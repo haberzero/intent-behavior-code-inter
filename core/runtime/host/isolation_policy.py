@@ -14,8 +14,8 @@ class IsolationPolicy:
     | PLUGIN_ONLY | 共享     | 独立    | 清空    | 不继承    | 清空      |
     | MINIMAL     | 共享     | 无      | 清空    | 不继承    | 清空      |
 
-    设计决策（01_principles.md §3.6/§8）：变量不跨隔离边界继承--
-    子环境与父环境之间不做隐式内存交互，父->子 数据传递应通过显式 file 读写完成。
+    设计决策：变量不跨隔离边界继承--子环境与父环境之间不做隐式内存交互，
+    父->子 数据传递应通过显式 file 读写完成。
     """
     level: str = "PARTIAL"
     inherit_plugins: Optional[List[str]] = None

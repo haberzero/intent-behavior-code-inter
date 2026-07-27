@@ -194,9 +194,8 @@ class HostService(IHostService):
         if not self.orchestrator:
             raise RuntimeError("Kernel Orchestrator not available. Isolated execution cannot be performed.")
 
-        # 设计决策（01_principles.md §3.6/§8）：子环境与父环境之间不做隐式内存交互，
-        # 变量不跨隔离边界继承。父->子 数据传递应通过显式 file 读写完成。
-        # 原 inherit_variables 提取路径（含 get_value/provenance/resolve 三重死代码）已移除。
+        # 设计决策：子环境与父环境之间不做隐式内存交互，变量不跨隔离边界继承。
+        # 父->子 数据传递应通过显式 file 读写完成。
 
         # 发起系统调用，阻塞等待执行完成
         abs_path = self._resolve_isolated_path(path)

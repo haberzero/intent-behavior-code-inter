@@ -158,7 +158,7 @@ print(result)
         assert "hello world" in lines
 
 
-@pytest.mark.skip(reason="dispatch_eager 已禁用（PT-4.7）：这些测试依赖 dispatch 的延迟失败语义（LLMFuture 陷阱化不确定结果，跳过同步路径的 LLMParseError 检查）。dispatch 禁用后所有 behavior 走同步路径，MOCK:FAIL 立即 raise LLMParseError（符合 KNOWN_LIMITS §三设计）。PT-4.7 接通并发调度时重新评估。")
+@pytest.mark.skip(reason="dispatch_eager 已禁用：这些测试依赖 dispatch 的延迟失败语义（LLMFuture 陷阱化不确定结果，跳过同步路径的 LLMParseError 检查）。dispatch 禁用后所有 behavior 走同步路径，MOCK:FAIL 立即 raise LLMParseError（符合 llmexcept 块外不确定结果即报错的设计）。接通并发调度时重新评估。")
 class TestE2EStaleResultIsolation:
     def test_plain_assignment_not_contaminated_after_fail(self):
         """MOCK:FAIL 后的普通赋值（int i = 0）不应被污染为 IbLLMUncertain"""

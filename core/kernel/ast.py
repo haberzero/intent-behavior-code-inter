@@ -404,7 +404,7 @@ class IbBehaviorExpr(IbExpr):
     #
     # 默认值的语义：
     # * ``llm_deps == []`` ：本 behavior 无 LLM 依赖（只引用普通变量）
-    # * ``dispatch_eligible == False`` ：并发 dispatch 未默认启用（PT-4.7）。
+    # * ``dispatch_eligible == False`` ：并发 dispatch 未默认启用。
     #   DDG 分析仍计算 ``llm_deps`` 供未来接通使用，但 ``dispatch_eligible``
     #   一律置 False，behavior 走同步求值路径。
     llm_deps: List["IbBehaviorExpr"] = field(default_factory=list)

@@ -118,7 +118,7 @@ class BehaviorDependencyAnalyzer:
 
         # 直接写入 AST 节点
         node.llm_deps = deps
-        # PT-4.7：并发 dispatch 未默认启用。DDG 分析仍计算 llm_deps 供未来
+        # 并发 dispatch 未默认启用。DDG 分析仍计算 llm_deps 供未来
         # 接通使用，但 dispatch_eligible 一律置 False，behavior 走同步求值。
         node.dispatch_eligible = False
 
