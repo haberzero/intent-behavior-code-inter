@@ -108,6 +108,43 @@ tests_docs/                          测试方法论
 - 新增 AST 字段或侧表前，必须先在 `architecture/02_metadata_ast.md` 查证。
 - 新增长期文档前，先确认它不与现有文档重复--若重复，扩展现有文档而非新建。
 
+### 3.6 代码注释卫生纪律
+
+> **核心原则**：代码注释只应注明**功能设计**与**已知问题**，不应承载项目过程信息（任务指针、设计代号、历史叙述、文档章节引用）。过程信息属于任务文档与 git 历史，不属于代码。
+
+**禁止在 `.py` 文件的注释与 docstring 中出现的内容**：
+
+| 类别 | 违规示例 | 处置 |
+|------|---------|------|
+| 任务文档指针 | `见 NEXT_STEPS.md`/`PENDING_TASKS §四`/`tasks_docs/` | 删指针，留功能说明 |
+| ADR 编号 | `Per ADR-019：`/`（ADR-020 §A）` | 删编号前缀/后缀，留设计解释 |
+| PT 任务编号 | `PT-ARCH-28：`/`PT-4.7：` | 删编号前缀，留功能说明 |
+| 设计代号 | `G1-G6`/`D1-D6`/`H1-H3`/`NS-x`/`P0-P7`/`方案A-B`/`C2-C11` | 删代号标签，留功能说明 |
+| 历史叙述 | `原实现采用…`/`历史上…`/`旧 bug`/`修复见PR`/`合并自`/`Source:`/`legacy` | 改写为现在时或删除 |
+| 文档章节号 | `§6.1`/`§9.2`/`§三` | 删章节号，留功能说明 |
+| 文档路径指针 | `docs/architecture/…`/`docs/KNOWN_LIMITS.md` | 删指针行/分句 |
+
+**保留的内容**（不视为违规）：
+
+| 类别 | 说明 |
+|------|------|
+| ERR 码 | `SEM_xxx`/`DEP_xxx`/`PAR_xxx`/`INV-x`/`SC-x`/`LT-x`/`CF-x`/`OM-x` 是功能性错误码/契约码 |
+| 功能性术语 | "锚点"（path anchor）、"Layer N / Phase N / STAGE N"（算法阶段）是功能描述 |
+| 错误码常量赋值 | `SEM_UNDEFINED_SYMBOL = "SEM_001"` 是代码，不是注释 |
+
+**新增代码时的自查**：提交前对自己的改动运行以下检查，确保未引入违规：
+
+```bash
+# 搜索违规模式（ADR/PT/任务文档指针/章节号）
+grep -rnE 'ADR-[0-9]|PT-ARCH|PT-[0-9]|Per ADR|§[0-9]|tasks_docs/|PENDING_TASKS|NEXT_STEPS' --include='*.py' <changed-files>
+# 搜索设计代号
+grep -rnE '\b(G[1-6]|D[1-6]|H[1-3]|NS-[0-9]|P[0-7]-[0-9A-Z])\b' --include='*.py' <changed-files>
+# 搜索历史叙述
+grep -rnE 'legacy|历史|旧 bug|修复见PR|合并自|Source:' --include='*.py' <changed-files>
+```
+
+命中后逐条判断：是注释/docstring 则清洁（删标记留功能），是 ERR 码或功能性术语则保留。
+
 ---
 
 ## 四、代码路径约定

@@ -36,5 +36,6 @@ python -m pytest tests/
 - 不在文档中冻结测试通过数字（以实跑为准）。
 - 不同时主推多个 P0 阶段（见 `tasks_docs/NEXT_STEPS.md` "工作规则"）。
 - 不写 compat shim / 胶水 / tricky 实现（见 `tasks_docs/NEXT_STEPS.md` "⛔ 工作模式定论"）。
+- 不在代码注释中使用任务代号/ADR 编号/PT 编号/文档章节指针/历史叙述--注释只注明功能设计与已知问题（详见 `docs/README.md` §三.6）。
 - 重大架构决策直接写入 `docs/architecture/` 对应章节，不再使用独立 ADR 文件。
 - 不在未读 `tasks_docs/NEXT_STEPS.md` 的情况下开始 media Phase 4（当前 GATED）。
