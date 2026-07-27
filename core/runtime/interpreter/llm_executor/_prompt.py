@@ -134,7 +134,7 @@ class _PromptMixin:
                     raise RuntimeError("LLMExecutor._evaluate_segments: vm_executor not available")
                 sent = vm.run(child)
         except StopIteration as si:
-            return si.value or ""
+            return si.value if si.value is not None else ""
 
     def _evaluate_segments_cps(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None):
         """CPS 版段求值（生成器）。

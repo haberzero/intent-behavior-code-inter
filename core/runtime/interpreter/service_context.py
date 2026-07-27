@@ -124,6 +124,18 @@ class ServiceContextImpl:
         if self._host_service and hasattr(self._host_service, 'orchestrator'):
             self._host_service.orchestrator = orchestrator
 
+    def set_scheduler(self, scheduler: Optional['IRuntimeScheduler']) -> None:
+        """注入运行时调度器（延迟注入，打破 rt_scheduler <-> ServiceContext 循环依赖）。"""
+        self._scheduler = scheduler
+
+    def set_capability_registry(self, capability_registry: Optional[Any]) -> None:
+        """注入能力注册中心（Engine 在解释器创建完毕后通过 kwargs 链传入）。"""
+        self._capability_registry = capability_registry
+
+    def set_host_service(self, host_service: Optional['IHostService']) -> None:
+        """注入宿主服务（rt_scheduler.spawn 创建 HostService 后调用）。"""
+        self._host_service = host_service
+
     @property
     def debugger(self) -> Any:
         return self._debugger

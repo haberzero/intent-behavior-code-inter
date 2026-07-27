@@ -189,15 +189,7 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
     old_module = func.context.current_module_name
     old_scope = rt_context.current_scope
 
-    old_intent_ctx = rt_context._intent_ctx
-    old_active_ibobj = rt_context.get_active_intent_ibobj()
-    child_ctx = old_intent_ctx.fork()
-    rt_context._intent_ctx = child_ctx
-    intent_context_class = func.context.registry.get_class("intent_context")
-    if intent_context_class is not None:
-        rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
-    else:
-        rt_context.set_active_intent_ibobj(None)
+    saved_intent = rt_context.enter_intent_scope()
 
     if func.module_name and func.module_name != old_module:
         func.context.current_module_name = func.module_name
@@ -263,8 +255,7 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
         func._pending_call_intent = None
         func.context.pop_stack()
         rt_context.exit_scope()
-        rt_context._intent_ctx = old_intent_ctx
-        rt_context.set_active_intent_ibobj(old_active_ibobj)
+        rt_context.exit_intent_scope(saved_intent)
         func.context.current_module_name = old_module
         rt_context.current_scope = old_scope
 

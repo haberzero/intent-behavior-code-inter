@@ -41,6 +41,8 @@ class _LLMFunctionMixin:
         param_names = self._get_function_param_names(node_data, execution_context)
 
         sys_prompt = self._evaluate_segments(sys_prompt_segments, execution_context, param_names)
+        if not isinstance(sys_prompt, str):
+            raise TypeError("__sys__ prompt segments must produce text-only content")
         user_prompt = self._evaluate_segments(user_prompt_segments, execution_context, param_names)
 
         # 2. 注入意图增强 (被动消费已消解的现场)
@@ -65,6 +67,8 @@ class _LLMFunctionMixin:
         # 如果有 retry_hint，注入到系统提示词
         if retry_hint_segments:
             retry_hint_text = self._evaluate_segments(retry_hint_segments, execution_context, param_names)
+            if not isinstance(retry_hint_text, str):
+                raise TypeError("retry hint segments must produce text-only content")
             sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
 
         # 清除运行时上下文中的 retry_hint（防止污染后续调用）
@@ -94,7 +98,7 @@ class _LLMFunctionMixin:
                 "user_prompt": user_prompt,
                 "response": "__MOCK_REPAIR__",
                 "raw_response": "__MOCK_REPAIR__",
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
@@ -110,7 +114,7 @@ class _LLMFunctionMixin:
                 "user_prompt": user_prompt,
                 "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
                 "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
@@ -125,7 +129,7 @@ class _LLMFunctionMixin:
             "user_prompt": user_prompt,
             "response": raw_res,
             "raw_response": raw_res,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
             "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
             "merged_intents": merged_intents
         }
@@ -176,6 +180,8 @@ class _LLMFunctionMixin:
         param_names = self._get_function_param_names(node_data, execution_context)
 
         sys_prompt = yield from self._evaluate_segments_cps(sys_prompt_segments, execution_context, param_names)
+        if not isinstance(sys_prompt, str):
+            raise TypeError("__sys__ prompt segments must produce text-only content")
         user_prompt = yield from self._evaluate_segments_cps(user_prompt_segments, execution_context, param_names)
 
         merged_intents = context.get_resolved_prompt_intents(execution_context)
@@ -192,6 +198,8 @@ class _LLMFunctionMixin:
 
         if retry_hint_segments:
             retry_hint_text = yield from self._evaluate_segments_cps(retry_hint_segments, execution_context, param_names)
+            if not isinstance(retry_hint_text, str):
+                raise TypeError("retry hint segments must produce text-only content")
             sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
 
         context.retry_hint = None
@@ -216,7 +224,7 @@ class _LLMFunctionMixin:
                 "user_prompt": user_prompt,
                 "response": "__MOCK_REPAIR__",
                 "raw_response": "__MOCK_REPAIR__",
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
@@ -231,7 +239,7 @@ class _LLMFunctionMixin:
                 "user_prompt": user_prompt,
                 "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
                 "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
@@ -245,7 +253,7 @@ class _LLMFunctionMixin:
             "user_prompt": user_prompt,
             "response": raw_res,
             "raw_response": raw_res,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context._intent_ctx.get_active_intents()],
+            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
             "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
             "merged_intents": merged_intents
         }

@@ -49,7 +49,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         # 完整 IbIntentContext + 活跃 intent_context IBCI 指针。
         full_intent_ctx_uid = None
         try:
-            intent_ctx = getattr(context, "_intent_ctx", None)
+            intent_ctx = getattr(context, "intent_context", None)
             if intent_ctx is not None:
                 full_intent_ctx_uid = self._collect_intent_context(intent_ctx)
         except Exception as e:
@@ -378,16 +378,16 @@ class RuntimeDeserializer:
         intent_ctx_uid = data.get("intent_ctx_uid")
         if intent_ctx_uid:
             restored_ctx = self._get_intent_context(intent_ctx_uid)
-            if restored_ctx is not None and hasattr(context, "_intent_ctx"):
-                context._intent_ctx = restored_ctx
+            if restored_ctx is not None and hasattr(context, "replace_intent_context"):
+                context.replace_intent_context(restored_ctx)
             active_uid = data.get("active_intent_ibobj_uid")
             if active_uid and hasattr(context, "set_active_intent_ibobj"):
                 active_obj = self._get_instance(active_uid)
                 # 确保共享引用不变量
                 if active_obj is not None and hasattr(active_obj, "fields"):
-                    if active_obj.fields.get("_ctx") is not getattr(context, "_intent_ctx", None):
-                        active_obj.fields["_ctx"] = context._intent_ctx
-                    context.set_active_intent_ibobj(active_obj)
+                    if active_obj.fields.get("_ctx") is not getattr(context, "intent_context", None):
+                        active_obj.fields["_ctx"] = context.intent_context
+                context.set_active_intent_ibobj(active_obj)
         else:
             if "global_intents" in data:
                 # 恢复全局意图 (通常是 IbIntent 实例)

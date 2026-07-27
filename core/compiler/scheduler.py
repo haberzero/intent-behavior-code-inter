@@ -300,11 +300,9 @@ class Scheduler(ICompilerService):
                 # Skip external modules - they don't have source files
                 # 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
                 module_name = imp.module_name
-                if self.host_interface.metadata.resolve(module_name) is not None:
+                resolved_spec = self.host_interface.metadata.resolve(module_name)
+                if resolved_spec is not None and getattr(resolved_spec, 'kind', None) == TypeKind.MODULE.value:
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {module_name}")
-                    continue
-                if module_name in self.host_interface._module_metadata_map:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module via alias: {module_name}")
                     continue
 
                 try:
@@ -405,16 +403,13 @@ class Scheduler(ICompilerService):
                     # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
                     s_mod_type = TypeDef(name=imp_mod_name)
                     # 必须绑定注册表以便后续解包
-                elif imp.module_name in self.host_interface._module_metadata_map:
-                    s_mod_type = self.host_interface._module_metadata_map[imp.module_name]
-                elif self.host_interface.metadata.resolve(imp.module_name) is not None:
-                    if imp.module_name in self.plugin_type_cache:
-                        s_mod_type = self.plugin_type_cache[imp.module_name]
-                    else:
-                        # 直接从宿主接口的元数据注册表解析描述符
-                        s_mod_type = self.host_interface.metadata.resolve(imp.module_name)
-                        if s_mod_type:
-                            # 确保从 Host 加载的元数据被正确水合到当前编译注册表
+                else:
+                    resolved_spec = self.host_interface.metadata.resolve(imp.module_name)
+                    if resolved_spec is not None and getattr(resolved_spec, 'kind', None) == TypeKind.MODULE.value:
+                        if imp.module_name in self.plugin_type_cache:
+                            s_mod_type = self.plugin_type_cache[imp.module_name]
+                        else:
+                            s_mod_type = resolved_spec
                             self.registry.register(s_mod_type)
                             self.plugin_type_cache[imp.module_name] = s_mod_type
                 

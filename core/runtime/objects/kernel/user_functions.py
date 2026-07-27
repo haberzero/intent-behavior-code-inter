@@ -48,20 +48,9 @@ class IbUserFunction(IbFunction):
         # --- 意图栈作用域隔離（拷贝传递语义）---
         # 每次函数调用 fork 调用者的意图上下文，函数内的 @+/@- 不泄漏给调用者。
         # 若需在函数体内屏蔽继承自调用者的意图，请显式调用：
-        #   intent_context.clear_inherited()  — 清空继承来的持久意图栈
-        #   intent_context.use(ctx)           — 以自定义上下文替换当前作用域的意图上下文
-        old_intent_ctx = rt_context._intent_ctx
-        # 函数调用进入时，子帧获得一个匿名活跃指针（共享 fork 后 _ctx 引用）。
-        # 子帧默认未选择命名意图策略；若参数被标注为 ``intent_context`` 类型，
-        # 后续参数自动绑定阶段（``use_intent_context``）会覆盖该匿名指针。
-        old_active_ibobj = rt_context.get_active_intent_ibobj()
-        child_ctx = old_intent_ctx.fork()
-        rt_context._intent_ctx = child_ctx
-        intent_context_class = self.context.registry.get_class("intent_context")
-        if intent_context_class is not None:
-            rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
-        else:
-            rt_context.set_active_intent_ibobj(None)
+        #   intent_context.clear_inherited()  - 清空继承来的持久意图栈
+        #   intent_context.use(ctx)           - 以自定义上下文替换当前作用域的意图上下文
+        saved_intent = rt_context.enter_intent_scope()
 
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
@@ -169,9 +158,7 @@ class IbUserFunction(IbFunction):
             self.context.pop_stack()
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
-            rt_context._intent_ctx = old_intent_ctx
-            # 恢复调用者的活跃实例指针。
-            rt_context.set_active_intent_ibobj(old_active_ibobj)
+            rt_context.exit_intent_scope(saved_intent)
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 
@@ -224,16 +211,7 @@ class IbLLMFunction(IbFunction):
         # --- 意图栈作用域隔离（拷贝传递语义）---
         # 与 IbUserFunction.call() 对称：fork 调用者意图上下文，函数内操作不泄漏。
         # 若需在函数体内屏蔽继承的意图，请在函数体内显式调用 intent_context.clear_inherited()。
-        old_intent_ctx = rt_context._intent_ctx
-        # 与 IbUserFunction.call 对称，进入 LLM 函数时为子帧建立匿名活跃指针。
-        old_active_ibobj = rt_context.get_active_intent_ibobj()
-        child_ctx = old_intent_ctx.fork()
-        rt_context._intent_ctx = child_ctx
-        intent_context_class = self.context.registry.get_class("intent_context")
-        if intent_context_class is not None:
-            rt_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
-        else:
-            rt_context.set_active_intent_ibobj(None)
+        saved_intent = rt_context.enter_intent_scope()
 
         if self.module_name and self.module_name != old_module:
             self.context.current_module_name = self.module_name
@@ -308,9 +286,7 @@ class IbLLMFunction(IbFunction):
             self.context.pop_stack()
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
-            rt_context._intent_ctx = old_intent_ctx
-            # 恢复调用者的活跃实例指针。
-            rt_context.set_active_intent_ibobj(old_active_ibobj)
+            rt_context.exit_intent_scope(saved_intent)
             self.context.current_module_name = old_module
             rt_context.current_scope = old_scope
 

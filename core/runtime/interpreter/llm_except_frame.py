@@ -248,21 +248,7 @@ class LLMExceptFrame:
         if self.saved_intent_ctx is not None:
             # 直接以快照 fork 替换 ``_intent_ctx``（取代 ``merge()``）。
             forked = self.saved_intent_ctx.fork()
-            runtime_context._intent_ctx = forked
-            # 同步重建活跃实例指针：保留命名身份（ib_class），但 _ctx 指向新底层。
-            if hasattr(runtime_context, "_set_active_intent_ibobj_for_current_ctx"):
-                intent_context_class = None
-                saved_ibobj = self.saved_active_intent_ibobj
-                if saved_ibobj is not None and hasattr(saved_ibobj, "ib_class"):
-                    intent_context_class = saved_ibobj.ib_class
-                else:
-                    registry = getattr(runtime_context, "_registry", None)
-                    if registry is not None and hasattr(registry, "get_class"):
-                        intent_context_class = registry.get_class("intent_context")
-                if intent_context_class is not None:
-                    runtime_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
-                else:
-                    runtime_context.set_active_intent_ibobj(None)
+            runtime_context.replace_intent_context(forked)
 
         if hasattr(runtime_context, '_loop_stack') and self.saved_loop_context:
             runtime_context._loop_stack = self.saved_loop_context.get('iterators', [])

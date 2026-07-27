@@ -159,30 +159,34 @@ M2、M4、M5(重新调查)、M6、M7、M10、M13、M11c
 
 ## 六、MINOR 汇总（分类）
 
-### 明确修复（低歧义）
-- `engine.py` spawn `isolated` 参数死逻辑（移除）
-- `engine.py:347-353` `hasattr`/`setattr` 字符串属性穿透（改协议方法）
-- `primitive_initializer.py:276` 防御性回退掩盖配置错误（改 fail-fast）
-- `primitive_initializer.py:556-558` 私有属性穿透（封装突破）
-- `primitive_initializer.py:677` 陈旧注释（删除）
-- `service.py:263-269` `_resolve_isolated_path` 静默回退（传播错误）
-- `service.py:78,107` 魔法哨兵 `__EXTERNAL_FILE_REF__`（提常量）
-- `host_interface.py` re-export 垫片（违反"禁止 compat shim"，更新调用点或文档化）
-- `engine.py:717-723` 子引擎 auto_sniff 硬编码（继承父设置）
-- `loader.py:233-241` 插件直接导出类静默跳过（加 warning）
-- `interpreter.py:26` 注释与 compat 垫片矛盾（修正）
-- `llm_result.py`/`constants.py`/`vm/task.py` re-export 垫片（评估删除）
-- `_prompt.py:199-223` stringly-typed 返回（评估统一）
-- `llm_except_frame.py:310-315` 黄金快照再克隆失败边沿（加守卫）
-- `contract_validator.py:24` "STAGE 7" 陈旧输出（改当前术语）
-- `scheduler.py:306,408` 私有字典穿透（加公开方法）
-- `_declaration_visitors.py:252-256` SEM_092 双向可赋值（**故意简化，非缺陷**，保留）
-- `test_runtime_getitem_contract.py:13` 陈旧 module docstring（更新）
-- `test_collection_semantics.py:256` INV-STR-6 未测变异（补测试）
-- `test_scope_semantics.py:155` 冗余重复断言（删除）
-- `test_e2e_exceptions.py:276` H1 覆盖缺口（补深层栈/finally 路径）
-- `test_e2e_llmexcept.py:497` 部分快照协议未验状态（补状态断言）
-- `test_meta/test_layering.py:85` 混合测试白名单（已知债，保留至拆分）
+### 已完成（commit bb7d223 + 89db9f7 + 本轮根因修复）
+- ✅ `engine.py` spawn `isolated` 参数死逻辑（移除 + IsolationLevel 死链全清）
+- ✅ `engine.py` `hasattr`/`setattr` 字符串属性穿透（加 3 setter + 清 hydrate 死分支 + 清全部 setattr，三处同修）
+- ✅ `primitive_initializer.py:276` 防御性回退掩盖配置错误（改 fail-fast）
+- ✅ `primitive_initializer.py:556-558` 私有属性穿透（_intent_ctx 系统性治理 B1+B2+B3，22 处穿透归零）
+- ✅ `primitive_initializer.py:677` 陈旧注释（注释清洁中已删）
+- ✅ `service.py` `_resolve_isolated_path` 静默回退（传播错误）
+- ✅ `service.py` 魔法哨兵 `__EXTERNAL_FILE_REF__`（提常量）
+- ✅ `host_interface.py` re-export 垫片（删垫片，5 调用点改指 kernel 真源）
+- ✅ `engine.py` 子引擎 auto_sniff 硬编码（改继承父设置）
+- ✅ `loader.py` 插件直接导出类静默跳过（加 warning）
+- ✅ `interpreter.py:26` 注释与 compat 垫片矛盾（注释清洁中已修）
+- ✅ `llm_result.py`/`constants.py` re-export 垫片（零调用死垫片已删；vm/task.py 非垫片保留）
+- ✅ `_prompt.py` stringly-typed 返回（根因分析确认 Union 是有意设计，保持现状 + 局部加固：si.value 修正 + sys_prompt str 断言）
+- ✅ `llm_except_frame.py:310-315` 黄金快照再克隆失败（else val 改为 fail-fast raise）
+- ✅ `scheduler.py` 私有字典穿透（统一到 metadata.resolve + TypeKind.MODULE 过滤，消除双路径+副作用差异+隐式不变量）
+
+### 误判确认（保持现状）
+- ⏭️ `contract_validator.py` "STAGE 7" 输出：**确认误判**。"STAGE 7" 是 `docs/README.md §三.6` 认定的当前规范术语，与 `engine.py`/`RegistrationState.STAGE_7_READY` 一致。无需修改。
+- ⏭️ `_declaration_visitors.py` SEM_DUAL_ASSIGNABLE 双向可赋值：**确认故意简化**。注释标注 "Simplified compatibility"，9 个 e2e 测试覆盖，warning 级别合理。保持现状。
+
+### 测试相关（暂缓，待测试重构）
+- `test_runtime_getitem_contract.py:13` 陈旧 module docstring
+- `test_collection_semantics.py:256` INV-STR-6 未测变异
+- `test_scope_semantics.py:155` 冗余重复断言
+- `test_e2e_exceptions.py:276` H1 覆盖缺口
+- `test_e2e_llmexcept.py:497` 部分快照协议未验状态
+- `test_meta/test_layering.py:85` 混合测试白名单
 
 ### 需讨论（见 §四 D8-D10）
 - prelude 重导出过滤标准（D8）

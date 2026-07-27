@@ -79,27 +79,12 @@ class RuntimeSchedulerImpl:
             entry_dir=kwargs.get('entry_dir')
         )
 
-        # 4. 装配 ServiceContext
+        # 4. 装配 ServiceContext（延迟注入，打破循环依赖）
         sub_sc = interpreter.service_context
-        if hasattr(sub_sc, 'hydrate'):
-             sub_sc.hydrate(
-                 issue_tracker=kwargs.get('issue_tracker', sc.issue_tracker if sc else None),
-                 registry=effective_registry,
-                 host_interface=effective_host_interface,
-                 debugger=kwargs.get('debugger', sc.debugger if sc else self.debugger),
-                 root_dir=root_dir,
-                 source_provider=kwargs.get('source_provider', sc.source_provider if sc else None),
-                 orchestrator=getattr(sc, 'orchestrator', None) if sc else None,
-                 execution_context=interpreter._execution_context,
-                 interop=sub_sc.interop,
-                 factory=kwargs.get('factory'),
-                 setup_context_callback=interpreter.setup_context,
-                 object_factory=kwargs.get('object_factory', sc.object_factory if sc else None),
-                 scheduler=self
-             )
-            
+        sub_sc.set_scheduler(self)
+        sub_sc.set_capability_registry(kwargs.get('capability_registry'))
+
         # 5. 装配 HostService
-        # orchestrator 是 ServiceContext Protocol 的正式属性，直接访问即可
         host_service = HostService(
             registry=effective_registry,
             execution_context=interpreter._execution_context,
@@ -108,8 +93,7 @@ class RuntimeSchedulerImpl:
             setup_context_callback=interpreter.setup_context,
             get_current_module_callback=lambda: interpreter.current_module_name
         )
-        if hasattr(sub_sc, '_host_service'):
-            setattr(sub_sc, '_host_service', host_service)
+        sub_sc.set_host_service(host_service)
 
         # 6. 注册实例
         self.instances[instance_id] = interpreter

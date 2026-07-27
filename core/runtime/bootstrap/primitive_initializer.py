@@ -554,9 +554,6 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             frame = get_current_frame()
             if frame is not None and hasattr(frame, 'clear_inherited_intents'):
                 frame.clear_inherited_intents()
-            elif frame is not None and hasattr(frame, '_intent_ctx'):
-                # 回退：帧实现缺少 clear_inherited_intents 时直接操作 _intent_ctx
-                frame._intent_ctx.set_intent_top(None)
             return registry.get_none()
 
         def _ic_use(receiver, *args):
@@ -597,8 +594,8 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                     if active_ctx is not None and hasattr(active_ctx, 'fork'):
                         new_instance.fields['_ctx'] = active_ctx.fork()
                         return new_instance
-            if frame is not None and hasattr(frame, '_intent_ctx'):
-                new_instance.fields['_ctx'] = frame._intent_ctx.fork()
+            if frame is not None and hasattr(frame, 'fork_intent_snapshot'):
+                new_instance.fields['_ctx'] = frame.fork_intent_snapshot()
             else:
                 new_instance.fields['_ctx'] = IbIntentContext()
             return new_instance

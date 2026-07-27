@@ -312,7 +312,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             output_callback=self.debugger.output_callback,
             input_callback=None,
             entry_file=entry_file,
-            entry_dir=entry_dir
+            entry_dir=entry_dir,
+            capability_registry=self.capability_registry
         )
         return self.rt_scheduler.instances[instance_id]
 
@@ -332,24 +333,19 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         )
         
         # Post-construction wiring: inject orchestrator and output_callback into ServiceContext.
-        # Engine is the orchestrator but can only inject itself after the interpreter is fully
-        # constructed, so this wiring happens here rather than in __init__.
-        if hasattr(self.interpreter, 'service_context'):
-            self.interpreter.service_context.set_orchestrator(self)
-            if output_callback is not None:
-                self.interpreter.service_context.output_callback = output_callback
-        
-        # 统一装配调度器与能力注册中心
+        # scheduler / capability_registry / host_service 已由 rt_scheduler.spawn 通过
+        # 公开 setter 注入（set_scheduler / set_capability_registry / set_host_service）。
+        # Engine 此处仅注入 orchestrator（Engine 自身）和 output_callback。
         service_context = self.interpreter.service_context
+        service_context.set_orchestrator(self)
+        if output_callback is not None:
+            service_context.output_callback = output_callback
+
+        # 延迟水化调度器（给 rt_scheduler 注入 service_context 引用，方向与上述 setter 相反）
         self.rt_scheduler.hydrate(service_context)
-        
+
         # 设定主实例 ID
         self.rt_scheduler._main_instance_id = self.interpreter.instance_id
-        
-        if hasattr(service_context, '_scheduler'):
-            setattr(service_context, '_scheduler', self.rt_scheduler)
-        if hasattr(service_context, '_capability_registry'):
-            setattr(service_context, '_capability_registry', self.capability_registry)
         
         # STAGE 7: 深度契约校验与就绪
         # 强制检查状态流转，确保 STAGE 6 (预评估) 已完成

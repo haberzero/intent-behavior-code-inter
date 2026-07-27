@@ -779,6 +779,33 @@ class RuntimeContextImpl(RuntimeContext):
         else:
             raise TypeError(f"Invalid intent stack type for restoration: {type(intents)}")
 
+    def enter_intent_scope(self) -> tuple:
+        """函数调用进入时 fork 当前意图上下文，返回 (old_ctx, old_active_ibobj) 供 exit_intent_scope 恢复。"""
+        old_ctx = self._intent_ctx
+        old_active = self._active_intent_ibobj
+        self._intent_ctx = old_ctx.fork()
+        intent_context_class = self._registry.get_class("intent_context") if self._registry else None
+        if intent_context_class is not None:
+            self._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            self._active_intent_ibobj = None
+        return (old_ctx, old_active)
+
+    def exit_intent_scope(self, saved: tuple) -> None:
+        """函数调用退出时恢复调用者的意图上下文和活跃指针。"""
+        old_ctx, old_active = saved
+        self._intent_ctx = old_ctx
+        self._active_intent_ibobj = old_active
+
+    def replace_intent_context(self, new_ctx) -> None:
+        """整替换意图上下文（供 llmexcept retry / 反序列化使用），并重建活跃指针。"""
+        self._intent_ctx = new_ctx
+        intent_context_class = self._registry.get_class("intent_context") if self._registry else None
+        if intent_context_class is not None:
+            self._set_active_intent_ibobj_for_current_ctx(intent_context_class)
+        else:
+            self._active_intent_ibobj = None
+
     def get_resolved_prompt_intents(self, execution_context: Any) -> List[str]:
         """
         获取最终消解后的 Prompt 字符串列表。
