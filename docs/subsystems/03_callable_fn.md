@@ -1,6 +1,6 @@
 ﻿# IBCI 高阶函数 / 可调用类型 设计笔记
 
-> **最后更新（2026-04-29）**：清理早期设计讨论；当前内容反映 M1/M2/D1/D2/D3 落地后的事实。
+> 本文档描述 IBCI 高阶函数与可调用类型的设计。
 
 ---
 
@@ -41,7 +41,7 @@ int result = my_fn(5)   # 调用 adder.__call__(5)
 
 详见 `docs/KNOWN_LIMITS.md` §一（`__call__` 协议）和 §七（`auto` / `fn` / `any`）—— `fn` 在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的若干路径上仍存在一致性不足，需要等待整体重设计。
 
-后续改进方向（`func[sig]` 泛型标注、轻量泛型 `<T>`、高阶函数类型推断、lambda 剩余缺陷）将按主线优先级在 `tasks_docs/NEXT_STEPS.md` / `tasks_docs/PENDING_TASKS.md` 中滚动维护。
+后续改进方向（`func[sig]` 泛型标注、轻量泛型 `<T>`、高阶函数类型推断、lambda 剩余缺陷）见 `tasks_docs/PENDING_TASKS.md`。
 
 ---
 

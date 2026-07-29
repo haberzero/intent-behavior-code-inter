@@ -74,7 +74,7 @@ def test_binding_analysis_lambda_captures_to_cell_captured(spec_registry):
 
 
 class TestLLMExceptReadOnlyConstraint:
-    """SEM_LLMEXCEPT_BODY_WRITE — llmexcept body 内禁止对外部作用域变量赋值。"""
+    """SEM_LLMEXCEPT_BODY_WRITE — llmexcept body 内禁止对 LLM 参与变量赋值。"""
 
     def test_sem052_outer_scope_write_produces_error(self, spec_registry):
         """Writing to outer-scope variable in llmexcept body produces SEM_LLMEXCEPT_BODY_WRITE."""

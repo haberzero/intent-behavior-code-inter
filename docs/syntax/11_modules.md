@@ -24,7 +24,13 @@ func main():
     import json  # DEP_INVALID_IMPORT_POSITION 编译错误
 ```
 
-此约束使调度器（Scheduler）能够高效地在不执行代码的前提下进行无副作用的依赖扫描。
+此约束使编译器能够高效地在不执行代码的前提下进行无副作用的依赖扫描。
+
+**禁止循环导入**：模块间的 `import` 依赖图必须为有向无环图（DAG）。循环导入触发致命编译错误 `DEP_CIRCULAR_IMPORT`。详见 `docs/KNOWN_LIMITS.md §二十`。
+
+**`from mod import *` 冲突行为**：通配符导入时，若模块导出的符号与当前作用域已有的非模块符号同名，发出 `SEM_IMPORT_CONFLICT` WARNING 并跳过该符号（本地定义优先）。与已有模块符号同名时静默跳过。命名导入 `from mod import name` 冲突行为一致。
+
+**模块导出规则**：模块的导出成员仅包含用户定义和显式导入的符号。语言内建（`int`/`str`/`print` 等）不出现在模块导出中——每个模块自动获得这些内建符号，无需跨模块重导出。
 
 ### 11.2 内置模块
 

@@ -17,6 +17,8 @@ from core.base.diagnostics.codes import (
     SEM_INTENT_STATIC_CALL,
     SEM_SUPER_OUTSIDE_METHOD,
     SEM_TYPE_MISMATCH,
+    SEM_UNRESOLVED_TYPE,
+    ICE_TYPE_LEAK,
 )
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
@@ -35,8 +37,12 @@ class ExpressionVisitorsMixin:
         sym = self.lookup_symbol(node.id)
         if sym and sym.spec:
             spec = sym.spec
-            # Resolve TypeRef → IbSpec
             if isinstance(spec, TypeRef):
+                self.error(
+                    f"Internal: unresolved TypeRef '{spec.head}' in symbol "
+                    f"'{node.id}' reached type checking (symbol spec leak)",
+                    node, code=ICE_TYPE_LEAK,
+                )
                 spec = self.registry.resolve(spec.head) or self._any_desc
             self.bind_type(node, spec)
             return spec
@@ -295,9 +301,23 @@ class ExpressionVisitorsMixin:
             ret_ref = getattr(func_type, 'return_type', None)
             if ret_ref is not None:
                 if isinstance(ret_ref, TypeRef):
-                    res = self.registry.resolve(ret_ref.head) or self._any_desc
+                    resolved = self.registry.resolve(ret_ref.head)
+                    if not resolved:
+                        self.error(
+                            f"Unresolved return type '{ret_ref.head}'",
+                            node, code=SEM_UNRESOLVED_TYPE,
+                        )
+                        resolved = self._any_desc
+                    res = resolved
                 elif hasattr(ret_ref, 'head') and ret_ref.head:
-                    res = self.registry.resolve(ret_ref.head) or self._any_desc
+                    resolved = self.registry.resolve(ret_ref.head)
+                    if not resolved:
+                        self.error(
+                            f"Unresolved return type '{ret_ref.head}'",
+                            node, code=SEM_UNRESOLVED_TYPE,
+                        )
+                        resolved = self._any_desc
+                    res = resolved
                 else:
                     res = self._any_desc
             else:
@@ -481,7 +501,7 @@ class ExpressionVisitorsMixin:
                 arg_type = self._any_desc
                 # IbArg now has annotation field directly
                 if arg_node.annotation:
-                    arg_type = self._resolve_type(arg_node.annotation) or self._any_desc
+                    arg_type = self._resolve_type(arg_node.annotation)
 
                 arg_name = None
                 if isinstance(arg_node, ast.IbArg):
@@ -580,7 +600,7 @@ class ExpressionVisitorsMixin:
         """访问类型转换表达式 (e.g., (int) expr)
 
         使用 can_convert_from 进行编译期 cast 校验。
-        当目标类型的公理明确拒绝从源类型转换时，发出 SEM_CAST_NO_CONVERTER 警告。
+        当目标类型的公理明确拒绝从源类型转换时，发出 SEM_CAST_NO_CONVERTER 错误。
         """
         source_type = self.visit(node.value)
         cast_type = self._resolve_type(node.type_annotation)
@@ -592,10 +612,9 @@ class ExpressionVisitorsMixin:
                 and source_type.name != cast_type.name):
             converter = self.registry.get_converter_cap(cast_type)
             if converter and not converter.can_convert_from(source_type.name):
-                self.warn(
+                self.error(
                     f"Cast from '{source_type.name}' to '{cast_type.name}' "
-                    f"is not supported by the type's conversion rules. "
-                    f"This cast may fail at runtime.",
+                    f"is not supported by the type's conversion rules.",
                     node, code=SEM_CAST_NO_CONVERTER,
                 )
 

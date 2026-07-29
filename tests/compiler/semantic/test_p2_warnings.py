@@ -157,11 +157,11 @@ class TestCastValidationWarning:
     def test_int_from_list_emits_sem091(self, spec_registry):
         """(int)list_var: int cannot convert from list, should SEM_CAST_NO_CONVERTER."""
         result = self._run_cast("int", "list", spec_registry)
-        warnings = [d for d in result.diagnostics
-                    if d.level == DiagnosticLevel.WARNING and d.code == "SEM_CAST_NO_CONVERTER"]
-        assert len(warnings) == 1
-        assert "list" in warnings[0].message
-        assert "int" in warnings[0].message
+        errors = [d for d in result.diagnostics
+                    if d.level == DiagnosticLevel.ERROR and d.code == "SEM_CAST_NO_CONVERTER"]
+        assert len(errors) == 1
+        assert "list" in errors[0].message
+        assert "int" in errors[0].message
 
     def test_float_from_str_no_warning(self, spec_registry):
         """(float)str_var: float can convert from str, no SEM_CAST_NO_CONVERTER."""
@@ -173,16 +173,16 @@ class TestCastValidationWarning:
     def test_float_from_list_emits_sem091(self, spec_registry):
         """(float)list_var: float cannot convert from list, should SEM_CAST_NO_CONVERTER."""
         result = self._run_cast("float", "list", spec_registry)
-        warnings = [d for d in result.diagnostics
-                    if d.level == DiagnosticLevel.WARNING and d.code == "SEM_CAST_NO_CONVERTER"]
-        assert len(warnings) == 1
+        errors = [d for d in result.diagnostics
+                    if d.level == DiagnosticLevel.ERROR and d.code == "SEM_CAST_NO_CONVERTER"]
+        assert len(errors) == 1
 
     def test_list_from_int_emits_sem091(self, spec_registry):
         """(list)int_var: list can only convert from list, should SEM_CAST_NO_CONVERTER."""
         result = self._run_cast("list", "int", spec_registry)
-        warnings = [d for d in result.diagnostics
-                    if d.level == DiagnosticLevel.WARNING and d.code == "SEM_CAST_NO_CONVERTER"]
-        assert len(warnings) == 1
+        errors = [d for d in result.diagnostics
+                    if d.level == DiagnosticLevel.ERROR and d.code == "SEM_CAST_NO_CONVERTER"]
+        assert len(errors) == 1
 
     def test_bool_from_anything_no_warning(self, spec_registry):
         """(bool)int_var: bool can convert from anything (truthy), no SEM_CAST_NO_CONVERTER."""

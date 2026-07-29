@@ -8,7 +8,7 @@ as part of a pure mechanical refactoring — no logic changes.
 
 from typing import Optional
 
-from core.base.diagnostics.codes import SEM_UNCATEGORIZED
+from core.base.diagnostics.codes import SEM_UNCATEGORIZED, SEM_UNRESOLVED_TYPE, ICE_TYPE_LEAK
 from core.base.enums import Provenance, Visibility
 from core.kernel import ast
 from core.kernel.symbols import Symbol
@@ -88,12 +88,24 @@ class TypeCheckBase:
         """检查源类型是否可以赋给目标类型（dynamic 类型跳过检查）"""
         if not source or not target:
             return True
-        # Guard: resolve TypeRef to actual IbSpec if needed
         if isinstance(source, TypeRef):
-            source = self.registry.resolve(source.head) or self._any_desc
+            resolved = self.registry.resolve(source.head)
+            if not resolved:
+                self.error(
+                    f"Unresolved type '{source.head}' in assignability check",
+                    self._current_node, code=SEM_UNRESOLVED_TYPE,
+                )
+                resolved = self._any_desc
+            source = resolved
         if isinstance(target, TypeRef):
-            target = self.registry.resolve(target.head) or self._any_desc
-        # 当源或目标为 dynamic（any/auto）时，跳过兼容性检查
+            resolved = self.registry.resolve(target.head)
+            if not resolved:
+                self.error(
+                    f"Unresolved type '{target.head}' in assignability check",
+                    self._current_node, code=SEM_UNRESOLVED_TYPE,
+                )
+                resolved = self._any_desc
+            target = resolved
         if self.registry.is_dynamic(source) or self.registry.is_dynamic(target):
             return True
         return self.registry.is_assignable(source, target)
@@ -116,7 +128,14 @@ class TypeCheckBase:
         if annotation is None:
             return self._any_desc
         if isinstance(annotation, ast.IbName):
-            return self.registry.resolve(annotation.id) or self._any_desc
+            resolved = self.registry.resolve(annotation.id)
+            if not resolved:
+                self.error(
+                    f"Unknown type '{annotation.id}'",
+                    annotation, code=SEM_UNRESOLVED_TYPE,
+                )
+                return self._any_desc
+            return resolved
         elif isinstance(annotation, ast.IbCallableType):
             # callable signature constraint fn[(param_types) -> return_type]
             param_specs = [self._resolve_type(pt) for pt in annotation.param_types]

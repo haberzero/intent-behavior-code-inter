@@ -39,4 +39,17 @@
 
 有状态内核原生模块需要 service_context 注入才能完成初始化。`late_hydrate_kernel_native_modules(service_context)` 在 `_prepare_interpreter` 附近提供二次初始化窗口，保证编译期类型检查靠 axiom 签名（bootstrap 期已就位），运行期状态注入走 late-hydrate。
 
+### 模块导出过滤（provenance 门控）
+
+语义分析完成后，scheduler 将符号表写入模块 `members` 时按 provenance 过滤（`scheduler.py`）：
+
+```python
+final_mod_meta.members = {
+    name: sym for name, sym in result.symbol_table.symbols.items()
+    if sym.provenance != Provenance.KERNEL_NATIVE
+}
+```
+
+`KERNEL_NATIVE` provenance 的符号（prelude 注入的 `int`/`str`/`print` 等语言内建、`import file` 门控注入的 `file_handle`/`audio` 等类型）不进入模块导出面。每个模块通过自身的 prelude 注入获得这些符号，无需跨模块重导出。`USER_DEFINED` 和 `EXTERNAL_MODULE` provenance 的符号正常导出。
+
 ---

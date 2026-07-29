@@ -9,7 +9,7 @@ pure mechanical refactoring — no logic changes.
 
 from typing import Optional
 
-from core.base.diagnostics.codes import SEM_TYPE_MISMATCH
+from core.base.diagnostics.codes import SEM_TYPE_MISMATCH, SEM_UNRESOLVED_TYPE, ICE_TYPE_LEAK
 from core.kernel import ast
 from core.kernel.symbols import SymbolKind
 from core.kernel.spec import IbSpec
@@ -56,7 +56,14 @@ class StatementVisitorsMixin:
 
         # Resolve TypeRef → IbSpec early to avoid downstream crashes
         if isinstance(val_type, TypeRef):
-            val_type = self.registry.resolve(val_type.head) or self._any_desc
+            resolved = self.registry.resolve(val_type.head)
+            if not resolved:
+                self.error(
+                    f"Unresolved type '{val_type.head}' in assignment",
+                    node, code=SEM_UNRESOLVED_TYPE,
+                )
+                resolved = self._any_desc
+            val_type = resolved
 
         # 提取变量名和声明类型
         var_name, declared_type = self._resolve_target_name_and_type(target)
@@ -66,8 +73,12 @@ class StatementVisitorsMixin:
             sym = self.lookup_symbol(var_name)
 
             if declared_type:
-                # Resolve declared_type if it's a TypeRef
                 if isinstance(declared_type, TypeRef):
+                    self.error(
+                        f"Internal: unresolved TypeRef '{declared_type.head}' "
+                        f"reached type checking (symbol spec leak)",
+                        node, code=ICE_TYPE_LEAK,
+                    )
                     declared_type = self.registry.resolve(declared_type.head) or self._any_desc
                 # 类型推断策略
                 target_type = self._infer_target_type_from_declared(declared_type, val_type)
@@ -75,6 +86,11 @@ class StatementVisitorsMixin:
                 # 已存在的符号：使用现有类型
                 spec = sym.spec
                 if isinstance(spec, TypeRef):
+                    self.error(
+                        f"Internal: unresolved TypeRef '{spec.head}' in symbol "
+                        f"'{var_name}' reached type checking (symbol spec leak)",
+                        node, code=ICE_TYPE_LEAK,
+                    )
                     spec = self.registry.resolve(spec.head) or self._any_desc
                 target_type = spec
             else:

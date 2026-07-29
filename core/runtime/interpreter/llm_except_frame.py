@@ -318,6 +318,34 @@ class LLMExceptFrame:
         self.should_retry = self.retry_count < self.max_retry
         return self.should_retry
 
+    def verify_snapshot_integrity(self, runtime_context: 'RuntimeContextImpl') -> list:
+        """校验 llmexcept body 执行后被保护变量是否被篡改。
+
+        比对当前作用域中的变量值与黄金快照。返回被篡改的变量名列表。
+        调用方负责发出 WARNING 并在下一轮 retry 前强制恢复。
+        """
+        violations = []
+        scope = runtime_context.get_current_scope()
+        for name, golden_val in self.saved_vars.items():
+            symbol = scope.get_symbol(name)
+            if symbol is None:
+                continue
+            current_val = symbol.value
+            if current_val is golden_val:
+                continue
+            if not self._values_equal(current_val, golden_val):
+                violations.append(name)
+        return violations
+
+    def _values_equal(self, a, b) -> bool:
+        """浅层值比较：对 IbValue 使用 to_native()，否则用 identity/==。"""
+        a_native = a.to_native() if hasattr(a, 'to_native') else a
+        b_native = b.to_native() if hasattr(b, 'to_native') else b
+        try:
+            return a_native == b_native
+        except Exception:
+            return a is b
+
     def should_continue_retrying(self) -> bool:
         """
         判断是否应该继续重试。

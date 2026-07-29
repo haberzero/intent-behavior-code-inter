@@ -60,8 +60,18 @@ class MethodMemberSpec(MemberSpec):
 
     The ``kind`` field defaults to ``"method"``; pass ``kind="llm_method"`` for
     LLM functions.
+
+    ``mutating`` declares that this method modifies the receiver's state.
+    Used by llmexcept body protection to block mutation of LLM-participating
+    variables. Propagates transitively: a user function calling a mutating
+    method on its parameter is inferred as mutating.
+
+    ``llmexcept_safe`` marks methods that are sanctioned for use inside
+    llmexcept handler bodies (e.g. ai.set_retry_hint, print).
     """
 
     kind: str = "method"
     param_types: List[TypeRef] = field(default_factory=list)
     return_type: TypeRef = field(default_factory=lambda: _VOID_REF)
+    mutating: bool = False
+    llmexcept_safe: bool = False

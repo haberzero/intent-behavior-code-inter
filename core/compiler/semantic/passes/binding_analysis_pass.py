@@ -12,6 +12,7 @@ from core.base.diagnostics.codes import (
     SEM_LLMEXCEPT_BINDING,
     SEM_LLMEXCEPT_BODY_WRITE,
     SEM_LLMEXCEPT_SCOPE_BINDING,
+    SEM_LLMEXCEPT_MUTATING_CALL,
     SEM_UNCATEGORIZED,
 )
 from core.kernel import ast
@@ -78,7 +79,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
     验证 llmexcept 语句的合法性：
     - llmexcept 必须关联到包含行为表达式的语句
     - 检查 llmexcept target 的合法性
-    - read-only 约束：llmexcept body 内禁止对外部作用域变量赋值（SEM_LLMEXCEPT_BODY_WRITE）
+    - read-only 约束：llmexcept body 内禁止对 LLM 参与变量赋值（SEM_LLMEXCEPT_BODY_WRITE）及 mutating 调用（SEM_LLMEXCEPT_MUTATING_CALL）
     """
 
     def __init__(self, context: SemanticContext):
@@ -174,8 +175,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                     # 递归处理 llmexcept body
                     if stmt.body:
                         stmt.body = self._rewrite_body(stmt.body)
-                        # 验证 body 内的 read-only 约束
-                        self._validate_readonly_body(stmt.body)
+                        self._validate_readonly_body(stmt.body, protected_stmt=prev_stmt)
                     i += 1
                     continue
                 else:
@@ -194,8 +194,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                 # 递归处理 llmexcept body
                 if stmt.body:
                     stmt.body = self._rewrite_body(stmt.body)
-                    # 验证 body 内的 read-only 约束
-                    self._validate_readonly_body(stmt.body)
+                    self._validate_readonly_body(stmt.body, protected_stmt=stmt.target)
 
                 # 记录绑定（使用节点对象作为键）
                 self.llmexcept_bindings[stmt] = {
@@ -232,29 +231,69 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
 
     # ===== llmexcept body read-only 约束 =====
 
-    def _validate_readonly_body(self, body: List[ast.IbASTNode]):
+    def _extract_llm_participating_vars(self, target_stmt: Optional[ast.IbASTNode]) -> frozenset:
+        """从被保护语句中提取参与 LLM 调用的变量名集合。
+
+        包括：$ 插值变量、意图注解引用变量、赋值目标（接收 LLM 结果）。
+        """
+        if target_stmt is None:
+            return frozenset()
+        names: Set[str] = set()
+        self._collect_vars_from_node(target_stmt, names)
+        return frozenset(names)
+
+    def _collect_vars_from_node(self, node: ast.IbASTNode, names: Set[str]):
+        """递归收集节点中的变量引用名。"""
+        if isinstance(node, ast.IbBehaviorExpr) or isinstance(node, getattr(ast, 'IbBehaviorInstance', type(None))):
+            for seg in getattr(node, 'segments', []):
+                if isinstance(seg, ast.IbASTNode):
+                    self._collect_root_names(seg, names)
+            return
+        if isinstance(node, ast.IbIntentAnnotation) or isinstance(node, ast.IbIntentStackOperation):
+            intent = getattr(node, 'intent', None)
+            if intent and hasattr(intent, 'segments') and intent.segments:
+                for seg in intent.segments:
+                    if isinstance(seg, ast.IbASTNode):
+                        self._collect_root_names(seg, names)
+            if intent and hasattr(intent, 'expr') and intent.expr:
+                self._collect_root_names(intent.expr, names)
+            return
+        if isinstance(node, ast.IbAssign):
+            for target in node.targets:
+                self._collect_root_names(target, names)
+            if node.value:
+                self._collect_vars_from_node(node.value, names)
+            return
+        for attr in vars(node):
+            child = getattr(node, attr)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.IbASTNode):
+                        self._collect_vars_from_node(item, names)
+            elif isinstance(child, ast.IbASTNode):
+                self._collect_vars_from_node(child, names)
+
+    def _collect_root_names(self, node: ast.IbASTNode, names: Set[str]):
+        """从表达式中提取根变量名（处理属性链和下标链）。"""
+        if isinstance(node, ast.IbName):
+            names.add(node.id)
+        elif isinstance(node, ast.IbAttribute):
+            self._collect_root_names(node.value, names)
+        elif isinstance(node, ast.IbSubscript):
+            self._collect_root_names(node.value, names)
+        elif isinstance(node, ast.IbTypeAnnotatedExpr):
+            self._collect_root_names(node.target, names)
+
+    def _validate_readonly_body(self, body: List[ast.IbASTNode], protected_stmt: Optional[ast.IbASTNode] = None):
         """验证 llmexcept body 内的 read-only 约束（SEM_LLMEXCEPT_BODY_WRITE）。
 
-        - 捕获进入 body 前的外部作用域变量名集合
-        - 排除 body 内声明的 body-local 变量（避免误报）
-        - body 内任何对外部作用域变量的赋值产生 SEM_LLMEXCEPT_BODY_WRITE 错误
+        保护集为参与 LLM 调用的变量（$ 插值 + 意图引用 + 赋值目标）。
+        非 LLM 参与变量的修改默认允许（计数器、统计等辅助用途）。
         """
-        # 收集所有可见作用域的变量名（当前作用域 + 全部外层父作用域）
-        all_scope_names = set()
-        scope = self.current_scope
-        while scope is not None:
-            all_scope_names.update(scope.symbols.keys())
-            scope = scope.parent
-        all_scope_names = frozenset(all_scope_names)
-
-        # 收集 body 直接层级声明的变量名（body-local）
-        body_declared_names = self._collect_body_declared_names(body)
-
-        # 外部作用域变量 = 进入 body 前的所有变量 - body 内新声明的变量
-        outer_scope_names = all_scope_names - body_declared_names
-
-        # 检查 body 内的赋值
-        self._check_assignments_readonly(body, outer_scope_names)
+        protected_vars = self._extract_llm_participating_vars(protected_stmt)
+        if not protected_vars:
+            return
+        self._check_assignments_readonly(body, protected_vars)
 
     def _collect_body_declared_names(self, body: List[ast.IbASTNode]) -> frozenset:
         """收集 llmexcept body 直接层级中真正新声明的变量名。
@@ -280,48 +319,168 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                                 result.add(name)
         return frozenset(result)
 
-    def _check_assignments_readonly(self, body: List[ast.IbASTNode], outer_scope_names: frozenset):
-        """递归检查 body 内的赋值是否违反 read-only 约束。"""
+    def _check_assignments_readonly(self, body: List[ast.IbASTNode], protected_vars: frozenset):
+        """递归检查 body 内的赋值和 mutating 调用是否违反 read-only 约束。"""
         for stmt in body:
             if isinstance(stmt, ast.IbAssign):
                 for target in stmt.targets:
                     var_name = self._extract_assign_target_name(target)
-                    if var_name and var_name in outer_scope_names:
+                    if var_name and var_name in protected_vars:
                         self.error(
                             f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
-                            f"writes to outer-scope variables break snapshot isolation. "
+                            f"this variable participates in the protected LLM call. "
                             f"Use 'retry \"hint\"' to provide correction guidance instead.",
                             stmt, code=SEM_LLMEXCEPT_BODY_WRITE
                         )
             elif isinstance(stmt, ast.IbAugAssign):
                 var_name = self._extract_assign_target_name(stmt.target)
-                if var_name and var_name in outer_scope_names:
+                if var_name and var_name in protected_vars:
                     self.error(
                         f"Cannot assign to '{var_name}' inside a llmexcept handler body: "
-                        f"writes to outer-scope variables break snapshot isolation. "
+                        f"this variable participates in the protected LLM call. "
                         f"Use 'retry \"hint\"' to provide correction guidance instead.",
                         stmt, code=SEM_LLMEXCEPT_BODY_WRITE
                     )
 
+            self._check_mutating_calls(stmt, protected_vars)
+
             # 递归检查嵌套结构
             if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):
-                self._check_assignments_readonly(stmt.body, outer_scope_names)
+                self._check_assignments_readonly(stmt.body, protected_vars)
             if hasattr(stmt, 'orelse') and isinstance(getattr(stmt, 'orelse'), list):
-                self._check_assignments_readonly(stmt.orelse, outer_scope_names)
+                self._check_assignments_readonly(stmt.orelse, protected_vars)
             if hasattr(stmt, 'handlers') and isinstance(getattr(stmt, 'handlers'), list):
                 for handler in stmt.handlers:
                     if hasattr(handler, 'body') and isinstance(handler.body, list):
-                        self._check_assignments_readonly(handler.body, outer_scope_names)
+                        self._check_assignments_readonly(handler.body, protected_vars)
             if hasattr(stmt, 'finalbody') and isinstance(getattr(stmt, 'finalbody'), list):
-                self._check_assignments_readonly(stmt.finalbody, outer_scope_names)
+                self._check_assignments_readonly(stmt.finalbody, protected_vars)
+
+    def _check_mutating_calls(self, node: ast.IbASTNode, protected_vars: frozenset):
+        """检查节点中的方法调用是否对受保护变量执行 mutating 操作。"""
+        if isinstance(node, ast.IbCall):
+            self._check_single_call(node, protected_vars)
+        for attr in vars(node):
+            child = getattr(node, attr)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.IbASTNode):
+                        self._check_mutating_calls(item, protected_vars)
+            elif isinstance(child, ast.IbASTNode):
+                self._check_mutating_calls(child, protected_vars)
+
+    def _check_single_call(self, call_node: ast.IbCall, protected_vars: frozenset):
+        """检查单个调用：若接收者为受保护变量且方法为 mutating，报错。"""
+        func = call_node.func
+        if not isinstance(func, ast.IbAttribute):
+            if isinstance(func, ast.IbName):
+                self._check_user_func_call(func, call_node, protected_vars)
+            return
+        receiver_name = self._extract_assign_target_name(func.value)
+        if not receiver_name or receiver_name not in protected_vars:
+            return
+        method_name = func.attr
+        spec_reg = self.context.registry
+        receiver_sym = self.current_scope.resolve(receiver_name) if self.current_scope else None
+        if not receiver_sym or not receiver_sym.spec:
+            return
+        axiom = spec_reg.get_axiom(receiver_sym.spec) if hasattr(spec_reg, 'get_axiom') else None
+        if not axiom:
+            return
+        method_specs = axiom.get_method_specs()
+        method_spec = method_specs.get(method_name)
+        if not method_spec:
+            return
+        if getattr(method_spec, 'llmexcept_safe', False):
+            return
+        if getattr(method_spec, 'mutating', False):
+            self.error(
+                f"Cannot call mutating method '{method_name}' on '{receiver_name}' "
+                f"inside a llmexcept handler body: this variable participates in "
+                f"the protected LLM call.",
+                call_node, code=SEM_LLMEXCEPT_MUTATING_CALL
+            )
+
+    def _check_user_func_call(self, func_name_node: ast.IbName, call_node: ast.IbCall, protected_vars: frozenset):
+        """检查用户函数调用：若参数包含受保护变量且函数为 mutating，报错。"""
+        arg_names = set()
+        for arg in (call_node.args or []):
+            name = self._extract_assign_target_name(arg)
+            if name:
+                arg_names.add(name)
+        if not arg_names & protected_vars:
+            return
+        func_sym = self.current_scope.resolve(func_name_node.id) if self.current_scope else None
+        if not func_sym or not getattr(func_sym, 'def_node', None):
+            return
+        if self._is_user_func_mutating(func_sym.def_node, set()):
+            violated = arg_names & protected_vars
+            self.error(
+                f"Cannot call mutating function '{func_name_node.id}' with "
+                f"protected variable(s) {sorted(violated)} inside a llmexcept "
+                f"handler body.",
+                call_node, code=SEM_LLMEXCEPT_MUTATING_CALL
+            )
+
+    def _is_user_func_mutating(self, func_def_node: ast.IbASTNode, visited: set) -> bool:
+        """推断用户函数是否为 mutating（体内是否对参数调用 mutating 方法）。"""
+        node_id = id(func_def_node)
+        if node_id in visited:
+            return False
+        visited.add(node_id)
+        body = getattr(func_def_node, 'body', None)
+        if not body:
+            return False
+        return self._body_contains_mutating_call(body, visited)
+
+    def _body_contains_mutating_call(self, stmts, visited: set) -> bool:
+        """扫描语句列表，检查是否存在 mutating 方法调用。"""
+        for stmt in stmts:
+            if isinstance(stmt, ast.IbCall):
+                func = stmt.func
+                if isinstance(func, ast.IbAttribute):
+                    method_name = func.attr
+                    receiver_name = self._extract_assign_target_name(func.value)
+                    if receiver_name and self._is_known_mutating_method(method_name):
+                        return True
+            for attr in vars(stmt):
+                child = getattr(stmt, attr)
+                if isinstance(child, list):
+                    for item in child:
+                        if isinstance(item, ast.IbASTNode):
+                            if isinstance(item, ast.IbCall):
+                                func = item.func
+                                if isinstance(func, ast.IbAttribute):
+                                    if self._is_known_mutating_method(func.attr):
+                                        return True
+                            if hasattr(item, 'body') and isinstance(getattr(item, 'body'), list):
+                                if self._body_contains_mutating_call(item.body, visited):
+                                    return True
+                elif isinstance(child, ast.IbASTNode):
+                    if hasattr(child, 'body') and isinstance(getattr(child, 'body'), list):
+                        if self._body_contains_mutating_call(child.body, visited):
+                            return True
+        return False
+
+    _KNOWN_MUTATING_METHODS = frozenset({
+        "append", "insert", "remove", "pop", "sort", "reverse", "clear",
+        "__setitem__", "update", "push", "merge", "combine",
+        "clear_inherited", "use",
+    })
+
+    def _is_known_mutating_method(self, method_name: str) -> bool:
+        return method_name in self._KNOWN_MUTATING_METHODS
 
     def _extract_assign_target_name(self, target: ast.IbASTNode) -> Optional[str]:
-        """从赋值目标提取变量名。"""
+        """从赋值目标提取根变量名（覆盖简单名、属性链、下标链）。"""
         if isinstance(target, ast.IbName):
             return target.id
         elif isinstance(target, ast.IbTypeAnnotatedExpr):
-            if isinstance(target.target, ast.IbName):
-                return target.target.id
+            return self._extract_assign_target_name(target.target)
+        elif isinstance(target, ast.IbAttribute):
+            return self._extract_assign_target_name(target.value)
+        elif isinstance(target, ast.IbSubscript):
+            return self._extract_assign_target_name(target.value)
         return None
 
 

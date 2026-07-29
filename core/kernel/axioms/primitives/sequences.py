@@ -125,20 +125,20 @@ class ListAxiom(BaseAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "append":        _m("append",        params=["any"],        ret="void"),
-            "insert":        _m("insert",         params=["int", "any"], ret="void"),
-            "remove":        _m("remove",         params=["any"],        ret="void"),
-            "pop":           _m("pop",                                   ret="any"),
+            "append":        _m("append",        params=["any"],        ret="void", mutating=True),
+            "insert":        _m("insert",         params=["int", "any"], ret="void", mutating=True),
+            "remove":        _m("remove",         params=["any"],        ret="void", mutating=True),
+            "pop":           _m("pop",                                   ret="any",  mutating=True),
             "index":         _m("index",          params=["any"],        ret="int"),
             "count":         _m("count",          params=["any"],        ret="int"),
             "contains":      _m("contains",       params=["any"],        ret="bool"),
             "len":           _m("len",                                   ret="int"),
-            "sort":          _m("sort",                                  ret="void"),
-            "reverse":       _m("reverse",                               ret="void"),
-            "clear":         _m("clear",                                 ret="void"),
+            "sort":          _m("sort",                                  ret="void", mutating=True),
+            "reverse":       _m("reverse",                               ret="void", mutating=True),
+            "clear":         _m("clear",                                 ret="void", mutating=True),
             "cast_to":       _m("cast_to",        params=["any"],        ret="any"),
             "__getitem__":   _m("__getitem__",    params=["int"],        ret="any"),
-            "__setitem__":   _m("__setitem__",    params=["int", "any"], ret="void"),
+            "__setitem__":   _m("__setitem__",    params=["int", "any"], ret="void", mutating=True),
         }
 
     def get_operators(self) -> Dict[str, str]:
@@ -215,17 +215,17 @@ class DictAxiom(BaseAxiom):
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
             "get":         _m("get",         params=["any", "any"], ret="any"),
-            "pop":         _m("pop",         params=["any"],        ret="any"),
+            "pop":         _m("pop",         params=["any"],        ret="any",  mutating=True),
             "keys":        _m("keys",                               ret="list"),
             "values":      _m("values",                             ret="list"),
             "items":       _m("items",                              ret="list"),
-            "update":      _m("update",      params=["any"],        ret="void"),
+            "update":      _m("update",      params=["any"],        ret="void", mutating=True),
             "len":         _m("len",                                ret="int"),
             "contains":    _m("contains",    params=["any"],        ret="bool"),
-            "remove":      _m("remove",      params=["any"],        ret="void"),
+            "remove":      _m("remove",      params=["any"],        ret="void", mutating=True),
             "cast_to":     _m("cast_to",     params=["any"],        ret="any"),
             "__getitem__": _m("__getitem__", params=["any"],         ret="any"),
-            "__setitem__": _m("__setitem__", params=["any", "any"],  ret="void"),
+            "__setitem__": _m("__setitem__", params=["any", "any"],  ret="void", mutating=True),
         }
 
     def get_operators(self) -> Dict[str, str]:

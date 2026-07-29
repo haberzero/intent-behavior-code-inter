@@ -281,7 +281,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 ## 十一、Switch 语句设计未稳定
 
-**当前状态**：`switch`/`case` 语法的 AST 节点已实现（`core/kernel/ast.py:217 class IbSwitch`），基本功能可用（e2e 测试覆盖），但语义设计存在待改进问题。
+**当前状态**：`switch`/`case` 语法的 AST 节点已实现（`core/kernel/ast.py` 的 `IbSwitch` 类），基本功能可用（e2e 测试覆盖），但语义设计存在待改进问题。
 
 **已知问题**：
 - case 匹配语义不完整（值比较、类型匹配、模式匹配的边界不清晰）
@@ -297,7 +297,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 ## 十二、`intent_context` 类静态调用的"静默无效"陷阱
 
-**当前状态**：`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/builtin_initializer.py:421-517`）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
+**当前状态**：`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/builtin_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
 
 **有效路径**：
 
@@ -313,7 +313,7 @@ intent_context.use(ctx)                              # ← 必须 use，否则�
 str r = @~ ... ~
 ```
 
-**作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `builtin_initializer.py:519-538` 注释）。
+**作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `core/runtime/bootstrap/builtin_initializer.py` 中对应方法注册段的注释）。
 
 **编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 现已对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
@@ -461,3 +461,27 @@ if cond:
 ```
 
 这是设计决策（与 Python 不同），目的是避免作用域歧义。
+
+---
+
+## 二十、禁止循环导入
+
+**限制说明**
+
+模块间的 `import` 依赖图必须为有向无环图（DAG）。循环导入（A 导入 B，B 导入 A）会触发致命编译错误 `DEP_CIRCULAR_IMPORT`。
+
+```ibci
+# a.ibci
+import b
+
+# b.ibci
+import a   # DEP_CIRCULAR_IMPORT: 循环依赖
+```
+
+**根源**
+
+IBCI 编译器按拓扑序编译模块（依赖先编译）。循环依赖使得拓扑排序不存在，后编译方无法获得先编译方的完整类型信息。IBC-Inter 不是通用系统编程语言，LLM 调用开销决定了工程规模有限，模块间循环依赖无实际必要。此设计与 Rust（禁止循环 crate）、Go（禁止循环 package）一致。
+
+**规避方式**
+
+将共享类型/接口提取到独立的底层模块，使依赖关系保持单向。

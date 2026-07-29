@@ -19,7 +19,7 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.compiler.serialization.serializer import FlatSerializer
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INT_INTERNAL_ERROR,
-    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT, SEM_UNDEFINED_SYMBOL
+    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT, SEM_UNDEFINED_SYMBOL, DEP_CIRCULAR_IMPORT
 )
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 
@@ -142,8 +142,11 @@ class Scheduler(ICompilerService):
         try:
             compilation_order = graph.get_compilation_order()
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Compilation order determined:", data=compilation_order)
+        except CircularDependencyError as e:
+            self.issue_tracker.error(str(e), code=DEP_CIRCULAR_IMPORT)
+            raise CompilerError(self.issue_tracker.diagnostics)
         except Exception as e:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Circular dependency or graph error: {str(e)}")
+            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Graph error: {str(e)}")
             self.issue_tracker.error(str(e), code=DEP_GRAPH_ERROR)
             raise e
 
@@ -516,12 +519,20 @@ class Scheduler(ICompilerService):
                     # 2. 处理 from mod import a, b as c, *
                     for alias in imp.names:
                         if alias.name == '*':
-                            # 注入所有导出的符号；跳过已存在同名符号（幂等）
                             for name, member in s_mod_type.members.items():
                                 existing = analyzer.symbol_table.resolve(name)
                                 if existing:
-                                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                        f"[from-import *] Symbol '{name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
+                                    if existing.kind != SymbolKind.MODULE:
+                                        file_tracker.warning(
+                                            f"'from {imp.module_name} import *' conflicts with an already-defined "
+                                            f"{existing.kind.name.lower()} symbol '{name}'. "
+                                            f"The import is ignored; the locally-defined symbol takes precedence.",
+                                            location=Location(file_path=file_path, line=imp.lineno, column=1),
+                                            code=SEM_IMPORT_CONFLICT,
+                                        )
+                                    else:
+                                        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                            f"[from-import *] Symbol '{name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
                                     new_sym = self._create_symbol_from_member(name, member)
                                     if new_sym:
@@ -569,8 +580,10 @@ class Scheduler(ICompilerService):
             # 这确保了 TypeDef 在解析时能看到完整的符号表
             final_mod_meta = self.registry.resolve(module_name)
             if final_mod_meta:
-                # 过滤掉非导出的符号（如内部变量）可以在这里做，目前默认全量导出
-                final_mod_meta.members = result.symbol_table.symbols
+                final_mod_meta.members = {
+                    name: sym for name, sym in result.symbol_table.symbols.items()
+                    if sym.provenance != Provenance.KERNEL_NATIVE
+                }
             
             # Cache AST, Tokens, and SymbolTable
             self.ast_cache[file_path] = ast_node

@@ -1,8 +1,7 @@
 ﻿# IBCI 元数据架构设计文档
 
-**创建日期**: 2026-05-13  
-**状态**: 已实施  
-**目的**: 澄清 AST、侧表、MetadataStore 的职责边界和设计原则
+> 本文档澄清 AST、侧表、MetadataStore 的职责边界和设计原则。
+> 读者对象：需要修改编译管线数据流或新增 AST 字段/侧表的开发者。
 
 ---
 
@@ -52,14 +51,14 @@ AST + SideTable  ────→  Serializer  ────→  Artifact  ──�
 
 ### 2.2 应该在 AST 上的内容
 
-#### ✅ 程序源码结构
+#### 程序源码结构
 ```python
 class IbBehaviorExpr:
     segments: List[Union[str, IbExpr]]  # 模板片段
     tag: str                             # 标识符
 ```
 
-#### ✅ 静态分析结果（需要持久化）
+#### 静态分析结果（需要持久化）
 ```python
 class IbBehaviorExpr:
     llm_deps: List["IbBehaviorExpr"]     # 依赖的其他 Behavior
@@ -81,11 +80,11 @@ class IbBehaviorExpr:
 
 **类型级属性**（描述"这个类型本身是什么/从哪来/怎么存储"）**不**落在 AST 节点或侧表，而落在 `IbSpec`（`core/kernel/spec/base.py`）——它是"类型身份的单点真理"（single source of truth for type identity），编译期与运行期共用。
 
-**当前类型级轴（ADR-021 + ADR-020 G6，2026-07-17）**：
-- **`provenance: Provenance`** —— 来源（`KERNEL_NATIVE`/`AXIOM_PROVIDED`/`USER_DEFINED`/`EXTERNAL_MODULE`）。取代原 `is_user_defined`（其对模块的重载已被消除）。
+**当前类型级轴**：
+- **`provenance: Provenance`** —— 来源（`KERNEL_NATIVE`/`AXIOM_PROVIDED`/`USER_DEFINED`/`EXTERNAL_MODULE`）。
 - **`visibility: Visibility`** —— 可见性（`PRELUDE_VISIBLE`/`IMPORT_GATED`/`SCOPE_PRIVATE`）。prelude 过滤器据此决定免 import 可见性。
-- **`storage_model: StorageModel`** —— 存储模型（`MEMORY_BACKED`/`DISK_BACKED`，ADR-016）。默认 `MEMORY_BACKED`；分发逻辑（deep_clone/序列化器磁盘型分支）在 G3 启用。
-- **`exported_types: List[str]`** —— 模块级附加类型注入列表（ADR-020 G6）。仅 `TypeKind.MODULE` 使用；当模块被 import 时，scheduler 把这些类型名作为符号同时注入当前作用域。例如 `import file` 会同时把 `file_handle`/`audio`/`image`/`video` 注入作用域，使后续 `file_handle fh = file.open(...)` / `audio a = audio.from_file(...)` 可解析。
+- **`storage_model: StorageModel`** —— 存储模型（`MEMORY_BACKED`/`DISK_BACKED`）。默认 `MEMORY_BACKED`；分发逻辑（deep_clone/序列化器磁盘型分支）按此标志分发。
+- **`exported_types: List[str]`** —— 模块级附加类型注入列表。仅 `TypeKind.MODULE` 使用；当模块被 import 时，scheduler 把这些类型名作为符号同时注入当前作用域。例如 `import file` 会同时把 `file_handle`/`audio`/`image`/`video` 注入作用域，使后续 `file_handle fh = file.open(...)` / `audio a = audio.from_file(...)` 可解析。
 
 **`exported_types` 设计约束**：
 1. 只用于 `KERNEL_NATIVE + IMPORT_GATED` 模块（当前为 `ai`/`file`/`ihost`/`idbg`/`isys`）。
@@ -107,7 +106,7 @@ class IbBehaviorExpr:
 
 ```python
 class SideTableManager:
-    # ✅ 临时映射：使用 id() 快速查询
+    # 临时映射：使用 id() 快速查询
     node_to_symbol: Dict[Any, Symbol]      # AST节点 → 符号定义
     node_to_type: Dict[Any, IbSpec]        # AST节点 → 类型信息
     node_is_callable_instance: Dict[Any, bool]
@@ -202,30 +201,30 @@ type_uid = f"type_{module_path}.{name}"
 
 ### 5.1 正确的设计模式
 
-✅ **AST 节点包含依赖信息**
+**AST 节点包含依赖信息**
 ```python
 # 正确 - 直接写入 AST
 node.llm_deps = [dep1, dep2]
 node.dispatch_eligible = True
 ```
 
-✅ **侧表使用 id() 快速查询**
+**侧表使用 id() 快速查询**
 ```python
 # 正确 - 性能优先
 side_table.node_to_symbol[node] = symbol  # 使用 id(node)
 ```
 
-✅ **序列化器自动转换**
+**序列化器自动转换**
 ```python
 # 正确 - 职责分离
 serializer._collect_node(node)  # 自动 id() → UID
 ```
 
-### 5.2 曾经的过度设计（已修复）
+### 5.2 反模式：将 AST 固有属性移到 MetadataStore
 
 ❌ **试图将 AST 固有属性移到 MetadataStore**
 ```python
-# 旧实现：错误 - 重复存储
+# 错误 - 重复存储
 new_metadata.behavior_metadata['behavior_dependencies'][node_uid] = deps
 ```
 
@@ -234,7 +233,7 @@ new_metadata.behavior_metadata['behavior_dependencies'][node_uid] = deps
 2. 同步问题（需要保持两处一致）
 3. 序列化冲突（序列化器已经处理 AST）
 
-✅ **修复后**
+正确做法：
 ```python
 # 正确 - 直接写 AST
 node.llm_deps = deps
@@ -263,7 +262,7 @@ class MetadataStore:
 
 ### 6.2 职责边界
 
-**✅ 应该存储的**：
+**应该存储的**：
 - 编译器生成的临时绑定（符号绑定、类型绑定）
 - 需要 UID 索引的分析结果（cell_captured_symbols）
 
@@ -366,17 +365,9 @@ def dispatch_behavior(node: IbBehaviorExpr):
 
 ---
 
-## 九、实施状态
+## 九、长期优化方向
 
-### 9.1 已完成的改进
-
-- ✅ Pass 5：直接写入 AST 节点（`node.llm_deps`, `node.dispatch_eligible`）
-- ✅ Pass 6：移除对 behavior_metadata 的检查
-- ✅ 文档：本架构设计文档
-
-### 9.2 待优化项（长期愿景）
-
-#### 优化 1：统一 UID 生成策略
+### 优化 1：统一 UID 生成策略
 **当前问题**：符号 UID、节点 UID、类型 UID 的生成逻辑分散
 
 **建议**：创建统一的 `UIDGenerator` 类
@@ -455,7 +446,6 @@ class IbASTNode:
 
 ### 10.1 相关文档
 
-- `TYPE_SYSTEM_ANALYSIS_REPORT.md` - 类型系统分析
 - `core/compiler/serialization/serializer.py` - 序列化实现
 
 ### 10.2 关键代码位置
@@ -464,121 +454,45 @@ class IbASTNode:
 - 序列化器：`core/compiler/serialization/serializer.py`
 - Semantic Passes：`core/compiler/semantic/passes/`
 
+### 10.3 语义分析 4-Phase 流水线
+
+`core/compiler/semantic/pipeline.py:create_semantic_pipeline()` 创建标准管道：
+
+| Phase | 类 | 子步骤 | 职责 |
+|-------|------|--------|------|
+| 1. SymbolPhase | `symbol_phase.py` | SymbolCollectionPass → SymbolResolutionPass → **TypeRefResolutionPass** | 收集所有符号定义；解析符号引用；将残留 TypeRef spec 统一解析为 IbSpec（循环导入已禁止，resolve 失败即真错误） |
+| 2. TypePhase | `type_phase.py` | TypeResolutionPass → TypeCheckingPass | 解析声明标注；类型推断与兼容性检查 |
+| 3. BindingPhase | `binding_phase.py` | BindingAnalysisPass → BehaviorDependencyPass | llmexcept 绑定 + body 保护约束；行为依赖图 |
+| 4. IntegrityPhase | `integrity_phase.py` | IntegrityCheckPass | 完整性校验 |
+
+Phase 间通过 `PassOutput`（symbol_bindings / type_bindings / diagnostics）传递产物，Pipeline 合并为最终 `MetadataStore`。
+
 ---
----
-
-**文档维护者**: Claude Sonnet 4.5
-**最后更新**: 2026-05-15（追加"附录 B：2026-05-15 回顾性事实核查的关键订正"；
-修正 §3.2 中关于侧表字段的描述，删除已确认为"双写"的两条字段）
-
----
-
-## 附录 B：2026-05-15 回顾性事实核查的关键订正
-
-
-### B.1 关于 §3.2 SideTableManager 的当前真实字段
-
-§3.2 列举的 `node_is_callable_instance` 与 `node_capture_mode` 是**双写真相**的产物——这两份信息同时存在于 AST 字段（`IbBehaviorInstance.is_callable_instance`、`IbAssign.capture_mode` / `IbLambdaExpr.capture_mode`）与侧表中，运行时 VM 实际是从侧表读取的（`core/runtime/vm/handlers.py:710-712, 1431, 1445`）。这违反了本文第八章"反模式警告"的第一条："不要将 AST 固有属性复制到 MetadataStore/侧表"。
-
-**结论**：这两条侧表字段计划删除（NEXT_STEPS 下一步 P0 任务"双写真相收敛"），VM 直接读取 AST 字段。删除后侧表只保留：
-- `node_to_symbol`（C2，编译期对象身份索引；序列化时统一展平为 UID）
-- `node_to_type`（C3，同上）
-- `node_to_loc`（仅诊断用）
-- `cell_captured_symbols`（UID 集合，跨边界字段；保留）
-
-### B.2 关于 §6 MetadataStore 字段定位的修订
-
-`MetadataStore` 当前实现含 6 个字段：`symbol_bindings`、`type_bindings`、`callable_instances`、`capture_modes`、`cell_captured_symbols`、`annotations`。其中：
-
-- `callable_instances` / `capture_modes`：**AST 字段副本**，应当删除（同 §B.1）。
-- `annotations`：**通用口袋字段**，会被滥用为"再加一份保险"的便捷出口，应当删除。
-- `cell_captured_symbols`：**保留**（确实是跨 Pass 传递的 UID 集合，无 AST 对应字段）。
-
-同时 `BindingAnalysisPass.run()` 写入了三个 `MetadataStore` 未声明的字段：`llmexcept_bindings`、`intent_annotations`、`behavior_metadata`——这三个字段**不应当被声明**。正确做法：
-
-- `llmexcept_bindings`：直接写回 AST（`IbLLMExceptionalStmt.target` / `IbFor.llmexcept_handler`，两个并存的 AST 通道，见下 §B.3）。
-- `intent_annotations`：写回 AST 或写回 `symbol_bindings`/`type_bindings`。
-- `behavior_metadata`：拆解成具体字段（dispatch_eligible / llm_deps）写回 AST，**避免通用口袋**。
-
-### B.3 关于 llmexcept 的 AST 双通道绑定（必须明文记录）
-
-`IbLLMExceptionalStmt` 在 parser 阶段 `target=None`；语义阶段 `_bind_llm_except`（`core/compiler/semantic/passes/semantic_analyzer.py:235-285`）按情形分两路写入：
-
-- **正则情形**（assign / if / return / while 等含 `@~...~` 的语句）：`IbLLMExceptionalStmt` 在 body 中**替换**前一句，`stmt.target = prev_stmt`。
-- **条件驱动 for 循环情形**：`IbLLMExceptionalStmt` **不**进入 body，而是挂在 `IbFor.llmexcept_handler` 字段，`stmt.target` 保持 None。
-
-这是历史上"侧表 → AST 字段"反向迁移（删除旧 `node_protection` 侧表，C11/P3）的最终形态。**v2 重构必须同时处理这两条 AST 通道**，不可以只读其中一个。
-
-### B.4 关于 `TypeInferenceState` 字段的设计
-
-`TypeInferenceState`（原 `TypeEnvironment`，alias 已彻底移除）仅含 `auto_return_accumulator`（tuple）和 `slots`（Dict[str, TypeSlot]）。不引入约束求解或泛型实例化字段——这不符合 IBCI "单次锁定 + 公理调度"的设计承诺。
-
-### B.5 关于 §4.3 UID 生成策略的两个潜在地雷（待整改）
-
-- **类型 UID 冲突**：`type_{module}.{name}` 对结构化 `CALLABLE_SIG` 名字均为 "callable" 或匿名，会塌成同一 UID。当前未爆是因为 fn 推断少；D3（HOF 参数签名匹配）开始落地时会成为故障源。**改法**：CALLABLE_SIG 的 UID 改为 `sig_<sha16(return_head + ','.join(param_heads))>`。
-
-### B.6 关于 "MetadataStore.bind 返回新 store" 的反模式
-
-当前实现采用 `{**self.symbol_bindings, k: v}` 拷整张字典模式（在 `metadata_store.py` 中）。节点上千就是 O(n²) 开销。改法：bind 改为 mutable in-place 更新，但**只允许从 Pass 内部调用**——这等价于 v1 的 SideTableManager 的成熟方案。"不可变 Context" 的设计承诺**不需要落到 MetadataStore 内部字典级别**。
-
-### B.7 反模式警告的扩充（取代 §8.3）
-
-在第八章"反模式警告"的基础上追加：
-
-❌ **不要**给 MetadataStore 新增 `behavior_metadata` / `annotations` 这种通用口袋字段——它会立刻被滥用，把侧表的债换个名字续命。
-❌ **不要**让 `TypeInferenceState` 演化出"按节点-约束键"的字段——这是元数据膨胀的种子。
-❌ **不要**忽略 llmexcept 的两条 AST 通道（`stmt.target` 与 `IbFor.llmexcept_handler`）——v2 必须同时处理。
-❌ **不要**重复存放"捕获模式"和"callable 实例标志"——AST 字段已是真相，删侧表副本。
-
-
 
 ## 变量存储模型
 
-> 本节落地类型级存储区分与协议驱动分发的最终设计。字段定义见 §2.4，本节聚焦分发机制与磁盘型协议族。
-
-### 协议驱动分发（核心原则）
-
-变量如何参与快照、序列化，由分发到该类型 axiom 所实现的协议方法决定，禁止在 executor/strategy/deep_clone/序列化器里查询能力标志位做 `if/else`：
-
-| 调用方 | 分发入口 | 协议方法 |
-|---|---|---|
-| `deep_clone` | `receive("__clone_ref__")` | 磁盘型返回路径引用拷贝（浅、廉价），内存型深拷贝字节 |
-| 序列化器 | `receive("__to_descriptor__")` | 输出路径引用描述符（字符串） |
-| 反序列化器 | `receive("__from_descriptor__")` | 从描述符重建 handle |
-
-调用方代码存储模型无关；新增磁盘型类型不需要改动 executor/strategy/deep_clone/序列化器一行代码。
-
-### 磁盘型协议族
-
-磁盘型类型实现一组与 `__prompt__` 平行的协议方法：
-
-| 协议方法 | 职责 |
-|---|---|
-| `__materialize__` | 惰性物化（按需从路径读字节） |
-| `__path_payload_prompt__` | 基于路径的 payload 构建 |
-| `__clone_ref__` | 路径引用的快照（浅、廉价） |
-| `__to_descriptor__` | 路径引用的序列化 |
-| `__from_descriptor__` | 路径引用的反序列化 |
-
-`__prompt__` 协议族（`__to_prompt__`/`__from_prompt__`/`__outputhint_prompt__`/`__payload_prompt__`）继续作为内存型类型的 I/O 协议；两族不互相混合。
-
-### IbFileHandle 为磁盘型基类
-
-`IbFileHandle` 是磁盘型基类。两种 backing：
-
-- `FileBacking(path, sandboxed)`：指向已存在的源文件。
-- `GeneratedBacking(path)`：指向 LLM 生成时溢写的工件，恒在 project_root 内。
-
-不存在 `MemoryBacking`--所有 media 一律磁盘型。继承关系：
-
-`IbFileHandle` -> `IbAudio` / `IbImage` / `IbVideo`
-
-`IbMedia`（未来容器）= 聚合多 FileHandle，非子类。
-
-### is_disk_backed 辅助属性
-
-`IbSpec` 提供 `is_disk_backed` 只读 property（`storage_model == StorageModel.DISK_BACKED`），用于诊断/断言。分发路径不得改读此 property 做 if/else。
+> 磁盘型文件容器的完整设计（协议族、类型继承、Backing 模型、与快照/序列化/LLM 的交互）见 `docs/subsystems/02_file_container.md`。
+> 本节仅保留与元数据架构直接相关的字段定义。
 
 ### Symbol.provenance 与冲突解析
 
-历史 `is_user_defined: bool` 已废弃，替换为 `Symbol.provenance: Provenance`。`SymbolTable.define` 使用 `existing.provenance.compatible_with(sym.provenance)` 做冲突检测，分发从过程式分支回归协议方法。`metadata["axiom_provided"]` 与 `metadata["is_llm"]` 死字段已删除。
+`Symbol.provenance: Provenance` 是符号来源的唯一标志。`SymbolTable.define` 使用 `existing.provenance.compatible_with(sym.provenance)` 做冲突检测，分发通过协议方法完成。
+
+---
+
+## 附录：常见问题解答
+
+### Q1：为什么不在编译期就使用 UID？
+性能考虑。编译期频繁查询（Pass 之间传递），使用 Python id() 比字符串 UID 快得多。序列化时才转换为 UID，是性能和持久化的最佳平衡点。
+
+### Q2：为什么行为依赖要写在 AST 上？
+三个原因：
+1. 运行时需要（VM 调度器直接读取）
+2. 是程序结构的一部分（不是临时元数据）
+3. 序列化器已经处理对象引用转换（无需手动管理）
+
+### Q3：MetadataStore 未来会被移除吗？
+不会完全移除，但会重新定位为"序列化中介"。长期目标是让序列化器直接从侧表转换，MetadataStore 变成可选的中间表示。
+
+### Q4：如何判断新的分析结果应该存在哪里？
+参考第八章的决策流程图。核心判断：运行时需要 → AST，仅编译期查询 → 侧表。

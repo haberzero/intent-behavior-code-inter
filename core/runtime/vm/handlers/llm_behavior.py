@@ -101,6 +101,18 @@ def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[s
             if isinstance(body_res, Signal):
                 return body_res
 
+            # 运行期影子存储校验：检测被保护变量是否在 body 中被篡改
+            violations = frame.verify_snapshot_integrity(executor.runtime_context)
+            if violations:
+                from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+                core_debugger.trace(
+                    CoreModule.INTERPRETER, DebugLevel.BASIC,
+                    f"[llmexcept] Snapshot violation detected: variable(s) "
+                    f"{violations} were modified inside llmexcept body. "
+                    f"Forcing restore before retry."
+                )
+                frame.restore_snapshot(executor.runtime_context)
+
             # 递增重试计数；若耗尽则抛出 LLMRetryExhaustedError
             if not frame.increment_retry():
                 error = executor.registry.make_llm_retry_exhausted_error(

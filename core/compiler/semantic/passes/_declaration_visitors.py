@@ -69,7 +69,7 @@ class DeclarationVisitorsMixin:
         for arg_node in node.args:
             # IbArg now has annotation field directly
             if arg_node.annotation:
-                arg_type = self._resolve_type(arg_node.annotation) or self._any_desc
+                arg_type = self._resolve_type(arg_node.annotation)
             else:
                 arg_type = self._any_desc
             param_types.append(arg_type)

@@ -227,7 +227,7 @@ except AppError as e:
     print(e.message)        # 能由父类 except 捕获
 ```
 
-> **类型窄化已支持（2026-05-06）**：`except X as e:` 中 `e` 的编译期类型现在正确窄化为 `X`，
+> **类型窄化**：`except X as e:` 中 `e` 的编译期类型正确窄化为 `X`，
 > 可直接访问子类专属字段，无需 `(X)e` 强转：
 >
 > ```ibci

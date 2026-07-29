@@ -2,11 +2,6 @@
 
 > 本文档是 IBC-Inter 项目的核心架构参考文档，包含设计理念、层级架构、设计原则等关键内容。
 > 供未来参与 IBC-Inter 项目的智能体和开发者进行架构对齐使用。
->
-> **最后更新**：2026-05-08
->
-> 重要的架构细节（llmexcept 机制、MOCK 系统、类型系统迁移等）详见 [ARCH_DETAILS.md](./design/ARCH_DETAILS.md)。
-> 当前类型系统状态：`TypeRef` + `TypeDef` + `CALLABLE_INSTANCE` + `IbValue` + `TypeAxiom` 已落地；类型系统主线 M1–M5 全部完成（2026-05-08）。
 
 ---
 
@@ -180,7 +175,7 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 
 ### 5.1 公理系统架构
 
-> **注意**：旧的 `core/kernel/types/`（TypeDescriptor、AxiomHydrator 等）已被删除。当前公理体系直接与 `core/kernel/spec/` 统一类型描述系统集成，详见 5.4 节。
+公理体系直接与 `core/kernel/spec/` 统一类型描述系统集成（详见 5.4 节）。
 
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
@@ -191,7 +186,7 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 
 ### 5.2 公理与类型系统集成
 
-- IbSpec（`core/kernel/spec/`）是唯一的类型描述符系统，旧的 `TypeDescriptor` / `AxiomHydrator` 已不存在
+- IbSpec（`core/kernel/spec/`）是唯一的类型描述符系统
 - 公理通过 `AxiomRegistry` 查询，各类型能力通过公理的 `has_*_cap` 类属性声明，统一由 `TypeAxiom` 接口实现
 - 所有类型引用在公理层均以**纯字符串类型名**传递，消除公理层对 spec 层的直接依赖
 - `SpecRegistry` 负责将公理返回的类型名字符串解析为对应的 `IbSpec` 对象
@@ -216,7 +211,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 | 问题 | 说明 |
 |------|------|
-| **ExpressionAnalyzer `or self._any_desc`** | 静默掩盖类型错误，应给出精确错误提示 |
+| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析已通过 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 修复；内建名防御和推断规则缺失仍保留为允许的职责分离型回退 |
 | **LazySpec 异常情况** | `resolve()` 失败时应抛出错误而非返回占位符 |
 
 **关于 LazySpec 的说明**：
@@ -231,12 +226,12 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 
 ### 5.4 统一类型描述系统（core/kernel/spec/）
 
-类型描述系统已从旧的 `core/kernel/types/`（已删除）完全迁移至 `core/kernel/spec/`。
+类型描述系统位于 `core/kernel/spec/`。
 
 | 组件 | 职责 | 文件位置 |
 |------|------|----------|
 | **IbSpec** | 所有类型描述符的基类 | `kernel/spec/base.py` |
-| **TypeDef（统一类型定义；旧 *Spec 子类与别名已彻底删除）** | 统一类型描述与 kind 分派入口 | `kernel/spec/specs.py`, `kernel/spec/base.py` |
+| **TypeDef** | 统一类型描述与 kind 分派入口 | `kernel/spec/specs.py`, `kernel/spec/base.py` |
 | **SpecRegistry** | 类型注册、兼容性检查、Capability 查询 | `kernel/spec/registry/`（包） |
 | **SpecFactory** | 内置类型工厂（create_list/create_tuple/create_dict 等） | `kernel/spec/registry/`（包） |
 | **MemberSpec / MethodMemberSpec** | 模块成员描述符 | `kernel/spec/member.py` |
@@ -289,7 +284,7 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 |------|------|---------------|
 | 内核原生（kernel-native）| 随内核发行，构造期预注册，IMPORT_GATED；不位于 `ibci_modules/`，不可被用户插件覆盖 | `ai` / `file` / `ihost` / `idbg` / `isys` |
 | 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema` |
-| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | `ibci_ai`（已 kernel-native 化，保留历史位置）/ `ibci_ihost`（已 kernel-native 化）/ `ibci_idbg`（已 kernel-native 化）|
+| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg`（均已 kernel-native 化）|
 
 **示例（AI 插件）**：
 - `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
@@ -502,9 +497,9 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 ## 附录：关键文件索引
 
-> **更新（2026-06-25）**：以下模块已重构为包（目录），路径以 `/` 结尾标注：
-> `kernel/spec/registry/`、`kernel/axioms/primitives/`、`runtime/objects/{builtins,kernel}/`、
-> `runtime/vm/handlers/`、`runtime/interpreter/llm_executor/`。旧 visitor `interpreter/handlers/` 已删除。
+> 以下模块已重构为包（目录），路径以 `/` 结尾标注：
+> `kernel/spec/registry/`、`kernel/axioms/primitives/`、`runtime/objects/{primitives,kernel}/`、
+> `runtime/vm/handlers/`、`runtime/interpreter/llm_executor/`。
 
 | 文件 | 重要性 | 说明 |
 |------|--------|------|
@@ -525,28 +520,17 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 | `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
 | `core/base/diagnostics/debugger.py` | 中 | CoreDebugger |
 | `core/runtime/module_system/discovery.py` | 高 | ModuleDiscoveryService，插件发现服务 |
-| `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin（IbStatelessPlugin 已删除） |
+| `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin |
 | `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（LLM Provider 核心实现） |
 | `ibci_modules/ibci_ihost/core.py` | 中 | HOST 插件实现（核心级） |
 | `ibci_modules/ibci_idbg/core.py` | 中 | IDBG 调试插件实现 |
 
 ---
 
-## 附录：已知架构问题（历史遗留）
+## 附录：HOST 插件双路暴露
 
-> 以下问题已在代码中发现，将在后续版本中修复。详细技术背景见 ARCH_DETAILS.md。
+`HostService`（核心层）和 `ibci_ihost`（用户级插件）对同一宿主能力有双路暴露：
 
-### A.1 MetadataRegistry 双轨问题（已解决，2026-05-08）
-
-主引擎路径已于 M3 重构后统一至单一 SpecRegistry 实例：`discover_all(registry)` 将引擎的 `SpecRegistry` 传入 `HostInterface`，`HostInterface.metadata` 与 `KernelRegistry._metadata_registry` 同源，不存在两轨分离问题。详见 `docs/design/ARCH_DETAILS.md §十`。
-
-### A.2 HOST 插件游离问题
-
-**问题描述**：
-- `HostService`（核心层）和 `ibci_ihost`（用户级插件）对同一宿主能力有双路暴露
-- 历史上存在 `run()` vs `run_isolated()` 方法名不一致的问题
-
-**当前架构**：
 ```
 IBCI脚本 ──→ host_run() 内置函数 ──→ HostService
                 (builtin_initializer)    (实际执行)
@@ -555,10 +539,6 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
                (ModuleDiscovery)   (插件实现)
 ```
 
-### A.3 符号去重：import 与用户定义同名冲突（已解决，2026-05-02）
-
-`Prelude._init_defaults()` 的 `is_user_defined=True` 过滤器阻止了插件模块的预注入——未 `import` 时访问插件符号会触发正常的 `SEM_UNDEFINED_SYMBOL Unknown variable` 报错。`scheduler.py` 中的所有 `[临时方案]` 注释已全部清除；新增 `SEM_IMPORT_CONFLICT SEM_IMPORT_CONFLICT` 诊断码，当 `import X` 与用户定义的同名符号冲突时，编译器发出 WARNING 而非静默跳过。
 ---
 
 *本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*
-*最后更新：2026-05-09*

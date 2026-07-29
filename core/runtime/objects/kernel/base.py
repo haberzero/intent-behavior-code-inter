@@ -86,8 +86,11 @@ class IbObject:
             if isinstance(target_class, IbClass) and self.ib_class.is_assignable_to(target_class):
                 return self
 
-            # 尝试使用 __to_prompt__ 进行字符串转换（通过 vtable 查找）
-            if target_name in ("str", "any"):
+            # __to_prompt__ 协议产出 str；仅当目标类型可接受 str 时此路径有效
+            spec_reg = self.ib_class.registry.get_metadata_registry()
+            target_spec = getattr(target_class, 'spec', None)
+            str_spec = spec_reg.resolve("str") if spec_reg else None
+            if str_spec and target_spec and spec_reg.is_assignable(str_spec, target_spec):
                 to_prompt_method = self.ib_class.lookup_method('__to_prompt__')
                 if to_prompt_method:
                     try:

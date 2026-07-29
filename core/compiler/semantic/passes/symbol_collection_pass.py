@@ -133,10 +133,13 @@ class SymbolCollector:
                         method_spec.return_type = sym.spec.return_type
                     self.current_class.members[sym.name] = method_spec
                 else:
+                    spec_name = "any"
+                    if sym.spec:
+                        spec_name = sym.spec.head if isinstance(sym.spec, TypeRef) else sym.spec.name
                     self.current_class.members[sym.name] = MemberSpec(
                         name=sym.name,
                         kind="field",
-                        type_ref=TypeRef.of(sym.spec.name if sym.spec else "any")
+                        type_ref=TypeRef.of(spec_name)
                     )
 
         except ValueError as e:
@@ -261,6 +264,8 @@ class SymbolCollector:
                     resolved = self._resolve_annotation(target.annotation)
                     if resolved:
                         spec = resolved
+                    else:
+                        spec = self._annotation_to_typeref(target.annotation)
                 sym = VariableSymbol(
                     name=name,
                     kind=SymbolKind.VARIABLE,

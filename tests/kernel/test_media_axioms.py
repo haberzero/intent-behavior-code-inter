@@ -55,11 +55,6 @@ class TestAudioAxiom:
         assert not ax.is_compatible("image")
         assert not ax.is_compatible("any")
 
-    def test_can_convert_from_only_audio(self):
-        ax = AudioAxiom()
-        assert ax.can_convert_from("audio")
-        assert not ax.can_convert_from("str")
-
     def test_method_specs_include_data_and_format(self):
         specs = AudioAxiom().get_method_specs()
         assert "data" in specs

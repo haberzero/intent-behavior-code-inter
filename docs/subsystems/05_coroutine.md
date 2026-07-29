@@ -1,8 +1,7 @@
 # 协程与迭代器设计笔记（搁置中）
 
-> **创建日期**：2026-05-28
 > **文档性质**：独立记录协程/迭代器相关的分析和设计思路，搁置待后续推进。
-> **状态**：⏸️ 搁置——当前优先完善多模态功能（Phase 3-5）。
+> **状态**：搁置——当前优先完善多模态功能。
 
 ---
 
@@ -26,13 +25,13 @@
 
 ### 2.2 ControlSignal 枚举
 
-- 位置：`core/runtime/vm/task.py:34`
+- 位置：`core/runtime/vm/task.py` 的 `ControlSignal` 枚举
 - 已定义：`break` / `continue` / `return` / `llm_uncertain` 信号类型
 - **可扩展**：新增 `YIELD` 信号类型用于协程挂起
 
 ### 2.3 dispatch_eager + LLMFuture
 
-- 位置：`handlers.py:691-754`
+- 位置：`core/runtime/vm/handlers/` 包中的赋值上下文调度逻辑
 - 已验证"异步提交 → 延迟解析"模式可行
 - 后台 LLM 请求 + 使用点阻塞解引用
 
@@ -64,8 +63,8 @@
 
 | 编号 | 标题 | 依赖 L3 的原因 |
 |------|------|---------------|
-| PT-3.1 | `host.run_isolated()` 返回值改进 | 当前返回 `IbObject`/`bool`，需要协程句柄才能实现"异步等待子脚本完成" |
-| PT-3.2 | `ReceiveMode` 枚举演进 | 需要 yield/resume 语义支持流式接收模式 |
+| 1 | `host.run_isolated()` 返回值改进 | 当前返回 `IbObject`/`bool`，需要协程句柄才能实现"异步等待子脚本完成" |
+| 2 | `ReceiveMode` 枚举演进 | 需要 yield/resume 语义支持流式接收模式 |
 
 ---
 
@@ -95,7 +94,7 @@
 
 当以下条件满足时，可考虑恢复协程层开发：
 
-1. ✅ 多模态 Phase 3-5 稳定实现并通过充分测试
+1. 多模态子系统稳定实现并通过充分测试
 2. ⬜ 出现明确的用户需求场景（如需要同时等待多个独立 LLM 调用）
 3. ⬜ `dispatch_eager` + `LLMFuture` 模式被证明不足以覆盖需求
 4. ⬜ 团队有足够带宽做跨五层（lexer → runtime）的大规模改动

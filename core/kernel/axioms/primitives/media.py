@@ -39,9 +39,6 @@ class _MediaAxiomBase(BaseAxiom):
             "cast_to":  _m("cast_to", params=["any"], ret="any"),
         }
 
-    def can_convert_from(self, source_type_name: str) -> bool:
-        return source_type_name == self.name
-
     def is_compatible(self, other_name: str) -> bool:
         return other_name == self.name
 

@@ -19,12 +19,14 @@ from typing import Dict, List, Optional
 from core.kernel.spec.type_ref import TypeRef
 
 
-def _m(name: str, params: Optional[List[str]] = None, ret: str = "void"):
+def _m(name: str, params: Optional[List[str]] = None, ret: str = "void",
+       mutating: bool = False, llmexcept_safe: bool = False):
     from core.kernel.spec.member import MethodMemberSpec
     return MethodMemberSpec(
         name=name,
         kind="method",
-        return_type=TypeRef.of(ret), param_types=[TypeRef.of(p) for p in params or []])
+        return_type=TypeRef.of(ret), param_types=[TypeRef.of(p) for p in params or []],
+        mutating=mutating, llmexcept_safe=llmexcept_safe)
 
 
 class IntentContextAxiom:
@@ -55,13 +57,13 @@ class IntentContextAxiom:
         return {
             "fork": _m("fork", ret="intent_context"),
             "resolve": _m("resolve", ret="any"),
-            "push": _m("push", params=["any"], ret="void"),
-            "pop": _m("pop", ret="any"),
-            "merge": _m("merge", params=["intent_context"], ret="void"),
-            "combine": _m("combine", params=["intent_context"], ret="void"),
-            "clear": _m("clear", ret="void"),
-            "clear_inherited": _m("clear_inherited", ret="void"),
-            "use": _m("use", params=["intent_context"], ret="void"),
+            "push": _m("push", params=["any"], ret="void", mutating=True),
+            "pop": _m("pop", ret="any", mutating=True),
+            "merge": _m("merge", params=["intent_context"], ret="void", mutating=True),
+            "combine": _m("combine", params=["intent_context"], ret="void", mutating=True),
+            "clear": _m("clear", ret="void", mutating=True),
+            "clear_inherited": _m("clear_inherited", ret="void", mutating=True),
+            "use": _m("use", params=["intent_context"], ret="void", mutating=True),
             "get_current": _m("get_current", ret="intent_context"),
             "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
@@ -74,7 +76,6 @@ class IntentContextAxiom:
     def get_element_type_name(self) -> str: return "any"
     def resolve_item_type_name(self, key_type_name): return None
     def resolve_operation_type_name(self, op, other_name): return None
-    def can_convert_from(self, source_type_name): return False
     def parse_value(self, raw_value): return raw_value
     def from_prompt(self, raw_response, spec=None): return (False, "intent_context does not support from_prompt")
     def __outputhint_prompt__(self, spec=None) -> str: return ""

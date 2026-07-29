@@ -52,25 +52,41 @@ llmretry "如果无法判断，请回复 0 并说明原因"
 - LLM 调用失败 → 执行 `llmexcept` 体，然后从快照恢复状态并 retry
 - 重试耗尽 → 抛出 `LLMRetryExhaustedError`（`LLMError` 的子类，可被 `try except` 捕获，详见 §4.6）
 
-> 历史说明：在更早的版本中，重试耗尽会将目标变量置为 `Uncertain` 而非抛出异常；当前版本统一改为
-> 抛出 `LLMRetryExhaustedError`，使 LLM 失败与一般运行时异常走同一处理通道。
-> 对于**无 `llmexcept` 保护**的裸 LLM 赋值，内容解析失败时 VM 内部会临时产生 `Uncertain` 哨兵，
-> 并在该变量被后续读取时抛出 `LLMParseError`；LLM provider 层失败（网络/鉴权）则立即抛出
-> `LLMCallError`（行为见 §4.6）。`Uncertain` 哨兵是 VM 内部信号，用户代码无需处理。
+对于**无 `llmexcept` 保护**的裸 LLM 赋值，内容解析失败时 VM 内部会临时产生 `Uncertain` 哨兵，
+并在该变量被后续读取时抛出 `LLMParseError`；LLM provider 层失败（网络/鉴权）则立即抛出
+`LLMCallError`（行为见 §4.6）。`Uncertain` 哨兵是 VM 内部信号，用户代码无需处理。
 
-`llmexcept` 体内**禁止写入外部变量**（编译期 `SEM_LLMEXCEPT_BODY_WRITE` 错误）：
+`llmexcept` 体内**禁止修改参与 LLM 调用的变量**（编译期 `SEM_LLMEXCEPT_BODY_WRITE` / `SEM_LLMEXCEPT_MUTATING_CALL` 错误）：
+
+保护集为：`$` 插值引用的变量、意图注解引用的变量、接收 LLM 结果的赋值目标。
 
 ```ibci
 int x = 1
-int result = @~ 计算结果 ~
+str result = @~ 翻译 $text ~
 llmexcept:
-    x = 2            # SEM_LLMEXCEPT_BODY_WRITE：禁止在 llmexcept 中写入外部变量
+    result = "fallback"   # SEM_LLMEXCEPT_BODY_WRITE：result 是 LLM 赋值目标
+    text = "other"        # SEM_LLMEXCEPT_BODY_WRITE：text 参与 $ 插值
+    x = 2                 # 允许：x 未参与 LLM 调用
     retry "重试"
 ```
 
-**磁盘型变量在 retry 体内的额外限制（PT-ARCH-27）**：
+对被保护变量的 mutating 方法调用同样禁止：
 
-`file_handle`/`audio`/`image`/`video` 是磁盘引用身份对象。`llmexcept` 快照保存的是路径引用的浅拷贝，因此 retry body 中调用 `file.write_overwrite` / `file.write_overwrite_bytes` 会**污染 gold snapshot**，导致后续 retry 恢复到已被修改的文件状态。G6 起运行时直接禁止：
+```ibci
+list items = [1, 2, 3]
+str summary = @~ 总结 $items ~
+llmexcept:
+    items.append(4)       # SEM_LLMEXCEPT_MUTATING_CALL：items 参与 $ 插值
+    retry "请只返回摘要"
+```
+
+非 LLM 参与变量的修改默认允许（辅助统计、诊断标记等用途）。
+
+**运行期安全网**：即使编译期未捕获的变异路径（如用户函数内部间接修改），运行期在 retry 前会比对被保护变量与黄金快照。若检测到篡改，发出 `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION` 警告并强制恢复快照后继续 retry。
+
+**磁盘型变量在 retry 体内的额外限制**：
+
+`file_handle`/`audio`/`image`/`video` 是磁盘引用身份对象。`llmexcept` 快照保存的是路径引用的浅拷贝，因此 retry body 中调用 `file.write_overwrite` / `file.write_overwrite_bytes` 会**污染黄金快照**，导致后续 retry 恢复到已被修改的文件状态。运行时直接禁止：
 
 ```ibci
 import file

@@ -1,6 +1,6 @@
 # 代码缺陷复查与修复计划（临时任务文档）
 
-> **状态**：CRITICAL/MAJOR 可决断/MINOR/设计限制/注释清洁/诊断码规范化全部完成。剩余 8 个待讨论项（D2-D3, D5-D10）+ 6 项测试相关（暂缓）。已完成项的详细分析见 git 提交历史。
+> **状态**：D6/D7/D8/D9/D10 全部完成。剩余 3 个架构决策项（D2/D3/D5）+ 6 项测试相关（暂缓）。
 > **性质**：临时文档，全部待讨论项处置完成后删除。
 
 ---
@@ -18,25 +18,6 @@
 ### D5. M10 - 浅引用快照的健全性：接受残余风险 还是 重开 COW 架构决策？
 - 浅路径引用快照是已定设计。但 disable-list 本质是打地鼠：`file.remove()` 未禁用、`write_new(同路径)`、子进程触碰 backing 路径都能绕过。
 - **问题**：接受 disable-list 不完整性为残余风险，还是重开 COW-vs-浅引用架构决策？
-
-### D6. M13 - `resolve(...) or self._any_desc` 修复范围与严重性
-- `01_principles.md §5.3` 明令禁止。16 处不均：A 类(9 处)真违规；B 类(3 处)内建名查找(防御性)；C 类(2 处)推断缺失；D 类(2 处)死代码。
-- **问题**：A 类发 ERROR 还是 WARNING？哪个 pass 发？B/C/D 保持原样？改动语义错误集需全量 pytest 评估破坏面。
-
-### D7. M11c - SEM_052 是否覆盖属性/下标赋值目标？
-- `obj.f = x` / `lst[0] = x` 当前返回 None 被静默跳过。快照隔离原则要求覆盖，但 spec 示例只展示简单名重绑定。
-- **问题**：SEM_052 覆盖简单名重绑定，还是也覆盖属性/下标变异？后者扩大错误集。
-
-### D8. Minor - prelude 重导出过滤标准
-- `scheduler.py` 模块导出含 prelude 符号。修复需过滤，但标准未定：provenance？scope 深度？显式导出列表？
-
-### D9. Minor - 通配符 import 冲突处理
-- `from mod import *` 冲突静默跳过；`from mod import name` 冲突发 SEM_IMPORT_CONFLICT。不一致。
-- **问题**：通配符冲突应 warn 还是静默跳过？
-
-### D10. Minor - cast 无 converter 时 SEM_CAST_NO_CONVERTER
-- 目标类型无 converter cap 时 cast 静默未校验（编译期）。
-- **问题**："无 converter"意味着"cast 不在编译期检查"（故意宽松）还是"cast 总是无效"（应 warn）？
 
 ---
 

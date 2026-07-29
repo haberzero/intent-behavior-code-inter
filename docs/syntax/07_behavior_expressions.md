@@ -61,7 +61,7 @@ for @~ $count 小于 3 吗？只回答 1 或 0 ~:
 延迟执行，每次调用时使用**调用处**的当前意图上下文（调用处意图完全敏感）：
 
 ```ibci
-# 无参 lambda（使用调用时意图栈），表达式侧返回类型标注（D2）
+# 无参 lambda（使用调用时意图栈），表达式侧返回类型标注
 fn compute = lambda -> int: @~ 根据 $x 计算一个结果 ~
 # 此时不会执行 LLM 调用
 
@@ -79,18 +79,18 @@ fn add = lambda(int a, int b) -> int: a + b
 int s = add(3, 4)
 ```
 
-**lambda 意图语义**（完整规则见 `docs/design/INTENT_SYSTEM_DESIGN.md` §9.4）：
+**lambda 意图语义**：
 - 定义时**不捕获**任何意图上下文
 - 调用时使用调用处的持久意图栈（`@+` 累积）和一次性意图（`@` smear）
 - 作为高阶函数参数传出后，调用时使用的仍是**调用点**的意图栈（不是定义处）
-- `lambda` 延迟对象可以自由作为高阶函数参数传递（M2 落地后限制已移除）
+- `lambda` 延迟对象可以自由作为高阶函数参数传递
 
 #### snapshot
 
 延迟执行，定义时对当前意图栈进行 `fork()` 快照（与 lambda 的区别在于意图冻结）：
 
 ```ibci
-# 无参 snapshot（捕获定义时意图上下文），表达式侧返回类型标注（D2）
+# 无参 snapshot（捕获定义时意图上下文），表达式侧返回类型标注
 @+ 聚焦于正面回答
 fn handler = snapshot -> str: @~ 根据 $context 生成回复 ~
 @-   # 移除刚才添加的意图
@@ -106,14 +106,14 @@ fn translate = snapshot(str text) -> str: @~ 翻译 $text ~
 str r = translate("hello")
 ```
 
-**snapshot 意图语义**（完整规则见 `docs/design/INTENT_SYSTEM_DESIGN.md` §9.3）：
-- 定义时 `fork()` 当时的完整意图上下文，存储为 `frozen_intent_ctx`
+**snapshot 意图语义**：
+- 定义时冻结当时的完整意图上下文
 - 调用时**绝对忽略**调用处的所有意图（持久栈、`@` smear、`@!` 排他）
 - `snapshot` 是 IBCI 中唯一"确定无状态、确定可重入"的延迟对象
 
 #### 完整语法形式（8 种，lambda/snapshot 对称）
 
-返回类型标注写在**表达式侧**（`fn f = lambda -> TYPE: EXPR`，D2）：
+返回类型标注写在**表达式侧**（`fn f = lambda -> TYPE: EXPR`）：
 
 | 形式 | 语法 |
 |------|------|
@@ -136,7 +136,7 @@ fn make_pair = lambda(int n, str s) -> tuple[int,str]: (n, s)
 
 **已废弃的声明侧返回类型语法**（产生 PAR_INVALID_SYNTAX 编译错误）：
 ```ibci
-int fn f = lambda: EXPR            # PAR_INVALID_SYNTAX：声明侧返回类型已废弃（D1）
+int fn f = lambda: EXPR            # PAR_INVALID_SYNTAX：声明侧返回类型已废弃
 str fn f = lambda(PARAMS): EXPR    # PAR_INVALID_SYNTAX
 ```
 
@@ -188,7 +188,7 @@ image photo = image.from_file("cat.png")
 str caption = @~ 请描述这张图片：$photo ~
 ```
 
-**内置 media 类型（G6 之后）**：
+**内置 media 类型**：
 
 | 类型 | 构造方式 | field | I/O method |
 |------|---------|-------|-----------|

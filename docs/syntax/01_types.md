@@ -66,4 +66,25 @@ bool b = (bool)1        # True
 any a = (any)x          # any 类型
 ```
 
+**转换规则**（按优先级）：
+
+1. **同类型**：目标类型与源类型相同 → 直接返回原值
+2. **向上转型**：目标类型是源类型的父类 → 直接返回原值（安全且语义正确）
+3. **字符串化**：目标类型为 `str` 或 `any` 时，调用源对象的 `__to_prompt__` 协议获取字符串表示
+4. **失败**：以上均不满足 → 运行时抛出类型转换错误
+
+内置类型（int/float/str/list/dict/tuple 等）有专用的转换实现。用户类可定义自己的 `cast_to` 方法覆盖默认行为：
+
+```ibci
+class Temperature:
+    float value
+
+    func cast_to(self, target) -> any:
+        if target == str:
+            return (str)self.value + "°C"
+        return self
+```
+
+**编译期提示**：对于声明了转换规则的类型，编译器会在转换明显不合法时发出 `SEM_CAST_NO_CONVERTER` 警告（如 `(int)file_handle`）。未声明转换规则的类型不做编译期校验，由运行时裁定。
+
 ---

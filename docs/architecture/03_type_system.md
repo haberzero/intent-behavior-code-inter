@@ -1,12 +1,10 @@
 ﻿# IBCI 类型系统设计（代码对齐版）
 
-> 本文档是 IBCI 类型系统的**正式设计文档**，与当前代码（`core/kernel/spec/`、`core/kernel/axioms/`、`core/runtime/objects/`）严格对齐。
-> 设计原文（架构推演、语言学动机）见 `docs/design/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`（已归档）。
+> 本文档是 IBCI 类型系统的正式设计文档，与当前代码（`core/kernel/spec/`、`core/kernel/axioms/`、`core/runtime/objects/`）严格对齐。
 >
-> **⚠️ 路径漂移说明（2026-06-25 整理）**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
-> `kernel/spec/registry`、`kernel/axioms/primitives`、`runtime/objects/{builtins,kernel}`、
-> `runtime/vm/handlers`（`build_dispatch_table`→`handlers/dispatch.py`）、`runtime/interpreter/llm_executor`。
-> 旧 visitor `interpreter/handlers/{stmt,expr}_handler.py` 已删除（现 `vm/handlers/` CPS 包）。
+> **路径说明**：以下模块已重构为包（目录），正文中 `*.py` 路径请以实际目录为准：
+> `kernel/spec/registry/`、`kernel/axioms/primitives/`、`runtime/objects/{primitives,kernel}/`、
+> `runtime/vm/handlers/`、`runtime/interpreter/llm_executor/`。
 
 ---
 
@@ -69,9 +67,9 @@ class TypeRef:
 
 ## §3 IbSpec / TypeDef — 类型定义层
 
-### 3.1 单一统一类（M3 收口）
+### 3.1 单一统一类
 
-`core/kernel/spec/base.py:TypeDef` 是**所有类型种类**的统一定义类，**没有** `FuncSpec` / `ClassSpec` / `ListSpec` 等子类（已于 M3 合并删除）。差异通过 `kind` 字段分派。
+`core/kernel/spec/base.py:TypeDef` 是**所有类型种类**的统一定义类，**没有** `FuncSpec` / `ClassSpec` / `ListSpec` 等子类。差异通过 `kind` 字段分派。
 
 ```python
 @dataclass(eq=False)
@@ -83,7 +81,7 @@ class TypeDef(IbSpec):
     is_nullable:    bool
     provenance:     Provenance       # 来源：KERNEL_NATIVE / AXIOM_PROVIDED / USER_DEFINED / EXTERNAL_MODULE
     visibility:     Visibility       # 可见性：PRELUDE_VISIBLE / IMPORT_GATED / SCOPE_PRIVATE
-    storage_model:  StorageModel     # 存储模型：MEMORY_BACKED / DISK_BACKED（ADR-016，G3 启用）
+    storage_model:  StorageModel     # 存储模型：MEMORY_BACKED / DISK_BACKED
     members:        Dict[str, MemberSpec]
     _axiom_name:    Optional[str]    # axiom 查询 key 重定向
 
@@ -124,16 +122,17 @@ class TypeDef(IbSpec):
 | `OPTIONAL` | 空安全包装 | `Optional[T]` |
 | `BOUND_METHOD` | 已绑定接收者的方法 | `obj.method` 取值 |
 | `MODULE` | 模块命名空间 | `import` 后的模块对象 |
-| `CALLABLE_INSTANCE` | lambda/snapshot/behavior 产生的可调用实例（M3→M5 合并） | `fn_callable` / `behavior` |
+| `CALLABLE_INSTANCE` | lambda/snapshot/behavior 产生的可调用实例 | `fn_callable` / `behavior` |
 | `CALLABLE_SIG` | 高阶函数签名约束 | `fn[(int)->int]` |
 | `LAZY` | 跨模块未解析占位符 | 编译期 forward ref |
 
-> M3→M5 补充：旧 `TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 已合并为 `TypeKind.CALLABLE_INSTANCE`；区分仅由 `name`（`"fn_callable"` / `"behavior"`）或 `_axiom_name` 决定，不再是类型层语义。
+> `TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 已合并为 `TypeKind.CALLABLE_INSTANCE`；区分仅由 `name`（`"fn_callable"` / `"behavior"`）或 `_axiom_name` 决定，不再是类型层语义。
 
 ### 3.3 字段存储规范
 
 - **TypeRef-only**：所有指向"其他类型"的字段全部以 `TypeRef` 存储；旧 `*_name` / `*_module` 扁平字符串字段已彻底删除。访问统一走 `spec.X.head` / `spec.X.module` / `spec.X.canonical_name`。
 - **MemberSpec 同样 TypeRef 化**：`core/kernel/spec/member.py:MemberSpec.type_ref`、`MethodMemberSpec.return_type` / `param_types` 均为 TypeRef。
+- **MethodMemberSpec 变异声明**：`MethodMemberSpec.mutating: bool`（默认 False）声明该方法是否修改接收者状态；`MethodMemberSpec.llmexcept_safe: bool`（默认 False）标记该方法在 llmexcept body 内对被保护变量的调用是否被豁免。这两个字段是 `SEM_LLMEXCEPT_MUTATING_CALL` 编译期检查的公理层数据源，由 `binding_analysis_pass.py` 在 BindingPhase 消费。
 - **线协议保留**：序列化 / 反序列化（`core/compiler/serialization/`）仍把 TypeRef 解构为字符串字段（`return_type_name` / `parent_module` 等）以保持艺术品向后兼容；in-memory 模型纯 TypeRef。
 
 ### 3.4 注册表 SpecRegistry
@@ -145,7 +144,7 @@ class TypeDef(IbSpec):
 | `resolve(name, module=None)` | 按名字查找 spec |
 | `resolve_typeref(ref)` | 按 TypeRef 查找；带模块优先，回落裸名 |
 | `register(spec, ...)` | 注册新 spec（克隆原型） |
-| `resolve_specialization(base, args)` | 按需创建/缓存 `list[int]` 等泛型特化 spec（G1/G3 早缓存） |
+| `resolve_specialization(base, args)` | 按需创建/缓存 `list[int]` 等泛型特化 spec |
 | `is_assignable(src, target)` | 类型兼容性检查（含 Optional / 类继承链 / 公理委托） |
 | `get_base_spec(spec)` | 取泛型特化的底 spec（`list[int]` → `list`） |
 | `get_axiom(spec)` | 桥接 AxiomRegistry，按 `spec.get_base_name()` / `_axiom_name` 查询 |
@@ -171,7 +170,7 @@ class TypeDef(IbSpec):
 
 ---
 
-## §4 TypeAxiom — 行为分派层（M5 单一接口）
+## §4 TypeAxiom — 行为分派层
 
 ### 4.1 统一 Protocol
 
@@ -272,7 +271,7 @@ VMExecutor handler
 
 ## §6 运行时值层（IbValue 单一承载）
 
-> M4 收口：所有运行时值统一通过 `core/runtime/objects/kernel.py:IbValue` 承载；`IbInteger` / `IbFloat` / `IbString` / `IbBool` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbFnCallable` / `IbBehavior` 是该模型的子体系。
+> 所有运行时值统一通过 `core/runtime/objects/kernel.py:IbValue` 承载；`IbInteger` / `IbFloat` / `IbString` / `IbBool` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbFnCallable` / `IbBehavior` 是该模型的子体系。
 
 ### 6.1 IbValue 四元结构
 
@@ -324,7 +323,7 @@ class IbValue(IbObject):
 
 ### 7.3 类型标注侧 `fn[(...)→(...)]`
 
-`fn[(int,str)->bool]` 表达高阶函数签名约束（D3）：
+`fn[(int,str)->bool]` 表达高阶函数签名约束：
 - AST: `IbCallableType(IbExpr)`（`core/kernel/ast.py`）
 - TypeDef: `kind=CALLABLE_SIG`，`param_types` / `return_type` 已填充
 - 兼容性：与具体可调用 spec 通过结构匹配比对（参数数量 / 各位置 assignable / 返回类型 assignable）
@@ -359,18 +358,9 @@ class IbValue(IbObject):
 
 ---
 
-## §10 当前状态
+## §10 关联文档
 
-- M1 / M2 / M3 / M3→M5 callable-instance 路线 / M4 / M5 全部完成。
-- 类型系统主线本身无开放债务；路径系统统一（ADR-015~019）已完成（2026-07-13，PT-ARCH-21）。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 + ADR-014 协同里程碑），多模态 Phase 4（`MediaAxiom` + `IbMedia`）被显式 gate 在该里程碑完成之后。
-- 实时主线状态以 `tasks_docs/NEXT_STEPS.md` 为准；测试基线请以当次 `python -m pytest tests/` 输出为准（不在此冻结具体数字）。
-
----
-
-## §11 关联文档
-
-- 设计原文（架构推演、动机、与旧体系对照）：`docs/design/IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md`
-- VM 与解释器架构（执行边界、CPS、Signal、LLM Scheduler）：`docs/design/VM_AND_INTERPRETER_DESIGN.md`
-- VM 正式规范（公理化）：`docs/design/VM_SPEC.md`
-- 架构原则：`docs/ARCHITECTURE_PRINCIPLES.md`
-- 运行时与解释器细节备份：`docs/design/ARCH_DETAILS.md`
+- 架构原则与设计理念：`docs/architecture/01_principles.md`
+- VM 与解释器架构：`docs/architecture/04_vm_interpreter.md`
+- VM 公理化规范：`docs/architecture/05_vm_specification.md`
+- 已知语言限制：`docs/KNOWN_LIMITS.md`

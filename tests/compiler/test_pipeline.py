@@ -350,7 +350,7 @@ class TestCompileErrors:
 
 class TestLLMExceptBodyReadOnly:
     """
-    验证快照隔离编译期约束：llmexcept body 内向外部作用域变量写入产生 SEM_LLMEXCEPT_BODY_WRITE。
+    验证快照隔离编译期约束：llmexcept body 内向 LLM 参与变量写入产生 SEM_LLMEXCEPT_BODY_WRITE。
     """
 
     def test_assign_to_outer_var_raises(self, engine):
@@ -408,15 +408,13 @@ llmexcept:
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
-    def test_assign_to_outer_int_var_raises(self, engine):
-        """llmexcept body 内对整型外部变量写入也应产生 SEM_LLMEXCEPT_BODY_WRITE。"""
+    def test_assign_to_non_llm_var_allowed(self, engine):
+        """llmexcept body 内对非 LLM 参与变量写入是允许的（辅助统计用途）。"""
         code = """int counter = 0
 str result = @~ greet ~
 llmexcept:
     counter = 1
     retry "hint"
 """
-        with pytest.raises(CompilerError) as exc_info:
-            engine.compile_string(code, silent=True)
-        codes = [d.code for d in exc_info.value.diagnostics]
-        assert "SEM_LLMEXCEPT_BODY_WRITE" in codes
+        result = engine.compile_string(code, silent=True)
+        assert result is not None

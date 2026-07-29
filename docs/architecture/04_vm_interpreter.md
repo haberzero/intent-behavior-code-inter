@@ -1,12 +1,10 @@
-﻿# IBCI VM 与解释器架构（代码对齐版）
+﻿# IBCI VM 与解释器架构
 
-> 本文档是 IBCI 运行时（VM + 解释器）的**正式架构设计文档**，与当前代码（`core/runtime/vm/`、`core/runtime/interpreter/`、`core/runtime/objects/`）严格对齐。
-> 公理化的可验证规范见 `docs/design/VM_SPEC.md`；实现细节备份见 `docs/design/ARCH_DETAILS.md`。
+> 本文档是 IBCI 运行时（VM + 解释器）的架构设计文档，覆盖 CPS 调度循环、执行帧、LLM 流水线、llmexcept 机制、意图上下文、多 Interpreter 隔离、内存模型。
+> 公理化可验证规范见 `docs/architecture/05_vm_specification.md`。
 >
-> **⚠️ 路径漂移说明（2026-06-25 整理）**：以下模块已重构为**包（目录）**，正文残留 `*.py` 路径请以实际目录为准：
-> `runtime/vm/handlers`（`build_dispatch_table`→`handlers/dispatch.py`）、`runtime/objects/{builtins,kernel}`、
-> `runtime/interpreter/llm_executor`。旧 visitor `interpreter/handlers/{stmt,expr}_handler.py` 已删除（现 `vm/handlers/` CPS 包）。
-> 当前主线状态见 `tasks_docs/NEXT_STEPS.md`（路径系统统一已完成；活跃主线为 PT-ARCH-23 内核原生化 + 磁盘型存储模型）。
+> **路径说明**：以下模块已重构为包（目录），正文中 `*.py` 路径请以实际目录为准：
+> `runtime/vm/handlers/`（CPS handler 包）、`runtime/objects/{primitives,kernel}/`、`runtime/interpreter/llm_executor/`。
 
 ---
 
@@ -43,7 +41,7 @@
 | `VMTask(node_uid, generator, locals)` | 一个执行帧；包装节点求值的 Python 生成器协程 |
 | `VMTaskResult(kind, value)` | 标记类型 `done` / `suspend` / `signal`（部分场景代用） |
 | `Signal(kind: ControlSignal, value)` | 控制流数据对象（`return` / `break` / `continue` / `throw`） |
-| `UnhandledSignal(signal)` | VM 顶层未消费 Signal 的边界异常（C5）|
+| `UnhandledSignal(signal)` | VM 顶层未消费 Signal 的边界异常 |
 
 ### 2.2 主循环协议
 
@@ -92,7 +90,7 @@ while frame_stack:
 ### 2.5 Handler 编写约束
 
 - 不允许递归 `executor.run(...)`；子求值通过 `yield child_uid`。
-- 不允许 `raise ControlSignalException`（已删除）；用 `return Signal(kind, value)`。
+- 不允许 `raise ControlSignalException`；用 `return Signal(kind, value)`。
 - 拦截 `Signal`：父 handler 用 `isinstance(res, Signal)` 判断后决定 **拦截**（循环 handler 拦截 `BREAK`/`CONTINUE`，函数帧拦截 `RETURN`，`Try` handler 拦截 `THROW` 并匹配 `except`）或 **透传**（`return res`）。
 
 ---
@@ -109,7 +107,7 @@ while frame_stack:
 
 ### 3.2 IExecutionFrame 协议
 
-`core/base/interfaces.py:IExecutionFrame`（Step 5a 落地）：
+`core/base/interfaces.py:IExecutionFrame`：
 
 ```python
 class IExecutionFrame(Protocol):
@@ -126,7 +124,7 @@ class IExecutionFrame(Protocol):
     def visit(self, node_uid, **kwargs): ...
 ```
 
-`RuntimeContextImpl` 即此协议的实现。多 Interpreter 隔离（M4）通过为每个子解释器创建独立 `RuntimeContextImpl` 实现。
+`RuntimeContextImpl` 即此协议的实现。多 Interpreter 隔离通过为每个子解释器创建独立 `RuntimeContextImpl` 实现。
 
 ### 3.3 ContextVar 当前帧
 
@@ -166,9 +164,9 @@ class IExecutionFrame(Protocol):
 
 | 层 | 粒度 | 状态 |
 |----|------|------|
-| **L1: LLM 调用流水线** | 单个 LLM 调用 | ✅ 已实现（M5a/M5b/M5c） |
-| **L2: 多 Interpreter 隔离** | 整段程序 | ✅ 已实现（M4） |
-| **L3: 语言级协程 / yield** | 单个 yield 点 | ⏳ 远期愿景 |
+| **L1: LLM 调用流水线** | 单个 LLM 调用 | 已实现 |
+| **L2: 多 Interpreter 隔离** | 整段程序 | 已实现 |
+| **L3: 语言级协程 / yield** | 单个 yield 点 | 远期愿景（见 `docs/subsystems/05_coroutine.md`） |
 
 ### 5.2 编译期：依赖图（DDG）
 
@@ -249,7 +247,7 @@ visit_IbLLMExceptionalStmt
 
 | 组件 | 文件 | 责任 |
 |------|------|------|
-| `LLMExceptFrame` | `core/runtime/interpreter/llm_except_frame.py` | 现场快照（变量、意图栈、loop 栈、retry hint） |
+| `LLMExceptFrame` | `core/runtime/interpreter/llm_except_frame.py` | 现场快照（变量、意图栈、loop 栈、retry hint）+ 快照完整性校验 |
 | `LLMExceptFrameStack` | 同上 | 嵌套 llmexcept 块栈管理 |
 | `IbLLMUncertain` | `core/runtime/objects/kernel.py` | 不确定结果哨兵对象（赋值占位符） |
 | `LLMResult` | `core/runtime/interpreter/llm_result.py` | LLM 调用结果数据对象（`is_uncertain` 旗标） |
@@ -264,7 +262,25 @@ visit_IbLLMExceptionalStmt
 
 ### 6.4 完整规范
 
-详见 `docs/design/ARCH_DETAILS.md §一` 与 `docs/design/INTENT_SYSTEM_DESIGN.md §4.6`。
+详见 `docs/architecture/05_vm_specification.md` §5（意图上下文模型公理）。
+
+### 6.5 Body 保护机制（编译期 + 运行期双层防御）
+
+llmexcept handler body 对**参与 LLM 调用的变量**实施只读保护。保护集为：`$` 插值引用的变量、意图注解引用的变量、接收 LLM 结果的赋值目标。非 LLM 参与变量的修改默认允许。
+
+**编译期**（BindingPhase，`binding_analysis_pass.py`）：
+
+| 检查 | 诊断码 | 触发条件 |
+|------|--------|----------|
+| 赋值/属性变异/下标变异 | `SEM_LLMEXCEPT_BODY_WRITE` | 赋值目标的根变量 ∈ 保护集 |
+| mutating 方法调用 | `SEM_LLMEXCEPT_MUTATING_CALL` | 接收者 ∈ 保护集 且方法 `MethodMemberSpec.mutating=True` |
+| 间接 mutating 函数调用 | `SEM_LLMEXCEPT_MUTATING_CALL` | 参数含保护集变量 且函数体被推断为 mutating |
+
+mutating 推断从公理层 `mutating=True` 标注出发，沿用户函数调用链向上传播（保守过近似）。
+
+**运行期**（`LLMExceptFrame.verify_snapshot_integrity()`）：
+
+body 执行后、retry 前，比对被保护变量当前值与黄金快照。若检测到篡改（编译期未捕获的间接路径），发出 `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION` 警告并强制恢复快照后继续 retry。
 
 ---
 
@@ -278,14 +294,14 @@ visit_IbLLMExceptionalStmt
 | **IC-2 restore 还原** | 函数返回时恢复调用者 context |
 | **IC-3 llmexcept snapshot** | retry 时通过 `LLMExceptFrame` 完整恢复意图栈快照 |
 
-### 7.2 OOP 化与语法路径（NS-2 完整收口，2026-05-11）
+### 7.2 OOP 化与语法路径
 
 意图系统提供**双路径**，二者在帧级别打通为同一底层 `IbIntentContext`：
 
 - **语法路径**：`@`/`@!`/`@+`/`@-` → `vm_handle_IbIntentAnnotation` / `IbIntentStackOperation` → `runtime_context._intent_ctx`
 - **OOP 路径**：`intent_context.get_current()` / `.push()` / `.pop()` / `.fork()` / `.use()` → 当前帧活跃实例的 `IbIntentContext`
 
-**核心不变量（NS-2b）**：`_active_intent_ibobj.fields['_ctx'] is runtime_context._intent_ctx`——活跃 IBCI 实例与帧底层 Python 对象共享引用，因此两路径对当前帧的操作互可观察。
+**核心不变量**：`_active_intent_ibobj.fields['_ctx'] is runtime_context._intent_ctx`——活跃 IBCI 实例与帧底层 Python 对象共享引用，因此两路径对当前帧的操作互可观察。
 
 **关键 API**：
 
@@ -294,18 +310,16 @@ visit_IbLLMExceptionalStmt
 | `intent_context.use(ctx)` | fork 源对象 `_ctx`，重建活跃指针（共享引用） |
 | `intent_context.clear_inherited()` | 清空持久栈，建立新的匿名活跃指针 |
 | 函数调用进入 | 子帧 fork 调用者意图，建立匿名活跃指针；返回时恢复 |
-| `intent_context` 参数自动激活（NS-2a） | 内部复用 `use_intent_context` 入口 |
-| `LLMExceptFrame` retry（NS-2c）| 以 `saved.fork()` 替换 `_intent_ctx`，同步重建活跃指针 |
-
-完整 OOP 化（参数 / 默认 ctx / behavior 动态注入 / 序列化）已完成。
+| `intent_context` 参数自动激活 | 内部复用 `use_intent_context` 入口 |
+| `LLMExceptFrame` retry | 以 `saved.fork()` 替换 `_intent_ctx`，同步重建活跃指针 |
 
 ### 7.3 完整设计
 
-详见 `docs/design/INTENT_SYSTEM_DESIGN.md`。
+详见 `docs/subsystems/01_intent_system.md`。
 
 ---
 
-## §8 多 Interpreter 隔离（M4）
+## §8 多 Interpreter 隔离
 
 ### 8.1 公理（与 `VM_SPEC.md §4` 对齐）
 
@@ -326,7 +340,7 @@ visit_IbLLMExceptionalStmt
 
 ### 8.3 KernelRegistry.clone()
 
-子解释器初始化路径若走 `clone()`（IsolationLevel != NONE 的旧路径），`_classes` / `_boxers` / `_metadata_registry` / `_builtin_instances` / `_llm_executor` 等字段均传播；`_int_cache` 故意不拷（性能缓存而非正确性）。M4 的 `spawn_isolated` 走新建独立 `IBCIEngine` 路径，不经 clone。
+子解释器初始化路径若走 `clone()`（IsolationLevel != NONE 的旧路径），`_classes` / `_boxers` / `_metadata_registry` / `_builtin_instances` / `_llm_executor` 等字段均传播；`_int_cache` 故意不拷（性能缓存而非正确性）。`spawn_isolated` 走新建独立 `IBCIEngine` 路径，不经 clone。
 
 ### 8.4 合规测试
 
@@ -363,7 +377,7 @@ visit_IbLLMExceptionalStmt
 
 ### 10.2 HostService 与插件
 
-- `HostService` 负责 spawn/collect 子 Interpreter（M4）；
+- `HostService` 负责 spawn/collect 子 Interpreter；
 - 插件通过 `IbStatefulPlugin` 协议参与状态快照（`save_plugin_state` / `restore_plugin_state`）；
 - 详见 `docs/ARCHITECTURE_PRINCIPLES.md §三 / §七`。
 
@@ -376,7 +390,7 @@ visit_IbLLMExceptionalStmt
 ## §11 设计不变量
 
 1. **VM 唯一执行入口**：所有 IBCI 代码执行必须经 `VMExecutor.run_body()`；handler 不可绕过调度循环递归调用。
-2. **控制流数据化**：`Signal` 是控制流唯一表示；handler 内不允许 `raise ControlSignalException`（类已删除）。
+2. **控制流数据化**：`Signal` 是控制流唯一表示；handler 内不允许 `raise ControlSignalException`。
 3. **执行帧抽象**：`IExecutionFrame` 协议是帧的对外契约；不允许直接读 `RuntimeContextImpl` 内部字段实现新功能。
 4. **LLM 服务通道唯一**：所有 LLM 调用必须经 `KernelRegistry.get_llm_executor()` 走 `IILLMExecutor`。
 5. **公理层无运行时依赖**：`core/kernel/axioms/` 不导入 `core/runtime/`；运行时通过 `SpecRegistry.get_axiom()` 桥接。
@@ -385,37 +399,10 @@ visit_IbLLMExceptionalStmt
 
 ---
 
-## §12 当前状态
+## §12 关联文档
 
-> 本节为 VM/解释器主线里程碑的**历史快照**。实时主线状态以 `tasks_docs/NEXT_STEPS.md` 为准。
-
-| 主线 | 状态 |
-|------|------|
-| M1–M5（类型系统） | ✅ 完成 |
-| M3a–M3d（CPS 调度循环） | ✅ 完成 |
-| M5a/M5b/M5c（DDG + LLMScheduler + dispatch-before-use） | ✅ 完成 |
-| M4（多 Interpreter 隔离） | ✅ 完成 |
-| M6（合规测试套件） | ✅ 完成 |
-| Phase 1–5 编译器深度清洁（C5–C14） | ✅ 完成 |
-| NS-1（LLM 调用路径合并入 CPS 调度循环） | ✅ 完成（2026-05-11） |
-| NS-3（lambda/snapshot/behavior 调用现场 EC 优先） | ✅ 完成（2026-05-12） |
-| PT-2.1（intent_context 高级 OOP 场景） | ✅ 完成（2026-05-12） |
-| PT-2.2（IbIntentContext 序列化/反序列化） | ✅ 完成（2026-05-12） |
-| `_evaluate_segments` CPS 化 | ✅ 完成（2026-05-12） |
-| PT-1.2（LLMExceptFrame 重试错误历史） | ✅ 完成（2026-05-12） |
-| PT-1.3（LLMExceptFrameStack 深度限制） | ✅ 完成（2026-05-12） |
-| PT-3.3（idbg.protection_map） | ✅ 完成（2026-05-12） |
-| L3 语言级协程 / yield | ⏳ 远期愿景（搁置，见 `docs/design/COROUTINE_DESIGN_NOTES.md`） |
-
-**VM/解释器层面的开放议题**：本层无新增 P0/P1 议题。路径系统统一（ADR-015~019）已完成。当前项目活跃主线是 **PT-ARCH-23：内核原生化 + 磁盘型存储模型**（ADR-020 + ADR-016 存储模型 + ADR-014 media 重建）——这些属于路径层与对象模型层，详见 `tasks_docs/NEXT_STEPS.md` 与 `tasks_docs/PENDING_TASKS.md §六`。
-
----
-
-## §13 关联文档
-
-- VM 正式规范（公理化、合规测试）：`docs/design/VM_SPEC.md`
-- 类型系统设计（代码对齐版）：`docs/design/TYPE_SYSTEM_DESIGN.md`
-- 架构原则：`docs/ARCHITECTURE_PRINCIPLES.md`
-- 实现细节备份（llmexcept / MOCK / 类型系统迁移历史等）：`docs/design/ARCH_DETAILS.md`
-- 意图系统设计：`docs/design/INTENT_SYSTEM_DESIGN.md`
+- VM 公理化规范（合规测试）：`docs/architecture/05_vm_specification.md`
+- 类型系统设计：`docs/architecture/03_type_system.md`
+- 架构原则：`docs/architecture/01_principles.md`
+- 意图系统子系统设计：`docs/subsystems/01_intent_system.md`
 - 已知语言限制：`docs/KNOWN_LIMITS.md`

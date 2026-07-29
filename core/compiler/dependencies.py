@@ -112,16 +112,11 @@ class DependencyGraph:
 
     def get_compilation_order(self) -> List[str]:
         """
-        Returns a list of file paths to compile.
-        If there are no cycles, this is a topological sort (dependencies first).
-        If there are cycles, it returns a best-effort order.
+        Returns a list of file paths to compile in topological order
+        (dependencies first). Raises CircularDependencyError if the
+        import graph contains a cycle.
         """
-        # [MOD] 允许循环引用，不再强制报错。
-        # 运行时由 ModuleManager 的缓存机制处理循环加载。
-        try:
-            self.check_cycles()
-        except CircularDependencyError as e:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Note: Circular dependency detected (allowed): {e}")
+        self.check_cycles()
         
         visited = set()
         order = []

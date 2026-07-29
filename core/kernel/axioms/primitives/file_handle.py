@@ -39,9 +39,6 @@ class FileHandleAxiom(BaseAxiom):
             "cast_to": _m("cast_to", params=["any"], ret="any"),
         }
 
-    def can_convert_from(self, source_type_name: str) -> bool:
-        return source_type_name == "file_handle"
-
     def is_compatible(self, other_name: str) -> bool:
         return other_name == "file_handle"
 

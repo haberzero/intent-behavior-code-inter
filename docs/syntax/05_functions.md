@@ -105,13 +105,13 @@ int r = f(5)            # 10
 fn g = lambda: 42       # 持有无参 lambda
 auto v = g()            # 42
 
-fn h = lambda(int x) -> int: x * 2   # 带表达式侧返回类型标注（D2），带参 lambda
+fn h = lambda(int x) -> int: x * 2   # 带表达式侧返回类型标注，带参 lambda
 int w = h(3)                          # 6
 ```
 
 延迟执行的完整语法见 §7.4。
 
-### 5.6 `fn[(...)->(...)]` 高阶函数 callable 签名标注（D3）
+### 5.6 `fn[(...)->(...)]` 高阶函数 callable 签名标注
 
 裸 `fn` 用于变量声明位置时表示"推导任意可调用类型，不约束签名"；当需要在**类型标注位置**对 callable 进行结构签名约束时（如高阶函数参数、返回类型、`auto`/`fn` 覆盖类型），使用 `fn[(<input_types>) -> (<output_types>)]` 形式。
 
@@ -146,7 +146,5 @@ func call_any(fn f) -> auto:
 - 各位置参数类型必须 assignable（含子类型协变）
 - 返回类型必须 assignable
 - 实参可以是普通函数引用、lambda 闭包、snapshot 延迟对象、可调用类实例
-
-> **历史背景**：D3（2026-04-29）落地。当前规范见 `docs/design/TYPE_SYSTEM_DESIGN.md §7`。
 
 ---

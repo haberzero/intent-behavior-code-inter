@@ -89,7 +89,7 @@
 ### 明确排除
 
 - **双写真相**：禁止同一事实在两处维护
-- **约束求解风格类型推断**：不做 Hindley-Milner
+- **完备约束求解类型推断**：原则上不实现 Hindley-Milner 级别的完备约束求解体系（设计过重）；但允许参考其设计思路（如占位符/待解析态/终局裁定）用于解决具体的类型解析时序问题
 - **walrus (`:=`)**：IBCI 无此语法（设计限制）
 - **if-block 内重声明同名变量**：SEM_002 禁止（设计限制）
 
@@ -105,9 +105,21 @@
 
 > `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 中的测试名与实际文件名不同步。
 
-### PT-TEST-8　MOCK 指令文档与代码同步 [P3]
+### PT-TEST-8 MOCK 指令文档与代码同步 [P3]
 
 > `docs/syntax/13_mock_testing.md` 需与 `ibci_ai/core.py` MOCK 处理逻辑保持同步。
+
+---
+
+## 5.5、文档体系完善项
+
+### PT-DOC-1 语法手册定位段补充 [P3]
+
+> `docs/syntax/*.md` 各章节文件缺少 `docs/README.md` §六.3 要求的定位段（1-3 句：本文是什么、给谁看、覆盖什么）。当前由 `SYNTAX_REFERENCE.md` 目录结构承担定位职责，未来应为每篇补充独立定位段以支持独立阅读。
+
+### PT-DOC-2 多模态子系统设计文档恢复 [P3]
+
+> 全模态行为表达式设计文档已移至 `docs/backup/02_multimodal_behavior.md`。待多模态主线恢复时，需按 `docs/README.md` §六准则重新审视并纳入 `docs/subsystems/`。
 
 ---
 
