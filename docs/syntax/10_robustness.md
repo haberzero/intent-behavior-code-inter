@@ -1,5 +1,7 @@
 ## 10. 健壮性与自愈
 
+> 本章描述 IBCI 的 AI 容错控制流机制。面向已阅读意图系统章节的开发者。覆盖 `llmexcept` 异常捕获、`retry` 重试机制、LLM 异常体系与快照隔离。
+
 ### 10.1 llmexcept
 
 `llmexcept` 附着在可能触发 LLM 不确定性的语句之后，提供重试机制：
@@ -52,9 +54,7 @@ llmretry "如果无法判断，请回复 0 并说明原因"
 - LLM 调用失败 → 执行 `llmexcept` 体，然后从快照恢复状态并 retry
 - 重试耗尽 → 抛出 `LLMRetryExhaustedError`（`LLMError` 的子类，可被 `try except` 捕获，详见 §4.6）
 
-对于**无 `llmexcept` 保护**的裸 LLM 赋值，内容解析失败时 VM 内部会临时产生 `Uncertain` 哨兵，
-并在该变量被后续读取时抛出 `LLMParseError`；LLM provider 层失败（网络/鉴权）则立即抛出
-`LLMCallError`（行为见 §4.6）。`Uncertain` 哨兵是 VM 内部信号，用户代码无需处理。
+对于**无 `llmexcept` 保护**的裸 LLM 赋值，内容解析失败时抛出 `LLMParseError`；LLM provider 层失败（网络/鉴权）时立即抛出 `LLMCallError`。
 
 `llmexcept` 体内**禁止修改参与 LLM 调用的变量**（编译期 `SEM_LLMEXCEPT_BODY_WRITE` / `SEM_LLMEXCEPT_MUTATING_CALL` 错误）：
 

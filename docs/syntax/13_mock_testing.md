@@ -1,8 +1,6 @@
-# IBCI MOCK 测试机制
+## 13. MOCK 测试机制
 
-> 本文档详细说明 IBCI 的 MOCK 指令系统，用于在没有真实 LLM API 的环境中测试 LLM 相关功能。
->
-> 语法参考见 `docs/syntax/07_behavior_expressions.md` 与 `docs/syntax/08_llm_functions.md`。
+> 本章描述 IBCI 的 MOCK 测试机制，用于在没有真实 LLM API 的环境中测试 LLM 相关功能。面向需要编写测试的 IBCI 开发者。覆盖 TESTONLY 模式、MOCK 指令语法与命名模型 MOCK。
 
 ---
 

@@ -169,7 +169,7 @@ python main.py run test_target_proj/01_hello_world.ibci
 
 *注意！！！ 现阶段不推荐使用任何思考模型接入 IBC-Inter，思考模型在当前 IBCI 版本的提示词约束下，无法合理工作并收敛思考结论，容易陷入思考死循环。特别是本地小尺寸的思考模型，更容易陷入无穷无尽的“等一等，我应该更深入思考”之类的反思中。请务必使用非思考模式。
 
-## 其它
+## 进一步阅读
 
 更多详情请参阅：
 
@@ -177,7 +177,6 @@ python main.py run test_target_proj/01_hello_world.ibci
 - [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
 - [架构原则](docs/ARCHITECTURE.md) (核心设计思路)
 - [已知限制](docs/KNOWN_LIMITS.md) (当前版本的语言级约束)
-- [当前任务进度](tasks_docs/NEXT_STEPS.md)
 
 ### 运行测试
 
@@ -185,6 +184,6 @@ python main.py run test_target_proj/01_hello_world.ibci
 python -m pytest tests/
 ```
 
-最新基线请以当次 pytest 输出为准（见 `tasks_docs/NEXT_STEPS.md` 顶部锚点）。
+测试基线以当次 pytest 输出为准。
 
 ***

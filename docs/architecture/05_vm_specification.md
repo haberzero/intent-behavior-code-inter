@@ -31,7 +31,7 @@ while frame_stack:
 
 **公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段在编译期建立——正则情形通过 `IbLLMExceptionalStmt.target` 字段引用前一语句节点，并在 body 中**替换**该节点；条件驱动 for 循环情形通过 `IbFor.llmexcept_handler` 字段直接引用 handler。运行时 `vm_handle_IbLLMExceptionalStmt` 显式 yield target_uid 驱动 target 求值并管理 retry 循环；`vm_handle_IbFor` 在条件求值返回 uncertain 时内联执行 handler body。不存在侧表驱动的隐式重定向机制。
 
-**已知限制**：无——所有节点类型均已 CPS 化。
+**已知限制**：无——所有节点类型均支持 CPS handler。
 
 ---
 

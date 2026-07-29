@@ -1,5 +1,7 @@
 ## 11. 模块与插件
 
+> 本章描述 IBCI 的模块系统与 import 机制。面向已阅读健壮性章节的开发者。覆盖 import 约束、内置模块（ai/isys/idbg/ihost/file/json）的 API 与插件使用。
+
 ### 11.1 import 位置约束
 
 **`import` 语句必须出现在模块文件的顶部**，在任何非 import 语句之前。不允许在函数、类、条件块或循环体内部使用 `import`。`from X import Y` 语法同样受此约束。
@@ -155,9 +157,6 @@ file.remove("data.txt")
 1. 所有 FS I/O 均受 `PermissionManager` 沙箱约束（默认禁止越出 `project_root`）。
 2. `save_state` 遇到活跃 `file_handle`/`audio`/`image`/`video` 变量时直接报错。
 3. `llmexcept` retry body 中禁用 `write_overwrite` / `write_overwrite_bytes`（避免污染 gold snapshot）。涉及可能失败的 LLM 调用时，优先使用 `write_copy` 或 `write_new` 生成新文件。
-
-**未来 API 演进（待函数动态/命名参数支持后）**：
-`file.write(target, data, overwrite_flag="copy"|"overwrite"|"new")` 将统一当前三种写入函数，默认 `"overwrite"`。
 
 ### 11.8 json 模块
 

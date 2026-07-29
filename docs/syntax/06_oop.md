@@ -1,5 +1,7 @@
 ## 6. 面向对象
 
+> 本章描述 IBCI 的面向对象编程支持。面向已阅读函数章节的开发者。覆盖类定义、继承、super()、Enum 枚举与协议方法。
+
 ### 6.1 类定义
 
 ```ibci
@@ -92,7 +94,7 @@ if s == Status.RUNNING:
     print("正在运行")
 ```
 
-> **Known Limit (docs/KNOWN_LIMITS.md §四)**：
+> **Known Limit (docs/KNOWN_LIMITS.md §二)**：
 > - 枚举成员目前仅支持 `str` 类型。
 > - 不支持枚举迭代和数量查询。
 

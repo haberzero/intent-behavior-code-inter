@@ -1,10 +1,8 @@
 ﻿# IBC-Inter 已知限制（语言级）
 
-> 本文档记录当前版本中**正式承认的语言设计限制**：偏向"用法约束 + 设计取向 + 根源说明"。
-> **最后更新**：2026-07-21（新增 §十七：MOCK 模式下无法验证的 LLM 功能清单）
+> 本文档记录 IBCI 当前版本中正式承认的语言设计限制与使用约束。面向需要了解 IBCI 语言边界的所有开发者和使用者。每个限制条目包含限制说明、根源分析与规避建议。
 >
-> **测试基线**：请以当次 `python -m pytest tests/` 的输出为准。
-> 不再于本文档冻结具体通过数字以避免出现"文档落后于代码"的幻觉。
+> 语言设计决策与规划见 `docs/ARCHITECTURE.md`；测试基线以 `python -m pytest tests/` 实跑为准。
 
 ---
 
@@ -245,7 +243,7 @@ str mood = @~ 请判断颜色，回复颜色单词 ~
 
 LHS 的变量声明类型会自动被传递给 LLM 作为输出格式提示，无需额外的类型转换语法。
 
-### 旧 fn / lambda 声明语法（PAR_INVALID_SYNTAX / D1/D2 废弃）
+### 旧 fn / lambda 声明语法（PAR_INVALID_SYNTAX）
 
 ```ibci
 # ❌ 全部产生 parse error
@@ -254,20 +252,19 @@ auto snapshot g = expr        # 旧声明语法（PAR_EXPECTED_TOKEN）
 fn lambda h = expr            # 旧括号体形式（PAR_EXPECTED_TOKEN）
 lambda(EXPR)                  # 旧括号体形式（PAR_EXPECTED_TOKEN）
 lambda(PARAMS)(EXPR)          # 旧括号体形式（PAR_EXPECTED_TOKEN）
-int fn f = lambda: EXPR       # 声明侧返回类型（PAR_INVALID_SYNTAX，D1 废弃）
-int fn f = snapshot(int a, int b): EXPR  # 声明侧返回类型（PAR_INVALID_SYNTAX，D1 废弃）
+int fn f = lambda: EXPR       # 声明侧返回类型（PAR_INVALID_SYNTAX）
+int fn f = snapshot(int a, int b): EXPR  # 声明侧返回类型（PAR_INVALID_SYNTAX）
 
-# ✅ 正确写法（D1/D2：返回类型标注写在表达式侧）
+# ✅ 正确写法：返回类型标注写在表达式侧
 fn f = lambda: EXPR                          # 无参，返回类型推导
-fn f = lambda -> int: EXPR                   # 无参，显式返回类型（D2）
+fn f = lambda -> int: EXPR                   # 无参，显式返回类型
 fn f = lambda(int x): EXPR                  # 有参，返回类型推导
-fn f = lambda(int x) -> int: EXPR           # 有参，显式返回类型（D2）
-fn f = snapshot -> int: EXPR                # snapshot，显式返回类型（D2）
-fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
+fn f = lambda(int x) -> int: EXPR           # 有参，显式返回类型
+fn f = snapshot -> int: EXPR                # snapshot，显式返回类型
+fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 ```
 
-`D1`（2026-04-29）废弃了声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式（产生 PAR_INVALID_SYNTAX），
-改为在表达式侧通过 `-> TYPE` 标注（`D2`）。
+声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式已被废弃（产生 PAR_INVALID_SYNTAX），改为在表达式侧通过 `-> TYPE` 标注。
 
 ---
 
@@ -281,9 +278,12 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 ## 十一、Switch 语句设计未稳定
 
-**当前状态**：`switch`/`case` 语法的 AST 节点已实现（`core/kernel/ast.py` 的 `IbSwitch` 类），基本功能可用（e2e 测试覆盖），但语义设计存在待改进问题。
+**限制说明**
 
-**已知问题**：
+`switch`/`case` 语法的 AST 节点位于 `core/kernel/ast.py` 的 `IbSwitch` 类，基本功能可用，但语义设计存在待改进问题。
+
+**根源**
+
 - case 匹配语义不完整（值比较、类型匹配、模式匹配的边界不清晰）
 - default 语句的兜底行为需要明确定义
 - switch 内控制流（break/continue/return）与其他控制流的一致性待验证
@@ -297,7 +297,9 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参（D2）
 
 ## 十二、`intent_context` 类静态调用的"静默无效"陷阱
 
-**当前状态**：`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/builtin_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
+**限制说明**
+
+`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/builtin_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
 
 **有效路径**：
 
@@ -341,7 +343,7 @@ str r = @~ ... ~
 1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置 `list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` 全部走内置 axiom 的 `resolve_specialization_by_names` 路径，用户类型无对应入口。
 2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel/`（包）的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
 
-**未来演进思路（不构成承诺）**：以上见 `tasks_docs/PENDING_TASKS.md §四`。
+**未来演进思路（不构成承诺）**：涉及用户类泛型参数与运算符重载能力扩展，具体规划见任务文档。
 
 ---
 
@@ -349,21 +351,19 @@ str r = @~ ... ~
 
 **当前状态**：编译期 `BehaviorDependencyAnalyzer`（Phase 3 Binding）仍为每个 `IbBehaviorExpr` 计算 `llm_deps` 字段（供未来接通使用），但 `dispatch_eligible` 一律置 `False`（`behavior_dependency_pass.py`）。运行时 `assignment.py` 检测到 `dispatch_eligible=False` 即走同步求值路径，`LLMScheduler.dispatch_eager()` 代码存在但不会被触发。所有 `@~ ... ~` 行为表达式按 AST 序串行执行。
 
-**根源**：dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`），但后台线程执行完整的 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争（原 C2 缺陷）。已显式禁用并降级为 PT-4.7 专项重做。
+**根源**：dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`），但后台线程执行完整的 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争。已显式禁用并降级为专项重做。
 
-**接通前置条件**（PT-4.7）：
+**接通前置条件**：
 1. 修 `BehaviorDependencyPass` 实现 spec §3.1 规则（插值依赖/Cell/llmexcept 强制 `False`）
 2. 拆分 `execute_behavior_expression` 为"主线程预求值 prompt"+"后台仅 HTTP 调用"
 3. `last_call_info`/`retry_hint` 线程安全或去共享
 4. 补"插值 + 真实并发"合规测试
 
-**未来演进思路**：见 `tasks_docs/PENDING_TASKS.md §三 PT-4.7`。
+**未来演进思路**：具体规划见任务文档。
 
 ---
 
 ## 十六、`__prompt__` 协议家族：已知问题与待决策项
-
-> **新增**：2026-05-27（__prompt__ 协议统一化改造期间发现）
 
 ### 16.1 用户类 `__from_prompt__` 返回的实例字段访问风险
 
@@ -385,9 +385,9 @@ str r = @~ ... ~
 
 ### 16.3 `__to_prompt__` 的异常处理（已加可观测性）
 
-**现状**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，内部 `try/except` 在 `__to_prompt__()` 抛异常时回退到 `str(val)` / `str(val.to_native())`。**降级行为保留**（LLM 调用不因 prompt 序列化失败而中断）。
+**现状**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，内部 `try/except` 在 `__to_prompt__()` 抛异常时回退到 `str(val)` / `str(val.to_native())`。降级行为保留（LLM 调用不因 prompt 序列化失败而中断）。
 
-**已改善（2026-06-25 PT-ARCH-7）**：原先的静默吞异常已改为 `core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, ...)` 日志——用户实现的 `__to_prompt__` 若抛异常（如字段未初始化的 AttributeError），开启调试（默认 NONE 级，零开销）即可观测，不再完全无感知。同样的处理已应用到 `__payload_prompt__` / `to_native` 回退链。
+原先的静默吞异常已改为 `core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, ...)` 日志——用户实现的 `__to_prompt__` 若抛异常（如字段未初始化的 AttributeError），开启调试（默认 NONE 级，零开销）即可观测，不再完全无感知。同样的处理已应用到 `__payload_prompt__` / `to_native` 回退链。
 
 ### 16.4 协议签名校验（SEM_PROTOCOL_SIGNATURE）的强度选择
 
@@ -399,11 +399,7 @@ str r = @~ ... ~
 
 ---
 
-*最后更新：2026-06-25（文档体系整理：同步 VM_SPEC/路径引用至 design/ + 包路径）*
-
----
-
-## 十七、MOCK 模式下无法验证的 LLM 功能（2026-07-21 记录）
+## 十七、MOCK 模式下无法验证的 LLM 功能
 
 以下功能需要连接真实 LLM API 才能完整验证，MOCK/TESTONLY 模式无法覆盖：
 

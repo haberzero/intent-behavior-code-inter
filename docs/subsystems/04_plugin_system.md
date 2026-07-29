@@ -1,7 +1,7 @@
 # IBCI 插件与模块指南
 
 > 本文档详细说明 IBCI 的模块系统、内置模块 API、用户插件开发流程。
-> 语法参考见 `docs/IBCI_SYNTAX_REFERENCE.md` §11（模块与插件基础）。
+> 语法参考见 `docs/SYNTAX_REFERENCE.md` §11（模块与插件基础）。
 
 ---
 
@@ -71,7 +71,7 @@ ai.register_model(name, url, key, model)  # 注册命名模型
 
 ### 3.2 file 模块
 
-详见 `docs/IBCI_SYNTAX_REFERENCE.md` §11.7。
+详见 `docs/SYNTAX_REFERENCE.md` §11.7。
 
 ### 3.3 isys 模块
 

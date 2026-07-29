@@ -126,7 +126,7 @@ class TypeDef(IbSpec):
 | `CALLABLE_SIG` | 高阶函数签名约束 | `fn[(int)->int]` |
 | `LAZY` | 跨模块未解析占位符 | 编译期 forward ref |
 
-> `TypeKind.DEFERRED` + `TypeKind.BEHAVIOR` 已合并为 `TypeKind.CALLABLE_INSTANCE`；区分仅由 `name`（`"fn_callable"` / `"behavior"`）或 `_axiom_name` 决定，不再是类型层语义。
+> `TypeKind.DEFERRED` 和 `TypeKind.BEHAVIOR` 对应于 `TypeKind.CALLABLE_INSTANCE`；区分仅由 `name`（`"fn_callable"` / `"behavior"`）或 `_axiom_name` 决定，不再是类型层语义。
 
 ### 3.3 字段存储规范
 
@@ -265,7 +265,7 @@ VMExecutor handler
 
 ### 5.3 LazySpec 占位符
 
-跨模块未解析符号在编译期暂以 `LazySpec` 占位（`core/kernel/spec/`）；解析阶段强制成功，**异常**情况应抛错而非静默回填（见 `ARCHITECTURE_PRINCIPLES.md §5.3`）。
+跨模块未解析符号在编译期暂以 `LazySpec` 占位（`core/kernel/spec/`）；解析阶段强制成功，**异常**情况应抛错而非静默回填（见 `01_principles.md §5.3`）。
 
 ---
 
@@ -316,7 +316,7 @@ class IbValue(IbObject):
 
 ### 7.2 声明侧关键字 `fn`
 
-`fn`（D1 后等同 `auto`）只承担"推导可调用类型"职责，不携带返回类型：
+`fn` 等同 `auto` 类型推导，只承担"推导可调用类型"职责，不携带返回类型：
 - `fn f = myFunc` ⇒ 推导 `f` 类型为 `myFunc` 的 FuncSpec
 - `fn g = lambda(int x) -> int: x+1` ⇒ 推导 g 类型为 `CALLABLE_INSTANCE[int]`
 - `fn h = lambda: @~ ... ~` ⇒ 推导 h 类型为 `behavior` 路由的 `CALLABLE_INSTANCE[auto]`

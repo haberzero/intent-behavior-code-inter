@@ -1,5 +1,7 @@
 ## 1. 类型系统
 
+> 本章描述 IBCI 的基础类型系统。面向所有 IBCI 开发者。覆盖基础类型、泛型容器、Optional[T] 空安全与类型转换规则。
+
 ### 1.1 基础类型
 
 | 类型名 | 说明 | 示例字面量 |
@@ -34,10 +36,7 @@ dict[str,str]      # string→string 字典
 None        # 空值（首字母大写）
 ```
 
-`None` 在布尔上下文中为假。`(str)None` 返回 `"None"`。
-
-> `Uncertain` 是 IBCI 内核内部的 LLM 不确定性哨兵，不是用户可编程的公开值。
-> LLM 失败处理请使用 `llmexcept` / `try except LLMCallError` / `try except LLMRetryExhaustedError`。
+`None` 在布尔上下文中为假。`(str)None` 返回 `"None"`。LLM 调用失败处理请使用 `llmexcept` / `try except LLMCallError` / `try except LLMRetryExhaustedError`。
 
 ### 1.3.1 Optional[T] 空安全
 

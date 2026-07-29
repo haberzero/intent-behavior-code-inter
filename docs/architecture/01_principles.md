@@ -238,7 +238,7 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 
 `Symbol` 只保留 `.spec` 字段（`IbSpec` 类型），不存在 `.descriptor` 属性或任何兼容 shim。
 
-关于 MetadataRegistry（公理 Capability 查询入口）以及双轨问题解决详情，详见 ARCH_DETAILS.md §10。
+关于 MetadataRegistry（公理 Capability 查询入口）以及双轨问题解决详情，详见本文 §5.4。
 
 ---
 
@@ -284,7 +284,7 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 |------|------|---------------|
 | 内核原生（kernel-native）| 随内核发行，构造期预注册，IMPORT_GATED；不位于 `ibci_modules/`，不可被用户插件覆盖 | `ai` / `file` / `ihost` / `idbg` / `isys` |
 | 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema` |
-| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg`（均已 kernel-native 化）|
+| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg` |
 
 **示例（AI 插件）**：
 - `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
@@ -450,10 +450,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 ## 八、信息交互原则
 
-> "更倾向于某种比较显式的信息交互，主要通过硬盘以及文件读写"
-> "子环境的 llm 输出也可以直接进行硬盘保存"
-> "有利于开发者绝对控制可被交互的信息"
-> "内存交互实在过分复杂而沉重，不符合易用性设计理念"
+IBCI 采用显式的文件读写作为子环境与主环境之间的信息交互方式，子环境的 LLM 输出也直接通过硬盘保存。相比于隐式内存交互，这种方式使开发者可以绝对控制可被交互的信息，降低系统复杂度和维护成本。
 
 **核心原则**：信息交互应通过显式的 file 读写进行，不做隐式内存交互。
 
@@ -461,7 +458,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 ## 九、自动注册/自动嗅探机制
 
-> "99%的情况严格禁止硬编码，一切不管是内置函数/内置关键字/语法糖等，还是外部插件的主动注册，都应该自动完成，而且享有基本上同等地位。"
+IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置关键字、语法糖以及外部插件均通过自动注册机制完成，且享有同等地位。
 
 | 机制 | 位置 | 说明 |
 |------|------|------|
@@ -541,4 +538,4 @@ IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostSer
 
 ---
 
-*本文档为 IBC-Inter 架构原则参考文档，供未来项目参与人员进行架构对齐使用。*
+

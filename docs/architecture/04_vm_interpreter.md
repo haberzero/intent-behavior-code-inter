@@ -164,8 +164,8 @@ class IExecutionFrame(Protocol):
 
 | 层 | 粒度 | 状态 |
 |----|------|------|
-| **L1: LLM 调用流水线** | 单个 LLM 调用 | 已实现 |
-| **L2: 多 Interpreter 隔离** | 整段程序 | 已实现 |
+| **L1: LLM 调用流水线** | 单个 LLM 调用 | 当前支持 |
+| **L2: 多 Interpreter 隔离** | 整段程序 | 当前支持 |
 | **L3: 语言级协程 / yield** | 单个 yield 点 | 远期愿景（见 `docs/subsystems/05_coroutine.md`） |
 
 ### 5.2 编译期：依赖图（DDG）
@@ -228,7 +228,7 @@ VM 行为：
 
 ### 6.1 模型概述
 
-llmexcept 不再用 Python 异常实现，改用**快照隔离 + 影子执行驱动 + 标志位轮询**：
+llmexcept 使用快照隔离 + 影子执行驱动 + 标志位轮询实现：
 
 ```text
 visit_IbLLMExceptionalStmt
@@ -365,7 +365,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 | **GC-2 根集合** | 全局 scope 符号 ∪ 调用栈帧局部 ∪ 所有活跃 fn 的 closure cell ∪ 所有活跃 snapshot 的 frozen_intent_ctx |
 | **GC-3** | 对象不可达时方可回收，独立于 Python 引用计数 |
 
-实现侧目前使用 Python GC；`IbCell` / `IbBehavior` / `IbFnCallable` 暴露 `trace_refs()` 钩子供未来自管 GC。
+实现侧使用 Python GC；`IbCell` / `IbBehavior` / `IbFnCallable` 暴露 `trace_refs()` 钩子供未来自管 GC。
 
 ---
 
@@ -379,7 +379,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 - `HostService` 负责 spawn/collect 子 Interpreter；
 - 插件通过 `IbStatefulPlugin` 协议参与状态快照（`save_plugin_state` / `restore_plugin_state`）；
-- 详见 `docs/ARCHITECTURE_PRINCIPLES.md §三 / §七`。
+- 详见 `docs/architecture/01_principles.md §三 / §七`。
 
 ### 10.3 LLM 边界（公理化通道）
 

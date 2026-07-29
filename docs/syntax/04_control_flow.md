@@ -1,5 +1,7 @@
 ## 4. 控制流
 
+> 本章描述 IBCI 的控制流语句。面向已阅读运算符章节的开发者。覆盖 if/while/for/switch 条件分支与循环、try/except/raise 异常处理、pass 空语句。
+
 ### 4.1 条件语句
 
 ```ibci

@@ -1,5 +1,7 @@
 ## 7. 行为描述语句（LLM 调用）
 
+> 本章描述 IBCI 的行为描述语句（`@~ ... ~`），即 LLM 调用的语法。面向已阅读 OOP 章节的开发者。覆盖即时行为表达式、类型约束与输出格式、控制流中的行为表达式、lambda/snapshot 延迟执行。
+
 ### 7.1 即时行为
 
 ```ibci
@@ -134,7 +136,7 @@ fn greet = lambda(str name) -> str: "Hello, " + name
 fn make_pair = lambda(int n, str s) -> tuple[int,str]: (n, s)
 ```
 
-**已废弃的声明侧返回类型语法**（产生 PAR_INVALID_SYNTAX 编译错误）：
+**声明侧返回类型语法**（产生 PAR_INVALID_SYNTAX 编译错误）：
 ```ibci
 int fn f = lambda: EXPR            # PAR_INVALID_SYNTAX：声明侧返回类型已废弃
 str fn f = lambda(PARAMS): EXPR    # PAR_INVALID_SYNTAX
@@ -179,7 +181,7 @@ str greeting = @~ 打个招呼 ~
 
 ### 7.6 多模态 payload 协议（`__payload_prompt__`）
 
-`__payload_prompt__` 是 `__to_prompt__` 的多模态增强版本，允许类返回结构化 content block 而非纯文本。IBCI 内置的 `audio`/`image`/`video` 类型已实现该协议，可直接插值到 `@~ ... ~` 中：
+`__payload_prompt__` 是 `__to_prompt__` 的多模态增强版本，允许类返回结构化 content block 而非纯文本。IBCI 内置的 `audio`/`image`/`video` 类型支持该协议，可直接插值到 `@~ ... ~` 中：
 
 ```ibci
 import file
@@ -206,8 +208,6 @@ str b64 = rec.data()     # method，惰性读取字节并按需 base64 物化
 
 用户自定义类型如需实现 `__payload_prompt__`，需自己负责字节物化与格式化；`file` 模块不再提供 `read_base64`，可用 `file.read_bytes(path)` 读取原始字节后自行编码。
 
-**协议优先级**：当变量插值到行为表达式时，运行时优先调用 `__payload_prompt__`；若未定义则回退到 `__to_prompt__`。纯文本路径完全不受影响——只有当 content 中包含结构化 block 时才会切换为多模态 payload 模式。
-
-**向后兼容**：仅实现了 `__to_prompt__` 的类型行为不变；`__payload_prompt__` 是可选扩展，不替代现有协议。
+**协议优先级**：当变量插值到行为表达式时，运行时优先调用 `__payload_prompt__`；若未定义则回退到 `__to_prompt__`。仅实现 `__to_prompt__` 的类型行为不变；`__payload_prompt__` 是可选扩展。纯文本路径完全不受影响——只有当 content 中包含结构化 block 时才会切换为多模态 payload 模式。
 
 ---

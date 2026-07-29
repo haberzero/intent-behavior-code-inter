@@ -1,4 +1,10 @@
-## 路径系统架构
+# 路径系统架构
+
+> 本文档描述 IBCI 路径系统的架构设计，包含三层路径模型、五概念路径模型与沙箱隔离语义。面向需要理解和修改路径/模块系统的开发者。
+>
+> 模块系统与插件边界见 `docs/architecture/07_kernel_native_modules.md`；变量存储模型见 `docs/architecture/08_storage_model.md`。
+
+---
 
 ### 1. 三层路径模块
 

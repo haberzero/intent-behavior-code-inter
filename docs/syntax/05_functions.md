@@ -1,5 +1,7 @@
 ## 5. 函数
 
+> 本章描述 IBCI 的函数声明与调用。面向已阅读控制流章节的开发者。覆盖函数声明、参数传递、递归、嵌套函数、fn 引用与高阶函数签名。
+
 ### 5.1 函数声明
 
 ```ibci
@@ -57,7 +59,7 @@ func maybe_get(bool flag) -> None:
 
 ### 5.2 行为表达式与 return 的约束
 
-> **Known Limit (docs/KNOWN_LIMITS.md §七)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_TYPE_MISMATCH` 编译错误。
+> **Known Limit (docs/KNOWN_LIMITS.md §四)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_TYPE_MISMATCH` 编译错误。
 
 ```ibci
 # 错误：不允许在 return 中直接使用行为表达式

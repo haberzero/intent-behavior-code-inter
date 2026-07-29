@@ -1,4 +1,10 @@
-## 内核原生模块边界
+# 内核原生模块与插件边界
+
+> 本文档描述 IBCI 内核原生模块的架构边界，包括模块分类、provenance/visibility 模型与插件发现机制。面向需要理解模块系统内部设计的开发者。
+>
+> 路径系统架构见 `docs/architecture/06_path_system.md`。
+
+---
 
 ### 两轴正交模型
 
@@ -9,7 +15,7 @@
 | 可用性 | `provenance` | `KERNEL_NATIVE` = 随内核发行、构造期预注册、不可被用户插件覆盖 |
 | 可见性 | `visibility` | `IMPORT_GATED` = 名字须经 `import` 语句进入当前文件作用域 |
 
-禁止用单一 bool（如历史 `is_user_defined`）将两轴焊死，否则会经 prelude 过滤器意外解除 import-gating。
+禁止用单一 bool（如 `is_user_defined`）将两轴焊死，否则会经 prelude 过滤器意外解除 import-gating。
 
 ### 内核原生模块清单
 
