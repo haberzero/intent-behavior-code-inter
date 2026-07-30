@@ -133,14 +133,21 @@ class TestFileSecurityGates:
             root_dir=str(tmp_path),
         )
 
-    def test_llmexcept_retry_body_disables_write_overwrite(self, tmp_path):
-        """llmexcept retry body 中 file.write_overwrite 被禁用。"""
+    def test_llmexcept_retry_body_runtime_guard_catches_dynamic_dispatch(self, tmp_path):
+        """编译期无法静态追踪的动态分派（fn 变量调用写文件的用户函数）由运行时守卫兜底。
+
+        直接调用 file.<写> 现由编译期 SEM_LLMEXCEPT_FILE_WRITE 拦截（见 test_pipeline.py）；
+        此处验证经 fn 动态分派的间接写仍被运行时 _guard_no_file_write_in_retry 拦下。
+        """
         code = AI_MOCK_PREFIX + (
+            'func _do_write():\n'
+            '    file.write_overwrite("./x.txt", "mutated")\n'
+            'fn f = _do_write\n'
             'file.write_overwrite("./x.txt", "initial")\n'
             'try:\n'
             '    str r = @~ MOCK:FAIL trigger ~\n'
             '    llmexcept:\n'
-            '        file.write_overwrite("./x.txt", "mutated")\n'
+            '        f()\n'
             '        retry "please try again"\n'
             'except LLMRetryExhaustedError as e:\n'
             '    print("caught")\n'

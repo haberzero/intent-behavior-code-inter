@@ -481,3 +481,64 @@ IBCI 编译器按拓扑序编译模块（依赖先编译）。循环依赖使得
 **规避方式**
 
 将共享类型/接口提取到独立的底层模块，使依赖关系保持单向。
+
+---
+
+## 二十一、插件可见性隔离与无状态约定
+
+**限制说明**
+
+IBC-Inter 的多 Interpreter 隔离（动态宿主）在**插件层**采用**可见性隔离**，而非 Python 代码/内存层的强隔离：
+
+- 每个 Engine 拥有独立的 `HostInterface` / `InterOp` 注册表；IBCI 脚本只能 `import` 到**本引擎注册表**中登记的插件。引擎 A 的 IBCI 代码无法看到引擎 B 的插件--可见性是每引擎隔离的。
+- 插件的 **Python 实现代码**仍由 Python 的 `importlib` 按进程级常规机制加载：`sys.modules` 全局缓存、按模块名命中。同一进程内，**同名插件按"先加载者胜"作为身份唯一性**--后启动的引擎若发现同名插件，拿到的是进程已缓存的那个模块对象。
+- 插件的**实例**是每引擎独立的：`create_implementation()` 每次调用产出新实例，并以 `_ibci_registry_id` 戳标记所属 registry，跨引擎误用实例会抛 `RegistryIsolationError`。
+
+因此，**隔离的边界落在"IBCI 可见性与实例"层，不落在"Python 模块代码"层**。IBC-Inter 不插手 Python 的 import 机制（不装自定义 finder、不篡改 `sys.modules`），因为那既脆弱又是泄漏的抽象。
+
+**无状态约定（期望遵守，IBC-Inter 无强制力）**
+
+插件应尽可能保持**无状态**：所有可变数据应放在插件实例的字段里（每引擎独立），而非 Python 模块级全局变量。该约定服务于三个目标：
+
+1. **行为隔离**：不同引擎调用同一插件得到互不干扰的行为。
+2. **数据不互相污染**：一个引擎对插件状态的修改不泄漏到另一引擎。
+3. **可重入**：同一插件可被多个引擎并发/反复调用而不产生共享状态竞争。
+
+IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可变全局（如 `_cache = {}`），该状态会被同进程所有引擎共享，IBC-Inter 无法从原理上阻止（任何非进程级隔离方案都做不到）。这是插件作者的责任，不是 IBCI 的隔离缺陷。内置插件（`ai`/`ihost`/`idbg`/`isys` 等）均遵守此约定，使用实例级状态。
+
+**根源**
+
+可见性隔离是把隔离职责放在 IBCI 能完全控制的层（注册表 / `HostInterface`，new 一个实例即隔离），而非 Python 进程全局 import 状态（`sys.modules` 是 CPython 全局单例，IBC-Inter 无法 per-engine 实例化）。试图在 Python import 层做强隔离需要自定义 meta-path finder 或绕开 `import_module`，既触碰 Python 内部、又存在大量边界情况（namespace package、相对导入、循环导入等），不符合"质量优先、不写 tricky 实现"的原则。
+
+**规避方式**
+
+- 插件作者：把所有可变状态放进实例字段（`self.xxx`），通过 `create_implementation()` 工厂返回的实例持有；不要在模块顶层放可变全局。
+- 跨 project_root 部署：若多个 project_root 在同一进程内运行且各自携带同名但内容不同的用户插件，**这是不支持的用法**（同名=同身份，先加载者胜）。若需加载不同代码，请使用不同的插件目录名。
+
+---
+
+## 二十二、llmexcept retry body 内禁止文件写/删（含固有边界）
+
+**限制说明**
+
+`llmexcept` 快照对磁盘型对象（`file_handle`/`audio`/`image`/`video`）保存的是**浅路径引用**（`__clone_ref__` 仅复制路径，不物化字节）。retry body 内任何文件写/删都会污染黄金快照：原地覆写改变 backing 内容、删除令 handle 悬空、即便是"创建新文件"的 `write_new`/`write_copy` 若路径撞上已有 backing 同样污染。
+
+因此 retry body 内**禁止全部 7 个 `file` 模块写/删函数**：`write_copy` / `write_copy_bytes` / `write_new` / `write_new_bytes` / `write_overwrite` / `write_overwrite_bytes` / `remove`。只读操作（`open` / `read` / `read_bytes` / `exists`）允许。
+
+防护为编译期 + 运行时双层（公理 IC-5）：
+- **编译期** `SEM_LLMEXCEPT_FILE_WRITE`：spec 驱动判定，拦截 retry body 内直接调用与经用户函数递归传导的间接调用（含 `import file as f` 别名）。
+- **运行时** `llmexcept_body_depth` 守卫：兜底编译期无法静态追踪的情形（如经 `fn` 动态分派）。
+
+**固有边界（不可由 IBCI 拦截）**
+
+外部进程（非 IBCI 代码，如子进程、其它引擎同进程直接写磁盘、OS 层变更）触碰 backing 文件，IBCI 在编译期与运行时均**无法拦截**。这是磁盘态快照零拷贝设计与进程外 I/O 不可控性的根本结果，任何非进程级隔离方案都做不到。磁盘型变量参与 `llmexcept` 时，用户须自行保证 backing 文件在 retry 期间不被外部修改。
+
+**根源**
+
+浅路径引用是为避免对大媒体（audio/image/video，可能 GB 级）在每次受 retry 保护的 LLM 调用上深拷贝字节而做的性能取舍。深拷贝能保证快照独立但代价不可接受；浅引用便宜但共享 backing 文件，故用"retry body 内禁写"作为补偿约束。外部进程不在 IBCI 管辖，是该取舍下无法消除的残余风险。
+
+**规避方式**
+
+- 文件 I/O 放在 `llmexcept` 块之外；retry body 内仅用 `retry "hint"` 提供修正指引。
+- 若 retry 期间需记录诊断信息，使用 `print`（console，retry body 内允许）或待 retry 退出后再落盘。
+- 磁盘型变量参与 retry 时，确保 backing 文件不被外部进程并发修改。

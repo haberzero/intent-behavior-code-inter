@@ -142,6 +142,10 @@ while frame_stack:
 
 **公理 ISO-8（错误传播）**：子 Interpreter 运行期或编译期抛出的异常，在 `collect()` 时传播为 `RuntimeError`。
 
+**公理 ISO-9（collect 超时，默认无界）**：`IsolationPolicy.collect_timeout` 控制 `collect()` 的墙钟等待上限。`None`（默认）= 无界等待，严格遵循 ISO-5；正数（秒）= 等待上限，超时则 `collect()` 抛 `RuntimeError`。Python 宿主无法强杀线程，超时后子 Interpreter 线程作为 daemon 孤儿继续运行直至自身结束或进程退出--超时的语义是"放弃等待"而非"停止子任务"。该超时为可选安全网，不改变 ISO-5 的默认阻塞契约。
+
+**公理 ISO-10（插件可见性隔离）**：插件层的隔离落在 IBCI 可见性层，不落在 Python 模块代码层。每个 Engine 拥有独立 `HostInterface`/`InterOp` 注册表，IBCI 脚本只能 `import` 本引擎注册表登记的插件（可见性每引擎隔离）；插件的 Python 实现代码由 `importlib` 按进程级常规机制加载，`sys.modules` 全局缓存、按名命中，同名插件"先加载者胜"作为进程级身份唯一性；插件实例每引擎独立（`create_implementation()` + `_ibci_registry_id`）。IBC-Inter 不插手 Python import 机制（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离--无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §二十一。
+
 ### §4.3 合规测试
 
 `tests/compliance/test_execution_isolation.py` 验证以上公理的可观察行为，独立可运行。
@@ -159,6 +163,8 @@ while frame_stack:
 **公理 IC-3（llmexcept snapshot）**：`llmexcept` 框架在执行前对 context 进行完整快照（scope + intent + last_result），retry 时恢复该快照，使重试语义完整隔离。
 
 **公理 IC-4（llmexcept body 只读约束）**：llmexcept handler body 对参与 LLM 调用的变量（`$` 插值、意图引用、赋值目标）实施只读保护。编译期通过 `SEM_LLMEXCEPT_BODY_WRITE`（赋值/属性/下标变异）和 `SEM_LLMEXCEPT_MUTATING_CALL`（mutating 方法调用）拦截；运行期通过 `verify_snapshot_integrity()` 比对黄金快照作为安全网，违规时强制恢复并发出 `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION`。非 LLM 参与变量的修改不受限制。
+
+**公理 IC-5（llmexcept body 文件写/删禁令）**：磁盘型快照是浅路径引用，retry body 内任何文件写/删都会污染黄金快照。retry body 内禁止全部 `file` 模块写/删函数（`write_copy`/`write_new`/`write_overwrite` 各字节版共 6 个 + `remove`）。编译期以 `SEM_LLMEXCEPT_FILE_WRITE` spec 驱动拦截直接与间接（经用户函数递归传导）调用，运行时以 `llmexcept_body_depth` 守卫兜底动态分派等漏检情形。只读操作（`open`/`read`/`read_bytes`/`exists`）放行。外部进程触碰 backing 文件为固有边界，不在拦截范围（详见 `docs/KNOWN_LIMITS.md`）。
 
 ---
 
@@ -229,9 +235,13 @@ python3 -m pytest tests/compliance/ -v
 | **ISO-6** | collect 幂等保护 | §4.2 |
 | **ISO-7** | collect 类型过滤 | §4.2 |
 | **ISO-8** | 错误传播 | §4.2 |
+| **ISO-9** | collect 超时（默认无界） | §4.2 |
+| **ISO-10** | 插件可见性隔离（不碰 Python import） | §4.2 |
 | **IC-1** | fork 隔离 | §5.1 |
 | **IC-2** | restore 还原 | §5.1 |
 | **IC-3** | llmexcept snapshot | §5.1 |
+| **IC-4** | llmexcept body 只读约束 | §5.1 |
+| **IC-5** | llmexcept body 文件写/删禁令 | §5.1 |
 
 **命名空间分配**：EXEC / OM / SC / LT / GC / LLM / ISO / IC。新增公理族须先在此表注册新前缀，禁止复用已有前缀。
 

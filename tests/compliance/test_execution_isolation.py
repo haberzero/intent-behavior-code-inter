@@ -16,6 +16,7 @@ IBCI VM 合规测试：多 Interpreter 执行隔离。
 可作为未来跨宿主实现的合规验证测试集。
 """
 import os
+import time
 import tempfile
 import pytest
 
@@ -203,5 +204,64 @@ class TestCollectConstraints:
             h = eng.request_spawn_isolated(child, {})
             assert isinstance(h, str) and len(h) > 0
             eng.request_collect(h)  # 等待完成，避免悬挂线程
+        finally:
+            os.unlink(child)
+
+
+# ===========================================================================
+# collect 超时契约（ISO-9）
+# ===========================================================================
+
+class TestCollectTimeout:
+    """collect 的墙钟超时行为（ISO-9）。"""
+
+    def test_default_policy_is_unbounded(self):
+        """默认 policy（无 collect_timeout）保持无界等待，正常脚本可被收集。"""
+        child = write_child('str x = "ok"\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {})
+            result = eng.request_collect(h)
+            assert result.get("x") == "ok"
+        finally:
+            os.unlink(child)
+
+    def test_explicit_none_timeout_collects_normally(self):
+        """显式 collect_timeout=None 等价于无界，正常脚本可被收集。"""
+        child = write_child('int n = 7\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {"collect_timeout": None})
+            result = eng.request_collect(h)
+            assert result.get("n") == 7
+        finally:
+            os.unlink(child)
+
+    def test_generous_timeout_allows_completion(self):
+        """宽裕的超时值不应干扰正常收集。"""
+        child = write_child('str s = "done"\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {"collect_timeout": 30.0})
+            result = eng.request_collect(h)
+            assert result.get("s") == "done"
+        finally:
+            os.unlink(child)
+
+    def test_timeout_raises_when_child_exceeds_deadline(self):
+        """子执行未在 collect_timeout 内完成时，collect 应抛 RuntimeError。
+
+        采用极小超时（1ms）：子引擎启动（构造 Engine + 编译 + 运行）远超 1ms，
+        故 collect 必然超时。超时后子线程作为 daemon 孤儿继续运行；短暂等待
+        让其自行结束，避免残留线程读取已被 finally 删除的临时文件。
+        """
+        child = write_child('str x = "ok"\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {"collect_timeout": 0.001})
+            with pytest.raises(RuntimeError, match=r"(?i)timed out|timeout"):
+                eng.request_collect(h)
+            # 让未被 join 的 daemon 子线程自行结束
+            time.sleep(0.3)
         finally:
             os.unlink(child)

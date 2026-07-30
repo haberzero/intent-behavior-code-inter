@@ -221,13 +221,18 @@ class ModuleLoader(IModuleLoader):
                 try:
                     # 动态加载实现层
                     # 必须支持跨项目根目录加载（如 examples_temp/plugins/calc）
+                    added_paths = []
                     pkg_dir = os.path.dirname(module_dir)
                     if pkg_dir not in sys.path:
                         sys.path.insert(0, pkg_dir)
+                        added_paths.append(pkg_dir)
 
                     # 安装路径下的包使用完整命名空间 ibci_modules.<name>，
                     # 用户插件路径仍使用目录名作为顶层包名。
                     import_name = f"ibci_modules.{entry}" if is_install_path else entry
+                    if import_name in sys.modules:
+                        core_trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
+                                   f"Plugin '{import_name}' already loaded process-wide; reusing cached module per same-name identity contract.")
                     mod = importlib.import_module(import_name)
                     
                     # 实例化：优先寻找 create_implementation 工厂
@@ -256,3 +261,9 @@ class ModuleLoader(IModuleLoader):
                 except Exception as e:
                     # 插件加载失败必须导致初始化中断，严禁静默失败
                     raise InterpreterError(f"Plugin Critical Error: Failed to load implementation for module '{entry}': {e}") from e
+                finally:
+                    # sys.path 用后即还：插件代码已进入 sys.modules，包内相对导入经 __package__ 解析，
+                    # 不再依赖 sys.path 残留；stdlib/core 经各自既定路径解析。
+                    for p in added_paths:
+                        if p in sys.path:
+                            sys.path.remove(p)

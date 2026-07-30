@@ -86,7 +86,9 @@ llmexcept:
 
 **磁盘型变量在 retry 体内的额外限制**：
 
-`file_handle`/`audio`/`image`/`video` 是磁盘引用身份对象。`llmexcept` 快照保存的是路径引用的浅拷贝，因此 retry body 中调用 `file.write_overwrite` / `file.write_overwrite_bytes` 会**污染黄金快照**，导致后续 retry 恢复到已被修改的文件状态。运行时直接禁止：
+`file_handle`/`audio`/`image`/`video` 是磁盘引用身份对象。`llmexcept` 快照保存的是路径引用的浅拷贝，因此 retry body 中调用任何文件写/删都会**污染黄金快照**（写新文件若路径撞上已有 backing 同样污染；删除令 handle 悬空），导致后续 retry 恢复到已被破坏的文件状态。
+
+retry body 内**禁止全部文件写/删操作**（`write_copy` / `write_copy_bytes` / `write_new` / `write_new_bytes` / `write_overwrite` / `write_overwrite_bytes` / `remove`），编译期以 `SEM_LLMEXCEPT_FILE_WRITE` 拦截直接与间接调用，运行时兜底动态分派等漏检情形。只读操作（`open` / `read` / `read_bytes` / `exists`）允许。
 
 ```ibci
 import file
@@ -94,11 +96,13 @@ import file
 file_handle fh = file.open("data.txt")
 str result = @~ 根据 $fh 总结内容 ~
 llmexcept:
-    file.write_overwrite(fh, "mutated")   # 运行时错误：retry body 中禁用 overwrite
+    file.write_overwrite(fh, "mutated")   # 编译错误 SEM_LLMEXCEPT_FILE_WRITE：retry body 中禁用文件写/删
     retry "请只返回摘要"
 ```
 
-**推荐做法**：在涉及可能失败的 LLM 调用时，使用 `file.write_copy` / `file.write_copy_bytes` 创建新文件，避免副作用污染快照。
+**推荐做法**：文件 I/O 放在 `llmexcept` 块之外完成；retry body 内仅用 `retry "hint"` 提供修正指引。
+
+> **固有边界**：外部进程（非 IBCI 代码）触碰 backing 文件无法被 IBCI 拦截，是磁盘态快照的固有限制（详见 `docs/KNOWN_LIMITS.md`）。
 
 ### 10.4 用户自定义快照协议
 

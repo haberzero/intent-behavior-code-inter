@@ -13,11 +13,13 @@ from core.base.diagnostics.codes import (
     SEM_LLMEXCEPT_BODY_WRITE,
     SEM_LLMEXCEPT_SCOPE_BINDING,
     SEM_LLMEXCEPT_MUTATING_CALL,
+    SEM_LLMEXCEPT_FILE_WRITE,
     SEM_UNCATEGORIZED,
 )
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, VariableSymbol, SymbolKind
 from core.kernel.spec.registry import SpecRegistry
+from core.kernel.spec.base import TypeKind
 
 from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
@@ -289,7 +291,11 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
 
         保护集为参与 LLM 调用的变量（$ 插值 + 意图引用 + 赋值目标）。
         非 LLM 参与变量的修改默认允许（计数器、统计等辅助用途）。
+
+        文件写/删禁令（SEM_LLMEXCEPT_FILE_WRITE）独立于受保护变量集合：
+        磁盘型快照是浅路径引用，任何文件写/删都会污染黄金快照，retry body 内一律禁止。
         """
+        self._check_file_writes_in_body(body)
         protected_vars = self._extract_llm_participating_vars(protected_stmt)
         if not protected_vars:
             return
@@ -470,6 +476,123 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
 
     def _is_known_mutating_method(self, method_name: str) -> bool:
         return method_name in self._KNOWN_MUTATING_METHODS
+
+    # ===== llmexcept body 文件写/删禁令（SEM_LLMEXCEPT_FILE_WRITE）=====
+
+    def _check_file_writes_in_body(self, body: List[ast.IbASTNode]):
+        """无条件扫描 llmexcept body，禁止任何文件写/删调用（直接或经用户函数间接）。
+
+        与受保护变量集合无关：磁盘型快照是浅路径引用，任何文件写/删都会污染黄金快照。
+        判定纯 spec 驱动（读 module spec 成员的 mutating 标记），正确处理别名与 shadowing。
+        """
+        for stmt in body:
+            self._check_file_writes_in_node(stmt)
+
+    def _check_file_writes_in_node(self, node: ast.IbASTNode):
+        if isinstance(node, ast.IbFunctionDef):
+            return  # 嵌套函数定义体不直接扫；被调用时经 _func_writes_files 递归覆盖
+        if isinstance(node, ast.IbCall):
+            self._check_single_file_write_call(node)
+        for attr in vars(node):
+            child = getattr(node, attr)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.IbASTNode):
+                        self._check_file_writes_in_node(item)
+            elif isinstance(child, ast.IbASTNode):
+                self._check_file_writes_in_node(child)
+
+    def _check_single_file_write_call(self, call_node: ast.IbCall):
+        func = call_node.func
+        # 直接：file.<写/删>(...)
+        if isinstance(func, ast.IbAttribute) and self._is_file_write_call(call_node):
+            self.error(
+                f"Cannot call file.{func.attr} inside a llmexcept handler body: "
+                f"file writes/removes corrupt the shallow path-reference snapshot. "
+                f"Use 'retry \"hint\"' for correction guidance, or perform file I/O outside the handler.",
+                call_node, code=SEM_LLMEXCEPT_FILE_WRITE
+            )
+            return
+        # 间接：用户函数调用，其体内（经任意层间接）含文件写/删
+        if isinstance(func, ast.IbName):
+            func_sym = self.current_scope.resolve(func.id) if self.current_scope else None
+            if func_sym is not None and getattr(func_sym, 'def_node', None) is not None:
+                if self._func_writes_files(func_sym, set()):
+                    self.error(
+                        f"Cannot call '{func.id}' inside a llmexcept handler body: "
+                        f"its body performs a file write/remove, which is forbidden in retry bodies.",
+                        call_node, code=SEM_LLMEXCEPT_FILE_WRITE
+                    )
+
+    def _is_file_write_call(self, call_node: ast.IbCall) -> bool:
+        """纯 spec 驱动判定：调用是否为某模块的 mutating 写/删成员调用。
+
+        解析 receiver 符号 -> 若为 module spec 且其 members[attr] 标记 mutating=True 则命中。
+        正确处理 ``import file as f`` 别名（resolve 别名符号读到同一 module spec），
+        且不误报局部变量同名 shadowing（非 module spec 直接返回 False）。无名称兜底。
+        """
+        func = call_node.func
+        if not isinstance(func, ast.IbAttribute):
+            return False
+        receiver = func.value
+        if not isinstance(receiver, ast.IbName):
+            return False
+        attr = func.attr
+        sym = self.current_scope.resolve(receiver.id) if self.current_scope else None
+        spec = getattr(sym, 'spec', None) if sym is not None else None
+        if spec is None:
+            return False  # 未解析（未 import 等）-> 由其它检查处理，非 file 模块调用
+        if getattr(spec, 'kind', None) != TypeKind.MODULE.value:
+            return False  # receiver 解析为非模块（如局部变量）-> 不是 file 模块调用
+        members = getattr(spec, 'members', None)
+        member = members.get(attr) if members else None
+        return member is not None and getattr(member, 'mutating', False)
+
+    def _func_writes_files(self, func_sym, visited: set) -> bool:
+        """递归判断用户函数体内（经任意层间接调用）是否含文件写/删。
+
+        spec 驱动 + 作用域感知：push 该函数的 owned_scope，在其作用域内用
+        _is_file_write_call 判定。visited 按 id(func_sym) 防调用图环路。
+        owned_scope 缺失（异常情况）时编译期不判定，由运行时守卫兜底。
+        """
+        if id(func_sym) in visited:
+            return False
+        visited.add(id(func_sym))
+        func_scope = getattr(func_sym, 'owned_scope', None)
+        def_node = getattr(func_sym, 'def_node', None)
+        body = getattr(def_node, 'body', None) if def_node is not None else None
+        if func_scope is None or not body:
+            return False
+        with self.enter_scope(func_scope):
+            return any(self._node_contains_file_write(stmt, visited) for stmt in body)
+
+    def _node_contains_file_write(self, node: ast.IbASTNode, visited: set) -> bool:
+        if isinstance(node, ast.IbFunctionDef):
+            return False  # 跳过嵌套函数定义体
+        if isinstance(node, ast.IbCall) and self._call_writes_files(node, visited):
+            return True
+        for attr in vars(node):
+            child = getattr(node, attr)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.IbASTNode) and self._node_contains_file_write(item, visited):
+                        return True
+            elif isinstance(child, ast.IbASTNode) and self._node_contains_file_write(child, visited):
+                return True
+        return False
+
+    def _call_writes_files(self, call_node: ast.IbCall, visited: set) -> bool:
+        """判断单个调用是否（直接或经用户函数间接）写文件。"""
+        if self._is_file_write_call(call_node):
+            return True
+        func = call_node.func
+        if isinstance(func, ast.IbName):
+            func_sym = self.current_scope.resolve(func.id) if self.current_scope else None
+            if func_sym is not None and getattr(func_sym, 'def_node', None) is not None:
+                return self._func_writes_files(func_sym, visited)
+        return False
+
+
 
     def _extract_assign_target_name(self, target: ast.IbASTNode) -> Optional[str]:
         """从赋值目标提取根变量名（覆盖简单名、属性链、下标链）。"""

@@ -337,6 +337,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 | `host.collect(handle)` | 阻塞等待，返回 `Dict[str, native_value]`（仅可序列化值） |
 | 二次 `collect(handle)` | 抛 `RuntimeError`（幂等保护） |
 | 子 Interpreter 异常 | 在 `collect()` 时透传为 `RuntimeError` |
+| `policy.collect_timeout` | `None`（默认）= 无界等待；正数（秒）= 墙钟上限，超时抛 `RuntimeError`，子线程作为 daemon 孤儿继续运行（Python 无法强杀线程） |
 
 ### 8.3 KernelRegistry.clone()
 
@@ -345,6 +346,18 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 ### 8.4 合规测试
 
 `tests/compliance/test_execution_isolation.py` 验证可观察契约，仅依赖公开 API。
+
+### 8.5 插件可见性隔离（与 `VM_SPEC.md §4.2 ISO-10` 对齐）
+
+插件层隔离落在 **IBCI 可见性层**，不落在 Python 模块代码层：
+
+| 维度 | 隔离方式 | 层 |
+|------|---------|-----|
+| IBCI 脚本可见的插件 | 每 Engine 独立 `HostInterface`/`InterOp` 注册表，只能 `import` 本引擎登记的插件 | IBCI 层（隔离） |
+| 插件 Python 实现代码 | `importlib` 进程级常规加载，`sys.modules` 全局缓存，同名"先加载者胜" | Python 层（共享） |
+| 插件实例 | `create_implementation()` 每引擎新建实例 + `_ibci_registry_id` 戳 | IBCI 层（隔离） |
+
+设计立场：IBC-Inter **不插手 Python import 机制**（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离--无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §二十一。
 
 ---
 

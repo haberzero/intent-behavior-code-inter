@@ -312,6 +312,35 @@ class TestPluginSearchPathResolution:
 import json  # noqa: E402
 
 
+class TestPluginLoadingPathHygiene:
+    """插件加载不得污染进程级 sys.path（用后即还）。"""
+
+    def test_sys_path_unchanged_after_engine_run(self, tmp_path):
+        """引擎初始化 + 插件加载后，sys.path 应与启动前一致（无残留插入）。"""
+        import sys
+        before = list(sys.path)
+        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        eng.run_string('str x = "ok"\n', silent=True)
+        assert sys.path == before, (
+            f"sys.path polluted by engine init: "
+            f"added={set(sys.path) - set(before)}, removed={set(before) - set(sys.path)}"
+        )
+
+    def test_sys_path_unchanged_after_spawn_collect(self, tmp_path):
+        """spawn/collect 子引擎加载插件后，sys.path 应与启动前一致。"""
+        import sys
+        child = tmp_path / "child.ibci"
+        child.write_text('str x = "ok"\n', encoding="utf-8")
+        before = list(sys.path)
+        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        h = eng.request_spawn_isolated(str(child), {})
+        eng.request_collect(h)
+        assert sys.path == before, (
+            f"sys.path polluted by spawn/collect: "
+            f"added={set(sys.path) - set(before)}"
+        )
+
+
 class TestEnginePathContextContract:
     """IBCIEngine 的 PathContext 锚点契约（D4）。
 

@@ -41,6 +41,18 @@ class FileLib:
         self.capabilities = capabilities
         self.permission_manager = capabilities.service_context.permission_manager
 
+    def _guard_no_file_write_in_retry(self, op_name: str) -> None:
+        """llmexcept retry body 内禁止一切文件写/删：磁盘型快照是浅路径引用，
+        任何写/删都会污染黄金快照（共享同一 backing 路径）。编译期亦拦 SEM_LLMEXCEPT_FILE_WRITE；
+        运行时为兜底（覆盖别名导入/动态分派等编译期漏检情形）。
+        """
+        if self.capabilities.execution_context.llmexcept_body_depth > 0:
+            raise InterpreterError(
+                f"file.{op_name} is disabled inside an llmexcept retry body: "
+                f"file writes/removes mutate the shared backing and corrupt the retry snapshot. "
+                f"Use 'retry \"hint\"' for correction guidance, or perform file I/O outside the handler."
+            )
+
     def _resolve_path(
         self, path: Union[str, IbPath, IbFileHandle], operation: str = "access"
     ) -> str:
@@ -99,6 +111,7 @@ class FileLib:
         Copy-on-write 写入：在 ``new_path`` 创建新文件，写入 ``data``。
         ``source`` 及其所有别名均不受影响。返回指向新文件的只读 handle。
         """
+        self._guard_no_file_write_in_retry("write_copy")
         # 校验 source（提供沙箱上下文与 lineage）。
         self._resolve_path(source, operation="read")
         # 解析并校验目标路径。
@@ -122,6 +135,7 @@ class FileLib:
         data: Any,
     ) -> IbFileHandle:
         """Copy-on-write 的字节版本。"""
+        self._guard_no_file_write_in_retry("write_copy_bytes")
         self._resolve_path(source, operation="read")
         dest_ib_path = self.capabilities.execution_context.resolve_path(new_path)
         dest_native = dest_ib_path.to_native()
@@ -149,6 +163,7 @@ class FileLib:
         未来支持命名/可选参数后，``write_overwrite(target, data)`` 在 ``target`` 为路径、
         且未提供 source 上下文时，将等价于 ``write_new(target, data)``。
         """
+        self._guard_no_file_write_in_retry("write_new")
         dest_ib_path = self.capabilities.execution_context.resolve_path(new_path)
         dest_native = dest_ib_path.to_native()
         self.permission_manager.validate_path(dest_native, operation="write")
@@ -164,6 +179,7 @@ class FileLib:
 
     def write_new_bytes(self, new_path: str, data: Any) -> IbFileHandle:
         """``write_new`` 的字节版本。"""
+        self._guard_no_file_write_in_retry("write_new_bytes")
         dest_ib_path = self.capabilities.execution_context.resolve_path(new_path)
         dest_native = dest_ib_path.to_native()
         self.permission_manager.validate_path(dest_native, operation="write")
@@ -185,12 +201,7 @@ class FileLib:
         所有共享同一 backing 路径的 handle 都会观察到新内容。
         """
         # llmexcept retry body 中禁用 overwrite 写入，避免污染快照。
-        if self.capabilities.execution_context.llmexcept_body_depth > 0:
-            raise InterpreterError(
-                "file.write_overwrite is disabled inside an llmexcept retry body "
-                "because it would mutate the shared backing file and corrupt the retry snapshot. "
-                "Use file.write_copy to create a new artifact instead."
-            )
+        self._guard_no_file_write_in_retry("write_overwrite")
         native_path = self._resolve_path(target, operation="write")
         native_data = data.to_native() if hasattr(data, "to_native") else data
         with open(native_path, "w", encoding="utf-8") as f:
@@ -200,12 +211,7 @@ class FileLib:
     def write_overwrite_bytes(self, target: Union[str, IbFileHandle], data: Any) -> Any:
         """显式副作用写入的字节版本。"""
         # llmexcept retry body 中禁用 overwrite 写入。
-        if self.capabilities.execution_context.llmexcept_body_depth > 0:
-            raise InterpreterError(
-                "file.write_overwrite_bytes is disabled inside an llmexcept retry body "
-                "because it would mutate the shared backing file and corrupt the retry snapshot. "
-                "Use file.write_copy_bytes to create a new artifact instead."
-            )
+        self._guard_no_file_write_in_retry("write_overwrite_bytes")
         native_path = self._resolve_path(target, operation="write")
         native_data = data.to_native() if hasattr(data, "to_native") else data
         if isinstance(native_data, list):
@@ -224,6 +230,7 @@ class FileLib:
 
     def remove(self, target: Union[str, IbFileHandle]) -> Any:
         """删除文件（受沙箱约束）。"""
+        self._guard_no_file_write_in_retry("remove")
         native_path = self._resolve_path(target, operation="remove")
         if os.path.exists(native_path):
             os.remove(native_path)

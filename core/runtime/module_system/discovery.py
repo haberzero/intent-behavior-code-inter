@@ -1,7 +1,7 @@
 # Python plugin loading boundary — native paths intentional.
 #
 # 本模块位于 IBCI 运行时与 Python importlib 的交界：扫描到的目录最终喂给
-# os.listdir / os.path.isdir、sys.path.insert 以及 importlib.import_module。
+# os.listdir / os.path.isdir 以及 spec_from_file_location。
 # 这些 API 必须使用原生字符串，因此本文件保留 os.path 进行 FS 查询与
 # importlib 路径构造，不在每个边界点强行 IbPath 化。
 #
@@ -9,7 +9,6 @@
 # PathValidator.canonicalize_for_security / InstallPaths.modules_dir().to_native()
 # 提供绝对原生路径，此处不再重复 os.path.abspath。
 import os
-import sys
 import json
 import inspect
 import importlib.util
@@ -127,10 +126,6 @@ class ModuleDiscoveryService:
 
         这确保 IBC-Inter 内核完全独立于 Python 反射机制。
         """
-        ibci_modules_path = os.path.dirname(os.path.dirname(spec_path))
-        if ibci_modules_path not in sys.path:
-            sys.path.insert(0, ibci_modules_path)
-
         parent_dir = os.path.basename(os.path.dirname(spec_path))
         # 对 ibci_modules/ 下的一方模块，使用完整命名空间 ibci_modules.<pkg>._spec，
         # 与实现层导入命名空间保持一致，避免 namespace package 产生重复模块对象。

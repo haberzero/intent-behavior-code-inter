@@ -54,16 +54,21 @@ def _load_implementation(package_name: str) -> Any:
     parent_native = parent_dir.to_native()
 
     # 与 ModuleLoader 一致：将模块目录父路径加入 sys.path 以支持直接 import package_name
+    added = False
     if parent_native not in sys.path:
         sys.path.insert(0, parent_native)
-
-    # 统一使用完整包名 ibci_modules.<package_name>，避免 namespace package
-    # 在不同 import 路径下产生重复模块对象（如 ibci_ai vs ibci_modules.ibci_ai）。
-    mod = importlib.import_module(f"ibci_modules.{package_name}")
-    factory = getattr(mod, "create_implementation", None)
-    if factory is None:
-        raise RuntimeError(f"Kernel-native package {package_name} has no create_implementation")
-    return factory()
+        added = True
+    try:
+        # 统一使用完整包名 ibci_modules.<package_name>，避免 namespace package
+        # 在不同 import 路径下产生重复模块对象（如 ibci_ai vs ibci_modules.ibci_ai）。
+        mod = importlib.import_module(f"ibci_modules.{package_name}")
+        factory = getattr(mod, "create_implementation", None)
+        if factory is None:
+            raise RuntimeError(f"Kernel-native package {package_name} has no create_implementation")
+        return factory()
+    finally:
+        if added and parent_native in sys.path:
+            sys.path.remove(parent_native)
 
 
 def register_kernel_native_modules(host_interface: "HostInterface") -> None:

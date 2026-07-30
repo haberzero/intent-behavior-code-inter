@@ -418,3 +418,103 @@ llmexcept:
 """
         result = engine.compile_string(code, silent=True)
         assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# 13. llmexcept body 文件写/删禁令 (SEM_LLMEXCEPT_FILE_WRITE)
+# ---------------------------------------------------------------------------
+
+class TestLLMExceptFileWrite:
+    """llmexcept body 内禁止文件写/删（浅路径引用快照污染）。编译期 spec 驱动判定。"""
+
+    @staticmethod
+    def _assert_file_write_error(engine, code):
+        with pytest.raises(CompilerError) as exc_info:
+            engine.compile_string(code, silent=True)
+        codes = [d.code for d in exc_info.value.diagnostics]
+        assert "SEM_LLMEXCEPT_FILE_WRITE" in codes
+
+    def test_direct_write_new_raises(self, engine):
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    file.write_new("log.txt", "failed")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_direct_remove_raises(self, engine):
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    file.remove("log.txt")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_direct_write_overwrite_raises(self, engine):
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    file.write_overwrite("log.txt", "failed")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_indirect_via_user_func_raises(self, engine):
+        """用户函数体内含文件写，retry body 调用它亦禁止（递归传导）。"""
+        code = """import file
+func helper():
+    file.write_new("log.txt", "x")
+str result = @~ greet ~
+llmexcept:
+    helper()
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_indirect_two_levels_raises(self, engine):
+        """多层间接：a() 调 b()，b() 写文件 -> a() 在 retry body 内亦禁止。"""
+        code = """import file
+func b():
+    file.write_new("log.txt", "x")
+func a():
+    b()
+str result = @~ greet ~
+llmexcept:
+    a()
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_aliased_import_raises(self, engine):
+        """import file as f 别名：spec 驱动 resolve 别名符号，仍命中。"""
+        code = """import file as f
+str result = @~ greet ~
+llmexcept:
+    f.write_new("log.txt", "x")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_read_allowed(self, engine):
+        """file.read 是只读，retry body 内允许。"""
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    str info = file.read("a.txt")
+    retry "hint"
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_exists_allowed(self, engine):
+        """file.exists 是只读查询，retry body 内允许。"""
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    bool b = file.exists("a.txt")
+    retry "hint"
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None

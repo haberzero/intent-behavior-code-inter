@@ -141,31 +141,31 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     param_types=[TypeRef.of("any")], return_type=TypeRef.of("list[int]"),
                 ),
                 "write_copy": MethodMemberSpec(
-                    name="write_copy", kind="method", type_ref=TypeRef.of("file_handle"),
+                    name="write_copy", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
                     param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("str")],
                     return_type=TypeRef.of("file_handle"),
                 ),
                 "write_copy_bytes": MethodMemberSpec(
-                    name="write_copy_bytes", kind="method", type_ref=TypeRef.of("file_handle"),
+                    name="write_copy_bytes", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
                     param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("list[int]")],
                     return_type=TypeRef.of("file_handle"),
                 ),
                 "write_new": MethodMemberSpec(
-                    name="write_new", kind="method", type_ref=TypeRef.of("file_handle"),
+                    name="write_new", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
                     param_types=[TypeRef.of("str"), TypeRef.of("str")],
                     return_type=TypeRef.of("file_handle"),
                 ),
                 "write_new_bytes": MethodMemberSpec(
-                    name="write_new_bytes", kind="method", type_ref=TypeRef.of("file_handle"),
+                    name="write_new_bytes", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
                     param_types=[TypeRef.of("str"), TypeRef.of("list[int]")],
                     return_type=TypeRef.of("file_handle"),
                 ),
                 "write_overwrite": MethodMemberSpec(
-                    name="write_overwrite", kind="method", type_ref=TypeRef.of("void"),
+                    name="write_overwrite", kind="method", type_ref=TypeRef.of("void"), mutating=True,
                     param_types=[TypeRef.of("any"), TypeRef.of("str")], return_type=TypeRef.of("void"),
                 ),
                 "write_overwrite_bytes": MethodMemberSpec(
-                    name="write_overwrite_bytes", kind="method", type_ref=TypeRef.of("void"),
+                    name="write_overwrite_bytes", kind="method", type_ref=TypeRef.of("void"), mutating=True,
                     param_types=[TypeRef.of("any"), TypeRef.of("list[int]")], return_type=TypeRef.of("void"),
                 ),
                 "exists": MethodMemberSpec(
@@ -173,7 +173,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     param_types=[TypeRef.of("str")], return_type=TypeRef.of("bool"),
                 ),
                 "remove": MethodMemberSpec(
-                    name="remove", kind="method", type_ref=TypeRef.of("void"),
+                    name="remove", kind="method", type_ref=TypeRef.of("void"), mutating=True,
                     param_types=[TypeRef.of("any")], return_type=TypeRef.of("void"),
                 ),
             },
@@ -188,7 +188,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.interpreter: Optional[Interpreter] = None
 
         # 多 Interpreter 并发任务表（handle → (thread, sub_engine, exc_holder)）
-        self._spawned_tasks: Dict[str, Tuple[threading.Thread, 'IBCIEngine', list]] = {}
+        self._spawned_tasks: Dict[str, Tuple[threading.Thread, 'IBCIEngine', list, Optional[float]]] = {}
         self._spawned_tasks_lock = threading.Lock()
 
         # --- root-dependent（延迟）：在 _ensure_root_initialized 中确立 ---
@@ -752,11 +752,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 派生 + 隔离反转校验。
         abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
 
+        policy_obj = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
+
         sub_engine = IBCIEngine(
             root_dir=sub_root_dir,
             auto_sniff=self.auto_sniff,
             core_debug_config=self.debugger.config,
-            inherited_plugin_paths=self._resolve_inherited_plugin_paths(policy),
+            inherited_plugin_paths=self._resolve_inherited_plugin_paths(policy_obj),
             inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
         )
 
@@ -774,7 +776,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         handle = f"spawn_{uuid.uuid4().hex[:16]}"
         with self._spawned_tasks_lock:
-            self._spawned_tasks[handle] = (thread, sub_engine, exc_holder)
+            self._spawned_tasks[handle] = (thread, sub_engine, exc_holder, policy_obj.collect_timeout)
 
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"spawned handle={handle}")
         return handle
@@ -784,6 +786,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         [IKernelOrchestrator] 阻塞等待 spawn handle 对应的子执行完成。
         线程 join 后提取子环境的全局变量（排除内置符号和不可序列化值），
         以 Python dict 形式返回，由 HostService 层装箱为 IbDict 传回 IBCI。
+
+        collect_timeout（spawn 时由 IsolationPolicy 传入）：
+            None = 无界等待（默认，阻塞至子执行完成）；
+            正数 = 墙钟等待上限（秒），超时抛 RuntimeError。Python 无法强杀
+                   线程，超时后子线程作为 daemon 孤儿继续运行直至自身结束
+                   或进程退出，调用方不应假设子任务已停止。
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_collect handle={handle}")
 
@@ -793,8 +801,15 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             raise RuntimeError(f"Unknown spawn handle: {handle!r}. "
                                "The handle may have already been collected or never spawned.")
 
-        thread, sub_engine, exc_holder = task
-        thread.join()  # 阻塞直到子线程结束
+        thread, sub_engine, exc_holder, collect_timeout = task
+        thread.join(timeout=collect_timeout)  # None = 无界阻塞；正数 = 墙钟上限
+        if thread.is_alive():
+            # 超时：handle 已消费，子线程作为 daemon 孤儿继续运行。
+            raise RuntimeError(
+                f"collect({handle!r}) timed out after {collect_timeout}s; "
+                "the isolated child thread is still running as a daemon orphan "
+                "and could not be joined."
+            )
 
         # 子线程异常透传至父环境
         if exc_holder[0] is not None:
