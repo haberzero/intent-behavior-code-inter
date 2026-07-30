@@ -64,8 +64,10 @@
 
 ### PT-4.5　用户类运算符重载 [VISION]
 
-### PT-4.7　DDG 并行调度接入 VM（含原 C2 缺陷合并） [DESIGN-DEBT]
+### PT-4.7　DDG 并行调度接入 VM（含原 C2 缺陷合并） [DESIGN-DEBT] [已激活]
 
+> **已激活为当前主线**（见 `NEXT_STEPS.md`）。细化规划与工作路径见 `tasks_docs/_mock_concurrency.md`：MOCK 服务化（独立进程 HTTP 服务，模拟延迟/并发/失败）作为开发仪器，协同修复 dispatch 数据竞争，解锁 4 项 skip 测试。
+>
 > **原 C2 缺陷已并入此项**。dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`）但后台线程执行完整 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争。已显式禁用（`dispatch_eligible` 一律置 `False`），行为表达式全部走同步路径。
 >
 > **接通前置条件**：
@@ -175,5 +177,5 @@
 
 | 测试 ID | 原因 | 处理 |
 |---------|------|------|
-| **INV-LAMBDA-3** | IBCI 无 walrus (`:=`) / lambda 体赋值语法 | 保持 SKIP，标注为"设计限制" |
-| **INV-SCOPE-1** | SEM_002 禁止 if-block 内重声明同名变量 | 保持 SKIP，标注为"设计限制" |
+| **INV-LAMBDA-3** | IBCI 无 walrus (`:=`) / lambda 体赋值语法 | 设计排除（见 `docs/KNOWN_LIMITS.md` §十九.1）；原 SKIP 测试已删除（永久死代码） |
+| **INV-SCOPE-1** | SEM_002 禁止 if-block 内重声明同名变量 | 设计排除（见 `docs/KNOWN_LIMITS.md` §十九.2）；原 SKIP 测试已删除（永久死代码） |

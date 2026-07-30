@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-24（删除 COMPLETED.md / HISTORY_LOG.md / AUDIT_REPORT 历史文档；代码注释与文档去除任务控制文档指针，完成记录改由 git 提交历史承载）
+> **最后更新**：2026-07-30（主线切换为 MOCK 服务化与 LLM 并发调度；测试体系重构降级为独立任务）
 
 ---
 
@@ -26,17 +26,19 @@
 python -m pytest tests/
 ```
 
-**2026-07-27 实测结果**：`1173 passed, 10 skipped`（0 failures/errors，linux / bash）
+**2026-07-30 实测结果**：`1186 passed, 8 skipped`（0 failures/errors，linux / bash）
 
 > 当前基线以实跑为准，不冻结数字。
 
 ---
 
-## 当前主线：缺陷收尾
+## 当前主线：MOCK 服务化与 LLM 并发调度
 
 > **media Phase 4（MediaAxiom + IbMedia 全模态容器）已暂停**，降级为未来低优先级任务（详见 `tasks_docs/PENDING_TASKS.md` §六）。代码层零启动，仅设计文档存在。
 >
-> 代码/注释卫生 + 诊断码命名制规范化 + MINOR 全部已完成。当前聚焦 `_defect_review.md` 收尾：D2-D3/D5-D10 共 8 个待讨论项。
+> 缺陷复查已全部完成。当前最优先任务：MOCK 机制升级为可编程独立进程 HTTP 服务（模拟延迟/并发/失败/流式），并修复 `dispatch_eager` 数据竞争（PT-4.7），解锁 4 项 dispatch 专属 skip 测试。细化规划见 `tasks_docs/_mock_concurrency.md`。**Phase 0 设计冻结前不动代码。**
+>
+> 测试体系治理与彻底重构降为**独立、较低优先级**任务，单独立项于 `tasks_docs/TEST_REFACTOR.md`（含 4 份调研报告 `TEST_REFACTOR_REPORTS.md`），不与本主线混置。
 
 ---
 

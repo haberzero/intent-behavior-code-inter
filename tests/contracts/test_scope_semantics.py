@@ -89,10 +89,6 @@ print(funcs[2]())
         # All should print 2 (loop variable final value)
         assert result == ["2", "2", "2"]
 
-    def test_lambda_modifies_captured_variable(self):
-        """INV-LAMBDA-3: Lambda can modify captured variables."""
-        pytest.skip("Walrus operator (:=) and lambda body assignments not in IBCI syntax")
-
 
 # ===========================================================================
 # Snapshot Value Capture (INV-SNAPSHOT-*)
@@ -160,10 +156,6 @@ print(b)
 class TestLexicalScoping:
     """Validate lexical scoping rules.
     """
-
-    def test_inner_scope_shadows_outer(self):
-        """INV-SCOPE-1: Inner scope shadows outer scope variables."""
-        pytest.skip("SEM_REDEFINITION forbids redeclaring same-name variable in if-block (no shadowing allowed)")
 
     def test_function_creates_new_scope(self):
         """INV-SCOPE-2: Function creates independent scope."""
