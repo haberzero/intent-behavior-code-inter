@@ -245,7 +245,7 @@ Phase A（状态去共享 + llmexcept 统一）──奠基──> Phase B（dis
 | Phase | 状态 | 备注 |
 |---|---|---|
 | A 已完成项 | ✅ | A7/A1/A2/A3/A6（5 commit） |
-| A U1 统一编译期 | ⬜ 待启动 | 消除 IbLLMExceptionalStmt 包装 |
+| A U1 统一编译期 | 🔶 编译期完成(中间态) | ast.py 5 节点加 llmexcept_handler + binding_analysis_pass.py 统一挂载。运行期未适配，不能验证 |
 | A U2 统一运行期内联重试 | ⬜ | 各语句 handler 内联，废弃 IbLLMExceptionalStmt handler |
 | A U3 certainty 经 IbLLMCallResult | ⬜ | 产生者不依赖 frame |
 | A U4 消除 _last_llm_result + last_call_info | ⬜ | 全局槽清除 |
@@ -255,6 +255,25 @@ Phase A（状态去共享 + llmexcept 统一）──奠基──> Phase B（dis
 | B dispatch 修复 | ⬜ | PT-4.7，依赖 A |
 | C MOCK 服务 | ⬜ | FastAPI + 流式，依赖 B |
 | D 全栈 async | ⏸ 暂搁置 | 语言级 async |
+
+### 当前状态（供下个 session 续接）
+
+**已完成**：A7/A1/A2/A3/A6（5 commit，1186 passed 不退化）+ U1 编译期统一（wip commit `e0aeeaa`，中间态不能验证）。
+
+**U1 编译期改动详情**（已提交 wip）：
+- `core/kernel/ast.py`：IbAssign/IbIf/IbWhile/IbSwitch/IbExprStmt 加 `llmexcept_handler` 字段（此前仅 IbFor 有）。
+- `core/compiler/semantic/passes/binding_analysis_pass.py`：`_rewrite_body` 消除两种绑定（for 挂载 + 正则包装），统一为 `prev_stmt.llmexcept_handler = stmt` + llmexcept 语句从 body 移除（不包装 prev_stmt）。
+
+**中间态不一致**：编译期已统一挂载，但运行期各语句 handler 仍读 `get_last_llm_result`（未内联检查 `llmexcept_handler`），产生者仍写 `set_last_llm_result`（未返回 `IbLLMCallResult`），`vm_handle_IbLLMExceptionalStmt` 仍存在（但 IbLLMExceptionalStmt 不再在 body 中，不执行）。**测试会失败**，需 U2+U3 完成后才能验证。
+
+**下一步：U2+U3 协同变更**（下个 session 推进）：
+- **U3 产生者改**：`vm_handle_IbBehaviorExpr`/`_finalize_invoke_result`/`vm_handle_IbBehaviorInstance` uncertain 时返回 `IbLLMCallResult(is_certain=False, raw_response=..., retry_hint=...)`，不写 frame，不 `set_last_llm_result`，不 raise。`is_truthy`/`IbCast` 同改。
+- **U2 消费者改**：各语句 handler（IbAssign/IbIf/IbWhile/IbFor/IbSwitch/IbExprStmt）内联检查返回值是否 `IbLLMCallResult(is_certain=False)` -> 有 `llmexcept_handler` 则创建 frame + 完整多轮重试（与 A1 IbFor 模式对齐）-> 无则 raise。提取共用辅助函数 `_handle_llm_uncertain`。废弃 `vm_handle_IbLLMExceptionalStmt`。
+- **U4 消除全局槽**：废弃 `_last_llm_result` + `last_call_info`（U2/U3 改造中一并清除所有 `set/get_last_llm_result` 调用点）。
+- **关键设计决策**：产生者不依赖 frame（架构解耦），certainty 经返回值传递（`IbLLMCallResult`），frame 由消费者创建 + 写 `frame.target_result`。`IbLLMUncertain` 保留为变量赋值标记，`IbLLMCallResult` 是内部传递容器（sentinels.py:110 已预见）。
+- **U5-U7 在 U2-U4 完成后**：命名变更（last->target/current）+ idbg 适配 + 公理 EXEC-3 更新。
+
+**已回滚的旧方案 wip**（产生者写 frame.target_result + 返回 IbLLMUncertain）：已 git checkout 回滚，不再适用。新方案是产生者返回 IbLLMCallResult（不写 frame）。
 
 ---
 
