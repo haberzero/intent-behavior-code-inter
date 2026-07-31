@@ -13,7 +13,6 @@ class AIPlugin(IbStatefulPlugin):
     断点保存/恢复时由 HostService 负责持久化与恢复。
     """
     def __init__(self):
-        self._retry_hint: Optional[str] = None
         self._last_call_info: Dict[str, Any] = {}
         self._client = None
         self._config = {
@@ -309,9 +308,6 @@ class AIPlugin(IbStatefulPlugin):
 
     def get_return_type_prompt(self, type_name: str) -> Optional[str]:
         return self._return_type_prompts.get(type_name)
-
-    def set_retry_hint(self, hint: str) -> None:
-        self._retry_hint = hint
 
     def get_last_call_info(self) -> Dict[str, Any]:
         return self._last_call_info

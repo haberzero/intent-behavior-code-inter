@@ -306,7 +306,6 @@ class RuntimeContextImpl(RuntimeContext):
         self._global_scope = initial_scope or ScopeImpl(registry=self._registry)
         self._current_scope = self._global_scope
         self._loop_stack: List[Dict[str, int]] = []
-        self._retry_hint: Optional[str] = None # 运行时重试提示词
 
         # 意图上下文：
         # 持久意图栈、涂抹意图队列、排他意图槽、全局意图全部统一持有在此对象中。
@@ -490,14 +489,6 @@ class RuntimeContextImpl(RuntimeContext):
 
     def get_current_scope(self) -> Scope:
         return self._current_scope
-
-    @property
-    def retry_hint(self) -> Optional[str]:
-        return self._retry_hint
-
-    @retry_hint.setter
-    def retry_hint(self, value: Optional[str]):
-        self._retry_hint = value
 
     def push_loop_context(self, index: int, total: int) -> None:
         self._loop_stack.append({"index": index, "total": total})
