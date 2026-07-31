@@ -162,8 +162,8 @@ def test_behavior_dep_assigns_behavior_expr_to_symbol(spec_registry):
 
     assert result.success
     assert hasattr(behavior, 'llm_deps')
-    # 并发 dispatch 未默认启用，dispatch_eligible 一律置 False
-    assert behavior.dispatch_eligible is False
+    # 模块级无依赖 → dispatch_eligible=True（spec §3.1 可调度）
+    assert behavior.dispatch_eligible is True
 
 
 def test_behavior_dep_non_behavior_assign_no_crash(spec_registry):
@@ -200,3 +200,75 @@ def test_behavior_dep_dependency_tracking(spec_registry):
 
     assert result.success
     assert behavior_a in behavior_b.llm_deps
+
+
+# ===========================================================================
+# dispatch_eligible 规则（spec §3.1）
+# ===========================================================================
+
+
+def _run_dep_pass(module, spec_registry):
+    context = make_context(module, spec_registry)
+    return BehaviorDependencyPass().run(context)
+
+
+def test_dispatch_eligible_false_with_interpolation_dep(spec_registry):
+    """插值依赖：前序 behavior 的输出是当前输入 → 不可调度。"""
+    behavior_a = ast.IbBehaviorExpr(segments=["first"])
+    assign_a = ast.IbAssign(
+        targets=[ast.IbName(id="a", ctx="store")],
+        value=behavior_a,
+    )
+    ref_a = ast.IbName(id="a", ctx="load")
+    behavior_b = ast.IbBehaviorExpr(segments=["use ", ref_a])
+    assign_b = ast.IbAssign(
+        targets=[ast.IbName(id="b", ctx="store")],
+        value=behavior_b,
+    )
+    module = ast.IbModule(body=[assign_a, assign_b])
+    assert _run_dep_pass(module, spec_registry).success
+    assert behavior_a.dispatch_eligible is True
+    assert behavior_b.dispatch_eligible is False
+
+
+def test_dispatch_eligible_false_in_loop_body(spec_registry):
+    """循环体：同 node_uid 多次 dispatch 覆写 _pending_futures → 不可调度。"""
+    behavior = ast.IbBehaviorExpr(segments=["item"])
+    assign = ast.IbAssign(
+        targets=[ast.IbName(id="item", ctx="store")],
+        value=behavior,
+    )
+    loop = ast.IbWhile(test=ast.IbConstant(value=True), body=[assign])
+    module = ast.IbModule(body=[loop])
+    assert _run_dep_pass(module, spec_registry).success
+    assert behavior.dispatch_eligible is False
+
+
+def test_dispatch_eligible_false_in_function_body(spec_registry):
+    """函数体（可重复执行上下文，Cell 规则被吸收）→ 不可调度。"""
+    behavior = ast.IbBehaviorExpr(segments=["x"])
+    assign = ast.IbAssign(
+        targets=[ast.IbName(id="x", ctx="store")],
+        value=behavior,
+    )
+    func = ast.IbFunctionDef(name="f", args=[], body=[assign])
+    module = ast.IbModule(body=[func])
+    assert _run_dep_pass(module, spec_registry).success
+    assert behavior.dispatch_eligible is False
+
+
+def test_dispatch_eligible_false_under_llmexcept(spec_registry):
+    """llmexcept 保护（snapshot 隔离约束）→ 不可调度。"""
+    behavior = ast.IbBehaviorExpr(segments=["v"])
+    assign = ast.IbAssign(
+        targets=[ast.IbName(id="v", ctx="store")],
+        value=behavior,
+    )
+    protected = ast.IbAssign(
+        targets=[ast.IbName(id="v", ctx="store")],
+        value=behavior,
+        llmexcept_handler=ast.IbExprStmt(value=None),
+    )
+    module = ast.IbModule(body=[protected])
+    assert _run_dep_pass(module, spec_registry).success
+    assert behavior.dispatch_eligible is False

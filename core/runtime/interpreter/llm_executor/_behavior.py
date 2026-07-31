@@ -10,7 +10,8 @@
 ``_get_expected_type_hint`` / ``_parse_result``。
 """
 
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Union
 
 from core.runtime.interfaces import IExecutionContext
 
@@ -23,10 +24,181 @@ from core.runtime.objects.intent_context import IbIntentContext
 from core.kernel.intent_resolver import IntentResolver
 
 
+@dataclass
+class BehaviorCallSpec:
+    """行为调用预求值结果（主线程完成，worker 仅执行 LLM 调用 + 解析）。
+
+    拆分的边界：主线程预求值 prompt 段（``_evaluate_segments`` / 意图消解 /
+    output hint / retry_hint），把与执行线程无关的输入快照进本对象；
+    worker 线程只读本对象执行 ``_call_llm`` + 解析，不访问 live context。
+
+    ``pre_resolved``：auto_intent 关闭且携带 ``call_intent`` 时的短路结果
+    （不经 LLM 调用），由调用方直接返回。
+    """
+
+    sys_prompt: str
+    user_prompt: Union[str, List[Union[str, Dict[str, Any]]]]
+    type_hint: Optional[str]
+    target_model: str
+    active_intents: List[Any] = field(default_factory=list)
+    global_intents: List[Any] = field(default_factory=list)
+    merged_intents: List[Any] = field(default_factory=list)
+    pre_resolved: Optional[LLMResult] = None
+
+
 class _BehaviorMixin:
-    def execute_behavior_expression(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = "") -> LLMResult:
+    def _prepare_behavior_call(
+        self,
+        node_uid: str,
+        execution_context: IExecutionContext,
+        call_intent: Optional[IbIntent] = None,
+        captured_intents: Optional[IbIntentContext] = None,
+        target_model: str = "",
+    ) -> BehaviorCallSpec:
+        """主线程预求值行为调用的全部输入（prompt 段 + 意图 + 输出约束）。
+
+        在 dispatch 时刻同步调用；``_evaluate_segments`` 经 ``vm.run`` 重入
+        主线程调度循环（同线程嵌套 drive_loop 安全）。worker 线程随后仅读
+        返回的 :class:`BehaviorCallSpec`，不再访问 live context。
         """
-        处理行为描述行 (即时、匿名的 LLM 调用)。
+        node_data = execution_context.get_node_data(node_uid)
+        context = execution_context.runtime_context
+
+        if not target_model:
+            target_model = node_data.get("tag", "")
+
+        content = self._evaluate_segments(node_data.get("segments"), execution_context)
+
+        provider = self.llm_callback
+        auto_intent = True
+        if provider and hasattr(provider, "_config"):
+            auto_intent = provider._config.get("auto_intent_injection", True)
+
+        if not auto_intent:
+            if call_intent:
+                content_str = call_intent.resolve_content(context, execution_context)
+                return BehaviorCallSpec(
+                    sys_prompt="",
+                    user_prompt=content_str,
+                    type_hint=None,
+                    target_model=target_model,
+                    pre_resolved=LLMResult.success_result(
+                        value=self.registry.box(content_str),
+                        raw_response=content_str,
+                    ),
+                )
+
+        active_list: List[Any] = []
+        global_intents: List[Any] = []
+        if captured_intents is not None:
+            if not isinstance(captured_intents, IbIntentContext):
+                raise TypeError(
+                    f"_prepare_behavior_call: captured_intents must be "
+                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
+                )
+            active_list = captured_intents.get_active_intents()
+            global_intents = captured_intents.get_global_intents()
+            all_intents = IntentResolver.resolve(
+                active_intents=active_list,
+                global_intents=global_intents,
+                context=context,
+                execution_context=execution_context,
+            )
+        else:
+            all_intents = context.get_resolved_prompt_intents(execution_context)
+            global_intents = context.get_global_intents()
+
+        llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
+
+        sys_prompt = "你是一个意图行为代码执行器。"
+
+        if llmoutput_hint:
+            sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
+
+        frame = context.get_current_llm_except_frame()
+        current_retry_hint = frame.retry_hint if frame else None
+
+        if current_retry_hint:
+            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
+
+        if all_intents:
+            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
+            sys_prompt += intent_block
+
+        type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
+
+        return BehaviorCallSpec(
+            sys_prompt=sys_prompt,
+            user_prompt=content,
+            type_hint=type_hint,
+            target_model=target_model,
+            active_intents=[i.content if hasattr(i, "content") else str(i) for i in active_list],
+            global_intents=[i.content if hasattr(i, "content") else str(i) for i in global_intents],
+            merged_intents=all_intents,
+        )
+
+    def _call_and_parse(
+        self, spec: BehaviorCallSpec, node_uid: str, execution_context: IExecutionContext
+    ) -> LLMResult:
+        """执行 LLM 调用并解析结果（worker 线程可安全调用）。
+
+        只读 :class:`BehaviorCallSpec`，不写主线程单写槽（``_current_call_info``
+        由调用方在 sync 尾部或 resolve 点记录）；不访问 live context。
+        """
+        if spec.pre_resolved is not None:
+            return spec.pre_resolved
+
+        response = self._call_llm(spec.sys_prompt, spec.user_prompt, node_uid, target_model=spec.target_model)
+
+        def _call_info(resp: str) -> dict:
+            return {
+                "sys_prompt": spec.sys_prompt,
+                "user_prompt": spec.user_prompt,
+                "response": resp,
+                "raw_response": resp,
+                "active_intents": list(spec.active_intents),
+                "global_intents": list(spec.global_intents),
+                "merged_intents": list(spec.merged_intents),
+            }
+
+        if response == MOCK_REPAIR_SENTINEL:
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_REPAIR_SENTINEL,
+                    retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试",
+                ),
+                _call_info(MOCK_REPAIR_SENTINEL),
+                record_current=False,
+            )
+
+        if response == MOCK_AMBIGUOUS_SENTINEL:
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_AMBIGUOUS_SENTINEL,
+                    retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理",
+                ),
+                _call_info(MOCK_AMBIGUOUS_SENTINEL),
+                record_current=False,
+            )
+
+        if spec.type_hint:
+            result = self._parse_result(response, spec.type_hint, node_uid)
+        else:
+            result = LLMResult.success_result(
+                value=self.registry.box(response),
+                raw_response=response,
+            )
+        return self._finalize_call(result, _call_info(response), record_current=False)
+
+    def execute_behavior_expression(
+        self,
+        node_uid: str,
+        execution_context: IExecutionContext,
+        call_intent: Optional[IbIntent] = None,
+        captured_intents: Optional[IbIntentContext] = None,
+        target_model: str = "",
+    ) -> LLMResult:
+        """处理行为描述行（即时、匿名的 LLM 调用）。
 
         返回 LLMResult：
         - success=True, is_uncertain=False: 成功且结果确定
@@ -44,118 +216,18 @@ class _BehaviorMixin:
         ``target_model``：
             - ``""``（空字符串）→ 使用默认模型配置（无 tag 的 @~ ... ~ 语法）
             - 非空字符串 → 路由到命名模型配置（@NAME~ ... ~ 语法中的 NAME）
+
+        本方法为主线程同步入口：``_prepare_behavior_call``（prompt 预求值）
+        + ``_call_and_parse``（LLM 调用 + 解析）顺序执行，结果绑定 call_info，
+        并在尾部记录主线程单写槽。
         """
-        node_data = execution_context.get_node_data(node_uid)
-        context = execution_context.runtime_context
-
-        # 如果未显式传递 target_model，从 node_data 中读取 tag 字段
-        if not target_model:
-            target_model = node_data.get("tag", "")
-
-        # 1. 评估段式插值
-        content = self._evaluate_segments(node_data.get("segments"), execution_context)
-
-        # 2. 收集与合并意图 (被动消费已消解的现场)
-        # auto_intent_injection 配置从已注册的 LLM Provider 读取（通过能力注册中心）
-        provider = self.llm_callback
-        auto_intent = True
-        if provider and hasattr(provider, "_config"):
-            auto_intent = provider._config.get("auto_intent_injection", True)
-
-        if not auto_intent:
-            # 如果关闭了自动注入，仅保留当前节点的意图 (如果有)
-            if call_intent:
-                content_str = call_intent.resolve_content(context, execution_context)
-                return LLMResult.success_result(
-                    value=self.registry.box(content_str),
-                    raw_response=content_str
-                )
-
-        # 获取消解后的最终列表
-        # 如果提供了捕获的意图栈，则优先使用捕获的，否则使用当前上下文的
-        if captured_intents is not None:
-            if not isinstance(captured_intents, IbIntentContext):
-                # 所有生产者只产出 None 或 IbIntentContext。
-                # 命中即为契约违反。
-                raise TypeError(
-                    f"execute_behavior_expression: captured_intents must be "
-                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
-                )
-            # snapshot 捕获了 IbIntentContext.fork() 的完整值快照
-            active_list = captured_intents.get_active_intents()
-            all_intents = IntentResolver.resolve(
-                active_intents=active_list,
-                global_intents=captured_intents.get_global_intents(),
-                context=context,
-                execution_context=execution_context
-            )
-        else:
-            all_intents = context.get_resolved_prompt_intents(execution_context)
-
-        # 获取 __outputhint_prompt__ 注入到系统提示词
-        llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
-
-        sys_prompt = "你是一个意图行为代码执行器。"
-
-        # 注入 __outputhint_prompt__
-        if llmoutput_hint:
-            sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
-
-        frame = context.get_current_llm_except_frame()
-        current_retry_hint = frame.retry_hint if frame else None
-
-        if current_retry_hint:
-            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
-
-        # 4. 构造意图增强块
-        if all_intents:
-            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
-            sys_prompt += intent_block
-
-        # 5. 调用底层模型
-        response = self._call_llm(sys_prompt, content, node_uid, target_model=target_model)
-
-        def _call_info(resp: str) -> dict:
-            return {
-                "sys_prompt": sys_prompt,
-                "user_prompt": content,
-                "response": resp,
-                "raw_response": resp,
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
-                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-                "merged_intents": all_intents
-            }
-
-        # 6.1 处理 MOCK:REPAIR 特殊标记
-        if response == MOCK_REPAIR_SENTINEL:
-            return self._finalize_call(
-                LLMResult.uncertain_result(
-                    raw_response=MOCK_REPAIR_SENTINEL,
-                    retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
-                ),
-                _call_info(MOCK_REPAIR_SENTINEL),
-            )
-
-        # 6.2 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
-        if response == MOCK_AMBIGUOUS_SENTINEL:
-            return self._finalize_call(
-                LLMResult.uncertain_result(
-                    raw_response=MOCK_AMBIGUOUS_SENTINEL,
-                    retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
-                ),
-                _call_info(MOCK_AMBIGUOUS_SENTINEL),
-            )
-
-        # 7. 处理返回类型（__from_prompt__ 机制），并绑定调用信息到结果
-        type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
-        if type_hint:
-            result = self._parse_result(response, type_hint, node_uid)
-        else:
-            result = LLMResult.success_result(
-                value=self.registry.box(response),
-                raw_response=response
-            )
-        return self._finalize_call(result, _call_info(response))
+        spec = self._prepare_behavior_call(
+            node_uid, execution_context, call_intent, captured_intents, target_model
+        )
+        result = self._call_and_parse(spec, node_uid, execution_context)
+        if result is not None and result.call_info is not None:
+            self._record_current_call_info(result.call_info)
+        return result
 
 
     def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> LLMResult:

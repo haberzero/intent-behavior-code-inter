@@ -117,13 +117,25 @@ class LLMFuture:
         """阻塞等待 Future 完成并返回 IbObject。若已完成则零开销。
 
         若后台线程抛出异常，该异常将在此处重新抛出。
-        若 LLM 调用结果不确定（is_uncertain=True），返回 ``registry.get_llm_uncertain()``
-        哨兵，由调用方（``vm_handle_IbName``）负责检测并抛出 ``LLMParseError``。
+        若 LLM 调用结果不确定（is_uncertain=True），返回
+        ``IbLLMCallResult(is_certain=False)`` 不确定容器（与统一 llmexcept
+        机制的返回值传递一致），由调用方（``vm_handle_IbName``）检测并处理。
         """
         result: LLMResult = self.future.result()
         if result is not None:
             if result.value is not None and not result.is_uncertain:
                 return result.value
             if result.is_uncertain:
-                return registry.get_llm_uncertain()
+                # 延迟导入避免 shared 叶子模块与 objects 形成导入环
+                from core.runtime.objects.kernel import IbLLMCallResult
+
+                cls = registry.get_class("llm_call_result")
+                if cls is None:
+                    raise RuntimeError("Registry missing 'llm_call_result' class")
+                return IbLLMCallResult(
+                    ib_class=cls,
+                    is_certain=False,
+                    raw_response=result.raw_response or "",
+                    retry_hint=result.retry_hint or "",
+                )
         return registry.get_none()

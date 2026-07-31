@@ -124,16 +124,22 @@ class LLMExecutorCore:
         """获取最近一次 resolve 的调用信息（主线程单写槽）。"""
         return self._current_call_info
 
-    def _finalize_call(self, result: Any, call_info: Mapping[str, Any]) -> Any:
-        """记录调用信息到主线程单写槽并绑定到结果对象。
+    def _finalize_call(self, result: Any, call_info: Mapping[str, Any], record_current: bool = True) -> Any:
+        """绑定调用信息到结果对象（可选记录主线程单写槽）。
 
-        call_info 与 LLMResult 同行传递（去共享）；``_current_call_info`` 仅由
-        主线程写入（当前同步模式即产生者；并行 dispatch 后由 resolve 点写入）。
+        ``record_current=False``：worker 线程调用（并行 dispatch），只绑定
+        call_info 不写槽；主线程 resolve 点再经 :meth:`_record_current_call_info`
+        记录。``record_current=True``：同步路径产生者直接记录。
         """
-        self._current_call_info = call_info
         if result is not None:
             result.call_info = call_info
+        if record_current:
+            self._current_call_info = call_info
         return result
+
+    def _record_current_call_info(self, call_info: Mapping[str, Any]) -> None:
+        """记录最近一次 resolve 的调用信息（仅主线程调用）。"""
+        self._current_call_info = call_info
 
     def _finalize_invoke_result(self, result: Any):
         """``invoke_*`` 系列入口的共用后处理（sync 与 CPS 版语义完全一致）。

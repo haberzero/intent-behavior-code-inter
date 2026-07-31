@@ -36,21 +36,27 @@ class _SchedulerMixin:
         """立即将 LLM 调用提交到线程池，返回 ``LLMFuture``（非阻塞）。
 
         在 ``dispatch_eligible=True`` 且数据依赖已满足时，由 VM 调度器调用。
-        在 dispatch 时刻捕获 prompt 内容与意图上下文，后台线程中发起实际调用。
+
+        拆分执行边界：主线程在此方法内完成 prompt 段预求值
+        （:meth:`_prepare_behavior_call`，含段插值 / 意图消解 / 输出约束 /
+        retry_hint），后台线程仅执行 :meth:`_call_and_parse`（``_call_llm``
+        + 解析），不重入 VM、不访问 live context、不写主线程单写槽。
 
         参数：
             node_uid:          对应 ``IbBehaviorExpr`` 节点的 UID
-            execution_context: 当前执行上下文（用于 prompt 求值；调用时刻只读）
+            execution_context: 当前执行上下文（主线程预求值使用）
             intent_ctx:        （可选）已 fork 的意图上下文快照；None 表示使用
                                当前 runtime_context 的活跃意图
 
         返回：
             ``LLMFuture``，可通过 ``resolve(node_uid)`` 阻塞等待结果。
         """
+        spec = self._prepare_behavior_call(
+            node_uid, execution_context, captured_intents=intent_ctx
+        )
+
         def _run() -> LLMResult:
-            return self.execute_behavior_expression(
-                node_uid, execution_context, captured_intents=intent_ctx
-            )
+            return self._call_and_parse(spec, node_uid, execution_context)
 
         future = self._get_thread_pool().submit(_run)
         llm_future = LLMFuture(node_uid=node_uid, future=future)
@@ -62,6 +68,8 @@ class _SchedulerMixin:
         """阻塞等待 ``node_uid`` 对应的 ``LLMFuture`` 完成，返回 ``IbObject``。
 
         在变量使用点检测到对应 ``LLMFuture`` 时由 VM 调度器调用。
+        仅主线程调用：此处记录 ``_current_call_info``（主线程单写槽）并把
+        不确定性结果转译为 ``IbLLMCallResult`` 容器（与同步路径一致）。
 
         若 ``dispatch_eager`` 尚未被调用，或对应 Future 已被 resolve 消费，
         则抛出 ``RuntimeError``。
@@ -74,7 +82,10 @@ class _SchedulerMixin:
                 f"请确认 dispatch_eager() 已在 resolve() 之前被调用，"
                 f"且每个 Future 只被 resolve 一次。"
             )
-        return llm_future.get(self.registry)
+        result = llm_future.future.result()
+        if result is not None and result.call_info is not None:
+            self._current_call_info = result.call_info
+        return self._finalize_invoke_result(result)
 
     def close(self) -> None:
         """关闭线程池（等待已提交任务完成）。

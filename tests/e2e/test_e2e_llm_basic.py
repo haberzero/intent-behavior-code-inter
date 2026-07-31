@@ -156,7 +156,6 @@ print(result)
         assert "hello world" in lines
 
 
-@pytest.mark.skip(reason="dispatch_eager 已禁用：这些测试依赖 dispatch 的延迟失败语义（LLMFuture 陷阱化不确定结果，跳过同步路径的 LLMParseError 检查）。dispatch 禁用后所有 behavior 走同步路径，MOCK:FAIL 立即 raise LLMParseError（符合 llmexcept 块外不确定结果即报错的设计）。接通并发调度时重新评估。")
 class TestE2EStaleResultIsolation:
     def test_plain_assignment_not_contaminated_after_fail(self):
         """MOCK:FAIL 后的普通赋值（int i = 0）不应被污染为 IbLLMUncertain"""
@@ -168,17 +167,23 @@ print((str)i)
         lines = run_ibci(code)
         assert "0" in lines
 
-    def test_while_loop_runs_after_fail_in_body(self):
-        """循环体内出现 MOCK:FAIL（无 llmexcept）后，下一次迭代的普通条件不应被过期结果终止"""
+    def test_while_loop_fail_without_llmexcept_raises(self):
+        """循环体内 MOCK:FAIL（无 llmexcept）→ 同步路径抛 LLMParseError，循环终止。
+
+        循环体内行为不可 dispatch（spec §3.1 可重复执行上下文），走同步路径；
+        不确定结果无 llmexcept 保护即在赋值点报错（统一机制语义）。
+        """
         code = AI_MOCK_PREFIX + """
 int i = 0
-while i < 3:
-    str x = @~ MOCK:FAIL body ~
-    i = i + 1
-print((str)i)
+try:
+    while i < 3:
+        str x = @~ MOCK:FAIL body ~
+        i = i + 1
+except:
+    print("caught")
 """
         lines = run_ibci(code)
-        assert "3" in lines
+        assert "caught" in lines
 
     def test_if_condition_not_contaminated_by_prior_fail(self):
         """MOCK:FAIL 后的 if 语句使用普通条件时不应被过期不确定结果阻断"""

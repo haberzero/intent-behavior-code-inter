@@ -27,6 +27,7 @@ from core.runtime.vm.handlers._shared import (
     _vm_invoke_llm_function,
     _is_llm_uncertain_value,
     _make_uncertain_call_result,
+    _raise_uncertain_parse_error,
 )
 
 
@@ -73,17 +74,12 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
         else:
             # service_context 不可用时回退到 LLMFuture.get（仍阻塞，结果等价）
             resolved = val.get(executor.registry)
-        # 若 Future 解析出不确定值（LLM parse failure），根据是否在 llmexcept
-        # 保护帧内决定处理方式：有帧则沿用 Uncertain 哨兵（llmexcept 机制接管），
-        # 无帧则抛出 LLMParseError（无自愈机会，语义同情形 B）。
-        if isinstance(resolved, IbLLMUncertain):
+        # 若 Future 解析出不确定容器（LLM parse failure），无 llmexcept 保护帧
+        # 则抛 LLMParseError（保留 retry_hint/raw_response）；有帧则由
+        # llmexcept 机制接管（容器沿变量流动）。
+        if _is_llm_uncertain_value(resolved):
             if executor.runtime_context.get_current_llm_except_frame() is None:
-                error = executor.registry.make_llm_parse_error(
-                    "LLM output could not be parsed",
-                    raw_response="",
-                    type_name="unknown",
-                )
-                raise ThrownException(error)
+                _raise_uncertain_parse_error(executor, resolved, type_name="unknown")
         # 写回，避免后续读取再次 resolve
         # skip_type_check=True：写回是缓存优化，类型校验在首次赋值时完成
         executor.runtime_context.set_variable_by_uid(sym_uid, resolved, skip_type_check=True)

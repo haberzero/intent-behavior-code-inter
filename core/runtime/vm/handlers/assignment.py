@@ -66,13 +66,11 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
             sc = executor.service_context
             llm_executor = sc.llm_executor if sc is not None else None
             if llm_executor is not None and hasattr(llm_executor, "dispatch_eager"):
-                # 在 dispatch 时刻 fork 当前意图栈快照，确保后台线程看到的
-                # 意图状态与同步执行点一致（避免 dispatch 后主线程 push/pop
-                # 改变 LLM 提示词构造的语义）。
-                try:
-                    intent_snapshot = executor.runtime_context.fork_intent_snapshot()
-                except Exception:
-                    intent_snapshot = None
+                # 在 dispatch 时刻 fork 当前意图栈快照并交由主线程预求值，
+                # 确保后台线程看到的意图状态与同步执行点一致。快照失败即
+                # fail-fast（禁止静默回退到 lambda 模式，否则后台线程会
+                # 读 live context 并消费 one-shot 意图）。
+                intent_snapshot = executor.runtime_context.fork_intent_snapshot()
                 dispatched_future = llm_executor.dispatch_eager(
                     value_uid, executor.ec, intent_ctx=intent_snapshot
                 )

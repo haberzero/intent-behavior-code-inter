@@ -171,6 +171,7 @@ class TestMockServiceE2E:
                 mock_server,
                 "try:\n"
                 "    str x = @~ MOCK:FAIL boom ~\n"
+                "    print(x)\n"  # 读取触发 resolve → 抛 LLMParseError
                 "    print('no')\n"
                 "except:\n"
                 "    print('caught')\n",

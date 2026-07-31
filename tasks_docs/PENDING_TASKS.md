@@ -64,6 +64,18 @@
 
 ### PT-4.5　用户类运算符重载 [VISION]
 
+### PT-4.9　行为批量执行原语 `ai.run_batch`（并发 map） [DESIGN-DEBT] [已激活]
+
+> **已纳入当前主线**（Phase B 后实施，依赖 dispatch 拆分机制）。设计决策（2026-07-31）：
+>
+> **排除"循环内自动透明并发"**——理由：① `_pending_futures` 按 `node_uid` 键控，循环内同一节点多次执行会覆写键导致读点解析错乱与泄漏，改"执行实例"键是运行时模型改动；② 自动展开要求编译器证明循环体为"纯批次"（无控制流/跨迭代依赖/副作用顺序），证明错判 = 静默改变程序行为（最危险错误）；③ 与"显式优于隐式"公理冲突。
+>
+> **采用显式原语**：`ai.run_batch(fn_behavior, items) -> list`——对参数化 fn 行为（`fn f = lambda(str x) -> str: @~ ... $x ... ~`）逐项并发执行，保序返回结果列表。不走 `_pending_futures`（自管按实例索引的 future 列表，天然解决身份问题），复用 `_prepare_behavior_call` + `_call_and_parse`。
+>
+> **备选（未来）**：列表推导式 `[ @~ ... ~ for item in items ]`（Python 风格，需类型推断设计）。
+>
+> **循环内软件流水线 / 严格纯度分析下的自动展开**：远期探索，不排除。
+
 ### PT-4.7　DDG 并行调度接入 VM（含原 C2 缺陷合并） [DESIGN-DEBT] [已激活]
 
 > **已激活为当前主线**（见 `NEXT_STEPS.md`）。细化规划与工作路径见 `tasks_docs/_mock_concurrency.md`：MOCK 服务化（独立进程 HTTP 服务，模拟延迟/并发/失败）作为开发仪器，协同修复 dispatch 数据竞争，解锁 4 项 skip 测试。
