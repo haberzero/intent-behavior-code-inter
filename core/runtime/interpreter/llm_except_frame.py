@@ -95,7 +95,7 @@ class LLMExceptFrame:
     # 重试状态
     retry_count: int = 0
     max_retry: int = 3
-    saved_retry_hint: Optional[str] = None
+    retry_hint: Optional[str] = None  # 持续覆盖，不参与 save/restore（retry "hint" 写入，跨轮次存活）
     
     # 上下文快照
     saved_vars: Dict[str, IbObject] = field(default_factory=dict)
@@ -150,9 +150,6 @@ class LLMExceptFrame:
             self.saved_loop_context = {
                 'iterators': [dict(d) for d in runtime_context._loop_stack]
             }
-
-        if hasattr(runtime_context, 'retry_hint'):
-            self.saved_retry_hint = runtime_context.retry_hint
 
     def _save_vars_snapshot(self, runtime_context: 'RuntimeContextImpl') -> None:
         """
@@ -238,9 +235,6 @@ class LLMExceptFrame:
 
         if hasattr(runtime_context, '_loop_stack') and self.saved_loop_context:
             runtime_context._loop_stack = self.saved_loop_context.get('iterators', [])
-
-        if hasattr(runtime_context, 'retry_hint'):
-            runtime_context.retry_hint = self.saved_retry_hint
 
         # 注意：loop_resume 字段故意不在此处重置。
         # visit_IbFor 依赖 loop_resume[node_uid] 来判断 retry 后应从哪个迭代索引继续，

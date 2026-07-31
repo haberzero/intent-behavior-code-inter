@@ -391,8 +391,8 @@ def vm_handle_IbRetry(executor, node_uid: str, node_data: Mapping[str, Any]):
     if hint_uid:
         hint_obj = yield hint_uid
         hint_val = hint_obj.to_native() if hasattr(hint_obj, "to_native") else str(hint_obj)
-    executor.runtime_context.retry_hint = hint_val
     frame = executor.runtime_context.get_current_llm_except_frame()
     if frame is not None:
+        frame.retry_hint = hint_val
         frame.should_retry = True
     return executor.registry.get_none()

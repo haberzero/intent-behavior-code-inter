@@ -56,12 +56,12 @@ class _LLMFunctionMixin:
         # 优先级：运行时 context.retry_hint (来自 llmretry 语句) > 函数定义中的 retry_hint
         retry_hint_segments = None
 
-        # 首先检查运行时上下文中的 retry_hint（来自 llmretry 语句）
-        current_retry_hint = context.retry_hint
+        # retry_hint 绑定到当前 llmexcept 帧（持续覆盖），回退到函数定义 __llmretry__
+        frame = context.get_current_llm_except_frame()
+        current_retry_hint = frame.retry_hint if frame else None
         if current_retry_hint:
             retry_hint_segments = [current_retry_hint]
         else:
-            # 回退到函数定义中的 __llmretry__ 提示词
             retry_hint_segments = node_data.get("retry_hint")
 
         # 如果有 retry_hint，注入到系统提示词
@@ -70,9 +70,6 @@ class _LLMFunctionMixin:
             if not isinstance(retry_hint_text, str):
                 raise TypeError("retry hint segments must produce text-only content")
             sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
-
-        # 清除运行时上下文中的 retry_hint（防止污染后续调用）
-        context.retry_hint = None
 
         # 4. 处理返回类型提示注入
         type_name = "str"
@@ -190,7 +187,8 @@ class _LLMFunctionMixin:
             sys_prompt += intent_block
 
         retry_hint_segments = None
-        current_retry_hint = context.retry_hint
+        frame = context.get_current_llm_except_frame()
+        current_retry_hint = frame.retry_hint if frame else None
         if current_retry_hint:
             retry_hint_segments = [current_retry_hint]
         else:
@@ -201,8 +199,6 @@ class _LLMFunctionMixin:
             if not isinstance(retry_hint_text, str):
                 raise TypeError("retry hint segments must produce text-only content")
             sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
-
-        context.retry_hint = None
 
         type_name = "str"
         returns_uid = node_data.get("returns")

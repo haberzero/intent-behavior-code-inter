@@ -165,15 +165,8 @@ class LLMExecutorCore:
         if target_model:
             self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Target model: {target_model}")
 
-        context = execution_context.runtime_context if execution_context else None
-        retry_hint = context.retry_hint if context else None
-
         if self.llm_callback:
             try:
-                if retry_hint:
-                    self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Injecting retry hint: {retry_hint}")
-                    self.llm_callback.set_retry_hint(retry_hint)
-
                 response = self.llm_callback(sys_prompt, user_prompt, target_model=target_model)
                 self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
                 self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)

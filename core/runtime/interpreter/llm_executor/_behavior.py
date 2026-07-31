@@ -101,11 +101,8 @@ class _BehaviorMixin:
         if llmoutput_hint:
             sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
 
-        # 读取 retry_hint 后立即清除，防止污染后续 LLM 调用（无论本次执行走哪条路径）
-        current_retry_hint = context.retry_hint
-        context.retry_hint = None
-        if provider and not current_retry_hint and hasattr(provider, "_retry_hint"):
-            current_retry_hint = provider._retry_hint
+        frame = context.get_current_llm_except_frame()
+        current_retry_hint = frame.retry_hint if frame else None
 
         if current_retry_hint:
             sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
@@ -269,10 +266,8 @@ class _BehaviorMixin:
         if llmoutput_hint:
             sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
 
-        current_retry_hint = context.retry_hint
-        context.retry_hint = None
-        if provider and not current_retry_hint and hasattr(provider, "_retry_hint"):
-            current_retry_hint = provider._retry_hint
+        frame = context.get_current_llm_except_frame()
+        current_retry_hint = frame.retry_hint if frame else None
 
         if current_retry_hint:
             sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
