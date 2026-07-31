@@ -76,8 +76,6 @@ class LLMExceptFrame:
         saved_intent_ctx: 重试前保存的意图上下文快照（IbIntentContext.fork()）
         saved_loop_context: 重试前保存的循环上下文
         saved_retry_hint: 重试前保存的提示词
-        last_error: 最后一次捕获的异常
-        last_llm_response: 最后一次 LLM 响应
         is_in_fallback: 是否正在执行 fallback 块
         should_retry: 是否应该继续重试
 
@@ -120,19 +118,7 @@ class LLMExceptFrame:
     # 当用户 IBCI 类定义了 func __snapshot__ / func __restore__，此字段优先于深克隆（_try_deep_clone）。
     saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
-    # 错误信息
-    last_error: Optional[Exception] = None
-    last_llm_response: Optional[str] = None
     last_result: Optional[Any] = None  # LLMResult 对象
-    # 重试错误历史，按发生顺序追加。
-    # 每项结构：
-    #   {
-    #       "retry_count": int,
-    #       "error_type": str,
-    #       "error_message": str,
-    #       "response": Optional[str],
-    #   }
-    error_history: List[Dict[str, Any]] = field(default_factory=list)
     
     # 状态标志
     is_in_fallback: bool = False
@@ -362,56 +348,6 @@ class LLMExceptFrame:
     def restore_snapshot(self, runtime_context: 'RuntimeContextImpl') -> None:
         """restore_context 的别名，用于代码可读性"""
         self.restore_context(runtime_context)
-    
-    def set_error(self, error: Exception, response: Optional[str] = None) -> None:
-        """
-        设置错误信息。
-        
-        参数:
-            error: 捕获的异常
-            response: LLM 的原始响应 (如果有)
-        """
-        self.last_error = error
-        self.last_llm_response = response
-        self.error_history.append({
-            "retry_count": self.retry_count,
-            "error_type": type(error).__name__,
-            "error_message": str(error),
-            "response": response,
-        })
-    
-    def reset_for_retry(self) -> None:
-        """
-        重置状态以准备下一次重试。
-
-        设计注：会清除 ``last_error``/``last_llm_response``（当前尝试状态），
-        但保留 ``error_history`` 作为跨重试可追踪历史。
-        """
-        self.last_error = None
-        self.last_llm_response = None
-        self.should_retry = True
-    
-    def get_retry_info(self) -> Dict[str, Any]:
-        """
-        获取重试信息的摘要。
-        
-        用于调试和日志记录。
-        
-        返回:
-            包含重试相关信息的字典
-        """
-        return {
-            'target_uid': self.target_uid,
-            'node_type': self.node_type,
-            'retry_count': self.retry_count,
-            'max_retry': self.max_retry,
-            'should_retry': self.should_retry,
-            'has_error': self.last_error is not None,
-            'error_type': type(self.last_error).__name__ if self.last_error else None,
-            'error_message': str(self.last_error) if self.last_error else None,
-            'error_history_count': len(self.error_history),
-            'error_history': list(self.error_history),
-        }
     
     def __repr__(self) -> str:
         return (

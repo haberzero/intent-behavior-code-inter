@@ -217,45 +217,7 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
             last_result = executor.runtime_context.get_last_llm_result()
 
             if last_result and not last_result.is_certain:
-                if llmexcept_handler_uid is not None:
-                    # uncertain + llmexcept —— 内联重试逻辑
-                    llmexcept_data = executor.ec.get_node_data(llmexcept_handler_uid)
-                    handler_body_uids = llmexcept_data.get("body", []) if llmexcept_data else []
-
-                    # 创建 LLMExceptFrame，保存当前作用域快照
-                    frame = executor.runtime_context.save_llm_except_state(
-                        target_uid=actual_iter_uid,
-                        node_type="IbLLMExceptionalStmt",
-                        max_retry=max_retry,
-                    )
-                    frame.last_result = last_result
-                    frame.should_retry = False  # 等待 retry 语句显式设置
-
-                    try:
-                        # 在 llmexcept handler body 中禁用 write_overwrite 写入。
-                        executor.ec.enter_llmexcept_body()
-                        try:
-                            handler_res = yield from _vm_execute_stmt_sequence(executor, handler_body_uids)
-                        finally:
-                            executor.ec.exit_llmexcept_body()
-                        if isinstance(handler_res, Signal):
-                            return handler_res
-                    finally:
-                        executor.runtime_context.pop_llm_except_frame()
-
-                    # 仅当 retry 语句被执行（should_retry=True）且重试次数未耗尽时继续
-                    if frame.should_retry and frame.increment_retry():
-                        continue  # 重试条件求值
-                    else:
-                        # 重试耗尽：抛出 LLMRetryExhaustedError
-                        error = executor.registry.make_llm_retry_exhausted_error(
-                            f"LLM condition retry exhausted after {max_retry} attempt(s); "
-                            f"no certain result was produced",
-                            max_retry=max_retry,
-                            raw_response=getattr(last_result, "raw_response", "") or "",
-                        )
-                        raise ThrownException(error)
-                else:
+                if llmexcept_handler_uid is None:
                     # uncertain 且无 llmexcept handler：抛出 LLMParseError
                     error = executor.registry.make_llm_parse_error(
                         getattr(last_result, "retry_hint", None) or "LLM condition output could not be parsed",
@@ -263,6 +225,59 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                         type_name="bool",
                     )
                     raise ThrownException(error)
+
+                # 有 handler：完整多轮重试（frame 跨重试轮次复用，与 IbLLMExceptionalStmt 对齐）
+                llmexcept_data = executor.ec.get_node_data(llmexcept_handler_uid)
+                handler_body_uids = llmexcept_data.get("body", []) if llmexcept_data else []
+
+                frame = executor.runtime_context.save_llm_except_state(
+                    target_uid=actual_iter_uid,
+                    node_type="IbLLMExceptionalStmt",
+                    max_retry=max_retry,
+                )
+                try:
+                    frame.last_result = last_result
+
+                    # 首次：条件已在 while True 中求值（uncertain），直接执行 body 处理；
+                    # 后续：restore 后重新求值条件，确定则退出，uncertain 则再执行 body。
+                    first_attempt = True
+                    while frame.should_continue_retrying():
+                        if not first_attempt:
+                            frame.restore_snapshot(executor.runtime_context)
+                            executor.runtime_context.set_last_llm_result(None)
+                            condition = yield actual_iter_uid
+                            if isinstance(condition, Signal):
+                                return condition
+                            result = executor.runtime_context.get_last_llm_result()
+                            executor.runtime_context.set_last_llm_result(None)
+                            if result is None or result.is_certain:
+                                break
+                            frame.last_result = result
+                        first_attempt = False
+
+                        # uncertain：执行 handler body（retry 语句设 should_retry=True）
+                        frame.should_retry = False
+                        executor.ec.enter_llmexcept_body()
+                        try:
+                            handler_res = yield from _vm_execute_stmt_sequence(executor, handler_body_uids)
+                        finally:
+                            executor.ec.exit_llmexcept_body()
+                        if isinstance(handler_res, Signal):
+                            return handler_res
+                        violations = frame.verify_snapshot_integrity(executor.runtime_context)
+                        if violations:
+                            frame.restore_snapshot(executor.runtime_context)
+                        if not frame.increment_retry():
+                            error = executor.registry.make_llm_retry_exhausted_error(
+                                f"LLM condition retry exhausted after {max_retry} attempt(s); "
+                                f"no certain result was produced",
+                                max_retry=max_retry,
+                                raw_response=getattr(frame.last_result, "raw_response", "") or "",
+                            )
+                            raise ThrownException(error)
+                finally:
+                    executor.runtime_context.pop_llm_except_frame()
+                # 重试循环结束：条件已确定，继续外层 while True
 
             if not executor.ec.is_truthy(condition):
                 break
