@@ -80,6 +80,27 @@ class TypeCheckBase:
         if node and type_spec:
             self.type_bindings[node] = type_spec
 
+    def _bind_condition_behavior_types(self, node: Optional[ast.IbASTNode]):
+        """把布尔上下文中的行为表达式定型为 ``bool``（递归传播）。
+
+        布尔位置：条件测试本身、``and``/``or`` 操作数、逻辑 ``not`` 操作数。
+        不穿透：``BinOp``/``Compare``（行为按另一操作数适配，是值比较语义）、
+        值上下文（赋值 LHS / 调用实参 / 容器元素等不由本方法处理）。
+
+        与 ``visit_IbIf``/``visit_IbWhile``/条件驱动 ``visit_IbFor`` 的
+        直接条件绑定同一条设计契约：行为表达式的结果类型由使用上下文决定，
+        布尔上下文即 ``bool``。调用方须在 ``visit`` 之后执行（覆盖占位符绑定）。
+        """
+        if node is None:
+            return
+        if isinstance(node, ast.IbBehaviorExpr):
+            self.bind_type(node, self._bool_desc)
+        elif isinstance(node, ast.IbBoolOp):
+            for val in node.values:
+                self._bind_condition_behavior_types(val)
+        elif isinstance(node, ast.IbUnaryOp) and node.op == "not":
+            self._bind_condition_behavior_types(node.operand)
+
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""
         return self.current_scope.resolve(name)

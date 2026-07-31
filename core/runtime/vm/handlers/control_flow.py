@@ -240,10 +240,13 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                 filter_val = yield filter_uid
                 if isinstance(filter_val, Signal):
                     return filter_val
-                filter_truthy = executor.ec.is_truthy(filter_val)
-                if _is_llm_uncertain_value(filter_truthy):
-                    return filter_truthy
-                if not filter_truthy:
+                # filter 是布尔位置：不确定时经 llmexcept handler 重试
+                filter_val = yield from _resolve_condition(
+                    executor, filter_val, llmexcept_handler_uid, filter_uid, "IbFor"
+                )
+                if isinstance(filter_val, Signal):
+                    return filter_val
+                if not executor.ec.is_truthy(filter_val):
                     break
 
             res = yield from _vm_execute_stmt_sequence(executor, body)
@@ -256,15 +259,15 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
         return executor.registry.get_none()
 
     # ----- 标准 Foreach 循环 -----
+    llmexcept_handler_uid = node_data.get("llmexcept_handler")
     iterable_obj = yield actual_iter_uid
     if isinstance(iterable_obj, Signal):
         return iterable_obj
     if _is_llm_uncertain_value(iterable_obj):
-        handler_uid = node_data.get("llmexcept_handler")
-        if handler_uid is None:
+        if llmexcept_handler_uid is None:
             _raise_uncertain_parse_error(executor, iterable_obj, type_name="list")
         iterable_obj = yield from _retry_llm_uncertain(
-            executor, iterable_obj, handler_uid, actual_iter_uid, "IbFor"
+            executor, iterable_obj, llmexcept_handler_uid, actual_iter_uid, "IbFor"
         )
         if isinstance(iterable_obj, Signal):
             return iterable_obj
@@ -314,11 +317,14 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
             if isinstance(filter_val, Signal):
                 rc.pop_loop_context()
                 return filter_val
-            filter_truthy = executor.ec.is_truthy(filter_val)
-            if _is_llm_uncertain_value(filter_truthy):
+            # filter 是布尔位置：不确定时经 llmexcept handler 重试
+            filter_val = yield from _resolve_condition(
+                executor, filter_val, llmexcept_handler_uid, filter_uid, "IbFor"
+            )
+            if isinstance(filter_val, Signal):
                 rc.pop_loop_context()
-                return filter_truthy
-            if not filter_truthy:
+                return filter_val
+            if not executor.ec.is_truthy(filter_val):
                 rc.pop_loop_context()
                 continue
 

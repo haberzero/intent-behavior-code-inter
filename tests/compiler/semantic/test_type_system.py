@@ -438,3 +438,75 @@ def test_type_checking_func_call_uses_return_type(registry, pipeline):
     context = make_context(module, registry)
     result = TypeCheckingPass().run(context)
     assert result is not None
+
+
+# ===========================================================================
+# 布尔上下文行为表达式定型（恒真陷阱修复）
+# ===========================================================================
+
+
+class TestBehaviorBooleanContextTyping:
+    """布尔上下文中的行为表达式应定型为 bool（与直接条件一致）。
+
+    修复前：`while @~...~ and True:` / `if not @~...~:` 中的行为表达式落到
+    `behavior` 占位符 → 运行期装箱为 str → "0" 按 Python 真值语义判真 → 恒真陷阱。
+    """
+
+    @staticmethod
+    def _bindings(pipeline, registry, module):
+        ctx = make_context(module, registry)
+        result = pipeline.run(ctx)
+        bindings = {}
+        for out in result.outputs:
+            for node, spec in (getattr(out, "type_bindings", None) or {}).items():
+                bindings[node] = spec
+        return bindings
+
+    def test_boolop_operand_behavior_is_bool(self, registry, pipeline):
+        """`while @~...~ and True:` 中行为表达式定型为 bool"""
+        behavior = ast.IbBehaviorExpr(segments=["is done?"])
+        boolop = ast.IbBoolOp(op="and", values=[behavior, ast.IbConstant(value=True)])
+        module = ast.IbModule(body=[ast.IbWhile(test=boolop, body=[ast.IbPass()])])
+        bindings = self._bindings(pipeline, registry, module)
+        assert bindings[behavior].name == "bool"
+
+    def test_not_operand_behavior_is_bool(self, registry, pipeline):
+        """`if not @~...~:` 中行为表达式定型为 bool"""
+        behavior = ast.IbBehaviorExpr(segments=["done?"])
+        unary = ast.IbUnaryOp(op="not", operand=behavior)
+        module = ast.IbModule(body=[ast.IbIf(test=unary, body=[ast.IbPass()], orelse=[])])
+        bindings = self._bindings(pipeline, registry, module)
+        assert bindings[behavior].name == "bool"
+
+    def test_nested_boolop_behavior_all_bool(self, registry, pipeline):
+        """`while not @~a~ and (@~b~ or @~c~):` 中全部行为定型为 bool"""
+        b1 = ast.IbBehaviorExpr(segments=["a"])
+        b2 = ast.IbBehaviorExpr(segments=["b"])
+        b3 = ast.IbBehaviorExpr(segments=["c"])
+        inner = ast.IbBoolOp(op="or", values=[b2, b3])
+        outer = ast.IbBoolOp(op="and", values=[ast.IbUnaryOp(op="not", operand=b1), inner])
+        module = ast.IbModule(body=[ast.IbWhile(test=outer, body=[ast.IbPass()])])
+        bindings = self._bindings(pipeline, registry, module)
+        assert all(bindings[b].name == "bool" for b in (b1, b2, b3))
+
+    def test_compare_behavior_not_forced_bool(self, registry, pipeline):
+        """比较中的行为表达式按另一操作数适配（不被强制为 bool）"""
+        behavior = ast.IbBehaviorExpr(segments=["guess"])
+        cmp = ast.IbCompare(left=behavior, ops=["=="], comparators=[ast.IbConstant(value=42)])
+        module = ast.IbModule(body=[ast.IbIf(test=cmp, body=[ast.IbPass()], orelse=[])])
+        bindings = self._bindings(pipeline, registry, module)
+        assert bindings[behavior].name == "int"
+
+    def test_ifexp_test_behavior_is_bool(self, registry, pipeline):
+        """条件表达式 `x if @~cond~ else y` 的 test 行为定型为 bool"""
+        behavior = ast.IbBehaviorExpr(segments=["cond?"])
+        ifexp = ast.IbIfExp(
+            test=behavior,
+            body=ast.IbConstant(value=1),
+            orelse=ast.IbConstant(value=2),
+        )
+        module = ast.IbModule(body=[
+            ast.IbAssign(targets=[ast.IbName(id="x", ctx="Store")], value=ifexp)
+        ])
+        bindings = self._bindings(pipeline, registry, module)
+        assert bindings[behavior].name == "bool"

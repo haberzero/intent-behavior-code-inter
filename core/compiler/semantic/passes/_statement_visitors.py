@@ -326,9 +326,8 @@ class StatementVisitorsMixin:
     def visit_IbIf(self, node: ast.IbIf) -> Optional[IbSpec]:
         """访问 if 语句"""
         self.visit(node.test)
-        # if @~...~: 中的行为表达式应被解析为 bool 类型
-        if isinstance(node.test, ast.IbBehaviorExpr):
-            self.bind_type(node.test, self.registry.resolve("bool"))
+        # 布尔上下文中的行为表达式定型为 bool（含复合布尔表达式的递归传播）
+        self._bind_condition_behavior_types(node.test)
         for stmt in node.body:
             self.visit(stmt)
         for stmt in node.orelse:
@@ -338,9 +337,8 @@ class StatementVisitorsMixin:
     def visit_IbWhile(self, node: ast.IbWhile) -> Optional[IbSpec]:
         """访问 while 语句"""
         self.visit(node.test)
-        # while @~...~: 中的行为表达式应被解析为 bool 类型
-        if isinstance(node.test, ast.IbBehaviorExpr):
-            self.bind_type(node.test, self.registry.resolve("bool"))
+        # 布尔上下文中的行为表达式定型为 bool（含复合布尔表达式的递归传播）
+        self._bind_condition_behavior_types(node.test)
         for stmt in node.body:
             self.visit(stmt)
         return None
@@ -351,19 +349,20 @@ class StatementVisitorsMixin:
             # for...if 过滤语法：先访问实际迭代对象，再访问循环变量，最后访问过滤条件
             if isinstance(node.iter, ast.IbFilteredExpr):
                 self.visit(node.iter.expr)
-                # 条件驱动循环中的行为表达式应被解析为 bool 类型
-                if isinstance(node.iter.expr, ast.IbBehaviorExpr):
-                    self.bind_type(node.iter.expr, self.registry.resolve("bool"))
+                # 条件驱动 for（target 为空）：迭代表达式是条件（布尔位置）
+                if node.target is None:
+                    self._bind_condition_behavior_types(node.iter.expr)
             else:
                 self.visit(node.iter)
-                # 条件驱动循环中的行为表达式应被解析为 bool 类型
-                if isinstance(node.iter, ast.IbBehaviorExpr):
-                    self.bind_type(node.iter, self.registry.resolve("bool"))
+                # 条件驱动 for（target 为空）：迭代表达式是条件（布尔位置）
+                if node.target is None:
+                    self._bind_condition_behavior_types(node.iter)
         if node.target:
             self.visit(node.target)
-        # 访问 for...if 的过滤条件（此时循环变量已注册）
+        # 访问 for...if 的过滤条件（此时循环变量已注册）；filter 恒为布尔位置
         if node.iter and isinstance(node.iter, ast.IbFilteredExpr):
             self.visit(node.iter.filter)
+            self._bind_condition_behavior_types(node.iter.filter)
         for stmt in node.body:
             self.visit(stmt)
         return None

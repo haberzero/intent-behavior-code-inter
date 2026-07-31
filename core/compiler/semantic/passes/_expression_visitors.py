@@ -204,6 +204,8 @@ class ExpressionVisitorsMixin:
     def visit_IbIfExp(self, node: ast.IbIfExp) -> Optional[IbSpec]:
         """访问条件表达式 (x if cond else y)"""
         self.visit(node.test)
+        # 条件表达式的 test 恒为布尔位置
+        self._bind_condition_behavior_types(node.test)
         body_type = self.visit(node.body)
         orelse_type = self.visit(node.orelse)
         # 两分支类型一致则返回该类型，否则返回 any
@@ -635,5 +637,7 @@ class ExpressionVisitorsMixin:
         """访问带过滤条件的表达式"""
         expr_type = self.visit(node.expr)
         self.visit(node.filter)
+        # filter 恒为布尔位置
+        self._bind_condition_behavior_types(node.filter)
         self.bind_type(node, expr_type)
         return expr_type

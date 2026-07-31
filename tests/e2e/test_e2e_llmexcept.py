@@ -669,3 +669,64 @@ except:
         assert "exhausted_or_error" in lines
         assert "after" not in lines
 
+
+class TestE2EBoolContextTyping:
+    """
+    布尔上下文行为表达式定型 bool（恒真陷阱修复）的 e2e 回归。
+
+    修复前：`while @~...~ and True:` / `if not @~...~:` 中行为表达式落到
+    `behavior` 占位符 → 运行期装箱为 str → "0" 按 Python 真值语义判真 → 恒真死循环。
+    修复后：布尔上下文行为定型 bool，0/1 正确判定，循环正常终止。
+    """
+
+    def test_while_boolop_condition_terminates(self):
+        """`while @~...~ and True:` 中行为定型 bool，TRUE/FALSE 正确判定并终止。"""
+        code = AI_MOCK_PREFIX + """
+int count = 0
+while @~ MOCK:SEQ:[TRUE,TRUE,FALSE] w_bt ~ and True:
+    count = count + 1
+llmexcept:
+    retry "hint"
+print((str)count)
+"""
+        # TRUE→body(1), TRUE→body(2), FALSE→exit
+        assert run_ibci(code) == ["2"]
+
+    def test_while_boolop_condition_with_retry_terminates(self):
+        """FAIL 触发 llmexcept 重试后恢复，循环仍正确终止（不恒真）。"""
+        code = AI_MOCK_PREFIX + """
+int count = 0
+while @~ MOCK:SEQ:[TRUE,FAIL,TRUE,FALSE] w_bt2 ~ and True:
+    count = count + 1
+llmexcept:
+    print("w_retry")
+    retry "hint"
+print((str)count)
+"""
+        lines = run_ibci(code)
+        assert "w_retry" in lines
+        assert "2" in lines
+
+    def test_not_condition(self):
+        """`if not @~REPAIR~:` 重试后恢复；not True → False → else 分支。"""
+        code = AI_MOCK_PREFIX + """
+if not @~ MOCK:REPAIR:BOOL:TRUE not_bt ~:
+    print("taken")
+else:
+    print("not_taken")
+llmexcept:
+    retry "hint"
+"""
+        assert run_ibci(code) == ["not_taken"]
+
+    def test_for_filter_retries(self):
+        """foreach filter 是布尔位置：REPAIR 重试后恢复，两元素均通过。"""
+        code = AI_MOCK_PREFIX + """
+list items = ["a", "b"]
+for str x in items if @~ MOCK:REPAIR:BOOL:TRUE filt_bt ~:
+    print(x)
+llmexcept:
+    retry "hint"
+"""
+        assert run_ibci(code) == ["a", "b"]
+
