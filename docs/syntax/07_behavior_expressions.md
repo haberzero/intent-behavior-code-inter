@@ -150,6 +150,26 @@ str fn f = lambda(PARAMS): EXPR    # PAR_INVALID_SYNTAX
 | `snapshot` | 延迟，定义时冻结意图 | 定义时的意图栈快照（完全免疫调用处意图） |
 | 无关键字（即时） | 立即执行 | 执行时的意图栈 |
 
+#### 批量并发执行（`ai.run_batch`）
+
+对参数化 fn 行为逐项**并发**执行，保序返回结果列表。适合"对一批输入各自做一次独立 LLM 推理"的场景——同一行为反复独立调用时，不再需要手写循环串行等待：
+
+```ibci
+import ai
+
+fn summarize = lambda(str doc) -> str: @~ 用一句话总结：$doc ~
+list docs = ["文档A", "文档B", "文档C"]
+
+list results = ai.run_batch(summarize, docs)
+# results == [总结(文档A), 总结(文档B), 总结(文档C)]，顺序与 docs 一致
+```
+
+- `ai.run_batch(fn_behavior, items) -> list`：对 `items` 逐项绑定行为参数，并发执行 LLM 调用，按 `items` 顺序返回结果。
+- 行为必须为带参 fn（`fn f = lambda(PARAMS) -> TYPE: @~ ... ~`）；参数经 `$PARAM` 插值进提示词。
+- 行为同时可引用定义作用域的自由变量（lambda 闭包 / snapshot 冻结值）。
+- 任一项结果无法解析（不确定）即抛 `LLMParseError`，错误粒度为整个批次。
+- 与循环的取舍：循环体内行为按可调度规则走同步路径（不可自动并发）；需要批量并发时用 `ai.run_batch` 显式表达。
+
 ### 7.5 命名模型路由（`@NAME~`）
 
 通过 `@` 后跟模型名称前缀，可以将行为表达式路由到指定的命名模型：

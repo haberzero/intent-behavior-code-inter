@@ -279,13 +279,15 @@ Phase D（全栈 async）暂搁置
 | A U7 公理 EXEC-3 更新 + 文档 | 🔶 部分 | EXEC-3/IC-3 + 04_vm_interpreter + KNOWN_LIMITS 已更新；语法/子系统文档同步 |
 | B0-Env 环境与依赖正规化 | ✅ | pyproject.toml 分组 + environment.yml + 00_environment.md + CI 统一安装 + ibci_modules 根 __init__.py |
 | B0-Mock MOCK 服务化 | ✅ | MockScenarioEngine + MockServer（stdlib HTTP + SSE + SLEEP/ERROR）+ TESTONLY 收敛 + 16 项服务测试 |
-| B dispatch 修复 | ⬜ | PT-4.7，依赖 B0（服务作为验收仪器） |
+| B dispatch 修复 | ✅ | PT-4.7 闭合：运行时拆分 + resolve 对齐 + 四条规则 + 4 skip 解锁（8→4） |
+| ai.run_batch 批量原语 | ✅ | PT-4.9：并发 map（loader 可调用透传 + 绑定辅助提取），4 项测试 |
 | C MOCK 服务 | ✅ 吸收 | 主体已由 B0-Mock 落地（非 fastapi，stdlib 线程内服务） |
 | D 全栈 async | ⏸ 暂搁置 | 语言级 async |
 
 ### 当前状态（供下个 session 续接）
 
-**已完成**：A7/A1/A2/A3/A6 + U1-U4 + U5（帧字段/方法改名）+ U6 + U7 核心文档 + PT-4.8 + **B0-Env（环境正规化）+ B0-Mock（MOCK 服务化）**。
+**已完成**：A7/A1/A2/A3/A6 + U1-U4 + U5（帧字段/方法改名）+ U6 + U7 核心文档 + PT-4.8 + **B0-Env（环境正规化）+ B0-Mock（MOCK 服务化）+ Phase B（dispatch 修复，PT-4.7）+ `ai.run_batch`（PT-4.9）**。
+**测试基线**：`1229 passed, 4 skipped`（llmexcept 统一回归 + PT-4.8 恒真陷阱 + 16 项 MOCK 服务 + dispatch 规则 4 项 + run_batch 4 项）。
 **测试基线**：`1215 passed, 8 skipped`（llmexcept 统一回归 + PT-4.8 恒真陷阱修复 + 16 项 MOCK 服务测试）。
 
 **B0 交付**：
@@ -295,7 +297,7 @@ Phase D（全栈 async）暂搁置
 - `AIPlugin._is_test_config` 收敛 4 处 TESTONLY 判定；`_handle_mock_response` 变薄委托。
 - `tests/conftest.py` 新增 `mock_server` fixture；`tests/runtime/test_mock_service.py` 16 项。
 
-**下一步：Phase B dispatch 修复**（§五 改造项 1-5 + 调研微调 1-8），以 `mock_server` 为验收仪器。剩余低优先级项：U5 命名审查、mock 子系统健康清洁（已实施：`_scene_prompts` 死方法 / `_retry_prompts` / `auto_type_constraint` 删除、MOCK 常量统一、scene 死分支清理、文档漂移修复、哨兵一致性测试），executor 侧健康项见 `PENDING_TASKS.md` §五 PT-HEALTH-*。
+**下一步**：主线阶段性完成。剩余低优先级项：U5 命名审查、`_pending_futures` 泄漏观测性（KNOWN_LIMITS §十五 已标注）、executor 侧健康项见 `PENDING_TASKS.md` §五 PT-HEALTH-*。规划书使命完成，可归档删除。
 
 **U2+U3 关键设计落地**：
 - 产生者（`_finalize_invoke_result` / `vm_handle_IbBehaviorExpr` / `vm_handle_IbBehaviorInstance` / `is_truthy` / `IbCastExpr`）不确定时返回 `IbLLMCallResult(is_certain=False)`，不写 frame / 全局槽。

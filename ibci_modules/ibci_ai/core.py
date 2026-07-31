@@ -288,6 +288,25 @@ class AIPlugin(IbStatefulPlugin):
                 return dict(executor.get_current_call_info())
         return {}
 
+    def run_batch(self, behavior: Any, items: List[Any]) -> List[Any]:
+        """并发批量执行行为对象（`ai.run_batch`）。
+
+        对参数化 fn 行为（``fn f = lambda(str x) -> str: @~ ... $x ... ~``）
+        逐项并发执行，保序返回结果列表。任一项 parse 失败抛 ``LLMParseError``。
+        """
+        kr = getattr(self._capabilities, "kernel_registry", None) if self._capabilities else None
+        if kr is None or not hasattr(kr, "get_llm_executor"):
+            raise RuntimeError("run_batch: LLM executor not available")
+        executor = kr.get_llm_executor()
+        if executor is None or not hasattr(executor, "run_batch"):
+            raise RuntimeError("run_batch: LLM executor does not support batch execution")
+        from core.runtime.frame import get_current_execution_context
+
+        ec = get_current_execution_context() or getattr(behavior, "_execution_context", None)
+        if ec is None:
+            raise RuntimeError("run_batch: no execution context available")
+        return executor.run_batch(behavior, list(items), ec)
+
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.set_global_intent(intent)

@@ -64,30 +64,23 @@
 
 ### PT-4.5　用户类运算符重载 [VISION]
 
-### PT-4.9　行为批量执行原语 `ai.run_batch`（并发 map） [DESIGN-DEBT] [已激活]
+### PT-4.9　行为批量执行原语 `ai.run_batch`（并发 map） [DESIGN-DEBT] [已完成]
 
-> **已纳入当前主线**（Phase B 后实施，依赖 dispatch 拆分机制）。设计决策（2026-07-31）：
+> **已实现（2026-07-31，随 Phase B 落地）**。设计决策：
 >
 > **排除"循环内自动透明并发"**——理由：① `_pending_futures` 按 `node_uid` 键控，循环内同一节点多次执行会覆写键导致读点解析错乱与泄漏，改"执行实例"键是运行时模型改动；② 自动展开要求编译器证明循环体为"纯批次"（无控制流/跨迭代依赖/副作用顺序），证明错判 = 静默改变程序行为（最危险错误）；③ 与"显式优于隐式"公理冲突。
 >
 > **采用显式原语**：`ai.run_batch(fn_behavior, items) -> list`——对参数化 fn 行为（`fn f = lambda(str x) -> str: @~ ... $x ... ~`）逐项并发执行，保序返回结果列表。不走 `_pending_futures`（自管按实例索引的 future 列表，天然解决身份问题），复用 `_prepare_behavior_call` + `_call_and_parse`。
 >
+> **实现要点**：executor `run_batch`（主线程逐项绑闭包+参数+预求值，后台并发 `_call_and_parse`，保序收集，任一项不确定抛 `LLMParseError`）；AIPlugin 暴露 + vtable；loader `proxy_wrapper` 可调用实例原样透传（`_is_callable_object`）；`bind_behavior_closure`/`bind_behavior_call_args` 提取为共享辅助（消除 3 处重复绑定循环）。
+>
 > **备选（未来）**：列表推导式 `[ @~ ... ~ for item in items ]`（Python 风格，需类型推断设计）。
 >
 > **循环内软件流水线 / 严格纯度分析下的自动展开**：远期探索，不排除。
 
-### PT-4.7　DDG 并行调度接入 VM（含原 C2 缺陷合并） [DESIGN-DEBT] [已激活]
+### PT-4.7　DDG 并行调度接入 VM（含原 C2 缺陷合并） [DESIGN-DEBT] [已完成]
 
-> **已激活为当前主线**（见 `NEXT_STEPS.md`）。细化规划与工作路径见 `tasks_docs/_mock_concurrency.md`：MOCK 服务化（独立进程 HTTP 服务，模拟延迟/并发/失败）作为开发仪器，协同修复 dispatch 数据竞争，解锁 4 项 skip 测试。
->
-> **原 C2 缺陷已并入此项**。dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`）但后台线程执行完整 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争。已显式禁用（`dispatch_eligible` 一律置 `False`），行为表达式全部走同步路径。
->
-> **接通前置条件**：
-> 1. 修 `BehaviorDependencyPass` 实现 `05_vm_specification.md §3.1` 规则（插值依赖/Cell/llmexcept 强制 `False`，当前 pass 只检测环）
-> 2. 拆分 `execute_behavior_expression` 为"主线程预求值 prompt"（同步）+"后台仅 `_call_llm`+解析"（异步）
-> 3. `last_call_info`/`retry_hint` 线程安全或去共享化
-> 4. 补"插值 + 真实并发"合规测试（现有 `test_concurrent_llm.py` / `test_e2e_llm_pipeline.py` 用 MOCK 只验值正确性，不验真实并发时序）
-> 5. 重新启用被 skip 的 4 个 dispatch 专属测试（`test_e2e_llm_pipeline.py::test_two_independent_assignments_both_pending_after_run`、`test_e2e_llm_basic.py::TestE2EStaleResultIsolation` × 3）
+> **已完成（2026-07-31）**。运行时拆分（`_prepare_behavior_call` + `_call_and_parse`）、resolve 对齐、`fork_intent_snapshot` fail-fast、`BehaviorDependencyPass` 四条规则、`dispatch_eligible` 按规则接通全部落地；4 项 dispatch skip 解锁（8→4），循环内 FAIL 语义修正为同步报错。细化记录见 `tasks_docs/_mock_concurrency.md` §五/§十。
 
 ---
 

@@ -347,21 +347,15 @@ str r = @~ ... ~
 
 ---
 
-## 十五、DDG 分析已完成但并发调度已禁用
+## 十五、DDG 并发调度（规则化已启用）
 
-**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Phase 3 Binding）仍为每个 `IbBehaviorExpr` 计算 `llm_deps` 字段（供未来接通使用），但 `dispatch_eligible` 一律置 `False`（`behavior_dependency_pass.py`）。运行时 `assignment.py` 检测到 `dispatch_eligible=False` 即走同步求值路径，`LLMScheduler.dispatch_eager()` 代码存在但不会被触发。所有 `@~ ... ~` 行为表达式按 AST 序串行执行。
+**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Phase 3 Binding）为每个 `IbBehaviorExpr` 计算 `llm_deps`，并按 `05_vm_specification.md §3.1` 规则标注 `dispatch_eligible`。运行时 `assignment.py` 对 `dispatch_eligible=True` 的赋值走 `LLMScheduler.dispatch_eager()` 并发路径：主线程预求值 prompt（`_prepare_behavior_call`），后台线程仅执行 LLM 调用 + 解析（`_call_and_parse`，不重入 VM、不写主线程单写槽）；变量读取点 resolve-at-read 阻塞等待并写回。
 
-**根源**：dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`），但后台线程执行完整的 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争。已显式禁用并降级为专项重做。
-
-**接通前置条件**：
-1. 修 `BehaviorDependencyPass` 实现 spec §3.1 规则（插值依赖/Cell/llmexcept/可重复执行上下文强制 `False`）
-2. 拆分 `execute_behavior_expression` 为"主线程预求值 prompt"+"后台仅 HTTP 调用"
-3. `retry_hint` 线程安全（`last_call_info` 已去共享：call_info 绑定到 `LLMResult`，executor 仅保留主线程单写槽）
-4. 补"插值 + 真实并发"合规测试
-
-**MOCK 验证能力缺口**：内联 MOCK（`AIPlugin._handle_mock_response`）是进程内纯函数，零延迟控制、零基础设施失败注入，无法实测并发时序与 provider 异常传播路径。机制类验证（时序/失败/并发）须经 MOCK HTTP 服务（`MockServer`，`ibci_modules/ibci_ai/mock_service.py`）走真实 `OpenAI` 客户端路径；指令解析与场景状态由 `MockScenarioEngine` 统一实现（线程安全）。
-
-**未来演进思路**：具体规划见任务文档。
+**行为边界**：
+- **循环体 / 函数体内行为不可 dispatch**：同一 `node_uid` 多次执行会覆写 `_pending_futures` 条目导致解析错乱与泄漏。此类行为走同步路径，不确定结果无 llmexcept 保护即在赋值点抛 `LLMParseError`。
+- **call_info 时点**：`ai.get_current_call_info()` 返回"最近一次 resolve 的调用"（dispatch 在首次读取时写入），非赋值点。
+- **未读取的 dispatched 变量**：在 `_pending_futures` 残留（无读则无 resolve），属已知泄漏面，观测性待补。
+- **MOCK 验证能力**：内联 MOCK（`AIPlugin._handle_mock_response`）是进程内纯函数，零延迟控制、零基础设施失败注入，无法实测并发时序与 provider 异常传播路径。机制类验证（时序/失败/并发）须经 MOCK HTTP 服务（`MockServer`，`ibci_modules/ibci_ai/mock_service.py`）走真实 `OpenAI` 客户端路径；指令解析与场景状态由 `MockScenarioEngine` 统一实现（线程安全）。
 
 ---
 

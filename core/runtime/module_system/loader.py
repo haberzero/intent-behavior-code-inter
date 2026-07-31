@@ -23,6 +23,23 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import IModuleLoader, ServiceContext
 from core.runtime.interfaces import IExecutionContext
 from core.base.interfaces import IStateReader, ISymbolView, IIntentManager
+
+
+def _is_callable_object(obj: Any) -> bool:
+    """判断对象是否为可调用实例（behavior / fn_callable / callable）。
+
+    可调用实例不是数据值：应原样透传给插件实现层，而非拆箱成 native
+    （未执行的可调用对象 ``to_native()`` 会显式抛错）。
+    """
+    cls = getattr(obj, "ib_class", None)
+    if cls is None:
+        return False
+    name = getattr(cls, "name", "") or ""
+    return (
+        name in ("behavior", "fn_callable", "callable")
+        or name.startswith("fn_callable[")
+        or name.startswith("behavior[")
+    )
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import MethodMemberSpec, IbSpec, TypeKind
@@ -93,12 +110,23 @@ class ModuleLoader(IModuleLoader):
                 def create_proxy(target_func, reg):
                     def proxy_wrapper(*args, **kwargs):
                         # UTS: 自动拆箱 (IbObject -> Native)
-                        native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
-                        native_kwargs = {k: (v.to_native() if hasattr(v, 'to_native') else v) for k, v in kwargs.items()}
-                        
+                        # 可调用实例（behavior/fn_callable/callable）不是数据值，
+                        # 原样透传给实现层（插件按 IBCI 对象处理），避免误拆箱
+                        # 触发未执行 callable 的 to_native() 抛错。
+                        native_args = [
+                            a if _is_callable_object(a)
+                            else (a.to_native() if hasattr(a, 'to_native') else a)
+                            for a in args
+                        ]
+                        native_kwargs = {
+                            k: (v if _is_callable_object(v)
+                                else (v.to_native() if hasattr(v, 'to_native') else v))
+                            for k, v in kwargs.items()
+                        }
+
                         # 执行 Python 函数
                         result = target_func(*native_args, **native_kwargs)
-                        
+
                         # UTS: 自动装箱 (Native -> IbObject)
                         return reg.box(result)
                     return proxy_wrapper

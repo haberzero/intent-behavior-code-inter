@@ -163,6 +163,41 @@ class IbFnCallable(IbValue):
         return f"<FnCallable({mode}) {self.node_uid}>"
 
 
+def bind_behavior_closure(behavior: "IbBehavior", rt_context: Any) -> None:
+    """在子作用域中安装行为闭包（lambda 共享 cell / snapshot 深克隆种子）。
+
+    与单次调用路径同构：snapshot 每次深克隆种子保证无状态可重入；
+    lambda 通过 IbCell 读最新值。``rt_context`` 必须是已 enter_scope 的当前作用域。
+    """
+    is_snapshot = behavior.capture_mode == "snapshot"
+    for sym_uid, (name, slot) in behavior.closure.items():
+        if is_snapshot:
+            fresh = try_deep_clone(slot) if slot is not None else None
+            value = fresh if fresh is not None else slot
+            if value is not None:
+                rt_context.define_variable(name, value, uid=sym_uid)
+        elif isinstance(slot, IbCell):
+            if not slot.is_empty():
+                rt_context.define_variable(name, slot.get(), uid=sym_uid)
+        else:
+            rt_context.define_variable(name, slot, uid=sym_uid)
+
+
+def bind_behavior_call_args(behavior: "IbBehavior", args: List[Any], ec: Any, rt_context: Any) -> None:
+    """在子作用域中按行为参数 UID 绑定实参（与单次调用路径同构）。"""
+    for i, arg_uid in enumerate(behavior.params_uids):
+        arg_data = ec.get_node_data(arg_uid)
+        actual_arg_uid = arg_uid
+        actual_arg_data = arg_data
+        if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
+            actual_arg_uid = arg_data.get("target")
+            actual_arg_data = ec.get_node_data(actual_arg_uid)
+        arg_name = (actual_arg_data or {}).get("arg")
+        if arg_name and i < len(args):
+            sym_uid = ec.get_side_table("node_to_symbol", actual_arg_uid)
+            rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+
+
 @register_ib_type("behavior")
 class IbBehavior(IbValue):
     """
@@ -316,30 +351,8 @@ class IbBehavior(IbValue):
         rt_context = ec.runtime_context
         rt_context.enter_scope()
         try:
-            is_snapshot = self.capture_mode == "snapshot"
-            for sym_uid, (name, slot) in self.closure.items():
-                if is_snapshot:
-                    fresh = try_deep_clone(slot) if slot is not None else None
-                    value = fresh if fresh is not None else slot
-                    if value is not None:
-                        rt_context.define_variable(name, value, uid=sym_uid)
-                elif isinstance(slot, IbCell):
-                    if not slot.is_empty():
-                        rt_context.define_variable(name, slot.get(), uid=sym_uid)
-                else:
-                    rt_context.define_variable(name, slot, uid=sym_uid)
-
-            for i, arg_uid in enumerate(self.params_uids):
-                arg_data = ec.get_node_data(arg_uid)
-                actual_arg_uid = arg_uid
-                actual_arg_data = arg_data
-                if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
-                    actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = ec.get_node_data(actual_arg_uid)
-                arg_name = (actual_arg_data or {}).get("arg")
-                if arg_name and i < len(args):
-                    sym_uid = ec.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+            bind_behavior_closure(self, rt_context)
+            bind_behavior_call_args(self, args, ec, rt_context)
 
             return executor.invoke_behavior(self, ec)
         finally:

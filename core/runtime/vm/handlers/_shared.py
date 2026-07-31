@@ -22,6 +22,10 @@ from core.runtime.exceptions import (
 from core.runtime.objects.intent import IbIntent, IntentRole
 from core.runtime.objects.cell import IbCell
 from core.runtime.objects.deep_clone import try_deep_clone
+from core.runtime.objects.primitives.callables import (
+    bind_behavior_closure,
+    bind_behavior_call_args,
+)
 from core.runtime.shared.llm_result import LLMFuture
 
 
@@ -138,31 +142,8 @@ def _vm_invoke_behavior(executor, behavior, args):
 
     rt_context.enter_scope()
     try:
-        for sym_uid, (name, slot) in behavior.closure.items():
-            if is_snapshot:
-                fresh = try_deep_clone(slot) if slot is not None else None
-                value = fresh if fresh is not None else slot
-                if value is not None:
-                    rt_context.define_variable(name, value, uid=sym_uid)
-            elif isinstance(slot, IbCell):
-                if not slot.is_empty():
-                    rt_context.define_variable(name, slot.get(), uid=sym_uid)
-            else:
-                rt_context.define_variable(name, slot, uid=sym_uid)
-
-        for i, arg_uid in enumerate(behavior.params_uids):
-            arg_data = ec.get_node_data(arg_uid)
-            actual_arg_uid = arg_uid
-            actual_arg_data = arg_data
-            if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
-                actual_arg_uid = arg_data.get("target")
-                actual_arg_data = ec.get_node_data(actual_arg_uid)
-            arg_name = (actual_arg_data or {}).get("arg")
-            if arg_name and i < len(args):
-                sym_uid = ec.get_side_table(
-                    "node_to_symbol", actual_arg_uid
-                )
-                rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+        bind_behavior_closure(behavior, rt_context)
+        bind_behavior_call_args(behavior, args, ec, rt_context)
 
         yield None
         result = yield from llm_exec.invoke_behavior_cps(behavior, ec)

@@ -20,6 +20,11 @@ from core.runtime.shared.llm_result import LLMResult, MOCK_REPAIR_SENTINEL, MOCK
 from core.runtime.objects.kernel import IbObject, IbValue
 from core.runtime.objects.intent import IbIntent
 from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.objects.primitives.callables import (
+    bind_behavior_closure,
+    bind_behavior_call_args,
+)
+from core.runtime.exceptions import ThrownException
 
 from core.kernel.intent_resolver import IntentResolver
 
@@ -406,3 +411,58 @@ class _BehaviorMixin:
         """CPS 版 :meth:`invoke_behavior`；段求值嵌入外层 VM 帧栈。"""
         result = yield from self.execute_behavior_object_cps(behavior, execution_context)
         return self._finalize_invoke_result(result)
+
+    def run_batch(
+        self,
+        behavior: IbObject,
+        items: List[IbObject],
+        execution_context: IExecutionContext,
+    ) -> List[IbObject]:
+        """并发批量执行行为对象：逐项绑定参数，并行调用，保序返回。
+
+        ``items`` 逐项作为行为参数在子作用域中绑定（``bind_behavior_closure``
+        + ``bind_behavior_call_args``），每项在主线程预求值 prompt
+        （``_prepare_behavior_call``），后台并发执行 ``_call_and_parse``
+        （不重入 VM、不写主线程单写槽）。返回结果列表（按 ``items`` 顺序）。
+
+        任一项结果不确定（parse 失败）即抛 ``LLMParseError``——与无
+        llmexcept 的同步语义一致，错误粒度为整个批次。
+        """
+        if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
+            raise TypeError(
+                f"run_batch: expected a behavior, got {type(behavior).__name__}"
+            )
+
+        ec = execution_context
+        rt = ec.runtime_context
+
+        specs: List[BehaviorCallSpec] = []
+        for item in items:
+            rt.enter_scope()
+            try:
+                bind_behavior_closure(behavior, rt)
+                bind_behavior_call_args(behavior, [item], ec, rt)
+                spec = self._prepare_behavior_call(
+                    behavior.node, ec, captured_intents=behavior.captured_intents
+                )
+                specs.append(spec)
+            finally:
+                rt.exit_scope()
+
+        pool = self._get_thread_pool()
+        futures = [
+            pool.submit(self._call_and_parse, spec, behavior.node, ec)
+            for spec in specs
+        ]
+        results: List[IbObject] = []
+        for fut in futures:
+            llm_result = fut.result()
+            if llm_result is not None and llm_result.is_uncertain:
+                error = self.registry.make_llm_parse_error(
+                    llm_result.retry_hint or "LLM output could not be parsed",
+                    raw_response=llm_result.raw_response or "",
+                    type_name="unknown",
+                )
+                raise ThrownException(error)
+            results.append(self._finalize_invoke_result(llm_result))
+        return results

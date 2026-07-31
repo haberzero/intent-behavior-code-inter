@@ -27,6 +27,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "set_return_type_prompt": {"param_types": ["str", "str"], "return_type": "void"},
             "get_return_type_prompt": {"param_types": ["str"], "return_type": "str"},
             "get_current_call_info": {"param_types": [], "return_type": "dict"},
+            "run_batch": {"param_types": ["behavior", "list"], "return_type": "list"},
             "set_global_intent": {"param_types": ["str"], "return_type": "void"},
             "clear_global_intents": {"param_types": [], "return_type": "void"},
             "remove_global_intent": {"param_types": ["str"], "return_type": "void"},
