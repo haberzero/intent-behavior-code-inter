@@ -18,11 +18,11 @@ def __ibcext_vtable__() -> Dict[str, Any]:
 
     vars: void -> dict (获取当前作用域变量)
     print_vars: void -> void (打印当前作用域变量)
-    last_llm: void -> dict (获取上次 LLM 调用信息)
-    show_last_prompt: void -> void (打印上次 LLM 完整提示词)
-    show_last_result: void -> void (打印上次 LLM 原始输出结果)
-    show_all: void -> void (打印上次 LLM 完整信息)
-    last_result: void -> dict (获取上次 LLM 执行结果)
+    current_llm: void -> dict (获取最近 LLM 调用信息)
+    show_target_prompt: void -> void (打印最近 LLM 完整提示词)
+    show_target_result: void -> void (打印最近 LLM 原始输出结果)
+    show_all: void -> void (打印最近 LLM 完整信息)
+    current_result: void -> dict (获取最近 LLM 执行结果)
     retry_stack: void -> list (获取当前重试帧栈)
     show_retry_stack: void -> void (打印当前重试帧栈)
     protection_map: void -> dict (获取 llmexcept 保护映射)
@@ -43,15 +43,15 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                 "param_types": [],
                 "return_type": "void"
             },
-            "last_llm": {
+            "current_llm": {
                 "param_types": [],
                 "return_type": "dict"
             },
-            "show_last_prompt": {
+            "show_target_prompt": {
                 "param_types": [],
                 "return_type": "void"
             },
-            "show_last_result": {
+            "show_target_result": {
                 "param_types": [],
                 "return_type": "void"
             },
@@ -59,7 +59,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                 "param_types": [],
                 "return_type": "void"
             },
-            "last_result": {
+            "current_result": {
                 "param_types": [],
                 "return_type": "dict"
             },

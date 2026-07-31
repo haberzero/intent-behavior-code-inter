@@ -428,15 +428,15 @@ _active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork
 
 ```
 ibci_modules/ibci_idbg/core.py
-├── last_llm()           # 获取最近一次 LLM 调用的完整详情（帧优先模式）
-├── last_result()        # 获取 LLM 调用结果（从 LLMExceptFrame 或共享字段读取）
-├── show_last_prompt()   # 打印最近一次提示词（含意图注入内容）
-├── show_intents()       # 打印当前意图栈
-├── intents()            # 获取意图栈列表
-└── retry_stack()        # 获取当前 llmexcept 帧栈（含 last_result 详情）
+├── current_llm()         # 获取最近一次 LLM 调用的完整详情（帧优先模式）
+├── current_result()      # 获取 LLM 调用结果（从 LLMExceptFrame 或调试内省读取）
+├── show_target_prompt()  # 打印最近一次提示词（含意图注入内容）
+├── show_intents()        # 打印当前意图栈
+├── intents()             # 获取意图栈列表
+└── retry_stack()         # 获取当前 llmexcept 帧栈（含 target_result 详情）
 ```
 
-`last_result()` 和 `last_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.last_result`，无活跃帧时回退到 `RuntimeContextImpl._last_llm_result` 共享字段。
+`current_result()` 和 `current_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.target_result`，无活跃帧时回退到 `RuntimeContextImpl.get_last_llm_result()`（调试内省，读当前帧 target_result）。不再存在全局 `_last_llm_result` 共享字段——certainty 经 `IbLLMCallResult` 返回值传递，调用详情经 LLMExecutor 主线程单写槽 `get_current_call_info()` 获取。
 
 ---
 
@@ -452,7 +452,7 @@ str r0 = @~ 打个招呼 ~
 @+ 用英文回复
 @+ 每个单词首字母大写
 str result = @~ 说 hello ~
-idbg.show_last_prompt()   # 可见两个 @+ 意图注入到提示词
+idbg.show_target_prompt()   # 可见两个 @+ 意图注入到提示词
 
 @- 每个单词首字母大写
 result = @~ 打个招呼 ~    # 只剩"用英文回复"意图

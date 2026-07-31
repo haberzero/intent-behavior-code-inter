@@ -19,9 +19,12 @@ from core.runtime.exceptions import (
 from core.kernel.issue import InterpreterError
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
-    _raise_if_uncertain_condition,
     _vm_invoke_behavior,
     _vm_assign_to_target,
+    _is_llm_uncertain_value,
+    _resolve_condition,
+    _retry_llm_uncertain,
+    _raise_uncertain_parse_error,
 )
 
 
@@ -32,11 +35,22 @@ def vm_handle_IbPass(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbExprStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
-    res = yield node_data.get("value")
+    """表达式语句：求值后丢弃结果。
+
+    llmexcept 保护：表达式返回不确定容器时，若有 handler 则创建帧并完整多轮
+    重试；无 handler 则抛 ``LLMParseError``。
+    """
+    value_uid = node_data.get("value")
+    res = yield value_uid
     if isinstance(res, Signal):
-        # 表达式求值理论上不产生控制信号；若子节点意外携带信号上来，
-        # 仍按数据透传给父帧处理而不是当场丢弃。
         return res
+    if _is_llm_uncertain_value(res):
+        handler_uid = node_data.get("llmexcept_handler")
+        if handler_uid is None:
+            _raise_uncertain_parse_error(executor, res, type_name="unknown")
+        res = yield from _retry_llm_uncertain(executor, res, handler_uid, value_uid, "IbExprStmt")
+        if isinstance(res, Signal):
+            return res
     if isinstance(res, IbValue) and res.ib_class.name == "behavior":
         # IbBehavior 调用通过 CPS 执行，确保 behavior 帧在 VM 栈上
         result = yield from _vm_invoke_behavior(executor, res, [])
@@ -49,11 +63,16 @@ def vm_handle_IbIf(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     每个子语句的执行结果都要检查 ``Signal``，若是则透传给上层。
     body/orelse 直接遍历，无需 ``_resolve_stmt_uid`` 过滤。
+
+    llmexcept 保护：条件值不确定（直接容器或 is_truthy 模糊判定）时，
+    有 handler 则内联重试，无 handler 则抛 ``LLMParseError``。
     """
-    executor.runtime_context.set_last_llm_result(None)
-    cond = yield node_data.get("test")
-    last = executor.runtime_context.get_last_llm_result()
-    _raise_if_uncertain_condition(executor, last)
+    test_uid = node_data.get("test")
+    handler_uid = node_data.get("llmexcept_handler")
+    cond = yield test_uid
+    cond = yield from _resolve_condition(executor, cond, handler_uid, test_uid, "IbIf")
+    if isinstance(cond, Signal):
+        return cond
     branch = node_data.get("body", []) if executor.ec.is_truthy(cond) else node_data.get("orelse", [])
     res = yield from _vm_execute_stmt_sequence(executor, branch)
     if isinstance(res, Signal):
@@ -64,14 +83,18 @@ def vm_handle_IbIf(executor, node_uid: str, node_data: Mapping[str, Any]):
 def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
     """while 循环：消费 BREAK/CONTINUE 数据信号；其他信号透传。
     body 直接遍历，无需 ``_resolve_stmt_uid`` 过滤。
+
+    llmexcept 保护：条件值不确定时，有 handler 则内联重试，无 handler 则抛
+    ``LLMParseError``。
     """
     test_uid = node_data.get("test")
+    handler_uid = node_data.get("llmexcept_handler")
     body = node_data.get("body", [])
     while True:
-        executor.runtime_context.set_last_llm_result(None)
         cond = yield test_uid
-        last = executor.runtime_context.get_last_llm_result()
-        _raise_if_uncertain_condition(executor, last)
+        cond = yield from _resolve_condition(executor, cond, handler_uid, test_uid, "IbWhile")
+        if isinstance(cond, Signal):
+            return cond
         if not executor.ec.is_truthy(cond):
             break
 
@@ -129,15 +152,17 @@ def vm_handle_IbRaise(executor, node_uid: str, node_data: Mapping[str, Any]):
 def vm_handle_IbSwitch(executor, node_uid: str, node_data: Mapping[str, Any]):
     """Switch-Case 语句：与 StmtHandler.visit_IbSwitch 同语义。
 
-    test 求值产生不确定 LLM 结果时直接返回 None（与 IbIf 一致）。
+    test 求值产生不确定 LLM 结果时，有 llmexcept handler 则内联重试，
+    无 handler 则抛 ``LLMParseError``（不再静默返回 None）。
     case body 内的 Signal 被透传给上层（return / break / continue / throw）。
     case body 直接遍历，无需 ``_resolve_stmt_uid`` 过滤。
     """
-    executor.runtime_context.set_last_llm_result(None)
-    test_value = yield node_data.get("test")
-    last = executor.runtime_context.get_last_llm_result()
-    if last and not last.is_certain:
-        return executor.registry.get_none()
+    test_uid = node_data.get("test")
+    handler_uid = node_data.get("llmexcept_handler")
+    test_value = yield test_uid
+    test_value = yield from _resolve_condition(executor, test_value, handler_uid, test_uid, "IbSwitch")
+    if isinstance(test_value, Signal):
+        return test_value
 
     case_uids = node_data.get("cases", [])
     matched = False
@@ -150,8 +175,13 @@ def vm_handle_IbSwitch(executor, node_uid: str, node_data: Mapping[str, Any]):
             matched = True
         else:
             pattern_value = yield pattern
+            if _is_llm_uncertain_value(pattern_value):
+                return pattern_value
             eq_result = test_value.receive("__eq__", [pattern_value])
-            if executor.ec.is_truthy(eq_result):
+            eq_truthy = executor.ec.is_truthy(eq_result)
+            if _is_llm_uncertain_value(eq_truthy):
+                return eq_truthy
+            if eq_truthy:
                 matched = True
 
         if matched:
@@ -173,14 +203,9 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
     条件驱动 for + llmexcept 的内联重试逻辑
     --------------------------------------------------
     当 ``node_data["llmexcept_handler"]`` 存在时，条件 LLM 调用返回 uncertain
-    (``last_result.is_certain == False``) 不再直接退出循环，而是：
-    1. 创建 ``LLMExceptFrame``（保存快照、记录 target_uid）
-    2. 执行 handler body（通常含 ``retry "hint"`` 语句）
-    3. 若 ``frame.should_retry`` 为 True（由 ``vm_handle_IbRetry`` 设置）且重试
-       次数未耗尽（``frame.increment_retry()`` 返回 True），则 continue 重试条件求值
-    4. 否则退出循环（等同于 uncertain-无-handler 情形：``return get_none()``）
-
-    此方案通过 AST 字段（``IbFor.llmexcept_handler``）直接引用 handler。
+    （``IbLLMCallResult(is_certain=False)``）不再直接退出循环，而是通过
+    ``_resolve_condition`` 创建 ``LLMExceptFrame``（保存快照）+ 执行 handler
+    body + 完整多轮重试；无 handler 时抛 ``LLMParseError``。
     """
     target_uid = node_data.get("target")
     iter_uid = node_data.get("iter")
@@ -199,85 +224,15 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 读取 llmexcept_handler uid（由语义分析阶段写入）
         llmexcept_handler_uid: Optional[str] = node_data.get("llmexcept_handler")
 
-        # 从 LLM provider 读取 max_retry（与 vm_handle_IbLLMExceptionalStmt 保持一致）
-        max_retry = 3
-        sc = executor.service_context
-        if sc is not None:
-            cap_reg = getattr(sc, "capability_registry", None)
-            if cap_reg is not None:
-                llm_provider = cap_reg.get("llm_provider") if hasattr(cap_reg, "get") else None
-                if llm_provider is not None and hasattr(llm_provider, "get_retry"):
-                    max_retry = llm_provider.get_retry()
-
         while True:
-            executor.runtime_context.set_last_llm_result(None)
             condition = yield actual_iter_uid
             if isinstance(condition, Signal):
                 return condition
-            last_result = executor.runtime_context.get_last_llm_result()
-
-            if last_result and not last_result.is_certain:
-                if llmexcept_handler_uid is None:
-                    # uncertain 且无 llmexcept handler：抛出 LLMParseError
-                    error = executor.registry.make_llm_parse_error(
-                        getattr(last_result, "retry_hint", None) or "LLM condition output could not be parsed",
-                        raw_response=getattr(last_result, "raw_response", "") or "",
-                        type_name="bool",
-                    )
-                    raise ThrownException(error)
-
-                # 有 handler：完整多轮重试（frame 跨重试轮次复用，与 IbLLMExceptionalStmt 对齐）
-                llmexcept_data = executor.ec.get_node_data(llmexcept_handler_uid)
-                handler_body_uids = llmexcept_data.get("body", []) if llmexcept_data else []
-
-                frame = executor.runtime_context.save_llm_except_state(
-                    target_uid=actual_iter_uid,
-                    node_type="IbLLMExceptionalStmt",
-                    max_retry=max_retry,
-                )
-                try:
-                    frame.last_result = last_result
-
-                    # 首次：条件已在 while True 中求值（uncertain），直接执行 body 处理；
-                    # 后续：restore 后重新求值条件，确定则退出，uncertain 则再执行 body。
-                    first_attempt = True
-                    while frame.should_continue_retrying():
-                        if not first_attempt:
-                            frame.restore_snapshot(executor.runtime_context)
-                            executor.runtime_context.set_last_llm_result(None)
-                            condition = yield actual_iter_uid
-                            if isinstance(condition, Signal):
-                                return condition
-                            result = executor.runtime_context.get_last_llm_result()
-                            executor.runtime_context.set_last_llm_result(None)
-                            if result is None or result.is_certain:
-                                break
-                            frame.last_result = result
-                        first_attempt = False
-
-                        # uncertain：执行 handler body（retry 语句设 should_retry=True）
-                        frame.should_retry = False
-                        executor.ec.enter_llmexcept_body()
-                        try:
-                            handler_res = yield from _vm_execute_stmt_sequence(executor, handler_body_uids)
-                        finally:
-                            executor.ec.exit_llmexcept_body()
-                        if isinstance(handler_res, Signal):
-                            return handler_res
-                        violations = frame.verify_snapshot_integrity(executor.runtime_context)
-                        if violations:
-                            frame.restore_snapshot(executor.runtime_context)
-                        if not frame.increment_retry():
-                            error = executor.registry.make_llm_retry_exhausted_error(
-                                f"LLM condition retry exhausted after {max_retry} attempt(s); "
-                                f"no certain result was produced",
-                                max_retry=max_retry,
-                                raw_response=getattr(frame.last_result, "raw_response", "") or "",
-                            )
-                            raise ThrownException(error)
-                finally:
-                    executor.runtime_context.pop_llm_except_frame()
-                # 重试循环结束：条件已确定，继续外层 while True
+            condition = yield from _resolve_condition(
+                executor, condition, llmexcept_handler_uid, actual_iter_uid, "IbFor"
+            )
+            if isinstance(condition, Signal):
+                return condition
 
             if not executor.ec.is_truthy(condition):
                 break
@@ -285,7 +240,10 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
                 filter_val = yield filter_uid
                 if isinstance(filter_val, Signal):
                     return filter_val
-                if not executor.ec.is_truthy(filter_val):
+                filter_truthy = executor.ec.is_truthy(filter_val)
+                if _is_llm_uncertain_value(filter_truthy):
+                    return filter_truthy
+                if not filter_truthy:
                     break
 
             res = yield from _vm_execute_stmt_sequence(executor, body)
@@ -301,6 +259,15 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
     iterable_obj = yield actual_iter_uid
     if isinstance(iterable_obj, Signal):
         return iterable_obj
+    if _is_llm_uncertain_value(iterable_obj):
+        handler_uid = node_data.get("llmexcept_handler")
+        if handler_uid is None:
+            _raise_uncertain_parse_error(executor, iterable_obj, type_name="list")
+        iterable_obj = yield from _retry_llm_uncertain(
+            executor, iterable_obj, handler_uid, actual_iter_uid, "IbFor"
+        )
+        if isinstance(iterable_obj, Signal):
+            return iterable_obj
 
     # 解析迭代序列（与 StmtHandler.visit_IbFor 同协议）
     elements_obj = None
@@ -326,13 +293,9 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
     elements = elements_obj.elements
     total = len(elements)
 
-    # llmexcept 帧的循环断点恢复
+    # llmexcept 帧的循环断点恢复（外层帧保护整个循环时按迭代索引续跑）
     rc = executor.runtime_context
-    top_frame = (
-        rc._llm_except_frames[-1]
-        if hasattr(rc, "_llm_except_frames") and rc._llm_except_frames
-        else None
-    )
+    top_frame = rc.get_current_llm_except_frame()
     resume_from = top_frame.loop_resume.get(node_uid, 0) if top_frame is not None else 0
 
     for i, item in enumerate(elements):
@@ -351,7 +314,11 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
             if isinstance(filter_val, Signal):
                 rc.pop_loop_context()
                 return filter_val
-            if not executor.ec.is_truthy(filter_val):
+            filter_truthy = executor.ec.is_truthy(filter_val)
+            if _is_llm_uncertain_value(filter_truthy):
+                rc.pop_loop_context()
+                return filter_truthy
+            if not filter_truthy:
                 rc.pop_loop_context()
                 continue
 

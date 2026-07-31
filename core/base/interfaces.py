@@ -51,7 +51,13 @@ class IStateReader(Protocol):
     def get_vars_snapshot(self) -> Dict[str, Any]: ...
     def get_vars(self) -> Dict[str, Any]: ...
     def get_active_intents(self) -> List[Any]: ...
-    def get_last_llm_result(self) -> Optional[Any]: ...
+    def get_last_llm_result(self) -> Optional[Any]:
+        """返回当前 llmexcept 帧的目标结果（target_result）；无活跃帧时返回 None。
+
+        不再存在全局"最近 LLM 结果"槽位——certainty 经 IbLLMCallResult 返回值
+        传递，本方法仅为调试内省保留。
+        """
+        ...
     def get_llm_except_frames(self) -> List[Any]: ...
 
 @runtime_checkable
@@ -65,13 +71,13 @@ class ISymbolView(Protocol):
 class ILLMProvider(Protocol):
     """LLM 服务提供者标准接口"""
     def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str: ...
-    def get_last_call_info(self) -> Dict[str, Any]: ...
+    def get_current_call_info(self) -> Dict[str, Any]: ...
     def get_retry_prompt(self, node_type: str) -> Optional[str]: ...
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
     """提供对内核 LLM 执行器的内省能力。"""
-    def get_last_call_info(self) -> Dict[str, Any]: ...
+    def get_current_call_info(self) -> Dict[str, Any]: ...
 
 
 @runtime_checkable
@@ -84,7 +90,7 @@ class IILLMExecutor(Protocol):
     * ``invoke_behavior``             —— 行为对象公理化调用入口（供 IbBehavior.call() 使用）
     * ``execute_behavior_expression`` —— 行为描述行底层执行
     * ``execute_behavior_object``     —— 被动行为对象的底层执行
-    * ``get_last_call_info``          —— 内省上次 LLM 调用的诊断信息
+    * ``get_current_call_info``       —— 内省最近 resolve 的 LLM 调用诊断信息
 
     设计原则：此接口驻留于 core.base，不依赖任何 runtime 具体类型；
     所有参数/返回类型均使用 Any，由实现层负责具体类型约束。
@@ -103,8 +109,9 @@ class IILLMExecutor(Protocol):
         执行一个命名 LLM 函数对象，返回 IbObject 结果。
 
         作用域管理和参数绑定已由 IbLLMFunction.call() 完成。
-        此方法负责：调用 execute_llm_function、回写 last_llm_result（供 llmexcept 使用），
-        并返回解析后的 IbObject，而非 LLMResult。
+        此方法负责：调用 execute_llm_function 并把结果经 ``_finalize_invoke_result``
+        转译为 IbObject（不确定性结果转译为 ``IbLLMCallResult(is_certain=False)``
+        供语句层消费者处理），而非直接返回 LLMResult。
         是 IbLLMFunction.call() 的唯一执行分发点。
         """
         ...
@@ -123,8 +130,8 @@ class IILLMExecutor(Protocol):
         """执行被动行为对象，返回 LLMResult。"""
         ...
 
-    def get_last_call_info(self) -> Dict[str, Any]:
-        """获取最后一次 LLM 调用的诊断信息。"""
+    def get_current_call_info(self) -> Dict[str, Any]:
+        """获取最近一次 resolve 的 LLM 调用诊断信息。"""
         ...
 
 @runtime_checkable
@@ -151,7 +158,7 @@ class IExecutionFrame(Protocol):
     - current_scope  —— 当前作用域链（局部变量）
     - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
     - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
-    - get_last_llm_result()   —— LLM 结果寄存器
+    - get_last_llm_result()   —— 当前 llmexcept 帧的 target_result（调试内省）
     - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照
     """
     @property

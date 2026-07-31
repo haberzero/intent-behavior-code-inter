@@ -25,6 +25,8 @@ from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,
     _vm_invoke_behavior,
     _vm_invoke_llm_function,
+    _is_llm_uncertain_value,
+    _make_uncertain_call_result,
 )
 
 
@@ -95,7 +97,11 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 def vm_handle_IbBinOp(executor, node_uid: str, node_data: Mapping[str, Any]):
     left = yield node_data.get("left")
+    if _is_llm_uncertain_value(left):
+        return left
     right = yield node_data.get("right")
+    if _is_llm_uncertain_value(right):
+        return right
     op = node_data.get("op")
     method = OP_MAPPING.get(op)
     if not method:
@@ -105,6 +111,8 @@ def vm_handle_IbBinOp(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 def vm_handle_IbUnaryOp(executor, node_uid: str, node_data: Mapping[str, Any]):
     operand = yield node_data.get("operand")
+    if _is_llm_uncertain_value(operand):
+        return operand
     op_symbol = node_data.get("op")
     op = AST_OP_MAP.get(op_symbol, op_symbol)
     method = UNARY_OP_MAPPING.get(op)
@@ -115,21 +123,32 @@ def vm_handle_IbUnaryOp(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 def vm_handle_IbBoolOp(executor, node_uid: str, node_data: Mapping[str, Any]):
     is_or = node_data.get("op") == "or"
-    last_val = executor.registry.get_none()
+    seq_result = executor.registry.get_none()
     for val_uid in node_data.get("values", []):
         val = yield val_uid
-        last_val = val
-        if is_or and executor.ec.is_truthy(val):
+        if _is_llm_uncertain_value(val):
             return val
-        if not is_or and not executor.ec.is_truthy(val):
+        seq_result = val
+        truthy = executor.ec.is_truthy(val)
+        if _is_llm_uncertain_value(truthy):
+            return truthy
+        if is_or and truthy:
             return val
-    return last_val
+        if not is_or and not truthy:
+            return val
+    return seq_result
 
 
 def vm_handle_IbIfExp(executor, node_uid: str, node_data: Mapping[str, Any]):
     cond = yield node_data.get("test")
-    if executor.ec.is_truthy(cond):
-        return (yield node_data.get("body"))
+    if _is_llm_uncertain_value(cond):
+        return cond
+    truthy = executor.ec.is_truthy(cond)
+    if _is_llm_uncertain_value(truthy):
+        return truthy
+    if truthy:
+        res = yield node_data.get("body")
+        return res
     return (yield node_data.get("orelse"))
 
 
@@ -137,6 +156,8 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
     """比较运算（支持链式 + in / not in / is / is not）。"""
 
     left = yield node_data.get("left")
+    if _is_llm_uncertain_value(left):
+        return left
     ops = node_data.get("ops", [])
     comparators = node_data.get("comparators", [])
     current_left = left
@@ -144,6 +165,8 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     for op, comparator_uid in zip(ops, comparators):
         right = yield comparator_uid
+        if _is_llm_uncertain_value(right):
+            return right
 
         if op == "in":
             contained = right.receive("__contains__", [current_left])
@@ -173,7 +196,10 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
                 raise RuntimeError(f"VM: Unsupported comparison: {op}")
             cmp_res = current_left.receive(method, [right])
 
-        if not executor.ec.is_truthy(cmp_res):
+        truthy = executor.ec.is_truthy(cmp_res)
+        if _is_llm_uncertain_value(truthy):
+            return truthy
+        if not truthy:
             return cmp_res
         final_res = cmp_res
         current_left = right
@@ -186,9 +212,14 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     其他 callable 仍通过 call() 同步完成。
     """
     func = yield node_data.get("func")
+    if _is_llm_uncertain_value(func):
+        return func
     args = []
     for a_uid in node_data.get("args", []):
-        args.append((yield a_uid))
+        arg = yield a_uid
+        if _is_llm_uncertain_value(arg):
+            return arg
+        args.append(arg)
 
     # IbFnCallable（lambda/snapshot）完全 CPS 内联
     if isinstance(func, IbValue) and func.ib_class.name == "fn_callable":
@@ -221,27 +252,39 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 def vm_handle_IbAttribute(executor, node_uid: str, node_data: Mapping[str, Any]):
     value = yield node_data.get("value")
+    if _is_llm_uncertain_value(value):
+        return value
     attr = node_data.get("attr")
     return value.receive("__getattr__", [executor.registry.box(attr)])
 
 
 def vm_handle_IbSubscript(executor, node_uid: str, node_data: Mapping[str, Any]):
     value = yield node_data.get("value")
+    if _is_llm_uncertain_value(value):
+        return value
     slice_obj = yield node_data.get("slice")
+    if _is_llm_uncertain_value(slice_obj):
+        return slice_obj
     return value.receive("__getitem__", [slice_obj])
 
 
 def vm_handle_IbTuple(executor, node_uid: str, node_data: Mapping[str, Any]):
     elts = []
     for e_uid in node_data.get("elts", []):
-        elts.append((yield e_uid))
+        elt = yield e_uid
+        if _is_llm_uncertain_value(elt):
+            return elt
+        elts.append(elt)
     return executor.registry.box(tuple(elts))
 
 
 def vm_handle_IbListExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     elts = []
     for e_uid in node_data.get("elts", []):
-        elts.append((yield e_uid))
+        elt = yield e_uid
+        if _is_llm_uncertain_value(elt):
+            return elt
+        elts.append(elt)
     return executor.registry.box(elts)
 
 
@@ -257,7 +300,11 @@ def vm_handle_IbDict(executor, node_uid: str, node_data: Mapping[str, Any]):
             key_obj = yield k_uid
         else:
             key_obj = executor.registry.get_none()
+        if _is_llm_uncertain_value(key_obj):
+            return key_obj
         val_obj = yield v_uid
+        if _is_llm_uncertain_value(val_obj):
+            return val_obj
         native_key = key_obj.to_native() if hasattr(key_obj, "to_native") else key_obj
         data[native_key] = val_obj
     return executor.registry.box(data)
@@ -274,12 +321,18 @@ def vm_handle_IbSlice(executor, node_uid: str, node_data: Mapping[str, Any]):
     s_val = None
     if lower_uid:
         lo = yield lower_uid
+        if _is_llm_uncertain_value(lo):
+            return lo
         l_val = lo.to_native() if hasattr(lo, "to_native") else lo
     if upper_uid:
         up = yield upper_uid
+        if _is_llm_uncertain_value(up):
+            return up
         u_val = up.to_native() if hasattr(up, "to_native") else up
     if step_uid:
         st = yield step_uid
+        if _is_llm_uncertain_value(st):
+            return st
         s_val = st.to_native() if hasattr(st, "to_native") else st
     return executor.registry.box(slice(l_val, u_val, s_val))
 
@@ -289,11 +342,14 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     若目标类型描述符或目标 IbClass 缺失，按既有保守语义直接返回原值。
 
-    LLM-aware: 当转换失败且处于 llmexcept 保护帧内时，通过 LLMResult 信号不确定性
-    以便 llmexcept 重试，而非直接抛出异常。LLM 不确定性检测属于 VM handler 层职责，
+    LLM-aware: 当转换失败且处于 llmexcept 保护帧内时，返回
+    ``IbLLMCallResult(is_certain=False)`` 不确定容器以便 llmexcept 重试，
+    而非直接抛出异常。LLM 不确定性检测属于 VM handler 层职责，
     不应由原始包装层越层访问。
     """
     value = yield node_data.get("value")
+    if _is_llm_uncertain_value(value):
+        return value
     target_descriptor = executor.ec.get_side_table("node_to_type", node_uid)
     if not target_descriptor:
         return value
@@ -305,15 +361,12 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     except (InterpreterError, Exception) as e:
         rc = executor.runtime_context
         if rc is not None and rc.get_current_llm_except_frame() is not None:
-            from core.runtime.shared.llm_result import LLMResult
             raw_val = getattr(value, 'value', '') if hasattr(value, 'value') else str(value)
-            rc.set_last_llm_result(
-                LLMResult.uncertain_result(
-                    raw_response=raw_val,
-                    retry_hint=f"类型强制转换失败: {str(e)}"
-                )
+            return _make_uncertain_call_result(
+                executor.registry,
+                raw_response=raw_val,
+                retry_hint=f"类型强制转换失败: {str(e)}",
             )
-            return executor.registry.get_none()
         raise
 
 
@@ -321,12 +374,22 @@ def vm_handle_IbFilteredExpr(executor, node_uid: str, node_data: Mapping[str, An
     """带过滤条件的表达式（while ... if filter 等）。
 
     与 ExprHandler.visit_IbFilteredExpr 同语义：主表达式为假则短路返回；
-    过滤条件为假则返回 IbNone。
+    过滤条件为假则返回 IbNone。任何子表达式产生不确定容器时透传。
     """
     result = yield node_data.get("expr")
-    if not executor.ec.is_truthy(result):
+    if _is_llm_uncertain_value(result):
+        return result
+    result_truthy = executor.ec.is_truthy(result)
+    if _is_llm_uncertain_value(result_truthy):
+        return result_truthy
+    if not result_truthy:
         return result
     filter_val = yield node_data.get("filter")
-    if not executor.ec.is_truthy(filter_val):
+    if _is_llm_uncertain_value(filter_val):
+        return filter_val
+    filter_truthy = executor.ec.is_truthy(filter_val)
+    if _is_llm_uncertain_value(filter_truthy):
+        return filter_truthy
+    if not filter_truthy:
         return executor.registry.get_none()
     return result

@@ -11,6 +11,7 @@ from core.runtime.shared.signals import (
 )
 from core.runtime.objects.kernel import (
     IbValue,
+    IbLLMCallResult,
     _is_intent_context_param,
     _should_activate_intent_context_arg,
 )
@@ -284,7 +285,7 @@ def _vm_execute_stmt_sequence(executor, stmt_uids: List[str]):
     - 下一条真实语句开始前安装该 one-shot；语句结束后（无论是否出现 LLM 调用）清理残留。
     - 语句返回 ``Signal`` 时立即透传给调用方。
     """
-    last_result = executor.registry.get_none()
+    seq_result = executor.registry.get_none()
     pending_one_shot: Optional[IbIntent] = None
 
     for stmt_uid in stmt_uids or ():
@@ -297,27 +298,184 @@ def _vm_execute_stmt_sequence(executor, stmt_uids: List[str]):
             executor.runtime_context.activate_statement_one_shot_intent(pending_one_shot)
 
         try:
-            last_result = yield stmt_uid
+            seq_result = yield stmt_uid
         finally:
             if pending_one_shot is not None:
                 executor.runtime_context.cleanup_statement_one_shot_intent(pending_one_shot)
                 pending_one_shot = None
 
-        if isinstance(last_result, Signal):
-            return last_result
+        if isinstance(seq_result, Signal):
+            return seq_result
 
-    return last_result
+    return seq_result
 
 
-def _raise_if_uncertain_condition(executor, last):
-    """Raise LLMParseError if LLM condition result is uncertain (shared by if/while/for)."""
-    if last and not last.is_certain:
-        error = executor.registry.make_llm_parse_error(
-            getattr(last, "retry_hint", None) or "LLM condition output could not be parsed",
-            raw_response=getattr(last, "raw_response", "") or "",
-            type_name="bool",
-        )
-        raise ThrownException(error)
+# ---------------------------------------------------------------------------
+# llmexcept 统一机制：certainty 经 IbLLMCallResult 返回值传递
+# ---------------------------------------------------------------------------
+
+def _is_llm_uncertain_value(value: Any) -> bool:
+    """判断值是否为 LLM 不确定性结果（``IbLLMCallResult`` 且 ``is_certain=False``）。
+
+    产生者（行为表达式 / is_truthy / cast）在无法产生确定结果时返回该容器，
+    消费者（赋值 / if / while / for / switch / 表达式语句）从返回值检查。
+    """
+    return isinstance(value, IbLLMCallResult) and not value.is_certain
+
+
+def _make_uncertain_call_result(registry, raw_response: str = "", retry_hint: str = "") -> IbLLMCallResult:
+    """构造内部 uncertain 传递容器 ``IbLLMCallResult``。"""
+    cls = registry.get_class("llm_call_result")
+    if cls is None:
+        raise RuntimeError("Registry missing 'llm_call_result' class")
+    return IbLLMCallResult(
+        ib_class=cls,
+        is_certain=False,
+        raw_response=raw_response or "",
+        retry_hint=retry_hint or "",
+    )
+
+
+def _get_max_retry(executor) -> int:
+    """从 LLM Provider 读取最大重试次数（默认 3）。"""
+    sc = executor.service_context
+    if sc is not None:
+        cap_reg = getattr(sc, "capability_registry", None)
+        if cap_reg is not None:
+            llm_provider = cap_reg.get("llm_provider") if hasattr(cap_reg, "get") else None
+            if llm_provider is not None and hasattr(llm_provider, "get_retry"):
+                return llm_provider.get_retry()
+    return 3
+
+
+def _raise_uncertain_parse_error(executor, uncertain_result, type_name: str = "unknown") -> None:
+    """无 llmexcept 保护时，将不确定结果转为 ``LLMParseError`` 抛出。"""
+    error = executor.registry.make_llm_parse_error(
+        uncertain_result.retry_hint or "LLM output could not be parsed",
+        raw_response=uncertain_result.raw_response or "",
+        type_name=type_name,
+    )
+    raise ThrownException(error)
+
+
+def _retry_llm_uncertain(executor, uncertain_result, handler_uid: str, re_eval_uid: str,
+                         node_type: str, on_uncertain_attempt=None, is_acceptable=None):
+    """在 llmexcept 保护帧内对不确定结果执行完整多轮重试（生成器）。
+
+    调用方必须以 ``yield from`` 调用，并传入已求值出的不确定结果
+    ``uncertain_result``。重试循环内通过 ``yield re_eval_uid`` 重新求值被保护
+    表达式（经调用方的 ``yield from`` 转发给 VM 调度器），并通过 send 接收新值。
+
+    ``on_uncertain_attempt``：可选的生成器/可调用对象，在每个不确定轮次
+    （handler body 执行前）触发。IbAssign 用它把目标变量临时标记为
+    ``IbLLMUncertain``（快照/重试通信令牌）。
+
+    ``is_acceptable``：可选谓词 ``(value) -> bool``。提供时，重试循环在
+    ``is_acceptable(final_value)`` 为真时才返回——用于条件消费者把
+    "直接不确定容器" 与 "is_truthy 模糊判定" 统一收敛在**同一个帧**的重试计数内，
+    避免外层循环反复新建帧导致重试永不止步。
+
+    返回：重试循环结束时最终可接受的值；若被控制流信号打断则返回该 ``Signal``。
+    抛出：重试耗尽时 ``LLMRetryExhaustedError``。
+    """
+    frame = executor.runtime_context.save_llm_except_state(
+        target_uid=re_eval_uid,
+        node_type=node_type,
+        max_retry=_get_max_retry(executor),
+    )
+    try:
+        frame.target_result = uncertain_result
+        first_attempt = True
+        final_value = uncertain_result
+        while frame.should_continue_retrying():
+            if not first_attempt:
+                frame.restore_snapshot(executor.runtime_context)
+                final_value = yield re_eval_uid
+                if isinstance(final_value, Signal):
+                    return final_value
+                if is_acceptable is not None:
+                    if is_acceptable(final_value):
+                        return final_value
+                elif not _is_llm_uncertain_value(final_value):
+                    return final_value
+                # target_result 始终保留 IbLLMCallResult 容器（certainty 信号载体）
+                if _is_llm_uncertain_value(final_value):
+                    frame.target_result = final_value
+            first_attempt = False
+
+            if on_uncertain_attempt is not None:
+                hook_res = on_uncertain_attempt(executor)
+                if hook_res is not None:
+                    yield from hook_res
+
+            # 执行 handler body（retry 语句设置 retry_hint / should_retry）
+            frame.should_retry = False
+            handler_data = executor.ec.get_node_data(handler_uid)
+            handler_body = handler_data.get("body", []) if handler_data else []
+            executor.ec.enter_llmexcept_body()
+            try:
+                body_res = yield from _vm_execute_stmt_sequence(executor, handler_body)
+            finally:
+                executor.ec.exit_llmexcept_body()
+            if isinstance(body_res, Signal):
+                return body_res
+
+            # 运行期影子存储校验：检测被保护变量是否在 body 中被篡改
+            violations = frame.verify_snapshot_integrity(executor.runtime_context)
+            if violations:
+                frame.restore_snapshot(executor.runtime_context)
+
+            if not frame.increment_retry():
+                error = executor.registry.make_llm_retry_exhausted_error(
+                    f"LLM call retry exhausted after {frame.max_retry} attempt(s); "
+                    f"no certain result was produced",
+                    max_retry=frame.max_retry,
+                    raw_response=getattr(frame.target_result, "raw_response", "") or "",
+                )
+                raise ThrownException(error)
+    finally:
+        executor.runtime_context.pop_llm_except_frame()
+    return final_value
+
+
+def _condition_is_acceptable(executor):
+    """构造条件值的可接受谓词：非不确定容器，且 is_truthy 不返回模糊容器。"""
+    def check(value) -> bool:
+        if _is_llm_uncertain_value(value):
+            return False
+        return not _is_llm_uncertain_value(executor.ec.is_truthy(value))
+    return check
+
+
+def _resolve_condition(executor, cond, handler_uid, re_eval_uid, node_type):
+    """解析条件值并处理不确定性（生成器）。
+
+    覆盖两种不确定来源，并在**同一个帧**的重试计数内收敛：
+    1. 条件值本身是 ``IbLLMCallResult(is_certain=False)``（行为表达式直接产生）；
+    2. ``is_truthy`` 在 llmexcept 帧内对模糊字符串的判定返回不确定容器。
+
+    有 handler 时进入 ``_retry_llm_uncertain`` 完整多轮重试（以
+    ``_condition_is_acceptable`` 为收敛谓词，防止模糊字符串导致外层反复
+    新建帧而永不止步）；无 handler 时抛 ``LLMParseError``。
+
+    返回确定且可接受的条件值或 ``Signal``。
+    """
+    if _is_llm_uncertain_value(cond):
+        if handler_uid is None:
+            _raise_uncertain_parse_error(executor, cond, type_name="bool")
+        return (yield from _retry_llm_uncertain(
+            executor, cond, handler_uid, re_eval_uid, node_type,
+            is_acceptable=_condition_is_acceptable(executor),
+        ))
+    truthy = executor.ec.is_truthy(cond)
+    if _is_llm_uncertain_value(truthy):
+        if handler_uid is None:
+            _raise_uncertain_parse_error(executor, truthy, type_name="bool")
+        return (yield from _retry_llm_uncertain(
+            executor, truthy, handler_uid, re_eval_uid, node_type,
+            is_acceptable=_condition_is_acceptable(executor),
+        ))
+    return cond
 
 
 def _is_simple_name_target(executor, target_uid: str) -> bool:

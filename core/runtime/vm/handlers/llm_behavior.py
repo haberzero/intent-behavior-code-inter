@@ -1,5 +1,5 @@
 """
-core.runtime.vm.handlers.llm_behavior — LLM 行为 / 意图 / llmexcept CPS handler。
+core.runtime.vm.handlers.llm_behavior — LLM 行为 / 意图 CPS handler。
 """
 from __future__ import annotations
 from typing import Any, Mapping, Optional, Dict, List
@@ -14,120 +14,9 @@ from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
+    _is_llm_uncertain_value,
+    _make_uncertain_call_result,
 )
-
-
-def vm_handle_IbLLMExceptionalStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """llmexcept 语句的 CPS 调度器实现。
-
-    执行流程：
-    1. 从 LLM Provider 读取 ``max_retry``（默认 3）
-    2. 创建 ``LLMExceptFrame`` 并保存上下文快照
-    3. 循环（最多 max_retry 次）：
-       a. restore_snapshot（确保每次 LLM 看到一致的输入状态）
-       b. 清除共享信号通道
-       c. CPS 执行 target（yield target_uid）
-       d. 读取 last_llm_result：
-          - None 或 is_certain → 成功，break
-          - is_uncertain → 执行 handler body（body 中的 retry 语句会设置
-            frame.should_retry = True）
-       e. increment_retry：若耗尽重试次数则 break
-    4. finally：保证 pop_llm_except_frame 始终执行
-
-    信号传播：target 或 body 返回 Signal（RETURN/BREAK/CONTINUE/THROW）时
-    立即透传给父帧，并在 finally 中完成帧清理。
-    """
-    target_uid: Optional[str] = node_data.get("target")
-    body_uids = node_data.get("body", [])
-
-    if not target_uid:
-        if False:
-            yield  # pragma: no cover — 无 target 时仍需维持 generator function 签名
-        return executor.registry.get_none()
-
-    # 从 LLM Provider 获取重试次数配置
-    max_retry = 3
-    sc = executor.service_context
-    if sc is not None and sc.capability_registry:
-        llm_provider = sc.capability_registry.get("llm_provider")
-        if llm_provider and hasattr(llm_provider, "get_retry"):
-            max_retry = llm_provider.get_retry()
-
-    # 创建 LLMExceptFrame 并保存上下文快照
-    frame = executor.runtime_context.save_llm_except_state(
-        target_uid=target_uid,
-        node_type="IbLLMExceptionalStmt",
-        max_retry=max_retry,
-    )
-
-    last_target_value = executor.registry.get_none()
-    try:
-        first_iteration = True
-        while frame.should_continue_retrying():
-            # 恢复快照：首次迭代跳过（刚刚 save_context 完成，状态一致）；
-            # 后续迭代在此处统一恢复，确保每次 LLM 看到一致的输入状态。
-            if not first_iteration:
-                frame.restore_snapshot(executor.runtime_context)
-            first_iteration = False
-
-            # 清除共享信号通道，防止上次结果污染本次判断
-            executor.runtime_context.set_last_llm_result(None)
-
-            # dispatch table 覆盖所有节点类型。
-            last_target_value = yield target_uid
-
-            # 信号透传：target 内部产生控制流信号时立即向上传播
-            if isinstance(last_target_value, Signal):
-                return last_target_value
-
-            # 读取并立即消费 last_llm_result（缩短生命周期至快照内通信）
-            result = executor.runtime_context.get_last_llm_result()
-            executor.runtime_context.set_last_llm_result(None)
-
-            # LLM 调用确定或无 LLM 调用：任务完成
-            if result is None or result.is_certain:
-                break
-
-            # LLM 返回不确定：执行 handler body
-            frame.last_result = result
-            frame.should_retry = False  # 等待 body 中的 retry 语句重新设为 True
-
-            # 在 retry body 中禁用 write_overwrite 写入。
-            executor.ec.enter_llmexcept_body()
-            try:
-                body_res = yield from _vm_execute_stmt_sequence(executor, body_uids)
-            finally:
-                executor.ec.exit_llmexcept_body()
-            if isinstance(body_res, Signal):
-                return body_res
-
-            # 运行期影子存储校验：检测被保护变量是否在 body 中被篡改
-            violations = frame.verify_snapshot_integrity(executor.runtime_context)
-            if violations:
-                from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
-                core_debugger.trace(
-                    CoreModule.INTERPRETER, DebugLevel.BASIC,
-                    f"[llmexcept] Snapshot violation detected: variable(s) "
-                    f"{violations} were modified inside llmexcept body. "
-                    f"Forcing restore before retry."
-                )
-                frame.restore_snapshot(executor.runtime_context)
-
-            # 递增重试计数；若耗尽则抛出 LLMRetryExhaustedError
-            if not frame.increment_retry():
-                error = executor.registry.make_llm_retry_exhausted_error(
-                    f"LLM call retry exhausted after {max_retry} attempt(s); "
-                    f"no certain result was produced",
-                    max_retry=max_retry,
-                    raw_response=getattr(result, "raw_response", "") or "",
-                )
-                raise ThrownException(error)
-
-    finally:
-        # 无论正常结束、信号传播还是异常，帧都必须弹出
-        executor.runtime_context.pop_llm_except_frame()
-
-    return last_target_value
 
 
 # === 意图操作 ===
@@ -189,8 +78,9 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     与 ExprHandler.visit_IbBehaviorExpr 同语义：
     * 若被标记为 fn_callable，根据 ``capture_mode`` 创建 ``IbBehavior`` 包装
       （snapshot 捕获意图栈快照，lambda 不捕获）。
-    * 否则直接同步执行 LLM 调用，把 ``LLMResult`` 写入
-      ``runtime_context.set_last_llm_result``，返回 ``result.value``。
+    * 否则直接同步执行 LLM 调用，确定时返回 ``result.value``；不确定时返回
+      ``IbLLMCallResult(is_certain=False)`` 容器，由语句层消费者处理
+      （llmexcept 重试或 LLMParseError）。
 
     注意：dispatch-before-use 路径**不**在这里触发——dispatch_eager
     由 ``vm_handle_IbAssign`` 在识别到 RHS 为本节点且 ``dispatch_eligible=True``
@@ -234,7 +124,10 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
         node_uid, executor.ec, call_intent=call_intent,
         target_model=target_model,
     )
-    executor.runtime_context.set_last_llm_result(result)
+    if result is not None and result.is_uncertain:
+        return _make_uncertain_call_result(
+            executor.registry, result.raw_response or "", result.retry_hint or ""
+        )
     if result is not None and result.value is not None:
         return result.value
     return executor.registry.get_none()
@@ -279,12 +172,13 @@ def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str
     sc = executor.service_context
     llm_exec = sc.llm_executor if sc is not None else None
     if llm_exec is None:
-        executor.runtime_context.set_last_llm_result(None)
         return executor.registry.get_none()
 
     result = llm_exec.execute_behavior_expression(node_uid, executor.ec, call_intent=call_intent)
-    executor.runtime_context.set_last_llm_result(result)
-
+    if result is not None and result.is_uncertain:
+        return _make_uncertain_call_result(
+            executor.registry, result.raw_response or "", result.retry_hint or ""
+        )
     if not result or not result.value:
         return executor.registry.get_none()
 
@@ -380,11 +274,12 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
 def vm_handle_IbRetry(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``retry`` 语句：与 StmtHandler.visit_IbRetry 同语义。
 
-    1. 求值可选的 retry hint，写入 ``runtime_context.retry_hint``
-    2. 设置 ``frame.should_retry = True``，由外层 llmexcept handler 重新执行 target
+    1. 求值可选的 retry hint，写入当前帧的 ``retry_hint``（持续覆盖，注入下一次
+       重试的提示词）
+    2. 设置 ``frame.should_retry = True``，由外层 llmexcept 重试循环重新求值被保护语句
 
-    注意：状态恢复（restore_snapshot）由外层 ``vm_handle_IbLLMExceptionalStmt``
-    在下一次迭代开始时统一执行，避免同一轮 retry 中出现冗余的双重 restore 调用。
+    注意：状态恢复（restore_snapshot）由重试循环（``_retry_llm_uncertain``）在
+    下一次迭代开始时统一执行，避免同一轮 retry 中出现冗余的双重 restore 调用。
     """
     hint_uid = node_data.get("hint")
     hint_val: Optional[str] = None

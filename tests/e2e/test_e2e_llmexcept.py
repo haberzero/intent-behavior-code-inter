@@ -595,3 +595,77 @@ except:
 """
         lines_while = run_ibci(code_while)
         assert "while_caught" in lines_while
+
+
+class TestE2EUnifiedMechanism:
+    """
+    统一 llmexcept 机制回归测试：certainty 经 IbLLMCallResult 返回值传递，
+    各被保护语句 handler 内联重试，不确定容器经表达式层透传到语句消费者。
+
+    覆盖：
+    - BoolOp 嵌套（`@~...~ and True`）条件的不确定传递与重试
+    - BinOp 嵌套 RHS（`base + @~...~`）的不确定传递与重试
+    - 模糊字符串条件在帧内重试收敛（有界，不无限循环）
+    """
+
+    def test_boolop_nested_condition_retries(self):
+        """`if @~REPAIR~ and True:` 嵌套 BoolOp：首次不确定，重试后恢复。"""
+        code = AI_MOCK_PREFIX + """
+if @~ MOCK:REPAIR:BOOL:TRUE boolop_key ~ and True:
+    print("cond_ok")
+llmexcept:
+    print("cond_retry")
+    retry "hint"
+"""
+        lines = run_ibci(code)
+        assert "cond_retry" in lines
+        assert "cond_ok" in lines
+
+    def test_boolop_nested_condition_no_handler_raises(self):
+        """`if @~FAIL~ and True:` 无 handler → LLMParseError（而非静默吞掉容器）。"""
+        code = AI_MOCK_PREFIX + """
+try:
+    if @~ MOCK:FAIL deep_fail ~ and True:
+        print("no")
+    print("also_no")
+except:
+    print("caught")
+"""
+        lines = run_ibci(code)
+        assert "caught" in lines
+        assert "no" not in lines
+
+    def test_binop_nested_rhs_retries(self):
+        """`str r = base + @~REPAIR~`：BinOp 嵌套 RHS 不确定容器透传到赋值消费者并重试。"""
+        code = AI_MOCK_PREFIX + """
+str base = "x"
+str r = base + @~ MOCK:REPAIR:STR:ok concat_key ~
+llmexcept:
+    print("concat_retry")
+    retry "hint"
+print(r)
+"""
+        lines = run_ibci(code)
+        assert "concat_retry" in lines
+        assert "xok" in lines
+
+    def test_ambiguous_str_condition_retry_is_bounded(self):
+        """模糊字符串条件在 llmexcept 帧内重试有界：耗尽后抛错，不无限循环。
+
+        行为表达式返回无法判定的字符串（如 "maybe"）时，is_truthy 在帧内返回
+        不确定容器；重试必须在同一帧计数内收敛（max_retry 后 LLMRetryExhaustedError）。
+        """
+        code = AI_MOCK_PREFIX + """
+try:
+    while @~ MOCK:STR:maybe ambig_key ~:
+        print("body")
+    llmexcept:
+        retry "hint"
+    print("after")
+except:
+    print("exhausted_or_error")
+"""
+        lines = run_ibci(code)
+        assert "exhausted_or_error" in lines
+        assert "after" not in lines
+

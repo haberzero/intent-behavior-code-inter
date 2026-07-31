@@ -4,7 +4,7 @@
 同步与 CPS 版本成对放置于同一文件。
 
 依赖 :class:`LLMExecutorCore` 的 ``_call_llm`` / ``llm_callback`` /
-``last_call_info`` / ``push_expected_type`` / ``pop_expected_type`` 等共享状态，
+``_current_call_info`` / ``push_expected_type`` / ``pop_expected_type`` 等共享状态，
 以及 :class:`_PromptMixin` 的 ``_evaluate_segments`` /
 ``_evaluate_segments_cps`` / ``_get_llmoutput_hint`` /
 ``_get_expected_type_hint`` / ``_parse_result``。
@@ -115,59 +115,47 @@ class _BehaviorMixin:
         # 5. 调用底层模型
         response = self._call_llm(sys_prompt, content, node_uid, target_model=target_model)
 
-        # 6.1 处理 MOCK:REPAIR 特殊标记
-        if response == MOCK_REPAIR_SENTINEL:
-            self.last_call_info = {
+        def _call_info(resp: str) -> dict:
+            return {
                 "sys_prompt": sys_prompt,
                 "user_prompt": content,
-                "response": MOCK_REPAIR_SENTINEL,
-                "raw_response": MOCK_REPAIR_SENTINEL,
+                "response": resp,
+                "raw_response": resp,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": all_intents
             }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_REPAIR_SENTINEL,
-                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+
+        # 6.1 处理 MOCK:REPAIR 特殊标记
+        if response == MOCK_REPAIR_SENTINEL:
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_REPAIR_SENTINEL,
+                    retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+                ),
+                _call_info(MOCK_REPAIR_SENTINEL),
             )
 
         # 6.2 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
         if response == MOCK_AMBIGUOUS_SENTINEL:
-            self.last_call_info = {
-                "sys_prompt": sys_prompt,
-                "user_prompt": content,
-                "response": MOCK_AMBIGUOUS_SENTINEL,
-                "raw_response": MOCK_AMBIGUOUS_SENTINEL,
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
-                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-                "merged_intents": all_intents
-            }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_AMBIGUOUS_SENTINEL,
-                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_AMBIGUOUS_SENTINEL,
+                    retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+                ),
+                _call_info(MOCK_AMBIGUOUS_SENTINEL),
             )
 
-        # 记录最后一次调用信息
-        self.last_call_info = {
-            "sys_prompt": sys_prompt,
-            "user_prompt": content,
-            "response": response,
-            "raw_response": response,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
-            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-            "merged_intents": all_intents
-        }
-
-        # 7. 处理返回类型
-        # 使用 __from_prompt__ 机制进行解析
+        # 7. 处理返回类型（__from_prompt__ 机制），并绑定调用信息到结果
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
         if type_hint:
-            return self._parse_result(response, type_hint, node_uid)
-
-        return LLMResult.success_result(
-            value=self.registry.box(response),
-            raw_response=response
-        )
+            result = self._parse_result(response, type_hint, node_uid)
+        else:
+            result = LLMResult.success_result(
+                value=self.registry.box(response),
+                raw_response=response
+            )
+        return self._finalize_call(result, _call_info(response))
 
 
     def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> LLMResult:
@@ -213,11 +201,11 @@ class _BehaviorMixin:
 
         封装了完整执行流程：
         1. 委托给 execute_behavior_object 完成 LLM 调用及类型解析；
-        2. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
-        3. 直接返回 IbObject，调用方无需了解 LLMResult 内部结构。
+        2. 直接返回 IbObject；不确定性结果经 ``_finalize_invoke_result``
+           转译为 ``IbLLMCallResult(is_certain=False)`` 供语句层消费者处理。
         """
         result = self.execute_behavior_object(behavior, execution_context)
-        return self._finalize_invoke_result(result, execution_context)
+        return self._finalize_invoke_result(result)
 
     def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
         """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。"""
@@ -278,54 +266,44 @@ class _BehaviorMixin:
 
         response = self._call_llm(sys_prompt, content, node_uid, target_model=target_model)
 
-        if response == MOCK_REPAIR_SENTINEL:
-            self.last_call_info = {
+        def _call_info(resp: str) -> dict:
+            return {
                 "sys_prompt": sys_prompt,
                 "user_prompt": content,
-                "response": MOCK_REPAIR_SENTINEL,
-                "raw_response": MOCK_REPAIR_SENTINEL,
+                "response": resp,
+                "raw_response": resp,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": all_intents
             }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_REPAIR_SENTINEL,
-                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+
+        if response == MOCK_REPAIR_SENTINEL:
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_REPAIR_SENTINEL,
+                    retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+                ),
+                _call_info(MOCK_REPAIR_SENTINEL),
             )
 
         if response == MOCK_AMBIGUOUS_SENTINEL:
-            self.last_call_info = {
-                "sys_prompt": sys_prompt,
-                "user_prompt": content,
-                "response": MOCK_AMBIGUOUS_SENTINEL,
-                "raw_response": MOCK_AMBIGUOUS_SENTINEL,
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
-                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-                "merged_intents": all_intents
-            }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_AMBIGUOUS_SENTINEL,
-                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_AMBIGUOUS_SENTINEL,
+                    retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+                ),
+                _call_info(MOCK_AMBIGUOUS_SENTINEL),
             )
-
-        self.last_call_info = {
-            "sys_prompt": sys_prompt,
-            "user_prompt": content,
-            "response": response,
-            "raw_response": response,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
-            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-            "merged_intents": all_intents
-        }
 
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
         if type_hint:
-            return self._parse_result(response, type_hint, node_uid)
-
-        return LLMResult.success_result(
-            value=self.registry.box(response),
-            raw_response=response
-        )
+            result = self._parse_result(response, type_hint, node_uid)
+        else:
+            result = LLMResult.success_result(
+                value=self.registry.box(response),
+                raw_response=response
+            )
+        return self._finalize_call(result, _call_info(response))
 
     def execute_behavior_object_cps(self, behavior: IbObject, execution_context: IExecutionContext):
         """CPS 版 :meth:`execute_behavior_object`；委托给 execute_behavior_expression_cps。"""
@@ -355,4 +333,4 @@ class _BehaviorMixin:
     def invoke_behavior_cps(self, behavior: IbObject, execution_context: IExecutionContext):
         """CPS 版 :meth:`invoke_behavior`；段求值嵌入外层 VM 帧栈。"""
         result = yield from self.execute_behavior_object_cps(behavior, execution_context)
-        return self._finalize_invoke_result(result, execution_context)
+        return self._finalize_invoke_result(result)

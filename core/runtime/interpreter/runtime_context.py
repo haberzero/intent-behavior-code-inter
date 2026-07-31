@@ -10,12 +10,11 @@ from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction, IbLLMCallResult
+from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.cell import IbCell
 from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptFrameStack
-from core.runtime.shared.llm_result import LLMResult
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_intrinsic: bool = False):
@@ -334,10 +333,6 @@ class RuntimeContextImpl(RuntimeContext):
         # 最大 llmexcept 嵌套深度限制
         self._llm_except_max_depth: int = 128
 
-        # [IbLLMCallResult] 最后一个 LLM 执行结果
-        # IbLLMCallResult IBCI 类型；set_last_llm_result() 负责转换。
-        self._last_llm_result: Optional[Any] = None
-
     # --- 排他意图管理 ---
 
     def set_pending_override_intent(self, intent: IbIntent) -> None:
@@ -383,39 +378,20 @@ class RuntimeContextImpl(RuntimeContext):
         else:
             self._intent_ctx.discard_smear(intent)
 
-    # --- LLM Result 管理 ---
-
-    def set_last_llm_result(self, result: Any) -> None:
-        """
-        设置最后一个 LLM 执行结果。
-
-        接受 LLMResult（Python dataclass）或 IbLLMCallResult（IBCI 对象）。
-        LLMResult 会被自动转换为 IbLLMCallResult 后存储。
-        """
-        if result is None:
-            self._last_llm_result = None
-            return
-        # 如果是内部 LLMResult dataclass，转换为 IbLLMCallResult
-        if isinstance(result, LLMResult):
-            ib_cls = self._registry.get_class("llm_call_result")
-            if ib_cls is not None:
-                result = IbLLMCallResult(
-                    ib_class=ib_cls,
-                    is_certain=result.is_success,
-                    value=result.value,
-                    raw_response=result.raw_response or "",
-                    retry_hint=result.retry_hint or "",
-                )
-            # If ib_cls is not yet available (early init), fall through and store as-is
-        self._last_llm_result = result
+    # --- LLM 结果状态（调试内省） ---
 
     def get_last_llm_result(self) -> Optional[Any]:
-        """获取最后一个 LLM 执行结果（IbLLMCallResult）"""
-        return self._last_llm_result
+        """返回当前 llmexcept 帧的目标结果（``target_result``）。
 
-    def clear_last_llm_result(self) -> None:
-        """清除最后一个 LLM 执行结果"""
-        self._last_llm_result = None
+        保留给调试接口（idbg）使用；不再存在全局"最近 LLM 结果"槽位——
+        certainty 经 ``IbLLMCallResult`` 返回值传递，产生者不写 frame、
+        不写共享槽。无活跃帧时返回 ``None``。
+        """
+        frame = self.get_current_llm_except_frame()
+        if frame is not None:
+            return frame.target_result
+        return None
+
     def push_llm_except_frame(self, frame: 'LLMExceptFrame') -> None:
         """
         将新的 LLMExceptFrame 入栈。

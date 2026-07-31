@@ -48,7 +48,6 @@ from core.runtime.vm.handlers.declarations import (
     vm_handle_IbImportFrom,
 )
 from core.runtime.vm.handlers.llm_behavior import (
-    vm_handle_IbLLMExceptionalStmt,
     vm_handle_IbBehaviorExpr,
     vm_handle_IbBehaviorInstance,
     vm_handle_IbLambdaExpr,
@@ -93,8 +92,6 @@ def build_dispatch_table() -> dict:
         "IbBreak": vm_handle_IbBreak,
         "IbContinue": vm_handle_IbContinue,
         "IbAssign": vm_handle_IbAssign,
-        # llmexcept 保护
-        "IbLLMExceptionalStmt": vm_handle_IbLLMExceptionalStmt,
         # 语句 handler 扩展
         "IbAugAssign": vm_handle_IbAugAssign,
         "IbGlobalStmt": vm_handle_IbGlobalStmt,

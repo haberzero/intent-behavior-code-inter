@@ -509,7 +509,7 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 | `core/runtime/interpreter/execution_context.py` | 高 | ExecutionContextImpl |
 | `core/runtime/interpreter/llm_executor/`（包） | 高 | LLMExecutorImpl，LLM 调用与结果解析 |
 | `core/runtime/interpreter/llm_except_frame.py` | 高 | LLMExceptFrame，llmexcept 现场帧 |
-| `core/runtime/vm/handlers/`（包） | 高 | CPS 语句/表达式节点处理（含 vm_handle_IbLLMExceptionalStmt） |
+| `core/runtime/vm/handlers/`（包） | 高 | CPS 语句/表达式节点处理（含各语句 handler 的 llmexcept 内联重试） |
 | `core/runtime/host/service.py` | 高 | HostService，断点快照/恢复 |
 | `core/runtime/host/host_interface.py` | 高 | HostInterface，宿主环境接口注册器 |
 | `core/runtime/bootstrap/builtin_initializer.py` | 高 | 内置类型注册与装箱器 |

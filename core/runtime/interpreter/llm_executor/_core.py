@@ -15,7 +15,8 @@
     - ``self._result_parser``          —— ``LLMResultParser``，水化后惰性创建
 
 调用追踪:
-    - ``self.last_call_info``          —— ``Mapping[str, Any]``，最后一次 LLM 调用信息
+    - ``self._current_call_info``      —— ``Mapping[str, Any]``，最近一次 resolve 的调用信息
+                                         （主线程单写槽；并行 dispatch 下仅由主线程 resolve 点写入）
 
 预期类型栈:
     - ``self._expected_type_stack``    —— ``List[str]``，由 :meth:`push_expected_type`
@@ -41,6 +42,7 @@ from core.base.interfaces import ILLMProvider, IssueTracker
 
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.llm_result import LLMFuture
+from core.runtime.objects.kernel import IbLLMCallResult
 from core.base.diagnostics.codes import RUN_LLM_ERROR
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.exceptions import ThrownException
@@ -69,7 +71,7 @@ class LLMExecutorCore:
         self._service_context = service_context
         self._execution_context = execution_context
 
-        self.last_call_info: Mapping[str, Any] = {} # 记录最后一次 LLM 调用信息
+        self._current_call_info: Mapping[str, Any] = {}  # 主线程单写槽：最近一次 resolve 的调用信息
         self._expected_type_stack: List[str] = []
 
         # LLMScheduler 状态
@@ -117,28 +119,41 @@ class LLMExecutorCore:
     def pop_expected_type(self):
         if self._expected_type_stack:
             self._expected_type_stack.pop()
-    def get_last_call_info(self) -> Mapping[str, Any]:
-        """获取最后一次 LLM 调用信息"""
-        # 优先返回 executor 自身记录的信息（包含合并后的 Prompt）
-        if self.last_call_info:
-            return self.last_call_info
 
-        # 否则尝试从 Provider (ai 模块) 获取
-        if self.llm_callback and hasattr(self.llm_callback, 'get_last_call_info'):
-            return self.llm_callback.get_last_call_info()
+    def get_current_call_info(self) -> Mapping[str, Any]:
+        """获取最近一次 resolve 的调用信息（主线程单写槽）。"""
+        return self._current_call_info
 
-        return {}
+    def _finalize_call(self, result: Any, call_info: Mapping[str, Any]) -> Any:
+        """记录调用信息到主线程单写槽并绑定到结果对象。
 
-    def _finalize_invoke_result(self, result: Any, execution_context: Optional[IExecutionContext]):
+        call_info 与 LLMResult 同行传递（去共享）；``_current_call_info`` 仅由
+        主线程写入（当前同步模式即产生者；并行 dispatch 后由 resolve 点写入）。
+        """
+        self._current_call_info = call_info
+        if result is not None:
+            result.call_info = call_info
+        return result
+
+    def _finalize_invoke_result(self, result: Any):
         """``invoke_*`` 系列入口的共用后处理（sync 与 CPS 版语义完全一致）。
 
         消除 ``invoke_*`` 方法的近重复后处理。
 
-        1. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
+        1. 不确定性结果转译为 ``IbLLMCallResult(is_certain=False)`` 返回值，
+           由语句层消费者（赋值 / 控制流 / 表达式语句）检查并触发 llmexcept 重试；
         2. None-safe 解包：``result.value`` 非空则返回，否则返回 None 单例。
         """
-        if execution_context is not None:
-            execution_context.runtime_context.set_last_llm_result(result)
+        if result is not None and result.is_uncertain:
+            cls = self.registry.get_class("llm_call_result")
+            if cls is None:
+                raise RuntimeError("Registry missing 'llm_call_result' class")
+            return IbLLMCallResult(
+                ib_class=cls,
+                is_certain=False,
+                raw_response=result.raw_response or "",
+                retry_hint=result.retry_hint or "",
+            )
         if result is not None and result.value is not None:
             return result.value
         return self.registry.get_none()

@@ -14,7 +14,6 @@ class AIPlugin(IbStatefulPlugin):
     断点保存/恢复时由 HostService 负责持久化与恢复。
     """
     def __init__(self):
-        self._last_call_info: Dict[str, Any] = {}
         self._client = None
         self._config = {
             "url": None,
@@ -234,15 +233,6 @@ class AIPlugin(IbStatefulPlugin):
                 
             if raw_content is None:
                 raw_content = ""
-                
-            # 记录调用信息以便调试
-            self._last_call_info = {
-                "sys_prompt": sys_prompt,
-                "user_prompt": user_prompt,
-                "response": raw_content,
-                "raw_response": raw_content,
-                "scene": "probe"
-            }
 
             is_reasoning = False
             # 判定条件：
@@ -310,8 +300,14 @@ class AIPlugin(IbStatefulPlugin):
     def get_return_type_prompt(self, type_name: str) -> Optional[str]:
         return self._return_type_prompts.get(type_name)
 
-    def get_last_call_info(self) -> Dict[str, Any]:
-        return self._last_call_info
+    def get_current_call_info(self) -> Dict[str, Any]:
+        """获取最近一次 resolve 的调用信息（委托内核 LLM 执行器的主线程单写槽）。"""
+        kr = getattr(self._capabilities, "kernel_registry", None) if self._capabilities else None
+        if kr is not None and hasattr(kr, "get_llm_executor"):
+            executor = kr.get_llm_executor()
+            if executor is not None and hasattr(executor, "get_current_call_info"):
+                return dict(executor.get_current_call_info())
+        return {}
 
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
@@ -363,9 +359,7 @@ class AIPlugin(IbStatefulPlugin):
 
         # 在注入约束后缀前，先检查 Mock 指令
         if is_test_mode:
-            res = self._handle_mock_response(user_prompt_text, scene)
-            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt_text, "response": res, "scene": scene}
-            return res
+            return self._handle_mock_response(user_prompt_text, scene)
 
         # 强化决策场景的 User Prompt 约束
         scene_str = str(scene).lower()
@@ -485,7 +479,6 @@ class AIPlugin(IbStatefulPlugin):
                         else:
                             res = raw_content
 
-                self._last_call_info = {"sys_prompt": enhanced_sys_prompt, "user_prompt": user_prompt, "response": res, "raw_response": raw_content, "scene": scene}
                 return res
             except Exception as e:
                 raise RuntimeError(f"LLM 调用失败: {str(e)}")

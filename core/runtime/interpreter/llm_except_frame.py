@@ -18,28 +18,23 @@ LLM 异常处理现场帧 (LLMExceptFrame)。
     - ``retry`` 语句本身**不**调用 restore_snapshot（只设置 should_retry 标志），
       restore 统一由外层 while 循环顶部执行，消除冗余双重 restore。
 
-使用方式（影子执行驱动，由 vm_handle_IbLLMExceptionalStmt 主控）:
+使用方式（消费者驱动，由各被保护语句 handler 主控）:
     # 1. 保存快照（save_llm_except_state 内部调用 frame.save_context()）
     frame = runtime_context.save_llm_except_state(target_uid, node_type, max_retry)
 
-    # 2. 驱动循环
-    first_iteration = True
+    # 2. 驱动循环（见 vm/handlers/_shared._retry_llm_uncertain）
+    frame.target_result = uncertain_result       # 记录本次不确定结果
+    first_attempt = True
     while frame.should_continue_retrying():
-        if not first_iteration:
+        if not first_attempt:
             frame.restore_snapshot(runtime_context)     # retry 前恢复快照
-        first_iteration = False
-        runtime_context.set_last_llm_result(None)      # 清除上次信号
-        execution_context.visit(target_uid)            # 驱动 LLM 节点执行
-
-        result = runtime_context.get_last_llm_result()
-        if result is None or result.is_certain:
-            break                                       # 成功，commit 到目标变量
-
-        # LLM 返回不确定（is_uncertain=True）
-        for stmt_uid in body_uids:                      # 执行 llmexcept body
-            visit(stmt_uid)                             # body 中 retry 设 should_retry=True
+            value = yield re_eval_uid                   # 重新求值被保护表达式
+            if 值确定: break
+            frame.target_result = value
+        first_attempt = False
+        # 执行 llmexcept body（retry 语句设 should_retry / retry_hint）
         if not frame.increment_retry():
-            break                                       # 重试耗尽
+            raise LLMRetryExhaustedError
 
     # 3. 清理
     runtime_context.pop_llm_except_frame()
@@ -118,7 +113,7 @@ class LLMExceptFrame:
     # 当用户 IBCI 类定义了 func __snapshot__ / func __restore__，此字段优先于深克隆（_try_deep_clone）。
     saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
-    last_result: Optional[Any] = None  # LLMResult 对象
+    target_result: Optional[Any] = None  # 最近一次不确定调用的 IbLLMCallResult（certainty 信号载体）
     
     # 状态标志
     is_in_fallback: bool = False

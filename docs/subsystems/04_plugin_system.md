@@ -67,7 +67,7 @@ ai.set_timeout(seconds)                 # 设置超时（秒）
 ai.register_model(name, url, key, model)  # 注册命名模型
 ```
 
-其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`set_retry_hint(hint)`、`get_retry_prompt()`、`get_last_call_info()`、`mask(pattern)` 等。
+其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`set_retry_hint(hint)`、`get_retry_prompt()`、`get_current_call_info()`、`mask(pattern)` 等。
 
 ### 3.2 file 模块
 
@@ -92,10 +92,10 @@ import idbg
 
 idbg.vars()                # 返回当前作用域所有变量及值（dict）
 idbg.print_vars()          # 打印当前作用域所有变量
-idbg.last_llm()            # 返回最后一次 LLM 调用详细信息（dict）
-idbg.last_result()         # 返回最后一次 LLM 调用结果对象
-idbg.show_last_prompt()    # 打印最后一次 LLM 调用提示词
-idbg.show_last_result()    # 打印最后一次 LLM 调用结果
+idbg.current_llm()         # 返回最近一次 LLM 调用详细信息（dict）
+idbg.current_result()      # 返回最近一次 LLM 调用结果对象
+idbg.show_target_prompt()  # 打印最近一次 LLM 调用提示词
+idbg.show_target_result()  # 打印最近一次 LLM 调用结果
 idbg.show_all()            # 打印全部调试信息
 idbg.retry_stack()         # 返回当前 llmexcept 重试栈
 idbg.show_retry_stack()    # 打印重试栈

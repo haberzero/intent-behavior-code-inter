@@ -18,7 +18,7 @@
 │   └─ Interpreter ── 解释器外壳                                         │
 │        ├─ ServiceContext  — capability_registry / llm_executor / ...   │
 │        ├─ ExecutionContextImpl — node 池、侧表、对象工厂、registry 引用 │
-│        ├─ RuntimeContextImpl — 当前执行帧（scope / intent / last_llm）  │
+│        ├─ RuntimeContextImpl — 当前执行帧（scope / intent / llm_except_frames）│
 │        └─ VMExecutor ── CPS 调度循环（运行时唯一执行入口）              │
 │             ├─ build_dispatch_table() — 43 个 AST 节点 handler         │
 │             ├─ Frame stack (List[VMTask])                              │
@@ -68,7 +68,7 @@ while frame_stack:
 |------|------|
 | **EXEC-1 无 Python 递归** | 主路径不使用 Python 递归栈；IBCI 调用深度不受 `sys.setrecursionlimit` 限制 |
 | **EXEC-2 控制流数据化** | `return` / `break` / `continue` / `throw` 通过 `Signal(kind, value)` 沿生成器返回值传播；不使用跨帧异常 |
-| **EXEC-3 llmexcept 显式驱动** | llmexcept 关联通过 AST 字段建立（`IbLLMExceptionalStmt.target` / `IbFor.llmexcept_handler`）；CPS handler 内显式 yield + retry 循环 |
+| **EXEC-3 llmexcept 显式驱动** | llmexcept 关联通过 AST 字段 `llmexcept_handler` 统一挂载到被保护语句；各语句 handler 检查返回值 `IbLLMCallResult(is_certain=False)`，内联创建 `LLMExceptFrame` + retry 循环（无 handler 时抛 `LLMParseError`） |
 
 ### 2.4 Handler 表
 
@@ -83,7 +83,7 @@ while frame_stack:
 | 声明 | `IbFunctionDef` `IbLLMFunctionDef` `IbClassDef` |
 | 意图 | `IbIntentAnnotation` `IbIntentStackOperation` |
 | Behavior / 闭包 | `IbBehaviorExpr` `IbBehaviorInstance` `IbLambdaExpr` |
-| llmexcept | `IbLLMExceptionalStmt` |
+| llmexcept | `IbLLMExceptionalStmt`（挂载型，不入 body；经 `llmexcept_handler` 字段驱动） |
 
 每个 handler 是 `def vm_handle_*(...) -> Generator`：通过 `yield child_uid` 发起子求值，`return value` 完成本帧；`return Signal(...)` 触发控制流。
 
@@ -103,7 +103,7 @@ while frame_stack:
 |------|------|------|
 | `ServiceContext` | `core/runtime/interpreter/service_context.py` | 进程级服务：`llm_executor` / `capability_registry` / `host_service` / 调试器 |
 | `ExecutionContextImpl` | `core/runtime/interpreter/execution_context.py` | 解释器静态部分：节点池、侧表、`registry`、`object_factory`、`runtime_context` 引用 |
-| `RuntimeContextImpl` | `core/runtime/interpreter/runtime_context.py` | 当前执行帧：scope / intent_context / last_llm_result / loop_stack / retry_hint |
+| `RuntimeContextImpl` | `core/runtime/interpreter/runtime_context.py` | 当前执行帧：scope / intent_context / llm_except_frames / loop_stack / retry_hint |
 
 ### 3.2 IExecutionFrame 协议
 
@@ -119,8 +119,6 @@ class IExecutionFrame(Protocol):
     def intent_context(self) -> IbIntentContext: ...
     @property
     def llm_except_stack(self) -> List: ...
-    @property
-    def last_llm_result(self) -> Any: ...
     def visit(self, node_uid, **kwargs): ...
 ```
 
@@ -216,31 +214,38 @@ VM 行为：
    └── dispatch_eligible=False：
          vm_handle_IbAssign → LLMExecutorImpl.execute_behavior_expression(...)
            → _call_llm() → axiom.from_prompt(raw, spec)
-           → LLMResult(success/value/is_uncertain/raw_response/retry_hint)
-           → runtime_context.set_last_llm_result(result)
+           → LLMResult(success/value/is_uncertain/raw_response/retry_hint/call_info)
+           → 确定：返回 result.value；不确定：返回 IbLLMCallResult(is_certain=False) 容器
 ```
 
 > 当前 LLM 调用路径：`IbBehavior.call()` / `IbLLMFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers.py` 中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
 
 ---
 
-## §6 llmexcept：影子执行驱动模式
+## §6 llmexcept：消费者内联驱动模式
 
 ### 6.1 模型概述
 
-llmexcept 使用快照隔离 + 影子执行驱动 + 标志位轮询实现：
+llmexcept 使用快照隔离 + 消费者内联驱动 + 返回值传递实现。certainty 经
+`IbLLMCallResult` 返回值传递（产生者不写 frame / 全局槽），各被保护语句
+handler 从返回值检查不确定并创建帧执行重试：
 
 ```text
-visit_IbLLMExceptionalStmt
-  ├─ save_llm_except_state()                 — 创建 LLMExceptFrame，保存变量/意图/loop 快照
-  └─ while frame.should_continue_retrying():
-       ├─ frame.restore_snapshot()
-       ├─ runtime_context.set_last_llm_result(None)
-       ├─ execution_context.visit(target_uid)
-       │     └─ 内部 LLM 调用 → LLMResult.is_uncertain
-       │     └─ runtime_context.set_last_llm_result(result)
-       ├─ if not last_llm_result.is_uncertain: break
-       └─ else: 执行 body 块（可含 IbRetry）→ frame.increment_retry()
+vm_handle_IbIf / IbWhile / IbFor / IbSwitch / IbAssign / IbExprStmt
+  ├─ cond/value = yield 被保护表达式
+  │     └─ 内部 LLM 调用不确定 → 返回 IbLLMCallResult(is_certain=False) 容器
+  ├─ if _is_llm_uncertain_value(cond/value)（或 is_truthy 返回容器）:
+  │     ├─ 无 llmexcept_handler → 抛 LLMParseError
+  │     └─ _retry_llm_uncertain()：
+  │           ├─ save_llm_except_state()       — 创建 LLMExceptFrame，保存变量/意图/loop 快照
+  │           ├─ frame.target_result = 容器
+  │           └─ while frame.should_continue_retrying()：  （单帧计数内收敛）
+  │                ├─ frame.restore_snapshot()
+  │                ├─ 重新求值被保护表达式（yield re_eval_uid）
+  │                ├─ 确定/可接受 → 返回最终值
+  │                ├─ 否则执行 llmexcept body（可含 IbRetry）→ frame.increment_retry()
+  │                └─ 耗尽 → 抛 LLMRetryExhaustedError
+  └─ 确定：按分支/赋值/循环语义继续
 ```
 
 ### 6.2 关键组件
@@ -249,8 +254,9 @@ visit_IbLLMExceptionalStmt
 |------|------|------|
 | `LLMExceptFrame` | `core/runtime/interpreter/llm_except_frame.py` | 现场快照（变量、意图栈、loop 栈、retry hint）+ 快照完整性校验 |
 | `LLMExceptFrameStack` | 同上 | 嵌套 llmexcept 块栈管理 |
-| `IbLLMUncertain` | `core/runtime/objects/kernel.py` | 不确定结果哨兵对象（赋值占位符） |
-| `LLMResult` | `core/runtime/interpreter/llm_result.py` | LLM 调用结果数据对象（`is_uncertain` 旗标） |
+| `IbLLMUncertain` | `core/runtime/objects/kernel/sentinels.py` | 不确定结果哨兵对象（赋值占位符，重试轮内标记目标变量） |
+| `IbLLMCallResult` | `core/runtime/objects/kernel/sentinels.py` | certainty 信号载体（内部传递容器，`is_certain=False` 触发重试） |
+| `LLMResult` | `core/runtime/shared/llm_result.py` | LLM 调用结果数据对象（`is_uncertain` 旗标 + `call_info`） |
 
 ### 6.3 快照内容
 

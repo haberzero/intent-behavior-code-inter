@@ -24,20 +24,17 @@ handler 形参：
 ``return res`` 把信号继续向上传播。
 
 **llmexcept 保护机制**：
-``IbLLMExceptionalStmt`` 节点在 module/block body 中以**替换**形式出现：
+llmexcept 统一通过 AST 字段 ``llmexcept_handler`` 挂载到被保护语句
+（``IbAssign`` / ``IbIf`` / ``IbWhile`` / ``IbFor`` / ``IbSwitch`` / ``IbExprStmt``），
+被保护语句从 body 中正常执行，llmexcept 语句本身不入 body。
 
-    body = [..., llmexcept_uid, ...]   （target 已从 body 中移除）
+运行期：各被保护语句 handler 求值条件 / RHS 后，检查返回值是否为
+``IbLLMCallResult(is_certain=False)`` 不确定容器；有 handler 时创建
+``LLMExceptFrame`` 并内联执行 handler body + 完整多轮重试（见
+``_shared._retry_llm_uncertain``），无 handler 时抛出 ``LLMParseError``。
 
-``IbLLMExceptionalStmt.target`` 字段直接引用被保护的 target node uid。
-容器 handler 直接遍历 body 中的每个 uid，无需 ``_resolve_stmt_uid`` 过滤；
-``vm_handle_IbLLMExceptionalStmt`` 负责读取 target_uid 并管理 retry 循环。
-
-条件驱动 for 循环（``for @~...~:``）例外：``IbLLMExceptionalStmt`` 不写入 body，
-``IbFor.llmexcept_handler`` 字段直接引用 handler node。
-``vm_handle_IbFor`` 在条件求值返回 uncertain 时内联执行 handler body 并重试。
-
-所有 llmexcept 触发路径均通过 AST 字段（target /
-llmexcept_handler）显式建立，不再有侧表间接关联。
+所有 llmexcept 触发路径均通过 AST 字段（llmexcept_handler）显式建立，
+不再有侧表间接关联，也不存在 ``IbLLMExceptionalStmt`` 包装节点。
 
 本包按节点类别组织为子模块；公共 API 保持不变：
 

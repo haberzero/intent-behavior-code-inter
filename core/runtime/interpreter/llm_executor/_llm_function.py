@@ -4,7 +4,7 @@
 :meth:`invoke_llm_function`) 及其 CPS 生成器孪生 (:meth:`execute_llm_function_cps`
 / :meth:`invoke_llm_function_cps`)。同步与 CPS 版本成对放置。
 
-依赖 :class:`LLMExecutorCore` 的 ``_call_llm`` / ``llm_callback`` / ``last_call_info``
+依赖 :class:`LLMExecutorCore` 的 ``_call_llm`` / ``llm_callback`` / ``_current_call_info``
 等共享状态，以及 :class:`_PromptMixin` 的 ``_get_function_param_names`` /
 ``_evaluate_segments`` / ``_evaluate_segments_cps`` / ``_parse_result``。
 """
@@ -88,51 +88,42 @@ class _LLMFunctionMixin:
         # 5. 调用底层模型
         raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
 
-        # 处理 MOCK:REPAIR 特殊标记
-        if raw_res == MOCK_REPAIR_SENTINEL:
-            self.last_call_info = {
+        def _call_info(resp: str) -> dict:
+            return {
                 "sys_prompt": sys_prompt,
                 "user_prompt": user_prompt,
-                "response": MOCK_REPAIR_SENTINEL,
-                "raw_response": MOCK_REPAIR_SENTINEL,
+                "response": resp,
+                "raw_response": resp,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_REPAIR_SENTINEL,
-                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+
+        # 处理 MOCK:REPAIR 特殊标记
+        if raw_res == MOCK_REPAIR_SENTINEL:
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_REPAIR_SENTINEL,
+                    retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+                ),
+                _call_info(MOCK_REPAIR_SENTINEL),
             )
 
         # 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
         if raw_res == MOCK_AMBIGUOUS_SENTINEL:
-            self.last_call_info = {
-                "sys_prompt": sys_prompt,
-                "user_prompt": user_prompt,
-                "response": MOCK_AMBIGUOUS_SENTINEL,
-                "raw_response": MOCK_AMBIGUOUS_SENTINEL,
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
-                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-                "merged_intents": merged_intents
-            }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_AMBIGUOUS_SENTINEL,
-                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_AMBIGUOUS_SENTINEL,
+                    retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+                ),
+                _call_info(MOCK_AMBIGUOUS_SENTINEL),
             )
 
-        # 记录最后一次调用信息
-        self.last_call_info = {
-            "sys_prompt": sys_prompt,
-            "user_prompt": user_prompt,
-            "response": raw_res,
-            "raw_response": raw_res,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
-            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-            "merged_intents": merged_intents
-        }
-
-        # 6. 解析结果
-        return self._parse_result(raw_res, type_name, node_uid)
+        # 6. 解析结果并绑定调用信息
+        return self._finalize_call(
+            self._parse_result(raw_res, type_name, node_uid),
+            _call_info(raw_res),
+        )
 
     def invoke_llm_function(self, func: IbObject, execution_context: IExecutionContext) -> IbObject:
         """
@@ -141,13 +132,13 @@ class _LLMFunctionMixin:
         作用域管理和参数绑定已由 IbLLMFunction.call() 完成，此方法负责：
         1. 从 func 对象提取 call_intent（函数头意图）；
         2. 委托给 execute_llm_function 完成 LLM 推理并返回 LLMResult；
-        3. 将 LLMResult 回写到 RuntimeContext（供 llmexcept 检查）；
-        4. 直接返回 IbObject（result.value），调用方无需了解 LLMResult 内部结构。
+        3. 直接返回 IbObject；不确定性结果经 ``_finalize_invoke_result``
+           转译为 ``IbLLMCallResult(is_certain=False)`` 供语句层消费者处理。
         """
         # call_intent 由 IbLLMFunction 在调用前已解析并暂存到 _pending_call_intent
         call_intent = getattr(func, '_pending_call_intent', None)
         result = self.execute_llm_function(func.node_uid, execution_context, call_intent=call_intent)
-        return self._finalize_invoke_result(result, execution_context)
+        return self._finalize_invoke_result(result)
 
     # ------------------------------------------------------------------ #
     # CPS-friendly generator variants                                    #
@@ -214,46 +205,39 @@ class _LLMFunctionMixin:
 
         raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
 
-        if raw_res == MOCK_REPAIR_SENTINEL:
-            self.last_call_info = {
+        def _call_info(resp: str) -> dict:
+            return {
                 "sys_prompt": sys_prompt,
                 "user_prompt": user_prompt,
-                "response": MOCK_REPAIR_SENTINEL,
-                "raw_response": MOCK_REPAIR_SENTINEL,
+                "response": resp,
+                "raw_response": resp,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_REPAIR_SENTINEL,
-                retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+
+        if raw_res == MOCK_REPAIR_SENTINEL:
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_REPAIR_SENTINEL,
+                    retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
+                ),
+                _call_info(MOCK_REPAIR_SENTINEL),
             )
 
         if raw_res == MOCK_AMBIGUOUS_SENTINEL:
-            self.last_call_info = {
-                "sys_prompt": sys_prompt,
-                "user_prompt": user_prompt,
-                "response": MOCK_AMBIGUOUS_SENTINEL,
-                "raw_response": MOCK_AMBIGUOUS_SENTINEL,
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
-                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-                "merged_intents": merged_intents
-            }
-            return LLMResult.uncertain_result(
-                raw_response=MOCK_AMBIGUOUS_SENTINEL,
-                retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+            return self._finalize_call(
+                LLMResult.uncertain_result(
+                    raw_response=MOCK_AMBIGUOUS_SENTINEL,
+                    retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
+                ),
+                _call_info(MOCK_AMBIGUOUS_SENTINEL),
             )
 
-        self.last_call_info = {
-            "sys_prompt": sys_prompt,
-            "user_prompt": user_prompt,
-            "response": raw_res,
-            "raw_response": raw_res,
-            "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
-            "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-            "merged_intents": merged_intents
-        }
-        return self._parse_result(raw_res, type_name, node_uid)
+        return self._finalize_call(
+            self._parse_result(raw_res, type_name, node_uid),
+            _call_info(raw_res),
+        )
 
     def invoke_llm_function_cps(self, func: IbObject, execution_context: IExecutionContext):
         """CPS 版 :meth:`invoke_llm_function`；段求值嵌入外层 VM 帧栈。"""
@@ -261,4 +245,4 @@ class _LLMFunctionMixin:
         result = yield from self.execute_llm_function_cps(
             func.node_uid, execution_context, call_intent=call_intent
         )
-        return self._finalize_invoke_result(result, execution_context)
+        return self._finalize_invoke_result(result)

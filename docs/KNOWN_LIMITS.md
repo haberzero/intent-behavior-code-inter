@@ -356,7 +356,7 @@ str r = @~ ... ~
 **接通前置条件**：
 1. 修 `BehaviorDependencyPass` 实现 spec §3.1 规则（插值依赖/Cell/llmexcept 强制 `False`）
 2. 拆分 `execute_behavior_expression` 为"主线程预求值 prompt"+"后台仅 HTTP 调用"
-3. `last_call_info`/`retry_hint` 线程安全或去共享
+3. `retry_hint` 线程安全（`last_call_info` 已去共享：call_info 绑定到 `LLMResult`，executor 仅保留主线程单写槽）
 4. 补"插值 + 真实并发"合规测试
 
 **未来演进思路**：具体规划见任务文档。
@@ -542,3 +542,31 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 - 文件 I/O 放在 `llmexcept` 块之外；retry body 内仅用 `retry "hint"` 提供修正指引。
 - 若 retry 期间需记录诊断信息，使用 `print`（console，retry body 内允许）或待 retry 退出后再落盘。
 - 磁盘型变量参与 retry 时，确保 backing 文件不被外部进程并发修改。
+
+---
+
+## 二十三、布尔上下文中的行为表达式定型为 `str` 的恒真陷阱
+
+**限制说明**
+
+行为表达式嵌套在复合布尔表达式（如 `@~...~ and True`）中时，编译器将其定型为 `str` 而非 `bool`。此时 LLM 返回的 `"0"` / `"false"` / `"no"` 等字符串按 Python 非空字符串真值语义（`IbString.to_bool()` → `bool(self.value)`）判真，导致条件恒真——`while` 循环可能永不终止。
+
+```ibci
+# ⚠️ 危险：@~...~ 在 BoolOp 中定型为 str，"0" 被判定为真，while 永不退出
+int count = 0
+while @~ 判定是否完成，返回 1 或 0 ~ and True:
+    count = count + 1
+```
+
+**根源**
+
+类型推断在布尔上下文中未将行为表达式约束为 `bool`；字符串真值语义遵循 Python 规则（非空即真）。两者叠加使 `"0"` / `"false"` 字符串在布尔判定中恒真。此问题与 llmexcept 机制无关（不加 llmexcept 亦可复现），是独立于确定性控制流的类型/语义缺陷。
+
+**当前建议**
+
+- 条件判定使用直接形式 `while @~...~:` / `if @~...~:`——该上下文下编译器将行为表达式定型为 `bool`，`"0"` 会被解析为假值。
+- 若需复合条件，先把行为表达式赋值给 `bool` 类型变量，再参与组合。
+
+**独立调研**
+
+类型推断层修复（布尔上下文中将行为表达式定型为 `bool`）已单独立项，见 `tasks_docs/PENDING_TASKS.md`（布尔上下文类型推断）。本条目不随 llmexcept 机制统一任务消解。

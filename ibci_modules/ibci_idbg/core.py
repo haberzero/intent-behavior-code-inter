@@ -72,34 +72,24 @@ class IDbgPlugin(IbPlugin):
         for name, value in variables.items():
             print(f"  {name} = {value}")
 
-    def last_llm(self) -> Dict[str, Any]:
-        """获取最近一次 LLM 调用的完整详情 (合并 Executor 与 Provider 信息)"""
+    def current_llm(self) -> Dict[str, Any]:
+        """获取最近一次 LLM 调用的完整详情 (Executor 主线程单写槽)"""
         info = {}
 
-        # 1. 优先获取 Executor 记录的高层调用信息 (包含自动注入的意图和重试提示)
+        # 1. 获取 Executor 记录的高层调用信息 (包含自动注入的意图和重试提示)
         executor = self._llm_executor()
         if executor:
-            executor_info = executor.get_last_call_info()
+            executor_info = executor.get_current_call_info()
             if executor_info:
                 info.update(executor_info)
 
-        # 2. 如果 Provider 有更底层或不同的记录 (如原生插件调用)，进行合并
-        provider = self._llm_provider()
-        if provider:
-            provider_info = provider.get_last_call_info()
-            if provider_info:
-                # 仅当 Executor 信息为空或 Provider 信息更新时覆盖
-                for k, v in provider_info.items():
-                    if k not in info or not info[k]:
-                        info[k] = v
-
-        # 3. 合并 LLMCallResult 状态
-        # §9.3: 优先从活跃的 llmexcept 帧读取（per-snapshot 权威来源），
-        # 无活跃帧时回退到共享字段（llmexcept 外部的普通 LLM 调用路径）。
+        # 2. 合并 LLMCallResult 状态
+        # 优先从活跃的 llmexcept 帧读取（per-snapshot 权威来源，target_result
+        # 是帧私有的 certainty 信号载体）；无活跃帧时回退到调试内省接口。
         sr = self._state_reader()
         if sr:
             frames = sr.get_llm_except_frames()
-            res = frames[-1].last_result if frames else sr.get_last_llm_result()
+            res = frames[-1].target_result if frames else sr.get_last_llm_result()
 
             if res:
                 info["result"] = {
@@ -111,11 +101,11 @@ class IDbgPlugin(IbPlugin):
                 }
         return info
 
-    def show_last_prompt(self):
+    def show_target_prompt(self):
         """直接打印最近一次 LLM 调用的完整提示词（IBCI 友好）"""
         print("[IDBG] 最近一次 LLM 调用提示词:")
 
-        info = self.last_llm()
+        info = self.current_llm()
         if not info:
             print("  (无可用信息)")
             return
@@ -179,11 +169,11 @@ class IDbgPlugin(IbPlugin):
             for idx, intent in enumerate(merged_intents):
                 print(f"    [{idx}] {intent}")
 
-    def show_last_result(self):
+    def show_target_result(self):
         """直接打印最近一次 LLM 调用的结果（IBCI 友好）"""
         print("[IDBG] 最近一次 LLM 调用结果:")
 
-        res_info = self.last_result()
+        res_info = self.current_result()
         if not res_info:
             print("  (无可用信息)")
             return
@@ -220,21 +210,20 @@ class IDbgPlugin(IbPlugin):
         print()
         self.show_protection_map()
         print()
-        self.show_last_prompt()
+        self.show_target_prompt()
         print()
-        self.show_last_result()
+        self.show_target_result()
 
-    def last_result(self) -> Dict[str, Any]:
+    def current_result(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的 IbLLMCallResult 详情"""
         sr = self._state_reader()
         if not sr:
             return {}
 
-        # §9.3: _last_llm_result 生命周期已缩短为"快照内通信"；
-        # llmexcept body 执行期间该字段为 None，结果存于 LLMExceptFrame.last_result。
-        # 优先从活跃帧读取（per-snapshot 权威来源），无活跃帧时回退到共享字段。
+        # certainty 经 IbLLMCallResult 返回值传递，结果存于 LLMExceptFrame.target_result。
+        # 优先从活跃帧读取（per-snapshot 权威来源），无活跃帧时回退到调试内省接口。
         frames = sr.get_llm_except_frames()
-        res = frames[-1].last_result if frames else sr.get_last_llm_result()
+        res = frames[-1].target_result if frames else sr.get_last_llm_result()
 
         if not res:
             return {}
@@ -264,15 +253,15 @@ class IDbgPlugin(IbPlugin):
                 "max_retry": f.max_retry,
                 "is_fallback": f.is_in_fallback,
             }
-            # §9.3: last_result 是帧私有字段（per-snapshot），包含上次不确定调用的详情。
-            if f.last_result:
-                entry["last_result"] = {
-                    "is_certain": f.last_result.is_certain,
-                    "raw_response": (f.last_result.raw_response or "")[:120],
-                    "retry_hint": f.last_result.retry_hint
+            # target_result 是帧私有字段（per-snapshot），包含上次不确定调用的详情。
+            if f.target_result:
+                entry["target_result"] = {
+                    "is_certain": f.target_result.is_certain,
+                    "raw_response": (f.target_result.raw_response or "")[:120],
+                    "retry_hint": f.target_result.retry_hint
                 }
             else:
-                entry["last_result"] = None
+                entry["target_result"] = None
             result.append(entry)
         return result
 
@@ -334,10 +323,10 @@ class IDbgPlugin(IbPlugin):
                 f"retry={entry.get('retry')}/{entry.get('max_retry')} "
                 f"fallback={entry.get('is_fallback')}"
             )
-            lr = entry.get("last_result")
+            lr = entry.get("target_result")
             if lr:
                 print(
-                    f"       last_result: certain={lr.get('is_certain')} "
+                    f"       target_result: certain={lr.get('is_certain')} "
                     f"retry_hint={lr.get('retry_hint')} "
                     f"raw={lr.get('raw_response')}"
                 )

@@ -29,7 +29,7 @@ while frame_stack:
 
 **公理 EXEC-2（控制流数据化）**：控制流信号（`return`/`break`/`continue`/`throw`）以数据对象 `Signal(kind, value)` 在帧栈间传播，不使用 Python 异常跨帧传递。外部边界（帧栈空仍持有 Signal）以 `UnhandledSignal` 透传给调用方处理。
 
-**公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段在编译期建立——正则情形通过 `IbLLMExceptionalStmt.target` 字段引用前一语句节点，并在 body 中**替换**该节点；条件驱动 for 循环情形通过 `IbFor.llmexcept_handler` 字段直接引用 handler。运行时 `vm_handle_IbLLMExceptionalStmt` 显式 yield target_uid 驱动 target 求值并管理 retry 循环；`vm_handle_IbFor` 在条件求值返回 uncertain 时内联执行 handler body。不存在侧表驱动的隐式重定向机制。
+**公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段 `llmexcept_handler` 在编译期统一挂载到被保护语句（`IbAssign`/`IbIf`/`IbWhile`/`IbFor`/`IbSwitch`/`IbExprStmt`），llmexcept 语句本身不入 body。运行期各被保护语句 handler 求值条件/RHS 后，检查返回值是否为 `IbLLMCallResult(is_certain=False)` 不确定容器：有 handler 时创建 `LLMExceptFrame` 并内联执行 handler body + 完整多轮重试（重试循环以 `_retry_llm_uncertain` 收敛于单帧计数内），无 handler 时抛 `LLMParseError`。不存在 `IbLLMExceptionalStmt` 包装节点，也不存在侧表驱动的隐式重定向机制。
 
 **已知限制**：无——所有节点类型均支持 CPS handler。
 
@@ -39,8 +39,7 @@ while frame_stack:
 
 | 分类 | 节点类型 | CPS 状态 |
 |------|---------|---------|
-| 语句 | `IbModule` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbRaise` `IbAssign` `IbAugAssign` `IbDelete` `IbPass` `IbTry` `IbExceptHandler` `IbRetry` `IbCase` | CPS handler |
-| 语句 | `IbLLMExceptionalStmt` | CPS handler |
+| 语句 | `IbModule` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbRaise` `IbAssign` `IbAugAssign` `IbDelete` `IbPass` `IbTry` `IbExceptHandler` `IbRetry` `IbCase` `IbLLMExceptionalStmt`(挂载型，不入 body) | CPS handler |
 | 表达式 | `IbName` `IbConst` `IbBinOp` `IbUnaryOp` `IbCompare` `IbBoolOp` `IbCall` `IbAttribute` `IbSubscript` `IbTuple` `IbList` `IbDict` `IbSlice` `IbFString` | CPS handler |
 | 表达式 | `IbBehaviorExpr` | CPS handler |
 | 表达式 | `IbTypeAnnotatedExpr` `IbIntentInfo` | CPS handler |
@@ -160,7 +159,7 @@ while frame_stack:
 
 **公理 IC-2（restore 还原）**：函数返回时恢复调用者的 context，不论函数体内对意图栈的任何修改。
 
-**公理 IC-3（llmexcept snapshot）**：`llmexcept` 框架在执行前对 context 进行完整快照（scope + intent + last_result），retry 时恢复该快照，使重试语义完整隔离。
+**公理 IC-3（llmexcept snapshot）**：`llmexcept` 框架在执行前对 context 进行完整快照（scope 变量 + intent + loop context），retry 时恢复该快照，使重试语义完整隔离。certainty 信号经 `LLMExceptFrame.target_result`（`IbLLMCallResult` 容器）传递，不参与 save/restore。
 
 **公理 IC-4（llmexcept body 只读约束）**：llmexcept handler body 对参与 LLM 调用的变量（`$` 插值、意图引用、赋值目标）实施只读保护。编译期通过 `SEM_LLMEXCEPT_BODY_WRITE`（赋值/属性/下标变异）和 `SEM_LLMEXCEPT_MUTATING_CALL`（mutating 方法调用）拦截；运行期通过 `verify_snapshot_integrity()` 比对黄金快照作为安全网，违规时强制恢复并发出 `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION`。非 LLM 参与变量的修改不受限制。
 

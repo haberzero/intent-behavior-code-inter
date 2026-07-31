@@ -1,6 +1,6 @@
 # LLM 并行化与状态重设计规划书
 
-> **状态**：主线规划。Phase A 统一重构进行中。
+> **状态**：主线规划。Phase A 统一重构基本完成（U1-U7），剩余文档收尾与命名审查。
 > **性质**：临时任务文档，全部 Phase 完成后删除，决策性内容并入 `docs/architecture/`。
 > **关联**：`tasks_docs/NEXT_STEPS.md`、`tasks_docs/PENDING_TASKS.md` PT-4.7、`docs/KNOWN_LIMITS.md` §十五/§十七.6、`docs/architecture/05_vm_specification.md` §1.1/§3/§5。
 
@@ -245,35 +245,32 @@ Phase A（状态去共享 + llmexcept 统一）──奠基──> Phase B（dis
 | Phase | 状态 | 备注 |
 |---|---|---|
 | A 已完成项 | ✅ | A7/A1/A2/A3/A6（5 commit） |
-| A U1 统一编译期 | 🔶 编译期完成(中间态) | ast.py 5 节点加 llmexcept_handler + binding_analysis_pass.py 统一挂载。运行期未适配，不能验证 |
-| A U2 统一运行期内联重试 | ⬜ | 各语句 handler 内联，废弃 IbLLMExceptionalStmt handler |
-| A U3 certainty 经 IbLLMCallResult | ⬜ | 产生者不依赖 frame |
-| A U4 消除 _last_llm_result + last_call_info | ⬜ | 全局槽清除 |
-| A U5 命名变更 | ⬜ | last -> target/current |
-| A U6 idbg 适配 + 接口清理 | ⬜ | |
-| A U7 公理 EXEC-3 更新 + 文档 | ⬜ | |
+| A U1 统一编译期 | ✅ | ast.py 5 节点加 llmexcept_handler + binding_analysis_pass.py 统一挂载 |
+| A U2 统一运行期内联重试 | ✅ | 各语句 handler 内联，废弃 vm_handle_IbLLMExceptionalStmt |
+| A U3 certainty 经 IbLLMCallResult | ✅ | 产生者返回容器，不依赖 frame |
+| A U4 消除 _last_llm_result + last_call_info | ✅ | _last_llm_result 全局槽消除；last_call_info 去共享（call_info 绑 LLMResult + 主线程单写槽） |
+| A U5 命名变更 | 🔶 部分 | frame.last_result→target_result、executor/ai/idbg 方法改名已做；帧内局部变量名待审 |
+| A U6 idbg 适配 + 接口清理 | ✅ | 读 frame.target_result；IStateReader/IExecutionFrame 接口重定义 |
+| A U7 公理 EXEC-3 更新 + 文档 | 🔶 部分 | EXEC-3/IC-3 + 04_vm_interpreter + KNOWN_LIMITS 已更新；语法/子系统文档同步 |
 | B dispatch 修复 | ⬜ | PT-4.7，依赖 A |
 | C MOCK 服务 | ⬜ | FastAPI + 流式，依赖 B |
 | D 全栈 async | ⏸ 暂搁置 | 语言级 async |
 
 ### 当前状态（供下个 session 续接）
 
-**已完成**：A7/A1/A2/A3/A6（5 commit，1186 passed 不退化）+ U1 编译期统一（wip commit `e0aeeaa`，中间态不能验证）。
+**已完成**：A7/A1/A2/A3/A6 + U1-U4 + U5（帧字段/方法改名）+ U6 + U7 核心文档。
+**测试基线**：`1190 passed, 8 skipped`（llmexcept e2e 26 项 + 新增 4 项统一机制回归；含 if/while 无 handler raise 固化、BoolOp/BinOp 嵌套传播、模糊字符串有界重试）。
 
-**U1 编译期改动详情**（已提交 wip）：
-- `core/kernel/ast.py`：IbAssign/IbIf/IbWhile/IbSwitch/IbExprStmt 加 `llmexcept_handler` 字段（此前仅 IbFor 有）。
-- `core/compiler/semantic/passes/binding_analysis_pass.py`：`_rewrite_body` 消除两种绑定（for 挂载 + 正则包装），统一为 `prev_stmt.llmexcept_handler = stmt` + llmexcept 语句从 body 移除（不包装 prev_stmt）。
+**U2+U3 关键设计落地**：
+- 产生者（`_finalize_invoke_result` / `vm_handle_IbBehaviorExpr` / `vm_handle_IbBehaviorInstance` / `is_truthy` / `IbCastExpr`）不确定时返回 `IbLLMCallResult(is_certain=False)`，不写 frame / 全局槽。
+- 消费者（IbAssign/IbIf/IbWhile/IbFor/IbSwitch/IbExprStmt）从返回值检查 `_is_llm_uncertain_value`，经 `_retry_llm_uncertain` 单帧内收敛重试；`_resolve_condition` 用 `_condition_is_acceptable` 谓词统一"直接容器 + is_truthy 模糊"两种不确定来源（修复"重入新建帧导致重试永不止步"死循环缺陷）。
+- 表达式层（BinOp/BoolOp/IfExp/Compare/Call/Attribute/Subscript/Tuple/List/Dict/Slice/CastExpr/FilteredExpr/AugAssign）透传不确定容器到语句消费者。
+- `vm_handle_IbLLMExceptionalStmt` 已删除，dispatch 表条目移除。
 
-**中间态不一致**：编译期已统一挂载，但运行期各语句 handler 仍读 `get_last_llm_result`（未内联检查 `llmexcept_handler`），产生者仍写 `set_last_llm_result`（未返回 `IbLLMCallResult`），`vm_handle_IbLLMExceptionalStmt` 仍存在（但 IbLLMExceptionalStmt 不再在 body 中，不执行）。**测试会失败**，需 U2+U3 完成后才能验证。
-
-**下一步：U2+U3 协同变更**（下个 session 推进）：
-- **U3 产生者改**：`vm_handle_IbBehaviorExpr`/`_finalize_invoke_result`/`vm_handle_IbBehaviorInstance` uncertain 时返回 `IbLLMCallResult(is_certain=False, raw_response=..., retry_hint=...)`，不写 frame，不 `set_last_llm_result`，不 raise。`is_truthy`/`IbCast` 同改。
-- **U2 消费者改**：各语句 handler（IbAssign/IbIf/IbWhile/IbFor/IbSwitch/IbExprStmt）内联检查返回值是否 `IbLLMCallResult(is_certain=False)` -> 有 `llmexcept_handler` 则创建 frame + 完整多轮重试（与 A1 IbFor 模式对齐）-> 无则 raise。提取共用辅助函数 `_handle_llm_uncertain`。废弃 `vm_handle_IbLLMExceptionalStmt`。
-- **U4 消除全局槽**：废弃 `_last_llm_result` + `last_call_info`（U2/U3 改造中一并清除所有 `set/get_last_llm_result` 调用点）。
-- **关键设计决策**：产生者不依赖 frame（架构解耦），certainty 经返回值传递（`IbLLMCallResult`），frame 由消费者创建 + 写 `frame.target_result`。`IbLLMUncertain` 保留为变量赋值标记，`IbLLMCallResult` 是内部传递容器（sentinels.py:110 已预见）。
-- **U5-U7 在 U2-U4 完成后**：命名变更（last->target/current）+ idbg 适配 + 公理 EXEC-3 更新。
-
-**已回滚的旧方案 wip**（产生者写 frame.target_result + 返回 IbLLMUncertain）：已 git checkout 回滚，不再适用。新方案是产生者返回 IbLLMCallResult（不写 frame）。
+**剩余**：
+- U5 命名审查：`_shared.py`/`leaf.py`/`control_flow.py` 局部变量 `last_result`/`last_val` 等可审慎清理（低优先级，不影响功能）。
+- U7 文档收尾：`docs/syntax/10_robustness.md` 已确认用户面语义无需改动；`_code_llmexcept_unify.md` 临时任务文档待清理。
+- **独立调研项（本轮主线后启动）**：布尔上下文行为表达式定型 `str` 恒真陷阱（PT-4.8），见 `docs/KNOWN_LIMITS.md` §二十三。
 
 ---
 

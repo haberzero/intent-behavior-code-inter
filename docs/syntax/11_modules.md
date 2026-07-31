@@ -79,13 +79,13 @@ str root   = isys.project_root()  # 项目根目录
 import idbg
 
 int x = 42
-idbg.vars()              # 返回当前作用域所有变量及其值（dict）
-idbg.print_vars()        # 打印当前作用域所有变量
-idbg.last_llm()          # 返回最后一次 LLM 调用的详细信息（dict）
-idbg.last_result()       # 返回最后一次 LLM 调用的结果对象
-idbg.show_last_prompt()  # 打印最后一次 LLM 调用的提示词
-idbg.show_last_result()  # 打印最后一次 LLM 调用的结果
-idbg.show_all()          # 打印变量、最后结果等全部调试信息
+idbg.vars()                # 返回当前作用域所有变量及其值（dict）
+idbg.print_vars()          # 打印当前作用域所有变量
+idbg.current_llm()         # 返回最近一次 LLM 调用的详细信息（dict）
+idbg.current_result()      # 返回最近一次 LLM 调用的结果对象
+idbg.show_target_prompt()  # 打印最近一次 LLM 调用的提示词
+idbg.show_target_result()  # 打印最近一次 LLM 调用的结果
+idbg.show_all()            # 打印变量、最近结果等全部调试信息
 idbg.retry_stack()       # 返回当前 llmexcept 重试栈
 idbg.show_retry_stack()  # 打印当前 llmexcept 重试栈
 idbg.protection_map()    # 返回 llmexcept 保护映射（target_uid -> handler_uid）

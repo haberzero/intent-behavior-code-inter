@@ -364,7 +364,7 @@ class TestTypeResolutionPass:
 
 class TestLLMExceptRewrite:
     def test_regular_llmexcept_binds_to_prev_stmt(self, registry, pipeline):
-        """llmexcept after behavior stmt → stmt.target = prev_stmt (body rewrite)"""
+        """llmexcept after behavior stmt → prev_stmt.llmexcept_handler = llmexcept (统一挂载)"""
         behavior = ast.IbBehaviorExpr(segments=["describe weather"])
         assign_stmt = ast.IbAssign(
             targets=[ast.IbName(id='result', ctx='Store')],
@@ -377,11 +377,11 @@ class TestLLMExceptRewrite:
         module = ast.IbModule(body=[assign_stmt, llmexcept])
         ctx = make_context(module, registry)
         result = pipeline.run(ctx)
-        # After binding analysis, llmexcept.target should be the assign_stmt
-        assert llmexcept.target is assign_stmt
-        # And the module body should have llmexcept as the sole entry (assign_stmt was popped)
+        # 统一挂载：prev_stmt.llmexcept_handler = llmexcept（不再 IbLLMExceptionalStmt 包装）
+        assert assign_stmt.llmexcept_handler is llmexcept
+        # llmexcept 从 body 中移除；被保护语句留在 body 中正常执行
         assert len(module.body) == 1
-        assert module.body[0] is llmexcept
+        assert module.body[0] is assign_stmt
 
     def test_cond_for_llmexcept_binds_to_handler(self, registry, pipeline):
         """llmexcept after condition-driven for → for.llmexcept_handler = stmt"""

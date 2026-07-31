@@ -161,11 +161,11 @@ ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 @+ 用简洁的语言回答
 str r = @~ MOCK:STR:hello ~
 
-idbg.show_intents()        # 打印当前意图栈
-idbg.show_last_prompt()    # 打印上次 LLM 调用的完整提示词
-idbg.last_llm()            # 返回上次调用的完整信息（dict）
-idbg.last_result()         # 返回上次调用的结果对象
-idbg.show_vars()           # 打印当前作用域所有变量
+idbg.show_intents()          # 打印当前意图栈
+idbg.show_target_prompt()    # 打印最近 LLM 调用的完整提示词
+idbg.current_llm()           # 返回最近调用的完整信息（dict）
+idbg.current_result()        # 返回最近调用的结果对象
+idbg.show_vars()             # 打印当前作用域所有变量
 ```
 
 ---
@@ -189,7 +189,7 @@ MOCK 模式无法验证意图注释（`@`/`@+`/`@!`）、`__outputhint_prompt__`
 - 在 TESTONLY 模式下用 MOCK 指令为 `@~` 和 LLM 函数提供预设返回值
 - 用 `MOCK:FAIL` / `MOCK:REPAIR` 验证容错逻辑
 - 用 `MOCK:SEQ` 模拟多次调用的不同返回序列
-- 用 `idbg.show_intents()` 和 `idbg.show_last_prompt()` 调试 LLM 交互
+- 用 `idbg.show_intents()` 和 `idbg.show_target_prompt()` 调试 LLM 交互
 - 理解 MOCK 的边界，知道何时必须切换到真实 API
 
 深入查阅：MOCK 指令的完整语法见 [语法参考 / MOCK 测试][syntax-13]，语言级限制见 [已知限制][known-17]。

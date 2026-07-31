@@ -12,11 +12,15 @@ from core.runtime.shared.op_constants import (
 from core.runtime.exceptions import (
     ThrownException,
 )
+from core.runtime.shared.signals import Signal
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.vm.handlers._shared import (
     _is_simple_name_target,
     _assign_future_to_name_target,
     _vm_assign_to_target,
+    _is_llm_uncertain_value,
+    _retry_llm_uncertain,
+    _raise_uncertain_parse_error,
 )
 
 
@@ -34,8 +38,11 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     is_callable_instance 路径：``yield value_uid``，``vm_handle_IbBehaviorExpr``
     已完整实现 fn_callable 模式的 IbBehavior 包装。
+
+    llmexcept 保护：RHS 返回 ``IbLLMCallResult(is_certain=False)`` 时，若有
+    ``llmexcept_handler`` 则创建帧并完整多轮重试（重试轮内目标变量临时标记为
+    ``IbLLMUncertain``，作为快照/重试通信令牌）；无 handler 则抛 ``LLMParseError``。
     """
-    executor.runtime_context.set_last_llm_result(None)
     value_uid = node_data.get("value")
 
     is_callable_instance = False
@@ -104,20 +111,24 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     # 的 IbBehavior 包装，直接 yield 走 CPS 调度。
     value = yield value_uid
 
-    last = executor.runtime_context.get_last_llm_result()
-    if last and not last.is_certain:
-        # 检查是否在 llmexcept 保护帧内
-        if executor.runtime_context.get_current_llm_except_frame() is not None:
-            # 在保护帧内：赋值 Uncertain 哨兵，llmexcept 机制负责重试
-            value = executor.registry.get_llm_uncertain()
-        else:
+    if _is_llm_uncertain_value(value):
+        handler_uid = node_data.get("llmexcept_handler")
+        if handler_uid is None:
             # 无保护帧：无法自愈，抛出真正的 LLMParseError
-            error = executor.registry.make_llm_parse_error(
-                last.retry_hint or "LLM output could not be parsed",
-                raw_response=last.raw_response or "",
-                type_name="unknown",
-            )
-            raise ThrownException(error)
+            _raise_uncertain_parse_error(executor, value, type_name="unknown")
+        # 有 handler：完整多轮重试。重试轮内目标变量临时标记为 IbLLMUncertain
+        #（快照/重试通信令牌），handler body 执行后 restore 会恢复黄金快照。
+        def _on_uncertain_attempt(executor):
+            uncertain = executor.registry.get_llm_uncertain()
+            for target_uid in node_data.get("targets", []):
+                yield from _vm_assign_to_target(executor, target_uid, uncertain)
+
+        value = yield from _retry_llm_uncertain(
+            executor, value, handler_uid, value_uid, "IbAssign",
+            on_uncertain_attempt=_on_uncertain_attempt,
+        )
+        if isinstance(value, Signal):
+            return value
 
     # 所有目标类型均通过 CPS helper 处理
     for target_uid in node_data.get("targets", []):
@@ -158,6 +169,8 @@ def vm_handle_IbAugAssign(executor, node_uid: str, node_data: Mapping[str, Any])
     target_uid = node_data.get("target")
     target_data = executor.ec.get_node_data(target_uid)
     value = yield node_data.get("value")
+    if _is_llm_uncertain_value(value):
+        return value
     op_symbol = node_data.get("op")
     base_op = (
         op_symbol.rstrip("=") if op_symbol and op_symbol.endswith("=") else op_symbol
@@ -169,6 +182,8 @@ def vm_handle_IbAugAssign(executor, node_uid: str, node_data: Mapping[str, Any])
 
     # 1. 读取旧值
     old_val = yield target_uid
+    if _is_llm_uncertain_value(old_val):
+        return old_val
     # 2. 计算新值
     new_val = old_val.receive(method, [value])
     # 3. 写回
@@ -180,6 +195,8 @@ def vm_handle_IbAugAssign(executor, node_uid: str, node_data: Mapping[str, Any])
             executor.runtime_context.set_variable(target_data.get("id"), new_val)
     elif target_data and target_data.get("_type") == "IbAttribute":
         obj = yield target_data.get("value")
+        if _is_llm_uncertain_value(obj):
+            return obj
         attr = target_data.get("attr")
         obj.receive("__setattr__", [executor.registry.box(attr), new_val])
     return executor.registry.get_none()
