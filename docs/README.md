@@ -22,6 +22,7 @@ docs/
 ├── KNOWN_LIMITS.md                  语言级已知限制
 │
 ├── guide/                           入门教程（按序阅读）
+│   ├── 00_environment.md
 │   ├── 01_setup.md
 │   ├── 02_first_call.md
 │   ├── 03_handling_errors.md
@@ -78,7 +79,7 @@ tests_docs/                          测试方法论
 
 | 角色 | 推荐阅读顺序 |
 |------|------------|
-| **新加入的开发者** | `README.md`（根目录）-> `GETTING_STARTED.md` -> `docs/guide/01_setup.md` -> `docs/guide/` -> `SYNTAX_REFERENCE.md` -> `ARCHITECTURE.md` |
+| **新加入的开发者** | `README.md`（根目录）-> `GETTING_STARTED.md` -> `docs/guide/00_environment.md` -> `docs/guide/01_setup.md` -> `docs/guide/` -> `SYNTAX_REFERENCE.md` -> `ARCHITECTURE.md` |
 | **写 IBCI 代码的用户** | `README.md`（根目录）-> `docs/guide/` 教程 -> `SYNTAX_REFERENCE.md`（查语法）-> `KNOWN_LIMITS.md`（查边界） |
 | **要改类型系统的人** | `architecture/03_type_system.md` -> `architecture/02_metadata_ast.md` |
 | **要改 VM/解释器的人** | `architecture/04_vm_interpreter.md` -> `architecture/05_vm_specification.md` |

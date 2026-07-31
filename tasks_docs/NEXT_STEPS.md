@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-31（Phase A 统一重构 U1-U7 基本完成：llmexcept 机制统一 + 状态去共享落地，基线 1190 passed, 8 skipped 实测）
+> **最后更新**：2026-07-31（Phase B0 完成：环境与依赖正规化 + MOCK 服务化落地，基线 1215 passed, 8 skipped 实测）
 
 ---
 
@@ -36,7 +36,7 @@ python -m pytest tests/
 
 > **media Phase 4（MediaAxiom + IbMedia 全模态容器）已暂停**，降级为未来低优先级任务（详见 `tasks_docs/PENDING_TASKS.md` §六）。代码层零启动，仅设计文档存在。
 >
-> 彻查发现 llmexcept 存在**两种绑定机制**（正则包装 `IbLLMExceptionalStmt` vs 条件驱动 for 内联 `llmexcept_handler`），是历史演进产物而非设计意图，导致 frame 时机不一致、Bug-8/9 等架构裂缝。决断：**llmexcept 机制彻底统一**（消除 `IbLLMExceptionalStmt`，统一 `llmexcept_handler` 挂载 + 内联重试，禁止语法糖兼容展开）+ **状态模型重设计**（certainty 经 `IbLLMCallResult` 返回值传递，产生者不依赖 frame；retry_hint 绑 frame；消除 `_last_llm_result` 全局槽与 `last_call_info` 共享槽）。Phase A 统一重构**已完成**（U1-U7，基线 `python -m pytest tests/` 实跑通过）：llmexcept 统一为单一机制、`vm_handle_IbLLMExceptionalStmt` 已删除、产生者返回容器/消费者内联重试（`_retry_llm_uncertain` 单帧内收敛，修复了"重入新建帧导致重试永不止步"死循环）、表达式层透传不确定容器、idbg/ai 接口改名为 current/target。剩余：文档收尾（`_mock_concurrency.md`/`_code_llmexcept_unify.md` 清理）与 U5 命名审查。**下一步：Phase B dispatch 修复（PT-4.7）**。async 层级：优先 LLM 层面（FastAPI server），全体系语言级 async 暂搁置。细化规划见 `tasks_docs/_mock_concurrency.md`。
+> 彻查发现 llmexcept 存在**两种绑定机制**（正则包装 `IbLLMExceptionalStmt` vs 条件驱动 for 内联 `llmexcept_handler`），是历史演进产物而非设计意图，导致 frame 时机不一致、Bug-8/9 等架构裂缝。决断：**llmexcept 机制彻底统一**（消除 `IbLLMExceptionalStmt`，统一 `llmexcept_handler` 挂载 + 内联重试，禁止语法糖兼容展开）+ **状态模型重设计**（certainty 经 `IbLLMCallResult` 返回值传递，产生者不依赖 frame；retry_hint 绑 frame；消除 `_last_llm_result` 全局槽与 `last_call_info` 共享槽）。Phase A 统一重构**已完成**（U1-U7，基线 `python -m pytest tests/` 实跑通过）：llmexcept 统一为单一机制、`vm_handle_IbLLMExceptionalStmt` 已删除、产生者返回容器/消费者内联重试（`_retry_llm_uncertain` 单帧内收敛，修复了"重入新建帧导致重试永不止步"死循环）、表达式层透传不确定容器、idbg/ai 接口改名为 current/target。剩余：文档收尾（`_mock_concurrency.md`/`_code_llmexcept_unify.md` 清理）与 U5 命名审查。**下一步：Phase B dispatch 修复（PT-4.7）**。async 层级：优先 LLM 层面（MOCK HTTP 服务），全体系语言级 async 暂搁置。细化规划见 `tasks_docs/_mock_concurrency.md`。**Phase B0 已完成**（环境正规化 + MOCK 服务化）：`pyproject.toml` 依赖分组 + conda `environment.yml` + `docs/guide/00_environment.md` + CI 统一安装；`MockScenarioEngine`（指令语言单点实现，线程安全）+ `MockServer`（stdlib HTTP + OpenAI 兼容 + SSE + SLEEP/ERROR 控制）+ `AIPlugin._is_test_config` 收敛 + 16 项服务测试。MOCK 服务作为 Phase B 并发时序验收仪器（真实 `OpenAI` 客户端路径彩排）。
 >
 > **独立调研项（本轮主线完成后启动）**：布尔上下文行为表达式定型 `str` 恒真陷阱（PT-4.8，`docs/KNOWN_LIMITS.md` §二十三）。
 >

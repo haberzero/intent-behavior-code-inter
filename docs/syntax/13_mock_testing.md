@@ -62,6 +62,17 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 - `FAIL`、`TRUE`、`FALSE` 可作为哨兵成员嵌入序列中
 - 同一 `key` 的多次调用按序返回，超出序列长度后循环或返回空字符串
 
+### 2.5 控制指令（HTTP 服务模式）
+
+以下指令仅在 MOCK HTTP 服务（§6）下生效，内联模式忽略：
+
+| 指令 | 说明 |
+|------|------|
+| `MOCK:SLEEP:<ms>` | 响应前延迟指定毫秒数（并发时序测试） |
+| `MOCK:ERROR:<status>` | 返回指定 HTTP 错误状态（基础设施失败注入）；内联模式等价于直接抛出 provider 异常 |
+
+控制指令可与值指令组合书写，如 `MOCK:STR:hello MOCK:SLEEP:200`。
+
 ---
 
 ## 3. 使用示例
@@ -175,3 +186,40 @@ print(transcript)   # named_result
 1. **MOCK 模式不处理提示词内容**：意图注释、`__outputhint_prompt__` 等对 MOCK 返回值无影响。MOCK 只解析指令本身。
 2. **`retry "hint"` 中的 hint 不会作为 MOCK 指令解析**：retry hint 是追加给 LLM 的系统提示词，不是 MOCK 指令覆盖。使用 `MOCK:REPAIR:<FALLBACK>` 表达"失败一次后回退到指定值"。
 3. **MOCK 模式无法验证真实 LLM 行为**：`__to_prompt__`/`__from_prompt__`/`__outputhint_prompt__` 协议对真实 LLM 的影响需要连接真实 API 才能测试。
+
+---
+
+## 6. MOCK HTTP 服务
+
+内联 MOCK（`TESTONLY` 模式）在进程内即时返回，零延迟、零基础设施失败，无法验证 LLM 调用的传输层行为（超时、并发时序、HTTP 错误）。
+
+MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/completions` 端点（含 SSE 流式），由测试代码启动于 `127.0.0.1` 随机端口。将 `ai.set_config` 指向服务地址后，IBCI 走**真实的 `OpenAI` 客户端路径**发起 HTTP 调用，作为机制测试的完整传输彩排。
+
+### 6.1 启动与接入
+
+```python
+from ibci_modules.ibci_ai.mock_service import MockServer
+
+server = MockServer()
+server.start()
+# server.url 形如 http://127.0.0.1:PORT
+```
+
+```ibci
+import ai
+ai.set_config("http://127.0.0.1:PORT", "sk-test", "mock")
+
+str reply = @~ MOCK:STR:hello ~    # 经真实 HTTP 路径返回 hello
+```
+
+服务按请求解析 MOCK 指令（含控制指令 `SLEEP`/`ERROR`），场景状态（`SEQ`/`REPAIR` 计数）按请求加锁隔离，并发安全。服务记录请求统计（活跃数、最大并发），供并发鲁棒性断言。
+
+### 6.2 与内联 MOCK 的关系
+
+- **值场景**（结果正确性）：内联 `TESTONLY` 与 HTTP 服务行为一致，指令语言为同一实现。
+- **机制场景**（时序/失败/并发）：必须使用 HTTP 服务。
+- 服务每个实例持有独立场景状态，测试间以独立实例隔离。
+
+### 6.3 测试 fixture
+
+pytest 环境提供 `mock_server` fixture（`tests/conftest.py`），每个测试自动启动/停止独立服务。

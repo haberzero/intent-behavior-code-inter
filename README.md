@@ -129,11 +129,18 @@ cd intent-behavior-code-inter
 
 ### 第二步：安装 Python 与运行依赖
 
-确保你的电脑安装了 **Python 3.10** 或更高版本。然后在终端运行：
+使用 conda 创建独立环境并安装全部依赖（依赖分组与完整步骤见 `docs/guide/00_environment.md`）：
 
 ```bash
-# 安装连接 AI 所需的官方库
-pip install openai
+# 从项目根目录创建名为 ibci 的 conda 环境（含可编辑安装 + 测试依赖）
+conda env create -f environment.yml
+conda activate ibci
+```
+
+不熟悉 conda 时，也可直接用 pip 安装运行时依赖（`openai`）：
+
+```bash
+pip install -e .
 ```
 
 ### 第三步：获取你的 AI API Key (以阿里云百炼为例)

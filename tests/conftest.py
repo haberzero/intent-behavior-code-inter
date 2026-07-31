@@ -22,6 +22,7 @@ Fixtures
 - ``intent_class``     (session)  — registry.get_class("Intent")
 - ``intent_context_class`` (session) — registry.get_class("intent_context")
 - ``captured_output``  (function) — ``(lines, callback)`` 元组，用于 print 捕获
+- ``mock_server``      (function) — 已启动的线程内 MOCK HTTP 服务（自动停止）
 
 Helpers（普通函数，可 import 也可由 fixture ``helpers`` 暴露）
 -------------------------------------------------------------
@@ -362,6 +363,23 @@ def captured_output():
         lines.append(str(text))
 
     return lines, callback
+
+
+@pytest.fixture
+def mock_server():
+    """启动一个线程内 MOCK HTTP 服务（function 级，自动停止）。
+
+    每个测试独立服务实例（含独立场景状态），经 ``server.url`` 配置给
+    ``ai.set_config`` 后由真实 ``OpenAI`` 客户端驱动。
+    """
+    from ibci_modules.ibci_ai.mock_service import MockServer
+
+    server = MockServer()
+    server.start()
+    try:
+        yield server
+    finally:
+        server.stop()
 
 
 @pytest.fixture

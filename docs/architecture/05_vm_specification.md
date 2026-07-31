@@ -104,6 +104,7 @@ while frame_stack:
 - 目标变量是插值依赖（前序 behavior 的输出是当前 behavior 的 $var 输入）
 - 赋值目标是 Cell 变量（IbCell 不允许持有 LLMFuture 占位符）
 - 节点处于 llmexcept 保护下（snapshot 隔离约束）
+- 节点处于可重复执行上下文（循环体或可重入函数体内）：同一节点多次执行会以相同 `node_uid` 覆写 `_pending_futures` 条目，导致旧 Future 泄漏且读点解析错乱
 
 ### §3.2 LLMScheduler + LLMFuture
 

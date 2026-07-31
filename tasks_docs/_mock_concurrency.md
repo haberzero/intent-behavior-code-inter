@@ -168,33 +168,57 @@ LLM 并行化工作此前搁置，根因是 async 层级边界（全栈 vs LLM �
 
 **前置**：Phase A 完成（状态去共享 + llmexcept 统一）。
 
+### 调研微调（真实代码复核，2026-07-31）
+
+接通前置经真实代码复核，规划需以下微调：
+
+1. **spec §3.1 新增第 4 条强制规则：可重复执行上下文**。循环体 / 可重入函数内的同一 `node_uid` 多次 dispatch 会覆写 `_pending_futures[node_uid]`，旧 Future 泄漏且读点解析到错误 Future。当前 pass 未实现任何 §3.1 规则（只检测环），须一并补上。
+2. **dispatch 路径 uncertain 容器与统一机制对齐**：`resolve`/`LLMFuture.get` 应返回 `IbLLMCallResult(is_certain=False)`（而非旧 `IbLLMUncertain` 哨兵），`vm_handle_IbName` 读点统一走 `_is_llm_uncertain_value` + `_raise_uncertain_parse_error`（保留 retry_hint/raw_response，当前 raise 时 raw_response 为空）。
+3. **`_finalize_call` 分解**：拆为"绑定 call_info 到 result"（worker 可做）+ "记录主线程槽 `_current_call_info`"（仅 sync 尾部 / resolve 点）。worker 线程禁止写主线程槽。
+4. **dispatch 主线程预求值复用 sync `_evaluate_segments`**：同线程 `vm.run` 嵌套 drive_loop 安全（`_drive_loop` 保存/恢复 `_current_stack`），不 CPS 化。
+5. **call_info 元数据主线程烘焙**：`context.get_global_intents()` 在 prepare 阶段读取并烘焙进元数据，worker 不再读 live context。
+6. **`fork_intent_snapshot` 失败 fail-fast**：当前静默回退 `intent_ctx=None` 会让 worker 走 lambda 模式读 live context（含 `consume_smear` 消费副作用），违背工作模式定论。
+7. **未 resolve Future 泄漏观测性**：`_pending_futures` 条目程序结束残留，补结束断言/显式清理。
+8. **`_result_parser` 惰性初始化竞争**：worker 并发首解析双初始化，改水化时预建。
+
 ### 改造
-1. 拆分 `execute_behavior_expression`：主线程预求值 prompt 段；worker 仅 `_call_llm(prompt)` + 解析（不重入 VMExecutor）。
+1. 拆分 `execute_behavior_expression`：主线程 `_prepare`（预求值 prompt + 意图 + output hint + retry_hint + call_info 元数据）；worker 仅 `_call_llm` + 解析（不重入 VMExecutor，不写主线程槽）。
 2. retry_hint 在 dispatch 时刻主线程从 frame 读（dispatched 不在 llmexcept 帧内，故为 None），烘焙进 sys_prompt。
-3. call_info 经 LLMResult/future 回传，主线程 resolve 时处理。
-4. 补 `BehaviorDependencyPass` 的 spec §3.1 规则。
-5. `dispatch_eligible` 默认开启。
+3. call_info 经 LLMResult 回传，主线程 resolve 时写 `_current_call_info` 并处理 uncertain 容器。
+4. 修 `BehaviorDependencyPass` 实现 spec §3.1 规则（插值依赖/Cell/llmexcept/可重复执行上下文），删除"一律 False"硬编码。
+5. `dispatch_eligible` 按规则判定开启（`ast.py` 默认值 `False` 保留为安全默认）。
+6. MOCK 并发确定性：seq/retry 计数加锁；**已被 B0-Mock 服务化吸收**（`MockScenarioEngine` RLock + 服务按请求隔离状态）。
 
 ### 验收
 - 解锁 4 项 dispatch 专属 skip（`test_e2e_llm_pipeline.py` ×1 + `test_e2e_llm_basic.py::TestE2EStaleResultIsolation` ×3）。
 - skip 数 8->4。
 - 更新 `KNOWN_LIMITS §十五`、`PENDING_TASKS` PT-4.7、`05_vm_specification.md §3`。
 
+### §五.1 MOCK 服务化与 Phase B 的次序（决策点）
+
+> 调研发现规划内部不一致：PT-4.7 声明"MOCK 服务化（独立进程 HTTP 服务，模拟延迟/并发/失败）作为开发仪器，协同修复 dispatch 数据竞争"，但阶段依赖图把 C 排在 B 之后。Phase B 验收要求"补'插值 + 真实并发'合规测试（不验真实并发时序）"，而现有内联 MOCK（纯函数、零延迟控制、零失败注入、共享插件状态非线程安全、TESTONLY 判定散落 4 处、`_scene_prompts` 死字段、服务化依赖 openai/fastapi/uvicorn/httpx 全部未安装）无法提供该验证能力。
+
+**决策选项**：
+- **选项 A（MOCK 服务化提前，作为 Phase B0 开发仪器）**：先建服务主体（场景引擎 + 延迟 + 失败注入 + 请求级状态隔离 + OpenAI 兼容协议），再实施 §五 改造项 1-5，验收以服务为后端。符合 PT-4.7 原声明；一次性清 mock 子系统技术债；并发时序可观测。代价：引入服务依赖（openai + fastapi/uvicorn），改变项目零第三方依赖现状（需决策依赖策略：强制 vs 可选 skip）。
+- **选项 B（保持 B→C 次序）**：内联 MOCK 加锁 + 值正确性验证先行，真实并发时序验证延后到 Phase C。风险：B 的"并发"属性无法在验收中实测，dispatch 可能静默串行化而不被发现。
+- **选项 C（内联 MOCK 最小硬化 + 服务化并行推进）**：两轨并存，值场景留内联（258 处 MOCK 用法不迁移），机制/时序/失败场景用服务。工作量大但破坏面最小。
+
+**已决策（B0 执行）**：采用选项 A+C 融合——**MOCK 服务化提前为 Phase B0 开发仪器**，值场景保留内联 MOCK（不迁移既有用法）。服务实现要点：
+- **线程内 `ThreadingHTTPServer`**（非独立进程）：wire 行为与子进程一致，测试编排免端口协调/生命周期管理；服务器类可被子进程方式复用。
+- **stdlib `http.server`**（无 fastapi/uvicorn）：依赖面保持仅 `openai`，配合环境正规化（pyproject 分组 + conda env）。
+- **含 SSE 流式端点**（Phase C 原承诺一并落地）。
+- **TESTONLY 判定收敛**：`_is_test_config` 统一 4 处散落比对。
+- **指令语言单点真理**：`MockScenarioEngine`（`ibci_modules/ibci_ai/mock_scenario.py`）从 `_handle_mock_response` 提取，内联/服务共用；扩展控制指令 `SLEEP:<ms>`/`ERROR:<status>`。
+- 环境正规化（B0-Env）：`pyproject.toml` 依赖分组 + `environment.yml` conda 环境 + `docs/guide/00_environment.md` + CI 统一安装。
+
 ---
 
 ## 六、Phase C：MOCK 服务（FastAPI + 流式）
 
-**前置**：Phase B 完成。
-
-### 改造
-1. FastAPI 构建 OpenAI 兼容 `/v1/chat/completions`（含流式 SSE），独立线程事件循环。
-2. 可编程场景引擎（延迟/并发/失败/流式）。
-3. 正式 mock 注册口（收敛 TESTONLY 散落判定）。
-4. sync `OpenAI` client 指向本地服务。
-5. 补 `requirements` 文件（openai + fastapi + uvicorn 等测试依赖）。
+> **状态：主体已被 B0-Mock 吸收落地**（作为 Phase B 开发仪器提前启动）。原设计的技术选型（FastAPI 独立进程）调整为 stdlib `ThreadingHTTPServer` 线程内服务，五项改造逐一对应：① OpenAI 兼容 `/v1/chat/completions` + SSE 流式 → `MockServer`；② 可编程场景引擎 → `MockScenarioEngine`（延迟 `SLEEP`/失败 `ERROR`/并发统计）；③ 正式 mock 注册口 → `AIPlugin._is_test_config` 收敛；④ sync `OpenAI` client 指向本地服务 → 服务接入模式；⑤ requirements → `pyproject.toml` 依赖分组 + `environment.yml`。
 
 ### 边界
-- 不涉及 client 侧 async（`AsyncOpenAI`）。VM 保持 sync。
+- 不涉及 client 侧 async（`AsyncOpenAI`）。VM 保持 sync。SSE 端点已就绪，其 `AsyncOpenAI` 消费方属 Phase D。
 
 ---
 
@@ -208,10 +232,11 @@ LLM 并行化工作此前搁置，根因是 async 层级边界（全栈 vs LLM �
 
 ```
 Phase A（状态去共享 + llmexcept 统一）──奠基──> Phase B（dispatch 修复）
-                                                       │
-                                                       └──> Phase C（MOCK 服务）
-                                                                │
-                                                                └──（Phase D 暂搁置）
+   │                                             ▲
+   └──> B0（环境正规化 + MOCK 服务化）──开发仪器──┘
+                                                      
+Phase C（MOCK 服务）主体已被 B0-Mock 吸收
+Phase D（全栈 async）暂搁置
 ```
 
 - U1（编译期统一）是 U2（运行期统一）的前置。
@@ -252,14 +277,25 @@ Phase A（状态去共享 + llmexcept 统一）──奠基──> Phase B（dis
 | A U5 命名变更 | 🔶 部分 | frame.last_result→target_result、executor/ai/idbg 方法改名已做；帧内局部变量名待审 |
 | A U6 idbg 适配 + 接口清理 | ✅ | 读 frame.target_result；IStateReader/IExecutionFrame 接口重定义 |
 | A U7 公理 EXEC-3 更新 + 文档 | 🔶 部分 | EXEC-3/IC-3 + 04_vm_interpreter + KNOWN_LIMITS 已更新；语法/子系统文档同步 |
-| B dispatch 修复 | ⬜ | PT-4.7，依赖 A |
-| C MOCK 服务 | ⬜ | FastAPI + 流式，依赖 B |
+| B0-Env 环境与依赖正规化 | ✅ | pyproject.toml 分组 + environment.yml + 00_environment.md + CI 统一安装 + ibci_modules 根 __init__.py |
+| B0-Mock MOCK 服务化 | ✅ | MockScenarioEngine + MockServer（stdlib HTTP + SSE + SLEEP/ERROR）+ TESTONLY 收敛 + 16 项服务测试 |
+| B dispatch 修复 | ⬜ | PT-4.7，依赖 B0（服务作为验收仪器） |
+| C MOCK 服务 | ✅ 吸收 | 主体已由 B0-Mock 落地（非 fastapi，stdlib 线程内服务） |
 | D 全栈 async | ⏸ 暂搁置 | 语言级 async |
 
 ### 当前状态（供下个 session 续接）
 
-**已完成**：A7/A1/A2/A3/A6 + U1-U4 + U5（帧字段/方法改名）+ U6 + U7 核心文档。
-**测试基线**：`1190 passed, 8 skipped`（llmexcept e2e 26 项 + 新增 4 项统一机制回归；含 if/while 无 handler raise 固化、BoolOp/BinOp 嵌套传播、模糊字符串有界重试）。
+**已完成**：A7/A1/A2/A3/A6 + U1-U4 + U5（帧字段/方法改名）+ U6 + U7 核心文档 + PT-4.8 + **B0-Env（环境正规化）+ B0-Mock（MOCK 服务化）**。
+**测试基线**：`1215 passed, 8 skipped`（llmexcept 统一回归 + PT-4.8 恒真陷阱修复 + 16 项 MOCK 服务测试）。
+
+**B0 交付**：
+- `pyproject.toml`（ibci-inter 0.1.0，运行时依赖 openai，`test`/`dev` 分组）；`environment.yml`（conda env `ibci`）；`docs/guide/00_environment.md`；CI 改 `pip install -e ".[test]"`。
+- `MockScenarioEngine`（`ibci_modules/ibci_ai/mock_scenario.py`）：指令语言单点实现（RLock 线程安全），内联/服务共用。
+- `MockServer`（`ibci_modules/ibci_ai/mock_service.py`）：stdlib `ThreadingHTTPServer` + OpenAI 兼容 `/v1/chat/completions` + SSE + `SLEEP`/`ERROR` 控制 + 并发统计。
+- `AIPlugin._is_test_config` 收敛 4 处 TESTONLY 判定；`_handle_mock_response` 变薄委托。
+- `tests/conftest.py` 新增 `mock_server` fixture；`tests/runtime/test_mock_service.py` 16 项。
+
+**下一步：Phase B dispatch 修复**（§五 改造项 1-5 + 调研微调 1-8），以 `mock_server` 为验收仪器。剩余低优先级项：U5 命名审查、`_scene_prompts` 死方法清理（`set_general_prompt` 等 4 方法引用未初始化字段）。
 
 **U2+U3 关键设计落地**：
 - 产生者（`_finalize_invoke_result` / `vm_handle_IbBehaviorExpr` / `vm_handle_IbBehaviorInstance` / `is_truthy` / `IbCastExpr`）不确定时返回 `IbLLMCallResult(is_certain=False)`，不写 frame / 全局槽。

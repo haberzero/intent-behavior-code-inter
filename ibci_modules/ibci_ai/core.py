@@ -4,6 +4,8 @@ from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
 from core.runtime.shared.llm_result import MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
 
+from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine
+
 
 class AIPlugin(IbStatefulPlugin):
     """
@@ -42,10 +44,8 @@ class AIPlugin(IbStatefulPlugin):
             "IbAssign": "目标值计算模糊。请确保返回的内容能被清晰地识别并赋值给变量。"
         }
         self._capabilities: Optional[ExtensionCapabilities] = None
-        self._mock_state: Dict[str, int] = {}
-        self._mock_retry_counts: Dict[str, int] = {}
-        # SEQ mock: per-key call index counter
-        self._mock_seq_counters: Dict[str, int] = {}
+        # MOCK 指令语言单点实现（线程安全；seq/retry 状态由引擎持有）
+        self._mock_engine = MockScenarioEngine()
         
         # [NEW] 模型能力策略缓存
         self._model_capabilities = {
@@ -57,9 +57,20 @@ class AIPlugin(IbStatefulPlugin):
 
     def reset_mock_state(self) -> None:
         """重置Mock状态，用于测试隔离"""
-        self._mock_state.clear()
-        self._mock_retry_counts.clear()
-        self._mock_seq_counters.clear()
+        self._mock_engine.reset()
+
+    @staticmethod
+    def _is_test_config(url: Optional[str], key: Optional[str]) -> bool:
+        """TESTONLY / MOCK 模式统一判定（收敛散落的字符串比对）。"""
+        return (
+            url == "TESTONLY"
+            or key == "MOCK_KEY"
+            or os.environ.get("IBC_TEST_MODE") == "1"
+        )
+
+    def _is_test_mode(self) -> bool:
+        """当前默认配置是否处于 MOCK 测试模式。"""
+        return self._is_test_config(self._config.get("url"), self._config.get("key"))
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
@@ -79,10 +90,7 @@ class AIPlugin(IbStatefulPlugin):
 
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""
-        is_test_mode = (
-            self._config["url"] == "TESTONLY" or
-            os.environ.get("IBC_TEST_MODE") == "1"
-        )
+        is_test_mode = self._is_test_mode()
         if is_test_mode:
             self._client = "MOCK_CLIENT"
             return
@@ -155,10 +163,7 @@ class AIPlugin(IbStatefulPlugin):
                 f"未注册的命名模型 '{name}'。请先使用 ai.register_model(\"{name}\", url, key, model) 注册。"
             )
 
-        is_test_mode = (
-            config["url"] == "TESTONLY" or
-            os.environ.get("IBC_TEST_MODE") == "1"
-        )
+        is_test_mode = self._is_test_config(config["url"], config["key"])
         if is_test_mode:
             self._named_clients[name] = "MOCK_CLIENT"
             return "MOCK_CLIENT"
@@ -193,7 +198,7 @@ class AIPlugin(IbStatefulPlugin):
         通过发送特定的测试请求，动态检测模型是否属于"强制推理模型" (Reasoning/CoT Model)，
         并在内部缓存探测结果以指导后续所有的工作流调用策略。
         """
-        is_test_mode = (self._config["key"] == "MOCK_KEY" or self._config["url"] == "TESTONLY")
+        is_test_mode = self._is_test_mode()
         if is_test_mode:
             self._model_capabilities.update({
                 "probed": True, "is_reasoning": False, "extract_strategy": "standard"
@@ -345,10 +350,7 @@ class AIPlugin(IbStatefulPlugin):
         return []
 
     def __call__(self, sys_prompt: str, user_prompt: "Union[str, List]", scene: str = "general", *, target_model: str = "") -> str:
-        is_test_mode = (
-            self._config["url"] == "TESTONLY" or
-            os.environ.get("IBC_TEST_MODE") == "1"
-        )
+        is_test_mode = self._is_test_mode()
         
         # 多模态内容：将 List 转换为纯文本用于 MOCK 或传递给 API
         # 对于 MOCK 模式和纯文本路径，需要将 List 展平为 str
@@ -531,214 +533,17 @@ class AIPlugin(IbStatefulPlugin):
         return content_blocks
 
     def _handle_mock_response(self, user_prompt: str, scene: str) -> str:
+        """处理 MOCK 指令（委托 :class:`MockScenarioEngine` 单点实现）。
+
+        指令语言定义见 ``ibci_modules/ibci_ai/mock_scenario.py``。
+        内联路径忽略传输层控制（``SLEEP`` 延迟），但 ``ERROR`` 指令在此
+        模拟 provider 基础设施失败（raise），使 ``_call_llm`` 的
+        ``ThrownException`` 路径不经 HTTP 即可被测试覆盖。
         """
-        处理 MOCK 前缀指令。所有指令关键字**区分大小写，必须全大写**。
-
-        **重要约束（LLM 函数 MOCK）**：
-        LLM 函数的 ``__user__`` 块在测试时必须**只包含单独一行 MOCK 指令**，不允许与
-        其他文字混合书写。MOCK 指令必须是 user_prompt 的完整内容（去空白后以 "MOCK:" 开头）。
-        错误示例：
-            __user__
-            请分析以下代码：
-            MOCK:STR:ok         ← 错误！MOCK 不在首位，不会被识别
-            给出建议
-        正确示例：
-            __user__
-            MOCK:STR:ok         ← 正确：__user__ 块仅含此 MOCK 指令
-
-        **裸行为表达式（@~...~）的 MOCK**：MOCK 指令直接写在行为描述内容中即可，
-        例如 ``str r = @~MOCK:STR:hello~``，无此约束。
-
-        ---
-
-        [基础指令]（不带额外参数）
-        MOCK:FAIL    - 触发 llmexcept（模拟 LLM 不确定/拒绝）
-        MOCK:TRUE    - 返回 "1"（bool 真）
-        MOCK:FALSE   - 返回 "0"（bool 假）
-        MOCK:REPAIR  - 首次返回模糊值触发重试，重试后返回 "1"（默认 truthy 值）
-
-        [二级类型指令]（指令关键字必须大写）
-        MOCK:INT:<value>          - 返回整数，如 MOCK:INT:42
-        MOCK:STR:<value>          - 返回字符串，如 MOCK:STR:"hello"
-        MOCK:FLOAT:<value>        - 返回浮点数，如 MOCK:FLOAT:3.14
-        MOCK:BOOL:TRUE/FALSE      - 返回布尔值，如 MOCK:BOOL:TRUE
-        MOCK:LIST:<json>          - 返回列表，如 MOCK:LIST:[1,2,3]
-        MOCK:DICT:<json>          - 返回字典，如 MOCK:DICT:{"key":"value"}
-        MOCK:SEQ:[v1,v2,...] key  - 按序返回值；成员必须全大写；FAIL/TRUE/FALSE 为哨兵
-
-        [扩展 REPAIR 指令]
-        MOCK:REPAIR:<FALLBACK_DIRECTIVE>
-                    - 首次返回模糊值；重试后按 FALLBACK_DIRECTIVE 执行（可使用任意二级指令）
-                    - 例：MOCK:REPAIR:STR:repaired → 修复后返回字符串 "repaired"
-                    - 例：MOCK:REPAIR:INT:42       → 修复后返回整数 42
-                    - 例：MOCK:REPAIR:BOOL:TRUE    → 修复后返回 bool true
-
-        """
-        if not user_prompt.startswith("MOCK:"):
-            # Validation: warn if a MOCK directive appears somewhere in the prompt but is not
-            # the sole content.  LLM function mock testing requires the __user__ block to
-            # contain ONLY a single MOCK directive line — mixing MOCK with other text is not
-            # supported and the directive will be silently ignored.
-            if "MOCK:" in user_prompt:
-                import warnings
-                # stacklevel=4: __call__ → run_string → engine → user code; keeps the
-                # warning pointing at the user's LLM function definition rather than
-                # this internal helper.
-                warnings.warn(
-                    "A MOCK: directive was found in the LLM prompt but is not at the start. "
-                    "LLM function MOCK must be the sole content of the __user__ block "
-                    "(a single 'MOCK:<directive>' line with no other text). "
-                    "The directive will be ignored and a generic mock response will be used instead.",
-                    UserWarning,
-                    stacklevel=4,
-                )
-            if scene in ("branch", "loop"):
-                return "1"
-            return f"[MOCK] {user_prompt}"
-
-        content_after_mock = user_prompt[5:].strip()
-        # 如果 user_prompt 是多行模板的一部分，MOCK 指令通常在第一行；
-        # 只取第一行内容进行解析，避免后续内容干扰。
-        first_line_after_mock = content_after_mock.split("\n", 1)[0].strip()
-        
-        # 1. 处理二级类型指令 (MOCK:INT:xxx, MOCK:STR:xxx, etc.)
-        if ':' in first_line_after_mock:
-            type_parts = first_line_after_mock.split(':', 2)
-            if len(type_parts) >= 2:
-                mock_type = type_parts[0]
-                mock_value = type_parts[1] if len(type_parts) == 2 else ':'.join(type_parts[1:])
-                
-                if mock_type == "INT":
-                    # Strip any trailing key/label (first word only is the value)
-                    int_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return str(int(int_val))
-                elif mock_type == "STR":
-                    # Strip surrounding matched quotes (added by behavior-expression parser),
-                    # then strip any trailing key/label (text after the first whitespace).
-                    if len(mock_value) >= 2 and (
-                        (mock_value[0] == '"' and '"' in mock_value[1:]) or
-                        (mock_value[0] == "'" and "'" in mock_value[1:])
-                    ):
-                        q = mock_value[0]
-                        close = mock_value.index(q, 1)
-                        return mock_value[1:close]
-                    # Unquoted: value is everything up to the first whitespace
-                    str_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return str_val
-                elif mock_type == "FLOAT":
-                    # Strip any trailing key/label
-                    float_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return str(float(float_val))
-                elif mock_type == "BOOL":
-                    # Strip any trailing key/label; comparison remains uppercase-only
-                    bool_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return "1" if bool_val == "TRUE" else "0"
-                elif mock_type == "LIST":
-                    # Value must start with '['; strip trailing key after the closing ']'
-                    if mock_value.startswith('['):
-                        close = mock_value.find(']')
-                        if close != -1:
-                            return mock_value[:close + 1]
-                    return f"[{mock_value.split()[0] if mock_value.split() else mock_value}]"
-                elif mock_type == "DICT":
-                    # Value must start with '{'; strip trailing key after the closing '}'
-                    if mock_value.startswith('{'):
-                        close = mock_value.find('}')
-                        if close != -1:
-                            return mock_value[:close + 1]
-                    return "{" + (mock_value.split()[0] if mock_value.split() else mock_value) + "}"
-                elif mock_type == "REPAIR":
-                    # Extended MOCK:REPAIR syntax with a fallback directive.
-                    # Format: MOCK:REPAIR:<FALLBACK_MOCK_DIRECTIVE>
-                    # e.g.  MOCK:REPAIR:STR:hello   → first call uncertain, repaired as "hello"
-                    #       MOCK:REPAIR:INT:42       → repaired as integer 42
-                    #       MOCK:REPAIR:BOOL:TRUE    → repaired as bool true
-                    # The legacy bare form "MOCK:REPAIR" (no colon-directive) is handled in
-                    # section 2 below for backward compatibility.
-                    repair_fallback = mock_value  # e.g. "STR:hello" or "BOOL:TRUE"
-                    retry_key = f"_repair_ext_{repair_fallback}"
-                    if retry_key not in self._mock_retry_counts:
-                        self._mock_retry_counts[retry_key] = 0
-                    if self._mock_retry_counts[retry_key] == 0:
-                        self._mock_retry_counts[retry_key] = 1
-                        return MOCK_REPAIR_SENTINEL
-                    else:
-                        self._mock_retry_counts[retry_key] = 0
-                        if repair_fallback:
-                            # Recursively process the fallback as a standard mock directive
-                            return self._handle_mock_response(f"MOCK:{repair_fallback}", scene)
-                        return "1"  # no fallback → default truthy value
-                elif mock_type == "SEQ":
-                    # MOCK:SEQ:[v1,v2,...] optional_key
-                    # Returns values in sequence per call, keyed by 'key'.
-                    # Special sentinel values: FAIL → ambiguous (triggers llmexcept),
-                    # TRUE → "1", FALSE → "0". Repeats last value when exhausted.
-                    # NOTE: bracket format [v1,v2,...] is REQUIRED; bare comma-separated
-                    # values are rejected to avoid ambiguous key/value boundary detection.
-                    mv = mock_value.strip()
-                    if mv.startswith('[') and ']' in mv:
-                        bracket_end = mv.index(']')
-                        seq_values_str = mv[1:bracket_end]
-                        remainder = mv[bracket_end + 1:].strip()
-                        seq_key = remainder if remainder else ""
-                    else:
-                        import warnings
-                        warnings.warn(
-                            "MOCK:SEQ requires bracket format: MOCK:SEQ:[v1,v2,...] optional_key. "
-                            "Bare comma-separated values are no longer supported and will be ignored. "
-                            f"Got: MOCK:SEQ:{mv!r}",
-                            UserWarning,
-                            stacklevel=2,
-                        )
-                        return ""
-                    values = [v.strip() for v in seq_values_str.split(',') if v.strip()]
-                    counter_key = f"_seq_{seq_key}"
-                    idx = self._mock_seq_counters.get(counter_key, 0)
-                    self._mock_seq_counters[counter_key] = idx + 1
-                    val = values[idx] if idx < len(values) else (values[-1] if values else "")
-                    if val == "FAIL":
-                        return MOCK_AMBIGUOUS_SENTINEL
-                    if val == "TRUE":
-                        return "1"
-                    if val == "FALSE":
-                        return "0"
-                    return val
-
-        # 2. 处理命名指令（区分大小写，MOCK 指令必须全大写）
-        # first_line_after_mock 已在上方提取（第一行内容，去除空白）。
-        parts = first_line_after_mock.split(" ", 1)
-        mock_cmd = parts[0] if parts else ""
-        mock_content = parts[1] if len(parts) > 1 else ""
-
-        if mock_cmd == "FAIL":
-            self._mock_state[mock_content] = -1
-            return MOCK_AMBIGUOUS_SENTINEL
-
-        if mock_cmd == "TRUE":
-            self._mock_state[mock_content] = 1
-            return "1"
-
-        if mock_cmd == "FALSE":
-            self._mock_state[mock_content] = 0
-            return "0"
-
-        if mock_cmd == "REPAIR":
-            retry_key = f"_repair_{mock_content}"
-            if retry_key not in self._mock_retry_counts:
-                self._mock_retry_counts[retry_key] = 0
-
-            if self._mock_retry_counts[retry_key] == 0:
-                self._mock_retry_counts[retry_key] = 1
-                self._mock_state[mock_content] = -1
-                return MOCK_REPAIR_SENTINEL
-            else:
-                self._mock_retry_counts[retry_key] = 0
-                self._mock_state[mock_content] = 1
-                return "1"
-
-        if scene in ("branch", "loop"):
-            return "1"
-        return f"[MOCK] {user_prompt}"
+        result = self._mock_engine.handle(user_prompt, scene)
+        if result.error_status is not None:
+            raise RuntimeError(f"MOCK:ERROR injected ({result.error_status})")
+        return result.content
 
     # ------------------------------------------------------------------
     # IbStatefulPlugin 协议：断点保存/恢复

@@ -26,3 +26,9 @@ diff_output_ibci_all.md
 .tmp_run/
 pytest-of-*/
 ref/
+
+# packaging / build artifacts
+*.egg-info/
+build/
+dist/
+.eggs/

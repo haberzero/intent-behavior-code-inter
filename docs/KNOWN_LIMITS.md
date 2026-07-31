@@ -354,10 +354,12 @@ str r = @~ ... ~
 **根源**：dispatch_eager 曾被半接通（`dispatch_eligible` 默认 `True`），但后台线程执行完整的 `execute_behavior_expression`（含 prompt 段求值），重入共享 `VMExecutor` 导致 `_current_stack`/`step_count`/`last_call_info`/`retry_hint` 数据竞争。已显式禁用并降级为专项重做。
 
 **接通前置条件**：
-1. 修 `BehaviorDependencyPass` 实现 spec §3.1 规则（插值依赖/Cell/llmexcept 强制 `False`）
+1. 修 `BehaviorDependencyPass` 实现 spec §3.1 规则（插值依赖/Cell/llmexcept/可重复执行上下文强制 `False`）
 2. 拆分 `execute_behavior_expression` 为"主线程预求值 prompt"+"后台仅 HTTP 调用"
 3. `retry_hint` 线程安全（`last_call_info` 已去共享：call_info 绑定到 `LLMResult`，executor 仅保留主线程单写槽）
 4. 补"插值 + 真实并发"合规测试
+
+**MOCK 验证能力缺口**：内联 MOCK（`AIPlugin._handle_mock_response`）是进程内纯函数，零延迟控制、零基础设施失败注入，无法实测并发时序与 provider 异常传播路径。机制类验证（时序/失败/并发）须经 MOCK HTTP 服务（`MockServer`，`ibci_modules/ibci_ai/mock_service.py`）走真实 `OpenAI` 客户端路径；指令解析与场景状态由 `MockScenarioEngine` 统一实现（线程安全）。
 
 **未来演进思路**：具体规划见任务文档。
 
