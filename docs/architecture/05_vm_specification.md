@@ -118,6 +118,14 @@ while frame_stack:
 
 `tests/compliance/test_concurrent_llm.py` 验证以上公理的可观察行为，以 MOCK LLM driver 作为后端，不依赖外部网络。
 
+### §3.4 批量并发执行（`ai.run_batch`）
+
+**公理 LLM-4（批量执行）**：`ai.run_batch(fn_behavior, items) -> list` 对参数化 fn 行为逐项并发执行，保序返回结果列表。每项在主线程预求值 prompt（参数绑定 + `_prepare_behavior_call`），后台线程仅执行 `_call_and_parse`；结果按 `items` 顺序收集。任一项结果不确定即抛 `LLMParseError`（与无 llmexcept 的同步语义一致，错误粒度为整个批次）。
+
+**排除"循环内自动透明并发"**：循环体 / 函数体内行为强制 `dispatch_eligible=False`（§3.1），不做自动并发展开。理由：① `_pending_futures` 按静态 `node_uid` 键控，同一节点多次执行会覆写键导致读点解析错乱与旧 Future 泄漏，改"执行实例"键是运行时模型改动；② 自动展开要求编译器证明循环体为"纯批次"（无控制流 / 跨迭代依赖 / 副作用顺序），证明错判即静默改变程序行为；③ 与"显式优于隐式"公理冲突。需要批量并发时用 `ai.run_batch` 显式表达。
+
+**未来方向**：列表推导式 `[ @~ ... ~ for item in items ]`（需元素类型推断设计）；循环内软件流水线 / 严格纯度分析下的自动展开（远期探索）。
+
 ---
 
 ## §4 多 Interpreter 并发（Layer 2 Execution Isolation）
@@ -227,6 +235,7 @@ python3 -m pytest tests/compliance/ -v
 | **LLM-1** | dispatch_eager | §3.2 |
 | **LLM-2** | lazy resolve | §3.2 |
 | **LLM-3** | 确定性输出 | §3.2 |
+| **LLM-4** | 批量并发执行（`ai.run_batch`） | §3.4 |
 | **ISO-1** | 独立 RuntimeContext | §4.1 |
 | **ISO-2** | 只读共享 Registry | §4.1 |
 | **ISO-3** | 线程安全 | §4.1 |

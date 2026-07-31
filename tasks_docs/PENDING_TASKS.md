@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-07-31（PT-4.8 布尔上下文行为表达式定型已修复关闭；语言级边界保留于 `docs/KNOWN_LIMITS.md` §二十三）
+> **最后更新**：2026-07-31（主线收官后任务控制清洁：移除已完成项 PT-4.7/PT-4.9/PT-TEST-8，删 `_mock_concurrency.md`，设计决策并入 `docs/architecture/05_vm_specification.md` §3.4）
 
 ---
 
@@ -64,24 +64,6 @@
 
 ### PT-4.5　用户类运算符重载 [VISION]
 
-### PT-4.9　行为批量执行原语 `ai.run_batch`（并发 map） [DESIGN-DEBT] [已完成]
-
-> **已实现（2026-07-31，随 Phase B 落地）**。设计决策：
->
-> **排除"循环内自动透明并发"**——理由：① `_pending_futures` 按 `node_uid` 键控，循环内同一节点多次执行会覆写键导致读点解析错乱与泄漏，改"执行实例"键是运行时模型改动；② 自动展开要求编译器证明循环体为"纯批次"（无控制流/跨迭代依赖/副作用顺序），证明错判 = 静默改变程序行为（最危险错误）；③ 与"显式优于隐式"公理冲突。
->
-> **采用显式原语**：`ai.run_batch(fn_behavior, items) -> list`——对参数化 fn 行为（`fn f = lambda(str x) -> str: @~ ... $x ... ~`）逐项并发执行，保序返回结果列表。不走 `_pending_futures`（自管按实例索引的 future 列表，天然解决身份问题），复用 `_prepare_behavior_call` + `_call_and_parse`。
->
-> **实现要点**：executor `run_batch`（主线程逐项绑闭包+参数+预求值，后台并发 `_call_and_parse`，保序收集，任一项不确定抛 `LLMParseError`）；AIPlugin 暴露 + vtable；loader `proxy_wrapper` 可调用实例原样透传（`_is_callable_object`）；`bind_behavior_closure`/`bind_behavior_call_args` 提取为共享辅助（消除 3 处重复绑定循环）。
->
-> **备选（未来）**：列表推导式 `[ @~ ... ~ for item in items ]`（Python 风格，需类型推断设计）。
->
-> **循环内软件流水线 / 严格纯度分析下的自动展开**：远期探索，不排除。
-
-### PT-4.7　DDG 并行调度接入 VM（含原 C2 缺陷合并） [DESIGN-DEBT] [已完成]
-
-> **已完成（2026-07-31）**。运行时拆分（`_prepare_behavior_call` + `_call_and_parse`）、resolve 对齐、`fork_intent_snapshot` fail-fast、`BehaviorDependencyPass` 四条规则、`dispatch_eligible` 按规则接通全部落地；4 项 dispatch skip 解锁（8→4），循环内 FAIL 语义修正为同步报错。细化记录见 `tasks_docs/_mock_concurrency.md` §五/§十。
-
 ---
 
 ## 四、设计原则与明确排除方向
@@ -102,7 +84,7 @@
 
 ---
 
-## 五、测试基础设施改善项
+## 五、测试与文档体系完善项
 
 ### PT-TEST-6　e2e 测试覆盖率提升 [P2]
 
@@ -112,9 +94,9 @@
 
 > `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 中的测试名与实际文件名不同步。
 
-### PT-TEST-8 MOCK 指令文档与代码同步 [P3]
+### PT-TEST-8 MOCK 指令文档与代码同步 [已完成]
 
-> `docs/syntax/13_mock_testing.md` 需与 `ibci_ai/core.py` MOCK 处理逻辑保持同步。
+> `docs/syntax/13_mock_testing.md` 与 MOCK 指令实现（`MockScenarioEngine`）已同步（2026-07-31）：控制指令 `SLEEP`/`ERROR`、HTTP 服务章节、SEQ 语义修正。
 
 ### PT-TEST-9　`ai.probe_model` 零测试覆盖 [P2]
 
@@ -130,11 +112,7 @@
 
 ### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]
 
-> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项：`_expected_type_stack`（实例级全局，并行化潜在竞争，见 `_mock_concurrency.md` §九）；`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按宏观诊断 skill 全仓扫描。
-
----
-
-## 5.5、文档体系完善项
+> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项：`_expected_type_stack`（实例级全局，并行化潜在竞争）；`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按 `skills/code-health.md` 宏观诊断全仓扫描。
 
 ### PT-DOC-1 语法手册定位段补充 [P3]
 

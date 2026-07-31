@@ -83,8 +83,8 @@
 |---|---|---|---|
 | 1 | `Interpreter.execution_context` 取代 `_execution_context` 穿透 | 报告C ②#1（4 处） | 零成本测试侧 |
 | 2 | `IIbBehavior` Protocol 声明 `llm_deps`/`dispatch_eligible` | 报告C ④.1 `hasattr` 探测 | Protocol 契约化 |
-| 3 | MOCK 哨兵字符串常量化（`MOCK_REPAIR_SENTINEL` 等） | 报告C ③.1 跨模块魔法字符串（6+ 处） | 契约化 |
-| 4 | 统一 LLM mock 注册口 + `is_test_mode` 收敛 | 报告C ③.2 TESTONLY 散落判定（4 处重复+MOCK_KEY 孤儿） | 机制收敛 |
+| 3 | MOCK 哨兵字符串常量化（`MOCK_REPAIR_SENTINEL` 等） | 报告C ③.1 跨模块魔法字符串（6+ 处） | 契约化 ✅ 已完成（B0，含 enum 镜像一致性测试） |
+| 4 | 统一 LLM mock 注册口 + `is_test_mode` 收敛 | 报告C ③.2 TESTONLY 散落判定（4 处重复+MOCK_KEY 孤儿） | 机制收敛 ✅ 已完成（B0，`_is_test_config`） |
 | 5 | `IBCIEngine.test_snapshot()` 内省 API | 报告C ②#2-7（12 处私有穿透） | 正式内省 API |
 | 6 | `resolve_plugin_search_paths()` 公开 | 报告C ②#3 | 正式 API |
 | 7 | `LLMExecutor.pending_future_count()`/`has_pending()` | 报告C ②#8（5 处穿透） | 正式观测口 |

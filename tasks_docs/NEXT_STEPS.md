@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-31（主线收官：Phase B dispatch 修复 + `ai.run_batch` 批量原语落地，基线 1229 passed, 4 skipped 实测）
+> **最后更新**：2026-07-31（主线阶段收官，当前无激活 P0）
 
 ---
 
@@ -26,34 +26,31 @@
 python -m pytest tests/
 ```
 
-**2026-07-30 实测结果**：`1186 passed, 8 skipped`（0 failures/errors，linux / bash）
-
-> 当前基线以实跑为准，不冻结数字。
+> 基线以实跑为准，不冻结数字。
 
 ---
 
-## 当前主线：LLM 并行化与状态重设计 + llmexcept 机制统一
+## 当前主线：LLM 并行化与状态重设计（阶段收官）
 
-> **media Phase 4（MediaAxiom + IbMedia 全模态容器）已暂停**，降级为未来低优先级任务（详见 `tasks_docs/PENDING_TASKS.md` §六）。代码层零启动，仅设计文档存在。
->
-> 彻查发现 llmexcept 存在**两种绑定机制**（正则包装 `IbLLMExceptionalStmt` vs 条件驱动 for 内联 `llmexcept_handler`），是历史演进产物而非设计意图，导致 frame 时机不一致、Bug-8/9 等架构裂缝。决断：**llmexcept 机制彻底统一**（消除 `IbLLMExceptionalStmt`，统一 `llmexcept_handler` 挂载 + 内联重试，禁止语法糖兼容展开）+ **状态模型重设计**（certainty 经 `IbLLMCallResult` 返回值传递，产生者不依赖 frame；retry_hint 绑 frame；消除 `_last_llm_result` 全局槽与 `last_call_info` 共享槽）。Phase A 统一重构**已完成**（U1-U7，基线 `python -m pytest tests/` 实跑通过）：llmexcept 统一为单一机制、`vm_handle_IbLLMExceptionalStmt` 已删除、产生者返回容器/消费者内联重试（`_retry_llm_uncertain` 单帧内收敛，修复了"重入新建帧导致重试永不止步"死循环）、表达式层透传不确定容器、idbg/ai 接口改名为 current/target。剩余：文档收尾（`_mock_concurrency.md`/`_code_llmexcept_unify.md` 清理）与 U5 命名审查。**下一步：Phase B dispatch 修复（PT-4.7）**。async 层级：优先 LLM 层面（MOCK HTTP 服务），全体系语言级 async 暂搁置。细化规划见 `tasks_docs/_mock_concurrency.md`。**Phase B0 已完成**（环境正规化 + MOCK 服务化）：`pyproject.toml` 依赖分组 + conda `environment.yml` + `docs/guide/00_environment.md` + CI 统一安装；`MockScenarioEngine`（指令语言单点实现，线程安全）+ `MockServer`（stdlib HTTP + OpenAI 兼容 + SSE + SLEEP/ERROR 控制）+ `AIPlugin._is_test_config` 收敛 + 16 项服务测试。MOCK 服务作为 Phase B 并发时序验收仪器（真实 `OpenAI` 客户端路径彩排）。
->
-> **独立调研项（本轮主线已完成）**：布尔上下文行为表达式定型 `str` 恒真陷阱（PT-4.8）已修复；**Phase B dispatch 修复（PT-4.7）已完成**（运行时拆分 + resolve 对齐 + 四条规则 + 4 skip 解锁）；**`ai.run_batch` 批量并发原语（PT-4.9）已落地**（并发 map，参数化 fn 行为逐项并行、保序返回）。主线（LLM 并行化 + 状态重设计 + llmexcept 统一 + MOCK 服务化 + 批量原语）阶段收官，基线 `1229 passed, 4 skipped` 实测。剩余低优先级项见 `PENDING_TASKS.md`（U5 命名审查、`_pending_futures` 泄漏观测性、PT-HEALTH-*）。async 层级：全体系语言级 async 仍暂搁置（Phase D）。
->
-> 测试体系治理与彻底重构降为**独立、较低优先级**任务，单独立项于 `tasks_docs/TEST_REFACTOR.md`（含 4 份调研报告 `TEST_REFACTOR_REPORTS.md`），不与本主线混置。
+**已完成**（本周期主线，提交见 `git log`）：
+- llmexcept 机制统一 + 状态模型重设计（Phase A，U1-U7）
+- 环境与依赖正规化 + MOCK 服务化（B0：pyproject 分组 / conda env / `MockServer`）
+- Phase B dispatch 修复（运行时拆分 + 规则化调度，4 项 skip 解锁）
+- `ai.run_batch` 批量并发原语（并发 map，公理 LLM-4）
+
+**当前无激活 P0 阶段**。剩余待办均为低优先级（P2/P3 / VISION / SHELVED），见 `tasks_docs/PENDING_TASKS.md`。
+
+**下一步候选**（从 PENDING_TASKS 优先队列中择一）：
+- **U5 命名审查**：`_shared.py`/`leaf.py`/`control_flow.py` 局部变量 `last_result`/`last_val` 等审慎清理
+- **`_pending_futures` 泄漏观测性**：未读取的 dispatched 变量残留（`KNOWN_LIMITS.md §十五` 已标注）
+- **PT-HEALTH-1/2/3**：executor 侧健康项（hasattr 协议化 / set_return_type_prompt / 全仓 code-health 扫描）
 
 ---
 
-## P1 后续任务
+## 独立并行任务
 
-以下任务不影响 media Phase 4 的开工决策：
-
-1. **PT-ARCH-22**：全项目文件命名清理（暂缓，独立窗口执行）。
-2. **PT-ARCH-28**：`file` 模块统一写入 API + 函数动态/命名参数支持（临时 `write_new` 已就位）。
-3. **PT-ARCH-29**：命名历史包袱全方位代码卫生清理（代码层零残留，历史文档标注待做）。
-4. **PT-ARCH-30**：内置 `file` 模块命名风险清理（长期需重命名，如 `fs`）。
-
-详见 `tasks_docs/PENDING_TASKS.md`。
+- **测试体系治理与彻底重构**：独立、较低优先级，`tasks_docs/TEST_REFACTOR.md`（含 4 份调研报告 `TEST_REFACTOR_REPORTS.md`），不与主线混置。
+- **media Phase 4**（多模态容器）：已暂停，代码层零启动，降级未来低优先级（`PENDING_TASKS.md` §六）。
 
 ---
 
