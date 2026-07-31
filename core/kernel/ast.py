@@ -188,6 +188,7 @@ class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
     capture_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbAugAssign(IbStmt):
@@ -211,18 +212,21 @@ class IbWhile(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbIf(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbSwitch(IbStmt):
     """Switch-Case 语句"""
     test: IbExpr  # 要匹配的表达式
     cases: List['IbCase']  # case 列表
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbCase(IbASTNode):
@@ -261,6 +265,7 @@ class IbImportFrom(IbStmt):
 @dataclass(kw_only=True, eq=False)
 class IbExprStmt(IbStmt):
     value: IbExpr
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbPass(IbStmt):

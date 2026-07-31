@@ -162,47 +162,32 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
 
                 prev_stmt = new_body[-1]
 
-                # 条件驱动 for 循环的特殊处理
-                if isinstance(prev_stmt, ast.IbFor) and prev_stmt.target is None:
-                    cond_expr = prev_stmt.iter
-                    if not self._contains_behavior_expr(cond_expr):
-                        self.error(
-                            "llmexcept following a condition-driven 'for' loop requires a behavior expression "
-                            "'@~...~' as the loop condition.",
-                            stmt, code=SEM_LLMEXCEPT_BINDING
-                        )
-                    # 条件 for 循环：挂载到 IbFor.llmexcept_handler
-                    stmt.target = None
-                    prev_stmt.llmexcept_handler = stmt
-                    # 递归处理 llmexcept body
-                    if stmt.body:
-                        stmt.body = self._rewrite_body(stmt.body)
-                        self._validate_readonly_body(stmt.body, protected_stmt=prev_stmt)
+                # 统一挂载：检查前一个语句是否包含行为描述
+                if not self._contains_behavior_expr(prev_stmt):
+                    self.error(
+                        f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
+                        f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
+                        stmt, code=SEM_LLMEXCEPT_BINDING
+                    )
                     i += 1
                     continue
-                else:
-                    # 正则情形：检查前一个语句是否包含行为描述
-                    if not self._contains_behavior_expr(prev_stmt):
-                        self.error(
-                            f"llmexcept must follow a statement containing a behavior expression '@~...~'. "
-                            f"Found: '{prev_stmt.__class__.__name__}' without IbBehaviorExpr.",
-                            stmt, code=SEM_LLMEXCEPT_BINDING
-                        )
-                    # 正则情形：stmt.target = prev_stmt; pop prev_stmt from body
-                    stmt.target = prev_stmt
-                    new_body.pop()
-                    new_body.append(stmt)
+
+                # 统一挂载到被保护语句的 llmexcept_handler（消除两种绑定机制）
+                prev_stmt.llmexcept_handler = stmt
 
                 # 递归处理 llmexcept body
                 if stmt.body:
                     stmt.body = self._rewrite_body(stmt.body)
-                    self._validate_readonly_body(stmt.body, protected_stmt=stmt.target)
+                    self._validate_readonly_body(stmt.body, protected_stmt=prev_stmt)
 
-                # 记录绑定（使用节点对象作为键）
+                # 记录绑定
                 self.llmexcept_bindings[stmt] = {
-                    'target': stmt.target,
+                    'target': prev_stmt,
                     'has_behavior': True
                 }
+                # llmexcept 语句从 body 中移除（不 append；prev_stmt 留在 body 中正常执行）
+                i += 1
+                continue
             else:
                 new_body.append(stmt)
                 # 递归处理子节点
