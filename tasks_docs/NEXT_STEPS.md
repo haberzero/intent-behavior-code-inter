@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-31（主线阶段收官，当前无激活 P0）
+> **最后更新**：2026-07-31（新主线立项：函数参数机制——默认/具名/动态参数，规划见 `tasks_docs/_function_params.md`）
 
 ---
 
@@ -30,20 +30,20 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：LLM 并行化与状态重设计（阶段收官）
+## 当前主线：函数参数机制（默认 / 具名 / 动态参数）
 
-**已完成**（本周期主线，提交见 `git log`）：
+> **下一里程碑**（2026-07-31 立项）。调研已完成：当前全链路仅位置参数（`IbKeyword` AST 预留未激活、`IbArg` 无 default/kind、parser 硬编码 `keywords=[]`、vtable `param_types` 固定）；lexer `STAR`/`STAR_STAR` 已就绪。可行性成立，规模为语言级里程碑。受益项：PT-ARCH-28（`file.write` 统一 API）、PT-PHASE4-1（`register_model(**kwargs)`）、函数 API 设计僵硬度。
+>
+> 细化规划与相位化实施（P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 → P4 应用+文档）见 `tasks_docs/_function_params.md`。设计决策待确认（覆盖面 / Python 语义对齐 / vtable 签名格式）。
+
+**已完成**（前主线，LLM 并行化与状态重设计，提交见 `git log`）：
 - llmexcept 机制统一 + 状态模型重设计（Phase A，U1-U7）
 - 环境与依赖正规化 + MOCK 服务化（B0：pyproject 分组 / conda env / `MockServer`）
 - Phase B dispatch 修复（运行时拆分 + 规则化调度，4 项 skip 解锁）
 - `ai.run_batch` 批量并发原语（并发 map，公理 LLM-4）
 
-**当前无激活 P0 阶段**。剩余待办均为低优先级（P2/P3 / VISION / SHELVED），见 `tasks_docs/PENDING_TASKS.md`。
-
-**下一步候选**（从 PENDING_TASKS 优先队列中择一）：
-- **U5 命名审查**：`_shared.py`/`leaf.py`/`control_flow.py` 局部变量 `last_result`/`last_val` 等审慎清理
-- **`_pending_futures` 泄漏观测性**：未读取的 dispatched 变量残留（`KNOWN_LIMITS.md §十五` 已标注）
-- **PT-HEALTH-1/2/3**：executor 侧健康项（hasattr 协议化 / set_return_type_prompt / 全仓 code-health 扫描）
+**次要候选**（新主线之外）：
+- U5 命名审查；`_pending_futures` 泄漏观测性；PT-HEALTH-1/2/3——见 `PENDING_TASKS.md`。
 
 ---
 
