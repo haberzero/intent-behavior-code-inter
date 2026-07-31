@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-30（主线定为 LLM 并行化与状态重设计：状态去共享先行，分阶段 A-D；async 边界：LLM 层面优先，全体系暂搁置）
+> **最后更新**：2026-07-31（主线定为 LLM 并行化与状态重设计 + llmexcept 机制统一：Phase A 已完成 A1-A3/A6/A7，剩余 U1-U7 统一重构）
 
 ---
 
@@ -32,11 +32,11 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：LLM 并行化与状态重设计
+## 当前主线：LLM 并行化与状态重设计 + llmexcept 机制统一
 
 > **media Phase 4（MediaAxiom + IbMedia 全模态容器）已暂停**，降级为未来低优先级任务（详见 `tasks_docs/PENDING_TASKS.md` §六）。代码层零启动，仅设计文档存在。
 >
-> 彻查发现 retry_hint / last_call_info 子系统存在真 bug（两条 llmexcept 路径对 `retry "hint"` 行为不一致等）与架构缺陷（"上一次"全局共享语义在并行下无良定义）。决断：**状态模型重设计先行**（摒弃全局"上一次"语义，状态绑定到执行单元），再修复 dispatch（PT-4.7），再做 MOCK 服务。async 层级边界：优先 LLM 层面 async（FastAPI server），暂不推进全体系 async（语言级 async 关键字/原语/公理列入 Phase D 暂搁置）。细化规划见 `tasks_docs/_mock_concurrency.md`。**Phase A 启动前需完成 A5（`_last_llm_result` 去共享）破坏面评估。**
+> 彻查发现 llmexcept 存在**两种绑定机制**（正则包装 `IbLLMExceptionalStmt` vs 条件驱动 for 内联 `llmexcept_handler`），是历史演进产物而非设计意图，导致 frame 时机不一致、Bug-8/9 等架构裂缝。决断：**llmexcept 机制彻底统一**（消除 `IbLLMExceptionalStmt`，统一 `llmexcept_handler` 挂载 + 内联重试，禁止语法糖兼容展开）+ **状态模型重设计**（certainty 经 `IbLLMCallResult` 返回值传递，产生者不依赖 frame；retry_hint 绑 frame；消除 `_last_llm_result` 全局槽）。Phase A 已完成 A1-A3/A6/A7（5 commit，1186 passed 不退化），剩余 U1-U7 统一重构进行中。async 层级：优先 LLM 层面（FastAPI server），全体系语言级 async 暂搁置。细化规划见 `tasks_docs/_mock_concurrency.md`。
 >
 > 测试体系治理与彻底重构降为**独立、较低优先级**任务，单独立项于 `tasks_docs/TEST_REFACTOR.md`（含 4 份调研报告 `TEST_REFACTOR_REPORTS.md`），不与本主线混置。
 
