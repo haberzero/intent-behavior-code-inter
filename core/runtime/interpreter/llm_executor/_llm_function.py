@@ -13,7 +13,7 @@ from typing import Optional
 
 from core.runtime.interfaces import IExecutionContext
 
-from core.runtime.shared.llm_result import LLMResult
+from core.runtime.shared.llm_result import LLMResult, MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 
 from core.runtime.objects.kernel import IbObject
@@ -89,34 +89,34 @@ class _LLMFunctionMixin:
         raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
 
         # 处理 MOCK:REPAIR 特殊标记
-        if raw_res == "__MOCK_REPAIR__":
+        if raw_res == MOCK_REPAIR_SENTINEL:
             self.last_call_info = {
                 "sys_prompt": sys_prompt,
                 "user_prompt": user_prompt,
-                "response": "__MOCK_REPAIR__",
-                "raw_response": "__MOCK_REPAIR__",
+                "response": MOCK_REPAIR_SENTINEL,
+                "raw_response": MOCK_REPAIR_SENTINEL,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
             return LLMResult.uncertain_result(
-                raw_response="__MOCK_REPAIR__",
+                raw_response=MOCK_REPAIR_SENTINEL,
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
             )
 
         # 处理 MOCK:FAIL 特殊标记 (LLM 明确拒绝/不确定)
-        if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+        if raw_res == MOCK_AMBIGUOUS_SENTINEL:
             self.last_call_info = {
                 "sys_prompt": sys_prompt,
                 "user_prompt": user_prompt,
-                "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
-                "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "response": MOCK_AMBIGUOUS_SENTINEL,
+                "raw_response": MOCK_AMBIGUOUS_SENTINEL,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
             return LLMResult.uncertain_result(
-                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                raw_response=MOCK_AMBIGUOUS_SENTINEL,
                 retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
             )
 
@@ -214,33 +214,33 @@ class _LLMFunctionMixin:
 
         raw_res = self._call_llm(sys_prompt, user_prompt, node_uid, execution_context=execution_context)
 
-        if raw_res == "__MOCK_REPAIR__":
+        if raw_res == MOCK_REPAIR_SENTINEL:
             self.last_call_info = {
                 "sys_prompt": sys_prompt,
                 "user_prompt": user_prompt,
-                "response": "__MOCK_REPAIR__",
-                "raw_response": "__MOCK_REPAIR__",
+                "response": MOCK_REPAIR_SENTINEL,
+                "raw_response": MOCK_REPAIR_SENTINEL,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
             return LLMResult.uncertain_result(
-                raw_response="__MOCK_REPAIR__",
+                raw_response=MOCK_REPAIR_SENTINEL,
                 retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
             )
 
-        if raw_res == "MAYBE_YES_MAYBE_NO_this_is_ambiguous":
+        if raw_res == MOCK_AMBIGUOUS_SENTINEL:
             self.last_call_info = {
                 "sys_prompt": sys_prompt,
                 "user_prompt": user_prompt,
-                "response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
-                "raw_response": "MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                "response": MOCK_AMBIGUOUS_SENTINEL,
+                "raw_response": MOCK_AMBIGUOUS_SENTINEL,
                 "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_active_intents()],
                 "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
                 "merged_intents": merged_intents
             }
             return LLMResult.uncertain_result(
-                raw_response="MAYBE_YES_MAYBE_NO_this_is_ambiguous",
+                raw_response=MOCK_AMBIGUOUS_SENTINEL,
                 retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
             )
 

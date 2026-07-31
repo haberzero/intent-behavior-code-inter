@@ -14,6 +14,11 @@ if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
 
 
+# Mock 哨兵 pass-through：与 core.runtime.shared.llm_result.MOCK_AMBIGUOUS_SENTINEL
+# 保持同步（kernel 层禁止依赖 runtime，故此处局部定义大写形式，供 from_prompt 比对）
+_MOCK_AMBIGUOUS_SENTINEL_UPPER = "MAYBE_YES_MAYBE_NO_THIS_IS_AMBIGUOUS"
+
+
 # ------------------------------------------------------------------ #
 # enum                                                                #
 # ------------------------------------------------------------------ #
@@ -85,7 +90,7 @@ class EnumAxiom(BaseAxiom):
         # Pass through special mock sentinel values
         if isinstance(raw_response, str):
             upper = raw_response.upper().strip()
-            if upper in ("MAYBE_YES_MAYBE_NO_THIS_IS_AMBIGUOUS", "1", "0", "TRUE", "FALSE"):
+            if upper in (_MOCK_AMBIGUOUS_SENTINEL_UPPER, "1", "0", "TRUE", "FALSE"):
                 return (True, raw_response)
 
         if spec is None:

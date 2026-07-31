@@ -13,6 +13,12 @@ from typing import Optional, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
 
+# MOCK 哨兵常量（产生方 ibci_ai 与消费方 llm_executor / enum axioms 统一引用，
+# 替代散落的字符串字面量，避免"靠凑巧相等"的魔法哨兵）
+MOCK_REPAIR_SENTINEL = "__MOCK_REPAIR__"
+MOCK_AMBIGUOUS_SENTINEL = "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+
+
 @dataclass
 class LLMResult:
     """

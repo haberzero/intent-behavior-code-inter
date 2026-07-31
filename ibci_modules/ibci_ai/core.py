@@ -2,6 +2,7 @@ import os
 import time
 from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
+from core.runtime.shared.llm_result import MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
 
 
 class AIPlugin(IbStatefulPlugin):
@@ -667,7 +668,7 @@ class AIPlugin(IbStatefulPlugin):
                         self._mock_retry_counts[retry_key] = 0
                     if self._mock_retry_counts[retry_key] == 0:
                         self._mock_retry_counts[retry_key] = 1
-                        return "__MOCK_REPAIR__"
+                        return MOCK_REPAIR_SENTINEL
                     else:
                         self._mock_retry_counts[retry_key] = 0
                         if repair_fallback:
@@ -703,7 +704,7 @@ class AIPlugin(IbStatefulPlugin):
                     self._mock_seq_counters[counter_key] = idx + 1
                     val = values[idx] if idx < len(values) else (values[-1] if values else "")
                     if val == "FAIL":
-                        return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+                        return MOCK_AMBIGUOUS_SENTINEL
                     if val == "TRUE":
                         return "1"
                     if val == "FALSE":
@@ -718,7 +719,7 @@ class AIPlugin(IbStatefulPlugin):
 
         if mock_cmd == "FAIL":
             self._mock_state[mock_content] = -1
-            return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
+            return MOCK_AMBIGUOUS_SENTINEL
 
         if mock_cmd == "TRUE":
             self._mock_state[mock_content] = 1
@@ -736,7 +737,7 @@ class AIPlugin(IbStatefulPlugin):
             if self._mock_retry_counts[retry_key] == 0:
                 self._mock_retry_counts[retry_key] = 1
                 self._mock_state[mock_content] = -1
-                return "__MOCK_REPAIR__"
+                return MOCK_REPAIR_SENTINEL
             else:
                 self._mock_retry_counts[retry_key] = 0
                 self._mock_state[mock_content] = 1
