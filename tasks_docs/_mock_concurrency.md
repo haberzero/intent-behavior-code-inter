@@ -295,7 +295,7 @@ Phase D（全栈 async）暂搁置
 - `AIPlugin._is_test_config` 收敛 4 处 TESTONLY 判定；`_handle_mock_response` 变薄委托。
 - `tests/conftest.py` 新增 `mock_server` fixture；`tests/runtime/test_mock_service.py` 16 项。
 
-**下一步：Phase B dispatch 修复**（§五 改造项 1-5 + 调研微调 1-8），以 `mock_server` 为验收仪器。剩余低优先级项：U5 命名审查、`_scene_prompts` 死方法清理（`set_general_prompt` 等 4 方法引用未初始化字段）。
+**下一步：Phase B dispatch 修复**（§五 改造项 1-5 + 调研微调 1-8），以 `mock_server` 为验收仪器。剩余低优先级项：U5 命名审查、mock 子系统健康清洁（已实施：`_scene_prompts` 死方法 / `_retry_prompts` / `auto_type_constraint` 删除、MOCK 常量统一、scene 死分支清理、文档漂移修复、哨兵一致性测试），executor 侧健康项见 `PENDING_TASKS.md` §五 PT-HEALTH-*。
 
 **U2+U3 关键设计落地**：
 - 产生者（`_finalize_invoke_result` / `vm_handle_IbBehaviorExpr` / `vm_handle_IbBehaviorInstance` / `is_truthy` / `IbCastExpr`）不确定时返回 `IbLLMCallResult(is_certain=False)`，不写 frame / 全局槽。

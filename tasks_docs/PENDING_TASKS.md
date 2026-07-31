@@ -111,6 +111,22 @@
 
 > `docs/syntax/13_mock_testing.md` 需与 `ibci_ai/core.py` MOCK 处理逻辑保持同步。
 
+### PT-TEST-9　`ai.probe_model` 零测试覆盖 [P2]
+
+> `probe_model`（含 MOCK 路径与真实客户端路径）无任何测试。MOCK 路径返回 `MOCK_PROBE_SUCCESS` 并写入 `_model_capabilities`；真实路径含 reasoning 探测判定。需补覆盖以支撑 `_model_capabilities` 策略分支的可信度。
+
+### PT-HEALTH-1　provider 能力探测协议化（`hasattr` 穿透） [P2]
+
+> `_llm_function.py` 两处（:83 / :201）用 `hasattr(self.llm_callback, 'get_return_type_prompt')` 探测 provider 能力，违反封装纪律（应经协议声明）。方案：`ILLMProvider` 协议已含 `get_return_type_prompt`（存活），将 hasattr 调用改为直接协议调用；若需可选能力，用显式 capability 标志替代 hasattr 穿透。
+
+### PT-HEALTH-2　`ai.set_return_type_prompt` 无 IBCI 消费者 [P3]
+
+> `set_return_type_prompt` 为 vtable 用户面 API，零 IBCI 消费者（`get_return_type_prompt` 有 2 消费者）。功能完好，保留但需覆盖测试或明确弃用。
+
+### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]
+
+> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项：`_expected_type_stack`（实例级全局，并行化潜在竞争，见 `_mock_concurrency.md` §九）；`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按宏观诊断 skill 全仓扫描。
+
 ---
 
 ## 5.5、文档体系完善项

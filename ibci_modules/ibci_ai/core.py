@@ -2,9 +2,14 @@ import os
 import time
 from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
-from core.runtime.shared.llm_result import MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
 
 from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine
+
+# MOCK 模式判定与哨兵常量（统一字面量，供配置比对）
+MOCK_CONFIG_URL = "TESTONLY"
+MOCK_CONFIG_KEY = "MOCK_KEY"
+MOCK_CLIENT_SENTINEL = "MOCK_CLIENT"
+_MOCK_TEST_MODE_ENV = "IBC_TEST_MODE"
 
 
 class AIPlugin(IbStatefulPlugin):
@@ -23,7 +28,6 @@ class AIPlugin(IbStatefulPlugin):
             "model": None,
             "retry": 3,
             "timeout": 30.0,
-            "auto_type_constraint": True,
             "auto_intent_injection": True
         }
         # 命名模型注册表：用于 @NAME~ 语法的模型路由
@@ -37,12 +41,6 @@ class AIPlugin(IbStatefulPlugin):
             "list": "请仅返回一个合法的 JSON 数组（List）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。",
             "dict": "请仅返回一个合法的 JSON 对象（Dict）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。"
         }
-        self._retry_prompts = {
-            "IbIf": "此处的逻辑判断存在歧义。请严格基于事实，返回 1 (条件成立) 或 0 (条件不成立)。",
-            "IbWhile": "循环条件判断模糊。请确认当前任务是否已完成：返回 0 表示完成（跳出循环），返回 1 表示继续。",
-            "IbExprStmt": "当前行为描述执行失败或结果不明确。请尝试以更直接、更具确定性的方式重新执行。",
-            "IbAssign": "目标值计算模糊。请确保返回的内容能被清晰地识别并赋值给变量。"
-        }
         self._capabilities: Optional[ExtensionCapabilities] = None
         # MOCK 指令语言单点实现（线程安全；seq/retry 状态由引擎持有）
         self._mock_engine = MockScenarioEngine()
@@ -55,17 +53,13 @@ class AIPlugin(IbStatefulPlugin):
             "extract_strategy": "standard" # 提取策略: standard, tag_based, keyword_based
         }
 
-    def reset_mock_state(self) -> None:
-        """重置Mock状态，用于测试隔离"""
-        self._mock_engine.reset()
-
     @staticmethod
     def _is_test_config(url: Optional[str], key: Optional[str]) -> bool:
-        """TESTONLY / MOCK 模式统一判定（收敛散落的字符串比对）。"""
+        """TESTONLY / MOCK 模式统一判定。"""
         return (
-            url == "TESTONLY"
-            or key == "MOCK_KEY"
-            or os.environ.get("IBC_TEST_MODE") == "1"
+            url == MOCK_CONFIG_URL
+            or key == MOCK_CONFIG_KEY
+            or os.environ.get(_MOCK_TEST_MODE_ENV) == "1"
         )
 
     def _is_test_mode(self) -> bool:
@@ -79,8 +73,6 @@ class AIPlugin(IbStatefulPlugin):
 
     def hydrate(self, service_context):
         """
-        ADR-020 G2 late-hydrate 窗口。
-
         在 registry hooks（llm_executor / host_service / stack_inspector / state_reader）
         全部注入后调用。当前主要重新确认 LLM Provider 注册；未来可在此捕获
         host_service / llm_executor 等引用供 save/restore 使用。
@@ -92,7 +84,7 @@ class AIPlugin(IbStatefulPlugin):
         """初始化 OpenAI 客户端 (单例/复用模式)"""
         is_test_mode = self._is_test_mode()
         if is_test_mode:
-            self._client = "MOCK_CLIENT"
+            self._client = MOCK_CLIENT_SENTINEL
             return
 
         try:
@@ -119,8 +111,6 @@ class AIPlugin(IbStatefulPlugin):
         self._config["key"] = key
         self._config["model"] = model
 
-        if "auto_type_constraint" in kwargs:
-            self._config["auto_type_constraint"] = bool(kwargs["auto_type_constraint"])
         if "auto_intent_injection" in kwargs:
             self._config["auto_intent_injection"] = bool(kwargs["auto_intent_injection"])
 
@@ -165,8 +155,8 @@ class AIPlugin(IbStatefulPlugin):
 
         is_test_mode = self._is_test_config(config["url"], config["key"])
         if is_test_mode:
-            self._named_clients[name] = "MOCK_CLIENT"
-            return "MOCK_CLIENT"
+            self._named_clients[name] = MOCK_CLIENT_SENTINEL
+            return MOCK_CLIENT_SENTINEL
 
         try:
             from openai import OpenAI
@@ -283,22 +273,6 @@ class AIPlugin(IbStatefulPlugin):
         self._config["timeout"] = seconds
         self._init_client()
 
-    def set_general_prompt(self, prompt: str) -> None:
-        self._scene_prompts["general"] = prompt
-
-    def set_branch_prompt(self, prompt: str) -> None:
-        self._scene_prompts["branch"] = prompt
-
-    def set_loop_prompt(self, prompt: str) -> None:
-        self._scene_prompts["loop"] = prompt
-
-    def set_scene_config(self, scene: str, config: Dict[str, Any]) -> None:
-        if "prompt" in config:
-            self._scene_prompts[scene] = config["prompt"]
-
-    def get_retry_prompt(self, node_type: str) -> Optional[str]:
-        return self._retry_prompts.get(node_type)
-
     def set_return_type_prompt(self, type_name: str, prompt: str) -> None:
         self._return_type_prompts[type_name] = prompt
 
@@ -350,6 +324,10 @@ class AIPlugin(IbStatefulPlugin):
         return []
 
     def __call__(self, sys_prompt: str, user_prompt: "Union[str, List]", scene: str = "general", *, target_model: str = "") -> str:
+        """LLM 调用入口（ILLMProvider 协议）。
+
+        ``scene`` 为协议兼容保留参数（当前恒为 ``"general"``，未使用）。
+        """
         is_test_mode = self._is_test_mode()
         
         # 多模态内容：将 List 转换为纯文本用于 MOCK 或传递给 API
@@ -361,131 +339,119 @@ class AIPlugin(IbStatefulPlugin):
 
         # 在注入约束后缀前，先检查 Mock 指令
         if is_test_mode:
-            return self._handle_mock_response(user_prompt_text, scene)
+            return self._handle_mock_response(user_prompt_text)
 
-        # 强化决策场景的 User Prompt 约束
-        scene_str = str(scene).lower()
-        if any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice")):
-            user_prompt_text += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
-            
-        if not is_test_mode:
-            # 命名模型路由：@NAME~ 语法
-            if target_model:
-                if target_model not in self._model_registry:
-                    raise RuntimeError(
-                        f"未注册的命名模型 '{target_model}'。"
-                        f"请先使用 ai.register_model(\"{target_model}\", url, key, model) 注册。"
-                    )
-                named_config = self._model_registry[target_model]
-                active_client = self._get_named_client(target_model)
-                active_model = named_config["model"]
-            else:
-                # 默认模型路径
-                if not self._config["key"] or not self._config["url"] or not self._config["model"]:
-                    raise RuntimeError("LLM 运行配置缺失")
-
-                # 优先使用预初始化的客户端 (单例复用)
-                if not self._client or self._client == "MOCK_CLIENT":
-                    self._init_client()
-
-                if not self._client or self._client == "MOCK_CLIENT":
-                    raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
-
-                active_client = self._client
-                active_model = self._config["model"]
-            
-            # 决策场景下限制 max_tokens
-            is_decision = any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice"))
-            
-            # 如果没有主动探测过，可以在这里触发一次懒加载探测，或者直接使用默认策略
-            if not self._model_capabilities["probed"]:
-                # 为避免隐式延迟，这里默认回退到保守的推理策略，
-                # 但推荐用户在脚本中显式调用 ai.probe_model()
-                is_reasoning_model = True
-            else:
-                is_reasoning_model = self._model_capabilities["is_reasoning"]
-            
-            # 动态调整策略：
-            if is_reasoning_model:
-                # 强制推理模型：放宽 Token 限制，并要求用 ANSWER 标签包裹最终结果
-                decision_max_tokens = 4096
-                enhanced_sys_prompt = sys_prompt + "\nIMPORTANT: You are a reasoning model. You MUST output your final, conclusive, and brief answer at the very end of your response, starting with 'ANSWER:'."
-            else:
-                # 标准指令模型：严格限制 Token 以防噪音，直接使用原 Prompt
-                decision_max_tokens = 10
-                enhanced_sys_prompt = sys_prompt
-
-            try:
-                # 构建 messages：支持纯文本和多模态两种路径
-                user_content = self._build_user_content(user_prompt, user_prompt_text)
-                completion = active_client.chat.completions.create(
-                    model=active_model,
-                    messages=[
-                        {"role": "system", "content": enhanced_sys_prompt},
-                        {"role": "user", "content": user_content}
-                    ],
-                    max_tokens=decision_max_tokens if is_decision else 4096,
-                    extra_body={
-                        "enable_thinking": False,
-                        "chat_template_kwargs": {"enable_thinking": False}
-                    }
+        # 命名模型路由：@NAME~ 语法
+        if target_model:
+            if target_model not in self._model_registry:
+                raise RuntimeError(
+                    f"未注册的命名模型 '{target_model}'。"
+                    f"请先使用 ai.register_model(\"{target_model}\", url, key, model) 注册。"
                 )
-                
-                # 调试输出，偶尔会使用。注释并保留
-                # print("    -> [System] Called llm once.")
-                
-                if not completion or not hasattr(completion, 'choices') or not completion.choices:
-                    raise RuntimeError(f"LLM 返回异常响应: {completion}")
+            named_config = self._model_registry[target_model]
+            active_client = self._get_named_client(target_model)
+            active_model = named_config["model"]
+        else:
+            # 默认模型路径
+            if not self._config["key"] or not self._config["url"] or not self._config["model"]:
+                raise RuntimeError("LLM 运行配置缺失")
 
-                raw_content = completion.choices[0].message.content
-                
-                # 兼容性处理：尝试提取 Reasoning 字段
-                reasoning = getattr(completion.choices[0].message, "reasoning", None)
-                if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
-                    reasoning = completion.choices[0].message.reasoning_content
-                
-                # 如果 content 为空且 reasoning 有值，说明这是强制推理模型把结果都放进 reasoning 里了
-                if (raw_content is None or raw_content.strip() == "") and reasoning:
-                    raw_content = reasoning
-                
-                if raw_content is None:
-                    res = ""
+            # 优先使用预初始化的客户端 (单例复用)
+            if not self._client or self._client == MOCK_CLIENT_SENTINEL:
+                self._init_client()
+
+            if not self._client or self._client == MOCK_CLIENT_SENTINEL:
+                raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
+
+            active_client = self._client
+            active_model = self._config["model"]
+
+        # 如果没有主动探测过，可以在这里触发一次懒加载探测，或者直接使用默认策略
+        if not self._model_capabilities["probed"]:
+            # 为避免隐式延迟，这里默认回退到保守的推理策略，
+            # 但推荐用户在脚本中显式调用 ai.probe_model()
+            is_reasoning_model = True
+        else:
+            is_reasoning_model = self._model_capabilities["is_reasoning"]
+
+        # 动态调整策略：
+        if is_reasoning_model:
+            # 强制推理模型：放宽 Token 限制，并要求用 ANSWER 标签包裹最终结果
+            enhanced_sys_prompt = sys_prompt + "\nIMPORTANT: You are a reasoning model. You MUST output your final, conclusive, and brief answer at the very end of your response, starting with 'ANSWER:'."
+        else:
+            # 标准指令模型：直接使用原 Prompt
+            enhanced_sys_prompt = sys_prompt
+
+        try:
+            # 构建 messages：支持纯文本和多模态两种路径
+            user_content = self._build_user_content(user_prompt, user_prompt_text)
+            completion = active_client.chat.completions.create(
+                model=active_model,
+                messages=[
+                    {"role": "system", "content": enhanced_sys_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                max_tokens=4096,
+                extra_body={
+                    "enable_thinking": False,
+                    "chat_template_kwargs": {"enable_thinking": False}
+                }
+            )
+
+            # 调试输出，偶尔会使用。注释并保留
+            # print("    -> [System] Called llm once.")
+
+            if not completion or not hasattr(completion, 'choices') or not completion.choices:
+                raise RuntimeError(f"LLM 返回异常响应: {completion}")
+
+            raw_content = completion.choices[0].message.content
+
+            # 兼容性处理：尝试提取 Reasoning 字段
+            reasoning = getattr(completion.choices[0].message, "reasoning", None)
+            if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
+                reasoning = completion.choices[0].message.reasoning_content
+
+            # 如果 content 为空且 reasoning 有值，说明这是强制推理模型把结果都放进 reasoning 里了
+            if (raw_content is None or raw_content.strip() == "") and reasoning:
+                raw_content = reasoning
+
+            if raw_content is None:
+                res = ""
+            else:
+                raw_content = raw_content.strip()
+                # === 核心改造：后处理提取器 ===
+                # 1. 尝试匹配 ANSWER: 前缀
+                if "ANSWER:" in raw_content:
+                    res = raw_content.split("ANSWER:")[-1].strip()
+                elif "Answer:" in raw_content:
+                    res = raw_content.split("Answer:")[-1].strip()
                 else:
-                    raw_content = raw_content.strip()
-                    # === 核心改造：后处理提取器 ===
-                    # 1. 尝试匹配 ANSWER: 前缀
-                    if "ANSWER:" in raw_content:
-                        res = raw_content.split("ANSWER:")[-1].strip()
-                    elif "Answer:" in raw_content:
-                        res = raw_content.split("Answer:")[-1].strip()
+                    # 2. 回退处理：如果模型没写前缀，但是写了 Thinking Process 或思考过程
+                    # 我们假定思考过程结束后的最后一段文字就是答案
+
+                    # 剔除可能存在的 Thinking Process 块
+                    if "Thinking Process:" in raw_content:
+                        parts = raw_content.split("Thinking Process:")
+                        raw_content = parts[-1]
+
+                    # 按行分割，过滤掉看起来像推理步骤的行
+                    lines = [line.strip() for line in raw_content.split('\n') if line.strip()]
+                    valid_lines = []
+                    import re
+                    for line in lines:
+                        if not re.match(r'^[\d\-\*\s]+(Analyze|Consider|Think|Hypothesis|Wait|Wait,|Let\'s|Actually|Alternative|Decision|Correction|Hypothesis \d+|So|Since)', line, re.IGNORECASE):
+                            valid_lines.append(line)
+
+                    if valid_lines:
+                        # 取最后一行作为结论
+                        res = valid_lines[-1]
                     else:
-                        # 2. 回退处理：如果模型没写前缀，但是写了 Thinking Process 或思考过程
-                        # 我们假定思考过程结束后的最后一段文字就是答案
-                        
-                        # 剔除可能存在的 Thinking Process 块
-                        if "Thinking Process:" in raw_content:
-                            parts = raw_content.split("Thinking Process:")
-                            raw_content = parts[-1]
-                        
-                        # 按行分割，过滤掉看起来像推理步骤的行
-                        lines = [line.strip() for line in raw_content.split('\n') if line.strip()]
-                        valid_lines = []
-                        import re
-                        for line in lines:
-                            if not re.match(r'^[\d\-\*\s]+(Analyze|Consider|Think|Hypothesis|Wait|Wait,|Let\'s|Actually|Alternative|Decision|Correction|Hypothesis \d+|So|Since)', line, re.IGNORECASE):
-                                valid_lines.append(line)
-                        
-                        if valid_lines:
-                            # 取最后一行作为结论
-                            res = valid_lines[-1]
-                        else:
-                            res = raw_content
+                        res = raw_content
 
-                return res
-            except Exception as e:
-                raise RuntimeError(f"LLM 调用失败: {str(e)}")
+            return res
+        except Exception as e:
+            raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
-        return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
 
     @staticmethod
     def _flatten_content_parts(parts: "List") -> str:
@@ -532,7 +498,7 @@ class AIPlugin(IbStatefulPlugin):
         
         return content_blocks
 
-    def _handle_mock_response(self, user_prompt: str, scene: str) -> str:
+    def _handle_mock_response(self, user_prompt: str) -> str:
         """处理 MOCK 指令（委托 :class:`MockScenarioEngine` 单点实现）。
 
         指令语言定义见 ``ibci_modules/ibci_ai/mock_scenario.py``。
@@ -540,7 +506,7 @@ class AIPlugin(IbStatefulPlugin):
         模拟 provider 基础设施失败（raise），使 ``_call_llm`` 的
         ``ThrownException`` 路径不经 HTTP 即可被测试覆盖。
         """
-        result = self._mock_engine.handle(user_prompt, scene)
+        result = self._mock_engine.handle(user_prompt)
         if result.error_status is not None:
             raise RuntimeError(f"MOCK:ERROR injected ({result.error_status})")
         return result.content
@@ -556,14 +522,12 @@ class AIPlugin(IbStatefulPlugin):
         保存内容：
         - _config：LLM 连接配置（url/key/model/timeout 等）
         - _return_type_prompts：用户自定义的返回类型提示词
-        - _retry_prompts：用户自定义的重试提示词
         注意：_client 为外部连接对象，不可序列化，恢复后由 _init_client() 重建。
         注意：全局意图由 capabilities.intent_manager 管理，不在此处保存。
         """
         return {
             "config": dict(self._config),
             "return_type_prompts": dict(self._return_type_prompts),
-            "retry_prompts": dict(self._retry_prompts),
         }
 
     def restore_plugin_state(self, state: dict) -> None:
@@ -577,8 +541,6 @@ class AIPlugin(IbStatefulPlugin):
             self._config.update(state["config"])
         if "return_type_prompts" in state:
             self._return_type_prompts.update(state["return_type_prompts"])
-        if "retry_prompts" in state:
-            self._retry_prompts.update(state["retry_prompts"])
         # 重建 LLM 客户端（连接对象无法序列化，必须在恢复后重建）
         self._client = None
         self._model_capabilities["probed"] = False

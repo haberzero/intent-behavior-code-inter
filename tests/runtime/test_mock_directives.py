@@ -23,14 +23,14 @@ class TestBasicDirectives:
     """基础指令（不带额外参数）。"""
 
     def test_mock_true_returns_one(self, mock_plugin):
-        assert mock_plugin._handle_mock_response("MOCK:TRUE", "general") == "1"
+        assert mock_plugin._handle_mock_response("MOCK:TRUE") == "1"
 
     def test_mock_false_returns_zero(self, mock_plugin):
-        assert mock_plugin._handle_mock_response("MOCK:FALSE", "general") == "0"
+        assert mock_plugin._handle_mock_response("MOCK:FALSE") == "0"
 
     def test_mock_fail_returns_ambiguous(self, mock_plugin):
         """MOCK:FAIL 返回模糊哨兵值（由 LLM executor 检测后触发 llmexcept）。"""
-        result = mock_plugin._handle_mock_response("MOCK:FAIL", "general")
+        result = mock_plugin._handle_mock_response("MOCK:FAIL")
         assert "ambiguous" in result.lower()
 
 
@@ -38,39 +38,39 @@ class TestTypedDirectives:
     """二级类型指令。"""
 
     def test_mock_int(self, mock_plugin):
-        assert mock_plugin._handle_mock_response("MOCK:INT:42", "general") == "42"
+        assert mock_plugin._handle_mock_response("MOCK:INT:42") == "42"
 
     def test_mock_int_zero(self, mock_plugin):
-        assert mock_plugin._handle_mock_response("MOCK:INT:0", "general") == "0"
+        assert mock_plugin._handle_mock_response("MOCK:INT:0") == "0"
 
     def test_mock_int_negative(self, mock_plugin):
-        assert mock_plugin._handle_mock_response("MOCK:INT:-7", "general") == "-7"
+        assert mock_plugin._handle_mock_response("MOCK:INT:-7") == "-7"
 
     def test_mock_str_single_word(self, mock_plugin):
-        result = mock_plugin._handle_mock_response("MOCK:STR:hello", "general")
+        result = mock_plugin._handle_mock_response("MOCK:STR:hello")
         assert result == "hello"
 
     def test_mock_str_strips_trailing_whitespace(self, mock_plugin):
         """未加引号的 STR 值取第一个空白分隔的词。"""
-        result = mock_plugin._handle_mock_response("MOCK:STR:hello world", "general")
+        result = mock_plugin._handle_mock_response("MOCK:STR:hello world")
         assert result == "hello"
 
     def test_mock_float(self, mock_plugin):
-        result = mock_plugin._handle_mock_response("MOCK:FLOAT:3.14", "general")
+        result = mock_plugin._handle_mock_response("MOCK:FLOAT:3.14")
         assert "3.14" in result
 
     def test_mock_bool_true(self, mock_plugin):
-        assert mock_plugin._handle_mock_response("MOCK:BOOL:TRUE", "general") == "1"
+        assert mock_plugin._handle_mock_response("MOCK:BOOL:TRUE") == "1"
 
     def test_mock_bool_false(self, mock_plugin):
-        assert mock_plugin._handle_mock_response("MOCK:BOOL:FALSE", "general") == "0"
+        assert mock_plugin._handle_mock_response("MOCK:BOOL:FALSE") == "0"
 
     def test_mock_list(self, mock_plugin):
-        result = mock_plugin._handle_mock_response("MOCK:LIST:[1,2,3]", "general")
+        result = mock_plugin._handle_mock_response("MOCK:LIST:[1,2,3]")
         assert "1" in result and "2" in result and "3" in result
 
     def test_mock_dict(self, mock_plugin):
-        result = mock_plugin._handle_mock_response('MOCK:DICT:{"key":"value"}', "general")
+        result = mock_plugin._handle_mock_response('MOCK:DICT:{"key":"value"}')
         assert "key" in result and "value" in result
 
 
@@ -82,7 +82,7 @@ class TestSeqDirective:
         responses = []
         prompt = "MOCK:SEQ:[MOCK:STR:first,MOCK:STR:second,MOCK:STR:third]"
         for _ in range(3):
-            r = mock_plugin._handle_mock_response(prompt, "general")
+            r = mock_plugin._handle_mock_response(prompt)
             responses.append(r)
         assert any("first" in r for r in responses)
         assert any("second" in r for r in responses)
@@ -92,10 +92,10 @@ class TestSeqDirective:
         """SEQ 中的 FAIL 哨兵应返回模糊值（触发 llmexcept）。"""
         prompt = "MOCK:SEQ:[MOCK:STR:ok,FAIL]"
         # 第一次应该返回 ok 值
-        result = mock_plugin._handle_mock_response(prompt, "general")
+        result = mock_plugin._handle_mock_response(prompt)
         assert "ok" in result or "MOCK:STR:ok" in result
         # 第二次应该返回模糊值
-        second = mock_plugin._handle_mock_response(prompt, "general")
+        second = mock_plugin._handle_mock_response(prompt)
         assert "ambiguous" in second.lower()
 
 
@@ -105,24 +105,24 @@ class TestRepairDirective:
     def test_mock_repair_default(self, mock_plugin):
         """MOCK:REPAIR 首次返回模糊值触发重试，重试后返回 truthy。"""
         # 第一次调用应返回模糊值
-        first = mock_plugin._handle_mock_response("MOCK:REPAIR", "general")
+        first = mock_plugin._handle_mock_response("MOCK:REPAIR")
         assert "MAYBE" in first.upper() or "ambiguous" in first.lower() or first != "1"
         # 第二次调用（重试后）应返回 truthy
-        second = mock_plugin._handle_mock_response("MOCK:REPAIR", "general")
+        second = mock_plugin._handle_mock_response("MOCK:REPAIR")
         assert second == "1"
 
     def test_mock_repair_with_fallback_str(self, mock_plugin):
         """MOCK:REPAIR:STR:<value> 首次模糊，重试后返回指定字符串。"""
         # 首次模糊
-        first = mock_plugin._handle_mock_response("MOCK:REPAIR:STR:repaired", "general")
+        first = mock_plugin._handle_mock_response("MOCK:REPAIR:STR:repaired")
         # 重试后返回 "repaired"
-        second = mock_plugin._handle_mock_response("MOCK:REPAIR:STR:repaired", "general")
+        second = mock_plugin._handle_mock_response("MOCK:REPAIR:STR:repaired")
         assert "repaired" in second
 
     def test_mock_repair_with_fallback_int(self, mock_plugin):
         """MOCK:REPAIR:INT:<value> 首次模糊，重试后返回指定整数。"""
-        first = mock_plugin._handle_mock_response("MOCK:REPAIR:INT:42", "general")
-        second = mock_plugin._handle_mock_response("MOCK:REPAIR:INT:42", "general")
+        first = mock_plugin._handle_mock_response("MOCK:REPAIR:INT:42")
+        second = mock_plugin._handle_mock_response("MOCK:REPAIR:INT:42")
         assert "42" in second
 
 
@@ -131,7 +131,7 @@ class TestMockValidation:
 
     def test_non_mock_prompt_returns_empty_or_passthrough(self, mock_plugin):
         """非 MOCK 前缀的 prompt 不应被 MOCK 系统处理。"""
-        result = mock_plugin._handle_mock_response("Hello world", "general")
+        result = mock_plugin._handle_mock_response("Hello world")
         # 非 MOCK 指令在 mock 模式下应返回某种默认值（可能是空或回显）
         # 具体行为取决于实现，但不应抛异常
         assert isinstance(result, str)
@@ -139,5 +139,20 @@ class TestMockValidation:
     def test_mock_directive_case_sensitive(self, mock_plugin):
         """MOCK 指令关键字必须全大写。小写不应被识别为指令。"""
         # mock:true（小写）不应返回 "1"
-        result = mock_plugin._handle_mock_response("mock:true", "general")
+        result = mock_plugin._handle_mock_response("mock:true")
         assert result != "1"
+
+
+class TestSentinelConsistency:
+    """MOCK 哨兵单点一致性：kernel 层镜像必须与规范常量同步。"""
+
+    def test_enum_mirror_matches_canonical(self):
+        """``enum.py`` 局部大写镜像必须等于规范常量的大写形式。
+
+        镜像的存在源于 kernel 层禁止依赖 runtime 的层约束，但其值必须
+        与 ``llm_result.MOCK_AMBIGUOUS_SENTINEL`` 保持同步。
+        """
+        from core.kernel.axioms.primitives.enum import _MOCK_AMBIGUOUS_SENTINEL_UPPER
+        from core.runtime.shared.llm_result import MOCK_AMBIGUOUS_SENTINEL
+
+        assert _MOCK_AMBIGUOUS_SENTINEL_UPPER == MOCK_AMBIGUOUS_SENTINEL.upper()

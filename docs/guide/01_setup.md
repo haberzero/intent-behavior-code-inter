@@ -89,14 +89,11 @@ else:
 发起一次真实的模型探测调用：
 
 ```ibci
-bool ok = ai.probe_model()
-if ok:
-    print("模型连接正常")
-else:
-    print("模型探测失败，请检查 base_url 和 api_key")
+str status = ai.probe_model()
+print(status)   # STANDARD_MODEL / REASONING_MODEL / PROBE_FAILED_FALLBACK_REASONING
 ```
 
-`ai.has_api_key()` 仅检查密钥是否已填入，不发起网络请求。`ai.probe_model()` 发起一次轻量级真实调用，验证端到端连通性。
+`ai.has_api_key()` 仅检查密钥是否已填入，不发起网络请求。`ai.probe_model()` 发起一次轻量级真实调用，返回模型能力状态字符串（MOCK 模式返回 `MOCK_PROBE_SUCCESS`）。
 
 ## 超时与重试配置
 

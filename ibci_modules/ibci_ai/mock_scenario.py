@@ -58,13 +58,13 @@ class MockScenarioEngine:
     # 公共入口
     # ------------------------------------------------------------------
 
-    def handle(self, prompt: str, scene: str) -> MockScenarioResult:
+    def handle(self, prompt: str) -> MockScenarioResult:
         """解析一条 LLM user prompt，返回内容与传输控制。
 
         内容解析（含 seq/retry 状态变更）在锁内完成；控制指令
         （``SLEEP`` / ``ERROR``）为纯扫描，在锁外完成。
         """
-        content = self._resolve(prompt, scene)
+        content = self._resolve(prompt)
         delay_ms = 0
         error_status: Optional[int] = None
         if _SLEEP_RE.search(prompt):
@@ -82,11 +82,11 @@ class MockScenarioEngine:
     # 内容解析（指令语言本体，与既有语义一致）
     # ------------------------------------------------------------------
 
-    def _resolve(self, prompt: str, scene: str) -> str:
+    def _resolve(self, prompt: str) -> str:
         with self._lock:
-            return self._resolve_locked(prompt, scene)
+            return self._resolve_locked(prompt)
 
-    def _resolve_locked(self, prompt: str, scene: str) -> str:
+    def _resolve_locked(self, prompt: str) -> str:
         if not prompt.startswith("MOCK:"):
             # Validation: warn if a MOCK directive appears somewhere in the
             # prompt but is not the sole content.
@@ -99,8 +99,6 @@ class MockScenarioEngine:
                     UserWarning,
                     stacklevel=4,
                 )
-            if scene in ("branch", "loop"):
-                return "1"
             return f"[MOCK] {prompt}"
 
         content_after_mock = prompt[5:].strip()
@@ -155,7 +153,7 @@ class MockScenarioEngine:
                         return MOCK_REPAIR_SENTINEL
                     self._retry_counts[retry_key] = 0
                     if repair_fallback:
-                        return self._resolve_locked(f"MOCK:{repair_fallback}", scene)
+                        return self._resolve_locked(f"MOCK:{repair_fallback}")
                     return "1"
                 if mock_type == "SEQ":
                     mv = mock_value.strip()
@@ -206,6 +204,4 @@ class MockScenarioEngine:
             self._retry_counts[retry_key] = 0
             return "1"
 
-        if scene in ("branch", "loop"):
-            return "1"
         return f"[MOCK] {prompt}"

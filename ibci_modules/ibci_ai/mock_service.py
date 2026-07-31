@@ -22,8 +22,6 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Type
 
-from core.runtime.shared.llm_result import MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
-
 from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine, MockScenarioResult
 
 _PATH_CHAT_COMPLETIONS = "/v1/chat/completions"
@@ -116,11 +114,6 @@ class MockServer:
     def __exit__(self, *exc_info: Any) -> None:
         self.stop()
 
-    @property
-    def engine_reset(self) -> None:
-        """别名：清空服务场景状态。"""
-        self._engine.reset()
-
 
 def _make_handler(
     engine: MockScenarioEngine, stats: MockServerStats
@@ -131,7 +124,6 @@ def _make_handler(
         protocol_version = "HTTP/1.1"
         _engine = engine
         _stats = stats
-        _request_counter = 0
 
         def log_message(self, *args: Any) -> None:
             pass
@@ -166,9 +158,11 @@ def _make_handler(
             stream = bool(body.get("stream", False))
             user_prompt = self._extract_user_prompt(body)
             self._stats.record_start(user_prompt, stream)
+            status = 200
             try:
-                result = self._engine.handle(user_prompt, "general")
+                result = self._engine.handle(user_prompt)
                 if result.error_status is not None:
+                    status = result.error_status
                     self._respond_json(
                         {
                             "error": {
@@ -188,7 +182,7 @@ def _make_handler(
                 else:
                     self._respond_json(self._completion_body(result.content, model), status=200)
             finally:
-                self._stats.record_end(self._response_status if hasattr(self, "_response_status") else 200)
+                self._stats.record_end(status)
 
         @staticmethod
         def _extract_user_prompt(body: Dict[str, Any]) -> str:
@@ -243,7 +237,6 @@ def _make_handler(
         # ------------------------------------------------------------------
 
         def _respond_json(self, payload: Dict[str, Any], status: int) -> None:
-            self._response_status = status
             data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
@@ -260,7 +253,6 @@ def _make_handler(
                 "data: [DONE]\n\n",
             ]
             payload = "".join(lines).encode("utf-8")
-            self._response_status = 200
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Content-Length", str(len(payload)))
