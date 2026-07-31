@@ -8,7 +8,7 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Any, TYPE_CHECKING
+from typing import Optional, Any, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
@@ -33,6 +33,7 @@ class LLMResult:
     - error_message: 错误信息（如果有）
     - raw_response: LLM 的原始回复
     - retry_hint: 重试提示（如果 is_uncertain=True）
+    - call_info: 诊断信息（sys_prompt/user_prompt/response/intents），绑定到调用实例
     """
     success: bool = False
     is_uncertain: bool = False
@@ -40,6 +41,7 @@ class LLMResult:
     error_message: Optional[str] = None
     raw_response: str = ""
     retry_hint: Optional[str] = None
+    call_info: Optional[Dict[str, Any]] = None
 
     @property
     def is_success(self) -> bool:
