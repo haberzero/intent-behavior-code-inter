@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-31（主线收官 + 下一主线候选评估 + skill 体系规整记录）
+> **最后更新**：2026-08-01（media Phase 4 彻底封存，短期不考虑实现）
 
 ---
 
@@ -36,7 +36,7 @@ python -m pytest tests/
 
 **已解锁的受益项**：
 - PT-ARCH-28：`file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已落地（`PENDING_TASKS.md` 标记完成）
-- PT-PHASE4-1：`register_model(name, url, key, model, **kwargs)` 的前置（`**kwargs` 收集）已就绪，Phase 4 恢复时只需声明 vtable VAR_KEYWORD 并扩展原生 kwargs 分传（见 `_function_params.md` P3 已知待办）
+- PT-PHASE4-1（已封存）：`register_model(name, url, key, model, **kwargs)` 的前置（`**kwargs` 收集）已就绪，解封恢复时只需声明 vtable VAR_KEYWORD 并扩展原生 kwargs 分传（见 `_function_params.md` P3 已知待办）
 
 **skill 体系现状**（2026-07-31 规整）：`code-health` 已并入 `code-quality`（健康诊断十查 + 质量红线）；新增 `code-odor`（异味特征检测 + 工作过程自查 + 自我质询协议）、`self-grill`（内向化自我质询）、`grilling`（对用户质询）。AGENTS.md 必读清单已同步。
 
@@ -44,19 +44,18 @@ python -m pytest tests/
 
 1. **主线架构决策收尾（推荐新 session 首项）**：函数参数机制架构决策落进 `docs/architecture/`（`ParamDescriptor`/`TypeDef.param_descriptors` → `03_type_system`；统一绑定器 → `04_vm_interpreter`；vtable `params` 格式 → `04_plugin_system` 已有），随后删除临时文档 `_function_params.md`（工作流 Phase 5 收尾）。
 2. **语义/运行时解析算法收敛（推荐作为下一主线）**：`_resolve_with_descriptors`（语义）与 `_resolve_call_arguments_runtime`（运行时）~30 行同逻辑双实现，收敛为共享纯算法核心（输入 names/kinds/has_default + 位置/具名，输出绑定结果），两适配层各自消费。主线新引入的技术债，命中"单点真理/禁双写真相"。
-3. **原生 `**kwargs` 分传接通**：绑定器把 varkw 打包为 dict 位置实参，`def f(**kw)` 原生实现无法按位置接受；扩展原生调用适配（位置 + kwargs 分传）。PT-PHASE4-1 前置。
+3. **原生 `**kwargs` 分传接通**：绑定器把 varkw 打包为 dict 位置实参，`def f(**kw)` 原生实现无法按位置接受；扩展原生调用适配（位置 + kwargs 分传）。
 4. **PT-HEALTH-1**：`hasattr` 能力探测 → 协议化（封装纪律）。
 5. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
-6. **media Phase 4 恢复**（GATED，需先读本文件）。
 
-**既定推荐顺序**：先 1（收尾）→ 再 2（清主线技术债）→ 3（Phase 4 铺路）。
+**既定推荐顺序**：先 1（收尾）→ 再 2（清主线技术债）→ 3（原生 kwargs 分传）。
 
 ---
 
 ## 独立并行任务
 
 - **测试体系治理与彻底重构**：独立、较低优先级，`tasks_docs/TEST_REFACTOR.md`（含 4 份调研报告 `TEST_REFACTOR_REPORTS.md`），不与主线混置。
-- **media Phase 4**（多模态容器）：已暂停，代码层零启动，降级未来低优先级（`PENDING_TASKS.md` §六）。
+- **media Phase 4**（多模态容器）：**已彻底封存（2026-08-01）**，短期不考虑实现，恢复需显式解封；代码层零启动（`PENDING_TASKS.md` §六）。
 
 ---
 

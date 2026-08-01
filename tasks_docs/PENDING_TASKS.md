@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-07-31（主线收官后任务控制清洁：移除已完成项 PT-4.7/PT-4.9/PT-TEST-8，删 `_mock_concurrency.md`，设计决策并入 `docs/architecture/05_vm_specification.md` §3.4）
+> **最后更新**：2026-08-01（media Phase 4 彻底封存：PT-PHASE4-1/2/3 与多模态容器降级为封存参考，短期不考虑实现）
 
 ---
 
@@ -29,7 +29,7 @@
 
 ## 二、VM 异步/协程层（L3）[SHELVED]
 
-> **搁置原因**：当前优先完善多模态功能
+> **搁置原因**：原为优先完善多模态功能（2026-08-01 多模态已封存）；协程仍保持搁置，恢复优先级待重估
 > **独立设计文档**：`docs/subsystems/05_coroutine.md`
 
 ### 阻塞原因
@@ -112,7 +112,7 @@
 
 ### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]
 
-> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项：`_expected_type_stack`（实例级全局，并行化潜在竞争）；`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按 `skills/code-health.md` 宏观诊断全仓扫描。
+> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项：`_expected_type_stack`（实例级全局，并行化潜在竞争）；`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按 `.opencode/skills/code-quality/SKILL.md` 健康诊断十查全仓扫描。
 
 ### PT-DOC-1 语法手册定位段补充 [P3]
 
@@ -120,11 +120,11 @@
 
 ### PT-DOC-2 多模态子系统设计文档恢复 [P3]
 
-> 全模态行为表达式设计文档已移至 `docs/backup/02_multimodal_behavior.md`。待多模态主线恢复时，需按 `docs/README.md` §六准则重新审视并纳入 `docs/subsystems/`。
+> 全模态行为表达式设计文档已移至 `docs/backup/02_multimodal_behavior.md`。多模态已封存（2026-08-01），解封恢复时需按 `docs/README.md` §六准则重新审视并纳入 `docs/subsystems/`。
 
 ---
 
-## 六、media Phase 4 前置技术债与延迟项
+## 六、通用技术债 与 media Phase 4（已封存）
 
 ### PT-ARCH-22：全项目文件命名清理 [暂缓]
 
@@ -146,9 +146,9 @@
 
 > `file` 影子化 Python 内建。长期需重命名（如 `fs`/`filesys`/`io`）。当前过渡措施已实施。
 
-### Phase 4 延迟项（从 ADR-008/010/013 提取）
+### Phase 4 延迟项（已封存，从 ADR-008/010/013 提取）
 
-以下三项在 media Phase 4 开工时需实现：
+以下三项在 media Phase 4 开工时需实现（**封存期间不推进**）：
 
 **PT-PHASE4-1：多模态模型注册字段**
 
@@ -166,9 +166,9 @@
 - 新增 bypass register（`set_last_raw_response`/`get_last_raw_response`）到 runtime_context
 - `_call_llm` 存储完整响应对象到 bypass register
 
-### media Phase 4（未来低优先级）
+### media Phase 4（已彻底封存，短期不考虑）
 
-> **已暂停**。代码层零启动（仅设计文档 `docs/subsystems/02_multimodal_behavior.md` 存在）。前置（路径统一/内核原生化/磁盘型存储）均已完成，但 Phase 4 容器工作（MediaAxiom + IbMedia + from_response 协议）暂不推进，降级为未来低优先级。恢复时需重新评估设计文档与当前代码基线的一致性。
+> **已彻底封存（2026-08-01）**：短期不考虑实现，恢复需显式解封并重新评估设计文档与当前代码基线的一致性。代码层零启动（仅设计文档 `docs/backup/02_multimodal_behavior.md` 存在）。前置（路径统一/内核原生化/磁盘型存储）均已完成，但 Phase 4 容器工作（MediaAxiom + IbMedia + from_response 协议）封存期间不推进。
 
 ---
 
