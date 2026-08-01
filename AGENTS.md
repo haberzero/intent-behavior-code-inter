@@ -16,7 +16,9 @@ IBC-Inter 是实验性意图驱动混合编程语言（Python-style 确定性代
 6. `skills/doc-governance.md`--执行文档治理/检查/体系建设前必读，按 Phase 0-8 流程操作
 7. `skills/code-workflow.md`--执行代码任务（实现/修复/重构）前必读，按 Phase 0-5 流程操作，遵守工作模式定论
 8. `skills/code-review.md`--执行缺陷复核/分类决策/实施后核验前必读，按 Phase 0-5 流程操作，遵守验证与分组纪律
-9. `skills/code-health.md`--执行代码子系统健康/清洁诊断（体检/残留扫描/历史痕迹排查）前必读，按"诊断六查"与分类速查操作
+9. `skills/code-quality.md`--执行代码子系统健康/清洁诊断（体检/残留扫描/历史痕迹排查）与质量红线判定前必读，按"健康诊断十查"与分类速查操作（`code-health` 已并入）
+10. `skills/code-odor.md`--执行工作过程自查/异味特征扫描前必读，命中兼容/兜底/快速实现等字样时按自我质询协议审问
+11. `skills/self-grill.md`--交付前对计划/设计/已完成工作自我质询，仅将无法自主决断项反馈用户
 
 ## 测试
 
