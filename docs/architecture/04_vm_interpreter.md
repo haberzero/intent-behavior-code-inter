@@ -93,6 +93,21 @@ while frame_stack:
 - 不允许 `raise ControlSignalException`；用 `return Signal(kind, value)`。
 - 拦截 `Signal`：父 handler 用 `isinstance(res, Signal)` 判断后决定 **拦截**（循环 handler 拦截 `BREAK`/`CONTINUE`，函数帧拦截 `RETURN`，`Try` handler 拦截 `THROW` 并匹配 `except`）或 **透传**（`return res`）。
 
+### 2.6 调用实参绑定（统一绑定器）
+
+`vm_handle_IbCall` 是所有可调用形式（用户函数、类方法、fn-lambda、behavior、LLM 函数、原生模块函数）的统一调用点。它先 CPS 求值函数对象与实参，再经统一绑定器解析：位置实参（`*expr` 序列解包展开）与具名实参（`**expr` 字典解包合并）收集后，按**声明序**执行「位置 → 具名 → 默认填充 → varargs/varkw」绑定，产出最终实参列表。
+
+| 输入 | 处理 |
+|------|------|
+| 位置实参 | 依序填入普通参数槽位；溢出进入 `*args`，无 `*args` 则报错 |
+| 具名实参 | 命中声明参数即绑定（重复绑定报错）；未声明且有 `**kwargs` 则归入 `**kwargs`，否则报未知具名 |
+| 缺省参数 | 未绑定的普通 / keyword-only 参数取默认值：用户级默认表达式经 `yield` 惰性求值，原生默认值直接使用字面值 |
+| `*args` / `**kwargs` | 打包为 `list` / `dict`（装箱为 IbObject） |
+
+绑定器实现于 `core/runtime/vm/handlers/_shared.py:_resolve_call_arguments_runtime`。调用体参数签名由 `_get_callee_param_specs` 按 callee 种类取得：用户/LLM 函数读自身 AST 的 `IbArg` 节点；fn_callable / behavior 读 `params_uids`；原生模块函数读 loader 附加在实现上的 `_ibci_param_meta`；bound method 解包到内层方法。无静态签名（内置构造器 / axiom-backed）时保持位置直传、忽略具名实参，与语义层动态策略一致。
+
+该绑定语义与语义层实参解析（`docs/architecture/03_type_system.md` §3.6、§5.1）一致。运行期各 callee 路径保持按索引绑定不变，参数解析的改动收敛在 `vm_handle_IbCall` 单一入口。
+
 ---
 
 ## §3 执行帧与上下文

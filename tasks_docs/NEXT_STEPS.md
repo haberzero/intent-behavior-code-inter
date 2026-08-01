@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-01（media Phase 4 彻底封存，短期不考虑实现）
+> **最后更新**：2026-08-01（主线架构决策收尾完成，`_function_params.md` 已删除；media Phase 4 已封存）
 
 ---
 
@@ -32,23 +32,24 @@ python -m pytest tests/
 
 ## 当前主线：无（函数参数机制已收官）
 
-> **函数参数机制（默认 / 具名 / 动态参数）P1-P4 已全部完成并提交**（2026-07-31，`git log`：`14ec729` P1+P2+维修、`f4e501f` P3、`8326063` P4、`b5a54ab` 任务控制、`5d7c2e8` skill 规整）：P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 + vtable 签名升级 → P4 `file.write` 统一 API + 文档。质量维修（人工复查驱动：描述符单点化 / 双路径清理 / 兜底清零）与 `code-quality` skill 同期完成。规划见 `tasks_docs/_function_params.md`（临时文档，待清理）。
+> **函数参数机制（默认 / 具名 / 动态参数）P1-P4 已全部完成并提交**（2026-07-31，`git log`：`14ec729` P1+P2+维修、`f4e501f` P3、`8326063` P4、`b5a54ab` 任务控制、`5d7c2e8` skill 规整）：P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 + vtable 签名升级 → P4 `file.write` 统一 API + 文档。质量维修（人工复查驱动：描述符单点化 / 双路径清理 / 兜底清零）与 `code-quality` skill 同期完成。
+>
+> **架构决策收尾（2026-08-01）已落地**：`ParamDescriptor`/`param_descriptors` → `docs/architecture/03_type_system.md` §3.6；统一绑定器 → `docs/architecture/04_vm_interpreter.md` §2.6；AST 参数节点 → `docs/architecture/02_metadata_ast.md` §2.5；vtable `params` 格式 → `docs/subsystems/04_plugin_system.md` §4.2（已有）。临时文档 `tasks_docs/_function_params.md` 已删除。
 
 **已解锁的受益项**：
 - PT-ARCH-28：`file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已落地（`PENDING_TASKS.md` 标记完成）
-- PT-PHASE4-1（已封存）：`register_model(name, url, key, model, **kwargs)` 的前置（`**kwargs` 收集）已就绪，解封恢复时只需声明 vtable VAR_KEYWORD 并扩展原生 kwargs 分传（见 `_function_params.md` P3 已知待办）
+- PT-PHASE4-1（已封存）：`register_model(name, url, key, model, **kwargs)` 的前置（`**kwargs` 收集）已就绪，解封恢复时只需声明 vtable VAR_KEYWORD 并扩展原生 kwargs 分传（见下方候选 2）
 
 **skill 体系现状**（2026-07-31 规整）：`code-health` 已并入 `code-quality`（健康诊断十查 + 质量红线）；新增 `code-odor`（异味特征检测 + 工作过程自查 + 自我质询协议）、`self-grill`（内向化自我质询）、`grilling`（对用户质询）。AGENTS.md 必读清单已同步。
 
-**下一主线候选**（2026-07-31 评估，择一立项）：
+**下一主线候选**（2026-08-01 评估，候选 1 已收尾，择一立项）：
 
-1. **主线架构决策收尾（推荐新 session 首项）**：函数参数机制架构决策落进 `docs/architecture/`（`ParamDescriptor`/`TypeDef.param_descriptors` → `03_type_system`；统一绑定器 → `04_vm_interpreter`；vtable `params` 格式 → `04_plugin_system` 已有），随后删除临时文档 `_function_params.md`（工作流 Phase 5 收尾）。
-2. **语义/运行时解析算法收敛（推荐作为下一主线）**：`_resolve_with_descriptors`（语义）与 `_resolve_call_arguments_runtime`（运行时）~30 行同逻辑双实现，收敛为共享纯算法核心（输入 names/kinds/has_default + 位置/具名，输出绑定结果），两适配层各自消费。主线新引入的技术债，命中"单点真理/禁双写真相"。
-3. **原生 `**kwargs` 分传接通**：绑定器把 varkw 打包为 dict 位置实参，`def f(**kw)` 原生实现无法按位置接受；扩展原生调用适配（位置 + kwargs 分传）。
-4. **PT-HEALTH-1**：`hasattr` 能力探测 → 协议化（封装纪律）。
-5. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
+1. **语义/运行时解析算法收敛（推荐作为下一主线）**：`_resolve_with_descriptors`（语义）与 `_resolve_call_arguments_runtime`（运行时）~30 行同逻辑双实现，收敛为共享纯算法核心（输入 names/kinds/has_default + 位置/具名，输出绑定结果），两适配层各自消费。主线新引入的技术债，命中"单点真理/禁双写真相"。
+2. **原生 `**kwargs` 分传接通**：绑定器把 varkw 打包为 dict 位置实参，`def f(*a, **kw)` 原生实现无法按位置接受；扩展原生调用适配（位置 + kwargs 分传）。PT-PHASE4-1 解封前置。相关清理：`_ibci_param_meta` 作为 proxy 私有属性跨模块读取，可形式化为原生函数对象字段。
+3. **PT-HEALTH-1**：`hasattr` 能力探测 → 协议化（封装纪律）。
+4. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
 
-**既定推荐顺序**：先 1（收尾）→ 再 2（清主线技术债）→ 3（原生 kwargs 分传）。
+**既定推荐顺序**：先 1（清主线技术债）→ 再 2（原生 kwargs 分传）→ 3（封装纪律）。
 
 ---
 

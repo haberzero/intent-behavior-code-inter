@@ -94,6 +94,24 @@ class IbBehaviorExpr:
 
 **边界原则**：`Symbol`（编译期符号表）与 `RuntimeSymbolImpl`（运行时符号）**不复写**这些轴——`Symbol` 的 `provenance` 仅缓存符号层面的来源（复用同一 `Provenance` 枚举），其类型真相仍以 `spec`（IbSpec）为准，避免 AST 字段 / 侧表 / IbSpec 三处同时存储同一语义事实。
 
+### 2.5 调用与参数节点
+
+函数定义与调用共用一组参数节点（`core/kernel/ast.py`），参数种类常量与 Python 对齐：
+
+| 常量 | 含义 |
+|------|------|
+| `ARG_POSITIONAL_OR_KEYWORD` | 普通参数（位置或具名传入） |
+| `ARG_KEYWORD_ONLY` | `*args` 之后的参数，只能具名传入 |
+| `ARG_VAR_POSITIONAL` | `*args`，收集多余位置实参 |
+| `ARG_VAR_KEYWORD` | `**kwargs`，收集未声明具名实参 |
+
+- **`IbArg`**（声明侧）：`arg`（参数名）、`annotation`（类型标注）、`default`（默认值表达式，仅普通 / keyword-only 参数可携带）、`kind`。`*args` / `**kwargs` 参数无标注与默认值。
+- **`IbCall`**（调用侧）：`args`（位置实参列表，序列解包 `*expr` 以 `IbStarred` 节点出现在其中）、`keywords`（`List[IbKeyword]`）。
+- **`IbStarred`**：`*expr` 序列解包表达式，仅出现在调用实参位置。
+- **`IbKeyword`**：具名实参；`arg=None` 表示 `**expr` 字典解包。
+
+这些节点由解析器组件 `parameters()`（`core/compiler/parser/components/declaration.py`）与 `call()`（`core/compiler/parser/components/expression.py`）共享，用户函数、fn-lambda、behavior 与 LLM 函数因此天然获得同一参数语法。序列化器对 AST 节点字段通用序列化（`vars(node)`），`default` / `kind` / `keywords` 随节点自动持久化，无需额外映射。
+
 ---
 
 ## 三、侧表层：编译期的临时工作区

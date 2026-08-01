@@ -88,6 +88,7 @@ class TypeDef(IbSpec):
     # ── 函数签名（FUNCTION / BOUND_METHOD / CALLABLE_INSTANCE / CALLABLE_SIG）
     param_types:    List[TypeRef]
     return_type:    TypeRef
+    param_descriptors: List[ParamDescriptor]   # 参数名/种类/默认值存在性（FUNCTION，见 §3.6）
 
     # ── 类继承（CLASS）
     parent_type:    Optional[TypeRef]
@@ -131,7 +132,7 @@ class TypeDef(IbSpec):
 ### 3.3 字段存储规范
 
 - **TypeRef-only**：所有指向"其他类型"的字段全部以 `TypeRef` 存储；旧 `*_name` / `*_module` 扁平字符串字段已彻底删除。访问统一走 `spec.X.head` / `spec.X.module` / `spec.X.canonical_name`。
-- **MemberSpec 同样 TypeRef 化**：`core/kernel/spec/member.py:MemberSpec.type_ref`、`MethodMemberSpec.return_type` / `param_types` 均为 TypeRef。
+- **MemberSpec 同样 TypeRef 化**：`core/kernel/spec/member.py:MemberSpec.type_ref`、`MethodMemberSpec.return_type` / `param_types` 均为 TypeRef。类方法另以 `MethodMemberSpec.param_descriptors` 携带参数描述符（与 `TypeDef.param_descriptors` 对齐，见 §3.6），由 `_declaration_visitors._sync_class_member` 同步，供方法覆写契约校验消费。
 - **MethodMemberSpec 变异声明**：`MethodMemberSpec.mutating: bool`（默认 False）声明该方法是否修改接收者状态；`MethodMemberSpec.llmexcept_safe: bool`（默认 False）标记该方法在 llmexcept body 内对被保护变量的调用是否被豁免。这两个字段是 `SEM_LLMEXCEPT_MUTATING_CALL` 编译期检查的公理层数据源，由 `binding_analysis_pass.py` 在 BindingPhase 消费。
 - **线协议保留**：序列化 / 反序列化（`core/compiler/serialization/`）仍把 TypeRef 解构为字符串字段（`return_type_name` / `parent_module` 等）以保持艺术品向后兼容；in-memory 模型纯 TypeRef。
 
@@ -167,6 +168,32 @@ class TypeDef(IbSpec):
 | `create_bound_method(...)` | 绑定方法 |
 | `create_callable_instance(...)` | fn_callable / behavior |
 | `create_callable_sig(...)` | `fn[(...)→(...)]` 签名约束 |
+
+### 3.6 参数描述符 ParamDescriptor
+
+**ParamDescriptor**（`core/kernel/spec/member.py`）是单个可调用参数的解析后描述：名称、种类、类型引用、默认值存在性。用户函数、LLM 函数与原生模块函数共用这一结构，使语义层实参解析与 vtable 声明共享同一数据形态。
+
+**继承/组合关系**：独立 frozen dataclass；被 `TypeDef.param_descriptors`（用户/LLM 函数）与 `MethodMemberSpec.param_descriptors`（类方法与模块成员）持有。
+
+**字段**：
+
+| 字段 | 语义 |
+|------|------|
+| `name` | 参数名 |
+| `kind` | 参数种类，对齐 `core.kernel.ast` 的 `ARG_*` 常量（见 `docs/architecture/02_metadata_ast.md` §2.5） |
+| `type_ref` | 参数类型（TypeRef） |
+| `has_default` | 是否带默认值 |
+| `default_value` | 原生默认字面值；仅原生模块声明使用，其余为 `None` |
+
+**核心不变量**：
+- `param_types` 只存类型；`param_descriptors` 携带名称、种类、默认值存在性，二者并列，实参解析以描述符为权威。
+- 描述符在 type-check 阶段构建（`_declaration_visitors._build_function_signature`），用户函数与 LLM 函数对称精化；类方法由 `_sync_class_member` 同步到成员表。
+- 用户级函数默认值是 AST 表达式，运行期惰性求值，描述符只记 `has_default=True`；原生模块函数默认值是声明给出的 Python 字面值，存入 `default_value`。
+
+**与其他机制的交互**：
+- 语义层 `visit_IbCall` 以描述符为权威做结构/类型校验（见 §5.1 编译期调用）。
+- 运行期统一绑定器与语义层共享同一绑定语义（见 `docs/architecture/04_vm_interpreter.md` §2.6）。
+- 原生模块函数的描述符由 discovery 从 vtable `params` 声明构建（格式见 `docs/subsystems/04_plugin_system.md` §4.2）。
 
 ---
 
@@ -250,6 +277,8 @@ Pass 4/5 SemanticAnalyzer
         └── SpecRegistry.resolve_subscript(spec, key_spec) — `obj[key]`
               └── 内部按 spec.kind 直分派；其余委托 axiom.resolve_*_type_name
 ```
+
+实参解析在 `visit_IbCall` 按调用体可用的静态签名选择策略：① 有 `param_descriptors`（用户/LLM 函数、已声明参数的 vtable 模块函数）→ 全量解析（位置 → 具名 → 默认填充 → varargs/varkw），结构/类型错误用 SEM_* 码报告；② 仅 `param_types`（`fn[...]` 签名约束、容器特化方法）→ 只做位置数量与类型检查；③ 无静态签名（内置构造器 / axiom-backed）→ 动态跳过，不报告。三策略的输入统一为调用体的位置 / 具名 / splat 实参列表，输出位置实参类型列表供返回类型推断使用。
 
 ### 5.2 运行期调用（VM 层）
 
