@@ -24,7 +24,7 @@ from core.base.enums import Provenance, StorageModel, Visibility
 from .type_ref import TypeRef as _TypeRef
 
 if TYPE_CHECKING:
-    from .member import MemberSpec
+    from .member import MemberSpec, ParamDescriptor
     from .type_ref import TypeRef
 
 
@@ -190,6 +190,11 @@ class TypeDef(IbSpec):
     #    + CALLABLE_SIG kinds use these). ---------------------------------
     param_types: List["TypeRef"] = field(default_factory=list)
     return_type: "TypeRef" = field(default_factory=lambda: _ANY_REF.replace_head("void"))
+
+    # 函数参数描述符（FUNCTION kind，用户函数 / LLM 函数）。
+    # 与 ``param_types`` 并列：前者只存类型，后者携带名称/种类/默认值存在性，
+    # 供语义层实参解析（位置 → 具名 → 默认填充 → varargs）与 vtable 声明复用。
+    param_descriptors: List["ParamDescriptor"] = field(default_factory=list)
 
     # -- Class inheritance (CLASS kind) -----------------------------------
     parent_type: Optional["TypeRef"] = None

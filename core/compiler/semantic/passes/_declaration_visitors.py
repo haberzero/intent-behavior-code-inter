@@ -10,6 +10,7 @@ no logic changes.
 from typing import Optional
 
 from core.base.diagnostics.codes import (
+    SEM_DEFAULT_TYPE_MISMATCH,
     SEM_DUAL_ASSIGNABLE,
     SEM_PROTOCOL_SIGNATURE,
     SEM_TYPE_MISMATCH,
@@ -18,6 +19,7 @@ from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
 from core.kernel.spec.type_ref import TypeRef
+from core.kernel.spec.member import ParamDescriptor
 from core.kernel.axioms.prompt_protocol import (
     validate_prompt_protocol_signature,
     is_prompt_protocol_method,
@@ -64,15 +66,8 @@ class DeclarationVisitorsMixin:
         # 查找函数符号
         sym = self.lookup_symbol(node.name)
 
-        # 解析参数类型标注
-        param_types = []
-        for arg_node in node.args:
-            # IbArg now has annotation field directly
-            if arg_node.annotation:
-                arg_type = self._resolve_type(arg_node.annotation)
-            else:
-                arg_type = self._any_desc
-            param_types.append(arg_type)
+        # 参数签名唯一权威：解析类型 + 描述符 + 定义处默认值校验
+        param_types, param_descriptors = self._build_function_signature(node.args)
 
         # 如果在类定义中，插入 self 类型
         if self.in_class_def and self.current_class:
@@ -96,7 +91,11 @@ class DeclarationVisitorsMixin:
                 provenance=Provenance.USER_DEFINED,
                 visibility=Visibility.IMPORT_GATED,
             )
+            updated_spec.param_descriptors = param_descriptors
             sym.spec = updated_spec
+
+        # 同步精化后的签名到类成员表（运行期契约校验消费）
+        self._sync_class_member(node.name, param_descriptors)
 
         # 创建函数作用域
         func_scope = SymbolTable(parent=self.current_scope, name=node.name)
@@ -223,15 +222,29 @@ class DeclarationVisitorsMixin:
 
         # Compare parameter count (both include self as first param)
         if len(child_params) != len(parent_params):
-            self.warn(
-                f"Method '{method_name}' overrides parent with "
-                f"{len(parent_params)} parameter(s), but defines "
-                f"{len(child_params)} parameter(s).",
-                node, code=SEM_DUAL_ASSIGNABLE,
-                hint=f"Parent signature has {len(parent_params)} parameters (including self). "
-                     f"Ensure override matches the parent signature."
-            )
-            return  # Cannot check individual params if count differs
+            # 子类允许增加参数，但多出的参数必须带默认值或为 varargs，
+            # 否则按父类签名的调用方在子类上会缺少实参。
+            # param_descriptors 不含 self，故与 child_params 差一个偏移。
+            child_desc = getattr(child_spec, 'param_descriptors', None) or []
+            extra = len(child_params) - len(parent_params)
+            flexible = False
+            if extra > 0 and len(child_desc) >= extra:
+                flexible = all(
+                    d.has_default or d.kind in (ast.ARG_VAR_POSITIONAL, ast.ARG_VAR_KEYWORD)
+                    for d in child_desc[-extra:]
+                )
+            if not flexible:
+                self.warn(
+                    f"Method '{method_name}' overrides parent with "
+                    f"{len(parent_params)} parameter(s), but defines "
+                    f"{len(child_params)} parameter(s).",
+                    node, code=SEM_DUAL_ASSIGNABLE,
+                    hint=f"Parent signature has {len(parent_params)} parameters (including self). "
+                         f"Ensure override matches the parent signature."
+                )
+                return  # Cannot check individual params if count differs
+            # 子类多出的参数均有默认值 / varargs：只对父类签名部分做类型对比
+            child_params = child_params[: len(parent_params)]
 
         # Check parameter types (skip self at index 0)
         for i in range(1, len(parent_params)):
@@ -286,8 +299,34 @@ class DeclarationVisitorsMixin:
                     )
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef) -> Optional[IbSpec]:
-        """访问 LLM 函数定义"""
-        # 类似 IbFunctionDef
+        """访问 LLM 函数定义 — 与 visit_IbFunctionDef 对称：精化签名并回填 spec。"""
+        sym = self.lookup_symbol(node.name)
+
+        # 参数签名唯一权威（同 visit_IbFunctionDef）
+        param_types, param_descriptors = self._build_function_signature(node.args)
+
+        if self.in_class_def and self.current_class:
+            param_types.insert(0, self.current_class)
+
+        ret_type = self._resolve_type(node.returns) if node.returns else self._any_desc
+
+        if sym and sym.spec and self.registry:
+            param_type_names = [(p.name if p else "any") for p in param_types]
+            ret_type_name = ret_type.name if ret_type else "void"
+            from core.base.enums import Provenance, Visibility
+            updated_spec = self.registry.factory.create_func(
+                name=node.name,
+                param_type_names=param_type_names,
+                return_type_name=ret_type_name,
+                provenance=Provenance.USER_DEFINED,
+                visibility=Visibility.IMPORT_GATED,
+            )
+            updated_spec.param_descriptors = param_descriptors
+            sym.spec = updated_spec
+
+        self._sync_class_member(node.name, param_descriptors)
+
+        # 创建函数作用域
         func_scope = SymbolTable(parent=self.current_scope, name=node.name)
 
         old_in_function = self.in_function_def
@@ -295,8 +334,6 @@ class DeclarationVisitorsMixin:
         self.push_scope(func_scope)
 
         try:
-            for arg in node.args:
-                self.visit(arg)
             # LLM 函数的提示词段落（sys_prompt / user_prompt / retry_hint）
             for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
                 if prompt_list:
@@ -308,3 +345,44 @@ class DeclarationVisitorsMixin:
             self.in_function_def = old_in_function
 
         return None
+
+    def _build_function_signature(self, args):
+        """构建函数参数签名（唯一权威，type-check 阶段，解析后精度）。
+
+        对每个参数：解析标注类型、构建 ParamDescriptor（name/kind/type/has_default）、
+        在包围作用域求值并校验默认值类型可赋值性（SEM_DEFAULT_TYPE_MISMATCH）。
+
+        返回 (param_types, param_descriptors)；两者都不含 self（调用方按需插入）。
+        """
+        param_types = []
+        param_descriptors = []
+        for arg_node in args:
+            arg_type = self._resolve_type(arg_node.annotation) if arg_node.annotation else self._any_desc
+            param_types.append(arg_type)
+            param_descriptors.append(ParamDescriptor(
+                name=arg_node.arg,
+                kind=arg_node.kind,
+                type_ref=TypeRef.of(arg_type.name, getattr(arg_type, 'module_path', None)),
+                has_default=arg_node.default is not None,
+            ))
+            if arg_node.default is not None and arg_node.kind in (ast.ARG_POSITIONAL_OR_KEYWORD, ast.ARG_KEYWORD_ONLY):
+                default_spec = self.visit(arg_node.default)
+                if (default_spec and arg_type != self._any_desc
+                        and not self.registry.is_dynamic(default_spec)
+                        and not self.registry.is_dynamic(arg_type)
+                        and not self.registry.is_assignable(default_spec, arg_type)):
+                    self.error(
+                        f"Default value for parameter '{arg_node.arg}' has type "
+                        f"'{default_spec.name}', but the parameter is declared "
+                        f"'{arg_type.name}'.",
+                        arg_node, code=SEM_DEFAULT_TYPE_MISMATCH,
+                    )
+        return param_types, param_descriptors
+
+    def _sync_class_member(self, method_name: str, param_descriptors: list) -> None:
+        """把精化后的参数描述符同步到类成员表（供运行期契约校验消费）。"""
+        if not (self.in_class_def and self.current_class):
+            return
+        member = self.current_class.members.get(method_name)
+        if member is not None:
+            member.param_descriptors = list(param_descriptors)

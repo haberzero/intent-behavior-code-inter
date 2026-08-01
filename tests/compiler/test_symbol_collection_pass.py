@@ -5,8 +5,7 @@ Tests for SymbolCollectionPass
 import pytest
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind
-from core.kernel.spec.registry import SpecRegistry
-from core.kernel.axioms.registry import AxiomRegistry
+from core.kernel.factory import create_default_registry
 from core.compiler.semantic.context import SemanticContext
 from core.compiler.semantic.metadata import MetadataStore, SymbolTableContext, TypeInferenceState
 from core.compiler.semantic.passes.symbol_collection_pass import SymbolCollectionPass
@@ -14,8 +13,8 @@ from core.compiler.semantic.passes.symbol_collection_pass import SymbolCollectio
 
 def create_test_context(ast_node):
     """创建测试上下文"""
-    axiom_reg = AxiomRegistry()
-    registry = SpecRegistry(axiom_reg)
+    # 符号收集依赖完整注册表（_any_desc 不可空，裸注册表触发 fail-fast）
+    registry = create_default_registry()
     symbol_table = SymbolTable()
 
     context = SemanticContext(

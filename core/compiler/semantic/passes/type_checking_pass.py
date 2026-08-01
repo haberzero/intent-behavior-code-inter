@@ -89,6 +89,8 @@ class TypeCheckingVisitor(
 
         # 常用类型描述符
         self._any_desc = self.registry.resolve("any")
+        if self._any_desc is None:
+            raise RuntimeError("Internal: registry has no 'any' primitive; type checking cannot proceed.")
         self._void_desc = self.registry.resolve("void")
         self._behavior_desc = self.registry.resolve("behavior")
         self._int_desc = self.registry.resolve("int")

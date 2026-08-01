@@ -47,7 +47,7 @@ class TypeResolutionPass(BasePass):
 class TypeAnnotationResolver:
     """类型标注解析器
 
-    遍历 AST，解析所有类型标注节点（IbName/IbGenericType/IbSubscript in annotation position）
+    遍历 AST，解析所有类型标注节点（IbName/IbSubscript/IbCallableType in annotation position）
     """
 
     def __init__(self, context: SemanticContext):
@@ -58,6 +58,8 @@ class TypeAnnotationResolver:
 
         # 常用类型描述符缓存
         self._any_desc = self.registry.resolve("any")
+        if self._any_desc is None:
+            raise RuntimeError("Internal: registry has no 'any' primitive; type resolution cannot proceed.")
         self._auto_desc = self.registry.resolve("auto")
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
@@ -111,13 +113,7 @@ class TypeAnnotationResolver:
                     return base_spec
             return self._any_desc
 
-        elif hasattr(ast, 'IbGenericType') and isinstance(annotation, ast.IbGenericType):
-            # 显式泛型标注节点
-            base_name = annotation.base.id if isinstance(annotation.base, ast.IbName) else str(annotation.base)
-            base_spec = self.registry.resolve(base_name)
-            return base_spec if base_spec else self._any_desc
-
-        elif hasattr(ast, 'IbCallableType') and isinstance(annotation, ast.IbCallableType):
+        elif isinstance(annotation, ast.IbCallableType):
             # fn[(param_types) -> return_type] 类型标注
             fn_callable_spec = self.registry.resolve("fn_callable")
             return fn_callable_spec if fn_callable_spec else self._any_desc

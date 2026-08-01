@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List, Union
-from core.base.diagnostics.codes import PAR_DEPRECATED_CAST_SYNTAX, PAR_UNEXPECTED_EOF, PAR_UNEXPECTED_TOKEN
+from core.base.diagnostics.codes import PAR_DEPRECATED_CAST_SYNTAX, PAR_POSITIONAL_AFTER_KEYWORD, PAR_UNEXPECTED_EOF, PAR_UNEXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
@@ -367,18 +367,50 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbCompare(left=left, ops=["is"], comparators=[right]), left, right)
 
     def call(self, left: ast.IbExpr) -> ast.IbCall:
-        arguments = []
+        arguments: List[ast.IbExpr] = []
+        keywords: List[ast.IbKeyword] = []
+        seen_keyword = False
         if not self.stream.check(TokenType.RPAREN):
             while True:
                 if self.stream.is_at_end():
                     raise self.stream.error(self.stream.peek(), "Unterminated argument list.", code=PAR_UNEXPECTED_EOF)
-                arguments.append(self.parse_expression(IbPrecedence.TUPLE))
+
+                if self.stream.match(TokenType.STAR_STAR):
+                    # **expr 字典解包 -> IbKeyword(arg=None)
+                    value = self.parse_expression(IbPrecedence.TUPLE)
+                    keywords.append(self._loc(ast.IbKeyword(arg=None, value=value), self.stream.previous(), value))
+                    seen_keyword = True
+                elif self.stream.match(TokenType.STAR):
+                    # *expr 序列解包 -> IbStarred（不得出现在具名实参之后）
+                    if seen_keyword:
+                        raise self.stream.error(
+                            self.stream.previous(),
+                            "Positional argument cannot follow keyword argument.",
+                            code=PAR_POSITIONAL_AFTER_KEYWORD,
+                        )
+                    value = self.parse_expression(IbPrecedence.TUPLE)
+                    arguments.append(self._loc(ast.IbStarred(value=value), self.stream.previous(), value))
+                else:
+                    arg = self.parse_expression(IbPrecedence.TUPLE)
+                    if isinstance(arg, ast.IbName) and self.stream.match(TokenType.ASSIGN):
+                        # 具名参数：name = value
+                        value = self.parse_expression(IbPrecedence.TUPLE)
+                        keywords.append(self._loc(ast.IbKeyword(arg=arg.id, value=value), arg, value))
+                        seen_keyword = True
+                    else:
+                        if seen_keyword:
+                            raise self.stream.error(
+                                self.stream.previous(),
+                                "Positional argument cannot follow keyword argument.",
+                                code=PAR_POSITIONAL_AFTER_KEYWORD,
+                            )
+                        arguments.append(arg)
+
                 if not self.stream.match(TokenType.COMMA):
                     break
         end_token = self.stream.consume(TokenType.RPAREN, "Expect ')' after arguments.")
-        
-        # 意图节点化：不再向 Call 注入 intent 属性
-        return self._loc(ast.IbCall(func=left, args=arguments, keywords=[]), left, end_token)
+
+        return self._loc(ast.IbCall(func=left, args=arguments, keywords=keywords), left, end_token)
 
     def dot(self, left: ast.IbExpr) -> ast.IbExpr:
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")

@@ -104,8 +104,19 @@ class ContractValidator:
         super_params = super_sig.param_types
 
         if len(sub_params) != len(super_params):
-            self.issue_tracker.report_error(
-                f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
-                f"but parent defines {len(super_params)} parameters.",
-                file_path="<metadata>", line=0, column=0, code=SEM_REDEFINITION
-            )
+            # 子类允许增加参数，但多出的参数必须带默认值或为 varargs，
+            # 否则调用父类签名的调用方在子类上会缺少实参（契约破坏）。
+            sub_desc = getattr(member, 'param_descriptors', None) or []
+            extra = len(sub_params) - len(super_params)
+            flexible = False
+            if extra > 0 and len(sub_desc) >= extra:
+                flexible = all(
+                    d.has_default or d.kind in ("VAR_POSITIONAL", "VAR_KEYWORD")
+                    for d in sub_desc[-extra:]
+                )
+            if not flexible:
+                self.issue_tracker.report_error(
+                    f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
+                    f"but parent defines {len(super_params)} parameters.",
+                    file_path="<metadata>", line=0, column=0, code=SEM_REDEFINITION
+                )

@@ -5,7 +5,7 @@ Public API for the spec layer.
 """
 
 from .base import IbSpec, TypeDef, TypeKind
-from .member import MemberSpec, MethodMemberSpec
+from .member import MemberSpec, MethodMemberSpec, ParamDescriptor
 from .type_ref import TypeRef
 from .specs import (
     # Built-in prototype constants
@@ -48,6 +48,7 @@ __all__ = [
     # Member specs
     "MemberSpec",
     "MethodMemberSpec",
+    "ParamDescriptor",
     # TypeRef
     "TypeRef",
     # Built-in constants

@@ -130,6 +130,14 @@ class SymbolResolver(ScopedVisitor):
                     self.bind_symbol(arg_node, param_sym)
 
     @staticmethod
+    def _visit_param_defaults(visitor, args: list):
+        """在定义包围作用域访问各参数的默认值表达式（默认值定义时求值）。"""
+        for arg_node in args:
+            target = arg_node.target if isinstance(arg_node, ast.IbTypeAnnotatedExpr) else arg_node
+            if isinstance(target, ast.IbArg) and target.default is not None:
+                visitor.visit(target.default)
+
+    @staticmethod
     def _extract_arg_name(arg_node: ast.IbASTNode) -> Optional[str]:
         """从参数节点提取参数名。IbArg now has annotation field directly."""
         if isinstance(arg_node, ast.IbArg):
@@ -138,6 +146,9 @@ class SymbolResolver(ScopedVisitor):
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         """访问函数定义节点"""
+        # 默认值表达式在定义包围作用域求值（Python 语义）
+        self._visit_param_defaults(self, node.args)
+
         # 创建函数作用域
         func_scope = SymbolTable(parent=self.current_scope, name=node.name)
 
@@ -192,6 +203,9 @@ class SymbolResolver(ScopedVisitor):
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         """访问 LLM 函数定义节点"""
+        # 默认值表达式在定义包围作用域求值（Python 语义）
+        self._visit_param_defaults(self, node.args)
+
         # 创建函数作用域
         func_scope = SymbolTable(parent=self.current_scope, name=node.name)
 
@@ -262,9 +276,13 @@ class SymbolResolver(ScopedVisitor):
         # 处理被调用对象
         self.visit(node.func)
 
-        # 处理参数
+        # 处理参数（含 *expr 序列解包；IbStarred 经 generic_visit 访问其 value）
         for arg in node.args:
             self.visit(arg)
+
+        # 处理具名实参（含 **expr 字典解包，IbKeyword.arg 为 None）
+        for kw in node.keywords:
+            self.visit(kw.value)
 
     def visit_IbAttribute(self, node: ast.IbAttribute):
         """访问属性访问节点"""
@@ -391,6 +409,9 @@ class SymbolResolver(ScopedVisitor):
 
     def visit_IbLambdaExpr(self, node: ast.IbLambdaExpr):
         """访问 lambda 表达式节点"""
+        # 默认值表达式在定义包围作用域求值（Python 语义）
+        self._visit_param_defaults(self, node.params)
+
         # 创建 lambda 作用域
         lambda_scope = SymbolTable(parent=self.current_scope, name="<lambda>")
 

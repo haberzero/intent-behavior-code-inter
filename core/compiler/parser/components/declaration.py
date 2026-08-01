@@ -293,17 +293,62 @@ class DeclarationComponent(BaseComponent):
     def parameters(self) -> List[ast.IbArg]:
         params = []
         if not self.stream.check(TokenType.RPAREN):
+            saw_var_pos = False
+            saw_var_kw = False
+            saw_default = False
             while True:
+                if saw_var_kw:
+                    raise self.stream.error(self.stream.peek(), "Parameter cannot follow '**kwargs'.", code=PAR_UNEXPECTED_TOKEN)
                 if self.stream.check(TokenType.SELF):
                     self.stream.advance()
                     if not self.stream.match(TokenType.COMMA):
                         break
                     continue
 
-                annotation = self.type_def.parse_type_annotation(IbPrecedence.TUPLE)
-                name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+                kind = ast.ARG_POSITIONAL_OR_KEYWORD
+                if self.stream.match(TokenType.STAR_STAR):
+                    kind = ast.ARG_VAR_KEYWORD
+                elif self.stream.match(TokenType.STAR):
+                    kind = ast.ARG_VAR_POSITIONAL
 
-                param_node = self._loc(ast.IbArg(arg=name_token.value, annotation=annotation), name_token)
+                if kind == ast.ARG_VAR_KEYWORD and saw_var_kw:
+                    raise self.stream.error(self.stream.previous(), "Duplicate '**kwargs' parameter.", code=PAR_UNEXPECTED_TOKEN)
+                if kind == ast.ARG_VAR_POSITIONAL and saw_var_pos:
+                    raise self.stream.error(self.stream.previous(), "Duplicate '*args' parameter.", code=PAR_UNEXPECTED_TOKEN)
+
+                if kind == ast.ARG_POSITIONAL_OR_KEYWORD:
+                    annotation = self.type_def.parse_type_annotation(IbPrecedence.TUPLE)
+                    name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+
+                    default = None
+                    if self.stream.match(TokenType.ASSIGN):
+                        # 默认值表达式以 TUPLE 优先级解析，避免吞掉后续参数分隔逗号
+                        default = self.expression.parse_expression(IbPrecedence.TUPLE)
+                        saw_default = True
+
+                    # *args 之后的普通参数为 keyword-only（Python 语义）
+                    if saw_var_pos:
+                        kind = ast.ARG_KEYWORD_ONLY
+
+                    param_node = self._loc(ast.IbArg(arg=name_token.value, annotation=annotation, default=default, kind=kind), name_token)
+                else:
+                    # *args / **kwargs：无类型标注、无默认值
+                    name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+                    param_node = self._loc(ast.IbArg(arg=name_token.value, annotation=None, default=None, kind=kind), name_token)
+                    if kind == ast.ARG_VAR_POSITIONAL:
+                        saw_var_pos = True
+                    else:
+                        saw_var_kw = True
+
+                if kind != ast.ARG_VAR_POSITIONAL and kind != ast.ARG_VAR_KEYWORD:
+                    if saw_default and param_node.default is None and not saw_var_pos:
+                        # 默认值后不允许出现无默认值的普通参数（keyword-only 除外）
+                        raise self.stream.error(
+                            self.stream.previous(),
+                            f"Parameter '{param_node.arg}' cannot follow a parameter with a default value.",
+                            code=PAR_UNEXPECTED_TOKEN,
+                        )
+
                 params.append(param_node)
 
                 if not self.stream.match(TokenType.COMMA):

@@ -75,3 +75,26 @@ class MethodMemberSpec(MemberSpec):
     return_type: TypeRef = field(default_factory=lambda: _VOID_REF)
     mutating: bool = False
     llmexcept_safe: bool = False
+    # 参数描述符（与 TypeDef.param_descriptors 对齐）。供方法覆写契约校验
+    # 判断"子类多出的参数是否带默认值 / 是否为 varargs"。
+    param_descriptors: List[ParamDescriptor] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ParamDescriptor:
+    """
+    Pure-data description of a single callable parameter.
+
+    Mirrors the ``IbArg`` AST node shape (name / kind / annotation /
+    default-presence) in a resolved form (``TypeRef``), so that semantic
+    argument resolution (positional → named → default fill → varargs) and
+    future vtable declarations share one structure.
+
+    ``kind`` values align with the ``ARG_*`` constants in ``core.kernel.ast``:
+    POSITIONAL_OR_KEYWORD / VAR_POSITIONAL / VAR_KEYWORD.
+    """
+
+    name: str
+    kind: str = "POSITIONAL_OR_KEYWORD"
+    type_ref: TypeRef = field(default_factory=lambda: _ANY_REF)
+    has_default: bool = False

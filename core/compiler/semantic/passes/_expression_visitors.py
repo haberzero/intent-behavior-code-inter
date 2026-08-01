@@ -14,9 +14,13 @@ from core.base.diagnostics.codes import (
     SEM_ARG_COUNT_MISMATCH,
     SEM_CAST_NO_CONVERTER,
     SEM_CONTAINER_METHOD_HINT,
+    SEM_DUPLICATE_KEYWORD,
     SEM_INTENT_STATIC_CALL,
+    SEM_MISSING_REQUIRED_ARG,
     SEM_SUPER_OUTSIDE_METHOD,
+    SEM_TOO_MANY_POSITIONAL,
     SEM_TYPE_MISMATCH,
+    SEM_UNKNOWN_KEYWORD,
     SEM_UNRESOLVED_TYPE,
     ICE_TYPE_LEAK,
 )
@@ -225,12 +229,21 @@ class ExpressionVisitorsMixin:
     })
 
     def visit_IbCall(self, node: ast.IbCall) -> Optional[IbSpec]:
-        """访问函数调用 — 使用 registry.resolve_call_return() 统一推断返回类型"""
+        """访问函数调用 — 统一实参解析 + 使用 registry.resolve_call_return() 推断返回类型"""
         # 处理被调用对象
         func_type = self.visit(node.func)
 
-        # 处理参数并收集类型
-        arg_types = [self.visit(arg) for arg in node.args]
+        # --- 结构化实参收集：位置 / 序列解包 / 具名 / 字典解包 ---
+        positional_specs: list = []
+        starred_specs: list = []          # *expr：静态数量未知
+        keyword_specs: list = []          # (name, spec)；name None 表示 **expr
+        for arg in node.args:
+            if isinstance(arg, ast.IbStarred):
+                starred_specs.append(self.visit(arg.value))
+            else:
+                positional_specs.append(self.visit(arg))
+        for kw in node.keywords:
+            keyword_specs.append((kw.arg, self.visit(kw.value)))
 
         if not func_type:
             self.bind_type(node, self._any_desc)
@@ -259,7 +272,7 @@ class ExpressionVisitorsMixin:
                     return None
 
                 ret = self.registry.resolve_callable_instance_return(
-                    func_type, arg_types, class_scope_lookup=scope_lookup
+                    func_type, positional_specs, class_scope_lookup=scope_lookup
                 )
                 if ret:
                     self.bind_type(node, ret)
@@ -272,31 +285,13 @@ class ExpressionVisitorsMixin:
             self.bind_type(node, self._any_desc)
             return self._any_desc
 
-        # --- Argument checking for structural signatures (SEM_ARG_COUNT_MISMATCH / SEM_TYPE_MISMATCH) ---
-        if func_type.kind == TypeKind.CALLABLE_SIG.value:
-            expected_names = [t.head for t in (getattr(func_type, 'param_types', None) or [])]
-            if len(arg_types) != len(expected_names):
-                self.error(
-                    f"Callable expected {len(expected_names)} argument(s), "
-                    f"but got {len(arg_types)}.",
-                    node, code=SEM_ARG_COUNT_MISMATCH,
-                )
-            else:
-                for i, (exp_name, actual_type) in enumerate(zip(expected_names, arg_types)):
-                    exp_spec = self.registry.resolve(exp_name)
-                    if (exp_spec and actual_type
-                            and not self.registry.is_dynamic(exp_spec)
-                            and not self.registry.is_dynamic(actual_type)
-                            and not self.registry.is_assignable(actual_type, exp_spec)):
-                        hint = self.registry.get_diff_hint(actual_type, exp_spec) if hasattr(self.registry, 'get_diff_hint') else None
-                        self.error(
-                            f"Argument {i + 1} type mismatch: expected '{exp_name}', "
-                            f"but got '{actual_type.name}'.",
-                            node, code=SEM_TYPE_MISMATCH, hint=hint,
-                        )
+        # --- 统一实参解析：单一入口，按调用体可用静态签名选择解析策略 ---
+        arg_specs = self._resolve_call_arguments(
+            node, func_type, positional_specs, starred_specs, keyword_specs,
+        )
 
         # --- Unified return type resolution ---
-        res = self.registry.resolve_call_return(func_type, arg_types or [])
+        res = self.registry.resolve_call_return(func_type, arg_specs or [])
 
         if not res:
             # Last resort fallback: direct return_type attribute read
@@ -325,13 +320,66 @@ class ExpressionVisitorsMixin:
             else:
                 res = self._any_desc
 
-        # --- SEM_CONTAINER_METHOD_HINT warning for specialized container write methods ---
-        param_types = getattr(func_type, "param_types", []) or []
-        param_type_names = [t.head for t in param_types]
-        if func_type.kind == TypeKind.FUNCTION.value and param_type_names:
-            for i, (expected_name, actual_type) in enumerate(
-                zip(param_type_names, arg_types)
-            ):
+        self.bind_type(node, res)
+        return res
+
+    def _resolve_call_arguments(
+        self,
+        node: ast.IbCall,
+        func_type: IbSpec,
+        positional_specs: list,
+        starred_specs: list,
+        keyword_specs: list,
+    ) -> list:
+        """统一实参解析：单一入口，按调用体可用的静态签名选择解析策略。
+
+        策略一：``param_descriptors`` 存在（用户/LLM 函数；vtable 模块函数在
+          签名升级后同样进入此路径）→ 全量解析：位置 → 具名 → 默认填充 →
+          varargs/varkw，结构/类型错误（SEM_* 新码）。
+        策略二：仅 ``param_types``（结构化签名 ``fn[...]``、容器特化方法）
+          → 位置数量 + 类型检查。容器方法无具名签名，故只按位置校验。
+        策略三：无静态签名（内置构造器 / axiom-backed / 运行时 callable）
+          → 动态跳过，不报告。
+
+        返回位置实参类型列表（供返回类型推断的近似输入）。
+        """
+        descriptors = getattr(func_type, "param_descriptors", None) or []
+        if descriptors:
+            return self._resolve_with_descriptors(
+                node, func_type, descriptors,
+                positional_specs, starred_specs, keyword_specs,
+            )
+
+        param_types = getattr(func_type, "param_types", None) or []
+        if not param_types:
+            return positional_specs  # 策略三：无静态签名
+
+        # 策略二：仅位置签名
+        if func_type.kind == TypeKind.CALLABLE_SIG.value:
+            expected_names = [t.head for t in param_types]
+            if len(positional_specs) != len(expected_names):
+                self.error(
+                    f"Callable expected {len(expected_names)} argument(s), "
+                    f"but got {len(positional_specs)}.",
+                    node, code=SEM_ARG_COUNT_MISMATCH,
+                )
+            else:
+                for i, (exp_name, actual_type) in enumerate(zip(expected_names, positional_specs)):
+                    exp_spec = self.registry.resolve(exp_name)
+                    if (exp_spec and actual_type
+                            and not self.registry.is_dynamic(exp_spec)
+                            and not self.registry.is_dynamic(actual_type)
+                            and not self.registry.is_assignable(actual_type, exp_spec)):
+                        self.error(
+                            f"Argument {i + 1} type mismatch: expected '{exp_name}', "
+                            f"but got '{actual_type.name}'.",
+                            node, code=SEM_TYPE_MISMATCH,
+                            hint=self.registry.get_diff_hint(actual_type, exp_spec),
+                        )
+        elif func_type.kind == TypeKind.FUNCTION.value:
+            # 容器特化写方法的类型提示（如 list[int].append("x")）
+            param_type_names = [t.head for t in param_types]
+            for i, (expected_name, actual_type) in enumerate(zip(param_type_names, positional_specs)):
                 if expected_name == "any":
                     continue
                 if actual_type is None:
@@ -339,15 +387,104 @@ class ExpressionVisitorsMixin:
                 exp_spec = self.registry.resolve(expected_name)
                 if (exp_spec and not self.registry.is_dynamic(actual_type)
                         and not self.registry.is_assignable(actual_type, exp_spec)):
-                    hint = self.registry.get_diff_hint(actual_type, exp_spec) if hasattr(self.registry, 'get_diff_hint') else None
                     self.warn(
                         f"Argument {i + 1} type mismatch: expected '{expected_name}', "
                         f"got '{actual_type.name}'",
-                        node, code=SEM_CONTAINER_METHOD_HINT, hint=hint,
+                        node, code=SEM_CONTAINER_METHOD_HINT,
+                        hint=self.registry.get_diff_hint(actual_type, exp_spec),
                     )
 
-        self.bind_type(node, res)
-        return res
+        return positional_specs
+
+    def _resolve_with_descriptors(
+        self,
+        node: ast.IbCall,
+        func_type: IbSpec,
+        descriptors: list,
+        positional_specs: list,
+        starred_specs: list,
+        keyword_specs: list,
+    ) -> list:
+        """参数描述符驱动的实参解析：位置 → 具名 → 默认填充 → varargs/varkw。
+
+        只报告结构/类型错误；返回位置实参类型列表（供返回类型推断的近似输入）。
+        """
+        named_slots = [d for d in descriptors if d.kind in (ast.ARG_POSITIONAL_OR_KEYWORD, ast.ARG_KEYWORD_ONLY)]
+        positional_slots = [d for d in descriptors if d.kind == ast.ARG_POSITIONAL_OR_KEYWORD]
+        has_var_pos = any(d.kind == ast.ARG_VAR_POSITIONAL for d in descriptors)
+        has_var_kw = any(d.kind == ast.ARG_VAR_KEYWORD for d in descriptors)
+        has_star = bool(starred_specs)
+        has_dstar = any(name is None for name, _ in keyword_specs)
+        has_dynamic = has_star or has_dstar
+
+        name_to_index = {d.name: i for i, d in enumerate(named_slots)}
+        bound: dict = {}
+        overflow = 0
+
+        # 1. 位置实参按序绑定到位置槽位（keyword-only 不参与位置绑定）。
+        #    先于具名实参绑定：后续具名实参若命中已占槽位即为重复传入。
+        slot = 0
+        for spec in positional_specs:
+            if slot < len(positional_slots):
+                desc = positional_slots[slot]
+                bound[desc.name] = spec
+                self._check_call_arg_type(node, desc.name, spec, desc)
+                slot += 1
+            else:
+                overflow += 1
+
+        # 2. 具名实参：重复（含与位置实参撞槽）/ 未知 校验 + 类型校验。
+        #    函数声明了 **kwargs 时，未声明的具名实参被其吸收（不报未知）。
+        for name, spec in keyword_specs:
+            if name is None:
+                continue  # **expr：运行时展开，无法静态校验
+            if name in name_to_index:
+                if name in bound:
+                    self.error(
+                        f"Keyword argument '{name}' provided multiple times.",
+                        node, code=SEM_DUPLICATE_KEYWORD,
+                    )
+                    continue
+                desc = named_slots[name_to_index[name]]
+                bound[name] = spec
+                self._check_call_arg_type(node, name, spec, desc)
+            elif not has_var_kw:
+                self.error(
+                    f"Function '{func_type.name}' has no parameter named '{name}'.",
+                    node, code=SEM_UNKNOWN_KEYWORD,
+                )
+
+        if not has_dynamic:
+            for desc in named_slots:
+                if desc.name not in bound and not desc.has_default:
+                    self.error(
+                        f"Function '{func_type.name}' missing required argument '{desc.name}'.",
+                        node, code=SEM_MISSING_REQUIRED_ARG,
+                    )
+            if overflow and not has_var_pos:
+                self.error(
+                    f"Function '{func_type.name}' expects at most {len(positional_slots)} "
+                    f"positional argument(s), but got {len(positional_specs)}.",
+                    node, code=SEM_TOO_MANY_POSITIONAL,
+                )
+
+        return positional_specs
+
+    def _check_call_arg_type(self, node: ast.IbCall, name: str, actual_spec, descriptor) -> None:
+        """单参数类型可赋值性校验（SEM_TYPE_MISMATCH）。"""
+        if not descriptor.type_ref:
+            return
+        exp_spec = self.registry.resolve_typeref(descriptor.type_ref)
+        if (exp_spec and actual_spec
+                and not self.registry.is_dynamic(exp_spec)
+                and not self.registry.is_dynamic(actual_spec)
+                and not self.registry.is_assignable(actual_spec, exp_spec)):
+            self.error(
+                f"Argument '{name}' type mismatch: expected '{descriptor.type_ref.head}', "
+                f"but got '{actual_spec.name}'.",
+                node, code=SEM_TYPE_MISMATCH,
+                hint=self.registry.get_diff_hint(actual_spec, exp_spec),
+            )
 
     def _check_intent_context_static_call(self, node: ast.IbCall):
         """检查 intent_context.<method>() 是否在类级别调用（SEM_INTENT_STATIC_CALL）

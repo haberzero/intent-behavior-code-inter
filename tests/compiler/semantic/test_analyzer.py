@@ -10,8 +10,7 @@ from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.compiler.semantic.pipeline import create_semantic_pipeline
 from core.compiler.semantic.context import ContextBuilder
 from core.compiler.semantic.metadata.metadata_store import MetadataStore
-from core.kernel.spec.registry import SpecRegistry
-from core.kernel.axioms.registry import AxiomRegistry
+from core.kernel.factory import create_default_registry
 from core.kernel.blueprint import CompilationResult
 from core.kernel.symbols import SymbolTable, Symbol, SymbolKind
 from core.kernel import ast
@@ -28,7 +27,9 @@ def source_mgr():
 
 @pytest.fixture
 def registry():
-    return SpecRegistry(AxiomRegistry())
+    # 语义 pipeline 依赖完整注册表（any/int/str 等核心原语必须可解析，
+    # 否则 _any_desc 为 None 触发 fail-fast）。裸注册表无法承载类型检查。
+    return create_default_registry()
 
 
 def parse_code(code: str, tracker):

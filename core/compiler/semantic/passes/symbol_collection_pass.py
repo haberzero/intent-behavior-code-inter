@@ -84,6 +84,8 @@ class SymbolCollector:
 
         # 使用 registry 的 _any_desc
         self._any_desc = context.registry.resolve("any")
+        if self._any_desc is None:
+            raise RuntimeError("Internal: registry has no 'any' primitive; symbol collection cannot proceed.")
 
     def visit(self, node: ast.IbASTNode):
         """访问节点的分派方法"""
@@ -281,21 +283,12 @@ class SymbolCollector:
         """Resolve a type annotation to an IbSpec (best-effort at collection time)."""
         if isinstance(annotation, ast.IbName):
             return self.registry.resolve(annotation.id)
-        elif hasattr(ast, 'IbGenericType') and isinstance(annotation, ast.IbGenericType):
-            base_name = annotation.base.id if isinstance(annotation.base, ast.IbName) else None
-            if base_name:
-                return self.registry.resolve(base_name)
         return None
 
     def _annotation_to_typeref(self, annotation: ast.IbASTNode) -> TypeRef:
         """Convert an AST annotation node to a TypeRef."""
         if isinstance(annotation, ast.IbName):
             return TypeRef.of(annotation.id)
-        elif hasattr(ast, 'IbGenericType') and isinstance(annotation, ast.IbGenericType):
-            base_name = annotation.base.id if isinstance(annotation.base, ast.IbName) else None
-            if base_name:
-                # For now, just use base name; full generic support is future work
-                return TypeRef.of(base_name)
         return TypeRef.of("any")
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):

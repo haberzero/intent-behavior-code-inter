@@ -5,6 +5,13 @@ from core.base.source_atomic import Location
 from .intent_logic import IntentMode
 
 
+# --- 函数参数种类（IbArg.kind） ---
+ARG_POSITIONAL_OR_KEYWORD = "POSITIONAL_OR_KEYWORD"
+ARG_VAR_POSITIONAL = "VAR_POSITIONAL"
+ARG_VAR_KEYWORD = "VAR_KEYWORD"
+ARG_KEYWORD_ONLY = "KEYWORD_ONLY"
+
+
 # --- AST Nodes ---
 
 @dataclass(eq=False, unsafe_hash=True)
@@ -346,6 +353,8 @@ class IbCompare(IbExpr):
 class IbCall(IbExpr):
     func: IbExpr
     args: List[IbExpr]
+    # 具名实参列表。IbKeyword.arg 为参数名；arg=None 表示 **expr 字典解包。
+    # 序列解包 *expr 以 IbStarred 节点出现在 args 中。
     keywords: List['IbKeyword']
 
 @dataclass(kw_only=True, eq=False)
@@ -521,11 +530,24 @@ class IbCallableType(IbExpr):
 class IbArg(IbASTNode):
     arg: str
     annotation: Optional[IbExpr] = None  # Type annotation for the parameter
+    # 默认值表达式（None 表示无默认值）。仅 POSITIONAL_OR_KEYWORD / KEYWORD_ONLY
+    # 参数可携带。
+    default: Optional[IbExpr] = None
+    # 参数种类：ARG_POSITIONAL_OR_KEYWORD / ARG_VAR_POSITIONAL / ARG_VAR_KEYWORD
+    # / ARG_KEYWORD_ONLY。VAR_POSITIONAL (*args) 与 VAR_KEYWORD (**kwargs) 参数
+    # 无类型标注、无默认值；KEYWORD_ONLY 为 *args 之后的参数，只能具名传入。
+    kind: str = ARG_POSITIONAL_OR_KEYWORD
+
+
+@dataclass(kw_only=True, eq=False)
+class IbStarred(IbExpr):
+    """序列解包表达式（*expr），仅出现在调用实参位置。"""
+    value: IbExpr
 
 
 @dataclass(kw_only=True, eq=False)
 class IbKeyword(IbASTNode):
-    arg: Optional[str]
+    arg: Optional[str]  # 参数名；None 表示 **expr 字典解包
     value: IbExpr
 
 @dataclass(kw_only=True, eq=False)
