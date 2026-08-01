@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-07-31（新主线立项：函数参数机制——默认/具名/动态参数，规划见 `tasks_docs/_function_params.md`）
+> **最后更新**：2026-07-31（主线收官：函数参数机制 P1-P4 全部完成）
 
 ---
 
@@ -30,20 +30,19 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：函数参数机制（默认 / 具名 / 动态参数）
+## 当前主线：无（函数参数机制已收官）
 
-> **下一里程碑**（2026-07-31 立项）。调研已完成：当前全链路仅位置参数（`IbKeyword` AST 预留未激活、`IbArg` 无 default/kind、parser 硬编码 `keywords=[]`、vtable `param_types` 固定）；lexer `STAR`/`STAR_STAR` 已就绪。可行性成立，规模为语言级里程碑。受益项：PT-ARCH-28（`file.write` 统一 API）、PT-PHASE4-1（`register_model(**kwargs)`）、函数 API 设计僵硬度。
->
-> 细化规划与相位化实施（P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 → P4 应用+文档）见 `tasks_docs/_function_params.md`。设计决策待确认（覆盖面 / Python 语义对齐 / vtable 签名格式）。
+> **函数参数机制（默认 / 具名 / 动态参数）P1-P4 已全部完成并提交**（2026-07-31，`git log` 三个 feat 提交）：P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 + vtable 签名升级 → P4 `file.write` 统一 API + 文档。质量维修（人工复查驱动：描述符单点化 / 双路径清理 / 兜底清零）与 `code-quality` skill 同期完成。规划见 `tasks_docs/_function_params.md`（临时文档，待清理）。
 
-**已完成**（前主线，LLM 并行化与状态重设计，提交见 `git log`）：
-- llmexcept 机制统一 + 状态模型重设计（Phase A，U1-U7）
-- 环境与依赖正规化 + MOCK 服务化（B0：pyproject 分组 / conda env / `MockServer`）
-- Phase B dispatch 修复（运行时拆分 + 规则化调度，4 项 skip 解锁）
-- `ai.run_batch` 批量并发原语（并发 map，公理 LLM-4）
+**已解锁的受益项**：
+- PT-ARCH-28：`file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已落地（`PENDING_TASKS.md` 标记完成）
+- PT-PHASE4-1：`register_model(name, url, key, model, **kwargs)` 的前置（`**kwargs` 收集）已就绪，Phase 4 恢复时只需声明 vtable VAR_KEYWORD 并扩展原生 kwargs 分传（见 `_function_params.md` P3 已知待办）
 
-**次要候选**（新主线之外）：
-- U5 命名审查；`_pending_futures` 泄漏观测性；PT-HEALTH-1/2/3——见 `PENDING_TASKS.md`。
+**已完成**（前主线，函数参数机制，提交见 `git log`）：
+- P1-P4 全阶段 + 质量维修 + code-quality skill
+
+**下一主线候选**（择一立项，见 `PENDING_TASKS.md`）：
+- U5 命名审查；`_pending_futures` 泄漏观测性；PT-HEALTH-1/2/3；PT-TEST-6/7/9
 
 ---
 
