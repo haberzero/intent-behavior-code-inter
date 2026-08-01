@@ -1,6 +1,7 @@
 # 函数参数机制：默认参数 / 具名参数 / 动态参数
 
-> **状态**：P1（AST+Parser）✅、P2（语义）✅、P2 质量维修 ✅、P3（运行时统一绑定器 + vtable 升级）✅ 已完成，P4（应用 + 文档）待开工。**当前主线**（见 `tasks_docs/NEXT_STEPS.md`）。
+> **状态**：P1-P4 全部 ✅ 已完成（2026-07-31）。主线收官，临时文档待用户确认后清理。
+> **性质**：临时任务文档，全部 Phase 完成后删除，决策性内容并入 `docs/architecture/`。
 > **性质**：临时任务文档，全部 Phase 完成后删除，决策性内容并入 `docs/architecture/`。
 > **关联**：`PENDING_TASKS.md` PT-ARCH-28（`file.write` 统一 API，依赖本机制）、PT-PHASE4-1（`register_model(**kwargs)`）。
 
@@ -112,10 +113,15 @@
 - `_ibci_param_meta` 作为 proxy 私有属性跨模块读取（设计通道，未穿透对外对象）；可形式化为 IbNativeFunction 字段
 - `file` 模块（kernel-native，engine.py 内联 spec）尚未声明参数名 → `file.*` 具名调用与 `file.write` 统一 API 属 P4
 
-### P4　应用 + 文档
-- 落地 PT-ARCH-28：`file.write(target, data, overwrite_flag=...)` 统一 API（删除 `write_copy`/`write_overwrite`/`write_new` 或改为薄包装）
-- `ai.*` 具名调用可用（如 `ai.set_config(model=..., url=...)`）
-- 语法手册（`docs/syntax/05_functions.md` 等）+ spec + KNOWN_LIMITS
+### P4　应用 + 文档 ✅ 已完成（2026-07-31）
+
+- **PT-ARCH-28 落地（file.write 统一 API）**：`file.write(target, data, overwrite_flag="new"|"overwrite")`，str/list[int] 自动判别；两模式均返回 `file_handle`（统一返回类型使模块 spec 返回类型恒定）。删除 `write_copy`/`write_copy_bytes`/`write_new`/`write_new_bytes`/`write_overwrite`/`write_overwrite_bytes` 共 6 个旧函数（含冗余的 copy 双路径 lineage）。设计取舍：copy 模式丢弃——其唯一区别是 source 沙箱校验，而 target 本身已被沙箱校验，不构成独立能力。
+- `ai.*` 具名调用：P3 vtable 升级后已可用（`ai.set_config(url=..., key=..., model=...)`）
+- 消费者迁移：tests（e2e/runtime/compiler 3 处）、examples（3 处）、docs（11_modules/10_robustness/05_vm_specification/06_multistep/02_file_container/04_plugin_system/KNOWN_LIMITS 共 7 处）
+- 语法手册 `docs/syntax/05_functions.md` 新增 §5.1.1 参数机制文档（默认/具名/varargs/keyword-only/splat + 诊断码）
+- 全量 `python -m pytest tests/` 实跑 **1255 passed / 4 skipped**，零回归
+
+> **主线全部阶段（P1-P4）完成**。临时任务文档后续经用户确认后删除，决策性内容并入 `docs/architecture/`。
 
 ---
 

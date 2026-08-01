@@ -103,12 +103,12 @@ IbValue (core/runtime/objects/kernel/)
 
 ### llmexcept 约束
 
-`llmexcept` 快照保存的是路径引用的浅拷贝。retry body 中调用任何文件写/删都会污染黄金快照（写新文件若路径撞上已有 backing 同样污染；删除则令 handle 悬空）。因此 retry body 内**禁止全部 7 个写/删函数**，采用编译期 + 运行时双层防护：
+`llmexcept` 快照保存的是路径引用的浅拷贝。retry body 中调用任何文件写/删都会污染黄金快照（写新文件若路径撞上已有 backing 同样污染；删除则令 handle 悬空）。因此 retry body 内**禁止全部写/删函数**，采用编译期 + 运行时双层防护：
 
 - **编译期**（`SEM_LLMEXCEPT_FILE_WRITE`）：spec 驱动判定--retry body 内直接或经用户函数间接调用 `file.<写/删>` 即报错。判定读 module spec 成员的 `mutating` 标记，正确处理 `import file as f` 别名与局部变量 shadowing。间接调用经 `func_sym.owned_scope` 作用域感知递归传导（含调用图环路保护）。
 - **运行时**（`_guard_no_file_write_in_retry`）：`llmexcept_body_depth > 0` 时执行任何写/删函数抛 `InterpreterError`。兜底编译期无法静态追踪的情形（如经 `fn` 动态分派）。
 
-禁用集：`write_copy` / `write_copy_bytes` / `write_new` / `write_new_bytes` / `write_overwrite` / `write_overwrite_bytes` / `remove`。放行：`open` / `read` / `read_bytes` / `exists`（只读，不污染快照）。
+禁用集：`file.write` / `remove`。放行：`open` / `read` / `read_bytes` / `exists`（只读，不污染快照）。
 
 **固有边界**：外部进程（非 IBCI 代码）触碰 backing 文件不受 IBCI 控制，无法在编译期或运行时拦截--磁盘态快照的零拷贝设计与进程外 I/O 的根本不可控性所致。详见 `docs/KNOWN_LIMITS.md`。
 
@@ -138,12 +138,7 @@ IbValue (core/runtime/objects/kernel/)
 | `open` | `(path, mode="r") -> file_handle` | 只读打开；mode 限 `""`/`"r"`/`"rb"`/`"rt"` |
 | `read` | `(target) -> str` | 文本读取 |
 | `read_bytes` | `(target) -> list[int]` | 字节读取 |
-| `write_copy` | `(source, new_path, data) -> file_handle` | 复制写入：创建新文件，source 不受影响 |
-| `write_copy_bytes` | `(source, new_path, data) -> file_handle` | 字节版 write_copy |
-| `write_new` | `(new_path, data) -> file_handle` | 从零创建新文件 |
-| `write_new_bytes` | `(new_path, data) -> file_handle` | 字节版 write_new |
-| `write_overwrite` | `(target, data)` | 原地覆写（llmexcept body 内禁止） |
-| `write_overwrite_bytes` | `(target, data)` | 字节版 write_overwrite |
+| `write` | `(target, data, overwrite_flag="new") -> file_handle` | 统一写入；`"new"` 创建新文件、`"overwrite"` 原地覆写；str/list[int] 自动判别（llmexcept body 内禁止） |
 | `exists` | `(path) -> bool` | 沙箱约束下的存在性检查 |
 | `remove` | `(target)` | 沙箱约束下的文件删除 |
 

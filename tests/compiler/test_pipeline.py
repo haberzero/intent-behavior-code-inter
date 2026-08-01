@@ -434,11 +434,11 @@ class TestLLMExceptFileWrite:
         codes = [d.code for d in exc_info.value.diagnostics]
         assert "SEM_LLMEXCEPT_FILE_WRITE" in codes
 
-    def test_direct_write_new_raises(self, engine):
+    def test_direct_write_new_mode_raises(self, engine):
         code = """import file
 str result = @~ greet ~
 llmexcept:
-    file.write_new("log.txt", "failed")
+    file.write("log.txt", "failed")
     retry "hint"
 """
         self._assert_file_write_error(engine, code)
@@ -452,11 +452,11 @@ llmexcept:
 """
         self._assert_file_write_error(engine, code)
 
-    def test_direct_write_overwrite_raises(self, engine):
+    def test_direct_write_overwrite_mode_raises(self, engine):
         code = """import file
 str result = @~ greet ~
 llmexcept:
-    file.write_overwrite("log.txt", "failed")
+    file.write("log.txt", "failed", overwrite_flag="overwrite")
     retry "hint"
 """
         self._assert_file_write_error(engine, code)
@@ -465,7 +465,7 @@ llmexcept:
         """用户函数体内含文件写，retry body 调用它亦禁止（递归传导）。"""
         code = """import file
 func helper():
-    file.write_new("log.txt", "x")
+    file.write("log.txt", "x")
 str result = @~ greet ~
 llmexcept:
     helper()
@@ -477,7 +477,7 @@ llmexcept:
         """多层间接：a() 调 b()，b() 写文件 -> a() 在 retry body 内亦禁止。"""
         code = """import file
 func b():
-    file.write_new("log.txt", "x")
+    file.write("log.txt", "x")
 func a():
     b()
 str result = @~ greet ~
@@ -492,7 +492,7 @@ llmexcept:
         code = """import file as f
 str result = @~ greet ~
 llmexcept:
-    f.write_new("log.txt", "x")
+    f.write("log.txt", "x")
     retry "hint"
 """
         self._assert_file_write_error(engine, code)

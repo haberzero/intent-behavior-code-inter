@@ -168,13 +168,18 @@ def __ibcext_vtable__():
     return {
         "functions": {
             "greet": {
-                "param_types": ["str"],
+                "params": [
+                    {"name": "name", "type": "str"},
+                    {"name": "punct", "type": "str", "default": "!", "kind": "POSITIONAL_OR_KEYWORD"},
+                ],
                 "return_type": "str",
             },
         },
         "variables": {},
     }
 ```
+
+`params` 中每个参数可声明字段：`name`（必填）、`type`（IBCI 类型名）、`default`（默认字面值，声明后参数可选）、`kind`（`POSITIONAL_OR_KEYWORD` 默认 / `VAR_POSITIONAL` / `VAR_KEYWORD` / `KEYWORD_ONLY`）。声明了 `name` 后，IBCI 侧即可对该模块函数进行具名调用与默认值填充；声明的参数名必须被实现函数按名接受（或实现接受 `**kwargs`），否则加载失败。
 
 ### 4.3 __init__.py 模板
 

@@ -102,14 +102,14 @@ str 情感 = 分析情感(原始)
 llmexcept:
     retry "请只返回 正面、负面 或 中性"
 
-file_handle fh = file.write_new("pipeline_output.txt",
+file_handle fh = file.write("pipeline_output.txt",
     "原始文本: " + 原始 + "\n情感判断: " + 情感)
 
 str 原文内容 = fh.read()
 print(原文内容)
 ```
 
-`file.write_new` 创建新文件，返回只读的 `file_handle`。`write_copy` 和 `write_new` 不污染已有数据，适合在 LLM 重试场景中使用——即使在 `llmexcept` retry body 中也可以安全调用（详见 [语法参考 / 模块][syntax-11]）。
+`file.write`（默认 `overwrite_flag="new"`）创建新文件，返回 `file_handle`。文件写/删在 `llmexcept` retry body 中统一禁止（磁盘型快照是浅路径引用，无法静态判别目标是否已入快照），请先完成文件写入再进入可能重试的调用（详见 [语法参考 / 模块][syntax-11]）。
 
 ---
 

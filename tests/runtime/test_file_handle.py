@@ -46,27 +46,27 @@ def _file_module(engine):
     return engine.host_interface.get_module_implementation("file")
 
 
-def test_file_handle_read_and_write_overwrite(file_engine, tmp_path):
+def test_file_handle_read_and_write(file_engine, tmp_path):
     fh = _make_file_handle(file_engine.registry, tmp_path)
     file_mod = _file_module(file_engine)
-    file_mod.write_overwrite(fh, "hello ibci")
+    file_mod.write(fh, "hello ibci", "overwrite")
     assert fh.read() == "hello ibci"
 
 
 def test_file_handle_read_bytes(file_engine, tmp_path):
     fh = _make_file_handle(file_engine.registry, tmp_path)
     file_mod = _file_module(file_engine)
-    file_mod.write_overwrite(fh, "AB")
+    file_mod.write(fh, "AB", "overwrite")
     result = fh.read_bytes()
     assert result.to_native() == [65, 66]
 
 
-def test_file_handle_write_copy_leaves_original(file_engine, tmp_path):
+def test_file_handle_write_new_leaves_original(file_engine, tmp_path):
     fh = _make_file_handle(file_engine.registry, tmp_path)
     file_mod = _file_module(file_engine)
-    file_mod.write_overwrite(fh, "original")
+    file_mod.write(fh, "original", "overwrite")
 
-    copy = file_mod.write_copy(fh, "copy.txt", "copied")
+    copy = file_mod.write("copy.txt", "copied")
     assert copy is not fh
     assert copy.backing.path.to_native() != fh.backing.path.to_native()
     assert copy.read() == "copied"
@@ -125,7 +125,7 @@ def test_file_handle_serializer_round_trip(file_engine, tmp_path):
     factory = RuntimeObjectFactory(registry)
     fh = _make_file_handle(registry, tmp_path)
     file_mod = _file_module(file_engine)
-    file_mod.write_overwrite(fh, "persist")
+    file_mod.write(fh, "persist", "overwrite")
 
     serializer = RuntimeSerializer(registry)
     uid = serializer._collect_instance(fh)

@@ -129,17 +129,19 @@ list[int] bytes = fh.read_bytes()
 str content2 = file.read("data.txt")
 list[int] bytes2 = file.read_bytes("data.txt")
 
-# Copy-on-write：创建新文件，原 handle 及其所有别名不受影响
-file_handle copy = file.write_copy(fh, "data_v2.txt", "new content")
-file_handle copy_b = file.write_copy_bytes(fh, "data_v2.bin", [65, 66])
+# 统一写入：file.write(target, data, overwrite_flag)
+#   overwrite_flag="new"（默认）：target 为路径，创建/覆盖文件，返回 file_handle
+#   overwrite_flag="overwrite"：target 为路径或 file_handle，就地覆盖，返回 file_handle
+# data 为 str（文本）或 list[int]（字节），自动判别
+file_handle copy = file.write("data_v2.txt", "new content")
+file_handle copy_b = file.write("data_v2.bin", [65, 66])
 
 # 显式副作用写入：覆盖原文件，所有共享该路径引用的变量看到变化
-file.write_overwrite(fh, "mutated content")
-file.write_overwrite_bytes(fh, [65, 66])
+file.write(fh, "mutated content", overwrite_flag="overwrite")
+file.write(fh, [65, 66], overwrite_flag="overwrite")
 
 # 创建新文件：无需 source handle，返回指向新文件的只读 handle
-file_handle fresh = file.write_new("data_v3.txt", "brand new")
-file_handle fresh_b = file.write_new_bytes("data_v3.bin", [65, 66])
+file_handle fresh = file.write("data_v3.txt", "brand new")
 
 # 存在检查与删除
 bool exists = file.exists("data.txt")
@@ -148,15 +150,14 @@ file.remove("data.txt")
 
 **只读语义**：`file_handle` 实例没有 `write()` 方法。所有写入必须通过 `file` 模块的自由函数显式完成。
 
-**三种写入的语义区分**：
-- `write_copy` / `write_copy_bytes`：以已有 handle/路径为 lineage 创建新文件，不污染任何现有 handle；适合在 `llmexcept` retry 等需要隔离副作用的场景使用。
-- `write_overwrite` / `write_overwrite_bytes`：显式副作用，覆盖已有文件，所有共享同一 backing 路径的 handle 都会观察到变化。
-- `write_new` / `write_new_bytes`：从无到有创建新文件，不需要 source handle；若目标已存在则覆盖（等价于 Python `open(path, "w")`）。
+**写入模式的语义区分**（`overwrite_flag`）：
+- `"new"`（默认）：`target` 为路径，创建新文件并返回 handle；若目标已存在则覆盖（等价于 Python `open(path, "w")`）。不依赖任何 source handle。
+- `"overwrite"`：`target` 为路径或 `file_handle`，显式就地覆盖，所有共享同一 backing 路径的 handle 都会观察到变化。
 
 **安全限制**：
 1. 所有 FS I/O 均受 `PermissionManager` 沙箱约束（默认禁止越出 `project_root`）。
 2. `save_state` 遇到活跃 `file_handle`/`audio`/`image`/`video` 变量时直接报错。
-3. `llmexcept` retry body 中禁用 `write_overwrite` / `write_overwrite_bytes`（避免污染 gold snapshot）。涉及可能失败的 LLM 调用时，优先使用 `write_copy` 或 `write_new` 生成新文件。
+3. `llmexcept` retry body 中禁用 `file.write`（避免污染 gold snapshot；磁盘型快照是浅路径引用，无法静态判别目标是否已入快照）。涉及可能失败的 LLM 调用时，先完成文件写入再进入可能重试的调用。
 
 ### 11.8 json 模块
 

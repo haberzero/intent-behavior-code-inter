@@ -57,8 +57,59 @@ func maybe_get(bool flag) -> None:
     return            # ✅ 裸 return 在 -> None 函数中合法
 ```
 
-### 5.2 行为表达式与 return 的约束
+### 5.1.1 函数参数：默认值 / 具名 / 动态参数
 
+函数参数支持默认值、具名调用、`*args`/`**kwargs` 动态参数与 keyword-only 参数（Python 语义对齐）。
+
+**默认值**：`name = expr`，未传参时惰性求值；默认值表达式在定义包围作用域求值。
+
+```ibci
+func greet(str name, str punct = "!") -> str:
+    return "hi " + name + punct
+
+print(greet("x"))        # punct 取默认值 "!"，输出 "hi x!"
+print(greet("x", "?"))   # 输出 "hi x?"
+```
+
+**具名调用**：实参以 `name = value` 传入，顺序任意；位置实参 + 具名实参可混用（位置先、具名后）。
+
+```ibci
+func add(int a, int b) -> int:
+    return a + b
+
+print((str)add(a=1, b=2))   # 3
+print((str)add(b=2, a=1))   # 3（具名可乱序）
+print((str)add(1, b=2))     # 3（混合）
+```
+
+**`*args` / `**kwargs`**：`*args` 收集多余位置实参为 `list`；`**kwargs` 收集未声明具名实参为 `dict`。`*args` 之后的参数为 **keyword-only**（只能具名传入）。
+
+```ibci
+func collect(str tag, *rest, int limit = 1, **kw) -> dict:
+    return {"tag": tag, "rest": rest, "limit": limit, "kw": kw}
+
+print((str)collect("t", 1, 2, limit=5, extra="x"))
+# {"tag": "t", "rest": [1, 2], "limit": 5, "kw": {extra: "x"}}
+```
+
+**splat 调用**：`*expr` 展开序列为位置实参，`**expr` 展开 dict 为具名实参。
+
+```ibci
+list m = [1, 2]
+dict kw = {"a": 1, "b": 2}
+print((str)add(*m))      # 展开为 add(1, 2) → 3
+print((str)add(**kw))    # 展开为 add(a=1, b=2) → 3
+```
+
+**约束**（编译期诊断）：
+- 具名实参后不允许再出现位置实参（`PAR_POSITIONAL_AFTER_KEYWORD`）
+- 重复具名 / 未知具名 / 缺失必填 / 位置超限（`SEM_DUPLICATE_KEYWORD` / `SEM_UNKNOWN_KEYWORD` / `SEM_MISSING_REQUIRED_ARG` / `SEM_TOO_MANY_POSITIONAL`）
+- 默认值类型与参数标注不匹配（`SEM_DEFAULT_TYPE_MISMATCH`，定义处校验）
+- 参数顺序：`*args` 前不能有默认值后接无默认值普通参数；`**kwargs` 必须居末（`PAR_UNEXPECTED_TOKEN`）
+
+**原生模块函数**：`_spec.py` 中声明 `params: [{"name", "type", "default", "kind"}]` 后，模块函数同样支持具名调用与默认值填充（如 `file.write(target="a.txt", data="x")`）。
+
+### 5.2 行为表达式与 return 的约束
 > **Known Limit (docs/KNOWN_LIMITS.md §四)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_TYPE_MISMATCH` 编译错误。
 
 ```ibci

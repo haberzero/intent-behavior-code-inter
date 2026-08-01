@@ -6,10 +6,10 @@ e2e 测试：file 模块内核原生化 + 安全闸门。
 
 覆盖：
 1. import gate：`import file` 把 file_handle/audio/image/video 类型注入作用域。
-2. write_copy / write_overwrite 基本行为。
+2. write 基本行为。
 3. PermissionManager 沙箱拒绝 project_root 外写入。
 4. ihost.save_state 遇到活跃文件容器变量时报错。
-5. llmexcept retry body 中禁用 write_overwrite。
+5. llmexcept retry body 中禁用 file 写。
 """
 
 from __future__ import annotations
@@ -60,13 +60,13 @@ class TestFileKernelNative:
         _, errs = compile_or_errors(code, root_dir=str(tmp_path))
         assert "SEM_UNDEFINED_SYMBOL" in errs
 
-    def test_write_copy_leaves_original_untouched(self, tmp_path):
-        """write_copy 创建新文件，不影响原 handle。"""
+    def test_write_new_mode_leaves_original_untouched(self, tmp_path):
+        """write(new) 创建新文件，不影响原 handle。"""
         code = (
             'import file\n'
-            'file.write_overwrite("./base.txt", "original")\n'
+            'file.write("./base.txt", "original", overwrite_flag="overwrite")\n'
             'file_handle h = file.open("./base.txt")\n'
-            'file_handle c = file.write_copy(h, "./copy.txt", "copied")\n'
+            'file_handle c = file.write("./copy.txt", "copied")\n'
             'print(file.read(h))\n'
             'print(file.read(c))\n'
         )
@@ -74,24 +74,24 @@ class TestFileKernelNative:
         assert "original" in lines
         assert "copied" in lines
 
-    def test_write_overwrite_mutates_shared_backing(self, tmp_path):
-        """write_overwrite 改变 backing 路径内容，所有 alias 观察到新内容。"""
+    def test_write_overwrite_mode_mutates_shared_backing(self, tmp_path):
+        """write(overwrite) 改变 backing 路径内容，所有 alias 观察到新内容。"""
         code = (
             'import file\n'
-            'file.write_overwrite("./shared.txt", "before")\n'
+            'file.write("./shared.txt", "before", overwrite_flag="overwrite")\n'
             'file_handle a = file.open("./shared.txt")\n'
             'file_handle b = file.open("./shared.txt")\n'
-            'file.write_overwrite(a, "after")\n'
+            'file.write(a, "after", overwrite_flag="overwrite")\n'
             'print(file.read(b))\n'
         )
         lines = run_ibci(code, root_dir=str(tmp_path))
         assert "after" in lines
 
-    def test_write_new_creates_file_without_source(self, tmp_path):
-        """write_new 不需要 source 参数即可创建新文件并返回只读 handle。"""
+    def test_write_new_mode_creates_file(self, tmp_path):
+        """write(new) 创建新文件并返回 handle。"""
         code = (
             'import file\n'
-            'file_handle h = file.write_new("./new.txt", "created")\n'
+            'file_handle h = file.write("./new.txt", "created")\n'
             'print(file.read(h))\n'
             'print(h.path)\n'
         )
@@ -102,7 +102,7 @@ class TestFileKernelNative:
     def test_sandbox_rejects_path_outside_project_root(self, tmp_path):
         """相对路径 `../` 解析到 project_root 外时 PermissionManager 拒绝。"""
         expect_runtime_error(
-            'import file\nfile.write_overwrite("../outside.txt", "x")\n',
+            'import file\nfile.write("../outside.txt", "x", overwrite_flag="overwrite")\n',
             "Security Error",
             root_dir=str(tmp_path),
         )
@@ -115,7 +115,7 @@ class TestFileSecurityGates:
         """活跃 file_handle 变量存在时 ihost.save_state 报错。"""
         expect_runtime_error(
             'import file\nimport ihost\n'
-            'file.write_overwrite("./x.txt", "x")\n'
+            'file.write("./x.txt", "x", overwrite_flag="overwrite")\n'
             'file_handle h = file.open("./x.txt")\n'
             'ihost.save_state("./state.json")\n',
             "save_state is not supported",
@@ -141,9 +141,9 @@ class TestFileSecurityGates:
         """
         code = AI_MOCK_PREFIX + (
             'func _do_write():\n'
-            '    file.write_overwrite("./x.txt", "mutated")\n'
+            '    file.write("./x.txt", "mutated", overwrite_flag="overwrite")\n'
             'fn f = _do_write\n'
-            'file.write_overwrite("./x.txt", "initial")\n'
+            'file.write("./x.txt", "initial", overwrite_flag="overwrite")\n'
             'try:\n'
             '    str r = @~ MOCK:FAIL trigger ~\n'
             '    llmexcept:\n'
@@ -154,6 +154,6 @@ class TestFileSecurityGates:
         )
         expect_runtime_error(
             code,
-            "file.write_overwrite is disabled inside an llmexcept retry body",
+            "file.write is disabled inside an llmexcept retry body",
             root_dir=str(tmp_path),
         )

@@ -88,7 +88,7 @@ llmexcept:
 
 `file_handle`/`audio`/`image`/`video` 是磁盘引用身份对象。`llmexcept` 快照保存的是路径引用的浅拷贝，因此 retry body 中调用任何文件写/删都会**污染黄金快照**（写新文件若路径撞上已有 backing 同样污染；删除令 handle 悬空），导致后续 retry 恢复到已被破坏的文件状态。
 
-retry body 内**禁止全部文件写/删操作**（`write_copy` / `write_copy_bytes` / `write_new` / `write_new_bytes` / `write_overwrite` / `write_overwrite_bytes` / `remove`），编译期以 `SEM_LLMEXCEPT_FILE_WRITE` 拦截直接与间接调用，运行时兜底动态分派等漏检情形。只读操作（`open` / `read` / `read_bytes` / `exists`）允许。
+retry body 内**禁止文件写/删操作**（`file.write` 与 `remove`），编译期以 `SEM_LLMEXCEPT_FILE_WRITE` 拦截直接与间接调用，运行时兜底动态分派等漏检情形。只读操作（`open` / `read` / `read_bytes` / `exists`）允许。
 
 ```ibci
 import file
@@ -96,7 +96,7 @@ import file
 file_handle fh = file.open("data.txt")
 str result = @~ 根据 $fh 总结内容 ~
 llmexcept:
-    file.write_overwrite(fh, "mutated")   # 编译错误 SEM_LLMEXCEPT_FILE_WRITE：retry body 中禁用文件写/删
+    file.write(fh, "mutated", overwrite_flag="overwrite")   # 编译错误 SEM_LLMEXCEPT_FILE_WRITE：retry body 中禁用文件写/删
     retry "请只返回摘要"
 ```
 

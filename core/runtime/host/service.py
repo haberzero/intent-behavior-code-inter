@@ -77,7 +77,7 @@ class HostService(IHostService):
             raise InterpreterError(
                 "save_state is not supported when the execution context contains "
                 "active file_handle/audio/image/video variables. "
-                "Use file.write_copy to persist artifacts explicitly."
+                "Use file.write to persist artifacts explicitly."
             )
 
         data = self.snapshot()

@@ -9,8 +9,8 @@ print("\n这个脚本运行在独立的沙箱中")
 print("只能访问 sub_project 目录内的文件")
 
 str test_file = "./local_test.txt"
-# write_new：在子项目沙箱内创建新文件。
-file.write_new(test_file, "子项目本地文件")
+# write（new 模式）：在子项目沙箱内创建新文件。
+file.write(test_file, "子项目本地文件")
 
 if file.exists(test_file):
     print("OK: 子项目本地文件创建成功")

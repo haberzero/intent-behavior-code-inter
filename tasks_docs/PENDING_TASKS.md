@@ -134,9 +134,9 @@
 
 > `HostInterface.register_module()` 静默忽略与 kernel-native 同名的用户插件，无 warning。功能正确，可观测性不足。待诊断体系稳定后专项处理。
 
-### PT-ARCH-28：`file` 模块统一写入 API [P2]
+### PT-ARCH-28：`file` 模块统一写入 API [已完成]
 
-> 当前提供 `write_copy`/`write_overwrite`/`write_new` 三种写入函数。未来统一为 `file.write(target, data, overwrite_flag="copy"|"overwrite"|"new")`，需 IBCI 支持动态/命名参数——**依赖当前主线**（函数参数机制，见 `NEXT_STEPS.md` / `tasks_docs/_function_params.md`）。
+> `file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已随函数参数机制（P4）落地（2026-07-31），旧 `write_copy`/`write_overwrite`/`write_new` 及字节版共 6 个函数已删除。
 
 ### PT-ARCH-29：命名历史包袱清理 [P1]
 

@@ -4,8 +4,8 @@
 # 设计要点（ADR-020 G6）：
 # - file_handle 实例是只读路径引用，不持有 OS fd。
 # - 所有写入必须通过 file 模块的显式函数完成。
-# - write_overwrite 是副作用写入：影响所有共享同一 backing 路径的 handle。
-# - write_copy 是 copy-on-write：创建新文件，不影响原 handle。
+# - write(overwrite) 是副作用写入：影响所有共享同一 backing 路径的 handle。
+# - write(new) 创建新文件，不影响原 handle。
 
 import file
 import isys
@@ -15,7 +15,7 @@ print("=== file module demo ===")
 str demo = "./demo.txt"
 
 print("\n[1] overwrite write")
-file.write_overwrite(demo, "line1\nline2\nline3")
+file.write(demo, "line1\nline2\nline3", overwrite_flag="overwrite")
 print("wrote: " + demo)
 
 print("\n[2] open as read-only handle and read")
@@ -24,12 +24,12 @@ str content = file.read(fh)
 print("content:\n" + content)
 
 print("\n[3] copy-on-write: new file, original untouched")
-file_handle copy = file.write_copy(fh, "./demo_copy.txt", "copied content")
+file_handle copy = file.write("./demo_copy.txt", "copied content")
 print("copy content: " + file.read(copy))
 print("original still: " + file.read(fh))
 
 print("\n[4] overwrite mutates the shared backing")
-file.write_overwrite(fh, "mutated content")
+file.write(fh, "mutated content", overwrite_flag="overwrite")
 print("original now: " + file.read(fh))
 print("copy still: " + file.read(copy))
 

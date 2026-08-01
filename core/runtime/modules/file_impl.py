@@ -8,8 +8,7 @@ Kernel-native IBCI ``file`` 模块实现。
 ``file_impl.py``，绝对不可重命名为 ``file.py``**。相关守护测试见
 ``tests/meta/test_layering.py::TestRuntimeModulesNamingRedLine``。
 
-- 提供 IBCI 脚本可见的自由函数：``open/read/read_bytes/write_copy/write_copy_bytes/
-  write_overwrite/write_overwrite_bytes/write_new/write_new_bytes/exists/remove``。
+- 提供 IBCI 脚本可见的自由函数：``open/read/read_bytes/write/exists/remove``。
 - 所有 FS I/O 都经过 ``ExecutionContext.resolve_path()`` + ``PermissionManager`` 沙箱校验。
 - ``open`` 返回 ``IbFileHandle``（磁盘型 file_handle）；其他函数接受路径字符串或 file_handle。
 - 本模块位于 runtime 层，可被 kernel-native 注册流程直接引用。
@@ -101,124 +100,48 @@ class FileLib:
             data = f.read()
         return self._registry().box(list(data))
 
-    def write_copy(
-        self,
-        source: Union[str, IbFileHandle],
-        new_path: str,
-        data: str,
-    ) -> IbFileHandle:
+    def write(self, target: Any, data: Any, overwrite_flag: str = "new") -> Any:
+        """统一写入接口。
+
+        ``overwrite_flag``：
+        - ``"new"``（默认）：``target`` 为路径字符串，创建/覆盖写入（若目标已存在则
+          覆盖，等价于 ``open(path, "w")``），返回指向该文件的新 ``file_handle``。
+        - ``"overwrite"``：``target`` 为路径或 ``file_handle``，就地覆盖其 backing 文件，
+          返回指向该文件的 ``file_handle``。
+
+        ``data`` 为 ``str``（UTF-8 文本）或 ``list[int]``（字节）时自动判别编码模式。
+        两模式均返回 ``file_handle``，使模块 spec 的返回类型恒定。
         """
-        Copy-on-write 写入：在 ``new_path`` 创建新文件，写入 ``data``。
-        ``source`` 及其所有别名均不受影响。返回指向新文件的只读 handle。
-        """
-        self._guard_no_file_write_in_retry("write_copy")
-        # 校验 source（提供沙箱上下文与 lineage）。
-        self._resolve_path(source, operation="read")
-        # 解析并校验目标路径。
-        dest_ib_path = self.capabilities.execution_context.resolve_path(new_path)
-        dest_native = dest_ib_path.to_native()
-        self.permission_manager.validate_path(dest_native, operation="write")
-
-        native_data = data.to_native() if hasattr(data, "to_native") else data
-        with open(dest_native, "w", encoding="utf-8") as f:
-            f.write(native_data)
-
-        return IbFileHandle(
-            FileBacking(IbPath.from_native(dest_native), sandboxed=True),
-            self._file_handle_class(),
-        )
-
-    def write_copy_bytes(
-        self,
-        source: Union[str, IbFileHandle],
-        new_path: str,
-        data: Any,
-    ) -> IbFileHandle:
-        """Copy-on-write 的字节版本。"""
-        self._guard_no_file_write_in_retry("write_copy_bytes")
-        self._resolve_path(source, operation="read")
-        dest_ib_path = self.capabilities.execution_context.resolve_path(new_path)
-        dest_native = dest_ib_path.to_native()
-        self.permission_manager.validate_path(dest_native, operation="write")
+        self._guard_no_file_write_in_retry("write")
 
         native_data = data.to_native() if hasattr(data, "to_native") else data
         if isinstance(native_data, list):
             native_data = bytes(native_data)
-        with open(dest_native, "wb") as f:
-            f.write(native_data)
+        binary = isinstance(native_data, (bytes, bytearray))
+
+        if overwrite_flag == "new":
+            dest_ib_path = self.capabilities.execution_context.resolve_path(target)
+            dest_native = dest_ib_path.to_native()
+            self.permission_manager.validate_path(dest_native, operation="write")
+        elif overwrite_flag == "overwrite":
+            dest_native = self._resolve_path(target, operation="write")
+        else:
+            raise RuntimeError(
+                f"file.write: unknown overwrite_flag '{overwrite_flag}' "
+                f"(expected 'new' or 'overwrite')"
+            )
+
+        if binary:
+            with open(dest_native, "wb") as f:
+                f.write(native_data)
+        else:
+            with open(dest_native, "w", encoding="utf-8") as f:
+                f.write(native_data)
 
         return IbFileHandle(
             FileBacking(IbPath.from_native(dest_native), sandboxed=True),
             self._file_handle_class(),
         )
-
-    def write_new(self, new_path: str, data: str) -> IbFileHandle:
-        """
-        创建/写新文件：在 ``new_path`` 写入 ``data``，返回指向新文件的只读 handle。
-
-        与 ``write_copy`` 不同，本函数不需要 ``source`` 参数，适用于从无到有
-        生成一份新工件的场景。若 ``new_path`` 已存在，行为与 Python ``open(path, "w")``
-        一致——覆盖原文件；若需保留原文件，请使用 ``write_copy``。
-
-        未来支持命名/可选参数后，``write_overwrite(target, data)`` 在 ``target`` 为路径、
-        且未提供 source 上下文时，将等价于 ``write_new(target, data)``。
-        """
-        self._guard_no_file_write_in_retry("write_new")
-        dest_ib_path = self.capabilities.execution_context.resolve_path(new_path)
-        dest_native = dest_ib_path.to_native()
-        self.permission_manager.validate_path(dest_native, operation="write")
-
-        native_data = data.to_native() if hasattr(data, "to_native") else data
-        with open(dest_native, "w", encoding="utf-8") as f:
-            f.write(native_data)
-
-        return IbFileHandle(
-            FileBacking(IbPath.from_native(dest_native), sandboxed=True),
-            self._file_handle_class(),
-        )
-
-    def write_new_bytes(self, new_path: str, data: Any) -> IbFileHandle:
-        """``write_new`` 的字节版本。"""
-        self._guard_no_file_write_in_retry("write_new_bytes")
-        dest_ib_path = self.capabilities.execution_context.resolve_path(new_path)
-        dest_native = dest_ib_path.to_native()
-        self.permission_manager.validate_path(dest_native, operation="write")
-
-        native_data = data.to_native() if hasattr(data, "to_native") else data
-        if isinstance(native_data, list):
-            native_data = bytes(native_data)
-        with open(dest_native, "wb") as f:
-            f.write(native_data)
-
-        return IbFileHandle(
-            FileBacking(IbPath.from_native(dest_native), sandboxed=True),
-            self._file_handle_class(),
-        )
-
-    def write_overwrite(self, target: Union[str, IbFileHandle], data: str) -> Any:
-        """
-        显式副作用写入：覆盖 ``target`` 指向的文件。
-        所有共享同一 backing 路径的 handle 都会观察到新内容。
-        """
-        # llmexcept retry body 中禁用 overwrite 写入，避免污染快照。
-        self._guard_no_file_write_in_retry("write_overwrite")
-        native_path = self._resolve_path(target, operation="write")
-        native_data = data.to_native() if hasattr(data, "to_native") else data
-        with open(native_path, "w", encoding="utf-8") as f:
-            f.write(native_data)
-        return self._registry().get_none()
-
-    def write_overwrite_bytes(self, target: Union[str, IbFileHandle], data: Any) -> Any:
-        """显式副作用写入的字节版本。"""
-        # llmexcept retry body 中禁用 overwrite 写入。
-        self._guard_no_file_write_in_retry("write_overwrite_bytes")
-        native_path = self._resolve_path(target, operation="write")
-        native_data = data.to_native() if hasattr(data, "to_native") else data
-        if isinstance(native_data, list):
-            native_data = bytes(native_data)
-        with open(native_path, "wb") as f:
-            f.write(native_data)
-        return self._registry().get_none()
 
     def exists(self, path: str) -> bool:
         """检查文件是否存在（受沙箱约束）。"""

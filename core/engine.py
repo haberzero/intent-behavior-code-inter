@@ -42,7 +42,7 @@ from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
 from core.kernel.symbols import VariableSymbol, SymbolKind
-from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC, TypeDef, MethodMemberSpec, TypeRef, TypeKind
+from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC, TypeDef, MethodMemberSpec, TypeRef, TypeKind, ParamDescriptor
 from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
@@ -140,33 +140,15 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     name="read_bytes", kind="method", type_ref=TypeRef.of("list[int]"),
                     param_types=[TypeRef.of("any")], return_type=TypeRef.of("list[int]"),
                 ),
-                "write_copy": MethodMemberSpec(
-                    name="write_copy", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
-                    param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("str")],
+                "write": MethodMemberSpec(
+                    name="write", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
+                    param_types=[TypeRef.of("any"), TypeRef.of("any"), TypeRef.of("str")],
                     return_type=TypeRef.of("file_handle"),
-                ),
-                "write_copy_bytes": MethodMemberSpec(
-                    name="write_copy_bytes", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
-                    param_types=[TypeRef.of("any"), TypeRef.of("str"), TypeRef.of("list[int]")],
-                    return_type=TypeRef.of("file_handle"),
-                ),
-                "write_new": MethodMemberSpec(
-                    name="write_new", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
-                    param_types=[TypeRef.of("str"), TypeRef.of("str")],
-                    return_type=TypeRef.of("file_handle"),
-                ),
-                "write_new_bytes": MethodMemberSpec(
-                    name="write_new_bytes", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
-                    param_types=[TypeRef.of("str"), TypeRef.of("list[int]")],
-                    return_type=TypeRef.of("file_handle"),
-                ),
-                "write_overwrite": MethodMemberSpec(
-                    name="write_overwrite", kind="method", type_ref=TypeRef.of("void"), mutating=True,
-                    param_types=[TypeRef.of("any"), TypeRef.of("str")], return_type=TypeRef.of("void"),
-                ),
-                "write_overwrite_bytes": MethodMemberSpec(
-                    name="write_overwrite_bytes", kind="method", type_ref=TypeRef.of("void"), mutating=True,
-                    param_types=[TypeRef.of("any"), TypeRef.of("list[int]")], return_type=TypeRef.of("void"),
+                    param_descriptors=[
+                        ParamDescriptor(name="target", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
+                        ParamDescriptor(name="data", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
+                        ParamDescriptor(name="overwrite_flag", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"), has_default=True, default_value="new"),
+                    ],
                 ),
                 "exists": MethodMemberSpec(
                     name="exists", kind="method", type_ref=TypeRef.of("bool"),
