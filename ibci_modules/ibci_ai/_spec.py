@@ -18,21 +18,48 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     """
     return {
         "functions": {
-            "set_config": {"param_types": ["str", "str", "str"], "return_type": "void"},
-            "register_model": {"param_types": ["str", "str", "str", "str"], "return_type": "void"},
-            "has_api_key": {"param_types": [], "return_type": "bool"},
-            "probe_model": {"param_types": [], "return_type": "str"},
-            "set_retry": {"param_types": ["int"], "return_type": "void"},
-            "set_timeout": {"param_types": ["float"], "return_type": "void"},
-            "set_return_type_prompt": {"param_types": ["str", "str"], "return_type": "void"},
-            "get_return_type_prompt": {"param_types": ["str"], "return_type": "str"},
-            "get_current_call_info": {"param_types": [], "return_type": "dict"},
-            "run_batch": {"param_types": ["behavior", "list"], "return_type": "list"},
-            "set_global_intent": {"param_types": ["str"], "return_type": "void"},
-            "clear_global_intents": {"param_types": [], "return_type": "void"},
-            "remove_global_intent": {"param_types": ["str"], "return_type": "void"},
-            "mask": {"param_types": ["str"], "return_type": "void"},
-            "get_global_intents": {"param_types": [], "return_type": "list"},
-            "get_current_intent_stack": {"param_types": [], "return_type": "list"}
+            "set_config": {
+                "params": [
+                    {"name": "url", "type": "str"},
+                    {"name": "key", "type": "str"},
+                    {"name": "model", "type": "str"},
+                ],
+                "return_type": "void",
+            },
+            "register_model": {
+                "params": [
+                    {"name": "name", "type": "str"},
+                    {"name": "url", "type": "str"},
+                    {"name": "key", "type": "str"},
+                    {"name": "model", "type": "str"},
+                ],
+                "return_type": "void",
+            },
+            "has_api_key": {"params": [], "return_type": "bool"},
+            "probe_model": {"params": [], "return_type": "str"},
+            "set_retry": {"params": [{"name": "count", "type": "int"}], "return_type": "void"},
+            "set_timeout": {"params": [{"name": "seconds", "type": "float"}], "return_type": "void"},
+            "set_return_type_prompt": {
+                "params": [
+                    {"name": "type_name", "type": "str"},
+                    {"name": "prompt", "type": "str"},
+                ],
+                "return_type": "void",
+            },
+            "get_return_type_prompt": {"params": [{"name": "type_name", "type": "str"}], "return_type": "str"},
+            "get_current_call_info": {"params": [], "return_type": "dict"},
+            "run_batch": {
+                "params": [
+                    {"name": "behavior", "type": "behavior"},
+                    {"name": "items", "type": "list"},
+                ],
+                "return_type": "list",
+            },
+            "set_global_intent": {"params": [{"name": "intent", "type": "str"}], "return_type": "void"},
+            "clear_global_intents": {"params": [], "return_type": "void"},
+            "remove_global_intent": {"params": [{"name": "intent", "type": "str"}], "return_type": "void"},
+            "mask": {"params": [{"name": "tag_pattern", "type": "str"}], "return_type": "void"},
+            "get_global_intents": {"params": [], "return_type": "list"},
+            "get_current_intent_stack": {"params": [], "return_type": "list"}
         }
     }

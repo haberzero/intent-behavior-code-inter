@@ -22,7 +22,7 @@ MemberSpec          — base (field or alias)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .type_ref import TypeRef
 
@@ -98,3 +98,6 @@ class ParamDescriptor:
     kind: str = "POSITIONAL_OR_KEYWORD"
     type_ref: TypeRef = field(default_factory=lambda: _ANY_REF)
     has_default: bool = False
+    # 默认值字面值（仅原生模块函数声明使用：_spec.py 中显式给出的 Python 值）。
+    # 用户级函数默认值是 AST 表达式，运行期经惰性求值，本字段保持 None。
+    default_value: Any = None

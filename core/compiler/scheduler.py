@@ -636,6 +636,7 @@ class Scheduler(ICompilerService):
                 return_type=member.return_type,
                 param_types=list(member.param_types),
             )
+            func_spec.param_descriptors = list(getattr(member, 'param_descriptors', None) or [])
             return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=func_spec, provenance=Provenance.EXTERNAL_MODULE)
 
         if isinstance(member, MemberSpec):

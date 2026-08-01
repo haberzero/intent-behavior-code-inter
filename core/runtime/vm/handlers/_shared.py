@@ -9,12 +9,16 @@ from core.runtime.shared.signals import (
     ControlSignal,
     Signal,
 )
+from core.kernel import ast
 from core.runtime.objects.kernel import (
     IbValue,
     IbLLMCallResult,
+    IbUserFunction,
+    IbLLMFunction,
     _is_intent_context_param,
     _should_activate_intent_context_arg,
 )
+from core.runtime.objects.kernel.functions import IbBoundMethod
 from core.base.source_atomic import Location
 from core.runtime.exceptions import (
     ThrownException,
@@ -27,6 +31,137 @@ from core.runtime.objects.primitives.callables import (
     bind_behavior_call_args,
 )
 from core.runtime.shared.llm_result import LLMFuture
+
+
+def _expand_starred(executor, value):
+    """把 *expr 求值得到的容器展开为 IbObject 位置实参序列。"""
+    elems = getattr(value, "elements", None)
+    if isinstance(elems, list):
+        return list(elems)
+    native = value.to_native() if hasattr(value, "to_native") else value
+    if isinstance(native, (list, tuple)):
+        return [executor.registry.box(e) if not hasattr(e, "ib_class") else e for e in native]
+    raise RuntimeError(f"VM: cannot unpack non-iterable with '*': {type(value).__name__}")
+
+
+def _merge_dstar(executor, keyword_map, value):
+    """把 **expr 求值得到的字典合并进具名实参表。"""
+    native = value.to_native() if hasattr(value, "to_native") else value
+    if not isinstance(native, dict):
+        raise RuntimeError(f"VM: cannot unpack non-mapping with '**': {type(value).__name__}")
+    for key, item in native.items():
+        keyword_map[key] = item if hasattr(item, "ib_class") else executor.registry.box(item)
+
+
+def _build_runtime_param_specs(executor, arg_uids):
+    """从调用体自身 IbArg 节点列表构建运行时参数签名。
+
+    返回 ``[(name, kind, default_src)]``；``default_src`` 为 ``("uid", uid)``
+    （用户级默认表达式，调用时惰性求值）或 None（无默认值）。
+    """
+    specs = []
+    for arg_uid in arg_uids:
+        arg_data = executor.ec.get_node_data(arg_uid)
+        actual_uid = arg_uid
+        actual_data = arg_data
+        if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
+            actual_uid = arg_data.get("target")
+            actual_data = executor.ec.get_node_data(actual_uid)
+        name = (actual_data or {}).get("arg")
+        if not name:
+            continue
+        kind = (actual_data or {}).get("kind", ast.ARG_POSITIONAL_OR_KEYWORD)
+        default_uid = (actual_data or {}).get("default")
+        specs.append((name, kind, ("uid", default_uid) if default_uid else None))
+    return specs
+
+
+def _get_callee_param_specs(executor, func):
+    """获取调用体的运行时参数签名（无静态签名时返回 None）。
+
+    用户/LLM 函数与 fn_callable/behavior 读取自身 AST 的 IbArg 节点；
+    bound method 解包到其内层方法；原生模块函数读取 loader 附加在
+    实现上的声明（默认源为字面值）。
+    """
+    if isinstance(func, IbBoundMethod):
+        return _get_callee_param_specs(executor, func.method)
+    if isinstance(func, (IbUserFunction, IbLLMFunction)):
+        node_data = executor.ec.get_node_data(func.node_uid)
+        return _build_runtime_param_specs(executor, node_data.get("args", [])) or None
+    if isinstance(func, IbValue):
+        cls_name = func.ib_class.name if func.ib_class else None
+        if cls_name in ("fn_callable", "behavior"):
+            if not func.params_uids:
+                return None
+            return _build_runtime_param_specs(executor, func.params_uids) or None
+    proxy = getattr(func, "py_func", None)
+    meta = getattr(proxy, "_ibci_param_meta", None)
+    return meta if meta else None
+
+
+def _resolve_call_arguments_runtime(executor, specs, positional, keyword_map):
+    """运行时统一实参解析：位置 → 具名 → 默认填充 → varargs/varkw。
+
+    产出**按声明序**排列的最终实参列表（默认值经 ``yield`` 惰性求值；
+    ``*args`` 打包为 list、``**kwargs`` 打包为 dict，均装箱为 IbObject）。
+    是 generator：默认表达式求值经由 VM 调度。
+    """
+    pos_or_kw: list = []
+    kw_only: list = []
+    var_pos = None
+    var_kw = None
+    for name, kind, default_src in specs:
+        if kind == ast.ARG_POSITIONAL_OR_KEYWORD:
+            pos_or_kw.append((name, default_src))
+        elif kind == ast.ARG_KEYWORD_ONLY:
+            kw_only.append((name, default_src))
+        elif kind == ast.ARG_VAR_POSITIONAL:
+            var_pos = name
+        elif kind == ast.ARG_VAR_KEYWORD:
+            var_kw = name
+
+    values: dict = {}
+    slot = 0
+    varargs: list = []
+    for v in positional:
+        if slot < len(pos_or_kw):
+            values[pos_or_kw[slot][0]] = v
+            slot += 1
+        elif var_pos:
+            varargs.append(v)
+        else:
+            raise RuntimeError("VM: too many positional arguments for callable.")
+
+    pos_names = {n for n, _ in pos_or_kw}
+    kw_names = {n for n, _ in kw_only}
+    for name, v in keyword_map.items():
+        if name in pos_names or name in kw_names:
+            if name in values:
+                raise RuntimeError(f"VM: multiple values for argument '{name}'.")
+            values[name] = v
+        elif var_kw:
+            values.setdefault(var_kw, {})[name] = v
+        else:
+            raise RuntimeError(f"VM: unexpected keyword argument '{name}'.")
+
+    # 默认值惰性填充（未提供的参数）
+    for name, default_src in list(pos_or_kw[slot:]) + kw_only:
+        if name not in values:
+            if default_src is None:
+                raise RuntimeError(f"VM: missing required argument '{name}'.")
+            src_kind, src = default_src
+            values[name] = (yield src) if src_kind == "uid" else src
+
+    # 按声明序产出最终列表
+    final = []
+    for name, kind, _ in specs:
+        if kind == ast.ARG_VAR_POSITIONAL:
+            final.append(executor.registry.box(varargs))
+        elif kind == ast.ARG_VAR_KEYWORD:
+            final.append(executor.registry.box(values.setdefault(var_kw, {})))
+        else:
+            final.append(values[name])
+    return final
 
 
 def _vm_call_fn_callable(executor, func, args):

@@ -106,8 +106,27 @@ class ModuleLoader(IModuleLoader):
                 if len(fixed_params) < param_count:
                     raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. "
                                            f"Spec expects {param_count} params, but implementation has only {len(fixed_params)}.")
-                
-                def create_proxy(target_func, reg):
+
+                # 运行时参数元数据（供统一实参绑定器做具名/默认解析）
+                param_meta = None
+                declared_descriptors = getattr(spec_member, "param_descriptors", None) or []
+                if declared_descriptors:
+                    param_meta = [
+                        (d.name, d.kind, ("value", d.default_value) if d.has_default else None)
+                        for d in declared_descriptors
+                    ]
+                    # 具名参数契约：声明名称必须被实现接受（具名调用依赖名称匹配）
+                    impl_names = {p.name for p in params}
+                    has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+                    for d in declared_descriptors:
+                        if d.kind in ("POSITIONAL_OR_KEYWORD", "KEYWORD_ONLY") \
+                                and d.name not in impl_names and not has_varkw:
+                            raise InterpreterError(
+                                f"Plugin Error: Module '{module_name}.{spec_name}' declares param "
+                                f"'{d.name}' but implementation does not accept it by name."
+                            )
+
+                def create_proxy(target_func, reg, meta):
                     def proxy_wrapper(*args, **kwargs):
                         # UTS: 自动拆箱 (IbObject -> Native)
                         # 可调用实例（behavior/fn_callable/callable）不是数据值，
@@ -129,9 +148,10 @@ class ModuleLoader(IModuleLoader):
 
                         # UTS: 自动装箱 (Native -> IbObject)
                         return reg.box(result)
+                    proxy_wrapper._ibci_param_meta = meta
                     return proxy_wrapper
 
-                proxy_vtable[spec_name] = create_proxy(py_func, registry)
+                proxy_vtable[spec_name] = create_proxy(py_func, registry, param_meta)
             
             # 2. 处理变量 (Variable / plain MemberSpec)
             else:

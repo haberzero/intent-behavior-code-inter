@@ -119,7 +119,7 @@ class _MemberMixin:
                         effective_params[0] = wrapped
                         effective_param_modules[0] = wrapped_mod
                 from ..base import TypeDef
-                return TypeDef(
+                resolved_member = TypeDef(
                     name=attr_name,
                     kind=TypeKind.FUNCTION.value,
                     provenance=spec.provenance,
@@ -127,6 +127,10 @@ class _MemberMixin:
                     return_type=TypeRef.of(effective_return, effective_return_module),
                     param_types=[TypeRef.of(n, m) for n, m in zip(effective_params, effective_param_modules)],
                 )
+                # 携带模块成员声明的参数描述符（具名/默认/varargs 实参校验依据）。
+                # 容器特化方法无描述符（空列表），拷贝为空操作。
+                resolved_member.param_descriptors = list(getattr(member, 'param_descriptors', None) or [])
+                return resolved_member
             # Enum variant access: return the enum class type itself
             if (spec.kind == TypeKind.CLASS.value and spec.parent_type is not None
                     and spec.parent_type.head == "Enum" and spec.provenance == Provenance.USER_DEFINED):

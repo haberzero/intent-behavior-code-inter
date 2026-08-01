@@ -19,10 +19,10 @@ def __ibcext_metadata__() -> dict:
 def __ibcext_vtable__() -> dict:
     return {
         "functions": {
-            "validate":        {"param_types": ["dict", "dict"], "return_type": "bool",  "description": "校验 data 是否符合 schema"},
-            "assert_schema":   {"param_types": ["dict", "dict"], "return_type": "void",  "description": "校验失败则抛出 RuntimeError"},
-            "required_fields": {"param_types": ["dict"],         "return_type": "list",  "description": "从 schema 提取 required 字段列表"},
-            "infer":           {"param_types": ["dict"],         "return_type": "dict",  "description": "从 dict 数据推断简单 schema"},
-            "coerce":          {"param_types": ["dict", "dict"], "return_type": "dict",  "description": "按 schema 对 dict 值进行类型强制转换"},
+            "validate":        {"params": [{"name": "data", "type": "dict"}, {"name": "rules", "type": "dict"}], "return_type": "bool",  "description": "校验 data 是否符合 schema"},
+            "assert_schema":   {"params": [{"name": "data", "type": "dict"}, {"name": "rules", "type": "dict"}], "return_type": "void",  "description": "校验失败则抛出 RuntimeError"},
+            "required_fields": {"params": [{"name": "rules", "type": "dict"}], "return_type": "list",  "description": "从 schema 提取 required 字段列表"},
+            "infer":           {"params": [{"name": "data", "type": "dict"}], "return_type": "dict",  "description": "从 dict 数据推断简单 schema"},
+            "coerce":          {"params": [{"name": "data", "type": "dict"}, {"name": "rules", "type": "dict"}], "return_type": "dict",  "description": "按 schema 对 dict 值进行类型强制转换"},
         }
     }

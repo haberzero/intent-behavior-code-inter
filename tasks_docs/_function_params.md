@@ -1,6 +1,6 @@
 # 函数参数机制：默认参数 / 具名参数 / 动态参数
 
-> **状态**：P1（AST+Parser）✅、P2（语义）✅ 已完成，**P2 质量维修 ✅ 已完成**，P3（运行时统一绑定器）待开工。**当前主线**（见 `tasks_docs/NEXT_STEPS.md`）。
+> **状态**：P1（AST+Parser）✅、P2（语义）✅、P2 质量维修 ✅、P3（运行时统一绑定器 + vtable 升级）✅ 已完成，P4（应用 + 文档）待开工。**当前主线**（见 `tasks_docs/NEXT_STEPS.md`）。
 > **性质**：临时任务文档，全部 Phase 完成后删除，决策性内容并入 `docs/architecture/`。
 > **关联**：`PENDING_TASKS.md` PT-ARCH-28（`file.write` 统一 API，依赖本机制）、PT-PHASE4-1（`register_model(**kwargs)`）。
 
@@ -93,14 +93,24 @@
 - `_declaration_visitors.py` 构建含 default/kind 的参数描述符（`param_types` 扩展）
 - 方法覆写契约校验（`contract_validator.py`）适配
 
-### P3　运行时（统一实参绑定器）
-- 提取统一参数绑定器（位置 + 具名 + 默认 + `*args` + `**kwargs`），替换现有全部位置绑定：
-  - 用户函数 `vm_handle_IbFunctionDef` / `_vm_call_fn_callable`
-  - behavior `bind_behavior_call_args`
-  - llm 函数 `_vm_invoke_llm_function`
-  - vtable 模块函数（`loader.py`）
-- 函数对象（IbUserFunction / IbFnCallable / IbBehavior / IbLLMFunction）携带参数元数据
-- **vtable 签名扩展**：`_spec.py` 的 `param_types` 升级以声明 default/kind（影响所有 `ai.*`/`file.*` 模块函数）
+### P3　运行时（统一实参绑定器） ✅ 已完成（2026-07-31）
+
+- **统一绑定器**（`_shared.py` `_resolve_call_arguments_runtime`）：位置 → 具名 → 默认填充 → varargs/varkw，在 `vm_handle_IbCall` 调用点统一解析，产出**按声明序的最终实参列表**；各 callee 路径保持按索引绑定不变（改动面最小化）
+  - `*expr`/`**expr` splat 展开（`_expand_starred`/`_merge_dstar`）
+  - 用户函数 / 类方法（含 `IbBoundMethod` 解包）/ fn-lambda / behavior / LLM 函数 / 原生模块函数统一走该路径
+  - 默认表达式惰性求值（`yield` 经 VM 调度）
+- **vtable 签名升级**（D4 裁定，不兼容旧格式）：`param_types` 数组 → `params` 结构化（`{"name","type","default","kind"}`）；`ParamDescriptor.default_value` 承载原生默认字面值；全部 9 个 `_spec.py` 转换（参数名与实现签名对齐）
+- `discovery.py`：`params` 解析 → `MethodMemberSpec.param_descriptors`；inspect 路径自动提取名称/种类/默认值
+- `loader.py`：从 `param_descriptors` 构建运行时参数元数据附加到 proxy；**具名参数契约校验**（声明名称必须被实现接受，否则加载失败）
+- 语义层：`resolve_member` 与调度器 `_rebuild_external_symbol` 携带模块成员 `param_descriptors` → 原生函数具名/默认实参也受编译期校验
+- e2e：`tests/e2e/test_function_params.py` 25 项（默认/具名/varargs/splat/dstar/keyword-only/类方法/behavior/LLM/原生 + 负样本）
+- 全量 `python -m pytest tests/` 实跑 **1255 passed / 4 skipped**（+26 新测试，零回归）
+
+**已知待办（P4 或专项）**：
+- 原生函数 `VAR_KEYWORD`（**kwargs）dispatch 未接通：绑定器把 varkw 打包为 dict 位置实参，`def f(*a, **kw)` 实现无法按位置接受。当前无原生函数声明 VAR_KEYWORD（`register_model` **kwargs 属 PT-PHASE4-1），出现时需扩展原生调用适配（位置 + kwargs 分传）
+- 语义 `_resolve_with_descriptors` 与运行时 `_resolve_call_arguments_runtime` 存在同算法双实现（~30 行），候选收敛为共享纯算法核心
+- `_ibci_param_meta` 作为 proxy 私有属性跨模块读取（设计通道，未穿透对外对象）；可形式化为 IbNativeFunction 字段
+- `file` 模块（kernel-native，engine.py 内联 spec）尚未声明参数名 → `file.*` 具名调用与 `file.write` 统一 API 属 P4
 
 ### P4　应用 + 文档
 - 落地 PT-ARCH-28：`file.write(target, data, overwrite_flag=...)` 统一 API（删除 `write_copy`/`write_overwrite`/`write_new` 或改为薄包装）

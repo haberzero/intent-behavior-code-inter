@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Any
 
 from core.base.path import IbPath
 from core.kernel.host_interface import HostInterface
-from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
+from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind, ParamDescriptor
 from core.base.enums import RegistrationState, Visibility
 from core.kernel.spec.type_ref import TypeRef
 from core.runtime.path import InstallPaths
@@ -188,14 +188,14 @@ class ModuleDiscoveryService:
         从字典格式元数据构建 TypeDef。
 
         支持两种函数描述格式：
-        1. 显式字典：{"param_types": ["str", "int"], "return_type": "float"}
-        2. 可调用对象：直接传入 Python 函数/方法，自动通过 inspect.signature() 提取参数类型注解
+        1. 显式字典：{"params": [{"name","type","default","kind"}], "return_type": "str"}
+        2. 可调用对象：直接传入 Python 函数/方法，自动通过 inspect.signature() 提取签名
 
         字典格式：
         {
             "functions": {
                 "parse": {
-                    "param_types": ["str"],
+                    "params": [{"name": "s", "type": "str"}],
                     "return_type": "dict"
                 },
                 "auto_sig_func": some_python_callable,  # 自动推导签名
@@ -218,19 +218,16 @@ class ModuleDiscoveryService:
         functions = vtable.get("functions", {})
         for func_name, func_sig in functions.items():
             if callable(func_sig):
-                # 自动从 Python 函数签名提取参数类型名
-                param_types, return_type = self._extract_signature(func_sig)
+                # 自动从 Python 函数签名提取参数描述
+                param_specs, return_type = self._extract_signature(func_sig)
+                member = self._build_method_member(func_name, param_specs, return_type)
             elif isinstance(func_sig, dict):
-                param_types = func_sig.get("param_types", [])
                 return_type = func_sig.get("return_type", "void")
+                member = self._build_method_member(
+                    func_name, func_sig.get("params", []), return_type
+                )
             else:
-                param_types = []
-                return_type = "void"
-
-            member = MethodMemberSpec(
-                name=func_name,
-                kind="method",
-                type_ref=TypeRef.of(return_type), return_type=TypeRef.of(return_type), param_types=[TypeRef.of(p) for p in param_types])
+                member = self._build_method_member(func_name, [], "void")
             spec.members[func_name] = member
 
         variables = vtable.get("variables", {})
@@ -239,6 +236,30 @@ class ModuleDiscoveryService:
             spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_ref=TypeRef.of(type_name))
 
         return spec
+
+    def _build_method_member(self, func_name: str, param_specs: list, return_type: str) -> MethodMemberSpec:
+        """从参数描述列表构建 MethodMemberSpec（类型列表 + 参数描述符）。"""
+        param_type_refs = []
+        descriptors = []
+        for p in param_specs:
+            ptype = p.get("type", "any") if isinstance(p, dict) else "any"
+            pname = p.get("name", "") if isinstance(p, dict) else ""
+            param_type_refs.append(TypeRef.of(ptype))
+            descriptors.append(ParamDescriptor(
+                name=pname,
+                kind=p.get("kind", "POSITIONAL_OR_KEYWORD") if isinstance(p, dict) else "POSITIONAL_OR_KEYWORD",
+                type_ref=TypeRef.of(ptype),
+                has_default=isinstance(p, dict) and "default" in p,
+                default_value=p.get("default") if isinstance(p, dict) else None,
+            ))
+        return MethodMemberSpec(
+            name=func_name,
+            kind="method",
+            type_ref=TypeRef.of(return_type),
+            return_type=TypeRef.of(return_type),
+            param_types=param_type_refs,
+            param_descriptors=descriptors,
+        )
 
     # Python type annotation → IBCI type name mapping
     _PY_TYPE_TO_IBCI: Dict[str, str] = {
@@ -253,16 +274,25 @@ class ModuleDiscoveryService:
         "None": "void",
     }
 
+    _KIND_MAP = {
+        inspect.Parameter.POSITIONAL_ONLY: "POSITIONAL_OR_KEYWORD",
+        inspect.Parameter.POSITIONAL_OR_KEYWORD: "POSITIONAL_OR_KEYWORD",
+        inspect.Parameter.VAR_POSITIONAL: "VAR_POSITIONAL",
+        inspect.Parameter.KEYWORD_ONLY: "KEYWORD_ONLY",
+        inspect.Parameter.VAR_KEYWORD: "VAR_KEYWORD",
+    }
+
     def _extract_signature(self, func: Any) -> tuple:
         """
-        通过 inspect.signature() 从 Python 函数自动提取参数类型名和返回类型名。
+        通过 inspect.signature() 从 Python 函数自动提取参数描述与返回类型名。
 
         - 跳过第一个参数（约定为 self）
         - 有注解则映射为 IBCI 类型名，无注解默认为 "any"
+        - 参数默认值与种类（*args/**kwargs/keyword-only）一并提取
         - 返回类型无注解时默认为 "any"
 
         返回:
-            (param_type_names: List[str], return_type_name: str)
+            (param_specs: List[Dict], return_type_name: str)
         """
         try:
             sig = inspect.signature(func)
@@ -271,13 +301,20 @@ class ModuleDiscoveryService:
             if params and params[0].name in ("self", "cls"):
                 params = params[1:]
 
-            param_types = []
+            param_specs = []
             for p in params:
                 if p.annotation is inspect.Parameter.empty:
-                    param_types.append("any")
+                    ptype = "any"
                 else:
                     ann_name = getattr(p.annotation, "__name__", str(p.annotation))
-                    param_types.append(self._PY_TYPE_TO_IBCI.get(ann_name, "any"))
+                    ptype = self._PY_TYPE_TO_IBCI.get(ann_name, "any")
+                spec: Dict[str, Any] = {"name": p.name, "type": ptype}
+                if p.default is not inspect.Parameter.empty:
+                    spec["default"] = p.default
+                kind = self._KIND_MAP.get(p.kind, "POSITIONAL_OR_KEYWORD")
+                if kind != "POSITIONAL_OR_KEYWORD":
+                    spec["kind"] = kind
+                param_specs.append(spec)
 
             ret_ann = sig.return_annotation
             if ret_ann is inspect.Signature.empty:
@@ -286,6 +323,6 @@ class ModuleDiscoveryService:
                 ret_name = getattr(ret_ann, "__name__", str(ret_ann))
                 return_type = self._PY_TYPE_TO_IBCI.get(ret_name, "any")
 
-            return param_types, return_type
+            return param_specs, return_type
         except (ValueError, TypeError):
             return [], "any"

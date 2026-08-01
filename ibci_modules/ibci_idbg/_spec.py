@@ -15,89 +15,24 @@ def __ibcext_metadata__() -> Dict[str, Any]:
 def __ibcext_vtable__() -> Dict[str, Any]:
     """
     方法虚表 - 返回原生 IBC-Inter 元数据声明
-
-    vars: void -> dict (获取当前作用域变量)
-    print_vars: void -> void (打印当前作用域变量)
-    current_llm: void -> dict (获取最近 LLM 调用信息)
-    show_target_prompt: void -> void (打印最近 LLM 完整提示词)
-    show_target_result: void -> void (打印最近 LLM 原始输出结果)
-    show_all: void -> void (打印最近 LLM 完整信息)
-    current_result: void -> dict (获取最近 LLM 执行结果)
-    retry_stack: void -> list (获取当前重试帧栈)
-    show_retry_stack: void -> void (打印当前重试帧栈)
-    protection_map: void -> dict (获取 llmexcept 保护映射)
-    show_protection_map: void -> void (打印 llmexcept 保护映射)
-    intents: void -> list (获取详细意图栈)
-    show_intents: void -> void (打印意图栈到控制台)
-    env: void -> dict (获取环境变量)
-    show_env: void -> void (打印环境变量)
-    fields: any -> dict (检查对象的字段)
     """
     return {
         "functions": {
-            "vars": {
-                "param_types": [],
-                "return_type": "dict"
-            },
-            "print_vars": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "current_llm": {
-                "param_types": [],
-                "return_type": "dict"
-            },
-            "show_target_prompt": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "show_target_result": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "show_all": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "current_result": {
-                "param_types": [],
-                "return_type": "dict"
-            },
-            "retry_stack": {
-                "param_types": [],
-                "return_type": "list"
-            },
-            "show_retry_stack": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "protection_map": {
-                "param_types": [],
-                "return_type": "dict"
-            },
-            "show_protection_map": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "intents": {
-                "param_types": [],
-                "return_type": "list"
-            },
-            "show_intents": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "env": {
-                "param_types": [],
-                "return_type": "dict"
-            },
-            "show_env": {
-                "param_types": [],
-                "return_type": "void"
-            },
-            "fields": {
-                "param_types": ["any"],
-                "return_type": "dict"
-            }
+            "vars": {"params": [], "return_type": "dict"},
+            "print_vars": {"params": [], "return_type": "void"},
+            "current_llm": {"params": [], "return_type": "dict"},
+            "show_target_prompt": {"params": [], "return_type": "void"},
+            "show_target_result": {"params": [], "return_type": "void"},
+            "show_all": {"params": [], "return_type": "void"},
+            "current_result": {"params": [], "return_type": "dict"},
+            "retry_stack": {"params": [], "return_type": "list"},
+            "show_retry_stack": {"params": [], "return_type": "void"},
+            "protection_map": {"params": [], "return_type": "dict"},
+            "show_protection_map": {"params": [], "return_type": "void"},
+            "intents": {"params": [], "return_type": "list"},
+            "show_intents": {"params": [], "return_type": "void"},
+            "env": {"params": [], "return_type": "dict"},
+            "show_env": {"params": [], "return_type": "void"},
+            "fields": {"params": [{"name": "obj", "type": "any"}], "return_type": "dict"}
         }
     }

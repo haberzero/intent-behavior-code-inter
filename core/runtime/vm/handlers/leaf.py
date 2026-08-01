@@ -28,6 +28,10 @@ from core.runtime.vm.handlers._shared import (
     _is_llm_uncertain_value,
     _make_uncertain_call_result,
     _raise_uncertain_parse_error,
+    _expand_starred,
+    _merge_dstar,
+    _get_callee_param_specs,
+    _resolve_call_arguments_runtime,
 )
 
 
@@ -204,18 +208,52 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """函数调用：CPS 求值函数对象和实参；IbFnCallable 完全内联 CPS 执行，
+    """函数调用：CPS 求值函数对象与实参（含 *expr/**expr splat），
+    经统一实参绑定器解析后按声明序绑定；IbFnCallable 完全内联 CPS 执行，
     其他 callable 仍通过 call() 同步完成。
     """
     func = yield node_data.get("func")
     if _is_llm_uncertain_value(func):
         return func
-    args = []
+
+    # --- 求值位置实参（*expr 序列解包展开） ---
+    positional = []
     for a_uid in node_data.get("args", []):
-        arg = yield a_uid
-        if _is_llm_uncertain_value(arg):
-            return arg
-        args.append(arg)
+        a_data = executor.ec.get_node_data(a_uid)
+        if a_data and a_data.get("_type") == "IbStarred":
+            starred = yield a_data.get("value")
+            if _is_llm_uncertain_value(starred):
+                return starred
+            positional.extend(_expand_starred(executor, starred))
+        else:
+            arg = yield a_uid
+            if _is_llm_uncertain_value(arg):
+                return arg
+            positional.append(arg)
+
+    # --- 求值具名实参（**expr 字典解包合并） ---
+    keyword_map = {}
+    for kw_uid in node_data.get("keywords", []):
+        kw_data = executor.ec.get_node_data(kw_uid)
+        kw_value = yield kw_data.get("value")
+        if _is_llm_uncertain_value(kw_value):
+            return kw_value
+        kw_name = (kw_data or {}).get("arg")
+        if kw_name is None:
+            _merge_dstar(executor, keyword_map, kw_value)
+        else:
+            keyword_map[kw_name] = kw_value
+
+    # --- 统一实参解析：位置 → 具名 → 默认填充 → varargs/varkw ---
+    specs = _get_callee_param_specs(executor, func)
+    if specs is not None:
+        args = yield from _resolve_call_arguments_runtime(
+            executor, specs, positional, keyword_map
+        )
+    else:
+        # 无静态签名（内置构造器 / axiom-backed / 运行时 callable）：
+        # 保持位置直传，splat 已展开、具名实参忽略（与语义层动态策略一致）。
+        args = positional
 
     # IbFnCallable（lambda/snapshot）完全 CPS 内联
     if isinstance(func, IbValue) and func.ib_class.name == "fn_callable":
