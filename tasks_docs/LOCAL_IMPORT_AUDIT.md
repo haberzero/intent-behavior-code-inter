@@ -1,7 +1,10 @@
 # 局部 import 审计 — 独立分支任务（技术债）
 
 > **来源**：2026-08-02 用户裁定。无意义的局部 import、为打破循环导入而内联的 import（及同类 import 组织异味）属技术债，需独立分支核对分析。
-> **状态**：待执行（独立分支，不与主线混置）
+> **状态**：部分完成（2026-08-02，独立分支 `pt-smell`，未并入主线；仅本地 commit，未 push）
+> - **可提升类已处置**：L12/L13/L14（stdlib）、L16（auto_discovery）、L19（base.enums×5 文件）、L20（member.py）
+> - **已核验保留**：L15（engine 构造期延迟加载，合法动机）；L17 中 base.enums 部分已提升，`prelude` 局部 import 属真实循环打破（保留）
+> - **待设计决策（禁止更深的胶水）**：L1-L10 循环打破类——需按工作模式定论优先重构依赖方向 / TYPE_CHECKING 替代，涉架构决策，明早与用户对后续方向再定；L18（kernel_native_modules ↔ kernel.host_interface）待核验
 > **方法**：AST 全仓扫描局部 import（函数/方法体内 import）→ 逐处判定动机（循环导入打破 / 惰性可选依赖 / 无理由）→ 证据驱动处置；每批 `python -m pytest tests/` 全量零回归。
 > **核验基准**：工作模式定论（禁止胶水/tricky——用局部 import 掩盖循环依赖即胶水变体）+ 依赖规则（kernel→base 单向，runtime→kernel）。
 
