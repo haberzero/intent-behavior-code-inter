@@ -114,7 +114,9 @@
 
 ### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]（已并入主线 Stage 1）
 
-> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项。**2026-08-02**：executor 共享状态部分已并入并行主线 **Stage 1**（`_expected_type_stack` 死状态已删、`_result_parser` 懒重建竞争已修 fail-fast、`_current_call_info` 核验按构造无竞争）。**剩余**：`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）——删除或激活；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按 `.opencode/skills/code-quality/SKILL.md` 健康诊断十查全仓扫描。
+> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项。**2026-08-02**：executor 共享状态部分已并入并行主线 **Stage 1**（`_expected_type_stack` 死状态已删、`_result_parser` 懒重建竞争已修 fail-fast、`_current_call_info` 核验按构造无竞争）。**`scene` 协议参数**保留但无消费者（`__call__` 已注明协议兼容）——删除或激活，属契约级决策（待用户对方向）。
+>
+> **全仓健康诊断扫描（2026-08-02 已执行）**：按健康诊断十查 + code-odor 特征码扫描全部 `ibci_modules` 插件。分类结论：`ibci_isys`/`ibci_idbg` 的 `hasattr/getattr` 防御性内省属**合法**（可选项注入、调试内省工具、安全默认沙箱），非掩盖型兜底；`ibci_ai.__call__` 未 probe 时静默回退为保守推理策略（已由 PT-TEST-9 锁定现有行为）——**改即改对外行为契约，列为待决策/上报项**，不得擅自改。
 
 ### PT-DOC-1 语法手册定位段补充 [P3]
 
