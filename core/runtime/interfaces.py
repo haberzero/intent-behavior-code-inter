@@ -70,9 +70,10 @@ class Scope(Protocol):
     def assign_by_uid(self, uid: str, value: Any, skip_type_check: bool = False) -> bool:
         """基于 UID 的赋值（向上查找父作用域）。
 
-        默认实现委托到 assign()；支持 UID 映射的 ScopeImpl 应覆写此方法。
+        默认实现返回 False（不支持 UID 映射时安全降级）；
+        支持 UID 映射的 ScopeImpl 应覆写此方法。
         """
-        return self.assign(uid, value)
+        return False
     def get_symbol_by_uid(self, uid: str) -> Optional[RuntimeSymbol]:
         """向上查找 UID 符号。
 
