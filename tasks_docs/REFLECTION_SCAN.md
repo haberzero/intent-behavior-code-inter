@@ -30,13 +30,14 @@
 
 | 缺陷组 | 性质 | 处置方向 | 需上报 |
 |---|---|---|---|
-| 组 1：LLM 协议声明滞后 | 契约漏声明 → hasattr 探测 | 并入 `ILLMProvider`/`LLMExecutor`/`IILLMExecutor`/`IHostService` 协议 | 是（契约变更，非破坏性） |
+| 组 1：LLM 协议声明滞后 | 契约漏声明 → hasattr 探测 | 并入 `ILLMProvider`/`LLMExecutor`/`IILLMExecutor`/`IHostService` 协议 | 是（契约变更，非破坏性）✅ 已完成 |
 | 组 2：插件公开接口损坏 | 参数错位 + 私有穿透 + `dir()` 绕过白名单 | 修公开 API，删穿透 | 是（跨子系统） |
 | 组 3：异常做能力探测 | 吞 `InterpreterError` 误报"不可迭代" | 协议/类型判定 + 窄捕获 | 否 |
 | 组 4：序列化/私有属性穿透 | setattr 私有 + 读 `_uid_to_symbol` + 缺公开接口 | 改公开接口/补缺失方法 | 部分 |
 | 组 5：静默兜底掩盖错误 | 吞错后继续产生错误结果 | fail-fast | 否 |
 | 死代码/双通道/半接通 | 零调用、双写真相、恒假探测 | 删除或激活 | 否 |
-| **组 6：orchestrator 注入双通道 + 生产死参数链** | 构造注入链恒失效，真实注入靠事后 setter 同步 | 收敛单一注入路径（**高优先级**，见 §三-A） | 是（构造签名变更） |
+| 组 6：orchestrator 注入双通道 + 生产死参数链 | 构造注入链恒失效，真实注入靠事后 setter 同步 | 收敛单一注入路径 ✅ 已完成（§三-A） | 是（构造签名变更）✅ 已裁决方案 A |
+| **组 7：组 1 深度复核新发现**（组 1 修复掩盖的深层缺陷） | hydrate 冗余钩子 + leaf 死分支 + getattr 遗漏 + 协议过度承诺 | 见 §三-B | 部分 |
 
 ---
 
@@ -84,6 +85,51 @@ _prepare_interpreter (engine.py:302):
 | **A（已实施）** | 收敛单一注入：`HostService`/`Interpreter`/`ServiceContextImpl` 构造器删除 orchestrator 参数；orchestrator 统一经 `set_orchestrator` 注入；删除 rt_scheduler.py:77 死值 | ✅ 消除双通道 + 死参数链；测试构造改为 setter 注入 |
 | B | 保留构造参数但修复时序：spawn 前先 hydrate rt_scheduler 并设 orchestrator | 循环依赖（Engine→spawn→Interpreter→sc→orchestrator→Engine），架构上不可行 |
 | C | 最小修补：仅删 rt_scheduler.py:77 死值 + getattr 冗余，保留双通道 | 不解决根因，双通道残留 |
+
+---
+
+## 三-B、组 7：组 1 深度复核新发现（组 1 修复掩盖的深层缺陷）
+
+> **背景**：用户要求以组 6 的深度复核组 1 的 hasattr 改动——不满足于形式修复，找出被 hasattr 掩盖的架构缺陷。逐点追问"原防御在防什么？被防场景现在怎样？"，用禁用验证/时序追踪确认。
+
+### 7.1 AIPlugin.hydrate 冗余生命周期钩子（死代码）【已用禁用验证】
+
+- **位置**：`ibci_modules/ibci_ai/core.py:74-81` `hydrate`；`core/runtime/bootstrap/kernel_native_modules.py:99` `hasattr(impl, "hydrate")`
+- **原 hasattr 防御**：`late_hydrate_kernel_native_modules` 对 kernel-native 模块探测 `hydrate`——但 `hydrate` **未在任何插件协议声明**（`IbPlugin`/`IbStatefulPlugin` 均无），是隐式约定。
+- **深层问题**：`AIPlugin.hydrate` 与 `setup`（core.py:69-72）**做完全相同的事**（重新 expose llm_provider）。hydrate 是为 "ADR-020 G2 late-hydrate 窗口" 引入的"重确认"，但 setup 已正确注册（`ModuleLoader` 注入的 `_capability_registry` = engine 的 capability_registry，`engine.capability_registry is sc.capability_registry` 已验证为同一对象）。hydrate 声称的"未来捕获 host_service/llm_executor 供 save/restore"**从未实现**，且 save/restore 已由 `IbStatefulPlugin.save_plugin_state/restore_plugin_state` 覆盖。
+- **验证**：临时禁用 hydrate（no-op）→ **1263 passed / 4 skipped 全绿**。证明 hydrate 完全冗余。
+- **分类**：死代码（预留接口未激活、无消费者价值）
+- **处置**：删除 `AIPlugin.hydrate` + `late_hydrate_kernel_native_modules` 的 hydrate 分支（或整体评估 late_hydrate 是否仍需要）
+
+### 7.2 leaf.py LLMFuture 解引用的 else 回退分支是死代码
+
+- **位置**：`core/runtime/vm/handlers/leaf.py:76-80`
+- **原 hasattr 防御**：`hasattr(llm_executor, "resolve")` 后 else 回退 `val.get(executor.registry)`——假设"llm_executor 可能缺失/无 resolve"
+- **深层问题**：`VMExecutor` 由 interpreter 构造（interpreter.py:467 `interpreter=self`），恒非 None → `executor.service_context` 恒非 None → `sc.llm_executor`（协议非 Optional）恒存在 → **else 回退分支永远不可达**。
+- **验证**：全仓 `VMExecutor(` 构造点（interpreter.py:467、conftest.py:213）均传 interpreter。
+- **分类**：死代码（双通道残留——"llm_executor 缺失"假设已不存在）
+- **处置**：删除 else 回退分支，直接 `llm_executor.resolve(val.node_uid)`
+
+### 7.3 vm_executor.service_context 的 getattr 冗余（组 1 遗漏）
+
+- **位置**：`core/runtime/vm/vm_executor.py:96` `getattr(self._interpreter, "service_context", None)`
+- **深层问题**：`Interpreter` 有公开 `service_context` property，构造后恒有。getattr 冗余（组 1 应一并处理）。
+- **分类**：冗余防御探测
+- **处置**：改直接访问（`self._interpreter.service_context`），保留 `if self._interpreter is not None` 守卫
+
+### 7.4 LLMExecutor 协议过度承诺（dispatch_eager/resolve 是 scheduler 能力）
+
+- **位置**：`core/runtime/interfaces.py` `LLMExecutor` 协议并入 `dispatch_eager`/`resolve`/`run_batch`（组 1 U2）
+- **深层问题**：这些是 `_SchedulerMixin`/`_BehaviorMixin` 的能力，非所有 LLMExecutor 的**最小契约**。原 `hasattr(llm_executor, "dispatch_eager")` 暗示设计意图是"可选调度能力"。全部并入后，未来纯同步 executor 被强制实现这些方法。
+- **当前影响**：LLMExecutorImpl 是唯一实现且含所有 mixin，无实际破坏。
+- **分类**：协议设计风险（非当前缺陷）
+- **处置**：评估是否拆分协议（`LLMExecutor` 基础 + `ISchedulingLLMExecutor` 扩展）；当前可保留，记录为设计注意点
+
+### 7.5 关联：capabilities.expose 参数错位（组 2 关联确认）
+
+- `AIPlugin.setup` 调 `capabilities.expose("llm_provider", self)`，默认 priority=0 → `register(name, self, 0)` 把 0 当 plugin_id（组 2 已记录 bug）。当前恰好注册成功（get 按 name 查），但 plugin_id=0 是脏数据。修组 2 时一并处理。
+
+**复核结论**：组 1 的形式修复（协议并入）正确，但**未触及 hasattr 背后的深层问题**——7.1（hydrate 冗余）、7.2（死分支）、7.3（getattr 遗漏）是组 1 修复后仍存在的死代码/冗余，7.4 是协议设计风险。这印证用户判断：hasattr 特征点背后常藏着更深缺陷，需逐一深挖而非停留在形式。
 
 ---
 
@@ -226,5 +272,10 @@ _prepare_interpreter (engine.py:302):
 
 1. ~~**组 6 orchestrator 注入修复方向**~~（已完成 2026-08-02，方案 A）。
 2. ~~**组 1 协议并入方向**~~（已完成 2026-08-02）。
-3. **组 2 处置**：`PluginCapabilities.expose/revoke` 公开 API 修复（含 register 参数错位 bug）；`dir()` 改白名单导出的落地方式。
-4. **组 4 序列化访问**：Scope/Context 新增公开接口的边界（UID 枚举、`bind_symbol_by_uid`、loop 栈快照）是否全部纳入本次。
+3. **【组 7】组 1 深度复核发现的处置**（§三-B）：
+   - 7.1 删除 `AIPlugin.hydrate` + late_hydrate 分支（死代码，已验证禁用全绿）——可自主，但涉及生命周期钩子移除，建议确认
+   - 7.2 删除 leaf.py else 死分支（死代码）——可自主
+   - 7.3 修 vm_executor.py:96 getattr 冗余——可自主
+   - 7.4 LLMExecutor 协议过度承诺——设计风险，建议记录不立即改
+4. **组 2 处置**：`PluginCapabilities.expose/revoke` 公开 API 修复（含 register 参数错位 bug）；`dir()` 改白名单导出的落地方式。
+5. **组 4 序列化访问**：Scope/Context 新增公开接口的边界（UID 枚举、`bind_symbol_by_uid`、loop 栈快照）是否全部纳入本次。
