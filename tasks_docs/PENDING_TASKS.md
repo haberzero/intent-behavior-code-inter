@@ -52,7 +52,7 @@
 
 | 编号 | 标题 | 目标 |
 |------|------|------|
-| PT-SYNC-1 | 并发正确性验证方法 | Stage 1/2 需要并发测试基建（并发 dispatch 测试、共享状态只读不变式测试）——否则"真正可用"无法被证明 |
+| PT-SYNC-1 | 并发正确性验证方法 | Stage 1/2 需要并发测试基建（并发 dispatch 测试、共享状态只读不变式测试）——否则"真正可用"无法被证明【已完成 2026-08-02：新增 `tests/runtime/test_concurrent_dispatch_integrity.py`，经 mock_server 真实 HTTP 驱动并行 dispatch，验证 真正并发重叠/no-cross-talk/乱序确定性/批次隔离；全量 pytest 1284 passed/4 skipped 零回归】 |
 | PT-SYNC-2 | `LLMFuture` 生命周期/错误语义 | resolve 超时/取消/重复 resolve 的用户可见语义——并行可用性的边界 |
 | PT-SYNC-3 | 线程池资源生命周期 | `close()` 语义、关闭后 `dispatch_eager` 的行为（当前会重建池，语义模糊）——资源管理明确化 |
 
