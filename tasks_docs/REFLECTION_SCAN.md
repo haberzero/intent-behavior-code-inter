@@ -92,14 +92,14 @@ _prepare_interpreter (engine.py:302):
 
 > **背景**：用户要求以组 6 的深度复核组 1 的 hasattr 改动——不满足于形式修复，找出被 hasattr 掩盖的架构缺陷。逐点追问"原防御在防什么？被防场景现在怎样？"，用禁用验证/时序追踪确认。
 
-### 7.1 AIPlugin.hydrate 冗余生命周期钩子（死代码）【已用禁用验证】
+### 7.1 AIPlugin.hydrate 冗余生命周期钩子（死代码）【已根治】
 
 - **位置**：`ibci_modules/ibci_ai/core.py:74-81` `hydrate`；`core/runtime/bootstrap/kernel_native_modules.py:99` `hasattr(impl, "hydrate")`
 - **原 hasattr 防御**：`late_hydrate_kernel_native_modules` 对 kernel-native 模块探测 `hydrate`——但 `hydrate` **未在任何插件协议声明**（`IbPlugin`/`IbStatefulPlugin` 均无），是隐式约定。
 - **深层问题**：`AIPlugin.hydrate` 与 `setup`（core.py:69-72）**做完全相同的事**（重新 expose llm_provider）。hydrate 是为 "ADR-020 G2 late-hydrate 窗口" 引入的"重确认"，但 setup 已正确注册（`ModuleLoader` 注入的 `_capability_registry` = engine 的 capability_registry，`engine.capability_registry is sc.capability_registry` 已验证为同一对象）。hydrate 声称的"未来捕获 host_service/llm_executor 供 save/restore"**从未实现**，且 save/restore 已由 `IbStatefulPlugin.save_plugin_state/restore_plugin_state` 覆盖。
 - **验证**：临时禁用 hydrate（no-op）→ **1263 passed / 4 skipped 全绿**。证明 hydrate 完全冗余。
-- **分类**：死代码（预留接口未激活、无消费者价值）
-- **处置**：删除 `AIPlugin.hydrate` + `late_hydrate_kernel_native_modules` 的 hydrate 分支（或整体评估 late_hydrate 是否仍需要）
+- **分类**：死代码（预留接口未激活、无消费者价值）+ 半接通生命周期特性（框架落地、实现空壳、测试固化）
+- **处置（已根治 2026-08-02）**：删除 `AIPlugin.hydrate` + `late_hydrate_kernel_native_modules` 函数 + `engine.py` 调用点 + `test_ai_hydrate_called_after_registry_hooks` 测试。插件初始化收敛为**单一 setup 入口**（loader.py:254-260 手动注册循环已覆盖 kernel-native）。同步更新 `docs/architecture/07_kernel_native_modules.md` 与 `docs/ARCHITECTURE.md`（删 late-hydrate 描述，改为"单一 setup 初始化"）。验证：1262 passed（-1 删除的测试）/ 4 skipped，`llm_provider` 仍由 setup 正确注册。
 
 ### 7.2 leaf.py LLMFuture 解引用的 else 回退分支是死代码
 
@@ -272,10 +272,7 @@ _prepare_interpreter (engine.py:302):
 
 1. ~~**组 6 orchestrator 注入修复方向**~~（已完成 2026-08-02，方案 A）。
 2. ~~**组 1 协议并入方向**~~（已完成 2026-08-02）。
-3. **【组 7】组 1 深度复核发现的处置**（§三-B）：
-   - 7.1 删除 `AIPlugin.hydrate` + late_hydrate 分支（死代码，已验证禁用全绿）——可自主，但涉及生命周期钩子移除，建议确认
-   - 7.2 删除 leaf.py else 死分支（死代码）——可自主
-   - 7.3 修 vm_executor.py:96 getattr 冗余——可自主
+3. ~~**【组 7】组 1 深度复核发现的处置**~~（§三-B，7.1-7.3 已根治 2026-08-02；7.4 协议过度承诺记录为设计注意点，不立即改）：
    - 7.4 LLMExecutor 协议过度承诺——设计风险，建议记录不立即改
 4. **组 2 处置**：`PluginCapabilities.expose/revoke` 公开 API 修复（含 register 参数错位 bug）；`dir()` 改白名单导出的落地方式。
 5. **组 4 序列化访问**：Scope/Context 新增公开接口的边界（UID 枚举、`bind_symbol_by_uid`、loop 栈快照）是否全部纳入本次。

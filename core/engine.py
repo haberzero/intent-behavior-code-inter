@@ -364,9 +364,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if state_reader is not None:
             self.registry.register_state_reader(state_reader, self._kernel_token)
 
-        # 在 registry hooks 全部注入后，给 kernel-native 模块 late-hydrate 窗口
-        from core.runtime.bootstrap.kernel_native_modules import late_hydrate_kernel_native_modules
-        late_hydrate_kernel_native_modules(self.interpreter.service_context)
 
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)

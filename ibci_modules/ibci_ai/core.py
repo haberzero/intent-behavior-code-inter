@@ -71,15 +71,6 @@ class AIPlugin(IbStatefulPlugin):
         # 向能力注册表注册自己为 LLM Provider
         capabilities.expose("llm_provider", self)
 
-    def hydrate(self, service_context):
-        """
-        在 registry hooks（llm_executor / host_service / stack_inspector / state_reader）
-        全部注入后调用。当前主要重新确认 LLM Provider 注册；未来可在此捕获
-        host_service / llm_executor 等引用供 save/restore 使用。
-        """
-        if self._capabilities is not None:
-            self._capabilities.expose("llm_provider", self)
-
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""
         is_test_mode = self._is_test_mode()

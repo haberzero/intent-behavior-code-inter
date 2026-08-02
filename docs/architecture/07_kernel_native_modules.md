@@ -23,7 +23,7 @@
 
 | 模块 | 功能 | 安全语义 |
 |---|---|---|
-| `ai` | LLM 调用 | 有状态，需 late-hydrate |
+| `ai` | LLM 调用 | 有状态（配置跨断点保存） |
 | `file` | 文件 I/O + 类型注入 | 沙箱相关 |
 | `ihost` | 宿主保存/恢复 | `save_state` by design 绕沙箱 |
 | `idbg` | 运行时信息输出 | 调试钩子 |
@@ -41,9 +41,9 @@
 
 `audio`/`image`/`video` 经标准 axiom 路径注册为普通类名（与 `str`/`int`/`Enum` 同级），非词法关键字。`core_scanner.py` 的 `KEYWORDS` 表不含类型名；新增内置类型不触及 TokenType 或 parser 文法。
 
-### late-hydrate 生命周期钩子
+### 模块初始化：单一 setup 入口
 
-有状态内核原生模块需要 service_context 注入才能完成初始化。`late_hydrate_kernel_native_modules(service_context)` 在 `_prepare_interpreter` 附近提供二次初始化窗口，保证编译期类型检查靠 axiom 签名（bootstrap 期已就位），运行期状态注入走 late-hydrate。
+内核原生模块与用户插件统一经 `setup(capabilities)` 完成初始化。加载器遍历已注册模块调用 `setup`，`capabilities` 在构造时已装配能力注册表，模块据此向 `CapabilityRegistry` 注册自身能力（如 `ai` 注册 `llm_provider`）。不存在独立的二次水化钩子——生命周期收敛为单一初始化入口。
 
 ### 模块导出过滤（provenance 门控）
 

@@ -4,8 +4,7 @@
 将 ai/ihost/idbg/isys 四个深度内核耦合的模块从插件发现流程提升为内核原生模块：
 - 在 Engine 构造期即预注册到 HostInterface，不依赖磁盘发现；
 - 标记 Provenance.KERNEL_NATIVE + Visibility.IMPORT_GATED；
-- 通过 HostInterface 保护机制防止用户插件覆盖；
-- 提供 late-hydrate 生命周期窗口。
+- 通过 HostInterface 保护机制防止用户插件覆盖。
 """
 import importlib
 import os
@@ -86,15 +85,3 @@ def register_kernel_native_modules(host_interface: "HostInterface") -> None:
             discovery_name=package_name,
         )
         host_interface.reserve_kernel_native_name(logical_name)
-
-
-def late_hydrate_kernel_native_modules(service_context: Any) -> None:
-    """
-    在 registry hooks（llm_executor / host_service / stack_inspector / state_reader）
-    全部注入后，给 kernel-native 模块第二次水化窗口。
-    """
-    host = service_context.interop.host_interface
-    for logical_name in KERNEL_NATIVE_MODULES:
-        impl = host.get_module_implementation(logical_name)
-        if impl is not None and hasattr(impl, "hydrate"):
-            impl.hydrate(service_context)

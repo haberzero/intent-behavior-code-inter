@@ -13,7 +13,7 @@
 | 04 | [04_vm_interpreter](architecture/04_vm_interpreter.md) | VM 与解释器架构 | CPS 调度、llmexcept、LLM 流水线、执行帧 |
 | 05 | [05_vm_specification](architecture/05_vm_specification.md) | VM 公理化规范 | 执行模型公理、内存模型公理、合规测试 |
 | 06 | [06_path_system](architecture/06_path_system.md) | 路径系统架构 | 三层路径、五概念模型、沙箱隔离 |
-| 07 | [07_kernel_native_modules](architecture/07_kernel_native_modules.md) | 内核原生模块与插件边界 | import-gating、provenance/visibility、late-hydrate |
+| 07 | [07_kernel_native_modules](architecture/07_kernel_native_modules.md) | 内核原生模块与插件边界 | import-gating、provenance/visibility、单一 setup 初始化 |
 | 08 | [08_storage_model](architecture/08_storage_model.md) | 变量存储模型 | 磁盘型协议族、IbFileHandle、协议驱动分发 |
 | 附录 | [appendix](architecture/appendix_type_system_rationale.md) | 类型系统设计原文（历史） | 设计动机追溯，非当前实现参考 |
 

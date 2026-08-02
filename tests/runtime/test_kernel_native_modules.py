@@ -119,26 +119,3 @@ class TestKernelNativeImportGating:
             f"expected SEM_UNDEFINED_SYMBOL/DEP_MODULE_NOT_FOUND, got codes={codes}, msg={err}"
         )
 
-
-class TestKernelNativeLateHydrate:
-    """late-hydrate 生命周期。"""
-
-    def test_ai_hydrate_called_after_registry_hooks(self, monkeypatch):
-        """_prepare_interpreter 完成后应调用 AIPlugin.hydrate。"""
-        from ibci_modules.ibci_ai import core as ai_core
-
-        calls = []
-        original_hydrate = ai_core.AIPlugin.hydrate
-
-        def patched_hydrate(self, service_context):
-            calls.append(1)
-            return original_hydrate(self, service_context)
-
-        monkeypatch.setattr(ai_core.AIPlugin, "hydrate", patched_hydrate)
-
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
-        out = []
-        eng.run_string('str x = "hello"\nprint(x)\n', output_callback=lambda s: out.append(str(s)), silent=True)
-
-        assert len(calls) >= 1, "AIPlugin.hydrate should be called during late-hydrate"
-        assert "hello" in out
