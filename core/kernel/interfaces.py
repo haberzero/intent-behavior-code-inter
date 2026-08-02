@@ -1,6 +1,23 @@
 from typing import Any, Protocol, Optional, List, Mapping, runtime_checkable
 
-__all__ = ["IExecutionContext"]
+__all__ = ["IExecutionContext", "IModuleScope"]
+
+@runtime_checkable
+class IModuleScope(Protocol):
+    """模块作用域协议：``IbModule.scope`` 的统一契约。
+
+    模块 scope 有两种实现形态：
+    - ``IbNativeObject``（objects/kernel）：原生模块桥接，成员经 ``receive`` 分发；
+    - ``ScopeImpl``（runtime/interpreter）：IBC 模块作用域，成员经 ``get`` 查找。
+
+    本协议声明两者的统一成员访问契约，使 ``IbModule.receive`` 无需按形态判别。
+    """
+    def get(self, name: str) -> Any:
+        """按名字获取成员；不存在抛 ``KeyError``。"""
+        ...
+    def receive(self, message: str, args: List[Any]) -> Any:
+        """消息分发（IbObject 协议）。"""
+        ...
 
 @runtime_checkable
 class IExecutionContext(Protocol):

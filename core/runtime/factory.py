@@ -1,4 +1,5 @@
 from typing import Any, Dict, Optional, List, Tuple, Sequence, Mapping, Callable, Union
+from core.kernel.interfaces import IModuleScope
 from core.runtime.interfaces import (
     IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent, RuntimeContext, RuntimeSymbol
 )
@@ -29,7 +30,7 @@ class RuntimeObjectFactory(IObjectFactory):
 
     # --- 对象创建接口 ---
 
-    def create_module(self, name: str, scope: Scope) -> IIbModule:
+    def create_module(self, name: str, scope: 'IModuleScope') -> IIbModule:
         return IbModule(name, scope, registry=self._registry)
 
     def create_scope(self, parent: Optional[Scope] = None) -> Scope:

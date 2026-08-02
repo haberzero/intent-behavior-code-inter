@@ -22,6 +22,16 @@ class IbNativeObject(IbObject):
         self.vtable = vtable or {}
         self.whitelist = whitelist or []
 
+    def get(self, name: str) -> Any:
+        """模块作用域协议成员访问：经 ``receive('__getattr__')`` 分发。
+
+        与 ``ScopeImpl.get`` 对齐——不存在抛 ``KeyError``。
+        """
+        try:
+            return self.receive('__getattr__', [self.ib_class.registry.box(name)])
+        except AttributeError:
+            raise KeyError(name)
+
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
          Native 消息分发核心。
@@ -83,9 +93,9 @@ class IbNativeObject(IbObject):
 class IbModule(IbObject):
     """
     IBC-Inter 模块对象。
-    持有一个作用域 (Scope)，并根据 UTS 协议通过消息传递暴露成员。
+    持有一个作用域 (IModuleScope)，并根据 UTS 协议通过消息传递暴露成员。
     """
-    def __init__(self, name: str, scope: Any, registry: KernelRegistry):
+    def __init__(self, name: str, scope: 'IModuleScope', registry: KernelRegistry):
         super().__init__(registry.get_class("module") or registry.get_class("Object"))
         self.name = name
         self.scope = scope
@@ -93,39 +103,25 @@ class IbModule(IbObject):
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
          模块级消息传递核心。
+         经 ``IModuleScope`` 协议统一分派（scope 两形态均实现 get/receive）。
         """
-        is_native = hasattr(self.scope, 'receive')  # IbNativeObject 形态（ScopeImpl 无 receive）
-        # 1. 处理 __getattr__ 协议
+        scope = self.scope  # IModuleScope
+
+        # 1. 处理 __getattr__ 协议（成员访问统一走 scope.get）
         if message == '__getattr__' and len(args) > 0:
             target_name = args[0].to_native()
-
-            # 优先从 Native 虚表或实现中查找（成员不存在时抛 AttributeError 表示"无此成员"）
-            if is_native:
-                try:
-                    return self.scope.receive('__getattr__', args)
-                except AttributeError:
-                    pass
-            # 其次查找模块级定义的变量/函数 (Scope 模式；仅捕获 KeyError，不吞内部错误)
-            else:
-                try:
-                    return self.scope.get(target_name)
-                except KeyError:
-                    pass
-
-        # 2. 尝试通过 IbNativeObject 的虚表直接执行 (如果是 Native 模块)
-        if is_native:
             try:
-                return self.scope.receive(message, args)
-            except AttributeError:
-                pass
-        # 3. 查找模块级定义的变量/函数 (Scope 模式)
-        else:
-            try:
-                return self.scope.get(message)
+                return scope.get(target_name)
             except KeyError:
                 pass
 
-        # 4. 后备：降级到基类公理 (如 __to_prompt__ 等)
+        # 2. 其他消息经 scope.receive 转发（两形态均实现）
+        try:
+            return scope.receive(message, args)
+        except (KeyError, AttributeError):
+            pass
+
+        # 3. 后备：降级到基类公理 (如 __to_prompt__ 等)
         return super().receive(message, args)
 
     def __repr__(self):

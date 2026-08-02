@@ -238,8 +238,7 @@ class ModuleLoader(IModuleLoader):
                 capabilities.intent_manager = rt_context
             
             # [Active Defense] 注入只读符号视图 (通过 RuntimeContext 获取)
-            if hasattr(rt_context, 'get_symbol_view'):
-                capabilities.symbol_view = rt_context.get_symbol_view()
+            capabilities.symbol_view = rt_context.get_symbol_view()
                 
         capabilities.stack_inspector = execution_context.stack_inspector
 

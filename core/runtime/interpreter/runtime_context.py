@@ -172,6 +172,12 @@ class ScopeImpl:
             return symbol.value
         raise KeyError(name)
 
+    def receive(self, message: str, args: List[Any]) -> Any:
+        """模块作用域协议消息分发：``__getattr__`` 委托到 ``get``，其余按名字查找。"""
+        if message == '__getattr__' and len(args) > 0:
+            return self.get(args[0].to_native())
+        return self.get(message)
+
     def get_by_uid(self, uid: str) -> Any:
         """基于 UID 的获取"""
         symbol = self.get_symbol_by_uid(uid)

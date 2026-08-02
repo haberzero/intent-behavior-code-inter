@@ -6,7 +6,7 @@ from core.base.interfaces import (
     IssueTracker, ISourceProvider, ICompilerService
 )
 
-from core.kernel.interfaces import IExecutionContext
+from core.kernel.interfaces import IExecutionContext, IModuleScope
 
 @runtime_checkable
 class IStackInspector(Protocol):
@@ -310,14 +310,14 @@ class IIbBehavior(IIbObject, Protocol):
 class IIbModule(IIbObject, Protocol):
     """IBC-Inter 模块对象协议"""
     name: str
-    scope: 'Scope'
+    scope: 'IModuleScope'
 
 class IObjectFactory(Protocol):
     """
     运行时对象工厂接口。
     用于解耦 Service（如 ModuleManager）与具体运行时对象（如 IbModule）的构造。
     """
-    def create_module(self, name: str, scope: 'Scope') -> 'IIbModule': ...
+    def create_module(self, name: str, scope: 'IModuleScope') -> 'IIbModule': ...
     def create_scope(self, parent: Optional['Scope'] = None) -> 'Scope': ...
     def create_native_object(self, py_obj: Any, ib_class: 'IIbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None) -> 'IIbObject': ...
     def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, capture_mode: Optional[str] = None, execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, closure: Optional[Dict[str, Any]] = None) -> Any: ...
