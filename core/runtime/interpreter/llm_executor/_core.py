@@ -18,10 +18,6 @@
     - ``self._current_call_info``      —— ``Mapping[str, Any]``，最近一次 resolve 的调用信息
                                          （主线程单写槽；并行 dispatch 下仅由主线程 resolve 点写入）
 
-预期类型栈:
-    - ``self._expected_type_stack``    —— ``List[str]``，由 :meth:`push_expected_type`
-                                         / :meth:`pop_expected_type` 维护
-
 LLMScheduler 状态 (由 ``_SchedulerMixin`` 使用):
     - ``self._max_workers``            —— ``int``，线程池大小
     - ``self._thread_pool``            —— ``Optional[ThreadPoolExecutor]``
@@ -73,7 +69,6 @@ class LLMExecutorCore:
         self._execution_context = execution_context
 
         self._current_call_info: Mapping[str, Any] = {}  # 主线程单写槽：最近一次 resolve 的调用信息
-        self._expected_type_stack: List[str] = []
 
         # LLMScheduler 状态
         self._max_workers: int = max_workers
@@ -113,13 +108,6 @@ class LLMExecutorCore:
             if provider:
                 return provider
         return None
-
-    def push_expected_type(self, type_name: str):
-        self._expected_type_stack.append(type_name)
-
-    def pop_expected_type(self):
-        if self._expected_type_stack:
-            self._expected_type_stack.pop()
 
     def get_current_call_info(self) -> Mapping[str, Any]:
         """获取最近一次 resolve 的调用信息（主线程单写槽）。"""

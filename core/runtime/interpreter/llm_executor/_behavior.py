@@ -4,7 +4,7 @@
 同步与 CPS 版本成对放置于同一文件。
 
 依赖 :class:`LLMExecutorCore` 的 ``_call_llm`` / ``llm_callback`` /
-``_current_call_info`` / ``push_expected_type`` / ``pop_expected_type`` 等共享状态，
+``_current_call_info`` 等共享状态，
 以及 :class:`_PromptMixin` 的 ``_evaluate_segments`` /
 ``_evaluate_segments_cps`` / ``_get_llmoutput_hint`` /
 ``_get_expected_type_hint`` / ``_parse_result``。
@@ -254,23 +254,10 @@ class _BehaviorMixin:
         if cache_enabled and behavior._cache is not None:
             return LLMResult.success_result(value=behavior._cache)
 
-        # 1. 处理预期类型注入
-        type_pushed = False
-        if behavior.expected_type:
-            self.push_expected_type(behavior.expected_type)
-            type_pushed = True
-
-        try:
-            # 2. 递归调用 execute_behavior_expression (环境已由 Caller 准备)
-            # 传入行为对象捕获的意图栈
-            result = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
-            if cache_enabled:
-                behavior._cache = result.value if result else None
-            return result
-        finally:
-            # 3. 环境恢复 (类型栈)
-            if type_pushed:
-                self.pop_expected_type()
+        result = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
+        if cache_enabled:
+            behavior._cache = result.value if result else None
+        return result
 
     def invoke_behavior(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
         """
@@ -391,21 +378,12 @@ class _BehaviorMixin:
         if cache_enabled and behavior._cache is not None:
             return LLMResult.success_result(value=behavior._cache)
 
-        type_pushed = False
-        if behavior.expected_type:
-            self.push_expected_type(behavior.expected_type)
-            type_pushed = True
-
-        try:
-            result = yield from self.execute_behavior_expression_cps(
-                behavior.node, execution_context, captured_intents=behavior.captured_intents
-            )
-            if cache_enabled:
-                behavior._cache = result.value if result else None
-            return result
-        finally:
-            if type_pushed:
-                self.pop_expected_type()
+        result = yield from self.execute_behavior_expression_cps(
+            behavior.node, execution_context, captured_intents=behavior.captured_intents
+        )
+        if cache_enabled:
+            behavior._cache = result.value if result else None
+        return result
 
     def invoke_behavior_cps(self, behavior: IbObject, execution_context: IExecutionContext):
         """CPS 版 :meth:`invoke_behavior`；段求值嵌入外层 VM 帧栈。"""

@@ -311,8 +311,12 @@ class _PromptMixin:
         Returns:
             LLMResult with parsed value or uncertainty
         """
-        if not self._result_parser:
-            # Fallback if parser not initialized (shouldn't happen after hydration)
-            self._result_parser = LLMResultParser(self.registry, self.debugger)
+        if self._result_parser is None:
+            # hydrate() 已初始化；此处为 None 说明未水化即执行——fail-fast（
+            # 原懒重建是 worker 线程可触发的潜在竞争 + 静默兜底，违反 fail-fast）。
+            raise RuntimeError(
+                "LLMExecutor: result parser not initialized; hydrate() must be called "
+                "before _parse_result() (pre-hydration parse is not supported)."
+            )
 
         return self._result_parser.parse_result(raw_res, type_name, node_uid, execution_context)
