@@ -106,9 +106,11 @@
 
 > `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 中的测试名与实际文件名不同步。
 
-### PT-TEST-9　`ai.probe_model` 测试覆盖 [P2]（Tier 2，并行主线可靠性地基）
+### PT-TEST-9　`ai.probe_model` 测试覆盖 [P2]（Tier 2，并行主线可靠性地基）【已完成 2026-08-02】
 
 > `probe_model`（含 MOCK 路径与真实客户端路径）无任何测试。MOCK 路径返回 `MOCK_PROBE_SUCCESS` 并写入 `_model_capabilities`；真实路径含 reasoning 探测判定。**2026-08-02 目标细化**：reasoning 判定决定每个 LLM 调用（串行+并行）的 prompt 注入/提取策略，是行为正确性地基。测试须锁定：① probe 为 setup-time 显式动作（无懒探测竞争，已确认）；② `_model_capabilities` 在并行阶段只读消费（probe 后不可变）不变式；③ MOCK/推理判定/失败兜底三路径 + 消费方决策测试。
+>
+> **已完成**：新增 `tests/runtime/test_probe_model.py`（12 用例），锁定 ①②③ 三项不变式。验证：全量 pytest 1278 passed / 4 skipped（+12，零回归）。
 
 ### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]（已并入主线 Stage 1）
 
