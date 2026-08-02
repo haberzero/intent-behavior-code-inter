@@ -119,7 +119,12 @@ class ServiceContextImpl:
         return self._orchestrator
 
     def set_orchestrator(self, orchestrator: Optional[IKernelOrchestrator]) -> None:
-        """注入内核协调器（Engine 在解释器创建完毕后调用）。"""
+        """注入内核协调器（Engine 在解释器创建完毕后调用）。
+
+        HostService 的 orchestrator 由构造器从 sc.orchestrator 注入
+        （rt_scheduler.spawn 内），但该时序先于本 setter 执行，故此处
+        需将 orchestrator 同步给已创建的 HostService。
+        """
         self._orchestrator = orchestrator
         if self._host_service:
             self._host_service.orchestrator = orchestrator
