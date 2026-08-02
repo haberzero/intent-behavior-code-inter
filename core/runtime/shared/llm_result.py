@@ -48,15 +48,6 @@ class LLMResult:
         """执行成功且结果确定"""
         return self.success and not self.is_uncertain
 
-    def unwrap(self) -> 'IbObject':
-        """获取返回值，假设已成功"""
-        if not self.success:
-            raise RuntimeError(f"Cannot unwrap failed result: {self.error_message}")
-        if self.value is None:
-            from core.runtime.objects.primitives import IbNone
-            return IbNone()
-        return self.value
-
     @staticmethod
     def success_result(value: Optional['IbObject'] = None, raw_response: str = "") -> 'LLMResult':
         """创建成功结果"""
