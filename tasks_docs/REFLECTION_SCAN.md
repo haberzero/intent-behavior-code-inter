@@ -31,7 +31,7 @@
 | 缺陷组 | 性质 | 处置方向 | 需上报 |
 |---|---|---|---|
 | 组 1：LLM 协议声明滞后 | 契约漏声明 → hasattr 探测 | 并入 `ILLMProvider`/`LLMExecutor`/`IILLMExecutor`/`IHostService` 协议 | 是（契约变更，非破坏性）✅ 已完成 |
-| 组 2：插件公开接口损坏 | 参数错位 + 私有穿透 + `dir()` 绕过白名单 | 修公开 API，删穿透 | 是（跨子系统） |
+| 组 2：插件能力注册与模块导入体系 | **复合缺陷**：能力注册双通道（坏入口+死入口+脏数据）+ `import *` 双路径分裂（运行时损坏）+ 隐式契约（私有属性注入）+ 加固层被绕过 | 跨子系统重构（§四 4.1-4.4） | 是（需确认方向） |
 | 组 3：异常做能力探测 | 吞 `InterpreterError` 误报"不可迭代" | 协议/类型判定 + 窄捕获 | 否 |
 | 组 4：序列化/私有属性穿透 | setattr 私有 + 读 `_uid_to_symbol` + 缺公开接口 | 改公开接口/补缺失方法 | 部分 |
 | 组 5：静默兜底掩盖错误 | 吞错后继续产生错误结果 | fail-fast | 否 |
@@ -155,18 +155,48 @@ _prepare_interpreter (engine.py:302):
 
 ---
 
-## 四、缺陷组 2：插件能力公开接口损坏 → 被迫穿透
+## 四、缺陷组 2：插件能力注册与模块导入体系（深度复核，多缺陷复合）
 
-**根因**：`PluginCapabilities.expose/revoke` 公开 API 无法正确传 `plugin_id`（`register` 参数错位：priority 被当 plugin_id），ibcext 才不得不穿透 `_capability_registry` 私有字段。
+> **深度复核（2026-08-02）**：2-subagent 独立验证 + 实测脚本确认。核心结论：**这不是单一缺陷，而是"能力注册 API 双通道（坏入口+死入口）+ `import *` 双路径分裂（一条运行时损坏）+ 隐式契约（私有属性注入）"的复合缺陷**。已用实测验证每条。
 
-| # | 命中点 | 问题 | 修法 |
+### 4.1 能力注册：坏入口 + 死入口 + 脏数据
+
+| # | 位置 | 问题 | 验证 |
 |---|---|---|---|
-| 2.1 | `extension/ibcext.py:135/147/154` | 穿透 `PluginCapabilities._capability_registry` 私有字段 + hasattr 恒真冗余 | 修 `capabilities.py:24-38` expose/revoke 传 plugin_id；ibcext 改公开方法 |
-| 2.2 | `interpreter/module_manager.py:107` | `dir(package)` 全量遍历 → `import *` 泄露，绕过 vtable/whitelist | 改用 `_ibci_whitelist`/声明成员导出 |
-| 2.3 | `objects/kernel/native_module.py:22/24` | 私有注入属性携带契约 + 空默认值 | `create_native_object` 显式传 whitelist 参数 |
-| 2.4 | `objects/kernel/native_module.py:102-123` | 已知框架类型间 hasattr 分派 + `except AttributeError` 异常流控制 | 改 isinstance；删除异常流控制 |
+| 4.1.1 | `capabilities.py:24-27` `PluginCapabilities.expose` | 调 `register(cap_name, provider, priority)` —— **priority 错填到必填 plugin_id 位**；请求的 priority 被丢弃（恒 NORMAL） | ✅ 实测 plugin_id=0（int 脏数据）、priority 恒 NORMAL；显式 priority=75 → plugin_id=75 |
+| 4.1.2 | `capabilities.py:29-32` `revoke` | 调 `unregister(cap_name)` **缺必填 plugin_id → 必抛 TypeError** | ✅ 实测 TypeError；当前零调用者（潜伏） |
+| 4.1.3 | `ibci_ai/ihost/idbg` setup 用 `capabilities.expose` | 3 个 kernel-native 插件注册时 **plugin_id 全部=0**（实测确认） | ✅ `llm_provider`/`ihost_provider`/`debugger_provider` plugin_id 均 0 |
+| 4.1.4 | `ibcext.py:107-161` `IbPlugin.expose/_do_expose/revoke/revoke_all/get_vtable/get_exposed_capabilities` | **全部零使用者死代码**（含穿透私有 `_capability_registry` 的实现）；`_ibcext_vtable_func` 无赋值点恒返 {} | ✅ grep 全仓仅定义处 |
+| 4.1.5 | `ibcext.py:135/147/154` hasattr 守卫 | dataclass 字段恒真，冗余 | ✅ 实测恒真 |
+| 4.1.6 | `ibci_idbg/core.py:27` 读私有 `_capability_registry` | 因 expose/revoke API 坏而被迫穿透（穿透已成模式） | ✅ 与 4.1.1 因果 |
 
-**连带**：`capabilities.py:24-27` `expose()` 的 register 参数错位 bug 被 ibci_ai/ihost/idbg 使用，修公开 API 时一并修正。
+**本质**：能力注册 API 未统一——插件真实用的入口（PluginCapabilities.expose）坏（产生脏数据），设计好的入口（IbPlugin.expose）死。`get()` 按 name 查故潜伏不炸，但按真实 plugin_id 的 unregister/replace 永不命中。
+
+### 4.2 `import *`：双路径分裂 + 运行时损坏
+
+| # | 位置 | 问题 | 验证 |
+|---|---|---|---|
+| 4.2.1 | `module_manager.py:107-112` Python 包 `from pkg import *` | `dir(package)` + 非 `_` 过滤全量导出——**无白名单/spec/is_const 过滤**，泄漏 setup/expose/plugin_id/get_vtable 等全部公开方法 | ✅ 实测 `from idbg import *` 注入 60+ 名字含协议方法 |
+| 4.2.2 | `module_manager.py:107-112` `*` 分支 `define_variable` 不传 uid | **编译器已为 spec 成员注入带 uid 符号（scheduler.py:521-539），运行时不传 uid → `get_variable_by_uid` 查不到 → `RUN_UNDEFINED_VARIABLE`** | ✅ 实测 `from idbg import *` 后引用 `show_env` 报 RUN_UNDEFINED_VARIABLE——**路径实际损坏** |
+| 4.2.3 | `module_manager.py:130-135` IBC 模块 `*` 路径 | 与 Python 路径过滤语义分裂（is_const vs `_` 前缀、符号表 vs dir） | ✅ 语义不一致 |
+| 4.2.4 | 无测试覆盖 | `import *` 两条路径零测试 | ✅ grep 无命中 |
+| 4.2.5 | `module_manager.py:57-62` `hasattr(package,'receive')` + `getattr(package,'_ibci_vtable')` | 鸭子探测 + 私有属性耦合 | ✅ |
+
+### 4.3 native_module：隐式契约 + 异常流控制
+
+| # | 位置 | 问题 | 验证 |
+|---|---|---|---|
+| 4.3.1 | `native_module.py:22-24` | vtable/whitelist 显式参数与 `getattr(py_obj, '_ibci_*')` 兜底**双通道**；whitelist 参数生产路径**零调用**（factory.py:38 不传）——死代码，行为依赖是否经 loader 绑定 | ✅ 实测 whitelist 恒走 getattr 兜底 |
+| 4.3.2 | `loader.py:196-198` 封印 `_ibci_vtable`/`_ibci_whitelist` 私有属性 | 隐式约定（属性名耦合），违反封装纪律；`native_module.py:21` 注释自称"消除动态属性依赖"却用 getattr 兜底——自相矛盾 | ✅ 三处字符串名硬耦合 |
+| 4.3.3 | `native_module.py:62` `getattr(vtable[target], "_ibci_param_meta", None)` | 耦合 loader 实现细节（loader.py:183 设置）；非 loader vtable 静默丢失元数据；本可显式传（IbNativeFunction 有 param_meta 参数） | ✅ |
+| 4.3.4 | `native_module.py:102-126` `hasattr(scope,'receive'/'get')` + `except (KeyError, AttributeError): pass` | 鸭子探测应改 isinstance（scope 仅两已知类型）；**`except AttributeError` 吞 scope.receive 内部真实 AttributeError** → 误报"no method" | ✅ 实测构造 vtable 内 raise AttributeError 被吞，替换为误导性错误 |
+| 4.3.5 | `native_module.py:71` | AttributeError 兼作"不在契约"与真实错误信号——单一异常双职责，是 4.3.4 吞错根因 | ✅ |
+
+### 4.4 加固层被绕过的安全缺口
+
+`IbNativeObject.receive` 的 whitelist 加固机制（native_module.py:65-68）本身健全，但 **`import *`（4.2.1）在 Python 侧 `dir()` 全量搬移，不经 receive/白名单**——加固层被完全绕过。这是"反射规避"排查的核心命中点。
+
+**处置方向**：4.1 修复 `PluginCapabilities.expose/revoke`（传 plugin_id + priority），删除 IbPlugin 死代码能力方法组；4.2 统一两条 `import *` 路径（用 spec 成员/白名单导出 + 补 uid），修复 M2 运行时损坏；4.3 显式化 vtable/whitelist 传递（`create_native_object` 补 whitelist 参数）、改 isinstance 分派、消除异常流控制吞错。属跨子系统重构，需用户确认方向后实施。
 
 ---
 
@@ -274,5 +304,9 @@ _prepare_interpreter (engine.py:302):
 2. ~~**组 1 协议并入方向**~~（已完成 2026-08-02）。
 3. ~~**【组 7】组 1 深度复核发现的处置**~~（§三-B，7.1-7.3 已根治 2026-08-02；7.4 协议过度承诺记录为设计注意点，不立即改）：
    - 7.4 LLMExecutor 协议过度承诺——设计风险，建议记录不立即改
-4. **组 2 处置**：`PluginCapabilities.expose/revoke` 公开 API 修复（含 register 参数错位 bug）；`dir()` 改白名单导出的落地方式。
+4. **【组 2】插件能力注册与模块导入体系重构方向**（§四 4.1-4.4，深度复核已完成）：
+   - 4.1 修复 `PluginCapabilities.expose/revoke`（传 plugin_id + priority），删 IbPlugin 死代码能力方法组
+   - 4.2 统一两条 `import *` 路径（spec 成员/白名单导出 + 补 uid），修复 M2 运行时损坏（RUN_UNDEFINED_VARIABLE）
+   - 4.3 显式化 vtable/whitelist 传递（create_native_object 补 whitelist 参数）、isinstance 分派、消除异常流控制吞错
+   - 4.4 修复加固层被 import * 绕过的安全缺口
 5. **组 4 序列化访问**：Scope/Context 新增公开接口的边界（UID 枚举、`bind_symbol_by_uid`、loop 栈快照）是否全部纳入本次。
