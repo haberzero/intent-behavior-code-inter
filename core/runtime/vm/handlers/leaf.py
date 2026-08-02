@@ -75,9 +75,6 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
         llm_executor = sc.llm_executor if sc is not None else None
         if llm_executor is not None:
             resolved = llm_executor.resolve(val.node_uid)
-        else:
-            # service_context 不可用时回退到 LLMFuture.get（仍阻塞，结果等价）
-            resolved = val.get(executor.registry)
         # 若 Future 解析出不确定容器（LLM parse failure），无 llmexcept 保护帧
         # 则抛 LLMParseError（保留 retry_hint/raw_response）；有帧则由
         # llmexcept 机制接管（容器沿变量流动）。

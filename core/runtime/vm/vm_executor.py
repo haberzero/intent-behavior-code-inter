@@ -93,7 +93,7 @@ class VMExecutor:
         handlers 通过此属性获取 capability_registry（例如 llm_provider.get_retry()）。
         """
         if self._interpreter is not None:
-            return getattr(self._interpreter, "service_context", None)
+            return self._interpreter.service_context
         return None
 
     # ------------------------------------------------------------------
