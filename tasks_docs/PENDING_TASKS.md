@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-02（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；反射排查已全线完成，遗留项归并至 PT-SEM-4 / REFLECT-ARCH-1）
+> **最后更新**：2026-08-02（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；反射排查已全线完成，遗留项归并至 PT-SEM-4 / REFLECT-ARCH-1；新增 PT-SMELL-1/2/3 技术债审计分支任务）
 
 ---
 
@@ -121,6 +121,18 @@
 ### PT-ARCH-22：全项目文件命名清理 [暂缓]
 
 > 全面排查过短/欠层次/欠区分度/影子化内建的代码文件命名。排期：暂缓，独立窗口执行。
+
+### PT-SMELL-1：代码异味核对分析（独立分支）[P2]
+
+> 对话/代码分析中反复出现的"兜底、双轨、双通道、双形态、三策略"等表述暗示潜在代码异味，属技术债。完整分类清单 + 代码位置 + 核验流程见 **`tasks_docs/CODE_SMELL_AUDIT.md`**（单一事实来源）。独立分支执行，不与主线混置。
+
+### PT-SMELL-2：条件分支与异常嵌套复杂度审计（独立分支）[P2]
+
+> 异常过多的 if-else 并用、过深 if-else、过多过深 except 嵌套（含我的工程经验补充：守卫子句缺失、长 elif 链查表化、宽 except 误吞语言级异常、异常当控制流等）。AST 度量基线（深度/elif 链/70 处宽 except/5 处嵌套 try）+ 位置清单见 **`tasks_docs/BRANCH_NESTING_AUDIT.md`**。独立分支执行。
+
+### PT-SMELL-3：局部 import 审计（独立分支）[P2]
+
+> 无意义的局部 import、为打破循环导入的内联 import（含我的工程经验补充：循环依赖应重构方向而非胶水掩盖、TYPE_CHECKING 替代、热路径重复 import、惰性依赖合法模式）。全仓 35 处局部 import 分类清单见 **`tasks_docs/LOCAL_IMPORT_AUDIT.md`**。独立分支执行。
 
 ### PT-ARCH-23 G2 遗留：内核原生模块覆盖可观测性缺口 [待决策]
 
