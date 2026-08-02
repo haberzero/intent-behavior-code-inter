@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
+from core.base.enums import Provenance
 from core.base.source_atomic import Location
 from core.runtime.exceptions import StageTransitionError, RegistryIsolationError, ThrownException
 from core.kernel.issue import InterpreterError
@@ -71,7 +72,6 @@ class ScopeImpl:
             return
 
         # 用户定义类（含枚举）的赋值由编译器在语义分析阶段验证，运行时跳过类型检查
-        from core.base.enums import Provenance
         if isinstance(declared_type, IbSpec) and declared_type.kind == TypeKind.CLASS.value and declared_type.provenance == Provenance.USER_DEFINED:
             return
             

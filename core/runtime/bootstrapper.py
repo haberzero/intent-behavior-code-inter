@@ -1,4 +1,5 @@
 from typing import Dict, Optional, Any
+from core.base.enums import Provenance, Visibility
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
 from core.kernel.registry import KernelRegistry
 from core.kernel.factory import create_default_registry
@@ -46,7 +47,6 @@ class Bootstrapper:
         intent_desc = factory.create_class("Intent")
         intent_stack_desc = factory.create_class("IntentStack")
 
-        from core.base.enums import Provenance, Visibility
         # 内核类不属于用户定义类
         for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc, intent_stack_desc]:
             d.provenance = Provenance.KERNEL_NATIVE
