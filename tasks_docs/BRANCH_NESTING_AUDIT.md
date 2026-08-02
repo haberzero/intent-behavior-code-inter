@@ -31,7 +31,7 @@
 
 | 位置 | 特征 | 初始判定 |
 |---|---|---|
-| `ibci_modules/ibci_net/core.py`（**12 处** 75/87/99/111/123/135/147/158/169…） | HTTP 错误统一 `except Exception` | 待核验（可能应窄化为请求异常） |
+| `ibci_modules/ibci_net/core.py`（**12 处** 75/87/99/111/123/135/147/158/169…） | HTTP 错误统一 `except Exception` | **已核验 2026-08-02**：9 处（get/post/put/delete/head/get_json/post_json/post_form/get_status_code）均为 `except Exception as e: raise RuntimeError(...)`——重抛非吞掉（**fail-fast 保留，非掩盖型兜底**）；但**过度宽捕获**会把非网络程序错误（如参数 `TypeError`）误包成 "Network failed" 掩盖真实 bug。建议窄化为 `requests.RequestException` + json 解码 `ValueError` 单独处理——错误类型细化属行为变更，**列待决策（本批未改）** |
 | `engine.py`（5 处 388/477/523/751/818） | 编译/运行包装 | 待核验 |
 | `compiler/scheduler.py`（4 处 151/280/323/605） | 导入/编译 | 待核验 |
 | `interpreter/llm_parsing_strategy.py`（5 处 143/209/250/270/279） | LLM 解析兜底 | 待核验 |
