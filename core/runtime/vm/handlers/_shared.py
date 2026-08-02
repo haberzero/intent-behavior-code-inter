@@ -10,6 +10,13 @@ from core.runtime.shared.signals import (
     Signal,
 )
 from core.kernel import ast
+from core.kernel.arg_binding import (
+    DUPLICATE_KEYWORD,
+    TOO_MANY_POSITIONAL,
+    UNKNOWN_KEYWORD,
+    ParamDecl,
+    resolve_call_binding,
+)
 from core.runtime.objects.kernel import (
     IbValue,
     IbLLMCallResult,
@@ -102,65 +109,46 @@ def _get_callee_param_specs(executor, func):
 def _resolve_call_arguments_runtime(executor, specs, positional, keyword_map):
     """运行时统一实参解析：位置 → 具名 → 默认填充 → varargs/varkw。
 
-    产出**按声明序**排列的最终实参列表（默认值经 ``yield`` 惰性求值；
-    ``*args`` 打包为 list、``**kwargs`` 打包为 dict，均装箱为 IbObject）。
-    是 generator：默认表达式求值经由 VM 调度。
+    绑定算法收敛于 `core.kernel.arg_binding.resolve_call_binding`（共享纯核心）；
+    本方法把中性绑定计划映射为按声明序的最终实参列表。是 generator：
+    默认表达式求值经由 VM 调度（yield）。
     """
-    pos_or_kw: list = []
-    kw_only: list = []
-    var_pos = None
-    var_kw = None
-    for name, kind, default_src in specs:
-        if kind == ast.ARG_POSITIONAL_OR_KEYWORD:
-            pos_or_kw.append((name, default_src))
-        elif kind == ast.ARG_KEYWORD_ONLY:
-            kw_only.append((name, default_src))
-        elif kind == ast.ARG_VAR_POSITIONAL:
-            var_pos = name
-        elif kind == ast.ARG_VAR_KEYWORD:
-            var_kw = name
+    params = [
+        ParamDecl(name=name, kind=kind, has_default=default_src is not None)
+        for name, kind, default_src in specs
+    ]
+    default_srcs = [default_src for _name, _kind, default_src in specs]
+    keyword_items = list(keyword_map.items())
+    binding = resolve_call_binding(params, positional, keyword_items)
 
-    values: dict = {}
-    slot = 0
-    varargs: list = []
-    for v in positional:
-        if slot < len(pos_or_kw):
-            values[pos_or_kw[slot][0]] = v
-            slot += 1
-        elif var_pos:
-            varargs.append(v)
-        else:
+    # 非填充类问题按处理顺序抛错（保持既有运行时语义）
+    for issue in binding.issues:
+        if issue.code == TOO_MANY_POSITIONAL:
             raise RuntimeError("VM: too many positional arguments for callable.")
+        if issue.code == DUPLICATE_KEYWORD:
+            raise RuntimeError(f"VM: multiple values for argument '{issue.name}'.")
+        if issue.code == UNKNOWN_KEYWORD:
+            raise RuntimeError(f"VM: unexpected keyword argument '{issue.name}'.")
 
-    pos_names = {n for n, _ in pos_or_kw}
-    kw_names = {n for n, _ in kw_only}
-    for name, v in keyword_map.items():
-        if name in pos_names or name in kw_names:
-            if name in values:
-                raise RuntimeError(f"VM: multiple values for argument '{name}'.")
-            values[name] = v
-        elif var_kw:
-            values.setdefault(var_kw, {})[name] = v
-        else:
-            raise RuntimeError(f"VM: unexpected keyword argument '{name}'.")
-
-    # 默认值惰性填充（未提供的参数）
-    for name, default_src in list(pos_or_kw[slot:]) + kw_only:
-        if name not in values:
-            if default_src is None:
-                raise RuntimeError(f"VM: missing required argument '{name}'.")
-            src_kind, src = default_src
-            values[name] = (yield src) if src_kind == "uid" else src
-
-    # 按声明序产出最终列表
+    # 按声明序装配：默认值惰性求值（yield），缺失必填在此抛出
+    varkw = {name: keyword_map[name] for name in binding.varkw_names}
     final = []
-    for name, kind, _ in specs:
-        if kind == ast.ARG_VAR_POSITIONAL:
-            final.append(executor.registry.box(varargs))
-        elif kind == ast.ARG_VAR_KEYWORD:
-            final.append(executor.registry.box(values.setdefault(var_kw, {})))
-        else:
-            final.append(values[name])
+    for i, (src_kind, src) in enumerate(binding.slots):
+        if src_kind == "varargs":
+            final.append(executor.registry.box(
+                [positional[idx] for idx in binding.varargs]
+            ))
+        elif src_kind == "varkw":
+            final.append(executor.registry.box(varkw))
+        elif src_kind == "positional":
+            final.append(positional[src])
+        elif src_kind == "keyword":
+            final.append(keyword_map[src])
+        elif src_kind == "missing":
+            raise RuntimeError(f"VM: missing required argument '{params[i].name}'.")
+        else:  # default
+            default_kind, default_src = default_srcs[i]
+            final.append((yield default_src) if default_kind == "uid" else default_src)
     return final
 
 

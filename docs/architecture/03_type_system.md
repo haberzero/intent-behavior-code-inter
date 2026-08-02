@@ -192,7 +192,7 @@ class TypeDef(IbSpec):
 
 **与其他机制的交互**：
 - 语义层 `visit_IbCall` 以描述符为权威做结构/类型校验（见 §5.1 编译期调用）。
-- 运行期统一绑定器与语义层共享同一绑定语义（见 `docs/architecture/04_vm_interpreter.md` §2.6）。
+- 语义层与运行期共用同一绑定算法核心（`core/kernel/arg_binding.py`），见 `docs/architecture/04_vm_interpreter.md` §2.6。
 - 原生模块函数的描述符由 discovery 从 vtable `params` 声明构建（格式见 `docs/subsystems/04_plugin_system.md` §4.2）。
 
 ---
@@ -279,6 +279,8 @@ Pass 4/5 SemanticAnalyzer
 ```
 
 实参解析在 `visit_IbCall` 按调用体可用的静态签名选择策略：① 有 `param_descriptors`（用户/LLM 函数、已声明参数的 vtable 模块函数）→ 全量解析（位置 → 具名 → 默认填充 → varargs/varkw），结构/类型错误用 SEM_* 码报告；② 仅 `param_types`（`fn[...]` 签名约束、容器特化方法）→ 只做位置数量与类型检查；③ 无静态签名（内置构造器 / axiom-backed）→ 动态跳过，不报告。三策略的输入统一为调用体的位置 / 具名 / splat 实参列表，输出位置实参类型列表供返回类型推断使用。
+
+策略①的绑定算法与运行期同源，收敛于 `core/kernel/arg_binding.py`（共享纯核心，见 §3.6 交互与 `docs/architecture/04_vm_interpreter.md` §2.6）。
 
 ### 5.2 运行期调用（VM 层）
 

@@ -25,6 +25,12 @@ from core.base.diagnostics.codes import (
     ICE_TYPE_LEAK,
 )
 from core.kernel import ast
+from core.kernel.arg_binding import (
+    MISSING_REQUIRED,
+    TOO_MANY_POSITIONAL,
+    ParamDecl,
+    resolve_call_binding,
+)
 from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
@@ -407,66 +413,59 @@ class ExpressionVisitorsMixin:
     ) -> list:
         """参数描述符驱动的实参解析：位置 → 具名 → 默认填充 → varargs/varkw。
 
-        只报告结构/类型错误；返回位置实参类型列表（供返回类型推断的近似输入）。
+        绑定算法收敛于 `core.kernel.arg_binding.resolve_call_binding`（共享纯核心）；
+        本方法把其中性问题映射为 SEM_* 诊断，并对绑定实参做类型校验。
+        返回位置实参类型列表（供返回类型推断的近似输入）。
         """
-        named_slots = [d for d in descriptors if d.kind in (ast.ARG_POSITIONAL_OR_KEYWORD, ast.ARG_KEYWORD_ONLY)]
-        positional_slots = [d for d in descriptors if d.kind == ast.ARG_POSITIONAL_OR_KEYWORD]
-        has_var_pos = any(d.kind == ast.ARG_VAR_POSITIONAL for d in descriptors)
-        has_var_kw = any(d.kind == ast.ARG_VAR_KEYWORD for d in descriptors)
-        has_star = bool(starred_specs)
-        has_dstar = any(name is None for name, _ in keyword_specs)
-        has_dynamic = has_star or has_dstar
+        params = [
+            ParamDecl(name=d.name, kind=d.kind, has_default=d.has_default)
+            for d in descriptors
+        ]
+        binding = resolve_call_binding(params, positional_specs, keyword_specs)
 
-        name_to_index = {d.name: i for i, d in enumerate(named_slots)}
-        bound: dict = {}
-        overflow = 0
+        # 位置实参类型校验（按声明序）；*args 之后的 keyword-only 槽不参与位置绑定
+        pos_or_kw_count = sum(
+            1 for d in descriptors if d.kind == ast.ARG_POSITIONAL_OR_KEYWORD
+        )
+        for i, actual in enumerate(positional_specs[:pos_or_kw_count]):
+            self._check_call_arg_type(node, descriptors[i].name, actual, descriptors[i])
 
-        # 1. 位置实参按序绑定到位置槽位（keyword-only 不参与位置绑定）。
-        #    先于具名实参绑定：后续具名实参若命中已占槽位即为重复传入。
-        slot = 0
-        for spec in positional_specs:
-            if slot < len(positional_slots):
-                desc = positional_slots[slot]
-                bound[desc.name] = spec
-                self._check_call_arg_type(node, desc.name, spec, desc)
-                slot += 1
-            else:
-                overflow += 1
-
-        # 2. 具名实参：重复（含与位置实参撞槽）/ 未知 校验 + 类型校验。
-        #    函数声明了 **kwargs 时，未声明的具名实参被其吸收（不报未知）。
-        for name, spec in keyword_specs:
-            if name is None:
-                continue  # **expr：运行时展开，无法静态校验
-            if name in name_to_index:
-                if name in bound:
-                    self.error(
-                        f"Keyword argument '{name}' provided multiple times.",
-                        node, code=SEM_DUPLICATE_KEYWORD,
-                    )
-                    continue
-                desc = named_slots[name_to_index[name]]
-                bound[name] = spec
-                self._check_call_arg_type(node, name, spec, desc)
-            elif not has_var_kw:
+        # 具名实参：重复 / 未知 结构错误 + 绑定槽位类型校验（按关键字序）
+        for (name, actual), outcome in zip(keyword_specs, binding.keyword_outcomes):
+            if outcome[0] == "bound":
+                desc = descriptors[outcome[1]]
+                self._check_call_arg_type(node, name, actual, desc)
+            elif outcome[0] == "duplicate":
+                self.error(
+                    f"Keyword argument '{name}' provided multiple times.",
+                    node, code=SEM_DUPLICATE_KEYWORD,
+                )
+            elif outcome[0] == "unknown":
                 self.error(
                     f"Function '{func_type.name}' has no parameter named '{name}'.",
                     node, code=SEM_UNKNOWN_KEYWORD,
                 )
 
-        if not has_dynamic:
-            for desc in named_slots:
-                if desc.name not in bound and not desc.has_default:
+        # 结构性问题：*expr/**expr 存在时缺失必填与位置超限交由运行期裁决
+        has_dynamic = bool(starred_specs) or any(
+            name is None for name, _ in keyword_specs
+        )
+        for issue in binding.issues:
+            if issue.code == TOO_MANY_POSITIONAL:
+                if not has_dynamic:
                     self.error(
-                        f"Function '{func_type.name}' missing required argument '{desc.name}'.",
+                        f"Function '{func_type.name}' expects at most "
+                        f"{pos_or_kw_count} positional argument(s), "
+                        f"but got {len(positional_specs)}.",
+                        node, code=SEM_TOO_MANY_POSITIONAL,
+                    )
+            elif issue.code == MISSING_REQUIRED:
+                if not has_dynamic:
+                    self.error(
+                        f"Function '{func_type.name}' missing required "
+                        f"argument '{issue.name}'.",
                         node, code=SEM_MISSING_REQUIRED_ARG,
                     )
-            if overflow and not has_var_pos:
-                self.error(
-                    f"Function '{func_type.name}' expects at most {len(positional_slots)} "
-                    f"positional argument(s), but got {len(positional_specs)}.",
-                    node, code=SEM_TOO_MANY_POSITIONAL,
-                )
 
         return positional_specs
 
