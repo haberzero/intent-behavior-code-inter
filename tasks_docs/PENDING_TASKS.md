@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-02（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；反射排查已全线完成，遗留项归并至 PT-SEM-4 / REFLECT-ARCH-1；新增 PT-SMELL-1/2/3 技术债审计分支任务）
+> **最后更新**：2026-08-02（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；反射排查已全线完成，遗留项归并至 PT-SEM-4 / REFLECT-ARCH-1；新增 PT-SMELL-1/2/3 技术债审计分支任务；LLM 并行/异步主线确立并梳理 Tier 分层，新增 PT-SYNC-1/2/3）
 
 ---
 
@@ -14,7 +14,7 @@
 **前置条件**: Semantic 4-Phase pipeline 已稳定运行 ✅
 
 **待做**：
-1. 错误信息优化：`SEM_xxx` 错误码转化为用户友好表述
+1. 错误信息优化：`SEM_xxx` 错误码转化为用户友好表述（**Tier 3**：并行主线引入新错误类别——future 未 resolve/超时/资源生命周期，错误表达须覆盖）
 2. 诊断工具：符号表/类型绑定/行为依赖图 JSON/dot 导出
 3. 性能基准：编译时间基准测试
 4. CI/CD 集成
@@ -25,16 +25,16 @@
 
 ### PT-SEM-3　二层 IR 路线评估 [VISION]
 
-### PT-SEM-4　resolve_call_return 兜底双通道待深析 [P3]
+### PT-SEM-4　resolve_call_return 兜底双通道待深析 [P3]（Tier 4，独立于并行主线）
 
 > 反射排查归并遗留：`_expression_visitors.py:304` 在统一入口 `resolve_call_return` 之外直读 `func_type.return_type` 作最后兜底（功能性双通道，非机械冗余）。待评估 `resolve_call_return` 是否应覆盖该路径或显式收敛。
 
 ---
 
-## 二、VM 异步/协程层（L3）[SHELVED]
+## 二、VM 异步/协程层（L3）【已升为主线，见 NEXT_STEPS.md】
 
-> **搁置原因**：原为优先完善多模态功能（2026-08-01 多模态已封存）；协程仍保持搁置，恢复优先级待重估
-> **独立设计文档**：`docs/subsystems/05_coroutine.md`
+> **状态变更（2026-08-02）**：用户裁定 **LLM 真正可用的并行化 + 同步异步** 为当前主线，本方向由 SHELVED 升为主线。原阻塞项（调度器多任务化、async/await 关键字、快照协议）成为主线组成部分；设计文档：`docs/subsystems/05_coroutine.md`。
+> **原搁置原因**：原为优先完善多模态功能（2026-08-01 多模态已封存，2026-08-02 无限期搁置）；协程方向已重新评估并升为主线。
 
 ### 阻塞原因
 1. 调度器架构需从单根任务升级为多任务挂起/恢复
@@ -48,6 +48,14 @@
 | PT-3.1 | `host.run_isolated()` 返回值改进 | 需要协程句柄实现异步等待 |
 | PT-3.2 | `ReceiveMode` 枚举演进 | 需要 yield/resume 语义 |
 
+### 主线隐含新任务（2026-08-02 梳理定案，并行主线自身要求）
+
+| 编号 | 标题 | 目标 |
+|------|------|------|
+| PT-SYNC-1 | 并发正确性验证方法 | Stage 1/2 需要并发测试基建（并发 dispatch 测试、共享状态只读不变式测试）——否则"真正可用"无法被证明 |
+| PT-SYNC-2 | `LLMFuture` 生命周期/错误语义 | resolve 超时/取消/重复 resolve 的用户可见语义——并行可用性的边界 |
+| PT-SYNC-3 | 线程池资源生命周期 | `close()` 语义、关闭后 `dispatch_eager` 的行为（当前会重建池，语义模糊）——资源管理明确化 |
+
 ---
 
 ## 三、语言级能力扩展
@@ -56,13 +64,13 @@
 
 > `primitives.py` 把成员值一律设为名字字符串，数字状态码枚举无法 round-trip。
 
-### PT-4.2　`__call__` 协议类型推断一致性 [VISION]
+### PT-4.2　`__call__` 协议类型推断一致性 [VISION]（Tier 3，独立于并行主线）
 
-> `__call__` 协议在 3 个文档有 3 种不同定性，框架应统一。
+> `__call__` 协议在 3 个文档有 3 种不同定性，框架应统一。**2026-08-02**：与并行主线为弱-中关联（async 未来中可调用对象可能 awaitable，边缘交集）；保持独立，不阻塞主线，async 落地时再评估 `await` 与可调用对象的交互。
 
-### PT-4.3　语言级协程 [SHELVED]
+### PT-4.3　语言级协程 [升为主线，见 NEXT_STEPS.md]
 
-见 §二 + `docs/subsystems/05_coroutine.md`。
+> 2026-08-02 随 §二 升为主线（Stage 3 语言级 async/await）；完整设计见 `docs/subsystems/05_coroutine.md`。
 
 ### PT-4.4　用户类泛型类型参数 [VISION]
 
@@ -98,13 +106,13 @@
 
 > `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 中的测试名与实际文件名不同步。
 
-### PT-TEST-9　`ai.probe_model` 零测试覆盖 [P2]
+### PT-TEST-9　`ai.probe_model` 测试覆盖 [P2]（Tier 2，并行主线可靠性地基）
 
-> `probe_model`（含 MOCK 路径与真实客户端路径）无任何测试。MOCK 路径返回 `MOCK_PROBE_SUCCESS` 并写入 `_model_capabilities`；真实路径含 reasoning 探测判定。需补覆盖以支撑 `_model_capabilities` 策略分支的可信度。
+> `probe_model`（含 MOCK 路径与真实客户端路径）无任何测试。MOCK 路径返回 `MOCK_PROBE_SUCCESS` 并写入 `_model_capabilities`；真实路径含 reasoning 探测判定。**2026-08-02 目标细化**：reasoning 判定决定每个 LLM 调用（串行+并行）的 prompt 注入/提取策略，是行为正确性地基。测试须锁定：① probe 为 setup-time 显式动作（无懒探测竞争，已确认）；② `_model_capabilities` 在并行阶段只读消费（probe 后不可变）不变式；③ MOCK/推理判定/失败兜底三路径 + 消费方决策测试。
 
-### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]
+### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]（已并入主线 Stage 1）
 
-> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项：`_expected_type_stack`（实例级全局，并行化潜在竞争）；`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按 `.opencode/skills/code-quality/SKILL.md` 健康诊断十查全仓扫描。
+> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项。**2026-08-02**：executor 共享状态部分已并入并行主线 **Stage 1**（`_expected_type_stack` 死状态已删、`_result_parser` 懒重建竞争已修 fail-fast、`_current_call_info` 核验按构造无竞争）。**剩余**：`scene` 协议参数保留但无消费者（`__call__` 已注明协议兼容）——删除或激活；`MOCK_CLIENT_SENTINEL`/`TESTONLY` 字面量已常量化的同一批健康问题在其它 `ibci_modules` 插件（json/math/time 等）中可能仍存在，需按 `.opencode/skills/code-quality/SKILL.md` 健康诊断十查全仓扫描。
 
 ### PT-DOC-1 语法手册定位段补充 [P3]
 
