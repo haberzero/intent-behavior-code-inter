@@ -20,16 +20,19 @@ class PluginCapabilities:
     execution_context: Optional[Any] = None
     _capability_registry: Optional[Any] = field(default=None, repr=False)
     _registry: Optional[Any] = field(default=None, repr=False)
+    _plugin_id: str = field(default="", repr=False)
 
-    def expose(self, capability_name: str, provider: Any, priority: int = 0) -> None:
-        """向能力注册表注册一个能力提供者"""
+    def expose(self, capability_name: str, provider: Any, priority: int = 50) -> None:
+        """向能力注册表注册一个能力提供者（以当前插件身份）。"""
         if self._capability_registry:
-            self._capability_registry.register(capability_name, provider, priority)
+            self._capability_registry.register(
+                capability_name, provider, plugin_id=self._plugin_id, priority=priority,
+            )
 
     def revoke(self, capability_name: str) -> None:
-        """从能力注册表移除能力"""
+        """从能力注册表移除当前插件提供的能力。"""
         if self._capability_registry:
-            self._capability_registry.unregister(capability_name)
+            self._capability_registry.unregister(capability_name, plugin_id=self._plugin_id)
 
     def get(self, capability_name: str) -> Optional[Any]:
         """获取已注册的能力"""

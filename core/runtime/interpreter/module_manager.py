@@ -55,9 +55,11 @@ class ModuleManagerImpl:
         if package:
             # 确保 Python 插件实现被正确包装为 IbNativeObject 以支持消息传递
             if not hasattr(package, 'receive'): 
-                # 尝试获取已绑定的 vtable
-                vtable = getattr(package, '_ibci_vtable', None)
-                native_obj = self.object_factory.create_native_object(package, self.registry.get_class("Object"), vtable=vtable)
+                # 从模块契约显式获取 vtable/白名单（替代私有属性注入）
+                contract = self.interop.get_native_contract(module_name)
+                vtable = contract[0] if contract else None
+                whitelist = contract[1] if contract else None
+                native_obj = self.object_factory.create_native_object(package, self.registry.get_class("Object"), vtable=vtable, whitelist=whitelist)
                 # 包装为 IbModule 
                 return self.object_factory.create_module(module_name, native_obj)
             return package

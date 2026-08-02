@@ -19,12 +19,10 @@ class IDbgPlugin(IbPlugin):
         super().__init__()
         self._capabilities: Optional[ExtensionCapabilities] = None
         self._kr: Optional[Any] = None          # KernelRegistry 引用
-        self._cap_registry: Optional[Any] = None  # CapabilityRegistry 引用
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
         self._kr = capabilities.kernel_registry
-        self._cap_registry = capabilities._capability_registry
         # 向能力注册表注册自己为 Debugger Provider
         capabilities.expose("debugger_provider", self)
 
@@ -46,7 +44,7 @@ class IDbgPlugin(IbPlugin):
 
     def _llm_provider(self) -> Optional[Any]:
         """通过 CapabilityRegistry 获取 LLM Provider（由 ibci_ai 注册）。"""
-        return self._cap_registry.get("llm_provider") if self._cap_registry else None
+        return self._capabilities.get("llm_provider") if self._capabilities else None
 
     def _execution_context(self) -> Optional[Any]:
         """通过 KernelRegistry 获取 IExecutionContext 实例。"""

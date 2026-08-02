@@ -180,11 +180,10 @@ class ModuleLoader(IModuleLoader):
 
                         # UTS: 自动装箱 (Native -> IbObject)
                         return reg.box(result)
-                    proxy_wrapper._ibci_param_meta = meta
-                    return proxy_wrapper
+                    # 返回 (proxy_wrapper, param_meta)：param_meta 显式携带，供 IbNativeObject 包装时使用
+                    return proxy_wrapper, param_meta
 
                 proxy_vtable[spec_name] = create_proxy(py_func, registry, param_meta, has_declared_varkw)
-            
             # 2. 处理变量 (Variable / plain MemberSpec)
             else:
                 # 只要在元数据中声明了，就加入白名单允许通过 __getattr__ 访问
@@ -193,16 +192,17 @@ class ModuleLoader(IModuleLoader):
                                            f"declared in _spec.py")
                 whitelist.append(spec_name)
 
-        # 封印虚表和白名单到实现对象上
-        implementation._ibci_vtable = proxy_vtable
-        implementation._ibci_whitelist = whitelist
+        # 显式返回 vtable 与白名单（由调用方经 InterOp.bind_native_contract 承载）
+        return proxy_vtable, whitelist
 
-    def _setup_implementation(self, implementation, context: ServiceContext, capabilities: ExtensionCapabilities):
+    def _setup_implementation(self, implementation, module_name: str, context: ServiceContext, capabilities: ExtensionCapabilities):
         """强制依赖注入协议：必须且仅接受 capabilities 参数"""
         if not hasattr(implementation, 'setup'): return
         
         # 统一注入 ServiceContext 到容器中
         capabilities.service_context = context
+        # 以模块名作为当前插件身份（能力注册的 plugin_id）
+        capabilities._plugin_id = module_name
         
         sig = inspect.signature(implementation.setup)
         # 强制要求 setup(capabilities) 或 setup(self, capabilities)
@@ -255,9 +255,10 @@ class ModuleLoader(IModuleLoader):
             implementation = interop.get_package(entry)
             if not implementation: continue
 
-            self._validate_and_bind(entry, implementation, context, capabilities, registry)
+            vtable, whitelist = self._validate_and_bind(entry, implementation, context, capabilities, registry)
+            interop.bind_native_contract(entry, vtable, whitelist)
             
-            self._setup_implementation(implementation, context, capabilities)
+            self._setup_implementation(implementation, entry, context, capabilities)
                 
             loaded_modules.add(entry)
 
@@ -329,10 +330,11 @@ class ModuleLoader(IModuleLoader):
 
                     # 1. 自动依赖注入 (基于 setup 方法签名)
                     # 必须在校验前注入，因为插件可能根据注入的能力动态决定其虚表 (vtable)
-                    self._setup_implementation(implementation, context, capabilities)
+                    self._setup_implementation(implementation, module_name, context, capabilities)
                     
                     # 2. 校验与绑定 (Proxy VTable)
-                    self._validate_and_bind(module_name, implementation, context, capabilities, registry)
+                    vtable, whitelist = self._validate_and_bind(module_name, implementation, context, capabilities, registry)
+                    interop.bind_native_contract(module_name, vtable, whitelist)
                     
                     # 绑定到运行时宿主
                     interop.register_package(module_name, implementation)

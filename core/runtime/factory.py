@@ -35,8 +35,8 @@ class RuntimeObjectFactory(IObjectFactory):
     def create_scope(self, parent: Optional[Scope] = None) -> Scope:
         return ScopeImpl(parent=parent, registry=self._registry)
 
-    def create_native_object(self, py_obj: Any, ib_class: IIbClass, vtable: Optional[Dict[str, Any]] = None) -> IIbObject:
-        return IbNativeObject(py_obj, ib_class, vtable=vtable)
+    def create_native_object(self, py_obj: Any, ib_class: IIbClass, vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None) -> IIbObject:
+        return IbNativeObject(py_obj, ib_class, vtable=vtable, whitelist=whitelist)
 
     def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, capture_mode: Optional[str] = None, execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, closure: Optional[Dict[str, Any]] = None) -> Any:
         return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, closure=closure)

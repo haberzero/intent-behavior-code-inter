@@ -18,10 +18,9 @@ class IbNativeObject(IbObject):
     def __init__(self, py_obj: Any, ib_class: 'IbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None):
         super().__init__(ib_class)
         self.py_obj = py_obj
-        # 显式持有虚表，消除对 py_obj 的动态属性依赖
-        self.vtable = vtable if vtable is not None else getattr(py_obj, '_ibci_vtable', {})
-        # [SECURITY] 属性访问白名单
-        self.whitelist = whitelist if whitelist is not None else getattr(py_obj, '_ibci_whitelist', [])
+        # 显式持有虚表与属性白名单（由 InterOp.bind_native_contract 承载，无私有属性注入）
+        self.vtable = vtable or {}
+        self.whitelist = whitelist or []
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
@@ -35,7 +34,7 @@ class IbNativeObject(IbObject):
 
         # 1. 如果消息本身就在虚表中 (方法直接调用)
         if message in self.vtable:
-            attr = self.vtable[message]
+            attr = self.vtable[message][0]
             # Proxy VTable 由 ModuleLoader 完成自动装箱转换
             return attr(*args)
 
@@ -55,11 +54,12 @@ class IbNativeObject(IbObject):
                     reg.verify_level_at_least(RegistrationState.STAGE_4_PLUGIN_IMPL.value)
                     raise InterpreterError("Core Error: 'callable' class not found in registry. Primitive initialization failed? ")
 
+                func, param_meta = self.vtable[target_name]
                 return IbNativeFunction(
-                    self.vtable[target_name],
+                    func,
                     ib_class=callable_cls,
                     name=target_name,
-                    param_meta=getattr(self.vtable[target_name], "_ibci_param_meta", None),
+                    param_meta=param_meta,
                 )
 
             # [SECURITY] 仅允许访问白名单属性
@@ -94,36 +94,35 @@ class IbModule(IbObject):
         """
          模块级消息传递核心。
         """
+        is_native = hasattr(self.scope, 'receive')  # IbNativeObject 形态（ScopeImpl 无 receive）
         # 1. 处理 __getattr__ 协议
         if message == '__getattr__' and len(args) > 0:
             target_name = args[0].to_native()
 
-            # 优先从 Native 虚表或实现中查找
-            if hasattr(self.scope, 'receive'):
+            # 优先从 Native 虚表或实现中查找（成员不存在时抛 AttributeError 表示"无此成员"）
+            if is_native:
                 try:
                     return self.scope.receive('__getattr__', args)
                 except AttributeError:
                     pass
-
-            # 其次查找模块级定义的变量/函数 (Scope 模式)
-            if hasattr(self.scope, 'get'):
+            # 其次查找模块级定义的变量/函数 (Scope 模式；仅捕获 KeyError，不吞内部错误)
+            else:
                 try:
                     return self.scope.get(target_name)
-                except (KeyError, AttributeError):
+                except KeyError:
                     pass
 
         # 2. 尝试通过 IbNativeObject 的虚表直接执行 (如果是 Native 模块)
-        if hasattr(self.scope, 'receive'):
+        if is_native:
             try:
                 return self.scope.receive(message, args)
             except AttributeError:
                 pass
-
         # 3. 查找模块级定义的变量/函数 (Scope 模式)
-        if hasattr(self.scope, 'get'):
+        else:
             try:
                 return self.scope.get(message)
-            except (KeyError, AttributeError):
+            except KeyError:
                 pass
 
         # 4. 后备：降级到基类公理 (如 __to_prompt__ 等)
