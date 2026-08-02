@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
@@ -451,7 +452,6 @@ class AIPlugin(IbStatefulPlugin):
                     # 按行分割，过滤掉看起来像推理步骤的行
                     lines = [line.strip() for line in raw_content.split('\n') if line.strip()]
                     valid_lines = []
-                    import re
                     for line in lines:
                         if not re.match(r'^[\d\-\*\s]+(Analyze|Consider|Think|Hypothesis|Wait|Wait,|Let\'s|Actually|Alternative|Decision|Correction|Hypothesis \d+|So|Since)', line, re.IGNORECASE):
                             valid_lines.append(line)

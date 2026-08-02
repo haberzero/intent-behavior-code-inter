@@ -8,6 +8,7 @@ Design principle: Each pass is independent and composable.
 
 from abc import ABC, abstractmethod
 from typing import Optional
+import traceback
 from ..context import SemanticContext
 from ..result import PassResult
 
@@ -55,7 +56,6 @@ class BasePass(ABC):
         try:
             return self.run(context)
         except Exception as e:
-            import traceback
             traceback.print_exc()
             raise
 

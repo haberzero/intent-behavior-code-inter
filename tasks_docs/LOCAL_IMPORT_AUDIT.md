@@ -36,9 +36,9 @@
 
 | # | 位置 | import | 判定 |
 |---|---|---|---|
-| L12 | `interpreter/intrinsics/io.py:23` | `import sys`（重复 2 次） | **可提升**（stdlib，无循环风险；且同函数内重复 import） |
-| L13 | `semantic/passes/base_pass.py:58` | `import traceback` | **可提升**（stdlib） |
-| L14 | `ibci_ai/core.py:454` | `import re` | **可提升**（stdlib，函数内一次性使用） |
+| L12 | `interpreter/intrinsics/io.py:23` | `import sys`（重复 2 次） | **可提升**【已处置 2026-08-02：提升至模块顶部；实测仅 1 处局部 import，审计"重复 2 次"为陈旧标注，已修正】 |
+| L13 | `semantic/passes/base_pass.py:58` | `import traceback` | **可提升**【已处置 2026-08-02：提升至模块顶部】 |
+| L14 | `ibci_ai/core.py:454` | `import re` | **可提升**【已处置 2026-08-02：提升至模块顶部（顶部现含 `import re`）】 |
 
 ### 1.4 动机待核验
 

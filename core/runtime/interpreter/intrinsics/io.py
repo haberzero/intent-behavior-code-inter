@@ -1,4 +1,5 @@
 from typing import Optional, Any
+import sys
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
 from core.runtime.objects.primitives import IbNone
 from core.kernel.registry import KernelRegistry
@@ -20,7 +21,6 @@ def register_io(manager: Any, execution_context: Any, service_context: Any):
         else:
             try:
                 # [WINDOWS FIX] 尝试以 UTF-8 编码打印
-                import sys
                 if hasattr(sys.stdout, 'reconfigure'):
                     try:
                         sys.stdout.reconfigure(encoding='utf-8')
