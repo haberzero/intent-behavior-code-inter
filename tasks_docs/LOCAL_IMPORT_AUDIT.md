@@ -44,8 +44,8 @@
 
 | # | 位置 | import | 判定 |
 |---|---|---|---|
-| L15 | `engine.py:119/123` | kernel_native_modules / file_impl | 待核验（可能构造期避免循环） |
-| L16 | `extension/auto_discovery.py:56` | `from core.runtime.path import` | 待核验 |
+| L15 | `engine.py:119/123` | kernel_native_modules / file_impl | 待核验（可能构造期避免循环）【已核验 2026-08-02：构造期惰性加载 kernel-native 实现，属合法的构造期延迟加载（避免启动期重型模块加载），非无理由局部 import，保留并注明动机】 |
+| L16 | `extension/auto_discovery.py:56` | `from core.runtime.path import` | 待核验【已处置 2026-08-02：`core.runtime.path` 为叶子路径服务（engine.py:26 / module_system/* 均顶层导入），`_get_default_paths` 局部 import 提升至模块顶部】 |
 | L17 | `semantic/context.py:117/118` | passes.prelude / base.enums | 待核验 |
 | L18 | `bootstrap/kernel_native_modules.py:75` | `from kernel.host_interface import` | 待核验 |
 | L19 | `loader/artifact_loader.py:69`、`bootstrapper.py:49`、`runtime_context.py:74`、`_declaration_visitors.py:86/316` | `from core.base.enums import` 等 | 待核验（base.enums 无循环风险，多数应可提升）【已处置 2026-08-02：base.enums 为叶子纯枚举模块，5 文件 6 处局部 import 全部提升至模块顶部；`context.py` 中仅提升 base.enums，`prelude` 局部 import 属真实循环打破，保留】 |
