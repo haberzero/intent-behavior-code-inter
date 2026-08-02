@@ -2,6 +2,7 @@ import os
 import time
 from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
+from core.runtime.capability_registry import CapabilityRegistry
 
 from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine
 
@@ -15,7 +16,7 @@ _MOCK_TEST_MODE_ENV = "IBC_TEST_MODE"
 class AIPlugin(IbStatefulPlugin):
     """
     AI LLM 供应者插件。
-    通过 capabilities.expose("llm_provider", self) 向内核注册 LLM provider。
+    通过 capabilities.expose(CAP_LLM_PROVIDER, self) 向内核注册 LLM provider。
 
     实现 IbStatefulPlugin 协议：LLM 配置、提示词定制等均为跨断点状态，
     断点保存/恢复时由 HostService 负责持久化与恢复。
@@ -69,7 +70,7 @@ class AIPlugin(IbStatefulPlugin):
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
         # 向能力注册表注册自己为 LLM Provider
-        capabilities.expose("llm_provider", self)
+        capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
 
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""
@@ -259,6 +260,9 @@ class AIPlugin(IbStatefulPlugin):
 
     def get_retry(self) -> int:
         return self._config.get("retry", 3)
+
+    def is_auto_intent_injection_enabled(self) -> bool:
+        return self._config.get("auto_intent_injection", True)
 
     def set_timeout(self, seconds: float) -> None:
         self._config["timeout"] = seconds

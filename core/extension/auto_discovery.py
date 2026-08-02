@@ -14,9 +14,8 @@
 """
 import os
 import importlib
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
 
@@ -32,14 +31,7 @@ class PluginSpec:
     description: str = ""
     dependencies: List[str] = field(default_factory=list)
     module_path: str = ""
-    vtable: Optional[Dict[str, Callable]] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    factory: Optional[Callable] = None
     axioms: Dict[str, Any] = field(default_factory=dict)
-
-    def has_vtable(self) -> bool:
-        """检查是否提供了虚表"""
-        return self.vtable is not None and len(self.vtable) > 0
 
     def has_axioms(self) -> bool:
         """检查是否提供了公理"""
@@ -114,11 +106,6 @@ class AutoDiscoveryService:
                 f"plugin '{module_name}' must implement __ibcext_metadata__() method"
             )
 
-        if not hasattr(mod, '__ibcext_vtable__') or not callable(mod.__ibcext_vtable__):
-            raise RuntimeError(
-                f"plugin '{module_name}' must implement __ibcext_vtable__() method"
-            )
-
         spec = PluginSpec(
             name=module_name,
             module_path=spec_path,
@@ -126,21 +113,12 @@ class AutoDiscoveryService:
 
         try:
             metadata = mod.__ibcext_metadata__()
-            spec.metadata = metadata
             spec.name = metadata.get("name", module_name)
             spec.version = metadata.get("version", "1.0.0")
             spec.description = metadata.get("description", "")
             spec.dependencies = metadata.get("dependencies", [])
         except Exception as e:
             raise RuntimeError(f"Failed to get metadata from plugin '{module_name}': {e}") from e
-
-        try:
-            spec.vtable = mod.__ibcext_vtable__()
-        except Exception as e:
-            raise RuntimeError(f"Failed to get vtable from plugin '{module_name}': {e}") from e
-
-        if hasattr(mod, 'create_implementation') and callable(mod.create_implementation):
-            spec.factory = mod.create_implementation
 
         if hasattr(mod, '__ibcext_axiom__') and callable(mod.__ibcext_axiom__):
             try:
@@ -165,19 +143,6 @@ class AutoDiscoveryService:
     def get_plugin_names(self) -> List[str]:
         """获取所有已发现插件的名称列表"""
         return list(self._discovered.keys())
-
-    def create_plugin(self, name: str) -> Optional[Any]:
-        """创建指定插件的实例"""
-        spec = self._discovered.get(name)
-        if not spec:
-            return None
-        if spec.factory:
-            try:
-                return spec.factory()
-            except Exception as e:
-                core_debugger.trace(CoreModule.GENERAL, DebugLevel.DETAIL, f"plugin factory failed, returning None: {e!r}")
-                return None
-        return None
 
 
 def create_auto_discovery_service(search_paths: Optional[List[str]] = None) -> AutoDiscoveryService:

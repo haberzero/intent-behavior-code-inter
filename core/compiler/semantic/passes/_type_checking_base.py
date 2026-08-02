@@ -64,15 +64,13 @@ class TypeCheckBase:
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED, hint: str = None):
         """记录错误诊断"""
-        node_uid = getattr(node, 'uid', None)
         full_message = message
         if hint:
             full_message = f"{message}\nHint: {hint}"
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.ERROR,
             message=full_message,
-            code=code,
-            node_uid=node_uid
+            code=code
         ))
 
     def bind_type(self, node: ast.IbASTNode, type_spec: IbSpec):
@@ -133,15 +131,13 @@ class TypeCheckBase:
 
     def warn(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED, hint: str = None):
         """记录警告诊断"""
-        node_uid = getattr(node, 'uid', None)
         full_message = message
         if hint:
             full_message = f"{message}\nHint: {hint}"
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.WARNING,
             message=full_message,
-            code=code,
-            node_uid=node_uid
+            code=code
         ))
 
     def _resolve_type(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:

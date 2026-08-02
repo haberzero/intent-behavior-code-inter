@@ -106,12 +106,10 @@ class SymbolCollector:
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """记录错误诊断"""
-        node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.ERROR,
             message=message,
-            code=code,
-            node_uid=node_uid
+            code=code
         ))
 
     def _define(self, sym: Symbol, node: ast.IbASTNode):

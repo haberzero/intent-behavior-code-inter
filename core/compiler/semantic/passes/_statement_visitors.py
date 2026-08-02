@@ -234,7 +234,7 @@ class StatementVisitorsMixin:
             if is_constructor_ref:
                 return val_type
             # (b) 类实例引用，且类定义了 __call__
-            members = getattr(val_type, 'members', {}) or {}
+            members = val_type.members
             if '__call__' in members:
                 return val_type
             else:
@@ -279,8 +279,8 @@ class StatementVisitorsMixin:
 
     def _check_callable_sig_match(self, sig: IbSpec, actual: IbSpec, node: ast.IbASTNode):
         """Best-effort structural compatibility check between a CALLABLE_SIG constraint and a concrete callable."""
-        expected_params = [t.head for t in (getattr(sig, 'param_types', None) or [])]
-        actual_params = [t.head for t in (getattr(actual, 'param_types', None) or [])]
+        expected_params = [t.head for t in sig.param_types]
+        actual_params = [t.head for t in actual.param_types]
 
         # Param count check
         if len(actual_params) != len(expected_params):
@@ -306,8 +306,8 @@ class StatementVisitorsMixin:
                 )
 
         # Return type compatibility
-        sig_ret = getattr(sig, 'return_type', None)
-        actual_ret = getattr(actual, 'return_type', None)
+        sig_ret = sig.return_type
+        actual_ret = actual.return_type
         if sig_ret and actual_ret:
             exp_ret = self.registry.resolve(sig_ret.head)
             act_ret = self.registry.resolve(actual_ret.head)
@@ -445,10 +445,6 @@ class StatementVisitorsMixin:
 
     def visit_IbImportFrom(self, node: ast.IbImportFrom) -> Optional[IbSpec]:
         """访问 from ... import 语句"""
-        return None
-
-    def visit_IbIntentAnnotations(self, node: ast.IbIntentAnnotation) -> Optional[IbSpec]:
-        """访问意图注释 (@ / @!)"""
         return None
 
     def visit_IbIntentStackOperation(self, node: ast.IbIntentStackOperation) -> Optional[IbSpec]:

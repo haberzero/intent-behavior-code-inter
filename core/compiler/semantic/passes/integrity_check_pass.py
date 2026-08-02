@@ -6,11 +6,11 @@ Integrity Check Pass (IntegrityPhase)
 输出：PassOutput with location_bindings
 """
 
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 from core.kernel import ast
 
-from ..result import PassResult, PassOutput, Diagnostic
+from ..result import PassResult, PassOutput
 from ..context import SemanticContext
 from .base_pass import BasePass
 
@@ -64,27 +64,8 @@ class IntegrityCheckPass(BasePass):
         loc_binder = LocationBinder(context)
         loc_binder.bind_all(context.ast)
 
-        # Run symbol table consistency check
-        checker = IntegrityChecker(context)
-        checker.check()
-
         output = PassOutput(
             location_bindings=loc_binder.bindings,
-            diagnostics=checker.diagnostics,
             success=True,
         )
         return PassResult.ok(context, output=output)
-
-
-class IntegrityChecker:
-    """符号表一致性检查器"""
-
-    def __init__(self, context: SemanticContext):
-        self.context = context
-        self.diagnostics: List[Diagnostic] = []
-
-    def check(self):
-        """验证符号表中所有符号的一致性。"""
-        for symbol_name, symbol in self.context.symbol_table.current.symbols.items():
-            if hasattr(symbol, 'node_uid') and symbol.node_uid:
-                pass  # 未来可扩展：验证符号定义节点存在性

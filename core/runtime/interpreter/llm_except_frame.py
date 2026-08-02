@@ -46,6 +46,7 @@ Status: Active
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from core.runtime.objects.kernel import IbObject, IbValue, IbNone
+from core.runtime.objects.kernel.base import unbox
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.kernel.issue import InterpreterError
@@ -99,7 +100,7 @@ class LLMExceptFrame:
     # 否则 llmexcept body 内部对意图策略的切换（``use(ctx)``/``clear_inherited()``）
     # 在 retry 后仍会"残留"于活跃指针，造成与 ``_intent_ctx`` 的双轨断裂。
     saved_active_intent_ibobj: Any = field(default=None, repr=False)
-    saved_loop_context: Optional[Dict[str, int]] = None
+    saved_loop_context: Optional[List[Dict[str, int]]] = None
 
     # 循环迭代器断点恢复索引
     # 映射: for 循环节点 UID → 当次重试应从哪个迭代索引开始。
@@ -139,12 +140,8 @@ class LLMExceptFrame:
         if hasattr(runtime_context, "get_active_intent_ibobj"):
             self.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
 
-        if hasattr(runtime_context, '_loop_stack') and runtime_context._loop_stack:
-            # 深拷贝 dict 对象，确保保存的快照与运行时 _loop_stack 完全独立，
-            # 即使 (将来) 循环上下文 dict 被就地修改，也不影响快照的正确性。
-            self.saved_loop_context = {
-                'iterators': [dict(d) for d in runtime_context._loop_stack]
-            }
+        if runtime_context.get_loop_context_stack():
+            self.saved_loop_context = runtime_context.get_loop_context_stack()
 
     def _save_vars_snapshot(self, runtime_context: 'RuntimeContextImpl') -> None:
         """
@@ -178,7 +175,7 @@ class LLMExceptFrame:
             # 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
             # isinstance（非 type() is）确保 IbObject 子类（如未来的 IbAudio/IbImage）也能匹配；
             # 但需要 val.ib_class 存在才能查找方法
-            if isinstance(val, IbObject) and hasattr(val, 'ib_class') and val.ib_class:
+            if isinstance(val, IbObject) and val.ib_class:
                 snapshot_method = val.ib_class.lookup_method('__snapshot__')
                 if snapshot_method:
                     try:
@@ -228,8 +225,8 @@ class LLMExceptFrame:
             forked = self.saved_intent_ctx.fork()
             runtime_context.replace_intent_context(forked)
 
-        if hasattr(runtime_context, '_loop_stack') and self.saved_loop_context:
-            runtime_context._loop_stack = self.saved_loop_context.get('iterators', [])
+        if self.saved_loop_context is not None:
+            runtime_context.restore_loop_context_stack(self.saved_loop_context)
 
         # 注意：loop_resume 字段故意不在此处重置。
         # visit_IbFor 依赖 loop_resume[node_uid] 来判断 retry 后应从哪个迭代索引继续，
@@ -314,8 +311,8 @@ class LLMExceptFrame:
 
     def _values_equal(self, a, b) -> bool:
         """浅层值比较：对 IbValue 使用 to_native()，否则用 identity/==。"""
-        a_native = a.to_native() if hasattr(a, 'to_native') else a
-        b_native = b.to_native() if hasattr(b, 'to_native') else b
+        a_native = unbox(a)
+        b_native = unbox(b)
         try:
             return a_native == b_native
         except Exception:

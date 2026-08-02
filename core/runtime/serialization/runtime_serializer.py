@@ -43,31 +43,19 @@ class RuntimeSerializer(BaseFlatSerializer):
             pools["scopes"] = execution_context.scope_pool
             pools["types"] = execution_context.type_pool
             # 合并现有的资产池
-            if hasattr(execution_context, 'asset_pool'):
-                self.external_assets.update(execution_context.asset_pool)
+            self.external_assets.update(execution_context.asset_pool)
 
         # 完整 IbIntentContext + 活跃 intent_context IBCI 指针。
+        # 快照序列化失败必须 fail-fast：静默丢弃会使恢复端拿到错误的意图上下文。
         full_intent_ctx_uid = None
-        try:
-            intent_ctx = getattr(context, "intent_context", None)
-            if intent_ctx is not None:
-                full_intent_ctx_uid = self._collect_intent_context(intent_ctx)
-        except Exception as e:
-            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"serialize intent_context failed, skipping: {e!r}")
-            full_intent_ctx_uid = None
+        intent_ctx = context.intent_context
+        if intent_ctx is not None:
+            full_intent_ctx_uid = self._collect_intent_context(intent_ctx)
 
         active_intent_ibobj_uid = None
-        try:
-            active = (
-                context.get_active_intent_ibobj()
-                if hasattr(context, "get_active_intent_ibobj")
-                else None
-            )
-            if active is not None:
-                active_intent_ibobj_uid = self._collect_instance(active)
-        except Exception as e:
-            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"serialize active_intent_ibobj failed, skipping: {e!r}")
-            active_intent_ibobj_uid = None
+        active = context.get_active_intent_ibobj()
+        if active is not None:
+            active_intent_ibobj_uid = self._collect_instance(active)
 
         return {
             "version": "2.1",
@@ -76,7 +64,6 @@ class RuntimeSerializer(BaseFlatSerializer):
             "intent_stack": self._process_value(context.intent_stack),
             "intent_ctx_uid": full_intent_ctx_uid,
             "active_intent_ibobj_uid": active_intent_ibobj_uid,
-            "intent_exclusive_depth": getattr(context, "intent_exclusive_depth", 0),
             "pools": pools
         }
 
@@ -117,11 +104,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             symbols_data[name] = self._serialize_symbol(sym)
             
         uid_symbols_data = {}
-        # 注意：_uid_to_symbol 目前不在 Scope 接口中，但这是内部实现细节
-        # 如果需要彻底解耦，应在 Scope 接口中增加获取 UID 符号的方法
-        if hasattr(scope, '_uid_to_symbol'):
-            for suid, sym in getattr(scope, '_uid_to_symbol').items():
-                uid_symbols_data[suid] = self._serialize_symbol(sym)
+        for suid, sym in scope.get_all_symbols_by_uid().items():
+            uid_symbols_data[suid] = self._serialize_symbol(sym)
 
         self.runtime_scope_pool[uid] = {
             "uid": uid,
@@ -145,18 +129,11 @@ class RuntimeSerializer(BaseFlatSerializer):
             return self._collect_instance(value)
         
         # 拓扑序列化 IntentNode，保留结构共享
-        # 注意：此处使用鸭子类型判定以避免循环依赖 (RuntimeSerializer 不直接导入 IntentNode 实现类)
-        if hasattr(value, 'intent') and hasattr(value, 'parent') and hasattr(value, 'to_list'):
+        if isinstance(value, IntentNode):
             return self._collect_intent_node(value)
 
-        # 拓扑序列化 IbIntentContext Python 值。
-        # 鸭子类型：避免循环依赖。
-        if (
-            hasattr(value, "get_intent_top")
-            and hasattr(value, "get_active_intents")
-            and hasattr(value, "fork")
-            and hasattr(value, "_smear_queue")
-        ):
+        # 拓扑序列化 IbIntentContext Python 值
+        if isinstance(value, IbIntentContext):
             return self._collect_intent_context(value)
 
         # 处理基本 Python 类型 (Fallback)
@@ -206,9 +183,9 @@ class RuntimeSerializer(BaseFlatSerializer):
             "class_name": obj.ib_class.name,
         }
         if isinstance(obj, IbValue):
-            type_ref = getattr(obj, "type_ref", None)
+            type_ref = obj.type_ref
             data["type_ref"] = str(type_ref) if type_ref is not None else None
-            if getattr(obj, "meta", None):
+            if obj.meta:
                 data["value_meta"] = dict(obj.meta)
         
         # 根据类型名进行差异化序列化（通过 ib_class.name 而非 isinstance 分派）
@@ -216,10 +193,11 @@ class RuntimeSerializer(BaseFlatSerializer):
 
         # 按 storage_model 分发：磁盘型对象序列化为路径描述符，不物化字节。
         # 注意：只处理实例（IbValue），不处理类元对象（IbClass）。
-        spec = getattr(getattr(obj, "ib_class", None), "spec", None)
-        if isinstance(obj, IbValue) and spec is not None and getattr(spec, "storage_model", None) is StorageModel.DISK_BACKED:
+        spec = obj.ib_class.spec
+        if isinstance(obj, IbValue) and spec is not None and spec.storage_model is StorageModel.DISK_BACKED:
             data["_type"] = "disk_backed"
             descriptor = obj.receive("__to_descriptor__", [])
+            # 协议返回不保证为 IbObject：鸭子拆箱（receive 可返回第三方/原生描述符）
             if hasattr(descriptor, "to_native"):
                 descriptor = descriptor.to_native()
             data["descriptor"] = descriptor
@@ -234,18 +212,22 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["name"] = obj._name
             data["unbox"] = obj.unbox_args
             data["is_method"] = obj.is_method
-            if hasattr(obj, 'logic_id') and obj.logic_id:
+            if obj.logic_id:
                 data["logic_id"] = obj.logic_id
                 
         elif isinstance(obj, IbNativeObject):
             data["_type"] = "native"
-            # 尝试记录原生值
+            # 记录原生值；非 JSON 序列化值必须 fail-fast——占位字符串会
+            # 在恢复时静默替换为错误数据，掩盖真实的序列化失败。
             val = obj.to_native()
             try:
                 json.dumps(val)
-                data["py_value"] = val
-            except (TypeError, ValueError):
-                data["py_value"] = f"<Non-Serializable: {repr(val)}>"
+            except (TypeError, ValueError) as e:
+                raise TypeError(
+                    f"Cannot serialize native object of class '{cls_name}': "
+                    f"to_native() produced non-JSON-serializable value {val!r}"
+                ) from e
+            data["py_value"] = val
                 
         elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):
             data["_type"] = "primitive"
@@ -288,7 +270,7 @@ class RuntimeSerializer(BaseFlatSerializer):
             ci = obj.captured_intents
             if ci is None:
                 data["captured_intents"] = []
-            elif hasattr(ci, "get_active_intents"):
+            elif isinstance(ci, IbIntentContext):
                 data["captured_intents"] = [self._process_value(i) for i in ci.get_active_intents()]
             else:
                 # 不应到达：IIbBehavior 契约要求 None 或 IbIntentContext。
@@ -305,7 +287,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif cls_name == "intent_context":
             # ``intent_context`` IBCI 封装实例序列化
             data["_type"] = "intent_context"
-            ctx = obj.fields.get("_ctx") if hasattr(obj, "fields") else None
+            ctx = obj.fields.get("_ctx")
             data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
             extra_fields = {
                 k: self._process_value(v)
@@ -371,21 +353,19 @@ class RuntimeDeserializer:
             global_scope = global_scope.parent
             
         context = self.factory.create_context(initial_scope=global_scope)
-        # 使用反射设置私有属性，保持接口纯净
-        if hasattr(context, '_current_scope'):
-            setattr(context, '_current_scope', current_scope)
+        context.current_scope = current_scope
 
         intent_ctx_uid = data.get("intent_ctx_uid")
         if intent_ctx_uid:
             restored_ctx = self._get_intent_context(intent_ctx_uid)
-            if restored_ctx is not None and hasattr(context, "replace_intent_context"):
+            if restored_ctx is not None:
                 context.replace_intent_context(restored_ctx)
             active_uid = data.get("active_intent_ibobj_uid")
-            if active_uid and hasattr(context, "set_active_intent_ibobj"):
+            if active_uid:
                 active_obj = self._get_instance(active_uid)
                 # 确保共享引用不变量
-                if active_obj is not None and hasattr(active_obj, "fields"):
-                    if active_obj.fields.get("_ctx") is not getattr(context, "intent_context", None):
+                if active_obj is not None:
+                    if active_obj.fields.get("_ctx") is not context.intent_context:
                         active_obj.fields["_ctx"] = context.intent_context
                 context.set_active_intent_ibobj(active_obj)
         else:
@@ -401,11 +381,7 @@ class RuntimeDeserializer:
             active_intents = self._deserialize_value(intent_stack_raw)
 
             # 恢复活跃意图栈
-            if hasattr(context, 'restore_active_intents'):
-                getattr(context, 'restore_active_intents')(active_intents)
-
-        if hasattr(context, '_intent_exclusive_depth'):
-            setattr(context, '_intent_exclusive_depth', data.get("intent_exclusive_depth", 0))
+            context.restore_active_intents(active_intents)
 
         return context
 
@@ -486,8 +462,7 @@ class RuntimeDeserializer:
             
         for suid, sym_data in data.get("uid_to_symbol", {}).items():
             sym = self._deserialize_symbol(sym_data)
-            if hasattr(scope, 'bind_symbol_by_uid'):
-                getattr(scope, 'bind_symbol_by_uid')(suid, sym)
+            scope.bind_symbol_by_uid(suid, sym)
             
         return scope
 

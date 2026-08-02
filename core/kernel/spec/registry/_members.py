@@ -129,7 +129,7 @@ class _MemberMixin:
                 )
                 # 携带模块成员声明的参数描述符（具名/默认/varargs 实参校验依据）。
                 # 容器特化方法无描述符（空列表），拷贝为空操作。
-                resolved_member.param_descriptors = list(getattr(member, 'param_descriptors', None) or [])
+                resolved_member.param_descriptors = list(member.param_descriptors)
                 return resolved_member
             # Enum variant access: return the enum class type itself
             if (spec.kind == TypeKind.CLASS.value and spec.parent_type is not None

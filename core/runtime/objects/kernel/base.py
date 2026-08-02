@@ -62,12 +62,6 @@ class IbObject:
         if method:
             return method.call(self, args)
 
-        # 消息未找到，尝试调用 method_missing 协议 (Spec 扩展支持)
-        method_missing = self.ib_class.lookup_method('method_missing')
-        if method_missing:
-            # 包装原始消息名作为第一个参数
-            return method_missing.call(self, [self.ib_class.registry.box(message)] + args)
-
         # [cast_to Hook] 处理类型转换消息
         if message == 'cast_to':
             if not args:
@@ -96,8 +90,7 @@ class IbObject:
                     try:
                         prompt_result = to_prompt_method.call(self, [])
                         # Unwrap if it's an IbObject
-                        if hasattr(prompt_result, 'to_native'):
-                            prompt_result = prompt_result.to_native()
+                        prompt_result = unbox(prompt_result)
                         return self.ib_class.registry.box(prompt_result)
                     except Exception as e:
                         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"cast via __to_prompt__ failed for {self.ib_class.name}->{target_name}: {e!r}")
@@ -143,7 +136,7 @@ class IbObject:
         """
         try:
             res = self.receive('__outputhint_prompt__', [])
-            return str(res.to_native()) if hasattr(res, 'to_native') else str(res)
+            return str(res.to_native()) if isinstance(res, IbObject) else str(res)
         except (AttributeError, InterpreterError):
             pass
         return f"请返回一个 {self.ib_class.name} 类型的值"
@@ -267,3 +260,15 @@ class IbValue(IbObject):
 
     def __repr__(self):
         return f"<{self.get_type_name()} value payload={self.payload!r}>"
+
+
+def unbox(value: Any) -> Any:
+    """单一拆箱边界函数：IbObject 数据值 → 原生 Python；原生值原样透传。
+
+    收敛全仓散落的 ``x.to_native() if hasattr(x, 'to_native') else x`` 双轨写法。
+    **不含**可调用实例（behavior/fn_callable/callable）的特殊透传——那些是站点
+    专属语义（如插件代理参数），由调用方按需另行判定。
+    """
+    if isinstance(value, IbObject):
+        return value.to_native()
+    return value

@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..kernel import IbObject, IbValue, IbClass
+from ..kernel.base import unbox
 from core.kernel.issue import InterpreterError
 from ..ib_type_mapping import register_ib_type
 
@@ -68,7 +69,7 @@ class IbList(IbValue):
         return self
 
     def __getitem__(self, key: Any) -> IbObject:
-        idx = key.to_native() if hasattr(key, 'to_native') else key
+        idx = unbox(key)
         try:
             res = self.elements[idx]
             if isinstance(idx, slice):
@@ -79,7 +80,7 @@ class IbList(IbValue):
             raise InterpreterError(f"IndexError: list index out of range: {idx}")
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
-        idx = key.to_native() if hasattr(key, 'to_native') else key
+        idx = unbox(key)
         self.elements[idx] = val
 
     def sort(self) -> IbObject:
@@ -93,13 +94,13 @@ class IbList(IbValue):
 
     def insert(self, index: Any, item: IbObject) -> IbObject:
         """在指定位置插入元素。对齐 Python list.insert(index, item)"""
-        idx = index.to_native() if hasattr(index, 'to_native') else int(index)
+        idx = index.to_native() if isinstance(index, IbObject) else int(index)
         self.elements.insert(idx, item)
         return self.ib_class.registry.get_none()
 
     def remove(self, item: Any) -> IbObject:
         """删除第一个匹配元素。对齐 Python list.remove(item)"""
-        native = item.to_native() if hasattr(item, 'to_native') else item
+        native = unbox(item)
         for i, el in enumerate(self.elements):
             if el.to_native() == native:
                 del self.elements[i]
@@ -108,7 +109,7 @@ class IbList(IbValue):
 
     def index(self, item: Any) -> IbObject:
         """返回第一个匹配元素的索引。对齐 Python list.index(item)"""
-        native = item.to_native() if hasattr(item, 'to_native') else item
+        native = unbox(item)
         for i, el in enumerate(self.elements):
             if el.to_native() == native:
                 return self.ib_class.registry.box(i)
@@ -116,13 +117,13 @@ class IbList(IbValue):
 
     def count(self, item: Any) -> IbObject:
         """统计元素出现次数。对齐 Python list.count(item)"""
-        native = item.to_native() if hasattr(item, 'to_native') else item
+        native = unbox(item)
         cnt = sum(1 for el in self.elements if el.to_native() == native)
         return self.ib_class.registry.box(cnt)
 
     def contains(self, item: Any) -> IbObject:
         """检查是否包含元素（便捷方法，等价于 item in list）"""
-        native = item.to_native() if hasattr(item, 'to_native') else item
+        native = unbox(item)
         return self.ib_class.registry.box(any(el.to_native() == native for el in self.elements))
 
     def __contains__(self, item: Any) -> bool:
@@ -138,7 +139,7 @@ class IbList(IbValue):
 
     def __mul__(self, other: IbObject) -> Any:
         """列表重复: list * int"""
-        n = other.to_native() if hasattr(other, 'to_native') else other
+        n = unbox(other)
         if not isinstance(n, int):
             raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
         return self.elements * n
@@ -199,7 +200,7 @@ class IbTuple(IbValue):
         return self
 
     def __getitem__(self, key: Any) -> IbObject:
-        idx = key.to_native() if hasattr(key, 'to_native') else key
+        idx = unbox(key)
         try:
             res = self.elements[idx]
             if isinstance(idx, slice):
@@ -256,7 +257,7 @@ class IbDict(IbValue):
         """将另一个字典合并到当前字典。对齐 Python dict.update(other)"""
         if isinstance(other, IbDict):
             self.fields.update(other.fields)
-        elif hasattr(other, 'to_native'):
+        elif isinstance(other, IbObject):
             src = other.to_native()
             if isinstance(src, dict):
                 for k, v in src.items():
@@ -276,25 +277,25 @@ class IbDict(IbValue):
         return self
 
     def __getitem__(self, key: Any) -> IbObject:
-        k = key.to_native() if hasattr(key, 'to_native') else key
+        k = unbox(key)
         try:
             return self.fields[k]
         except KeyError:
             raise InterpreterError(f"KeyError: '{k}'")
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
-        k = key.to_native() if hasattr(key, 'to_native') else key
+        k = unbox(key)
         self.fields[k] = val
 
     def get(self, key: Any, default: Optional[IbObject] = None) -> IbObject:
-        k = key.to_native() if hasattr(key, 'to_native') else key
+        k = unbox(key)
         if k in self.fields:
             return self.fields[k]
         return default or self.ib_class.registry.get_none()
 
     def pop(self, key: Any, default: Optional[IbObject] = None) -> IbObject:
         """删除并返回指定 key 的值。对齐 Python dict.pop(key[, default])"""
-        k = key.to_native() if hasattr(key, 'to_native') else key
+        k = unbox(key)
         if k in self.fields:
             return self.fields.pop(k)
         if default is not None:
@@ -303,12 +304,12 @@ class IbDict(IbValue):
 
     def contains(self, key: Any) -> IbObject:
         """检查 key 是否存在于字典中（便捷方法，等价于 key in dict）"""
-        k = key.to_native() if hasattr(key, 'to_native') else key
+        k = unbox(key)
         return self.ib_class.registry.box(k in self.fields)
 
     def remove(self, key: Any) -> IbObject:
         """移除指定 key 的键值对，key 不存在时抛出错误"""
-        k = key.to_native() if hasattr(key, 'to_native') else key
+        k = unbox(key)
         if k not in self.fields:
             raise InterpreterError(f"KeyError: '{k}'")
         del self.fields[k]

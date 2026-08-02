@@ -5,7 +5,7 @@ from core.kernel.issue import InterpreterError
 from core.kernel.spec import IbSpec
 from core.runtime.exceptions import ThrownException
 
-from .base import IbObject
+from .base import IbObject, unbox
 
 
 class IbFunction(IbObject):
@@ -55,7 +55,7 @@ class IbNativeFunction(IbFunction):
 
         final_args = args
         if self.unbox_args:
-            final_args = [arg.to_native() if hasattr(arg, 'to_native') else arg for arg in args]
+            final_args = [unbox(arg) for arg in args]
 
         try:
             if self.is_method:
@@ -73,14 +73,6 @@ class IbNativeFunction(IbFunction):
                 raise
             raise InterpreterError(f"Native function '{self._name}' failed: {e}") from e
 
-    def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        if message == '__getattr__':
-            # [SECURITY] 原生函数禁止泄露底层 Python 函数属性 (如 __class__, __subclasses__)
-            pass
-        return super().receive(message, args)
-
-    def __getattr__(self, name):
-        return getattr(self.py_func, name)
 
 class IbBoundMethod(IbFunction):
     """绑定了接收者的函数 (模拟 C++ 虚表调用的 this 绑定)"""

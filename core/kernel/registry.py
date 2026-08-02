@@ -270,23 +270,6 @@ class KernelRegistry:
         with self._execution_context_lock:
             return self._execution_context
 
-    def create_instance(self, class_name: str, *args, **kwargs) -> Any:
-        """
-        统一对象实例化入口。
-        确保每个实例都绑定到当前的 Registry，并根据真相源获取类定义。
-        """
-        ib_class = self.get_class(class_name)
-        if not ib_class:
-            raise ValueError(f"Registry: Class '{class_name}' not found.")
-        
-        # 优先调用类对象的 instantiate 方法
-        if hasattr(ib_class, 'instantiate'):
-            # 这里的 args 应该是 IbObject 列表
-            return ib_class.instantiate(list(args))
-        
-        # Fallback: 如果是普通 Python 类 (例如在引导阶段)
-        return ib_class(*args, **kwargs)
-
     def register_class(self, name: str, ib_class: Any, token: Any, spec: 'IbSpec'):
         """
         注册类（内置或用户定义），并强制关联其 UTS 描述符。
@@ -372,18 +355,6 @@ class KernelRegistry:
         if self._box_func:
             return self._box_func(self, value, memo)
         return value
-
-    def is_truthy(self, obj: Any) -> bool:
-        """ 判定对象的真值 (Truthy)。"""
-        if obj is None or obj is self._none_instance:
-            return False
-        if hasattr(obj, 'to_bool'):
-            res = obj.to_bool()
-            # to_bool 应该返回 IbInteger(0 或 1)
-            return bool(res.value) if hasattr(res, 'value') else bool(res)
-        if hasattr(obj, 'value'):
-            return bool(obj.value)
-        return True
 
     def make_llm_parse_error(self, message: str, raw_response: str = "", type_name: str = "") -> Any:
         """Construct an LLMParseError IbObject with the given fields."""

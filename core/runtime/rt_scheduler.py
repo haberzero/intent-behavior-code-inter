@@ -12,6 +12,7 @@ from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.host.service import HostService
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.interpreter.llm_executor import LLMExecutorImpl
+from core.runtime.objects.kernel import IbObject
 
 class RuntimeSchedulerImpl:
     """
@@ -123,7 +124,7 @@ class RuntimeSchedulerImpl:
         if variables:
             for name, val in variables.items():
                 # 确保变量被正确装箱
-                if not hasattr(val, 'ib_class'):
+                if not isinstance(val, IbObject):
                     val = interpreter.registry.box(val)
                 interpreter.runtime_context.define_variable(name, val)
         

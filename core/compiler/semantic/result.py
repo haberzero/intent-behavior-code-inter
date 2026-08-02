@@ -26,7 +26,6 @@ class Diagnostic:
     level: DiagnosticLevel
     message: str
     code: str  # e.g., SEM_TYPE_MISMATCH
-    node_uid: Optional[str] = None
     file_path: Optional[str] = None
     line: Optional[int] = None
     column: Optional[int] = None
@@ -46,12 +45,11 @@ class Diagnostic:
         return cls(level=DiagnosticLevel.INFO, message=message, code=code, **kwargs)
 
     @classmethod
-    def from_exception(cls, exc: Exception, node_uid: Optional[str] = None) -> 'Diagnostic':
+    def from_exception(cls, exc: Exception) -> 'Diagnostic':
         return cls(
             level=DiagnosticLevel.ERROR,
             message=str(exc),
             code=SEM_INTERNAL_SENTINEL,
-            node_uid=node_uid,
             hint=f"Exception: {exc.__class__.__name__}"
         )
 
@@ -66,7 +64,6 @@ class Diagnostic:
             'level': self.level.value,
             'message': self.message,
             'code': self.code,
-            'node_uid': self.node_uid,
             'file_path': self.file_path,
             'line': self.line,
             'column': self.column,

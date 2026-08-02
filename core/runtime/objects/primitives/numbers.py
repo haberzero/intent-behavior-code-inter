@@ -105,7 +105,7 @@ class IbBool(IbValue):
     def __eq__(self, other):
         if isinstance(other, IbBool):
             return self.value == other.value
-        if hasattr(other, 'to_native'):
+        if isinstance(other, IbObject):
             return self.value == other.to_native()
         return False
 

@@ -558,12 +558,13 @@ class SymbolResolver(ScopedVisitor):
                                 spec=self.registry.resolve("any"),
                             )
                             scope.define(sym)
-            # 递归进入 if/for/while body（不进入嵌套函数/类定义的 body）
+            # 递归进入嵌套结构（vars() 遍历覆盖 body/orelse 等语句列表；不进入嵌套函数/类定义；
+            # 仅递归纯 IbASTNode 列表——behavior 段等混合字符串字段须跳过）
             if not isinstance(stmt, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):
-                if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):
-                    self._prescan_body_locals(getattr(stmt, 'body'), scope, nonlocal_names)
-                if hasattr(stmt, 'orelse') and isinstance(getattr(stmt, 'orelse'), list):
-                    self._prescan_body_locals(getattr(stmt, 'orelse'), scope, nonlocal_names)
+                for attr in vars(stmt):
+                    child = getattr(stmt, attr)
+                    if isinstance(child, list) and all(isinstance(i, ast.IbASTNode) for i in child):
+                        self._prescan_body_locals(child, scope, nonlocal_names)
 
     def _collect_nonlocal_names(self, body: list) -> set:
         """从函数体中收集所有 nonlocal 声明的变量名。

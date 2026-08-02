@@ -87,7 +87,7 @@ class _InferenceMixin:
 
         # --- Layer 1: Structural callables with explicit return_type ---
         if kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-            ret_ref = getattr(callee_spec, "return_type", None)
+            ret_ref = callee_spec.return_type
             if ret_ref is not None and ret_ref.head:
                 return self.resolve_typeref(ret_ref) or self.resolve("any")
             # Function without explicit return type: axiom fallback
@@ -116,7 +116,7 @@ class _InferenceMixin:
 
         # --- Layer 3: Callable instance (fn_callable / behavior with value_type) ---
         if kind == TypeKind.CALLABLE_INSTANCE.value:
-            v_ref = getattr(callee_spec, "value_type", None)
+            v_ref = callee_spec.value_type
             if v_ref is not None and v_ref.head not in ("auto", "any", "", None):
                 return self.resolve_typeref(v_ref) or self.resolve("any")
             # Axiom fallback for untyped callable instances
@@ -130,7 +130,7 @@ class _InferenceMixin:
 
         # --- Layer 4: Bound method ---
         if kind == TypeKind.BOUND_METHOD.value:
-            ret_ref = getattr(callee_spec, "return_type", None)
+            ret_ref = callee_spec.return_type
             if ret_ref is not None and ret_ref.head:
                 return self.resolve_typeref(ret_ref) or self.resolve("any")
             return self.resolve("any")
@@ -190,7 +190,7 @@ class _InferenceMixin:
             call_spec = self.resolve_member(callee_spec, '__call__')
 
         if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-            ret_ref = getattr(call_spec, 'return_type', None)
+            ret_ref = call_spec.return_type
             if ret_ref and ret_ref.head:
                 return self.resolve_typeref(ret_ref) or self.resolve("any")
             return self.resolve("any")
@@ -250,7 +250,7 @@ class _InferenceMixin:
         """Infer the element type of an iterable."""
         if spec.kind in (TypeKind.LIST.value, TypeKind.TUPLE.value):
             # Multi-type list: element access returns any (user must cast explicitly)
-            if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_types', None):
+            if spec.kind == TypeKind.LIST.value and spec.allowed_element_types:
                 return self.resolve("any")
             return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
@@ -269,7 +269,7 @@ class _InferenceMixin:
         if spec.kind in (TypeKind.LIST.value, TypeKind.TUPLE.value):
             if key_spec.get_base_name() == "int":
                 # Multi-type list: subscript access returns any
-                if spec.kind == TypeKind.LIST.value and getattr(spec, 'allowed_element_types', None):
+                if spec.kind == TypeKind.LIST.value and spec.allowed_element_types:
                     return self.resolve("any")
                 return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
         if spec.kind == TypeKind.DICT.value:

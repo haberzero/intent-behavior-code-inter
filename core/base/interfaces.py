@@ -76,6 +76,8 @@ class ILLMProvider(Protocol):
     def get_return_type_prompt(self, type_name: str) -> Optional[str]: ...
     # 最大 LLM 重试次数：llmexcept 重试循环读取（默认 3）
     def get_retry(self) -> int: ...
+    # 自动意图注入开关：prompt 拼装前读取 provider 配置（默认 True）
+    def is_auto_intent_injection_enabled(self) -> bool: ...
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
@@ -107,11 +109,13 @@ class IILLMExecutor(Protocol):
         """
         ...
 
-    def invoke_llm_function(self, func: Any, context: Any) -> Any:
+    def invoke_llm_function(self, func: Any, context: Any, call_intent: Any = None) -> Any:
         """
         执行一个命名 LLM 函数对象，返回 IbObject 结果。
 
         作用域管理和参数绑定已由 IbLLMFunction.call() 完成。
+        ``call_intent`` 为函数头意图（已在调用前解析），显式传参而非经
+        私有属性暂存。
         此方法负责：调用 execute_llm_function 并把结果经 ``_finalize_invoke_result``
         转译为 IbObject（不确定性结果转译为 ``IbLLMCallResult(is_certain=False)``
         供语句层消费者处理），而非直接返回 LLMResult。

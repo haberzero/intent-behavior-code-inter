@@ -53,8 +53,8 @@ class _AssignabilityMixin:
 
         # Multi-type list compatibility: list[int,str] is assignable to list or list[int,str]
         if src.kind == TypeKind.LIST.value and target.kind == TypeKind.LIST.value:
-            src_allowed = getattr(src, 'allowed_element_types', None) or []
-            tgt_allowed = getattr(target, 'allowed_element_types', None) or []
+            src_allowed = src.allowed_element_types
+            tgt_allowed = target.allowed_element_types
             if src_allowed or tgt_allowed:
                 # If target is bare list, accept any list variant
                 if not tgt_allowed and target.element_type.head == "any":
@@ -102,14 +102,14 @@ class _AssignabilityMixin:
             value_type = arg_specs[0]
             return self.factory.create_fn_callable(
                 value_type_name=value_type.name,
-                value_type_module=getattr(value_type, 'module_path', None),
+                value_type_module=value_type.module_path,
             )
 
         if spec.name == "Optional" and arg_specs:
             value_type = arg_specs[0]
             result = self.register(self.factory.create_optional(
                 wrapped_type_name=value_type.name,
-                wrapped_type_module=getattr(value_type, "module_path", None),
+                wrapped_type_module=value_type.module_path,
             ))
             # Keep Optional[T] behavior consistent with other specialized specs.
             optional_axiom = self._axiom_registry.get_axiom("Optional")

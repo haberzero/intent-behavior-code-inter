@@ -124,10 +124,14 @@ class TypeRef:
         不导入 IbSpec 子类（避免循环），通过 ``get_base_name()`` 分派。
         """
         base = spec.get_base_name()
+        # 延迟导入打破 base↔type_ref 的循环依赖（base 运行时已导入本模块）。
+        from .base import TypeKind
 
-        # TypeDef: element_type
-        if base == "list" and hasattr(spec, "element_type"):
-            elem_ref = getattr(spec, "element_type", None)
+        # 容器 kind 以 TypeKind 分派，不用名字 + 字段探测：hasattr 副守卫
+        # 恒真（仅 TypeDef 携带这些字段），且同名非容器 kind（如名为 "list"
+        # 的用户类）会误命中——须以 kind 判定。
+        if spec.kind == TypeKind.LIST.value:
+            elem_ref = spec.element_type
             if elem_ref is not None and elem_ref.head != "any":
                 return cls(
                     head="list",
@@ -136,9 +140,8 @@ class TypeRef:
                 )
             return cls(head="list", args=(), module=spec.module_path)
 
-        # TypeDef: element_type
-        if base == "tuple" and hasattr(spec, "element_type"):
-            elem_ref = getattr(spec, "element_type", None)
+        if spec.kind == TypeKind.TUPLE.value:
+            elem_ref = spec.element_type
             if elem_ref is not None and elem_ref.head != "any":
                 return cls(
                     head="tuple",
@@ -147,19 +150,16 @@ class TypeRef:
                 )
             return cls(head="tuple", args=(), module=spec.module_path)
 
-        # TypeDef: key_type + value_type
-        if base == "dict" and hasattr(spec, "key_type"):
-            key_ref = getattr(spec, "key_type", cls.of("any"))
-            val_ref = getattr(spec, "value_type", cls.of("any"))
+        if spec.kind == TypeKind.DICT.value:
             return cls(
                 head="dict",
-                args=(key_ref, val_ref),
+                args=(spec.key_type, spec.value_type),
                 module=spec.module_path,
             )
 
-        # TypeDef / TypeDef: value_type
-        if base in ("fn_callable", "behavior") and hasattr(spec, "value_type"):
-            val_ref = getattr(spec, "value_type", None)
+        # fn_callable / behavior 共享 CALLABLE_INSTANCE kind，按名字区分 head
+        if spec.kind == TypeKind.CALLABLE_INSTANCE.value and base in ("fn_callable", "behavior"):
+            val_ref = spec.value_type
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
                 return cls(
                     head=base,
@@ -168,12 +168,10 @@ class TypeRef:
                 )
             return cls(head=base, args=(), module=spec.module_path)
 
-        # TypeDef: wrapped_type
-        if base == "Optional" and hasattr(spec, "wrapped_type"):
-            wrapped_ref = getattr(spec, "wrapped_type", cls.of("any"))
+        if spec.kind == TypeKind.OPTIONAL.value:
             return cls(
                 head="Optional",
-                args=(wrapped_ref,),
+                args=(spec.wrapped_type,),
                 module=spec.module_path,
             )
 

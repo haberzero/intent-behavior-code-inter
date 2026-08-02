@@ -127,7 +127,7 @@ class IbLLMCallResult(IbValue):
 
     def to_native(self, memo=None) -> Any:
         if self.is_certain and self.result_value is not None:
-            return self.result_value.to_native(memo) if hasattr(self.result_value, 'to_native') else self.result_value
+            return self.result_value.to_native(memo) if isinstance(self.result_value, IbObject) else self.result_value
         return None
 
     def __to_prompt__(self) -> str:

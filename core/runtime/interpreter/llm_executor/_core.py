@@ -39,6 +39,7 @@ from typing import Any, List, Optional, Dict, Union, Mapping
 
 from core.runtime.interfaces import ServiceContext, Registry, InterOp, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
+from core.runtime.capability_registry import CapabilityRegistry
 
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.llm_result import LLMFuture
@@ -106,9 +107,9 @@ class LLMExecutorCore:
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
         # 唯一来源：通过能力注册中心获取 Provider (能力名: llm_provider)
-        # ibci_ai.setup() 在加载时调用 capabilities.expose("llm_provider", self) 完成注册。
+        # ibci_ai.setup() 在加载时调用 capabilities.expose(CAP_LLM_PROVIDER, self) 完成注册。
         if self.service_context.capability_registry:
-            provider = self.service_context.capability_registry.get("llm_provider")
+            provider = self.service_context.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
             if provider:
                 return provider
         return None

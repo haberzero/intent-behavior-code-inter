@@ -1,5 +1,6 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
+from core.runtime.objects.kernel.base import unbox
 from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
 from ..objects.primitives import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
 from ..objects.file_handle import IbFileHandle
@@ -21,7 +22,6 @@ from core.kernel.spec import (
     VOID_SPEC,
     ANY_SPEC,
 )
-from core.runtime.support.converters import _cast_numeric_to_native, _cast_string_to_native
 from core.kernel.factory import create_default_registry
 from core.kernel.intent_logic import IntentMode, IntentRole
 from core.runtime.frame import get_current_frame
@@ -45,16 +45,6 @@ def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
             # 绑定为原生方法，运算符通常处理 IbObject 所以 unbox=False
             # 注意：一元运算符 (如 __neg__) 也是同样的逻辑
             _reg_native(ib_cls, magic_name, py_method, unbox=False)
-
-def _cast_string_to(ib_str: 'IbString', target_class: Any) -> Any:
-    """实现 Spec 中的自动类型转换策略 (Descriptor Identity 版)"""
-    target_desc = target_class.spec if hasattr(target_class, 'spec') else None
-    return _cast_string_to_native(ib_str.to_native(), target_desc)
-
-def _cast_numeric_to(ib_num: 'IbObject', target_class: Any) -> Any:
-    """数值类型到其他类型的转换 (Descriptor Identity 版)"""
-    target_desc = target_class.spec if hasattr(target_class, 'spec') else None
-    return _cast_numeric_to_native(ib_num.to_native(), target_desc)
 
 def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     """
@@ -185,13 +175,13 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         
         # 获取 receiver 的 _value
         self_value = receiver.fields.get("_value") if hasattr(receiver, 'fields') else None
-        self_native = self_value.to_native() if self_value and hasattr(self_value, 'to_native') else self_value
+        self_native = self_value.to_native() if self_value and isinstance(self_value, IbObject) else self_value
         
         # 获取 other 的值（可能是另一个 Mood 实例或枚举字面量）
         if hasattr(other, 'fields') and "_value" in other.fields:
             other_value = other.fields.get("_value")
-            other_native = other_value.to_native() if hasattr(other_value, 'to_native') else other_value
-        elif hasattr(other, 'to_native'):
+            other_native = unbox(other_value)
+        elif isinstance(other, IbObject):
             other_native = other.to_native()
         else:
             return registry.box(False)
@@ -322,7 +312,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
     # str.__contains__: 用于 'in' 运算符（右侧为 str 时）
     def _str_contains(self, item):
-        sub = item.to_native() if hasattr(item, 'to_native') else str(item)
+        sub = item.to_native() if isinstance(item, IbObject) else str(item)
         return self.ib_class.registry.box(sub in self.value)
     _reg_native(string_class, '__contains__', _str_contains, unbox=False)
 
@@ -333,7 +323,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
     # list.__contains__: 用于 'in' 运算符（右侧为 list 时）
     def _list_contains(self, item):
-        native = item.to_native() if hasattr(item, 'to_native') else item
+        native = unbox(item)
         result = any(el.to_native() == native for el in self.elements)
         return self.ib_class.registry.box(result)
     _reg_native(list_class, '__contains__', _list_contains, unbox=False)
@@ -345,7 +335,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             """Exception.__init__: 将首个参数存为 message 字段"""
             if init_args:
                 msg_arg = init_args[0]
-                receiver.fields["message"] = msg_arg if hasattr(msg_arg, 'to_native') else registry.box(str(msg_arg))
+                receiver.fields["message"] = msg_arg if isinstance(msg_arg, IbObject) else registry.box(str(msg_arg))
             else:
                 receiver.fields["message"] = registry.box("")
             return registry.get_none()
@@ -365,7 +355,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
     # dict.__contains__: 用于 'in' 运算符（右侧为 dict 时）
     def _dict_contains(self, key):
-        k = key.to_native() if hasattr(key, 'to_native') else key
+        k = unbox(key)
         return self.ib_class.registry.box(k in self.fields)
     _reg_native(dict_class, '__contains__', _dict_contains, unbox=False)
     
@@ -433,11 +423,11 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             if not ctx or not args:
                 return registry.get_none()
             content_obj = args[0]
-            content_str = content_obj.to_native() if hasattr(content_obj, 'to_native') else str(content_obj)
+            content_str = content_obj.to_native() if isinstance(content_obj, IbObject) else str(content_obj)
             tag_str = None
             if len(args) >= 2:
                 tag_obj = args[1]
-                tag_str = tag_obj.to_native() if hasattr(tag_obj, 'to_native') else None
+                tag_str = tag_obj.to_native() if isinstance(tag_obj, IbObject) else None
             intent_cls = registry.get_class("Intent")
             intent = IbIntent(ib_class=intent_cls, content=content_str,
                               mode=IntentMode.APPEND, tag=tag_str, role=IntentRole.DYNAMIC)

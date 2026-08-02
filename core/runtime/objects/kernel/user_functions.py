@@ -182,8 +182,6 @@ class IbLLMFunction(IbFunction):
         self.context = context
         self._spec = spec
         self.module_name = module_name or context.current_module_name
-        # 暂存由 call() 解析的呼叫级意图，供 invoke_llm_function 消费
-        self._pending_call_intent: Optional[Any] = None
 
     @property
     def spec(self) -> Optional[IbSpec]:
@@ -268,21 +266,20 @@ class IbLLMFunction(IbFunction):
                     if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
                         rt_context.use_intent_context(arg_value)
 
-            # 解析呼叫级意图（函数头上的意图），暂存供 invoke_llm_function 消费
+            # 解析呼叫级意图（函数头上的意图），显式传给执行器
+            call_intent = None
             intent_uid = node_data.get("intent")
-            self._pending_call_intent = None
             if intent_uid:
                 intent_data = self.context.get_node_data(intent_uid)
-                self._pending_call_intent = self.context.factory.create_intent_from_node(
+                call_intent = self.context.factory.create_intent_from_node(
                     intent_uid,
                     intent_data,
                     role=IntentRole.SMEAR
                 )
 
             # 公理化调用：通过 KernelRegistry 获取执行器，不再直接持有
-            return executor.invoke_llm_function(self, self.context)
+            return executor.invoke_llm_function(self, self.context, call_intent=call_intent)
         finally:
-            self._pending_call_intent = None
             self.context.pop_stack()
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文

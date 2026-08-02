@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 from ..kernel import IbObject, IbValue, IbClass
+from ..kernel.base import unbox
 from core.runtime.support.converters import _cast_string_to_native
 from core.kernel.issue import InterpreterError
 from core.runtime.exceptions import ThrownException
@@ -59,16 +60,16 @@ class IbString(IbValue):
 
     def join(self, iterable: Any) -> IbObject:
         """用本字符串作为分隔符，连接列表中的元素。对齐 Python str.join(iterable)"""
-        parts = iterable.to_native() if hasattr(iterable, 'to_native') else iterable
+        parts = unbox(iterable)
         str_parts = []
         for p in parts:
-            native = p.to_native() if hasattr(p, 'to_native') else p
+            native = unbox(p)
             str_parts.append(str(native))
         return self.ib_class.registry.box(self.value.join(str_parts))
 
     def format(self, arg: Any) -> IbObject:
         """简单格式化：将 {} 占位符替换为参数的字符串表示。对齐 Python str.format(value)"""
-        val = arg.to_native() if hasattr(arg, 'to_native') else str(arg)
+        val = arg.to_native() if isinstance(arg, IbObject) else str(arg)
         return self.ib_class.registry.box(self.value.format(str(val)))
 
     def split(self, sep: Optional[str] = None) -> IbObject:
@@ -76,7 +77,7 @@ class IbString(IbValue):
             parts = self.value.split()
         else:
             # sep 可能是 IbString（通过 unbox=False 注册的原生方法传入），需先拆箱
-            native_sep = sep.to_native() if hasattr(sep, 'to_native') else sep
+            native_sep = unbox(sep)
             parts = self.value.split(native_sep)
         registry = self.ib_class.registry
         return registry.box([registry.box(p) for p in parts])
@@ -86,19 +87,19 @@ class IbString(IbValue):
 
     def find(self, substring: Any) -> IbObject:
         """查找子串首次出现的位置，未找到返回 -1"""
-        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        sub_str = substring.to_native() if isinstance(substring, IbObject) else str(substring)
         idx = self.value.find(sub_str)
         return self.ib_class.registry.box(idx)
 
     def find_last(self, substring: Any) -> IbObject:
         """查找子串最后一次出现的位置，未找到返回 -1"""
-        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        sub_str = substring.to_native() if isinstance(substring, IbObject) else str(substring)
         idx = self.value.rfind(sub_str)
         return self.ib_class.registry.box(idx)
 
     def contains(self, substring: Any) -> IbObject:
         """检查是否包含子串"""
-        sub_str = substring.to_native() if hasattr(substring, 'to_native') else str(substring)
+        sub_str = substring.to_native() if isinstance(substring, IbObject) else str(substring)
         return self.ib_class.registry.box(sub_str in self.value)
 
     def __contains__(self, item: Any) -> bool:
@@ -108,23 +109,23 @@ class IbString(IbValue):
 
     def replace(self, old: Any, new: Any) -> IbObject:
         """替换子串。对齐 Python str.replace(old, new)"""
-        old_str = old.to_native() if hasattr(old, 'to_native') else str(old)
-        new_str = new.to_native() if hasattr(new, 'to_native') else str(new)
+        old_str = old.to_native() if isinstance(old, IbObject) else str(old)
+        new_str = new.to_native() if isinstance(new, IbObject) else str(new)
         return self.ib_class.registry.box(self.value.replace(old_str, new_str))
 
     def startswith(self, prefix: Any) -> IbObject:
         """判断是否以指定前缀开头。对齐 Python str.startswith(prefix)"""
-        prefix_str = prefix.to_native() if hasattr(prefix, 'to_native') else str(prefix)
+        prefix_str = prefix.to_native() if isinstance(prefix, IbObject) else str(prefix)
         return self.ib_class.registry.box(self.value.startswith(prefix_str))
 
     def endswith(self, suffix: Any) -> IbObject:
         """判断是否以指定后缀结尾。对齐 Python str.endswith(suffix)"""
-        suffix_str = suffix.to_native() if hasattr(suffix, 'to_native') else str(suffix)
+        suffix_str = suffix.to_native() if isinstance(suffix, IbObject) else str(suffix)
         return self.ib_class.registry.box(self.value.endswith(suffix_str))
 
     def __getitem__(self, key: Any) -> IbObject:
         """支持字符串下标与切片"""
-        idx = key.to_native() if hasattr(key, 'to_native') else key
+        idx = unbox(key)
         try:
             res = self.value[idx]
             return self.ib_class.registry.box(res)
@@ -155,7 +156,7 @@ class IbString(IbValue):
 
     def __mul__(self, other: IbObject) -> Any:
         """字符串重复: str * int"""
-        n = other.to_native() if hasattr(other, 'to_native') else other
+        n = unbox(other)
         if not isinstance(n, int):
             raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
         return self.value * n

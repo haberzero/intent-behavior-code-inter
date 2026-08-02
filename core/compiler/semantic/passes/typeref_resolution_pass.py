@@ -51,7 +51,6 @@ class TypeRefResolutionPass(BasePass):
                         level=DiagnosticLevel.ERROR,
                         message=f"Unknown type '{sym.spec.head}' in declaration of '{name}'",
                         code=SEM_UNRESOLVED_TYPE,
-                        node_uid=getattr(sym, 'uid', None),
                     ))
                     sym.spec = any_spec
 

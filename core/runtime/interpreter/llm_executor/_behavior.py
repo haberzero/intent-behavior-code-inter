@@ -76,8 +76,8 @@ class _BehaviorMixin:
 
         provider = self.llm_callback
         auto_intent = True
-        if provider and hasattr(provider, "_config"):
-            auto_intent = provider._config.get("auto_intent_injection", True)
+        if provider:
+            auto_intent = provider.is_auto_intent_injection_enabled()
 
         if not auto_intent:
             if call_intent:
@@ -297,8 +297,8 @@ class _BehaviorMixin:
 
         provider = self.llm_callback
         auto_intent = True
-        if provider and hasattr(provider, "_config"):
-            auto_intent = provider._config.get("auto_intent_injection", True)
+        if provider:
+            auto_intent = provider.is_auto_intent_injection_enabled()
 
         if not auto_intent:
             if call_intent:

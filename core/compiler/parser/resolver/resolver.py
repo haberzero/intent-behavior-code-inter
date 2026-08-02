@@ -131,14 +131,6 @@ class ModuleResolver:
             
         raise ModuleResolveError(module_name, context_file)
 
-    def is_package_dir(self, module_name: str, context_file: Optional[str] = None) -> bool:
-        """Check if the module name resolves to an existing directory (namespace package)."""
-        try:
-            candidate_path = self._get_candidate_path(module_name, context_file)
-            return os.path.isdir(candidate_path)
-        except Exception:
-            return False
-
     def _probe_file(self, base_path: str) -> Optional[str]:
         """Check for file existence with various extensions and package inits."""
         # 1. Check direct file: path.ibci

@@ -125,18 +125,17 @@ class _LLMFunctionMixin:
             _call_info(raw_res),
         )
 
-    def invoke_llm_function(self, func: IbObject, execution_context: IExecutionContext) -> IbObject:
+    def invoke_llm_function(self, func: IbObject, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None) -> IbObject:
         """
         公理化命名 LLM 函数调用入口 —— 供 IbLLMFunction.call() 使用。
 
         作用域管理和参数绑定已由 IbLLMFunction.call() 完成，此方法负责：
-        1. 从 func 对象提取 call_intent（函数头意图）；
-        2. 委托给 execute_llm_function 完成 LLM 推理并返回 LLMResult；
-        3. 直接返回 IbObject；不确定性结果经 ``_finalize_invoke_result``
+        1. 委托给 execute_llm_function 完成 LLM 推理并返回 LLMResult；
+        2. 直接返回 IbObject；不确定性结果经 ``_finalize_invoke_result``
            转译为 ``IbLLMCallResult(is_certain=False)`` 供语句层消费者处理。
+
+        ``call_intent`` 为调用前已解析的函数头意图，显式传参。
         """
-        # call_intent 由 IbLLMFunction 在调用前已解析并暂存到 _pending_call_intent
-        call_intent = getattr(func, '_pending_call_intent', None)
         result = self.execute_llm_function(func.node_uid, execution_context, call_intent=call_intent)
         return self._finalize_invoke_result(result)
 
@@ -239,9 +238,8 @@ class _LLMFunctionMixin:
             _call_info(raw_res),
         )
 
-    def invoke_llm_function_cps(self, func: IbObject, execution_context: IExecutionContext):
+    def invoke_llm_function_cps(self, func: IbObject, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None):
         """CPS 版 :meth:`invoke_llm_function`；段求值嵌入外层 VM 帧栈。"""
-        call_intent = getattr(func, '_pending_call_intent', None)
         result = yield from self.execute_llm_function_cps(
             func.node_uid, execution_context, call_intent=call_intent
         )

@@ -1,5 +1,6 @@
 from typing import List, Any
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
+from core.runtime.objects.kernel.base import unbox
 from core.kernel.registry import KernelRegistry
 
 def register_collection(manager: Any, execution_context: Any, service_context: Any):
@@ -16,7 +17,7 @@ def register_collection(manager: Any, execution_context: Any, service_context: A
 
     def _range(*args):
         """全局 range() 函数"""
-        native_args = [a.to_native() if hasattr(a, 'to_native') else a for a in args]
+        native_args = [unbox(a) for a in args]
         return manager.registry.box(list(range(*native_args)))
 
     # NOTE [INTERNAL — 未来演进路线]:

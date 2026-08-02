@@ -23,6 +23,7 @@ from core.base.path import IbPath
 from core.kernel.issue import InterpreterError
 from core.runtime.objects.file_handle import IbFileHandle
 from core.runtime.objects.media_backing import FileBacking
+from core.runtime.objects.kernel.base import unbox
 
 
 class FileLib:
@@ -114,7 +115,7 @@ class FileLib:
         """
         self._guard_no_file_write_in_retry("write")
 
-        native_data = data.to_native() if hasattr(data, "to_native") else data
+        native_data = unbox(data)
         if isinstance(native_data, list):
             native_data = bytes(native_data)
         binary = isinstance(native_data, (bytes, bytearray))

@@ -268,7 +268,7 @@ class ExpressionVisitorsMixin:
         # (not a type reference), route through __call__ protocol.
         if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
             sym = self.lookup_symbol(node.func.id)
-            if sym and not getattr(sym, 'is_type', True) and '__call__' in (func_type.members or {}):
+            if sym and not sym.is_type and '__call__' in func_type.members:
                 def scope_lookup(class_name: str, method_name: str) -> Optional[IbSpec]:
                     class_sym = self.lookup_symbol(class_name)
                     if class_sym and hasattr(class_sym, 'owned_scope') and class_sym.owned_scope:
@@ -592,7 +592,7 @@ class ExpressionVisitorsMixin:
 
         # 元组位置元素类型精确推断
         if (value_type.kind == TypeKind.TUPLE.value
-                and getattr(value_type, "positional_element_types", None)
+                and value_type.positional_element_types
                 and isinstance(node.slice, ast.IbConstant)
                 and isinstance(node.slice.value, int)
                 and not isinstance(node.slice.value, bool)):
@@ -626,7 +626,7 @@ class ExpressionVisitorsMixin:
         """访问 lambda 表达式 — 返回类型检查与 CALLABLE_SIG 传播"""
         # 1. 确定返回类型标注
         returns_type: Optional[IbSpec] = (
-            self._resolve_type(node.returns) if getattr(node, 'returns', None) is not None else None
+            self._resolve_type(node.returns) if node.returns is not None else None
         )
 
         # 2. 创建 lambda 作用域并注册参数
@@ -685,7 +685,7 @@ class ExpressionVisitorsMixin:
                 self.bind_type(node.body, returns_type)
                 result = self.registry.factory.create_behavior(
                     value_type_name=returns_type.name,
-                    value_type_module=getattr(returns_type, 'module_path', None),
+                    value_type_module=returns_type.module_path,
                 )
                 self.bind_type(node, result)
                 return result
@@ -695,7 +695,7 @@ class ExpressionVisitorsMixin:
             if has_concrete_returns:
                 result = self.registry.factory.create_fn_callable(
                     value_type_name=returns_type.name,
-                    value_type_module=getattr(returns_type, 'module_path', None),
+                    value_type_module=returns_type.module_path,
                 )
                 self.bind_type(node, result)
                 return result

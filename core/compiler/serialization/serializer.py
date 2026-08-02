@@ -174,20 +174,20 @@ class FlatSerializer(BaseFlatSerializer):
         # (IbFnCallable/IbBehavior) and on the AST node, both of which round-trip
         # through their own channels.
         if t.kind == TypeKind.CALLABLE_INSTANCE.value:
-            v_ref = getattr(t, "value_type", None)
+            v_ref = t.value_type
             type_data["value_type_name"] = v_ref.head if v_ref is not None else "auto"
             type_data["axiom_name"] = t.get_base_name()
 
         # Persist TypeDef inner-type scalar fields for artifact rehydration.
         if t.kind == TypeKind.OPTIONAL.value:
-            w_ref = getattr(t, "wrapped_type", None)
+            w_ref = t.wrapped_type
             type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
             type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
         # Persist TypeDef param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
-            type_data["param_type_names"] = [p.head for p in getattr(t, "param_types", [])]
-            ret_ref = getattr(t, "return_type", None)
+            type_data["param_type_names"] = [p.head for p in t.param_types]
+            ret_ref = t.return_type
             type_data["return_type_name"] = ret_ref.head if ret_ref is not None else "auto"
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
@@ -202,7 +202,7 @@ class FlatSerializer(BaseFlatSerializer):
         # 使用 is_class() 代替 isinstance 检查
         if t.kind == TypeKind.CLASS.value:
             # 父类引用：从 parent_type TypeRef 提取扁平名供反序列化使用
-            p_ref = getattr(t, "parent_type", None)
+            p_ref = t.parent_type
             type_data["parent_name"] = p_ref.head if p_ref is not None else None
             type_data["parent_module"] = p_ref.module if p_ref is not None else None
             

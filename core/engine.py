@@ -28,6 +28,7 @@ from core.kernel.registry import KernelRegistry
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+from core.runtime.objects.kernel import IbObject
 from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
@@ -599,7 +600,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     def set_variable(self, name: str, val: Any):
         """[Engine API] 向当前解释器环境注入变量"""
         if self.interpreter:
-            if not hasattr(val, 'ib_class'):
+            if not isinstance(val, IbObject):
                 val = self.interpreter.registry.box(val)
             if self.interpreter.runtime_context:
                 self.interpreter.runtime_context.define_variable(name, val)

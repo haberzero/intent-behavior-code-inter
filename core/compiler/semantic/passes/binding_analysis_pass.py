@@ -335,17 +335,13 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
 
             self._check_mutating_calls(stmt, protected_vars)
 
-            # 递归检查嵌套结构
-            if hasattr(stmt, 'body') and isinstance(getattr(stmt, 'body'), list):
-                self._check_assignments_readonly(stmt.body, protected_vars)
-            if hasattr(stmt, 'orelse') and isinstance(getattr(stmt, 'orelse'), list):
-                self._check_assignments_readonly(stmt.orelse, protected_vars)
-            if hasattr(stmt, 'handlers') and isinstance(getattr(stmt, 'handlers'), list):
-                for handler in stmt.handlers:
-                    if hasattr(handler, 'body') and isinstance(handler.body, list):
-                        self._check_assignments_readonly(handler.body, protected_vars)
-            if hasattr(stmt, 'finalbody') and isinstance(getattr(stmt, 'finalbody'), list):
-                self._check_assignments_readonly(stmt.finalbody, protected_vars)
+            # 递归检查嵌套结构（vars() 遍历统一覆盖 body/orelse/handlers/finalbody 等语句列表）
+            for attr in vars(stmt):
+                child = getattr(stmt, attr)
+                if isinstance(child, list):
+                    for item in child:
+                        if isinstance(item, ast.IbASTNode):
+                            self._check_assignments_readonly([item], protected_vars)
 
     def _check_mutating_calls(self, node: ast.IbASTNode, protected_vars: frozenset):
         """检查节点中的方法调用是否对受保护变量执行 mutating 操作。"""
@@ -607,12 +603,10 @@ class IntentContextValidator:
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """记录错误诊断"""
-        node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.ERROR,
             message=message,
-            code=code,
-            node_uid=node_uid
+            code=code
         ))
 
     def validate(self):

@@ -59,14 +59,14 @@ class IbIntent(IbObject):
                     # 使用统一的协议方法调用（通过 receive）
                     try:
                         prompt_str = val.receive('__to_prompt__', [])
-                        if hasattr(prompt_str, 'to_native'):
+                        if isinstance(prompt_str, IbObject):
                             content_parts.append(str(prompt_str.to_native()))
                         else:
                             content_parts.append(str(prompt_str))
                     except Exception as e:
                         # Fallback: to_native()
                         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"__to_prompt__ failed in intent resolution, falling back to to_native(): {e!r}")
-                        if hasattr(val, 'to_native'):
+                        if isinstance(val, IbObject):
                             content_parts.append(str(val.to_native()))
                         else:
                             content_parts.append(str(val))

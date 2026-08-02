@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from core.extension.ibcext import IbPlugin, ExtensionCapabilities
+from core.runtime.capability_registry import CapabilityRegistry
 
 
 class IDbgPlugin(IbPlugin):
@@ -44,7 +45,7 @@ class IDbgPlugin(IbPlugin):
 
     def _llm_provider(self) -> Optional[Any]:
         """通过 CapabilityRegistry 获取 LLM Provider（由 ibci_ai 注册）。"""
-        return self._capabilities.get("llm_provider") if self._capabilities else None
+        return self._capabilities.get(CapabilityRegistry.CAP_LLM_PROVIDER) if self._capabilities else None
 
     def _execution_context(self) -> Optional[Any]:
         """通过 KernelRegistry 获取 IExecutionContext 实例。"""

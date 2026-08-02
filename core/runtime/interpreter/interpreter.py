@@ -804,10 +804,10 @@ class Interpreter:
         if isinstance(value, IbLLMCallResult) and not value.is_certain:
             return value
         # 先检查是否为字符串值在 llmexcept 帧内的模糊布尔判定
-        if hasattr(value, 'ib_class') and value.ib_class and value.ib_class.name == "str":
+        if isinstance(value, IbObject) and value.ib_class and value.ib_class.name == "str":
             rc = self.runtime_context
             if rc is not None and rc.get_current_llm_except_frame() is not None:
-                raw_val = value.to_native() if hasattr(value, 'to_native') else str(value)
+                raw_val = value.to_native() if isinstance(value, IbObject) else str(value)
                 val = raw_val.strip().lower() if isinstance(raw_val, str) else str(raw_val).strip().lower()
                 if val in ("1", "true", "yes", "on"):
                     return True

@@ -22,6 +22,7 @@ from core.runtime.path import InstallPaths
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import IModuleLoader, ServiceContext
 from core.runtime.interfaces import IExecutionContext
+from core.runtime.objects.kernel.base import unbox
 from core.base.interfaces import IStateReader, IIntentManager
 
 
@@ -149,7 +150,7 @@ class ModuleLoader(IModuleLoader):
                         # 原样透传，避免误拆箱触发未执行 callable 的 to_native() 抛错。
                         if _is_callable_object(value):
                             return value
-                        return value.to_native() if hasattr(value, 'to_native') else value
+                        return unbox(value)
 
                     def proxy_wrapper(*args, **kwargs):
                         # 绑定器把 **kwargs 归集的 dict 装箱为声明序末位的位置实参；

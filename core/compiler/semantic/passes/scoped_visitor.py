@@ -98,20 +98,16 @@ class ScopedVisitor:
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """Record an error diagnostic."""
-        node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.ERROR,
             message=message,
-            code=code,
-            node_uid=node_uid
+            code=code
         ))
 
     def warning(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
         """Record a warning diagnostic."""
-        node_uid = getattr(node, 'uid', None)
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.WARNING,
             message=message,
-            code=code,
-            node_uid=node_uid
+            code=code
         ))

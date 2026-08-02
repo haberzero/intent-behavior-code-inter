@@ -25,6 +25,7 @@ from core.kernel.issue import InterpreterError
 from .ib_type_mapping import register_ib_type, get_ib_implementation
 from .kernel import IbValue, IbClass
 from .media_backing import FileBacking, GeneratedBacking, MediaBacking
+from core.runtime.objects.kernel.base import unbox
 
 
 @register_ib_type("file_handle")
@@ -101,7 +102,7 @@ class IbFileHandle(IbValue):
         作为类级别协议方法注册：运行时调用 ``audio.__from_descriptor__(descriptor)``
         时 ``self`` 为 ``IbClass``；因此返回的实例类型由 ``self`` 决定。
         """
-        descriptor = descriptor_obj.to_native() if hasattr(descriptor_obj, "to_native") else descriptor_obj
+        descriptor = unbox(descriptor_obj)
         path = IbPath.from_native(descriptor["path"])
         backing_type = descriptor.get("backing_type", "file")
         backing: MediaBacking = (

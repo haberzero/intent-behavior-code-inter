@@ -15,6 +15,7 @@ from core.runtime.objects.kernel import (
     IbLLMFunction,
     IbLLMUncertain,
 )
+from core.runtime.objects.kernel.base import unbox
 from core.runtime.exceptions import (
     ThrownException,
 )
@@ -167,11 +168,11 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
 
         if op == "in":
             contained = right.receive("__contains__", [current_left])
-            native = contained.to_native() if hasattr(contained, "to_native") else contained
+            native = unbox(contained)
             cmp_res = executor.registry.box(bool(native))
         elif op == "not in":
             contained = right.receive("__contains__", [current_left])
-            native = contained.to_native() if hasattr(contained, "to_native") else contained
+            native = unbox(contained)
             cmp_res = executor.registry.box(not bool(native))
         elif op == "is":
             if isinstance(right, IbNone):
@@ -336,7 +337,7 @@ def vm_handle_IbDict(executor, node_uid: str, node_data: Mapping[str, Any]):
         val_obj = yield v_uid
         if _is_llm_uncertain_value(val_obj):
             return val_obj
-        native_key = key_obj.to_native() if hasattr(key_obj, "to_native") else key_obj
+        native_key = unbox(key_obj)
         data[native_key] = val_obj
     return executor.registry.box(data)
 
@@ -354,17 +355,17 @@ def vm_handle_IbSlice(executor, node_uid: str, node_data: Mapping[str, Any]):
         lo = yield lower_uid
         if _is_llm_uncertain_value(lo):
             return lo
-        l_val = lo.to_native() if hasattr(lo, "to_native") else lo
+        l_val = unbox(lo)
     if upper_uid:
         up = yield upper_uid
         if _is_llm_uncertain_value(up):
             return up
-        u_val = up.to_native() if hasattr(up, "to_native") else up
+        u_val = unbox(up)
     if step_uid:
         st = yield step_uid
         if _is_llm_uncertain_value(st):
             return st
-        s_val = st.to_native() if hasattr(st, "to_native") else st
+        s_val = unbox(st)
     return executor.registry.box(slice(l_val, u_val, s_val))
 
 

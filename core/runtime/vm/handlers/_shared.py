@@ -21,13 +21,16 @@ from core.kernel.arg_binding import (
 )
 from core.runtime.objects.kernel import (
     IbValue,
+    IbObject,
     IbLLMCallResult,
     IbUserFunction,
     IbLLMFunction,
     _is_intent_context_param,
     _should_activate_intent_context_arg,
 )
+from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.kernel.functions import IbBoundMethod, IbNativeFunction
+from core.runtime.capability_registry import CapabilityRegistry
 from core.base.source_atomic import Location
 from core.runtime.exceptions import (
     ThrownException,
@@ -47,19 +50,19 @@ def _expand_starred(executor, value):
     elems = getattr(value, "elements", None)
     if isinstance(elems, list):
         return list(elems)
-    native = value.to_native() if hasattr(value, "to_native") else value
+    native = unbox(value)
     if isinstance(native, (list, tuple)):
-        return [executor.registry.box(e) if not hasattr(e, "ib_class") else e for e in native]
+        return [executor.registry.box(e) if not isinstance(e, IbObject) else e for e in native]
     raise RuntimeError(f"VM: cannot unpack non-iterable with '*': {type(value).__name__}")
 
 
 def _merge_dstar(executor, keyword_map, value):
     """把 **expr 求值得到的字典合并进具名实参表。"""
-    native = value.to_native() if hasattr(value, "to_native") else value
+    native = unbox(value)
     if not isinstance(native, dict):
         raise RuntimeError(f"VM: cannot unpack non-mapping with '**': {type(value).__name__}")
     for key, item in native.items():
-        keyword_map[key] = item if hasattr(item, "ib_class") else executor.registry.box(item)
+        keyword_map[key] = item if isinstance(item, IbObject) else executor.registry.box(item)
 
 
 def _build_runtime_param_specs(executor, arg_uids):
@@ -352,20 +355,19 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
                     rt_context.use_intent_context(arg_value)
 
         intent_uid = node_data.get("intent")
-        func._pending_call_intent = None
+        call_intent = None
         if intent_uid:
             intent_data = func.context.get_node_data(intent_uid)
-            func._pending_call_intent = func.context.factory.create_intent_from_node(
+            call_intent = func.context.factory.create_intent_from_node(
                 intent_uid,
                 intent_data,
                 role=IntentRole.SMEAR,
             )
 
         yield None
-        result = yield from llm_exec.invoke_llm_function_cps(func, func.context)
+        result = yield from llm_exec.invoke_llm_function_cps(func, func.context, call_intent=call_intent)
         return result
     finally:
-        func._pending_call_intent = None
         func.context.pop_stack()
         rt_context.exit_scope()
         rt_context.exit_intent_scope(saved_intent)
@@ -454,7 +456,7 @@ def _get_max_retry(executor) -> int:
     if sc is not None:
         cap_reg = sc.capability_registry
         if cap_reg is not None:
-            llm_provider = cap_reg.get("llm_provider")
+            llm_provider = cap_reg.get(CapabilityRegistry.CAP_LLM_PROVIDER)
             if llm_provider is not None:
                 return llm_provider.get_retry()
     return 3

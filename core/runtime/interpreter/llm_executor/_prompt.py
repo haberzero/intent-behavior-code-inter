@@ -13,6 +13,7 @@ from core.runtime.shared.llm_result import LLMResult
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
+from core.runtime.objects.kernel.base import IbObject
 
 
 class _PromptMixin:
@@ -33,14 +34,14 @@ class _PromptMixin:
             try:
                 result = val.receive('__to_prompt__', [])
                 # Unwrap if result is an IbObject
-                if hasattr(result, 'to_native'):
+                if isinstance(result, IbObject):
                     return str(result.to_native())
                 return str(result)
             except Exception as e:
                 core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"__to_prompt__ dispatch failed, trying fallback: {e!r}")
 
         # Fallback to to_native() for primitives
-        if hasattr(val, 'to_native'):
+        if isinstance(val, IbObject):
             try:
                 return str(val.to_native())
             except Exception as e:
@@ -67,7 +68,7 @@ class _PromptMixin:
                 result = val.receive('__payload_prompt__', [])
                 if result is not None:
                     # Unwrap IbObject wrappers
-                    if hasattr(result, 'to_native'):
+                    if isinstance(result, IbObject):
                         native = result.to_native()
                         # dict or list of dicts → structured content block
                         if isinstance(native, (dict, list)):
@@ -247,7 +248,7 @@ class _PromptMixin:
                 if method:
                     try:
                         result = method.call(ib_class, [])
-                        hint = result.to_native() if hasattr(result, 'to_native') else str(result)
+                        hint = result.to_native() if isinstance(result, IbObject) else str(result)
                         return str(hint) if hint is not None else None
                     except Exception as e:
                         self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC,

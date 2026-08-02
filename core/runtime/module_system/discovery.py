@@ -9,7 +9,6 @@
 # PathValidator.canonicalize_for_security / InstallPaths.modules_dir().to_native()
 # 提供绝对原生路径，此处不再重复 os.path.abspath。
 import os
-import json
 import inspect
 import importlib.util
 from typing import Dict, List, Optional, Any
@@ -91,28 +90,6 @@ class ModuleDiscoveryService:
                         raise RuntimeError(f"Fatal Error: Failed to load spec for module '{entry}': {e}") from e
 
         return host
-
-    def export_metadata(self, host: HostInterface, output_path: str) -> None:
-        """
-        将发现的元数据导出为 .ibc_meta 文件。
-
-        实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
-        """
-        metadata_snapshot = {
-            "version": "1.0",
-            "modules": {}
-        }
-
-        registry = host.metadata
-        if hasattr(registry, 'to_dict'):
-            snapshot = registry.to_dict()
-            metadata_snapshot["modules"] = snapshot.get("modules", {})
-            metadata_snapshot["classes"] = snapshot.get("classes", {})
-            metadata_snapshot["functions"] = snapshot.get("functions", {})
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata_snapshot, f, indent=2, ensure_ascii=False)
 
     def _load_spec(self, module_name: str, spec_path: str) -> Optional[TypeDef]:
         """
@@ -220,6 +197,13 @@ class ModuleDiscoveryService:
             if callable(func_sig):
                 # 自动从 Python 函数签名提取参数描述
                 param_specs, return_type = self._extract_signature(func_sig)
+                if param_specs is None:
+                    raise RuntimeError(
+                        f"Module '{name_val}': callable '{func_name}' cannot have its "
+                        f"signature introspected (C builtin / dynamic callable). Declare "
+                        f"the signature explicitly as a dict in the vtable instead of "
+                        f"relying on silent 'any' fabrication."
+                    )
                 member = self._build_method_member(func_name, param_specs, return_type)
             elif isinstance(func_sig, dict):
                 return_type = func_sig.get("return_type", "void")
@@ -325,4 +309,6 @@ class ModuleDiscoveryService:
 
             return param_specs, return_type
         except (ValueError, TypeError):
-            return [], "any"
+            # 显式"无签名"状态：C 内建 / 动态 callable 无法内省。交由调用方
+            # fail-fast——伪造空契约会把类型错误静默推迟到运行时才炸。
+            return None, None

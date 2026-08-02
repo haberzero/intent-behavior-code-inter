@@ -11,6 +11,7 @@ from core.runtime.exceptions import (
     ThrownException,
 )
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
+from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
@@ -151,7 +152,7 @@ def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str
             intent_content_parts.append(seg)
         elif isinstance(seg, dict) and seg.get("_type") == "ext_ref":
             intent_content_parts.append(executor.ec.get_asset(seg.get("uid", "")))
-        elif hasattr(seg, "to_native"):
+        elif isinstance(seg, IbObject):
             intent_content_parts.append(str(seg.to_native()))
         else:
             intent_content_parts.append(str(seg))
@@ -285,7 +286,7 @@ def vm_handle_IbRetry(executor, node_uid: str, node_data: Mapping[str, Any]):
     hint_val: Optional[str] = None
     if hint_uid:
         hint_obj = yield hint_uid
-        hint_val = hint_obj.to_native() if hasattr(hint_obj, "to_native") else str(hint_obj)
+        hint_val = hint_obj.to_native() if isinstance(hint_obj, IbObject) else str(hint_obj)
     frame = executor.runtime_context.get_current_llm_except_frame()
     if frame is not None:
         frame.retry_hint = hint_val

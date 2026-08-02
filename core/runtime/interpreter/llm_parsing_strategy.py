@@ -12,6 +12,7 @@ Refactored from llm_executor.py:366-478 to improve maintainability and testabili
 from abc import ABC, abstractmethod
 from typing import Optional, Any, TYPE_CHECKING
 from core.runtime.shared.llm_result import LLMResult
+from core.runtime.objects.kernel.base import IbObject
 from core.base.diagnostics.debugger import CoreModule, DebugLevel
 
 if TYPE_CHECKING:
@@ -198,9 +199,9 @@ class VTableParsingStrategy(ParsingStrategy):
                 if hasattr(validate_result, 'elements') and len(validate_result.elements) >= 2:
                     is_valid = validate_result.elements[0]
                     error_desc = validate_result.elements[1]
-                    is_valid_native = is_valid.to_native() if hasattr(is_valid, 'to_native') else bool(is_valid)
+                    is_valid_native = is_valid.to_native() if isinstance(is_valid, IbObject) else bool(is_valid)
                     if not is_valid_native:
-                        error_str = error_desc.to_native() if hasattr(error_desc, 'to_native') else str(error_desc)
+                        error_str = error_desc.to_native() if isinstance(error_desc, IbObject) else str(error_desc)
                         return LLMResult.uncertain_result(
                             raw_response=raw_res,
                             retry_hint=f"Validation failed: {error_str}"
@@ -222,12 +223,12 @@ class VTableParsingStrategy(ParsingStrategy):
 
             success_val = result_obj.elements[0]
             parsed_val = result_obj.elements[1]
-            success_native = success_val.to_native() if hasattr(success_val, 'to_native') else bool(success_val)
+            success_native = success_val.to_native() if isinstance(success_val, IbObject) else bool(success_val)
 
             if success_native:
                 # Design 2: Auto-box basic values into class instances
                 is_instance_of_target = (
-                    hasattr(parsed_val, 'ib_class') and
+                    isinstance(parsed_val, IbObject) and
                     parsed_val.ib_class is ib_class
                 )
 
@@ -240,7 +241,7 @@ class VTableParsingStrategy(ParsingStrategy):
                     raw_response=raw_res
                 )
             else:
-                hint = parsed_val.to_native() if hasattr(parsed_val, 'to_native') else str(parsed_val)
+                hint = parsed_val.to_native() if isinstance(parsed_val, IbObject) else str(parsed_val)
                 return LLMResult.uncertain_result(
                     raw_response=raw_res,
                     retry_hint=str(hint)

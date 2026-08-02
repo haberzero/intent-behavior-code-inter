@@ -11,6 +11,7 @@ from core.kernel.spec.base import TypeKind
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction
+from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.cell import IbCell
@@ -75,7 +76,7 @@ class ScopeImpl:
             return
             
         # 强契约：运行时类型校验
-        if not hasattr(value, 'ib_class'):
+        if not isinstance(value, IbObject):
             value = self._registry.box(value)
 
         val_spec = value.ib_class.spec if value.ib_class else None
@@ -210,6 +211,23 @@ class ScopeImpl:
     def get_all_symbols(self) -> Dict[str, RuntimeSymbol]:
         """返回当前作用域的所有符号（不包含父作用域）"""
         return dict(self._symbols)
+
+    def get_all_symbols_by_uid(self) -> Dict[str, RuntimeSymbol]:
+        """返回当前作用域的所有 UID → 符号映射（不包含父作用域）。
+
+        序列化/快照恢复的公开枚举接口（替代对私有 ``_uid_to_symbol`` 的探测）。
+        """
+        return dict(self._uid_to_symbol)
+
+    def bind_symbol_by_uid(self, uid: str, sym: RuntimeSymbol) -> None:
+        """将既有符号对象绑定到指定 UID（反序列化恢复路径）。
+
+        若同名符号已由按名恢复（``define``）创建，复用该符号对象而非新建，
+        保持同一逻辑变量在 name 映射与 UID 映射中共享身份。
+        """
+        existing = self._symbols.get(sym.name) if sym.name else None
+        target = existing if existing is not None else sym
+        self._uid_to_symbol[uid] = target
 
     # ------------------------------------------------------------------
     # Cell 变量支持
@@ -485,6 +503,18 @@ class RuntimeContextImpl(RuntimeContext):
             return self._loop_stack[-1]
         return None
 
+    def get_loop_context_stack(self) -> List[Dict[str, int]]:
+        """返回当前循环上下文栈的深拷贝快照（llmexcept 帧保存用）。
+
+        深拷贝保证快照与运行时 ``_loop_stack`` 完全独立，即使后续栈内 dict
+        被就地修改也不影响快照正确性。
+        """
+        return [dict(d) for d in self._loop_stack]
+
+    def restore_loop_context_stack(self, stack: List[Dict[str, int]]) -> None:
+        """以快照整体替换循环上下文栈（llmexcept 帧恢复用）。"""
+        self._loop_stack = list(stack)
+
     def set_global_intent(self, intent: Union[str, IbIntent]) -> None:
         if isinstance(intent, str):
             intent = IbIntent(
@@ -520,7 +550,7 @@ class RuntimeContextImpl(RuntimeContext):
                     val = symbol.value
                     is_class = isinstance(val, IbClass)
                     is_module = isinstance(val, IbModule)
-                    type_name = val.ib_class.name if hasattr(val, 'ib_class') and val.ib_class else "Object"
+                    type_name = val.ib_class.name if isinstance(val, IbObject) and val.ib_class else "Object"
                     
                     # 过滤逻辑：过滤掉非基础类型、下划线变量、类定义、模块、以及内置全局函数
                     if type_name == "Object" or type_name == "Function" or name.startswith("_"):
@@ -547,7 +577,7 @@ class RuntimeContextImpl(RuntimeContext):
                     val = symbol.value
                     # 获取运行时类型名称
                     type_name = "auto"
-                    if hasattr(val, 'ib_class') and val.ib_class:
+                    if isinstance(val, IbObject) and val.ib_class:
                         type_name = val.ib_class.name
                     elif symbol.declared_type:
                         type_name = str(symbol.declared_type)
@@ -559,7 +589,7 @@ class RuntimeContextImpl(RuntimeContext):
                         continue
 
                     res[name] = {
-                        "value": val.to_native() if hasattr(val, 'to_native') else val,
+                        "value": unbox(val),
                         "type": type_name,
                         "metadata": val.serialize_for_debug() if hasattr(val, 'serialize_for_debug') else {},
                         "is_const": symbol.is_const
