@@ -104,7 +104,9 @@ while frame_stack:
 | 缺省参数 | 未绑定的普通 / keyword-only 参数取默认值：用户级默认表达式经 `yield` 惰性求值，原生默认值直接使用字面值 |
 | `*args` / `**kwargs` | 打包为 `list` / `dict`（装箱为 IbObject） |
 
-绑定算法与语义层同源，收敛于 `core/kernel/arg_binding.py:resolve_call_binding`（共享纯核心，见 `docs/architecture/03_type_system.md` §3.6）；运行时适配层 `core/runtime/vm/handlers/_shared.py:_resolve_call_arguments_runtime` 把中性绑定计划映射为按声明序的最终实参列表。调用体参数签名由 `_get_callee_param_specs` 按 callee 种类取得：用户/LLM 函数读自身 AST 的 `IbArg` 节点；fn_callable / behavior 读 `params_uids`；原生模块函数读 loader 附加在实现上的 `_ibci_param_meta`；bound method 解包到内层方法。无静态签名（内置构造器 / axiom-backed）时保持位置直传、忽略具名实参，与语义层动态策略一致。
+绑定算法与语义层同源，收敛于 `core/kernel/arg_binding.py:resolve_call_binding`（共享纯核心，见 `docs/architecture/03_type_system.md` §3.6）；运行时适配层 `core/runtime/vm/handlers/_shared.py:_resolve_call_arguments_runtime` 把中性绑定计划映射为按声明序的最终实参列表。调用体参数签名由 `_get_callee_param_specs` 按 callee 种类取得：用户/LLM 函数读自身 AST 的 `IbArg` 节点；fn_callable / behavior 读 `params_uids`；原生模块函数读 `IbNativeFunction.param_meta` 字段（loader 构建的声明元数据）；bound method 解包到内层方法。无静态签名（内置构造器 / axiom-backed）时保持位置直传、忽略具名实参，与语义层动态策略一致。
+
+原生模块函数声明 `**kwargs`（VAR_KEYWORD）时，绑定器把归集的具名实参 dict 装箱为声明序末位的位置实参；loader 代理（`create_proxy`）识别声明并把它分传为 `**kwargs` 交给原生实现。声明 VAR_KEYWORD 但实现不接受 `**kwargs` 在加载阶段即失败。
 
 该绑定语义与语义层实参解析（`docs/architecture/03_type_system.md` §3.6、§5.1）一致。运行期各 callee 路径保持按索引绑定不变，参数解析的改动收敛在 `vm_handle_IbCall` 单一入口。
 

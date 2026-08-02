@@ -25,7 +25,7 @@ from core.runtime.objects.kernel import (
     _is_intent_context_param,
     _should_activate_intent_context_arg,
 )
-from core.runtime.objects.kernel.functions import IbBoundMethod
+from core.runtime.objects.kernel.functions import IbBoundMethod, IbNativeFunction
 from core.base.source_atomic import Location
 from core.runtime.exceptions import (
     ThrownException,
@@ -87,8 +87,8 @@ def _get_callee_param_specs(executor, func):
     """获取调用体的运行时参数签名（无静态签名时返回 None）。
 
     用户/LLM 函数与 fn_callable/behavior 读取自身 AST 的 IbArg 节点；
-    bound method 解包到其内层方法；原生模块函数读取 loader 附加在
-    实现上的声明（默认源为字面值）。
+    bound method 解包到其内层方法；原生模块函数读取 IbNativeFunction 的
+    ``param_meta`` 字段（默认源为字面值）。
     """
     if isinstance(func, IbBoundMethod):
         return _get_callee_param_specs(executor, func.method)
@@ -101,9 +101,9 @@ def _get_callee_param_specs(executor, func):
             if not func.params_uids:
                 return None
             return _build_runtime_param_specs(executor, func.params_uids) or None
-    proxy = getattr(func, "py_func", None)
-    meta = getattr(proxy, "_ibci_param_meta", None)
-    return meta if meta else None
+    if isinstance(func, IbNativeFunction):
+        return func.param_meta if func.param_meta else None
+    return None
 
 
 def _resolve_call_arguments_runtime(executor, specs, positional, keyword_map):

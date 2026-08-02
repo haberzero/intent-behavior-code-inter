@@ -58,7 +58,8 @@ class IbNativeObject(IbObject):
                 return IbNativeFunction(
                     self.vtable[target_name],
                     ib_class=callable_cls,
-                    name=target_name
+                    name=target_name,
+                    param_meta=getattr(self.vtable[target_name], "_ibci_param_meta", None),
                 )
 
             # [SECURITY] 仅允许访问白名单属性

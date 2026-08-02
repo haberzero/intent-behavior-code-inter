@@ -12,7 +12,7 @@ import os
 import importlib.util
 import inspect
 import sys
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Any, Optional
 
 from core.base.path import IbPath
 from core.runtime.exceptions import RegistryIsolationError
@@ -22,7 +22,7 @@ from core.runtime.path import InstallPaths
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import IModuleLoader, ServiceContext
 from core.runtime.interfaces import IExecutionContext
-from core.base.interfaces import IStateReader, ISymbolView, IIntentManager
+from core.base.interfaces import IStateReader, IIntentManager
 
 
 def _is_callable_object(obj: Any) -> bool:
@@ -43,7 +43,6 @@ def _is_callable_object(obj: Any) -> bool:
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import MethodMemberSpec, IbSpec, TypeKind
-from core.kernel.symbols import FunctionSymbol
 
 class ModuleLoader(IModuleLoader):
     """
@@ -97,51 +96,84 @@ class ModuleLoader(IModuleLoader):
                 if not callable(py_func):
                     raise InterpreterError(f"Plugin implementation error: Module '{module_name}.{spec_name}' is not callable.")
                 
-                # 校验参数签名
+                # 校验参数签名：声明的固定参数（非 *args/**kwargs）实现必须全部接受
                 sig = inspect.signature(py_func)
                 params = [p for p in sig.parameters.values() if p.name != 'self']
                 fixed_params = [p for p in params if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
-                
-                # 允许实现层的参数比 spec 多（如果有默认值），但不能少
-                if len(fixed_params) < param_count:
-                    raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. "
-                                           f"Spec expects {param_count} params, but implementation has only {len(fixed_params)}.")
 
                 # 运行时参数元数据（供统一实参绑定器做具名/默认解析）
                 param_meta = None
+                has_declared_varkw = False
                 declared_descriptors = getattr(spec_member, "param_descriptors", None) or []
                 if declared_descriptors:
                     param_meta = [
                         (d.name, d.kind, ("value", d.default_value) if d.has_default else None)
                         for d in declared_descriptors
                     ]
+                    has_declared_varkw = any(d.kind == "VAR_KEYWORD" for d in declared_descriptors)
+                    fixed_declared_count = sum(
+                        1 for d in declared_descriptors
+                        if d.kind in ("POSITIONAL_OR_KEYWORD", "KEYWORD_ONLY")
+                    )
+                else:
+                    # 旧格式（仅 param_types）：全部按位置参数计
+                    fixed_declared_count = param_count
+
+                # 允许实现层的参数比 spec 多（如果有默认值），但不能少
+                if len(fixed_params) < fixed_declared_count:
+                    raise InterpreterError(f"Plugin Error: Module '{module_name}.{spec_name}' signature mismatch. "
+                                           f"Spec expects {fixed_declared_count} fixed params, but implementation has only {len(fixed_params)}.")
+
+                if declared_descriptors:
                     # 具名参数契约：声明名称必须被实现接受（具名调用依赖名称匹配）
                     impl_names = {p.name for p in params}
-                    has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+                    has_impl_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
                     for d in declared_descriptors:
                         if d.kind in ("POSITIONAL_OR_KEYWORD", "KEYWORD_ONLY") \
-                                and d.name not in impl_names and not has_varkw:
+                                and d.name not in impl_names and not has_impl_varkw:
                             raise InterpreterError(
                                 f"Plugin Error: Module '{module_name}.{spec_name}' declares param "
                                 f"'{d.name}' but implementation does not accept it by name."
                             )
+                    # **kwargs 契约：声明 VAR_KEYWORD 时实现必须接受 **kwargs
+                    if has_declared_varkw and not has_impl_varkw:
+                        raise InterpreterError(
+                            f"Plugin Error: Module '{module_name}.{spec_name}' declares a "
+                            f"VAR_KEYWORD param but implementation does not accept **kwargs."
+                        )
 
-                def create_proxy(target_func, reg, meta):
-                    def proxy_wrapper(*args, **kwargs):
+                def create_proxy(target_func, reg, meta, has_declared_varkw):
+                    def _unbox(value):
                         # UTS: 自动拆箱 (IbObject -> Native)
                         # 可调用实例（behavior/fn_callable/callable）不是数据值，
-                        # 原样透传给实现层（插件按 IBCI 对象处理），避免误拆箱
-                        # 触发未执行 callable 的 to_native() 抛错。
-                        native_args = [
-                            a if _is_callable_object(a)
-                            else (a.to_native() if hasattr(a, 'to_native') else a)
-                            for a in args
-                        ]
-                        native_kwargs = {
-                            k: (v if _is_callable_object(v)
-                                else (v.to_native() if hasattr(v, 'to_native') else v))
-                            for k, v in kwargs.items()
-                        }
+                        # 原样透传，避免误拆箱触发未执行 callable 的 to_native() 抛错。
+                        if _is_callable_object(value):
+                            return value
+                        return value.to_native() if hasattr(value, 'to_native') else value
+
+                    def proxy_wrapper(*args, **kwargs):
+                        # 绑定器把 **kwargs 归集的 dict 装箱为声明序末位的位置实参；
+                        # 声明了 VAR_KEYWORD 时把它分传为 **kwargs 交给原生实现。
+                        if has_declared_varkw and args:
+                            positional, varkw_arg = args[:-1], args[-1]
+                        else:
+                            positional, varkw_arg = args, None
+
+                        native_args = [_unbox(a) for a in positional]
+                        native_kwargs = {k: _unbox(v) for k, v in kwargs.items()}
+                        if varkw_arg is not None:
+                            varkw_fields = getattr(varkw_arg, "fields", None)
+                            if isinstance(varkw_fields, dict):
+                                varkw_items = varkw_fields.items()
+                            elif isinstance(varkw_arg, dict):
+                                varkw_items = varkw_arg.items()
+                            else:
+                                raise InterpreterError(
+                                    f"Plugin Error: Module function expected **kwargs dict, "
+                                    f"got {type(varkw_arg).__name__}."
+                                )
+                            for k, v in varkw_items:
+                                native_kwargs[k] = _unbox(v)
 
                         # 执行 Python 函数
                         result = target_func(*native_args, **native_kwargs)
@@ -151,7 +183,7 @@ class ModuleLoader(IModuleLoader):
                     proxy_wrapper._ibci_param_meta = meta
                     return proxy_wrapper
 
-                proxy_vtable[spec_name] = create_proxy(py_func, registry, param_meta)
+                proxy_vtable[spec_name] = create_proxy(py_func, registry, param_meta, has_declared_varkw)
             
             # 2. 处理变量 (Variable / plain MemberSpec)
             else:

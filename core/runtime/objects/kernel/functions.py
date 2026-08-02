@@ -23,7 +23,7 @@ class IbNativeFunction(IbFunction):
     包装 Python 原生函数的 IBC 函数。
     用于引导阶段注入基础运算（如 int.__add__）。
     """
-    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, spec: Optional[IbSpec] = None):
+    def __init__(self, py_func: Callable, unbox_args: bool = False, is_method: bool = False, ib_class: Optional['IbClass'] = None, name: Optional[str] = None, logic_id: Optional[str] = None, spec: Optional[IbSpec] = None, param_meta: Optional[List[Any]] = None):
         # 强制绑定到协议类，移除静默兜底
         reg = ib_class.registry if ib_class else None
         target_class = ib_class
@@ -41,6 +41,8 @@ class IbNativeFunction(IbFunction):
         self.logic_id = logic_id
         self._name = name or (py_func.__name__ if hasattr(py_func, '__name__') else "anonymous")
         self._spec = spec
+        # 声明参数元数据（(name, kind, default_src) 序列），供统一实参绑定器做具名/默认解析
+        self.param_meta = param_meta
 
     @property
     def spec(self) -> Optional[IbSpec]:

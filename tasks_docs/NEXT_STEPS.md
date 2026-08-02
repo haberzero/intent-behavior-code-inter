@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-01（解析算法收敛完成，候选 1 落定 `core/kernel/arg_binding.py`；media Phase 4 已封存）
+> **最后更新**：2026-08-01（原生 `**kwargs` 分传接通完成；候选 1 = PT-HEALTH-1）
 
 ---
 
@@ -30,28 +30,28 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：无（函数参数机制已收官 + 解析算法已收敛）
+## 当前主线：无（函数参数机制已收官 + 解析算法已收敛 + 原生 kwargs 已接通）
 
 > **函数参数机制（默认 / 具名 / 动态参数）P1-P4 已全部完成并提交**（2026-07-31，`git log`：`14ec729` P1+P2+维修、`f4e501f` P3、`8326063` P4、`b5a54ab` 任务控制、`5d7c2e8` skill 规整）：P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 + vtable 签名升级 → P4 `file.write` 统一 API + 文档。质量维修（人工复查驱动：描述符单点化 / 双路径清理 / 兜底清零）与 `code-quality` skill 同期完成。
 >
 > **架构决策收尾（2026-08-01）已落地**：`ParamDescriptor`/`param_descriptors` → `docs/architecture/03_type_system.md` §3.6；统一绑定器 → `docs/architecture/04_vm_interpreter.md` §2.6；AST 参数节点 → `docs/architecture/02_metadata_ast.md` §2.5；vtable `params` 格式 → `docs/subsystems/04_plugin_system.md` §4.2（已有）。临时文档 `tasks_docs/_function_params.md` 已删除。
 >
 > **语义/运行时解析算法收敛（2026-08-01）已完成**：`_resolve_with_descriptors`（语义）与 `_resolve_call_arguments_runtime`（运行时）的双实现收敛为共享纯核心 `core/kernel/arg_binding.py:resolve_call_binding`（输入 names/kinds/has_default + 位置/具名 → 输出绑定计划 + 中性问题），两适配层各自映射诊断/实参装配。绑定算法单点真源，命中"单点真理/禁双写真相"。
+>
+> **原生 `**kwargs` 分传接通（2026-08-01）已完成**：原生模块函数可声明 `VAR_KEYWORD` 并正确接收未声明具名实参（`create_proxy` 把末位 varkw dict 分传为 `**kwargs`）；签名校验改为只计非 VAR_* 声明参数；声明 VAR_KEYWORD 但实现不接受 `**kwargs` 加载即失败。附带：`_ibci_param_meta` 形式化为 `IbNativeFunction.param_meta` 字段，消除 VM 层对 loader 代理私有属性的 duck-typing。
 
 **已解锁的受益项**：
 - PT-ARCH-28：`file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已落地（`PENDING_TASKS.md` 标记完成）
-- PT-PHASE4-1（已封存）：`register_model(name, url, key, model, **kwargs)` 的前置（`**kwargs` 收集）已就绪，解封恢复时只需声明 vtable VAR_KEYWORD 并扩展原生 kwargs 分传（见下方候选 1）
-- 原生 `**kwargs` 分传的落点已就绪：共享绑定核心的 `("varkw",)` 槽位已支持 varkw 归集，仅剩原生调用适配（见下方候选 1）
+- PT-PHASE4-1（已封存）：`register_model(name, url, key, model, **kwargs)` 的运行时前置（`**kwargs` 收集 + 原生分传）已全部就绪，解封恢复时只需声明 vtable VAR_KEYWORD
 
 **skill 体系现状**（2026-07-31 规整）：`code-health` 已并入 `code-quality`（健康诊断十查 + 质量红线）；新增 `code-odor`（异味特征检测 + 工作过程自查 + 自我质询协议）、`self-grill`（内向化自我质询）、`grilling`（对用户质询）。AGENTS.md 必读清单已同步。
 
 **下一主线候选**（2026-08-01 评估，择一立项）：
 
-1. **原生 `**kwargs` 分传接通（推荐作为下一主线）**：绑定器把 varkw 打包为 dict 位置实参，`def f(*a, **kw)` 原生实现无法按位置接受；扩展原生调用适配（位置 + kwargs 分传）。PT-PHASE4-1 解封前置。相关清理：`_ibci_param_meta` 作为 proxy 私有属性跨模块读取，可形式化为原生函数对象字段。
-2. **PT-HEALTH-1**：`hasattr` 能力探测 → 协议化（封装纪律）。
-3. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
+1. **PT-HEALTH-1（推荐作为下一主线）**：`hasattr` 能力探测 → 协议化（封装纪律）。
+2. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
 
-**既定推荐顺序**：先 1（原生 kwargs 分传）→ 再 2（封装纪律）→ 3（测试体系）。
+**既定推荐顺序**：先 1（封装纪律）→ 再 2（测试体系）。
 
 ---
 
