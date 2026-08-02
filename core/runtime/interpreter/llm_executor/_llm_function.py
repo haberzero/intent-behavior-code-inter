@@ -79,8 +79,8 @@ class _LLMFunctionMixin:
             if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
-        # 从 LLM Provider 获取返回类型提示
-        if self.llm_callback and hasattr(self.llm_callback, 'get_return_type_prompt'):
+        # 从 LLM Provider 获取返回类型提示（协议声明能力，直接调用）
+        if self.llm_callback:
             type_prompt = self.llm_callback.get_return_type_prompt(type_name)
             if type_prompt:
                 sys_prompt += f"\n\n{type_prompt}"
@@ -198,7 +198,7 @@ class _LLMFunctionMixin:
             if returns_data and returns_data["_type"] == "IbName":
                 type_name = returns_data.get("id", "str")
 
-        if self.llm_callback and hasattr(self.llm_callback, 'get_return_type_prompt'):
+        if self.llm_callback:
             type_prompt = self.llm_callback.get_return_type_prompt(type_name)
             if type_prompt:
                 sys_prompt += f"\n\n{type_prompt}"

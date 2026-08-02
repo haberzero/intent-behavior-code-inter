@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-01（media Phase 4 彻底封存：PT-PHASE4-1/2/3 与多模态容器降级为封存参考，短期不考虑实现）
+> **最后更新**：2026-08-01（PT-HEALTH-1 完成；新增 §七 反射规避架构缺陷全仓排查[搁置]）
 
 ---
 
@@ -102,9 +102,13 @@
 
 > `probe_model`（含 MOCK 路径与真实客户端路径）无任何测试。MOCK 路径返回 `MOCK_PROBE_SUCCESS` 并写入 `_model_capabilities`；真实路径含 reasoning 探测判定。需补覆盖以支撑 `_model_capabilities` 策略分支的可信度。
 
-### PT-HEALTH-1　provider 能力探测协议化（`hasattr` 穿透） [P2]
+### PT-HEALTH-1　provider 能力探测协议化（`hasattr` 穿透） [已完成]
 
 > `_llm_function.py` 两处（:83 / :201）用 `hasattr(self.llm_callback, 'get_return_type_prompt')` 探测 provider 能力，违反封装纪律（应经协议声明）。方案：`ILLMProvider` 协议已含 `get_return_type_prompt`（存活），将 hasattr 调用改为直接协议调用；若需可选能力，用显式 capability 标志替代 hasattr 穿透。
+>
+> **已修复（2026-08-01）**：`ILLMProvider` 协议补声明 `get_return_type_prompt`（AIPlugin 已实现，无 isinstance 依赖），`_llm_function.py` 两处改为 `if self.llm_callback:` 直接调用。新增 e2e `tests/e2e/test_e2e_return_type_prompt.py`（注册提示词注入 sys_prompt / 未注册类型跳过）。
+>
+> **同族残留（列入反射规避排查，短期搁置）**：`core/runtime/vm/handlers/_shared.py:449-451` 的 `_get_max_retry` 用 `hasattr(cap_reg, "get")` / `hasattr(llm_provider, "get_retry")` 探测，属同类封装违规，随全仓"反射规避架构缺陷排查"一并处理（见 PENDING §七）。
 
 ### PT-HEALTH-2　`ai.set_return_type_prompt` 无 IBCI 消费者 [P3]
 
@@ -169,6 +173,18 @@
 ### media Phase 4（已彻底封存，短期不考虑）
 
 > **已彻底封存（2026-08-01）**：短期不考虑实现，恢复需显式解封并重新评估设计文档与当前代码基线的一致性。代码层零启动（仅设计文档 `docs/backup/02_multimodal_behavior.md` 存在）。前置（路径统一/内核原生化/磁盘型存储）均已完成，但 Phase 4 容器工作（MediaAxiom + IbMedia + from_response 协议）封存期间不推进。
+
+---
+
+## 七、反射规避架构缺陷排查（短期搁置）
+
+> **来源**：2026-08-01 处理 PT-HEALTH-1 时用户指示——代码中可能存在更多"用反射/探测规避架构设计缺陷"的代码，需全仓找出并**确认背后是否确为架构缺陷**（若是则修复架构根因，而非继续用反射绕开）。现阶段暂时搁置，先处理已知项。
+
+**任务**：
+- 全仓扫描 `hasattr(obj, 'method')` / `getattr(obj, 'attr', default)` / 静默 `except` 等能力探测模式（见 `.opencode/skills/code-quality/SKILL.md` 健康诊断十查 §5、§8 与兜底识别）。
+- 对每个命中点：判断是"职责分离型 fallback"（允许）还是"为规避架构问题而做的穿透"（禁止，优先修架构根因）；区分后可自主修复或上报。
+- 已发现命中点（待处理）：
+  - `core/runtime/vm/handlers/_shared.py:449-451` `_get_max_retry`：`hasattr(cap_reg, "get")` / `hasattr(llm_provider, "get_retry")`（与 PT-HEALTH-1 同族，`get_retry` 可并入 provider 协议或显式能力标志）。
 
 ---
 

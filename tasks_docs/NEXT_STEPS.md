@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-01（原生 `**kwargs` 分传接通完成；候选 1 = PT-HEALTH-1）
+> **最后更新**：2026-08-01（PT-HEALTH-1 完成；PENDING §七 反射排查[搁置]；当前无推荐主线）
 
 ---
 
@@ -30,7 +30,7 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：无（函数参数机制已收官 + 解析算法已收敛 + 原生 kwargs 已接通）
+## 当前主线：无（函数参数机制已收官 + 解析算法已收敛 + 原生 kwargs 已接通 + PT-HEALTH-1 已落地）
 
 > **函数参数机制（默认 / 具名 / 动态参数）P1-P4 已全部完成并提交**（2026-07-31，`git log`：`14ec729` P1+P2+维修、`f4e501f` P3、`8326063` P4、`b5a54ab` 任务控制、`5d7c2e8` skill 规整）：P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 + vtable 签名升级 → P4 `file.write` 统一 API + 文档。质量维修（人工复查驱动：描述符单点化 / 双路径清理 / 兜底清零）与 `code-quality` skill 同期完成。
 >
@@ -39,6 +39,8 @@ python -m pytest tests/
 > **语义/运行时解析算法收敛（2026-08-01）已完成**：`_resolve_with_descriptors`（语义）与 `_resolve_call_arguments_runtime`（运行时）的双实现收敛为共享纯核心 `core/kernel/arg_binding.py:resolve_call_binding`（输入 names/kinds/has_default + 位置/具名 → 输出绑定计划 + 中性问题），两适配层各自映射诊断/实参装配。绑定算法单点真源，命中"单点真理/禁双写真相"。
 >
 > **原生 `**kwargs` 分传接通（2026-08-01）已完成**：原生模块函数可声明 `VAR_KEYWORD` 并正确接收未声明具名实参（`create_proxy` 把末位 varkw dict 分传为 `**kwargs`）；签名校验改为只计非 VAR_* 声明参数；声明 VAR_KEYWORD 但实现不接受 `**kwargs` 加载即失败。附带：`_ibci_param_meta` 形式化为 `IbNativeFunction.param_meta` 字段，消除 VM 层对 loader 代理私有属性的 duck-typing。
+>
+> **PT-HEALTH-1（2026-08-01）已完成**：`ILLMProvider` 协议补声明 `get_return_type_prompt`（AIPlugin 已实现），`_llm_function.py` 两处 `hasattr` 探测改为直接协议调用。新增 e2e `test_e2e_return_type_prompt.py`。同族残留（`_shared.py:449-451` `_get_max_retry` 的 hasattr 探测）与全仓"反射规避架构缺陷排查"一并列入 `PENDING_TASKS.md` §七（短期搁置）。
 
 **已解锁的受益项**：
 - PT-ARCH-28：`file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已落地（`PENDING_TASKS.md` 标记完成）
@@ -48,10 +50,10 @@ python -m pytest tests/
 
 **下一主线候选**（2026-08-01 评估，择一立项）：
 
-1. **PT-HEALTH-1（推荐作为下一主线）**：`hasattr` 能力探测 → 协议化（封装纪律）。
-2. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
+1. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
+2. **PENDING §七 反射规避架构缺陷全仓排查**（短期搁置，可提前解封）。
 
-**既定推荐顺序**：先 1（封装纪律）→ 再 2（测试体系）。
+**既定推荐顺序**：无主线在推进时，转入独立并行任务（测试体系治理）或提前解封 §七 排查。
 
 ---
 
