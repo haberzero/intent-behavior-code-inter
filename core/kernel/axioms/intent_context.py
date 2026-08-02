@@ -17,11 +17,11 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 from core.kernel.spec.type_ref import TypeRef
+from core.kernel.spec.member import MethodMemberSpec
 
 
 def _m(name: str, params: Optional[List[str]] = None, ret: str = "void",
        mutating: bool = False, llmexcept_safe: bool = False):
-    from core.kernel.spec.member import MethodMemberSpec
     return MethodMemberSpec(
         name=name,
         kind="method",

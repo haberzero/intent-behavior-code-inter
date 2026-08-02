@@ -49,7 +49,7 @@
 | L17 | `semantic/context.py:117/118` | passes.prelude / base.enums | 待核验 |
 | L18 | `bootstrap/kernel_native_modules.py:75` | `from kernel.host_interface import` | 待核验 |
 | L19 | `loader/artifact_loader.py:69`、`bootstrapper.py:49`、`runtime_context.py:74`、`_declaration_visitors.py:86/316` | `from core.base.enums import` 等 | 待核验（base.enums 无循环风险，多数应可提升）【已处置 2026-08-02：base.enums 为叶子纯枚举模块，5 文件 6 处局部 import 全部提升至模块顶部；`context.py` 中仅提升 base.enums，`prelude` 局部 import 属真实循环打破，保留】 |
-| L20 | `kernel/axioms/intent_context.py:24`、`intent.py:28` | `from core.kernel.spec.member import` | 待核验 |
+| L20 | `kernel/axioms/intent_context.py:24`、`intent.py:28` | `from core.kernel.spec.member import` | 待核验【已处置 2026-08-02：member.py 为纯数据叶子模块（无运行时对象引用，文档明示打破历史循环）；`_m` 辅助函数内局部 import 提升至模块顶部】 |
 
 ---
 
