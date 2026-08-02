@@ -34,15 +34,19 @@ class _FakeOrchestrator:
 
 
 def _make_service(orchestrator=None):
-    """构造 HostService，仅注入 orchestrator（collect 只依赖它）。"""
-    return HostService(
+    """构造 HostService，仅注入 orchestrator（collect 只依赖它）。
+
+    orchestrator 经公开 property 注入（与生产路径 set_orchestrator 同步一致）。
+    """
+    service = HostService(
         registry=None,
         execution_context=None,
         interop=None,
-        orchestrator=orchestrator,
         setup_context_callback=None,
         get_current_module_callback=None,
     )
+    service.orchestrator = orchestrator
+    return service
 
 
 class TestHostServiceCollect:

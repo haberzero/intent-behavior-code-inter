@@ -26,7 +26,6 @@ class ServiceContextImpl:
                  registry: Any,
                  host_service: Optional['IHostService'] = None,
                  source_provider: Optional[ISourceProvider] = None,
-                 orchestrator: Optional[IKernelOrchestrator] = None,
                  debugger: Any = None,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
@@ -42,7 +41,6 @@ class ServiceContextImpl:
         self._registry = registry
         self._host_service = host_service
         self._source_provider = source_provider
-        self._orchestrator = orchestrator
         self._debugger = debugger
         self._output_callback = output_callback
         self._input_callback = input_callback
@@ -121,9 +119,8 @@ class ServiceContextImpl:
     def set_orchestrator(self, orchestrator: Optional[IKernelOrchestrator]) -> None:
         """注入内核协调器（Engine 在解释器创建完毕后调用）。
 
-        HostService 的 orchestrator 由构造器从 sc.orchestrator 注入
-        （rt_scheduler.spawn 内），但该时序先于本 setter 执行，故此处
-        需将 orchestrator 同步给已创建的 HostService。
+        orchestrator 的唯一注入点：同时写入本容器与已装配的 HostService
+        （HostService 构造不接收 orchestrator，统一经本方法注入）。
         """
         self._orchestrator = orchestrator
         if self._host_service:

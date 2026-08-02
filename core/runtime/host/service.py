@@ -35,19 +35,18 @@ class HostService(IHostService):
                  registry: KernelRegistry,
                  execution_context: IExecutionContext,
                  interop: InterOp,
-                 orchestrator: Optional[IKernelOrchestrator],
                  setup_context_callback: Callable,
                  get_current_module_callback: Callable):
         self.registry = registry
         self.execution_context = execution_context
         self.interop = interop
-        self._orchestrator = orchestrator
+        self._orchestrator = None
         self.setup_context_callback = setup_context_callback
         self.get_current_module_callback = get_current_module_callback
 
     @property
     def orchestrator(self) -> Optional[IKernelOrchestrator]:
-        """内核协调器（构造器注入；可经 ServiceContext.set_orchestrator 更新）。"""
+        """内核协调器（由 ServiceContext.set_orchestrator 统一注入）。"""
         return self._orchestrator
 
     @orchestrator.setter

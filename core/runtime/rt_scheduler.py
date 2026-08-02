@@ -74,7 +74,6 @@ class RuntimeSchedulerImpl:
             input_callback=kwargs.get('input_callback'),
             instance_id=instance_id,
             strict_mode=kwargs.get('strict_mode', True),
-            orchestrator=kwargs.get('orchestrator', getattr(sc, 'orchestrator', None) if sc else None),
             entry_file=kwargs.get('entry_file'),
             entry_dir=kwargs.get('entry_dir')
         )
@@ -84,12 +83,11 @@ class RuntimeSchedulerImpl:
         sub_sc.set_scheduler(self)
         sub_sc.set_capability_registry(kwargs.get('capability_registry'))
 
-        # 5. 装配 HostService
+        # 5. 装配 HostService（orchestrator 由 ServiceContext.set_orchestrator 统一注入）
         host_service = HostService(
             registry=effective_registry,
             execution_context=interpreter._execution_context,
             interop=sub_sc.interop,
-            orchestrator=sc.orchestrator if sc else None,
             setup_context_callback=interpreter.setup_context,
             get_current_module_callback=lambda: interpreter.current_module_name
         )

@@ -47,7 +47,6 @@ def _make_service():
         registry=None,
         execution_context=_StubExecutionContext(),
         interop=_StubInterop(),
-        orchestrator=None,
         setup_context_callback=lambda ctx, force=False: None,
         get_current_module_callback=lambda: None,
     )

@@ -124,7 +124,6 @@ class Interpreter:
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None,
                  kernel_token: Optional[Any] = None,
                  instance_id: str = "main",
-                 orchestrator: Optional[Any] = None,
                  entry_file: str = None,
                  entry_dir: str = None):
         
@@ -222,7 +221,6 @@ class Interpreter:
                 registry=self.registry,
                 host_service=None, # 将由外界注入或通过 scheduler 获取
                 source_provider=self.source_provider,
-                orchestrator=orchestrator,
                 debugger=self.debugger,
                 output_callback=output_callback,
                 input_callback=input_callback,

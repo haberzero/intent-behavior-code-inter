@@ -40,9 +40,11 @@
 
 ---
 
-## 三-A、缺陷组 6：orchestrator 注入双通道 + 生产死参数链【高优先级】
+## 三-A、缺陷组 6：orchestrator 注入双通道 + 生产死参数链【已修复】
 
 > **发现背景**：组 1 修复后的自我质询中，`set_orchestrator` 分支曾被误判为"死代码"（质询 14）。用户指出"误判可能暴露设计不一致"，经完整时序追踪确认：**该分支是功能必需代码，但恰好掩盖了 orchestrator 注入链的构造死参数缺陷**。误判本身是设计缺陷的症状信号。
+>
+> **修复状态**：方案 A 已实施（2026-08-02），全量 pytest 1263 passed / 4 skipped。
 
 **根因**：orchestrator 注入存在"双通道"——生产路径的构造注入链恒失效（死参数），真实注入完全依赖 `set_orchestrator` 事后同步。这违反"双通道被禁止"（code-quality §一.3）与"单点真理"（§五）。
 
@@ -61,29 +63,27 @@ _prepare_interpreter (engine.py:302):
   C. rt_scheduler.hydrate(sub_sc)
 ```
 
-### 问题点清单
+### 问题点清单（方案 A 已修复 6.1-6.3；6.4 保留为必要同步；6.5 组 1 已处理）
 
-| # | 位置 | 问题 | 性质 |
+| # | 位置 | 问题 | 处置 |
 |---|---|---|---|
-| 6.1 | `HostService.__init__` 的 `orchestrator` 参数（`host/service.py:38`） | 生产路径恒传 None，构造注入失效；但测试路径有效（验证 None 守护分支）→ 构造注入与 setter 注入**双通道** | 双通道缺陷 |
-| 6.2 | `Interpreter.__init__` 的 `orchestrator` 参数 → `ServiceContextImpl.__init__`（`interpreter.py:127,225` / `service_context.py:29`） | 恒 None（spawn 时 sc 未 hydrate），随后被 `set_orchestrator` 覆盖 → **死参数链** | 死参数 |
-| 6.3 | `rt_scheduler.py:77` `kwargs.get('orchestrator', getattr(sc, 'orchestrator', None) if sc else None)` | sc 此时恒 None → 恒 None；且 `orchestrator` 已入 ServiceContext 协议，getattr 冗余 | 冗余 + 死值 |
-| 6.4 | `set_orchestrator`（`service_context.py:121`）承担隐式副作用 | 命名是"set_orchestrator"，实际同时同步 host_service.orchestrator——副作用不透明，造成误判 | 隐式副作用 |
-| 6.5 | 本次组 1 U3 的 `IHostService.orchestrator` property + 去 hasattr | 建立在"HostService 有正常注入"的未验证假设上；真实注入机制是误判后才发现的 | 本次工作隐患 |
+| 6.1 | `HostService.__init__` 的 `orchestrator` 参数（`host/service.py:38`） | 生产路径恒传 None，构造注入失效；但测试路径有效（验证 None 守护分支）→ 构造注入与 setter 注入**双通道** | ✅ 删构造参数，`_orchestrator = None` 初始，统一经 `set_orchestrator` 注入 |
+| 6.2 | `Interpreter.__init__` 的 `orchestrator` 参数 → `ServiceContextImpl.__init__`（`interpreter.py:127,225` / `service_context.py:29`） | 恒 None（spawn 时 sc 未 hydrate），随后被 `set_orchestrator` 覆盖 → **死参数链** | ✅ 删 Interpreter 构造参数 + ServiceContextImpl 构造参数 |
+| 6.3 | `rt_scheduler.py:77` `kwargs.get('orchestrator', getattr(sc, 'orchestrator', None) if sc else None)` | sc 此时恒 None → 恒 None；且 `orchestrator` 已入 ServiceContext 协议，getattr 冗余 | ✅ 删除（rt_scheduler.py:77 与 HostService 构造的 :92） |
+| 6.4 | `set_orchestrator`（`service_context.py:121`）承担隐式副作用 | 命名是"set_orchestrator"，实际同时同步 host_service.orchestrator——副作用不透明，造成误判 | ✅ 保留为**唯一注入点**（功能必需）；docstring 明示"唯一注入 + 同步" |
+| 6.5 | 本次组 1 U3 的 `IHostService.orchestrator` property + 去 hasattr | 建立在"HostService 有正常注入"的未验证假设上；真实注入机制是误判后才发现的 | ✅ 组 1 处理；方案 A 后注入路径已收敛，假设已证实 |
 
 **影响面**：所有 Engine 实例（含子引擎 request_isolated_run/spawn_isolated 创建的全新 IBCIEngine）都依赖 `set_orchestrator` 事后同步，构造注入链在所有路径下均失效。
 
-**验证**：删除 6.4 同步分支后 `test_run_isolated_still_works` 等 9 测试失败（`Kernel Orchestrator not available`）；恢复后 1263 passed。证明分支功能必需，缺陷在构造链而非同步分支。
+**验证**：删除 6.4 同步分支后 `test_run_isolated_still_works` 等 9 测试失败（`Kernel Orchestrator not available`）；恢复后 1263 passed。证明分支功能必需，缺陷在构造链而非同步分支。方案 A 后全量 pytest 1263 passed / 4 skipped。
 
-### 修复方向（候选方案）
+### 修复方向（已选方案 A）
 
 | 方案 | 做法 | 评价 |
 |---|---|---|
-| A（推荐） | 收敛单一注入：`HostService`/`Interpreter`/`ServiceContextImpl` 构造器删除 orchestrator 参数；orchestrator 统一经 `set_orchestrator` 注入；删除 rt_scheduler.py:77 死值 | 消除双通道 + 死参数链；测试构造改为 setter 注入 |
+| **A（已实施）** | 收敛单一注入：`HostService`/`Interpreter`/`ServiceContextImpl` 构造器删除 orchestrator 参数；orchestrator 统一经 `set_orchestrator` 注入；删除 rt_scheduler.py:77 死值 | ✅ 消除双通道 + 死参数链；测试构造改为 setter 注入 |
 | B | 保留构造参数但修复时序：spawn 前先 hydrate rt_scheduler 并设 orchestrator | 循环依赖（Engine→spawn→Interpreter→sc→orchestrator→Engine），架构上不可行 |
 | C | 最小修补：仅删 rt_scheduler.py:77 死值 + getattr 冗余，保留双通道 | 不解决根因，双通道残留 |
-
-**需用户裁决**：方案 A（构造签名变更，涉及测试构造点）vs 方案 C（最小修补）。推荐 A——消除双通道与死参数链，符合"新设计就是真设计"。
 
 ---
 
@@ -224,7 +224,7 @@ _prepare_interpreter (engine.py:302):
 
 ## 十二、需用户确认项
 
-1. **【最高优先级】组 6 orchestrator 注入修复方向**（§三-A）：方案 A（删构造参数收敛单一注入，推荐）vs 方案 C（最小修补）。涉及 `HostService`/`Interpreter`/`ServiceContextImpl` 构造签名变更与测试构造点。
+1. ~~**组 6 orchestrator 注入修复方向**~~（已完成 2026-08-02，方案 A）。
 2. ~~**组 1 协议并入方向**~~（已完成 2026-08-02）。
 3. **组 2 处置**：`PluginCapabilities.expose/revoke` 公开 API 修复（含 register 参数错位 bug）；`dir()` 改白名单导出的落地方式。
 4. **组 4 序列化访问**：Scope/Context 新增公开接口的边界（UID 枚举、`bind_symbol_by_uid`、loop 栈快照）是否全部纳入本次。
