@@ -91,3 +91,26 @@ class TestConcurrentBatchIsolation:
         second = run_ibci(_code(mock_server, n=3, sleep_ms=120, value_prefix="b2"))
         assert first == ["b10", "b11", "b12"]
         assert second == ["b20", "b21", "b22"]
+
+
+class TestConcurrentStability:
+    """⑤ 稳定性：重复并发执行跨轮次必须确定性一致（防间歇性 race）。
+
+    race 类缺陷是间歇性的——单轮通过不代表无并发竞争。重复多轮完全一致
+    是对 Stage 1 去共享化（worker 不写共享状态）的强证据。
+    """
+
+    def test_repeated_runs_are_deterministic(self, mock_server):
+        ref = None
+        for _ in range(5):
+            out = run_ibci(_code(mock_server, n=5, sleep_ms=120, value_prefix="det"))
+            if ref is None:
+                ref = out
+            assert out == ref, f"并发执行跨轮次不确定 (race): {out}"
+
+    def test_eight_task_batch_at_worker_limit(self, mock_server):
+        """8 路并发在 max_workers=8 满员下仍正确且重叠（池边界）。"""
+        n = 8
+        out = run_ibci(_code(mock_server, n=n, sleep_ms=150, value_prefix="mx"))
+        assert out == [f"mx{i}" for i in range(n)]
+        assert mock_server.stats.max_concurrent >= 2
