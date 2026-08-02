@@ -38,6 +38,7 @@
 | 死代码/双通道/半接通 | 零调用、双写真相、恒假探测 | 删除或激活 | 否 |
 | 组 6：orchestrator 注入双通道 + 生产死参数链 | 构造注入链恒失效，真实注入靠事后 setter 同步 | 收敛单一注入路径 ✅ 已完成（§三-A） | 是（构造签名变更）✅ 已裁决方案 A |
 | **组 7：组 1 深度复核新发现**（组 1 修复掩盖的深层缺陷） | hydrate 冗余钩子 + leaf 死分支 + getattr 遗漏 + 协议过度承诺 | 见 §三-B | 部分 |
+| **组 8：非 hasattr 反射面重复核**（用户质询"过度聚焦 hasattr"后新增） | 异常字符串嗅探 + 能力名裸字符串契约 + 签名提取静默降级 + `__getattr__` 透传安全矛盾 | 见 §三-C | 部分 |
 
 ---
 
@@ -130,6 +131,53 @@ _prepare_interpreter (engine.py:302):
 - `AIPlugin.setup` 调 `capabilities.expose("llm_provider", self)`，默认 priority=0 → `register(name, self, 0)` 把 0 当 plugin_id（组 2 已记录 bug）。当前恰好注册成功（get 按 name 查），但 plugin_id=0 是脏数据。修组 2 时一并处理。
 
 **复核结论**：组 1 的形式修复（协议并入）正确，但**未触及 hasattr 背后的深层问题**——7.1（hydrate 冗余）、7.2（死分支）、7.3（getattr 遗漏）是组 1 修复后仍存在的死代码/冗余，7.4 是协议设计风险。这印证用户判断：hasattr 特征点背后常藏着更深缺陷，需逐一深挖而非停留在形式。
+
+---
+
+## 三-C、组 8：非 hasattr 反射面重复核（用户质询"过度聚焦 hasattr"后新增）
+
+> **背景**：用户指出可能过度聚焦 hasattr 单一特征，真正关心的是反射机制滥用的潜在隐患。subagent 独立复核全仓非 hasattr 反射面（签名内省/动态导入/魔术方法/异常分类/字符串契约），发现多个被 hasattr 聚焦掩盖的真实隐患。
+
+### 8.1 异常消息字符串嗅探分类【中高危】
+
+- `core/compiler/scheduler.py:324` `if "Security Error" in str(e)` 分类异常；`resolver.py:53` 把安全违规塞进 message 字符串
+- **根因**：`ModuleResolveError` 缺结构化错误码，靠消息字符串耦合决策
+- **正确修法**：给异常加 `code` 字段或细分异常子类，由异常对象携带语义
+
+### 8.2 能力名跨层裸字符串契约【中危】
+
+- `CapabilityRegistry.CAP_LLM_PROVIDER` 常量（capability_registry.py:38-45）**零使用**（死常量）；实际 4 处消费方裸字符串 `"llm_provider"`（`_shared.py:449`、`llm_executor/_core.py:111`、`ibci_ai/core.py:72`、`ibci_idbg/core.py:47`）
+- **根因**：能力名是跨层字符串契约（插件注册名 ↔ 内核取用名），靠惯例同步
+- **附带**：`_get_max_retry` 在 provider 为 None 时静默 `return 3`（组 5 兜底）
+- **正确修法**：内核侧消费改用 `CapabilityRegistry.CAP_*` 常量；插件侧能力名登记为可导入契约常量
+
+### 8.3 签名提取静默降级为空契约【中危】
+
+- `core/runtime/module_system/discovery.py:327` `except (ValueError, TypeError): return [], "any"`——签名提取失败（C 内建/动态 callable）伪造空契约，运行时才炸
+- **正确修法**：显式返回"无签名"状态让上层决策（fail-fast）
+
+### 8.4 IbNativeFunction.__getattr__ 透传安全矛盾【中危】
+
+- `core/runtime/objects/kernel/functions.py:77-80` `receive('__getattr__')` 以安全名义拦截 py_func 属性泄露，但 line 82-83 `__getattr__` **透传 py_func 所有属性**（`__code__`/`__globals__`），守卫自相矛盾
+- **验证**：透传无直接消费者（`.py_func` 读取均显式属性）
+- **正确修法**：删除透传
+
+### 8.5 序列化 setattr 穿透私有属性【中低危】
+
+- `runtime_serializer.py:376/408` `setattr(context, '_current_scope'/'_intent_exclusive_depth')` 恢复状态穿透私有
+- 组 4 已记录同类，合并处理
+
+### 8.6 AST 访问器动态方法名构造【低危】
+
+- `scoped_visitor.py:82`、`_type_checking_base.py:50`、`symbol_collection_pass.py:93`、`type_resolution_pass.py:78` `getattr(self, f"visit_{cls}")`
+- 类名重构会静默落 generic_visit——可显式注册表或命名一致性测试
+
+### 8.7 同源双写真相
+
+- `loader.py:100-143` ↔ `check.py:163-201`（签名校验复制）；`loader.py:207` ↔ `check.py:165`（setup 参数名校验复制）
+- `method_missing` 协议零消费者（半接通）
+
+**复核结论**：非 hasattr 反射面中，真正的架构核心隐患是——**异常对象缺结构化错误码导致消息字符串嗅探、能力名跨层字符串契约、签名提取静默伪造空契约、Python 层 `__getattr__` 与消息守卫双通道矛盾**。前两项是典型"用字符串/异常约定掩盖本应显式化的契约"，与 hasattr 轮结论同源同向。
 
 ---
 
