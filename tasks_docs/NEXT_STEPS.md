@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-01（PT-HEALTH-1 完成；PENDING §七 反射排查[搁置]；当前无推荐主线）
+> **最后更新**：2026-08-01（任务控制清洁：函数参数机制家族收官项删除/归并；PENDING §七 反射排查解封为下一任务）
 
 ---
 
@@ -30,30 +30,21 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：无（函数参数机制已收官 + 解析算法已收敛 + 原生 kwargs 已接通 + PT-HEALTH-1 已落地）
+## 当前主线：无（函数参数机制家族已全线收官）
 
-> **函数参数机制（默认 / 具名 / 动态参数）P1-P4 已全部完成并提交**（2026-07-31，`git log`：`14ec729` P1+P2+维修、`f4e501f` P3、`8326063` P4、`b5a54ab` 任务控制、`5d7c2e8` skill 规整）：P1 AST+Parser → P2 语义 → P3 运行时统一绑定器 + vtable 签名升级 → P4 `file.write` 统一 API + 文档。质量维修（人工复查驱动：描述符单点化 / 双路径清理 / 兜底清零）与 `code-quality` skill 同期完成。
+> 2026-08-01 完成并推送（`git log`：`f3b54e8`…`3dc09ba`）：函数参数机制（默认/具名/动态参数 + `file.write` 统一 API）、架构决策收尾、语义/运行时解析算法收敛（`core/kernel/arg_binding.py` 共享纯核心）、原生 `**kwargs` 分传（VAR_KEYWORD）、PT-HEALTH-1（provider 能力探测协议化）。详细记录见 git 历史；已完成条目已从本文件移除。
 >
-> **架构决策收尾（2026-08-01）已落地**：`ParamDescriptor`/`param_descriptors` → `docs/architecture/03_type_system.md` §3.6；统一绑定器 → `docs/architecture/04_vm_interpreter.md` §2.6；AST 参数节点 → `docs/architecture/02_metadata_ast.md` §2.5；vtable `params` 格式 → `docs/subsystems/04_plugin_system.md` §4.2（已有）。临时文档 `tasks_docs/_function_params.md` 已删除。
->
-> **语义/运行时解析算法收敛（2026-08-01）已完成**：`_resolve_with_descriptors`（语义）与 `_resolve_call_arguments_runtime`（运行时）的双实现收敛为共享纯核心 `core/kernel/arg_binding.py:resolve_call_binding`（输入 names/kinds/has_default + 位置/具名 → 输出绑定计划 + 中性问题），两适配层各自映射诊断/实参装配。绑定算法单点真源，命中"单点真理/禁双写真相"。
->
-> **原生 `**kwargs` 分传接通（2026-08-01）已完成**：原生模块函数可声明 `VAR_KEYWORD` 并正确接收未声明具名实参（`create_proxy` 把末位 varkw dict 分传为 `**kwargs`）；签名校验改为只计非 VAR_* 声明参数；声明 VAR_KEYWORD 但实现不接受 `**kwargs` 加载即失败。附带：`_ibci_param_meta` 形式化为 `IbNativeFunction.param_meta` 字段，消除 VM 层对 loader 代理私有属性的 duck-typing。
->
-> **PT-HEALTH-1（2026-08-01）已完成**：`ILLMProvider` 协议补声明 `get_return_type_prompt`（AIPlugin 已实现），`_llm_function.py` 两处 `hasattr` 探测改为直接协议调用。新增 e2e `test_e2e_return_type_prompt.py`。同族残留（`_shared.py:449-451` `_get_max_retry` 的 hasattr 探测）与全仓"反射规避架构缺陷排查"一并列入 `PENDING_TASKS.md` §七（短期搁置）。
+> **PT-PHASE4-1（已封存）受益**：`register_model(..., **kwargs)` 的运行时前置（kwargs 收集 + 原生分传）已全部就绪，解封恢复时只需声明 vtable VAR_KEYWORD。
 
-**已解锁的受益项**：
-- PT-ARCH-28：`file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已落地（`PENDING_TASKS.md` 标记完成）
-- PT-PHASE4-1（已封存）：`register_model(name, url, key, model, **kwargs)` 的运行时前置（`**kwargs` 收集 + 原生分传）已全部就绪，解封恢复时只需声明 vtable VAR_KEYWORD
+## 下一任务：反射规避架构缺陷全仓排查（已解封，新 session 首项）
 
-**skill 体系现状**（2026-07-31 规整）：`code-health` 已并入 `code-quality`（健康诊断十查 + 质量红线）；新增 `code-odor`（异味特征检测 + 工作过程自查 + 自我质询协议）、`self-grill`（内向化自我质询）、`grilling`（对用户质询）。AGENTS.md 必读清单已同步。
+> **来源**：处理 PT-HEALTH-1 时用户裁定——代码中可能存在更多"用反射/探测规避架构设计缺陷"的代码，需全仓找出并**确认背后是否确为架构缺陷**（若是则修架构根因，而非继续用反射绕开）。完整任务定义原为 `PENDING_TASKS.md` §七，现已移入本文档（单点真理）。
 
-**下一主线候选**（2026-08-01 评估，择一立项）：
-
-1. **测试体系治理**（`TEST_REFACTOR.md`，独立低优先级）。
-2. **PENDING §七 反射规避架构缺陷全仓排查**（短期搁置，可提前解封）。
-
-**既定推荐顺序**：无主线在推进时，转入独立并行任务（测试体系治理）或提前解封 §七 排查。
+- 全仓扫描 `hasattr(obj, 'method')` / `getattr(obj, 'attr', default)` / 静默 `except` 等能力探测（判定基准见 `.opencode/skills/code-quality/SKILL.md` 健康诊断十查 §5、§8 与兜底识别）。
+- 每个命中点分类：**职责分离型 fallback**（协议声明能力、显式降级路径 → 允许保留）vs **为规避架构问题而做的穿透**（→ 禁止，修架构根因而非用反射绕开）。
+- 已发现命中点（先处理）：`core/runtime/vm/handlers/_shared.py:449-451` `_get_max_retry`——`hasattr(cap_reg, "get")` / `hasattr(llm_provider, "get_retry")`（与 PT-HEALTH-1 同族，`get_retry` 可并入 provider 协议或显式能力标志）。
+- 判定分界：无法自主决断的（架构取舍 / 契约变更 / 用户意图）→ 上报；可自主的（根因明确）→ 直接修。
+- 验证：`python -m pytest tests/` 全量，零回归。
 
 ---
 

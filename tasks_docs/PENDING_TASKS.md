@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-01（PT-HEALTH-1 完成；新增 §七 反射规避架构缺陷全仓排查[搁置]）
+> **最后更新**：2026-08-01（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；§七 反射排查已解封并移入 `NEXT_STEPS.md`）
 
 ---
 
@@ -94,25 +94,9 @@
 
 > `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 中的测试名与实际文件名不同步。
 
-### PT-TEST-8 MOCK 指令文档与代码同步 [已完成]
-
-> `docs/syntax/13_mock_testing.md` 与 MOCK 指令实现（`MockScenarioEngine`）已同步（2026-07-31）：控制指令 `SLEEP`/`ERROR`、HTTP 服务章节、SEQ 语义修正。
-
 ### PT-TEST-9　`ai.probe_model` 零测试覆盖 [P2]
 
 > `probe_model`（含 MOCK 路径与真实客户端路径）无任何测试。MOCK 路径返回 `MOCK_PROBE_SUCCESS` 并写入 `_model_capabilities`；真实路径含 reasoning 探测判定。需补覆盖以支撑 `_model_capabilities` 策略分支的可信度。
-
-### PT-HEALTH-1　provider 能力探测协议化（`hasattr` 穿透） [已完成]
-
-> `_llm_function.py` 两处（:83 / :201）用 `hasattr(self.llm_callback, 'get_return_type_prompt')` 探测 provider 能力，违反封装纪律（应经协议声明）。方案：`ILLMProvider` 协议已含 `get_return_type_prompt`（存活），将 hasattr 调用改为直接协议调用；若需可选能力，用显式 capability 标志替代 hasattr 穿透。
->
-> **已修复（2026-08-01）**：`ILLMProvider` 协议补声明 `get_return_type_prompt`（AIPlugin 已实现，无 isinstance 依赖），`_llm_function.py` 两处改为 `if self.llm_callback:` 直接调用。新增 e2e `tests/e2e/test_e2e_return_type_prompt.py`（注册提示词注入 sys_prompt / 未注册类型跳过）。
->
-> **同族残留（列入反射规避排查，短期搁置）**：`core/runtime/vm/handlers/_shared.py:449-451` 的 `_get_max_retry` 用 `hasattr(cap_reg, "get")` / `hasattr(llm_provider, "get_retry")` 探测，属同类封装违规，随全仓"反射规避架构缺陷排查"一并处理（见 PENDING §七）。
-
-### PT-HEALTH-2　`ai.set_return_type_prompt` 无 IBCI 消费者 [P3]
-
-> `set_return_type_prompt` 为 vtable 用户面 API，零 IBCI 消费者（`get_return_type_prompt` 有 2 消费者）。功能完好，保留但需覆盖测试或明确弃用。
 
 ### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]
 
@@ -138,13 +122,9 @@
 
 > `HostInterface.register_module()` 静默忽略与 kernel-native 同名的用户插件，无 warning。功能正确，可观测性不足。待诊断体系稳定后专项处理。
 
-### PT-ARCH-28：`file` 模块统一写入 API [已完成]
-
-> `file.write(target, data, overwrite_flag="new"|"overwrite")` 统一 API 已随函数参数机制（P4）落地（2026-07-31），旧 `write_copy`/`write_overwrite`/`write_new` 及字节版共 6 个函数已删除。
-
 ### PT-ARCH-29：命名历史包袱清理 [P1]
 
-> 代码层已零残留；历史设计文档/工作日志中的旧 API 引用需加"历史文档"标注。items 3-5 待做。
+> 代码层已零残留（完成）；剩余：历史设计文档/工作日志中的旧 API 引用加"历史文档"标注（低优先级，随文档治理顺带处理）。
 
 ### PT-ARCH-30：`file` 模块命名风险 [P1]
 
@@ -156,7 +136,7 @@
 
 **PT-PHASE4-1：多模态模型注册字段**
 
-`ai.register_model(name, url, key, model, **kwargs)` 当前仅存储 `timeout`，需扩展存储 `modalities`/`endpoint`/`audio_config` 字段，并更新 vtable 声明。
+`ai.register_model(name, url, key, model, **kwargs)` 当前仅存储 `timeout`，需扩展存储 `modalities`/`endpoint`/`audio_config` 字段，并更新 vtable 声明。运行时前置（`**kwargs` 收集 + 原生分传）已就绪（2026-08-01），解封时只需声明 vtable VAR_KEYWORD。
 
 **PT-PHASE4-2：非聊天端点推理绕过**
 
@@ -173,18 +153,6 @@
 ### media Phase 4（已彻底封存，短期不考虑）
 
 > **已彻底封存（2026-08-01）**：短期不考虑实现，恢复需显式解封并重新评估设计文档与当前代码基线的一致性。代码层零启动（仅设计文档 `docs/backup/02_multimodal_behavior.md` 存在）。前置（路径统一/内核原生化/磁盘型存储）均已完成，但 Phase 4 容器工作（MediaAxiom + IbMedia + from_response 协议）封存期间不推进。
-
----
-
-## 七、反射规避架构缺陷排查（短期搁置）
-
-> **来源**：2026-08-01 处理 PT-HEALTH-1 时用户指示——代码中可能存在更多"用反射/探测规避架构设计缺陷"的代码，需全仓找出并**确认背后是否确为架构缺陷**（若是则修复架构根因，而非继续用反射绕开）。现阶段暂时搁置，先处理已知项。
-
-**任务**：
-- 全仓扫描 `hasattr(obj, 'method')` / `getattr(obj, 'attr', default)` / 静默 `except` 等能力探测模式（见 `.opencode/skills/code-quality/SKILL.md` 健康诊断十查 §5、§8 与兜底识别）。
-- 对每个命中点：判断是"职责分离型 fallback"（允许）还是"为规避架构问题而做的穿透"（禁止，优先修架构根因）；区分后可自主修复或上报。
-- 已发现命中点（待处理）：
-  - `core/runtime/vm/handlers/_shared.py:449-451` `_get_max_retry`：`hasattr(cap_reg, "get")` / `hasattr(llm_provider, "get_retry")`（与 PT-HEALTH-1 同族，`get_retry` 可并入 provider 协议或显式能力标志）。
 
 ---
 
