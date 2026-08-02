@@ -26,9 +26,11 @@ class TestIbciConfigLoad:
         cfg = IbciConfig.load(str(tmp_path))
         assert cfg == {"plugin_paths": ["ext"]}
 
-    def test_load_malformed_json_returns_empty(self, tmp_path):
+    def test_load_malformed_json_raises(self, tmp_path):
+        """文件存在但 JSON 损坏是配置错误——fail-fast，静默返回空 dict 会掩盖配置问题。"""
         (tmp_path / "ibci.json").write_text("{not valid json", encoding="utf-8")
-        assert IbciConfig.load(str(tmp_path)) == {}
+        with pytest.raises(ValueError, match="malformed JSON"):
+            IbciConfig.load(str(tmp_path))
 
     def test_load_non_dict_root_returns_empty(self, tmp_path):
         (tmp_path / "ibci.json").write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")

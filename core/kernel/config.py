@@ -39,7 +39,12 @@ class IbciConfig:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             return data if isinstance(data, dict) else {}
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError as e:
+            # 文件存在但 JSON 损坏是配置错误——fail-fast，静默返回空 dict 会掩盖配置问题
+            raise ValueError(
+                f"Invalid {cls.CONFIG_FILENAME}: malformed JSON at {path}: {e}"
+            ) from e
+        except OSError:
             return {}
 
     @classmethod

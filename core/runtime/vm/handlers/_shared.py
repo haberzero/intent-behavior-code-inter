@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional, List
 
 from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.base.diagnostics.codes import RUN_CALL_ERROR
+from core.kernel.issue import InterpreterError
 from core.runtime.shared.signals import (
     ControlSignal,
     Signal,
@@ -304,7 +306,13 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
             )
             rt_context.current_scope = mod_inst.scope
         except Exception as e:
-            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"function-context module import '{func.module_name}' failed: {e!r}")
+            # 导入失败必须 fail-fast：否则模块名已切换而 scope 未切换，
+            # 函数会在错误模块上下文执行（全局符号解析静默错位）。
+            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Failed to import module '{func.module_name}' for LLM function call: {e}")
+            raise InterpreterError(
+                f"Failed to import module '{func.module_name}' for function call: {e}",
+                error_code=RUN_CALL_ERROR,
+            ) from e
 
     try:
         node_data = func.context.get_node_data(func.node_uid)
@@ -675,14 +683,12 @@ def _assign_name_target(
             else:
                 rc.define_variable(name, value, declared_type=declared_type, uid=sym_uid)
     elif not executor.ec.strict_mode:
-        try:
-            rc.get_variable(name)
+        if rc.get_symbol(name) is not None:
             if define_only:
                 rc.define_variable(name, value)
             else:
                 rc.set_variable(name, value)
-        except Exception as e:
-            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"set_variable '{name}' failed, falling back to define: {e!r}")
+        else:
             rc.define_variable(name, value)
     else:
         raise RuntimeError(

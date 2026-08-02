@@ -302,11 +302,7 @@ class SymbolViewImpl:
         return self._context.get_symbol(name)
 
     def has(self, name: str) -> bool:
-        try:
-            self._context.get_symbol(name)
-            return True
-        except (KeyError, AttributeError):
-            return False
+        return self._context.get_symbol(name) is not None
 
 class RuntimeContextImpl(RuntimeContext):
     def __init__(self, initial_scope: Optional[Scope] = None, registry: Optional[Registry] = None):

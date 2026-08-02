@@ -285,14 +285,15 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
             r = iterable_obj.receive("__iter__", [])
             if isinstance(r, (IbList, IbTuple)):
                 elements_obj = r
-        except (AttributeError, InterpreterError):
+        except AttributeError:
+            # 仅"无 __iter__ 方法"是能力缺失信号；用户实现体内的真实错误须传播
             pass
         if elements_obj is None:
             try:
                 r = iterable_obj.receive("to_list", [])
                 if isinstance(r, (IbList, IbTuple)):
                     elements_obj = r
-            except (AttributeError, InterpreterError):
+            except AttributeError:
                 elements_obj = None
     if elements_obj is None:
         raise RuntimeError(f"VM: Object is not iterable (uid={node_uid})")

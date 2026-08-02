@@ -2,12 +2,14 @@ import os
 from typing import Optional
 
 from core.kernel.path import IbPath, PathValidator, ModuleNameSpace
+from core.base.diagnostics.codes import DEP_SECURITY_ERROR
 
 class ModuleResolveError(Exception):
-    def __init__(self, module_name: str, importer_path: Optional[str] = None, message: Optional[str] = None):
+    def __init__(self, module_name: str, importer_path: Optional[str] = None, message: Optional[str] = None, code: Optional[str] = None):
         self.module_name = module_name
         self.importer_path = importer_path
         self.message = message
+        self.code = code
         
         if message:
             msg = message
@@ -50,7 +52,11 @@ class ModuleResolver:
 
         # 2. is_within 沙箱检查（跨盘由内部返回 False 覆盖）。
         if not PathValidator.is_within(self._project_root, abs_path_ib):
-            raise ModuleResolveError("", None, message=f"Security Error: Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'")
+            raise ModuleResolveError(
+                "", None,
+                message=f"Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'",
+                code=DEP_SECURITY_ERROR,
+            )
 
     def _get_candidate_path(self, module_name: str, context_file: Optional[str] = None) -> str:
         """Helper to calculate candidate path without probing."""

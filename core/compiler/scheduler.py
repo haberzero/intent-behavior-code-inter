@@ -11,7 +11,7 @@ from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager
 from core.kernel.path import IbPath, PathValidator, ModuleNameSpace, safe_relpath
-from core.compiler.parser.resolver.resolver import ModuleResolver
+from core.compiler.parser.resolver.resolver import ModuleResolver, ModuleResolveError
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
 from core.kernel.host_interface import HostInterface
@@ -97,7 +97,10 @@ class Scheduler(ICompilerService):
         # Try resolving relative to root_dir
         try:
             return self.resolver.resolve(module_name, (IbPath.from_native(self.root_dir) / "__init__.ibci").to_native())
-        except Exception as e:
+        except ModuleResolveError as e:
+            # 安全错误（越权访问）必须传播——降级为 None 会把安全违规掩盖成"模块未找到"
+            if getattr(e, 'code', None) == DEP_SECURITY_ERROR:
+                raise
             core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
                                 f"Module resolve failed for '{module_name}': {e}")
             return None
@@ -319,10 +322,8 @@ class Scheduler(ICompilerService):
                         
                 except Exception as e:
                      self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to resolve '{imp.module_name}': {str(e)}")
-                     # Use appropriate error code based on message
-                     code = DEP_MODULE_NOT_FOUND
-                     if "Security Error" in str(e):
-                         code = DEP_SECURITY_ERROR
+                     # 结构化错误码分派（ModuleResolveError 携带 code 字段）
+                     code = getattr(e, 'code', None) or DEP_MODULE_NOT_FOUND
                      
                      self.issue_tracker.report(
                          Severity.ERROR, 

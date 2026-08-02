@@ -144,11 +144,15 @@ class FileLib:
         )
 
     def exists(self, path: str) -> bool:
-        """检查文件是否存在（受沙箱约束）。"""
+        """检查文件是否存在（受沙箱约束）。
+
+        沙箱权限拒绝（InterpreterError）必须传播——降级为 False 会
+        把越权访问掩盖成"文件不存在"。
+        """
         try:
             native_path = self._resolve_path(path, operation="read")
             return os.path.exists(native_path)
-        except Exception:
+        except (OSError, ValueError):
             return False
 
     def remove(self, target: Union[str, IbFileHandle]) -> Any:
