@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-01（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；§七 反射排查已解封并移入 `NEXT_STEPS.md`）
+> **最后更新**：2026-08-02（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；反射排查已全线完成，遗留项归并至 PT-SEM-4 / REFLECT-ARCH-1）
 
 ---
 
@@ -24,6 +24,10 @@
 **前置条件**: PT-SEM-1 完成 + pipeline 稳定运行 ≥ 1 个月
 
 ### PT-SEM-3　二层 IR 路线评估 [VISION]
+
+### PT-SEM-4　resolve_call_return 兜底双通道待深析 [P3]
+
+> 反射排查归并遗留：`_expression_visitors.py:304` 在统一入口 `resolve_call_return` 之外直读 `func_type.return_type` 作最后兜底（功能性双通道，非机械冗余）。待评估 `resolve_call_return` 是否应覆盖该路径或显式收敛。
 
 ---
 
@@ -162,3 +166,6 @@
 |---------|------|------|
 | **INV-LAMBDA-3** | IBCI 无 walrus (`:=`) / lambda 体赋值语法 | 设计排除（见 `docs/KNOWN_LIMITS.md` §十九.1）；原 SKIP 测试已删除（永久死代码） |
 | **INV-SCOPE-1** | SEM_002 禁止 if-block 内重声明同名变量 | 设计排除（见 `docs/KNOWN_LIMITS.md` §十九.2）；原 SKIP 测试已删除（永久死代码） |
+| **REFLECT-ARCH-1** | `loader.py` 与 `ibci_sdk/check.py` 签名校验存在复制 | 设计隔离（`check.py:209` 刻意 `# 不 import core.*`——SDK 离线校验不初始化运行时）；强制收敛引入 SDK↔runtime 错误耦合，**不收敛** |
+
+> 上述设计决策来自 2026-08-02 反射排查收尾，决策归并于此。
