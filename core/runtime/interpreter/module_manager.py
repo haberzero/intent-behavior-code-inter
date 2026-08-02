@@ -94,6 +94,27 @@ class ModuleManagerImpl:
 
         raise InterpreterError(f"Module '{module_name}' not found or not registered in artifact.", error_code=DEP_MODULE_NOT_FOUND)
 
+    def _import_star_uid_map(self, execution_context: IExecutionContext) -> Dict[str, str]:
+        """读取编译器为 ``from x import *`` 注入当前模块的符号 uid 映射。
+
+        编译器（scheduler）在语义分析期为 import-* 成员创建带 uid 的 Symbol
+        （uid = ``scope_<importing_module>:<name>``），并序列化进当前模块
+        根作用域的 ``pools.scopes[scope_uid].symbols``（name -> sym_uid）。
+        运行时按同一 uid 注入变量，才能与使用点的 ``get_variable_by_uid`` 对齐。
+        """
+        if not self.artifact:
+            return {}
+        module_name = execution_context.current_module_name
+        if not module_name:
+            return {}
+        module_data = self.artifact.get("modules", {}).get(module_name, {})
+        root_scope_uid = module_data.get("root_scope_uid")
+        if not root_scope_uid:
+            return {}
+        scopes = self.artifact.get("pools", {}).get("scopes", {})
+        scope_symbols = scopes.get(root_scope_uid, {}).get("symbols", {})
+        return dict(scope_symbols) if isinstance(scope_symbols, dict) else {}
+
     def import_from(self, module_name: str, names: List[tuple], execution_context: IExecutionContext) -> None:
         """
         处理 from module_name import names...
@@ -105,13 +126,20 @@ class ModuleManagerImpl:
         if package:
             # Check if any alias is '*'
             if any(name == '*' for name, _, _ in names):
-                # 导入所有非私有属性 (注意：import * 通常不带 UID)
+                # 从编译器注入符号表取 uid（name -> sym_uid），与运行时实际存在的
+                # 公开属性取交集——既保证 uid 对齐，又只导出 spec 声明成员（不泄漏协议方法）
+                uid_map = self._import_star_uid_map(execution_context)
                 for attr_name in dir(package):
-                    if not attr_name.startswith('_'):
-                        try:
-                            attr_val = getattr(package, attr_name)
-                            context.define_variable(attr_name, attr_val)
-                        except AttributeError: pass
+                    if attr_name.startswith('_'):
+                        continue
+                    if attr_name not in uid_map:
+                        # 仅注入编译器声明为 import-* 成员的符号（spec 契约成员）
+                        continue
+                    try:
+                        attr_val = getattr(package, attr_name)
+                        context.define_variable(attr_name, attr_val, uid=uid_map.get(attr_name))
+                    except AttributeError:
+                        pass
             else:
                 for name, asname, uid in names:
                     try:
@@ -130,11 +158,15 @@ class ModuleManagerImpl:
             module_instance = self._loaded_modules.get(module_name)
             if module_instance:
                 if any(name == '*' for name, _, _ in names):
-                    # 使用接口公开方法获取符号
+                    # 使用接口公开方法获取符号；uid 从导入文件编译器注入表取（保证 uid 对齐）
+                    uid_map = self._import_star_uid_map(execution_context)
                     symbols = module_instance.scope.get_all_symbols()
                     for sym_name, sym in symbols.items():
-                        if not sym.is_const: # 排除 print, int 等内置符号
-                            context.define_variable(sym_name, sym.value, declared_type=sym.declared_type)
+                        if sym.is_const:  # 排除 print, int 等内置符号
+                            continue
+                        if sym_name not in uid_map:
+                            continue
+                        context.define_variable(sym_name, sym.value, declared_type=sym.declared_type, uid=uid_map.get(sym_name))
                 else:
                     for name, asname, uid in names:
                         try:

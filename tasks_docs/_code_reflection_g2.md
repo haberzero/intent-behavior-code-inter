@@ -1,7 +1,7 @@
 # 反射规避架构缺陷修复 — 组 2：能力注册/模块导入体系重构（临时任务文档）
 
 > 临时任务文档，Phase 5 完成后经用户确认删除。
-> **状态**：4.1、4.3 完成（1262 passed / 4 skipped）；4.2、4.4 待做。
+> **状态**：4.1-4.4 全部完成（1265 passed / 4 skipped）。
 
 ## 4.1 能力注册统一 ✅ 已完成
 
@@ -18,16 +18,18 @@
 - `create_native_object` 补 whitelist 参数（factory + 接口）
 - vtable 值改 `(func, param_meta)` 元组，删 `_ibci_param_meta` getattr
 - `IbNativeObject.__init__` 删 getattr 兜底，显式参数
-- `IbModule.receive` 改 native/scope 明确分派，Scope 分支仅捕获 KeyError（不吞内部 AttributeError）
-- 验证：1262 passed / 4 skipped；`_ibci_*` 零残留
+- `IbModule.receive` 改 native/scope 明确分派，Scope 分支仅捕获 KeyError
+- 验证：`_ibci_*` 零残留
 
-## 4.2 import * 统一（待做）
+## 4.2 import * 统一 ✅ 已完成
 
-- Python 路径改按 spec 成员/白名单导出 + 补 uid
-- 修复 M2 运行时损坏（RUN_UNDEFINED_VARIABLE）
-- 统一两条路径语义
-- 补测试
+- 新增 `_import_star_uid_map`：从 artifact scope_pool 读编译器注入的 uid（方案 A，subagent 评估推荐）
+- Python 路径：uid_map ∩ dir(package)，`define_variable(uid=...)` 对齐
+- IBC 路径：uid_map ∩ get_all_symbols，保留 is_const 过滤 + uid 对齐
+- 修复 M2 运行时损坏（RUN_UNDEFINED_VARIABLE，实测复现→修复）
+- 修复 4.2.1 泄漏（实测 setup/expose/plugin_id 不再注入）
+- 补 3 个测试（uid 对齐 / 不泄漏 / spec 成员齐全）
 
-## 4.4 加固层修复（待做）
+## 4.4 加固层修复 ✅ 已完成
 
-- import * 走白名单后加固层不再被绕过
+- import * 只导出 spec 成员后，加固层（whitelist）不再被 dir() 绕过

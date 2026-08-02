@@ -119,3 +119,39 @@ class TestKernelNativeImportGating:
             f"expected SEM_UNDEFINED_SYMBOL/DEP_MODULE_NOT_FOUND, got codes={codes}, msg={err}"
         )
 
+
+class TestImportStarContract:
+    """``from package import *`` 的 uid 对齐与成员契约（组 2 修复验证）。"""
+
+    def test_import_star_binds_with_uid(self):
+        """import * 注入的成员带编译器 uid，使用点可解析（修复 RUN_UNDEFINED_VARIABLE）。"""
+        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        out = []
+        eng.run_string(
+            'from idbg import *\ndict d = vars()\nprint((str)d)\n',
+            output_callback=lambda s: out.append(str(s)),
+            silent=True,
+        )
+        assert out, "expected vars() callable via import * (uid 未对齐会 RUN_UNDEFINED_VARIABLE)"
+        assert "current_llm" in out[0] and "show_env" in out[0], out[0]
+
+    def test_import_star_does_not_leak_protocol_methods(self):
+        """import * 只导出 spec 成员，不泄漏 setup/expose/plugin_id 等协议方法。"""
+        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng.run_string('from idbg import *\n', silent=True)
+        rt = eng.interpreter.runtime_context
+        sym_names = set(rt.get_vars().keys())
+        for leaked in ("setup", "expose", "revoke", "plugin_id", "get_vtable", "save_plugin_state"):
+            assert leaked not in sym_names, f"protocol method leaked via import *: {leaked}"
+
+    def test_import_star_spec_members_present(self):
+        """spec 声明的成员经 import * 全部注入。"""
+        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng.run_string('from idbg import *\n', silent=True)
+        rt = eng.interpreter.runtime_context
+        sym_names = set(rt.get_vars().keys())
+        for member in ("vars", "env", "show_env", "current_llm", "print_vars"):
+            assert member in sym_names, f"spec member missing via import *: {member}"
+
+
+
