@@ -73,7 +73,7 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
     if isinstance(val, LLMFuture):
         sc = executor.service_context
         llm_executor = sc.llm_executor if sc is not None else None
-        if llm_executor is not None and hasattr(llm_executor, "resolve"):
+        if llm_executor is not None:
             resolved = llm_executor.resolve(val.node_uid)
         else:
             # service_context 不可用时回退到 LLMFuture.get（仍阻塞，结果等价）

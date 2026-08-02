@@ -41,10 +41,15 @@ class ScopeImpl:
         # 如果没有传入 registry，则从父作用域继承
         if registry:
             self._registry = registry
-        elif parent and hasattr(parent, '_registry'):
-            self._registry = parent._registry
+        elif parent and parent.registry:
+            self._registry = parent.registry
         else:
             raise ValueError("Registry is required for Scope creation (no parent provided)")
+
+    @property
+    def registry(self) -> Registry:
+        """本作用域关联的对象注册表。"""
+        return self._registry
 
     def _check_type(self, value: Any, declared_type: Optional[Any], name: str):
         """运行时类型检查"""
@@ -154,7 +159,7 @@ class ScopeImpl:
             if symbol.cell is not None:
                 symbol.cell.set(boxed_value)
             return True
-        if self._parent and hasattr(self._parent, 'assign_by_uid'):
+        if self._parent:
             return self._parent.assign_by_uid(uid, value, skip_type_check=skip_type_check)
         return False
 
@@ -188,7 +193,7 @@ class ScopeImpl:
         """向上查找 UID 符号"""
         if uid in self._uid_to_symbol:
             return self._uid_to_symbol[uid]
-        if self._parent and hasattr(self._parent, 'get_symbol_by_uid'):
+        if self._parent:
             return self._parent.get_symbol_by_uid(uid)
         return None
 
@@ -233,7 +238,7 @@ class ScopeImpl:
             self._cell_map[sym_uid] = cell
             return cell
         # 向上查找
-        if self._parent and hasattr(self._parent, 'promote_to_cell'):
+        if self._parent:
             return self._parent.promote_to_cell(sym_uid)
         return None
 

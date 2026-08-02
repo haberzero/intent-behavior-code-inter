@@ -74,6 +74,8 @@ class ILLMProvider(Protocol):
     def get_current_call_info(self) -> Dict[str, Any]: ...
     # 返回类型提示：注入并约束模型输出格式（无对应注册时返回 None）
     def get_return_type_prompt(self, type_name: str) -> Optional[str]: ...
+    # 最大 LLM 重试次数：llmexcept 重试循环读取（默认 3）
+    def get_retry(self) -> int: ...
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
@@ -133,6 +135,27 @@ class IILLMExecutor(Protocol):
 
     def get_current_call_info(self) -> Dict[str, Any]:
         """获取最近一次 resolve 的 LLM 调用诊断信息。"""
+        ...
+
+    def resolve(self, node_uid: str) -> Any:
+        """阻塞等待 ``node_uid`` 对应的 ``LLMFuture`` 完成，返回结果。"""
+        ...
+
+    def dispatch_eager(
+        self,
+        node_uid: str,
+        execution_context: Any,
+        intent_ctx: Any = None,
+    ) -> Any:
+        """立即将 LLM 调用提交到后台线程池，返回 ``LLMFuture``（非阻塞）。"""
+        ...
+
+    def hydrate(self, service_context: Any) -> None:
+        """水化依赖（注入 ``ServiceContext`` 并初始化结果解析器）。"""
+        ...
+
+    def run_batch(self, behavior: Any, items: Any, execution_context: Any) -> Any:
+        """并发批量执行行为对象，保序返回结果列表。"""
         ...
 
 @runtime_checkable

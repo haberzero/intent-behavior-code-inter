@@ -234,8 +234,7 @@ class Interpreter:
             self._execution_context.permission_manager = self.service_context.permission_manager
             
             # 完成延迟水化
-            if hasattr(llm_executor, 'hydrate'):
-                llm_executor.hydrate(self.service_context)
+            llm_executor.hydrate(self.service_context)
             
         # 2.  加载内置函数 (不再穿透持有 Interpreter)
         self.intrinsic_manager.load_defaults(self._execution_context, self.service_context)

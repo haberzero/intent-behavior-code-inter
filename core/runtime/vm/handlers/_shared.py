@@ -444,10 +444,10 @@ def _get_max_retry(executor) -> int:
     """从 LLM Provider 读取最大重试次数（默认 3）。"""
     sc = executor.service_context
     if sc is not None:
-        cap_reg = getattr(sc, "capability_registry", None)
+        cap_reg = sc.capability_registry
         if cap_reg is not None:
-            llm_provider = cap_reg.get("llm_provider") if hasattr(cap_reg, "get") else None
-            if llm_provider is not None and hasattr(llm_provider, "get_retry"):
+            llm_provider = cap_reg.get("llm_provider")
+            if llm_provider is not None:
                 return llm_provider.get_retry()
     return 3
 

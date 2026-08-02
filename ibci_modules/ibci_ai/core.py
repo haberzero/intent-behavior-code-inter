@@ -281,10 +281,10 @@ class AIPlugin(IbStatefulPlugin):
 
     def get_current_call_info(self) -> Dict[str, Any]:
         """获取最近一次 resolve 的调用信息（委托内核 LLM 执行器的主线程单写槽）。"""
-        kr = getattr(self._capabilities, "kernel_registry", None) if self._capabilities else None
-        if kr is not None and hasattr(kr, "get_llm_executor"):
+        kr = self._capabilities.kernel_registry if self._capabilities else None
+        if kr is not None:
             executor = kr.get_llm_executor()
-            if executor is not None and hasattr(executor, "get_current_call_info"):
+            if executor is not None:
                 return dict(executor.get_current_call_info())
         return {}
 
@@ -294,11 +294,11 @@ class AIPlugin(IbStatefulPlugin):
         对参数化 fn 行为（``fn f = lambda(str x) -> str: @~ ... $x ... ~``）
         逐项并发执行，保序返回结果列表。任一项 parse 失败抛 ``LLMParseError``。
         """
-        kr = getattr(self._capabilities, "kernel_registry", None) if self._capabilities else None
-        if kr is None or not hasattr(kr, "get_llm_executor"):
+        kr = self._capabilities.kernel_registry if self._capabilities else None
+        if kr is None:
             raise RuntimeError("run_batch: LLM executor not available")
         executor = kr.get_llm_executor()
-        if executor is None or not hasattr(executor, "run_batch"):
+        if executor is None:
             raise RuntimeError("run_batch: LLM executor does not support batch execution")
         from core.runtime.frame import get_current_execution_context
 

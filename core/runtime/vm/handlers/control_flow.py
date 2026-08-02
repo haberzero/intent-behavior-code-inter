@@ -13,6 +13,10 @@ from core.runtime.objects.kernel import (
     IbValue,
     IbClass,
 )
+from core.runtime.objects.primitives.collections import (
+    IbList,
+    IbTuple,
+)
 from core.runtime.exceptions import (
     ThrownException,
 )
@@ -274,19 +278,19 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     # 解析迭代序列（与 StmtHandler.visit_IbFor 同协议）
     elements_obj = None
-    if hasattr(iterable_obj, "elements") and isinstance(iterable_obj.elements, list):
+    if isinstance(iterable_obj, (IbList, IbTuple)):
         elements_obj = iterable_obj
     else:
         try:
             r = iterable_obj.receive("__iter__", [])
-            if hasattr(r, "elements") and isinstance(r.elements, list):
+            if isinstance(r, (IbList, IbTuple)):
                 elements_obj = r
         except (AttributeError, InterpreterError):
             pass
         if elements_obj is None:
             try:
                 r = iterable_obj.receive("to_list", [])
-                if hasattr(r, "elements") and isinstance(r.elements, list):
+                if isinstance(r, (IbList, IbTuple)):
                     elements_obj = r
             except (AttributeError, InterpreterError):
                 elements_obj = None

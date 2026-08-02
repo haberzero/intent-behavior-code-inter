@@ -346,17 +346,17 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.registry.seal_classes(self._kernel_token)
 
         # 将 LLM 执行器注入 KernelRegistry，使 IbBehavior.call() 可通过公理体系自主执行
-        llm_executor = getattr(self.interpreter.service_context, 'llm_executor', None)
+        llm_executor = self.interpreter.service_context.llm_executor
         if llm_executor is not None:
             self.registry.register_llm_executor(llm_executor, self._kernel_token)
 
         # 将宿主服务、调用栈内省器、状态读取器注入 KernelRegistry
         # 供核心层插件（ibci_ihost、ibci_idbg）通过稳定钩子接口访问，替代直接持有 ServiceContext
-        host_service = getattr(self.interpreter.service_context, 'host_service', None)
+        host_service = self.interpreter.service_context.host_service
         if host_service is not None:
             self.registry.register_host_service(host_service, self._kernel_token)
 
-        stack_inspector = getattr(self.interpreter._execution_context, 'stack_inspector', None)
+        stack_inspector = self.interpreter.execution_context.stack_inspector
         if stack_inspector is not None:
             self.registry.register_stack_inspector(stack_inspector, self._kernel_token)
 

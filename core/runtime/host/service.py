@@ -41,9 +41,18 @@ class HostService(IHostService):
         self.registry = registry
         self.execution_context = execution_context
         self.interop = interop
-        self.orchestrator = orchestrator
+        self._orchestrator = orchestrator
         self.setup_context_callback = setup_context_callback
         self.get_current_module_callback = get_current_module_callback
+
+    @property
+    def orchestrator(self) -> Optional[IKernelOrchestrator]:
+        """内核协调器（构造器注入；可经 ServiceContext.set_orchestrator 更新）。"""
+        return self._orchestrator
+
+    @orchestrator.setter
+    def orchestrator(self, value: Optional[IKernelOrchestrator]) -> None:
+        self._orchestrator = value
 
     @staticmethod
     def _contains_disk_backed_instance(execution_context: IExecutionContext) -> bool:
