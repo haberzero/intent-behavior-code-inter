@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-02（任务控制清洁：PT-HEALTH-1/PT-HEALTH-2/PT-ARCH-28/PT-TEST-8 完成移除；反射排查已全线完成，遗留项归并至 PT-SEM-4 / REFLECT-ARCH-1；新增 PT-SMELL-1/2/3 技术债审计分支任务；LLM 并行/异步主线确立并梳理 Tier 分层，新增 PT-SYNC-1/2/3）
+> **最后更新**：2026-08-03（PT-3.1/PT-3.2 宿主异步统一接入 Waitable 完成；PT-SEM-4 resolve_call_return 兜底双通道收敛完成；PT-4.3 Stage 3 语言级 await 表达式落地，剩余 async 函数/生成器）
 
 ---
 
@@ -25,9 +25,11 @@
 
 ### PT-SEM-3　二层 IR 路线评估 [VISION]
 
-### PT-SEM-4　resolve_call_return 兜底双通道待深析 [P3]（Tier 4，独立于并行主线）
+### PT-SEM-4　resolve_call_return 兜底双通道待深析 [P3]（Tier 4，独立于并行主线）【已完成 2026-08-03】
 
 > 反射排查归并遗留：`_expression_visitors.py:304` 在统一入口 `resolve_call_return` 之外直读 `func_type.return_type` 作最后兜底（功能性双通道，非机械冗余）。待评估 `resolve_call_return` 是否应覆盖该路径或显式收敛。
+>
+> **已完成（2026-08-03）**：收敛为单一入口。`resolve_call_return` 新增 Layer 6——仅对**可调用** spec 且显式 `return_type`（非默认 void/any/auto）时直读解析，非可调用返回 None（与调用方 `call_trait` 前置检查一致）；`_expression_visitors` 移除末尾直读兜底，统一走 `resolve_call_return`，未解析回退 any。全量 pytest 1322 passed/4 skipped 零回归。
 
 ---
 
