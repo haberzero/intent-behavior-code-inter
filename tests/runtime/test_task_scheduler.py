@@ -12,6 +12,7 @@ Stage 2 多任务协作调度器（``TaskScheduler``）测试。
 - 空调度器 → 空结果
 """
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any
 
 import pytest
@@ -37,6 +38,19 @@ class _ManualWaitable(Waitable):
     def set_result(self, value):
         self._result = value
         self._result_set = True
+
+
+class _FutureWaitable(Waitable):
+    """把真实的 ``concurrent.futures.Future`` 适配为 Waitable（LLM executor 实际基底）。"""
+
+    def __init__(self, future: Future):
+        self._future = future
+
+    def is_done(self) -> bool:
+        return self._future.done()
+
+    def result(self) -> Any:
+        return self._future.result()
 
 
 def _task_await(waitable, value):
@@ -102,3 +116,21 @@ class TestTaskScheduler:
         s.submit(_task_immediate("fast"))
         s.submit(_task_await(w, "slow"))
         assert s.run() == ["fast", "slow"]
+
+    def test_real_concurrent_futures_overlap(self):
+        """用真实 concurrent.futures.Future（LLM executor 实际基底）验证并发。
+
+        两个任务各等待一个由线程池 0.2s 后完成的 Future，总时应显著小于 0.4s。
+        """
+        s = TaskScheduler()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f1 = pool.submit(lambda: time.sleep(0.2) or "t1")
+            f2 = pool.submit(lambda: time.sleep(0.2) or "t2")
+            s.submit(_task_await(_FutureWaitable(f1), "t1"))
+            s.submit(_task_await(_FutureWaitable(f2), "t2"))
+            t0 = time.monotonic()
+            results = s.run()
+            elapsed = time.monotonic() - t0
+        # 并发完成序不确定，只断言结果集与总时（真并发）
+        assert sorted(results) == ["t1", "t2"]
+        assert elapsed < 0.35, f"串行化迹象: {elapsed:.3f}s"
