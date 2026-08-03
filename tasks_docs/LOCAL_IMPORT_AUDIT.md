@@ -1,10 +1,10 @@
 # 局部 import 审计 — 独立分支任务（技术债）
 
 > **来源**：2026-08-02 用户裁定。无意义的局部 import、为打破循环导入而内联的 import（及同类 import 组织异味）属技术债，需独立分支核对分析。
-> **状态**：部分完成（2026-08-02，独立分支 `pt-smell`，未并入主线；仅本地 commit，未 push）
-> - **可提升类已处置**：L12/L13/L14（stdlib）、L16（auto_discovery）、L19（base.enums×5 文件）、L20（member.py）
-> - **已核验保留**：L15（engine 构造期延迟加载，合法动机）；L17 中 base.enums 部分已提升，`prelude` 局部 import 属真实循环打破（保留）
-> - **待设计决策（禁止更深的胶水）**：L1-L10 循环打破类——需按工作模式定论优先重构依赖方向 / TYPE_CHECKING 替代，涉架构决策，明早与用户对后续方向再定；L18（kernel_native_modules ↔ kernel.host_interface）待核验
+> **状态**：已完成（2026-08-03，独立分支 `pt-smell`，已并入主线）
+> - **可提升类已处置**：L12/L13/L14（stdlib）、L16（auto_discovery）、L19（base.enums×5 文件）、L20（member.py：intent/intent_context）
+> - **已核验保留**：L15（engine 构造期延迟加载）；L17 中 base.enums 已提升，`prelude` 局部 import 属真实循环打破（保留）
+> - **循环打破类（L1-L10 等）核验结论**：均为标准运行时局部 import 环打破（非胶水），但**保留它们属"可接受的谨慎 tradeoff"**——理想上应永无循环依赖；因此其存在必须**极其谨慎地记录为未来推迟工作**，见下方"推迟工作记录"节，待架构重构（依赖方向下沉/接口上移）时逐项复核。
 > **方法**：AST 全仓扫描局部 import（函数/方法体内 import）→ 逐处判定动机（循环导入打破 / 惰性可选依赖 / 无理由）→ 证据驱动处置；每批 `python -m pytest tests/` 全量零回归。
 > **核验基准**：工作模式定论（禁止胶水/tricky——用局部 import 掩盖循环依赖即胶水变体）+ 依赖规则（kernel→base 单向，runtime→kernel）。
 
@@ -74,3 +74,27 @@
 1. 逐处判定动机（1.1 循环打破 / 1.2 惰性依赖 / 1.3 可提升 / 1.4 待核验），用"删除该局部 import、临时提升到顶部→全量测试"禁用验证确认循环风险是否真实。
 2. 处置：可提升（L12-L14）直接提升；循环打破（L1-L10）逐处评估 TYPE_CHECKING 替代或依赖方向重构（方案需对照工作模式定论，禁止用更深的胶水）；待核验（L15-L20）定案后归入对应类。
 3. 每批 `python -m pytest tests/` 全量零回归；收尾定案回写本清单。
+
+---
+
+## 四、推迟工作记录 — 循环打破局部 import tradeoff（待决断）
+
+> **原则**：理想上应永远避免循环依赖。但允许少量"设计合理、能显著减少工作量"的局部 import 作为**谨慎 tradeoff**。此类 tradeoff 可能在遥远未来产生影响，故**其存在必须被极其谨慎地记录**，不论现阶段看似多合理、多安全。以下为保留的循环打破局部 import，列为**未来推迟工作**，待架构重构（依赖方向下沉 / 接口上移）时逐项复核。
+
+| 记录 | 位置 | 引用 | 保留理由（tradeoff） | 未来复核方向 |
+|---|---|---|---|---|
+| L1 | `core/runtime/objects/kernel/base.py:31/32` | `from .functions import IbBoundMethod` / `from .ib_class import IbClass` | 运行时构造/分派所需，base↔functions/ib_class 环 | 下沉共享基类到独立叶子 |
+| L2 | `core/runtime/objects/kernel/ib_class.py:165` | `from .functions import IbBoundMethod` | 运行时构造，ib_class↔functions 环 | 同上 |
+| L3 | `core/kernel/spec/type_ref.py:128` | `from .base import TypeKind` | 运行时 kind 比较分派，base↔type_ref 环 | 下沉 TypeKind 到叶子 |
+| L4 | `core/kernel/spec/registry/_members.py:121` | `from ..base import TypeDef` | 运行时构造 TypeDef | 下沉 TypeDef 到叶子 |
+| L5 | `core/kernel/spec/registry/_runtime.py:90` | 相对导入 | 运行时（审计标注循环打破） | 复核定位并下沉 |
+| L6 | `core/runtime/interpreter/interpreter.py:466` | `from vm.vm_executor import` | interpreter↔vm 环 | 延迟属性引用评估 |
+| L7 | `core/runtime/objects/kernel/user_functions.py:42/79/140` | `from ..primitives` / `..cell` / `..signals` | 运行时（热路径） | 复核能否去环 |
+| L8 | `core/runtime/shared/llm_result.py:56/130` | `from ..objects.primitives/kernel` | 运行时 | 复核能否去环 |
+| L9 | `core/runtime/path/install.py:36/40` | `import ibci_modules` / `import core` | 模块加载期 | 重构加载顺序 |
+| L10 | `ibci_modules/ibci_ai/core.py:298` | `from core.runtime.frame import` | 插件↔core 环 | 接口上移 |
+| L15 | `core/engine.py:119/123` | `kernel_native_modules` / `file_impl` | 构造期延迟加载重型实现 | 核验是否可去除 |
+| L17 | `core/compiler/semantic/context.py:117` | `from ...passes.prelude import Prelude` | context↔passes 环 | 依赖方向重构 |
+| L18 | `core/runtime/bootstrap/kernel_native_modules.py:75` | `from kernel.host_interface import` | 环（审计待核验） | 复核定位并下沉 |
+
+> 复核触发：任一处所在模块发生架构重构、或引入新的循环依赖、或出现相关技术债时，返回本表逐项复核该 tradeoff 是否仍成立。此处**不删除**，仅作待决断记录。
