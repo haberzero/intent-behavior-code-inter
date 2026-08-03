@@ -41,9 +41,17 @@ def _get_comm_registry(executor) -> CommRegistry:
 def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
     """向 runtime_context 上的事件总线广播事件（PT-MT-4 内省事件流）。
 
+    受控制层 observability 开关约束（PT-MT-5）：关闭时跳过事件记录。
     无订阅者时为空操作；事件总线失败不阻断执行（可观测性层尽力而为）。
     """
     rc = executor.runtime_context
+    store = getattr(rc, "_comm_config_store", None)
+    if store is not None:
+        try:
+            if not store.get("observability"):
+                return
+        except Exception:
+            pass
     bus = getattr(rc, "_comm_event_bus", None)
     if bus is None:
         return

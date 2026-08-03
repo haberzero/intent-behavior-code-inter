@@ -31,5 +31,15 @@ def __ibcext_vtable__() -> dict:
                 "return_type": "chan",
                 "description": "订阅运行时状态变更事件流，返回 mode=stream 的 Channel"
             },
+            "configure": {
+                "params": [{"name": "kwargs", "kind": "VAR_KEYWORD"}],
+                "return_type": "dict",
+                "description": "统一启停接口（parallel/stream/observability/debug），粒度全局→单调用→单实例"
+            },
+            "get_config": {
+                "params": [],
+                "return_type": "dict",
+                "description": "读取当前生效配置"
+            },
         }
     }

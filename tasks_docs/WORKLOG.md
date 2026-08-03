@@ -115,3 +115,16 @@
 3. **chan 关键字参数解析**：`chan(str, "stream", name="my_ch")` 的 name= 关键字参数未处理。修复 chan_expr 解析逻辑。
 
 **测试**：`tests/runtime/test_observability.py`（6：snapshot 字段、命名 channel 跟踪、subscribe 事件流、关键字成员访问）。全量 pytest 1388 passed/4 skipped 零回归。
+
+#### 9. PT-MT-5 控制层（自主实现，2026-08-03）
+
+按 `THREADING_DESIGN_DETAIL.md` §五落地控制层，全量 pytest 零回归（1393 passed/4 skipped，+5 测试）。
+
+**实现内容**：
+- **ConfigStore**（`core/runtime/observability/config.py`）：全局→单调用→单实例三表链式覆盖，查询按 单实例→单调用→全局→默认 顺序解析（读时解析不缓存陈旧，单点真理）。默认：parallel/stream/observability=开、debug=关。
+- **iruntime.configure/get_config**：VAR_KEYWORD 参数形态（`runtime.configure(parallel=False, debug=True)`），支持 `instance=`/`task=` 作用域定位。变更广播 `configured` 事件（observability 开启时）。
+- **实际门控**：`parallel` 门控 dispatch_eager（`_parallel_enabled`，关闭走同步串行）；`observability` 门控事件流（`_emit_event` 关闭时抑制 chan/slot/task 事件）。
+
+**关键决策**：configure 采用 VAR_KEYWORD vtable 参数而非固定参数——`configure(parallel=, stream=, ...)` 接受任意配置键，避免硬编码参数列表（工作模式定论：协议驱动）。语义层经 VAR_KEYWORD 契约校验（loader.py 已支持）。
+
+**测试**：`tests/runtime/test_runtime_configure.py`（5：默认值、configure 生效、observability 门控、配置持久）。全量 pytest 1393 passed/4 skipped 零回归。

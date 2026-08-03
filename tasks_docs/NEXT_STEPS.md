@@ -62,7 +62,9 @@ python -m pytest tests/
 >
 > **PT-MT-4 内省层已完成（2026-08-03）**：`core/runtime/observability/`（snapshot 聚合 + EventBus/EventSource/ChannelSink）+ 新 kernel-native 模块 `iruntime`（`snapshot()`/`subscribe()`）。快照返回 tasks/channels/slots/vms/vars/llm 结构化 dict；订阅返回 stream Channel，事件流送达（chan_created/slot_updated/task_started/task_done/task_cancelled）。附带修复：**关键字作成员名**（`iruntime.snapshot` 中 snapshot 是保留字——`dot` 解析接受标识符样关键字，Python 风格）；`chan(str,"stream",name=...)` 关键字参数解析。测试：`test_observability.py`（6），全量 pytest 1388 passed/4 skipped 零回归。
 >
-> **下一步**：PT-MT-5 控制层（`runtime.configure(...)` 统一启停 + ConfigStore 链式覆盖 + config_change 信号）。
+> **PT-MT-5 控制层已完成（2026-08-03）**：`ConfigStore`（`core/runtime/observability/config.py`，全局→单调用→单实例链式覆盖，单点真理）+ `iruntime.configure(...)`/`get_config()`（VAR_KEYWORD 参数形态，返回 effective config）+ `config_change` 事件广播。默认值：parallel/stream/observability=开、debug=关。已接入实际开关：`parallel` 门控 dispatch_eager（关闭走同步串行）、`observability` 门控事件流（关闭抑制 chan/slot/task 事件）。测试：`test_runtime_configure.py`（5），全量 pytest 1393 passed/4 skipped 零回归。
+>
+> **下一步**：PT-MT-6 流式 + 并行（流式 provider 接口 + Worker 增量 → Channel → 渲染线程）。
 
 ---
 
