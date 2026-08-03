@@ -34,6 +34,7 @@ from core.runtime.vm.task import (
     UnhandledSignal,
     Signal,
 )
+from core.runtime.vm.task_scheduler import TaskScheduler, Waitable
 from core.runtime.vm.handlers import (
     build_dispatch_table,
     build_one_shot_intent_from_annotation,
@@ -130,6 +131,20 @@ class VMExecutor:
 
         return self._drive_loop([self._make_task(node_uid)])
 
+    def run_many(self, roots: "List[str]") -> "List[Any]":
+        """并发执行多个根任务（Stage 2 多任务/宿主异步入口）。
+
+        每个根是一棵独立 AST 子树；用 ``TaskScheduler`` 协作式推进，各根在
+        等待 LLM/IO（Waitable）时挂起、让出给其它根，就绪后恢复。返回各根
+        结果（按 roots 提交序）。
+
+        受 Python GIL 限制，本并发只为服务 LLM 调用（IO 密集）。
+        """
+        scheduler = TaskScheduler()
+        for root in roots:
+            scheduler.submit(self._drive_loop_gen([self._make_task(root)]), node_uid=root)
+        return scheduler.run()
+
     def run_body(self, stmt_uids: Any) -> Any:
         """执行一个语句列表（模块或函数体）。
 
@@ -181,16 +196,39 @@ class VMExecutor:
         本方法负责把 ``stack`` 临时绑定到 ``self._current_stack`` 上，使
         ``frame_stack_depth`` 属性能从外部观察到 CPS 栈深度；嵌套
         ``_drive_loop`` 调用（例如 ``vm.run`` 重入）通过保存/恢复保持外层
-        视图一致。实际循环体在 ``_drive_loop_body``。
+        视图一致。实际循环体在 ``_drive_loop_gen``（单任务驱动，阻塞等待
+        每个 Waitable，保持既有语义）。
         """
         prev_stack = self._current_stack
         self._current_stack = stack
         try:
-            return self._drive_loop_body(stack)
+            return self._drive_gen_blocking(self._drive_loop_gen(stack))
         finally:
             self._current_stack = prev_stack
 
-    def _drive_loop_body(self, stack: list) -> Any:
+    def _drive_gen_blocking(self, gen: Any) -> Any:
+        """驱动单个调度生成器到完成（单任务：对每个 Waitable 阻塞等待）。
+
+        ``_drive_loop_gen`` 在 handler yield 一个 Waitable 时挂起；此处立即
+        ``waitable.result()`` 阻塞等待并 ``send`` 恢复，等价于旧的同步阻塞语义。
+        """
+        try:
+            waitable = gen.send(None)
+            while True:
+                waitable = gen.send(waitable.result())
+        except StopIteration as si:
+            return si.value
+
+    def _drive_loop_gen(self, stack: list) -> Any:
+        """可挂起的调度循环生成器（单源）。
+
+        逐帧推进栈；当某 handler yield 一个 Waitable（如 ``LLMFuture``）时挂起
+        （``yield waitable``），把控制权交还调用方；调用方（单任务驱动 / 多任务
+        调度器）在 waitable 就绪后 ``send(result)`` 恢复。栈耗尽时返回最终结果。
+
+        单任务驱动（``_drive_loop``）在此阻塞等待；多任务驱动（``run_many``）
+        由 ``TaskScheduler`` 挂起该根、让出给其它根。
+        """
         # (value, exception) — 互斥；下一次循环将传递给栈顶任务
         pending_value: Any = None
         pending_exception: Optional[BaseException] = None
@@ -240,6 +278,13 @@ class VMExecutor:
             if child_uid is None:
                 # yield None —— 视作 None 立即返回
                 pending_value = self.registry.get_none()
+                continue
+
+            # 生成器 yield 了一个 Waitable（如 LLMFuture）→ 挂起，等待其完成。
+            # 单任务驱动（_drive_loop）在此阻塞等待；多任务驱动（run_many）由
+            # 调度器挂起该根、让出给其它根，就绪后 send 结果恢复。
+            if isinstance(child_uid, Waitable):
+                pending_value = yield child_uid
                 continue
 
             if isinstance(child_uid, str) and self.supports(child_uid):
