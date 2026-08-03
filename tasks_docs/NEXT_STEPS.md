@@ -53,6 +53,14 @@ python -m pytest tests/
 > **关联**：PT-TEST-9（probe_model 测试）为并行可靠性的组成；PT-HEALTH-3 核心并入 Stage 1；PT-4.2（`__call__` 协议）降为次要。
 >
 > **验证**：每批 `python -m pytest tests/` 全量零回归。
+>
+> **Stage 2 地基已落地（2026-08-03）**：
+> - `TaskScheduler` 多任务协作调度器（纯 stdlib，`Waitable` 协议）+ `run_many` 多根并发入口
+> - `TaskScheduler` 结果按**提交序**收集（非完成序），`run_many` 按 roots 索引取结果可靠
+> - `leaf.py` `vm_handle_IbName` 对 `LLMFuture` 改 `yield from resolve_future_cps` 挂起（单脚本内 LLM 阻塞可挂起，对齐多根语义）
+> - Stage 1 三项核验完成（parse_result 线程安全 / `_prompt`+`_llm_function` 无实例级可变状态 / 意图 fork 隔离完整）
+>
+> **下一步**：宿主级异步（PT-3.1）——`run_isolated`/`spawn_isolated` 返回可 await 句柄 + 多返回值；`ReceiveMode`（PT-3.2）语义。需先对齐宿主异步句柄契约设计。
 
 ---
 
