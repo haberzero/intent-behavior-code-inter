@@ -66,7 +66,9 @@ python -m pytest tests/
 >
 > **PT-MT-6 流式 + 并行已完成（2026-08-03）**：流式 provider 接口（`AIPlugin.stream()`，ILLMProvider 协议扩展，MOCK 单块 + 真实 OpenAI stream=True 逐 delta）+ `IbStreamHandle`（`core/runtime/objects/stream.py`：Waitable + stream Channel，后台线程消费增量））+ `MOCK:STREAM:chunk1|chunk2|...` 指令 + MockServer SSE 多块流式端点 + 语言面 `ai.stream_call()`（Waitable，await/赋值自动等待完整文本）/`ai.stream_channel()`（返回承载增量块的 IbChannel，渲染线程 recv 逐块）。流式与并行（dispatch_eager/run_many）独立、都默认开启。测试：`test_streaming.py`（8），全量 pytest 1401 passed/4 skipped 零回归。
 >
-> **下一步**：PT-MT-7 多 VM 实例（每并发路径一个轻量 VM + 全局只读数据 + RuntimeCoordinator）。
+> **PT-MT-7 多 VM 实例已完成（2026-08-03）**：`core/runtime/coordinator.py`（`RuntimeCoordinator` + `SpawnedTask`）：spawn 在**后台线程**运行目标函数，使用**任务本地执行上下文**（fresh runtime_context + setup_context 注入内置 + 任务本地 EC/LogicalCallStack/VMExecutor，共享只读 node_pool/registry）。实现 per-task 隔离（C4 作用域/意图/llmexcept）+ 全局只读数据共享（C5）。`IbTask` 升级为后台线程句柄（join 阻塞等结果 / cancel 协作式）。函数/lambda/fn_callable/behavior 均可 spawn。测试：`test_vm_instance.py`（6），全量 pytest 1407 passed/4 skipped 零回归。
+>
+> **下一步**：PT-MT-8 用户代码多线程收尾（挂起点协作取消 + 实时 UI/输出刷新场景验证）。
 
 ---
 

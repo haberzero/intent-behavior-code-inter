@@ -1,0 +1,293 @@
+"""
+core.runtime.coordinator — 多任务/多 VM 生命周期协调器（PT-MT-7/8）。
+
+``spawn(fn, args)`` 在**后台线程**运行目标函数，使用**任务本地执行上下文**
+（fresh runtime_context + fresh VMExecutor，共享只读 node_pool/registry），
+实现 per-task 隔离（并发正确性 C4）与全局只读数据共享（C5）。
+
+生命周期：``spawn`` → task handle → ``join``（阻塞等待结果）/ ``cancel``（协作式
+请求取消）/ ``is_done``（非破坏检查）。
+
+设计（THREADING_DESIGN_DETAIL §七）：
+- 轻量 VM 实例：每并发路径一个，完全隔离作用域/意图/llmexcept，共享只读数据。
+- join/cancel 经 handle；结果为函数返回值（经 Waitable 协议供 VM yield 挂起）。
+- 后台线程为 daemon（Python 无法强杀线程；cancel 为协作式请求）。
+
+隔离边界（关键）：任务不写主环境作用域；跨任务数据经 Channel/Slot 显式通信。
+任务运行期间，``get_current_execution_context`` 返回任务本地 EC（ContextVar
+线程隔离），故 LLM 调用 / 内省在任务线程内正确解析到任务上下文。
+"""
+
+from __future__ import annotations
+
+import threading
+import uuid
+from concurrent.futures import Future
+from typing import Any, Dict, List, Optional, Tuple
+
+from core.runtime.frame import (
+    set_current_execution_context,
+    set_current_frame,
+    reset_current_execution_context,
+    reset_current_frame,
+)
+from core.runtime.shared.waitable import Waitable
+
+
+class SpawnedTask:
+    """一个 spawn 任务（后台线程 + 任务本地执行上下文）。
+
+    结构性满足 :class:`Waitable`（``is_done`` + ``result()``）：VM 可 yield 挂起
+    等待；``join`` 阻塞等结果。
+    """
+
+    def __init__(self, interpreter: Any, callable_obj: Any, args: Optional[List[Any]] = None):
+        self._interpreter = interpreter
+        self._callable = callable_obj
+        self._args = list(args or [])
+        self._handle = f"task_{uuid.uuid4().hex[:16]}"
+        self._future: Future = Future()
+        self._cancelled = False
+        self._thread: Optional[threading.Thread] = None
+
+    # ------------------------------------------------------------------ #
+    # 生命周期                                                            #
+    # ------------------------------------------------------------------ #
+
+    def start(self) -> "SpawnedTask":
+        """启动后台线程执行。"""
+        self._thread = threading.Thread(
+            target=self._run,
+            daemon=True,
+            name=self._handle,
+        )
+        self._thread.start()
+        return self
+
+    def _run(self) -> None:
+        """后台线程入口：构建任务本地上下文并驱动函数体。"""
+        try:
+            result = _run_task_body(self._interpreter, self._callable, self._args)
+            self._future.set_result(result)
+        except BaseException as e:  # 任务内任何异常都捕获并传递（join 时重抛）
+            self._future.set_exception(e)
+
+    # ------------------------------------------------------------------ #
+    # 查询 / 等待                                                        #
+    # ------------------------------------------------------------------ #
+
+    @property
+    def handle(self) -> str:
+        return self._handle
+
+    @property
+    def is_done(self) -> bool:
+        return self._future.done()
+
+    def result(self) -> Any:
+        """阻塞等待任务结果；任务内异常在此重抛。"""
+        return self._future.result()
+
+    def join(self) -> Any:
+        """阻塞等待任务完成并返回结果。"""
+        return self._future.result()
+
+    def cancel(self) -> None:
+        """请求取消（协作式：仅未启动时可取消；已启动则无法强杀）。
+
+        注：Python 无法强杀运行中线程。本实现仅标记取消；已启动任务无法
+        中断。真正的中断（协作式检查）在 PT-MT-8 的挂起点机制中落地。
+        """
+        if not self._started():
+            self._cancelled = True
+            self._future.set_exception(RuntimeError("IbTask: task was cancelled."))
+
+    def _started(self) -> bool:
+        return self._thread is not None
+
+    def to_dict(self) -> dict:
+        return {
+            "handle": self._handle,
+            "done": self.is_done,
+            "cancelled": self._cancelled,
+        }
+
+
+def _run_task_body(interpreter: Any, callable_obj: Any, args: List[Any]) -> Any:
+    """在任务本地执行上下文中驱动目标函数体，返回结果。
+
+    构建流程：
+    1. 新建任务本地 ``RuntimeContextImpl`` 并经 ``setup_context`` 注入内置。
+    2. 新建任务本地 ``ExecutionContextImpl``（共享只读 node_pool/side_tables，
+       任务本地 runtime_context/logical_stack/current_module）。
+    3. 新建任务本地 ``VMExecutor`` 绑定到该 EC。
+    4. 若可调用是 ``IbUserFunction``：经其 ``call()`` 驱动（内部 run_body）。
+       否则（lambda/fn_callable/behavior）经 ``_vm_call_fn_callable`` CPS 驱动。
+    """
+    from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+    from core.runtime.interpreter.execution_context import ExecutionContextImpl
+    from core.runtime.interpreter.call_stack import LogicalCallStack
+    from core.runtime.vm import VMExecutor
+    from core.runtime.objects.kernel import IbUserFunction, IbValue, IbObject
+
+    main_ec = interpreter.execution_context
+    registry = interpreter.registry
+
+    # 1. 任务本地 runtime_context（隔离作用域/意图/llmexcept）
+    task_rt = RuntimeContextImpl(registry=registry)
+    interpreter.setup_context(task_rt)
+
+    # 2. 任务本地 EC：共享只读回调（node_pool/side_tables/factory），任务本地状态
+    task_logical_stack = LogicalCallStack()
+    task_ec = ExecutionContextImpl(
+        registry=registry,
+        factory=main_ec.factory,
+        get_node_data_callback=interpreter.get_node_data,
+        get_side_table_callback=interpreter.get_side_table,
+        push_stack_callback=task_logical_stack.push,
+        pop_stack_callback=task_logical_stack.pop,
+        get_instruction_count_callback=lambda: 0,
+        get_captured_intents_callback=interpreter.get_captured_intents,
+        is_truthy_callback=interpreter.is_truthy,
+        resolve_type_from_symbol_callback=interpreter._resolve_type_from_symbol,
+        extract_name_id_callback=interpreter._extract_name_id,
+        resolve_value_callback=interpreter._resolve_value,
+        module_manager=interpreter.service_context.module_manager,
+        strict_mode=True,
+        entry_file=main_ec.get_entry_path(),
+        entry_dir=main_ec.get_entry_dir(),
+    )
+    task_ec.runtime_context = task_rt
+    task_ec.node_pool = main_ec.node_pool
+    task_ec.symbol_pool = main_ec.symbol_pool
+    task_ec.scope_pool = main_ec.scope_pool
+    task_ec.type_pool = main_ec.type_pool
+    task_ec.asset_pool = main_ec.asset_pool
+    task_ec.logical_stack = task_logical_stack
+    task_ec.current_module_name = interpreter.current_module_name
+
+    # 3. 任务本地 VMExecutor
+    task_vm = VMExecutor(task_ec, interpreter=interpreter)
+    task_ec.vm_executor = task_vm
+
+    # 4. 线程本地 ContextVar：任务线程内的 LLM/内省正确解析到任务 EC
+    frame_token = set_current_frame(task_rt)
+    ec_token = set_current_execution_context(task_ec)
+    try:
+        if isinstance(callable_obj, IbUserFunction):
+            # 用户函数：call() 内部切换模块作用域 + 绑定实参 + run_body
+            receiver = registry.get_none()
+            return callable_obj.call(receiver, args)
+        if isinstance(callable_obj, IbValue) and callable_obj.ib_class.name in (
+            "fn_callable",
+            "behavior",
+        ):
+            # lambda/snapshot/behavior：CPS 内联驱动
+            from core.runtime.vm.handlers._shared import _vm_call_fn_callable, _vm_invoke_behavior
+            from core.runtime.vm.task import VMTask
+
+            if callable_obj.ib_class.name == "behavior":
+                # behavior：经 CPS 驱动
+                result = _run_behavior_cps(task_vm, callable_obj, args)
+                return result
+            # fn_callable（lambda/snapshot）：经 CPS 驱动
+            gen = _vm_call_fn_callable(task_vm, callable_obj, args)
+            return _drive_generator(task_vm, gen, args)
+        # 兜底：原生函数 / 其它可调用
+        if hasattr(callable_obj, "call"):
+            return callable_obj.call(registry.get_none(), args)
+        raise RuntimeError(
+            f"spawn: 目标 {callable_obj!r} 不可作为任务执行（非函数/lambda/behavior）"
+        )
+    finally:
+        reset_current_execution_context(ec_token)
+        reset_current_frame(frame_token)
+
+
+def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any]) -> Any:
+    """在任务本地 VM 中 CPS 驱动 behavior 表达式。"""
+    from core.runtime.vm.handlers._shared import _vm_invoke_behavior
+
+    gen = _vm_invoke_behavior(task_vm, behavior, args)
+    return _drive_generator(task_vm, gen, args)
+
+
+def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None) -> Any:
+    """驱动一个 CPS 生成器到完成（阻塞等待每个 Waitable）。
+
+    任务线程内使用：对 LLM Future / 通信 Channel recv 等 Waitable 阻塞等待。
+
+    生成器契约（与 VM 主循环一致）：首次 ``send(None)`` 启动；后续 yield 的
+    若是 Waitable 则阻塞等待其完成再 ``send(result)`` 恢复；否则（yield child
+    uid）经 VM 的 ``_drive_loop_gen`` 处理——但任务线程内 lambda 体的子节点由
+    ``_vm_call_fn_callable`` 内部 yield body_uid，故此处需把 child uid 转发给
+    任务本地 VM 驱动（经递归驱动该子节点）。
+    """
+    from core.runtime.shared.waitable import Waitable
+
+    def _step(val):
+        try:
+            return gen.send(val), False
+        except StopIteration as si:
+            return si.value, True
+
+    result, done = _step(None)
+    while not done:
+        if isinstance(result, Waitable):
+            result, done = _step(result.result())
+        elif isinstance(result, str) and task_vm.supports(result):
+            # lambda 体 yield 的 child uid：经任务本地 VM 求值后恢复
+            child_result = task_vm.run(result)
+            result, done = _step(child_result)
+        else:
+            raise RuntimeError(
+                f"spawn task: generator yielded non-waitable, non-node value {result!r}"
+            )
+    return result
+
+
+class RuntimeCoordinator:
+    """多任务生命周期协调器。
+
+    ``spawn(fn, args)`` → ``SpawnedTask``（后台线程 + 任务本地上下文）。
+    ``join`` / ``cancel`` / ``is_done`` 经 handle。
+    """
+
+    def __init__(self, interpreter: Any):
+        self._interpreter = interpreter
+        self._tasks: Dict[str, SpawnedTask] = {}
+        self._lock = threading.Lock()
+
+    def spawn(self, callable_obj: Any, args: Optional[List[Any]] = None) -> SpawnedTask:
+        """在后台线程运行目标函数，返回任务句柄。"""
+        task = SpawnedTask(self._interpreter, callable_obj, args).start()
+        with self._lock:
+            self._tasks[task.handle] = task
+        return task
+
+    def lookup(self, handle: str) -> Optional[SpawnedTask]:
+        with self._lock:
+            return self._tasks.get(handle)
+
+    def is_done(self, handle: str) -> bool:
+        task = self.lookup(handle)
+        return task.is_done if task else True
+
+    def join(self, handle: str) -> Any:
+        task = self.lookup(handle)
+        if task is None:
+            raise RuntimeError(f"Unknown task handle: {handle!r}")
+        return task.join()
+
+    def cancel(self, handle: str) -> None:
+        task = self.lookup(handle)
+        if task is not None:
+            task.cancel()
+
+    def snapshot(self) -> list:
+        with self._lock:
+            return [t.to_dict() for t in self._tasks.values()]
+
+    def cleanup(self, handle: str) -> None:
+        with self._lock:
+            self._tasks.pop(handle, None)

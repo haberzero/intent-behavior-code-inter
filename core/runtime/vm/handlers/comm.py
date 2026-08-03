@@ -38,6 +38,25 @@ def _get_comm_registry(executor) -> CommRegistry:
     return reg
 
 
+def _get_coordinator(executor) -> Any:
+    """获取（或惰性创建）执行器关联的 RuntimeCoordinator。
+
+    挂在 runtime_context 上（与 CommRegistry 同级）。spawn/join/cancel 共享。
+    """
+    from core.runtime.coordinator import RuntimeCoordinator
+
+    rc = executor.runtime_context
+    coord = getattr(rc, "_runtime_coordinator", None)
+    if coord is None:
+        interpreter = getattr(executor, "_interpreter", None)
+        coord = RuntimeCoordinator(interpreter)
+        try:
+            rc._runtime_coordinator = coord
+        except Exception:
+            pass
+    return coord
+
+
 def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
     """向 runtime_context 上的事件总线广播事件（PT-MT-4 内省事件流）。
 
@@ -118,7 +137,7 @@ def vm_handle_IbSpawnStmt(executor, node_uid: str, node_data: Mapping[str, Any])
     PT-MT-3 阶段：构造协作式延迟任务句柄（IbTask，join 时在当前 VM 线程
     求值）。后台线程 / 轻量 VM 实例的并发执行在 PT-MT-7/8 升级执行路径。
     """
-    from core.runtime.objects.task import spawn_task_handle
+    from core.runtime.objects.task import IbTask
     from core.runtime.vm.handlers._shared import _vm_assign_to_target
 
     func_uid = node_data.get("func")
@@ -146,13 +165,21 @@ def vm_handle_IbSpawnStmt(executor, node_uid: str, node_data: Mapping[str, Any])
             kw_val = yield kw.get("value")
             args.append(kw_val)
 
-    handle = spawn_task_handle(executor, callable_obj, args)
+    coordinator = _get_coordinator(executor)
+    task_cls = executor.registry.get_class("task")
+    task_obj = IbTask(
+        ib_class=task_cls,
+        executor=executor,
+        coordinator=coordinator,
+        callable_obj=callable_obj,
+        args=args,
+    )
     _emit_event(executor, "task_started", {"node_uid": node_uid})
 
     target_uid = node_data.get("target")
     if target_uid:
-        yield from _vm_assign_to_target(executor, target_uid, handle, define_only=True)
-    return handle
+        yield from _vm_assign_to_target(executor, target_uid, task_obj, define_only=True)
+    return task_obj
 
 
 def vm_handle_IbJoinStmt(executor, node_uid: str, node_data: Mapping[str, Any]):

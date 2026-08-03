@@ -142,3 +142,20 @@
 **关键决策**：流式与并行（dispatch_eager/run_many）保持独立（设计 §六.1），都默认开启；`stream` config 键已注册但接入点在行为表达式自动流式（未来），当前经 ai.stream_call/stream_channel 显式暴露（非双通道——显式 API 是流式的一等入口）。
 
 **测试**：`tests/runtime/test_streaming.py`（8：IbStreamHandle 单元、STREAM 指令、MockServer SSE 真实客户端、stream_call await/赋值、stream_channel 增量渲染）。全量 pytest 1401 passed/4 skipped 零回归。
+
+#### 11. PT-MT-7 多 VM 实例（自主实现，2026-08-03）
+
+按 `THREADING_DESIGN_DETAIL.md` §七落地多 VM 实例，全量 pytest 零回归（1407 passed/4 skipped，+6 测试）。
+
+**实现内容**：
+- **`core/runtime/coordinator.py`**：`RuntimeCoordinator`（spawn/lookup/is_done/join/cancel/snapshot）+ `SpawnedTask`（后台线程 + `concurrent.futures.Future` 结果槽，Waitable 协议）。
+- **任务本地执行上下文**（`_run_task_body`）：fresh `RuntimeContextImpl` + `setup_context` 注入内置；fresh `ExecutionContextImpl`（共享只读 node_pool/side_tables/factory，任务本地 runtime_context/LogicalCallStack/current_module）；fresh `VMExecutor`。线程本地 ContextVar（`set_current_frame`/`set_current_execution_context`）保证任务线程内 LLM/内省解析到任务上下文。
+- **IbTask 升级**：后台线程句柄（`_ensure_started` 惰性启动，join 阻塞等 Future 结果，cancel 协作式）。
+- **spawn 支持**：用户函数（IbUserFunction.call）/ lambda/fn_callable（`_vm_call_fn_callable` CPS）/ behavior（`_vm_invoke_behavior`）。
+
+**关键决策**：
+- spawn 从 PT-MT-3 的"协作式延迟任务"升级为"后台线程 + 任务本地上下文"——实现用户裁定"用户可见多线程"（实时 UI/输出刷新）。任务隔离遵循并发正确性 C4（per-task 所有权）+ C5（全局只读）。
+- cancel 为协作式（Python 无法强杀线程）：未启动可取消；运行中任务无法中断（挂起点检查在 PT-MT-8 细化）。
+- 共享注册表/artifact/node_pool 只读（C5），任务写隔离经作用域隔离天然保证。
+
+**测试**：`tests/runtime/test_vm_instance.py`（6：后台函数 spawn、lambda spawn、多任务、作用域隔离、cancel、snapshot 任务字段）。全量 pytest 1407 passed/4 skipped 零回归。
