@@ -50,9 +50,32 @@ Constants
 from __future__ import annotations
 
 import os
+import threading
+import faulthandler
 from typing import Any, Callable, List, Optional, Set, Tuple
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# 死锁/卡死防护看门狗（进程级，纯 stdlib，agent 无关）
+# ---------------------------------------------------------------------------
+# 测试体系对"死循环/卡死"的强制防护：任何测试 / 整个运行超过 90 秒即强制退出，
+# 防止 pytest 永久挂起（挂起的 pytest 工具调用会使智能体无法继续）。
+# 不依赖任何外部因素或智能体调用模式——pytest 进程启动即生效。
+# 超时前 dump 所有线程栈（诊断死锁点），再用 os._exit 强制终止（进程级，
+# 任何线程阻塞都无法阻止 os._exit）。
+_DEADLOCK_TIMEOUT_S = 90
+
+
+def _deadlock_watchdog() -> None:
+    import time
+
+    time.sleep(_DEADLOCK_TIMEOUT_S)
+    faulthandler.dump_traceback()  # 诊断：dump 所有线程栈
+    os._exit(124)  # 强制退出（124 = GNU timeout 语义）
+
+
+threading.Thread(target=_deadlock_watchdog, daemon=True).start()
 
 # ---------------------------------------------------------------------------
 # Path constants
