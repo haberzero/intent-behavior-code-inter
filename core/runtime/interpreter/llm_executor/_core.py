@@ -73,6 +73,7 @@ class LLMExecutorCore:
         # LLMScheduler 状态
         self._max_workers: int = max_workers
         self._thread_pool: Optional[_ThreadPoolExecutor] = None
+        self._closed: bool = False  # close() 后禁止再 dispatch（fail-fast，防静默重建）
         self._pending_futures: Dict[str, LLMFuture] = {}  # node_uid → LLMFuture
         self._pending_futures_lock = threading.Lock()  # 保护 _pending_futures 的并发访问
 

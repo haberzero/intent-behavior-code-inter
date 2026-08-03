@@ -54,7 +54,7 @@
 |------|------|------|
 | PT-SYNC-1 | 并发正确性验证方法 | Stage 1/2 需要并发测试基建（并发 dispatch 测试、共享状态只读不变式测试）——否则"真正可用"无法被证明【已完成 2026-08-02：新增 `tests/runtime/test_concurrent_dispatch_integrity.py`，经 mock_server 真实 HTTP 驱动并行 dispatch，验证 真正并发重叠/no-cross-talk/乱序确定性/批次隔离；全量 pytest 1284 passed/4 skipped 零回归】 |
 | PT-SYNC-2 | `LLMFuture` 生命周期/错误语义 | resolve 超时/取消/重复 resolve 的用户可见语义——并行可用性的边界【部分完成 2026-08-02：新增 `tests/runtime/test_llm_result_future.py` 锁定 `LLMResult`/`LLMFuture` 语义（is_success/三工厂/get 四分支/blocking/is_done；10 用例，全量 pytest 1296 passed/4 skipped 零回归）。顺带移除 `LLMResult.unwrap()` 死代码（零消费者 + None 分支构造 `IbNone()` 缺参属潜在 bug）。超时/取消语义仍待定】 |
-| PT-SYNC-3 | 线程池资源生命周期 | `close()` 语义、关闭后 `dispatch_eager` 的行为（当前会重建池，语义模糊）——资源管理明确化 |
+| PT-SYNC-3 | 线程池资源生命周期 | close() 语义、关闭后 dispatch_eager 的行为（当前会重建池，语义模糊）——资源管理明确化【已完成 2026-08-03：判为 IBCI 自身设计缺陷，按"可推翻"+fail-fast 原则重建。变化：close() 后置 `_closed=True`，`_get_thread_pool()` 在 `_closed` 时抛 RuntimeError，不再静默重建；`close()` 幂等。新增 `tests/runtime/test_scheduler_threadpool_lifecycle.py`（4 用例）。全量 pytest 零回归】 |
 
 ---
 

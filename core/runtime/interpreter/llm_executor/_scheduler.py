@@ -22,7 +22,15 @@ class _SchedulerMixin:
     # ---------------------------------------------------------------------------
 
     def _get_thread_pool(self) -> _ThreadPoolExecutor:
-        """惰性初始化线程池（首次 dispatch_eager 调用时创建）。"""
+        """惰性初始化线程池（首次 dispatch_eager 调用时创建）。
+
+        线程池已通过 :meth:`close` 关闭后，禁止再次获取（fail-fast）——
+        否则会在不知情下静默重建新池，破坏"已关闭"资源生命周期不变量。
+        """
+        if self._closed:
+            raise RuntimeError(
+                "LLMExecutorImpl 线程池已关闭（close() 已调用），禁止再次 dispatch_eager/run_batch。"
+            )
         if self._thread_pool is None:
             self._thread_pool = _ThreadPoolExecutor(max_workers=self._max_workers)
         return self._thread_pool
@@ -91,11 +99,14 @@ class _SchedulerMixin:
         """关闭线程池（等待已提交任务完成）。
 
         应优先调用此方法显式释放资源，而非依赖 ``__del__``。
-        关闭后不应再调用 ``dispatch_eager()``（会重新创建线程池）。
+        关闭后再次调用 ``dispatch_eager()``/``run_batch`` 会抛 ``RuntimeError``
+        （见 :meth:`_get_thread_pool`），不再静默重建线程池。
+        幂等：重复调用安全。
         """
         if self._thread_pool is not None:
             self._thread_pool.shutdown(wait=True)
             self._thread_pool = None
+        self._closed = True
 
     def __del__(self) -> None:
         """关闭线程池（非阻塞；允许已提交的任务完成）。"""
