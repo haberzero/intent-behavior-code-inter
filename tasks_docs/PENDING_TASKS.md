@@ -144,9 +144,11 @@
 
 > 异常过多的 if-else 并用、过深 if-else、过多过深 except 嵌套（含我的工程经验补充：守卫子句缺失、长 elif 链查表化、宽 except 误吞语言级异常、异常当控制流等）。AST 度量基线（深度/elif 链/70 处宽 except/5 处嵌套 try）+ 位置清单见 **`tasks_docs/BRANCH_NESTING_AUDIT.md`**。独立分支执行。
 
-### PT-SMELL-3：局部 import 审计（独立分支）[P2]
+### PT-SMELL-3：局部 import 审计（独立分支）[P2]【已完成 2026-08-03】
 
 > 无意义的局部 import、为打破循环导入的内联 import（含我的工程经验补充：循环依赖应重构方向而非胶水掩盖、TYPE_CHECKING 替代、热路径重复 import、惰性依赖合法模式）。全仓 35 处局部 import 分类清单见 **`tasks_docs/LOCAL_IMPORT_AUDIT.md`**。独立分支执行。
+>
+> **完成**：可提升类（L12/13/14/16/19/20）已提升至模块顶部；L15/L17 核验保留；循环打破类（L1-L10 等）核验为**标准运行时局部 import 环打破（非胶水）**，但按其 tradeoff 性质**极其谨慎地记录为未来推迟工作**（见 `LOCAL_IMPORT_AUDIT.md` §四"推迟工作记录"），待架构重构时逐项复核。已并入 unsafe-vibe-dev。
 
 ### PT-ARCH-23 G2 遗留：内核原生模块覆盖可观测性缺口 [待决策]
 

@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace, field
 from typing import Optional, Any, Dict
 from core.kernel import ast as ibci_ast
 from core.kernel.symbols import VariableSymbol, FunctionSymbol, TypeSymbol, SymbolKind
+from core.base.enums import Provenance, Visibility
 from core.compiler.semantic.metadata.symbol_table import SymbolTableContext
 from core.compiler.semantic.metadata.type_environment import TypeInferenceState
 
@@ -115,7 +116,6 @@ class ContextBuilder:
 
         # Local import to avoid circular: context → passes → base_pass → context
         from core.compiler.semantic.passes.prelude import Prelude
-        from core.base.enums import Provenance, Visibility
 
         symbol_table = SymbolTableContext.create_root(self.module_name)
         type_environment = TypeInferenceState.create_empty()

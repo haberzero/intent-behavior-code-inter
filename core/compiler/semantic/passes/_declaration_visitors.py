@@ -8,6 +8,7 @@ no logic changes.
 """
 
 from typing import Optional
+from core.base.enums import Provenance, Visibility
 
 from core.base.diagnostics.codes import (
     SEM_DEFAULT_TYPE_MISMATCH,
@@ -83,7 +84,6 @@ class DeclarationVisitorsMixin:
         if sym and sym.spec and self.registry:
             param_type_names = [(p.name if p else "any") for p in param_types]
             ret_type_name = ret_type.name if ret_type else "void"
-            from core.base.enums import Provenance, Visibility
             updated_spec = self.registry.factory.create_func(
                 name=node.name,
                 param_type_names=param_type_names,
@@ -313,7 +313,6 @@ class DeclarationVisitorsMixin:
         if sym and sym.spec and self.registry:
             param_type_names = [(p.name if p else "any") for p in param_types]
             ret_type_name = ret_type.name if ret_type else "void"
-            from core.base.enums import Provenance, Visibility
             updated_spec = self.registry.factory.create_func(
                 name=node.name,
                 param_type_names=param_type_names,

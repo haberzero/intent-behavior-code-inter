@@ -17,6 +17,7 @@ import importlib
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
+from core.runtime.path import InstallPaths
 
 
 @dataclass
@@ -53,7 +54,6 @@ class AutoDiscoveryService:
 
     def _get_default_paths(self) -> List[str]:
         """获取默认搜索路径：经 InstallPaths 服务统一计算（消灭 __file__ 遍历）。"""
-        from core.runtime.path import InstallPaths
         return [
             InstallPaths.modules_dir().to_native(),
             InstallPaths.plugins_dir().to_native(),
