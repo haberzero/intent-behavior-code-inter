@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from core.runtime.vm.task_scheduler import TaskScheduler, Waitable
+from core.runtime.shared.llm_result import LLMFuture, LLMResult
 
 
 class _ManualWaitable(Waitable):
@@ -29,6 +30,7 @@ class _ManualWaitable(Waitable):
         self._result = None
         self._result_set = False
 
+    @property
     def is_done(self) -> bool:
         return self._result_set or (self._delay > 0 and time.monotonic() >= self._ready_after)
 
@@ -46,6 +48,7 @@ class _FutureWaitable(Waitable):
     def __init__(self, future: Future):
         self._future = future
 
+    @property
     def is_done(self) -> bool:
         return self._future.done()
 
@@ -134,3 +137,14 @@ class TestTaskScheduler:
         # 并发完成序不确定，只断言结果集与总时（真并发）
         assert sorted(results) == ["t1", "t2"]
         assert elapsed < 0.35, f"串行化迹象: {elapsed:.3f}s"
+
+    def test_real_llm_future_is_waitable(self):
+        """LLMFuture 结构符合 Waitable 协议，可直接被调度器 await。"""
+        f = Future()
+        lf = LLMFuture(node_uid="n", future=f)
+        assert isinstance(lf, Waitable)  # runtime_checkable Protocol 结构匹配
+
+        s = TaskScheduler()
+        s.submit(_task_await(lf, "llm-ok"))
+        f.set_result(LLMResult.success_result(value=None, raw_response="r"))
+        assert s.run() == ["llm-ok"]

@@ -104,6 +104,14 @@ class LLMFuture:
         """返回 True 当且仅当后台 LLM 调用已完成（无论成功与否）。"""
         return self.future.done()
 
+    def result(self) -> Any:
+        """阻塞等待后台 Future 完成并返回原始 ``LLMResult``（不含解析）。
+
+        供协作式调度器（``TaskScheduler``）作为 ``Waitable`` 消费：调度器
+        ``is_done`` 后取 ``result()`` 得原始结果，由任务侧再解析为 ``IbObject``。
+        """
+        return self.future.result()
+
     def get(self, registry: Any) -> 'IbObject':
         """阻塞等待 Future 完成并返回 IbObject。若已完成则零开销。
 

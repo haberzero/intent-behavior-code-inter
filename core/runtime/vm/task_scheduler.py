@@ -20,22 +20,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Generator, List, Optional
+from typing import Any, Generator, List, Optional, Protocol, runtime_checkable
 
 from core.runtime.shared.signals import Signal, ControlSignal
 
 
-class Waitable:
+@runtime_checkable
+class Waitable(Protocol):
     """可等待对象协议：调度器据此询问是否就绪并取完成结果。
 
-    现有 ``LLMFuture``（``is_done``/``get``）与宿主句柄应适配本协议。
+    现有 ``LLMFuture``（``is_done`` 属性 + ``result()``）与宿主句柄应适配本协议。
+    ``is_done`` 为属性（与 ``LLMFuture.is_done`` 一致），``result()`` 返回完成值。
     """
 
-    def is_done(self) -> bool:
-        raise NotImplementedError
+    @property
+    def is_done(self) -> bool: ...
 
-    def result(self) -> Any:
-        raise NotImplementedError
+    def result(self) -> Any: ...
 
 
 @dataclass
@@ -77,7 +78,7 @@ class TaskScheduler:
         # 1) 检查等待任务：waitable 就绪 → 恢复（回到就绪）
         still_waiting: List[Task] = []
         for t in self._waiting:
-            if t.waiting_on is not None and t.waiting_on.is_done():
+            if t.waiting_on is not None and t.waiting_on.is_done:
                 self._ready.append(t)
             else:
                 still_waiting.append(t)
@@ -106,7 +107,7 @@ class TaskScheduler:
         # 任务 yield 了一个 waitable → 挂起
         if isinstance(yielded, Waitable):
             t.waiting_on = yielded
-            if yielded.is_done():
+            if yielded.is_done:
                 still_ready.append(t)  # 已就绪，下一轮立即恢复
             else:
                 self._waiting.append(t)
