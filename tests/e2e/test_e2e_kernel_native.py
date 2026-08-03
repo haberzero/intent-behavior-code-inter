@@ -49,7 +49,7 @@ class TestIHostNative:
         parent_path.write_text(
             "import ihost\n"
             'dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}\n'
-            'bool ok = ihost.run_isolated("child.ibci", policy)\n'
+            'dict res = ihost.run_isolated("child.ibci", policy)\n'
             'print("parent_done")\n',
             encoding="utf-8",
         )

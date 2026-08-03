@@ -75,7 +75,7 @@ class TestIsolationPluginInheritance:
         parent_ibci.write_text(
             "import ihost\n"
             'dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}\n'
-            f'bool ok = ihost.run_isolated("{_ibci_path(str(child_root / "child.ibci"))}", policy)\n'
+            f'dict res = ihost.run_isolated("{_ibci_path(str(child_root / "child.ibci"))}", policy)\n'
             'print("parent_done")\n',
             encoding="utf-8",
         )
@@ -122,7 +122,7 @@ class TestIsolationPluginInheritance:
         parent_ibci.write_text(
             "import ihost\n"
             'dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}\n'
-            f'bool ok = ihost.run_isolated("{_ibci_path(str(child_root / "child.ibci"))}", policy)\n'
+            f'dict res = ihost.run_isolated("{_ibci_path(str(child_root / "child.ibci"))}", policy)\n'
             'print("parent_done")\n',
             encoding="utf-8",
         )

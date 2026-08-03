@@ -20,23 +20,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Generator, List, Optional, Protocol, runtime_checkable
+from typing import Any, Generator, List, Optional
 
 from core.runtime.shared.signals import Signal, ControlSignal
+from core.runtime.shared.waitable import Waitable
 
-
-@runtime_checkable
-class Waitable(Protocol):
-    """可等待对象协议：调度器据此询问是否就绪并取完成结果。
-
-    现有 ``LLMFuture``（``is_done`` 属性 + ``result()``）与宿主句柄应适配本协议。
-    ``is_done`` 为属性（与 ``LLMFuture.is_done`` 一致），``result()`` 返回完成值。
-    """
-
-    @property
-    def is_done(self) -> bool: ...
-
-    def result(self) -> Any: ...
+# Waitable 协议定义于叶子模块 core/runtime/shared/waitable.py（避免 vm ↔ host /
+# vm ↔ bootstrapper 循环导入）；此处重导出，保持 ``from core.runtime.vm.task_scheduler
+# import Waitable`` 的既有导入路径可用。
+__all__ = ["Task", "TaskScheduler", "Waitable"]
 
 
 @dataclass

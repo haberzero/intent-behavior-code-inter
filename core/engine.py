@@ -695,37 +695,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 f"Selective plugin inheritance {policy_obj.inherit_plugins} requested but not yet filtered; inheriting all.")
             return self._plugin_search_paths
 
-    def request_isolated_run(self, entry_path: str, policy: Dict[str, Any]) -> bool:
-        """
-        [IKernelOrchestrator] 处理来自运行时的隔离执行系统调用。
-        核心逻辑：启动一个全新的 Engine 实例，实现编译与运行的完全隔离。
-        """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Handling kernel system call: request_isolated_run -> {entry_path}")
-
-        # 子 host 沙箱派生 + 隔离反转校验（子 entry 必须在父 project_root 内）。
-        abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
-
-        # 2. 实例化全新的 Engine（继承父 plugin search_paths）
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Bootstrapping new Engine instance for sub-project root: {sub_root_dir}")
-        sub_engine = IBCIEngine(
-            root_dir=sub_root_dir,
-            auto_sniff=self.auto_sniff,
-            core_debug_config=self.debugger.config,  # 继承调试配置
-            inherited_plugin_paths=self._resolve_inherited_plugin_paths(policy),
-            inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
-        )
-
-        # 3. 运行子项目
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Running isolated artifact...")
-        success = sub_engine.run(abs_path)
-
-        return success
-
-    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any]) -> str:
+    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], silent: bool = True) -> str:
         """
         [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用。
         在后台线程中启动全新的 Engine 实例；立即返回 handle 字符串。
         调用方随后通过 request_collect(handle) 阻塞等待结果。
+
+        ``silent``：子引擎是否抑制输出。``spawn_isolated``（后台任务）默认 True；
+        ``run_isolated``（阻塞式运行）传 False 以保留子脚本输出。
         """
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_spawn_isolated -> {entry_path}")
 
@@ -747,7 +724,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         def _run_child():
             try:
-                sub_engine.run(abs_path, silent=True)
+                sub_engine.run(abs_path, silent=silent)
             except Exception as e:
                 exc_holder[0] = e
 
@@ -760,6 +737,18 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"spawned handle={handle}")
         return handle
+
+    def is_spawn_done(self, handle: str) -> bool:
+        """[IKernelOrchestrator] 非破坏性检查 spawn handle 的子线程是否已执行完成。
+
+        供 ``HostAwaitable.is_done`` 轮询；不消费 handle（不 pop），与
+        ``request_collect`` 的消费语义互补。handle 不存在/已消费视为已完成。
+        """
+        with self._spawned_tasks_lock:
+            task = self._spawned_tasks.get(handle)
+        if task is None:
+            return True
+        return not task[0].is_alive()
 
     def request_collect(self, handle: str) -> Dict[str, Any]:
         """

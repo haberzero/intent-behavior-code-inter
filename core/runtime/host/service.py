@@ -21,6 +21,7 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.registry import KernelRegistry
 from core.runtime.objects.kernel import IbObject
 from core.kernel.issue import InterpreterError
+from core.runtime.host.awaitable import HostAwaitable
 from core.extension.ibcext import IbStatefulPlugin
 
 # 序列化格式约定：save_state 外化资产时用此哨兵占位，load_state 据此回填。
@@ -196,23 +197,23 @@ class HostService(IHostService):
                     except Exception as e:
                         core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"restore_plugin_state failed for '{name}', skipping: {e!r}")
 
-    def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
+    def run_isolated(self, path: str, policy: Dict[str, Any]) -> "HostAwaitable":
         """
-         通过内核协调器开启完全隔离的解释器环境。
-        不再负责手动孵化实例或编译代码，而是将请求作为系统调用上报。
+        隔离执行：在独立子引擎中运行 ``path``，返回 ``HostAwaitable``（可等待句柄）。
+
+        语义与 ``spawn_isolated`` 统一——子引擎在后台线程中运行；本方法返回
+        ``HostAwaitable``，VM 调度器对它 ``yield`` 挂起并等待完成，经 ``result()``
+        取回子环境导出的变量字典（多返回值）。对脚本而言即"阻塞式"运行并等待。
+
+        父与子之间不做隐式内存交互，变量不跨隔离边界继承；父->子 数据传递应
+        通过显式 file 读写完成。
         """
         if not self.orchestrator:
             raise RuntimeError("Kernel Orchestrator not available. Isolated execution cannot be performed.")
 
-        # 设计决策：子环境与父环境之间不做隐式内存交互，变量不跨隔离边界继承。
-        # 父->子 数据传递应通过显式 file 读写完成。
-
-        # 发起系统调用，阻塞等待执行完成
         abs_path = self._resolve_isolated_path(path)
-        success = self.orchestrator.request_isolated_run(abs_path, policy)
-        
-        # 返回执行结果（当前简化为布尔值；多返回值改进待实现）
-        return self.registry.box(success)
+        handle = self.orchestrator.request_spawn_isolated(abs_path, policy, silent=False)
+        return HostAwaitable(self.orchestrator, handle)
 
     def spawn_isolated(self, path: str, policy: Dict[str, Any]) -> str:
         """
@@ -225,15 +226,16 @@ class HostService(IHostService):
         abs_path = self._resolve_isolated_path(path)
         return self.orchestrator.request_spawn_isolated(abs_path, policy)
 
-    def collect(self, handle: str) -> Dict[str, Any]:
+    def collect(self, handle: str) -> "HostAwaitable":
         """
-        阻塞等待 spawn_isolated 对应的子执行完成，返回子环境导出的全局变量字典。
-        handle 消费后失效；重复 collect 同一 handle 将抛出 RuntimeError。
+        返回 ``HostAwaitable``（可等待句柄）：VM 调度器对它 ``yield`` 挂起，等待
+        对应 ``spawn_isolated`` 子执行完成，经 ``result()`` 取回子环境导出的变量
+        字典。handle 消费后失效；重复 collect 同一 handle 将抛出 RuntimeError。
         """
         if not self.orchestrator:
             raise RuntimeError("Kernel Orchestrator not available.")
 
-        return self.orchestrator.request_collect(handle)
+        return HostAwaitable(self.orchestrator, handle)
 
     def _resolve_isolated_path(self, path: str) -> str:
         """

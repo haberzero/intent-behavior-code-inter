@@ -324,13 +324,13 @@ class TestRunIsolatedCompatibility:
         try:
             code = (
                 "import ihost\n"
-                f'bool ok = ihost.run_isolated("{_ibci_path(child)}", {{}})\n'
-                "print((str)ok)\n"
+                f'dict result = ihost.run_isolated("{_ibci_path(child)}", {{}})\n'
+                'print(result["x"])\n'
             )
             out: list = []
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             eng.run_string(code, output_callback=lambda s: out.append(str(s)), silent=True)
-            assert any("1" in line or "True" in line for line in out)
+            assert any("sync" in line for line in out)
         finally:
             os.unlink(child)
 
@@ -358,7 +358,7 @@ class TestRunIsolatedPathRelativeToEntryDir:
         parent_path.write_text(
             "import ihost\n"
             'dict policy = {"isolated": True, "registry_isolation": True, "inherit_variables": False}\n'
-            'bool ok = ihost.run_isolated("child.ibci", policy)\n'
+            'dict res = ihost.run_isolated("child.ibci", policy)\n'
             'print("parent_done")\n',
             encoding="utf-8",
         )

@@ -22,7 +22,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "load_state": {"params": [{"name": "path", "type": "str"}], "return_type": "void"},
             "run_isolated": {
                 "params": [{"name": "path", "type": "str"}, {"name": "policy", "type": "dict"}],
-                "return_type": "bool",
+                "return_type": "dict",
             },
             "spawn_isolated": {
                 "params": [{"name": "path", "type": "str"}, {"name": "policy", "type": "dict"}],

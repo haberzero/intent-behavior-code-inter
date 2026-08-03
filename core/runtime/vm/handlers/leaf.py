@@ -22,6 +22,7 @@ from core.runtime.exceptions import (
 from core.kernel.issue import InterpreterError
 from core.runtime.objects.primitives import IbNone
 from core.runtime.shared.llm_result import LLMFuture
+from core.runtime.shared.waitable import Waitable
 from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,
     _vm_invoke_behavior,
@@ -271,8 +272,14 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     try:
         if hasattr(func, "call"):
-            return func.call(executor.registry.get_none(), args)
-        return func.receive("__call__", args)
+            result = func.call(executor.registry.get_none(), args)
+        else:
+            result = func.receive("__call__", args)
+        # native 调用返回 Waitable（宿主异步句柄）→ 挂起本根，让调度器等待其完成，
+        # 而非阻塞当前线程。恢复后 result 为完成值（如 collect 的 dict）。
+        if isinstance(result, Waitable):
+            result = yield result
+        return result
     except ThrownException:
         # 用户代码主动抛出的语言级异常必须穿透函数调用边界，由 IbTry / 顶层
         # try-except 体系按 IBCI 类型匹配处理；不得包装成 Python RuntimeError，
