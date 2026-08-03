@@ -115,11 +115,11 @@ idbg.fields(obj)           # 返回对象所有字段
 ```ibci
 import ihost
 
-bool ok = ihost.run_isolated(path, policy)    # 隔离运行子脚本
+dict result = ihost.run_isolated(path, policy)   # 隔离运行子脚本，返回子环境变量字典
 ihost.save_state(path)                         # 保存当前状态
 ihost.load_state(path)                         # 加载状态
-bool ok = ihost.spawn_isolated(path, policy)   # 启动隔离子环境（不等待）
-any result = ihost.collect(handle)             # 收集子环境结果
+str handle = ihost.spawn_isolated(path, policy)   # 启动隔离子环境（不等待），返回 handle
+dict result = ihost.collect(handle)             # 等待子环境完成，返回子环境变量字典
 str src = ihost.get_source()                   # 获取当前入口源码
 ```
 

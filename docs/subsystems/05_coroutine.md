@@ -157,4 +157,17 @@ Stage 2 地基已落地（见 `core/runtime/vm/task_scheduler.py`、`vm_executor
 
 **单脚本内 LLM 挂起（GAP-2 修复）**：`vm_handle_IbName`（`leaf.py`）对变量持有的 `LLMFuture` 原为 `llm_executor.resolve()` 阻塞；现改为 `yield from llm_executor.resolve_future_cps(future)`——yield future 给调度器挂起，LLM 就绪后恢复。`resolve_future_cps` 是 `resolve()` 的 CPS 平行（yield 挂起替代 `future.result()` 阻塞），结果处理（`_pending_futures` 清理 / 主线程单写槽记录 / 确定性转译）完全一致。使单脚本内 LLM 阻塞也可被调度器挂起，对齐 `run_many` 多根语义。
 
-**下一步**：宿主级异步（PT-3.1）——`run_isolated`/`spawn_isolated` 返回可 await 句柄、多返回值；`ReceiveMode`（PT-3.2）语义。
+### 7.7 宿主异步统一架构（PT-3.1/3.2，2026-08-03）
+
+宿主异步（`spawn_isolated`/`collect`/`run_isolated`）已接入 VM 协作式 `Waitable` 协议，统一为单一异步模型：
+
+- **`Waitable` 移至叶子模块** `core/runtime/shared/waitable.py`（避免 vm↔host↔bootstrapper 循环导入），`task_scheduler` 重导出。
+- **`box()` 透传 `Waitable`**（`bootstrapper.py`）：Waitable 是异步基础设施对象，非普通值，原样返回不装箱。
+- **`vm_handle_IbCall` 对 native 调用返回的 `Waitable` 做 `yield` 挂起**（`leaf.py`）——native 异步函数（`collect`/`run_isolated`）不再阻塞 VM 线程。
+- **`HostAwaitable`**（`core/runtime/host/awaitable.py`）：结构性满足 `Waitable`（`is_done` 非破坏轮询 + `result()` 消费取回 dict）。`engine.is_spawn_done` 提供非破坏检查。
+- **统一 API**：`spawn_isolated` 返回非 Waitable handle；`collect`/`run_isolated` 返回 `HostAwaitable`（VM 透明 await → dict）。`run_isolated` 从 `bool` 改为多值 `dict`；移除冗余 `request_isolated_run`。
+- **`ReceiveMode`**（枚举）：`COLLECT`（完整接收，实现）、`STREAM`（流式，依赖多模态已封存，deferred）。
+
+设计约束：`spawn_isolated` 返回**非 Waitable** handle（区分"创建"与"等待"），`collect`/`run_isolated` 返回 **Waitable**（VM 自动 yield），天然区分，无需 per-function 标记。
+
+**下一步**：语言级 `async`/`await`（Stage 3，暂缓）——在此统一 `Waitable` 地基之上的显式语法表面。

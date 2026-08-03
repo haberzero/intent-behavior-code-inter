@@ -43,10 +43,12 @@
 
 ### 被阻塞的子项
 
-| 编号 | 标题 | 依赖 L3 的原因 |
-|------|------|---------------|
-| PT-3.1 | `host.run_isolated()` 返回值改进 | 需要协程句柄实现异步等待 |
-| PT-3.2 | `ReceiveMode` 枚举演进 | 需要 yield/resume 语义 |
+| 编号 | 标题 | 依赖 L3 的原因 | 状态 |
+|------|------|---------------|------|
+| PT-3.1 | `host.run_isolated()` 返回值改进 | 需要协程句柄实现异步等待 | **已完成 2026-08-03** |
+| PT-3.2 | `ReceiveMode` 枚举演进 | 需要 yield/resume 语义 | **已完成 2026-08-03** |
+
+> **PT-3.1/PT-3.2 完成（2026-08-03）**：宿主异步统一接入 VM 协作式 `Waitable` 协议。`run_isolated`/`collect` 返回 `HostAwaitable`（Waitable，VM 透明 await → 多值 dict）；`spawn_isolated` 返回非 Waitable handle；`run_isolated` 从 `bool` 改 `dict`（破坏性变更）。`ReceiveMode` 定义为 `COLLECT`（实现）/`STREAM`（多模态封存，deferred）。`Waitable` 移至 `core/runtime/shared/waitable.py`，`box()` 透传，`vm_handle_IbCall` 对 native 返回的 Waitable 做 yield 挂起。详见 `docs/subsystems/05_coroutine.md §7.7`。
 
 ### 主线隐含新任务（2026-08-02 梳理定案，并行主线自身要求）
 

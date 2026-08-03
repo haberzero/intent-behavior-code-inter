@@ -60,7 +60,7 @@ python -m pytest tests/
 > - `leaf.py` `vm_handle_IbName` 对 `LLMFuture` 改 `yield from resolve_future_cps` 挂起（单脚本内 LLM 阻塞可挂起，对齐多根语义）
 > - Stage 1 三项核验完成（parse_result 线程安全 / `_prompt`+`_llm_function` 无实例级可变状态 / 意图 fork 隔离完整）
 >
-> **下一步**：宿主级异步（PT-3.1）——`run_isolated`/`spawn_isolated` 返回可 await 句柄 + 多返回值；`ReceiveMode`（PT-3.2）语义。需先对齐宿主异步句柄契约设计。
+> **下一步**：语言级 `async`/`await`（Stage 3，暂缓）——在统一 `Waitable` 地基之上的显式语法表面。宿主异步（PT-3.1/3.2）已落地（见 §七、7.7 与 PENDING_TASKS §二）。
 
 ---
 
