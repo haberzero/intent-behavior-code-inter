@@ -340,11 +340,8 @@ class AIPlugin(IbStatefulPlugin):
             return res
         return []
 
-    def __call__(self, sys_prompt: str, user_prompt: "Union[str, List]", scene: str = "general", *, target_model: str = "") -> str:
-        """LLM 调用入口（ILLMProvider 协议）。
-
-        ``scene`` 为协议兼容保留参数（当前恒为 ``"general"``，未使用）。
-        """
+    def __call__(self, sys_prompt: str, user_prompt: "Union[str, List]", *, target_model: str = "") -> str:
+        """LLM 调用入口（ILLMProvider 协议）。"""
         is_test_mode = self._is_test_mode()
         
         # 多模态内容：将 List 转换为纯文本用于 MOCK 或传递给 API

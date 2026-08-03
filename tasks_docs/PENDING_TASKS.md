@@ -114,7 +114,7 @@
 
 ### PT-HEALTH-3　LLMExecutor 共享状态健康审计 [P2]（已并入主线 Stage 1）
 
-> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项。**2026-08-02**：executor 共享状态部分已并入并行主线 **Stage 1**（`_expected_type_stack` 死状态已删、`_result_parser` 懒重建竞争已修 fail-fast、`_current_call_info` 核验按构造无竞争）。**`scene` 协议参数**保留但无消费者（`__call__` 已注明协议兼容）——删除或激活，属契约级决策（待用户对方向）。
+> 健康审计（2026-07-31，mock 子系统）发现的 executor 侧待诊断项。**2026-08-02**：executor 共享状态部分已并入并行主线 **Stage 1**（`_expected_type_stack` 死状态已删、`_result_parser` 懒重建竞争已修 fail-fast、`_current_call_info` 核验按构造无竞争）。**`scene` 协议参数已删除（2026-08-03）**：判为早期"provider 自有场景逻辑"设计的残留参数——当前场景化智能已收敛/上移至 executor `_prepare_behavior_call`（意图注入/输出约束/期望类型/reasoning 策略），provider 为薄传输层，`scene` 零消费者、零读取、可无痛重建（内部接口，消费方仅 `_call_llm` 一处）。
 >
 > **全仓健康诊断扫描（2026-08-02 已执行）**：按健康诊断十查 + code-odor 特征码扫描全部 `ibci_modules` 插件。分类结论：`ibci_isys`/`ibci_idbg` 的 `hasattr/getattr` 防御性内省属**合法**（可选项注入、调试内省工具、安全默认沙箱），非掩盖型兜底。
 >
