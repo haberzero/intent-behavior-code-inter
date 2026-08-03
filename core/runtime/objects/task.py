@@ -31,20 +31,23 @@ class IbTask(IbObject):
         coordinator: Any,
         callable_obj: Any,
         args: Optional[List[Any]] = None,
+        autostart: bool = True,
     ):
         super().__init__(ib_class)
         self._executor = executor
         self._coordinator = coordinator
         self._callable = callable_obj
         self._args = list(args or [])
-        self._spawned = None  # SpawnedTask（惰性启动）
+        self._spawned = None  # SpawnedTask（autostart 时立即启动）
+        if autostart:
+            self._ensure_started()
 
     # ------------------------------------------------------------------ #
     # 启动 / 等待                                                        #
     # ------------------------------------------------------------------ #
 
     def _ensure_started(self):
-        """惰性启动 SpawnedTask（join 首次触发）。"""
+        """启动 SpawnedTask（eager：spawn 即后台线程运行，供实时并发）。"""
         if self._spawned is None:
             self._spawned = self._coordinator.spawn(self._callable, self._args)
         return self._spawned

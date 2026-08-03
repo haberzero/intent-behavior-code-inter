@@ -34,6 +34,14 @@ from core.runtime.frame import (
 from core.runtime.shared.waitable import Waitable
 
 
+class TaskCancelled(Exception):
+    """任务被协作式取消（经挂起点检查）。"""
+
+    def __init__(self, handle: str):
+        super().__init__(f"Task {handle!r} was cancelled.")
+        self.handle = handle
+
+
 class SpawnedTask:
     """一个 spawn 任务（后台线程 + 任务本地执行上下文）。
 
@@ -47,7 +55,7 @@ class SpawnedTask:
         self._args = list(args or [])
         self._handle = f"task_{uuid.uuid4().hex[:16]}"
         self._future: Future = Future()
-        self._cancelled = False
+        self._cancelled = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
     # ------------------------------------------------------------------ #
@@ -65,10 +73,21 @@ class SpawnedTask:
         return self
 
     def _run(self) -> None:
-        """后台线程入口：构建任务本地上下文并驱动函数体。"""
+        """后台线程入口：构建任务本地上下文并驱动函数体。
+
+        协作式取消：任务体在挂起点（Waitable 等待 / 子节点驱动）检查
+        ``_cancelled``，命中即抛 ``TaskCancelled``（join 时重抛）。
+        """
         try:
-            result = _run_task_body(self._interpreter, self._callable, self._args)
+            result = _run_task_body(
+                self._interpreter,
+                self._callable,
+                self._args,
+                cancel_event=self._cancelled,
+            )
             self._future.set_result(result)
+        except TaskCancelled as e:
+            self._future.set_exception(e)
         except BaseException as e:  # 任务内任何异常都捕获并传递（join 时重抛）
             self._future.set_exception(e)
 
@@ -93,14 +112,18 @@ class SpawnedTask:
         return self._future.result()
 
     def cancel(self) -> None:
-        """请求取消（协作式：仅未启动时可取消；已启动则无法强杀）。
+        """请求取消任务（协作式）。
 
-        注：Python 无法强杀运行中线程。本实现仅标记取消；已启动任务无法
-        中断。真正的中断（协作式检查）在 PT-MT-8 的挂起点机制中落地。
+        未启动：直接标记取消并使 join 抛错。
+        运行中：设置取消事件，任务在下一个挂起点（Waitable 等待 / 子节点
+        驱动）检查并自行退出（``TaskCancelled``）。纯 CPU 任务无可挂起点时
+        cancel 无法强制中断（Python 无法强杀线程）。
         """
-        if not self._started():
-            self._cancelled = True
-            self._future.set_exception(RuntimeError("IbTask: task was cancelled."))
+        self._cancelled.set()
+        if self._thread is None or not self._thread.is_alive():
+            # 未启动或已结束：直接让 join 抛取消
+            if not self._future.done():
+                self._future.set_exception(TaskCancelled(self._handle))
 
     def _started(self) -> bool:
         return self._thread is not None
@@ -113,7 +136,12 @@ class SpawnedTask:
         }
 
 
-def _run_task_body(interpreter: Any, callable_obj: Any, args: List[Any]) -> Any:
+def _run_task_body(
+    interpreter: Any,
+    callable_obj: Any,
+    args: List[Any],
+    cancel_event: Optional[threading.Event] = None,
+) -> Any:
     """在任务本地执行上下文中驱动目标函数体，返回结果。
 
     构建流程：
@@ -175,9 +203,22 @@ def _run_task_body(interpreter: Any, callable_obj: Any, args: List[Any]) -> Any:
     ec_token = set_current_execution_context(task_ec)
     try:
         if isinstance(callable_obj, IbUserFunction):
-            # 用户函数：call() 内部切换模块作用域 + 绑定实参 + run_body
+            # 用户函数：构建任务本地函数包装（绑定 task EC），使函数体经
+            # task EC 的 runtime_context 驱动（避免共享主上下文的作用域竞争）。
+            # 函数定义所在模块切换 + 实参绑定 + run_body 全在任务上下文内完成。
+            from core.runtime.objects.kernel import IbUserFunction as _UF
+
+            task_func = _UF(
+                node_uid=callable_obj.node_uid,
+                context=task_ec,
+                ib_class=callable_obj.ib_class,
+                spec=callable_obj.spec,
+                module_name=callable_obj.module_name,
+                owner_class=getattr(callable_obj, "owner_class", None),
+            )
+            task_func.closure = callable_obj.closure
             receiver = registry.get_none()
-            return callable_obj.call(receiver, args)
+            return task_func.call(receiver, args)
         if isinstance(callable_obj, IbValue) and callable_obj.ib_class.name in (
             "fn_callable",
             "behavior",
@@ -188,11 +229,11 @@ def _run_task_body(interpreter: Any, callable_obj: Any, args: List[Any]) -> Any:
 
             if callable_obj.ib_class.name == "behavior":
                 # behavior：经 CPS 驱动
-                result = _run_behavior_cps(task_vm, callable_obj, args)
+                result = _run_behavior_cps(task_vm, callable_obj, args, cancel_event=cancel_event)
                 return result
             # fn_callable（lambda/snapshot）：经 CPS 驱动
             gen = _vm_call_fn_callable(task_vm, callable_obj, args)
-            return _drive_generator(task_vm, gen, args)
+            return _drive_generator(task_vm, gen, cancel_event=cancel_event)
         # 兜底：原生函数 / 其它可调用
         if hasattr(callable_obj, "call"):
             return callable_obj.call(registry.get_none(), args)
@@ -204,26 +245,32 @@ def _run_task_body(interpreter: Any, callable_obj: Any, args: List[Any]) -> Any:
         reset_current_frame(frame_token)
 
 
-def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any]) -> Any:
+def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any], cancel_event: Optional[threading.Event] = None) -> Any:
     """在任务本地 VM 中 CPS 驱动 behavior 表达式。"""
     from core.runtime.vm.handlers._shared import _vm_invoke_behavior
 
     gen = _vm_invoke_behavior(task_vm, behavior, args)
-    return _drive_generator(task_vm, gen, args)
+    return _drive_generator(task_vm, gen, cancel_event=cancel_event)
 
 
-def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None) -> Any:
+def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_event: Optional[threading.Event] = None) -> Any:
     """驱动一个 CPS 生成器到完成（阻塞等待每个 Waitable）。
 
     任务线程内使用：对 LLM Future / 通信 Channel recv 等 Waitable 阻塞等待。
 
     生成器契约（与 VM 主循环一致）：首次 ``send(None)`` 启动；后续 yield 的
     若是 Waitable 则阻塞等待其完成再 ``send(result)`` 恢复；否则（yield child
-    uid）经 VM 的 ``_drive_loop_gen`` 处理——但任务线程内 lambda 体的子节点由
-    ``_vm_call_fn_callable`` 内部 yield body_uid，故此处需把 child uid 转发给
-    任务本地 VM 驱动（经递归驱动该子节点）。
+    uid）经任务本地 VM 求值后恢复。
+
+    协作式取消：每个挂起点（Waitable 等待 / 子节点驱动前）检查
+    ``cancel_event``，命中即抛 ``TaskCancelled``。
     """
     from core.runtime.shared.waitable import Waitable
+
+    def _check_cancel() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            handle = getattr(task_vm, "_task_handle", "") or ""
+            raise TaskCancelled(handle)
 
     def _step(val):
         try:
@@ -233,6 +280,7 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None) -> Any:
 
     result, done = _step(None)
     while not done:
+        _check_cancel()
         if isinstance(result, Waitable):
             result, done = _step(result.result())
         elif isinstance(result, str) and task_vm.supports(result):

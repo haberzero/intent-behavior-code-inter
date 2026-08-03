@@ -68,7 +68,9 @@ python -m pytest tests/
 >
 > **PT-MT-7 多 VM 实例已完成（2026-08-03）**：`core/runtime/coordinator.py`（`RuntimeCoordinator` + `SpawnedTask`）：spawn 在**后台线程**运行目标函数，使用**任务本地执行上下文**（fresh runtime_context + setup_context 注入内置 + 任务本地 EC/LogicalCallStack/VMExecutor，共享只读 node_pool/registry）。实现 per-task 隔离（C4 作用域/意图/llmexcept）+ 全局只读数据共享（C5）。`IbTask` 升级为后台线程句柄（join 阻塞等结果 / cancel 协作式）。函数/lambda/fn_callable/behavior 均可 spawn。测试：`test_vm_instance.py`（6），全量 pytest 1407 passed/4 skipped 零回归。
 >
-> **下一步**：PT-MT-8 用户代码多线程收尾（挂起点协作取消 + 实时 UI/输出刷新场景验证）。
+> **PT-MT-8 用户代码多线程已完成（2026-08-03）**：`task = spawn(fn)` 显式任务句柄（join/cancel）完整可用 + 实时 UI/输出刷新场景验证。**eager spawn**（spawn 即后台线程运行，非惰性——主线程无需 join 即可收到 worker 经 Channel 的输出）；**协作式取消**（`TaskCancelled`，任务在挂起点——Waitable 等待/子节点驱动——检查取消事件自行退出；纯 CPU 任务无可挂起点时无法强杀，Python 限制）。测试：`test_vm_instance.py` 新增实时输出场景（worker→Channel→主线程 recv 渲染）+ eager start，全量 pytest 1409 passed/4 skipped 零回归。
+>
+> ✅ **主线（PT-MT-1~8）全部完成（2026-08-03）**：设计文档 → 编译器地基 → 统一通信内核 → 内省层 → 控制层 → 流式+并行 → 多 VM 实例 → 用户代码多线程。全量 pytest 1409 passed/4 skipped 零回归。
 
 ---
 

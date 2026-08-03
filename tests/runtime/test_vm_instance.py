@@ -89,3 +89,39 @@ dict snap = iruntime.snapshot()
 print(snap)
 """)
         assert "tasks" in lines[0]
+
+
+class TestRealtimeOutput:
+    """PT-MT-8：实时 UI/输出刷新场景——spawn 任务写 Channel，主线程消费渲染。"""
+
+    def test_worker_sends_chunks_to_channel(self):
+        """后台 worker 任务逐块写 Channel，主线程 recv 渲染（实时输出）。"""
+        lines = run_ibci("""
+func worker(chan out) -> void:
+    out.send("chunk1")
+    out.send("chunk2")
+    out.send("chunk3")
+
+chan out = chan(str, "stream")
+task t = spawn worker(out)
+str a = out.recv()
+str b = out.recv()
+str c = out.recv()
+print(a)
+print(b)
+print(c)
+""")
+        assert lines == ["chunk1", "chunk2", "chunk3"]
+
+    def test_eager_start_runs_in_background(self):
+        """spawn 即后台启动（非惰性）：主线程无需 join 即可收到 worker 输出。"""
+        lines = run_ibci("""
+func worker(chan out) -> void:
+    out.send("hi")
+
+chan out = chan(str, "stream")
+task t = spawn worker(out)
+str msg = out.recv()
+print(msg)
+""")
+        assert lines == ["hi"]

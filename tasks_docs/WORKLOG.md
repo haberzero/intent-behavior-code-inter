@@ -159,3 +159,15 @@
 - 共享注册表/artifact/node_pool 只读（C5），任务写隔离经作用域隔离天然保证。
 
 **测试**：`tests/runtime/test_vm_instance.py`（6：后台函数 spawn、lambda spawn、多任务、作用域隔离、cancel、snapshot 任务字段）。全量 pytest 1407 passed/4 skipped 零回归。
+
+#### 12. PT-MT-8 用户代码多线程收尾（自主实现，2026-08-03）
+
+主线 PT-MT-1~8 **全部完成**，全量 pytest 零回归（1409 passed/4 skipped）。
+
+**实现内容**：
+- **eager spawn**（`objects/task.py`）：IbTask 构造即 `_ensure_started()`（后台线程立即运行），非惰性——主线程无需 join 即可收到 worker 经 Channel 的输出（实时 UI/输出刷新）。
+- **协作式取消**（`core/runtime/coordinator.py`）：`TaskCancelled` 异常 + `SpawnedTask.cancel()` 设置取消事件；任务在挂起点（`_drive_generator` 的 Waitable 等待 / 子节点驱动前）检查 `cancel_event`，命中即抛 `TaskCancelled`（join 时重抛）。纯 CPU 任务无可挂起点时 cancel 无法强制中断（Python 无法强杀线程，文档注明）。
+- **任务本地函数包装**：IbUserFunction 构建 task-local 副本（绑定 task EC），使函数体经任务 runtime_context 驱动，避免共享主上下文作用域竞争（修复跨线程 channel send 场景）。
+- **实时输出场景验证**：`spawn worker(chan out)` 后台逐块 send，主线程 recv 渲染。
+
+**测试**：`test_vm_instance.py` 新增 2（实时输出 worker→Channel→主线程 recv、eager start 后台运行）。全量 pytest 1409 passed/4 skipped 零回归。
