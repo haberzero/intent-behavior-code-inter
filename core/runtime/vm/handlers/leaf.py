@@ -70,22 +70,23 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
             f"(name: '{node_data.get('id')}') is not defined."
         ) from e
 
-    # 变量使用点的 LLMFuture 解引用。
+    # 变量使用点的 LLMFuture 解引用：yield 挂起到 LLM 完成（而非阻塞当前线程），
+    # 使单脚本内 LLM 阻塞也可被调度器挂起（对齐 run_many 多根语义）。
     if isinstance(val, LLMFuture):
         sc = executor.service_context
         llm_executor = sc.llm_executor if sc is not None else None
         if llm_executor is not None:
-            resolved = llm_executor.resolve(val.node_uid)
-        # 若 Future 解析出不确定容器（LLM parse failure），无 llmexcept 保护帧
-        # 则抛 LLMParseError（保留 retry_hint/raw_response）；有帧则由
-        # llmexcept 机制接管（容器沿变量流动）。
-        if _is_llm_uncertain_value(resolved):
-            if executor.runtime_context.get_current_llm_except_frame() is None:
-                _raise_uncertain_parse_error(executor, resolved, type_name="unknown")
-        # 写回，避免后续读取再次 resolve
-        # skip_type_check=True：写回是缓存优化，类型校验在首次赋值时完成
-        executor.runtime_context.set_variable_by_uid(sym_uid, resolved, skip_type_check=True)
-        val = resolved
+            resolved = yield from llm_executor.resolve_future_cps(val)
+            # 若 Future 解析出不确定容器（LLM parse failure），无 llmexcept 保护帧
+            # 则抛 LLMParseError（保留 retry_hint/raw_response）；有帧则由
+            # llmexcept 机制接管（容器沿变量流动）。
+            if _is_llm_uncertain_value(resolved):
+                if executor.runtime_context.get_current_llm_except_frame() is None:
+                    _raise_uncertain_parse_error(executor, resolved, type_name="unknown")
+            # 写回，避免后续读取再次 resolve
+            # skip_type_check=True：写回是缓存优化，类型校验在首次赋值时完成
+            executor.runtime_context.set_variable_by_uid(sym_uid, resolved, skip_type_check=True)
+            val = resolved
     return val
 
 
