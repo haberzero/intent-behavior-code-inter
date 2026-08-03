@@ -54,6 +54,9 @@ class TokenType(Enum):
     RETRY = auto()
     LLM_RETRY = auto()
 
+    # 异步关键字
+    AWAIT = auto()
+
     # 标识符与字面量
     IDENTIFIER = auto()
     NUMBER = auto()

@@ -99,10 +99,15 @@ class StatementVisitorsMixin:
 
             # BehaviorExpr 特殊处理：行为表达式适配接收者类型
             # 这是 IBCI 核心语义 — @~...~ 的结果类型由左值决定
-            if isinstance(node.value, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
+            # (支持 await <behavior> 的显式等待形式：解包 IbAwaitExpr 处理内层行为)
+            rhs = node.value
+            rhs_inner = rhs.value if isinstance(rhs, ast.IbAwaitExpr) else rhs
+            if isinstance(rhs_inner, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
                 if target_type and not self.registry.is_dynamic(target_type):
                     # 行为表达式结果适配目标类型
-                    self.bind_type(node.value, target_type)
+                    self.bind_type(rhs_inner, target_type)
+                    if rhs is not rhs_inner:
+                        self.bind_type(rhs, target_type)
                     val_type = target_type
                 else:
                     # 动态类型或无类型：默认 str

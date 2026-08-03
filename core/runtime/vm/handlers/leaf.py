@@ -121,6 +121,24 @@ def vm_handle_IbUnaryOp(executor, node_uid: str, node_data: Mapping[str, Any]):
     return operand.receive(method, [])
 
 
+def vm_handle_IbAwaitExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``await <expr>``：显式等待一个 Waitable 完成，返回其结果。
+
+    操作数求值为 Waitable（LLMFuture / HostAwaitable）时，yield 挂起等待其完成，
+    恢复后返回 result()。若操作数不是 Waitable（如已在数据流读点自动解析），
+    原样返回（幂等）。供容器/非变量位置持有 Waitable 时的显式等待。
+    """
+    value = yield node_data.get("value")
+    if isinstance(value, LLMFuture):
+        sc = executor.service_context
+        llm_executor = sc.llm_executor if sc is not None else None
+        if llm_executor is not None:
+            value = yield from llm_executor.resolve_future_cps(value)
+    elif isinstance(value, Waitable):
+        value = yield value
+    return value
+
+
 def vm_handle_IbBoolOp(executor, node_uid: str, node_data: Mapping[str, Any]):
     is_or = node_data.get("op") == "or"
     seq_result = executor.registry.get_none()

@@ -36,6 +36,7 @@ class CoreTokenScanner:
             'func': TokenType.FUNC, 'return': TokenType.RETURN,
             'lambda': TokenType.LAMBDA,
             'snapshot': TokenType.SNAPSHOT,
+            'await': TokenType.AWAIT,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'switch': TokenType.SWITCH, 'case': TokenType.CASE, 'default': TokenType.DEFAULT,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,

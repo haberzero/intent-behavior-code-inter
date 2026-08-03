@@ -327,6 +327,16 @@ class IbUnaryOp(IbExpr):
     operand: IbExpr
 
 @dataclass(kw_only=True, eq=False)
+class IbAwaitExpr(IbExpr):
+    """``await <expr>``：显式等待一个 Waitable 完成，返回其结果。
+
+    操作数求值为 ``Waitable``（少数 ``LLMFuture`` / 宿主 ``HostAwaitable``）。
+    VM 对该 Waitable ``yield`` 挂起，恢复后返回 ``result()``。使对任意 Waitable
+    的等待显式化、通用化（区别于数据流自动 await 的透明便利）。
+    """
+    value: IbExpr
+
+@dataclass(kw_only=True, eq=False)
 class IbIfExp(IbExpr):
     test: IbExpr
     body: IbExpr

@@ -171,6 +171,17 @@ class ExpressionVisitorsMixin:
         self.bind_type(node, result_type)
         return result_type
 
+    def visit_IbAwaitExpr(self, node: ast.IbAwaitExpr) -> Optional[IbSpec]:
+        """访问 ``await <expr>``：显式等待一个 Waitable 完成。
+
+        操作数的静态类型即其等待后的结果类型（LLMFuture 变量声明类型 / 容器
+        元素类型 / 宿主结果类型）。``await`` 不改变类型，仅等待。
+        """
+        operand_type = self.visit(node.value)
+        result_type = operand_type or self._any_desc
+        self.bind_type(node, result_type)
+        return result_type
+
     def visit_IbCompare(self, node: ast.IbCompare) -> Optional[IbSpec]:
         """访问比较运算"""
         left_type = self.visit(node.left)

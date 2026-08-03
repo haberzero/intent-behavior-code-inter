@@ -69,6 +69,9 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.PLUS, None, self.binary, IbPrecedence.TERM)
         self.register(TokenType.NOT, self.unary, self.not_in_binary, IbPrecedence.COMPARISON)
         self.register(TokenType.BIT_NOT, self.unary, None, IbPrecedence.UNARY)
+
+        # Await (显式等待一个 Waitable)
+        self.register(TokenType.AWAIT, self.await_expr, None, IbPrecedence.UNARY)
         
         # Binary Operations
         self.register(TokenType.STAR, None, self.binary, IbPrecedence.FACTOR)
@@ -276,6 +279,17 @@ class ExpressionComponent(BaseComponent):
         op = OP_MAP.get(op_token.type, op_token.type.name)
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbUnaryOp(op=op, operand=operand), op_token)
+
+    def await_expr(self) -> ast.IbExpr:
+        """``await <expr>``：显式等待一个 Waitable 完成，返回其结果。
+
+        操作数求值为 ``Waitable``（LLMFuture / HostAwaitable）；VM 对该
+        Waitable ``yield`` 挂起，恢复后返回 ``result()``。作为 UNARY 优先级
+        前缀：``await x + 1`` 解析为 ``(await x) + 1``（与 Pythona await 一致）。
+        """
+        op_token = self.stream.previous()
+        operand = self.parse_precedence(IbPrecedence.UNARY)
+        return self._loc(ast.IbAwaitExpr(value=operand), op_token)
 
     def pow_binary(self, left: ast.IbExpr) -> ast.IbExpr:
         """右结合幂运算符 **：parse 右侧时使用比当前优先级低一级的 FACTOR，
