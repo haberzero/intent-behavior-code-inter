@@ -17,7 +17,7 @@ Phase 0 理解任务上下文 -> Phase 1 理解代码上下文 -> Phase 2 方案
 ## 二、各阶段
 
 ### Phase 0: 理解任务上下文
-读 `tasks_docs/NEXT_STEPS.md` 确认当前主线、任务是否属主线、是否有 GATED/SHELVED 阻塞。读 `tasks_docs/PENDING_TASKS.md` 确认前置条件与阻塞项。涉及语言设计变更先查 `docs/KNOWN_LIMITS.md` 确认非设计排除项。GATED/SHELVED 任务向用户报告阻塞原因并询问是否解封。
+读 `tasks_docs/NEXT_STEPS.md` 确认当前主线、任务是否属主线、是否有 GATED/SHELVED 阻塞。读 `tasks_docs/PENDING_TASKS.md` 确认前置条件与阻塞项。涉及语言设计变更先查 `docs/KNOWN_LIMITS.md` 确认非设计排除项。**GATED/SHELVED 任务**：与当前主线目标一致、且不触及对外契约/架构级变更时，可**自行重新评估并解封**（记录解封依据与工作内容）后推进；仅当解封触及架构/契约/破坏性变更时才向用户报告并询问。
 
 ### Phase 1: 理解代码上下文
 **先读代码再改代码。** 用 grep/glob 搜索相关模块，阅读现有实现与测试，理解模式与覆盖范围。检查架构边界（依赖规则见 `docs/architecture/01_principles.md` §四，禁止架构穿透）。
