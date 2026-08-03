@@ -104,3 +104,40 @@
 4. 团队有足够带宽做跨五层（lexer → runtime）的大规模改动 —— 主线立项即带宽承诺
 
 **执行入口**：先核查 §二 基础设施现状（CPS 帧栈/ControlSignal/dispatch_eager），再从 Stage 1（共享状态去共享化）起步。
+
+---
+
+## 七、Stage 2 设计：调度器多任务化（当前推进）
+
+> 本节是异步/协程主线的**当前设计要点**（2026-08-03）。目标：把 VM 从"单栈生成器调度"升级为"多任务协作调度"，作为语言级 async/await（Stage 3）与宿主异步（PT-3.1/3.2）的**共同地基**。设计面向最终语言级目标，不绕路。
+
+### 7.1 现状与缺口
+
+- **现状**：`VMExecutor._drive_loop_body`（`core/runtime/vm/vm_executor.py`）驱动**单个栈**（`VMTask` 列表，每个是一生成器），一次只服务一个逻辑计算。
+- **缺口**：无"多任务队列"；`resolve`/`collect`/`run_isolated` 等 IO 等待为**阻塞整个 VM**（`future.result()`），无法并发。
+- **关键洞察**：生成器本身就是**可挂起状态**（yield=挂起、send=恢复），帧保存被生成器模型天然解决，无需额外帧快照协议。
+
+### 7.2 核心机制
+
+1. **挂起信号**：`ControlSignal` 新增 `SUSPEND`（携带一个 waitable：`LLMFuture` 或宿主句柄）。生成器在等待 IO 时返回 `SUSPEND(waitable)`，而非阻塞。
+2. **任务队列**：调度器从"单栈"升级为"任务队列"（多个独立根任务，各自是栈）。新增一个就绪队列 + 等待表。
+3. **轮转**：调度器循环取一个就绪任务推进一步；若返回 `SUSPEND(waitable)`，移入等待表；当 waitable 完成，任务回到就绪队列。
+4. **恢复**：对就绪任务的生成器 `send(完成值)` 继续。
+
+### 7.3 关键设计点
+
+- **waitable 抽象**：`LLMFuture`（已有 `is_done`/`get`）与宿主句柄（`spawn_isolated` 返回）统一为"可等待"协议，供调度器询问是否就绪。
+- **`resolve` 改造**：从"阻塞 `future.result()`"改为"未就绪则返回 `SUSPEND(future)`，就绪后恢复"——把阻塞整个 VM 变为仅挂起当前任务。
+- **`collect`/`run_isolated` 改造**：未就绪则挂起（PT-3.1 宿主异步依托）。
+- **快照/状态**：per-task 状态所有权（对应 Stage 1 去共享化）；intent_context、llmexcept 帧栈随任务挂起持久化的方式在实现时确认。
+
+### 7.4 与语言级 async 的关系
+
+- Stage 2 提供"任务可挂起/恢复"机制（地基）。
+- 语言级 `async`/`await`（Stage 3）是建立在此之上的**显式语法表面**：`await` 把对 waitable 的挂起表达为语句。
+- 宿主异步（PT-3.1/3.2）是 Stage 2 之上的宿主级形态：`run_isolated`/`spawn_isolated` 返回可 await 句柄。
+
+### 7.5 验证方式
+
+- 多任务并发：两个独立任务各自等待不同的 SLEEP forever 的 mock future，断言总时近似 max 而非 sum（复用 `mock_server` 真并发思路）。
+- 单任务行为不变：现有全量测试零回归（单栈语义保持，多任务只为并发生效）。
