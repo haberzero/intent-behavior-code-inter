@@ -98,3 +98,20 @@
 **变化前后**：+7 文件（comm 包 6 模块、objects/comm.py、objects/task.py、handlers/comm.py、2 测试文件），+4 修改文件。
 
 **测试**：`tests/runtime/test_comm_kernel.py`（33：CommBuffer 并发吞吐、Channel 三模式、pubsub 扇出、Signal 不可变、Slot 并发 update 100 线程 +1、CommRegistry）+ `tests/runtime/test_vm_comm.py`（8：语言面 e2e）。全量 pytest 1382 passed/4 skipped 零回归。
+
+#### 8. PT-MT-4 内省层（自主实现，2026-08-03）
+
+按 `THREADING_DESIGN_DETAIL.md` §四落地内省层，全量 pytest 零回归（1388 passed/4 skipped，+6 测试）。
+
+**实现内容**：
+- **快照聚合**（`core/runtime/observability/snapshot.py`）：`snapshot(executor)` 聚合 tasks（TaskScheduler 就绪/等待）、channels/slots（CommRegistry）、vms（解释器实例）、vars（模块级变量）、llm（pending_futures/call_info）。
+- **事件流**（`core/runtime/observability/events.py`）：`EventSource`/`EventSink` 协议 + `EventBus`（线程安全广播）+ `ChannelSink`（推入 stream Channel）+ `RuntimeEvent`（不可变值对象）。
+- **iruntime 模块**（`ibci_modules/ibci_iruntime/`）：kernel-native 模块（`KERNEL_NATIVE_MODULES` 注册）。`snapshot()` → dict；`subscribe()` → stream Channel（关闭即退订）。事件总线挂在 runtime_context 上（`_comm_event_bus`，与 CommRegistry 同级）。
+- **VM 事件源**：comm handlers 在 chan/slot/spawn/join/cancel 处 emit（chan_created/slot_updated/task_started/task_done/task_cancelled）。
+
+**关键修复**：
+1. **关键字作成员名（设计遗漏修正）**：`iruntime.snapshot` 中 `snapshot` 是保留关键字（lambda snapshot 语法），`dot` 解析只接受 IDENTIFIER 导致 "Expect property name after '.'" 编译失败。修复：`dot`/`_parse_complex_access` 新增 `_consume_member_name()`——接受标识符样关键字（`val.isidentifier()`）作成员名，运算符等仍拒绝（Python 风格）。这是通用改进，非特例。
+2. **ChannelSink 传参 bug**：`subscribe()` 误传 `event_bus` 而非 `core` 给 `ChannelSink`，事件推入 EventBus 而非 Channel。修复后事件流送达。
+3. **chan 关键字参数解析**：`chan(str, "stream", name="my_ch")` 的 name= 关键字参数未处理。修复 chan_expr 解析逻辑。
+
+**测试**：`tests/runtime/test_observability.py`（6：snapshot 字段、命名 channel 跟踪、subscribe 事件流、关键字成员访问）。全量 pytest 1388 passed/4 skipped 零回归。

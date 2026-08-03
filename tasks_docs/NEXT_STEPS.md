@@ -60,7 +60,9 @@ python -m pytest tests/
 >
 > **PT-MT-3 统一通信内核已完成（2026-08-03）**：线程安全内核（`core/runtime/shared/comm/`：CommBuffer/ChannelCore/SignalCore/SlotCore/CommRegistry）+ 语言层对象（`IbChannel`/`IbSignal`/`IbSlot`/`IbTask`）+ dispatch handler（6 个新节点全部接入 VM）。语言面可用：`chan.send/recv/recv_nonblocking/close`、`slot.set/get`、`spawn/join/cancel`（PT-MT-3 阶段为协作式延迟任务：join 触发求值；后台线程/轻量 VM 在 PT-MT-7/8 升级）。测试：`test_comm_kernel.py`（33）+ `test_vm_comm.py`（8），全量 pytest 1382 passed/4 skipped 零回归。
 >
-> **下一步**：PT-MT-4 内省层（`runtime.snapshot()` + `runtime.subscribe()`）。
+> **PT-MT-4 内省层已完成（2026-08-03）**：`core/runtime/observability/`（snapshot 聚合 + EventBus/EventSource/ChannelSink）+ 新 kernel-native 模块 `iruntime`（`snapshot()`/`subscribe()`）。快照返回 tasks/channels/slots/vms/vars/llm 结构化 dict；订阅返回 stream Channel，事件流送达（chan_created/slot_updated/task_started/task_done/task_cancelled）。附带修复：**关键字作成员名**（`iruntime.snapshot` 中 snapshot 是保留字——`dot` 解析接受标识符样关键字，Python 风格）；`chan(str,"stream",name=...)` 关键字参数解析。测试：`test_observability.py`（6），全量 pytest 1388 passed/4 skipped 零回归。
+>
+> **下一步**：PT-MT-5 控制层（`runtime.configure(...)` 统一启停 + ConfigStore 链式覆盖 + config_change 信号）。
 
 ---
 

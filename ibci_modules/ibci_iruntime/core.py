@@ -1,0 +1,108 @@
+"""
+ibci_iruntime/core.py
+
+IBIRuntime 内核内省模块插件实现（PT-MT-4）。
+
+提供：
+- ``snapshot()``    —— 运行时快照聚合（见 ``core.runtime.observability.snapshot``）
+- ``subscribe()``   —— 订阅状态变更事件流（返回 mode=stream 的 Channel）
+
+通过 KernelRegistry 稳定钩子（get_execution_context）访问当前 EC/VM 执行器，
+与 idbg/isys 的懒获取模式一致。
+"""
+from typing import Any, Optional, TYPE_CHECKING
+
+from core.runtime.frame import get_current_execution_context
+from core.runtime.observability.snapshot import snapshot as _snapshot_aggregate
+from core.runtime.observability.events import EventBus, ChannelSink
+from core.runtime.shared.comm.channel import ChannelCore
+
+
+class IRuntimeLib:
+    """IBCI 运行时内省模块（snapshot / subscribe）。"""
+
+    def __init__(self):
+        self._event_bus: Optional[EventBus] = None
+
+    def setup(self, capabilities) -> None:
+        # 事件总线惰性初始化（每模块实例独立，挂到模块对象上）
+        self._event_bus = EventBus()
+
+    # ------------------------------------------------------------------
+    # 内省
+    # ------------------------------------------------------------------
+
+    def snapshot(self) -> dict:
+        """获取当前运行时快照（tasks/channels/slots/vms/vars/llm）。"""
+        ec = get_current_execution_context()
+        executor = getattr(ec, "vm_executor", None) if ec is not None else None
+        if executor is None:
+            return {}
+        return _snapshot_aggregate(executor)
+
+    def subscribe(self) -> Any:
+        """订阅运行时状态变更事件流。
+
+        返回一个 mode=stream 的 Channel（IbChannel），事件 dict 逐个推入。
+        Channel 关闭即退订。事件总线挂在 runtime_context 上（与 CommRegistry
+        同级），供 VM handlers / 协调器事件源共用。
+        """
+        from core.runtime.objects.kernel import IbChannel
+
+        ec = get_current_execution_context()
+        registry = getattr(ec, "registry", None) if ec is not None else None
+        rc = getattr(ec, "runtime_context", None) if ec is not None else None
+        if registry is None or rc is None:
+            raise RuntimeError("runtime.subscribe: no runtime context available")
+
+        event_bus = self._get_event_bus(rc)
+        core = ChannelCore(mode="stream", name="runtime_events")
+        sink = ChannelSink(core)
+        event_bus.attach(sink)
+
+        # 构造语言层 IbChannel（包装 core）
+        chan_cls = registry.get_class("chan")
+        channel = IbChannel(ib_class=chan_cls, core=core)
+
+        # 把退订逻辑挂到 channel 的 close 上：关闭即 detach sink
+        _orig_close = core.close
+
+        def _close_and_detach():
+            event_bus.detach(sink)
+            _orig_close()
+
+        core.close = _close_and_detach  # type: ignore[method-assign]
+
+        return channel
+
+    # ------------------------------------------------------------------
+    # 内部：事件总线访问（挂在 runtime_context 上，与 CommRegistry 同级）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _get_event_bus(rc: Any) -> EventBus:
+        """获取（或惰性创建）runtime_context 关联的事件总线。"""
+        bus = getattr(rc, "_comm_event_bus", None)
+        if bus is None:
+            bus = EventBus()
+            try:
+                rc._comm_event_bus = bus
+            except Exception:
+                pass
+        return bus
+
+    # ------------------------------------------------------------------
+    # 内部：供运行时事件源 emit（协调器/VM/CommRegistry 接入点）
+    # ------------------------------------------------------------------
+
+    def emit_event(self, event_type: str, data: Optional[dict] = None) -> None:
+        """向事件总线广播一个事件（供运行时事件源调用）。"""
+        ec = get_current_execution_context()
+        rc = getattr(ec, "runtime_context", None) if ec is not None else None
+        if rc is None:
+            return
+        self._get_event_bus(rc).emit({"type": event_type, "data": data or {}})
+
+
+def create_implementation():
+    return IRuntimeLib()

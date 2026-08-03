@@ -357,21 +357,30 @@ class ExpressionComponent(BaseComponent):
             if not self.stream.check(TokenType.RPAREN):
                 type_ann = self.context.type_parser.parse_type_annotation()
                 type_name = getattr(type_ann, "id", None) or getattr(getattr(type_ann, "value", None), "id", None) or str(type_ann)
-                # 第二个位置参数可作 mode（chan(str, "stream")）
+                # 可选位置参数：第二参可作 mode（chan(str, "stream")）
                 if self.stream.match(TokenType.COMMA):
-                    if self.stream.check(TokenType.STRING):
+                    if self.stream.check(TokenType.STRING) and not (
+                        self.stream.peek(1).type == TokenType.ASSIGN
+                    ):
                         mode_token = self.stream.advance()
                         mode = mode_token.value
-                        # 第三个位置参数可作 buffer
-                        if self.stream.match(TokenType.COMMA):
-                            buf_tok = self.stream.peek()
-                            if buf_tok.type in (TokenType.NUMBER, TokenType.MINUS):
-                                buf_val = self.parse_precedence(IbPrecedence.UNARY)
-                                buffer = int(buf_val.value) if hasattr(buf_val, "value") else int(buf_val)
-                    else:
+                    elif self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
+                        # 直接是关键字参数
+                        self.stream.previous()  # 回退，交给 _parse_chan_kwargs
                         kw = self._parse_chan_kwargs()
                         if kw is not None:
                             mode, buffer, name = kw
+                # 剩余关键字参数（mode=/buffer=/name=）
+                if mode in ("message", "stream", "pubsub"):
+                    kw = self._parse_chan_kwargs()
+                    if kw is not None:
+                        m, b, n = kw
+                        if m is not None:
+                            mode = m
+                        if b:
+                            buffer = b
+                        if n is not None:
+                            name = n
             self.stream.consume(TokenType.RPAREN, "Expect ')' after chan arguments.")
         else:
             # 声明式形态：chan T(...) —— 解析类型注解后接参数
@@ -604,8 +613,25 @@ class ExpressionComponent(BaseComponent):
         return self._loc(ast.IbCall(func=left, args=arguments, keywords=keywords), left, end_token)
 
     def dot(self, left: ast.IbExpr) -> ast.IbExpr:
-        name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
-        return self._loc(ast.IbAttribute(value=left, attr=name.value, ctx='Load'), left, name)
+        name = self._consume_member_name()
+        return self._loc(ast.IbAttribute(value=left, attr=name, ctx='Load'), left)
+
+    def _consume_member_name(self) -> str:
+        """消费成员名：IDENTIFIER 或标识符样关键字（如 ``iruntime.snapshot``）。
+
+        ``snapshot``/``fn``/``auto``/``chan`` 等关键字在点访问后可作为成员名
+        （关键字保留字限制不适用于成员位置——Python 的 ``obj.<name>`` 语义）。
+        运算符等非标识符 token 仍被拒绝。
+        """
+        tok = self.stream.peek()
+        if tok.type == TokenType.IDENTIFIER:
+            return self.stream.advance().value
+        # 关键字：仅当其 source 文本是合法标识符时才接受（排除运算符等）
+        val = tok.value or ""
+        if val and val.isidentifier():
+            self.stream.advance()
+            return val
+        return self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.").value
 
     def tuple_expr(self, left: ast.IbExpr) -> ast.IbExpr:
         elts = [left]
@@ -826,8 +852,8 @@ class ExpressionComponent(BaseComponent):
         while True:
             if self.stream.match(TokenType.DOT):
                 dot_token = self.stream.previous()
-                attr_name = self.stream.consume(TokenType.IDENTIFIER, "Expect property name after '.'.")
-                node = self._loc(ast.IbAttribute(value=node, attr=attr_name.value, ctx='Load'), dot_token)
+                attr_name = self._consume_member_name()
+                node = self._loc(ast.IbAttribute(value=node, attr=attr_name, ctx='Load'), dot_token)
             elif self.stream.match(TokenType.LBRACKET):
                 lbracket_token = self.stream.previous()
                 # 使用统一的切片/索引解析器

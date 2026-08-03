@@ -38,6 +38,21 @@ def _get_comm_registry(executor) -> CommRegistry:
     return reg
 
 
+def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
+    """向 runtime_context 上的事件总线广播事件（PT-MT-4 内省事件流）。
+
+    无订阅者时为空操作；事件总线失败不阻断执行（可观测性层尽力而为）。
+    """
+    rc = executor.runtime_context
+    bus = getattr(rc, "_comm_event_bus", None)
+    if bus is None:
+        return
+    try:
+        bus.emit({"type": event_type, "data": data or {}})
+    except Exception:
+        pass
+
+
 def vm_handle_IbChannelExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``chan(T, mode=..., buffer=...)`` 构造 Channel 值对象。"""
     if False:
@@ -50,6 +65,7 @@ def vm_handle_IbChannelExpr(executor, node_uid: str, node_data: Mapping[str, Any
     obj = IbChannel(ib_class=cls, core=core)
     if name:
         _get_comm_registry(executor).register(name, obj, "chan")
+    _emit_event(executor, "chan_created", {"name": name, "mode": mode})
     return obj
 
 
@@ -78,6 +94,7 @@ def vm_handle_IbSlotExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     obj = IbSlot(ib_class=cls, core=core)
     if name:
         _get_comm_registry(executor).register(name, obj, "slot")
+    _emit_event(executor, "slot_updated", {"name": name, "value": value})
     return obj
 
 
@@ -122,6 +139,7 @@ def vm_handle_IbSpawnStmt(executor, node_uid: str, node_data: Mapping[str, Any])
             args.append(kw_val)
 
     handle = spawn_task_handle(executor, callable_obj, args)
+    _emit_event(executor, "task_started", {"node_uid": node_uid})
 
     target_uid = node_data.get("target")
     if target_uid:
@@ -145,6 +163,7 @@ def vm_handle_IbJoinStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
             result = join()
         else:
             result = task_obj
+    _emit_event(executor, "task_done", {"node_uid": node_uid})
     target_uid = node_data.get("target")
     if target_uid:
         from core.runtime.vm.handlers._shared import _vm_assign_to_target
@@ -160,4 +179,5 @@ def vm_handle_IbCancelStmt(executor, node_uid: str, node_data: Mapping[str, Any]
         cancel = getattr(task_obj, "cancel", None)
         if callable(cancel):
             cancel()
+    _emit_event(executor, "task_cancelled", {"node_uid": node_uid})
     return executor.registry.get_none()

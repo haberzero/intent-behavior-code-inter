@@ -24,6 +24,7 @@ KERNEL_NATIVE_MODULES: Dict[str, str] = {
     "ihost": "ibci_ihost",
     "idbg": "ibci_idbg",
     "isys": "ibci_isys",
+    "iruntime": "ibci_iruntime",
 }
 
 
