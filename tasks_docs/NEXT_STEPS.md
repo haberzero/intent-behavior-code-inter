@@ -58,7 +58,9 @@ python -m pytest tests/
 >
 > **PT-MT-2 编译器地基已完成（2026-08-03）**：新 AST 节点（IbSpawnStmt/IbJoinStmt/IbCancelStmt/IbChannelExpr/IbSignalExpr/IbSlotExpr）+ 7 个关键字（spawn/join/cancel/chan/signal/slot/task）+ parser（语句 if-链 + 表达式前缀规则 + type_def 分支）+ 4 阶段语义（spawn 可调用校验、join/cancel 目标 task 校验）+ 类型注册（TypeKind.TASK/CHANNEL/SIGNAL/SLOT + Spec + Axiom）+ 序列化 round-trip。测试：新增 `tests/compiler/test_concurrency_syntax.py`（18 用例），全量 pytest 1341 passed/4 skipped 零回归。
 >
-> **下一步**：PT-MT-3 统一通信内核（Channel/Signal/Slot 三抽象线程安全内核 + IbObject 语言层对象 + dispatch handler 接入 VM）。
+> **PT-MT-3 统一通信内核已完成（2026-08-03）**：线程安全内核（`core/runtime/shared/comm/`：CommBuffer/ChannelCore/SignalCore/SlotCore/CommRegistry）+ 语言层对象（`IbChannel`/`IbSignal`/`IbSlot`/`IbTask`）+ dispatch handler（6 个新节点全部接入 VM）。语言面可用：`chan.send/recv/recv_nonblocking/close`、`slot.set/get`、`spawn/join/cancel`（PT-MT-3 阶段为协作式延迟任务：join 触发求值；后台线程/轻量 VM 在 PT-MT-7/8 升级）。测试：`test_comm_kernel.py`（33）+ `test_vm_comm.py`（8），全量 pytest 1382 passed/4 skipped 零回归。
+>
+> **下一步**：PT-MT-4 内省层（`runtime.snapshot()` + `runtime.subscribe()`）。
 
 ---
 

@@ -75,3 +75,26 @@
 **变化前后**：+2 文件（comm.py axiom、test_concurrency_syntax.py），+7 修改文件。
 
 **测试**：新增 `tests/compiler/test_concurrency_syntax.py`（18 用例：lexer 关键字、parser 节点、类型注解、语义正/负样本、序列化 round-trip）。全量 pytest 1341 passed/4 skipped 零回归。
+
+#### 7. PT-MT-3 统一通信内核（自主实现，2026-08-03）
+
+按 `THREADING_DESIGN_DETAIL.md` §三落地统一通信内核，全量 pytest 零回归（1382 passed/4 skipped，+41 测试）。
+
+**实现内容**：
+- **线程安全内核**（`core/runtime/shared/comm/`）：
+  - `buffer.py` CommBuffer（threading.Condition 单锁、有界 send/recv、非阻塞、close 语义、qsize、snapshot）
+  - `channel.py` ChannelCore（stream/message/pubsub 三模式、pubsub 每订阅者 CommBuffer 扇出）
+  - `signal.py` SignalCore（frozen dataclass、kind 白名单 cancel/pause/resume/config_change、定向/广播）
+  - `slot.py` SlotCore（get/set/update 原子读改写——锁外计算 + CAS 回写，避免锁内回调死锁，设计 D4 定案）
+  - `registry.py` CommRegistry（name→对象、kind 枚举、snapshot）
+- **语言层对象**（`core/runtime/objects/kernel/comm.py` + `core/runtime/objects/task.py`）：
+  - `IbChannel`（send/recv/recv_nonblocking/close）、`IbSignal`、`IbSlot`（get/set/update）、`IbTask`（spawn 句柄）
+  - `@register_ib_type` 注册，primitive_initializer axiom 驱动自动绑定方法
+- **dispatch handler**（`core/runtime/vm/handlers/comm.py`）：6 个新节点全部接入 VM。
+- **spawn/join/cancel 执行模型（关键决策）**：PT-MT-3 阶段为**协作式延迟任务**——spawn 记录可调用+实参不立即执行，join 触发求值（当前 VM 线程），cancel 在未启动时标记取消。**刻意不做后台线程**：后台线程共享 runtime_context 会产生作用域竞争（违反并发正确性 C4），轻量 VM 实例隔离在 PT-MT-7/8 落地时升级执行路径（任务句柄接口不变）。此决策符合工作模式定论（非 shim：任务抽象完整、语义自洽）。
+
+**关键 bug 修复**：`vm_handle_IbChannelExpr` 原为普通函数（非生成器），违反 VM CPS handler 必须为 generator 的契约（`gen.send` 在非生成器上 AttributeError → VM 主循环死循环）。修复：加 `if False: yield` 保持生成器身份（对齐 `vm_handle_IbPass` 模式）。
+
+**变化前后**：+7 文件（comm 包 6 模块、objects/comm.py、objects/task.py、handlers/comm.py、2 测试文件），+4 修改文件。
+
+**测试**：`tests/runtime/test_comm_kernel.py`（33：CommBuffer 并发吞吐、Channel 三模式、pubsub 扇出、Signal 不可变、Slot 并发 update 100 线程 +1、CommRegistry）+ `tests/runtime/test_vm_comm.py`（8：语言面 e2e）。全量 pytest 1382 passed/4 skipped 零回归。

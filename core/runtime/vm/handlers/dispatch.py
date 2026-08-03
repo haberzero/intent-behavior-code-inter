@@ -56,6 +56,14 @@ from core.runtime.vm.handlers.llm_behavior import (
     vm_handle_IbIntentStackOperation,
     vm_handle_IbRetry,
 )
+from core.runtime.vm.handlers.comm import (
+    vm_handle_IbChannelExpr,
+    vm_handle_IbSignalExpr,
+    vm_handle_IbSlotExpr,
+    vm_handle_IbSpawnStmt,
+    vm_handle_IbJoinStmt,
+    vm_handle_IbCancelStmt,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -114,4 +122,11 @@ def build_dispatch_table() -> dict:
         "IbFor": vm_handle_IbFor,
         "IbTry": vm_handle_IbTry,
         "IbRetry": vm_handle_IbRetry,
+        # 并发/通信（运行时多线程主线 PT-MT-*）
+        "IbChannelExpr": vm_handle_IbChannelExpr,
+        "IbSignalExpr": vm_handle_IbSignalExpr,
+        "IbSlotExpr": vm_handle_IbSlotExpr,
+        "IbSpawnStmt": vm_handle_IbSpawnStmt,
+        "IbJoinStmt": vm_handle_IbJoinStmt,
+        "IbCancelStmt": vm_handle_IbCancelStmt,
     }
