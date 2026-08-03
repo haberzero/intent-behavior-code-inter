@@ -37,7 +37,7 @@ python -m pytest tests/
 >
 > **核心动机**：现有通信机制碎片化（`output_callback`/`call_info`/`Waitable`/`future`），无统一官方设计；用户需实时监控/流式时被迫手写轮询（不可维护）。需要**一等通信机制** + **运行时内省** + **默认开启的控制能力**。
 >
-> **范围分解（设计已综合，见 `docs/subsystems/05_coroutine.md §8` 待补充）**：
+> **范围分解（设计已综合，见 `tasks_docs/THREADING_DESIGN.md`）**：
 > 1. **统一通信内核**：`Channel`（数据流，mode=stream/message/pubsub）+ `Signal`（控制流，target 可选定向/广播）+ `Slot`（状态，具名原子读写），三抽象共享线程安全内核，语言层全部暴露
 > 2. **内省层**：**快照式 + 事件流** 两者都提供（`runtime.snapshot()` / `runtime.subscribe()`）
 > 3. **控制层**：统一启停接口（有开有关，部分默认开、部分默认关），`runtime.configure(...)` 粒度全局→单调用→单实例

@@ -45,7 +45,7 @@
 【正式主线自动化 · 无人值守】主任务：实施 IBCI 运行时多线程 + 统一通信机制 + 内省/控制主线（见 tasks_docs/NEXT_STEPS.md 与 tasks_docs/THREADING_DESIGN.md）。
 
 一、主线任务（PT-MT-*，按序）：
-1) PT-MT-1 详细设计文档（架构/AST 变更/接口/并发正确性/测试策略）→ 2) PT-MT-2 编译器地基（新 AST 节点 spawn/join/task/chan/signal/slot + parser + 4 阶段语义 + dispatch + 序列化，任务为运行时瞬态）→ 3) PT-MT-3 统一通信内核（Channel stream/message/pubsub + Signal 定向/广播 + Slot 具名原子，线程安全，语言层暴露）→ 4) PT-MT-4 内省层（快照 snapshot + 事件流 subscribe）→ 5) PT-MT-5 控制层（runtime.configure 统一启停，并行/流式/内省默认开）→ 6) PT-MT-6 流式+并行（流式 provider + Worker→Channel→渲染，都默认开启）→ 7) PT-MT-7 多 VM 实例（每并发路径一个轻量 VM + 全局只读数据 + 内核协调器）→ 8) PT-MT-8 用户代码多线程（task = spawn(fn) 显式任务句柄 join/cancel）。
+1) PT-MT-1 详细设计文档（架构/AST 变更/接口/并发正确性/测试策略）——基于 tasks_docs/THREADING_DESIGN.md 的决策整理成正式设计文档；若设计无歧义则继续 PT-MT-2+，若遇设计歧义/需用户裁定则停止上报 → 2) PT-MT-2 编译器地基（新 AST 节点 spawn/join/task/chan/signal/slot + parser + 4 阶段语义 + dispatch + 序列化，任务为运行时瞬态）→ 3) PT-MT-3 统一通信内核（Channel stream/message/pubsub + Signal 定向/广播 + Slot 具名原子，线程安全，语言层暴露）→ 4) PT-MT-4 内省层（快照 snapshot + 事件流 subscribe）→ 5) PT-MT-5 控制层（runtime.configure 统一启停，并行/流式/内省默认开）→ 6) PT-MT-6 流式+并行（流式 provider + Worker→Channel→渲染，都默认开启）→ 7) PT-MT-7 多 VM 实例（每并发路径一个轻量 VM + 全局只读数据 + 内核协调器）→ 8) PT-MT-8 用户代码多线程（task = spawn(fn) 显式任务句柄 join/cancel）。
 每完成一个任务用描述性 commit 提交（说明+验证计数），同步更新 NEXT_STEPS/PENDING_TASKS，然后自动接续下一任务。
 
 二、决策纪律：可大胆激进选方案，底线=架构原则/代码质量原则/非妥协/非tricky/非临时兼容层/大方向主线。不因需拍板而停滞。
@@ -61,7 +61,7 @@
 4) 测试体系重构（TEST_REFACTOR，tasks_docs/TEST_REFACTOR.md）。
 每条支线仍须每批全量 pytest 零回归、commit+留痕（仅本地）、遇上报阈值项即停。
 
-六、停止条件：遇用户意图不明/公理层或语义错误集需全量评估破坏面/与工作模式定论冲突才停止并 update_goal(status="unmet", blocker=具体卡点+建议)。
+六、停止条件：遇用户意图不明/公理层或语义错误集需全量评估破坏面/与工作模式定论冲突/**超出已授权范围的破坏性变更**才停止并 update_goal(status="unmet", blocker=具体卡点+建议)。
 
 七、非目标：media Phase 4、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器）。
 ```
