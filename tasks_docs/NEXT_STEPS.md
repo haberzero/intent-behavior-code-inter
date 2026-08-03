@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-02（新主线确立：LLM 混合执行核心加固——PT-TEST-9 / PT-HEALTH-3 / PT-4.2；多媒体无限期搁置）
+> **最后更新**：2026-08-03（新主线确立：IBCI 运行时多线程 + 统一通信机制 + 内省/控制；上一主线 LLM 并行化+同步异步全部完成）
 ---
 
 ## ⛔ 工作模式定论（强制，凌驾于本文件一切任务之上）
@@ -31,36 +31,28 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：LLM 真正可用的并行化 + 同步异步
+## 当前主线：IBCI 运行时多线程 + 统一通信机制 + 内省/控制（新确立）
 
-> **用户裁定（2026-08-02）**：多媒体无限期搁置。主线为 **LLM 真正可用的并行化、同步异步等相关工作**——即现有并行 dispatch（`dispatch_eager`/`resolve`/`run_batch`）从"能用"到"真正可靠可用"，并推进语言级 async/await 与 VM 多任务挂起/恢复（原 PENDING_TASKS §二 L3 协程方向，由 SHELVED 升为主线）。
+> **用户裁定（2026-08-03）**：上一主线（LLM 并行化 + 同步异步，Stages 1-4 + `await` 表达式）**已全部完成**。确立下一主线：**IBCI 运行时多线程 + 统一通信机制（Channel/Signal/Slot）+ 内省/控制**。这是基于"用 ibci 设计一个完整虚拟机运行时"的视角，对 IBCI 内核的**大范围破坏性改造**（用户明确接受，架构正确性 > 维持现状）。
 >
-> **范围分解**：
-> 1. **并行可靠性地基**：executor/behavior 共享状态**去共享化**（per-task/per-dispatch 所有权）——`_expected_type_stack`/`_current_call_info`/意图上下文。根因修复（状态不应跨线程共享），非加锁症状层
-> 2. **VM 调度器多任务化**：单根任务 → 多任务协作调度（`Signal.YIELD` 挂起/恢复、任务句柄、快照覆盖 yield 点）——L3 解封落地
-> 3. **语言级 async/await**：作为多任务调度器之上的显式表面（**暂缓完整语言机制**，Stage 3 落地）
-> 4. **宿主级异步**：`host.run_isolated()` 异步句柄（PT-3.1）、`ReceiveMode` 演进（PT-3.2）
+> **核心动机**：现有通信机制碎片化（`output_callback`/`call_info`/`Waitable`/`future`），无统一官方设计；用户需实时监控/流式时被迫手写轮询（不可维护）。需要**一等通信机制** + **运行时内省** + **默认开启的控制能力**。
 >
-> **架构定案（2026-08-02，Option A 混合模型）**：LLM IO 保持线程池但**只做纯 IO 边界**（不触碰共享状态）；VM 多任务协作调度（单线程、无锁，公理调度+单次锁定）；语言级 async/await 为演进目标。**核心洞察：共享状态去共享化 = 多任务调度器地基，Stage 1 与 Stage 2 是同一重构的两面。**
+> **范围分解（设计已综合，见 `docs/subsystems/05_coroutine.md §8` 待补充）**：
+> 1. **统一通信内核**：`Channel`（数据流，mode=stream/message/pubsub）+ `Signal`（控制流，target 可选定向/广播）+ `Slot`（状态，具名原子读写），三抽象共享线程安全内核，语言层全部暴露
+> 2. **内省层**：**快照式 + 事件流** 两者都提供（`runtime.snapshot()` / `runtime.subscribe()`）
+> 3. **控制层**：统一启停接口（有开有关，部分默认开、部分默认关），`runtime.configure(...)` 粒度全局→单调用→单实例
+> 4. **流式 vs 并行**：两个独立概念，**都默认开启**；流式需 provider 流式接口 + Worker 增量 → Channel → 渲染线程
+> 5. **多 VM 实例**：每个并发路径一个轻量 VM 实例（完全隔离，留出全局可见只读数据），内核协调器管理生命周期；经 Channel 协调
+> 6. **编译器改造**：新 AST 节点（spawn/join/task/chan/signal/slot）+ parser 语法 + 4 阶段语义 + dispatch + 序列化（并发任务为运行时瞬态，不进入持久化状态）
+> 7. **用户代码多线程**：`task = spawn(fn)` 显式任务句柄（join/cancel），供实时 UI/输出刷新
 >
-> **任务分层（2026-08-02 梳理定案）**：
-> - **Tier 1 主线组成部分**：PT-HEALTH-3（executor 共享状态 → Stage 1）、PT-3.1/PT-3.2（宿主异步 → Stage 4）
-> - **Tier 2 可靠性地基（前置/并行推进）**：PT-TEST-9 probe_model 测试——reasoning 判定决定每个 LLM 调用行为；目标含"probe 为 setup-time 显式动作 + `_model_capabilities` 并行阶段只读不变式 + 三路径测试"
-> - **Tier 3 交叉独立（顺带，不阻塞）**：PT-SEM-1.1 错误用户友好化（覆盖并行新增错误类别）、PT-4.2 `__call__` 协议（async 边缘交集，保持独立）
-> - **Tier 4 独立**：PT-SEM-1 其余 / PT-SEM-4 / PT-4.1/4.4/4.5
-> - **主线隐含新任务（进 PENDING）**：并发正确性验证方法、LLMFuture 生命周期/错误语义、线程池资源生命周期
+> **明确排除**：跨进程/CPU 并行（性能瓶颈在 IBCI 包装，非 CPU 并发）；跨引擎通信（隔离运行是自我进化窗口，现阶段仅维护+同步演进，保持文件/序列化机制）。
 >
-> **关联**：PT-TEST-9（probe_model 测试）为并行可靠性的组成；PT-HEALTH-3 核心并入 Stage 1；PT-4.2（`__call__` 协议）降为次要。
+> **参考**：现有 `Waitable`/`LLMFuture`/`TaskScheduler`/`spawn_isolated` 多 VM 机制作为演进基础；`docs/subsystems/05_coroutine.md §7.7/§7.8` 记录 Stage 3/4 成果。
 >
-> **验证**：每批 `python -m pytest tests/` 全量零回归。
+> **完成状态**：上一主线（LLM 并行化 + 同步异步）全部完成——Stage 1（executor 去共享化）、Stage 2（VM 多任务调度）、Stage 4（宿主异步统一 Waitable）、Stage 3（`await` 表达式）、PT-SEM-4、PT-4.2、PT-SYNC-1/2/3、PT-TEST-9。
 >
-> **Stage 2 地基已落地（2026-08-03）**：
-> - `TaskScheduler` 多任务协作调度器（纯 stdlib，`Waitable` 协议）+ `run_many` 多根并发入口
-> - `TaskScheduler` 结果按**提交序**收集（非完成序），`run_many` 按 roots 索引取结果可靠
-> - `leaf.py` `vm_handle_IbName` 对 `LLMFuture` 改 `yield from resolve_future_cps` 挂起（单脚本内 LLM 阻塞可挂起，对齐多根语义）
-> - Stage 1 三项核验完成（parse_result 线程安全 / `_prompt`+`_llm_function` 无实例级可变状态 / 意图 fork 隔离完整）
->
-> **下一步**：async 函数/生成器（`yield` 使函数成为生成器，语言级协程形态）；或回到主线 Tier 3/4 任务（PT-SEM-1.1 错误用户友好化、PT-4.2 `__call__` 协议、PT-SEM-4 兜底双通道）。语言级 `await` 表达式已落地（Stage 3，见 `docs/subsystems/05_coroutine.md §7.8`）。
+> **下一步（本节正式开工前）**：先完成本节主线的**详细设计文档**（架构/AST 变更/接口/并发正确性/测试策略），经用户审阅后落地实现。
 
 ---
 
