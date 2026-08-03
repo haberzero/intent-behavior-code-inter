@@ -72,7 +72,7 @@
 
 ### PT-4.3　语言级协程 [升为主线，见 NEXT_STEPS.md]
 
-> 2026-08-02 随 §二 升为主线（Stage 3 语言级 async/await）；完整设计见 `docs/subsystems/05_coroutine.md`。
+> 2026-08-02 随 §二 升为主线。**Stage 3 语言级 `await` 表达式已落地（2026-08-03）**：`await <expr>` 显式等待 Waitable（五层实现 + 4 e2e 测试，全量 pytest 1322 passed/4 skipped 零回归，见 `docs/subsystems/05_coroutine.md §7.8`）。**剩余**：async 函数/生成器（`yield` 使函数成为生成器）——语言级协程的完整形态，作为 `await` 之上的下一步。
 
 ### PT-4.4　用户类泛型类型参数 [VISION]
 

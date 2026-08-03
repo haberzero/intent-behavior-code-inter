@@ -170,4 +170,14 @@ Stage 2 地基已落地（见 `core/runtime/vm/task_scheduler.py`、`vm_executor
 
 设计约束：`spawn_isolated` 返回**非 Waitable** handle（区分"创建"与"等待"），`collect`/`run_isolated` 返回 **Waitable**（VM 自动 yield），天然区分，无需 per-function 标记。
 
+### 7.8 Stage 3 语言级 `await` 表达式（2026-08-03）
+
+在统一 `Waitable` 地基之上实现语言级 `await <expr>` 显式语法表面。
+
+- **定位**：`await` 是显式等待任意 Waitable（LLMFuture / HostAwaitable）完成的通用表面，与数据流自动 await（读 LLMFuture 变量自动解析、collect 返回 HostAwaitable 自动等待）**互补而非双通道**——数据流自动 await 是透明 future 便利，`await` 服务显式异步点与容器/非变量位置持有 Waitable 的等待，并作为未来 async 函数的地基。
+- **五层实现**：lexer 加 `await`→`TokenType.AWAIT`；AST 新增 `IbAwaitExpr(value)`；parser 加 AWAIT 前缀规则（UNARY 优先级，`await x + 1` 解析为 `(await x) + 1`）；semantic `visit_IbAwaitExpr`（类型=操作数类型）+ `_handle_assign_target` 解包 `await <behavior>` 适配目标类型；VM `vm_handle_IbAwaitExpr`（LLMFuture→`resolve_future_cps`、Waitable→`yield`、非 Waitable 幂等返回）+ dispatch 注册。
+- **测试**：`test_e2e_await_expr.py`（4 用例），全量 pytest 1322 passed/4 skipped 零回归。
+
+**下一步**：async 函数 / 生成器（`yield` 使函数成为生成器）——在 `await` 基础之上的语言级协程形态；或回到主线 Tier 3/4 任务（PT-SEM-1.1 错误用户友好化、PT-4.2 `__call__` 协议、PT-SEM-4 兜底双通道）。
+
 **下一步**：语言级 `async`/`await`（Stage 3，暂缓）——在此统一 `Waitable` 地基之上的显式语法表面。

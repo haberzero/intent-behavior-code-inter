@@ -60,7 +60,7 @@ python -m pytest tests/
 > - `leaf.py` `vm_handle_IbName` 对 `LLMFuture` 改 `yield from resolve_future_cps` 挂起（单脚本内 LLM 阻塞可挂起，对齐多根语义）
 > - Stage 1 三项核验完成（parse_result 线程安全 / `_prompt`+`_llm_function` 无实例级可变状态 / 意图 fork 隔离完整）
 >
-> **下一步**：语言级 `async`/`await`（Stage 3，暂缓）——在统一 `Waitable` 地基之上的显式语法表面。宿主异步（PT-3.1/3.2）已落地（见 §七、7.7 与 PENDING_TASKS §二）。
+> **下一步**：async 函数/生成器（`yield` 使函数成为生成器，语言级协程形态）；或回到主线 Tier 3/4 任务（PT-SEM-1.1 错误用户友好化、PT-4.2 `__call__` 协议、PT-SEM-4 兜底双通道）。语言级 `await` 表达式已落地（Stage 3，见 `docs/subsystems/05_coroutine.md §7.8`）。
 
 ---
 
