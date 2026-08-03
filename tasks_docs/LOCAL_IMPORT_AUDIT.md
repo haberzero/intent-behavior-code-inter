@@ -29,6 +29,8 @@
 | L9 | `runtime/path/install.py:36/40` | `import ibci_modules` / `import core` | **循环打破**（模块加载期） |
 | L10 | `ibci_ai/core.py:298` | `from core.runtime.frame import` | **循环打破**（插件↔core） |
 
+> **L1-L10 分类结论（2026-08-03 核验）**：经逐处核验，L1-L10 均为**运行时依赖的循环打破**（`IbBoundMethod`/`IbClass`/`TypeKind`/`TypeDef` 等为运行时构造/比较/分派所需，非纯类型引用），用的是 Python 处理模块环的**标准局部 import 模式**，且均有注释说明动机、共享类型已置于叶子模块（`kernel.spec.base`）。**非掩盖型胶水**，不属需修复的异味。改进方向（把共享类型进一步下沉到独立叶子模块以彻底去环）属**架构重构决策**，非本次技术债修复范畴，列为设计期项。
+
 ### 1.2 惰性可选依赖（设计内）
 
 | # | 位置 | import | 判定 |
