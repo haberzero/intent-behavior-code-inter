@@ -53,6 +53,8 @@ class AIPlugin(IbStatefulPlugin):
             "supports_system": True,  # 是否支持 System 角色
             "extract_strategy": "standard" # 提取策略: standard, tag_based, keyword_based
         }
+        # 未 probe 告警去重：仅首次未探测调用告警一次，避免热路径刷屏
+        self._unprobed_warned = False
 
     @staticmethod
     def _is_test_config(url: Optional[str], key: Optional[str]) -> bool:
@@ -108,6 +110,7 @@ class AIPlugin(IbStatefulPlugin):
 
         # 如果切换了模型，重置探测状态
         self._model_capabilities["probed"] = False
+        self._unprobed_warned = False
         self._init_client()
 
     def register_model(self, name: str, url: str, key: str, model: str, **kwargs) -> None:
@@ -380,10 +383,19 @@ class AIPlugin(IbStatefulPlugin):
             active_client = self._client
             active_model = self._config["model"]
 
-        # 如果没有主动探测过，可以在这里触发一次懒加载探测，或者直接使用默认策略
+        # 未显式探测时的回退策略。
+        #
+        # 设计立场（2026-08-03）：本阶段 IBCI 不推荐使用 thinking 模型，推荐
+        # 直接输出模式（standard）。thinking 模型现阶段允许但非推荐；未来将专门
+        # 设计"直接输出 vs thinking 后输出"的映射/分配策略（届时再细化）。
+        #
+        # 未 probe 时本应显式失败（fail-fast），但为保持既有调用可用，此处保守
+        # 按推理模型处理，并仅在首次告警一次，提示调用方显式 ai.probe_model()
+        # 以选用直接输出模式。告警去重见 self._unprobed_warned。
         if not self._model_capabilities["probed"]:
-            # 为避免隐式延迟，这里默认回退到保守的推理策略，
-            # 但推荐用户在脚本中显式调用 ai.probe_model()
+            if not self._unprobed_warned:
+                print("[AI Probe] 警告：未调用 ai.probe_model()，按推理模型保守处理。建议显式探测以选用直接输出模式。")
+                self._unprobed_warned = True
             is_reasoning_model = True
         else:
             is_reasoning_model = self._model_capabilities["is_reasoning"]
@@ -558,6 +570,7 @@ class AIPlugin(IbStatefulPlugin):
         # 重建 LLM 客户端（连接对象无法序列化，必须在恢复后重建）
         self._client = None
         self._model_capabilities["probed"] = False
+        self._unprobed_warned = False
         if self._config.get("url") and self._config.get("key"):
             self._init_client()
 

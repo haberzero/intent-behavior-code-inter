@@ -217,6 +217,25 @@ class TestConsumerDecision:
         plugin("sys", "user")
         assert "ANSWER:" in sys_prompts[0]
 
+    def test_unprobed_emits_warning_once(self, capsys):
+        plugin = _plugin_with_fake(responder=lambda *a, **k: _completion(content="ANSWER: hi"))
+        plugin("sys", "user")
+        plugin("sys", "user")
+        captured = capsys.readouterr()
+        # 未探测告警仅首次触发一次（去重，避免热路径刷屏）
+        assert captured.out.count("未调用 ai.probe_model()") == 1
+
+    def test_warning_resets_after_set_config(self, capsys):
+        plugin = _plugin_with_fake(responder=lambda *a, **k: _completion(content="ANSWER: hi"))
+        plugin("sys", "user")
+        capsys.readouterr()  # 清空第一个告警窗口
+        # 切换模型触发 set_config → 重置探测状态与告警去重 → 再次告警
+        plugin.set_config("https://llm.invalid/v2", "sk-fake-2", "fake-model-2")
+        plugin._client = FakeClient(lambda *a, **k: _completion(content="ANSWER: hi"))
+        plugin("sys", "user")
+        captured = capsys.readouterr()
+        assert captured.out.count("未调用 ai.probe_model()") == 1
+
 
 # ---------------------------------------------------------------------------
 # ② _model_capabilities 只读消费不变式
