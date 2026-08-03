@@ -15,8 +15,8 @@
 
 | 编号 | 标题 | 目标 | 状态 |
 |------|------|------|------|
-| PT-MT-1 | 详细设计文档 | 完整架构/AST 变更/接口/并发正确性/测试策略，先经用户审阅 | 待做 |
-| PT-MT-2 | 编译器地基 | 新 AST 节点（spawn/join/task/chan/signal/slot）+ parser + 4 阶段语义 + dispatch + 序列化（任务为运行时瞬态） | 待做 |
+| PT-MT-1 | 详细设计文档 | 完整架构/AST 变更/接口/并发正确性/测试策略，先经用户审阅 | **已完成 2026-08-03（待用户审阅）**，见 `tasks_docs/THREADING_DESIGN_DETAIL.md` |
+| PT-MT-2 | 编译器地基 | 新 AST 节点（spawn/join/task/chan/signal/slot）+ parser + 4 阶段语义 + dispatch + 序列化（任务为运行时瞬态） | 待做（待 PT-MT-1 审阅通过） |
 | PT-MT-3 | 统一通信内核 | Channel（stream/message/pubsub）+ Signal（定向/广播）+ Slot（具名原子）三抽象，线程安全，语言层暴露 | 待做 |
 | PT-MT-4 | 内省层 | 快照式（`runtime.snapshot()`）+ 事件流（`runtime.subscribe()`）两者都提供 | 待做 |
 | PT-MT-5 | 控制层 | 统一启停接口 `runtime.configure(...)`（有开有关，部分默认开/关），粒度全局→单调用→单实例 | 待做 |
