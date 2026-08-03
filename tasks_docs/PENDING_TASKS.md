@@ -118,6 +118,8 @@
 >
 > **全仓健康诊断扫描（2026-08-02 已执行）**：按健康诊断十查 + code-odor 特征码扫描全部 `ibci_modules` 插件。分类结论：`ibci_isys`/`ibci_idbg` 的 `hasattr/getattr` 防御性内省属**合法**（可选项注入、调试内省工具、安全默认沙箱），非掩盖型兜底。
 >
+> **Stage 1 待核验项（2026-08-03 记录，来自已删除的 `_code_llm_core.md`）**：① `LLMResultParser.parse_result` 线程安全（strategy 链是否无实例突变）；② `_prompt.py`/`_llm_function.py` 实例级状态审计；③ 意图上下文并行隔离核验（fork 语义完整性）。需核验是否已完成，未完成则补。
+>
 > **`ai.__call__` 未 probe 回退决策（2026-08-03 裁定）**：原静默回退为推理模型。裁定：**保留行为 + 首次告警一次**（`_unprobed_warned` 去重），并在注释记录设计立场——本阶段 IBCI **不推荐使用 thinking 模型，推荐直接输出模式**；thinking 允许但非推荐；未来将专门设计"直接输出 vs thinking 后输出"的映射/分配策略（届时再细化）。此决策按"原则 > 行为维持"原则执行（见各级工作模式文档）。告警行为变化已由 `test_probe_model.py` 新增用例锁定。
 
 ### PT-DOC-1 语法手册定位段补充 [P3]
