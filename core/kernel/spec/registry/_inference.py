@@ -143,6 +143,17 @@ class _InferenceMixin:
             if ret_name:
                 return self.resolve(ret_name) or self.resolve("any")
 
+        # --- Layer 6: Last resort — direct return_type attribute read ---
+        # 收敛语义层末尾的直读兜底（原 _expression_visitors 双通道）：仅对
+        # **可调用** spec 且带显式 return_type（非默认 void/any/auto）时，
+        # 解析其 return_type；无法解析则回退 any。非可调用 spec 返回 None
+        # （与调用方 call_trait 前置检查一致）。
+        ret_ref = getattr(callee_spec, "return_type", None)
+        head = getattr(ret_ref, "head", None)
+        if head is not None and head not in ("any", "auto", "", "void"):
+            if self.get_call_cap(callee_spec):
+                return self.resolve_typeref(ret_ref) or self.resolve("any")
+
         # Not callable
         return None
 

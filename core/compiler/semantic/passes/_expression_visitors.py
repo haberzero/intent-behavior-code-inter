@@ -308,34 +308,12 @@ class ExpressionVisitorsMixin:
         )
 
         # --- Unified return type resolution ---
+        # 单一入口：resolve_call_return 已覆盖直读 return_type 的兜底（Layer 6）；
+        # 此处不再重复直读，避免双通道。未解析则回退 any。
         res = self.registry.resolve_call_return(func_type, arg_specs or [])
 
         if not res:
-            # Last resort fallback: direct return_type attribute read
-            ret_ref = getattr(func_type, 'return_type', None)
-            if ret_ref is not None:
-                if isinstance(ret_ref, TypeRef):
-                    resolved = self.registry.resolve(ret_ref.head)
-                    if not resolved:
-                        self.error(
-                            f"Unresolved return type '{ret_ref.head}'",
-                            node, code=SEM_UNRESOLVED_TYPE,
-                        )
-                        resolved = self._any_desc
-                    res = resolved
-                elif hasattr(ret_ref, 'head') and ret_ref.head:
-                    resolved = self.registry.resolve(ret_ref.head)
-                    if not resolved:
-                        self.error(
-                            f"Unresolved return type '{ret_ref.head}'",
-                            node, code=SEM_UNRESOLVED_TYPE,
-                        )
-                        resolved = self._any_desc
-                    res = resolved
-                else:
-                    res = self._any_desc
-            else:
-                res = self._any_desc
+            res = self._any_desc
 
         self.bind_type(node, res)
         return res
