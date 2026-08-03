@@ -37,7 +37,7 @@
 | `interpreter/llm_parsing_strategy.py`（5 处 143/209/250/270/279） | LLM 解析兜底 | 待核验 |
 | `llm_executor/_prompt.py`（4 处 40/47/81/253） | prompt 降级链 | 待核验 |
 | `llm_except_frame.py`（3 处 185/266/318） | 快照/恢复 | 部分设计内（best-effort） |
-| `user_functions.py`（2 处 61/220）、`base.py:95/127`、`functions.py:66` 等 | 原生函数包装 | 待核验（部分设计内：ThrownException 穿透） |
+| `user_functions.py`（2 处 61/220）、`base.py:95/127`、`functions.py:66` 等 | 原生函数包装 | 待核验（部分设计内：ThrownException 穿透）【**已核验 2026-08-02**：**无语言级异常误吞**。`functions.py:66` 为正确示范——显式透传 `InterpreterError` 与 `ThrownException`（用户代码主动抛的语言级异常，须由 IbTry/顶层 try 体系处理），仅将真正的原生 bug 包为 `InterpreterError`；`base.py:95`（cast 失败→透传后抛明确 TypeError）、`:113`（`__to_prompt__` 显示兜底，窄 except `(AttributeError, InterpreterError)`）、`:127`（`__from_prompt__` 协议返 `(False, 错误)`，非静默）、`user_functions.py:61/220`（模块导入失败→`raise InterpreterError(...) from e` 重抛）——均 fail-fast / 协议契约，非掩盖型兜底】 |
 | `ibci_ai/core.py`（4 处 98/167/249/466） | OpenAI 客户端 | 待核验 |
 | `ibci_idbg/core.py`（2 处 383/398）、`auto_discovery.py`（4 处） | 观察者/发现 | 待核验 |
 | `llm_except_frame.py:318`、`debugger.py:139` | 值比较/调试 | 设计内 |
