@@ -73,6 +73,12 @@ TUPLE_SPEC        = TypeDef(name="tuple",  kind=TypeKind.TUPLE.value,  is_nullab
 DICT_SPEC         = TypeDef(name="dict",   kind=TypeKind.DICT.value,   is_nullable=True,  provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 MODULE_SPEC       = TypeDef(name="module", kind=TypeKind.MODULE.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
+# 并发/通信类型规格（运行时多线程主线 PT-MT-*）
+TASK_SPEC    = TypeDef(name="task",   kind=TypeKind.TASK.value,   is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+SIGNAL_SPEC  = TypeDef(name="signal", kind=TypeKind.SIGNAL.value,  is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+
 ENUM_SPEC = TypeDef(name="Enum", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                     parent_type=TypeRef.of("Object"))
 ENUM_SPEC._axiom_name = "enum"

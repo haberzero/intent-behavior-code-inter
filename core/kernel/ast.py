@@ -308,6 +308,32 @@ class IbLLMExceptionalStmt(IbStmt):
     target: Optional[IbStmt]
     body: List[IbStmt] = field(default_factory=list)
 
+@dataclass(kw_only=True, eq=False)
+class IbSpawnStmt(IbStmt):
+    """``task t = spawn fn(...)`` / ``task t = spawn(fn, args)`` / fire-and-forget ``spawn fn(...)``。
+
+    ``task`` 是保留关键字（任务句柄类型名），spawn 的目标变量名**不能**叫 ``task``
+    （见 THREADING_DESIGN_DETAIL §2.2）。变量命名用 ``t``/``handle`` 等普通标识符。
+    """
+    target: Optional[IbExpr] = None          # 赋值目标（IbName / IbTypeAnnotatedExpr），None 表示 fire-and-forget
+    func: Optional[IbExpr] = None            # 被 spawn 的可调用表达式（函数名 / fn 变量 / lambda）
+    args: List[IbExpr] = field(default_factory=list)    # 位置实参
+    keywords: List['IbKeyword'] = field(default_factory=list)  # 具名实参
+
+@dataclass(kw_only=True, eq=False)
+class IbJoinStmt(IbStmt):
+    """``join t`` 或 ``task t = join t2``（join 出现在声明右侧，表达式位置）。
+
+    ``target`` 非 None 时表示"等待任务并取回结果赋值给 target"。
+    """
+    task: Optional[IbExpr] = None            # 任务句柄表达式
+    target: Optional[IbExpr] = None          # 结果赋值目标
+
+@dataclass(kw_only=True, eq=False)
+class IbCancelStmt(IbStmt):
+    """``cancel t``：请求取消任务（协作式取消）。"""
+    task: Optional[IbExpr] = None
+
 # --- Expressions ---
 
 @dataclass(kw_only=True, eq=False)
@@ -335,6 +361,40 @@ class IbAwaitExpr(IbExpr):
     的等待显式化、通用化（区别于数据流自动 await 的透明便利）。
     """
     value: IbExpr
+
+@dataclass(kw_only=True, eq=False)
+class IbChannelExpr(IbExpr):
+    """``chan(T, mode=..., buffer=...)`` 或 ``chan T(...)``：创建 Channel。
+
+    ``type_name`` 为元素类型名（首参经 ``parse_type_annotation`` 解析）；
+    ``mode`` 为 stream / message / pubsub；``buffer`` 为有界缓冲大小（0=无界）；
+    ``name`` 为可选具名 Channel（用于跨作用域寻址）。
+    """
+    type_name: Optional[str] = None
+    mode: str = "message"
+    buffer: int = 0
+    name: Optional[str] = None
+
+@dataclass(kw_only=True, eq=False)
+class IbSignalExpr(IbExpr):
+    """``signal(...)``：创建/发送 Signal（控制流，抢占式）。
+
+    ``kind`` 为 cancel / pause / resume / config_change；``target`` 定向目标
+    （None=广播）；``payload`` 附加数据。
+    """
+    kind: str = "cancel"
+    target: Optional[IbExpr] = None
+    payload: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
+class IbSlotExpr(IbExpr):
+    """``slot T(name)`` 或 ``slot(name, value)``：创建/访问 Slot。
+
+    ``name`` 为具名标识；``type_name`` 可选元素类型；``value`` 可选初始值。
+    """
+    name: str
+    type_name: Optional[str] = None
+    value: Optional[IbExpr] = None
 
 @dataclass(kw_only=True, eq=False)
 class IbIfExp(IbExpr):

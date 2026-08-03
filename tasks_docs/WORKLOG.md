@@ -51,4 +51,27 @@
 - **测试**：全量 pytest 1322 passed / 4 skipped 零回归（设计文档阶段无代码改动）。
 
 ### 待决（无需用户立即裁决）
-- PT-MT-1 设计文档待用户审阅（尤其编译器改造范围、多 VM 实例共享只读数据边界、D6-D9）。
+- PT-MT-1 设计文档待用户审阅（尤其编译器改造范围、多 VM 实例共享只读数据边界、D6-D9）。**注：按用户自主推进偏好（最高优先，仅次于硬性定时），PT-MT-2 已自主推进落地；用户仍可随时审阅设计文档并调整。**
+
+#### 6. PT-MT-2 编译器地基（自主实现，2026-08-03）
+
+按 `THREADING_DESIGN_DETAIL.md` §二落地编译器地基，全量 pytest 零回归（1341 passed/4 skipped，+18 测试）。
+
+**实现内容**：
+- **AST**（`core/kernel/ast.py`）：新增 `IbSpawnStmt`/`IbJoinStmt`/`IbCancelStmt`（语句）+ `IbChannelExpr`/`IbSignalExpr`/`IbSlotExpr`（表达式）。移除设计稿中的 IbTaskRef（任务句柄是运行时对象非 AST 节点）。
+- **Token/Lexer**（`tokens.py`/`core_scanner.py`）：SPAWN/JOIN/CANCEL/CHAN/SIGNAL/SLOT/TASK 7 关键字。
+- **Parser**（`statement.py`/`expression.py`/`type_def.py`/`recognizer.py`）：
+  - statement if-链注册 spawn/join/cancel；expression 前缀规则注册 spawn_expr/join_expr/chan_expr/signal_expr/slot_expr（spawn/join 表达式位置，`task t = spawn fn(...)`）。
+  - type_def 新增 TASK/CHAN/SIGNAL/SLOT 类型分支；recognizer 把 task/chan/signal/slot 识别为 VARIABLE_DECLARATION。
+- **类型注册**：TypeKind.TASK/CHANNEL/SIGNAL/SLOT + TASK_SPEC/CHANNEL_SPEC/SIGNAL_SPEC/SLOT_SPEC + 新 axiom 模块 `core/kernel/axioms/primitives/comm.py`（TaskAxiom/ChannelAxiom/SignalAxiom/SlotAxiom）。
+- **语义**：`visit_IbSpawnStmt`（spawn 目标可调用校验，task 返回类型）、`visit_IbJoinStmt`/`visit_IbCancelStmt`（目标必须 task 类型）、`visit_IbChannelExpr`/`visit_IbSignalExpr`/`visit_IbSlotExpr`。
+- **序列化**：vars(node) 通用序列化自动覆盖新字段，round-trip 验证通过。
+
+**关键自主决策**：
+- spawn/join 同时注册语句与表达式前缀（审查修正 #1 的落地）。
+- `spawn compute("x")` 中 func 为 IbCall 节点（call 嵌入 func），args 字段保留给 `spawn(fn, args)` 形态——语义层对 IbCall 校验被调用者（func.func）可调用。
+- `join` 返回类型当前保守为 any（任务-返回类型跟踪表留到 PT-MT-7 绑定，符合设计 §2.4）。
+
+**变化前后**：+2 文件（comm.py axiom、test_concurrency_syntax.py），+7 修改文件。
+
+**测试**：新增 `tests/compiler/test_concurrency_syntax.py`（18 用例：lexer 关键字、parser 节点、类型注解、语义正/负样本、序列化 round-trip）。全量 pytest 1341 passed/4 skipped 零回归。

@@ -72,6 +72,15 @@ class ExpressionComponent(BaseComponent):
 
         # Await (显式等待一个 Waitable)
         self.register(TokenType.AWAIT, self.await_expr, None, IbPrecedence.UNARY)
+
+        # 并发/通信（运行时多线程主线 PT-MT-*）
+        # spawn/join 在表达式位置（task t = spawn fn(...) / task t = join t2）
+        self.register(TokenType.SPAWN, self.spawn_expr, None, IbPrecedence.UNARY)
+        self.register(TokenType.JOIN, self.join_expr, None, IbPrecedence.UNARY)
+        # chan/signal/slot 构造函数前缀
+        self.register(TokenType.CHAN, self.chan_expr, None, IbPrecedence.UNARY)
+        self.register(TokenType.SIGNAL, self.signal_expr, None, IbPrecedence.UNARY)
+        self.register(TokenType.SLOT, self.slot_expr, None, IbPrecedence.UNARY)
         
         # Binary Operations
         self.register(TokenType.STAR, None, self.binary, IbPrecedence.FACTOR)
@@ -290,6 +299,174 @@ class ExpressionComponent(BaseComponent):
         op_token = self.stream.previous()
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbAwaitExpr(value=operand), op_token)
+
+    def spawn_expr(self) -> ast.IbExpr:
+        """``spawn fn(...)`` —— 表达式位置（``task t = spawn ...``）。
+
+        UNARY 优先级前缀。产出 ``IbSpawnStmt``（带/不带 target 由赋值上下文
+        判别——声明右侧时经语义阶段绑定 target）。
+        """
+        op_token = self.stream.previous()
+        func = self.parse_precedence(IbPrecedence.UNARY)
+        args: List = []
+        keywords: List = []
+        # 解析调用实参（若为函数调用形态）
+        from core.kernel.ast import IbStarred, IbKeyword
+        if self.stream.match(TokenType.LPAREN):
+            if not self.stream.check(TokenType.RPAREN):
+                while True:
+                    if self.stream.match(TokenType.STAR_STAR):
+                        value = self.parse_precedence(IbPrecedence.UNARY)
+                        keywords.append(self._loc(IbKeyword(arg=None, value=value), self.stream.previous()))
+                    elif self.stream.match(TokenType.STAR):
+                        value = self.parse_precedence(IbPrecedence.UNARY)
+                        args.append(self._loc(IbStarred(value=value), self.stream.previous()))
+                    elif self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
+                        name_token = self.stream.advance()
+                        self.stream.advance()  # '='
+                        value = self.parse_precedence(IbPrecedence.UNARY)
+                        keywords.append(self._loc(IbKeyword(arg=name_token.value, value=value), name_token))
+                    else:
+                        args.append(self.parse_precedence(IbPrecedence.UNARY))
+                    if not self.stream.match(TokenType.COMMA):
+                        break
+            self.stream.consume(TokenType.RPAREN, "Expect ')' after spawn arguments.")
+        return self._loc(ast.IbSpawnStmt(target=None, func=func, args=args, keywords=keywords), op_token)
+
+    def join_expr(self) -> ast.IbExpr:
+        """``join t`` —— 表达式位置（``task t = join t2``）。产出 ``IbJoinStmt``。"""
+        op_token = self.stream.previous()
+        task = self.parse_precedence(IbPrecedence.UNARY)
+        return self._loc(ast.IbJoinStmt(task=task, target=None), op_token)
+
+    def chan_expr(self) -> ast.IbExpr:
+        """``chan(T, mode=..., buffer=...)`` 或 ``chan T(...)`` —— Channel 构造。
+
+        首参 ``T`` 为元素类型名，经 ``type_parser.parse_type_annotation`` 解析为
+        类型引用（``str``/``int`` 等注册类型名）；其余参数（mode/buffer/name）
+        走通用表达式解析。
+        """
+        op_token = self.stream.previous()
+        type_name = None
+        mode = "message"
+        buffer = 0
+        name = None
+
+        if self.stream.match(TokenType.LPAREN):
+            # 函数形态：chan(T, ...) —— 首参是类型名
+            if not self.stream.check(TokenType.RPAREN):
+                type_ann = self.context.type_parser.parse_type_annotation()
+                type_name = getattr(type_ann, "id", None) or getattr(getattr(type_ann, "value", None), "id", None) or str(type_ann)
+                # 第二个位置参数可作 mode（chan(str, "stream")）
+                if self.stream.match(TokenType.COMMA):
+                    if self.stream.check(TokenType.STRING):
+                        mode_token = self.stream.advance()
+                        mode = mode_token.value
+                        # 第三个位置参数可作 buffer
+                        if self.stream.match(TokenType.COMMA):
+                            buf_tok = self.stream.peek()
+                            if buf_tok.type in (TokenType.NUMBER, TokenType.MINUS):
+                                buf_val = self.parse_precedence(IbPrecedence.UNARY)
+                                buffer = int(buf_val.value) if hasattr(buf_val, "value") else int(buf_val)
+                    else:
+                        kw = self._parse_chan_kwargs()
+                        if kw is not None:
+                            mode, buffer, name = kw
+            self.stream.consume(TokenType.RPAREN, "Expect ')' after chan arguments.")
+        else:
+            # 声明式形态：chan T(...) —— 解析类型注解后接参数
+            type_ann = self.context.type_parser.parse_type_annotation()
+            type_name = getattr(type_ann, "id", None)
+            if self.stream.match(TokenType.LPAREN):
+                while self.stream.match(TokenType.COMMA):
+                    if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
+                        kw_token = self.stream.advance()
+                        self.stream.advance()
+                        kw_val = self.parse_precedence(IbPrecedence.UNARY)
+                        if kw_token.value == "mode":
+                            mode = kw_val.id if hasattr(kw_val, "id") else str(kw_val)
+                        elif kw_token.value == "buffer":
+                            buffer = int(kw_val.value) if hasattr(kw_val, "value") else int(kw_val)
+                        elif kw_token.value == "name":
+                            name = kw_val.value if hasattr(kw_val, "value") else str(kw_val)
+                self.stream.consume(TokenType.RPAREN, "Expect ')' after chan declaration.")
+
+        return self._loc(ast.IbChannelExpr(type_name=type_name, mode=mode, buffer=buffer, name=name), op_token)
+
+    def _parse_chan_kwargs(self):
+        """解析 ``chan`` 的具名参数（mode=/buffer=/name=），返回 ``(mode, buffer, name)`` 或 None。"""
+        mode = None
+        buffer = 0
+        name = None
+        while self.stream.match(TokenType.COMMA):
+            if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
+                kw_token = self.stream.advance()
+                self.stream.advance()  # '='
+                kw_val = self.parse_precedence(IbPrecedence.UNARY)
+                if kw_token.value == "mode":
+                    mode = kw_val.id if hasattr(kw_val, "id") else str(kw_val)
+                elif kw_token.value == "buffer":
+                    buffer = int(kw_val.value) if hasattr(kw_val, "value") else int(kw_val)
+                elif kw_token.value == "name":
+                    name = kw_val.value if hasattr(kw_val, "value") else str(kw_val)
+            else:
+                return None
+        return mode, buffer, name
+
+    def signal_expr(self) -> ast.IbExpr:
+        """``signal(kind, target=..., payload=...)`` —— Signal 构造。"""
+        op_token = self.stream.previous()
+        kind = "cancel"
+        target = None
+        payload = None
+        self.stream.consume(TokenType.LPAREN, "Expect '(' after signal.")
+        if not self.stream.check(TokenType.RPAREN):
+            first = self.parse_precedence(IbPrecedence.UNARY)
+            # kind 可为常量字符串（signal("cancel")）或标识符
+            if isinstance(first, ast.IbConstant):
+                kind = str(first.value)
+            elif hasattr(first, "id"):
+                kind = first.id
+            else:
+                kind = str(first)
+            while self.stream.match(TokenType.COMMA):
+                if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
+                    kw_token = self.stream.advance()
+                    self.stream.advance()
+                    kw_val = self.parse_precedence(IbPrecedence.UNARY)
+                    if kw_token.value == "target":
+                        target = kw_val
+                    elif kw_token.value == "payload":
+                        payload = kw_val
+                else:
+                    break
+        self.stream.consume(TokenType.RPAREN, "Expect ')' after signal arguments.")
+        return self._loc(ast.IbSignalExpr(kind=kind, target=target, payload=payload), op_token)
+
+    def slot_expr(self) -> ast.IbExpr:
+        """``slot(name, value)`` 或 ``slot T(name)`` —— Slot 构造。"""
+        op_token = self.stream.previous()
+        type_name = None
+        name = None
+        value = None
+        if self.stream.match(TokenType.LPAREN):
+            # 函数形态：slot(name, value)
+            if not self.stream.check(TokenType.RPAREN):
+                first = self.parse_precedence(IbPrecedence.UNARY)
+                name = first.value if hasattr(first, "value") and not hasattr(first, "id") else str(first)
+                if self.stream.match(TokenType.COMMA):
+                    value = self.parse_precedence(IbPrecedence.UNARY)
+            self.stream.consume(TokenType.RPAREN, "Expect ')' after slot arguments.")
+        else:
+            # 声明式形态：slot T(name)
+            type_ann = self.context.type_parser.parse_type_annotation()
+            type_name = getattr(type_ann, "id", None)
+            self.stream.consume(TokenType.LPAREN, "Expect '(' after slot type.")
+            name = self.stream.consume(TokenType.IDENTIFIER, "Expect slot name.").value
+            if self.stream.match(TokenType.COMMA):
+                value = self.parse_precedence(IbPrecedence.UNARY)
+            self.stream.consume(TokenType.RPAREN, "Expect ')' after slot name.")
+        return self._loc(ast.IbSlotExpr(name=name or "", type_name=type_name, value=value), op_token)
 
     def pow_binary(self, left: ast.IbExpr) -> ast.IbExpr:
         """右结合幂运算符 **：parse 右侧时使用比当前优先级低一级的 FACTOR，

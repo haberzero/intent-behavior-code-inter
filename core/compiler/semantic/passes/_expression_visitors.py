@@ -182,6 +182,35 @@ class ExpressionVisitorsMixin:
         self.bind_type(node, result_type)
         return result_type
 
+    def visit_IbChannelExpr(self, node: ast.IbChannelExpr) -> Optional[IbSpec]:
+        """``chan(T, ...)`` 的类型 = chan。
+
+        元素类型 ``T`` 经 type_name 解析；当前保守返回 ``chan`` 基类型。
+        """
+        if node.type_name:
+            self.registry.resolve(node.type_name)  # 触发解析校验
+        chan_spec = self.registry.resolve("chan") or self._any_desc
+        self.bind_type(node, chan_spec)
+        return chan_spec
+
+    def visit_IbSignalExpr(self, node: ast.IbSignalExpr) -> Optional[IbSpec]:
+        """``signal(...)`` 的类型 = signal。"""
+        if node.target is not None:
+            self.visit(node.target)
+        if node.payload is not None:
+            self.visit(node.payload)
+        sig_spec = self.registry.resolve("signal") or self._any_desc
+        self.bind_type(node, sig_spec)
+        return sig_spec
+
+    def visit_IbSlotExpr(self, node: ast.IbSlotExpr) -> Optional[IbSpec]:
+        """``slot(...)`` 的类型 = slot。"""
+        if node.value is not None:
+            self.visit(node.value)
+        slot_spec = self.registry.resolve("slot") or self._any_desc
+        self.bind_type(node, slot_spec)
+        return slot_spec
+
     def visit_IbCompare(self, node: ast.IbCompare) -> Optional[IbSpec]:
         """访问比较运算"""
         left_type = self.visit(node.left)

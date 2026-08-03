@@ -38,6 +38,12 @@ from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxi
 from core.kernel.axioms.primitives.file_handle import FileHandleAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
+from core.kernel.axioms.primitives.comm import (
+    TaskAxiom,
+    ChannelAxiom,
+    SignalAxiom,
+    SlotAxiom,
+)
 
 if TYPE_CHECKING:
     from core.kernel.axioms.registry import AxiomRegistry
@@ -79,3 +85,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(IntentAxiom())
     registry.register(LlmCallResultAxiom())
     registry.register(LLMUncertainAxiom())
+    registry.register(TaskAxiom())
+    registry.register(ChannelAxiom())
+    registry.register(SignalAxiom())
+    registry.register(SlotAxiom())

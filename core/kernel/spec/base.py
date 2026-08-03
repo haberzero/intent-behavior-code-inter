@@ -57,6 +57,11 @@ class TypeKind(str, Enum):
     CALLABLE_INSTANCE = "callable_instance"
     CALLABLE_SIG = "callable_sig"
     LAZY = "lazy"
+    # 并发/通信类型（运行时多线程主线 PT-MT-*）
+    TASK = "task"           # 任务句柄（spawn/join/cancel 载体）
+    CHANNEL = "channel"     # 数据流通道（元素类型泛型）
+    SIGNAL = "signal"       # 控制流信号
+    SLOT = "slot"           # 共享状态槽（值类型泛型）
 
 
 @dataclass(eq=False)
@@ -248,4 +253,8 @@ TypeDef._KIND_BASE_NAMES = {
     # ``fn_callable[int]``) to dispatch to the correct axiom.
     TypeKind.CALLABLE_SIG.value:  "callable_sig",
     TypeKind.LAZY.value:          "module",
+    TypeKind.TASK.value:          "task",
+    TypeKind.CHANNEL.value:       "chan",
+    TypeKind.SIGNAL.value:        "signal",
+    TypeKind.SLOT.value:          "slot",
 }

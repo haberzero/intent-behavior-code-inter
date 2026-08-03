@@ -73,6 +73,13 @@ class StatementComponent(BaseComponent):
             self.stream.consume_end_of_statement("Expect newline after retry.")
             return self._loc(ast.IbRetry(hint=hint), start)
         
+        if self.stream.match(TokenType.SPAWN):
+            return self.spawn_statement()
+        if self.stream.match(TokenType.JOIN):
+            return self.join_statement()
+        if self.stream.match(TokenType.CANCEL):
+            return self.cancel_statement()
+        
         if self.stream.match(TokenType.LLM_EXCEPT):
             return self.llm_except_statement()
         
@@ -200,6 +207,72 @@ class StatementComponent(BaseComponent):
         
         self.stream.consume(TokenType.DEDENT, "Expect dedent after llmexcept body.")
         return body
+
+    def spawn_statement(self) -> ast.IbStmt:
+        """解析 ``spawn`` 语句。
+
+        形态：
+        - ``spawn fn(...)``          —— fire-and-forget（无赋值目标）
+        - ``task t = spawn fn(...)`` —— 表达式前缀路径（见 expression.py spawn_expr），
+           此处处理语句起始形态 ``spawn <expr>``。
+
+        返回 ``IbSpawnStmt(target=None, func=..., args=..., keywords=...)``；
+        带赋值目标的形态由 ``spawn_expr`` 产出（target 由语义阶段/VM 判别）。
+        """
+        start_token = self.stream.previous()
+        # 解析被 spawn 的可调用表达式 + 实参（函数调用形态：name(args)）
+        func, args, keywords = self._parse_spawn_call()
+        self.stream.consume_end_of_statement("Expect newline after spawn.")
+        return self._loc(ast.IbSpawnStmt(target=None, func=func, args=args, keywords=keywords), start_token)
+
+    def join_statement(self) -> ast.IbStmt:
+        """解析 ``join`` 语句（语句起始形态：``join t``）。"""
+        start_token = self.stream.previous()
+        task = self.expression.parse_expression()
+        self.stream.consume_end_of_statement("Expect newline after join.")
+        return self._loc(ast.IbJoinStmt(task=task, target=None), start_token)
+
+    def cancel_statement(self) -> ast.IbStmt:
+        """解析 ``cancel`` 语句：``cancel t``。"""
+        start_token = self.stream.previous()
+        task = self.expression.parse_expression()
+        self.stream.consume_end_of_statement("Expect newline after cancel.")
+        return self._loc(ast.IbCancelStmt(task=task), start_token)
+
+    def _parse_spawn_call(self):
+        """解析 spawn 的可调用目标与实参。
+
+        支持形态：``spawn fn(arg1, arg2)`` / ``spawn fn`` / ``spawn lambda(...)``。
+        返回 ``(func, args, keywords)``；func 为可调用表达式，args/keywords 为实参。
+        """
+        from core.kernel.ast import IbStarred, IbKeyword
+
+        # 先解析可调用表达式（函数名 / fn 变量 / lambda）
+        func = self.expression.parse_expression()
+
+        args: List[ast.IbExpr] = []
+        keywords: List[ast.IbKeyword] = []
+        # 若紧跟 '('，则解析调用实参
+        if self.stream.match(TokenType.LPAREN):
+            if not self.stream.check(TokenType.RPAREN):
+                while True:
+                    if self.stream.match(TokenType.STAR_STAR):
+                        value = self.expression.parse_expression()
+                        keywords.append(self._loc(IbKeyword(arg=None, value=value), self.stream.previous()))
+                    elif self.stream.match(TokenType.STAR):
+                        value = self.expression.parse_expression()
+                        args.append(self._loc(IbStarred(value=value), self.stream.previous()))
+                    elif self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
+                        name_token = self.stream.advance()
+                        self.stream.advance()  # '='
+                        value = self.expression.parse_expression()
+                        keywords.append(self._loc(IbKeyword(arg=name_token.value, value=value), name_token))
+                    else:
+                        args.append(self.expression.parse_expression())
+                    if not self.stream.match(TokenType.COMMA):
+                        break
+            self.stream.consume(TokenType.RPAREN, "Expect ')' after spawn arguments.")
+        return func, args, keywords
 
     def at_intent_shorthand(self) -> ast.IbStmt:
         """

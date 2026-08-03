@@ -54,7 +54,11 @@ python -m pytest tests/
 >
 > **完成状态**：上一主线（LLM 并行化 + 同步异步）全部完成——Stage 1（executor 去共享化）、Stage 2（VM 多任务调度）、Stage 4（宿主异步统一 Waitable）、Stage 3（`await` 表达式）、PT-SEM-4、PT-4.2、PT-SYNC-1/2/3、PT-TEST-9。
 >
-> **下一步**：**PT-MT-1 详细设计文档已产出（2026-08-03，见 `tasks_docs/THREADING_DESIGN_DETAIL.md`）**——覆盖架构总览、编译器改造（AST/lexer/parser/语义/dispatch/序列化）、统一通信内核、内省层、控制层、流式+并行、多 VM 实例、并发正确性、测试策略、待决项 D1-D9。**待用户审阅**；审阅通过后接续 PT-MT-2（编译器地基）。
+> **下一步**：**PT-MT-1 详细设计文档已产出（2026-08-03，见 `tasks_docs/THREADING_DESIGN_DETAIL.md`）**——覆盖架构总览、编译器改造（AST/lexer/parser/语义/dispatch/序列化）、统一通信内核、内省层、控制层、流式+并行、多 VM 实例、并发正确性、测试策略、待决项 D1-D9。**已按自主推进偏好进入实现**。
+>
+> **PT-MT-2 编译器地基已完成（2026-08-03）**：新 AST 节点（IbSpawnStmt/IbJoinStmt/IbCancelStmt/IbChannelExpr/IbSignalExpr/IbSlotExpr）+ 7 个关键字（spawn/join/cancel/chan/signal/slot/task）+ parser（语句 if-链 + 表达式前缀规则 + type_def 分支）+ 4 阶段语义（spawn 可调用校验、join/cancel 目标 task 校验）+ 类型注册（TypeKind.TASK/CHANNEL/SIGNAL/SLOT + Spec + Axiom）+ 序列化 round-trip。测试：新增 `tests/compiler/test_concurrency_syntax.py`（18 用例），全量 pytest 1341 passed/4 skipped 零回归。
+>
+> **下一步**：PT-MT-3 统一通信内核（Channel/Signal/Slot 三抽象线程安全内核 + IbObject 语言层对象 + dispatch handler 接入 VM）。
 
 ---
 
