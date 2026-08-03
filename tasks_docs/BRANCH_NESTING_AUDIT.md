@@ -32,11 +32,11 @@
 | 位置 | 特征 | 初始判定 |
 |---|---|---|
 | `ibci_modules/ibci_net/core.py`（**12 处** 75/87/99/111/123/135/147/158/169…） | HTTP 错误统一 `except Exception` | **已核验 2026-08-02**：9 处（get/post/put/delete/head/get_json/post_json/post_form/get_status_code）均为 `except Exception as e: raise RuntimeError(...)`——重抛非吞掉（**fail-fast 保留，非掩盖型兜底**）；但**过度宽捕获**会把非网络程序错误（如参数 `TypeError`）误包成 "Network failed" 掩盖真实 bug。建议窄化为 `requests.RequestException` + json 解码 `ValueError` 单独处理——错误类型细化属行为变更，**列待决策（本批未改）** |
-| `engine.py`（5 处 388/477/523/751/818） | 编译/运行包装 | 待核验 |
+| `engine.py`（5 处 388/477/523/751/818） | 编译/运行包装 | 待核验【**已核验 2026-08-03**：477/523 为 `print+raise e`（重抛，fail-fast 保留）；751/818 为跨线程异常捕获（spawn_isolated 存 exc_holder 供父线程重抛，合法）；388 为 axiom 注册失败→log 继续（注册循环健壮性，可考虑窄化，属可选优化）】 |
 | `compiler/scheduler.py`（4 处 151/280/323/605） | 导入/编译 | 待核验 |
 | `interpreter/llm_parsing_strategy.py`（5 处 143/209/250/270/279） | LLM 解析兜底 | 待核验【**已核验 2026-08-03**：合法解析失败回退链——解析失败→`uncertain_result`/`None`，驱动 llmexcept 重试协议（"LLM 输出不确定→重试"语言语义），非吞语言级异常、非静默掩盖。边缘：用户 `__from_prompt__` 抛真异常会被按"不确定"处理，属"输出不确定"语义固有取舍，可接受】 |
 | `llm_executor/_prompt.py`（4 处 40/47/81/253） | prompt 降级链 | 待核验【**已核验 2026-08-03**：合法 prompt 表示降级链——对象→prompt 文本转换失败时降级 `to_native()`/`str()`/None（构建提示词的尽力而为韧性），非掩盖程序错误。边缘：用户 `__to_prompt__` 内真 bug 会被静默吞掉并降级，可考虑窄化 except，属可选优化】 |
-| `llm_except_frame.py`（3 处 185/266/318） | 快照/恢复 | 部分设计内（best-effort） |
+| `llm_except_frame.py`（3 处 185/266/318） | 快照/恢复 | 部分设计内（best-effort）【**已核验 2026-08-03**：185 快照协议失败→深克隆兜底；266 恢复协议失败→保留当前状态（best-effort）；318 值比较失败→回退身份比较 `a is b`。均为带注释的 best-effort 协议兜底，设计内】 |
 | `user_functions.py`（2 处 61/220）、`base.py:95/127`、`functions.py:66` 等 | 原生函数包装 | 待核验（部分设计内：ThrownException 穿透）【**已核验 2026-08-02**：**无语言级异常误吞**。`functions.py:66` 为正确示范——显式透传 `InterpreterError` 与 `ThrownException`（用户代码主动抛的语言级异常，须由 IbTry/顶层 try 体系处理），仅将真正的原生 bug 包为 `InterpreterError`；`base.py:95`（cast 失败→透传后抛明确 TypeError）、`:113`（`__to_prompt__` 显示兜底，窄 except `(AttributeError, InterpreterError)`）、`:127`（`__from_prompt__` 协议返 `(False, 错误)`，非静默）、`user_functions.py:61/220`（模块导入失败→`raise InterpreterError(...) from e` 重抛）——均 fail-fast / 协议契约，非掩盖型兜底】 |
 | `ibci_ai/core.py`（4 处 98/167/249/466） | OpenAI 客户端 | 待核验 |
 | `ibci_idbg/core.py`（2 处 383/398）、`auto_discovery.py`（4 处） | 观察者/发现 | 待核验 |
