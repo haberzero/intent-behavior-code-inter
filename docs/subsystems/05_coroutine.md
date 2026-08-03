@@ -143,3 +143,15 @@
 
 - 多任务并发：两个独立任务各自等待不同的 SLEEP forever 的 mock future，断言总时近似 max 而非 sum（复用 `mock_server` 真并发思路）。
 - 单任务行为不变：现有全量测试零回归（单栈语义保持，多任务只为并发生效）。
+
+### 7.6 实现进度（2026-08-03）
+
+Stage 2 地基已落地（见 `core/runtime/vm/task_scheduler.py`、`vm_executor.py`）：
+- **`TaskScheduler`**：多任务协作调度器（纯 stdlib，`custom` 的 `Waitable` 协议），单线程轮转、Waitable 挂起/恢复。
+- **`Waitable` 为 `runtime_checkable Protocol`**，`LLMFuture` 结构符合（`is_done` 属性 + `result()`），可直接被调度器 await。
+- **`_drive_loop_body` → `_drive_loop_gen`（生成器）**：VM 调度循环改为可挂起（handler yield Waitable 时挂起），`run()` 单任务驱动（阻塞等待，保持既有语义）。
+- **`run_many(roots)`**：多根并发入口，用 `TaskScheduler` 驱动多个独立 LLM 根，各自挂起在 LLM future 上。
+
+测试：`test_task_scheduler.py`（8）、`test_vm_run_many.py`（1），全量 pytest 1311 passed/4 skipped 零回归。
+
+**下一步**：宿主级异步（PT-3.1）——`run_isolated`/`spawn_isolated` 返回可 await 句柄、多返回值；`ReceiveMode`（PT-3.2）语义；以及 `leaf.py` 的 suspendable resolve 接线。
