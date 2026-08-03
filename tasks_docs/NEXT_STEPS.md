@@ -64,7 +64,9 @@ python -m pytest tests/
 >
 > **PT-MT-5 控制层已完成（2026-08-03）**：`ConfigStore`（`core/runtime/observability/config.py`，全局→单调用→单实例链式覆盖，单点真理）+ `iruntime.configure(...)`/`get_config()`（VAR_KEYWORD 参数形态，返回 effective config）+ `config_change` 事件广播。默认值：parallel/stream/observability=开、debug=关。已接入实际开关：`parallel` 门控 dispatch_eager（关闭走同步串行）、`observability` 门控事件流（关闭抑制 chan/slot/task 事件）。测试：`test_runtime_configure.py`（5），全量 pytest 1393 passed/4 skipped 零回归。
 >
-> **下一步**：PT-MT-6 流式 + 并行（流式 provider 接口 + Worker 增量 → Channel → 渲染线程）。
+> **PT-MT-6 流式 + 并行已完成（2026-08-03）**：流式 provider 接口（`AIPlugin.stream()`，ILLMProvider 协议扩展，MOCK 单块 + 真实 OpenAI stream=True 逐 delta）+ `IbStreamHandle`（`core/runtime/objects/stream.py`：Waitable + stream Channel，后台线程消费增量））+ `MOCK:STREAM:chunk1|chunk2|...` 指令 + MockServer SSE 多块流式端点 + 语言面 `ai.stream_call()`（Waitable，await/赋值自动等待完整文本）/`ai.stream_channel()`（返回承载增量块的 IbChannel，渲染线程 recv 逐块）。流式与并行（dispatch_eager/run_many）独立、都默认开启。测试：`test_streaming.py`（8），全量 pytest 1401 passed/4 skipped 零回归。
+>
+> **下一步**：PT-MT-7 多 VM 实例（每并发路径一个轻量 VM + 全局只读数据 + RuntimeCoordinator）。
 
 ---
 

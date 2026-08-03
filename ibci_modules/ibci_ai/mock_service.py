@@ -178,7 +178,7 @@ def _make_handler(
                     time.sleep(result.delay_ms / 1000.0)
                 model = body.get("model", "mock")
                 if stream:
-                    self._respond_stream(result.content, model)
+                    self._respond_stream(result.content, model, chunks=result.chunks)
                 else:
                     self._respond_json(self._completion_body(result.content, model), status=200)
             finally:
@@ -245,14 +245,30 @@ def _make_handler(
             self.end_headers()
             self.wfile.write(data)
 
-        def _respond_stream(self, content: str, model: str) -> None:
-            lines = [
-                f"data: {json.dumps(self._chunk_body('', model, None), ensure_ascii=False)}\n\n",
-                f"data: {json.dumps(self._chunk_body(content, model, None), ensure_ascii=False)}\n\n",
-                f"data: {json.dumps(self._chunk_body(None, model, 'stop'), ensure_ascii=False)}\n\n",
-                "data: [DONE]\n\n",
-            ]
-            payload = "".join(lines).encode("utf-8")
+        def _respond_stream(self, content: str, model: str, chunks: Optional[List[str]] = None) -> None:
+            """SSE 流式响应。
+
+            有 ``chunks`` 时逐块流式发送（模拟真实流式），块间微小延迟；
+            否则单块发送完整内容。
+            """
+            payload_parts = []
+            if chunks:
+                for chunk in chunks:
+                    payload_parts.append(
+                        f"data: {json.dumps(self._chunk_body(chunk, model, None), ensure_ascii=False)}\n\n"
+                    )
+            else:
+                payload_parts.append(
+                    f"data: {json.dumps(self._chunk_body('', model, None), ensure_ascii=False)}\n\n"
+                )
+                payload_parts.append(
+                    f"data: {json.dumps(self._chunk_body(content, model, None), ensure_ascii=False)}\n\n"
+                )
+            payload_parts.append(
+                f"data: {json.dumps(self._chunk_body(None, model, 'stop'), ensure_ascii=False)}\n\n"
+            )
+            payload_parts.append("data: [DONE]\n\n")
+            payload = "".join(payload_parts).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Content-Length", str(len(payload)))

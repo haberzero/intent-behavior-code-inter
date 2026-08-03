@@ -24,6 +24,7 @@ from core.runtime.shared.llm_result import (
 
 _SLEEP_RE = re.compile(r"MOCK:SLEEP:(\d+)")
 _ERROR_RE = re.compile(r"MOCK:ERROR:(\d{3})")
+_STREAM_RE = re.compile(r"MOCK:STREAM:(.+)")
 
 
 @dataclass
@@ -33,6 +34,7 @@ class MockScenarioResult:
     content: str
     delay_ms: int = 0
     error_status: Optional[int] = None
+    chunks: Optional[List[str]] = None  # MOCK:STREAM:a|b|c 分块（流式）
 
 
 class MockScenarioEngine:
@@ -67,15 +69,24 @@ class MockScenarioEngine:
         content = self._resolve(prompt)
         delay_ms = 0
         error_status: Optional[int] = None
+        chunks: Optional[List[str]] = None
         if _SLEEP_RE.search(prompt):
             delay_ms = int(_SLEEP_RE.search(prompt).group(1))
         error_m = _ERROR_RE.search(prompt)
         if error_m:
             error_status = int(error_m.group(1))
+        stream_m = _STREAM_RE.search(prompt)
+        if stream_m:
+            raw = stream_m.group(1)
+            # 以 | 分隔多个块；空块剔除
+            chunks = [c for c in raw.split("|") if c]
+            if chunks:
+                content = "".join(chunks)
         return MockScenarioResult(
             content=content,
             delay_ms=delay_ms,
             error_status=error_status,
+            chunks=chunks,
         )
 
     # ------------------------------------------------------------------

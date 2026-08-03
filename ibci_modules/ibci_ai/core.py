@@ -306,6 +306,37 @@ class AIPlugin(IbStatefulPlugin):
             raise RuntimeError("run_batch: no execution context available")
         return executor.run_batch(behavior, list(items), ec)
 
+    def stream_call(self, sys_prompt: str, user_prompt: str) -> Any:
+        """流式 LLM 调用（PT-MT-6）：返回 ``IbStreamHandle``（Waitable）。
+
+        后台线程消费 provider 增量并推入内部 stream Channel；调用方经
+        ``await`` / VM 协作等待取回完整文本，或经 ``stream_channel`` 逐块渲染。
+        """
+        from core.runtime.objects.stream import IbStreamHandle
+        return IbStreamHandle(
+            producer=lambda: self.stream(sys_prompt, user_prompt)
+        )
+
+    def stream_channel(self, sys_prompt: str, user_prompt: str) -> Any:
+        """流式 LLM 调用（PT-MT-6）：返回承载增量块的 stream Channel。
+
+        返回语言层 ``IbChannel``（包装 IbStreamHandle 的内部 Channel），供
+        渲染线程 ``recv`` 逐块消费。
+        """
+        from core.runtime.objects.stream import IbStreamHandle
+        from core.runtime.objects.kernel import IbChannel
+        from core.runtime.frame import get_current_execution_context
+
+        handle = IbStreamHandle(
+            producer=lambda: self.stream(sys_prompt, user_prompt)
+        )
+        ec = get_current_execution_context()
+        registry = getattr(ec, "registry", None) if ec is not None else None
+        if registry is None:
+            raise RuntimeError("ai.stream_channel: no registry available")
+        chan_cls = registry.get_class("chan")
+        return IbChannel(ib_class=chan_cls, core=handle.channel)
+
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
             self._capabilities.intent_manager.set_global_intent(intent)
@@ -475,6 +506,72 @@ class AIPlugin(IbStatefulPlugin):
         except Exception as e:
             raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
+
+    def stream(self, sys_prompt: str, user_prompt: "Union[str, List]", *, target_model: str = "") -> Any:
+        """LLM 流式调用入口（ILLMProvider 协议扩展，PT-MT-6）。
+
+        返回一个**增量迭代器**（逐步产出 str 增量），调用方（IbStreamHandle）
+        把增量推入 stream Channel 供渲染。非流式场景不应调用本方法。
+
+        实现：
+        - MOCK 模式：返回单块（完整响应）——MockServer 流式端点经真实
+          OpenAI 客户端测试时由 SSE 分块；进程内 MOCK 路径直接单块。
+        - 真实模式：调用 OpenAI 流式 API（``stream=True``），逐 delta 产出。
+        """
+        is_test_mode = self._is_test_mode()
+
+        user_prompt_text = user_prompt if isinstance(user_prompt, str) else self._flatten_content_parts(user_prompt)
+        user_prompt_text = user_prompt_text.strip()
+
+        if is_test_mode:
+            # 进程内 MOCK：单块产出完整响应
+            result = self._mock_engine.handle(user_prompt_text)
+            if result.error_status is not None:
+                raise RuntimeError(f"MOCK:ERROR injected ({result.error_status})")
+            return iter([result.content])
+
+        # 真实模式：选客户端
+        if target_model:
+            if target_model not in self._model_registry:
+                raise RuntimeError(
+                    f"未注册的命名模型 '{target_model}'。"
+                    f"请先使用 ai.register_model(\"{target_model}\", url, key, model) 注册。"
+                )
+            named_config = self._model_registry[target_model]
+            active_client = self._get_named_client(target_model)
+            active_model = named_config["model"]
+        else:
+            if not self._config["key"] or not self._config["url"] or not self._config["model"]:
+                raise RuntimeError("LLM 运行配置缺失")
+            if not self._client or self._client == MOCK_CLIENT_SENTINEL:
+                self._init_client()
+            active_client = self._client
+            active_model = self._config["model"]
+
+        user_content = self._build_user_content(user_prompt, user_prompt_text)
+
+        def _gen():
+            try:
+                stream_resp = active_client.chat.completions.create(
+                    model=active_model,
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    stream=True,
+                    max_tokens=4096,
+                )
+                for chunk in stream_resp:
+                    if not chunk or not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta
+                    piece = getattr(delta, "content", None)
+                    if piece:
+                        yield piece
+            except Exception as e:
+                raise RuntimeError(f"LLM 流式调用失败: {str(e)}")
+
+        return _gen()
 
     @staticmethod
     def _flatten_content_parts(parts: "List") -> str:

@@ -128,3 +128,17 @@
 **关键决策**：configure 采用 VAR_KEYWORD vtable 参数而非固定参数——`configure(parallel=, stream=, ...)` 接受任意配置键，避免硬编码参数列表（工作模式定论：协议驱动）。语义层经 VAR_KEYWORD 契约校验（loader.py 已支持）。
 
 **测试**：`tests/runtime/test_runtime_configure.py`（5：默认值、configure 生效、observability 门控、配置持久）。全量 pytest 1393 passed/4 skipped 零回归。
+
+#### 10. PT-MT-6 流式 + 并行（自主实现，2026-08-03）
+
+按 `THREADING_DESIGN_DETAIL.md` §六落地流式，全量 pytest 零回归（1401 passed/4 skipped，+8 测试）。
+
+**实现内容**：
+- **流式 provider 接口**（`ibci_modules/ibci_ai/core.py` `AIPlugin.stream()`）：ILLMProvider 协议扩展。MOCK 模式返回单块（进程内）；真实模式 OpenAI `stream=True` 逐 delta 产出增量迭代器。
+- **IbStreamHandle**（`core/runtime/objects/stream.py`）：Waitable 协议 + stream Channel；后台线程消费迭代器逐块推入 Channel；`result()` 阻塞等待完整文本（修复：`_drive_gen_blocking` 直接 `waitable.result()` 不轮询 is_done，result() 必须阻塞 join 线程）。
+- **Mock 流式**：`MOCK:STREAM:chunk1|chunk2|...` 指令（`MockScenarioResult.chunks`）+ MockServer `_respond_stream` 多块 SSE（真实 OpenAI 客户端流式收到分块）。
+- **语言面**：`ai.stream_call()`（Waitable，await/赋值自动等待完整文本）+ `ai.stream_channel()`（返回承载增量块的 IbChannel，渲染线程 recv 逐块）。
+
+**关键决策**：流式与并行（dispatch_eager/run_many）保持独立（设计 §六.1），都默认开启；`stream` config 键已注册但接入点在行为表达式自动流式（未来），当前经 ai.stream_call/stream_channel 显式暴露（非双通道——显式 API 是流式的一等入口）。
+
+**测试**：`tests/runtime/test_streaming.py`（8：IbStreamHandle 单元、STREAM 指令、MockServer SSE 真实客户端、stream_call await/赋值、stream_channel 增量渲染）。全量 pytest 1401 passed/4 skipped 零回归。

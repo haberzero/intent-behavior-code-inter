@@ -20,8 +20,8 @@
 | PT-MT-3 | 统一通信内核 | Channel（stream/message/pubsub）+ Signal（定向/广播）+ Slot（具名原子）三抽象，线程安全，语言层暴露 | **已完成 2026-08-03**（CommBuffer/ChannelCore/SignalCore/SlotCore/CommRegistry + IbChannel/IbSignal/IbSlot/IbTask + 6 dispatch handler；33+8 测试，全量 1382 passed 零回归） |
 | PT-MT-4 | 内省层 | 快照式（`runtime.snapshot()`）+ 事件流（`runtime.subscribe()`）两者都提供 | **已完成 2026-08-03**（observability 包 + iruntime 模块 + 事件流；6 测试，全量 1388 passed 零回归） |
 | PT-MT-5 | 控制层 | 统一启停接口 `runtime.configure(...)`（有开有关，部分默认开/关），粒度全局→单调用→单实例 | **已完成 2026-08-03**（ConfigStore 链式覆盖 + configure/get_config + parallel/observability 门控；5 测试，全量 1393 passed 零回归） |
-| PT-MT-6 | 流式 + 并行 | 流式 provider 接口；Worker 增量→Channel→渲染线程；流式与并行都默认开启 | 待做（当前） |
-| PT-MT-7 | 多 VM 实例 | 每并发路径一个轻量 VM 实例（完全隔离 + 全局只读数据），内核协调器管理生命周期 | 待做 |
+| PT-MT-6 | 流式 + 并行 | 流式 provider 接口；Worker 增量→Channel→渲染线程；流式与并行都默认开启 | **已完成 2026-08-03**（AIPlugin.stream + IbStreamHandle + MOCK:STREAM + SSE 多块 + stream_call/stream_channel；8 测试，全量 1401 passed 零回归） |
+| PT-MT-7 | 多 VM 实例 | 每并发路径一个轻量 VM 实例（完全隔离 + 全局只读数据），内核协调器管理生命周期 | 待做（当前） |
 | PT-MT-8 | 用户代码多线程 | `task = spawn(fn)` 显式任务句柄（join/cancel），供实时 UI/输出刷新 | 待做 |
 
 **明确排除**：跨进程/CPU 并行；跨引擎通信（隔离运行是自我进化窗口，保持文件/序列化机制）。

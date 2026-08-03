@@ -60,6 +60,22 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "remove_global_intent": {"params": [{"name": "intent", "type": "str"}], "return_type": "void"},
             "mask": {"params": [{"name": "tag_pattern", "type": "str"}], "return_type": "void"},
             "get_global_intents": {"params": [], "return_type": "list"},
-            "get_current_intent_stack": {"params": [], "return_type": "list"}
+            "get_current_intent_stack": {"params": [], "return_type": "list"},
+            "stream_call": {
+                "params": [
+                    {"name": "sys_prompt", "type": "str"},
+                    {"name": "user_prompt", "type": "str"},
+                ],
+                "return_type": "any",
+                "description": "流式 LLM 调用（PT-MT-6）：后台消费增量，返回可等待句柄（Waitable）",
+            },
+            "stream_channel": {
+                "params": [
+                    {"name": "sys_prompt", "type": "str"},
+                    {"name": "user_prompt", "type": "str"},
+                ],
+                "return_type": "chan",
+                "description": "流式 LLM 调用（PT-MT-6）：返回承载增量块的 stream Channel（渲染用）",
+            }
         }
     }
