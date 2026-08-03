@@ -151,7 +151,8 @@ Stage 2 地基已落地（见 `core/runtime/vm/task_scheduler.py`、`vm_executor
 - **`Waitable` 为 `runtime_checkable Protocol`**，`LLMFuture` 结构符合（`is_done` 属性 + `result()`），可直接被调度器 await。
 - **`_drive_loop_body` → `_drive_loop_gen`（生成器）**：VM 调度循环改为可挂起（handler yield Waitable 时挂起），`run()` 单任务驱动（阻塞等待，保持既有语义）。
 - **`run_many(roots)`**：多根并发入口，用 `TaskScheduler` 驱动多个独立 LLM 根，各自挂起在 LLM future 上。
+- **结果序契约**：`TaskScheduler.run()` 返回各任务完成值**按提交序**（与 `submit` 顺序一致），而非完成序——完成序不可预测，按提交序才能让调用方按索引取回对应任务结果。实现：`Task` 携带 `index`，`submit` 预分配结果槽位，`_step` 完成时按索引写入。
 
-测试：`test_task_scheduler.py`（8）、`test_vm_run_many.py`（1），全量 pytest 1311 passed/4 skipped 零回归。
+测试：`test_task_scheduler.py`（9）、`test_vm_run_many.py`（1），全量 pytest 1311 passed/4 skipped 零回归。
 
 **下一步**：宿主级异步（PT-3.1）——`run_isolated`/`spawn_isolated` 返回可 await 句柄、多返回值；`ReceiveMode`（PT-3.2）语义；以及 `leaf.py` 的 suspendable resolve 接线。

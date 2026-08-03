@@ -41,9 +41,14 @@ class Waitable(Protocol):
 
 @dataclass
 class Task:
-    """调度器中的一个可挂起任务。"""
+    """调度器中的一个可挂起任务。
+
+    ``index`` 为提交序号（自 0 起），用于把完成值按提交序收集到结果槽位，
+    保证 ``run()`` 返回序与提交序一致（而非完成序——完成序不可预测）。
+    """
 
     gen: Any
+    index: int = 0
     node_uid: str = ""
     started: bool = False  # 是否已首次推进（区分 next() 与 send()）
     waiting_on: Optional[Waitable] = None
@@ -53,15 +58,22 @@ class TaskScheduler:
     """多任务协作调度器。
 
     用法：``submit(gen)`` 加入任务，``run()`` 推进到全部完成，返回各任务返回值。
+
+    结果序契约：``run()`` 返回的列表**按提交序**（与 ``submit`` 调用顺序一致），
+    而非完成序——完成序不可预测，按提交序才使调用方能按索引取回对应任务结果。
     """
 
     def __init__(self) -> None:
         self._ready: List[Task] = []
         self._waiting: List[Task] = []
+        self._submit_count: int = 0
         self._results: List[Any] = []
 
     def submit(self, gen: Generator, node_uid: str = "") -> None:
-        self._ready.append(Task(gen=gen, node_uid=node_uid))
+        task = Task(gen=gen, index=self._submit_count, node_uid=node_uid)
+        self._submit_count += 1
+        self._results.append(None)  # 预分配结果槽位，按提交序收集
+        self._ready.append(task)
 
     def run(self) -> List[Any]:
         """运行到所有任务完成，返回各任务的完成值（按提交序）。"""
@@ -99,7 +111,7 @@ class TaskScheduler:
             else:
                 yielded = t.gen.send(t.waiting_on.result() if t.waiting_on else None)
         except StopIteration as si:
-            self._results.append(si.value)
+            self._results[t.index] = si.value
             return
         except Exception as e:  # 任务内部异常 → fail-fast 向上抛
             raise

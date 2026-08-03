@@ -148,3 +148,17 @@ class TestTaskScheduler:
         s.submit(_task_await(lf, "llm-ok"))
         f.set_result(LLMResult.success_result(value=None, raw_response="r"))
         assert s.run() == ["llm-ok"]
+
+    def test_results_in_submission_order_not_completion_order(self):
+        """结果按提交序返回，而非完成序（完成序不可预测）。
+
+        后提交的任务先完成（t2 先就绪），但 run() 结果仍按提交序 [t1, t2]。
+        """
+        s = TaskScheduler()
+        w1 = _ManualWaitable(delay_s=0.2)  # t1 慢
+        w2 = _ManualWaitable(delay_s=0.05)  # t2 快（先完成）
+        s.submit(_task_await(w1, "t1"))  # index 0
+        s.submit(_task_await(w2, "t2"))  # index 1
+        results = s.run()
+        # 提交序 [t1, t2]，而非完成序 [t2, t1]
+        assert results == ["t1", "t2"]
