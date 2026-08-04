@@ -21,6 +21,7 @@ IBC-Inter 是实验性意图驱动混合编程语言（Python-style 确定性代
 11. `.opencode/skills/self-grill/SKILL.md`--交付前对计划/设计/已完成工作自我质询，仅将无法自主决断项反馈用户
 12. `.opencode/skills/quality-maintenance/SKILL.md`--执行长期/间歇性代码质量维护与异味检测（Tier A/B/C 分层节奏）前必读
 13. `.opencode/skills/aimless-review/SKILL.md`--执行非目的性审视/设计沉思（低密度潜在参考 + 周期性事实回顾）前必读
+14. `.opencode/skills/design-philosophy/SKILL.md`--执行设计审查/机制设计/模块配合/方案取舍前必读（系统级统一性：单一权威源、设计语言统一、设计思路统一、机制同构、配合模式统一、一致性先于便利、宏观反思、命名粒度统一——从用户工作习惯提炼的通用设计取舍基准）
 
 ## 自主工作循环（工作方式，强制）
 

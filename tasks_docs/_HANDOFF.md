@@ -1,29 +1,38 @@
 # 临时交接文档（下一 session 完成交接后删除）
 
 > 本文件为**临时交接**，记录当前工作状态、已完成、下一步、关键约束与待决项。下一 session 据此继续后，经确认删除本文件。
-> 状态：上一主线（LLM 并行化 + 同步异步）已完成并推送；下一主线（运行时多线程 + 通信机制 + 内省/控制）已确立，设计决策已记录。分支 `unsafe-vibe-dev`。
-> ⚠️ **重要**：下一 session 必须先完整阅读本文件（尤其 §三 自主运行配置），再启动自主运行 goal。
+> 状态：主线 PT-MT-1~8 已完成并标记 goal complete；随后进行**线程对象模型方向修正**（`tasks_docs/THREAD_DESIGN_REVISION.md`），**已授权实现但未开始**。分支 `unsafe-vibe-dev`。
+> ⚠️ **重要**：下一 session 必须先完整阅读本文件（尤其 §三 自主运行配置 与 §四 当前工作状态），再启动自主运行。
 
 ---
 
 ## 一、当前工作状态
 
-- **上一主线完成**：LLM 并行化 + 同步异步（Stages 1-4 + `await` 表达式 + PT-SEM-4 + PT-4.2 + PT-SYNC-1/2/3 + PT-TEST-9），已推送。
-- **下一主线确立**：IBCI 运行时多线程 + 统一通信机制（Channel/Signal/Slot）+ 内省/控制 + 多 VM 实例 + 编译器改造。
+- **主线 PT-MT-1~8 完成**：IBCI 运行时多线程 + 统一通信机制 + 内省/控制（Channel/Signal/Slot + spawn/join/cancel/task + iruntime.snapshot/subscribe/configure + 流式 + 多 VM），已 commit（本地，未 push）。
+- **方向修正（重大）**：用户深度质询后裁定推翻 PT-MT-1~8 的 spawn/join/cancel/task 关键字语法，改为 **thread 对象 + 句柄方法** 模型。完整决策见 `tasks_docs/THREAD_DESIGN_REVISION.md`。
+- **下一步（待实现）**：任务 A-F（Optional 配套 → 统一泛型模型 → 线程对象模型 → err 类型 → 清理 → 关键字精简+测试），已授权，**未开始写代码**。
 - **分支**：`unsafe-vibe-dev`（唯一活动分支）。
-- **测试基线**：以实跑为准；当前全量 `python -m pytest tests/` = **1322 passed / 4 skipped**（约 26s）。
+- **测试基线**：以实跑为准；方向修正前全量 `python -m pytest tests/` = **1409 passed / 4 skipped**。
 
-## 二、已完成（本次会话，已推送）
+## 二、已完成（本会话/上一会话，已 commit，未 push）
 
-### 上一主线（LLM 并行化 + 同步异步）
-- Stage 1：executor 共享状态去共享化（`_current_call_info` 主线程单写槽、`_result_parser` fail-fast、`scene` 参数删除）
-- Stage 2：`TaskScheduler` 多任务协作调度器 + `run_many` + 结果按提交序 + `TaskScheduler` 测试
-- Stage 4：宿主异步统一 `Waitable` 协议（`HostAwaitable`/`box` 透传/`vm_handle_IbCall` yield/统一 API）
-- Stage 3：语言级 `await` 表达式（lexer/AST/parser/semantic/VM 五层）
-- PT-SEM-4：`resolve_call_return` 兜底双通道收敛
-- PT-4.2：`__call__` 协议 3 文档定性统一
-- PT-SYNC-1/2/3、PT-TEST-9
-- Stage 1 三项核验（parse_result 线程安全 / `_prompt`+`_llm_function` 无实例级可变状态 / 意图 fork 隔离完整）
+### 上一主线（PT-MT-1~8，commit 7f99ddb ~ 493f8bc）
+- PT-MT-1 详细设计文档（`tasks_docs/THREADING_DESIGN_DETAIL.md`，736 行，经独立审查修正 6 处）
+- PT-MT-2 编译器地基（spawn/join/cancel/task/chan/signal/slot AST+关键字+parser+语义+序列化）
+- PT-MT-3 统一通信内核（CommBuffer/ChannelCore/SignalCore/SlotCore/CommRegistry + IbObject）
+- PT-MT-4 内省层（iruntime：snapshot/subscribe + 事件流）
+- PT-MT-5 控制层（runtime.configure + ConfigStore 链式覆盖）
+- PT-MT-6 流式+并行（AIPlugin.stream + IbStreamHandle + SSE）
+- PT-MT-7 多 VM 实例（RuntimeCoordinator + SpawnedTask 后台线程）
+- PT-MT-8 用户多线程（eager spawn + 协作式取消）
+
+### 方向修正（本会话，commit 8275124 + 4f2a456）
+- `tasks_docs/THREAD_DESIGN_REVISION.md`：async/thread 领域分离、删 spawn/join/cancel/task、`thread[T]` 泛型、`thread_result[T]` 容器、err 类型统一、挂起取消、统一泛型模型、Optional 配套、疏漏 1-6 裁决、F-1~F-8 碎片化、VP-1~VP-6 违规点、任务 A-F 清单。
+- **用户已授权实现**（"授权实现。完善相关决策文档。"），任务清单已细化为可执行计划（含验收标准）。
+
+### 通用体系（本会话，未 commit）
+- 新增 `.opencode/skills/design-philosophy/SKILL.md`（从线程讨论提炼的用户设计哲学——**系统级统一性**：单一权威源/设计语言统一/设计思路统一/机制同构/配合模式统一/一致性先于便利/宏观反思/命名粒度统一）。
+- 更新 `.opencode/skills/README.md` + `AGENTS.md`（注册 design-philosophy）。
 
 ---
 
@@ -36,9 +45,9 @@
 1. **自主推进偏好（最高优先）**：总体偏向**无人值守**，允许模型**较大限度自我裁定与自我质询分析**并**尽可能推进**。**只有经过最大限度反思、质询、分析后仍确实无法彻底自主决定的内容，才造成阻塞**。凡能自主决断的，一律自主决断并**详尽记录决策依据**（工作日志）。上报阈值从"最小化上报"统一为"**尽可能自主推进**"——不是"遇到困难就上报"，而是"先穷尽自主手段，确实无法决定才上报"。
 2. **决策纪律**：凡需用户拍板的决断项，可**大胆且相对激进地选择方案**，不必保守。最底线 = ①架构设计原则 ②代码质量原则 ③非妥协/非 tricky/非临时兼容层原则 ④大方向主线任务原则。在此底线内自主推进，不因需拍板而停滞。
 3. **交付纪律**：全程本地 git commit；**禁止 push 到 GitHub（硬原则）**——除非用户明确指示允许 push，否则一律禁止 `git push` 到任何远程仓库。push 不因"已授权自主运行"而默许，必须等用户显式授权。
-4. **破坏性重构授权（硬原则）**：当判断符合一般工程经验、普适性、合理架构选择与设计，且经分析确实优于 IBCI 现有体系及已有代码时，**哪怕该设计已被 IBCI 文档记录，也允许进行破坏性重构**。用户**不禁止修改已有代码**；已有代码的优先级**低于**架构正确性与设计统一一致。此授权覆盖"超出已授权范围的破坏性变更"项，默认自主推进，仅需详尽记录决策依据与工作内容即推进。
+4. **破坏性重构授权（硬原则）**：当判断符合一般工程经验、普适性、合理架构选择与设计，且经分析确实优于现有体系及已有代码时，**哪怕该设计已被文档记录，也允许进行破坏性重构**。用户**不禁止修改已有代码**；已有代码的优先级**低于**架构正确性与设计统一一致。此授权覆盖"超出已授权范围的破坏性变更"项，默认自主推进，仅需详尽记录决策依据与工作内容即推进。
 5. **大范围破坏性重构的分支政策（硬原则）**：对**无法确认边界、无法判断危害程度**的破坏性重构，**100% 授权在其独立分支**（不污染 `main` 与 `unsafe-vibe-dev`，不污染任何计算机环境与用户目录），允许任意程度破坏性实验与重构。**仅当独立隔离分支也无法经自主实验确定工作路线时**才将任务配置为阻塞。**独立分支禁止直接合并到 `unsafe-vibe-dev` 或 `main`**；确认完整技术路线后，允许单独手动更新 `unsafe-vibe-dev` 代码。**永远不允许触碰主干分支（`main`）的代码。**
-6. **工作流（每任务强制）**：code-workflow Phase 0-5（先读 NEXT_STEPS/PENDING_TASKS 再读代码证据再对照硬约束设计，实现守卫生纪律，全量验证，收尾同步）；方案对照工作模式定论五条 + code-quality 红线 + fail-fast/封装纪律；设计后 self-grill 自我质询；code-odor 工作过程自查；批量后 code-review 残留扫描；每批跑全量 `python -m pytest tests/` 零回归才算完成。
+6. **工作流（每任务强制）**：code-workflow Phase 0-5（先读 NEXT_STEPS/PENDING_TASKS 再读代码证据再对照硬约束设计，实现守卫生纪律，全量验证，收尾同步）；方案对照工作模式定论五条 + code-quality 红线 + fail-fast/封装纪律；设计后 self-grill 自我质询 + design-philosophy 设计哲学对照；code-odor 工作过程自查；批量后 code-review 残留扫描；每批跑全量 `python -m pytest tests/` 零回归才算完成。
 7. **工作模式定论**：禁 compat shim/胶水/tricky/过程式硬编码/双通道/双写真相；质量优先于速度；原则优先于行为维持；可推翻 IBCI 自身设计缺陷（文档化也可推翻，按更普适方案重建，通常不询问用户）。
 8. **文档治理**：设计/决策先写**任务控制文档 `tasks_docs/`**，**不写进技术手册 `docs/`**（用户明确要求）；落地后按治理择机写入。`docs/` 只面向人类，禁智能体元信息。
 9. **工作日志记录（强制）**：所有自主决策、质询分析、方案取舍、变化前后（实现+测试+文档）必须**详尽记录**在 `tasks_docs/` 任务控制文档（如 `WORKLOG` 或各任务文档的决策记录段落）。**"只记录，不断决"**——能自主决定的就记录决定并推进，不断等用户；只有确实无法决定的才在记录中标记为待决并上报。
@@ -46,17 +55,17 @@
 ### 3.2 goal objective 模板（可直接复制使用）
 
 ```
-【正式主线自动化 · 无人值守】主任务：实施 IBCI 运行时多线程 + 统一通信机制 + 内省/控制主线（见 tasks_docs/NEXT_STEPS.md 与 tasks_docs/THREADING_DESIGN.md）。
+【方向修正实施 · 无人值守】主任务：按 tasks_docs/THREAD_DESIGN_REVISION.md 实施线程对象模型方向修正（任务 A-F）。
 
-一、主线任务（PT-MT-*，按序）：
-1) PT-MT-1 详细设计文档（架构/AST 变更/接口/并发正确性/测试策略）——基于 tasks_docs/THREADING_DESIGN.md 的决策整理成正式设计文档；若设计无歧义则继续 PT-MT-2+，若遇设计歧义/需用户裁定则停止上报 → 2) PT-MT-2 编译器地基（新 AST 节点 spawn/join/task/chan/signal/slot + parser + 4 阶段语义 + dispatch + 序列化，任务为运行时瞬态）→ 3) PT-MT-3 统一通信内核（Channel stream/message/pubsub + Signal 定向/广播 + Slot 具名原子，线程安全，语言层暴露）→ 4) PT-MT-4 内省层（快照 snapshot + 事件流 subscribe）→ 5) PT-MT-5 控制层（runtime.configure 统一启停，并行/流式/内省默认开）→ 6) PT-MT-6 流式+并行（流式 provider + Worker→Channel→渲染，都默认开启）→ 7) PT-MT-7 多 VM 实例（每并发路径一个轻量 VM + 全局只读数据 + 内核协调器）→ 8) PT-MT-8 用户代码多线程（task = spawn(fn) 显式任务句柄 join/cancel）。
+一、主线任务（按序，依赖驱动）：
+A) Optional 配套完整实现（运行时 IbOptional + is_some/unwrap/or_else；与 thread_result[T] 共用模式）→ B) 统一泛型模型（内置泛型类型声明正式机制，thread[T] 首个消费者；不含用户级泛型类/约束求解）→ C) 线程对象模型（thread[T] 类型 + 构造函数 + 句柄方法 start/join/cancel/is_done + 生命周期状态机）→ D) err 类型统一（TaskCancelled/TaskFailed 映射 IBCI Exception 子类；cancel 返回 err；err 用户可见可继承）→ E) 线程相关清理（VP-1~VP-6 + F-1~F-8）→ F) 关键字精简（删 spawn/join/cancel/task 全链）+ 废除旧测试 + 新测试单独制作。
 每完成一个任务用描述性 commit 提交（说明+验证计数），同步更新 NEXT_STEPS/PENDING_TASKS，然后自动接续下一任务。
 
 二、自主推进偏好（最高优先）：总体偏向无人值守，允许较大限度自我裁定与自我质询分析并尽可能推进。只有经过最大限度反思/质询/分析后仍确实无法彻底自主决定的内容才造成阻塞。凡能自主决断的一律自主决断并详尽记录决策依据（工作日志）。上报阈值统一为"尽可能自主推进"——先穷尽自主手段，确实无法决定才上报。决策纪律：可大胆激进选方案，底线=架构原则/代码质量原则/非妥协/非tricky/非临时兼容层/大方向主线。不因需拍板而停滞。
 
-三、交付纪律：本地 commit；**禁止 push 到 GitHub（硬原则）**——除非用户明确指示允许 push，否则一律禁止 `git push` 到任何远程仓库，push 不因"已授权自主运行"而默许，必须等用户显式授权。**破坏性重构授权（硬原则）**：当判断符合一般工程经验、普适性、合理架构选择与设计，且经分析确实优于 IBCI 现有体系及已有代码时，哪怕该设计已被 IBCI 文档记录，也允许进行破坏性重构；不禁止修改已有代码，已有代码优先级低于架构正确性与设计统一一致；此类破坏性变更默认已授权自主推进，仅需详尽记录决策依据与工作内容。**大范围破坏性重构分支政策（硬原则）**：对无法确认边界/危害程度的破坏性重构，100% 授权在其独立分支（不污染 main 与 unsafe-vibe-dev，不污染任何计算机环境与用户目录）进行任意程度破坏性实验与重构；仅当独立隔离分支也无法经自主实验确定工作路线时才将任务配置为阻塞；独立分支禁止直接合并到 unsafe-vibe-dev 或 main，确认完整技术路线后允许单独手动更新 unsafe-vibe-dev 代码；永远不允许触碰主干分支（main）的代码。工作日志：所有自主决策/质询分析/方案取舍/变化前后(实现+测试+文档)必须详尽记录在 tasks_docs/ 任务控制文档（WORKLOG 或各任务文档决策记录段落），"只记录，不断决"。
+三、交付纪律：本地 commit；禁止 push 到 GitHub（硬原则）——除非用户明确指示允许 push，否则一律禁止 git push 到任何远程仓库，push 不因"已授权自主运行"而默许，必须等用户显式授权。破坏性重构授权（硬原则）：当判断符合一般工程经验/普适性/合理架构设计且经分析确实优于现有体系及已有代码时，哪怕设计已被文档记录也允许破坏性重构；不禁止修改已有代码，已有代码优先级低于架构正确性与设计统一一致；此类破坏性变更默认已授权自主推进，仅需详尽记录决策依据与工作内容。大范围破坏性重构分支政策（硬原则）：对无法确认边界/危害程度的破坏性重构，100% 授权在其独立分支（不污染 main 与 unsafe-vibe-dev，不污染任何计算机环境与用户目录）进行任意程度破坏性实验与重构；仅当独立隔离分支也无法经自主实验确定工作路线时才将任务配置为阻塞；独立分支禁止直接合并到 unsafe-vibe-dev 或 main，确认完整技术路线后允许单独手动更新 unsafe-vibe-dev 代码；永远不允许触碰主干分支（main）的代码。工作日志：所有自主决策/质询分析/方案取舍/变化前后(实现+测试+文档)必须详尽记录在 tasks_docs/ 任务控制文档（WORKLOG 或各任务文档决策记录段落），"只记录，不断决"。
 
-四、工作流：每任务 code-workflow Phase 0-5 + 质量门 + 全量 pytest 零回归（python -m pytest tests/）。
+四、工作流：每任务 code-workflow Phase 0-5 + 质量门 + design-philosophy 设计哲学对照 + 全量 pytest 零回归（python -m pytest tests/）。
 
 五、主任务阻塞/暂停时的支线（按优先级，主任务解阻立即回主线；全部主线任务被阻塞时自主推进，不因等待而停滞）：
 1) 质量维护/代码健康：quality-maintenance Tier A/B + 健康诊断十查 + aimless-review 低密度审视，产出入 tasks_docs/AIMLESS_REVIEW.md；
@@ -65,9 +74,9 @@
 4) 测试体系重构（TEST_REFACTOR，tasks_docs/TEST_REFACTOR.md）。
 每条支线仍须每批全量 pytest 零回归、commit+留痕（仅本地）、遇上报阈值项即停。
 
-六、停止条件：**先穷尽自主手段（反思/质询/分析/记录）**，仅当确实无法自主决定时（用户意图不明穷尽无解/公理层语义错误集确需用户裁决/与工作模式定论冲突/破坏性重构无法确认边界且独立隔离分支也无法经实验确定技术路线）才 update_goal(status="unmet", blocker=具体卡点+建议)。凡能自主决断的一律自主推进并记录工作日志。（破坏性重构默认已授权，见 §三.1；仅在独立分支也无法确定路线时才阻塞。）
+六、停止条件：先穷尽自主手段（反思/质询/分析/记录），仅当确实无法自主决定时（用户意图不明穷尽无解/公理层语义错误集确需用户裁决/与工作模式定论冲突/破坏性重构无法确认边界且独立隔离分支也无法经实验确定技术路线）才 update_goal(status="unmet", blocker=具体卡点+建议)。凡能自主决断的一律自主推进并记录工作日志。（破坏性重构默认已授权，见 §三.1；仅在独立分支也无法确定路线时才阻塞。）
 
-七、非目标：media Phase 4、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器）。
+七、非目标：media Phase 4、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器）、线程无损挂起/恢复、用户级泛型类（PT-4.4）、Hindley-Milner 约束求解。
 ```
 
 ### 3.3 支线任务完整清单（主线卡住时允许执行）
@@ -90,33 +99,58 @@
 
 ---
 
-## 四、下一主线设计（已定，见 `tasks_docs/THREADING_DESIGN.md`）
+## 四、当前工作状态（方向修正，最重要）
 
-**核心**：一等通信机制（Channel/Signal/Slot）+ 内省（快照+事件流）+ 控制（统一启停）+ 多 VM 实例 + 用户代码多线程 + 编译器改造。接受破坏性改造。
+**完整决策**：`tasks_docs/THREAD_DESIGN_REVISION.md`（200 行，唯一决策依据）。
 
-**任务序列（PT-MT-*）**：
-1. **PT-MT-1 详细设计文档**（先经用户审阅）→ 2. PT-MT-2 编译器地基 → 3. PT-MT-3 统一通信内核 → 4. PT-MT-4 内省层 → 5. PT-MT-5 控制层 → 6. PT-MT-6 流式+并行 → 7. PT-MT-7 多 VM 实例 → 8. PT-MT-8 用户代码多线程
+### 核心裁定
+- **async 与 thread 彻底分离**：`IbTask` 不得满足 Waitable；await 只服务异步；线程走句柄方法。
+- **关键字精简**：删 spawn/join/cancel/task，改用 `thread` 类型 + 句柄方法。
+- **`thread[T]` 泛型标注必须**（非参数传递）；返回类型显式标注；`thread[void]` 支持。
+- **`thread_result[T]` 泛型容器**：成功值/错误/状态，可继承可改写，禁止 any。
+- **配套方法**（Rust 对齐）：`unwrap()→Optional[T]` / `unwrap_or(default)` / `is_error()` / `.value`(fail-fast) / `.error`。
+- **err 类型统一**：接入既有 Exception 体系；TaskCancelled/TaskFailed 映射 IBCI 子类；`t.cancel()` 返回 err。
+- **挂起机制取消**（未来也不做）。
+- **统一泛型模型立即启动**：内置类型泛型化正式机制；`thread[T]` 首个消费者；不含用户级泛型类/约束求解。
+- **Optional 配套**：现状查证——编译期特化完整，**运行时无 IbOptional 对象**（`Optional[int] x = None` 的 `x.is_some()` 运行时失败）；需补齐运行时实现。
 
-**下一步（开工）**：产出 **PT-MT-1 详细设计文档**（架构/AST 变更/接口/并发正确性/测试策略），经用户审阅后落地实现。
+### 疏漏裁决
+- 疏漏 1：无用关键字直接删除。
+- 疏漏 2：通信领域（chan/signal/slot）完善与统一化检查 = **下阶段任务，暂缓**。
+- 疏漏 3：**大范围重构直接开始**，允许推翻/删除既有代码（含 PT-MT-1~8 的 spawn/join/cancel 相关实现与测试）。
+- 疏漏 4：内省用明确方法（非裸属性）；线程对象/容器瞬态；**save_state 检测未完成线程则抛异常 fail**。
+- 疏漏 6：废除相关旧测试，新机制测试单独制作。
+
+### 任务 A-F（已授权，未开始）
+1. A. Optional 配套完整实现
+2. B. 统一泛型模型（thread[T] 首个消费者）
+3. C. 线程对象模型（thread[T] + 句柄方法 + 状态机）
+4. D. err 类型统一
+5. E. 线程相关清理（VP-1~VP-6 + F-1~F-8）
+6. F. 关键字精简（删 spawn/join/cancel/task）+ 废除旧测试 + 新测试
+
+---
 
 ## 五、关键约束与原则（必须遵守）
 
 - **交付纪律**：**禁止 push 到 GitHub（硬原则）**——除非用户明确指示允许 push，否则一律禁止 `git push` 到任何远程仓库，push 不因"已授权自主运行"而默许，必须等用户显式授权。
-- **破坏性重构授权（硬原则）**：符合一般工程经验/普适性/合理架构设计且经分析确实优于 IBCI 现有体系及已有代码时，哪怕设计已被文档记录也允许破坏性重构；不禁止修改已有代码，已有代码优先级低于架构正确性与设计统一一致；默认已授权自主推进。
+- **破坏性重构授权（硬原则）**：符合一般工程经验/普适性/合理架构设计且经分析确实优于现有体系及已有代码时，哪怕设计已被文档记录也允许破坏性重构；不禁止修改已有代码，已有代码优先级低于架构正确性与设计统一一致；默认已授权自主推进。
 - **大范围破坏性重构分支政策（硬原则）**：无法确认边界/危害程度的破坏性重构，100% 授权在独立分支（不污染 main 与 unsafe-vibe-dev，不污染任何计算机环境与用户目录）任意实验；仅当独立隔离分支也无法确定技术路线时才阻塞；独立分支禁止直接合并到 unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsafe-vibe-dev；永远不允许触碰主干分支（main）的代码。
+- **设计哲学（用户工作习惯提炼，`design-philosophy` skill）**：系统级统一性——单一权威源（反碎片化）、设计语言统一、设计思路统一、机制同构、模块配合模式统一、系统一致性先于局部便利、宏观设计反思、概念命名与粒度统一。设计取舍时逐条对照。
 - **决策纪律**：需用户拍板的决断项可大胆激进选方案；底线=架构原则/代码质量原则/非妥协/非 tricky/非临时兼容层/大方向主线。
 - **工作模式定论**：禁 compat shim/胶水/tricky/过程式硬编码；质量优先；原则优先于行为维持；可推翻 IBCI 自身设计缺陷。
 - **文档治理**：设计/决策先写任务控制文档（`tasks_docs/`），**不写进技术手册 `docs/`**（用户明确要求）；落地后按治理择机写入。
 - **隔离运行的自我进化窗口**：跨引擎通信现阶段不做，保持文件/序列化机制，仅维护 + 同步演进。
 - **不做跨进程/CPU 并行**（性能瓶颈在 IBCI 包装）。
-- **工作流**：每任务走 code-workflow Phase 0-5 + 质量门 + 全量 pytest 零回归。
+- **工作流**：每任务走 code-workflow Phase 0-5 + 质量门 + design-philosophy 对照 + 全量 pytest 零回归。
 
 ## 六、待决项 / 待清理
 
-- **待决**：PT-MT-1 详细设计文档产出后需用户审阅（尤其编译器改造范围、多 VM 实例共享只读数据边界）。破坏性重构授权已明确（见 §三.1 / §五），编译器改造等破坏性变更默认已授权自主推进。
-- **待清理**：本 `_HANDOFF.md` 交接后删除。
-- **非目标**：media Phase 4、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器）。
+- **待决**：任务 A-F 已授权未开始；实施细节（线程构造签名/容器成员/既有内核处置）已授权自主决策（见 THREAD_DESIGN_REVISION §八）。
+- **待清理**：本 `_HANDOFF.md` 交接后删除；旧 spawn/join/cancel 相关代码与测试在任务 F 中删除。
+- **非目标**：media Phase 4、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器）、线程无损挂起/恢复、用户级泛型类、HM 约束求解。
+- **未 commit**：`design-philosophy` skill + `README.md` + `AGENTS.md` 更新（本会话完成，需 commit）。
 
 ---
 
-> 交接完成阶段：本文件由下一 session 交接后删除。下一 session 启动前必须完整读取 §三（自主运行配置）。
+> 交接完成阶段：本文件由下一 session 交接后删除。下一 session 启动前必须完整读取 §三（自主运行配置）与 §四（当前工作状态）。
