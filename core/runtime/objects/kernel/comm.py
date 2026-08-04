@@ -4,9 +4,11 @@ core.runtime.objects.kernel.comm — IBCI 语言层通信值对象。
 包装 ``core.runtime.shared.comm`` 线程安全原语，作为一等公民 IbObject
 暴露给 IBCI 代码：
 
-- ``IbChannel``（chan）—— 数据流通道（send / recv / recv_nonblocking / close）
-- ``IbSignal``（signal）—— 控制流信号（不可变值对象）
+- ``IbChannel``（chan）—— 数据流通道（send / recv / recv_nonblocking / close / subscribe）
 - ``IbSlot``（slot）—— 共享状态槽（get / set / update）
+
+（通信 Signal 抽象已于阶段 3 移除：零投递机制 + 与 VM 控制流 Signal 撞名，
+见 WORKLOG 会话 8。）
 
 经 ``@register_ib_type`` 注册，由 primitive_initializer 的 axiom 驱动自动化
 绑定方法（见 ChannelAxiom / SlotAxiom 的 get_method_specs）。
@@ -23,7 +25,6 @@ from .base import IbObject, unbox
 from .ib_class import IbClass
 from core.runtime.shared.comm.channel import ChannelCore
 from core.runtime.shared.comm.slot import SlotCore
-from core.runtime.shared.comm.signal import SignalCore
 
 
 @register_ib_type("chan")
@@ -77,27 +78,6 @@ class IbChannel(IbObject):
 
     def __repr__(self):
         return f"<Channel mode={self.core.mode} name={self.core.name}>"
-
-
-@register_ib_type("signal")
-class IbSignal(IbObject):
-    """IBCI 语言层的 Signal 值对象（不可变控制流信号）。"""
-
-    __slots__ = ("core",)
-
-    def __init__(self, ib_class: IbClass, core: Optional[SignalCore] = None):
-        super().__init__(ib_class)
-        self.core = core if core is not None else SignalCore(kind="cancel")
-
-    @property
-    def kind(self) -> str:
-        return self.core.kind
-
-    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
-        return self.core.to_dict()
-
-    def __repr__(self):
-        return f"<Signal kind={self.core.kind} target={self.core.target!r}>"
 
 
 @register_ib_type("slot")

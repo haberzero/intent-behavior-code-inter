@@ -3,18 +3,18 @@ core.runtime.vm.handlers.comm — 并发/通信 AST 节点的 CPS handler。
 
 覆盖（运行时多线程主线 PT-MT-*）：
 - ``IbChannelExpr``  → 构造 ``IbChannel``（语言层 Channel 值对象）
-- ``IbSignalExpr``   → 构造 ``IbSignal``（控制流信号值对象）
 - ``IbSlotExpr``     → 构造 ``IbSlot``（共享状态槽值对象）
-- ``_get_coordinator`` → 获取线程协调器（thread 构造共享）
+
+线程协调器访问器（``get_runtime_coordinator``）已移入线程领域模块
+``core/runtime/coordinator.py``（G5，不再寄居通信模块）。
 """
 
 from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
-from core.runtime.objects.kernel import IbChannel, IbSignal, IbSlot, IbClass, IbUserFunction, IbValue
+from core.runtime.objects.kernel import IbChannel, IbSlot, IbClass, IbUserFunction, IbValue
 from core.runtime.shared.comm.channel import ChannelCore
-from core.runtime.shared.comm.signal import SignalCore
 from core.runtime.shared.comm.slot import SlotCore
 from core.runtime.shared.comm.registry import CommRegistry
 
@@ -33,23 +33,6 @@ def _get_comm_registry(executor) -> CommRegistry:
         # setattr 恒成功；若失败（如无 runtime_context）说明构造路径有误，必须显式暴露。
         rc._comm_registry = reg
     return reg
-
-
-def _get_coordinator(executor) -> Any:
-    """获取（或惰性创建）执行器关联的 RuntimeCoordinator。
-
-    挂在 runtime_context 上（与 CommRegistry 同级）。thread 构造共享。
-    """
-    from core.runtime.coordinator import RuntimeCoordinator
-
-    rc = executor.runtime_context
-    coord = getattr(rc, "_runtime_coordinator", None)
-    if coord is None:
-        interpreter = getattr(executor, "_interpreter", None)
-        coord = RuntimeCoordinator(interpreter)
-        # fail-fast（B4）：同上，setattr 失败即显式暴露构造路径错误。
-        rc._runtime_coordinator = coord
-    return coord
 
 
 def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
@@ -89,20 +72,6 @@ def vm_handle_IbChannelExpr(executor, node_uid: str, node_data: Mapping[str, Any
         _get_comm_registry(executor).register(name, obj, "chan")
     _emit_event(executor, "chan_created", {"name": name, "mode": mode})
     return obj
-
-
-def vm_handle_IbSignalExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``signal(kind, target=..., payload=...)`` 构造 Signal 值对象。"""
-    kind = node_data.get("kind", "cancel")
-    target = None
-    if node_data.get("target"):
-        target = yield node_data["target"]
-    payload = None
-    if node_data.get("payload"):
-        payload = yield node_data["payload"]
-    core = SignalCore(kind=kind, target=target, payload=payload)
-    cls = executor.registry.get_class("signal")
-    return IbSignal(ib_class=cls, core=core)
 
 
 def vm_handle_IbSlotExpr(executor, node_uid: str, node_data: Mapping[str, Any]):

@@ -169,8 +169,8 @@ class TypeRef:
             return cls(head=base, args=(), module=spec.module_path)
 
         # thread / thread_result 是"值承载"泛型（join 结果类型 T 承载于 value_type）。
-        # task 类型已删除（任务 F），TASK kind 现仅指 thread。
-        if spec.kind == TypeKind.TASK.value and base == "thread":
+        # 旧 TASK kind（task 类型）已删除（任务 F），THREAD kind 现唯一指 thread。
+        if spec.kind == TypeKind.THREAD.value and base == "thread":
             val_ref = spec.value_type
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
                 return cls(

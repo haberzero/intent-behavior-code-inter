@@ -42,6 +42,22 @@ class TaskCancelled(Exception):
         self.handle = handle
 
 
+def get_runtime_coordinator(executor: Any) -> "RuntimeCoordinator":
+    """获取（或惰性创建）执行器关联的 RuntimeCoordinator（线程领域访问器，G5）。
+
+    挂在 executor.runtime_context 上（与 CommRegistry 同级），供 thread 构造
+    （``primitive_initializer._thread_init``）共享。fail-fast（B4）：runtime_context
+    为 RuntimeContextImpl（无 __slots__），setattr 恒成功；失败即显式暴露构造路径错误。
+    """
+    rc = executor.runtime_context
+    coord = getattr(rc, "_runtime_coordinator", None)
+    if coord is None:
+        interpreter = getattr(executor, "_interpreter", None)
+        coord = RuntimeCoordinator(interpreter)
+        rc._runtime_coordinator = coord
+    return coord
+
+
 class SpawnedTask:
     """一个 spawn 任务（后台线程 + 任务本地执行上下文）。
 

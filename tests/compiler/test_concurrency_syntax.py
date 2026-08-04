@@ -2,15 +2,16 @@
 tests/compiler/test_concurrency_syntax.py
 ==========================================
 
-PT-MT-2 编译器地基测试（任务 F 方向修正后）：chan/signal/slot 语法与语义。
+PT-MT-2 编译器地基测试（任务 F 方向修正 + 阶段 3 signal 移除后）：chan/slot 语法与语义。
 
 锁定：
-- 新关键字（chan/signal/slot）的 lexer 识别
-- 新 AST 节点（IbChannelExpr/IbSignalExpr/IbSlotExpr）的 parser 产出
-- 类型注解（chan/signal/slot）的解析
+- 新关键字（chan/slot）的 lexer 识别
+- 新 AST 节点（IbChannelExpr/IbSlotExpr）的 parser 产出
+- 类型注解（chan/slot）的解析
 - 序列化 round-trip（节点类型在 artifact 中存活）
 
-spawn/join/cancel/task 已按线程对象模型方向修正删除（任务 F），
+spawn/join/cancel/task 已按线程对象模型方向修正删除（任务 F）；
+signal 已按阶段 3 移除（零投递机制 + 与 VM 控制流 Signal 撞名）。
 其新测试见 test_thread_model.py / test_thread_result.py / test_vm_instance.py。
 """
 import pytest
@@ -31,20 +32,26 @@ def assert_compiles(code: str):
 
 class TestLexer:
     def test_comm_keywords_produce_tokens(self):
-        tokens = Lexer("chan signal slot").tokenize()
+        tokens = Lexer("chan slot").tokenize()
         types = [t.type for t in tokens]
         assert TokenType.CHAN in types
-        assert TokenType.SIGNAL in types
         assert TokenType.SLOT in types
+
+    def test_signal_keyword_removed(self):
+        """阶段 3：signal 关键字已从 lexer 移除（作为普通标识符 lex）。"""
+        tokens = Lexer("signal").tokenize()
+        types = [t.type for t in tokens]
+        assert TokenType.IDENTIFIER in types
+        assert TokenType.CHAN not in types
+        assert TokenType.SLOT not in types
 
 
 # ────────────────────────────────────────────────────── parser ──
 
 class TestParser:
-    def test_chan_signal_slot_expr_in_artifact(self):
+    def test_chan_slot_expr_in_artifact(self):
         artifact = compile_ibci("""
 chan c = chan(str, "stream")
-signal s = signal("cancel")
 slot st = slot("score", 0)
 """)
         from core.compiler.serialization.serializer import FlatSerializer
@@ -52,7 +59,6 @@ slot st = slot("score", 0)
         nodes = d["modules"][artifact.entry_module]["pools"]["nodes"]
         types = {v["_type"] for v in nodes.values()}
         assert "IbChannelExpr" in types
-        assert "IbSignalExpr" in types
         assert "IbSlotExpr" in types
 
 
@@ -61,9 +67,6 @@ slot st = slot("score", 0)
 class TestTypeAnnotations:
     def test_chan_type_declaration(self):
         assert_compiles("chan c = chan(str, \"stream\")\n")
-
-    def test_signal_type_declaration(self):
-        assert_compiles("signal s = signal(\"cancel\")\n")
 
     def test_slot_type_declaration(self):
         assert_compiles("slot st = slot(\"score\", 0)\n")
@@ -75,11 +78,10 @@ class TestSerialization:
     def test_comm_node_types_survive_artifact(self):
         artifact = compile_ibci("""
 chan c = chan(str, "stream")
-signal s = signal("cancel")
 slot st = slot("score", 0)
 """)
         from core.compiler.serialization.serializer import FlatSerializer
         d = FlatSerializer().serialize_artifact(artifact)
         nodes = d["modules"][artifact.entry_module]["pools"]["nodes"]
         types = {v["_type"] for v in nodes.values()}
-        assert {"IbChannelExpr", "IbSignalExpr", "IbSlotExpr"} <= types
+        assert {"IbChannelExpr", "IbSlotExpr"} <= types

@@ -1,14 +1,17 @@
 """
 core/kernel/axioms/primitives/comm.py
 
-Concurrency / communication axioms: task, chan, signal, slot.
+Concurrency / communication axioms: thread, thread_result, chan, slot.
 
 These axioms are deliberately minimal — they establish type identity and
 the method surface (send/recv/get/set etc.) so the semantic layer can type
 check ``chan.send(...)`` / ``slot.get()`` etc. Runtime behaviour is provided
-by the ``IbChannel`` / ``IbSignal`` / ``IbSlot`` / ``IbTask`` objects in
-``core/runtime/objects/`` (registered at interpreter bootstrap), consistent
-with the "axioms declare, runtime implements" convention used across IBCI.
+by the ``IbChannel`` / ``IbSlot`` objects in ``core/runtime/objects/``
+(registered at interpreter bootstrap), consistent with the "axioms declare,
+runtime implements" convention used across IBCI.
+
+（通信 Signal 抽象已于阶段 3 移除——零投递机制 + 与 VM 控制流 Signal 撞名，
+见 WORKLOG 会话 8。）
 """
 
 from __future__ import annotations
@@ -107,17 +110,6 @@ class ChannelAxiom(BaseAxiom):
 
     def is_compatible(self, other_name: str) -> bool:
         return other_name == "chan" or other_name.startswith("chan[")
-
-
-class SignalAxiom(BaseAxiom):
-    """公理：signal 类型（控制流信号，抢占式、一次性）。"""
-
-    @property
-    def name(self) -> str:
-        return "signal"
-
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "signal"
 
 
 class SlotAxiom(BaseAxiom):

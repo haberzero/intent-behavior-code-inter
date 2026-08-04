@@ -53,10 +53,6 @@ class TypeComponent(BaseComponent):
             # 'chan' as a type annotation: chan[str] c = chan(str, "stream")
             name_token = self.stream.previous()
             base_type = self._loc(ast.IbName(id="chan", ctx='Load'), name_token)
-        elif self.stream.match(TokenType.SIGNAL):
-            # 'signal' as a type annotation: signal s = signal("cancel")
-            name_token = self.stream.previous()
-            base_type = self._loc(ast.IbName(id="signal", ctx='Load'), name_token)
         elif self.stream.match(TokenType.SLOT):
             # 'slot' as a type annotation: slot[int] s = slot("score", 0)
             name_token = self.stream.previous()

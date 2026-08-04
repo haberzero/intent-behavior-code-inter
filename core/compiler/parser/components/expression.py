@@ -74,9 +74,8 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.AWAIT, self.await_expr, None, IbPrecedence.UNARY)
 
         # 并发/通信（运行时多线程主线 PT-MT-*）
-        # chan/signal/slot 构造函数前缀
+        # chan/slot 构造函数前缀
         self.register(TokenType.CHAN, self.chan_expr, None, IbPrecedence.UNARY)
-        self.register(TokenType.SIGNAL, self.signal_expr, None, IbPrecedence.UNARY)
         self.register(TokenType.SLOT, self.slot_expr, None, IbPrecedence.UNARY)
         
         # Binary Operations
@@ -379,36 +378,6 @@ class ExpressionComponent(BaseComponent):
             else:
                 return None
         return mode, buffer, name
-
-    def signal_expr(self) -> ast.IbExpr:
-        """``signal(kind, target=..., payload=...)`` —— Signal 构造。"""
-        op_token = self.stream.previous()
-        kind = "cancel"
-        target = None
-        payload = None
-        self.stream.consume(TokenType.LPAREN, "Expect '(' after signal.")
-        if not self.stream.check(TokenType.RPAREN):
-            first = self.parse_precedence(IbPrecedence.UNARY)
-            # kind 可为常量字符串（signal("cancel")）或标识符
-            if isinstance(first, ast.IbConstant):
-                kind = str(first.value)
-            elif hasattr(first, "id"):
-                kind = first.id
-            else:
-                kind = str(first)
-            while self.stream.match(TokenType.COMMA):
-                if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
-                    kw_token = self.stream.advance()
-                    self.stream.advance()
-                    kw_val = self.parse_precedence(IbPrecedence.UNARY)
-                    if kw_token.value == "target":
-                        target = kw_val
-                    elif kw_token.value == "payload":
-                        payload = kw_val
-                else:
-                    break
-        self.stream.consume(TokenType.RPAREN, "Expect ')' after signal arguments.")
-        return self._loc(ast.IbSignalExpr(kind=kind, target=target, payload=payload), op_token)
 
     def slot_expr(self) -> ast.IbExpr:
         """``slot(name, value)`` 或 ``slot T(name)`` —— Slot 构造。"""

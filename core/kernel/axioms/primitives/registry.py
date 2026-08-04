@@ -45,7 +45,6 @@ from core.kernel.axioms.primitives.comm import (
     ThreadAxiom,
     ThreadResultAxiom,
     ChannelAxiom,
-    SignalAxiom,
     SlotAxiom,
 )
 
@@ -95,5 +94,4 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(ThreadAxiom())
     registry.register(ThreadResultAxiom())
     registry.register(ChannelAxiom())
-    registry.register(SignalAxiom())
     registry.register(SlotAxiom())

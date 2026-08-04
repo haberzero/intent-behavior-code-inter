@@ -2,13 +2,12 @@
 tests/runtime/test_comm_kernel.py
 =================================
 
-PT-MT-3 统一通信内核单元测试：CommBuffer / ChannelCore / SignalCore /
-SlotCore / CommRegistry 的线程安全与语义。
+PT-MT-3 统一通信内核单元测试：CommBuffer / ChannelCore / SlotCore /
+CommRegistry 的线程安全与语义。
 
 锁定：
 - CommBuffer：有界 send/recv、非阻塞、close 语义、qsize、多线程并发
 - ChannelCore：stream/message/pubsub 三模式、subscribe 扇出、close
-- SignalCore：kind 校验、定向/广播字段、不可变
 - SlotCore：get/set/update 原子读改写、并发 update 一致性
 - CommRegistry：register/lookup/all/snapshot 线程安全
 """
@@ -20,7 +19,6 @@ import pytest
 
 from core.runtime.shared.comm.buffer import CommBuffer, CommClosedError
 from core.runtime.shared.comm.channel import ChannelCore
-from core.runtime.shared.comm.signal import SignalCore
 from core.runtime.shared.comm.slot import SlotCore
 from core.runtime.shared.comm.registry import CommRegistry
 
@@ -178,40 +176,6 @@ class TestChannelSnapshot:
         assert snap["mode"] == "message"
         assert snap["name"] == "ch"
         assert snap["closed"] is False
-
-
-# ------------------------------------------------------------------ #
-# SignalCore                                                          #
-# ------------------------------------------------------------------ #
-
-class TestSignal:
-    def test_kind_validated(self):
-        with pytest.raises(ValueError):
-            SignalCore(kind="bogus")
-
-    def test_kinds(self):
-        for k in ("cancel", "pause", "resume", "config_change"):
-            s = SignalCore(kind=k)
-            assert s.kind == k
-
-    def test_target_default_none(self):
-        s = SignalCore(kind="cancel")
-        assert s.target is None  # 广播
-
-    def test_target_directed(self):
-        s = SignalCore(kind="cancel", target="handle_123")
-        assert s.target == "handle_123"
-
-    def test_frozen(self):
-        s = SignalCore(kind="cancel")
-        with pytest.raises(Exception):
-            s.kind = "pause"  # frozen dataclass 不可变
-
-    def test_to_dict(self):
-        s = SignalCore(kind="config_change", payload={"parallel": False})
-        d = s.to_dict()
-        assert d["kind"] == "config_change"
-        assert d["payload"] == {"parallel": False}
 
 
 # ------------------------------------------------------------------ #

@@ -58,7 +58,6 @@ from core.runtime.vm.handlers.llm_behavior import (
 )
 from core.runtime.vm.handlers.comm import (
     vm_handle_IbChannelExpr,
-    vm_handle_IbSignalExpr,
     vm_handle_IbSlotExpr,
 )
 
@@ -121,6 +120,5 @@ def build_dispatch_table() -> dict:
         "IbRetry": vm_handle_IbRetry,
         # 并发/通信（运行时多线程主线 PT-MT-*）
         "IbChannelExpr": vm_handle_IbChannelExpr,
-        "IbSignalExpr": vm_handle_IbSignalExpr,
         "IbSlotExpr": vm_handle_IbSlotExpr,
     }

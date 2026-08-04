@@ -118,7 +118,7 @@ class _MemberMixin:
                         # Optional[T].or_else(default) expects default of type T.
                         effective_params[0] = wrapped
                         effective_param_modules[0] = wrapped_mod
-                elif spec.kind == TypeKind.TASK.value and spec.get_base_name() == "thread":
+                elif spec.kind == TypeKind.THREAD.value:
                     # thread[T].join() → thread_result[T]（容器，含成功值/错误/状态）。
                     val = spec.value_type.head
                     val_mod = spec.value_type.module

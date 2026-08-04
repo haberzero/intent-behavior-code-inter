@@ -613,7 +613,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             实参容器（args=[...]）按 IbList 元素直接取出（保持 IbObject 身份，
             不 to_native——否则 chan/slot 等值对象会退化为原生快照丢失身份）。
             """
-            from core.runtime.vm.handlers.comm import _get_coordinator
+            from core.runtime.coordinator import get_runtime_coordinator
 
             func_obj = args[0] if len(args) > 0 else registry.get_none()
             args_obj = args[1] if len(args) > 1 else registry.box([])
@@ -629,7 +629,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 arg_list = []
             execution_context = registry.get_execution_context()
             vm = execution_context.vm_executor if execution_context is not None else None
-            coordinator = _get_coordinator(vm) if vm is not None else None
+            coordinator = get_runtime_coordinator(vm) if vm is not None else None
             if coordinator is None:
                 raise InterpreterError(
                     "thread: coordinator unavailable (no active execution context)"

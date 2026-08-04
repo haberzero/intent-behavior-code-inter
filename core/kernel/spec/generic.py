@@ -273,7 +273,7 @@ def create_generic_registry() -> GenericTypeRegistry:
         build=_build_behavior, to_typeref=_to_typeref_value_typed, restore=_restore_behavior,
     ))
     reg.register(GenericTypeDeclaration(
-        name="thread", kind=TypeKind.TASK.value,
+        name="thread", kind=TypeKind.THREAD.value,
         build=_build_thread, to_typeref=_to_typeref_value_typed, restore=_restore_thread,
     ))
     reg.register(GenericTypeDeclaration(

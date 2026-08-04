@@ -73,7 +73,7 @@ class TestThreadGeneric:
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("thread"), [reg.resolve("int")])
         assert sp.name == "thread[int]"
-        assert sp.kind == TypeKind.TASK.value
+        assert sp.kind == TypeKind.THREAD.value
         assert sp.get_base_name() == "thread"
         assert sp.value_type.head == "int"
 

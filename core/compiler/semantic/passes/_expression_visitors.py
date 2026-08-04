@@ -193,16 +193,6 @@ class ExpressionVisitorsMixin:
         self.bind_type(node, chan_spec)
         return chan_spec
 
-    def visit_IbSignalExpr(self, node: ast.IbSignalExpr) -> Optional[IbSpec]:
-        """``signal(...)`` 的类型 = signal。"""
-        if node.target is not None:
-            self.visit(node.target)
-        if node.payload is not None:
-            self.visit(node.payload)
-        sig_spec = self.registry.resolve("signal") or self._any_desc
-        self.bind_type(node, sig_spec)
-        return sig_spec
-
     def visit_IbSlotExpr(self, node: ast.IbSlotExpr) -> Optional[IbSpec]:
         """``slot(...)`` 的类型 = slot。"""
         if node.value is not None:

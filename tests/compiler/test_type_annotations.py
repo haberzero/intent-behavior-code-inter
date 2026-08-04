@@ -612,7 +612,7 @@ class TestTaskThreadArtifactRehydrator:
         type_pool = {
             "type_root.thread[int]": {
                 "uid": "type_root.thread[int]",
-                "kind": "task",
+                "kind": "thread",
                 "name": "thread[int]",
                 "module_path": None,
                 "is_nullable": False,
@@ -626,7 +626,7 @@ class TestTaskThreadArtifactRehydrator:
         rehydrator = ArtifactRehydrator(type_pool=type_pool, registry=registry)
         spec = rehydrator.hydrate("type_root.thread[int]")
         assert isinstance(spec, TypeDef)
-        assert spec.kind == "task"
+        assert spec.kind == "thread"
         assert spec.value_type.head == "int"
         assert spec.get_base_name() == "thread"
 

@@ -57,10 +57,9 @@ class TypeKind(str, Enum):
     CALLABLE_INSTANCE = "callable_instance"
     CALLABLE_SIG = "callable_sig"
     LAZY = "lazy"
-    # 并发/通信类型（运行时多线程主线 PT-MT-*）
-    TASK = "task"           # 任务句柄（spawn/join/cancel 载体）
+    # 并发/通信类型（运行时多线程主线 PT-MT-*；task/signal 类型已删除，任务 F/阶段 3）
+    THREAD = "thread"       # 线程句柄（thread[T]，join 返回 thread_result）
     CHANNEL = "channel"     # 数据流通道（元素类型泛型）
-    SIGNAL = "signal"       # 控制流信号
     SLOT = "slot"           # 共享状态槽（值类型泛型）
     THREAD_RESULT = "thread_result"  # 线程结果容器（值类型泛型，thread_result[T]）
 
@@ -254,8 +253,7 @@ TypeDef._KIND_BASE_NAMES = {
     # ``fn_callable[int]``) to dispatch to the correct axiom.
     TypeKind.CALLABLE_SIG.value:  "callable_sig",
     TypeKind.LAZY.value:          "module",
-    TypeKind.TASK.value:          "task",
+    TypeKind.THREAD.value:        "thread",
     TypeKind.CHANNEL.value:       "chan",
-    TypeKind.SIGNAL.value:        "signal",
     TypeKind.SLOT.value:          "slot",
 }

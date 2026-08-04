@@ -38,7 +38,6 @@ class CoreTokenScanner:
             'snapshot': TokenType.SNAPSHOT,
             'await': TokenType.AWAIT,
             'chan': TokenType.CHAN,
-            'signal': TokenType.SIGNAL,
             'slot': TokenType.SLOT,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'switch': TokenType.SWITCH, 'case': TokenType.CASE, 'default': TokenType.DEFAULT,

@@ -350,17 +350,6 @@ class IbChannelExpr(IbExpr):
     name: Optional[str] = None
 
 @dataclass(kw_only=True, eq=False)
-class IbSignalExpr(IbExpr):
-    """``signal(...)``：创建/发送 Signal（控制流，抢占式）。
-
-    ``kind`` 为 cancel / pause / resume / config_change；``target`` 定向目标
-    （None=广播）；``payload`` 附加数据。
-    """
-    kind: str = "cancel"
-    target: Optional[IbExpr] = None
-    payload: Optional[IbExpr] = None
-
-@dataclass(kw_only=True, eq=False)
 class IbSlotExpr(IbExpr):
     """``slot T(name)`` 或 ``slot(name, value)``：创建/访问 Slot。
 

@@ -59,7 +59,6 @@ class TokenType(Enum):
 
     # 并发/通信关键字（运行时多线程主线 PT-MT-*）
     CHAN = auto()
-    SIGNAL = auto()
     SLOT = auto()
 
     # 标识符与字面量

@@ -139,7 +139,7 @@ class ArtifactRehydrator:
                 wrapped_type_name=data.get("wrapped_type_name", "any"),
                 wrapped_type_module=data.get("wrapped_type_module"),
             ),
-            TypeKind.TASK.value: lambda: factory.create_thread(
+            TypeKind.THREAD.value: lambda: factory.create_thread(
                 value_type_name=data.get("value_type_name", "any"),
                 value_type_module=data.get("value_type_module"),
             ),
@@ -217,7 +217,7 @@ class ArtifactRehydrator:
             w_name = data.get("wrapped_type_name", spec.wrapped_type.head)
             w_mod = data.get("wrapped_type_module", spec.wrapped_type.module)
             spec.wrapped_type = TypeRef.of(w_name, w_mod)
-        elif spec.kind == TypeKind.TASK.value and spec.get_base_name() == "thread":
+        elif spec.kind == TypeKind.THREAD.value:
             v_name = data.get("value_type_name", spec.value_type.head if spec.value_type else "any")
             v_mod = data.get("value_type_module", spec.value_type.module if spec.value_type else None)
             spec.value_type = TypeRef.of(v_name, v_mod)

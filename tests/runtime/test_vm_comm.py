@@ -7,8 +7,6 @@ PT-MT-3 VM 层并发/通信 e2e 测试。
 锁定：
 - chan 构造 + send/recv（语言面）
 - slot 构造 + set/get（语言面）
-- signal 构造
-- pubsub 模式 subscribe（经 IbChannel 底层）
 
 线程（spawn/join/cancel）已被 thread 对象模型取代（任务 C/F），
 其测试见 test_thread_model.py / test_vm_instance.py。
@@ -57,12 +55,3 @@ int v = st.get()
 print((str)v)
 """)
         assert lines == ["42"]
-
-
-class TestSignalE2E:
-    def test_signal_create(self):
-        lines = run_ibci("""
-signal s = signal("cancel")
-print("ok")
-""")
-        assert lines == ["ok"]

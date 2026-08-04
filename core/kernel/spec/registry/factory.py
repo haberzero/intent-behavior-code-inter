@@ -269,7 +269,7 @@ class SpecFactory:
         thread_name = f"thread[{value_type_name}]" if value_type_name != "any" else "thread"
         spec = TypeDef(
             name=thread_name,
-            kind=TypeKind.TASK.value,
+            kind=TypeKind.THREAD.value,
             is_nullable=False,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),

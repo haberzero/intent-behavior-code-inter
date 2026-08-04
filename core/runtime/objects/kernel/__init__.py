@@ -21,7 +21,7 @@ from .native_module import IbNativeObject, IbModule
 from .ib_class import IbClassField, IbClass
 from .sentinels import IbNone, IbLLMUncertain, IbLLMCallResult
 from .user_functions import IbUserFunction, IbLLMFunction
-from .comm import IbChannel, IbSignal, IbSlot
+from .comm import IbChannel, IbSlot
 
 __all__ = [
     "IbObject",
@@ -40,7 +40,6 @@ __all__ = [
     "IbUserFunction",
     "IbLLMFunction",
     "IbChannel",
-    "IbSignal",
     "IbSlot",
     "_is_intent_context_param",
     "_should_activate_intent_context_arg",
