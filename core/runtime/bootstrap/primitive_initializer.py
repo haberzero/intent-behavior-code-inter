@@ -6,6 +6,8 @@ from ..objects.primitives import IbInteger, IbFloat, IbString, IbList, IbTuple, 
 from ..objects.file_handle import IbFileHandle
 from ..objects.media_types import audio_from_file, image_from_file, video_from_file
 from ..objects.intent import IbIntent  # 确保 @register_ib_type("Intent") 在公理自动化绑定前已执行
+from ..objects.thread import IbThread  # 确保 @register_ib_type("thread") 在公理自动化绑定前已执行（B2 循环导入修复：thread 不再经 primitives 反向再导出）
+from ..objects.thread_result import IbThreadResult  # 确保 @register_ib_type("thread_result") 在公理自动化绑定前已执行（同上）
 from ..objects.intent_stack import IbIntentStack
 from ..objects.intent_context import IbIntentContext
 from core.kernel.registry import KernelRegistry
@@ -611,7 +613,6 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             实参容器（args=[...]）按 IbList 元素直接取出（保持 IbObject 身份，
             不 to_native——否则 chan/slot 等值对象会退化为原生快照丢失身份）。
             """
-            from core.runtime.objects.thread import IbThread, _FIELDS
             from core.runtime.vm.handlers.comm import _get_coordinator
 
             func_obj = args[0] if len(args) > 0 else registry.get_none()

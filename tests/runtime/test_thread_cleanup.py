@@ -9,9 +9,32 @@
 - 协作式取消 handle 上报（VP-2，无死 _task_handle 依赖）
 """
 
+import subprocess
+import sys
 import time
 
-from tests.conftest import run_ibci
+from tests.conftest import REPO_ROOT, run_ibci
+
+
+def test_thread_result_imports_without_circular_import():
+    """B2 回归：干净解释器下直接 import thread_result / thread 不触发循环导入。
+
+    旧缺陷：thread_result → primitives.optional → primitives/__init__ → ..thread_result，
+    直接导入抛 ImportError（依赖隐式导入顺序存活）。
+    """
+    code = (
+        "import core.runtime.objects.thread_result\n"
+        "import core.runtime.objects.thread\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"循环导入回归：{result.stderr}"
+    assert "ok" in result.stdout
 
 
 def test_save_state_rejects_unfinished_thread():

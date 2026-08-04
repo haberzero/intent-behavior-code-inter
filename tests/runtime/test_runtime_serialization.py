@@ -128,3 +128,56 @@ class TestSerializationStructureAndContract:
         # 恢复出的 list 变量是不同的 IbObject 实例
         assert rest.get_variable("xs") is not orig.get_variable("xs")
         assert _native(rest, "xs") == _native(orig, "xs")
+
+
+class TestThreadResultSerializationRoundTrip:
+    """B1 回归：thread_result 序列化往返保真。
+
+    背景（COMMS_DESIGN_REVIEW B1）：``IbThreadResult`` 继承 ``IbObject`` 而非
+    ``IbValue``，旧守卫 ``isinstance(obj, IbValue) and cls_name == "thread_result"``
+    永不触发 → 序列化为 ``{"_type": "object", "fields": {}}``，value/error/status
+    静默丢失，反序列化分支（``_type == "thread_result"``）因此不可达。
+    """
+
+    _SUCCESS_CODE = (
+        "func c() -> int:\n"
+        "    return 1\n"
+        "thread[int] t = thread(callable=c, args=[])\n"
+        "thread_result[int] r = t.join()\n"
+    )
+
+    _FAILED_CODE = (
+        'func c() -> int:\n'
+        '    raise LLMParseError("boom")\n'
+        'thread[int] t = thread(callable=c, args=[])\n'
+        'thread_result[int] r = t.join()\n'
+    )
+
+    def test_serialized_entry_has_thread_result_type(self, engine):
+        """序列化产物必须出现 ``_type == "thread_result"``（旧守卫从未触发的回归）。"""
+        engine.run_string(self._SUCCESS_CODE, silent=True)
+        ec = engine.interpreter._execution_context
+        data = RuntimeSerializer(engine.registry).serialize_context(
+            ec.runtime_context, include_static=False
+        )
+        pool = data["pools"]["instances"]
+        hits = [v for v in pool.values() if v.get("_type") == "thread_result"]
+        assert hits, "thread_result 必须序列化为 _type='thread_result'（B1 回归）"
+        assert hits[0]["status"] == "done"
+
+    def test_round_trip_success_preserves_value_and_status(self, engine):
+        orig, rest = _round_trip(engine, self._SUCCESS_CODE)
+        assert _native(rest, "r") == 1
+        r_rest = rest.get_variable("r")
+        assert r_rest.status().to_native() == "done"
+        assert r_rest.is_success().to_native() is True
+        assert r_rest.is_error().to_native() is False
+
+    def test_round_trip_failed_preserves_status_and_error(self, engine):
+        orig, rest = _round_trip(engine, self._FAILED_CODE)
+        r_rest = rest.get_variable("r")
+        assert r_rest.status().to_native() == "failed"
+        assert r_rest.is_error().to_native() is True
+        assert r_rest.is_success().to_native() is False
+        assert r_rest.value().to_native() is None
+        assert r_rest.error() is not None

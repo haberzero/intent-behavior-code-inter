@@ -267,7 +267,10 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["is_some"] = obj._is_some
             data["inner"] = self._process_value(obj._inner) if obj._is_some else None
 
-        elif isinstance(obj, IbValue) and cls_name == "thread_result":
+        # thread_result 是 IbObject 值对象（非 IbValue，thread.join() 直接构造
+        # IbThreadResult 实例）——与 thread_transient 分支一致，按 ib_class.name
+        # 分发而非 isinstance(IbValue)。
+        elif cls_name == "thread_result" and not isinstance(obj, IbClass):
             data["_type"] = "thread_result"
             data["status"] = obj._status
             data["value"] = self._process_value(obj._value) if obj._status == "done" else None

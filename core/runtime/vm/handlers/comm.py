@@ -29,10 +29,9 @@ def _get_comm_registry(executor) -> CommRegistry:
     reg = getattr(rc, "_comm_registry", None)
     if reg is None:
         reg = CommRegistry()
-        try:
-            rc._comm_registry = reg
-        except Exception:
-            pass
+        # fail-fast（B4）：runtime_context 为 RuntimeContextImpl（无 __slots__），
+        # setattr 恒成功；若失败（如无 runtime_context）说明构造路径有误，必须显式暴露。
+        rc._comm_registry = reg
     return reg
 
 
@@ -48,10 +47,8 @@ def _get_coordinator(executor) -> Any:
     if coord is None:
         interpreter = getattr(executor, "_interpreter", None)
         coord = RuntimeCoordinator(interpreter)
-        try:
-            rc._runtime_coordinator = coord
-        except Exception:
-            pass
+        # fail-fast（B4）：同上，setattr 失败即显式暴露构造路径错误。
+        rc._runtime_coordinator = coord
     return coord
 
 
