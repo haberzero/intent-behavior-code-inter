@@ -34,6 +34,30 @@ class TaskAxiom(BaseAxiom):
         return other_name == "task"
 
 
+class ThreadAxiom(BaseAxiom):
+    """公理：thread 类型（线程对象模型方向修正，任务 C 落地）。
+
+    ``thread[T]`` 泛型：返回值类型经 value_type 承载（``t.join()`` 返回 T）。
+    提供句柄方法表面（start/join/cancel/is_done）供语义层类型检查——
+    运行时实现由 ``IbThread`` 值对象提供（任务 C）。
+    """
+
+    @property
+    def name(self) -> str:
+        return "thread"
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "start": _m("start", ret="thread"),
+            "join": _m("join", ret="any"),
+            "cancel": _m("cancel", ret="any"),
+            "is_done": _m("is_done", ret="bool"),
+        }
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name == "thread" or other_name.startswith("thread[")
+
+
 class ChannelAxiom(BaseAxiom):
     """公理：chan 类型（数据流通道）。
 

@@ -139,6 +139,11 @@ class ArtifactRehydrator:
                 wrapped_type_name=data.get("wrapped_type_name", "any"),
                 wrapped_type_module=data.get("wrapped_type_module"),
             ),
+            TypeKind.TASK.value: lambda: (
+                factory.create_thread(value_type_name=data.get("value_type_name", "any"))
+                if (data.get("axiom_name") or name or "").startswith("thread")
+                else TypeDef(name=name or "task", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+            ),
         }
 
         if name in PRIMITIVE_TYPES and kind == TypeKind.PRIMITIVE.value:
@@ -209,6 +214,10 @@ class ArtifactRehydrator:
             w_name = data.get("wrapped_type_name", spec.wrapped_type.head)
             w_mod = data.get("wrapped_type_module", spec.wrapped_type.module)
             spec.wrapped_type = TypeRef.of(w_name, w_mod)
+        elif spec.kind == TypeKind.TASK.value and spec.get_base_name() == "thread":
+            v_name = data.get("value_type_name", spec.value_type.head if spec.value_type else "any")
+            v_mod = data.get("value_type_module", spec.value_type.module if spec.value_type else None)
+            spec.value_type = TypeRef.of(v_name, v_mod)
         elif spec.kind == TypeKind.CLASS.value:
             p_name = data.get("parent_name")
             p_mod = data.get("parent_module")

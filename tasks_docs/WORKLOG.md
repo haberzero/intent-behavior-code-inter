@@ -252,3 +252,44 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 
 ### 待决
 - 无。任务 A 完成，校验通过。下一步任务 B（统一泛型模型）。
+
+---
+
+## 2026-08-04 会话 3：任务 B — 统一泛型模型（自主实现）
+
+### 背景
+
+按 `THREAD_DESIGN_REVISION.md` 任务 B 实施。查证现状：内置泛型类型（list/dict/tuple/Optional/fn_callable/behavior）的创建、特化、序列化、还原散落多个 ad-hoc 入口——`SpecFactory.create_*` 方法、`_assignability.resolve_specialization` 的 fn/Optional 函数特判 + Axiom 的 `resolve_specialization_by_names`、`TypeRef.from_spec` 的 kind 分派、`artifact_rehydrator` 的 kind 分派。这是碎片化（design-philosophy：单一权威源/机制同构）。
+
+### 设计决策
+
+1. **`GenericTypeDeclaration` + `GenericTypeRegistry`**（`core/kernel/spec/generic.py`）：内置泛型类型声明的单一权威源。每个声明描述生命周期四操作——`build`（创建）、`to_typeref`（序列化）、`restore`（还原）。注册表同时按 name 与 kind 索引。
+2. **统一创建入口**：`SpecRegistry.resolve_specialization` 改为按基础名查注册表，经 `decl.build` 创建 + register + bootstrap axiom 方法。删除 `fn`/`Optional` 函数特判中的旧 `Optional` 分支（保留 `fn[RETURN]` 的表达式侧推断特判）。
+3. **删除历史遗留路径**：删除 `Optional/List/Dict/Tuple` Axiom 的 `resolve_specialization_by_names` 方法（死代码），删除 `resolve_specialization` 的遗留兜底分支（axiom `resolve_specialization_by_names` 路径）。用户明确要求"不保留历史包袱，最终删除"。
+4. **`thread[T]` 首个消费者**：新增 `THREAD_SPEC`（kind=TASK，`_axiom_name="thread"`）、`ThreadAxiom`（start/join/cancel/is_done 方法表面）、`SpecFactory.create_thread`，注册进 `GenericTypeRegistry`。`_members.py` 增加 thread 特化（`thread[T].join()` → T）。
+5. **序列化/还原**：serializer 增加 thread 的 `value_type_name/module` 持久化；rehydrator 增加 TASK→thread shell 创建与值类型填充。
+
+### 变化前后
+
+**实现（新增）**：
+- `core/kernel/spec/generic.py`（GenericTypeDeclaration + GenericTypeRegistry + 内置声明 + 默认注册表）
+- `tests/kernel/test_generic_model.py`（16 用例：注册表完备性/统一解析/thread 泛型/to_typeref/遗留路径删除验证）
+
+**实现（修改）**：
+- `core/kernel/spec/registry/_assignability.py`（resolve_specialization 统一走注册表，删除遗留路径）
+- `core/kernel/spec/registry/_base.py`（SpecRegistry 持有 generic_types 注册表）
+- `core/kernel/spec/registry/factory.py`（新增 create_thread）
+- `core/kernel/spec/registry/_members.py`（thread[T].join → T 特化）
+- `core/kernel/spec/specs.py`（新增 THREAD_SPEC）
+- `core/kernel/spec/registry/_runtime.py`（注册 THREAD_SPEC）
+- `core/kernel/axioms/primitives/comm.py`（新增 ThreadAxiom）
+- `core/kernel/axioms/primitives/registry.py`（注册 ThreadAxiom）
+- `core/kernel/axioms/primitives/sentinels.py`（删除 OptionalAxiom.resolve_specialization_by_names）
+- `core/kernel/axioms/primitives/sequences.py`（删除 List/Dict/TupleAxiom.resolve_specialization_by_names）
+- `core/compiler/serialization/serializer.py`（thread 值类型持久化）
+- `core/runtime/loader/artifact_rehydrator.py`（thread shell 创建 + 值类型填充）
+
+**测试**：全量 pytest **1443 passed / 4 skipped**（1426 + 17 新增，零回归）。
+
+### 待决
+- 无。任务 B 完成，校验通过。下一步任务 C（线程对象模型 thread[T] + 句柄方法 + 状态机）。

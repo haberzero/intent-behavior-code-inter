@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-04（任务 A 已完成；任务 B 待开工；PT-MT-1~8 已全部完成）
+> **最后更新**：2026-08-04（任务 A、B 已完成；任务 C 待开工；PT-MT-1~8 已全部完成）
 ---
 
 ## 🔴 当前主线：线程对象模型方向修正（已授权，待实现）
@@ -27,7 +27,9 @@
 >
 > **进度**：任务 A（Optional 配套完整实现）**已完成 2026-08-04**——运行时 `IbOptional` + is_some/unwrap/or_else + 绑定入口单一化（`_wrap_optional`）+ Optional 基础可赋值性 + 值协议 + 序列化。测试：新增 `tests/runtime/test_optional_runtime.py`（17 用例），全量 pytest 1426 passed/4 skipped 零回归。
 >
-> **下一步（开工）**：任务 B——统一泛型模型（内置泛型类型声明正式机制，thread[T] 首个消费者）。
+> **任务 B（统一泛型模型）已完成 2026-08-04**——`GenericTypeDeclaration` + `GenericTypeRegistry`（单一权威源），`resolve_specialization` 统一走注册表创建/解析；删除 Optional/List/Dict/Tuple Axiom 的 `resolve_specialization_by_names` 遗留路径（用户明确要求删除历史包袱）；`thread[T]` 首个消费者（THREAD_SPEC + ThreadAxiom + create_thread + join→T 特化 + 序列化/还原）。测试：新增 `tests/kernel/test_generic_model.py`（16 用例），全量 pytest 1443 passed/4 skipped 零回归。
+>
+> **下一步（开工）**：任务 C——线程对象模型（thread[T] + 句柄方法 + 状态机）。
 
 ---
 

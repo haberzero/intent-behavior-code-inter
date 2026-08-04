@@ -58,6 +58,10 @@ class SpecRegistryBase:
         self._specs: Dict[str, IbSpec] = {}
         self._axiom_registry = axiom_registry
         self.factory = SpecFactory()
+        # 统一泛型模型：内置泛型类型声明注册表（单一权威源）。
+        # 创建/解析/序列化/还原统一经此路由。
+        from ..generic import create_generic_registry
+        self.generic_types = create_generic_registry()
 
     # ---------------------------------------------------------- #
     # Registration                                               #

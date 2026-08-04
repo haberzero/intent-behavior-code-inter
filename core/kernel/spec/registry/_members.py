@@ -118,6 +118,13 @@ class _MemberMixin:
                         # Optional[T].or_else(default) expects default of type T.
                         effective_params[0] = wrapped
                         effective_param_modules[0] = wrapped_mod
+                elif spec.kind == TypeKind.TASK.value and spec.get_base_name() == "thread":
+                    # thread[T].join() → T（返回值类型）。
+                    val = spec.value_type.head
+                    val_mod = spec.value_type.module
+                    if val != "any" and attr_name in ("join", "result"):
+                        effective_return = val
+                        effective_return_module = val_mod
                 from ..base import TypeDef
                 resolved_member = TypeDef(
                     name=attr_name,

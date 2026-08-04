@@ -184,16 +184,6 @@ class ListAxiom(BaseAxiom):
     def is_compatible(self, other_name: str) -> bool:
         return other_name in ("list",) or other_name.startswith("list[")
 
-    def resolve_specialization_by_names(
-        self, registry: Any, arg_names: List[str]
-    ) -> Optional[Any]:
-        if len(arg_names) == 1:
-            elem = arg_names[0]
-            spec = registry.factory.create_list(element_type_name=elem)
-        else:
-            spec = registry.factory.create_list(allowed_element_type_names=arg_names)
-        return registry.register(spec)
-
 
 # ------------------------------------------------------------------ #
 # dict                                                                #
@@ -262,14 +252,6 @@ class DictAxiom(BaseAxiom):
 
     def is_compatible(self, other_name: str) -> bool:
         return other_name in ("dict",) or other_name.startswith("dict[")
-
-    def resolve_specialization_by_names(
-        self, registry: Any, arg_names: List[str]
-    ) -> Optional[Any]:
-        key = arg_names[0] if len(arg_names) > 0 else "any"
-        val = arg_names[1] if len(arg_names) > 1 else "any"
-        spec = registry.factory.create_dict(key_type_name=key, value_type_name=val)
-        return registry.register(spec)
 
 
 # ------------------------------------------------------------------ #
@@ -344,15 +326,3 @@ class TupleAxiom(BaseAxiom):
         # 注意：不同位置元素的 tuple 之间默认不互相兼容（与 list[int]/list[str]
         # 不互兼容的方向一致，由 SpecRegistry 的 covariance 路径细化处理）。
         return other_name in ("tuple",) or other_name.startswith("tuple[")
-
-    def resolve_specialization_by_names(
-        self, registry: Any, arg_names: List[str]
-    ) -> Optional[Any]:
-        # 元素数 ≥ 2 时走位置元素类型路径（`tuple[T1, T2, ...]`），
-        # 元素数 ≤ 1 时退化为单类型路径。
-        if len(arg_names) >= 2:
-            spec = registry.factory.create_tuple(positional_element_type_names=list(arg_names))
-        else:
-            elem = arg_names[0] if arg_names else "any"
-            spec = registry.factory.create_tuple(element_type_name=elem)
-        return registry.register(spec)

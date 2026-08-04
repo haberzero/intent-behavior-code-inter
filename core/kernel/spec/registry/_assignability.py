@@ -99,6 +99,9 @@ class _AssignabilityMixin:
         ``fn f = lambda -> int: EXPR`` causes the semantic analyser to build a
         ``TypeDef(value_type_name="int")`` via this path.  This enables
         call-site inference: ``int r = f()`` compiles without SEM_TYPE_MISMATCH.
+
+        其余内置泛型类型（list/dict/tuple/Optional/fn_callable/behavior/thread）
+        统一经 ``GenericTypeRegistry``（单一权威源）路由创建/解析。
         """
         # Special case: fn[RETURN_TYPE] → TypeDef(value_type_name=RETURN_TYPE)
         if spec.name == "fn" and arg_specs:
@@ -108,46 +111,25 @@ class _AssignabilityMixin:
                 value_type_module=value_type.module_path,
             )
 
-        if spec.name == "Optional" and arg_specs:
-            value_type = arg_specs[0]
-            result = self.register(self.factory.create_optional(
-                wrapped_type_name=value_type.name,
-                wrapped_type_module=value_type.module_path,
-            ))
-            # Keep Optional[T] behavior consistent with other specialized specs.
-            optional_axiom = self._axiom_registry.get_axiom("Optional")
-            if optional_axiom:
-                method_specs = optional_axiom.get_method_specs()
-                for m_name, m_spec in method_specs.items():
-                    result.members.setdefault(m_name, m_spec)
-            return result
-
-        # early-cache hit — 避免为已注册的特化类型分配临时 spec。
-        # 使用 spec.name（含类型参数的完整名称）而非 get_base_name()，
-        # 以便嵌套泛型如 list[list[int]] 正确构建缓存键。
-        #
-        # 关键修正：缓存键构建时不对 arg_names 排序。
-        # 位置敏感的特化类型（tuple[T1,T2]、dict[K,V]）会因排序而冲突。
-        if arg_specs:
+        # 统一泛型模型：按基础名查声明的内置泛型类型。
+        base_name = spec.get_base_name()
+        decl = self.generic_types.get(base_name)
+        if decl is not None:
             arg_names = [a.name for a in arg_specs]
-            candidate_key = f"{spec.name}[{','.join(arg_names)}]"
+            arg_modules = [a.module_path for a in arg_specs]
+            # 使用完整特化名（含参数）作缓存键，支持嵌套泛型 list[list[int]]。
+            candidate_key = f"{base_name}[{','.join(arg_names)}]"
             cached = self.resolve(candidate_key)
             if cached is not None:
                 return cached
-
-        axiom = self.get_axiom(spec)
-        if axiom and hasattr(axiom, "resolve_specialization_by_names"):
-            if not arg_specs:
-                arg_names_inner: List[str] = []
-            else:
-                arg_names_inner = arg_names  # already computed above
-            result = axiom.resolve_specialization_by_names(self, arg_names_inner)
-            if result is not None:
-                # Bootstrap axiom methods for the newly registered specialised spec.
-                # _bootstrap_axiom_methods() ran at init time before this spec existed,
-                # so we must populate its members here using the same axiom.
+            result = decl.build(self.factory, arg_names, arg_modules)
+            result = self.register(result)
+            # Bootstrap axiom methods for the newly registered specialised spec.
+            axiom = self.get_axiom(result)
+            if axiom:
                 method_specs = axiom.get_method_specs()
                 for m_name, m_spec in method_specs.items():
                     result.members.setdefault(m_name, m_spec)
             return result
+        return None
         return None

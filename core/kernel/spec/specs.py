@@ -79,6 +79,12 @@ CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, is_nullable=F
 SIGNAL_SPEC  = TypeDef(name="signal", kind=TypeKind.SIGNAL.value,  is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
+# thread —— 线程对象模型方向修正（任务 B/C）引入的线程类型。
+# 与 task 不同：thread 是泛型类型（thread[T]，T 为 join 返回类型），
+# 经 ThreadAxiom 路由（_axiom_name="thread"）。task 将在任务 F 删除。
+THREAD_SPEC  = TypeDef(name="thread", kind=TypeKind.TASK.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+THREAD_SPEC._axiom_name = "thread"
+
 ENUM_SPEC = TypeDef(name="Enum", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                     parent_type=TypeRef.of("Object"))
 ENUM_SPEC._axiom_name = "enum"
