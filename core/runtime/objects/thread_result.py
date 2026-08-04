@@ -4,9 +4,14 @@ core.runtime.objects.thread_result — IBCI 线程结果容器值对象（IbThre
 ``thread_result[T]`` 是 ``t.join()`` 的返回值容器（线程对象模型方向修正，
 任务 C）。携带成功值 / 错误对象 / 状态，值化失败（不靠抛异常打断控制流）。
 
-状态：done / cancelled / failed。
+状态：done / cancelled / failed（``ThreadStatus`` 单一权威源，G2）。
 - 成功：``status=done``、``value=T``、``error=null``
 - 失败：``status=failed/cancelled``、``error=err``、``value=null``
+
+值对象身份（阶段 2，D3）：继承 ``IbValue``，``payload`` 承载成功值（单一承载，
+消除双载碎片），``_error``/``_status`` 存槽位；``type_ref`` 经 spec 生效，
+``thread_result[int]`` 泛型身份在序列化/快照中保留（配合 G4 的
+``TypeRef.from_spec`` THREAD_RESULT 分支）。
 
 方法（Rust 对齐，见 ``THREAD_DESIGN_REVISION`` §2.5 + 用户裁定）：
 - ``unwrap()``     → Optional[T]（失败返回 Optional 空，不抛）
@@ -26,34 +31,31 @@ from typing import Any, Dict, List, Optional
 from core.kernel.issue import InterpreterError
 
 from .ib_type_mapping import register_ib_type
-from .kernel.base import IbObject, unbox
+from .kernel.base import IbValue, IbObject
 from .kernel.ib_class import IbClass
 from .primitives.optional import IbOptional
-
-
-class _ThreadResultStatus:
-    """线程结果状态常量（内部枚举）。"""
-
-    DONE = "done"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
+from .thread import ThreadStatus
 
 
 @register_ib_type("thread_result")
-class IbThreadResult(IbObject):
-    """IBCI 语言层的 thread_result[T] 值对象（线程结果容器）。"""
+class IbThreadResult(IbValue):
+    """IBCI 语言层的 thread_result[T] 值对象（线程结果容器）。
 
-    __slots__ = ("_value", "_error", "_status")
+    继承 ``IbValue``：``payload`` 为成功值承载；``_status``/``_error`` 存槽位。
+    ``value()`` 语言方法遮蔽 ``IbValue.value`` 属性（payload 别名），内部一律
+    经 ``self.payload`` 访问承载值。
+    """
+
+    __slots__ = ("_error", "_status")
 
     def __init__(
         self,
         ib_class: IbClass,
         value: Any = None,
         error: Any = None,
-        status: str = _ThreadResultStatus.DONE,
+        status: str = ThreadStatus.DONE,
     ):
-        super().__init__(ib_class)
-        self._value = value
+        super().__init__(ib_class, payload=value)
         self._error = error
         self._status = status
 
@@ -63,13 +65,13 @@ class IbThreadResult(IbObject):
 
     def value(self) -> Any:
         """返回成功值（失败时为 None/null）。"""
-        if self._status == _ThreadResultStatus.DONE:
-            return self._value
+        if self._status == ThreadStatus.DONE:
+            return self.payload
         return self.ib_class.registry.get_none()
 
     def error(self) -> Any:
         """返回错误对象（成功时为 None/null）。"""
-        if self._status == _ThreadResultStatus.DONE:
+        if self._status == ThreadStatus.DONE:
             return self.ib_class.registry.get_none()
         return self._error if self._error is not None else self.ib_class.registry.get_none()
 
@@ -83,11 +85,11 @@ class IbThreadResult(IbObject):
 
     def is_error(self) -> Any:
         """是否失败（failed/cancelled）。"""
-        return self.ib_class.registry.box(self._status != _ThreadResultStatus.DONE)
+        return self.ib_class.registry.box(self._status != ThreadStatus.DONE)
 
     def is_success(self) -> Any:
         """是否成功（done）。"""
-        return self.ib_class.registry.box(self._status == _ThreadResultStatus.DONE)
+        return self.ib_class.registry.box(self._status == ThreadStatus.DONE)
 
     # ------------------------------------------------------------------ #
     # 取值方法（Rust 对齐）                                                 #
@@ -99,14 +101,14 @@ class IbThreadResult(IbObject):
         对齐 OptionalAxiom 先例，避免类型撒谎。
         """
         optional_cls = self.ib_class.registry.get_class("Optional")
-        if self._status == _ThreadResultStatus.DONE:
-            return IbOptional(ib_class=optional_cls, inner=self._value, is_some=True)
+        if self._status == ThreadStatus.DONE:
+            return IbOptional(ib_class=optional_cls, inner=self.payload, is_some=True)
         return IbOptional(ib_class=optional_cls, inner=None, is_some=False)
 
     def unwrap_or(self, default: Any) -> Any:
         """失败返回默认值（最常用，推荐）。"""
-        if self._status == _ThreadResultStatus.DONE:
-            return self._value
+        if self._status == ThreadStatus.DONE:
+            return self.payload
         return default
 
     def expect(self) -> Any:
@@ -115,8 +117,8 @@ class IbThreadResult(IbObject):
         失败时以 ``ThrownException`` 抛出容器内错误对象，语言层 try/except
         可捕获；容器内错误是 IBCI 异常对象（TaskCancelled/TaskFailed 等）。
         """
-        if self._status == _ThreadResultStatus.DONE:
-            return self._value
+        if self._status == ThreadStatus.DONE:
+            return self.payload
         err = self._error
         from core.runtime.exceptions import ThrownException
 
@@ -133,14 +135,14 @@ class IbThreadResult(IbObject):
     # ------------------------------------------------------------------ #
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
-        if self._status == _ThreadResultStatus.DONE:
-            return self._value.to_native(memo) if isinstance(self._value, IbObject) else self._value
+        if self._status == ThreadStatus.DONE:
+            return self.payload.to_native(memo) if isinstance(self.payload, IbObject) else self.payload
         return None
 
     def __to_prompt__(self) -> str:
-        if self._status == _ThreadResultStatus.DONE:
-            return str(self._value.__to_prompt__()) if hasattr(self._value, "__to_prompt__") else str(self._value)
+        if self._status == ThreadStatus.DONE:
+            return str(self.payload.__to_prompt__()) if hasattr(self.payload, "__to_prompt__") else str(self.payload)
         return f"<thread_result {self._status}>"
 
     def __repr__(self):
-        return f"<ThreadResult status={self._status} value={self._value!r}>"
+        return f"<ThreadResult status={self._status} value={self.payload!r}>"

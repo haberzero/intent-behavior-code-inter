@@ -131,6 +131,32 @@ class TestToTyperef:
         tr = reg.generic_types.get_by_kind(sp.kind).to_typeref(sp)
         assert tr.canonical_name == "thread[int]"
 
+    def test_thread_result(self):
+        reg = make_registry()
+        sp = reg.resolve_specialization(reg.resolve("thread_result"), [reg.resolve("int")])
+        tr = reg.generic_types.get_by_kind(sp.kind).to_typeref(sp)
+        assert tr.canonical_name == "thread_result[int]"
+
+
+class TestTypeRefFromSpecThreadKinds:
+    """G4（阶段 2 D5）：TypeRef.from_spec 对 thread/thread_result 泛型实参的保留。"""
+
+    def test_thread_int_preserves_arg(self):
+        from core.kernel.spec.type_ref import TypeRef
+        reg = make_registry()
+        sp = reg.resolve_specialization(reg.resolve("thread"), [reg.resolve("int")])
+        tr = TypeRef.from_spec(sp)
+        assert tr.canonical_name == "thread[int]"
+        assert tr.head == "thread"
+
+    def test_thread_result_int_preserves_arg(self):
+        from core.kernel.spec.type_ref import TypeRef
+        reg = make_registry()
+        sp = reg.resolve_specialization(reg.resolve("thread_result"), [reg.resolve("int")])
+        tr = TypeRef.from_spec(sp)
+        assert tr.canonical_name == "thread_result[int]"
+        assert tr.head == "thread_result"
+
 
 class TestLegacyPathRemoved:
     def test_no_resolve_specialization_by_names_on_axioms(self):

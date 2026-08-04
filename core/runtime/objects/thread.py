@@ -18,11 +18,12 @@ core.runtime.objects.thread — IBCI 线程对象模型值对象（IbThread）�
 方法与 async 彻底分离：``IbThread`` 不满足 ``Waitable``（await 只服务异步），
 线程生命周期经句柄方法管理。
 
-实例状态经 ``fields`` 承载（与 ``intent_context`` 值对象模式一致）：实例由
-``instantiate`` 创建为普通 ``IbObject``，``__init__`` 经 ``_init_fields`` 在
-``fields`` 初始化线程状态，句柄方法经 axiom 自动绑定操作 ``fields``。
-所有句柄方法自包含（仅操作 ``fields``），不依赖实例私有 helper ——
-因为实例是普通 ``IbObject``，axiom 自动绑定只将公开方法绑定到类。
+实例状态承载（阶段 2 统一值对象机制，D2）：实例经 ``_create_blank`` 创建为
+真实 ``IbThread``，状态存于 ``__slots__``（``_coordinator``/``_spawned``/
+``_callable``/``_args``/``_state``），不再经普通 IbObject 的 ``fields`` 绕路。
+句柄方法为真实例方法；eager 启动内聚于 ``_ensure_started`` 实例方法。
+
+状态常量单一权威源：``ThreadStatus``（G2）同时供 thread 与 thread_result 使用。
 """
 
 from __future__ import annotations
@@ -36,8 +37,12 @@ from .kernel.base import IbObject
 from .kernel.ib_class import IbClass
 
 
-class _ThreadState:
-    """线程生命周期状态常量（内部枚举，避免魔法字符串）。"""
+class ThreadStatus:
+    """线程 / 线程结果生命周期状态常量（单一权威源，G2）。
+
+    thread 使用全部 5 态；thread_result 使用子集 3 态（done/cancelled/failed）。
+    序列化字符串与枚举 ``.value`` 同源，禁止裸字符串散落。
+    """
 
     IDLE = "idle"
     RUNNING = "running"
@@ -46,59 +51,53 @@ class _ThreadState:
     FAILED = "failed"
 
 
-# fields 键名（单一权威源，避免魔法字符串散落）。
-# 实例为普通 IbObject，状态存于其 fields；句柄方法经 axiom 自动绑定读取这些键。
-_FIELD_COORDINATOR = "_coordinator"
-_FIELD_SPAWNED = "_spawned"
-_FIELD_CALLABLE = "_callable"
-_FIELD_ARGS = "_args"
-_FIELD_STATE = "_state"
-
-# 供 primitive_initializer 的 __init__ 构造使用（导入键名常量）。
-_FIELDS = (
-    _FIELD_COORDINATOR,
-    _FIELD_SPAWNED,
-    _FIELD_CALLABLE,
-    _FIELD_ARGS,
-    _FIELD_STATE,
-)
-
-
 @register_ib_type("thread")
 class IbThread(IbObject):
     """IBCI 语言层的 thread 值对象（句柄 + 生命周期状态机）。
 
     方法表面（start/join/cancel/is_done）由 ``ThreadAxiom`` 声明，经
     ``primitive_initializer`` 的 axiom-driven auto-bind 自动绑定到语言层。
-    实例状态存于 ``self.fields``（构造经 ``instantiate`` 创建普通 IbObject）。
+    实例状态存于 ``__slots__``；构造经 ``instantiate`` 的 ``_create_blank``
+    钩子创建真实 ``IbThread`` 实例。
     """
 
-    @staticmethod
-    def _init_fields(instance: IbObject, coordinator: Any, callable_obj: Any,
-                     args: Optional[List[Any]] = None) -> None:
-        """初始化线程状态到实例 fields，并 eager 启动（构造经 __init__ 调用）。"""
-        instance.fields[_FIELD_COORDINATOR] = coordinator
-        instance.fields[_FIELD_CALLABLE] = callable_obj
-        instance.fields[_FIELD_ARGS] = list(args or [])
-        instance.fields[_FIELD_SPAWNED] = None
-        instance.fields[_FIELD_STATE] = _ThreadState.IDLE
-        _ensure_started(instance)
+    __slots__ = ("_coordinator", "_spawned", "_callable", "_args", "_state")
+
+    @classmethod
+    def _create_blank(cls, ib_class: IbClass) -> "IbThread":
+        """类型化空实例（阶段 2，D1）：使 ``thread(...)`` 构造真实 IbThread。"""
+        return cls(ib_class)
+
+    def __init__(self, ib_class: IbClass):
+        super().__init__(ib_class)
+        self._coordinator: Any = None
+        self._spawned: Any = None
+        self._callable: Any = None
+        self._args: List[Any] = []
+        self._state: str = ThreadStatus.IDLE
+
+    def _ensure_started(self) -> None:
+        """启动后台线程（eager：首次调用即启动；幂等）。"""
+        if self._spawned is not None:
+            return
+        self._spawned = self._coordinator.spawn(self._callable, self._args)
+        self._state = ThreadStatus.RUNNING
 
     # ------------------------------------------------------------------ #
-    # 生命周期状态机（句柄方法，自包含操作 fields）                        #
+    # 生命周期状态机（句柄方法，操作实例槽位）                            #
     # ------------------------------------------------------------------ #
 
     def start(self) -> "IbObject":
         """启动线程（幂等；已启动则直接返回自身）。"""
-        _ensure_started(self)
+        self._ensure_started()
         return self
 
     def is_done(self) -> "IbObject":
         """返回是否已完成（done/cancelled/failed 均视为结束）。"""
-        return self.ib_class.registry.box(self.fields.get(_FIELD_STATE) in (
-            _ThreadState.DONE,
-            _ThreadState.CANCELLED,
-            _ThreadState.FAILED,
+        return self.ib_class.registry.box(self._state in (
+            ThreadStatus.DONE,
+            ThreadStatus.CANCELLED,
+            ThreadStatus.FAILED,
         ))
 
     def join(self) -> Any:
@@ -108,20 +107,19 @@ class IbThread(IbObject):
         失败/取消 → status=failed/cancelled、error=err、value=null。
         值化失败（不靠抛异常打断控制流），用户经 ``thread_result`` 方法取值。
         """
-        from .thread_result import IbThreadResult, _ThreadResultStatus
+        from .thread_result import IbThreadResult
 
-        spawned = self.fields.get(_FIELD_SPAWNED)
-        if spawned is None:
+        if self._spawned is None:
             raise InterpreterError("join() called on a thread that was never started")
         result_cls = self.ib_class.registry.get_class("thread_result")
         try:
-            value = spawned.join()
-            self.fields[_FIELD_STATE] = _ThreadState.DONE
+            value = self._spawned.join()
+            self._state = ThreadStatus.DONE
             return IbThreadResult(
                 ib_class=result_cls,
                 value=value,
                 error=None,
-                status=_ThreadResultStatus.DONE,
+                status=ThreadStatus.DONE,
             )
         except BaseException as e:
             # 线程失败/取消：把底层异常映射为 IBCI err 对象存入容器（值化失败）。
@@ -137,16 +135,12 @@ class IbThread(IbObject):
             else:
                 err_obj = self.ib_class.registry.make_task_failed(str(e))
             state = (
-                _ThreadState.CANCELLED
+                ThreadStatus.CANCELLED
                 if isinstance(e, _CoordTaskCancelled)
-                else _ThreadState.FAILED
+                else ThreadStatus.FAILED
             )
-            status = (
-                _ThreadResultStatus.CANCELLED
-                if isinstance(e, _CoordTaskCancelled)
-                else _ThreadResultStatus.FAILED
-            )
-            self.fields[_FIELD_STATE] = state
+            status = state
+            self._state = state
             return IbThreadResult(
                 ib_class=result_cls,
                 value=None,
@@ -160,11 +154,10 @@ class IbThread(IbObject):
         - 成功发出取消请求 → ``TaskCancelled`` err
         - 线程未启动或已结束 → ``None``（无效/已结束）
         """
-        spawned = self.fields.get(_FIELD_SPAWNED)
-        if spawned is None:
+        if self._spawned is None:
             return self.ib_class.registry.get_none()
-        spawned.cancel()
-        self.fields[_FIELD_STATE] = _ThreadState.CANCELLED
+        self._spawned.cancel()
+        self._state = ThreadStatus.CANCELLED
         return self.ib_class.registry.make_task_cancelled()
 
     # ------------------------------------------------------------------ #
@@ -172,25 +165,9 @@ class IbThread(IbObject):
     # ------------------------------------------------------------------ #
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
-        spawned = self.fields.get(_FIELD_SPAWNED)
-        if spawned is None:
-            return {"state": self.fields.get(_FIELD_STATE), "done": False}
-        return {"state": self.fields.get(_FIELD_STATE), "done": bool(spawned.is_done)}
+        if self._spawned is None:
+            return {"state": self._state, "done": False}
+        return {"state": self._state, "done": bool(self._spawned.is_done)}
 
     def __repr__(self):
-        return f"<Thread state={self.fields.get(_FIELD_STATE)}>"
-
-
-def _ensure_started(instance: IbObject) -> None:
-    """启动后台线程（eager：首次调用即启动；幂等）。
-
-    独立函数（非 IbThread 方法）以便 ``_init_fields`` 与 ``start`` 复用，
-    且不依赖实例私有 helper（实例为普通 IbObject）。
-    """
-    if instance.fields.get(_FIELD_SPAWNED) is not None:
-        return
-    spawned = instance.fields[_FIELD_COORDINATOR].spawn(
-        instance.fields[_FIELD_CALLABLE], instance.fields[_FIELD_ARGS]
-    )
-    instance.fields[_FIELD_SPAWNED] = spawned
-    instance.fields[_FIELD_STATE] = _ThreadState.RUNNING
+        return f"<Thread state={self._state}>"

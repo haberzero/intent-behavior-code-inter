@@ -171,7 +171,13 @@ def _to_typeref_optional(spec: "TypeDef") -> TypeRef:
     return TypeRef.of("Optional")
 
 
-def _to_typeref_callable(spec: "TypeDef") -> TypeRef:
+def _to_typeref_value_typed(spec: "TypeDef") -> TypeRef:
+    """值承载型泛型序列化：head 取 spec 基名，实参取 ``value_type``。
+
+    服务 fn_callable / behavior / thread / thread_result 四类"携带值类型"
+    的泛型（阶段 2 G4 语义改名——原 ``_to_typeref_callable`` 以"callable"之
+    名覆盖 thread/thread_result 两个非 callable 类型，掩盖语义差异）。
+    """
     head = spec.get_base_name()
     val = spec.value_type
     if val is not None and val.head not in ("auto", "any", "", None):
@@ -260,18 +266,18 @@ def create_generic_registry() -> GenericTypeRegistry:
     ))
     reg.register(GenericTypeDeclaration(
         name="fn_callable", kind=TypeKind.CALLABLE_INSTANCE.value,
-        build=_build_fn_callable, to_typeref=_to_typeref_callable, restore=_restore_fn_callable,
+        build=_build_fn_callable, to_typeref=_to_typeref_value_typed, restore=_restore_fn_callable,
     ))
     reg.register(GenericTypeDeclaration(
         name="behavior", kind=TypeKind.CALLABLE_INSTANCE.value,
-        build=_build_behavior, to_typeref=_to_typeref_callable, restore=_restore_behavior,
+        build=_build_behavior, to_typeref=_to_typeref_value_typed, restore=_restore_behavior,
     ))
     reg.register(GenericTypeDeclaration(
         name="thread", kind=TypeKind.TASK.value,
-        build=_build_thread, to_typeref=_to_typeref_callable, restore=_restore_thread,
+        build=_build_thread, to_typeref=_to_typeref_value_typed, restore=_restore_thread,
     ))
     reg.register(GenericTypeDeclaration(
         name="thread_result", kind=TypeKind.THREAD_RESULT.value,
-        build=_build_thread_result, to_typeref=_to_typeref_callable, restore=_restore_thread_result,
+        build=_build_thread_result, to_typeref=_to_typeref_value_typed, restore=_restore_thread_result,
     ))
     return reg

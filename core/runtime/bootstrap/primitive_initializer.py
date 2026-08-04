@@ -607,7 +607,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         def _thread_init(receiver, *args):
             """thread(callable=..., args=...) 构造函数：创建线程并启动。
 
-            线程状态直接写入 receiver.fields（与 IbThread 方法读取的键一致），
+            线程状态直接写入 receiver 槽位（与 IbThread 方法读取的槽位一致），
             使 axiom 自动绑定的 start/join/cancel/is_done 在实例上直接工作。
 
             实参容器（args=[...]）按 IbList 元素直接取出（保持 IbObject 身份，
@@ -634,7 +634,12 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 raise InterpreterError(
                     "thread: coordinator unavailable (no active execution context)"
                 )
-            IbThread._init_fields(receiver, coordinator, func_obj, arg_list)
+            # 阶段 2（D2）：receiver 经 _create_blank 为真实 IbThread，直接写槽位；
+            # 空槽位（_spawned=None/_state=idle）已由 IbThread.__init__ 初始化。
+            receiver._coordinator = coordinator
+            receiver._callable = func_obj
+            receiver._args = arg_list
+            receiver._ensure_started()
             return registry.get_none()
 
         _thread_init_meta = [

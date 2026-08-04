@@ -4,7 +4,7 @@ from core.kernel.registry import KernelRegistry
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import IbSpec, TypeKind
 
-from ..ib_type_mapping import register_ib_type
+from ..ib_type_mapping import register_ib_type, get_ib_implementation
 from .base import IbObject, IbValue
 
 if TYPE_CHECKING:
@@ -83,7 +83,10 @@ class IbClass(IbObject):
         self.default_fields[name] = default_value
 
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
-        instance = IbObject(self)
+        # 值对象类型化构造钩子（阶段 2，D1）：实现类覆写 _create_blank 则产生
+        # 其类型化实例（如 IbThread），否则默认普通 IbObject（既有行为）。
+        impl_cls = get_ib_implementation(self.name)
+        instance = impl_cls._create_blank(self) if impl_cls is not None else IbObject(self)
 
         # Bug D 修复：收集完整的字段继承链（父类字段 + 子类字段）
         # 父类字段先初始化，子类同名字段会覆盖父类字段

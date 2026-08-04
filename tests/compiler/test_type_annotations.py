@@ -598,3 +598,57 @@ class TestM2OptionalArtifactRehydrator:
         assert isinstance(spec, TypeDef)
         assert spec.kind == "optional"
         assert spec.wrapped_type.head == "int"
+
+
+################################################################################
+# MERGED: thread/thread_result artifact 还原（阶段 2 G4，D5）
+################################################################################
+
+class TestTaskThreadArtifactRehydrator:
+    """TASK kind 还原（task 类型已删除，任务 F）：一律重建 thread，无幽灵 task 回退。"""
+
+    def test_thread_specialization_hydrates(self):
+        registry = create_default_registry()
+        type_pool = {
+            "type_root.thread[int]": {
+                "uid": "type_root.thread[int]",
+                "kind": "task",
+                "name": "thread[int]",
+                "module_path": None,
+                "is_nullable": False,
+                "provenance": "KERNEL_NATIVE",
+                "visibility": "PRELUDE_VISIBLE",
+                "storage_model": "MEMORY_BACKED",
+                "value_type_name": "int",
+                "value_type_module": None,
+            },
+        }
+        rehydrator = ArtifactRehydrator(type_pool=type_pool, registry=registry)
+        spec = rehydrator.hydrate("type_root.thread[int]")
+        assert isinstance(spec, TypeDef)
+        assert spec.kind == "task"
+        assert spec.value_type.head == "int"
+        assert spec.get_base_name() == "thread"
+
+    def test_thread_result_specialization_hydrates(self):
+        registry = create_default_registry()
+        type_pool = {
+            "type_root.thread_result[int]": {
+                "uid": "type_root.thread_result[int]",
+                "kind": "thread_result",
+                "name": "thread_result[int]",
+                "module_path": None,
+                "is_nullable": False,
+                "provenance": "KERNEL_NATIVE",
+                "visibility": "PRELUDE_VISIBLE",
+                "storage_model": "MEMORY_BACKED",
+                "value_type_name": "int",
+                "value_type_module": None,
+            },
+        }
+        rehydrator = ArtifactRehydrator(type_pool=type_pool, registry=registry)
+        spec = rehydrator.hydrate("type_root.thread_result[int]")
+        assert isinstance(spec, TypeDef)
+        assert spec.kind == "thread_result"
+        assert spec.value_type.head == "int"
+        assert spec.get_base_name() == "thread_result"

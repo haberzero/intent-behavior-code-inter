@@ -23,6 +23,17 @@ class IbObject:
         self.ib_class = ib_class
         self.fields: Mapping[str, Any] = {}
 
+    @classmethod
+    def _create_blank(cls, ib_class: 'IbClass') -> 'IbObject':
+        """值对象类型化实例构造钩子（阶段 2 统一值对象机制）。
+
+        默认返回普通 ``IbObject``（即 ``instantiate`` 既有行为）。值对象实现类
+        覆写返回其类型化空实例（如 ``IbThread._create_blank``），使
+        ``ClassName(...)`` 语言构造产生真实实现类实例而非字段空壳。
+        协议驱动：是否类型化实例由实现类自身决定，不经调用方标志位分支。
+        """
+        return IbObject(ib_class)
+
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
         统一消息传递接口。

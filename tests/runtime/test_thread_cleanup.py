@@ -37,6 +37,45 @@ def test_thread_result_imports_without_circular_import():
     assert "ok" in result.stdout
 
 
+def test_thread_instance_is_real_ibthread():
+    """阶段 2 D1/D2：instantiate 挂钩使 thread(...) 产生真实 IbThread 实例（槽位状态）。"""
+    from core.engine import IBCIEngine
+    from core.runtime.objects.thread import IbThread
+
+    engine = IBCIEngine(root_dir=".")
+    engine.run_string("""
+func f() -> int:
+    return 1
+thread[int] t = thread(callable=f, args=[])
+""", silent=True)
+    rc = engine.interpreter.execution_context.runtime_context
+    t = rc.get_variable("t")
+    assert isinstance(t, IbThread), f"thread(...) 应产生真实 IbThread，got {type(t).__name__}"
+    assert t._state == "running"  # eager 启动
+
+
+def test_thread_result_is_ibvalue():
+    """阶段 2 D3：thread_result 升级为 IbValue（payload 承载值，type_ref 生效）。"""
+    from core.engine import IBCIEngine
+    from core.runtime.objects.kernel import IbValue
+    from core.runtime.objects.thread_result import IbThreadResult
+
+    engine = IBCIEngine(root_dir=".")
+    engine.run_string("""
+func f() -> int:
+    return 1
+thread[int] t = thread(callable=f, args=[])
+thread_result[int] r = t.join()
+""", silent=True)
+    rc = engine.interpreter.execution_context.runtime_context
+    r = rc.get_variable("r")
+    assert isinstance(r, IbValue), f"thread_result 应为 IbValue，got {type(r).__name__}"
+    assert isinstance(r, IbThreadResult)
+    assert r.type_ref is not None
+    assert r.status().to_native() == "done"
+    assert r.value().to_native() == 1
+
+
 def test_save_state_rejects_unfinished_thread():
     """未完成线程存在时 save_state 必须抛异常（疏漏 4）。"""
     from core.engine import IBCIEngine

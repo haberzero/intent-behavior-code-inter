@@ -191,13 +191,12 @@ class RuntimeSerializer(BaseFlatSerializer):
 
         # 线程对象是瞬态（疏漏 4）：序列化为仅含状态信息的存根，
         # 不递归进入 coordinator（否则经 _interpreter → EC → scope → t
-        # 引用环导致无限递归）。注意线程实例是普通 IbObject（非 IbValue，
-        # 由 instantiate 创建），故按 ib_class.name 匹配而非 isinstance；
-        # 其 to_native 未绑定，直接读 fields 状态（避免经 coordinator 递归）。
+        # 引用环导致无限递归）。thread 实例经 _create_blank 为真实 IbThread，
+        # 状态存于槽位（阶段 2，D2），直接读槽位。
         if obj.ib_class.name == "thread" and not isinstance(obj, IbClass):
             data["_type"] = "thread_transient"
-            state = obj.fields.get("_state")
-            spawned = obj.fields.get("_spawned")
+            state = obj._state
+            spawned = obj._spawned
             data["state"] = {
                 "state": state,
                 "done": bool(spawned is not None and spawned.is_done),
@@ -267,13 +266,12 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["is_some"] = obj._is_some
             data["inner"] = self._process_value(obj._inner) if obj._is_some else None
 
-        # thread_result 是 IbObject 值对象（非 IbValue，thread.join() 直接构造
-        # IbThreadResult 实例）——与 thread_transient 分支一致，按 ib_class.name
-        # 分发而非 isinstance(IbValue)。
+        # thread_result 是 IbValue 值对象（payload 承载成功值，阶段 2 D3）——
+        # 与 thread_transient 分支一致，按 ib_class.name 分发而非 isinstance。
         elif cls_name == "thread_result" and not isinstance(obj, IbClass):
             data["_type"] = "thread_result"
             data["status"] = obj._status
-            data["value"] = self._process_value(obj._value) if obj._status == "done" else None
+            data["value"] = self._process_value(obj.payload) if obj._status == "done" else None
             data["error"] = self._process_value(obj._error) if obj._error is not None else None
 
         elif isinstance(obj, IbModule):
@@ -583,7 +581,7 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
 
         elif _type == "thread_result":
-            from core.runtime.objects.thread_result import IbThreadResult, _ThreadResultStatus
+            from core.runtime.objects.thread_result import IbThreadResult
             status = data.get("status", "done")
             value = self._deserialize_value(data.get("value")) if status == "done" else None
             error = self._deserialize_value(data.get("error")) if data.get("error") is not None else None
