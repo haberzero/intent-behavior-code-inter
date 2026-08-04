@@ -56,10 +56,12 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 
 - **`thread[T]` 泛型标注是必须语法**（非"类型作参数传递进括号"）。
 - 线程**允许且要求**携带返回值类型，用户书写时必须显式标注。
-- 例：`thread[int] t = thread(fn=compute, args=["x"])`，`int r = t.join()`。
-- 无返回值线程：`thread[void]`（join 返回 None）。
+- 例：`thread[int] t = thread(callable=compute, args=["x"])`，`thread_result[int] r = t.join()`。
+- 无返回值线程：`thread[void]`（join 返回 None 容器）。
 
 > **决策理由**：`t.join()` 的返回类型必须在编译期与线程类型绑定（泛型正解）；与 `list[int]`/`Optional[int]`/`fn[...]` 语法统一；避免类型与值混淆。
+>
+> **实施修正（2026-08-04，任务 C2）**：用户裁定 `join()` 返回 `thread_result[T]` 容器（非 T）。构造参数名 `fn`（原 §2.3 例）与保留关键字碰撞，按"内部接口设计不违反关键字碰撞"原则改用 `callable`（`callable` 非关键字）。例更新为 `thread(callable=compute, args=["x"])`。
 
 ### 2.4 返回值容器 `thread_result[T]`
 
@@ -76,11 +78,13 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 | `r.unwrap()` | 返回 `Optional[T]`——失败返回 Optional 空（**非裸 None**，避免类型撒谎；对齐 `OptionalAxiom` 先例） |
 | `r.unwrap_or(default)` | 失败返回默认值（**最常用，推荐**） |
 | `r.is_error()` / `r.is_success()` | 内省检查 |
-| `r.value` | 直接取值，**失败时抛错**（fail-fast，防静默空值） |
-| `r.error` | 取错误对象（不抛，内省友好） |
+| `r.value()` | 直接取值，**失败时抛错**（fail-fast，防静默空值） |
+| `r.error()` | 取错误对象（不抛，内省友好） |
+| `r.expect()` | **实施新增（任务 C2）**：直接返回 T，失败抛 IBCI 异常（Rust `unwrap`/`expect` 对齐）——"明确直接返回 value"的易用方法，弥补 `unwrap()` 返回 Optional 不直接取 T 的缺口 |
 
 > **用户裁定**：同意 `unwrap_or(default)` + `is_error()` 模式（Rust `unwrap_or` 模式）。
 > **疏漏 4 裁决（用户）**：用更明确的**内省方法**（获取完整状态）配合 result 模型，取代裸属性暴露。
+> **实施细化（任务 C2）**：`value`/`error`/`status` 均实现为**方法**（`r.value()`/`r.error()`/`r.status()`），符合疏漏 4"内省方法取代裸属性"。
 
 ### 2.6 err 类型统一设计
 
@@ -169,7 +173,7 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 |------|------|------|---------|
 | 1 | **A. Optional 配套完整实现** | 运行时 `IbOptional` 对象 + `is_some`/`unwrap`/`or_else` 运行时实现；与 `thread_result[T]` 共用设计模式 | `Optional[int] x = None` 后 `x.is_some()`/`x.unwrap()` 可运行；全量 pytest 零回归 |
 | 2 | **B. 统一泛型模型** | 内置泛型类型声明正式机制（list/dict/tuple/Optional/fn/thread 统一）；`thread[T]` 首个消费者 | 泛型 spec 经统一入口创建/解析/序列化/还原；不触碰用户级泛型类/约束求解 |
-| 3 | **C. 线程对象模型** | `thread[T]` 类型 + 构造函数 + 句柄方法（start/join/cancel/is_done）+ 生命周期状态机 | `thread[int] t = thread(fn=compute, args=["x"])`；`t.join()` 返回 int；cancel 返回 err |
+| 3 | **C. 线程对象模型** | `thread[T]` 类型 + 构造函数 + 句柄方法（start/join/cancel/is_done）+ 生命周期状态机 | `thread[int] t = thread(callable=compute, args=["x"])`；`t.join()` 返回 `thread_result[int]` 容器（用户裁定）；cancel 返回 err |
 | 4 | **D. err 类型统一** | TaskCancelled/TaskFailed 映射 IBCI Exception 子类；`cancel()` 返回 err；err 用户可见可继承 | `class MyErr(Exception)` 可继承；取消后可从 err 取错误对象 |
 | 5 | **E. 线程相关清理** | VP-1~VP-6 + F-1~F-8（join 阻塞、_task_handle 死引用、cancel 覆盖、except:pass、方法表面、内省统一、事件语义、资源生命周期） | 触碰到的问题全部修复；内省单数据源；task_done 事件语义正确 |
 | 6 | **F. 关键字精简 + 测试** | 删除 spawn/join/cancel/task 关键字（AST/parser/语义/dispatch/序列化全链）；废除旧测试；新测试单独制作 | 旧 spawn/join/cancel 语法编译失败；新 thread 对象模型测试覆盖；全量 pytest 零回归 |
@@ -194,7 +198,7 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 
 ## 八、实施细节（已授权自主决策，按 WORKLOG 记录）
 
-- **线程创建语法**：`thread t = thread(fn=..., args=...)`（构造函数）——签名按 IBCI 既有对象构造模式自主细化并记录。
+- **线程创建语法**：`thread t = thread(callable=..., args=...)`（构造函数）——签名按 IBCI 既有对象构造模式自主细化并记录。参数名 `callable`（原 `fn` 与关键字碰撞，实施修正）。
 - **`thread_result[T]` 容器成员**：按本记录 2.5 细化（value/error/status/is_error/unwrap/unwrap_or）。
 - **既有 `RuntimeCoordinator`/`SpawnedTask`**：保留内核机制，语言表面改造为 thread 对象 + 方法（用户已授权删除/改造，自主决定并记录）。
 - **大范围重构分支政策**：本方向修正为**已确认边界**的破坏性改造（边界 = spawn/join/cancel/task 相关 + 线程对象模型 + Optional/err/泛型），用户明确授权在当前分支直接开始（疏漏 3），**不**走独立隔离分支。
