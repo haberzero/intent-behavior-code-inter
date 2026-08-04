@@ -74,7 +74,18 @@
 - [x] C1：`IbThread` 值对象 + 状态机—— **已完成 2026-08-04**（thread.py + primitive_initializer 注册 __init__ + ThreadAxiom has_call_cap + resolve_return_type_name；5 用例，全量 1447 passed 零回归）
 - [x] C2：`thread_result[T]` 容器—— **已完成 2026-08-04**（TypeKind.THREAD_RESULT + THREAD_RESULT_SPEC + create_thread_result + GenericTypeRegistry + ThreadResultAxiom + IbThreadResult + join 返回容器 + value/error/status/is_error/is_success/unwrap/unwrap_or/expect；9 用例（thread_model 5 + thread_result 4），全量 1457 passed 零回归）
 - [x] C5：序列化—— **已完成 2026-08-04**（serializer thread_result value_type 持久化 + rehydrator THREAD_RESULT shell + runtime_serializer thread_result 值序列化/反序列化；全量 1457 passed 零回归）
-- [ ] C6：测试 + 全量验证
+- [x] C6：测试 + 全量验证—— **已完成 2026-08-04**（新增 cancel/线程隔离用例；全量 1459 passed / 4 skipped 零回归）
+
+## 任务 C 完成小结
+
+任务 C（线程对象模型）**已完成 2026-08-04**：
+- C0 前置：类构造关键字参数支持（commit 35b0691）
+- C1：IbThread 值对象 + 生命周期状态机（commit 5ebbcfd）
+- C2：thread_result[T] 容器 + join 返回容器 + expect()（commit e30487c）
+- C5：序列化（commit 21b3ce6）
+- C6：测试验证（11 用例，全量 1459 passed / 4 skipped 零回归）
+
+**待办**：任务 D（err 类型统一）、任务 E（线程相关清理，含 save_state 未完成线程检测）、任务 F（关键字精简 + 废除旧测试）。见 `NEXT_STEPS.md` 主线。
 
 ### C1 实现细节记录（2026-08-04）
 

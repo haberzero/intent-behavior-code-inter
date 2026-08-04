@@ -80,3 +80,35 @@ print("done")
 """
     lines = run_ibci(code)
     assert lines == ["hi", "done"]
+
+
+def test_thread_cancel():
+    code = """
+func work(int x) -> int:
+    return x * 2
+
+thread[int] t = thread(callable=work, args=[21])
+print((str)t.cancel())
+t.join()
+print((str)t.is_done())
+"""
+    lines = run_ibci(code)
+    assert lines == ["True", "True"]
+
+
+def test_thread_isolation_does_not_leak_main_scope():
+    code = """
+int shared = 100
+
+func mutate() -> int:
+    shared = 999
+    return shared
+
+thread[int] t = thread(callable=mutate, args=[])
+t.join()
+print((str)shared)
+print((str)t.join().expect())
+"""
+    lines = run_ibci(code)
+    # 任务不写主环境作用域（隔离边界）；主作用域 shared 保持 100。
+    assert lines == ["100", "999"]
