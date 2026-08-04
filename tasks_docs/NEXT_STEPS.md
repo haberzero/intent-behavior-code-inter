@@ -4,7 +4,29 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-03（新主线确立：IBCI 运行时多线程 + 统一通信机制 + 内省/控制；上一主线 LLM 并行化+同步异步全部完成）
+> **最后更新**：2026-08-04（线程对象模型方向修正已授权未实现，任务 A-F 待开工；PT-MT-1~8 已全部完成）
+---
+
+## 🔴 当前主线：线程对象模型方向修正（已授权，待实现）
+
+> **用户裁定（2026-08-04）**：PT-MT-1~8 完成后深度质询，推翻 spawn/join/cancel/task 关键字语法，改为 **thread 对象 + 句柄方法** 模型。完整决策见 `tasks_docs/THREAD_DESIGN_REVISION.md`（唯一决策依据）。
+>
+> **核心裁定**：
+> - async 与 thread 彻底分离（IbTask 不得满足 Waitable；await 只服务异步）
+> - 删 spawn/join/cancel/task 关键字；`thread[T]` 泛型 + 句柄方法（start/join/cancel/is_done）
+> - `thread_result[T]` 泛型容器（成功值/错误/状态，可继承改写，禁止 any）
+> - err 类型统一接入 Exception 体系；`t.cancel()` 返回 err
+> - 统一泛型模型立即启动（内置类型泛型化正式机制；thread[T] 首个消费者）
+> - Optional 配套（运行时 IbOptional 缺失需补齐）
+> - 挂起机制取消；通信领域（chan/signal/slot）暂缓下阶段
+>
+> **任务 A-F（按序，依赖驱动）**：
+> A. Optional 配套完整实现 → B. 统一泛型模型 → C. 线程对象模型（thread[T] + 句柄方法 + 状态机）→ D. err 类型统一 → E. 线程相关清理（VP-1~VP-6 + F-1~F-8）→ F. 关键字精简（删 spawn/join/cancel/task）+ 废除旧测试 + 新测试。
+>
+> **约束**：大范围重构已授权（可推翻/删除既有代码）；save_state 检测未完成线程则抛异常 fail；旧测试废除。
+>
+> **下一步（开工）**：任务 A——Optional 配套完整实现（运行时 IbOptional + is_some/unwrap/or_else）。
+
 ---
 
 ## ⛔ 工作模式定论（强制，凌驾于本文件一切任务之上）

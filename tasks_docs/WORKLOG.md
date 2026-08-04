@@ -210,3 +210,11 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 - **实时输出场景验证**：`spawn worker(chan out)` 后台逐块 send，主线程 recv 渲染。
 
 **测试**：`test_vm_instance.py` 新增 2（实时输出 worker→Channel→主线程 recv、eager start 后台运行）。全量 pytest 1409 passed/4 skipped 零回归。
+
+#### 13. 交接准备（2026-08-04）
+
+- 更新 `_HANDOFF.md`：反映当前真实状态（PT-MT-1~8 完成 → 方向修正已授权未实现、任务 A-F、完整 goal 工作原则模板）。
+- 提炼用户**系统级设计哲学** → 新增 `.opencode/skills/design-philosophy/SKILL.md`（单一权威源/设计语言统一/设计思路统一/机制同构/配合模式统一/一致性先于便利/宏观反思/命名粒度统一），注册进 `skills/README.md` + `AGENTS.md`。
+- 同步 `NEXT_STEPS.md`（当前主线改为方向修正任务 A-F）+ `PENDING_TASKS.md`（PT-MT 系列标完成 + 记录方向修正）。
+
+> 注：用户两次纠正 design-philosophy 提炼方向——第一次误提炼为 IBCI 语言特性（不合格），第二次才对准"系统级统一性"（碎片化/设计语言/设计思路/机制/配合模式/一致性/宏观反思/命名）。此为重要教训：提炼用户工作哲学应抓**宏观元层面**（系统统一性），而非项目专属特性。
