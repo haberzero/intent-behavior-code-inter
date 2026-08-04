@@ -74,9 +74,6 @@ class ExpressionComponent(BaseComponent):
         self.register(TokenType.AWAIT, self.await_expr, None, IbPrecedence.UNARY)
 
         # 并发/通信（运行时多线程主线 PT-MT-*）
-        # spawn/join 在表达式位置（task t = spawn fn(...) / task t = join t2）
-        self.register(TokenType.SPAWN, self.spawn_expr, None, IbPrecedence.UNARY)
-        self.register(TokenType.JOIN, self.join_expr, None, IbPrecedence.UNARY)
         # chan/signal/slot 构造函数前缀
         self.register(TokenType.CHAN, self.chan_expr, None, IbPrecedence.UNARY)
         self.register(TokenType.SIGNAL, self.signal_expr, None, IbPrecedence.UNARY)
@@ -299,45 +296,6 @@ class ExpressionComponent(BaseComponent):
         op_token = self.stream.previous()
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbAwaitExpr(value=operand), op_token)
-
-    def spawn_expr(self) -> ast.IbExpr:
-        """``spawn fn(...)`` —— 表达式位置（``task t = spawn ...``）。
-
-        UNARY 优先级前缀。产出 ``IbSpawnStmt``（带/不带 target 由赋值上下文
-        判别——声明右侧时经语义阶段绑定 target）。
-        """
-        op_token = self.stream.previous()
-        func = self.parse_precedence(IbPrecedence.UNARY)
-        args: List = []
-        keywords: List = []
-        # 解析调用实参（若为函数调用形态）
-        from core.kernel.ast import IbStarred, IbKeyword
-        if self.stream.match(TokenType.LPAREN):
-            if not self.stream.check(TokenType.RPAREN):
-                while True:
-                    if self.stream.match(TokenType.STAR_STAR):
-                        value = self.parse_precedence(IbPrecedence.UNARY)
-                        keywords.append(self._loc(IbKeyword(arg=None, value=value), self.stream.previous()))
-                    elif self.stream.match(TokenType.STAR):
-                        value = self.parse_precedence(IbPrecedence.UNARY)
-                        args.append(self._loc(IbStarred(value=value), self.stream.previous()))
-                    elif self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
-                        name_token = self.stream.advance()
-                        self.stream.advance()  # '='
-                        value = self.parse_precedence(IbPrecedence.UNARY)
-                        keywords.append(self._loc(IbKeyword(arg=name_token.value, value=value), name_token))
-                    else:
-                        args.append(self.parse_precedence(IbPrecedence.UNARY))
-                    if not self.stream.match(TokenType.COMMA):
-                        break
-            self.stream.consume(TokenType.RPAREN, "Expect ')' after spawn arguments.")
-        return self._loc(ast.IbSpawnStmt(target=None, func=func, args=args, keywords=keywords), op_token)
-
-    def join_expr(self) -> ast.IbExpr:
-        """``join t`` —— 表达式位置（``task t = join t2``）。产出 ``IbJoinStmt``。"""
-        op_token = self.stream.previous()
-        task = self.parse_precedence(IbPrecedence.UNARY)
-        return self._loc(ast.IbJoinStmt(task=task, target=None), op_token)
 
     def chan_expr(self) -> ast.IbExpr:
         """``chan(T, mode=..., buffer=...)`` 或 ``chan T(...)`` —— Channel 构造。

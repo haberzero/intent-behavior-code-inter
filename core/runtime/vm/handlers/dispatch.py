@@ -60,9 +60,6 @@ from core.runtime.vm.handlers.comm import (
     vm_handle_IbChannelExpr,
     vm_handle_IbSignalExpr,
     vm_handle_IbSlotExpr,
-    vm_handle_IbSpawnStmt,
-    vm_handle_IbJoinStmt,
-    vm_handle_IbCancelStmt,
 )
 
 
@@ -126,7 +123,4 @@ def build_dispatch_table() -> dict:
         "IbChannelExpr": vm_handle_IbChannelExpr,
         "IbSignalExpr": vm_handle_IbSignalExpr,
         "IbSlotExpr": vm_handle_IbSlotExpr,
-        "IbSpawnStmt": vm_handle_IbSpawnStmt,
-        "IbJoinStmt": vm_handle_IbJoinStmt,
-        "IbCancelStmt": vm_handle_IbCancelStmt,
     }

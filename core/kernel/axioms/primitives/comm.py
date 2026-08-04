@@ -19,21 +19,6 @@ from core.kernel.axioms.primitives.base import BaseAxiom, _m
 from core.kernel.spec.member import MethodMemberSpec
 
 
-class TaskAxiom(BaseAxiom):
-    """公理：task 类型（spawn 的任务句柄，join/cancel 载体）。
-
-    无值运算能力；主要作为类型标识。运行时 IbTask 提供 is_done/result
-    等（供 Waitable 协议 / 内省）。
-    """
-
-    @property
-    def name(self) -> str:
-        return "task"
-
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "task"
-
-
 class ThreadAxiom(BaseAxiom):
     """公理：thread 类型（线程对象模型方向修正，任务 C 落地）。
 

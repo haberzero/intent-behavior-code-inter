@@ -308,32 +308,6 @@ class IbLLMExceptionalStmt(IbStmt):
     target: Optional[IbStmt]
     body: List[IbStmt] = field(default_factory=list)
 
-@dataclass(kw_only=True, eq=False)
-class IbSpawnStmt(IbStmt):
-    """``task t = spawn fn(...)`` / ``task t = spawn(fn, args)`` / fire-and-forget ``spawn fn(...)``。
-
-    ``task`` 是保留关键字（任务句柄类型名），spawn 的目标变量名**不能**叫 ``task``。
-    变量命名用 ``t``/``handle`` 等普通标识符。
-    """
-    target: Optional[IbExpr] = None          # 赋值目标（IbName / IbTypeAnnotatedExpr），None 表示 fire-and-forget
-    func: Optional[IbExpr] = None            # 被 spawn 的可调用表达式（函数名 / fn 变量 / lambda）
-    args: List[IbExpr] = field(default_factory=list)    # 位置实参
-    keywords: List['IbKeyword'] = field(default_factory=list)  # 具名实参
-
-@dataclass(kw_only=True, eq=False)
-class IbJoinStmt(IbStmt):
-    """``join t`` 或 ``task t = join t2``（join 出现在声明右侧，表达式位置）。
-
-    ``target`` 非 None 时表示"等待任务并取回结果赋值给 target"。
-    """
-    task: Optional[IbExpr] = None            # 任务句柄表达式
-    target: Optional[IbExpr] = None          # 结果赋值目标
-
-@dataclass(kw_only=True, eq=False)
-class IbCancelStmt(IbStmt):
-    """``cancel t``：请求取消任务（协作式取消）。"""
-    task: Optional[IbExpr] = None
-
 # --- Expressions ---
 
 @dataclass(kw_only=True, eq=False)

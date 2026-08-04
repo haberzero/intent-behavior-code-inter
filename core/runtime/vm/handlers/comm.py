@@ -5,9 +5,7 @@ core.runtime.vm.handlers.comm — 并发/通信 AST 节点的 CPS handler。
 - ``IbChannelExpr``  → 构造 ``IbChannel``（语言层 Channel 值对象）
 - ``IbSignalExpr``   → 构造 ``IbSignal``（控制流信号值对象）
 - ``IbSlotExpr``     → 构造 ``IbSlot``（共享状态槽值对象）
-- ``IbSpawnStmt``    → 派生任务（见 vm_handle_IbSpawnStmt 注释）
-- ``IbJoinStmt``     → 等待任务完成
-- ``IbCancelStmt``   → 请求取消任务
+- ``_get_coordinator`` → 获取线程协调器（thread 构造共享）
 """
 
 from __future__ import annotations
@@ -41,7 +39,7 @@ def _get_comm_registry(executor) -> CommRegistry:
 def _get_coordinator(executor) -> Any:
     """获取（或惰性创建）执行器关联的 RuntimeCoordinator。
 
-    挂在 runtime_context 上（与 CommRegistry 同级）。spawn/join/cancel 共享。
+    挂在 runtime_context 上（与 CommRegistry 同级）。thread 构造共享。
     """
     from core.runtime.coordinator import RuntimeCoordinator
 
@@ -123,96 +121,3 @@ def vm_handle_IbSlotExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
         _get_comm_registry(executor).register(name, obj, "slot")
     _emit_event(executor, "slot_updated", {"name": name, "value": value})
     return obj
-
-
-def vm_handle_IbSpawnStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``spawn fn(...)`` 派生任务。
-
-    两种形态：
-    - ``spawn compute("x")`` —— ``func`` 是 ``IbCall`` 节点：提取被调用者
-      （callee）与实参，spawn 一个运行 ``compute("x")`` 的任务。
-    - ``spawn compute`` / ``spawn fn_var`` —— ``func`` 是可调用对象本身，
-      实参来自 ``node_data["args"]``。
-
-    PT-MT-3 阶段：构造协作式延迟任务句柄（IbTask，join 时在当前 VM 线程
-    求值）。后台线程 / 轻量 VM 实例的并发执行在 PT-MT-7/8 升级执行路径。
-    """
-    from core.runtime.objects.task import IbTask
-    from core.runtime.vm.handlers._shared import _vm_assign_to_target
-
-    func_uid = node_data.get("func")
-    func_data = executor.ec.get_node_data(func_uid) if func_uid else None
-
-    callable_obj = None
-    args = []
-
-    if func_data is not None and func_data.get("_type") == "IbCall":
-        # 形态 1：func 是调用表达式 → 提取被调用者 + 实参
-        callee_uid = func_data.get("func")
-        callable_obj = yield callee_uid
-        for arg_uid in func_data.get("args", []) or []:
-            args.append((yield arg_uid))
-        # 具名实参（spawn compute(x=1) 形态）
-        for kw in func_data.get("keywords", []) or []:
-            kw_val = yield kw.get("value")
-            args.append(kw_val)
-    else:
-        # 形态 2：func 是可调用对象本身 + 独立实参
-        callable_obj = yield func_uid if func_uid else None
-        for arg_uid in node_data.get("args", []) or []:
-            args.append((yield arg_uid))
-        for kw in node_data.get("keywords", []) or []:
-            kw_val = yield kw.get("value")
-            args.append(kw_val)
-
-    coordinator = _get_coordinator(executor)
-    task_cls = executor.registry.get_class("task")
-    task_obj = IbTask(
-        ib_class=task_cls,
-        executor=executor,
-        coordinator=coordinator,
-        callable_obj=callable_obj,
-        args=args,
-    )
-    _emit_event(executor, "task_started", {"node_uid": node_uid})
-
-    target_uid = node_data.get("target")
-    if target_uid:
-        yield from _vm_assign_to_target(executor, target_uid, task_obj, define_only=True)
-    return task_obj
-
-
-def vm_handle_IbJoinStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``join t`` 等待任务完成并取回结果。
-
-    PT-MT-3 阶段：任务为协作式延迟任务（IbTask），join 直接触发求值并返回
-    结果（不经 Waitable 协议——延迟任务未启动时不满足"已完成"前提）。PT-MT-7
-    后台线程执行升级后，此处改为对任务 Waitable yield 挂起等待。
-    """
-    task_uid = node_data.get("task")
-    task_obj = yield task_uid if task_uid else None
-    result = None
-    if task_obj is not None:
-        join = getattr(task_obj, "join", None)
-        if callable(join):
-            result = join()
-        else:
-            result = task_obj
-    _emit_event(executor, "task_done", {"node_uid": node_uid})
-    target_uid = node_data.get("target")
-    if target_uid:
-        from core.runtime.vm.handlers._shared import _vm_assign_to_target
-        yield from _vm_assign_to_target(executor, target_uid, result, define_only=True)
-    return result
-
-
-def vm_handle_IbCancelStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``cancel t`` 请求取消任务（协作式）。"""
-    task_uid = node_data.get("task")
-    task_obj = yield task_uid if task_uid else None
-    if task_obj is not None:
-        cancel = getattr(task_obj, "cancel", None)
-        if callable(cancel):
-            cancel()
-    _emit_event(executor, "task_cancelled", {"node_uid": node_uid})
-    return executor.registry.get_none()

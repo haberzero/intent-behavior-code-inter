@@ -83,14 +83,13 @@ DICT_SPEC         = TypeDef(name="dict",   kind=TypeKind.DICT.value,   is_nullab
 MODULE_SPEC       = TypeDef(name="module", kind=TypeKind.MODULE.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
 # 并发/通信类型规格（运行时多线程主线 PT-MT-*）
-TASK_SPEC    = TypeDef(name="task",   kind=TypeKind.TASK.value,   is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SIGNAL_SPEC  = TypeDef(name="signal", kind=TypeKind.SIGNAL.value,  is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
 # thread —— 线程对象模型方向修正（任务 B/C）引入的线程类型。
-# 与 task 不同：thread 是泛型类型（thread[T]，T 为 join 返回类型），
-# 经 ThreadAxiom 路由（_axiom_name="thread"）。task 将在任务 F 删除。
+# thread 是泛型类型（thread[T]，T 为 join 返回类型），
+# 经 ThreadAxiom 路由（_axiom_name="thread"）。
 THREAD_SPEC  = TypeDef(name="thread", kind=TypeKind.TASK.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 THREAD_SPEC._axiom_name = "thread"
 

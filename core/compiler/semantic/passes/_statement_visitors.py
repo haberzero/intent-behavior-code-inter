@@ -423,69 +423,6 @@ class StatementVisitorsMixin:
         """访问表达式语句"""
         return self.visit(node.value)
 
-    def visit_IbSpawnStmt(self, node: ast.IbSpawnStmt) -> Optional[IbSpec]:
-        """``spawn fn(...)`` 的类型 = task。
-
-        校验被 spawn 的可调用目标可调用；任务句柄类型为 ``task``。
-
-        当 ``func`` 是 ``IbCall``（``spawn compute("x")``）时，被调用者是
-        ``func.func``（可调用表达式），``func`` 整体的类型是调用结果的类型
-        （即任务的返回类型）。
-        """
-        if node.func is not None:
-            if isinstance(node.func, ast.IbCall):
-                callee_type = self.visit(node.func.func)
-                if callee_type is not None and not self._has_call_cap(callee_type):
-                    self.error(
-                        f"spawn: 目标 {callee_type.name if hasattr(callee_type, 'name') else callee_type} "
-                        f"不可调用（spawn 要求函数 / fn 变量 / lambda / behavior）",
-                        node, code=SEM_TYPE_MISMATCH,
-                    )
-                for arg in node.func.args:
-                    self.visit(arg)
-                for kw in node.func.keywords:
-                    self.visit(kw.value)
-            else:
-                func_type = self.visit(node.func)
-                if func_type is not None and not self._has_call_cap(func_type):
-                    self.error(
-                        f"spawn: 目标 {func_type.name if hasattr(func_type, 'name') else func_type} "
-                        f"不可调用（spawn 要求函数 / fn 变量 / lambda / behavior）",
-                        node, code=SEM_TYPE_MISMATCH,
-                    )
-        for arg in node.args:
-            self.visit(arg)
-        for kw in node.keywords:
-            self.visit(kw.value)
-        task_spec = self.registry.resolve("task") or self._any_desc
-        self.bind_type(node, task_spec)
-        return task_spec
-
-    def visit_IbJoinStmt(self, node: ast.IbJoinStmt) -> Optional[IbSpec]:
-        """``join t`` 的类型 = 被 join 任务的函数返回类型（当前保守为 any）。"""
-        if node.task is not None:
-            task_type = self.visit(node.task)
-            if task_type is not None and not self._is_task_type(task_type):
-                self.error(
-                    f"join: 目标类型 {task_type.name if hasattr(task_type, 'name') else task_type} "
-                    f"不是 task（join 要求任务句柄）",
-                    node, code=SEM_TYPE_MISMATCH,
-                )
-        self.bind_type(node, self._any_desc)
-        return self._any_desc
-
-    def visit_IbCancelStmt(self, node: ast.IbCancelStmt) -> Optional[IbSpec]:
-        """``cancel t``：校验目标是 task 类型。"""
-        if node.task is not None:
-            task_type = self.visit(node.task)
-            if task_type is not None and not self._is_task_type(task_type):
-                self.error(
-                    f"cancel: 目标类型 {task_type.name if hasattr(task_type, 'name') else task_type} "
-                    f"不是 task（cancel 要求任务句柄）",
-                    node, code=SEM_TYPE_MISMATCH,
-                )
-        return self._void_desc
-
     def _has_call_cap(self, spec: IbSpec) -> bool:
         """判断 spec 是否具备调用能力。"""
         axiom = self.registry.get_axiom(spec)
@@ -493,10 +430,6 @@ class StatementVisitorsMixin:
             spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_INSTANCE.value,
                           TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value)
         )
-
-    def _is_task_type(self, spec: IbSpec) -> bool:
-        """判断 spec 是否为 task 类型。"""
-        return getattr(spec, "name", "") == "task" or getattr(spec, "kind", "") == TypeKind.TASK.value
 
     def visit_IbAugAssign(self, node: ast.IbAugAssign) -> Optional[IbSpec]:
         """访问增量赋值 (e.g., x += 1)

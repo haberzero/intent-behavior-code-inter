@@ -1,7 +1,7 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from core.runtime.objects.kernel.base import unbox
-from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbLLMUncertain
+from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbValue, IbLLMUncertain
 from ..objects.primitives import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
 from ..objects.file_handle import IbFileHandle
 from ..objects.media_types import audio_from_file, image_from_file, video_from_file
@@ -607,17 +607,25 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
             线程状态直接写入 receiver.fields（与 IbThread 方法读取的键一致），
             使 axiom 自动绑定的 start/join/cancel/is_done 在实例上直接工作。
+
+            实参容器（args=[...]）按 IbList 元素直接取出（保持 IbObject 身份，
+            不 to_native——否则 chan/slot 等值对象会退化为原生快照丢失身份）。
             """
             from core.runtime.objects.thread import IbThread, _FIELDS
             from core.runtime.vm.handlers.comm import _get_coordinator
 
             func_obj = args[0] if len(args) > 0 else registry.get_none()
             args_obj = args[1] if len(args) > 1 else registry.box([])
-            native_args = args_obj.to_native() if isinstance(args_obj, IbObject) else args_obj
-            arg_list = list(native_args) if isinstance(native_args, (list, tuple)) else []
-            for i, a in enumerate(arg_list):
-                if not isinstance(a, IbObject):
-                    arg_list[i] = registry.box(a)
+            if isinstance(args_obj, IbValue) and args_obj.ib_class.name == "list":
+                arg_list = list(args_obj.elements)
+            elif isinstance(args_obj, IbObject):
+                native_args = args_obj.to_native()
+                arg_list = list(native_args) if isinstance(native_args, (list, tuple)) else []
+                for i, a in enumerate(arg_list):
+                    if not isinstance(a, IbObject):
+                        arg_list[i] = registry.box(a)
+            else:
+                arg_list = []
             execution_context = registry.get_execution_context()
             vm = execution_context.vm_executor if execution_context is not None else None
             coordinator = _get_coordinator(vm) if vm is not None else None

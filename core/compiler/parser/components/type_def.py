@@ -49,10 +49,6 @@ class TypeComponent(BaseComponent):
             #   None  — function explicitly returns the None value (assignable to any/Optional[T])
             name_token = self.stream.previous()
             base_type = self._loc(ast.IbName(id="None", ctx='Load'), name_token)
-        elif self.stream.match(TokenType.TASK):
-            # 'task' as a type annotation: task t = spawn ...
-            name_token = self.stream.previous()
-            base_type = self._loc(ast.IbName(id="task", ctx='Load'), name_token)
         elif self.stream.match(TokenType.CHAN):
             # 'chan' as a type annotation: chan[str] c = chan(str, "stream")
             name_token = self.stream.previous()

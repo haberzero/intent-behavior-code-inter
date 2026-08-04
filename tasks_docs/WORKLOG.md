@@ -48,6 +48,32 @@
 
 ---
 
+## 2026-08-04 会话 4：任务 D/E/F 实现（err 类型统一 + 线程清理 + 关键字精简）
+
+### 任务 D：err 类型统一（已完成）
+
+按 THREAD_DESIGN_REVISION §2.6：TaskError（parent Exception）→ TaskCancelled/TaskFailed（parent TaskError）映射 IBCI Exception 子类；make_task_cancelled/make_task_failed 运行时工厂；cancel() 返回 TaskCancelled err（成功取消）/ None（无效）；join() 错误值化进容器；expect() 抛容器内 err 供语言层 try/except 按类型捕获；err 用户可见可继承（class MyTaskError(TaskError) 验证）。测试：test_thread_err.py（5 用例）。
+
+### 任务 E：线程相关清理（已完成）
+
+VP-2（死 _task_handle → handle 全链透传）、F-2（coordinator _tasks 自动清理防泄漏）、F-1（快照补充协调器线程）、疏漏 4（save_state 未完成线程检测）+ save_state 磁盘型误判修复（类对象不再误判为 disk-backed 实例）+ 序列化瞬态线程存根化。测试：test_thread_cleanup.py（4 用例）。
+
+### 任务 F：关键字精简（已完成）
+
+删除 spawn/join/cancel/task 全链 + 废除旧测试 + 重写为 thread 对象模型语法。修复 _thread_init 实参传递 bug（IbList 内 chan/slot 身份保留）。旧语法全部编译失败（验证通过）。
+
+### 变化前后
+- **删除**：`objects/task.py`（IbTask 死代码）、TASK_SPEC/TaskAxiom/IbSpawnStmt/IbJoinStmt/IbCancelStmt/SPAWN/JOIN/CANCEL/TASK TokenType。
+- **修改**：lexer/parser/AST/semantic/VM/spec 全链移除旧关键字；coordinator/snapshot/serializer/service 清理；_thread_init 实参修复。
+- **测试**：重写 test_concurrency_syntax/test_vm_comm/test_vm_instance；新增 test_thread_err/test_thread_cleanup。
+
+**测试**：全量 pytest **1453 passed / 4 skipped** 零回归。
+
+### 待决
+- 无。线程对象模型方向修正（任务 A-F）全部完成。
+
+---
+
 ## 2026-08-04 会话 4：任务 C 调研 + 发现前置机制缺口（用户侧机制不完善）
 
 ### 背景

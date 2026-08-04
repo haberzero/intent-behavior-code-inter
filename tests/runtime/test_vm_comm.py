@@ -8,9 +8,10 @@ PT-MT-3 VM 层并发/通信 e2e 测试。
 - chan 构造 + send/recv（语言面）
 - slot 构造 + set/get（语言面）
 - signal 构造
-- spawn/join（延迟任务模型：join 触发求值）
-- cancel（协作式）
 - pubsub 模式 subscribe（经 IbChannel 底层）
+
+线程（spawn/join/cancel）已被 thread 对象模型取代（任务 C/F），
+其测试见 test_thread_model.py / test_vm_instance.py。
 """
 from tests.conftest import run_ibci
 
@@ -65,33 +66,3 @@ signal s = signal("cancel")
 print("ok")
 """)
         assert lines == ["ok"]
-
-
-class TestSpawnJoinE2E:
-    def test_spawn_join_function(self):
-        lines = run_ibci("""
-func compute(str x) -> int:
-    return 42
-task t = spawn compute("x")
-int r = join t
-print((str)r)
-""")
-        assert lines == ["42"]
-
-    def test_spawn_join_lambda(self):
-        lines = run_ibci("""
-task t = spawn lambda() -> int: 7
-int r = join t
-print((str)r)
-""")
-        assert lines == ["7"]
-
-    def test_cancel_task(self):
-        lines = run_ibci("""
-func compute(str x) -> int:
-    return 42
-task t = spawn compute("x")
-cancel t
-print("cancelled")
-""")
-        assert lines == ["cancelled"]

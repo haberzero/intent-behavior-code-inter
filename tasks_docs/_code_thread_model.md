@@ -118,6 +118,29 @@
 
 测试：新增 `tests/runtime/test_thread_cleanup.py`（4 用例）。全量 pytest **1468 passed / 4 skipped** 零回归。
 
+## 任务 F：关键字精简（已完成 2026-08-04）
+
+按 THREAD_DESIGN_REVISION §2.2 + 任务 F：删除 spawn/join/cancel/task 关键字全链 + 废除旧测试 + 新测试。
+
+**删除（全链）**：
+- **lexer**：`core_scanner.py` KEYWORDS 移除 'spawn'/'join'/'cancel'/'task'；`tokens.py` 移除 SPAWN/JOIN/CANCEL/TASK TokenType。
+- **parser**：`statement.py` 移除 spawn_statement/join_statement/cancel_statement/_parse_spawn_call + 语句起始匹配；`expression.py` 移除 spawn_expr/join_expr + 前缀注册；`type_def.py` 移除 TASK 类型注解；`recognizer.py` 移除 TASK 声明起始。
+- **AST**：`ast.py` 移除 IbSpawnStmt/IbJoinStmt/IbCancelStmt。
+- **semantic**：`_statement_visitors.py` 移除 visit_IbSpawnStmt/visit_IbJoinStmt/visit_IbCancelStmt + 死 `_is_task_type`。
+- **VM**：`comm.py` 移除 vm_handle_IbSpawnStmt/IbJoinStmt/IbCancelStmt；`dispatch.py` 移除注册。
+- **spec**：`specs.py` 移除 TASK_SPEC；`_runtime.py` 移除 TASK_SPEC；`comm.py` 移除 TaskAxiom；`registry.py` 移除注册。
+- **runtime 对象**：删除 `objects/task.py`（IbTask，死代码）。
+
+**废除旧测试 + 重写**：
+- `test_concurrency_syntax.py`：移除 spawn/join/cancel/task 语法/语义/序列化测试，保留 chan/signal/slot。
+- `test_vm_comm.py`：移除 TestSpawnJoinE2E。
+- `test_vm_instance.py`：重写为 thread 对象模型语法（函数/多线程/隔离/cancel/实时输出）。
+
+**修复（实现中发现）**：
+- `_thread_init` 实参传递 bug：`args_obj.to_native()` 使 IbList 内 chan/slot 值对象退化为原生快照丢失身份 → 改为 IbList 元素直接取出（保持 IbObject 身份）。
+
+**验证**：旧 spawn/join/cancel/task 语法全部编译失败（已验证）；新 thread 对象模型测试覆盖。全量 pytest **1453 passed / 4 skipped** 零回归（净减 15：废除旧 spawn/join/cancel/task 测试，新 thread 测试已计入）。
+
 ### C1 实现细节记录（2026-08-04）
 
 - **构造参数名**：`callable`（非关键字）。设计文档原 `fn`/`func` 均与关键字碰撞，按"内部接口设计不违反关键字碰撞"原则裁定弃用。

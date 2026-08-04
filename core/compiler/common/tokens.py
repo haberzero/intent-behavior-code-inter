@@ -58,13 +58,9 @@ class TokenType(Enum):
     AWAIT = auto()
 
     # 并发/通信关键字（运行时多线程主线 PT-MT-*）
-    SPAWN = auto()
-    JOIN = auto()
-    CANCEL = auto()
     CHAN = auto()
     SIGNAL = auto()
     SLOT = auto()
-    TASK = auto()
 
     # 标识符与字面量
     IDENTIFIER = auto()

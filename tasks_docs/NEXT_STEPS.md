@@ -35,7 +35,9 @@
 >
 > **任务 E（线程相关清理）已完成 2026-08-04**——VP-2（死 `_task_handle` 引用 → handle 全链透传）、F-2（coordinator `_tasks` 自动清理防泄漏）、F-1（快照补充协调器线程，单数据源）、疏漏 4（save_state 检测未完成线程抛异常）+ save_state 磁盘型误判修复（类对象不再误判）+ 序列化瞬态线程存根化。VP-1/VP-4/VP-5 随任务 F 删除旧关键字路径一并清除。测试：新增 `tests/runtime/test_thread_cleanup.py`（4 用例），全量 pytest 1468 passed/4 skipped 零回归。
 >
-> **下一步（开工）**：任务 F——关键字精简（删 spawn/join/cancel/task 全链：lexer/parser/AST/semantic/dispatch/serialization）+ 废除旧测试 + 新测试单独制作。
+> **任务 F（关键字精简）已完成 2026-08-04**——删除 spawn/join/cancel/task 全链（lexer/parser/AST/semantic/dispatch/serialization/spec + 删除 objects/task.py）；废除旧 spawn/join/cancel/task 测试并重写为 thread 对象模型语法；修复 `_thread_init` 实参传递 bug（IbList 内 chan/slot 值对象身份保留）。旧 spawn/join/cancel/task 语法全部编译失败（已验证）。全量 pytest 1453 passed/4 skipped 零回归。
+>
+> **🎉 线程对象模型方向修正（任务 A-F）全部完成 2026-08-04**——Optional 配套 → 统一泛型模型 → 线程对象模型（thread[T] + thread_result[T] + err 类型统一）→ 线程清理 → 关键字精简。`thread` 取代 `spawn/join/cancel/task`，async/thread 领域彻底分离。
 
 ---
 
