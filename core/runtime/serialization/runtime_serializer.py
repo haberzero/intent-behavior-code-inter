@@ -188,6 +188,22 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["type_ref"] = str(type_ref) if type_ref is not None else None
             if obj.meta:
                 data["value_meta"] = dict(obj.meta)
+
+        # 线程对象是瞬态（疏漏 4）：序列化为仅含状态信息的存根，
+        # 不递归进入 coordinator（否则经 _interpreter → EC → scope → t
+        # 引用环导致无限递归）。注意线程实例是普通 IbObject（非 IbValue，
+        # 由 instantiate 创建），故按 ib_class.name 匹配而非 isinstance；
+        # 其 to_native 未绑定，直接读 fields 状态（避免经 coordinator 递归）。
+        if obj.ib_class.name == "thread" and not isinstance(obj, IbClass):
+            data["_type"] = "thread_transient"
+            state = obj.fields.get("_state")
+            spawned = obj.fields.get("_spawned")
+            data["state"] = {
+                "state": state,
+                "done": bool(spawned is not None and spawned.is_done),
+            }
+            self.instance_pool[uid] = data
+            return uid
         
         # 根据类型名进行差异化序列化（通过 ib_class.name 而非 isinstance 分派）
         cls_name = obj.ib_class.name

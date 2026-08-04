@@ -175,7 +175,7 @@ class IbThread(IbObject):
         spawned = self.fields.get(_FIELD_SPAWNED)
         if spawned is None:
             return {"state": self.fields.get(_FIELD_STATE), "done": False}
-        return {"state": self.fields.get(_FIELD_STATE), "done": self.is_done()}
+        return {"state": self.fields.get(_FIELD_STATE), "done": bool(spawned.is_done)}
 
     def __repr__(self):
         return f"<Thread state={self.fields.get(_FIELD_STATE)}>"

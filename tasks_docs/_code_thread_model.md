@@ -100,6 +100,24 @@
 
 测试：新增 `tests/runtime/test_thread_err.py`（5 用例）。全量 pytest **1464 passed / 4 skipped** 零回归。
 
+## 任务 E：线程相关清理（已完成 2026-08-04）
+
+按 THREAD_DESIGN_REVISION VP-1~VP-6 + F-1~F-8 处理：
+
+**已完成（coordinator / observability / serializer / save_state）**：
+- **VP-2**：`_drive_generator` 死 `_task_handle` 引用 → 改为显式传入 `handle`（`_run`→`_run_task_body`→`_drive_generator` 全链透传）。
+- **F-2**：`RuntimeCoordinator._tasks` 只增不减 → `spawn` 注册 `add_done_callback` 自动清理（防泄漏）。
+- **F-1**：快照双数据源 → `snapshot.py` 补充从 `RuntimeCoordinator` 收集线程任务（单数据源）。
+- **疏漏 4（save_state 未完成线程检测）**：`save_state` 在 `unfinished_handles()` 非空时抛异常 fail。
+- **save_state 磁盘型误判修复**：`_contains_disk_backed_instance` 把类对象（IbClass）误判为 disk-backed 实例（file_handle/audio/image/video 类常驻 prelude，导致 save_state 永久拒绝）→ 跳过 IbClass。
+- **序列化瞬态线程**：thread 值序列化为存根（`thread_transient`，读 fields 状态），不递归 coordinator（否则经 `_interpreter → EC → scope → t` 引用环无限递归）；修正 `IbThread.to_native` 返回原生 bool。
+
+**随任务 F 删除（旧 spawn/join/cancel 关键字路径）**：
+- VP-1（join 阻塞式）、VP-4（except:pass 兜底）、VP-5（TaskAxiom 无方法表面）——位于旧 comm.py handler / TaskAxiom，任务 F 删除关键字时一并清除。
+- VP-3（cancel 覆盖用户函数路径缺失）、VP-6（完成后 cancel 覆盖结果）——经复核，VP-6 已有 `not self._future.done()` 守卫；VP-3 属协作式取消设计边界（纯 CPU 用户函数无可挂起点），记录为设计取舍，随任务 F 清理评估。
+
+测试：新增 `tests/runtime/test_thread_cleanup.py`（4 用例）。全量 pytest **1468 passed / 4 skipped** 零回归。
+
 ### C1 实现细节记录（2026-08-04）
 
 - **构造参数名**：`callable`（非关键字）。设计文档原 `fn`/`func` 均与关键字碰撞，按"内部接口设计不违反关键字碰撞"原则裁定弃用。

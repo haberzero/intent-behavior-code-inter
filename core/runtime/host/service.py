@@ -56,7 +56,14 @@ class HostService(IHostService):
 
     @staticmethod
     def _contains_disk_backed_instance(execution_context: IExecutionContext) -> bool:
-        """扫描当前及外层作用域，检查是否存在 disk-backed 实例（file/media）。"""
+        """扫描当前及外层作用域，检查是否存在 disk-backed 实例（file/media）。
+
+        仅检查**实例**（值为 IbClass 的类型对象不算——类是类型定义，非
+        disk-backed 数据）；class file_handle/audio/image/video 的类对象
+        常驻 prelude，若误判会导致 save_state 永久拒绝。
+        """
+        from core.runtime.objects.kernel.ib_class import IbClass
+
         runtime_context = getattr(execution_context, "runtime_context", None)
         if runtime_context is None:
             return False
@@ -65,6 +72,9 @@ class HostService(IHostService):
             for sym in scope.get_all_symbols().values():
                 val = sym.value
                 if val is None:
+                    continue
+                if isinstance(val, IbClass):
+                    # 类型对象（类）不是实例，跳过。
                     continue
                 ib_class = getattr(val, "ib_class", None)
                 spec = getattr(ib_class, "spec", None)
@@ -88,6 +98,18 @@ class HostService(IHostService):
                 "active file_handle/audio/image/video variables. "
                 "Use file.write to persist artifacts explicitly."
             )
+
+        # 疏漏 4：线程对象/容器是瞬态；save_state 时检测到未完成线程直接失败。
+        runtime_context = getattr(self.execution_context, "runtime_context", None)
+        coordinator = getattr(runtime_context, "_runtime_coordinator", None) if runtime_context is not None else None
+        if coordinator is not None:
+            unfinished = coordinator.unfinished_handles()
+            if unfinished:
+                raise InterpreterError(
+                    "save_state is not supported while threads are running: "
+                    f"unfinished thread(s) {unfinished}. "
+                    "Join or cancel all threads before saving state."
+                )
 
         data = self.snapshot()
 

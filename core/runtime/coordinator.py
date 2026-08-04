@@ -84,6 +84,7 @@ class SpawnedTask:
                 self._callable,
                 self._args,
                 cancel_event=self._cancelled,
+                handle=self._handle,
             )
             self._future.set_result(result)
         except TaskCancelled as e:
@@ -132,7 +133,7 @@ class SpawnedTask:
         return {
             "handle": self._handle,
             "done": self.is_done,
-            "cancelled": self._cancelled,
+            "cancelled": self._cancelled.is_set(),
         }
 
 
@@ -141,6 +142,7 @@ def _run_task_body(
     callable_obj: Any,
     args: List[Any],
     cancel_event: Optional[threading.Event] = None,
+    handle: str = "",
 ) -> Any:
     """在任务本地执行上下文中驱动目标函数体，返回结果。
 
@@ -151,6 +153,9 @@ def _run_task_body(
     3. 新建任务本地 ``VMExecutor`` 绑定到该 EC。
     4. 若可调用是 ``IbUserFunction``：经其 ``call()`` 驱动（内部 run_body）。
        否则（lambda/fn_callable/behavior）经 ``_vm_call_fn_callable`` CPS 驱动。
+
+    ``handle``：任务句柄标识，用于协作式取消错误上报（不再依赖失效的
+    ``_task_handle`` 属性读取）。
     """
     from core.runtime.interpreter.runtime_context import RuntimeContextImpl
     from core.runtime.interpreter.execution_context import ExecutionContextImpl
@@ -229,11 +234,11 @@ def _run_task_body(
 
             if callable_obj.ib_class.name == "behavior":
                 # behavior：经 CPS 驱动
-                result = _run_behavior_cps(task_vm, callable_obj, args, cancel_event=cancel_event)
+                result = _run_behavior_cps(task_vm, callable_obj, args, cancel_event=cancel_event, handle=handle)
                 return result
             # fn_callable（lambda/snapshot）：经 CPS 驱动
             gen = _vm_call_fn_callable(task_vm, callable_obj, args)
-            return _drive_generator(task_vm, gen, cancel_event=cancel_event)
+            return _drive_generator(task_vm, gen, cancel_event=cancel_event, handle=handle)
         # 兜底：原生函数 / 其它可调用
         if hasattr(callable_obj, "call"):
             return callable_obj.call(registry.get_none(), args)
@@ -245,15 +250,15 @@ def _run_task_body(
         reset_current_frame(frame_token)
 
 
-def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any], cancel_event: Optional[threading.Event] = None) -> Any:
+def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any], cancel_event: Optional[threading.Event] = None, handle: str = "") -> Any:
     """在任务本地 VM 中 CPS 驱动 behavior 表达式。"""
     from core.runtime.vm.handlers._shared import _vm_invoke_behavior
 
     gen = _vm_invoke_behavior(task_vm, behavior, args)
-    return _drive_generator(task_vm, gen, cancel_event=cancel_event)
+    return _drive_generator(task_vm, gen, cancel_event=cancel_event, handle=handle)
 
 
-def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_event: Optional[threading.Event] = None) -> Any:
+def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_event: Optional[threading.Event] = None, handle: str = "") -> Any:
     """驱动一个 CPS 生成器到完成（阻塞等待每个 Waitable）。
 
     任务线程内使用：对 LLM Future / 通信 Channel recv 等 Waitable 阻塞等待。
@@ -263,13 +268,13 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
     uid）经任务本地 VM 求值后恢复。
 
     协作式取消：每个挂起点（Waitable 等待 / 子节点驱动前）检查
-    ``cancel_event``，命中即抛 ``TaskCancelled``。
+    ``cancel_event``，命中即抛 ``TaskCancelled``。``handle`` 为任务句柄标识
+    （由调用方传入，不再读取失效的 ``_task_handle`` 属性）。
     """
     from core.runtime.shared.waitable import Waitable
 
     def _check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():
-            handle = getattr(task_vm, "_task_handle", "") or ""
             raise TaskCancelled(handle)
 
     def _step(val):
@@ -307,11 +312,26 @@ class RuntimeCoordinator:
         self._lock = threading.Lock()
 
     def spawn(self, callable_obj: Any, args: Optional[List[Any]] = None) -> SpawnedTask:
-        """在后台线程运行目标函数，返回任务句柄。"""
+        """在后台线程运行目标函数，返回任务句柄。
+
+        任务完成（正常/失败/取消）后自动从 ``_tasks`` 移除，防止句柄表
+        无限增长（资源生命周期，F-2）。
+        """
         task = SpawnedTask(self._interpreter, callable_obj, args).start()
         with self._lock:
             self._tasks[task.handle] = task
+        self._schedule_cleanup(task)
         return task
+
+    def _schedule_cleanup(self, task: SpawnedTask) -> None:
+        """在任务完成回调中移除自身（防泄漏）。"""
+        try:
+            task._future.add_done_callback(
+                lambda fut: self.cleanup(task.handle)
+            )
+        except Exception:
+            # add_done_callback 已取消/完成时不应失败；兜底保护防注册失败。
+            pass
 
     def lookup(self, handle: str) -> Optional[SpawnedTask]:
         with self._lock:
@@ -335,6 +355,11 @@ class RuntimeCoordinator:
     def snapshot(self) -> list:
         with self._lock:
             return [t.to_dict() for t in self._tasks.values()]
+
+    def unfinished_handles(self) -> List[str]:
+        """返回所有未完成任务的句柄（疏漏 4：save_state 检测用）。"""
+        with self._lock:
+            return [h for h, t in self._tasks.items() if not t.is_done]
 
     def cleanup(self, handle: str) -> None:
         with self._lock:
