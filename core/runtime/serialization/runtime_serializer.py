@@ -6,6 +6,7 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.enums import StorageModel
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
+from core.runtime.objects.primitives import IbOptional
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent import IbIntent
 from core.runtime.objects.intent_context import IbIntentContext
@@ -244,6 +245,11 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif isinstance(obj, IbValue) and cls_name == "dict":
             data["_type"] = "dict"
             data["fields"] = {str(k): self._process_value(v) for k, v in obj.fields.items()}
+
+        elif isinstance(obj, IbValue) and cls_name == "Optional":
+            data["_type"] = "optional"
+            data["is_some"] = obj._is_some
+            data["inner"] = self._process_value(obj._inner) if obj._is_some else None
             
         elif isinstance(obj, IbModule):
             data["_type"] = "module"
@@ -544,6 +550,12 @@ class RuntimeDeserializer:
             obj = self.factory.create_dict({})
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
+
+        elif _type == "optional":
+            is_some = data.get("is_some", False)
+            inner = self._deserialize_value(data.get("inner")) if is_some else None
+            obj = IbOptional(ib_class, inner, is_some)
+            self.instance_cache[uid] = obj
             
         elif _type == "module":
             if data.get("scope_native"):

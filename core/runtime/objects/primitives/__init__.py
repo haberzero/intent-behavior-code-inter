@@ -4,6 +4,7 @@ from .strings import IbString
 from .exceptions import IbException
 from .collections import IbList, IbTuple, IbDict
 from .callables import IbFnCallable, IbBehavior
+from .optional import IbOptional
 from ..media_types import IbAudio, IbImage, IbVideo
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "IbDict",
     "IbFnCallable",
     "IbBehavior",
+    "IbOptional",
     "IbAudio",
     "IbImage",
     "IbVideo",

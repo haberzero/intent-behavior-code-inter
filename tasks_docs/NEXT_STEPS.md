@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-04（线程对象模型方向修正已授权未实现，任务 A-F 待开工；PT-MT-1~8 已全部完成）
+> **最后更新**：2026-08-04（任务 A 已完成；任务 B 待开工；PT-MT-1~8 已全部完成）
 ---
 
 ## 🔴 当前主线：线程对象模型方向修正（已授权，待实现）
@@ -25,7 +25,9 @@
 >
 > **约束**：大范围重构已授权（可推翻/删除既有代码）；save_state 检测未完成线程则抛异常 fail；旧测试废除。
 >
-> **下一步（开工）**：任务 A——Optional 配套完整实现（运行时 IbOptional + is_some/unwrap/or_else）。
+> **进度**：任务 A（Optional 配套完整实现）**已完成 2026-08-04**——运行时 `IbOptional` + is_some/unwrap/or_else + 绑定入口单一化（`_wrap_optional`）+ Optional 基础可赋值性 + 值协议 + 序列化。测试：新增 `tests/runtime/test_optional_runtime.py`（17 用例），全量 pytest 1426 passed/4 skipped 零回归。
+>
+> **下一步（开工）**：任务 B——统一泛型模型（内置泛型类型声明正式机制，thread[T] 首个消费者）。
 
 ---
 

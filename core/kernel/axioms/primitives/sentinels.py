@@ -116,6 +116,9 @@ class OptionalAxiom(BaseAxiom):
             "unwrap": _m("unwrap", ret="any"),
             "or_else": _m("or_else", params=["any"], ret="any"),
             "is_some": _m("is_some", ret="bool"),
+            "to_bool": _m("to_bool", ret="bool"),
+            "cast_to": _m("cast_to", params=["any"], ret="any"),
+            "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
 
     def is_compatible(self, other_name: str) -> bool:

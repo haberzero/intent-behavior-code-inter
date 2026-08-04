@@ -42,6 +42,9 @@ class _AssignabilityMixin:
                 return True
             if src.kind == TypeKind.OPTIONAL.value:
                 inner_src = self.resolve(src.wrapped_type.head, src.wrapped_type.module) or self.resolve("any")
+                # 基础 Optional（wrapped=any）缺失类型精度，可赋值给任何 Optional[T]。
+                if inner_src.name == "any":
+                    return True
                 return self.is_assignable(inner_src, inner_target, _visited)
             return self.is_assignable(src, inner_target, _visited)
 

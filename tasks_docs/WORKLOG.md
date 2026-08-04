@@ -218,3 +218,37 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 - 同步 `NEXT_STEPS.md`（当前主线改为方向修正任务 A-F）+ `PENDING_TASKS.md`（PT-MT 系列标完成 + 记录方向修正）。
 
 > 注：用户两次纠正 design-philosophy 提炼方向——第一次误提炼为 IBCI 语言特性（不合格），第二次才对准"系统级统一性"（碎片化/设计语言/设计思路/机制/配合模式/一致性/宏观反思/命名）。此为重要教训：提炼用户工作哲学应抓**宏观元层面**（系统统一性），而非项目专属特性。
+
+---
+
+## 2026-08-04 会话 3：任务 A — Optional 配套完整实现（自主实现）
+
+### 背景
+
+按 `THREAD_DESIGN_REVISION.md` 任务 A 实施。查证现状：Optional 编译期（`Optional[T]` spec 特化、`resolve_member` 返回包装类型、空安全编译期校验、artifact 还原）已完整；**运行时无 `IbOptional`**——`Optional[int] x = None` 是裸 `IbNone`，`x.is_some()` 运行时失败（"Object of type 'None' has no method '__call__'"）。
+
+### 设计决策
+
+1. **`IbOptional` 运行时值类**（`core/runtime/objects/primitives/optional.py`，`@register_ib_type("Optional")`）：包装内层值 + `is_some` 标志。方法表面 `is_some`/`unwrap`/`or_else` 由 `OptionalAxiom` 声明，经 `primitive_initializer` 的 axiom-driven auto-bind 自动绑定到语言层（复用既有 spec/axiom/factory 基础设施，符合"机制同构"）。
+2. **绑定入口单一化**：`ScopeImpl` 新增 `_wrap_optional(value, declared_type)`——当 `declared_type.kind == OPTIONAL` 且值非 `IbOptional` 时包装为 `IbOptional`（幂等，不重复包装）。在 `define`/`assign`/`assign_by_uid` 三处调用（覆盖变量定义、重赋值、函数参数、LLMFuture 解析回写）。这是 Optional 运行时值的**单一权威入口**（design-philosophy：单一权威源，反碎片化）。
+3. **`Optional` 基础可赋值性**：`_assignability.py` 中 `Optional`（wrapped=any）→ `Optional[T]` 返回 True（复制 Optional 场景 `Optional[int] y = x` 需要）。否则基础 Optional 无法赋值给特定 Optional[int]。
+4. **值协议补齐**：`OptionalAxiom.get_method_specs()` 增加 `to_bool`/`cast_to`/`__to_prompt__`（auto-bind 只绑定 axiom 声明的方法，`to_bool` 若不声明会落到基类 Object 默认 True）。
+5. **序列化**：serializer 增加 `_type=="optional"`（is_some + inner），deserializer 增加对应分支。
+
+### 变化前后
+
+**实现（新增）**：
+- `core/runtime/objects/primitives/optional.py`（IbOptional：is_some/unwrap/or_else/to_native/__to_prompt__/to_bool/cast_to/receive(__eq__/__ne__)/serialize_for_debug）
+- `tests/runtime/test_optional_runtime.py`（17 用例：is_some/unwrap/or_else/复制/重赋值/类型覆盖/空 unwrap fail-fast/真值/序列化 round-trip）
+
+**实现（修改）**：
+- `core/runtime/objects/primitives/__init__.py`（注册 IbOptional）
+- `core/runtime/interpreter/runtime_context.py`（`_wrap_optional` + define/assign/assign_by_uid 三处接入 + 导入）
+- `core/kernel/spec/registry/_assignability.py`（Optional 基础 → Optional[T] 可赋值）
+- `core/kernel/axioms/primitives/sentinels.py`（OptionalAxiom 增加 to_bool/cast_to/__to_prompt__ 方法表面）
+- `core/runtime/serialization/runtime_serializer.py`（serialize + deserialize optional 分支）
+
+**测试**：全量 pytest **1426 passed / 4 skipped**（1409 + 17 新增，零回归）。
+
+### 待决
+- 无。任务 A 完成，校验通过。下一步任务 B（统一泛型模型）。

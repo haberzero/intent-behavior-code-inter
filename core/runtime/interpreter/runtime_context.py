@@ -11,8 +11,9 @@ from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction
+from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction, IbNone
 from core.runtime.objects.kernel.base import unbox
+from core.runtime.objects.primitives import IbOptional
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.cell import IbCell
@@ -91,11 +92,31 @@ class ScopeImpl:
                     error_code=RUN_TYPE_MISMATCH
                 )
 
+    def _wrap_optional(self, value: Any, declared_type: Optional[Any]) -> Any:
+        """将值按 Optional 声明类型包装为 ``IbOptional``（幂等）。
+
+        当 ``declared_type`` 是 Optional 类型（且值尚未是 ``IbOptional``）时，
+        把值包装进 ``IbOptional``；否则原样返回。这是 Optional 运行时值的
+        单一绑定入口——所有变量定义/赋值/函数参数/LLMFuture 解析均经此包装。
+        """
+        if declared_type is None or not isinstance(declared_type, IbSpec):
+            return value
+        if declared_type.kind != TypeKind.OPTIONAL.value:
+            return value
+        if isinstance(value, IbOptional):
+            return value
+        optional_class = self._registry.get_class("Optional")
+        if optional_class is None:
+            return value
+        is_some = not isinstance(value, IbNone)
+        return IbOptional(optional_class, value, is_some)
+
     def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_intrinsic: bool = False) -> None:
         """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""
         boxed_value = self._registry.box(value)
         
         self._check_type(boxed_value, declared_type, name or uid or "unknown")
+        boxed_value = self._wrap_optional(boxed_value, declared_type)
 
         if not force:
             if name in self._symbols and self._symbols[name].is_const:
@@ -131,7 +152,7 @@ class ScopeImpl:
             # 运行时类型校验
             self._check_type(boxed_value, symbol.declared_type, name)
             
-            symbol.value = boxed_value
+            symbol.value = self._wrap_optional(boxed_value, symbol.declared_type)
             symbol.current_type = type(boxed_value)
             # Cell 变量赋值时同步更新共享 IbCell，使持有该 Cell 的
             # lambda 闭包在下次调用时读到最新值。
@@ -154,7 +175,7 @@ class ScopeImpl:
             if not skip_type_check:
                 self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
             
-            symbol.value = boxed_value
+            symbol.value = self._wrap_optional(boxed_value, symbol.declared_type)
             symbol.current_type = type(boxed_value)
             # Cell 变量赋值时同步更新共享 IbCell。
             if symbol.cell is not None:
