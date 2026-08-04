@@ -6,6 +6,50 @@
 
 ---
 
+## 2026-08-04 会话 6：通信领域设计完善 —— 阶段 1 实锤 bug 修复（B1/B2/B4，自主实现）
+
+### 背景
+
+按 `_HANDOFF.md` 与 `COMMS_DESIGN_REVIEW.md` 阶段 1 开工。用户开启无人值守运行；另明确工作约束：**所有 subagent 工作（含 review）仅允许使用 general agent，不使用 explore/reviewer 等特化 agent**（本会话后续一律遵守）。
+
+### 变化前后
+
+**B1 —— thread_result 序列化往返丢数据（high）**
+- 根因：`IbThreadResult` 继承 `IbObject`（非 `IbValue`），`runtime_serializer.py:270` 守卫 `isinstance(obj, IbValue) and cls_name == "thread_result"` 永不触发 → 落入通用 object 分支，序列化为 `{"_type":"object","fields":{}}`，value/error/status 静默丢失。
+- 变化：守卫改为按 `ib_class.name` 分发（`cls_name == "thread_result" and not isinstance(obj, IbClass)`），与 `thread_transient` 分支同模式。反序列化分支（`_type=="thread_result"`）本已存在，故往返即打通。
+- 前向兼容：阶段 2 若将 thread_result 升级为 IbValue，本守卫仍有效（不依赖 isinstance IbValue）。
+- 测试：`test_runtime_serialization.py` 新增 `TestThreadResultSerializationRoundTrip`（3 用例：结构断言 `_type=="thread_result"` + 成功往返保真 value/status + 失败往返保真 status/error）。
+
+**B2 —— 循环导入（high）**
+- 根因：`primitives/__init__.py:8-9` 反向再导出包外兄弟模块（`..thread` / `..thread_result`），且**零消费者**（grep 全仓确认）。链：`thread_result → primitives.optional → primitives/__init__ → ..thread_result`（thread_result 部分初始化 → ImportError）。
+- 变化：
+  1. `primitives/__init__.py` 删除 `..thread` / `..thread_result` 导入及 `__all__` 条目（分层违规移除）。
+  2. `primitive_initializer.py` 模块级新增 `from ..objects.thread import IbThread` / `from ..objects.thread_result import IbThreadResult`（确保 `@register_ib_type` 在公理自动化绑定前执行——对齐 line 8 `IbIntent` 先例；这是注册时序的显式归属地）。
+  3. `_thread_init` 内冗余局部导入 `from core.runtime.objects.thread import IbThread, _FIELDS` 删除（模块级导入已覆盖，`_FIELDS` 本未使用）。
+- 测试：`test_thread_cleanup.py` 新增干净解释器（subprocess）直接导入 `thread_result`/`thread` 回归测试（旧缺陷需全新 sys.modules 才可复现，进程内测试无法锁定）。
+
+**B4 —— VP-4 except:pass 兜底未修（medium）**
+- 根因：`comm.py:32-35/51-54` 用 `try/except Exception: pass` 包裹 `rc._comm_registry`/`rc._runtime_coordinator` 的 setattr——`RuntimeContextImpl` 无 `__slots__`，setattr 恒成功；失败必为构造路径真错（如无 runtime_context），被静默吞掉 → 注册表/协调器每次调用重建。
+- 变化：删除 try/except，直接 setattr（fail-fast）。`_emit_event` 的两处 except 属"可观测性尽力而为"设计（未在 B4 审查范围），保留不动。
+- 测试：无新增（既有 `test_thread_cleanup`/`test_vm_comm` 已覆盖构造路径；全量回归零失败）。
+
+### 测试与验证
+
+- 阶段 1 相关：`test_runtime_serialization.py` + `test_thread_cleanup.py` + thread 系列 + `test_vm_comm.py` + `test_generic_model.py` = 57 passed。
+- 全量：`python -m pytest tests/` = **1457 passed / 4 skipped**（+4，零回归）。
+
+### 决策记录
+
+- 阶段 1 与阶段 2 的边界：B1 只修序列化分派（真正根因"值对象机制不统一"属 G1，阶段 2 架构级处理）。此守卫修复非症状层打补丁——它修正了错误的分派谓词，无双通道、无 compat shim；且前向兼容阶段 2 升级。
+- B2 采用"primitive_initializer 显式导入"而非"objects/__init__.py 聚合"：前者对齐 `IbIntent` 既存先例（注册时序显式归属 bootstrap 站点），后者会使 objects 包导入即加载全部子模块、耦合面过大。两方案均符合"单一权威源"。
+- subagent 约束（用户 2026-08-04）：后续 review/explore 类工作一律使用 general agent。
+
+### 待决
+
+- 无。阶段 2（统一值对象机制）为下一项，方案需设计审查（候选：值对象专用构造入口 / `__init__` 返回实例 / factory 注入）。
+
+---
+
 ## 2026-08-04 会话 5：通信领域设计完善与统一化 —— 全方位审查（自主推进）
 
 ### 背景
