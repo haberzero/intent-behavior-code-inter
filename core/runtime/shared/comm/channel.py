@@ -70,15 +70,19 @@ class ChannelCore:
         self._primary.send(item)
 
     def send_nowait(self, item: Any) -> bool:
-        """非阻塞发送。False = 满/已关闭。pubsub 下任一订阅者满即 False。"""
+        """非阻塞发送。False = 满/已关闭。pubsub 下任一订阅者满即 False。
+
+        G7 语义修正：pubsub 无订阅者时返回 ``False``（消息未投递给任何人，
+        与 message/stream 模式 "False=拒绝" 契约对齐——不再把"被零人接收"
+        报告为投递成功）。
+        """
         if self._mode == "pubsub":
             with self._lock:
                 if self._closed_flag():
                     return False
                 subscribers = list(self._subscribers.values())
             if not subscribers:
-                # 无订阅者：丢弃（广播无听众语义），返回 True 不阻塞
-                return True
+                return False
             ok = True
             for sub in subscribers:
                 if not sub.send_nowait(item):
@@ -93,19 +97,38 @@ class ChannelCore:
     # ------------------------------------------------------------------ #
 
     def recv(self) -> Any:
-        """阻塞接收。已关闭且空抛 ``CommClosedError``。"""
+        """阻塞接收。已关闭且空抛 ``CommClosedError``。
+
+        G7：pubsub 通道是广播器（无主缓冲），消费须经 ``subscribe()`` 取得
+        订阅者端点——直接 recv 属用法错误，明确报错而非误导性的 CommClosedError。
+        """
+        if self._mode == "pubsub":
+            raise ValueError(
+                "recv() is invalid for pubsub channels: use subscribe() "
+                "to obtain a subscriber consumer endpoint"
+            )
         if self._primary is None:
             raise CommClosedError()
         return self._primary.recv()
 
     def recv_nowait(self):
-        """非阻塞接收，返回 ``(ok, item)``。"""
+        """非阻塞接收，返回 ``(ok, item)``。pubsub 通道同 recv 用法约束。"""
+        if self._mode == "pubsub":
+            raise ValueError(
+                "recv_nowait() is invalid for pubsub channels: use subscribe() "
+                "to obtain a subscriber consumer endpoint"
+            )
         if self._primary is None:
             return False, None
         return self._primary.recv_nowait()
 
-    def subscribe(self) -> "ChannelCore":
+    def subscribe(self, size: int = 0) -> "_SubscriberView":
         """pubsub 模式：返回订阅者专属队列视图（fan-out）。
+
+        ``size``：订阅者队列容量（G7——``可配置`` 落地；0=无界，>0 有界，
+        满时 ``send_nowait`` 返回 False）。订阅者队列无失效/驱逐机制，
+        有界模式由消费方及时 ``recv`` 防积压；无界模式是广播信箱的设计选择，
+        调用方须自行保证消费速率。
 
         非 pubsub 模式调用抛 ``ValueError``（subscribe 是 pubsub 专用）。
         """
@@ -118,7 +141,7 @@ class ChannelCore:
                 raise CommClosedError()
             sub_id = self._next_sub_id
             self._next_sub_id += 1
-            sub = CommBuffer(0)  # 订阅者队列无界（设计 D5：默认无界，可配置）
+            sub = CommBuffer(size)
             self._subscribers[sub_id] = sub
             return _SubscriberView(self, sub, sub_id)
 

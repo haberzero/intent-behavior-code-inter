@@ -164,6 +164,29 @@ class TestChannelPubSub:
         c.close()
         assert s.closed
 
+    def test_pubsub_send_nowait_no_subscribers_returns_false(self):
+        """G7：无订阅者时消息未投递给任何人 → send_nowait 返回 False（非丢弃报成功）。"""
+        c = ChannelCore(mode="pubsub")
+        assert c.send_nowait("m") is False
+
+    def test_pubsub_bounded_subscriber(self):
+        """G7：subscribe(size) 可配置订阅者队列容量（size=0 无界，>0 有界）。"""
+        c = ChannelCore(mode="pubsub")
+        s = c.subscribe(size=1)
+        c.send("a")
+        assert c.send_nowait("b") is False  # 订阅者队列满，未投递
+        assert s.recv() == "a"
+        assert c.send_nowait("b") is True   # 消费后可再投递
+        assert s.recv() == "b"
+
+    def test_pubsub_recv_raises_clear_error(self):
+        """G7：pubsub 通道是广播器，直接 recv 明确报错（而非误导性 CommClosedError）。"""
+        c = ChannelCore(mode="pubsub")
+        with pytest.raises(ValueError):
+            c.recv()
+        with pytest.raises(ValueError):
+            c.recv_nowait()
+
     def test_invalid_mode(self):
         with pytest.raises(ValueError):
             ChannelCore(mode="bogus")

@@ -55,3 +55,47 @@ int v = st.get()
 print((str)v)
 """)
         assert lines == ["42"]
+
+
+class TestChannelPubSubE2E:
+    """G7：pubsub 语言层打通（subscribe → subscriber 端点 + send_nowait 语义）。"""
+
+    def test_pubsub_subscribe_recv(self):
+        lines = run_ibci("""
+chan c = chan(str, "pubsub")
+subscriber sub = c.subscribe()
+c.send("hello")
+str msg = sub.recv()
+print(msg)
+""")
+        assert lines == ["hello"]
+
+    def test_pubsub_fanout(self):
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber a = c.subscribe()
+subscriber b = c.subscribe()
+c.send(7)
+print((str)a.recv())
+print((str)b.recv())
+""")
+        assert lines == ["7", "7"]
+
+    def test_pubsub_send_nowait_no_subscribers_false(self):
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+bool r = c.send_nowait(1)
+print((str)r)
+""")
+        assert lines == ["False"]
+
+    def test_pubsub_bounded_subscriber(self):
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber sub = c.subscribe(1)
+c.send(1)
+bool r = c.send_nowait(2)
+print((str)r)
+print((str)sub.recv())
+""")
+        assert lines == ["False", "1"]

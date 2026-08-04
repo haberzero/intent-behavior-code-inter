@@ -85,6 +85,7 @@ MODULE_SPEC       = TypeDef(name="module", kind=TypeKind.MODULE.value, is_nullab
 # 并发/通信类型规格（运行时多线程主线 PT-MT-*）
 CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+SUBSCRIBER_SPEC = TypeDef(name="subscriber", kind=TypeKind.SUBSCRIBER.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
 # thread —— 线程对象模型方向修正（任务 B/C）引入的线程类型。
 # thread 是泛型类型（thread[T]，T 为 join 返回类型），

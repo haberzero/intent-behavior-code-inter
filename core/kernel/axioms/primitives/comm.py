@@ -92,8 +92,9 @@ class ThreadResultAxiom(BaseAxiom):
 class ChannelAxiom(BaseAxiom):
     """公理：chan 类型（数据流通道）。
 
-    ``chan[T]`` 泛型：元素类型经 value_type 承载。提供 send/recv/close
-    等方法表面供语义层类型检查。
+    ``chan[T]`` 泛型：元素类型经 value_type 承载。提供 send/recv/subscribe/close
+    等方法表面供语义层类型检查。``subscribe()`` 返回 subscriber 消费者端点
+    （pubsub 模式专用；G7 语言层打通）。
     """
 
     @property
@@ -103,13 +104,36 @@ class ChannelAxiom(BaseAxiom):
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
             "send": _m("send", params=["any"], ret="void", mutating=True),
+            "send_nowait": _m("send_nowait", params=["any"], ret="bool"),
+            "recv": _m("recv", ret="any"),
+            "recv_nonblocking": _m("recv_nonblocking", ret="any"),
+            "subscribe": _m("subscribe", params=["int"], ret="subscriber"),
+            "close": _m("close", ret="void", mutating=True),
+        }
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name == "chan" or other_name.startswith("chan[")
+
+
+class SubscriberAxiom(BaseAxiom):
+    """公理：subscriber 类型（pubsub 订阅者消费者端点，G7）。
+
+    ``chan(pubsub).subscribe()`` 的返回值。提供 recv/recv_nonblocking/close。
+    """
+
+    @property
+    def name(self) -> str:
+        return "subscriber"
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
             "recv": _m("recv", ret="any"),
             "recv_nonblocking": _m("recv_nonblocking", ret="any"),
             "close": _m("close", ret="void", mutating=True),
         }
 
     def is_compatible(self, other_name: str) -> bool:
-        return other_name == "chan" or other_name.startswith("chan[")
+        return other_name == "subscriber"
 
 
 class SlotAxiom(BaseAxiom):

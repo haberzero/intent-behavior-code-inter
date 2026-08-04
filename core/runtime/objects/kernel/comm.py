@@ -61,6 +61,16 @@ class IbChannel(IbObject):
             return self.ib_class.registry.get_none()
         return self.ib_class.registry.box(val)
 
+    def subscribe(self, size=0) -> "IbObject":
+        """pubsub 模式订阅：返回订阅者消费者端点（IbSubscriber）。
+
+        ``size``：订阅者队列容量（0=无界默认，>0 有界）。
+        非 pubsub 通道调用抛 ``ValueError``。
+        """
+        view = self.core.subscribe(unbox(size))
+        cls = self.ib_class.registry.get_class("subscriber")
+        return IbSubscriber(ib_class=cls, view=view)
+
     # -- 生命周期 / 内省 ---------------------------------------- #
 
     def close(self) -> None:
@@ -78,6 +88,45 @@ class IbChannel(IbObject):
 
     def __repr__(self):
         return f"<Channel mode={self.core.mode} name={self.core.name}>"
+
+
+@register_ib_type("subscriber")
+class IbSubscriber(IbObject):
+    """IBCI 语言层的 pubsub 订阅者值对象（包装 ``_SubscriberView``）。
+
+    ``chan(T, "pubsub")`` 是广播器；``c.subscribe()`` 返回本订阅者端点，
+    提供独立消费队列（recv / recv_nonblocking / close）。
+    """
+
+    __slots__ = ("view",)
+
+    def __init__(self, ib_class: IbClass, view: Any):
+        super().__init__(ib_class)
+        self.view = view
+
+    def recv(self):
+        """阻塞接收订阅队列数据。"""
+        return self.ib_class.registry.box(self.view.recv())
+
+    def recv_nonblocking(self) -> "IbObject":
+        """非阻塞接收；无数据时返回 None。"""
+        ok, val = self.view.recv_nowait()
+        if not ok:
+            return self.ib_class.registry.get_none()
+        return self.ib_class.registry.box(val)
+
+    def close(self) -> None:
+        """关闭订阅者端点（并注销于通道）。幂等。"""
+        self.view.close()
+
+    def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        return self.view.snapshot()
+
+    def __to_prompt__(self) -> str:
+        return "<subscriber>"
+
+    def __repr__(self):
+        return f"<Subscriber channel_closed={self.view.closed}>"
 
 
 @register_ib_type("slot")
