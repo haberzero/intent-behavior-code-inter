@@ -2,7 +2,7 @@
 
 > **状态**：设计决策已定，**用户已授权实现（2026-08-04）**。本文档完整记录本轮讨论的所有细节与用户裁定，作为实施（统一泛型模型 + 线程对象模型 + thread_result 容器 + err 类型 + Optional 配套）的唯一决策依据。
 > **授权记录**：2026-08-04 用户授权实现（含 Optional 配套的完整实现）；"授权实现。完善相关决策文档。"
-> **前置设计**：`tasks_docs/THREADING_DESIGN.md`（主线原裁定）、`tasks_docs/THREADING_DESIGN_DETAIL.md`（PT-MT-1 详细设计）。
+> **前置设计**：PT-MT-1~8 主线设计（原 `THREADING_DESIGN.md` / `THREADING_DESIGN_DETAIL.md` 已删除归档，作为历史完成记录）。
 > **性质**：本轮是**大范围方向修正**——推翻 PT-MT-1~8 已实现的 spawn/join/cancel 关键字语法，改为"thread 对象 + 句柄方法"模型。用户已授权（疏漏 3 裁决）。
 > **最后更新**：2026-08-04
 

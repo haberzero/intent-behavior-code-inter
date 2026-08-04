@@ -15,7 +15,7 @@
 
 | 编号 | 标题 | 目标 | 状态 |
 |------|------|------|------|
-| PT-MT-1 | 详细设计文档 | 完整架构/AST 变更/接口/并发正确性/测试策略，先经用户审阅 | **已完成 2026-08-03**，见 `tasks_docs/THREADING_DESIGN_DETAIL.md`（经独立审查修正 6 处后落地） |
+| PT-MT-1 | 详细设计文档 | 完整架构/AST 变更/接口/并发正确性/测试策略，先经用户审阅 | **已完成 2026-08-03**（经独立审查修正 6 处后落地；原详细设计文档已删除归档） |
 | PT-MT-2 | 编译器地基 | 新 AST 节点（spawn/join/task/chan/signal/slot）+ parser + 4 阶段语义 + dispatch + 序列化（任务为运行时瞬态） | **已完成 2026-08-03**（AST/lexer/parser/语义/类型注册/序列化 + 18 测试；全量 1341 passed 零回归） |
 | PT-MT-3 | 统一通信内核 | Channel（stream/message/pubsub）+ Signal（定向/广播）+ Slot（具名原子）三抽象，线程安全，语言层暴露 | **已完成 2026-08-03**（CommBuffer/ChannelCore/SignalCore/SlotCore/CommRegistry + IbChannel/IbSignal/IbSlot/IbTask + 6 dispatch handler；33+8 测试，全量 1382 passed 零回归） |
 | PT-MT-4 | 内省层 | 快照式（`runtime.snapshot()`）+ 事件流（`runtime.subscribe()`）两者都提供 | **已完成 2026-08-03**（observability 包 + iruntime 模块 + 事件流；6 测试，全量 1388 passed 零回归） |
@@ -175,11 +175,33 @@
 
 > 异常过多的 if-else 并用、过深 if-else、过多过深 except 嵌套（含我的工程经验补充：守卫子句缺失、长 elif 链查表化、宽 except 误吞语言级异常、异常当控制流等）。AST 度量基线（深度/elif 链/70 处宽 except/5 处嵌套 try）+ 位置清单见 **`tasks_docs/BRANCH_NESTING_AUDIT.md`**。独立分支执行。
 
-### PT-SMELL-3：局部 import 审计（独立分支）[P2]【已完成 2026-08-03】
+### PT-SMELL-3：局部 import 审计（独立分支）【已完成 2026-08-03】
 
-> 无意义的局部 import、为打破循环导入的内联 import（含我的工程经验补充：循环依赖应重构方向而非胶水掩盖、TYPE_CHECKING 替代、热路径重复 import、惰性依赖合法模式）。全仓 35 处局部 import 分类清单见 **`tasks_docs/LOCAL_IMPORT_AUDIT.md`**。独立分支执行。
+> 无意义的局部 import、为打破循环导入的内联 import。全仓 35 处局部 import 分类清单（原审计文档 `LOCAL_IMPORT_AUDIT.md` 已删除，结论归档于此）。
 >
-> **完成**：可提升类（L12/13/14/16/19/20）已提升至模块顶部；L15/L17 核验保留；循环打破类（L1-L10 等）核验为**标准运行时局部 import 环打破（非胶水）**，但按其 tradeoff 性质**极其谨慎地记录为未来推迟工作**（见 `LOCAL_IMPORT_AUDIT.md` §四"推迟工作记录"），待架构重构时逐项复核。已并入 unsafe-vibe-dev。
+> **完成**：可提升类（L12/13/14/16/19/20）已提升至模块顶部；L15/L17 核验保留；循环打破类（L1-L10 等）核验为**标准运行时局部 import 环打破（非胶水）**，但按其 tradeoff 性质**极其谨慎地记录为未来推迟工作**，待架构重构时逐项复核。已并入 unsafe-vibe-dev。
+
+##### 推迟工作记录 — 循环打破局部 import tradeoff（待架构重构时复核）
+
+> 原则：理想上应永远避免循环依赖。但允许少量"设计合理、能显著减少工作量"的局部 import 作为**谨慎 tradeoff**。以下为保留的循环打破局部 import，列为**未来推迟工作**，待架构重构（依赖方向下沉 / 接口上移）时逐项复核。
+
+| 记录 | 位置 | 引用 | 保留理由（tradeoff） | 未来复核方向 |
+|---|---|---|---|---|
+| L1 | `core/runtime/objects/kernel/base.py:31/32` | `from .functions import IbBoundMethod` / `from .ib_class import IbClass` | 运行时构造/分派所需，base↔functions/ib_class 环 | 下沉共享基类到独立叶子 |
+| L2 | `core/runtime/objects/kernel/ib_class.py:165` | `from .functions import IbBoundMethod` | 运行时构造，ib_class↔functions 环 | 同上 |
+| L3 | `core/kernel/spec/type_ref.py:128` | `from .base import TypeKind` | 运行时 kind 比较分派，base↔type_ref 环 | 下沉 TypeKind 到叶子 |
+| L4 | `core/kernel/spec/registry/_members.py:121` | `from ..base import TypeDef` | 运行时构造 TypeDef | 下沉 TypeDef 到叶子 |
+| L5 | `core/kernel/spec/registry/_runtime.py:90` | 相对导入 | 运行时（审计标注循环打破） | 复核定位并下沉 |
+| L6 | `core/runtime/interpreter/interpreter.py:466` | `from vm.vm_executor import` | interpreter↔vm 环 | 延迟属性引用评估 |
+| L7 | `core/runtime/objects/kernel/user_functions.py:42/79/140` | `from ..primitives` / `..cell` / `..signals` | 运行时（热路径） | 复核能否去环 |
+| L8 | `core/runtime/shared/llm_result.py:56/130` | `from ..objects.primitives/kernel` | 运行时 | 复核能否去环 |
+| L9 | `core/runtime/path/install.py:36/40` | `import ibci_modules` / `import core` | 模块加载期 | 重构加载顺序 |
+| L10 | `ibci_modules/ibci_ai/core.py:298` | `from core.runtime.frame import` | 插件↔core 环 | 接口上移 |
+| L15 | `core/engine.py:119/123` | `kernel_native_modules` / `file_impl` | 构造期延迟加载重型实现 | 核验是否可去除 |
+| L17 | `core/compiler/semantic/context.py:117` | `from ...passes.prelude import Prelude` | context↔passes 环 | 依赖方向重构 |
+| L18 | `core/runtime/bootstrap/kernel_native_modules.py:75` | `from kernel.host_interface import` | 环（审计待核验） | 复核定位并下沉 |
+
+> 复核触发：任一处所在模块发生架构重构、或引入新的循环依赖、或出现相关技术债时，返回本表逐项复核该 tradeoff 是否仍成立。
 
 ### PT-ARCH-23 G2 遗留：内核原生模块覆盖可观测性缺口 [待决策]
 

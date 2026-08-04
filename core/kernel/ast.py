@@ -312,8 +312,8 @@ class IbLLMExceptionalStmt(IbStmt):
 class IbSpawnStmt(IbStmt):
     """``task t = spawn fn(...)`` / ``task t = spawn(fn, args)`` / fire-and-forget ``spawn fn(...)``。
 
-    ``task`` 是保留关键字（任务句柄类型名），spawn 的目标变量名**不能**叫 ``task``
-    （见 THREADING_DESIGN_DETAIL §2.2）。变量命名用 ``t``/``handle`` 等普通标识符。
+    ``task`` 是保留关键字（任务句柄类型名），spawn 的目标变量名**不能**叫 ``task``。
+    变量命名用 ``t``/``handle`` 等普通标识符。
     """
     target: Optional[IbExpr] = None          # 赋值目标（IbName / IbTypeAnnotatedExpr），None 表示 fire-and-forget
     func: Optional[IbExpr] = None            # 被 spawn 的可调用表达式（函数名 / fn 变量 / lambda）

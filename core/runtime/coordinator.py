@@ -8,7 +8,7 @@ core.runtime.coordinator — 多任务/多 VM 生命周期协调器（PT-MT-7/8�
 生命周期：``spawn`` → task handle → ``join``（阻塞等待结果）/ ``cancel``（协作式
 请求取消）/ ``is_done``（非破坏检查）。
 
-设计（THREADING_DESIGN_DETAIL §七）：
+设计（线程对象模型方向修正，任务 C 将改造为 thread 对象 + 句柄方法）：
 - 轻量 VM 实例：每并发路径一个，完全隔离作用域/意图/llmexcept，共享只读数据。
 - join/cancel 经 handle；结果为函数返回值（经 Waitable 协议供 VM yield 挂起）。
 - 后台线程为 daemon（Python 无法强杀线程；cancel 为协作式请求）。

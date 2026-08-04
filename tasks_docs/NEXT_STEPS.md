@@ -59,51 +59,10 @@ python -m pytest tests/
 
 ---
 
-## 当前主线：IBCI 运行时多线程 + 统一通信机制 + 内省/控制（新确立）
-
-> **用户裁定（2026-08-03）**：上一主线（LLM 并行化 + 同步异步，Stages 1-4 + `await` 表达式）**已全部完成**。确立下一主线：**IBCI 运行时多线程 + 统一通信机制（Channel/Signal/Slot）+ 内省/控制**。这是基于"用 ibci 设计一个完整虚拟机运行时"的视角，对 IBCI 内核的**大范围破坏性改造**（用户明确接受，架构正确性 > 维持现状）。
->
-> **核心动机**：现有通信机制碎片化（`output_callback`/`call_info`/`Waitable`/`future`），无统一官方设计；用户需实时监控/流式时被迫手写轮询（不可维护）。需要**一等通信机制** + **运行时内省** + **默认开启的控制能力**。
->
-> **范围分解（设计已综合，见 `tasks_docs/THREADING_DESIGN.md`）**：
-> 1. **统一通信内核**：`Channel`（数据流，mode=stream/message/pubsub）+ `Signal`（控制流，target 可选定向/广播）+ `Slot`（状态，具名原子读写），三抽象共享线程安全内核，语言层全部暴露
-> 2. **内省层**：**快照式 + 事件流** 两者都提供（`runtime.snapshot()` / `runtime.subscribe()`）
-> 3. **控制层**：统一启停接口（有开有关，部分默认开、部分默认关），`runtime.configure(...)` 粒度全局→单调用→单实例
-> 4. **流式 vs 并行**：两个独立概念，**都默认开启**；流式需 provider 流式接口 + Worker 增量 → Channel → 渲染线程
-> 5. **多 VM 实例**：每个并发路径一个轻量 VM 实例（完全隔离，留出全局可见只读数据），内核协调器管理生命周期；经 Channel 协调
-> 6. **编译器改造**：新 AST 节点（spawn/join/task/chan/signal/slot）+ parser 语法 + 4 阶段语义 + dispatch + 序列化（并发任务为运行时瞬态，不进入持久化状态）
-> 7. **用户代码多线程**：`task = spawn(fn)` 显式任务句柄（join/cancel），供实时 UI/输出刷新
->
-> **明确排除**：跨进程/CPU 并行（性能瓶颈在 IBCI 包装，非 CPU 并发）；跨引擎通信（隔离运行是自我进化窗口，现阶段仅维护+同步演进，保持文件/序列化机制）。
->
-> **参考**：现有 `Waitable`/`LLMFuture`/`TaskScheduler`/`spawn_isolated` 多 VM 机制作为演进基础；`docs/subsystems/05_coroutine.md §7.7/§7.8` 记录 Stage 3/4 成果。
->
-> **完成状态**：上一主线（LLM 并行化 + 同步异步）全部完成——Stage 1（executor 去共享化）、Stage 2（VM 多任务调度）、Stage 4（宿主异步统一 Waitable）、Stage 3（`await` 表达式）、PT-SEM-4、PT-4.2、PT-SYNC-1/2/3、PT-TEST-9。
->
-> **下一步**：**PT-MT-1 详细设计文档已产出（2026-08-03，见 `tasks_docs/THREADING_DESIGN_DETAIL.md`）**——覆盖架构总览、编译器改造（AST/lexer/parser/语义/dispatch/序列化）、统一通信内核、内省层、控制层、流式+并行、多 VM 实例、并发正确性、测试策略、待决项 D1-D9。**已按自主推进偏好进入实现**。
->
-> **PT-MT-2 编译器地基已完成（2026-08-03）**：新 AST 节点（IbSpawnStmt/IbJoinStmt/IbCancelStmt/IbChannelExpr/IbSignalExpr/IbSlotExpr）+ 7 个关键字（spawn/join/cancel/chan/signal/slot/task）+ parser（语句 if-链 + 表达式前缀规则 + type_def 分支）+ 4 阶段语义（spawn 可调用校验、join/cancel 目标 task 校验）+ 类型注册（TypeKind.TASK/CHANNEL/SIGNAL/SLOT + Spec + Axiom）+ 序列化 round-trip。测试：新增 `tests/compiler/test_concurrency_syntax.py`（18 用例），全量 pytest 1341 passed/4 skipped 零回归。
->
-> **PT-MT-3 统一通信内核已完成（2026-08-03）**：线程安全内核（`core/runtime/shared/comm/`：CommBuffer/ChannelCore/SignalCore/SlotCore/CommRegistry）+ 语言层对象（`IbChannel`/`IbSignal`/`IbSlot`/`IbTask`）+ dispatch handler（6 个新节点全部接入 VM）。语言面可用：`chan.send/recv/recv_nonblocking/close`、`slot.set/get`、`spawn/join/cancel`（PT-MT-3 阶段为协作式延迟任务：join 触发求值；后台线程/轻量 VM 在 PT-MT-7/8 升级）。测试：`test_comm_kernel.py`（33）+ `test_vm_comm.py`（8），全量 pytest 1382 passed/4 skipped 零回归。
->
-> **PT-MT-4 内省层已完成（2026-08-03）**：`core/runtime/observability/`（snapshot 聚合 + EventBus/EventSource/ChannelSink）+ 新 kernel-native 模块 `iruntime`（`snapshot()`/`subscribe()`）。快照返回 tasks/channels/slots/vms/vars/llm 结构化 dict；订阅返回 stream Channel，事件流送达（chan_created/slot_updated/task_started/task_done/task_cancelled）。附带修复：**关键字作成员名**（`iruntime.snapshot` 中 snapshot 是保留字——`dot` 解析接受标识符样关键字，Python 风格）；`chan(str,"stream",name=...)` 关键字参数解析。测试：`test_observability.py`（6），全量 pytest 1388 passed/4 skipped 零回归。
->
-> **PT-MT-5 控制层已完成（2026-08-03）**：`ConfigStore`（`core/runtime/observability/config.py`，全局→单调用→单实例链式覆盖，单点真理）+ `iruntime.configure(...)`/`get_config()`（VAR_KEYWORD 参数形态，返回 effective config）+ `config_change` 事件广播。默认值：parallel/stream/observability=开、debug=关。已接入实际开关：`parallel` 门控 dispatch_eager（关闭走同步串行）、`observability` 门控事件流（关闭抑制 chan/slot/task 事件）。测试：`test_runtime_configure.py`（5），全量 pytest 1393 passed/4 skipped 零回归。
->
-> **PT-MT-6 流式 + 并行已完成（2026-08-03）**：流式 provider 接口（`AIPlugin.stream()`，ILLMProvider 协议扩展，MOCK 单块 + 真实 OpenAI stream=True 逐 delta）+ `IbStreamHandle`（`core/runtime/objects/stream.py`：Waitable + stream Channel，后台线程消费增量））+ `MOCK:STREAM:chunk1|chunk2|...` 指令 + MockServer SSE 多块流式端点 + 语言面 `ai.stream_call()`（Waitable，await/赋值自动等待完整文本）/`ai.stream_channel()`（返回承载增量块的 IbChannel，渲染线程 recv 逐块）。流式与并行（dispatch_eager/run_many）独立、都默认开启。测试：`test_streaming.py`（8），全量 pytest 1401 passed/4 skipped 零回归。
->
-> **PT-MT-7 多 VM 实例已完成（2026-08-03）**：`core/runtime/coordinator.py`（`RuntimeCoordinator` + `SpawnedTask`）：spawn 在**后台线程**运行目标函数，使用**任务本地执行上下文**（fresh runtime_context + setup_context 注入内置 + 任务本地 EC/LogicalCallStack/VMExecutor，共享只读 node_pool/registry）。实现 per-task 隔离（C4 作用域/意图/llmexcept）+ 全局只读数据共享（C5）。`IbTask` 升级为后台线程句柄（join 阻塞等结果 / cancel 协作式）。函数/lambda/fn_callable/behavior 均可 spawn。测试：`test_vm_instance.py`（6），全量 pytest 1407 passed/4 skipped 零回归。
->
-> **PT-MT-8 用户代码多线程已完成（2026-08-03）**：`task = spawn(fn)` 显式任务句柄（join/cancel）完整可用 + 实时 UI/输出刷新场景验证。**eager spawn**（spawn 即后台线程运行，非惰性——主线程无需 join 即可收到 worker 经 Channel 的输出）；**协作式取消**（`TaskCancelled`，任务在挂起点——Waitable 等待/子节点驱动——检查取消事件自行退出；纯 CPU 任务无可挂起点时无法强杀，Python 限制）。测试：`test_vm_instance.py` 新增实时输出场景（worker→Channel→主线程 recv 渲染）+ eager start，全量 pytest 1409 passed/4 skipped 零回归。
->
-> ✅ **主线（PT-MT-1~8）全部完成（2026-08-03）**：设计文档 → 编译器地基 → 统一通信内核 → 内省层 → 控制层 → 流式+并行 → 多 VM 实例 → 用户代码多线程。全量 pytest 1409 passed/4 skipped 零回归。
-
----
-
 ## 独立并行任务
 
 - **测试体系治理与彻底重构**：独立、较低优先级，`tasks_docs/TEST_REFACTOR.md`（含 4 份调研报告 `TEST_REFACTOR_REPORTS.md`），不与主线混置。
-- **技术债审计分支任务**：PT-SMELL-1/2/3（`CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` / `LOCAL_IMPORT_AUDIT.md`），独立分支执行。
+- **技术债审计分支任务**：PT-SMELL-1/2（`CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md`），独立分支执行；PT-SMELL-3 已完成（见 `PENDING_TASKS.md` §六）。
 - **media Phase 4**（多模态容器）：**已彻底封存（2026-08-01），且 2026-08-02 起无限期搁置**；恢复需显式解封并重估；代码层零启动（`PENDING_TASKS.md` §六）。
 
 ---
