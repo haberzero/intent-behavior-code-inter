@@ -144,6 +144,10 @@ class ArtifactRehydrator:
                 if (data.get("axiom_name") or name or "").startswith("thread")
                 else TypeDef(name=name or "task", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
             ),
+            TypeKind.THREAD_RESULT.value: lambda: factory.create_thread_result(
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
         }
 
         if name in PRIMITIVE_TYPES and kind == TypeKind.PRIMITIVE.value:

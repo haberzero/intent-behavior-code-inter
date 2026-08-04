@@ -250,7 +250,13 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["_type"] = "optional"
             data["is_some"] = obj._is_some
             data["inner"] = self._process_value(obj._inner) if obj._is_some else None
-            
+
+        elif isinstance(obj, IbValue) and cls_name == "thread_result":
+            data["_type"] = "thread_result"
+            data["status"] = obj._status
+            data["value"] = self._process_value(obj._value) if obj._status == "done" else None
+            data["error"] = self._process_value(obj._error) if obj._error is not None else None
+
         elif isinstance(obj, IbModule):
             data["_type"] = "module"
             data["name"] = obj.name
@@ -556,7 +562,15 @@ class RuntimeDeserializer:
             inner = self._deserialize_value(data.get("inner")) if is_some else None
             obj = IbOptional(ib_class, inner, is_some)
             self.instance_cache[uid] = obj
-            
+
+        elif _type == "thread_result":
+            from core.runtime.objects.thread_result import IbThreadResult, _ThreadResultStatus
+            status = data.get("status", "done")
+            value = self._deserialize_value(data.get("value")) if status == "done" else None
+            error = self._deserialize_value(data.get("error")) if data.get("error") is not None else None
+            obj = IbThreadResult(ib_class, value=value, error=error, status=status)
+            self.instance_cache[uid] = obj
+
         elif _type == "module":
             if data.get("scope_native"):
                 # Kernel-native module: the real implementation is re-bound at

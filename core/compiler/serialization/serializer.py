@@ -190,6 +190,12 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
+        # Persist the value type for thread_result[T] (join 返回容器负载类型)。
+        if t.kind == TypeKind.THREAD_RESULT.value:
+            v_ref = t.value_type
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
         # Persist TypeDef param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
             type_data["param_type_names"] = [p.head for p in t.param_types]

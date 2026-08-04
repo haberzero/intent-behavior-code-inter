@@ -73,7 +73,7 @@
 - [x] C0：`_get_callee_param_specs` 支持 IbClass + `_auto_init` 补 param_meta（+ 测试）—— **已完成 2026-08-04**（commit 35b0691，4 用例，全量 1443+4 零回归）
 - [x] C1：`IbThread` 值对象 + 状态机—— **已完成 2026-08-04**（thread.py + primitive_initializer 注册 __init__ + ThreadAxiom has_call_cap + resolve_return_type_name；5 用例，全量 1447 passed 零回归）
 - [x] C2：`thread_result[T]` 容器—— **已完成 2026-08-04**（TypeKind.THREAD_RESULT + THREAD_RESULT_SPEC + create_thread_result + GenericTypeRegistry + ThreadResultAxiom + IbThreadResult + join 返回容器 + value/error/status/is_error/is_success/unwrap/unwrap_or/expect；9 用例（thread_model 5 + thread_result 4），全量 1457 passed 零回归）
-- [ ] C5：序列化（thread_result 值类型持久化）
+- [x] C5：序列化—— **已完成 2026-08-04**（serializer thread_result value_type 持久化 + rehydrator THREAD_RESULT shell + runtime_serializer thread_result 值序列化/反序列化；全量 1457 passed 零回归）
 - [ ] C6：测试 + 全量验证
 
 ### C1 实现细节记录（2026-08-04）
