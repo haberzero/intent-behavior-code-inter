@@ -293,3 +293,30 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 
 ### 待决
 - 无。任务 B 完成，校验通过。下一步任务 C（线程对象模型 thread[T] + 句柄方法 + 状态机）。
+
+---
+
+## 2026-08-04 会话 3：任务 C 调研 + 交接准备（用户要求暂停）
+
+### 背景
+
+任务 A、B 完成后进入任务 C（线程对象模型）调研。用户中途要求暂停所有工作、停止自动化 goal，并准备交接以便下一 session 接手。
+
+### 任务 C 调研结论（已确认，供下一 session 使用，勿重复调研）
+
+- **`thread` 类型已就绪**：`registry.get_class("thread")` 存在（ThreadAxiom 驱动创建）；`thread[T]` 解析经 GenericTypeRegistry 工作（`thread[int]` 解析成功、kind=TASK、`get_base_name()="thread"`、`value_type.head="int"`）。
+- **`thread[T].join()` 返回类型特化已就绪**（`_members.py` thread 特化：`thread[T].join()`→T）。
+- **既有内核机制可复用**：`core/runtime/coordinator.py` 的 `RuntimeCoordinator` + `SpawnedTask`（后台线程 + 任务本地执行上下文）。现有 `IbTask`（`core/runtime/objects/task.py`）是 spawn 句柄，方向修正要求改造为 thread 对象 + 句柄方法。
+- **当前 spawn/join/cancel 是关键字**（TokenType.SPAWN/JOIN/CANCEL/TASK），走 `vm_handle_IbSpawnStmt/IbJoinStmt/IbCancelStmt`（`core/runtime/vm/handlers/comm.py`），任务 F 删除。
+- **parser 构造函数模式参考**：chan/signal/slot 是关键字前缀（`chan_expr`/`signal_expr`/`slot_expr`），产 `IbChannelExpr/IbSignalExpr/IbSlotExpr`。但 `thread` 不是关键字，`thread(...)` 如何解析为构造函数需自主设计。
+- **设计重点**：`thread[T] t = thread(fn=..., args=...)` 构造函数 + `t.join()/t.cancel()/t.start()/t.is_done()` 句柄方法 + 生命周期状态机。`join()` 返回 T（任务 B 已特化好）。`cancel()` 返回 err（任务 D 落地）。需从 comp_parser → semantic → VM dispatch → 运行时对象全链设计。
+
+### 变化前后
+
+- **修改**：`tasks_docs/_HANDOFF.md`（更新为任务 A、B 完成 + 任务 C 调研结论 + 任务 C 起 goal 模板），`NEXT_STEPS.md`/`PENDING_TASKS.md`/`WORKLOG.md` 已如实同步。
+- **代码**：无新增代码改动（任务 C 仅调研，未写实现）。
+
+### 状态
+
+- **goal 已暂停**（用户要求）。测试基线：全量 pytest **1443 passed / 4 skipped** 零回归。
+- **待决**：无。任务 C-F 已授权待实现；交接文档已备好，下一 session 从任务 C 继续。
