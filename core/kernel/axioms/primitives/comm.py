@@ -40,7 +40,12 @@ class ThreadAxiom(BaseAxiom):
     ``thread[T]`` 泛型：返回值类型经 value_type 承载（``t.join()`` 返回 T）。
     提供句柄方法表面（start/join/cancel/is_done）供语义层类型检查——
     运行时实现由 ``IbThread`` 值对象提供（任务 C）。
+
+    ``has_call_cap``：``thread(...)`` 是构造函数调用（创建线程句柄），
+    语义层据此允许 ``thread(...)`` 表达式。
     """
+
+    has_call_cap = True
 
     @property
     def name(self) -> str:
@@ -53,6 +58,10 @@ class ThreadAxiom(BaseAxiom):
             "cancel": _m("cancel", ret="any"),
             "is_done": _m("is_done", ret="bool"),
         }
+
+    def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
+        # thread(...) 构造函数返回 thread 类型（具体泛型由声明上下文确定）。
+        return "thread"
 
     def is_compatible(self, other_name: str) -> bool:
         return other_name == "thread" or other_name.startswith("thread[")

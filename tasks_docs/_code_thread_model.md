@@ -26,7 +26,9 @@
 
 ## 三、C0 前置：类构造关键字参数支持（机制完善）
 
-**目标**：`thread(fn=..., args=...)` 及用户类 `Dog(name=..., age=...)` 的关键字构造可用。
+**目标**：`thread(func=..., args=...)` 及用户类 `Dog(name=..., age=...)` 的关键字构造可用。
+
+**设计裁决（关键字碰撞原则，2026-08-04）**：设计文档 §2.3 示例 `thread(fn=compute, ...)` 中的 `fn` 是保留关键字（`TokenType.FN`），与"内部接口设计不违反关键字碰撞"架构原则冲突。按"架构原则优先"裁定，thread 构造参数名**不使用 `fn`**，改用不与关键字碰撞的 `callable`（`callable` 非关键字，`args` 亦非关键字）。设计文档措辞相应调整（`fn`→`callable`）。
 
 **设计**：
 1. `_get_callee_param_specs`（`_shared.py`）增加 `IbClass` 分支：返回其 `__init__` 方法的参数签名。
@@ -41,7 +43,8 @@
 1. **`IbThread` 值对象**（`core/runtime/objects/thread.py`，`@register_ib_type("thread")`）：改造 `IbTask`，继承 `IbObject`，持有 `_coordinator`/`_spawned`/`_callable`/`_args`/`_value_type` + 生命周期状态机 + `thread_result[T]` 容器。
 2. **生命周期状态机**：idle → running → done / cancelled / failed。`start()` 启动；`join()` 等待返回 T；`cancel()` 返回 err；`is_done()` 查询。
 3. **`thread_result[T]` 容器**（`core/runtime/objects/thread_result.py`，`@register_ib_type("thread_result")`）：`value`/`error`/`status` + `is_error`/`is_success`/`unwrap`/`unwrap_or`。禁止 any。
-4. **构造**：`thread(fn=..., args=...)` 走普通 `IbCall` + C0 机制。thread 类需注册 `__init__` 原生方法接收 fn/args，创建 `IbThread`。
+4. **构造**：`thread(callable=..., args=...)` 走普通 `IbCall` + C0 机制。thread 类需注册 `__init__` 原生方法接收 callable/args，创建 `IbThread`。
+   - **参数名**：`callable`（非关键字）。设计文档原 `fn`/`func` 均与关键字（`TokenType.FN`/`FUNC`）碰撞，按"内部接口设计不违反关键字碰撞"架构原则裁定弃用，改用 `callable`（`args` 本身非关键字，保留）。
 5. **`ThreadAxiom` 方法表面修正**：`join` → T、`cancel` → err（任务 D 细化，此处先对齐）。
 6. **序列化**：thread/thread_result 值类型持久化。
 
@@ -52,10 +55,18 @@
 
 ## 六、待办（按序）
 
-- [ ] C0：`_get_callee_param_specs` 支持 IbClass + `_auto_init` 补 param_meta（+ 测试）
-- [ ] C1：`IbThread` 值对象 + 状态机
+- [x] C0：`_get_callee_param_specs` 支持 IbClass + `_auto_init` 补 param_meta（+ 测试）—— **已完成 2026-08-04**（commit 35b0691，4 用例，全量 1443+4 零回归）
+- [x] C1：`IbThread` 值对象 + 状态机—— **已完成 2026-08-04**（thread.py + primitive_initializer 注册 __init__ + ThreadAxiom has_call_cap + resolve_return_type_name；5 用例，全量 1447 passed 零回归）
 - [ ] C2：`thread_result[T]` 容器
-- [ ] C3：thread 构造函数注册 + 绑定
-- [ ] C4：ThreadAxiom 方法表面对齐
+- [ ] C3：thread 构造函数注册 + 绑定（已完成 C1 内：`thread(callable=..., args=...)` 关键字构造可用）
+- [ ] C4：ThreadAxiom 方法表面对齐（join → T、cancel → err，任务 D 细化）
 - [ ] C5：序列化
 - [ ] C6：测试 + 全量验证
+
+### C1 实现细节记录（2026-08-04）
+
+- **构造参数名**：`callable`（非关键字）。设计文档原 `fn`/`func` 均与关键字碰撞，按"内部接口设计不违反关键字碰撞"原则裁定弃用。
+- **`IbThread` 值对象**（`core/runtime/objects/thread.py`，`@register_ib_type("thread")`）：实例状态存于 `self.fields`（与 `intent_context` 模式一致）。句柄方法 `start`/`join`/`cancel`/`is_done` 自包含操作 fields，不依赖实例私有 helper（实例是普通 `IbObject`）。
+- **构造**：`primitive_initializer` 注册 thread 类 `__init__` 原生方法（param_meta 声明 callable/args），经 `_init_fields` 初始化状态并 eager 启动。
+- **`ThreadAxiom`**：`has_call_cap = True`（允许 `thread(...)` 构造调用）+ `resolve_return_type_name` 返回 "thread"（具体泛型由声明上下文确定）。
+- **eager 语义**：构造即启动后台线程（与既有 spawn 语义一致）。

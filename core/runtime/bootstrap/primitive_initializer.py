@@ -594,6 +594,47 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         _reg_native(intent_context_class, 'use', _ic_use, unbox=False)
         _reg_native(intent_context_class, 'get_current', _ic_get_current, unbox=False)
 
+    # 5b'. thread 类型构造函数注册（线程对象模型方向修正，任务 C）
+    #
+    # thread 类方法（start/join/cancel/is_done）已由 ThreadAxiom → axiom-driven
+    # auto-bind 自动绑定（从 get_ib_implementation("thread") = IbThread）。
+    # 此处补充 __init__ 构造：接收 callable/args 关键字参数，创建 IbThread 实例。
+    # 参数名 ``callable``（非关键字，避免与 ``fn``/``func`` 关键字碰撞）。
+    _thread_class = ib_classes.get("thread")
+    if _thread_class is not None:
+        def _thread_init(receiver, *args):
+            """thread(callable=..., args=...) 构造函数：创建线程并启动。
+
+            线程状态直接写入 receiver.fields（与 IbThread 方法读取的键一致），
+            使 axiom 自动绑定的 start/join/cancel/is_done 在实例上直接工作。
+            """
+            from core.runtime.objects.thread import IbThread, _FIELDS
+            from core.runtime.vm.handlers.comm import _get_coordinator
+
+            func_obj = args[0] if len(args) > 0 else registry.get_none()
+            args_obj = args[1] if len(args) > 1 else registry.box([])
+            native_args = args_obj.to_native() if isinstance(args_obj, IbObject) else args_obj
+            arg_list = list(native_args) if isinstance(native_args, (list, tuple)) else []
+            for i, a in enumerate(arg_list):
+                if not isinstance(a, IbObject):
+                    arg_list[i] = registry.box(a)
+            execution_context = registry.get_execution_context()
+            vm = execution_context.vm_executor if execution_context is not None else None
+            coordinator = _get_coordinator(vm) if vm is not None else None
+            if coordinator is None:
+                raise InterpreterError(
+                    "thread: coordinator unavailable (no active execution context)"
+                )
+            IbThread._init_fields(receiver, coordinator, func_obj, arg_list)
+            return registry.get_none()
+
+        _thread_init_meta = [
+            ("callable", "POSITIONAL_OR_KEYWORD", None),
+            ("args", "POSITIONAL_OR_KEYWORD", None),
+        ]
+        _reg_native(_thread_class, "__init__", _thread_init, unbox=False)
+        _thread_class.lookup_method("__init__").param_meta = _thread_init_meta
+
     # 5b. 多模态类型方法注册 (audio / image / video)
     #
     # 作为普通类名注册，通过 axiom → primitive_initializer 标准路径。
