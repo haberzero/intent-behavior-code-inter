@@ -6,6 +6,48 @@
 
 ---
 
+## 2026-08-04 会话 4：任务 C 线程对象模型实现（C0-C6，自主实现）
+
+### 背景
+
+按 `THREAD_DESIGN_REVISION.md` 任务 C 实施。调研发现用户侧机制缺口（类构造关键字参数支持缺失），经用户确认引入工作规划并调整路径。
+
+### 用户裁定（2026-08-04，任务 C 实施中）
+
+1. **类构造关键字参数支持缺口**：`_get_callee_param_specs` 不处理 `IbClass`，导致关键字参数被丢弃。用户指示"把相关机制的完善调研和实现工作引入到现存工作规划中，并调整工作任务路径"→ 引入任务 C0 前置。
+2. **关键字碰撞原则**：内部接口设计不违反关键字碰撞；设计文档与架构原则冲突时以架构原则为主 → thread 构造参数名不用 `fn`/`func`（均与关键字碰撞），改用 `callable`。
+3. **join 返回容器**：`t.join()` 返回 `thread_result[T]` 容器（非 T）。要求提供 Rust 风格"直接返回 value"的易用方法（设计历史已归档无此记录，自主设计为 `expect()`）。
+
+### 实现记录
+
+| 子任务 | 内容 | 测试 |
+|--------|------|------|
+| C0 | `_get_callee_param_specs` 支持 IbClass + `_auto_init` 补 param_meta | `test_class_constructor_keywords.py`（4 用例） |
+| C1 | `IbThread` 值对象 + 生命周期状态机 + `thread(callable=..., args=...)` 构造 | `test_thread_model.py` 起 |
+| C2 | `thread_result[T]` 容器 + join 返回容器 + expect/unwrap/unwrap_or/is_error/is_success/value/error/status | `test_thread_result.py`（4 用例） |
+| C5 | 序列化（spec value_type + 值对象序列化/反序列化） | 全量回归 |
+| C6 | 测试补充（cancel + 线程隔离） | 11 用例 |
+
+### 设计决策
+
+1. **`IbThread` 实例状态存于 `self.fields`**（与 `intent_context` 模式一致）：实例由 `instantiate` 创建为普通 `IbObject`，`__init__` 经 `_init_fields` 初始化状态，句柄方法自包含操作 fields（不依赖实例私有 helper）。
+2. **`thread_result[T]` 容器**：TypeKind.THREAD_RESULT + THREAD_RESULT_SPEC + GenericTypeRegistry + ThreadResultAxiom + IbThreadResult 值对象。`unwrap()`→Optional[T]、`unwrap_or(default)`→T、`expect()`→T（失败重抛存入异常，语言层 try/except 可捕获）、`is_error()`/`is_success()`、`value()`/`error()`/`status()`（方法，非裸属性，符合疏漏 4）。
+3. **`thread[T].join()` → `thread_result[T]`**（`_members.py` 特化更新）。
+4. **save_state 未完成线程检测**：属任务 E 范围，C 阶段未实现。
+
+### 变化前后
+
+**实现（新增）**：`core/runtime/objects/thread.py`（IbThread）、`core/runtime/objects/thread_result.py`（IbThreadResult）、`tests/runtime/test_class_constructor_keywords.py`、`tests/runtime/test_thread_model.py`、`tests/runtime/test_thread_result.py`。
+
+**实现（修改）**：`_shared.py`（IbClass 分支）、`interpreter.py`（_auto_init param_meta）、`primitive_initializer.py`（thread __init__ 注册）、`comm.py`（ThreadAxiom has_call_cap + ThreadResultAxiom）、`specs.py`/`factory.py`/`generic.py`/`base.py`/`_runtime.py`/`_members.py`（thread_result 泛型全链）、`serializer.py`/`artifact_rehydrator.py`/`runtime_serializer.py`（序列化）、`test_generic_model.py`（join 容器）。
+
+**测试**：全量 pytest **1459 passed / 4 skipped** 零回归。
+
+### 待决
+- 无。任务 C 完成。下一步任务 D（err 类型统一）。
+
+---
+
 ## 2026-08-04 会话 4：任务 C 调研 + 发现前置机制缺口（用户侧机制不完善）
 
 ### 背景
