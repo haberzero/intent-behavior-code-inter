@@ -138,3 +138,41 @@ class LLMCallErrorAxiom(_LLMErrorAxiomBase):
     _parent_name = "LLMError"
     _extra_field = ("provider_error", "str")
     _compatible_chain = ("Exception", "LLMError", "LLMCallError")
+
+
+# ------------------------------------------------------------------ #
+# 线程错误层次（err 类型统一，任务 D）                                  #
+# ------------------------------------------------------------------ #
+
+class _TaskErrorAxiomBase(_LLMErrorAxiomBase):
+    """任务错误公理基类（TaskError/TaskCancelled/TaskFailed 共用）。
+
+    结构同 LLM 错误：IS-A Exception 链，携带 message 字段。
+    子类配置 ``_axiom_name``/``_parent_name``/``_compatible_chain``。
+    """
+
+    _extra_field = None
+
+
+class TaskErrorAxiom(_TaskErrorAxiomBase):
+    """Raised/returned on a thread-level failure (base of task errors)."""
+
+    _axiom_name = "TaskError"
+    _parent_name = "Exception"
+    _compatible_chain = ("Exception", "TaskError")
+
+
+class TaskCancelledAxiom(_TaskErrorAxiomBase):
+    """Cancelled 任务错误：线程被协作式取消。"""
+
+    _axiom_name = "TaskCancelled"
+    _parent_name = "TaskError"
+    _compatible_chain = ("Exception", "TaskError", "TaskCancelled")
+
+
+class TaskFailedAxiom(_TaskErrorAxiomBase):
+    """Failed 任务错误：线程函数体执行失败。"""
+
+    _axiom_name = "TaskFailed"
+    _parent_name = "TaskError"
+    _compatible_chain = ("Exception", "TaskError", "TaskFailed")

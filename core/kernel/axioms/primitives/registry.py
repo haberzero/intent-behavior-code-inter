@@ -17,6 +17,9 @@ from core.kernel.axioms.primitives.errors import (
     LLMParseErrorAxiom,
     LLMRetryExhaustedErrorAxiom,
     LLMCallErrorAxiom,
+    TaskErrorAxiom,
+    TaskCancelledAxiom,
+    TaskFailedAxiom,
 )
 from core.kernel.axioms.primitives.sentinels import (
     VoidAxiom,
@@ -65,6 +68,9 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(LLMParseErrorAxiom())
     registry.register(LLMRetryExhaustedErrorAxiom())
     registry.register(LLMCallErrorAxiom())
+    registry.register(TaskErrorAxiom())
+    registry.register(TaskCancelledAxiom())
+    registry.register(TaskFailedAxiom())
     registry.register(BoundMethodAxiom())
     registry.register(NoneAxiom())
     registry.register(OptionalAxiom())

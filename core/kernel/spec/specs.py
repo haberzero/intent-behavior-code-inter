@@ -56,6 +56,15 @@ LLM_RETRY_EXHAUSTED_ERROR_SPEC = TypeDef(name="LLMRetryExhaustedError", kind=Typ
 LLM_CALL_ERROR_SPEC = TypeDef(name="LLMCallError", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                                parent_type=TypeRef.of("LLMError"))
 
+# 线程错误层次（err 类型统一，任务 D）：TaskError IS-A Exception；
+# TaskCancelled / TaskFailed IS-A TaskError。用户可见、可继承。
+TASK_ERROR_SPEC = TypeDef(name="TaskError", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+                          parent_type=TypeRef.of("Exception"))
+TASK_CANCELLED_SPEC = TypeDef(name="TaskCancelled", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+                              parent_type=TypeRef.of("TaskError"))
+TASK_FAILED_SPEC = TypeDef(name="TaskFailed", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+                           parent_type=TypeRef.of("TaskError"))
+
 # fn — callable type inference marker (declaration-time keyword, like auto but for callables)
 # 不是一个独立的运行期类型：fn x = myFunc 实际上将 x 的 spec 推导为 myFunc 的具体 callable spec。
 FN_SPEC         = TypeDef(name="fn", kind=TypeKind.FUNCTION.value, is_nullable=True,  provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE, return_type=TypeRef.of("auto"))

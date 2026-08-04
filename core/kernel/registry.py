@@ -396,6 +396,28 @@ class KernelRegistry:
         instance.fields["provider_error"] = self.box(provider_error)
         return instance
 
+    def make_task_cancelled(self, message: str = "Task was cancelled") -> Any:
+        """Construct a TaskCancelled err IbObject."""
+        cls = self.get_class("TaskCancelled")
+        if not cls:
+            cls = self.get_class("TaskError") or self.get_class("Exception")
+        if not cls:
+            return self.get_none()
+        instance = cls.instantiate([])
+        instance.fields["message"] = self.box(message)
+        return instance
+
+    def make_task_failed(self, message: str = "Task failed") -> Any:
+        """Construct a TaskFailed err IbObject."""
+        cls = self.get_class("TaskFailed")
+        if not cls:
+            cls = self.get_class("TaskError") or self.get_class("Exception")
+        if not cls:
+            return self.get_none()
+        instance = cls.instantiate([])
+        instance.fields["message"] = self.box(message)
+        return instance
+
     def clone(self) -> 'KernelRegistry':
         """
         创建 KernelRegistry 的浅克隆。

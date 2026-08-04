@@ -87,6 +87,19 @@
 
 **待办**：任务 D（err 类型统一）、任务 E（线程相关清理，含 save_state 未完成线程检测）、任务 F（关键字精简 + 废除旧测试）。见 `NEXT_STEPS.md` 主线。
 
+## 任务 D：err 类型统一（已完成 2026-08-04）
+
+按 THREAD_DESIGN_REVISION §2.6 实施：
+
+- **`TaskError` 层次**：`TaskError`（parent Exception）→ `TaskCancelled`/`TaskFailed`（parent TaskError），均为 IBCI CLASS spec + axiom。用户可见、可继承（`class MyTaskError(TaskError)` 验证通过）、`except TaskError`/`except Exception` 按继承链捕获。
+- **`make_task_cancelled`/`make_task_failed`**：kernel registry 运行时工厂（与 make_llm_parse_error 模式一致）。
+- **`cancel()` 返回 err**：成功发出取消请求 → `TaskCancelled` err（含 message）；未启动/已结束 → None。
+- **`join()` 错误值化**：线程失败/取消时把底层异常映射为 IBCI err 对象存入容器（用户 raise → 原 IBCI 异常对象；协调器 TaskCancelled → IBCI TaskCancelled；其他 → TaskFailed）。
+- **`expect()` 抛容器内 err**：经 `ThrownException` 抛出，语言层 try/except 按类型捕获。
+- **`IbThreadResult.error()`** 返回 IBCI 错误对象（如 `<Instance of LLMParseError>`）。
+
+测试：新增 `tests/runtime/test_thread_err.py`（5 用例）。全量 pytest **1464 passed / 4 skipped** 零回归。
+
 ### C1 实现细节记录（2026-08-04）
 
 - **构造参数名**：`callable`（非关键字）。设计文档原 `fn`/`func` 均与关键字碰撞，按"内部接口设计不违反关键字碰撞"原则裁定弃用。

@@ -112,17 +112,20 @@ class IbThreadResult(IbObject):
     def expect(self) -> Any:
         """直接返回 T；失败抛对应 IBCI 异常（fail-fast，Rust 对齐）。
 
-        失败时重抛容器内存储的错误对象（若是语言级异常则语言层 try/except
-        可捕获）；否则抛 InterpreterError。
+        失败时以 ``ThrownException`` 抛出容器内错误对象，语言层 try/except
+        可捕获；容器内错误是 IBCI 异常对象（TaskCancelled/TaskFailed 等）。
         """
         if self._status == _ThreadResultStatus.DONE:
             return self._value
         err = self._error
+        from core.runtime.exceptions import ThrownException
+
+        if isinstance(err, ThrownException):
+            raise err
         if isinstance(err, BaseException):
             raise err
-        raise InterpreterError(
-            f"thread_result.expect() called on a failed result "
-            f"(status={self._status!r}, error={self._error!r})"
+        raise ThrownException(err) if err is not None else InterpreterError(
+            f"thread_result.expect() called on a failed result (status={self._status!r})"
         )
 
     # ------------------------------------------------------------------ #

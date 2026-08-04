@@ -123,26 +123,49 @@ class IbThread(IbObject):
                 error=None,
                 status=_ThreadResultStatus.DONE,
             )
-        except Exception as e:
-            self.fields[_FIELD_STATE] = _ThreadState.FAILED
+        except BaseException as e:
+            # 线程失败/取消：把底层异常映射为 IBCI err 对象存入容器（值化失败）。
+            # 协作式取消（TaskCancelled）→ TaskCancelled；其他 → TaskFailed。
+            from core.runtime.exceptions import ThrownException
+            from core.runtime.coordinator import TaskCancelled as _CoordTaskCancelled
+
+            if isinstance(e, ThrownException):
+                # 用户代码主动 raise：错误值本身就是 IBCI 异常对象。
+                err_obj = e.value
+            elif isinstance(e, _CoordTaskCancelled):
+                err_obj = self.ib_class.registry.make_task_cancelled(str(e))
+            else:
+                err_obj = self.ib_class.registry.make_task_failed(str(e))
+            state = (
+                _ThreadState.CANCELLED
+                if isinstance(e, _CoordTaskCancelled)
+                else _ThreadState.FAILED
+            )
+            status = (
+                _ThreadResultStatus.CANCELLED
+                if isinstance(e, _CoordTaskCancelled)
+                else _ThreadResultStatus.FAILED
+            )
+            self.fields[_FIELD_STATE] = state
             return IbThreadResult(
                 ib_class=result_cls,
                 value=None,
-                error=e,
-                status=_ThreadResultStatus.FAILED,
+                error=err_obj,
+                status=status,
             )
 
     def cancel(self) -> "IbObject":
-        """请求取消线程（协作式）；返回操作状态（任务 D 落地为 err 类型）。
+        """请求取消线程（协作式）；返回 err 指示操作状态。
 
-        当前阶段返回 IBCI bool 表示是否成功发出取消请求。
+        - 成功发出取消请求 → ``TaskCancelled`` err
+        - 线程未启动或已结束 → ``None``（无效/已结束）
         """
         spawned = self.fields.get(_FIELD_SPAWNED)
         if spawned is None:
-            return self.ib_class.registry.box(False)
+            return self.ib_class.registry.get_none()
         spawned.cancel()
         self.fields[_FIELD_STATE] = _ThreadState.CANCELLED
-        return self.ib_class.registry.box(True)
+        return self.ib_class.registry.make_task_cancelled()
 
     # ------------------------------------------------------------------ #
     # 值协议 / 内省                                                       #

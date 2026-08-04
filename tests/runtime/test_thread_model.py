@@ -88,12 +88,13 @@ func work(int x) -> int:
     return x * 2
 
 thread[int] t = thread(callable=work, args=[21])
-print((str)t.cancel())
+TaskCancelled e = t.cancel()
+print(e.message)
 t.join()
 print((str)t.is_done())
 """
     lines = run_ibci(code)
-    assert lines == ["True", "True"]
+    assert lines == ["Task was cancelled", "True"]
 
 
 def test_thread_isolation_does_not_leak_main_scope():
