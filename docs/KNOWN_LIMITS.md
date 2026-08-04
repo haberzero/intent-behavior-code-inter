@@ -340,7 +340,7 @@ str r = @~ ... ~
 
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
-1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置 `list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` 全部走内置 axiom 的 `resolve_specialization_by_names` 路径，用户类型无对应入口。
+1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置泛型（`list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` / `thread[T]` / `thread_result[T]`）统一经 `GenericTypeRegistry`（`core/kernel/spec/generic.py`）创建/解析/序列化/还原，用户类型无对应入口。
 2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel/`（包）的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
 
 **未来演进思路（不构成承诺）**：涉及用户类泛型参数与运算符重载能力扩展，具体规划见任务文档。
@@ -415,22 +415,17 @@ str r = @~ ... ~
 
 ---
 
-## 十八、Optional[T] 运行时方法分发缺失
+## 十八、Optional[T] 运行时方法分发（已补齐）
 
-**限制说明**
-
-`Optional[T]` 的方法（如 `.or_else()`）在编译期已通过类型契约检查（编译能通过），但运行时方法分发未接通，实际调用会在运行时失败。
+**状态**：已修复（2026-08-04，任务 A）。运行时 `IbOptional` 已实现，`Optional[T]` 的方法链（`is_some`/`unwrap`/`or_else`）可用。
 
 ```ibci
 Optional[int] x = None
-int y = x.or_else(0)  # 编译通过，运行时失败
+int y = x.or_else(0)  # 可用，返回 0
+print((str)x.is_some())  # False
 ```
 
-**根源**
-
-内置 `Optional[T]` 走 axiom 的 `resolve_specialization_by_names` 路径，编译期类型签名已就位；但运行时 axiom 未实现 Optional 专属的方法分发（`or_else`/`is_none`/`unwrap` 等），调用会退化为普通对象属性查找并失败。
-
-**当前建议**：暂不在生产代码中使用 `Optional[T]` 的方法链；用 `if`/`else` 显式判空替代。
+**遗留**：Optional 的 `__to_prompt__`/值协议等与 `thread_result[T]` 共用设计模式；若未来需扩展方法（如 `map`/`filter`），纳入通信领域设计完善检查。见 `tasks_docs/COMMS_DESIGN_REVIEW.md`。
 
 ---
 

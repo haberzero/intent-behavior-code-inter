@@ -4,40 +4,40 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-04（任务 A、B 已完成；任务 C 待开工；PT-MT-1~8 已全部完成）
+> **最后更新**：2026-08-04（线程对象模型方向修正任务 A-F 全部完成；通信领域设计完善为下一主线）
+
 ---
 
-## 🔴 当前主线：线程对象模型方向修正（已授权，待实现）
+## 🔴 当前主线：通信领域（chan/signal/slot）设计完善与统一化检查
 
-> **用户裁定（2026-08-04）**：PT-MT-1~8 完成后深度质询，推翻 spawn/join/cancel/task 关键字语法，改为 **thread 对象 + 句柄方法** 模型。完整决策见 `tasks_docs/THREAD_DESIGN_REVISION.md`（唯一决策依据）。
+> **用户裁定（2026-08-04）**：通信领域设计完善与统一化检查为下阶段任务（THREAD_DESIGN_REVISION §三 疏漏 2）。方向修正任务 A-F 全部完成后启动。
 >
-> **核心裁定**：
-> - async 与 thread 彻底分离（IbTask 不得满足 Waitable；await 只服务异步）
-> - 删 spawn/join/cancel/task 关键字；`thread[T]` 泛型 + 句柄方法（start/join/cancel/is_done）
-> - `thread_result[T]` 泛型容器（成功值/错误/状态，可继承改写，禁止 any）
-> - err 类型统一接入 Exception 体系；`t.cancel()` 返回 err
-> - 统一泛型模型立即启动（内置类型泛型化正式机制；thread[T] 首个消费者）
-> - Optional 配套（运行时 IbOptional 缺失需补齐）
-> - 挂起机制取消；通信领域（chan/signal/slot）暂缓下阶段
+> **前置审查（已完成 2026-08-04）**：对线程对象模型方向修正代码做了全方位审查（系统级一致性/设计语言统一/碎片化），完整发现记录见 `tasks_docs/COMMS_DESIGN_REVIEW.md`（唯一审查依据）。测试基线 1453 passed / 4 skipped。
 >
-> **任务 A-F（按序，依赖驱动）**：
-> A. Optional 配套完整实现 → B. 统一泛型模型 → C. 线程对象模型（thread[T] + 句柄方法 + 状态机）→ D. err 类型统一 → E. 线程相关清理（VP-1~VP-6 + F-1~F-8）→ F. 关键字精简（删 spawn/join/cancel/task）+ 废除旧测试 + 新测试。
+> **修复路径（三阶段，见 COMMS_DESIGN_REVIEW §六）**：
+> - **阶段 1（先修实锤 bug，低风险高价值）**：
+>   - B1：`thread_result` 序列化往返丢数据（`IbThreadResult` 非 IbValue → 守卫永不触发 → 空 object）——补测试
+>   - B2：循环导入（`thread_result → primitives.optional → primitives/__init__ → ..thread_result`）
+>   - B4：VP-4 未修（`comm.py:32-35/51-54` 的 `except: pass` 兜底）
+> - **阶段 2（统一值对象机制，架构级）**：解决 `instantiate` 不可挂钩根因（`ib_class.py:86` 硬编码普通 IbObject）→ 统一值对象状态承载（G1）→ 顺带消除 G2/G4 碎片
+> - **阶段 3（通信领域设计完善）**：Signal 投递语义设计（G6）、pubsub 语言层打通（G7）、TASK kind 清理（G3）、协调器归属修正（G5）
 >
-> **约束**：大范围重构已授权（可推翻/删除既有代码）；save_state 检测未完成线程则抛异常 fail；旧测试废除。
->
-> **进度**：任务 A（Optional 配套完整实现）**已完成 2026-08-04**——运行时 `IbOptional` + is_some/unwrap/or_else + 绑定入口单一化（`_wrap_optional`）+ Optional 基础可赋值性 + 值协议 + 序列化。测试：新增 `tests/runtime/test_optional_runtime.py`（17 用例），全量 pytest 1426 passed/4 skipped 零回归。
->
-> **任务 B（统一泛型模型）已完成 2026-08-04**——`GenericTypeDeclaration` + `GenericTypeRegistry`（单一权威源），`resolve_specialization` 统一走注册表创建/解析；删除 Optional/List/Dict/Tuple Axiom 的 `resolve_specialization_by_names` 遗留路径（用户明确要求删除历史包袱）；`thread[T]` 首个消费者（THREAD_SPEC + ThreadAxiom + create_thread + join→T 特化 + 序列化/还原）。测试：新增 `tests/kernel/test_generic_model.py`（16 用例），全量 pytest 1443 passed/4 skipped 零回归。
->
-> **任务 C（线程对象模型）已完成 2026-08-04**——C0 前置（类构造关键字参数支持，`_get_callee_param_specs` 支持 IbClass + `_auto_init` 补 param_meta）；C1（`IbThread` 值对象 + 生命周期状态机 + `thread(callable=..., args=...)` 构造）；C2（`thread_result[T]` 容器 + join 返回容器 + `expect()`/`unwrap()`/`unwrap_or()` 等，用户裁定 join 返回容器）；C5（序列化）；C6（测试）。**设计裁决**：构造参数名 `callable`（设计文档原 `fn`/`func` 均与关键字碰撞，按"内部接口设计不违反关键字碰撞"原则弃用）。测试：新增 `test_thread_model.py`（7 用例）+ `test_thread_result.py`（4 用例），全量 pytest 1459 passed/4 skipped 零回归。详见 `tasks_docs/_code_thread_model.md`。
->
-> **任务 D（err 类型统一）已完成 2026-08-04**——TaskError（parent Exception）→ TaskCancelled/TaskFailed（parent TaskError）映射 IBCI Exception 子类；`make_task_cancelled`/`make_task_failed` 运行时工厂；`cancel()` 返回 TaskCancelled err；`join()` 错误值化进容器；`expect()` 抛容器内 err 供语言层 try/except 按类型捕获；err 用户可见可继承（`class MyTaskError(TaskError)` 验证）。测试：新增 `tests/runtime/test_thread_err.py`（5 用例），全量 pytest 1464 passed/4 skipped 零回归。
->
-> **任务 E（线程相关清理）已完成 2026-08-04**——VP-2（死 `_task_handle` 引用 → handle 全链透传）、F-2（coordinator `_tasks` 自动清理防泄漏）、F-1（快照补充协调器线程，单数据源）、疏漏 4（save_state 检测未完成线程抛异常）+ save_state 磁盘型误判修复（类对象不再误判）+ 序列化瞬态线程存根化。VP-1/VP-4/VP-5 随任务 F 删除旧关键字路径一并清除。测试：新增 `tests/runtime/test_thread_cleanup.py`（4 用例），全量 pytest 1468 passed/4 skipped 零回归。
->
-> **任务 F（关键字精简）已完成 2026-08-04**——删除 spawn/join/cancel/task 全链（lexer/parser/AST/semantic/dispatch/serialization/spec + 删除 objects/task.py）；废除旧 spawn/join/cancel/task 测试并重写为 thread 对象模型语法；修复 `_thread_init` 实参传递 bug（IbList 内 chan/slot 值对象身份保留）。旧 spawn/join/cancel/task 语法全部编译失败（已验证）。全量 pytest 1453 passed/4 skipped 零回归。
->
-> **🎉 线程对象模型方向修正（任务 A-F）全部完成 2026-08-04**——Optional 配套 → 统一泛型模型 → 线程对象模型（thread[T] + thread_result[T] + err 类型统一）→ 线程清理 → 关键字精简。`thread` 取代 `spawn/join/cancel/task`，async/thread 领域彻底分离。
+> **约束**：工作模式定论（质量优先、不留历史包袱、原则优先于行为维持）；每批全量 pytest 零回归 + commit + 同步 NEXT_STEPS/WORKLOG。
+
+---
+
+## ✅ 已完成：线程对象模型方向修正（任务 A-F）
+
+> 2026-08-04 全部完成。`thread` 取代 `spawn/join/cancel/task`，async/thread 领域彻底分离。详细记录见 `tasks_docs/THREAD_DESIGN_REVISION.md`（决策依据，历史保留）与 `tasks_docs/WORKLOG.md`（实现记录）。
+
+| 任务 | 内容 | 状态 |
+|------|------|------|
+| A | Optional 配套完整实现（运行时 IbOptional） | ✅ commit b7b3e77 |
+| B | 统一泛型模型（GenericTypeRegistry 单一权威源 + thread[T] 首个消费者） | ✅ commit d814568 |
+| C | 线程对象模型（IbThread + 状态机 + thread(callable=,args=) + thread_result[T] + join 返回容器 + expect()） | ✅ commit 5ebbcfd/e30487c/21b3ce6 |
+| D | err 类型统一（TaskError/TaskCancelled/TaskFailed + cancel 返回 err） | ✅ commit bd14381 |
+| E | 线程相关清理（VP-2/F-1/F-2/疏漏4 + save_state 修复） | ✅ commit b0fe530 |
+| F | 关键字精简（删 spawn/join/cancel/task 全链 + 废除旧测试） | ✅ commit 24baa3e |
 
 ---
 

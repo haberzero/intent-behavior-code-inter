@@ -6,6 +6,53 @@
 
 ---
 
+## 2026-08-04 会话 5：通信领域设计完善与统一化 —— 全方位审查（自主推进）
+
+### 背景
+
+线程对象模型方向修正（任务 A-F）完成后，用户要求对昨天自主推进的代码做全方位审查，重点：系统级宏观一致性、设计语言统一、机制/功能碎片化。作为"通信领域（chan/signal/slot）设计完善与统一化检查"的前置审查。
+
+### 审查方法与范围
+
+- 三个独立 subagent 并行审查：① 线程对象模型一致性（thread/thread_result/coordinator/构造链）② 统一泛型模型/spec 一致性（generic/factory/_members/serializer/rehydrator）③ 通信机制与构造链（chan/signal/slot + primitive_initializer + vm handlers）。
+- 随后对关键断言逐一读代码/实跑核验。完整审查记录见 `tasks_docs/COMMS_DESIGN_REVIEW.md`。
+
+### 审查发现（摘要，详见 COMMS_DESIGN_REVIEW.md）
+
+**已实锤真实 bug（直接核验）**：
+- **B1**：`thread_result` 序列化往返丢数据——`IbThreadResult` 非 IbValue → `runtime_serializer.py:270` 守卫永不触发 → 序列化为空 object（value/error/status 静默丢失）。实测序列化输出 `{"_type":"object","fields":{}}`。
+- **B2**：循环导入——`thread_result → primitives.optional → primitives/__init__ → ..thread_result`，直接导入触发 ImportError（依赖隐式顺序）。
+- **B3**：`_by_kind` 索引有损——共享 kind 后注册者覆盖先者（`callable_instance→behavior`，`task→thread`）。
+- **B4**：VP-4 未修——`comm.py:32-35/51-54` 的 `except: pass` 兜底原址仍在（任务 E 声称已清未清）。
+
+**六大同构/碎片化问题**：
+- G1 值对象状态承载四模式并存（core 槽/fields/__slots__+payload 双载/payload 单载），根因=instantiate 硬编码普通 IbObject。
+- G2 状态枚举三写真相（_ThreadState/_ThreadResultStatus/序列化裸字符串）。
+- G3 thread 复用已删除 task 的 kind（TypeKind.TASK 残留 + _axiom_name 隐藏不变量）。
+- G4 序列化/还原三套并行机制（注册表 to_typeref 死代码 / serializer 硬编码 / rehydrator 字符串嗅探 + 幽灵 task 回退）。
+- G5 线程协调器访问器（_get_coordinator）寄居通信模块 comm.py，刺穿领域分离。
+- G6 Signal 功能空壳（语言层零方法、无投递机制）+ 双 Signal 撞名（VM 控制流 Signal vs 通信 SignalCore）。
+- G7 通信半成品：pubsub 语言层不可达、send_nowait 无订阅者"丢弃返回 True"语义不对称、订阅者无界缓存无失效机制、"可配置"空头支票。
+
+### 根因归纳
+
+1. `instantiate` 不可挂钩（`ib_class.py:86`）→ 值对象构造机制无法统一 → G1/G2/G4 + B1/B2 连锁碎片。
+2. 方向修正清理不彻底 → TASK kind 残留、comm 模块归属、VP-4 未修、SpawnedTask 结构性 Waitable 残留。
+3. 完成口径高估 → C5"序列化"实为半接通（B1）、PT-MT-3"已完成"实为占位（G6/G7）。
+4. join/cancel 公理返回类型仍是 any 兜底，仅靠 `_members.py` 特化补救。
+
+### 变化前后
+
+- **新增**：`tasks_docs/COMMS_DESIGN_REVIEW.md`（完整审查记录）。
+- **代码**：无改动（纯审查）。
+- **测试**：基线 1453 passed / 4 skipped（全绿，B1/B3 等未被测试覆盖）。
+
+### 待决
+
+- 无。修复方向已列于 COMMS_DESIGN_REVIEW §六（三阶段：先修实锤 bug → 统一值对象机制 → 通信领域设计）。下一 session 按 `_HANDOFF.md` 规划推进。
+
+---
+
 ## 2026-08-04 会话 4：任务 C 线程对象模型实现（C0-C6，自主实现）
 
 ### 背景

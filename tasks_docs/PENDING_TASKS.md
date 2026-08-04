@@ -3,13 +3,15 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-04（PT-MT-1~8 全部完成；任务 A、B 已完成；任务 C-F 见 NEXT_STEPS.md）
+> **最后更新**：2026-08-04（线程对象模型方向修正任务 A-F 全部完成；通信领域设计完善为下一主线，见 NEXT_STEPS.md）
 
 ---
 
-## 〇、IBCI 运行时多线程 + 通信机制（已全部完成，方向修正中）
+## 〇、IBCI 运行时多线程 + 通信机制（已全部完成，方向修正后进入通信领域设计完善）
 
-> 用户裁定（2026-08-03）确立下一主线，PT-MT-1~8 已全部完成（2026-08-03，全量 1409 passed 零回归）。**随后用户深度质询推翻 spawn/join/cancel/task 关键字语法**，方向修正为 thread 对象 + 句柄方法模型——任务 A-F 见 `NEXT_STEPS.md`"当前主线"节与 `tasks_docs/THREAD_DESIGN_REVISION.md`（已授权，**任务 A、B 已完成 2026-08-04**，任务 C-F 待开工）。
+> 用户裁定（2026-08-03）确立 PT-MT-1~8 主线（已全部完成 2026-08-03）。随后深度质询推翻 spawn/join/cancel/task 关键字语法，方向修正为 thread 对象 + 句柄方法模型——任务 A-F **已全部完成 2026-08-04**（见 `NEXT_STEPS.md`"已完成"节与 `tasks_docs/THREAD_DESIGN_REVISION.md`）。
+>
+> **下一阶段**：通信领域（chan/signal/slot）设计完善与统一化检查为当前主线，前置审查已完成，见 `NEXT_STEPS.md`"当前主线"节与 `tasks_docs/COMMS_DESIGN_REVIEW.md`。
 >
 > 本系列原规划已完成（历史记录保留）。
 
