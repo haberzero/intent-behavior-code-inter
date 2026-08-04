@@ -33,7 +33,9 @@
 >
 > **任务 D（err 类型统一）已完成 2026-08-04**——TaskError（parent Exception）→ TaskCancelled/TaskFailed（parent TaskError）映射 IBCI Exception 子类；`make_task_cancelled`/`make_task_failed` 运行时工厂；`cancel()` 返回 TaskCancelled err；`join()` 错误值化进容器；`expect()` 抛容器内 err 供语言层 try/except 按类型捕获；err 用户可见可继承（`class MyTaskError(TaskError)` 验证）。测试：新增 `tests/runtime/test_thread_err.py`（5 用例），全量 pytest 1464 passed/4 skipped 零回归。
 >
-> **下一步（开工）**：任务 E——线程相关清理（VP-1~VP-6 + F-1~F-8：join 阻塞、_task_handle 死引用、cancel 覆盖、except:pass、方法表面、内省统一、事件语义、资源生命周期、save_state 未完成线程检测）。
+> **任务 E（线程相关清理）已完成 2026-08-04**——VP-2（死 `_task_handle` 引用 → handle 全链透传）、F-2（coordinator `_tasks` 自动清理防泄漏）、F-1（快照补充协调器线程，单数据源）、疏漏 4（save_state 检测未完成线程抛异常）+ save_state 磁盘型误判修复（类对象不再误判）+ 序列化瞬态线程存根化。VP-1/VP-4/VP-5 随任务 F 删除旧关键字路径一并清除。测试：新增 `tests/runtime/test_thread_cleanup.py`（4 用例），全量 pytest 1468 passed/4 skipped 零回归。
+>
+> **下一步（开工）**：任务 F——关键字精简（删 spawn/join/cancel/task 全链：lexer/parser/AST/semantic/dispatch/serialization）+ 废除旧测试 + 新测试单独制作。
 
 ---
 
