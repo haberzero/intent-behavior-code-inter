@@ -102,17 +102,35 @@ class IbThread(IbObject):
         ))
 
     def join(self) -> Any:
-        """阻塞等待线程完成并返回结果值。
+        """阻塞等待线程完成并返回 ``thread_result[T]`` 容器。
 
-        线程失败/取消时抛对应 IBCI 异常（任务 D 落地精确 err 类型；
-        当前阶段先以既有 ``TaskCancelled``/``TaskFailed`` 语义透传）。
+        成功 → status=done、value=T、error=null；
+        失败/取消 → status=failed/cancelled、error=err、value=null。
+        值化失败（不靠抛异常打断控制流），用户经 ``thread_result`` 方法取值。
         """
+        from .thread_result import IbThreadResult, _ThreadResultStatus
+
         spawned = self.fields.get(_FIELD_SPAWNED)
         if spawned is None:
             raise InterpreterError("join() called on a thread that was never started")
-        result = spawned.join()
-        self.fields[_FIELD_STATE] = _ThreadState.DONE
-        return result
+        result_cls = self.ib_class.registry.get_class("thread_result")
+        try:
+            value = spawned.join()
+            self.fields[_FIELD_STATE] = _ThreadState.DONE
+            return IbThreadResult(
+                ib_class=result_cls,
+                value=value,
+                error=None,
+                status=_ThreadResultStatus.DONE,
+            )
+        except Exception as e:
+            self.fields[_FIELD_STATE] = _ThreadState.FAILED
+            return IbThreadResult(
+                ib_class=result_cls,
+                value=None,
+                error=e,
+                status=_ThreadResultStatus.FAILED,
+            )
 
     def cancel(self) -> "IbObject":
         """请求取消线程（协作式）；返回操作状态（任务 D 落地为 err 类型）。

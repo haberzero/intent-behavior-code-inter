@@ -67,6 +67,40 @@ class ThreadAxiom(BaseAxiom):
         return other_name == "thread" or other_name.startswith("thread[")
 
 
+class ThreadResultAxiom(BaseAxiom):
+    """公理：thread_result 类型（线程结果容器，join 的返回值）。
+
+    ``thread_result[T]`` 泛型：成功值类型经 value_type 承载。提供容器方法
+    表面供语义层类型检查——运行时实现由 ``IbThreadResult`` 值对象提供。
+
+    方法：
+    - ``unwrap()``     → Optional[T]（失败返回 Optional 空，不抛）
+    - ``unwrap_or(v)`` → T（失败返回默认值）
+    - ``expect()``     → T（失败抛错，fail-fast，Rust 对齐）
+    - ``is_error()`` / ``is_success()`` → bool
+    - ``value`` / ``error`` / ``status`` 内省成员
+    """
+
+    @property
+    def name(self) -> str:
+        return "thread_result"
+
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "unwrap": _m("unwrap", ret="any"),
+            "unwrap_or": _m("unwrap_or", params=["any"], ret="any"),
+            "expect": _m("expect", ret="any"),
+            "is_error": _m("is_error", ret="bool"),
+            "is_success": _m("is_success", ret="bool"),
+            "value": _m("value", ret="any"),
+            "error": _m("error", ret="any"),
+            "status": _m("status", ret="str"),
+        }
+
+    def is_compatible(self, other_name: str) -> bool:
+        return other_name == "thread_result" or other_name.startswith("thread_result[")
+
+
 class ChannelAxiom(BaseAxiom):
     """公理：chan 类型（数据流通道）。
 

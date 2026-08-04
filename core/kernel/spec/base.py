@@ -62,6 +62,7 @@ class TypeKind(str, Enum):
     CHANNEL = "channel"     # 数据流通道（元素类型泛型）
     SIGNAL = "signal"       # 控制流信号
     SLOT = "slot"           # 共享状态槽（值类型泛型）
+    THREAD_RESULT = "thread_result"  # 线程结果容器（值类型泛型，thread_result[T]）
 
 
 @dataclass(eq=False)

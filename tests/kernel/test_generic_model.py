@@ -82,7 +82,18 @@ class TestThreadGeneric:
         sp = reg.resolve_specialization(reg.resolve("thread"), [reg.resolve("int")])
         join_spec = reg.resolve_member(sp, "join")
         assert join_spec is not None
-        assert join_spec.return_type.head == "int"
+        # join() 返回 thread_result[T] 容器（任务 C2），T 为线程返回类型。
+        assert join_spec.return_type.head == "thread_result[int]"
+
+    def test_thread_result_unwrap_returns_value_type(self):
+        reg = make_registry()
+        sp = reg.resolve_specialization(reg.resolve("thread_result"), [reg.resolve("int")])
+        unwrap_spec = reg.resolve_member(sp, "unwrap")
+        assert unwrap_spec is not None
+        assert unwrap_spec.return_type.head == "Optional[int]"
+        expect_spec = reg.resolve_member(sp, "expect")
+        assert expect_spec is not None
+        assert expect_spec.return_type.head == "int"
 
     def test_thread_void_join(self):
         reg = make_registry()

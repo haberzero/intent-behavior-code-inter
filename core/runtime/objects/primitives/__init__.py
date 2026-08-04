@@ -6,6 +6,7 @@ from .collections import IbList, IbTuple, IbDict
 from .callables import IbFnCallable, IbBehavior
 from .optional import IbOptional
 from ..thread import IbThread
+from ..thread_result import IbThreadResult
 from ..media_types import IbAudio, IbImage, IbVideo
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "IbBehavior",
     "IbOptional",
     "IbThread",
+    "IbThreadResult",
     "IbAudio",
     "IbImage",
     "IbVideo",

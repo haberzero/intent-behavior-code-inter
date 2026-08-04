@@ -134,6 +134,12 @@ def _build_thread(factory: "SpecFactory", names: List[str], modules: List[Option
     return factory.create_thread(value_type_name=value, value_type_module=value_mod)
 
 
+def _build_thread_result(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
+    value = names[0] if names else "any"
+    value_mod = modules[0] if modules else None
+    return factory.create_thread_result(value_type_name=value, value_type_module=value_mod)
+
+
 # -- to_typeref（序列化：特化 TypeDef → 结构化 TypeRef） ------------- #
 
 def _to_typeref_list(spec: "TypeDef") -> TypeRef:
@@ -226,6 +232,13 @@ def _restore_thread(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
     )
 
 
+def _restore_thread_result(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
+    return factory.create_thread_result(
+        value_type_name=data.get("value_type_name", "any"),
+        value_type_module=data.get("value_type_module"),
+    )
+
+
 def create_generic_registry() -> GenericTypeRegistry:
     """构建全部内置泛型类型的声明注册表（单一权威源）。"""
     reg = GenericTypeRegistry()
@@ -256,5 +269,9 @@ def create_generic_registry() -> GenericTypeRegistry:
     reg.register(GenericTypeDeclaration(
         name="thread", kind=TypeKind.TASK.value,
         build=_build_thread, to_typeref=_to_typeref_callable, restore=_restore_thread,
+    ))
+    reg.register(GenericTypeDeclaration(
+        name="thread_result", kind=TypeKind.THREAD_RESULT.value,
+        build=_build_thread_result, to_typeref=_to_typeref_callable, restore=_restore_thread_result,
     ))
     return reg

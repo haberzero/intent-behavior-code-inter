@@ -119,10 +119,23 @@ class _MemberMixin:
                         effective_params[0] = wrapped
                         effective_param_modules[0] = wrapped_mod
                 elif spec.kind == TypeKind.TASK.value and spec.get_base_name() == "thread":
-                    # thread[T].join() → T（返回值类型）。
+                    # thread[T].join() → thread_result[T]（容器，含成功值/错误/状态）。
                     val = spec.value_type.head
                     val_mod = spec.value_type.module
                     if val != "any" and attr_name in ("join", "result"):
+                        effective_return = f"thread_result[{val}]"
+                        effective_return_module = val_mod
+                elif spec.kind == TypeKind.THREAD_RESULT.value:
+                    # thread_result[T] 方法返回类型特化：
+                    #   unwrap()      → Optional[T]（失败返回 Optional 空）
+                    #   unwrap_or(v)  → T（失败返回默认值）
+                    #   expect()      → T（失败抛错，fail-fast）
+                    val = spec.value_type.head
+                    val_mod = spec.value_type.module
+                    if attr_name == "unwrap" and val != "any":
+                        effective_return = f"Optional[{val}]"
+                        effective_return_module = val_mod
+                    elif val != "any" and attr_name in ("unwrap_or", "expect"):
                         effective_return = val
                         effective_return_module = val_mod
                 from ..base import TypeDef

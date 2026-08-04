@@ -85,6 +85,11 @@ SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value,    is_nullable=F
 THREAD_SPEC  = TypeDef(name="thread", kind=TypeKind.TASK.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 THREAD_SPEC._axiom_name = "thread"
 
+# thread_result —— 线程结果容器（join 的返回值，thread_result[T]）。
+# 泛型：value_type 承载 T。经 ThreadResultAxiom 路由（_axiom_name="thread_result"）。
+THREAD_RESULT_SPEC  = TypeDef(name="thread_result", kind=TypeKind.THREAD_RESULT.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+THREAD_RESULT_SPEC._axiom_name = "thread_result"
+
 ENUM_SPEC = TypeDef(name="Enum", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                     parent_type=TypeRef.of("Object"))
 ENUM_SPEC._axiom_name = "enum"

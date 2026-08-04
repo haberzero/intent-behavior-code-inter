@@ -48,19 +48,32 @@
 5. **`ThreadAxiom` 方法表面修正**：`join` → T、`cancel` → err（任务 D 细化，此处先对齐）。
 6. **序列化**：thread/thread_result 值类型持久化。
 
+### C2 设计裁定：join 返回容器 + Rust 风格直接取值方法（2026-08-04）
+
+**用户裁定**：`t.join()` 返回 `thread_result[T]` 容器（非 T）。§2.3 例 `int r = t.join()` 需改为 `thread_result[int] r = t.join()` 再取 value。
+
+**易用方法**（用户要求：参考 Rust 的直接返回 value 方法，设计历史已归档无此记录，自主设计）：
+- §2.5 已有：`unwrap()`→Optional[T]（失败返回 Optional 空，不抛）、`unwrap_or(default)`→T、`is_error()`/`is_success()`、`.value`（失败抛错）、`.error`（不抛）。
+- **新增 `expect()`**（Rust 对齐）：直接返回 T，失败抛 IBCI 异常（fail-fast）。`expect()` 是"明确直接返回 value"的方法，弥补 `unwrap()` 返回 Optional 不直接取 T 的缺口。
+- **`status`**：容器持有状态（done/cancelled/failed），经内省方法暴露。
+
+**容器成员**：`value()`、`error()`、`status()`、`is_error()`、`is_success()`、`unwrap()`、`unwrap_or(default)`、`expect()`。
+- **value/error/status 为方法**（`r.value()` 等），符合疏漏 4"内省方法取代裸属性"裁决（非裸属性）。
+
+**join 语义**：`join()` 返回容器。成功 → `status=done`、`value=T`、`error=null`；失败/取消 → `status=failed/cancelled`、`error=err`、`value=null`。成功值经 `expect()`/`.value()`/`.unwrap()` 取。
+
 ## 五、验证
 
 - 新增 `tests/runtime/test_thread_model.py`（构造/状态机/join/cancel/is_done/线程隔离）。
+- 新增 `tests/runtime/test_thread_result.py`（容器方法 + join 返回容器）。
 - 全量 `python -m pytest tests/` 零回归。
 
 ## 六、待办（按序）
 
 - [x] C0：`_get_callee_param_specs` 支持 IbClass + `_auto_init` 补 param_meta（+ 测试）—— **已完成 2026-08-04**（commit 35b0691，4 用例，全量 1443+4 零回归）
 - [x] C1：`IbThread` 值对象 + 状态机—— **已完成 2026-08-04**（thread.py + primitive_initializer 注册 __init__ + ThreadAxiom has_call_cap + resolve_return_type_name；5 用例，全量 1447 passed 零回归）
-- [ ] C2：`thread_result[T]` 容器
-- [ ] C3：thread 构造函数注册 + 绑定（已完成 C1 内：`thread(callable=..., args=...)` 关键字构造可用）
-- [ ] C4：ThreadAxiom 方法表面对齐（join → T、cancel → err，任务 D 细化）
-- [ ] C5：序列化
+- [x] C2：`thread_result[T]` 容器—— **已完成 2026-08-04**（TypeKind.THREAD_RESULT + THREAD_RESULT_SPEC + create_thread_result + GenericTypeRegistry + ThreadResultAxiom + IbThreadResult + join 返回容器 + value/error/status/is_error/is_success/unwrap/unwrap_or/expect；9 用例（thread_model 5 + thread_result 4），全量 1457 passed 零回归）
+- [ ] C5：序列化（thread_result 值类型持久化）
 - [ ] C6：测试 + 全量验证
 
 ### C1 实现细节记录（2026-08-04）

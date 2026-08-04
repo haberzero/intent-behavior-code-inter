@@ -3,7 +3,7 @@
 
 覆盖：
 - 构造：``thread(callable=..., args=...)`` 关键字参数
-- join：返回 T（泛型精度）
+- join：返回 thread_result[T] 容器
 - is_done：状态查询
 - 多线程并发
 - 状态机：done 后 is_done 为 True
@@ -18,8 +18,8 @@ func compute(str x) -> int:
     return 42
 
 thread[int] t = thread(callable=compute, args=["x"])
-int r = t.join()
-print((str)r)
+thread_result[int] r = t.join()
+print((str)r.expect())
 """
     lines = run_ibci(code)
     assert lines == ["42"]
@@ -31,7 +31,8 @@ func add(int a, int b) -> int:
     return a + b
 
 thread[int] t = thread(callable=add, args=[1, 2])
-print((str)t.join())
+thread_result[int] r = t.join()
+print((str)r.expect())
 """
     lines = run_ibci(code)
     assert lines == ["3"]
@@ -44,7 +45,8 @@ func add(int a, int b) -> int:
 
 thread[int] t = thread(callable=add, args=[1, 2])
 print((str)t.is_done())
-print((str)t.join())
+thread_result[int] r = t.join()
+print((str)r.expect())
 print((str)t.is_done())
 """
     lines = run_ibci(code)
@@ -58,8 +60,8 @@ func work(int x) -> int:
 
 thread[int] a = thread(callable=work, args=[21])
 thread[int] b = thread(callable=work, args=[50])
-print((str)a.join())
-print((str)b.join())
+print((str)a.join().expect())
+print((str)b.join().expect())
 print((str)(a.is_done() and b.is_done()))
 """
     lines = run_ibci(code)

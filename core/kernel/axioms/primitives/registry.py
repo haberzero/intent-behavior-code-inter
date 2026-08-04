@@ -41,6 +41,7 @@ from core.kernel.axioms.intent import IntentAxiom
 from core.kernel.axioms.primitives.comm import (
     TaskAxiom,
     ThreadAxiom,
+    ThreadResultAxiom,
     ChannelAxiom,
     SignalAxiom,
     SlotAxiom,
@@ -88,6 +89,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(LLMUncertainAxiom())
     registry.register(TaskAxiom())
     registry.register(ThreadAxiom())
+    registry.register(ThreadResultAxiom())
     registry.register(ChannelAxiom())
     registry.register(SignalAxiom())
     registry.register(SlotAxiom())

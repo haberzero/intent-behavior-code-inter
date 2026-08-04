@@ -278,3 +278,27 @@ class SpecFactory:
         # specs like "thread[int]".
         spec._axiom_name = "thread"
         return spec
+
+    def create_thread_result(
+        self,
+        value_type_name: str = "any",
+        value_type_module: Optional[str] = None,
+    ) -> "TypeDef":
+        """Create a ``TypeDef`` for a ``thread_result[T]`` container.
+
+        ``value_type_name`` is the thread's return value type (join 结果类型).
+        ``thread_result[T]`` is the container returned by ``t.join()``;
+        ``T`` is the payload type (success value).
+        """
+        result_name = f"thread_result[{value_type_name}]" if value_type_name != "any" else "thread_result"
+        spec = TypeDef(
+            name=result_name,
+            kind=TypeKind.THREAD_RESULT.value,
+            is_nullable=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+            value_type=TypeRef.of(value_type_name, value_type_module),
+        )
+        # Route axiom dispatch to the "thread_result" axiom even for parameterised
+        # specs like "thread_result[int]".
+        spec._axiom_name = "thread_result"
+        return spec
