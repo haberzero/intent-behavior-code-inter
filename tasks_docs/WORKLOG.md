@@ -6,6 +6,56 @@
 
 ---
 
+## 2026-08-04 会话 8：阶段 3 通信领域设计完善（G3/G5/G6/G7）
+
+### 背景
+
+阶段 2 完成后按 COMMS_DESIGN_REVIEW 阶段 3 推进。四项全部完成。
+
+### 变化前后
+
+**G3 —— TASK kind 清理**
+- `TypeKind.TASK`（task 已删除的遗留 kind）→ `TypeKind.THREAD`（"thread"）。thread 不再复用已删类型 kind，与 thread_result 兄弟类型同构。
+- 序列化/还原/分派各处 `kind==TASK and base=="thread"` 双判收敛为 kind-only（THREAD kind 唯一指 thread）。
+- 同步点：generic/factory/specs/type_ref/rehydrator/serializer/_members + 测试。
+
+**G5 —— 协调器归属修正**
+- `_get_coordinator` 从 `vm/handlers/comm.py` 移入线程领域模块 `core/runtime/coordinator.py`（更名 `get_runtime_coordinator`）。primitive_initializer 改引用。消除"线程领域依赖通信 handler"的刺穿。
+
+**G6 —— 通信 Signal 抽象移除（设计裁定，非实现）**
+- **决策**：移除 comm `Signal` 抽象（SignalCore/IbSignal/SignalAxiom/`signal(...)` 语言构造/TypeKind.SIGNAL/SIGNAL_SPEC）全链。
+- **理由**（可推翻 IBCI 自身设计缺陷 + 真删除）：① 零功能消费者（语言 `signal(...)` 产惰性数据，无投递/接收/广播机制，"定向/广播/抢占式/一次性"仅 docstring）；② 与 VM 控制流 `Signal`（shared/signals.py，真实帧栈传播）撞名——双 kind 词汇表一真一空；③ PT-MT-3 "已完成"口径高估；④ 对齐 task 关键字族移除先例（任务 F）；⑤ 实现投递机制属无消费者造轮子。VM 控制流 Signal 保留。
+- 移除面：lexer 关键字/scanner/recognizer/parser（signal_expr + 类型注解）/AST（IbSignalExpr）/semantic（visit_IbSignalExpr）/dispatch/IbSignal 类/kernel 导出/SignalCore 文件/SignalAxiom/TypeKind.SIGNAL/SIGNAL_SPEC + 3 个测试文件。
+- 测试：-8（signal 相关）+1（signal 关键字已移除回归）。
+
+**G7 —— pubsub 语言层打通 + send_nowait 语义 + 订阅缓存**
+- `ChannelCore.subscribe(size=0)`：订阅队列容量可配置（0=无界默认，>0 有界），"设计 D5：可配置"落地；无界为广播信箱设计选择并注明无失效机制。
+- `send_nowait` 无订阅者 → False（消息未投递给任何人，按"False=未投递"契约，不再把被零人接收报为成功）。
+- pubsub 直接 `recv`/`recv_nowait` → 明确 ValueError（广播器须 subscribe 取消费端点），消除误导性 CommClosedError。
+- 语言层：`IbChannel.subscribe(size)` → 新 `IbSubscriber` 值对象（recv/recv_nonblocking/close）；**顺带修复 `send_nowait` 从未在 ChannelAxiom 声明**（又一个口径高估——IbChannel 有该方法但语言面不可达）；新增 SubscriberAxiom + TypeKind.SUBSCRIBER + SUBSCRIBER_SPEC + IbSubscriber 注册。
+- 测试：+7（有界订阅/无订阅者语义/pubsub recv 报错/语言层订阅+扇出 e2e）。
+
+### 已知残留（记录，不属本次范围）
+
+- **chan/slot/subscriber 序列化仍为空 object**（实测确认）：与 thread/thread_result 修复前同类数据丢失，但为既有系统性瞬态缺口（chan/slot 本就如此），本次不扩面处理；正解是像 thread_transient 一样为瞬态通信对象加序列化存根，待后续架构窗口。
+- 运行时泛型身份全系统有损（Optional[any]/list 等，见会话 7）——G4 系统性边界，阶段 2 已记录。
+
+### 测试与验证
+
+- 每批全量 `python -m pytest tests/` 零回归。最终：**1464 passed / 4 skipped**。
+
+### 决策记录
+
+- G6 移除 vs 实现：选移除（无消费者 + 撞名 + 口径高估 + 造轮子禁令）。此为语言级删除，按"可推翻 IBCI 自身设计缺陷 + 破坏性重构授权"自主裁定，git 历史可回溯。
+- G7 subscriber 新类型：语义诚实（广播器 vs 消费端点分离），与 chan/slot 机制同构（axiom 声明 + 实现类 + spec 注册 + auto-bind）。
+- `unbox(size)` 修复：`IbInteger.__lt__` 调 `other.to_native()`，boxed size 传入 `CommBuffer` 触发 `0.to_native()`——标准参数 unbox 模式（与 send 一致）。
+
+### 待决
+
+- 无。三阶段全部完成；通信领域设计完善主线收尾。
+
+---
+
 ## 2026-08-04 会话 7：阶段 2 统一值对象机制（D1-D5，独立分支验证 + 手动应用）
 
 ### 背景

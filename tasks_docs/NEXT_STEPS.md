@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-04（阶段 1 实锤 bug 修复 + 阶段 2 统一值对象机制完成；阶段 3 通信领域设计完善为当前项）
+> **最后更新**：2026-08-04（通信领域设计完善三阶段全部完成；下一主线待定/详见 PENDING_TASKS）
 
 ---
 
@@ -14,22 +14,19 @@
 >
 > **前置审查（已完成 2026-08-04）**：对线程对象模型方向修正代码做了全方位审查（系统级一致性/设计语言统一/碎片化），完整发现记录见 `tasks_docs/COMMS_DESIGN_REVIEW.md`（唯一审查依据）。
 >
-> **修复路径（三阶段，见 COMMS_DESIGN_REVIEW §六）**：
-> - **阶段 1（✅ 已完成 2026-08-04，commit e217b8b）**：
->   - B1：`thread_result` 序列化往返丢数据——序列化守卫改按 ib_class.name 分发 + 3 条往返测试锁定
->   - B2：循环导入——移除 primitives 反向再导出 + primitive_initializer 显式注册导入 + 干净解释器回归测试
->   - B4：VP-4 未修（`comm.py` 的 `except: pass` 兜底）——改为 fail-fast 直写
->   - 全量 pytest 1457 passed / 4 skipped（+4，零回归）
-> - **阶段 2（✅ 已完成 2026-08-04，commit f3037b2；设计见 STAGE2_VALUE_OBJECT_UNIFICATION.md）**：
->   - D1 `instantiate` 挂钩（`_create_blank` 协议）→ thread 实例真实化
->   - D2 thread 状态迁移 `__slots__`（消 G1 fields 承载模式）+ 实例方法
->   - D3 thread_result 升级 IbValue（payload + type_ref，修 B1 深根因）
->   - D4 `ThreadStatus` 单一状态枚举（消 G2 三写）
->   - D5 G4 机制诚实化（from_spec 补分支 / rehydrator 去嗅探+幽灵回退 / to_typeref 语义改名）
->   - 独立分支验证后手动应用；全量 pytest 1464 passed / 4 skipped（+7，零回归）
-> - **阶段 3（当前）**：Signal 投递语义设计（G6）、pubsub 语言层打通（G7）、TASK kind 清理（G3）、协调器归属修正（G5）
+> **修复路径（三阶段，全部完成 ✅ 2026-08-04）**：
+> - **阶段 1（commit e217b8b）**：B1 thread_result 序列化往返 / B2 循环导入 / B4 except:pass 兜底（1457 passed）
+> - **阶段 2（commit f3037b2；设计见 STAGE2_VALUE_OBJECT_UNIFICATION.md）**：D1 instantiate 挂钩 / D2 thread 槽位化 / D3 thread_result IbValue / D4 ThreadStatus 单一枚举 / D5 G4 机制诚实化（1464 passed）
+> - **阶段 3（commit 1da0b1c + 2c49240）**：
+>   - G3 TASK→THREAD kind 清理
+>   - G5 协调器访问器移入 coordinator.py（线程领域归属）
+>   - G6 通信 Signal 抽象移除（零消费者空壳 + 与 VM 控制流 Signal 撞名，裁定见 WORKLOG 会话 8）
+>   - G7 pubsub 语言层打通（IbChannel.subscribe + IbSubscriber）+ send_nowait 无订阅者语义 + 订阅缓存可配置 + 补发 send_nowait 语言面（曾未声明）
+>   - 全量 pytest 1464 passed / 4 skipped
 >
-> **约束**：工作模式定论（质量优先、不留历史包袱、原则优先于行为维持）；每批全量 pytest 零回归 + commit + 同步 NEXT_STEPS/WORKLOG。
+> **遗留记录（后续窗口）**：chan/slot/subscriber 序列化空壳（瞬态通信对象存根，见 WORKLOG 会话 8）；运行时泛型身份全系统有损（会话 7）。
+>
+> **下一主线**：待定。可选方向见 `PENDING_TASKS.md`（§二 L3 异步剩余 async 函数/生成器、§三 PT-4.3 语言级协程完整形态等）。
 
 ---
 
