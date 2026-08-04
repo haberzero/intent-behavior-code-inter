@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-08-04 会话 7：阶段 2 统一值对象机制（D1-D5，独立分支验证 + 手动应用）
+
+### 背景
+
+阶段 1 完成后，按 `STAGE2_VALUE_OBJECT_UNIFICATION.md` 设计实施。判断属"危害程度无法预先确认"的架构级重构（触碰最核心的 `instantiate` 构造路径 + 值对象数据布局 + 序列化三文件），按硬原则在独立分支 `comms-stage2-valueobj` 实验，全绿后手动 diff/apply 应用到 unsafe-vibe-dev（未 merge）。
+
+### 决策记录（详见 STAGE2_VALUE_OBJECT_UNIFICATION.md）
+
+- **D1 instantiate 挂钩**：`IbObject._create_blank(ib_class)` 协议（默认返回普通 IbObject，零行为变化）；`instantiate` 经 `get_ib_implementation(name)` 使用类型化实例。选"值对象专用构造入口"候选，未选"__init__ 返回实例"（破坏 Python 构造语义）/ "factory 注入"（增加注册表耦合）。
+- **D2 thread 值对象化**：状态 fields → `__slots__`；方法改真实例方法；删除模块级 `_ensure_started`/`_init_fields` 绕路。
+- **D3 thread_result → IbValue**：payload 承载值（消除 `_value` 槽，无双载碎片），type_ref 生效。
+- **D4 ThreadStatus 单一枚举**：替换 `_ThreadState`/`_ThreadResultStatus` 双写；thread 用 5 态、thread_result 用 3 态子集。
+- **D5 G4 机制诚实化**：`TypeRef.from_spec` 补 TASK/THREAD_RESULT 分支；`artifact_rehydrator` 移除 `startswith("thread")` 嗅探 + 幽灵 `name or "task"` 回退；`generic.py` `_to_typeref_callable` → `_to_typeref_value_typed`（语义改名）。
+
+### 重大发现（G4 系统性边界）
+
+实测运行时泛型身份**全系统有损**：`Optional[int]→Optional[any]`、`list[int]→list`、`dict[str,int]→dict[any,any]`——runtime 值对象经 `get_class` 取基础类（spec 非特化），thread_result 并不特殊。**阶段 2 仅做机制诚实化（D5），不做全系统运行时泛型身份保留**（超出阶段 2 边界，记为后续技术债，建议入 KNOWN_LIMITS 或独立任务）。
+
+### 变化前后
+
+- **实现**：9 个 core 文件 + 3 个测试文件（277+/135-）。thread 实例现在是真实 `IbThread`（槽位状态）；`thread_result` 是 `IbValue`。
+- **测试**：+7（thread 实例类型/thread_result IbValue/from_spec 泛型实参/rehydrator 还原）。全量 `python -m pytest tests/` = **1464 passed / 4 skipped**（零回归）。
+- **分支**：`comms-stage2-valueobj` 验证后手动应用，未 merge（符合分支政策）；验证后删除分支。
+
+### 待决
+
+- 无。阶段 3（通信领域设计完善 G3/G5/G6/G7）为下一项。
+
+---
+
 ## 2026-08-04 会话 6：通信领域设计完善 —— 阶段 1 实锤 bug 修复（B1/B2/B4，自主实现）
 
 ### 背景
