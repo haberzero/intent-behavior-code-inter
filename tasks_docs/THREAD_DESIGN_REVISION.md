@@ -1,6 +1,7 @@
 # 线程对象模型方向修正 — 完整决策记录（2026-08-04）
 
-> **状态**：设计决策已定，**暂不开始实现**。本文档完整记录本轮讨论的所有细节与用户裁定，作为后续实施（统一泛型模型 + 线程对象模型 + thread_result 容器 + err 类型）的唯一决策依据。
+> **状态**：设计决策已定，**用户已授权实现（2026-08-04）**。本文档完整记录本轮讨论的所有细节与用户裁定，作为实施（统一泛型模型 + 线程对象模型 + thread_result 容器 + err 类型 + Optional 配套）的唯一决策依据。
+> **授权记录**：2026-08-04 用户授权实现（含 Optional 配套的完整实现）；"授权实现。完善相关决策文档。"
 > **前置设计**：`tasks_docs/THREADING_DESIGN.md`（主线原裁定）、`tasks_docs/THREADING_DESIGN_DETAIL.md`（PT-MT-1 详细设计）。
 > **性质**：本轮是**大范围方向修正**——推翻 PT-MT-1~8 已实现的 spawn/join/cancel 关键字语法，改为"thread 对象 + 句柄方法"模型。用户已授权（疏漏 3 裁决）。
 > **最后更新**：2026-08-04
@@ -160,18 +161,20 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 
 ---
 
-## 六、后续任务清单
+## 六、后续任务清单（已授权实现，2026-08-04）
 
-> **暂不开始实现**（用户指示）。以下为决策后的工作规划，待用户下令启动。
+> **实施顺序**：依赖驱动（泛型/容器地基在前，对象模型/清理在后）。每步全量 pytest 零回归 + 本地 commit。
 
-| 任务 | 内容 | 关联 |
-|------|------|------|
-| **A. 统一泛型模型** | 内置泛型类型声明正式机制；`thread[T]` 首个消费者 | 与线程直接关联 |
-| **B. Optional 配套实现** | 运行时 `IbOptional` + is_some/unwrap/or_else | 与容器共用模式 |
-| **C. 线程对象模型** | `thread[T]` 类型 + 构造函数 + 句柄方法 + 生命周期状态机 | 替换 spawn/join/cancel |
-| **D. err 类型统一** | TaskCancelled/TaskFailed 映射 IBCI Exception 子类；cancel 返回 err | 接入既有体系 |
-| **E. 线程相关清理** | VP-1~VP-6 + F-1~F-8 | 触碰即修 |
-| **F. 关键字精简 + 测试** | 删除 spawn/join/cancel/task；废除旧测试；新测试单独制作 | 疏漏 1/6 |
+| 顺序 | 任务 | 内容 | 验收标准 |
+|------|------|------|---------|
+| 1 | **A. Optional 配套完整实现** | 运行时 `IbOptional` 对象 + `is_some`/`unwrap`/`or_else` 运行时实现；与 `thread_result[T]` 共用设计模式 | `Optional[int] x = None` 后 `x.is_some()`/`x.unwrap()` 可运行；全量 pytest 零回归 |
+| 2 | **B. 统一泛型模型** | 内置泛型类型声明正式机制（list/dict/tuple/Optional/fn/thread 统一）；`thread[T]` 首个消费者 | 泛型 spec 经统一入口创建/解析/序列化/还原；不触碰用户级泛型类/约束求解 |
+| 3 | **C. 线程对象模型** | `thread[T]` 类型 + 构造函数 + 句柄方法（start/join/cancel/is_done）+ 生命周期状态机 | `thread[int] t = thread(fn=compute, args=["x"])`；`t.join()` 返回 int；cancel 返回 err |
+| 4 | **D. err 类型统一** | TaskCancelled/TaskFailed 映射 IBCI Exception 子类；`cancel()` 返回 err；err 用户可见可继承 | `class MyErr(Exception)` 可继承；取消后可从 err 取错误对象 |
+| 5 | **E. 线程相关清理** | VP-1~VP-6 + F-1~F-8（join 阻塞、_task_handle 死引用、cancel 覆盖、except:pass、方法表面、内省统一、事件语义、资源生命周期） | 触碰到的问题全部修复；内省单数据源；task_done 事件语义正确 |
+| 6 | **F. 关键字精简 + 测试** | 删除 spawn/join/cancel/task 关键字（AST/parser/语义/dispatch/序列化全链）；废除旧测试；新测试单独制作 | 旧 spawn/join/cancel 语法编译失败；新 thread 对象模型测试覆盖；全量 pytest 零回归 |
+
+> **分工说明**：任务 A（Optional）与 B（泛型模型）为地基，先于 C（线程对象）；D（err）与 C 紧密关联；E（清理）随触碰随修；F（关键字删除）最后统一执行（避免实现期语法漂移）。
 
 ---
 
@@ -189,11 +192,12 @@ PT-MT-1~8 主线实现完成后，对 spawn/join/cancel/task 关键字设计进�
 
 ---
 
-## 八、待澄清/待用户确认（暂未定案）
+## 八、实施细节（已授权自主决策，按 WORKLOG 记录）
 
-- 线程创建语法最终形态：`thread t = thread(fn=..., args=...)`（构造函数）——**方向已定，具体签名待实施时细化**。
-- `thread_result[T]` 容器的**具体成员字段命名**（value/error/status 等）——实施时按本记录 2.5 细化。
-- 既有 `RuntimeCoordinator`/`SpawnedTask` 内核是保留改造还是重写——**用户已授权删除/改造**，实施时自主决定并按 WORKLOG 记录。
+- **线程创建语法**：`thread t = thread(fn=..., args=...)`（构造函数）——签名按 IBCI 既有对象构造模式自主细化并记录。
+- **`thread_result[T]` 容器成员**：按本记录 2.5 细化（value/error/status/is_error/unwrap/unwrap_or）。
+- **既有 `RuntimeCoordinator`/`SpawnedTask`**：保留内核机制，语言表面改造为 thread 对象 + 方法（用户已授权删除/改造，自主决定并记录）。
+- **大范围重构分支政策**：本方向修正为**已确认边界**的破坏性改造（边界 = spawn/join/cancel/task 相关 + 线程对象模型 + Optional/err/泛型），用户明确授权在当前分支直接开始（疏漏 3），**不**走独立隔离分支。
 
 ---
 
