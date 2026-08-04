@@ -692,6 +692,10 @@ class Interpreter:
                     is_method=True,
                     name=f"{name}.__init__",
                     ib_class=ib_class,
+                    param_meta=[
+                        (fname, "POSITIONAL_OR_KEYWORD", None)
+                        for fname in field_names
+                    ],
                 )
                 ib_class.register_method('__init__', auto_init_fn)
         

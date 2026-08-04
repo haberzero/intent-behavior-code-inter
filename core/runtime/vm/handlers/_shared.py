@@ -22,6 +22,7 @@ from core.kernel.arg_binding import (
 from core.runtime.objects.kernel import (
     IbValue,
     IbObject,
+    IbClass,
     IbLLMCallResult,
     IbUserFunction,
     IbLLMFunction,
@@ -108,6 +109,12 @@ def _get_callee_param_specs(executor, func):
             return _build_runtime_param_specs(executor, func.params_uids) or None
     if isinstance(func, IbNativeFunction):
         return func.param_meta if func.param_meta else None
+    if isinstance(func, IbClass):
+        # 类构造调用：返回其 __init__ 方法的参数签名，使关键字参数可解析
+        # （thread(fn=..., args=...) / Dog(name=..., age=...) 均走此路径）。
+        init_method = func.lookup_method("__init__")
+        if init_method is not None:
+            return _get_callee_param_specs(executor, init_method)
     return None
 
 

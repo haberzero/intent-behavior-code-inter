@@ -6,6 +6,40 @@
 
 ---
 
+## 2026-08-04 会话 4：任务 C 调研 + 发现前置机制缺口（用户侧机制不完善）
+
+### 背景
+
+任务 A、B 已完成。进入任务 C（线程对象模型）调研。调研中发现**用户侧机制缺口**：类构造的关键字参数支持缺失，直接阻碍 `thread(fn=..., args=...)` 构造。
+
+### 机制缺口（用户侧机制不完善，已确认）
+
+**现象**：`Dog(name="Rex", age=5)` 报 "got 0"；`thread(fn=..., args=...)` 的关键字参数无法传递。
+
+**根因**：`_get_callee_param_specs`（`core/runtime/vm/handlers/_shared.py:91-111`）只处理 `IbBoundMethod`/`IbUserFunction`/`IbLLMFunction`/`IbValue`/`IbNativeFunction`，**不处理 `IbClass`**。当 `func` 是类（构造调用）时返回 `None`，`vm_handle_IbCall`（`leaf.py:266-274`）走 `args = positional` 分支，关键字参数被丢弃。
+
+**影响**：
+- 用户类构造 `Dog(name=..., age=...)` 关键字无效（既有缺陷）。
+- thread 构造 `thread(fn=..., args=...)` 无法工作（任务 C 阻塞）。
+
+**决策**：将此机制完善纳入任务规划（作为任务 C 前置 C0），调整任务路径。符合用户"发现用户侧机制不完善导致任务无法推进时引入工作规划并调整路径"的指示。
+
+### 任务路径调整
+
+- **C0（前置）**：类构造关键字参数支持——`_get_callee_param_specs` 增加 `IbClass` 分支（返回 `__init__` 参数签名）+ `_auto_init` 补 `param_meta`。
+- **C1-C6**：线程对象模型（IbThread + 状态机 + thread_result 容器 + 构造注册 + 序列化 + 测试）。
+
+> 完整任务文档见 `tasks_docs/_code_thread_model.md`（临时，Phase 5 后删除）。
+
+### 变化前后
+- **新增**：`tasks_docs/_code_thread_model.md`（任务 C 临时任务文档，含 C0 前置设计）。
+- **代码**：未改动（调研与方案设计阶段）。
+
+### 待决
+- 无。C0 机制完善已明确方案，可自主推进。
+
+---
+
 ## 2026-08-04 会话 2：线程对象模型方向修正（设计决策，未实现）
 
 ### 背景

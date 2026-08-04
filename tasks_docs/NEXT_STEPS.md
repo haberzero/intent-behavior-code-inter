@@ -29,7 +29,9 @@
 >
 > **任务 B（统一泛型模型）已完成 2026-08-04**——`GenericTypeDeclaration` + `GenericTypeRegistry`（单一权威源），`resolve_specialization` 统一走注册表创建/解析；删除 Optional/List/Dict/Tuple Axiom 的 `resolve_specialization_by_names` 遗留路径（用户明确要求删除历史包袱）；`thread[T]` 首个消费者（THREAD_SPEC + ThreadAxiom + create_thread + join→T 特化 + 序列化/还原）。测试：新增 `tests/kernel/test_generic_model.py`（16 用例），全量 pytest 1443 passed/4 skipped 零回归。
 >
-> **下一步（开工）**：任务 C——线程对象模型（thread[T] + 句柄方法 + 状态机）。
+> **任务 C 调研发现前置机制缺口（2026-08-04）**：类构造关键字参数支持缺失——`_get_callee_param_specs` 不处理 `IbClass`，导致 `thread(fn=..., args=...)` 关键字参数无法传递（用户类 `Dog(name=,...)` 同样受影响）。已调整任务路径：**任务 C0（前置）** 完善类构造关键字参数支持，再实施任务 C 线程对象模型。详见 `tasks_docs/_code_thread_model.md`。
+>
+> **下一步（开工）**：任务 C0——类构造关键字参数支持（`_get_callee_param_specs` 支持 IbClass + `_auto_init` 补 param_meta）；随后任务 C——线程对象模型。
 
 ---
 
