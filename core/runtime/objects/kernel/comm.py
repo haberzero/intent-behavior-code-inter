@@ -83,6 +83,10 @@ class IbChannel(IbObject):
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return self.core.snapshot()
 
+    def __transient_state__(self) -> Dict[str, Any]:
+        """瞬态序列化协议（L6）：纯状态存根（mode/name/closed/队列信息），不递归 core。"""
+        return self.core.snapshot()
+
     def snapshot(self) -> "IbObject":
         return self.ib_class.registry.box(self.core.snapshot())
 
@@ -120,6 +124,10 @@ class IbSubscriber(IbObject):
         self.view.close()
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        return self.view.snapshot()
+
+    def __transient_state__(self) -> Dict[str, Any]:
+        """瞬态序列化协议（L6）：纯状态存根（队列信息），不递归订阅视图。"""
         return self.view.snapshot()
 
     def __to_prompt__(self) -> str:
@@ -162,6 +170,10 @@ class IbSlot(IbObject):
         return f"<slot {self.core.name}>"
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
+        return self.core.snapshot()
+
+    def __transient_state__(self) -> Dict[str, Any]:
+        """瞬态序列化协议（L6）：纯状态存根（name/value），不递归 core。"""
         return self.core.snapshot()
 
     def snapshot(self) -> "IbObject":

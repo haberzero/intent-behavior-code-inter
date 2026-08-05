@@ -181,3 +181,81 @@ class TestThreadResultSerializationRoundTrip:
         assert r_rest.is_success().to_native() is False
         assert r_rest.value().to_native() is None
         assert r_rest.error() is not None
+
+
+class TestTransientObjectSerialization:
+    """L6：瞬态对象（thread/chan/slot/subscriber）序列化协议化——统一 transient 存根。
+
+    背景：原 thread 有 thread_transient 专用分支（类名硬编码），chan/slot/subscriber
+    无处理 → 空 object 数据丢失。L6 引入 __transient_state__ 协议，统一状态保真存根。
+    """
+
+    def test_chan_pubsub_serialized_as_transient(self, engine):
+        engine.run_string('chan c = chan(int, "pubsub")\nsubscriber sub = c.subscribe()\n', silent=True)
+        ec = engine.interpreter._execution_context
+        data = RuntimeSerializer(engine.registry).serialize_context(
+            ec.runtime_context, include_static=False
+        )
+        pool = data["pools"]["instances"]
+        chan = next(
+            v for v in pool.values()
+            if v.get("class_name") == "chan" and v.get("_type") == "transient"
+        )
+        assert chan["state"]["mode"] == "pubsub"
+        assert chan["state"]["subscriber_count"] == 1
+        sub = next(
+            v for v in pool.values()
+            if v.get("class_name") == "subscriber" and v.get("_type") == "transient"
+        )
+        assert "qsize" in sub["state"]
+
+    def test_slot_serialized_as_transient(self, engine):
+        engine.run_string('slot st = slot("score", 42)\n', silent=True)
+        ec = engine.interpreter._execution_context
+        data = RuntimeSerializer(engine.registry).serialize_context(
+            ec.runtime_context, include_static=False
+        )
+        pool = data["pools"]["instances"]
+        slot = next(
+            v for v in pool.values()
+            if v.get("class_name") == "slot" and v.get("_type") == "transient"
+        )
+        assert slot["state"]["name"] == "score"
+        # value 是嵌套 IbObject，经 _process_value 序列化为实例引用
+        assert isinstance(slot["state"]["value"], str)
+        assert slot["state"]["value"].startswith("inst_")
+
+    def test_thread_serialized_as_transient(self, engine):
+        """thread 由专用 thread_transient 分支迁移至统一 transient 协议（回归）。"""
+        engine.run_string("""
+func f() -> int:
+    return 1
+thread[int] t = thread(callable=f, args=[])
+""", silent=True)
+        ec = engine.interpreter._execution_context
+        data = RuntimeSerializer(engine.registry).serialize_context(
+            ec.runtime_context, include_static=False
+        )
+        pool = data["pools"]["instances"]
+        thread = next(
+            v for v in pool.values()
+            if v.get("class_name") == "thread" and v.get("_type") == "transient"
+        )
+        assert thread["state"]["state"] in ("idle", "running", "done")
+
+    def test_round_trip_preserves_transient_state(self, engine):
+        """往返后瞬态对象重建为携带 _transient_state 的占位（状态可内省）。"""
+        code = (
+            'slot st = slot("score", 42)\n'
+            'chan c = chan(int, "pubsub")\n'
+            'subscriber sub = c.subscribe()\n'
+        )
+        orig, rest = _round_trip(engine, code)
+        st = rest.get_variable("st")
+        assert st.fields["_transient_state"]["name"] == "score"
+        value = st.fields["_transient_state"]["value"]
+        assert value.to_native() == 42  # 嵌套 IbObject 完整往返
+        c = rest.get_variable("c")
+        assert c.fields["_transient_state"]["mode"] == "pubsub"
+        sub = rest.get_variable("sub")
+        assert "qsize" in sub.fields["_transient_state"]

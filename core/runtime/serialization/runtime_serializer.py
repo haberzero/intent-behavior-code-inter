@@ -189,18 +189,16 @@ class RuntimeSerializer(BaseFlatSerializer):
             if obj.meta:
                 data["value_meta"] = dict(obj.meta)
 
-        # 线程对象是瞬态（疏漏 4）：序列化为仅含状态信息的存根，
-        # 不递归进入 coordinator（否则经 _interpreter → EC → scope → t
-        # 引用环导致无限递归）。thread 实例经 _create_blank 为真实 IbThread，
-        # 状态存于槽位（阶段 2，D2），直接读槽位。
-        if obj.ib_class.name == "thread" and not isinstance(obj, IbClass):
-            data["_type"] = "thread_transient"
-            state = obj._state
-            spawned = obj._spawned
-            data["state"] = {
-                "state": state,
-                "done": bool(spawned is not None and spawned.is_done),
-            }
+        # 瞬态对象协议（L6 统一，替代原 thread_transient 专用分支）：实现
+        # __transient_state__ 的对象序列化为纯状态存根，不递归运行时句柄
+        # （thread 的 coordinator 引用环 / chan 的队列 / slot 的值 / subscriber
+        # 的订阅视图）。检测用公开 dunder 协议（与 disk_backed 鸭子先例一致），
+        # 非 per-type 类名分支。state 值经 _process_value 递归（嵌套 IbObject
+        # 如 slot 的值保持完整往返）。
+        if not isinstance(obj, IbClass) and hasattr(obj, "__transient_state__"):
+            state = obj.__transient_state__()
+            data["_type"] = "transient"
+            data["state"] = {k: self._process_value(v) for k, v in state.items()}
             self.instance_pool[uid] = data
             return uid
         
@@ -589,6 +587,16 @@ class RuntimeDeserializer:
             error = self._deserialize_value(data.get("error")) if data.get("error") is not None else None
             obj = IbThreadResult(ib_class, value=value, error=error, status=status)
             self.instance_cache[uid] = obj
+
+        elif _type == "transient":
+            # 瞬态对象不可复活（活体句柄/队列/订阅视图），重建为携带已知状态的
+            # 占位 IbObject 供内省（快照恢复后仍可读取 mode/name/value/state 等）。
+            # L6：thread 原 thread_transient 亦走本路径（行为不变，多保留状态）。
+            obj = IbObject(ib_class)
+            self.instance_cache[uid] = obj
+            obj.fields["_transient_state"] = {
+                k: self._deserialize_value(v) for k, v in data.get("state", {}).items()
+            }
 
         elif _type == "module":
             if data.get("scope_native"):

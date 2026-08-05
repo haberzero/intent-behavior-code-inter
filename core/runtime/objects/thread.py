@@ -169,5 +169,11 @@ class IbThread(IbObject):
             return {"state": self._state, "done": False}
         return {"state": self._state, "done": bool(self._spawned.is_done)}
 
+    def __transient_state__(self) -> Dict[str, Any]:
+        """瞬态序列化协议（L6）：纯状态存根，不递归 coordinator（防引用环）。"""
+        if self._spawned is None:
+            return {"state": self._state, "done": False}
+        return {"state": self._state, "done": bool(self._spawned.is_done)}
+
     def __repr__(self):
         return f"<Thread state={self._state}>"
