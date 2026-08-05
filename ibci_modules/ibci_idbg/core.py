@@ -269,7 +269,8 @@ class IDbgPlugin(IbPlugin):
         if not ec:
             return {}
 
-        node_pool = getattr(ec, "node_pool", None)
+        # node_pool 是 IExecutionContext 公开只读 property（共享只读节点池）
+        node_pool = ec.node_pool
         if not node_pool:
             return {}
 
@@ -355,12 +356,14 @@ class IDbgPlugin(IbPlugin):
         if not sr:
             return []
         intents = sr.get_active_intents()
+        # IStateReader.get_active_intents() 契约返回 List[IbIntent]——直访契约成员
+        # （mode/role 恒为枚举），不做逐元素 hasattr 能力探测。
         return [
             {
-                "content": i.content if hasattr(i, 'content') else str(i),
-                "mode": i.mode.name if hasattr(i, 'mode') and hasattr(i.mode, 'name') else str(getattr(i, 'mode', '+')),
-                "tag": getattr(i, 'tag', None),
-                "role": i.role.name if hasattr(i, 'role') and hasattr(i.role, 'name') else str(getattr(i, 'role', 'DYNAMIC'))
+                "content": i.content,
+                "mode": i.mode.name,
+                "tag": i.tag,
+                "role": i.role.name,
             }
             for i in intents
         ]
@@ -369,17 +372,19 @@ class IDbgPlugin(IbPlugin):
         """直接打印意图栈到控制台（IBCI 友好）"""
         print("[IDBG] 意图栈:")
 
+        # 调试打印 best-effort：stack_inspector(轻量 List[str]) 优先，失败/为空
+        # 回退 state_reader(富 List[IbIntent])，再回退 "(空)"。两来源接口形状
+        # 不同是刻意设计（轻量视图 vs 富对象视图），不是分派缺陷。
         si = self._stack_inspector()
         if si:
             try:
-                if hasattr(si, 'get_active_intents'):
-                    raw = si.get_active_intents()
-                    if raw:
-                        print("  (via stack_inspector)")
-                        for idx, content in enumerate(raw):
-                            print(f"  [{idx}] {content}")
-                        return
-            except Exception:
+                raw = si.get_active_intents()
+                if raw:
+                    print("  (via stack_inspector)")
+                    for idx, content in enumerate(raw):
+                        print(f"  [{idx}] {content}")
+                    return
+            except (AttributeError, TypeError, ValueError):
                 pass
 
         sr = self._state_reader()
@@ -389,12 +394,9 @@ class IDbgPlugin(IbPlugin):
                 if intents:
                     print("  (via state_reader)")
                     for idx, i in enumerate(intents):
-                        content = i.content if hasattr(i, 'content') else str(i)
-                        mode = i.mode.name if hasattr(i, 'mode') and hasattr(i.mode, 'name') else str(getattr(i, 'mode', '+'))
-                        role = i.role.name if hasattr(i, 'role') and hasattr(i.role, 'name') else str(getattr(i, 'role', '?'))
-                        print(f"  [{idx}] {mode} | {role} | {content}")
+                        print(f"  [{idx}] {i.mode.name} | {i.role.name} | {i.content}")
                     return
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
                 pass
 
         print("  (空)")

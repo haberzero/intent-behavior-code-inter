@@ -13,7 +13,7 @@ from tests.conftest import run_ibci
 
 
 def _code(server, body):
-    return f'import ai\nai.set_config("{server.url}", "sk-test", "mock")\n' + body
+    return f'import ai\nai.set_config("{server.url}/v1", "sk-test", "mock")\n' + body
 
 
 class TestAiRunBatch:

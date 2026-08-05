@@ -27,7 +27,7 @@ def _code(server, n, sleep_ms, value_prefix):
         body.append(f"str k{i} = @~ MOCK:STR:{value_prefix}{i} MOCK:SLEEP:{sleep_ms} ~")
     for i in range(n):
         body.append(f"print(k{i})")
-    return 'import ai\nai.set_config("{}", "sk-test", "mock")\n'.format(server.url) + "\n".join(body)
+    return 'import ai\nai.set_config("{}", "sk-test", "mock")\n'.format(server.url + "/v1") + "\n".join(body)
 
 
 class TestConcurrentDispatchOverlap:

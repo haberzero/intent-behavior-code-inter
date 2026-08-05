@@ -29,7 +29,7 @@ def _complete(client, content, *, stream=False, model="mock"):
 
 
 def _code(server, body):
-    return f'import ai\nai.set_config("{server.url}", "sk-test", "mock")\n' + body
+    return f'import ai\nai.set_config("{server.url}/v1", "sk-test", "mock")\n' + body
 
 
 class TestMockServiceHTTP:

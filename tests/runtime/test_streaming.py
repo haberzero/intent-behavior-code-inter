@@ -84,7 +84,7 @@ class TestMockServerStreaming:
 class TestStreamCallLanguage:
     def test_stream_call_awaits_full_text(self, mock_server):
         code = (
-            f'import ai\nai.set_config("{mock_server.url}", "sk-test", "mock")\n'
+            f'import ai\nai.set_config("{mock_server.url}/v1", "sk-test", "mock")\n'
             'str full = await ai.stream_call("sys", "MOCK:STREAM:Hello| World|!")\n'
             "print(full)\n"
         )
@@ -93,7 +93,7 @@ class TestStreamCallLanguage:
 
     def test_stream_call_auto_wait_on_assign(self, mock_server):
         code = (
-            f'import ai\nai.set_config("{mock_server.url}", "sk-test", "mock")\n'
+            f'import ai\nai.set_config("{mock_server.url}/v1", "sk-test", "mock")\n'
             'any h = ai.stream_call("sys", "MOCK:STREAM:Hi| there")\n'
             "str s = (str)h\n"
             "print(s)\n"
@@ -109,7 +109,7 @@ class TestStreamCallLanguage:
 class TestStreamChannelLanguage:
     def test_stream_channel_incremental_recv(self, mock_server):
         code = (
-            f'import ai\nai.set_config("{mock_server.url}", "sk-test", "mock")\n'
+            f'import ai\nai.set_config("{mock_server.url}/v1", "sk-test", "mock")\n'
             'chan chunks = ai.stream_channel("sys", "MOCK:STREAM:Hello| World|!")\n'
             "str c1 = chunks.recv()\n"
             "str c2 = chunks.recv()\n"

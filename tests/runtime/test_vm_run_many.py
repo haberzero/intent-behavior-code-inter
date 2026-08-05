@@ -21,7 +21,7 @@ from tests.conftest import make_vm, TESTS_ROOT
 
 def _code(server):
     return (
-        f'import ai\nai.set_config("{server.url}", "sk-test", "mock")\n'
+        f'import ai\nai.set_config("{server.url}/v1", "sk-test", "mock")\n'
         'str a = @~ MOCK:STR:val1 ~\n'
         'str b = @~ MOCK:STR:val2 ~\n'
     )

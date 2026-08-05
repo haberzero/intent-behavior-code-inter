@@ -36,9 +36,14 @@ class IRuntimeLib:
     def snapshot(self) -> dict:
         """获取当前运行时快照（tasks/channels/slots/vms/vars/llm）。"""
         ec = get_current_execution_context()
-        executor = getattr(ec, "vm_executor", None) if ec is not None else None
+        if ec is None:
+            raise RuntimeError("runtime.snapshot: no execution context available")
+        executor = ec.vm_executor
         if executor is None:
-            return {}
+            raise RuntimeError(
+                "runtime.snapshot: vm_executor not available "
+                "(interpreter not yet prepared)"
+            )
         return _snapshot_aggregate(executor)
 
     def subscribe(self) -> Any:
@@ -51,10 +56,10 @@ class IRuntimeLib:
         from core.runtime.objects.kernel import IbChannel
 
         ec = get_current_execution_context()
-        registry = getattr(ec, "registry", None) if ec is not None else None
-        rc = getattr(ec, "runtime_context", None) if ec is not None else None
-        if registry is None or rc is None:
-            raise RuntimeError("runtime.subscribe: no runtime context available")
+        if ec is None:
+            raise RuntimeError("runtime.subscribe: no execution context available")
+        registry = ec.registry
+        rc = ec.runtime_context
 
         event_bus = self._get_event_bus(rc)
         core = ChannelCore(mode="stream", name="runtime_events")
@@ -92,9 +97,9 @@ class IRuntimeLib:
         返回配置后的生效值 dict。
         """
         ec = get_current_execution_context()
-        rc = getattr(ec, "runtime_context", None) if ec is not None else None
-        if rc is None:
+        if ec is None:
             raise RuntimeError("runtime.configure: no runtime context available")
+        rc = ec.runtime_context
 
         store = self._get_config_store(rc)
 
@@ -126,10 +131,10 @@ class IRuntimeLib:
     def get_config(self) -> dict:
         """读取当前生效配置（全局视角）。"""
         ec = get_current_execution_context()
-        rc = getattr(ec, "runtime_context", None) if ec is not None else None
-        if rc is None:
+        if ec is None:
+            # 无活跃执行上下文时返回默认配置（读默认值的合理空态，非静默异常）
             return dict(DEFAULT_CONFIG)
-        store = self._get_config_store(rc)
+        store = self._get_config_store(ec.runtime_context)
         return {k: store.get(k) for k in DEFAULT_CONFIG}
 
     @staticmethod

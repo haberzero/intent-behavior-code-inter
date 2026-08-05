@@ -77,6 +77,18 @@ class AIPlugin(IbStatefulPlugin):
             or os.environ.get(_MOCK_TEST_MODE_ENV) == "1"
         )
 
+    @staticmethod
+    def _extract_reasoning(message: Any) -> Optional[str]:
+        """从 provider 消息对象提取推理字段（reasoning / reasoning_content）。
+
+        不同 provider 的 SDK 消息字段名各异——这是对第三方 SDK 对象的合法适配
+        探测（非 IBCI 内部对象私有穿透）。probe 与调用两路径共用，消除重复。
+        """
+        reasoning = getattr(message, "reasoning", None)
+        if reasoning is None and hasattr(message, "reasoning_content"):
+            reasoning = message.reasoning_content
+        return reasoning
+
     def _is_test_mode(self) -> bool:
         """当前默认配置是否处于 MOCK 测试模式。"""
         return self._is_test_config(self._config.get("url"), self._config.get("key"))
@@ -95,12 +107,10 @@ class AIPlugin(IbStatefulPlugin):
 
         try:
             from openai import OpenAI
-            
+
             base_url = self._config["url"]
-            # 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
-            if base_url and "/v1" not in base_url and ("127.0.0.1" in base_url or "localhost" in base_url):
-                base_url = f"{base_url.rstrip('/')}/v1"
-            
+            # base_url 按用户显式配置原样使用（不再做 localhost /v1 字符串嗅探
+            # 启发式——URL 是显式契约，由调用方给出完整 endpoint）。
             if base_url and self._config["key"]:
                 self._client = OpenAI(
                     api_key=self._config["key"],
@@ -168,8 +178,6 @@ class AIPlugin(IbStatefulPlugin):
         try:
             from openai import OpenAI
             base_url = config["url"]
-            if base_url and "/v1" not in base_url and ("127.0.0.1" in base_url or "localhost" in base_url):
-                base_url = f"{base_url.rstrip('/')}/v1"
             client = OpenAI(
                 api_key=config["key"],
                 base_url=base_url,
@@ -229,9 +237,7 @@ class AIPlugin(IbStatefulPlugin):
             print("    -> [System] Called llm once (Probe).")
             
             raw_content = completion.choices[0].message.content
-            reasoning = getattr(completion.choices[0].message, "reasoning", None)
-            if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
-                reasoning = completion.choices[0].message.reasoning_content
+            reasoning = self._extract_reasoning(completion.choices[0].message)
                 
             if raw_content is None:
                 raw_content = ""
@@ -316,7 +322,9 @@ class AIPlugin(IbStatefulPlugin):
             raise RuntimeError("run_batch: LLM executor does not support batch execution")
         from core.runtime.frame import get_current_execution_context
 
-        ec = get_current_execution_context() or getattr(behavior, "_execution_context", None)
+        # 调用现场 EC 是运行期的单一真相源（CPS 主路径仅使用调用现场 ContextVar，
+        # behavior._execution_context 字段是 core 内部同步后备，插件不做私有穿透）。
+        ec = get_current_execution_context()
         if ec is None:
             raise RuntimeError("run_batch: no execution context available")
         return executor.run_batch(behavior, list(items), ec)
@@ -477,9 +485,7 @@ class AIPlugin(IbStatefulPlugin):
             raw_content = completion.choices[0].message.content
 
             # 兼容性处理：尝试提取 Reasoning 字段
-            reasoning = getattr(completion.choices[0].message, "reasoning", None)
-            if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
-                reasoning = completion.choices[0].message.reasoning_content
+            reasoning = self._extract_reasoning(completion.choices[0].message)
 
             # 如果 content 为空且 reasoning 有值，说明这是强制推理模型把结果都放进 reasoning 里了
             if (raw_content is None or raw_content.strip() == "") and reasoning:
