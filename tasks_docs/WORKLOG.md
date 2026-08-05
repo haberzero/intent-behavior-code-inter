@@ -6,6 +6,47 @@
 
 ---
 
+## 2026-08-04 会话 11：L8 类型符号序列化身份破坏修复（此前未知缺陷）
+
+### 背景
+
+用户对 L6 冒烟观测中"object slot（IbClass 全局符号）"发问。深入调查发现此为**此前未知的真实缺陷**。
+
+### 调查结论（回答用户提问）
+
+- **现象**：`RuntimeDeserializer.deserialize_context` 把全局作用域内置类型符号
+  （int/str/thread/chan/slot/Type/Object 等 IbClass）重建为对应类的**空普通实例**（IbObject）。
+  实测 round-trip 后 `slot` 符号 IbClass→IbObject，`slot(...)` 调用报
+  `Object of type 'slot' has no method '__call__'`。
+- **根因**：serializer `_collect_instance` 对 IbClass 无"类引用"处理 → 落 else object
+  分支展开为空 fields；`_get_instance` 用 `registry.get_class(cls_name)` 构造
+  `IbObject(ib_class)`——**类型引用被当实例构造**。类型符号是"类型引用"而非实例值。
+- **影响面**：`HostService.load_state` 被 `setup_context(force=True)` 重注入类型符号
+  **掩盖**（最终正确，这也是此前未暴露原因）；`rt_scheduler.restore`（隔离快照恢复）
+  **无重绑定** → 类型符号真实破坏。
+- **此前未知**：KNOWN_LIMITS 无记录、无测试覆盖、历次 review 未提及。登记为 L8。
+
+### 变化前后
+
+- **修复**（commit af3ee21）：IbClass 序列化为 `{"_type":"class_ref","name":...}`
+  （类名引用，不展开 fields），反序列化重绑定 `registry.get_class(name)`——与
+  IbModule `scope_native` 模式一致。**class_ref 分支必须 return**（否则落 else
+  被覆盖为 IbObject——调试中发现的第二层坑）。
+- **测试**：+2（class_ref 序列化 + round-trip 类型身份保留且可构造）。
+  全量 `python -m pytest tests/` = **1471 passed / 4 skipped**（零回归）。
+
+### 决策记录
+
+- 序列化格式新增 `_type="class_ref"`（向后兼容：旧 object 空壳数据仍可反序列化，
+  但旧数据已丢类身份——该缺陷修复只对修复后产生的快照生效）。
+- 登记 L8 于 PENDING_REVIEW_ITEMS（标记已修复）。
+
+### 待决
+
+- 无。L8 已修复；剩余 L7 / T 建议 2 待用户裁定。
+
+---
+
 ## 2026-08-04 会话 10：L6 瞬态序列化协议化（thread/chan/slot/subscriber 统一 transient 存根）
 
 ### 背景
