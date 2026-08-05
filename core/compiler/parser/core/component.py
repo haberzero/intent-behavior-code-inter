@@ -22,26 +22,20 @@ class BaseComponent:
         return self.context.issue_tracker
 
     def _loc(self, node: T, start_obj: Any, end_obj: Optional[Any] = None) -> T:
-        """Helper to attach location info to a node from a token or other object with line/column."""
-        if hasattr(start_obj, 'line'):
-            node.lineno = start_obj.line
-            node.col_offset = start_obj.column
-            if hasattr(start_obj, 'end_line'):
-                node.end_lineno = start_obj.end_line
-                node.end_col_offset = start_obj.end_column
-        elif hasattr(start_obj, 'lineno'):
-            node.lineno = start_obj.lineno
-            node.col_offset = start_obj.col_offset
-            node.end_lineno = getattr(start_obj, 'end_lineno', None)
-            node.end_col_offset = getattr(start_obj, 'end_col_offset', None)
+        """Helper to attach location info to a node from a token or other object with line/column.
+
+        输入统一为 Token 或 IbASTNode——两者都经 ``.line``/``.column``/``.end_line``/
+        ``.end_column`` 属性暴露位置（IbASTNode 已提供同名属性转发），无需双形状探测。
+        """
+        node.lineno = start_obj.line
+        node.col_offset = start_obj.column
+        if hasattr(start_obj, 'end_line'):
+            node.end_lineno = start_obj.end_line
+            node.end_col_offset = start_obj.end_column
 
         if end_obj:
-            if hasattr(end_obj, 'end_line'):
-                node.end_lineno = end_obj.end_line
-                node.end_col_offset = end_obj.end_column
-            elif hasattr(end_obj, 'end_lineno'):
-                node.end_lineno = end_obj.end_lineno
-                node.end_col_offset = end_obj.end_col_offset
+            node.end_lineno = end_obj.end_line
+            node.end_col_offset = end_obj.end_column
         
         return node
 

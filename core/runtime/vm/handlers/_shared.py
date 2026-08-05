@@ -745,18 +745,19 @@ def _vm_assign_to_target(executor, target_uid: str, value: Any, define_only: boo
         if isinstance(value, IbValue) and value.ib_class.name in ("list", "tuple"):
             vals = list(value.elements)
         else:
-            try:
-                r = value.receive("to_list", [])
-                if isinstance(r, list):
-                    vals = r
-                elif hasattr(r, "elements") and isinstance(r.elements, list):
-                    vals = list(r.elements)
-                else:
-                    vals = None
-            except Exception as e:
-                core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"unpack iterable extraction failed: {e!r}")
-                vals = None
-            if vals is None:
+            # 结构化能力查询（与 for 循环同款先例）：to_list 预检存在才调用，
+            # 用户 to_list 实现体内的真实错误不再被宽 except 折叠成
+            # "Cannot unpack non-iterable"。
+            if not hasattr(value, "ib_class") or value.ib_class.lookup_method("to_list") is None:
+                raise RuntimeError(
+                    f"VM: Cannot unpack non-iterable for target {target_uid}"
+                )
+            r = value.receive("to_list", [])
+            if isinstance(r, list):
+                vals = r
+            elif isinstance(r, IbValue) and r.ib_class.name in ("list", "tuple"):
+                vals = list(r.elements)
+            else:
                 raise RuntimeError(
                     f"VM: Cannot unpack non-iterable for target {target_uid}"
                 )

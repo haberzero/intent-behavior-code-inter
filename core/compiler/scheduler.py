@@ -145,7 +145,9 @@ class Scheduler(ICompilerService):
         except Exception as e:
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Graph error: {str(e)}")
             self.issue_tracker.error(str(e), code=DEP_GRAPH_ERROR)
-            raise e
+            # 图构建异常也是内部 bug，但须以契约内异常（CompilerError）承载——
+            # 否则记录的诊断成为孤儿，上层只按 "Runtime Error" 重抛（双通道）。
+            raise CompilerError(self.issue_tracker.diagnostics)
 
         # 3. Compile in Topological Order
         self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 3: Compiling {len(compilation_order)} files in topological order.")

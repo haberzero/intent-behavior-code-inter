@@ -223,7 +223,14 @@ class CoreTokenScanner:
         # 1. Variable Reference (Support $ in NORMAL mode for 'intent $x:')
         # 使用尝试性扫描，避免物理回退
         if char == '$':
-            self.try_scan(tokens, self._scan_var_ref)
+            # 失败时消费 $ 作为普通文本（与 IN_INTENT 路径对齐），避免回滚后
+            # 同字符死循环。当前 _scan_var_ref 恒成功，此分支为防御纵深。
+            if not self.try_scan(tokens, self._scan_var_ref):
+                self.scanner.advance()
+                tokens.append(Token(
+                    TokenType.RAW_TEXT, "$",
+                    self.scanner.line, self.scanner.col,
+                ))
             return False
 
         # 正常消费一个字符

@@ -172,7 +172,7 @@ def _run_task_body(
     from core.runtime.interpreter.execution_context import ExecutionContextImpl
     from core.runtime.interpreter.call_stack import LogicalCallStack
     from core.runtime.vm import VMExecutor
-    from core.runtime.objects.kernel import IbUserFunction, IbValue, IbObject
+    from core.runtime.objects.kernel import IbUserFunction, IbValue, IbObject, IbFunction
 
     main_ec = interpreter.execution_context
     registry = interpreter.registry
@@ -250,8 +250,9 @@ def _run_task_body(
             # fn_callable（lambda/snapshot）：经 CPS 驱动
             gen = _vm_call_fn_callable(task_vm, callable_obj, args)
             return _drive_generator(task_vm, gen, cancel_event=cancel_event, handle=handle)
-        # 兜底：原生函数 / 其它可调用
-        if hasattr(callable_obj, "call"):
+        # 兜底：原生函数 / 绑定方法（IbFunction 家族；hasattr(call) 探测改为
+        # isinstance 精确判别——call 仅定义于 IbFunction 子类）
+        if isinstance(callable_obj, IbFunction):
             return callable_obj.call(registry.get_none(), args)
         raise RuntimeError(
             f"spawn: 目标 {callable_obj!r} 不可作为任务执行（非函数/lambda/behavior）"

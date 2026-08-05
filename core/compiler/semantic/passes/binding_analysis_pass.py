@@ -895,8 +895,11 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
                 captured_vars.add(var_name)
                 free_var_refs.append([var_name, sym.uid])
 
-        # 如果通过 name node 没有找到所有 nonlocal 变量的绑定（可能在嵌套 if/for 中），
-        # 使用父作用域查找兜底
+        # 兜底：主通道（node_to_symbol 遍历函数体）未覆盖的 nonlocal 名，再经父
+        # 作用域按名解析。注意：_collect_name_nodes 会递归进入嵌套 if/for 等块，
+        # 因此"嵌套块中绑定缺失"情形下名称必在 seen_names 中，不会进入本兜底——
+        # 本兜底只覆盖"函数体完全未出现该名"的退化情形（SymbolResolver 缺口下
+        # 存在漏捕获风险，当前无实际触发路径）。
         for name in nonlocal_names:
             if name not in seen_names:
                 parent = self.current_scope.parent if self.current_scope else None

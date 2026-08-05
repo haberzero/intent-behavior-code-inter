@@ -294,9 +294,8 @@ class KernelRegistry:
         ib_class.spec = spec
         self._classes[name] = ib_class
         
-        # 绑定注册表引用
-        if hasattr(ib_class, 'registry'):
-            ib_class.registry = self
+        # 绑定注册表引用（IbClass.registry 槽恒存在：__init__ 强制要求 registry）
+        ib_class.registry = self
 
     def register_function(self, name: str, descriptor: 'IbSpec', token: Any):
         """注册全局函数元数据 (仅用于编译器发现)"""

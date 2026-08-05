@@ -129,6 +129,11 @@ class ModuleManagerImpl:
                 # 从编译器注入符号表取 uid（name -> sym_uid），与运行时实际存在的
                 # 公开属性取交集——既保证 uid 对齐，又只导出 spec 声明成员（不泄漏协议方法）
                 uid_map = self._import_star_uid_map(execution_context)
+                # 迭代源为包的实际公开属性（dir）与编译器注入符号（uid_map）的交集：
+                # 白名单约束（仅 spec 声明成员，不泄漏协议方法）由 uid_map 保证；
+                # 迭代源用 dir(package) 可避免把当前模块预置符号（int/str 等内建）
+                # 误当导入成员。spec 声明但实现缺失的成员在此静默跳过（契约违例
+                # 由具名导入路径显式报错；import-* 批量导入保持宽容）。
                 for attr_name in dir(package):
                     if attr_name.startswith('_'):
                         continue
@@ -154,34 +159,28 @@ class ModuleManagerImpl:
             return
 
         # 2. 处理 IBC 文件模块的 import from 逻辑
-        try:
-            if module_name not in self._loaded_modules:
-                self.import_module(module_name, execution_context)
-            
-            module_instance = self._loaded_modules.get(module_name)
-            if module_instance:
-                if any(name == '*' for name, _, _ in names):
-                    # 使用接口公开方法获取符号；uid 从导入文件编译器注入表取（保证 uid 对齐）
-                    uid_map = self._import_star_uid_map(execution_context)
-                    symbols = module_instance.scope.get_all_symbols()
-                    for sym_name, sym in symbols.items():
-                        if sym.is_const:  # 排除 print, int 等内置符号
-                            continue
-                        if sym_name not in uid_map:
-                            continue
-                        context.define_variable(sym_name, sym.value, declared_type=sym.declared_type, uid=uid_map.get(sym_name))
-                else:
-                    for name, asname, uid in names:
-                        try:
-                            val = module_instance.get_variable(name)
-                            symbol = module_instance.scope.get_symbol(name)
-                            target_name = asname or name
-                            context.define_variable(target_name, val, declared_type=symbol.declared_type if symbol else None, uid=uid)
-                        except (InterpreterError, KeyError):
-                            raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
-                return
+        if module_name not in self._loaded_modules:
+            self.import_module(module_name, execution_context)
 
-        except Exception as e:
-            if isinstance(e, InterpreterError):
-                raise
-            raise InterpreterError(f"Module '{module_name}' not found or not registered.") from e
+        module_instance = self._loaded_modules.get(module_name)
+        if module_instance:
+            if any(name == '*' for name, _, _ in names):
+                # 使用接口公开方法获取符号；uid 从导入文件编译器注入表取（保证 uid 对齐）
+                uid_map = self._import_star_uid_map(execution_context)
+                symbols = module_instance.scope.get_all_symbols()
+                for sym_name, sym in symbols.items():
+                    if sym.is_const:  # 排除 print, int 等内置符号
+                        continue
+                    if sym_name not in uid_map:
+                        continue
+                    context.define_variable(sym_name, sym.value, declared_type=sym.declared_type, uid=uid_map.get(sym_name))
+            else:
+                for name, asname, uid in names:
+                    try:
+                        val = module_instance.get_variable(name)
+                        symbol = module_instance.scope.get_symbol(name)
+                        target_name = asname or name
+                        context.define_variable(target_name, val, declared_type=symbol.declared_type if symbol else None, uid=uid)
+                    except (InterpreterError, KeyError):
+                        raise InterpreterError(f"Cannot import name '{name}' from module '{module_name}'")
+            return

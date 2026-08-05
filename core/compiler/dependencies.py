@@ -92,14 +92,12 @@ class DependencyGraph:
                         dfs(neighbor, current_path)
                     elif neighbor in recursion_stack:
                         # Cycle detected!
-                        # Extract the cycle part from current_path
-                        # neighbor is the start of the cycle
-                        try:
-                            idx = current_path.index(neighbor)
-                            cycle = current_path[idx:] + [neighbor]
-                        except ValueError:
-                            cycle = [neighbor, node, neighbor]
-                            
+                        # neighbor is the start of the cycle.
+                        # DFS 不变量：recursion_stack 与 current_path 严格同步（同入同出），
+                        # 故 neighbor ∈ recursion_stack ⟹ index 必成功（原 except ValueError
+                        # 伪环兜底为死分支）。
+                        idx = current_path.index(neighbor)
+                        cycle = current_path[idx:] + [neighbor]
                         raise CircularDependencyError(cycle)
                         
             recursion_stack.remove(node)

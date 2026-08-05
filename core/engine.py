@@ -769,12 +769,15 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 val = sym.value
                 if val is None:
                     continue
+                # 非 IbObject 占位符（未执行的 LLMFuture 等）不属于可收集变量：
+                # 结构化判别前置，替代宽 except 吞错（try 只保留 to_native 转换）。
+                if not isinstance(val, IbObject):
+                    continue
+                type_name = val.ib_class.name
+                if type_name in _COLLECT_SKIP_TYPES:
+                    continue
                 try:
-                    type_name = val.ib_class.name
-                    if type_name in _COLLECT_SKIP_TYPES:
-                        continue
-                    native = val.to_native()
-                    result[name] = native
+                    result[name] = val.to_native()
                 except Exception as e:
                     # 跳过无法转为原生值的对象（未执行的延迟值、循环引用等）
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,

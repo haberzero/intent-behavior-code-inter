@@ -38,15 +38,20 @@ class _PromptMixin:
                 if isinstance(result, IbObject):
                     return str(result.to_native())
                 return str(result)
-            except Exception as e:
-                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"__to_prompt__ dispatch failed, trying fallback: {e!r}")
+            except AttributeError:
+                # 协议缺失（receive 对未声明方法抛 AttributeError）→ 回退；
+                # 用户 __to_prompt__ 实现体内的真实 bug（TypeError 等）fail-fast，
+                # 不再被宽 except 吞掉后静默降级 str()。
+                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL,
+                                    "__to_prompt__ not available, trying fallback")
 
         # Fallback to to_native() for primitives
         if isinstance(val, IbObject):
             try:
                 return str(val.to_native())
-            except Exception as e:
-                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"to_native fallback failed, using str(): {e!r}")
+            except AttributeError:
+                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL,
+                                    "to_native not available, using str()")
 
         # Last resort: str()
         return str(val)
@@ -247,13 +252,11 @@ class _PromptMixin:
             if ib_class:
                 method = ib_class.lookup_method('__outputhint_prompt__')
                 if method:
-                    try:
-                        result = method.call(ib_class, [])
-                        hint = result.to_native() if isinstance(result, IbObject) else str(result)
-                        return str(hint) if hint is not None else None
-                    except Exception as e:
-                        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC,
-                            f"vtable __outputhint_prompt__ failed for '{type_name}': {e}")
+                    # lookup_method 已预检方法存在——此处无"协议缺失"情形；
+                    # 用户方法实现体的真实 bug 直接 fail-fast，不再静默吞掉后无 hint。
+                    result = method.call(ib_class, [])
+                    hint = result.to_native() if isinstance(result, IbObject) else str(result)
+                    return str(hint) if hint is not None else None
             return None
 
         returns_uid = node_data.get("returns")
