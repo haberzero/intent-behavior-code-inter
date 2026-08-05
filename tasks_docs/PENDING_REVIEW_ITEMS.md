@@ -28,6 +28,7 @@
 | L5 | **G1 残留：值对象承载未完全统一** | `IbOptional` 双载（`_inner`+payload）；`IbChannel`/`IbSubscriber` 的 core/view 槽模式未并入统一承载 | 后续值对象统一窗口评估 |
 | L6 | **chan/slot/subscriber 序列化空壳** | ✅ **已完成（commit 3a2e5d1）**——瞬态序列化协议化：`__transient_state__` 协议 + 统一 `transient` 存根，thread_transient 专用分支删除；数据不再丢失。设计见 `TRANSIENT_SERIALIZATION_UNIFICATION.md` | 已修复 |
 | L7 | **运行时泛型身份全系统有损** | `Optional[int]→Optional[any]`、`list[int]→list`、`dict[str,int]→dict[any,any]`（G4 系统性边界，会话 7 发现） | 独立任务评估运行时泛型身份保留 |
+| L8 | **类型符号序列化类型身份破坏（此前未知缺陷）** | `RuntimeDeserializer.deserialize_context` 把全局作用域内置类型符号（IbClass）重建为对应类的空普通实例（IbObject）——实测 `slot` 符号 IbClass→IbObject，`slot(...)` 调用失败。根因：serializer 对 IbClass 落 else object 分支（类引用当实例构造）。`rt_scheduler.restore` 无重绑定 → 真实破坏；`HostService.load_state` 被 `setup_context(force=True)` 掩盖 | **已修复（commit 见 WORKLOG 会话 11）**：serializer 序列化为 `class_ref`（类名引用），反序列化重绑定 `registry.get_class(name)` |
 
 ## 三、docs/ 技术手册未同步（按治理纪律设计阶段先写 tasks_docs/）
 

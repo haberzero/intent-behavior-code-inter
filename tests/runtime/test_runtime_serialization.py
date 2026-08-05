@@ -259,3 +259,35 @@ thread[int] t = thread(callable=f, args=[])
         assert c.fields["_transient_state"]["mode"] == "pubsub"
         sub = rest.get_variable("sub")
         assert "qsize" in sub.fields["_transient_state"]
+
+
+class TestTypeSymbolSerialization:
+    """L8 修复：类型符号（IbClass）序列化为类引用，round-trip 后保持类型身份。
+
+    此前缺陷：IbClass 落 else object 分支展开为空 fields，反序列化时被
+    registry.get_class 构造为对应类的空普通实例（IbObject）——类型符号身份破坏，
+    `slot(...)` 等类型构造在恢复后失效。
+    """
+
+    def test_serialized_type_symbols_are_class_ref(self, engine):
+        engine.run_string('int a = 1\n', silent=True)
+        ec = engine.interpreter._execution_context
+        data = RuntimeSerializer(engine.registry).serialize_context(
+            ec.runtime_context, include_static=False
+        )
+        pool = data["pools"]["instances"]
+        refs = [v for v in pool.values() if v.get("_type") == "class_ref"]
+        assert refs, "类型符号必须以 class_ref 序列化（L8 回归：原落 object 空壳）"
+        assert any(v.get("name") == "slot" for v in refs)
+
+    def test_round_trip_preserves_type_symbol_identity(self, engine):
+        orig, rest = _round_trip(engine, 'int a = 1\n')
+        for name in ("int", "str", "thread", "chan", "slot", "subscriber", "Type", "Object"):
+            sym = rest.get_symbol(name)
+            assert sym is not None, f"类型符号 {name} 缺失"
+            assert type(sym.value).__name__ == "IbClass", (
+                f"类型符号 {name} 身份破坏：{type(sym.value).__name__}（L8 回归）"
+            )
+        # 恢复后类型可构造（类对象保留 instantiate 能力）
+        slot_cls = rest.get_symbol("slot").value
+        assert hasattr(slot_cls, "instantiate")

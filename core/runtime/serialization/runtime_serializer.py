@@ -189,6 +189,16 @@ class RuntimeSerializer(BaseFlatSerializer):
             if obj.meta:
                 data["value_meta"] = dict(obj.meta)
 
+        # 类元对象（IbClass）：序列化为类引用（类名），反序列化时重绑定 registry
+        # 真实类（L8 修复——此前落 else object 分支展开为空 fields，反序列化时被
+        # registry.get_class 构造为对应类的空普通实例，类型符号身份破坏）。
+        # 类型符号是"类型引用"而非实例值（与 IbModule scope_native 模式一致）。
+        if isinstance(obj, IbClass):
+            data["_type"] = "class_ref"
+            data["name"] = obj.name
+            self.instance_pool[uid] = data
+            return uid
+
         # 瞬态对象协议（L6 统一，替代原 thread_transient 专用分支）：实现
         # __transient_state__ 的对象序列化为纯状态存根，不递归运行时句柄
         # （thread 的 coordinator 引用环 / chan 的队列 / slot 的值 / subscriber
@@ -530,7 +540,15 @@ class RuntimeDeserializer:
         obj = None
         _type = data.get("_type")
 
-        if _type == "intent_context_native":
+        if _type == "class_ref":
+            # 类引用（L8 修复）：重绑定 registry 真实类——类型符号是"类型引用"
+            # 而非实例值，反序列化后必须仍为 IbClass（类型身份保留）。
+            # 必须 return：否则落入下方 else 分支被覆盖为 IbObject(ib_class)。
+            obj = self.registry.get_class(data.get("name"))
+            self.instance_cache[uid] = obj
+            return obj
+
+        elif _type == "intent_context_native":
             # 该条目不是 IbObject 实例，由 ``_get_intent_context`` 处理。
             # 调用方误以 inst_ 前缀来到这里时，回退到 native 路径。
             return self._get_intent_context(uid)
