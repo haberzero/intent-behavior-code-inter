@@ -114,7 +114,7 @@ class IbThreadResult(IbValue):
         """直接返回 T；失败抛对应 IBCI 异常（fail-fast，Rust 对齐）。
 
         失败时以 ``ThrownException`` 抛出容器内错误对象，语言层 try/except
-        可捕获；容器内错误是 IBCI 异常对象（TaskCancelled/TaskFailed 等）。
+        可捕获；容器内错误是 IBCI 异常对象（ThreadCancelled/ThreadFailed 等）。
         """
         if self._status == ThreadStatus.DONE:
             return self.payload

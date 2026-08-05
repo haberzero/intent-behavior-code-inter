@@ -107,3 +107,36 @@ def test_comm_objects_use_create_blank_protocol():
     assert isinstance(IbChannel._create_blank(None), IbChannel)
     assert isinstance(IbSlot._create_blank(None), IbSlot)
     assert isinstance(IbSubscriber._create_blank(None), IbSubscriber)
+
+
+class TestSlotUpdateE2E:
+    """slot.update 语言面：普通值 set 形态 + 可调用对象 CAS 读改写形态。"""
+
+    def test_update_with_plain_value_sets(self):
+        lines = run_ibci("""
+slot s = slot("x", 0)
+s.update(5)
+print((str)s.get())
+""")
+        assert lines == ["5"]
+
+    def test_update_with_fn_does_read_modify_write(self):
+        """update(fn)：fn(当前值) → 新值，原子 CAS 读改写。"""
+        lines = run_ibci("""
+slot s = slot("x", 10)
+fn inc = lambda(int v): (v + 1)
+s.update(inc)
+print((str)s.get())
+""")
+        assert lines == ["11"]
+
+    def test_update_with_fn_via_closure(self):
+        """update(fn)：闭包 lambda 读改写（锁外计算，RMW 语义）。"""
+        lines = run_ibci("""
+slot s = slot("x", 0)
+s.set(7)
+fn bump = lambda: (s.get() + 3)
+s.update(bump)
+print((str)s.get())
+""")
+        assert lines == ["10"]

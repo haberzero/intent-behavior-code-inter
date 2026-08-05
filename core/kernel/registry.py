@@ -396,22 +396,22 @@ class KernelRegistry:
         instance.fields["provider_error"] = self.box(provider_error)
         return instance
 
-    def make_task_cancelled(self, message: str = "Task was cancelled") -> Any:
-        """Construct a TaskCancelled err IbObject."""
-        cls = self.get_class("TaskCancelled")
+    def make_thread_cancelled(self, message: str = "Task was cancelled") -> Any:
+        """Construct a ThreadCancelled err IbObject."""
+        cls = self.get_class("ThreadCancelled")
         if not cls:
-            cls = self.get_class("TaskError") or self.get_class("Exception")
+            cls = self.get_class("ThreadError") or self.get_class("Exception")
         if not cls:
             return self.get_none()
         instance = cls.instantiate([])
         instance.fields["message"] = self.box(message)
         return instance
 
-    def make_task_failed(self, message: str = "Task failed") -> Any:
-        """Construct a TaskFailed err IbObject."""
-        cls = self.get_class("TaskFailed")
+    def make_thread_failed(self, message: str = "Task failed") -> Any:
+        """Construct a ThreadFailed err IbObject."""
+        cls = self.get_class("ThreadFailed")
         if not cls:
-            cls = self.get_class("TaskError") or self.get_class("Exception")
+            cls = self.get_class("ThreadError") or self.get_class("Exception")
         if not cls:
             return self.get_none()
         instance = cls.instantiate([])

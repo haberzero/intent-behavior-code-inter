@@ -35,7 +35,7 @@ from core.runtime.frame import (
 from core.runtime.shared.waitable import Waitable
 
 
-class TaskCancelled(Exception):
+class ThreadCancelled(Exception):
     """任务被协作式取消（经挂起点检查）。"""
 
     def __init__(self, handle: str):
@@ -94,7 +94,7 @@ class SpawnedTask:
         """后台线程入口：构建任务本地上下文并驱动函数体。
 
         协作式取消：任务体在挂起点（Waitable 等待 / 子节点驱动）检查
-        ``_cancelled``，命中即抛 ``TaskCancelled``（join 时重抛）。
+        ``_cancelled``，命中即抛 ``ThreadCancelled``（join 时重抛）。
         """
         try:
             result = _run_task_body(
@@ -105,7 +105,7 @@ class SpawnedTask:
                 handle=self._handle,
             )
             self._future.set_result(result)
-        except TaskCancelled as e:
+        except ThreadCancelled as e:
             self._future.set_exception(e)
         except BaseException as e:  # 任务内任何异常都捕获并传递（join 时重抛）
             self._future.set_exception(e)
@@ -131,14 +131,14 @@ class SpawnedTask:
 
         未启动：直接标记取消并使 join 抛错。
         运行中：设置取消事件，任务在下一个挂起点（Waitable 等待 / 子节点
-        驱动）检查并自行退出（``TaskCancelled``）。纯 CPU 任务无可挂起点时
+        驱动）检查并自行退出（``ThreadCancelled``）。纯 CPU 任务无可挂起点时
         cancel 无法强制中断（Python 无法强杀线程）。
         """
         self._cancelled.set()
         if self._thread is None or not self._thread.is_alive():
             # 未启动或已结束：直接让 join 抛取消
             if not self._future.done():
-                self._future.set_exception(TaskCancelled(self._handle))
+                self._future.set_exception(ThreadCancelled(self._handle))
 
     def _started(self) -> bool:
         return self._thread is not None
@@ -282,14 +282,14 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
     uid）经任务本地 VM 求值后恢复。
 
     协作式取消：每个挂起点（Waitable 等待 / 子节点驱动前）检查
-    ``cancel_event``，命中即抛 ``TaskCancelled``。``handle`` 为任务句柄标识
+    ``cancel_event``，命中即抛 ``ThreadCancelled``。``handle`` 为任务句柄标识
     （由调用方传入，不再读取失效的 ``_task_handle`` 属性）。
     """
     from core.runtime.shared.waitable import Waitable
 
     def _check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():
-            raise TaskCancelled(handle)
+            raise ThreadCancelled(handle)
 
     def _step(val):
         try:

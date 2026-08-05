@@ -59,7 +59,6 @@ class TestAudioAxiom:
         specs = AudioAxiom().get_method_specs()
         assert "data" in specs
         assert "format" in specs
-        assert "duration" in specs
         assert "cast_to" in specs
 
     def test_payload_prompt_delegates_to_runtime_value(self):

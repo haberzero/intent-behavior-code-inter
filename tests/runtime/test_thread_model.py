@@ -99,7 +99,7 @@ func work(chan x) -> int:
     return 1
 
 thread[int] t = thread(callable=work, args=[c])
-TaskCancelled e = t.cancel()
+ThreadCancelled e = t.cancel()
 print(e.message)
 c.send("x")
 t.join()

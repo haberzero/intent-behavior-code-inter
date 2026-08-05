@@ -682,18 +682,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         True  = 全部继承（默认）
         False = 不继承
-        List  = 选择性继承（按插件名过滤；过滤逻辑待未来实现，当前走全量继承）
         """
         policy_obj = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
 
-        if policy_obj.inherit_plugins is True:
+        if policy_obj.inherit_plugins:
             return self._plugin_search_paths
-        elif policy_obj.inherit_plugins is False:
-            return []
-        else:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                f"Selective plugin inheritance {policy_obj.inherit_plugins} requested but not yet filtered; inheriting all.")
-            return self._plugin_search_paths
+        return []
 
     def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], silent: bool = True) -> str:
         """

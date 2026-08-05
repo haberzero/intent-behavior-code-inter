@@ -183,21 +183,34 @@ class ExpressionVisitorsMixin:
         return result_type
 
     def visit_IbChannelExpr(self, node: ast.IbChannelExpr) -> Optional[IbSpec]:
-        """``chan(T, ...)`` 的类型 = chan。
+        """``chan(T, ...)`` 的类型 = chan[T]（元素类型经 type_name 保真）。
 
-        元素类型 ``T`` 经 type_name 解析；当前保守返回 ``chan`` 基类型。
+        元素类型 ``T`` 经 ``resolve_specialization`` 构造特化 spec，与注解层
+        ``chan[T]`` 的身份保留一致（此前表达式层保守返回裸 chan）。
         """
-        if node.type_name:
-            self.registry.resolve(node.type_name)  # 触发解析校验
-        chan_spec = self.registry.resolve("chan") or self._any_desc
+        base_spec = self.registry.resolve("chan")
+        if node.type_name and base_spec is not None:
+            elem_spec = self.registry.resolve(node.type_name)
+            if elem_spec is not None:
+                specialized = self.registry.resolve_specialization(base_spec, [elem_spec])
+                if specialized is not None:
+                    base_spec = specialized
+        chan_spec = base_spec or self._any_desc
         self.bind_type(node, chan_spec)
         return chan_spec
 
     def visit_IbSlotExpr(self, node: ast.IbSlotExpr) -> Optional[IbSpec]:
-        """``slot(...)`` 的类型 = slot。"""
+        """``slot(T, ...)`` 的类型 = slot[T]（值类型经 type_name 保真）。"""
         if node.value is not None:
             self.visit(node.value)
-        slot_spec = self.registry.resolve("slot") or self._any_desc
+        base_spec = self.registry.resolve("slot")
+        if node.type_name and base_spec is not None:
+            elem_spec = self.registry.resolve(node.type_name)
+            if elem_spec is not None:
+                specialized = self.registry.resolve_specialization(base_spec, [elem_spec])
+                if specialized is not None:
+                    base_spec = specialized
+        slot_spec = base_spec or self._any_desc
         self.bind_type(node, slot_spec)
         return slot_spec
 

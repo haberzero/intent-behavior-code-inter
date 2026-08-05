@@ -64,10 +64,6 @@ class IbAudio(IbFileHandle):
         """返回 base64 编码的音频数据（可观测性/兼容性）。"""
         return base64.b64encode(self.__materialize__()).decode("ascii")
 
-    def duration(self) -> float:
-        """占位：当前实现不解析媒体元数据。"""
-        return 0.0
-
     def __path_payload_prompt__(self) -> Dict[str, Any]:
         fmt = _format_from_backing(self.backing)
         b64_data = base64.b64encode(self.__materialize__()).decode("ascii")
@@ -97,12 +93,6 @@ class IbImage(IbFileHandle):
     def data(self) -> str:
         return base64.b64encode(self.__materialize__()).decode("ascii")
 
-    def width(self) -> int:
-        return 0
-
-    def height(self) -> int:
-        return 0
-
     def __path_payload_prompt__(self) -> Dict[str, Any]:
         fmt = _format_from_backing(self.backing)
         b64_data = base64.b64encode(self.__materialize__()).decode("ascii")
@@ -131,9 +121,6 @@ class IbVideo(IbFileHandle):
 
     def data(self) -> str:
         return base64.b64encode(self.__materialize__()).decode("ascii")
-
-    def duration(self) -> float:
-        return 0.0
 
     def __path_payload_prompt__(self) -> Dict[str, Any]:
         fmt = _format_from_backing(self.backing)

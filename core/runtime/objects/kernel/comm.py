@@ -172,15 +172,29 @@ class IbSlot(IbObject):
         self.core.set(unbox(value))
 
     def update(self, value) -> None:
-        """以 value 覆盖（兼容 update(fn) 的简化形态）。
+        """原子读改写：以 value 覆盖，或对可调用对象执行 fn(当前值) → 新值。
 
-        语言层 update 接受"新值"直接覆盖（原子 set），或可调用对象执行
-        读改写（fn）。当前实现：若 value 可调用则走 CAS 读改写，否则 set。
+        语言层 update 接受：
+        - 普通值：原子 set（覆盖）；
+        - 可调用对象（fn_callable / behavior）：走 SlotCore 的 CAS 读改写，
+          锁外执行 fn（IBCI 函数经同步后备 .call 驱动），冲突时基于最新值重试。
+
+        约束：fn 在锁外执行、应无副作用且不内嵌通信操作（否则可能死锁）；
+        behavior 为 LLM 调用，CAS 重试会重复推理，fn 须是确定性函数。
         """
-        if callable(value):
-            self.core.update(lambda _old: unbox(value))
+        if value.ib_class.name in ("fn_callable", "behavior"):
+            self.core.update(lambda old: unbox(self._invoke_update_fn(value, old)))
         else:
             self.core.set(unbox(value))
+
+    def _invoke_update_fn(self, fn, old_value: Any) -> "IbObject":
+        """在 CAS 锁外调用 IBCI 函数：读改写语义 fn(当前值) → 新值。
+
+        复用可调用对象的同步后备 ``.call``（fn_callable → vm.run /
+        behavior → invoke_behavior），返回装箱结果供 unbox 拆为原生值。
+        """
+        boxed_old = self.ib_class.registry.box(old_value)
+        return fn.call(self.ib_class.registry.get_none(), [boxed_old])
 
     def __to_prompt__(self) -> str:
         return f"<slot {self.core.name}>"

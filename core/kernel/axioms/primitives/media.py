@@ -35,7 +35,6 @@ class _MediaAxiomBase(BaseAxiom):
             # format 从文件名扩展名推导，无 I/O，改为 field。
             "data":     _m("data",     ret="str"),
             "format":   MemberSpec(name="format",   kind="field", type_ref=TypeRef.of("str")),
-            "duration": _m("duration", ret="float"),
             "cast_to":  _m("cast_to", params=["any"], ret="any"),
         }
 
@@ -72,9 +71,6 @@ class ImageAxiom(_MediaAxiomBase):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         specs = super().get_method_specs()
-        # width/height 当前占位，未来可能读取图像头，保持 method。
-        specs["width"] = _m("width", ret="int")
-        specs["height"] = _m("height", ret="int")
         # 构造入口：image.from_file(path)。
         specs["from_file"] = _m("from_file", params=["str"], ret="image")
         return specs

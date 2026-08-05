@@ -69,7 +69,7 @@ class TestTaskCancel:
         """线程可协作式取消。
 
         线程体阻塞在 chan recv 上（确定性挂起），cancel 命中挂起点——
-        快函数线程可能在 cancel 前自然完成（竞态），旧无条件返回 TaskCancelled
+        快函数线程可能在 cancel 前自然完成（竞态），旧无条件返回 ThreadCancelled
         掩盖了它；改为阻塞挂起场景验证协作取消。
         """
         lines = run_ibci("""
@@ -78,7 +78,7 @@ func f(chan x) -> int:
     str m = x.recv()
     return 1
 thread[int] t = thread(callable=f, args=[c])
-TaskCancelled e = t.cancel()
+ThreadCancelled e = t.cancel()
 print(e.message)
 c.send("x")
 """)

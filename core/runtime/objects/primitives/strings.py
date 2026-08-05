@@ -46,18 +46,6 @@ class IbString(IbValue):
     def strip(self) -> IbObject:
         return self.ib_class.registry.box(self.value.strip())
 
-    def trim(self) -> IbObject:
-        """IBCI-style alias for strip()"""
-        return self.ib_class.registry.box(self.value.strip())
-
-    def to_upper(self) -> IbObject:
-        """IBCI-style alias for upper()"""
-        return self.ib_class.registry.box(self.value.upper())
-
-    def to_lower(self) -> IbObject:
-        """IBCI-style alias for lower()"""
-        return self.ib_class.registry.box(self.value.lower())
-
     def join(self, iterable: Any) -> IbObject:
         """用本字符串作为分隔符，连接列表中的元素。对齐 Python str.join(iterable)"""
         parts = unbox(iterable)

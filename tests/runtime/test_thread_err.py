@@ -1,9 +1,9 @@
 """
-err 类型统一测试：TaskError 层次 + cancel 返回 err。
+err 类型统一测试：ThreadError 层次 + cancel 返回 err。
 
 覆盖：
-- TaskCancelled / TaskFailed 是 IBCI Exception 子类（用户可见、可继承）
-- cancel() 返回 TaskCancelled err（操作状态）
+- ThreadCancelled / ThreadFailed 是 IBCI Exception 子类（用户可见、可继承）
+- cancel() 返回 ThreadCancelled err（操作状态）
 - 线程失败 error() 返回 IBCI 错误对象
 - expect() 抛出的错误可被 try/except 按类型捕获（继承链）
 - thread_result 容器错误值化
@@ -20,7 +20,7 @@ func blocked(chan x) -> int:
     return 1
 
 thread[int] t = thread(callable=blocked, args=[ch])
-TaskCancelled e = t.cancel()
+ThreadCancelled e = t.cancel()
 print(e.message)
 ch.send("x")
 """
@@ -31,7 +31,7 @@ ch.send("x")
 def test_thread_failure_returns_taskfailed_err():
     code = """
 func c() -> int:
-    raise TaskFailed("boom")
+    raise ThreadFailed("boom")
 
 thread[int] t = thread(callable=c, args=[])
 thread_result[int] r = t.join()
@@ -45,20 +45,20 @@ print((str)r.is_error())
 def test_expect_catches_by_taskerror_hierarchy():
     code = """
 func c() -> int:
-    raise TaskFailed("boom")
+    raise ThreadFailed("boom")
 
 thread[int] t = thread(callable=c, args=[])
 thread_result[int] r = t.join()
 try:
     int x = r.expect()
     print("no error")
-except TaskError:
-    print("caught TaskError")
+except ThreadError:
+    print("caught ThreadError")
 except Exception:
     print("caught Exception")
 """
     lines = run_ibci(code)
-    assert lines == ["caught TaskError"]
+    assert lines == ["caught ThreadError"]
 
 
 def test_expect_catches_user_defined_llm_error():
@@ -84,7 +84,7 @@ except Exception:
 def test_task_errors_are_exception_subclasses():
     code = """
 func c() -> int:
-    raise TaskCancelled("stopped")
+    raise ThreadCancelled("stopped")
 
 thread[int] t = thread(callable=c, args=[])
 thread_result[int] r = t.join()

@@ -128,20 +128,20 @@ class IbThread(IbObject):
             )
         except BaseException as e:
             # 线程失败/取消：把底层异常映射为 IBCI err 对象存入容器（值化失败）。
-            # 协作式取消（TaskCancelled）→ TaskCancelled；其他 → TaskFailed。
+            # 协作式取消（ThreadCancelled）→ ThreadCancelled；其他 → ThreadFailed。
             from core.runtime.exceptions import ThrownException
-            from core.runtime.coordinator import TaskCancelled as _CoordTaskCancelled
+            from core.runtime.coordinator import ThreadCancelled as _CoordThreadCancelled
 
             if isinstance(e, ThrownException):
                 # 用户代码主动 raise：错误值本身就是 IBCI 异常对象。
                 err_obj = e.value
-            elif isinstance(e, _CoordTaskCancelled):
-                err_obj = self.ib_class.registry.make_task_cancelled(str(e))
+            elif isinstance(e, _CoordThreadCancelled):
+                err_obj = self.ib_class.registry.make_thread_cancelled(str(e))
             else:
-                err_obj = self.ib_class.registry.make_task_failed(str(e))
+                err_obj = self.ib_class.registry.make_thread_failed(str(e))
             state = (
                 ThreadStatus.CANCELLED
-                if isinstance(e, _CoordTaskCancelled)
+                if isinstance(e, _CoordThreadCancelled)
                 else ThreadStatus.FAILED
             )
             status = state
@@ -156,14 +156,14 @@ class IbThread(IbObject):
     def cancel(self) -> "IbObject":
         """请求取消线程（协作式）；返回 err 指示操作状态。
 
-        - 成功发出取消请求 → ``TaskCancelled`` err
+        - 成功发出取消请求 → ``ThreadCancelled`` err
         - 线程未启动或已结束 → ``None``（无效/已结束）
         """
         if self._spawned is None or self._spawned.is_done:
             return self.ib_class.registry.get_none()
         self._spawned.cancel()
         self._state = ThreadStatus.CANCELLED
-        return self.ib_class.registry.make_task_cancelled()
+        return self.ib_class.registry.make_thread_cancelled()
 
     # ------------------------------------------------------------------ #
     # 值协议 / 内省                                                       #
