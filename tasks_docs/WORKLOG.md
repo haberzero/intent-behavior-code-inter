@@ -59,13 +59,8 @@
   二次复核（架构层面 + IBCI 设计思路：功能必要性/设计目的/修复长久收益），用户偏好彻底
   修复优先。**结论**：30 项升格为彻底修复/删除（批次 A-E），12 项确认真设计决策保留+文档化，
   其余保留+局部修复。**用户确认两项关键决策**：① `IbSlot.update(fn)` 方案 A 接通语言面
-  RMW（复用 SlotCore 已测 CAS 机器）；② `Task* → Thread*` 语言面改名授权。完整清单见
+   RMW（复用 SlotCore 已测 CAS 机器）；② `Task* → Thread*` 语言面改名授权。完整清单见
    `PENDING_REVIEW_ITEMS.md` §〇b 与 §二次复核决策记录。
-- **注释卫生清理（2026-08-05）**：用户指出近期工作（会话 6-13）在代码注释/docstring 大量
-  引入任务代号/进度标记。全仓清理 66 文件：删除 L7-A/R1-Dx/G7/D1-D6/B1-B4/L8/C1/A1、
-  任务 A-F/C0-C2、PT-MT-\*、阶段 2/3、疏漏 N、VP-/F-、MERGED、THREAD_DESIGN_REVISION、
-  WORKLOG 会话、日期戳、文档章节号（§3.1/§8.1）等标记，保留功能说明；INV-\* 契约不变式
-  码（等价公理码）保留。全量 pytest 零回归。commit db3c610（仅本地）。
 - **R2 处置完成（2026-08-05，会话 15）**：按批次 A-E + 补充项全部落地（本地 commit 序列：
   381d30e/1ee2bcb/77d0863/7473a8b/94c8e86/末批），每批全量 pytest 零回归后提交。涵盖：
   机械清理（负数误lex/CJK/动态槽/去BOM）、fail-fast（反序列化/能力查询/前缀碰撞/插件状态/
@@ -80,6 +75,6 @@
 
 ## 四、遗留 / 待办
 
-- **下一阶段（完整复核审查）**：`tasks_docs/PENDING_REVIEW_ITEMS.md`（R1 ✅ / R2-R5 待做 + D1-D5 docs 同步）。
+- **下一阶段（完整复核审查）**：`tasks_docs/PENDING_REVIEW_ITEMS.md`（R1 ✅ / R2 ✅ / R3-R5 待做 + D1-D5 docs 同步）。
 - **长期规划**：`tasks_docs/PENDING_TASKS.md`（PT-SEM/PT-4.x/PT-ARCH/PT-SMELL/TEST_REFACTOR 等）。
 - **固定化内容**：`tasks_docs/HANDOFF.md`（常驻交接文档：工作流程/原则/goal 模板）。

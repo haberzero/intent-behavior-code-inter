@@ -87,7 +87,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `NEXT_STEPS.md` | 当前最紧要项 / 下一阶段 / 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `PENDING_TASKS.md` | 长期规划（PT-SEM/PT-4.x/PT-ARCH/PT-SMELL/TEST_REFACTOR/media 封存） |
-| `PENDING_REVIEW_ITEMS.md` | 完整复核审查清单（R 系列审查动作 + L/D 系列） |
+| `PENDING_REVIEW_ITEMS.md` | 完整复核审查清单（R1/R2 ✅ / R3-R5 待做 + D1-D5 docs 同步） |
 | `WORKLOG.md` | 自主工作日志（关键裁定 + 仍有效设计决策 + 遗留） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-SMELL-1/2 审计（待执行，独立分支） |
@@ -101,16 +101,19 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一阶段：完整复核审查工作流程**（用户 2026-08-05 裁定）。
-- 清单：`PENDING_REVIEW_ITEMS.md` —— R1 正式 code-review / R4 覆盖率 / R2 健康诊断 /
-  R3 异味扫描 / R5 doc 治理 + D1-D5 docs 同步。
+- **下一阶段：R3 code-odor 全面异味扫描**（完整复核审查流程中；R1/R2 已完成）。
+- 清单：`PENDING_REVIEW_ITEMS.md` —— R3 异味扫描（待做）/ R4 覆盖率核对（待做）/
+  R5 doc 治理 + D1-D5 docs 同步（待做）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
 
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** 全部落地
   unsafe-vibe-dev（本地 commit，未 push）。批次/commit 明细见 `NEXT_STEPS.md`"已完成"节。
-- **测试基线**：1474 passed / 4 skipped（以实跑为准）。
+- **R1 完整复核**（会话 13）+ **R2 健康诊断十查**（会话 14-15）+ **注释卫生清理** 全部完成，
+  缺陷按"不删也不修"两档处置，含 IbSlot.update 方案 A 接通 CAS RMW、Task→Thread 语言面
+  改名（用户授权）。详细记录见 `PENDING_REVIEW_ITEMS.md` §〇b 与 `WORKLOG.md`。
+- **测试基线**：1506 passed / 6 skipped（以实跑为准）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；无独立分支残留）。
 
 ### 2.3 交接检查单

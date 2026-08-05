@@ -4,48 +4,57 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-05（通信领域主线 + 收尾 L1-L8 全部完成；下一阶段 = **完整复核审查**，用户明确准备开启）
+> **最后更新**：2026-08-05（R1/R2 复核审查完成；下一阶段 = **R3 code-odor 全面异味扫描**）
 
 ---
 
-## 🔴 下一阶段：完整复核审查工作流程（当前最紧要）
+## 🔴 下一阶段：R3 code-odor 全面异味扫描（当前最紧要）
 
-> **用户裁定（2026-08-05）**：准备开启**完整复核审查工作流程**。对会话 1-12 累计的所有改动
-> （通信领域三阶段主线 + 收尾 L1-L8 + 泛型成员特化协议化等）做**完整独立复核**。
-> 交接准备已完成（归档过期设计/审查文档，本文件为下一阶段指引，`HANDOFF.md` 为常驻交接与固定化内容库）。
+> 完整复核审查工作流程进行中（R1/R2 已完成）。R3 对全仓做 **code-odor 特征扫描**：
+> 嵌套分支 / 能力探测 / 兜底字样 / 反射变体。完整审查清单见 `tasks_docs/PENDING_REVIEW_ITEMS.md`。
 
-### 审查清单（核心依据：`tasks_docs/PENDING_REVIEW_ITEMS.md`）
+### R3 执行要点
+
+- **范围**：全仓 `.py`（core/、ibci_modules/、ibci_sdk/）。
+- **特征**：大量/深层 if-else 嵌套、兼容/fallback/兜底/混合方案/快速实现字样、
+  反射/能力探测隐蔽变体（异常做能力判定、getattr 私有穿透、dir() 枚举、字符串嗅探）。
+- **方法**：并行 general agent 独立扫描 + 主会话实证关键项；发现分类（真缺陷/设计限制/需讨论）。
+- **约束**：subagent **仅 general agent**；每批全量 `python -m pytest tests/` 零回归；
+  新缺陷按"不删也不修=不可接受"两档处置；commit 留痕（仅本地，**禁止 push**）。
+
+### 后续审查（R3 之后）
 
 | 编号 | 内容 | 说明 |
 |------|------|------|
-| **R1** | 正式 code-review 复核 | 对三阶段主线 + 收尾（L1/L2/L3/L4/L6/L8/L5/L7-A + T2）的全部改动做独立复核（general agent）。改前会话从未做完整独立复核 |
-| **R2** | code-quality 健康诊断十查 | 全仓健康审计（残留扫描/历史痕迹/双通道/双写真相/fail-fast/封装纪律） |
-| **R3** | code-odor 全面异味扫描 | 特征扫描（嵌套分支/能力探测/兜底字样/反射变体） |
 | **R4** | 覆盖率核对 | 新增测试是否覆盖全部新行为（subscriber 生命周期/class_ref/泛型特化分支/瞬态协议等） |
 | **R5** | doc-governance 审计 | docs/ 治理流程（配合 D1-D5 文档收敛） |
-| **D1-D5** | docs/ 技术手册同步 | signal 移除 / pubsub+subscriber / 瞬态序列化协议 / thread 槽位化 / 收尾机制变化收敛进 docs/subsystems、语法文档、KNOWN_LIMITS |
+| **D1-D5** | docs/ 技术手册同步 | signal 移除 / pubsub+subscriber / 瞬态序列化协议 / thread 槽位化 / 收尾机制变化收敛进 docs |
 
-### 复核审查注意事项
+---
 
-- **约束**：所有 subagent 工作（含 review）**仅允许使用 general agent**，禁 explore/reviewer 特化 agent。
-- **验证**：每批全量 `python -m pytest tests/` 零回归；产出缺陷清单合入 `PENDING_REVIEW_ITEMS.md`。
-- **交付**：commit 留痕（仅本地）；**禁止 push**（硬原则）；发现新缺陷按"不删也不修=不可接受"两档处置（根本修复或彻底删除）。
+## ✅ 已完成：完整复核审查 R1/R2（2026-08-05）
+
+- **R1 正式 code-review**（会话 13）：三阶段主线 + 收尾 L1-L8 独立复核，无高严重缺陷；
+  新增缺陷 A1/C1/B1-B6/D1-D6 全部处置（D 系列重分类修正）。
+- **R2 健康诊断十查**（会话 14-15）：约 50 项问题；经二次复核（架构层面 + 设计思路），
+  30 项彻底修复/删除（批次 A-E），12 项设计决策保留+文档化。
+  含 IbSlot.update 方案 A 接通 CAS RMW、Task→Thread 语言面改名（用户授权）。
+- **注释卫生清理**：全仓 66 文件删除任务代号/进度标记（恢复"注释只注功能"纪律）。
+- 详细记录见 `tasks_docs/PENDING_REVIEW_ITEMS.md` §〇b 与 `tasks_docs/WORKLOG.md` 会话 13-15。
 
 ---
 
 ## ✅ 已完成：通信领域设计完善（三阶段）+ 收尾 L1-L8（2026-08-04/05）
 
-> 全部完成并落地 unsafe-vibe-dev。详细决策记录见 `tasks_docs/WORKLOG.md` 会话 6-12（设计/审查
-> 文档已归档，决策浓缩于 WORKLOG）。当前测试基线：**1474 passed / 4 skipped**（以实跑为准）。
+> 全部完成并落地 unsafe-vibe-dev。批次/commit 明细见 git 历史；决策见 WORKLOG 会话 6-12。
 
 | 批次 | 内容 | commit |
 |------|------|--------|
 | 阶段1 | B1 thread_result 序列化往返 / B2 循环导入 / B4 except:pass 兜底 | e217b8b |
 | 阶段2 | D1 instantiate 挂钩（_create_blank）/ D2 thread 槽位化 / D3 thread_result IbValue / D4 ThreadStatus 单枚举 / D5 G4 诚实化 | f3037b2 |
 | 阶段3 | G3 TASK→THREAD kind / G5 协调器归位 / G6 通信 Signal 移除 / G7 pubsub 打通 | 1da0b1c, 2c49240 |
-| 收尾-L1 | _by_kind 索引彻底删除（B3） | 149dd63 |
+| 收尾-L1/L3/L4 | _by_kind 索引彻底删除 / serializer done 字面量统一 / SpawnedTask Waitable 残留清理 | 149dd63 |
 | 收尾-L2 | 泛型成员特化协议化（resolve_member 级联收敛为声明回调） | 8e0ada9 |
-| 收尾-L3/L4 | serializer done 字面量统一 / SpawnedTask Waitable 残留清理 | 149dd63 |
 | 收尾-L6 | 瞬态序列化协议化（__transient_state__ 统一存根） | 3a2e5d1 |
 | 收尾-L8 | 类型符号 class_ref 序列化（IbClass 身份保留） | af3ee21 |
 | 收尾-L5/L7-A/T2 | IbOptional 单承载 / 泛型注解符号身份精确化 / _create_blank 构造入口统一 | 80b463e |
@@ -57,7 +66,8 @@ PT-SMELL-1/2 审计、TEST_REFACTOR、语言级协程（PT-4.3 async 函数/生�
 
 ## ✅ 已完成：线程对象模型方向修正（任务 A-F）
 
-> 2026-08-04 全部完成。`thread` 取代 `spawn/join/cancel/task`，async/thread 领域彻底分离。设计决策记录已随落地归档（git 历史保留）；关键裁定与摘要见 `tasks_docs/WORKLOG.md`。
+> 2026-08-04 全部完成。`thread` 取代 `spawn/join/cancel/task`，async/thread 领域彻底分离。
+> 关键裁定与摘要见 `tasks_docs/WORKLOG.md`。
 
 | 任务 | 内容 | 状态 |
 |------|------|------|
