@@ -239,6 +239,12 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         return_type_name="str"
     ), token)
 
+    registry.register_function("type", factory.create_func(
+        "type",
+        param_type_names=["any"],
+        return_type_name="str"
+    ), token)
+
     # ------------------------------
 
     # 4. 注册 None 单例 (Per-registry)

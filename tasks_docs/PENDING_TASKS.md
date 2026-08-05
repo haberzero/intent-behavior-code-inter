@@ -105,22 +105,25 @@
 
 ### PT-4.5　用户类运算符重载 [VISION]
 
-### PT-INTRO-1　运行时内省与常用内置函数体系设计 [P2]
+### PT-INTRO-1　运行时内省与常用内置函数体系设计 [P2]【type() 已落地 2026-08-05 会话 17；其余待设计】
 
 > **来源**：会话 16 类型强化收尾（2026-08-05，用户裁定）。用户确认编译期类型已静态传播
 > （fn 返回类型等），运行时内省（`type()` / 查询 fn 输出类型等）与常用内置函数
 > （`len()` 等）作为**独立设计任务**，不并入类型收紧。
 >
-> **现状**：`type()` **不是 IBCI 内建**（`type(f)` 报 `SEM_UNDEFINED_SYMBOL`）；无用户级
-> fn 返回类型查询（`fn_callable`/`behavior` 的 `type_ref` 承载类型但未暴露为 IBCI 可读
-> 接口）；`len()` 及类似常用内置的覆盖面未系统梳理。idbg 插件只暴露极少量内省方法。
+> **现状（会话 17 更新）**：`type(x)` **已落地**（commit 待记）——返回 `ib_class.name` 规范
+> 类型名（int/str/list/fn_callable/用户类名/None），编译期签名 `str type(any)`，测试
+> `tests/runtime/test_introspection_intrinsics.py` 6 用例。`len()`/`range()`/`print()`/`input()`/
+> `get_self_source()` 已存在；`str()`/`int()` 由 `(T)x` 强转语法覆盖（非函数形态）。
 >
-> **设计方向（需定）**：
-> - `type(x)` 内建：对值返回规范类型名；对 fn/behavior 返回含签名的类型名（或专门
->   的返回类型查询，如 `f.__return_type__()`）。
-> - `len()`/`str()`/`int()` 等常用内置的系统梳理与补齐。
-> - 参照 Rust（静态、无运行时闭包反射）/ TypeScript（`ReturnType<typeof f>` 类型层）/
->   Python（`get_type_hints` 运行时）的取舍。
+> **设计方向（需定，会话 17 自主决策后剩余）**：
+> - `type(x)` 内建：✅ 已实现（值/容器/None/fn_callable/用户类返回规范类型名）。
+>   **fn/behavior 返回含签名的类型名（`fn[()->T]` 形态）** 与专门的返回类型查询
+>   （`f.__return_type__()`）**未做**——签名形态需 type_ref/params 内省，独立 API 形态待定。
+> - `len()`/`str()`/`int()` 等常用内置的系统梳理与补齐：`len` 已存在（str/list/dict/elements/
+>   receive 协议）；无单独 `str()`/`int()` 函数（语言面用 `(T)x` 强转，是既有设计）。
+> - 参照 Rust（静态）/ TypeScript（`ReturnType<typeof f>` 类型层）/ Python（`get_type_hints`）
+>   的取舍：`type()` 对齐 Python 运行时内省；fn 签名查询未定。
 > - 对齐 idbg 内省哲学（调试/泛型分发场景）。
 > **前置**：不依赖其他任务；建议在类型体系稳定后单独设计。
 
