@@ -67,7 +67,9 @@ def vm_handle_IbChannelExpr(executor, node_uid: str, node_data: Mapping[str, Any
     name = node_data.get("name")
     core = ChannelCore(mode=mode, buffer=buffer, name=name)
     cls = executor.registry.get_class("chan")
-    obj = IbChannel(ib_class=cls, core=core)
+    # 经 _create_blank 统一构造协议创建实例（与 thread instantiate 入口同构）
+    obj = IbChannel._create_blank(cls)
+    obj.core = core
     if name:
         _get_comm_registry(executor).register(name, obj, "chan")
     _emit_event(executor, "chan_created", {"name": name, "mode": mode})
@@ -82,7 +84,9 @@ def vm_handle_IbSlotExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
         value = yield node_data["value"]
     core = SlotCore(name=name, initial_value=value)
     cls = executor.registry.get_class("slot")
-    obj = IbSlot(ib_class=cls, core=core)
+    # 经 _create_blank 统一构造协议创建实例（与 thread instantiate 入口同构）
+    obj = IbSlot._create_blank(cls)
+    obj.core = core
     if name:
         _get_comm_registry(executor).register(name, obj, "slot")
     _emit_event(executor, "slot_updated", {"name": name, "value": value})

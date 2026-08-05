@@ -33,6 +33,11 @@ class IbChannel(IbObject):
 
     __slots__ = ("core",)
 
+    @classmethod
+    def _create_blank(cls, ib_class: IbClass) -> "IbChannel":
+        """类型化空实例（阶段 2 统一构造协议）：经该入口创建，handler/instantiate 同构。"""
+        return cls(ib_class)
+
     def __init__(self, ib_class: IbClass, core: Optional[ChannelCore] = None):
         super().__init__(ib_class)
         self.core = core if core is not None else ChannelCore(mode="message")
@@ -69,7 +74,9 @@ class IbChannel(IbObject):
         """
         view = self.core.subscribe(unbox(size))
         cls = self.ib_class.registry.get_class("subscriber")
-        return IbSubscriber(ib_class=cls, view=view)
+        obj = IbSubscriber._create_blank(cls)
+        obj.view = view
+        return obj
 
     # -- 生命周期 / 内省 ---------------------------------------- #
 
@@ -103,6 +110,11 @@ class IbSubscriber(IbObject):
     """
 
     __slots__ = ("view",)
+
+    @classmethod
+    def _create_blank(cls, ib_class: IbClass) -> "IbSubscriber":
+        """类型化空实例（阶段 2 统一构造协议）：经该入口创建，调用方随后填充 view。"""
+        return cls(ib_class, view=None)
 
     def __init__(self, ib_class: IbClass, view: Any):
         super().__init__(ib_class)
@@ -142,6 +154,11 @@ class IbSlot(IbObject):
     """IBCI 语言层的 Slot 值对象（包装 ``SlotCore``，具名原子读写）。"""
 
     __slots__ = ("core",)
+
+    @classmethod
+    def _create_blank(cls, ib_class: IbClass) -> "IbSlot":
+        """类型化空实例（阶段 2 统一构造协议）：经该入口创建，handler/instantiate 同构。"""
+        return cls(ib_class)
 
     def __init__(self, ib_class: IbClass, core: Optional[SlotCore] = None):
         super().__init__(ib_class)

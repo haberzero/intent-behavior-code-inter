@@ -99,3 +99,11 @@ print((str)r)
 print((str)sub.recv())
 """)
         assert lines == ["False", "1"]
+
+
+def test_comm_objects_use_create_blank_protocol():
+    """T2 可统一点：comm 句柄对象经 _create_blank 统一构造协议创建实例。"""
+    from core.runtime.objects.kernel import IbChannel, IbSlot, IbSubscriber
+    assert isinstance(IbChannel._create_blank(None), IbChannel)
+    assert isinstance(IbSlot._create_blank(None), IbSlot)
+    assert isinstance(IbSubscriber._create_blank(None), IbSubscriber)

@@ -184,6 +184,30 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
             type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
+        # Persist inner-type scalars for list[T] / dict[K,V] / tuple[T]（L7-A）：
+        # 泛型实参持久化，运行时 rehydrator 据此重建特化 spec——此前未持久化致
+        # 符号 declared_type 在运行时退化为基础 list/dict[any,any]（泛型身份丢失）。
+        if t.kind == TypeKind.LIST.value:
+            e_ref = t.element_type
+            type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
+            type_data["element_type_module"] = e_ref.module if e_ref is not None else None
+
+        if t.kind == TypeKind.DICT.value:
+            k_ref = t.key_type
+            v_ref = t.value_type
+            type_data["key_type_name"] = k_ref.head if k_ref is not None else "any"
+            type_data["key_type_module"] = k_ref.module if k_ref is not None else None
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
+        if t.kind == TypeKind.TUPLE.value:
+            if t.positional_element_types:
+                type_data["positional_type_names"] = [p.head for p in t.positional_element_types]
+            else:
+                e_ref = t.element_type
+                type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
+                type_data["element_type_module"] = e_ref.module if e_ref is not None else None
+
         # Persist the value type for thread[T] (join 返回类型)。
         if t.kind == TypeKind.THREAD.value:
             v_ref = t.value_type

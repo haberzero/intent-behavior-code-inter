@@ -90,15 +90,25 @@ class ArtifactRehydrator:
 
         # 映射驱动的 Shell 创建
         shell_creators = {
-            TypeKind.LIST.value: lambda: TypeDef(
-                name="list",
-                provenance=Provenance.KERNEL_NATIVE,
-                visibility=Visibility.PRELUDE_VISIBLE,
+            # list[T] / dict[K,V] / tuple[T]（L7-A）：经 factory 重建特化 spec——
+            # 此前硬编码基础 TypeDef（name="list"）致泛型实参丢失。
+            TypeKind.LIST.value: lambda: factory.create_list(
+                element_type_name=data.get("element_type_name", "any"),
+                element_type_module=data.get("element_type_module"),
             ),
-            TypeKind.DICT.value: lambda: TypeDef(
-                name="dict",
-                provenance=Provenance.KERNEL_NATIVE,
-                visibility=Visibility.PRELUDE_VISIBLE,
+            TypeKind.DICT.value: lambda: factory.create_dict(
+                key_type_name=data.get("key_type_name", "any"),
+                key_type_module=data.get("key_type_module"),
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
+            TypeKind.TUPLE.value: lambda: (
+                factory.create_tuple(positional_element_type_names=data.get("positional_type_names"))
+                if data.get("positional_type_names")
+                else factory.create_tuple(
+                    element_type_name=data.get("element_type_name", "any"),
+                    element_type_module=data.get("element_type_module"),
+                )
             ),
             TypeKind.FUNCTION.value: lambda: TypeDef(
                 name=name or "callable",

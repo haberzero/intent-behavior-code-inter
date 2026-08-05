@@ -272,7 +272,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif isinstance(obj, IbValue) and cls_name == "Optional":
             data["_type"] = "optional"
             data["is_some"] = obj._is_some
-            data["inner"] = self._process_value(obj._inner) if obj._is_some else None
+            data["inner"] = self._process_value(obj.payload) if obj._is_some else None
 
         # thread_result 是 IbValue 值对象（payload 承载成功值，阶段 2 D3）——
         # 与 thread_transient 分支一致，按 ib_class.name 分发而非 isinstance。

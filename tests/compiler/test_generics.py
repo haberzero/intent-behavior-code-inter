@@ -14,8 +14,7 @@ import pytest
 from core.engine import IBCIEngine
 from tests.conftest import run_ibci
 from core.kernel.factory import create_default_registry
-from core.kernel.spec import (
-    SpecRegistry,
+from core.kernel.spec import (    SpecRegistry,
     TypeDef,
     INT_SPEC,
     STR_SPEC,
@@ -421,3 +420,31 @@ class TestG3NestedGenerics:
             "print(val)\n"
         )
         assert lines == ["30"], f"Expected ['30'], got {lines}"
+
+
+class TestGenericAnnotationDeclaredType:
+    """L7-A：泛型注解符号声明保留泛型身份（运行时内省/序列化不退化）。
+
+    此前缺陷：symbol_collection 只处理 IbName 注解，list[int] 等退化为
+    any/基础类型；serializer 未持久化 list/dict/tuple 泛型实参，rehydrator
+    shell 硬编码基础 TypeDef——运行时符号 declared_type 丢泛型参数。
+    """
+
+    def test_generic_annotations_preserve_type_args(self, engine):
+        engine.run_string(
+            "list[int] xs = [1, 2]\n"
+            'dict[str, int] d = {"a": 1}\n'
+            "Optional[int] o = 5\n"
+            "tuple[int] tu = (1,)\n",
+            silent=True,
+        )
+        rc = engine.interpreter._execution_context.runtime_context
+        expect = {
+            "xs": "list[int]",
+            "d": "dict[str,int]",
+            "o": "Optional[int]",
+            "tu": "tuple[int]",
+        }
+        for name, want in expect.items():
+            sp = rc.get_symbol(name).declared_type
+            assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（L7-A 回归）"

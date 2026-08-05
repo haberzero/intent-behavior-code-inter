@@ -278,9 +278,29 @@ class SymbolCollector:
         self.generic_visit(node)
 
     def _resolve_annotation(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:
-        """Resolve a type annotation to an IbSpec (best-effort at collection time)."""
+        """Resolve a type annotation to an IbSpec (best-effort at collection time).
+
+        支持泛型注解（L7-A）：``list[int]`` / ``dict[str,int]`` / ``Optional[int]``
+        等经 ``resolve_specialization`` 解析为特化 spec——符号 declared_type 保留
+        泛型身份（此前只处理 ``IbName``，泛型注解退化为 any/基础类型，运行时
+        内省/序列化丢泛型参数）。
+        """
         if isinstance(annotation, ast.IbName):
             return self.registry.resolve(annotation.id)
+        if isinstance(annotation, ast.IbSubscript):
+            if isinstance(annotation.value, ast.IbName):
+                base = self.registry.resolve(annotation.value.id)
+                if base is None:
+                    return None
+                if isinstance(annotation.slice, ast.IbTuple):
+                    arg_specs = [self._resolve_annotation(elt) for elt in annotation.slice.elts]
+                else:
+                    arg_specs = [self._resolve_annotation(annotation.slice)]
+                arg_specs = [s for s in arg_specs if s is not None]
+                if not arg_specs:
+                    return base
+                return self.registry.resolve_specialization(base, arg_specs)
+            return None
         return None
 
     def _annotation_to_typeref(self, annotation: ast.IbASTNode) -> TypeRef:

@@ -12,17 +12,19 @@ class IbOptional(IbValue):
     IBC-Inter 的 Optional[T] 运行时值对象。
 
     包装一个内层值（可能为空）。``is_some`` 标志记录是否持有值：
-    - ``is_some=True``   → 持有值（``_inner`` 为内层 IbObject）
-    - ``is_some=False``  → 空（``_inner`` 为 None，语义上是 None）
+    - ``is_some=True``   → 持有值（内层值为 ``payload``）
+    - ``is_some=False``  → 空（``payload`` 为 None，语义上是 None）
+
+    单承载（L5 收敛，消除 G1 双载残留）：内层值统一存 ``payload``，
+    不再重复存 ``_inner`` 槽（双写真相）。``_is_some`` 为元数据保留。
 
     方法表面（``is_some``/``unwrap``/``or_else``）由 ``OptionalAxiom`` 声明，
     经 ``primitive_initializer`` 的 axiom-driven auto-bind 自动绑定到语言层。
     """
-    __slots__ = ('_inner', '_is_some')
+    __slots__ = ('_is_some',)
 
     def __init__(self, ib_class: IbClass, inner: Optional[IbObject], is_some: bool):
         super().__init__(ib_class, payload=inner)
-        self._inner = inner
         self._is_some = is_some
 
     # ------------------------------------------------------------------ #
@@ -39,12 +41,12 @@ class IbOptional(IbValue):
             raise InterpreterError(
                 "unwrap() called on an empty Optional"
             )
-        return self._inner
+        return self.payload
 
     def or_else(self, default: IbObject) -> IbObject:
         """持有值时返回内层值，否则返回默认值。"""
         if self._is_some:
-            return self._inner
+            return self.payload
         return default
 
     # ------------------------------------------------------------------ #
@@ -54,18 +56,18 @@ class IbOptional(IbValue):
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         if not self._is_some:
             return None
-        return self._inner.to_native(memo) if isinstance(self._inner, IbObject) else self._inner
+        return self.payload.to_native(memo) if isinstance(self.payload, IbObject) else self.payload
 
     def __to_prompt__(self) -> str:
         if not self._is_some:
             return "null"
-        return str(self._inner.__to_prompt__()) if hasattr(self._inner, "__to_prompt__") else str(self._inner)
+        return str(self.payload.__to_prompt__()) if hasattr(self.payload, "__to_prompt__") else str(self.payload)
 
     def to_bool(self) -> IbObject:
         """空 Optional 视为 False；持有值则按内层值判定。"""
         if not self._is_some:
             return self.ib_class.registry.box(False)
-        return self._inner.to_bool() if isinstance(self._inner, IbObject) else self.ib_class.registry.box(True)
+        return self.payload.to_bool() if isinstance(self.payload, IbObject) else self.ib_class.registry.box(True)
 
     def cast_to(self, target_class: Any) -> IbObject:
         if target_class.name == "str":
@@ -76,7 +78,7 @@ class IbOptional(IbValue):
             return self
         if target_class.name == "bool":
             return self.to_bool()
-        return self._inner.cast_to(target_class) if isinstance(self._inner, IbObject) else self
+        return self.payload.cast_to(target_class) if isinstance(self.payload, IbObject) else self
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         if message == "__eq__":
@@ -95,19 +97,19 @@ class IbOptional(IbValue):
         if isinstance(other, IbOptional):
             if not other._is_some:
                 return False
-            return unbox(self._inner) == unbox(other._inner)
-        return unbox(self._inner) == unbox(other)
+            return unbox(self.payload) == unbox(other.payload)
+        return unbox(self.payload) == unbox(other)
 
     def serialize_for_debug(self) -> Dict[str, Any]:
         return {
             "type": self.get_type_name(),
             "is_some": self._is_some,
             "value": (
-                self._inner.serialize_for_debug() if isinstance(self._inner, IbObject) else None
+                self.payload.serialize_for_debug() if isinstance(self.payload, IbObject) else None
             ),
         }
 
     def __repr__(self):
         if self._is_some:
-            return f"Optional({self._inner!r})"
+            return f"Optional({self.payload!r})"
         return "Optional(None)"

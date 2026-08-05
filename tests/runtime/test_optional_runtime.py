@@ -200,3 +200,9 @@ class TestOptionalSerialization:
         val = restored.get_variable("x")
         assert val.is_some().to_native() is False
         assert val.or_else(9) == 9
+
+
+def test_optional_single_carrier():
+    """L5：Optional 单承载——内层值存 payload，无 _inner 双载槽（消除 G1 双载残留）。"""
+    from core.runtime.objects.primitives.optional import IbOptional
+    assert "_inner" not in IbOptional.__slots__
