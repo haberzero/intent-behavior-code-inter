@@ -1,4 +1,4 @@
-﻿"""
+"""
 core.runtime.vm.handlers.leaf — 叶子 / 基础表达式 CPS handler。
 
 """
@@ -416,7 +416,7 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
         return value
     try:
         return value.receive("cast_to", [target_class])
-    except (InterpreterError, Exception) as e:
+    except Exception as e:
         rc = executor.runtime_context
         if rc is not None and rc.get_current_llm_except_frame() is not None:
             raw_val = getattr(value, 'value', '') if hasattr(value, 'value') else str(value)

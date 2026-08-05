@@ -310,8 +310,10 @@ class RuntimeSerializer(BaseFlatSerializer):
             elif isinstance(ci, IbIntentContext):
                 data["captured_intents"] = [self._process_value(i) for i in ci.get_active_intents()]
             else:
-                # 不应到达：IIbBehavior 契约要求 None 或 IbIntentContext。
-                data["captured_intents"] = []
+                raise TypeError(
+                    "Unexpected captured_intents type "
+                    f"{type(ci).__name__} (contract requires None or IbIntentContext)"
+                )
             data["expected_type"] = obj.expected_type
             if obj.call_intent is not None:
                 data["call_intent"] = self._process_value(obj.call_intent)

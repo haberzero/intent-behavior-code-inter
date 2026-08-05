@@ -401,7 +401,7 @@ class CoreTokenScanner:
             return False
 
         # 9. Identifiers / Numbers
-        if char.isalpha() or char == '_' or '\u4e00' <= char <= '\u9fff':
+        if char.isalpha() or char == '_':
             self._scan_identifier(char, tokens)
             return False
         if char.isdigit():
@@ -647,7 +647,7 @@ class CoreTokenScanner:
                 # Top-level: only allow .attr or [
                 if peek == '.':
                     next_char = self.scanner.peek(1)
-                    if next_char.isalpha() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
+                    if next_char.isalpha() or next_char == '_':
                         self.scanner.start_token()
                         self.scanner.advance() # .
                         tokens.append(self.scanner.create_token(TokenType.DOT, "."))
@@ -655,7 +655,7 @@ class CoreTokenScanner:
                         # Scan identifier
                         self.scanner.start_token()
                         id_val = ""
-                        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
                             id_val += self.scanner.advance()
                         tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
                     else:
@@ -702,10 +702,10 @@ class CoreTokenScanner:
                         # This is a real unclosed string error
                         self.issue_tracker.error("Unclosed string literal in behavior subscript", self.scanner, code=LEX_UNTERMINATED_STRING)
                         break
-                elif peek.isalpha() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
+                elif peek.isalpha() or peek == '_':
                     self.scanner.start_token()
                     id_val = ""
-                    while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                    while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
                         id_val += self.scanner.advance()
                     tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
                 elif peek in ' \t':
@@ -723,7 +723,7 @@ class CoreTokenScanner:
 
     def _scan_identifier(self, first_char: str, tokens: List[Token]):
         value = first_char
-        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
             value += self.scanner.advance()
             
         if value in self.KEYWORDS:
@@ -747,24 +747,6 @@ class CoreTokenScanner:
             tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, value, self.is_new_line_flag))
             
         self.is_new_line_flag = False
-
-    def _is_at_expression_start(self) -> bool:
-        """检查是否处于表达式开头（用于判断负号是负号还是减号）"""
-        idx = self.scanner.pos
-        while idx > 0:
-            pos = idx - 1
-            if pos < 0:
-                break
-            char = self.scanner.source[pos]
-            if char == ' ' or char == '\t':
-                idx = pos
-                continue
-            if char == '\n':
-                return True
-            if char in '+-*/%=<>!&|,':
-                return True
-            return False
-        return True
 
     def _scan_number(self, first_char: str, tokens: List[Token]):
         value = first_char
@@ -816,22 +798,6 @@ class CoreTokenScanner:
                 while self.scanner.peek().isdigit():
                     value += self.scanner.advance()
 
-        # Check for negative number
-        # Only treat as negative if this is at the start of an expression (after whitespace, operator, or at beginning of line)
-        if self.is_new_line_flag or self._is_at_expression_start():
-            if self.scanner.peek() == '-':
-                self.scanner.advance()
-                next_char = self.scanner.peek()
-                if next_char.isdigit():
-                    value = '-' + value
-                    while self.scanner.peek().isdigit():
-                        value += self.scanner.advance()
-                    # Check for negative float
-                    if self.scanner.peek() == '.' and self.scanner.peek(1).isdigit():
-                        value += self.scanner.advance()
-                        while self.scanner.peek().isdigit():
-                            value += self.scanner.advance()
-
         tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
         self.is_new_line_flag = False
 
@@ -840,14 +806,14 @@ class CoreTokenScanner:
         self.scanner.advance() # $
         name = ""
         
-        if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+        if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
             name += self.scanner.advance()
         else:
             self.issue_tracker.warning(r"Empty variable reference '$'. Did you mean '\$'?", self.scanner, code=LEX_INVALID_CHAR)
 
         while not self.scanner.is_at_end():
             peek = self.scanner.peek()
-            if peek.isalnum() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
+            if peek.isalnum() or peek == '_':
                 name += self.scanner.advance()
             else:
                 break

@@ -139,7 +139,10 @@ class ModuleManagerImpl:
                         attr_val = getattr(package, attr_name)
                         context.define_variable(attr_name, attr_val, uid=uid_map.get(attr_name))
                     except AttributeError:
-                        pass
+                        # spec 声明成员但实现缺失 = 契约违例，显式暴露（与非星号路径一致）
+                        raise InterpreterError(
+                            f"Cannot import name '{attr_name}' from module '{module_name}'"
+                        )
             else:
                 for name, asname, uid in names:
                     try:

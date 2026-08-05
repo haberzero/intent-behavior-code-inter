@@ -378,6 +378,10 @@ class RuntimeContextImpl(RuntimeContext):
         self._llm_except_frames: List['LLMExceptFrame'] = []
         # 最大 llmexcept 嵌套深度限制
         self._llm_except_max_depth: int = 128
+        # 通信域后注入槽（由 comm handler / iruntime 插件惰性挂载，未挂载时默认空）。
+        self._comm_registry: Optional[Any] = None
+        self._comm_config_store: Optional[Any] = None
+        self._comm_event_bus: Optional[Any] = None
 
     # --- 排他意图管理 ---
 

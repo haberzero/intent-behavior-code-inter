@@ -1,4 +1,4 @@
-﻿"""
+"""
 core/runtime/modules/file_impl.py
 
 Kernel-native IBCI ``file`` 模块实现。

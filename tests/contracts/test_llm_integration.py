@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/contracts/test_llm_integration.py
 ========================================
 

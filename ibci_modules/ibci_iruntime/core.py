@@ -145,7 +145,7 @@ class IRuntimeLib:
     @staticmethod
     def _get_config_store(rc: Any) -> ConfigStore:
         """获取（或惰性创建）runtime_context 关联的配置存储。"""
-        store = getattr(rc, "_comm_config_store", None)
+        store = rc._comm_config_store
         if store is None:
             store = ConfigStore()
             try:
@@ -161,7 +161,7 @@ class IRuntimeLib:
     @staticmethod
     def _get_event_bus(rc: Any) -> EventBus:
         """获取（或惰性创建）runtime_context 关联的事件总线。"""
-        bus = getattr(rc, "_comm_event_bus", None)
+        bus = rc._comm_event_bus
         if bus is None:
             bus = EventBus()
             try:

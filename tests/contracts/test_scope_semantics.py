@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/contracts/test_scope_semantics.py
 ========================================
 

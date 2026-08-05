@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/contracts/test_type_invariants.py
 ========================================
 

@@ -105,8 +105,6 @@ class TaskScheduler:
         except StopIteration as si:
             self._results[t.index] = si.value
             return
-        except Exception as e:  # 任务内部异常 → fail-fast 向上抛
-            raise
 
         # 任务 yield 了一个 waitable → 挂起
         if isinstance(yielded, Waitable):

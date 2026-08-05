@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/contracts/test_intent_propagation.py
 ===========================================
 

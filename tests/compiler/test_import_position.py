@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/compiler/test_import_position.py
 =======================================
 

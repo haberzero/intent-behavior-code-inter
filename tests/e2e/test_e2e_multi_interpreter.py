@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/e2e/test_e2e_multi_interpreter.py
 =======================================
 

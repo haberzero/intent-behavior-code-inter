@@ -26,7 +26,7 @@ def _get_comm_registry(executor) -> CommRegistry:
     查找 / 内省。多个 VM 实例各持一份（per-task 隔离）。
     """
     rc = executor.runtime_context
-    reg = getattr(rc, "_comm_registry", None)
+    reg = rc._comm_registry
     if reg is None:
         reg = CommRegistry()
         # fail-fast：runtime_context 为 RuntimeContextImpl（无 __slots__），
@@ -42,14 +42,14 @@ def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
     无订阅者时为空操作；事件总线失败不阻断执行（可观测性层尽力而为）。
     """
     rc = executor.runtime_context
-    store = getattr(rc, "_comm_config_store", None)
+    store = rc._comm_config_store
     if store is not None:
         try:
             if not store.get("observability"):
                 return
         except Exception:
             pass
-    bus = getattr(rc, "_comm_event_bus", None)
+    bus = rc._comm_event_bus
     if bus is None:
         return
     try:

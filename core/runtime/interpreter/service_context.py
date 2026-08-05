@@ -47,6 +47,7 @@ class ServiceContextImpl:
         self._scheduler = scheduler
         self._capability_registry = capability_registry
         self._interpreter = interpreter
+        self._orchestrator = None
 
     @property
     def scheduler(self) -> Optional['IRuntimeScheduler']:

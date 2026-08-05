@@ -1,4 +1,4 @@
-﻿from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from core.compiler.common.tokens import Token, TokenType
 from core.kernel import ast as ast
 from core.compiler.parser.core.syntax import IbPrecedence

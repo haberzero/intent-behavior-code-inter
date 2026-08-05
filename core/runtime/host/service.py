@@ -1,4 +1,4 @@
-﻿from typing import Any, Dict, Optional, List, TYPE_CHECKING, Callable
+from typing import Any, Dict, Optional, List, TYPE_CHECKING, Callable
 import os
 import json
 

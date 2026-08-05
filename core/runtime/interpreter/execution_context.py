@@ -55,6 +55,9 @@ class ExecutionContextImpl:
         # 三级 getattr 的脆弱查找路径。多 Interpreter 并发场景下，每个执行上下文
         # 必须通过此属性直接获得对应的 VMExecutor，避免静默 fallback。
         self._vm_executor: Optional[Any] = None
+        # 后注入槽（由 Interpreter / llmexcept 机制显式初始化，未注入时默认空）。
+        self._permission_manager: Optional[Any] = None
+        self._llmexcept_body_depth: int = 0
         
         # Logic Callbacks
         self._get_node_data_callback = get_node_data_callback
@@ -173,7 +176,7 @@ class ExecutionContextImpl:
     @property
     def permission_manager(self) -> Any:
         """由 Interpreter 注入，供 file_handle/media I/O 做沙箱校验。"""
-        return getattr(self, "_permission_manager", None)
+        return self._permission_manager
 
     @permission_manager.setter
     def permission_manager(self, value: Any):
@@ -182,7 +185,7 @@ class ExecutionContextImpl:
     @property
     def llmexcept_body_depth(self) -> int:
         """当前处于 llmexcept retry body 的嵌套深度（0 = 不在其中）。"""
-        return getattr(self, "_llmexcept_body_depth", 0)
+        return self._llmexcept_body_depth
 
     def enter_llmexcept_body(self) -> None:
         """进入 llmexcept retry body 时调用。"""
