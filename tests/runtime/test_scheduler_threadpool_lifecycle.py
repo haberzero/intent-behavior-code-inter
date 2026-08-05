@@ -51,6 +51,7 @@ class TestThreadPoolLifecycle:
         s = _StubScheduler()
         s.close()
         s.close()  # 第二次调用不抛
+        assert s._thread_pool is None  # 双 close 后状态仍一致
 
     def test_close_sets_pool_none(self):
         s = _StubScheduler()

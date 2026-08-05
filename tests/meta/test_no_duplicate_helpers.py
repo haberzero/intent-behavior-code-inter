@@ -64,6 +64,7 @@ BANNED_HELPERS = [
     'native',
     'make_intent',
     'compile_code',
+    'make_context',
 ]
 
 

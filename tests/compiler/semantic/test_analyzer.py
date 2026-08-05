@@ -5,7 +5,9 @@ Semantic Analyzer Integration Tests
 （serializer、VM）的结构约束。
 """
 
+import os
 import pytest
+from tests.conftest import REPO_ROOT
 from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.compiler.semantic.pipeline import create_semantic_pipeline
 from core.compiler.semantic.context import ContextBuilder
@@ -291,19 +293,18 @@ class TestFullFileCompilation:
         return create_default_registry()
 
     @pytest.mark.parametrize("example_file", [
-        "examples/01_getting_started/01_hello_world.ibci",
-        "examples/01_getting_started/02_intent_demo.ibci",
-        "examples/01_getting_started/03_flow_control_and_behavior.ibci",
-        "examples/01_getting_started/04_mock_and_llmexcept.ibci",
-        "examples/01_getting_started/05_enum_and_switch.ibci",
-        "examples/01_getting_started/06_enum_switch_with_llm.ibci",
+        os.path.join(REPO_ROOT, "examples/01_getting_started/01_hello_world.ibci"),
+        os.path.join(REPO_ROOT, "examples/01_getting_started/02_intent_demo.ibci"),
+        os.path.join(REPO_ROOT, "examples/01_getting_started/03_flow_control_and_behavior.ibci"),
+        os.path.join(REPO_ROOT, "examples/01_getting_started/04_mock_and_llmexcept.ibci"),
+        os.path.join(REPO_ROOT, "examples/01_getting_started/05_enum_and_switch.ibci"),
+        os.path.join(REPO_ROOT, "examples/01_getting_started/06_enum_switch_with_llm.ibci"),
     ])
     def test_example_compiles_without_crash(self, source_mgr, full_registry, example_file):
-        """Analyzer should compile example files without raising exceptions."""
-        import os
-        if not os.path.exists(example_file):
-            pytest.skip(f"Example file not found: {example_file}")
+        """Analyzer should compile example files without raising exceptions.
 
+        文件缺失即失败（不静默 skip）——示例被删/改名时红线必须变红。
+        """
         with open(example_file, encoding='utf-8') as f:
             code = f.read()
 

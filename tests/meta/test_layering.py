@@ -97,7 +97,8 @@ class TestCompilerLayerRedLine:
         src = _read_source(test_file)
         if test_file.name in _COMPILER_KNOWN_RUN_IBCI_VIOLATIONS:
             pytest.skip(
-                f"{test_file.name}: known mixed-concerns file pending split"
+                f"{test_file.name}: known mixed-concerns file pending split "
+                "(TEST_REFACTOR 拆分任务；拆分完成后须从白名单移除)"
             )
         assert "run_ibci(" not in src, (
             f"{test_file.name}: compiler/ layer must not call run_ibci() "
@@ -118,6 +119,14 @@ class TestE2ELayerRedLine:
         "from core.runtime.objects.",
     ]
 
+    # 已知白盒测试（构造期内部状态契约，R2-E5 记录豁免；下沉成本高收益低）。
+    #   - test_e2e_engine_lifecycle.py：验证 engine 构造期 _explicit_root/_cwd 契约
+    #   - test_e2e_multi_interpreter.py：验证 spawn 任务表内部状态
+    PRIVATE_ACCESS_EXEMPT = {
+        "test_e2e_engine_lifecycle.py",
+        "test_e2e_multi_interpreter.py",
+    }
+
     @pytest.mark.parametrize("test_file", _find_test_files("e2e"))
     def test_e2e_does_not_import_runtime_internals(self, test_file):
         src = _read_source(test_file)
@@ -127,6 +136,34 @@ class TestE2ELayerRedLine:
                 f"— these are interpreter/VM internals. "
                 f"Move the test to tests/runtime/ if it needs internals access."
             )
+
+    @pytest.mark.parametrize("test_file", _find_test_files("e2e"))
+    def test_e2e_does_not_access_private_attributes(self, test_file):
+        """e2e/ 黑盒红线：禁止私有属性穿透（``obj._attr``）。
+
+        R2-E5：此前红线只查 import，`eng.interpreter.service_context.llm_executor
+        ._pending_futures` 这类属性链穿透检测不到。允许豁免名单内的构造期白盒测试。
+        """
+        if test_file.name in self.PRIVATE_ACCESS_EXEMPT:
+            pytest.skip(f"known white-box test (R2-E5 exempt): {test_file.name}")
+        src = _read_source(test_file)
+        # 数据结构字段白名单（序列化/诊断码访问，非穿透）
+        DATA_FIELDS = ("._type", "._name", "._data", "._value", "._lock", "._error")
+        violations = []
+        for m in re.finditer(r"\.(_[a-z]\w*)", src):
+            attr = "." + m.group(1)
+            # 排除 self._xxx（方法调用/内部实现）与数据结构字段
+            if attr in DATA_FIELDS:
+                continue
+            if "self." + m.group(1) in src[m.start() - 5:m.start() + 1]:
+                continue
+            line = src.count("\n", 0, m.start()) + 1
+            violations.append(f"{test_file.name}:{line}: private attr {attr}")
+        assert not violations, (
+            "e2e/ layer must not access private attributes (black-box):\n"
+            + "\n".join(violations)
+            + "\nMove white-box assertions to tests/runtime/."
+        )
 
 
 # ---------------------------------------------------------------------------

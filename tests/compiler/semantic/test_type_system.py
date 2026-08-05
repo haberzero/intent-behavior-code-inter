@@ -29,8 +29,7 @@ def pipeline():
     return create_semantic_pipeline()
 
 
-def make_context(module, registry):
-    return ContextBuilder().with_ast(module).with_registry(registry).with_module_name("test").build()
+from .conftest import make_context  # noqa: E402  (single-source helper)
 
 
 # ========== auto 单次锁定 ==========

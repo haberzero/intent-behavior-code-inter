@@ -38,7 +38,6 @@ from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.serialization.serializer import FlatSerializer
 from core.compiler.semantic.passes.contract_validator import ContractValidator
-from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
@@ -637,22 +636,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=self.scheduler.source_manager))
                 print(f"Check failed: {entry_file}")
             return False
-
-    def resolve_semantics(self, module: Any, raise_on_error: bool = True, analyzer: Optional[Any] = None):
-        """
-        暴露分段语义分析接口，允许观察中间产物。
-        """
-        if analyzer is None:
-            analyzer = SemanticAnalyzer(
-                issue_tracker=self.issue_tracker, 
-                registry=self.registry.get_metadata_registry(),
-                debugger=self.debugger
-            )
-        
-        # 执行完整的语义分析
-        analyzer.analyze(module, raise_on_error=raise_on_error)
-        
-        return analyzer
 
     def _validate_and_derive_isolated(self, entry_path: str) -> Tuple[str, str]:
         """隔离反转：解析子 entry + 校验其在父 project_root 内。

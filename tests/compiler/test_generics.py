@@ -12,7 +12,7 @@ tests/compiler/test_generics.py
 import pytest
 
 from core.engine import IBCIEngine
-from tests.conftest import run_ibci
+from tests.conftest import run_ibci, REPO_ROOT
 from core.kernel.factory import create_default_registry
 from core.kernel.spec import (    SpecRegistry,
     TypeDef,
@@ -41,7 +41,7 @@ def _compile_code(code: str):
     the historical helpers in both original files.
     """
     from core.kernel.issue import CompilerError
-    engine = IBCIEngine(root_dir=".", auto_sniff=False)
+    engine = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
     try:
         artifact = engine.compile_string(code, silent=True)
     except CompilerError:
@@ -58,7 +58,7 @@ def _g3_compile_code(code: str):
 
 
 def _g3_run_code(code: str):
-    return run_ibci(code, root_dir=".")
+    return run_ibci(code, root_dir=REPO_ROOT)
 
 
 def _g3_sem_errors(issue_tracker):

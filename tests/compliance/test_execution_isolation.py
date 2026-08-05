@@ -60,14 +60,17 @@ class TestVariableIsolation:
             os.unlink(child_path)
 
     def test_parent_variable_not_inherited_by_child(self):
-        """子 Interpreter 不继承主 Interpreter 的变量（隔离策略）。"""
+        """子 Interpreter 不继承主 Interpreter 的变量（隔离策略）。
+
+        R2-E7：用公开 Engine API ``set_variable`` 注入主变量（激活该 API）。
+        """
         # 子脚本尝试读取一个在主环境中存在的变量（会触发 undefined variable）
         child_code = 'str result = "ok_without_parent"\n'
         child_path = write_child(child_code)
         try:
-            # 先在主环境定义一个变量
+            # 先在主环境定义一个变量（经公开 Engine API）
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
-            eng.run_string('str main_var = "main_value"\n', silent=True)
+            eng.set_variable("main_var", "main_value")
             # 子 Interpreter 正常运行，不受主环境变量影响
             handle = eng.request_spawn_isolated(child_path, {})
             result = eng.request_collect(handle)

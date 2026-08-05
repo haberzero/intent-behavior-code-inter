@@ -70,6 +70,11 @@ class TestCommBuffer:
         b = CommBuffer(0)
         b.close()
         b.close()  # 幂等
+        # 状态断言：双 close 后 send/recv 仍抛 CommClosedError（未因重复 close 复活）
+        with pytest.raises(CommClosedError):
+            b.send(1)
+        with pytest.raises(CommClosedError):
+            b.recv()
 
     def test_send_recv_concurrent(self):
         """多生产者/多消费者并发：总吞吐一致、无丢失。"""

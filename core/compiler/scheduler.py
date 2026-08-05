@@ -212,15 +212,16 @@ class Scheduler(ICompilerService):
     def _prune_cache(self):
         """
         Maintains the LRU cache by removing oldest items if capacity exceeded.
+
+        统一剪枝 ast/token/symbol_table/build 四缓存（R2-E4：此前只剪 ast+token，
+        symbol_table/build 无界增长；同路径的其它缓存条目一并淘汰）。
         """
         while len(self.ast_cache) > self.MAX_CACHE_SIZE:
             oldest_path, _ = self.ast_cache.popitem(last=False)
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Pruning cache for {oldest_path}")
-            # Optionally remove from other caches if they are tightly coupled
-            if oldest_path in self.token_cache:
-                self.token_cache.pop(oldest_path)
-            # Note: scope_cache is harder to prune because it's used for cross-file analysis.
-            # For now, we keep scopes as they are relatively small.
+            self.token_cache.pop(oldest_path, None)
+            self.symbol_table_cache.pop(oldest_path, None)
+            self.build_cache.pop(oldest_path, None)
 
     def _scan_and_cache(self, entry_file: str):
         """

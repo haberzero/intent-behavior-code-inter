@@ -26,10 +26,10 @@ from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
 # 共享 helper
 # ---------------------------------------------------------------------------
 
-from tests.conftest import run_ibci, compile_or_errors
+from tests.conftest import run_ibci, compile_or_errors, REPO_ROOT
 
 
-ROOT_DIR = "."
+ROOT_DIR = REPO_ROOT
 
 
 def assert_compiles(code: str):
