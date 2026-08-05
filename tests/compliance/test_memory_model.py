@@ -39,7 +39,7 @@ class TestLambdaSharedCell:
         """lambda 应读到外部最新写入的值（共享 Cell 引用语义）。"""
         code = """
 int x = 10
-fn get_x = lambda: x
+fn get_x = lambda -> auto: x
 x = 20
 print((str)(int)get_x())
 """
@@ -50,8 +50,8 @@ print((str)(int)get_x())
         """两个 lambda 捕获同一变量，修改对两者均可见（Cell 共享）。"""
         code = """
 int counter = 0
-fn get_a = lambda: counter
-fn get_b = lambda: counter
+fn get_a = lambda -> auto: counter
+fn get_b = lambda -> auto: counter
 counter = 42
 int va = (int)get_a()
 int vb = (int)get_b()
@@ -68,7 +68,7 @@ print((str)vb)
         code = """
 int a = 1
 int b = 2
-fn sum_ab = lambda: a + b
+fn sum_ab = lambda -> auto: a + b
 a = 10
 int result = (int)sum_ab()
 print((str)result)
@@ -88,7 +88,7 @@ class TestSnapshotFrozenCell:
         """snapshot 定义时冻结自由变量值，外部修改对 snapshot 不可见。"""
         code = """
 int x = 10
-fn frozen = snapshot: x
+fn frozen = snapshot -> auto: x
 x = 99
 int result = (int)frozen()
 print((str)result)
@@ -100,8 +100,8 @@ print((str)result)
         """相同自由变量被 snapshot 和 lambda 同时捕获后，外部修改只影响 lambda。"""
         code = """
 int val = 5
-fn snap = snapshot: val
-fn lam = lambda: val
+fn snap = snapshot -> auto: val
+fn lam = lambda -> auto: val
 val = 100
 int snap_result = (int)snap()
 int lam_result = (int)lam()
@@ -125,7 +125,7 @@ class TestCellLifetimeExtension:
         code = """
 func make_counter(int start) -> fn:
     int n = start
-    fn increment = lambda: n + 1
+    fn increment = lambda -> auto: n + 1
     return increment
 
 fn counter = make_counter(10)
@@ -139,7 +139,7 @@ print((str)result)
         """snapshot 在创建时捕获值，而非调用时（与 lambda 行为对比）。"""
         code = """
 func make_snapshot(int v) -> fn:
-    fn snap = snapshot: v
+    fn snap = snapshot -> auto: v
     return snap
 
 fn s = make_snapshot(7)
@@ -207,7 +207,7 @@ class TestHigherOrderFunctionPassing:
 func apply(fn f, int n) -> auto:
     return f(n)
 
-fn double = lambda(int x): x * 2
+fn double = lambda(int x) -> auto: x * 2
 int result = (int)apply(double, 6)
 print((str)result)
 """
@@ -218,7 +218,7 @@ print((str)result)
         """函数返回的 lambda 在外层作用域仍然可调用。"""
         code = """
 func make_adder(int base) -> fn:
-    fn adder = lambda(int x): base + x
+    fn adder = lambda(int x) -> auto: base + x
     return adder
 
 fn add5 = make_adder(5)

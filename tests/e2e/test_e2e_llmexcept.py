@@ -421,7 +421,7 @@ class Watcher:
         print("snap:" + (str)self.val)
         return self.val
 
-    func __restore__(self, int s):
+    func __restore__(self, int s) -> auto:
         print("restore:" + (str)s)
         self.val = s
 
@@ -449,7 +449,7 @@ class Counter:
     func __snapshot__(self) -> int:
         return self.n
 
-    func __restore__(self, int saved):
+    func __restore__(self, int saved) -> auto:
         self.n = saved
 
 Counter c = Counter(5)
@@ -477,7 +477,7 @@ class Tracked:
         print("protocol_snap")
         return self.x
 
-    func __restore__(self, int saved_x):
+    func __restore__(self, int saved_x) -> auto:
         print("protocol_restore")
         self.x = saved_x
 

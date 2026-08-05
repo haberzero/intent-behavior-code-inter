@@ -44,8 +44,8 @@ print(get_x())
         """INV-CELL-2: Multiple closures sharing a variable see updates."""
         code = """
 int x = 10
-fn f1 = lambda: x
-fn f2 = lambda: x
+fn f1 = lambda -> auto: x
+fn f2 = lambda -> auto: x
 x = 42
 print((str)f1())
 print((str)f2())
@@ -67,7 +67,7 @@ class TestLambdaCapture:
         """INV-LAMBDA-1: Lambda captures variables by reference (shared Cell)."""
         code = """
 int x = 5
-fn[()->int] f = lambda: x
+fn[()->int] f = lambda -> auto: x
 x = 10
 print(f())
 """
@@ -78,7 +78,7 @@ print(f())
         code = """
 list[fn[()->int]] funcs = []
 for int i in range(3):
-    funcs.append(lambda: i)
+    funcs.append(lambda -> auto: i)
 
 # All lambdas share same 'i', which is now 2 (last value)
 print(funcs[0]())
@@ -106,7 +106,7 @@ class TestSnapshotSemantics:
         """INV-SNAPSHOT-1: Snapshot captures value at definition time."""
         code = """
 int x = 5
-fn[()->int] f = snapshot: x
+fn[()->int] f = snapshot -> auto: x
 x = 10
 print(f())
 """
@@ -117,7 +117,7 @@ print(f())
         """INV-SNAPSHOT-2: Snapshot deep clones mutable objects."""
         code = """
 list[int] nums = [1, 2]
-fn[()->list[int]] get = snapshot: nums
+fn[()->list[int]] get = snapshot -> auto: nums
 nums.append(3)
 print(get())
 print(nums)
@@ -130,7 +130,7 @@ print(nums)
         """INV-SNAPSHOT-3: Each snapshot call gets fresh isolated clone."""
         code = """
 list[int] base = [1]
-fn[()->list[int]] maker = snapshot: base
+fn[()->list[int]] maker = snapshot -> auto: base
 
 auto a = maker()
 a.append(2)

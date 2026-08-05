@@ -13,6 +13,7 @@ from core.base.enums import Provenance, Visibility
 from core.base.diagnostics.codes import (
     SEM_DEFAULT_TYPE_MISMATCH,
     SEM_DUAL_ASSIGNABLE,
+    SEM_MISSING_RETURN_ANNOTATION,
     SEM_PROTOCOL_SIGNATURE,
     SEM_TYPE_MISMATCH,
 )
@@ -66,6 +67,15 @@ class DeclarationVisitorsMixin:
         """访问函数定义 — 解析参数类型标注，回填 spec，参数以正确类型注册"""
         # 查找函数符号
         sym = self.lookup_symbol(node.name)
+
+        # 静态名义强类型：函数必须声明返回类型（显式 TYPE / auto 推断 / any 逃生）。
+        # 缺标注不再静默回填 any（曾击穿类型推断与泛型体系）。
+        if node.returns is None:
+            self.error(
+                f"Function '{node.name}' must declare a return type. "
+                "Add '-> TYPE', '-> auto', or '-> any'.",
+                node, code=SEM_MISSING_RETURN_ANNOTATION
+            )
 
         # 参数签名唯一权威：解析类型 + 描述符 + 定义处默认值校验
         param_types, param_descriptors = self._build_function_signature(node.args)
@@ -301,6 +311,14 @@ class DeclarationVisitorsMixin:
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef) -> Optional[IbSpec]:
         """访问 LLM 函数定义 — 与 visit_IbFunctionDef 对称：精化签名并回填 spec。"""
         sym = self.lookup_symbol(node.name)
+
+        # 同 visit_IbFunctionDef：LLM 函数必须声明返回类型（LLM 输出解析的目标类型）。
+        if node.returns is None:
+            self.error(
+                f"LLM function '{node.name}' must declare a return type. "
+                "Add '-> TYPE', '-> auto', or '-> any'.",
+                node, code=SEM_MISSING_RETURN_ANNOTATION
+            )
 
         # 参数签名唯一权威（同 visit_IbFunctionDef）
         param_types, param_descriptors = self._build_function_signature(node.args)

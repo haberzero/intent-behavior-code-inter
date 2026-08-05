@@ -344,7 +344,7 @@ class TestFullFileCompilation:
     def test_llm_function_compiles(self, source_mgr, full_registry):
         """Correctly handles LLM function definitions."""
         tracker = IssueTracker(source_provider=source_mgr)
-        code = 'llm translate(str text, str target):\n__user__\ntranslate $text to $target\nllmend'
+        code = 'llm translate(str text, str target) -> auto:\n__user__\ntranslate $text to $target\nllmend'
         ast_node = parse_code(code, tracker)
 
         analyzer = SemanticAnalyzer(tracker, registry=full_registry, module_name='test')

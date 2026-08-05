@@ -124,7 +124,7 @@ print((str)s.get())
         """update(fn)：fn(当前值) → 新值，原子 CAS 读改写。"""
         lines = run_ibci("""
 slot s = slot("x", 10)
-fn inc = lambda(int v): (v + 1)
+fn inc = lambda(int v) -> auto: (v + 1)
 s.update(inc)
 print((str)s.get())
 """)
@@ -135,7 +135,7 @@ print((str)s.get())
         lines = run_ibci("""
 slot s = slot("x", 0)
 s.set(7)
-fn bump = lambda: (s.get() + 3)
+fn bump = lambda -> auto: (s.get() + 3)
 s.update(bump)
 print((str)s.get())
 """)

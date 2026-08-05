@@ -148,7 +148,7 @@ class TestCompileFunctions:
         assert artifact is not None
 
     def test_void_function(self, engine):
-        code = """func greet(str name):
+        code = """func greet(str name) -> auto:
     print("hello " + name)
 """
         artifact = engine.compile_string(code, silent=True)
@@ -464,7 +464,7 @@ llmexcept:
     def test_indirect_via_user_func_raises(self, engine):
         """用户函数体内含文件写，retry body 调用它亦禁止（递归传导）。"""
         code = """import file
-func helper():
+func helper() -> auto:
     file.write("log.txt", "x")
 str result = @~ greet ~
 llmexcept:
@@ -476,9 +476,9 @@ llmexcept:
     def test_indirect_two_levels_raises(self, engine):
         """多层间接：a() 调 b()，b() 写文件 -> a() 在 retry body 内亦禁止。"""
         code = """import file
-func b():
+func b() -> auto:
     file.write("log.txt", "x")
-func a():
+func a() -> auto:
     b()
 str result = @~ greet ~
 llmexcept:

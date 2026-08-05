@@ -76,7 +76,7 @@ print(r)
     def test_single_intent_before_no_llm_statement_is_cleaned_without_leak(self):
         """If the decorated statement path has no LLM call, one-shot is still cleaned at statement end."""
         code = """
-func pure_no_llm():
+func pure_no_llm() -> auto:
     int x = 1
     return
 
@@ -166,7 +166,7 @@ class TestE2EIntentScopeIsolation:
         code = AI_MOCK_PREFIX + """
 @+ "caller intent"
 
-func modify_intents():
+func modify_intents() -> auto:
     @+ "inner intent"
     return
 
@@ -272,7 +272,7 @@ print((str)resolved)
 intent_context ctx = intent_context()
 ctx.push("ctx base")
 
-func mutate(intent_context p):
+func mutate(intent_context p) -> auto:
     @+ "inner from func"
     return
 
@@ -298,7 +298,7 @@ class TestE2ELambdaRestriction:
 func apply(fn f, int val) -> auto:
     return f(val)
 
-fn double = lambda(int x): x * 2
+fn double = lambda(int x) -> auto: x * 2
 int result = (int)apply(double, 5)
 print((str)result)
 """
@@ -311,7 +311,7 @@ print((str)result)
 func call_it(fn f) -> str:
     return (str)f()
 
-fn greet = lambda: "hello"
+fn greet = lambda -> auto: "hello"
 str r = call_it(greet)
 print(r)
 """
@@ -323,10 +323,10 @@ print(r)
         snapshot 值可以作为参数传递。
         """
         code = AI_MOCK_PREFIX + """
-func accept_any(any x):
+func accept_any(any x) -> auto:
     print("called")
 
-fn fn_callable_val = snapshot: 42
+fn fn_callable_val = snapshot -> auto: 42
 accept_any(fn_callable_val)
 print("ok")
 """

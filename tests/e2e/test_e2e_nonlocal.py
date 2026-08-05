@@ -22,7 +22,7 @@ class TestNonlocalBasicSemantics:
         code = """
 func outer() -> int:
     int count = 0
-    func inc():
+    func inc() -> auto:
         nonlocal count
         count = count + 1
     inc()
@@ -53,7 +53,7 @@ print(outer())
 func outer() -> int:
     int a = 1
     int b = 2
-    func swap():
+    func swap() -> auto:
         nonlocal a, b
         int temp = a
         a = b
@@ -70,7 +70,7 @@ print(outer())
         code = """
 func test_counter() -> int:
     int count = 0
-    func increment():
+    func increment() -> auto:
         nonlocal count
         count = count + 1
     func get_count() -> int:
@@ -90,9 +90,9 @@ print(test_counter())
         code = """
 func outer() -> int:
     int x = 0
-    func middle():
+    func middle() -> auto:
         nonlocal x
-        func inner():
+        func inner() -> auto:
             nonlocal x
             x = x + 10
         inner()
@@ -180,8 +180,8 @@ int x = 1
     def test_nonlocal_undefined_in_outer_scope(self):
         """nonlocal referencing non-existent outer variable should produce SEM_NONLOCAL_NOT_FOUND."""
         code = """
-func outer():
-    func inner():
+func outer() -> auto:
+    func inner() -> auto:
         nonlocal does_not_exist
         does_not_exist = 1
     inner()
@@ -198,10 +198,10 @@ class TestNonlocalInteractionWithLambda:
         code = """
 func outer() -> int:
     int x = 0
-    func inc():
+    func inc() -> auto:
         nonlocal x
         x = x + 1
-    fn getter = lambda: x
+    fn getter = lambda -> auto: x
     inc()
     inc()
     return getter()

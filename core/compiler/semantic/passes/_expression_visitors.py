@@ -16,6 +16,7 @@ from core.base.diagnostics.codes import (
     SEM_CONTAINER_METHOD_HINT,
     SEM_DUPLICATE_KEYWORD,
     SEM_INTENT_STATIC_CALL,
+    SEM_MISSING_RETURN_ANNOTATION,
     SEM_MISSING_REQUIRED_ARG,
     SEM_SUPER_OUTSIDE_METHOD,
     SEM_TOO_MANY_POSITIONAL,
@@ -649,6 +650,18 @@ class ExpressionVisitorsMixin:
         returns_type: Optional[IbSpec] = (
             self._resolve_type(node.returns) if node.returns is not None else None
         )
+        is_auto_return = (
+            node.returns is not None
+            and isinstance(node.returns, ast.IbName)
+            and node.returns.id == "auto"
+        )
+
+        # 静态名义强类型：lambda 必须声明返回类型（显式 TYPE / auto 推断 / any 逃生）。
+        if node.returns is None:
+            self.error(
+                "Lambda must declare a return type. Add '-> TYPE', '-> auto', or '-> any'.",
+                node, code=SEM_MISSING_RETURN_ANNOTATION
+            )
 
         # 2. 创建 lambda 作用域并注册参数
         lambda_scope = SymbolTable(parent=self.current_scope, name="<lambda>")
@@ -681,6 +694,17 @@ class ExpressionVisitorsMixin:
 
         # 3. body 是 BehaviorExpr 时的特殊处理
         is_behavior_body = isinstance(node.body, ast.IbBehaviorExpr)
+
+        # -> auto：从非行为 body 推断具体返回类型（与 visit_IbFunctionDef 的
+        # auto 语义对齐：编译期锁定为 body 实际类型）。行为 body 输出本质动态，
+        # 不参与推断（保持 behavior 类型，调用期由 expected_type/运行时解析）。
+        if (is_auto_return
+                and not is_behavior_body
+                and body_type is not None
+                and body_type is not self._void_desc
+                and not self.registry.is_dynamic(body_type)):
+            returns_type = body_type
+
         has_concrete_returns = (
             returns_type is not None
             and not self.registry.is_dynamic(returns_type)
@@ -720,7 +744,7 @@ class ExpressionVisitorsMixin:
                 )
                 self.bind_type(node, result)
                 return result
-            # 无标注时返回通用 fn_callable
+            # 无具体返回类型时返回通用 fn_callable
             callable_type = self.registry.resolve("fn_callable")
             self.bind_type(node, callable_type)
             return callable_type

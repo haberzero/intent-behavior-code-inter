@@ -43,7 +43,7 @@ def test_explicit_init_keyword_construction():
 class Point:
     int x
     int y
-    func __init__(self, int x, int y):
+    func __init__(self, int x, int y) -> auto:
         self.x = x
         self.y = y
 

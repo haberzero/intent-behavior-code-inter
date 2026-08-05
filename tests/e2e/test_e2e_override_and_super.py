@@ -89,12 +89,12 @@ print(c.compute())
         """__init__ override should NOT produce SEM_DUAL_ASSIGNABLE (signature-free method)."""
         code = """class Base:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 class Child(Base):
     str name
-    func __init__(self, int v, str n):
+    func __init__(self, int v, str n) -> auto:
         self.x = v
         self.name = n
 
@@ -124,11 +124,11 @@ print(c.unique())
         """Override with subclass return type should be compatible."""
         code = """class Animal:
     str name
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
 
 class Dog(Animal):
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
 
 class Factory:
@@ -216,11 +216,11 @@ class TestSubclassAssignability:
         """Animal a = Dog() should compile and work."""
         code = """class Animal:
     str name
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
 
 class Dog(Animal):
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
 
 Animal a = Dog("Rex")
@@ -233,15 +233,15 @@ print(a.name)
         """Grandchild should be assignable to grandparent."""
         code = """class Base:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 class Mid(Base):
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 class Leaf(Mid):
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 Base b = Leaf(99)
@@ -254,11 +254,11 @@ print((str)b.x)
         """Dog d = Animal("x") should fail type checking (SEM_TYPE_MISMATCH)."""
         code = """class Animal:
     str name
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
 
 class Dog(Animal):
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
 
 Dog d = Animal("x")
@@ -285,7 +285,7 @@ Cat c = Dog()
     str name = ""
 
 class Dog(Animal):
-    func __init__(self):
+    func __init__(self) -> auto:
         self.name = "Rex"
 
 Dog d = Dog()

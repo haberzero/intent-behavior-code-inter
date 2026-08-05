@@ -144,7 +144,7 @@ class TestE2EExplicitInit:
         code = """class Greeter:
     str name
 
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = "Hello, " + n
 
 Greeter g = Greeter("World")
@@ -173,7 +173,7 @@ print((str)p.y)
     int a
     int b
 
-    func __init__(self, int x, int y):
+    func __init__(self, int x, int y) -> auto:
         self.a = x * 2
         self.b = y * 2
 
@@ -190,7 +190,7 @@ print((str)p.b)
         code = """class Box:
     int value
 
-    func init(self, int v):
+    func init(self, int v) -> auto:
         self.value = 999
 
 Box b = Box(42)
@@ -216,12 +216,12 @@ class TestE2EClassInheritance:
         """Child class can access fields defined in parent class."""
         code = """class Animal:
     str name
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
 
 class Dog(Animal):
     str breed
-    func __init__(self, str n, str b):
+    func __init__(self, str n, str b) -> auto:
         self.name = n
         self.breed = b
 
@@ -237,14 +237,14 @@ print(d.breed)
         """Child class can call methods defined in parent class."""
         code = """class Animal:
     str name
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
     func describe(self) -> str:
         return "I am " + self.name
 
 class Dog(Animal):
     str breed
-    func __init__(self, str n, str b):
+    func __init__(self, str n, str b) -> auto:
         self.name = n
         self.breed = b
 
@@ -258,13 +258,13 @@ print(d.describe())
         """Child class can override parent methods."""
         code = """class Animal:
     str name
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
     func speak(self) -> str:
         return "..."
 
 class Cat(Animal):
-    func __init__(self, str n):
+    func __init__(self, str n) -> auto:
         self.name = n
     func speak(self) -> str:
         return "Meow"
@@ -281,18 +281,18 @@ print(c.name)
         """Multi-level inheritance: grandchild accesses grandparent members."""
         code = """class Base:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 class Mid(Base):
     int y
-    func __init__(self, int v, int w):
+    func __init__(self, int v, int w) -> auto:
         self.x = v
         self.y = w
 
 class Leaf(Mid):
     int z
-    func __init__(self, int a, int b, int c):
+    func __init__(self, int a, int b, int c) -> auto:
         self.x = a
         self.y = b
         self.z = c
@@ -319,7 +319,7 @@ class TestE2EClassEquality:
         """o1 == o1 should be True (same reference)."""
         code = """class Obj:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 Obj o1 = Obj(5)
@@ -333,7 +333,7 @@ print((str)same)
         """o1 == o2 (different instances, same value) should be False."""
         code = """class Obj:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 Obj o1 = Obj(5)
@@ -348,7 +348,7 @@ print((str)different)
         """o3 = o1; o3 == o1 should be True."""
         code = """class Obj:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 Obj o1 = Obj(42)
@@ -363,7 +363,7 @@ print((str)same_ref)
         """o1 != o2 (different instances) should be True."""
         code = """class Obj:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 Obj o1 = Obj(5)
@@ -378,7 +378,7 @@ print((str)ne)
         """class equality in if-condition should work without type error."""
         code = """class Pt:
     int x
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.x = v
 
 Pt a = Pt(1)
@@ -395,7 +395,7 @@ else:
         """== result must be assignable to bool variable (was returning int before fix)."""
         code = """class Node:
     int val
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.val = v
 
 Node n1 = Node(10)
@@ -513,12 +513,12 @@ class TestE2ESuperCall:
         """super().__init__() calls parent constructor."""
         code = """class Base:
     int value
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.value = v
 
 class Child(Base):
     str name
-    func __init__(self, int v, str n):
+    func __init__(self, int v, str n) -> auto:
         super().__init__(v)
         self.name = n
 
@@ -550,21 +550,21 @@ print(c.greet())
         """super() correctly chains through multiple inheritance levels."""
         code = """class A:
     int val
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.val = v
     func describe(self) -> str:
         return "A:" + (str)self.val
 
 class B(A):
     str label
-    func __init__(self, int v, str l):
+    func __init__(self, int v, str l) -> auto:
         super().__init__(v)
         self.label = l
     func describe(self) -> str:
         return self.label + "/" + super().describe()
 
 class C(B):
-    func __init__(self, int v, str l):
+    func __init__(self, int v, str l) -> auto:
         super().__init__(v, l)
     func describe(self) -> str:
         return "C->" + super().describe()
@@ -584,7 +584,7 @@ print(obj.label)
         code = """class Animal:
     str name
     int age
-    func __init__(self, str n, int a):
+    func __init__(self, str n, int a) -> auto:
         self.name = n
         self.age = a
     func info(self) -> str:
@@ -592,7 +592,7 @@ print(obj.label)
 
 class Dog(Animal):
     str breed
-    func __init__(self, str n, int a, str b):
+    func __init__(self, str n, int a, str b) -> auto:
         super().__init__(n, a)
         self.breed = b
     func info(self) -> str:

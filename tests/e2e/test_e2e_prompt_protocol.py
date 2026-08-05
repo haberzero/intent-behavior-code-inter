@@ -22,7 +22,7 @@ class TestValidatePromptRuntime:
 class StrictType:
     str value
 
-    func __init__(self):
+    func __init__(self) -> auto:
         self.value = ""
 
     func __validate_prompt__(str raw) -> tuple:

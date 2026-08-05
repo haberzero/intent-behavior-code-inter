@@ -71,17 +71,17 @@ print((str)result)
         """fn f = lambda expr; f() evaluates the expression."""
         code = """\
 int x = 10
-fn compute = lambda: x + 5
+fn compute = lambda -> auto: x + 5
 fn f = compute
 print((str)f())
 """
         assert run_ibci(code) == ["15"]
 
     def test_fn_lambda_reads_latest_free_var(self):
-        """fn f = lambda: expr; f reads latest value of captured variable."""
+        """fn f = lambda -> auto: expr; f reads latest value of captured variable."""
         code = """\
 int x = 3
-fn f = lambda: x * 2
+fn f = lambda -> auto: x * 2
 print((str)f())
 x = 10
 print((str)f())
@@ -98,7 +98,7 @@ print((str)f())
 class Adder:
     int base
 
-    func __init__(self, int b):
+    func __init__(self, int b) -> auto:
         self.base = b
 
     func __call__(self, int x) -> int:
@@ -142,10 +142,10 @@ fn f = p
 ################################################################################
 
 class TestFnNoParamLambda:
-    """``fn f = lambda: EXPR``: defers a no-param expression, re-evaluates each call."""
+    """``fn f = lambda -> auto: EXPR``: defers a no-param expression, re-evaluates each call."""
 
     def test_simple_arithmetic(self):
-        code = "int x = 5\nfn f = lambda: x * 2\nprint((str)f())"
+        code = "int x = 5\nfn f = lambda -> auto: x * 2\nprint((str)f())"
         assert run_ibci(code) == ["10"]
 
     def test_function_call_in_body(self):
@@ -153,7 +153,7 @@ class TestFnNoParamLambda:
 func double(int n) -> int:
     return n * 2
 
-fn f = lambda: double(7)
+fn f = lambda -> auto: double(7)
 print((str)f())
 print((str)f())
 """
@@ -161,19 +161,19 @@ print((str)f())
 
 
 class TestFnParametricLambda:
-    """``fn f = lambda(PARAMS): EXPR``: accepts arguments, body sees them."""
+    """``fn f = lambda(PARAMS) -> auto: EXPR``: accepts arguments, body sees them."""
 
     def test_one_param(self):
-        code = "fn square = lambda(int n): n * n\nprint((str)square(4))\nprint((str)square(10))"
+        code = "fn square = lambda(int n) -> auto: n * n\nprint((str)square(4))\nprint((str)square(10))"
         assert run_ibci(code) == ["16", "100"]
 
     def test_multi_params(self):
-        code = "fn add = lambda(int a, int b): a + b\nprint((str)add(3, 4))\nprint((str)add(10, 20))"
+        code = "fn add = lambda(int a, int b) -> auto: a + b\nprint((str)add(3, 4))\nprint((str)add(10, 20))"
         assert run_ibci(code) == ["7", "30"]
 
     def test_param_shadows_outer(self):
         """A param named the same as an outer var refers to the param."""
-        code = "int x = 999\nfn f = lambda(int x): x + 1\nprint((str)f(10))"
+        code = "int x = 999\nfn f = lambda(int x) -> auto: x + 1\nprint((str)f(10))"
         assert run_ibci(code) == ["11"]
 
 
@@ -183,7 +183,7 @@ class TestFnSnapshot:
     def test_no_param_freezes_free_var(self):
         code = """\
 int x = 5
-fn snap = snapshot: x * 2
+fn snap = snapshot -> auto: x * 2
 print((str)snap())
 x = 999
 print((str)snap())
@@ -193,7 +193,7 @@ print((str)snap())
     def test_parametric_freezes_free_var(self):
         code = """\
 int base = 10
-fn addbase = snapshot(int n): n + base
+fn addbase = snapshot(int n) -> auto: n + base
 print((str)addbase(5))
 base = 999
 print((str)addbase(7))
@@ -203,7 +203,7 @@ print((str)addbase(7))
     def test_each_call_uses_new_args(self):
         """Parametric snapshot must NOT cache the return value."""
         code = """\
-fn add = snapshot(int a, int b): a + b
+fn add = snapshot(int a, int b) -> auto: a + b
 print((str)add(1, 2))
 print((str)add(10, 20))
 print((str)add(100, 200))
@@ -213,7 +213,7 @@ print((str)add(100, 200))
     def test_snapshot_factory_pattern(self):
         code = """\
 func make_adder(int b) -> fn:
-    fn f = snapshot(int x): x + b
+    fn f = snapshot(int x) -> auto: x + b
     return f
 
 fn a5 = make_adder(5)
@@ -229,7 +229,7 @@ class TestFnLambdaNested:
     """Nested lambdas: inner param shadows outer free var."""
 
     def test_inner_param_shadows_outer(self):
-        code = "int x = 100\nfn outer = lambda(int x): x * 2\nprint((str)outer(7))"
+        code = "int x = 100\nfn outer = lambda(int x) -> auto: x * 2\nprint((str)outer(7))"
         assert run_ibci(code) == ["14"]
 
 
@@ -257,8 +257,8 @@ class TestFnLambdaErrors:
         expect_compile_error("fn f = lambda(int a) -> str: a + 1", "SEM_TYPE_MISMATCH")
 
     def test_decl_side_type_fn_is_error(self):
-        """``int fn f = lambda: EXPR`` declaration-side return type is error."""
-        expect_compile_error("int fn f = lambda: 1 + 1", "PAR_INVALID_SYNTAX")
+        """``int fn f = lambda -> auto: EXPR`` declaration-side return type is error."""
+        expect_compile_error("int fn f = lambda -> auto: 1 + 1", "PAR_INVALID_SYNTAX")
 
     def test_expr_side_arrow_compiles(self):
         """``fn f = lambda -> int: EXPR`` expression-side annotation is valid."""
@@ -314,8 +314,8 @@ print(r)
         assert run_ibci(code) == ["Hello, World!"]
 
     def test_type_checking_call_site(self):
-        """Without annotation auto→int is SEM_TYPE_MISMATCH; with annotation compiles OK."""
-        expect_compile_error("fn f = lambda: 1 + 1\nint r = f()", "SEM_TYPE_MISMATCH")
+        """`-> auto` 推断 lambda 返回类型；显式标注亦编译通过。"""
+        compile_ibci("fn f = lambda -> auto: 1 + 1\nint r = f()")
         compile_ibci("fn f = lambda -> int: 1 + 1\nint r = f()")
 
     def test_factory_function_returning_typed_fn(self):
@@ -338,13 +338,13 @@ print((str)r)
 
 class TestFnLambdaBehaviorBody:
     def test_no_param_behavior_lambda(self):
-        code = AI_MOCK_PREFIX + "fn b = lambda: @~MOCK:STR:hello~\nstr r = (str)b()\nprint(r)"
+        code = AI_MOCK_PREFIX + "fn b = lambda -> auto: @~MOCK:STR:hello~\nstr r = (str)b()\nprint(r)"
         assert run_ibci(code) == ["hello"]
 
     def test_param_behavior_lambda_with_var_ref(self):
         """Param ``$who`` bound on each call and interpolated into prompt."""
         code = AI_MOCK_PREFIX + """\
-fn greet = lambda(str who): @~MOCK:STR:hi-$who~
+fn greet = lambda(str who) -> auto: @~MOCK:STR:hi-$who~
 str r1 = (str)greet("alice")
 print(r1)
 str r2 = (str)greet("bob")
@@ -360,7 +360,7 @@ print(r2)
     def test_behavior_lambda_returns_str_call_site_typed(self):
         """`fn f = lambda -> str: @~...~` enables `str r = f()` without cast."""
         expect_compile_error(
-            AI_MOCK_PREFIX + "\nfn f = lambda: @~MOCK:STR:hi~\nstr r = f()", "SEM_TYPE_MISMATCH")
+            AI_MOCK_PREFIX + "\nfn f = lambda -> auto: @~MOCK:STR:hi~\nstr r = f()", "SEM_TYPE_MISMATCH")
         compile_ibci(AI_MOCK_PREFIX + "\nfn f = lambda -> str: @~MOCK:STR:hi~\nstr r = f()")
 
     def test_snapshot_behavior_returns_str(self):
@@ -380,7 +380,7 @@ class TestFnLambdaColonSyntaxEdgeCases:
 
     def test_lambda_free_var_reads_latest(self):
         """No-param lambda with free var reads latest value at call time."""
-        code = "int x = 10\nfn f = lambda: x * 4\nprint((str)f())\nx = 20\nprint((str)f())"
+        code = "int x = 10\nfn f = lambda -> auto: x * 4\nprint((str)f())\nx = 20\nprint((str)f())"
         assert run_ibci(code) == ["40", "80"]
 
     def test_snapshot_string_concat(self):
@@ -408,7 +408,7 @@ class TestSnapshotDeepCloneAtDefinition:
     def test_snapshot_isolates_list_from_outer_mutation(self):
         code = """\
 list xs = [1, 2, 3]
-fn snap = snapshot: xs.len()
+fn snap = snapshot -> auto: xs.len()
 print((str)snap())
 xs.append(4)
 xs.append(5)
@@ -419,7 +419,7 @@ print((str)snap())
     def test_snapshot_isolates_dict_from_outer_mutation(self):
         code = """\
 dict d = {"k": 1}
-fn snap = snapshot: (int)d["k"]
+fn snap = snapshot -> auto: (int)d["k"]
 print((str)snap())
 d["k"] = 999
 print((str)snap())
@@ -429,7 +429,7 @@ print((str)snap())
     def test_snapshot_with_param_isolates_list(self):
         code = """\
 list base = [10, 20]
-fn add_first = snapshot(int x): base[0] + x
+fn add_first = snapshot(int x) -> auto: base[0] + x
 print((str)add_first(5))
 base.append(999)
 base[0] = 777
@@ -448,7 +448,7 @@ func _mutate_count(list b) -> int:
     return b.len()
 
 list buf = [1, 2]
-fn snap = snapshot: _mutate_count(buf)
+fn snap = snapshot -> auto: _mutate_count(buf)
 print((str)snap())
 print((str)snap())
 print((str)snap())
@@ -463,7 +463,7 @@ func _bump(dict d) -> int:
     return n
 
 dict d = {"n": 0}
-fn snap = snapshot: _bump(d)
+fn snap = snapshot -> auto: _bump(d)
 print((str)snap())
 print((str)snap())
 print((str)snap())
@@ -478,7 +478,7 @@ func _add(list s, int d) -> int:
     return newv
 
 list shared = [0]
-fn snap = snapshot(int delta): _add(shared, delta)
+fn snap = snapshot(int delta) -> auto: _add(shared, delta)
 print((str)snap(5))
 print((str)snap(7))
 print((str)snap(100))
@@ -497,7 +497,7 @@ func _double_first(list s) -> int:
     return v
 
 list seed = [42]
-fn snap = snapshot: _double_first(seed)
+fn snap = snapshot -> auto: _double_first(seed)
 print((str)snap())
 print((str)snap())
 print((str)seed[0])
@@ -516,7 +516,7 @@ class TestLambdaReferenceSemantics:
     def test_lambda_sees_outer_mutation(self):
         code = """\
 list xs = [1, 2, 3]
-fn read = lambda: xs.len()
+fn read = lambda -> auto: xs.len()
 print((str)read())
 xs.append(4)
 xs.append(5)
@@ -531,7 +531,7 @@ func _push_one(list b) -> int:
     return b.len()
 
 list buf = []
-fn push = lambda: _push_one(buf)
+fn push = lambda -> auto: _push_one(buf)
 print((str)push())
 print((str)push())
 print((str)push())
@@ -551,7 +551,7 @@ class TestLambdaAsHigherOrderArg:
 func apply(fn f, int val) -> auto:
     return f(val)
 
-fn double = lambda(int x): x * 2
+fn double = lambda(int x) -> auto: x * 2
 int result = (int)apply(double, 5)
 print((str)result)
 """
@@ -564,7 +564,7 @@ func apply_twice(fn f, int val) -> auto:
     auto r2 = f((int)r1)
     return r2
 
-fn triple = lambda(int x): x * 3
+fn triple = lambda(int x) -> auto: x * 3
 int result = (int)apply_twice(triple, 2)
 print((str)result)
 """
@@ -574,7 +574,7 @@ print((str)result)
         """lambda with free var: reads latest value when called inside another function."""
         code = """\
 int base = 10
-fn adder = lambda(int x): x + base
+fn adder = lambda(int x) -> auto: x + base
 
 func apply(fn f, int val) -> auto:
     return f(val)
@@ -593,8 +593,8 @@ func compose(fn f, fn g, int val) -> auto:
     auto tmp = g(val)
     return f((int)tmp)
 
-fn add1 = lambda(int x): x + 1
-fn mul2 = lambda(int x): x * 2
+fn add1 = lambda(int x) -> auto: x + 1
+fn mul2 = lambda(int x) -> auto: x * 2
 
 int r = (int)compose(add1, mul2, 5)
 print((str)r)
@@ -604,7 +604,7 @@ print((str)r)
     def test_lambda_returned_from_func_and_applied(self):
         code = """\
 func make_adder(int n) -> fn:
-    fn f = lambda(int x): x + n
+    fn f = lambda(int x) -> auto: x + n
     return f
 
 func apply(fn f, int val) -> auto:
@@ -623,7 +623,7 @@ class TestLambdaFactory:
     def test_lambda_from_factory_reads_param(self):
         code = """\
 func make_greeter(str greeting) -> fn:
-    fn greet = lambda(str name): greeting + ", " + name
+    fn greet = lambda(str name) -> auto: greeting + ", " + name
     return greet
 
 fn hello = make_greeter("Hello")
@@ -636,7 +636,7 @@ print(hi("Bob"))
     def test_lambda_factory_in_higher_order(self):
         code = """\
 func make_adder(int n) -> fn:
-    fn adder = lambda(int x): x + n
+    fn adder = lambda(int x) -> auto: x + n
     return adder
 
 func apply(fn f, int val) -> auto:

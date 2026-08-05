@@ -113,7 +113,7 @@ class TestDispatchSkipped:
         # fn f = lambda: @~ MOCK:STR:lazy ~
         # 此时 RHS 是 lambda 包装；不会经过 IbAssign(IbBehaviorExpr) 直派发。
         code = AI_MOCK_PREFIX + (
-            "fn f = lambda: @~ MOCK:STR:lazy ~\n"
+            "fn f = lambda -> auto: @~ MOCK:STR:lazy ~\n"
         )
         eng, _ = _run_pipeline(code)
         executor = eng.interpreter.service_context.llm_executor

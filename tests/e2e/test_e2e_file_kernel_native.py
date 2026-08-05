@@ -142,7 +142,7 @@ class TestFileSecurityGates:
         此处验证经 fn 动态分派的间接写仍被运行时 _guard_no_file_write_in_retry 拦下。
         """
         code = FILE_MOCK_PREFIX + (
-            'func _do_write():\n'
+            'func _do_write() -> auto:\n'
             '    file.write("./x.txt", "mutated", overwrite_flag="overwrite")\n'
             'fn f = _do_write\n'
             'file.write("./x.txt", "initial", overwrite_flag="overwrite")\n'

@@ -131,7 +131,7 @@ class TestE2EUserDefinedException:
         """`class MyError(Exception)` 可被声明、raise 并按具体类型 except 捕获。"""
         code = """
 class MyError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 try:
@@ -150,7 +150,7 @@ print("after_catch")
         """用户自定义 Exception 子类可被 `except Exception` 捕获。"""
         code = """
 class AppError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 try:
@@ -167,11 +167,11 @@ except Exception as e:
         """两级用户自定义继承链：`NetworkError -> AppError -> Exception` 全链路捕获生效。"""
         code = """
 class AppError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 class NetworkError(AppError):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 try:
@@ -188,7 +188,7 @@ except AppError as e:
         """用户可继承内置 LLMError 派生异常，并被 LLMError / Exception 捕获。"""
         code = """
 class MyLLMErr(LLMError):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 try:
@@ -206,7 +206,7 @@ except LLMError as e:
         code = """
 class MyError(Exception):
     str detail
-    func __init__(self, str msg, str detail):
+    func __init__(self, str msg, str detail) -> auto:
         self.message = msg
         self.detail = detail
 
@@ -224,11 +224,11 @@ except MyError as e:
         """用户自定义异常不会错误匹配到无关类型的 except 分支。"""
         code = """
 class FooError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 class BarError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 try:
@@ -274,10 +274,10 @@ class TestExceptionAcrossFunctionBoundary:
         ``except MyError as e:`` 应能匹配；``e.message`` 是用户字段。"""
         code = AI_MOCK_PREFIX + """
 class MyError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
-func boom():
+func boom() -> auto:
     raise MyError("kaboom")
 
 try:
@@ -300,11 +300,11 @@ print("after")
         code = AI_MOCK_PREFIX + """
 class MyError(Exception):
     str detail
-    func __init__(self, str msg, str detail):
+    func __init__(self, str msg, str detail) -> auto:
         self.message = msg
         self.detail = detail
 
-func boom():
+func boom() -> auto:
     raise MyError("oops", "deep-ctx")
 
 try:
@@ -323,7 +323,7 @@ except MyError as e:
         """内置 ``LLMRetryExhaustedError`` 从函数内 ``llmexcept`` 耗尽抛出后，
         被外层 caller 以专用类型捕获。"""
         code = AI_MOCK_PREFIX + """
-func ask():
+func ask() -> auto:
     str result = @~ MOCK:FAIL retry_exhaust ~
     llmexcept:
         retry "please try again"
@@ -348,13 +348,13 @@ print("after")
         """两层嵌套调用栈：raise → inner → outer → try。"""
         code = AI_MOCK_PREFIX + """
 class MyError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
-func inner():
+func inner() -> auto:
     raise MyError("from_inner")
 
-func outer():
+func outer() -> auto:
     inner()
 
 try:

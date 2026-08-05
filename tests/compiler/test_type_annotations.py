@@ -167,7 +167,7 @@ fn[(int) -> int] f = add_one
         """fn[(int) -> int] as function return type annotation compiles without errors."""
         assert_compiles("""
 func make_adder(int n) -> fn[(int) -> int]:
-    fn add = lambda(int x): n + x
+    fn add = lambda(int x) -> auto: n + x
     return add
 """)
 

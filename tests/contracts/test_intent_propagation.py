@@ -189,7 +189,7 @@ print(y)
     def test_single_intent_on_regular_call_no_llm_path_does_not_leak(self):
         """INV-INTENT-SCOPE-3: one-shot on regular call with no LLM path is cleaned per statement."""
         code = """
-func pure_no_llm():
+func pure_no_llm() -> auto:
     int x = 1
     return
 
