@@ -10,6 +10,7 @@ from core.runtime.objects.primitives import IbOptional
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent import IbIntent
 from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.objects.cell import IbCell
 from core.kernel.intent_logic import IntentMode, IntentRole
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -117,12 +118,51 @@ class RuntimeSerializer(BaseFlatSerializer):
         return uid
 
     def _serialize_symbol(self, sym: RuntimeSymbol) -> Dict[str, Any]:
+        # Cell 变量（被内层闭包捕获、已提升）的当前值以 IbCell 为准（与
+        # ScopeImpl.get 语义一致：cell 是读写的单一真相源）。
+        is_cell = getattr(sym, "cell", None) is not None
+        if is_cell and not sym.cell.is_empty():
+            value = sym.cell.get()
+        else:
+            value = sym.value
         return {
             "name": sym.name,
-            "value": self._process_value(sym.value),
+            "value": self._process_value(value),
             "is_const": sym.is_const,
-            "declared_type": str(sym.declared_type) if sym.declared_type else None
+            "declared_type": str(sym.declared_type) if sym.declared_type else None,
+            "is_cell": is_cell,
         }
+
+    def _serialize_closure(self, closure: Dict[str, Any], capture_mode: Optional[str]) -> List[Dict[str, Any]]:
+        """序列化闭包表（``{sym_uid: (name, slot)}``）。
+
+        - ``cell`` 模式（lambda）：slot 为共享 ``IbCell``，序列化其当前值。
+          值在作用域符号中同样可获，但此处冗余携带——闭包持有者可能已离开
+          cell 所有者作用域（公理 LT-2 堆语义），仅靠作用域树无法重建该 cell。
+        - ``value`` 模式（snapshot）：slot 为定义时刻深克隆种子，直接序列化。
+        """
+        is_snapshot = capture_mode == "snapshot"
+        entries: List[Dict[str, Any]] = []
+        for sym_uid, (name, slot) in closure.items():
+            if is_snapshot:
+                entries.append({
+                    "sym_uid": sym_uid,
+                    "name": name,
+                    "mode": "value",
+                    "value": self._process_value(slot) if slot is not None else None,
+                })
+                continue
+            if isinstance(slot, IbCell) and not slot.is_empty():
+                cell_value = self._process_value(slot.get())
+            else:
+                cell_value = self._process_value(slot) if slot is not None else None
+            entries.append({
+                "sym_uid": sym_uid,
+                "name": name,
+                "mode": "cell",
+                "value": cell_value,
+            })
+        return entries
 
     def _process_value(self, value: Any) -> Any:
         # 处理 IbObject 及其子类
@@ -186,7 +226,12 @@ class RuntimeSerializer(BaseFlatSerializer):
         if isinstance(obj, IbValue):
             type_ref = obj.type_ref
             data["type_ref"] = str(type_ref) if type_ref is not None else None
-            if obj.meta:
+            # 可调用实例（behavior/fn_callable）的完整状态由下方专用分支的字段
+            # 承载（node/params/body/closure/capture_mode/captured_intents 等）；
+            # ``meta`` 中同样冗余拷贝了这些字段，但携带 IbIntentContext/IbCell/
+            # TypeDef 等非 JSON 值，原样落盘会破坏 json 序列化——专用字段才是
+            # 单一事实来源，此处不再重复写入 value_meta。
+            if obj.meta and obj.ib_class.name not in ("behavior", "fn_callable"):
                 data["value_meta"] = dict(obj.meta)
 
         # 类元对象（IbClass）：序列化为类引用（类名），反序列化时重绑定 registry
@@ -316,17 +361,27 @@ class RuntimeSerializer(BaseFlatSerializer):
                     "Unexpected captured_intents type "
                     f"{type(ci).__name__} (contract requires None or IbIntentContext)"
                 )
-            data["expected_type"] = obj.expected_type
+            # expected_type 在运行期由调用点经 node_to_type 侧表解析，字段本身
+            # 仅作元数据（serialize_for_debug）——按接口契约 ``Optional[str]``
+            # 以类型名字符串落盘，避免 IbSpec 对象破坏 json 序列化。
+            et = obj.expected_type
+            data["expected_type"] = str(et) if et is not None else None
             if obj.call_intent is not None:
                 data["call_intent"] = self._process_value(obj.call_intent)
             data["capture_mode"] = obj.capture_mode
             if obj.params_uids:
                 data["params_uids"] = list(obj.params_uids)
+            data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
 
         elif isinstance(obj, IbValue) and cls_name == "fn_callable":
             data["_type"] = "fn_callable"
             data["node_uid"] = obj.node_uid
             data["capture_mode"] = obj.capture_mode
+            if obj.params_uids:
+                data["params_uids"] = list(obj.params_uids)
+            if obj.body_uid:
+                data["body_uid"] = obj.body_uid
+            data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
 
         elif cls_name == "intent_context":
             # ``intent_context`` IBCI 封装实例序列化
@@ -372,10 +427,14 @@ class RuntimeDeserializer:
         self.scope_cache: Dict[str, Scope] = {}
         self.intent_cache: Dict[str, IntentNode] = {}
         self.intent_ctx_cache: Dict[str, Any] = {}
-        self.asset_pool: Dict[str, str] = {} 
+        self.asset_pool: Dict[str, str] = {}
+        # 闭包 cell 待重链登记：[(闭包持有对象, sym_uid)]。作用域与实例全部
+        # 恢复后经 ``_relink_cells`` 按 sym_uid 重链到恢复作用域树中的共享 cell。
+        self._pending_cell_relinks: List[tuple] = []
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContext:
         """从字典数据重建运行时上下文"""
+        self._pending_cell_relinks = []
         pools = data.get("pools", {})
         self.node_pool = pools.get("nodes", {})
         self.symbol_pool = pools.get("symbols", {})
@@ -426,6 +485,9 @@ class RuntimeDeserializer:
 
             # 恢复活跃意图栈
             context.restore_active_intents(active_intents)
+
+        # 闭包 cell 重链 post-pass：作用域树与全部可达实例恢复完成后执行。
+        self._relink_cells()
 
         return context
 
@@ -507,8 +569,63 @@ class RuntimeDeserializer:
         for suid, sym_data in data.get("uid_to_symbol", {}).items():
             sym = self._deserialize_symbol(sym_data)
             scope.bind_symbol_by_uid(suid, sym)
-            
+            # Cell 变量（is_cell）经 promote_to_cell 语义重建 IbCell：cell 值
+            # 来自符号当前值（序列化端以 cell 值为准），供闭包 post-pass 重链共享。
+            if sym_data.get("is_cell"):
+                scope.promote_to_cell(suid)
+
         return scope
+
+    def _deserialize_closure(self, data: Dict[str, Any]) -> tuple:
+        """从序列化闭包表重建 ``{sym_uid: (name, slot)}``，返回 (closure, pending_uids)。
+
+        - ``value``（snapshot）：种子直接重建；调用路径每次再深克隆。
+        - ``cell``（lambda）：先以携带值重建**自包含** IbCell（保证恢复即可用），
+          同时登记待重链 sym_uid——post-pass 若在恢复的作用域树中找到该符号的
+          共享 cell，则替换为共享 cell（保持外层赋值可见与多闭包共享同步）。
+        """
+        closure: Dict[str, Any] = {}
+        pending_uids: List[str] = []
+        for entry in data.get("closure") or []:
+            sym_uid = entry["sym_uid"]
+            name = entry.get("name", "")
+            if entry.get("mode", "cell") == "value":
+                closure[sym_uid] = (name, self._deserialize_value(entry.get("value")))
+            else:
+                val = self._deserialize_value(entry.get("value"))
+                closure[sym_uid] = (name, IbCell(val) if val is not None else IbCell())
+                pending_uids.append(sym_uid)
+        return closure, pending_uids
+
+    def _relink_cells(self) -> None:
+        """闭包 cell 重链 post-pass：按 sym_uid 共享恢复作用域树中的 IbCell。
+
+        修复档位 A 的两个退化：
+        - 外层重赋值不可见：闭包自建 cell 与作用域符号 cell 分家；
+        - 多闭包共享分叉：同一 sym_uid 的多个闭包各自持有独立 cell。
+        仅当作用域树中存在持有该 sym_uid 的作用域时才重链；闭包捕获的 cell
+        来自已退出作用域（不在恢复树中）时保留自包含 cell（公理 LT-2 语义）。
+        """
+        for obj, sym_uid in self._pending_cell_relinks:
+            entry = obj.closure.get(sym_uid)
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                continue
+            name, slot = entry
+            if not isinstance(slot, IbCell):
+                continue
+            owning = self._find_owning_scope(sym_uid)
+            if owning is None:
+                continue
+            shared = owning.promote_to_cell(sym_uid)
+            if shared is not None and shared is not slot:
+                obj.closure[sym_uid] = (name, shared)
+
+    def _find_owning_scope(self, sym_uid: str) -> Optional[Scope]:
+        """在恢复的作用域树中查找持有 sym_uid 符号的作用域（不含父递归）。"""
+        for scope in self.scope_cache.values():
+            if sym_uid in scope.get_all_symbols_by_uid():
+                return scope
+        return None
 
     def _deserialize_symbol(self, data: Dict[str, Any]) -> RuntimeSymbol:
         val = self._deserialize_value(data["value"])
@@ -677,13 +794,32 @@ class RuntimeDeserializer:
                 )
             call_intent_raw = data.get("call_intent")
             call_intent = self._deserialize_value(call_intent_raw) if call_intent_raw is not None else None
+            closure, pending_uids = self._deserialize_closure(data)
             obj = self.factory.create_behavior(
                 data["node_uid"], captured, data.get("expected_type"),
                 call_intent=call_intent,
                 capture_mode=data.get("capture_mode"),
                 params_uids=data.get("params_uids"),
+                closure=closure,
             )
             self.instance_cache[uid] = obj
+            for suid in pending_uids:
+                self._pending_cell_relinks.append((obj, suid))
+
+        elif _type == "fn_callable":
+            # 此前无此分支：落入 else 展开为空 IbObject（node/closure/params/body
+            # 全丢），恢复后调用失败。重建完整 fn_callable 并登记闭包 cell 重链。
+            closure, pending_uids = self._deserialize_closure(data)
+            obj = self.factory.create_fn_callable(
+                data["node_uid"],
+                capture_mode=data.get("capture_mode", "lambda"),
+                params_uids=data.get("params_uids"),
+                body_uid=data.get("body_uid"),
+                closure=closure,
+            )
+            self.instance_cache[uid] = obj
+            for suid in pending_uids:
+                self._pending_cell_relinks.append((obj, suid))
 
         elif _type == "intent_context":
             # ``intent_context`` IBCI 封装实例 — 先入缓存（打断潜在循环），
