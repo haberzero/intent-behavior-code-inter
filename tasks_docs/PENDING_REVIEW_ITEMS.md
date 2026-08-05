@@ -68,6 +68,64 @@
 
 ---
 
+## 〇b、R2 健康诊断结果（2026-08-05）
+
+> **方法**：code-quality 健康诊断十查，四个 general agent 并行独立诊断（编译/类型层、
+> 运行时核心层、对象/通信/插件层、测试/引导层）+ 主会话亲自实证关键项。
+> **总体结论**：主链健康（序列化往返/TaskScheduler/并发 dispatch/线程模型均零回归）；
+> 发现约 50 项问题，其中真缺陷集中在死代码、损坏空壳、双通道/双写真相、半接通、兜底。
+> 处置原则：按"不删也不修"两档（根本修复或彻底删除），设计限制文档化。
+>
+> **二次复核（2026-08-05）**：用户裁定——所有"需讨论/设计限制/倾向文档化"项经独立
+> subagent 二次复核（架构层面 + IBCI 设计思路：功能必要性/设计目的/修复长久收益），
+> 用户偏好彻底修复优先，文档化仅限根深蒂固不可维修项。复核结论：30 项升格为
+> 彻底修复/删除，12 项确认真设计决策保留，其余保留+局部修复。
+
+### R2 处置清单（已全部处理）
+
+| 组 | 编号 | 位置 | 断言 | 处置 |
+|----|------|------|------|------|
+| P0 | R2-1 | `serialization/immutable_artifact.py:83-85` | `ImmutableArtifact.__hash__` 声明即坏——实测 `hash()` 抛 `TypeError: unhashable type: 'dict'`（嵌套 dict 不可哈希） | ✅ 根本修复（规范化不可变键哈希）+ 测试 |
+| P0 | R2-2 | `objects/intent_stack.py:88-91` + `interfaces.py:126` | `IntentStack.resolve()` 传不存在的 `call_intent` kwarg → 实现签名不匹配必抛 TypeError（协议签名漂移） | ✅ 根本修复（签名对齐）+ 测试 |
+| P0 | R2-3 | `objects/intent_stack.py:47-57` | `pop(tag)` docstring 声称按 tag 弹出，实现忽略参数 | ✅ 根本修复（按 tag 移除语义）+ 测试 |
+| P0 | R2-4 | `compiler/scheduler.py:382-383` | `registry` 可空分支自毁：else 建 ModuleMetadata 后下一行无条件 `registry.register` 必 AttributeError | ✅ 根本修复（registry 必填，删恒假 guard）+ 测试 |
+| P0 | R2-5 | `parser/components/statement.py:378-379` | switch 无 case 时 `stream.error` 参数颠倒（message/token 对调）+ 未 raise | ✅ 根本修复（参数纠正 + raise） |
+| P0 | R2-6 | `parser/components/expression.py:156-162` | 前导零数字 `017` 触发未捕获 ValueError（`int("017", 0)`），穿透诊断机制 | ✅ 根本修复（lexer 拒绝前导零 / parser 报 PAR 诊断）+ 测试 |
+| P0 | R2-7 | `vm/handlers/assignment.py:98-108` | dispatch resolve 失败 `except Exception: sync_result=None` 静默兜底，掩盖双路径/双重提交风险 | ✅ 根本修复（fail-fast raise）+ 测试 |
+| P0 | R2-8 | `ibci_net/core.py` | requests 缺失时静默返回 MOCK 假数据（生产假成功）——**实测为显式测试契约**（`test_function_params.py:142` 断言 MOCK GET），模块级设计取舍 | ✅ 文档化（设计限制：模块离线 mock 能力，测试显式依赖） |
+| P1 | R2-9 | `objects/enum.py` 整模块 | IbEnum/IbEnumAdapter/IbEnumValue 全仓零消费者（真实枚举是 primitive_initializer 的 IbClass-based）——两套枚举表示并存 | ✅ 彻底删除 + 外围引用检查 |
+| P1 | R2-10 | `vm/task.py:46-77` | `VMTaskResult` 整类零消费者（实际用 Signal 直接返回），docstring 与实际矛盾 | ✅ 彻底删除 |
+| P1 | R2-11 | `serialization/snapshot_options.py:116-159` | `SnapshotManager` 占位 stub 整模块零消费者（create 恒 `{"data": None}`，apply 不做恢复），docstring 与实际不符 | ✅ 彻底删除 |
+| P1 | R2-12 | 死方法簇 | `_has_call_cap`/`get_iter_cap`/`get_subscript_cap`/`get_operator_cap`/`is_callable_instance`/`_started`/`is_in_fallback`/`save_snapshot`/`_bind_operator_method`/`LLMExceptFrameStack`/`collect_gc_roots` 等零消费者 | ✅ 彻底删除 |
+| P1 | R2-13 | `type_ref.py` vs `generic.py` | spec→TypeRef 双序列化器（from_spec vs to_typeref），实测 tuple-positional/multi-list 身份漂移 | ✅ 收敛单一入口 |
+| P1 | R2-14 | `type_resolution_pass.py:105-112` vs `symbol_collection_pass.py` | 双注解解析精度矛盾（erasure vs preserve 并存）——双写真相 | ✅ 统一为 preserve |
+| P1 | R2-15 | `module_system/loader.py:118-120` | 插件 vtable 旧格式 `param_types` 与新格式 `params` 双格式兼容（历史包袱） | ✅ 删旧格式，单一新格式 |
+| P1 | R2-16 | `sdk/check.py:131-138` | 校验只认旧格式 `param_types`，真实插件全用 `params`——协议漂移 | ✅ 改为校验新格式 |
+| P2 | R2-17 | `_capabilities.py` `can_return_from_isolated` | 全链路声明（协议+注册表+8 axiom）零接线 | ✅ 整链路删除（或文档化激活） |
+| P2 | R2-18 | `semantic/metadata/type_environment.py` | `TypeInferenceState`/`TypeSlot` 设计未接线（生产零消费，仅测试覆盖） | ✅ 明确废弃/接线 |
+
+### R2 二次复核决策记录（2026-08-05）
+
+> 以下为独立 subagent 二次复核后经用户确认的处置决策（用户偏好彻底修复，文档化仅限
+> 根深蒂固不可维修项）。**全部按此执行，不再逐项上报**。
+
+| 决策 | 结论 | 依据 |
+|------|------|------|
+| **IbSlot.update(fn)** | ✅ **方案 A 接通语言面 RMW**（用户确认） | 实测当前 `slot.update(fn)` 传 IBCI 函数必崩（`callable()` 判定失败落 set→`to_native()` 抛裸错）；底层 `SlotCore.update` CAS 机器完整已测，缺口仅在语言面接线。实现：`ib_class.name in ("fn_callable","behavior")` 判定（与 leaf.py 既有模式一致），fn 走同步 `.call`（fn_callable→vm.run / behavior→invoke_behavior，均同步后备）；docstring 注明 fn 锁外执行、无副作用、behavior 重试重复推理；补 3 个语言面测试（set/fn/并发） |
+| **Task\* → Thread\*** | ✅ **改名授权**（用户确认） | task 模型已删、thread 唯一，语言面 `catch TaskError` 概念漂移。`TaskError/TaskCancelled/TaskFailed` → `ThreadError/ThreadCancelled/ThreadFailed`。机械改名 ~10 文件，无序列化格式依赖（错误对象运行时构造）。内部 `SpawnedTask`/`spawn` 为可选次要清理（无用户可见收益） |
+| 其余二次复核项 | 按复核结论执行 | 30 项彻底修复/删除（批次 A-E），12 项确认真设计决策保留+文档化，其余保留+局部修复。见 WORKLOG 会话 14 记录 |
+| P2 | R2-19 | `host/isolation_policy.py` | `level` 等字段只写不读，docstring 表格语义未实现 | ✅ 文档化实际生效字段 |
+| P2 | R2-20 | `observability/events.py` | 声明 11 种事件仅 3 种有发射点（超卖） | ✅ 文档收敛为实际支持 |
+| P2 | R2-21 | `engine.py:694-698` | `inherit_plugins` List 选择性继承退化全量 | ✅ 实现过滤或文档化 |
+| 测试 | R2-22 | `tests/` AI MOCK 前缀 15 处镜像 | `AI_MOCK_PREFIX` 单点真理被复制 15 处 | ✅ 收敛 conftest 单点 |
+| 测试 | R2-23 | `compliance/test_concurrent_llm.py:101-112` | 依赖测试名不副实（声称测数据依赖实际独立） | ✅ 改写为真依赖用例 |
+| 测试 | R2-24 | `meta/test_layering.py` + `e2e` | e2e 白盒穿透内部 + 红线检测空壳 | ✅ 下沉白盒测试/修红线 |
+| 测试 | R2-25 | `e2e/test_e2e_model_routing.py:85-99` | tag 大小写测试名不副实（声称报错实际验证成功） | ✅ 改写/改名 |
+| 测试 | R2-26 | Engine 公开 API 零覆盖 | `register_native_module`/`set_variable`/`get_variable`/`resolve_semantics` 零测试 | ✅ 补黑盒用例 |
+| 测试 | R2-27 | 其他测试卫生 | 宽捕获 `pytest.raises(Exception)`、kernel conftest 死 fixture、`make_context` 双实现、BOM 混用 | ✅ 逐项收敛 |
+
+---
+
 ## 一、审查动作（R 系列——完整复核审查的核心）
 
 | # | 内容 | 说明 |
