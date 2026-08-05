@@ -6,6 +6,45 @@
 
 ---
 
+## 2026-08-04 会话 12：L5 + L7-A + T2 可统一点（构造入口统一）
+
+### 背景
+
+用户裁定：不记录判断准则；应用 T2 可统一点；推进 L5/L7 维修。同时用户纠正碎片化判断基准——**碎片化 = 设计语言（用户语义形态）统一，非实现路径一致**。据此 T2 从"统一候选"降级为"设计记录 + 应用可统一点"。
+
+### 判断基准修正（用户裁定，已用于本次分析）
+
+- T2 三轨（chan/slot AST 节点 / thread 普通调用 / thread_result 直接构造）**非碎片**：用户看到的构造/方法/类型语义统一，内部路径差异由语法本质需求驱动（chan 首参是类型名须专用节点）。
+- 可统一点 = 实例创建入口协议化（`_create_blank`），已应用。
+
+### 变化前后
+
+**L5 —— IbOptional 单承载收敛**
+- 删 `_inner` 槽，内层值统一存 `payload`（消除双写真相）；`_is_some` 保留。serializer optional 分支读 payload。
+- core/view 槽判定为**合理句柄承载**（与 thread slots 同构），记录为设计决策，不并入 payload。
+
+**L7-A —— 泛型注解符号身份精确化**
+- 根因链（调查确认）：① `symbol_collection._resolve_annotation` 只处理 IbName → 泛型注解退化；② compiler serializer 未持久化 list/dict/tuple 泛型实参；③ rehydrator shell 硬编码基础 TypeDef → 运行时 declared_type 丢泛型身份。
+- 修复：`_resolve_annotation` 支持 IbSubscript → `resolve_specialization`；serializer 持久化 element/key/value_type；rehydrator 用 factory.create_list/dict/tuple 重建。
+- 实测：`list[int]`/`dict[str,int]`/`tuple[int]`/`Optional[int]` 运行时 declared_type 全部精确。
+- 边界：**运行时值 type_ref 仍为基础 spec**（可变值不固有泛型身份——同一对象可被赋给 list[int]/list[str]，语义不自洽），记录为设计决策。
+
+**T2 可统一点 —— `_create_blank` 协议扩展**
+- IbChannel/IbSlot/IbSubscriber 覆写 `_create_blank`；handler 与 `IbChannel.subscribe` 改经 `_create_blank` 创建（与 thread instantiate 入口同构）。
+
+**测试**：+3（L7-A 泛型注解身份 / L5 单承载 / T2 协议）。全量 `python -m pytest tests/` = **1474 passed / 4 skipped**（零回归）。
+
+### 决策记录
+
+- 碎片化判断基准修正（用户裁定）：实现路径差异非碎片，设计语言统一才是标准。此为准用于未来判断。
+- L7 值 type_ref 保持基础（可变值泛型身份不自洽），符号/序列化侧已精确。
+
+### 待决
+
+- 无。L5/L7-A 完成，T2 可统一点应用；剩余 R1-R5 审查复核 / D1-D5 docs 收敛。
+
+---
+
 ## 2026-08-04 会话 11：L8 类型符号序列化身份破坏修复（此前未知缺陷）
 
 ### 背景
