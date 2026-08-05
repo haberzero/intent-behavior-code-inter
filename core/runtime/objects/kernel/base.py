@@ -39,7 +39,7 @@ class IbObject:
         统一消息传递接口。
         所有属性访问和方法调用都通过此入口分发。
         """
-        from .functions import IbBoundMethod
+        from .functions import IbBoundMethod, IbFunction
         from .ib_class import IbClass
         core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
 
@@ -50,12 +50,9 @@ class IbObject:
             if spec_reg and self.ib_class.spec:
                 call_cap = spec_reg.get_call_cap(self.ib_class.spec)
                 if call_cap:
-                    # 查找 vtable 中的 call 方法（统一路径）
-                    call_method = self.ib_class.lookup_method('call')
-                    if call_method:
-                        return call_method.call(self, [self.ib_class.registry.get_none()] + args)
-                    # Fallback: 对于内置类型，可能直接有 Python 的 call 方法
-                    if hasattr(self, 'call'):
+                    # 函数家族（IbFunction 子类：用户函数/原生函数/绑定方法/LLM 函数）
+                    # 直接走 Python .call（isinstance 精确判别，替代 hasattr 探测）。
+                    if isinstance(self, IbFunction):
                         return self.call(self.ib_class.registry.get_none(), args)
 
         if message == '__getattr__' and len(args) > 0:

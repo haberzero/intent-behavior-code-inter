@@ -179,7 +179,8 @@ class IbClass(IbObject):
             if attr_name in self.default_fields:
                 val_info = self.default_fields[attr_name]
                 if val_info is not None:
-                    if hasattr(val_info, 'static_val') and val_info.static_val is not None:
+                    # static_val 仅定义于 IbClassField（isinstance 精确判别，与同文件其它处一致）
+                    if isinstance(val_info, IbClassField) and val_info.static_val is not None:
                         return val_info.static_val
                     return self.registry.box(val_info)
             # 降级查找类方法

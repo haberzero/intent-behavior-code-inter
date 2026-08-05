@@ -114,12 +114,12 @@ class ModuleDiscoveryService:
             else f"ibci_{parent_dir}._spec"
         )
 
-        try:
-            spec = importlib.util.spec_from_file_location(internal_name, spec_path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-        except ImportError:
-            mod = None
+        # _spec.py 导入失败直接上抛（由 discover_all 的 Fatal Error 包装给出可读
+        # 诊断）——此前 except ImportError 静默置 None 使插件无声不可发现。仓内
+        # 全部 _spec.py 仅依赖标准库，无合法可选导入场景。
+        spec = importlib.util.spec_from_file_location(internal_name, spec_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
 
         raw_name = module_name
         # 读取插件种类声明：
@@ -136,27 +136,25 @@ class ModuleDiscoveryService:
                 plugin_kind = metadata_dict.get("kind", "method_module")
 
         if mod and hasattr(mod, '__ibcext_vtable__'):
-            try:
-                vtable = mod.__ibcext_vtable__()
+            # __ibcext_vtable__() 内部异常（含 ImportError）直接上抛，不静默吞掉
+            # （同 _load_spec 导入失败：由 discover_all Fatal Error 暴露）。
+            vtable = mod.__ibcext_vtable__()
 
-                # 协议2：深度嵌入模块直接返回 TypeDef
-                if isinstance(vtable, IbSpec) and vtable.kind == TypeKind.MODULE.value:
-                    vtable.name = raw_name
-                    # 方法插件必须显式 import 才可用，不预注入为全局内置符号
-                    if plugin_kind == "method_module":
-                        vtable.visibility = Visibility.IMPORT_GATED
-                    return vtable
+            # 协议2：深度嵌入模块直接返回 TypeDef
+            if isinstance(vtable, IbSpec) and vtable.kind == TypeKind.MODULE.value:
+                vtable.name = raw_name
+                # 方法插件必须显式 import 才可用，不预注入为全局内置符号
+                if plugin_kind == "method_module":
+                    vtable.visibility = Visibility.IMPORT_GATED
+                return vtable
 
-                # 协议1：标准插件（字典格式，零侵入）
-                if vtable and isinstance(vtable, dict):
-                    spec = self._build_spec_from_dict(raw_name, vtable)
-                    # 方法插件必须显式 import 才可用，不预注入为全局内置符号
-                    if plugin_kind == "method_module":
-                        spec.visibility = Visibility.IMPORT_GATED
-                    return spec
-
-            except ImportError:
-                pass
+            # 协议1：标准插件（字典格式，零侵入）
+            if vtable and isinstance(vtable, dict):
+                spec = self._build_spec_from_dict(raw_name, vtable)
+                # 方法插件必须显式 import 才可用，不预注入为全局内置符号
+                if plugin_kind == "method_module":
+                    spec.visibility = Visibility.IMPORT_GATED
+                return spec
 
         return None
 

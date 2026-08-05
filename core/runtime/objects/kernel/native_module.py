@@ -74,9 +74,16 @@ class IbNativeObject(IbObject):
 
             # [SECURITY] 仅允许访问白名单属性
             # 白名单成员已在绑定期校验实现对象必须含该属性（loader._validate_and_bind），
-            # 此处直接 getattr；缺失即抛契约异常。
+            # 因此白名单分支内的 AttributeError 只能是 property getter 内部抛出的
+            # 真实错误——重抛为带模块/成员名的 InterpreterError（区别于"成员缺失"），
+            # 不再被上层 get()/IbModule.receive 折叠成 KeyError 静默吞掉。
             if target_name in self.whitelist:
-                return self.ib_class.registry.box(getattr(self.py_obj, target_name))
+                try:
+                    return self.ib_class.registry.box(getattr(self.py_obj, target_name))
+                except AttributeError as e:
+                    raise InterpreterError(
+                        f"Plugin error: attribute '{target_name}' getter raised: {e}"
+                    ) from e
 
             # 未在契约或白名单声明的成员，坚决抛出异常
             raise AttributeError(f"Plugin Error: '{target_name}' is not defined in module contract (_spec.py)")

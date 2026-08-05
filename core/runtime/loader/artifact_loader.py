@@ -82,18 +82,15 @@ class ArtifactLoader:
                 parent_class = self.registry.get_class(parent_name)
                 if parent_class:
                     # 父类已存在，直接创建子类
-                    try:
+                    if self.registry.get_class(cls_desc.name) is None:
+                        # 类不存在才创建；已注册（如预注册的 Enum 基类/重复类）有意跳过
                         self.registry.create_subclass(
-                            cls_desc.name, 
-                            cls_desc, 
+                            cls_desc.name,
+                            cls_desc,
                             parent_name
                         )
-                    except ValueError:
-                        # 类可能已存在，忽略
-                        pass
-                    except PermissionError:
-                        # 注册表已封印，类可能已被注册，忽略
-                        pass
+                    # 其余 ValueError/PermissionError 是真实错误（封印/描述符失配），
+                    # 不再被静默吞掉
                 else:
                     try:
                         self.registry.create_subclass(

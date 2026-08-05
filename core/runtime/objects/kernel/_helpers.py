@@ -15,33 +15,15 @@ def _is_intent_context_param(ec: 'IExecutionContext', param_uid: str, param_data
     def _is_intent_context_spec(spec: Any) -> bool:
         if spec is None:
             return False
+        base_name = spec.get_base_name()
         name = getattr(spec, "name", None)
-        base_name = spec.get_base_name() if hasattr(spec, "get_base_name") else name
         return base_name == "intent_context" or name == "intent_context"
 
-    # 1) Prefer semantic side-table type info: it is produced after full Pass-4
-    #    type resolution and is more stable than runtime node shape fallbacks.
+    # 语义侧表类型信息：Pass-4 类型解析后产生，是稳定的单一判别源。
+    # 函数参数节点一律为 IbArg（解析器不再产生 IbTypeAnnotatedExpr 包装，
+    # 见 symbol_resolution_pass 注释）——无节点形态嗅探兜底。
     direct_spec = ec.get_side_table("node_to_type", param_uid)
-    if _is_intent_context_spec(direct_spec):
-        return True
-
-    # 2) Compatibility fallback for IbTypeAnnotatedExpr-wrapped target binding
-    if not isinstance(param_data, dict):
-        return False
-    if param_data.get("_type") == "IbTypeAnnotatedExpr":
-        target_uid = param_data.get("target")
-        target_spec = ec.get_side_table("node_to_type", target_uid)
-        if _is_intent_context_spec(target_spec):
-            return True
-        annotation_uid = param_data.get("annotation")
-        annotation_data = ec.get_node_data(annotation_uid) if annotation_uid else None
-        if annotation_data:
-            ann_type = annotation_data.get("_type")
-            if ann_type == "IbName":
-                return annotation_data.get("id") == "intent_context"
-            if ann_type == "IbAttribute":
-                return annotation_data.get("attr") == "intent_context"
-    return False
+    return _is_intent_context_spec(direct_spec)
 
 
 def _should_activate_intent_context_arg(arg_value: Any, is_intent_ctx_param: bool) -> bool:
