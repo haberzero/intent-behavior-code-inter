@@ -44,15 +44,23 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     ``IbLLMUncertain``，作为快照/重试通信令牌）；无 handler 则抛 ``LLMParseError``。
     """
     value_uid = node_data.get("value")
+    targets = node_data.get("targets", [])
 
     is_callable_instance = False
     if value_uid:
         value_node_data = executor.ec.get_node_data(value_uid)
         is_callable_instance = bool(value_node_data.get("is_callable_instance")) if value_node_data else False
 
+    # 仅简单目标（IbName / IbTypeAnnotatedExpr(IbName)）走 dispatch-before-use。
+    # 复杂目标（attribute/subscript/tuple unpack）直接走同步路径，保证 llmexcept
+    # 不确定性协议与失败语义一致，且不会对同一 LLM 表达式重复调用。
+    future_assignable = all(
+        _is_simple_name_target(executor, t_uid) for t_uid in targets
+    ) if targets else False
+
     # 识别 dispatch-before-use 路径
     dispatched_future: Optional[LLMFuture] = None
-    if value_uid and not is_callable_instance:
+    if value_uid and not is_callable_instance and future_assignable:
         value_node_data = executor.ec.get_node_data(value_uid)
         if (
             value_node_data
@@ -79,33 +87,12 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     if dispatched_future is not None:
         # 直接把 LLMFuture 写入目标，跳过 LLM 不确定性检查与同步求值。
-        # 仅支持简单的 IbName / IbTypeAnnotatedExpr(IbName) 目标——
-        # 复杂目标（attribute/subscript/tuple unpack）此处不并发化，
-        # fallback 到同步路径以保证语义一致。
         # cell 捕获变量已在编译期被标记为 dispatch_eligible=False，
         # 故 dispatched_future 不会为被 cell 捕获的目标变量生成。
         # 此处只需简单判断目标形式，不再需要运行时 scope 链扫描。
-        targets = node_data.get("targets", [])
-        future_assignable = all(
-            _is_simple_name_target(executor, t_uid)
-            for t_uid in targets
-        )
-        if future_assignable:
-            for target_uid in targets:
-                _assign_future_to_name_target(executor, target_uid, dispatched_future)
-            return executor.registry.get_none()
-        # 复杂目标：撤销 dispatch 改走同步路径
-        try:
-            sync_result = executor.service_context.llm_executor.resolve(
-                dispatched_future.node_uid
-            )
-        except Exception:
-            sync_result = None
-        if sync_result is not None:
-            for target_uid in targets:
-                yield from _vm_assign_to_target(executor, target_uid, sync_result)
-            return executor.registry.get_none()
-        # 兜底：让下面的同步路径继续执行（极少触发）
+        for target_uid in targets:
+            _assign_future_to_name_target(executor, target_uid, dispatched_future)
+        return executor.registry.get_none()
 
     # is_callable_instance 路径：vm_handle_IbBehaviorExpr 已完整实现 fn_callable 模式
     # 的 IbBehavior 包装，直接 yield 走 CPS 调度。

@@ -302,13 +302,15 @@ class RuntimeSerializer(BaseFlatSerializer):
         elif isinstance(obj, IbValue) and cls_name == "behavior":
             data["_type"] = "behavior"
             data["node_uid"] = obj.node
-            # captured_intents 协议：None 或 IbIntentContext。
-            # 此处展开为 active_intents 的 list 形态以兼容序列化反序列化的读取方。
+            # captured_intents 协议：None 或 IbIntentContext（非可迭代）。
+            # 完整序列化意图上下文（持久栈/涂抹/排他槽），反序列化时经
+            # _get_intent_context 重建共享身份——此前展开为 list 会破坏契约，
+            # 且二次序列化抛 TypeError。
             ci = obj.captured_intents
             if ci is None:
-                data["captured_intents"] = []
+                data["captured_intents"] = None
             elif isinstance(ci, IbIntentContext):
-                data["captured_intents"] = [self._process_value(i) for i in ci.get_active_intents()]
+                data["captured_intents"] = self._collect_intent_context(ci)
             else:
                 raise TypeError(
                     "Unexpected captured_intents type "
@@ -317,6 +319,9 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["expected_type"] = obj.expected_type
             if obj.call_intent is not None:
                 data["call_intent"] = self._process_value(obj.call_intent)
+            data["capture_mode"] = obj.capture_mode
+            if obj.params_uids:
+                data["params_uids"] = list(obj.params_uids)
 
         elif isinstance(obj, IbValue) and cls_name == "fn_callable":
             data["_type"] = "fn_callable"
@@ -660,10 +665,24 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             
         elif _type == "behavior":
-            captured = [self._deserialize_value(i) for i in data.get("captured_intents", [])]
+            ci_raw = data.get("captured_intents")
+            if ci_raw is None:
+                captured = None
+            elif isinstance(ci_raw, str):
+                captured = self._get_intent_context(ci_raw)
+            else:
+                raise TypeError(
+                    "Unexpected captured_intents payload "
+                    f"{type(ci_raw).__name__} (contract requires None or intent_context uid)"
+                )
             call_intent_raw = data.get("call_intent")
             call_intent = self._deserialize_value(call_intent_raw) if call_intent_raw is not None else None
-            obj = self.factory.create_behavior(data["node_uid"], captured, data.get("expected_type"), call_intent=call_intent)
+            obj = self.factory.create_behavior(
+                data["node_uid"], captured, data.get("expected_type"),
+                call_intent=call_intent,
+                capture_mode=data.get("capture_mode"),
+                params_uids=data.get("params_uids"),
+            )
             self.instance_cache[uid] = obj
 
         elif _type == "intent_context":
