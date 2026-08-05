@@ -497,3 +497,40 @@ class TestGenericAnnotationDeclaredType:
         restored = reh.hydrate(target)
         assert restored.name == "tuple[int,str]"
         assert [t.head for t in restored.positional_element_types] == ["int", "str"]
+
+    def test_chan_slot_annotation_preserves_type_args(self, engine):
+        """R1-D1：chan[T]/slot[T] 注解纳入统一泛型模型，泛型身份保真。
+
+        此前 chan/slot 不在 GenericTypeDeclaration，注解实参丢弃（符号退化
+        为裸 chan/slot），与 ChannelAxiom/SlotAxiom docstring 声称的
+        "value_type 承载"矛盾——属半接通，根本修复。
+        """
+        engine.run_string(
+            'chan[str] c = chan(str, "stream")\n'
+            'slot[int] s = slot("score", 0)\n',
+            silent=True,
+        )
+        rc = engine.interpreter._execution_context.runtime_context
+        expect = {"c": "chan[str]", "s": "slot[int]"}
+        for name, want in expect.items():
+            sp = rc.get_symbol(name).declared_type
+            assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（R1-D1 回归）"
+
+        # artifact 序列化 → rehydrator 还原闭环（chan/slot 身份保真）
+        from core.compiler.serialization.serializer import FlatSerializer
+        from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+        from core.kernel.factory import create_default_registry
+
+        artifact = engine.compile_string(
+            'chan[str] c = chan(str, "stream")\nslot[int] s = slot("score", 0)\n'
+        )
+        d = FlatSerializer().serialize_artifact(artifact)
+        types = d["modules"][artifact.entry_module]["pools"]["types"]
+        for name, want in (("chan[str]", "str"), ("slot[int]", "int")):
+            target = next(k for k, v in types.items() if v.get("name") == name)
+            assert types[target]["value_type_name"] == want
+            reg = create_default_registry()
+            reh = ArtifactRehydrator(type_pool=types, registry=reg)
+            restored = reh.hydrate(target)
+            assert restored.name == name
+            assert restored.value_type.head == want

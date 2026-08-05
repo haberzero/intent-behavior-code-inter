@@ -43,7 +43,12 @@
   收尾全部改动（`e217b8b^..80b463e`）。整体正确，无高严重缺陷；新增缺陷 A1/C1/B1-B6/D1-D4
   全部处置（A1 cancel is_done 守卫、C1 multi-type list/tuple positional 序列化持久化、B 组
   死代码清理、D 组文档化）。发现清单与决策见 `PENDING_REVIEW_ITEMS.md` §〇。
-- **测试基线**：`python -m pytest tests/` = 1477 passed / 4 skipped（以实跑为准）。
+- **R1 修正批（2026-08-05，D 系列重分类）**：用户质询"文档化是否违反不删也不修"触发自我
+  质询重新取证，纠正初判误分类——D1（chan/slot 半接通，axiom docstring 声称 value_type
+  承载未落地）、D3（send 泄漏 CommClosedError 给生产者）、D4（close 后 subscriber_count
+  失真）、D6（自然完成线程 is_done() 误报 False，真 bug）均**根本修复**并补测试；D2/D5
+  确认为真设计限制/效率，文档化合理。修正记录见 `PENDING_REVIEW_ITEMS.md` §〇 D 系列。
+- **测试基线**：`python -m pytest tests/` = 1481 passed / 4 skipped（以实跑为准）。
 
 ## 四、遗留 / 待办
 

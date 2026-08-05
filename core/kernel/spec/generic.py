@@ -162,6 +162,18 @@ def _build_thread_result(factory: "SpecFactory", names: List[str], modules: List
     return factory.create_thread_result(value_type_name=value, value_type_module=value_mod)
 
 
+def _build_chan(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
+    value = names[0] if names else "any"
+    value_mod = modules[0] if modules else None
+    return factory.create_chan(value_type_name=value, value_type_module=value_mod)
+
+
+def _build_slot(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
+    value = names[0] if names else "any"
+    value_mod = modules[0] if modules else None
+    return factory.create_slot(value_type_name=value, value_type_module=value_mod)
+
+
 # -- to_typeref（序列化：特化 TypeDef → 结构化 TypeRef） ------------- #
 
 def _to_typeref_list(spec: "TypeDef") -> TypeRef:
@@ -262,6 +274,20 @@ def _restore_thread(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
 
 def _restore_thread_result(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
     return factory.create_thread_result(
+        value_type_name=data.get("value_type_name", "any"),
+        value_type_module=data.get("value_type_module"),
+    )
+
+
+def _restore_chan(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
+    return factory.create_chan(
+        value_type_name=data.get("value_type_name", "any"),
+        value_type_module=data.get("value_type_module"),
+    )
+
+
+def _restore_slot(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
+    return factory.create_slot(
         value_type_name=data.get("value_type_name", "any"),
         value_type_module=data.get("value_type_module"),
     )
@@ -383,5 +409,13 @@ def create_generic_registry() -> GenericTypeRegistry:
         name="thread_result", kind=TypeKind.THREAD_RESULT.value,
         build=_build_thread_result, to_typeref=_to_typeref_value_typed, restore=_restore_thread_result,
         resolve_member=_resolve_member_thread_result,
+    ))
+    reg.register(GenericTypeDeclaration(
+        name="chan", kind=TypeKind.CHANNEL.value,
+        build=_build_chan, to_typeref=_to_typeref_value_typed, restore=_restore_chan,
+    ))
+    reg.register(GenericTypeDeclaration(
+        name="slot", kind=TypeKind.SLOT.value,
+        build=_build_slot, to_typeref=_to_typeref_value_typed, restore=_restore_slot,
     ))
     return reg

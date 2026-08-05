@@ -194,3 +194,24 @@ print(t.is_done())
 """)
     # join 成功 → done；cancel 守卫 → 返回 None（不打印）；is_done 仍 True
     assert lines == ["done", "True"]
+
+
+def test_is_done_reflects_natural_completion():
+    """D6 修复：线程自然完成（未 join）后 is_done() 返回 True。
+
+    此前 is_done() 读 _state（仅 join/cancel 时刷新），自然完成未 join 会
+    滞后为 running 而误报 False；现在以 _spawned.is_done 为权威完成信号。
+    """
+    import time
+    from core.engine import IBCIEngine
+
+    engine = IBCIEngine(root_dir=".")
+    engine.run_string("""
+func f() -> int:
+    return 42
+thread[int] t = thread(callable=f, args=[])
+""", silent=True)
+    time.sleep(0.3)  # 等待线程自然完成（不 join）
+    t = engine.interpreter.execution_context.runtime_context.get_symbol("t").value
+    assert t.is_done().payload is True
+    assert t.to_native()["done"] is True

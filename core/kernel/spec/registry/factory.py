@@ -318,3 +318,47 @@ class SpecFactory:
         # specs like "thread_result[int]".
         spec._axiom_name = "thread_result"
         return spec
+
+    def create_chan(
+        self,
+        value_type_name: str = "any",
+        value_type_module: Optional[str] = None,
+    ) -> "TypeDef":
+        """Create a ``TypeDef`` for a ``chan[T]`` type annotation.
+
+        ``value_type_name`` is the channel's element type（消息类型）。
+        ``chan[T]`` 经统一泛型模型承载（R1-D1）：此前注解实参丢弃，符号
+        declared_type 退化为裸 chan；纳入 GenericTypeDeclaration 后身份保留。
+        """
+        chan_name = f"chan[{value_type_name}]" if value_type_name != "any" else "chan"
+        spec = TypeDef(
+            name=chan_name,
+            kind=TypeKind.CHANNEL.value,
+            is_nullable=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+            value_type=TypeRef.of(value_type_name, value_type_module),
+        )
+        spec._axiom_name = "chan"
+        return spec
+
+    def create_slot(
+        self,
+        value_type_name: str = "any",
+        value_type_module: Optional[str] = None,
+    ) -> "TypeDef":
+        """Create a ``TypeDef`` for a ``slot[T]`` type annotation.
+
+        ``value_type_name`` is the slot's value type（共享状态类型）。
+        ``slot[T]`` 经统一泛型模型承载（R1-D1）：此前注解实参丢弃，符号
+        declared_type 退化为裸 slot。
+        """
+        slot_name = f"slot[{value_type_name}]" if value_type_name != "any" else "slot"
+        spec = TypeDef(
+            name=slot_name,
+            kind=TypeKind.SLOT.value,
+            is_nullable=False,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+            value_type=TypeRef.of(value_type_name, value_type_module),
+        )
+        spec._axiom_name = "slot"
+        return spec

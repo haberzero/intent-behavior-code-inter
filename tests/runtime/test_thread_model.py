@@ -39,12 +39,21 @@ print((str)r.expect())
 
 
 def test_thread_is_done_state_machine():
-    code = """
-func add(int a, int b) -> int:
-    return a + b
+    """is_done 状态机：阻塞挂起时 False → 完成后 True（R1-D6 后以真实状态为准）。
 
-thread[int] t = thread(callable=add, args=[1, 2])
+    线程体阻塞在 chan recv 上（确定性挂起），is_done 如实反映未完成；
+    send 唤醒后 join 取回结果，is_done 转 True。快函数线程可能在 is_done()
+    前自然完成（竞态），旧读 _state 的实现掩盖了它。
+    """
+    code = """
+chan c = chan(str, "message")
+func add(chan x) -> int:
+    str _ = x.recv()
+    return 1 + 2
+
+thread[int] t = thread(callable=add, args=[c])
 print((str)t.is_done())
+c.send("go")
 thread_result[int] r = t.join()
 print((str)r.expect())
 print((str)t.is_done())

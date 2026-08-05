@@ -34,16 +34,33 @@
 | **B5** | 死代码 | `_assignability.py:134-135` | 重复 `return None` | ✅ 删除一行 | R1 提交 |
 | **B6** | 格式 | `_runtime.py:22,107` | 缩进不一致（8 vs 4 空格） | ✅ 对齐 | R1 提交 |
 | **C1** | 半接通 | `serializer.py`/`rehydrator`/`factory` | multi-type list `allowed_element_types` 未持久化（`list[int,str]` 序列化退化为裸 list）；tuple positional module 未持久化 | ✅ 根本修复（持久化 allowed/positional 名+模块）+ 2 测试 | R1 提交 |
-| **D1** | 设计限制 | `symbol_collection_pass` | `chan[str]`/`slot[int]` 注解实参不保留（chan/slot 不在统一泛型模型，pre-existing） | ✅ 文档化 KNOWN_LIMITS §10.2 | R1 提交 |
-| **D2** | 设计限制 | `channel.py send_nowait` | 多订阅者部分满时返回 False 但消息已部分投递 | ✅ docstring 明确语义边界 | R1 提交 |
-| **D3** | 设计限制 | `channel.py send` | fan-out 与订阅者并发 close 竞态（pre-existing） | ✅ docstring 记录竞态边界 | R1 提交 |
-| **D4** | 设计限制 | `channel.py close` | close 后 subscriber_count 仍计入已关订阅者（纯内省瑕疵） | ✅ docstring 记录边界 | R1 提交 |
+| **D1** | 半接通 | `symbol_collection_pass` | `chan[str]`/`slot[int]` 注解实参不保留——`ChannelAxiom`/`SlotAxiom` docstring 声称"value_type 承载"但 chan/slot 不在统一泛型模型，注释实参实际丢弃。**（初判"设计限制"有误——声称的协议未落地 = 半接通，按定论第 7 条可推翻）** | ✅ 根本修复（chan/slot 纳入 GenericTypeDeclaration + factory create_chan/create_slot + serializer/rehydrator/TypeRef 持久化）+ 测试；KNOWN_LIMITS §10.2 已移除 | R1 修正提交 |
+| **D2** | 设计限制 | `channel.py send_nowait` | 多订阅者部分满时返回 False 但消息已部分投递——pubsub 广播固有语义（全有全无需原子性），非缺陷 | ✅ docstring 明确语义边界（文档化合理） | R1 提交 |
+| **D3** | 真缺陷 | `channel.py send` | fan-out 与订阅者并发 close 竞态，`CommClosedError` 从单个订阅者泄漏给生产者。**（初判"文档化"过保守——真实异常泄漏路径）** | ✅ 根本修复（send 捕获跳过已关订阅者，与 send_nowait 语义对齐）+ 测试 | R1 修正提交 |
+| **D4** | 真缺陷 | `channel.py close` | close 后 `subscriber_count` 仍计入已关订阅者（snapshot 内省与状态不一致）。**（初判"文档化"有误——可观测性失真）** | ✅ 根本修复（close 清空 _subscribers）+ 测试 | R1 修正提交 |
+| **D5** | 设计限制 | `objects/kernel/comm.py` | `_create_blank` 默认 core 立即被覆盖（纯效率损耗，无行为/泄漏/注册表副作用） | ✅ 无需动作（构造协议正常代价，文档化合理） | R1 提交 |
+| **D6** | 真bug | `objects/thread.py is_done()` | 线程自然完成未 join 时 `is_done()` 读滞后的 `_state`（running）误报 False，`_spawned.is_done` 才是权威。**（初判"设计决策"严重有误——用户可见错误行为）** | ✅ 根本修复（is_done 读真实后台状态）+ 测试 | R1 修正提交 |
 
 ### C1 根因补充（比预期深）
 
 实证发现 multi-type list 注解在**编译期构建**即退化为 `list[]`：`factory.create_list` 用
 `zip(names, modules)` 且 modules 为空时产出空对 → `list[]` 且 allowed 丢失。修复：modules
 缺省补 `[None]*len`，配合 serializer/rehydrator 持久化闭环后 `list[int,str]` 往返保真。
+
+### D 系列分类修正（2026-08-05，R1 修正批）
+
+> **自我质询反思**：初判把 D1/D3/D4/D6 归为"设计限制/文档化"是**过度保守的误分类**——
+> 用"设计限制"标签回避了可低成本根本修复的真实缺陷，违反"不删也不修"精神
+> （D2/D5 为真设计限制/效率，文档化合理）。用户质询触发重新取证，逐项实证修正：
+
+| 项 | 初判 | 证据 | 修正 |
+|---|---|---|---|
+| D1 | 设计限制 | `ChannelAxiom`/`SlotAxiom` docstring 声称"value_type 承载"但实现未落地（半接通） | 根本修复：chan/slot 纳入统一泛型模型 + 序列化持久化 + 测试 |
+| D3 | 文档化 | send fan-out 对已关订阅者 `CommClosedError` 泄漏给生产者（真实异常路径） | 根本修复：send 跳过已关订阅者 + 测试 |
+| D4 | 文档化 | 实证 close 后 `subscriber_count` 仍为 2（可观测性失真） | 根本修复：close 清空 _subscribers + 测试 |
+| D6 | 设计决策 | 实证自然完成线程 `is_done()` 误报 False（`_spawned.is_done` 为权威） | 根本修复：is_done 读真实后台状态 + 测试 |
+| D2 | 文档化 | pubsub 广播部分投递固有语义（全有全无需原子性），非缺陷 | 保持文档化（正确） |
+| D5 | 无需动作 | `_create_blank` 默认 core 立即覆盖为纯效率损耗 | 保持无需动作（正确） |
 
 ### R1 复核范围
 

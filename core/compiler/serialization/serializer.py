@@ -225,6 +225,13 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
+        # Persist the value type for chan[T] / slot[T]（R1-D1：纳入统一泛型模型，
+        # 注解实参经 value_type 承载持久化，rehydrator 据此重建特化 spec）。
+        if t.kind in (TypeKind.CHANNEL.value, TypeKind.SLOT.value):
+            v_ref = t.value_type
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
         # Persist TypeDef param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
             type_data["param_type_names"] = [p.head for p in t.param_types]

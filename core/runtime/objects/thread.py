@@ -93,7 +93,14 @@ class IbThread(IbObject):
         return self
 
     def is_done(self) -> "IbObject":
-        """返回是否已完成（done/cancelled/failed 均视为结束）。"""
+        """返回是否已完成（done/cancelled/failed 均视为结束）。
+
+        R1-D6 修复：以真实后台状态为准——`_state` 仅在 join/cancel 时刷新，
+        线程自然完成后未 join 会滞后为 running；`_spawned.is_done` 才是权威
+        完成信号（D6 实证：此前自然完成线程 is_done() 误报 False）。
+        """
+        if self._spawned is not None and self._spawned.is_done:
+            return self.ib_class.registry.box(True)
         return self.ib_class.registry.box(self._state in (
             ThreadStatus.DONE,
             ThreadStatus.CANCELLED,

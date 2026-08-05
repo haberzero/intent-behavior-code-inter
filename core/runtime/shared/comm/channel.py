@@ -58,10 +58,11 @@ class ChannelCore:
     def send(self, item: Any) -> None:
         """阻塞发送（模式无关）。已关闭抛 ``CommClosedError``。
 
-        竞态边界（R1 复核确认，D3）：pubsub fan-out 对订阅者快照逐 buffer
-        ``send``，若某个订阅者并发 ``close()``（buffer 已关、尚未从
-        ``_subscribers`` 移除），``CommClosedError`` 会从该订阅者泄漏给生产者。
-        属历史遗留竞态（非本批引入）；生产者须自行捕获或在已知生命周期内使用。
+        R1-D3 修复：pubsub fan-out 对订阅者快照逐 buffer ``send``，若某订阅者
+        在快照后并发 ``close()``（buffer 已关、尚未从 ``_subscribers`` 移除），
+        ``CommClosedError`` 会从该订阅者泄漏给生产者——修复为捕获并跳过单个
+        已关闭订阅者（与 ``send_nowait`` 对已关订阅者返回 False 的语义对齐），
+        消息仍投递给其余存活订阅者。通道整体关闭仍抛 ``CommClosedError``。
         """
         if self._mode == "pubsub":
             with self._lock:
@@ -69,7 +70,10 @@ class ChannelCore:
                     raise CommClosedError()
                 subscribers = list(self._subscribers.values())
             for sub in subscribers:
-                sub.send(item)
+                try:
+                    sub.send(item)
+                except CommClosedError:
+                    continue
             return
         if self._primary is None:
             raise CommClosedError()
@@ -168,10 +172,10 @@ class ChannelCore:
     def close(self) -> None:
         """关闭通道：主缓冲与所有订阅者缓冲一并关闭。幂等。
 
-        内省边界（R1 复核确认，D4）：close 关闭全部订阅者 buffer 但**不移出**
-        ``_subscribers``（仅 ``_SubscriberView.close`` 走 ``unsubscribe``），故
-        ``snapshot()["subscriber_count"]`` 在通道关闭后仍计入已关闭订阅者——纯
-        内省瑕疵，无功能影响（已关订阅者的 buffer 不可再 send/recv）。
+        R1-D4 修复：pubsub 下关闭全部订阅者 buffer 后**一并清空**
+        ``_subscribers``——此前仅关 buffer 不移出注册表，导致
+        ``snapshot()["subscriber_count"]`` 在通道关闭后仍计入已关闭订阅者
+        （内省与"已关"状态不一致）。清空后 subscriber_count 如实反映 0。
         """
         with self._lock:
             if self._closed_flag():
@@ -180,6 +184,7 @@ class ChannelCore:
             if self._mode == "pubsub":
                 for sub in self._subscribers.values():
                     sub.close()
+                self._subscribers.clear()
             elif self._primary is not None:
                 self._primary.close()
 

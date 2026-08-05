@@ -190,6 +190,28 @@ class TypeRef:
                 )
             return cls(head="thread_result", args=(), module=spec.module_path)
 
+        # chan[T] / slot[T] 也是"值承载"泛型（消息元素类型/槽值类型承载于
+        # value_type，R1-D1：纳入统一泛型模型后符号→TypeRef 身份保真）。
+        if spec.kind == TypeKind.CHANNEL.value and base == "chan":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="chan",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="chan", args=(), module=spec.module_path)
+
+        if spec.kind == TypeKind.SLOT.value and base == "slot":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="slot",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="slot", args=(), module=spec.module_path)
+
         if spec.kind == TypeKind.OPTIONAL.value:
             return cls(
                 head="Optional",

@@ -187,6 +187,34 @@ class TestChannelPubSub:
         with pytest.raises(ValueError):
             c.recv_nowait()
 
+    def test_close_clears_subscribers(self):
+        """D4 修复：close() 清空订阅者注册表，subscriber_count 如实归零。
+
+        此前 close() 仅关闭订阅者 buffer 不移出 _subscribers，内省
+        snapshot()["subscriber_count"] 在通道关闭后仍计入已关订阅者。
+        """
+        c = ChannelCore(mode="pubsub")
+        s1 = c.subscribe()
+        s2 = c.subscribe()
+        assert c.snapshot()["subscriber_count"] == 2
+        c.close()
+        snap = c.snapshot()
+        assert snap["closed"] is True
+        assert snap["subscriber_count"] == 0
+
+    def test_send_skips_concurrently_closed_subscriber(self):
+        """D3 修复：send fan-out 跳过已关闭订阅者，异常不泄漏给生产者。
+
+        通道整体未关闭，但某订阅者在快照后并发 close——此前 CommClosedError
+        从该订阅者泄漏；修复后消息仍投递给存活订阅者。
+        """
+        c = ChannelCore(mode="pubsub")
+        alive = c.subscribe()
+        closing = c.subscribe()
+        closing.close()  # buffer 已关（模拟快照后并发 close 的已关状态）
+        c.send("hello")
+        assert alive.recv() == "hello"
+
     def test_invalid_mode(self):
         with pytest.raises(ValueError):
             ChannelCore(mode="bogus")
