@@ -213,22 +213,13 @@ def check_plugin(plugin_dir: str) -> CheckResult:
                 errors.append(f"Variable '{vname}' declared in vtable but not found in implementation")
 
     # 8. IbStatefulPlugin 协议完整性
-    try:
-        # 不 import core.* — 直接检查方法名
-        is_stateful = (
-            hasattr(impl, "save_plugin_state") and
-            hasattr(impl, "restore_plugin_state")
-        )
-        is_stateless_marker = type(impl).__name__ in dir(type(impl).__mro__)
-        # 如果有其中一个但没有另一个，报警告
-        has_save = hasattr(impl, "save_plugin_state")
-        has_restore = hasattr(impl, "restore_plugin_state")
-        if has_save and not has_restore:
-            errors.append("save_plugin_state() found but restore_plugin_state() missing (IbStatefulPlugin incomplete)")
-        if has_restore and not has_save:
-            errors.append("restore_plugin_state() found but save_plugin_state() missing (IbStatefulPlugin incomplete)")
-    except Exception:
-        pass
+    # 不 import core.* — 直接检查方法名。若有其中一个但没有另一个，报警告。
+    has_save = hasattr(impl, "save_plugin_state")
+    has_restore = hasattr(impl, "restore_plugin_state")
+    if has_save and not has_restore:
+        errors.append("save_plugin_state() found but restore_plugin_state() missing (IbStatefulPlugin incomplete)")
+    if has_restore and not has_save:
+        errors.append("restore_plugin_state() found but save_plugin_state() missing (IbStatefulPlugin incomplete)")
 
     return result
 

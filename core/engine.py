@@ -381,14 +381,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if axiom_registry:
             for spec in discovery.discover_plugins().values():
                 if spec.has_axioms():
-                    for name, axiom in spec.axioms.items():
-                        try:
-                            axiom_registry.register(axiom)
-                        except Exception as e:
-                            self.debugger.trace(
-                                CoreModule.SCHEDULER, DebugLevel.BASIC,
-                                f"Failed to register axiom '{name}': {e}"
-                            )
+                    for axiom in spec.axioms.values():
+                        axiom_registry.register(axiom)
 
         self.module_loader.load_and_register_all(service_context, execution_context)
 

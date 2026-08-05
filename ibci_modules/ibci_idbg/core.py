@@ -250,7 +250,6 @@ class IDbgPlugin(IbPlugin):
                 "type": f.node_type,
                 "retry": f.retry_count,
                 "max_retry": f.max_retry,
-                "is_fallback": f.is_in_fallback,
             }
             # target_result 是帧私有字段（per-snapshot），包含上次不确定调用的详情。
             if f.target_result:

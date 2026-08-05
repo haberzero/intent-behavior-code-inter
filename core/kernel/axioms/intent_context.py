@@ -91,7 +91,6 @@ class IntentContextAxiom:
 
     def is_module(self) -> bool:
         return False
-        return False
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "Object"

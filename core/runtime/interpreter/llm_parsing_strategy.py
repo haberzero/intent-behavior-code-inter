@@ -352,9 +352,4 @@ class LLMResultParser:
                 if result is not None:
                     return result
 
-        # Should never reach here due to DefaultParsingStrategy
-        # but return a safe fallback just in case
-        return LLMResult.success_result(
-            value=self.registry.box(raw_res),
-            raw_response=raw_res
-        )
+        # DefaultParsingStrategy.can_handle 恒为 True，循环必然在链末返回。

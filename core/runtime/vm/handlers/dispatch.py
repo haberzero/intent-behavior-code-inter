@@ -50,7 +50,6 @@ from core.runtime.vm.handlers.declarations import (
 )
 from core.runtime.vm.handlers.llm_behavior import (
     vm_handle_IbBehaviorExpr,
-    vm_handle_IbBehaviorInstance,
     vm_handle_IbLambdaExpr,
     vm_handle_IbIntentAnnotation,
     vm_handle_IbIntentStackOperation,
@@ -113,7 +112,6 @@ def build_dispatch_table() -> dict:
         "IbIntentStackOperation": vm_handle_IbIntentStackOperation,
         # 剩余节点 handler
         "IbBehaviorExpr": vm_handle_IbBehaviorExpr,
-        "IbBehaviorInstance": vm_handle_IbBehaviorInstance,
         "IbLambdaExpr": vm_handle_IbLambdaExpr,
         "IbFor": vm_handle_IbFor,
         "IbTry": vm_handle_IbTry,

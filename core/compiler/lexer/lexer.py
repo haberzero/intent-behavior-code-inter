@@ -38,30 +38,25 @@ class Lexer:
 
     def tokenize(self) -> List[Token]:
         self.debugger.trace(CoreModule.LEXER, DebugLevel.BASIC, "Starting tokenization...")
-        try:
-            while not self.scanner.is_at_end():
-                self._process_line()
-                
-            # Check residual state (defensive check)
-            self.core_scanner.check_eof_state()
-            
-            # Handle remaining indentation at EOF
-            dedents = self.indent_processor.handle_eof()
-            self.tokens.extend(dedents)
-                
-            self.tokens.append(Token(TokenType.EOF, "", self.scanner.line, 0))
-            
-            self.debugger.trace(CoreModule.LEXER, DebugLevel.BASIC, f"Tokenization complete. Total tokens: {len(self.tokens)}")
-            self.debugger.trace(CoreModule.LEXER, DebugLevel.DATA, "Token stream:", data=self.tokens)
-            
-            # Throw exception if errors exist
-            self.issue_tracker.check_errors()
-            
-            return self.tokens
-        except Exception as e:
-            # Ensure non-Diagnostic exceptions are propagated
-            # If it's CompilerError, raise directly
-            raise e
+        while not self.scanner.is_at_end():
+            self._process_line()
+
+        # Check residual state (defensive check)
+        self.core_scanner.check_eof_state()
+
+        # Handle remaining indentation at EOF
+        dedents = self.indent_processor.handle_eof()
+        self.tokens.extend(dedents)
+
+        self.tokens.append(Token(TokenType.EOF, "", self.scanner.line, 0))
+
+        self.debugger.trace(CoreModule.LEXER, DebugLevel.BASIC, f"Tokenization complete. Total tokens: {len(self.tokens)}")
+        self.debugger.trace(CoreModule.LEXER, DebugLevel.DATA, "Token stream:", data=self.tokens)
+
+        # Throw exception if errors exist
+        self.issue_tracker.check_errors()
+
+        return self.tokens
 
     def _process_line(self):
         """Process single line, including indentation and mode dispatch."""

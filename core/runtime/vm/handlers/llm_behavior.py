@@ -10,7 +10,7 @@ from core.runtime.shared.signals import (
 from core.runtime.exceptions import (
     ThrownException,
 )
-from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
+from core.runtime.objects.intent import IbIntent, IntentRole
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.vm.handlers._shared import (
@@ -126,61 +126,6 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     if result is not None and result.value is not None:
         return result.value
     return executor.registry.get_none()
-
-
-def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``(Type) @~ ... ~`` 强制转换语法（PAR_DEPRECATED_CAST_SYNTAX）的运行时路径。
-
-    解析器不再生成此节点类型；此 handler 作为防御性兜底保留。
-    segments 为字面字符串与 ext_ref dicts，不含子表达式 UID，故无需 yield。
-    逻辑与 ExprHandler.visit_IbBehaviorInstance 完全对应，但走 VM 路径。
-    """
-    segments = node_data.get("segments", [])
-    target_type_name = node_data.get("target_type_name", "")
-
-    intent_content_parts = []
-    for seg in segments:
-        if isinstance(seg, str):
-            intent_content_parts.append(seg)
-        elif isinstance(seg, dict) and seg.get("_type") == "ext_ref":
-            intent_content_parts.append(executor.ec.get_asset(seg.get("uid", "")))
-        elif isinstance(seg, IbObject):
-            intent_content_parts.append(str(seg.to_native()))
-        else:
-            intent_content_parts.append(str(seg))
-    intent_content = "".join(intent_content_parts)
-
-    intent_class = executor.registry.get_class("Intent")
-    if intent_class:
-        call_intent = IbIntent(ib_class=intent_class, content=intent_content, mode=IntentMode.APPEND)
-    else:
-        call_intent = None
-
-    target_descriptor = executor.ec.get_side_table("node_to_type", node_uid)
-    if not target_descriptor and target_type_name:
-        meta_reg = executor.registry.get_metadata_registry()
-        if meta_reg:
-            target_descriptor = meta_reg.resolve(target_type_name)
-
-    sc = executor.service_context
-    llm_exec = sc.llm_executor if sc is not None else None
-    if llm_exec is None:
-        return executor.registry.get_none()
-
-    result = llm_exec.execute_behavior_expression(node_uid, executor.ec, call_intent=call_intent)
-    if result is not None and result.is_uncertain:
-        return _make_uncertain_call_result(
-            executor.registry, result.raw_response or "", result.retry_hint or ""
-        )
-    if not result or not result.value:
-        return executor.registry.get_none()
-
-    if target_type_name:
-        target_class = executor.registry.get_class(target_type_name)
-        if target_class:
-            return target_class.receive("__call__", [result.value])
-
-    return result.value
 
 
 def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]):

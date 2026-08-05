@@ -32,19 +32,9 @@ def snapshot(executor: Any) -> Dict[str, Any]:
 
     out: Dict[str, Any] = {}
 
-    # ---- tasks：从执行器侧收集在途任务（TaskScheduler / spawn 句柄）----
+    # ---- tasks：从线程协调器收集在途线程任务 ----
     tasks = []
-    scheduler = getattr(executor, "_scheduler", None) or getattr(executor, "_task_scheduler", None)
-    if scheduler is not None:
-        for t in getattr(scheduler, "_ready", []) + getattr(scheduler, "_waiting", []):
-            tasks.append({
-                "index": getattr(t, "index", None),
-                "node_uid": getattr(t, "node_uid", ""),
-                "started": getattr(t, "started", False),
-                "waiting": getattr(t, "waiting_on", None) is not None,
-            })
-    # 线程对象（RuntimeCoordinator）：快照补充后台线程任务，
-    # 消除内省双数据源（spawn 线程此前在协调器，快照看不到）。
+    # 线程对象（RuntimeCoordinator）：快照收集后台线程任务。
     rc = getattr(executor, "runtime_context", None)
     coordinator = getattr(rc, "_runtime_coordinator", None) if rc is not None else None
     if coordinator is not None:
