@@ -16,6 +16,7 @@ import os
 import tempfile
 
 from core.engine import IBCIEngine
+from tests.conftest import AI_MOCK_PREFIX
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -44,10 +45,9 @@ class TestAwaitExpr:
     def test_await_behavior_expression(self):
         """``await @~...~`` 显式等待行为结果，返回其值。"""
         code = (
-            "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
-            "str x = await @~ MOCK:STR:hello-await ~\n"
-            "print(x)\n"
+            AI_MOCK_PREFIX
+            + "str x = await @~ MOCK:STR:hello-await ~\n"
+            + "print(x)\n"
         )
         out = _run(code)
         assert any("hello-await" in line for line in out)
@@ -55,10 +55,9 @@ class TestAwaitExpr:
     def test_await_behavior_expression_with_type(self):
         """``await @~...~`` 结果类型由左值决定（适配 int）。"""
         code = (
-            "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
-            "int x = await @~ MOCK:INT:42 ~\n"
-            "print((str)x)\n"
+            AI_MOCK_PREFIX
+            + "int x = await @~ MOCK:INT:42 ~\n"
+            + "print((str)x)\n"
         )
         out = _run(code)
         assert any("42" in line for line in out)

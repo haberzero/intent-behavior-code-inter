@@ -104,10 +104,22 @@ class TypeAnnotationResolver:
 
         elif isinstance(annotation, ast.IbSubscript):
             # 泛型类型: list[int], dict[str, int], Optional[str]
+            # 经 resolve_specialization 保真实参（与 symbol_collection_pass 一致），
+            # 不再擦除为基类型（R2-14：消除 erasure/preserve 双口径）。
             if isinstance(annotation.value, ast.IbName):
                 base_spec = self.registry.resolve(annotation.value.id)
                 if base_spec:
-                    # 记录基础类型（泛型参数在当前 IBCI 中是 erasure）
+                    if isinstance(annotation.slice, ast.IbTuple):
+                        arg_specs = [
+                            self.resolve_type_annotation(elt) for elt in annotation.slice.elts
+                        ]
+                    else:
+                        arg_specs = [self.resolve_type_annotation(annotation.slice)]
+                    arg_specs = [s for s in arg_specs if s is not None]
+                    if arg_specs:
+                        specialized = self.registry.resolve_specialization(base_spec, arg_specs)
+                        if specialized is not None:
+                            return specialized
                     return base_spec
             return self._any_desc
 

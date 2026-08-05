@@ -21,6 +21,7 @@ import tempfile
 import pytest
 
 from core.engine import IBCIEngine
+from tests.conftest import AI_MOCK_PREFIX
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -349,9 +350,7 @@ class TestRunIsolatedPathRelativeToEntryDir:
         parent_dir = tmp_path / "isohome"
         parent_dir.mkdir()
         (parent_dir / "child.ibci").write_text(
-            'import ai\n'
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
-            'print("child_ran")\n',
+            AI_MOCK_PREFIX + 'print("child_ran")\n',
             encoding="utf-8",
         )
         parent_path = parent_dir / "parent.ibci"
@@ -385,9 +384,7 @@ class TestRunIsolatedPathRelativeToEntryDir:
         """
         child_path = tmp_path / "absolute_child.ibci"  # 在 parent_dir 之外
         child_path.write_text(
-            'import ai\n'
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
-            'print("abs_child_ran")\n',
+            AI_MOCK_PREFIX + 'print("abs_child_ran")\n',
             encoding="utf-8",
         )
         parent_dir = tmp_path / "parents"

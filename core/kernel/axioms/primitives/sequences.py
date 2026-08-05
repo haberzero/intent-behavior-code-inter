@@ -31,8 +31,6 @@ class StrAxiom(BaseAxiom):
     @property
     def name(self) -> str:
         return "str"
-
-    def can_return_from_isolated(self) -> bool:
         return True
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:

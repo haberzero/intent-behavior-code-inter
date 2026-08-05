@@ -127,8 +127,6 @@ class BaseAxiom:
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "Object"
-
-    def can_return_from_isolated(self) -> bool:
         return False
 
     def get_diff_hint(self, other_name: str) -> Optional[str]:

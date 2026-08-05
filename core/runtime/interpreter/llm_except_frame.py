@@ -72,7 +72,6 @@ class LLMExceptFrame:
         saved_intent_ctx: 重试前保存的意图上下文快照（IbIntentContext.fork()）
         saved_loop_context: 重试前保存的循环上下文
         saved_retry_hint: 重试前保存的提示词
-        is_in_fallback: 是否正在执行 fallback 块
         should_retry: 是否应该继续重试
 
     快照策略（用户协议优先，深克隆兜底）:
@@ -115,9 +114,8 @@ class LLMExceptFrame:
     saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
     target_result: Optional[Any] = None  # 最近一次不确定调用的 IbLLMCallResult（certainty 信号载体）
-    
+
     # 状态标志
-    is_in_fallback: bool = False
     should_retry: bool = True
     
     def save_context(self, runtime_context: 'RuntimeContextImpl') -> None:
@@ -344,60 +342,3 @@ class LLMExceptFrame:
         )
 
 
-class LLMExceptFrameStack:
-    """
-    LLM 异常处理帧栈。
-    
-    用于管理嵌套的 llmexcept 块。
-    在复杂场景下，可能会有多层嵌套的 llmexcept，
-    帧栈确保每个层级都有独立的现场状态。
-
-    支持最大嵌套深度限制，防止异常情况下的无界增长。
-    默认最大深度为 128：足够覆盖深层业务嵌套，同时抑制异常路径的栈爆炸风险。
-    """
-    
-    DEFAULT_MAX_DEPTH = 128
-
-    def __init__(self, max_depth: int = DEFAULT_MAX_DEPTH):
-        self._frames: List[LLMExceptFrame] = []
-        self._max_depth = max_depth
-    
-    def push(self, frame: LLMExceptFrame) -> None:
-        """压入一个新帧"""
-        if len(self._frames) >= self._max_depth:
-            raise RuntimeError(
-                f"LLMExceptFrameStack overflow: max depth {self._max_depth} exceeded"
-            )
-        self._frames.append(frame)
-    
-    def pop(self) -> Optional[LLMExceptFrame]:
-        """弹出栈顶帧"""
-        if self._frames:
-            return self._frames.pop()
-        return None
-    
-    def peek(self) -> Optional[LLMExceptFrame]:
-        """查看栈顶帧但不弹出"""
-        if self._frames:
-            return self._frames[-1]
-        return None
-    
-    def is_empty(self) -> bool:
-        """检查栈是否为空"""
-        return len(self._frames) == 0
-    
-    def size(self) -> int:
-        """返回栈的大小"""
-        return len(self._frames)
-
-    @property
-    def max_depth(self) -> int:
-        """返回帧栈允许的最大嵌套深度"""
-        return self._max_depth
-    
-    def clear(self) -> None:
-        """清空栈"""
-        self._frames.clear()
-    
-    def __repr__(self) -> str:
-        return f"LLMExceptFrameStack(size={len(self._frames)})"

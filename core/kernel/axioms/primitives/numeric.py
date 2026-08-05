@@ -31,9 +31,6 @@ class IntAxiom(BaseAxiom):
     def name(self) -> str:
         return "int"
 
-    def can_return_from_isolated(self) -> bool:
-        return True
-
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
             "to_bool":  _m("to_bool",  ret="bool"),
@@ -109,8 +106,6 @@ class FloatAxiom(BaseAxiom):
     @property
     def name(self) -> str:
         return "float"
-
-    def can_return_from_isolated(self) -> bool:
         return True
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
@@ -182,8 +177,6 @@ class BoolAxiom(BaseAxiom):
     @property
     def name(self) -> str:
         return "bool"
-
-    def can_return_from_isolated(self) -> bool:
         return True
 
     def get_parent_axiom_name(self) -> Optional[str]:

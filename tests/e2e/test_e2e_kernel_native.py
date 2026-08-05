@@ -40,9 +40,8 @@ class TestIHostNative:
         parent_dir = tmp_path / "isohome"
         parent_dir.mkdir()
         (parent_dir / "child.ibci").write_text(
-            'import ai\n'
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
-            'print("child_ran")\n',
+            AI_MOCK_PREFIX
+            + 'print("child_ran")\n',
             encoding="utf-8",
         )
         parent_path = parent_dir / "parent.ibci"

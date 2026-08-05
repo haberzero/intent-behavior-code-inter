@@ -17,7 +17,7 @@ from core.runtime.objects.primitives import IbOptional
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.cell import IbCell
-from core.runtime.interpreter.llm_except_frame import LLMExceptFrame, LLMExceptFrameStack
+from core.runtime.interpreter.llm_except_frame import LLMExceptFrame
 
 class RuntimeSymbolImpl:
     def __init__(self, name: str, value: Any, declared_type: Optional[IbSpec] = None, is_const: bool = False, is_intrinsic: bool = False):
@@ -385,18 +385,6 @@ class RuntimeContextImpl(RuntimeContext):
 
     # --- 排他意图管理 ---
 
-    def set_pending_override_intent(self, intent: IbIntent) -> None:
-        """设置临时的排他意图（@! 语义）。"""
-        self._intent_ctx.set_override(intent)
-
-    def consume_pending_override_intent(self) -> Optional[IbIntent]:
-        """消费并清除排他意图。"""
-        return self._intent_ctx.consume_override()
-
-    def has_pending_override_intent(self) -> bool:
-        """检查是否存在待处理的排他意图"""
-        return self._intent_ctx.has_override()
-
     # --- 涂抹意图管理 (@) ---
 
     def add_smear_intent(self, intent: IbIntent) -> None:
@@ -429,18 +417,6 @@ class RuntimeContextImpl(RuntimeContext):
             self._intent_ctx.discard_smear(intent)
 
     # --- LLM 结果状态（调试内省） ---
-
-    def get_last_llm_result(self) -> Optional[Any]:
-        """返回当前 llmexcept 帧的目标结果（``target_result``）。
-
-        保留给调试接口（idbg）使用；不再存在全局"最近 LLM 结果"槽位——
-        certainty 经 ``IbLLMCallResult`` 返回值传递，产生者不写 frame、
-        不写共享槽。无活跃帧时返回 ``None``。
-        """
-        frame = self.get_current_llm_except_frame()
-        if frame is not None:
-            return frame.target_result
-        return None
 
     def push_llm_except_frame(self, frame: 'LLMExceptFrame') -> None:
         """
@@ -495,23 +471,6 @@ class RuntimeContextImpl(RuntimeContext):
         frame.save_context(self)
         self.push_llm_except_frame(frame)
         return frame
-
-    def restore_llm_except_state(self) -> bool:
-        """
-        从当前 LLMExceptFrame 恢复现场。
-        1. 恢复变量快照
-        2. 恢复 intent 栈
-        3. 恢复 loop 上下文
-        4. 恢复 retry_hint
-        
-        Returns:
-            True 如果恢复成功，False 如果帧栈为空
-        """
-        frame = self.get_current_llm_except_frame()
-        if frame:
-            frame.restore_context(self)
-            return True
-        return False
 
     def get_current_scope(self) -> Scope:
         return self._current_scope
@@ -889,31 +848,6 @@ class RuntimeContextImpl(RuntimeContext):
     @property
     def global_scope(self) -> Scope:
         return self._global_scope
-
-    def collect_gc_roots(self):
-        """
-        枚举 GC 根集合中的所有 IbObject。
-
-        根集合 = 当前作用域链中所有符号值 ∪ 所有活跃 Cell 的持有对象。
-
-        返回一个生成器，逐一 yield IbObject。
-
-        注意
-        ----
-        本方法是 IBCI 规范层 GC 根集合接口的落地。Python 宿主依赖 CPython 引用计数，
-        不需要手动 GC；此方法主要用于调试、合规测试以及未来非 Python 宿主迁移。
-        """
-        scope = self._current_scope
-        while scope is not None:
-            # 1. 所有符号值
-            for sym in scope.get_all_symbols().values():
-                if sym.value is not None:
-                    yield sym.value
-            # 2. Cell 变量：通过 Scope 协议方法 iter_cells() 枚举本作用域的所有 IbCell。
-            #    Scope 协议提供默认空迭代器实现，因此无需 hasattr 检查。
-            for cell in scope.iter_cells():
-                yield from cell.trace_refs()
-            scope = scope.parent
 
     def get_symbol_view(self) -> SymbolView:
         return SymbolViewImpl(self)

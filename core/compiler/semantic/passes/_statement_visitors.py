@@ -423,14 +423,6 @@ class StatementVisitorsMixin:
         """访问表达式语句"""
         return self.visit(node.value)
 
-    def _has_call_cap(self, spec: IbSpec) -> bool:
-        """判断 spec 是否具备调用能力。"""
-        axiom = self.registry.get_axiom(spec)
-        return bool(axiom and getattr(axiom, "has_call_cap", False)) or (
-            spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_INSTANCE.value,
-                          TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value)
-        )
-
     def visit_IbAugAssign(self, node: ast.IbAugAssign) -> Optional[IbSpec]:
         """访问增量赋值 (e.g., x += 1)
 

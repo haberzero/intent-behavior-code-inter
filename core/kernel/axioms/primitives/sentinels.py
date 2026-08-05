@@ -193,8 +193,6 @@ class LLMUncertainAxiom(BaseAxiom):
     def is_compatible(self, other_name: str) -> bool:
         # 赋值方向：llm_uncertain 值可被赋给任何类型的变量（宽松策略）。
         return True
-
-    def can_return_from_isolated(self) -> bool:
         return True
 
 

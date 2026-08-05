@@ -185,7 +185,6 @@ class IExecutionFrame(Protocol):
     - current_scope  —— 当前作用域链（局部变量）
     - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
     - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
-    - get_last_llm_result()   —— 当前 llmexcept 帧的 target_result（调试内省）
     - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照
     """
     @property

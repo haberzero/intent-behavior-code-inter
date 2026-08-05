@@ -374,7 +374,9 @@ class Scheduler(ICompilerService):
             
             # 在分析前预注册空的 ModuleMetadata 到注册表
             # 这样 TypeDef 才能在解析时找到目标，即使当前模块还未分析完
-            pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
+            if self.registry is None:
+                raise RuntimeError("Scheduler.registry is required for compilation")
+            pre_mod_meta = self.registry.factory.create_module(module_name)
             self.registry.register(pre_mod_meta)
             
             analyzer = SemanticAnalyzer(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)

@@ -140,9 +140,6 @@ class SpawnedTask:
             if not self._future.done():
                 self._future.set_exception(ThreadCancelled(self._handle))
 
-    def _started(self) -> bool:
-        return self._thread is not None
-
     def to_dict(self) -> dict:
         return {
             "handle": self._handle,

@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from tests.conftest import run_ibci, compile_or_errors, expect_runtime_error
 
-AI_MOCK_PREFIX = 'import ai\nimport file\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+# 文件内核测试专用前缀（含 `import file`；独立于 conftest 的 AI_MOCK_PREFIX，
+# 避免同名遮蔽）。
+FILE_MOCK_PREFIX = 'import ai\nimport file\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
 
 
 def _write_media(tmp_path, filename: str, payload: bytes = b"fake_media_payload"):
@@ -139,7 +141,7 @@ class TestFileSecurityGates:
         直接调用 file.<写> 现由编译期 SEM_LLMEXCEPT_FILE_WRITE 拦截（见 test_pipeline.py）；
         此处验证经 fn 动态分派的间接写仍被运行时 _guard_no_file_write_in_retry 拦下。
         """
-        code = AI_MOCK_PREFIX + (
+        code = FILE_MOCK_PREFIX + (
             'func _do_write():\n'
             '    file.write("./x.txt", "mutated", overwrite_flag="overwrite")\n'
             'fn f = _do_write\n'

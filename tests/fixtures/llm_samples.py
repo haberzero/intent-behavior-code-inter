@@ -7,8 +7,10 @@ LLM-related IBCI code samples: behavior expressions, llmexcept, intent, retry.
 
 import pytest
 
-# AI configuration prefix (used in most LLM samples)
-AI_SETUP = 'import ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+from tests.conftest import AI_MOCK_PREFIX
+
+# AI configuration prefix (used in most LLM samples)——复用 conftest 单点真理
+AI_SETUP = AI_MOCK_PREFIX
 
 
 # ============================================================================
