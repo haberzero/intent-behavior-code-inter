@@ -82,7 +82,6 @@ class ModuleLoader(IModuleLoader):
         # 遍历元数据中声明的所有成员 (源自 _spec.py)
         for spec_name, spec_member in metadata.members.items():
             is_callable_member = isinstance(spec_member, MethodMemberSpec)
-            param_count = len(spec_member.param_types) if is_callable_member else 0
 
 
             # 1. 处理函数/方法
@@ -106,19 +105,15 @@ class ModuleLoader(IModuleLoader):
                 param_meta = None
                 has_declared_varkw = False
                 declared_descriptors = getattr(spec_member, "param_descriptors", None) or []
-                if declared_descriptors:
-                    param_meta = [
-                        (d.name, d.kind, ("value", d.default_value) if d.has_default else None)
-                        for d in declared_descriptors
-                    ]
-                    has_declared_varkw = any(d.kind == "VAR_KEYWORD" for d in declared_descriptors)
-                    fixed_declared_count = sum(
-                        1 for d in declared_descriptors
-                        if d.kind in ("POSITIONAL_OR_KEYWORD", "KEYWORD_ONLY")
-                    )
-                else:
-                    # 旧格式（仅 param_types）：全部按位置参数计
-                    fixed_declared_count = param_count
+                param_meta = [
+                    (d.name, d.kind, ("value", d.default_value) if d.has_default else None)
+                    for d in declared_descriptors
+                ]
+                has_declared_varkw = any(d.kind == "VAR_KEYWORD" for d in declared_descriptors)
+                fixed_declared_count = sum(
+                    1 for d in declared_descriptors
+                    if d.kind in ("POSITIONAL_OR_KEYWORD", "KEYWORD_ONLY")
+                )
 
                 # 允许实现层的参数比 spec 多（如果有默认值），但不能少
                 if len(fixed_params) < fixed_declared_count:

@@ -140,8 +140,6 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 def vm_handle_IbGlobalStmt(executor, node_uid: str, node_data: Mapping[str, Any]):
     """global 声明是编译期语义，运行时无操作。"""
-    if False:
-        yield  # pragma: no cover — 强制 generator function
     return executor.registry.get_none()
 
 
@@ -153,8 +151,6 @@ def vm_handle_IbNonlocalStmt(executor, node_uid: str, node_data: Mapping[str, An
     - 将外层作用域的符号引用注入当前作用域
     运行时赋值操作通过符号 UID 解析自然穿透到外层作用域（Cell 提升机制）。
     """
-    if False:
-        yield  # pragma: no cover — 强制 generator function
     return executor.registry.get_none()
 
 

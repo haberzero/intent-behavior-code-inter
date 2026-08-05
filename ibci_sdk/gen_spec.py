@@ -134,15 +134,18 @@ def gen_spec(
             )
         ]
 
-        param_types = [_py_type_to_ibci(hints.get(p.name, Any)) for p in params]
         return_type = _py_type_to_ibci(hints.get("return"))
 
         doc = inspect.getdoc(method) or ""
         # 取第一行作为 description
         short_desc = doc.split("\n")[0].strip() if doc else ""
 
+        # 新格式 `params`：具名参数描述符（与运行时 vtable 解析契约一致）。
         entry: Dict[str, Any] = {
-            "param_types": param_types,
+            "params": [
+                {"name": p.name, "type": _py_type_to_ibci(hints.get(p.name, Any))}
+                for p in params
+            ],
             "return_type": return_type,
         }
         if short_desc:
@@ -175,12 +178,12 @@ def gen_spec(
     ]
 
     for fname, fspec in functions.items():
-        params_repr = repr(fspec["param_types"])
+        params_repr = repr(fspec["params"])
         ret_repr = repr(fspec["return_type"])
         if "description" in fspec:
-            lines.append(f'            "{fname}": {{"param_types": {params_repr}, "return_type": {ret_repr}, "description": {repr(fspec["description"])}}},')
+            lines.append(f'            "{fname}": {{"params": {params_repr}, "return_type": {ret_repr}, "description": {repr(fspec["description"])}}},')
         else:
-            lines.append(f'            "{fname}": {{"param_types": {params_repr}, "return_type": {ret_repr}}},')
+            lines.append(f'            "{fname}": {{"params": {params_repr}, "return_type": {ret_repr}}},')
 
     lines.append("        },")
 

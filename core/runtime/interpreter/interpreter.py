@@ -41,6 +41,7 @@ from core.runtime.interfaces import (
     Registry
 )
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+from core.runtime.shared.op_constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
@@ -72,6 +73,9 @@ class Interpreter:
     IBC-Inter 2.0 消息传递解释器。
     彻底转向基于 IbObject 的统一对象模型。
     """
+    # 运算符 dunder 方法集合（从 op_constants 派生，R2-D3 单点收敛）。
+    _OPERATOR_METHODS: Optional[set] = None
+
     def get_call_stack_depth(self) -> int:
         return self.logical_stack.depth if self.logical_stack else 0
 
@@ -713,22 +717,17 @@ class Interpreter:
         return self.type_hydrator.hydrate(type_uid)
 
     def _is_operator_method(self, method_name: str) -> bool:
-        """检查方法名是否为运算符 dunder 方法
+        """检查方法名是否为运算符 dunder 方法。
 
-        运算符方法列表基于常见的二元/一元运算符。
-        这些方法在用户类中定义时，应该可以被运算符语法调用。
+        运算符集合从 ``op_constants`` 单一权威源派生（R2-D3 收敛：
+        此前此处硬编码一份镜像，与 op_constants 双写真相）。
+        ``__not__`` 属 base 协议（非运算符语法绑定），排除。
         """
-        operator_methods = {
-            # 算术运算符
-            '__add__', '__sub__', '__mul__', '__truediv__', '__floordiv__',
-            '__mod__', '__pow__', '__neg__', '__pos__',
-            # 位运算符
-            '__and__', '__or__', '__xor__', '__invert__',
-            '__lshift__', '__rshift__',
-            # 比较运算符
-            '__eq__', '__ne__', '__lt__', '__le__', '__gt__', '__ge__',
-        }
-        return method_name in operator_methods
+        if self._OPERATOR_METHODS is None:
+            self._OPERATOR_METHODS = set(OP_MAPPING.values()) | {
+                UNARY_OP_MAPPING[k] for k in ("-", "+", "~")
+            }
+        return method_name in self._OPERATOR_METHODS
 
     def _bind_operator_method(self, ib_class: 'IbClass', method_name: str, user_func: Any) -> None:
         """显式绑定用户类的运算符方法到运算符符号

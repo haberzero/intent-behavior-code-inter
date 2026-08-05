@@ -33,8 +33,6 @@ from core.runtime.vm.handlers._shared import (
 
 
 def vm_handle_IbPass(executor, node_uid: str, node_data: Mapping[str, Any]):
-    if False:
-        yield
     return executor.registry.get_none()
 
 
@@ -127,14 +125,10 @@ def vm_handle_IbReturn(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbBreak(executor, node_uid: str, node_data: Mapping[str, Any]):
-    if False:
-        yield
     return Signal(ControlSignal.BREAK)
 
 
 def vm_handle_IbContinue(executor, node_uid: str, node_data: Mapping[str, Any]):
-    if False:
-        yield
     return Signal(ControlSignal.CONTINUE)
 
 

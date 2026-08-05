@@ -117,7 +117,9 @@ class SpecRegistryBase:
 
         For non-generic TypeRefs this delegates to ``resolve(head, module)``.
         For generic TypeRefs (e.g. list[int]) it first attempts to look up
-        the fully-encoded canonical name, then falls back to the base type.
+        the fully-encoded canonical name, then falls back to building the
+        specialization from the structured args (R2-D1：结构化 ref 懒构建，
+        不再依赖调用方预注册特化 spec）。
 
         This method is the primary resolution path for new code that already
         holds a TypeRef and needs an IbSpec for capability queries.
@@ -127,6 +129,18 @@ class SpecRegistryBase:
             result = self.resolve(ref.canonical_name, ref.module)
             if result is not None:
                 return result
+            # 懒构建：canonical 名未命中时，从结构化 args 经 resolve_specialization
+            # 构建特化 spec（list[int] / Optional[int] / thread_result[int] 等）。
+            base_spec = self.resolve(ref.head, ref.module)
+            if base_spec is not None:
+                arg_specs = [
+                    self.resolve_typeref(a) or self.resolve("any")
+                    for a in ref.args
+                ]
+                if all(a is not None for a in arg_specs):
+                    built = self.resolve_specialization(base_spec, arg_specs)
+                    if built is not None:
+                        return built
         # Fall back to bare head name (works for non-generic and base-type lookup)
         return self.resolve(ref.head, ref.module)
 

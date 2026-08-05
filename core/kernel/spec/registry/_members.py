@@ -6,7 +6,7 @@ _MemberMixin — attribute/method member resolution and diff hints.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from core.base.enums import Provenance
 
@@ -34,23 +34,19 @@ class _MemberMixin:
         member = spec.members.get(attr_name)
         if member is not None:
             if isinstance(member, MethodMemberSpec):
-                # 泛型成员特化（协议驱动，下一主线 MEMBER_SPECIALIZATION_UNIFICATION）：
-                # 经 GenericTypeRegistry 查声明回调，替代原 per-type if/elif 级联
-                # （LIST/DICT/OPTIONAL/THREAD/THREAD_RESULT 特化已迁移至 generic.py 声明）。
-                effective_return = member.return_type.head
-                effective_return_module = member.return_type.module
-                effective_params = [t.head for t in member.param_types]
-                effective_param_modules: List[Optional[str]] = [t.module for t in member.param_types]
+                # 泛型成员特化（协议驱动）：经 GenericTypeRegistry 查声明回调。
+                # 回调返回结构化 TypeRef（如 TypeRef.generic("list", elem)），
+                # 直接透传，不再 head 字符串化——保留嵌套泛型实参身份。
+                effective_return = member.return_type
+                effective_params = list(member.param_types)
 
                 decl = self.generic_types.get(spec.get_base_name())
                 if decl is not None and decl.resolve_member is not None:
                     spec_result = decl.resolve_member(self, spec, attr_name, member)
                     if spec_result is not None:
-                        effective_return = spec_result.return_type.head
-                        effective_return_module = spec_result.return_type.module
+                        effective_return = spec_result.return_type
                         if spec_result.param_types is not None:
-                            effective_params = [t.head for t in spec_result.param_types]
-                            effective_param_modules = [t.module for t in spec_result.param_types]
+                            effective_params = spec_result.param_types
 
                 from ..base import TypeDef
                 resolved_member = TypeDef(
@@ -58,8 +54,8 @@ class _MemberMixin:
                     kind=TypeKind.FUNCTION.value,
                     provenance=spec.provenance,
                     visibility=spec.visibility,
-                    return_type=TypeRef.of(effective_return, effective_return_module),
-                    param_types=[TypeRef.of(n, m) for n, m in zip(effective_params, effective_param_modules)],
+                    return_type=effective_return,
+                    param_types=list(effective_params),
                 )
                 # 携带模块成员声明的参数描述符（具名/默认/varargs 实参校验依据）。
                 # 容器特化方法无描述符（空列表），拷贝为空操作。

@@ -8,7 +8,7 @@
 - ``Signal``：显式控制流信号数据对象（frozen dataclass）
 - ``UnhandledSignal``：VM 顶层未消费信号的边界异常
 
-帧/调度数据类型（``VMTask`` / ``VMTaskResult``）保留在 ``vm/task.py`` 中，
+帧/调度数据类型（``VMTask``）保留在 ``vm/task.py`` 中，
 因为它们仅在 ``vm`` 包内部使用。
 """
 

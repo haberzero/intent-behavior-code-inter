@@ -14,6 +14,7 @@ from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
 from core.runtime.objects.kernel.base import IbObject
+from core.kernel import ast as ib_ast
 
 
 class _PromptMixin:
@@ -178,7 +179,7 @@ class _PromptMixin:
                         content_parts.append(payload)
                 else:
                     content_parts.append(segment)
-            elif hasattr(segment, 'id'):
+            elif isinstance(segment, ib_ast.IbName):
                 # IbName 节点（变量引用）
                 var_name = segment.id
 

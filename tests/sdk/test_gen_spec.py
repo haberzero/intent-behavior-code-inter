@@ -127,12 +127,12 @@ class TestGenSpec:
     def test_hello_method_in_vtable(self):
         result = gen_spec(SamplePlugin, name="sample")
         assert '"hello"' in result
-        assert "['str']" in result  # param_types
+        assert "{'name': 'name', 'type': 'str'}" in result  # params 具名描述符
 
     def test_add_method_in_vtable(self):
         result = gen_spec(SamplePlugin, name="sample")
         assert '"add"' in result
-        assert "['int', 'int']" in result
+        assert "'int'" in result and "params" in result
 
     def test_no_return_maps_to_void(self):
         result = gen_spec(SamplePlugin, name="sample")
@@ -247,12 +247,12 @@ class TestGenSpecEdgeCases:
             def method(self, a: int, *args, **kwargs) -> str:
                 pass
         result = gen_spec(VarArgsPlugin, name="varargs")
-        # *args and **kwargs should not appear in param_types
+        # *args and **kwargs should not appear in params
         namespace = {}
         exec(result, namespace)
         vtable = namespace["__ibcext_vtable__"]()
         method_spec = vtable["functions"]["method"]
-        assert method_spec["param_types"] == ["int"]
+        assert method_spec["params"] == [{"name": "a", "type": "int"}]
 
     def test_method_docstring_as_description(self):
         class DocPlugin:

@@ -43,8 +43,6 @@ from core.runtime.vm.handlers._shared import (
 
 def vm_handle_IbConstant(executor, node_uid: str, node_data: Mapping[str, Any]):
     """常量字面量：直接装箱返回。"""
-    if False:
-        yield  # pragma: no cover — 强制 generator function
     return executor.registry.box(executor.ec.resolve_value(node_data.get("value")))
 
 
@@ -54,8 +52,6 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
     若读到的值是 ``LLMFuture``（dispatch-before-use 残留的待解析占位符），
     在此处阻塞解析并写回，使后续读取为 O(1) 命中。
     """
-    if False:
-        yield
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     if not sym_uid:
         name = node_data.get("id")
@@ -289,10 +285,9 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         return result
 
     try:
-        if hasattr(func, "call"):
-            result = func.call(executor.registry.get_none(), args)
-        else:
-            result = func.receive("__call__", args)
+        # 统一走 receive('__call__') 协议分派（base.receive 内置 .call 兜底），
+        # 不再用 hasattr 探测双路径（R2-D4：单一协议分派）。
+        result = func.receive("__call__", args)
         # native 调用返回 Waitable（宿主异步句柄）→ 挂起本根，让调度器等待其完成，
         # 而非阻塞当前线程。恢复后 result 为完成值（如 collect 的 dict）。
         if isinstance(result, Waitable):

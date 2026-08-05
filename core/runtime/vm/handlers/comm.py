@@ -60,8 +60,6 @@ def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
 
 def vm_handle_IbChannelExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``chan(T, mode=..., buffer=...)`` 构造 Channel 值对象。"""
-    if False:
-        yield  # 保持生成器身份（VM CPS 契约：handler 必须为 generator）
     mode = node_data.get("mode", "message")
     buffer = node_data.get("buffer", 0)
     name = node_data.get("name")

@@ -24,8 +24,6 @@ from core.runtime.vm.handlers._shared import (
 
 def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``@`` / ``@!`` 单次意图注释节点的执行路径。"""
-    if False:
-        yield
     intent_info_uid = node_data.get("intent")
     if not intent_info_uid:
         return executor.registry.get_none()
@@ -41,8 +39,6 @@ def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str
 
 def vm_handle_IbIntentStackOperation(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``@+`` / ``@-`` 意图栈操作：与 StmtHandler.visit_IbIntentStackOperation 同。"""
-    if False:
-        yield
     intent_info_uid = node_data.get("intent")
     if not intent_info_uid:
         return executor.registry.get_none()
@@ -87,8 +83,6 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     由 ``vm_handle_IbAssign`` 在识别到 RHS 为本节点且 ``dispatch_eligible=True``
     时调用，避免 LLMFuture 占位符泄漏到非赋值上下文。
     """
-    if False:
-        yield
     is_callable_instance = node_data.get("is_callable_instance")
 
     intent_uid = node_data.get("intent")
@@ -141,8 +135,6 @@ def vm_handle_IbBehaviorInstance(executor, node_uid: str, node_data: Mapping[str
     segments 为字面字符串与 ext_ref dicts，不含子表达式 UID，故无需 yield。
     逻辑与 ExprHandler.visit_IbBehaviorInstance 完全对应，但走 VM 路径。
     """
-    if False:
-        yield
     segments = node_data.get("segments", [])
     target_type_name = node_data.get("target_type_name", "")
 
@@ -206,11 +198,9 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
       对种子再做一次深克隆，作为该次调用的私有副本注入子作用域——确保 snapshot
       作为**无状态、可重入**的可调用实例存在，多次调用之间彼此独立。
 
-    body 节点在 lambda 被调用时才执行，此处无需 yield——handler 为 generator
-    function（``if False: yield``）满足 VMExecutor 调度协议。
+    body 节点在 lambda 被调用时才执行，此处为纯 return handler，
+    由 VMExecutor 中央化包装为生成器。
     """
-    if False:
-        yield
     params_uids: List[str] = list(node_data.get("params") or [])
     body_uid = node_data.get("body")
     capture_mode = node_data.get("capture_mode") or "lambda"

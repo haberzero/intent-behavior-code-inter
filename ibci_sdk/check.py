@@ -128,10 +128,18 @@ def check_plugin(plugin_dir: str) -> CheckResult:
                 if not isinstance(fspec, dict):
                     errors.append(f"vtable function '{fname}' spec must be a dict")
                     continue
-                if "param_types" not in fspec:
-                    warnings.append(f"vtable function '{fname}' missing 'param_types'")
-                elif not isinstance(fspec["param_types"], list):
-                    errors.append(f"vtable function '{fname}' 'param_types' must be a list")
+                if "params" not in fspec:
+                    warnings.append(f"vtable function '{fname}' missing 'params'")
+                elif not isinstance(fspec["params"], list):
+                    errors.append(f"vtable function '{fname}' 'params' must be a list")
+                elif not all(
+                    isinstance(p, dict) and "name" in p and "type" in p
+                    for p in fspec["params"]
+                ):
+                    errors.append(
+                        f"vtable function '{fname}' 'params' must be a list of "
+                        "{{'name': str, 'type': str}} descriptors"
+                    )
                 if "return_type" not in fspec:
                     warnings.append(f"vtable function '{fname}' missing 'return_type'")
                 elif not isinstance(fspec["return_type"], str):
@@ -182,9 +190,9 @@ def check_plugin(plugin_dir: str) -> CheckResult:
             if not callable(py_func):
                 errors.append(f"'{fname}' exists but is not callable")
                 continue
-            # 参数数量检查
-            if isinstance(fspec, dict) and "param_types" in fspec:
-                expected_count = len(fspec["param_types"])
+            # 参数数量检查（新格式 `params`：具名参数描述符列表）
+            if isinstance(fspec, dict) and "params" in fspec:
+                expected_count = len(fspec["params"])
                 sig = inspect.signature(py_func)
                 fixed_params = [
                     p for k, p in sig.parameters.items()

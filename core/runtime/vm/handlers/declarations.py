@@ -30,10 +30,8 @@ def vm_handle_IbImport(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     内联 ``ImportHandler.visit_IbImport`` 逻辑：通过 ``module_manager``
     加载模块并调用 ``runtime_context.define_variable`` 绑定到当前作用域。
-    ``if False: yield`` 满足调度协议（维持生成器签名）。
+    纯 return handler，由 VMExecutor 中央化包装为生成器。
     """
-    if False:
-        yield
     sc = executor.service_context
     for alias_uid in node_data.get("names", []):
         alias_data = executor.ec.get_node_data(alias_uid)
@@ -54,10 +52,8 @@ def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]
 
     内联 ``ImportHandler.visit_IbImportFrom`` 逻辑：收集名称列表后调用
     ``module_manager.import_from``，由其负责把符号注入当前作用域。
-    无 yield——``if False: yield`` 满足调度协议。
+    纯 return handler，由 VMExecutor 中央化包装为生成器。
     """
-    if False:
-        yield
     sc = executor.service_context
     names = []
     for alias_uid in node_data.get("names", []):
@@ -77,8 +73,6 @@ def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any
     当函数包含 nonlocal 声明时（free_vars 非空），构建 Cell 闭包
     使得返回后的函数仍能读写外层变量（与 lambda 闭包机制对齐）。
     """
-    if False:
-        yield
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
     func = IbUserFunction(node_uid, executor.ec, spec=declared_type)
@@ -106,8 +100,6 @@ def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any
 
 def vm_handle_IbLLMFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):
     """LLM 函数定义：在当前作用域绑定 IbLLMFunction。"""
-    if False:
-        yield
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
     func = IbLLMFunction(node_uid, executor.ec, spec=declared_type)
@@ -125,8 +117,6 @@ def vm_handle_IbClassDef(executor, node_uid: str, node_data: Mapping[str, Any]):
     仅做契约校验并绑定到当前作用域。校验失败时抛 RuntimeError（与原 handler
     的 self.report_error 等价的"严格模式"）。
     """
-    if False:
-        yield
     name = node_data.get("name")
     existing_class = executor.registry.get_class(name)
     if not existing_class:

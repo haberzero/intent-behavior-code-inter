@@ -311,8 +311,9 @@ class TestG3DictValuesKeys:
         )
         values_spec = reg.resolve_member(dict_si, "values")
         assert values_spec is not None
-        assert values_spec.return_type.head == "list[int]", (
-            f"Expected 'list[int]', got '{values_spec.return_type.head}'"
+        rt = values_spec.return_type
+        assert rt.head == "list" and rt.args and rt.args[0].head == "int", (
+            f"Expected structured list[int], got '{rt}'"
         )
 
     def test_keys_return_type_is_list_of_key_type(self):
@@ -323,8 +324,9 @@ class TestG3DictValuesKeys:
         )
         keys_spec = reg.resolve_member(dict_si, "keys")
         assert keys_spec is not None
-        assert keys_spec.return_type.head == "list[str]", (
-            f"Expected 'list[str]', got '{keys_spec.return_type.head}'"
+        rt = keys_spec.return_type
+        assert rt.head == "list" and rt.args and rt.args[0].head == "str", (
+            f"Expected structured list[str], got '{rt}'"
         )
 
     def test_unspecialized_dict_values_stays_list(self):
@@ -336,22 +338,32 @@ class TestG3DictValuesKeys:
         assert values_spec.return_type.head == "list"
 
     def test_values_list_spec_is_registered(self):
-        """After resolving dict[str,int].values(), list[int] should be in registry."""
+        """After resolving dict[str,int].values(), the list[int] TypeRef resolves
+        to a registered specialization (lazy build via resolve_typeref)."""
         reg = make_registry()
         dict_si = reg.resolve_specialization(
             reg.resolve("dict"), [reg.resolve("str"), reg.resolve("int")]
         )
-        reg.resolve_member(dict_si, "values")
-        assert reg.resolve("list[int]") is not None, "list[int] should be registered after values() resolution"
+        values_spec = reg.resolve_member(dict_si, "values")
+        assert values_spec is not None
+        resolved = reg.resolve_typeref(values_spec.return_type)
+        assert resolved is not None and resolved.name == "list[int]", (
+            "list[int] should resolve after values() resolution"
+        )
 
     def test_keys_list_spec_is_registered(self):
-        """After resolving dict[str,int].keys(), list[str] should be in registry."""
+        """After resolving dict[str,int].keys(), the list[str] TypeRef resolves
+        to a registered specialization (lazy build via resolve_typeref)."""
         reg = make_registry()
         dict_si = reg.resolve_specialization(
             reg.resolve("dict"), [reg.resolve("str"), reg.resolve("int")]
         )
-        reg.resolve_member(dict_si, "keys")
-        assert reg.resolve("list[str]") is not None, "list[str] should be registered after keys() resolution"
+        keys_spec = reg.resolve_member(dict_si, "keys")
+        assert keys_spec is not None
+        resolved = reg.resolve_typeref(keys_spec.return_type)
+        assert resolved is not None and resolved.name == "list[str]", (
+            "list[str] should resolve after keys() resolution"
+        )
 
 
 # ===========================================================================

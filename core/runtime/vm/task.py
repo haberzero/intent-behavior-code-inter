@@ -6,12 +6,6 @@ VMTask
 * ``node_uid``  —— 当前帧对应的 AST 节点 uid
 * ``generator`` —— Python 生成器协程，按 yield 协议表达节点求值的连续性
 
-VMTaskResult
-------------
-* DONE(value)         —— 任务完成，值返回给上游帧
-* SUSPEND(child_uid)  —— 任务挂起，等待子节点求值完成
-* SIGNAL(signal,val)  —— 触发控制流信号（return/break/continue/throw）
-
 Signal 控制信号语义
 ------------------
 控制流不再依赖 Python 异常跨帧传播，而是用
@@ -40,41 +34,6 @@ from core.runtime.shared.signals import (
     Signal,
     UnhandledSignal,
 )
-
-
-@dataclass
-class VMTaskResult:
-    """调度结果数据对象。
-
-    SIGNAL 形态由 :class:`Signal` 数据对象在生成器返回值中直接承担，
-    本数据类作为公开类型标签（含 ``DONE`` / ``SUSPEND`` / ``SIGNAL``）。
-    """
-    kind: str  # "done" | "suspend" | "signal"
-    value: Any = None
-
-    @classmethod
-    def DONE(cls, value: Any = None) -> "VMTaskResult":
-        return cls("done", value)
-
-    @classmethod
-    def SUSPEND(cls, child_uid: str) -> "VMTaskResult":
-        return cls("suspend", child_uid)
-
-    @classmethod
-    def SIGNAL(cls, signal: ControlSignal, value: Any = None) -> "VMTaskResult":
-        return cls("signal", (signal, value))
-
-    @property
-    def is_done(self) -> bool:
-        return self.kind == "done"
-
-    @property
-    def is_suspend(self) -> bool:
-        return self.kind == "suspend"
-
-    @property
-    def is_signal(self) -> bool:
-        return self.kind == "signal"
 
 
 @dataclass

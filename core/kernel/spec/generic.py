@@ -318,21 +318,9 @@ def _resolve_member_dict(registry: "SpecRegistry", spec: "TypeDef", attr_name: s
     if val.head != "any" and attr_name in ("pop", "get"):
         return MemberSpecialization(return_type=val)
     if attr_name == "values" and val.head != "any":
-        list_v_name = f"list[{val.head}]"
-        if not registry.resolve(list_v_name):
-            list_base = registry.resolve("list")
-            elem_spec = registry.resolve(val.head) or registry.resolve("any")
-            if list_base and elem_spec:
-                registry.resolve_specialization(list_base, [elem_spec])
-        return MemberSpecialization(return_type=TypeRef.of(list_v_name))
+        return MemberSpecialization(return_type=TypeRef.generic("list", val))
     if attr_name == "keys" and key.head != "any":
-        list_k_name = f"list[{key.head}]"
-        if not registry.resolve(list_k_name):
-            list_base = registry.resolve("list")
-            key_spec = registry.resolve(key.head) or registry.resolve("any")
-            if list_base and key_spec:
-                registry.resolve_specialization(list_base, [key_spec])
-        return MemberSpecialization(return_type=TypeRef.of(list_k_name))
+        return MemberSpecialization(return_type=TypeRef.generic("list", key))
     return None
 
 
@@ -354,7 +342,7 @@ def _resolve_member_thread(registry: "SpecRegistry", spec: "TypeDef", attr_name:
     """``thread[T]`` 成员特化：``join() → thread_result[T]``（join 结果容器）。"""
     val = spec.value_type
     if val.head != "any" and attr_name == "join":
-        return MemberSpecialization(return_type=TypeRef.of(f"thread_result[{val.head}]", val.module))
+        return MemberSpecialization(return_type=TypeRef.generic("thread_result", val))
     return None
 
 
@@ -364,7 +352,7 @@ def _resolve_member_thread_result(registry: "SpecRegistry", spec: "TypeDef", att
     if val.head == "any":
         return None
     if attr_name == "unwrap":
-        return MemberSpecialization(return_type=TypeRef.of(f"Optional[{val.head}]", val.module))
+        return MemberSpecialization(return_type=TypeRef.generic("Optional", val))
     if attr_name in ("unwrap_or", "expect"):
         return MemberSpecialization(return_type=val)
     return None

@@ -25,11 +25,11 @@ core.runtime.vm.vm_executor — VM 调度循环主类。
 ``Interpreter.execute_module()`` 和 ``IbUserFunction.call()`` 以本执行器为主路径。
 """
 from __future__ import annotations
+import inspect
 from typing import Any, Optional
 
 from core.runtime.vm.task import (
     VMTask,
-    VMTaskResult,
     ControlSignal,
     UnhandledSignal,
     Signal,
@@ -315,7 +315,11 @@ class VMExecutor:
     def _make_task(self, node_uid: str) -> VMTask:
         node_data = self._ec.get_node_data(node_uid)
         if not node_data:
-            return self._make_const_task(node_uid, self.registry.get_none())
+            # 调用方已通过 supports() 排除，不应到达——fail-fast。
+            raise RuntimeError(
+                f"VMExecutor: missing node data for uid={node_uid!r} "
+                "(supports() should have filtered it)"
+            )
         node_type = node_data.get("_type")
         handler = self._dispatch.get(node_type)
         if handler is None:
@@ -324,12 +328,12 @@ class VMExecutor:
                 f"VMExecutor: no CPS handler for node type {node_type!r} "
                 f"(uid={node_uid})"
             )
+        if not inspect.isgeneratorfunction(handler):
+            # 非生成器 handler（纯 return 值）：中央化包装为生成器，
+            # 消除各 handler 内的 ``if False: yield`` 身份 hack（R2-D5）。
+            def _gen(h=handler):
+                return h(self, node_uid, node_data)
+                yield  # pragma: no cover
+            return VMTask(node_uid=node_uid, generator=_gen())
         gen = handler(self, node_uid, node_data)
         return VMTask(node_uid=node_uid, generator=gen)
-
-    def _make_const_task(self, node_uid: str, value: Any) -> VMTask:
-        """把一个已知值包装成立即完成的任务（用于缺失节点数据场景）。"""
-        def _gen():
-            return value
-            yield  # pragma: no cover
-        return VMTask(node_uid=node_uid, generator=_gen())
