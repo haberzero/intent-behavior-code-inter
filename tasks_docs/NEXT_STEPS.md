@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-04（通信领域设计完善三阶段全部完成；下一主线待定/详见 PENDING_TASKS）
+> **最后更新**：2026-08-04（通信领域设计完善三阶段 + 收尾 L1-L4 + 泛型成员特化协议化全部完成；下一主线待定/详见 PENDING_TASKS）
 
 ---
 
@@ -17,16 +17,16 @@
 > **修复路径（三阶段，全部完成 ✅ 2026-08-04）**：
 > - **阶段 1（commit e217b8b）**：B1 thread_result 序列化往返 / B2 循环导入 / B4 except:pass 兜底（1457 passed）
 > - **阶段 2（commit f3037b2；设计见 STAGE2_VALUE_OBJECT_UNIFICATION.md）**：D1 instantiate 挂钩 / D2 thread 槽位化 / D3 thread_result IbValue / D4 ThreadStatus 单一枚举 / D5 G4 机制诚实化（1464 passed）
-> - **阶段 3（commit 1da0b1c + 2c49240）**：
->   - G3 TASK→THREAD kind 清理
->   - G5 协调器访问器移入 coordinator.py（线程领域归属）
->   - G6 通信 Signal 抽象移除（零消费者空壳 + 与 VM 控制流 Signal 撞名，裁定见 WORKLOG 会话 8）
->   - G7 pubsub 语言层打通（IbChannel.subscribe + IbSubscriber）+ send_nowait 无订阅者语义 + 订阅缓存可配置 + 补发 send_nowait 语言面（曾未声明）
->   - 全量 pytest 1464 passed / 4 skipped
+> - **阶段 3（commit 1da0b1c + 2c49240）**：G3 TASK→THREAD kind 清理 / G5 协调器归位 / G6 通信 Signal 移除 / G7 pubsub 语言层打通 + send_nowait 语义 + 订阅缓存（1464 passed）
 >
-> **遗留记录（后续窗口）**：chan/slot/subscriber 序列化空壳（瞬态通信对象存根，见 WORKLOG 会话 8）；运行时泛型身份全系统有损（会话 7）。
+> **收尾（✅ 2026-08-04）**：
+> - 待复核登记（PENDING_REVIEW_ITEMS.md）+ thread 隐患深度调查（THREAD_ARCH_HARDCODE_INVESTIGATION.md，确认根因=泛型成员特化机制缺失）
+> - L1 _by_kind 索引彻底删除 / L3 序列化 done 字面量统一 / L4 SpawnedTask Waitable 残留清理（commit 149dd63）
+> - **L2 根治：泛型成员特化协议化**（commit 8e0ada9，设计见 MEMBER_SPECIALIZATION_UNIFICATION.md）——resolve_member per-type 级联收敛为 GenericTypeDeclaration 声明回调；全量 pytest 1465 passed / 4 skipped
 >
-> **下一主线**：待定。可选方向见 `PENDING_TASKS.md`（§二 L3 异步剩余 async 函数/生成器、§三 PT-4.3 语言级协程完整形态等）。
+> **遗留记录（后续窗口）**：chan/slot/subscriber 序列化空壳（L6）；运行时泛型身份全系统有损（L7）；kernel 构造机制统一（T 建议 2，暂缓）。
+>
+> **下一主线**：待定。可选项：L6 瞬态序列化协议化 / L7 泛型身份评估 / 语言级协程（PENDING_TASKS §二、§三 PT-4.3）。
 
 ---
 

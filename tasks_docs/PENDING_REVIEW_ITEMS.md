@@ -22,7 +22,7 @@
 | # | 内容 | 位置/现状 | 处置建议 |
 |---|------|----------|---------|
 | L1 | **B3 `_by_kind` 索引有损** | ✅ **已完成（commit 149dd63）**——彻底删除 `_by_kind`/`get_by_kind`（kind 不唯一有损 + 生产零调用死代码），测试改按名 `get(name)`；未来按 kind 分发的正确形态（多值索引 + 声明驱动）记录于 class docstring | 已删除 |
-| L2 | **根因 4：join/cancel 返回 `any` 兜底** | `ThreadAxiom` `"join"/"cancel" ret="any"`（`axioms/primitives/comm.py:45-46`），仅靠 `_members.py` per-type if/elif 级联补救 | **已立项为下一主线**：泛型成员特化协议化（见 `MEMBER_SPECIALIZATION_UNIFICATION.md`） |
+| L2 | **根因 4：join/cancel 返回 `any` 兜底** | ✅ **已完成（commit 8e0ada9）**——泛型成员特化协议化根治：`resolve_member` 级联收敛为 `GenericTypeDeclaration` 声明回调；`any` 成为声明层合法默认，精确化由机制承担。设计见 `MEMBER_SPECIALIZATION_UNIFICATION.md` | 已根治 |
 | L3 | **G2 未完全兑现**：序列化端 `"done"` 字面量 | ✅ **已完成（commit 149dd63）**——`runtime_serializer.py` thread_result 分支改用 `ThreadStatus.DONE`（序列化+反序列化） | 已修复 |
 | L4 | **SpawnedTask "结构性满足 Waitable" 注释残留** | ✅ **已完成（commit 149dd63）**——`result()` 死方法删除（全仓零消费者），docstring 明确"不满足 Waitable"（async/thread 彻底分离） | 已清理 |
 | L5 | **G1 残留：值对象承载未完全统一** | `IbOptional` 双载（`_inner`+payload）；`IbChannel`/`IbSubscriber` 的 core/view 槽模式未并入统一承载 | 后续值对象统一窗口评估 |
@@ -54,3 +54,7 @@
 > 调查结论摘要：用户观察**确认成立**。thread 有 5 处特有突兀分支（A1-A5）+ 公理构造机制双轨；
 > 但系统层隐患归因为**泛型成员特化机制缺失**（`_members.py` per-type 级联，list/dict/Optional/thread 通用模式），
 > 非 thread 独立病灶。完整分析见 `THREAD_ARCH_HARDCODE_INVESTIGATION.md`。
+>
+> **建议落地状态**：建议 1（成员特化协议化）✅ 已落地（commit 8e0ada9，根治 L2/T1）；
+> 建议 4（公理返回类型正确化）✅ 以机制化满足（any 为声明层合法默认）；建议 2（kernel 构造机制统一）
+> 与建议 3（瞬态序列化协议化 = L6）仍待用户裁定。

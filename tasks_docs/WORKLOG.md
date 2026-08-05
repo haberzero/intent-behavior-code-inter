@@ -6,6 +6,49 @@
 
 ---
 
+## 2026-08-04 会话 9：待复核登记 + thread 隐患调查 + L1/L3/L4 清理 + 泛型成员特化协议化
+
+### 背景
+
+三阶段主线完成后，用户要求：①记录未做工作待逐个处理；②调查"通用流程中针对 thread 的突兀硬编码分支 + 类型系统/公理体系隐患"；③对"废弃记录但不删除也不根本修复"明确反对；④处置 L1（_by_kind）并立刻开启下一步任务。
+
+### 产出 1：待复核登记 + 隐患调查
+
+- `tasks_docs/PENDING_REVIEW_ITEMS.md`：登记 R1-R5（未做审查）/ L1-L7（review 遗留）/ D1-D5（docs 未同步）/ T1-T3（thread 隐患线索）。
+- `tasks_docs/THREAD_ARCH_HARDCODE_INVESTIGATION.md`：深度调查结论——
+  - **用户观察确认成立**：thread 特有突兀分支 5 处（A1-A5：serializer 瞬态存根/thread_result 分支/_thread_init 手工构造/instantiate 挂钩/普通调用构造路径）；公理构造机制三轨并存；瞬态序列化处理不对称。
+  - **系统层根因**：统一泛型模型半落地——`resolve_member` 泛型成员特化未协议化，`_members.py` per-type if/elif 级联（list/dict/Optional/thread 通用模式）。thread 是症状暴露最充分的成员，非独立病灶。
+
+### 产出 2：L1/L3/L4 处置（commit 149dd63，遵循"不删也不修=不可接受"）
+
+- **L1（B3）_by_kind 彻底删除**：`GenericTypeRegistry` 删 `_by_kind`/`get_by_kind`（kind 不唯一：fn_callable/behavior 共享 CALLABLE_INSTANCE → 覆盖有损；生产零调用死代码）。测试改按名 `get(base_name)`。未来按 kind 分发的正确形态（多值索引+声明驱动）记录于 class docstring。
+- **L3**：serializer thread_result 分支 `"done"` 字面量改用 `ThreadStatus.DONE`（G2 单一权威源兑现）。
+- **L4**：`SpawnedTask.result()` 死方法删除（全仓零消费者），docstring 明确"不满足 Waitable"（async/thread 彻底分离）——清理"结构性 Waitable 残留"。
+
+### 产出 3：下一主线——泛型成员特化协议化（commit 8e0ada9）
+
+- **设计**：`tasks_docs/MEMBER_SPECIALIZATION_UNIFICATION.md`。`GenericTypeDeclaration` 新增可选 `resolve_member` 声明回调 + `MemberSpecialization` 值对象；`_members.py` 移除 per-type 级联改查注册表。
+- **实施**：独立分支 `member-spec-unify` 验证（全量 1465 passed 零回归）后手动应用（未 merge），分支删除。
+- **关键点**：
+  - 特化逻辑（list pop/append、dict pop/values/keys、Optional unwrap/or_else、thread join、thread_result unwrap 等）原样迁移至 generic.py 声明回调，含 dict.values/keys 的 `resolve_specialization(list[V])` 副作用（回调带 registry 参数）。
+  - 公理层不动：`join/cancel ret="any"` 是**声明层合法默认**（泛型参数不可知），精确化由声明回调机制承担——"禁止 any 兜底"裁定以机制化满足，L2 根治。
+  - 既有 32 条成员特化测试全绿证明行为保留；+1 机制锁定测试。
+
+### 测试与验证
+
+- 每批全量 `python -m pytest tests/` 零回归。最终 **1465 passed / 4 skipped**。
+
+### 决策记录
+
+- **"不删也不修 = 不可接受"原则**（用户明确）：任何有缺陷/冗余的机制，处置只有"根本修复"或"彻底删除"两档，禁止"废弃记录"中间态。本会话 L1 采用删除（死代码+有损），L4 采用清理（死方法删除）。
+- **泛型成员特化协议化采用独立分支**：触碰 resolve_member 语义核心，按分支政策实验后手动应用。
+
+### 待决
+
+- 无。L2 已根治；T 建议 2（kernel 构造机制统一）仍暂缓；L6/L7 待用户裁定。
+
+---
+
 ## 2026-08-04 会话 8：阶段 3 通信领域设计完善（G3/G5/G6/G7）
 
 ### 背景
