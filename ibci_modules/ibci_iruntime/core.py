@@ -148,10 +148,7 @@ class IRuntimeLib:
         store = rc._comm_config_store
         if store is None:
             store = ConfigStore()
-            try:
-                rc._comm_config_store = store
-            except Exception:
-                pass
+            rc._comm_config_store = store
         return store
 
     # ------------------------------------------------------------------
@@ -164,10 +161,7 @@ class IRuntimeLib:
         bus = rc._comm_event_bus
         if bus is None:
             bus = EventBus()
-            try:
-                rc._comm_event_bus = bus
-            except Exception:
-                pass
+            rc._comm_event_bus = bus
         return bus
 
     # ------------------------------------------------------------------

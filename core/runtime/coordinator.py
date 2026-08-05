@@ -336,13 +336,9 @@ class RuntimeCoordinator:
 
     def _schedule_cleanup(self, task: SpawnedTask) -> None:
         """在任务完成回调中移除自身（防泄漏）。"""
-        try:
-            task._future.add_done_callback(
-                lambda fut: self.cleanup(task.handle)
-            )
-        except Exception:
-            # add_done_callback 已取消/完成时不应失败；兜底保护防注册失败。
-            pass
+        task._future.add_done_callback(
+            lambda fut: self.cleanup(task.handle)
+        )
 
     def lookup(self, handle: str) -> Optional[SpawnedTask]:
         with self._lock:

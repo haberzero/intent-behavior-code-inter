@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol
 
 from core.runtime.shared.comm.channel import ChannelCore
+from core.runtime.shared.comm.buffer import CommClosedError
 
 
 # ------------------------------------------------------------------ #
@@ -106,7 +107,7 @@ class ChannelSink:
     def emit(self, event: Dict[str, Any]) -> None:
         try:
             self._channel.send(event)
-        except Exception:
+        except CommClosedError:
             # Channel 已关闭 → 订阅者已退订，忽略
             pass
 

@@ -1,6 +1,7 @@
 from core.base.diagnostics.codes import PAR_EXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.syntax import ID_AUTO
+from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
@@ -113,7 +114,7 @@ class TypeComponent(BaseComponent):
 
             # Parse the callable signature: (type, ...) -> return_type
             return self._parse_fn_signature(fn_token)
-        except Exception:
+        except ParseControlFlowError:
             self.stream.restore_checkpoint(saved_pos)
             return None
 

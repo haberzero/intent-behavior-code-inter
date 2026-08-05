@@ -72,7 +72,7 @@ class NetLib:
                                 timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network GET failed: {e}")
 
     def get_json(self, url: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -84,7 +84,7 @@ class NetLib:
                                 timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.json()
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network GET_JSON failed: {e}")
 
     def post(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> str:
@@ -96,7 +96,7 @@ class NetLib:
                                  timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network POST failed: {e}")
 
     def post_json(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -108,7 +108,7 @@ class NetLib:
                                  timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.json()
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network POST_JSON failed: {e}")
 
     def post_form(self, url: str, data: Dict[str, str], headers: Optional[Dict[str, str]] = None) -> str:
@@ -120,7 +120,7 @@ class NetLib:
                                  timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network POST_FORM failed: {e}")
 
     def put(self, url: str, body: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> str:
@@ -132,7 +132,7 @@ class NetLib:
                                 timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network PUT failed: {e}")
 
     def delete(self, url: str, headers: Optional[Dict[str, str]] = None) -> str:
@@ -144,7 +144,7 @@ class NetLib:
                                    timeout=self._timeout, verify=False)
             resp.raise_for_status()
             return resp.text
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network DELETE failed: {e}")
 
     def head(self, url: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -155,7 +155,7 @@ class NetLib:
             resp = requests.head(url, headers=self._merge_headers(headers),
                                  timeout=self._timeout, verify=False)
             return dict(resp.headers)
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network HEAD failed: {e}")
 
     def get_status_code(self, url: str) -> int:
@@ -166,7 +166,7 @@ class NetLib:
             resp = requests.get(url, headers=self._merge_headers(),
                                 timeout=self._timeout, verify=False, allow_redirects=False)
             return resp.status_code
-        except Exception as e:
+        except requests.RequestException as e:
             raise RuntimeError(f"Network status check failed: {e}")
 
 

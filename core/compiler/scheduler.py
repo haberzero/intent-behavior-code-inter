@@ -272,8 +272,8 @@ class Scheduler(ICompilerService):
             try:
                 tokens = lexer.tokenize()
                 self.token_cache[current_path] = tokens
-            except Exception:
-                # Lexer error reported to issue_tracker
+            except CompilerError:
+                # Lexer 诊断已上报 tracker，跳过该模块（依赖分析继续）。
                 continue
                 
             # 2. Scan Imports using Main Parser (parse_imports_only)
