@@ -25,7 +25,7 @@
 ```ibci
 list[int]          # 整数列表
 list[str]          # 字符串列表
-list[int,str]      # 多类型列表（元素访问返回 any）
+list[any]          # 异构列表（元素访问返回 any；list[int,str] 多类型声明已移除）
 dict[str,int]      # string→int 字典
 dict[str,str]      # string→string 字典
 ```

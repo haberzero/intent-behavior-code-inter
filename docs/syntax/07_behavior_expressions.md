@@ -115,18 +115,18 @@ str r = translate("hello")
 
 #### 完整语法形式（8 种，lambda/snapshot 对称）
 
-返回类型标注写在**表达式侧**（`fn f = lambda -> TYPE: EXPR`）：
+返回类型标注写在**表达式侧**，且**必须声明**（`SEM_MISSING_RETURN_ANNOTATION`，可 `-> TYPE` /
+`-> auto` 推断）：
 
 | 形式 | 语法 |
 |------|------|
-| 无参，无返回类型标注 | `fn f = lambda: EXPR` |
-| 无参，有返回类型标注 | `fn f = lambda -> TYPE: EXPR` |
-| 带参，无返回类型标注 | `fn f = lambda(PARAMS): EXPR` |
-| 带参，有返回类型标注 | `fn f = lambda(PARAMS) -> TYPE: EXPR` |
-| 无参 snapshot | `fn f = snapshot: EXPR` |
-| 无参 snapshot，有返回类型 | `fn f = snapshot -> TYPE: EXPR` |
-| 带参 snapshot | `fn f = snapshot(PARAMS): EXPR` |
-| 带参 snapshot，有返回类型 | `fn f = snapshot(PARAMS) -> TYPE: EXPR` |
+| 无参，返回类型标注/推断 | `fn f = lambda -> TYPE: EXPR` / `fn f = lambda -> auto: EXPR` |
+| 带参，返回类型标注/推断 | `fn f = lambda(PARAMS) -> TYPE: EXPR` / `fn f = lambda(PARAMS) -> auto: EXPR` |
+| 无参 snapshot | `fn f = snapshot -> TYPE: EXPR` / `fn f = snapshot -> auto: EXPR` |
+| 带参 snapshot | `fn f = snapshot(PARAMS) -> TYPE: EXPR` / `fn f = snapshot(PARAMS) -> auto: EXPR` |
+
+> **2026-08-05 收紧**：`fn f = lambda: EXPR`（省略返回标注）现在产生编译错误，必须显式
+> `-> TYPE` 或 `-> auto`（非行为 body 从 body 推断；行为 body 保持 behavior 动态语义）。
 
 其中 `TYPE` 可以是任意类型（包括泛型如 `tuple[int,str]`、`list[str]`，以及用户自定义类名）：
 

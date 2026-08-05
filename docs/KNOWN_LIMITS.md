@@ -191,31 +191,42 @@ class Dog(Animal):
 
 ---
 
-## 七、`auto` / `fn` / `any` 对比
+## 七、`auto` / `fn` / `any` / 裸赋值 对比
 
 | 关键字 | 用途 | 类型推导时机 | 后续赋值限制 |
 |--------|------|------------|------------|
 | `auto x = expr` | 通用类型推导，锁定为首次赋值的实际类型 | 编译期 | 只能赋相同类型 |
 | `fn f = callable` | 可调用类型推导，RHS 必须是可调用的 | 编译期 | 保持可调用约束 |
-| `any x = expr` | 真正的动态类型，不锁定 | 运行时 | 任意类型 |
-| `x = expr`（裸赋值）| 隐式 `any` 语义（不推荐） | 运行时 | 任意类型 |
+| `any x = expr` | 真正的动态类型，不锁定（**唯一**的动态逃生阀） | 运行时 | 任意类型 |
+| `x = expr`（裸赋值）| **等同 `auto`**：从首次赋值推断并锁定 | 编译期 | 只能赋相同类型 |
 
-> **注意**：没有类型标注的裸赋值（`x = expr`）编译器会将变量视为 `any` 类型。
-> 若需要将此变量用于有类型检查的上下文（如赋给 `int y`），**必须使用强制类型转换**：
+> **裸赋值语义（2026-08-05 收紧）**：无类型标注的裸赋值（`x = expr`）现在采用
+> `auto` 语义——编译期从首次赋值推断实际类型并锁定，不再隐式退化为动态 `any`
+> （曾击穿静态类型设计）。异类型重赋现在产生 `SEM_TYPE_MISMATCH`。
+> 需要真正的动态语义时，**必须显式声明 `any`**。
+>
+> **any 逃生后的重处理机制**：`any` 值用于有类型检查的上下文（如赋给 `int y`）时，
+> **运行时强制类型校验**——值类型不匹配即抛 `RUN_TYPE_MISMATCH`，必须先用强制类型
+> 转换（`(int)x`）取得目标类型：
 > ```ibci
-> x = 42
-> int y = (int)x    # 必须显式转换，不能直接赋值
+> any x = 42
+> int y = (int)x    # 强转后安全；直接 `int y = x` 在值类型不匹配时运行时报错
 > ```
 
 ---
 
-## 八、容器多类型声明
+## 八、容器多类型声明（已移除多元素 list）
 
-`list[int, str, list]` 语法允许声明一个可持有多种类型元素的列表。编译器规则：
+**`list[int, str]` 多类型 list 已移除（2026-08-05）**——无 union 类型机制，多元素 list
+的"元素读取返回 any"实为隐式异构，击穿元素类型设计。异构容器必须**显式声明 `list[any]`**，
+否则产生 `SEM_MULTI_TYPE_LIST_REMOVED` 编译错误。`tuple[T1, T2, ...]` 位置元素类型
+（定长异构元组）是合法特性，不受影响。
+
+`list[any]` 显式异构的读取规则（元素读取返回 `any`）：
 
 - **元素读取**（下标访问 / for 迭代）返回 `any` 类型。若需明确类型，必须显式转换：
   ```ibci
-  list[int, str] mixed = [1, "hello"]
+  list[any] mixed = [1, "hello"]
   any val = mixed[0]
   int n = (int)val      # 必须先取到 any，再强制转换
   ```
@@ -255,16 +266,18 @@ lambda(PARAMS)(EXPR)          # 旧括号体形式（PAR_EXPECTED_TOKEN）
 int fn f = lambda: EXPR       # 声明侧返回类型（PAR_INVALID_SYNTAX）
 int fn f = snapshot(int a, int b): EXPR  # 声明侧返回类型（PAR_INVALID_SYNTAX）
 
-# ✅ 正确写法：返回类型标注写在表达式侧
-fn f = lambda: EXPR                          # 无参，返回类型推导
+# ✅ 正确写法：返回类型标注写在表达式侧且必须声明
 fn f = lambda -> int: EXPR                   # 无参，显式返回类型
-fn f = lambda(int x): EXPR                  # 有参，返回类型推导
+fn f = lambda -> auto: EXPR                  # 无参，-> auto 从 body 推断
 fn f = lambda(int x) -> int: EXPR           # 有参，显式返回类型
+fn f = lambda(int x) -> auto: EXPR          # 有参，-> auto 推断
 fn f = snapshot -> int: EXPR                # snapshot，显式返回类型
 fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 ```
 
-声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式已被废弃（产生 PAR_INVALID_SYNTAX），改为在表达式侧通过 `-> TYPE` 标注。
+> **2026-08-05 收紧**：`fn f = lambda: EXPR` 等省略返回标注形式现在产生
+> `SEM_MISSING_RETURN_ANNOTATION` 编译错误（不再静默回填 any），必须显式 `-> TYPE` 或
+> `-> auto`。声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式仍废弃（PAR_INVALID_SYNTAX）。
 
 ---
 

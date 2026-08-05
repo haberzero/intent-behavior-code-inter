@@ -12,30 +12,24 @@ str msg = greet("World")
 print(msg)
 ```
 
-返回类型可以省略，编译器会自动推断（`auto` 语义）：
+**返回类型必须声明（2026-08-05 收紧）**：`func` / `llm` / lambda 缺失返回标注现在产生
+`SEM_MISSING_RETURN_ANNOTATION` 编译错误（不再静默回填 `any` 击穿类型推断）。必须显式
+声明 `-> TYPE`、`-> auto`（从 body 推断）或 `-> any`（显式逃生）：
 
 ```ibci
-func double(int x):          # 省略返回类型，自动推断为 int
+func double(int x) -> auto:      # auto：从 return 推断实际类型（此处 int）
     return x * 2
 
-func say_hello(str name):    # 无 return 语句，推断为 void
+func say_hello(str name) -> void:    # void：无返回值
     print("Hello, " + name)
-```
 
-> **注意**：省略 `-> type` 标注等同于 `-> auto`，编译器从函数体内的 `return` 语句推断实际返回类型。若所有路径均无 `return`，推断为 `void`；若有多条路径返回不同类型，报 `SEM_TYPE_MISMATCH` 错误。
-
-显式返回类型标注：
-
-```ibci
-func add(int a, int b) -> int:
-    return a + b
-
-func log(str msg) -> void:
-    print(msg)
-
-func identity(int x) -> auto:   # 显式 auto，与省略等价
+func identity(int x) -> auto:   # 显式 auto，与显式 TYPE 等价（推断结果）
     return x
 ```
+
+> **`-> auto` 推断规则**：编译器从函数体内的 `return` 语句推断实际返回类型。若所有路径
+> 均无 `return`，推断为 `void`；若有多条路径返回不同类型，报 `SEM_TYPE_MISMATCH` 错误。
+> lambda 的 `-> auto` 从 body 表达式推断（行为体保持 behavior 动态语义）。
 
 **`-> None` 与 `-> void` 的区别**
 
@@ -43,7 +37,8 @@ func identity(int x) -> auto:   # 显式 auto，与省略等价
 |------|------|---------|
 | `-> void` | 函数不产生任何值 | 不可赋值给变量 |
 | `-> None` | 函数显式返回 `None` 值 | 可被赋值给 `any` 变量 |
-| 省略 | 编译器自动推断（`auto`） | 取决于推断结果 |
+| `-> auto` | 从 return/body 推断并锁定 | 取决于推断结果 |
+| 省略 | **编译错误**（`SEM_MISSING_RETURN_ANNOTATION`） | — |
 
 ```ibci
 func cleanup(str path) -> None:
@@ -155,7 +150,7 @@ func double(int x) -> int:
 fn f = double           # 持有函数引用
 int r = f(5)            # 10
 
-fn g = lambda: 42       # 持有无参 lambda
+fn g = lambda -> auto: 42   # 持有无参 lambda（-> auto 推断为 int）
 auto v = g()            # 42
 
 fn h = lambda(int x) -> int: x * 2   # 带表达式侧返回类型标注，带参 lambda

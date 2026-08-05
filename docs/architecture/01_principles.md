@@ -211,7 +211,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 | 问题 | 说明 |
 |------|------|
-| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析已通过 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 修复；内建名防御和推断规则缺失仍保留为允许的职责分离型回退 |
+| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析已通过 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 修复；内建名防御和推断规则缺失仍保留为允许的职责分离型回退。**2026-08-05 类型强化**：未标注可调用（func/llm/lambda）现为 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值改为 `auto` 推断锁定（不再隐式 any）；多类型 `list[int,str]` 移除（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
 | **LazySpec 异常情况** | `resolve()` 失败时应抛出错误而非返回占位符 |
 
 **关于 LazySpec 的说明**：
