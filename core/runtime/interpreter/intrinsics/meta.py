@@ -1,6 +1,5 @@
-from typing import Any, List, Optional
-from core.runtime.objects.kernel import IbObject, IbNativeFunction
-from core.runtime.interfaces import ServiceContext
+from typing import Any
+from core.runtime.objects.kernel import IbObject
 
 def register_meta(manager: Any, execution_context: Any, service_context: Any):
     """注册元编程/内核信息相关内置函数"""
