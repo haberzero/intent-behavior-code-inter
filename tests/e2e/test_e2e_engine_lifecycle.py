@@ -135,7 +135,8 @@ class TestEngineRootDirContract:
     def test_run_string_without_explicit_root_raises(self, tmp_path):
         """run_string 无真实 entry_file；无显式 root 时必须报错（无可默认的 entry_dir）。"""
         eng = IBCIEngine(auto_sniff=False)  # 无 root
-        with pytest.raises(Exception):  # InterpreterError
+        from core.kernel.issue import InterpreterError
+        with pytest.raises(InterpreterError):
             eng.run_string('str x = "hi"\n', silent=True)
 
     def test_run_string_with_explicit_root_succeeds(self):

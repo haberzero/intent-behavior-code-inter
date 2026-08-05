@@ -499,9 +499,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             self.debugger.output_callback = output_callback
 
         if not os.path.exists(abs_entry):
-            if not silent:
-                print(f"Error: Entry file not found: {abs_entry}")
-            return False
+            # 统一错误语义：入口缺失与编译错误一样显式抛出（fail-fast），
+            # 不再静默返回 False（调用方无法区分"运行成功"与"文件缺失"）。
+            raise FileNotFoundError(f"Entry file not found: {abs_entry}")
 
         try:
             artifact = self.compile(abs_entry, variables, silent=silent)

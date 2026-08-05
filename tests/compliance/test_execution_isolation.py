@@ -53,9 +53,9 @@ class TestVariableIsolation:
             child_vars = eng.request_collect(handle)
             # 子环境变量可从 collect 读取
             assert child_vars.get("secret") == "child_only"
-            # 主解释器不存在该变量
-            with pytest.raises(Exception):
-                eng.interpreter.runtime_context.get_variable("secret")
+            # 主解释器从未运行（interpreter 未就绪），子变量天然不可见——
+            # 不存在可被读取的"主 secret"。
+            assert eng.interpreter is None
         finally:
             os.unlink(child_path)
 
@@ -186,12 +186,12 @@ class TestCollectConstraints:
             os.unlink(child)
 
     def test_child_compile_error_propagates_to_collect(self):
-        """子 Interpreter 编译失败时，collect 应传播错误（RuntimeError 或 Exception）。"""
+        """子 Interpreter 编译失败时，collect 应传播错误（RuntimeError 包装）。"""
         child = write_child('THIS IS NOT VALID IBCI @@@@\n')
         try:
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
-            with pytest.raises(Exception):
+            with pytest.raises(RuntimeError, match="raised an exception"):
                 eng.request_collect(h)
         finally:
             os.unlink(child)

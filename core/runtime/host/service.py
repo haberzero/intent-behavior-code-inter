@@ -176,11 +176,9 @@ class HostService(IHostService):
         for name in self.interop.get_all_package_names():
             pkg = self.interop.get_package(name)
             if pkg and isinstance(pkg, IbStatefulPlugin):
-                try:
-                    plugin_states[name] = pkg.save_plugin_state()
-                except Exception as e:
-                    # 插件状态保存失败不中断快照，但需要记录
-                    plugin_states[name] = {"__save_error__": str(e)}
+                # 显式持久化契约：插件状态保存失败必须暴露（fail-fast），
+                # 不静默降级为哨兵——否则 save_state 用户无感知地丢数据。
+                plugin_states[name] = pkg.save_plugin_state()
         if plugin_states:
             snapshot["plugin_states"] = plugin_states
         return snapshot
@@ -209,15 +207,12 @@ class HostService(IHostService):
                 # 强制覆盖常量符号
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
 
-        # 3. 恢复有状态插件的内部状态
+        # 3. 恢复有状态插件的内部状态（fail-fast：恢复失败必须暴露，不静默跳过）
         if plugin_states:
             for name, saved in plugin_states.items():
                 pkg = self.interop.get_package(name)
-                if pkg and isinstance(pkg, IbStatefulPlugin) and "__save_error__" not in saved:
-                    try:
-                        pkg.restore_plugin_state(saved)
-                    except Exception as e:
-                        core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"restore_plugin_state failed for '{name}', skipping: {e!r}")
+                if pkg and isinstance(pkg, IbStatefulPlugin):
+                    pkg.restore_plugin_state(saved)
 
     def run_isolated(self, path: str, policy: Dict[str, Any]) -> "HostAwaitable":
         """

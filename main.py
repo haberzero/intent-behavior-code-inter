@@ -142,8 +142,12 @@ def main():
                     cli_variables[k] = v
 
         # 运行引擎
-        success = engine.run(args.file, variables=cli_variables)
-        sys.exit(0 if success else 1)
+        try:
+            engine.run(args.file, variables=cli_variables)
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        sys.exit(0)
 
     elif args.command == "check":
         success = engine.check(args.file)

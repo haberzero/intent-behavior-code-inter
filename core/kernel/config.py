@@ -44,8 +44,6 @@ class IbciConfig:
             raise ValueError(
                 f"Invalid {cls.CONFIG_FILENAME}: malformed JSON at {path}: {e}"
             ) from e
-        except OSError:
-            return {}
 
     @classmethod
     def plugin_paths(cls, config: Dict[str, Any], project_root: str) -> List[str]:

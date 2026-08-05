@@ -515,19 +515,26 @@ class RuntimeDeserializer:
 
     def _deserialize_value(self, val: Any) -> Any:
         if isinstance(val, str):
-            if val.startswith("inst_"):
+            # 引用解析守卫：仅当字符串确实是本池中的引用 UID 才按引用解析，
+            # 否则视为普通字面量——避免用户数据撞 inst_/intent_ 前缀被误判
+            # 为引用（此前 `"inst_userdata"` 未在池中也会 KeyError）。
+            if val.startswith("inst_") and (val in self.instance_pool or val in self.instance_cache):
                 return self._get_instance(val)
-            if val.startswith("intent_") and not val.startswith("intentctx_"):
+            if val.startswith("intent_") and not val.startswith("intentctx_") and (
+                val in self.intent_pool or val in self.intent_cache
+            ):
                 return self._get_intent_node(val)
-            if val.startswith("intentctx_"):
+            if val.startswith("intentctx_") and (
+                val in self.instance_pool or val in self.intent_ctx_cache
+            ):
                 return self._get_intent_context(val)
-            
+
         if isinstance(val, dict) and val.get("_type") == "ext_ref":
             uid = val.get("uid")
             if uid in self.asset_pool:
                 return self.asset_pool[uid]
             return f"__EXT_ASSET_MISSING_{uid}__"
-            
+
         return val
 
     def _get_instance(self, uid: str) -> IbObject:
@@ -675,13 +682,13 @@ class RuntimeDeserializer:
             try:
                 mode = IntentMode(data.get("mode", "+"))
             except Exception as e:
-                core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"deserialize intent mode '{data.get('mode')}' invalid, defaulting APPEND: {e!r}")
-                mode = IntentMode.APPEND
+                # 序列化端恒写合法 .value；异常只来自损坏/版本漂移数据。
+                # 静默降级会改变意图语义（OVERRIDE→APPEND）——fail-fast 显式暴露。
+                raise ValueError(f"deserialize intent mode {data.get('mode')!r} invalid: {e!r}") from e
             try:
                 role = IntentRole(data.get("role", "block"))
             except Exception as e:
-                core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"deserialize intent role '{data.get('role')}' invalid, defaulting BLOCK: {e!r}")
-                role = IntentRole.BLOCK
+                raise ValueError(f"deserialize intent role {data.get('role')!r} invalid: {e!r}") from e
             segments_raw = data.get("segments") or []
             segments = [self._deserialize_value(s) for s in segments_raw]
             obj = IbIntent(
