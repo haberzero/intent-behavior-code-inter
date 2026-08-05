@@ -3,7 +3,7 @@
 > 本文档记录**暂时搁置但经过验证仍有有效性的规划**。
 > 当前最紧要项见 `tasks_docs/NEXT_STEPS.md`。
 >
-> **最后更新**：2026-08-05（R1/R2 复核审查完成；当前最紧要 = R3 异味扫描，见 NEXT_STEPS.md）
+> **最后更新**：2026-08-05（PT-ARCH-31/32/33/34 + PT-SMELL-R3 全部处置完成；当前最紧要见 NEXT_STEPS.md）
 
 ---
 
@@ -236,10 +236,17 @@
 
 > `file` 影子化 Python 内建。长期需重命名（如 `fs`/`filesys`/`io`）。当前过渡措施已实施。
 
-### PT-ARCH-31：behavior / fn_callable 闭包序列化 + fn_callable round-trip 损坏 [P1]
+### PT-ARCH-31：behavior / fn_callable 闭包序列化 + fn_callable round-trip 损坏 [P1]【已完成 2026-08-05 会话 17】
 
 > **来源**：R3 复核（2026-08-05）确认为明确设计缺陷（用户裁定记录）。2026-08-05 会话尾
-> 深入取证，**用户裁定档位 A + B 都必须完成**，作为下一 session 主线。
+> 深入取证，**用户裁定档位 A + B 都必须完成**。
+>
+> **已完成**：档位 A+B 全部落地（commit 662b83c）。序列化端补 closure/is_cell（cell 值优先）、
+> fn_callable 补 closure/params_uids/body_uid、可调用实例不再冗余写 value_meta、expected_type
+> 按 Optional[str] 契约落盘；反序列化端新增 fn_callable 分支、closure 重建（cell 先自包含可调用 +
+> 待重链）、is_cell 符号 promote_to_cell 重建、post-pass 按 sym_uid 重链共享 cell（修复外层重赋值
+> 不可见 + 多闭包共享分叉）。测试 tests/runtime/test_closure_serialization.py 12 用例。
+> 原始缺陷记录保留如下。
 >
 > **缺陷（三处，均已实证）**：
 > 1. **`fn_callable` round-trip 完全损坏**：反序列化器**无 `fn_callable` 分支**，落入通用
@@ -267,7 +274,7 @@
 > call-site ContextVar，`get_current_execution_context() or self._execution_context`）。
 > 全局变量不进闭包（`promote_to_cell` 对全局返回 None），闭包只捕获函数局部 cell。
 
-### PT-ARCH-32：Axiom 家族分裂——IntentAxiom / IntentContextAxiom 未并入 BaseAxiom [P2]
+### PT-ARCH-32：Axiom 家族分裂——IntentAxiom / IntentContextAxiom 未并入 BaseAxiom [P2]【已完成 2026-08-05 会话 17】
 
 > **来源**：R3 code-odor 扫描（2026-08-05）确认为碎片化，主会话建议修但未落地；用户裁定
 > 记录为未修缺陷待下一 session 处理。
@@ -277,10 +284,10 @@
 > `get_element_type_name`/`from_prompt`/`get_diff_hint` 等），连 `_m` 辅助函数也复制一份。
 > 公理体系存在**两条基线**，有漂移风险（曾致 `_members.py:85` 用 hasattr 探测迁就分裂，
 > 该 hasattr 已删，但分裂本体仍在）。
-> **修复**：两公理改继承 `BaseAxiom`，删除手抄 no-op 与重复 `_m`（机械、低风险；两公理
-> 均协议合规，行为等价需全量 pytest 验证）。功能上非 bug，属设计不统一（碎片化）。
+> **已完成（commit 759956b）**：两公理改继承 `BaseAxiom`，仅保留差异覆盖（name 属性/is_class()/
+> get_method_specs），删除手抄 no-op 与重复 `_m`。行为等价：全量 pytest 零回归。
 
-### PT-ARCH-33：EnumAxiom.from_prompt 双通道 + 静默吞错 [P2]
+### PT-ARCH-33：EnumAxiom.from_prompt 双通道 + 静默吞错 [P2]【已完成 2026-08-05 会话 17】
 
 > **来源**：R3 code-odor 扫描 Zone A 疑似真缺陷 #3（2026-08-05），主会话核验确认为未修缺陷，
 > 用户裁定记录待办。
@@ -291,10 +298,11 @@
 >    `x.to_native() if hasattr(x, 'to_native') else x` 双轨写法在 kernel 层的残留散落点。
 > 2. **静默吞错**：`except Exception: val = raw_response` 把 `receive('__to_prompt__', [])`
 >    内的任何异常（含协议分派真实 bug）吞掉，静默用原值兜底。
-> **修复方向**：收敛到单一 receive 协议（或 `unbox()` 统一入口）；except 仅捕获协议明确
-> 声明的失败，其余 fail-fast。
+> **已完成（commit d82b989）**：删除双轨探测 + 宽 except；按协议契约（protocols.py + 全部
+> 调用点均传 str）以 str 入参，非 str 输入 fail-fast 抛 TypeError。测试
+> tests/kernel/test_enum_axiom.py 8 用例。
 
-### PT-ARCH-34：RuntimeContext.use_intent_context 恒真守卫 + 静默 False [P2]
+### PT-ARCH-34：RuntimeContext.use_intent_context 恒真守卫 + 静默 False [P2]【已完成 2026-08-05 会话 17】
 
 > **来源**：R3 code-odor 扫描 Zone B 疑似真缺陷 #6（2026-08-05），主会话核验确认为未修缺陷，
 > 用户裁定记录待办。
@@ -305,78 +313,91 @@
 >    `hasattr(other_ctx, "fork")`（恒有）——对协议保证成员做能力探测，守卫恒真无分支价值。
 > 2. **静默 fail**：用户误传非 intent_context 对象时静默 `return False` 无任何诊断（语言面
 >    `intent_context.use(ctx)` 的错误输入被无声吞掉）。
-> **修复方向**：isinstance 校验参数并抛可读错误；删除恒真守卫。注意：这是用户可见语言 API
-> （`intent_context.use`），改变 return False → 抛错属行为变更，需与调用方/测试核对。
+> **已完成（commit 661d02c）**：删除恒真守卫；非 intent_context 入参 fail-fast 抛
+> InterpreterError（可读诊断）；返回类型对齐接口声明（-> None）。注意：这是用户可见语言 API
+> （`intent_context.use`），return False → 抛错属行为变更，已与调用方/测试核对。
+> 测试 test_e2e_intent.py +2。
 
 ### PT-SMELL-R3：R3 code-odor 需讨论项全量待办（2026-08-05 用户裁定全部记录）
 
 > R3 四 Zone 扫描的"需讨论"项中，除已修（批次 A-D + 后续）与设计确认保留（media 封存 /
 > llm_except best-effort 协议兜底 / ibci_ai 宽 except 已修 / permissive any 已由类型强化处理 /
-> closure 序列化见 PT-ARCH-31）外，**以下全部记录为待办**。每项标注建议处置（修 / 复核定案 /
+> closure 序列化见 PT-ARCH-31）外，以下全部记录为待办。每项标注建议处置（修 / 复核定案 /
 > 设计确认），下一 session 按序处理。
 >
-> **Zone A（compiler + kernel）**
+> **✅ 全部处置完成（2026-08-05 会话 17，详见 WORKLOG）**。处置分布：
+> **修 19 项**（A-D1/2/5/7/9/10，B-D1/4/5/7/8/12，C-D1/2/4/6/9，D-D1/2/3/6/7 — 其中
+> D-D4 消费者清理并入，D-D5 node_pool 直访并入）；**复核定案保留 10 项**（A-D3/4/8，
+> B-D2/6/9/10/11，C-D3/8/10，D-D4 双接口）；**设计确认保留 6 项**（A-D6 media 封存、
+> B-D3 side-car、C-D5 deep_clone 精确判别、C-D7 snapshot 待协议化、D-D5 comm 槽文档化契约）。
+> 全部修复经全量 pytest 零回归。以下各表保留为原始记录（处置列已更新为实际结果）。
+>
+> **Zone A（compiler + kernel）** ✅
 
-| # | 位置 | 特征 | 建议处置 |
+| # | 位置 | 特征 | 处置结果 |
 |---|------|------|---------|
-| A-D1 | `core/compiler/lexer/core_scanner.py:118-120 + 225-227` | try_scan 全量 except 回滚；NORMAL 模式 `$` 路径忽略返回值，失败静默丢 `$` 无诊断，与 IN_INTENT 路径不对称 | 复核对齐：失败加诊断 |
-| A-D2 | `core/compiler/scheduler.py:145-148` | 记录 DEP_GRAPH_ERROR 后 `raise e` 抛非 CompilerError（诊断 + 异常双通道，调用方契约期望 CompilerError） | 复核：统一为 CompilerError 或去双通道 |
-| A-D3 | `binding_analysis_pass.py:537/545-546` | owned_scope 缺失返回 False（不判文件写），编译期尽力 + 运行时兜底双通道，fail-open 方向 | 复核安全敏感度 |
-| A-D4 | `binding_analysis_pass.py:898-907` | lambda 捕获解析双通道（node 映射优先 + 父作用域兜底），可能掩盖捕获解析遗漏 | 复核 |
-| A-D5 | `expression.py:315/344/352-356/372-376/391/398` | 类型注解多形状链式探测 + `str()` 兜底（产生无意义类型名） | 复核结构化判别 |
-| A-D6 | `media.py:46-47` | `not hasattr(value, "receive")` 能力探测 + 占位兜底 | **media 封存，零改动**（设计确认） |
-| A-D7 | `parser/core/component.py:26-44` | `_loc` hasattr('line')/hasattr('lineno') 双形状探测 | 复核：isinstance/统一位置接口 |
-| A-D8 | `symbol_collection_pass.py:117-146` | `except ValueError` 捕获常规重定义转诊断（异常做控制流） | 复核：与 define 实现解耦 |
-| A-D9 | `kernel/registry.py:298-299` | `hasattr(ib_class, 'registry')` 恒真/静默探测（缺则绑定被跳过） | 复核删除 |
-| A-D10 | `compiler/dependencies.py:97-103` | `except ValueError` 死兜底合成环（DFS 不变量成立则死分支） | 复核删除/断言 |
+| A-D1 | `core/compiler/lexer/core_scanner.py` | try_scan 全量 except 回滚；NORMAL 模式 `$` 路径忽略返回值 | **修**：失败路径消费 `$` 对齐 IN_INTENT（防御纵深，当前不可达） |
+| A-D2 | `core/compiler/scheduler.py:145-148` | 记录 DEP_GRAPH_ERROR 后 `raise e` 抛非 CompilerError（双通道，诊断孤儿） | **修**：统一抛 CompilerError |
+| A-D3 | `binding_analysis_pass.py:537/545-546` | owned_scope 缺失返回 False（fail-open，编译期尽力 + 运行时守卫兜底） | **复核定案保留**（运行时 file_impl 守卫有测试背书，fail-open 不可达） |
+| A-D4 | `binding_analysis_pass.py:898-907` | lambda 捕获双通道（注释与兜底条件矛盾，实际只覆盖函数体未出现的名） | **复核定案保留** + 注释修正（nonlocal 非 lambda；兜底条件与注释不符已修正） |
+| A-D5 | `expression.py` chan/slot | 类型注解多形状链式探测 + `str()` 兜底（无意义类型名/点分截断/关键字 mode 坏死） | **修**：`_expr_name` shape 归一 + 修复关键字参数路径（previous() 只读不移动光标致坏死） |
+| A-D6 | `media.py:46-47` | 能力探测 + 占位兜底 | **media 封存，零改动** |
+| A-D7 | `parser/core/component.py:24-44` | `_loc` hasattr 双形状探测（elif 死分支） | **修**：直访统一属性（Token/IbASTNode 均实现） |
+| A-D8 | `symbol_collection_pass.py:117-146` | `except ValueError` 捕获重定义转诊断（库错误契约转换，非异常控制流） | **复核定案保留** |
+| A-D9 | `kernel/registry.py:298-299` | `hasattr(ib_class, 'registry')` 恒真守卫 | **修**：直访（IbClass.registry 槽恒在） |
+| A-D10 | `compiler/dependencies.py:97-103` | `except ValueError` 伪环死兜底（DFS 不变量下不可达） | **修**：删除 |
 
-> **Zone B（interpreter + vm）**
+> **Zone B（interpreter + vm）** ✅
 
-| # | 位置 | 特征 | 建议处置 |
+| # | 位置 | 特征 | 处置结果 |
 |---|------|------|---------|
-| B-D1 | `llm_executor/_prompt.py:34-52` | 能力探测 + 宽 except 吞用户 `__to_prompt__`/`to_native` 真实 bug，静默降级 str() | 复核：窄化 except（仅协议缺失） |
-| B-D2 | `llm_parsing_strategy.py:285-303` | DefaultParsingStrategy 把不可解析输出静默 box 为成功字符串（不触发 llmexcept） | 复核：是否应为 uncertainty |
-| B-D3 | `coordinator.py:54-58` | `getattr(rc, "_runtime_coordinator")` 跨对象私有穿透（side-car 挂载） | 设计确认（文档化） |
-| B-D4 | `coordinator.py:253-255` | "兜底：原生函数/其它可调用" + hasattr 探测 | 复核：isinstance 明确判别 |
-| B-D5 | `engine.py:784-787` | request_collect 对 `val.to_native()` 宽 except 跳过 | 复核窄化 |
-| B-D6 | `module_manager.py:132-145` | `dir(package)` 枚举（虽被白名单约束） | 复核：用 uid_map 键直接 getattr |
-| B-D7 | `module_manager.py:184-187` | 宽 except 把内部异常包装成 "Module not found"（误译） | 复核窄化 |
-| B-D8 | `vm/handlers/_shared.py:748-762` | tuple 解包 `receive("to_list")` 宽 except 统一报 "Cannot unpack non-iterable"（真实异常被折叠） | 复核窄化 |
-| B-D9 | `interpreter/intrinsics/io.py:24-31` | reconfigure 宽 except pass + GBK 转义兜底（Windows 编码） | 复核：失败显式暴露 |
-| B-D10 | `vm/handlers/comm.py:45-58` | `rc._comm_config_store`/`_comm_event_bus` 私有直取 + 宽 except | 复核：统一访问器 |
-| B-D11 | `interpreter.py:610-612` | 用户类预评估宽 except 留待 instantiate 重试（双路径兜底） | 复核一致性保证 |
-| B-D12 | `llm_executor/_prompt.py:245-256` | axiom→vtable 双轨回退 + except 吞用户 `__outputhint_prompt__` bug 静默无 hint | 复核窄化 |
+| B-D1 | `llm_executor/_prompt.py:34-52` | 能力探测 + 宽 except 吞用户 `__to_prompt__`/`to_native` 真实 bug | **修**：except 收窄 AttributeError（仅协议缺失回退，用户 bug fail-fast） |
+| B-D2 | `llm_parsing_strategy.py:285-303` | DefaultParsingStrategy 把不可解析输出静默 box 为成功字符串 | **复核定案保留**：auto 无类型→box 成功合理；"已声明类型无 parser→uncertain"属语言级语义决策待用户拍板（改动会回归现有测试） |
+| B-D3 | `coordinator.py:54-58` | `getattr(rc, "_runtime_coordinator")` side-car 挂载 | **设计确认保留**（同模块权威访问器；可观测性层走公开 property 属可选增强） |
+| B-D4 | `coordinator.py:253-255` | "兜底：原生函数/其它可调用" + hasattr 探测 | **修**：isinstance(IbFunction) 明确判别 |
+| B-D5 | `engine.py:772-781` | request_collect 宽 except 跳过 | **修**：isinstance(IbObject) 前置判占位符，try 缩至 to_native() |
+| B-D6 | `module_manager.py:132-145` | `dir(package)` 枚举 | **复核定案保留**：uid_map 含当前模块全部符号（int/str 内建），dir∩uid_map 交集才是正确白名单；尝试改 uid_map 迭代引入回归已回退 |
+| B-D7 | `module_manager.py:184-187` | 宽 except 把内部异常包装成 "Module not found"（误译） | **修**：删除宽 except 包装，内部错误直传 |
+| B-D8 | `vm/handlers/_shared.py:748-762` | tuple 解包宽 except 折叠真实异常 | **修**：照搬 for 循环结构化 lookup_method("to_list") 预检 |
+| B-D9 | `interpreter/intrinsics/io.py:24-31` | reconfigure 宽 except pass + GBK 转义兜底（Windows 编码） | **复核定案保留**（编码感知替换转义，UX 取舍，测试经 callback 旁路） |
+| B-D10 | `vm/handlers/comm.py:45-58` | `rc._comm_config_store`/`_comm_event_bus` 私有直取 + 宽 except | **复核定案保留**：runtime_context.py 注释明文的内部注入契约（comm/iruntime 三方共用），协议化列入长期项 |
+| B-D11 | `interpreter.py:604-613` | 用户类预评估宽 except 留待 instantiate 重试 | **复核定案保留**（预评估优化 + instantiate 权威 fail-fast，issue_tracker 恢复；instantiate 无 context 静默 None 边缘已记录） |
+| B-D12 | `llm_executor/_prompt.py:245-256` | axiom→vtable 双轨 + except 吞用户 `__outputhint_prompt__` bug | **修**：lookup_method 已预检，删 try/except，用户 bug fail-fast |
 
-> **Zone C（objects / shared / base / loader）**
+> **Zone C（objects / shared / base / loader）** ✅
 
-| # | 位置 | 特征 | 建议处置 |
+| # | 位置 | 特征 | 处置结果 |
 |---|------|------|---------|
-| C-D1 | `objects/kernel/base.py:46-59` | `__call__` 双路径：vtable lookup 优先 + `hasattr(self,'call')` 兜底 | 复核：统一绑 vtable |
-| C-D2 | `objects/kernel/native_module.py:30-33/119-125` | `except AttributeError`/`except (KeyError,AttributeError)` 作能力判定，白名单 getter 内部真实错误被吞 | 复核窄化 |
-| C-D3 | `native_module.py:41` + `loader.py:71` | `_ibci_registry_id` 跨对象私有标记注入（重命名即静默失效） | 复核：协议/包装层 |
-| C-D4 | `objects/kernel/_helpers.py:19/28-44` | Compatibility fallback：side-table miss 后节点形态嗅探 | 复核：确认 side-table 恒完备则删 |
-| C-D5 | `objects/deep_clone.py:109` | `type(val) is KernelIbObject` 精确判别（新子类会静默漏判） | 设计确认（当前语义正确） |
-| C-D6 | `objects/kernel/ib_class.py:182` | `hasattr(val_info, 'static_val')`（宜 isinstance IbClassField） | 复核 |
-| C-D7 | `observability/snapshot.py:24-104` | 跨对象私有穿透 + 宽 except（可观测性层） | 设计确认（待接口协议化） |
-| C-D8 | `modules/file_impl.py:44-54` | 运行时兜底注释（编译期漏检防御纵深） | 设计确认（有据） |
-| C-D9 | `module_system/discovery.py:121-122` + `artifact_loader.py:91-96` | 静默 except 吞错：插件 _spec 依赖导入失败静默不可发现 / 继承链循环类被静默丢弃 | 复核窄化 |
-| C-D10 | `runtime_serializer.py:561` + `callables.py:295` | 池布局歧义回退 native + hasattr 探测 | 复核 |
+| C-D1 | `objects/kernel/base.py:46-59` | `__call__` 双路径（vtable lookup 死分支 + hasattr 兜底） | **修**：删死 vtable 'call' 分支（全库无注册点）+ isinstance(IbFunction) |
+| C-D2 | `objects/kernel/native_module.py:78-82` | 白名单 getter 内部 AttributeError 被双层吞成成员缺失 | **修**：getter 异常重抛 InterpreterError（区分真实错误与成员缺失） |
+| C-D3 | `native_module.py:41` + `loader.py:71` | `_ibci_registry_id` 跨对象私有标记注入 | **复核定案保留**（fail-closed 自洽；低优先协议化 BoundPlugin 容器，列入长期项） |
+| C-D4 | `objects/kernel/_helpers.py:19/28-44` | Compatibility fallback：side-table miss 后节点形态嗅探 | **修**：删 wrapper 嗅探（形参恒为 IbArg，side-table 单一判别源） |
+| C-D5 | `objects/deep_clone.py:109` | `type(val) is KernelIbObject` 精确判别 | **设计确认保留**（精确判别有意，专用子类不可克隆属契约） |
+| C-D6 | `objects/kernel/ib_class.py:182` | `hasattr(val_info, 'static_val')` | **修**：isinstance(IbClassField)（同文件其它处一致） |
+| C-D7 | `observability/snapshot.py:24-104` | 跨对象私有穿透 + 宽 except（可观测性层） | **设计确认保留**（best-effort 快照契约有测试，待接口协议化列入长期项） |
+| C-D8 | `modules/file_impl.py:44-54` | 运行时兜底注释（编译期漏检防御纵深） | **复核定案保留**（有专项测试背书动态分派兜底） |
+| C-D9 | `module_system/discovery.py:121-122` + `artifact_loader.py:91-96` | 静默 except 吞错 | **修**：discovery 删 except ImportError（Fatal Error 暴露）；artifact_loader 先查 get_class 再创建（已存在有意跳过，真实错误上抛） |
+| C-D10 | `runtime_serializer.py` + `callables.py:295` | 池布局歧义回退 native + hasattr 探测 | **复核定案保留**（前缀守卫 + 有注释的鸭子类型，先例 deep_clone.py:87；单独立池属中重构不推进） |
 
-> **Zone D（ibci_modules + sdk）**
+> **Zone D（ibci_modules + sdk）** ✅
 
-| # | 位置 | 特征 | 建议处置 |
+| # | 位置 | 特征 | 处置结果 |
 |---|------|------|---------|
-| D-D1 | `ibci_ai/core.py:459-466`（同 221-223） | reasoning/reasoning_content 双字段探测 + 提取逻辑两处完全重复（DRY） | 复核：抽象单一 helper |
-| D-D2 | `ibci_isys/core.py:38-83` | 对 PluginCapabilities 保证字段/接口方法做恒真守卫 + 能力探测 | 复核：直访（契约 fail-fast） |
-| D-D3 | `ibci_iruntime/core.py:39-180` | `getattr(ec, "vm_executor"/"registry"/"runtime_context", None)` 死守卫（公开 property 恒在）；snapshot 无 executor 静默 {} | 复核：直访 + fail-fast |
-| D-D4 | `ibci_idbg/core.py:361-364` | IStackInspector(List[str]) vs IStateReader(List[IbIntent]) 接口形状不一致，hasattr 分支模拟类型分派 | 复核：统一接口返回类型 |
-| D-D5 | `ibci_iruntime:148-171` + `ibci_idbg:273-309` | 跨对象私有槽访问（`_comm_event_bus`/`node_pool` 原始 AST 结构） | 复核：走公开只读接口（ReadOnlyNodePool） |
-| D-D6 | `ibci_ai/core.py:304` | `getattr(behavior, "_execution_context")` 私有穿透（插件重复实现核心解析逻辑） | 复核：调用公开方法 |
-| D-D7 | `ibci_ai/core.py:90-91/160-161` | `"/v1"` 字符串嗅探启发式自动补 URL 后缀 | 复核：显式配置项 |
+| D-D1 | `ibci_ai/core.py` | reasoning/reasoning_content 双字段探测两处重复（DRY） | **修**：抽象单一 `_extract_reasoning` helper |
+| D-D2 | `ibci_isys/core.py:38-83` | PluginCapabilities 恒真守卫 + 静默降级 | **修**：契约直访 fail-fast；is_sandboxed 保留无 pm 默认沙箱开；request_external_access 不可用即 raise |
+| D-D3 | `ibci_iruntime/core.py:39-180` | ec 公开 property 死守卫 + snapshot 无 executor 静默 {} | **修**：直访 + 无 EC/executor 统一 raise；get_config 无 EC 保留默认值语义 |
+| D-D4 | `ibci_idbg/core.py:361-364` | IStackInspector(List[str]) vs IStateReader(List[IbIntent]) 接口形状不一致 | **复核定案保留双接口**（轻量视图 vs 富对象视图是刻意设计，统一不可行）；消费者 hasattr 死守卫/逐元素探测删除、except 收窄 |
+| D-D5 | `ibci_iruntime:148-171` + `ibci_idbg:273-309` | 跨对象私有槽访问 | **设计确认保留**（comm 槽为 runtime_context 注释明文内部契约；node_pool 为公开只读 property）——node_pool 改直访 |
+| D-D6 | `ibci_ai/core.py:304` | `getattr(behavior, "_execution_context")` 私有穿透 | **修**：仅 `get_current_execution_context()` + fail-fast（CPS 主路径恒有调用现场 EC） |
+| D-D7 | `ibci_ai/core.py:90-91/160-161` | `"/v1"` 字符串嗅探启发式自动补 URL 后缀 | **修**：删除嗅探（base_url 是显式契约）；5 个测试文件显式补 `/v1` |
 
 > 处置原则：每项按"修 / 复核定案 / 设计确认"三档处理；"复核定案"项先证据化判定再决定
 > 修或文档化；`media 封存 / deep_clone / snapshot 协议化 / file_impl 防御` 等已确认设计项
 > 仍列为待办（复核时确认无需动即关闭）。
+>
+> **全部处置完成（2026-08-05 会话 17）**：修 19 项 + 复核定案保留 10 项 + 设计确认保留 6 项，
+> 全部修复经全量 pytest 零回归（各批 commit 见 git 历史）。长期项（C-D3 协议化 / C-D7 /
+> B-D10 / B-D2 语义决策）已记录，不阻塞主线。
 
 
 ### Phase 4 延迟项（已封存，从 ADR-008/010/013 提取）

@@ -101,33 +101,28 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一阶段：序列化工作（PT-ARCH-31 档位 A + B）**——behavior/fn_callable 闭包序列化 +
-  fn_callable round-trip 完全损坏修复。用户裁定档位 A（务实主体：补 closure/params/body_uid/
-  is_cell + 新增 fn_callable 反序列化分支）与档位 B（作用域 cell 重建 + closure post-pass
-  重链，修复外层重赋值不可见与多闭包共享分叉）**都必须完成**。缺陷取证/设计/测试见
-  `PENDING_TASKS.md` PT-ARCH-31。
-- **未修缺陷待办（独立记录，下一 session 一并处理）**：
-  - `PT-ARCH-31`：序列化工作（behavior/fn_callable 闭包 + fn_callable round-trip 损坏，
-    档位 A + B 都必须完成）——**下一阶段主线**。
-  - `PT-ARCH-32`：Axiom 家族分裂（IntentAxiom/IntentContextAxiom 未并入 BaseAxiom，碎片化）。
-  - `PT-ARCH-33`：EnumAxiom.from_prompt 双通道 + 静默吞错（R3 疑似真缺陷 #3 未修）。
-  - `PT-ARCH-34`：use_intent_context 恒真守卫 + 静默 False（R3 疑似真缺陷 #6 未修）。
-  - `PT-SMELL-R3`：R3 四 Zone **全部"需讨论"项**记录为待办（约 30 项，Zone A-D 表，
-    处置三档：修 / 复核定案 / 设计确认）——用户裁定全部记录。
-  - `PT-INTRO-1`：运行时内省/常用内置函数体系（`type()`/`len()` 等，独立设计任务）。
-- **完整复核审查后续**：`PENDING_REVIEW_ITEMS.md` —— R4 覆盖率核对（待做）/
-  R5 doc 治理 + D1-D5 docs 同步（待做，序列化之后）。
+- **未修缺陷待办已全部完成（会话 17）**：PT-ARCH-31（序列化档位 A+B）/ PT-ARCH-32（Axiom
+  家族分裂）/ PT-ARCH-33（EnumAxiom 双通道）/ PT-ARCH-34（use_intent_context 守卫）/
+  PT-SMELL-R3（四 Zone 约 30 项三档处置：修 19 + 复核定案保留 10 + 设计确认保留 6）。
+  处置明细与长期项记录见 `PENDING_TASKS.md`。
+- **待办**：
+  - `PT-INTRO-1`：运行时内省/常用内置函数体系设计（`type()`/`len()` 等，独立设计任务，
+    能自主决断则设计落地否则记录待决）。
+  - `R4` 覆盖率核对 / `R5` doc 治理 + D1-D5 docs 同步（完整复核审查流程中待做）。
+- **长期项（不阻塞）**：C-D3 私有标记协议化 / C-D7 snapshot 接口协议化 / B-D10 comm 访问器 /
+  B-D2 "已声明类型无 parser → uncertain" 语义决策。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
 
+- **未修缺陷待办全量完成（会话 17，2026-08-05）**：PT-ARCH-31/32/33/34 + PT-SMELL-R3 全部
+  落地 unsafe-vibe-dev（本地 commit 序列：662b83c / 759956b / d82b989 / 661d02c / ee7c480 /
+  0b9e306 / 6c3f25b / cef4e94，每批全量 pytest 零回归）。详细记录见 `WORKLOG.md` 会话 17。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** 全部落地
   unsafe-vibe-dev（本地 commit，未 push）。批次/commit 明细见 `NEXT_STEPS.md`"已完成"节。
 - **R1 完整复核**（会话 13）+ **R2 健康诊断十查**（会话 14-15）+ **R3 code-odor 全面异味
-  扫描**（会话 16）+ **注释卫生清理** + **类型强化**（会话 16 尾：强制返回标注 / 裸赋值 auto /
-  多类型 list 移除 / fn[...] 调用点签名校验补齐）全部完成。每批全量 pytest 零回归。
-  详细记录见 `PENDING_REVIEW_ITEMS.md` §〇b 与 `WORKLOG.md`。
-- **测试基线**：1507 passed / 6 skipped（以实跑为准）。
+  扫描**（会话 16）+ **注释卫生清理** + **类型强化**（会话 16 尾）全部完成。
+- **测试基线**：1532 passed / 6 skipped（以实跑为准）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；无独立分支残留）。
 
 ### 2.3 交接检查单

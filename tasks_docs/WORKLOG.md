@@ -8,6 +8,71 @@
 > 最后更新：2026-08-05
 ---
 
+## 〇、会话 17：未修缺陷待办全量处置（2026-08-05）
+
+> 用户指令：根据已知问题自主分析推进修复（未修缺陷待办 = 当前 session 范围），确认后直接
+> 高度自主运行，无需再询问。全程本地 commit、禁 push。
+
+### 已完成（commit 序列，每批全量 pytest 零回归）
+
+- **PT-ARCH-31 序列化工作（档位 A+B）** commit 662b83c：
+  - 档位 A：`_serialize_symbol` 补 `is_cell`（cell 值优先，与 ScopeImpl.get 单一真相源一致）；
+    `_serialize_closure`（lambda→cell 当前值 / snapshot→深克隆种子）；behavior 补 closure、
+    fn_callable 补 closure/params_uids/body_uid；可调用实例不再冗余写 `value_meta`（携带
+    IbIntentContext/IbCell/TypeDef 非 JSON 值破坏 save_state 落盘——实测 json.dumps 失败）；
+    `expected_type` 按 Optional[str] 契约以类型名字符串落盘（运行期经 node_to_type 解析，字段仅元数据）。
+  - 档位 B：反序列化新增 fn_callable 分支（此前落 else 空 IbObject 全丢）；is_cell 符号经
+    promote_to_cell 语义重建；`_deserialize_closure` 先重建自包含 IbCell + 登记待重链；
+    post-pass `_relink_cells` 按 sym_uid 在恢复作用域树中查找持有符号的作用域，promote 共享
+    cell 替换闭包槽（修复外层重赋值不可见 + 多闭包共享分叉）；不在树中（闭包持有者作用域
+    已退出，LT-2 堆语义）保留自包含 cell。
+  - 测试 `tests/runtime/test_closure_serialization.py` 12 用例（snapshot 保真/lambda 自包含/
+    参数保真/作用域 cell 重链/双闭包共享/外层重赋值可见/behavior+MOCK 调用一致）。
+- **PT-ARCH-32 Axiom 家族分裂** commit 759956b：IntentAxiom/IntentContextAxiom 继承 BaseAxiom，
+  删手抄 no-op 与重复 `_m`，仅保留 name/is_class()/get_method_specs 覆盖。行为等价。
+- **PT-ARCH-33 EnumAxiom 双通道** commit d82b989：删 to_native/receive hasattr 双轨 + 宽 except；
+  按协议契约 str 入参，非 str fail-fast TypeError。测试 test_enum_axiom.py 8 用例。
+- **PT-ARCH-34 use_intent_context** commit 661d02c：删三层恒真 hasattr 守卫；非 intent_context
+  入参 fail-fast InterpreterError（用户可见 API 行为变更：return False→抛错，已核对调用方全部
+  忽略返回值）；返回类型对齐接口声明（-> None）。测试 test_e2e_intent.py +2。
+
+### PT-SMELL-R3 四 Zone 处置（4 general agent 独立取证 + 主会话逐项核验）
+
+- **Zone A+B 批** commit ee7c480：A-D1（lexer NORMAL `$` 失败路径对齐 IN_INTENT，防御纵深）、
+  A-D2（DEP_GRAPH_ERROR 统一抛 CompilerError，诊断孤儿消除）、A-D4（nonlocal 兜底注释修正）、
+  A-D7（_loc 删双形状 hasattr）、A-D9（registry 删恒真 hasattr）、A-D10（dependencies 删死兜底）、
+  B-D1（_obj_to_prompt_str except 收窄 AttributeError）、B-D4（coordinator isinstance(IbFunction)）、
+  B-D5（request_collect isinstance 前置 + try 窄化）、B-D7（module_manager 删宽 except 误译）、
+  B-D8（tuple 解包照搬 lookup_method 结构化预检）、B-D12（_try_vtable_hint 删 try/except）。
+  **B-D6 判为复核定案保留**：尝试改 uid_map 迭代源引入回归（uid_map 含当前模块全部符号含内建），
+  dir∩uid_map 交集才是正确白名单，已回退。
+- **Zone C 批** commit 0b9e306：C-D1（删死 vtable 'call' 分支 + isinstance(IbFunction)）、
+  C-D2（白名单 getter 异常重抛 InterpreterError）、C-D4（删 IbTypeAnnotatedExpr wrapper 嗅探）、
+  C-D6（isinstance(IbClassField)）、C-D9（discovery 删 except ImportError + artifact_loader
+  先查 get_class 再创建）。
+- **Zone D 批** commit 6c3f25b：D-D1（_extract_reasoning 单一 helper）、D-D2（isys 契约直访 +
+  fail-fast，is_sandboxed 保留安全默认）、D-D3（iruntime 直访 + 统一 raise，不再静默 {}）、
+  D-D4（双接口复核定案保留 + 消费者删 hasattr/except 收窄）、D-D5（node_pool 直访公开 property）、
+  D-D6（run_batch 删 _execution_context 私有穿透）、D-D7（删 localhost '/v1' 字符串嗅探，
+  5 个测试文件显式补 /v1）。
+- **A-D5 批** commit cef4e94：chan/slot 类型注解 `_expr_name` shape 归一（IbName/IbConstant/
+  IbAttribute 全限定名/IbSubscript 基名，删 str() dataclass 垃圾名）+ **修复 chan 关键字参数
+  路径坏死**（`self.stream.previous()` 是只读回看不移动光标，`chan(T, mode=...)` 此前永远
+  解析失败——A-D5 报告所称"垃圾 mode 进 ChannelCore"实为解析失败，比预想更严重）。测试 +3。
+
+### 设计决策 / 保留项
+
+- **expected_type 落盘为类型名字符串**：运行期由调用点经 node_to_type 侧表解析，字段本身仅
+  元数据（serialize_for_debug），按接口契约 Optional[str]。
+- **可调用实例不写 value_meta**：meta 冗余拷贝专用分支字段且含非 JSON 值（IbIntentContext/
+  IbCell/TypeDef），原样落盘破坏 save_state；专用字段是单一事实来源。
+- **PT-SMELL-R3 复核定案保留 10 项 + 设计确认保留 6 项**：明细见 `PENDING_TASKS.md` PT-SMELL-R3
+  表（处置列）。其中 B-D2（"已声明类型无 parser → uncertain"）属语言级语义决策记录待用户
+  拍板；C-D3/C-D7/B-D10 协议化列入长期项。
+- **测试基线**：1532 passed / 6 skipped（以实跑为准）。
+
+---
+
 ## 一、关键用户裁定（长期约束力）
 
 | 裁定 | 内容 | 来源 |

@@ -4,37 +4,44 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-05（类型强化完成；下一阶段 = **序列化工作 PT-ARCH-31 档位 A+B**）
+> **最后更新**：2026-08-05（未修缺陷待办全部完成：PT-ARCH-31/32/33/34 + PT-SMELL-R3）
 
 ---
 
-## 🔴 下一阶段：序列化工作——闭包序列化 + fn_callable round-trip 修复（当前最紧要）
+## 🔴 下一阶段：未修缺陷待办已全部完成——剩余 PT-INTRO-1（运行时内省/内置函数体系设计）
 
-> **PT-ARCH-31**（`PENDING_TASKS.md`）：behavior/fn_callable 闭包序列化缺陷 +
-> fn_callable round-trip 完全损坏。用户裁定**档位 A + B 都必须完成**。
-> 完整缺陷取证、修复设计与测试要求见 PT-ARCH-31。
+> PT-ARCH-31（序列化档位 A+B）、PT-ARCH-32（Axiom 家族分裂）、PT-ARCH-33（EnumAxiom 双通道）、
+> PT-ARCH-34（use_intent_context 守卫）、PT-SMELL-R3（四 Zone 约 30 项三档处置）**已全部
+> 完成**（会话 17，commit 662b83c / 759956b / d82b989 / 661d02c / ee7c480 / 0b9e306 / 6c3f25b /
+> cef4e94）。每批全量 pytest 零回归。
+>
+> **待办（独立设计任务）**：
+> - **PT-INTRO-1**：运行时内省/常用内置函数体系设计（`type()`/`len()` 等）——独立设计任务，
+>   能自主决断则设计落地，否则记录待决。
 
-### 执行要点
-
-- **档位 A**：序列化端补 closure（snapshot 种子值 / lambda cell 当前值）+ fn_callable 补
-  closure/params_uids/body_uid + 作用域符号补 `is_cell`；反序列化端**新增 fn_callable 分支**、
-  behavior/fn_callable 重建 closure。
-- **档位 B**：作用域反序列化重建 cell；closure 反序列化后 post-pass 按 sym_uid 重链恢复的
-  cell（修复 A 的两个退化：外层重赋值不可见 + 多闭包共享分叉）。
-- **测试**：round-trip（snapshot 保真 / lambda 值拷贝 / 双闭包共享 / 调用一致）。
-- **约束**：每批全量 `python -m pytest tests/` 零回归；commit 留痕（仅本地，禁 push）。
-
-### 后续（序列化之后）
+### 后续（独立/长期项）
 
 | 编号 | 内容 | 说明 |
 |------|------|------|
 | **R4** | 覆盖率核对 | 完整复核审查流程中待做（见 `PENDING_REVIEW_ITEMS.md`） |
 | **R5 / D1-D5** | doc-governance 审计 + docs 同步 | 完整复核审查流程中待做 |
-| **PT-ARCH-32** | Axiom 家族分裂（IntentAxiom/IntentContextAxiom 并入 BaseAxiom） | 未修缺陷待办（碎片化，机械修复） |
-| **PT-ARCH-33** | EnumAxiom.from_prompt 双通道 + 静默吞错 | R3 疑似真缺陷 #3 未修 |
-| **PT-ARCH-34** | use_intent_context 恒真守卫 + 静默 False | R3 疑似真缺陷 #6 未修 |
-| **PT-SMELL-R3** | R3 code-odor 需讨论项全量待办（约 30 项，Zone A-D） | 用户裁定全部记录，处置三档（修/复核定案/设计确认） |
 | **PT-INTRO-1** | 运行时内省/常用内置函数体系设计（`type()`/`len()` 等） | 独立设计任务（用户 2026-08-05 裁定） |
+| 长期项 | C-D3 协议化 / C-D7 snapshot 协议化 / B-D10 comm 访问器 / B-D2 声明类型无 parser 语义决策 | PT-SMELL-R3 处置中记录的长期项（见 PENDING_TASKS.md） |
+
+---
+
+## ✅ 已完成：未修缺陷待办全量处置（会话 17，2026-08-05）
+
+- **PT-ARCH-31 序列化工作（档位 A+B）**：闭包序列化 + fn_callable round-trip 修复（commit 662b83c）。
+  序列化端补 closure/is_cell/fn_callable 字段；反序列化端新增 fn_callable 分支 + 作用域 cell
+  重建 + post-pass 按 sym_uid 重链（修复外层重赋值不可见 + 多闭包共享分叉）。12 个新测试。
+- **PT-ARCH-32 Axiom 家族分裂**（commit 759956b）：IntentAxiom/IntentContextAxiom 并入 BaseAxiom。
+- **PT-ARCH-33 EnumAxiom 双通道**（commit d82b989）：收敛 str 契约 + fail-fast，8 个新测试。
+- **PT-ARCH-34 use_intent_context**（commit 661d02c）：删恒真守卫 + 可读错误，2 个新测试。
+- **PT-SMELL-R3 四 Zone 全量处置**（commit ee7c480/0b9e306/6c3f25b/cef4e94）：修 19 项 +
+  复核定案保留 10 项 + 设计确认保留 6 项（含 A-D5 chan/slot 类型归一 + 关键字 mode 路径坏死
+  修复、D-D7 删 /v1 嗅探）。长期项已记录不阻塞。
+- 全量 pytest 零回归（1532 passed / 6 skipped，以实跑为准）。全程本地 commit，未 push。
 
 ---
 
