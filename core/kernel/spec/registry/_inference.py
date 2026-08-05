@@ -249,7 +249,7 @@ class _InferenceMixin:
             if method_name and method_name in spec.members:
                 # User class has this operator method in its type definition
                 method_member = spec.members[method_name]
-                if method_member.is_method() and hasattr(method_member, 'return_type'):
+                if method_member.is_method():
                     # Use the declared return type
                     return self.resolve(method_member.return_type.head, method_member.return_type.module) or self.resolve("any")
                 # Default: assume operator returns same type as left operand

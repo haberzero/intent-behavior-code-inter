@@ -139,18 +139,4 @@ def vm_handle_IbClassDef(executor, node_uid: str, node_data: Mapping[str, Any]):
                     f"VM: Hydration Leak: Method '{method_name}' of class "
                     f"'{name}' was not hydrated in STAGE 5."
                 )
-            method_obj = existing_class.methods[method_name]
-            if hasattr(method_obj, "spec") and method_obj.spec:
-                params = stmt_data.get("args", [])
-                expected_count = (
-                    len(method_obj.spec.params)
-                    if hasattr(method_obj.spec, "params")
-                    else -1
-                )
-                if expected_count != -1 and len(params) != expected_count:
-                    raise RuntimeError(
-                        f"VM: Contract Mismatch: Method '{method_name}' of class "
-                        f"'{name}' parameter count mismatch. "
-                        f"AST: {len(params)}, Descriptor: {expected_count}"
-                    )
     return executor.registry.get_none()

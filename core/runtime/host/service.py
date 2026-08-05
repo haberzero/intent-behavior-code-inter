@@ -64,7 +64,7 @@ class HostService(IHostService):
         """
         from core.runtime.objects.kernel.ib_class import IbClass
 
-        runtime_context = getattr(execution_context, "runtime_context", None)
+        runtime_context = execution_context.runtime_context
         if runtime_context is None:
             return False
         scope = runtime_context.get_current_scope()
@@ -100,8 +100,8 @@ class HostService(IHostService):
             )
 
         # 线程对象/容器是瞬态；save_state 时检测到未完成线程直接失败。
-        runtime_context = getattr(self.execution_context, "runtime_context", None)
-        coordinator = getattr(runtime_context, "_runtime_coordinator", None) if runtime_context is not None else None
+        runtime_context = self.execution_context.runtime_context
+        coordinator = getattr(runtime_context, "_runtime_coordinator", None)
         if coordinator is not None:
             unfinished = coordinator.unfinished_handles()
             if unfinished:

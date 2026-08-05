@@ -250,7 +250,7 @@ class _BehaviorMixin:
         if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
              return LLMResult.success_result(value=behavior)
 
-        cache_enabled = getattr(behavior, "capture_mode", None) is None
+        cache_enabled = behavior.capture_mode is None
         if cache_enabled and behavior._cache is not None:
             return LLMResult.success_result(value=behavior._cache)
 
@@ -374,7 +374,7 @@ class _BehaviorMixin:
         if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
             return LLMResult.success_result(value=behavior)
 
-        cache_enabled = getattr(behavior, "capture_mode", None) is None
+        cache_enabled = behavior.capture_mode is None
         if cache_enabled and behavior._cache is not None:
             return LLMResult.success_result(value=behavior._cache)
 

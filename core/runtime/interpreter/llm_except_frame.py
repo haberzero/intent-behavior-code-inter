@@ -135,8 +135,7 @@ class LLMExceptFrame:
 
         self.saved_intent_ctx = runtime_context.intent_context.fork()
         # 同时快照活跃实例指针，restore 时一并还原。
-        if hasattr(runtime_context, "get_active_intent_ibobj"):
-            self.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
+        self.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
 
         if runtime_context.get_loop_context_stack():
             self.saved_loop_context = runtime_context.get_loop_context_stack()

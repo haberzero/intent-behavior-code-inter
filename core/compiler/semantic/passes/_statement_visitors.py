@@ -138,7 +138,7 @@ class StatementVisitorsMixin:
             if not self.is_assignable(val_type, target_type):
                 src_name = getattr(val_type, 'name', str(val_type))
                 tgt_name = getattr(target_type, 'name', str(target_type))
-                hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
+                hint = self.registry.get_diff_hint(val_type, target_type)
                 self.error(
                     f"Cannot assign '{src_name}' to '{tgt_name}'",
                     node, code=SEM_TYPE_MISMATCH, hint=hint
@@ -167,7 +167,7 @@ class StatementVisitorsMixin:
 
             # 类型兼容性检查
             if target_type and not self.is_assignable(val_type, target_type):
-                hint = self.registry.get_diff_hint(val_type, target_type) if hasattr(self.registry, 'get_diff_hint') else None
+                hint = self.registry.get_diff_hint(val_type, target_type)
                 self.error(
                     f"Cannot assign '{getattr(val_type, 'name', str(val_type))}' to '{getattr(target_type, 'name', str(target_type))}'",
                     node, code=SEM_TYPE_MISMATCH, hint=hint
@@ -209,13 +209,13 @@ class StatementVisitorsMixin:
             # fn[(...)→(...)] 签名标注 — 检查结构签名匹配
             return self._infer_fn_type_with_sig(declared_type, val_type)
 
-        if hasattr(self.registry, 'is_dynamic') and self.registry.is_dynamic(declared_type):
+        if self.registry.is_dynamic(declared_type):
             if declared_type.name == "any":
                 # `any`：变量 spec 永久保持为 any，不因首次赋值类型窄化。
                 return self._any_desc
             # `auto`：从首次赋值的实际类型推断并锁定。
             # 即时行为表达式的 LLM 输出天然是字符串，不应推断为 behavior spec。
-            if hasattr(self.registry, 'is_behavior') and self.registry.is_behavior(val_type):
+            if self.registry.is_behavior(val_type):
                 return self._str_desc
             return val_type
 

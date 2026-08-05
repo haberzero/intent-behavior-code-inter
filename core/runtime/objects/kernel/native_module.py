@@ -73,9 +73,10 @@ class IbNativeObject(IbObject):
                 )
 
             # [SECURITY] 仅允许访问白名单属性
+            # 白名单成员已在绑定期校验实现对象必须含该属性（loader._validate_and_bind），
+            # 此处直接 getattr；缺失即抛契约异常。
             if target_name in self.whitelist:
-                if hasattr(self.py_obj, target_name):
-                    return self.ib_class.registry.box(getattr(self.py_obj, target_name))
+                return self.ib_class.registry.box(getattr(self.py_obj, target_name))
 
             # 未在契约或白名单声明的成员，坚决抛出异常
             raise AttributeError(f"Plugin Error: '{target_name}' is not defined in module contract (_spec.py)")

@@ -96,11 +96,8 @@ class Interpreter:
         ci = obj.captured_intents
         if ci is None:
             return []
-        if hasattr(ci, "get_active_intents"):
-            return [i.content if isinstance(i, IbIntent) else str(i)
-                    for i in ci.get_active_intents()]
-        # Defensive: should be unreachable per IIbBehavior contract.
-        return [str(ci)]
+        return [i.content if isinstance(i, IbIntent) else str(i)
+                for i in ci.get_active_intents()]
 
 
     # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险

@@ -82,6 +82,6 @@ class _MemberMixin:
     def get_diff_hint(self, src: IbSpec, target: IbSpec) -> Optional[str]:
         """Return an axiom-provided diagnostic hint for a type mismatch."""
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())
-        if src_axiom and hasattr(src_axiom, "get_diff_hint"):
+        if src_axiom:
             return src_axiom.get_diff_hint(target.get_base_name())
         return None
