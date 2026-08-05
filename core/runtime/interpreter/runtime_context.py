@@ -674,7 +674,7 @@ class RuntimeContextImpl(RuntimeContext):
         """当前帧的意图上下文（直接持有的 IbIntentContext 实例）。"""
         return self._intent_ctx
 
-    def use_intent_context(self, intent_ctx_obj: Any) -> bool:
+    def use_intent_context(self, intent_ctx_obj: Any) -> None:
         """
         以指定 intent_context IBCI 实例替换当前帧意图上下文（fork 拷贝语义）。
 
@@ -688,20 +688,26 @@ class RuntimeContextImpl(RuntimeContext):
         因此后续语法路径（``@+``/``@-``）与 OOP 路径（``active.push(...)``）
         操作的是同一底层 IbIntentContext，而原始实参 ``intent_ctx_obj``
         因 fork 语义不会受到泄漏影响。
+
+        非法入参（非 intent_context 对象）fail-fast 抛 InterpreterError——
+        此前静默 return False 会吞掉语言面错误输入，无任何诊断。
         """
-        if intent_ctx_obj is None or not hasattr(intent_ctx_obj, "fields"):
-            return False
-        if self._intent_ctx is None or not hasattr(self._intent_ctx, "get_global_intents"):
-            return False
+        if not isinstance(intent_ctx_obj, IbObject):
+            raise InterpreterError(
+                "intent_context.use(): expected an intent_context instance, "
+                f"got {type(intent_ctx_obj).__name__}"
+            )
         other_ctx = intent_ctx_obj.fields.get("_ctx")
-        if other_ctx is None or not hasattr(other_ctx, "fork"):
-            return False
+        if not isinstance(other_ctx, IbIntentContext):
+            raise InterpreterError(
+                "intent_context.use(): the given object is not an intent_context "
+                f"(its '_ctx' slot holds {type(other_ctx).__name__})"
+            )
         forked = other_ctx.fork()
         forked.set_global_intents(self._intent_ctx.get_global_intents())
         self._intent_ctx = forked
         # 同步更新活跃实例指针，使其封装与 _intent_ctx 共享引用。
         self._set_active_intent_ibobj_for_current_ctx(intent_ctx_obj.ib_class)
-        return True
 
     # ------------------------------------------------------------------ #
     # active intent_context IBCI handle                                   #

@@ -219,6 +219,32 @@ print(result)
         lines = run_ibci(code)
         assert "77" in lines
 
+    def test_use_with_non_intent_context_fails_fast(self):
+        """intent_context.use(非法对象) 必须可读报错（此前静默 return False 吞错）。"""
+        code = "intent_context.use(42)\n"
+        engine = IBCIEngine(root_dir="tests", auto_sniff=False)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("intent_context.use(42) 应抛运行时错误")
+        except Exception as e:
+            assert "intent_context" in str(e), f"错误信息应指明意图上下文：{e}"
+
+    def test_use_with_plain_object_fails_fast(self):
+        """intent_context.use(普通类实例) 必须可读报错（_ctx 槽缺失/非意图上下文）。"""
+        code = """\
+class Box:
+    int v
+
+Box b = Box(1)
+intent_context.use(b)
+"""
+        engine = IBCIEngine(root_dir="tests", auto_sniff=False)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("intent_context.use(Box) 应抛运行时错误")
+        except Exception as e:
+            assert "intent_context" in str(e), f"错误信息应指明意图上下文：{e}"
+
     def test_get_current_captures_scope_snapshot(self):
         """
         intent_context.get_current() returns a snapshot of the current scope's
