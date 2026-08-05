@@ -16,7 +16,7 @@ class CommRegistry:
 
     - ``register(name, obj)`` / ``unregister(name)``：具名注册（Channel/Slot）。
     - ``lookup(name)``：按名称查对象。
-    - ``all(kind)``：枚举某类对象（kind 为 "chan"/"signal"/"slot"/"task" 或 None=全部）。
+    - ``all(kind)``：枚举某类对象（kind 为 "chan"/"slot" 或 None=全部）。
     - ``snapshot()``：内省全部注册对象。
     """
 

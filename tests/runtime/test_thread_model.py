@@ -84,12 +84,15 @@ print("done")
 
 def test_thread_cancel():
     code = """
-func work(int x) -> int:
-    return x * 2
+chan c = chan(str, "message")
+func work(chan x) -> int:
+    str m = x.recv()
+    return 1
 
-thread[int] t = thread(callable=work, args=[21])
+thread[int] t = thread(callable=work, args=[c])
 TaskCancelled e = t.cancel()
 print(e.message)
+c.send("x")
 t.join()
 print((str)t.is_done())
 """

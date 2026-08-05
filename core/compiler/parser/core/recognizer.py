@@ -60,7 +60,7 @@ class SyntaxRecognizer:
         if token.type == TokenType.FN:
             return SyntaxRole.VARIABLE_DECLARATION
 
-        # 并发/通信类型关键字（chan/signal/slot）作声明起始
+        # 并发/通信类型关键字（chan/slot）作声明起始
         if token.type in (TokenType.CHAN, TokenType.SLOT):
             return SyntaxRole.VARIABLE_DECLARATION
 

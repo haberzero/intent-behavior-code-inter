@@ -39,10 +39,14 @@
 - **通信领域设计完善三阶段**：B1-B4 实锤 bug + G1-G7 统一化（值对象机制/序列化/通信域）。
 - **收尾 L1-L8 + T2**：_by_kind 删除 / 泛型成员特化协议化 / 序列化清理 / 瞬态序列化协议 /
   类型符号 class_ref / IbOptional 单承载 / 泛型注解符号身份 / `_create_blank` 构造入口统一。
-- **测试基线**：`python -m pytest tests/` = 1474 passed / 4 skipped（以实跑为准）。
+- **R1 完整独立复核（2026-08-05，会话 13）**：三个 general agent 并行独立复核三阶段主线 +
+  收尾全部改动（`e217b8b^..80b463e`）。整体正确，无高严重缺陷；新增缺陷 A1/C1/B1-B6/D1-D4
+  全部处置（A1 cancel is_done 守卫、C1 multi-type list/tuple positional 序列化持久化、B 组
+  死代码清理、D 组文档化）。发现清单与决策见 `PENDING_REVIEW_ITEMS.md` §〇。
+- **测试基线**：`python -m pytest tests/` = 1477 passed / 4 skipped（以实跑为准）。
 
 ## 四、遗留 / 待办
 
-- **下一阶段（完整复核审查）**：`tasks_docs/PENDING_REVIEW_ITEMS.md`（R1-R5 审查动作 + D1-D5 docs 同步）。
+- **下一阶段（完整复核审查）**：`tasks_docs/PENDING_REVIEW_ITEMS.md`（R1 ✅ / R2-R5 待做 + D1-D5 docs 同步）。
 - **长期规划**：`tasks_docs/PENDING_TASKS.md`（PT-SEM/PT-4.x/PT-ARCH/PT-SMELL/TEST_REFACTOR 等）。
 - **固定化内容**：`tasks_docs/HANDOFF.md`（常驻交接文档：工作流程/原则/goal 模板）。

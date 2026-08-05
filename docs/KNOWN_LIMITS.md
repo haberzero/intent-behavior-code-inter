@@ -274,6 +274,12 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
+### 10.2 `chan[T]` / `slot[T]` 注解实参不保留
+
+`chan[str]` / `slot[int]` 等通信类型注解的泛型实参**不参与符号 declared_type**：chan/slot 不在统一泛型模型
+（`GenericTypeDeclaration`）内，注解经类型解析退化为裸 `chan` / `slot`（实参丢弃）。这是设计现状
+（通信对象类型参数仅作文档/约束参考），与 `list[T]` / `dict[K,V]` / `Optional[T]` / `thread[T]` 的泛型身份保留不对称。
+
 ---
 
 ## 十一、Switch 语句设计未稳定

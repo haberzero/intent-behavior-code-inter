@@ -132,4 +132,3 @@ class _AssignabilityMixin:
                     result.members.setdefault(m_name, m_spec)
             return result
         return None
-        return None

@@ -188,9 +188,13 @@ class FlatSerializer(BaseFlatSerializer):
         # 泛型实参持久化，运行时 rehydrator 据此重建特化 spec——此前未持久化致
         # 符号 declared_type 在运行时退化为基础 list/dict[any,any]（泛型身份丢失）。
         if t.kind == TypeKind.LIST.value:
-            e_ref = t.element_type
-            type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
-            type_data["element_type_module"] = e_ref.module if e_ref is not None else None
+            if t.allowed_element_types:
+                type_data["allowed_element_type_names"] = [r.head for r in t.allowed_element_types]
+                type_data["allowed_element_type_modules"] = [r.module for r in t.allowed_element_types]
+            else:
+                e_ref = t.element_type
+                type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
+                type_data["element_type_module"] = e_ref.module if e_ref is not None else None
 
         if t.kind == TypeKind.DICT.value:
             k_ref = t.key_type
@@ -203,6 +207,7 @@ class FlatSerializer(BaseFlatSerializer):
         if t.kind == TypeKind.TUPLE.value:
             if t.positional_element_types:
                 type_data["positional_type_names"] = [p.head for p in t.positional_element_types]
+                type_data["positional_type_modules"] = [p.module for p in t.positional_element_types]
             else:
                 e_ref = t.element_type
                 type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"

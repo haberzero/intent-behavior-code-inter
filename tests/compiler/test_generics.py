@@ -448,3 +448,52 @@ class TestGenericAnnotationDeclaredType:
         for name, want in expect.items():
             sp = rc.get_symbol(name).declared_type
             assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（L7-A 回归）"
+
+    def test_multi_type_list_preserves_allowed_types(self, engine):
+        """L7-A/C1：multi-type list（list[int,str]）泛型身份经 artifact 序列化→还原不退化。
+
+        此前 serializer 只持久化 element_type_name（multi-type 下为 "any"），
+        allowed_element_types 丢失，还原后退化为裸 list（C1 根本修复）。
+        """
+        from core.compiler.serialization.serializer import FlatSerializer
+        from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+        from core.kernel.factory import create_default_registry
+
+        engine.run_string("list[int,str] mixed = [1, \"a\"]\n", silent=True)
+        rc = engine.interpreter._execution_context.runtime_context
+        sp = rc.get_symbol("mixed").declared_type
+        assert sp.name == "list[int,str]"
+        assert [t.head for t in sp.allowed_element_types] == ["int", "str"]
+
+        # artifact 序列化 → rehydrator 还原闭环（multi-type 身份保真）
+        artifact = engine.compile_string("list[int,str] mixed = [1, \"a\"]\n")
+        d = FlatSerializer().serialize_artifact(artifact)
+        types = d["modules"][artifact.entry_module]["pools"]["types"]
+        target = next(k for k, v in types.items() if v.get("name") == "list[int,str]")
+        assert types[target]["allowed_element_type_names"] == ["int", "str"]
+        reg = create_default_registry()
+        reh = ArtifactRehydrator(type_pool=types, registry=reg)
+        restored = reh.hydrate(target)
+        assert restored.name == "list[int,str]"
+        assert [t.head for t in restored.allowed_element_types] == ["int", "str"]
+
+    def test_positional_tuple_preserves_elements(self, engine):
+        """L7-A/C1：tuple[int,str] 位置元素类型经 artifact 序列化→还原不退化。
+
+        此前 serializer 只存 positional_type_names（head），位置顺序保真但
+        positional_type_modules 未持久化（C1 根本修复，与 dict key/value 双字段对齐）。
+        """
+        from core.compiler.serialization.serializer import FlatSerializer
+        from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+        from core.kernel.factory import create_default_registry
+
+        artifact = engine.compile_string('tuple[int,str] t = (1, "a")\n')
+        d = FlatSerializer().serialize_artifact(artifact)
+        types = d["modules"][artifact.entry_module]["pools"]["types"]
+        target = next(k for k, v in types.items() if v.get("name") == "tuple[int,str]")
+        assert types[target]["positional_type_names"] == ["int", "str"]
+        reg = create_default_registry()
+        reh = ArtifactRehydrator(type_pool=types, registry=reg)
+        restored = reh.hydrate(target)
+        assert restored.name == "tuple[int,str]"
+        assert [t.head for t in restored.positional_element_types] == ["int", "str"]

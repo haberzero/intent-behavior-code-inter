@@ -92,9 +92,16 @@ class ArtifactRehydrator:
         shell_creators = {
             # list[T] / dict[K,V] / tuple[T]（L7-A）：经 factory 重建特化 spec——
             # 此前硬编码基础 TypeDef（name="list"）致泛型实参丢失。
-            TypeKind.LIST.value: lambda: factory.create_list(
-                element_type_name=data.get("element_type_name", "any"),
-                element_type_module=data.get("element_type_module"),
+            TypeKind.LIST.value: lambda: (
+                factory.create_list(
+                    allowed_element_type_names=data.get("allowed_element_type_names"),
+                    allowed_element_type_modules=data.get("allowed_element_type_modules"),
+                )
+                if data.get("allowed_element_type_names")
+                else factory.create_list(
+                    element_type_name=data.get("element_type_name", "any"),
+                    element_type_module=data.get("element_type_module"),
+                )
             ),
             TypeKind.DICT.value: lambda: factory.create_dict(
                 key_type_name=data.get("key_type_name", "any"),
@@ -103,7 +110,10 @@ class ArtifactRehydrator:
                 value_type_module=data.get("value_type_module"),
             ),
             TypeKind.TUPLE.value: lambda: (
-                factory.create_tuple(positional_element_type_names=data.get("positional_type_names"))
+                factory.create_tuple(
+                    positional_element_type_names=data.get("positional_type_names"),
+                    positional_element_type_modules=data.get("positional_type_modules"),
+                )
                 if data.get("positional_type_names")
                 else factory.create_tuple(
                     element_type_name=data.get("element_type_name", "any"),

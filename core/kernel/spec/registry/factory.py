@@ -93,9 +93,16 @@ class SpecFactory:
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
         allowed_element_type_names: Optional[list] = None,
+        allowed_element_type_modules: Optional[list] = None,
     ) -> "TypeDef":
         if allowed_element_type_names:
-            sorted_names = sorted(allowed_element_type_names)
+            modules = allowed_element_type_modules or [None] * len(allowed_element_type_names)
+            sorted_pairs = sorted(
+                zip(allowed_element_type_names, modules),
+                key=lambda p: p[0],
+            )
+            sorted_names = [p[0] for p in sorted_pairs]
+            sorted_modules = [p[1] for p in sorted_pairs]
             list_name = f"list[{','.join(sorted_names)}]"
             return TypeDef(
                 name=list_name,
@@ -103,7 +110,9 @@ class SpecFactory:
                 is_nullable=True,
                 provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
-                allowed_element_types=[TypeRef.of(n) for n in allowed_element_type_names],
+                allowed_element_types=[
+                    TypeRef.of(n, m) for n, m in zip(sorted_names, sorted_modules)
+                ],
             )
         list_name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
         return TypeDef(
@@ -135,6 +144,7 @@ class SpecFactory:
         element_type_name: str = "any",
         element_type_module: Optional[str] = None,
         positional_element_type_names: Optional[list] = None,
+        positional_element_type_modules: Optional[list] = None,
     ) -> "TypeDef":
         # 位置元素类型路径（`tuple[T1, T2, ...]`，元素数 ≥ 2）。
         # 与单类型路径 `tuple[T]` 互斥；前者使用 ``positional_element_types``，
@@ -148,7 +158,13 @@ class SpecFactory:
                 is_nullable=True,
                 provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
-                positional_element_types=[TypeRef.of(n) for n in positional_element_type_names],
+                positional_element_types=[
+                    TypeRef.of(n, m) for n, m in zip(
+                        positional_element_type_names,
+                        positional_element_type_modules
+                        or [None] * len(positional_element_type_names),
+                    )
+                ],
             )
         tuple_name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
         return TypeDef(

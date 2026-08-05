@@ -56,7 +56,13 @@ class ChannelCore:
     # ------------------------------------------------------------------ #
 
     def send(self, item: Any) -> None:
-        """阻塞发送（模式无关）。已关闭抛 ``CommClosedError``。"""
+        """阻塞发送（模式无关）。已关闭抛 ``CommClosedError``。
+
+        竞态边界（R1 复核确认，D3）：pubsub fan-out 对订阅者快照逐 buffer
+        ``send``，若某个订阅者并发 ``close()``（buffer 已关、尚未从
+        ``_subscribers`` 移除），``CommClosedError`` 会从该订阅者泄漏给生产者。
+        属历史遗留竞态（非本批引入）；生产者须自行捕获或在已知生命周期内使用。
+        """
         if self._mode == "pubsub":
             with self._lock:
                 if self._closed_flag():
@@ -75,6 +81,11 @@ class ChannelCore:
         G7 语义修正：pubsub 无订阅者时返回 ``False``（消息未投递给任何人，
         与 message/stream 模式 "False=拒绝" 契约对齐——不再把"被零人接收"
         报告为投递成功）。
+
+        N>1 订阅者语义边界（R1 复核确认，D2）：多订阅者且部分满时返回
+        ``False``，但消息已投递给先序的未满订阅者——``False`` 表示"未全量
+        投递"而非"整条被拒"。调用方须据此解读（对广播结果敏感的路径应在
+        投递前先确认所有订阅者未满）。
         """
         if self._mode == "pubsub":
             with self._lock:
@@ -155,7 +166,13 @@ class ChannelCore:
     # ------------------------------------------------------------------ #
 
     def close(self) -> None:
-        """关闭通道：主缓冲与所有订阅者缓冲一并关闭。幂等。"""
+        """关闭通道：主缓冲与所有订阅者缓冲一并关闭。幂等。
+
+        内省边界（R1 复核确认，D4）：close 关闭全部订阅者 buffer 但**不移出**
+        ``_subscribers``（仅 ``_SubscriberView.close`` 走 ``unsubscribe``），故
+        ``snapshot()["subscriber_count"]`` 在通道关闭后仍计入已关闭订阅者——纯
+        内省瑕疵，无功能影响（已关订阅者的 buffer 不可再 send/recv）。
+        """
         with self._lock:
             if self._closed_flag():
                 return

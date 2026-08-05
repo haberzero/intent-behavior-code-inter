@@ -4,6 +4,50 @@
 > 用途：会话 1-12 所有改动（通信领域三阶段主线 + 收尾 L1-L8 + 泛型成员特化协议化等）的
 > **完整独立复核审查**清单。R 系列为审查动作；L/D 系列为已完成项（供审查时验证）+ 未同步项。
 > 审查完成后经确认删除本文件；各决策记录详见 `WORKLOG.md` 会话 6-12。
+>
+> **R1 已完成（2026-08-05）**：三个 general agent 并行独立复核（编译/类型层 + 运行时对象层 +
+> 通信内核/VM 层）+ 亲自实证关键发现。新增缺陷 A1/B1-B6/C1/D1-D4 全部处置完毕，全量
+> 1477 passed / 4 skipped 零回归（commit 见 git log）。
+
+---
+
+## 〇、R1 复核结果（2026-08-05，已完成）
+
+### 独立复核执行
+
+- **方法**：三个 general agent 并行独立复核（禁 explore/reviewer）；每 agent 读 diff + 完整
+  当前版本 + 交叉契约侧；关键发现由主会话亲自实证（cancel 生命周期 / multi-type 序列化
+  链路 / 未使用 import / 不可达分支）。
+- **总体结论**：三阶段主线 + 收尾 L1-L8 整体正确。L2 重构语义等价、G3/G6 移除彻底、
+  L7-A 与 G7 契约一致、B1 往返闭环、L5 单承载收敛、L8 class_ref 重绑定正确、瞬态协议一致。
+  无高严重性缺陷。
+
+### 新增缺陷处置（按"不删也不修"两档）
+
+| 编号 | 分类 | 位置 | 断言 | 处置 | commit |
+|------|------|------|------|------|--------|
+| **A1** | 真bug | `objects/thread.py:151-161` | `cancel()` 未检查 `is_done`：已结束线程调用返回 `TaskCancelled` 并翻转状态为 CANCELLED，违背 docstring"未启动或已结束→None" | ✅ 根本修复（is_done 守卫）+ 4 测试改确定性挂起场景 + 新增已结束 cancel 测试 | R1 提交 |
+| **B1** | 死代码 | `generic.py:330` | `_resolve_member_thread` 的 `"result"` 分支不可达（ThreadAxiom 无 result 成员） | ✅ 彻底删除 | R1 提交 |
+| **B2** | 死代码 | `vm/handlers/comm.py:16` | 未使用 import（IbClass/IbUserFunction/IbValue） | ✅ 彻底删除 | R1 提交 |
+| **B3** | 死代码 | `recognizer.py:63` | 注释残留 signal（G6 后 chan/slot 而已） | ✅ 清理注释 | R1 提交 |
+| **B4** | 死代码 | `registry.py:19` | docstring kind 残留 signal/task | ✅ 清理注释 | R1 提交 |
+| **B5** | 死代码 | `_assignability.py:134-135` | 重复 `return None` | ✅ 删除一行 | R1 提交 |
+| **B6** | 格式 | `_runtime.py:22,107` | 缩进不一致（8 vs 4 空格） | ✅ 对齐 | R1 提交 |
+| **C1** | 半接通 | `serializer.py`/`rehydrator`/`factory` | multi-type list `allowed_element_types` 未持久化（`list[int,str]` 序列化退化为裸 list）；tuple positional module 未持久化 | ✅ 根本修复（持久化 allowed/positional 名+模块）+ 2 测试 | R1 提交 |
+| **D1** | 设计限制 | `symbol_collection_pass` | `chan[str]`/`slot[int]` 注解实参不保留（chan/slot 不在统一泛型模型，pre-existing） | ✅ 文档化 KNOWN_LIMITS §10.2 | R1 提交 |
+| **D2** | 设计限制 | `channel.py send_nowait` | 多订阅者部分满时返回 False 但消息已部分投递 | ✅ docstring 明确语义边界 | R1 提交 |
+| **D3** | 设计限制 | `channel.py send` | fan-out 与订阅者并发 close 竞态（pre-existing） | ✅ docstring 记录竞态边界 | R1 提交 |
+| **D4** | 设计限制 | `channel.py close` | close 后 subscriber_count 仍计入已关订阅者（纯内省瑕疵） | ✅ docstring 记录边界 | R1 提交 |
+
+### C1 根因补充（比预期深）
+
+实证发现 multi-type list 注解在**编译期构建**即退化为 `list[]`：`factory.create_list` 用
+`zip(names, modules)` 且 modules 为空时产出空对 → `list[]` 且 allowed 丢失。修复：modules
+缺省补 `[None]*len`，配合 serializer/rehydrator 持久化闭环后 `list[int,str]` 往返保真。
+
+### R1 复核范围
+
+`git diff e217b8b^..80b463e`（三阶段主线 + 收尾 L1-L8，19 commit，53 文件）。
 
 ---
 

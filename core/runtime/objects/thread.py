@@ -154,7 +154,7 @@ class IbThread(IbObject):
         - 成功发出取消请求 → ``TaskCancelled`` err
         - 线程未启动或已结束 → ``None``（无效/已结束）
         """
-        if self._spawned is None:
+        if self._spawned is None or self._spawned.is_done:
             return self.ib_class.registry.get_none()
         self._spawned.cancel()
         self._state = ThreadStatus.CANCELLED

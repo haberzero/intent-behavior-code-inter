@@ -157,12 +157,40 @@ t.join()
 
 
 def test_cancel_cooperative_handle():
-    """协作式取消句柄（无死 _task_handle 依赖）。"""
+    """协作式取消句柄（无死 _task_handle 依赖）。
+
+    线程体阻塞在 chan recv 上（确定性挂起），cancel 在挂起点生效——
+    快函数线程可能在 cancel 前自然完成（竞态），旧无条件返回 TaskCancelled
+    掩盖了它；A1 修复后改为阻塞挂起场景验证协作取消语义。
+    chan 经参数传入（线程闭包不捕获模块级变量）。
+    """
+    lines = run_ibci("""
+chan c = chan(str, "message")
+func f(chan x) -> str:
+    str m = x.recv()
+    return m
+thread[str] t = thread(callable=f, args=[c])
+TaskCancelled e = t.cancel()
+print(e.message)
+c.send("x")
+""")
+    assert lines == ["Task was cancelled"]
+
+
+def test_cancel_on_finished_thread_returns_none():
+    """A1 守卫：已结束线程 cancel() 返回 None，不翻转状态为 CANCELLED。
+
+    此前 cancel() 仅查 _spawned is None，已 join 的线程调用会返回
+    TaskCancelled err 并把 _state 从 done 翻转为 cancelled（违背 docstring）。
+    """
     lines = run_ibci("""
 func f() -> int:
     return 1
 thread[int] t = thread(callable=f, args=[])
-TaskCancelled e = t.cancel()
-print(e.message)
+thread_result[int] r = t.join()
+print(r.status())
+t.cancel()
+print(t.is_done())
 """)
-    assert lines == ["Task was cancelled"]
+    # join 成功 → done；cancel 守卫 → 返回 None（不打印）；is_done 仍 True
+    assert lines == ["done", "True"]

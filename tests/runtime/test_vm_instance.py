@@ -66,13 +66,21 @@ print((str)t.join().expect())
 
 class TestTaskCancel:
     def test_cancel_before_join(self):
-        """线程可协作式取消。"""
+        """线程可协作式取消。
+
+        线程体阻塞在 chan recv 上（确定性挂起），cancel 命中挂起点——
+        快函数线程可能在 cancel 前自然完成（竞态），旧无条件返回 TaskCancelled
+        掩盖了它；A1 修复后改为阻塞挂起场景验证协作取消。
+        """
         lines = run_ibci("""
-func f() -> int:
+chan c = chan(str, "message")
+func f(chan x) -> int:
+    str m = x.recv()
     return 1
-thread[int] t = thread(callable=f, args=[])
+thread[int] t = thread(callable=f, args=[c])
 TaskCancelled e = t.cancel()
 print(e.message)
+c.send("x")
 """)
         assert lines == ["Task was cancelled"]
 

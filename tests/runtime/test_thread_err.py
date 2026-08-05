@@ -14,12 +14,15 @@ from tests.conftest import run_ibci
 
 def test_cancel_returns_taskcancelled_err():
     code = """
-func c() -> int:
+chan ch = chan(str, "message")
+func blocked(chan x) -> int:
+    str m = x.recv()
     return 1
 
-thread[int] t = thread(callable=c, args=[])
+thread[int] t = thread(callable=blocked, args=[ch])
 TaskCancelled e = t.cancel()
 print(e.message)
+ch.send("x")
 """
     lines = run_ibci(code)
     assert lines == ["Task was cancelled"]

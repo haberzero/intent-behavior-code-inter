@@ -325,9 +325,9 @@ def _resolve_member_optional(registry: "SpecRegistry", spec: "TypeDef", attr_nam
 
 
 def _resolve_member_thread(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
-    """``thread[T]`` 成员特化：``join()/result() → thread_result[T]``（join 结果容器）。"""
+    """``thread[T]`` 成员特化：``join() → thread_result[T]``（join 结果容器）。"""
     val = spec.value_type
-    if val.head != "any" and attr_name in ("join", "result"):
+    if val.head != "any" and attr_name == "join":
         return MemberSpecialization(return_type=TypeRef.of(f"thread_result[{val.head}]", val.module))
     return None
 
