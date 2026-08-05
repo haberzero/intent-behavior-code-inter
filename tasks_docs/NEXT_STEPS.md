@@ -31,6 +31,8 @@
 | **R4** | 覆盖率核对 | 完整复核审查流程中待做（见 `PENDING_REVIEW_ITEMS.md`） |
 | **R5 / D1-D5** | doc-governance 审计 + docs 同步 | 完整复核审查流程中待做 |
 | **PT-ARCH-32** | Axiom 家族分裂（IntentAxiom/IntentContextAxiom 并入 BaseAxiom） | 未修缺陷待办（碎片化，机械修复） |
+| **PT-ARCH-33** | EnumAxiom.from_prompt 双通道 + 静默吞错 | R3 疑似真缺陷 #3 未修 |
+| **PT-ARCH-34** | use_intent_context 恒真守卫 + 静默 False | R3 疑似真缺陷 #6 未修 |
 | **PT-INTRO-1** | 运行时内省/常用内置函数体系设计（`type()`/`len()` 等） | 独立设计任务（用户 2026-08-05 裁定） |
 
 ---

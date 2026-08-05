@@ -107,7 +107,11 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   重链，修复外层重赋值不可见与多闭包共享分叉）**都必须完成**。缺陷取证/设计/测试见
   `PENDING_TASKS.md` PT-ARCH-31。
 - **未修缺陷待办（独立记录，下一 session 一并处理）**：
+  - `PT-ARCH-31`：序列化工作（behavior/fn_callable 闭包 + fn_callable round-trip 损坏，
+    档位 A + B 都必须完成）——**下一阶段主线**。
   - `PT-ARCH-32`：Axiom 家族分裂（IntentAxiom/IntentContextAxiom 未并入 BaseAxiom，碎片化）。
+  - `PT-ARCH-33`：EnumAxiom.from_prompt 双通道 + 静默吞错（R3 疑似真缺陷 #3 未修）。
+  - `PT-ARCH-34`：use_intent_context 恒真守卫 + 静默 False（R3 疑似真缺陷 #6 未修）。
   - `PT-INTRO-1`：运行时内省/常用内置函数体系（`type()`/`len()` 等，独立设计任务）。
 - **完整复核审查后续**：`PENDING_REVIEW_ITEMS.md` —— R4 覆盖率核对（待做）/
   R5 doc 治理 + D1-D5 docs 同步（待做，序列化之后）。

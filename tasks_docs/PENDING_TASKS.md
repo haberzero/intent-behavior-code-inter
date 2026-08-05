@@ -280,6 +280,34 @@
 > **修复**：两公理改继承 `BaseAxiom`，删除手抄 no-op 与重复 `_m`（机械、低风险；两公理
 > 均协议合规，行为等价需全量 pytest 验证）。功能上非 bug，属设计不统一（碎片化）。
 
+### PT-ARCH-33：EnumAxiom.from_prompt 双通道 + 静默吞错 [P2]
+
+> **来源**：R3 code-odor 扫描 Zone A 疑似真缺陷 #3（2026-08-05），主会话核验确认为未修缺陷，
+> 用户裁定记录待办。
+> **位置**：`core/kernel/axioms/primitives/enum.py:104-114`（`EnumAxiom.from_prompt`）。
+> **缺陷**：
+> 1. **双通道探测**：`hasattr(raw_response, "to_native")` / `hasattr(raw_response, "receive")`
+>    两套入口并存——正是 `base.py:279 unbox()` 声明要收敛的
+>    `x.to_native() if hasattr(x, 'to_native') else x` 双轨写法在 kernel 层的残留散落点。
+> 2. **静默吞错**：`except Exception: val = raw_response` 把 `receive('__to_prompt__', [])`
+>    内的任何异常（含协议分派真实 bug）吞掉，静默用原值兜底。
+> **修复方向**：收敛到单一 receive 协议（或 `unbox()` 统一入口）；except 仅捕获协议明确
+> 声明的失败，其余 fail-fast。
+
+### PT-ARCH-34：RuntimeContext.use_intent_context 恒真守卫 + 静默 False [P2]
+
+> **来源**：R3 code-odor 扫描 Zone B 疑似真缺陷 #6（2026-08-05），主会话核验确认为未修缺陷，
+> 用户裁定记录待办。
+> **位置**：`core/runtime/interpreter/runtime_context.py:692-697`（`use_intent_context`）。
+> **缺陷**：
+> 1. **三层恒真 hasattr 守卫**：`hasattr(intent_ctx_obj, "fields")`（IbObject 恒有）、
+>    `hasattr(self._intent_ctx, "get_global_intents")`（IbIntentContext 恒有）、
+>    `hasattr(other_ctx, "fork")`（恒有）——对协议保证成员做能力探测，守卫恒真无分支价值。
+> 2. **静默 fail**：用户误传非 intent_context 对象时静默 `return False` 无任何诊断（语言面
+>    `intent_context.use(ctx)` 的错误输入被无声吞掉）。
+> **修复方向**：isinstance 校验参数并抛可读错误；删除恒真守卫。注意：这是用户可见语言 API
+> （`intent_context.use`），改变 return False → 抛错属行为变更，需与调用方/测试核对。
+
 
 ### Phase 4 延迟项（已封存，从 ADR-008/010/013 提取）
 
