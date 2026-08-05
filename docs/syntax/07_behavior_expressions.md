@@ -133,11 +133,13 @@ str r = translate("hello")
 > - **行为 body（`lambda -> auto: @~...~`）→ `-> auto` 唯一推断为 `str`**（LLM 输出默认
 >   字符串），**不存在任何其他自动推断**。LLM 输出本质动态、无 body 可静态推断，`auto`
 >   在此处只等于 `str`。
-> - 要其它返回类型（int/自定义类等）必须显式 `-> TYPE`——这会同时设定 LLM 输出的
->   `expected_type`（解析目标）。例如：
+> - **`-> auto` 写法允许但不推荐**：需要 `str` 时应显式书写 `-> str`（语义等价且意图明确，
+>   避免读者误以为有类型推断发生）。要其它返回类型（int/自定义类等）**必须**显式
+>   `-> TYPE`——这会同时设定 LLM 输出的 `expected_type`（解析目标）。例如：
 >   ```ibci
->   fn f = lambda -> auto: @~ 给出一个数字 ~   # f() 返回 str（LLM 输出原样字符串）
->   fn g = lambda -> int: @~ 给出一个数字 ~    # g() 返回 int（LLM 输出按 int 解析）
+>   fn f = lambda -> auto: @~ 给出一个数字 ~   # 允许，但不推荐：f() 返回 str（LLM 输出原样字符串）
+>   fn f = lambda -> str:  @~ 给出一个数字 ~   # ✅ 推荐：显式声明 str
+>   fn g = lambda -> int: @~ 给出一个数字 ~    # 返回 int（LLM 输出按 int 解析）
 >   ```
 > - `fn[() -> T]` 声明侧签名约束同样适用：行为体返回类型与实际 `T` 不匹配即编译错误
 >   （例如 `fn[() -> int] f = lambda -> auto: @~...~` 因实际为 str 而报错，须写

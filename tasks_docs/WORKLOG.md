@@ -151,6 +151,31 @@
 - **验证**：any→typed 运行时强校验、裸赋值锁定、标注强制、多类型移除在各声明上下文生效；
   行为体 auto=str 全套语义（str 承接 / int 报错 / fn[()->str] 匹配 / fn[()->int] 报错 / 带参
   不误伤）实证通过；残留扫描确认 Python lambda 与 tuple 位置元素未误伤。
+
+## 六、fn[...] 签名体系补齐（2026-08-05，会话 16 尾）
+
+> 用户裁定：① 行为体 `-> auto` = str 无条件保留但手册标注"允许但不推荐"，明确推荐 `-> str`；
+> ② 补齐 fn[...] 调用点校验缺口。
+
+- **行为体 `-> auto` = str 强制**（`_expression_visitors.visit_IbLambdaExpr`）：行为 body 的
+  `-> auto` 唯一推断 str（LLM 输出默认字符串，无其他自动推断）；要其它类型必须显式 `-> T`
+  （同时设定 LLM expected_type）。手册（syntax 07 / architecture 03 §7）标注"允许但不推荐，
+  需要 str 用 `-> str`"。
+- **调用点 fn[...] 校验缺口修复**（根因是 `fn[...]` 参数标注被扁平化为 `TypeRef('fn')`，
+  调用点只见裸 fn（动态）而跳过校验，导致 `fn[()->int] f = lambda -> auto: ...` 编译通过、
+  运行期返回 str 不一致）：
+  1. `_assignability.is_dynamic`：CALLABLE_SIG（`fn[...]`）非动态（裸 fn FUNCTION 仍动态）；
+     `is_assignable` 对 CALLABLE_SIG 目标走 `_matches_callable_sig`（参数数量 + 返回类型，
+     动态源放行，lambda 参数签名不携带则跳过）。
+  2. `_declaration_visitors._param_type_ref`：fn[...] 参数 descriptor 保留结构化 TypeRef
+     （`TypeRef('fn', (TypeRef('__args__', params), ret))`），不再扁平化。
+  3. `_base.resolve_typeref`：从结构化 fn ref 重建 CALLABLE_SIG。
+  - 效果：`apply(lambda -> auto: @~...~)`（fn[()->int] 参数）现在编译错误；`-> int` 匹配通过。
+- **连带确认（既有限制，非本次引入）**：带参 lambda（`lambda(int n) -> int: ...`）作为**实参
+  内联**存在 parser 限制（基线即失败，声明上下文可用）；`fn[(int)->int]` + 带参 lambda 实参
+  属既有未覆盖，记录非本次范围。
+- 文档同步：syntax 07、architecture 03 §7。
+- 验证：1507 passed / 6 skipped 零回归（新增调用点校验回归测试）。
 - 文档同步：`KNOWN_LIMITS.md` §七/八/九、`syntax/02_variables.md`、`05_functions.md`、
   `07_behavior_expressions.md`、`01_types.md`、`architecture/03_type_system.md` §7、
   `01_principles.md` §5.3。

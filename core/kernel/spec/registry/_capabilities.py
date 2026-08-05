@@ -101,8 +101,12 @@ class _CapabilityMixin:
         """True for any/auto and any axiom that declares itself dynamic."""
         if spec is None:
             return True  # unknown type treated as dynamic
-        if spec.name in ("any", "auto", "fn"):
+        if spec.name in ("any", "auto"):
             return True
+        if spec.name == "fn":
+            # 裸 fn（FUNCTION 哨兵）是动态可调用；`fn[(...) -> (...)]`（CALLABLE_SIG）
+            # 携带具体签名约束，非动态——可调用赋给它/传入参数必须结构签名匹配。
+            return spec.kind != TypeKind.CALLABLE_SIG.value
         axiom = self.get_axiom(spec)
         return bool(axiom and axiom.is_dynamic())
 

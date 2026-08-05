@@ -365,6 +365,26 @@ print(r2)
         expect_compile_error(
             AI_MOCK_PREFIX + "\nfn f = lambda -> auto: @~MOCK:STR:hi~\nint r = f()", "SEM_TYPE_MISMATCH")
 
+    def test_fn_sig_param_validates_behavior_lambda_return(self):
+        """`fn[()->int]` 参数调用点校验行为 lambda 返回类型（此前被跳过致运行期不一致）。"""
+        # 行为 auto(=str) 传 fn[()->int] 参数 → 编译错误
+        expect_compile_error(
+            AI_MOCK_PREFIX + (
+                "func apply(fn[() -> int] cb) -> int:\n    return cb()\n"
+                "int r = apply(lambda -> auto: @~MOCK:INT:7~)\n"),
+            "SEM_TYPE_MISMATCH")
+        # 行为 -> int 传 fn[()->int] 参数 → 匹配并运行
+        assert run_ibci(
+            AI_MOCK_PREFIX + (
+                "func apply(fn[() -> int] cb) -> int:\n    return cb()\n"
+                "int r = apply(lambda -> int: @~MOCK:INT:7~)\nprint((str)r)\n")
+        ) == ["7"]
+        # 表达式体 str lambda 传 fn[()->int] → 编译错误
+        expect_compile_error(
+            "func apply(fn[() -> int] cb) -> int:\n    return cb()\n"
+            "int r = apply(lambda -> str: \"s\")\n",
+            "SEM_TYPE_MISMATCH")
+
     def test_snapshot_behavior_returns_str(self):
         """``fn f = snapshot -> str: @~...~`` freezes intent context."""
         code = AI_MOCK_PREFIX + "fn f = snapshot -> str: @~MOCK:STR:frozen~\nstr r = f()\nprint(r)"

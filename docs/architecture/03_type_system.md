@@ -348,8 +348,8 @@ class IbValue(IbObject):
 > **返回标注强制（2026-08-05）**：`lambda`/`snapshot`/`func`/`llm` 缺失返回标注产生
 > `SEM_MISSING_RETURN_ANNOTATION` 编译错误。`-> auto` 对非行为 body 从 body 表达式推断
 > 具体返回类型并锁定（与 `func -> auto` 的 return 推断语义对齐）；**行为 body 的 `-> auto`
-> 唯一推断为 `str`**（LLM 输出默认字符串，无其它自动推断），要其它类型必须显式 `-> T`
-> （同时设定 LLM 输出 expected_type）。
+> 唯一推断为 `str`**（LLM 输出默认字符串，无其它自动推断）——该写法允许但不推荐，需要
+> `str` 时应显式 `-> str`；要其它类型必须显式 `-> T`（同时设定 LLM 输出 expected_type）。
 
 ### 7.2 声明侧关键字 `fn`
 

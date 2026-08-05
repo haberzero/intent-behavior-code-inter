@@ -27,9 +27,10 @@ from __future__ import annotations
 
 from typing import Dict, Optional, TYPE_CHECKING
 
-from ..base import IbSpec
+from ..base import IbSpec, TypeDef, TypeKind
 from ..type_ref import TypeRef
 from .factory import SpecFactory
+from core.base.enums import Provenance, Visibility
 
 if TYPE_CHECKING:
     from core.kernel.axioms.registry import AxiomRegistry
@@ -124,6 +125,19 @@ class SpecRegistryBase:
         This method is the primary resolution path for new code that already
         holds a TypeRef and needs an IbSpec for capability queries.
         """
+        # fn[(args) -> ret]：结构化 CALLABLE_SIG ref（param descriptor 保留签名
+        # 结构，避免扁平化为裸 fn 后调用点跳过校验）。
+        if ref.head == "fn" and len(ref.args) == 2 and ref.args[0].head == "__args__":
+            param_refs = list(ref.args[0].args)
+            ret_ref = ref.args[1]
+            return TypeDef(
+                name="fn",
+                kind=TypeKind.CALLABLE_SIG.value,
+                param_types=[TypeRef.of(a.head, a.module) for a in param_refs],
+                return_type=TypeRef.of(ret_ref.head, ret_ref.module),
+                provenance=Provenance.KERNEL_NATIVE,
+                visibility=Visibility.PRELUDE_VISIBLE,
+            )
         if ref.args:
             # Try canonical name first (e.g. "list[int]", "dict[str,int]")
             result = self.resolve(ref.canonical_name, ref.module)

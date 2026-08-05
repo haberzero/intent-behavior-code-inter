@@ -25,6 +25,13 @@ class _AssignabilityMixin:
             return False
         if src is target:
             return True
+
+        # fn[...]（CALLABLE_SIG）有具体签名约束，不做动态放行：源可调用必须
+        # 结构签名匹配（参数数量 + 返回类型）。否则 `fn[()->int]` 槽会被任意
+        # 可调用无条件接受，编译期承诺 int 而运行期返回 str（不一致）。
+        if target.kind == TypeKind.CALLABLE_SIG.value:
+            return self._matches_callable_sig(src, target)
+
         if self.is_dynamic(target):
             return True
         if self.is_dynamic(src):
@@ -87,6 +94,43 @@ class _AssignabilityMixin:
                 return self.is_assignable(parent, target, visited | {visit_key})
 
         return False
+
+    def _matches_callable_sig(self, src: IbSpec, target: IbSpec) -> bool:
+        """``fn[...]`` 签名约束的结构匹配（谓词，供 is_assignable 消费）。
+
+        - 动态源（auto / fn / 裸动态可调用）：推迟到运行时，放行。
+        - 参数数量：CALLABLE_INSTANCE（lambda）spec 不携带参数信息，跳过。
+        - 返回类型：FUNCTION/BOUND_METHOD 用 ``return_type``，CALLABLE_INSTANCE 用
+          ``value_type``；任一侧为动态（any/auto）即放行，否则必须可赋值。
+        """
+        if self.is_dynamic(src):
+            return True
+        if not self.is_callable(src):
+            return False
+        # 参数数量（CALLABLE_INSTANCE 无参数签名，跳过）
+        if src.kind != TypeKind.CALLABLE_INSTANCE.value:
+            src_params = getattr(src, "param_types", None) or []
+            tgt_params = getattr(target, "param_types", None) or []
+            if len(src_params) != len(tgt_params):
+                return False
+        # 返回类型
+        if src.kind == TypeKind.CALLABLE_INSTANCE.value:
+            src_ret = getattr(src, "value_type", None)
+        else:
+            src_ret = getattr(src, "return_type", None)
+        tgt_ret = getattr(target, "return_type", None)
+        if src_ret is not None and tgt_ret is not None:
+            src_head = getattr(src_ret, "head", None)
+            tgt_head = getattr(tgt_ret, "head", None)
+            if (src_head and tgt_head
+                    and src_head not in ("any", "auto")
+                    and tgt_head not in ("any", "auto")):
+                src_ret_spec = self.resolve(src_head, getattr(src_ret, "module", None))
+                tgt_ret_spec = self.resolve(tgt_head, getattr(tgt_ret, "module", None))
+                if (src_ret_spec and tgt_ret_spec
+                        and not self.is_assignable(src_ret_spec, tgt_ret_spec)):
+                    return False
+        return True
 
     def resolve_specialization(
         self,
