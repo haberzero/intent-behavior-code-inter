@@ -112,6 +112,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   - `PT-ARCH-32`：Axiom 家族分裂（IntentAxiom/IntentContextAxiom 未并入 BaseAxiom，碎片化）。
   - `PT-ARCH-33`：EnumAxiom.from_prompt 双通道 + 静默吞错（R3 疑似真缺陷 #3 未修）。
   - `PT-ARCH-34`：use_intent_context 恒真守卫 + 静默 False（R3 疑似真缺陷 #6 未修）。
+  - `PT-SMELL-R3`：R3 四 Zone **全部"需讨论"项**记录为待办（约 30 项，Zone A-D 表，
+    处置三档：修 / 复核定案 / 设计确认）——用户裁定全部记录。
   - `PT-INTRO-1`：运行时内省/常用内置函数体系（`type()`/`len()` 等，独立设计任务）。
 - **完整复核审查后续**：`PENDING_REVIEW_ITEMS.md` —— R4 覆盖率核对（待做）/
   R5 doc 治理 + D1-D5 docs 同步（待做，序列化之后）。

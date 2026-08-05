@@ -33,6 +33,7 @@
 | **PT-ARCH-32** | Axiom 家族分裂（IntentAxiom/IntentContextAxiom 并入 BaseAxiom） | 未修缺陷待办（碎片化，机械修复） |
 | **PT-ARCH-33** | EnumAxiom.from_prompt 双通道 + 静默吞错 | R3 疑似真缺陷 #3 未修 |
 | **PT-ARCH-34** | use_intent_context 恒真守卫 + 静默 False | R3 疑似真缺陷 #6 未修 |
+| **PT-SMELL-R3** | R3 code-odor 需讨论项全量待办（约 30 项，Zone A-D） | 用户裁定全部记录，处置三档（修/复核定案/设计确认） |
 | **PT-INTRO-1** | 运行时内省/常用内置函数体系设计（`type()`/`len()` 等） | 独立设计任务（用户 2026-08-05 裁定） |
 
 ---

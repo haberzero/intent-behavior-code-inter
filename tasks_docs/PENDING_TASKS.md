@@ -308,6 +308,76 @@
 > **修复方向**：isinstance 校验参数并抛可读错误；删除恒真守卫。注意：这是用户可见语言 API
 > （`intent_context.use`），改变 return False → 抛错属行为变更，需与调用方/测试核对。
 
+### PT-SMELL-R3：R3 code-odor 需讨论项全量待办（2026-08-05 用户裁定全部记录）
+
+> R3 四 Zone 扫描的"需讨论"项中，除已修（批次 A-D + 后续）与设计确认保留（media 封存 /
+> llm_except best-effort 协议兜底 / ibci_ai 宽 except 已修 / permissive any 已由类型强化处理 /
+> closure 序列化见 PT-ARCH-31）外，**以下全部记录为待办**。每项标注建议处置（修 / 复核定案 /
+> 设计确认），下一 session 按序处理。
+>
+> **Zone A（compiler + kernel）**
+
+| # | 位置 | 特征 | 建议处置 |
+|---|------|------|---------|
+| A-D1 | `core/compiler/lexer/core_scanner.py:118-120 + 225-227` | try_scan 全量 except 回滚；NORMAL 模式 `$` 路径忽略返回值，失败静默丢 `$` 无诊断，与 IN_INTENT 路径不对称 | 复核对齐：失败加诊断 |
+| A-D2 | `core/compiler/scheduler.py:145-148` | 记录 DEP_GRAPH_ERROR 后 `raise e` 抛非 CompilerError（诊断 + 异常双通道，调用方契约期望 CompilerError） | 复核：统一为 CompilerError 或去双通道 |
+| A-D3 | `binding_analysis_pass.py:537/545-546` | owned_scope 缺失返回 False（不判文件写），编译期尽力 + 运行时兜底双通道，fail-open 方向 | 复核安全敏感度 |
+| A-D4 | `binding_analysis_pass.py:898-907` | lambda 捕获解析双通道（node 映射优先 + 父作用域兜底），可能掩盖捕获解析遗漏 | 复核 |
+| A-D5 | `expression.py:315/344/352-356/372-376/391/398` | 类型注解多形状链式探测 + `str()` 兜底（产生无意义类型名） | 复核结构化判别 |
+| A-D6 | `media.py:46-47` | `not hasattr(value, "receive")` 能力探测 + 占位兜底 | **media 封存，零改动**（设计确认） |
+| A-D7 | `parser/core/component.py:26-44` | `_loc` hasattr('line')/hasattr('lineno') 双形状探测 | 复核：isinstance/统一位置接口 |
+| A-D8 | `symbol_collection_pass.py:117-146` | `except ValueError` 捕获常规重定义转诊断（异常做控制流） | 复核：与 define 实现解耦 |
+| A-D9 | `kernel/registry.py:298-299` | `hasattr(ib_class, 'registry')` 恒真/静默探测（缺则绑定被跳过） | 复核删除 |
+| A-D10 | `compiler/dependencies.py:97-103` | `except ValueError` 死兜底合成环（DFS 不变量成立则死分支） | 复核删除/断言 |
+
+> **Zone B（interpreter + vm）**
+
+| # | 位置 | 特征 | 建议处置 |
+|---|------|------|---------|
+| B-D1 | `llm_executor/_prompt.py:34-52` | 能力探测 + 宽 except 吞用户 `__to_prompt__`/`to_native` 真实 bug，静默降级 str() | 复核：窄化 except（仅协议缺失） |
+| B-D2 | `llm_parsing_strategy.py:285-303` | DefaultParsingStrategy 把不可解析输出静默 box 为成功字符串（不触发 llmexcept） | 复核：是否应为 uncertainty |
+| B-D3 | `coordinator.py:54-58` | `getattr(rc, "_runtime_coordinator")` 跨对象私有穿透（side-car 挂载） | 设计确认（文档化） |
+| B-D4 | `coordinator.py:253-255` | "兜底：原生函数/其它可调用" + hasattr 探测 | 复核：isinstance 明确判别 |
+| B-D5 | `engine.py:784-787` | request_collect 对 `val.to_native()` 宽 except 跳过 | 复核窄化 |
+| B-D6 | `module_manager.py:132-145` | `dir(package)` 枚举（虽被白名单约束） | 复核：用 uid_map 键直接 getattr |
+| B-D7 | `module_manager.py:184-187` | 宽 except 把内部异常包装成 "Module not found"（误译） | 复核窄化 |
+| B-D8 | `vm/handlers/_shared.py:748-762` | tuple 解包 `receive("to_list")` 宽 except 统一报 "Cannot unpack non-iterable"（真实异常被折叠） | 复核窄化 |
+| B-D9 | `interpreter/intrinsics/io.py:24-31` | reconfigure 宽 except pass + GBK 转义兜底（Windows 编码） | 复核：失败显式暴露 |
+| B-D10 | `vm/handlers/comm.py:45-58` | `rc._comm_config_store`/`_comm_event_bus` 私有直取 + 宽 except | 复核：统一访问器 |
+| B-D11 | `interpreter.py:610-612` | 用户类预评估宽 except 留待 instantiate 重试（双路径兜底） | 复核一致性保证 |
+| B-D12 | `llm_executor/_prompt.py:245-256` | axiom→vtable 双轨回退 + except 吞用户 `__outputhint_prompt__` bug 静默无 hint | 复核窄化 |
+
+> **Zone C（objects / shared / base / loader）**
+
+| # | 位置 | 特征 | 建议处置 |
+|---|------|------|---------|
+| C-D1 | `objects/kernel/base.py:46-59` | `__call__` 双路径：vtable lookup 优先 + `hasattr(self,'call')` 兜底 | 复核：统一绑 vtable |
+| C-D2 | `objects/kernel/native_module.py:30-33/119-125` | `except AttributeError`/`except (KeyError,AttributeError)` 作能力判定，白名单 getter 内部真实错误被吞 | 复核窄化 |
+| C-D3 | `native_module.py:41` + `loader.py:71` | `_ibci_registry_id` 跨对象私有标记注入（重命名即静默失效） | 复核：协议/包装层 |
+| C-D4 | `objects/kernel/_helpers.py:19/28-44` | Compatibility fallback：side-table miss 后节点形态嗅探 | 复核：确认 side-table 恒完备则删 |
+| C-D5 | `objects/deep_clone.py:109` | `type(val) is KernelIbObject` 精确判别（新子类会静默漏判） | 设计确认（当前语义正确） |
+| C-D6 | `objects/kernel/ib_class.py:182` | `hasattr(val_info, 'static_val')`（宜 isinstance IbClassField） | 复核 |
+| C-D7 | `observability/snapshot.py:24-104` | 跨对象私有穿透 + 宽 except（可观测性层） | 设计确认（待接口协议化） |
+| C-D8 | `modules/file_impl.py:44-54` | 运行时兜底注释（编译期漏检防御纵深） | 设计确认（有据） |
+| C-D9 | `module_system/discovery.py:121-122` + `artifact_loader.py:91-96` | 静默 except 吞错：插件 _spec 依赖导入失败静默不可发现 / 继承链循环类被静默丢弃 | 复核窄化 |
+| C-D10 | `runtime_serializer.py:561` + `callables.py:295` | 池布局歧义回退 native + hasattr 探测 | 复核 |
+
+> **Zone D（ibci_modules + sdk）**
+
+| # | 位置 | 特征 | 建议处置 |
+|---|------|------|---------|
+| D-D1 | `ibci_ai/core.py:459-466`（同 221-223） | reasoning/reasoning_content 双字段探测 + 提取逻辑两处完全重复（DRY） | 复核：抽象单一 helper |
+| D-D2 | `ibci_isys/core.py:38-83` | 对 PluginCapabilities 保证字段/接口方法做恒真守卫 + 能力探测 | 复核：直访（契约 fail-fast） |
+| D-D3 | `ibci_iruntime/core.py:39-180` | `getattr(ec, "vm_executor"/"registry"/"runtime_context", None)` 死守卫（公开 property 恒在）；snapshot 无 executor 静默 {} | 复核：直访 + fail-fast |
+| D-D4 | `ibci_idbg/core.py:361-364` | IStackInspector(List[str]) vs IStateReader(List[IbIntent]) 接口形状不一致，hasattr 分支模拟类型分派 | 复核：统一接口返回类型 |
+| D-D5 | `ibci_iruntime:148-171` + `ibci_idbg:273-309` | 跨对象私有槽访问（`_comm_event_bus`/`node_pool` 原始 AST 结构） | 复核：走公开只读接口（ReadOnlyNodePool） |
+| D-D6 | `ibci_ai/core.py:304` | `getattr(behavior, "_execution_context")` 私有穿透（插件重复实现核心解析逻辑） | 复核：调用公开方法 |
+| D-D7 | `ibci_ai/core.py:90-91/160-161` | `"/v1"` 字符串嗅探启发式自动补 URL 后缀 | 复核：显式配置项 |
+
+> 处置原则：每项按"修 / 复核定案 / 设计确认"三档处理；"复核定案"项先证据化判定再决定
+> 修或文档化；`media 封存 / deep_clone / snapshot 协议化 / file_impl 防御` 等已确认设计项
+> 仍列为待办（复核时确认无需动即关闭）。
+
 
 ### Phase 4 延迟项（已封存，从 ADR-008/010/013 提取）
 
