@@ -101,8 +101,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一阶段：R3 code-odor 全面异味扫描**（完整复核审查流程中；R1/R2 已完成）。
-- 清单：`PENDING_REVIEW_ITEMS.md` —— R3 异味扫描（待做）/ R4 覆盖率核对（待做）/
+- **下一阶段：R4 覆盖率核对**（完整复核审查流程中；R1/R2/R3 已完成）。
+- 清单：`PENDING_REVIEW_ITEMS.md` —— R4 覆盖率核对（待做）/
   R5 doc 治理 + D1-D5 docs 同步（待做）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
@@ -110,9 +110,11 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** 全部落地
   unsafe-vibe-dev（本地 commit，未 push）。批次/commit 明细见 `NEXT_STEPS.md`"已完成"节。
-- **R1 完整复核**（会话 13）+ **R2 健康诊断十查**（会话 14-15）+ **注释卫生清理** 全部完成，
-  缺陷按"不删也不修"两档处置，含 IbSlot.update 方案 A 接通 CAS RMW、Task→Thread 语言面
-  改名（用户授权）。详细记录见 `PENDING_REVIEW_ITEMS.md` §〇b 与 `WORKLOG.md`。
+- **R1 完整复核**（会话 13）+ **R2 健康诊断十查**（会话 14-15）+ **R3 code-odor 全面异味
+  扫描**（会话 16）+ **注释卫生清理** 全部完成。R3 处置：4 批 23 项真缺陷
+  （死代码清除 / 恒真守卫移除 / except 窄化 / 真缺陷重构，含 assignment 复杂目标双通道、
+  behavior 序列化 round-trip、idbg 悬空属性）。每批全量 pytest 零回归。
+  详细记录见 `PENDING_REVIEW_ITEMS.md` §〇b 与 `WORKLOG.md`。
 - **测试基线**：1506 passed / 6 skipped（以实跑为准）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；无独立分支残留）。
 

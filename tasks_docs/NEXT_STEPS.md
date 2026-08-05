@@ -4,43 +4,46 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-05（R1/R2 复核审查完成；下一阶段 = **R3 code-odor 全面异味扫描**）
+> **最后更新**：2026-08-05（R1/R2/R3 复核审查完成；下一阶段 = **R4 覆盖率核对**）
 
 ---
 
-## 🔴 下一阶段：R3 code-odor 全面异味扫描（当前最紧要）
+## 🔴 下一阶段：R4 覆盖率核对（当前最紧要）
 
-> 完整复核审查工作流程进行中（R1/R2 已完成）。R3 对全仓做 **code-odor 特征扫描**：
-> 嵌套分支 / 能力探测 / 兜底字样 / 反射变体。完整审查清单见 `tasks_docs/PENDING_REVIEW_ITEMS.md`。
+> 完整复核审查工作流程进行中（R1/R2/R3 已完成）。R4 核对新增测试是否覆盖
+> 全部新行为。完整审查清单见 `tasks_docs/PENDING_REVIEW_ITEMS.md`。
 
-### R3 执行要点
+### R4 执行要点
 
-- **范围**：全仓 `.py`（core/、ibci_modules/、ibci_sdk/）。
-- **特征**：大量/深层 if-else 嵌套、兼容/fallback/兜底/混合方案/快速实现字样、
-  反射/能力探测隐蔽变体（异常做能力判定、getattr 私有穿透、dir() 枚举、字符串嗅探）。
-- **方法**：并行 general agent 独立扫描 + 主会话实证关键项；发现分类（真缺陷/设计限制/需讨论）。
+- **范围**：会话 1-16 累计新增行为——subscriber 生命周期 / class_ref / 泛型特化分支 /
+  瞬态序列化协议 / 构造入口 / R3 修复的新行为（complex 目标同步路径、behavior
+  序列化 round-trip、异常窄化错误面）。
+- **方法**：并行 general agent 独立核对 + 主会话实证；发现覆盖缺口即补测试。
 - **约束**：subagent **仅 general agent**；每批全量 `python -m pytest tests/` 零回归；
-  新缺陷按"不删也不修=不可接受"两档处置；commit 留痕（仅本地，**禁止 push**）。
+  commit 留痕（仅本地，**禁止 push**）。
 
-### 后续审查（R3 之后）
+### 后续审查（R4 之后）
 
 | 编号 | 内容 | 说明 |
 |------|------|------|
-| **R4** | 覆盖率核对 | 新增测试是否覆盖全部新行为（subscriber 生命周期/class_ref/泛型特化分支/瞬态协议等） |
 | **R5** | doc-governance 审计 | docs/ 治理流程（配合 D1-D5 文档收敛） |
 | **D1-D5** | docs/ 技术手册同步 | signal 移除 / pubsub+subscriber / 瞬态序列化协议 / thread 槽位化 / 收尾机制变化收敛进 docs |
 
 ---
 
-## ✅ 已完成：完整复核审查 R1/R2（2026-08-05）
+## ✅ 已完成：完整复核审查 R1/R2/R3（2026-08-05）
 
 - **R1 正式 code-review**（会话 13）：三阶段主线 + 收尾 L1-L8 独立复核，无高严重缺陷；
   新增缺陷 A1/C1/B1-B6/D1-D6 全部处置（D 系列重分类修正）。
 - **R2 健康诊断十查**（会话 14-15）：约 50 项问题；经二次复核（架构层面 + 设计思路），
   30 项彻底修复/删除（批次 A-E），12 项设计决策保留+文档化。
   含 IbSlot.update 方案 A 接通 CAS RMW、Task→Thread 语言面改名（用户授权）。
+- **R3 code-odor 全面异味扫描**（会话 16）：4 个 general agent 独立扫描（Zone A-D）+
+  主会话实证核验；23 项真缺陷按 4 批处置（死代码清除 / 恒真守卫移除 / except 窄化 /
+  真缺陷重构），含 assignment 复杂目标双通道消除、behavior 序列化 round-trip 修复、
+  idbg 悬空属性潜伏崩溃等。每批全量 pytest 零回归。
 - **注释卫生清理**：全仓 66 文件删除任务代号/进度标记（恢复"注释只注功能"纪律）。
-- 详细记录见 `tasks_docs/PENDING_REVIEW_ITEMS.md` §〇b 与 `tasks_docs/WORKLOG.md` 会话 13-15。
+- 详细记录见 `tasks_docs/PENDING_REVIEW_ITEMS.md` §〇b 与 `tasks_docs/WORKLOG.md` 会话 13-16。
 
 ---
 

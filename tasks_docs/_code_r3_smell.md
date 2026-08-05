@@ -3,6 +3,8 @@
 > 临时任务文档（Phase 5 汇报后删除）。范围：core/、ibci_modules/、ibci_sdk/。
 > 方法：4 个 general agent 独立扫描（Zone A/B/C/D）+ 主会话实证核验。
 > 处置：真缺陷按"不删也不修"两档（根本修复/彻底删除）；设计限制文档化；纯良性保留。
+> **状态：✅ 完成（2026-08-05）。全部批次落地 unsafe-vibe-dev（本地 commit，未 push）。
+> 每批全量 pytest 零回归（1506 passed / 6 skipped，以实跑为准）。**
 
 ## 发现汇总（2026-08-05）
 
@@ -70,3 +72,11 @@
 
 ## 验证
 每批改完：全量 `python -m pytest tests/` 零回归 + commit（仅本地，禁 push）。
+- 批次 A commit f5d3f94 / 批次 B cb2edbd / 批次 C c73914d / 批次 D a1ffbbe /
+  残留清理 bffe195 —— 每批均 1506 passed / 6 skipped 零回归。
+- D-2 behavior 序列化 round-trip 已用真实 engine 验证：captured_intents
+  None/uid 双向还原 + capture_mode/params_uids 保留 + 二次序列化不再 TypeError。
+
+## 批次 D-2 补充决策
+- **closure 未序列化**：与 fn_callable 既有行为一致（lambda 闭包 cell 为活引用，
+  恢复后无法重链到新作用域）；已文档化为已知限制，非本批范围。

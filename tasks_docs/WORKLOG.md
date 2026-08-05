@@ -6,7 +6,6 @@
 > 与代码承载的内容，随落地归档（git 历史保留完整版）。本文档只保留**仍有参考价值的决策**
 > 与**关键用户裁定**。
 > 最后更新：2026-08-05
-
 ---
 
 ## 一、关键用户裁定（长期约束力）
@@ -71,10 +70,35 @@
   死方法簇/erasure统一/can_return_from_isolated 删除/TypeInferenceState 文档化/AI MOCK 前缀
   收敛/依赖测试改写）。保留+文档化 12 项。**验证**：全量 pytest = 1506 passed / 6 skipped
   零回归（以实跑为准）。
+- **R3 code-odor 全面异味扫描（2026-08-05，会话 16）**：4 个 general agent 独立扫描
+  （Zone A compiler+kernel / B interpreter+vm / C objects+shared+base / D ibci_modules+sdk），
+  26 项疑似真缺陷 + 46 项需讨论；主会话逐项实证核验后按 4 批处置（commit 序列：
+  f5d3f94/cb2edbd/c73914d/a1ffbbe/bffe195，每批全量 pytest 零回归）。涵盖：
+  **批次A 死代码/不可达清除**（lexer 无作用 try / axiom 重复 return / 解析链死 fallback /
+  snapshot 恒假 scheduler 探测 / idbg 悬空 `is_in_fallback`（帧无此字段，命中即
+  AttributeError 潜伏崩溃）/ check.py 死常量 dir() 误用 / engine 静默 axiom 注册 /
+  删除不可达 `vm_handle_IbBehaviorInstance`）；
+  **批次B 恒真守卫移除**（registry hasattr / axiom get_diff_hint / method return_type /
+  llm 帧 / interpreter 防御分支 / capture_mode getattr / native_module 白名单 / service
+  runtime_context 直访 / parallel 简化；并删除 hydration 参数计数死检查——水化 spec 不
+  携带签名信息，字段名 `params` 自始不存在，检查从未生效）；
+  **批次C except 窄化/fail-fast**（module_manager try 仅包 getattr / 事件总线
+  CommClosedError / iruntime 去静默 try / ibci_net 9 处收窄 RequestException /
+  type_def 解析检查点 / scheduler lexer 诊断 / coordinator 去死兜底）；
+  **批次D 真缺陷重构**（assignment 复杂目标不再 dispatch——消除"复杂目标先 dispatch 再
+  撤销"双通道：该路径吞异常后对同一 LLM 表达式二次调用、且同步成功路径绕过 llmexcept
+  不确定性协议；behavior 序列化 round-trip 修复——captured_intents 此前展开为 list 违反
+  None|IbIntentContext 契约且二次序列化抛 TypeError，现存 intent_context uid + 补
+  capture_mode/params_uids，round-trip 已用真实 engine 验证）。
+  **保留+文档化**：axiom 家族分裂（IntentAxiom/IntentContextAxiom 未并入 BaseAxiom，
+  设计观察）、LAZY→any/分层 any permissive 语义、deep_clone `type() is` 精确判别、
+  media 封存零改动、llm_except best-effort 协议兜底、ibci_ai 宽 except（已记录待决策）、
+  behavior closure 序列化限制（与 fn_callable 一致，lambda cell 活引用不可重链）。
+  **验证**：全量 pytest = 1506 passed / 6 skipped 零回归（以实跑为准，每批均验证）。
 - **测试基线**：`python -m pytest tests/` = 1506 passed / 6 skipped（以实跑为准）。
 
 ## 四、遗留 / 待办
 
-- **下一阶段（完整复核审查）**：`tasks_docs/PENDING_REVIEW_ITEMS.md`（R1 ✅ / R2 ✅ / R3-R5 待做 + D1-D5 docs 同步）。
+- **下一阶段（完整复核审查）**：`tasks_docs/PENDING_REVIEW_ITEMS.md`（R1 ✅ / R2 ✅ / R3 ✅ / R4-R5 待做 + D1-D5 docs 同步）。
 - **长期规划**：`tasks_docs/PENDING_TASKS.md`（PT-SEM/PT-4.x/PT-ARCH/PT-SMELL/TEST_REFACTOR 等）。
 - **固定化内容**：`tasks_docs/HANDOFF.md`（常驻交接文档：工作流程/原则/goal 模板）。
