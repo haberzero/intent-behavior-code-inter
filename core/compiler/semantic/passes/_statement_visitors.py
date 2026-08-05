@@ -92,7 +92,12 @@ class StatementVisitorsMixin:
                         node, code=ICE_TYPE_LEAK,
                     )
                     spec = self.registry.resolve(spec.head) or self._any_desc
-                target_type = spec
+                if getattr(spec, "name", None) == "auto":
+                    # 裸赋值符号（auto 占位）：从首次赋值推断并锁定实际类型。
+                    # 与 `auto x = expr` 语义一致——静态锁定，不再隐式退化为 any。
+                    target_type = self._infer_target_type_from_declared(spec, val_type)
+                else:
+                    target_type = spec
             else:
                 # 首次定义无类型标注：推断类型
                 target_type = val_type

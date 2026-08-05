@@ -259,13 +259,17 @@ class SymbolCollector:
             # 避免重复定义
             if name not in self.symbol_table.symbols:
                 # 尝试从类型标注解析 spec
-                spec = self._any_desc
+                spec = None
                 if isinstance(target, ast.IbTypeAnnotatedExpr) and target.annotation:
                     resolved = self._resolve_annotation(target.annotation)
                     if resolved:
                         spec = resolved
                     else:
                         spec = self._annotation_to_typeref(target.annotation)
+                if spec is None:
+                    # 裸赋值（无标注）：以 auto 语义占位——类型检查阶段从首次
+                    # 赋值推断并锁定实际类型（不再静默退化为动态 any）。
+                    spec = self.registry.resolve("auto")
                 sym = VariableSymbol(
                     name=name,
                     kind=SymbolKind.VARIABLE,
