@@ -15,21 +15,10 @@ IbIntentContext 是将意图栈从 RuntimeContextImpl 的私有字段群提升�
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-from core.kernel.spec.type_ref import TypeRef
-from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.axioms.primitives.base import BaseAxiom, _m
 
 
-def _m(name: str, params: Optional[List[str]] = None, ret: str = "void",
-       mutating: bool = False, llmexcept_safe: bool = False):
-    return MethodMemberSpec(
-        name=name,
-        kind="method",
-        return_type=TypeRef.of(ret), param_types=[TypeRef.of(p) for p in params or []],
-        mutating=mutating, llmexcept_safe=llmexcept_safe)
-
-
-class IntentContextAxiom:
+class IntentContextAxiom(BaseAxiom):
     """
     公理：intent_context 类型。
 
@@ -38,16 +27,6 @@ class IntentContextAxiom:
     * is_compatible 仅接受 "intent_context" 自身。
     * get_parent_axiom_name() = "Object"。
     """
-
-    has_call_cap = False
-    has_iter_cap = False
-    has_subscript_cap = False
-    has_operator_cap = False
-    has_converter_cap = False
-    has_parser_cap = False
-    has_from_prompt_cap = False
-    has_output_hint_cap = False
-    has_llm_call_cap = False
 
     @property
     def name(self) -> str:
@@ -68,32 +47,5 @@ class IntentContextAxiom:
             "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
 
-    def get_operators(self) -> Dict[str, str]:
-        return {}
-
-    # ---- No-op defaults for capability methods --------------------- #
-    def resolve_return_type_name(self, arg_type_names): return None
-    def get_element_type_name(self) -> str: return "any"
-    def resolve_item_type_name(self, key_type_name): return None
-    def resolve_operation_type_name(self, op, other_name): return None
-    def parse_value(self, raw_value): return raw_value
-    def from_prompt(self, raw_response, spec=None): return (False, "intent_context does not support from_prompt")
-    def __outputhint_prompt__(self, spec=None) -> str: return ""
-
-    def is_dynamic(self) -> bool:
-        return False
-
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "intent_context"
-
     def is_class(self) -> bool:
         return True
-
-    def is_module(self) -> bool:
-        return False
-
-    def get_parent_axiom_name(self) -> Optional[str]:
-        return "Object"
-
-    def get_diff_hint(self, other_name: str) -> Optional[str]:
-        return None
