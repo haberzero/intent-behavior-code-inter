@@ -4,30 +4,54 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-04（通信领域三阶段 + 收尾 L1-L4 + 泛型成员特化 + L6 瞬态序列化协议化全部完成；下一主线待定/详见 PENDING_TASKS）
+> **最后更新**：2026-08-05（通信领域主线 + 收尾 L1-L8 全部完成；下一阶段 = **完整复核审查**，用户明确准备开启）
 
 ---
 
-## 🔴 当前主线：通信领域（chan/signal/slot）设计完善与统一化检查
+## 🔴 下一阶段：完整复核审查工作流程（当前最紧要）
 
-> **用户裁定（2026-08-04）**：通信领域设计完善与统一化检查为下阶段任务（THREAD_DESIGN_REVISION §三 疏漏 2）。方向修正任务 A-F 全部完成后启动。
->
-> **前置审查（已完成 2026-08-04）**：对线程对象模型方向修正代码做了全方位审查（系统级一致性/设计语言统一/碎片化），完整发现记录见 `tasks_docs/COMMS_DESIGN_REVIEW.md`（唯一审查依据）。
->
-> **修复路径（三阶段，全部完成 ✅ 2026-08-04）**：
-> - **阶段 1（commit e217b8b）**：B1 thread_result 序列化往返 / B2 循环导入 / B4 except:pass 兜底（1457 passed）
-> - **阶段 2（commit f3037b2；设计见 STAGE2_VALUE_OBJECT_UNIFICATION.md）**：D1 instantiate 挂钩 / D2 thread 槽位化 / D3 thread_result IbValue / D4 ThreadStatus 单一枚举 / D5 G4 机制诚实化（1464 passed）
-> - **阶段 3（commit 1da0b1c + 2c49240）**：G3 TASK→THREAD kind 清理 / G5 协调器归位 / G6 通信 Signal 移除 / G7 pubsub 语言层打通 + send_nowait 语义 + 订阅缓存（1464 passed）
->
-> **收尾（✅ 2026-08-04）**：
-> - 待复核登记（PENDING_REVIEW_ITEMS.md）+ thread 隐患深度调查（THREAD_ARCH_HARDCODE_INVESTIGATION.md，确认根因=泛型成员特化机制缺失）
-> - L1 _by_kind 索引彻底删除 / L3 序列化 done 字面量统一 / L4 SpawnedTask Waitable 残留清理（commit 149dd63）
-> - **L2 根治：泛型成员特化协议化**（commit 8e0ada9，设计见 MEMBER_SPECIALIZATION_UNIFICATION.md）——resolve_member per-type 级联收敛为 GenericTypeDeclaration 声明回调
-> - **L6 瞬态序列化协议化**（commit 3a2e5d1，设计见 TRANSIENT_SERIALIZATION_UNIFICATION.md）——`__transient_state__` 协议统一 thread/chan/slot/subscriber 存根，修复 chan/slot/subscriber 数据丢失；全量 pytest 1469 passed / 4 skipped
->
-> **遗留记录（后续窗口）**：运行时泛型身份全系统有损（L7）；kernel 构造机制统一（T 建议 2，暂缓）。
->
-> **下一主线**：待定。可选项：L7 泛型身份评估 / 语言级协程（PENDING_TASKS §二、§三 PT-4.3）。
+> **用户裁定（2026-08-05）**：准备开启**完整复核审查工作流程**。对会话 1-12 累计的所有改动
+> （通信领域三阶段主线 + 收尾 L1-L8 + 泛型成员特化协议化等）做**完整独立复核**。
+> 交接准备已完成（归档过期设计/审查文档，本文件为下一阶段指引，`_HANDOFF.md` 为接手文档）。
+
+### 审查清单（核心依据：`tasks_docs/PENDING_REVIEW_ITEMS.md`）
+
+| 编号 | 内容 | 说明 |
+|------|------|------|
+| **R1** | 正式 code-review 复核 | 对三阶段主线 + 收尾（L1/L2/L3/L4/L6/L8/L5/L7-A + T2）的全部改动做独立复核（general agent）。改前会话从未做完整独立复核 |
+| **R2** | code-quality 健康诊断十查 | 全仓健康审计（残留扫描/历史痕迹/双通道/双写真相/fail-fast/封装纪律） |
+| **R3** | code-odor 全面异味扫描 | 特征扫描（嵌套分支/能力探测/兜底字样/反射变体） |
+| **R4** | 覆盖率核对 | 新增测试是否覆盖全部新行为（subscriber 生命周期/class_ref/泛型特化分支/瞬态协议等） |
+| **R5** | doc-governance 审计 | docs/ 治理流程（配合 D1-D5 文档收敛） |
+| **D1-D5** | docs/ 技术手册同步 | signal 移除 / pubsub+subscriber / 瞬态序列化协议 / thread 槽位化 / 收尾机制变化收敛进 docs/subsystems、语法文档、KNOWN_LIMITS |
+
+### 复核审查注意事项
+
+- **约束**：所有 subagent 工作（含 review）**仅允许使用 general agent**，禁 explore/reviewer 特化 agent。
+- **验证**：每批全量 `python -m pytest tests/` 零回归；产出缺陷清单合入 `PENDING_REVIEW_ITEMS.md`。
+- **交付**：commit 留痕（仅本地）；**禁止 push**（硬原则）；发现新缺陷按"不删也不修=不可接受"两档处置（根本修复或彻底删除）。
+
+---
+
+## ✅ 已完成：通信领域设计完善（三阶段）+ 收尾 L1-L8（2026-08-04/05）
+
+> 全部完成并落地 unsafe-vibe-dev。详细决策记录见 `tasks_docs/WORKLOG.md` 会话 6-12（设计/审查
+> 文档已归档，决策浓缩于 WORKLOG）。当前测试基线：**1474 passed / 4 skipped**（以实跑为准）。
+
+| 批次 | 内容 | commit |
+|------|------|--------|
+| 阶段1 | B1 thread_result 序列化往返 / B2 循环导入 / B4 except:pass 兜底 | e217b8b |
+| 阶段2 | D1 instantiate 挂钩（_create_blank）/ D2 thread 槽位化 / D3 thread_result IbValue / D4 ThreadStatus 单枚举 / D5 G4 诚实化 | f3037b2 |
+| 阶段3 | G3 TASK→THREAD kind / G5 协调器归位 / G6 通信 Signal 移除 / G7 pubsub 打通 | 1da0b1c, 2c49240 |
+| 收尾-L1 | _by_kind 索引彻底删除（B3） | 149dd63 |
+| 收尾-L2 | 泛型成员特化协议化（resolve_member 级联收敛为声明回调） | 8e0ada9 |
+| 收尾-L3/L4 | serializer done 字面量统一 / SpawnedTask Waitable 残留清理 | 149dd63 |
+| 收尾-L6 | 瞬态序列化协议化（__transient_state__ 统一存根） | 3a2e5d1 |
+| 收尾-L8 | 类型符号 class_ref 序列化（IbClass 身份保留） | af3ee21 |
+| 收尾-L5/L7-A/T2 | IbOptional 单承载 / 泛型注解符号身份精确化 / _create_blank 构造入口统一 | 80b463e |
+
+**遗留记录（后续窗口）**：运行时值 type_ref 保持基础 spec（设计决策：可变值不固有泛型身份）；
+PT-SMELL-1/2 审计、TEST_REFACTOR、语言级协程（PT-4.3 async 函数/生成器）等见 `PENDING_TASKS.md`。
 
 ---
 
@@ -65,6 +89,7 @@
 ## 当前测试基线
 
 ```bash
+conda activate ibci
 python -m pytest tests/
 ```
 
