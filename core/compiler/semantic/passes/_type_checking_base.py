@@ -8,7 +8,12 @@ as part of a pure mechanical refactoring — no logic changes.
 
 from typing import Optional
 
-from core.base.diagnostics.codes import SEM_UNCATEGORIZED, SEM_UNRESOLVED_TYPE, ICE_TYPE_LEAK
+from core.base.diagnostics.codes import (
+    SEM_MULTI_TYPE_LIST_REMOVED,
+    SEM_UNCATEGORIZED,
+    SEM_UNRESOLVED_TYPE,
+    ICE_TYPE_LEAK,
+)
 from core.base.enums import Provenance, Visibility
 from core.kernel import ast
 from core.kernel.symbols import Symbol
@@ -179,6 +184,15 @@ class TypeCheckBase:
                         generic_args = [self._resolve_type(elt) for elt in annotation.slice.elts]
                     else:
                         generic_args = [self._resolve_type(annotation.slice)]
+                    # 多类型 list（list[int,str]）已移除：无 union 类型机制，元素读取
+                    # 本应显式 any。异构容器必须显式声明 list[any]，不允许隐式异构
+                    # 击穿元素类型（tuple 多参为位置元素类型，属合法特性，不受影响）。
+                    if base_type.name == "list" and len(generic_args) > 1:
+                        self.error(
+                            "list 只接受单一元素类型参数（如 list[int]）。"
+                            "异构容器请显式声明 list[any]。",
+                            annotation, code=SEM_MULTI_TYPE_LIST_REMOVED,
+                        )
                     # 使用 registry.resolve_specialization 解析特化
                     result = self.registry.resolve_specialization(base_type, generic_args)
                     return result if result is not None else base_type

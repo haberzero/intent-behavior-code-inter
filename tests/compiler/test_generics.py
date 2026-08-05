@@ -461,33 +461,23 @@ class TestGenericAnnotationDeclaredType:
             sp = rc.get_symbol(name).declared_type
             assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（泛型身份回归）"
 
-    def test_multi_type_list_preserves_allowed_types(self, engine):
-        """multi-type list（list[int,str]）泛型身份经 artifact 序列化→还原不退化。
+    def test_multi_type_list_removed(self, engine):
+        """多类型 list（list[int,str]）已移除——必须显式 list[any]。
 
-        此前 serializer 只持久化 element_type_name（multi-type 下为 "any"），
-        allowed_element_types 丢失，还原后退化为裸 list。
+        无 union 类型机制，多元素 list 的"元素读取返回 any"实为隐式异构，
+        击穿元素类型设计。异构容器改为显式声明 list[any]。
         """
-        from core.compiler.serialization.serializer import FlatSerializer
-        from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
-        from core.kernel.factory import create_default_registry
+        from tests.conftest import expect_compile_error
 
-        engine.run_string("list[int,str] mixed = [1, \"a\"]\n", silent=True)
+        expect_compile_error(
+            "list[int,str] mixed = [1, \"a\"]\n",
+            "SEM_MULTI_TYPE_LIST_REMOVED",
+        )
+        # list[any] 显式异构仍可用；list[any] 折叠为裸 list（元素类型默认为 any）
+        engine.run_string("list[any] mixed = [1, \"a\"]\n", silent=True)
         rc = engine.interpreter._execution_context.runtime_context
         sp = rc.get_symbol("mixed").declared_type
-        assert sp.name == "list[int,str]"
-        assert [t.head for t in sp.allowed_element_types] == ["int", "str"]
-
-        # artifact 序列化 → rehydrator 还原闭环（multi-type 身份保真）
-        artifact = engine.compile_string("list[int,str] mixed = [1, \"a\"]\n")
-        d = FlatSerializer().serialize_artifact(artifact)
-        types = d["modules"][artifact.entry_module]["pools"]["types"]
-        target = next(k for k, v in types.items() if v.get("name") == "list[int,str]")
-        assert types[target]["allowed_element_type_names"] == ["int", "str"]
-        reg = create_default_registry()
-        reh = ArtifactRehydrator(type_pool=types, registry=reg)
-        restored = reh.hydrate(target)
-        assert restored.name == "list[int,str]"
-        assert [t.head for t in restored.allowed_element_types] == ["int", "str"]
+        assert sp.name == "list"
 
     def test_positional_tuple_preserves_elements(self, engine):
         """tuple[int,str] 位置元素类型经 artifact 序列化→还原不退化。
