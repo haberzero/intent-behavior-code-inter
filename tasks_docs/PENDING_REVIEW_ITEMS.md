@@ -26,7 +26,7 @@
 | L3 | **G2 未完全兑现**：序列化端 `"done"` 字面量 | ✅ **已完成（commit 149dd63）**——`runtime_serializer.py` thread_result 分支改用 `ThreadStatus.DONE`（序列化+反序列化） | 已修复 |
 | L4 | **SpawnedTask "结构性满足 Waitable" 注释残留** | ✅ **已完成（commit 149dd63）**——`result()` 死方法删除（全仓零消费者），docstring 明确"不满足 Waitable"（async/thread 彻底分离） | 已清理 |
 | L5 | **G1 残留：值对象承载未完全统一** | `IbOptional` 双载（`_inner`+payload）；`IbChannel`/`IbSubscriber` 的 core/view 槽模式未并入统一承载 | 后续值对象统一窗口评估 |
-| L6 | **chan/slot/subscriber 序列化空壳** | 实测序列化为空 object（与 B1 修复前同类数据丢失，为既有系统性瞬态缺口） | 像 thread_transient 一样加瞬态序列化存根 |
+| L6 | **chan/slot/subscriber 序列化空壳** | ✅ **已完成（commit 3a2e5d1）**——瞬态序列化协议化：`__transient_state__` 协议 + 统一 `transient` 存根，thread_transient 专用分支删除；数据不再丢失。设计见 `TRANSIENT_SERIALIZATION_UNIFICATION.md` | 已修复 |
 | L7 | **运行时泛型身份全系统有损** | `Optional[int]→Optional[any]`、`list[int]→list`、`dict[str,int]→dict[any,any]`（G4 系统性边界，会话 7 发现） | 独立任务评估运行时泛型身份保留 |
 
 ## 三、docs/ 技术手册未同步（按治理纪律设计阶段先写 tasks_docs/）

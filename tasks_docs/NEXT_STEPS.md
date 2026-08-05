@@ -4,7 +4,7 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-04（通信领域设计完善三阶段 + 收尾 L1-L4 + 泛型成员特化协议化全部完成；下一主线待定/详见 PENDING_TASKS）
+> **最后更新**：2026-08-04（通信领域三阶段 + 收尾 L1-L4 + 泛型成员特化 + L6 瞬态序列化协议化全部完成；下一主线待定/详见 PENDING_TASKS）
 
 ---
 
@@ -22,11 +22,12 @@
 > **收尾（✅ 2026-08-04）**：
 > - 待复核登记（PENDING_REVIEW_ITEMS.md）+ thread 隐患深度调查（THREAD_ARCH_HARDCODE_INVESTIGATION.md，确认根因=泛型成员特化机制缺失）
 > - L1 _by_kind 索引彻底删除 / L3 序列化 done 字面量统一 / L4 SpawnedTask Waitable 残留清理（commit 149dd63）
-> - **L2 根治：泛型成员特化协议化**（commit 8e0ada9，设计见 MEMBER_SPECIALIZATION_UNIFICATION.md）——resolve_member per-type 级联收敛为 GenericTypeDeclaration 声明回调；全量 pytest 1465 passed / 4 skipped
+> - **L2 根治：泛型成员特化协议化**（commit 8e0ada9，设计见 MEMBER_SPECIALIZATION_UNIFICATION.md）——resolve_member per-type 级联收敛为 GenericTypeDeclaration 声明回调
+> - **L6 瞬态序列化协议化**（commit 3a2e5d1，设计见 TRANSIENT_SERIALIZATION_UNIFICATION.md）——`__transient_state__` 协议统一 thread/chan/slot/subscriber 存根，修复 chan/slot/subscriber 数据丢失；全量 pytest 1469 passed / 4 skipped
 >
-> **遗留记录（后续窗口）**：chan/slot/subscriber 序列化空壳（L6）；运行时泛型身份全系统有损（L7）；kernel 构造机制统一（T 建议 2，暂缓）。
+> **遗留记录（后续窗口）**：运行时泛型身份全系统有损（L7）；kernel 构造机制统一（T 建议 2，暂缓）。
 >
-> **下一主线**：待定。可选项：L6 瞬态序列化协议化 / L7 泛型身份评估 / 语言级协程（PENDING_TASKS §二、§三 PT-4.3）。
+> **下一主线**：待定。可选项：L7 泛型身份评估 / 语言级协程（PENDING_TASKS §二、§三 PT-4.3）。
 
 ---
 

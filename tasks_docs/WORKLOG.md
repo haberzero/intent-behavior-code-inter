@@ -6,6 +6,41 @@
 
 ---
 
+## 2026-08-04 会话 10：L6 瞬态序列化协议化（thread/chan/slot/subscriber 统一 transient 存根）
+
+### 背景
+
+用户"立刻启动下一阶段任务"。承接 thread 隐患调查（`THREAD_ARCH_HARDCODE_INVESTIGATION.md`
+§五 建议 3 = L6）：修复 chan/slot/subscriber 序列化数据丢失 + 消除与 thread 的处理不对称。
+
+### 变化前后
+
+- **问题确认**：thread 有 `thread_transient` 专用分支（类名硬编码，调查 A1）；chan/slot/subscriber
+  无处理 → 落空 object 分支 → mode/name/value/队列信息全丢。真实数据丢失 + 处理不对称。
+- **协议**：`__transient_state__() -> dict`（纯状态存根）。thread 返回状态/done；
+  chan/slot 返回 `core.snapshot()`（含嵌套 IbObject 值）；subscriber 返回订阅视图信息。
+- **serializer 序列化端**：删除 `thread_transient` 专用分支，改为统一 `transient` 协议分支
+  （公开 dunder 协议检测，与 disk_backed `hasattr(descriptor,"to_native")` 鸭子先例一致；
+  state 值经 `_process_value` 递归，嵌套 IbObject 完整往返）。
+- **反序列化端**：`transient` 分支重建为携带 `_transient_state` 的占位 IbObject（状态可内省；
+  活体句柄/队列不可复活——瞬态语义）。thread 反序列化行为不变（多保留状态）。
+- **测试**：+4（chan/subscriber/slot 状态保真 + thread 协议迁移回归 + 往返内省）。
+  全量 `python -m pytest tests/` = **1469 passed / 4 skipped**（零回归）。
+
+### 决策记录
+
+- 协议检测用 hasattr（公开 dunder 协议），非 per-type 类名分支——根治 A1 硬编码分支。
+- 反序列化不复活活体（瞬态语义），重建为带状态的占位。
+- **未走独立分支**：改动仅涉及 serializer 协议分支 + 4 个协议方法，边界清晰、危害可控
+  （非语义核心），直接在主分支推进（不属"无法确认边界"的重构）。
+- 顺带核实：类型对象（IbClass 全局符号）序列化为空 object 属既有行为，非 L6 引入。
+
+### 待决
+
+- 无。L6 完成；剩余 L7（泛型身份评估）/ T 建议 2（构造机制统一）待用户裁定。
+
+---
+
 ## 2026-08-04 会话 9：待复核登记 + thread 隐患调查 + L1/L3/L4 清理 + 泛型成员特化协议化
 
 ### 背景
