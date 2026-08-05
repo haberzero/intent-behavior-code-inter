@@ -9,9 +9,6 @@ from core.runtime.shared.op_constants import (
     OP_MAPPING,
     AST_OP_MAP,
 )
-from core.runtime.exceptions import (
-    ThrownException,
-)
 from core.runtime.shared.signals import Signal
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.vm.handlers._shared import (

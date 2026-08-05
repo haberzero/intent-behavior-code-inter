@@ -7,9 +7,6 @@ from typing import Any, Mapping, Optional, Dict, List
 from core.runtime.shared.signals import (
     Signal,
 )
-from core.runtime.exceptions import (
-    ThrownException,
-)
 from core.runtime.objects.intent import IbIntent, IntentRole
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.deep_clone import try_deep_clone
