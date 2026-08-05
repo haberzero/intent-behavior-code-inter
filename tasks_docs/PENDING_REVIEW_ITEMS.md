@@ -21,10 +21,10 @@
 
 | # | 内容 | 位置/现状 | 处置建议 |
 |---|------|----------|---------|
-| L1 | **B3 `_by_kind` 索引有损** | `GenericTypeRegistry._by_kind`：`get_by_kind("callable_instance")` 实测返回 `behavior`（fn_callable 被覆盖）。D5 语义统一实际缓解后果（共享 `_to_typeref_value_typed`），但索引承诺未修复、无测试锁定 | 修复索引（同 kind 多声明冲突）或显式废弃 `_by_kind` 承诺 |
-| L2 | **根因 4：join/cancel 返回 `any` 兜底** | `ThreadAxiom` `"join"/"cancel" ret="any"`（`axioms/primitives/comm.py:45-46`），仅靠 `_members.py` per-type if/elif 级联补救 | 公理返回类型声明正确化；收敛 `_members.py` 级联为协议驱动 |
-| L3 | **G2 未完全兑现**：序列化端 `"done"` 字面量 | `runtime_serializer.py:274/585/586` 硬编码 `"done"`，未引用 `ThreadStatus` 常量 | 改用 `ThreadStatus.DONE` 单一权威源 |
-| L4 | **SpawnedTask "结构性满足 Waitable" 注释残留** | `coordinator.py:64`（review 根因 2 提及"结构性 Waitable 残留"） | 清理注释或核验实际协议关系 |
+| L1 | **B3 `_by_kind` 索引有损** | ✅ **已完成（commit 149dd63）**——彻底删除 `_by_kind`/`get_by_kind`（kind 不唯一有损 + 生产零调用死代码），测试改按名 `get(name)`；未来按 kind 分发的正确形态（多值索引 + 声明驱动）记录于 class docstring | 已删除 |
+| L2 | **根因 4：join/cancel 返回 `any` 兜底** | `ThreadAxiom` `"join"/"cancel" ret="any"`（`axioms/primitives/comm.py:45-46`），仅靠 `_members.py` per-type if/elif 级联补救 | **已立项为下一主线**：泛型成员特化协议化（见 `MEMBER_SPECIALIZATION_UNIFICATION.md`） |
+| L3 | **G2 未完全兑现**：序列化端 `"done"` 字面量 | ✅ **已完成（commit 149dd63）**——`runtime_serializer.py` thread_result 分支改用 `ThreadStatus.DONE`（序列化+反序列化） | 已修复 |
+| L4 | **SpawnedTask "结构性满足 Waitable" 注释残留** | ✅ **已完成（commit 149dd63）**——`result()` 死方法删除（全仓零消费者），docstring 明确"不满足 Waitable"（async/thread 彻底分离） | 已清理 |
 | L5 | **G1 残留：值对象承载未完全统一** | `IbOptional` 双载（`_inner`+payload）；`IbChannel`/`IbSubscriber` 的 core/view 槽模式未并入统一承载 | 后续值对象统一窗口评估 |
 | L6 | **chan/slot/subscriber 序列化空壳** | 实测序列化为空 object（与 B1 修复前同类数据丢失，为既有系统性瞬态缺口） | 像 thread_transient 一样加瞬态序列化存根 |
 | L7 | **运行时泛型身份全系统有损** | `Optional[int]→Optional[any]`、`list[int]→list`、`dict[str,int]→dict[any,any]`（G4 系统性边界，会话 7 发现） | 独立任务评估运行时泛型身份保留 |
