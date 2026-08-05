@@ -125,6 +125,28 @@
   `PENDING_TASKS.md` PT-ARCH-31（lambda 活 cell 不可重链 / snapshot 种子丢失；需设计闭包
   序列化语义并与 fn_callable 一并处理）。
 - commit：本轮处置已随会话提交。
+
+## 五、类型强化（2026-08-05，会话 16 尾，用户裁定"any 兜底击穿类型设计"）
+
+> 设计依据：`docs/architecture/01_principles.md §5.3`（`or self._any_desc` 列为禁止的妥协
+> fallback）+ `appendix_type_system_rationale.md §九`（静态名义强类型 + 渐进 any 显式逃生阀）。
+> 三项收紧全部落地 unsafe-vibe-dev（本地 commit 序列：4991c19/56f8447/95af889/f7f7010），
+> 每项全量 pytest 零回归（1506 passed / 6 skipped，以实跑为准）。
+
+- **Task1 强制返回标注**：`func`/`llm`/lambda 缺失返回标注 → `SEM_MISSING_RETURN_ANNOTATION`
+  编译错误（替代静默回填 any）。先补 lambda `-> auto` body 推断（非行为 body 推断并锁定；
+  行为 body 保持 behavior 动态语义）。~80 个测试点补标注（`-> auto`/`-> T`/`-> void`）。
+- **Task2 裸赋值 auto 语义**：裸赋值 `x = expr` 从隐式 any 改为 `auto`（symbol_collection 以
+  auto 占位 + 类型检查走 `_infer_target_type_from_declared` 推断锁定）。异类型重赋现在
+  `SEM_TYPE_MISMATCH`。显式 `any` 保留为唯一动态逃生阀；any 值用于类型化上下文时运行时
+  强制校验（`RUN_TYPE_MISMATCH`，必须显式强转）。
+- **Task3 多类型 list 移除**：`list[int,str]` → `SEM_MULTI_TYPE_LIST_REMOVED`（无 union 机制，
+  强制显式 `list[any]`）。`tuple[T1,T2,...]` 位置元素类型保留（合法特性）。
+- **验证**：any→typed 运行时强校验、裸赋值锁定、标注强制、多类型移除在各声明上下文生效；
+  残留扫描确认 Python lambda 与 tuple 位置元素未误伤。
+- 文档同步：`KNOWN_LIMITS.md` §七/八/九、`syntax/02_variables.md`、`05_functions.md`、
+  `07_behavior_expressions.md`、`01_types.md`、`architecture/03_type_system.md` §7、
+  `01_principles.md` §5.3。
 - **测试基线**：`python -m pytest tests/` = 1506 passed / 6 skipped（以实跑为准）。
 
 ## 四、遗留 / 待办

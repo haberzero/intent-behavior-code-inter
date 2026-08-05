@@ -110,7 +110,7 @@ class TestDispatchSkipped:
     def test_fn_callable_behavior_not_dispatched(self):
         """``fn`` 声明的 fn_callable behavior expression 不应被立刻 dispatch。"""
         # fn 声明侧语法：
-        # fn f = lambda: @~ MOCK:STR:lazy ~
+        # fn f = lambda -> auto: @~ MOCK:STR:lazy ~
         # 此时 RHS 是 lambda 包装；不会经过 IbAssign(IbBehaviorExpr) 直派发。
         code = AI_MOCK_PREFIX + (
             "fn f = lambda -> auto: @~ MOCK:STR:lazy ~\n"
