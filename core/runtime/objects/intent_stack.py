@@ -51,8 +51,14 @@ class IbIntentStack(IbObject):
         IBCI 用法示例：
             IntentStack.pop()
             IntentStack.pop("language")
+
+        ``tag`` 给定则移除最近添加的匹配标签的意图（返回该意图）；
+        否则弹出栈顶意图（R2 修复：此前忽略 tag 参数）。
         """
         if self._runtime_context:
+            if tag is not None:
+                removed = self._runtime_context.remove_intent(tag=tag)
+                return removed if removed is not None else None
             return self._runtime_context.pop_intent()
         return None
 

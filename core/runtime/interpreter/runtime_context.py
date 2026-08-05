@@ -831,7 +831,7 @@ class RuntimeContextImpl(RuntimeContext):
         else:
             self._active_intent_ibobj = None
 
-    def get_resolved_prompt_intents(self, execution_context: Any) -> List[str]:
+    def get_resolved_prompt_intents(self, execution_context: Any, call_intent: Optional[Any] = None) -> List[str]:
         """
         获取最终消解后的 Prompt 字符串列表。
 
@@ -840,6 +840,9 @@ class RuntimeContextImpl(RuntimeContext):
         2. @ 涂抹意图（pending_smear）：一次性，合并入本次结果后清除
         3. 持久意图栈（active_intents via @+）
         4. 全局意图
+
+        ``call_intent`` 为协议预留参数（当前消解逻辑未消费；签名与
+        ``IRuntimeContext`` 对齐）。
         """
         if self._intent_ctx.has_override():
             pending_override = self._intent_ctx.consume_override()

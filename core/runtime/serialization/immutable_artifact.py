@@ -81,8 +81,23 @@ class ImmutableArtifact(Mapping):
         raise TypeError("ImmutableArtifact does not support update")
 
     def __hash__(self) -> int:
-        """支持将 ImmutableArtifact 用作 dict 的键"""
-        return hash(self._data)
+        """支持将 ImmutableArtifact 用作 dict 的键。
+
+        对规范化不可变表示取哈希：嵌套 dict 递归为冻结键值对、
+        list 转 tuple——原始 dict/list 不可哈希，直接 hash(self._data)
+        会抛 TypeError（R2 修复）。
+        """
+        return hash(self._to_frozen(self._data))
+
+    def _to_frozen(self, value: Any) -> Any:
+        """递归将 dict/list 规范化为可哈希的冻结表示。"""
+        if isinstance(value, ImmutableArtifact):
+            return self._to_frozen(value._data)
+        if isinstance(value, dict):
+            return frozenset((k, self._to_frozen(v)) for k, v in value.items())
+        if isinstance(value, (list, tuple)):
+            return tuple(self._to_frozen(v) for v in value)
+        return value
 
     def __eq__(self, other: object) -> bool:
         """支持相等性比较"""
