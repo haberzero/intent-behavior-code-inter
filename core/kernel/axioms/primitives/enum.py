@@ -86,12 +86,19 @@ class EnumAxiom(BaseAxiom):
             return "Reply with one of the valid enum values."
         return f"Reply with exactly one of: {', '.join(index_map.keys())}."
 
-    def from_prompt(self, raw_response: Any, spec: Optional["IbSpec"] = None) -> Tuple[bool, Any]:
-        # Pass through special mock sentinel values
-        if isinstance(raw_response, str):
-            upper = raw_response.upper().strip()
-            if upper in (_MOCK_AMBIGUOUS_SENTINEL_UPPER, "1", "0", "TRUE", "FALSE"):
-                return (True, raw_response)
+    def from_prompt(self, raw_response: str, spec: Optional["IbSpec"] = None) -> Tuple[bool, Any]:
+        # 契约：入参为原始响应字符串（protocols.py 与全部调用点均传 str）。
+        # 非字符串属协议违反——fail-fast 显式暴露，不再做 to_native/receive 双轨
+        # 探测或宽 except 静默兜底（unbox 收敛方向）。
+        if not isinstance(raw_response, str):
+            raise TypeError(
+                f"EnumAxiom.from_prompt expects str, got {type(raw_response).__name__}"
+            )
+
+        upper = raw_response.upper().strip()
+        # MOCK 哨兵值直通
+        if upper in (_MOCK_AMBIGUOUS_SENTINEL_UPPER, "1", "0", "TRUE", "FALSE"):
+            return (True, raw_response)
 
         if spec is None:
             return (False, "无法解析枚举值：缺少类型信息")
@@ -100,22 +107,8 @@ class EnumAxiom(BaseAxiom):
         if not index_map:
             return (False, "无法解析枚举值：缺少成员信息")
 
-        # Use unified message passing for protocol methods
-        if hasattr(raw_response, "to_native"):
-            val = raw_response.to_native()
-        elif hasattr(raw_response, "receive"):
-            # Unified protocol method dispatch via receive()
-            try:
-                result = raw_response.receive('__to_prompt__', [])
-                val = result.to_native() if hasattr(result, 'to_native') else result
-            except Exception:
-                val = raw_response
-        else:
-            val = raw_response
-
-        val_str = str(val).strip().upper()
-        if val_str in index_map:
-            return (True, val_str)
+        if upper in index_map:
+            return (True, upper)
 
         names = list(index_map.keys())
         preview = ", ".join(names[:5]) + (" 等" if len(names) > 5 else "")
