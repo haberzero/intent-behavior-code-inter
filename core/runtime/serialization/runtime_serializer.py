@@ -269,9 +269,10 @@ class RuntimeSerializer(BaseFlatSerializer):
         # thread_result 是 IbValue 值对象（payload 承载成功值，阶段 2 D3）——
         # 与 thread_transient 分支一致，按 ib_class.name 分发而非 isinstance。
         elif cls_name == "thread_result" and not isinstance(obj, IbClass):
+            from core.runtime.objects.thread import ThreadStatus
             data["_type"] = "thread_result"
             data["status"] = obj._status
-            data["value"] = self._process_value(obj.payload) if obj._status == "done" else None
+            data["value"] = self._process_value(obj.payload) if obj._status == ThreadStatus.DONE else None
             data["error"] = self._process_value(obj._error) if obj._error is not None else None
 
         elif isinstance(obj, IbModule):
@@ -581,9 +582,10 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
 
         elif _type == "thread_result":
+            from core.runtime.objects.thread import ThreadStatus
             from core.runtime.objects.thread_result import IbThreadResult
-            status = data.get("status", "done")
-            value = self._deserialize_value(data.get("value")) if status == "done" else None
+            status = data.get("status", ThreadStatus.DONE)
+            value = self._deserialize_value(data.get("value")) if status == ThreadStatus.DONE else None
             error = self._deserialize_value(data.get("error")) if data.get("error") is not None else None
             obj = IbThreadResult(ib_class, value=value, error=error, status=status)
             self.instance_cache[uid] = obj

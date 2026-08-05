@@ -8,9 +8,10 @@ core.runtime.coordinator — 多任务/多 VM 生命周期协调器（PT-MT-7/8�
 生命周期：``spawn`` → task handle → ``join``（阻塞等待结果）/ ``cancel``（协作式
 请求取消）/ ``is_done``（非破坏检查）。
 
-设计（线程对象模型方向修正，任务 C 将改造为 thread 对象 + 句柄方法）：
+设计（线程对象模型方向修正，任务 C 已完成，thread 对象 + 句柄方法）：
 - 轻量 VM 实例：每并发路径一个，完全隔离作用域/意图/llmexcept，共享只读数据。
-- join/cancel 经 handle；结果为函数返回值（经 Waitable 协议供 VM yield 挂起）。
+- join/cancel 经 handle；结果为函数返回值。**SpawnedTask 不满足 Waitable 协议**
+  （async/thread 彻底分离——线程生命周期经句柄方法管理，不供 VM yield 挂起）。
 - 后台线程为 daemon（Python 无法强杀线程；cancel 为协作式请求）。
 
 隔离边界（关键）：任务不写主环境作用域；跨任务数据经 Channel/Slot 显式通信。
@@ -61,8 +62,9 @@ def get_runtime_coordinator(executor: Any) -> "RuntimeCoordinator":
 class SpawnedTask:
     """一个 spawn 任务（后台线程 + 任务本地执行上下文）。
 
-    结构性满足 :class:`Waitable`（``is_done`` + ``result()``）：VM 可 yield 挂起
-    等待；``join`` 阻塞等结果。
+    线程生命周期经句柄方法管理（``join`` 阻塞等结果 / ``cancel`` 协作式请求 /
+    ``is_done`` 非破坏检查）。**不满足 :class:`Waitable`**——async/thread 领域
+    彻底分离，线程句柄不经 VM yield 挂起（清理：``result()`` 死方法已删除）。
     """
 
     def __init__(self, interpreter: Any, callable_obj: Any, args: Optional[List[Any]] = None):
@@ -119,10 +121,6 @@ class SpawnedTask:
     @property
     def is_done(self) -> bool:
         return self._future.done()
-
-    def result(self) -> Any:
-        """阻塞等待任务结果；任务内异常在此重抛。"""
-        return self._future.result()
 
     def join(self) -> Any:
         """阻塞等待任务完成并返回结果。"""

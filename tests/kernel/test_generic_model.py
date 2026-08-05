@@ -30,12 +30,12 @@ class TestGenericTypeRegistry:
         for name in ("list", "dict", "tuple", "Optional", "fn_callable", "behavior", "thread"):
             assert name in reg, f"generic '{name}' not declared"
 
-    def test_registry_is_single_authority(self):
-        """同一注册表实例同时按名与按 kind 索引同一声明。"""
+    def test_registry_indexed_by_name(self):
+        """注册表按 name 索引（B3 修复：_by_kind 单值索引已删除——kind 不唯一）。"""
         reg = create_generic_registry()
-        by_name = reg.get("list")
-        by_kind = reg.get_by_kind(TypeKind.LIST.value)
-        assert by_name is by_kind
+        assert reg.get("list").name == "list"
+        assert reg.get("fn_callable").name == "fn_callable"
+        assert reg.get("behavior").name == "behavior"
 
 
 class TestUnifiedResolve:
@@ -110,31 +110,31 @@ class TestToTyperef:
     def test_list(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
-        tr = reg.generic_types.get_by_kind(sp.kind).to_typeref(sp)
+        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
         assert tr.canonical_name == "list[int]"
 
     def test_dict(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("dict"), [reg.resolve("str"), reg.resolve("int")])
-        tr = reg.generic_types.get_by_kind(sp.kind).to_typeref(sp)
+        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
         assert tr.canonical_name == "dict[str,int]"
 
     def test_optional(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("Optional"), [reg.resolve("int")])
-        tr = reg.generic_types.get_by_kind(sp.kind).to_typeref(sp)
+        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
         assert tr.canonical_name == "Optional[int]"
 
     def test_thread(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("thread"), [reg.resolve("int")])
-        tr = reg.generic_types.get_by_kind(sp.kind).to_typeref(sp)
+        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
         assert tr.canonical_name == "thread[int]"
 
     def test_thread_result(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("thread_result"), [reg.resolve("int")])
-        tr = reg.generic_types.get_by_kind(sp.kind).to_typeref(sp)
+        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
         assert tr.canonical_name == "thread_result[int]"
 
 

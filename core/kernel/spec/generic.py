@@ -55,23 +55,25 @@ class GenericTypeDeclaration:
 class GenericTypeRegistry:
     """内置泛型类型声明的注册表（单一权威源）。
 
-    同时按 ``name`` 与 ``kind`` 索引，供创建（按名）与序列化/还原（按 kind）
-    两条路径复用同一份声明。
+    按 ``name`` 索引，供创建 / 特化（``_assignability`` 按基础名查声明）复用。
+
+    设计决策（2026-08-04，会话 9）：**不提供按 ``kind`` 索引**。
+    原 ``_by_kind`` 索引因 kind 不唯一（fn_callable/behavior 共享
+    CALLABLE_INSTANCE）存在后注册覆盖先注册的有损缺陷，且生产路径零调用
+    （序列化/还原实际走 ``TypeRef.from_spec`` / ``artifact_rehydrator`` /
+    ``get(name)``）——属死代码，已彻底删除。未来若需"按 kind 分发"收敛
+    rehydrator/from_spec 的硬编码分支，正确形态是**多值** ``kind -> List[decl]``
+    索引 + 声明驱动，而非单值覆盖；在无实际消费者前不预埋。
     """
 
     def __init__(self) -> None:
         self._by_name: Dict[str, GenericTypeDeclaration] = {}
-        self._by_kind: Dict[str, GenericTypeDeclaration] = {}
 
     def register(self, decl: GenericTypeDeclaration) -> None:
         self._by_name[decl.name] = decl
-        self._by_kind[decl.kind] = decl
 
     def get(self, name: str) -> Optional[GenericTypeDeclaration]:
         return self._by_name.get(name)
-
-    def get_by_kind(self, kind: str) -> Optional[GenericTypeDeclaration]:
-        return self._by_kind.get(kind)
 
     def names(self) -> List[str]:
         return sorted(self._by_name)
