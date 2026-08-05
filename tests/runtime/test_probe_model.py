@@ -1,10 +1,10 @@
 """
 tests/runtime/test_probe_model.py
-==================================
+=================================
 
-PT-TEST-9: ``ai.probe_model`` 测试覆盖。
+``ai.probe_model`` 测试覆盖。
 
-锁定三项关键不变式（见 ``tasks_docs/PENDING_TASKS.md`` §五 PT-TEST-9）：
+锁定三项关键不变式：
 
 ① probe 为 setup-time 显式动作（无懒探测竞争）——MOCK 路径调用 ``probe_model()``
    显式写入 ``_model_capabilities`` 并返回 ``MOCK_PROBE_SUCCESS``；未 probe 时

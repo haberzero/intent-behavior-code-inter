@@ -2,7 +2,7 @@
 core.runtime.objects.stream — 流式句柄（IbStreamHandle）。
 
 ``IbStreamHandle`` 把 provider 的增量迭代器接入统一 Waitable 协议与
-stream Channel（PT-MT-6）：后台线程消费迭代器，逐块 ``send`` 到 Channel，
+stream Channel：后台线程消费迭代器，逐块 ``send`` 到 Channel，
 渲染线程（或 VM）``recv`` 逐块渲染。
 
 - ``is_done``：迭代器已耗尽（完整文本已推入）。

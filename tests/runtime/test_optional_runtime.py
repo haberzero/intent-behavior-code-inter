@@ -2,8 +2,8 @@
 tests/runtime/test_optional_runtime.py
 =======================================
 
-任务 A（Optional 配套完整实现）：运行时 ``IbOptional`` 对象 + ``is_some``/``unwrap``/
-``or_else`` 运行时实现。
+Optional 配套运行时：``IbOptional`` 对象 + ``is_some``/``unwrap``/``or_else``
+运行时实现。
 
 锁定 Optional 运行时语义：
 - ``Optional[T] x = None`` 后 ``x.is_some()`` 为 False，``x.or_else(default)`` 返回默认值
@@ -203,6 +203,6 @@ class TestOptionalSerialization:
 
 
 def test_optional_single_carrier():
-    """L5：Optional 单承载——内层值存 payload，无 _inner 双载槽（消除 G1 双载残留）。"""
+    """Optional 单承载——内层值存 payload，无 _inner 双载槽。"""
     from core.runtime.objects.primitives.optional import IbOptional
     assert "_inner" not in IbOptional.__slots__

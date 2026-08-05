@@ -307,7 +307,7 @@ class AIPlugin(IbStatefulPlugin):
         return executor.run_batch(behavior, list(items), ec)
 
     def stream_call(self, sys_prompt: str, user_prompt: str) -> Any:
-        """流式 LLM 调用（PT-MT-6）：返回 ``IbStreamHandle``（Waitable）。
+        """流式 LLM 调用：返回 ``IbStreamHandle``（Waitable）。
 
         后台线程消费 provider 增量并推入内部 stream Channel；调用方经
         ``await`` / VM 协作等待取回完整文本，或经 ``stream_channel`` 逐块渲染。
@@ -318,7 +318,7 @@ class AIPlugin(IbStatefulPlugin):
         )
 
     def stream_channel(self, sys_prompt: str, user_prompt: str) -> Any:
-        """流式 LLM 调用（PT-MT-6）：返回承载增量块的 stream Channel。
+        """流式 LLM 调用：返回承载增量块的 stream Channel。
 
         返回语言层 ``IbChannel``（包装 IbStreamHandle 的内部 Channel），供
         渲染线程 ``recv`` 逐块消费。
@@ -414,7 +414,7 @@ class AIPlugin(IbStatefulPlugin):
 
         # 未显式探测时的回退策略。
         #
-        # 设计立场（2026-08-03）：本阶段 IBCI 不推荐使用 thinking 模型，推荐
+        # 设计立场：本阶段 IBCI 不推荐使用 thinking 模型，推荐
         # 直接输出模式（standard）。thinking 模型现阶段允许但非推荐；未来将专门
         # 设计"直接输出 vs thinking 后输出"的映射/分配策略（届时再细化）。
         #
@@ -508,7 +508,7 @@ class AIPlugin(IbStatefulPlugin):
 
 
     def stream(self, sys_prompt: str, user_prompt: "Union[str, List]", *, target_model: str = "") -> Any:
-        """LLM 流式调用入口（ILLMProvider 协议扩展，PT-MT-6）。
+        """LLM 流式调用入口（ILLMProvider 协议扩展）。
 
         返回一个**增量迭代器**（逐步产出 str 增量），调用方（IbStreamHandle）
         把增量推入 stream Channel 供渲染。非流式场景不应调用本方法。

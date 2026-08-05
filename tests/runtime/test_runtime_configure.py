@@ -2,7 +2,7 @@
 tests/runtime/test_runtime_configure.py
 =======================================
 
-PT-MT-5 控制层测试：runtime.configure(...) 统一启停。
+控制层测试：runtime.configure(...) 统一启停。
 
 锁定：
 - 默认值（parallel/stream/observability 开，debug 关）

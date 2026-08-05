@@ -58,11 +58,11 @@ class ChannelCore:
     def send(self, item: Any) -> None:
         """阻塞发送（模式无关）。已关闭抛 ``CommClosedError``。
 
-        R1-D3 修复：pubsub fan-out 对订阅者快照逐 buffer ``send``，若某订阅者
-        在快照后并发 ``close()``（buffer 已关、尚未从 ``_subscribers`` 移除），
-        ``CommClosedError`` 会从该订阅者泄漏给生产者——修复为捕获并跳过单个
-        已关闭订阅者（与 ``send_nowait`` 对已关订阅者返回 False 的语义对齐），
-        消息仍投递给其余存活订阅者。通道整体关闭仍抛 ``CommClosedError``。
+        pubsub fan-out 对订阅者快照逐 buffer ``send``，若某订阅者在快照后
+        并发 ``close()``（buffer 已关、尚未从 ``_subscribers`` 移除），
+        ``CommClosedError`` 会从该订阅者泄漏给生产者——捕获并跳过单个已关闭
+        订阅者（与 ``send_nowait`` 对已关订阅者返回 False 的语义对齐），消息
+        仍投递给其余存活订阅者。通道整体关闭仍抛 ``CommClosedError``。
         """
         if self._mode == "pubsub":
             with self._lock:
@@ -82,14 +82,12 @@ class ChannelCore:
     def send_nowait(self, item: Any) -> bool:
         """非阻塞发送。False = 满/已关闭。pubsub 下任一订阅者满即 False。
 
-        G7 语义修正：pubsub 无订阅者时返回 ``False``（消息未投递给任何人，
-        与 message/stream 模式 "False=拒绝" 契约对齐——不再把"被零人接收"
-        报告为投递成功）。
+        pubsub 无订阅者时返回 ``False``（消息未投递给任何人，与 message/stream
+        模式 "False=拒绝" 契约对齐——不再把"被零人接收"报告为投递成功）。
 
-        N>1 订阅者语义边界（R1 复核确认，D2）：多订阅者且部分满时返回
-        ``False``，但消息已投递给先序的未满订阅者——``False`` 表示"未全量
-        投递"而非"整条被拒"。调用方须据此解读（对广播结果敏感的路径应在
-        投递前先确认所有订阅者未满）。
+        N>1 订阅者语义边界：多订阅者且部分满时返回 ``False``，但消息已投递给
+        先序的未满订阅者——``False`` 表示"未全量投递"而非"整条被拒"。调用方须
+        据此解读（对广播结果敏感的路径应在投递前先确认所有订阅者未满）。
         """
         if self._mode == "pubsub":
             with self._lock:
@@ -114,7 +112,7 @@ class ChannelCore:
     def recv(self) -> Any:
         """阻塞接收。已关闭且空抛 ``CommClosedError``。
 
-        G7：pubsub 通道是广播器（无主缓冲），消费须经 ``subscribe()`` 取得
+        pubsub 通道是广播器（无主缓冲），消费须经 ``subscribe()`` 取得
         订阅者端点——直接 recv 属用法错误，明确报错而非误导性的 CommClosedError。
         """
         if self._mode == "pubsub":
@@ -140,10 +138,9 @@ class ChannelCore:
     def subscribe(self, size: int = 0) -> "_SubscriberView":
         """pubsub 模式：返回订阅者专属队列视图（fan-out）。
 
-        ``size``：订阅者队列容量（G7——``可配置`` 落地；0=无界，>0 有界，
-        满时 ``send_nowait`` 返回 False）。订阅者队列无失效/驱逐机制，
-        有界模式由消费方及时 ``recv`` 防积压；无界模式是广播信箱的设计选择，
-        调用方须自行保证消费速率。
+        ``size``：订阅者队列容量（0=无界，>0 有界，满时 ``send_nowait``
+        返回 False）。订阅者队列无失效/驱逐机制，有界模式由消费方及时
+        ``recv`` 防积压；无界模式是广播信箱的设计选择，调用方须自行保证消费速率。
 
         非 pubsub 模式调用抛 ``ValueError``（subscribe 是 pubsub 专用）。
         """
@@ -172,10 +169,9 @@ class ChannelCore:
     def close(self) -> None:
         """关闭通道：主缓冲与所有订阅者缓冲一并关闭。幂等。
 
-        R1-D4 修复：pubsub 下关闭全部订阅者 buffer 后**一并清空**
-        ``_subscribers``——此前仅关 buffer 不移出注册表，导致
-        ``snapshot()["subscriber_count"]`` 在通道关闭后仍计入已关闭订阅者
-        （内省与"已关"状态不一致）。清空后 subscriber_count 如实反映 0。
+        pubsub 下关闭全部订阅者 buffer 后**一并清空** ``_subscribers``——
+        否则 ``snapshot()["subscriber_count"]`` 在通道关闭后仍计入已关闭
+        订阅者（内省与"已关"状态不一致）。清空后 subscriber_count 如实反映 0。
         """
         with self._lock:
             if self._closed_flag():

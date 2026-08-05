@@ -2,7 +2,7 @@
 tests/runtime/test_comm_kernel.py
 =================================
 
-PT-MT-3 统一通信内核单元测试：CommBuffer / ChannelCore / SlotCore /
+统一通信内核单元测试：CommBuffer / ChannelCore / SlotCore /
 CommRegistry 的线程安全与语义。
 
 锁定：
@@ -165,12 +165,12 @@ class TestChannelPubSub:
         assert s.closed
 
     def test_pubsub_send_nowait_no_subscribers_returns_false(self):
-        """G7：无订阅者时消息未投递给任何人 → send_nowait 返回 False（非丢弃报成功）。"""
+        """无订阅者时消息未投递给任何人 → send_nowait 返回 False（非丢弃报成功）。"""
         c = ChannelCore(mode="pubsub")
         assert c.send_nowait("m") is False
 
     def test_pubsub_bounded_subscriber(self):
-        """G7：subscribe(size) 可配置订阅者队列容量（size=0 无界，>0 有界）。"""
+        """subscribe(size) 可配置订阅者队列容量（size=0 无界，>0 有界）。"""
         c = ChannelCore(mode="pubsub")
         s = c.subscribe(size=1)
         c.send("a")
@@ -180,7 +180,7 @@ class TestChannelPubSub:
         assert s.recv() == "b"
 
     def test_pubsub_recv_raises_clear_error(self):
-        """G7：pubsub 通道是广播器，直接 recv 明确报错（而非误导性 CommClosedError）。"""
+        """pubsub 通道是广播器，直接 recv 明确报错（而非误导性 CommClosedError）。"""
         c = ChannelCore(mode="pubsub")
         with pytest.raises(ValueError):
             c.recv()
@@ -188,7 +188,7 @@ class TestChannelPubSub:
             c.recv_nowait()
 
     def test_close_clears_subscribers(self):
-        """D4 修复：close() 清空订阅者注册表，subscriber_count 如实归零。
+        """close() 清空订阅者注册表，subscriber_count 如实归零。
 
         此前 close() 仅关闭订阅者 buffer 不移出 _subscribers，内省
         snapshot()["subscriber_count"] 在通道关闭后仍计入已关订阅者。
@@ -203,7 +203,7 @@ class TestChannelPubSub:
         assert snap["subscriber_count"] == 0
 
     def test_send_skips_concurrently_closed_subscriber(self):
-        """D3 修复：send fan-out 跳过已关闭订阅者，异常不泄漏给生产者。
+        """send fan-out 跳过已关闭订阅者，异常不泄漏给生产者。
 
         通道整体未关闭，但某订阅者在快照后并发 close——此前 CommClosedError
         从该订阅者泄漏；修复后消息仍投递给存活订阅者。

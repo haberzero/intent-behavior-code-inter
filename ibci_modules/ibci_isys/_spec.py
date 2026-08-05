@@ -11,7 +11,7 @@ def __ibcext_metadata__() -> dict:
         "name": "isys",
         "kind": "method_module",
         "version": "2.0.0",
-        "description": "IBCI 内核运行时状态与系统控制模块（合并自 isys + sys）",
+        "description": "IBCI 内核运行时状态与系统控制模块",
         "dependencies": [],
     }
 

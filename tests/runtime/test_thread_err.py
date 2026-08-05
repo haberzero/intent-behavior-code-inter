@@ -1,5 +1,5 @@
 """
-err 类型统一测试（任务 D）：TaskError 层次 + cancel 返回 err。
+err 类型统一测试：TaskError 层次 + cancel 返回 err。
 
 覆盖：
 - TaskCancelled / TaskFailed 是 IBCI Exception 子类（用户可见、可继承）

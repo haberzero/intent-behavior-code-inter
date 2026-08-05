@@ -1,14 +1,14 @@
 """
-core.runtime.coordinator — 多任务/多 VM 生命周期协调器（PT-MT-7/8）。
+core.runtime.coordinator — 多任务/多 VM 生命周期协调器。
 
 ``spawn(fn, args)`` 在**后台线程**运行目标函数，使用**任务本地执行上下文**
 （fresh runtime_context + fresh VMExecutor，共享只读 node_pool/registry），
-实现 per-task 隔离（并发正确性 C4）与全局只读数据共享（C5）。
+实现 per-task 隔离与全局只读数据共享。
 
 生命周期：``spawn`` → task handle → ``join``（阻塞等待结果）/ ``cancel``（协作式
 请求取消）/ ``is_done``（非破坏检查）。
 
-设计（线程对象模型方向修正，任务 C 已完成，thread 对象 + 句柄方法）：
+设计（thread 对象 + 句柄方法）：
 - 轻量 VM 实例：每并发路径一个，完全隔离作用域/意图/llmexcept，共享只读数据。
 - join/cancel 经 handle；结果为函数返回值。**SpawnedTask 不满足 Waitable 协议**
   （async/thread 彻底分离——线程生命周期经句柄方法管理，不供 VM yield 挂起）。
@@ -44,10 +44,10 @@ class TaskCancelled(Exception):
 
 
 def get_runtime_coordinator(executor: Any) -> "RuntimeCoordinator":
-    """获取（或惰性创建）执行器关联的 RuntimeCoordinator（线程领域访问器，G5）。
+    """获取（或惰性创建）执行器关联的 RuntimeCoordinator（线程领域访问器）。
 
     挂在 executor.runtime_context 上（与 CommRegistry 同级），供 thread 构造
-    （``primitive_initializer._thread_init``）共享。fail-fast（B4）：runtime_context
+    （``primitive_initializer._thread_init``）共享。fail-fast：runtime_context
     为 RuntimeContextImpl（无 __slots__），setattr 恒成功；失败即显式暴露构造路径错误。
     """
     rc = executor.runtime_context
@@ -371,7 +371,7 @@ class RuntimeCoordinator:
             return [t.to_dict() for t in self._tasks.values()]
 
     def unfinished_handles(self) -> List[str]:
-        """返回所有未完成任务的句柄（疏漏 4：save_state 检测用）。"""
+        """返回所有未完成任务的句柄（save_state 检测用）。"""
         with self._lock:
             return [h for h, t in self._tasks.items() if not t.is_done]
 

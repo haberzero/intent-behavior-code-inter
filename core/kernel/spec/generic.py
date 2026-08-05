@@ -1,7 +1,7 @@
 """
 core/kernel/spec/generic.py
 
-统一泛型模型（任务 B）——内置泛型类型的正式声明机制。
+统一泛型模型——内置泛型类型的正式声明机制。
 
 背景
 ----
@@ -77,7 +77,7 @@ class GenericTypeRegistry:
 
     按 ``name`` 索引，供创建 / 特化（``_assignability`` 按基础名查声明）复用。
 
-    设计决策（2026-08-04，会话 9）：**不提供按 ``kind`` 索引**。
+    设计决策：**不提供按 ``kind`` 索引**。
     原 ``_by_kind`` 索引因 kind 不唯一（fn_callable/behavior 共享
     CALLABLE_INSTANCE）存在后注册覆盖先注册的有损缺陷，且生产路径零调用
     （序列化/还原实际走 ``TypeRef.from_spec`` / ``artifact_rehydrator`` /
@@ -208,9 +208,9 @@ def _to_typeref_optional(spec: "TypeDef") -> TypeRef:
 def _to_typeref_value_typed(spec: "TypeDef") -> TypeRef:
     """值承载型泛型序列化：head 取 spec 基名，实参取 ``value_type``。
 
-    服务 fn_callable / behavior / thread / thread_result 四类"携带值类型"
-    的泛型（阶段 2 G4 语义改名——原 ``_to_typeref_callable`` 以"callable"之
-    名覆盖 thread/thread_result 两个非 callable 类型，掩盖语义差异）。
+    服务 fn_callable / behavior / thread / thread_result / chan / slot 等
+    "携带值类型"的泛型（原 ``_to_typeref_callable`` 以"callable"之名覆盖
+    thread/thread_result 等非 callable 类型，掩盖语义差异）。
     """
     head = spec.get_base_name()
     val = spec.value_type

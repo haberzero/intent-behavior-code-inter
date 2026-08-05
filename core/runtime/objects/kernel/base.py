@@ -25,7 +25,7 @@ class IbObject:
 
     @classmethod
     def _create_blank(cls, ib_class: 'IbClass') -> 'IbObject':
-        """值对象类型化实例构造钩子（阶段 2 统一值对象机制）。
+        """值对象类型化实例构造钩子（统一值对象机制）。
 
         默认返回普通 ``IbObject``（即 ``instantiate`` 既有行为）。值对象实现类
         覆写返回其类型化空实例（如 ``IbThread._create_blank``），使

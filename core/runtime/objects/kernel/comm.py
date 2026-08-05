@@ -7,8 +7,7 @@ core.runtime.objects.kernel.comm — IBCI 语言层通信值对象。
 - ``IbChannel``（chan）—— 数据流通道（send / recv / recv_nonblocking / close / subscribe）
 - ``IbSlot``（slot）—— 共享状态槽（get / set / update）
 
-（通信 Signal 抽象已于阶段 3 移除：零投递机制 + 与 VM 控制流 Signal 撞名，
-见 WORKLOG 会话 8。）
+通信 Signal 抽象已移除（零投递机制 + 与 VM 控制流 Signal 撞名）。
 
 经 ``@register_ib_type`` 注册，由 primitive_initializer 的 axiom 驱动自动化
 绑定方法（见 ChannelAxiom / SlotAxiom 的 get_method_specs）。
@@ -35,7 +34,7 @@ class IbChannel(IbObject):
 
     @classmethod
     def _create_blank(cls, ib_class: IbClass) -> "IbChannel":
-        """类型化空实例（阶段 2 统一构造协议）：经该入口创建，handler/instantiate 同构。"""
+        """类型化空实例（统一构造协议）：经该入口创建，handler/instantiate 同构。"""
         return cls(ib_class)
 
     def __init__(self, ib_class: IbClass, core: Optional[ChannelCore] = None):
@@ -91,7 +90,7 @@ class IbChannel(IbObject):
         return self.core.snapshot()
 
     def __transient_state__(self) -> Dict[str, Any]:
-        """瞬态序列化协议（L6）：纯状态存根（mode/name/closed/队列信息），不递归 core。"""
+        """瞬态序列化协议：纯状态存根（mode/name/closed/队列信息），不递归 core。"""
         return self.core.snapshot()
 
     def snapshot(self) -> "IbObject":
@@ -113,7 +112,7 @@ class IbSubscriber(IbObject):
 
     @classmethod
     def _create_blank(cls, ib_class: IbClass) -> "IbSubscriber":
-        """类型化空实例（阶段 2 统一构造协议）：经该入口创建，调用方随后填充 view。"""
+        """类型化空实例（统一构造协议）：经该入口创建，调用方随后填充 view。"""
         return cls(ib_class, view=None)
 
     def __init__(self, ib_class: IbClass, view: Any):
@@ -139,7 +138,7 @@ class IbSubscriber(IbObject):
         return self.view.snapshot()
 
     def __transient_state__(self) -> Dict[str, Any]:
-        """瞬态序列化协议（L6）：纯状态存根（队列信息），不递归订阅视图。"""
+        """瞬态序列化协议：纯状态存根（队列信息），不递归订阅视图。"""
         return self.view.snapshot()
 
     def __to_prompt__(self) -> str:
@@ -157,7 +156,7 @@ class IbSlot(IbObject):
 
     @classmethod
     def _create_blank(cls, ib_class: IbClass) -> "IbSlot":
-        """类型化空实例（阶段 2 统一构造协议）：经该入口创建，handler/instantiate 同构。"""
+        """类型化空实例（统一构造协议）：经该入口创建，handler/instantiate 同构。"""
         return cls(ib_class)
 
     def __init__(self, ib_class: IbClass, core: Optional[SlotCore] = None):
@@ -190,7 +189,7 @@ class IbSlot(IbObject):
         return self.core.snapshot()
 
     def __transient_state__(self) -> Dict[str, Any]:
-        """瞬态序列化协议（L6）：纯状态存根（name/value），不递归 core。"""
+        """瞬态序列化协议：纯状态存根（name/value），不递归 core。"""
         return self.core.snapshot()
 
     def snapshot(self) -> "IbObject":

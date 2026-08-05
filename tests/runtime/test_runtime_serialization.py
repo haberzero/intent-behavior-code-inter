@@ -131,10 +131,10 @@ class TestSerializationStructureAndContract:
 
 
 class TestThreadResultSerializationRoundTrip:
-    """B1 回归：thread_result 序列化往返保真。
+    """thread_result 序列化往返保真。
 
-    背景（COMMS_DESIGN_REVIEW B1）：``IbThreadResult`` 继承 ``IbObject`` 而非
-    ``IbValue``，旧守卫 ``isinstance(obj, IbValue) and cls_name == "thread_result"``
+    背景：``IbThreadResult`` 继承 ``IbObject`` 而非 ``IbValue``，旧守卫
+    ``isinstance(obj, IbValue) and cls_name == "thread_result"``
     永不触发 → 序列化为 ``{"_type": "object", "fields": {}}``，value/error/status
     静默丢失，反序列化分支（``_type == "thread_result"``）因此不可达。
     """
@@ -162,7 +162,7 @@ class TestThreadResultSerializationRoundTrip:
         )
         pool = data["pools"]["instances"]
         hits = [v for v in pool.values() if v.get("_type") == "thread_result"]
-        assert hits, "thread_result 必须序列化为 _type='thread_result'（B1 回归）"
+        assert hits, "thread_result 必须序列化为 _type='thread_result'"
         assert hits[0]["status"] == "done"
 
     def test_round_trip_success_preserves_value_and_status(self, engine):
@@ -184,10 +184,10 @@ class TestThreadResultSerializationRoundTrip:
 
 
 class TestTransientObjectSerialization:
-    """L6：瞬态对象（thread/chan/slot/subscriber）序列化协议化——统一 transient 存根。
+    """瞬态对象（thread/chan/slot/subscriber）序列化协议化——统一 transient 存根。
 
     背景：原 thread 有 thread_transient 专用分支（类名硬编码），chan/slot/subscriber
-    无处理 → 空 object 数据丢失。L6 引入 __transient_state__ 协议，统一状态保真存根。
+    无处理 → 空 object 数据丢失。引入 __transient_state__ 协议，统一状态保真存根。
     """
 
     def test_chan_pubsub_serialized_as_transient(self, engine):
@@ -262,7 +262,7 @@ thread[int] t = thread(callable=f, args=[])
 
 
 class TestTypeSymbolSerialization:
-    """L8 修复：类型符号（IbClass）序列化为类引用，round-trip 后保持类型身份。
+    """类型符号（IbClass）序列化为类引用，round-trip 后保持类型身份。
 
     此前缺陷：IbClass 落 else object 分支展开为空 fields，反序列化时被
     registry.get_class 构造为对应类的空普通实例（IbObject）——类型符号身份破坏，
@@ -277,7 +277,7 @@ class TestTypeSymbolSerialization:
         )
         pool = data["pools"]["instances"]
         refs = [v for v in pool.values() if v.get("_type") == "class_ref"]
-        assert refs, "类型符号必须以 class_ref 序列化（L8 回归：原落 object 空壳）"
+        assert refs, "类型符号必须以 class_ref 序列化（原落 object 空壳）"
         assert any(v.get("name") == "slot" for v in refs)
 
     def test_round_trip_preserves_type_symbol_identity(self, engine):
@@ -286,7 +286,7 @@ class TestTypeSymbolSerialization:
             sym = rest.get_symbol(name)
             assert sym is not None, f"类型符号 {name} 缺失"
             assert type(sym.value).__name__ == "IbClass", (
-                f"类型符号 {name} 身份破坏：{type(sym.value).__name__}（L8 回归）"
+                f"类型符号 {name} 身份破坏：{type(sym.value).__name__}"
             )
         # 恢复后类型可构造（类对象保留 instantiate 能力）
         slot_cls = rest.get_symbol("slot").value

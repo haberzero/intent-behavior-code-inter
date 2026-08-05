@@ -184,7 +184,7 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
             type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
-        # Persist inner-type scalars for list[T] / dict[K,V] / tuple[T]（L7-A）：
+        # Persist inner-type scalars for list[T] / dict[K,V] / tuple[T]：
         # 泛型实参持久化，运行时 rehydrator 据此重建特化 spec——此前未持久化致
         # 符号 declared_type 在运行时退化为基础 list/dict[any,any]（泛型身份丢失）。
         if t.kind == TypeKind.LIST.value:
@@ -225,7 +225,7 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
-        # Persist the value type for chan[T] / slot[T]（R1-D1：纳入统一泛型模型，
+        # Persist the value type for chan[T] / slot[T]（纳入统一泛型模型，
         # 注解实参经 value_type 承载持久化，rehydrator 据此重建特化 spec）。
         if t.kind in (TypeKind.CHANNEL.value, TypeKind.SLOT.value):
             v_ref = t.value_type

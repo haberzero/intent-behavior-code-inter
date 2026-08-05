@@ -1,12 +1,12 @@
 """
-线程相关清理测试（任务 E）：save_state 未完成线程检测 + 快照含线程 + coordinator 生命周期。
+线程相关清理测试：save_state 未完成线程检测 + 快照含线程 + coordinator 生命周期。
 
 覆盖：
-- save_state 在未完成线程存在时抛异常（疏漏 4）
+- save_state 在未完成线程存在时抛异常
 - 线程完成后 save_state 正常
-- 快照（observability）包含协调器线程（F-1 单数据源）
-- coordinator 自动清理已完成任务（F-2 防泄漏）
-- 协作式取消 handle 上报（VP-2，无死 _task_handle 依赖）
+- 快照（observability）包含协调器线程
+- coordinator 自动清理已完成任务（防泄漏）
+- 协作式取消 handle 上报
 """
 
 import subprocess
@@ -17,7 +17,7 @@ from tests.conftest import REPO_ROOT, run_ibci
 
 
 def test_thread_result_imports_without_circular_import():
-    """B2 回归：干净解释器下直接 import thread_result / thread 不触发循环导入。
+    """干净解释器下直接 import thread_result / thread 不触发循环导入。
 
     旧缺陷：thread_result → primitives.optional → primitives/__init__ → ..thread_result，
     直接导入抛 ImportError（依赖隐式导入顺序存活）。
@@ -38,7 +38,7 @@ def test_thread_result_imports_without_circular_import():
 
 
 def test_thread_instance_is_real_ibthread():
-    """阶段 2 D1/D2：instantiate 挂钩使 thread(...) 产生真实 IbThread 实例（槽位状态）。"""
+    """instantiate 挂钩使 thread(...) 产生真实 IbThread 实例（槽位状态）。"""
     from core.engine import IBCIEngine
     from core.runtime.objects.thread import IbThread
 
@@ -55,7 +55,7 @@ thread[int] t = thread(callable=f, args=[])
 
 
 def test_thread_result_is_ibvalue():
-    """阶段 2 D3：thread_result 升级为 IbValue（payload 承载值，type_ref 生效）。"""
+    """thread_result 升级为 IbValue（payload 承载值，type_ref 生效）。"""
     from core.engine import IBCIEngine
     from core.runtime.objects.kernel import IbValue
     from core.runtime.objects.thread_result import IbThreadResult
@@ -77,7 +77,7 @@ thread_result[int] r = t.join()
 
 
 def test_save_state_rejects_unfinished_thread():
-    """未完成线程存在时 save_state 必须抛异常（疏漏 4）。"""
+    """未完成线程存在时 save_state 必须抛异常。"""
     from core.engine import IBCIEngine
     from concurrent.futures import Future
     from core.runtime.coordinator import SpawnedTask
@@ -119,7 +119,7 @@ thread[int] t = thread(callable=f, args=[])
 
 
 def test_snapshot_includes_coordinator_threads():
-    """快照应包含协调器线程（F-1 单数据源）。"""
+    """快照应包含协调器线程（单数据源）。"""
     from core.engine import IBCIEngine
     from core.runtime.observability import snapshot as snap
 
@@ -137,7 +137,7 @@ thread[int] t = thread(callable=f, args=[])
 
 
 def test_coordinator_cleans_up_completed_tasks():
-    """已完成任务自动从协调器移除（F-2 防泄漏）。"""
+    """已完成任务自动从协调器移除（防泄漏）。"""
     from core.engine import IBCIEngine
 
     engine = IBCIEngine(root_dir=".")
@@ -161,7 +161,7 @@ def test_cancel_cooperative_handle():
 
     线程体阻塞在 chan recv 上（确定性挂起），cancel 在挂起点生效——
     快函数线程可能在 cancel 前自然完成（竞态），旧无条件返回 TaskCancelled
-    掩盖了它；A1 修复后改为阻塞挂起场景验证协作取消语义。
+    掩盖了它；改为阻塞挂起场景验证协作取消语义。
     chan 经参数传入（线程闭包不捕获模块级变量）。
     """
     lines = run_ibci("""
@@ -178,7 +178,7 @@ c.send("x")
 
 
 def test_cancel_on_finished_thread_returns_none():
-    """A1 守卫：已结束线程 cancel() 返回 None，不翻转状态为 CANCELLED。
+    """已结束线程 cancel() 返回 None，不翻转状态为 CANCELLED。
 
     此前 cancel() 仅查 _spawned is None，已 join 的线程调用会返回
     TaskCancelled err 并把 _state 从 done 翻转为 cancelled（违背 docstring）。
@@ -197,7 +197,7 @@ print(t.is_done())
 
 
 def test_is_done_reflects_natural_completion():
-    """D6 修复：线程自然完成（未 join）后 is_done() 返回 True。
+    """线程自然完成（未 join）后 is_done() 返回 True。
 
     此前 is_done() 读 _state（仅 join/cancel 时刷新），自然完成未 join 会
     滞后为 running 而误报 False；现在以 _spawned.is_done 为权威完成信号。

@@ -30,7 +30,7 @@ class CommBuffer:
     - ``close()``：置 closed 并唤醒所有等待者；``send`` 抛 ``CommClosedError``；
       ``recv`` 排空剩余后抛 ``CommClosedError``。
 
-    正确性要点（设计 §8.1 C1）：单一锁保护 ``_queue`` + ``_closed``，所有
+    正确性要点：单一锁保护 ``_queue`` + ``_closed``，所有
     读改写原子；不持锁调用外部代码（send/recv 只操作内部队列，不回调用户代码），
     避免死锁。
     """

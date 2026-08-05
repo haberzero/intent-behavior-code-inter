@@ -2,7 +2,7 @@
 tests/runtime/test_streaming.py
 ===============================
 
-PT-MT-6 流式 + 并行测试。
+流式 + 并行测试。
 
 锁定：
 - MOCK:STREAM 指令解析（mock_scenario 分块）

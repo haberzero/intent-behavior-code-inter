@@ -2,7 +2,7 @@
 tests/kernel/test_generic_model.py
 ==================================
 
-任务 B（统一泛型模型）：内置泛型类型声明正式机制。
+统一泛型模型：内置泛型类型声明正式机制。
 
 锁定统一泛型模型语义：
 - 所有内置泛型类型（list/dict/tuple/Optional/fn_callable/behavior/thread）统一声明
@@ -10,8 +10,7 @@ tests/kernel/test_generic_model.py
 - ``thread[T]`` 为第一个正式消费者：thread[T] 解析、join 返回类型特化、
   thread[T] 可赋值给 thread。
 - 序列化/还原（to_typeref / restore）经同一注册表。
-- 历史遗留路径已删除：Optional/List/Dict/Tuple Axiom 不再有
-  ``resolve_specialization_by_names``。
+- Optional/List/Dict/Tuple Axiom 不再有 ``resolve_specialization_by_names``。
 """
 import pytest
 
@@ -31,7 +30,7 @@ class TestGenericTypeRegistry:
             assert name in reg, f"generic '{name}' not declared"
 
     def test_registry_indexed_by_name(self):
-        """注册表按 name 索引（B3 修复：_by_kind 单值索引已删除——kind 不唯一）。"""
+        """注册表按 name 索引（_by_kind 单值索引已删除——kind 不唯一）。"""
         reg = create_generic_registry()
         assert reg.get("list").name == "list"
         assert reg.get("fn_callable").name == "fn_callable"
@@ -98,7 +97,7 @@ class TestThreadGeneric:
         sp = reg.resolve_specialization(reg.resolve("thread"), [reg.resolve("int")])
         join_spec = reg.resolve_member(sp, "join")
         assert join_spec is not None
-        # join() 返回 thread_result[T] 容器（任务 C2），T 为线程返回类型。
+        # join() 返回 thread_result[T] 容器，T 为线程返回类型。
         assert join_spec.return_type.head == "thread_result[int]"
 
     def test_thread_result_unwrap_returns_value_type(self):
@@ -155,7 +154,7 @@ class TestToTyperef:
 
 
 class TestTypeRefFromSpecThreadKinds:
-    """G4（阶段 2 D5）：TypeRef.from_spec 对 thread/thread_result 泛型实参的保留。"""
+    """TypeRef.from_spec 对 thread/thread_result 泛型实参的保留。"""
 
     def test_thread_int_preserves_arg(self):
         from core.kernel.spec.type_ref import TypeRef
@@ -176,7 +175,7 @@ class TestTypeRefFromSpecThreadKinds:
 
 class TestLegacyPathRemoved:
     def test_no_resolve_specialization_by_names_on_axioms(self):
-        """历史遗留路径已删除：Optional/List/Dict/Tuple Axiom 不再定义该方法。"""
+        """Optional/List/Dict/Tuple Axiom 不再定义该方法。"""
         from core.kernel.axioms.primitives.sentinels import OptionalAxiom
         from core.kernel.axioms.primitives.sequences import ListAxiom, DictAxiom, TupleAxiom
         for axiom in (OptionalAxiom(), ListAxiom(), DictAxiom(), TupleAxiom()):

@@ -67,7 +67,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                     {"name": "user_prompt", "type": "str"},
                 ],
                 "return_type": "any",
-                "description": "流式 LLM 调用（PT-MT-6）：后台消费增量，返回可等待句柄（Waitable）",
+                "description": "流式 LLM 调用：后台消费增量，返回可等待句柄（Waitable）",
             },
             "stream_channel": {
                 "params": [
@@ -75,7 +75,7 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                     {"name": "user_prompt", "type": "str"},
                 ],
                 "return_type": "chan",
-                "description": "流式 LLM 调用（PT-MT-6）：返回承载增量块的 stream Channel（渲染用）",
+                "description": "流式 LLM 调用：返回承载增量块的 stream Channel（渲染用）",
             }
         }
     }

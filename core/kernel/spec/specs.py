@@ -56,7 +56,7 @@ LLM_RETRY_EXHAUSTED_ERROR_SPEC = TypeDef(name="LLMRetryExhaustedError", kind=Typ
 LLM_CALL_ERROR_SPEC = TypeDef(name="LLMCallError", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                                parent_type=TypeRef.of("LLMError"))
 
-# 线程错误层次（err 类型统一，任务 D）：TaskError IS-A Exception；
+# 线程错误层次：TaskError IS-A Exception；
 # TaskCancelled / TaskFailed IS-A TaskError。用户可见、可继承。
 TASK_ERROR_SPEC = TypeDef(name="TaskError", kind=TypeKind.CLASS.value, is_nullable=True, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                           parent_type=TypeRef.of("Exception"))
@@ -82,13 +82,12 @@ TUPLE_SPEC        = TypeDef(name="tuple",  kind=TypeKind.TUPLE.value,  is_nullab
 DICT_SPEC         = TypeDef(name="dict",   kind=TypeKind.DICT.value,   is_nullable=True,  provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 MODULE_SPEC       = TypeDef(name="module", kind=TypeKind.MODULE.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
-# 并发/通信类型规格（运行时多线程主线 PT-MT-*）
+# 并发/通信类型规格
 CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value,    is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SUBSCRIBER_SPEC = TypeDef(name="subscriber", kind=TypeKind.SUBSCRIBER.value, is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
-# thread —— 线程对象模型方向修正（任务 B/C）引入的线程类型。
-# thread 是泛型类型（thread[T]，T 为 join 返回类型），
+# thread —— 线程类型（泛型 thread[T]，T 为 join 返回类型），
 # 经 ThreadAxiom 路由（_axiom_name="thread"）。
 THREAD_SPEC  = TypeDef(name="thread", kind=TypeKind.THREAD.value,  is_nullable=False, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 THREAD_SPEC._axiom_name = "thread"

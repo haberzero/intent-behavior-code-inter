@@ -57,11 +57,11 @@ class TypeKind(str, Enum):
     CALLABLE_INSTANCE = "callable_instance"
     CALLABLE_SIG = "callable_sig"
     LAZY = "lazy"
-    # 并发/通信类型（运行时多线程主线 PT-MT-*；task/signal 类型已删除，任务 F/阶段 3）
+    # 并发/通信类型（task/signal 类型已删除）
     THREAD = "thread"       # 线程句柄（thread[T]，join 返回 thread_result）
     CHANNEL = "channel"     # 数据流通道（元素类型泛型）
     SLOT = "slot"           # 共享状态槽（值类型泛型）
-    SUBSCRIBER = "subscriber"  # pubsub 订阅者消费者端点（G7）
+    SUBSCRIBER = "subscriber"  # pubsub 订阅者消费者端点
     THREAD_RESULT = "thread_result"  # 线程结果容器（值类型泛型，thread_result[T]）
 
 

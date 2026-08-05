@@ -57,7 +57,7 @@ class TokenType(Enum):
     # 异步关键字
     AWAIT = auto()
 
-    # 并发/通信关键字（运行时多线程主线 PT-MT-*）
+    # 并发/通信关键字
     CHAN = auto()
     SLOT = auto()
 

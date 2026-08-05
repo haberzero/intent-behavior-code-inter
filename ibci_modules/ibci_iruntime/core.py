@@ -1,7 +1,7 @@
 """
 ibci_iruntime/core.py
 
-IBIRuntime 内核内省模块插件实现（PT-MT-4）。
+IBIRuntime 内核内省模块插件实现。
 
 提供：
 - ``snapshot()``    —— 运行时快照聚合（见 ``core.runtime.observability.snapshot``）
@@ -77,7 +77,7 @@ class IRuntimeLib:
         return channel
 
     # ------------------------------------------------------------------
-    # 控制层（PT-MT-5）
+    # 控制层
     # ------------------------------------------------------------------
 
     def configure(self, *args, **kwargs) -> "Any":

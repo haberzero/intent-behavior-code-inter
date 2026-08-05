@@ -10,8 +10,7 @@ by the ``IbChannel`` / ``IbSlot`` objects in ``core/runtime/objects/``
 (registered at interpreter bootstrap), consistent with the "axioms declare,
 runtime implements" convention used across IBCI.
 
-（通信 Signal 抽象已于阶段 3 移除——零投递机制 + 与 VM 控制流 Signal 撞名，
-见 WORKLOG 会话 8。）
+（通信 Signal 抽象已移除——零投递机制 + 与 VM 控制流 Signal 撞名。）
 """
 
 from __future__ import annotations
@@ -23,11 +22,11 @@ from core.kernel.spec.member import MethodMemberSpec
 
 
 class ThreadAxiom(BaseAxiom):
-    """公理：thread 类型（线程对象模型方向修正，任务 C 落地）。
+    """公理：thread 类型。
 
     ``thread[T]`` 泛型：返回值类型经 value_type 承载（``t.join()`` 返回 T）。
     提供句柄方法表面（start/join/cancel/is_done）供语义层类型检查——
-    运行时实现由 ``IbThread`` 值对象提供（任务 C）。
+    运行时实现由 ``IbThread`` 值对象提供。
 
     ``has_call_cap``：``thread(...)`` 是构造函数调用（创建线程句柄），
     语义层据此允许 ``thread(...)`` 表达式。
@@ -94,7 +93,7 @@ class ChannelAxiom(BaseAxiom):
 
     ``chan[T]`` 泛型：元素类型经 value_type 承载。提供 send/recv/subscribe/close
     等方法表面供语义层类型检查。``subscribe()`` 返回 subscriber 消费者端点
-    （pubsub 模式专用；G7 语言层打通）。
+    （pubsub 模式专用）。
     """
 
     @property
@@ -116,7 +115,7 @@ class ChannelAxiom(BaseAxiom):
 
 
 class SubscriberAxiom(BaseAxiom):
-    """公理：subscriber 类型（pubsub 订阅者消费者端点，G7）。
+    """公理：subscriber 类型（pubsub 订阅者消费者端点）。
 
     ``chan(pubsub).subscribe()`` 的返回值。提供 recv/recv_nonblocking/close。
     """

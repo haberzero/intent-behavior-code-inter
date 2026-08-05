@@ -169,7 +169,7 @@ class TypeRef:
             return cls(head=base, args=(), module=spec.module_path)
 
         # thread / thread_result 是"值承载"泛型（join 结果类型 T 承载于 value_type）。
-        # 旧 TASK kind（task 类型）已删除（任务 F），THREAD kind 现唯一指 thread。
+        # 旧 TASK kind（task 类型）已删除，THREAD kind 现唯一指 thread。
         if spec.kind == TypeKind.THREAD.value and base == "thread":
             val_ref = spec.value_type
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
@@ -191,7 +191,7 @@ class TypeRef:
             return cls(head="thread_result", args=(), module=spec.module_path)
 
         # chan[T] / slot[T] 也是"值承载"泛型（消息元素类型/槽值类型承载于
-        # value_type，R1-D1：纳入统一泛型模型后符号→TypeRef 身份保真）。
+        # value_type，纳入统一泛型模型后符号→TypeRef 身份保真）。
         if spec.kind == TypeKind.CHANNEL.value and base == "chan":
             val_ref = spec.value_type
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):

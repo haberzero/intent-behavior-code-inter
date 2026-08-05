@@ -279,8 +279,7 @@ class SpecFactory:
         """Create a ``TypeDef`` for a ``thread[T]`` type annotation.
 
         ``value_type_name`` is the thread's return value type (join 结果类型).
-        Per the direction revision (``THREAD_DESIGN_REVISION``), ``thread[T]``
-        is a required generic annotation; ``t.join()`` yields ``T``.
+        ``thread[T]`` 是必选泛型注解；``t.join()`` yields ``T``。
         """
         thread_name = f"thread[{value_type_name}]" if value_type_name != "any" else "thread"
         spec = TypeDef(
@@ -327,8 +326,8 @@ class SpecFactory:
         """Create a ``TypeDef`` for a ``chan[T]`` type annotation.
 
         ``value_type_name`` is the channel's element type（消息类型）。
-        ``chan[T]`` 经统一泛型模型承载（R1-D1）：此前注解实参丢弃，符号
-        declared_type 退化为裸 chan；纳入 GenericTypeDeclaration 后身份保留。
+        ``chan[T]`` 经统一泛型模型承载：此前注解实参丢弃，符号 declared_type
+        退化为裸 chan；纳入 GenericTypeDeclaration 后身份保留。
         """
         chan_name = f"chan[{value_type_name}]" if value_type_name != "any" else "chan"
         spec = TypeDef(
@@ -349,8 +348,8 @@ class SpecFactory:
         """Create a ``TypeDef`` for a ``slot[T]`` type annotation.
 
         ``value_type_name`` is the slot's value type（共享状态类型）。
-        ``slot[T]`` 经统一泛型模型承载（R1-D1）：此前注解实参丢弃，符号
-        declared_type 退化为裸 slot。
+        ``slot[T]`` 经统一泛型模型承载：此前注解实参丢弃，符号 declared_type
+        退化为裸 slot。
         """
         slot_name = f"slot[{value_type_name}]" if value_type_name != "any" else "slot"
         spec = TypeDef(

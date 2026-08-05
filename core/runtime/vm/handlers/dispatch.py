@@ -118,7 +118,7 @@ def build_dispatch_table() -> dict:
         "IbFor": vm_handle_IbFor,
         "IbTry": vm_handle_IbTry,
         "IbRetry": vm_handle_IbRetry,
-        # 并发/通信（运行时多线程主线 PT-MT-*）
+        # 并发/通信
         "IbChannelExpr": vm_handle_IbChannelExpr,
         "IbSlotExpr": vm_handle_IbSlotExpr,
     }

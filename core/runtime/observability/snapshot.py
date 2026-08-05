@@ -43,8 +43,8 @@ def snapshot(executor: Any) -> Dict[str, Any]:
                 "started": getattr(t, "started", False),
                 "waiting": getattr(t, "waiting_on", None) is not None,
             })
-    # 线程对象（RuntimeCoordinator，任务 C）：快照补充后台线程任务，
-    # 消除内省双数据源（F-1：spawn 线程此前在协调器，快照看不到）。
+    # 线程对象（RuntimeCoordinator）：快照补充后台线程任务，
+    # 消除内省双数据源（spawn 线程此前在协调器，快照看不到）。
     rc = getattr(executor, "runtime_context", None)
     coordinator = getattr(rc, "_runtime_coordinator", None) if rc is not None else None
     if coordinator is not None:

@@ -73,8 +73,7 @@ class ExpressionComponent(BaseComponent):
         # Await (显式等待一个 Waitable)
         self.register(TokenType.AWAIT, self.await_expr, None, IbPrecedence.UNARY)
 
-        # 并发/通信（运行时多线程主线 PT-MT-*）
-        # chan/slot 构造函数前缀
+        # 并发/通信：chan/slot 构造函数前缀
         self.register(TokenType.CHAN, self.chan_expr, None, IbPrecedence.UNARY)
         self.register(TokenType.SLOT, self.slot_expr, None, IbPrecedence.UNARY)
         

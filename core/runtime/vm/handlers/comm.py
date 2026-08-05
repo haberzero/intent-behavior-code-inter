@@ -1,12 +1,12 @@
 """
 core.runtime.vm.handlers.comm — 并发/通信 AST 节点的 CPS handler。
 
-覆盖（运行时多线程主线 PT-MT-*）：
+覆盖：
 - ``IbChannelExpr``  → 构造 ``IbChannel``（语言层 Channel 值对象）
 - ``IbSlotExpr``     → 构造 ``IbSlot``（共享状态槽值对象）
 
 线程协调器访问器（``get_runtime_coordinator``）已移入线程领域模块
-``core/runtime/coordinator.py``（G5，不再寄居通信模块）。
+``core/runtime/coordinator.py``（不再寄居通信模块）。
 """
 
 from __future__ import annotations
@@ -29,16 +29,16 @@ def _get_comm_registry(executor) -> CommRegistry:
     reg = getattr(rc, "_comm_registry", None)
     if reg is None:
         reg = CommRegistry()
-        # fail-fast（B4）：runtime_context 为 RuntimeContextImpl（无 __slots__），
+        # fail-fast：runtime_context 为 RuntimeContextImpl（无 __slots__），
         # setattr 恒成功；若失败（如无 runtime_context）说明构造路径有误，必须显式暴露。
         rc._comm_registry = reg
     return reg
 
 
 def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
-    """向 runtime_context 上的事件总线广播事件（PT-MT-4 内省事件流）。
+    """向 runtime_context 上的事件总线广播事件（内省事件流）。
 
-    受控制层 observability 开关约束（PT-MT-5）：关闭时跳过事件记录。
+    受控制层 observability 开关约束：关闭时跳过事件记录。
     无订阅者时为空操作；事件总线失败不阻断执行（可观测性层尽力而为）。
     """
     rc = executor.runtime_context

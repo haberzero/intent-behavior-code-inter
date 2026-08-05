@@ -2,13 +2,13 @@
 tests/runtime/test_vm_comm.py
 =============================
 
-PT-MT-3 VM 层并发/通信 e2e 测试。
+VM 层并发/通信 e2e 测试。
 
 锁定：
 - chan 构造 + send/recv（语言面）
 - slot 构造 + set/get（语言面）
 
-线程（spawn/join/cancel）已被 thread 对象模型取代（任务 C/F），
+线程（spawn/join/cancel）已被 thread 对象模型取代，
 其测试见 test_thread_model.py / test_vm_instance.py。
 """
 from tests.conftest import run_ibci
@@ -58,7 +58,7 @@ print((str)v)
 
 
 class TestChannelPubSubE2E:
-    """G7：pubsub 语言层打通（subscribe → subscriber 端点 + send_nowait 语义）。"""
+    """pubsub 语言层（subscribe → subscriber 端点 + send_nowait 语义）。"""
 
     def test_pubsub_subscribe_recv(self):
         lines = run_ibci("""
@@ -102,7 +102,7 @@ print((str)sub.recv())
 
 
 def test_comm_objects_use_create_blank_protocol():
-    """T2 可统一点：comm 句柄对象经 _create_blank 统一构造协议创建实例。"""
+    """comm 句柄对象经 _create_blank 统一构造协议创建实例。"""
     from core.runtime.objects.kernel import IbChannel, IbSlot, IbSubscriber
     assert isinstance(IbChannel._create_blank(None), IbChannel)
     assert isinstance(IbSlot._create_blank(None), IbSlot)

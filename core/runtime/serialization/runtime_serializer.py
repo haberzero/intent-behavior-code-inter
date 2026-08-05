@@ -190,8 +190,8 @@ class RuntimeSerializer(BaseFlatSerializer):
                 data["value_meta"] = dict(obj.meta)
 
         # 类元对象（IbClass）：序列化为类引用（类名），反序列化时重绑定 registry
-        # 真实类（L8 修复——此前落 else object 分支展开为空 fields，反序列化时被
-        # registry.get_class 构造为对应类的空普通实例，类型符号身份破坏）。
+        # 真实类——此前落 else object 分支展开为空 fields，反序列化时被
+        # registry.get_class 构造为对应类的空普通实例，类型符号身份破坏。
         # 类型符号是"类型引用"而非实例值（与 IbModule scope_native 模式一致）。
         if isinstance(obj, IbClass):
             data["_type"] = "class_ref"
@@ -199,12 +199,11 @@ class RuntimeSerializer(BaseFlatSerializer):
             self.instance_pool[uid] = data
             return uid
 
-        # 瞬态对象协议（L6 统一，替代原 thread_transient 专用分支）：实现
-        # __transient_state__ 的对象序列化为纯状态存根，不递归运行时句柄
-        # （thread 的 coordinator 引用环 / chan 的队列 / slot 的值 / subscriber
-        # 的订阅视图）。检测用公开 dunder 协议（与 disk_backed 鸭子先例一致），
-        # 非 per-type 类名分支。state 值经 _process_value 递归（嵌套 IbObject
-        # 如 slot 的值保持完整往返）。
+        # 瞬态对象协议：实现 __transient_state__ 的对象序列化为纯状态存根，不递归
+        # 运行时句柄（thread 的 coordinator 引用环 / chan 的队列 / slot 的值 /
+        # subscriber 的订阅视图）。检测用公开 dunder 协议（与 disk_backed 鸭子
+        # 先例一致），非 per-type 类名分支。state 值经 _process_value 递归
+        # （嵌套 IbObject 如 slot 的值保持完整往返）。
         if not isinstance(obj, IbClass) and hasattr(obj, "__transient_state__"):
             state = obj.__transient_state__()
             data["_type"] = "transient"
@@ -274,8 +273,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["is_some"] = obj._is_some
             data["inner"] = self._process_value(obj.payload) if obj._is_some else None
 
-        # thread_result 是 IbValue 值对象（payload 承载成功值，阶段 2 D3）——
-        # 与 thread_transient 分支一致，按 ib_class.name 分发而非 isinstance。
+        # thread_result 是 IbValue 值对象（payload 承载成功值）——
+        # 按 ib_class.name 分发而非 isinstance。
         elif cls_name == "thread_result" and not isinstance(obj, IbClass):
             from core.runtime.objects.thread import ThreadStatus
             data["_type"] = "thread_result"
@@ -541,7 +540,7 @@ class RuntimeDeserializer:
         _type = data.get("_type")
 
         if _type == "class_ref":
-            # 类引用（L8 修复）：重绑定 registry 真实类——类型符号是"类型引用"
+            # 类引用：重绑定 registry 真实类——类型符号是"类型引用"
             # 而非实例值，反序列化后必须仍为 IbClass（类型身份保留）。
             # 必须 return：否则落入下方 else 分支被覆盖为 IbObject(ib_class)。
             obj = self.registry.get_class(data.get("name"))
@@ -609,7 +608,7 @@ class RuntimeDeserializer:
         elif _type == "transient":
             # 瞬态对象不可复活（活体句柄/队列/订阅视图），重建为携带已知状态的
             # 占位 IbObject 供内省（快照恢复后仍可读取 mode/name/value/state 等）。
-            # L6：thread 原 thread_transient 亦走本路径（行为不变，多保留状态）。
+            # thread 原 thread_transient 亦走本路径（行为不变，多保留状态）。
             obj = IbObject(ib_class)
             self.instance_cache[uid] = obj
             obj.fields["_transient_state"] = {

@@ -15,8 +15,8 @@ class IbOptional(IbValue):
     - ``is_some=True``   → 持有值（内层值为 ``payload``）
     - ``is_some=False``  → 空（``payload`` 为 None，语义上是 None）
 
-    单承载（L5 收敛，消除 G1 双载残留）：内层值统一存 ``payload``，
-    不再重复存 ``_inner`` 槽（双写真相）。``_is_some`` 为元数据保留。
+    单承载：内层值统一存 ``payload``，不再重复存 ``_inner`` 槽（双写真相）。
+    ``_is_some`` 为元数据保留。
 
     方法表面（``is_some``/``unwrap``/``or_else``）由 ``OptionalAxiom`` 声明，
     经 ``primitive_initializer`` 的 axiom-driven auto-bind 自动绑定到语言层。

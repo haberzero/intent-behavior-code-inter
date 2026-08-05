@@ -65,7 +65,7 @@ def _run_expect_compile_error(code: str):
 
 
 ################################################################################
-# MERGED: Optional[T] 类型方法解析 + 编译期语义
+# Optional[T] 类型方法解析 + 编译期语义
 ################################################################################
 
 class TestM2OptionalMethodResolution:
@@ -100,7 +100,7 @@ class TestM2OptionalMethodCompileSemantics:
 
 
 ################################################################################
-# MERGED: Optional[T] 空安全编译期校验
+# Optional[T] 空安全编译期校验
 ################################################################################
 
 class TestM2OptionalNullSafety:
@@ -127,10 +127,10 @@ class TestM2OptionalNullSafety:
 
 
 ################################################################################
-# MERGED: callable 签名 fn[(in)->(out)]
+# callable 签名 fn[(in)->(out)]
 ################################################################################
 
-class TestD3Parse:
+class TestCallableSigParse:
     """Parser accepts fn[(...)→(...)] in type-annotation positions."""
 
     def test_no_params_int_return(self):
@@ -172,7 +172,7 @@ func make_adder(int n) -> fn[(int) -> int]:
 """)
 
     def test_bare_fn_still_works(self):
-        """Plain fn f = myfunc (without signature) is unaffected by D3."""
+        """Plain fn f = myfunc (without signature) still compiles."""
         assert_compiles("""
 func double(int n) -> int:
     return n * 2
@@ -184,7 +184,7 @@ print((str)f(3))
 
 # ─────────────────────────────────────────────────────── call-site checks ──
 
-class TestD3CallSiteStructural:
+class TestCallableSigCallSite:
     """Calling a fn[(...)→(...)] parameter: arg-count and type checks."""
 
     def test_correct_call_no_error(self):
@@ -218,7 +218,7 @@ func apply(fn[(int) -> int] f, str s) -> int:
 
 # ──────────────────────────────────────────── declaration-site sig check ──
 
-class TestD3DeclarationSite:
+class TestCallableSigDeclaration:
     """fn[(...)→(...)] variable declaration: structural sig matching on RHS."""
 
     def test_matching_sig_no_error(self):
@@ -251,7 +251,7 @@ fn[(int) -> str] f = add_one
 
 # ────────────────────────────────────────────────────── return type infer ──
 
-class TestD3ReturnTypeInference:
+class TestCallableSigReturnInference:
     """Return type of calling fn[(...)→T] parameter is inferred as T."""
 
     def test_int_return_inferred(self):
@@ -273,7 +273,7 @@ func check(fn[(int, str) -> bool] pred, int n, str s) -> bool:
 
 # ──────────────────────────────────────────────────────── end-to-end runs ──
 
-class TestD3E2E:
+class TestCallableSigE2E:
     """Full execution: HOF with fn[(...)→(...)] parameters."""
 
     def test_apply_double(self):
@@ -341,7 +341,7 @@ print((str)result)
 
 
 ################################################################################
-# MERGED: tuple[T1,T2,...] 位置类型推断
+# tuple[T1,T2,...] 位置类型推断
 ################################################################################
 
 class TestTuplePositionalTypeInference:
@@ -500,7 +500,7 @@ class TestSpecFactoryCreateTuple:
 
 
 ################################################################################
-# MERGED: Optional[T] artifact 还原
+# Optional[T] artifact 还原
 ################################################################################
 
 class TestM2OptionalArtifactRehydrator:
@@ -601,11 +601,11 @@ class TestM2OptionalArtifactRehydrator:
 
 
 ################################################################################
-# MERGED: thread/thread_result artifact 还原（阶段 2 G4，D5）
+# thread/thread_result artifact 还原
 ################################################################################
 
 class TestTaskThreadArtifactRehydrator:
-    """TASK kind 还原（task 类型已删除，任务 F）：一律重建 thread，无幽灵 task 回退。"""
+    """TASK kind 还原（task 类型已删除）：一律重建 thread，无幽灵 task 回退。"""
 
     def test_thread_specialization_hydrates(self):
         registry = create_default_registry()

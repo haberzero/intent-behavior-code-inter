@@ -2,7 +2,7 @@
 tests/runtime/test_vm_instance.py
 =================================
 
-线程对象模型（任务 C/F 方向修正后）多 VM 实例测试。
+线程对象模型多 VM 实例测试。
 
 锁定：
 - thread 函数在后台线程运行，join 取回结果（thread_result）
@@ -70,7 +70,7 @@ class TestTaskCancel:
 
         线程体阻塞在 chan recv 上（确定性挂起），cancel 命中挂起点——
         快函数线程可能在 cancel 前自然完成（竞态），旧无条件返回 TaskCancelled
-        掩盖了它；A1 修复后改为阻塞挂起场景验证协作取消。
+        掩盖了它；改为阻塞挂起场景验证协作取消。
         """
         lines = run_ibci("""
 chan c = chan(str, "message")
@@ -97,7 +97,7 @@ print(snap)
 
 
 class TestRealtimeOutput:
-    """PT-MT-8：实时 UI/输出刷新场景——线程写 Channel，主线程消费渲染。"""
+    """实时 UI/输出刷新场景——线程写 Channel，主线程消费渲染。"""
 
     def test_worker_sends_chunks_to_channel(self):
         """后台 worker 线程逐块写 Channel，主线程 recv 渲染（实时输出）。"""

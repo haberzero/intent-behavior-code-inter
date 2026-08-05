@@ -280,7 +280,7 @@ class SymbolCollector:
     def _resolve_annotation(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:
         """Resolve a type annotation to an IbSpec (best-effort at collection time).
 
-        支持泛型注解（L7-A）：``list[int]`` / ``dict[str,int]`` / ``Optional[int]``
+        支持泛型注解：``list[int]`` / ``dict[str,int]`` / ``Optional[int]``
         等经 ``resolve_specialization`` 解析为特化 spec——符号 declared_type 保留
         泛型身份（此前只处理 ``IbName``，泛型注解退化为 any/基础类型，运行时
         内省/序列化丢泛型参数）。

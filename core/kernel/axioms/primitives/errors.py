@@ -141,7 +141,7 @@ class LLMCallErrorAxiom(_LLMErrorAxiomBase):
 
 
 # ------------------------------------------------------------------ #
-# 线程错误层次（err 类型统一，任务 D）                                  #
+# 线程错误层次（TaskError/TaskCancelled/TaskFailed）                    #
 # ------------------------------------------------------------------ #
 
 class _TaskErrorAxiomBase(_LLMErrorAxiomBase):

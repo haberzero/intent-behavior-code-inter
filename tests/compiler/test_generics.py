@@ -66,7 +66,7 @@ def _g3_sem_errors(issue_tracker):
 
 
 ################################################################################
-# MERGED: generics - early cache + write-method specialization
+# generics: early cache + write-method specialization
 ################################################################################
 
 class TestG1SpecializationCache:
@@ -188,7 +188,7 @@ class TestG2ListWriteMethodSpecialization:
 
 
 ################################################################################
-# MERGED: generics - getitem/get/values/keys/covariance/nested
+# generics: getitem/get/values/keys/covariance/nested
 ################################################################################
 
 # ===========================================================================
@@ -423,7 +423,7 @@ class TestG3NestedGenerics:
 
 
 class TestGenericAnnotationDeclaredType:
-    """L7-A：泛型注解符号声明保留泛型身份（运行时内省/序列化不退化）。
+    """泛型注解符号声明保留泛型身份（运行时内省/序列化不退化）。
 
     此前缺陷：symbol_collection 只处理 IbName 注解，list[int] 等退化为
     any/基础类型；serializer 未持久化 list/dict/tuple 泛型实参，rehydrator
@@ -447,13 +447,13 @@ class TestGenericAnnotationDeclaredType:
         }
         for name, want in expect.items():
             sp = rc.get_symbol(name).declared_type
-            assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（L7-A 回归）"
+            assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（泛型身份回归）"
 
     def test_multi_type_list_preserves_allowed_types(self, engine):
-        """L7-A/C1：multi-type list（list[int,str]）泛型身份经 artifact 序列化→还原不退化。
+        """multi-type list（list[int,str]）泛型身份经 artifact 序列化→还原不退化。
 
         此前 serializer 只持久化 element_type_name（multi-type 下为 "any"），
-        allowed_element_types 丢失，还原后退化为裸 list（C1 根本修复）。
+        allowed_element_types 丢失，还原后退化为裸 list。
         """
         from core.compiler.serialization.serializer import FlatSerializer
         from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
@@ -478,10 +478,10 @@ class TestGenericAnnotationDeclaredType:
         assert [t.head for t in restored.allowed_element_types] == ["int", "str"]
 
     def test_positional_tuple_preserves_elements(self, engine):
-        """L7-A/C1：tuple[int,str] 位置元素类型经 artifact 序列化→还原不退化。
+        """tuple[int,str] 位置元素类型经 artifact 序列化→还原不退化。
 
         此前 serializer 只存 positional_type_names（head），位置顺序保真但
-        positional_type_modules 未持久化（C1 根本修复，与 dict key/value 双字段对齐）。
+        positional_type_modules 未持久化（与 dict key/value 双字段对齐）。
         """
         from core.compiler.serialization.serializer import FlatSerializer
         from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
@@ -499,7 +499,7 @@ class TestGenericAnnotationDeclaredType:
         assert [t.head for t in restored.positional_element_types] == ["int", "str"]
 
     def test_chan_slot_annotation_preserves_type_args(self, engine):
-        """R1-D1：chan[T]/slot[T] 注解纳入统一泛型模型，泛型身份保真。
+        """chan[T]/slot[T] 注解纳入统一泛型模型，泛型身份保真。
 
         此前 chan/slot 不在 GenericTypeDeclaration，注解实参丢弃（符号退化
         为裸 chan/slot），与 ChannelAxiom/SlotAxiom docstring 声称的
@@ -514,7 +514,7 @@ class TestGenericAnnotationDeclaredType:
         expect = {"c": "chan[str]", "s": "slot[int]"}
         for name, want in expect.items():
             sp = rc.get_symbol(name).declared_type
-            assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（R1-D1 回归）"
+            assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（chan/slot 泛型身份回归）"
 
         # artifact 序列化 → rehydrator 还原闭环（chan/slot 身份保真）
         from core.compiler.serialization.serializer import FlatSerializer

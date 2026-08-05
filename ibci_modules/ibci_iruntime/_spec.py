@@ -1,7 +1,7 @@
 """
 IBIRuntime 内核插件规范
 
-IBCI 运行时内省与控制模块（PT-MT-4/5）。提供：
+IBCI 运行时内省与控制模块。提供：
 - ``snapshot()`` —— 运行时快照（tasks/channels/slots/vms/vars/llm）
 - ``subscribe()`` —— 订阅状态变更事件流（返回 stream Channel）
 """

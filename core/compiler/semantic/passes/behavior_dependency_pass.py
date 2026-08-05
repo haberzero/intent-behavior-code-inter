@@ -42,7 +42,7 @@ class BehaviorDependencyAnalyzer:
     - 扫描 segments 中的插值变量
     - 追溯变量定义来源
     - 如果来源是另一个 IbBehaviorExpr，记录依赖（写入 node.llm_deps）
-    - 依 spec §3.1 规则计算 dispatch_eligible（默认 True，命中规则则 False）
+    - 依可调度规则计算 dispatch_eligible（默认 True，命中规则则 False）
     """
 
     def __init__(self, context: SemanticContext):
@@ -72,7 +72,7 @@ class BehaviorDependencyAnalyzer:
     # ------------------------------------------------------------------
 
     def _analyze_node(self, node: ast.IbASTNode, in_loop: bool, in_llmexcept: bool, in_function: bool):
-        """递归分析节点。上下文标志（spec §3.1 可调度规则）随遍历传播：
+        """递归分析节点。上下文标志（可调度规则）随遍历传播：
         - ``in_loop``：处于循环体
         - ``in_llmexcept``：处于 llmexcept 保护语句子树
         - ``in_function``：处于函数 / lambda 体
@@ -159,7 +159,7 @@ class BehaviorDependencyAnalyzer:
 
     @staticmethod
     def _is_dispatch_eligible(deps: List[ast.IbBehaviorExpr], in_loop: bool, in_llmexcept: bool, in_function: bool) -> bool:
-        """spec §3.1 可调度判定：依赖图为 DAG 且不命中任何强制 False 规则。
+        """可调度判定：依赖图为 DAG 且不命中任何强制 False 规则。
 
         规则：
         1. 插值依赖：前序 behavior 的输出是当前 behavior 的 $var 输入

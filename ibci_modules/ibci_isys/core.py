@@ -25,7 +25,7 @@ class ISysLib:
     """
     ISys 2.0: IBCI 运行时状态与系统控制模块。
 
-    合并自原 ibci_isys（路径查询）与 ibci_sys（沙箱控制）两个模块。
+    路径查询（isys）与沙箱控制（sys）两大能力域。
     """
 
     def __init__(self):

@@ -1,15 +1,15 @@
 """
-core.runtime.observability.config — 控制层 ConfigStore（PT-MT-5）。
+core.runtime.observability.config — 控制层 ConfigStore。
 
-统一"启停"接口（设计 §五）：每个可控制能力有开启/关闭两侧，默认值不同。
+统一"启停"接口：每个可控制能力有开启/关闭两侧，默认值不同。
 ``runtime.configure(...)`` 粒度链式覆盖：全局 → 单调用 → 单实例（后者优先）。
 
 ConfigStore 为**单点真理**：只有一个 ConfigStore 承载全部配置；查询按
 单实例 → 单调用 → 全局 顺序解析（读时解析，不缓存陈旧值）。
 
-配置键（设计 §五.1）：
+配置键：
 - parallel      并发 dispatch（默认开）
-- stream        流式 LLM 增量（默认开；PT-MT-6 接入）
+- stream        流式 LLM 增量（默认开）
 - observability 内省（snapshot/subscribe 记录，默认开）
 - debug         调试细节（call_info 保留，默认关）
 """

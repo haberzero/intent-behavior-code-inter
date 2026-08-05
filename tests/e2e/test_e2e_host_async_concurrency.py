@@ -2,7 +2,7 @@
 tests/e2e/test_e2e_host_async_concurrency.py
 =============================================
 
-统一异步架构（PT-3.1/3.2）并发 E2E 测试。
+统一异步架构并发 E2E 测试。
 
 验证 IBCI 脚本经 ``ihost.collect`` 等待 ``HostAwaitable`` 时，VM 协作式挂起
 （而非阻塞），且多个隔离子任务在后台线程中真实并发运行：

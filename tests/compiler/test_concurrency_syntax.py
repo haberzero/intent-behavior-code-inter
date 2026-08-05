@@ -2,7 +2,7 @@
 tests/compiler/test_concurrency_syntax.py
 ==========================================
 
-PT-MT-2 编译器地基测试（任务 F 方向修正 + 阶段 3 signal 移除后）：chan/slot 语法与语义。
+并发/通信语法测试（chan/slot）：编译器地基。
 
 锁定：
 - 新关键字（chan/slot）的 lexer 识别
@@ -10,8 +10,8 @@ PT-MT-2 编译器地基测试（任务 F 方向修正 + 阶段 3 signal 移除�
 - 类型注解（chan/slot）的解析
 - 序列化 round-trip（节点类型在 artifact 中存活）
 
-spawn/join/cancel/task 已按线程对象模型方向修正删除（任务 F）；
-signal 已按阶段 3 移除（零投递机制 + 与 VM 控制流 Signal 撞名）。
+spawn/join/cancel/task 已按线程对象模型方向修正删除；
+signal 已移除（零投递机制 + 与 VM 控制流 Signal 撞名）。
 其新测试见 test_thread_model.py / test_thread_result.py / test_vm_instance.py。
 """
 import pytest
@@ -38,7 +38,7 @@ class TestLexer:
         assert TokenType.SLOT in types
 
     def test_signal_keyword_removed(self):
-        """阶段 3：signal 关键字已从 lexer 移除（作为普通标识符 lex）。"""
+        """signal 关键字已从 lexer 移除（作为普通标识符 lex）。"""
         tokens = Lexer("signal").tokenize()
         types = [t.type for t in tokens]
         assert TokenType.IDENTIFIER in types

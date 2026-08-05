@@ -170,7 +170,7 @@ print((str)i)
     def test_while_loop_fail_without_llmexcept_raises(self):
         """循环体内 MOCK:FAIL（无 llmexcept）→ 同步路径抛 LLMParseError，循环终止。
 
-        循环体内行为不可 dispatch（spec §3.1 可重复执行上下文），走同步路径；
+        循环体内行为不可 dispatch（可重复执行上下文），走同步路径；
         不确定结果无 llmexcept 保护即在赋值点报错（统一机制语义）。
         """
         code = AI_MOCK_PREFIX + """

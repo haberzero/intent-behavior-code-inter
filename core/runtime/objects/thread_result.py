@@ -1,19 +1,18 @@
 """
 core.runtime.objects.thread_result — IBCI 线程结果容器值对象（IbThreadResult）。
 
-``thread_result[T]`` 是 ``t.join()`` 的返回值容器（线程对象模型方向修正，
-任务 C）。携带成功值 / 错误对象 / 状态，值化失败（不靠抛异常打断控制流）。
+``thread_result[T]`` 是 ``t.join()`` 的返回值容器。携带成功值 / 错误对象 /
+状态，值化失败（不靠抛异常打断控制流）。
 
-状态：done / cancelled / failed（``ThreadStatus`` 单一权威源，G2）。
+状态：done / cancelled / failed（``ThreadStatus`` 单一权威源）。
 - 成功：``status=done``、``value=T``、``error=null``
 - 失败：``status=failed/cancelled``、``error=err``、``value=null``
 
-值对象身份（阶段 2，D3）：继承 ``IbValue``，``payload`` 承载成功值（单一承载，
-消除双载碎片），``_error``/``_status`` 存槽位；``type_ref`` 经 spec 生效，
-``thread_result[int]`` 泛型身份在序列化/快照中保留（配合 G4 的
-``TypeRef.from_spec`` THREAD_RESULT 分支）。
+值对象身份：继承 ``IbValue``，``payload`` 承载成功值（单一承载），
+``_error``/``_status`` 存槽位；``type_ref`` 经 spec 生效，``thread_result[int]``
+泛型身份在序列化/快照中保留。
 
-方法（Rust 对齐，见 ``THREAD_DESIGN_REVISION`` §2.5 + 用户裁定）：
+方法（Rust 风格）：
 - ``unwrap()``     → Optional[T]（失败返回 Optional 空，不抛）
 - ``unwrap_or(v)`` → T（失败返回默认值）
 - ``expect()``     → T（失败抛 IBCI 异常，fail-fast）

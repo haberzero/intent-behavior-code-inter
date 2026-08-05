@@ -6,7 +6,7 @@ from ..objects.primitives import IbInteger, IbFloat, IbString, IbList, IbTuple, 
 from ..objects.file_handle import IbFileHandle
 from ..objects.media_types import audio_from_file, image_from_file, video_from_file
 from ..objects.intent import IbIntent  # 确保 @register_ib_type("Intent") 在公理自动化绑定前已执行
-from ..objects.thread import IbThread  # 确保 @register_ib_type("thread") 在公理自动化绑定前已执行（B2 循环导入修复：thread 不再经 primitives 反向再导出）
+from ..objects.thread import IbThread  # 确保 @register_ib_type("thread") 在公理自动化绑定前已执行（循环导入修复：thread 不再经 primitives 反向再导出）
 from ..objects.thread_result import IbThreadResult  # 确保 @register_ib_type("thread_result") 在公理自动化绑定前已执行（同上）
 from ..objects.intent_stack import IbIntentStack
 from ..objects.intent_context import IbIntentContext
@@ -596,7 +596,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         _reg_native(intent_context_class, 'use', _ic_use, unbox=False)
         _reg_native(intent_context_class, 'get_current', _ic_get_current, unbox=False)
 
-    # 5b'. thread 类型构造函数注册（线程对象模型方向修正，任务 C）
+    # 5b'. thread 类型构造函数注册
     #
     # thread 类方法（start/join/cancel/is_done）已由 ThreadAxiom → axiom-driven
     # auto-bind 自动绑定（从 get_ib_implementation("thread") = IbThread）。
@@ -634,7 +634,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 raise InterpreterError(
                     "thread: coordinator unavailable (no active execution context)"
                 )
-            # 阶段 2（D2）：receiver 经 _create_blank 为真实 IbThread，直接写槽位；
+            # receiver 经 _create_blank 为真实 IbThread，直接写槽位；
             # 空槽位（_spawned=None/_state=idle）已由 IbThread.__init__ 初始化。
             receiver._coordinator = coordinator
             receiver._callable = func_obj

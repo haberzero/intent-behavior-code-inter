@@ -230,7 +230,7 @@ class TestIbPathComparison:
 
 
 # ===========================================================================
-# 6. PathResolver — entry_dir 单锚点解析（D1）
+# 6. PathResolver — entry_dir 单锚点解析
 # ===========================================================================
 
 class TestPathResolver:
@@ -302,7 +302,7 @@ class TestPathResolver:
 
 
 # ===========================================================================
-# 6b. ModuleNameSpace — 模块名 ↔ 相对路径映射（D4）
+# 6b. ModuleNameSpace — 模块名 ↔ 相对路径映射
 # ===========================================================================
 
 class TestModuleNameSpace:
@@ -337,7 +337,7 @@ class TestModuleNameSpace:
 
 
 # ===========================================================================
-# 6c. PathContext — 锚点容器（D5）
+# 6c. PathContext — 锚点容器
 # ===========================================================================
 
 class TestPathContext:
@@ -396,7 +396,7 @@ class TestPathValidator:
         assert not PathValidator.is_within(IbPath.from_native(""), IbPath.from_native("/a"))
 
     def test_is_within_case_sensitive_posix_only(self):
-        """R1 修复：大小写敏感平台（POSIX）下不同大小写 = 不在内部。"""
+        """大小写敏感平台（POSIX）下不同大小写 = 不在内部。"""
         import os
         parent = IbPath.from_native("/Project")
         child = IbPath.from_native("/project/sub/file.txt")
@@ -405,7 +405,7 @@ class TestPathValidator:
             assert not PathValidator.is_within(parent, child)
 
     def test_is_within_case_insensitive_windows(self):
-        """R1 修复：大小写不敏感 FS（win32）下 is_within 应大小写不敏感（沙箱健全）。
+        """大小写不敏感 FS（win32）下 is_within 应大小写不敏感（沙箱健全）。
         """
         import os
         parent = IbPath.from_native("D:/Project")
@@ -415,7 +415,7 @@ class TestPathValidator:
             assert PathValidator.is_within(parent, child)
 
     def test_is_within_no_false_prefix_match(self):
-        """R1 伴随：/foo 不应误包含 /foobar（尾分隔符保护）。"""
+        """/foo 不应误包含 /foobar（尾分隔符保护）。"""
         parent = IbPath.from_native("D:/foo")
         child = IbPath.from_native("D:/foobar/x.txt")
         assert not PathValidator.is_within(parent, child)

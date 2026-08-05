@@ -98,7 +98,7 @@ class TestEngineRootDirContract:
 
     root_dir 可选；未提供时 project_root 在 run/compile 时确立为 entry_dir。
     root-dependent 初始化（Scheduler/plugin 发现）延迟到 _ensure_root_initialized。
-    D2 保留：root 经 canonicalize_for_security 规范化（解 symlink）。
+    root 经 canonicalize_for_security 规范化（解 symlink）。
     """
 
     def test_construct_without_root_dir_succeeds_root_deferred(self):
@@ -145,7 +145,7 @@ class TestEngineRootDirContract:
         assert eng.root_dir is not None
 
     def test_root_dir_resolves_symlinks(self, tmp_path):
-        """显式 root_dir 含符号链接时解析到真实路径（D2：symlink 基准统一）。"""
+        """显式 root_dir 含符号链接时解析到真实路径（symlink 基准统一）。"""
         import os
         target = tmp_path / "real_project"
         target.mkdir()
@@ -158,14 +158,13 @@ class TestEngineRootDirContract:
         assert eng._explicit_root == os.path.realpath(str(target))
 
     def test_cwd_saved_at_construction(self):
-        """A4：CWD 在构造期单独保存（无上界校验）。"""
+        """CWD 在构造期单独保存（无上界校验）。"""
         import os
         eng = IBCIEngine(auto_sniff=False)
         assert eng._cwd == os.getcwd()
 
     def test_run_relative_entry_canonicalizes_to_absolute(self, tmp_path, monkeypatch):
-        """B1 修复：相对 entry_file 经 canonicalize_for_security → 绝对 entry_dir（锚点健全）。
-
+        """相对 entry_file 经 canonicalize_for_security → 绝对 entry_dir（锚点健全）。
         """
         entry = tmp_path / "main.ibci"
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
@@ -176,7 +175,7 @@ class TestEngineRootDirContract:
         assert os.path.isabs(eng._path_ctx.entry_dir.to_native())
 
     def test_execute_without_prior_compile_raises(self, tmp_path):
-        """B2 修复：execute() 未经 run/compile 触发 root 初始化 → 明确 InterpreterError（非 AttributeError）。"""
+        """execute() 未经 run/compile 触发 root 初始化 → 明确 InterpreterError（非 AttributeError）。"""
         from core.kernel.issue import InterpreterError
         eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
         with pytest.raises(InterpreterError):
@@ -262,7 +261,7 @@ class TestPluginSearchPathResolution:
         assert x_count == 1
 
     def test_plugin_path_outside_project_root_allowed(self, tmp_path, tmp_path_factory):
-        """B4：plugin_path 可在 project_root 之外（特权只读越界）——resolver 不拒绝。"""
+        """plugin_path 可在 project_root 之外（特权只读越界）——resolver 不拒绝。"""
         import os
         # 独立临时目录（project_root 之外）
         external = tmp_path_factory.mktemp("external_plugins") / "ext"
@@ -275,7 +274,7 @@ class TestPluginSearchPathResolution:
         assert os.path.realpath(str(external)) in paths
 
     def test_inherited_parent_plugins_appended(self, tmp_path):
-        """C2：子引擎继承父 plugin search_paths（附加于自身之后，兜底来源）。"""
+        """子引擎继承父 plugin search_paths（附加于自身之后，兜底来源）。"""
         parent_extra = tmp_path / "parent_plugins"
         parent_extra.mkdir()
         child_root = tmp_path / "child_area"
@@ -342,7 +341,7 @@ class TestPluginLoadingPathHygiene:
 
 
 class TestEnginePathContextContract:
-    """IBCIEngine 的 PathContext 锚点契约（D4）。
+    """IBCIEngine 的 PathContext 锚点契约。
 
     核心：entry_dir 必须始终是有意义的用户目录。
     - ``run(entry_file)``：entry_dir = entry_file.parent（数据路径契约）
@@ -386,7 +385,7 @@ class TestEnginePathContextContract:
             f"entry_dir 不应是系统 temp：{entry_dir} (sys_temp={sys_temp})"
 
     def test_run_string_uses_synthetic_entry_file(self):
-        """A3：run_string 的 entry_file = 合成 <proj_root>/__string_exec__.ibci（非 tempdir）。"""
+        """run_string 的 entry_file = 合成 <proj_root>/__string_exec__.ibci（非 tempdir）。"""
         eng = _new_engine()
         eng.run_string('str x = "hi"\nprint(x)\n', silent=True)
         assert eng._entry_file is not None

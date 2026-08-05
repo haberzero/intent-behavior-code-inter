@@ -99,7 +99,7 @@ class HostService(IHostService):
                 "Use file.write to persist artifacts explicitly."
             )
 
-        # 疏漏 4：线程对象/容器是瞬态；save_state 时检测到未完成线程直接失败。
+        # 线程对象/容器是瞬态；save_state 时检测到未完成线程直接失败。
         runtime_context = getattr(self.execution_context, "runtime_context", None)
         coordinator = getattr(runtime_context, "_runtime_coordinator", None) if runtime_context is not None else None
         if coordinator is not None:

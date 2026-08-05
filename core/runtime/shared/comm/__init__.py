@@ -1,8 +1,7 @@
 """
-core.runtime.shared.comm — 统一通信内核（PT-MT-3）。
+core.runtime.shared.comm — 统一通信内核。
 
-两个正交通信域（用户裁定 §三，不能用一个超抽象覆盖；Signal 控制流域已移除，
-见 WORKLOG 会话 8）：
+两个正交通信域（不能用一个超抽象覆盖；Signal 控制流域已移除）：
 - Channel（数据流：stream / message / pubsub）
 - Slot（共享状态：具名原子读写）
 

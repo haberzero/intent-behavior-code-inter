@@ -223,13 +223,11 @@ class IExecutionFrame(Protocol):
 
 @runtime_checkable
 class IVMTask(Protocol):
-    """VM 调度单元协议（公理 VM-T1）。
+    """VM 调度单元协议。
 
     每个 VMTask 包装一个生成器协程，形态等价于 CPU 寄存器组：
     ``node_uid`` 标识当前帧对应的 AST 节点；``generator`` 是按 yield 协议表达的
     协程，节点之间通过 ``yield child_uid`` 让出控制权。
-
-    实现位于 ``core.runtime.vm.task.VMTask``；该协议仅声明对外可观测属性。
     """
     node_uid: str
     generator: Any

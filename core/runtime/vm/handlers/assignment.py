@@ -62,7 +62,7 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
             # 来检测不确定性并触发 retry；异步 dispatch 会绕过该协议导致占位符
             # 直接落入用户变量。
             and executor.runtime_context.get_current_llm_except_frame() is None
-            # 控制层 parallel 开关（PT-MT-5）：关闭时走同步路径（串行语义）。
+            # 控制层 parallel 开关：关闭时走同步路径（串行语义）。
             and _parallel_enabled(executor)
         ):
             sc = executor.service_context
@@ -203,7 +203,7 @@ def vm_handle_IbAugAssign(executor, node_uid: str, node_data: Mapping[str, Any])
 
 
 def _parallel_enabled(executor) -> bool:
-    """读取控制层 parallel 开关（PT-MT-5）。
+    """读取控制层 parallel 开关。
 
     经 runtime_context 上的 ConfigStore 读时解析（单实例→单调用→全局→默认开）。
     无 ConfigStore 时默认开启（保持既有行为）。

@@ -2,7 +2,7 @@
 tests/runtime/test_observability.py
 ===================================
 
-PT-MT-4 内省层测试：runtime.snapshot() + runtime.subscribe()。
+内省层测试：runtime.snapshot() + runtime.subscribe()。
 
 锁定：
 - iruntime 模块注册为 kernel-native，可 import

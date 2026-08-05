@@ -1,5 +1,5 @@
 """
-线程对象模型测试（任务 C1）：thread[T] 构造 + 句柄方法 + 生命周期状态机。
+线程对象模型测试：thread[T] 构造 + 句柄方法 + 生命周期状态机。
 
 覆盖：
 - 构造：``thread(callable=..., args=...)`` 关键字参数
@@ -39,7 +39,7 @@ print((str)r.expect())
 
 
 def test_thread_is_done_state_machine():
-    """is_done 状态机：阻塞挂起时 False → 完成后 True（R1-D6 后以真实状态为准）。
+    """is_done 状态机：阻塞挂起时 False → 完成后 True（以真实状态为准）。
 
     线程体阻塞在 chan recv 上（确定性挂起），is_done 如实反映未完成；
     send 唤醒后 join 取回结果，is_done 转 True。快函数线程可能在 is_done()

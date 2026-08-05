@@ -162,7 +162,7 @@ def test_behavior_dep_assigns_behavior_expr_to_symbol(spec_registry):
 
     assert result.success
     assert hasattr(behavior, 'llm_deps')
-    # 模块级无依赖 → dispatch_eligible=True（spec §3.1 可调度）
+    # 模块级无依赖 → dispatch_eligible=True（可调度）
     assert behavior.dispatch_eligible is True
 
 
@@ -203,7 +203,7 @@ def test_behavior_dep_dependency_tracking(spec_registry):
 
 
 # ===========================================================================
-# dispatch_eligible 规则（spec §3.1）
+# dispatch_eligible 规则
 # ===========================================================================
 
 
