@@ -347,15 +347,16 @@ class IbValue(IbObject):
 >
 > **返回标注强制（2026-08-05）**：`lambda`/`snapshot`/`func`/`llm` 缺失返回标注产生
 > `SEM_MISSING_RETURN_ANNOTATION` 编译错误。`-> auto` 对非行为 body 从 body 表达式推断
-> 具体返回类型并锁定（与 `func -> auto` 的 return 推断语义对齐）；行为 body 输出本质
-> 动态，保持 behavior 类型（调用期由 expected_type / 运行时解析）。
+> 具体返回类型并锁定（与 `func -> auto` 的 return 推断语义对齐）；**行为 body 的 `-> auto`
+> 唯一推断为 `str`**（LLM 输出默认字符串，无其它自动推断），要其它类型必须显式 `-> T`
+> （同时设定 LLM 输出 expected_type）。
 
 ### 7.2 声明侧关键字 `fn`
 
 `fn` 等同 `auto` 类型推导，只承担"推导可调用类型"职责，不携带返回类型：
 - `fn f = myFunc` ⇒ 推导 `f` 类型为 `myFunc` 的 FuncSpec
 - `fn g = lambda(int x) -> int: x+1` ⇒ 推导 g 类型为 `CALLABLE_INSTANCE[int]`
-- `fn h = lambda -> auto: @~ ... ~` ⇒ 行为体保持 `CALLABLE_INSTANCE[behavior]`（LLM 输出动态）
+- `fn h = lambda -> auto: @~ ... ~` ⇒ 行为体 `-> auto` 唯一推断 str ⇒ `CALLABLE_INSTANCE[str]`
 
 ### 7.3 类型标注侧 `fn[(...)→(...)]`
 

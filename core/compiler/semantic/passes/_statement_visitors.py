@@ -281,8 +281,16 @@ class StatementVisitorsMixin:
                 )
                 return declared_type
 
-        # Structural sig matching when RHS carries concrete signature
-        if val_type.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+        # Structural sig matching when RHS carries concrete signature.
+        # CALLABLE_INSTANCE（behavior/fn lambda）此前被跳过，导致 `fn[()->int] f =
+        # lambda -> auto: @~...~` 声明侧承诺 int 而运行期返回 str（不一致）。
+        # 现纳入：按 value_type 校验返回类型（lambda 的 CALLABLE_INSTANCE spec 不
+        # 携带 param_types，参数约束由调用处实参解析覆盖，此处只校验返回）。
+        if val_type.kind in (
+            TypeKind.FUNCTION.value,
+            TypeKind.CALLABLE_SIG.value,
+            TypeKind.CALLABLE_INSTANCE.value,
+        ):
             self._check_callable_sig_match(declared_type, val_type, self._current_node)
 
         return declared_type
@@ -290,10 +298,14 @@ class StatementVisitorsMixin:
     def _check_callable_sig_match(self, sig: IbSpec, actual: IbSpec, node: ast.IbASTNode):
         """Best-effort structural compatibility check between a CALLABLE_SIG constraint and a concrete callable."""
         expected_params = [t.head for t in sig.param_types]
-        actual_params = [t.head for t in actual.param_types]
+
+        # CALLABLE_INSTANCE（behavior/fn lambda）：spec 不携带 param_types，只按
+        # value_type 校验返回类型；参数约束由调用处实参解析覆盖。
+        is_callable_instance = actual.kind == TypeKind.CALLABLE_INSTANCE.value
+        actual_params = [] if is_callable_instance else [t.head for t in actual.param_types]
 
         # Param count check
-        if len(actual_params) != len(expected_params):
+        if not is_callable_instance and len(actual_params) != len(expected_params):
             self.error(
                 f"Callable signature mismatch: expected {len(expected_params)} "
                 f"parameter(s), but the callable has {len(actual_params)} parameter(s).",
@@ -317,7 +329,7 @@ class StatementVisitorsMixin:
 
         # Return type compatibility
         sig_ret = sig.return_type
-        actual_ret = actual.return_type
+        actual_ret = actual.value_type if is_callable_instance else actual.return_type
         if sig_ret and actual_ret:
             exp_ret = self.registry.resolve(sig_ret.head)
             act_ret = self.registry.resolve(actual_ret.head)

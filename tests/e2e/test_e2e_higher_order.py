@@ -358,10 +358,12 @@ print(r2)
         assert run_ibci(code) == ["hello"]
 
     def test_behavior_lambda_returns_str_call_site_typed(self):
-        """`fn f = lambda -> str: @~...~` enables `str r = f()` without cast."""
-        expect_compile_error(
-            AI_MOCK_PREFIX + "\nfn f = lambda -> auto: @~MOCK:STR:hi~\nstr r = f()", "SEM_TYPE_MISMATCH")
+        """行为体 `-> auto` 唯一推断为 str；`str r = f()` 免强转；`int` 需显式 `-> int`。"""
+        compile_ibci(AI_MOCK_PREFIX + "\nfn f = lambda -> auto: @~MOCK:STR:hi~\nstr r = f()")
         compile_ibci(AI_MOCK_PREFIX + "\nfn f = lambda -> str: @~MOCK:STR:hi~\nstr r = f()")
+        # 行为体 auto 只给 str：赋给 int 编译报错，必须显式 -> int
+        expect_compile_error(
+            AI_MOCK_PREFIX + "\nfn f = lambda -> auto: @~MOCK:STR:hi~\nint r = f()", "SEM_TYPE_MISMATCH")
 
     def test_snapshot_behavior_returns_str(self):
         """``fn f = snapshot -> str: @~...~`` freezes intent context."""

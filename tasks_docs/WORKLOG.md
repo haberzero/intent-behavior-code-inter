@@ -142,8 +142,15 @@
   强制校验（`RUN_TYPE_MISMATCH`，必须显式强转）。
 - **Task3 多类型 list 移除**：`list[int,str]` → `SEM_MULTI_TYPE_LIST_REMOVED`（无 union 机制，
   强制显式 `list[any]`）。`tuple[T1,T2,...]` 位置元素类型保留（合法特性）。
+- **行为体 fn 的 `-> auto` 唯一 = str（用户裁定强制规则）**：行为 body 的 `-> auto` 不再保持
+  behavior 动态语义，而是**唯一推断为 str**（LLM 输出默认字符串，无其它自动推断）；要其它
+  类型必须显式 `-> T`（同时设定 LLM expected_type）。附带修复 `fn[()->T]` 声明侧签名约束对
+  CALLABLE_INSTANCE（行为/fn lambda）的返回类型校验缺口——此前被跳过导致 `fn[()->int] f =
+  lambda -> auto: @~...~` 编译通过而运行期返回 str（声明承诺 int 实际 str），现按 value_type
+  校验返回类型（参数约束由调用处实参解析覆盖），不匹配即 `SEM_TYPE_MISMATCH`。
 - **验证**：any→typed 运行时强校验、裸赋值锁定、标注强制、多类型移除在各声明上下文生效；
-  残留扫描确认 Python lambda 与 tuple 位置元素未误伤。
+  行为体 auto=str 全套语义（str 承接 / int 报错 / fn[()->str] 匹配 / fn[()->int] 报错 / 带参
+  不误伤）实证通过；残留扫描确认 Python lambda 与 tuple 位置元素未误伤。
 - 文档同步：`KNOWN_LIMITS.md` §七/八/九、`syntax/02_variables.md`、`05_functions.md`、
   `07_behavior_expressions.md`、`01_types.md`、`architecture/03_type_system.md` §7、
   `01_principles.md` §5.3。

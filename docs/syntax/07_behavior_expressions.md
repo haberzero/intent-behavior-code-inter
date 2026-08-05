@@ -126,7 +126,22 @@ str r = translate("hello")
 | 带参 snapshot | `fn f = snapshot(PARAMS) -> TYPE: EXPR` / `fn f = snapshot(PARAMS) -> auto: EXPR` |
 
 > **2026-08-05 收紧**：`fn f = lambda: EXPR`（省略返回标注）现在产生编译错误，必须显式
-> `-> TYPE` 或 `-> auto`（非行为 body 从 body 推断；行为 body 保持 behavior 动态语义）。
+> `-> TYPE` 或 `-> auto`。
+>
+> **行为体 lambda 的 `-> auto` 唯一推断为 `str`（强制规则）**：
+> - 非行为 body（`lambda -> auto: 1 + 1`）→ `-> auto` 从 body 推断具体类型并锁定。
+> - **行为 body（`lambda -> auto: @~...~`）→ `-> auto` 唯一推断为 `str`**（LLM 输出默认
+>   字符串），**不存在任何其他自动推断**。LLM 输出本质动态、无 body 可静态推断，`auto`
+>   在此处只等于 `str`。
+> - 要其它返回类型（int/自定义类等）必须显式 `-> TYPE`——这会同时设定 LLM 输出的
+>   `expected_type`（解析目标）。例如：
+>   ```ibci
+>   fn f = lambda -> auto: @~ 给出一个数字 ~   # f() 返回 str（LLM 输出原样字符串）
+>   fn g = lambda -> int: @~ 给出一个数字 ~    # g() 返回 int（LLM 输出按 int 解析）
+>   ```
+> - `fn[() -> T]` 声明侧签名约束同样适用：行为体返回类型与实际 `T` 不匹配即编译错误
+>   （例如 `fn[() -> int] f = lambda -> auto: @~...~` 因实际为 str 而报错，须写
+>   `lambda -> int:`）。
 
 其中 `TYPE` 可以是任意类型（包括泛型如 `tuple[int,str]`、`list[str]`，以及用户自定义类名）：
 

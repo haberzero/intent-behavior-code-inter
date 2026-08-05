@@ -696,14 +696,19 @@ class ExpressionVisitorsMixin:
         is_behavior_body = isinstance(node.body, ast.IbBehaviorExpr)
 
         # -> auto：从非行为 body 推断具体返回类型（与 visit_IbFunctionDef 的
-        # auto 语义对齐：编译期锁定为 body 实际类型）。行为 body 输出本质动态，
-        # 不参与推断（保持 behavior 类型，调用期由 expected_type/运行时解析）。
+        # auto 语义对齐：编译期锁定为 body 实际类型）。
         if (is_auto_return
                 and not is_behavior_body
                 and body_type is not None
                 and body_type is not self._void_desc
                 and not self.registry.is_dynamic(body_type)):
             returns_type = body_type
+
+        # 行为体 + -> auto：唯一推断结果就是 str（LLM 输出默认字符串），
+        # 不做任何其他自动推断（LLM 输出本质动态，无 body 可静态推断）。
+        # 要其它类型必须显式 `-> T`，这同时设定 LLM 输出的 expected_type。
+        if is_behavior_body and returns_type is not None and returns_type.name == "auto":
+            returns_type = self._str_desc
 
         has_concrete_returns = (
             returns_type is not None
