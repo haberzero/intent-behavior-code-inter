@@ -66,7 +66,17 @@
   任务 A-F/C0-C2、PT-MT-\*、阶段 2/3、疏漏 N、VP-/F-、MERGED、THREAD_DESIGN_REVISION、
   WORKLOG 会话、日期戳、文档章节号（§3.1/§8.1）等标记，保留功能说明；INV-\* 契约不变式
   码（等价公理码）保留。全量 pytest 零回归。commit db3c610（仅本地）。
-- **测试基线**：`python -m pytest tests/` = 1481 passed / 4 skipped（以实跑为准）。
+- **R2 处置完成（2026-08-05，会话 15）**：按批次 A-E + 补充项全部落地（本地 commit 序列：
+  381d30e/1ee2bcb/77d0863/7473a8b/94c8e86/末批），每批全量 pytest 零回归后提交。涵盖：
+  机械清理（负数误lex/CJK/动态槽/去BOM）、fail-fast（反序列化/能力查询/前缀碰撞/插件状态/
+  run()）、半接通语言面（IbSlot.update 方案A 接通 CAS/media 假值/IsolationPolicy 收敛/
+  str 别名/chan(T) 保真/**Task→Thread 改名**）、结构单点（泛型名结构化 TypeRef/运算符映射/
+  hasattr/生成器中央化/VMTaskResult/check-gen_spec 格式对齐）、测试健康（make_context/
+  root/去skip/LRU/白盒下沉+红线/Engine死API/状态断言）、补充项（enum/SnapshotManager/
+  死方法簇/erasure统一/can_return_from_isolated 删除/TypeInferenceState 文档化/AI MOCK 前缀
+  收敛/依赖测试改写）。保留+文档化 12 项。**验证**：全量 pytest = 1506 passed / 6 skipped
+  零回归（以实跑为准）。
+- **测试基线**：`python -m pytest tests/` = 1506 passed / 6 skipped（以实跑为准）。
 
 ## 四、遗留 / 待办
 

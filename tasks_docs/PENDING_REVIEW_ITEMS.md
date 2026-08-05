@@ -83,6 +83,30 @@
 
 ### R2 处置清单（已全部处理）
 
+> **执行完成（2026-08-05）**：按批次 A-E + 补充项全部落地 unsafe-vibe-dev（本地 commit，
+> 未 push）。执行摘要：
+> - **批次 A（机械清理）**：负数块误 lex 修复 / CJK 冗余区删除 / _orchestrator 与动态槽
+>   初始化 / compile_to_artifact_dict 删除 / 13 文件去 BOM + meta 防回归 / 空捕获 fail-fast
+> - **批次 B（fail-fast）**：IntentMode 反序列化 raise / control_flow 结构化能力查询 /
+>   前缀碰撞池成员守卫 / 插件状态 save/restore fail-fast / run() 统一 raise / 宽捕获收窄 /
+>   config OSError 删除
+> - **批次 C（半接通/语言面）**：IbSlot.update 方案 A 接通 CAS RMW（+3 测试）/ media 假值
+>   删除 / IsolationPolicy 收敛两维 / inherit_plugins 收敛 bool / str 别名删除 /
+>   chan(T) 表达式保真 / **Task\* → Thread\* 改名**
+> - **批次 D（结构/单点）**：泛型名结构化 TypeRef（+resolve_typeref 懒构建）/ 运算符映射
+>   派生 / hasattr 收敛 / 生成器中央化 _make_task（删 18 处 hack）/ VMTaskResult 删除 /
+>   check/gen_spec/loader 格式对齐 params
+> - **批次 E（测试健康）**：make_context 收敛 / root 显式化 / 去静默 skip / LRU 统一剪枝 /
+>   LLM pipeline 白盒下沉 + 红线增扫私有属性 / Engine 死 API / 补状态断言 / 白名单显式化
+> - **补充项**：scheduler registry 坏分支 / enum.py 删除 / SnapshotManager 删除 / 死方法簇
+>   删除 / erasure 统一 preserve / can_return_from_isolated 整链路删除 /
+>   TypeInferenceState 文档化（预留增强）/ AI MOCK 前缀收敛 / 依赖测试真改写
+> - **保留+文档化**：is_dynamic/is_assignable 口径、resolve_member 回退 any、get_vars 近重复、
+>   max_steps/frame_stack_depth 预留、get_self_source 空串、序列化器私有字段直读、事件流
+>   收敛、ReceiveMode.STREAM、spawn 三层命名、可观测性穿透、ConfigStore 生命周期、
+>   AIPlugin 线程契约、probe 回退、事件总线 trace、90s 看门狗加固
+> - **验证**：全量 `python -m pytest tests/` = 1506 passed / 6 skipped 零回归（以实跑为准）
+
 | 组 | 编号 | 位置 | 断言 | 处置 |
 |----|------|------|------|------|
 | P0 | R2-1 | `serialization/immutable_artifact.py:83-85` | `ImmutableArtifact.__hash__` 声明即坏——实测 `hash()` 抛 `TypeError: unhashable type: 'dict'`（嵌套 dict 不可哈希） | ✅ 根本修复（规范化不可变键哈希）+ 测试 |
