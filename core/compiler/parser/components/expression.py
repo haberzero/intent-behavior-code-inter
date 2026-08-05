@@ -295,6 +295,28 @@ class ExpressionComponent(BaseComponent):
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbAwaitExpr(value=operand), op_token)
 
+    def _expr_name(self, node: Optional[ast.IbExpr]) -> Optional[str]:
+        """AST 表达式节点 → 名称字符串（供 chan/slot 的 type_name/mode/name 字段）。
+
+        统一形状判别（IbName/.id、IbConstant/.value、IbAttribute 全限定名、
+        IbSubscript 基名），替代链式 hasattr 探测 + ``str()`` 兜底——后者对
+        dataclass 节点产生含 lineno/col 噪音的无意义名（点分类型还会被截断为
+        接收者名）。
+        """
+        if node is None:
+            return None
+        if isinstance(node, ast.IbName):
+            return node.id
+        if isinstance(node, ast.IbConstant):
+            return str(node.value) if node.value is not None else None
+        if isinstance(node, ast.IbAttribute):
+            base = self._expr_name(node.value)
+            return f"{base}.{node.attr}" if base else node.attr
+        if isinstance(node, ast.IbSubscript):
+            # 泛型实参由语义层 resolve_typeref 结构化处理；这里只承载基名
+            return self._expr_name(node.value)
+        return None
+
     def chan_expr(self) -> ast.IbExpr:
         """``chan(T, mode=..., buffer=...)`` 或 ``chan T(...)`` —— Channel 构造。
 
@@ -312,7 +334,7 @@ class ExpressionComponent(BaseComponent):
             # 函数形态：chan(T, ...) —— 首参是类型名
             if not self.stream.check(TokenType.RPAREN):
                 type_ann = self.context.type_parser.parse_type_annotation()
-                type_name = getattr(type_ann, "id", None) or getattr(getattr(type_ann, "value", None), "id", None) or str(type_ann)
+                type_name = self._expr_name(type_ann)
                 # 可选位置参数：第二参可作 mode（chan(str, "stream")）
                 if self.stream.match(TokenType.COMMA):
                     if self.stream.check(TokenType.STRING) and not (
@@ -320,12 +342,18 @@ class ExpressionComponent(BaseComponent):
                     ):
                         mode_token = self.stream.advance()
                         mode = mode_token.value
-                    elif self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
-                        # 直接是关键字参数
-                        self.stream.previous()  # 回退，交给 _parse_chan_kwargs
-                        kw = self._parse_chan_kwargs()
-                        if kw is not None:
-                            mode, buffer, name = kw
+                    # 关键字参数（mode=/buffer=/name=）——逗号已由上方 match 消费，
+                    # 流停在首关键字处，_parse_chan_kwargs 兼容"已消费逗号"形态
+                    # （此前的 previous() 是只读回看、不移动光标，关键字路径坏死）。
+                    kw = self._parse_chan_kwargs()
+                    if kw is not None:
+                        m, b, n = kw
+                        if m is not None:
+                            mode = m
+                        if b:
+                            buffer = b
+                        if n is not None:
+                            name = n
                 # 剩余关键字参数（mode=/buffer=/name=）
                 if mode in ("message", "stream", "pubsub"):
                     kw = self._parse_chan_kwargs()
@@ -341,7 +369,7 @@ class ExpressionComponent(BaseComponent):
         else:
             # 声明式形态：chan T(...) —— 解析类型注解后接参数
             type_ann = self.context.type_parser.parse_type_annotation()
-            type_name = getattr(type_ann, "id", None)
+            type_name = self._expr_name(type_ann)
             if self.stream.match(TokenType.LPAREN):
                 while self.stream.match(TokenType.COMMA):
                     if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
@@ -349,34 +377,46 @@ class ExpressionComponent(BaseComponent):
                         self.stream.advance()
                         kw_val = self.parse_precedence(IbPrecedence.UNARY)
                         if kw_token.value == "mode":
-                            mode = kw_val.id if hasattr(kw_val, "id") else str(kw_val)
+                            mode = self._expr_name(kw_val)
                         elif kw_token.value == "buffer":
                             buffer = int(kw_val.value) if hasattr(kw_val, "value") else int(kw_val)
                         elif kw_token.value == "name":
-                            name = kw_val.value if hasattr(kw_val, "value") else str(kw_val)
+                            name = self._expr_name(kw_val)
                 self.stream.consume(TokenType.RPAREN, "Expect ')' after chan declaration.")
 
         return self._loc(ast.IbChannelExpr(type_name=type_name, mode=mode, buffer=buffer, name=name), op_token)
 
     def _parse_chan_kwargs(self):
-        """解析 ``chan`` 的具名参数（mode=/buffer=/name=），返回 ``(mode, buffer, name)`` 或 None。"""
+        """解析 ``chan`` 的具名参数（mode=/buffer=/name=），返回 ``(mode, buffer, name)`` 或 None。
+
+        兼容两种流位置：调用方已消费首个逗号（流停在首关键字处，如函数形态
+        ``chan(T, mode=...)``），或流停在逗号前（后续关键字参数）——按
+        "关键字直接位于当前位置 / 逗号后关键字"两种形态统一处理。
+        """
         mode = None
         buffer = 0
         name = None
-        while self.stream.match(TokenType.COMMA):
+        matched_any = False
+        while True:
             if self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN:
-                kw_token = self.stream.advance()
-                self.stream.advance()  # '='
-                kw_val = self.parse_precedence(IbPrecedence.UNARY)
-                if kw_token.value == "mode":
-                    mode = kw_val.id if hasattr(kw_val, "id") else str(kw_val)
-                elif kw_token.value == "buffer":
-                    buffer = int(kw_val.value) if hasattr(kw_val, "value") else int(kw_val)
-                elif kw_token.value == "name":
-                    name = kw_val.value if hasattr(kw_val, "value") else str(kw_val)
+                pass  # 已停在关键字处（调用方已消费首个逗号）
+            elif self.stream.match(TokenType.COMMA):
+                # 停在逗号前：消费逗号后必须是关键字，否则结束
+                if not (self.stream.check(TokenType.IDENTIFIER) and self.stream.peek(1).type == TokenType.ASSIGN):
+                    break
             else:
-                return None
-        return mode, buffer, name
+                break
+            kw_token = self.stream.advance()
+            self.stream.advance()  # '='
+            kw_val = self.parse_precedence(IbPrecedence.UNARY)
+            if kw_token.value == "mode":
+                mode = self._expr_name(kw_val)
+            elif kw_token.value == "buffer":
+                buffer = int(kw_val.value) if hasattr(kw_val, "value") else int(kw_val)
+            elif kw_token.value == "name":
+                name = self._expr_name(kw_val)
+            matched_any = True
+        return (mode, buffer, name) if matched_any else None
 
     def slot_expr(self) -> ast.IbExpr:
         """``slot(name, value)`` 或 ``slot T(name)`` —— Slot 构造。"""
@@ -388,14 +428,14 @@ class ExpressionComponent(BaseComponent):
             # 函数形态：slot(name, value)
             if not self.stream.check(TokenType.RPAREN):
                 first = self.parse_precedence(IbPrecedence.UNARY)
-                name = first.value if hasattr(first, "value") and not hasattr(first, "id") else str(first)
+                name = self._expr_name(first)
                 if self.stream.match(TokenType.COMMA):
                     value = self.parse_precedence(IbPrecedence.UNARY)
             self.stream.consume(TokenType.RPAREN, "Expect ')' after slot arguments.")
         else:
             # 声明式形态：slot T(name)
             type_ann = self.context.type_parser.parse_type_annotation()
-            type_name = getattr(type_ann, "id", None)
+            type_name = self._expr_name(type_ann)
             self.stream.consume(TokenType.LPAREN, "Expect '(' after slot type.")
             name = self.stream.consume(TokenType.IDENTIFIER, "Expect slot name.").value
             if self.stream.match(TokenType.COMMA):

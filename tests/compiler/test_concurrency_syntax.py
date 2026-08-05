@@ -71,6 +71,34 @@ class TestTypeAnnotations:
     def test_slot_type_declaration(self):
         assert_compiles("slot st = slot(\"score\", 0)\n")
 
+    def test_chan_keyword_mode_normalized(self):
+        """chan(str, mode=\"stream\") 的 mode/type_name 归一为字面值（A-D5 回归）。"""
+        from core.compiler.serialization.serializer import FlatSerializer
+        artifact = compile_ibci('chan c = chan(str, mode="stream")\n')
+        d = FlatSerializer().serialize_artifact(artifact)
+        nodes = d["modules"][artifact.entry_module]["pools"]["nodes"]
+        chan_node = next(v for v in nodes.values() if v["_type"] == "IbChannelExpr")
+        assert chan_node["type_name"] == "str"
+        assert chan_node["mode"] == "stream"
+
+    def test_chan_generic_type_uses_base_name(self):
+        """chan(list[int]) 的 type_name 取基名 list（不再 str() 产出 dataclass 噪音）。"""
+        from core.compiler.serialization.serializer import FlatSerializer
+        artifact = compile_ibci('chan c = chan(list[int], "message")\n')
+        d = FlatSerializer().serialize_artifact(artifact)
+        nodes = d["modules"][artifact.entry_module]["pools"]["nodes"]
+        chan_node = next(v for v in nodes.values() if v["_type"] == "IbChannelExpr")
+        assert chan_node["type_name"] == "list"
+
+    def test_slot_identifier_name_normalized(self):
+        """slot(标识符, 0) 的 name 归一为标识符值（不再 str() 产出 dataclass 噪音）。"""
+        from core.compiler.serialization.serializer import FlatSerializer
+        artifact = compile_ibci('slot st = slot(score_name, 0)\n')
+        d = FlatSerializer().serialize_artifact(artifact)
+        nodes = d["modules"][artifact.entry_module]["pools"]["nodes"]
+        slot_node = next(v for v in nodes.values() if v["_type"] == "IbSlotExpr")
+        assert slot_node["name"] == "score_name"
+
 
 # ────────────────────────────────────────────────────── serialization ──
 
