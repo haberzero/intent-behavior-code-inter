@@ -307,13 +307,21 @@ class LLMExceptFrame:
         return violations
 
     def _values_equal(self, a, b) -> bool:
-        """浅层值比较：对 IbValue 使用 to_native()，否则用 identity/==。"""
+        """浅层值比较：对 IbValue 使用 to_native()，否则用 identity/==。
+
+        值比较降级链路（llmexcept 篡改完整性校验的最后一环，设计机制）：
+        1. 正常路径：原生值 ``==`` 比较；
+        2. 降级路径：``==`` 抛异常（自定义对象 ``__eq__`` 故障 / 类型不可比较）
+           → 保守判定"不相等"（返回 False）。这是有意的 fail-safe 方向：
+           完整性校验宁可误报篡改而触发恢复，也不可漏报。调用方对 False
+           一律视为"被篡改"。（调用方在进入本方法前已排除同对象恒等情况。）
+        """
         a_native = unbox(a)
         b_native = unbox(b)
         try:
             return a_native == b_native
         except Exception:
-            return a is b
+            return False
 
     def should_continue_retrying(self) -> bool:
         """

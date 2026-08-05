@@ -60,15 +60,17 @@
 
 ## 保留+文档化（设计决策/需讨论，非真缺陷）
 - Axiom 家族分裂（IntentAxiom/IntentContextAxiom 不继承 BaseAxiom）：设计观察，暂不重构。
-- `_members.py:28-32` LAZY→any、`_inference.py` 分层 any fallback：permissive 类型语义设计。
+- **permissive any 语义（用户重审，2026-08-05）**：按类型系统实际可达面重审——LAZY→any 分支
+  实证死代码（无 LAZY 创建点）→ **已删除**；resolve_call_return 的 any 兜底三分：动态类型语义
+  （`any`/裸赋值/容器读，KNOWN_LIMITS §七）保留、auto 推断兜底保留、**未标注可调用静默变 any
+  属掩盖缺口**（建议强制标注 → SEM 错误，待用户拍板语言变更）。
+- **llm_except best-effort**：`_values_equal` 已收窄（显式保守 False + 降级链路注释）；
+  快照/恢复协议兜底为文档化设计保留。
+- **ibci_ai 宽 except**（用户裁定修复）：已收窄至 `_PROVIDER_ERRORS`
+  （openai.OpenAIError + RuntimeError + ValueError），内部缺陷 fail-fast 传播。
+- **behavior closure 序列化**（用户裁定为明确设计缺陷）：记录为未来改进 → PT-ARCH-31。
 - `deep_clone.py:109` `type() is`：裸 IbObject 精确判别，语义正确。
 - `media.py:46` hasattr(receive) 探测：media Phase 4 已封存，零改动。
-- `llm_except_frame.py` 快照/恢复 best-effort：用户协议优先、深克隆兜底的文档化设计。
-- `ibci_ai` 宽 except（LLM 调用失败包装）：已记录待决策（probe/stream 保守策略）。
-- `ibci_isys` 恒真守卫、`iruntime`/`idbg` 私有穿透：插件经 capabilities 访问的边界讨论，
-  属可观测性/插件层设计，随接口收敛另行处理。
-- `snapshot.py` 整体私有名耦合：可观测性层设计，待接口协议化（非本次范围）。
-- `coordinator.py:54` side-car 挂载、`interpreter.py:466`：文档化设计。
 
 ## 验证
 每批改完：全量 `python -m pytest tests/` 零回归 + commit（仅本地，禁 push）。

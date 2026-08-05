@@ -187,6 +187,10 @@ class LLMExecutorCore:
                 # 此类错误与 LLM 输出内容无关，llmexcept retry 对其无效，因此
                 # 直接抛出 ThrownException，跳过 llmexcept 重试循环，
                 # 让外层 try/except LLMCallError（或 LLMError/Exception）捕获。
+                # 注意：此处是 provider 协议的安全网（任意 provider 异常都转
+                # LLMCallError）。provider 插件（ibci_ai 等）应在自身边界收窄
+                # 捕获面（仅 provider 失败契约），使内部代码缺陷以真实类型
+                # 到达此处再经 `from e` 保留原始 traceback，便于定位。
                 self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"LLM call failed (infra): {e}")
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),

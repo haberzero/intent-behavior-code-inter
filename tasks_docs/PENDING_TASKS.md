@@ -217,6 +217,22 @@
 
 > `file` 影子化 Python 内建。长期需重命名（如 `fs`/`filesys`/`io`）。当前过渡措施已实施。
 
+### PT-ARCH-31：behavior / fn_callable 闭包序列化缺陷 [P2]
+
+> **来源**：R3 复核（2026-08-05）确认为明确设计缺陷（用户裁定记录）。
+> **缺陷**：`IbBehavior`（及同构的 `IbFnCallable`）的 `closure`（`{sym_uid: (name, slot)}`）
+> 在 `save_state → load_state` 往返中**丢失**：
+> - lambda 模式 slot 为 `IbCell` 活引用，指向定义作用域 cell 表；恢复后新作用域树无
+>   旧 cell，无法按引用重链。
+> - snapshot 模式 slot 为深克隆种子值，丢失后行为退化、失去"自包含冻结值"语义。
+> - 现状：序列化端（`runtime_serializer.py`）与 `fn_callable` 均不写 closure，只写
+>   node_uid/capture_mode（behavior 另补 captured_intents/params_uids）。
+> **影响**：带闭包的行为/fn 对象 round-trip 后语义漂移；snapshot 行为失去自包含性。
+> **改进方向（需设计裁定）**：闭包序列化语义——(a) 值拷贝（破坏 lambda 读最新语义，仅
+> snapshot 适用）或 (b) 按 sym_uid + 变量名重链回恢复后作用域（要求恢复端重建 cell 表）。
+> 需与 fn_callable 一并设计，避免不对称。
+
+
 ### Phase 4 延迟项（已封存，从 ADR-008/010/013 提取）
 
 以下三项在 media Phase 4 开工时需实现（**封存期间不推进**）：

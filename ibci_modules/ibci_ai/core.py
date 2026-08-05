@@ -13,6 +13,17 @@ MOCK_CONFIG_KEY = "MOCK_KEY"
 MOCK_CLIENT_SENTINEL = "MOCK_CLIENT"
 _MOCK_TEST_MODE_ENV = "IBC_TEST_MODE"
 
+# openai 为可选依赖（与 ibci_net 的 HAS_REQUESTS 同构）。错误收窄覆盖
+# provider 层失败契约：openai SDK 全家族基类 + 本仓约定的 provider 失败信号
+# RuntimeError（含 mock/第三方 provider）+ 响应格式 ValueError；TypeError /
+# AttributeError 等内部代码缺陷原样传播（fail-fast），不被误标为 LLM 调用失败。
+try:
+    import openai
+    _PROVIDER_ERRORS = (openai.OpenAIError, RuntimeError, ValueError)
+except ImportError:  # pragma: no cover - 未安装时仅走 MOCK / 配置错误路径
+    openai = None  # type: ignore[assignment]
+    _PROVIDER_ERRORS = (RuntimeError, ValueError)
+
 
 class AIPlugin(IbStatefulPlugin):
     """
@@ -98,7 +109,7 @@ class AIPlugin(IbStatefulPlugin):
                 )
         except ImportError:
             raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
-        except Exception as e:
+        except _PROVIDER_ERRORS as e:
             raise RuntimeError(f"OpenAI 客户端初始化失败: {str(e)}")
 
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
@@ -168,7 +179,7 @@ class AIPlugin(IbStatefulPlugin):
             return client
         except ImportError:
             raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
-        except Exception as e:
+        except _PROVIDER_ERRORS as e:
             raise RuntimeError(f"命名模型 '{name}' 的 OpenAI 客户端初始化失败: {str(e)}")
 
     def has_api_key(self) -> bool:
@@ -250,7 +261,11 @@ class AIPlugin(IbStatefulPlugin):
             
             return "REASONING_MODEL" if is_reasoning else "STANDARD_MODEL"
             
-        except Exception as e:
+        except _PROVIDER_ERRORS as e:
+            # 能力探测的保守降级（设计）：provider 层失败（网络/鉴权/响应格式）
+            # 无法判定模型类型 → 安全回退为按推理模型处理。仅对 provider 异常
+            # 降级；探测逻辑自身的内部缺陷（TypeError/AttributeError 等）原样
+            # 传播，避免静默误分类模型导致后续所有调用策略失真。
             print(f"  => [!警告] 探测失败 ({e})，将使用安全回退策略 (当作推理模型处理)。")
             self._model_capabilities.update({
                 "probed": True,
@@ -503,7 +518,7 @@ class AIPlugin(IbStatefulPlugin):
                         res = raw_content
 
             return res
-        except Exception as e:
+        except _PROVIDER_ERRORS as e:
             raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
 
@@ -568,7 +583,7 @@ class AIPlugin(IbStatefulPlugin):
                     piece = getattr(delta, "content", None)
                     if piece:
                         yield piece
-            except Exception as e:
+            except _PROVIDER_ERRORS as e:
                 raise RuntimeError(f"LLM 流式调用失败: {str(e)}")
 
         return _gen()

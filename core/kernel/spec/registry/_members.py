@@ -21,16 +21,7 @@ class _MemberMixin:
         Resolve the type of an attribute / method on ``spec``.
 
         Searches own members first, then the parent class chain.
-        For ``TypeDef`` placeholders the real spec is looked up first so
-        that cross-file imports resolve correctly during semantic analysis.
         """
-        # Transparently resolve lazy placeholders created by the scheduler.
-        if spec.kind == TypeKind.LAZY.value and not spec.members:
-            resolved = self.resolve(spec.name, spec.module_path)
-            if resolved and resolved is not spec:
-                return self.resolve_member(resolved, attr_name)
-            return self.resolve("any")
-
         member = spec.members.get(attr_name)
         if member is not None:
             if isinstance(member, MethodMemberSpec):

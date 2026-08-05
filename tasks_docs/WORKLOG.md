@@ -16,6 +16,8 @@
 | "不删也不修" | 有缺陷/冗余的机制只能"**根本修复**"或"**彻底删除**"两档，禁止"废弃记录"中间态 | 会话 9 |
 | subagent 约束 | 所有 subagent 工作（含 review）**仅允许 general agent**，禁 explore/reviewer 特化 agent | 会话 6 |
 | 决策纪律 | 需拍板的决断项可大胆激进选方案；底线 = 架构原则/代码质量原则/非妥协/非 tricky/非临时兼容层/大方向主线 | 会话 1 |
+| behavior/fn 闭包序列化 = 明确设计缺陷 | R3 后用户裁定：closure 序列化丢失属**明显设计缺陷**，必须记录为未来改进任务（→ `PENDING_TASKS.md` PT-ARCH-31） | 会话 16 |
+| permissive any 需重审 | 用户裁定：类型系统已成熟（LHS 目标类型 / 标注 / 泛型），any 兜底不再默认合理，需按实际可达面重审（→ 会话 16 分析结论） | 会话 16 |
 | 禁 push / 破坏性重构授权 / 分支政策 | 见 AGENTS.md（权威源，此处不复制） | — |
 
 ## 二、仍有效的设计决策
@@ -95,6 +97,34 @@
   media 封存零改动、llm_except best-effort 协议兜底、ibci_ai 宽 except（已记录待决策）、
   behavior closure 序列化限制（与 fn_callable 一致，lambda cell 活引用不可重链）。
   **验证**：全量 pytest = 1506 passed / 6 skipped 零回归（以实跑为准，每批均验证）。
+
+## 四、R3 复核后续处置（会话 16 尾，用户逐项裁定）
+
+- **permissive any 重审结论**（用户裁定"any 不再默认合理"，按类型系统实际可达面重审）：
+  - `_members.py` LAZY→any 分支**实证为死代码**（全仓无 `TypeKind.LAZY` 创建点，scheduler 改
+    用裸 TypeDef）→ **已删除**。
+  - resolve_call_return 的 any 兜底按可达面三分：
+    (a) **动态类型语义**（`any` 变量 / 裸赋值 / 容器元素读，`KNOWN_LIMITS §七` 文档化）——保留；
+    (b) **auto 推断失败兜底**——保留（推断机制的诚实回退）；
+    (c) **未标注可调用定义静默变 any**（`func f():`/`llm f():`/`fn x = lambda:` 无返回标注 →
+      语义层直接回填 any，`_declaration_visitors:78/311`、`_expression_visitors:724`）——**属掩盖
+      缺口**：语言已有标注/LHS 类型/auto/泛型，却未强制标注，any 静默吸收缺失标注。真实可达
+      （tests 中 `func helper():`、未标注 lambda behavior 均有效）。
+  - **改进建议（待用户拍板语言变更）**：对 `func`/`llm`/lambda 缺失返回标注发 SEM 错误（要求
+    `-> T` / `-> auto` / 显式 `-> any`），替代静默 any。影响面：现有未标注测试需补标注。
+- **_values_equal 收窄**（用户裁定"直接改进"）：异常降级由 `return a is b` 改为显式保守
+  `return False`（调用方已排除同对象恒等），docstring 明确降级链路设计机制（fail-safe 方向：
+  宁可误报篡改触发恢复，不漏报）。
+- **ibci_ai 宽 except 收窄**（用户裁定"分析修复方案，自主决断"）：新增 `_PROVIDER_ERRORS =
+  (openai.OpenAIError, RuntimeError, ValueError)`（provider 失败契约 = openai 家族 +
+  本仓约定的 RuntimeError 信号 + 响应格式 ValueError），收窄 5 处（客户端 init / 命名模型 /
+  probe 保守降级 / 非流式 / 流式）；TypeError/AttributeError 等内部缺陷原样传播（fail-fast）。
+  probe 保守降级仅对 provider 异常生效，避免内部探测缺陷静默误分类模型。executor
+  `_core.py:185` 保留为 provider 协议安全网（任意 provider 异常 → LLMCallError），补充注释。
+- **behavior/fn closure 序列化**（用户裁定"必须记录为未来改进"）：已记录为明确设计缺陷 →
+  `PENDING_TASKS.md` PT-ARCH-31（lambda 活 cell 不可重链 / snapshot 种子丢失；需设计闭包
+  序列化语义并与 fn_callable 一并处理）。
+- commit：本轮处置已随会话提交。
 - **测试基线**：`python -m pytest tests/` = 1506 passed / 6 skipped（以实跑为准）。
 
 ## 四、遗留 / 待办
