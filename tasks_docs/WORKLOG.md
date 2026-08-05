@@ -48,6 +48,11 @@
   承载未落地）、D3（send 泄漏 CommClosedError 给生产者）、D4（close 后 subscriber_count
   失真）、D6（自然完成线程 is_done() 误报 False，真 bug）均**根本修复**并补测试；D2/D5
   确认为真设计限制/效率，文档化合理。修正记录见 `PENDING_REVIEW_ITEMS.md` §〇 D 系列。
+- **注释卫生清理（2026-08-05）**：用户指出近期工作（会话 6-13）在代码注释/docstring 大量
+  引入任务代号/进度标记。全仓清理 66 文件：删除 L7-A/R1-Dx/G7/D1-D6/B1-B4/L8/C1/A1、
+  任务 A-F/C0-C2、PT-MT-\*、阶段 2/3、疏漏 N、VP-/F-、MERGED、THREAD_DESIGN_REVISION、
+  WORKLOG 会话、日期戳、文档章节号（§3.1/§8.1）等标记，保留功能说明；INV-\* 契约不变式
+  码（等价公理码）保留。全量 pytest 零回归。commit db3c610（仅本地）。
 - **测试基线**：`python -m pytest tests/` = 1481 passed / 4 skipped（以实跑为准）。
 
 ## 四、遗留 / 待办
