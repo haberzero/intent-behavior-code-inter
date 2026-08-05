@@ -37,6 +37,22 @@ class TestGenericTypeRegistry:
         assert reg.get("fn_callable").name == "fn_callable"
         assert reg.get("behavior").name == "behavior"
 
+    def test_member_specialization_declarations_registered(self):
+        """泛型成员特化协议化：需要特化的泛型声明携带 resolve_member 回调。
+
+        替代 _members.py per-type 级联（MEMBER_SPECIALIZATION_UNIFICATION）。
+        """
+        reg = create_generic_registry()
+        for name in ("list", "dict", "Optional", "thread", "thread_result"):
+            decl = reg.get(name)
+            assert decl is not None
+            assert decl.resolve_member is not None, f"{name} 泛型声明应携带成员特化回调"
+        # 无泛型实参依赖的类型（tuple/fn_callable/behavior）不携带（无需特化）
+        for name in ("tuple", "fn_callable", "behavior"):
+            decl = reg.get(name)
+            assert decl is not None
+            assert decl.resolve_member is None, f"{name} 不应携带成员特化回调"
+
 
 class TestUnifiedResolve:
     def test_list_int(self):

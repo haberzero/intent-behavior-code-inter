@@ -30,7 +30,22 @@ from .type_ref import TypeRef
 
 if TYPE_CHECKING:
     from .base import TypeDef
+    from .member import MethodMemberSpec
     from .registry.factory import SpecFactory
+    from .registry import SpecRegistry
+
+
+@dataclass(frozen=True)
+class MemberSpecialization:
+    """泛型成员特化结果（协议化 resolve_member 的返回值）。
+
+    ``resolve_member`` 声明回调根据 spec 的泛型实参，精确化成员返回类型与
+    参数类型（如 ``thread[T].join() → thread_result[T]``）。返回 None 表示
+    不特化（保持 axiom 声明原样）。
+    """
+
+    return_type: TypeRef
+    param_types: Optional[List[TypeRef]] = None  # None = 保持 axiom 声明
 
 
 @dataclass(frozen=True)
@@ -43,6 +58,8 @@ class GenericTypeDeclaration:
                     从实参类型名构造特化 TypeDef。
     ``to_typeref``: ``(TypeDef) -> TypeRef`` 序列化特化 spec → 结构化 TypeRef。
     ``restore``   : ``(factory, data) -> TypeDef`` 从序列化数据还原特化 TypeDef。
+    ``resolve_member``: ``(registry, spec, attr_name, member) -> Optional[MemberSpecialization]``
+                    泛型成员特化（协议化，替代 _members.py per-type 级联）。
     """
 
     name: str
@@ -50,6 +67,9 @@ class GenericTypeDeclaration:
     build: Callable[["SpecFactory", List[str], List[Optional[str]]], "TypeDef"]
     to_typeref: Callable[["TypeDef"], TypeRef]
     restore: Callable[["SpecFactory", Dict[str, Any]], "TypeDef"]
+    resolve_member: Optional[
+        Callable[["SpecRegistry", "TypeDef", str, "MethodMemberSpec"], Optional[MemberSpecialization]]
+    ] = None
 
 
 class GenericTypeRegistry:
@@ -247,16 +267,95 @@ def _restore_thread_result(factory: "SpecFactory", data: Dict[str, Any]) -> "Typ
     )
 
 
+# -- resolve_member（泛型成员特化，协议化——替代 _members.py per-type 级联） --- #
+
+def _resolve_member_list(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
+    """``list[T]`` 成员特化：``pop()/__getitem__() → T``；``append/insert/__setitem__`` 末参 → T。
+
+    multi-type list（``allowed_element_types`` 非空）刻意不特化（element_type="any"）。
+    """
+    if not spec.allowed_element_types and spec.element_type.head != "any":
+        elem = spec.element_type
+        if attr_name in ("pop", "__getitem__"):
+            return MemberSpecialization(return_type=elem)
+        if attr_name in ("append", "insert", "__setitem__") and member.param_types:
+            new_params = list(member.param_types)
+            new_params[-1] = elem
+            return MemberSpecialization(return_type=member.return_type, param_types=new_params)
+    return None
+
+
+def _resolve_member_dict(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
+    """``dict[K,V]`` 成员特化：``pop/get → V``；``values → list[V]``；``keys → list[K]``。"""
+    val = spec.value_type
+    key = spec.key_type
+    if val.head != "any" and attr_name in ("pop", "get"):
+        return MemberSpecialization(return_type=val)
+    if attr_name == "values" and val.head != "any":
+        list_v_name = f"list[{val.head}]"
+        if not registry.resolve(list_v_name):
+            list_base = registry.resolve("list")
+            elem_spec = registry.resolve(val.head) or registry.resolve("any")
+            if list_base and elem_spec:
+                registry.resolve_specialization(list_base, [elem_spec])
+        return MemberSpecialization(return_type=TypeRef.of(list_v_name))
+    if attr_name == "keys" and key.head != "any":
+        list_k_name = f"list[{key.head}]"
+        if not registry.resolve(list_k_name):
+            list_base = registry.resolve("list")
+            key_spec = registry.resolve(key.head) or registry.resolve("any")
+            if list_base and key_spec:
+                registry.resolve_specialization(list_base, [key_spec])
+        return MemberSpecialization(return_type=TypeRef.of(list_k_name))
+    return None
+
+
+def _resolve_member_optional(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
+    """``Optional[T]`` 成员特化：``unwrap/or_else → T``；``or_else`` 首参 → T。"""
+    wrapped = spec.wrapped_type
+    if wrapped.head == "any":
+        return None
+    if attr_name in ("unwrap", "or_else"):
+        new_params = None
+        if attr_name == "or_else" and member.param_types:
+            new_params = list(member.param_types)
+            new_params[0] = wrapped
+        return MemberSpecialization(return_type=wrapped, param_types=new_params)
+    return None
+
+
+def _resolve_member_thread(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
+    """``thread[T]`` 成员特化：``join()/result() → thread_result[T]``（join 结果容器）。"""
+    val = spec.value_type
+    if val.head != "any" and attr_name in ("join", "result"):
+        return MemberSpecialization(return_type=TypeRef.of(f"thread_result[{val.head}]", val.module))
+    return None
+
+
+def _resolve_member_thread_result(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
+    """``thread_result[T]`` 成员特化：``unwrap → Optional[T]``；``unwrap_or/expect → T``。"""
+    val = spec.value_type
+    if val.head == "any":
+        return None
+    if attr_name == "unwrap":
+        return MemberSpecialization(return_type=TypeRef.of(f"Optional[{val.head}]", val.module))
+    if attr_name in ("unwrap_or", "expect"):
+        return MemberSpecialization(return_type=val)
+    return None
+
+
 def create_generic_registry() -> GenericTypeRegistry:
     """构建全部内置泛型类型的声明注册表（单一权威源）。"""
     reg = GenericTypeRegistry()
     reg.register(GenericTypeDeclaration(
         name="list", kind=TypeKind.LIST.value,
         build=_build_list, to_typeref=_to_typeref_list, restore=_restore_list,
+        resolve_member=_resolve_member_list,
     ))
     reg.register(GenericTypeDeclaration(
         name="dict", kind=TypeKind.DICT.value,
         build=_build_dict, to_typeref=_to_typeref_dict, restore=_restore_dict,
+        resolve_member=_resolve_member_dict,
     ))
     reg.register(GenericTypeDeclaration(
         name="tuple", kind=TypeKind.TUPLE.value,
@@ -265,6 +364,7 @@ def create_generic_registry() -> GenericTypeRegistry:
     reg.register(GenericTypeDeclaration(
         name="Optional", kind=TypeKind.OPTIONAL.value,
         build=_build_optional, to_typeref=_to_typeref_optional, restore=_restore_optional,
+        resolve_member=_resolve_member_optional,
     ))
     reg.register(GenericTypeDeclaration(
         name="fn_callable", kind=TypeKind.CALLABLE_INSTANCE.value,
@@ -277,9 +377,11 @@ def create_generic_registry() -> GenericTypeRegistry:
     reg.register(GenericTypeDeclaration(
         name="thread", kind=TypeKind.THREAD.value,
         build=_build_thread, to_typeref=_to_typeref_value_typed, restore=_restore_thread,
+        resolve_member=_resolve_member_thread,
     ))
     reg.register(GenericTypeDeclaration(
         name="thread_result", kind=TypeKind.THREAD_RESULT.value,
         build=_build_thread_result, to_typeref=_to_typeref_value_typed, restore=_restore_thread_result,
+        resolve_member=_resolve_member_thread_result,
     ))
     return reg

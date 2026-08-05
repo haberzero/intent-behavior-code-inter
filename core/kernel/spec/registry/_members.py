@@ -34,110 +34,24 @@ class _MemberMixin:
         member = spec.members.get(attr_name)
         if member is not None:
             if isinstance(member, MethodMemberSpec):
-                # For specialized generic containers, override the return type of
-                # methods that return the element/value type.
-                # Override is applied regardless of the axiom's declared return type —
-                # specialization is based on the container's runtime type parameter.
-                #
-                # TypeDef[T]:
-                #   pop()         → T  (was "any")
-                #   __getitem__() → T  (was "any")
-                # TypeDef[K,V]:
-                #   pop(key)  → V  (was "any")
-                #   get(key)  → V  (was "any")
-                #   values()  → list[V]  (was bare "list")
-                #   keys()    → list[K]  (was bare "list")
+                # 泛型成员特化（协议驱动，下一主线 MEMBER_SPECIALIZATION_UNIFICATION）：
+                # 经 GenericTypeRegistry 查声明回调，替代原 per-type if/elif 级联
+                # （LIST/DICT/OPTIONAL/THREAD/THREAD_RESULT 特化已迁移至 generic.py 声明）。
                 effective_return = member.return_type.head
                 effective_return_module = member.return_type.module
-
-                if (
-                    spec.kind == TypeKind.LIST.value
-                    # Multi-type lists (list[int,str,...]) have allowed_element_types set and
-                    # use element_type="any" intentionally — skip specialization for them.
-                    and not spec.allowed_element_types
-                ):
-                    elem = spec.element_type.head
-                    if elem != "any" and attr_name in ("pop", "__getitem__"):
-                        effective_return = elem
-                        effective_return_module = spec.element_type.module
-                elif spec.kind == TypeKind.DICT.value:
-                    val = spec.value_type.head
-                    key = spec.key_type.head
-                    if attr_name in ("pop", "get") and val != "any":
-                        # dict[K,V].get(key) → V  (same as pop)
-                        effective_return = val
-                        effective_return_module = spec.value_type.module
-                    elif attr_name == "values" and val != "any":
-                        # dict[K,V].values() → list[V]
-                        # Eagerly register list[V] if not yet in registry so that
-                        # resolve_return (called by visit_IbCall) can find it by name.
-                        list_v_name = f"list[{val}]"
-                        if not self.resolve(list_v_name):
-                            list_base = self.resolve("list")
-                            elem_spec = self.resolve(val) or self.resolve("any")
-                            if list_base and elem_spec:
-                                self.resolve_specialization(list_base, [elem_spec])
-                        effective_return = list_v_name
-                        effective_return_module = None
-                    elif attr_name == "keys" and key != "any":
-                        # dict[K,V].keys() → list[K]
-                        list_k_name = f"list[{key}]"
-                        if not self.resolve(list_k_name):
-                            list_base = self.resolve("list")
-                            key_spec = self.resolve(key) or self.resolve("any")
-                            if list_base and key_spec:
-                                self.resolve_specialization(list_base, [key_spec])
-                        effective_return = list_k_name
-                        effective_return_module = None
-
-                # specialize write-method parameter types for list[T].
-                # append(item: any) → append(item: T)
-                # insert(idx: int, item: any) → insert(idx: int, item: T)
-                # __setitem__(idx: int, value: any) → __setitem__(idx: int, value: T)
                 effective_params = [t.head for t in member.param_types]
                 effective_param_modules: List[Optional[str]] = [t.module for t in member.param_types]
-                if (
-                    spec.kind == TypeKind.LIST.value
-                    and attr_name in ("append", "insert", "__setitem__")
-                    and spec.element_type.head != "any"
-                    and not spec.allowed_element_types
-                ):
-                    elem = spec.element_type.head
-                    elem_mod = spec.element_type.module
-                    # last param is always the element (value/item)
-                    if effective_params:
-                        effective_params[-1] = elem
-                        effective_param_modules[-1] = elem_mod
-                elif spec.kind == TypeKind.OPTIONAL.value:
-                    wrapped = spec.wrapped_type.head
-                    wrapped_mod = spec.wrapped_type.module
-                    if wrapped != "any" and attr_name in ("unwrap", "or_else"):
-                        effective_return = wrapped
-                        effective_return_module = wrapped_mod
-                    if wrapped != "any" and attr_name == "or_else" and effective_params:
-                        # Optional[T].or_else(default) expects default of type T.
-                        effective_params[0] = wrapped
-                        effective_param_modules[0] = wrapped_mod
-                elif spec.kind == TypeKind.THREAD.value:
-                    # thread[T].join() → thread_result[T]（容器，含成功值/错误/状态）。
-                    val = spec.value_type.head
-                    val_mod = spec.value_type.module
-                    if val != "any" and attr_name in ("join", "result"):
-                        effective_return = f"thread_result[{val}]"
-                        effective_return_module = val_mod
-                elif spec.kind == TypeKind.THREAD_RESULT.value:
-                    # thread_result[T] 方法返回类型特化：
-                    #   unwrap()      → Optional[T]（失败返回 Optional 空）
-                    #   unwrap_or(v)  → T（失败返回默认值）
-                    #   expect()      → T（失败抛错，fail-fast）
-                    val = spec.value_type.head
-                    val_mod = spec.value_type.module
-                    if attr_name == "unwrap" and val != "any":
-                        effective_return = f"Optional[{val}]"
-                        effective_return_module = val_mod
-                    elif val != "any" and attr_name in ("unwrap_or", "expect"):
-                        effective_return = val
-                        effective_return_module = val_mod
+
+                decl = self.generic_types.get(spec.get_base_name())
+                if decl is not None and decl.resolve_member is not None:
+                    spec_result = decl.resolve_member(self, spec, attr_name, member)
+                    if spec_result is not None:
+                        effective_return = spec_result.return_type.head
+                        effective_return_module = spec_result.return_type.module
+                        if spec_result.param_types is not None:
+                            effective_params = [t.head for t in spec_result.param_types]
+                            effective_param_modules = [t.module for t in spec_result.param_types]
+
                 from ..base import TypeDef
                 resolved_member = TypeDef(
                     name=attr_name,
