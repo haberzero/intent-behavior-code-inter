@@ -12,7 +12,7 @@
 
 > **用户裁定（2026-08-05）**：准备开启**完整复核审查工作流程**。对会话 1-12 累计的所有改动
 > （通信领域三阶段主线 + 收尾 L1-L8 + 泛型成员特化协议化等）做**完整独立复核**。
-> 交接准备已完成（归档过期设计/审查文档，本文件为下一阶段指引，`_HANDOFF.md` 为接手文档）。
+> 交接准备已完成（归档过期设计/审查文档，本文件为下一阶段指引，`HANDOFF.md` 为常驻交接与固定化内容库）。
 
 ### 审查清单（核心依据：`tasks_docs/PENDING_REVIEW_ITEMS.md`）
 
@@ -57,7 +57,7 @@ PT-SMELL-1/2 审计、TEST_REFACTOR、语言级协程（PT-4.3 async 函数/生�
 
 ## ✅ 已完成：线程对象模型方向修正（任务 A-F）
 
-> 2026-08-04 全部完成。`thread` 取代 `spawn/join/cancel/task`，async/thread 领域彻底分离。详细记录见 `tasks_docs/THREAD_DESIGN_REVISION.md`（决策依据，历史保留）与 `tasks_docs/WORKLOG.md`（实现记录）。
+> 2026-08-04 全部完成。`thread` 取代 `spawn/join/cancel/task`，async/thread 领域彻底分离。设计决策记录已随落地归档（git 历史保留）；关键裁定与摘要见 `tasks_docs/WORKLOG.md`。
 
 | 任务 | 内容 | 状态 |
 |------|------|------|
