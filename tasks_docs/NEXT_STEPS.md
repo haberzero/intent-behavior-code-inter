@@ -4,34 +4,38 @@
 > 阻塞 / 等前置项见 `tasks_docs/PENDING_TASKS.md`。
 > 已知语言级限制见 `docs/KNOWN_LIMITS.md`。
 >
-> **最后更新**：2026-08-05（R1/R2/R3 复核审查完成；下一阶段 = **R4 覆盖率核对**）
+> **最后更新**：2026-08-05（类型强化完成；下一阶段 = **序列化工作 PT-ARCH-31 档位 A+B**）
 
 ---
 
-## 🔴 下一阶段：R4 覆盖率核对（当前最紧要）
+## 🔴 下一阶段：序列化工作——闭包序列化 + fn_callable round-trip 修复（当前最紧要）
 
-> 完整复核审查工作流程进行中（R1/R2/R3 已完成）。R4 核对新增测试是否覆盖
-> 全部新行为。完整审查清单见 `tasks_docs/PENDING_REVIEW_ITEMS.md`。
+> **PT-ARCH-31**（`PENDING_TASKS.md`）：behavior/fn_callable 闭包序列化缺陷 +
+> fn_callable round-trip 完全损坏。用户裁定**档位 A + B 都必须完成**。
+> 完整缺陷取证、修复设计与测试要求见 PT-ARCH-31。
 
-### R4 执行要点
+### 执行要点
 
-- **范围**：会话 1-16 累计新增行为——subscriber 生命周期 / class_ref / 泛型特化分支 /
-  瞬态序列化协议 / 构造入口 / R3 修复的新行为（complex 目标同步路径、behavior
-  序列化 round-trip、异常窄化错误面）。
-- **方法**：并行 general agent 独立核对 + 主会话实证；发现覆盖缺口即补测试。
-- **约束**：subagent **仅 general agent**；每批全量 `python -m pytest tests/` 零回归；
-  commit 留痕（仅本地，**禁止 push**）。
+- **档位 A**：序列化端补 closure（snapshot 种子值 / lambda cell 当前值）+ fn_callable 补
+  closure/params_uids/body_uid + 作用域符号补 `is_cell`；反序列化端**新增 fn_callable 分支**、
+  behavior/fn_callable 重建 closure。
+- **档位 B**：作用域反序列化重建 cell；closure 反序列化后 post-pass 按 sym_uid 重链恢复的
+  cell（修复 A 的两个退化：外层重赋值不可见 + 多闭包共享分叉）。
+- **测试**：round-trip（snapshot 保真 / lambda 值拷贝 / 双闭包共享 / 调用一致）。
+- **约束**：每批全量 `python -m pytest tests/` 零回归；commit 留痕（仅本地，禁 push）。
 
-### 后续审查（R4 之后）
+### 后续（序列化之后）
 
 | 编号 | 内容 | 说明 |
 |------|------|------|
-| **R5** | doc-governance 审计 | docs/ 治理流程（配合 D1-D5 文档收敛） |
-| **D1-D5** | docs/ 技术手册同步 | signal 移除 / pubsub+subscriber / 瞬态序列化协议 / thread 槽位化 / 收尾机制变化收敛进 docs |
+| **R4** | 覆盖率核对 | 完整复核审查流程中待做（见 `PENDING_REVIEW_ITEMS.md`） |
+| **R5 / D1-D5** | doc-governance 审计 + docs 同步 | 完整复核审查流程中待做 |
+| **PT-ARCH-32** | Axiom 家族分裂（IntentAxiom/IntentContextAxiom 并入 BaseAxiom） | 未修缺陷待办（碎片化，机械修复） |
+| **PT-INTRO-1** | 运行时内省/常用内置函数体系设计（`type()`/`len()` 等） | 独立设计任务（用户 2026-08-05 裁定） |
 
 ---
 
-## ✅ 已完成：完整复核审查 R1/R2/R3（2026-08-05）
+## ✅ 已完成：完整复核审查 R1/R2/R3 + 类型强化（2026-08-05）
 
 - **R1 正式 code-review**（会话 13）：三阶段主线 + 收尾 L1-L8 独立复核，无高严重缺陷；
   新增缺陷 A1/C1/B1-B6/D1-D6 全部处置（D 系列重分类修正）。
@@ -42,6 +46,9 @@
   主会话实证核验；23 项真缺陷按 4 批处置（死代码清除 / 恒真守卫移除 / except 窄化 /
   真缺陷重构），含 assignment 复杂目标双通道消除、behavior 序列化 round-trip 修复、
   idbg 悬空属性潜伏崩溃等。每批全量 pytest 零回归。
+- **类型强化（会话 16 尾）**：func/llm/lambda 强制返回标注（SEM_MISSING_RETURN_ANNOTATION）
+  + lambda `-> auto` 推断 + 行为体 `-> auto` 唯一 str + 裸赋值 auto 锁定 + 多类型 list 移除
+  （强制 list[any]）+ fn[...] 调用点签名校验补齐（CALLABLE_SIG 结构化 TypeRef）。
 - **注释卫生清理**：全仓 66 文件删除任务代号/进度标记（恢复"注释只注功能"纪律）。
 - 详细记录见 `tasks_docs/PENDING_REVIEW_ITEMS.md` §〇b 与 `tasks_docs/WORKLOG.md` 会话 13-16。
 

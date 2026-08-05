@@ -105,6 +105,25 @@
 
 ### PT-4.5　用户类运算符重载 [VISION]
 
+### PT-INTRO-1　运行时内省与常用内置函数体系设计 [P2]
+
+> **来源**：会话 16 类型强化收尾（2026-08-05，用户裁定）。用户确认编译期类型已静态传播
+> （fn 返回类型等），运行时内省（`type()` / 查询 fn 输出类型等）与常用内置函数
+> （`len()` 等）作为**独立设计任务**，不并入类型收紧。
+>
+> **现状**：`type()` **不是 IBCI 内建**（`type(f)` 报 `SEM_UNDEFINED_SYMBOL`）；无用户级
+> fn 返回类型查询（`fn_callable`/`behavior` 的 `type_ref` 承载类型但未暴露为 IBCI 可读
+> 接口）；`len()` 及类似常用内置的覆盖面未系统梳理。idbg 插件只暴露极少量内省方法。
+>
+> **设计方向（需定）**：
+> - `type(x)` 内建：对值返回规范类型名；对 fn/behavior 返回含签名的类型名（或专门
+>   的返回类型查询，如 `f.__return_type__()`）。
+> - `len()`/`str()`/`int()` 等常用内置的系统梳理与补齐。
+> - 参照 Rust（静态、无运行时闭包反射）/ TypeScript（`ReturnType<typeof f>` 类型层）/
+>   Python（`get_type_hints` 运行时）的取舍。
+> - 对齐 idbg 内省哲学（调试/泛型分发场景）。
+> **前置**：不依赖其他任务；建议在类型体系稳定后单独设计。
+
 ---
 
 ## 四、设计原则与明确排除方向
@@ -217,20 +236,49 @@
 
 > `file` 影子化 Python 内建。长期需重命名（如 `fs`/`filesys`/`io`）。当前过渡措施已实施。
 
-### PT-ARCH-31：behavior / fn_callable 闭包序列化缺陷 [P2]
+### PT-ARCH-31：behavior / fn_callable 闭包序列化 + fn_callable round-trip 损坏 [P1]
 
-> **来源**：R3 复核（2026-08-05）确认为明确设计缺陷（用户裁定记录）。
-> **缺陷**：`IbBehavior`（及同构的 `IbFnCallable`）的 `closure`（`{sym_uid: (name, slot)}`）
-> 在 `save_state → load_state` 往返中**丢失**：
-> - lambda 模式 slot 为 `IbCell` 活引用，指向定义作用域 cell 表；恢复后新作用域树无
->   旧 cell，无法按引用重链。
-> - snapshot 模式 slot 为深克隆种子值，丢失后行为退化、失去"自包含冻结值"语义。
-> - 现状：序列化端（`runtime_serializer.py`）与 `fn_callable` 均不写 closure，只写
->   node_uid/capture_mode（behavior 另补 captured_intents/params_uids）。
-> **影响**：带闭包的行为/fn 对象 round-trip 后语义漂移；snapshot 行为失去自包含性。
-> **改进方向（需设计裁定）**：闭包序列化语义——(a) 值拷贝（破坏 lambda 读最新语义，仅
-> snapshot 适用）或 (b) 按 sym_uid + 变量名重链回恢复后作用域（要求恢复端重建 cell 表）。
-> 需与 fn_callable 一并设计，避免不对称。
+> **来源**：R3 复核（2026-08-05）确认为明确设计缺陷（用户裁定记录）。2026-08-05 会话尾
+> 深入取证，**用户裁定档位 A + B 都必须完成**，作为下一 session 主线。
+>
+> **缺陷（三处，均已实证）**：
+> 1. **`fn_callable` round-trip 完全损坏**：反序列化器**无 `fn_callable` 分支**，落入通用
+>    `else` 变成空 `IbObject`（node/closure/params_uids/body_uid 全丢，恢复后调用失败）。
+> 2. **closure 丢失**：`behavior` 缺 closure；`fn_callable` 缺 closure/params_uids/body_uid
+>    （body_uid 丢失致恢复后调用错节点）。
+> 3. **作用域 cell 结构未序列化**：`_serialize_symbol` 只存 name/value/is_const/declared_type，
+>    `sym.cell`/`_cell_map` 不存，闭包 cell 无法重建。
+>
+> **修复（档位 A + B，都做）**：
+> - **档位 A（务实主体）**：
+>   - 序列化：behavior 加 closure（snapshot 存深克隆种子值 / lambda 存 cell 当前值）；
+>     fn_callable 加 closure/params_uids/body_uid；作用域符号加 `is_cell` 标记。
+>   - 反序列化：**新增 fn_callable 分支**；behavior/fn_callable 重建 closure
+>     （snapshot 值直接重建 / lambda 重建独立 IbCell）。
+> - **档位 B（完整重链，修复 A 的两个退化：恢复后外层重赋值闭包不可见 + 多闭包共享
+>   同一 cell 各自分叉）**：
+>   - 作用域反序列化重建 cell（is_cell 符号经 `promote_to_cell` 语义重建），closure
+>     反序列化后 **post-pass 按 sym_uid 扫描恢复的作用域树重链 cell**（保持共享引用
+>     不变量：外层赋值对闭包可见、多闭包共享同步）。
+> - **测试**：round-trip（snapshot 保真 / lambda 值拷贝 / 档位 B 双闭包共享同步 /
+>   外层重赋值可见 / 调用结果一致）。save_state 测试现有 asset/mock 聚焦，需补 callable 往返。
+>
+> **设计确认**：behavior/fn_callable 的 `_execution_context` 丢失无碍（恢复后调用走
+> call-site ContextVar，`get_current_execution_context() or self._execution_context`）。
+> 全局变量不进闭包（`promote_to_cell` 对全局返回 None），闭包只捕获函数局部 cell。
+
+### PT-ARCH-32：Axiom 家族分裂——IntentAxiom / IntentContextAxiom 未并入 BaseAxiom [P2]
+
+> **来源**：R3 code-odor 扫描（2026-08-05）确认为碎片化，主会话建议修但未落地；用户裁定
+> 记录为未修缺陷待下一 session 处理。
+> **缺陷**：`core/kernel/axioms/primitives/base.py:BaseAxiom` 是全部基础类型公理的统一基类；
+> 但 `intent.py:IntentAxiom` 与 `intent_context.py:IntentContextAxiom` **不继承 BaseAxiom**，
+> 手抄全部 9 个 capability flag（False）与十几个 no-op 默认方法（`resolve_return_type_name`/
+> `get_element_type_name`/`from_prompt`/`get_diff_hint` 等），连 `_m` 辅助函数也复制一份。
+> 公理体系存在**两条基线**，有漂移风险（曾致 `_members.py:85` 用 hasattr 探测迁就分裂，
+> 该 hasattr 已删，但分裂本体仍在）。
+> **修复**：两公理改继承 `BaseAxiom`，删除手抄 no-op 与重复 `_m`（机械、低风险；两公理
+> 均协议合规，行为等价需全量 pytest 验证）。功能上非 bug，属设计不统一（碎片化）。
 
 
 ### Phase 4 延迟项（已封存，从 ADR-008/010/013 提取）

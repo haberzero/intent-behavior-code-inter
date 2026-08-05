@@ -101,9 +101,16 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一阶段：R4 覆盖率核对**（完整复核审查流程中；R1/R2/R3 已完成）。
-- 清单：`PENDING_REVIEW_ITEMS.md` —— R4 覆盖率核对（待做）/
-  R5 doc 治理 + D1-D5 docs 同步（待做）。
+- **下一阶段：序列化工作（PT-ARCH-31 档位 A + B）**——behavior/fn_callable 闭包序列化 +
+  fn_callable round-trip 完全损坏修复。用户裁定档位 A（务实主体：补 closure/params/body_uid/
+  is_cell + 新增 fn_callable 反序列化分支）与档位 B（作用域 cell 重建 + closure post-pass
+  重链，修复外层重赋值不可见与多闭包共享分叉）**都必须完成**。缺陷取证/设计/测试见
+  `PENDING_TASKS.md` PT-ARCH-31。
+- **未修缺陷待办（独立记录，下一 session 一并处理）**：
+  - `PT-ARCH-32`：Axiom 家族分裂（IntentAxiom/IntentContextAxiom 未并入 BaseAxiom，碎片化）。
+  - `PT-INTRO-1`：运行时内省/常用内置函数体系（`type()`/`len()` 等，独立设计任务）。
+- **完整复核审查后续**：`PENDING_REVIEW_ITEMS.md` —— R4 覆盖率核对（待做）/
+  R5 doc 治理 + D1-D5 docs 同步（待做，序列化之后）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
@@ -111,11 +118,10 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** 全部落地
   unsafe-vibe-dev（本地 commit，未 push）。批次/commit 明细见 `NEXT_STEPS.md`"已完成"节。
 - **R1 完整复核**（会话 13）+ **R2 健康诊断十查**（会话 14-15）+ **R3 code-odor 全面异味
-  扫描**（会话 16）+ **注释卫生清理** 全部完成。R3 处置：4 批 23 项真缺陷
-  （死代码清除 / 恒真守卫移除 / except 窄化 / 真缺陷重构，含 assignment 复杂目标双通道、
-  behavior 序列化 round-trip、idbg 悬空属性）。每批全量 pytest 零回归。
+  扫描**（会话 16）+ **注释卫生清理** + **类型强化**（会话 16 尾：强制返回标注 / 裸赋值 auto /
+  多类型 list 移除 / fn[...] 调用点签名校验补齐）全部完成。每批全量 pytest 零回归。
   详细记录见 `PENDING_REVIEW_ITEMS.md` §〇b 与 `WORKLOG.md`。
-- **测试基线**：1506 passed / 6 skipped（以实跑为准）。
+- **测试基线**：1507 passed / 6 skipped（以实跑为准）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；无独立分支残留）。
 
 ### 2.3 交接检查单
