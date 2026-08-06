@@ -114,6 +114,14 @@ class LLMExecutorCore:
         """获取最近一次 resolve 的调用信息（主线程单写槽）。"""
         return self._current_call_info
 
+    def pending_futures_count(self) -> int:
+        """在途 LLM Future 数量（只读内省，线程安全）。
+
+        供可观测层（snapshot）经公开接口读取，替代直接访问私有槽。
+        """
+        with self._pending_futures_lock:
+            return len(self._pending_futures)
+
     def _finalize_call(self, result: Any, call_info: Mapping[str, Any], record_current: bool = True) -> Any:
         """绑定调用信息到结果对象（可选记录主线程单写槽）。
 

@@ -101,7 +101,7 @@ class HostService(IHostService):
 
         # 线程对象/容器是瞬态；save_state 时检测到未完成线程直接失败。
         runtime_context = self.execution_context.runtime_context
-        coordinator = getattr(runtime_context, "_runtime_coordinator", None)
+        coordinator = runtime_context.peek_runtime_coordinator() if runtime_context is not None else None
         if coordinator is not None:
             unfinished = coordinator.unfinished_handles()
             if unfinished:
@@ -200,7 +200,8 @@ class HostService(IHostService):
                     # 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
                     pkg_obj = self.execution_context.factory.create_native_object(
                         pkg,
-                        self.registry.get_class("Object")
+                        self.registry.get_class("Object"),
+                        registry_id=self.interop.get_registry_id(name),
                     )
                 else:
                     pkg_obj = pkg

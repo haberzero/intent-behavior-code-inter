@@ -2,29 +2,26 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-06（PT-INTRO-1 运行时内省体系全部落地）
+> **最后更新**：2026-08-06（PT-INTRO-1 内省体系 + PT-DECIDE-1 裁定 + PT-DEBT-1/2/3 内核接口协议化全部落地）
 
 ---
 
 ## 🔴 下一阶段候选主线（待用户择定）
 
-> PT-INTRO-1 运行时内省体系已全部落地（见下"已完成交付"）。下一主线的自然候选：
+> 近期已完成：PT-INTRO-1（内省体系）、PT-DECIDE-1（行为输出可解析性）、PT-DEBT-1/2/3（内核接口协议化）。下一主线的自然候选：
 
-- **PT-DEBT-1/2/3 内核接口协议化**（推荐）：跨对象私有穿透收敛为公开访问器/容器
-  （`native_module.py` / `observability/snapshot.py` / `runtime_context.py`），同性质可合并实施。
-- **PT-DECIDE-1（已裁定）**：行为输出具体类型必须可解析——编译期
-  `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE` + 运行时兜底（见 `PENDING_TASKS.md` §二）。
-- **长期周期**：PT-AUDIT-1/2/3（R4/R5 待做）/4/5，阶段边界择机。
+- **PT-DEBT-4 file 模块重命名 / PT-DEBT-5 文件命名清理**：语言面/项目级命名卫生，窗口期独立执行。
+- **PT-AUDIT-3 R4/R5**：代码复核审查循环下一轮（覆盖率核对 + doc 审计）。
+- **PT-DOC-1 docs 同步 / PT-DOC-2 语法手册定位段**：技术手册与代码现状对齐。
+- **长期周期**：PT-AUDIT-1/2/4/5，阶段边界择机。
 - **保留规划**：PT-TEST-1（测试体系重构，未来做）、PT-FEAT-1（语言级协程，保持现状）。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **PT-INTRO-1 已完成**：`type(f)` 签名形态 + `f.__return_type__()`（详见 `PENDING_TASKS.md` §一）。
-- **下一主线**：待用户择定（推荐 PT-DEBT-1/2/3，见上）。
-- **PT-DECIDE-1 已裁定**：行为输出类型可解析性（编译期检查 + 运行时兜底，见 `PENDING_TASKS.md` §二）。
-- **待选**：PT-DEBT-1/2/3（内核接口协议化）——同性质可合并实施。
+- **已完成**：PT-INTRO-1（内省体系）、PT-DECIDE-1（行为输出可解析性）、PT-DEBT-1/2/3（内核接口协议化）——详见 `PENDING_TASKS.md` §一/§二/§三。
+- **下一主线**：待用户择定（候选见上）。
 - **长期周期**：PT-AUDIT-1/2（代码异味 / 分支嵌套审计）+ PT-AUDIT-3（代码复核审查循环，
   R4/R5 待做）+ PT-AUDIT-4/5（文档清洗与梳理 / 注释卫生清理）——持续周期工作，阶段边界择机。
 - **保留规划**：PT-TEST-1（测试体系重构，未来做）、PT-FEAT-1（语言级协程，保持现状）。
@@ -36,6 +33,14 @@
 
 > 全部落地 unsafe-vibe-dev（本地 commit，未 push）。commit 明细见 git 历史。
 
+- **PT-DEBT-1/2/3 内核接口协议化（2026-08-06）**：
+  - PT-DEBT-1：`BoundPlugin` 容器替代 `_ibci_registry_id` 私有标记注入；加载期跨引擎
+    单例守卫改用 process 级 weak map（安全语义保留）。
+  - PT-DEBT-2：`snapshot.py` 改走公开访问器；LLMExecutor 补 `pending_futures_count()`。
+  - PT-DEBT-3：RuntimeContextImpl 补 `get_comm_*`/`peek_*`/`get_runtime_coordinator`
+    访问器，统一替换 core 与 iruntime 插件的私有槽直接访问。
+- **PT-DECIDE-1 裁定落地（2026-08-06）**：行为输出具体类型必须可解析——编译期
+  `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE` + 运行时 Default 兜底（见 `PENDING_TASKS.md` §二）。
 - **PT-INTRO-1 运行时内省体系（2026-08-06）**：
   - `type(f)` 对 fn_callable/behavior 返回含签名类型名（`fn_callable[()->int]` /
     `behavior[(int,str)->bool]`）；其余值仍返回规范名。

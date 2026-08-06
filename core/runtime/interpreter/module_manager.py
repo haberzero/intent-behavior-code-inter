@@ -45,7 +45,11 @@ class ModuleManagerImpl:
                 contract = self.interop.get_native_contract(module_name)
                 vtable = contract[0] if contract else None
                 whitelist = contract[1] if contract else None
-                native_obj = self.object_factory.create_native_object(package, self.registry.get_class("Object"), vtable=vtable, whitelist=whitelist)
+                native_obj = self.object_factory.create_native_object(
+                    package, self.registry.get_class("Object"),
+                    vtable=vtable, whitelist=whitelist,
+                    registry_id=self.interop.get_registry_id(module_name),
+                )
                 # 包装为 IbModule 
                 return self.object_factory.create_module(module_name, native_obj)
             return package

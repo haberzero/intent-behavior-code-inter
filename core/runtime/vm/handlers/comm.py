@@ -22,17 +22,10 @@ from core.runtime.shared.comm.registry import CommRegistry
 def _get_comm_registry(executor) -> CommRegistry:
     """获取（或惰性创建）执行器关联的通信注册表。
 
-    注册表挂在 execution_context 上（runtime_context 侧），供广播枚举 / 定向
-    查找 / 内省。多个 VM 实例各持一份（per-task 隔离）。
+    注册表挂在 execution_context 上（runtime_context 侧，经公开访问器惰性
+    创建），供广播枚举 / 定向查找 / 内省。多个 VM 实例各持一份（per-task 隔离）。
     """
-    rc = executor.runtime_context
-    reg = rc._comm_registry
-    if reg is None:
-        reg = CommRegistry()
-        # fail-fast：runtime_context 为 RuntimeContextImpl（无 __slots__），
-        # setattr 恒成功；若失败（如无 runtime_context）说明构造路径有误，必须显式暴露。
-        rc._comm_registry = reg
-    return reg
+    return executor.runtime_context.get_comm_registry()
 
 
 def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
@@ -40,16 +33,17 @@ def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
 
     受控制层 observability 开关约束：关闭时跳过事件记录。
     无订阅者时为空操作；事件总线失败不阻断执行（可观测性层尽力而为）。
+    仅读取存在性（peek），不因事件记录而创建存储/总线。
     """
     rc = executor.runtime_context
-    store = rc._comm_config_store
+    store = rc.peek_comm_config_store()
     if store is not None:
         try:
             if not store.get("observability"):
                 return
         except Exception:
             pass
-    bus = rc._comm_event_bus
+    bus = rc.peek_comm_event_bus()
     if bus is None:
         return
     try:

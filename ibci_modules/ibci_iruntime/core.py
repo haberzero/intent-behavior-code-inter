@@ -149,12 +149,8 @@ class IRuntimeLib:
 
     @staticmethod
     def _get_config_store(rc: Any) -> ConfigStore:
-        """获取（或惰性创建）runtime_context 关联的配置存储。"""
-        store = rc._comm_config_store
-        if store is None:
-            store = ConfigStore()
-            rc._comm_config_store = store
-        return store
+        """获取（或惰性创建）runtime_context 关联的配置存储（公开访问器）。"""
+        return rc.get_comm_config_store()
 
     # ------------------------------------------------------------------
     # 内部：事件总线访问（挂在 runtime_context 上，与 CommRegistry 同级）
@@ -162,12 +158,8 @@ class IRuntimeLib:
 
     @staticmethod
     def _get_event_bus(rc: Any) -> EventBus:
-        """获取（或惰性创建）runtime_context 关联的事件总线。"""
-        bus = rc._comm_event_bus
-        if bus is None:
-            bus = EventBus()
-            rc._comm_event_bus = bus
-        return bus
+        """获取（或惰性创建）runtime_context 关联的事件总线（公开访问器）。"""
+        return rc.get_comm_event_bus()
 
     # ------------------------------------------------------------------
     # 内部：供运行时事件源 emit（协调器/VM/CommRegistry 接入点）

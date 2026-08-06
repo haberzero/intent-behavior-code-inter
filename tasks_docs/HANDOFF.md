@@ -100,12 +100,10 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **PT-INTRO-1 已完成**：`type(f)` 对 fn_callable/behavior 返回签名形态 + `f.__return_type__()`
-  返回类型查询 + 签名序列化 round-trip 保真（2026-08-06）。设计要点见 `PENDING_TASKS.md` §一/§十。
-- **下一主线：待用户择定**——自然候选 `PT-DEBT-1/2/3`（内核接口协议化，同性质可合并实施）。
-- **PT-DECIDE-1 已裁定（2026-08-06）**：行为输出具体类型必须可解析——编译期
-  `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE` + 运行时 Default 兜底 uncertain，禁止静默 box。
-- **待选**：`PT-DEBT-1/2/3` 内核接口协议化——同性质可合并实施。
+- **已完成**：`PT-INTRO-1`（内省体系）、`PT-DECIDE-1`（行为输出可解析性）、`PT-DEBT-1/2/3`
+  （内核接口协议化）——设计要点见 `PENDING_TASKS.md` §一/§二/§三/§十。
+- **下一主线：待用户择定**——自然候选：`PT-DEBT-4/5`（文件/命名卫生）、`PT-AUDIT-3 R4/R5`
+  （复核审查循环）、`PT-DOC-1/2`（docs 同步）。
 - **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
   审查循环，R4/R5 待做）+ `PT-AUDIT-4/5`（文档清洗与梳理 / 注释卫生清理）——持续周期工作。
 - **保留规划**：`PT-TEST-1`（测试体系重构，未来做）、`PT-FEAT-1`（语言级协程，保持现状）。
@@ -113,8 +111,9 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
-- **2026-08-06**：PT-INTRO-1 运行时内省体系全部落地——`type(f)` fn/behavior 签名形态 +
-  `f.__return_type__()` 返回类型查询 + 签名序列化 round-trip 保真（+9 测试）。
+- **2026-08-06**：PT-INTRO-1 内省体系 + PT-DECIDE-1 裁定 + PT-DEBT-1/2/3 内核接口协议化
+  全部落地——`type(f)` 签名形态、`f.__return_type__()`、行为输出可解析性编译期检查 +
+  运行时兜底、`BoundPlugin` 容器、RuntimeContextImpl 公开访问器（+32 测试，1579 通过）。
 - **2026-08-05**：闭包序列化 round-trip 修复 + Axiom 家族分裂收敛 + EnumAxiom 双通道收敛 +
   use_intent_context 守卫修复 + R3 异味四 Zone 处置 + import-* 精确成员枚举根治（含 IBC 文件
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。

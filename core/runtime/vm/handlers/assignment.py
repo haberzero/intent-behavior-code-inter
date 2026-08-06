@@ -188,7 +188,7 @@ def _parallel_enabled(executor) -> bool:
     经 runtime_context 上的 ConfigStore 读时解析（单实例→单调用→全局→默认开）。
     无 ConfigStore 时默认开启（保持既有行为）。
     """
-    store = executor.runtime_context._comm_config_store
+    store = executor.runtime_context.peek_comm_config_store()
     if store is None:
         return True
     return store.get("parallel")

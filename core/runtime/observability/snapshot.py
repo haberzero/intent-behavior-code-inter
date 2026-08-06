@@ -19,12 +19,9 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 
-def _comm_registry(executor: Any):
-    """获取执行器关联的通信注册表（无则返回 None）。"""
-    rc = getattr(executor, "runtime_context", None)
-    if rc is None:
-        return None
-    return getattr(rc, "_comm_registry", None)
+def _runtime_context(executor: Any) -> Optional[Any]:
+    """执行器关联的 runtime_context（无则返回 None）。"""
+    return getattr(executor, "runtime_context", None)
 
 
 def snapshot(executor: Any) -> Dict[str, Any]:
@@ -35,14 +32,14 @@ def snapshot(executor: Any) -> Dict[str, Any]:
     # ---- tasks：从线程协调器收集在途线程任务 ----
     tasks = []
     # 线程对象（RuntimeCoordinator）：快照收集后台线程任务。
-    rc = getattr(executor, "runtime_context", None)
-    coordinator = getattr(rc, "_runtime_coordinator", None) if rc is not None else None
+    rc = _runtime_context(executor)
+    coordinator = rc.peek_runtime_coordinator() if rc is not None else None
     if coordinator is not None:
         tasks.extend(coordinator.snapshot())
     out["tasks"] = tasks
 
     # ---- channels / slots：从 CommRegistry 收集 ----
-    reg = _comm_registry(executor)
+    reg = rc.peek_comm_registry() if rc is not None else None
     channels = []
     slots = []
     if reg is not None:
@@ -64,7 +61,6 @@ def snapshot(executor: Any) -> Dict[str, Any]:
     out["vms"] = vms
 
     # ---- vars：模块级变量（经 runtime_context）----
-    rc = getattr(executor, "runtime_context", None)
     vars_snapshot: Dict[str, Any] = {}
     if rc is not None:
         try:
@@ -87,9 +83,8 @@ def snapshot(executor: Any) -> Dict[str, Any]:
         sc = getattr(interpreter, "service_context", None)
         llm_exec = getattr(sc, "llm_executor", None) if sc is not None else None
     if llm_exec is not None:
-        pending = getattr(llm_exec, "_pending_futures", None)
-        llm["pending_futures"] = len(pending) if pending is not None else 0
-        call_info = getattr(llm_exec, "_current_call_info", None)
+        llm["pending_futures"] = llm_exec.pending_futures_count()
+        call_info = llm_exec.get_current_call_info()
         llm["last_call_info"] = dict(call_info) if call_info else None
     out["llm"] = llm
 

@@ -18,6 +18,7 @@
 | 禁 push / 破坏性重构授权 / 分支政策 | 见 AGENTS.md（权威源，此处不复制） |
 | PT-INTRO-1 已完成 | fn/behavior 签名形态（`type(f)`）+ `__return_type__()` 返回类型查询 **已落地（2026-08-06）**；设计决策见 PENDING_TASKS §十 |
 | PT-DECIDE-1 裁定 | 行为输出具体类型必须可被 LLM 解析（用户 2026-08-06 拍板采纳推荐方案）：编译期 `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE` + 运行时 Default 兜底 uncertain，禁止静默 box 成字符串。不采用原"uncertain"提案——无 parser 类型在 llmexcept 下重试必然空转（每轮重新调用 LLM，白耗后 `LLMRetryExhaustedError`），编译期零成本暴露根因更符合 fail-fast |
+| PT-DEBT-1/2/3 完成 | 内核接口协议化（2026-08-06）：① `BoundPlugin` 容器承载 `(implementation, registry_id)` 替代 `_ibci_registry_id` 私有标记注入（隔离身份随容器流动，无硬编码字符串）；加载期跨引擎单例守卫改用 process 级 WeakKeyDictionary 保留安全语义。② RuntimeContextImpl 补通信域/协调器访问器（get_* 惰性创建 + peek_* 纯只读），LLMExecutor 补 `pending_futures_count()`；snapshot/comm/assignment/host/coordinator/iruntime 全部改走公开接口。设计要点：peek/get 双形态避免快照与开关检查产生创建副作用 |
 
 ---
 

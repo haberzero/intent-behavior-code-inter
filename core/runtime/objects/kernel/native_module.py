@@ -15,12 +15,14 @@ class IbNativeObject(IbObject):
     包装 Python 原生对象的 IBC 对象。
     用于桥接 Python 扩展和标准库。
     """
-    def __init__(self, py_obj: Any, ib_class: 'IbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None):
+    def __init__(self, py_obj: Any, ib_class: 'IbClass', vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None, registry_id: Optional[int] = None):
         super().__init__(ib_class)
         self.py_obj = py_obj
         # 显式持有虚表与属性白名单（由 InterOp.bind_native_contract 承载，无私有属性注入）
         self.vtable = vtable or {}
         self.whitelist = whitelist or []
+        # 绑定引擎 registry 身份（经 BoundPlugin 容器注入；None 表示无跨引擎约束）。
+        self.registry_id = registry_id
 
     def get(self, name: str) -> Any:
         """模块作用域协议成员访问：经 ``receive('__getattr__')`` 分发。
@@ -37,10 +39,10 @@ class IbNativeObject(IbObject):
          Native 消息分发核心。
         强制通过虚表映射，禁止任何非预期的 Python 属性穿透。
         """
-        # [Registry Isolation] 校验对象所属 Registry 身份
-        if hasattr(self.py_obj, '_ibci_registry_id'):
-            if self.py_obj._ibci_registry_id != id(self.ib_class.registry):
-                raise RegistryIsolationError(f"Security Violation: Native object from another engine instance detected. ")
+        # [Registry Isolation] 校验对象所属 Registry 身份（身份来自 BoundPlugin 容器，
+        # 不再读取实现对象的私有属性）
+        if self.registry_id is not None and self.registry_id != id(self.ib_class.registry):
+            raise RegistryIsolationError(f"Security Violation: Native object from another engine instance detected. ")
 
         # 1. 如果消息本身就在虚表中 (方法直接调用)
         if message in self.vtable:

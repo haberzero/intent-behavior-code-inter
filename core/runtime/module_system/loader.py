@@ -12,6 +12,7 @@ import os
 import importlib.util
 import inspect
 import sys
+import weakref
 from typing import List, Any, Optional
 
 from core.base.path import IbPath
@@ -44,6 +45,13 @@ def _is_callable_object(obj: Any) -> bool:
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import MethodMemberSpec, IbSpec, TypeKind
+from core.runtime.interpreter.interop import BoundPlugin
+
+
+# 跨引擎单例守卫：process 级 weak map（实现对象 -> 首次绑定 registry 身份）。
+# 保留"同一实现对象不得绑定到两个活跃引擎"的加载期隔离语义（如插件导出
+# 模块级 ``implementation`` 单例时），同时避免向实现对象注入私有属性。
+_BOUND_IMPLEMENTATIONS: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 
 class ModuleLoader(IModuleLoader):
     """
@@ -63,12 +71,12 @@ class ModuleLoader(IModuleLoader):
         2. 实现对象必须包含元数据中声明的所有成员。
         3. 严禁隐式反射，所有暴露给 IBC-Inter 的成员必须在 _spec.py 中显式声明。
         """
-        # [Registry Isolation] 虚表隔离检查
-        if hasattr(implementation, '_ibci_registry_id'):
-            if implementation._ibci_registry_id != id(context.registry):
-                raise RegistryIsolationError(f"Security Violation: Plugin '{module_name}' is already bound to another engine instance.")
-        
-        implementation._ibci_registry_id = id(context.registry)
+        # [Registry Isolation] 跨引擎单例守卫：同一实现对象已绑定其他引擎
+        # registry → 拒绝（隔离身份经 BoundPlugin 容器 / weak map 承载，不注入属性）。
+        bound_registry_id = _BOUND_IMPLEMENTATIONS.get(implementation)
+        if bound_registry_id is not None and bound_registry_id != id(context.registry):
+            raise RegistryIsolationError(f"Security Violation: Plugin '{module_name}' is already bound to another engine instance.")
+        _BOUND_IMPLEMENTATIONS[implementation] = id(context.registry)
 
         # 从元数据注册表解析 (元数据来源于 _spec.py)
         metadata = context.interop.metadata.resolve(module_name)
@@ -331,8 +339,11 @@ class ModuleLoader(IModuleLoader):
                     vtable, whitelist = self._validate_and_bind(module_name, implementation, context, capabilities, registry)
                     interop.bind_native_contract(module_name, vtable, whitelist)
                     
-                    # 绑定到运行时宿主
-                    interop.register_package(module_name, implementation)
+                    # 绑定到运行时宿主（BoundPlugin 容器承载实现 + 引擎 registry 身份）
+                    interop.register_package(
+                        module_name,
+                        BoundPlugin(implementation, id(context.registry)),
+                    )
                     loaded_modules.add(entry)
                     
                 except Exception as e:

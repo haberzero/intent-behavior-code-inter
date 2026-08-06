@@ -47,15 +47,15 @@
 
 ---
 
-## 三、待选任务：内核接口协议化（PT-DEBT-1/2/3）
+## 三、内核接口协议化（PT-DEBT-1/2/3，已完成）
 
-> 三者同性质：跨对象私有穿透 → 公开访问器/容器，属内部机制打磨（不阻塞）。
+> 三者同性质（跨对象私有穿透 → 公开访问器/容器）**全部落地（2026-08-06）**，全量 pytest 零回归。
 
-| # | 位置 | 内容 | 方案 |
-|---|------|------|------|
-| PT-DEBT-1 | `native_module.py:41-42` + `loader.py:66-71` | `_ibci_registry_id` 私有标记注入（跨引擎隔离，两处硬编码字符串无单一权威源，改名即静默失效） | `(implementation, registry_id)` 包进 `BoundPlugin` 容器，构造时从容器取；不再往实现对象打属性（loader/native_module/object_factory 三处） |
-| PT-DEBT-2 | `observability/snapshot.py` | 可观测层直接读内核私有槽（`_comm_registry`/`_runtime_coordinator`/`_pending_futures`/`_current_call_info`）+ 宽 except | 给 RuntimeContextImpl/LLMExecutorImpl 补公开只读访问器，snapshot 走公开接口（best-effort 契约有测试） |
-| PT-DEBT-3 | `runtime_context.py:381-384` + `vm/handlers/comm.py` 等 | `_comm_config_store`/`_comm_event_bus` 槽被 core/插件直接 `rc._comm_*` 穿透（注释明文的三方契约，无公开访问器） | 加 `get_comm_registry()`/`get_comm_config_store()`/`get_comm_event_bus()`（惰性创建），统一替换各方直接访问。与 PT-DEBT-2 同方向可合并实施 |
+| # | 落地内容 |
+|---|---------|
+| PT-DEBT-1 | `BoundPlugin(implementation, registry_id)` 容器替代 `_ibci_registry_id` 私有标记注入；`InterOpImpl` 记录/查询 registry_id；`IbNativeObject` 构造时携带（跨引擎隔离校验保留）；加载期跨引擎单例守卫改用 process 级 weak map（保留安全语义，不污染实现对象） |
+| PT-DEBT-2 | `snapshot.py` 改走公开访问器（`peek_runtime_coordinator`/`peek_comm_registry`/`get_current_call_info`）；LLMExecutor 补 `pending_futures_count()` 只读计数 |
+| PT-DEBT-3 | RuntimeContextImpl 补通信域/协调器公开访问器（`get_comm_registry`/`get_comm_config_store`/`get_comm_event_bus`/`get_runtime_coordinator` 惰性创建 + `peek_*` 只读），统一替换 core（comm/assignment/host/coordinator）与插件（iruntime）全部 `rc._comm_*`/`rc._runtime_coordinator` 直接访问 |
 
 ---
 
