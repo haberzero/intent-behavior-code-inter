@@ -12,7 +12,7 @@ Validates:
 """
 
 import pytest
-from tests.conftest import run_ibci, expect_runtime_error
+from tests.conftest import run_ibci, expect_runtime_error, expect_compile_error
 
 
 # ===========================================================================
@@ -191,3 +191,43 @@ for int i in range(3):
 print(i)
 """
         assert run_ibci(code) == ["2"]
+
+
+class TestBuiltinShadowing:
+    """内建函数名可被用户变量声明遮蔽（intrinsic 是可遮蔽默认绑定）。"""
+
+    def test_module_level_shadow_builtin(self):
+        """int len = 5 遮蔽内建 len；后续 len 指用户变量。"""
+        code = """
+int len = 5
+print(len)
+"""
+        assert run_ibci(code) == ["5"]
+
+    def test_shadowed_builtin_is_reassignable(self):
+        code = """
+int len = 5
+len = 9
+print(len)
+"""
+        assert run_ibci(code) == ["9"]
+
+    def test_builtin_still_works_when_not_shadowed(self):
+        assert run_ibci("print(len([1, 2, 3]))\n") == ["3"]
+
+    def test_function_local_shadow(self):
+        code = """
+func f() -> int:
+    int range = 7
+    return range
+print(f())
+"""
+        assert run_ibci(code) == ["7"]
+
+    def test_type_name_not_shadowable(self):
+        """内建类型名（is_intrinsic=False）不可被变量声明遮蔽。"""
+        expect_runtime_error("int int = 5\n", "Cannot redefine constant")
+
+    def test_plain_assignment_to_builtin_rejected(self):
+        """对内建名的直接赋值（非声明）被编译期拒绝。"""
+        expect_compile_error("print = 5", "SEM_TYPE_MISMATCH")

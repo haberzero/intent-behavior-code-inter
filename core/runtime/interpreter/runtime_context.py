@@ -118,16 +118,27 @@ class ScopeImpl:
         self._check_type(boxed_value, declared_type, name or uid or "unknown")
         boxed_value = self._wrap_optional(boxed_value, declared_type)
 
+        existing = self._symbols.get(name)
+
         if not force:
-            if name in self._symbols and self._symbols[name].is_const:
+            # 内建函数（is_intrinsic=True）是可遮蔽的默认绑定：用户声明同名变量
+            # 即遮蔽（如 `int len = 5`）。内建类型（is_intrinsic=False）与用户
+            # 常量不可遮蔽；赋值路径（assign）仍拒绝改写内建绑定。
+            if existing is not None and existing.is_const and not existing.is_intrinsic:
                 raise InterpreterError(f"Cannot redefine constant '{name}'", error_code=RUN_TYPE_MISMATCH)
-            if uid in self._uid_to_symbol and self._uid_to_symbol[uid].is_const:
+            existing_uid = self._uid_to_symbol.get(uid) if uid else None
+            if existing_uid is not None and existing_uid.is_const and not existing_uid.is_intrinsic:
                 raise InterpreterError(f"Cannot redefine constant UID '{uid}'", error_code=RUN_TYPE_MISMATCH)
 
         sym = RuntimeSymbolImpl(name, boxed_value, declared_type, is_const, is_intrinsic=is_intrinsic)
         if name:
             self._symbols[name] = sym
         if uid:
+            if existing is not None and existing is not sym:
+                # 遮蔽被替换的内建符号：清除其旧的 uid 绑定，避免孤儿符号残留
+                for k, v in list(self._uid_to_symbol.items()):
+                    if v is existing:
+                        del self._uid_to_symbol[k]
             self._uid_to_symbol[uid] = sym
         else:
             # 合法编译路径下语义分析始终提供 UID。剩余的无 UID 调用仅来自
