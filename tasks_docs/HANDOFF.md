@@ -87,6 +87,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED；PT-INTRO-1 已完成） |
 | `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行 2026-08-05，R4/R5 待做） |
+| `DOC_AUDIT_REPORT.md` | docs/ 治理审核记录（2026-08-06，P0-P2 全量发现 + F0-F4 执行计划，下一主线） |
 | `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md` §十） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
@@ -100,20 +101,21 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
+- **下一主线：DOC_AUDIT 文档治理执行（已交接）**——docs/ 全量审核完成，
+  发现与分阶段计划见 **`tasks_docs/DOC_AUDIT_REPORT.md`**（F0 本批引入修复 → F1 P0 断链
+  → F2 P1 红线批量 → F3 P2 改善 → F4 体系）。每阶段全量 pytest 零回归 + commit。
 - **已完成**：`PT-INTRO-1`（内省体系）、`PT-DECIDE-1`（行为输出可解析性）、`PT-DEBT-1/2/3`
-  （内核接口协议化）——设计要点见 `PENDING_TASKS.md` §一/§二/§三/§十。
-- **下一主线：待用户择定**——自然候选：`PT-DEBT-4/5`（文件/命名卫生）、`PT-AUDIT-3 R4/R5`
-  （复核审查循环）、`PT-DOC-1/2`（docs 同步）。
+  （内核接口协议化）、内建函数群完善+遮蔽、整合巩固批次——设计要点见 `PENDING_TASKS.md`。
 - **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
-  审查循环，R4/R5 待做）+ `PT-AUDIT-4/5`（文档清洗与梳理 / 注释卫生清理）——持续周期工作。
+  审查循环，R4/R5 待做）+ `PT-AUDIT-5`（注释卫生清理）——持续周期工作。
 - **保留规划**：`PT-TEST-1`（测试体系重构，未来做）、`PT-FEAT-1`（语言级协程，保持现状）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
 
-- **2026-08-06**：PT-INTRO-1 内省体系 + PT-DECIDE-1 裁定 + PT-DEBT-1/2/3 内核接口协议化
-  全部落地——`type(f)` 签名形态、`f.__return_type__()`、行为输出可解析性编译期检查 +
-  运行时兜底、`BoundPlugin` 容器、RuntimeContextImpl 公开访问器（+32 测试，1579 通过）。
+- **2026-08-06**：PT-INTRO-1 内省体系 + PT-DECIDE-1 裁定 + PT-DEBT-1/2/3 内核接口协议化 +
+  内建函数群完善（转换/序列辅助/遮蔽）+ 整合巩固批次（并发语法章节/for...if 与复合赋值 e2e）
+  + **docs/ 全量治理审核**（发现记录于 `DOC_AUDIT_REPORT.md`，执行交接下一 session）。
 - **2026-08-05**：闭包序列化 round-trip 修复 + Axiom 家族分裂收敛 + EnumAxiom 双通道收敛 +
   use_intent_context 守卫修复 + R3 异味四 Zone 处置 + import-* 精确成员枚举根治（含 IBC 文件
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
