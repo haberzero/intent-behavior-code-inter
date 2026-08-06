@@ -3,7 +3,7 @@
 > 本文件是 `docs/` 目录的**导航枢纽与治理章程**。
 >
 > **文档分工**：
-> - `docs/` -- 设计文档与用户手册（6 个主手册 + 5 个子目录）
+> - `docs/` -- 设计文档与用户手册（6 个主手册 + 4 个子目录）
 > - `tasks_docs/` -- 任务控制、决策记录、完成日志
 > - `tests_docs/` -- 测试方法论
 
@@ -58,8 +58,7 @@ docs/
 │   ├── 05_vm_specification.md
 │   ├── 06_path_system.md
 │   ├── 07_kernel_native_modules.md
-│   ├── 08_storage_model.md
-│   └── appendix_type_system_rationale.md
+│   └── 08_storage_model.md
 │
 ├── subsystems/                      子系统设计详细章节
 │   ├── 01_intent_system.md
@@ -67,9 +66,6 @@ docs/
 │   ├── 03_callable_fn.md
 │   ├── 04_plugin_system.md
 │   └── 05_coroutine.md
-│
-└── backup/                          封存归档（不参与导航）
-    └── 02_multimodal_behavior.md
 
 tasks_docs/                          任务控制
 ├── NEXT_STEPS.md

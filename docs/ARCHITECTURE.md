@@ -15,7 +15,6 @@
 | 06 | [06_path_system](architecture/06_path_system.md) | 路径系统架构 | 三层路径、五概念模型、沙箱隔离 |
 | 07 | [07_kernel_native_modules](architecture/07_kernel_native_modules.md) | 内核原生模块与插件边界 | import-gating、provenance/visibility、单一 setup 初始化 |
 | 08 | [08_storage_model](architecture/08_storage_model.md) | 变量存储模型 | 磁盘型协议族、IbFileHandle、协议驱动分发 |
-| 附录 | [appendix](architecture/appendix_type_system_rationale.md) | 类型系统设计原文（归档） | 设计动机追溯；现行类型系统以 03 为准 |
 
 ## 阅读路径
 

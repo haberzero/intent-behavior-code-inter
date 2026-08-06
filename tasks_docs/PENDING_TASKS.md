@@ -70,16 +70,19 @@
 | PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准 |
 | PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
+| PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | 原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此）：`ibcc` 构建命令 `--pre-scan-specs` 扫描 `_spec.py` 生成 `.ibc_meta` 快照，`export_metadata()`/`load_metadata_from_file()` 使编译器离线复用元数据，减少运行时发现开销。当前为全量 `discover_all() → HostInterface.metadata` 流程 |
 
 ---
 
-## 五、缺陷 / 技术债（PT-DEBT-4/5/6）
+## 五、缺陷 / 技术债（PT-DEBT-4/5/6/7/8）
 
 | # | 内容 | 说明 |
 |---|------|------|
 | PT-DEBT-4 | `file` 模块重命名 | `file` 影子化 Python 内建，长期重命名（如 `fs`/`io`）。当前过渡措施已实施 |
 | PT-DEBT-5 | 全项目文件命名清理 | 过短/欠层次/欠区分度/影子化内建的代码文件命名排查。暂缓，独立窗口执行 |
 | PT-DEBT-6 | `register_module()` 可观测性缺口 | 静默忽略与 kernel-native 同名的用户插件，无 warning。待诊断体系稳定后专项处理 |
+| PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | 原 `appendix_type_system_rationale.md` §8.2 规划（M2）：`TypeDef.is_nullable` 仍是 `is_assignable` 与序列化数据源（`specs.py`/`serializer.py` 仍在传/写该字段）。空安全统一由 `Optional[T]` 承载，非空由类型系统保证。破坏面：全部 `is_nullable` 消费点 + 序列化格式 |
+| PT-DEBT-8 | 折叠 `IbXxx` 对象族为单一 `IbValue` | 原 `appendix_type_system_rationale.md` §5.1 规划（M4）：`IbString`/`IbList`/`IbInteger`/`IbBool`/`IbFloat` 等并行对象折叠为 `IbValue(type_ref, fields, payload)`，消除 isinstance 分派，代码净减最大。高破坏面，独立分支评估 |
 
 ---
 
@@ -120,12 +123,14 @@
 
 ## 九、封存（PT-SEALED-1：media Phase 4 多模态容器）
 
-> **已彻底封存（2026-08-01，无限期搁置）**：恢复需显式解封并重估。代码层零启动
-> （仅设计文档 `docs/backup/02_multimodal_behavior.md`）。前置（路径统一/内核原生化/磁盘型
+> **已彻底封存（2026-08-01，无限期搁置）**：恢复需显式解封并重估。代码层零启动，
+> 设计要点见 `tasks_docs/MEDIA_DESIGN.md`。前置（路径统一/内核原生化/磁盘型
 > 存储）已完成。解封时需实现三项：
 > 1. 多模态模型注册字段（`ai.register_model` 存 modalities/endpoint/audio_config）；
 > 2. 非聊天端点推理绕过（endpoint 字段强制非推理，跳过 reasoning prompt 注入）；
 > 3. 磁盘型响应解析协议（`from_response` 平行协议 + `has_multimodal_response_cap` flag）。
+
+> **已落地部分**：`__payload_prompt__` 协议与 `audio`/`image`/`video` 类型（见 `docs/syntax/07_behavior_expressions.md` §7.6、`docs/subsystems/02_file_container.md`）。
 
 ---
 
