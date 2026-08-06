@@ -24,7 +24,8 @@
 - **主线**：PT-INTRO-1 剩余（见上）。
 - **待讨论**：PT-DECIDE-1（LLM 解析默认策略语义，原 B-D2）——下一 session 待讨论项，仅记录。
 - **待选**：PT-DEBT-1/2/3（内核接口协议化，原 C-D3/C-D7/B-D10）——同性质可合并实施。
-- **长期周期**：PT-AUDIT-1/2（代码异味 / 分支嵌套审计）——时不时启动，独立分支执行。
+- **长期周期**：PT-AUDIT-1/2（代码异味 / 分支嵌套审计）+ PT-AUDIT-3（代码复核审查循环，
+  R4/R5 为下一轮）+ PT-AUDIT-4/5（文档清洗与梳理 / 注释卫生清理）——持续周期工作，阶段边界择机。
 - **保留规划**：PT-TEST-1（测试体系重构，未来做）、PT-FEAT-1（语言级协程，保持现状）。
 - 完整清单见 `PENDING_TASKS.md`。
 
@@ -43,8 +44,10 @@
 - **B-D6 根治重构**：import-* 精确成员枚举（编译器记录 + 运行时枚举）+ **IBC 文件跨模块导入
   三层断裂修复**（TypeDef 别名 NameError / Lazy 描述符 members 恒空 / IbModule.get_variable）。
 - **PT-INTRO-1 type() 落地**：`type(x)` 内建。
-- **任务控制文档全面重整**：任务代号按性质分域（FEAT/DEBT/REV/DOC/TEST/AUDIT/DECIDE/SEALED），
+- **任务控制文档全面重整**：任务代号按性质分域（FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED），
   删除已完成/无价值条目与无用设计决策，清理注释任务代号/历史说明。
+- **周期清扫启动**：文档清洗与梳理（PT-AUDIT-4）、注释卫生清理（PT-AUDIT-5）首轮完成，
+  代码复核审查循环（PT-AUDIT-3）R1/R2/R3 上一轮完成。
 
 ---
 

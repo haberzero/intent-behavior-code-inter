@@ -85,8 +85,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 |------|------|
 | `NEXT_STEPS.md` | 当前最紧要项（PT-INTRO-1 主线）/ 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
-| `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-REV/PT-DOC/PT-TEST/PT-AUDIT/PT-DECIDE/PT-SEALED + PT-INTRO-1 主线） |
-| `PENDING_REVIEW_ITEMS.md` | 完整复核审查清单（R1/R2/R3 ✅ / PT-REV-1(原R4)、PT-REV-2(原R5) 待做） |
+| `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED + PT-INTRO-1 主线） |
+| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 上一轮完成，R4/R5 下一轮待做） |
 | `WORKLOG.md` | 自主工作日志（关键裁定 + 仍有效设计决策） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
@@ -106,10 +106,9 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 - **待讨论（下一 session）**：`PT-DECIDE-1`（原 B-D2）——"已声明类型无 parser → uncertain"
   语言级语义决策，仅记录。
 - **待选**：`PT-DEBT-1/2/3`（原 C-D3/C-D7/B-D10）内核接口协议化——同性质可合并实施。
-- **长期周期**：`PT-AUDIT-1/2`（原 PT-SMELL-1/2）审计，独立分支，时不时启动。
+- **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
+  审查循环，R4/R5 下一轮）+ `PT-AUDIT-4/5`（文档清洗与梳理 / 注释卫生清理）——持续周期工作。
 - **保留规划**：`PT-TEST-1`（测试体系重构，未来做）、`PT-FEAT-1`（语言级协程，保持现状）。
-- **审查后续**：`PT-REV-1`（原 R4 覆盖率核对）/ `PT-REV-2`（原 R5 doc 治理）+ `PT-DOC-1`
-  （原 D1-D5 docs 同步）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
