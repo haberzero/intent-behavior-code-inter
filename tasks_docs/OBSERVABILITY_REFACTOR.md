@@ -82,26 +82,24 @@
 - [ ] **0.3 文档同步**：`NEXT_STEPS.md` 列本任务为主线；`TEST_REFACTOR.md` 标注并入；`HANDOFF.md` 动态状态更新。
 - **验收**：设计冻结 + 基准存档 + 文档同步；零代码改动。
 
-### Phase 1：契约修复 + 死码清理（`unsafe-vibe-dev`，小改动直做）
+### Phase 1：契约修复 + 死码清理 + 零成本穿透替换（`unsafe-vibe-dev`，小改动直做）
 
-> 每项全量 pytest 零回归 + 描述性 commit + 必要时补测试（warnings 断言等）。
+> **重新定界（2026-08-06 实施中）**：与 CoreDebugger 机制强绑定的清理项（rt_scheduler `CoreModule.RUNTIME`
+> bug、5 处 dead import、`core_enter`/`core_exit`、`dependencies.debugger` 死字段、silent 语义收敛）归入 **2A**
+> 一并处理（2A 整体删除该机制，避免重复劳动）；idbg 死 API（fields/intents/_llm_provider/debugger_provider）
+> 归入 **2C** idbg 重构一并决策。每项全量 pytest 零回归 + 描述性 commit。
 
-- [ ] **1.1 悬挂契约修复**
-  - `IStateReader.get_last_llm_result`（interfaces.py:53,201）声明无实现、idbg 空帧回退必 AttributeError → 删除协议方法 + 修 idbg 回退（只依赖活跃帧 `frames[-1].target_result`）+ 修 docs/subsystems/01_intent_system.md:436 不实引用。
-  - examples 幽灵 API：`last_llm`→`current_llm`、`last_result`→`current_result`、`show_last_prompt`→`show_target_prompt`（examples/01_getting_started/02/04/05/06）。
-  - `rt_scheduler.py:138` `CoreModule.RUNTIME` 不存在的枚举成员（潜伏 AttributeError）。
-  - `idbg.show_retry_stack` 读已删 `is_fallback` 键（core.py:323，恒 None）。
-- [ ] **1.2 死码清理**
-  - dead import ×5（host/service.py:20、runtime_serializer.py:5、_helpers.py:3、service_context.py:3、main.py:18）。
-  - `core_enter`/`core_exit`（零调用）；`dependencies.py:61` debugger 死字段。
-  - idbg 死 API：`fields()`/`intents()`/`_llm_provider()`/`debugger_provider` capability（零消费者）。
-- [ ] **1.3 零成本穿透替换**（测试侧，公开访问器已存在）
-  - `engine.interpreter._execution_context`→`execution_context`（25+ 处）
-  - `executor._pending_futures`→`pending_futures_count()`（6 处）
-  - `getattr(rc, "_runtime_coordinator")`→`peek_runtime_coordinator()`（2 处）
-  - 消除 conftest `make_vm` 私有访问。
-- [ ] **1.4 silent 语义收敛**：仅保留"抑制用户错误打印"职责（解除与内核 trace 的耦合）。
-- **验收**：Phase 1 全绿；穿透替换后 tests/ 无上述三类私有访问残留。
+- [x] **1.1a 悬挂契约修复（已完成，commit d2d828a）**：删 `IStateReader`/`IExecutionFrame.get_last_llm_result`
+  协议方法（声明无实现、idbg 空帧回退必 AttributeError）+ idbg 改只依赖活跃帧 + 修 docs/subsystems/01_intent_system.md 不实引用。
+- [x] **1.1b examples 幽灵 API（已完成，commit d2d828a）**：`last_llm`→`current_llm`、`last_result`→`current_result`、
+  `show_last_prompt`→`show_target_prompt`（02/04/05/06 四示例）；顺带删除 06 示例引用不存在的 `call_info["scene"]` 打印行。
+- [x] **1.1d 悬空键（已完成，commit d2d828a）**：`show_retry_stack` 删读已移除的 `is_fallback` 键。
+- [ ] **1.2b idbg 死 API → 归入 2C**：fields/intents/_llm_provider/debugger_provider 在 idbg 重构中一并决策。
+- [x] **1.3 零成本穿透替换（已完成，commit d2d828a）**：`engine.interpreter._execution_context`→`execution_context`
+  （22 处 + conftest make_vm）、`len(executor._pending_futures)`→`pending_futures_count()`（6 处）、
+  `getattr(rc,"_runtime_coordinator")`→`peek_runtime_coordinator()`（2 处）。
+- [ ] **1.1c/1.4 → 归入 2A**：rt_scheduler RUNTIME bug、silent 语义收敛随 CoreDebugger 删除一并处理。
+- **验收**：Phase 1 全绿；穿透替换后 tests/ 无上述三类私有访问残留（test_idbg 的 `_DummyExecutionContext` 自持字段除外）。
 
 ### Phase 2：大规模破坏实验（独立分支，禁止合并）
 
@@ -159,6 +157,8 @@
 | 2026-08-06 | 规划 | idbg 重定位为观测骨架渲染层，API 按统一设计语言重设计（不以 API 契约史为约束） | 对外契约破坏已获授权；长期收益与系统统一优先 |
 | 2026-08-06 | 规划 | test_snapshot/test_hooks/test_mode 直接长在观测骨架上（不造第三套） | 单一权威源 / 机制同构 |
 | 2026-08-06 | 规划 | PT-TEST-1 并入本任务；覆盖矩阵三段式 + meta 机器校验 | 用户裁定合并推进；矩阵"测试位置"列大面积虚构（TEST_MATRIX_FINDINGS） |
+| 2026-08-06 | Phase1 | 删 `get_last_llm_result` 悬挂协议 + idbg 只依赖活跃帧（不实现该方法） | 设计意图（certainty 经 IbLLMCallResult 传递，无全局槽）自证无实现需求；无兼容层 |
+| 2026-08-06 | Phase1 | 与 CoreDebugger 强绑定的清理项（rt_scheduler RUNTIME/dead import/core_enter/dependencies 字段/silent）归入 2A；idbg 死 API 归入 2C | 避免 2A/2C 重复劳动；机制整体删除时一并处理 |
 
 ---
 
@@ -166,8 +166,8 @@
 
 | Phase | 状态 | 备注 |
 |---|---|---|
-| 0 设计冻结 | 🔄 进行中 | 0.1/0.2 完成；0.3 待做 |
-| 1 契约修复+死码清理 | ⬜ | |
+| 0 设计冻结 | ✅ 完成 | 基线存档 + 规划冻结 + 文档同步（commit 3dfba92） |
+| 1 契约修复+死码清理 | 🔄 进行中 | 1.1a/1.1b/1.1d/1.3 完成（commit d2d828a）；1.2b→2C、1.1c/1.4→2A |
 | 2A CORE_DEBUG 移除实验 | ⬜ | 独立分支 |
 | 2B 观测骨架扩展实验 | ⬜ | 独立分支 |
 | 2C idbg 重构实验 | ⬜ | 独立分支 |
