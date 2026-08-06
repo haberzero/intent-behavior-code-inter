@@ -234,7 +234,7 @@ def make_vm(engine):
     from core.runtime.vm import VMExecutor
 
     return VMExecutor(
-        engine.interpreter._execution_context,
+        engine.interpreter.execution_context,
         interpreter=engine.interpreter,
     )
 

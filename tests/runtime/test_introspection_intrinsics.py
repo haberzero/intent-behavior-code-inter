@@ -140,7 +140,7 @@ class TestCallableSignatureFallback:
     def test_manual_callable_without_signature(self, engine):
         """直接构造的 fn_callable 无签名字段时退化为裸类名。"""
         engine.run_string("int seed = 1\n", silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         fc = ec.factory.create_fn_callable("node1")
         assert fc.signature_name() == "fn_callable"
         assert fc.get_return_type() == "auto"
@@ -156,7 +156,7 @@ class TestCallableSignatureFallback:
             'fn b = lambda(auto x) -> str: @~ "hi" ~\n',
             silent=True,
         )
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         ctx = ec.runtime_context
         data = RuntimeSerializer(engine.registry).serialize_context(ctx, include_static=False)
         hits = [v for v in data["pools"]["instances"].values()

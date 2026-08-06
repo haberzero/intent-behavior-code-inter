@@ -51,7 +51,7 @@ class TestParallelDispatch:
         eng, _ = _run_pipeline(code)
         executor = eng.interpreter.service_context.llm_executor
         # 两个赋值都未被读取 → 两个 future 均仍存在
-        assert len(executor._pending_futures) == 2
+        assert executor.pending_futures_count() == 2
 
     def test_dispatched_assignments_resolve_on_read(self):
         """读取触发 lazy resolve，``_pending_futures`` 应被清空。"""
@@ -64,7 +64,7 @@ class TestParallelDispatch:
         eng, out = _run_pipeline(code)
         executor = eng.interpreter.service_context.llm_executor
         # 两次读取 → 两个 future 都已被 resolve 并清空
-        assert len(executor._pending_futures) == 0
+        assert executor.pending_futures_count() == 0
         assert any("alpha" in line for line in out)
         assert any("beta" in line for line in out)
 
@@ -78,7 +78,7 @@ class TestParallelDispatch:
         )
         eng, out = _run_pipeline(code)
         executor = eng.interpreter.service_context.llm_executor
-        assert len(executor._pending_futures) == 0
+        assert executor.pending_futures_count() == 0
         # 三次都打印同一值
         once_count = sum(1 for line in out if "once" in line)
         assert once_count == 3
@@ -105,7 +105,7 @@ class TestDispatchSkipped:
         # 同步路径下不会创建 LLMFuture（或者已被 resolve）
         # MOCK:STR:plain 是确定的，无需进入 handler；输出应仅来自 print 之外的语句。
         # 这里关键是：执行不抛错，且没有遗留 future。
-        assert len(executor._pending_futures) == 0
+        assert executor.pending_futures_count() == 0
 
     def test_fn_callable_behavior_not_dispatched(self):
         """``fn`` 声明的 fn_callable behavior expression 不应被立刻 dispatch。"""
@@ -118,7 +118,7 @@ class TestDispatchSkipped:
         eng, _ = _run_pipeline(code)
         executor = eng.interpreter.service_context.llm_executor
         # 未调用 f：不应有任何 LLMFuture
-        assert len(executor._pending_futures) == 0
+        assert executor.pending_futures_count() == 0
 
 
 # ===========================================================================

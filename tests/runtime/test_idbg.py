@@ -27,9 +27,6 @@ class _DummyStateReader:
     def get_vars(self):
         return {"x": 1}
 
-    def get_last_llm_result(self):
-        return None
-
     def get_llm_except_frames(self):
         return []
 

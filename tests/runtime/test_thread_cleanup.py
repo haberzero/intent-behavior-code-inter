@@ -92,7 +92,7 @@ thread[int] t = thread(callable=f, args=[])
 """, output_callback=lambda s: lines.append(str(s)))
 
     rc = engine.interpreter.execution_context.runtime_context
-    coord = getattr(rc, "_runtime_coordinator", None)
+    coord = rc.peek_runtime_coordinator()
     assert coord is not None
 
     # 注入一个未完成的任务（future 未完成）
@@ -150,7 +150,7 @@ t.join()
 """, output_callback=lambda s: lines.append(str(s)))
 
     rc = engine.interpreter.execution_context.runtime_context
-    coord = getattr(rc, "_runtime_coordinator", None)
+    coord = rc.peek_runtime_coordinator()
     assert coord is not None
     time.sleep(0.1)  # 等待 done 回调
     assert coord.unfinished_handles() == []

@@ -116,7 +116,8 @@ class TestLLMExecutorPendingCount:
             silent=True,
         )
         executor = engine.interpreter.service_context.llm_executor
-        # 公开访问器可读，且与私有槽计数一致（读取即经锁切片）
+        # 公开访问器可读：返回非负整数（在途 Future 计数契约），读取即经锁切片
         count = executor.pending_futures_count()
         assert isinstance(count, int)
-        assert count == len(executor._pending_futures)
+        assert count >= 0
+        assert executor.pending_futures_count() == count

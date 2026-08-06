@@ -78,7 +78,7 @@ print("")
 Color llm_color = @~ MOCK:STR:BLUE ~
 
 # idbg 确认 LLM 调用的 user_prompt 和 response
-any last_info = idbg.last_llm()
+any last_info = idbg.current_llm()
 print("idbg: user_prompt = " + (str)last_info["user_prompt"])
 print("idbg: response    = " + (str)last_info["response"])
 print("")

@@ -433,7 +433,7 @@ ibci_modules/ibci_idbg/core.py
 └── retry_stack()         # 获取当前 llmexcept 帧栈（含 target_result 详情）
 ```
 
-`current_result()` 和 `current_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.target_result`，无活跃帧时回退到 `RuntimeContextImpl.get_last_llm_result()`（调试内省，读当前帧 target_result）。调用详情经 LLMExecutor 主线程单写槽 `get_current_call_info()` 获取；certainty 经 `IbLLMCallResult` 返回值传递，无全局 `_last_llm_result` 共享字段。
+`current_result()` 和 `current_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.target_result`，无活跃帧时返回空（无可用结果）。调用详情经 LLMExecutor 主线程单写槽 `get_current_call_info()` 获取；certainty 经 `IbLLMCallResult` 返回值传递，无全局 `_last_llm_result` 共享字段。
 
 ---
 

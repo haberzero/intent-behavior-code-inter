@@ -176,7 +176,7 @@ class TestOptionalSerialization:
 
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.dirname(os.path.abspath(__file__))), auto_sniff=False)
         engine.run_string("Optional[int] x = 1\n", silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         orig_ctx = ec.runtime_context
         data = RuntimeSerializer(engine.registry).serialize_context(orig_ctx, include_static=False)
         restored = RuntimeDeserializer(engine.registry, factory=ec.factory).deserialize_context(data)
@@ -193,7 +193,7 @@ class TestOptionalSerialization:
 
         engine = IBCIEngine(root_dir=os.path.dirname(os.path.dirname(os.path.abspath(__file__))), auto_sniff=False)
         engine.run_string("Optional[int] x = None\n", silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         orig_ctx = ec.runtime_context
         data = RuntimeSerializer(engine.registry).serialize_context(orig_ctx, include_static=False)
         restored = RuntimeDeserializer(engine.registry, factory=ec.factory).deserialize_context(data)

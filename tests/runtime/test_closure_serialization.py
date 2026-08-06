@@ -33,7 +33,7 @@ def _run_and_restore(engine, code):
     返回 ``(ec, restored_ctx)``。``ec.runtime_context`` 保持原值（调用前需自行交换）。
     """
     engine.run_string(code, silent=True)
-    ec = engine.interpreter._execution_context
+    ec = engine.interpreter.execution_context
     orig_ctx = ec.runtime_context
     data = _serialize(engine, orig_ctx)
     restored = _restore(engine, ec, data)
@@ -67,7 +67,7 @@ class TestFnCallableRoundTrip:
         ec, rest = _run_and_restore(
             engine, "fn f = lambda(int n) -> int: n + 1\nint r = f(41)\n"
         )
-        orig = engine.interpreter._execution_context
+        orig = engine.interpreter.execution_context
         f_orig = orig.runtime_context.get_variable("f")
         f = rest.get_variable("f")
         assert type(f).__name__ == "IbFnCallable"
@@ -79,7 +79,7 @@ class TestFnCallableRoundTrip:
     def test_serialized_with_fn_callable_type(self, engine):
         """序列化产物必须出现 _type='fn_callable'（反序列化分支可达的回归）。"""
         engine.run_string("fn f = lambda -> auto: 42\n", silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = _serialize(engine, ec.runtime_context)
         hits = [v for v in data["pools"]["instances"].values()
                 if v.get("_type") == "fn_callable"]
@@ -155,7 +155,7 @@ class TestScopeCellRelink:
     """
 
     def _build(self, engine):
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         factory = ec.factory
         ctx = factory.create_context()
         ctx.enter_scope()
@@ -237,7 +237,7 @@ class TestBehaviorRoundTrip:
     def test_behavior_fields_and_call_consistency(self, engine):
         """behavior 的 capture_mode/expected_type 保真，恢复后 MOCK 调用一致。"""
         ec, rest = _run_and_restore(engine, self._CODE)
-        orig = engine.interpreter._execution_context
+        orig = engine.interpreter.execution_context
         g_orig = orig.runtime_context.get_variable("g")
         g = rest.get_variable("g")
         assert g.capture_mode == g_orig.capture_mode == "snapshot"
@@ -250,7 +250,7 @@ class TestBehaviorRoundTrip:
     def test_behavior_serialized_with_closure(self, engine):
         """behavior 序列化产物包含 closure 条目（此前缺 closure 全丢）。"""
         engine.run_string(self._CODE, silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = _serialize(engine, ec.runtime_context)
         hits = [v for v in data["pools"]["instances"].values()
                 if v.get("_type") == "behavior"]

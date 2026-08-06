@@ -450,7 +450,7 @@ class TestGenericAnnotationDeclaredType:
             "tuple[int] tu = (1,)\n",
             silent=True,
         )
-        rc = engine.interpreter._execution_context.runtime_context
+        rc = engine.interpreter.execution_context.runtime_context
         expect = {
             "xs": "list[int]",
             "d": "dict[str,int]",
@@ -475,7 +475,7 @@ class TestGenericAnnotationDeclaredType:
         )
         # list[any] 显式异构仍可用；list[any] 折叠为裸 list（元素类型默认为 any）
         engine.run_string("list[any] mixed = [1, \"a\"]\n", silent=True)
-        rc = engine.interpreter._execution_context.runtime_context
+        rc = engine.interpreter.execution_context.runtime_context
         sp = rc.get_symbol("mixed").declared_type
         assert sp.name == "list"
 
@@ -512,7 +512,7 @@ class TestGenericAnnotationDeclaredType:
             'slot[int] s = slot("score", 0)\n',
             silent=True,
         )
-        rc = engine.interpreter._execution_context.runtime_context
+        rc = engine.interpreter.execution_context.runtime_context
         expect = {"c": "chan[str]", "s": "slot[int]"}
         for name, want in expect.items():
             sp = rc.get_symbol(name).declared_type

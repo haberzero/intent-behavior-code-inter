@@ -84,11 +84,11 @@ class IDbgPlugin(IbPlugin):
 
         # 2. 合并 LLMCallResult 状态
         # 优先从活跃的 llmexcept 帧读取（per-snapshot 权威来源，target_result
-        # 是帧私有的 certainty 信号载体）；无活跃帧时回退到调试内省接口。
+        # 是帧私有的 certainty 信号载体）；无活跃帧时无可用结果。
         sr = self._state_reader()
         if sr:
             frames = sr.get_llm_except_frames()
-            res = frames[-1].target_result if frames else sr.get_last_llm_result()
+            res = frames[-1].target_result if frames else None
 
             if res:
                 info["result"] = {
@@ -220,9 +220,9 @@ class IDbgPlugin(IbPlugin):
             return {}
 
         # certainty 经 IbLLMCallResult 返回值传递，结果存于 LLMExceptFrame.target_result。
-        # 优先从活跃帧读取（per-snapshot 权威来源），无活跃帧时回退到调试内省接口。
+        # 优先从活跃帧读取（per-snapshot 权威来源），无活跃帧时无可用结果。
         frames = sr.get_llm_except_frames()
-        res = frames[-1].target_result if frames else sr.get_last_llm_result()
+        res = frames[-1].target_result if frames else None
 
         if not res:
             return {}
@@ -319,8 +319,7 @@ class IDbgPlugin(IbPlugin):
             print(
                 f"  [{idx}] target={entry.get('target')} "
                 f"type={entry.get('type')} "
-                f"retry={entry.get('retry')}/{entry.get('max_retry')} "
-                f"fallback={entry.get('is_fallback')}"
+                f"retry={entry.get('retry')}/{entry.get('max_retry')}"
             )
             lr = entry.get("target_result")
             if lr:

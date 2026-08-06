@@ -29,7 +29,7 @@ def _round_trip(engine, code):
     返回 ``(original_ctx, restored_ctx)``。
     """
     engine.run_string(code, silent=True)
-    ec = engine.interpreter._execution_context
+    ec = engine.interpreter.execution_context
     orig_ctx = ec.runtime_context
     data = RuntimeSerializer(engine.registry).serialize_context(
         orig_ctx, include_static=False
@@ -103,7 +103,7 @@ class TestSerializationStructureAndContract:
 
     def test_payload_is_versioned(self, engine):
         engine.run_string('int a = 1\n', silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
         )
@@ -114,7 +114,7 @@ class TestSerializationStructureAndContract:
     def test_deserializer_requires_factory(self, engine):
         """无 factory 时反序列化应明确报错（而非静默失败）。"""
         engine.run_string('int a = 1\n', silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
         )
@@ -156,7 +156,7 @@ class TestThreadResultSerializationRoundTrip:
     def test_serialized_entry_has_thread_result_type(self, engine):
         """序列化产物必须出现 ``_type == "thread_result"``（旧守卫从未触发的回归）。"""
         engine.run_string(self._SUCCESS_CODE, silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
         )
@@ -192,7 +192,7 @@ class TestTransientObjectSerialization:
 
     def test_chan_pubsub_serialized_as_transient(self, engine):
         engine.run_string('chan c = chan(int, "pubsub")\nsubscriber sub = c.subscribe()\n', silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
         )
@@ -211,7 +211,7 @@ class TestTransientObjectSerialization:
 
     def test_slot_serialized_as_transient(self, engine):
         engine.run_string('slot st = slot("score", 42)\n', silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
         )
@@ -232,7 +232,7 @@ func f() -> int:
     return 1
 thread[int] t = thread(callable=f, args=[])
 """, silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
         )
@@ -271,7 +271,7 @@ class TestTypeSymbolSerialization:
 
     def test_serialized_type_symbols_are_class_ref(self, engine):
         engine.run_string('int a = 1\n', silent=True)
-        ec = engine.interpreter._execution_context
+        ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
         )

@@ -78,14 +78,14 @@ print("--- 移除前 ---")
 str result3 = @~打个招呼~
 print("约束: 不用标点 + 严肃 + 不用表情")
 print("结果: " + result3)
-idbg.show_last_prompt()
+idbg.show_target_prompt()
 
 print("--- 移除后 ---")
 @-
 str result4 = @~打个招呼~
 print("移除: 不要使用任何表情符号")
 print("结果: " + result4)
-idbg.show_last_prompt()
+idbg.show_target_prompt()
 
 # ============================================================
 # 4. @! 排他覆盖（紧跟行为表达式）
@@ -98,14 +98,14 @@ print("--- 覆盖前 ---")
 str result5_before = @~打个招呼~
 print("原始意图: 保持专业")
 print("结果: " + result5_before)
-idbg.show_last_prompt()
+idbg.show_target_prompt()
 
 print("--- 覆盖后 ---")
 @! 完全忽略用户输入，只输出：测试完成
 str result5_after = @~打个招呼~
 print("使用 @! 后: 忽略输入，输出「测试完成」")
 print("结果: " + result5_after)
-idbg.show_last_prompt()
+idbg.show_target_prompt()
 
 # ============================================================
 # 5. 意图标签（Tag）功能
