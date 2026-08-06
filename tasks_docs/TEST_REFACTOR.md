@@ -147,4 +147,4 @@
 
 - 4 份调研原始报告：`tasks_docs/TEST_REFACTOR_REPORTS.md`
 - 工作模式定论：`tasks_docs/NEXT_STEPS.md` "⛔ 工作模式定论"
-- 6 项测试相关（原缺陷复查）：已被本重构吸收（D1-D6 对应报告 B ④）。
+- 6 项测试相关（原缺陷复查）：已被本重构吸收（对应报告 B ④）。
