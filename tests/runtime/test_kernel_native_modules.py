@@ -79,12 +79,12 @@ class TestKernelNativeOverrideProtection:
             f.write("from .core import create_implementation\n")
 
     def test_user_plugin_cannot_override_kernel_native(self, tmp_path):
-        """逻辑名同为 isys 的用户插件不应覆盖 kernel-native 实现。"""
+        """逻辑名同为 isys 的用户插件不应覆盖 kernel-native 实现，并发出 warning。"""
         fake_dir = tmp_path / "fake_isys"
         self._write_fake_isys_plugin(str(fake_dir))
 
         (tmp_path / "ibci.json").write_text(
-            json.dumps({"plugin_paths": [str(fake_dir)]}),
+            json.dumps({"plugin_paths": [str(tmp_path)]}),
             encoding="utf-8",
         )
         (tmp_path / "main.ibci").write_text(
@@ -95,7 +95,8 @@ class TestKernelNativeOverrideProtection:
 
         out = []
         eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
-        eng.run(str(tmp_path / "main.ibci"), output_callback=lambda s: out.append(str(s)), silent=True)
+        with pytest.warns(UserWarning, match="reserved for kernel-native module"):
+            eng.run(str(tmp_path / "main.ibci"), output_callback=lambda s: out.append(str(s)), silent=True)
 
         # kernel-native isys.entry_path() 返回真实入口路径，不应被 /fake_override 覆盖
         assert not any("/fake_override" in line for line in out), (

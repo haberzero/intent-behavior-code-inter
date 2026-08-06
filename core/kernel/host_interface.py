@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional, List, Set, TYPE_CHECKING
+import warnings
 
 from core.base.enums import Provenance
 from core.kernel.spec import TypeDef
@@ -57,12 +58,17 @@ class HostInterface:
         discovery_name: 物理名称 (如目录名)。
 
         若 name 已被标记为 kernel-native，则只允许 kernel-native 自身注册；
-        用户插件尝试覆盖时直接忽略。
+        用户插件尝试覆盖时忽略并发出 warning（可观测，不静默）。
         """
         is_kernel_native_meta = metadata is not None and metadata.provenance == Provenance.KERNEL_NATIVE
 
         if name in self._kernel_native_names and not is_kernel_native_meta:
-            # 用户插件尝试覆盖 kernel-native 模块，忽略
+            # 用户插件尝试覆盖 kernel-native 模块：kernel-native 保护优先，忽略用户插件
+            warnings.warn(
+                f"Ignoring user plugin '{name}' (discovery_name={discovery_name!r}): "
+                f"name '{name}' is reserved for kernel-native module and cannot be overridden.",
+                stacklevel=2,
+            )
             return
 
         if is_kernel_native_meta:
