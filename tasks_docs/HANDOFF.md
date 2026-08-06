@@ -87,7 +87,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED + PT-INTRO-1 主线） |
 | `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行 2026-08-05，R4/R5 待做） |
-| `WORKLOG.md` | 自主工作日志（关键裁定 + 仍有效设计决策） |
+| `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md` §十） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
 | `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（PT-TEST-1，独立任务） |
@@ -113,9 +113,10 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
-- **2026-08-05**：PT-ARCH-31/32/33/34 + PT-SMELL-R3 全量处置 + B-D6 import-*
-  根治（含 IBC 文件跨模块导入三层断裂修复）+ PT-INTRO-1 type() 落地 + 任务控制文档全面重整
-  （任务代号按性质分域）。commit 明细见 git 历史。
+- **2026-08-05**：闭包序列化 round-trip 修复 + Axiom 家族分裂收敛 + EnumAxiom 双通道收敛 +
+  use_intent_context 守卫修复 + R3 异味四 Zone 处置 + import-* 精确成员枚举根治（含 IBC 文件
+  跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
+  commit 明细见 git 历史。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
 - **测试基线**：1547 passed / 6 skipped（以实跑为准）。

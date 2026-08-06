@@ -24,7 +24,7 @@
 | A2 | `ibci_ai/core.py` `__call__` 未 probe 分支 | 未 probe 时保守按推理模型处理 + 首次告警（设计立场：不推荐 thinking、推荐直接输出） | 未来"直接输出 vs thinking"策略细化后，此回退与告警需同步演进 | 质量维护·维持现状 | 有效 |
 | A3 | `llm_parsing_strategy.py` / `_prompt.py` 宽 except | 解析失败→`uncertain`/降级链（LLM 输出不确定→重试语义）——**`_obj_to_prompt_str` 已收窄 AttributeError（2026-08-05）；`_obj_to_payload` 仍宽** | 用户 `__from_prompt__`/`__to_prompt__` 内真异常会被当作"不确定/降级"吞掉 | 质量维护·维持现状 | 部分已改（2026-08-05） |
 | A4 | ~~`core/engine.py:388`~~（已删除） | axiom 注册失败→log 继续（注册循环健壮性） | 单个 axiom 注册的隐蔽 bug 被静默跳过，难发现 | 质量维护·维持现状 | **已失效**（R3 批次 A-7 删除 try/except，改为 fail-fast 直注册） |
-| A5 | `core/kernel/spec/type_ref.py:128` 等 L1-L10 循环打破局部 import | 标准运行时局部 import 环打破 | 模块环长期存在，未来重构被这些环约束（详见 `PENDING_TASKS.md` 的 PT-SMELL-3 推迟工作记录） | 质量维护·维持现状 | 有效 |
+| A5 | `core/kernel/spec/type_ref.py:128` 等 L1-L10 循环打破局部 import | 标准运行时局部 import 环打破 | 模块环长期存在，未来重构被这些环约束（详见 `PENDING_TASKS.md` §十一 推迟工作记录） | 质量维护·维持现状 | 有效 |
 
 ### 无目的审视（设计沉思）
 
