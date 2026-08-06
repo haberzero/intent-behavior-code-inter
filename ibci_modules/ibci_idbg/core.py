@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from core.extension.ibcext import IbPlugin, ExtensionCapabilities
-from core.runtime.capability_registry import CapabilityRegistry
+from core.runtime.objects.kernel import IbObject
 
 
 class IDbgPlugin(IbPlugin):
@@ -18,14 +18,10 @@ class IDbgPlugin(IbPlugin):
     """
     def __init__(self):
         super().__init__()
-        self._capabilities: Optional[ExtensionCapabilities] = None
         self._kr: Optional[Any] = None          # KernelRegistry 引用
 
     def setup(self, capabilities: ExtensionCapabilities):
-        self._capabilities = capabilities
         self._kr = capabilities.kernel_registry
-        # 向能力注册表注册自己为 Debugger Provider
-        capabilities.expose("debugger_provider", self)
 
     # ------------------------------------------------------------------
     # 内部辅助：懒获取内核服务
@@ -42,10 +38,6 @@ class IDbgPlugin(IbPlugin):
     def _llm_executor(self) -> Optional[Any]:
         """通过 KernelRegistry 获取 IILLMExecutor 实例。"""
         return self._kr.get_llm_executor() if self._kr else None
-
-    def _llm_provider(self) -> Optional[Any]:
-        """通过 CapabilityRegistry 获取 LLM Provider（由 ibci_ai 注册）。"""
-        return self._capabilities.get(CapabilityRegistry.CAP_LLM_PROVIDER) if self._capabilities else None
 
     def _execution_context(self) -> Optional[Any]:
         """通过 KernelRegistry 获取 IExecutionContext 实例。"""
@@ -368,37 +360,18 @@ class IDbgPlugin(IbPlugin):
         ]
 
     def show_intents(self):
-        """直接打印意图栈到控制台（IBCI 友好）"""
+        """直接打印意图栈到控制台（IBCI 友好）。
+
+        单一权威源：经 :meth:`intents` 读取 ``IStateReader.get_active_intents()``
+        （富 List[IbIntent]），不维护多来源回退。
+        """
         print("[IDBG] 意图栈:")
-
-        # 调试打印 best-effort：stack_inspector(轻量 List[str]) 优先，失败/为空
-        # 回退 state_reader(富 List[IbIntent])，再回退 "(空)"。两来源接口形状
-        # 不同是刻意设计（轻量视图 vs 富对象视图），不是分派缺陷。
-        si = self._stack_inspector()
-        if si:
-            try:
-                raw = si.get_active_intents()
-                if raw:
-                    print("  (via stack_inspector)")
-                    for idx, content in enumerate(raw):
-                        print(f"  [{idx}] {content}")
-                    return
-            except (AttributeError, TypeError, ValueError):
-                pass
-
-        sr = self._state_reader()
-        if sr:
-            try:
-                intents = sr.get_active_intents()
-                if intents:
-                    print("  (via state_reader)")
-                    for idx, i in enumerate(intents):
-                        print(f"  [{idx}] {i.mode.name} | {i.role.name} | {i.content}")
-                    return
-            except (AttributeError, TypeError, ValueError):
-                pass
-
-        print("  (空)")
+        intents = self.intents()
+        if not intents:
+            print("  (空)")
+            return
+        for idx, i in enumerate(intents):
+            print(f"  [{idx}] {i['mode']} | {i['role']} | {i['content']}")
 
     def env(self) -> Dict[str, Any]:
         si = self._stack_inspector()
@@ -412,20 +385,24 @@ class IDbgPlugin(IbPlugin):
         }
 
     def fields(self, obj: Any) -> Dict[str, Any]:
-        if hasattr(obj, 'fields'):
-            if hasattr(obj, 'serialize_for_debug'):
-                data = obj.serialize_for_debug()
-            else:
-                data = obj.fields
+        """返回对象字段的 JSON 安全视图（IIbObject 协议直访；非 IbObject 返回空）。
 
-            def _to_native(v):
-                if hasattr(v, 'to_native'): return v.to_native()
-                if isinstance(v, dict): return {k: _to_native(i) for k, i in v.items()}
-                if isinstance(v, list): return [_to_native(i) for i in v]
-                return v
+        不使用 hasattr 能力探测：经 ``isinstance(IbObject)`` 判别后直访
+        公开 ``fields`` 属性与 ``to_native()`` 协议方法。
+        """
+        if not isinstance(obj, IbObject):
+            return {}
 
-            return {k: _to_native(v) for k, v in data.items()}
-        return {}
+        def _to_native(v):
+            if isinstance(v, IbObject):
+                return v.to_native()
+            if isinstance(v, dict):
+                return {k: _to_native(i) for k, i in v.items()}
+            if isinstance(v, list):
+                return [_to_native(i) for i in v]
+            return v
+
+        return {k: _to_native(v) for k, v in obj.fields.items()}
 
 
 def create_implementation():

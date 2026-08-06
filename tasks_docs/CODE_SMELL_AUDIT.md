@@ -57,8 +57,8 @@
 | C5 | `modules/file_impl.py:156` | `except (OSError, ValueError): return False`（**原 5.6：沙箱权限降级"文件不存在"**） | 待核验 |
 | C6 | `kernel/config.py:47` | `except OSError: return {}`（**原 5.8：损坏 JSON 静默吞**） | **待核验（区分"不存在=空"与"损坏=报错"）** |
 | C7 | `base/support/fuzzy_json.py:29/71/81/108/118` | 5 处 JSONDecodeError/ValueError pass（容错解析） | 待核验（容错 vs 掩盖） |
-| C8 | `base/diagnostics/debugger.py:59` | 配置解析异常 pass | 待核验 |
-| C9 | `ibci_modules/ibci_idbg/core.py:383/398` | `except Exception: pass` | 待核验 |
+| C8 | `base/diagnostics/debugger.py:59` | 配置解析异常 pass | **已解决（2026-08-06，OBSERVABILITY 2A：机制整体移除）** |
+| C9 | `ibci_modules/ibci_idbg/core.py:383/398` | `except Exception: pass` | **已解决（2026-08-06，OBSERVABILITY 2C：show_intents 单一权威源，去双源回退）** |
 | C10 | `extension/auto_discovery.py:73/87/101` | OSError/PermissionError/Exception 静默 | 待核验 |
 | C11 | `objects/kernel/base.py:113/140` | `__to_prompt__`/`__outputhint_prompt__` 兜底 | 设计内（协议降级有明确语义） |
 | C12 | `llm_except_frame.py:318` | `except Exception: return a is b`（值比较 best-effort） | 设计内（浅比较兜底） |
