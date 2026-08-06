@@ -81,8 +81,8 @@
 | PT-DEBT-4 | `file` 模块重命名 | `file` 影子化 Python 内建，长期重命名（如 `fs`/`io`）。当前过渡措施已实施 |
 | PT-DEBT-5 | 全项目文件命名清理 | 过短/欠层次/欠区分度/影子化内建的代码文件命名排查。暂缓，独立窗口执行 |
 | PT-DEBT-6 | `register_module()` 可观测性缺口 | 静默忽略与 kernel-native 同名的用户插件，无 warning。待诊断体系稳定后专项处理 |
-| PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | 原 `appendix_type_system_rationale.md` §8.2 规划（M2）：`TypeDef.is_nullable` 仍是 `is_assignable` 与序列化数据源（`specs.py`/`serializer.py` 仍在传/写该字段）。空安全统一由 `Optional[T]` 承载，非空由类型系统保证。破坏面：全部 `is_nullable` 消费点 + 序列化格式 |
-| PT-DEBT-8 | 折叠 `IbXxx` 对象族为单一 `IbValue` | 原 `appendix_type_system_rationale.md` §5.1 规划（M4）：`IbString`/`IbList`/`IbInteger`/`IbBool`/`IbFloat` 等并行对象折叠为 `IbValue(type_ref, fields, payload)`，消除 isinstance 分派，代码净减最大。高破坏面，独立分支评估 |
+| PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | **已落地（2026-08-06）**：死字段清理（`is_assignable` 早已用 `Optional[T].wrapped_type`，序列化不消费）。全量 pytest 零回归 |
+| PT-DEBT-8 | ~~折叠 `IbXxx` 为单一 `IbValue`~~ → **重定义为"值层分派收敛审计"** | **已落地（2026-08-06）**：系统层面定论——折叠是伪目标（消 isinstance 动机已由 name 分派达成；具体类=领域方法载体，折叠违反单一职责）。实际收敛：`is_sequence_value` 统一容器分派、`IbLLMCallResult.is_uncertain` 统一不确定判断；类角色分工固化于 `03_type_system.md` §6.4。全量 pytest 零回归 |
 
 ---
 
