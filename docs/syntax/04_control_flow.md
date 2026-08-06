@@ -81,7 +81,7 @@ for int i in range(10):
     print((str)i)   # 输出 1, 3
 ```
 
-### 4.4b pass 空语句
+### 4.5 pass 空语句
 
 `pass` 是空操作语句，用于空函数体、空类体等占位场景：
 
@@ -90,7 +90,7 @@ func placeholder() -> void:
     pass
 ```
 
-### 4.5 switch / case
+### 4.6 switch / case
 
 ```ibci
 str status = "ok"
@@ -123,7 +123,7 @@ switch c:
         print("其它")
 ```
 
-### 4.6 try / except / raise / finally
+### 4.7 try / except / raise / finally
 
 IBCI 提供与传统命令式语言一致的 `try` / `except` / `raise` / `finally` 异常机制，用于处理"显式抛出的语言级异常"。
 处理 LLM 调用的不确定性请使用 `llmexcept`（见第 10 节）—— 二者**互补**而非竞争：

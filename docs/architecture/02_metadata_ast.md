@@ -84,13 +84,7 @@ class IbBehaviorExpr:
 - **`provenance: Provenance`** —— 来源（`KERNEL_NATIVE`/`AXIOM_PROVIDED`/`USER_DEFINED`/`EXTERNAL_MODULE`）。
 - **`visibility: Visibility`** —— 可见性（`PRELUDE_VISIBLE`/`IMPORT_GATED`/`SCOPE_PRIVATE`）。prelude 过滤器据此决定免 import 可见性。
 - **`storage_model: StorageModel`** —— 存储模型（`MEMORY_BACKED`/`DISK_BACKED`）。默认 `MEMORY_BACKED`；分发逻辑（deep_clone/序列化器磁盘型分支）按此标志分发。
-- **`exported_types: List[str]`** —— 模块级附加类型注入列表。仅 `TypeKind.MODULE` 使用；当模块被 import 时，scheduler 把这些类型名作为符号同时注入当前作用域。例如 `import file` 会同时把 `file_handle`/`audio`/`image`/`video` 注入作用域，使后续 `file_handle fh = file.open(...)` / `audio a = audio.from_file(...)` 可解析。
-
-**`exported_types` 设计约束**：
-1. 只用于 `KERNEL_NATIVE + IMPORT_GATED` 模块（当前为 `ai`/`file`/`ihost`/`idbg`/`isys`）。
-2. 注入的类型必须是已注册的真实类型名（通常由 axiom + spec + bootstrap 注册）。
-3. 不用于用户插件；用户插件的类型可见性由其自身的 `visibility` 决定。
-4. 与 `Symbol.metadata` 中的来源键解耦——注入动作由 scheduler 在 import 处理阶段根据 `TypeDef.exported_types` 显式完成，不依赖隐式约定。
+- **`exported_types: List[str]`** —— 模块级附加类型注入列表。仅 `TypeKind.MODULE` 使用；当模块被 import 时，scheduler 把这些类型名作为符号同时注入当前作用域（约束与注入机制见 `07_kernel_native_modules.md` 的 exported_types 章节）。
 
 **边界原则**：`Symbol`（编译期符号表）与 `RuntimeSymbolImpl`（运行时符号）**不复写**这些轴——`Symbol` 的 `provenance` 仅缓存符号层面的来源（复用同一 `Provenance` 枚举），其类型真相仍以 `spec`（IbSpec）为准，避免 AST 字段 / 侧表 / IbSpec 三处同时存储同一语义事实。
 
@@ -120,18 +114,16 @@ class IbBehaviorExpr:
 
 **侧表是编译器内部的瞬时映射**，用于 Pass 之间高效传递信息。
 
-### 3.2 SideTableManager 的设计
+### 3.2 MetadataStore 的设计
+
+编译期侧表由 `core/compiler/semantic/metadata/metadata_store.py:MetadataStore` 承载，存放 Pass 之间传递的分析结果：
 
 ```python
-class SideTableManager:
-    # 临时映射：使用 id() 快速查询
+class MetadataStore:
     node_to_symbol: Dict[Any, Symbol]      # AST节点 → 符号定义
     node_to_type: Dict[Any, IbSpec]        # AST节点 → 类型信息
-    node_is_callable_instance: Dict[Any, bool]
-    node_capture_mode: Dict[Any, str]
-    
-    # ⚠️ 特殊：需要持久化的分析结果（使用 UID）
     cell_captured_symbols: Set[str]        # 被 Cell 捕获的符号 UID
+    get_symbol(node) / get_type(node) / is_cell_captured(uid)
 ```
 
 ### 3.3 为什么混用 id() 和 UID？
@@ -142,22 +134,21 @@ class SideTableManager:
 |------|---------|------|
 | `node_to_symbol` | id() | 编译期频繁查询，性能优先 |
 | `node_to_type` | id() | 同上 |
-| `cell_captured_symbols` | UID | 需要传递给 Pass 5 和运行时 |
+| `cell_captured_symbols` | UID | 需要传递给 BindingPhase 和运行时 |
 
 ### 3.4 侧表的生命周期
 
+编译期在 `MetadataStore` 中写入绑定，序列化时经 `side_tables` 承载转换为 UID 映射，运行时经 `ExecutionContext.get_side_table` 读取：
+
 ```python
 # Pass 2: Symbol Resolution
-side_table.bind_symbol(node, symbol)  # 写入
+metadata.node_to_symbol[node] = symbol   # 写入
 
 # Pass 3: Type Checking
-sym = side_table.get_symbol(node)     # 读取
+sym = metadata.get_symbol(node)          # 读取
 
-# 序列化时：自动转换
-for node, sym in side_table.node_to_symbol.items():
-    node_uid = collect_node(node)      # id(node) → UID
-    sym_uid = collect_symbol(sym)      # id(sym) → UID
-    output[node_uid] = sym_uid         # 输出 UID 映射
+# 序列化时：MetadataStore.to_dict() 输出 UID 映射 → 序列化器 side_tables
+# 运行时：executor.ec.get_side_table("node_to_symbol", node_uid)
 ```
 
 ---
@@ -487,12 +478,7 @@ Phase 间通过 `PassOutput`（symbol_bindings / type_bindings / diagnostics）�
 
 ---
 
-## 变量存储模型
-
-> 磁盘型文件容器的完整设计（协议族、类型继承、Backing 模型、与快照/序列化/LLM 的交互）见 `docs/subsystems/02_file_container.md`。
-> 本节仅保留与元数据架构直接相关的字段定义。
-
-### Symbol.provenance 与冲突解析
+## 十一、Symbol 冲突解析
 
 `Symbol.provenance: Provenance` 是符号来源的唯一标志。`SymbolTable.define` 使用 `existing.provenance.compatible_with(sym.provenance)` 做冲突检测，分发通过协议方法完成。
 

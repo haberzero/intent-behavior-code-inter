@@ -238,8 +238,6 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 
 `Symbol` 只保留 `.spec` 字段（`IbSpec` 类型），不存在 `.descriptor` 属性或任何兼容 shim。
 
-关于 MetadataRegistry（公理 Capability 查询入口）以及双轨问题解决详情，详见本文 §5.4。
-
 ---
 
 ## 六、Intent/Behavior 系统

@@ -20,7 +20,7 @@
 │        ├─ ExecutionContextImpl — node 池、侧表、对象工厂、registry 引用 │
 │        ├─ RuntimeContextImpl — 当前执行帧（scope / intent / llm_except_frames）│
 │        └─ VMExecutor ── CPS 调度循环（运行时唯一执行入口）              │
-│             ├─ build_dispatch_table() — 43 个 AST 节点 handler         │
+│             ├─ build_dispatch_table() — 45 个 AST 节点 handler         │
 │             ├─ Frame stack (List[VMTask])                              │
 │             └─ Signal / UnhandledSignal — 控制流数据化                  │
 └──────────────────────────────────────────────────────────────────────┘
@@ -72,18 +72,19 @@ while frame_stack:
 
 ### 2.4 Handler 表
 
-`core/runtime/vm/handlers.py:build_dispatch_table()` 注册 43 个 `vm_handle_IbXxx(executor, node_uid, node_data)` 生成器函数，覆盖全部 AST 节点：
+`core/runtime/vm/handlers/dispatch.py:build_dispatch_table()` 注册 45 个 `vm_handle_IbXxx(executor, node_uid, node_data)` 生成器函数：
 
 | 类别 | 节点 |
 |------|------|
-| 字面量 / 名字 / 算子 | `IbConstant` `IbName` `IbBinOp` `IbUnaryOp` `IbBoolOp` `IbCompare` `IbIfExp` |
+| 字面量 / 名字 / 算子 | `IbConstant` `IbName` `IbBinOp` `IbUnaryOp` `IbBoolOp` `IbCompare` `IbIfExp` `IbAwaitExpr` |
 | 表达式 | `IbCall` `IbAttribute` `IbSubscript` `IbTuple` `IbListExpr` `IbDict` `IbSlice` `IbCastExpr` `IbFilteredExpr` |
-| 语句 | `IbExprStmt` `IbAssign` `IbAugAssign` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbPass` `IbRaise` `IbSwitch` `IbTry` `IbRetry` `IbGlobalStmt` |
+| 语句 | `IbExprStmt` `IbAssign` `IbAugAssign` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbPass` `IbRaise` `IbSwitch` `IbTry` `IbRetry` `IbGlobalStmt` `IbNonlocalStmt` |
 | 模块 / 引入 | `IbModule` `IbImport` `IbImportFrom` |
 | 声明 | `IbFunctionDef` `IbLLMFunctionDef` `IbClassDef` |
 | 意图 | `IbIntentAnnotation` `IbIntentStackOperation` |
-| Behavior / 闭包 | `IbBehaviorExpr` `IbBehaviorInstance` `IbLambdaExpr` |
-| llmexcept | `IbLLMExceptionalStmt`（挂载型，不入 body；经 `llmexcept_handler` 字段驱动） |
+| Behavior / 闭包 | `IbBehaviorExpr` `IbLambdaExpr` |
+| 并发 / 通信 | `IbChannelExpr` `IbSlotExpr` |
+| llmexcept | `IbLLMExceptionalStmt`（挂载载体，不入 body；经 `llmexcept_handler` 字段驱动） |
 
 每个 handler 是 `def vm_handle_*(...) -> Generator`：通过 `yield child_uid` 发起子求值，`return value` 完成本帧；`return Signal(...)` 触发控制流。
 

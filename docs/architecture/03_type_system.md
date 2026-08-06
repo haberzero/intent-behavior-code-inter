@@ -278,7 +278,15 @@ Pass 4/5 SemanticAnalyzer
               └── 内部按 spec.kind 直分派；其余委托 axiom.resolve_*_type_name
 ```
 
-实参解析在 `visit_IbCall` 按调用体可用的静态签名选择策略：① 有 `param_descriptors`（用户/LLM 函数、已声明参数的 vtable 模块函数）→ 全量解析（位置 → 具名 → 默认填充 → varargs/varkw），结构/类型错误用 SEM_* 码报告；② 仅 `param_types`（`fn[...]` 签名约束、容器特化方法）→ 只做位置数量与类型检查；③ 无静态签名（内置构造器 / axiom-backed）→ 动态跳过，不报告。三策略的输入统一为调用体的位置 / 具名 / splat 实参列表，输出位置实参类型列表供返回类型推断使用。
+实参解析在 `visit_IbCall` 按调用体可用的静态签名选择策略：
+
+| 策略 | 触发条件 | 解析内容 |
+|------|---------|---------|
+| ① 全量解析 | 有 `param_descriptors`（用户/LLM 函数、已声明参数的 vtable 模块函数） | 位置 → 具名 → 默认填充 → varargs/varkw；结构/类型错误用 SEM_* 码报告 |
+| ② 轻量检查 | 仅 `param_types`（`fn[...]` 签名约束、容器特化方法） | 只做位置数量与类型检查 |
+| ③ 动态跳过 | 无静态签名（内置构造器 / axiom-backed） | 不报告 |
+
+三策略的输入统一为调用体的位置 / 具名 / splat 实参列表，输出位置实参类型列表供返回类型推断使用。
 
 策略①的绑定算法与运行期同源，收敛于 `core/kernel/arg_binding.py`（共享纯核心，见 §3.6 交互与 `docs/architecture/04_vm_interpreter.md` §2.6）。
 
@@ -346,10 +354,9 @@ class IbValue(IbObject):
 > `lambda` / `snapshot` 不是 behavior 专属包装；`IbLambdaExpr` 覆盖任意表达式 body，semantic pass 按 body 是否为 `IbBehaviorExpr` 分流到 `fn_callable` 或 `behavior`。
 >
 > **返回标注强制**：`lambda`/`snapshot`/`func`/`llm` 缺失返回标注产生
-> `SEM_MISSING_RETURN_ANNOTATION` 编译错误。`-> auto` 对非行为 body 从 body 表达式推断
-> 具体返回类型并锁定（与 `func -> auto` 的 return 推断语义对齐）；**行为 body 的 `-> auto`
-> 唯一推断为 `str`**（LLM 输出默认字符串，无其它自动推断）——该写法允许但不推荐，需要
-> `str` 时应显式 `-> str`；要其它类型必须显式 `-> T`（同时设定 LLM 输出 expected_type）。
+> `SEM_MISSING_RETURN_ANNOTATION` 编译错误。行为 body 的 `-> auto` 唯一推断为 `str`
+> （LLM 输出默认字符串）；要其它类型必须显式 `-> T`（同时设定 LLM 输出 expected_type）。
+> 语法规格见 `docs/syntax/07_behavior_expressions.md`。
 
 ### 7.2 声明侧关键字 `fn`
 

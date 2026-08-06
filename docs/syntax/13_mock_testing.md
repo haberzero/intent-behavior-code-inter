@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 启用 MOCK 模式
+### 13.1 启用 MOCK 模式
 
 ```ibci
 import ai
@@ -15,11 +15,11 @@ ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
 
 ---
 
-## 2. MOCK 指令格式
+### 13.2 MOCK 指令格式
 
 MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块中。
 
-### 2.1 基本类型指令
+#### 13.2.1 基本类型指令
 
 | 指令 | 说明 | 示例 |
 |------|------|------|
@@ -30,14 +30,14 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 | `MOCK:LIST:value` | 返回 JSON 数组字符串 | `MOCK:LIST:[1,2,3]` |
 | `MOCK:DICT:value` | 返回 JSON 对象字符串 | `MOCK:DICT:{"a":1}` |
 
-### 2.2 布尔快捷指令
+#### 13.2.2 布尔快捷指令
 
 | 指令 | 返回值 |
 |------|--------|
 | `MOCK:TRUE` | `"1"`（bool True） |
 | `MOCK:FALSE` | `"0"`（bool False） |
 
-### 2.3 失败与恢复指令
+#### 13.2.3 失败与恢复指令
 
 | 指令 | 说明 |
 |------|------|
@@ -52,7 +52,7 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 
 > `MOCK:REPAIR:<FALLBACK>` 支持任意基本类型指令作为回退值。
 
-### 2.4 序列指令
+#### 13.2.4 序列指令
 
 | 指令 | 说明 |
 |------|------|
@@ -62,7 +62,7 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 - `FAIL`、`TRUE`、`FALSE` 可作为哨兵成员嵌入序列中
 - 同一 `key` 的多次调用按序返回，超出序列长度后重复最后一个值
 
-### 2.5 控制指令（HTTP 服务模式）
+#### 13.2.5 控制指令（HTTP 服务模式）
 
 以下指令仅在 MOCK HTTP 服务（§6）下生效，内联模式忽略：
 
@@ -75,9 +75,9 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 
 ---
 
-## 3. 使用示例
+### 13.3 使用示例
 
-### 3.1 基本 MOCK
+#### 13.3.1 基本 MOCK
 
 ```ibci
 import ai
@@ -90,7 +90,7 @@ int n = @~ MOCK:INT:42 ~
 print((str)n)   # 42
 ```
 
-### 3.2 MOCK + llmexcept
+#### 13.3.2 MOCK + llmexcept
 
 ```ibci
 import ai
@@ -105,7 +105,7 @@ except LLMRetryExhaustedError as e:
     print("重试耗尽: " + e.message)
 ```
 
-### 3.3 MOCK:REPAIR 模拟恢复
+#### 13.3.3 MOCK:REPAIR 模拟恢复
 
 ```ibci
 import ai
@@ -118,7 +118,7 @@ llmexcept:
 print((str)result)   # 99
 ```
 
-### 3.4 MOCK:SEQ 序列
+#### 13.3.4 MOCK:SEQ 序列
 
 ```ibci
 import ai
@@ -129,7 +129,7 @@ str s2 = @~ MOCK:SEQ:[first,second,third] mykey ~   # second
 str s3 = @~ MOCK:SEQ:[first,second,third] mykey ~   # third
 ```
 
-### 3.5 在控制流中使用 MOCK
+#### 13.3.5 在控制流中使用 MOCK
 
 ```ibci
 import ai
@@ -144,7 +144,7 @@ else:
     print("条件为假")
 ```
 
-### 3.6 LLM 函数 MOCK
+#### 13.3.6 LLM 函数 MOCK
 
 LLM 函数 MOCK 时，`__user__` 块必须**只包含** MOCK 指令：
 
@@ -165,7 +165,7 @@ print(r)   # mock_result
 
 ---
 
-## 4. 命名模型路由的 MOCK
+### 13.4 命名模型路由的 MOCK
 
 ```ibci
 import ai
@@ -177,11 +177,11 @@ str transcript = @WHISPER~ MOCK:STR:named_result ~
 print(transcript)   # named_result
 ```
 
-在 MOCK 模式下，未注册的模型名称不会报错（MOCK 拦截在路由之前）。
+MOCK 拦截发生在模型路由之前，因此 MOCK 模式下未注册的模型名称不报错（命名模型路由规则见 `07_behavior_expressions.md`）。
 
 ---
 
-## 5. 注意事项
+### 13.5 注意事项
 
 1. **MOCK 模式不处理提示词内容**：意图注释、`__outputhint_prompt__` 等对 MOCK 返回值无影响。MOCK 只解析指令本身。
 2. **`retry "hint"` 中的 hint 不会作为 MOCK 指令解析**：retry hint 是追加给 LLM 的系统提示词，不是 MOCK 指令覆盖。使用 `MOCK:REPAIR:<FALLBACK>` 表达"失败一次后回退到指定值"。
@@ -189,13 +189,13 @@ print(transcript)   # named_result
 
 ---
 
-## 6. MOCK HTTP 服务
+### 13.6 MOCK HTTP 服务
 
 内联 MOCK（`TESTONLY` 模式）在进程内即时返回，零延迟、零基础设施失败，无法验证 LLM 调用的传输层行为（超时、并发时序、HTTP 错误）。
 
-MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/completions` 端点（含 SSE 流式），由测试代码启动于 `127.0.0.1` 随机端口。将 `ai.set_config` 指向服务地址后，IBCI 走**真实的 `OpenAI` 客户端路径**发起 HTTP 调用，作为机制测试的完整传输彩排。
+MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/completions` 端点（含 SSE 流式），由测试代码启动于 `127.0.0.1` 随机端口。将 `ai.set_config` 指向服务地址后，IBCI 走**真实的 `OpenAI` 客户端路径**发起 HTTP 调用。这作为机制测试的完整传输彩排。
 
-### 6.1 启动与接入
+#### 13.6.1 启动与接入
 
 ```python
 # MockServer 由测试代码启动于 127.0.0.1 随机端口（实现路径见 ibci_ai 插件）
@@ -215,12 +215,12 @@ str reply = @~ MOCK:STR:hello ~    # 经真实 HTTP 路径返回 hello
 
 服务按请求解析 MOCK 指令（含控制指令 `SLEEP`/`ERROR`），场景状态（`SEQ`/`REPAIR` 计数）按请求加锁隔离，并发安全。服务记录请求统计（活跃数、最大并发），供并发鲁棒性断言。
 
-### 6.2 与内联 MOCK 的关系
+#### 13.6.2 与内联 MOCK 的关系
 
 - **值场景**（结果正确性）：内联 `TESTONLY` 与 HTTP 服务行为一致，指令语言为同一实现。
 - **机制场景**（时序/失败/并发）：必须使用 HTTP 服务。
 - 服务每个实例持有独立场景状态，测试间以独立实例隔离。
 
-### 6.3 测试 fixture
+#### 13.6.3 测试 fixture
 
 pytest 环境提供 `mock_server` fixture（`tests/conftest.py`），每个测试自动启动/停止独立服务。

@@ -52,7 +52,7 @@ llmretry "如果无法判断，请回复 0 并说明原因"
 - 进入 LLM 语句执行时，创建当前变量/意图上下文/循环状态的快照
 - LLM 调用成功 → 结果 commit 到目标变量，退出快照
 - LLM 调用失败 → 执行 `llmexcept` 体，然后从快照恢复状态并 retry
-- 重试耗尽 → 抛出 `LLMRetryExhaustedError`（`LLMError` 的子类，可被 `try except` 捕获，详见 §4.6）
+- 重试耗尽 → 抛出 `LLMRetryExhaustedError`（`LLMError` 的子类，可被 `try except` 捕获，详见 `04_control_flow.md` 的 try/except 章节）
 
 对于**无 `llmexcept` 保护**的裸 LLM 赋值，内容解析失败时抛出 `LLMParseError`；LLM provider 层失败（网络/鉴权）时立即抛出 `LLMCallError`。
 
