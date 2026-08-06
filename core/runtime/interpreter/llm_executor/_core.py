@@ -107,6 +107,18 @@ class LLMExecutorCore:
                 return provider
         return None
 
+    def _notify_test_hooks(self, hook: str, **kwargs: Any) -> None:
+        """按名称分发测试钩子回调（未注入时零成本）。
+
+        测试观察器自身异常按 fail-fast 传播（观察器 bug 立即暴露）。
+        """
+        hooks = self.service_context.test_hooks
+        if hooks is None:
+            return
+        method = getattr(hooks, hook, None)
+        if method is not None:
+            method(**kwargs)
+
     def get_current_call_info(self) -> Mapping[str, Any]:
         """获取最近一次 resolve 的调用信息（主线程单写槽）。"""
         return self._current_call_info
@@ -175,6 +187,10 @@ class LLMExecutorCore:
         if self.llm_callback:
             try:
                 response = self.llm_callback(sys_prompt, user_prompt, target_model=target_model)
+                self._notify_test_hooks(
+                    "on_llm_call", node_uid=node_uid, sys_prompt=sys_prompt,
+                    user_prompt=user_prompt, target_model=target_model, response=response,
+                )
                 return response
             except Exception as e:
                 # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
@@ -185,6 +201,7 @@ class LLMExecutorCore:
                 # LLMCallError）。provider 插件（ibci_ai 等）应在自身边界收窄
                 # 捕获面（仅 provider 失败契约），使内部代码缺陷以真实类型
                 # 到达此处再经 `from e` 保留原始 traceback，便于定位。
+                self._notify_test_hooks("on_llm_call_error", node_uid=node_uid, error=str(e))
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),
                     provider_error=str(e),

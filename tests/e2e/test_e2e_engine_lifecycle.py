@@ -107,6 +107,12 @@ class TestEngineRootDirContract:
         assert eng.root_dir is None  # 延迟，未确立
         assert eng._explicit_root is None
 
+    def test_reset_test_state_clears_spawned_tasks(self):
+        """reset_test_state 清空在途隔离任务表（快照可观测；无任务时为幂等 no-op）。"""
+        eng = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        eng.reset_test_state()
+        assert eng.test_snapshot().spawned_handles == []
+
     def test_explicit_root_canonicalized_at_construction(self, tmp_path):
         """显式 root_dir 在构造期即 canonicalize（_explicit_root 立即可用）。"""
         eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)

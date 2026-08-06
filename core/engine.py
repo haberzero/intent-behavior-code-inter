@@ -95,6 +95,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.issue_tracker = IssueTracker()
         # 执行输出回调（run() 时记录，spawn 子解释器时透传）
         self._output_callback: Optional[Any] = None
+        # 测试钩子（服务上下文创建后注入；生产为 None）
+        self._test_hooks: Optional[Any] = None
 
         # 初始化能力注册中心
         self.capability_registry = CapabilityRegistry()
@@ -316,6 +318,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         service_context.set_orchestrator(self)
         if output_callback is not None:
             service_context.output_callback = output_callback
+        if self._test_hooks is not None:
+            service_context.test_hooks = self._test_hooks
 
         # 延迟水化调度器（给 rt_scheduler 注入 service_context 引用，方向与上述 setter 相反）
         self.rt_scheduler.hydrate(service_context)
@@ -594,6 +598,47 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             val = self.interpreter.runtime_context.get_variable(name)
             return val
         return None
+
+    def test_snapshot(self) -> EngineTestSnapshot:
+        """引擎可观测状态快照（测试内省；替代对私有字段的穿透访问）。
+
+        ``spawned_handles`` 为锁内快照，避免与并发 spawn 竞态。
+        """
+        with self._spawned_tasks_lock:
+            handles = list(self._spawned_tasks.keys())
+        entry_dir = self._path_ctx.entry_dir.to_native() if self._path_ctx else None
+        project_root = self._path_ctx.project_root.to_native() if self._path_ctx else None
+        return EngineTestSnapshot(
+            explicit_root=self._explicit_root,
+            cwd=self._cwd,
+            entry_file=self._entry_file,
+            entry_dir=entry_dir,
+            project_root=project_root,
+            plugin_search_paths=list(self._plugin_search_paths),
+            install_path=self._install_path,
+            root_initialized=self._root_initialized,
+            spawned_handles=handles,
+        )
+
+    def reset_test_state(self) -> None:
+        """重置引擎级测试可观测状态（清空在途隔离 spawn 任务表）。
+
+        供测试复用引擎实例时的隔离清理：子线程为 daemon，清表不中断其执行，
+        仅移除句柄追踪（收集语义为"已消费"）。生产流程不使用。
+        """
+        with self._spawned_tasks_lock:
+            self._spawned_tasks.clear()
+
+    @property
+    def test_hooks(self) -> Optional[Any]:
+        """测试钩子（TestHooks 协议实例；解释器就绪后注入服务上下文）。"""
+        return self._test_hooks
+
+    @test_hooks.setter
+    def test_hooks(self, hooks: Optional[Any]) -> None:
+        self._test_hooks = hooks
+        if self.interpreter is not None and self.interpreter.service_context is not None:
+            self.interpreter.service_context.test_hooks = hooks
 
     def check(self, entry_file: str, silent: bool = False) -> bool:
         """

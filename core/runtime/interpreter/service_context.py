@@ -45,6 +45,15 @@ class ServiceContextImpl:
         self._capability_registry = capability_registry
         self._interpreter = interpreter
         self._orchestrator = None
+        self._test_hooks = None
+
+    @property
+    def test_hooks(self) -> Optional[Any]:
+        return self._test_hooks
+
+    @test_hooks.setter
+    def test_hooks(self, hooks: Optional[Any]) -> None:
+        self._test_hooks = hooks
 
     @property
     def scheduler(self) -> Optional['IRuntimeScheduler']:

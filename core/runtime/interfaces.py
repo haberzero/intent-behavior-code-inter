@@ -369,6 +369,20 @@ class IRuntimeScheduler(Protocol):
     def terminate(self, instance_id: str) -> None: ...
 
 @runtime_checkable
+class TestHooks(Protocol):
+    """测试钩子：LLM 调用/分发的结构化事件回调。
+
+    供测试侧观测 LLM 执行流（生产注入 None，不调用）。所有回调为关键字
+    参数、可空返回（无返回值）。实现异常按 fail-fast 传播（测试观察器
+    自身 bug 应立即暴露）。
+    """
+
+    def on_llm_call(self, *, node_uid: str, sys_prompt: str, user_prompt: Any, target_model: str, response: str) -> None: ...
+    def on_llm_call_error(self, *, node_uid: str, error: str) -> None: ...
+    def on_dispatch(self, *, node_uid: str) -> None: ...
+
+
+@runtime_checkable
 class ServiceContext(Protocol):
     """注入容器，聚合所有运行时服务"""
     @property
@@ -391,6 +405,8 @@ class ServiceContext(Protocol):
     def source_provider(self) -> Optional[ISourceProvider]: ...
     @property
     def orchestrator(self) -> Optional[IKernelOrchestrator]: ...
+    @property
+    def test_hooks(self) -> Optional[TestHooks]: ...
     @property
     def scheduler(self) -> Optional[IRuntimeScheduler]: ...
     @property
