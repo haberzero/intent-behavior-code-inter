@@ -160,6 +160,9 @@
 | 2026-08-06 | Phase1 | 删 `get_last_llm_result` 悬挂协议 + idbg 只依赖活跃帧（不实现该方法） | 设计意图（certainty 经 IbLLMCallResult 传递，无全局槽）自证无实现需求；无兼容层 |
 | 2026-08-06 | Phase1 | 与 CoreDebugger 强绑定的清理项（rt_scheduler RUNTIME/dead import/core_enter/dependencies 字段/silent）归入 2A；idbg 死 API 归入 2C | 避免 2A/2C 重复劳动；机制整体删除时一并处理 |
 | 2026-08-06 | 2A | **CORE_DEBUG 移除实验完成并应用**：`exp/obs-2a-core-debug-removal` 分支全量绿（1626/6、零 warning）→ cherry-pick 手动应用回 unsafe-vibe-dev（commit 6878986）。处置细化：15 处诊断点中仅"真实异常回退"转 warnings（8 处）；AttributeError 协议缺失回退=设计路径静默（receive 对无协议对象抛 AttributeError 是正常路径，实测 11 warning 触发后拆分）；设计内重试/已上报错误/会重抛的 trace 直接删 | 实验验证 + 全量零回归 + 实测噪音分类；警告语义与 _prompt.py 既有 AttributeError-fallback 范式一致 |
+| 2026-08-06 | 2B | **观测骨架测试合作面实验完成并应用**：`exp/obs-2b-skeleton` 分支全量绿（1633/4）→ cherry-pick 应用回 unsafe-vibe-dev。交付：`EngineTestSnapshot`+`reset_test_state`+`resolve_plugin_search_paths` 公开（消除 engine 生命周期私有穿透、layering 豁免归零）、`ServiceContext.test_hooks`（TestHooks 协议，显式协议调用非 getattr 分派，契约强制全方法） | 实验验证 + 设计自检（code-odor 去除能力探测） |
+| 2026-08-06 | 2B | **推迟 `IsolationPolicy.test_mode`/`mock_provider` 至 2D**：无消费方的预留字段=死字段（R2 教训）；MOCK/TESTONLY 判定内核化是行为变更，随测试重构一并设计 | 禁死代码；预留字段违背"禁兼容层/禁预留"哲学 |
+| 2026-08-06 | 2B | **跳过 call_info 形式化**：ai/idbg/snapshot 三入口已收敛于 `get_current_call_info()`（`_current_call_info` 单写槽）单一权威源，dict 形态 JSON 友好无需 dataclass 化 | 单一权威源已达成；形式化收益边际 |
 
 ---
 
@@ -170,6 +173,7 @@
 | 0 设计冻结 | ✅ 完成 | 基线存档 + 规划冻结 + 文档同步（commit 3dfba92） |
 | 1 契约修复+死码清理 | ✅ 完成 | 1.1a/1.1b/1.1d/1.3 完成（commit d2d828a）；1.2b→2C、1.1c/1.4→2A |
 | 2A CORE_DEBUG 移除实验 | ✅ 完成并应用 | 分支验证全绿 → cherry-pick 应用回 unsafe-vibe-dev（commit 6878986），全量 1626/6 零 warning |
+| 2B 观测骨架扩展实验 | ✅ 完成并应用 | EngineTestSnapshot/test_hooks/resolve_plugin_search_paths 公开；test_mode/mock_provider→2D、call_info 形式化跳过 |
 | 2B 观测骨架扩展实验 | ⬜ | 独立分支 |
 | 2C idbg 重构实验 | ⬜ | 独立分支 |
 | 2D 测试体系重建实验 | ⬜ | 独立分支 |
