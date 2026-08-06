@@ -15,6 +15,7 @@ from core.base.diagnostics.codes import (
 )
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
+from core.kernel.spec import IbSpec
 
 from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
@@ -309,17 +310,38 @@ class SymbolResolver(ScopedVisitor):
         for stmt in node.body:
             self.visit(stmt)
 
-    def _register_loop_variable(self, name: str, target_node: ast.IbASTNode, def_node: ast.IbASTNode):
-        """Register a loop variable in scope and bind its symbol to the target node."""
+    def _resolve_annotation_spec(self, annotation: Optional[ast.IbASTNode]) -> Optional[IbSpec]:
+        """解析循环变量声明的类型标注（简单名类型）；复杂标注由类型检查 pass 精确处理。"""
+        if annotation is None:
+            return self.registry.resolve("any")
+        if isinstance(annotation, ast.IbName):
+            return self.registry.resolve(annotation.id) or self.registry.resolve("any")
+        return self.registry.resolve("any")
+
+    def _register_loop_variable(self, name: str, target_node: ast.IbASTNode, def_node: ast.IbASTNode,
+                                spec: Optional[IbSpec] = None) -> None:
+        """Register a loop variable in scope and bind its symbol to the target node.
+
+        ``spec`` 为循环变量声明的类型（``for int x``）；未声明时回退 ``any``。
+        声明类型在此传播，类型检查 pass 才能以具体类型解析循环体内的引用
+        （否则恒为 any，使复合赋值等需要具体 RHS 类型的运算无法定型）。
+        """
+        if spec is None:
+            spec = self.registry.resolve("any")
 
         if not self.lookup_symbol(name):
             loop_var_sym = VariableSymbol(
                 name=name,
                 kind=SymbolKind.VARIABLE,
                 def_node=def_node,
-                spec=self.registry.resolve("any"),
+                spec=spec,
             )
             self.current_scope.define(loop_var_sym)
+        else:
+            # 已存在符号（外层或先前声明）：本层声明带具体类型时更新其 spec
+            sym = self.lookup_symbol(name)
+            if spec is not None and not self.registry.is_dynamic(spec):
+                sym.spec = spec
         sym = self.lookup_symbol(name)
         if sym:
             self.bind_symbol(target_node, sym)
@@ -342,7 +364,10 @@ class SymbolResolver(ScopedVisitor):
                 # for int item in items: - target is IbTypeAnnotatedExpr
                 inner = node.target.target
                 if isinstance(inner, ast.IbName):
-                    self._register_loop_variable(inner.id, inner, node)
+                    self._register_loop_variable(
+                        inner.id, inner, node,
+                        spec=self._resolve_annotation_spec(node.target.annotation),
+                    )
             elif isinstance(node.target, ast.IbTuple):
                 # Tuple unpacking in for loop: for (a, b) in ...
                 # 元素可为裸 IbName 或带类型标注的 IbTypeAnnotatedExpr(IbName)
@@ -350,7 +375,11 @@ class SymbolResolver(ScopedVisitor):
                 for elt in node.target.elts:
                     inner = elt.target if isinstance(elt, ast.IbTypeAnnotatedExpr) else elt
                     if isinstance(inner, ast.IbName):
-                        self._register_loop_variable(inner.id, inner, node)
+                        self._register_loop_variable(
+                            inner.id, inner, node,
+                            spec=(self._resolve_annotation_spec(elt.annotation)
+                                  if isinstance(elt, ast.IbTypeAnnotatedExpr) else None),
+                        )
             else:
                 self.visit(node.target)
 
