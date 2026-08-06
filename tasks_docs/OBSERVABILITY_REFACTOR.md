@@ -174,7 +174,6 @@
 | 1 契约修复+死码清理 | ✅ 完成 | 1.1a/1.1b/1.1d/1.3 完成（commit d2d828a）；1.2b→2C、1.1c/1.4→2A |
 | 2A CORE_DEBUG 移除实验 | ✅ 完成并应用 | 分支验证全绿 → cherry-pick 应用回 unsafe-vibe-dev（commit 6878986），全量 1626/6 零 warning |
 | 2B 观测骨架扩展实验 | ✅ 完成并应用 | EngineTestSnapshot/test_hooks/resolve_plugin_search_paths 公开；test_mode/mock_provider→2D、call_info 形式化跳过 |
-| 2B 观测骨架扩展实验 | ⬜ | 独立分支 |
 | 2C idbg 重构实验 | ⬜ | 独立分支 |
 | 2D 测试体系重建实验 | ⬜ | 独立分支 |
 | 3 手动应用回 unsafe-vibe-dev | ⬜ | |
