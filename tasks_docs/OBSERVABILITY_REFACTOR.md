@@ -159,6 +159,7 @@
 | 2026-08-06 | 规划 | PT-TEST-1 并入本任务；覆盖矩阵三段式 + meta 机器校验 | 用户裁定合并推进；矩阵"测试位置"列大面积虚构（TEST_MATRIX_FINDINGS） |
 | 2026-08-06 | Phase1 | 删 `get_last_llm_result` 悬挂协议 + idbg 只依赖活跃帧（不实现该方法） | 设计意图（certainty 经 IbLLMCallResult 传递，无全局槽）自证无实现需求；无兼容层 |
 | 2026-08-06 | Phase1 | 与 CoreDebugger 强绑定的清理项（rt_scheduler RUNTIME/dead import/core_enter/dependencies 字段/silent）归入 2A；idbg 死 API 归入 2C | 避免 2A/2C 重复劳动；机制整体删除时一并处理 |
+| 2026-08-06 | 2A | **CORE_DEBUG 移除实验完成并应用**：`exp/obs-2a-core-debug-removal` 分支全量绿（1626/6、零 warning）→ cherry-pick 手动应用回 unsafe-vibe-dev（commit 6878986）。处置细化：15 处诊断点中仅"真实异常回退"转 warnings（8 处）；AttributeError 协议缺失回退=设计路径静默（receive 对无协议对象抛 AttributeError 是正常路径，实测 11 warning 触发后拆分）；设计内重试/已上报错误/会重抛的 trace 直接删 | 实验验证 + 全量零回归 + 实测噪音分类；警告语义与 _prompt.py 既有 AttributeError-fallback 范式一致 |
 
 ---
 
@@ -167,8 +168,8 @@
 | Phase | 状态 | 备注 |
 |---|---|---|
 | 0 设计冻结 | ✅ 完成 | 基线存档 + 规划冻结 + 文档同步（commit 3dfba92） |
-| 1 契约修复+死码清理 | 🔄 进行中 | 1.1a/1.1b/1.1d/1.3 完成（commit d2d828a）；1.2b→2C、1.1c/1.4→2A |
-| 2A CORE_DEBUG 移除实验 | ⬜ | 独立分支 |
+| 1 契约修复+死码清理 | ✅ 完成 | 1.1a/1.1b/1.1d/1.3 完成（commit d2d828a）；1.2b→2C、1.1c/1.4→2A |
+| 2A CORE_DEBUG 移除实验 | ✅ 完成并应用 | 分支验证全绿 → cherry-pick 应用回 unsafe-vibe-dev（commit 6878986），全量 1626/6 零 warning |
 | 2B 观测骨架扩展实验 | ⬜ | 独立分支 |
 | 2C idbg 重构实验 | ⬜ | 独立分支 |
 | 2D 测试体系重建实验 | ⬜ | 独立分支 |
