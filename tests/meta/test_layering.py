@@ -120,12 +120,8 @@ class TestE2ELayerRedLine:
     ]
 
     # 已知白盒测试（构造期内部状态契约，R2-E5 记录豁免；下沉成本高收益低）。
-    #   - test_e2e_engine_lifecycle.py：验证 engine 构造期 _explicit_root/_cwd 契约
-    #   - test_e2e_multi_interpreter.py：验证 spawn 任务表内部状态
-    PRIVATE_ACCESS_EXEMPT = {
-        "test_e2e_engine_lifecycle.py",
-        "test_e2e_multi_interpreter.py",
-    }
+    #   ——已由 IBCIEngine.test_snapshot() 取代（OBSERVABILITY 2B），豁免归零。
+    PRIVATE_ACCESS_EXEMPT: set = set()
 
     @pytest.mark.parametrize("test_file", _find_test_files("e2e"))
     def test_e2e_does_not_import_runtime_internals(self, test_file):
@@ -152,10 +148,10 @@ class TestE2ELayerRedLine:
         violations = []
         for m in re.finditer(r"\.(_[a-z]\w*)", src):
             attr = "." + m.group(1)
-            # 排除 self._xxx（方法调用/内部实现）与数据结构字段
+            # 排除 self._xxx（测试自身 helper 方法/内部实现）与数据结构字段
             if attr in DATA_FIELDS:
                 continue
-            if "self." + m.group(1) in src[m.start() - 5:m.start() + 1]:
+            if m.start() >= 4 and src[m.start() - 4:m.start()] == "self":
                 continue
             line = src.count("\n", 0, m.start()) + 1
             violations.append(f"{test_file.name}:{line}: private attr {attr}")

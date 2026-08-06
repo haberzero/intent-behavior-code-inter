@@ -6,6 +6,7 @@ import copy
 import threading
 import uuid
 import warnings
+from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List, Tuple, Union
 
 # =============================================================================
@@ -60,6 +61,34 @@ _COLLECT_SKIP_TYPES: frozenset = frozenset({
     "fn", "lambda", "snapshot", "behavior", "fn_callable", "callable", "void",
 })
 
+
+@dataclass(frozen=True)
+class EngineTestSnapshot:
+    """引擎可观测状态快照（测试内省用，只读，替代私有字段穿透）。
+
+    字段均为引擎生命周期事实的只读投影：
+    - ``explicit_root``    —— 构造期显式 root（canonicalize 后；未提供为 None）
+    - ``cwd``              —— 构造期 CWD
+    - ``entry_file``       —— 当前 entry 锚点（run/compile_string 确立后非 None）
+    - ``entry_dir``        —— PathContext.entry_dir 原生字符串（未确立为 None）
+    - ``project_root``     —— PathContext.project_root 原生字符串（未确立为 None）
+    - ``plugin_search_paths`` —— 当前插件搜索路径（root 确立后有效）
+    - ``install_path``     —— kernel-native 模块目录
+    - ``root_initialized`` —— root-dependent 初始化是否完成
+    - ``spawned_handles``  —— 在途隔离 spawn 任务句柄（锁内快照）
+    """
+
+    explicit_root: Optional[str] = None
+    cwd: str = ""
+    entry_file: Optional[str] = None
+    entry_dir: Optional[str] = None
+    project_root: Optional[str] = None
+    plugin_search_paths: List[str] = field(default_factory=list)
+    install_path: str = ""
+    root_initialized: bool = False
+    spawned_handles: List[str] = field(default_factory=list)
+
+
 class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
@@ -71,7 +100,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 引擎级默认——未提供时，project_root 在 run()/compile() 时
                 确立为 entry_file 所在目录（entry_dir）。run_string 无真实 entry，须显式提供。
                 提供时经 canonicalize_for_security 规范化。
-            auto_sniff: 是否自动嗅探项目插件路径（plugin 发现优先级见 _resolve_plugin_search_paths）。
+            auto_sniff: 是否自动嗅探项目插件路径（plugin 发现优先级见 resolve_plugin_search_paths）。
 
         多阶段启动：__init__ 仅做 root-independent 设置（KernelRegistry/CWD/install 路径等）；
         root-dependent 设置（plugin 发现路径、Scheduler）延迟到 ``_ensure_root_initialized``，
@@ -214,12 +243,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         """root-dependent 延迟初始化（多阶段启动）：plugin 发现路径 + Scheduler。
 
         幂等：engine 单次执行，project_root 一旦确立不再变。
-        plugin 发现优先级见 ``_resolve_plugin_search_paths``。
+        plugin 发现优先级见 ``resolve_plugin_search_paths``。
         """
         if self._root_initialized:
             return
         self.root_dir = project_root
-        self._plugin_search_paths = self._resolve_plugin_search_paths(project_root)
+        self._plugin_search_paths = self.resolve_plugin_search_paths(project_root)
         self.discovery_service = ModuleDiscoveryService(self._plugin_search_paths)
         self.module_loader = ModuleLoader(self._plugin_search_paths, capability_registry=self.capability_registry)
         self.scheduler = Scheduler(
@@ -229,7 +258,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         )
         self._root_initialized = True
 
-    def _resolve_plugin_search_paths(self, project_root: str) -> List[str]:
+    def resolve_plugin_search_paths(self, project_root: str) -> List[str]:
         """plugin 发现优先级（高 → 低，先命中者胜）：
 
         1. **kernel-native**（install 路径，恒在，最高优先级，不可覆盖）
@@ -639,7 +668,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._test_hooks = hooks
         if self.interpreter is not None and self.interpreter.service_context is not None:
             self.interpreter.service_context.test_hooks = hooks
-
     def check(self, entry_file: str, silent: bool = False) -> bool:
         """
         仅对项目进行静态检查（编译和语义分析）。

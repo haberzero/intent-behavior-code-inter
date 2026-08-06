@@ -105,7 +105,7 @@ class TestEngineRootDirContract:
         """无 root_dir 构造成功（引擎级默认）；root_dir 延迟（构造期为 None）。"""
         eng = IBCIEngine(auto_sniff=False)
         assert eng.root_dir is None  # 延迟，未确立
-        assert eng._explicit_root is None
+        assert eng.test_snapshot().explicit_root is None
 
     def test_reset_test_state_clears_spawned_tasks(self):
         """reset_test_state 清空在途隔离任务表（快照可观测；无任务时为幂等 no-op）。"""
@@ -117,7 +117,7 @@ class TestEngineRootDirContract:
         """显式 root_dir 在构造期即 canonicalize（_explicit_root 立即可用）。"""
         eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
         expected = PathValidator.canonicalize_for_security(str(tmp_path)).to_native()
-        assert eng._explicit_root == expected
+        assert eng.test_snapshot().explicit_root == expected
 
     def test_run_defaults_project_root_to_entry_dir(self, tmp_path):
         """无显式 root + run(entry_file) → project_root 默认 = entry_dir（canonicalize）。"""
@@ -162,13 +162,13 @@ class TestEngineRootDirContract:
         except (OSError, NotImplementedError):
             pytest.skip("无法创建符号链接（权限不足）")
         eng = IBCIEngine(root_dir=str(link), auto_sniff=False)
-        assert eng._explicit_root == os.path.realpath(str(target))
+        assert eng.test_snapshot().explicit_root == os.path.realpath(str(target))
 
     def test_cwd_saved_at_construction(self):
         """CWD 在构造期单独保存（无上界校验）。"""
         import os
         eng = IBCIEngine(auto_sniff=False)
-        assert eng._cwd == os.getcwd()
+        assert eng.test_snapshot().cwd == os.getcwd()
 
     def test_run_relative_entry_canonicalizes_to_absolute(self, tmp_path, monkeypatch):
         """相对 entry_file 经 canonicalize_for_security → 绝对 entry_dir（锚点健全）。
@@ -179,7 +179,7 @@ class TestEngineRootDirContract:
         eng = IBCIEngine(auto_sniff=False)
         eng.run("main.ibci", silent=True)
         # entry_dir 必须是绝对的（canonicalize 后），非相对 "main.ibci" 的父目录 "."
-        assert os.path.isabs(eng._path_ctx.entry_dir.to_native())
+        assert os.path.isabs(eng.test_snapshot().entry_dir)
 
     def test_execute_without_prior_compile_raises(self, tmp_path):
         """execute() 未经 run/compile 触发 root 初始化 → 明确 InterpreterError（非 AttributeError）。"""
@@ -195,7 +195,7 @@ class TestPluginSearchPathResolution:
     @staticmethod
     def _resolve(project_root, auto_sniff=True):
         eng = IBCIEngine(root_dir=project_root, auto_sniff=auto_sniff)
-        return eng._resolve_plugin_search_paths(project_root), eng._install_path
+        return eng.resolve_plugin_search_paths(project_root), eng.test_snapshot().install_path
 
     def test_install_always_first_and_highest(self, tmp_path):
         """install 恒在且最高优先级（search_paths[0]）。"""
@@ -289,7 +289,7 @@ class TestPluginSearchPathResolution:
         # 子引擎直接接收 inherited_plugin_paths（模拟隔离透传）
         child = IBCIEngine(root_dir=str(child_root), auto_sniff=False,
                            inherited_plugin_paths=[str(parent_extra)])
-        resolved = child._resolve_plugin_search_paths(str(child_root))
+        resolved = child.resolve_plugin_search_paths(str(child_root))
         # 父的 parent_extra 应出现在子的 search_paths（继承，兜底来源）
         assert os.path.realpath(str(parent_extra)) in resolved
 
@@ -308,7 +308,7 @@ class TestPluginSearchPathResolution:
         )
         child = IBCIEngine(root_dir=str(child_root), auto_sniff=False,
                            inherited_global_plugin=[str(inh_gp)])
-        resolved = child._resolve_plugin_search_paths(str(child_root))
+        resolved = child.resolve_plugin_search_paths(str(child_root))
         inh_idx = next(i for i, p in enumerate(resolved) if "inh_global" in p)
         own_idx = next(i for i, p in enumerate(resolved) if "own_pp" in p)
         assert inh_idx < own_idx, "继承的 global_plugin 必须排在子自身 plugin_paths 之前"
@@ -364,7 +364,7 @@ class TestEnginePathContextContract:
         eng.run(str(entry), silent=True)
         import os
         expected_entry_dir = PathValidator.canonicalize_for_security(str(tmp_path)).to_native()
-        assert eng._path_ctx.entry_dir.to_native() == expected_entry_dir
+        assert eng.test_snapshot().entry_dir == expected_entry_dir
 
     def test_run_string_sets_entry_dir_to_project_root(self):
         """run_string 后，entry_dir = project_root，而非 tempdir。
@@ -373,20 +373,20 @@ class TestEnginePathContextContract:
         eng = _new_engine()
         eng.run_string('str x = "hi"\nprint(x)\n', silent=True)
         # entry_dir 必须是 project_root（= TESTS_ROOT 经 canonicalize），而非 tempdir
-        assert eng._path_ctx.entry_dir.to_native() == eng.root_dir
+        assert eng.test_snapshot().entry_dir == eng.root_dir
 
     def test_compile_string_sets_entry_dir_to_project_root(self):
         """compile_string（不执行）同样把 entry_dir 锚到 project_root。"""
         eng = _new_engine()
         eng.compile_string('str x = "hi"\n', silent=True)
-        assert eng._path_ctx.entry_dir.to_native() == eng.root_dir
+        assert eng.test_snapshot().entry_dir == eng.root_dir
 
     def test_run_string_entry_dir_not_in_system_temp(self):
         """run_string 的 entry_dir 绝不能落在系统 temp 目录（反向断言）。"""
         import tempfile, os
         eng = _new_engine()
         eng.run_string('str x = "hi"\n', silent=True)
-        entry_dir = eng._path_ctx.entry_dir.to_native()
+        entry_dir = eng.test_snapshot().entry_dir
         sys_temp = os.path.realpath(tempfile.gettempdir())
         assert not entry_dir.startswith(sys_temp), \
             f"entry_dir 不应是系统 temp：{entry_dir} (sys_temp={sys_temp})"
@@ -395,10 +395,10 @@ class TestEnginePathContextContract:
         """run_string 的 entry_file = 合成 <proj_root>/__string_exec__.ibci（非 tempdir）。"""
         eng = _new_engine()
         eng.run_string('str x = "hi"\nprint(x)\n', silent=True)
-        assert eng._entry_file is not None
-        assert eng._entry_file.replace("\\", "/").endswith("__string_exec__.ibci")
+        assert eng.test_snapshot().entry_file is not None
+        assert eng.test_snapshot().entry_file.replace("\\", "/").endswith("__string_exec__.ibci")
         # 合成 entry 的 dir = project_root
-        assert eng._path_ctx.entry_dir.to_native() == eng.root_dir
+        assert eng.test_snapshot().entry_dir == eng.root_dir
 
     def test_path_ctx_project_root_always_engine_root(self, tmp_path):
         """无论 run 还是 run_string，PathContext.project_root 始终 = engine.root_dir。"""
@@ -406,4 +406,4 @@ class TestEnginePathContextContract:
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
         eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
         eng.run(str(entry), silent=True)
-        assert eng._path_ctx.project_root.to_native() == eng.root_dir
+        assert eng.test_snapshot().project_root == eng.root_dir

@@ -226,8 +226,7 @@ class TestConcurrency:
                 f"(threshold: {_MAX_SPAWN_BLOCKING_SECONDS}s)"
             )
             # handle 已注册到任务表
-            with eng._spawned_tasks_lock:
-                assert handle in eng._spawned_tasks
+            assert handle in eng.test_snapshot().spawned_handles
             eng.request_collect(handle)
         finally:
             os.unlink(child)
