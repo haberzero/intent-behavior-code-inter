@@ -359,7 +359,7 @@
 | B-D3 | `coordinator.py:54-58` | `getattr(rc, "_runtime_coordinator")` side-car 挂载 | **设计确认保留**（同模块权威访问器；可观测性层走公开 property 属可选增强） |
 | B-D4 | `coordinator.py:253-255` | "兜底：原生函数/其它可调用" + hasattr 探测 | **修**：isinstance(IbFunction) 明确判别 |
 | B-D5 | `engine.py:772-781` | request_collect 宽 except 跳过 | **修**：isinstance(IbObject) 前置判占位符，try 缩至 to_native() |
-| B-D6 | `module_manager.py:132-145` | `dir(package)` 枚举 | **复核定案保留**：uid_map 含当前模块全部符号（int/str 内建），dir∩uid_map 交集才是正确白名单；尝试改 uid_map 迭代引入回归已回退 |
+| B-D6 | `module_manager.py:132-145` | `dir(package)` 枚举（虽被白名单约束） | **根治重构（会话 17 后补）**：import-* 成员精确集合只在编译期存在，此前未序列化，运行时靠"整张模块表 + dir 交集"反推（命名/契约断层）。编译器新增 `import_star_members` 精确记录（CompilationResult/artifact/缓存），运行时据此枚举（`_module_scope_uids` 诚实命名 + `_import_star_members`）。**连带修复 IBC 文件跨模块导入三层断裂**（TypeDef 别名 NameError / Lazy 空描述符 members 恒空 / 运行时 IbModule.get_variable 缺失）。commit 37be9ca，测试 test_ibc_file_imports.py 9 用例 |
 | B-D7 | `module_manager.py:184-187` | 宽 except 把内部异常包装成 "Module not found"（误译） | **修**：删除宽 except 包装，内部错误直传 |
 | B-D8 | `vm/handlers/_shared.py:748-762` | tuple 解包宽 except 折叠真实异常 | **修**：照搬 for 循环结构化 lookup_method("to_list") 预检 |
 | B-D9 | `interpreter/intrinsics/io.py:24-31` | reconfigure 宽 except pass + GBK 转义兜底（Windows 编码） | **复核定案保留**（编码感知替换转义，UX 取舍，测试经 callback 旁路） |
@@ -401,6 +401,12 @@
 > **全部处置完成（2026-08-05 会话 17）**：修 19 项 + 复核定案保留 10 项 + 设计确认保留 6 项，
 > 全部修复经全量 pytest 零回归（各批 commit 见 git 历史）。长期项（C-D3 协议化 / C-D7 /
 > B-D10 / B-D2 语义决策）已记录，不阻塞主线。
+>
+> **B-D6 复盘后根治（2026-08-05 会话 17 后补）**：复核定案时误判为"设计正确"，实际是命名/
+> 契约断层（`_import_star_uid_map` 读整张模块表却叫 import-* 映射，正确性依赖隐式 dir 交集）。
+> 已根治：编译器精确记录 import-* 成员并序列化，运行时精确枚举（commit 37be9ca）；连带修复
+> IBC 文件跨模块导入三层断裂（TypeDef 别名 NameError / Lazy 描述符 members 恒空 / 运行时
+> get_variable 缺失——该功能此前完全不可用且零测试覆盖）。
 
 
 ### Phase 4 延迟项（已封存，从 ADR-008/010/013 提取）

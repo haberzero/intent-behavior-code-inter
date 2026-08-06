@@ -71,6 +71,29 @@
   拍板；C-D3/C-D7/B-D10 协议化列入长期项。
 - **测试基线**：1532 passed / 6 skipped（以实跑为准）。
 
+### B-D6 复盘根治（会话 17 后补，用户质询触发）
+
+- **用户质询**："uid_map 混有 prelude/内建符号是否正常设计还是设计缺陷？感觉有断层和不统一"。
+  实证结论：**命名/契约断层**——`_import_star_uid_map` 读整张模块根作用域表（58 符号含内建），
+  却叫"import-* uid 映射"、docstring 声称"为 import-* 成员创建带 uid 的 Symbol"（编译器实际
+  未做专属 uid）；正确性依赖下游隐式 `dir(package)` 交集。非功能 bug（可达场景均正确），但
+  属"隐式约定"与"结构性信息丢失"（精确契约集合只在编译期存在，未序列化）。
+- **根治重构** commit 37be9ca：编译器在 import-* 注入时精确记录成员名 →
+  `CompilationResult.import_star_members`（新字段）→ artifact 序列化 → 运行时 `_import_star_members`
+  精确枚举；`_import_star_uid_map` 改名 `_module_scope_uids`（诚实语义，仅供按名查 uid）；
+  包分支/IBC 分支均改精确枚举，spec 声明但实现缺失显式报错（与具名导入一致）。
+- **连带发现并修复：IBC 文件跨模块导入三层断裂（零测试覆盖，功能完全不可用）**：
+  ① scheduler:407 裸 `TypeDef`（被别名 `ModuleMetadata` 后 NameError → INT_INTERNAL_ERROR，
+     所有 `from <ibci文件> import x` 编译即崩）；② 文件模块元数据用 Lazy 空描述符，members
+     恒空 → 全 SEM_UNDEFINED_SYMBOL（改 `registry.resolve` 取真实 meta，依赖图拓扑序保证
+     依赖先编译）；③ 运行时 `module_instance.get_variable`（IbModule 无此方法）→ AttributeError
+     （改 `scope.get`）。
+- **测试**：新增 tests/runtime/test_ibc_file_imports.py 9 用例（具名/星号/别名/多模块/artifact
+  契约）。全量 1547 passed / 6 skipped 零回归。
+- **教训**：复核定案"保留"某机制前，应核实该机制的名称/文档与实际语义是否一致；subagent
+  建议与实现之间的断层要靠测试+用户视角质询暴露。B-D6 初判"保留"经用户质询后证明为误判，
+  已升级为根治。
+
 ---
 
 ## 一、关键用户裁定（长期约束力）
