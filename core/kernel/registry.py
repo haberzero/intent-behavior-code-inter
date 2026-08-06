@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Optional, Callable, Union, TYPE_CHECKING
 import threading
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.base.enums import PrivilegeLevel, RegistrationState
 
 if TYPE_CHECKING:
@@ -69,7 +68,6 @@ class KernelRegistry:
         if new_level <= self._state_level:
             raise PermissionError(f"Registry: Invalid level transition from {self._state_level} to {new_level}. Levels must progress forward.")
         
-        core_trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Registry level transition: {self._state_level} -> {new_level}")
         self._state_level = new_level
 
     def verify_level(self, required_level: int):

@@ -11,13 +11,12 @@ Refactored from llm_executor.py:366-478 to improve maintainability and testabili
 
 from abc import ABC, abstractmethod
 from typing import Optional, Any, TYPE_CHECKING
+import warnings
 from core.runtime.shared.llm_result import LLMResult
 from core.runtime.objects.kernel.base import IbObject
-from core.base.diagnostics.debugger import CoreModule, DebugLevel
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import Registry
-    from core.base.diagnostics.debugger import Debugger
     from core.runtime.interfaces import IExecutionContext
 
 
@@ -30,9 +29,8 @@ class ParsingStrategy(ABC):
     - parse: Attempt to parse the raw result
     """
 
-    def __init__(self, registry: 'Registry', debugger: 'Debugger'):
+    def __init__(self, registry: 'Registry'):
         self.registry = registry
-        self.debugger = debugger
 
     @abstractmethod
     def can_handle(self, raw_res: str, type_name: str) -> bool:
@@ -141,10 +139,6 @@ class AxiomParsingStrategy(ParsingStrategy):
                     raw_response=raw_res
                 )
             except Exception as e:
-                self.debugger.trace(
-                    CoreModule.LLM, DebugLevel.BASIC,
-                    f"Failed to parse LLM response via Axiom for type '{type_name}': {str(e)}"
-                )
                 return LLMResult.uncertain_result(
                     raw_response=raw_res,
                     retry_hint=f"LLM 返回值类型转换失败：期望 {type_name}。详细: {str(e)}"
@@ -207,9 +201,9 @@ class VTableParsingStrategy(ParsingStrategy):
                             retry_hint=f"Validation failed: {error_str}"
                         )
             except Exception as e:
-                self.debugger.trace(
-                    CoreModule.LLM, DebugLevel.BASIC,
-                    f"__validate_prompt__ failed for '{type_name}': {e}"
+                warnings.warn(
+                    f"__validate_prompt__ failed for '{type_name}': {e}",
+                    stacklevel=2,
                 )
                 # __validate_prompt__ exception is non-fatal — proceed to __from_prompt__
 
@@ -248,9 +242,9 @@ class VTableParsingStrategy(ParsingStrategy):
                 )
 
         except Exception as e:
-            self.debugger.trace(
-                CoreModule.LLM, DebugLevel.BASIC,
-                f"vtable __from_prompt__ failed for '{type_name}': {e}"
+            warnings.warn(
+                f"vtable __from_prompt__ failed for '{type_name}': {e}",
+                stacklevel=2,
             )
             return None
 
@@ -268,8 +262,7 @@ class VTableParsingStrategy(ParsingStrategy):
             auto_instance = ib_class.instantiate([parsed_val], context=execution_context)
             return auto_instance
         except Exception as e:
-            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"auto instantiate with value failed, trying empty+field: {e!r}")
-            # Try creating empty instance and setting first field
+            # 首策略失败是设计内路径，尝试第二策略（空实例 + 首字段注入）
             try:
                 auto_instance = ib_class.instantiate([], context=execution_context)
                 if ib_class.default_fields:
@@ -277,8 +270,7 @@ class VTableParsingStrategy(ParsingStrategy):
                     auto_instance.fields[first_field] = parsed_val
                 return auto_instance
             except Exception as e2:
-                self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"auto-boxing empty+field also failed, returning original value: {e2!r}")
-                # If auto-boxing fails, return original value
+                # 两策略均失败，返回原始值（下游类型校验承接）
                 return parsed_val
 
 
@@ -352,20 +344,18 @@ class LLMResultParser:
     3. DefaultParsingStrategy - Fallback to raw string
     """
 
-    def __init__(self, registry: 'Registry', debugger: 'Debugger'):
+    def __init__(self, registry: 'Registry'):
         """
         Initialize the parser with a chain of strategies.
 
         Args:
             registry: Type registry for resolving types
-            debugger: Debugger for logging
         """
         self.registry = registry
-        self.debugger = debugger
         self.strategies = [
-            AxiomParsingStrategy(registry, debugger),
-            VTableParsingStrategy(registry, debugger),
-            DefaultParsingStrategy(registry, debugger)
+            AxiomParsingStrategy(registry),
+            VTableParsingStrategy(registry),
+            DefaultParsingStrategy(registry)
         ]
 
     def parse_result(self, raw_res: str, type_name: str, node_uid: str,

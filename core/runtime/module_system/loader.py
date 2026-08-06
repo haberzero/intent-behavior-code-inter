@@ -13,6 +13,7 @@ import importlib.util
 import inspect
 import sys
 import weakref
+import warnings
 from typing import List, Any, Optional
 
 from core.base.path import IbPath
@@ -20,7 +21,6 @@ from core.runtime.exceptions import RegistryIsolationError
 from core.base.enums import RegistrationState
 from core.runtime.path import InstallPaths
 
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.runtime.interfaces import IModuleLoader, ServiceContext
 from core.runtime.interfaces import IExecutionContext
 from core.runtime.objects.kernel.base import unbox
@@ -315,8 +315,8 @@ class ModuleLoader(IModuleLoader):
                     # 用户插件路径仍使用目录名作为顶层包名。
                     import_name = f"ibci_modules.{entry}" if is_install_path else entry
                     if import_name in sys.modules:
-                        core_trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                   f"Plugin '{import_name}' already loaded process-wide; reusing cached module per same-name identity contract.")
+                        # 插件已加载，按同名 identity 契约复用进程级缓存模块
+                        pass
                     mod = importlib.import_module(import_name)
                     
                     # 实例化：优先寻找 create_implementation 工厂
@@ -327,8 +327,10 @@ class ModuleLoader(IModuleLoader):
                         implementation = mod.implementation
                     else:
                         # 支持直接导出的类或函数（如有必要可扩展）
-                        core_trace(CoreModule.SCHEDULER, DebugLevel.BASIC,
-                                   f"Module '{module_name}' skipped: no create_implementation() or implementation export found")
+                        warnings.warn(
+                            f"Module '{module_name}' skipped: no create_implementation() or implementation export found",
+                            stacklevel=2,
+                        )
                         continue
 
                     # 1. 自动依赖注入 (基于 setup 方法签名)

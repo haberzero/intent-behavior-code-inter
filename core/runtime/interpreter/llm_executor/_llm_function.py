@@ -14,7 +14,6 @@ from typing import Optional
 from core.runtime.interfaces import IExecutionContext
 
 from core.runtime.shared.llm_result import LLMResult, MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
-from core.base.diagnostics.debugger import CoreModule, DebugLevel
 
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.intent import IbIntent
@@ -32,7 +31,6 @@ class _LLMFunctionMixin:
         context = execution_context.runtime_context
 
         name = node_data.get("name", "unknown")
-        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{name}'")
 
         sys_prompt_segments = node_data.get("sys_prompt")
         user_prompt_segments = node_data.get("user_prompt")
@@ -159,7 +157,6 @@ class _LLMFunctionMixin:
         context = execution_context.runtime_context
 
         name = node_data.get("name", "unknown")
-        self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Executing LLM function '{name}'")
 
         sys_prompt_segments = node_data.get("sys_prompt")
         user_prompt_segments = node_data.get("user_prompt")

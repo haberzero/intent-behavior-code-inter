@@ -28,7 +28,7 @@
 
 **现状**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，内部 `try/except` 在 `__to_prompt__()` 抛异常时回退到 `str(val)` / `str(val.to_native())`。降级行为保留（LLM 调用不因 prompt 序列化失败而中断）。
 
-静默吞异常已改为 `core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, ...)` 日志——用户实现的 `__to_prompt__` 若抛异常（如字段未初始化的 AttributeError），开启调试（默认 NONE 级，零开销）即可观测。同样的处理应用于 `__payload_prompt__` / `to_native` 回退链。
+协议缺失（`receive` 对未声明方法抛 `AttributeError`）是设计回退路径（静默）；用户实现的 `__to_prompt__` / `__payload_prompt__` 抛真实异常（TypeError 等）时以 `warnings.warn` 告警（可观测、可被 pytest.warns 断言）。CORE_DEBUG 机制已移除（OBSERVABILITY_REFACTOR 2A）。
 
 ## 四、协议签名校验（SEM_PROTOCOL_SIGNATURE）的强度选择
 

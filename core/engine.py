@@ -5,6 +5,7 @@ import traceback
 import copy
 import threading
 import uuid
+import warnings
 from typing import Optional, Dict, Any, List, Tuple, Union
 
 # =============================================================================
@@ -43,7 +44,6 @@ from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
 from core.kernel.symbols import VariableSymbol, SymbolKind
 from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC, TypeDef, MethodMemberSpec, TypeRef, TypeKind, ParamDescriptor
-from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
 from core.runtime.host.isolation_policy import IsolationPolicy
@@ -64,7 +64,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
-    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, core_debug_config: Optional[Dict[str, str]] = None, inherited_plugin_paths: Optional[List[str]] = None, inherited_global_plugin: Optional[List[str]] = None):
+    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, inherited_plugin_paths: Optional[List[str]] = None, inherited_global_plugin: Optional[List[str]] = None):
         """
         参数:
             root_dir: **可选**。项目根目录（沙箱边界）。
@@ -72,7 +72,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 确立为 entry_file 所在目录（entry_dir）。run_string 无真实 entry，须显式提供。
                 提供时经 canonicalize_for_security 规范化。
             auto_sniff: 是否自动嗅探项目插件路径（plugin 发现优先级见 _resolve_plugin_search_paths）。
-            core_debug_config: 内核调试器配置。
 
         多阶段启动：__init__ 仅做 root-independent 设置（KernelRegistry/CWD/install 路径等）；
         root-dependent 设置（plugin 发现路径、Scheduler）延迟到 ``_ensure_root_initialized``，
@@ -94,13 +93,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._entry_file: Optional[str] = None
 
         self.issue_tracker = IssueTracker()
-        self.debugger = CoreDebugger()
-
-        # 0. 配置内核调试器
-        if core_debug_config:
-            self.debugger.configure(core_debug_config)
-            self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Core Debugger initialized with config: {core_debug_config}")
-        self.debugger.output_callback = None  # 默认
+        # 执行输出回调（run() 时记录，spawn 子解释器时透传）
+        self._output_callback: Optional[Any] = None
 
         # 初始化能力注册中心
         self.capability_registry = CapabilityRegistry()
@@ -228,7 +222,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.module_loader = ModuleLoader(self._plugin_search_paths, capability_registry=self.capability_registry)
         self.scheduler = Scheduler(
             project_root, host_interface=self.host_interface,
-            debugger=self.debugger, issue_tracker=self.issue_tracker,
+            issue_tracker=self.issue_tracker,
             registry=self.registry.get_metadata_registry(),
         )
         self._root_initialized = True
@@ -291,7 +285,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             plugin_loader=self._load_plugins,
             kernel_token=self._kernel_token,
             issue_tracker=self.issue_tracker,
-            output_callback=self.debugger.output_callback,
+            output_callback=self._output_callback,
             input_callback=None,
             entry_file=entry_file,
             entry_dir=entry_dir,
@@ -334,7 +328,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if self.registry.state_level < RegistrationState.STAGE_6_PRE_EVAL.value:
              self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
 
-        validator = ContractValidator(self.registry.get_metadata_registry(), self.issue_tracker, self.debugger)
+        validator = ContractValidator(self.registry.get_metadata_registry(), self.issue_tracker)
         validator.validate_all()
         
         # 如果校验过程中发现了严重契约冲突，则阻止系统进入 READY 状态
@@ -489,7 +483,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         abs_entry = self._entry_file
 
         if output_callback:
-            self.debugger.output_callback = output_callback
+            self._output_callback = output_callback
 
         if not os.path.exists(abs_entry):
             # 统一错误语义：入口缺失与编译错误一样显式抛出（fail-fast），
@@ -534,9 +528,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # entry_file 直接用作编译输入（源码位置）；canonicalize（解 symlink、绝对化）。
         abs_entry = PathValidator.canonicalize_for_security(entry_file).to_native()
         
-        # 同步静默状态到调试器
-        self.debugger.silent = silent
-        
         # 0. 预置符号到调度器
         if variables:
             static_vars = {}
@@ -552,7 +543,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             self.scheduler.predefined_symbols.update(static_vars)
 
         # 1. 调用调度器进行项目级编译
-        self.debugger.trace(CoreModule.GENERAL, DebugLevel.BASIC, f"Compiling project: {abs_entry}")
         
         return self.scheduler.compile_project(abs_entry)
 
@@ -675,8 +665,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         ``silent``：子引擎是否抑制输出。``spawn_isolated``（后台任务）默认 True；
         ``run_isolated``（阻塞式运行）传 False 以保留子脚本输出。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_spawn_isolated -> {entry_path}")
-
         # 派生 + 隔离反转校验。
         abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
 
@@ -685,7 +673,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         sub_engine = IBCIEngine(
             root_dir=sub_root_dir,
             auto_sniff=self.auto_sniff,
-            core_debug_config=self.debugger.config,
             inherited_plugin_paths=self._resolve_inherited_plugin_paths(policy_obj),
             inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
         )
@@ -706,7 +693,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         with self._spawned_tasks_lock:
             self._spawned_tasks[handle] = (thread, sub_engine, exc_holder, policy_obj.collect_timeout)
 
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"spawned handle={handle}")
         return handle
 
     def is_spawn_done(self, handle: str) -> bool:
@@ -733,8 +719,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                    线程，超时后子线程作为 daemon 孤儿继续运行直至自身结束
                    或进程退出，调用方不应假设子任务已停止。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"request_collect handle={handle}")
-
         with self._spawned_tasks_lock:
             task = self._spawned_tasks.pop(handle, None)
         if task is None:
@@ -780,9 +764,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     result[name] = val.to_native()
                 except Exception as e:
                     # 跳过无法转为原生值的对象（未执行的延迟值、循环引用等）
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                        f"collect({handle!r}) skipped non-convertible variable '{name}': {e!r}")
+                    warnings.warn(
+                        f"collect({handle!r}) skipped non-convertible variable '{name}': {e!r}",
+                        stacklevel=2,
+                    )
 
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                            f"collect({handle!r}) extracted {len(result)} variable(s): {list(result)}")
         return result

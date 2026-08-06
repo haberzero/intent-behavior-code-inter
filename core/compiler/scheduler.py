@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import Dict, List, Optional, Any, Set
 from collections import OrderedDict
 from core.compiler.dependencies import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus, ImportType, DependencyGraph
@@ -15,7 +16,6 @@ from core.compiler.parser.resolver.resolver import ModuleResolver, ModuleResolve
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
 from core.kernel.host_interface import HostInterface
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INT_INTERNAL_ERROR,
     DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT, SEM_UNDEFINED_SYMBOL, DEP_CIRCULAR_IMPORT
@@ -38,7 +38,7 @@ class Scheduler(ICompilerService):
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
         # root_dir 已由 engine 经 canonicalize_for_security 规范化（单一 realpath 源），
         # 消费者信任传入值，仅做 IbPath 类型包装（不再重复 realpath——幂等冗余）。
         self._project_root = IbPath.from_native(root_dir)
@@ -47,7 +47,6 @@ class Scheduler(ICompilerService):
         self.issue_tracker = issue_tracker or IssueTracker(source_provider=self.source_manager)
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
-        self.debugger = debugger or core_debugger
         self.registry = registry
         
         # Initial symbols to pre-populate in every module's global scope
@@ -96,8 +95,6 @@ class Scheduler(ICompilerService):
             # 安全错误（越权访问）必须传播——降级为 None 会把安全违规掩盖成"模块未找到"
             if getattr(e, 'code', None) == DEP_SECURITY_ERROR:
                 raise
-            core_debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                f"Module resolve failed for '{module_name}': {e}")
             return None
 
     def get_module_source(self, module_name: str) -> Optional[str]:
@@ -114,7 +111,6 @@ class Scheduler(ICompilerService):
         Compiles the project starting from entry_file.
         Returns a CompilationArtifact (Blueprint) for the interpreter.
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Starting project compilation: {entry_file}")
         # 0. Clear previous state
         self.issue_tracker.clear()
         self.modules.clear()
@@ -127,31 +123,25 @@ class Scheduler(ICompilerService):
         # entry 经 canonicalize_for_security 规范化（与 root 同源，解 symlink），
         # 替代散点 os.path.abspath（engine 上游已规范化，此处统一收口）。
         entry_file = PathValidator.canonicalize_for_security(entry_file).to_native()
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 1: Scanning dependencies starting from {entry_file}")
         self._scan_and_cache(entry_file)
             
         if self.issue_tracker.has_errors():
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Dependency scanning failed with errors.")
             raise CompilerError(self.issue_tracker.diagnostics)
 
         # 2. Build Dependency Graph and Get Order
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, "Phase 2: Building dependency graph and determining compilation order.")
-        graph = DependencyGraph(self.modules, debugger=self.debugger)
+        graph = DependencyGraph(self.modules)
         try:
             compilation_order = graph.get_compilation_order()
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Compilation order determined:", data=compilation_order)
         except CircularDependencyError as e:
             self.issue_tracker.error(str(e), code=DEP_CIRCULAR_IMPORT)
             raise CompilerError(self.issue_tracker.diagnostics)
         except Exception as e:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Graph error: {str(e)}")
             self.issue_tracker.error(str(e), code=DEP_GRAPH_ERROR)
             # 图构建异常也是内部 bug，但须以契约内异常（CompilerError）承载——
             # 否则记录的诊断成为孤儿，上层只按 "Runtime Error" 重抛（双通道）。
             raise CompilerError(self.issue_tracker.diagnostics)
 
         # 3. Compile in Topological Order
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 3: Compiling {len(compilation_order)} files in topological order.")
         for file_path in compilation_order:
             mod_info = self.modules.get(file_path)
             if not mod_info:
@@ -166,7 +156,6 @@ class Scheduler(ICompilerService):
                         failed_deps.append(imp.module_name)
             
             if failed_deps:
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Skipping {file_path} because dependencies failed: {failed_deps}")
                 self.issue_tracker.error(f"IbModule '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}", code=DEP_FAILED_DEPENDENCY)
                 mod_info.status = ModuleStatus.FAILED
                 continue
@@ -180,18 +169,15 @@ class Scheduler(ICompilerService):
             last_mtime = self.build_cache.get(file_path, 0.0)
             if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                 # Recompile
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Compiling file: {file_path} (Cache miss/Outdated)")
                 try:
                     res = self._compile_file(file_path, artifact)
                     artifact.add_module(module_name, res)
                     self.import_star_cache[file_path] = dict(res.import_star_members)
                     mod_info.status = ModuleStatus.SUCCESS
                 except CompilerError:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to compile: {file_path}")
                     mod_info.status = ModuleStatus.FAILED
                 self.build_cache[file_path] = mod_info.mtime
             else:
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Using cached AST for: {file_path}")
                 # Reconstruct result from cache
                 res = CompilationResult(
                     module_ast=self.ast_cache[file_path], 
@@ -202,10 +188,7 @@ class Scheduler(ICompilerService):
                 mod_info.status = ModuleStatus.SUCCESS
             
         if self.issue_tracker.has_errors():
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation failed with errors.")
             raise CompilerError(self.issue_tracker.diagnostics)
-            
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation successful.")
         
         # Set entry point
         entry_rel = safe_relpath(entry_file, self.root_dir)
@@ -223,7 +206,6 @@ class Scheduler(ICompilerService):
         """
         while len(self.ast_cache) > self.MAX_CACHE_SIZE:
             oldest_path, _ = self.ast_cache.popitem(last=False)
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Pruning cache for {oldest_path}")
             self.token_cache.pop(oldest_path, None)
             self.symbol_table_cache.pop(oldest_path, None)
             self.import_star_cache.pop(oldest_path, None)
@@ -248,14 +230,12 @@ class Scheduler(ICompilerService):
             
             visited.add(current_path)
             processed_in_this_scan.add(current_path)
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Scanning: {current_path}")
             
             # Security Check: Ensure file is within root_dir or explicitly allowed
             # 统一沙箱检查走 PathValidator（canonicalize_for_security 解符号链接 + is_within 判定）。
             abs_path_ib = PathValidator.canonicalize_for_security(current_path)
             if abs_path_ib.to_native() not in self.allowed_files:
                 if not PathValidator.is_within(self._project_root, abs_path_ib):
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Security violation: Access denied for {current_path}")
                     self.issue_tracker.error(f"Security Error: Access denied for file outside root: {current_path}", code=DEP_SECURITY_ERROR)
                     continue
 
@@ -265,7 +245,6 @@ class Scheduler(ICompilerService):
                     content = f.read()
                     mtime = os.path.getmtime(current_path)
             except (FileNotFoundError, OSError):
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"File not found: {current_path}")
                 self.issue_tracker.error(f"File not found: {current_path}", code=DEP_FILE_NOT_FOUND)
                 continue
             
@@ -273,8 +252,7 @@ class Scheduler(ICompilerService):
             self.source_manager.add_source(current_path, content)
             
             # Lexing
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Lexing for dependencies: {current_path}")
-            lexer = Lexer(content, self.issue_tracker, debugger=self.debugger)
+            lexer = Lexer(content, self.issue_tracker)
             try:
                 tokens = lexer.tokenize()
                 self.token_cache[current_path] = tokens
@@ -286,12 +264,9 @@ class Scheduler(ICompilerService):
             # Replaced ImportScanner with Parser.parse_imports_only
             parser = Parser(
                 tokens, 
-                self.issue_tracker, 
-                debugger=self.debugger
+                self.issue_tracker
             )
             imports = parser.parse_imports_only()
-            
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Found imports in {current_path}:", data=[i.module_name for i in imports])
             
             # Create ModuleInfo
             mod_info = ModuleInfo(
@@ -309,20 +284,17 @@ class Scheduler(ICompilerService):
                 module_name = imp.module_name
                 resolved_spec = self.host_interface.metadata.resolve(module_name)
                 if resolved_spec is not None and getattr(resolved_spec, 'kind', None) == TypeKind.MODULE.value:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {module_name}")
                     continue
 
                 try:
                     resolved_path = self.resolver.resolve(imp.module_name, current_path)
                     imp.file_path = resolved_path
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Resolved import '{imp.module_name}' to {resolved_path}")
                     
                     # Cycle Prevention: Only add to queue if not visited
                     if resolved_path not in visited and resolved_path not in queue:
                         queue.append(resolved_path)
                         
                 except Exception as e:
-                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to resolve '{imp.module_name}': {str(e)}")
                      # 结构化错误码分派（ModuleResolveError 携带 code 字段）
                      code = getattr(e, 'code', None) or DEP_MODULE_NOT_FOUND
                      
@@ -359,24 +331,20 @@ class Scheduler(ICompilerService):
             tokens = self.token_cache.get(file_path)
             if not tokens:
                 # re-lex 纯粹的防御机制，常规情况下，理论上来讲不应该出现
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Token cache miss for {file_path}, re-lexing.")
-                lexer = Lexer(source, file_tracker, debugger=self.debugger)
+                lexer = Lexer(source, file_tracker)
                 tokens = lexer.tokenize()
             
             # 2. Parse
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Parsing: {file_path} (IbModule: {module_name})")
             parser = Parser(
                 tokens, 
                 file_tracker, 
                 package_name=module_name, 
                 module_resolver=self.resolver,
-                host_interface=self.host_interface,
-                debugger=self.debugger
+                host_interface=self.host_interface
             )
             ast_node = parser.parse()
             
             # 3. Semantic Analysis
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
             
             # 在分析前预注册空的 ModuleMetadata 到注册表
             # 这样 TypeDef 才能在解析时找到目标，即使当前模块还未分析完
@@ -385,15 +353,18 @@ class Scheduler(ICompilerService):
             pre_mod_meta = self.registry.factory.create_module(module_name)
             self.registry.register(pre_mod_meta)
             
-            analyzer = SemanticAnalyzer(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
+            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():
                 if isinstance(val, Symbol):
                     analyzer.symbol_table.define(val)
                 else:
-                    # Log a warning for non-Symbol predefined symbols (should not happen now)
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Warning: Predefined symbol '{name}' is not a Symbol object, skipping.")
+                    # 非 Symbol 的预定义符号是内部异常（正常路径下不会出现）
+                    warnings.warn(
+                        f"Scheduler: predefined symbol '{name}' is not a Symbol object, skipping.",
+                        stacklevel=2,
+                    )
             
             # Inject imported modules
             # ``from x import *`` 实际注入的成员名（按导入模块名记录）——精确契约
@@ -477,8 +448,7 @@ class Scheduler(ICompilerService):
                         if existing:
                             if existing.kind == SymbolKind.MODULE:
                                 # 同名 MODULE 符号已存在（同一模块被重复导入）——幂等跳过即可。
-                                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                    f"[import] Symbol '{local_name}' already exists as MODULE in '{file_path}', skipping re-injection.")
+                                pass
                             else:
                                 # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突。
                                 # 用户自有符号优先；发出 SEM_IMPORT_CONFLICT WARNING 提示用户检查命名。
@@ -497,19 +467,9 @@ class Scheduler(ICompilerService):
                             for exported_name in getattr(s_mod_type, "exported_types", []):
                                 existing_exported = analyzer.symbol_table.resolve(exported_name)
                                 if existing_exported:
-                                    self.debugger.trace(
-                                        CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                        f"[import] Exported type '{exported_name}' from module '{imp.module_name}' "
-                                        f"already exists in '{file_path}', skipping."
-                                    )
                                     continue
                                 exported_spec = self.registry.resolve(exported_name)
                                 if exported_spec is None:
-                                    self.debugger.trace(
-                                        CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                        f"[import] Exported type '{exported_name}' from module '{imp.module_name}' "
-                                        f"not found in registry; skipping."
-                                    )
                                     continue
                                 type_sym = TypeSymbol(
                                     name=exported_name,
@@ -538,9 +498,6 @@ class Scheduler(ICompilerService):
                                             location=Location(file_path=file_path, line=imp.lineno, column=1),
                                             code=SEM_IMPORT_CONFLICT,
                                         )
-                                    else:
-                                        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                            f"[from-import *] Symbol '{name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
                                     new_sym = self._create_symbol_from_member(name, member)
                                     if new_sym:
@@ -564,9 +521,6 @@ class Scheduler(ICompilerService):
                                             location=Location(file_path=file_path, line=imp.lineno, column=1),
                                             code=SEM_IMPORT_CONFLICT,
                                         )
-                                    else:
-                                        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                            f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
                                     new_sym = self._create_symbol_from_member(local_name, target_member)
                                     if new_sym:

@@ -12,14 +12,13 @@ DefaultParsingStrategy 的契约：
 * 有解析能力的类型（str/int 等）由 Axiom 策略先行处理，不落入 Default。
 """
 from core.runtime.interpreter.llm_parsing_strategy import DefaultParsingStrategy
-from core.base.diagnostics.debugger import core_debugger
 
 
 class TestDefaultParsingStrategy:
     """Default 兜底策略的 box/uncertain 语义。"""
 
     def _strategy(self, engine):
-        return DefaultParsingStrategy(engine.registry, core_debugger)
+        return DefaultParsingStrategy(engine.registry)
 
     def test_empty_type_name_boxes_as_string(self, engine):
         """无类型名（无契约）→ box 为字符串 success。"""

@@ -1,6 +1,7 @@
 import re
 import json
 import traceback
+import warnings
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 
@@ -51,7 +52,6 @@ from core.runtime.bootstrap.primitive_initializer import initialize_primitive_cl
 from core.kernel.registry import KernelRegistry
 from core.kernel.host_interface import HostInterface
 from core.runtime.interfaces import IStackInspector, IExecutionContext
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.interpreter.intrinsics import IntrinsicManager
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
@@ -108,7 +108,6 @@ class Interpreter:
                  max_call_stack: int = 1000,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
-                 debugger: Optional[Any] = None,
                  root_dir: str = ".",
                  strict_mode: bool = True,
                  registry: Optional[Registry] = None,
@@ -173,7 +172,6 @@ class Interpreter:
         
         self.issue_tracker = issue_tracker
         self.host_interface = host_interface or HostInterface()
-        self.debugger = debugger or core_debugger
         self.source_provider = source_provider
         self.compiler = compiler
         self.factory = factory
@@ -222,7 +220,6 @@ class Interpreter:
                 registry=self.registry,
                 host_service=None, # 将由外界注入或通过 scheduler 获取
                 source_provider=self.source_provider,
-                debugger=self.debugger,
                 output_callback=output_callback,
                 input_callback=input_callback,
                 scheduler=None, # 占位，由 Engine 统一装配
@@ -273,8 +270,10 @@ class Interpreter:
             self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
         else:
             # 在某些脱离 Engine 的测试环境下，如果没有令牌，系统将无法正确追踪状态流转
-            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
-                "Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.")
+            warnings.warn(
+                "Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.",
+                stacklevel=2,
+            )
 
         # 运行限制初始化
         self.max_instructions = max_instructions
@@ -474,7 +473,6 @@ class Interpreter:
         return self._vm_executor
 
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
         _frame_token = set_current_frame(self.runtime_context)
         _ec_token = set_current_execution_context(self._execution_context)
 
@@ -524,7 +522,6 @@ class Interpreter:
             vm = self._get_vm_executor()
             body = module_data.get("body", [])
             result = vm.run_body(body)
-            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
         except InterpreterError:
             raise
@@ -606,7 +603,7 @@ class Interpreter:
                     val_info.static_val = evaluated
                 except Exception as e:
                     # 预评估失败是允许的，留待实例化时 (instantiate) 再次尝试
-                    self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"preeval failed for {getattr(val_info, 'name', '?')}, will retry at instantiate: {e!r}")
+                    pass
         
         # 恢复 issue_tracker 状态：预评估期间产生的任何错误都是误报
         self.issue_tracker._error_count = saved_error_count

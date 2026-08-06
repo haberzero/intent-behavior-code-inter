@@ -1,6 +1,5 @@
 from typing import Dict, Optional, Type, List
 from core.kernel.axioms.protocols import TypeAxiom
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 
 class AxiomRegistry:
     """
@@ -12,14 +11,10 @@ class AxiomRegistry:
         self._axioms: Dict[str, TypeAxiom] = {}
 
     def register(self, axiom: TypeAxiom):
-        core_trace(CoreModule.UTS, DebugLevel.BASIC, f"Registering UTS Axiom: {axiom.name}")
         self._axioms[axiom.name] = axiom
 
     def get_axiom(self, name: str) -> Optional[TypeAxiom]:
-        axiom = self._axioms.get(name)
-        if axiom:
-            core_trace(CoreModule.UTS, DebugLevel.DETAIL, f"Resolved UTS Axiom for: {name}")
-        return axiom
+        return self._axioms.get(name)
 
     def get_all_names(self) -> List[str]:
         return list(self._axioms.keys())

@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, Callable
 from core.runtime.interfaces import (
     IRuntimeScheduler, ServiceContext
 )
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 # 顶层导入核心实现类，通过接口化解除物理循环依赖
 from core.runtime.interpreter.interpreter import Interpreter
@@ -21,14 +20,12 @@ class RuntimeSchedulerImpl:
     """
     def __init__(self, service_context: Optional[ServiceContext] = None):
         self.service_context = service_context
-        self.debugger = service_context.debugger if service_context else core_debugger
         self.instances: Dict[str, Any] = {} # instance_id -> Interpreter
         self._main_instance_id: Optional[str] = None
         
     def hydrate(self, service_context: ServiceContext):
         """延迟水化调度器，注入运行时服务"""
         self.service_context = service_context
-        self.debugger = service_context.debugger
 
     def spawn(self, 
               artifact: Any, 
@@ -36,10 +33,8 @@ class RuntimeSchedulerImpl:
               **kwargs) -> str:
         """
          创建并初始化一个新的解释器实例。
-        承担了原 Engine._prepare_interpreter 的装配职责。
+         承担了原 Engine._prepare_interpreter 的装配职责。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Spawning new interpreter instance")
-        
         if not instance_id:
             instance_id = f"inst_{uuid.uuid4().hex[:8]}"
             
@@ -64,7 +59,6 @@ class RuntimeSchedulerImpl:
             artifact=artifact,
             registry=effective_registry,
             host_interface=effective_host_interface,
-            debugger=kwargs.get('debugger', sc.debugger if sc else self.debugger),
             root_dir=root_dir,
             source_provider=kwargs.get('source_provider', sc.source_provider if sc else None),
             factory=kwargs.get('factory'),
@@ -104,10 +98,8 @@ class RuntimeSchedulerImpl:
     def execute(self, artifact: Any, variables: Optional[Dict[str, Any]] = None, output_callback: Optional[Callable[[str], None]] = None) -> bool:
         """
          顶层执行入口。
-        调度一个解释器实例并开始执行。
+         调度一个解释器实例并开始执行。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Starting top-level execution via scheduler")
-        
         # 获取或创建主实例
         instance_id = self._main_instance_id
         if not instance_id or instance_id not in self.instances:
@@ -135,7 +127,6 @@ class RuntimeSchedulerImpl:
         """
         获取指定实例的状态快照。
         """
-        self.debugger.trace(CoreModule.RUNTIME, DebugLevel.DETAIL, f"Creating snapshot for instance: {instance_id}")
         interpreter = self.instances.get(instance_id)
         if not interpreter:
             return {}
@@ -150,7 +141,6 @@ class RuntimeSchedulerImpl:
         """
         恢复指定实例的状态。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Restoring snapshot for instance: {instance_id}")
         interpreter = self.instances.get(instance_id)
         if not interpreter:
             return
@@ -167,7 +157,6 @@ class RuntimeSchedulerImpl:
         """
         销毁指定的解释器实例。
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Terminating instance: {instance_id}")
         if instance_id in self.instances:
             del self.instances[instance_id]
             if self._main_instance_id == instance_id:

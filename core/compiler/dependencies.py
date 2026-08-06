@@ -2,7 +2,6 @@
 from dataclasses import dataclass, field
 from typing import List, Set, Optional, Dict, Any
 from enum import Enum, auto
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 class ImportType(Enum):
     IMPORT = auto()      # import module
@@ -55,10 +54,9 @@ class DependencyGraph:
     """
     Analyzes dependency graph for cycles and compilation order.
     """
-    def __init__(self, modules: Dict[str, ModuleInfo], debugger: Optional[Any] = None):
+    def __init__(self, modules: Dict[str, ModuleInfo]):
         self.modules = modules
         self.adj_list: Dict[str, List[str]] = {}
-        self.debugger = debugger or core_debugger
         self._build_graph()
 
         

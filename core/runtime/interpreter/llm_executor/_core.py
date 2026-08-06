@@ -26,7 +26,7 @@ LLMScheduler 状态 (由 ``_SchedulerMixin`` 使用):
 
 派生属性 (property, 依赖 ``self._service_context``):
     - ``self.service_context`` / ``self.registry`` / ``self.interop``
-    - ``self.issue_tracker`` / ``self.debugger`` / ``self.llm_callback``
+    - ``self.issue_tracker`` / ``self.llm_callback``
 """
 
 import threading
@@ -41,7 +41,6 @@ from core.kernel.issue import InterpreterError
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.objects.kernel import IbLLMCallResult
 from core.base.diagnostics.codes import RUN_LLM_ERROR
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.exceptions import ThrownException
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
@@ -84,7 +83,7 @@ class LLMExecutorCore:
         """ 水化依赖，由解释器在服务准备就绪后调用"""
         self._service_context = service_context
         # Initialize the result parser after hydration
-        self._result_parser = LLMResultParser(self.registry, self.debugger)
+        self._result_parser = LLMResultParser(self.registry)
 
     @property
     def service_context(self) -> ServiceContext:
@@ -98,8 +97,6 @@ class LLMExecutorCore:
     def interop(self) -> InterOp: return self.service_context.interop
     @property
     def issue_tracker(self) -> IssueTracker: return self.service_context.issue_tracker
-    @property
-    def debugger(self) -> Any: return self.service_context.debugger or core_debugger
     @property
     def llm_callback(self) -> Optional[ILLMProvider]:
         # 唯一来源：通过能力注册中心获取 Provider (能力名: llm_provider)
@@ -175,20 +172,9 @@ class LLMExecutorCore:
         ``target_model``：命名模型标识符，传递给 LLM provider 用于路由到特定模型配置。
         空字符串表示使用默认模型。
         """
-        self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "Calling LLM")
-        self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "System Prompt:", data=sys_prompt)
-        if isinstance(user_prompt, str):
-            self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt:", data=user_prompt)
-        else:
-            self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "User Prompt (multimodal):", data=f"[{len(user_prompt)} content blocks]")
-        if target_model:
-            self.debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"Target model: {target_model}")
-
         if self.llm_callback:
             try:
                 response = self.llm_callback(sys_prompt, user_prompt, target_model=target_model)
-                self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, "LLM Response received.")
-                self.debugger.trace(CoreModule.LLM, DebugLevel.DATA, "LLM Raw Response:", data=response)
                 return response
             except Exception as e:
                 # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
@@ -199,7 +185,6 @@ class LLMExecutorCore:
                 # LLMCallError）。provider 插件（ibci_ai 等）应在自身边界收窄
                 # 捕获面（仅 provider 失败契约），使内部代码缺陷以真实类型
                 # 到达此处再经 `from e` 保留原始 traceback，便于定位。
-                self.debugger.trace(CoreModule.LLM, DebugLevel.BASIC, f"LLM call failed (infra): {e}")
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),
                     provider_error=str(e),

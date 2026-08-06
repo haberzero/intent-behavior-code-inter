@@ -1,6 +1,5 @@
 from typing import Any, Optional, TYPE_CHECKING, Callable
 from core.runtime.objects.kernel import IbObject
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.interfaces import IssueTracker, ISourceProvider, ICompilerService
 from core.runtime.interfaces import IKernelOrchestrator
 
@@ -26,7 +25,6 @@ class ServiceContextImpl:
                  registry: Any,
                  host_service: Optional['IHostService'] = None,
                  source_provider: Optional[ISourceProvider] = None,
-                 debugger: Any = None,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
                  scheduler: Optional['IRuntimeScheduler'] = None,
@@ -41,7 +39,6 @@ class ServiceContextImpl:
         self._registry = registry
         self._host_service = host_service
         self._source_provider = source_provider
-        self._debugger = debugger
         self._output_callback = output_callback
         self._input_callback = input_callback
         self._scheduler = scheduler
@@ -138,7 +135,3 @@ class ServiceContextImpl:
     def set_host_service(self, host_service: Optional['IHostService']) -> None:
         """注入宿主服务（rt_scheduler.spawn 创建 HostService 后调用）。"""
         self._host_service = host_service
-
-    @property
-    def debugger(self) -> Any:
-        return self._debugger

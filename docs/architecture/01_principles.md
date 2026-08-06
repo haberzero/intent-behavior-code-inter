@@ -51,7 +51,6 @@ base/ (最底层 - 原子概念，可迁移到任何语言)
     │
     ├── source/source_atomic.py  → Location, Severity
     ├── diagnostics/codes.py     → 错误码常量
-    └── diagnostics/debugger.py  → CoreDebugger, DebugLevel
     │
     ▼ 依赖
 kernel/ (核心层 - IBC-Inter核心语言概念)
@@ -490,7 +489,6 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 | `core/runtime/bootstrap/primitive_initializer.py` | 高 | 内置类型注册与装箱器 |
 | `core/compiler/serialization/serializer.py` | 高 | FlatSerializer |
 | `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
-| `core/base/diagnostics/debugger.py` | 中 | CoreDebugger |
 | `core/runtime/module_system/discovery.py` | 高 | ModuleDiscoveryService，插件发现服务 |
 | `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin |
 | `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（LLM Provider 核心实现） |

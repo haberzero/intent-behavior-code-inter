@@ -17,7 +17,6 @@ from core.runtime.serialization.runtime_serializer import RuntimeSerializer, Run
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IExecutionContext, IKernelOrchestrator
 from core.kernel.host_interface import HostInterface
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.registry import KernelRegistry
 from core.runtime.objects.kernel import IbObject
 from core.kernel.issue import InterpreterError

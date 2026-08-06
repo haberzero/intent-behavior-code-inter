@@ -4,7 +4,6 @@ from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.kernel.spec.base import TypeKind
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.diagnostics.codes import SEM_REDEFINITION
-from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
 
 class ContractValidator:
     """
@@ -12,18 +11,14 @@ class ContractValidator:
     在系统启动前，对所有已注册的类进行深度审计，
     确保方法签名对齐父类契约（协变/逆变）以及公理契约。
     """
-    def __init__(self, registry: Any, issue_tracker: IssueTracker, debugger: Optional[CoreDebugger] = None):
+    def __init__(self, registry: Any, issue_tracker: IssueTracker):
         self.registry = registry
         self.issue_tracker = issue_tracker
-        self.debugger = debugger
 
     def validate_all(self):
         """
         遍历注册表中的所有描述符，验证其内部契约一致性。
         """
-        if self.debugger:
-            self.debugger.trace(CoreModule.UTS, DebugLevel.BASIC, "Starting Global Contract Validation (STAGE 7)...")
-
         all_descs = self.registry.all_specs
         for desc in all_descs.values():
             # 1. 审计类契约

@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional, Mapping, Tuple
+import warnings
 
 from core.kernel.issue import InterpreterError
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.kernel.spec.type_ref import TypeRef as _TypeRef
 
 from ..ib_type_mapping import register_ib_type
@@ -41,7 +41,6 @@ class IbObject:
         """
         from .functions import IbBoundMethod, IbFunction
         from .ib_class import IbClass
-        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DATA, f"[MSG] {self} received '{message}' with {args}")
 
         # 下沉至公理层能力探测
         # 针对 __call__ 消息，检查类型公理是否声明了调用能力
@@ -101,7 +100,10 @@ class IbObject:
                         prompt_result = unbox(prompt_result)
                         return self.ib_class.registry.box(prompt_result)
                     except Exception as e:
-                        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"cast via __to_prompt__ failed for {self.ib_class.name}->{target_name}: {e!r}")
+                        warnings.warn(
+                            f"cast via __to_prompt__ failed for {self.ib_class.name}->{target_name}: {e!r}",
+                            stacklevel=2,
+                        )
 
             # 无法执行类型转换，抛出明确错误
             raise InterpreterError(
@@ -133,7 +135,10 @@ class IbObject:
                 if cap:
                     return cap.from_prompt(raw_response, self.ib_class.spec)
         except Exception as e:
-            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"__from_prompt__ parse failed for {self.ib_class.name}: {e!r}")
+            warnings.warn(
+                f"__from_prompt__ parse failed for {self.ib_class.name}: {e!r}",
+                stacklevel=2,
+            )
         return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
 
     def __outputhint_prompt__(self) -> str:

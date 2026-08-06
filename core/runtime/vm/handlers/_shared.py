@@ -4,7 +4,6 @@ core.runtime.vm.handlers._shared — 跨类别 CPS 辅助函数。
 from __future__ import annotations
 from typing import Any, Mapping, Optional, List
 
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.diagnostics.codes import RUN_CALL_ERROR
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.signals import (
@@ -318,7 +317,6 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
         except Exception as e:
             # 导入失败必须 fail-fast：否则模块名已切换而 scope 未切换，
             # 函数会在错误模块上下文执行（全局符号解析静默错位）。
-            core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Failed to import module '{func.module_name}' for LLM function call: {e}")
             raise InterpreterError(
                 f"Failed to import module '{func.module_name}' for function call: {e}",
                 error_code=RUN_CALL_ERROR,

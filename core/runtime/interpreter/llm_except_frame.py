@@ -45,9 +45,9 @@ Status: Active
 
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
+import warnings
 from core.runtime.objects.kernel import IbObject, IbValue, IbNone
 from core.runtime.objects.kernel.base import unbox
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.kernel.issue import InterpreterError
 
@@ -180,7 +180,10 @@ class LLMExceptFrame:
                         self.saved_protocol_states[name] = (val, state)
                         continue  # 跳过克隆
                     except Exception as e:
-                        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"__snapshot__ protocol call failed for '{name}', falling back to deep clone: {e!r}")
+                        warnings.warn(
+                            f"__snapshot__ protocol call failed for '{name}', falling back to deep clone: {e!r}",
+                            stacklevel=2,
+                        )
 
             # 自动深克隆
             cloned = self._try_deep_clone(val)
@@ -261,7 +264,10 @@ class LLMExceptFrame:
                     try:
                         restore_method.call(original_obj, [saved_state])
                     except Exception as e:
-                        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"__restore__ protocol call failed for '{name}', keeping current state (best-effort): {e!r}")
+                        warnings.warn(
+                            f"__restore__ protocol call failed for '{name}', keeping current state (best-effort): {e!r}",
+                            stacklevel=2,
+                        )
 
         # 每次恢复时从黄金快照重新深克隆，防止上一轮 llmexcept body 修改了快照对象
         for name, val in self.saved_vars.items():

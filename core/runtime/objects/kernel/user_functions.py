@@ -1,7 +1,6 @@
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 from core.kernel.issue import InterpreterError
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.diagnostics.codes import RUN_CALL_ERROR
 from core.base.source_atomic import Location
 from core.kernel.intent_logic import IntentRole
@@ -59,10 +58,6 @@ class IbUserFunction(IbFunction):
                 mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
                 rt_context.current_scope = mod_inst.scope
             except Exception as e:
-                core_debugger.trace(
-                    CoreModule.INTERPRETER, DebugLevel.BASIC,
-                    f"Failed to import module '{self.module_name}' for user function call: {e}"
-                )
                 raise InterpreterError(
                     f"Failed to import module '{self.module_name}' for function call: {e}",
                     error_code=RUN_CALL_ERROR
@@ -218,10 +213,6 @@ class IbLLMFunction(IbFunction):
                 mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
                 rt_context.current_scope = mod_inst.scope
             except Exception as e:
-                core_debugger.trace(
-                    CoreModule.INTERPRETER, DebugLevel.BASIC,
-                    f"Failed to import module '{self.module_name}' for user function call: {e}"
-                )
                 raise InterpreterError(
                     f"Failed to import module '{self.module_name}' for function call: {e}",
                     error_code=RUN_CALL_ERROR

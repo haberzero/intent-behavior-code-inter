@@ -12,9 +12,6 @@ from .base import IbObject, IbValue
 from ._helpers import (
     _is_intent_context_param,
     _should_activate_intent_context_arg,
-    CoreModule,
-    DebugLevel,
-    core_debugger,
 )
 from .functions import IbFunction, IbNativeFunction, IbBoundMethod, IbSuperProxy
 from .native_module import IbNativeObject, IbModule
@@ -44,7 +41,4 @@ __all__ = [
     "IbSlot",
     "_is_intent_context_param",
     "_should_activate_intent_context_arg",
-    "CoreModule",
-    "DebugLevel",
-    "core_debugger",
 ]

@@ -2,15 +2,15 @@
 
 包含所有将 IbObject / 段列表转换为 prompt 文本或多模态 content blocks 的方法，
 以及 LLM 输出结果的解析入口。所有方法均依赖 :class:`LLMExecutorCore` 提供的
-共享状态 (``self.registry`` / ``self.debugger`` / ``self._result_parser`` 等)。
+共享状态 (``self.registry`` / ``self._result_parser`` 等)。
 """
 
 from typing import Any, List, Optional, Dict, Union, Mapping, Set
+import warnings
 
 from core.runtime.interfaces import IExecutionContext
 
 from core.runtime.shared.llm_result import LLMResult
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
 from core.runtime.objects.kernel.base import IbObject
@@ -42,16 +42,14 @@ class _PromptMixin:
                 # 协议缺失（receive 对未声明方法抛 AttributeError）→ 回退；
                 # 用户 __to_prompt__ 实现体内的真实 bug（TypeError 等）fail-fast，
                 # 不再被宽 except 吞掉后静默降级 str()。
-                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL,
-                                    "__to_prompt__ not available, trying fallback")
+                pass
 
         # Fallback to to_native() for primitives
         if isinstance(val, IbObject):
             try:
                 return str(val.to_native())
             except AttributeError:
-                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL,
-                                    "to_native not available, using str()")
+                pass
 
         # Last resort: str()
         return str(val)
@@ -84,8 +82,16 @@ class _PromptMixin:
                     if isinstance(result, (dict, list)):
                         return result
                     return str(result)
+            except AttributeError:
+                # 协议缺失（receive 对未声明方法抛 AttributeError）→ 回退纯文本；
+                # 用户 __payload_prompt__ 实现体内的真实 bug（TypeError 等）告警，
+                # 不再被宽 except 吞掉后静默降级为纯文本。
+                pass
             except Exception as e:
-                core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, f"__payload_prompt__ dispatch failed, falling back to text: {e!r}")
+                warnings.warn(
+                    f"__payload_prompt__ dispatch failed, falling back to text: {e!r}",
+                    stacklevel=2,
+                )
 
         # Fallback to plain text via __to_prompt__
         return _PromptMixin._obj_to_prompt_str(val)

@@ -1,7 +1,5 @@
 from typing import Dict, Any, TYPE_CHECKING
 
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
-
 from .base import IbObject
 
 if TYPE_CHECKING:

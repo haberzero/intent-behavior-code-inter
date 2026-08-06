@@ -1,7 +1,7 @@
 from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
+import warnings
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.ib_type_mapping import register_ib_type
 from core.kernel.intent_logic import IntentMode, IntentRole
 
@@ -63,9 +63,18 @@ class IbIntent(IbObject):
                             content_parts.append(str(prompt_str.to_native()))
                         else:
                             content_parts.append(str(prompt_str))
+                    except AttributeError:
+                        # 协议缺失（对象未注册 __to_prompt__）→ 回退 to_native()；
+                        # 已注册协议的实现异常（TypeError 等）告警，不静默降级。
+                        if isinstance(val, IbObject):
+                            content_parts.append(str(val.to_native()))
+                        else:
+                            content_parts.append(str(val))
                     except Exception as e:
-                        # Fallback: to_native()
-                        core_debugger.trace(CoreModule.INTERPRETER, DebugLevel.DETAIL, f"__to_prompt__ failed in intent resolution, falling back to to_native(): {e!r}")
+                        warnings.warn(
+                            f"__to_prompt__ failed in intent resolution, falling back to to_native(): {e!r}",
+                            stacklevel=2,
+                        )
                         if isinstance(val, IbObject):
                             content_parts.append(str(val.to_native()))
                         else:

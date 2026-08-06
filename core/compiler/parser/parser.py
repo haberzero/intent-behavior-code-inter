@@ -17,7 +17,6 @@ from core.kernel.issue import Severity
 from core.base.source_atomic import Location
 
 from core.kernel.host_interface import HostInterface
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 if TYPE_CHECKING:
     from core.compiler.parser.resolver.resolver import ModuleResolver
@@ -27,7 +26,7 @@ class Parser:
     IBC-Inter Parser.
     Uses Component-based architecture.
     """
-    def __init__(self, tokens: List[Token], issue_tracker: Optional[DiagnosticReporter] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None):
+    def __init__(self, tokens: List[Token], issue_tracker: Optional[DiagnosticReporter] = None, module_cache: Optional[Dict[str, Any]] = None, package_name: str = "", module_resolver: Optional['ModuleResolver'] = None, host_interface: Optional[HostInterface] = None):
         
         # 1. Initialize Context
         # 直接使用 IssueTracker，它现在满足 DiagnosticReporter 协议
@@ -35,7 +34,6 @@ class Parser:
             issue_tracker = IssueTracker()
             
         self.stream = TokenStream(tokens, issue_tracker)
-        self.debugger = debugger or core_debugger
         self.context = ParserContext(
             stream=self.stream,
             issue_tracker=self.stream.issue_tracker,
@@ -65,34 +63,26 @@ class Parser:
         return self.context.issue_tracker
 
     def parse(self) -> ast.IbModule:
-        self.debugger.enter_scope(CoreModule.PARSER, "Starting parsing...")
         statements = []
-        try:
-            while not self.stream.is_at_end():
-                try:
-                    if self.stream.match(TokenType.NEWLINE):
-                        continue
-                    
-                    # Top level declarations or statements
-                    stmt = self.declaration()
-                    if stmt:
-                        self.debugger.trace(CoreModule.PARSER, DebugLevel.DETAIL, f"Parsed top-level statement: {stmt.__class__.__name__}")
-                        statements.append(stmt)
-                except ParseControlFlowError:
-                    self.synchronize()
-            
-            # Check for errors at the end
-            self.context.issue_tracker.check_errors()
-            
-            module_node = ast.IbModule(body=statements)
-            
-            self.debugger.trace(CoreModule.PARSER, DebugLevel.BASIC, f"Parsing complete. Total statements: {len(statements)}")
-            self.debugger.trace(CoreModule.PARSER, DebugLevel.DATA, "AST Module body:", data=statements)
-            
-            return module_node
-        finally:
-            self.debugger.exit_scope(CoreModule.PARSER)
+        while not self.stream.is_at_end():
+            try:
+                if self.stream.match(TokenType.NEWLINE):
+                    continue
+                
+                # Top level declarations or statements
+                stmt = self.declaration()
+                if stmt:
+                    statements.append(stmt)
+            except ParseControlFlowError:
+                self.synchronize()
         
+        # Check for errors at the end
+        self.context.issue_tracker.check_errors()
+        
+        module_node = ast.IbModule(body=statements)
+        
+        return module_node
+
     def parse_imports_only(self) -> List[ImportInfo]:
         """
         Only parse import statements at the beginning of the file.

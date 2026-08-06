@@ -15,7 +15,6 @@ from core.project_detector import ProjectDetector
 from core.kernel.issue import CompilerError
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.lexer.lexer import Lexer
-from core.runtime.objects.kernel import CoreModule, DebugLevel
 
 def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
     """从本地 Python 文件动态加载插件"""
@@ -51,7 +50,6 @@ def main():
     run_parser.add_argument("--auto", action="append", help="Set variable (key=value)")
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
-    run_parser.add_argument("--core-debug", help="Core debugger config (JSON string or file path)", default=None)
     run_parser.add_argument('--max-inst', type=int, default=100000000, help='Max instructions (default: 100000000)')
 
     # Check command
@@ -110,23 +108,8 @@ def main():
 
     # 初始化引擎，决定是否自动嗅探
     auto_sniff = not getattr(args, 'no_sniff', False)
-    
-    # 处理内核调试配置
-    core_debug_config = None
-    if hasattr(args, 'core_debug') and args.core_debug:
-        if os.path.exists(args.core_debug):
-            try:
-                with open(args.core_debug, 'r', encoding='utf-8') as f:
-                    core_debug_config = json.load(f)
-            except Exception as e:
-                print(f"Warning: Failed to load core debug config file: {e}")
-        else:
-            try:
-                core_debug_config = json.loads(args.core_debug)
-            except Exception as e:
-                print(f"Warning: Failed to parse core debug JSON string: {e}")
 
-    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff, core_debug_config=core_debug_config)
+    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff)
 
     # 1. 加载插件
     if getattr(args, 'plugin', None):
@@ -173,7 +156,7 @@ def main():
         from core.compiler.lexer.lexer import Lexer
         with open(args.file, 'r', encoding='utf-8') as f:
             content = f.read()
-        lexer = Lexer(content, engine.issue_tracker, debugger=engine.debugger)
+        lexer = Lexer(content, engine.issue_tracker)
         tokens = lexer.tokenize()
         for tok in tokens:
             print(tok)
