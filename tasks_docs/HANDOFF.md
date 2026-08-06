@@ -86,7 +86,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `NEXT_STEPS.md` | 当前最紧要项（PT-INTRO-1 主线）/ 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED + PT-INTRO-1 主线） |
-| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 上一轮完成，R4/R5 下一轮待做） |
+| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行 2026-08-05，R4/R5 待做） |
 | `WORKLOG.md` | 自主工作日志（关键裁定 + 仍有效设计决策） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
@@ -107,17 +107,17 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   语言级语义决策，仅记录。
 - **待选**：`PT-DEBT-1/2/3`（原 C-D3/C-D7/B-D10）内核接口协议化——同性质可合并实施。
 - **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
-  审查循环，R4/R5 下一轮）+ `PT-AUDIT-4/5`（文档清洗与梳理 / 注释卫生清理）——持续周期工作。
+  审查循环，R4/R5 待做）+ `PT-AUDIT-4/5`（文档清洗与梳理 / 注释卫生清理）——持续周期工作。
 - **保留规划**：`PT-TEST-1`（测试体系重构，未来做）、`PT-FEAT-1`（语言级协程，保持现状）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
 
-- **会话 17（2026-08-05）**：PT-ARCH-31/32/33/34 + PT-SMELL-R3 全量处置 + B-D6 import-*
+- **2026-08-05**：PT-ARCH-31/32/33/34 + PT-SMELL-R3 全量处置 + B-D6 import-*
   根治（含 IBC 文件跨模块导入三层断裂修复）+ PT-INTRO-1 type() 落地 + 任务控制文档全面重整
   （任务代号按性质分域）。commit 明细见 git 历史。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
-  **R1/R2/R3 复核** + **类型强化** 全部落地（详见 git 历史）。
+  **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
 - **测试基线**：1547 passed / 6 skipped（以实跑为准）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；无独立分支残留）。
 

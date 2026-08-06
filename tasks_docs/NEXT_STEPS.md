@@ -25,29 +25,29 @@
 - **待讨论**：PT-DECIDE-1（LLM 解析默认策略语义，原 B-D2）——下一 session 待讨论项，仅记录。
 - **待选**：PT-DEBT-1/2/3（内核接口协议化，原 C-D3/C-D7/B-D10）——同性质可合并实施。
 - **长期周期**：PT-AUDIT-1/2（代码异味 / 分支嵌套审计）+ PT-AUDIT-3（代码复核审查循环，
-  R4/R5 为下一轮）+ PT-AUDIT-4/5（文档清洗与梳理 / 注释卫生清理）——持续周期工作，阶段边界择机。
+  R4/R5 待做）+ PT-AUDIT-4/5（文档清洗与梳理 / 注释卫生清理）——持续周期工作，阶段边界择机。
 - **保留规划**：PT-TEST-1（测试体系重构，未来做）、PT-FEAT-1（语言级协程，保持现状）。
 - 完整清单见 `PENDING_TASKS.md`。
 
 ---
 
-## ✅ 已完成：本 session 交付（2026-08-05，会话 17）
+## ✅ 已完成交付（2026-08-05）
 
 > 全部落地 unsafe-vibe-dev（本地 commit，未 push）。commit 明细见 git 历史。
 
-- **PT-ARCH-31 序列化档位 A+B**：闭包序列化 + fn_callable round-trip 修复（作用域 cell 重建 +
-  post-pass 按 sym_uid 重链；value_meta/expected_type JSON 安全）。
-- **PT-ARCH-32 Axiom 家族分裂**：IntentAxiom/IntentContextAxiom 并入 BaseAxiom。
-- **PT-ARCH-33 EnumAxiom 双通道**：收敛 str 契约 + fail-fast。
-- **PT-ARCH-34 use_intent_context**：删恒真守卫 + 可读错误。
-- **PT-SMELL-R3 四 Zone 处置**：修 19 + 复核定案保留 10 + 设计确认保留 6。
-- **B-D6 根治重构**：import-* 精确成员枚举（编译器记录 + 运行时枚举）+ **IBC 文件跨模块导入
-  三层断裂修复**（TypeDef 别名 NameError / Lazy 描述符 members 恒空 / IbModule.get_variable）。
-- **PT-INTRO-1 type() 落地**：`type(x)` 内建。
+- **闭包序列化 + fn_callable round-trip 修复**：作用域 cell 重建 + 按 sym_uid 重链共享；
+  value_meta/expected_type JSON 安全。
+- **Axiom 家族分裂收敛**：IntentAxiom/IntentContextAxiom 并入 BaseAxiom。
+- **EnumAxiom 双通道收敛**：str 契约 + fail-fast。
+- **use_intent_context 守卫修复**：删恒真守卫 + 可读错误。
+- **R3 异味四 Zone 处置**：修 19 + 复核定案保留 10 + 设计确认保留 6。
+- **import-* 精确成员枚举根治**：编译器记录 + 运行时枚举；**IBC 文件跨模块导入三层断裂修复**
+  （TypeDef 别名 NameError / Lazy 描述符 members 恒空 / IbModule.get_variable）。
+- **`type()` 内建落地**：运行时内省第一项。
 - **任务控制文档全面重整**：任务代号按性质分域（FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED），
   删除已完成/无价值条目与无用设计决策，清理注释任务代号/历史说明。
-- **周期清扫启动**：文档清洗与梳理（PT-AUDIT-4）、注释卫生清理（PT-AUDIT-5）首轮完成，
-  代码复核审查循环（PT-AUDIT-3）R1/R2/R3 上一轮完成。
+- **周期清扫启动**：文档清洗与梳理、注释卫生清理、代码复核审查（R1/R2/R3）均已执行，
+  周期复核。
 
 ---
 
