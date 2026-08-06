@@ -103,16 +103,17 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一主线：暂无 P0 冲刺项（周期清扫择机）**——DOC_AUDIT 文档治理（F0-F4）已完成。
-  候选方向：`PT-AUDIT-3` R4 覆盖率核对 / `PT-AUDIT-5` 注释卫生 / `PT-FEAT-5` 错误用户友好化。
+- **下一主线：PT-TEST-1 测试体系治理与彻底重构**——完整规划见 `TEST_REFACTOR.md`（Phase 0-5）。
+  **铁律：Phase 0 规划与设计冻结完成前，不启动任何代码改动**。启动方式：先做覆盖基准固化
+  （`pytest --collect-only` 快照）+ 新体系架构设计冻结。并入 PT-TEST-3 矩阵同步（输入存档
+  `TEST_MATRIX_FINDINGS.md`）。
 - **已完成**：`PT-INTRO-1`（内省体系）、`PT-DECIDE-1`（行为输出可解析性）、`PT-DEBT-1/2/3`
-  （内核接口协议化）、`PT-DEBT-7`（删 is_nullable 死字段）、`PT-DEBT-8`（重定义为值层分派
-  收敛审计）、内建函数群完善+遮蔽、整合巩固批次、DOC_AUDIT 文档治理——设计要点见
-  `PENDING_TASKS.md`。
+  （内核接口协议化）、`PT-DEBT-7`（删 is_nullable 死字段）、`PT-DEBT-8`（值层分派收敛审计）、
+  `PT-DEBT-6`（register_module 可观测性）、`PT-DOC-2`（定位段收尾）、内建函数群完善+遮蔽、
+  整合巩固批次、DOC_AUDIT 文档治理——详见 `PENDING_TASKS.md`。
 - **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
   审查循环，R4/R5 待做）+ `PT-AUDIT-5`（注释卫生清理）——持续周期工作。
-- **保留规划**：`PT-TEST-1`（测试体系重构，**并入 PT-TEST-3 矩阵同步**，未来做）、`PT-FEAT-1`
-  （语言级协程，保持现状）。
+- **保留规划**：`PT-FEAT-1`（语言级协程，保持现状）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
@@ -121,8 +122,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   内建函数群完善（转换/序列辅助/遮蔽）+ 整合巩固批次 + **DOC_AUDIT 文档治理 F0-F4 全量执行**
   + 清理自治标注文档（appendix/backup 移出 docs/，规划迁 PENDING_TASKS）+ **PT-DEBT-7 删
   is_nullable 死字段** + **PT-DEBT-8 值层分派收敛审计**（系统层面定论：折叠为单一 IbValue 是
-  伪目标，具体类=领域方法载体；收敛 is_sequence_value / IbLLMCallResult.is_uncertain；类角色
-  分工固化 03_type_system §6.4）。
+  伪目标）+ **PT-DEBT-6 register_module 可观测性**（warning + 测试配置 bug 修正）+ **PT-DOC-2
+  定位段收尾**。**PT-TEST-1 列为主线**（用户裁定）。
 - **2026-08-05**：闭包序列化 round-trip 修复 + Axiom 家族分裂收敛 + EnumAxiom 双通道收敛 +
   use_intent_context 守卫修复 + R3 异味四 Zone 处置 + import-* 精确成员枚举根治（含 IBC 文件
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。

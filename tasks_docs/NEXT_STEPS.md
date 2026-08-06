@@ -2,25 +2,31 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-06（DOC_AUDIT 文档治理 F0-F4 + 自治标注文档清理完成）
+> **最后更新**：2026-08-06（PT-TEST-1 列为主线，交接下一 session）
 
 ---
 
-## 🔴 下一主线：暂无 P0 冲刺项（周期清扫择机启动）
+## 🔴 下一主线：PT-TEST-1 测试体系治理与彻底重构
 
-> 2026-08-06 已完成 `docs/` 全量治理审核与修复（F0-F4，commit 87666d1/d66d3df/27e7e35/d93d14d），
-> 执行记录见 `tasks_docs/DOC_AUDIT_REPORT.md`（归档）。
+> **已列为本 session 之后的主线（2026-08-06 用户裁定）**。完整规划见 **`tasks_docs/TEST_REFACTOR.md`**
+> （Phase 0-5，含强制策略）。**铁律：Phase 0 规划与设计冻结完成前，不启动任何代码改动。**
 
-- **周期清扫**：PT-AUDIT-1/2/3（R4/R5 待做）/5，阶段边界择机。
-- **保留规划**：PT-TEST-1、PT-FEAT-1。
-- **待办池**：完整清单见 `PENDING_TASKS.md`。
+- **Phase 0 基准固化与设计冻结**（不动代码）：覆盖基准快照（`pytest --collect-only`）、
+  新体系架构设计冻结（目录结构/命名/分层/conftest/覆盖矩阵）、内核测试接口设计冻结、docs 治理方案。
+- **Phase 1 内核测试接口层**（additive）：正式测试内省 API + test hooks + MOCK 契约化。
+- **Phase 2-4 新体系骨架 → 逐域移植 → 全面替换**：新建从零 → 并行共存 → 覆盖 ≥ 旧体系后替换删除。
+- **并入 PT-TEST-3**：覆盖矩阵同步在重构中一并完成（用户 2026-08-06 裁定）。
+- **输入存档**：矩阵核对发现见 `tasks_docs/TEST_MATRIX_FINDINGS.md`。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **已完成**：DOC_AUDIT 文档治理（F0-F4，见上）、PT-INTRO-1（内省体系）、PT-DECIDE-1（行为输出可解析性）、PT-DEBT-1/2/3（内核接口协议化）、内建函数群完善+遮蔽、整合巩固批次——详见 `PENDING_TASKS.md` 与 git 历史。
-- **待办池**：完整清单见 `PENDING_TASKS.md`（含 PT-DEBT-4/5 等候选）。
+- **首要任务**：按 `TEST_REFACTOR.md` Phase 0 启动 PT-TEST-1（先做覆盖基准固化与设计冻结，**不碰代码**）。
+- **已完成**：PT-DEBT-7（删 is_nullable 死字段）、PT-DEBT-8（值层分派收敛，重定义原折叠目标）、
+  PT-DEBT-6（register_module 可观测性）、PT-DOC-2（定位段收尾）、DOC_AUDIT 文档治理（F0-F4）、
+  PT-INTRO-1/PT-DECIDE-1/PT-DEBT-1/2/3、内建函数群完善+遮蔽——详见 `PENDING_TASKS.md` 与 git 历史。
+- **待办池**：完整清单见 `PENDING_TASKS.md`。
 
 ---
 
@@ -28,6 +34,13 @@
 
 > 全部落地 unsafe-vibe-dev（本地 commit，未 push）。commit 明细见 git 历史。
 
+- **PT-DEBT-7/8 + PT-DEBT-6 + PT-DOC-2（2026-08-06）**：
+  - PT-DEBT-7：删 `TypeDef.is_nullable` 死字段（可空性早已由 `Optional[T].wrapped_type` 承载，序列化不消费）。
+  - PT-DEBT-8：系统层面重定义"折叠 IbXxx→IbValue"为伪目标（消 isinstance 动机已由 name 分派达成）→
+    值层分派收敛审计：`is_sequence_value` 统一容器分派、`IbLLMCallResult.is_uncertain` 统一不确定判断；
+    类角色分工固化 `03_type_system.md` §6.4。
+  - PT-DEBT-6：`register_module` 用户插件覆盖 kernel-native 时发 warning（原静默忽略）；修正测试配置 bug。
+  - PT-DOC-2：14 篇 syntax 定位段核实完成（DOC_AUDIT F3 已补齐），条目移除。
 - **DOC_AUDIT 文档治理（2026-08-06）**：docs/ 全量治理（42 篇）分四阶段执行——F0 本批引入修复（KNOWN_LIMITS §二十二重复编号→§二十四、14_concurrency E9、E2 历史叙述）；F1 P0 断链/矛盾 ~17+ 处（以代码为最高真相）；F2 P1 红线批量（日期戳/历史叙述/冻结数字/任务代号清除、KNOWN_LIMITS 章节重排为一~二十二并同步跨文档引用、05_coroutine 任务日志迁 tasks_docs/THREAD_DESIGN.md、__prompt__ 待决项迁 tasks_docs/PROMPT_DESIGN_REVIEW.md）；F3 P2 改善（模板统一 13_mock_testing/04_control_flow、A5 去重、侧表/MetadataStore 事实修正、handler 数 43→45）；F4 体系（How-to 层 docs/howto/ 两篇、'深入指引'尾段 23 篇补齐）。**后续清理**：删除自治标注文档 appendix_type_system_rationale.md 与 backup/（未完成规划迁 PENDING_TASKS PT-FEAT-8/PT-DEBT-7/8，media 设计浓缩为 tasks_docs/MEDIA_DESIGN.md）。完整记录见 `tasks_docs/DOC_AUDIT_REPORT.md`。
 - **整合巩固批次（2026-08-06）**：新写 `docs/syntax/14_concurrency.md`（并发语言面，此前缺失）+ KNOWN_LIMITS §二十二（signal 移除）；修复 PT-DEBT-1 文档漂移（`_ibci_registry_id` 残留）；修复 for 循环变量类型恒为 any 缺陷（复合赋值在 for 体内无法定型）；for...if + 复合赋值 e2e 覆盖（PT-TEST-2）。
 - **内建函数群完善（2026-08-06）**：类型转换全局函数 `int()`/`str()`/`float()`/`bool()` +

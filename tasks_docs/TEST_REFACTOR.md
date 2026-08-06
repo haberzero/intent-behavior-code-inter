@@ -27,6 +27,8 @@
 - 跑 `python3 -m pytest tests/ --collect-only -q` 输出 per-file 用例计数快照。
 - 固化当前 INV-* 矩阵的"已覆盖项"清单（每条定位到 file:line）。
 - 此快照作为"新体系必须 ≥ 此基准"的对照基线，存档。
+- **并入 PT-TEST-3（2026-08-06 用户裁定）**：矩阵同步在此重构中一并完成。
+  已有核对发现（改名映射 / TRUE_GAP / 契约漂移）见 `tasks_docs/TEST_MATRIX_FINDINGS.md`，作为输入。
 
 **0.2 新体系架构设计冻结**（产出设计文档，评审通过后不动）
 - 目录结构（采纳报告 A ⑥ 提议：kernel/compiler/runtime/plugins/contracts/e2e/compliance/sdk/meta/fixtures）。

@@ -80,7 +80,7 @@
 |---|------|------|
 | PT-DEBT-4 | `file` 模块重命名 | `file` 影子化 Python 内建，长期重命名（如 `fs`/`io`）。当前过渡措施已实施 |
 | PT-DEBT-5 | 全项目文件命名清理 | 过短/欠层次/欠区分度/影子化内建的代码文件命名排查。暂缓，独立窗口执行 |
-| PT-DEBT-6 | `register_module()` 可观测性缺口 | 静默忽略与 kernel-native 同名的用户插件，无 warning。待诊断体系稳定后专项处理 |
+| PT-DEBT-6 | `register_module()` 可观测性缺口 | **已落地（2026-08-06）**：用户插件覆盖 kernel-native 时 `warnings.warn`（原静默忽略）。顺带修正测试配置 bug（plugin_paths 指向插件目录本身导致插件从未加载）。全量 pytest 零回归 |
 | PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | **已落地（2026-08-06）**：死字段清理（`is_assignable` 早已用 `Optional[T].wrapped_type`，序列化不消费）。全量 pytest 零回归 |
 | PT-DEBT-8 | ~~折叠 `IbXxx` 为单一 `IbValue`~~ → **重定义为"值层分派收敛审计"** | **已落地（2026-08-06）**：系统层面定论——折叠是伪目标（消 isinstance 动机已由 name 分派达成；具体类=领域方法载体，折叠违反单一职责）。实际收敛：`is_sequence_value` 统一容器分派、`IbLLMCallResult.is_uncertain` 统一不确定判断；类角色分工固化于 `03_type_system.md` §6.4。全量 pytest 零回归 |
 
@@ -107,7 +107,7 @@
 | D1-D5 | **已落地**：新写 `docs/syntax/14_concurrency.md`（chan/slot/subscriber/thread/thread_result + pubsub/send_nowait 语义 + signal 移除说明），KNOWN_LIMITS §二十二，SYNTAX_REFERENCE/README 接入。详见 WORKLOG |
 
 ### PT-DOC-2 语法手册定位段补充
-`docs/syntax/*.md` 各章节缺 `docs/README.md` §六.3 要求的定位段。
+**已完成（2026-08-06）**：14 篇 `docs/syntax/*.md` 均已有合格定位段（`> 本章描述...面向...覆盖...`），DOC_AUDIT F3 期间随"深入指引"补齐时一并落地。条目移除。
 
 ---
 
@@ -115,7 +115,7 @@
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-TEST-1 | 测试体系治理与彻底重构（TEST_REFACTOR） | 独立低优先级：新建从零 → 并行共存 → 全面替换 → 深入内核（正式测试内省 API）。铁律：Phase 0 设计冻结前不启动代码改动。详见 `TEST_REFACTOR.md`。**并入 PT-TEST-3**（矩阵同步在重构中一并完成，2026-08-06 用户裁定） |
+| PT-TEST-1 | 测试体系治理与彻底重构（TEST_REFACTOR） | **下一主线（2026-08-06 用户裁定）**：新建从零 → 并行共存 → 全面替换 → 深入内核（正式测试内省 API）。铁律：Phase 0 设计冻结前不启动代码改动。详见 `TEST_REFACTOR.md`。**并入 PT-TEST-3**（矩阵同步在重构中一并完成） |
 | PT-TEST-2 | e2e 测试覆盖率提升 | `for...if` 过滤、复合赋值运算符 e2e **已补（2026-08-06）**；其余覆盖缺口待续 |
 | PT-TEST-3 | 测试名与覆盖矩阵同步 | **推迟至 PT-TEST-1**（2026-08-06 用户裁定，矩阵彻底完善随测试体系重构一并做）。核对发现（改名映射/TRUE_GAP/契约漂移）存档于 `tasks_docs/TEST_MATRIX_FINDINGS.md` |
 
