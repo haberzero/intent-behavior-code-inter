@@ -109,7 +109,8 @@ class StatementVisitorsMixin:
             rhs_inner = rhs.value if isinstance(rhs, ast.IbAwaitExpr) else rhs
             if isinstance(rhs_inner, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
                 if target_type and not self.registry.is_dynamic(target_type):
-                    # 行为表达式结果适配目标类型
+                    # 行为表达式结果适配目标类型；具体目标类型必须可被 LLM 解析
+                    self._check_behavior_output_parseable(target_type, node)
                     self.bind_type(rhs_inner, target_type)
                     if rhs is not rhs_inner:
                         self.bind_type(rhs, target_type)
@@ -167,6 +168,7 @@ class StatementVisitorsMixin:
             # Behavior 表达式特殊处理
             if isinstance(node.value, ast.IbBehaviorExpr):
                 if target_type and not self.registry.is_dynamic(target_type):
+                    self._check_behavior_output_parseable(target_type, node)
                     self.bind_type(node.value, target_type)
                 return
 

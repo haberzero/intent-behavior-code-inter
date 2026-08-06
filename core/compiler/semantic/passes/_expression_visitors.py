@@ -735,6 +735,9 @@ class ExpressionVisitorsMixin:
         # 5. 返回带 return_type 的 Spec（使调用处 resolve_return 能推导出具体类型）
         if is_behavior_body:
             if has_concrete_returns:
+                # 行为输出契约：具体返回类型必须可被 LLM 解析，否则运行期
+                # 静默 box 成字符串（fail-fast，见 KNOWN_LIMITS）。
+                self._check_behavior_output_parseable(returns_type, node)
                 # 行为表达式 + 具体返回类型：bind body node 并返回带 value_type 的 spec
                 self.bind_type(node.body, returns_type)
                 result = self.registry.factory.create_behavior(

@@ -248,6 +248,72 @@ fn my_snap = snapshot -> str: @~ say hello ~
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
+
+class TestBehaviorOutputParseability:
+    """行为输出目标类型必须可被 LLM 解析（SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE）。
+
+    声明的具体类型无 __from_prompt__/parser 时，运行期只能把 LLM 字符串静默
+    box 成 str——错误类型流入。编译期 fail-fast 暴露根因。
+    """
+
+    _POINT_NO_FROM = (
+        "class Point:\n"
+        "    int x\n"
+        "    func __init__(self, int x) -> auto:\n"
+        "        self.x = x\n"
+    )
+    _POINT_WITH_FROM = _POINT_NO_FROM + (
+        "    func __from_prompt__(self, str raw) -> auto:\n"
+        "        return (True, 1)\n"
+    )
+
+    def _error_codes(self, engine, code):
+        from core.kernel.issue import CompilerError
+        with pytest.raises(CompilerError) as exc_info:
+            engine.compile_string(code, silent=True)
+        return {d.code for d in exc_info.value.diagnostics}
+
+    def test_lambda_behavior_no_from_prompt_rejected(self, engine):
+        codes = self._error_codes(engine, self._POINT_NO_FROM +
+            "fn f = lambda -> Point: @~ MOCK:STR:hi ~\n")
+        assert "SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE" in codes
+
+    def test_lambda_behavior_with_from_prompt_allowed(self, engine):
+        artifact = engine.compile_string(
+            self._POINT_WITH_FROM + "fn f = lambda -> Point: @~ MOCK:STR:hi ~\n",
+            silent=True)
+        assert artifact is not None
+
+    def test_lambda_behavior_parseable_primitives_allowed(self, engine):
+        for decl in ("int", "str", "auto", "any"):
+            artifact = engine.compile_string(
+                f"fn f = lambda -> {decl}: @~ MOCK:STR:hi ~\n", silent=True)
+            assert artifact is not None, f"-> {decl} 应可编译"
+
+    def test_typed_assignment_rejected(self, engine):
+        codes = self._error_codes(engine, self._POINT_NO_FROM +
+            "Point p = @~ MOCK:STR:hi ~\n")
+        assert "SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE" in codes
+
+    def test_typed_assignment_with_from_prompt_allowed(self, engine):
+        artifact = engine.compile_string(
+            self._POINT_WITH_FROM + "Point p = @~ MOCK:STR:hi ~\n", silent=True)
+        assert artifact is not None
+
+    def test_subclass_inherits_from_prompt_allowed(self, engine):
+        artifact = engine.compile_string(
+            self._POINT_WITH_FROM +
+            "class Point3(Point):\n"
+            "    int z\n"
+            "fn f = lambda -> Point3: @~ MOCK:STR:hi ~\n",
+            silent=True)
+        assert artifact is not None
+
+    def test_bare_behavior_unconstrained_allowed(self, engine):
+        artifact = engine.compile_string(
+            "auto x = @~ MOCK:STR:hi ~\n", silent=True)
+        assert artifact is not None
+
     def test_llm_function_def(self, engine):
         code = """import ai
 llm translate(str text, str lang) -> str:

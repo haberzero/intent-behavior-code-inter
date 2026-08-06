@@ -9,6 +9,7 @@ as part of a pure mechanical refactoring — no logic changes.
 from typing import Optional
 
 from core.base.diagnostics.codes import (
+    SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE,
     SEM_MULTI_TYPE_LIST_REMOVED,
     SEM_UNCATEGORIZED,
     SEM_UNRESOLVED_TYPE,
@@ -103,6 +104,70 @@ class TypeCheckBase:
                 self._bind_condition_behavior_types(val)
         elif isinstance(node, ast.IbUnaryOp) and node.op == "not":
             self._bind_condition_behavior_types(node.operand)
+
+    def _class_has_member_method(self, spec: IbSpec, method_name: str) -> bool:
+        """类（含继承链）是否声明了指定方法成员。
+
+        类成员以 ``spec.members`` 承载（本地定义的类已回填方法 spec）。
+        继承的方法沿 ``parent_type`` 向上查找。
+        """
+        seen = set()
+        cur: Optional[IbSpec] = spec
+        while cur is not None:
+            name = getattr(cur, "name", None)
+            if name in seen:
+                break
+            seen.add(name)
+            if method_name in (getattr(cur, "members", None) or {}):
+                return True
+            parent_ref = getattr(cur, "parent_type", None)
+            if parent_ref is None:
+                break
+            cur = self.registry.resolve(parent_ref.head)
+        return False
+
+    def _has_llm_parse_cap(self, spec: Optional[IbSpec]) -> bool:
+        """目标类型能否作为 LLM 行为输出被解析回原类型。
+
+        LLM 输出原始形态是字符串；要兑现声明的具体输出类型，目标必须有
+        from_prompt/parser 能力（内建类型公理）或 ``__from_prompt__`` 方法
+        （用户类）。auto/any/fn 等动态类型无输出契约（运行期 box 为字符串），
+        视为可解析。无法确认的 spec（None/未解析）保守视为可解析，避免误伤
+        运行时注册的解析能力。
+        """
+        if spec is None:
+            return True
+        if self.registry.is_dynamic(spec):
+            return True
+        # 行为本体（fn_callable/behavior）：目标类型未解析到真实声明类型时的
+        # 兜底形态（如对既有变量赋行为，见 _handle_assign_target 的 target_type
+        # 回退），无独立输出契约，运行期 box 为字符串。
+        if spec.kind == TypeKind.CALLABLE_INSTANCE.value and spec.get_base_name() in ("behavior", "fn_callable"):
+            return True
+        if self.registry.get_from_prompt_cap(spec) is not None:
+            return True
+        if self.registry.get_parser_cap(spec) is not None:
+            return True
+        if spec.kind == TypeKind.CLASS.value:
+            return self._class_has_member_method(spec, "__from_prompt__")
+        return False
+
+    def _check_behavior_output_parseable(self, spec: Optional[IbSpec], node: ast.IbASTNode) -> None:
+        """行为输出的目标类型必须可被 LLM 解析；否则编译期错误（fail-fast）。
+
+        声明的具体输出类型无解析能力时，运行期会把 LLM 字符串静默 box 成成功值，
+        使错误类型流入后续代码。此处把根因（声明了无法兑现的输出类型）在编译期
+        暴露，避免 llmexcept 重试空转（重试无法弥补缺失的解析能力）。
+        """
+        if self._has_llm_parse_cap(spec):
+            return
+        self.error(
+            f"Behavior output type '{spec.name}' has no LLM parsing capability "
+            f"(no __from_prompt__/parser). LLM output would silently become a string. "
+            f"Add '__from_prompt__' to '{spec.name}', or declare '-> str'/'auto'/'any' "
+            f"if the raw string is intended.",
+            node, code=SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE,
+        )
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""

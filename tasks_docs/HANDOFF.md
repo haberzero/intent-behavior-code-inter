@@ -103,8 +103,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 - **PT-INTRO-1 已完成**：`type(f)` 对 fn_callable/behavior 返回签名形态 + `f.__return_type__()`
   返回类型查询 + 签名序列化 round-trip 保真（2026-08-06）。设计要点见 `PENDING_TASKS.md` §一/§十。
 - **下一主线：待用户择定**——自然候选 `PT-DEBT-1/2/3`（内核接口协议化，同性质可合并实施）。
-- **待讨论（下一 session）**：`PT-DECIDE-1`——"已声明类型无 parser → uncertain"
-  语言级语义决策，仅记录。
+- **PT-DECIDE-1 已裁定（2026-08-06）**：行为输出具体类型必须可解析——编译期
+  `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE` + 运行时 Default 兜底 uncertain，禁止静默 box。
 - **待选**：`PT-DEBT-1/2/3` 内核接口协议化——同性质可合并实施。
 - **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
   审查循环，R4/R5 待做）+ `PT-AUDIT-4/5`（文档清洗与梳理 / 注释卫生清理）——持续周期工作。

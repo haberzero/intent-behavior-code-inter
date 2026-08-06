@@ -286,17 +286,53 @@ class DefaultParsingStrategy(ParsingStrategy):
     """
     Default fallback parsing strategy.
 
-    This strategy simply boxes the raw string response as-is.
-    It's the last resort when no other strategy can handle the type.
+    兜底策略：无真实输出契约（auto/any/无类型/行为本体）时把原始字符串 box 成 str；
+    已声明的具体类型却无任何解析能力时返回 uncertain（编译期
+    SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE 已拦截主要路径，此处兜底防绕过路径
+    静默流入错误类型）。
     """
 
     def can_handle(self, raw_res: str, type_name: str) -> bool:
         """Default strategy always returns True (fallback)."""
         return True
 
+    def _is_declared_unparseable(self, type_name: str) -> bool:
+        """type_name 是否指代一个已声明但无解析能力的具体类型。
+
+        排除无契约情形：动态类型（any/auto/fn）与行为本体（behavior/fn_callable，
+        ``-> any`` 行为运行时 type_hint 即裸 'behavior'）。仅当解析到具体 descriptor
+        且无 from_prompt/parser 能力时判定为不可解析。
+        """
+        meta_reg = self.registry.get_metadata_registry()
+        if meta_reg is None:
+            return False
+        descriptor = meta_reg.resolve(type_name)
+        # 泛型形态（如 "list[int]"）无精确 descriptor，回退基名（与 Axiom 策略一致）。
+        if descriptor is None and '[' in type_name:
+            descriptor = meta_reg.resolve(type_name.split('[')[0])
+        if descriptor is None:
+            return False
+        base = descriptor.get_base_name()
+        if base in ("behavior", "fn_callable", "any", "auto"):
+            return False
+        if meta_reg.get_from_prompt_cap(descriptor) is not None:
+            return False
+        if meta_reg.get_parser_cap(descriptor) is not None:
+            return False
+        return True
+
     def parse(self, raw_res: str, type_name: str, node_uid: str,
               execution_context: Optional['IExecutionContext'] = None) -> Optional[LLMResult]:
-        """Return raw response boxed as string."""
+        """无契约时返回字符串 box；已声明但不可解析的具体类型返回 uncertain。"""
+        if type_name and self._is_declared_unparseable(type_name):
+            return LLMResult.uncertain_result(
+                raw_response=raw_res,
+                retry_hint=(
+                    f"Declared LLM output type '{type_name}' has no parsing capability "
+                    f"(no __from_prompt__/parser). Add one, or declare "
+                    f"'-> str'/'auto'/'any' if the raw string is intended."
+                ),
+            )
         return LLMResult.success_result(
             value=self.registry.box(raw_res),
             raw_response=raw_res

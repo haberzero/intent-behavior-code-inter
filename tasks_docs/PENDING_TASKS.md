@@ -22,15 +22,28 @@
 
 ---
 
-## 二、待用户拍板：PT-DECIDE-1 LLM 解析默认策略语义
+## 二、PT-DECIDE-1 LLM 解析默认策略语义（已裁定，2026-08-06）
 
-> **位置**：`core/runtime/interpreter/llm_parsing_strategy.py`（DefaultParsingStrategy）。
-> **问题**："已声明具体类型但无 `__from_prompt__`/parser" 的 LLM 输出被**静默 box 成成功
-> 字符串**（不触发 llmexcept 重试）→ 错误类型可能静默流入。`auto`/无类型 → box 成功合理
-> （已有测试依赖）。
-> **待决方案**：区分语义——`auto`/None 无类型 → box；已声明且有 spec 但无 parser → uncertain
-> （触发 llmexcept）。属**语言级语义变更**，改会回归现有 `auto result = @~ ... ~` 测试。
-> **状态**：仅记录，作为待讨论项。
+> **裁定**：编译期 `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE` + 运行时兜底（DefaultParsingStrategy）。
+>
+> **问题**："已声明具体类型但无 `__from_prompt__`/parser" 的 LLM 输出被静默 box 成成功
+> 字符串 → 错误类型静默流入（实测：`Point p = make()` 中 p 实际为 str）。
+>
+> **方案评估**：`uncertain`（原提案）有致命缺陷——无 parser 类型在 llmexcept 下重试
+> 永远不可能成功，每轮重试重新调用 LLM，白耗 3 次后必然 `LLMRetryExhaustedError`；
+> 且需小心排除 `-> any`（运行时 type_hint 为裸 behavior）。编译期错误在零成本处暴露根因，
+> 与 fail-fast / 根因优先原则一致。
+>
+> **落地**：
+> 1. 编译期：lambda 行为体 `-> T`、`T x = @~...~`、`obj.field = @~...~` 三处检查
+>    T 是否可解析（from_prompt/parser 公理能力 或 类 `__from_prompt__` 含继承）；
+>    不可解析报 `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE`。`auto`/`any`/行为本体动态类型不设
+>    契约，豁免。
+> 2. 运行时兜底：`DefaultParsingStrategy` 对"已声明具体类型却无解析能力"返回 uncertain
+>    （含明确 retry_hint），不再静默 box；无契约情形（空/auto/any/行为本体）保持 box。
+>
+> **兼容性**：`auto result = @~...~`、`-> auto/any`、有 parser 的内建类型全部保留原行为；
+> 现有测试无"无 parser 具体类型 → str"依赖。设计决策（含 futile-retry 论证）见 WORKLOG。
 
 ---
 

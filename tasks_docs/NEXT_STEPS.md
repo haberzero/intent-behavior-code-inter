@@ -12,8 +12,8 @@
 
 - **PT-DEBT-1/2/3 内核接口协议化**（推荐）：跨对象私有穿透收敛为公开访问器/容器
   （`native_module.py` / `observability/snapshot.py` / `runtime_context.py`），同性质可合并实施。
-- **PT-DECIDE-1**：LLM 解析默认策略语义（"已声明具体类型但无 parser → uncertain"）——
-  语言级语义变更，需用户拍板。
+- **PT-DECIDE-1（已裁定）**：行为输出具体类型必须可解析——编译期
+  `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE` + 运行时兜底（见 `PENDING_TASKS.md` §二）。
 - **长期周期**：PT-AUDIT-1/2/3（R4/R5 待做）/4/5，阶段边界择机。
 - **保留规划**：PT-TEST-1（测试体系重构，未来做）、PT-FEAT-1（语言级协程，保持现状）。
 
@@ -23,7 +23,7 @@
 
 - **PT-INTRO-1 已完成**：`type(f)` 签名形态 + `f.__return_type__()`（详见 `PENDING_TASKS.md` §一）。
 - **下一主线**：待用户择定（推荐 PT-DEBT-1/2/3，见上）。
-- **待讨论**：PT-DECIDE-1（LLM 解析默认策略语义）——仅记录。
+- **PT-DECIDE-1 已裁定**：行为输出类型可解析性（编译期检查 + 运行时兜底，见 `PENDING_TASKS.md` §二）。
 - **待选**：PT-DEBT-1/2/3（内核接口协议化）——同性质可合并实施。
 - **长期周期**：PT-AUDIT-1/2（代码异味 / 分支嵌套审计）+ PT-AUDIT-3（代码复核审查循环，
   R4/R5 待做）+ PT-AUDIT-4/5（文档清洗与梳理 / 注释卫生清理）——持续周期工作，阶段边界择机。
