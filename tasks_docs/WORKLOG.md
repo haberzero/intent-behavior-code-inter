@@ -2,7 +2,7 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-05
+> 最后更新：2026-08-06
 
 ---
 
@@ -27,6 +27,11 @@
 | PT-DEBT-7 落地（2026-08-06） | 删 `TypeDef.is_nullable` 死字段（commit 5d57359）：核实 `is_assignable` 早已用 `Optional[T].wrapped_type`（_assignability.py 不读 is_nullable），序列化写出后反序列化不消费（artifact_rehydrator 忽略）→ 纯死字段。删 base.py 字段 + specs/factory 构造参数 + serializer 写出 + 测试断言 + 文档，全量 pytest 零回归 |
 | PT-DEBT-8 重定义落地（2026-08-06） | **系统层面定论**（用户要求从设计目标/设计语言一致性/务实规划重新审视）：折叠 `IbXxx`→单一 `IbValue` 是伪目标——M4 原始动机（消 isinstance 分派）已由 `isinstance(obj, IbValue) and obj.ib_class.name` 统一分派达成（运行时精确 isinstance 值层分派仅剩类内运算符重载 2 处）；具体类是**领域方法实现载体**（单一职责），折叠把 180+ 方法灌入巨型类违反单一职责。按 design-philosophy 审视：无碎片化（值身份权威已是 type_ref 单一源）、无机制割裂（分派已 name 化）→ 折叠无系统一致性价值。**实际收敛**（commit 01ffc94）：新增 `is_sequence_value()`（base.py）统一容器分派（control_flow/seq/_shared 三处 `isinstance(IbList, IbTuple)` 与 name 分派并存 → 单一权威）；`IbLLMCallResult.is_uncertain` 属性统一不确定判断（_shared._is_llm_uncertain_value 与 interpreter.py 双轨 → 单一权威）；哨兵身份判断（IbNone/IbLLMUncertain/IbOptional）保留 isinstance（Python 惯用）。类角色分工固化 `03_type_system.md` §6.4（防未来重复 M4 误判）。全量 pytest 零回归 |
 | 测试矩阵核对存档（2026-08-06） | PT-TEST-3/R4 核对发现存档 `tasks_docs/TEST_MATRIX_FINDINGS.md`：124 测试名 60 个过期（改名映射）、5 处 TRUE_GAP（INV-INTENT-PRIORITY-2/SCOPE-3/MOCK-3/LLMEXCEPT-CATCH-4/CAST-2）、3 处契约漂移（UNCERTAIN-2 语义疑似反转等）。**用户裁定**：矩阵彻底完善推迟至 PT-TEST-1 测试体系重构，现阶段不执行 |
+| OBSERVABILITY_REFACTOR 授权（2026-08-06） | **用户补充裁定（凌驾）**：① 允许代码破坏，不以已存在代码为重，长期收益/系统统一/宏观机制一致性为最高指导；② 大规模破坏**必须先独立分支实验**，成功后**禁直接合并**回 unsafe-vibe-dev，只按已检验设计**手动**应用；③ 破坏性改造满足"实验通过+工程实践+普适性+符合 IBCI 设计原则+长期收益"即**全权自主实施**；④ **禁兼容层**；⑤ 历史包袱经慎重分析确信无意义即**大胆抛弃彻底清理**。PT-TEST-1 并入本任务（`tasks_docs/OBSERVABILITY_REFACTOR.md` 为任务控制文档） |
+| OBSERVABILITY 2A（2026-08-06） | **CORE_DEBUG 机制整体移除**（commit 6878986）：删 CoreDebugger 类/env `IBC_CORE_DEBUG`/CLI `--core-debug`/`debugger=` 参数链/`ServiceContext.debugger` 契约/88 trace 点。诊断点分类处置（实测校正）：真实异常回退 8 处→`warnings.warn`（PT-DEBT-6 先例）；**AttributeError 协议缺失回退=设计路径静默**（receive 对无协议对象抛 AttributeError 是正常路径，实测 11 warning 后拆分）；设计内重试/已上报错误/会重抛的 trace 直接删。engine `output_callback` 改 `_output_callback` 普通字段承载；silent 收敛为单职责（只抑制用户错误打印） |
+| OBSERVABILITY 2B（2026-08-06） | **观测骨架测试合作面**（commit 73f373d/ae2209e/feff694）：`EngineTestSnapshot`（explicit_root/cwd/entry_file/entry_dir/project_root/plugin_search_paths/install_path/root_initialized/spawned_handles）+ `reset_test_state()` + `resolve_plugin_search_paths()` 公开化 → **e2e engine 生命周期私有穿透归零、layering 豁免名单归零**（顺带修复 layering `self._xxx` 排除逻辑 bug）；`ServiceContext.test_hooks`（TestHooks 协议：on_llm_call/on_llm_call_error/on_dispatch，**显式协议调用非 getattr 分派**，契约强制全方法，fail-fast）+ `engine.test_hooks` 转发。**推迟 `IsolationPolicy.test_mode`/`mock_provider` 至 2D**（无消费方预留字段=死字段，R2 教训）；跳过 call_info 形式化（三入口已收敛单写槽） |
+| OBSERVABILITY 2C（2026-08-06） | **idbg 适配**（commit 8a0065c）：删真死代码 `_llm_provider()`/`debugger_provider` capability；`show_intents()` 收敛为 `intents()` 单一权威源（去 C9 双源回退 + except-pass）；`fields()` 改 `isinstance(IbObject)` 协议直访（去 A1 hasattr 探测链）。保留 16-API vtable 契约（fields/intents 保留并修复）。CODE_SMELL_AUDIT C8/C9、AIMLESS_REVIEW A1 标记已解决 |
+| OBSERVABILITY session 收尾（2026-08-06） | Phase 0-2C 全部落地 unsafe-vibe-dev（11 commits），全量 **1633 passed / 4 skipped**（较基线 1626/6：+4 layering 豁免转真实执行，2 处测试置换）。**下一 session 起点：Phase 2D 测试体系重建实验**（独立分支 `exp/obs-2d-test-refactor`，沿用 TEST_REFACTOR 策略/铁律）→ Phase 3-2D 手动应用 → Phase 4 收敛（矩阵三段式/PT-TEST-3 + meta 扩展 + 旧 tests 删除 + docs 治理） |
 | PT-DEBT-6 落地（2026-08-06） | `register_module` 可观测性（commit 1999484）：用户插件覆盖 kernel-native 时从静默忽略改为 `warnings.warn`（kernel-native 保护语义不变，仅消除静默，fail-fast/可观测）。**顺带修正测试配置 bug**：`test_kernel_native_modules.py` 的 `plugin_paths` 原指向插件目录本身（`fake_isys`）而非父目录 → fake_isys 从未被 discover 加载、测试"碰巧通过"；修正后插件真正进入注册路径，warning 可被 `pytest.warns` 断言。全量 pytest 零回归 |
 | PT-TEST-1 列为主线（2026-08-06） | **用户裁定**：测试体系完整重构（PT-TEST-1，`TEST_REFACTOR.md` Phase 0-5）列为下一 session 主任务。铁律：Phase 0 规划与设计冻结完成前不启动代码改动。并入 PT-TEST-3 矩阵同步（输入 `TEST_MATRIX_FINDINGS.md`）。启动方式：覆盖基准固化（`pytest --collect-only` 快照）+ 新体系架构设计冻结 |
 
