@@ -44,6 +44,8 @@ class IbFnCallable(IbValue):
         params_uids: Optional[List[str]] = None,
         body_uid: Optional[str] = None,
         closure: Optional[Dict[str, Any]] = None,
+        param_types: Optional[List[str]] = None,
+        return_type: Optional[str] = None,
     ):
         super().__init__(
             ib_class,
@@ -62,6 +64,25 @@ class IbFnCallable(IbValue):
         self.params_uids: List[str] = list(params_uids) if params_uids else []
         self.body_uid: Optional[str] = body_uid
         self.closure: Dict[str, Any] = dict(closure) if closure else {}
+        # 内省签名：编译期 node_to_type 捕获，JSON 安全纯字符串。
+        self.param_types: List[str] = list(param_types) if param_types else []
+        self.return_type: Optional[str] = return_type
+
+    def get_return_type(self) -> str:
+        """返回类型查询：规范类型名；未捕获具体类型时回退 'auto'。"""
+        return self.return_type or "auto"
+
+    def signature_name(self) -> str:
+        """含签名的类型名形态：'fn_callable[()->int]' / 'fn_callable[(int,str)->bool]'。
+
+        返回类型非具体（auto/any）时退化为裸 'fn_callable'，与类型 spec 的命名
+        约定（create_fn_callable 对 auto 省略泛型实参）一致。
+        """
+        rt = self.get_return_type()
+        if rt in ("auto", "any"):
+            return self.ib_class.name
+        params = ",".join(self.param_types)
+        return f"{self.ib_class.name}[({params})->{rt}]"
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """
@@ -153,8 +174,15 @@ class IbFnCallable(IbValue):
         if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
             return self.ib_class.registry.box(str(self))
 
+        if message == "__return_type__":
+            return self.ib_class.registry.box(self.get_return_type())
+
         if message == "__call__":
             return self.call(self.ib_class.registry.get_none(), args)
+
+        # 属性访问委派到基类 vtable（__return_type__ 原生方法等）。
+        if message == "__getattr__":
+            return super().receive(message, args)
 
         raise RuntimeError(f"FnCallable '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
 
@@ -226,6 +254,8 @@ class IbBehavior(IbValue):
         execution_context: Optional[Any] = None,
         params_uids: Optional[List[str]] = None,
         closure: Optional[Dict[str, Any]] = None,
+        param_types: Optional[List[str]] = None,
+        return_type: Optional[str] = None,
     ):
         """
         IbBehavior 是纯粹的数据描述符与自主执行单元。
@@ -267,6 +297,25 @@ class IbBehavior(IbValue):
         # 参数化调用支持
         self.params_uids: List[str] = list(params_uids) if params_uids else []
         self.closure: Dict[str, Any] = dict(closure) if closure else {}
+        # 内省签名：编译期 node_to_type 捕获，JSON 安全纯字符串。
+        self.param_types: List[str] = list(param_types) if param_types else []
+        self.return_type: Optional[str] = return_type
+
+    def get_return_type(self) -> str:
+        """返回类型查询：规范类型名；未捕获具体类型时回退 'auto'。"""
+        return self.return_type or "auto"
+
+    def signature_name(self) -> str:
+        """含签名的类型名形态：'behavior[()->str]' / 'behavior[(int,str)->bool]'。
+
+        返回类型非具体（auto/any）时退化为裸 'behavior'，与类型 spec 的命名
+        约定（create_behavior 对 auto 省略泛型实参）一致。
+        """
+        rt = self.get_return_type()
+        if rt in ("auto", "any"):
+            return self.ib_class.name
+        params = ",".join(self.param_types)
+        return f"{self.ib_class.name}[({params})->{rt}]"
 
     def value(self):
         if self._cache: return self._cache.to_native()
@@ -363,9 +412,17 @@ class IbBehavior(IbValue):
         行为对象的消息处理。
         允许查询元数据，仅在尝试"执行行为本身"且无上下文时才抛出异常。
         """
+        # 签名查询反映行为声明形态，与执行状态无关，先于 _cache 委派处理。
+        if message == "__return_type__":
+            return self.ib_class.registry.box(self.get_return_type())
+
         if self._cache: return self._cache.receive(message, args)
 
         if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
             return self.ib_class.registry.box(str(self))
+
+        # 属性访问委派到基类 vtable（__return_type__ 原生方法等）。
+        if message == "__getattr__":
+            return super().receive(message, args)
 
         raise RuntimeError(f"Behavior '{self.node}' is not executed. Cannot process message '{message}'.")

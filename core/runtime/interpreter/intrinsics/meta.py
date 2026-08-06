@@ -18,11 +18,15 @@ def register_meta(manager: Any, execution_context: Any, service_context: Any):
         """全局 type() 函数：返回值的规范类型名字符串。
 
         对齐 Python type() 语义的运行时内省：返回对象运行时类型的规范名
-        （int/str/list/fn_callable/用户类名等），即 ib_class.name。供调试、
+        （int/str/list/用户类名等）。fn_callable/behavior 返回含签名的形态
+        （如 ``fn_callable[()->int]``、``behavior[(int,str)->bool]``）。供调试、
         泛型分发、类型比较使用。
         """
         if isinstance(obj, IbObject):
-            return manager.registry.box(obj.ib_class.name)
+            name = obj.ib_class.name
+            if name in ("fn_callable", "behavior"):
+                return manager.registry.box(obj.signature_name())
+            return manager.registry.box(name)
         return manager.registry.box(type(obj).__name__)
 
     manager.register("get_self_source", get_self_source, unbox=True)

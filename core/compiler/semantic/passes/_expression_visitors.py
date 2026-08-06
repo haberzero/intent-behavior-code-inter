@@ -675,6 +675,10 @@ class ExpressionVisitorsMixin:
                 if arg_node.annotation:
                     arg_type = self._resolve_type(arg_node.annotation)
 
+                # 参数节点类型绑定：运行时内省（签名形态）经 node_to_type
+                # 侧表读取参数类型，必须在此落绑定。
+                self.bind_type(arg_node, arg_type)
+
                 arg_name = None
                 if isinstance(arg_node, ast.IbArg):
                     arg_name = arg_node.arg

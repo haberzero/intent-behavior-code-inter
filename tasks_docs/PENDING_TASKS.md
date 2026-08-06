@@ -3,25 +3,22 @@
 > 当前最紧要见 `tasks_docs/NEXT_STEPS.md`；本文档只保留**仍有价值**的待办、长期规划与设计决策。
 > 已完成/无价值条目已删除（完整历史在 git）。
 > 任务代号体系（2026-08-05 重整，按**性质**分域，一概念一前缀）：
-> **PT-INTRO-1** 主线（内省体系剩余）｜**PT-FEAT-\*** 语言特性｜**PT-DEBT-\*** 缺陷/技术债
+> **PT-INTRO-1**（内省体系，已完成）｜**PT-FEAT-\*** 语言特性｜**PT-DEBT-\*** 缺陷/技术债
 > ｜**PT-AUDIT-\*** 长期周期清扫（审查/审计/文档与注释治理，持续周期工作）
 > ｜**PT-DOC-\*** 文档同步｜**PT-TEST-\*** 测试体系｜**PT-DECIDE-\*** 待用户拍板
 > ｜**PT-SEALED-\*** 封存
 
 ---
 
-## 一、下一主线：PT-INTRO-1 运行时内省体系剩余（fn/behavior 签名形态 + 返回类型查询）
+## 一、运行时内省体系（PT-INTRO-1，已完成）
 
-> `type(x)` 内建已落地（返回 `ib_class.name` 规范类型名，含 fn_callable/用户类）。
-> 剩余两项作为下一阶段主线（用户 2026-08-05 裁定）：
-
-1. **fn/behavior 签名形态**：`type(f)` 对 fn_callable/behavior 返回**含签名**的类型名
-   （如 `fn_callable[()->int]`）。需内省 `type_ref` 的 params + return。
-2. **返回类型查询 API**：草案 `f.__return_type__()`（独立于 `type()` 的签名查询形态）。
-
-**设计参照**：Rust（静态无运行时闭包反射）/ TypeScript（`ReturnType<typeof f>` 类型层）/
-Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛型分发场景）。
-**前置**：不依赖其它任务（类型体系已稳定）。详细设计先写本 tasks_docs 层，落地后收敛进 `docs/`。
+> `type(x)` 内建 + fn/behavior 签名形态 + `__return_type__()` 返回类型查询 **全部落地（2026-08-06）**。
+> 完成形态：
+> 1. `type(f)` 对 fn_callable/behavior 返回含签名类型名（`fn_callable[()->int]` /
+>    `behavior[(int,str)->bool]`）；其余值返回 `ib_class.name` 规范名。
+> 2. `f.__return_type__()` 返回返回类型规范名；签名随序列化 round-trip 保真。
+>
+> 设计决策（签名属值层属性）见 §十。
 
 ---
 
@@ -130,6 +127,7 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 | 决策 | 内容 |
 |------|------|
 | 运行时值 `type_ref` 保持基础 spec | 可变值（list/dict）不固有泛型身份（同一对象可赋给 list[int]/list[str]，语义不自洽）；符号/序列化侧已精确 |
+| callable 签名属值层属性 | fn_callable/behavior 的签名（param_types + return_type）在运行时值创建时经 node_to_type 捕获、自持于值（JSON 安全字符串，序列化保真）；不落 CALLABLE_INSTANCE 类型 spec（该 spec 仅载 value_type）。`type(f)`/`__return_type__()` 据此内省 |
 | 通信 `Signal` 抽象移除 | 零消费者空壳 + 与 VM 控制流 Signal 撞名 → 彻底删除 |
 | 瞬态序列化协议 | thread/chan/slot/subscriber 统一 `__transient_state__` 存根；反序列化不复活活体 |
 | 类型符号 `class_ref` | IbClass 序列化为类名引用、反序列化重绑定 registry 真实类 |

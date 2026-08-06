@@ -134,6 +134,13 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 # 自动化运算符绑定
                 _auto_bind_operators(ib_cls, py_impl_cls)
 
+    # 内省查询方法：__return_type__ 注册在 fn_callable 类上，
+    # behavior 经父链继承。值为 IbFnCallable/IbBehavior 自持签名字段，返回
+    # 规范类型名字符串。
+    fn_callable_class = ib_classes.get("fn_callable")
+    if fn_callable_class:
+        _reg_native(fn_callable_class, "__return_type__", lambda self: self.get_return_type())
+
     # 获取引用以便后续绑定
     integer_class = ib_classes.get("int")
     float_class = ib_classes.get("float")

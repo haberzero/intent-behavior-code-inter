@@ -83,9 +83,9 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 | 文档 | 用途 |
 |------|------|
-| `NEXT_STEPS.md` | 当前最紧要项（PT-INTRO-1 主线）/ 已完成摘要 / 工作模式定论 / 工作规则 |
+| `NEXT_STEPS.md` | 当前最紧要项（下一主线待择定）/ 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
-| `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED + PT-INTRO-1 主线） |
+| `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED；PT-INTRO-1 已完成） |
 | `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行 2026-08-05，R4/R5 待做） |
 | `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md` §十） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
@@ -100,9 +100,9 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一阶段主线：PT-INTRO-1 运行时内省体系剩余**——fn/behavior 签名形态（`type(f)` 返回
-  `fn_callable[()->int]`）+ 返回类型查询 API（草案 `f.__return_type__()`）。`type(x)` 内建已
-  落地。设计要点见 `PENDING_TASKS.md` §一。
+- **PT-INTRO-1 已完成**：`type(f)` 对 fn_callable/behavior 返回签名形态 + `f.__return_type__()`
+  返回类型查询 + 签名序列化 round-trip 保真（2026-08-06）。设计要点见 `PENDING_TASKS.md` §一/§十。
+- **下一主线：待用户择定**——自然候选 `PT-DEBT-1/2/3`（内核接口协议化，同性质可合并实施）。
 - **待讨论（下一 session）**：`PT-DECIDE-1`——"已声明类型无 parser → uncertain"
   语言级语义决策，仅记录。
 - **待选**：`PT-DEBT-1/2/3` 内核接口协议化——同性质可合并实施。
@@ -113,6 +113,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
+- **2026-08-06**：PT-INTRO-1 运行时内省体系全部落地——`type(f)` fn/behavior 签名形态 +
+  `f.__return_type__()` 返回类型查询 + 签名序列化 round-trip 保真（+9 测试）。
 - **2026-08-05**：闭包序列化 round-trip 修复 + Axiom 家族分裂收敛 + EnumAxiom 双通道收敛 +
   use_intent_context 守卫修复 + R3 异味四 Zone 处置 + import-* 精确成员枚举根治（含 IBC 文件
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。

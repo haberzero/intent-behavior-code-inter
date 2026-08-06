@@ -19,6 +19,41 @@ from core.runtime.vm.handlers._shared import (
 
 # === 意图操作 ===
 
+def _capture_signature(
+    executor,
+    node_uid: str,
+    params_uids: List[str],
+    expected_type: Optional[Any],
+) -> tuple:
+    """从 node_to_type 侧表捕获可调用实例签名（param_types + return_type）。
+
+    供运行时内省：``type(f)`` 签名形态与 ``f.__return_type__()``
+    查询需要值自持签名。签名属值层属性（与 capture_mode / expected_type 同层），
+    不落入 CALLABLE_INSTANCE 类型 spec。
+
+    - return_type：``expected_type`` 是具体返回类型 spec 时取其 ``name``；
+      否则回退读 ``node_to_type[node_uid]`` 的 ``value_type``（fn_callable[T]
+      规范 spec 的载值类型）。
+    - param_types：逐参数 ``node_to_type[param_uid]`` → spec ``name``。
+    """
+    param_types: List[str] = []
+    for p_uid in params_uids:
+        p_spec = executor.ec.get_side_table("node_to_type", p_uid)
+        if p_spec is not None:
+            param_types.append(p_spec.name)
+
+    return_type: Optional[str] = None
+    base = expected_type.get_base_name() if expected_type is not None else None
+    if expected_type is not None and base not in ("fn_callable", "behavior"):
+        return_type = expected_type.name
+    else:
+        node_spec = executor.ec.get_side_table("node_to_type", node_uid)
+        value_type = getattr(node_spec, "value_type", None)
+        if value_type is not None:
+            return_type = value_type.canonical_name
+    return param_types, return_type
+
+
 def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``@`` / ``@!`` 单次意图注释节点的执行路径。"""
     intent_info_uid = node_data.get("intent")
@@ -99,13 +134,19 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
             None if capture_mode == "lambda"
             else executor.runtime_context.fork_intent_snapshot()
         )
+        expected_type = executor.ec.get_side_table("node_to_type", node_uid)
+        param_types, return_type = _capture_signature(
+            executor, node_uid, [], expected_type
+        )
         return sc.object_factory.create_behavior(
             node_uid,
             captured_intents,
-            expected_type=executor.ec.get_side_table("node_to_type", node_uid),
+            expected_type=expected_type,
             call_intent=call_intent,
             capture_mode=capture_mode,
             execution_context=executor.ec,
+            param_types=param_types,
+            return_type=return_type,
         )
 
     # 提取命名模型 tag（@NAME~ 语法）用于模型路由
@@ -184,6 +225,9 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
             else executor.runtime_context.fork_intent_snapshot()
         )
         expected_type = executor.ec.get_side_table("node_to_type", body_uid)
+        param_types, return_type = _capture_signature(
+            executor, node_uid, params_uids, expected_type
+        )
         return executor.service_context.object_factory.create_behavior(
             body_uid,
             captured_intents,
@@ -192,8 +236,11 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
             execution_context=executor.ec,
             params_uids=params_uids,
             closure=closure,
+            param_types=param_types,
+            return_type=return_type,
         )
 
+    param_types, return_type = _capture_signature(executor, node_uid, params_uids, None)
     return executor.service_context.object_factory.create_fn_callable(
         node_uid,
         capture_mode=capture_mode,
@@ -201,6 +248,8 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
         params_uids=params_uids,
         body_uid=body_uid,
         closure=closure,
+        param_types=param_types,
+        return_type=return_type,
     )
 
 

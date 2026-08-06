@@ -2,27 +2,28 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-05（任务控制文档全面重整，任务代号按性质分域）
+> **最后更新**：2026-08-06（PT-INTRO-1 运行时内省体系全部落地）
 
 ---
 
-## 🔴 下一阶段主线：PT-INTRO-1 运行时内省体系剩余
+## 🔴 下一阶段候选主线（待用户择定）
 
-> `type(x)` 内建已落地（返回 `ib_class.name` 规范类型名）。下一阶段完成剩余两项：
->
-> 1. **fn/behavior 签名形态**：`type(f)` 对 fn_callable/behavior 返回含签名类型名
->    （如 `fn_callable[()->int]`）——需内省 `type_ref` 的 params + return。
-> 2. **返回类型查询 API**：草案 `f.__return_type__()`（独立签名查询形态）。
->
-> 完整设计要点见 `PENDING_TASKS.md` §一。约束：每批全量 `python -m pytest tests/` 零回归；
-> commit 留痕（仅本地，禁 push）；设计先写 `tasks_docs/`，落地后收敛进 `docs/`。
+> PT-INTRO-1 运行时内省体系已全部落地（见下"已完成交付"）。下一主线的自然候选：
+
+- **PT-DEBT-1/2/3 内核接口协议化**（推荐）：跨对象私有穿透收敛为公开访问器/容器
+  （`native_module.py` / `observability/snapshot.py` / `runtime_context.py`），同性质可合并实施。
+- **PT-DECIDE-1**：LLM 解析默认策略语义（"已声明具体类型但无 parser → uncertain"）——
+  语言级语义变更，需用户拍板。
+- **长期周期**：PT-AUDIT-1/2/3（R4/R5 待做）/4/5，阶段边界择机。
+- **保留规划**：PT-TEST-1（测试体系重构，未来做）、PT-FEAT-1（语言级协程，保持现状）。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **主线**：PT-INTRO-1 剩余（见上）。
-- **待讨论**：PT-DECIDE-1（LLM 解析默认策略语义）——下一 session 待讨论项，仅记录。
+- **PT-INTRO-1 已完成**：`type(f)` 签名形态 + `f.__return_type__()`（详见 `PENDING_TASKS.md` §一）。
+- **下一主线**：待用户择定（推荐 PT-DEBT-1/2/3，见上）。
+- **待讨论**：PT-DECIDE-1（LLM 解析默认策略语义）——仅记录。
 - **待选**：PT-DEBT-1/2/3（内核接口协议化）——同性质可合并实施。
 - **长期周期**：PT-AUDIT-1/2（代码异味 / 分支嵌套审计）+ PT-AUDIT-3（代码复核审查循环，
   R4/R5 待做）+ PT-AUDIT-4/5（文档清洗与梳理 / 注释卫生清理）——持续周期工作，阶段边界择机。
@@ -31,9 +32,16 @@
 
 ---
 
-## ✅ 已完成交付（2026-08-05）
+## ✅ 已完成交付
 
 > 全部落地 unsafe-vibe-dev（本地 commit，未 push）。commit 明细见 git 历史。
+
+- **PT-INTRO-1 运行时内省体系（2026-08-06）**：
+  - `type(f)` 对 fn_callable/behavior 返回含签名类型名（`fn_callable[()->int]` /
+    `behavior[(int,str)->bool]`）；其余值仍返回规范名。
+  - `f.__return_type__()` 返回类型查询 API（receive 消息 + vtable 原生方法）。
+  - 签名在运行时值创建时经 node_to_type 捕获、自持于值，序列化 round-trip 保真；
+    lambda 参数节点类型绑定补全（编译期 bind_type）。
 
 - **闭包序列化 + fn_callable round-trip 修复**：作用域 cell 重建 + 按 sym_uid 重链共享；
   value_meta/expected_type JSON 安全。

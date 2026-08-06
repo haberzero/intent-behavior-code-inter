@@ -196,3 +196,22 @@ func call_any(fn f) -> auto:
 - 实参可以是普通函数引用、lambda 闭包、snapshot 延迟对象、可调用类实例
 
 ---
+
+### 5.7 callable 运行时内省
+
+`type(f)` 对 fn_callable/behavior 返回含签名的类型名；`f.__return_type__()` 返回返回类型名。签名随值自持（定义时捕获，序列化 round-trip 保真），与变量声明位置无关。
+
+```ibci
+fn f = lambda(int x, str y) -> bool: True
+str sig = type(f)             # "fn_callable[(int,str)->bool]"
+str ret = f.__return_type__() # "bool"
+```
+
+| 查询 | 语义 |
+|------|------|
+| `type(f)` | fn_callable/behavior 返回签名形态；其余值返回规范类型名 |
+| `f.__return_type__()` | 返回类型规范名（`-> auto` 已按 body/LLM 语义锁定为具体类型） |
+
+签名形态遵循类型名约定（无空格）：`fn_callable[()->int]`、`behavior[(auto)->str]`。返回类型非具体（`-> any`）时退化为裸 `fn_callable`/`behavior`；用户函数（`callable`）的 `type()` 返回裸 `callable`。
+
+---

@@ -369,6 +369,11 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["capture_mode"] = obj.capture_mode
             if obj.params_uids:
                 data["params_uids"] = list(obj.params_uids)
+            # 内省签名：param_types / return_type 为 JSON 安全字符串。
+            if obj.param_types:
+                data["param_types"] = list(obj.param_types)
+            if obj.return_type is not None:
+                data["return_type"] = obj.return_type
             data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
 
         elif isinstance(obj, IbValue) and cls_name == "fn_callable":
@@ -379,6 +384,11 @@ class RuntimeSerializer(BaseFlatSerializer):
                 data["params_uids"] = list(obj.params_uids)
             if obj.body_uid:
                 data["body_uid"] = obj.body_uid
+            # 内省签名：param_types / return_type 为 JSON 安全字符串。
+            if obj.param_types:
+                data["param_types"] = list(obj.param_types)
+            if obj.return_type is not None:
+                data["return_type"] = obj.return_type
             data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
 
         elif cls_name == "intent_context":
@@ -799,6 +809,8 @@ class RuntimeDeserializer:
                 capture_mode=data.get("capture_mode"),
                 params_uids=data.get("params_uids"),
                 closure=closure,
+                param_types=data.get("param_types"),
+                return_type=data.get("return_type"),
             )
             self.instance_cache[uid] = obj
             for suid in pending_uids:
@@ -814,6 +826,8 @@ class RuntimeDeserializer:
                 params_uids=data.get("params_uids"),
                 body_uid=data.get("body_uid"),
                 closure=closure,
+                param_types=data.get("param_types"),
+                return_type=data.get("return_type"),
             )
             self.instance_cache[uid] = obj
             for suid in pending_uids:

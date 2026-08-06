@@ -10,6 +10,7 @@
 | `range(n)` | 生成 `[0, n)` 整数序列 |
 | `range(start, end)` | 生成 `[start, end)` 整数序列 |
 | `len(container)` | 获取容器长度（列表/字符串/字典） |
+| `type(value)` | 返回值的规范类型名（`int`/`list`/`Box` 等）；对 fn_callable/behavior 返回含签名形态（如 `fn_callable[()->int]`，见 `05_functions.md` §5.7） |
 
 ### 12.2 str 方法
 
