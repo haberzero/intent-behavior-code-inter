@@ -500,3 +500,9 @@ Phase 间通过 `PassOutput`（symbol_bindings / type_bindings / diagnostics）�
 
 ### Q4：如何判断新的分析结果应该存在哪里？
 参考第八章的决策流程图。核心判断：运行时需要 → AST，仅编译期查询 → 侧表。
+---
+
+## 深入指引
+
+- 类型系统与字段存储：docs/architecture/03_type_system.md
+- 编译产物序列化：docs/architecture/04_vm_interpreter.md

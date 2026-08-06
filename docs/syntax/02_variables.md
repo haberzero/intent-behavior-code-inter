@@ -97,5 +97,9 @@ print(counter())    # 3
 - 声明的变量必须在外层作用域中已存在，否则产生 SEM_NONLOCAL_NOT_FOUND 编译错误。
 - `nonlocal a, b` 支持一次声明多个外部变量。
 - nonlocal 变量通过闭包共享机制实现：多个闭包可以共享同一个外部变量，实现状态共享。
-
 ---
+
+## 深入指引
+
+- 作用域与存储模型：docs/architecture/08_storage_model.md
+- 语言级变量限制：docs/KNOWN_LIMITS.md

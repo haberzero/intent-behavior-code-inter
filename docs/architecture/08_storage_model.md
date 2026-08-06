@@ -32,3 +32,9 @@
 ## `is_disk_backed` 辅助属性
 
 `IbSpec` 提供 `is_disk_backed` 只读 property（`storage_model == StorageModel.DISK_BACKED`），仅用于诊断/断言。分发路径不得改读此 property 做 if/else。
+---
+
+## 深入指引
+
+- 磁盘型容器完整设计：docs/subsystems/02_file_container.md
+- 快照与序列化交互：docs/architecture/02_metadata_ast.md

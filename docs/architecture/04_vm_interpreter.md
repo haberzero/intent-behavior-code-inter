@@ -381,7 +381,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 | 插件 Python 实现代码 | `importlib` 进程级常规加载，`sys.modules` 全局缓存，同名"先加载者胜" | Python 层（共享） |
 | 插件实例 | `create_implementation()` 每引擎新建实例，经 `BoundPlugin` 容器绑定引擎 registry 身份 | IBCI 层（隔离） |
 
-设计立场：IBC-Inter **不插手 Python import 机制**（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离--无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §二十一。
+设计立场：IBC-Inter **不插手 Python import 机制**（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离--无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §十九。
 
 ---
 

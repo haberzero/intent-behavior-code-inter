@@ -66,5 +66,9 @@ ctx.push("用详细专业的语言回答")
 str r2 = @~ 描述天空 ~
 ctx.pop()
 ```
-
 ---
+
+## 深入指引
+
+- 意图系统内部实现：docs/subsystems/01_intent_system.md
+- 意图注释放置约束：docs/KNOWN_LIMITS.md §十三

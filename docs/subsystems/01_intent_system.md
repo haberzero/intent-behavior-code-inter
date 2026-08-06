@@ -322,7 +322,7 @@ captured_intents = None if capture_mode == "lambda" else self.runtime_context.fo
 
 ## 五、IbIntent 对象
 
-意图在运行时表示为 `IbIntent` 对象（`core/runtime/objects/intent.py`），已通过 `IntentAxiom` 纳入公理体系：
+意图在运行时表示为 `IbIntent` 对象（`core/runtime/objects/intent.py`），经 `IntentAxiom` 纳入公理体系：
 
 ```
 IbIntent (IbObject)
@@ -618,3 +618,9 @@ func make_translator():
 | `core/runtime/objects/kernel.py` | `IbUserFunction`/`IbLLMFunction` fork/restore 意图上下文（拷贝传递语义）；lambda 参数约束 |
 | `core/compiler/semantic/analyzer.py` | `@` 和 `@!` 语义校验：两者必须绑定下一条可执行语句（禁止连续 one-shot） |
 | `ibci_modules/ibci_idbg/core.py` | 调试工具（帧优先模式读取意图/结果状态） |
+---
+
+## 深入指引
+
+- 意图语法层：docs/syntax/09_intent_system.md
+- 意图注释放置限制：docs/KNOWN_LIMITS.md §十三

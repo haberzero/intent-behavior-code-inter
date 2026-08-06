@@ -57,5 +57,9 @@ final_mod_meta.members = {
 ```
 
 `KERNEL_NATIVE` provenance 的符号（prelude 注入的 `int`/`str`/`print` 等语言内建、`import file` 门控注入的 `file_handle`/`audio` 等类型）不进入模块导出面。每个模块通过自身的 prelude 注入获得这些符号，无需跨模块重导出。`USER_DEFINED` 和 `EXTERNAL_MODULE` provenance 的符号正常导出。
-
 ---
+
+## 深入指引
+
+- 插件子系统实现：docs/subsystems/04_plugin_system.md
+- 模块 API 语法层：docs/syntax/11_modules.md

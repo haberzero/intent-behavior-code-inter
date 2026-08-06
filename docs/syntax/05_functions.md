@@ -213,5 +213,9 @@ str ret = f.__return_type__() # "bool"
 | `f.__return_type__()` | 返回类型规范名（`-> auto` 已按 body/LLM 语义锁定为具体类型） |
 
 签名形态遵循类型名约定（无空格）：`fn_callable[()->int]`、`behavior[(auto)->str]`。返回类型非具体（`-> any`）时退化为裸 `fn_callable`/`behavior`；用户函数（`callable`）的 `type()` 返回裸 `callable`。
-
 ---
+
+## 深入指引
+
+- 可调用类型与 fn 机制：docs/subsystems/03_callable_fn.md
+- 语言级函数限制：docs/KNOWN_LIMITS.md §一

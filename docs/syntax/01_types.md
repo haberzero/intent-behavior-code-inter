@@ -85,5 +85,9 @@ class Temperature:
 ```
 
 **编译期提示**：对于声明了转换规则的类型，编译器会在转换明显不合法时发出 `SEM_CAST_NO_CONVERTER` 警告（如 `(int)file_handle`）。未声明转换规则的类型不做编译期校验，由运行时裁定。
-
 ---
+
+## 深入指引
+
+- 类型系统设计与原理：docs/architecture/03_type_system.md
+- 语言级类型限制：docs/KNOWN_LIMITS.md

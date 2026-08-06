@@ -40,5 +40,8 @@ llmend
 ```
 
 `__llmretry__` 块：当 `__from_prompt__` 解析失败触发 llmexcept 重试时，会将此内容附加为额外系统提示词。
-
 ---
+
+## 深入指引
+
+- LLM 函数实现：docs/architecture/04_vm_interpreter.md

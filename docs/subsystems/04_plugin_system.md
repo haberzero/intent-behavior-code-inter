@@ -133,3 +133,9 @@ if not result.ok:
 ## 5. import 语法
 
 `import X` / `from X import Y`（含相对导入、别名、星号导入）的语法约束见 `docs/syntax/11_modules.md` §11.1。
+---
+
+## 深入指引
+
+- 模块系统语法层：docs/syntax/11_modules.md
+- 插件可见性隔离：docs/KNOWN_LIMITS.md §十九

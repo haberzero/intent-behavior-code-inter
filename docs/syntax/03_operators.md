@@ -72,3 +72,8 @@ bool b2 = x is not None      # x 是否不为 None
 ```
 
 与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个对象实例。对于 `None` 字面量，`is` 使用类型检测而非实例身份。
+---
+
+## 深入指引
+
+- 运算符分派机制：docs/architecture/03_type_system.md

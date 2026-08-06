@@ -119,5 +119,10 @@ class Config:
     func __restore__(self, int saved):
         self.attempts = saved   # 恢复关键字段
 ```
-
 ---
+
+## 深入指引
+
+- llmexcept 实现机制：docs/architecture/04_vm_interpreter.md §6
+- 快照与序列化：docs/architecture/08_storage_model.md
+- llmexcept 文件写限制：docs/KNOWN_LIMITS.md §二十

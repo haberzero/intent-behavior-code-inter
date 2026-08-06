@@ -224,3 +224,9 @@ str reply = @~ MOCK:STR:hello ~    # 经真实 HTTP 路径返回 hello
 #### 13.6.3 测试 fixture
 
 pytest 环境提供 `mock_server` fixture（`tests/conftest.py`），每个测试自动启动/停止独立服务。
+---
+
+## 深入指引
+
+- 测试方法论：`tests_docs/TEST_PHILOSOPHY.md`
+- MOCK 模式无法验证的 LLM 功能：`docs/KNOWN_LIMITS.md` §十六

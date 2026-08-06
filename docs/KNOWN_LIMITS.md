@@ -10,7 +10,7 @@
 
 **限制说明**
 
-可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）**基础调用可用**（`fn` 承载与调用有测试覆盖，见 `docs/subsystems/03_callable_fn.md`），但在**特定跨路径**下存在设计限制，需谨慎使用。
+可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）**基础调用可用**（见 `docs/subsystems/03_callable_fn.md`），但在**特定跨路径**下存在设计限制，需谨慎使用。
 
 **根源**
 
@@ -318,8 +318,6 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 **当前建议**：暂不在生产代码中使用 `switch`/`case` 语句，优先使用 `if`/`elif`/`else` 实现条件分支逻辑。
 
-**测试覆盖**：e2e 层有 `tests/e2e/test_e2e_classes.py::TestE2EEnums::test_switch_case`，但尚无契约测试（INV-SWITCH-*）。
-
 ---
 
 ## 十二、`intent_context` 类静态调用的"静默无效"陷阱
@@ -344,9 +342,7 @@ str r = @~ ... ~
 
 **作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `core/runtime/bootstrap/primitive_initializer.py` 中对应方法注册段的注释）。
 
-**编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 现已对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
-
-**测试覆盖**：`tests/compiler/semantic/test_p2_warnings.py::TestIntentContextStaticCallWarning`（9 个测试）。
+**编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
 ---
 

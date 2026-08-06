@@ -106,3 +106,9 @@ thread[int] t = thread(callable=fail, args=[])
 thread_result[int] r = t.join()
 bool ok = r.is_error()   # True
 ```
+---
+
+## 深入指引
+
+- 并发调度器设计：docs/architecture/04_vm_interpreter.md
+- 通信原语限制：docs/KNOWN_LIMITS.md §二十二

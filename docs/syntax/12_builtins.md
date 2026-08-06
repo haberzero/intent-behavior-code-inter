@@ -136,5 +136,8 @@ tuple t = (1, "hello", True)
 auto first = t[0]     # 1（下标访问）
 int n = t.len()       # 3
 ```
-
 ---
+
+## 深入指引
+
+- 内建类型公理：docs/architecture/03_type_system.md §4

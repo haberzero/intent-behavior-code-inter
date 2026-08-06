@@ -166,3 +166,9 @@ IbValue (core/runtime/objects/kernel/)
 ## 九、`is_disk_backed` 辅助属性
 
 `IbSpec` 提供 `is_disk_backed` 只读 property（`storage_model == StorageModel.DISK_BACKED`），仅用于诊断/断言。分发路径不得改读此 property 做 if/else——分发一律通过协议方法完成。
+---
+
+## 深入指引
+
+- 存储模型架构摘要：docs/architecture/08_storage_model.md
+- file 模块语法层：docs/syntax/11_modules.md §11.7

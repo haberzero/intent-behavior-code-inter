@@ -510,7 +510,10 @@ IBCI脚本 ──→ host_run() 内置函数 ──→ HostService
 IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostService
                (ModuleDiscovery)   (插件实现)
 ```
-
 ---
 
+## 深入指引
 
+- 类型系统设计：docs/architecture/03_type_system.md
+- 运行时架构：docs/architecture/04_vm_interpreter.md
+- 子系统设计：docs/SUBSYSTEM_DESIGN.md

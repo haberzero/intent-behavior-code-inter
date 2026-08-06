@@ -3,7 +3,7 @@
 > 本文件是 `docs/` 目录的**导航枢纽与治理章程**。
 >
 > **文档分工**：
-> - `docs/` -- 设计文档与用户手册（6 个主手册 + 4 个子目录）
+> - `docs/` -- 设计文档与用户手册（6 个主手册 + 5 个子目录）
 > - `tasks_docs/` -- 任务控制、决策记录、完成日志
 > - `tests_docs/` -- 测试方法论
 
@@ -29,6 +29,10 @@ docs/
 │   ├── 05_llm_functions.md
 │   ├── 06_multistep.md
 │   └── 07_testing.md
+│
+├── howto/                           操作指南（按问题查阅）
+│   ├── debug_llm_calls.md
+│   └── write_user_plugin.md
 │
 ├── syntax/                          语法说明详细章节
 │   ├── 01_types.md

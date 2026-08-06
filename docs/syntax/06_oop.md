@@ -111,5 +111,9 @@ if s == Status.RUNNING:
 | `__payload_prompt__(self)` | 变量插值到多模态 `@~ ... ~` 时 | 返回结构化 content block（图像/音频等） |
 | `__snapshot__(self)` | llmexcept 快照进入时 | 返回用于恢复状态的快照值 |
 | `__restore__(self, state)` | llmexcept retry 前 | 从快照值恢复对象状态 |
-
 ---
+
+## 深入指引
+
+- 用户类能力差距：docs/KNOWN_LIMITS.md §十四
+- Enum 语法限制：docs/KNOWN_LIMITS.md §二

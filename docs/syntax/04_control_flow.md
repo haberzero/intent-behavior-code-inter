@@ -240,5 +240,8 @@ except AppError as e:
 > ```
 >
 > 直接访问基类字段（如 `e.message`）不受此限制影响。
-
 ---
+
+## 深入指引
+
+- 控制流实现与异常模型：docs/architecture/04_vm_interpreter.md

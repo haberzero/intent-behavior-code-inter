@@ -54,3 +54,9 @@
 ### 5. canonicalize_for_security
 
 `PathValidator.canonicalize_for_security(path) -> IbPath` 是全仓唯一的 `os.path.realpath` 调用点。所有需要规范化的路径统一经此函数。防止 symlink 逃逸：realpath 解析符号链接至真实物理路径，使后续 `is_within` 沙箱校验无法被 symlink 伪造路径绕过。
+---
+
+## 深入指引
+
+- 沙箱与路径实现：docs/architecture/07_kernel_native_modules.md
+- 存储模型：docs/architecture/08_storage_model.md
