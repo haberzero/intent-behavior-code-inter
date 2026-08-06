@@ -68,16 +68,15 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 残留扫描。
 
 五、主任务阻塞/暂停时的支线（按优先级，解阻立即回主线）：1) 质量维护/代码健康
-（quality-maintenance Tier A/B + aimless-review，产出 AIMLESS_REVIEW.md）；2) PT-SMELL-1/2/3
-代码质量审计（独立分支）；3) PT-SEM-1.1 错误用户友好化 / PT-4.1 Enum 非 str 成员；
-4) 测试体系重构（TEST_REFACTOR）。每条支线仍须全量 pytest 零回归、commit+留痕（仅本地）。
+（quality-maintenance Tier A/B + aimless-review，产出 AIMLESS_REVIEW.md）；2) PT-AUDIT-1/2
+代码质量审计（独立分支）；3) PT-FEAT-5 错误用户友好化 / PT-FEAT-2 Enum 非 str 成员；
+4) 测试体系重构（PT-TEST-1）。每条支线仍须全量 pytest 零回归、commit+留痕（仅本地）。
 
 六、停止条件：先穷尽自主手段，仅当确实无法自主决定时（用户意图不明穷尽无解/公理层语义
 错误集确需用户裁决/与工作模式定论冲突/破坏性重构无法确认边界且独立隔离分支也无法确定
 技术路线）才 update_goal(status="unmet", blocker=具体卡点+建议)。
 
-七、非目标：media Phase 4、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器）、
-线程无损挂起/恢复、用户级泛型类（PT-4.4）、Hindley-Milner 约束求解。
+七、非目标：media Phase 4（PT-SEALED-1）、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器，PT-FEAT-1 保持现状）、线程无损挂起/恢复、用户级泛型类（PT-FEAT-3）、Hindley-Milner 约束求解。
 ```
 
 ### 1.4 tasks_docs/ 文档结构指针
