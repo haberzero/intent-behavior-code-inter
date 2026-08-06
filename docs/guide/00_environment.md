@@ -43,7 +43,7 @@ python -c "import core; import ibci_modules; import ibci_sdk"
 python -m pytest tests/   # 全量测试套件
 ```
 
-`import` 三条命令均无输出即表示包可正常导入。测试套件的通过数量以实跑为准（详见 `tests/README` 与 `tasks_docs/NEXT_STEPS.md`）。
+`import` 三条命令均无输出即表示包可正常导入。测试套件的通过数量以实跑为准。
 
 ## 依赖分组
 

@@ -3,7 +3,7 @@
 > 本文件是 `docs/` 目录的**导航枢纽与治理章程**。
 >
 > **文档分工**：
-> - `docs/` -- 设计文档与用户手册（5 个主手册 + 3 个子目录）
+> - `docs/` -- 设计文档与用户手册（6 个主手册 + 4 个子目录）
 > - `tasks_docs/` -- 任务控制、决策记录、完成日志
 > - `tests_docs/` -- 测试方法论
 
@@ -57,12 +57,15 @@ docs/
 │   ├── 08_storage_model.md
 │   └── appendix_type_system_rationale.md
 │
-└── subsystems/                      子系统设计详细章节
-    ├── 01_intent_system.md
-    ├── 02_file_container.md
-    ├── 03_callable_fn.md
-    ├── 04_plugin_system.md
-    └── 05_coroutine.md
+├── subsystems/                      子系统设计详细章节
+│   ├── 01_intent_system.md
+│   ├── 02_file_container.md
+│   ├── 03_callable_fn.md
+│   ├── 04_plugin_system.md
+│   └── 05_coroutine.md
+│
+└── backup/                          封存归档（不参与导航）
+    └── 02_multimodal_behavior.md
 
 tasks_docs/                          任务控制
 ├── NEXT_STEPS.md
@@ -109,7 +112,6 @@ tests_docs/                          测试方法论
 
 - 重大架构决策直接写入 `docs/architecture/` 对应章节，不再使用独立 ADR 文件。
 - 已实现且无延迟项的设计内容可从任务文档中删除。
-- 每次开新分支前，先复跑测试基线。
 
 ### 3.4 跨文件一致性
 
@@ -144,19 +146,6 @@ tests_docs/                          测试方法论
 | 公理码 | `SC-3`/`LT-2`/`EXEC-2`/`ISO-4`/`OM-2`/`GC-2`/`LLM-1`/`IC-1` 等 VM 规范公理编号（定义见 `docs/architecture/05_vm_specification.md §8`），是规范契约码 |
 | 功能性术语 | "锚点"（path anchor）、"Layer N / Phase N / STAGE N"（算法阶段）是功能描述 |
 | 诊断码常量赋值 | `SEM_TYPE_MISMATCH = "SEM_TYPE_MISMATCH"` 是代码，不是注释 |
-
-**新增代码时的自查**：提交前对自己的改动运行以下检查，确保未引入违规：
-
-```bash
-# 搜索违规模式（ADR/PT/任务文档指针/章节号）
-grep -rnE 'ADR-[0-9]|PT-ARCH|PT-[0-9]|Per ADR|§[0-9]|tasks_docs/|PENDING_TASKS|NEXT_STEPS' --include='*.py' <changed-files>
-# 搜索设计代号
-grep -rnE '\b(G[1-6]|D[1-6]|H[1-3]|NS-[0-9]|P[0-7]-[0-9A-Z])\b' --include='*.py' <changed-files>
-# 搜索历史叙述
-grep -rnE 'legacy|历史|旧 bug|修复见PR|合并自|Source:' --include='*.py' <changed-files>
-```
-
-命中后逐条判断：是注释/docstring 则清洁（删标记留功能），是诊断码/公理码或功能性术语则保留。
 
 **诊断码使用规则**：生产代码中不得使用字符串字面量（如 `code="SEM_TYPE_MISMATCH"`）引用诊断码，必须从 `core/base/diagnostics/codes.py` 导入常量引用（如 `code=SEM_TYPE_MISMATCH`）。新增诊断码时在 `codes.py` 中定义新常量即可，无需分配编号。
 

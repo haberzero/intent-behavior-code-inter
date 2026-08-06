@@ -68,7 +68,7 @@ switch c:
 
 ### 2.3 当前限制
 
-- **仅支持 `str` 类型成员**：枚举成员的底层值目前只能声明为 `str` 类型。`int` 等其他类型成员在未来版本中支持。
+- **仅支持 `str` 类型成员**：枚举成员的底层值只能声明为 `str` 类型，不支持 `int` 等其他类型成员。
 - **不支持枚举迭代**：当前无法对枚举类的所有成员进行遍历（如 `for v in Color:`）。
 - **不支持枚举数量/序数查询**：`len(Color)`、成员序号等功能暂不支持。
 - **LLM 集成**：`Enum` 类型已具备 `has_output_hint_cap = True` 能力，LLM 函数可以直接输出枚举成员名称并自动解析为对应枚举值。
@@ -88,7 +88,7 @@ switch c:
 
 **用户代码无需处理 uncertain**：
 - `llmexcept` 块内处于重试循环，用户只需书写 `retry "hint"` 语句，无需显式检测 Uncertain。
-- `is_uncertain()` 内置函数已从用户 API 移除。`Uncertain` 字面量也不应出现在正常业务代码中。
+- `is_uncertain()` 不是用户 API。`Uncertain` 字面量也不应出现在正常业务代码中。
 
 ---
 
@@ -214,10 +214,7 @@ class Dog(Animal):
 | `any x = expr` | 真正的动态类型，不锁定（**唯一**的动态逃生阀） | 运行时 | 任意类型 |
 | `x = expr`（裸赋值）| **等同 `auto`**：从首次赋值推断并锁定 | 编译期 | 只能赋相同类型 |
 
-> **裸赋值语义（2026-08-05 收紧）**：无类型标注的裸赋值（`x = expr`）现在采用
-> `auto` 语义——编译期从首次赋值推断实际类型并锁定，不再隐式退化为动态 `any`
-> （曾击穿静态类型设计）。异类型重赋现在产生 `SEM_TYPE_MISMATCH`。
-> 需要真正的动态语义时，**必须显式声明 `any`**。
+> **裸赋值语义**：无类型标注的裸赋值（`x = expr`）采用 `auto` 语义——编译期从首次赋值推断实际类型并锁定，不隐式退化为动态 `any`（那会击穿静态类型设计）。异类型重赋产生 `SEM_TYPE_MISMATCH`。需要真正的动态语义时，**必须显式声明 `any`**。
 >
 > **any 逃生后的重处理机制**：`any` 值用于有类型检查的上下文（如赋给 `int y`）时，
 > **编译期放行，运行时强制类型校验**——值类型不匹配即抛 `RUN_TYPE_MISMATCH`。这与
@@ -232,9 +229,9 @@ class Dog(Animal):
 
 ---
 
-## 八、容器多类型声明（已移除多元素 list）
+## 八、容器多类型声明
 
-**`list[int, str]` 多类型 list 已移除（2026-08-05）**——无 union 类型机制，多元素 list
+**`list[int, str]` 多类型 list 不支持**——无 union 类型机制，多元素 list
 的"元素读取返回 any"实为隐式异构，击穿元素类型设计。异构容器必须**显式声明 `list[any]`**，
 否则产生 `SEM_MULTI_TYPE_LIST_REMOVED` 编译错误。`tuple[T1, T2, ...]` 位置元素类型
 （定长异构元组）是合法特性，不受影响。
@@ -292,8 +289,8 @@ fn f = snapshot -> int: EXPR                # snapshot，显式返回类型
 fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 ```
 
-> **2026-08-05 收紧**：`fn f = lambda: EXPR` 等省略返回标注形式现在产生
-> `SEM_MISSING_RETURN_ANNOTATION` 编译错误（不再静默回填 any），必须显式 `-> TYPE` 或
+> **返回标注强制**：`fn f = lambda: EXPR` 等省略返回标注形式产生
+> `SEM_MISSING_RETURN_ANNOTATION` 编译错误（不静默回填 any），必须显式 `-> TYPE` 或
 > `-> auto`。声明侧返回类型 `TYPE fn NAME = lambda: EXPR` 形式仍废弃（PAR_INVALID_SYNTAX）。
 
 ---
@@ -377,55 +374,20 @@ str r = @~ ... ~
 
 ---
 
-## 十五、DDG 并发调度（规则化已启用）
+## 十五、DDG 并发调度的行为边界
 
-**当前状态**：编译期 `BehaviorDependencyAnalyzer`（Phase 3 Binding）为每个 `IbBehaviorExpr` 计算 `llm_deps`，并按 `05_vm_specification.md §3.1` 规则标注 `dispatch_eligible`。运行时 `assignment.py` 对 `dispatch_eligible=True` 的赋值走 `LLMScheduler.dispatch_eager()` 并发路径：主线程预求值 prompt（`_prepare_behavior_call`），后台线程仅执行 LLM 调用 + 解析（`_call_and_parse`，不重入 VM、不写主线程单写槽）；变量读取点 resolve-at-read 阻塞等待并写回。
+> 编译期依赖图（DDG）与运行期并发 dispatch 的完整机制见 `docs/architecture/04_vm_interpreter.md` §5。
 
 **行为边界**：
+
 - **循环体 / 函数体内行为不可 dispatch**：同一 `node_uid` 多次执行会覆写 `_pending_futures` 条目导致解析错乱与泄漏。此类行为走同步路径，不确定结果无 llmexcept 保护即在赋值点抛 `LLMParseError`。
 - **call_info 时点**：`ai.get_current_call_info()` 返回"最近一次 resolve 的调用"（dispatch 在首次读取时写入），非赋值点。
-- **未读取的 dispatched 变量**：在 `_pending_futures` 残留（无读则无 resolve），属已知泄漏面，观测性待补。
+- **未读取的 dispatched 变量**：在 `_pending_futures` 残留（无读则无 resolve），属已知泄漏面。
 - **MOCK 验证能力**：内联 MOCK（`AIPlugin._handle_mock_response`）是进程内纯函数，零延迟控制、零基础设施失败注入，无法实测并发时序与 provider 异常传播路径。机制类验证（时序/失败/并发）须经 MOCK HTTP 服务（`MockServer`，`ibci_modules/ibci_ai/mock_service.py`）走真实 `OpenAI` 客户端路径；指令解析与场景状态由 `MockScenarioEngine` 统一实现（线程安全）。
 
 ---
 
-## 十六、`__prompt__` 协议家族：已知问题与待决策项
-
-### 16.1 用户类 `__from_prompt__` 返回的实例字段访问风险
-
-**现象**：当用户自定义类实现 `__from_prompt__`，在特定条件下返回实例的 `.field` 访问可能返回 `None` 而非实际赋值内容。
-
-**当前状态**：`VTableParsingStrategy` 已加入 `is_instance_of_target` 类身份检查——当 `__from_prompt__` 返回目标类的正确实例时跳过 auto-boxing。但若类身份比对失败（如跨模块加载导致类对象不同一），仍可能触发二次封装覆写字段。
-
-**待决策**：
-- 是否应该在 `__from_prompt__` 返回的对象类型已匹配目标类时，完全跳过 auto-boxing？
-- 是否需要强制要求 `__from_prompt__` 返回的第二元素必须是目标类的实例？
-
-### 16.2 `__validate_prompt__` 协议的执行时机语义
-
-**问题**：当 `__validate_prompt__` 在 `VTableParsingStrategy` 中执行时，它仅覆盖了通过用户类 vtable 路径解析的类型。对于 axiom 内置类型（`int`/`float`/`bool`/`str`/`list`/`dict`/`enum`），pre-flight 校验走的是 axiom 自身的 `from_prompt` 内部逻辑，不经过 `__validate_prompt__`。
-
-**待决策**：
-- 是否应该为内置类型也提供 `__validate_prompt__` 扩展点？
-- 当前设计是否足够——内置类型的 `from_prompt` 已含校验逻辑（返回 `(False, hint)` 时即触发 retry）？
-
-### 16.3 `__to_prompt__` 的异常处理（已加可观测性）
-
-**现状**：`LLMExecutorImpl._obj_to_prompt_str()` 统一了 prompt 序列化路径，内部 `try/except` 在 `__to_prompt__()` 抛异常时回退到 `str(val)` / `str(val.to_native())`。降级行为保留（LLM 调用不因 prompt 序列化失败而中断）。
-
-原先的静默吞异常已改为 `core_debugger.trace(CoreModule.LLM, DebugLevel.DETAIL, ...)` 日志——用户实现的 `__to_prompt__` 若抛异常（如字段未初始化的 AttributeError），开启调试（默认 NONE 级，零开销）即可观测，不再完全无感知。同样的处理已应用到 `__payload_prompt__` / `to_native` 回退链。
-
-### 16.4 协议签名校验（SEM_PROTOCOL_SIGNATURE）的强度选择
-
-**问题**：当前 `SEM_PROTOCOL_SIGNATURE` 是 warning 而非 error——用户可以声明签名不匹配协议约定的 `__from_prompt__`（如 0 个参数），编译仍通过。运行时如果 axiom 路径命中就不会调用 vtable，但如果确实调用到 vtable 则会在运行时失败。
-
-**待决策**：
-- 是否应该将 SEM_PROTOCOL_SIGNATURE 从 warning 提升为 error（阻止编译）？
-- 或保持 warning——鉴于协议方法签名本身属于 `_OVERRIDE_SIGNATURE_FREE`（允许自由修改签名以适配不同场景）？
-
----
-
-## 十七、MOCK 模式下无法验证的 LLM 功能
+## 十六、MOCK 模式下无法验证的 LLM 功能
 
 以下功能需要连接真实 LLM API 才能完整验证，MOCK/TESTONLY 模式无法覆盖：
 
@@ -445,29 +407,15 @@ str r = @~ ... ~
 
 ---
 
-## 十八、Optional[T] 运行时方法分发（已补齐）
-
-**状态**：已修复（2026-08-04，任务 A）。运行时 `IbOptional` 已实现，`Optional[T]` 的方法链（`is_some`/`unwrap`/`or_else`）可用。
-
-```ibci
-Optional[int] x = None
-int y = x.or_else(0)  # 可用，返回 0
-print((str)x.is_some())  # False
-```
-
-**遗留**：Optional 的 `__to_prompt__`/值协议等与 `thread_result[T]` 共用设计模式；若未来需扩展方法（如 `map`/`filter`），纳入通信领域设计完善检查。见 `tasks_docs/COMMS_DESIGN_REVIEW.md`。
-
----
-
-## 十九、设计排除的语法
+## 十七、设计排除的语法
 
 以下语法被明确排除出 IBCI 语言设计，不是 bug，不会支持：
 
-### 19.1 walrus 运算符（`:=`）
+### 17.1 walrus 运算符（`:=`）
 
 IBCI 不支持 walrus 运算符（`:=`），也不支持 lambda 体内赋值。这是设计决策，非实现遗漏。
 
-### 19.2 if-block 内重声明同名变量
+### 17.2 if-block 内重声明同名变量
 
 `SEM_REDEFINITION` 禁止在 if-block 内重声明与外层同名的变量：
 
@@ -481,7 +429,7 @@ if cond:
 
 ---
 
-## 二十、禁止循环导入
+## 十八、禁止循环导入
 
 **限制说明**
 
@@ -505,7 +453,7 @@ IBCI 编译器按拓扑序编译模块（依赖先编译）。循环依赖使得
 
 ---
 
-## 二十一、插件可见性隔离与无状态约定
+## 十九、插件可见性隔离与无状态约定
 
 **限制说明**
 
@@ -538,7 +486,7 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 
 ---
 
-## 二十二、llmexcept retry body 内禁止文件写/删（含固有边界）
+## 二十、llmexcept retry body 内禁止文件写/删（含固有边界）
 
 **限制说明**
 
@@ -566,18 +514,18 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 
 ---
 
-## 二十三、布尔上下文中的行为表达式定型与字符串真值语义
+## 二十一、布尔上下文中的行为表达式定型与字符串真值语义
 
-**已修复（状态说明）**
+**行为定型**
 
-类型推断现已把**布尔位置**中的行为表达式定型为 `bool`——与直接条件（`while @~...~:` / `if @~...~:`）完全一致，并递归覆盖复合布尔位置：
+类型推断把**布尔位置**中的行为表达式定型为 `bool`——与直接条件（`while @~...~:` / `if @~...~:`）完全一致，并递归覆盖复合布尔位置：
 
 - `@~...~ and True` / `@~...~ or ...` 的操作数
 - 逻辑 `not @~...~` 的操作数
 - 条件表达式 `x if @~...~ else y` 的 test
 - `for ... if @~...~` 的 filter
 
-因此 `while @~ 判定完成，返回 1 或 0 ~ and True:` 中行为被定型 `bool`，LLM 收到 0/1 输出约束、结果按 bool 解析，`"0"` 判假、循环正常终止（此前为恒真死循环）。比较运算（`@~...~ == 42`）中的行为仍按另一操作数适配（`int`），不被强制为 bool——那是值比较语义。
+因此 `while @~ 判定完成，返回 1 或 0 ~ and True:` 中行为被定型 `bool`，LLM 收到 0/1 输出约束、结果按 bool 解析，`"0"` 判假、循环正常终止。比较运算（`@~...~ == 42`）中的行为仍按另一操作数适配（`int`），不被强制为 bool——那是值比较语义。
 
 **残余边界（有意保留，非妥协）**
 
@@ -585,11 +533,11 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 
 **根源**
 
-布尔上下文（条件测试）是行为表达式的类型上下文之一；此前类型推断仅对**直接**作为条件的行为绑定 `bool`，未传播到复合布尔表达式内部，导致行为落到 `behavior` 占位符、运行期装箱为 `str`。
+布尔上下文（条件测试）是行为表达式的类型上下文之一；若类型推断仅对**直接**作为条件的行为绑定 `bool`，不传播到复合布尔表达式内部，行为会落到 `behavior` 占位符、运行期装箱为 `str`。
 
 ---
 
-## 二十四、通信原语面
+## 二十二、通信原语面
 
 **`signal` 不是关键字，语言面无此原语**：`signal` lex 为普通标识符。原因：零投递机制的通信抽象与 VM 控制流 `Signal` 撞名，且无消费者空壳。需要消息传递时使用 `chan`/`slot`/`subscriber`（见 `docs/syntax/14_concurrency.md`）。
 

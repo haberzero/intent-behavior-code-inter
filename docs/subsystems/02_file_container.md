@@ -44,7 +44,7 @@ IbValue (core/runtime/objects/kernel/)
 
 公理层继承关系：`AudioAxiom` / `ImageAxiom` / `VideoAxiom` 均声明 `get_parent_axiom_name() -> "file_handle"`。
 
-`IbMedia`（未来全模态聚合容器）= 聚合多个 FileHandle，非子类。
+`IbMedia` 不是现有类型（全模态聚合容器为未来设计），当前 `IbFileHandle` 持有单一 `MediaBacking`。
 
 ### 类型注册与门控
 
@@ -157,9 +157,9 @@ IbValue (core/runtime/objects/kernel/)
 
 纯文本路径（`__to_prompt__`）与多模态路径（`__payload_prompt__`）由返回值类型区分：`str` 走文本拼接，`dict` / `List[dict]` 走 content block 组装。
 
-### 输出路径（`from_prompt` / 未来 `from_response`）
+### 输出路径（`from_prompt`）
 
-当前文本输出通过 `from_prompt` 协议解析。多模态输出（音频/图像生成）的 `from_response` 协议为未来设计，接入点为 `_call_llm` 返回完整响应对象后按目标类型能力标志分发。
+文本输出通过 `from_prompt` 协议解析。多模态输出（音频/图像生成）的 `from_response` 协议未实现，属未来设计。
 
 ---
 

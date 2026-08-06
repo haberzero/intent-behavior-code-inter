@@ -118,5 +118,3 @@ ai.set_retry(3)       # 失败后最大重试次数，默认 3
 **下一步**：[02 · 第一个 @~ 调用][]——开始编写第一个行为表达式调用。
 
 [02 · 第一个 @~ 调用]: ./02_first_call.md
-[syntax-07]: ../syntax/07_behavior_expressions.md
-[syntax-11]: ../syntax/11_modules.md

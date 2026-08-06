@@ -1,4 +1,4 @@
-﻿# IBCI 类型系统设计（代码对齐版）
+﻿# IBCI 类型系统设计
 
 > 本文档是 IBCI 类型系统的正式设计文档，与当前代码（`core/kernel/spec/`、`core/kernel/axioms/`、`core/runtime/objects/`）严格对齐。
 >
@@ -95,7 +95,7 @@ class TypeDef(IbSpec):
 
     # ── 容器（LIST / TUPLE / DICT）
     element_type:   TypeRef
-    allowed_element_types: List[TypeRef]   # 多类型 list
+    allowed_element_types: List[TypeRef]   # 兼容性检查用的允许元素类型集合（与 element_type 并列）
     key_type:       TypeRef
     value_type:     TypeRef                # DICT 的 value 类型，CALLABLE_INSTANCE 的载值类型
 
@@ -134,7 +134,7 @@ class TypeDef(IbSpec):
 - **TypeRef-only**：所有指向"其他类型"的字段全部以 `TypeRef` 存储；旧 `*_name` / `*_module` 扁平字符串字段已彻底删除。访问统一走 `spec.X.head` / `spec.X.module` / `spec.X.canonical_name`。
 - **MemberSpec 同样 TypeRef 化**：`core/kernel/spec/member.py:MemberSpec.type_ref`、`MethodMemberSpec.return_type` / `param_types` 均为 TypeRef。类方法另以 `MethodMemberSpec.param_descriptors` 携带参数描述符（与 `TypeDef.param_descriptors` 对齐，见 §3.6），由 `_declaration_visitors._sync_class_member` 同步，供方法覆写契约校验消费。
 - **MethodMemberSpec 变异声明**：`MethodMemberSpec.mutating: bool`（默认 False）声明该方法是否修改接收者状态；`MethodMemberSpec.llmexcept_safe: bool`（默认 False）标记该方法在 llmexcept body 内对被保护变量的调用是否被豁免。这两个字段是 `SEM_LLMEXCEPT_MUTATING_CALL` 编译期检查的公理层数据源，由 `binding_analysis_pass.py` 在 BindingPhase 消费。
-- **线协议保留**：序列化 / 反序列化（`core/compiler/serialization/`）仍把 TypeRef 解构为字符串字段（`return_type_name` / `parent_module` 等）以保持艺术品向后兼容；in-memory 模型纯 TypeRef。
+- **线协议保留**：序列化 / 反序列化（`core/compiler/serialization/`）仍把 TypeRef 解构为字符串字段（`return_type_name` / `parent_module` 等）以保持向后兼容；in-memory 模型纯 TypeRef。
 
 ### 3.4 注册表 SpecRegistry
 
@@ -201,7 +201,7 @@ class TypeDef(IbSpec):
 
 ### 4.1 统一 Protocol
 
-`core/kernel/axioms/protocols.py:TypeAxiom` 是**单一**的能力接口；旧 9 个分散 Capability 协议（`CallCapability` / `IterCapability` / `SubscriptCapability` / `OperatorCapability` / `ConverterCapability` / `ParserCapability` / `FromPromptCapability` / `OutputHintCapability` / `WritableTrait`）已全部归并删除。
+`core/kernel/axioms/protocols.py:TypeAxiom` 是**单一**的能力接口；9 个分散 Capability 协议（`CallCapability` / `IterCapability` / `SubscriptCapability` / `OperatorCapability` / `ConverterCapability` / `ParserCapability` / `FromPromptCapability` / `OutputHintCapability` / `WritableTrait`）的职责归并于此。
 
 ```python
 @runtime_checkable
@@ -345,7 +345,7 @@ class IbValue(IbObject):
 
 > `lambda` / `snapshot` 不是 behavior 专属包装；`IbLambdaExpr` 覆盖任意表达式 body，semantic pass 按 body 是否为 `IbBehaviorExpr` 分流到 `fn_callable` 或 `behavior`。
 >
-> **返回标注强制（2026-08-05）**：`lambda`/`snapshot`/`func`/`llm` 缺失返回标注产生
+> **返回标注强制**：`lambda`/`snapshot`/`func`/`llm` 缺失返回标注产生
 > `SEM_MISSING_RETURN_ANNOTATION` 编译错误。`-> auto` 对非行为 body 从 body 表达式推断
 > 具体返回类型并锁定（与 `func -> auto` 的 return 推断语义对齐）；**行为 body 的 `-> auto`
 > 唯一推断为 `str`**（LLM 输出默认字符串，无其它自动推断）——该写法允许但不推荐，需要
@@ -389,9 +389,9 @@ class IbValue(IbObject):
 
 1. **三层闭合**：AST / 符号表 / FuncSignature 中的所有"另一类型"引用必须经过 `TypeRef`；TypeDef 不直接持 TypeDef。
 2. **公理无 spec 依赖**：axiom 层仅在签名中接受/返回字符串类型名，禁止 `from core.kernel.spec`。
-3. **运行时分派路径**：所有 `isinstance(IbXxx)` 已被 `isinstance(obj, IbValue) and obj.ib_class.name == "..."` 替换；仅 `IbNone` 哨兵比较是例外。
+3. **运行时分派路径**：所有类型分派经 `isinstance(obj, IbValue) and obj.ib_class.name == "..."`；仅 `IbNone` 哨兵比较是例外。
 4. **编译产物纯数据**：`CompilationResult` 与序列化协议中不出现 Python 函数引用、闭包或可变对象。
-5. **kind 驱动**：所有"按类型种类分派"必须读 `spec.kind`（或 `kind in (X, Y)`），禁止 `isinstance(spec, FuncSpec)` 这类已删除的子类判断。
+5. **kind 驱动**：所有"按类型种类分派"必须读 `spec.kind`（或 `kind in (X, Y)`），禁止 `isinstance(spec, FuncSpec)` 这类子类判断。
 
 ---
 

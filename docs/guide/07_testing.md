@@ -197,4 +197,4 @@ MOCK 模式无法验证意图注释（`@`/`@+`/`@!`）、`__outputhint_prompt__`
 
 [06 · 构建多步骤 LLM 工作流]: ./06_multistep.md
 [syntax-13]: ../syntax/13_mock_testing.md
-[known-17]: ../KNOWN_LIMITS.md#十七mock-模式下无法验证的-llm-功能
+[known-17]: ../KNOWN_LIMITS.md#十六mock-模式下无法验证的-llm-功能

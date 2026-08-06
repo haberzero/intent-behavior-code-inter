@@ -62,7 +62,7 @@ while frame_stack:
         throw_to_parent_generator(exc)
 ```
 
-### 2.3 公理（与 `VM_SPEC.md §1` 对齐）
+### 2.3 公理（与 `05_vm_specification.md` §1 对齐）
 
 | 公理 | 内容 |
 |------|------|
@@ -149,7 +149,7 @@ class IExecutionFrame(Protocol):
 
 ## §4 作用域与闭包
 
-### 4.1 公理（与 `VM_SPEC.md §2.2` 对齐）
+### 4.1 公理（与 `05_vm_specification.md` §2.2 对齐）
 
 | 公理 | 内容 |
 |------|------|
@@ -210,7 +210,7 @@ VM 行为：
 - `vm_handle_IbAssign`：`rhs` 是 behavior 且 `dispatch_eligible=True` → `LLMScheduler.dispatch_eager()`，把 `LLMFuture` 写入 scope（`define_raw`）。
 - `vm_handle_IbName`：读取时若拿到 `LLMFuture` → `resolve()` 阻塞 → 真实 `IbObject` 写回 scope，后续读取 O(1)。
 
-### 5.4 公理（与 `VM_SPEC.md §3` 对齐）
+### 5.4 公理（与 `05_vm_specification.md` §3 对齐）
 
 | 公理 | 内容 |
 |------|------|
@@ -235,7 +235,7 @@ VM 行为：
            → 确定：返回 result.value；不确定：返回 IbLLMCallResult(is_certain=False) 容器
 ```
 
-> 当前 LLM 调用路径：`IbBehavior.call()` / `IbLLMFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers.py` 中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
+> LLM 调用路径：`IbBehavior.call()` / `IbLLMFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers/` 包中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
 
 ---
 
@@ -309,7 +309,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ## §7 意图上下文（IbIntentContext）
 
-### 7.1 公理（与 `VM_SPEC.md §5` 对齐）
+### 7.1 公理（与 `05_vm_specification.md` §5 对齐）
 
 | 公理 | 内容 |
 |------|------|
@@ -344,7 +344,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ## §8 多 Interpreter 隔离
 
-### 8.1 公理（与 `VM_SPEC.md §4` 对齐）
+### 8.1 公理（与 `05_vm_specification.md` §4 对齐）
 
 | 公理 | 内容 |
 |------|------|
@@ -370,7 +370,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 `tests/compliance/test_execution_isolation.py` 验证可观察契约，仅依赖公开 API。
 
-### 8.5 插件可见性隔离（与 `VM_SPEC.md §4.2 ISO-10` 对齐）
+### 8.5 插件可见性隔离（与 `05_vm_specification.md` §4.2 ISO-10 对齐）
 
 插件层隔离落在 **IBCI 可见性层**，不落在 Python 模块代码层：
 
@@ -386,7 +386,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ## §9 内存模型与 GC
 
-### 9.1 对象模型公理（与 `VM_SPEC.md §2.1` 对齐）
+### 9.1 对象模型公理（与 `05_vm_specification.md` §2.1 对齐）
 
 | 公理 | 内容 |
 |------|------|

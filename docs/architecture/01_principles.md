@@ -139,7 +139,7 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 ### 3.6 DynamicHost 最小目标
 
 1. **能够启动全隔离的运行环境**
-2. **能够继承所有来自主解释器的插件/UTS/公理体系**
+2. **能够继承所有来自主解释器的插件/类型公理体系**
 3. **不做额外的权限控制管理**
 4. **运行之后不会干扰主解释器的任何内容**
 5. **可以让主解释器正确返回到跳出点的位置**
@@ -211,7 +211,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 | 问题 | 说明 |
 |------|------|
-| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析已通过 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 修复；内建名防御和推断规则缺失仍保留为允许的职责分离型回退。**2026-08-05 类型强化**：未标注可调用（func/llm/lambda）现为 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值改为 `auto` 推断锁定（不再隐式 any）；多类型 `list[int,str]` 移除（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
+| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析经 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 校验；内建名防御和推断规则缺失仍保留为允许的职责分离型回退。类型强化现状：未标注可调用（func/llm/lambda）报 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值采用 `auto` 推断锁定（不隐式 any）；多类型 `list[int,str]` 不支持（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
 | **LazySpec 异常情况** | `resolve()` 失败时应抛出错误而非返回占位符 |
 
 **关于 LazySpec 的说明**：
@@ -316,7 +316,7 @@ LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
 
 **示例（插件）**：
 ```python
-# ibc_modules/ai/_spec.py - 不再 import ibcext
+# ibc_modules/ai/_spec.py - 插件元数据不 import ibcext
 def __ibcext_metadata__():
     return {
         "name": "ai",
@@ -379,13 +379,7 @@ def __ibcext_vtable__():
 
 #### 7.3.5 二进制打包兼容性
 
-| 打包场景 | 兼容性 | 说明 |
-|----------|--------|------|
-| **PyInstaller 打包** | 完全兼容 | Python 解释器完整保留 |
-| **Nuitka 打包** | 完全兼容 | 反射机制正常工作 |
-| **未来语法迁移** | 完全兼容 | Python 作为胶水层保留 |
-
-**核心保障**：只要保留完整的 Python 解释器，所有 `__attr__` 反射机制、`importlib`、`dir()` 等都能正常工作。
+只要保留完整的 Python 解释器，`__attr__` 反射机制、`importlib`、`dir()` 等均能正常工作。
 
 #### 7.3.6 向后兼容策略
 
@@ -409,16 +403,6 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 **架构流程**：
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 构建阶段（ibcc 命令）                                                │
-│                                                                      │
-│ 1. AutoDiscoveryService.discover_all()                               │
-│    ↓                                                                │
-│ 2. 生成 .ibc_meta 文件（JSON格式的元数据快照）                       │
-│    ↓                                                                │
-│ 3. 编译器读取 .ibc_meta → MetadataRegistry                          │
-│    ↓                                                                │
-│ 4. 静态类型检查通过 → FlatSerializer 生成扁平JSON                   │
-├─────────────────────────────────────────────────────────────────────┤
 │ 运行时阶段（ibci 命令）                                              │
 │                                                                      │
 │ 1. AutoDiscoveryService.discover_all()                              │
@@ -438,13 +422,6 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 | **扁平流生成保留** | FlatSerializer 依赖 `IbSpec.get_references()` / `TypeDef` 统一字段，不依赖旧 `TypeDescriptor` 体系 |
 | **运行时零侵入** | 插件不需要 import ibcext 就能被发现和加载 |
 | **二进制兼容** | 只要有 Python 解释器，运行时发现正常工作 |
-
-**需要的代码配合**：
-| 组件 | 修改 | 说明 |
-|------|------|------|
-| **ibcc 构建命令** | 新增 `--pre-scan-specs` 参数 | 扫描 _spec.py 并生成 .ibc_meta |
-| **AutoDiscoveryService** | 增加 `export_metadata()` 方法 | 将元数据序列化为 JSON |
-| **Scheduler** | 增加 `load_metadata_from_file()` | 编译前读取 .ibc_meta |
 
 ---
 

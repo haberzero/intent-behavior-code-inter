@@ -2,9 +2,6 @@
 
 > 本文档描述 IBC-Inter 意图注释系统的架构设计和实现细节。
 > 读者对象：需要理解或修改意图栈机制的开发者。
->
-> **路径说明**：以下模块已重构为包（目录），正文中 `*.py` 路径请以实际目录为准：
-> `runtime/vm/handlers/`、`runtime/objects/kernel/`、`runtime/interpreter/llm_executor/`。
 
 ---
 
@@ -141,7 +138,7 @@ core/kernel/ast.py
 
 ### 3.2 意图上下文
 
-意图栈已从 `RuntimeContextImpl` 的私有字段群提升为独立的公理化类型：
+意图栈是独立于 `RuntimeContextImpl` 的私有字段群之外、公理化的独立类型：
 
 ```
 core/runtime/objects/intent_context.py
@@ -436,7 +433,7 @@ ibci_modules/ibci_idbg/core.py
 └── retry_stack()         # 获取当前 llmexcept 帧栈（含 target_result 详情）
 ```
 
-`current_result()` 和 `current_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.target_result`，无活跃帧时回退到 `RuntimeContextImpl.get_last_llm_result()`（调试内省，读当前帧 target_result）。不再存在全局 `_last_llm_result` 共享字段——certainty 经 `IbLLMCallResult` 返回值传递，调用详情经 LLMExecutor 主线程单写槽 `get_current_call_info()` 获取。
+`current_result()` 和 `current_llm()` 采用**帧优先模式**：优先从活跃的 `LLMExceptFrame` 读取 `frame.target_result`，无活跃帧时回退到 `RuntimeContextImpl.get_last_llm_result()`（调试内省，读当前帧 target_result）。调用详情经 LLMExecutor 主线程单写槽 `get_current_call_info()` 获取；certainty 经 `IbLLMCallResult` 返回值传递，无全局 `_last_llm_result` 共享字段。
 
 ---
 
@@ -493,17 +490,6 @@ func func_with_custom_ctx():
     # 后续函数调用 fork 当前活跃的 custom 副本，而非原始根上下文
     inner_func()          # inner_func 收到的是含上述三个意图的 fork 快照
 ```
-
-验证覆盖：
-- `@` 一次性涂抹意图 → 调用后自动清除，不残留
-- `@+` 增量追加 → 意图在持久栈中累积
-- `@-` 物理移除 → 正确重建链表，不破坏结构共享
-- `@!` 临时排他（LLM 调用）→ 只对当前调用有效，完全屏蔽其他意图
-- 普通函数调用 → fork 拷贝传递，函数内意图操作不泄漏给调用者
-- `intent_context.clear_inherited()` → 函数内清空继承意图，从干净起点开始
-- `intent_context.use(ctx)` → 用自定义对象替换当前作用域活跃意图上下文（fork 拷贝，非引用共享）
-- `intent_context.use(ctx)` 后的函数调用 → fork 的源头是替换后的自定义意图对象，而非原始根上下文
-- `intent_context.get_current()` → 返回当前作用域意图上下文的快照副本
 
 ---
 
@@ -622,7 +608,7 @@ func make_translator():
 | `core/kernel/spec/specs.py` | `INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)` |
 | `core/runtime/objects/intent.py` | `IbIntent` 运行时对象 |
 | `core/runtime/objects/intent_context.py` | `IbIntentContext` 运行时对象（Python 层，不可实例化为 IbObject） |
-| `core/runtime/objects/intent_stack.py` | `IbIntentStack`（遗留接口层，提供 `push/pop/clear` 等 IBCI 可调用方法） |
+| `core/runtime/objects/intent_stack.py` | `IbIntentStack`（IBCI 内置类，封装意图栈操作，提供 `push/pop/clear` 等 IBCI 可调用方法） |
 | `core/runtime/bootstrap/primitive_initializer.py` | `intent_context` 类原生方法绑定（`__init__/push/pop/fork/resolve/merge/clear`） |
 | `core/runtime/interpreter/runtime_context.py` | 运行时上下文（持有 `_intent_ctx: IbIntentContext`） |
 | `core/runtime/vm/handlers/`（包） | CPS 语句/表达式处理（含意图注释与栈操作节点，如 `control_flow.py`） |

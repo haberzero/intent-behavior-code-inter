@@ -1,4 +1,4 @@
-﻿# IBCI VM 规范（VM_SPEC.md）
+﻿# IBCI VM 规范
 
 > **文档性质**：本文档是 IBCI 虚拟机的**正式规范层定义**，与 Python 宿主实现隔离。
 > 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。
@@ -182,9 +182,9 @@ while frame_stack:
 ```
 tests/compliance/
 ├── __init__.py              — 套件说明文档
-├── test_execution_isolation.py  — §4 多 Interpreter 隔离（19 测试）
-├── test_concurrent_llm.py       — §3 LLM dispatch-before-use（9 测试）
-└── test_memory_model.py         — §2 内存模型（18 测试）
+├── test_execution_isolation.py  — §4 多 Interpreter 隔离
+├── test_concurrent_llm.py       — §3 LLM dispatch-before-use
+└── test_memory_model.py         — §2 内存模型
 ```
 
 **运行方式**（独立验证）：

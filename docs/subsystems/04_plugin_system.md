@@ -1,7 +1,8 @@
-# IBCI 插件与模块指南
+# IBCI 插件与模块系统
 
-> 本文档详细说明 IBCI 的模块系统、内置模块 API、用户插件开发流程。
-> 语法参考见 `docs/SYNTAX_REFERENCE.md` §11（模块与插件基础）。
+> 本文档描述 IBCI 的模块系统、插件发现机制与用户插件开发流程。面向需要开发或维护插件的开发者。
+> 内置模块（ai/file/ihost/idbg/isys/json）的 API 属语法参考层，见 `docs/syntax/11_modules.md`；
+> 模块与插件基础语法见 `docs/SYNTAX_REFERENCE.md` §11。
 
 ---
 
@@ -54,89 +55,9 @@
 
 ---
 
-## 3. 内核原生模块 API
+## 3. 内置模块
 
-### 3.1 ai 模块
-
-```ibci
-import ai
-
-ai.set_config(url, key, model)         # 配置默认 LLM provider
-ai.set_retry(count)                     # 设置重试次数（默认 3）
-ai.set_timeout(seconds)                 # 设置超时（秒）
-ai.register_model(name, url, key, model)  # 注册命名模型
-```
-
-其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`stream()`、`mask(pattern)` 等。
-
-### 3.2 file 模块
-
-详见 `docs/SYNTAX_REFERENCE.md` §11.7。
-
-### 3.3 isys 模块
-
-```ibci
-import isys
-
-str entry  = isys.entry_path()         # 入口文件绝对路径
-str dir    = isys.entry_dir()          # 入口文件所在目录
-str root   = isys.project_root()       # 项目根目录（沙箱边界）
-bool sand  = isys.is_sandboxed()       # 是否处于沙箱模式
-str ext    = isys.request_external_access()  # 请求外部访问权限
-```
-
-### 3.4 idbg 模块
-
-```ibci
-import idbg
-
-idbg.vars()                # 返回当前作用域所有变量及值（dict）
-idbg.print_vars()          # 打印当前作用域所有变量
-idbg.current_llm()         # 返回最近一次 LLM 调用详细信息（dict）
-idbg.current_result()      # 返回最近一次 LLM 调用结果对象
-idbg.show_target_prompt()  # 打印最近一次 LLM 调用提示词
-idbg.show_target_result()  # 打印最近一次 LLM 调用结果
-idbg.show_all()            # 打印全部调试信息
-idbg.retry_stack()         # 返回当前 llmexcept 重试栈
-idbg.show_retry_stack()    # 打印重试栈
-idbg.protection_map()      # 返回 llmexcept 保护映射
-idbg.show_protection_map() # 打印保护映射
-idbg.intents()             # 返回当前意图栈列表
-idbg.show_intents()        # 打印意图栈
-idbg.env()                 # 返回运行环境信息
-idbg.show_env()            # 打印环境信息
-idbg.fields(obj)           # 返回对象所有字段
-```
-
-> `idbg.inspect(x)` 和 `idbg.dump_intent_stack()` 未实现，调用会产生运行时错误。
-
-### 3.5 ihost 模块
-
-```ibci
-import ihost
-
-dict result = ihost.run_isolated(path, policy)   # 隔离运行子脚本，返回子环境变量字典
-ihost.save_state(path)                         # 保存当前状态
-ihost.load_state(path)                         # 加载状态
-str handle = ihost.spawn_isolated(path, policy)   # 启动隔离子环境（不等待），返回 handle
-dict result = ihost.collect(handle)             # 等待子环境完成，返回子环境变量字典
-str src = ihost.get_source()                   # 获取当前入口源码
-```
-
-### 3.6 json 模块
-
-```ibci
-import json
-
-dict parsed = json.parse(raw_str)        # 解析 JSON 字符串
-str serialized = json.stringify(obj)     # 序列化为 JSON 字符串
-str pretty = json.pretty(obj)            # 格式化输出
-dict merged = json.merge(a, b)           # 合并两个 dict/list
-list keys = json.keys(obj)               # 获取 dict 的键列表
-list vals = json.values(obj)             # 获取 dict 的值列表
-any val = json.get_nested(obj, path)     # 按路径取嵌套值
-json.set_nested(obj, path, value)        # 按路径设置嵌套值
-```
+内置模块（`ai`/`file`/`ihost`/`idbg`/`isys`/`json`）的完整 API 见 `docs/syntax/11_modules.md` §11.3-§11.8。
 
 ---
 
@@ -209,17 +130,6 @@ if not result.ok:
 
 ---
 
-## 5. from X import Y 语法
+## 5. import 语法
 
-除 `import X` 外，IBCI 也支持 `from X import Y` 语法：
-
-```ibci
-from json import parse, stringify
-from json import parse as p
-
-dict d = parse('{"a": 1}')
-str s = stringify(d)
-dict d2 = p('{"b": 2}')
-```
-
-支持相对导入（`from . import x`）、别名（`as`）、星号导入（`from x import *`）。所有 import 语句（含 `from...import`）必须出现在文件顶部。
+`import X` / `from X import Y`（含相对导入、别名、星号导入）的语法约束见 `docs/syntax/11_modules.md` §11.1。

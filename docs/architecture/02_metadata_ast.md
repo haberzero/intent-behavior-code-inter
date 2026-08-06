@@ -509,8 +509,8 @@ Phase 间通过 `PassOutput`（symbol_bindings / type_bindings / diagnostics）�
 2. 是程序结构的一部分（不是临时元数据）
 3. 序列化器已经处理对象引用转换（无需手动管理）
 
-### Q3：MetadataStore 未来会被移除吗？
-不会完全移除，但会重新定位为"序列化中介"。长期目标是让序列化器直接从侧表转换，MetadataStore 变成可选的中间表示。
+### Q3：MetadataStore 的定位
+`MetadataStore` 是语义分析产物的聚合容器，作为序列化中介向序列化器提供符号/类型绑定。核心判断：运行时需要 → AST，仅编译期查询 → 侧表，跨 Pass 传递的聚合产物 → MetadataStore。
 
 ### Q4：如何判断新的分析结果应该存在哪里？
 参考第八章的决策流程图。核心判断：运行时需要 → AST，仅编译期查询 → 侧表。

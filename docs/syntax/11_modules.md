@@ -28,7 +28,7 @@ func main():
 
 此约束使编译器能够高效地在不执行代码的前提下进行无副作用的依赖扫描。
 
-**禁止循环导入**：模块间的 `import` 依赖图必须为有向无环图（DAG）。循环导入触发致命编译错误 `DEP_CIRCULAR_IMPORT`。详见 `docs/KNOWN_LIMITS.md §二十`。
+**禁止循环导入**：模块间的 `import` 依赖图必须为有向无环图（DAG）。循环导入触发致命编译错误 `DEP_CIRCULAR_IMPORT`。详见 `docs/KNOWN_LIMITS.md §十八`。
 
 **`from mod import *` 冲突行为**：通配符导入时，若模块导出的符号与当前作用域已有的非模块符号同名，发出 `SEM_IMPORT_CONFLICT` WARNING 并跳过该符号（本地定义优先）。与已有模块符号同名时静默跳过。命名导入 `from mod import name` 冲突行为一致。
 
@@ -55,7 +55,10 @@ import ai
 ai.set_config("https://api.example.com", "API_KEY", "model-name")
 ai.set_retry(3)           # 设置重试次数（默认 3）
 ai.set_timeout(30)        # 设置超时（秒）
+ai.register_model(name, url, key, model)   # 注册命名模型（供 @NAME~ 路由）
 ```
+
+其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`stream()`、`mask(pattern)` 等。
 
 TESTONLY 模式（结合 MOCK 指令使用）：
 
@@ -107,14 +110,19 @@ import ihost
 import isys
 
 dict policy = {"isolated": True}
-ihost.run_isolated("./sub/child.ibci", policy)
+dict result = ihost.run_isolated("./sub/child.ibci", policy)  # 隔离运行子脚本，返回子环境变量字典
+str handle = ihost.spawn_isolated("./sub/child.ibci", policy) # 启动子环境（不等待），返回 handle
+dict result = ihost.collect(handle)   # 等待子环境完成，返回子环境变量字典
+ihost.save_state(path)                # 保存当前状态
+ihost.load_state(path)                # 加载状态
+str src = ihost.get_source()          # 获取当前入口源码
 ```
 
 子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）。
 
 ### 11.7 file 模块
 
-`file` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其 IMPORT_GATED 子类型。
+`file` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其受限子类型（仅可经 `file` 模块访问，不可由用户插件覆盖）。
 
 ```ibci
 import file
@@ -155,7 +163,7 @@ file.remove("data.txt")
 - `"overwrite"`：`target` 为路径或 `file_handle`，显式就地覆盖，所有共享同一 backing 路径的 handle 都会观察到变化。
 
 **安全限制**：
-1. 所有 FS I/O 均受 `PermissionManager` 沙箱约束（默认禁止越出 `project_root`）。
+1. 所有 FS I/O 均受沙箱约束（默认禁止越出 `project_root`）。
 2. `save_state` 遇到活跃 `file_handle`/`audio`/`image`/`video` 变量时直接报错。
 3. `llmexcept` retry body 中禁用 `file.write`（避免污染 gold snapshot；磁盘型快照是浅路径引用，无法静态判别目标是否已入快照）。涉及可能失败的 LLM 调用时，先完成文件写入再进入可能重试的调用。
 
@@ -167,6 +175,12 @@ import json
 str raw = '{"name": "Alice", "age": 30}'
 dict parsed = json.parse(raw)
 str serialized = json.stringify(parsed)
+str pretty = json.pretty(obj)        # 格式化输出
+dict merged = json.merge(a, b)       # 合并两个 dict/list
+list keys = json.keys(obj)           # 获取 dict 的键列表
+list vals = json.values(obj)         # 获取 dict 的值列表
+any val = json.get_nested(obj, path) # 按路径取嵌套值
+json.set_nested(obj, path, value)    # 按路径设置嵌套值
 ```
 
 ### 11.9 用户插件

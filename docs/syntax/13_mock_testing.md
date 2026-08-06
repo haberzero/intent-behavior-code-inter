@@ -198,6 +198,7 @@ MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/complet
 ### 6.1 启动与接入
 
 ```python
+# MockServer 由测试代码启动于 127.0.0.1 随机端口（实现路径见 ibci_ai 插件）
 from ibci_modules.ibci_ai.mock_service import MockServer
 
 server = MockServer()
