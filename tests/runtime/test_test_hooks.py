@@ -17,12 +17,16 @@ class _RecordingHooks:
     def __init__(self):
         self.calls = []
         self.errors = []
+        self.dispatches = []
 
     def on_llm_call(self, *, node_uid, sys_prompt, user_prompt, target_model, response):
         self.calls.append((node_uid, sys_prompt, user_prompt, target_model, response))
 
     def on_llm_call_error(self, *, node_uid, error):
         self.errors.append((node_uid, error))
+
+    def on_dispatch(self, *, node_uid):
+        self.dispatches.append(node_uid)
 
 
 class TestOnLLMCallHook:

@@ -70,7 +70,9 @@ class _SchedulerMixin:
         llm_future = LLMFuture(node_uid=node_uid, future=future)
         with self._pending_futures_lock:
             self._pending_futures[node_uid] = llm_future
-        self._notify_test_hooks("on_dispatch", node_uid=node_uid)
+        hooks = self._test_hooks()
+        if hooks is not None:
+            hooks.on_dispatch(node_uid=node_uid)
         return llm_future
 
     def resolve(self, node_uid: str) -> IbObject:
