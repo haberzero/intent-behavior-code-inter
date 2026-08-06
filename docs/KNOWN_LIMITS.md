@@ -513,7 +513,7 @@ IBC-Inter 的多 Interpreter 隔离（动态宿主）在**插件层**采用**可
 
 - 每个 Engine 拥有独立的 `HostInterface` / `InterOp` 注册表；IBCI 脚本只能 `import` 到**本引擎注册表**中登记的插件。引擎 A 的 IBCI 代码无法看到引擎 B 的插件--可见性是每引擎隔离的。
 - 插件的 **Python 实现代码**仍由 Python 的 `importlib` 按进程级常规机制加载：`sys.modules` 全局缓存、按模块名命中。同一进程内，**同名插件按"先加载者胜"作为身份唯一性**--后启动的引擎若发现同名插件，拿到的是进程已缓存的那个模块对象。
-- 插件的**实例**是每引擎独立的：`create_implementation()` 每次调用产出新实例，并以 `_ibci_registry_id` 戳标记所属 registry，跨引擎误用实例会抛 `RegistryIsolationError`。
+- 插件的**实例**是每引擎独立的：`create_implementation()` 每次调用产出新实例，绑定引擎 registry 身份（经 `BoundPlugin` 容器承载，跨引擎误用实例会抛 `RegistryIsolationError`）。
 
 因此，**隔离的边界落在"IBCI 可见性与实例"层，不落在"Python 模块代码"层**。IBC-Inter 不插手 Python 的 import 机制（不装自定义 finder、不篡改 `sys.modules`），因为那既脆弱又是泄漏的抽象。
 
@@ -586,3 +586,11 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 **根源**
 
 布尔上下文（条件测试）是行为表达式的类型上下文之一；此前类型推断仅对**直接**作为条件的行为绑定 `bool`，未传播到复合布尔表达式内部，导致行为落到 `behavior` 占位符、运行期装箱为 `str`。
+
+---
+
+## 二十二、通信原语面（signal 已移除 / chan/slot/subscriber/thread）
+
+**`signal` 关键字与类型已移除**：`signal` 作为普通标识符 lex（不再是关键字）。原因：零投递机制的通信抽象与 VM 控制流 `Signal` 撞名，且无消费者空壳。需要消息传递时使用 `chan`/`slot`/`subscriber`（见 `docs/syntax/14_concurrency.md`）。
+
+**通信/线程原语**：`chan`/`slot`/`subscriber`/`thread`/`thread_result` 均已落地为语言一等公民（构造、方法、类型注解、序列化 round-trip）。`spawn`/`task` 等旧形态已删除，统一收敛到 `thread[T]` 对象模型。`thread_result[T]` 经 `expect()` 解封，失败 fail-fast。

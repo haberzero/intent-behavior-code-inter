@@ -98,14 +98,10 @@
 
 ## 七、文档同步（PT-DOC-*）
 
-### PT-DOC-1 docs/ 技术手册同步
+### PT-DOC-1 docs/ 技术手册同步（D1-D5 已落地 2026-08-06）
 | # | 内容 |
 |---|------|
-| D1 | `signal` 关键字/类型移除 → 通信/并发章节、语法文档、KNOWN_LIMITS |
-| D2 | pubsub 语言面打通 + `subscriber` 新类型 |
-| D3 | 通信 Signal 移除裁定 |
-| D4 | `send_nowait` 语言面补齐 + 语义变化（无订阅者 False） |
-| D5 | 线程对象模型细化（thread 槽位化 / thread_result IbValue / 瞬态序列化协议） |
+| D1-D5 | **已落地**：新写 `docs/syntax/14_concurrency.md`（chan/slot/subscriber/thread/thread_result + pubsub/send_nowait 语义 + signal 移除说明），KNOWN_LIMITS §二十二，SYNTAX_REFERENCE/README 接入。详见 WORKLOG |
 
 ### PT-DOC-2 语法手册定位段补充
 `docs/syntax/*.md` 各章节缺 `docs/README.md` §六.3 要求的定位段。
@@ -117,7 +113,7 @@
 | # | 内容 | 说明 |
 |---|------|------|
 | PT-TEST-1 | 测试体系治理与彻底重构（TEST_REFACTOR） | 独立低优先级：新建从零 → 并行共存 → 全面替换 → 深入内核（正式测试内省 API）。铁律：Phase 0 设计冻结前不启动代码改动。详见 `TEST_REFACTOR.md` |
-| PT-TEST-2 | e2e 测试覆盖率提升 | `for...if` 过滤、复合赋值运算符零 e2e 测试 |
+| PT-TEST-2 | e2e 测试覆盖率提升 | `for...if` 过滤、复合赋值运算符 e2e **已补（2026-08-06）**；其余覆盖缺口待续 |
 | PT-TEST-3 | 测试名与覆盖矩阵同步 | `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 测试名与实际文件不同步 |
 
 ---

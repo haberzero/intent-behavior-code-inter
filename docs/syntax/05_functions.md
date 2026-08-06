@@ -12,9 +12,9 @@ str msg = greet("World")
 print(msg)
 ```
 
-**返回类型必须声明（2026-08-05 收紧）**：`func` / `llm` / lambda 缺失返回标注现在产生
-`SEM_MISSING_RETURN_ANNOTATION` 编译错误（不再静默回填 `any` 击穿类型推断）。必须显式
-声明 `-> TYPE`、`-> auto`（从 body 推断）或 `-> any`（显式逃生）：
+**返回类型必须声明**：`func` / `llm` / lambda 缺失返回标注产生 `SEM_MISSING_RETURN_ANNOTATION`
+编译错误（不静默回填 `any` 击穿类型推断）。必须显式声明 `-> TYPE`、`-> auto`（从 body 推断）
+或 `-> any`（显式逃生）：
 
 ```ibci
 func double(int x) -> auto:      # auto：从 return 推断实际类型（此处 int）
