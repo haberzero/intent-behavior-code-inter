@@ -27,8 +27,13 @@
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务**：按 `OBSERVABILITY_REFACTOR.md` Phase 1 启动（契约修复 + 死码清理 + 零成本穿透替换；
-  大规模破坏按 Phase 2 独立分支实验 → Phase 3 手动应用）。Phase 0 已冻结。
+- **首要任务**：按 `OBSERVABILITY_REFACTOR.md` **Phase 2D** 启动测试体系重建实验（`exp/obs-2d-test-refactor` 独立分支，
+  沿用 `TEST_REFACTOR.md` 策略/铁律），验证后手动应用回 unsafe-vibe-dev；随后 Phase 4 收敛收尾
+  （矩阵三段式同步 + meta 扩展 + 旧 tests 删除 + docs 治理）。
+- **本 session 已完成（2026-08-06，unsafe-vibe-dev，11 commits）**：Phase 0 设计冻结、Phase 1 契约修复+死码+零成本穿透替换、
+  **2A CORE_DEBUG 整体移除**（88 trace → warnings 8 处/删除，commit 6878986）、**2B 观测骨架测试合作面**
+  （EngineTestSnapshot + test_hooks + resolve_plugin_search_paths 公开 + layering 豁免归零，commit 73f373d/ae2209e/feff694）、
+  **2C idbg 适配**（删死代码 + show_intents 单一权威源 + fields 协议化，commit 8a0065c）。全量 pytest **1633 passed / 4 skipped**。
 - **已完成**：PT-DEBT-7（删 is_nullable 死字段）、PT-DEBT-8（值层分派收敛，重定义原折叠目标）、
   PT-DEBT-6（register_module 可观测性）、PT-DOC-2（定位段收尾）、DOC_AUDIT 文档治理（F0-F4）、
   PT-INTRO-1/PT-DECIDE-1/PT-DEBT-1/2/3、内建函数群完善+遮蔽——详见 `PENDING_TASKS.md` 与 git 历史。

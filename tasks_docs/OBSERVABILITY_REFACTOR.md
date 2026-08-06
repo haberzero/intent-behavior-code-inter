@@ -176,9 +176,13 @@
 | 2A CORE_DEBUG 移除实验 | ✅ 完成并应用 | 分支验证全绿 → cherry-pick 应用回 unsafe-vibe-dev（commit 6878986），全量 1626/6 零 warning |
 | 2B 观测骨架扩展实验 | ✅ 完成并应用 | EngineTestSnapshot/test_hooks/resolve_plugin_search_paths 公开；test_mode/mock_provider→2D、call_info 形式化跳过 |
 | 2C idbg 重构实验 | ✅ 完成并应用 | 删死代码 + show_intents 单一权威源 + fields() 协议化（commit 8a0065c） |
-| 2D 测试体系重建实验 | ⬜ | 独立分支 |
-| 3 手动应用回 unsafe-vibe-dev | ⬜ | |
-| 4 收敛收尾 | ⬜ | |
+| 2D 测试体系重建实验 | ⬜ 下一 session | 独立分支 `exp/obs-2d-test-refactor`；沿用 TEST_REFACTOR 策略/铁律 |
+| 3 手动应用回 unsafe-vibe-dev | 🔄 随各实验 | 2A/2B/2C 已应用；2D 待 |
+| 4 收敛收尾 | ⬜ | 矩阵三段式同步（PT-TEST-3）+ meta 扩展 + 旧 tests 删除 + docs 治理 |
+
+> **2026-08-06 session 收尾**：Phase 0-2C 全部落地 unsafe-vibe-dev（11 commits，全量 1633 passed / 4 skipped，
+> 较基线 1626/6 多 3 passed / 少 2 skipped：layering 豁免转真实执行 +4，其余置换）。
+> **下一 session 起点**：Phase 2D 测试体系重建实验（独立分支），随后 Phase 3-2D 手动应用 + Phase 4 收敛。
 
 ---
 
