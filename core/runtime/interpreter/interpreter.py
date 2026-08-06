@@ -73,7 +73,7 @@ class Interpreter:
     IBC-Inter 2.0 消息传递解释器。
     彻底转向基于 IbObject 的统一对象模型。
     """
-    # 运算符 dunder 方法集合（从 op_constants 派生，R2-D3 单点收敛）。
+    # 运算符 dunder 方法集合（从 op_constants 派生，单点收敛）。
     _OPERATOR_METHODS: Optional[set] = None
 
     def get_call_stack_depth(self) -> int:

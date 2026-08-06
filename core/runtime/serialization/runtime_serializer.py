@@ -235,9 +235,8 @@ class RuntimeSerializer(BaseFlatSerializer):
                 data["value_meta"] = dict(obj.meta)
 
         # 类元对象（IbClass）：序列化为类引用（类名），反序列化时重绑定 registry
-        # 真实类——此前落 else object 分支展开为空 fields，反序列化时被
-        # registry.get_class 构造为对应类的空普通实例，类型符号身份破坏。
-        # 类型符号是"类型引用"而非实例值（与 IbModule scope_native 模式一致）。
+        # 真实类——类型符号是"类型引用"而非实例值（与 IbModule scope_native
+        # 模式一致），必须保持 IbClass 身份。
         if isinstance(obj, IbClass):
             data["_type"] = "class_ref"
             data["name"] = obj.name
@@ -349,8 +348,7 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["node_uid"] = obj.node
             # captured_intents 协议：None 或 IbIntentContext（非可迭代）。
             # 完整序列化意图上下文（持久栈/涂抹/排他槽），反序列化时经
-            # _get_intent_context 重建共享身份——此前展开为 list 会破坏契约，
-            # 且二次序列化抛 TypeError。
+            # _get_intent_context 重建共享身份（契约：None 或 IbIntentContext uid）。
             ci = obj.captured_intents
             if ci is None:
                 data["captured_intents"] = None
@@ -639,7 +637,7 @@ class RuntimeDeserializer:
         if isinstance(val, str):
             # 引用解析守卫：仅当字符串确实是本池中的引用 UID 才按引用解析，
             # 否则视为普通字面量——避免用户数据撞 inst_/intent_ 前缀被误判
-            # 为引用（此前 `"inst_userdata"` 未在池中也会 KeyError）。
+            # 为引用（仅当确实是本池中的引用 UID，避免用户数据撞前缀被误判）。
             if val.startswith("inst_") and (val in self.instance_pool or val in self.instance_cache):
                 return self._get_instance(val)
             if val.startswith("intent_") and not val.startswith("intentctx_") and (
@@ -807,8 +805,8 @@ class RuntimeDeserializer:
                 self._pending_cell_relinks.append((obj, suid))
 
         elif _type == "fn_callable":
-            # 此前无此分支：落入 else 展开为空 IbObject（node/closure/params/body
-            # 全丢），恢复后调用失败。重建完整 fn_callable 并登记闭包 cell 重链。
+            # 重建完整 fn_callable（node/closure/params/body 保真）并登记闭包
+            # cell 重链——不得落入 else 展开为空 IbObject。
             closure, pending_uids = self._deserialize_closure(data)
             obj = self.factory.create_fn_callable(
                 data["node_uid"],

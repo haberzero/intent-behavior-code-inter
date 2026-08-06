@@ -282,9 +282,8 @@ class StatementVisitorsMixin:
                 return declared_type
 
         # Structural sig matching when RHS carries concrete signature.
-        # CALLABLE_INSTANCE（behavior/fn lambda）此前被跳过，导致 `fn[()->int] f =
-        # lambda -> auto: @~...~` 声明侧承诺 int 而运行期返回 str（不一致）。
-        # 现纳入：按 value_type 校验返回类型（lambda 的 CALLABLE_INSTANCE spec 不
+        # CALLABLE_INSTANCE（behavior/fn lambda）按 value_type 校验返回类型：
+        # lambda 的 CALLABLE_INSTANCE spec 不
         # 携带 param_types，参数约束由调用处实参解析覆盖，此处只校验返回）。
         if val_type.kind in (
             TypeKind.FUNCTION.value,

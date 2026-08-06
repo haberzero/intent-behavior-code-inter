@@ -115,8 +115,7 @@ class ModuleDiscoveryService:
         )
 
         # _spec.py 导入失败直接上抛（由 discover_all 的 Fatal Error 包装给出可读
-        # 诊断）——此前 except ImportError 静默置 None 使插件无声不可发现。仓内
-        # 全部 _spec.py 仅依赖标准库，无合法可选导入场景。
+        # 诊断）。仓内全部 _spec.py 仅依赖标准库，无合法可选导入场景。
         spec = importlib.util.spec_from_file_location(internal_name, spec_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

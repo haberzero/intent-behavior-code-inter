@@ -286,7 +286,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     try:
         # 统一走 receive('__call__') 协议分派（base.receive 内置 .call 兜底），
-        # 不再用 hasattr 探测双路径（R2-D4：单一协议分派）。
+        # 不再用 hasattr 探测双路径（单一协议分派）。
         result = func.receive("__call__", args)
         # native 调用返回 Waitable（宿主异步句柄）→ 挂起本根，让调度器等待其完成，
         # 而非阻塞当前线程。恢复后 result 为完成值（如 collect 的 dict）。

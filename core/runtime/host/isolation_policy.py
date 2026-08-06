@@ -50,7 +50,7 @@ class IsolationPolicy:
         inherit_plugins = data.get("inherit_plugins", True)
         if not isinstance(inherit_plugins, bool):
             # 选择性插件继承（List 形态）未实现——显式拒绝（fail-fast），
-            # 不接受静默退化为全量继承（R2 复核：收敛为 bool）。
+            # 不接受静默退化为全量继承（收敛为 bool）。
             raise ValueError(
                 "inherit_plugins must be a bool (True=all / False=none); "
                 f"got {type(inherit_plugins).__name__}: {inherit_plugins!r}. "

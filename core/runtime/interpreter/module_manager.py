@@ -84,7 +84,7 @@ class ModuleManagerImpl:
         """读取当前模块根作用域的整张符号表（name -> sym_uid）。
 
         注意：该表含 prelude/内建 + 用户符号 + import-* 注入符号的**全部**模块级
-        符号，不是 import-* 成员的专属映射（这是 B-D6 断层的根源）。本方法只用于
+        符号，不是 import-* 成员的专属映射。本方法只用于
         按名查询 import-* 成员的 uid（保证运行时绑定与使用点 get_variable_by_uid
         对齐）；"哪些名字是 import-* 成员"由 ``_import_star_members`` 精确提供。
         """

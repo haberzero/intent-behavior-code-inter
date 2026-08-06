@@ -20,7 +20,7 @@ def register_io(manager: Any, execution_context: Any, service_context: Any):
             callback(msg)
         else:
             try:
-                # [WINDOWS FIX] 尝试以 UTF-8 编码打印
+                # 尝试以 UTF-8 编码打印（Windows 控制台兼容）
                 if hasattr(sys.stdout, 'reconfigure'):
                     try:
                         sys.stdout.reconfigure(encoding='utf-8')

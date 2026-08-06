@@ -409,10 +409,8 @@ class Scheduler(ICompilerService):
 
                     # 解析已编译文件模块的真实元数据（其成员在依赖模块编译完成后已
                     # 由 _compile_file 写入 registry）：依赖图按拓扑序编译，被导入
-                    # 模块先于导入者完成，故 resolve 必含真实成员。此前的 Lazy
-                    # 描述符（ModuleMetadata(name=...)) members 恒为空，导致
-                    # `from <ibci文件> import x` 全部无法解析（INT_INTERNAL_ERROR/
-                    # SEM_UNDEFINED_SYMBOL）。
+                    # 模块先于导入者完成，故 resolve 必含真实成员（Lazy 空描述符
+                    # members 恒为空，无法承载 from-import 成员解析）。
                     s_mod_type = self.registry.resolve(imp_mod_name) or ModuleMetadata(name=imp_mod_name)
                     # 必须绑定注册表以便后续解包
                 else:

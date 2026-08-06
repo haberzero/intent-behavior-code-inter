@@ -186,8 +186,8 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
         # Persist inner-type scalars for list[T] / dict[K,V] / tuple[T]：
-        # 泛型实参持久化，运行时 rehydrator 据此重建特化 spec——此前未持久化致
-        # 符号 declared_type 在运行时退化为基础 list/dict[any,any]（泛型身份丢失）。
+        # 泛型实参持久化，运行时 rehydrator 据此重建特化 spec（否则符号
+        # declared_type 会退化为基础 list/dict[any,any]，泛型身份丢失）。
         if t.kind == TypeKind.LIST.value:
             if t.allowed_element_types:
                 type_data["allowed_element_type_names"] = [r.head for r in t.allowed_element_types]

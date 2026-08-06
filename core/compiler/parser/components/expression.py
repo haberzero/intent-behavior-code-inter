@@ -343,8 +343,7 @@ class ExpressionComponent(BaseComponent):
                         mode_token = self.stream.advance()
                         mode = mode_token.value
                     # 关键字参数（mode=/buffer=/name=）——逗号已由上方 match 消费，
-                    # 流停在首关键字处，_parse_chan_kwargs 兼容"已消费逗号"形态
-                    # （此前的 previous() 是只读回看、不移动光标，关键字路径坏死）。
+                    # 流停在首关键字处，_parse_chan_kwargs 兼容"已消费逗号"形态。
                     kw = self._parse_chan_kwargs()
                     if kw is not None:
                         m, b, n = kw

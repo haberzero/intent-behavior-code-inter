@@ -91,7 +91,7 @@ class ArtifactRehydrator:
         # 映射驱动的 Shell 创建
         shell_creators = {
             # list[T] / dict[K,V] / tuple[T]：经 factory 重建特化 spec——
-            # 此前硬编码基础 TypeDef（name="list"）致泛型实参丢失。
+            # 特化工厂按泛型实参重建 spec（硬编码基础 TypeDef 会丢失实参）。
             TypeKind.LIST.value: lambda: (
                 factory.create_list(
                     allowed_element_type_names=data.get("allowed_element_type_names"),

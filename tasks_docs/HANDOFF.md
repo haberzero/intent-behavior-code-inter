@@ -84,14 +84,14 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 | 文档 | 用途 |
 |------|------|
-| `NEXT_STEPS.md` | 当前最紧要项 / 下一阶段 / 已完成摘要 / 工作模式定论 / 工作规则 |
+| `NEXT_STEPS.md` | 当前最紧要项（PT-INTRO-1 主线）/ 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
-| `PENDING_TASKS.md` | 长期规划（PT-SEM/PT-4.x/PT-ARCH/PT-SMELL/TEST_REFACTOR/media 封存） |
-| `PENDING_REVIEW_ITEMS.md` | 完整复核审查清单（R1/R2 ✅ / R3-R5 待做 + D1-D5 docs 同步） |
-| `WORKLOG.md` | 自主工作日志（关键裁定 + 仍有效设计决策 + 遗留） |
+| `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-REV/PT-DOC/PT-TEST/PT-AUDIT/PT-DECIDE/PT-SEALED + PT-INTRO-1 主线） |
+| `PENDING_REVIEW_ITEMS.md` | 完整复核审查清单（R1/R2/R3 ✅ / PT-REV-1(原R4)、PT-REV-2(原R5) 待做） |
+| `WORKLOG.md` | 自主工作日志（关键裁定 + 仍有效设计决策） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
-| `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-SMELL-1/2 审计（待执行，独立分支） |
-| `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（独立任务） |
+| `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
+| `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（PT-TEST-1，独立任务） |
 
 ---
 
@@ -101,28 +101,26 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **未修缺陷待办已全部完成（会话 17）**：PT-ARCH-31（序列化档位 A+B）/ PT-ARCH-32（Axiom
-  家族分裂）/ PT-ARCH-33（EnumAxiom 双通道）/ PT-ARCH-34（use_intent_context 守卫）/
-  PT-SMELL-R3（四 Zone 约 30 项三档处置：修 19 + 复核定案保留 10 + 设计确认保留 6）。
-  处置明细与长期项记录见 `PENDING_TASKS.md`。
-- **待办**：
-  - `PT-INTRO-1`：运行时内省/常用内置函数体系设计（`type()`/`len()` 等，独立设计任务，
-    能自主决断则设计落地否则记录待决）。
-  - `R4` 覆盖率核对 / `R5` doc 治理 + D1-D5 docs 同步（完整复核审查流程中待做）。
-- **长期项（不阻塞）**：C-D3 私有标记协议化 / C-D7 snapshot 接口协议化 / B-D10 comm 访问器 /
-  B-D2 "已声明类型无 parser → uncertain" 语义决策。
+- **下一阶段主线：PT-INTRO-1 运行时内省体系剩余**——fn/behavior 签名形态（`type(f)` 返回
+  `fn_callable[()->int]`）+ 返回类型查询 API（草案 `f.__return_type__()`）。`type(x)` 内建已
+  落地。设计要点见 `PENDING_TASKS.md` §一。
+- **待讨论（下一 session）**：`PT-DECIDE-1`（原 B-D2）——"已声明类型无 parser → uncertain"
+  语言级语义决策，仅记录。
+- **待选**：`PT-DEBT-1/2/3`（原 C-D3/C-D7/B-D10）内核接口协议化——同性质可合并实施。
+- **长期周期**：`PT-AUDIT-1/2`（原 PT-SMELL-1/2）审计，独立分支，时不时启动。
+- **保留规划**：`PT-TEST-1`（测试体系重构，未来做）、`PT-FEAT-1`（语言级协程，保持现状）。
+- **审查后续**：`PT-REV-1`（原 R4 覆盖率核对）/ `PT-REV-2`（原 R5 doc 治理）+ `PT-DOC-1`
+  （原 D1-D5 docs 同步）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
 
-- **未修缺陷待办全量完成（会话 17，2026-08-05）**：PT-ARCH-31/32/33/34 + PT-SMELL-R3 全部
-  落地 unsafe-vibe-dev（本地 commit 序列：662b83c / 759956b / d82b989 / 661d02c / ee7c480 /
-  0b9e306 / 6c3f25b / cef4e94，每批全量 pytest 零回归）。详细记录见 `WORKLOG.md` 会话 17。
-- **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** 全部落地
-  unsafe-vibe-dev（本地 commit，未 push）。批次/commit 明细见 `NEXT_STEPS.md`"已完成"节。
-- **R1 完整复核**（会话 13）+ **R2 健康诊断十查**（会话 14-15）+ **R3 code-odor 全面异味
-  扫描**（会话 16）+ **注释卫生清理** + **类型强化**（会话 16 尾）全部完成。
-- **测试基线**：1532 passed / 6 skipped（以实跑为准）。
+- **会话 17（2026-08-05）**：PT-ARCH-31/32/33/34 + PT-SMELL-R3 全量处置 + B-D6 import-*
+  根治（含 IBC 文件跨模块导入三层断裂修复）+ PT-INTRO-1 type() 落地 + 任务控制文档全面重整
+  （任务代号按性质分域）。commit 明细见 git 历史。
+- **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
+  **R1/R2/R3 复核** + **类型强化** 全部落地（详见 git 历史）。
+- **测试基线**：1547 passed / 6 skipped（以实跑为准）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；无独立分支残留）。
 
 ### 2.3 交接检查单

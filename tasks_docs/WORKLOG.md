@@ -110,14 +110,7 @@
 
 ## 二、仍有效的设计决策
 
-| 决策 | 内容 |
-|------|------|
-| 运行时值 `type_ref` 保持基础 spec | 可变值（list/dict）不固有泛型身份（同一对象可被赋给 list[int]/list[str]，语义不自洽）；符号/序列化侧已精确（L7-A），值侧记录为设计决策（会话 12） |
-| 通信 `Signal` 抽象移除 | 零消费者空壳 + 与 VM 控制流 Signal 撞名 → 彻底删除；`signal(...)` 语言关键字全链移除（会话 8） |
-| `core`/`view` 槽 = 句柄承载 | IbChannel/IbSlot/IbSubscriber 的 core/view 槽与 thread `__slots__` 同构（句柄/内核状态经槽承载），非值对象碎片（会话 12） |
-| 瞬态序列化协议 | thread/chan/slot/subscriber 统一 `__transient_state__` 存根；反序列化不复活活体（会话 10） |
-| 类型符号 `class_ref` | IbClass 序列化为类名引用、反序列化重绑定 registry 真实类（会话 11） |
-| 泛型成员特化协议化 | `resolve_member` per-type 级联收敛为 `GenericTypeDeclaration` 声明回调（会话 9） |
+> 收敛至 `PENDING_TASKS.md` §十（单一事实来源，避免双维护）。本文件不再复制。
 
 ## 三、已完成工作摘要
 
