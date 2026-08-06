@@ -103,9 +103,9 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 - **下一阶段主线：PT-INTRO-1 运行时内省体系剩余**——fn/behavior 签名形态（`type(f)` 返回
   `fn_callable[()->int]`）+ 返回类型查询 API（草案 `f.__return_type__()`）。`type(x)` 内建已
   落地。设计要点见 `PENDING_TASKS.md` §一。
-- **待讨论（下一 session）**：`PT-DECIDE-1`（原 B-D2）——"已声明类型无 parser → uncertain"
+- **待讨论（下一 session）**：`PT-DECIDE-1`——"已声明类型无 parser → uncertain"
   语言级语义决策，仅记录。
-- **待选**：`PT-DEBT-1/2/3`（原 C-D3/C-D7/B-D10）内核接口协议化——同性质可合并实施。
+- **待选**：`PT-DEBT-1/2/3` 内核接口协议化——同性质可合并实施。
 - **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
   审查循环，R4/R5 待做）+ `PT-AUDIT-4/5`（文档清洗与梳理 / 注释卫生清理）——持续周期工作。
 - **保留规划**：`PT-TEST-1`（测试体系重构，未来做）、`PT-FEAT-1`（语言级协程，保持现状）。

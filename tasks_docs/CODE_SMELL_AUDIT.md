@@ -16,7 +16,7 @@
 
 | # | 位置 | 特征 | 状态 |
 |---|---|---|---|
-| A1 | `compiler/semantic/passes/_expression_visitors.py:303` | resolve_call_return 统一入口外直读 return_type 作最后兜底（功能性双通道） | **已记录 PT-SEM-4** |
+| A1 | `compiler/semantic/passes/_expression_visitors.py:303` | resolve_call_return 统一入口外直读 return_type 作最后兜底（功能性双通道） | **已记录并处置** |
 | A2 | `llm_executor/_prompt.py:26/41-48/59/84/315` | to_native/__to_prompt__ 多级 fallback 链（异常驱动逐级降级） | 待核验 |
 | A3 | `llm_parsing_strategy.py:287-316/356` | DefaultParsingStrategy 兜底 + "safe fallback just in case" | 待核验 |
 | A4 | `spec/registry/_inference.py:63/93` | 无显式返回类型 → axiom fallback → `resolve("any")` | 待核验 |
@@ -81,7 +81,7 @@
 | E2 | 承重保留站点（descriptor/sentinels memo/loader callable/kernel 分层） | 复核保留理由是否仍成立 |
 | E3 | 死代码删除（registry.is_truthy/_cast_*/export_metadata/IntegrityChecker/is_package_dir/create_plugin/create_instance/Diagnostic.node_uid） | 复核零消费方判定是否遗漏动态引用 |
 | E4 | 组8 处置（_extract_signature fail-fast、IbNativeFunction.__getattr__ 删除、method_missing 删除） | 复核 fail-fast 是否引入插件兼容回归；__getattr__ 删除是否有隐性消费者 |
-| E5 | `_expression:304` 兜底、loader↔check 复制 | 已记录（PT-SEM-4 / REFLECT-ARCH-1 设计决策），不重复修复 |
+| E5 | `_expression:304` 兜底、loader↔check 复制 | 已记录并处置；loader↔check 复制为设计决策，不重复修复 |
 
 ---
 

@@ -49,7 +49,7 @@
 | `vm/handlers/_shared.py:530` | LLM 调用处理内嵌套 try |
 | `interpreter/llm_parsing_strategy.py:273` | 解析兜底链内嵌套 |
 | ~~`interpreter/module_manager.py:172`~~ | 模块导入（**已消解 2026-08-05**：B-D7 删除外层 try/except 误译包装，B-D6 重构后无嵌套 try） |
-| `interpreter/intrinsics/io.py:25` | IO 读取（与局部 import 同点，见 PT-SMELL-3 推迟工作记录 L12） |
+| `interpreter/intrinsics/io.py:25` | IO 读取（与局部 import 同点，见 `PENDING_TASKS.md` §十一 推迟工作记录 L12） |
 | `objects/kernel/ib_class.py:124` | 类方法解析 |
 
 > 逐处核验异常处理范围是否过宽、是否可扁平化（try 范围应尽量窄，嵌套 handler 归属难判断）。

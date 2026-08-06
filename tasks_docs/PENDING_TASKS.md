@@ -25,7 +25,7 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 
 ---
 
-## 二、待用户拍板：PT-DECIDE-1 LLM 解析默认策略语义（原 B-D2）
+## 二、待用户拍板：PT-DECIDE-1 LLM 解析默认策略语义
 
 > **位置**：`core/runtime/interpreter/llm_parsing_strategy.py`（DefaultParsingStrategy）。
 > **问题**："已声明具体类型但无 `__from_prompt__`/parser" 的 LLM 输出被**静默 box 成成功
@@ -37,15 +37,15 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 
 ---
 
-## 三、待选任务：内核接口协议化（PT-DEBT-1/2/3，原 C-D3 / C-D7 / B-D10）
+## 三、待选任务：内核接口协议化（PT-DEBT-1/2/3）
 
 > 三者同性质：跨对象私有穿透 → 公开访问器/容器，属内部机制打磨（不阻塞）。
 
 | # | 位置 | 内容 | 方案 |
 |---|------|------|------|
-| PT-DEBT-1 | `native_module.py:41-42` + `loader.py:66-71`（原 C-D3） | `_ibci_registry_id` 私有标记注入（跨引擎隔离，两处硬编码字符串无单一权威源，改名即静默失效） | `(implementation, registry_id)` 包进 `BoundPlugin` 容器，构造时从容器取；不再往实现对象打属性（loader/native_module/object_factory 三处） |
-| PT-DEBT-2 | `observability/snapshot.py`（原 C-D7） | 可观测层直接读内核私有槽（`_comm_registry`/`_runtime_coordinator`/`_pending_futures`/`_current_call_info`）+ 宽 except | 给 RuntimeContextImpl/LLMExecutorImpl 补公开只读访问器，snapshot 走公开接口（best-effort 契约有测试） |
-| PT-DEBT-3 | `runtime_context.py:381-384` + `vm/handlers/comm.py` 等（原 B-D10） | `_comm_config_store`/`_comm_event_bus` 槽被 core/插件直接 `rc._comm_*` 穿透（注释明文的三方契约，无公开访问器） | 加 `get_comm_registry()`/`get_comm_config_store()`/`get_comm_event_bus()`（惰性创建），统一替换各方直接访问。与 PT-DEBT-2 同方向可合并实施 |
+| PT-DEBT-1 | `native_module.py:41-42` + `loader.py:66-71` | `_ibci_registry_id` 私有标记注入（跨引擎隔离，两处硬编码字符串无单一权威源，改名即静默失效） | `(implementation, registry_id)` 包进 `BoundPlugin` 容器，构造时从容器取；不再往实现对象打属性（loader/native_module/object_factory 三处） |
+| PT-DEBT-2 | `observability/snapshot.py` | 可观测层直接读内核私有槽（`_comm_registry`/`_runtime_coordinator`/`_pending_futures`/`_current_call_info`）+ 宽 except | 给 RuntimeContextImpl/LLMExecutorImpl 补公开只读访问器，snapshot 走公开接口（best-effort 契约有测试） |
+| PT-DEBT-3 | `runtime_context.py:381-384` + `vm/handlers/comm.py` 等 | `_comm_config_store`/`_comm_event_bus` 槽被 core/插件直接 `rc._comm_*` 穿透（注释明文的三方契约，无公开访问器） | 加 `get_comm_registry()`/`get_comm_config_store()`/`get_comm_event_bus()`（惰性创建），统一替换各方直接访问。与 PT-DEBT-2 同方向可合并实施 |
 
 ---
 
@@ -53,13 +53,13 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器（原 PT-4.3 剩余） | `await` 表达式已落地；剩余 async 函数/生成器。依赖调度器多任务挂起恢复 + 快照协议覆盖 yield 点。**保持现状规划，不主动推进** |
-| PT-FEAT-2 | Enum 非 str 成员 + 迭代能力（原 PT-4.1） | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
-| PT-FEAT-3 | 用户类泛型类型参数（原 PT-4.4） | VISION |
-| PT-FEAT-4 | 用户类运算符重载（原 PT-4.5） | VISION |
-| PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD（原 PT-SEM-1） | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准 |
-| PT-FEAT-6 | CompilationResult 字段精简（原 PT-SEM-2） | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
-| PT-FEAT-7 | 二层 IR 路线评估（原 PT-SEM-3） | VISION |
+| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地；剩余 async 函数/生成器。依赖调度器多任务挂起恢复 + 快照协议覆盖 yield 点。**保持现状规划，不主动推进** |
+| PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
+| PT-FEAT-3 | 用户类泛型类型参数 | VISION |
+| PT-FEAT-4 | 用户类运算符重载 | VISION |
+| PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准 |
+| PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
+| PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 
 ---
 
@@ -67,9 +67,9 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-DEBT-4 | `file` 模块重命名（原 PT-ARCH-30） | `file` 影子化 Python 内建，长期重命名（如 `fs`/`io`）。当前过渡措施已实施 |
-| PT-DEBT-5 | 全项目文件命名清理（原 PT-ARCH-22） | 过短/欠层次/欠区分度/影子化内建的代码文件命名排查。暂缓，独立窗口执行 |
-| PT-DEBT-6 | `register_module()` 可观测性缺口（原 PT-ARCH-23） | 静默忽略与 kernel-native 同名的用户插件，无 warning。待诊断体系稳定后专项处理 |
+| PT-DEBT-4 | `file` 模块重命名 | `file` 影子化 Python 内建，长期重命名（如 `fs`/`io`）。当前过渡措施已实施 |
+| PT-DEBT-5 | 全项目文件命名清理 | 过短/欠层次/欠区分度/影子化内建的代码文件命名排查。暂缓，独立窗口执行 |
+| PT-DEBT-6 | `register_module()` 可观测性缺口 | 静默忽略与 kernel-native 同名的用户插件，无 warning。待诊断体系稳定后专项处理 |
 
 ---
 
@@ -80,15 +80,15 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 
 | # | 内容 | 说明 |
 |---|------|--------------|
-| PT-AUDIT-1 | 代码异味核对分析（原 PT-SMELL-1） | `CODE_SMELL_AUDIT.md`（单一事实来源），独立分支执行 |
-| PT-AUDIT-2 | 条件分支与异常嵌套复杂度审计（原 PT-SMELL-2） | `BRANCH_NESTING_AUDIT.md`（AST 基线），独立分支执行 |
+| PT-AUDIT-1 | 代码异味核对分析 | `CODE_SMELL_AUDIT.md`（单一事实来源），独立分支执行 |
+| PT-AUDIT-2 | 条件分支与异常嵌套复杂度审计 | `BRANCH_NESTING_AUDIT.md`（AST 基线），独立分支执行 |
 | PT-AUDIT-3 | 代码复核审查循环（R 系列） | R1 正式 review / R2 健康诊断 / R3 异味扫描 **已执行（2026-08-05）**；R4 覆盖率核对、R5 doc 审计待做。复核清单见 `PENDING_REVIEW_ITEMS.md` |
 | PT-AUDIT-4 | 任务控制文档清洗与梳理（文档治理周期） | 删除已完成/无价值任务、无用设计决策、任务代号重整、交叉一致性核对。**已执行（2026-08-05）**，周期复核 |
 | PT-AUDIT-5 | 注释卫生清理（周期） | 删除代码注释中的任务代号、历史实现方案、修复过程叙述，保留功能设计语义。**已执行（2026-08-05）**，周期复核 |
 
 ## 七、文档同步（PT-DOC-*）
 
-### PT-DOC-1 docs/ 技术手册同步（原 D1-D5）
+### PT-DOC-1 docs/ 技术手册同步
 | # | 内容 |
 |---|------|
 | D1 | `signal` 关键字/类型移除 → 通信/并发章节、语法文档、KNOWN_LIMITS |
@@ -97,7 +97,7 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 | D4 | `send_nowait` 语言面补齐 + 语义变化（无订阅者 False） |
 | D5 | 线程对象模型细化（thread 槽位化 / thread_result IbValue / 瞬态序列化协议） |
 
-### PT-DOC-2 语法手册定位段补充（原 PT-DOC-1）
+### PT-DOC-2 语法手册定位段补充
 `docs/syntax/*.md` 各章节缺 `docs/README.md` §六.3 要求的定位段。
 
 ---
@@ -107,8 +107,8 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 | # | 内容 | 说明 |
 |---|------|------|
 | PT-TEST-1 | 测试体系治理与彻底重构（TEST_REFACTOR） | 独立低优先级：新建从零 → 并行共存 → 全面替换 → 深入内核（正式测试内省 API）。铁律：Phase 0 设计冻结前不启动代码改动。详见 `TEST_REFACTOR.md` |
-| PT-TEST-2 | e2e 测试覆盖率提升（原 PT-TEST-6） | `for...if` 过滤、复合赋值运算符零 e2e 测试 |
-| PT-TEST-3 | 测试名与覆盖矩阵同步（原 PT-TEST-7） | `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 测试名与实际文件不同步 |
+| PT-TEST-2 | e2e 测试覆盖率提升 | `for...if` 过滤、复合赋值运算符零 e2e 测试 |
+| PT-TEST-3 | 测试名与覆盖矩阵同步 | `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 测试名与实际文件不同步 |
 
 ---
 
@@ -116,7 +116,7 @@ Python（`get_type_hints` 运行时）。对齐 idbg 内省哲学（调试/泛�
 
 > **已彻底封存（2026-08-01，无限期搁置）**：恢复需显式解封并重估。代码层零启动
 > （仅设计文档 `docs/backup/02_multimodal_behavior.md`）。前置（路径统一/内核原生化/磁盘型
-> 存储）已完成。解封时需实现三项（原 PT-PHASE4-1/2/3）：
+> 存储）已完成。解封时需实现三项：
 > 1. 多模态模型注册字段（`ai.register_model` 存 modalities/endpoint/audio_config）；
 > 2. 非聊天端点推理绕过（endpoint 字段强制非推理，跳过 reasoning prompt 注入）；
 > 3. 磁盘型响应解析协议（`from_response` 平行协议 + `has_multimodal_response_cap` flag）。
