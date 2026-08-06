@@ -17,6 +17,11 @@
 | `enumerate(iterable)` | 生成 `[(索引, 值), ...]` 元组列表（与 `for (int i, str v) in ...` 搭配） |
 | `zip(a, b, ...)` | 按位置组合多个序列为元组列表（按最短截断） |
 | `sorted(iterable)` | 返回新排序列表（不改动原容器；区别于原地 `list.sort()`） |
+| `reversed(iterable)` | 返回新逆序列表（不改动原容器；区别于原地 `list.reverse()`） |
+| `sum(iterable)` | 数值元素之和（`list[int]`/`list[float]`） |
+| `all(iterable)` | 全部元素为真 → `bool` |
+| `min(a, b, ...)` / `min(iterable)` | 最小值（多参逐值比较，或单参集合） |
+| `max(a, b, ...)` / `max(iterable)` | 最大值（同上） |
 
 > **内建函数名可被用户变量声明遮蔽**：`int len = 5` 会遮蔽内建 `len`，其后该名字指
 > 用户变量（与 Python 一致）。内建**类型名**（`int`/`str`/`list` 等）不可遮蔽；对
@@ -36,6 +41,15 @@ for (int i, str name) in enumerate(names):
 
 list[int] l = [3, 1, 2]
 list[int] s = sorted(l)      # [1, 2, 3]；l 仍为 [3, 1, 2]
+
+# 聚合与最值
+list[int] nums = [1, 2, 3]
+int total = sum(nums)        # 6
+int hi = max(nums)           # 3
+int lo = min(nums)           # 1
+int hi2 = max(3, 1, 2)       # 3
+list[bool] flags = [True, False]
+bool ok = all(flags)         # False
 ```
 
 ### 12.2 str 方法

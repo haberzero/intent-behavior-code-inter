@@ -94,6 +94,48 @@ class TestSequenceHelpers:
         assert lines == ["0 5", "1 6"]
 
 
+class TestAggregationBuiltins:
+    """sum / reversed / all / min / max 聚合与迭代内建。"""
+
+    def test_sum(self):
+        assert run_ibci("list[int] l = [1, 2, 3]\nprint(sum(l))\n") == ["6"]
+
+    def test_sum_float(self):
+        assert run_ibci("list[float] l = [1.5, 2.5]\nprint(sum(l))\n") == ["4.0"]
+
+    def test_sum_shadowable(self):
+        """sum 内建名可被用户变量遮蔽（遮蔽修复使 sum 重新纳入成为可能）。"""
+        code = "int sum = 0\nsum = sum + 5\nprint(sum)\n"
+        assert run_ibci(code) == ["5"]
+
+    def test_reversed_returns_new_list(self):
+        """reversed 返回新逆序列表，不改动原容器。"""
+        lines = run_ibci(
+            "list[int] l = [1, 2, 3]\n"
+            "list[int] r = reversed(l)\n"
+            "print(r)\n"
+            "print(l)\n"
+        )
+        assert lines == ["[3, 2, 1]", "[1, 2, 3]"]
+
+    def test_all_true(self):
+        assert run_ibci("list[bool] l = [True, True]\nprint(all(l))\n") == ["True"]
+
+    def test_all_false(self):
+        assert run_ibci("list[bool] l = [True, False]\nprint(all(l))\n") == ["False"]
+
+    def test_min_and_max_over_collection(self):
+        assert run_ibci(
+            "list[int] l = [3, 1, 2]\nprint(min(l))\nprint(max(l))\n"
+        ) == ["1", "3"]
+
+    def test_min_and_max_varargs(self):
+        assert run_ibci("print(min(3, 1, 2))\nprint(max(3, 1, 2))\n") == ["1", "3"]
+
+    def test_min_strings(self):
+        assert run_ibci('print(min(["c", "a", "b"]))\n') == ["a"]
+
+
 class TestForLoopTupleUnpacking:
     """for 循环元组解包（编译器符号注册修复）。"""
 

@@ -271,6 +271,36 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         return_type_name="list"
     ), token)
 
+    registry.register_function("reversed", factory.create_func(
+        "reversed",
+        param_type_names=["any"],
+        return_type_name="list"
+    ), token)
+
+    registry.register_function("sum", factory.create_func(
+        "sum",
+        param_type_names=["any"],
+        return_type_name="any"
+    ), token)
+
+    registry.register_function("all", factory.create_func(
+        "all",
+        param_type_names=["any"],
+        return_type_name="bool"
+    ), token)
+
+    registry.register_function("min", factory.create_func(
+        "min",
+        param_type_names=["any"],
+        return_type_name="any"
+    ), token)
+
+    registry.register_function("max", factory.create_func(
+        "max",
+        param_type_names=["any"],
+        return_type_name="any"
+    ), token)
+
     # ------------------------------
 
     # 4. 注册 None 单例 (Per-registry)

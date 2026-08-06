@@ -1,5 +1,6 @@
 from typing import Any, List
 from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.kernel.base import unbox
 from core.kernel.issue import InterpreterError
 
 
@@ -23,7 +24,7 @@ def _iter_elements(obj: IbObject) -> List[IbObject]:
 
 
 def _sort_key(elem: IbObject) -> Any:
-    """排序键：原生值；非标量值退化为字符串表示（保持可比较）。"""
+    """比较键：原生值；非标量值退化为字符串表示（保持可比较）。"""
     native = elem.to_native()
     if isinstance(native, IbObject):
         return str(native)
@@ -58,6 +59,59 @@ def register_seq(manager: Any, execution_context: Any, service_context: Any):
             ) from e
         return manager.registry.box(ordered)
 
+    def _reversed(iterable: IbObject):
+        """reversed(iterable) -> 新逆序列表（不修改原容器；区别于原地 reverse()）。"""
+        elements = _iter_elements(iterable)
+        return manager.registry.box(list(reversed(elements)))
+
+    def _sum(iterable: IbObject):
+        """sum(iterable) -> 数值元素之和。"""
+        total = 0
+        for elem in _iter_elements(iterable):
+            total = total + unbox(elem)
+        return manager.registry.box(total)
+
+    def _all(iterable: IbObject):
+        """all(iterable) -> 全部元素为真。"""
+        for elem in _iter_elements(iterable):
+            if not elem.receive("to_bool", []).to_native():
+                return manager.registry.box(False)
+        return manager.registry.box(True)
+
+    def _extrema(*args: IbObject, is_max: bool):
+        """min/max 共用：单参视为集合，多参视为逐值比较。"""
+        if len(args) == 1:
+            values = _iter_elements(args[0])
+        else:
+            values = list(args)
+        if not values:
+            raise InterpreterError("min/max: empty sequence")
+        best = values[0]
+        best_key = _sort_key(best)
+        try:
+            for v in values[1:]:
+                k = _sort_key(v)
+                if (k > best_key) if is_max else (k < best_key):
+                    best, best_key = v, k
+        except TypeError as e:
+            raise InterpreterError(
+                f"{'max' if is_max else 'min'}: elements are not mutually comparable: {e}"
+            ) from e
+        return best
+
+    def _min(*args: IbObject):
+        """min(a, b, ...) 或 min(iterable) -> 最小值。"""
+        return _extrema(*args, is_max=False)
+
+    def _max(*args: IbObject):
+        """max(a, b, ...) 或 max(iterable) -> 最大值。"""
+        return _extrema(*args, is_max=True)
+
     manager.register("enumerate", _enumerate, unbox=False)
     manager.register("zip", _zip, unbox=False)
     manager.register("sorted", _sorted, unbox=False)
+    manager.register("reversed", _reversed, unbox=False)
+    manager.register("sum", _sum, unbox=False)
+    manager.register("all", _all, unbox=False)
+    manager.register("min", _min, unbox=False)
+    manager.register("max", _max, unbox=False)
