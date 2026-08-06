@@ -79,6 +79,7 @@ class FlatSerializer(BaseFlatSerializer):
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
+            "import_star_members": dict(result.import_star_members),
             "side_tables": {
                 "node_to_symbol": remaped_node_to_symbol,
                 "node_to_type": remaped_node_to_type,

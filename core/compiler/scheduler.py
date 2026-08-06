@@ -58,6 +58,7 @@ class Scheduler(ICompilerService):
         self.ast_cache: OrderedDict[str, IbModule] = OrderedDict()   # Path -> AST
         self.symbol_table_cache: OrderedDict[str, Any] = OrderedDict() # Path -> SymbolTable
         self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
+        self.import_star_cache: OrderedDict[str, Dict[str, List[str]]] = OrderedDict()  # Path -> {导入模块名: 注入成员名}
         self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
         
         # 插件类型缓存：用于存储已转换的外部插件模块类型，支持跨插件继承
@@ -183,6 +184,7 @@ class Scheduler(ICompilerService):
                 try:
                     res = self._compile_file(file_path, artifact)
                     artifact.add_module(module_name, res)
+                    self.import_star_cache[file_path] = dict(res.import_star_members)
                     mod_info.status = ModuleStatus.SUCCESS
                 except CompilerError:
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to compile: {file_path}")
@@ -195,6 +197,7 @@ class Scheduler(ICompilerService):
                     module_ast=self.ast_cache[file_path], 
                     symbol_table=self.symbol_table_cache.get(file_path)
                 )
+                res.import_star_members = self.import_star_cache.get(file_path, {})
                 artifact.add_module(module_name, res)
                 mod_info.status = ModuleStatus.SUCCESS
             
@@ -215,7 +218,7 @@ class Scheduler(ICompilerService):
         """
         Maintains the LRU cache by removing oldest items if capacity exceeded.
 
-        统一剪枝 ast/token/symbol_table/build 四缓存（R2-E4：此前只剪 ast+token，
+        统一剪枝 ast/token/symbol_table/build 五缓存（R2-E4：此前只剪 ast+token，
         symbol_table/build 无界增长；同路径的其它缓存条目一并淘汰）。
         """
         while len(self.ast_cache) > self.MAX_CACHE_SIZE:
@@ -223,6 +226,7 @@ class Scheduler(ICompilerService):
             self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Pruning cache for {oldest_path}")
             self.token_cache.pop(oldest_path, None)
             self.symbol_table_cache.pop(oldest_path, None)
+            self.import_star_cache.pop(oldest_path, None)
             self.build_cache.pop(oldest_path, None)
 
     def _scan_and_cache(self, entry_file: str):
@@ -392,6 +396,9 @@ class Scheduler(ICompilerService):
                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Warning: Predefined symbol '{name}' is not a Symbol object, skipping.")
             
             # Inject imported modules
+            # ``from x import *`` 实际注入的成员名（按导入模块名记录）——精确契约
+            # 集合只在编译期存在，序列化进 artifact 供运行时精确枚举。
+            import_star_members: Dict[str, List[str]] = {}
             for imp in module_info.imports:
                 # 查找已编译的结果或外部元数据
                 s_mod_type = None
@@ -400,11 +407,14 @@ class Scheduler(ICompilerService):
                 if imp.file_path:
                     rel_imp_path = safe_relpath(imp.file_path, self.root_dir)
                     imp_mod_name = ModuleNameSpace.relpath_to_module_name(rel_imp_path)
-                    
-                    # 统一使用 TypeDef 解决循环依赖问题
-                    # 无论该模块是否已编译，都先注入 Lazy 描述符，
-                    # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
-                    s_mod_type = TypeDef(name=imp_mod_name)
+
+                    # 解析已编译文件模块的真实元数据（其成员在依赖模块编译完成后已
+                    # 由 _compile_file 写入 registry）：依赖图按拓扑序编译，被导入
+                    # 模块先于导入者完成，故 resolve 必含真实成员。此前的 Lazy
+                    # 描述符（ModuleMetadata(name=...)) members 恒为空，导致
+                    # `from <ibci文件> import x` 全部无法解析（INT_INTERNAL_ERROR/
+                    # SEM_UNDEFINED_SYMBOL）。
+                    s_mod_type = self.registry.resolve(imp_mod_name) or ModuleMetadata(name=imp_mod_name)
                     # 必须绑定注册表以便后续解包
                 else:
                     resolved_spec = self.host_interface.metadata.resolve(imp.module_name)
@@ -519,6 +529,7 @@ class Scheduler(ICompilerService):
                     # 2. 处理 from mod import a, b as c, *
                     for alias in imp.names:
                         if alias.name == '*':
+                            injected_names: List[str] = []
                             for name, member in s_mod_type.members.items():
                                 existing = analyzer.symbol_table.resolve(name)
                                 if existing:
@@ -537,6 +548,9 @@ class Scheduler(ICompilerService):
                                     new_sym = self._create_symbol_from_member(name, member)
                                     if new_sym:
                                         analyzer.symbol_table.define(new_sym)
+                                        injected_names.append(name)
+                            if injected_names:
+                                import_star_members.setdefault(imp.module_name, []).extend(injected_names)
                         else:
                             # 注入特定符号
                             target_member = s_mod_type.members.get(alias.name)
@@ -575,6 +589,7 @@ class Scheduler(ICompilerService):
                                 )
             
             result = analyzer.analyze(ast_node)
+            result.import_star_members = import_star_members
             
             # 语义分析完成后，更新注册表中的元数据成员
             # 这确保了 TypeDef 在解析时能看到完整的符号表

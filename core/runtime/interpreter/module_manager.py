@@ -94,13 +94,13 @@ class ModuleManagerImpl:
 
         raise InterpreterError(f"Module '{module_name}' not found or not registered in artifact.", error_code=DEP_MODULE_NOT_FOUND)
 
-    def _import_star_uid_map(self, execution_context: IExecutionContext) -> Dict[str, str]:
-        """读取编译器为 ``from x import *`` 注入当前模块的符号 uid 映射。
+    def _module_scope_uids(self, execution_context: IExecutionContext) -> Dict[str, str]:
+        """读取当前模块根作用域的整张符号表（name -> sym_uid）。
 
-        编译器（scheduler）在语义分析期为 import-* 成员创建带 uid 的 Symbol
-        （uid = ``scope_<importing_module>:<name>``），并序列化进当前模块
-        根作用域的 ``pools.scopes[scope_uid].symbols``（name -> sym_uid）。
-        运行时按同一 uid 注入变量，才能与使用点的 ``get_variable_by_uid`` 对齐。
+        注意：该表含 prelude/内建 + 用户符号 + import-* 注入符号的**全部**模块级
+        符号，不是 import-* 成员的专属映射（这是 B-D6 断层的根源）。本方法只用于
+        按名查询 import-* 成员的 uid（保证运行时绑定与使用点 get_variable_by_uid
+        对齐）；"哪些名字是 import-* 成员"由 ``_import_star_members`` 精确提供。
         """
         if not self.artifact:
             return {}
@@ -115,6 +115,25 @@ class ModuleManagerImpl:
         scope_symbols = scopes.get(root_scope_uid, {}).get("symbols", {})
         return dict(scope_symbols) if isinstance(scope_symbols, dict) else {}
 
+    def _import_star_members(self, execution_context: IExecutionContext, module_name: str) -> List[str]:
+        """读取编译器精确记录的 import-* 注入成员名（导入模块名 → 成员名列表）。
+
+        精确契约集合只在编译期存在（scheduler 注入时已知 s_mod_type.members），
+        序列化进当前模块 artifact 的 ``import_star_members``。运行时据此枚举，
+        替代"读整张模块根作用域表 + dir(package) 交集"的粗糙代理——后者无法
+        感知"spec 声明但实现缺失"的契约违例（import-* 与具名导入行为不对称）。
+        """
+        if not self.artifact:
+            return []
+        current_module = execution_context.current_module_name
+        if not current_module:
+            return []
+        module_data = self.artifact.get("modules", {}).get(current_module, {})
+        members_map = module_data.get("import_star_members", {})
+        if not isinstance(members_map, dict):
+            return []
+        return list(members_map.get(module_name, []))
+
     def import_from(self, module_name: str, names: List[tuple], execution_context: IExecutionContext) -> None:
         """
         处理 from module_name import names...
@@ -126,28 +145,20 @@ class ModuleManagerImpl:
         if package:
             # Check if any alias is '*'
             if any(name == '*' for name, _, _ in names):
-                # 从编译器注入符号表取 uid（name -> sym_uid），与运行时实际存在的
-                # 公开属性取交集——既保证 uid 对齐，又只导出 spec 声明成员（不泄漏协议方法）
-                uid_map = self._import_star_uid_map(execution_context)
-                # 迭代源为包的实际公开属性（dir）与编译器注入符号（uid_map）的交集：
-                # 白名单约束（仅 spec 声明成员，不泄漏协议方法）由 uid_map 保证；
-                # 迭代源用 dir(package) 可避免把当前模块预置符号（int/str 等内建）
-                # 误当导入成员。spec 声明但实现缺失的成员在此静默跳过（契约违例
-                # 由具名导入路径显式报错；import-* 批量导入保持宽容）。
-                for attr_name in dir(package):
-                    if attr_name.startswith('_'):
-                        continue
-                    if attr_name not in uid_map:
-                        # 仅注入编译器声明为 import-* 成员的符号（spec 契约成员）
+                # 精确枚举编译器记录的 import-* 成员（不再 dir(package) ∩ 整张模块表）：
+                # spec 声明但实现缺失 = 契约违例，显式暴露（与具名导入一致）；
+                # uid 按名从当前模块根作用域表查询，保证与使用点 get_variable_by_uid 对齐。
+                uid_map = self._module_scope_uids(execution_context)
+                for member_name in self._import_star_members(execution_context, module_name):
+                    if member_name.startswith('_'):
                         continue
                     try:
-                        attr_val = getattr(package, attr_name)
+                        attr_val = getattr(package, member_name)
                     except AttributeError:
-                        # spec 声明成员但实现缺失 = 契约违例，显式暴露（与非星号路径一致）
                         raise InterpreterError(
-                            f"Cannot import name '{attr_name}' from module '{module_name}'"
+                            f"Cannot import name '{member_name}' from module '{module_name}'"
                         )
-                    context.define_variable(attr_name, attr_val, uid=uid_map.get(attr_name))
+                    context.define_variable(member_name, attr_val, uid=uid_map.get(member_name))
             else:
                 for name, asname, uid in names:
                     try:
@@ -165,19 +176,24 @@ class ModuleManagerImpl:
         module_instance = self._loaded_modules.get(module_name)
         if module_instance:
             if any(name == '*' for name, _, _ in names):
-                # 使用接口公开方法获取符号；uid 从导入文件编译器注入表取（保证 uid 对齐）
-                uid_map = self._import_star_uid_map(execution_context)
-                symbols = module_instance.scope.get_all_symbols()
-                for sym_name, sym in symbols.items():
-                    if sym.is_const:  # 排除 print, int 等内置符号
-                        continue
-                    if sym_name not in uid_map:
-                        continue
-                    context.define_variable(sym_name, sym.value, declared_type=sym.declared_type, uid=uid_map.get(sym_name))
+                # 与包分支同构：精确枚举编译器记录的 import-* 成员，按名取符号绑定。
+                # 运行时符号缺失（编译注入但运行未定义）= 不一致，显式报错。
+                uid_map = self._module_scope_uids(execution_context)
+                for member_name in self._import_star_members(execution_context, module_name):
+                    symbol = module_instance.scope.get_symbol(member_name)
+                    if symbol is None:
+                        raise InterpreterError(
+                            f"Cannot import name '{member_name}' from module '{module_name}'"
+                        )
+                    context.define_variable(
+                        member_name, symbol.value,
+                        declared_type=symbol.declared_type,
+                        uid=uid_map.get(member_name),
+                    )
             else:
                 for name, asname, uid in names:
                     try:
-                        val = module_instance.get_variable(name)
+                        val = module_instance.scope.get(name)
                         symbol = module_instance.scope.get_symbol(name)
                         target_name = asname or name
                         context.define_variable(target_name, val, declared_type=symbol.declared_type if symbol else None, uid=uid)
