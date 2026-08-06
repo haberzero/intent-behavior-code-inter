@@ -93,7 +93,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md` §十） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
-| `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（PT-TEST-1，独立任务，并入矩阵同步） |
+| `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（PT-TEST-1，**已并入 OBSERVABILITY_REFACTOR**） |
+| `OBSERVABILITY_REFACTOR.md` / `test_baseline_20260806.txt` | **当前主线任务控制文档**（可观测性统一重构 Phase 0-4）/ 覆盖基准快照 |
 
 ---
 
@@ -103,10 +104,11 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一主线：PT-TEST-1 测试体系治理与彻底重构**——完整规划见 `TEST_REFACTOR.md`（Phase 0-5）。
-  **铁律：Phase 0 规划与设计冻结完成前，不启动任何代码改动**。启动方式：先做覆盖基准固化
-  （`pytest --collect-only` 快照）+ 新体系架构设计冻结。并入 PT-TEST-3 矩阵同步（输入存档
-  `TEST_MATRIX_FINDINGS.md`）。
+- **下一主线：OBSERVABILITY_REFACTOR 可观测性统一与测试体系重构**——完整规划见
+  `OBSERVABILITY_REFACTOR.md`（任务控制文档）。**PT-TEST-1 已并入**。四机制（测试体系/CORE_DEBUG/idbg/
+  内省）统一收敛到观测骨架（observability）。Phase 0 设计冻结已完成（基准存档
+  `test_baseline_20260806.txt`）。**Phase 1 契约修复+死码清理+零成本穿透替换**待启动；大规模破坏按
+  Phase 2 独立分支实验 → Phase 3 手动应用（禁合并）。授权见 `OBSERVABILITY_REFACTOR.md` §二。
 - **已完成**：`PT-INTRO-1`（内省体系）、`PT-DECIDE-1`（行为输出可解析性）、`PT-DEBT-1/2/3`
   （内核接口协议化）、`PT-DEBT-7`（删 is_nullable 死字段）、`PT-DEBT-8`（值层分派收敛审计）、
   `PT-DEBT-6`（register_module 可观测性）、`PT-DOC-2`（定位段收尾）、内建函数群完善+遮蔽、

@@ -6,23 +6,29 @@
 
 ---
 
-## 🔴 下一主线：PT-TEST-1 测试体系治理与彻底重构
+## 🔴 下一主线：OBSERVABILITY_REFACTOR — 可观测性统一与测试体系重构
 
-> **已列为本 session 之后的主线（2026-08-06 用户裁定）**。完整规划见 **`tasks_docs/TEST_REFACTOR.md`**
-> （Phase 0-5，含强制策略）。**铁律：Phase 0 规划与设计冻结完成前，不启动任何代码改动。**
+> **2026-08-06 用户裁定**：测试体系重构升格为**从内核出发、全局且系统级**的机制完善——
+> 让内核积极、统一一致地配合测试/调试/内省体系。四机制（测试体系 / CORE_DEBUG / idbg /
+> 内省机制）宏观统一，不可割裂。**PT-TEST-1 并入本任务**。
+> 完整规划与授权见 **`tasks_docs/OBSERVABILITY_REFACTOR.md`**（任务控制文档）。
+> **铁律：Phase 0 设计冻结完成前，不启动任何代码改动。**
 
-- **Phase 0 基准固化与设计冻结**（不动代码）：覆盖基准快照（`pytest --collect-only`）、
-  新体系架构设计冻结（目录结构/命名/分层/conftest/覆盖矩阵）、内核测试接口设计冻结、docs 治理方案。
-- **Phase 1 内核测试接口层**（additive）：正式测试内省 API + test hooks + MOCK 契约化。
-- **Phase 2-4 新体系骨架 → 逐域移植 → 全面替换**：新建从零 → 并行共存 → 覆盖 ≥ 旧体系后替换删除。
-- **并入 PT-TEST-3**：覆盖矩阵同步在重构中一并完成（用户 2026-08-06 裁定）。
+- **Phase 0 设计冻结**（已 0.1 基准固化：`tasks_docs/test_baseline_20260806.txt`，103 文件/1632 用例；0.2 规划冻结）。
+- **Phase 1 契约修复 + 死码清理 + 零成本穿透替换**（unsafe-vibe-dev 直做，小改动）。
+- **Phase 2 大规模破坏实验**（独立分支，禁合并）：2A CORE_DEBUG 移除 / 2B 观测骨架扩展
+  （LastLLMCallRecord + test_hooks + test_mode + EngineTestSnapshot）/ 2C idbg 重构 / 2D 测试体系重建。
+- **Phase 3 手动应用**已验证设计回 unsafe-vibe-dev；**Phase 4 收敛收尾**（矩阵三段式 + meta 扩展 + docs 治理）。
+- **授权**（用户 2026-08-06）：破坏性改造满足"实验通过+工程实践+普适性+符合 IBCI 设计原则+长期收益"
+  即全权自主实施；大规模破坏先在独立分支实验、禁合并、手动应用；禁兼容层；历史包袱大胆抛弃彻底清理。
 - **输入存档**：矩阵核对发现见 `tasks_docs/TEST_MATRIX_FINDINGS.md`。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务**：按 `TEST_REFACTOR.md` Phase 0 启动 PT-TEST-1（先做覆盖基准固化与设计冻结，**不碰代码**）。
+- **首要任务**：按 `OBSERVABILITY_REFACTOR.md` Phase 1 启动（契约修复 + 死码清理 + 零成本穿透替换；
+  大规模破坏按 Phase 2 独立分支实验 → Phase 3 手动应用）。Phase 0 已冻结。
 - **已完成**：PT-DEBT-7（删 is_nullable 死字段）、PT-DEBT-8（值层分派收敛，重定义原折叠目标）、
   PT-DEBT-6（register_module 可观测性）、PT-DOC-2（定位段收尾）、DOC_AUDIT 文档治理（F0-F4）、
   PT-INTRO-1/PT-DECIDE-1/PT-DEBT-1/2/3、内建函数群完善+遮蔽——详见 `PENDING_TASKS.md` 与 git 历史。

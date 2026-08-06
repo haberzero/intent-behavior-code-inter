@@ -1,0 +1,199 @@
+# OBSERVABILITY_REFACTOR — 可观测性统一与测试体系重构（任务控制文档）
+
+> **最后更新**：2026-08-06
+> **性质**：正式任务控制文档（非临时）。本周期主线任务控制文件。
+> **主线**：本任务为当前唯一 P0 主线。原 PT-TEST-1 测试体系重构（`TEST_REFACTOR.md`）**并入本任务**（测试侧=观测骨架的消费方）。
+
+---
+
+## 一、背景与目标
+
+用户裁定（2026-08-06）：测试体系重构不只是测试脚本层面的治理，而是**从内核出发、全局且系统级的机制完善**——让内核更积极、统一一致、高效地配合测试/调试/内省体系，使 IBCI 内核更好地适应**测试驱动开发演进**。
+
+四项机制（测试体系 / CORE_DEBUG / idbg / 内省机制）**宏观统一，不可割裂考虑**，本质是同一件事的四个碎片——**内核可观测性（Kernel Observability）**：内核如何被观察、被诊断、被测试。
+
+**核心事实**：内核已存在设计语言最现代的观测骨架——`core/runtime/observability/`（`snapshot.py` 结构化快照聚合 + `events.py` 协议驱动事件总线 + `config.py` 作用域化配置），经 `iruntime` 插件暴露。而 CORE_DEBUG（print 推送）、idbg（自拼 dict + 直扫 node_pool）、测试（70+ 处私有穿透）**都在该骨架之外另搞一套**。
+
+**本任务方向**：以观测骨架为**单一权威源**，四机制收敛其上；历史包袱经分析确认无意义即**大胆抛弃并彻底清理**；禁止兼容层。
+
+---
+
+## 二、工作模式与授权（用户 2026-08-06 补充裁定，凌驾于本文档一切安排之上）
+
+1. **允许代码破坏**；不以已存在代码为重。
+2. **大规模破坏必须先在独立分支实验**；实验成功后**禁止直接合并**回 `unsafe-vibe-dev`，只能**根据已检验的设计思路手动**做出成熟、可靠的改动回 `unsafe-vibe-dev`。
+3. 破坏性改造若同时满足：**实验通过 + 符合工程实践 + 一般普适性设计思路 + 符合 IBCI 整体设计原则 + 长期收益** → 用户已授予**全权自主决定并实施**。
+4. 总体指导思路：**长期收益优先、系统级统一、宏观机制设计与思路一致性**，始终为主要基准。
+5. **禁止兼容层设计**（工作模式定论 §1）。
+6. **历史包袱**：经慎重分析确信无意义应演进 → 大胆抛弃并彻底清理（"不删也不修"两档）。
+7. 工作模式定论（`NEXT_STEPS.md` §⛔）其余条款继续有效。
+
+---
+
+## 三、目标架构（统一可观测性骨架）
+
+> 单一权威源 + 统一设计语言 + 机制同构 + 配合模式统一（对照 `design-philosophy`）。
+
+```
+                        ┌──── 内核观测骨架（observability，已存在，扩展） ────┐
+  用户侧 idbg（渲染层）   │  状态面 State：RuntimeSnapshot（snapshot 聚合）       │  测试侧 PT-TEST-1
+  iruntime（通用内省）    │    ├─ 统一 vars 查询（get_vars/get_vars_snapshot 收敛）│  conftest 收敛
+  type()/__return_type__│    ├─ 最近 LLM 调用记录模型（单一权威源）             │  正式 API（test_snapshot
+  （值层自持内省范式保留） │    └─ EngineTestSnapshot（替代 engine 生命周期穿透）   │  / test_hooks）
+                        │  事件面 Events：EventBus 扩展                        │  私有穿透清零
+  CORE_DEBUG（删除）     │    ├─ llm/retry/诊断事件类型                         │  meta 自检扩展
+  15 处诊断点→warnings   │    ├─ ServiceContext.test_hooks（测试侧 sink）        │
+                        │    └─ LastLLMCallRecord 由事件面更新                  │
+                        │  控制面 Control：ConfigStore 扩展                    │
+                        │    ├─ test_mode / IsolationPolicy.test_mode/mock_provider
+                        │    └─ Engine.reset_test_state / Interpreter.reset_test_state
+                        │  诊断面 Diagnostics：CoreDebugger 删除，无平行机制
+                        └───────────────────────────────────────────────────────┘
+```
+
+### 目标架构要点
+
+| 面 | 机制 | 收敛动作 |
+|---|---|---|
+| 状态面 | snapshot 聚合 + 统一查询 | 收敛 `get_vars`/`get_vars_snapshot`；新增 **LastLLMCallRecord**（sys_prompt/user_prompt/response/raw_response/active_intents/global_intents/merged_intents/result）作为 ai/idbg/snapshot/测试的单一事实来源；新增 **EngineTestSnapshot**（explicit_root/cwd/path_ctx/plugin_search_paths/install_path/spawned_handles/root_initialized）替代 engine 生命周期私有穿透 |
+| 事件面 | EventBus 扩展 | 新增 llm 调用/重试/诊断事件类型；`ServiceContext.test_hooks`（on_llm_call/on_dispatch/on_llmexcept_enter/exit）作为测试侧 sink；LastLLMCallRecord 由事件更新 |
+| 控制面 | ConfigStore 扩展 | `test_mode` 内核级概念；`IsolationPolicy.test_mode`/`mock_provider`；`Engine.reset_test_state()`；MOCK 判定收敛为内核级（不留在插件私有） |
+| 诊断面 | CoreDebugger 删除 | 机制整体删除（类/配置流/engine 接线/dead import/88 trace）；15 处异常回退诊断点 → `warnings.warn`（与 PT-DEBT-6 先例一致、可测试）；流程日志直接删；silent 收敛为单职责 |
+| 用户侧 | idbg 重定位 | idbg = 观测骨架的**用户侧渲染层**，API 按统一设计语言重设计（清幽灵 API/死 API/悬挂契约，数据源收敛）；iruntime 为通用内省入口；type()/`__return_type__` 值层自持范式保留 |
+| 测试侧 | PT-TEST-1 并入 | conftest 收敛；私有穿透清零；meta 自检扩展（命名/矩阵三段式/helper 自动派生）；覆盖矩阵机器校验 |
+
+### 设计原则（设计哲学对照）
+
+- **单一权威源**：状态/事件/配置/最近调用记录各一个模型，禁止双写真相 / 多入口形态各异。
+- **统一设计语言**：所有观测输出同形态（结构化 dict / 事件类型枚举）。
+- **机制同构**：idbg=渲染层、测试 hooks=事件 sink、诊断=warnings，不造平行机制。
+- **配合模式统一**：插件走 KernelRegistry 钩子；测试走 ServiceContext/Engine 正式口；禁私有穿透。
+- **无兼容层**：旧机制要么真删除要么真收敛，不留中间态 / shim / 别名。
+- **一致性先于便利**：白盒 helper 下沉、layering 白名单归零、无 skip 掩盖违规。
+
+---
+
+## 四、阶段规划与验收标准
+
+### Phase 0：设计冻结（`unsafe-vibe-dev`，不动代码）
+
+- [x] **0.1 覆盖基准固化**：`pytest --collect-only` per-file 快照 → 存档 `tasks_docs/test_baseline_20260806.txt`（103 文件 / 1632 用例；实跑 1626 passed / 6 skipped）。
+- [x] **0.2 本文档冻结**（目标架构 + 阶段验收 + 分支政策）。
+- [ ] **0.3 文档同步**：`NEXT_STEPS.md` 列本任务为主线；`TEST_REFACTOR.md` 标注并入；`HANDOFF.md` 动态状态更新。
+- **验收**：设计冻结 + 基准存档 + 文档同步；零代码改动。
+
+### Phase 1：契约修复 + 死码清理（`unsafe-vibe-dev`，小改动直做）
+
+> 每项全量 pytest 零回归 + 描述性 commit + 必要时补测试（warnings 断言等）。
+
+- [ ] **1.1 悬挂契约修复**
+  - `IStateReader.get_last_llm_result`（interfaces.py:53,201）声明无实现、idbg 空帧回退必 AttributeError → 删除协议方法 + 修 idbg 回退（只依赖活跃帧 `frames[-1].target_result`）+ 修 docs/subsystems/01_intent_system.md:436 不实引用。
+  - examples 幽灵 API：`last_llm`→`current_llm`、`last_result`→`current_result`、`show_last_prompt`→`show_target_prompt`（examples/01_getting_started/02/04/05/06）。
+  - `rt_scheduler.py:138` `CoreModule.RUNTIME` 不存在的枚举成员（潜伏 AttributeError）。
+  - `idbg.show_retry_stack` 读已删 `is_fallback` 键（core.py:323，恒 None）。
+- [ ] **1.2 死码清理**
+  - dead import ×5（host/service.py:20、runtime_serializer.py:5、_helpers.py:3、service_context.py:3、main.py:18）。
+  - `core_enter`/`core_exit`（零调用）；`dependencies.py:61` debugger 死字段。
+  - idbg 死 API：`fields()`/`intents()`/`_llm_provider()`/`debugger_provider` capability（零消费者）。
+- [ ] **1.3 零成本穿透替换**（测试侧，公开访问器已存在）
+  - `engine.interpreter._execution_context`→`execution_context`（25+ 处）
+  - `executor._pending_futures`→`pending_futures_count()`（6 处）
+  - `getattr(rc, "_runtime_coordinator")`→`peek_runtime_coordinator()`（2 处）
+  - 消除 conftest `make_vm` 私有访问。
+- [ ] **1.4 silent 语义收敛**：仅保留"抑制用户错误打印"职责（解除与内核 trace 的耦合）。
+- **验收**：Phase 1 全绿；穿透替换后 tests/ 无上述三类私有访问残留。
+
+### Phase 2：大规模破坏实验（独立分支，禁止合并）
+
+> 每实验：分支全绿 + 设计自检（design-philosophy / self-grill / code-odor / 残留扫描）+ 结论记录于本文件"六、决策记录"。
+
+- [ ] **2A：CORE_DEBUG 移除实验**（分支 `exp/obs-2a-core-debug-removal`）
+  - 删除 CoreDebugger 机制（类/单例/env `IBC_CORE_DEBUG`/CLI `--core-debug`/engine 接线/`ServiceContext.debugger` 契约/27 import 点/88 trace 点）。
+  - 15 处异常回退诊断点 → `warnings.warn`；~73 处流程/DATA 日志直接删除。
+  - 拆除 `debugger=` 构造参数链（Scheduler/Lexer/Parser/Analyzer/Interpreter/ServiceContext/llm_executor/ParsingStrategy）。
+  - 影响面最大（~31 文件），先行实验。
+- [ ] **2B：观测骨架扩展实验**（分支 `exp/obs-2b-skeleton`）
+  - LastLLMCallRecord 权威模型 + `_current_call_info` 单写槽收敛；ai/idbg/snapshot 三入口统一数据源。
+  - EventBus 新增事件类型；`ServiceContext.test_hooks`；test_mode 内核化。
+  - `IsolationPolicy.test_mode`/`mock_provider`；`Engine.reset_test_state`/`Interpreter.reset_test_state`。
+  - EngineTestSnapshot 正式 API（替代 engine 生命周期私有穿透）。
+- [ ] **2C：idbg 重构实验**（分支 `exp/obs-2c-idbg`）
+  - 数据源收敛到 LastLLMCallRecord/观测骨架；API 按统一设计语言重设计；渲染层化（消除手写拼 dict/打印分支、直扫 node_pool）。
+  - vtable 与 docs/syntax/11_modules.md §11.5 同步。
+- [ ] **2D：PT-TEST-1 新测试体系实验**（分支 `exp/obs-2d-test-refactor`）
+  - 沿用 `TEST_REFACTOR.md` Phase 0-5 强制策略与覆盖保活铁律；测试侧消费 2B 新接口。
+  - 结构重构（去代号/归类/拆白名单/plugins 层）+ 逐域移植 + 覆盖矩阵三段式 + meta 扩展。
+- **验收**：各分支全绿；实验结论记录；不合并。
+
+### Phase 3：手动应用到 `unsafe-vibe-dev`
+
+- [ ] 每实验验证通过后，按已检验设计**手动**实施回 `unsafe-vibe-dev`；每步全量 pytest 零回归 + commit + 记录变化前后（实现+测试+文档）。
+- **验收**：`unsafe-vibe-dev` 全绿；实验分支保留不合并；无兼容层残留。
+
+### Phase 4：收敛收尾
+
+- [ ] 覆盖矩阵三段式同步（PT-TEST-3 并入）+ meta 机器校验（命名/矩阵/helper 自动派生）。
+- [ ] 旧 `tests/` 删除（新体系覆盖 ≥ 基准论证后，遵循 TEST_REFACTOR §五）。
+- [ ] docs 治理：docs/syntax/11_modules.md idbg 段、docs/guide/07_testing、docs/howto/debug_llm_calls、docs/architecture 01/07、docs/subsystems 01 等同步；清除 `IBC_CORE_DEBUG`/`--core-debug` 相关（当前零提及，确认不新增）。
+- [ ] `NEXT_STEPS.md`/`WORKLOG.md`/`HANDOFF.md` 同步；本任务收尾。
+
+---
+
+## 五、分支政策
+
+- 实验分支：`exp/obs-2a-core-debug-removal`、`exp/obs-2b-skeleton`、`exp/obs-2c-idbg`、`exp/obs-2d-test-refactor`。
+- **禁止合并**实验分支到 `unsafe-vibe-dev` / `main`；验证后**手动**应用回 `unsafe-vibe-dev`。
+- 永远不触碰 `main`。
+- 全程本地 commit；**禁止 push**（除非用户显式授权）。
+- 每个实验分支基于 `unsafe-vibe-dev` 的当前 HEAD 新建；实验完成后分支保留（不删除）供追溯。
+
+---
+
+## 六、决策记录
+
+> 实施中按阶段追加：方案、依据（对照 §二 授权条件与 design-philosophy）、变化前后。
+
+| 日期 | 阶段 | 决策 | 依据 |
+|---|---|---|---|
+| 2026-08-06 | 规划 | CORE_DEBUG 处置 = 机制整体删除，15 处异常回退诊断点改 `warnings.warn`（不保留平行诊断机制） | 历史包袱彻底清理；warnings 与 PT-DEBT-6 先例一致、可测试；无兼容层 |
+| 2026-08-06 | 规划 | idbg 重定位为观测骨架渲染层，API 按统一设计语言重设计（不以 API 契约史为约束） | 对外契约破坏已获授权；长期收益与系统统一优先 |
+| 2026-08-06 | 规划 | test_snapshot/test_hooks/test_mode 直接长在观测骨架上（不造第三套） | 单一权威源 / 机制同构 |
+| 2026-08-06 | 规划 | PT-TEST-1 并入本任务；覆盖矩阵三段式 + meta 机器校验 | 用户裁定合并推进；矩阵"测试位置"列大面积虚构（TEST_MATRIX_FINDINGS） |
+
+---
+
+## 七、进度追踪
+
+| Phase | 状态 | 备注 |
+|---|---|---|
+| 0 设计冻结 | 🔄 进行中 | 0.1/0.2 完成；0.3 待做 |
+| 1 契约修复+死码清理 | ⬜ | |
+| 2A CORE_DEBUG 移除实验 | ⬜ | 独立分支 |
+| 2B 观测骨架扩展实验 | ⬜ | 独立分支 |
+| 2C idbg 重构实验 | ⬜ | 独立分支 |
+| 2D 测试体系重建实验 | ⬜ | 独立分支 |
+| 3 手动应用回 unsafe-vibe-dev | ⬜ | |
+| 4 收敛收尾 | ⬜ | |
+
+---
+
+## 八、风险与边界
+
+- **破坏面最大**：2A CORE_DEBUG 移除（~31 文件）。已评估：测试零行为依赖（唯一使用 core_debugger 处为构造参数）、docs 零提及、输出无消费者。残留风险集中在"移除后 15 处回退诊断的可见性"——以 warnings.warn 承接。
+- **idbg 为对外契约**：重设计需同步 vtable、docs、示例、测试；列为 2C 实验，验证后手动应用。
+- **覆盖保活**：2D/3 遵循 `TEST_REFACTOR.md` §五 铁律（删除前先承接、collect 前后对照、INV-* 逐条核对、分批小步全绿）。
+- **语义取舍**：test_mode/IsolationPolicy 字段为新增 additive，不破坏现有行为。
+- **禁止范围**：不触碰 `main`；不做 media/跨进程/异步/泛型类/HM 求解等非目标。
+
+---
+
+## 九、关联文档
+
+- 测试体系专项规划：`tasks_docs/TEST_REFACTOR.md`（并入本任务，策略/铁律沿用）
+- 矩阵核对发现：`tasks_docs/TEST_MATRIX_FINDINGS.md`（PT-TEST-1 输入）
+- 调研原始报告：`tasks_docs/TEST_REFACTOR_REPORTS.md`
+- 基准快照：`tasks_docs/test_baseline_20260806.txt`
+- 工作模式定论：`tasks_docs/NEXT_STEPS.md` §⛔
+- 长期规划：`tasks_docs/PENDING_TASKS.md`
+- 工作日志：`tasks_docs/WORKLOG.md`
+- 设计哲学：`.opencode/skills/design-philosophy/SKILL.md`
