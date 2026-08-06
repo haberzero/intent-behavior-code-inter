@@ -115,9 +115,9 @@
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-TEST-1 | 测试体系治理与彻底重构（TEST_REFACTOR） | 独立低优先级：新建从零 → 并行共存 → 全面替换 → 深入内核（正式测试内省 API）。铁律：Phase 0 设计冻结前不启动代码改动。详见 `TEST_REFACTOR.md` |
+| PT-TEST-1 | 测试体系治理与彻底重构（TEST_REFACTOR） | 独立低优先级：新建从零 → 并行共存 → 全面替换 → 深入内核（正式测试内省 API）。铁律：Phase 0 设计冻结前不启动代码改动。详见 `TEST_REFACTOR.md`。**并入 PT-TEST-3**（矩阵同步在重构中一并完成，2026-08-06 用户裁定） |
 | PT-TEST-2 | e2e 测试覆盖率提升 | `for...if` 过滤、复合赋值运算符 e2e **已补（2026-08-06）**；其余覆盖缺口待续 |
-| PT-TEST-3 | 测试名与覆盖矩阵同步 | `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 测试名与实际文件不同步 |
+| PT-TEST-3 | 测试名与覆盖矩阵同步 | **推迟至 PT-TEST-1**（2026-08-06 用户裁定，矩阵彻底完善随测试体系重构一并做）。核对发现（改名映射/TRUE_GAP/契约漂移）存档于 `tasks_docs/TEST_MATRIX_FINDINGS.md` |
 
 ---
 
