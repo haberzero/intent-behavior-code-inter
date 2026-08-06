@@ -329,7 +329,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 **限制说明**
 
-`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/builtin_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
+`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/primitive_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
 
 **有效路径**：
 
@@ -345,7 +345,7 @@ intent_context.use(ctx)                              # ← 必须 use，否则�
 str r = @~ ... ~
 ```
 
-**作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `core/runtime/bootstrap/builtin_initializer.py` 中对应方法注册段的注释）。
+**作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `core/runtime/bootstrap/primitive_initializer.py` 中对应方法注册段的注释）。
 
 **编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 现已对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
@@ -589,8 +589,8 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 
 ---
 
-## 二十二、通信原语面（signal 已移除 / chan/slot/subscriber/thread）
+## 二十四、通信原语面
 
-**`signal` 关键字与类型已移除**：`signal` 作为普通标识符 lex（不再是关键字）。原因：零投递机制的通信抽象与 VM 控制流 `Signal` 撞名，且无消费者空壳。需要消息传递时使用 `chan`/`slot`/`subscriber`（见 `docs/syntax/14_concurrency.md`）。
+**`signal` 不是关键字，语言面无此原语**：`signal` lex 为普通标识符。原因：零投递机制的通信抽象与 VM 控制流 `Signal` 撞名，且无消费者空壳。需要消息传递时使用 `chan`/`slot`/`subscriber`（见 `docs/syntax/14_concurrency.md`）。
 
-**通信/线程原语**：`chan`/`slot`/`subscriber`/`thread`/`thread_result` 均已落地为语言一等公民（构造、方法、类型注解、序列化 round-trip）。`spawn`/`task` 等旧形态已删除，统一收敛到 `thread[T]` 对象模型。`thread_result[T]` 经 `expect()` 解封，失败 fail-fast。
+**通信/线程原语**：`chan`/`slot`/`subscriber`/`thread`/`thread_result` 是语言一等公民（构造、方法、类型注解、序列化 round-trip）。线程创建统一使用 `thread[T]` 对象模型，不存在 `spawn`/`task` 形态。`thread_result[T]` 经 `expect()` 解封，失败 fail-fast。

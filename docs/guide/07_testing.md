@@ -165,7 +165,8 @@ idbg.show_intents()          # 打印当前意图栈
 idbg.show_target_prompt()    # 打印最近 LLM 调用的完整提示词
 idbg.current_llm()           # 返回最近调用的完整信息（dict）
 idbg.current_result()        # 返回最近调用的结果对象
-idbg.show_vars()             # 打印当前作用域所有变量
+idbg.vars()               # 返回当前作用域所有变量（dict）
+idbg.print_vars()         # 打印当前作用域所有变量
 ```
 
 ---

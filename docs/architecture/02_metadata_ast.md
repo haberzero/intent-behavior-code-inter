@@ -468,7 +468,7 @@ class IbASTNode:
 
 ### 10.2 关键代码位置
 - AST 定义：`core/kernel/ast.py`
-- 侧表管理：`core/compiler/semantic/passes/side_table.py`
+- 侧表管理：经 `ExecutionContext.get_side_table` 读取 + 序列化器 `side_tables` 承载
 - 序列化器：`core/compiler/serialization/serializer.py`
 - Semantic Passes：`core/compiler/semantic/passes/`
 

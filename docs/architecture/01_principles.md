@@ -511,8 +511,8 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 | `core/runtime/interpreter/llm_except_frame.py` | 高 | LLMExceptFrame，llmexcept 现场帧 |
 | `core/runtime/vm/handlers/`（包） | 高 | CPS 语句/表达式节点处理（含各语句 handler 的 llmexcept 内联重试） |
 | `core/runtime/host/service.py` | 高 | HostService，断点快照/恢复 |
-| `core/runtime/host/host_interface.py` | 高 | HostInterface，宿主环境接口注册器 |
-| `core/runtime/bootstrap/builtin_initializer.py` | 高 | 内置类型注册与装箱器 |
+| `core/kernel/host_interface.py` | 高 | HostInterface，宿主环境接口注册器 |
+| `core/runtime/bootstrap/primitive_initializer.py` | 高 | 内置类型注册与装箱器 |
 | `core/compiler/serialization/serializer.py` | 高 | FlatSerializer |
 | `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
 | `core/base/diagnostics/debugger.py` | 中 | CoreDebugger |
@@ -530,7 +530,7 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 
 ```
 IBCI脚本 ──→ host_run() 内置函数 ──→ HostService
-                (builtin_initializer)    (实际执行)
+                (primitive_initializer) (实际执行)
 
 IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostService
                (ModuleDiscovery)   (插件实现)

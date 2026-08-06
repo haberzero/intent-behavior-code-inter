@@ -67,7 +67,7 @@ ai.set_timeout(seconds)                 # 设置超时（秒）
 ai.register_model(name, url, key, model)  # 注册命名模型
 ```
 
-其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`set_retry_hint(hint)`、`get_retry_prompt()`、`get_current_call_info()`、`mask(pattern)` 等。
+其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`stream()`、`mask(pattern)` 等。
 
 ### 3.2 file 模块
 

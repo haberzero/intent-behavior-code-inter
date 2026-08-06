@@ -187,8 +187,8 @@ core/runtime/interpreter/runtime_context.py
     │   # 以下为对 _intent_ctx 的委托接口：
     ├── push_intent(intent)              # 压入持久栈 → _intent_ctx.push()
     ├── add_smear_intent(intent)         # 添加涂抹意图 → _intent_ctx.add_smear()
-    ├── set_pending_override_intent()    # 设置排他意图 → _intent_ctx.set_override()
-    ├── consume_pending_override_intent() # 消费排他意图 → _intent_ctx.consume_override()
+    ├── activate_statement_one_shot_intent()  # 激活语句级一次性意图 → _intent_ctx.set_override()
+    ├── cleanup_statement_one_shot_intent()   # 清理语句级一次性意图 → _intent_ctx.consume_override()
     ├── remove_intent(tag/content)       # 移除意图 → _intent_ctx.remove()
     ├── set_global_intent()              # 全局意图 → _intent_ctx.set_global_intents()
     └── fork_intent_snapshot()           # 值快照 → _intent_ctx.fork()
@@ -207,7 +207,7 @@ intent = factory.create_intent_from_node(...)
 runtime_context.add_smear_intent(intent)   # → _intent_ctx.add_smear(intent)
 
 # @!：排他意图，替换本次调用的所有意图，消费后自动清除
-runtime_context.set_pending_override_intent(intent)  # → _intent_ctx.set_override(intent)
+runtime_context.activate_statement_one_shot_intent(intent)  # → _intent_ctx.set_override(intent)
 ```
 
 ### 4.2 @! 排他意图的消解（LLM 调用时）
@@ -330,8 +330,8 @@ captured_intents = None if capture_mode == "lambda" else self.runtime_context.fo
 ```
 IbIntent (IbObject)
 ├── content: str            # 意图内容文本
-├── mode: IntentMode        # APPEND(持久) / SMEAR(涂抹@) / OVERRIDE(排他@!) / REMOVE(@-)
-├── role: IntentRole        # INLINE(内联) / GLOBAL(全局)
+├── mode: IntentMode        # APPEND(叠加) / OVERRIDE(排他) / REMOVE(移除)
+├── role: IntentRole        # BLOCK / SMEAR / CALL / GLOBAL / DYNAMIC / STACK
 ├── tag: Optional[str]      # 可选标签（用于 @-#tag 精确移除）
 └── resolve_content(...)    # 解析插值变量（$var 引用）后返回最终文本
 ```
@@ -382,7 +382,7 @@ intent_context.use(ctx)            # 等价于 ctx.use(ctx)
 intent_context saved = intent_context.get_current()
 ```
 
-**实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)`，所有方法在 `builtin_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。`clear_inherited()`/`use()`/`get_current()` 通过 `get_current_frame()` ContextVar 访问当前帧的 `_intent_ctx`，操作当前作用域的意图上下文。
+**实现层**：`IntentContextAxiom.is_class() = True`，`INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)`，所有方法在 `primitive_initializer.py` 注册。实例的 `_ctx` 字段持有底层 `IbIntentContext` Python 对象。`clear_inherited()`/`use()`/`get_current()` 通过 `get_current_frame()` ContextVar 访问当前帧的 `_intent_ctx`，操作当前作用域的意图上下文。
 
 ### 6.1 帧级活跃实例指针
 
@@ -623,12 +623,12 @@ func make_translator():
 | `core/runtime/objects/intent.py` | `IbIntent` 运行时对象 |
 | `core/runtime/objects/intent_context.py` | `IbIntentContext` 运行时对象（Python 层，不可实例化为 IbObject） |
 | `core/runtime/objects/intent_stack.py` | `IbIntentStack`（遗留接口层，提供 `push/pop/clear` 等 IBCI 可调用方法） |
-| `core/runtime/bootstrap/builtin_initializer.py` | `intent_context` 类原生方法绑定（`__init__/push/pop/fork/resolve/merge/clear`） |
+| `core/runtime/bootstrap/primitive_initializer.py` | `intent_context` 类原生方法绑定（`__init__/push/pop/fork/resolve/merge/clear`） |
 | `core/runtime/interpreter/runtime_context.py` | 运行时上下文（持有 `_intent_ctx: IbIntentContext`） |
 | `core/runtime/vm/handlers/`（包） | CPS 语句/表达式处理（含意图注释与栈操作节点，如 `control_flow.py`） |
 | `core/runtime/vm/handlers/`（包） | `snapshot` 捕获 `fork_intent_snapshot()` 值快照（延迟行为处理） |
 | `core/runtime/interpreter/llm_executor/`（包） | LLM 执行器（调用 `get_resolved_prompt_intents()` 组装提示词） |
 | `core/runtime/interpreter/llm_except_frame.py` | LLM 异常帧（`save_context` 使用 `fork()` 保存意图快照） |
 | `core/runtime/objects/kernel.py` | `IbUserFunction`/`IbLLMFunction` fork/restore 意图上下文（拷贝传递语义）；lambda 参数约束 |
-| `core/compiler/semantic/passes/semantic_analyzer.py` | `@` 和 `@!` 语义校验：两者必须绑定下一条可执行语句（禁止连续 one-shot） |
+| `core/compiler/semantic/analyzer.py` | `@` 和 `@!` 语义校验：两者必须绑定下一条可执行语句（禁止连续 one-shot） |
 | `ibci_modules/ibci_idbg/core.py` | 调试工具（帧优先模式读取意图/结果状态） |

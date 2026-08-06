@@ -29,7 +29,7 @@ while frame_stack:
 
 **公理 EXEC-2（控制流数据化）**：控制流信号（`return`/`break`/`continue`/`throw`）以数据对象 `Signal(kind, value)` 在帧栈间传播，不使用 Python 异常跨帧传递。外部边界（帧栈空仍持有 Signal）以 `UnhandledSignal` 透传给调用方处理。
 
-**公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段 `llmexcept_handler` 在编译期统一挂载到被保护语句（`IbAssign`/`IbIf`/`IbWhile`/`IbFor`/`IbSwitch`/`IbExprStmt`），llmexcept 语句本身不入 body。运行期各被保护语句 handler 求值条件/RHS 后，检查返回值是否为 `IbLLMCallResult(is_certain=False)` 不确定容器：有 handler 时创建 `LLMExceptFrame` 并内联执行 handler body + 完整多轮重试（重试循环以 `_retry_llm_uncertain` 收敛于单帧计数内），无 handler 时抛 `LLMParseError`。不存在 `IbLLMExceptionalStmt` 包装节点，也不存在侧表驱动的隐式重定向机制。
+**公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段 `llmexcept_handler` 在编译期统一挂载到被保护语句（`IbAssign`/`IbIf`/`IbWhile`/`IbFor`/`IbSwitch`/`IbExprStmt`）。`IbLLMExceptionalStmt` 节点（`core/kernel/ast.py`）仅作为挂载载体，binding 消费后不入被保护语句的 body。运行期各被保护语句 handler 求值条件/RHS 后，检查返回值是否为 `IbLLMCallResult(is_certain=False)` 不确定容器：有 handler 时创建 `LLMExceptFrame` 并内联执行 handler body + 完整多轮重试（重试循环以 `_retry_llm_uncertain` 收敛于单帧计数内），无 handler 时抛 `LLMParseError`。不存在侧表驱动的隐式重定向机制。
 
 **已知限制**：无——所有节点类型均支持 CPS handler。
 
@@ -39,11 +39,12 @@ while frame_stack:
 
 | 分类 | 节点类型 | CPS 状态 |
 |------|---------|---------|
-| 语句 | `IbModule` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbRaise` `IbAssign` `IbAugAssign` `IbDelete` `IbPass` `IbTry` `IbExceptHandler` `IbRetry` `IbCase` `IbLLMExceptionalStmt`(挂载型，不入 body) | CPS handler |
-| 表达式 | `IbName` `IbConst` `IbBinOp` `IbUnaryOp` `IbCompare` `IbBoolOp` `IbCall` `IbAttribute` `IbSubscript` `IbTuple` `IbList` `IbDict` `IbSlice` `IbFString` | CPS handler |
+| 语句 | `IbModule` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbRaise` `IbAssign` `IbAugAssign` `IbPass` `IbTry` `IbExceptHandler` `IbRetry` `IbSwitch`(含子节点 `IbCase`) `IbExprStmt` `IbGlobalStmt` `IbNonlocalStmt` `IbIntentAnnotation` `IbIntentStackOperation` | CPS handler |
+| 语句 | `IbLLMExceptionalStmt`（挂载载体，binding 消费后不入 body） | CPS handler |
+| 表达式 | `IbName` `IbConstant` `IbBinOp` `IbUnaryOp` `IbCompare` `IbBoolOp` `IbCall` `IbAttribute` `IbSubscript` `IbTuple` `IbListExpr` `IbDict` `IbSlice` `IbIfExp` `IbCastExpr` `IbAwaitExpr` `IbChannelExpr` `IbSlotExpr` | CPS handler |
 | 表达式 | `IbBehaviorExpr` | CPS handler |
-| 表达式 | `IbTypeAnnotatedExpr` `IbIntentInfo` | CPS handler |
-| 表达式 | `IbLambdaExpr` `IbBehaviorInstance` | CPS handler |
+| 表达式 | `IbTypeAnnotatedExpr` `IbIntentInfo` `IbFilteredExpr` | CPS handler |
+| 表达式 | `IbLambdaExpr` `IbBehaviorInstance` `IbCallableType` | CPS handler |
 | 声明 | `IbFunctionDef` `IbLLMFunctionDef` `IbClassDef` `IbImport` `IbImportFrom` | CPS handler |
 
 ---
