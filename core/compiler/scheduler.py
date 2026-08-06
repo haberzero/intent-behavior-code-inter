@@ -402,7 +402,6 @@ class Scheduler(ICompilerService):
             for imp in module_info.imports:
                 # 查找已编译的结果或外部元数据
                 s_mod_type = None
-                imp_res = None
                 
                 if imp.file_path:
                     rel_imp_path = safe_relpath(imp.file_path, self.root_dir)

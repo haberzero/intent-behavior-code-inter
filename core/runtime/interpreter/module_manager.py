@@ -14,20 +14,6 @@ from core.kernel.registry import KernelRegistry
 if TYPE_CHECKING:
     from core.kernel.blueprint import CompilationArtifact
 
-class ModuleInstanceImpl:
-    def __init__(self, name: str, scope: Scope):
-        self.name = name
-        self.scope = scope
-        
-    def get_variable(self, name: str) -> Any:
-        try:
-            return self.scope.get(name)
-        except (KeyError, AttributeError):
-            raise InterpreterError(f"Module '{self.name}' has no attribute '{name}'")
-
-    def __getattr__(self, name: str) -> Any:
-        return self.get_variable(name)
-
 class ModuleManagerImpl:
     """
     模块管理器实现。
