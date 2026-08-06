@@ -336,7 +336,22 @@ class IbValue(IbObject):
 ### 6.3 类型分派要点
 
 - `isinstance(obj, IbValue) and obj.ib_class.name == "list"` 是分派 list 类型的唯一惯用法（`IbClass` 自指 `ib_class=self` 会让裸 `ib_class.name` 误中，必须先做 `IbValue` 判定）。
+- 容器分派收敛为单一判定入口：`core/runtime/objects/kernel/base.py:is_sequence_value(value)`（原生序列 list/tuple 判断），VM 与 intrinsics 统一经它。
 - 工厂入口：`core/runtime/factory.py:RuntimeObjectFactory` 提供 `create_int / create_str / create_list / create_tuple / create_dict / create_fn_callable / create_behavior` 等方法，**不**在调用方导入具体类。
+
+### 6.4 类角色分工（设计决策）
+
+值层具体类（`IbInteger` / `IbString` / `IbList` / …）**不是**需要折叠消除的平行结构，而是**领域方法的实现载体**——`IbValue` 提供统一值形态（`type_ref`/`payload`/`fields`/`meta`），具体类各自实现其领域行为（`IbString.upper`、`IbList.append`、运算符 dunder 等），经 `_reg_native`/`_auto_bind_operators` 挂类注册、走 vtable 调用。
+
+**不折叠为单一 `IbValue`**（曾评估，2026-08-06 定论）：
+- 折叠的原始动机（消除 `isinstance(IbXxx)` 分派）已通过 `isinstance(obj, IbValue) and obj.ib_class.name` 统一分派达成——运行时精确 `isinstance` 具体值类分派仅剩类内运算符重载处。
+- 具体类的存在价值是**领域方法归属**（单一职责），非类型分派依据；折叠会把 180+ 方法灌入巨型 `IbValue`，违反单一职责。
+- 值身份权威已是 `type_ref`（单一源），具体类不构成第二个身份源。
+
+**分工规则**：
+- `IbValue` = 统一值载体（值形态 + 身份）。
+- 具体类 = 领域方法实现载体（行为），按 `ib_class.name` 分派。
+- `IbNone` / `IbLLMUncertain` / `IbOptional` 为哨兵值，身份判断用 `isinstance`（Python 惯用）；`IbLLMCallResult` 的不确定性判断用 `is_uncertain` 属性。
 
 ---
 

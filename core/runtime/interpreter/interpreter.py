@@ -801,7 +801,7 @@ class Interpreter:
         不应由原始包装层越层访问 runtime_context。
         """
         # 不确定容器直接透传（供表达式 handler 传播到语句层消费者）
-        if isinstance(value, IbLLMCallResult) and not value.is_certain:
+        if isinstance(value, IbLLMCallResult) and value.is_uncertain:
             return value
         # 先检查是否为字符串值在 llmexcept 帧内的模糊布尔判定
         if isinstance(value, IbObject) and value.ib_class and value.ib_class.name == "str":

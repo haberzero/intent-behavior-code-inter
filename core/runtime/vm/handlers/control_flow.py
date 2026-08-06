@@ -13,10 +13,7 @@ from core.runtime.objects.kernel import (
     IbValue,
     IbClass,
 )
-from core.runtime.objects.primitives.collections import (
-    IbList,
-    IbTuple,
-)
+from core.runtime.objects.kernel.base import is_sequence_value
 from core.runtime.exceptions import (
     ThrownException,
 )
@@ -272,19 +269,19 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     # 解析迭代序列（与 StmtHandler.visit_IbFor 同协议）
     elements_obj = None
-    if isinstance(iterable_obj, (IbList, IbTuple)):
+    if is_sequence_value(iterable_obj):
         elements_obj = iterable_obj
     else:
         # 结构化能力查询（不靠异常判定）：有 __iter__ 走迭代，否则尝试 to_list。
         # 用户 __iter__ 实现体内的真实错误不再被能力探测误吞。
         if iterable_obj.ib_class.lookup_method("__iter__") is not None:
             r = iterable_obj.receive("__iter__", [])
-            if isinstance(r, (IbList, IbTuple)):
+            if is_sequence_value(r):
                 elements_obj = r
         if elements_obj is None:
             if iterable_obj.ib_class.lookup_method("to_list") is not None:
                 r = iterable_obj.receive("to_list", [])
-                if isinstance(r, (IbList, IbTuple)):
+                if is_sequence_value(r):
                     elements_obj = r
     if elements_obj is None:
         raise RuntimeError(f"VM: Object is not iterable (uid={node_uid})")

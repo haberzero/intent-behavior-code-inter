@@ -125,6 +125,11 @@ class IbLLMCallResult(IbValue):
         self.raw_response = raw_response
         self.retry_hint = retry_hint
 
+    @property
+    def is_uncertain(self) -> bool:
+        """结果是否为不确定容器（``is_certain=False``）。单一权威判断入口。"""
+        return not self.is_certain
+
     def to_native(self, memo=None) -> Any:
         if self.is_certain and self.result_value is not None:
             return self.result_value.to_native(memo) if isinstance(self.result_value, IbObject) else self.result_value

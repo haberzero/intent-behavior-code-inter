@@ -280,3 +280,14 @@ def unbox(value: Any) -> Any:
     if isinstance(value, IbObject):
         return value.to_native()
     return value
+
+
+def is_sequence_value(value: Any) -> bool:
+    """判断值是否为原生序列容器（list/tuple）。
+
+    值层容器分派的单一判定入口：语义是"可直接取 ``.elements`` 的原生序列"，
+    经 ``IbValue.ib_class.name`` 判定（与 ``IbList``↔``"list"``、
+    ``IbTuple``↔``"tuple"`` 的恒定对应一致）。非 ``IbValue`` 对象（内核结构、
+    AST 节点等）一律 False。
+    """
+    return isinstance(value, IbValue) and value.ib_class.name in ("list", "tuple")

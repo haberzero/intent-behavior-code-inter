@@ -29,7 +29,7 @@ from core.runtime.objects.kernel import (
     _is_intent_context_param,
     _should_activate_intent_context_arg,
 )
-from core.runtime.objects.kernel.base import unbox
+from core.runtime.objects.kernel.base import unbox, is_sequence_value
 from core.runtime.objects.kernel.functions import IbBoundMethod, IbNativeFunction
 from core.runtime.capability_registry import CapabilityRegistry
 from core.base.source_atomic import Location
@@ -441,7 +441,7 @@ def _is_llm_uncertain_value(value: Any) -> bool:
     产生者（行为表达式 / is_truthy / cast）在无法产生确定结果时返回该容器，
     消费者（赋值 / if / while / for / switch / 表达式语句）从返回值检查。
     """
-    return isinstance(value, IbLLMCallResult) and not value.is_certain
+    return isinstance(value, IbLLMCallResult) and value.is_uncertain
 
 
 def _make_uncertain_call_result(registry, raw_response: str = "", retry_hint: str = "") -> IbLLMCallResult:
@@ -742,7 +742,7 @@ def _vm_assign_to_target(executor, target_uid: str, value: Any, define_only: boo
         obj.receive("__setitem__", [slice_obj, value])
 
     elif t == "IbTuple":
-        if isinstance(value, IbValue) and value.ib_class.name in ("list", "tuple"):
+        if is_sequence_value(value):
             vals = list(value.elements)
         else:
             # 结构化能力查询（与 for 循环同款先例）：to_list 预检存在才调用，
@@ -755,7 +755,7 @@ def _vm_assign_to_target(executor, target_uid: str, value: Any, define_only: boo
             r = value.receive("to_list", [])
             if isinstance(r, list):
                 vals = r
-            elif isinstance(r, IbValue) and r.ib_class.name in ("list", "tuple"):
+            elif is_sequence_value(r):
                 vals = list(r.elements)
             else:
                 raise RuntimeError(

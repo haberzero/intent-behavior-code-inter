@@ -1,22 +1,20 @@
 from typing import Any, List
 from core.runtime.objects.kernel import IbObject
-from core.runtime.objects.kernel.base import unbox
+from core.runtime.objects.kernel.base import unbox, is_sequence_value
 from core.kernel.issue import InterpreterError
 
 
 def _iter_elements(obj: IbObject) -> List[IbObject]:
     """提取可迭代对象的元素列表（与 VM for 循环同一协议：__iter__/to_list）。"""
-    from core.runtime.objects.primitives import IbList, IbTuple
-
-    if isinstance(obj, (IbList, IbTuple)):
+    if is_sequence_value(obj):
         return list(obj.elements)
     if obj.ib_class.lookup_method("__iter__") is not None:
         r = obj.receive("__iter__", [])
-        if isinstance(r, (IbList, IbTuple)):
+        if is_sequence_value(r):
             return list(r.elements)
     if obj.ib_class.lookup_method("to_list") is not None:
         r = obj.receive("to_list", [])
-        if isinstance(r, (IbList, IbTuple)):
+        if is_sequence_value(r):
             return list(r.elements)
     raise InterpreterError(
         f"Object of type '{obj.ib_class.name}' is not iterable"
