@@ -2,32 +2,25 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-06（文档治理审核完成，执行工作交接给下一 session）
+> **最后更新**：2026-08-06（DOC_AUDIT 文档治理 F0-F4 全部完成）
 
 ---
 
-## 🔴 下一主线：DOC_AUDIT 文档治理执行（交接给下一 session）
+## 🔴 下一主线：暂无 P0 冲刺项（周期清扫择机启动）
 
-> 2026-08-06 已完成 docs/ 全量治理审核（5 个并行 agent + P0 二次源码核验），
-> 完整发现与分阶段执行计划见 **`tasks_docs/DOC_AUDIT_REPORT.md`**（单一事实来源）。
-> 下一 session 按该文件 F0→F4 阶段执行修复（每阶段全量 pytest 零回归 + commit）。
+> 2026-08-06 已完成 `docs/` 全量治理审核与修复（F0-F4，commit 87666d1/d66d3df/27e7e35/d93d14d），
+> 执行记录见 `tasks_docs/DOC_AUDIT_REPORT.md`（归档）。
 
-- **F0 本批引入修复**（3 处）：KNOWN_LIMITS §二十二重复编号 → §二十四；`14_concurrency.md:7` E9；`KNOWN_LIMITS` §二十二 E2 历史叙述。
-- **F1 P0 断链/矛盾**（~17）：失效代码路径/不存在的 API 枚举/自相矛盾。
-- **F2 P1 红线批量**：日期戳/历史叙述/冻结数字/任务代号清理；`subsystems/05_coroutine.md` 迁 tasks_docs；KNOWN_LIMITS 章节重排+越界内容迁出。
-- **F3 P2 改善**：长句/模板/A5 去重/超长文件。
-- **F4 体系**：How-to 补齐 + "深入指引"尾段 + backup 处置。
-- **长期周期**：PT-AUDIT-1/2/3（R4/R5 待做）/5，阶段边界择机。
+- **周期清扫**：PT-AUDIT-1/2/3（R4/R5 待做）/5，阶段边界择机。
 - **保留规划**：PT-TEST-1、PT-FEAT-1。
+- **待办池**：完整清单见 `PENDING_TASKS.md`。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务**：执行 `DOC_AUDIT_REPORT.md` F0→F4（见上，已交接）。
-- **已完成**：PT-INTRO-1（内省体系）、PT-DECIDE-1（行为输出可解析性）、PT-DEBT-1/2/3（内核接口协议化）、内建函数群完善+遮蔽、整合巩固批次——详见 `PENDING_TASKS.md` 与 git 历史。
+- **已完成**：DOC_AUDIT 文档治理（F0-F4，见上）、PT-INTRO-1（内省体系）、PT-DECIDE-1（行为输出可解析性）、PT-DEBT-1/2/3（内核接口协议化）、内建函数群完善+遮蔽、整合巩固批次——详见 `PENDING_TASKS.md` 与 git 历史。
 - **待办池**：完整清单见 `PENDING_TASKS.md`（含 PT-DEBT-4/5 等候选）。
-- 完整清单见 `PENDING_TASKS.md`。
 
 ---
 
@@ -35,6 +28,7 @@
 
 > 全部落地 unsafe-vibe-dev（本地 commit，未 push）。commit 明细见 git 历史。
 
+- **DOC_AUDIT 文档治理（2026-08-06）**：docs/ 全量治理（42 篇）分四阶段执行——F0 本批引入修复（KNOWN_LIMITS §二十二重复编号→§二十四、14_concurrency E9、E2 历史叙述）；F1 P0 断链/矛盾 ~17+ 处（以代码为最高真相）；F2 P1 红线批量（日期戳/历史叙述/冻结数字/任务代号清除、KNOWN_LIMITS 章节重排为一~二十二并同步跨文档引用、05_coroutine 任务日志迁 tasks_docs/THREAD_DESIGN.md、__prompt__ 待决项迁 tasks_docs/PROMPT_DESIGN_REVIEW.md）；F3 P2 改善（模板统一 13_mock_testing/04_control_flow、A5 去重、侧表/MetadataStore 事实修正、handler 数 43→45）；F4 体系（How-to 层 docs/howto/ 两篇、'深入指引'尾段 23 篇补齐、backup 归档纳入目录树）。完整记录见 `tasks_docs/DOC_AUDIT_REPORT.md`。
 - **整合巩固批次（2026-08-06）**：新写 `docs/syntax/14_concurrency.md`（并发语言面，此前缺失）+ KNOWN_LIMITS §二十二（signal 移除）；修复 PT-DEBT-1 文档漂移（`_ibci_registry_id` 残留）；修复 for 循环变量类型恒为 any 缺陷（复合赋值在 for 体内无法定型）；for...if + 复合赋值 e2e 覆盖（PT-TEST-2）。
 - **内建函数群完善（2026-08-06）**：类型转换全局函数 `int()`/`str()`/`float()`/`bool()` +
   序列辅助 `enumerate`/`zip`/`sorted`/`reversed`/`sum`/`all`/`min`/`max`；级联修复 for 循环

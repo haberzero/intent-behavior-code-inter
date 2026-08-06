@@ -2,8 +2,8 @@
 
 > 依据 `doc-governance` skill + `docs/WRITING_GUIDE.md` 对 `docs/` 全量健康检查。
 > 5 个并行 general subagent 分目录审计 + **全部 P0 已二次源码核验**。
-> **本文件是下一 session 执行文档治理修复的单一事实来源**。修复后按阶段勾除，
-> 完成本文件从 NEXT_STEPS 移除。
+> **执行完成（2026-08-06）**：F0-F4 全部落地（commit 87666d1 / d66d3df / 27e7e35 / d93d14d），
+> 每阶段全量 pytest 零回归。执行记录见 git 历史与本文件各章，已完成项不再逐条勾选。
 
 ---
 
