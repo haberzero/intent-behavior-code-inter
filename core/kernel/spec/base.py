@@ -91,7 +91,6 @@ class IbSpec:
     name: str = ""
     module_path: Optional[str] = None
     kind: str = TypeKind.PRIMITIVE.value
-    is_nullable: bool = True
     provenance: Provenance = Provenance.USER_DEFINED
     visibility: Visibility = Visibility.IMPORT_GATED
     storage_model: StorageModel = StorageModel.MEMORY_BACKED

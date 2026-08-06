@@ -35,11 +35,10 @@ class SpecFactory:
     required as input, so there are no circular reference risks.
     """
 
-    def create_primitive(self, name: str, is_nullable: bool = False) -> IbSpec:
+    def create_primitive(self, name: str) -> IbSpec:
         return IbSpec(
             name=name,
             kind=TypeKind.PRIMITIVE.value,
-            is_nullable=is_nullable,
             provenance=Provenance.KERNEL_NATIVE,
             visibility=Visibility.PRELUDE_VISIBLE,
         )
@@ -61,7 +60,6 @@ class SpecFactory:
         return TypeDef(
             name=name,
             kind=TypeKind.FUNCTION.value,
-            is_nullable=True,
             provenance=provenance,
             visibility=visibility,
             return_type=TypeRef.of(return_type_name, return_type_module),
@@ -82,7 +80,6 @@ class SpecFactory:
             name=name,
             kind=TypeKind.CLASS.value,
             module_path=module,
-            is_nullable=True,
             provenance=provenance,
             visibility=visibility,
             parent_type=parent_type,
@@ -107,7 +104,6 @@ class SpecFactory:
             return TypeDef(
                 name=list_name,
                 kind=TypeKind.LIST.value,
-                is_nullable=True,
                 provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
                 allowed_element_types=[
@@ -118,7 +114,6 @@ class SpecFactory:
         return TypeDef(
             name=list_name,
             kind=TypeKind.LIST.value,
-            is_nullable=True,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             element_type=TypeRef.of(element_type_name, element_type_module),
         )
@@ -133,7 +128,6 @@ class SpecFactory:
         return TypeDef(
             name=f"dict[{key_type_name},{value_type_name}]",
             kind=TypeKind.DICT.value,
-            is_nullable=True,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             key_type=TypeRef.of(key_type_name, key_type_module),
             value_type=TypeRef.of(value_type_name, value_type_module),
@@ -155,7 +149,6 @@ class SpecFactory:
             return TypeDef(
                 name=tuple_name,
                 kind=TypeKind.TUPLE.value,
-                is_nullable=True,
                 provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
                 positional_element_types=[
@@ -170,7 +163,6 @@ class SpecFactory:
         return TypeDef(
             name=tuple_name,
             kind=TypeKind.TUPLE.value,
-            is_nullable=True,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             element_type=TypeRef.of(element_type_name, element_type_module),
         )
@@ -184,7 +176,6 @@ class SpecFactory:
         return TypeDef(
             name="bound_method",
             kind=TypeKind.BOUND_METHOD.value,
-            is_nullable=True,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             func_spec_name=func_spec_name,
             receiver_type=TypeRef.of(receiver_type_name, receiver_type_module),
@@ -195,7 +186,6 @@ class SpecFactory:
             name=name,
             kind=TypeKind.MODULE.value,
             module_path=module,
-            is_nullable=False,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
         )
 
@@ -215,7 +205,6 @@ class SpecFactory:
         spec = TypeDef(
             name=fn_callable_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
-            is_nullable=True,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
@@ -233,7 +222,6 @@ class SpecFactory:
         return TypeDef(
             name=f"Optional[{wrapped_type_name}]",
             kind=TypeKind.OPTIONAL.value,
-            is_nullable=True,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             wrapped_type=TypeRef.of(wrapped_type_name, wrapped_type_module),
         )
@@ -262,7 +250,6 @@ class SpecFactory:
         spec = TypeDef(
             name=beh_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
-            is_nullable=True,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
@@ -285,7 +272,6 @@ class SpecFactory:
         spec = TypeDef(
             name=thread_name,
             kind=TypeKind.THREAD.value,
-            is_nullable=False,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
@@ -309,7 +295,6 @@ class SpecFactory:
         spec = TypeDef(
             name=result_name,
             kind=TypeKind.THREAD_RESULT.value,
-            is_nullable=False,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
@@ -333,7 +318,6 @@ class SpecFactory:
         spec = TypeDef(
             name=chan_name,
             kind=TypeKind.CHANNEL.value,
-            is_nullable=False,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )
@@ -355,7 +339,6 @@ class SpecFactory:
         spec = TypeDef(
             name=slot_name,
             kind=TypeKind.SLOT.value,
-            is_nullable=False,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
             value_type=TypeRef.of(value_type_name, value_type_module),
         )

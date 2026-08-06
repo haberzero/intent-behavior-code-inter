@@ -159,7 +159,6 @@ class FlatSerializer(BaseFlatSerializer):
             "kind": t.kind,
             "name": t.name,
             "module_path": t.module_path,
-            "is_nullable": t.is_nullable,
             "provenance": t.provenance.name,
             "visibility": t.visibility.name,
             "storage_model": t.storage_model.name,

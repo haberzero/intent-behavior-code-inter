@@ -78,7 +78,6 @@ class TypeDef(IbSpec):
     name:           str
     module_path:    Optional[str]
     kind:           str  # 见 TypeKind
-    is_nullable:    bool
     provenance:     Provenance       # 来源：KERNEL_NATIVE / AXIOM_PROVIDED / USER_DEFINED / EXTERNAL_MODULE
     visibility:     Visibility       # 可见性：PRELUDE_VISIBLE / IMPORT_GATED / SCOPE_PRIVATE
     storage_model:  StorageModel     # 存储模型：MEMORY_BACKED / DISK_BACKED
@@ -160,7 +159,7 @@ class TypeDef(IbSpec):
 
 | 方法 | 用途 |
 |------|------|
-| `create_primitive(name, is_nullable)` | 标量类型 |
+| `create_primitive(name)` | 标量类型 |
 | `create_func(name, param_type_names, return_type_name, provenance, visibility, ...)` | 函数 spec（用户 func / 插件 vtable / 内置） |
 | `create_class(name, parent_name, provenance, visibility)` | 用户类 / 内置类 |
 | `create_list / create_tuple / create_dict` | 容器特化 |
@@ -380,10 +379,9 @@ class IbValue(IbObject):
 
 ---
 
-## §8 Optional[T] 与空安全（M2）
+## §8 Optional[T] 与空安全
 
-- 空安全由 `Optional[T]` 显式表达，不依赖 `is_nullable` 布尔。
-- `is_nullable` 字段保留为迁移期数据字段，不再参与 `is_assignable` 决策。
+- 空安全由 `Optional[T]` 显式表达。
 - 赋值规则：
   - 非 `Optional` 类型**禁止**接收 `None`；
   - `Optional[T]` 接受 `T` / `None` / `Optional[T]`；
