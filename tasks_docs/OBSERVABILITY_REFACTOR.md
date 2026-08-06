@@ -163,6 +163,7 @@
 | 2026-08-06 | 2B | **观测骨架测试合作面实验完成并应用**：`exp/obs-2b-skeleton` 分支全量绿（1633/4）→ cherry-pick 应用回 unsafe-vibe-dev。交付：`EngineTestSnapshot`+`reset_test_state`+`resolve_plugin_search_paths` 公开（消除 engine 生命周期私有穿透、layering 豁免归零）、`ServiceContext.test_hooks`（TestHooks 协议，显式协议调用非 getattr 分派，契约强制全方法） | 实验验证 + 设计自检（code-odor 去除能力探测） |
 | 2026-08-06 | 2B | **推迟 `IsolationPolicy.test_mode`/`mock_provider` 至 2D**：无消费方的预留字段=死字段（R2 教训）；MOCK/TESTONLY 判定内核化是行为变更，随测试重构一并设计 | 禁死代码；预留字段违背"禁兼容层/禁预留"哲学 |
 | 2026-08-06 | 2B | **跳过 call_info 形式化**：ai/idbg/snapshot 三入口已收敛于 `get_current_call_info()`（`_current_call_info` 单写槽）单一权威源，dict 形态 JSON 友好无需 dataclass 化 | 单一权威源已达成；形式化收益边际 |
+| 2026-08-06 | 2C | **idbg 适配实验完成并应用**：`exp/obs-2c-idbg` 分支全量绿（1633/4）→ cherry-pick 应用回 unsafe-vibe-dev（commit 8a0065c）。删真死代码 `_llm_provider`/`debugger_provider`；`show_intents` 收敛为 `intents()` 单一权威源（去 C9 双源回退 + except-pass）；`fields()` 改 `isinstance(IbObject)` 协议直访（去 A1 hasattr 探测）；保留 16-API vtable 契约（fields/intents 保留并修复，非删除） | 实验验证 + 审计记录（C9/A1）同步为已解决 |
 
 ---
 
@@ -174,7 +175,7 @@
 | 1 契约修复+死码清理 | ✅ 完成 | 1.1a/1.1b/1.1d/1.3 完成（commit d2d828a）；1.2b→2C、1.1c/1.4→2A |
 | 2A CORE_DEBUG 移除实验 | ✅ 完成并应用 | 分支验证全绿 → cherry-pick 应用回 unsafe-vibe-dev（commit 6878986），全量 1626/6 零 warning |
 | 2B 观测骨架扩展实验 | ✅ 完成并应用 | EngineTestSnapshot/test_hooks/resolve_plugin_search_paths 公开；test_mode/mock_provider→2D、call_info 形式化跳过 |
-| 2C idbg 重构实验 | ⬜ | 独立分支 |
+| 2C idbg 重构实验 | ✅ 完成并应用 | 删死代码 + show_intents 单一权威源 + fields() 协议化（commit 8a0065c） |
 | 2D 测试体系重建实验 | ⬜ | 独立分支 |
 | 3 手动应用回 unsafe-vibe-dev | ⬜ | |
 | 4 收敛收尾 | ⬜ | |
