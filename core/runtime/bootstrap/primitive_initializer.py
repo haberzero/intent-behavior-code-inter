@@ -252,6 +252,25 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         return_type_name="str"
     ), token)
 
+    # 序列/集合辅助内建（多态参数用 any，与 len 同约定）
+    registry.register_function("enumerate", factory.create_func(
+        "enumerate",
+        param_type_names=["any"],
+        return_type_name="list"
+    ), token)
+
+    registry.register_function("zip", factory.create_func(
+        "zip",
+        param_type_names=["any"],
+        return_type_name="list"
+    ), token)
+
+    registry.register_function("sorted", factory.create_func(
+        "sorted",
+        param_type_names=["any"],
+        return_type_name="list"
+    ), token)
+
     # ------------------------------
 
     # 4. 注册 None 单例 (Per-registry)
@@ -324,6 +343,14 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         if not args: return reg.box("")
         return args[0].receive('__to_prompt__', [])
     _reg_native(string_class, '__call__', _str_call, unbox=False)
+
+    # bool(x) 构造函数/转换逻辑（与 int/float/str 同构：cast_to 到目标类）
+    def _bool_call(self, *args):
+        reg = self.ib_class.registry
+        if not args: return reg.box(False)
+        target = self if isinstance(self, IbClass) else self.ib_class
+        return args[0].receive('cast_to', [target])
+    _reg_native(bool_class, '__call__', _bool_call, unbox=False)
 
     # str.__contains__: 用于 'in' 运算符（右侧为 str 时）
     def _str_contains(self, item):

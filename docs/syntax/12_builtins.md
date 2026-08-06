@@ -6,11 +6,33 @@
 
 | 函数 | 说明 |
 |------|------|
-| `print(value)` | 输出值（支持任意类型） |
+| `print(value, ...)` | 输出值（支持任意类型与多参数） |
+| `input(prompt)` | 读取一行输入（可选提示词） |
 | `range(n)` | 生成 `[0, n)` 整数序列 |
 | `range(start, end)` | 生成 `[start, end)` 整数序列 |
+| `range(start, end, step)` | 生成 `[start, end)` 整数序列（步进） |
 | `len(container)` | 获取容器长度（列表/字符串/字典） |
 | `type(value)` | 返回值的规范类型名（`int`/`list`/`Box` 等）；对 fn_callable/behavior 返回含签名形态（如 `fn_callable[()->int]`，见 `05_functions.md` §5.7） |
+| `int(value)` / `str(value)` / `float(value)` / `bool(value)` | 类型转换：`int("42")` → 42、`str(42)` → "42"、`float("3.5")` → 3.5、`bool(1)` → True（零参：`int()` → 0 等） |
+| `enumerate(iterable)` | 生成 `[(索引, 值), ...]` 元组列表（与 `for (int i, str v) in ...` 搭配） |
+| `zip(a, b, ...)` | 按位置组合多个序列为元组列表（按最短截断） |
+| `sorted(iterable)` | 返回新排序列表（不改动原容器；区别于原地 `list.sort()`） |
+
+```ibci
+# 类型转换
+int a = int("42")            # 42
+str b = str(42)              # "42"
+float c = float("3.5")       # 3.5
+bool d = bool(1)             # True
+
+# 序列辅助（与 for 元组解包搭配）
+list[str] names = ["a", "b"]
+for (int i, str name) in enumerate(names):
+    print(i, name)           # "0 a" / "1 b"
+
+list[int] l = [3, 1, 2]
+list[int] s = sorted(l)      # [1, 2, 3]；l 仍为 [3, 1, 2]
+```
 
 ### 12.2 str 方法
 

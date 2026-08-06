@@ -36,6 +36,7 @@ from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
+from core.kernel.spec.registry.factory import _PRIMITIVE_CONSTRUCTORS
 
 
 class ExpressionVisitorsMixin:
@@ -329,7 +330,14 @@ class ExpressionVisitorsMixin:
                     return ret
 
         # --- Callability check ---
-        call_trait = self.registry.get_call_cap(func_type)
+        # 基本类型转换构造器（int()/str()/float()/bool()）在调用位置视为可调用：
+        # 返回类型由 resolve_call_return 的 PRIMITIVE 分支推断。能力层不放开，
+        # 避免 int 值（如 `fn f = 42`）被误判为可调用值。
+        if (func_type.kind == TypeKind.PRIMITIVE.value
+                and func_type.name in _PRIMITIVE_CONSTRUCTORS):
+            call_trait = func_type
+        else:
+            call_trait = self.registry.get_call_cap(func_type)
         if not call_trait:
             self.error(f"Type '{func_type.name}' is not callable", node, code=SEM_TYPE_MISMATCH)
             self.bind_type(node, self._any_desc)

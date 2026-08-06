@@ -165,11 +165,15 @@ class IbClass(IbObject):
         2. __getattr__ -> 访问类字段 (default_fields)
         3. 其他 -> 正常消息处理 (查找静态方法等)
         """
-        from .functions import IbBoundMethod
+        from .functions import IbBoundMethod, IbNativeFunction
         if message == "__call__":
-            # 类作为构造器调用时，始终使用 instantiate 创建新实例。
-            # 用户定义的 __call__ 是实例方法（使实例可调用），不覆盖构造器。
-            # 实例的 __call__ 通过 IbObject.receive 中的 vtable 查找分发。
+            # 类自身声明的原生 __call__（如 int()/str()/float()/bool() 类型转换
+            # 构造器）优先于 instantiate；用户类的 __call__ 是实例方法（经
+            # IbObject.receive vtable 分发给实例），不覆盖类构造器。
+            own_call = self.methods.get("__call__")
+            if isinstance(own_call, IbNativeFunction):
+                return own_call.call(self, args)
+            # 用户类构造器：instantiate 创建新实例。
             context = self.registry.get_execution_context()
             return self.instantiate(args, context=context)
 

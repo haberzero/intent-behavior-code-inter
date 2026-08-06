@@ -345,9 +345,12 @@ class SymbolResolver(ScopedVisitor):
                     self._register_loop_variable(inner.id, inner, node)
             elif isinstance(node.target, ast.IbTuple):
                 # Tuple unpacking in for loop: for (a, b) in ...
+                # 元素可为裸 IbName 或带类型标注的 IbTypeAnnotatedExpr(IbName)
+                # （如 `for (int x, int y) in coords`），统一解包到内层名字。
                 for elt in node.target.elts:
-                    if isinstance(elt, ast.IbName):
-                        self._register_loop_variable(elt.id, elt, node)
+                    inner = elt.target if isinstance(elt, ast.IbTypeAnnotatedExpr) else elt
+                    if isinstance(inner, ast.IbName):
+                        self._register_loop_variable(inner.id, inner, node)
             else:
                 self.visit(node.target)
 

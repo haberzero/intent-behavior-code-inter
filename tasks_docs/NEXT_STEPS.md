@@ -33,6 +33,9 @@
 
 > 全部落地 unsafe-vibe-dev（本地 commit，未 push）。commit 明细见 git 历史。
 
+- **内建函数群完善（2026-08-06）**：类型转换全局函数 `int()`/`str()`/`float()`/`bool()` +
+  序列辅助 `enumerate`/`zip`/`sorted`；级联修复 for 循环元组解包 `for (int x, int y) in`。
+  丢弃 `sum`（与常见变量名冲突）。
 - **PT-DEBT-1/2/3 内核接口协议化（2026-08-06）**：
   - PT-DEBT-1：`BoundPlugin` 容器替代 `_ibci_registry_id` 私有标记注入；加载期跨引擎
     单例守卫改用 process 级 weak map（安全语义保留）。

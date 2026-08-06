@@ -3,6 +3,7 @@ from core.runtime.objects.kernel import IbNativeFunction, IbObject
 from core.kernel.registry import KernelRegistry
 from core.runtime.interpreter.intrinsics.io import register_io
 from core.runtime.interpreter.intrinsics.collection import register_collection
+from core.runtime.interpreter.intrinsics.seq import register_seq
 from core.runtime.interpreter.intrinsics.meta import register_meta
 
 class IntrinsicManager:
@@ -59,4 +60,5 @@ class IntrinsicManager:
 
         register_io(self, execution_context, service_context)
         register_collection(self, execution_context, service_context)
+        register_seq(self, execution_context, service_context)
         register_meta(self, execution_context, service_context)
