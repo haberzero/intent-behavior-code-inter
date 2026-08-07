@@ -104,10 +104,11 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **OBSERVABILITY_REFACTOR 主体已完成（2026-08-06）**：四机制（测试体系/CORE_DEBUG/idbg/内省）统一收敛、
-  测试体系全面重建（tests_v2 全域迁移 + Phase 5 切换 + 矩阵三段式 + tests_docs 治理）全部落地 unsafe-vibe-dev，
-  全量 **1962 passed / 1 skipped**。规划见 `OBSERVABILITY_REFACTOR.md`。
-- **剩余未来计划**：`PT-FEAT-9` 内核诊断机制重建（CORE_DEBUG 替代物），现阶段非重点。
+- **下一主线：PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**（2026-08-06 交接）——经既有观测骨架
+  （EventBus + `emit_runtime_event`）发射结构化诊断事件，与 idbg/iruntime/test_hooks 同一设计语言，
+  **禁止重建旧 print/级别门控/全局单例机制**。完整交接要点见 `PENDING_TASKS.md` §12。
+- **OBSERVABILITY_REFACTOR 主体已完成（2026-08-06）**：四机制统一收敛、测试体系全面重建 + 规范化清理，
+  全量 **1963 passed / 1 skipped**。规划见 `OBSERVABILITY_REFACTOR.md`。
 - **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核审查循环）+
   `PT-AUDIT-5`（注释卫生清理）——持续周期工作。
 - **保留规划**：`PT-FEAT-1`（语言级协程，保持现状）。

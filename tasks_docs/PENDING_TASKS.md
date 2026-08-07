@@ -71,7 +71,50 @@
 | PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 | PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | 原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此）：`ibcc` 构建命令 `--pre-scan-specs` 扫描 `_spec.py` 生成 `.ibc_meta` 快照，`export_metadata()`/`load_metadata_from_file()` 使编译器离线复用元数据，减少运行时发现开销。当前为全量 `discover_all() → HostInterface.metadata` 流程 |
-| PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **未来计划，现阶段非重点**（用户 2026-08-06 重排）。OBSERVABILITY 2A 已整体移除旧 CoreDebugger（88 trace；真实异常回退 8 处转 `warnings.warn`，其余删除）。未来重建方向：结构化内核诊断面（诊断事件 / 观测骨架扩展），与 idbg/iruntime/test_hooks 同一设计语言 |
+| PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **下一主线（2026-08-06 交接）**。OBSERVABILITY 2A 已整体移除旧 CoreDebugger（88 trace；真实异常回退 8 处转 `warnings.warn`，其余删除）。详见下方"§12 PT-FEAT-9 交接要点" |
+
+---
+
+## §12 PT-FEAT-9 交接要点：内核结构化诊断机制重建
+
+> **交接定位**（2026-08-06）：作为下一 session 主线任务。规划见 `OBSERVABILITY_REFACTOR.md`（2A 决策记录 + 目标架构）。
+
+### 背景与现状
+
+- **旧 CORE_DEBUG 已移除**（OBSERVABILITY 2A，commit 6878986）：`CoreDebugger` 类 / `IBC_CORE_DEBUG` env /
+  CLI `--core-debug` / `debugger=` 参数链 / `ServiceContext.debugger` 契约 / 88 个 trace 调用点全部删除。
+- **诊断价值承接**：真实异常回退 8 处 → `warnings.warn`（`intent.py:__to_prompt__` 回退、`kernel/base.py`
+  cast/parse 回退、`llm_except_frame.py` snapshot/restore 回退、`_prompt.py` __payload_prompt__ 回退、
+  `llm_parsing_strategy.py` validate/from_prompt、`engine.py` collect 跳过、`scheduler.py` 预定义符号、
+  `loader.py` 插件跳过）；AttributeError 协议缺失回退 = 设计路径静默；流程日志直接删除。
+- **观测骨架已存在**（单一权威源，勿另造）：`core/runtime/observability/`——`snapshot.py`（状态聚合）、
+  `events.py`（EventBus + `emit_runtime_event` 统一发射入口 + EventSource 协议）、`config.py`（ConfigStore，
+  `observability` 开关门控）。用户侧消费经 `iruntime`（snapshot/subscribe/configure）；测试侧经
+  `IBCIEngine.test_snapshot()` / `ServiceContext.test_hooks`（TestHooks 协议）。
+
+### 设计方向（对照 design-philosophy，禁止平行机制）
+
+1. **不重建旧 CoreDebugger**：print 推送 + 级别门控 + 进程全局单例 + env/CLI 配置都是历史包袱，不再采用。
+2. **结构化诊断面**：诊断事件经既有 EventBus 发射（如 `emit_runtime_event(rc, "kernel_diagnostic", {...})`，
+   受 `observability` 开关门控、无订阅者零成本）——与 llm/chan/slot 事件同一机制（机制同构）。
+3. **与现有消费端对齐**：`warnings.warn` 8 处是否迁入事件面，或保持 warnings（已可被 pytest.warns 断言）？
+   需裁决：warnings 是"开发者可见"通道，事件面是"可编程观测"通道——两者语义不同，可能并存（非双通道冲突）。
+4. **可测试**：事件面天然可被测试断言（订阅 + 收事件），优于 print。
+5. **文档**：`docs/architecture/01_principles.md` 已删 diagnostics/debugger 引用；重建后按 WRITING_GUIDE 记录。
+
+### 建议实施步骤
+
+1. 设计冻结：诊断事件类型集 + 数据形态（对齐 events.py 现有事件 dict 形态）。
+2. 评估 8 处 warnings 是否/如何接入；明确 warnings 与事件面的边界。
+3. 在 EventBus 上落地 `kernel_diagnostic` 事件 + 门控 + 测试。
+4. docs 治理：architecture 章节记录新诊断机制（人类手册）。
+
+### 关联
+
+- 移除记录：`OBSERVABILITY_REFACTOR.md` 决策记录 2A 行。
+- 既有事件类型：`core/runtime/observability/events.py`（llm_dispatched/llm_resolved/chan_*/slot_updated/
+  task_*/vm_*/configured）。
+- 测试规范：`tests/COVERAGE_MATRIX.md` + `test_matrix_sync`。
 
 ---
 

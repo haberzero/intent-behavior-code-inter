@@ -6,20 +6,24 @@
 
 ---
 
-## 🔴 下一主线：OBSERVABILITY_REFACTOR — 可观测性统一与测试体系重构
+## 🔴 下一主线：PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）
 
-> **2026-08-06：本周期主体已完成**。四机制（测试体系/CORE_DEBUG/idbg/内省）收敛、测试体系全面重建
-> （tests_v2 全域迁移 + 切换 + 矩阵三段式）全部落地 unsafe-vibe-dev，全量 **1962 passed / 1 skipped**。
-> 规划详见 `tasks_docs/OBSERVABILITY_REFACTOR.md`。
-> **剩余**：仅 PT-FEAT-9 内核诊断机制重建（CORE_DEBUG 替代物）列为**未来计划**，现阶段非重点。
+> **2026-08-06 交接为下一 session 主线**。OBSERVABILITY_REFACTOR 主体已完成（四机制收敛 + 测试体系重建
+> + 矩阵三段式，全量 1963 passed / 1 skipped）；旧 CORE_DEBUG 已于 2A 移除（88 trace → 8 处真实异常回退转
+> `warnings.warn`）。现重建**结构化内核诊断/可观测性机制**——经既有观测骨架（EventBus + `emit_runtime_event`）
+> 发射结构化诊断事件，与 idbg/iruntime/test_hooks 同一设计语言，**禁止重建旧 print/级别门控/全局单例机制**。
+> **完整交接要点见 `PENDING_TASKS.md` §12**（背景/现状/设计方向/实施步骤/关联）。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务（2026-08-06 完成）**：**OBSERVABILITY_REFACTOR 主体全部完成**——
-  2C-2 idbg 深度收敛 + 用户层机制改造、2D 测试体系全面重建（tests_v2 全域迁移 + Phase 5 切换 + 矩阵三段式 +
-  tests_docs 治理）全部落地，全量 **1962 passed / 1 skipped**。**剩余仅 PT-FEAT-9 内核诊断重建（未来计划）**。
+- **首要任务（2026-08-06 交接）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——
+  经观测骨架（EventBus + emit_runtime_event）发射结构化诊断事件，同一设计语言、禁重建旧机制；
+  完整交接要点见 `PENDING_TASKS.md` §12。
+- **已完成（OBSERVABILITY_REFACTOR 主体）**：2C-2 idbg 深度收敛 + 用户层机制改造、2D 测试体系全面重建
+  （tests_v2 全域迁移 + 切换 + 矩阵三段式 + tests_docs 治理）、测试规范化清理（弱断言升级 + 短簇参数化），
+  全量 **1963 passed / 1 skipped**。
 - **本 session 已完成（2026-08-06，unsafe-vibe-dev，11 commits）**：Phase 0 设计冻结、Phase 1 契约修复+死码+零成本穿透替换、
   **2A CORE_DEBUG 整体移除**（88 trace → warnings 8 处/删除，commit 6878986）、**2B 观测骨架测试合作面**
   （EngineTestSnapshot + test_hooks + resolve_plugin_search_paths 公开 + layering 豁免归零，commit 73f373d/ae2209e/feff694）、
