@@ -71,9 +71,8 @@ tasks_docs/                          任务控制
 ├── NEXT_STEPS.md
 └── PENDING_TASKS.md
 
-tests_docs/                          测试方法论
-├── TEST_PHILOSOPHY.md
-└── SEMANTIC_COVERAGE_MATRIX.md
+tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md 管辖）
+└── TEST_PHILOSOPHY.md                测试哲学（分层模型见 tests/README.md）
 ```
 
 ---

@@ -49,148 +49,33 @@ IBCI 不是传统编程语言，它面临独特的测试挑战：
 
 ## §2 IBCI 测试的分层模型
 
-### 2.1 四层测试金字塔
+> **分层模型以实际目录为准，单一权威源见 `tests/README.md`**（2026-08-06 测试体系重建后收敛，
+> 原四层金字塔的 Examples/Regression 层已移除——Examples 由 `examples/` 承担、Regression 场景
+> 并入对应语义层）。
+
+实际结构（tests/）：
 
 ```
-                    ┌────────────────┐
-                    │   Examples     │  4-6 个完整示例程序
-                    │   (文档化)      │  计算器/聊天代理/数据流水线
-                    └────────────────┘
-                  ┌──────────────────────┐
-                  │    Compliance        │  公开 API 黑盒契约
-                  │    (50-80 tests)     │  并发/隔离/内存模型
-                  └──────────────────────┘
-              ┌──────────────────────────────┐
-              │       Contracts              │  核心语义不变量
-              │    (300-400 tests)           │  类型/执行/作用域/Intent/LLM
-              └──────────────────────────────┘
-          ┌────────────────────────────────────────┐
-          │           Regression                   │  历史 Bug 最小复现
-          │         (按 issue 索引)                 │  不可被 contract 覆盖的边界条件
-          └────────────────────────────────────────┘
+kernel/      纯数据结构单元（TypeRef/Spec/Axiom）         禁 Engine
+compiler/    compile-only（含 semantic/ 子包）            禁 run_ibci
+runtime/     单子系统 + 小段 IBCI 代码（白盒）            允许 internals
+plugins/     插件单元测试（pure Python）                   —
+contracts/   语言不变量公理（INV-*，最小黑盒用例）        黑盒
+e2e/         完整程序端到端（黑盒）                       禁 runtime internals/私有穿透
+compliance/  跨实现公开 API 黑盒合规                      —
+sdk/         SDK 工具测试                                  —
+meta/        测试规范执行器（分层/命名/helper/矩阵机器校验） —
+fixtures/    可复用 IBCI 样本                              —
 ```
 
-### 2.2 各层职责与范围
-
-#### Contracts 层（核心，70% 测试工作）
-
-**目的**：验证语言设计文档中的核心不变量
-
-**范围**：
-- 类型系统不变量（Optional 空安全 / 泛型协变 / cast 合法性）
-- 执行模型公理（CPS 无递归 / Signal 传播 / 帧栈隔离）
-- 作用域语义（Cell 共享 / lambda 捕获 / snapshot 克隆）
-- Intent 系统（优先级 / 跨帧传播 / retry 还原）
-- llmexcept 保证（错误历史 / 深度限制 / 循环不变量）
-- LLM 集成契约（MOCK 协议 / dispatch / DDG 顺序）
-
-**特征**：
-- 每个测试验证 **一个** 语义不变量
-- 使用 **最小 IBCI 代码**（5-15 行）
-- **不访问内部实现**（不依赖 node_pool / interpreter 内部）
-- 参数化测试覆盖多种情况
-
-**示例**：
-```python
-# tests/contracts/test_type_invariants.py
-
-class TestOptionalNullSafety:
-    """验证 Optional[T] 的空安全保证"""
-
-    def test_optional_none_access_raises(self):
-        """INV-OPT-1: 访问 None 的 Optional 必须抛出运行时错误"""
-        code = """
-        Optional[int] x = None
-        int y = x.get()  # 必须失败
-        """
-        with pytest.raises(RuntimeError, match="None"):
-            run_ibci(code)
-
-    @pytest.mark.parametrize("type_,value", [
-        ("int", "42"),
-        ("str", '"hello"'),
-        ("list[int]", "[1,2,3]"),
-    ])
-    def test_optional_preserves_wrapped_type(self, type_, value):
-        """INV-OPT-2: Optional[T] 包装后类型不变"""
-        code = f"""
-        Optional[{type_}] x = Some({value})
-        {type_} y = x.get()
-        print(y)
-        """
-        # 验证不抛类型错误即可
-        run_ibci(code)
-```
-
-#### Compliance 层（公开 API，20% 测试工作）
-
-**目的**：验证跨实现的公开 API 契约
-
-**范围**：
-- 并发 LLM 调用（多线程安全）
-- 执行隔离（多 Interpreter 互不干扰）
-- 内存模型（快照不变性 / Cell 共享）
-
-**特征**：
-- 黑盒测试，只使用 `IBCIEngine` / `host.*` 公开 API
-- **禁止** import `core/runtime/...` 内部模块
-- 适合作为语言规范的可执行定义
-
-#### Regression 层（历史 Bug，5% 测试工作）
-
-**目的**：防止已修复的 Bug 再次出现
-
-**范围**：
-- 无法被 contract 测试覆盖的边界条件
-- 历史上导致崩溃/数据损坏的特定输入
-
-**特征**：
-- 按 GitHub issue 编号索引
-- 每个测试包含最小复现代码
-- Docstring 注明修复时间与相关 PR
-
-**示例**：
-```python
-# tests/regression/test_known_issues.py
-
-def test_issue_42_intent_leak_in_retry(self):
-    """Issue #42: retry 后意图栈未正确还原
-
-    修复：NS-2c (2026-05-11)
-    验证：retry 前后 intent_context 状态一致
-    """
-    code = """
-    import ai
-    ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
-    @ "initial"
-    llmexcept {
-        @ "temporary"
-        str x = @~ MOCK:INVALID ~
-    } retry {
-        str x = @~ MOCK:TRUE retry ~
-    }
-    """
-    # 验证不抛异常即可（原 Bug 会因意图泄漏崩溃）
-    run_ibci(code)
-```
-
-#### Examples 层（文档化，5% 测试工作）
-
-**目的**：提供完整示例程序，兼具测试与教程价值
-
-**范围**：
-- 简单计算器（基础语法）
-- 聊天代理（LLM 集成）
-- 数据流水线（高阶函数 / snapshot）
-- 并发任务（多 Interpreter）
-
-**特征**：
-- 每个示例 50-100 行 IBCI 代码
-- 自包含，可直接运行
-- Docstring 解释设计意图
+**哲学要点**（不因分层变化而改变）：
+- **Contracts 优先**：核心语义不变量（类型/执行/作用域/Intent/llmexcept/LLM 集成）用最小 IBCI
+  代码（5-15 行）验证，一测试一不变量，黑盒优先。
+- **红线机器强制**：分层边界由 `tests/meta/test_layering.py` 静态扫描，不允许白名单/跳过掩盖。
+- **命名统一**：`test_<concept>.py` / `Test<Concept><Aspect>`，禁里程碑代号。
+- **覆盖可追溯**：语义覆盖经 `tests/COVERAGE_MATRIX.md` 三段式引用 + `test_matrix_sync.py` 机器对账。
 
 ---
-
 ## §3 测试编写指南
 
 ### 3.1 黄金法则
@@ -612,15 +497,11 @@ IBCI 测试体系的核心原则：
 4. **文档化**：测试即规范
 5. **可维护**：内部重构不破坏测试
 
-**当前状态**（2026-06-25 更新）：
+**当前状态**：
 - 测试运行命令：`python -m pytest tests/`
-- 最近一次基线：1070 passed / 5 skipped（2026-06-25；含 2 个设计限制 skip + 3 个层级元测试 skip）
-- 注：测试数随开发持续增长，**请以实际 pytest 输出为准**，本文档不冻结具体数字。最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部。
+- 基线以实跑为准，本文件不冻结具体数字；最新基线锚点见 `tasks_docs/NEXT_STEPS.md` 顶部。
 
 **长期愿景**：
 > IBCI 测试体系成为语言设计文档的**可执行规范**，验证核心不变量，而非追逐实现细节。
 
 ---
-
-*文档版本：1.2（2026-06-25 文档体系整理：数字纪律化）*
-*维护者：IBCI 核心团队*
