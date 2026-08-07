@@ -42,6 +42,27 @@ _current_execution_context: ContextVar[Optional["IExecutionContext"]] = ContextV
     "ibci_current_execution_context", default=None
 )
 
+# 线程任务上下文标记：``coordinator._run_task_body`` 在任务线程内设置。
+# 用于 P3 隔离——任务内写"已共享给主线程的闭包 cell"报隔离错误。
+_current_in_thread_task: ContextVar[bool] = ContextVar(
+    "ibci_in_thread_task", default=False
+)
+
+
+def get_in_thread_task() -> bool:
+    """当前是否处于线程任务执行上下文（P3 隔离检查用）。"""
+    return _current_in_thread_task.get()
+
+
+def set_in_thread_task(value: bool):
+    """设置线程任务上下文标记，返回 Token（用于 reset）。"""
+    return _current_in_thread_task.set(value)
+
+
+def reset_in_thread_task(token) -> None:
+    """重置线程任务上下文标记。"""
+    _current_in_thread_task.reset(token)
+
 
 def get_current_frame() -> Optional["IExecutionFrame"]:
     """获取当前线程/协程的执行帧。如果在 Interpreter 执行上下文之外调用，返回 None。"""

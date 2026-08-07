@@ -191,3 +191,46 @@ print((str)t.join().status())
         assert lines[0] == "Task was cancelled"
         assert lines[1] == "True"
         assert lines[2] == "cancelled"
+
+
+class TestThreadCellIsolation:
+    """P3 隔离：任务内禁写"已共享给主线程"的闭包 cell（D2 闭合）。"""
+
+    def test_write_shared_closure_cell_is_isolated(self):
+        """任务写共享闭包 cell → 隔离违规 → thread_result failed。"""
+        code = """
+func make_counter() -> fn:
+    int total = 0
+    func tick() -> int:
+        nonlocal total
+        total = total + 1
+        return total
+    return tick
+
+fn c = make_counter()
+thread[int] t = thread(callable=c, args=[])
+thread_result[int] r = t.join()
+print((str)r.is_error())
+print((str)r.status())
+"""
+        lines = run_ibci(code)
+        assert lines == ["True", "failed"]
+
+    def test_read_shared_closure_cell_is_allowed(self):
+        """任务读共享闭包 cell（不写）→ 合法。"""
+        code = """
+func make_reader() -> fn:
+    int total = 42
+    func read() -> int:
+        nonlocal total
+        return total
+    return read
+
+fn c = make_reader()
+thread[int] t = thread(callable=c, args=[])
+thread_result[int] r = t.join()
+print((str)r.is_error())
+print((str)r.expect())
+"""
+        lines = run_ibci(code)
+        assert lines == ["False", "42"]

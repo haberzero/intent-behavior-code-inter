@@ -71,7 +71,7 @@ class IbCell:
     确保 cell 可以作为字典键，且两个独立 cell 即使 value 相等也不相等。
     """
 
-    __slots__ = ("_value",)
+    __slots__ = ("_value", "_shared_with_main")
 
     # 公开常量：未初始化哨兵。外部读取时可与 ``IbCell.EMPTY`` 比较。
     EMPTY: Any = _EMPTY
@@ -87,6 +87,8 @@ class IbCell:
             本类不主动 box，以保持 "纯容器" 语义、避免对 registry 的依赖。
         """
         self._value = value
+        # 隔离标记：该 cell 是否已共享给线程任务（任务内写入报错，P3）。
+        self._shared_with_main = False
 
     # ------------------------------------------------------------------
     # 核心读写 API
@@ -114,6 +116,15 @@ class IbCell:
         本方法不做类型/box 处理，类型一致性由调用方 (resolver/handler) 保证。
         """
         self._value = new_value
+
+    # ------------------------------------------------------------------
+    # 隔离标记（P3：任务内禁止写共享 cell）
+    # ------------------------------------------------------------------
+
+    @property
+    def shared_with_main(self) -> bool:
+        """该 cell 是否已共享给线程任务（任务内写入应报隔离错误）。"""
+        return self._shared_with_main
 
     def is_empty(self) -> bool:
         """是否处于未初始化状态。"""

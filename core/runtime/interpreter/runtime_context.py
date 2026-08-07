@@ -168,6 +168,7 @@ class ScopeImpl:
             # Cell 变量赋值时同步更新共享 IbCell，使持有该 Cell 的
             # lambda 闭包在下次调用时读到最新值。
             if symbol.cell is not None:
+                self._check_cell_isolation(symbol.name or name, symbol.cell)
                 symbol.cell.set(boxed_value)
             return True
         if self._parent:
@@ -190,11 +191,28 @@ class ScopeImpl:
             symbol.current_type = type(boxed_value)
             # Cell 变量赋值时同步更新共享 IbCell。
             if symbol.cell is not None:
+                self._check_cell_isolation(symbol.name or uid, symbol.cell)
                 symbol.cell.set(boxed_value)
             return True
         if self._parent:
             return self._parent.assign_by_uid(uid, value, skip_type_check=skip_type_check)
         return False
+
+    @staticmethod
+    def _check_cell_isolation(var_name: str, cell: Any) -> None:
+        """P3 隔离检查：线程任务内禁止写"已共享给主线程"的闭包 cell。
+
+        任务内对捕获变量赋值会写共享 cell（主线程可见），违反"任务不写主环境
+        作用域"隔离承诺；跨任务共享必须显式经 chan/slot。任务本地 cell 不受限。
+        """
+        from core.runtime.frame import get_in_thread_task
+
+        if get_in_thread_task() and cell.shared_with_main:
+            raise InterpreterError(
+                f"Task isolation violation: cannot assign captured variable "
+                f"'{var_name}' inside a thread task (it writes the main thread's "
+                f"shared closure cell). Use chan/slot for cross-task communication."
+            )
 
     def get(self, name: str) -> Any:
         symbol = self.get_symbol(name)

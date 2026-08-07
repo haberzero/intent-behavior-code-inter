@@ -31,6 +31,8 @@ from core.runtime.frame import (
     set_current_frame,
     reset_current_execution_context,
     reset_current_frame,
+    set_in_thread_task,
+    reset_in_thread_task,
 )
 from core.runtime.shared.waitable import Waitable
 from core.runtime.vm.task_scheduler import TaskCancelled
@@ -182,6 +184,7 @@ def _run_task_body(
     from core.runtime.interpreter.call_stack import LogicalCallStack
     from core.runtime.vm import VMExecutor
     from core.runtime.objects.kernel import IbUserFunction, IbValue, IbObject, IbFunction
+    from core.runtime.objects.cell import IbCell
 
     main_ec = interpreter.execution_context
     registry = interpreter.registry
@@ -227,7 +230,15 @@ def _run_task_body(
     # 4. 线程本地 ContextVar：任务线程内的 LLM/内省正确解析到任务 EC
     frame_token = set_current_frame(task_rt)
     ec_token = set_current_execution_context(task_ec)
+    task_token = set_in_thread_task(True)
     try:
+        # P3 隔离：把与主线程共享的闭包 cell 标记为"任务内禁写"——任务内对捕获
+        # 变量赋值会写共享 cell（主线程可见），违反隔离承诺。覆盖用户函数/lambda/
+        # behavior 全部任务体（其 closure 均为主线程共享的闭包 cell）。
+        for _sym_uid, (_var_name, _cell) in (getattr(callable_obj, "closure", None) or {}).items():
+            if isinstance(_cell, IbCell):
+                _cell._shared_with_main = True
+
         if isinstance(callable_obj, IbUserFunction):
             # 用户函数：构建任务本地函数包装（绑定 task EC），使函数体经
             # task EC 的 runtime_context 驱动（避免共享主上下文的作用域竞争）。
@@ -270,6 +281,7 @@ def _run_task_body(
     finally:
         reset_current_execution_context(ec_token)
         reset_current_frame(frame_token)
+        reset_in_thread_task(task_token)
 
 
 def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any], cancel_event: Optional[threading.Event] = None, handle: str = "") -> Any:
