@@ -2,23 +2,24 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-07（阶段 0 统一执行地基设计冻结完成，阶段 1 地基实现为下一主线）
+> **最后更新**：2026-08-07（阶段 1 地基 1a-1e 完成，进入阶段 3 统一清理）
 
 ---
 
-## 🔴 下一主线：阶段 1 —— 统一执行地基实现（独立分支实验，禁合并）
+## 🔴 下一主线：阶段 3 —— 统一清理（设计语言统一，W1-W5/P3/P4）
 
-> **阶段 0 设计冻结已完成（2026-08-07）**：**`tasks_docs/EXEC_FOUNDATION_DESIGN.md`**（零代码）——adopt 协作调度为
-> VM 唯一执行模型；统一 Waitable 家族（is_done + try_result + result）；阻塞即挂起（阻塞语言操作统一返回 Waitable，
-> 与 collect/run_isolated 同构）；线程 = I/O 并行任务（完成 = Waitable）；协作取消全路径；yield 点快照 × llmexcept
-> 闭合；语言面 async fn/yield 形态；决策 D-01~D-08。
-> **用户定案（2026-08-07，价值前提）**：设计优秀与统一、可维护性、宏观合理性、长期收益优先；难度与工作量不参与权衡。
-> 深度审计见 **`tasks_docs/CONCURRENCY_AUDIT.md`**（S1-S9/D1-D9/W1-W6/P1-P9 + §十一 任务重排）。
+> **阶段 1 统一执行地基完成（2026-08-07，分支 exp/exec-1a，全量 1979 passed / 1 skipped）**：
+> 1a 调度器接入主路径 → 1b Waitable 家族 + 阻塞即挂起 → 1c 协作取消核心 → 1d llmexcept×await 闭合 →
+> 1e 取消覆盖用户函数（D5）。设计见 **`tasks_docs/EXEC_FOUNDATION_DESIGN.md`**（D-01~D-08）。
+> **阶段 2（yield 惰性生成器）界定**：D-08（无 async 关键字，任意函数可 await）已落地验证；
+> `yield` 为大型独立特性，列为阶段 5 之前择机实现（生成器体需单可恢复驱动，见设计 §5.2）。
 >
-> **阶段 1 实施（独立分支 `exp/exec-1a` 起，全绿后手动应用 unsafe-vibe-dev）**：
-> 1a 调度器接入主路径（run/run_body/run_many 统一）→ 1b Waitable 家族扩展（SpawnedTask/ChannelRecvWaitable）
-> + 阻塞方法返回 Waitable → 1c 协作取消全路径 → 1d llmexcept × await 闭合 → 1e 线程体调度器统一 → 1f 语言面 async/yield。
-> **后续排序**：② 语言面 async fn/yield（PT-FEAT-1 解封）→ ③ 统一清理（W1-W5/P3/P4）→ ④ PT-FEAT-9 诊断 → ⑤ 增量。
+> **阶段 3 实施（独立分支 exp/exec-3，全绿后手动应用 unsafe-vibe-dev）**：
+> W1 非阻塞命名统一（recv_nonblocking→recv_nowait）｜W2 订阅契约统一（runtime.subscribe 复用
+> pubsub/subscriber，消 monkeypatch）｜W3 "comm_"命名回归（_event_bus/_config_store）｜W4 死状态清理
+> （_registry_lock / IRuntimeLib._event_bus / events.py 事件类型对账）｜W5 文档同步（14_concurrency 等）
+> ｜P3 cell 隔离（禁跨任务写）｜P4 全局事件总线（引擎级单实例）。
+> **后续排序**：阶段 4 PT-FEAT-9 诊断机制 → 阶段 5 yield 惰性生成器 + 增量。
 
 ---
 
@@ -37,10 +38,10 @@
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务（2026-08-07 阶段 0 完成）**：**阶段 1 统一执行地基实现**（独立分支 `exp/exec-1a` 起，禁合并，
-  全绿后手动应用 unsafe-vibe-dev）——设计冻结见 `tasks_docs/EXEC_FOUNDATION_DESIGN.md`（D-01~D-08，
-  1a 调度器接入主路径 → 1b Waitable 家族+阻塞方法返回 Waitable → 1c 协作取消 → 1d llmexcept×await →
-  1e 线程体调度器统一 → 1f 语言面 async/yield）。
+- **首要任务（2026-08-07 阶段 1 完成）**：**阶段 3 统一清理**（独立分支 `exp/exec-3`，禁合并，全绿后手动应用
+  unsafe-vibe-dev）——W1 非阻塞命名 / W2 订阅契约 / W3 comm 命名回归 / W4 死状态 / W5 文档 / P3 cell 隔离 /
+  P4 全局事件总线。阶段 1 地基 1a-1e 见 `tasks_docs/EXEC_FOUNDATION_DESIGN.md`（D-01~D-08）。
+- **阶段 2 界定**：D-08（任意函数可 await）已落地；`yield` 惰性生成器为大型独立特性，阶段 5 前择机实现。
 - **次任务（阶段 4，挂起）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——设计已冻结
   （`tasks_docs/DIAGNOSTIC_DESIGN.md`，D1-D7 + 诊断码集 + 实施步骤）；依赖 `EXEC_FOUNDATION_DESIGN.md`
   §3.6（全局事件总线，阶段 3）落地；完整交接要点见 `PENDING_TASKS.md` §12。

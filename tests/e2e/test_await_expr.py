@@ -77,3 +77,35 @@ class TestAwaitExpr:
         )
         out = run_ibci(code)
         assert any("plain" in line for line in out)
+
+class TestAwaitAnywhere:
+    """D-08：普通函数内 await 可用（无需 async 关键字）——CPS VM 所有函数体天然可挂起。"""
+
+    def test_await_channel_recv_inside_user_function(self):
+        """用户函数体内 await 通道 recv（Waitable），挂起/恢复正确。"""
+        code = """
+chan c = chan(str, "stream")
+c.send("hello")
+func read(chan x) -> str:
+    str m = await x.recv()
+    return m
+str got = read(c)
+print(got)
+"""
+        assert run_ibci(code) == ["hello"]
+
+    def test_await_inside_nested_call_chain(self):
+        """await 在多层函数调用链内挂起/恢复。"""
+        code = """
+chan c = chan(int, "stream")
+c.send(21)
+func half(chan x) -> int:
+    int v = await x.recv()
+    return v
+func double(chan x) -> int:
+    int v = half(x)
+    return v * 2
+int r = double(c)
+print((str)r)
+"""
+        assert run_ibci(code) == ["42"]
