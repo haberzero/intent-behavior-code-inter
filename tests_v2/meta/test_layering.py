@@ -28,15 +28,16 @@ def _read_source(test_file: Path) -> str:
 
 
 class TestKernelLayer:
-    """kernel/ 纯数据结构单元：禁 Engine、禁 run_ibci。"""
+    """kernel/ 纯数据结构单元：禁使用 Engine、禁运行 IBCI 代码。"""
 
     @pytest.mark.parametrize("test_file", _find_test_files("kernel"))
     def test_kernel_does_not_use_engine(self, test_file):
         src = _read_source(test_file)
-        assert "IBCIEngine" not in src, (
+        # 使用检测（import / 实例化 / 调用），避免 docstring 提及的裸名误报
+        assert "core.engine" not in src and "IBCIEngine(" not in src, (
             f"{test_file.name}: kernel/ layer must not construct IBCIEngine"
         )
-        assert "run_ibci" not in src, (
+        assert "run_ibci(" not in src and "from tests_v2.conftest import run_ibci" not in src, (
             f"{test_file.name}: kernel/ layer must not run IBCI code (use contracts/e2e)"
         )
 
