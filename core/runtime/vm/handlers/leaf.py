@@ -14,6 +14,7 @@ from core.runtime.objects.kernel import (
     IbValue,
     IbLLMFunction,
     IbLLMUncertain,
+    IbUserFunction,
 )
 from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.kernel.ib_class import IbClass
@@ -283,6 +284,15 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         result = yield from _vm_invoke_llm_function(
             executor, func, executor.registry.get_none(), args
         )
+        return result
+
+    # IbUserFunction（普通用户函数）：trampoline 调用（R1，EXEC-1 根治）。
+    # 不 yield from 生成器（会嵌套 Python 栈），而是 yield 函数调用请求，
+    # 由 _drive_loop_gen 把函数体作为独立 VMTask 压栈——深递归 Python 深度恒定。
+    if isinstance(func, IbUserFunction):
+        from core.runtime.vm.vm_executor import _UserFunctionCall
+
+        result = yield _UserFunctionCall(func, args)
         return result
 
     try:

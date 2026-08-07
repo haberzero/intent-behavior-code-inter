@@ -253,6 +253,50 @@ print(countdown(100, 0))
         result = run_ibci(code)
         assert result  # Should compute sum without overflow
 
+    def test_deep_recursion_500(self):
+        """R1 trampoline：500 层递归成功（原同步嵌套路径在 ~130 层即 Python 栈溢出）。
+
+        EXEC-1 根治：函数调用不再嵌套 Python 栈，深递归 Python 深度恒定。
+        """
+        code = """
+func f(int n) -> int:
+    if n <= 1:
+        return 1
+    return f(n - 1) + 1
+
+print(f(500))
+"""
+        assert run_ibci(code) == ["500"]
+
+    def test_deep_recursion_800(self):
+        """R1 trampoline：800 层递归成功（逼近 Python 默认 recursionlimit 边界）。"""
+        code = """
+func f(int n) -> int:
+    if n <= 1:
+        return 1
+    return f(n - 1) + 1
+
+print(f(800))
+"""
+        assert run_ibci(code) == ["800"]
+
+    def test_deep_mutual_recursion(self):
+        """R1 trampoline：深互递归（各 200 层，共 400 层调用链）。"""
+        code = """
+func is_even(int n) -> int:
+    if n == 0:
+        return 1
+    return is_odd(n - 1)
+
+func is_odd(int n) -> int:
+    if n == 0:
+        return 0
+    return is_even(n - 1)
+
+print(is_even(400))
+"""
+        assert run_ibci(code) == ["1"]
+
 
 # ===========================================================================
 # Exception Frame Unwinding (INV-UNWIND-*)

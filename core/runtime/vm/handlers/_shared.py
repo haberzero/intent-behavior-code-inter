@@ -29,7 +29,7 @@ from core.runtime.objects.kernel import (
     _should_activate_intent_context_arg,
 )
 from core.runtime.objects.kernel.base import unbox, is_sequence_value
-from core.runtime.objects.kernel.functions import IbBoundMethod, IbNativeFunction
+from core.runtime.objects.kernel.functions import IbBoundMethod, IbNativeFunction, IbSuperProxy
 from core.runtime.capability_registry import CapabilityRegistry
 from core.base.source_atomic import Location
 from core.runtime.exceptions import (
@@ -227,6 +227,115 @@ def _vm_call_fn_callable(executor, func, args):
             rt_context.exit_scope()
 
     return result
+
+
+def _vm_call_user_function(executor, func, receiver, args):
+    """CPS 内联执行用户函数（R1：EXEC-1 根治——调用不再嵌套 Python 栈）。
+
+    与 ``_vm_call_fn_callable`` 平行：帧准备（意图 fork / 模块切换 / 作用域 /
+    闭包 cell / self+super / 实参绑定）移入生成器前奏，语句体经
+    ``_vm_execute_stmt_sequence`` **yield 进同一 VMTask 栈**（不再逐语句新建
+    调度器 + ``_drive_loop_gen``）。任一时刻 Python 活跃链仅
+    ``_drive_loop_gen → 栈顶 handler(gen) → _vm_call_user_function(gen)``，
+    与递归深度无关——深递归 Python 深度恒定（trampoline）。
+    """
+    rt_context = executor.runtime_context
+    old_module = executor.ec.current_module_name
+    old_scope = rt_context.current_scope
+
+    # --- 意图栈作用域隔离（拷贝传递语义，与 IbUserFunction.call 一致）---
+    saved_intent = rt_context.enter_intent_scope()
+
+    if func.module_name and func.module_name != old_module:
+        executor.ec.current_module_name = func.module_name
+        try:
+            mod_inst = executor.ec.module_manager.import_module(
+                func.module_name, executor.ec
+            )
+            rt_context.current_scope = mod_inst.scope
+        except Exception as e:
+            raise InterpreterError(
+                f"Failed to import module '{func.module_name}' for function call: {e}",
+                error_code=RUN_CALL_ERROR,
+            ) from e
+
+    try:
+        node_data = executor.ec.get_node_data(func.node_uid)
+        params_uids = node_data.get("args", [])
+
+        rt_context.enter_scope()
+
+        # 绑定 nonlocal 闭包变量（Cell 共享引用，与 IbUserFunction.call 一致）
+        if func.closure:
+            from core.runtime.objects.cell import IbCell
+            for sym_uid, (var_name, cell) in func.closure.items():
+                if isinstance(cell, IbCell):
+                    initial_value = (
+                        cell.get() if not cell.is_empty() else func.ib_class.registry.get_none()
+                    )
+                    rt_context.define_variable(var_name, initial_value, uid=sym_uid)
+                    new_sym = rt_context.current_scope.get_symbol_by_uid(sym_uid)
+                    if new_sym is not None:
+                        new_sym.cell = cell
+
+        loc_data = executor.ec.get_side_table("node_to_loc", func.node_uid)
+        loc = None
+        if loc_data:
+            loc = Location(
+                file_path=loc_data.get("file_path"),
+                line=loc_data.get("line", 0),
+                column=loc_data.get("column", 0),
+            )
+        executor.ec.push_stack(
+            name=node_data.get("name", "anonymous"),
+            location=loc,
+            is_user_function=True,
+        )
+
+        ib_none = func.ib_class.registry.get_none()
+        if receiver and receiver is not ib_none:
+            self_sym = executor.ec.get_side_table("node_to_symbol", func.node_uid)
+            self_uid = (
+                self_sym if isinstance(self_sym, str)
+                else (self_sym.uid if self_sym else None)
+            )
+            rt_context.define_variable("self", receiver, uid=self_uid)
+            if func.owner_class and func.owner_class.parent:
+                super_proxy = IbSuperProxy(receiver, func.owner_class.parent)
+                rt_context.define_variable("super", super_proxy, uid="intrinsic:super")
+
+        for i, arg_uid in enumerate(params_uids):
+            arg_data = executor.ec.get_node_data(arg_uid)
+            is_intent_ctx_param = _is_intent_context_param(executor.ec, arg_uid, arg_data)
+            actual_arg_uid = arg_uid
+            actual_arg_data = arg_data
+            if arg_data.get("_type") == "IbTypeAnnotatedExpr":
+                actual_arg_uid = arg_data.get("target")
+                actual_arg_data = executor.ec.get_node_data(actual_arg_uid)
+            arg_name = actual_arg_data.get("arg")
+            if i < len(args):
+                arg_value = args[i]
+                sym_uid = executor.ec.get_side_table("node_to_symbol", actual_arg_uid)
+                rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
+                    rt_context.use_intent_context(arg_value)
+
+        # 逐语句 CPS 驱动函数体（yield 进同一 VMTask 栈，R1 trampoline 核心）
+        body = node_data.get("body", [])
+        seq_result = yield from _vm_execute_stmt_sequence(executor, body)
+
+        # 控制流信号：RETURN → 提取值；BREAK/CONTINUE/THROW → 透传（与 run_body 语义一致）
+        if isinstance(seq_result, Signal):
+            if seq_result.kind is ControlSignal.RETURN:
+                return seq_result.value
+            return seq_result
+        return seq_result
+    finally:
+        executor.ec.pop_stack()
+        rt_context.exit_scope()
+        rt_context.exit_intent_scope(saved_intent)
+        executor.ec.current_module_name = old_module
+        rt_context.current_scope = old_scope
 
 
 def _vm_invoke_behavior(executor, behavior, args):

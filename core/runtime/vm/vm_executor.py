@@ -40,6 +40,22 @@ from core.runtime.vm.handlers import (
     build_one_shot_intent_from_annotation,
 )
 
+
+class _UserFunctionCall:
+    """用户函数调用请求（R1 trampoline 内部标记）。
+
+    ``vm_handle_IbCall`` 对 :class:`IbUserFunction` 调用 yield 本对象，
+    ``_drive_loop_gen`` 识别后把函数体作为独立 VMTask 压栈（而非 ``yield from``
+    生成器嵌套），使函数体生成器挂起时不在 Python 栈上——深递归 Python 深度恒定
+    （EXEC-1）。
+    """
+
+    __slots__ = ("func", "args")
+
+    def __init__(self, func, args):
+        self.func = func
+        self.args = args
+
 class VMExecutor:
     """显式帧栈 CPS 调度执行器。
 
@@ -272,6 +288,14 @@ class VMExecutor:
                     pending_value = yield child_uid
                     continue
 
+                # R1 trampoline：用户函数调用请求（vm_handle_IbCall 对
+                # IbUserFunction yield）——把函数体作为独立 VMTask 压栈，
+                # 函数体生成器挂起时不在 Python 栈上（EXEC-1：深递归
+                # Python 深度恒定）。函数完成 return 后调度器 send 回调用点。
+                if isinstance(child_uid, _UserFunctionCall):
+                    stack.append(self._make_user_function_task(child_uid))
+                    continue
+
                 if isinstance(child_uid, str) and self.supports(child_uid):
                     stack.append(self._make_task(child_uid))
                 else:
@@ -324,3 +348,17 @@ class VMExecutor:
             return VMTask(node_uid=node_uid, generator=_gen())
         gen = handler(self, node_uid, node_data)
         return VMTask(node_uid=node_uid, generator=gen)
+
+    def _make_user_function_task(self, call: "_UserFunctionCall") -> VMTask:
+        """为 R1 用户函数调用请求创建函数体 VMTask（trampoline 压栈）。
+
+        函数体生成器为 ``_vm_call_user_function``（CPS 内联驱动，帧准备 +
+        逐语句 yield），作为独立 VMTask 压入同一帧栈。函数完成后其返回值
+        经 ``_drive_loop_gen`` 的 ``StopIteration.value`` send 回调用点。
+        """
+        from core.runtime.vm.handlers._shared import _vm_call_user_function
+
+        gen = _vm_call_user_function(
+            self, call.func, self.registry.get_none(), call.args
+        )
+        return VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)

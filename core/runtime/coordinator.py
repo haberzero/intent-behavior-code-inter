@@ -244,9 +244,9 @@ def _run_task_body(
                 _cell.mark_shared_with_main()
 
         if isinstance(callable_obj, IbUserFunction):
-            # 用户函数：构建任务本地函数包装（绑定 task EC），使函数体经
-            # task EC 的 runtime_context 驱动（避免共享主上下文的作用域竞争）。
-            # 函数定义所在模块切换 + 实参绑定 + run_body 全在任务上下文内完成。
+            # 用户函数：构建任务本地函数包装（绑定 task EC），函数体经
+            # CPS 生成器驱动（与 lambda 分支同构，R1）——避免同步 call()
+            # 嵌套（线程内深递归同样受 Python 栈限制，CPS 驱动消除之）。
             from core.runtime.objects.kernel import IbUserFunction as _UF
 
             task_func = _UF(
@@ -258,8 +258,10 @@ def _run_task_body(
                 owner_class=getattr(callable_obj, "owner_class", None),
             )
             task_func.closure = callable_obj.closure
-            receiver = registry.get_none()
-            return task_func.call(receiver, args)
+            from core.runtime.vm.handlers._shared import _vm_call_user_function
+
+            gen = _vm_call_user_function(task_vm, task_func, registry.get_none(), args)
+            return _drive_generator(task_vm, gen, cancel_event=cancel_event, handle=handle)
         if isinstance(callable_obj, IbValue) and callable_obj.ib_class.name in (
             "fn_callable",
             "behavior",
@@ -310,6 +312,8 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
     （由调用方传入，不再读取失效的 ``_task_handle`` 属性）。
     """
     from core.runtime.shared.waitable import Waitable
+    from core.runtime.shared.signals import UnhandledSignal
+    from core.runtime.vm.vm_executor import _UserFunctionCall
 
     def _check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():
@@ -327,8 +331,25 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
         if isinstance(result, Waitable):
             result, done = _step(result.result())
         elif isinstance(result, str) and task_vm.supports(result):
-            # lambda 体 yield 的 child uid：经任务本地 VM 求值后恢复
-            child_result = task_vm.run(result)
+            # lambda 体 yield 的 child uid：经任务本地 VM 求值后恢复。
+            # RETURN 信号在独立 run() 中无函数上下文 → UnhandledSignal；
+            # 此处把它转回 Signal 投递给生成器（函数体用 Signal 表达返回）。
+            try:
+                child_result = task_vm.run(result)
+            except UnhandledSignal as us:
+                child_result = us.signal
+            result, done = _step(child_result)
+        elif isinstance(result, _UserFunctionCall):
+            # 用户函数调用请求（R1 trampoline）：驱动函数体生成器（同步嵌套，
+            # 线程体内递归深度受 OS 线程栈限制；VM 主路径为真 trampoline）
+            from core.runtime.vm.handlers._shared import _vm_call_user_function
+
+            inner = _vm_call_user_function(
+                task_vm, result.func, task_vm.registry.get_none(), result.args
+            )
+            child_result = _drive_generator(
+                task_vm, inner, cancel_event=cancel_event, handle=handle
+            )
             result, done = _step(child_result)
         else:
             raise RuntimeError(
