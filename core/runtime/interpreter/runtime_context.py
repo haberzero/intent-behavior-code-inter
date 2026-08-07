@@ -587,61 +587,53 @@ class RuntimeContextImpl(RuntimeContext):
     def get_global_intents(self) -> List[IbIntent]:
         return self._intent_ctx.get_global_intents()
 
-    def get_vars(self) -> Dict[str, Any]:
-        """ 获取当前可见的所有真实变量对象 (IbObject)。"""
-        res = {}
+    def _iter_user_vars(self):
+        """单一权威：作用域链用户可见变量遍历（统一过滤策略）。
+
+        从当前作用域向外遍历，内层同名遮蔽外层；yield
+        ``(name, value_ibobject, type_name, is_const)``。
+
+        过滤：非基础类型（Object/Function/Type）、下划线变量、
+        类定义/模块、内置 intrinsic 函数（不暴露给调试/观测面板）。
+        供 ``get_vars`` / ``get_vars_snapshot`` 共享（消除双入口过滤分歧）。
+        """
+        seen: set = set()
         scope = self._current_scope
         while scope:
             for name, symbol in scope.get_all_symbols().items():
-                if name not in res:
-                    val = symbol.value
-                    is_class = isinstance(val, IbClass)
-                    is_module = isinstance(val, IbModule)
-                    type_name = val.ib_class.name if isinstance(val, IbObject) and val.ib_class else "Object"
-                    
-                    # 过滤逻辑：过滤掉非基础类型、下划线变量、类定义、模块、以及内置全局函数
-                    if type_name == "Object" or type_name == "Function" or name.startswith("_"):
-                        continue
-                    if is_class or is_module or type_name == "Type": # 过滤所有类定义和模块
-                        continue
-                    # 通过 RuntimeSymbolImpl.is_intrinsic 标志过滤内置函数（intrinsic），
-                    # 替代硬编码名单 ("len", "print", "range", "input", "get_self_source")。
-                    # 内置函数仅供 IBCI 代码调用，不应在调试器变量面板中暴露给用户。
-                    if getattr(symbol, "is_intrinsic", False):
-                        continue
-                    res[name] = val
+                if name in seen:
+                    continue
+                seen.add(name)
+                val = symbol.value
+                type_name = val.ib_class.name if isinstance(val, IbObject) and val.ib_class else "Object"
+                if type_name in ("Object", "Function", "Type"):
+                    continue
+                if name.startswith("_"):
+                    continue
+                if isinstance(val, (IbClass, IbModule)):
+                    continue
+                if getattr(symbol, "is_intrinsic", False):
+                    continue
+                yield name, val, type_name, symbol.is_const
             scope = scope.parent
-        return res
+
+    def get_vars(self) -> Dict[str, Any]:
+        """获取当前可见的所有真实变量对象 (IbObject)。"""
+        return {name: val for name, val, _type, _const in self._iter_user_vars()}
 
     def get_vars_snapshot(self) -> Dict[str, Any]:
-        """获取当前所有可见变量的快照（用于调试）"""
-        res = {}
-        scope = self._current_scope
-        while scope:
-            symbols = scope.get_all_symbols()
-            for name, symbol in symbols.items():
-                if name not in res:
-                    val = symbol.value
-                    # 获取运行时类型名称
-                    type_name = "auto"
-                    if isinstance(val, IbObject) and val.ib_class:
-                        type_name = val.ib_class.name
-                    elif symbol.declared_type:
-                        type_name = str(symbol.declared_type)
-                        
-                    # IDBG 过滤策略：过滤掉非基础类型和下划线变量
-                    if type_name == "Object" or type_name == "Function" or name.startswith("_"):
-                        continue
-                    if type_name == "Type" and name[0].isupper():
-                        continue
+        """获取当前所有可见变量的快照（用于调试/观测）。
 
-                    res[name] = {
-                        "value": unbox(val),
-                        "type": type_name,
-                        "metadata": val.serialize_for_debug() if hasattr(val, 'serialize_for_debug') else {},
-                        "is_const": symbol.is_const
-                    }
-            scope = scope.parent
+        统一变量视图的富形态：``{name: {"value": 原生值, "type": 类型名,
+        "is_const": 是否常量}}``。与 ``get_vars`` 共享单一遍历与过滤策略。
+        """
+        res = {}
+        for name, val, type_name, is_const in self._iter_user_vars():
+            res[name] = {
+                "value": unbox(val),
+                "type": type_name,
+                "is_const": is_const,
+            }
         return res
 
     def enter_scope(self) -> None:

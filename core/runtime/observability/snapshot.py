@@ -60,20 +60,14 @@ def snapshot(executor: Any) -> Dict[str, Any]:
         })
     out["vms"] = vms
 
-    # ---- vars：模块级变量（经 runtime_context）----
+    # ---- vars：模块级变量（经 runtime_context 统一变量视图）----
     vars_snapshot: Dict[str, Any] = {}
     if rc is not None:
-        try:
-            for name, val in rc.get_vars_snapshot().items():
-                try:
-                    native = val.to_native()
-                    if not isinstance(native, (str, int, float, bool, list, dict, type(None))):
-                        continue
-                    vars_snapshot[name] = native
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        for name, entry in rc.get_vars_snapshot().items():
+            native = entry.get("value")
+            if not isinstance(native, (str, int, float, bool, list, dict, type(None))):
+                continue
+            vars_snapshot[name] = native
     out["vars"] = vars_snapshot
 
     # ---- llm：pending futures / call_info ----

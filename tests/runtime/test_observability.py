@@ -36,6 +36,21 @@ print(snap)
         assert "tasks" in lines[0]
         assert "channels" in lines[0]
 
+    def test_snapshot_collects_module_variables(self):
+        """snapshot()[\"vars\"] 收集用户变量（统一变量视图；回归：消费端曾按原始值误读富 dict 而恒空）。"""
+        lines = run_ibci("""
+import iruntime
+int x = 42
+str s = "hi"
+list[int] l = [1, 2]
+dict snap = iruntime.snapshot()
+print(snap["vars"])
+""")
+        assert len(lines) == 1
+        assert "x" in lines[0] and "42" in lines[0]
+        assert "s" in lines[0] and "hi" in lines[0]
+        assert "l" in lines[0] and "[1, 2]" in lines[0]
+
     def test_snapshot_tracks_named_channel(self):
         lines = run_ibci("""
 import iruntime
