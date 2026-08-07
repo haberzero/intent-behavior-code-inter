@@ -8,7 +8,9 @@ core.runtime.observability.events — 事件流（事件总线 + 统一发射入
 无自定义 sink 注册表、无 monkeypatch 退订。事件类型是数据，不是分发条件。
 
 事件类型（如实清单，2026-08-07 对账）：llm_dispatched / llm_resolved /
-chan_created / slot_updated / configured。
+chan_created / slot_updated / configured / kernel_diagnostic。
+``kernel_diagnostic`` 为诊断面事件（异常/降级/策略），经
+``core.runtime.observability.diagnostics.kernel_diagnostic`` 发射。
 """
 
 from __future__ import annotations
