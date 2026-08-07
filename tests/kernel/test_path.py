@@ -19,52 +19,46 @@ from core.kernel.path import IbPath, PathResolver, PathValidator, ModuleNameSpac
 
 class TestIbPathNormalization:
 
-    def test_empty_path_normalizes_to_empty(self):
-        assert str(IbPath.from_native("")) == ""
-
-    def test_backslash_converted_to_forward_slash(self):
-        assert str(IbPath.from_native("a\\b\\c")) == "a/b/c"
-
-    def test_double_slashes_collapsed(self):
-        assert str(IbPath.from_native("a//b///c")) == "a/b/c"
-
-    def test_trailing_slash_removed(self):
-        assert str(IbPath.from_native("a/b/")) == "a/b"
-
-    def test_root_slash_preserved(self):
-        assert str(IbPath.from_native("/")) == "/"
-
-    def test_root_with_trailing_slash_preserved(self):
-        assert str(IbPath.from_native("//")) == "/"
-
-    def test_windows_drive_path_normalized(self):
-        assert str(IbPath.from_native("C:\\proj\\file.ibci")) == "C:/proj/file.ibci"
-
-    def test_mixed_separators(self):
-        assert str(IbPath.from_native("C:\\proj/sub\\dir")) == "C:/proj/sub/dir"
+    @pytest.mark.parametrize("native,expected", [
+        ("", ""),
+        ("a\\b\\c", "a/b/c"),
+        ("a//b///c", "a/b/c"),
+        ("a/b/", "a/b"),
+        ("/", "/"),
+        ("//", "/"),
+        ("C:\\proj\\file.ibci", "C:/proj/file.ibci"),
+        ("C:\\proj/sub\\dir", "C:/proj/sub/dir"),
+    ], ids=[
+        "empty_path_normalizes_to_empty",
+        "backslash_converted_to_forward_slash",
+        "double_slashes_collapsed",
+        "trailing_slash_removed",
+        "root_slash_preserved",
+        "root_with_trailing_slash_preserved",
+        "windows_drive_path_normalized",
+        "mixed_separators",
+    ])
+    def test_normalization(self, native, expected):
+        assert str(IbPath.from_native(native)) == expected
 
 
 class TestIbPathFromParts:
 
-    def test_simple_parts(self):
-        p = IbPath.from_parts("a", "b", "c")
-        assert str(p) == "a/b/c"
-
-    def test_absolute_parts(self):
-        p = IbPath.from_parts("/root", "sub", "file")
-        assert str(p) == "/root/sub/file"
-
-    def test_windows_drive_parts(self):
-        p = IbPath.from_parts("C:", "proj", "file.ibci")
-        assert str(p) == "C:/proj/file.ibci"
-
-    def test_dot_parts_skipped(self):
-        p = IbPath.from_parts("a", ".", "b")
-        assert str(p) == "a/b"
-
-    def test_empty_parts(self):
-        p = IbPath.from_parts()
-        assert str(p) == ""
+    @pytest.mark.parametrize("parts,expected", [
+        (("a", "b", "c"), "a/b/c"),
+        (("/root", "sub", "file"), "/root/sub/file"),
+        (("C:", "proj", "file.ibci"), "C:/proj/file.ibci"),
+        (("a", ".", "b"), "a/b"),
+        ((), ""),
+    ], ids=[
+        "simple_parts",
+        "absolute_parts",
+        "windows_drive_parts",
+        "dot_parts_skipped",
+        "empty_parts",
+    ])
+    def test_from_parts(self, parts, expected):
+        assert str(IbPath.from_parts(*parts)) == expected
 
 
 # ===========================================================================
@@ -73,57 +67,69 @@ class TestIbPathFromParts:
 
 class TestIbPathProperties:
 
-    def test_is_absolute_unix_root(self):
-        assert IbPath.from_native("/").is_absolute
+    @pytest.mark.parametrize("native", [
+        "/",
+        "/home/user",
+        "C:/proj",
+    ], ids=[
+        "is_absolute_unix_root",
+        "is_absolute_unix_path",
+        "is_absolute_windows_drive",
+    ])
+    def test_is_absolute(self, native):
+        assert IbPath.from_native(native).is_absolute
 
-    def test_is_absolute_unix_path(self):
-        assert IbPath.from_native("/home/user").is_absolute
+    @pytest.mark.parametrize("native", [
+        "relative/path",
+        "./script.ibci",
+        "",
+    ], ids=[
+        "is_relative_simple",
+        "is_relative_dot",
+        "is_relative_empty",
+    ])
+    def test_is_relative(self, native):
+        assert IbPath.from_native(native).is_relative
 
-    def test_is_absolute_windows_drive(self):
-        assert IbPath.from_native("C:/proj").is_absolute
+    @pytest.mark.parametrize("native,expected", [
+        ("a/b/c", ("a", "b", "c")),
+        ("/a/b", ("a", "b")),
+        ("C:/a/b", ("a", "b")),
+        ("", ()),
+    ], ids=[
+        "parts_relative",
+        "parts_absolute_unix",
+        "parts_windows_drive",
+        "parts_empty",
+    ])
+    def test_parts(self, native, expected):
+        assert IbPath.from_native(native).parts == expected
 
-    def test_is_relative_simple(self):
-        assert IbPath.from_native("relative/path").is_relative
+    @pytest.mark.parametrize("native,expected", [
+        ("a/b/c.ibci", "c.ibci"),
+        ("/", ""),
+    ], ids=[
+        "name_simple",
+        "name_root",
+    ])
+    def test_name(self, native, expected):
+        assert IbPath.from_native(native).name == expected
 
-    def test_is_relative_dot(self):
-        assert IbPath.from_native("./script.ibci").is_relative
-
-    def test_is_relative_empty(self):
-        assert IbPath.from_native("").is_relative
-
-    def test_parts_relative(self):
-        assert IbPath.from_native("a/b/c").parts == ("a", "b", "c")
-
-    def test_parts_absolute_unix(self):
-        assert IbPath.from_native("/a/b").parts == ("a", "b")
-
-    def test_parts_windows_drive(self):
-        assert IbPath.from_native("C:/a/b").parts == ("a", "b")
-
-    def test_parts_empty(self):
-        assert IbPath.from_native("").parts == ()
-
-    def test_name_simple(self):
-        assert IbPath.from_native("a/b/c.ibci").name == "c.ibci"
-
-    def test_name_root(self):
-        assert IbPath.from_native("/").name == ""
-
-    def test_parent_relative(self):
-        p = IbPath.from_native("a/b/c")
-        assert str(p.parent) == "a/b"
-
-    def test_parent_absolute(self):
-        p = IbPath.from_native("/a/b/c")
-        assert str(p.parent) == "/a/b"
+    @pytest.mark.parametrize("native,expected", [
+        ("a/b/c", "a/b"),
+        ("/a/b/c", "/a/b"),
+        ("/", "/"),
+    ], ids=[
+        "parent_relative",
+        "parent_absolute",
+        "parent_root",
+    ])
+    def test_parent(self, native, expected):
+        assert str(IbPath.from_native(native).parent) == expected
 
     def test_parent_single_part_relative(self):
         p = IbPath.from_native("file.ibci")
         assert p.parent is None
-
-    def test_parent_root(self):
-        p = IbPath.from_native("/")
-        assert str(p.parent) == "/"
 
 
 # ===========================================================================
@@ -132,9 +138,19 @@ class TestIbPathProperties:
 
 class TestIbPathJoin:
 
-    def test_join_relative(self):
-        p = IbPath.from_native("a/b")
-        assert str(p.join("c", "d")) == "a/b/c/d"
+    @pytest.mark.parametrize("base,parts,expected", [
+        ("a/b", ("c", "d"), "a/b/c/d"),
+        ("/root", ("sub", "file"), "/root/sub/file"),
+        ("C:/proj", ("sub", "file"), "C:/proj/sub/file"),
+        ("a/b", (), "a/b"),
+    ], ids=[
+        "join_relative",
+        "join_absolute",
+        "join_windows_drive",
+        "join_empty",
+    ])
+    def test_join(self, base, parts, expected):
+        assert str(IbPath.from_native(base).join(*parts)) == expected
 
     def test_join_with_string(self):
         p = IbPath.from_native("a")
@@ -144,18 +160,6 @@ class TestIbPathJoin:
         p = IbPath.from_native("a")
         q = IbPath.from_native("b/c")
         assert str(p / q) == "a/b/c"
-
-    def test_join_absolute(self):
-        p = IbPath.from_native("/root")
-        assert str(p.join("sub", "file")) == "/root/sub/file"
-
-    def test_join_windows_drive(self):
-        p = IbPath.from_native("C:/proj")
-        assert str(p.join("sub", "file")) == "C:/proj/sub/file"
-
-    def test_join_empty(self):
-        p = IbPath.from_native("a/b")
-        assert str(p.join()) == "a/b"
 
     def test_add_operator(self):
         p = IbPath.from_native("a")
@@ -168,29 +172,23 @@ class TestIbPathJoin:
 
 class TestIbPathDotSegments:
 
-    def test_resolve_single_dot(self):
-        p = IbPath.from_native("a/./b")
-        assert str(p.resolve_dot_segments()) == "a/b"
-
-    def test_resolve_double_dot(self):
-        p = IbPath.from_native("a/b/../c")
-        assert str(p.resolve_dot_segments()) == "a/c"
-
-    def test_resolve_multiple_double_dots(self):
-        p = IbPath.from_native("a/b/c/../../d")
-        assert str(p.resolve_dot_segments()) == "a/d"
-
-    def test_resolve_dot_dot_at_root(self):
-        p = IbPath.from_native("/a/../b")
-        assert str(p.resolve_dot_segments()) == "/b"
-
-    def test_resolve_dot_dot_beyond_root(self):
-        p = IbPath.from_native("/a/../../../b")
-        assert str(p.resolve_dot_segments()) == "/b"
-
-    def test_resolve_empty(self):
-        p = IbPath.from_native("")
-        assert str(p.resolve_dot_segments()) == ""
+    @pytest.mark.parametrize("native,expected", [
+        ("a/./b", "a/b"),
+        ("a/b/../c", "a/c"),
+        ("a/b/c/../../d", "a/d"),
+        ("/a/../b", "/b"),
+        ("/a/../../../b", "/b"),
+        ("", ""),
+    ], ids=[
+        "resolve_single_dot",
+        "resolve_double_dot",
+        "resolve_multiple_double_dots",
+        "resolve_dot_dot_at_root",
+        "resolve_dot_dot_beyond_root",
+        "resolve_empty",
+    ])
+    def test_resolve_dot_segments(self, native, expected):
+        assert str(IbPath.from_native(native).resolve_dot_segments()) == expected
 
 
 # ===========================================================================
@@ -199,34 +197,35 @@ class TestIbPathDotSegments:
 
 class TestIbPathComparison:
 
-    def test_equality_same_path(self):
-        assert IbPath.from_native("a/b") == IbPath.from_native("a/b")
-
-    def test_equality_different_separators(self):
-        assert IbPath.from_native("a/b") == IbPath.from_native("a\\b")
+    @pytest.mark.parametrize("x,y,expected", [
+        ("a/b", "a/b", True),
+        ("a/b", "a\\b", True),
+        ("a/b", "a/c", False),
+    ], ids=[
+        "equality_same_path",
+        "equality_different_separators",
+        "inequality_different_paths",
+    ])
+    def test_equality(self, x, y, expected):
+        assert (IbPath.from_native(x) == IbPath.from_native(y)) is expected
 
     def test_equality_with_string(self):
         assert IbPath.from_native("a/b") == "a/b"
 
-    def test_inequality_different_paths(self):
-        assert IbPath.from_native("a/b") != IbPath.from_native("a/c")
-
     def test_hash_consistency(self):
         assert hash(IbPath.from_native("a/b")) == hash(IbPath.from_native("a\\b"))
 
-    def test_startswith(self):
-        parent = IbPath.from_native("/proj")
-        child = IbPath.from_native("/proj/sub/file")
-        assert child.startswith(parent)
-
-    def test_startswith_false_different(self):
-        a = IbPath.from_native("/proj")
-        b = IbPath.from_native("/other/file")
-        assert not b.startswith(a)
-
-    def test_startswith_empty_parent(self):
-        p = IbPath.from_native("/any/path")
-        assert p.startswith(IbPath.from_native(""))
+    @pytest.mark.parametrize("child,parent,expected", [
+        ("/proj/sub/file", "/proj", True),
+        ("/other/file", "/proj", False),
+        ("/any/path", "", True),
+    ], ids=[
+        "startswith",
+        "startswith_false_different",
+        "startswith_empty_parent",
+    ])
+    def test_startswith(self, child, parent, expected):
+        assert IbPath.from_native(child).startswith(IbPath.from_native(parent)) is expected
 
 
 # ===========================================================================
@@ -307,29 +306,33 @@ class TestPathResolver:
 
 class TestModuleNameSpace:
 
-    def test_relpath_to_module_name_with_ext(self):
-        assert ModuleNameSpace.relpath_to_module_name("pkg/sub/mod.ibci") == "pkg.sub.mod"
+    @pytest.mark.parametrize("relpath,expected", [
+        ("pkg/sub/mod.ibci", "pkg.sub.mod"),
+        ("pkg/sub/mod", "pkg.sub.mod"),
+        ("mod", "mod"),
+        ("pkg\\sub\\mod.py", "pkg.sub.mod"),
+        ("", ""),
+    ], ids=[
+        "relpath_to_module_name_with_ext",
+        "relpath_to_module_name_without_ext",
+        "relpath_to_module_name_single",
+        "relpath_to_module_name_backslash",
+        "relpath_to_module_name_empty",
+    ])
+    def test_relpath_to_module_name(self, relpath, expected):
+        assert ModuleNameSpace.relpath_to_module_name(relpath) == expected
 
-    def test_relpath_to_module_name_without_ext(self):
-        assert ModuleNameSpace.relpath_to_module_name("pkg/sub/mod") == "pkg.sub.mod"
-
-    def test_relpath_to_module_name_single(self):
-        assert ModuleNameSpace.relpath_to_module_name("mod") == "mod"
-
-    def test_relpath_to_module_name_backslash(self):
-        assert ModuleNameSpace.relpath_to_module_name("pkg\\sub\\mod.py") == "pkg.sub.mod"
-
-    def test_relpath_to_module_name_empty(self):
-        assert ModuleNameSpace.relpath_to_module_name("") == ""
-
-    def test_module_to_relpath(self):
-        assert ModuleNameSpace.module_to_relpath("pkg.sub.mod") == "pkg/sub/mod"
-
-    def test_module_to_relpath_single(self):
-        assert ModuleNameSpace.module_to_relpath("mod") == "mod"
-
-    def test_module_to_relpath_empty(self):
-        assert ModuleNameSpace.module_to_relpath("") == ""
+    @pytest.mark.parametrize("module,expected", [
+        ("pkg.sub.mod", "pkg/sub/mod"),
+        ("mod", "mod"),
+        ("", ""),
+    ], ids=[
+        "module_to_relpath",
+        "module_to_relpath_single",
+        "module_to_relpath_empty",
+    ])
+    def test_module_to_relpath(self, module, expected):
+        assert ModuleNameSpace.module_to_relpath(module) == expected
 
     def test_round_trip(self):
         assert ModuleNameSpace.module_to_relpath(
@@ -376,24 +379,22 @@ class TestPathContext:
 
 class TestPathValidator:
 
-    def test_is_within_true(self):
-        parent = IbPath.from_native("D:/project")
-        child = IbPath.from_native("D:/project/sub/file.txt")
-        assert PathValidator.is_within(parent, child)
-
-    def test_is_within_false_cross_drive(self):
-        """跨盘路径不应判定为在 parent 内。"""
-        parent = IbPath.from_native("D:/project")
-        child = IbPath.from_native("C:/other/file.txt")
-        assert not PathValidator.is_within(parent, child)
-
-    def test_is_within_false_relative(self):
-        parent = IbPath.from_native("relative/parent")
-        child = IbPath.from_native("relative/parent/child")
-        assert not PathValidator.is_within(parent, child)
-
-    def test_is_within_false_empty(self):
-        assert not PathValidator.is_within(IbPath.from_native(""), IbPath.from_native("/a"))
+    @pytest.mark.parametrize("parent,child,expected", [
+        ("D:/project", "D:/project/sub/file.txt", True),
+        ("D:/project", "C:/other/file.txt", False),
+        ("relative/parent", "relative/parent/child", False),
+        ("", "/a", False),
+        ("D:/foo", "D:/foobar/x.txt", False),
+    ], ids=[
+        "is_within_true",
+        "is_within_false_cross_drive",
+        "is_within_false_relative",
+        "is_within_false_empty",
+        "is_within_no_false_prefix_match",
+    ])
+    def test_is_within(self, parent, child, expected):
+        assert PathValidator.is_within(
+            IbPath.from_native(parent), IbPath.from_native(child)) is expected
 
     def test_is_within_case_sensitive_posix_only(self):
         """大小写敏感平台（POSIX）下不同大小写 = 不在内部。"""
@@ -414,77 +415,60 @@ class TestPathValidator:
             # win32 等大小写不敏感平台
             assert PathValidator.is_within(parent, child)
 
-    def test_is_within_no_false_prefix_match(self):
-        """/foo 不应误包含 /foobar（尾分隔符保护）。"""
-        parent = IbPath.from_native("D:/foo")
-        child = IbPath.from_native("D:/foobar/x.txt")
-        assert not PathValidator.is_within(parent, child)
+    @pytest.mark.parametrize("path,root,expected_ok,msg_part,allow_external", [
+        ("D:/project/file.txt", "D:/project", True, "", False),
+        ("C:/other/file.txt", "D:/project", False, "outside", False),
+        ("C:/other/file.txt", "D:/project", True, "", True),
+        ("relative/path", "D:/project", False, "absolute", False),
+        ("", "/root", False, "empty", False),
+    ], ids=[
+        "validate_valid",
+        "validate_external_rejected",
+        "validate_external_allowed",
+        "validate_relative_rejected",
+        "validate_empty_rejected",
+    ])
+    def test_validate(self, path, root, expected_ok, msg_part, allow_external):
+        ok, msg = PathValidator.validate(
+            IbPath.from_native(path), IbPath.from_native(root), allow_external=allow_external)
+        assert ok is expected_ok
+        assert msg_part in msg
 
-    def test_validate_valid(self):
-        path = IbPath.from_native("D:/project/file.txt")
-        root = IbPath.from_native("D:/project")
-        ok, msg = PathValidator.validate(path, root)
-        assert ok and msg == ""
-
-    def test_validate_external_rejected(self):
-        path = IbPath.from_native("C:/other/file.txt")
-        root = IbPath.from_native("D:/project")
-        ok, msg = PathValidator.validate(path, root)
-        assert not ok and "outside" in msg
-
-    def test_validate_external_allowed(self):
-        path = IbPath.from_native("C:/other/file.txt")
-        root = IbPath.from_native("D:/project")
-        ok, msg = PathValidator.validate(path, root, allow_external=True)
-        assert ok
-
-    def test_validate_relative_rejected(self):
-        path = IbPath.from_native("relative/path")
-        root = IbPath.from_native("D:/project")
-        ok, msg = PathValidator.validate(path, root)
-        assert not ok and "absolute" in msg
-
-    def test_validate_empty_rejected(self):
-        ok, msg = PathValidator.validate(IbPath.from_native(""), IbPath.from_native("/root"))
-        assert not ok and "empty" in msg
-
-    def test_is_safe_name_normal(self):
-        assert PathValidator.is_safe_name("file.txt")
-
-    def test_is_safe_name_dot_file(self):
-        assert PathValidator.is_safe_name(".gitignore")
-
-    def test_is_safe_name_double_dot_rejected(self):
-        assert not PathValidator.is_safe_name("..")
-
-    def test_is_safe_name_slash_rejected(self):
-        assert not PathValidator.is_safe_name("a/b")
+    @pytest.mark.parametrize("name,expected", [
+        ("file.txt", True),
+        (".gitignore", True),
+        ("..", False),
+        ("a/b", False),
+        ("", False),
+        ("file\0.txt", False),
+    ], ids=[
+        "is_safe_name_normal",
+        "is_safe_name_dot_file",
+        "is_safe_name_double_dot_rejected",
+        "is_safe_name_slash_rejected",
+        "is_safe_name_empty",
+        "is_safe_name_null_byte",
+    ])
+    def test_is_safe_name(self, name, expected):
+        assert PathValidator.is_safe_name(name) is expected
 
     def test_is_safe_name_windows_reserved(self):
         assert not PathValidator.is_safe_name("CON")
         assert not PathValidator.is_safe_name("PRN")
         assert not PathValidator.is_safe_name("NUL")
 
-    def test_is_safe_name_empty(self):
-        assert not PathValidator.is_safe_name("")
-
-    def test_is_safe_name_null_byte(self):
-        assert not PathValidator.is_safe_name("file\0.txt")
-
-    def test_get_containing_directory_absolute(self):
-        path = IbPath.from_native("D:/project/sub/file.txt")
-        parent = PathValidator.get_containing_directory(path)
-        assert str(parent) == "D:/project/sub"
-
-    def test_get_containing_directory_relative(self):
-        path = IbPath.from_native("sub/file.txt")
-        parent = PathValidator.get_containing_directory(path)
-        assert str(parent) == "sub"
-
-    def test_get_containing_directory_root(self):
-        path = IbPath.from_native("/")
-        parent = PathValidator.get_containing_directory(path)
-        assert str(parent) == "/"
+    @pytest.mark.parametrize("native,expected", [
+        ("D:/project/sub/file.txt", "D:/project/sub"),
+        ("sub/file.txt", "sub"),
+        ("/", "/"),
+    ], ids=[
+        "get_containing_directory_absolute",
+        "get_containing_directory_relative",
+        "get_containing_directory_root",
+    ])
+    def test_get_containing_directory(self, native, expected):
+        parent = PathValidator.get_containing_directory(IbPath.from_native(native))
+        assert str(parent) == expected
 
     def test_validate_many_all_valid(self):
         root = IbPath.from_native("D:/project")

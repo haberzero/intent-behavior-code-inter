@@ -16,6 +16,8 @@ tests/e2e/test_higher_order.py
 ``tests/contracts/test_scope_semantics.py`` 中（INV-CELL-* / INV-SNAPSHOT-*）。
 本文件仅保留 e2e 层面的独有场景（如容器就地突变、重入性、factory 模式等）。
 """
+import pytest
+
 from tests.conftest import run_ibci, compile_ibci, expect_compile_error, AI_MOCK_PREFIX
 
 
@@ -85,10 +87,6 @@ x = 10
 print((str)f())
 """
         assert run_ibci(code) == ["6", "20"]
-
-    def test_fn_compile_error_on_non_callable(self):
-        """fn f = 42 should raise SEM_TYPE_MISMATCH."""
-        expect_compile_error("fn f = 42", "SEM_TYPE_MISMATCH")
 
     def test_fn_holds_callable_class_instance(self):
         """fn f = instance where class defines __call__ should work."""
@@ -234,37 +232,37 @@ class TestFnLambdaNested:
 class TestFnLambdaErrors:
     """Compile error paths for lambda/snapshot syntax."""
 
-    def test_type_lambda_decl_is_error(self):
-        """``int lambda f = EXPR`` is a parse error."""
-        expect_compile_error("int x = 3\nint lambda f = x * 2", "PAR_EXPECTED_TOKEN")
+    @pytest.mark.parametrize("source,error_code", [
+        ("fn f = 42", "SEM_TYPE_MISMATCH"),
+        ("int x = 3\nint lambda f = x * 2", "PAR_EXPECTED_TOKEN"),
+        ("int x = 4\nauto lambda g = x + 1", "PAR_EXPECTED_TOKEN"),
+        ("fn f = lambda 5", "PAR_UNEXPECTED_TOKEN"),
+        ("fn f = lambda(1 + 2)", "PAR_UNEXPECTED_TOKEN"),
+        ("fn f = lambda(int a) -> str: a + 1", "SEM_TYPE_MISMATCH"),
+        ("int fn f = lambda -> auto: 1 + 1", "PAR_INVALID_SYNTAX"),
+        ("fn f = lambda(int n)(n + 1)", "PAR_UNEXPECTED_TOKEN"),
+    ], ids=[
+        "fn_compile_error_on_non_callable",
+        "type_lambda_decl_is_error",
+        "auto_lambda_decl_is_error",
+        "lambda_bare_expr_is_error",
+        "lambda_bracket_body_is_error",
+        "lambda_returns_type_mismatch",
+        "decl_side_type_fn_is_error",
+        "param_bracket_body_is_error",
+    ])
+    def test_expect_compile_error(self, source, error_code):
+        expect_compile_error(source, error_code)
 
-    def test_auto_lambda_decl_is_error(self):
-        """``auto lambda g = EXPR`` is a parse error."""
-        expect_compile_error("int x = 4\nauto lambda g = x + 1", "PAR_EXPECTED_TOKEN")
-
-    def test_lambda_bare_expr_is_error(self):
-        """``lambda`` keyword must be followed by '(' or ':'."""
-        expect_compile_error("fn f = lambda 5", "PAR_UNEXPECTED_TOKEN")
-
-    def test_lambda_bracket_body_is_error(self):
-        """Old ``lambda(EXPR)`` bracket-only body form is not supported."""
-        expect_compile_error("fn f = lambda(1 + 2)", "PAR_UNEXPECTED_TOKEN")
-
-    def test_lambda_returns_type_mismatch(self):
-        """Body type incompatible with declared return type raises SEM_TYPE_MISMATCH."""
-        expect_compile_error("fn f = lambda(int a) -> str: a + 1", "SEM_TYPE_MISMATCH")
-
-    def test_decl_side_type_fn_is_error(self):
-        """``int fn f = lambda -> auto: EXPR`` declaration-side return type is error."""
-        expect_compile_error("int fn f = lambda -> auto: 1 + 1", "PAR_INVALID_SYNTAX")
-
-    def test_expr_side_arrow_compiles(self):
-        """``fn f = lambda -> int: EXPR`` expression-side annotation is valid."""
-        compile_ibci("fn f = lambda -> int: 1 + 1\nint r = f()")
-
-    def test_expr_side_arrow_params_compiles(self):
-        """``fn f = lambda(PARAMS) -> int: EXPR`` expression-side annotation is valid."""
-        compile_ibci("fn f = lambda(int a) -> int: a + 1\nint r = f(3)")
+    @pytest.mark.parametrize("source", [
+        "fn f = lambda -> int: 1 + 1\nint r = f()",
+        "fn f = lambda(int a) -> int: a + 1\nint r = f(3)",
+    ], ids=[
+        "expr_side_arrow_compiles",
+        "expr_side_arrow_params_compiles",
+    ])
+    def test_expr_side_arrow_compiles(self, source):
+        compile_ibci(source)
 
 
 # ---------------------------------------------------------------------------
@@ -412,10 +410,6 @@ str r = f()
 print(r)
 """
         assert run_ibci(code) == ["hello world"]
-
-    def test_param_bracket_body_is_error(self):
-        """``lambda(PARAMS)(EXPR)`` bracket body form is a parse error."""
-        expect_compile_error("fn f = lambda(int n)(n + 1)", "PAR_UNEXPECTED_TOKEN")
 
 
 ################################################################################
