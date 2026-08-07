@@ -32,6 +32,21 @@
   已有核对发现（改名映射 / TRUE_GAP / 契约漂移）见 `tasks_docs/TEST_MATRIX_FINDINGS.md`，作为输入。
 
 **0.2 新体系架构设计冻结**（产出设计文档，评审通过后不动）
+- **2D 设计冻结（2026-08-06，OBSERVABILITY_REFACTOR 2D 实验 `exp/obs-2d-test-refactor`）**：
+  - **新测试目录命名**：`tests_v2/`（与 `tests/` 并行共存；Phase 5 全面替换时 `tests_v2` → `tests`、旧目录删除）。
+  - **目录结构**（采纳报告 A ⑥）：`conftest.py` + `kernel/`（纯数据结构，原 test_path.py 迁入）+ `compiler/semantic/`
+    + `runtime/`（白盒层）+ `plugins/`（新层：test_idbg/test_mock_directives/test_plugin_implementations 迁入）
+    + `contracts/` + `e2e/`（文件去 `e2e_` 前缀，目录承载层义）+ `compliance/` + `sdk/` + `meta/` + `fixtures/`。
+  - **命名规范**：文件 `test_<concept>.py`；类 `Test<Concept><Aspect>`；禁里程碑代号；runtime 文件去冗余 `test_runtime_` 前缀。
+  - **分层模型**（单一模型，以实际目录为准）：kernel/compiler/runtime/plugins/contracts/e2e/compliance/sdk/meta。
+    TEST_PHILOSOPHY 的 Examples/Regression 层移除（不落地）；contracts 进分层表；meta 定位"测试规范执行器"。
+  - **conftest 设计**：根 `tests_v2/conftest.py` = 黑盒 API（run_ibci/compile_ibci/expect_*）+ `AI_MOCK_PREFIX`（真正单点真理）
+    + 会话 fixtures；`tests_v2/runtime/conftest.py` = 白盒 helper 下沉（make_vm/find_node*/native/make_intent）；
+    删除 `helpers` 聚合 fixture（近死）；去 kernel 别名 shim。
+  - **覆盖矩阵**：`file::class::method` 三段式 + `tests_v2/meta/test_matrix_sync.py` 机器校验
+    （解析矩阵引用 → `--collect-only` nodeid 对账；PT-TEST-3 并入）。
+  - **meta 扩展**：test_layering（无白名单）、test_no_duplicate_helpers（禁列从 conftest 自动派生）、
+    test_naming_conventions（禁代号）、test_matrix_sync、test_coverage_map_sync（双向对账）。
 - 目录结构（采纳报告 A ⑥ 提议：kernel/compiler/runtime/plugins/contracts/e2e/compliance/sdk/meta/fixtures）。
 - 命名规范（文件 `test_<concept>.py`、类 `Test<Concept><Aspect>`、禁里程碑代号；e2e 文件名去 `e2e_` 前缀由目录承载层义）。
 - 分层模型（统一为单一模型：以实际目录为准；TEST_PHILOSOPHY 的 Examples/Regression 层落地或移除；contracts 进分层表；meta 定位为"测试规范执行器"）。
