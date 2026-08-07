@@ -34,7 +34,7 @@ from core.runtime.vm.task import (
     UnhandledSignal,
     Signal,
 )
-from core.runtime.vm.task_scheduler import TaskScheduler, Waitable
+from core.runtime.vm.task_scheduler import TaskScheduler, TaskCancelled, Waitable
 from core.runtime.vm.handlers import (
     build_dispatch_table,
     build_one_shot_intent_from_annotation,
@@ -47,11 +47,16 @@ class VMExecutor:
         execution_context: 已配置的 :class:`ExecutionContextImpl`，提供节点池、
                            侧表、运行时上下文与对象工厂等服务。
         interpreter: 可选 :class:`Interpreter` 引用；当前未使用，可传 None。
+        cancel_event: 可选 ``threading.Event``。设置后 ``_drive_loop_gen`` 在每个
+                      步进边界检查并 ``raise TaskCancelled``（线程体协作取消；主
+                      VM 为 None 不启用）。
     """
 
-    def __init__(self, execution_context: Any, interpreter: Optional[Any] = None):
+    def __init__(self, execution_context: Any, interpreter: Optional[Any] = None,
+                 cancel_event: Any = None):
         self._ec = execution_context
         self._interpreter = interpreter
+        self._cancel_event = cancel_event
         self._dispatch = build_dispatch_table()
         # 调度计数：所有 yield/StopIteration 步骤的累计；用于诊断与未来限速。
         self.step_count: int = 0
@@ -129,9 +134,13 @@ class VMExecutor:
                 f"(uid={node_uid!r}). Add vm_handle_{node_type} to core/runtime/vm/handlers.py."
             )
 
-        scheduler = TaskScheduler()
+        scheduler = TaskScheduler(cancel_event=self._cancel_event)
         scheduler.submit(self._drive_loop_gen([self._make_task(node_uid)]))
-        return scheduler.run()[0]
+        results = scheduler.run()
+        if isinstance(results[0], TaskCancelled):
+            # 协作取消（线程体 cancel_event / VM 级取消）→ 转译为异常向调用方传播
+            raise results[0]
+        return results[0]
 
     def run_many(self, roots: "List[str]") -> "List[Any]":
         """并发执行多个根任务（多任务/宿主异步入口）。
@@ -142,7 +151,7 @@ class VMExecutor:
 
         受 Python GIL 限制，本并发只为服务 LLM 调用（IO 密集）。
         """
-        scheduler = TaskScheduler()
+        scheduler = TaskScheduler(cancel_event=self._cancel_event)
         for root in roots:
             scheduler.submit(self._drive_loop_gen([self._make_task(root)]), node_uid=root)
         return scheduler.run()
@@ -213,6 +222,9 @@ class VMExecutor:
                     raise RuntimeError(
                         f"VMExecutor step limit exceeded ({self.max_steps})"
                     )
+                if self._cancel_event is not None and self._cancel_event.is_set():
+                    # 协作取消（线程体）：每个步进边界检查，覆盖全任务体（含用户函数）
+                    raise TaskCancelled()
 
                 task = stack[-1]
                 gen = task.generator

@@ -146,3 +146,48 @@ thread[int] t = thread(callable=add, args=[3, 4])
         assert isinstance(w, Waitable)
         r = w.result()
         assert r.expect().to_native() == 7
+
+
+class TestThreadCancelCoversUserFunction:
+    """协作取消覆盖用户函数任务体（1e 闭合，D5）：步进边界 + 等待中任务。"""
+
+    def test_cancel_stops_while_loop_body(self):
+        """用户函数 while 循环体在步进边界协作退出。"""
+        code = """
+func work() -> int:
+    int i = 0
+    while i < 1000000000:
+        i = i + 1
+    return i
+
+thread[int] t = thread(callable=work, args=[])
+ThreadCancelled e = t.cancel()
+print(e.message)
+t.join()
+print((str)t.is_done())
+print((str)t.join().status())
+"""
+        lines = run_ibci(code)
+        assert lines[0] == "Task was cancelled"
+        assert lines[1] == "True"           # 线程实际已结束
+        assert lines[2] == "cancelled"      # thread_result status = cancelled
+
+    def test_cancel_stops_body_blocked_on_recv(self):
+        """用户函数阻塞在通道 recv 的任务也被协作取消（等待中任务，D5 闭合）。"""
+        code = """
+chan c = chan(str, "message")
+func work(chan x) -> int:
+    str m = x.recv()
+    return 1
+
+thread[int] t = thread(callable=work, args=[c])
+ThreadCancelled e = t.cancel()
+print(e.message)
+t.join()
+print((str)t.is_done())
+print((str)t.join().status())
+"""
+        lines = run_ibci(code)
+        assert lines[0] == "Task was cancelled"
+        assert lines[1] == "True"
+        assert lines[2] == "cancelled"

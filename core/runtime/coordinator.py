@@ -33,6 +33,7 @@ from core.runtime.frame import (
     reset_current_frame,
 )
 from core.runtime.shared.waitable import Waitable
+from core.runtime.vm.task_scheduler import TaskCancelled
 
 
 class ThreadCancelled(Exception):
@@ -102,6 +103,9 @@ class SpawnedTask:
             self._future.set_result(result)
         except ThreadCancelled as e:
             self._future.set_exception(e)
+        except TaskCancelled as e:
+            # 用户函数任务体经 VM 步进边界协作取消 → 统一转译为 ThreadCancelled
+            self._future.set_exception(ThreadCancelled(self._handle))
         except BaseException as e:  # 任务内任何异常都捕获并传递（join 时重抛）
             self._future.set_exception(e)
 
@@ -215,8 +219,9 @@ def _run_task_body(
     task_ec.logical_stack = task_logical_stack
     task_ec.current_module_name = interpreter.current_module_name
 
-    # 3. 任务本地 VMExecutor
-    task_vm = VMExecutor(task_ec, interpreter=interpreter)
+    # 3. 任务本地 VMExecutor（cancel_event 经驱动循环步进边界检查——协作取消覆盖
+    #    用户函数任务体，D5 闭合）
+    task_vm = VMExecutor(task_ec, interpreter=interpreter, cancel_event=cancel_event)
     task_ec.vm_executor = task_vm
 
     # 4. 线程本地 ContextVar：任务线程内的 LLM/内省正确解析到任务 EC

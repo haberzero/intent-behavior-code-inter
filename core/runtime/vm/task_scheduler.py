@@ -88,12 +88,13 @@ class TaskScheduler:
     ``run`` 循环内联推进/恢复/等待（帧数控制见模块 docstring）。
     """
 
-    def __init__(self, park_interval: float = 0.001):
+    def __init__(self, park_interval: float = 0.001, cancel_event: Any = None):
         self._ready: List[Task] = []
         self._waiting: List[Task] = []
         self._submit_count: int = 0
         self._results: List[Any] = []
         self._park_interval = park_interval
+        self._cancel_event = cancel_event  # 可选：设置后 park 期间取消全部等待任务
         self._lock = threading.Lock()  # 保护 cancel() 的并发取消（跨线程）
 
     def submit(self, gen: Generator, node_uid: str = "") -> None:
@@ -198,5 +199,9 @@ class TaskScheduler:
 
             # 3) 无就绪但有待决 → park 后重新轮询（不得消费 result()）
             if not self._ready and self._waiting:
+                if self._cancel_event is not None and self._cancel_event.is_set():
+                    # 协作取消：等待中的任务也取消（park 期间唤醒）
+                    for t in self._waiting:
+                        t.cancelled = True
                 time.sleep(park)
         return self._results
