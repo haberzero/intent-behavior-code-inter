@@ -2,7 +2,7 @@
 
 > 本文档记录 IBCI 异步/协程相关设计要点（原 `docs/subsystems/05_coroutine.md` 迁入，2026-08-06）。
 > 设计落地后收敛入技术手册的时机见 `AGENTS.md` 设计阶段文档放置规则。
-> **状态**：Stage 2 调度器多任务化已落地（`await` 表达式可用）；语言级 async 函数/生成器为演进目标，保持规划不主动推进（`PENDING_TASKS.md` PT-FEAT-1）。
+> **状态**：Stage 2 调度器多任务化已落地（`await` 表达式可用）；语言级 async 函数/生成器为演进目标。**PT-FEAT-1 已解封（2026-08-07 统一执行地基定案）**：async 函数关键字由 D-08 定案取消（任意函数可 await，透明 async）；`yield` 惰性生成器列为阶段 5 实现项（设计 `EXEC_FOUNDATION_DESIGN.md` §5.2，R 批次与 PT-FEAT-9 之后）。
 
 ---
 
@@ -79,15 +79,19 @@ executor 共享状态改为 per-task 所有权。既是并行可靠性根因修�
 - **定位**：`await` 是显式等待任意 Waitable（LLMFuture / HostAwaitable）完成的通用表面，与数据流自动 await（读 LLMFuture 变量自动解析、collect 返回 HostAwaitable 自动等待）**互补而非双通道**——数据流自动 await 是透明 future 便利，`await` 服务显式异步点与容器/非变量位置持有 Waitable 的等待，并作为未来 async 函数的地基。
 - **五层实现**：lexer 加 `await`→`TokenType.AWAIT`；AST 新增 `IbAwaitExpr(value)`；parser 加 AWAIT 前缀规则（UNARY 优先级，`await x + 1` 解析为 `(await x) + 1`）；semantic `visit_IbAwaitExpr`（类型=操作数类型）+ `_handle_assign_target` 解包 `await <behavior>` 适配目标类型；VM `vm_handle_IbAwaitExpr`（LLMFuture→`resolve_future_cps`、Waitable→`yield`、非 Waitable 幂等返回）+ dispatch 注册。
 
-### 5.2 async 函数 / 生成器（规划，PT-FEAT-1）
+### 5.2 async 函数 / 生成器（PT-FEAT-1，已解封）
 
-async 函数 / 生成器（`yield` 使函数成为生成器）是在 `await` 基础之上的语言级协程形态。依赖调度器多任务挂起恢复 + 快照协议覆盖 yield 点。保持现状规划，不主动推进。
+async 函数 / 生成器（`yield` 使函数成为生成器）是在 `await` 基础之上的语言级协程形态。依赖调度器多任务挂起恢复 + 快照协议覆盖 yield 点。
+
+**解封后定案（2026-08-07）**：
+- **无 async 函数关键字**（D-08 定案：CPS VM 天然可挂起，任意函数可 `await`，透明 async）；
+- **`yield` = 惰性生成器**（阶段 5 实现项，设计 `EXEC_FOUNDATION_DESIGN.md` §5.2）：含 `yield` 的函数 = 可迭代惰性序列，生成器体须为单可恢复驱动，在 `yield` 点暂停交付值、迭代恢复；与 `await` 正交可组合（可挂起生成器）。
 
 ---
 
-## 六、语言层关键字演进（规划）
+## 六、语言层关键字演进（阶段 5 yield 实现时落地）
 
-`async`/`yield` 不在现有 KEYWORDS 表中（`await` 已加入）。需设计语法与对应类型系统支持，涉及 lexer token 新增 + parser 语法规则 + semantic pass + VM handler。
+`yield` 不在现有 KEYWORDS 表中（`await` 已加入）。需设计语法与对应类型系统支持，涉及 lexer token 新增 + parser 语法规则 + semantic pass + VM handler。`async` 关键字**不需要**（D-08 定案取消）。
 
 ---
 

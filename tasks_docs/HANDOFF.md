@@ -76,7 +76,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 错误集确需用户裁决/与工作模式定论冲突/破坏性重构无法确认边界且独立隔离分支也无法确定
 技术路线）才 update_goal(status="unmet", blocker=具体卡点+建议)。
 
-七、非目标：media Phase 4（PT-SEALED-1）、跨进程/CPU 并行、跨引擎通信、完整通用异步（async 函数/生成器，PT-FEAT-1 保持现状）、线程无损挂起/恢复、用户级泛型类（PT-FEAT-3）、Hindley-Milner 约束求解。
+七、非目标：media Phase 4（PT-SEALED-1）、跨进程/CPU 并行、跨引擎通信、PT-FEAT-1 的 `yield` 惰性生成器（属阶段 5，R 批次之后实现，不在本批次范围；async 函数关键字已由 D-08 定案取消，任意函数可 await）、线程无损挂起/恢复、用户级泛型类（PT-FEAT-3）、Hindley-Milner 约束求解。
 ```
 
 ### 1.4 tasks_docs/ 文档结构指针

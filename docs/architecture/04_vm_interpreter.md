@@ -182,7 +182,7 @@ class IExecutionFrame(Protocol):
 |----|------|------|
 | **L1: LLM 调用流水线** | 单个 LLM 调用 | 当前支持 |
 | **L2: 多 Interpreter 隔离** | 整段程序 | 当前支持 |
-| **L3: 语言级协程 / yield** | 单个 yield 点 | 远期愿景（见 `docs/subsystems/05_coroutine.md`） |
+| **L3: 语言级生成器（yield）** | 单个 yield 点 | 规划中（阶段 5 实现项，见 `docs/subsystems/05_coroutine.md`） |
 
 ### 5.2 编译期：依赖图（DDG）
 
