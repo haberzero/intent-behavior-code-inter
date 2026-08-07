@@ -1,0 +1,365 @@
+"""
+tests_v2/e2e/test_exceptions.py
+=================================
+
+e2e 异常体系测试：LLM 异常层级（E5）+ 用户自定义异常 / NetworkError
+inheritance / LLMError 子类化。
+
+"""
+
+from tests_v2.conftest import run_ibci, AI_MOCK_PREFIX
+
+
+
+
+
+
+
+
+class TestE2ELLMExceptionHierarchy:
+    """
+    端到端验证 LLM 异常体系：
+    - 无保护裸 LLM 赋值失败 → LLMParseError
+    - llmexcept 重试耗尽 → LLMRetryExhaustedError
+    - 异常可被 LLMError 基类捕获
+    - 异常可被顶层 Exception 基类捕获
+    - 异常 message 字段可访问
+    """
+
+    def test_unprotected_llm_fail_raises_llm_parse_error(self):
+        """无 llmexcept 保护的 LLM 赋值失败，使用变量时抛出 LLMParseError。"""
+        code = AI_MOCK_PREFIX + """
+try:
+    str x = @~ MOCK:FAIL bare_fail ~
+    print(x)
+except LLMParseError as e:
+    print("llm_parse_error_caught")
+    print(e.message)
+print("after_catch")
+"""
+        lines = run_ibci(code)
+        assert "llm_parse_error_caught" in lines
+        assert "after_catch" in lines
+
+    def test_llm_parse_error_catchable_by_llm_error_base(self):
+        """LLMParseError 可被其基类 LLMError 捕获。"""
+        code = AI_MOCK_PREFIX + """
+try:
+    str x = @~ MOCK:FAIL base_catch ~
+    print(x)
+except LLMError as e:
+    print("llm_error_caught")
+print("done")
+"""
+        lines = run_ibci(code)
+        assert "llm_error_caught" in lines
+        assert "done" in lines
+
+    def test_llm_error_catchable_by_exception_base_class(self):
+        """LLMRetryExhaustedError 可被顶层 Exception 基类捕获。"""
+        code = AI_MOCK_PREFIX + """
+try:
+    str result = @~ MOCK:FAIL exception_catch ~
+    llmexcept:
+        retry "hint"
+except Exception as e:
+    print("base_exception_caught")
+print("done")
+"""
+        lines = run_ibci(code)
+        assert "base_exception_caught" in lines
+        assert "done" in lines
+
+    def test_llm_retry_exhausted_error_message_field(self):
+        """LLMRetryExhaustedError 包含可读 message 和 max_retry 字段。"""
+        code = AI_MOCK_PREFIX + """
+try:
+    str result = @~ MOCK:FAIL msg_field ~
+    llmexcept:
+        retry "hint"
+except LLMRetryExhaustedError as e:
+    print("caught")
+    print(e.message)
+"""
+        lines = run_ibci(code)
+        assert "caught" in lines
+        # message should mention retry exhaustion
+        assert any("retry" in line.lower() for line in lines)
+
+    def test_llm_parse_error_leaves_scope_clean_after_catch(self):
+        """try/except LLMParseError 后，作用域内后续普通赋值不受污染。"""
+        code = AI_MOCK_PREFIX + """
+int x = 0
+try:
+    str bad = @~ MOCK:FAIL scope_clean ~
+    print(bad)
+except LLMParseError as e:
+    x = 99
+int y = x + 1
+print((str)y)
+"""
+        lines = run_ibci(code)
+        assert "100" in lines
+
+    def test_repair_succeeds_before_exhaustion(self):
+        """MOCK:REPAIR 第一次失败后第二次成功，不抛异常，正常打印结果。"""
+        code = AI_MOCK_PREFIX + """
+str result = @~ MOCK:REPAIR repair_ok ~
+llmexcept:
+    retry "hint"
+print(result)
+"""
+        lines = run_ibci(code)
+        # successful second attempt → prints the result string, no exception
+        assert len(lines) > 0
+
+
+class TestE2EUserDefinedException:
+    """
+    端到端验证用户可继承内置 `Exception` 体系定义自定义异常。
+
+    本测试组锁定升级后的可用能力，并以注释形式标注一个已知
+    pre-existing 限制：`except X as e:` 中 e 的类型仍按基类公理解析，
+    访问子类新增字段需要先 `(MyError)e` 强制转换。
+    """
+
+    def test_user_exception_subclass_basic_raise_and_catch(self):
+        """`class MyError(Exception)` 可被声明、raise 并按具体类型 except 捕获。"""
+        code = """
+class MyError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+try:
+    raise MyError("oops")
+except MyError as e:
+    print("caught_my_error")
+    print(e.message)
+print("after_catch")
+"""
+        lines = run_ibci(code)
+        assert "caught_my_error" in lines
+        assert "oops" in lines
+        assert "after_catch" in lines
+
+    def test_user_exception_subclass_caught_by_exception_base(self):
+        """用户自定义 Exception 子类可被 `except Exception` 捕获。"""
+        code = """
+class AppError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+try:
+    raise AppError("base-catch")
+except Exception as e:
+    print("caught_as_exception")
+    print(e.message)
+"""
+        lines = run_ibci(code)
+        assert "caught_as_exception" in lines
+        assert "base-catch" in lines
+
+    def test_user_exception_two_level_inheritance(self):
+        """两级用户自定义继承链：`NetworkError -> AppError -> Exception` 全链路捕获生效。"""
+        code = """
+class AppError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+class NetworkError(AppError):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+try:
+    raise NetworkError("conn refused")
+except AppError as e:
+    print("caught_app_error")
+    print(e.message)
+"""
+        lines = run_ibci(code)
+        assert "caught_app_error" in lines
+        assert "conn refused" in lines
+
+    def test_user_subclass_of_llm_error(self):
+        """用户可继承内置 LLMError 派生异常，并被 LLMError / Exception 捕获。"""
+        code = """
+class MyLLMErr(LLMError):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+try:
+    raise MyLLMErr("custom-llm")
+except LLMError as e:
+    print("caught_llm_error")
+    print(e.message)
+"""
+        lines = run_ibci(code)
+        assert "caught_llm_error" in lines
+        assert "custom-llm" in lines
+
+    def test_user_exception_subclass_field_accessible(self):
+        """`except X as e:` 中 e 运行时绑定实际抛出对象，可直接访问子类字段。"""
+        code = """
+class MyError(Exception):
+    str detail
+    func __init__(self, str msg, str detail) -> auto:
+        self.message = msg
+        self.detail = detail
+
+try:
+    raise MyError("oops", "deep-context")
+except MyError as e:
+    print(e.message)
+    print(e.detail)
+"""
+        lines = run_ibci(code)
+        assert "oops" in lines
+        assert "deep-context" in lines
+
+    def test_user_exception_does_not_match_unrelated_class(self):
+        """用户自定义异常不会错误匹配到无关类型的 except 分支。"""
+        code = """
+class FooError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+class BarError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+try:
+    raise FooError("foo-only")
+except BarError as e:
+    print("wrong_branch")
+except FooError as e:
+    print("right_branch")
+    print(e.message)
+"""
+        lines = run_ibci(code)
+        assert "right_branch" in lines
+        assert "foo-only" in lines
+        assert "wrong_branch" not in lines
+
+    def test_llm_call_error_user_raise_and_catch(self):
+        """LLMCallError 当前由 VM 不自动抛出（仅供用户手动 raise）；
+        本测试锁定其作为 IBCI 用户层异常类型的可用性。"""
+        code = """
+try:
+    raise LLMCallError("provider down")
+except LLMCallError as e:
+    print("caught_call_error")
+    print(e.message)
+except LLMError as e:
+    print("wrong_branch")
+"""
+        lines = run_ibci(code)
+        assert "caught_call_error" in lines
+        assert "provider down" in lines
+        assert "wrong_branch" not in lines
+
+
+class TestExceptionAcrossFunctionBoundary:
+    """
+    回归：用户异常跨函数调用边界类型/字段必须保留。
+
+
+    """
+
+    def test_user_exception_subclass_preserved_across_call_boundary(self):
+        """用户子类 ``MyError`` 在被调用函数体内 raise → caller 用
+        ``except MyError as e:`` 应能匹配；``e.message`` 是用户字段。"""
+        code = AI_MOCK_PREFIX + """
+class MyError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+func boom() -> auto:
+    raise MyError("kaboom")
+
+try:
+    boom()
+except MyError as e:
+    print("caught_my_error")
+    print(e.message)
+except Exception as e:
+    print("downgraded_to_base")
+print("after")
+"""
+        lines = run_ibci(code)
+        assert "caught_my_error" in lines
+        assert "kaboom" in lines
+        assert "downgraded_to_base" not in lines
+        assert "after" in lines
+
+    def test_user_exception_extra_field_preserved_across_call_boundary(self):
+        """子类专属字段（``detail``）跨函数边界后仍可访问。"""
+        code = AI_MOCK_PREFIX + """
+class MyError(Exception):
+    str detail
+    func __init__(self, str msg, str detail) -> auto:
+        self.message = msg
+        self.detail = detail
+
+func boom() -> auto:
+    raise MyError("oops", "deep-ctx")
+
+try:
+    boom()
+except MyError as e:
+    print("caught")
+    print(e.message)
+    print(e.detail)
+"""
+        lines = run_ibci(code)
+        assert "caught" in lines
+        assert "oops" in lines
+        assert "deep-ctx" in lines
+
+    def test_llm_retry_exhausted_error_preserved_across_call_boundary(self):
+        """内置 ``LLMRetryExhaustedError`` 从函数内 ``llmexcept`` 耗尽抛出后，
+        被外层 caller 以专用类型捕获。"""
+        code = AI_MOCK_PREFIX + """
+func ask() -> auto:
+    str result = @~ MOCK:FAIL retry_exhaust ~
+    llmexcept:
+        retry "please try again"
+
+try:
+    ask()
+except LLMRetryExhaustedError as e:
+    print("caught_retry_exhausted")
+except LLMError as e:
+    print("wrong_branch_llm_error")
+except Exception as e:
+    print("wrong_branch_exception")
+print("after")
+"""
+        lines = run_ibci(code)
+        assert "caught_retry_exhausted" in lines
+        assert "wrong_branch_llm_error" not in lines
+        assert "wrong_branch_exception" not in lines
+        assert "after" in lines
+
+    def test_user_exception_through_two_nested_call_frames(self):
+        """两层嵌套调用栈：raise → inner → outer → try。"""
+        code = AI_MOCK_PREFIX + """
+class MyError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+func inner() -> auto:
+    raise MyError("from_inner")
+
+func outer() -> auto:
+    inner()
+
+try:
+    outer()
+except MyError as e:
+    print("caught_at_top")
+    print(e.message)
+"""
+        lines = run_ibci(code)
+        assert "caught_at_top" in lines
+        assert "from_inner" in lines
+
