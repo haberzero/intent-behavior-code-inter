@@ -16,6 +16,7 @@ from core.runtime.objects.kernel import (
     IbLLMUncertain,
 )
 from core.runtime.objects.kernel.base import unbox
+from core.runtime.objects.kernel.ib_class import IbClass
 from core.runtime.exceptions import (
     ThrownException,
 )
@@ -290,7 +291,10 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         result = func.receive("__call__", args)
         # native 调用返回 Waitable（宿主异步句柄）→ 挂起本根，让调度器等待其完成，
         # 而非阻塞当前线程。恢复后 result 为完成值（如 collect 的 dict）。
-        if isinstance(result, Waitable):
+        # 例外：类构造调用（func 是 IbClass，如 thread(...)）返回的 Waitable 是
+        # **句柄**（创建并启动线程后返回句柄，等待应经 t.join()/await t 显式表达），
+        # 不自动挂起——否则构造即被解析成完成结果，丢失句柄。
+        if isinstance(result, Waitable) and not isinstance(func, IbClass):
             result = yield result
         return result
     except ThrownException:

@@ -213,5 +213,5 @@ thread[int] t = thread(callable=f, args=[])
 """, silent=True)
     time.sleep(0.3)  # 等待线程自然完成（不 join）
     t = engine.interpreter.execution_context.runtime_context.get_symbol("t").value
-    assert t.is_done().payload is True
+    assert t.is_done is True
     assert t.to_native()["done"] is True

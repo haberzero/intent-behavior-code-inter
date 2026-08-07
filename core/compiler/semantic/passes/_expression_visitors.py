@@ -178,8 +178,16 @@ class ExpressionVisitorsMixin:
 
         操作数的静态类型即其等待后的结果类型（LLMFuture 变量声明类型 / 容器
         元素类型 / 宿主结果类型）。``await`` 不改变类型，仅等待。
+        例外：``await thread[T]`` 等待线程完成，结果为 ``thread_result[T]``
+        容器（与 ``t.join()`` 返回值一致，D-04）。
         """
         operand_type = self.visit(node.value)
+        if operand_type is not None and getattr(operand_type, "kind", None) == TypeKind.THREAD.value:
+            value_type = getattr(operand_type, "value_type", None)
+            result_tref = TypeRef.generic("thread_result", value_type or TypeRef.of("any"))
+            result_type = self.registry.resolve_typeref(result_tref) or self._any_desc
+            self.bind_type(node, result_type)
+            return result_type
         result_type = operand_type or self._any_desc
         self.bind_type(node, result_type)
         return result_type

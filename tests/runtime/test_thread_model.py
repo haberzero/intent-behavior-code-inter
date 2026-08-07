@@ -234,3 +234,74 @@ print((str)r.expect())
 """
         lines = run_ibci(code)
         assert lines == ["False", "42"]
+
+
+class TestThreadWaitableDirect:
+    """R3：IbThread 本体满足 Waitable（D-04 意图修复，exp/exec-ra）。
+
+    语言 ``await t`` 直接可用；``t.join()`` 返回自身；``t.is_done()`` 语言
+    方法保留（auto-bind 对 property 的包装，读 property + 装箱）。
+    """
+
+    def test_await_thread_direct(self):
+        """``await t`` 直接等待线程完成（无需 join 包装）。"""
+        code = """
+func add(int a, int b) -> int:
+    return a + b
+
+thread[int] t = thread(callable=add, args=[3, 4])
+thread_result[int] r = await t
+print((str)r.expect())
+"""
+        lines = run_ibci(code)
+        assert lines == ["7"]
+
+    def test_await_thread_with_chan_block(self):
+        """``await t`` 在线程阻塞于 chan recv 时挂起，send 唤醒后完成。"""
+        code = """
+chan c = chan(str, "message")
+func add(chan x) -> int:
+    str _ = x.recv()
+    return 1 + 2
+
+thread[int] t = thread(callable=add, args=[c])
+c.send("go")
+thread_result[int] r = await t
+print((str)r.expect())
+"""
+        lines = run_ibci(code)
+        assert lines == ["3"]
+
+    def test_join_returns_self_is_waitable(self, engine, captured_output):
+        """宿主侧 t.join() 返回自身（IbThread），isinstance Waitable 成立。"""
+        from core.runtime.shared.waitable import Waitable
+
+        lines, callback = captured_output
+        code = """
+func add(int a, int b) -> int:
+    return a + b
+
+thread[int] t = thread(callable=add, args=[3, 4])
+"""
+        engine.run_string(code, output_callback=callback)
+        scope = engine.interpreter.runtime_context.global_scope
+        t = scope.get_symbol("t").value
+        w = t.join()
+        assert w is t
+        assert isinstance(w, Waitable)
+        r = w.result()
+        assert r.expect().to_native() == 7
+
+    def test_is_done_language_method_still_works(self):
+        """语言 ``t.is_done()`` 保留（property 经 auto-bind 包装为方法）。"""
+        code = """
+func work(int x) -> int:
+    return x * 2
+
+thread[int] t = thread(callable=work, args=[21])
+t.join()
+print((str)t.is_done())
+print((str)(t.is_done() and True))
+"""
+        lines = run_ibci(code)
+        assert lines == ["True", "True"]

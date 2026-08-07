@@ -128,8 +128,18 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                     if hasattr(py_impl_cls, method_name):
                         # 获取 Python 实现的方法
                         py_method = getattr(py_impl_cls, method_name)
-                        # 绑定为原生方法
-                        _reg_native(ib_cls, method_name, py_method, unbox=False)
+                        if isinstance(py_method, property):
+                            # property-backed 方法：公理声明的语言方法在 Python 侧是
+                            # property 时（如 IbThread.is_done 为满足 Waitable 协议改为
+                            # property），包装成"读 property"的可调用原生方法，使语言
+                            # ``t.is_done()`` 仍可用（返回值经 IbNativeFunction.call 统一
+                            # box 成 IBCI 值）。通用机制，非特判。
+                            def _prop_read(receiver, _prop=py_method):
+                                return _prop.fget(receiver)
+                            _reg_native(ib_cls, method_name, _prop_read, unbox=False)
+                        else:
+                            # 绑定为原生方法
+                            _reg_native(ib_cls, method_name, py_method, unbox=False)
                 
                 # 自动化运算符绑定
                 _auto_bind_operators(ib_cls, py_impl_cls)

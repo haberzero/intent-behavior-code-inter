@@ -126,6 +126,15 @@ class IbCell:
         """该 cell 是否已共享给线程任务（任务内写入应报隔离错误）。"""
         return self._shared_with_main
 
+    def mark_shared_with_main(self) -> None:
+        """标记该 cell 已共享给线程任务（任务内写入应报隔离错误，P3）。
+
+        由线程任务启动路径（``coordinator._run_task_body``）调用：把与主线程
+        共享的闭包 cell 标记为"任务内禁写"，使 ``runtime_context._check_cell_isolation``
+        能拦截任务内对捕获变量的赋值。
+        """
+        self._shared_with_main = True
+
     def is_empty(self) -> bool:
         """是否处于未初始化状态。"""
         return self._value is _EMPTY

@@ -237,7 +237,7 @@ def _run_task_body(
         # behavior 全部任务体（其 closure 均为主线程共享的闭包 cell）。
         for _sym_uid, (_var_name, _cell) in (getattr(callable_obj, "closure", None) or {}).items():
             if isinstance(_cell, IbCell):
-                _cell._shared_with_main = True
+                _cell.mark_shared_with_main()
 
         if isinstance(callable_obj, IbUserFunction):
             # 用户函数：构建任务本地函数包装（绑定 task EC），使函数体经
