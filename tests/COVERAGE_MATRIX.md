@@ -28,7 +28,7 @@
 | INV-OPT-1 | None 访问时运行时错误 | `tests/contracts/test_type_invariants.py::TestOptionalNullSafety::test_optional_none_access_raises` | 现契约演化为编译期 or_else 兜底 |
 | INV-OPT-2 | Optional 赋值兼容性 | `tests/contracts/test_type_invariants.py::TestOptionalNullSafety::test_optional_accepts_value_of_T[int-42]` | 参数化覆盖 int/str/list[T] |
 | INV-OPT-3 | Optional 类型检查 | `tests/contracts/test_type_invariants.py::TestOptionalNullSafety::test_optional_is_some_compile_contract` | is_some/unwrap 编译期签名；编译器侧另有 `test_plain_int_rejects_none` |
-| INV-OPT-4 | Optional 链式操作 | `tests/runtime/test_optional_runtime.py::TestOptionalOrElse::test_or_else_empty_returns_default` | 运行期方法（or_else/unwrap/is_some）见 runtime/test_optional_runtime.py |
+| INV-OPT-4 | Optional 链式操作 | `tests/runtime/test_optional_runtime.py::TestOptionalOrElse::test_or_else[or_else_empty_returns_default]` | 运行期方法（or_else/unwrap/is_some）见 runtime/test_optional_runtime.py |
 
 ### 1.3 泛型类型语义
 
@@ -197,8 +197,8 @@
 
 | INV | 语义特性 | 覆盖测试 | 备注 |
 |-----|---------|---------|------|
-| INV-MOCK-1 | MOCK:STR 确定性 | `tests/contracts/test_llm_integration.py::TestMOCKProtocol::test_mock_typed_returns[MOCK:STR:hello-str]` | 参数化亦覆盖 INT/LIST |
-| INV-MOCK-2 | MOCK:INT 确定性 | `tests/contracts/test_llm_integration.py::TestMOCKProtocol::test_mock_typed_returns[MOCK:INT:42-int]` | |
+| INV-MOCK-1 | MOCK:STR 确定性 | `tests/contracts/test_llm_integration.py::TestMOCKProtocol::test_mock_typed_returns[MOCK:STR:hello-hello]` | 参数化亦覆盖 INT/LIST/FLOAT |
+| INV-MOCK-2 | MOCK:INT 确定性 | `tests/contracts/test_llm_integration.py::TestMOCKProtocol::test_mock_typed_returns[MOCK:INT:42-42]` | |
 | INV-MOCK-3 | MOCK:INVALID 触发错误 | 🔶 缺失 | TRUE_GAP：样例仅存于孤儿 fixture，无测试消费者 |
 
 ### 5.2 Behavior 表达式

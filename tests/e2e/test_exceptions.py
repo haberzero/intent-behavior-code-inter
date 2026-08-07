@@ -110,8 +110,9 @@ llmexcept:
 print(result)
 """
         lines = run_ibci(code)
-        # successful second attempt → prints the result string, no exception
-        assert len(lines) > 0
+        # 成功第二次尝试：不抛异常，恰好打印一行结果
+        assert len(lines) == 1
+        assert lines[0]
 
 
 class TestE2EUserDefinedException:

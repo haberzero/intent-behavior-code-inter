@@ -7,6 +7,8 @@ control flow / mock repair / stale result 隔离）。
 
 """
 
+import pytest
+
 from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
@@ -17,45 +19,23 @@ from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
 class TestE2EAIMockBasic:
-    def test_mock_true(self):
-        code = AI_MOCK_PREFIX + """
-str result = @~ MOCK:TRUE is sky blue ~
-print(result)
-"""
-        lines = run_ibci(code)
-        assert "1" in lines
+    """MOCK 基础协议（str 声明语境）：每种指令产生可断言的值。"""
 
-    def test_mock_false(self):
-        code = AI_MOCK_PREFIX + """
-str result = @~ MOCK:FALSE is it raining ~
+    @pytest.mark.parametrize("directive,expected", [
+        ("MOCK:TRUE is sky blue", "1"),
+        ("MOCK:FALSE is it raining", "0"),
+        ("MOCK:INT:42", "42"),
+        ("MOCK:FLOAT:3.14", "3.14"),
+        ('MOCK:LIST:["a","b","c"]', "a"),
+        ("MOCK:STR:hello", "hello"),
+    ])
+    def test_mock_directive_value(self, directive, expected):
+        code = AI_MOCK_PREFIX + f"""
+str result = @~ {directive} ~
 print(result)
 """
         lines = run_ibci(code)
-        assert "0" in lines
-
-    def test_mock_int_type(self):
-        code = AI_MOCK_PREFIX + """
-str result = @~ MOCK:INT:42 ~
-print(result)
-"""
-        lines = run_ibci(code)
-        assert "42" in lines
-
-    def test_mock_float_type(self):
-        code = AI_MOCK_PREFIX + """
-str result = @~ MOCK:FLOAT:3.14 ~
-print(result)
-"""
-        lines = run_ibci(code)
-        assert "3.14" in lines
-
-    def test_mock_list_direct(self):
-        code = AI_MOCK_PREFIX + """
-str result = @~ MOCK:LIST:["a","b","c"] ~
-print(result)
-"""
-        lines = run_ibci(code)
-        assert any("a" in l for l in lines)
+        assert any(expected in l for l in lines)
 
 
 class TestE2EAITypeCast:
@@ -104,8 +84,9 @@ str result = greet("Alice")
 print(result)
 """
         lines = run_ibci(code)
-        # In MOCK mode, it should return something
-        assert len(lines) > 0
+        # MOCK 模式：验证参数插值实际发生（$name → Alice），而非仅"有输出"
+        assert len(lines) == 1
+        assert "Greet Alice" in lines[0]
 
 
 class TestE2EMockRepair:
@@ -123,15 +104,6 @@ print(result)
 
 
 class TestE2EMockStrQuoted:
-    def test_mock_str_unquoted_value(self):
-        """MOCK:STR:hello 应返回 hello"""
-        code = AI_MOCK_PREFIX + """
-str result = @~ MOCK:STR:hello ~
-print(result)
-"""
-        lines = run_ibci(code)
-        assert "hello" in lines
-
     def test_mock_str_double_quoted_value(self):
         """MOCK:STR:"hello" 应返回 hello（不含引号）"""
         code = AI_MOCK_PREFIX + '''

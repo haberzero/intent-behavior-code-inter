@@ -64,17 +64,20 @@ class TestOptionalMethodResolution:
 
 
 class TestOptionalMethodCompileSemantics:
-    def test_or_else_allows_unwrap_to_plain_type(self):
-        assert_compiles(
+    @pytest.mark.parametrize("code", [
+        pytest.param(
             "Optional[int] x = None\n"
-            "int y = x.or_else(3)\n"
-        )
-
-    def test_unwrap_allows_assign_to_plain_type(self):
-        assert_compiles(
+            "int y = x.or_else(3)\n",
+            id="or_else_allows_unwrap_to_plain_type",
+        ),
+        pytest.param(
             "Optional[int] x = 1\n"
-            "int y = x.unwrap()\n"
-        )
+            "int y = x.unwrap()\n",
+            id="unwrap_allows_assign_to_plain_type",
+        ),
+    ])
+    def test_optional_method_allows_plain_assignment(self, code):
+        assert_compiles(code)
 
 
 ################################################################################
@@ -82,17 +85,20 @@ class TestOptionalMethodCompileSemantics:
 ################################################################################
 
 class TestOptionalNullSafety:
-    def test_optional_int_accepts_none(self):
-        assert_compiles(
+    @pytest.mark.parametrize("code", [
+        pytest.param(
             "Optional[int] x = None\n"
-            "Optional[int] y = x\n"
-        )
-
-    def test_optional_int_accepts_int(self):
-        assert_compiles(
+            "Optional[int] y = x\n",
+            id="optional_int_accepts_none",
+        ),
+        pytest.param(
             "Optional[int] x = 1\n"
-            "Optional[int] y = x\n"
-        )
+            "Optional[int] y = x\n",
+            id="optional_int_accepts_int",
+        ),
+    ])
+    def test_optional_int_accepts_value(self, code):
+        assert_compiles(code)
 
     def test_plain_int_rejects_none(self):
         assert_has_sem003("int x = None\n")
@@ -111,53 +117,46 @@ class TestOptionalNullSafety:
 class TestCallableSigParse:
     """Parser accepts fn[(...)→(...)] in type-annotation positions."""
 
-    def test_no_params_int_return(self):
-        """fn[() -> int] as parameter annotation compiles without errors."""
-        assert_compiles("""
-func apply(fn[() -> int] f) -> int:
-    return f()
-""")
-
-    def test_single_param(self):
-        """fn[(int) -> int] as parameter annotation compiles without errors."""
-        assert_compiles("""
-func apply(fn[(int) -> int] f, int x) -> int:
-    return f(x)
-""")
-
-    def test_multi_param(self):
-        """fn[(int, str) -> bool] as parameter annotation compiles without errors."""
-        assert_compiles("""
-func check(fn[(int, str) -> bool] predicate, int n, str s) -> bool:
-    return predicate(n, s)
-""")
-
-    def test_as_variable_declaration_type(self):
-        """fn[(int) -> int] as variable declaration type compiles without errors."""
-        assert_compiles("""
-func add_one(int n) -> int:
-    return n + 1
-
-fn[(int) -> int] f = add_one
-""")
-
-    def test_as_return_type_annotation(self):
-        """fn[(int) -> int] as function return type annotation compiles without errors."""
-        assert_compiles("""
-func make_adder(int n) -> fn[(int) -> int]:
-    fn add = lambda(int x) -> auto: n + x
-    return add
-""")
-
-    def test_bare_fn_still_works(self):
-        """Plain fn f = myfunc (without signature) still compiles."""
-        assert_compiles("""
-func double(int n) -> int:
-    return n * 2
-
-fn f = double
-print((str)f(3))
-""")
+    @pytest.mark.parametrize("code", [
+        pytest.param(
+            "func apply(fn[() -> int] f) -> int:\n"
+            "    return f()\n",
+            id="no_params_int_return",
+        ),
+        pytest.param(
+            "func apply(fn[(int) -> int] f, int x) -> int:\n"
+            "    return f(x)\n",
+            id="single_param",
+        ),
+        pytest.param(
+            "func check(fn[(int, str) -> bool] predicate, int n, str s) -> bool:\n"
+            "    return predicate(n, s)\n",
+            id="multi_param",
+        ),
+        pytest.param(
+            "func add_one(int n) -> int:\n"
+            "    return n + 1\n"
+            "\n"
+            "fn[(int) -> int] f = add_one\n",
+            id="as_variable_declaration_type",
+        ),
+        pytest.param(
+            "func make_adder(int n) -> fn[(int) -> int]:\n"
+            "    fn add = lambda(int x) -> auto: n + x\n"
+            "    return add\n",
+            id="as_return_type_annotation",
+        ),
+        pytest.param(
+            "func double(int n) -> int:\n"
+            "    return n * 2\n"
+            "\n"
+            "fn f = double\n"
+            "print((str)f(3))\n",
+            id="bare_fn_still_works",
+        ),
+    ])
+    def test_fn_signature_annotation_compiles(self, code):
+        assert_compiles(code)
 
 
 # ─────────────────────────────────────────────────────── call-site checks ──
@@ -232,21 +231,22 @@ fn[(int) -> str] f = add_one
 class TestCallableSigReturnInference:
     """Return type of calling fn[(...)→T] parameter is inferred as T."""
 
-    def test_int_return_inferred(self):
-        """fn[(int) -> int] parameter: calling it produces int."""
-        assert_compiles("""
-func apply(fn[(int) -> int] f, int x) -> int:
-    int result = f(x)
-    return result
-""")
-
-    def test_bool_return_inferred(self):
-        """fn[(int, str) -> bool] parameter: calling it produces bool."""
-        assert_compiles("""
-func check(fn[(int, str) -> bool] pred, int n, str s) -> bool:
-    bool result = pred(n, s)
-    return result
-""")
+    @pytest.mark.parametrize("code", [
+        pytest.param(
+            "func apply(fn[(int) -> int] f, int x) -> int:\n"
+            "    int result = f(x)\n"
+            "    return result\n",
+            id="int_return_inferred",
+        ),
+        pytest.param(
+            "func check(fn[(int, str) -> bool] pred, int n, str s) -> bool:\n"
+            "    bool result = pred(n, s)\n"
+            "    return result\n",
+            id="bool_return_inferred",
+        ),
+    ])
+    def test_call_return_type_inferred(self, code):
+        assert_compiles(code)
 
 
 # ===========================================================================

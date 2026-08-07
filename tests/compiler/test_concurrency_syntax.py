@@ -65,11 +65,12 @@ slot st = slot("score", 0)
 # ────────────────────────────────────────────────────── type annotation ──
 
 class TestTypeAnnotations:
-    def test_chan_type_declaration(self):
-        assert_compiles("chan c = chan(str, \"stream\")\n")
-
-    def test_slot_type_declaration(self):
-        assert_compiles("slot st = slot(\"score\", 0)\n")
+    @pytest.mark.parametrize("code", [
+        "chan c = chan(str, \"stream\")\n",
+        "slot st = slot(\"score\", 0)\n",
+    ])
+    def test_type_declaration_compiles(self, code):
+        assert_compiles(code)
 
     def test_chan_keyword_mode_normalized(self):
         """chan(str, mode=\"stream\") 的 mode/type_name 归一为字面值（A-D5 回归）。"""

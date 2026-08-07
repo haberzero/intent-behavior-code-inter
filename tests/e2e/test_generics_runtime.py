@@ -121,7 +121,8 @@ class TestListWriteMethodSpecialization:
             "nums.append(3)\n"
             "print(nums)\n"
         )
-        assert len(lines) > 0
+        assert len(lines) == 1
+        assert "[1, 2, 3]" in lines[0]
 
 
 # ===========================================================================

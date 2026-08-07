@@ -43,19 +43,19 @@ print(result)
 """
         assert run_ibci(code) == ["False"]
 
-    @pytest.mark.parametrize("mock_directive,expected_type", [
-        ("MOCK:INT:42", "int"),
-        ("MOCK:STR:hello", "str"),
-        ("MOCK:LIST:[1,2,3]", "list"),
+    @pytest.mark.parametrize("mock_directive,expected_value", [
+        ("MOCK:INT:42", "42"),
+        ("MOCK:STR:hello", "hello"),
+        ("MOCK:LIST:[1,2,3]", "[1,2,3]"),
+        ("MOCK:FLOAT:3.14", "3.14"),
     ])
-    def test_mock_typed_returns(self, mock_directive, expected_type):
-        """INV-MOCK-3: MOCK:TYPE:value returns typed value."""
+    def test_mock_typed_returns(self, mock_directive, expected_value):
+        """INV-MOCK-3: MOCK:TYPE:value returns the typed value."""
         code = AI_MOCK_PREFIX + f"""
 auto result = @~ {mock_directive} ~
 print(result)
 """
-        result = run_ibci(code)
-        assert result  # Execution succeeded
+        assert run_ibci(code) == [expected_value]
 
 
 # ===========================================================================

@@ -22,145 +22,171 @@ from tests.conftest import run_ibci, compile_ibci
 
 
 class TestOptionalIsSome:
-    def test_none_is_some_false(self):
-        lines = run_ibci(
+    @pytest.mark.parametrize("code,expected", [
+        pytest.param(
             "Optional[int] x = None\n"
             "bool ok = x.is_some()\n"
-            "print(ok)\n"
-        )
-        assert lines == ["False"]
-
-    def test_value_is_some_true(self):
-        lines = run_ibci(
+            "print(ok)\n",
+            "False",
+            id="none_is_some_false",
+        ),
+        pytest.param(
             "Optional[int] x = 1\n"
             "bool ok = x.is_some()\n"
-            "print(ok)\n"
-        )
-        assert lines == ["True"]
+            "print(ok)\n",
+            "True",
+            id="value_is_some_true",
+        ),
+    ])
+    def test_is_some(self, code, expected):
+        assert run_ibci(code) == [expected]
 
 
 class TestOptionalUnwrap:
-    def test_unwrap_some_returns_value(self):
-        lines = run_ibci(
+    @pytest.mark.parametrize("code,expected,should_raise", [
+        pytest.param(
             "Optional[int] x = 1\n"
             "int y = x.unwrap()\n"
-            "print(y)\n"
-        )
-        assert lines == ["1"]
-
-    def test_unwrap_empty_raises(self):
-        with pytest.raises(Exception):
-            run_ibci(
-                "Optional[int] x = None\n"
-                "int y = x.unwrap()\n"
-                "print(y)\n"
-            )
+            "print(y)\n",
+            "1",
+            False,
+            id="unwrap_some_returns_value",
+        ),
+        pytest.param(
+            "Optional[int] x = None\n"
+            "int y = x.unwrap()\n"
+            "print(y)\n",
+            None,
+            True,
+            id="unwrap_empty_raises",
+        ),
+    ])
+    def test_unwrap(self, code, expected, should_raise):
+        if should_raise:
+            with pytest.raises(Exception):
+                run_ibci(code)
+        else:
+            assert run_ibci(code) == [expected]
 
 
 class TestOptionalOrElse:
-    def test_or_else_some_returns_value(self):
-        lines = run_ibci(
+    @pytest.mark.parametrize("code,expected", [
+        pytest.param(
             "Optional[int] x = 1\n"
             "int y = x.or_else(9)\n"
-            "print(y)\n"
-        )
-        assert lines == ["1"]
-
-    def test_or_else_empty_returns_default(self):
-        lines = run_ibci(
+            "print(y)\n",
+            "1",
+            id="or_else_some_returns_value",
+        ),
+        pytest.param(
             "Optional[int] x = None\n"
             "int y = x.or_else(9)\n"
-            "print(y)\n"
-        )
-        assert lines == ["9"]
+            "print(y)\n",
+            "9",
+            id="or_else_empty_returns_default",
+        ),
+    ])
+    def test_or_else(self, code, expected):
+        assert run_ibci(code) == [expected]
 
 
 class TestOptionalCopy:
-    def test_copy_some(self):
-        lines = run_ibci(
+    @pytest.mark.parametrize("code,expected", [
+        pytest.param(
             "Optional[int] x = 1\n"
             "Optional[int] y = x\n"
             "int z = y.unwrap()\n"
-            "print(z)\n"
-        )
-        assert lines == ["1"]
-
-    def test_copy_none(self):
-        lines = run_ibci(
+            "print(z)\n",
+            "1",
+            id="copy_some",
+        ),
+        pytest.param(
             "Optional[int] x = None\n"
             "Optional[int] y = x\n"
             "bool ok = y.is_some()\n"
-            "print(ok)\n"
-        )
-        assert lines == ["False"]
+            "print(ok)\n",
+            "False",
+            id="copy_none",
+        ),
+    ])
+    def test_copy(self, code, expected):
+        assert run_ibci(code) == [expected]
 
 
 class TestOptionalReassign:
-    def test_reassign_none_to_some(self):
-        lines = run_ibci(
+    @pytest.mark.parametrize("code,expected", [
+        pytest.param(
             "Optional[int] x = None\n"
             "x = 5\n"
             "int z = x.unwrap()\n"
-            "print(z)\n"
-        )
-        assert lines == ["5"]
-
-    def test_reassign_some_to_none(self):
-        lines = run_ibci(
+            "print(z)\n",
+            "5",
+            id="reassign_none_to_some",
+        ),
+        pytest.param(
             "Optional[int] x = 1\n"
             "x = None\n"
             "bool ok = x.is_some()\n"
-            "print(ok)\n"
-        )
-        assert lines == ["False"]
+            "print(ok)\n",
+            "False",
+            id="reassign_some_to_none",
+        ),
+    ])
+    def test_reassign(self, code, expected):
+        assert run_ibci(code) == [expected]
 
 
 class TestOptionalTypeCoverage:
-    def test_str_optional(self):
-        lines = run_ibci(
+    @pytest.mark.parametrize("code,expected", [
+        pytest.param(
             'Optional[str] x = "hi"\n'
             "str s = x.unwrap()\n"
-            "print(s)\n"
-        )
-        assert lines == ["hi"]
-
-    def test_list_optional(self):
-        lines = run_ibci(
+            "print(s)\n",
+            "hi",
+            id="str_optional",
+        ),
+        pytest.param(
             "Optional[list[int]] x = [1, 2, 3]\n"
             "list[int] l = x.unwrap()\n"
-            "print(l)\n"
-        )
-        assert lines == ["[1, 2, 3]"]
-
-    def test_float_optional(self):
-        lines = run_ibci(
+            "print(l)\n",
+            "[1, 2, 3]",
+            id="list_optional",
+        ),
+        pytest.param(
             "Optional[float] x = 3.5\n"
             "float f = x.unwrap()\n"
-            "print(f)\n"
-        )
-        assert lines == ["3.5"]
+            "print(f)\n",
+            "3.5",
+            id="float_optional",
+        ),
+    ])
+    def test_value_type_coverage(self, code, expected):
+        assert run_ibci(code) == [expected]
 
 
 class TestOptionalTruthiness:
-    def test_empty_optional_is_false(self):
-        lines = run_ibci(
+    @pytest.mark.parametrize("code,expected", [
+        pytest.param(
             "Optional[int] x = None\n"
             "if x:\n"
             "    print('true')\n"
             "else:\n"
-            "    print('false')\n"
-        )
-        assert lines == ["false"]
-
-    def test_some_optional_value_truthiness(self):
-        lines = run_ibci(
+            "    print('false')\n",
+            "false",
+            id="empty_optional_is_false",
+        ),
+        pytest.param(
             "Optional[int] x = 1\n"
             "if x:\n"
             "    print('true')\n"
             "else:\n"
-            "    print('false')\n"
-        )
-        assert lines == ["true"]
+            "    print('false')\n",
+            "true",
+            id="some_optional_value_truthiness",
+        ),
+    ])
+    def test_truthiness(self, code, expected):
+        assert run_ibci(code) == [expected]
 
 
 class TestOptionalSerialization:
