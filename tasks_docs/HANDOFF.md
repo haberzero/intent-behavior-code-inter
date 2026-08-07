@@ -104,36 +104,29 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一主线：OBSERVABILITY_REFACTOR 可观测性统一与测试体系重构**——完整规划见
-  `OBSERVABILITY_REFACTOR.md`（任务控制文档）。**PT-TEST-1 已并入**。四机制（测试体系/CORE_DEBUG/idbg/
-  内省）统一收敛到观测骨架（observability）。Phase 0 设计冻结已完成（基准存档
-  `test_baseline_20260806.txt`）。**Phase 1 契约修复+死码清理+零成本穿透替换**待启动；大规模破坏按
-  Phase 2 独立分支实验 → Phase 3 手动应用（禁合并）。授权见 `OBSERVABILITY_REFACTOR.md` §二。
-- **已完成**：`PT-INTRO-1`（内省体系）、`PT-DECIDE-1`（行为输出可解析性）、`PT-DEBT-1/2/3`
-  （内核接口协议化）、`PT-DEBT-7`（删 is_nullable 死字段）、`PT-DEBT-8`（值层分派收敛审计）、
-  `PT-DEBT-6`（register_module 可观测性）、`PT-DOC-2`（定位段收尾）、内建函数群完善+遮蔽、
-  整合巩固批次、DOC_AUDIT 文档治理——详见 `PENDING_TASKS.md`。
-- **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核
-  审查循环，R4/R5 待做）+ `PT-AUDIT-5`（注释卫生清理）——持续周期工作。
+- **OBSERVABILITY_REFACTOR 主体已完成（2026-08-06）**：四机制（测试体系/CORE_DEBUG/idbg/内省）统一收敛、
+  测试体系全面重建（tests_v2 全域迁移 + Phase 5 切换 + 矩阵三段式 + tests_docs 治理）全部落地 unsafe-vibe-dev，
+  全量 **1962 passed / 1 skipped**。规划见 `OBSERVABILITY_REFACTOR.md`。
+- **剩余未来计划**：`PT-FEAT-9` 内核诊断机制重建（CORE_DEBUG 替代物），现阶段非重点。
+- **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核审查循环）+
+  `PT-AUDIT-5`（注释卫生清理）——持续周期工作。
 - **保留规划**：`PT-FEAT-1`（语言级协程，保持现状）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置。
 
 ### 2.2 已完成摘要
 
-- **2026-08-06**：PT-INTRO-1 内省体系 + PT-DECIDE-1 裁定 + PT-DEBT-1/2/3 内核接口协议化 +
-  内建函数群完善（转换/序列辅助/遮蔽）+ 整合巩固批次 + **DOC_AUDIT 文档治理 F0-F4 全量执行**
-  + 清理自治标注文档（appendix/backup 移出 docs/，规划迁 PENDING_TASKS）+ **PT-DEBT-7 删
-  is_nullable 死字段** + **PT-DEBT-8 值层分派收敛审计**（系统层面定论：折叠为单一 IbValue 是
-  伪目标）+ **PT-DEBT-6 register_module 可观测性**（warning + 测试配置 bug 修正）+ **PT-DOC-2
-  定位段收尾**。**PT-TEST-1 列为主线**（用户裁定）。
+- **2026-08-06**：**OBSERVABILITY_REFACTOR 主体完成**——Phase 0-2C + 2C-2（idbg 深度收敛：protection_map
+  内核化/统一变量视图/snapshot vars bug/LLM 事件流）+ 2D 测试体系全面重建（tests_v2 全域迁移 + 切换 +
+  矩阵三段式 + tests_docs 治理）+ Phase 4 收敛全部落地，全量 **1962 passed / 1 skipped**。测试体系现为
+  单一分层模型（kernel/compiler/runtime/plugins/contracts/e2e/compliance/sdk/meta/fixtures），meta 机器强制
+  （分层/命名/helper 去重/矩阵对账）。commit 明细见 git 历史。
 - **2026-08-05**：闭包序列化 round-trip 修复 + Axiom 家族分裂收敛 + EnumAxiom 双通道收敛 +
   use_intent_context 守卫修复 + R3 异味四 Zone 处置 + import-* 精确成员枚举根治（含 IBC 文件
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
-  commit 明细见 git 历史。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
-- **测试基线**：1626 passed / 6 skipped（以实跑为准，不冻结数字）。
-- **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；无独立分支残留）。
+- **测试基线**：以实跑为准，不冻结数字（当前 1962 passed / 1 skipped）。
+- **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d 保留未合并）。
 
 ### 2.3 交接检查单
 
