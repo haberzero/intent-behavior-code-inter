@@ -117,6 +117,16 @@ class SpawnedTask:
     def is_done(self) -> bool:
         return self._future.done()
 
+    def try_result(self):
+        """非阻塞取回 ``(ok, 结果)``（调度器专用；不阻塞）。"""
+        if not self.is_done:
+            return (False, None)
+        return (True, self._future.result())
+
+    def result(self):
+        """阻塞等待并返回任务结果（宿主/线程体专用）。"""
+        return self._future.result()
+
     def join(self) -> Any:
         """阻塞等待任务完成并返回结果。"""
         return self._future.result()

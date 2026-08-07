@@ -125,3 +125,24 @@ print((str)t.join().expect())
     lines = run_ibci(code)
     # 任务不写主环境作用域（隔离边界）；主作用域 shared 保持 100。
     assert lines == ["100", "999"]
+
+class TestThreadHostContract:
+    """IbThread.join() Python 宿主契约：返回 Waitable，.result() = thread_result 容器。"""
+
+    def test_join_returns_waitable_host(self, engine, captured_output):
+        from core.runtime.shared.waitable import Waitable
+
+        lines, callback = captured_output
+        code = """
+func add(int a, int b) -> int:
+    return a + b
+
+thread[int] t = thread(callable=add, args=[3, 4])
+"""
+        engine.run_string(code, output_callback=callback)
+        scope = engine.interpreter.runtime_context.global_scope
+        t = scope.get_symbol("t").value
+        w = t.join()
+        assert isinstance(w, Waitable)
+        r = w.result()
+        assert r.expect().to_native() == 7

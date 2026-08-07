@@ -56,6 +56,16 @@ class HostAwaitable:
         """子任务是否已执行完成（非破坏性检查，不消费 handle）。"""
         return self._orchestrator.is_spawn_done(self._handle)
 
+    def try_result(self):
+        """非阻塞取回 ``(ok, dict)``（调度器专用；不阻塞）。
+
+        ``ok=False`` 表示子任务未完成（调度器重新轮询）；``ok=True`` 消费一次
+        handle（经 ``request_collect`` 取回子环境变量字典）。
+        """
+        if not self.is_done:
+            return (False, None)
+        return (True, self.result())
+
     def result(self) -> Any:
         """等待并取回子环境导出的变量字典（消费 handle）。"""
         if self._mode is ReceiveMode.STREAM:

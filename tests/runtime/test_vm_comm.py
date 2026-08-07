@@ -140,3 +140,31 @@ s.update(bump)
 print((str)s.get())
 """)
         assert lines == ["10"]
+
+
+class TestChannelHostContract:
+    """IbChannel.recv() Python 宿主契约：返回 Waitable，.result() 取回装箱值。"""
+
+    def test_recv_returns_waitable_host(self, engine):
+        from core.runtime.objects.kernel import IbChannel
+        from core.runtime.shared.waitable import Waitable
+
+        cls = engine.registry.get_class("chan")
+        c = IbChannel(ib_class=cls)
+        c.send(42)
+        w = c.recv()
+        assert isinstance(w, Waitable)
+        assert w.result().to_native() == 42
+
+    def test_subscriber_recv_returns_waitable_host(self, engine):
+        from core.runtime.objects.kernel import IbChannel
+        from core.runtime.shared.comm.channel import ChannelCore
+        from core.runtime.shared.waitable import Waitable
+
+        cls = engine.registry.get_class("chan")
+        c = IbChannel(ib_class=cls, core=ChannelCore(mode="pubsub"))
+        sub = c.subscribe()
+        w = sub.recv()
+        assert isinstance(w, Waitable)
+        c.send("m")
+        assert w.result().to_native() == "m"

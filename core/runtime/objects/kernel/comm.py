@@ -26,6 +26,31 @@ from core.runtime.shared.comm.channel import ChannelCore
 from core.runtime.shared.comm.slot import SlotCore
 
 
+class _BoxingWaitable:
+    """把底层 Waitable 的取回值经 ``box`` 映射为语言层值（Waitable 协议）。
+
+    供阻塞语言方法（``recv``）返回——底层通道存原生值（send 时 unbox），
+    取回时装箱为 IbObject，与旧阻塞 recv 的装箱语义一致。
+    """
+
+    def __init__(self, inner: Any, box):
+        self._inner = inner
+        self._box = box
+
+    @property
+    def is_done(self) -> bool:
+        return self._inner.is_done
+
+    def try_result(self):
+        ok, val = self._inner.try_result()
+        if ok:
+            return (True, self._box(val))
+        return (False, None)
+
+    def result(self):
+        return self._box(self._inner.result())
+
+
 @register_ib_type("chan")
 class IbChannel(IbObject):
     """IBCI 语言层的 Channel 值对象（包装 ``ChannelCore``）。"""
@@ -53,10 +78,13 @@ class IbChannel(IbObject):
 
     # -- 消费者 ------------------------------------------------ #
 
-    def recv(self):
-        """阻塞接收数据。"""
-        val = self.core.recv()
-        return self.ib_class.registry.box(val)
+    def recv(self) -> "_BoxingWaitable":
+        """返回接收 Waitable（统一执行地基 · 阻塞即挂起）。
+
+        VM 经既有 Waitable 挂起路径等待，恢复后得装箱 T；宿主经 ``.result()``
+        阻塞取回装箱 T。与 ``collect``/``run_isolated`` 返回 HostAwaitable 同构。
+        """
+        return _BoxingWaitable(self.core.recv_waitable(), self.ib_class.registry.box)
 
     def recv_nonblocking(self) -> "IbObject":
         """非阻塞接收；无数据时返回 None。"""
@@ -119,9 +147,9 @@ class IbSubscriber(IbObject):
         super().__init__(ib_class)
         self.view = view
 
-    def recv(self):
-        """阻塞接收订阅队列数据。"""
-        return self.ib_class.registry.box(self.view.recv())
+    def recv(self) -> "_BoxingWaitable":
+        """返回接收 Waitable（阻塞即挂起；宿主 ``.result()`` 阻塞取回装箱 T）。"""
+        return _BoxingWaitable(self.view.recv_waitable(), self.ib_class.registry.box)
 
     def recv_nonblocking(self) -> "IbObject":
         """非阻塞接收；无数据时返回 None。"""

@@ -68,12 +68,22 @@ class IbStreamHandle:
         with self._lock:
             return self._done
 
+    def try_result(self):
+        """非阻塞取回 ``(ok, str)``（调度器专用；不阻塞）。
+
+        ``ok=False`` 表示流未耗尽（调度器重新轮询）；``ok=True`` 消费一次，
+        返回完整拼接文本。生产异常在 ``ok=True`` 分支重抛（终态错误）。
+        """
+        if not self.is_done:
+            return (False, None)
+        return (True, self.result())
+
     def result(self) -> str:
         """阻塞等待完整文本并返回；生产异常时重抛。
 
         Waitable 契约：``result()`` 必须返回完成值（阻塞语义由调用方决定——
-        本调度器在 ``is_done`` 就绪时调用，但 ``_drive_gen_blocking`` 直接
-        ``waitable.result()`` 不轮询 ``is_done``，故此处需等待线程完成）。
+        宿主/线程体直接 ``waitable.result()`` 不轮询 ``is_done``，故此处需等待
+        线程完成）。
         """
         self._thread.join(timeout=120)
         with self._lock:

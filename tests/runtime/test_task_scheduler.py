@@ -34,6 +34,11 @@ class _ManualWaitable(Waitable):
     def is_done(self) -> bool:
         return self._result_set or (self._delay > 0 and time.monotonic() >= self._ready_after)
 
+    def try_result(self) -> Any:
+        if self.is_done:
+            return (True, self._result)
+        return (False, None)
+
     def result(self) -> Any:
         return self._result
 
@@ -51,6 +56,11 @@ class _FutureWaitable(Waitable):
     @property
     def is_done(self) -> bool:
         return self._future.done()
+
+    def try_result(self) -> Any:
+        if self._future.done():
+            return (True, self._future.result())
+        return (False, None)
 
     def result(self) -> Any:
         return self._future.result()

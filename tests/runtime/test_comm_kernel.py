@@ -314,3 +314,59 @@ class TestCommRegistry:
         r = CommRegistry()
         r.register("", ChannelCore(), "chan")
         assert len(r.names()) == 1
+
+
+# ------------------------------------------------------------------ #
+# ChannelRecvWaitable（统一执行地基：通信接收的 Waitable 投影）         #
+# ------------------------------------------------------------------ #
+
+class TestChannelRecvWaitable:
+    """ChannelRecvWaitable：try_result 非阻塞取 / result 阻塞取 / 终态关闭。"""
+
+    def test_try_result_not_ready_then_ready(self):
+        c = ChannelCore(mode="message")
+        w = c.recv_waitable()
+        assert w.is_done is False
+        assert w.try_result() == (False, None)
+        c.send("a")
+        assert w.is_done is True
+        assert w.try_result() == (True, "a")
+
+    def test_result_blocks_until_data(self):
+        c = ChannelCore(mode="message")
+        w = c.recv_waitable()
+
+        def _send():
+            time.sleep(0.05)
+            c.send(7)
+
+        threading.Thread(target=_send, daemon=True).start()
+        assert w.result() == 7
+
+    def test_closed_empty_try_result_raises(self):
+        c = ChannelCore(mode="message")
+        w = c.recv_waitable()
+        c.close()
+        with pytest.raises(CommClosedError):
+            w.try_result()
+
+    def test_closed_drains_remaining_before_raise(self):
+        c = ChannelCore(mode="message")
+        c.send(1)
+        w = c.recv_waitable()
+        assert w.try_result() == (True, 1)
+        c.close()
+        with pytest.raises(CommClosedError):
+            w.try_result()
+
+    def test_pubsub_recv_waitable_rejected(self):
+        c = ChannelCore(mode="pubsub")
+        with pytest.raises(ValueError):
+            c.recv_waitable()
+
+    def test_subscriber_view_recv_waitable(self):
+        c = ChannelCore(mode="pubsub")
+        sub = c.subscribe()
+        w = sub.recv_waitable()
+        c.send("m")
+        assert w.try_result() == (True, "m")

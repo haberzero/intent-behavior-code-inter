@@ -16,6 +16,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from .buffer import CommBuffer, CommClosedError
+from .recv_waitable import ChannelRecvWaitable
 
 
 class ChannelCore:
@@ -124,6 +125,20 @@ class ChannelCore:
             raise CommClosedError()
         return self._primary.recv()
 
+    def recv_waitable(self) -> ChannelRecvWaitable:
+        """返回接收 Waitable（统一等待语义：调度器 try_result / 宿主 result()）。
+
+        pubsub 通道无主缓冲，须经 ``subscribe()`` 取得订阅者端点再取 waitable。
+        """
+        if self._mode == "pubsub":
+            raise ValueError(
+                "recv_waitable() is invalid for pubsub channels: use subscribe() "
+                "to obtain a subscriber consumer endpoint"
+            )
+        if self._primary is None:
+            raise CommClosedError()
+        return ChannelRecvWaitable(self._primary)
+
     def recv_nowait(self):
         """非阻塞接收，返回 ``(ok, item)``。pubsub 通道同 recv 用法约束。"""
         if self._mode == "pubsub":
@@ -228,6 +243,10 @@ class _SubscriberView:
 
     def recv_nowait(self):
         return self._buffer.recv_nowait()
+
+    def recv_waitable(self) -> ChannelRecvWaitable:
+        """返回本订阅者端点的接收 Waitable（统一等待语义）。"""
+        return ChannelRecvWaitable(self._buffer)
 
     def close(self) -> None:
         self._buffer.close()

@@ -49,14 +49,20 @@ class Task:
     保证 ``run()`` 返回序与提交序一致（而非完成序——完成序不可预测）。
 
     ``cancelled``：协作取消标志（阶段 1c 接线；先声明字段）。
+
+    resume 状态（waitable 就绪后投递给任务）：
+    - ``resumed``：是否有待投递的 resume payload（值或异常）。
+    - ``resume_value`` / ``resume_exception``：待投递的值 / 异常（互斥）。
     """
 
     gen: Any
     index: int = 0
     node_uid: str = ""
-    started: bool = False  # 是否已首次推进（区分 next() 与 send()）
     waiting_on: Optional[Waitable] = None
     cancelled: bool = False
+    resumed: bool = False
+    resume_value: Any = None
+    resume_exception: Optional[BaseException] = None
 
 
 class TaskScheduler:
@@ -88,41 +94,65 @@ class TaskScheduler:
         """运行到所有任务完成，返回各任务的完成值（按提交序）。
 
         循环（帧数内联）：
-        1. 恢复就绪的等待任务（waitable ``is_done`` → 回就绪）；
+        1. 恢复等待任务（``try_result()`` 非阻塞取：ok → 投递值；抛异常 → 投递
+           终态错误；未就绪 → 继续等待）；
         2. 推进就绪任务（``send`` 一步；yield Waitable → 等待表；完成 → 写结果槽）；
         3. 无就绪但有等待 → park 短睡眠后重新轮询。
+
+        调度器**只**经 ``try_result()`` 消费（永不阻塞、每个 waitable 恰一次）；
+        ``result()`` 为宿主/线程体专用，调度器不得调用（HostAwaitable 消耗性）。
         """
         park = self._park_interval
         while self._ready or self._waiting:
-            # 1) 等待任务：waitable 就绪 → 回就绪
+            # 1) 恢复等待任务
             still_waiting: List[Task] = []
             for t in self._waiting:
-                if t.waiting_on is not None and t.waiting_on.is_done:
+                if t.waiting_on is None:
+                    still_waiting.append(t)
+                    continue
+                try:
+                    ok, val = t.waiting_on.try_result()
+                except Exception as e:
+                    # 终态错误（通道关闭空队列 / Future 失败）→ 投递进任务，
+                    # 经 CPS 传播让 try-except / llmexcept 处理。
+                    t.resume_exception = e
+                    t.resumed = True
+                    t.waiting_on = None
                     self._ready.append(t)
                 else:
-                    still_waiting.append(t)
+                    if ok:
+                        t.resume_value = val
+                        t.resumed = True
+                        t.waiting_on = None
+                        self._ready.append(t)
+                    else:
+                        still_waiting.append(t)
             self._waiting = still_waiting
 
             # 2) 推进本轮就绪任务
             still_ready: List[Task] = []
             for t in self._ready:
                 try:
-                    if not t.started:
-                        t.started = True
-                        yielded = t.gen.send(None)
+                    if t.resume_exception is not None:
+                        exc = t.resume_exception
+                        t.resume_exception = None
+                        t.resumed = False
+                        yielded = t.gen.throw(exc)
+                    elif t.resumed:
+                        val = t.resume_value
+                        t.resumed = False
+                        yielded = t.gen.send(val)
                     else:
-                        yielded = t.gen.send(t.waiting_on.result() if t.waiting_on else None)
+                        # 首次推进（submit 后第一步）
+                        yielded = t.gen.send(None)
                 except StopIteration as si:
                     self._results[t.index] = si.value
                     continue
 
-                # 任务 yield 了一个 waitable → 挂起
+                # 任务 yield 了一个 waitable → 挂起（下一轮 step 1 经 try_result 恢复）
                 if isinstance(yielded, Waitable):
                     t.waiting_on = yielded
-                    if yielded.is_done:
-                        still_ready.append(t)  # 已就绪，下一轮立即恢复
-                    else:
-                        self._waiting.append(t)
+                    self._waiting.append(t)
                 else:
                     # 非 waitable（未知 yield 值）→ fail-fast：任务契约只允许 yield waitable
                     raise RuntimeError(
@@ -131,8 +161,7 @@ class TaskScheduler:
                     )
             self._ready = still_ready
 
-            # 3) 无就绪但有待决 → park 后重新轮询（不得在此消费 result()——
-            #    HostAwaitable.result() 消耗性，二次消费会报 Unknown handle）
+            # 3) 无就绪但有待决 → park 后重新轮询（不得消费 result()）
             if not self._ready and self._waiting:
                 time.sleep(park)
         return self._results

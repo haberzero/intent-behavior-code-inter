@@ -36,6 +36,31 @@ from .kernel.base import IbObject
 from .kernel.ib_class import IbClass
 
 
+class _ThreadJoinWaitable:
+    """线程 join 的 Waitable（统一执行地基 · 线程完成 = Waitable）。
+
+    包装 ``IbThread``，经 ``is_done`` / ``try_result`` / ``result`` 暴露等待协议；
+    ``result()`` = ``thread_result`` 容器。因语言方法 ``t.is_done()`` 与 Waitable
+    协议的 ``is_done`` 属性重名，以包装隔离（不改语言面 API）。
+    """
+
+    def __init__(self, thread: "IbThread"):
+        self._thread = thread
+
+    @property
+    def is_done(self) -> bool:
+        spawned = self._thread._spawned
+        return spawned is not None and spawned.is_done
+
+    def try_result(self):
+        if not self.is_done:
+            return (False, None)
+        return (True, self._thread._make_result())
+
+    def result(self):
+        return self._thread._make_result()
+
+
 class ThreadStatus:
     """线程 / 线程结果生命周期状态常量（单一权威源）。
 
@@ -105,8 +130,16 @@ class IbThread(IbObject):
             ThreadStatus.FAILED,
         ))
 
-    def join(self) -> Any:
-        """阻塞等待线程完成并返回 ``thread_result[T]`` 容器。
+    def join(self) -> "_ThreadJoinWaitable":
+        """返回 join Waitable（统一执行地基 · 阻塞即挂起）。
+
+        IBCI 代码 ``thread_result r = t.join()`` 语义不变（VM 透明等待，恢复后得
+        ``thread_result`` 容器）；Python 宿主经 ``t.join().result()`` 阻塞取回。
+        """
+        return _ThreadJoinWaitable(self)
+
+    def _make_result(self) -> Any:
+        """阻塞等待线程完成并构造 ``thread_result[T]`` 容器。
 
         成功 → status=done、value=T、error=null；
         失败/取消 → status=failed/cancelled、error=err、value=null。
