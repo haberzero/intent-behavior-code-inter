@@ -104,23 +104,28 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一主线：R 批次（统一执行地基复核与根治修复）**（2026-08-07 用户裁定：彻底修复，不留妥协）——
-  完整设计/深度分析/决策见 `tasks_docs/EXEC_REFACTOR_BATCH.md`（**无悬而未决问题**）。顺序：
-  R4+R3（`exp/exec-ra`：P3 公开协议 + D-04 意图修复 unify is_done）→ R6（`exp/exec-rb`：函数自动只读捕获）→
-  R2（`exp/exec-rc`：调度器通知式唤醒）→ R1（`exp/exec-rd`：函数调用 trampoline 化，EXEC-1 根治）。
-  各独立分支、全量 pytest 零回归、手动 cherry-pick 应用 unsafe-vibe-dev（禁合并）。
+- **下一主线（阶段 4）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——设计已冻结
+  （`tasks_docs/DIAGNOSTIC_DESIGN.md`，D1-D7 + 诊断码集 + 实施步骤）；完整交接要点见 `PENDING_TASKS.md` §12。
+  **前置已全部就绪**：全局事件总线（P4）+ R 批次（调度器通知式唤醒/线程 Waitable/函数 trampoline 已稳定）。
+- **R 批次全部完成（2026-08-07，unsafe-vibe-dev，全量 2001 passed / 1 skipped）**：R4+R3（82c9c0f，1988/1）
+  P3 公开协议 + D-04 `IbThread` 满足 Waitable → R6（35f1437，1995/1）嵌套函数自动只读捕获 → R2（c16b05e/c4c63aa，
+  1998/1）调度器通知式唤醒 → R1（6dc9214，2001/1）函数调用 trampoline 化（EXEC-1 根治，深递归 Python 深度恒定）。
+  各独立分支实验、手动 cherry-pick 应用 unsafe-vibe-dev。设计/决策见 `EXEC_REFACTOR_BATCH.md`（无悬而未决问题）。
 - **已定案（不再重议）**：R5 撤回（`await` 幂等是 auto-yield 组合承载，改报错破坏 `await collect(h)`）；
   D-08 保留透明 async（CPS 天然可挂起 + auto-yield 组合 + 值契约 + yield 自标记）。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev，全量 1984 passed / 1 skipped）**：地基 1a-1e（调度器执行核心/
   Waitable 家族 try_result/阻塞即挂起/协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4
   （非阻塞命名/订阅契约/pubsub EventBus/comm 命名回归/死状态/文档/cell 隔离/引擎级全局事件总线）。
-- **后续路线**：R 批次 → 阶段 4 PT-FEAT-9 诊断机制（`DIAGNOSTIC_DESIGN.md` 已冻结）→ 阶段 5 `yield` 惰性生成器
+- **后续路线**：阶段 4 PT-FEAT-9 诊断机制（`DIAGNOSTIC_DESIGN.md` 已冻结）→ 阶段 5 `yield` 惰性生成器
   （`EXEC_FOUNDATION_DESIGN.md` §5.2）→ 增量（streaming / host async 改进）。
 - **保留规划**：media Phase 4（PT-SEALED-1，彻底封存）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置；全程本地 commit、禁 push。
 
 ### 2.2 已完成摘要
 
+- **2026-08-07（R 批次完成）**：统一执行地基复核与根治——R4+R3 P3 公开协议 + `IbThread` 满足 Waitable（`await t` 可用）、
+  R6 嵌套函数自动只读捕获、R2 调度器通知式唤醒（根治 poll+park）、R1 函数调用 trampoline 化（深递归 Python 深度恒定）。
+  全量 **2001 passed / 1 skipped**。详见 WORKLOG 与 git 历史。
 - **2026-08-06**：**OBSERVABILITY_REFACTOR 主体完成**——Phase 0-2C + 2C-2（idbg 深度收敛：protection_map
   内核化/统一变量视图/snapshot vars bug/LLM 事件流）+ 2D 测试体系全面重建（tests_v2 全域迁移 + 切换 +
   矩阵三段式 + tests_docs 治理）+ Phase 4 收敛全部落地，全量 **1962 passed / 1 skipped**。测试体系现为
