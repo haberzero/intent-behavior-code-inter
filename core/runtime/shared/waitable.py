@@ -23,6 +23,12 @@
 ``result()`` 语义（宿主/线程体专用，**可阻塞**）：阻塞取回完成值；消费一次。
 调度器**不得**调用 ``result()``——部分 waitable（HostAwaitable）的 ``result()``
 是消耗性的，二次消费会报错。
+
+``register_wake(event)`` 语义（R2 通知式唤醒，**可选优化钩子**）：
+- 把完成通知注册到 ``event``（``threading.Event``）；本 waitable 完成时设置
+  该事件，使调度器能被**即时唤醒**（而非 ~1ms 轮询）。
+- 结构性协议允许缺失：实现者可不提供（此时调度器退回首轮询 + 安全超时兜底）。
+  缺失即"无通知能力"，不是协议决策点（调度决策仍经 ``try_result``）。
 """
 
 from __future__ import annotations
@@ -35,7 +41,8 @@ class Waitable(Protocol):
     """可等待对象协议：调度器据此询问是否就绪并取回完成结果。
 
     ``is_done`` 为属性；``try_result()`` 非阻塞取（调度器）；``result()``
-    阻塞取（宿主/线程体）。
+    阻塞取（宿主/线程体）；``register_wake()`` 可选完成通知钩子（调度器
+    即时唤醒优化）。
     """
 
     @property
@@ -47,4 +54,12 @@ class Waitable(Protocol):
 
     def result(self) -> Any:
         """阻塞取回完成值（消费一次）。宿主/线程体专用。"""
+        ...
+
+    def register_wake(self, event) -> None:
+        """把完成通知注册到 ``event``（可选优化；缺失时调度器退回首轮询）。
+
+        ``event`` 为 ``threading.Event`` 兼容对象，应具有 ``set()`` 方法。
+        本 waitable 完成时须设置该事件（可从任意线程调用）。
+        """
         ...

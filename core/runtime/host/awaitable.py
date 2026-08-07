@@ -66,6 +66,16 @@ class HostAwaitable:
             return (False, None)
         return (True, self.result())
 
+    def register_wake(self, event) -> None:
+        """完成通知钩子（R2）：子线程完成时设置 ``event``。
+
+        经 orchestrator 的 spawn 完成钩子注册；handle 已不存在/已完成时
+        立即设置（竞态下注册晚于完成）。
+        """
+        if not self._orchestrator.register_spawn_wake(self._handle, event):
+            # handle 已被消费：子任务已完成，立即唤醒
+            event.set()
+
     def result(self) -> Any:
         """等待并取回子环境导出的变量字典（消费 handle）。"""
         if self._mode is ReceiveMode.STREAM:

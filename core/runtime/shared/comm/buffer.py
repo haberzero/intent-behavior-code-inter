@@ -42,6 +42,37 @@ class CommBuffer:
         self._queue: deque = deque()
         self._closed = False
         self._cond = threading.Condition(threading.Lock())
+        # R2 通知式唤醒回调表：recv waitable 经 register_wake 注册，
+        # send/close 时触发（通知调度器即时唤醒，与 Condition 平行）。
+        self._wake_callbacks: list = []
+
+    # ------------------------------------------------------------------ #
+    # R2 通知式唤醒（调度器即时唤醒，与 Condition 平行）                  #
+    # ------------------------------------------------------------------ #
+
+    def register_wake(self, event) -> None:
+        """把完成通知注册到 ``event``：send/close 时设置（可跨线程）。
+
+        供 ``ChannelRecvWaitable`` 委托——调度器等待通道 recv 时注册，数据
+        到达或通道关闭即唤醒，消除 ~1ms 轮询延迟。
+        """
+        with self._cond:
+            if self._queue or self._closed:
+                event.set()
+                return
+            self._wake_callbacks.append(event)
+
+    def _notify_wake(self) -> None:
+        """触发全部完成通知（send 有新数据 / close 置关闭态时调用）。
+
+        调用方须已持有 ``_cond``（与 ``_cond.notify()`` 同模式）；事件集合
+        清空后回调可安全触发（``threading.Event.set`` 无锁需求）。
+        """
+        if not self._wake_callbacks:
+            return
+        callbacks, self._wake_callbacks = self._wake_callbacks, []
+        for ev in callbacks:
+            ev.set()
 
     # ------------------------------------------------------------------ #
     # 生产者                                                            #
@@ -58,6 +89,7 @@ class CommBuffer:
                     raise CommClosedError()
             self._queue.append(item)
             self._cond.notify()  # 唤醒一个等待 recv 的消费者
+            self._notify_wake()  # R2：通知调度器即时唤醒（新数据到达）
 
     def send_nowait(self, item: Any) -> bool:
         """非阻塞发送。返回 False 表示满或已关闭（不抛）。"""
@@ -68,6 +100,7 @@ class CommBuffer:
                 return False
             self._queue.append(item)
             self._cond.notify()
+            self._notify_wake()  # R2：通知调度器即时唤醒（新数据到达）
             return True
 
     # ------------------------------------------------------------------ #
@@ -115,6 +148,7 @@ class CommBuffer:
                 return
             self._closed = True
             self._cond.notify_all()
+            self._notify_wake()  # R2：通知调度器即时唤醒（通道已关闭）
 
     @property
     def closed(self) -> bool:

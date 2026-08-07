@@ -122,6 +122,10 @@ class LLMFuture:
         """
         return self.future.result()
 
+    def register_wake(self, event) -> None:
+        """完成通知钩子（R2）：后台 Future 完成时设置 ``event``（可跨线程）。"""
+        self.future.add_done_callback(lambda _future: event.set())
+
     def get(self, registry: Any) -> 'IbObject':
         """阻塞等待 Future 完成并返回 IbObject。若已完成则零开销。
 

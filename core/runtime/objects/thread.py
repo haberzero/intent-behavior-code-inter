@@ -129,6 +129,11 @@ class IbThread(IbObject):
         """
         return self._make_result()
 
+    def register_wake(self, event) -> None:
+        """完成通知钩子（R2）：委托底层 ``SpawnedTask``（后台 Future 完成即设置）。"""
+        if self._spawned is not None:
+            self._spawned.register_wake(event)
+
     def join(self) -> "IbThread":
         """返回自身作为 join Waitable（统一执行地基 · 阻塞即挂起，D-04）。
 

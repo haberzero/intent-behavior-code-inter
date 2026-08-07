@@ -50,6 +50,9 @@ class _BoxingWaitable:
     def result(self):
         return self._box(self._inner.result())
 
+    def register_wake(self, event) -> None:
+        self._inner.register_wake(event)
+
 
 @register_ib_type("chan")
 class IbChannel(IbObject):

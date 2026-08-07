@@ -133,6 +133,10 @@ class SpawnedTask:
         """阻塞等待并返回任务结果（宿主/线程体专用）。"""
         return self._future.result()
 
+    def register_wake(self, event) -> None:
+        """完成通知钩子（R2）：后台 Future 完成时设置 ``event``（可跨线程）。"""
+        self._future.add_done_callback(lambda _future: event.set())
+
     def join(self) -> Any:
         """阻塞等待任务完成并返回结果。"""
         return self._future.result()

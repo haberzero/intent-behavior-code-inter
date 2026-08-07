@@ -45,3 +45,7 @@ class ChannelRecvWaitable:
 
     def result(self) -> Any:
         return self._buffer.recv()
+
+    def register_wake(self, event) -> None:
+        """完成通知钩子（R2）：委托 ``CommBuffer``——send/close 时设置 ``event``。"""
+        self._buffer.register_wake(event)

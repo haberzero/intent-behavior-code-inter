@@ -40,6 +40,8 @@ class IbStreamHandle:
         self._error: Optional[BaseException] = None
         self._full_text: str = ""
         self._lock = threading.Lock()
+        # R2 通知式唤醒：注册的完成事件（消费线程 finally 时 set）
+        self._wake_events: list = []
         self._thread = threading.Thread(target=self._consume, daemon=True, name="ibci-stream")
         self._thread.start()
 
@@ -57,7 +59,10 @@ class IbStreamHandle:
         finally:
             with self._lock:
                 self._done = True
+                wake_events = list(self._wake_events)
             self._channel.close()
+            for ev in wake_events:
+                ev.set()
 
     # ------------------------------------------------------------------ #
     # Waitable 协议                                                      #
@@ -67,6 +72,14 @@ class IbStreamHandle:
     def is_done(self) -> bool:
         with self._lock:
             return self._done
+
+    def register_wake(self, event) -> None:
+        """完成通知钩子（R2）：流耗尽（``_done`` 置位）时设置 ``event``。"""
+        with self._lock:
+            if self._done:
+                event.set()
+                return
+            self._wake_events.append(event)
 
     def try_result(self):
         """非阻塞取回 ``(ok, str)``（调度器专用；不阻塞）。

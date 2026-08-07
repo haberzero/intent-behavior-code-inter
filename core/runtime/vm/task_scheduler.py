@@ -7,9 +7,11 @@
 - ``yield waitable`` —— 挂起，等待 ``waitable`` 就绪（调度器就绪后 ``send(result)`` 恢复）
 - ``return value``    —— 完成（``StopIteration.value``）
 
-等待策略（阶段 1a）：
-- 每轮推进：先恢复就绪的等待任务（poll ``is_done``），再推进就绪任务；
-- 无就绪但有待决任务时 **park**（短睡眠）后重新轮询。
+    等待策略（阶段 1a + R2 通知式唤醒）：
+    - 每轮推进：先恢复就绪的等待任务（poll ``is_done``），再推进就绪任务；
+    - 无就绪但有待决任务时 **park**（等待 ``_wake_event``；waitable 完成时经
+      ``register_wake`` 即时设置，无轮询延迟）后重新轮询；安全超时仅兜底
+      （未注册通知的 waitable / 跨线程竞态下不至于永久阻塞）。
 
 帧数控制（深递归友好）：
 - ``run`` 循环**内联**推进与恢复逻辑（不拆 ``_advance``/``_step`` 方法）——用户函数递归
@@ -84,7 +86,10 @@ class TaskScheduler:
     结果序契约：``run()`` 返回的列表**按提交序**（与 ``submit`` 调用顺序一致），
     而非完成序——完成序不可预测，按提交序才使调用方能按索引取回对应任务结果。
 
-    等待策略：poll ``is_done`` + park（无就绪但有等待时短睡眠轮询）。
+    等待策略：poll ``is_done`` + 通知式唤醒（R2）——任务转等待时对 waitable
+    注册 ``register_wake(self._wake_event)``；全等待时 ``_wake_event.wait``
+    （完成即被唤醒，无轮询延迟）；未注册通知的 waitable 退回首轮询 + 安全
+    超时兜底。
     ``run`` 循环内联推进/恢复/等待（帧数控制见模块 docstring）。
     """
 
@@ -94,6 +99,8 @@ class TaskScheduler:
         self._submit_count: int = 0
         self._results: List[Any] = []
         self._park_interval = park_interval
+        # 通知式唤醒事件：waitable 完成时经 register_wake 设置，唤醒全等待 park。
+        self._wake_event = threading.Event()
         self._cancel_event = cancel_event  # 可选：设置后 park 期间取消全部等待任务
         self._lock = threading.Lock()  # 保护 cancel() 的并发取消（跨线程）
 
@@ -185,10 +192,19 @@ class TaskScheduler:
                     self._results[t.index] = TaskCancelled()
                     continue
 
-                # 任务 yield 了一个 waitable → 挂起（下一轮 step 1 经 try_result 恢复）
+                # 任务 yield 了一个 waitable → 挂起（下一轮 step 1 经 try_result 恢复）。
+                # R2：注册完成通知，waitable 完成时即时唤醒调度器（无 ~1ms 轮询延迟）。
                 if isinstance(yielded, Waitable):
                     t.waiting_on = yielded
                     self._waiting.append(t)
+                    try:
+                        yielded.register_wake(self._wake_event)
+                    except AttributeError:
+                        # register_wake 是可选通知钩子（结构性协议允许缺失）——
+                        # 缺失即"无通知能力"，退回首轮询 + 安全超时兜底。
+                        # 注意：不是决策分派（决策仍经 try_result），故 AttributeError
+                        # 回退不违反"禁止能力探测"——本回退只是放弃性能优化。
+                        pass
                 else:
                     # 非 waitable（未知 yield 值）→ fail-fast：任务契约只允许 yield waitable
                     raise RuntimeError(
@@ -197,11 +213,17 @@ class TaskScheduler:
                     )
             self._ready = still_ready
 
-            # 3) 无就绪但有待决 → park 后重新轮询（不得消费 result()）
+            # 3) 无就绪但有待决 → 等待唤醒事件（完成即被唤醒），安全超时兜底
             if not self._ready and self._waiting:
                 if self._cancel_event is not None and self._cancel_event.is_set():
                     # 协作取消：等待中的任务也取消（park 期间唤醒）
                     for t in self._waiting:
                         t.cancelled = True
-                time.sleep(park)
+                    # 立即唤醒：已取消任务不再依赖 waitable 完成，直接进入下一轮投递
+                    self._wake_event.set()
+                # 等待通知式唤醒：waitable 完成时经 register_wake 设置事件，
+                # 立即唤醒重 poll（无轮询延迟）；park_interval 作安全超时兜底
+                # （未注册通知的 waitable / 事件竞态下不至于永久阻塞）。
+                self._wake_event.wait(timeout=park)
+                self._wake_event.clear()
         return self._results

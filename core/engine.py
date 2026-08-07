@@ -195,7 +195,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.interpreter: Optional[Interpreter] = None
 
         # 多 Interpreter 并发任务表（handle → (thread, sub_engine, exc_holder)）
-        self._spawned_tasks: Dict[str, Tuple[threading.Thread, 'IBCIEngine', list, Optional[float]]] = {}
+        self._spawned_tasks: Dict[str, Tuple[threading.Thread, 'IBCIEngine', list, Optional[float], list]] = {}
         self._spawned_tasks_lock = threading.Lock()
 
         # --- root-dependent（延迟）：在 _ensure_root_initialized 中确立 ---
@@ -752,21 +752,48 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出
         exc_holder: list = [None]
+        # R2：子任务完成的唤醒回调表（HostAwaitable.register_wake 注册的 event）
+        wake_callbacks: list = []
 
         def _run_child():
             try:
                 sub_engine.run(abs_path, silent=silent)
             except Exception as e:
                 exc_holder[0] = e
+            finally:
+                # 子线程完成 → 触发全部唤醒回调（调度器即时唤醒，无轮询延迟）
+                with self._spawned_tasks_lock:
+                    callbacks, _cb_ref = wake_callbacks, []
+                    wake_callbacks[:] = []
+                for ev in callbacks:
+                    ev.set()
 
         thread = threading.Thread(target=_run_child, daemon=True, name=f"ibci-spawn-{abs_path}")
         thread.start()
 
         handle = f"spawn_{uuid.uuid4().hex[:16]}"
         with self._spawned_tasks_lock:
-            self._spawned_tasks[handle] = (thread, sub_engine, exc_holder, policy_obj.collect_timeout)
+            self._spawned_tasks[handle] = (thread, sub_engine, exc_holder, policy_obj.collect_timeout, wake_callbacks)
 
         return handle
+
+    def register_spawn_wake(self, handle: str, event) -> bool:
+        """[IKernelOrchestrator] 为 spawn handle 注册完成通知（R2）。
+
+        子线程完成时设置 ``event``（调度器即时唤醒）。返回 False 表示 handle
+        已不存在/已完成（调用方退回首轮询）。
+        """
+        with self._spawned_tasks_lock:
+            task = self._spawned_tasks.get(handle)
+            if task is None:
+                return False
+            thread, _sub, _exc, _to, wake_callbacks = task
+            if not thread.is_alive():
+                # 已完成：立即唤醒（竞态下注册晚于完成）
+                event.set()
+                return True
+            wake_callbacks.append(event)
+            return True
 
     def is_spawn_done(self, handle: str) -> bool:
         """[IKernelOrchestrator] 非破坏性检查 spawn handle 的子线程是否已执行完成。
@@ -798,7 +825,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             raise RuntimeError(f"Unknown spawn handle: {handle!r}. "
                                "The handle may have already been collected or never spawned.")
 
-        thread, sub_engine, exc_holder, collect_timeout = task
+        thread, sub_engine, exc_holder, collect_timeout, _wake_callbacks = task
         thread.join(timeout=collect_timeout)  # None = 无界阻塞；正数 = 墙钟上限
         if thread.is_alive():
             # 超时：handle 已消费，子线程作为 daemon 孤儿继续运行。
