@@ -727,7 +727,7 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
             self._register_func_params(node.args, func_scope)
             with self.enter_scope(func_scope):
                 # 分析 nonlocal 声明：为包含 nonlocal 的函数填充 free_vars
-                self._analyze_function_nonlocal(node)
+                self._analyze_function_captures(node)
                 for stmt in node.body:
                     self._analyze_node(stmt)
 
@@ -800,10 +800,17 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
             self.lambda_captures[node] = captured_vars
 
     def _collect_name_nodes(self, node: ast.IbASTNode) -> list:
-        """收集 AST 子树中所有 IbName 节点。"""
+        """收集 AST 子树中所有 IbName 节点。
+
+        不进入嵌套函数/类/LLM 函数**定义体**（其内部引用属于嵌套作用域，
+        由各自的分析独立捕获——否则外层会把内层引用的变量误捕获）。
+        """
         result = []
         if isinstance(node, ast.IbName):
             result.append(node)
+        elif isinstance(node, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):
+            # 嵌套定义体：不递归（内层引用由内层函数自己的捕获分析处理）
+            return result
         elif isinstance(node, ast.IbASTNode):
             for attr in vars(node):
                 child = getattr(node, attr)
@@ -857,43 +864,60 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
                 )
                 scope.define(sym)
 
-    def _analyze_function_nonlocal(self, node: ast.IbFunctionDef):
-        """分析函数中的 nonlocal 声明，填充 node.free_vars。
+    def _analyze_function_captures(self, node: ast.IbFunctionDef):
+        """分析函数外层引用，自动捕获只读自由变量（R6）。
 
-        当函数包含 nonlocal 声明时，需要将 nonlocal 变量作为自由变量
-        记录到 free_vars 中，使得运行时 vm_handle_IbFunctionDef 能够
-        为这些变量建立 Cell 共享引用（类似 lambda 的闭包捕获机制）。
+        函数体引用的外层名称（非本函数参数/局部、非 intrinsic、非全局）自动
+        纳入 ``free_vars``，使运行时 ``vm_handle_IbFunctionDef`` 为其建立 Cell
+        共享引用（与 lambda 捕获机制同构）。``nonlocal`` 声明仅标记"写访问"，
+        其名称必是外层引用，同样经本分析捕获（写路径运行时经 Cell 写回）。
+
+        行为变更：原"引用外层局部未声明 nonlocal → 运行时 not defined"现变为
+        "自动捕获可用"（对齐 Python 心智模型：读捕获自动、写需 nonlocal）。
         """
-        # 收集 nonlocal 声明的名称
+        # 收集 nonlocal 声明的名称（写访问标记；名称本身仍是外层引用）
         nonlocal_names = set()
         for stmt in node.body:
             if isinstance(stmt, ast.IbNonlocalStmt):
                 nonlocal_names.update(stmt.names)
 
-        if not nonlocal_names:
-            return
-
-        # 使用 prior_symbol_bindings 查找各 nonlocal 名称的符号 UID
+        # 使用 prior_symbol_bindings 查找各引用名称的符号 UID
         node_to_symbol = self.context.prior_symbol_bindings
         free_var_refs = []
         captured_vars = set()
 
-        # 从函数体中收集所有 IbName 节点，找到引用 nonlocal 变量的节点
+        # 从函数体中收集所有 IbName 节点
         body_names = []
         for stmt in node.body:
             body_names.extend(self._collect_name_nodes(stmt))
 
+        # 当前函数作用域 UID（判断"本函数内定义"的符号）；null 时退化只排 intrinsic
+        func_scope_uid = self.current_scope.uid if self.current_scope is not None else None
+
         seen_names = set()
         for name_node in body_names:
             var_name = name_node.id
-            if var_name not in nonlocal_names or var_name in seen_names:
+            if var_name in seen_names:
                 continue
             seen_names.add(var_name)
 
             sym = node_to_symbol.get(name_node)
-            if sym and hasattr(sym, 'uid') and sym.uid:
-                captured_vars.add(var_name)
-                free_var_refs.append([var_name, sym.uid])
+            if not sym or not getattr(sym, 'uid', None):
+                continue
+            sym_uid = sym.uid
+            # 排除 intrinsic（内核原生符号）
+            if sym_uid.startswith("intrinsic:"):
+                continue
+            # 排除本函数内定义的符号（参数/局部变量）：uid 以本函数作用域为前缀
+            if func_scope_uid and sym_uid.startswith(func_scope_uid + ":"):
+                continue
+            # 排除全局作用域符号（root scope uid 无 "/" 分层，如 "scope_global:name"；
+            # 本函数及外层函数 uid 形如 "scope_global/outer:x" 含 "/"）。全局始终
+            # 可达，无需 Cell 捕获。
+            if "/" not in sym_uid:
+                continue
+            captured_vars.add(var_name)
+            free_var_refs.append([var_name, sym_uid])
 
         # 兜底：主通道（node_to_symbol 遍历函数体）未覆盖的 nonlocal 名，再经父
         # 作用域按名解析。注意：_collect_name_nodes 会递归进入嵌套 if/for 等块，
