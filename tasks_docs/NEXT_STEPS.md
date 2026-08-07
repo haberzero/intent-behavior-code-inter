@@ -16,7 +16,7 @@
 
 | 序 | 项 | 分支 | 内容 |
 |----|----|------|------|
-| 1 | R4 + R3 | `exp/exec-ra` | P3 公开协议（`IbCell.mark_shared_with_main`）+ D-04 意图修复（`IbThread` 本体满足 Waitable，unify `is_done`，auto-bind 支持 property-backed 方法，`await t` 可用） |
+| ~~1~~ | ~~R4 + R3~~ | ~~`exp/exec-ra`~~ | ~~P3 公开协议（`IbCell.mark_shared_with_main`）+ D-04 意图修复（`IbThread` 本体满足 Waitable，unify `is_done`，auto-bind 支持 property-backed 方法，`await t` 可用）~~ **已完成（2026-08-07，unsafe-vibe-dev 82c9c0f，全量 1988/1）** |
 | 2 | R6 | `exp/exec-rb` | 嵌套函数自动只读捕获（与 lambda 同构，`nonlocal` 仅用于写）——P3 触发面回到审计预期宽度 |
 | 3 | R2 | `exp/exec-rc` | 调度器通知式唤醒（Waitable `register_wake` + 各 waitable 完成通知 + CommBuffer 回调表 + 引擎 spawn 钩子）——根治 poll+park 与"单待决阻塞" |
 | 4 | R1 | `exp/exec-rd` | 函数调用 trampoline 化（`_vm_call_user_function` CPS 内联，EXEC-1 根治，深递归 Python 深度恒定） |
@@ -45,8 +45,12 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 ## 📋 交接要点（下一 session）
 
 - **首要任务（2026-08-07）**：**R 批次（统一执行地基复核与根治修复）**——完整设计/深度分析/决策见
-  `tasks_docs/EXEC_REFACTOR_BATCH.md`（无悬而未决问题）。顺序：R4+R3（exp/exec-ra）→ R6（exp/exec-rb）→
-  R2（exp/exec-rc）→ R1（exp/exec-rd），各独立分支、全量零回归、手动 cherry-pick 应用 unsafe-vibe-dev。
+  `tasks_docs/EXEC_REFACTOR_BATCH.md`（无悬而未决问题）。顺序：R4+R3（exp/exec-ra，**已完成 82c9c0f**）→
+  R6（exp/exec-rb）→ R2（exp/exec-rc）→ R1（exp/exec-rd），各独立分支、全量零回归、手动 cherry-pick 应用 unsafe-vibe-dev。
+- **R4+R3 已完成（2026-08-07，unsafe-vibe-dev 82c9c0f，全量 1988 passed / 1 skipped）**：R4 P3 公开协议
+  （`IbCell.mark_shared_with_main()`）+ R3 D-04 意图修复（`IbThread` 本体满足 Waitable：`is_done` 改 property、
+  auto-bind 支持 property-backed 方法、`try_result`/`result`、`join()` 返回自身、删 `_ThreadJoinWaitable`、`await t` 可用、
+  语言 `t.is_done()` 保留）。修复 auto-yield 缺口（类构造返回 Waitable 不自动挂起）+ 编译期 `await thread[T]`→`thread_result[T]`。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev）**：地基 1a-1e（调度器执行核心/Waitable 家族/阻塞即挂起/
   协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4（命名/订阅契约/comm 命名回归/死状态/
   文档/cell 隔离/全局事件总线），全量 **1984 passed / 1 skipped**。
