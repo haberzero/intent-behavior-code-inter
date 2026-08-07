@@ -16,15 +16,15 @@ MATRIX_PATH = TESTS_ROOT / "COVERAGE_MATRIX.md"
 
 
 def _collect_nodeids() -> set:
-    """经 ``pytest --collect-only`` 获取真实 nodeid 集合。"""
+    """经 ``pytest --collect-only`` 获取真实 nodeid 集合（勿用 -q：-q 输出 per-file 计数）。"""
     import subprocess
     import sys
 
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", str(TESTS_ROOT), "--collect-only", "-q"],
+        [sys.executable, "-m", "pytest", str(TESTS_ROOT), "--collect-only"],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=180,
     )
     nodeids = set()
     for line in proc.stdout.splitlines():
