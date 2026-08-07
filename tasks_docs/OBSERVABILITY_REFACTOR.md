@@ -165,6 +165,7 @@
 | 2026-08-06 | 2B | **跳过 call_info 形式化**：ai/idbg/snapshot 三入口已收敛于 `get_current_call_info()`（`_current_call_info` 单写槽）单一权威源，dict 形态 JSON 友好无需 dataclass 化 | 单一权威源已达成；形式化收益边际 |
 | 2026-08-06 | 2C | **idbg 适配实验完成并应用**：`exp/obs-2c-idbg` 分支全量绿（1633/4）→ cherry-pick 应用回 unsafe-vibe-dev（commit 8a0065c）。删真死代码 `_llm_provider`/`debugger_provider`；`show_intents` 收敛为 `intents()` 单一权威源（去 C9 双源回退 + except-pass）；`fields()` 改 `isinstance(IbObject)` 协议直访（去 A1 hasattr 探测）；保留 16-API vtable 契约（fields/intents 保留并修复，非删除） | 实验验证 + 审计记录（C9/A1）同步为已解决 |
 | 2026-08-06 | **重排** | **用户裁定优先级重排**：① **现阶段主线 = idbg 深度收敛 + 用户层机制改造**（内省机制有机配合、同步逐步收敛到观测骨架）；② idbg 深度改造完成后 → **测试体系全面重建（2D）**；③ **内核诊断/可观测性机制重建**（CORE_DEBUG 替代物，PT-FEAT-9）→ **未来计划，现阶段非重点** | 用户裁定（2026-08-06） |
+| 2026-08-06 | 2C-2 | **idbg 深度收敛 + 用户层机制改造（本批完成，commits dca033e/40ac9e4/ac245a5）**：① protection_map 内核化——`IExecutionContext.get_llmexcept_protection_map()`（内核拥有 node_pool 格式语义，消 idbg 白盒直扫）；② 渲染/结果形态去重（`_result_to_dict`/`_print_prompt_segments`）；③ 值层类型内省接入 `print_vars`（`_value_type`，与 `type()` 同源 ib_class.name）；④ **统一变量视图**——`_iter_user_vars()` 单遍历统一过滤，`get_vars`/`get_vars_snapshot` 共享（消除双入口过滤分歧），删 snapshot `metadata` hasattr 异味；⑤ **修 snapshot()["vars"] 恒空契约漂移 bug**（消费端按原始值误读富 dict）；⑥ **用户层事件流补齐**——统一发射入口 `emit_runtime_event`（observability 门控），`llm_dispatched`/`llm_resolved` 真正发射（原声明但从未发射的空壳），comm 发射复用。全量 1640/4 | 实验验证；其中⑤⑥为真 bug 修复（回归测试） |
 
 ---
 
@@ -177,7 +178,7 @@
 | 2A CORE_DEBUG 移除实验 | ✅ 完成并应用 | 分支验证全绿 → cherry-pick 应用回 unsafe-vibe-dev（commit 6878986），全量 1626/6 零 warning |
 | 2B 观测骨架扩展实验 | ✅ 完成并应用 | EngineTestSnapshot/test_hooks/resolve_plugin_search_paths 公开；test_mode/mock_provider→2D、call_info 形式化跳过 |
 | 2C idbg 重构实验 | ✅ 完成并应用 | 删死代码 + show_intents 单一权威源 + fields() 协议化（commit 8a0065c） |
-| 2C-2 idbg 深度收敛 + 用户层机制改造 | 🔄 **当前主线** | idbg 数据源收敛到观测骨架 + 渲染层化 + 消除白盒直扫；用户层内省（type()/__return_type__/idbg/iruntime）与测试层内省逐步收敛 |
+| 2C-2 idbg 深度收敛 + 用户层机制改造 | 🔄 本批完成 | protection_map 内核化、渲染去重、类型内省、统一变量视图、snapshot vars bug 修复、LLM 事件流补齐（commits dca033e/40ac9e4/ac245a5，全量 1640/4） |
 | 2D 测试体系重建实验 | ⬜ idbg 完成后 | 独立分支 `exp/obs-2d-test-refactor`；沿用 TEST_REFACTOR 策略/铁律 |
 | 3 手动应用回 unsafe-vibe-dev | 🔄 随各实验 | 2A/2B/2C 已应用；2C-2/2D 待 |
 | 4 收敛收尾 | ⬜ | 矩阵三段式同步（PT-TEST-3）+ meta 扩展 + 旧 tests 删除 + docs 治理 |
