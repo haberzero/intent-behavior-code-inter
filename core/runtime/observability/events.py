@@ -113,3 +113,30 @@ class ChannelSink:
 
     def close(self) -> None:
         self._channel.close()
+
+
+def emit_runtime_event(rc: Any, event_type: str, data: Optional[Dict[str, Any]] = None) -> None:
+    """统一事件发射入口（observability 门控 + 事件总线广播，尽力而为）。
+
+    经 runtime_context 公开访问器取配置存储与事件总线：
+    - 受控制层 ``observability`` 开关约束（关闭时跳过）；
+    - 无订阅者为空操作；
+    - 事件记录失败不阻断执行（可观测性层尽力而为）；
+    - 仅读取存在性（``peek_*``），不因事件记录而创建存储/总线。
+
+    供 VM handlers（chan/slot）、LLM 执行器（llm_dispatched/llm_resolved）等
+    内核事件源统一调用，消除各点各自内联的发射逻辑。
+    """
+    try:
+        store = rc.peek_comm_config_store()
+        if store is not None and not store.get("observability"):
+            return
+    except Exception:
+        return
+    bus = rc.peek_comm_event_bus()
+    if bus is None:
+        return
+    try:
+        bus.emit({"type": event_type, "data": data or {}})
+    except Exception:
+        pass

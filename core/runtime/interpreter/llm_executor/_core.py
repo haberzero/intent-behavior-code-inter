@@ -35,6 +35,7 @@ from typing import Any, List, Optional, Dict, Union, Mapping
 
 from core.runtime.interfaces import ServiceContext, Registry, InterOp, IExecutionContext
 from core.base.interfaces import ILLMProvider, IssueTracker
+from core.runtime.observability.events import emit_runtime_event
 from core.runtime.capability_registry import CapabilityRegistry
 
 from core.kernel.issue import InterpreterError
@@ -111,6 +112,16 @@ class LLMExecutorCore:
         """当前注入的测试钩子（未注入返回 None）。"""
         return self.service_context.test_hooks
 
+    def _emit_llm_event(self, event_type: str, data: Dict[str, Any]) -> None:
+        """向 runtime_context 事件总线广播 LLM 生命周期事件（尽力而为）。
+
+        经统一发射入口（observability 门控）；执行上下文未就绪或事件记录
+        失败均不阻断 LLM 调用。
+        """
+        if self._execution_context is None:
+            return
+        emit_runtime_event(self._execution_context.runtime_context, event_type, data)
+
     def get_current_call_info(self) -> Mapping[str, Any]:
         """获取最近一次 resolve 的调用信息（主线程单写槽）。"""
         return self._current_call_info
@@ -177,6 +188,9 @@ class LLMExecutorCore:
         空字符串表示使用默认模型。
         """
         if self.llm_callback:
+            self._emit_llm_event(
+                "llm_dispatched", {"node_uid": node_uid, "target_model": target_model}
+            )
             try:
                 response = self.llm_callback(sys_prompt, user_prompt, target_model=target_model)
                 hooks = self._test_hooks()
@@ -185,6 +199,7 @@ class LLMExecutorCore:
                         node_uid=node_uid, sys_prompt=sys_prompt,
                         user_prompt=user_prompt, target_model=target_model, response=response,
                     )
+                self._emit_llm_event("llm_resolved", {"node_uid": node_uid, "response": response})
                 return response
             except Exception as e:
                 # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
@@ -198,6 +213,7 @@ class LLMExecutorCore:
                 hooks = self._test_hooks()
                 if hooks is not None:
                     hooks.on_llm_call_error(node_uid=node_uid, error=str(e))
+                self._emit_llm_event("llm_resolved", {"node_uid": node_uid, "error": str(e)})
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),
                     provider_error=str(e),

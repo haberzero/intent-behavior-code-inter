@@ -17,6 +17,7 @@ from core.runtime.objects.kernel import IbChannel, IbSlot
 from core.runtime.shared.comm.channel import ChannelCore
 from core.runtime.shared.comm.slot import SlotCore
 from core.runtime.shared.comm.registry import CommRegistry
+from core.runtime.observability.events import emit_runtime_event
 
 
 def _get_comm_registry(executor) -> CommRegistry:
@@ -29,27 +30,8 @@ def _get_comm_registry(executor) -> CommRegistry:
 
 
 def _emit_event(executor, event_type: str, data: Optional[dict] = None) -> None:
-    """向 runtime_context 上的事件总线广播事件（内省事件流）。
-
-    受控制层 observability 开关约束：关闭时跳过事件记录。
-    无订阅者时为空操作；事件总线失败不阻断执行（可观测性层尽力而为）。
-    仅读取存在性（peek），不因事件记录而创建存储/总线。
-    """
-    rc = executor.runtime_context
-    store = rc.peek_comm_config_store()
-    if store is not None:
-        try:
-            if not store.get("observability"):
-                return
-        except Exception:
-            pass
-    bus = rc.peek_comm_event_bus()
-    if bus is None:
-        return
-    try:
-        bus.emit({"type": event_type, "data": data or {}})
-    except Exception:
-        pass
+    """经统一发射入口向 runtime_context 事件总线广播事件（见 emit_runtime_event）。"""
+    emit_runtime_event(executor.runtime_context, event_type, data)
 
 
 def vm_handle_IbChannelExpr(executor, node_uid: str, node_data: Mapping[str, Any]):

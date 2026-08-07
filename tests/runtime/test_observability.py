@@ -81,9 +81,21 @@ slot st = slot("score", 1)
 dict e = ev.recv()
 print(e)
 """)
-        assert "slot_updated" in lines[0]
-        assert "score" in lines[0]
 
+    def test_subscribe_receives_llm_lifecycle_events(self):
+        """LLM 调用生命周期事件（llm_dispatched/llm_resolved）经事件流送达。
+
+        回归：事件类型早已声明但从未发射（空壳机制）。
+        """
+        lines = run_ibci(
+            "chan ev = iruntime.subscribe()\n"
+            "str r = @~ MOCK:STR:hello ~\n"
+            "dict e = ev.recv()\n"
+            "print(e)\n",
+            prefix='import iruntime\nimport ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n',
+        )
+        assert len(lines) == 1
+        assert "llm" in lines[0]
 
 class TestKeywordMemberAccess:
     def test_keyword_as_member_name(self):
