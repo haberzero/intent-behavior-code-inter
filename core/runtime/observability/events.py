@@ -2,13 +2,12 @@
 core.runtime.observability.events — 事件流（EventSource 协议 + 事件总线）。
 
 ``runtime.subscribe()`` 返回一个 mode=stream 的 Channel，运行时状态变更事件
-推入其中。事件源（协调器/VM/CommRegistry）统一实现 ``EventSource`` 协议，
-经事件总线把事件 ``send`` 到订阅者 Channel（协议驱动，禁止在运行流程里写
+推入其中。事件源（VM handler / LLM 执行器 / iruntime）统一实现 ``EventSource``
+协议，经事件总线把事件 ``send`` 到订阅者 Channel（协议驱动，禁止在运行流程里写
 ``if 事件类型`` 硬编码分发——事件类型是数据，不是分发条件）。
 
-事件类型（设计 §四.2）：task_started / task_done / task_cancelled /
-chan_created / chan_closed / slot_updated / llm_dispatched / llm_resolved /
-vm_spawned / vm_terminated / configured。
+事件类型（如实清单，2026-08-07 对账）：llm_dispatched / llm_resolved /
+chan_created / slot_updated / configured。
 """
 
 from __future__ import annotations
@@ -128,12 +127,12 @@ def emit_runtime_event(rc: Any, event_type: str, data: Optional[Dict[str, Any]] 
     内核事件源统一调用，消除各点各自内联的发射逻辑。
     """
     try:
-        store = rc.peek_comm_config_store()
+        store = rc.peek_config_store()
         if store is not None and not store.get("observability"):
             return
     except Exception:
         return
-    bus = rc.peek_comm_event_bus()
+    bus = rc.peek_event_bus()
     if bus is None:
         return
     try:

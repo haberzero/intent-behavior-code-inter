@@ -23,11 +23,11 @@ class IRuntimeLib:
     """IBCI 运行时内省模块（snapshot / subscribe）。"""
 
     def __init__(self):
-        self._event_bus: Optional[EventBus] = None
+        pass
 
     def setup(self, capabilities) -> None:
-        # 事件总线惰性初始化（每模块实例独立，挂到模块对象上）
-        self._event_bus = EventBus()
+        # 事件总线统一挂在 runtime_context（rc.get_event_bus()），无模块级总线。
+        pass
 
     # ------------------------------------------------------------------
     # 内省
@@ -150,7 +150,7 @@ class IRuntimeLib:
     @staticmethod
     def _get_config_store(rc: Any) -> ConfigStore:
         """获取（或惰性创建）runtime_context 关联的配置存储（公开访问器）。"""
-        return rc.get_comm_config_store()
+        return rc.get_config_store()
 
     # ------------------------------------------------------------------
     # 内部：事件总线访问（挂在 runtime_context 上，与 CommRegistry 同级）
@@ -159,7 +159,7 @@ class IRuntimeLib:
     @staticmethod
     def _get_event_bus(rc: Any) -> EventBus:
         """获取（或惰性创建）runtime_context 关联的事件总线（公开访问器）。"""
-        return rc.get_comm_event_bus()
+        return rc.get_event_bus()
 
     # ------------------------------------------------------------------
     # 内部：供运行时事件源 emit（协调器/VM/CommRegistry 接入点）

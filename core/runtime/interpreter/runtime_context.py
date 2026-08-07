@@ -389,13 +389,14 @@ class RuntimeContextImpl(RuntimeContext):
         self._llm_except_frames: List['LLMExceptFrame'] = []
         # 最大 llmexcept 嵌套深度限制
         self._llm_except_max_depth: int = 128
-        # 通信域/线程协调器槽（由访问器惰性创建；未挂载时默认 None）。
+        # 运行时共享设施槽（由访问器惰性创建；未挂载时默认 None）：
+        # 通信注册表 / 线程协调器（通信域）+ 控制配置存储 / 事件总线（观测控制域）。
         self._comm_registry: Optional[Any] = None
-        self._comm_config_store: Optional[Any] = None
-        self._comm_event_bus: Optional[Any] = None
+        self._config_store: Optional[Any] = None
+        self._event_bus: Optional[Any] = None
         self._runtime_coordinator: Optional[Any] = None
 
-    # --- 通信域 / 线程协调器访问器（公开接口，替代跨对象私有槽穿透） ---
+    # --- 运行时共享设施访问器（公开接口，替代跨对象私有槽穿透） ---
     # 每槽两形态：``get_*`` 惰性创建（调用方需要对象本身）；``peek_*`` 只读
     # 返回（调用方仅检查存在性/读取，不产生副作用）。
 
@@ -410,27 +411,27 @@ class RuntimeContextImpl(RuntimeContext):
             self._comm_registry = CommRegistry()
         return self._comm_registry
 
-    def peek_comm_config_store(self) -> Optional[Any]:
+    def peek_config_store(self) -> Optional[Any]:
         """控制层配置存储（只读；未创建返回 None）。"""
-        return self._comm_config_store
+        return self._config_store
 
-    def get_comm_config_store(self) -> Any:
+    def get_config_store(self) -> Any:
         """控制层配置存储（惰性创建）。供 parallel/observability 等开关读取。"""
-        if self._comm_config_store is None:
+        if self._config_store is None:
             from core.runtime.observability.config import ConfigStore
-            self._comm_config_store = ConfigStore()
-        return self._comm_config_store
+            self._config_store = ConfigStore()
+        return self._config_store
 
-    def peek_comm_event_bus(self) -> Optional[Any]:
+    def peek_event_bus(self) -> Optional[Any]:
         """内省事件总线（只读；未创建返回 None）。"""
-        return self._comm_event_bus
+        return self._event_bus
 
-    def get_comm_event_bus(self) -> Any:
+    def get_event_bus(self) -> Any:
         """内省事件总线（惰性创建）。供事件源广播内省事件流。"""
-        if self._comm_event_bus is None:
+        if self._event_bus is None:
             from core.runtime.observability.events import EventBus
-            self._comm_event_bus = EventBus()
-        return self._comm_event_bus
+            self._event_bus = EventBus()
+        return self._event_bus
 
     def peek_runtime_coordinator(self) -> Optional[Any]:
         """线程协调器（只读；未创建返回 None）。"""

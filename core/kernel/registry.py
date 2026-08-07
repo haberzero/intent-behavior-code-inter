@@ -26,7 +26,6 @@ class KernelRegistry:
         # 绑定执行上下文数据，不再持有整个解释器实例
         self._execution_context: Optional[Any] = None
         self._execution_context_lock = threading.Lock()
-        self._registry_lock = threading.Lock()
         
         # 注册状态机级别。默认为 1。
         self._state_level = 1

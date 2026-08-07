@@ -85,17 +85,17 @@ class TestRuntimeContextCommAccessors:
         # 二次取同一实例（惰性创建幂等）
         assert ctx.get_comm_registry() is reg
 
-    def test_comm_config_store_accessors(self, ctx):
-        assert ctx.peek_comm_config_store() is None
-        store = ctx.get_comm_config_store()
+    def test_config_store_accessors(self, ctx):
+        assert ctx.peek_config_store() is None
+        store = ctx.get_config_store()
         assert store is not None
-        assert ctx.get_comm_config_store() is store
+        assert ctx.get_config_store() is store
 
-    def test_comm_event_bus_accessors(self, ctx):
-        assert ctx.peek_comm_event_bus() is None
-        bus = ctx.get_comm_event_bus()
+    def test_event_bus_accessors(self, ctx):
+        assert ctx.peek_event_bus() is None
+        bus = ctx.get_event_bus()
         assert bus is not None
-        assert ctx.get_comm_event_bus() is bus
+        assert ctx.get_event_bus() is bus
 
     def test_runtime_coordinator_accessors(self, ctx):
         assert ctx.peek_runtime_coordinator() is None
