@@ -27,10 +27,11 @@
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务（2026-08-06 重排）**：**2C-2 idbg 深度收敛 + 用户层机制改造 本批已完成**（commits dca033e/40ac9e4/ac245a5：
-  protection_map 内核化、渲染去重、类型内省、统一变量视图、snapshot vars bug 修复、LLM 事件流补齐，全量 1640/4）。
-  下一步 → **2D 测试体系全面重建**（独立分支 `exp/obs-2d-test-refactor`，沿用 TEST_REFACTOR 策略/铁律：
-  新测试目录从零构建 → 逐域移植 → 覆盖≥旧体系后替换；矩阵三段式 + meta 机器校验）→ Phase 4 收敛。
+- **首要任务（2026-08-06 重排）**：**2C-2 idbg 深度收敛 + 用户层机制改造 已完成**（commits dca033e/40ac9e4/ac245a5）；
+  **2D 测试体系重建 全域迁移+切换已完成**（用户授权 git 直接合并；语义覆盖守恒 1565=1565；旧 tests/ 删除、
+  tests_v2→tests 全面替换，全量 1962/1）。
+  **剩余**：矩阵三段式填充（PT-TEST-3，`tests/COVERAGE_MATRIX.md`）+ tests_docs 治理
+  （SEMANTIC_COVERAGE_MATRIX/TEST_PHILOSOPHY 重写）+ `docs/WRITING_GUIDE.md` 纳入 tests_docs 管辖 → Phase 4 收敛收尾。
   **内核诊断机制重建（CORE_DEBUG 替代物）列为未来计划 PT-FEAT-9，现阶段非重点**。
 - **本 session 已完成（2026-08-06，unsafe-vibe-dev，11 commits）**：Phase 0 设计冻结、Phase 1 契约修复+死码+零成本穿透替换、
   **2A CORE_DEBUG 整体移除**（88 trace → warnings 8 处/删除，commit 6878986）、**2B 观测骨架测试合作面**

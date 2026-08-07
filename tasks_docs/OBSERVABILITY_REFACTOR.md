@@ -179,7 +179,7 @@
 | 2B 观测骨架扩展实验 | ✅ 完成并应用 | EngineTestSnapshot/test_hooks/resolve_plugin_search_paths 公开；test_mode/mock_provider→2D、call_info 形式化跳过 |
 | 2C idbg 重构实验 | ✅ 完成并应用 | 删死代码 + show_intents 单一权威源 + fields() 协议化（commit 8a0065c） |
 | 2C-2 idbg 深度收敛 + 用户层机制改造 | 🔄 本批完成 | protection_map 内核化、渲染去重、类型内省、统一变量视图、snapshot vars bug 修复、LLM 事件流补齐（commits dca033e/40ac9e4/ac245a5，全量 1640/4） |
-| 2D 测试体系重建实验 | 🔄 全部域已迁移 | tests_v2 骨架 + kernel/compiler/contracts/runtime/plugins/e2e/compliance/sdk 全域迁移完成；**语义覆盖精确守恒 1565=1565**（旧 1644−旧meta79 = v2 1963−v2meta398）；meta 更强（398 参数化检查 vs 旧 79）。剩余：矩阵三段式填充（PT-TEST-3）+ Phase 5 切换（删旧 tests/ 改名 tests_v2→tests）+ docs 治理 |
+| 2D 测试体系重建实验 | 🔄 全域迁移+切换完成 | tests_v2 全域迁移（语义覆盖守恒 1565=1565）+ **Phase 5 切换**（旧 tests/ 删除、tests_v2→tests、import 重写，全量 1962/1）；用户授权 git 直接合并。**剩余**：矩阵三段式填充（PT-TEST-3）+ tests_docs 治理（SEMANTIC_COVERAGE_MATRIX/TEST_PHILOSOPHY 重写）+ WRITING_GUIDE 纳入 tests_docs |
 | 2D 测试体系重建实验 | ⬜ idbg 完成后 | 独立分支 `exp/obs-2d-test-refactor`；沿用 TEST_REFACTOR 策略/铁律 |
 | 3 手动应用回 unsafe-vibe-dev | 🔄 随各实验 | 2A/2B/2C 已应用；2C-2/2D 待 |
 | 4 收敛收尾 | ⬜ | 矩阵三段式同步（PT-TEST-3）+ meta 扩展 + 旧 tests 删除 + docs 治理 |
