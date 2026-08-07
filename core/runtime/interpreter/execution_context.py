@@ -209,6 +209,44 @@ class ExecutionContextImpl:
     def get_side_table(self, table_name: str, key: str) -> Any:
         return self._get_side_table_callback(table_name, key)
 
+    def get_llmexcept_protection_map(self) -> Dict[str, str]:
+        """llmexcept 保护映射（被保护节点 UID -> handler UID）。
+
+        内核拥有 node_pool 节点格式语义，一次性 O(n) 扫描（非热路径），
+        对外只暴露结构化映射契约。消费方（idbg 等）不直读原始节点结构。
+
+        - 直接 ``llmexcept`` 语句：``IbLLMExceptionalStmt`` 的 ``target`` → 语句节点
+        - 条件 for 的内联保护：``IbFor`` 的 ``llmexcept_handler`` → ``iter``
+          （若 iter 为 ``IbFilteredExpr``，真实受保护条件为其 ``expr``）
+        """
+        protection_mapping: Dict[str, str] = {}
+        for node_uid, node in self._node_pool.items():
+            if not isinstance(node, dict):
+                continue
+            node_type = node.get("_type")
+
+            if node_type == "IbLLMExceptionalStmt":
+                target_uid = node.get("target")
+                if isinstance(target_uid, str) and target_uid:
+                    protection_mapping[target_uid] = node_uid
+                continue
+
+            if node_type == "IbFor":
+                handler_uid = node.get("llmexcept_handler")
+                iter_uid = node.get("iter")
+                if not (isinstance(handler_uid, str) and handler_uid
+                        and isinstance(iter_uid, str) and iter_uid):
+                    continue
+                actual_target_uid = iter_uid
+                iter_node = self._node_pool.get(iter_uid)
+                if isinstance(iter_node, dict) and iter_node.get("_type") == "IbFilteredExpr":
+                    expr_uid = iter_node.get("expr")
+                    if isinstance(expr_uid, str) and expr_uid:
+                        actual_target_uid = expr_uid
+                protection_mapping[actual_target_uid] = handler_uid
+
+        return protection_mapping
+
     def push_stack(self, name: str, location: Optional[Any] = None, is_user_function: bool = False, **kwargs) -> None:
         self._push_stack_callback(name, location, is_user_function, **kwargs)
 

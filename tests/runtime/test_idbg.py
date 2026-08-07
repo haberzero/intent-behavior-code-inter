@@ -46,15 +46,20 @@ class _DummyStackInspector:
 
 
 class _DummyExecutionContext:
-    def __init__(self, node_pool):
-        self.node_pool = node_pool
+    """假内核执行上下文：只提供结构化保护映射查询（内核逻辑另测）。"""
+
+    def __init__(self, protection_map):
+        self._protection_map = protection_map
+
+    def get_llmexcept_protection_map(self):
+        return self._protection_map
 
 
 class _DummyKernelRegistry:
-    def __init__(self, node_pool):
+    def __init__(self, protection_map):
         self._state_reader = _DummyStateReader()
         self._stack_inspector = _DummyStackInspector()
-        self._execution_context = _DummyExecutionContext(node_pool)
+        self._execution_context = _DummyExecutionContext(protection_map)
 
     def get_state_reader(self):
         return self._state_reader
@@ -69,9 +74,9 @@ class _DummyKernelRegistry:
         return self._execution_context
 
 
-def _make_plugin(node_pool):
+def _make_plugin(protection_map):
     cap_registry = _DummyCapabilityRegistry()
-    kr = _DummyKernelRegistry(node_pool)
+    kr = _DummyKernelRegistry(protection_map)
     plugin = IDbgPlugin()
     plugin.setup(_DummyCapabilities(kr, cap_registry))
     return plugin
@@ -88,27 +93,21 @@ class TestIdbgSpec:
 
 
 class TestIdbgProtectionMap:
-    def test_protection_map_collects_llmexcept_links(self):
-        node_pool = {
-            "target_1": {"_type": "IbExprStmt"},
-            "handler_1": {"_type": "IbLLMExceptionalStmt", "target": "target_1", "body": []},
-            "cond_1": {"_type": "IbBehaviorExpr"},
-            "filtered_1": {"_type": "IbFilteredExpr", "expr": "cond_1", "filter": "f1"},
-            "handler_2": {"_type": "IbLLMExceptionalStmt", "target": "cond_1", "body": []},
-            "for_1": {"_type": "IbFor", "iter": "filtered_1", "llmexcept_handler": "handler_2"},
-        }
-        plugin = _make_plugin(node_pool)
-        mapping = plugin.protection_map()
+    def test_protection_map_delegates_to_kernel_query(self):
+        """idbg.protection_map 消费内核结构化查询（不直扫 node_pool）。"""
+        canned = {"target_1": "handler_1", "cond_1": "handler_2"}
+        plugin = _make_plugin(canned)
+        assert plugin.protection_map() == canned
 
-        assert mapping["target_1"] == "handler_1"
-        assert mapping["cond_1"] == "handler_2"
+    def test_protection_map_empty_without_execution_context(self):
+        kr = _DummyKernelRegistry({})
+        kr._execution_context = None
+        plugin = IDbgPlugin()
+        plugin.setup(_DummyCapabilities(kr, _DummyCapabilityRegistry()))
+        assert plugin.protection_map() == {}
 
     def test_show_protection_map_prints_output(self, capsys):
-        node_pool = {
-            "target_1": {"_type": "IbExprStmt"},
-            "handler_1": {"_type": "IbLLMExceptionalStmt", "target": "target_1", "body": []},
-        }
-        plugin = _make_plugin(node_pool)
+        plugin = _make_plugin({"target_1": "handler_1"})
         plugin.show_protection_map()
         out = capsys.readouterr().out
         assert "[IDBG] llmexcept 保护映射:" in out

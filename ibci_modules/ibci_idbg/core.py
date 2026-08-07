@@ -44,6 +44,54 @@ class IDbgPlugin(IbPlugin):
         return self._kr.get_execution_context() if self._kr else None
 
     # ------------------------------------------------------------------
+    # 内部：统一数据形态助手
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _result_to_dict(res: Any) -> Dict[str, Any]:
+        """IbLLMCallResult → 统一 dict 形态（success/uncertainty/error/hint/raw）。"""
+        return {
+            "success": res.is_certain,
+            "is_uncertain": not res.is_certain,
+            "error": res.retry_hint if not res.is_certain else None,
+            "retry_hint": res.retry_hint,
+            "raw_response": res.raw_response,
+        }
+
+    @staticmethod
+    def _value_type(value: Any) -> str:
+        """值层类型内省：IbObject → ``ib_class.name``（与 ``type()`` 内建同源）；其余 Python 类型名。"""
+        if isinstance(value, IbObject):
+            return value.ib_class.name
+        return type(value).__name__
+
+    @staticmethod
+    def _print_prompt_segments(label: str, prompt: Any) -> None:
+        """打印提示词片段（str / 多模态 content block list / 其它）。
+
+        多模态 list 中 dict 元素为结构化 content block（role/content），
+        content 可为 str 或分块 list——统一拼接为可读文本。
+        """
+        print(f"  [{label}]")
+        if isinstance(prompt, str):
+            print(f"    {prompt}")
+            return
+        if isinstance(prompt, list):
+            for seg in prompt:
+                if isinstance(seg, dict):
+                    role = seg.get("role", "unknown")
+                    content = seg.get("content", "")
+                    if isinstance(content, list):
+                        content = "".join(str(c) for c in content)
+                    print(f"    {role}: {content}")
+                elif isinstance(seg, str):
+                    print(f"    {seg}")
+                else:
+                    print(f"    {seg}")
+            return
+        print(f"    {prompt}")
+
+    # ------------------------------------------------------------------
     # 公开接口
     # ------------------------------------------------------------------
 
@@ -54,14 +102,14 @@ class IDbgPlugin(IbPlugin):
         return sr.get_vars()
 
     def print_vars(self):
-        """打印当前作用域中所有变量及其值（vars() 的便捷打印版本）"""
+        """打印当前作用域中所有变量及其值（含值层类型内省，与 ``type()`` 同源）。"""
         variables = self.vars()
         if not variables:
             print("[IDBG] (无可用变量)")
             return
         print("[IDBG] 当前变量：")
         for name, value in variables.items():
-            print(f"  {name} = {value}")
+            print(f"  {name}: {self._value_type(value)} = {value}")
 
     def current_llm(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的完整详情 (Executor 主线程单写槽)"""
@@ -83,13 +131,7 @@ class IDbgPlugin(IbPlugin):
             res = frames[-1].target_result if frames else None
 
             if res:
-                info["result"] = {
-                    "success": res.is_certain,
-                    "is_uncertain": not res.is_certain,
-                    "error": res.retry_hint if not res.is_certain else None,
-                    "retry_hint": res.retry_hint,
-                    "raw_response": res.raw_response
-                }
+                info["result"] = self._result_to_dict(res)
         return info
 
     def show_target_prompt(self):
@@ -105,42 +147,10 @@ class IDbgPlugin(IbPlugin):
         user_prompt = info.get("user_prompt", "")
 
         if sys_prompt:
-            print("  [系统提示词]")
-            if isinstance(sys_prompt, str):
-                print(f"    {sys_prompt}")
-            elif isinstance(sys_prompt, list):
-                for seg in sys_prompt:
-                    if isinstance(seg, dict):
-                        role = seg.get("role", "unknown")
-                        content = seg.get("content", "")
-                        if isinstance(content, list):
-                            content = "".join(str(c) for c in content)
-                        print(f"    {role}: {content}")
-                    elif isinstance(seg, str):
-                        print(f"    {seg}")
-                    else:
-                        print(f"    {seg}")
-            else:
-                print(f"    {sys_prompt}")
+            self._print_prompt_segments("系统提示词", sys_prompt)
 
         if user_prompt:
-            print("  [用户提示词]")
-            if isinstance(user_prompt, str):
-                print(f"    {user_prompt}")
-            elif isinstance(user_prompt, list):
-                for seg in user_prompt:
-                    if isinstance(seg, dict):
-                        role = seg.get("role", "unknown")
-                        content = seg.get("content", "")
-                        if isinstance(content, list):
-                            content = "".join(str(c) for c in content)
-                        print(f"    {role}: {content}")
-                    elif isinstance(seg, str):
-                        print(f"    {seg}")
-                    else:
-                        print(f"    {seg}")
-            else:
-                print(f"    {user_prompt}")
+            self._print_prompt_segments("用户提示词", user_prompt)
 
         active_intents = info.get("active_intents", [])
         if active_intents:
@@ -219,14 +229,9 @@ class IDbgPlugin(IbPlugin):
         if not res:
             return {}
 
-        return {
-            "success": res.is_certain,
-            "is_uncertain": not res.is_certain,
-            "value": str(res.result_value) if res.result_value else None,
-            "error": res.retry_hint if not res.is_certain else None,
-            "raw_response": res.raw_response,
-            "retry_hint": res.retry_hint
-        }
+        result = self._result_to_dict(res)
+        result["value"] = str(res.result_value) if res.result_value else None
+        return result
 
     def retry_stack(self) -> list:
         """获取当前的重试帧栈信息 (LLMExceptFrameStack)"""
@@ -256,49 +261,15 @@ class IDbgPlugin(IbPlugin):
         return result
 
     def protection_map(self) -> Dict[str, str]:
-        """获取节点保护映射（被保护节点 UID -> llmexcept handler UID）。"""
+        """获取节点保护映射（被保护节点 UID -> llmexcept handler UID）。
+
+        消费内核结构化查询 ``IExecutionContext.get_llmexcept_protection_map()``，
+        不直读 node_pool 原始节点结构（内核拥有节点格式语义）。
+        """
         ec = self._execution_context()
         if not ec:
             return {}
-
-        # node_pool 是 IExecutionContext 公开只读 property（共享只读节点池）
-        node_pool = ec.node_pool
-        if not node_pool:
-            return {}
-
-        protection_mapping: Dict[str, str] = {}
-
-        # 调试态一次性 O(n) 扫描：node_pool 常驻内存且 protection_map 非热路径调用。
-        for node_uid, node in node_pool.items():
-            if not isinstance(node, dict):
-                continue
-            node_type = node.get("_type")
-
-            # 1) 直接 llmexcept 语句：handler(target=...)
-            if node_type == "IbLLMExceptionalStmt":
-                target_uid = node.get("target")
-                if isinstance(target_uid, str) and target_uid:
-                    protection_mapping[target_uid] = node_uid
-                continue
-
-            # 2) 条件 for 的 llmexcept 内联保护：for 节点持有 llmexcept_handler 字段
-            if node_type == "IbFor":
-                handler_uid = node.get("llmexcept_handler")
-                iter_uid = node.get("iter")
-                has_handler_uid = isinstance(handler_uid, str) and bool(handler_uid)
-                has_iter_uid = isinstance(iter_uid, str) and bool(iter_uid)
-                if not (has_handler_uid and has_iter_uid):
-                    continue
-                # 若 iter 是 IbFilteredExpr，真实受保护条件是其 expr
-                actual_target_uid = iter_uid
-                iter_node = node_pool.get(iter_uid)
-                if isinstance(iter_node, dict) and iter_node.get("_type") == "IbFilteredExpr":
-                    expr_uid = iter_node.get("expr")
-                    if isinstance(expr_uid, str) and expr_uid:
-                        actual_target_uid = expr_uid
-                protection_mapping[actual_target_uid] = handler_uid
-
-        return protection_mapping
+        return dict(ec.get_llmexcept_protection_map())
 
     def show_retry_stack(self):
         """直接打印当前 llmexcept 重试帧栈。"""

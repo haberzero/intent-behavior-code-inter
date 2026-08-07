@@ -73,6 +73,14 @@ class IExecutionContext(Protocol):
 
     def get_side_table(self, table_name: str, key: str) -> Any: ...
 
+    def get_llmexcept_protection_map(self) -> Mapping[str, str]:
+        """llmexcept 保护映射（被保护节点 UID -> handler UID）。
+
+        内核拥有 node_pool 节点格式语义，对外只暴露结构化映射契约；
+        消费方（idbg 等）不得直读 node_pool 原始节点结构。
+        """
+        ...
+
     def push_stack(self, name: str, location: Optional[Any] = None, is_user_function: bool = False, **kwargs) -> None: ...
 
     def pop_stack(self) -> None: ...
