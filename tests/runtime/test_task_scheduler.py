@@ -65,6 +65,9 @@ class _FutureWaitable(Waitable):
     def result(self) -> Any:
         return self._future.result()
 
+    def register_wake(self, event) -> None:
+        self._future.add_done_callback(lambda _f: event.set())
+
 
 def _task_await(waitable, value):
     """一个任务：等待 waitable，返回 value。"""
@@ -172,6 +175,69 @@ class TestTaskScheduler:
         results = s.run()
         # 提交序 [t1, t2]，而非完成序 [t2, t1]
         assert results == ["t1", "t2"]
+
+
+class TestNotifyWake:
+    """R2 通知式唤醒：waitable 完成时经 register_wake 即时唤醒调度器（根治 poll+park）。"""
+
+    def test_register_wake_called_on_wait(self):
+        """任务挂起时调度器对 waitable 注册完成通知。"""
+        s = TaskScheduler()
+        w = _ManualWaitable()
+        events = []
+
+        orig = _ManualWaitable.register_wake
+        try:
+            def _reg(self, event):
+                events.append(event)
+                orig(self, event)
+            _ManualWaitable.register_wake = _reg
+            s.submit(_task_await(w, "done"))
+            w.set_result(None)
+            assert s.run() == ["done"]
+            assert len(events) == 1  # 挂起时注册了一次
+            assert events[0] is s._wake_event
+        finally:
+            _ManualWaitable.register_wake = orig
+
+    def test_wake_event_set_on_completion(self):
+        """waitable 完成时设置唤醒事件（无需等待 park 超时）。"""
+        import threading as _threading
+
+        s = TaskScheduler()
+        f = Future()
+        events = []
+
+        orig_reg = _FutureWaitable.register_wake
+        try:
+            def _traced_reg(self, event):
+                events.append(event)
+                orig_reg(self, event)
+            _FutureWaitable.register_wake = _traced_reg
+            s.submit(_task_await(_FutureWaitable(f), "done"))
+            # 单独线程稍后完成 future → 应触发事件
+            t0 = time.monotonic()
+            def _finish():
+                time.sleep(0.05)
+                f.set_result("x")
+            th = _threading.Thread(target=_finish, daemon=True)
+            th.start()
+            results = s.run()
+            elapsed = time.monotonic() - t0
+            assert results == ["done"]
+            assert len(events) == 1  # register_wake 被调用（通知注册）
+            # 通知式唤醒：总时≈waitable 完成时刻（~50ms），而非轮询延迟叠加（≫50ms）
+            assert elapsed < 0.2
+        finally:
+            _FutureWaitable.register_wake = orig_reg
+
+    def test_manual_waitable_without_register_wake_falls_back(self):
+        """无 register_wake 的 waitable（结构性协议允许缺失）退回首轮询，仍可完成。"""
+        s = TaskScheduler()
+        w = _ManualWaitable(delay_s=0.05)  # 时间驱动，无通知
+        s.submit(_task_await(w, "done"))
+        assert s.run() == ["done"]
+
 
 class TestTaskCancellation:
     """调度器级协作取消（阶段 1c）：步进边界 gen.throw(TaskCancelled)，finally 执行，结果槽标记取消。"""
