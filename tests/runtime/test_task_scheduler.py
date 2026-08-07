@@ -172,3 +172,67 @@ class TestTaskScheduler:
         results = s.run()
         # 提交序 [t1, t2]，而非完成序 [t2, t1]
         assert results == ["t1", "t2"]
+
+class TestTaskCancellation:
+    """调度器级协作取消（阶段 1c）：步进边界 gen.throw(TaskCancelled)，finally 执行，结果槽标记取消。"""
+
+    def test_cancel_delivers_and_unwinds(self):
+        import threading as _threading
+
+        from core.runtime.vm.task_scheduler import TaskCancelled
+
+        s = TaskScheduler()
+        events = []
+
+        def gen():
+            try:
+                w = yield _ManualWaitable()
+                events.append(("resumed", w))
+            finally:
+                events.append("finally")
+
+        s.submit(gen())
+        holder = {}
+
+        def _run():
+            holder["results"] = s.run()
+
+        th = _threading.Thread(target=_run, daemon=True)
+        th.start()
+        time.sleep(0.05)  # 让任务进入等待
+        s.cancel()
+        th.join(timeout=2)
+        assert not th.is_alive()
+        assert "finally" in events  # 任务体 finally 执行（资源清理）
+        assert isinstance(holder["results"][0], TaskCancelled)
+
+    def test_cancel_before_run_delivers(self):
+        from core.runtime.vm.task_scheduler import TaskCancelled
+
+        s = TaskScheduler()
+        events = []
+
+        def gen():
+            try:
+                yield _ManualWaitable()
+                events.append("resumed")
+            finally:
+                events.append("finally")
+
+        s.submit(gen())
+        s.cancel()
+        results = s.run()
+        assert isinstance(results[0], TaskCancelled)
+        # 未启动即取消：生成器从未运行，body 未进入 → finally 不执行（无清理负担）
+        assert events == []
+
+    def test_cancel_one_of_many(self):
+        from core.runtime.vm.task_scheduler import TaskCancelled
+
+        s = TaskScheduler()
+        s.submit(_task_await(_ManualWaitable(), "a"), node_uid="a")  # 永不完成
+        s.submit(_task_immediate("b"), node_uid="b")
+        s.cancel(0)
+        results = s.run()
+        assert isinstance(results[0], TaskCancelled)
+        assert results[1] == "b"

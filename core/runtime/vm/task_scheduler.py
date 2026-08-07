@@ -28,6 +28,7 @@
 """
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Generator, List, Optional
@@ -38,7 +39,17 @@ from core.runtime.shared.waitable import Waitable
 # Waitable 协议定义于叶子模块 core/runtime/shared/waitable.py（避免 vm ↔ host /
 # vm ↔ bootstrapper 循环导入）；此处重导出，保持 ``from core.runtime.vm.task_scheduler
 # import Waitable`` 的既有导入路径可用。
-__all__ = ["Task", "TaskScheduler", "Waitable"]
+__all__ = ["Task", "TaskScheduler", "TaskCancelled", "Waitable"]
+
+
+class TaskCancelled(BaseException):
+    """任务被协作式取消（调度器级统一信号）。
+
+    继承 :class:`BaseException`（非 Exception）：不被用户 try-except（捕获 Exception）
+    与 ``_drive_loop_gen`` 的 ``except Exception`` 拦截，沿 CPS 栈直接传播——
+    调度器在步进边界 ``gen.throw(TaskCancelled())`` 送达，任务体的 ``finally``
+    正常执行（资源清理），随后任务结果槽标记为取消。
+    """
 
 
 @dataclass
@@ -48,7 +59,7 @@ class Task:
     ``index`` 为提交序号（自 0 起），用于把完成值按提交序收集到结果槽位，
     保证 ``run()`` 返回序与提交序一致（而非完成序——完成序不可预测）。
 
-    ``cancelled``：协作取消标志（阶段 1c 接线；先声明字段）。
+    ``cancelled``：协作取消标志（调度器在步进边界检查，阶段 1c 接线）。
 
     resume 状态（waitable 就绪后投递给任务）：
     - ``resumed``：是否有待投递的 resume payload（值或异常）。
@@ -83,12 +94,27 @@ class TaskScheduler:
         self._submit_count: int = 0
         self._results: List[Any] = []
         self._park_interval = park_interval
+        self._lock = threading.Lock()  # 保护 cancel() 的并发取消（跨线程）
 
     def submit(self, gen: Generator, node_uid: str = "") -> None:
         task = Task(gen=gen, index=self._submit_count, node_uid=node_uid)
         self._submit_count += 1
         self._results.append(None)  # 预分配结果槽位，按提交序收集
         self._ready.append(task)
+
+    def cancel(self, index: Optional[int] = None) -> None:
+        """协作式取消任务（线程安全；跨线程可调用）。
+
+        ``index=None`` 取消全部；否则取消指定提交序的任务。取消是**协作式**：
+        调度器在下一个步进边界 ``gen.throw(TaskCancelled())`` 送达，任务体
+        ``finally`` 执行后结果槽标记为 ``TaskCancelled``。纯 CPU 任务无可挂起点
+        时无法立即打断（与线程 cancel 一致）。
+        """
+        with self._lock:
+            targets = [t for t in self._ready if index is None or t.index == index]
+            targets += [t for t in self._waiting if index is None or t.index == index]
+            for t in targets:
+                t.cancelled = True
 
     def run(self) -> List[Any]:
         """运行到所有任务完成，返回各任务的完成值（按提交序）。
@@ -104,36 +130,41 @@ class TaskScheduler:
         """
         park = self._park_interval
         while self._ready or self._waiting:
-            # 1) 恢复等待任务
+            # 1) 恢复等待任务（已取消 → 直接进入取消投递；未取消 → try_result 非阻塞取）
             still_waiting: List[Task] = []
             for t in self._waiting:
-                if t.waiting_on is None:
-                    still_waiting.append(t)
-                    continue
-                try:
-                    ok, val = t.waiting_on.try_result()
-                except Exception as e:
-                    # 终态错误（通道关闭空队列 / Future 失败）→ 投递进任务，
-                    # 经 CPS 传播让 try-except / llmexcept 处理。
-                    t.resume_exception = e
-                    t.resumed = True
+                if t.cancelled:
                     t.waiting_on = None
                     self._ready.append(t)
+                elif t.waiting_on is None:
+                    still_waiting.append(t)
                 else:
-                    if ok:
-                        t.resume_value = val
+                    try:
+                        ok, val = t.waiting_on.try_result()
+                    except Exception as e:
+                        # 终态错误（通道关闭空队列 / Future 失败）→ 投递进任务，
+                        # 经 CPS 传播让 try-except / llmexcept 处理。
+                        t.resume_exception = e
                         t.resumed = True
                         t.waiting_on = None
                         self._ready.append(t)
                     else:
-                        still_waiting.append(t)
+                        if ok:
+                            t.resume_value = val
+                            t.resumed = True
+                            t.waiting_on = None
+                            self._ready.append(t)
+                        else:
+                            still_waiting.append(t)
             self._waiting = still_waiting
 
-            # 2) 推进本轮就绪任务
+            # 2) 推进本轮就绪任务（每步进边界检查协作取消）
             still_ready: List[Task] = []
             for t in self._ready:
                 try:
-                    if t.resume_exception is not None:
+                    if t.cancelled:
+                        yielded = t.gen.throw(TaskCancelled())
+                    elif t.resume_exception is not None:
                         exc = t.resume_exception
                         t.resume_exception = None
                         t.resumed = False
@@ -147,6 +178,10 @@ class TaskScheduler:
                         yielded = t.gen.send(None)
                 except StopIteration as si:
                     self._results[t.index] = si.value
+                    continue
+                except TaskCancelled:
+                    # 协作取消：任务体 finally 已执行（gen.throw 展开），结果槽标记取消
+                    self._results[t.index] = TaskCancelled()
                     continue
 
                 # 任务 yield 了一个 waitable → 挂起（下一轮 step 1 经 try_result 恢复）
