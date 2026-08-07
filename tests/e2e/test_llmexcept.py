@@ -726,3 +726,42 @@ llmexcept:
 """
         assert run_ibci(code) == ["a", "b"]
 
+
+
+class TestE2ELLMExceptSuspension:
+    """llmexcept × 挂起点闭合（统一执行地基 1d）。
+
+    覆盖：受保护语句在调度器下重评估时在 LLM future 读点重新挂起；
+    重试体在通道 recv 上协作挂起后恢复继续重试。
+    """
+
+    def test_reveval_suspends_on_llm_future_read(self):
+        """受保护语句重评估时在 LLM future 读点重新挂起（1d 闭合）。"""
+        code = AI_MOCK_PREFIX + """
+str x = @~ MOCK:SEQ:[FAIL,OK] reveal_key ~
+llmexcept:
+    print("retried")
+    retry "again"
+print(x)
+"""
+        lines = run_ibci(code)
+        # 首次 FAIL → retry → 重评估重新挂起在 LLM future 读点 → 恢复后 OK 确定
+        assert lines.count("retried") == 1
+
+    def test_retry_body_suspends_on_channel_recv(self):
+        """llmexcept 处理器体在通道 recv 上协作挂起，恢复后继续重试（1d 闭合）。"""
+        code = AI_MOCK_PREFIX + """
+chan c = chan(str, "stream")
+c.send("hint-1")
+str x = @~ MOCK:SEQ:[FAIL,OK] chan_key ~
+llmexcept:
+    print("handler_ran")
+    str h = c.recv()
+    print((str)("retry_hint:" + h))
+    retry "again"
+print(x)
+"""
+        lines = run_ibci(code)
+        # 处理器体 recv 挂起取回 hint-1；重评估后 OK 确定
+        assert lines.count("retry_hint:hint-1") == 1
+        assert lines.count("handler_ran") == 1
