@@ -1,7 +1,6 @@
 import re
 import json
 import traceback
-import warnings
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 
@@ -33,8 +32,9 @@ from core.kernel.issue import (
 )
 from core.base.source_atomic import Location
 from core.base.diagnostics.codes import (
-    RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED
+    RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED, KDIAG_RUNTIME_STAGE_SKIP
 )
+from core.runtime.observability.diagnostics import kernel_diagnostic
 from core.runtime.interfaces import (
     Interpreter as InterpreterInterface,
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
@@ -270,9 +270,10 @@ class Interpreter:
             self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
         else:
             # 在某些脱离 Engine 的测试环境下，如果没有令牌，系统将无法正确追踪状态流转
-            warnings.warn(
-                "Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.",
-                stacklevel=2,
+            kernel_diagnostic(
+                code=KDIAG_RUNTIME_STAGE_SKIP,
+                detail={},
+                message="Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.",
             )
 
         # 运行限制初始化

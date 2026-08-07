@@ -5,7 +5,6 @@ import traceback
 import copy
 import threading
 import uuid
-import warnings
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List, Tuple, Union
 
@@ -51,6 +50,8 @@ from core.runtime.host.isolation_policy import IsolationPolicy
 from core.runtime.rt_scheduler import RuntimeSchedulerImpl
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.capability_registry import CapabilityRegistry
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import KDIAG_RUNTIME_COLLECT_SKIP
 from core.extension.auto_discovery import AutoDiscoveryService
 
 
@@ -864,9 +865,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     result[name] = val.to_native()
                 except Exception as e:
                     # 跳过无法转为原生值的对象（未执行的延迟值、循环引用等）
-                    warnings.warn(
-                        f"collect({handle!r}) skipped non-convertible variable '{name}': {e!r}",
-                        stacklevel=2,
+                    kernel_diagnostic(
+                        code=KDIAG_RUNTIME_COLLECT_SKIP,
+                        detail={"handle": handle, "name": name, "error": repr(e)},
+                        message=(
+                            f"collect({handle!r}) skipped non-convertible "
+                            f"variable '{name}': {e!r}"
+                        ),
                     )
 
         return result

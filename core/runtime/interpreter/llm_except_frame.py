@@ -45,10 +45,14 @@ Status: Active
 
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
-import warnings
 from core.runtime.objects.kernel import IbObject, IbValue, IbNone
 from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.deep_clone import try_deep_clone
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import (
+    KDIAG_PROTOCOL_SNAPSHOT_FALLBACK,
+    KDIAG_PROTOCOL_RESTORE_FALLBACK,
+)
 from core.kernel.issue import InterpreterError
 
 if TYPE_CHECKING:
@@ -180,9 +184,13 @@ class LLMExceptFrame:
                         self.saved_protocol_states[name] = (val, state)
                         continue  # 跳过克隆
                     except Exception as e:
-                        warnings.warn(
-                            f"__snapshot__ protocol call failed for '{name}', falling back to deep clone: {e!r}",
-                            stacklevel=2,
+                        kernel_diagnostic(
+                            code=KDIAG_PROTOCOL_SNAPSHOT_FALLBACK,
+                            detail={"name": name, "error": repr(e)},
+                            message=(
+                                f"__snapshot__ protocol call failed for '{name}', "
+                                f"falling back to deep clone: {e!r}"
+                            ),
                         )
 
             # 自动深克隆
@@ -264,9 +272,13 @@ class LLMExceptFrame:
                     try:
                         restore_method.call(original_obj, [saved_state])
                     except Exception as e:
-                        warnings.warn(
-                            f"__restore__ protocol call failed for '{name}', keeping current state (best-effort): {e!r}",
-                            stacklevel=2,
+                        kernel_diagnostic(
+                            code=KDIAG_PROTOCOL_RESTORE_FALLBACK,
+                            detail={"name": name, "error": repr(e)},
+                            message=(
+                                f"__restore__ protocol call failed for '{name}', "
+                                f"keeping current state (best-effort): {e!r}"
+                            ),
                         )
 
         # 每次恢复时从黄金快照重新深克隆，防止上一轮 llmexcept body 修改了快照对象

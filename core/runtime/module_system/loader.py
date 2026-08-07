@@ -13,7 +13,6 @@ import importlib.util
 import inspect
 import sys
 import weakref
-import warnings
 from typing import List, Any, Optional
 
 from core.base.path import IbPath
@@ -25,6 +24,8 @@ from core.runtime.interfaces import IModuleLoader, ServiceContext
 from core.runtime.interfaces import IExecutionContext
 from core.runtime.objects.kernel.base import unbox
 from core.base.interfaces import IStateReader, IIntentManager
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import KDIAG_POLICY_MODULE_NO_EXPORT
 
 
 def _is_callable_object(obj: Any) -> bool:
@@ -327,9 +328,13 @@ class ModuleLoader(IModuleLoader):
                         implementation = mod.implementation
                     else:
                         # 支持直接导出的类或函数（如有必要可扩展）
-                        warnings.warn(
-                            f"Module '{module_name}' skipped: no create_implementation() or implementation export found",
-                            stacklevel=2,
+                        kernel_diagnostic(
+                            code=KDIAG_POLICY_MODULE_NO_EXPORT,
+                            detail={"module": module_name},
+                            message=(
+                                f"Module '{module_name}' skipped: no create_implementation() "
+                                f"or implementation export found"
+                            ),
                         )
                         continue
 

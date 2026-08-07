@@ -1,8 +1,12 @@
 from typing import Dict, Any, List, Optional, Mapping, Tuple
-import warnings
 
 from core.kernel.issue import InterpreterError
 from core.kernel.spec.type_ref import TypeRef as _TypeRef
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import (
+    KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
+    KDIAG_PROTOCOL_FROM_PROMPT_FALLBACK,
+)
 
 from ..ib_type_mapping import register_ib_type
 
@@ -100,9 +104,18 @@ class IbObject:
                         prompt_result = unbox(prompt_result)
                         return self.ib_class.registry.box(prompt_result)
                     except Exception as e:
-                        warnings.warn(
-                            f"cast via __to_prompt__ failed for {self.ib_class.name}->{target_name}: {e!r}",
-                            stacklevel=2,
+                        kernel_diagnostic(
+                            code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
+                            detail={
+                                "context": "cast",
+                                "type": self.ib_class.name,
+                                "target": target_name,
+                                "error": repr(e),
+                            },
+                            message=(
+                                f"cast via __to_prompt__ failed for "
+                                f"{self.ib_class.name}->{target_name}: {e!r}"
+                            ),
                         )
 
             # 无法执行类型转换，抛出明确错误
@@ -135,9 +148,14 @@ class IbObject:
                 if cap:
                     return cap.from_prompt(raw_response, self.ib_class.spec)
         except Exception as e:
-            warnings.warn(
-                f"__from_prompt__ parse failed for {self.ib_class.name}: {e!r}",
-                stacklevel=2,
+            kernel_diagnostic(
+                code=KDIAG_PROTOCOL_FROM_PROMPT_FALLBACK,
+                detail={
+                    "context": "parse",
+                    "type": self.ib_class.name,
+                    "error": repr(e),
+                },
+                message=f"__from_prompt__ parse failed for {self.ib_class.name}: {e!r}",
             )
         return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
 

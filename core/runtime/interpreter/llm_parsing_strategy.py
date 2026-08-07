@@ -11,9 +11,13 @@ Refactored from llm_executor.py:366-478 to improve maintainability and testabili
 
 from abc import ABC, abstractmethod
 from typing import Optional, Any, TYPE_CHECKING
-import warnings
 from core.runtime.shared.llm_result import LLMResult
 from core.runtime.objects.kernel.base import IbObject
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import (
+    KDIAG_PROTOCOL_VALIDATE_FALLBACK,
+    KDIAG_PROTOCOL_FROM_PROMPT_FALLBACK,
+)
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import Registry
@@ -201,9 +205,10 @@ class VTableParsingStrategy(ParsingStrategy):
                             retry_hint=f"Validation failed: {error_str}"
                         )
             except Exception as e:
-                warnings.warn(
-                    f"__validate_prompt__ failed for '{type_name}': {e}",
-                    stacklevel=2,
+                kernel_diagnostic(
+                    code=KDIAG_PROTOCOL_VALIDATE_FALLBACK,
+                    detail={"type": type_name, "error": str(e)},
+                    message=f"__validate_prompt__ failed for '{type_name}': {e}",
                 )
                 # __validate_prompt__ exception is non-fatal — proceed to __from_prompt__
 
@@ -242,9 +247,10 @@ class VTableParsingStrategy(ParsingStrategy):
                 )
 
         except Exception as e:
-            warnings.warn(
-                f"vtable __from_prompt__ failed for '{type_name}': {e}",
-                stacklevel=2,
+            kernel_diagnostic(
+                code=KDIAG_PROTOCOL_FROM_PROMPT_FALLBACK,
+                detail={"context": "vtable", "type": type_name, "error": str(e)},
+                message=f"vtable __from_prompt__ failed for '{type_name}': {e}",
             )
             return None
 

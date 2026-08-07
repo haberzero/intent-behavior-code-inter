@@ -1,8 +1,9 @@
 from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
-import warnings
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
 from core.runtime.objects.ib_type_mapping import register_ib_type
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import KDIAG_PROTOCOL_TO_PROMPT_FALLBACK
 from core.kernel.intent_logic import IntentMode, IntentRole
 
 if TYPE_CHECKING:
@@ -71,9 +72,13 @@ class IbIntent(IbObject):
                         else:
                             content_parts.append(str(val))
                     except Exception as e:
-                        warnings.warn(
-                            f"__to_prompt__ failed in intent resolution, falling back to to_native(): {e!r}",
-                            stacklevel=2,
+                        kernel_diagnostic(
+                            code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
+                            detail={"context": "intent_resolution", "error": repr(e)},
+                            message=(
+                                f"__to_prompt__ failed in intent resolution, "
+                                f"falling back to to_native(): {e!r}"
+                            ),
                         )
                         if isinstance(val, IbObject):
                             content_parts.append(str(val.to_native()))

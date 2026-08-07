@@ -1,5 +1,4 @@
 from typing import Dict, Any, Optional, List, Set, TYPE_CHECKING
-import warnings
 
 from core.base.enums import Provenance
 from core.kernel.spec import TypeDef
@@ -64,10 +63,18 @@ class HostInterface:
 
         if name in self._kernel_native_names and not is_kernel_native_meta:
             # 用户插件尝试覆盖 kernel-native 模块：kernel-native 保护优先，忽略用户插件
-            warnings.warn(
-                f"Ignoring user plugin '{name}' (discovery_name={discovery_name!r}): "
-                f"name '{name}' is reserved for kernel-native module and cannot be overridden.",
-                stacklevel=2,
+            # kernel 层惰性 import runtime 观测（先例：registry.get_event_bus），
+            # 避免模块级 kernel → runtime 依赖；无活跃 EC 时仅警告面。
+            from core.runtime.observability.diagnostics import kernel_diagnostic
+            from core.base.diagnostics.codes import KDIAG_POLICY_MODULE_OVERRIDE
+
+            kernel_diagnostic(
+                code=KDIAG_POLICY_MODULE_OVERRIDE,
+                detail={"name": name, "discovery_name": discovery_name},
+                message=(
+                    f"Ignoring user plugin '{name}' (discovery_name={discovery_name!r}): "
+                    f"name '{name}' is reserved for kernel-native module and cannot be overridden."
+                ),
             )
             return
 

@@ -6,7 +6,6 @@
 """
 
 from typing import Any, List, Optional, Dict, Union, Mapping, Set
-import warnings
 
 from core.runtime.interfaces import IExecutionContext
 
@@ -14,6 +13,8 @@ from core.runtime.shared.llm_result import LLMResult
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
 from core.runtime.objects.kernel.base import IbObject
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import KDIAG_PROTOCOL_PAYLOAD_PROMPT_FALLBACK
 from core.kernel import ast as ib_ast
 
 
@@ -88,9 +89,13 @@ class _PromptMixin:
                 # 不再被宽 except 吞掉后静默降级为纯文本。
                 pass
             except Exception as e:
-                warnings.warn(
-                    f"__payload_prompt__ dispatch failed, falling back to text: {e!r}",
-                    stacklevel=2,
+                kernel_diagnostic(
+                    code=KDIAG_PROTOCOL_PAYLOAD_PROMPT_FALLBACK,
+                    detail={"error": repr(e)},
+                    message=(
+                        f"__payload_prompt__ dispatch failed, "
+                        f"falling back to text: {e!r}"
+                    ),
                 )
 
         # Fallback to plain text via __to_prompt__
