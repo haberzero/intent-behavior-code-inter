@@ -16,7 +16,7 @@ signal 已移除（零投递机制 + 与 VM 控制流 Signal 撞名）。
 """
 import pytest
 
-from tests.conftest import run_ibci, compile_or_errors, compile_ibci
+from tests.conftest import compile_or_errors, compile_ibci
 
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.common.tokens import TokenType

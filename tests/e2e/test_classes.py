@@ -1,0 +1,640 @@
+"""
+tests/e2e/test_classes.py
+
+End-to-end tests for IBCI class definitions and enum types.
+
+Coverage:
+  - Class definition with fields and methods
+  - Class instantiation
+  - Method calls on instances
+  - Enum definition
+  - Switch-case with enums
+"""
+
+from tests.conftest import run_ibci
+
+
+
+
+# ---------------------------------------------------------------------------
+# 1. Class definitions
+# ---------------------------------------------------------------------------
+
+class TestE2EClasses:
+    def test_simple_class(self):
+        code = """class Dog:
+    str name
+    int age
+
+    func bark(self) -> str:
+        return "Woof!"
+
+Dog d = Dog("Rex", 5)
+print(d.bark())
+"""
+        lines = run_ibci(code)
+        assert "Woof!" in lines
+
+    def test_class_field_access(self):
+        code = """class Point:
+    int x
+    int y
+
+Point p = Point(10, 20)
+print((str)p.x)
+print((str)p.y)
+"""
+        lines = run_ibci(code)
+        assert "10" in lines
+        assert "20" in lines
+
+    def test_class_method_with_args(self):
+        code = """class Calculator:
+    int value
+
+    func add(self, int n) -> int:
+        return self.value + n
+
+Calculator c = Calculator(10)
+int result = c.add(5)
+print((str)result)
+"""
+        lines = run_ibci(code)
+        assert "15" in lines
+
+
+# ---------------------------------------------------------------------------
+# 2. Enum types
+# ---------------------------------------------------------------------------
+
+class TestE2EEnums:
+    def test_enum_definition_and_access(self):
+        code = """class Color(Enum):
+    str RED = "RED"
+    str GREEN = "GREEN"
+    str BLUE = "BLUE"
+
+print((str)Color.RED)
+"""
+        lines = run_ibci(code)
+        assert "RED" in lines
+
+    def test_enum_comparison(self):
+        code = """class Status(Enum):
+    str ACTIVE = "ACTIVE"
+    str INACTIVE = "INACTIVE"
+
+Status s = Status.ACTIVE
+if s == Status.ACTIVE:
+    print("is active")
+else:
+    print("not active")
+"""
+        lines = run_ibci(code)
+        assert "is active" in lines
+
+    def test_switch_case(self):
+        code = """class Color(Enum):
+    str RED = "RED"
+    str GREEN = "GREEN"
+    str BLUE = "BLUE"
+
+Color c = Color.BLUE
+switch c:
+    case Color.RED:
+        print("red")
+    case Color.BLUE:
+        print("blue")
+    default:
+        print("other")
+"""
+        lines = run_ibci(code)
+        assert "blue" in lines
+
+
+# ---------------------------------------------------------------------------
+# 3. Multiple instances
+# ---------------------------------------------------------------------------
+
+class TestE2EMultipleInstances:
+    def test_two_instances_independent(self):
+        code = """class Counter:
+    int count
+
+Counter a = Counter(0)
+Counter b = Counter(10)
+print((str)a.count)
+print((str)b.count)
+"""
+        lines = run_ibci(code)
+        assert "0" in lines
+        assert "10" in lines
+
+
+# ---------------------------------------------------------------------------
+# 4. Explicit __init__ constructor
+# ---------------------------------------------------------------------------
+
+class TestE2EExplicitInit:
+    def test_explicit_init_is_called(self):
+        """func __init__ is called as constructor and can override field values"""
+        code = """class Greeter:
+    str name
+
+    func __init__(self, str n) -> auto:
+        self.name = "Hello, " + n
+
+Greeter g = Greeter("World")
+print(g.name)
+"""
+        lines = run_ibci(code)
+        assert "Hello, World" in lines
+
+    def test_auto_init_positional(self):
+        """Auto-generated __init__ assigns positional args to declaration-only fields"""
+        code = """class Point:
+    int x
+    int y
+
+Point p = Point(3, 7)
+print((str)p.x)
+print((str)p.y)
+"""
+        lines = run_ibci(code)
+        assert "3" in lines
+        assert "7" in lines
+
+    def test_explicit_init_overrides_auto_init(self):
+        """When func __init__ is defined, it takes complete control; auto-init is NOT generated"""
+        code = """class Pair:
+    int a
+    int b
+
+    func __init__(self, int x, int y) -> auto:
+        self.a = x * 2
+        self.b = y * 2
+
+Pair p = Pair(3, 4)
+print((str)p.a)
+print((str)p.b)
+"""
+        lines = run_ibci(code)
+        assert "6" in lines
+        assert "8" in lines
+
+    def test_plain_func_init_is_not_constructor(self):
+        """func init (without __) is a regular method, not the constructor"""
+        code = """class Box:
+    int value
+
+    func init(self, int v) -> auto:
+        self.value = 999
+
+Box b = Box(42)
+print((str)b.value)
+b.init(1)
+print((str)b.value)
+"""
+        lines = run_ibci(code)
+        # constructor used auto-init (42), not func init
+        assert "42" in lines
+        # explicit call to init() method worked
+        assert "999" in lines
+
+
+# ---------------------------------------------------------------------------
+# Inheritance tests
+# ---------------------------------------------------------------------------
+
+class TestE2EClassInheritance:
+    """Test class inheritance: child class accessing parent members."""
+
+    def test_child_accesses_parent_field(self):
+        """Child class can access fields defined in parent class."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n) -> auto:
+        self.name = n
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, str b) -> auto:
+        self.name = n
+        self.breed = b
+
+Dog d = Dog("Rex", "Lab")
+print(d.name)
+print(d.breed)
+"""
+        lines = run_ibci(code)
+        assert "Rex" in lines
+        assert "Lab" in lines
+
+    def test_child_accesses_parent_method(self):
+        """Child class can call methods defined in parent class."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n) -> auto:
+        self.name = n
+    func describe(self) -> str:
+        return "I am " + self.name
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, str b) -> auto:
+        self.name = n
+        self.breed = b
+
+Dog d = Dog("Rex", "Lab")
+print(d.describe())
+"""
+        lines = run_ibci(code)
+        assert "I am Rex" in lines
+
+    def test_child_overrides_parent_method(self):
+        """Child class can override parent methods."""
+        code = """class Animal:
+    str name
+    func __init__(self, str n) -> auto:
+        self.name = n
+    func speak(self) -> str:
+        return "..."
+
+class Cat(Animal):
+    func __init__(self, str n) -> auto:
+        self.name = n
+    func speak(self) -> str:
+        return "Meow"
+
+Cat c = Cat("Kitty")
+print(c.speak())
+print(c.name)
+"""
+        lines = run_ibci(code)
+        assert "Meow" in lines
+        assert "Kitty" in lines
+
+    def test_multi_level_inheritance(self):
+        """Multi-level inheritance: grandchild accesses grandparent members."""
+        code = """class Base:
+    int x
+    func __init__(self, int v) -> auto:
+        self.x = v
+
+class Mid(Base):
+    int y
+    func __init__(self, int v, int w) -> auto:
+        self.x = v
+        self.y = w
+
+class Leaf(Mid):
+    int z
+    func __init__(self, int a, int b, int c) -> auto:
+        self.x = a
+        self.y = b
+        self.z = c
+
+Leaf obj = Leaf(1, 2, 3)
+print((str)obj.x)
+print((str)obj.y)
+print((str)obj.z)
+"""
+        lines = run_ibci(code)
+        assert "1" in lines
+        assert "2" in lines
+        assert "3" in lines
+
+
+# ---------------------------------------------------------------------------
+# User-class equality operator (fix: __eq__ must return bool, not int)
+# ---------------------------------------------------------------------------
+
+class TestE2EClassEquality:
+    """Tests for == / != on user-defined class instances (bug fix)."""
+
+    def test_identity_equality_same_reference(self):
+        """o1 == o1 should be True (same reference)."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v) -> auto:
+        self.x = v
+
+Obj o1 = Obj(5)
+bool same = o1 == o1
+print((str)same)
+"""
+        lines = run_ibci(code)
+        assert "True" in lines
+
+    def test_identity_equality_different_instances(self):
+        """o1 == o2 (different instances, same value) should be False."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v) -> auto:
+        self.x = v
+
+Obj o1 = Obj(5)
+Obj o2 = Obj(5)
+bool different = o1 == o2
+print((str)different)
+"""
+        lines = run_ibci(code)
+        assert "False" in lines
+
+    def test_equality_assigned_reference(self):
+        """o3 = o1; o3 == o1 should be True."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v) -> auto:
+        self.x = v
+
+Obj o1 = Obj(42)
+Obj o3 = o1
+bool same_ref = o3 == o1
+print((str)same_ref)
+"""
+        lines = run_ibci(code)
+        assert "True" in lines
+
+    def test_not_equal_different_instances(self):
+        """o1 != o2 (different instances) should be True."""
+        code = """class Obj:
+    int x
+    func __init__(self, int v) -> auto:
+        self.x = v
+
+Obj o1 = Obj(5)
+Obj o2 = Obj(5)
+bool ne = o1 != o2
+print((str)ne)
+"""
+        lines = run_ibci(code)
+        assert "True" in lines
+
+    def test_equality_in_if_condition(self):
+        """class equality in if-condition should work without type error."""
+        code = """class Pt:
+    int x
+    func __init__(self, int v) -> auto:
+        self.x = v
+
+Pt a = Pt(1)
+Pt b = a
+if a == b:
+    print("same")
+else:
+    print("different")
+"""
+        lines = run_ibci(code)
+        assert "same" in lines
+
+    def test_equality_result_is_bool_not_int(self):
+        """== result must be assignable to bool variable (was returning int before fix)."""
+        code = """class Node:
+    int val
+    func __init__(self, int v) -> auto:
+        self.val = v
+
+Node n1 = Node(10)
+Node n2 = Node(10)
+bool eq_result = n1 == n2
+bool same_result = n1 == n1
+print((str)eq_result)
+print((str)same_result)
+"""
+        lines = run_ibci(code)
+        assert "False" in lines
+        assert "True" in lines
+
+
+# ---------------------------------------------------------------------------
+# Bug-fix regression: subclass explicit upcast (Bug B)
+# ---------------------------------------------------------------------------
+
+class TestE2EUpcast:
+    """Explicit (ParentClass)child_instance must succeed at runtime."""
+
+    def test_upcast_simple(self):
+        """(Animal)d must not raise and must expose inherited field."""
+        code = """class Animal:
+    str name = ""
+
+    func speak() -> str:
+        return "..."
+
+class Dog(Animal):
+    func speak() -> str:
+        return "Woof!"
+
+Dog d = Dog()
+d.name = "Rex"
+Animal a = (Animal)d
+print(a.name)
+"""
+        lines = run_ibci(code)
+        assert "Rex" in lines
+
+    def test_upcast_method_dispatch_uses_child(self):
+        """After upcast, virtual method call dispatches to child override."""
+        code = """class Animal:
+    func speak() -> str:
+        return "..."
+
+class Dog(Animal):
+    func speak() -> str:
+        return "Woof!"
+
+Dog d = Dog()
+Animal a = (Animal)d
+print(a.speak())
+"""
+        lines = run_ibci(code)
+        assert "Woof!" in lines
+
+    def test_upcast_same_type_noop(self):
+        """Casting to own type is a no-op."""
+        code = """class Animal:
+    str name = ""
+
+Animal a1 = Animal()
+a1.name = "Cat"
+Animal a2 = (Animal)a1
+print(a2.name)
+"""
+        lines = run_ibci(code)
+        assert "Cat" in lines
+
+
+# ---------------------------------------------------------------------------
+# __iter__ protocol tests
+# ---------------------------------------------------------------------------
+
+class TestIterProtocol:
+    """Tests for the lightweight __iter__ protocol on user-defined classes."""
+
+    def test_class_with_iter_method_is_iterable(self):
+        """A class that defines __iter__ returning a list can be used in for loops."""
+        code = """class NumberRange:
+    int start = 0
+    int end = 0
+
+    func __iter__(self) -> list:
+        list result = []
+        int i = self.start
+        while i < self.end:
+            result.append(i)
+            i = i + 1
+        return result
+
+NumberRange r = NumberRange()
+r.start = 1
+r.end = 4
+for any item in r:
+    print((str)item)
+"""
+        lines = run_ibci(code)
+        assert "1" in lines
+        assert "2" in lines
+        assert "3" in lines
+        assert "4" not in lines
+
+
+# ---------------------------------------------------------------------------
+# super() runtime dispatch
+# ---------------------------------------------------------------------------
+
+class TestE2ESuperCall:
+    """End-to-end tests for super() method dispatch in IBCI classes."""
+
+    def test_super_init_basic(self):
+        """super().__init__() calls parent constructor."""
+        code = """class Base:
+    int value
+    func __init__(self, int v) -> auto:
+        self.value = v
+
+class Child(Base):
+    str name
+    func __init__(self, int v, str n) -> auto:
+        super().__init__(v)
+        self.name = n
+
+Child c = Child(42, "hello")
+print(c.name)
+print((str)c.value)
+"""
+        lines = run_ibci(code)
+        assert "hello" in lines
+        assert "42" in lines
+
+    def test_super_method_call(self):
+        """super().method() dispatches to parent's method implementation."""
+        code = """class Base:
+    func greet(self) -> str:
+        return "Hello from Base"
+
+class Child(Base):
+    func greet(self) -> str:
+        return "Child: " + super().greet()
+
+Child c = Child()
+print(c.greet())
+"""
+        lines = run_ibci(code)
+        assert "Child: Hello from Base" in lines
+
+    def test_super_multi_level_inheritance(self):
+        """super() correctly chains through multiple inheritance levels."""
+        code = """class A:
+    int val
+    func __init__(self, int v) -> auto:
+        self.val = v
+    func describe(self) -> str:
+        return "A:" + (str)self.val
+
+class B(A):
+    str label
+    func __init__(self, int v, str l) -> auto:
+        super().__init__(v)
+        self.label = l
+    func describe(self) -> str:
+        return self.label + "/" + super().describe()
+
+class C(B):
+    func __init__(self, int v, str l) -> auto:
+        super().__init__(v, l)
+    func describe(self) -> str:
+        return "C->" + super().describe()
+
+C obj = C(99, "test")
+print(obj.describe())
+print((str)obj.val)
+print(obj.label)
+"""
+        lines = run_ibci(code)
+        assert "C->test/A:99" in lines
+        assert "99" in lines
+        assert "test" in lines
+
+    def test_super_init_with_field_initialization(self):
+        """super().__init__ correctly initializes parent fields accessible on child."""
+        code = """class Animal:
+    str name
+    int age
+    func __init__(self, str n, int a) -> auto:
+        self.name = n
+        self.age = a
+    func info(self) -> str:
+        return self.name + " age " + (str)self.age
+
+class Dog(Animal):
+    str breed
+    func __init__(self, str n, int a, str b) -> auto:
+        super().__init__(n, a)
+        self.breed = b
+    func info(self) -> str:
+        return super().info() + " breed " + self.breed
+
+Dog d = Dog("Rex", 3, "Labrador")
+print(d.info())
+"""
+        lines = run_ibci(code)
+        assert "Rex age 3 breed Labrador" in lines
+
+    def test_super_only_in_overridden_method(self):
+        """super() in a method that only exists in child (not override) still works
+        if called to invoke parent's different method."""
+        code = """class Base:
+    func base_method(self) -> str:
+        return "from_base"
+
+class Child(Base):
+    func child_method(self) -> str:
+        return "child+" + super().base_method()
+
+Child c = Child()
+print(c.child_method())
+"""
+        lines = run_ibci(code)
+        assert "child+from_base" in lines
+
+    def test_virtual_dispatch_preserved_with_super(self):
+        """After super() call, virtual dispatch for self still uses actual type."""
+        code = """class Base:
+    func name(self) -> str:
+        return "Base"
+    func greeting(self) -> str:
+        return "I am " + self.name()
+
+class Child(Base):
+    func name(self) -> str:
+        return "Child"
+    func greeting(self) -> str:
+        return super().greeting() + " (via super)"
+
+Child c = Child()
+print(c.greeting())
+"""
+        lines = run_ibci(code)
+        # self.name() inside Base.greeting() should resolve to Child.name() via virtual dispatch
+        assert "I am Child (via super)" in lines

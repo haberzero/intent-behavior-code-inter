@@ -14,14 +14,11 @@ Optional 配套运行时：``IbOptional`` 对象 + ``is_some``/``unwrap``/``or_e
 - 类型覆盖（int / str / list[int]）
 - Optional 序列化 round-trip
 """
-import sys
 import os
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from conftest import run_ibci, compile_ibci
+from tests.conftest import run_ibci, compile_ibci
 
 
 class TestOptionalIsSome:

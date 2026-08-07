@@ -16,7 +16,8 @@ Stage 2 ``VMExecutor.run_many`` 多根并发入口测试。
 同名变量、无数据依赖），否则会串扰。
 """
 from core.engine import IBCIEngine
-from tests.conftest import make_vm, TESTS_ROOT
+from tests.runtime.conftest import make_vm
+from tests.conftest import TESTS_ROOT
 
 
 def _code(server):
