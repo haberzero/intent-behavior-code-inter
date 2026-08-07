@@ -124,7 +124,7 @@
 
 ---
 
-## 五、缺陷 / 技术债（PT-DEBT-4/5/6/7/8）
+## 五、缺陷 / 技术债（PT-DEBT-4/5/6/7/8/9/10/11）
 
 | # | 内容 | 说明 |
 |---|------|------|
@@ -133,6 +133,9 @@
 | PT-DEBT-6 | `register_module()` 可观测性缺口 | **已落地（2026-08-06）**：用户插件覆盖 kernel-native 时 `warnings.warn`（原静默忽略）。顺带修正测试配置 bug（plugin_paths 指向插件目录本身导致插件从未加载）。全量 pytest 零回归 |
 | PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | **已落地（2026-08-06）**：死字段清理（`is_assignable` 早已用 `Optional[T].wrapped_type`，序列化不消费）。全量 pytest 零回归 |
 | PT-DEBT-8 | ~~折叠 `IbXxx` 为单一 `IbValue`~~ → **重定义为"值层分派收敛审计"** | **已落地（2026-08-06）**：系统层面定论——折叠是伪目标（消 isinstance 动机已由 name 分派达成；具体类=领域方法载体，折叠违反单一职责）。实际收敛：`is_sequence_value` 统一容器分派、`IbLLMCallResult.is_uncertain` 统一不确定判断；类角色分工固化于 `03_type_system.md` §6.4。全量 pytest 零回归 |
+| PT-DEBT-9 | RecursionError 被 `VM: Call failed` 级联包装掩盖根因 | **R 批次 R1 排查发现（2026-08-07）**：深递归触底时，`leaf.py:315-317` 的 `except Exception` 把 RecursionError（`Exception` 子类）包装为 `VM: Call failed`，且每层调用递归包装一次 → 级联链掩盖真实根因（R1 期间 `f` not defined 的根因即 Python 栈溢出副作用被此掩盖）。关联 PT-FEAT-9（结构化诊断站点可承接异常分类；建议诊断事件区分"环境限制"如栈溢出 vs "语义错误"）。处置：随 PT-FEAT-9 或专项诊断改进一并评估 |
+| PT-DEBT-10 | 线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline） | **R1 边界（2026-08-07 如实记录）**：VM 主路径已 trampoline（深递归 Python 深度恒定），但线程体 `_run_task_body` 经 `_drive_generator` **同步驱动** `_vm_call_user_function`——线程内用户函数递归仍嵌套 Python 栈（n≈20 即失败）。**R1 前同样失败（既有行为，非回归）**。复核方向：与阶段 5 `yield` 惰性生成器/"线程无损挂起"主题相关，线程体 trampoline 化列为专项评估；当前接受既有限制 |
+| PT-DEBT-11 | `_UserFunctionCall` 内部标记类定义位置（handler 依赖 VMExecutor 内部） | **R1 引入（2026-08-07）**：`_UserFunctionCall` 定义于 `vm_executor.py`，但 `leaf.py:293`（handler 层）与 `coordinator.py:316` 从 `vm_executor` import 它——handler 层向上依赖 VMExecutor 内部类，与"handler 是叶子、VMExecutor 调度"的分层方向略有违背。机制正确、功能无误，但按 design-philosophy"模块配合模式统一"应复核下沉（与 Waitable/Signal 同类放 `shared` 层）或改协议化标记。处置：随下次执行层重构或 PT-FEAT-9 一并评估 |
 
 ---
 

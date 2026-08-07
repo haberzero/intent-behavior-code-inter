@@ -113,6 +113,11 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   各独立分支实验、手动 cherry-pick 应用 unsafe-vibe-dev。设计/决策见 `EXEC_REFACTOR_BATCH.md`（无悬而未决问题）。
 - **已定案（不再重议）**：R5 撤回（`await` 幂等是 auto-yield 组合承载，改报错破坏 `await collect(h)`）；
   D-08 保留透明 async（CPS 天然可挂起 + auto-yield 组合 + 值契约 + yield 自标记）。
+- **R 批次遗留技术债（2026-08-07 评估登记，见 `PENDING_TASKS.md` §五 PT-DEBT-9/10/11）**：
+  ① PT-DEBT-9 RecursionError 被 `VM: Call failed` 级联包装掩盖根因（建议随 PT-FEAT-9 承接异常分类）；
+  ② PT-DEBT-10 线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline，既有行为非回归，与阶段 5 线程主题相关）；
+  ③ PT-DEBT-11 `_UserFunctionCall` 定义位置（handler 层依赖 VMExecutor 内部，建议下沉 `shared` 层或协议化）。
+  三项均不阻塞阶段 4，择机评估。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev，全量 1984 passed / 1 skipped）**：地基 1a-1e（调度器执行核心/
   Waitable 家族 try_result/阻塞即挂起/协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4
   （非阻塞命名/订阅契约/pubsub EventBus/comm 命名回归/死状态/文档/cell 隔离/引擎级全局事件总线）。
@@ -136,8 +141,9 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
-- **测试基线**：以实跑为准，不冻结数字（当前 1962 passed / 1 skipped）。
-- **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d 保留未合并）。
+- **测试基线**：以实跑为准，不冻结数字（当前 2001 passed / 1 skipped）。
+- **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d 与 R 批次
+  exp/exec-ra/rb/rc/rd 保留未合并）。
 
 ### 2.3 交接检查单
 
