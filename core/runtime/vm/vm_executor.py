@@ -56,8 +56,8 @@ class VMExecutor:
         # 调度计数：所有 yield/StopIteration 步骤的累计；用于诊断与未来限速。
         self.step_count: int = 0
         self.max_steps: int = 0  # 0 == unlimited
-        # 当前正在运行的帧栈引用；仅在 _drive_loop 主循环活跃时非 None。
-        # 通过 frame_stack_depth 属性暴露，供调试器 / 测试观察 CPS 栈深度。
+        # 当前正在执行的帧栈引用；仅在 _drive_loop_gen 驱动活跃时非 None
+        # （调度器多任务下为"当前推进任务"的栈，随任务步进切换）。
         self._current_stack: Optional[list] = None
 
     # ------------------------------------------------------------------
@@ -81,7 +81,7 @@ class VMExecutor:
     def frame_stack_depth(self) -> int:
         """当前 CPS 帧栈深度。
 
-        仅在主调度循环 ``_drive_loop`` 活跃期间非零。供调试器 / 测试观察
+        仅在调度循环（``_drive_loop_gen``）驱动期间非零。供调试器 / 测试观察
         正在执行的 VMTask 帧层级（``_vm_invoke_behavior`` /
         ``_vm_invoke_llm_function`` yield 后，本属性应 ≥ 2）。
         """
@@ -129,10 +129,12 @@ class VMExecutor:
                 f"(uid={node_uid!r}). Add vm_handle_{node_type} to core/runtime/vm/handlers.py."
             )
 
-        return self._drive_loop([self._make_task(node_uid)])
+        scheduler = TaskScheduler()
+        scheduler.submit(self._drive_loop_gen([self._make_task(node_uid)]))
+        return scheduler.run()[0]
 
     def run_many(self, roots: "List[str]") -> "List[Any]":
-        """并发执行多个根任务（Stage 2 多任务/宿主异步入口）。
+        """并发执行多个根任务（多任务/宿主异步入口）。
 
         每个根是一棵独立 AST 子树；用 ``TaskScheduler`` 协作式推进，各根在
         等待 LLM/IO（Waitable）时挂起、让出给其它根，就绪后恢复。返回各根
@@ -187,126 +189,99 @@ class VMExecutor:
     # 内部：调度循环主体（被 run() / future 入口共享）
     # ------------------------------------------------------------------
 
-    def _drive_loop(self, stack: list) -> Any:
-        """主调度循环本体；接受预填充的栈，返回最终结果。
+    def _drive_loop_gen(self, stack: list) -> Any:
+        """可挂起的调度循环生成器（单源，阶段 1a：唯一驱动生成器）。
 
-        独立成方法让 ``run()`` 和将来其他入口（例如 ``run_body``-内联化）
-        共享同一段循环代码，避免漂移。
+        逐帧推进栈；当某 handler yield 一个 Waitable（如 ``LLMFuture``）时挂起
+        （``yield waitable``），把控制权交还调用方；调用方（调度器 / 线程体）
+        在 waitable 就绪后 ``send(result)`` 恢复。栈耗尽时返回最终结果。
 
-        本方法负责把 ``stack`` 临时绑定到 ``self._current_stack`` 上，使
-        ``frame_stack_depth`` 属性能从外部观察到 CPS 栈深度；嵌套
-        ``_drive_loop`` 调用（例如 ``vm.run`` 重入）通过保存/恢复保持外层
-        视图一致。实际循环体在 ``_drive_loop_gen``（单任务驱动，阻塞等待
-        每个 Waitable，保持既有语义）。
+        ``_current_stack`` 绑定（供 ``frame_stack_depth`` 观察 CPS 栈深度）在
+        本生成器内保存/恢复：多任务下每任务的栈视图随其步进自然切换；嵌套
+        ``run`` 重入（如意图消解的 ``vm.run(segment)``）经 finally 恢复外层视图。
         """
         prev_stack = self._current_stack
         self._current_stack = stack
         try:
-            return self._drive_gen_blocking(self._drive_loop_gen(stack))
+            # (value, exception) — 互斥；下一次循环将传递给栈顶任务
+            pending_value: Any = None
+            pending_exception: Optional[BaseException] = None
+
+            while stack:
+                self.step_count += 1
+                if self.max_steps and self.step_count > self.max_steps:
+                    raise RuntimeError(
+                        f"VMExecutor step limit exceeded ({self.max_steps})"
+                    )
+
+                task = stack[-1]
+                gen = task.generator
+                try:
+                    if pending_exception is not None:
+                        exc = pending_exception
+                        pending_exception = None
+                        child_uid = gen.throw(exc)
+                    else:
+                        val = pending_value
+                        pending_value = None
+                        child_uid = gen.send(val)
+                except StopIteration as si:
+                    stack.pop()
+                    ret_value = si.value
+                    # StopIteration.value 若是 Signal，作为控制流数据沿栈传递
+                    if isinstance(ret_value, Signal):
+                        pending_value = ret_value
+                    else:
+                        pending_value = (
+                            ret_value if ret_value is not None else self.registry.get_none()
+                        )
+                    continue
+                except UnhandledSignal as use:
+                    # IbUserFunction.call() 等通过 vm.run_body() 执行函数体，
+                    # 若内部 BREAK/CONTINUE 逃逸出函数体，以 UnhandledSignal 透传。
+                    stack.pop()
+                    pending_exception = use
+                    continue
+                except Exception as e:
+                    # 其他运行时异常：弹栈并向上传递
+                    stack.pop()
+                    pending_exception = e
+                    continue
+
+                # 生成器 yield 了一个子节点 uid：决定是 CPS 求值还是 fallback
+                if child_uid is None:
+                    # yield None —— 视作 None 立即返回
+                    pending_value = self.registry.get_none()
+                    continue
+
+                # 生成器 yield 了一个 Waitable（如 LLMFuture）→ 挂起，等待其完成。
+                # 调度器挂起该根、让出给其它根，就绪后 send 结果恢复。
+                if isinstance(child_uid, Waitable):
+                    pending_value = yield child_uid
+                    continue
+
+                if isinstance(child_uid, str) and self.supports(child_uid):
+                    stack.append(self._make_task(child_uid))
+                else:
+                    # dispatch table 覆盖所有 43 个 AST 节点类型；到达此处
+                    # 意味着 handler yield 了一个未知节点 uid（artifact 损坏或新
+                    # 增了未实现 handler 的节点）。
+                    node_data = self._ec.get_node_data(child_uid) if isinstance(child_uid, str) else None
+                    node_type = (node_data.get("_type") if node_data else None) or repr(child_uid)
+                    raise RuntimeError(
+                        f"VMExecutor: No CPS handler for node type {node_type!r} "
+                        f"(uid={child_uid!r}). Add vm_handle_{node_type} to core/runtime/vm/handlers.py."
+                    )
+
+            # 栈空：处理最终结果
+            if pending_exception is not None:
+                raise pending_exception
+            # 未消费的顶层 Signal → 以 UnhandledSignal 抛给调用方
+            if isinstance(pending_value, Signal):
+                raise UnhandledSignal(pending_value)
+            return pending_value if pending_value is not None else self.registry.get_none()
         finally:
             self._current_stack = prev_stack
-
-    def _drive_gen_blocking(self, gen: Any) -> Any:
-        """驱动单个调度生成器到完成（单任务：对每个 Waitable 阻塞等待）。
-
-        ``_drive_loop_gen`` 在 handler yield 一个 Waitable 时挂起；此处立即
-        ``waitable.result()`` 阻塞等待并 ``send`` 恢复，等价于旧的同步阻塞语义。
-        """
-        try:
-            waitable = gen.send(None)
-            while True:
-                waitable = gen.send(waitable.result())
-        except StopIteration as si:
-            return si.value
-
-    def _drive_loop_gen(self, stack: list) -> Any:
-        """可挂起的调度循环生成器（单源）。
-
-        逐帧推进栈；当某 handler yield 一个 Waitable（如 ``LLMFuture``）时挂起
-        （``yield waitable``），把控制权交还调用方；调用方（单任务驱动 / 多任务
-        调度器）在 waitable 就绪后 ``send(result)`` 恢复。栈耗尽时返回最终结果。
-
-        单任务驱动（``_drive_loop``）在此阻塞等待；多任务驱动（``run_many``）
-        由 ``TaskScheduler`` 挂起该根、让出给其它根。
-        """
-        # (value, exception) — 互斥；下一次循环将传递给栈顶任务
-        pending_value: Any = None
-        pending_exception: Optional[BaseException] = None
-
-        while stack:
-            self.step_count += 1
-            if self.max_steps and self.step_count > self.max_steps:
-                raise RuntimeError(
-                    f"VMExecutor step limit exceeded ({self.max_steps})"
-                )
-
-            task = stack[-1]
-            gen = task.generator
-            try:
-                if pending_exception is not None:
-                    exc = pending_exception
-                    pending_exception = None
-                    child_uid = gen.throw(exc)
-                else:
-                    val = pending_value
-                    pending_value = None
-                    child_uid = gen.send(val)
-            except StopIteration as si:
-                stack.pop()
-                ret_value = si.value
-                # StopIteration.value 若是 Signal，作为控制流数据沿栈传递
-                if isinstance(ret_value, Signal):
-                    pending_value = ret_value
-                else:
-                    pending_value = (
-                        ret_value if ret_value is not None else self.registry.get_none()
-                    )
-                continue
-            except UnhandledSignal as use:
-                # IbUserFunction.call() 等通过 vm.run_body() 执行函数体，
-                # 若内部 BREAK/CONTINUE 逃逸出函数体，以 UnhandledSignal 透传。
-                stack.pop()
-                pending_exception = use
-                continue
-            except Exception as e:
-                # 其他运行时异常：弹栈并向上传递
-                stack.pop()
-                pending_exception = e
-                continue
-
-            # 生成器 yield 了一个子节点 uid：决定是 CPS 求值还是 fallback
-            if child_uid is None:
-                # yield None —— 视作 None 立即返回
-                pending_value = self.registry.get_none()
-                continue
-
-            # 生成器 yield 了一个 Waitable（如 LLMFuture）→ 挂起，等待其完成。
-            # 单任务驱动（_drive_loop）在此阻塞等待；多任务驱动（run_many）由
-            # 调度器挂起该根、让出给其它根，就绪后 send 结果恢复。
-            if isinstance(child_uid, Waitable):
-                pending_value = yield child_uid
-                continue
-
-            if isinstance(child_uid, str) and self.supports(child_uid):
-                stack.append(self._make_task(child_uid))
-            else:
-                # dispatch table 覆盖所有 43 个 AST 节点类型；到达此处
-                # 意味着 handler yield 了一个未知节点 uid（artifact 损坏或新
-                # 增了未实现 handler 的节点）。
-                node_data = self._ec.get_node_data(child_uid) if isinstance(child_uid, str) else None
-                node_type = (node_data.get("_type") if node_data else None) or repr(child_uid)
-                raise RuntimeError(
-                    f"VMExecutor: No CPS handler for node type {node_type!r} "
-                    f"(uid={child_uid!r}). Add vm_handle_{node_type} to core/runtime/vm/handlers.py."
-                )
-
-        # 栈空：处理最终结果
-        if pending_exception is not None:
-            raise pending_exception
-        # 未消费的顶层 Signal → 以 UnhandledSignal 抛给调用方
-        if isinstance(pending_value, Signal):
-            raise UnhandledSignal(pending_value)
-        return pending_value if pending_value is not None else self.registry.get_none()
 
     # ------------------------------------------------------------------
     # 内部：任务构造

@@ -81,8 +81,9 @@
 - **`run()` / `run_body()` / `run_many()`** 全部经调度器：`run` = 提交单任务跑完；`run_many` = 多任务协作推进
   （现 TaskScheduler 语义）；`run_body` 逐语句 `run()`——**每个语句子树为一个调度器任务**（语句内 `await` 挂起
   不重入调度器；body 级意图 one-shot 处理留在 run_body 的 Python 循环内，逐语句激活/清理）。
-- **等待策略**：调度器对 waiting 表 poll `is_done`；就绪 → `try_result()` 非阻塞取回 → send 恢复；全等待时 park
-  （默认 ~1ms 可配置）。专用线程体同一调度器（其线程可阻塞等待）。
+- **等待策略（1a 实现）**：调度器对 waiting 表 poll `is_done`；就绪 → `_step` 内 `result()` 恰一次取回 → send 恢复；
+  全等待时 park（默认 ~1ms 可配置）。**调度器不得在等待期消费 `result()`**（HostAwaitable 消耗性，二次消费报
+  Unknown handle）——单待决阻塞优化待 1b 经 `try_result()` 引入。专用线程体同一调度器（其线程可阻塞等待）。
 - **同步入口约束**：`IbUserFunction.call` / `IbBehavior.call` / `IbFnCallable.call` 的同步后备 = "同步跑完单任务"；
   **禁止从调度器运行中的任务内部再进入同步入口**（会死锁）——检测并报错，或路由经调度器。
 
@@ -145,8 +146,11 @@
 | `run_body` 逐语句 `run()`（每语句一次调度器入口） | `run_body` 逐语句 `run()`——每语句一个调度器任务（语句内 await 不重入调度器） |
 | `run_many` 用 TaskScheduler（生产零调用） | 成为调度器多根入口，生产启用 |
 
-- **TaskScheduler 演进**：加 per-task `cancelled` / 结果槽 / park 策略；`submit` 契约 = 生成器（`_drive_loop_gen`）。
-- **等待策略**：poll `is_done`；全等待时 park（默认 ~1ms 可配置）；专用线程体可改用阻塞 `result()`（同代码、策略可配）。
+- **TaskScheduler 演进（1a 落地）**：加 per-task `cancelled`（1c 接线）/ 结果槽 / park 策略；`run` 循环内联
+  （帧数控制——用户函数递归每层嵌套 run_body→run→scheduler.run，方法帧会推高 Python 递归栈；内联使每层帧数
+  低于旧 `_drive_loop` 路径）。`submit` 契约 = 生成器（`_drive_loop_gen`）。
+- **等待策略（1a）**：poll `is_done` + park（全等待时短睡眠）；`result()` 仅经 `_step` 每 waitable 恰一次。
+  单待决阻塞优化待 1b 经 `try_result()`（非阻塞取）引入。专用线程体可改用阻塞 `result()`（同代码、策略可配）。
 
 ### 4.2 Waitable 家族扩展（新增两个）
 
