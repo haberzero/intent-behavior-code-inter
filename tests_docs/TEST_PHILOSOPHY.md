@@ -275,8 +275,8 @@ def test_optional_none_access_raises(self):
 
 ### 5.1 新增测试时
 
-1. **先查 `tests/COVERAGE_MAP.md`** 找对应文件
-2. 找不到 → 先在 COVERAGE_MAP 添加条目 + 说明理由 → 再创建文件
+1. **先查 `tests/COVERAGE_MATRIX.md`** 找对应语义域/覆盖项（三段式引用，机器校验）
+2. 找不到 → 先在 COVERAGE_MATRIX 添加条目 + 说明理由 → 再创建文件
 3. 使用 `tests/conftest.py` 统一 helper，**禁止本地定义**
 4. 遵守命名规范（无里程碑代号）
 5. 每个测试验证 **一个** 语义不变量
