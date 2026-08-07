@@ -21,6 +21,11 @@
 - **语言面**：任意函数可 `await`（无需 async fn 关键字——CPS VM 天然可挂起）；`yield` = 惰性生成器。
 - **快照闭合**：yield 点 × llmexcept = llmexcept retry 的 re-drive 正确性（挂起瞬态，不序列化挂起协程）。
 
+> **2026-08-07 复核修正**：阶段 1-3 落地暴露的妥协处理与深度定案见 **`EXEC_REFACTOR_BATCH.md`**——
+> R1 函数调用 trampoline 化（EXEC-1 根治）、R2 调度器通知式唤醒（替代 poll+park）、R3 `IbThread` 本体满足
+> Waitable（unify is_done，D-04 意图修复）、R4 P3 公开协议、R5 撤回（await 幂等为设计特性）、R6 函数自动
+> 只读捕获、D-08 定案保留透明 async。本文件对应表述以批次定案为准。
+
 ---
 
 ## 一、定位与目标

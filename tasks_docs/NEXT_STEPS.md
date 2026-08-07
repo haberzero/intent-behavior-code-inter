@@ -2,49 +2,56 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-07（阶段 1 地基 1a-1e 完成，进入阶段 3 统一清理）
+> **最后更新**：2026-08-07（阶段 1/3 完成；R 批次（复核根治）为下一主线）
 
 ---
 
-## 🔴 下一主线：阶段 3 —— 统一清理（设计语言统一，W1-W5/P3/P4）
+## 🔴 下一主线：R 批次 —— 统一执行地基复核与根治修复（R1-R6）
 
-> **阶段 1 统一执行地基完成（2026-08-07，分支 exp/exec-1a，全量 1979 passed / 1 skipped）**：
-> 1a 调度器接入主路径 → 1b Waitable 家族 + 阻塞即挂起 → 1c 协作取消核心 → 1d llmexcept×await 闭合 →
-> 1e 取消覆盖用户函数（D5）。设计见 **`tasks_docs/EXEC_FOUNDATION_DESIGN.md`**（D-01~D-08）。
-> **阶段 2（yield 惰性生成器）界定**：D-08（无 async 关键字，任意函数可 await）已落地验证；
-> `yield` 为大型独立特性，列为阶段 5 之前择机实现（生成器体需单可恢复驱动，见设计 §5.2）。
->
-> **阶段 3 实施（独立分支 exp/exec-3，全绿后手动应用 unsafe-vibe-dev）**：
-> W1 非阻塞命名统一（recv_nonblocking→recv_nowait）｜W2 订阅契约统一（runtime.subscribe 复用
-> pubsub/subscriber，消 monkeypatch）｜W3 "comm_"命名回归（_event_bus/_config_store）｜W4 死状态清理
-> （_registry_lock / IRuntimeLib._event_bus / events.py 事件类型对账）｜W5 文档同步（14_concurrency 等）
-> ｜P3 cell 隔离（禁跨任务写）｜P4 全局事件总线（引擎级单实例）。
-> **后续排序**：阶段 4 PT-FEAT-9 诊断机制 → 阶段 5 yield 惰性生成器 + 增量。
+> **2026-08-07 用户裁定**：阶段 1-3 落地暴露的妥协处理**必须彻底修复，不留妥协**；工作成本/难度不参与权衡；
+> IBCI 无用户，已文档化设计可为长远可维护性与架构健康性被推翻。
+> **完整设计/深度分析/决策见 `tasks_docs/EXEC_REFACTOR_BATCH.md`**（无悬而未决问题）。
+
+**批次（各独立分支，禁合并，全量零回归后手动 cherry-pick 应用 unsafe-vibe-dev）**：
+
+| 序 | 项 | 分支 | 内容 |
+|----|----|------|------|
+| 1 | R4 + R3 | `exp/exec-ra` | P3 公开协议（`IbCell.mark_shared_with_main`）+ D-04 意图修复（`IbThread` 本体满足 Waitable，unify `is_done`，auto-bind 支持 property-backed 方法，`await t` 可用） |
+| 2 | R6 | `exp/exec-rb` | 嵌套函数自动只读捕获（与 lambda 同构，`nonlocal` 仅用于写）——P3 触发面回到审计预期宽度 |
+| 3 | R2 | `exp/exec-rc` | 调度器通知式唤醒（Waitable `register_wake` + 各 waitable 完成通知 + CommBuffer 回调表 + 引擎 spawn 钩子）——根治 poll+park 与"单待决阻塞" |
+| 4 | R1 | `exp/exec-rd` | 函数调用 trampoline 化（`_vm_call_user_function` CPS 内联，EXEC-1 根治，深递归 Python 深度恒定） |
+
+**已定案（不再重议）**：R5 撤回（`await` 幂等是 auto-yield 组合的承载）；D-08 保留透明 async（CPS 天然可挂起 +
+auto-yield 组合 + 值契约 + yield 自标记）。
+
+**后续路线**：R 批次 → **阶段 4 PT-FEAT-9 诊断机制**（`DIAGNOSTIC_DESIGN.md` 已冻结）→ **阶段 5 `yield` 惰性生成器**
+（`EXEC_FOUNDATION_DESIGN.md` §5.2）→ 增量（streaming / host async 改进）。
 
 ---
 
 ## 🔴 下一主线（诊断机制）：PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）
 
-> **2026-08-06 交接，挂起至阶段 4（依赖统一执行地基 + 全局事件总线）**。OBSERVABILITY_REFACTOR 主体已完成
-> （四机制收敛 + 测试体系重建 + 矩阵三段式，全量 1963 passed / 1 skipped）；旧 CORE_DEBUG 已于 2A 移除
+> **2026-08-06 交接，挂起至 R 批次之后（阶段 4）**。OBSERVABILITY_REFACTOR 主体已完成
+> （四机制收敛 + 测试体系重建 + 矩阵三段式，全量 1984 passed / 1 skipped）；旧 CORE_DEBUG 已于 2A 移除
 > （88 trace → 真实异常回退转 `warnings.warn`，实跑清点现为 12 处运行时 + 1 处编译期）。经观测骨架
 > （EventBus + `emit_runtime_event`）发射结构化诊断事件，与 idbg/iruntime/test_hooks 同一设计语言，
 > **禁止重建旧 print/级别门控/全局单例机制**。
 > **设计已冻结：`tasks_docs/DIAGNOSTIC_DESIGN.md`**（技术定位/职责边界/核心决策 D1-D7/诊断码集/事件 schema/实施步骤）。
-> **依赖前置**：`EXEC_FOUNDATION_DESIGN.md` §3.6（全局事件总线，阶段 3 落地）。
+> **依赖前置**：全局事件总线（P4 已落地）+ R 批次（诊断事件经调度器/waitable 的消费面）稳定。
 > **完整交接要点见 `PENDING_TASKS.md` §12**（背景/现状/设计方向/实施步骤/关联）。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务（2026-08-07 阶段 1 完成）**：**阶段 3 统一清理**（独立分支 `exp/exec-3`，禁合并，全绿后手动应用
-  unsafe-vibe-dev）——W1 非阻塞命名 / W2 订阅契约 / W3 comm 命名回归 / W4 死状态 / W5 文档 / P3 cell 隔离 /
-  P4 全局事件总线。阶段 1 地基 1a-1e 见 `tasks_docs/EXEC_FOUNDATION_DESIGN.md`（D-01~D-08）。
-- **阶段 2 界定**：D-08（任意函数可 await）已落地；`yield` 惰性生成器为大型独立特性，阶段 5 前择机实现。
-- **次任务（阶段 4，挂起）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——设计已冻结
-  （`tasks_docs/DIAGNOSTIC_DESIGN.md`，D1-D7 + 诊断码集 + 实施步骤）；依赖 `EXEC_FOUNDATION_DESIGN.md`
-  §3.6（全局事件总线，阶段 3）落地；完整交接要点见 `PENDING_TASKS.md` §12。
+- **首要任务（2026-08-07）**：**R 批次（统一执行地基复核与根治修复）**——完整设计/深度分析/决策见
+  `tasks_docs/EXEC_REFACTOR_BATCH.md`（无悬而未决问题）。顺序：R4+R3（exp/exec-ra）→ R6（exp/exec-rb）→
+  R2（exp/exec-rc）→ R1（exp/exec-rd），各独立分支、全量零回归、手动 cherry-pick 应用 unsafe-vibe-dev。
+- **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev）**：地基 1a-1e（调度器执行核心/Waitable 家族/阻塞即挂起/
+  协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4（命名/订阅契约/comm 命名回归/死状态/
+  文档/cell 隔离/全局事件总线），全量 **1984 passed / 1 skipped**。
+- **次任务（阶段 4，R 批次之后）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——设计已冻结
+  （`tasks_docs/DIAGNOSTIC_DESIGN.md`，D1-D7 + 诊断码集 + 实施步骤）；完整交接要点见 `PENDING_TASKS.md` §12。
 - **已完成（OBSERVABILITY_REFACTOR 主体）**：2C-2 idbg 深度收敛 + 用户层机制改造、2D 测试体系全面重建
   （tests_v2 全域迁移 + 切换 + 矩阵三段式 + tests_docs 治理）、测试规范化清理（弱断言升级 + 短簇参数化），
   全量 **1963 passed / 1 skipped**。

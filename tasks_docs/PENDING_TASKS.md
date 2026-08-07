@@ -63,7 +63,7 @@
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**2026-08-07 解封**：纳入"统一执行地基"工作流（`CONCURRENCY_AUDIT.md` §十一），阶段 2 语言面在协作调度地基上实现。快照协议需覆盖 yield 点（与 llmexcept snapshot 闭合兼容，最难处） |
+| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**阶段 5**：`yield` 惰性生成器在 R 批次与 PT-FEAT-9 之后实现（设计 `EXEC_FOUNDATION_DESIGN.md` §5.2 + D-08 定案保留透明 async）。**async 函数关键字不再需要**（D-08 定案：任意函数可 await，yield 自标记函数种类） |
 | PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |
@@ -81,9 +81,9 @@
 > **设计已冻结（2026-08-07）**：`tasks_docs/DIAGNOSTIC_DESIGN.md`——技术定位、职责边界、核心决策 D1-D7
 > （单一事件类型 + KDIAG 代码注册表；单一记录双投影；代码即数据非门控；rc best-effort；边界；
 > 码入 codes.py；不设 severity）、诊断码集（10 码 / 12 站点）、事件 schema、实施步骤 A-E。
-> **前置依赖（2026-08-07 用户定案）**：先建统一执行地基（协作任务模型）——`tasks_docs/CONCURRENCY_AUDIT.md`
-> §十一 方向定案与任务重排（阶段 0 设计冻结 → 1 地基实现 → 2 语言面 async fn/yield → 3 统一清理
-> [W1-W5/P3/P4，含全局事件总线] → 4 诊断机制）；诊断机制落地顺延至阶段 4。
+> **前置依赖（2026-08-07 更新）**：统一执行地基已落地（阶段 1/3，unsafe-vibe-dev）；**先完成 R 批次**
+> （`EXEC_REFACTOR_BATCH.md`：R1 trampoline/R2 通知式唤醒/R3 D-04 unify/R4 P3 公开/R6 函数自动捕获——彻底修复
+> 阶段 1-3 的妥协处理）→ 诊断机制（阶段 4）落地；全局事件总线（P4）已就绪。
 
 ### 背景与现状
 

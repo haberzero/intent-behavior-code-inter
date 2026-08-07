@@ -104,15 +104,18 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一主线：阶段 0 统一执行地基设计定案（协作任务模型）**（2026-08-07 用户定案）——**adopt 协作调度为
-  VM 唯一执行模型**（P1/P2 定案，不再二选一）。深度审计与方向定案见 `CONCURRENCY_AUDIT.md`（S1-S9/D1-D9/W1-W6/P1-P9
-  + §十一 任务重排）。下一交付物 = tasks_docs/ 统一执行地基设计冻结文档（零代码）。
-- **任务重排**：阶段 0 设计冻结 → 1 地基实现（独立分支实验）→ 2 语言面 async fn/yield（PT-FEAT-1 **解封**）→
-  3 统一清理（W1-W5/P3/P4）→ 4 PT-FEAT-9 诊断机制 → 5 增量。
-- **OBSERVABILITY_REFACTOR 主体已完成（2026-08-06）**：四机制统一收敛、测试体系全面重建 + 规范化清理，
-  全量 **1963 passed / 1 skipped**。规划见 `OBSERVABILITY_REFACTOR.md`。
-- **长期周期**：`PT-AUDIT-1/2`（代码异味 / 分支嵌套审计，独立分支）+ `PT-AUDIT-3`（代码复核审查循环）+
-  `PT-AUDIT-5`（注释卫生清理）——持续周期工作。
+- **下一主线：R 批次（统一执行地基复核与根治修复）**（2026-08-07 用户裁定：彻底修复，不留妥协）——
+  完整设计/深度分析/决策见 `tasks_docs/EXEC_REFACTOR_BATCH.md`（**无悬而未决问题**）。顺序：
+  R4+R3（`exp/exec-ra`：P3 公开协议 + D-04 意图修复 unify is_done）→ R6（`exp/exec-rb`：函数自动只读捕获）→
+  R2（`exp/exec-rc`：调度器通知式唤醒）→ R1（`exp/exec-rd`：函数调用 trampoline 化，EXEC-1 根治）。
+  各独立分支、全量 pytest 零回归、手动 cherry-pick 应用 unsafe-vibe-dev（禁合并）。
+- **已定案（不再重议）**：R5 撤回（`await` 幂等是 auto-yield 组合承载，改报错破坏 `await collect(h)`）；
+  D-08 保留透明 async（CPS 天然可挂起 + auto-yield 组合 + 值契约 + yield 自标记）。
+- **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev，全量 1984 passed / 1 skipped）**：地基 1a-1e（调度器执行核心/
+  Waitable 家族 try_result/阻塞即挂起/协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4
+  （非阻塞命名/订阅契约/pubsub EventBus/comm 命名回归/死状态/文档/cell 隔离/引擎级全局事件总线）。
+- **后续路线**：R 批次 → 阶段 4 PT-FEAT-9 诊断机制（`DIAGNOSTIC_DESIGN.md` 已冻结）→ 阶段 5 `yield` 惰性生成器
+  （`EXEC_FOUNDATION_DESIGN.md` §5.2）→ 增量（streaming / host async 改进）。
 - **保留规划**：media Phase 4（PT-SEALED-1，彻底封存）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置；全程本地 commit、禁 push。
 
