@@ -36,10 +36,10 @@ print((str)b)
 """)
         assert lines == ["1", "2"]
 
-    def test_chan_recv_nonblocking_empty(self):
+    def test_chan_recv_nowait_empty(self):
         lines = run_ibci("""
 chan c = chan(str, "stream")
-any none = c.recv_nonblocking()
+any none = c.recv_nowait()
 print(none)
 """)
         # 空缓冲非阻塞返回 None

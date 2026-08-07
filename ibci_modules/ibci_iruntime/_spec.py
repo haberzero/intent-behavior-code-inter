@@ -3,7 +3,7 @@ IBIRuntime 内核插件规范
 
 IBCI 运行时内省与控制模块。提供：
 - ``snapshot()`` —— 运行时快照（tasks/channels/slots/vms/vars/llm）
-- ``subscribe()`` —— 订阅状态变更事件流（返回 stream Channel）
+- ``subscribe()`` —— 订阅状态变更事件流（返回 pubsub 订阅端点 subscriber）
 """
 
 def __ibcext_metadata__() -> dict:
@@ -28,8 +28,8 @@ def __ibcext_vtable__() -> dict:
             },
             "subscribe": {
                 "params": [],
-                "return_type": "chan",
-                "description": "订阅运行时状态变更事件流，返回 mode=stream 的 Channel"
+                "return_type": "subscriber",
+                "description": "订阅运行时状态变更事件流，返回 pubsub 订阅端点（subscriber，close 即退订）"
             },
             "configure": {
                 "params": [{"name": "kwargs", "kind": "VAR_KEYWORD"}],

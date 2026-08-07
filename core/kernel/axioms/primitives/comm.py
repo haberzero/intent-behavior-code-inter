@@ -105,7 +105,7 @@ class ChannelAxiom(BaseAxiom):
             "send": _m("send", params=["any"], ret="void", mutating=True),
             "send_nowait": _m("send_nowait", params=["any"], ret="bool"),
             "recv": _m("recv", ret="any"),
-            "recv_nonblocking": _m("recv_nonblocking", ret="any"),
+            "recv_nowait": _m("recv_nowait", ret="any"),
             "subscribe": _m("subscribe", params=["int"], ret="subscriber"),
             "close": _m("close", ret="void", mutating=True),
         }
@@ -117,7 +117,7 @@ class ChannelAxiom(BaseAxiom):
 class SubscriberAxiom(BaseAxiom):
     """公理：subscriber 类型（pubsub 订阅者消费者端点）。
 
-    ``chan(pubsub).subscribe()`` 的返回值。提供 recv/recv_nonblocking/close。
+    ``chan(pubsub).subscribe()`` 的返回值。提供 recv/recv_nowait/close。
     """
 
     @property
@@ -127,7 +127,7 @@ class SubscriberAxiom(BaseAxiom):
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
             "recv": _m("recv", ret="any"),
-            "recv_nonblocking": _m("recv_nonblocking", ret="any"),
+            "recv_nowait": _m("recv_nowait", ret="any"),
             "close": _m("close", ret="void", mutating=True),
         }
 

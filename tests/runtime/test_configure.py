@@ -37,13 +37,13 @@ print(eff)
 
 class TestObservabilityGate:
     def test_observability_off_suppresses_events(self):
-        """observability 关闭后 chan 创建不再产生事件（recv_nonblocking 返回 None）。"""
+        """observability 关闭后 chan 创建不再产生事件（recv_nowait 返回 None）。"""
         lines = run_ibci("""
 import iruntime
 iruntime.configure(observability=False)
-chan ev = iruntime.subscribe()
+subscriber ev = iruntime.subscribe()
 chan c = chan(str, "stream")
-any e = ev.recv_nonblocking()
+any e = ev.recv_nowait()
 print(e)
 """)
         assert lines == ["None"]
@@ -52,7 +52,7 @@ print(e)
         """observability 默认开启时 chan 创建产生事件。"""
         lines = run_ibci("""
 import iruntime
-chan ev = iruntime.subscribe()
+subscriber ev = iruntime.subscribe()
 chan c = chan(str, "stream")
 dict e = ev.recv()
 print(e)

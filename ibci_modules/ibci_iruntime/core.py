@@ -5,7 +5,7 @@ IBIRuntime 内核内省模块插件实现。
 
 提供：
 - ``snapshot()``    —— 运行时快照聚合（见 ``core.runtime.observability.snapshot``）
-- ``subscribe()``   —— 订阅状态变更事件流（返回 mode=stream 的 Channel）
+- ``subscribe()``   —— 订阅状态变更事件流（返回 pubsub 订阅端点 subscriber）
 
 通过 KernelRegistry 稳定钩子（get_execution_context）访问当前 EC/VM 执行器，
 与 idbg/isys 的懒获取模式一致。
@@ -14,7 +14,7 @@ from typing import Any, Optional, TYPE_CHECKING
 
 from core.runtime.frame import get_current_execution_context
 from core.runtime.observability.snapshot import snapshot as _snapshot_aggregate
-from core.runtime.observability.events import EventBus, ChannelSink
+from core.runtime.observability.events import EventBus
 from core.runtime.observability.config import ConfigStore, DEFAULT_CONFIG
 from core.runtime.shared.comm.channel import ChannelCore
 
@@ -49,11 +49,11 @@ class IRuntimeLib:
     def subscribe(self) -> Any:
         """订阅运行时状态变更事件流。
 
-        返回一个 mode=stream 的 Channel（IbChannel），事件 dict 逐个推入。
-        Channel 关闭即退订。事件总线挂在 runtime_context 上（与 CommRegistry
-        同级），供 VM handlers / 协调器事件源共用。
+        返回一个 pubsub 订阅端点（``subscriber``，IbSubscriber），事件 dict 逐个
+        推入其独立队列；``close()`` = 干净退订（与 ``c.subscribe()`` 同一惯用法，
+        消 monkeypatch）。事件总线为引擎级共享 pubsub 通道（registry 承载）。
         """
-        from core.runtime.objects.kernel import IbChannel
+        from core.runtime.objects.kernel import IbSubscriber
 
         ec = get_current_execution_context()
         if ec is None:
@@ -62,24 +62,13 @@ class IRuntimeLib:
         rc = ec.runtime_context
 
         event_bus = self._get_event_bus(rc)
-        core = ChannelCore(mode="stream", name="runtime_events")
-        sink = ChannelSink(core)
-        event_bus.attach(sink)
+        view = event_bus.subscribe()
 
-        # 构造语言层 IbChannel（包装 core）
-        chan_cls = registry.get_class("chan")
-        channel = IbChannel(ib_class=chan_cls, core=core)
-
-        # 把退订逻辑挂到 channel 的 close 上：关闭即 detach sink
-        _orig_close = core.close
-
-        def _close_and_detach():
-            event_bus.detach(sink)
-            _orig_close()
-
-        core.close = _close_and_detach  # type: ignore[method-assign]
-
-        return channel
+        # 构造语言层 IbSubscriber（包装 pubsub 订阅者视图）
+        sub_cls = registry.get_class("subscriber")
+        subscriber = IbSubscriber._create_blank(sub_cls)
+        subscriber.view = view
+        return subscriber
 
     # ------------------------------------------------------------------
     # 控制层

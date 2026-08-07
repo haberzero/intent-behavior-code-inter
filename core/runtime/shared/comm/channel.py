@@ -204,6 +204,14 @@ class ChannelCore:
         with self._lock:
             return self._closed_flag()
 
+    @property
+    def subscriber_count(self) -> int:
+        """pubsub 模式的订阅者数量（非 pubsub 为 0）。"""
+        with self._lock:
+            if self._mode != "pubsub" or self._subscribers is None:
+                return 0
+            return len(self._subscribers)
+
     def _closed_flag(self) -> bool:
         """锁内调用的 closed 判断（两种模式统一）。"""
         if self._mode == "pubsub":

@@ -26,6 +26,11 @@ class KernelRegistry:
         # 绑定执行上下文数据，不再持有整个解释器实例
         self._execution_context: Optional[Any] = None
         self._execution_context_lock = threading.Lock()
+
+        # 引擎级共享事件总线（观测全局：所有 RuntimeContextImpl 共享同一 EventBus，
+        # 线程任务事件可达主订阅者——计算隔离、观测全局）
+        self._event_bus: Optional[Any] = None
+        self._event_bus_lock = threading.Lock()
         
         # 注册状态机级别。默认为 1。
         self._state_level = 1
@@ -266,6 +271,23 @@ class KernelRegistry:
         """
         with self._execution_context_lock:
             return self._execution_context
+
+    def get_event_bus(self) -> Any:
+        """引擎级共享事件总线（惰性创建，线程安全）。
+
+        观测全局：所有 RuntimeContextImpl（主/线程任务）共享同一 EventBus，
+        线程任务内事件可达主订阅者（计算隔离、观测全局，D3 闭合）。
+        """
+        with self._event_bus_lock:
+            if self._event_bus is None:
+                from core.runtime.observability.events import EventBus
+                self._event_bus = EventBus()
+            return self._event_bus
+
+    def peek_event_bus(self) -> Optional[Any]:
+        """事件总线只读（未创建返回 None，不产生副作用）。"""
+        with self._event_bus_lock:
+            return self._event_bus
 
     def register_class(self, name: str, ib_class: Any, token: Any, spec: 'IbSpec'):
         """

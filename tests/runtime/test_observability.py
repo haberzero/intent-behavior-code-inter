@@ -65,7 +65,7 @@ class TestSubscribeE2E:
     def test_subscribe_receives_chan_created(self):
         lines = run_ibci("""
 import iruntime
-chan ev = iruntime.subscribe()
+subscriber ev = iruntime.subscribe()
 chan c = chan(str, "stream")
 dict e = ev.recv()
 print(e)
@@ -76,7 +76,7 @@ print(e)
     def test_subscribe_receives_slot_updated(self):
         lines = run_ibci("""
 import iruntime
-chan ev = iruntime.subscribe()
+subscriber ev = iruntime.subscribe()
 slot st = slot("score", 1)
 dict e = ev.recv()
 print(e)
@@ -88,7 +88,7 @@ print(e)
         回归：事件类型早已声明但从未发射（空壳机制）。
         """
         lines = run_ibci(
-            "chan ev = iruntime.subscribe()\n"
+            "subscriber ev = iruntime.subscribe()\n"
             "str r = @~ MOCK:STR:hello ~\n"
             "dict e = ev.recv()\n"
             "print(e)\n",
@@ -107,3 +107,23 @@ print(snap)
 """)
         assert len(lines) == 1
         assert "llm" in lines[0]
+
+    def test_thread_task_events_reach_main_subscriber(self):
+        """全局事件总线（P4）：线程任务内事件可达主订阅者（D3 闭合回归）。"""
+        lines = run_ibci("""
+import iruntime
+subscriber ev = iruntime.subscribe()
+chan c = chan(str, "stream")
+func worker() -> int:
+    chan inner = chan(str, "stream")
+    return 1
+thread[int] t = thread(callable=worker, args=[])
+t.join()
+any e1 = ev.recv()
+any e2 = ev.recv()
+print((str)e1)
+print((str)e2)
+""")
+        # 主线程 + 线程任务各产生一次 chan_created，均到达主订阅者
+        assert len(lines) == 2
+        assert all("chan_created" in line for line in lines)

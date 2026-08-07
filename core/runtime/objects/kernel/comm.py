@@ -4,7 +4,7 @@ core.runtime.objects.kernel.comm — IBCI 语言层通信值对象。
 包装 ``core.runtime.shared.comm`` 线程安全原语，作为一等公民 IbObject
 暴露给 IBCI 代码：
 
-- ``IbChannel``（chan）—— 数据流通道（send / recv / recv_nonblocking / close / subscribe）
+- ``IbChannel``（chan）—— 数据流通道（send / recv / recv_nowait / close / subscribe）
 - ``IbSlot``（slot）—— 共享状态槽（get / set / update）
 
 通信 Signal 抽象已移除（零投递机制 + 与 VM 控制流 Signal 撞名）。
@@ -86,7 +86,7 @@ class IbChannel(IbObject):
         """
         return _BoxingWaitable(self.core.recv_waitable(), self.ib_class.registry.box)
 
-    def recv_nonblocking(self) -> "IbObject":
+    def recv_nowait(self) -> "IbObject":
         """非阻塞接收；无数据时返回 None。"""
         ok, val = self.core.recv_nowait()
         if not ok:
@@ -133,7 +133,7 @@ class IbSubscriber(IbObject):
     """IBCI 语言层的 pubsub 订阅者值对象（包装 ``_SubscriberView``）。
 
     ``chan(T, "pubsub")`` 是广播器；``c.subscribe()`` 返回本订阅者端点，
-    提供独立消费队列（recv / recv_nonblocking / close）。
+    提供独立消费队列（recv / recv_nowait / close）。
     """
 
     __slots__ = ("view",)
@@ -151,7 +151,7 @@ class IbSubscriber(IbObject):
         """返回接收 Waitable（阻塞即挂起；宿主 ``.result()`` 阻塞取回装箱 T）。"""
         return _BoxingWaitable(self.view.recv_waitable(), self.ib_class.registry.box)
 
-    def recv_nonblocking(self) -> "IbObject":
+    def recv_nowait(self) -> "IbObject":
         """非阻塞接收；无数据时返回 None。"""
         ok, val = self.view.recv_nowait()
         if not ok:

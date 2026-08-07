@@ -14,9 +14,10 @@
 |------|------|
 | `c.send(x)` | 阻塞投递（message/stream 排入队列；pubsub 广播给全部订阅者） |
 | `c.send_nowait(x)` | 非阻塞投递 → `bool`；pubsub 无订阅者、或订阅者队列满时返回 False |
-| `c.recv()` | 阻塞接收 → `T` |
-| `c.recv_nonblocking()` | 非阻塞接收 → `T` 或 `None`（空缓冲） |
-| `c.subscribe(buffer=0)` | 创建订阅端点 → `subscriber`（pubsub 模式） |
+| `c.recv()` | 阻塞接收 → `T`（VM 任务内为协作挂起） |
+| `c.recv_nowait()` | 非阻塞接收 → `T` 或 `None`（空缓冲） |
+| `c.subscribe(size=0)` | 创建订阅端点 → `subscriber`（pubsub 模式）；`size` 为端点队列容量 |
+| `c.close()` | 关闭通道（幂等） |
 
 **模式（`mode=`）**：
 
@@ -35,6 +36,12 @@ str msg = c.recv()   # "hello"
 ### 14.3 subscriber 订阅端点
 
 `subscriber sub = c.subscribe()` 为 pubsub 通道创建独立队列端点；`sub.recv()` 从**自己的**队列阻塞接收（端点互不影响）。
+
+| 方法 | 语义 |
+|------|------|
+| `sub.recv()` | 阻塞接收 → `T`（VM 任务内为协作挂起） |
+| `sub.recv_nowait()` | 非阻塞接收 → `T` 或 `None`（空缓冲） |
+| `sub.close()` | 关闭端点（并注销于通道，幂等） |
 
 ```ibci
 chan c = chan(int, "pubsub")
@@ -73,7 +80,8 @@ s.update(inc)         # CAS 读改写：11
 
 | 方法 | 语义 |
 |------|------|
-| `t.join()` | 阻塞等待完成 → `thread_result[T]` |
+| `t.start()` | 启动线程（构造时已自动启动，幂等） |
+| `t.join()` | 等待完成 → `thread_result[T]`（VM 任务内为协作挂起） |
 | `t.is_done()` | 非破坏状态查询 → `bool` |
 | `t.cancel()` | 协作式取消请求 → `ThreadCancelled` |
 
@@ -95,6 +103,8 @@ int v = r.expect()     # 3
 | 成员 | 语义 |
 |------|------|
 | `r.expect()` | 成功值 `T`；失败抛 IBCI 异常（fail-fast） |
+| `r.unwrap()` | 成功值 `T`；失败返回 `None`（不抛） |
+| `r.unwrap_or(v)` | 成功值 `T`；失败返回默认值 `v` |
 | `r.is_success()` / `r.is_error()` | `bool` 状态查询 |
 | `r.value()` / `r.error()` / `r.status()` | 内省读取（失败时 `value()` 为 null 等） |
 

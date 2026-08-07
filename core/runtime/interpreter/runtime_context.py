@@ -390,10 +390,10 @@ class RuntimeContextImpl(RuntimeContext):
         # 最大 llmexcept 嵌套深度限制
         self._llm_except_max_depth: int = 128
         # 运行时共享设施槽（由访问器惰性创建；未挂载时默认 None）：
-        # 通信注册表 / 线程协调器（通信域）+ 控制配置存储 / 事件总线（观测控制域）。
+        # 通信注册表 / 线程协调器（通信域）+ 控制配置存储（观测控制域）。
+        # 事件总线为引擎级共享实例（registry 承载），非本 rc 私有。
         self._comm_registry: Optional[Any] = None
         self._config_store: Optional[Any] = None
-        self._event_bus: Optional[Any] = None
         self._runtime_coordinator: Optional[Any] = None
 
     # --- 运行时共享设施访问器（公开接口，替代跨对象私有槽穿透） ---
@@ -423,15 +423,16 @@ class RuntimeContextImpl(RuntimeContext):
         return self._config_store
 
     def peek_event_bus(self) -> Optional[Any]:
-        """内省事件总线（只读；未创建返回 None）。"""
-        return self._event_bus
+        """内省事件总线（只读；未创建返回 None）。
+
+        引擎级共享实例（registry 承载）：所有 RuntimeContextImpl 共享同一总线，
+        线程任务事件可达主订阅者（计算隔离、观测全局）。
+        """
+        return self._registry.peek_event_bus()
 
     def get_event_bus(self) -> Any:
-        """内省事件总线（惰性创建）。供事件源广播内省事件流。"""
-        if self._event_bus is None:
-            from core.runtime.observability.events import EventBus
-            self._event_bus = EventBus()
-        return self._event_bus
+        """内省事件总线（惰性创建于引擎级）。供事件源广播内省事件流。"""
+        return self._registry.get_event_bus()
 
     def peek_runtime_coordinator(self) -> Optional[Any]:
         """线程协调器（只读；未创建返回 None）。"""
