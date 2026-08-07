@@ -2,7 +2,7 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-07（R 批次全部完成；PT-FEAT-9 诊断机制（阶段 4）列为下一主线）
+> **最后更新**：2026-08-07（PT-FEAT-9 诊断机制（阶段 4）完成；阶段 5 yield 列为下一主线）
 
 ---
 
@@ -29,24 +29,39 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ---
 
-## 🔴 下一主线（诊断机制）：PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）
+## ✅ 已完成：阶段 4 PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）
 
-> **2026-08-06 交接，挂起至 R 批次之后（阶段 4）**。OBSERVABILITY_REFACTOR 主体已完成
-> （四机制收敛 + 测试体系重建 + 矩阵三段式，全量 1984 passed / 1 skipped）；旧 CORE_DEBUG 已于 2A 移除
-> （88 trace → 真实异常回退转 `warnings.warn`，实跑清点现为 12 处运行时 + 1 处编译期）。经观测骨架
-> （EventBus + `emit_runtime_event`）发射结构化诊断事件，与 idbg/iruntime/test_hooks 同一设计语言，
-> **禁止重建旧 print/级别门控/全局单例机制**。
-> **设计已冻结：`tasks_docs/DIAGNOSTIC_DESIGN.md`**（技术定位/职责边界/核心决策 D1-D7/诊断码集/事件 schema/实施步骤）。
-> **依赖前置**：全局事件总线（P4 已落地）+ R 批次（诊断事件经调度器/waitable 的消费面）稳定。
-> **完整交接要点见 `PENDING_TASKS.md` §12**（背景/现状/设计方向/实施步骤/关联）。
+> **2026-08-07 完成，unsafe-vibe-dev，全量 2021 passed / 1 skipped**。
+> 设计权威：`tasks_docs/DIAGNOSTIC_DESIGN.md`（D1-D7 + 诊断码集 + 实施步骤 A-E）。
+> 完整落地记录见 `WORKLOG` PT-FEAT-9 阶段 B-D 落地。
+
+- **B 机制落地**：`codes.py` 增 `=== 内核诊断 (KDIAG_) ===` 节（10 码）；新建
+  `core/runtime/observability/diagnostics.py`（`kernel_diagnostic` helper：单一记录双投影——投影A 警告
+  不门控 + 投影B 事件受 observability 门控；rc 解析 best-effort：显式 > current-EC > 无→仅警告面）；
+  events.py docstring 对账确认 P4 已先行完成（如实清单），增补 `kernel_diagnostic`；helper 单测 8 项。
+- **C 站点迁移**：12 处运行时 warnings → `kernel_diagnostic`（文案逐字保留、detail JSON-safe）——
+  协议回退 8 / 策略 2 / 运行时 2；host_interface（kernel 层）用函数体内惰性 import（先例
+  registry.py:283）；scheduler.py 编译期站点按 D5 保持 warnings。
+- **D 事件投影测试**：tests/e2e/test_kernel_diagnostics.py——协议回退双投影（警告逐字 + 事件结构化）、
+  策略忽略站点无活跃 EC→仅警告面（fail-open 实证）、observability 门控（关→事件停、警告留）。
+- **E docs 治理**：新写 `docs/architecture/09_observability.md`（状态面/事件面/诊断面/配置面四机制
+  单点真理）；README/ARCHITECTURE/01_principles 索引同步；WORKLOG 记录。
+
+**遗留技术债（不阻塞阶段 5）**：PT-DEBT-9（RecursionError 级联包装，建议随下次执行层重构承接）、
+PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall` 定义位置）——见 `PENDING_TASKS.md` §五。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务（下一主线，阶段 4）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——设计已冻结
-  （`tasks_docs/DIAGNOSTIC_DESIGN.md`，D1-D7 + 诊断码集 + 实施步骤）；完整交接要点见 `PENDING_TASKS.md` §12。
-  **前置已全部就绪**：全局事件总线（P4）+ R 批次（调度器通知式唤醒/线程 Waitable/函数 trampoline 已稳定）。
+- **首要任务（下一主线，阶段 5）**：**`yield` 惰性生成器**（`EXEC_FOUNDATION_DESIGN.md` §5.2，D-08 定案
+  yield 自标记函数种类；async 关键字已取消）。前置全部就绪：调度器执行核心 + R 批次（trampoline/通知式
+  唤醒/Waitable 家族）稳定。**注意**：这是一个大型独立特性（生成器体需单可恢复驱动，见设计 §5.2），
+  建议先独立分支实验。
+- **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
+  kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
+  12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。
+  详见上方"已完成"节与 `WORKLOG`。
 - **R 批次全部完成（2026-08-07，unsafe-vibe-dev，全量 2001 passed / 1 skipped）**：
   - R4+R3（82c9c0f，1988/1）：P3 公开协议（`IbCell.mark_shared_with_main()`）+ D-04 意图修复（`IbThread` 本体满足
     Waitable：`is_done` 改 property、auto-bind 支持 property-backed 方法、`try_result`/`result`、`join()` 返回自身、

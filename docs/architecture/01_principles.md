@@ -494,6 +494,7 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 | `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（LLM Provider 核心实现） |
 | `ibci_modules/ibci_ihost/core.py` | 中 | HOST 插件实现（核心级） |
 | `ibci_modules/ibci_idbg/core.py` | 中 | IDBG 调试插件实现 |
+| `core/runtime/observability/`（包） | 中 | 观测体系（snapshot / events / diagnostics / config），详见 `09_observability.md` |
 
 ---
 

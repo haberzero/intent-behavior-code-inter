@@ -240,6 +240,10 @@ loop:
 | **D 事件投影测试** | 代表性站点事件测试（协议回退 / 策略忽略 / 运行时跳过）+ 门控测试（observability 关 → 事件不发射、警告保留）+ 覆盖矩阵补记 | 全量 pytest 零回归 |
 | **E docs 治理** | 按 WRITING_GUIDE 写入 `docs/architecture/`（诊断面职责、事件形态、代码表）；`WORKLOG` 记录 | 文档一致 |
 
+> **实施状态（2026-08-07）**：A-E 全部完成（unsafe-vibe-dev，全量 2021 passed / 1 skipped）。
+> B③ 确认在 P4 已先行完成（events.py docstring 已是如实清单），本次仅增补 `kernel_diagnostic`。
+> 详见 `WORKLOG` PT-FEAT-9 阶段 B-D 落地记录。
+
 ---
 
 ## 八、遗留 / 风险

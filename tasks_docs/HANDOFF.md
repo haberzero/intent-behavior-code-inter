@@ -104,9 +104,14 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一主线（阶段 4）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——设计已冻结
-  （`tasks_docs/DIAGNOSTIC_DESIGN.md`，D1-D7 + 诊断码集 + 实施步骤）；完整交接要点见 `PENDING_TASKS.md` §12。
-  **前置已全部就绪**：全局事件总线（P4）+ R 批次（调度器通知式唤醒/线程 Waitable/函数 trampoline 已稳定）。
+- **下一主线（阶段 5）**：**`yield` 惰性生成器**——设计 `EXEC_FOUNDATION_DESIGN.md` §5.2（D-08 定案：任意函数可
+  await、yield 自标记函数种类，async 关键字已取消）。**前置已全部就绪**：调度器执行核心 + R 批次
+  （trampoline/通知式唤醒/Waitable 家族）+ PT-FEAT-9 诊断机制（阶段 4）稳定。大型独立特性
+  （生成器体需单可恢复驱动），建议独立分支实验。
+- **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
+  `kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
+  12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计权威
+  `DIAGNOSTIC_DESIGN.md`（实施步骤 A-E 全部完成）。
 - **R 批次全部完成（2026-08-07，unsafe-vibe-dev，全量 2001 passed / 1 skipped）**：R4+R3（82c9c0f，1988/1）
   P3 公开协议 + D-04 `IbThread` 满足 Waitable → R6（35f1437，1995/1）嵌套函数自动只读捕获 → R2（c16b05e/c4c63aa，
   1998/1）调度器通知式唤醒 → R1（6dc9214，2001/1）函数调用 trampoline 化（EXEC-1 根治，深递归 Python 深度恒定）。
@@ -114,20 +119,23 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 - **已定案（不再重议）**：R5 撤回（`await` 幂等是 auto-yield 组合承载，改报错破坏 `await collect(h)`）；
   D-08 保留透明 async（CPS 天然可挂起 + auto-yield 组合 + 值契约 + yield 自标记）。
 - **R 批次遗留技术债（2026-08-07 评估登记，见 `PENDING_TASKS.md` §五 PT-DEBT-9/10/11）**：
-  ① PT-DEBT-9 RecursionError 被 `VM: Call failed` 级联包装掩盖根因（建议随 PT-FEAT-9 承接异常分类）；
+  ① PT-DEBT-9 RecursionError 被 `VM: Call failed` 级联包装掩盖根因（随下次执行层重构承接）；
   ② PT-DEBT-10 线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline，既有行为非回归，与阶段 5 线程主题相关）；
   ③ PT-DEBT-11 `_UserFunctionCall` 定义位置（handler 层依赖 VMExecutor 内部，建议下沉 `shared` 层或协议化）。
-  三项均不阻塞阶段 4，择机评估。
+  三项均不阻塞阶段 5，择机评估。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev，全量 1984 passed / 1 skipped）**：地基 1a-1e（调度器执行核心/
   Waitable 家族 try_result/阻塞即挂起/协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4
   （非阻塞命名/订阅契约/pubsub EventBus/comm 命名回归/死状态/文档/cell 隔离/引擎级全局事件总线）。
-- **后续路线**：阶段 4 PT-FEAT-9 诊断机制（`DIAGNOSTIC_DESIGN.md` 已冻结）→ 阶段 5 `yield` 惰性生成器
-  （`EXEC_FOUNDATION_DESIGN.md` §5.2）→ 增量（streaming / host async 改进）。
+- **后续路线**：阶段 5 `yield` 惰性生成器（`EXEC_FOUNDATION_DESIGN.md` §5.2，下一主线）→ 增量（streaming / host async 改进）。
 - **保留规划**：media Phase 4（PT-SEALED-1，彻底封存）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置；全程本地 commit、禁 push。
 
 ### 2.2 已完成摘要
 
+- **2026-08-07（PT-FEAT-9 阶段 4 完成）**：内核结构化诊断机制重建——`kernel_diagnostic` helper（单一记录双投影：
+  警告不门控 + 事件受 observability 门控，rc best-effort）+ 12 处运行时站点迁移（文案逐字）+ e2e 事件投影测试
+  （协议回退双投影/策略忽略 fail-open/门控）+ `docs/architecture/09_observability.md`（观测体系统一文档）。
+  全量 **2021 passed / 1 skipped**。详见 WORKLOG 与 git 历史。
 - **2026-08-07（R 批次完成）**：统一执行地基复核与根治——R4+R3 P3 公开协议 + `IbThread` 满足 Waitable（`await t` 可用）、
   R6 嵌套函数自动只读捕获、R2 调度器通知式唤醒（根治 poll+park）、R1 函数调用 trampoline 化（深递归 Python 深度恒定）。
   全量 **2001 passed / 1 skipped**。详见 WORKLOG 与 git 历史。

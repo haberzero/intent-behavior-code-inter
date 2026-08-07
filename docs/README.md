@@ -58,7 +58,8 @@ docs/
 │   ├── 05_vm_specification.md
 │   ├── 06_path_system.md
 │   ├── 07_kernel_native_modules.md
-│   └── 08_storage_model.md
+│   ├── 08_storage_model.md
+│   └── 09_observability.md
 │
 ├── subsystems/                      子系统设计详细章节
 │   ├── 01_intent_system.md

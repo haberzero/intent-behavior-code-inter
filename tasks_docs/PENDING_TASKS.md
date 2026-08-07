@@ -63,7 +63,7 @@
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**阶段 5**：`yield` 惰性生成器在 R 批次与 PT-FEAT-9 之后实现（设计 `EXEC_FOUNDATION_DESIGN.md` §5.2 + D-08 定案保留透明 async）。**async 函数关键字不再需要**（D-08 定案：任意函数可 await，yield 自标记函数种类） |
+| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**阶段 5（下一主线）**：`yield` 惰性生成器（设计 `EXEC_FOUNDATION_DESIGN.md` §5.2 + D-08 定案保留透明 async），大型独立特性建议独立分支实验。**async 函数关键字不再需要**（D-08 定案：任意函数可 await，yield 自标记函数种类） |
 | PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |
@@ -71,13 +71,15 @@
 | PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 | PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | 原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此）：`ibcc` 构建命令 `--pre-scan-specs` 扫描 `_spec.py` 生成 `.ibc_meta` 快照，`export_metadata()`/`load_metadata_from_file()` 使编译器离线复用元数据，减少运行时发现开销。当前为全量 `discover_all() → HostInterface.metadata` 流程 |
-| PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **设计已冻结（`tasks_docs/DIAGNOSTIC_DESIGN.md`）；待并发/通信统一前置（`tasks_docs/CONCURRENCY_AUDIT.md`）完成 + §八 P4 裁决后落地**。OBSERVABILITY 2A 已整体移除旧 CoreDebugger（88 trace；真实异常回退 12 处运行时转 `warnings.warn`）。详见下方"§12 PT-FEAT-9 交接要点" |
+| PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：`kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+ 12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计/决策见下方 §12（归档记录） |
 
 ---
 
 ## §12 PT-FEAT-9 交接要点：内核结构化诊断机制重建
 
-> **交接定位**（2026-08-06）：作为下一 session 主线任务。规划见 `OBSERVABILITY_REFACTOR.md`（2A 决策记录 + 目标架构）。
+> **状态**：**已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**。本节为决策记录
+> 归档。设计权威：`tasks_docs/DIAGNOSTIC_DESIGN.md`；实施记录见 `WORKLOG` PT-FEAT-9 阶段 B-D 落地。
+> 落地后观测体系统一文档：`docs/architecture/09_observability.md`（状态面/事件面/诊断面/配置面）。
 > **设计已冻结（2026-08-07）**：`tasks_docs/DIAGNOSTIC_DESIGN.md`——技术定位、职责边界、核心决策 D1-D7
 > （单一事件类型 + KDIAG 代码注册表；单一记录双投影；代码即数据非门控；rc best-effort；边界；
 > 码入 codes.py；不设 severity）、诊断码集（10 码 / 12 站点）、事件 schema、实施步骤 A-E。
@@ -133,9 +135,9 @@
 | PT-DEBT-6 | `register_module()` 可观测性缺口 | **已落地（2026-08-06）**：用户插件覆盖 kernel-native 时 `warnings.warn`（原静默忽略）。顺带修正测试配置 bug（plugin_paths 指向插件目录本身导致插件从未加载）。全量 pytest 零回归 |
 | PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | **已落地（2026-08-06）**：死字段清理（`is_assignable` 早已用 `Optional[T].wrapped_type`，序列化不消费）。全量 pytest 零回归 |
 | PT-DEBT-8 | ~~折叠 `IbXxx` 为单一 `IbValue`~~ → **重定义为"值层分派收敛审计"** | **已落地（2026-08-06）**：系统层面定论——折叠是伪目标（消 isinstance 动机已由 name 分派达成；具体类=领域方法载体，折叠违反单一职责）。实际收敛：`is_sequence_value` 统一容器分派、`IbLLMCallResult.is_uncertain` 统一不确定判断；类角色分工固化于 `03_type_system.md` §6.4。全量 pytest 零回归 |
-| PT-DEBT-9 | RecursionError 被 `VM: Call failed` 级联包装掩盖根因 | **R 批次 R1 排查发现（2026-08-07）**：深递归触底时，`leaf.py:315-317` 的 `except Exception` 把 RecursionError（`Exception` 子类）包装为 `VM: Call failed`，且每层调用递归包装一次 → 级联链掩盖真实根因（R1 期间 `f` not defined 的根因即 Python 栈溢出副作用被此掩盖）。关联 PT-FEAT-9（结构化诊断站点可承接异常分类；建议诊断事件区分"环境限制"如栈溢出 vs "语义错误"）。处置：随 PT-FEAT-9 或专项诊断改进一并评估 |
+| PT-DEBT-9 | RecursionError 被 `VM: Call failed` 级联包装掩盖根因 | **R 批次 R1 排查发现（2026-08-07）**：深递归触底时，`leaf.py:315-317` 的 `except Exception` 把 RecursionError（`Exception` 子类）包装为 `VM: Call failed`，且每层调用递归包装一次 → 级联链掩盖真实根因（R1 期间 `f` not defined 的根因即 Python 栈溢出副作用被此掩盖）。关联诊断面（`kernel_diagnostic` 站点可承接异常分类；建议诊断事件区分"环境限制"如栈溢出 vs "语义错误"）。处置：随下次执行层重构或专项诊断改进一并评估 |
 | PT-DEBT-10 | 线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline） | **R1 边界（2026-08-07 如实记录）**：VM 主路径已 trampoline（深递归 Python 深度恒定），但线程体 `_run_task_body` 经 `_drive_generator` **同步驱动** `_vm_call_user_function`——线程内用户函数递归仍嵌套 Python 栈（n≈20 即失败）。**R1 前同样失败（既有行为，非回归）**。复核方向：与阶段 5 `yield` 惰性生成器/"线程无损挂起"主题相关，线程体 trampoline 化列为专项评估；当前接受既有限制 |
-| PT-DEBT-11 | `_UserFunctionCall` 内部标记类定义位置（handler 依赖 VMExecutor 内部） | **R1 引入（2026-08-07）**：`_UserFunctionCall` 定义于 `vm_executor.py`，但 `leaf.py:293`（handler 层）与 `coordinator.py:316` 从 `vm_executor` import 它——handler 层向上依赖 VMExecutor 内部类，与"handler 是叶子、VMExecutor 调度"的分层方向略有违背。机制正确、功能无误，但按 design-philosophy"模块配合模式统一"应复核下沉（与 Waitable/Signal 同类放 `shared` 层）或改协议化标记。处置：随下次执行层重构或 PT-FEAT-9 一并评估 |
+| PT-DEBT-11 | `_UserFunctionCall` 内部标记类定义位置（handler 依赖 VMExecutor 内部） | **R1 引入（2026-08-07）**：`_UserFunctionCall` 定义于 `vm_executor.py`，但 `leaf.py:293`（handler 层）与 `coordinator.py:316` 从 `vm_executor` import 它——handler 层向上依赖 VMExecutor 内部类，与"handler 是叶子、VMExecutor 调度"的分层方向略有违背。机制正确、功能无误，但按 design-philosophy"模块配合模式统一"应复核下沉（与 Waitable/Signal 同类放 `shared` 层）或改协议化标记。处置：随下次执行层重构一并评估 |
 
 ---
 
