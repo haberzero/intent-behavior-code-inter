@@ -63,7 +63,7 @@
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地；剩余 async 函数/生成器。依赖调度器多任务挂起恢复 + 快照协议覆盖 yield 点。**保持现状规划，不主动推进** |
+| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**2026-08-07 解封**：纳入"统一执行地基"工作流（`CONCURRENCY_AUDIT.md` §十一），阶段 2 语言面在协作调度地基上实现。快照协议需覆盖 yield 点（与 llmexcept snapshot 闭合兼容，最难处） |
 | PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |
@@ -71,13 +71,19 @@
 | PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 | PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | 原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此）：`ibcc` 构建命令 `--pre-scan-specs` 扫描 `_spec.py` 生成 `.ibc_meta` 快照，`export_metadata()`/`load_metadata_from_file()` 使编译器离线复用元数据，减少运行时发现开销。当前为全量 `discover_all() → HostInterface.metadata` 流程 |
-| PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **下一主线（2026-08-06 交接）**。OBSERVABILITY 2A 已整体移除旧 CoreDebugger（88 trace；真实异常回退 8 处转 `warnings.warn`，其余删除）。详见下方"§12 PT-FEAT-9 交接要点" |
+| PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **设计已冻结（`tasks_docs/DIAGNOSTIC_DESIGN.md`）；待并发/通信统一前置（`tasks_docs/CONCURRENCY_AUDIT.md`）完成 + §八 P4 裁决后落地**。OBSERVABILITY 2A 已整体移除旧 CoreDebugger（88 trace；真实异常回退 12 处运行时转 `warnings.warn`）。详见下方"§12 PT-FEAT-9 交接要点" |
 
 ---
 
 ## §12 PT-FEAT-9 交接要点：内核结构化诊断机制重建
 
 > **交接定位**（2026-08-06）：作为下一 session 主线任务。规划见 `OBSERVABILITY_REFACTOR.md`（2A 决策记录 + 目标架构）。
+> **设计已冻结（2026-08-07）**：`tasks_docs/DIAGNOSTIC_DESIGN.md`——技术定位、职责边界、核心决策 D1-D7
+> （单一事件类型 + KDIAG 代码注册表；单一记录双投影；代码即数据非门控；rc best-effort；边界；
+> 码入 codes.py；不设 severity）、诊断码集（10 码 / 12 站点）、事件 schema、实施步骤 A-E。
+> **前置依赖（2026-08-07 用户定案）**：先建统一执行地基（协作任务模型）——`tasks_docs/CONCURRENCY_AUDIT.md`
+> §十一 方向定案与任务重排（阶段 0 设计冻结 → 1 地基实现 → 2 语言面 async fn/yield → 3 统一清理
+> [W1-W5/P3/P4，含全局事件总线] → 4 诊断机制）；诊断机制落地顺延至阶段 4。
 
 ### 背景与现状
 

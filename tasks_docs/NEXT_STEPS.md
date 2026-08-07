@@ -2,25 +2,48 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-06（PT-TEST-1 列为主线，交接下一 session）
+> **最后更新**：2026-08-07（阶段 0 统一执行地基设计冻结完成，阶段 1 地基实现为下一主线）
 
 ---
 
-## 🔴 下一主线：PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）
+## 🔴 下一主线：阶段 1 —— 统一执行地基实现（独立分支实验，禁合并）
 
-> **2026-08-06 交接为下一 session 主线**。OBSERVABILITY_REFACTOR 主体已完成（四机制收敛 + 测试体系重建
-> + 矩阵三段式，全量 1963 passed / 1 skipped）；旧 CORE_DEBUG 已于 2A 移除（88 trace → 8 处真实异常回退转
-> `warnings.warn`）。现重建**结构化内核诊断/可观测性机制**——经既有观测骨架（EventBus + `emit_runtime_event`）
-> 发射结构化诊断事件，与 idbg/iruntime/test_hooks 同一设计语言，**禁止重建旧 print/级别门控/全局单例机制**。
+> **阶段 0 设计冻结已完成（2026-08-07）**：**`tasks_docs/EXEC_FOUNDATION_DESIGN.md`**（零代码）——adopt 协作调度为
+> VM 唯一执行模型；统一 Waitable 家族（is_done + try_result + result）；阻塞即挂起（阻塞语言操作统一返回 Waitable，
+> 与 collect/run_isolated 同构）；线程 = I/O 并行任务（完成 = Waitable）；协作取消全路径；yield 点快照 × llmexcept
+> 闭合；语言面 async fn/yield 形态；决策 D-01~D-08。
+> **用户定案（2026-08-07，价值前提）**：设计优秀与统一、可维护性、宏观合理性、长期收益优先；难度与工作量不参与权衡。
+> 深度审计见 **`tasks_docs/CONCURRENCY_AUDIT.md`**（S1-S9/D1-D9/W1-W6/P1-P9 + §十一 任务重排）。
+>
+> **阶段 1 实施（独立分支 `exp/exec-1a` 起，全绿后手动应用 unsafe-vibe-dev）**：
+> 1a 调度器接入主路径（run/run_body/run_many 统一）→ 1b Waitable 家族扩展（SpawnedTask/ChannelRecvWaitable）
+> + 阻塞方法返回 Waitable → 1c 协作取消全路径 → 1d llmexcept × await 闭合 → 1e 线程体调度器统一 → 1f 语言面 async/yield。
+> **后续排序**：② 语言面 async fn/yield（PT-FEAT-1 解封）→ ③ 统一清理（W1-W5/P3/P4）→ ④ PT-FEAT-9 诊断 → ⑤ 增量。
+
+---
+
+## 🔴 下一主线（诊断机制）：PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）
+
+> **2026-08-06 交接，挂起至阶段 4（依赖统一执行地基 + 全局事件总线）**。OBSERVABILITY_REFACTOR 主体已完成
+> （四机制收敛 + 测试体系重建 + 矩阵三段式，全量 1963 passed / 1 skipped）；旧 CORE_DEBUG 已于 2A 移除
+> （88 trace → 真实异常回退转 `warnings.warn`，实跑清点现为 12 处运行时 + 1 处编译期）。经观测骨架
+> （EventBus + `emit_runtime_event`）发射结构化诊断事件，与 idbg/iruntime/test_hooks 同一设计语言，
+> **禁止重建旧 print/级别门控/全局单例机制**。
+> **设计已冻结：`tasks_docs/DIAGNOSTIC_DESIGN.md`**（技术定位/职责边界/核心决策 D1-D7/诊断码集/事件 schema/实施步骤）。
+> **依赖前置**：`EXEC_FOUNDATION_DESIGN.md` §3.6（全局事件总线，阶段 3 落地）。
 > **完整交接要点见 `PENDING_TASKS.md` §12**（背景/现状/设计方向/实施步骤/关联）。
 
 ---
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务（2026-08-06 交接）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——
-  经观测骨架（EventBus + emit_runtime_event）发射结构化诊断事件，同一设计语言、禁重建旧机制；
-  完整交接要点见 `PENDING_TASKS.md` §12。
+- **首要任务（2026-08-07 阶段 0 完成）**：**阶段 1 统一执行地基实现**（独立分支 `exp/exec-1a` 起，禁合并，
+  全绿后手动应用 unsafe-vibe-dev）——设计冻结见 `tasks_docs/EXEC_FOUNDATION_DESIGN.md`（D-01~D-08，
+  1a 调度器接入主路径 → 1b Waitable 家族+阻塞方法返回 Waitable → 1c 协作取消 → 1d llmexcept×await →
+  1e 线程体调度器统一 → 1f 语言面 async/yield）。
+- **次任务（阶段 4，挂起）**：**PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）**——设计已冻结
+  （`tasks_docs/DIAGNOSTIC_DESIGN.md`，D1-D7 + 诊断码集 + 实施步骤）；依赖 `EXEC_FOUNDATION_DESIGN.md`
+  §3.6（全局事件总线，阶段 3）落地；完整交接要点见 `PENDING_TASKS.md` §12。
 - **已完成（OBSERVABILITY_REFACTOR 主体）**：2C-2 idbg 深度收敛 + 用户层机制改造、2D 测试体系全面重建
   （tests_v2 全域迁移 + 切换 + 矩阵三段式 + tests_docs 治理）、测试规范化清理（弱断言升级 + 短簇参数化），
   全量 **1963 passed / 1 skipped**。
