@@ -71,6 +71,7 @@
 | PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 | PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | 原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此）：`ibcc` 构建命令 `--pre-scan-specs` 扫描 `_spec.py` 生成 `.ibc_meta` 快照，`export_metadata()`/`load_metadata_from_file()` 使编译器离线复用元数据，减少运行时发现开销。当前为全量 `discover_all() → HostInterface.metadata` 流程 |
+| PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **未来计划，现阶段非重点**（用户 2026-08-06 重排）。OBSERVABILITY 2A 已整体移除旧 CoreDebugger（88 trace；真实异常回退 8 处转 `warnings.warn`，其余删除）。未来重建方向：结构化内核诊断面（诊断事件 / 观测骨架扩展），与 idbg/iruntime/test_hooks 同一设计语言 |
 
 ---
 

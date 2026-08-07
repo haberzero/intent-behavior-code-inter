@@ -27,9 +27,9 @@
 
 ## 📋 交接要点（下一 session）
 
-- **首要任务**：按 `OBSERVABILITY_REFACTOR.md` **Phase 2D** 启动测试体系重建实验（`exp/obs-2d-test-refactor` 独立分支，
-  沿用 `TEST_REFACTOR.md` 策略/铁律），验证后手动应用回 unsafe-vibe-dev；随后 Phase 4 收敛收尾
-  （矩阵三段式同步 + meta 扩展 + 旧 tests 删除 + docs 治理）。
+- **首要任务（2026-08-06 重排）**：**2C-2 idbg 深度收敛 + 用户层机制改造**（内省机制有机配合、同步收敛到
+  观测骨架）→ idbg 深度改造完成后 → **2D 测试体系全面重建**（独立分支 `exp/obs-2d-test-refactor`）→ Phase 4 收敛。
+  **内核诊断机制重建（CORE_DEBUG 替代物）列为未来计划 PT-FEAT-9，现阶段非重点**。
 - **本 session 已完成（2026-08-06，unsafe-vibe-dev，11 commits）**：Phase 0 设计冻结、Phase 1 契约修复+死码+零成本穿透替换、
   **2A CORE_DEBUG 整体移除**（88 trace → warnings 8 处/删除，commit 6878986）、**2B 观测骨架测试合作面**
   （EngineTestSnapshot + test_hooks + resolve_plugin_search_paths 公开 + layering 豁免归零，commit 73f373d/ae2209e/feff694）、
