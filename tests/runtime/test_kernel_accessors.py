@@ -90,12 +90,33 @@ class TestRuntimeContextCommAccessors:
         store = ctx.get_config_store()
         assert store is not None
         assert ctx.get_config_store() is store
-
     def test_event_bus_accessors(self, ctx):
-        assert ctx.peek_event_bus() is None
+        """事件总线为引擎级注入共享实例（engine 装配时 set_event_bus）。
+
+        peek 只读返回注入实例；get 返回同一实例（未注入时 fail-fast）。
+        """
         bus = ctx.get_event_bus()
         assert bus is not None
         assert ctx.get_event_bus() is bus
+        assert ctx.peek_event_bus() is bus
+
+    def test_event_bus_uninjected_fail_fast(self):
+        """未注入事件总线的 registry：peek 返回 None，get 装配错误 fail-fast。
+
+        事件总线是 runtime 观测设施，须由 engine（组装层）注入；未注入即
+        调用属装配错误，应明确暴露而非静默降级。
+        """
+        from core.kernel.registry import KernelRegistry
+        from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+
+        registry = KernelRegistry()
+        ctx = RuntimeContextImpl(registry=registry)
+        assert ctx.peek_event_bus() is None
+        try:
+            ctx.get_event_bus()
+            raise AssertionError("expected RuntimeError for uninjected event bus")
+        except RuntimeError as e:
+            assert "set_event_bus" in str(e)
 
     def test_runtime_coordinator_accessors(self, ctx):
         assert ctx.peek_runtime_coordinator() is None

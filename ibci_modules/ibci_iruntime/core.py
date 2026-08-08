@@ -155,12 +155,19 @@ class IRuntimeLib:
     # ------------------------------------------------------------------
 
     def emit_event(self, event_type: str, data: Optional[dict] = None) -> None:
-        """向事件总线广播一个事件（供运行时事件源调用）。"""
+        """向事件总线广播一个事件（供运行时事件源调用）。
+
+        观测尽力而为：无活跃 EC 或事件总线未注入（独立 registry）时跳过，
+        不阻断调用方（与 ``emit_runtime_event`` 同一 fail-open 语义）。
+        """
         ec = get_current_execution_context()
         rc = getattr(ec, "runtime_context", None) if ec is not None else None
         if rc is None:
             return
-        self._get_event_bus(rc).emit({"type": event_type, "data": data or {}})
+        bus = rc.peek_event_bus()
+        if bus is None:
+            return
+        bus.emit({"type": event_type, "data": data or {}})
 
 
 def create_implementation():

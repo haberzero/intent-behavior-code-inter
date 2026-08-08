@@ -1,6 +1,7 @@
-from typing import Dict, Any, Optional, List, Set, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, Set, Callable, TYPE_CHECKING
 
 from core.base.enums import Provenance
+from core.base.diagnostics.codes import KDIAG_POLICY_MODULE_OVERRIDE
 from core.kernel.spec import TypeDef
 from core.kernel.spec.registry import SpecRegistry
 from core.kernel.axioms.registry import AxiomRegistry
@@ -42,6 +43,20 @@ class HostInterface:
         self._reverse_discovery_map: Dict[str, str] = {}  # Mapping: module_name -> discovery_name
         self._kernel_native_names: Set[str] = set()  # kernel-native 逻辑名集合
 
+        # 诊断发射器（kernel 层抽象槽，runtime 层注入实现；未注入时回退 warnings.warn）。
+        # 依赖注入模式（见架构原则 §4.2）：kernel 层不依赖 runtime 具体实现，
+        # 仅经注入的回调发射诊断，消除 kernel → runtime 穿透。
+        self._diagnostic_emitter: Optional[Callable[[str, dict, str], None]] = None
+
+    def set_diagnostic_emitter(self, emitter: Optional[Callable[[str, dict, str], None]]) -> None:
+        """注入诊断发射器（runtime 组装层调用）。
+
+        发射器签名 ``(code, detail, message)``，对应 runtime 层 ``kernel_diagnostic``
+        适配；未注入时 register_module 的覆盖站点回退 ``warnings.warn``（fail-open，
+        开发者可见性不丢）。
+        """
+        self._diagnostic_emitter = emitter
+
     def reserve_kernel_native_name(self, name: str) -> None:
         """将逻辑模块名标记为 kernel-native，禁止后续用户插件覆盖。"""
         self._kernel_native_names.add(name)
@@ -63,19 +78,22 @@ class HostInterface:
 
         if name in self._kernel_native_names and not is_kernel_native_meta:
             # 用户插件尝试覆盖 kernel-native 模块：kernel-native 保护优先，忽略用户插件
-            # kernel 层惰性 import runtime 观测（先例：registry.get_event_bus），
-            # 避免模块级 kernel → runtime 依赖；无活跃 EC 时仅警告面。
-            from core.runtime.observability.diagnostics import kernel_diagnostic
-            from core.base.diagnostics.codes import KDIAG_POLICY_MODULE_OVERRIDE
-
-            kernel_diagnostic(
-                code=KDIAG_POLICY_MODULE_OVERRIDE,
-                detail={"name": name, "discovery_name": discovery_name},
-                message=(
-                    f"Ignoring user plugin '{name}' (discovery_name={discovery_name!r}): "
-                    f"name '{name}' is reserved for kernel-native module and cannot be overridden."
-                ),
+            # 诊断发射经注入的 emitter（runtime 层提供，含警告+事件双投影）；
+            # 未注入（独立使用 HostInterface）时回退 warnings.warn 保持开发者可见性。
+            message = (
+                f"Ignoring user plugin '{name}' (discovery_name={discovery_name!r}): "
+                f"name '{name}' is reserved for kernel-native module and cannot be overridden."
             )
+            if self._diagnostic_emitter is not None:
+                self._diagnostic_emitter(
+                    KDIAG_POLICY_MODULE_OVERRIDE,
+                    {"name": name, "discovery_name": discovery_name},
+                    message,
+                )
+            else:
+                import warnings
+
+                warnings.warn(message, stacklevel=2)
             return
 
         if is_kernel_native_meta:

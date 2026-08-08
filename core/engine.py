@@ -50,6 +50,7 @@ from core.runtime.host.isolation_policy import IsolationPolicy
 from core.runtime.rt_scheduler import RuntimeSchedulerImpl
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.capability_registry import CapabilityRegistry
+from core.runtime.observability.events import EventBus
 from core.runtime.observability.diagnostics import kernel_diagnostic
 from core.base.diagnostics.codes import KDIAG_RUNTIME_COLLECT_SKIP
 from core.extension.auto_discovery import AutoDiscoveryService
@@ -111,6 +112,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self.registry = KernelRegistry()
         self._kernel_token = initialize_primitive_classes(self.registry)
 
+        # 注入引擎级共享事件总线（runtime 观测设施由组装层创建注入；
+        # 所有 interpreter/子引擎/线程任务共享，计算隔离、观测全局）。
+        self.registry.set_event_bus(EventBus())
+
         # project_root：显式（可选）。未提供时在 run/compile 经 _establish_project_root 确立。
         self._explicit_root: Optional[str] = (
             PathValidator.canonicalize_for_security(root_dir).to_native() if root_dir else None
@@ -140,6 +145,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # host_interface 与引擎共享 MetadataRegistry，确保构造期预注册的
         # kernel-native 模块元数据对编译器可见。
         self.host_interface = HostInterface(external_registry=self.registry.get_metadata_registry())
+        # 注入诊断发射器（kernel 层不依赖 runtime；经注入的 kernel_diagnostic
+        # 发射覆盖站点的警告+事件双投影）。
+        self.host_interface.set_diagnostic_emitter(kernel_diagnostic)
         # 预注册 ai/ihost/idbg/isys 为 kernel-native 模块
         from core.runtime.bootstrap.kernel_native_modules import register_kernel_native_modules
         register_kernel_native_modules(self.host_interface)

@@ -184,7 +184,11 @@ assert ev["data"]["code"] == "KDIAG_..."
 - **不重建旧 CORE_DEBUG 机制**：print 推送、级别门控、进程全局单例均为历史包袱，不采用。
 - **不重建流式流程追踪**：流程级因果诊断（如 llmexcept 重试循环）不在诊断面 v1 范围；新增诊断码可非破坏扩展。
 - **诊断面与事件面共用总线与发射入口**（机制同构），仅语义域不同。
-- **kernel 层访问观测**经惰性 import（先例：`core/kernel/registry.py` 承载引擎级事件总线），避免模块级 kernel → runtime 依赖。
+- **kernel 层零 runtime 依赖**：事件总线与诊断发射器均由 engine（runtime 组装层）创建并注入
+  （`registry.set_event_bus` / `HostInterface.set_diagnostic_emitter`）；kernel 层仅声明抽象槽，
+  不 import runtime 具体类型（依赖注入模式，见架构原则 §4.2）。未注入时：事件总线
+  `peek` 返回 None（发射 fail-open）、`get` fail-fast（主动使用观测属装配错误）；诊断发射器
+  回退 `warnings.warn`（开发者可见性不丢）。
 - **诊断事件 data 为自由 dict**：未来新增字段（如 severity）为非破坏扩展，不提前设字段。
 
 ## 深入指引

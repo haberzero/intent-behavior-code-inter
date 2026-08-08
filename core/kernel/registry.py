@@ -273,19 +273,30 @@ class KernelRegistry:
             return self._execution_context
 
     def get_event_bus(self) -> Any:
-        """引擎级共享事件总线（惰性创建，线程安全）。
+        """引擎级共享事件总线（由 runtime 组装层注入，线程安全）。
 
         观测全局：所有 RuntimeContextImpl（主/线程任务）共享同一 EventBus，
         线程任务内事件可达主订阅者（计算隔离、观测全局，D3 闭合）。
+
+        事件总线是 runtime 层观测设施，经 ``set_event_bus`` 注入（与
+        ``register_llm_executor`` 等同模式）。未注入即调用属装配错误，
+        fail-fast 暴露（观测尽力而为经 ``peek_event_bus`` 的 None 语义）。
         """
         with self._event_bus_lock:
             if self._event_bus is None:
-                from core.runtime.observability.events import EventBus
-                self._event_bus = EventBus()
+                raise RuntimeError(
+                    "KernelRegistry.event_bus is not injected. "
+                    "Engine must call set_event_bus(EventBus()) during assembly."
+                )
             return self._event_bus
 
+    def set_event_bus(self, bus: Any) -> None:
+        """注入引擎级共享事件总线（runtime 组装层调用一次，线程安全）。"""
+        with self._event_bus_lock:
+            self._event_bus = bus
+
     def peek_event_bus(self) -> Optional[Any]:
-        """事件总线只读（未创建返回 None，不产生副作用）。"""
+        """事件总线只读（未注入返回 None，不产生副作用）。"""
         with self._event_bus_lock:
             return self._event_bus
 
@@ -457,6 +468,9 @@ class KernelRegistry:
         new_registry._host_service = self._host_service
         new_registry._stack_inspector = self._stack_inspector
         new_registry._state_reader = self._state_reader
+        # 事件总线为引擎级共享实例：clone 不新建，子解释器共享同一总线
+        # （计算隔离、观测全局；子解释器间事件经同一总线广播）。
+        new_registry._event_bus = self._event_bus
         # 拷贝内置单例字典结构，使子解释器能通过 get_intrinsic_instance() 找到单例。
         # 子解释器在 Interpreter.__init__ 中会调用 set_runtime_context() 把自己的
         # runtime_context 重新绑定到单例，因此两个解释器共享同一对象是安全的。

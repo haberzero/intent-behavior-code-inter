@@ -161,6 +161,28 @@ class TestPolicyOverrideSite:
         ok, _ = sub.recv_nowait()
         # 不强制断言事件；仅确认 warning 投影保持（fail-open 契约）
 
+    def test_override_in_active_ec_emits_event(self, engine):
+        """注入链路：活跃 EC 下 kernel-native 覆盖经注入发射器发出警告+事件。
+
+        覆盖检测由 kernel 层 HostInterface 完成，经注入的 emitter（runtime 层
+        kernel_diagnostic）发射双投影；无活跃 EC 时仅警告（fail-open）。
+        """
+        engine.run_string("int seed = 1\n", silent=True)
+        from core.runtime.frame import set_current_execution_context, reset_current_execution_context
+        ec = engine.interpreter.execution_context
+        ec.runtime_context = engine.interpreter.runtime_context
+        token = set_current_execution_context(ec)
+        try:
+            sub = engine.registry.get_event_bus().subscribe()
+            with pytest.warns(UserWarning, match="reserved for kernel-native module"):
+                engine.host_interface.register_module("isys", object(), discovery_name="fake_isys")
+            ok, ev = sub.recv_nowait()
+            assert ok
+            assert ev["type"] == "kernel_diagnostic"
+            assert ev["data"]["code"] == "KDIAG_POLICY_MODULE_OVERRIDE"
+        finally:
+            reset_current_execution_context(token)
+
 
 class TestDiagnosticGate:
     """门控：observability 关 → 事件停止，警告保留。"""
