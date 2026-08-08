@@ -1,9 +1,8 @@
 ﻿# NEXT_STEPS - 当前最紧要项
 
-> 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
+> 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-08（穿透根治 + 文档对账治理 + 意图栈历史兼容移除完成；阶段 5 yield 列为下一主线，
-> 架构缺陷优先起点 PT-DEBT-9/11 可选）
+> **最后更新**：2026-08-08（阶段5 yield 落地 + 异步地基遗留妥协根治定为新主线；优先级总表归 PENDING_TASKS §〇）
 
 ---
 
@@ -104,16 +103,14 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ## 📋 交接要点（下一 session）
 
-- **新主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——审计确认
-  内核层仍有"任务内同步重入调度器"遗留旁路（用户方法调用 `obj.method()` / `slot.update(fn)` / prompt hint /
-  `chan.send` 满阻塞）。实施计划见 `tasks_docs/_ASYNC_UNIFY.md`（F1 用户方法 CPS 化 → B1 send Waitable →
-  F2 slot.update 收敛 → F3 hint CPS 化 → M1-M4 收敛）。
+- **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
+  审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
+  `chan.send` 满阻塞）。**起点 PT-DEBT-12（F1 用户方法 CPS 化，最高价值）**。实施计划见
+  `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。登记 PT-DEBT-12/13/14/15。
+- **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
+  当前主线后：P0 阶段 5 增量（`next()` 内建 + `yield from`）+ PT-FEAT-5；P1 UID/序列化统一 + `file` 重命名；
+  P2 审计 R4/R5 + Enum；P3 VISION。
 - **阶段 5 yield 惰性生成器已完成（2026-08-08）**：见上方"已完成"节。`YIELD_GENERATOR_DESIGN.md`。
-- **下一主线优先级表（用户 2026-08-08 认可，三维度判断）**：
-  - **P0** 阶段 5 增量（`next()` 内建 + `yield from`）、PT-FEAT-5 错误用户友好化；
-  - **P1** PT-FEAT-10/11/12 UID/序列化统一、PT-DEBT-4 `file` 重命名；
-  - **P2** PT-AUDIT-1/2 + R4/R5、PT-FEAT-2 Enum 非 str 成员；
-  - **P3** PT-FEAT-8 `.ibc_meta`、PT-FEAT-3/4/7 VISION、PT-FEAT-6；**暂缓** PT-DEBT-5。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
   12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。

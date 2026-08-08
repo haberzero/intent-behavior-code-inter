@@ -96,6 +96,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（PT-TEST-1，**已并入 OBSERVABILITY_REFACTOR**） |
 | `OBSERVABILITY_REFACTOR.md` / `test_baseline_20260806.txt` | 可观测性统一重构任务控制文档（**已完成**，Phase 0-4 落地）/ 覆盖基准快照 |
 | `DIAGNOSTIC_DESIGN.md` | PT-FEAT-9 设计权威（**已完成**，实施步骤 A-E 落地，归档） |
+| `YIELD_GENERATOR_DESIGN.md` | 阶段 5 yield 惰性生成器设计权威（**已完成**，独立分支 exp/yield-generator） |
+| `_ASYNC_UNIFY.md` | **当前主线**异步地基遗留妥协根治实施计划（PT-DEBT-12/13/14/15，F1→B1→F2/F3→M1-M4） |
 
 ---
 
@@ -105,14 +107,25 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **新主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——审计确认
-  内核层仍有"任务内同步重入调度器"遗留旁路：用户方法调用 `obj.method()`（F1）、`chan.send` 满阻塞（B1）、
-  `slot.update(fn)` CAS 回调（F2）、prompt hint 同步调用（F3）、及 `.call()` 孪生/驱动重复/LLM 阻塞（M1-M4）。
-  登记 PT-DEBT-12/13/14/15；实施计划见 `tasks_docs/_ASYNC_UNIFY.md`。**F1 用户方法 CPS 化为最高价值**。
+> **接手起点**：先读本节（当前主线）+ `_ASYNC_UNIFY.md`（主线实施计划）+ `PENDING_TASKS.md` §〇（优先级总表）。
+
+- **当前主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治（统一执行模型闭环）**。
+  审计确认内核层仍有"任务内同步重入调度器"遗留旁路（登记 PT-DEBT-12/13/14/15）：
+  - **PT-DEBT-12（F1，最高价值）**：`vm_handle_IbCall` 不展开 `IbBoundMethod` → 用户方法 `obj.method(x)`
+    落回 `receive('__call__')` → `vm.run_body` 嵌套调度器（方法含 Waitable 死锁、深递归方法嵌套 Python 栈）。
+    改造：解包 `IbBoundMethod` → CPS trampoline（与函数调用同构）。
+  - **PT-DEBT-13（B1）**：`chan.send` 有界满通道任务内真阻塞（与 recv 不对称）。
+  - **PT-DEBT-14（F2/F3）**：`slot.update(fn)` CAS 同步回调 + prompt hint 同步调用。
+  - **PT-DEBT-15（M1-M4）**：`.call()` 孪生双写 / 驱动循环重复 / prompt 双实现 / LLM 调用阻塞。
+  - **实施顺序 F1→B1→F2/F3→M1-M4**，独立分支实验，全量 pytest 零回归后手动 apply。详见 `_ASYNC_UNIFY.md`。
 - **阶段 5 `yield` 惰性生成器已完成（2026-08-08，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
   含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消），单可恢复驱动
   `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。
   独立分支 exp/yield-generator 实验 → 手动应用 c8b8956。设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
+- **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
+  当前主线后：P0 阶段 5 增量（`next()` 内建 + `yield from`）+ PT-FEAT-5；P1 UID/序列化统一 + `file` 重命名；
+  P2 审计 R4/R5 + Enum；P3 VISION。
+- **架构缺陷起点清空（2026-08-08）**：PT-DEBT-9/10/11 已根治（见 §2.2）。
 - **后续增量（可选起点）**：阶段 5 增量（`next()` 内建 / `yield from` / streaming / host async 改进）或
   待办池（`PENDING_TASKS.md`：PT-FEAT-2 Enum 非 str 成员 / PT-FEAT-5 错误用户友好化 / PT-FEAT-10/11/12）。
 - **架构缺陷优先起点清空（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 **三项已全部根治**（见 §2.2）。
@@ -148,6 +161,12 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
+- **2026-08-08（异步地基遗留妥协审计，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
+  用户追问"异步是否已完整接入内核" → general subagent 全面只读审计 + 逐项代码核实。结论：**主流已完整**
+  （协作调度器唯一执行核心/阻塞即挂起/Waitable 统一/trampoline/通知式唤醒/线程=IO/await+yield），
+  但内核层仍有"任务内同步重入调度器"遗留旁路（同步 `.call()` 后备在任务内可达）。发现 F1-F3 高严重度 +
+  B1 真阻塞 + M1-M4 中严重度；登记 PT-DEBT-12/13/14/15；用户定案新主线（异步遗留根治）+ 认可优先级表。
+  详见 WORKLOG 与 `_ASYNC_UNIFY.md`。
 - **2026-08-08（阶段 5 yield 惰性生成器，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
   含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消）。词法 `yield` 关键字 + 语法
   `yield` 表达式（LOWEST 优先级）+ AST `IbYieldExpr`/`is_generator`；语义 `_contains_yield` 自动标记 +
