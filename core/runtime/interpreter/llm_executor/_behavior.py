@@ -11,11 +11,11 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Mapping
 
 from core.runtime.interfaces import IExecutionContext
 
-from core.runtime.shared.llm_result import LLMResult, MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
+from core.runtime.shared.llm_result import LLMResult, LLMFuture, MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
 
 from core.runtime.objects.kernel import IbObject, IbValue
 from core.runtime.objects.intent import IbIntent
@@ -114,6 +114,99 @@ class _BehaviorMixin:
             global_intents = context.get_global_intents()
 
         llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
+
+        sys_prompt = "你是一个意图行为代码执行器。"
+
+        if llmoutput_hint:
+            sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
+
+        frame = context.get_current_llm_except_frame()
+        current_retry_hint = frame.retry_hint if frame else None
+
+        if current_retry_hint:
+            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
+
+        if all_intents:
+            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
+            sys_prompt += intent_block
+
+        type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
+
+        return BehaviorCallSpec(
+            sys_prompt=sys_prompt,
+            user_prompt=content,
+            type_hint=type_hint,
+            target_model=target_model,
+            active_intents=[i.content if hasattr(i, "content") else str(i) for i in active_list],
+            global_intents=[i.content if hasattr(i, "content") else str(i) for i in global_intents],
+            merged_intents=all_intents,
+        )
+
+    def _prepare_behavior_call_cps(
+        self,
+        node_uid: str,
+        node_data: Mapping[str, Any],
+        execution_context: IExecutionContext,
+        call_intent: Optional[IbIntent] = None,
+        captured_intents: Optional[IbIntentContext] = None,
+        target_model: str = "",
+    ):
+        """CPS 版 :meth:`_prepare_behavior_call`（M4：段求值经 yield from，非阻塞）。
+
+        与同步版同语义（prompt 段预求值 + 意图消解 + 输出约束 + retry_hint），
+        但段求值经 ``_evaluate_segments_cps``（yield）、hint 经
+        ``_get_llmoutput_hint_cps``（yield）——调用方须 ``yield from``。
+        返回 :class:`BehaviorCallSpec`，供 ``_call_and_parse`` 在 worker 线程
+        执行（本方法不调用 LLM，不阻塞调度线程）。
+        """
+        if not target_model:
+            target_model = node_data.get("tag", "")
+
+        content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
+
+        provider = self.llm_callback
+        auto_intent = True
+        if provider:
+            auto_intent = provider.is_auto_intent_injection_enabled()
+
+        if not auto_intent:
+            if call_intent:
+                content_str = call_intent.resolve_content(
+                    execution_context.runtime_context, execution_context
+                )
+                return BehaviorCallSpec(
+                    sys_prompt="",
+                    user_prompt=content_str,
+                    type_hint=None,
+                    target_model=target_model,
+                    pre_resolved=LLMResult.success_result(
+                        value=self.registry.box(content_str),
+                        raw_response=content_str,
+                    ),
+                )
+
+        context = execution_context.runtime_context
+        active_list: List[Any] = []
+        global_intents: List[Any] = []
+        if captured_intents is not None:
+            if not isinstance(captured_intents, IbIntentContext):
+                raise TypeError(
+                    f"_prepare_behavior_call_cps: captured_intents must be "
+                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
+                )
+            active_list = captured_intents.get_active_intents()
+            global_intents = captured_intents.get_global_intents()
+            all_intents = IntentResolver.resolve(
+                active_intents=active_list,
+                global_intents=global_intents,
+                context=context,
+                execution_context=execution_context,
+            )
+        else:
+            all_intents = context.get_resolved_prompt_intents(execution_context)
+            global_intents = context.get_global_intents()
+
+        llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)
 
         sys_prompt = "你是一个意图行为代码执行器。"
 
@@ -272,102 +365,29 @@ class _BehaviorMixin:
         return self._finalize_invoke_result(result)
 
     def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
-        """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。"""
+        """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。
+
+        **M4（PT-DEBT-15）LLM 真挂起**：spec 经 ``_prepare_behavior_call_cps``
+        （段求值 yield）构建，随后 ``_call_and_parse`` 提交线程池并 ``yield``
+        返回的 ``LLMFuture``——调度器挂起本根、让出给其它根，LLM 就绪后
+        ``send`` 回 ``LLMResult`` 恢复。消除了同步 ``_call_llm`` 阻塞调度线程
+        （"可挂起但未挂起"），使 ``run_many`` LLM 并发达 CPS 直连路径。
+        """
         node_data = execution_context.get_node_data(node_uid)
-        context = execution_context.runtime_context
+        spec = yield from self._prepare_behavior_call_cps(
+            node_uid, node_data, execution_context, call_intent, captured_intents, target_model
+        )
+        if spec.pre_resolved is not None:
+            return spec.pre_resolved
 
-        # 如果未显式传递 target_model，从 node_data 中读取 tag 字段
-        if not target_model:
-            target_model = node_data.get("tag", "")
-
-        content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
-
-        provider = self.llm_callback
-        auto_intent = True
-        if provider:
-            auto_intent = provider.is_auto_intent_injection_enabled()
-
-        if not auto_intent:
-            if call_intent:
-                content_str = call_intent.resolve_content(context, execution_context)
-                return LLMResult.success_result(
-                    value=self.registry.box(content_str),
-                    raw_response=content_str
-                )
-
-        if captured_intents is not None:
-            if not isinstance(captured_intents, IbIntentContext):
-                raise TypeError(
-                    f"execute_behavior_expression_cps: captured_intents must be "
-                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
-                )
-            active_list = captured_intents.get_active_intents()
-            all_intents = IntentResolver.resolve(
-                active_intents=active_list,
-                global_intents=captured_intents.get_global_intents(),
-                context=context,
-                execution_context=execution_context
-            )
-        else:
-            all_intents = context.get_resolved_prompt_intents(execution_context)
-
-        llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)
-
-        sys_prompt = "你是一个意图行为代码执行器。"
-
-        if llmoutput_hint:
-            sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
-
-        frame = context.get_current_llm_except_frame()
-        current_retry_hint = frame.retry_hint if frame else None
-
-        if current_retry_hint:
-            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
-
-        if all_intents:
-            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
-            sys_prompt += intent_block
-
-        response = self._call_llm(sys_prompt, content, node_uid, target_model=target_model)
-
-        def _call_info(resp: str) -> dict:
-            return {
-                "sys_prompt": sys_prompt,
-                "user_prompt": content,
-                "response": resp,
-                "raw_response": resp,
-                "active_intents": [i.content if hasattr(i, 'content') else str(i) for i in (captured_intents.get_active_intents() if captured_intents else [])],
-                "global_intents": [i.content if hasattr(i, 'content') else str(i) for i in context.get_global_intents()],
-                "merged_intents": all_intents
-            }
-
-        if response == MOCK_REPAIR_SENTINEL:
-            return self._finalize_call(
-                LLMResult.uncertain_result(
-                    raw_response=MOCK_REPAIR_SENTINEL,
-                    retry_hint="MOCK:REPAIR - 模拟 LLM 返回不确定结果，请重试"
-                ),
-                _call_info(MOCK_REPAIR_SENTINEL),
-            )
-
-        if response == MOCK_AMBIGUOUS_SENTINEL:
-            return self._finalize_call(
-                LLMResult.uncertain_result(
-                    raw_response=MOCK_AMBIGUOUS_SENTINEL,
-                    retry_hint="MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理"
-                ),
-                _call_info(MOCK_AMBIGUOUS_SENTINEL),
-            )
-
-        type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
-        if type_hint:
-            result = self._parse_result(response, type_hint, node_uid)
-        else:
-            result = LLMResult.success_result(
-                value=self.registry.box(response),
-                raw_response=response
-            )
-        return self._finalize_call(result, _call_info(response))
+        future = self._get_thread_pool().submit(
+            self._call_and_parse, spec, node_uid, execution_context
+        )
+        llm_future = LLMFuture(node_uid=node_uid, future=future)
+        result = yield llm_future
+        if result is not None and result.call_info is not None:
+            self._record_current_call_info(result.call_info)
+        return result
 
     def execute_behavior_object_cps(self, behavior: IbObject, execution_context: IExecutionContext):
         """CPS 版 :meth:`execute_behavior_object`；委托给 execute_behavior_expression_cps。"""
