@@ -159,8 +159,11 @@ core/runtime/objects/intent_context.py
 
 core/kernel/axioms/intent_context.py
 └── IntentContextAxiom                      # 公理层表示（is_class=True，可实例化）
-    ├── 方法：fork, resolve, push, pop, merge, clear
-    └── INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)
+    ├── 方法：fork, resolve, push, pop, merge, clear 等
+    └── 能力声明（is_class / is_compatible 等）
+
+core/kernel/spec/specs.py
+└── INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=CLASS, ...)   # 类型描述符
 ```
 
 **`IntentNode` 链表结构**：持久意图栈通过不可变链表实现结构共享：
@@ -294,10 +297,10 @@ frame.saved_intent_ctx = runtime_context.fork_intent_snapshot()  # → _intent_c
 frame.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
 
 # LLMExceptFrame.restore_snapshot()（每次 retry 前调用）
-# fork-and-replace：以快照的 fork 副本替换当前 _intent_ctx
-runtime_context._intent_ctx = frame.saved_intent_ctx.fork()
-# 同步重建活跃实例指针：保留命名身份（ib_class），但 _ctx 指向新底层
-runtime_context._set_active_intent_ibobj_for_current_ctx(<intent_context class>)
+# fork-and-replace：经公开访问器以快照的 fork 副本整替换当前意图上下文
+runtime_context.replace_intent_context(frame.saved_intent_ctx.fork())
+# 活跃实例指针由 replace_intent_context 内部同步重建（保留命名身份 ib_class，
+# _ctx 指向新底层）
 ```
 
 **为何采用 fork-and-replace 而非 merge**：
@@ -311,8 +314,8 @@ runtime_context._set_active_intent_ibobj_for_current_ctx(<intent_context class>)
 `snapshot` 关键字修饰的行为表达式（例如 `fn x = snapshot: @~...~`）在创建时捕获调用位置意图栈的完整值快照：
 
 ```python
-# vm/handlers.py / runtime factory
-capture_mode = self.get_side_table("node_capture_mode", node_uid)
+# llm_behavior.py 运行时读取序列化节点数据中的 capture_mode
+capture_mode = node_data.get("capture_mode")
 # snapshot 语义：捕获当前作用域正在生效的意图栈的值快照（IbIntentContext.fork()）
 # lambda 语义：不捕获意图状态，每次调用时使用调用位置的当前意图栈
 captured_intents = None if capture_mode == "lambda" else self.runtime_context.fork_intent_snapshot()
@@ -412,7 +415,7 @@ _active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork
 
 ### 6.3 序列化 / 反序列化
 
-- **完整 4 槽位**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top` / `smear_queue` / `override` / `global_intents`；同时保留 `intent_stack` 平铺方案的读取兼容路径。
+- **完整 6 槽位**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top_uid` / `smear_queue` / `override` / `global_intents` / `inherited_smear` / `inherited_override`；同时保留 `intent_stack` 平铺方案的读取兼容路径。
 - **共享身份**：通过 `id(ic) → uid` 备忘表保留多处引用同一 `IbIntentContext` 的身份；反序列化端的 `_get_intent_context` 也用 cache 还原"wrapper.fields['_ctx'] is rt_ctx._intent_ctx"不变量。
 - **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 content/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性。
 - **`serialize_context`**：写入 `intent_ctx_uid` 与 `active_intent_ibobj_uid`，调试器断点场景可还原完整意图上下文（含活跃指针身份）。
@@ -592,7 +595,7 @@ func make_translator():
 
 本节规则的完整实现依赖于 `fn` 参数化 lambda/snapshot 语法。意图与自由变量的捕获行为通过 `IbCell` 机制承载，详见 `docs/architecture/04_vm_interpreter.md` §4（作用域与闭包）。
 
-相关测试见 `tests/e2e/test_e2e_fn_callable.py`。
+相关测试见 `tests/e2e/test_higher_order.py`。
 
 ---
 

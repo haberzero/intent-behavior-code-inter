@@ -19,6 +19,7 @@
 | `ihost` | 动态宿主（隔离子环境运行） |
 | `idbg` | 调试探查工具 |
 | `isys` | 运行时状态与路径查询 |
+| `iruntime` | 运行时内省（snapshot / subscribe / configure） |
 
 ### 1.2 内置用户插件（随仓库发行）
 

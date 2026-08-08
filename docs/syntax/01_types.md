@@ -84,7 +84,7 @@ class Temperature:
         return self
 ```
 
-**编译期提示**：对于声明了转换规则的类型，编译器会在转换明显不合法时发出 `SEM_CAST_NO_CONVERTER` 警告（如 `(int)file_handle`）。未声明转换规则的类型不做编译期校验，由运行时裁定。
+**编译期检查**：对于声明了转换规则的类型，编译器会在转换明显不合法时报 `SEM_CAST_NO_CONVERTER` 错误（如 `(int)file_handle`）。未声明转换规则的类型不做编译期校验，由运行时裁定。
 ---
 
 ## 深入指引

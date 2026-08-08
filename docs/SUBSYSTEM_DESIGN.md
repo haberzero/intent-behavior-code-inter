@@ -13,6 +13,3 @@
 | 04 | [04_plugin_system](subsystems/04_plugin_system.md) | 插件与模块系统 | 模块分类、发现路径、插件开发、from import |
 | 05 | [05_coroutine](subsystems/05_coroutine.md) | 协程层设计 | 并发架构定案、调度器多任务化、await/generator 演进规划 |
 
-## 搁置项
-
-- **协程层（L3）**：见 [05_coroutine](subsystems/05_coroutine.md)。调度器多任务化与 `await` 已落地；语言级生成器（`yield`）列为阶段 5 实现项（无 async 函数关键字，任意函数可 await）。

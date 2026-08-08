@@ -19,7 +19,7 @@
 
 ### 内核原生模块清单
 
-五个模块在 `Engine.__init__` 构造期预注册：
+六个模块在 `Engine.__init__` 构造期预注册：其中 `ai`/`ihost`/`idbg`/`isys`/`iruntime` 经 `register_kernel_native_modules` 批量注册，`file` 由 engine 单独注册。
 
 | 模块 | 功能 | 安全语义 |
 |---|---|---|
@@ -28,6 +28,7 @@
 | `ihost` | 宿主保存/恢复 | `save_state` by design 绕沙箱 |
 | `idbg` | 运行时信息输出 | 调试钩子 |
 | `isys` | 外部访问请求 | `request_external_access` 全局关沙箱 |
+| `iruntime` | 运行时内省（snapshot / subscribe / configure） | 观测全局，只读 |
 
 ### HostInterface 覆盖保护
 

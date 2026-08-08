@@ -126,7 +126,7 @@ class TypeDef(IbSpec):
 | `CALLABLE_SIG` | 高阶函数签名约束 | `fn[(int)->int]` |
 | `LAZY` | 跨模块未解析占位符 | 编译期 forward ref |
 
-> `TypeKind.DEFERRED` 和 `TypeKind.BEHAVIOR` 对应于 `TypeKind.CALLABLE_INSTANCE`；区分仅由 `name`（`"fn_callable"` / `"behavior"`）或 `_axiom_name` 决定，不再是类型层语义。
+> `TypeKind.CALLABLE_INSTANCE` 统一 fn_callable 与 behavior 两类可调用实例；区分仅由 `name`（`"fn_callable"` / `"behavior"`）或 `_axiom_name` 决定，不再是类型层语义。
 
 ### 3.3 字段存储规范
 
@@ -148,8 +148,8 @@ class TypeDef(IbSpec):
 | `is_assignable(src, target)` | 类型兼容性检查（含 Optional / 类继承链 / 公理委托） |
 | `get_base_spec(spec)` | 取泛型特化的底 spec（`list[int]` → `list`） |
 | `get_axiom(spec)` | 桥接 AxiomRegistry，按 `spec.get_base_name()` / `_axiom_name` 查询 |
-| `get_call_cap` / `get_iter_cap` / `get_subscript_cap` / `get_operator_cap` | 能力门：返回公理（声明对应能力时）或 `None` |
-| `resolve_call_return(spec, args)` / `resolve_op` / `resolve_iter_element` / `resolve_subscript` | 编译期类型推断入口 |
+| `get_call_cap` / `get_converter_cap` / `get_parser_cap` / `get_from_prompt_cap` / `get_llm_output_hint_cap` | 能力门：返回公理（声明对应能力时）或 `None` |
+| `resolve_call_return(spec, args)` / `resolve_op` / `resolve_iter_element` / `resolve_subscript` | 编译期类型推断入口（iter/subscript/operator 经 `resolve_*` 推断，非独立能力门） |
 
 注册表持有的 spec 是原型的克隆，保证多引擎实例间状态隔离（`SpecRegistry.register` 内部 `clone()`）。
 
@@ -165,8 +165,8 @@ class TypeDef(IbSpec):
 | `create_list / create_tuple / create_dict` | 容器特化 |
 | `create_optional(wrapped_name)` | Optional[T] |
 | `create_bound_method(...)` | 绑定方法 |
-| `create_callable_instance(...)` | fn_callable / behavior |
-| `create_callable_sig(...)` | `fn[(...)→(...)]` 签名约束 |
+| `create_fn_callable(...)` | fn_callable 签名实例 |
+| `create_behavior(value_type_name)` | behavior 实例 |
 
 ### 3.6 参数描述符 ParamDescriptor
 
@@ -243,7 +243,9 @@ class TypeAxiom(Protocol):
 
 ### 4.3 字符串边界
 
-公理层**只**接受/返回**字符串类型名**（`"int"` / `"list[int]"` / `"any"` 等），不导入 `core/kernel/spec/`。这维持了"axiom 不依赖 spec 层"的单向边界——SpecRegistry 调用公理时把 spec 名字串过去，把字符串结果再 resolve 成 spec 返回给调用方。
+公理层能力方法只接受/返回**字符串类型名**（`"int"` / `"list[int]"` / `"any"` 等）。这维持了"axiom 能力逻辑不依赖 spec 层查询/解析"的单向边界——SpecRegistry 调用公理时把 spec 名字串过去，把字符串结果再 resolve 成 spec 返回给调用方。
+
+边界细则：axiom 层可 import `core.kernel.spec` 的**原子数据结构构造器**（`TypeRef` / `MethodMemberSpec`，用于声明协议方法签名），但不得依赖 spec 层的注册表/解析逻辑（`SpecRegistry` 查询、`resolve_*`）。
 
 ### 4.4 内置公理清单
 
@@ -256,9 +258,8 @@ class TypeAxiom(Protocol):
 | `OptionalAxiom` | Optional[T] | `is_compatible` / unwrap 方法集 |
 | `EnumAxiom` | 枚举类 | `is_class=True` / `from_prompt`（按字面值解析） |
 | `CallableAxiom` / `BoundMethodAxiom` / `FnCallableAxiom` / `BehaviorAxiom` | 可调用 | `call_cap` |
-| `ModuleAxiom` | 模块 | `is_module=True` |
 | `IntentContextAxiom` | 意图上下文 | `is_class=True` |
-| `LlmCallResultAxiom` | LLM 调用结果 | `is_class=True` |
+| `LlmCallResultAxiom` | LLM 调用结果 | 内核内部类型（不参与常规运算，不可用户声明） |
 | `ExceptionAxiom` / `LLMErrorAxiom` 系列 | 异常 | 类继承链 |
 
 ---
@@ -301,9 +302,9 @@ VMExecutor handler
 
 > 运行期的"做"（数学加法、列表 append 等）由具体 `IbValue` 子类的方法实现，而非走 axiom；axiom 在运行期只承担 LLM 边界（`from_prompt` / `parse_value` / `__outputhint_prompt__`）。
 
-### 5.3 LazySpec 占位符
+### 5.3 跨模块类型占位
 
-跨模块未解析符号在编译期暂以 `LazySpec` 占位（`core/kernel/spec/`）；解析阶段强制成功，**异常**情况应抛错而非静默回填（见 `01_principles.md §5.3`）。
+跨模块未解析符号在编译期经 `scheduler` 预注册空的 `ModuleMetadata`（`create_module`）占位（`core/compiler/scheduler.py`）；模块类型判定经 `is_module_spec`（先查 `spec.kind == MODULE`）。解析阶段强制成功，**异常**情况应抛错而非静默回填（见 `01_principles.md §5.3`）。
 
 ---
 
@@ -343,7 +344,7 @@ class IbValue(IbObject):
 
 值层具体类（`IbInteger` / `IbString` / `IbList` / …）**不是**需要折叠消除的平行结构，而是**领域方法的实现载体**——`IbValue` 提供统一值形态（`type_ref`/`payload`/`fields`/`meta`），具体类各自实现其领域行为（`IbString.upper`、`IbList.append`、运算符 dunder 等），经 `_reg_native`/`_auto_bind_operators` 挂类注册、走 vtable 调用。
 
-**不折叠为单一 `IbValue`**（曾评估，2026-08-06 定论）：
+**不折叠为单一 `IbValue`**：
 - 折叠的原始动机（消除 `isinstance(IbXxx)` 分派）已通过 `isinstance(obj, IbValue) and obj.ib_class.name` 统一分派达成——运行时精确 `isinstance` 具体值类分派仅剩类内运算符重载处。
 - 具体类的存在价值是**领域方法归属**（单一职责），非类型分派依据；折叠会把 180+ 方法灌入巨型 `IbValue`，违反单一职责。
 - 值身份权威已是 `type_ref`（单一源），具体类不构成第二个身份源。
@@ -408,7 +409,7 @@ class IbValue(IbObject):
 ## §9 设计不变量
 
 1. **三层闭合**：AST / 符号表 / FuncSignature 中的所有"另一类型"引用必须经过 `TypeRef`；TypeDef 不直接持 TypeDef。
-2. **公理无 spec 依赖**：axiom 层仅在签名中接受/返回字符串类型名，禁止 `from core.kernel.spec`。
+2. **公理无 spec 依赖**：axiom 层能力方法仅在签名中接受/返回字符串类型名；可 import `core.kernel.spec` 原子数据结构构造器（`TypeRef` / `MethodMemberSpec`），不得依赖 spec 注册表/解析逻辑。
 3. **运行时分派路径**：所有类型分派经 `isinstance(obj, IbValue) and obj.ib_class.name == "..."`；仅 `IbNone` 哨兵比较是例外。
 4. **编译产物纯数据**：`CompilationResult` 与序列化协议中不出现 Python 函数引用、闭包或可变对象。
 5. **kind 驱动**：所有"按类型种类分派"必须读 `spec.kind`（或 `kind in (X, Y)`），禁止 `isinstance(spec, FuncSpec)` 这类子类判断。

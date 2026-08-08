@@ -69,11 +69,6 @@ s.find("World")             # 8
 s.find_last("l")            # 9
 s.is_empty()                # False
 
-# 别名方法
-s.trim()                    # 等同于 strip()
-s.to_upper()                # 等同于 upper()
-s.to_lower()                # 等同于 lower()
-
 # 字符串拼接与重复
 str a = "ab" + "cd"    # "abcd"
 str b = "ab" * 3       # "ababab"

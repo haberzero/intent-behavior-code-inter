@@ -39,23 +39,30 @@
 | 类型 | 作用 |
 |------|------|
 | `VMTask(node_uid, generator, locals)` | 一个执行帧；包装节点求值的 Python 生成器协程 |
-| `VMTaskResult(kind, value)` | 标记类型 `done` / `suspend` / `signal`（部分场景代用） |
 | `Signal(kind: ControlSignal, value)` | 控制流数据对象（`return` / `break` / `continue` / `throw`） |
 | `UnhandledSignal(signal)` | VM 顶层未消费 Signal 的边界异常 |
 
 ### 2.2 主循环协议
 
-`core/runtime/vm/vm_executor.py:VMExecutor`：
+执行由**协作调度器**（`core/runtime/vm/task_scheduler.py:TaskScheduler`）驱动，单任务内层循环为 `VMExecutor._drive_loop_gen`：
 
 ```text
-while frame_stack:
-    task = frame_stack.top()
+TaskScheduler.run:
+    for task in active_tasks:
+        step(task)                        # 推进该任务的一步
+    if all parked: _wake_event.wait(park) # 全部挂起 → 通知式唤醒等待
+
+step(task) → _drive_loop_gen 单步:
     res = task.generator.send(pending_value)   # 或首次 send(None)
-    if isinstance(res, str):                   # yield child_uid
+    if isinstance(res, str):                   # yield child_uid → 压栈子帧
         frame_stack.push(make_task(res))
+    elif isinstance(res, Waitable):            # yield 阻塞操作 → 挂起任务
+        res.register_wake(_wake_event); 任务转 park（协作，不阻塞线程）
+    elif isinstance(res, _UserFunctionCall):   # trampoline：函数体独立压栈
+        make_user_function_task(res); frame_stack.push(it)
     elif StopIteration(value):                 # 协程结束
-        if isinstance(value, Signal):          # 控制信号沿生成器返回值传播
-            propagate_signal_to_parent(value)
+        if isinstance(value, Signal):
+            propagate_signal_to_parent(value)  # 控制信号数据化传播
         else:
             send_to_parent(value)
     elif raise:                                # Python 异常
@@ -182,7 +189,7 @@ class IExecutionFrame(Protocol):
 |----|------|------|
 | **L1: LLM 调用流水线** | 单个 LLM 调用 | 当前支持 |
 | **L2: 多 Interpreter 隔离** | 整段程序 | 当前支持 |
-| **L3: 语言级生成器（yield）** | 单个 yield 点 | 规划中（阶段 5 实现项，见 `docs/subsystems/05_coroutine.md`） |
+| **L3: 语言级生成器（yield）** | 单个 yield 点 | 演进方向（未实现，见 `docs/subsystems/05_coroutine.md`） |
 
 ### 5.2 编译期：依赖图（DDG）
 
@@ -427,13 +434,15 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ## §11 设计不变量
 
-1. **VM 唯一执行入口**：所有 IBCI 代码执行必须经 `VMExecutor.run_body()`；handler 不可绕过调度循环递归调用。
+1. **统一执行入口**：所有 IBCI 代码执行经协作调度器（`TaskScheduler.run`）驱动；用户函数调用经 trampoline（`_UserFunctionCall` 独立压栈），handler 不可绕过调度循环递归调用。
 2. **控制流数据化**：`Signal` 是控制流唯一表示；handler 内不允许 `raise ControlSignalException`。
 3. **执行帧抽象**：`IExecutionFrame` 协议是帧的对外契约；不允许直接读 `RuntimeContextImpl` 内部字段实现新功能。
 4. **LLM 服务通道唯一**：所有 LLM 调用必须经 `KernelRegistry.get_llm_executor()` 走 `IILLMExecutor`。
 5. **公理层无运行时依赖**：`core/kernel/axioms/` 不导入 `core/runtime/`；运行时通过 `SpecRegistry.get_axiom()` 桥接。
 6. **isinstance(IbXxx) 禁用**：分派一律 `isinstance(obj, IbValue) and obj.ib_class.name == "..."`；仅 `IbNone` 哨兵比较例外。
 7. **快照隔离不变量**：`behavior` 表达式只读外部变量、不写外部状态；提示词组装在 dispatch 时刻完成。
+8. **阻塞即挂起**：语言级阻塞操作（chan recv / await / LLM 读点 / 订阅 recv）返回 Waitable，经调度器协作挂起，不阻塞当前线程。
+9. **调度器永不阻塞**：调度器经 `try_result()` 非阻塞消费 Waitable；阻塞等待（`result()`）仅宿主/线程体专用。
 
 ---
 

@@ -112,7 +112,7 @@ scheduler 主循环（TaskScheduler.run）:
 
 **公理 LLM-1（dispatch_eager）**：`dispatch_eligible=True` 时，VM 在赋值点立即调用 `LLMScheduler.dispatch_eager()`，提交 LLM HTTP 调用到 `ThreadPoolExecutor`，返回 `LLMFuture` 占位符写入符号表（`ScopeImpl.define_raw()`）。
 
-**公理 LLM-2（lazy resolve）**：读取点（`vm_handle_IbName`）检测到 `LLMFuture` 时，调用 `resolve()` 阻塞等待 LLM 完成，将真实 `IbObject` 写回符号表，后续读取直接命中 IbObject（O(1)）。
+**公理 LLM-2（lazy resolve）**：读取点（`vm_handle_IbName`）检测到 `LLMFuture` 时，经 `resolve_future_cps` 挂起当前任务等待 LLM 完成（协作，不阻塞当前线程），将真实 `IbObject` 写回符号表，后续读取直接命中 IbObject（O(1)）。`LLMFuture` 满足 Waitable 协议（`is_done` / `try_result` / `register_wake`），供调度器消费。
 
 **公理 LLM-3（确定性输出）**：并发 dispatch 不改变程序的输出确定性——程序输出顺序遵从语句语义顺序（print 调用顺序），而非 dispatch 完成顺序。
 
@@ -144,7 +144,7 @@ scheduler 主循环（TaskScheduler.run）:
 
 **公理 ISO-4（spawn 非阻塞）**：`spawn_isolated(path, policy)` 立即返回字符串 handle，不等待子 Interpreter 完成。
 
-**公理 ISO-5（collect 提取）**：`collect(handle)` 阻塞等待子 Interpreter 完成并返回其用户变量字典 `Dict[str, native_value]`。
+**公理 ISO-5（collect 提取）**：`collect(handle)` 返回 `HostAwaitable`（Waitable）。语言层 VM 经 `yield` 协作挂起等待子 Interpreter 完成并返回其用户变量字典 `Dict[str, native_value]`；宿主侧经 `result()` 阻塞等待。
 
 **公理 ISO-6（collect 幂等保护）**：对同一 handle 重复调用 `collect()` 抛出 `RuntimeError`。
 

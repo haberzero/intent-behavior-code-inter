@@ -187,7 +187,7 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 
 - IbSpec（`core/kernel/spec/`）是唯一的类型描述符系统
 - 公理通过 `AxiomRegistry` 查询，各类型能力通过公理的 `has_*_cap` 类属性声明，统一由 `TypeAxiom` 接口实现
-- 所有类型引用在公理层均以**纯字符串类型名**传递，消除公理层对 spec 层的直接依赖
+- 所有类型引用在公理层能力方法均以**纯字符串类型名**传递，消除公理层对 spec 层查询/解析逻辑的依赖（axiom 可 import spec 的原子数据结构构造器 `TypeRef`/`MethodMemberSpec`，不得依赖注册表解析）
 - `SpecRegistry` 负责将公理返回的类型名字符串解析为对应的 `IbSpec` 对象
 
 ### 5.3 Fallback 策略原则（重要）

@@ -103,7 +103,7 @@ int v = r.expect()     # 3
 | 成员 | 语义 |
 |------|------|
 | `r.expect()` | 成功值 `T`；失败抛 IBCI 异常（fail-fast） |
-| `r.unwrap()` | 成功值 `T`；失败返回 `None`（不抛） |
+| `r.unwrap()` | 成功值 `T`；失败返回空 `Optional[T]`（`Optional[int] o = r.unwrap()`，不抛） |
 | `r.unwrap_or(v)` | 成功值 `T`；失败返回默认值 `v` |
 | `r.is_success()` / `r.is_error()` | `bool` 状态查询 |
 | `r.value()` / `r.error()` / `r.status()` | 内省读取（失败时 `value()` 为 null 等） |
