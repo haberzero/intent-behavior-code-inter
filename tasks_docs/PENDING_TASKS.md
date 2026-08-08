@@ -133,7 +133,7 @@
 
 > **优先级排序（2026-08-08 用户裁定原则：架构缺陷 ≥ 强相关依赖顺序 > 小而快的独立任务 > 非紧急功能演进）**：
 > **PT-DEBT-9 / PT-DEBT-11**（架构缺陷、小而独立）→ 可立即开工；
-> **PT-DEBT-10**（与阶段 5 yield 强相关）→ 并入主线合并设计；
+> **PT-DEBT-10** ~~（与阶段 5 yield 强相关）→ 并入主线合并设计~~ **已根治（2026-08-08）**；
 > **PT-DEBT-4/5**（破坏性/暂缓）→ 排后。
 
 | # | 内容 | 说明 |
@@ -144,7 +144,7 @@
 | PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | **已落地（2026-08-06）**：死字段清理（`is_assignable` 早已用 `Optional[T].wrapped_type`，序列化不消费）。全量 pytest 零回归 |
 | PT-DEBT-8 | ~~折叠 `IbXxx` 为单一 `IbValue`~~ → **重定义为"值层分派收敛审计"** | **已落地（2026-08-06）**：系统层面定论——折叠是伪目标（消 isinstance 动机已由 name 分派达成；具体类=领域方法载体，折叠违反单一职责）。实际收敛：`is_sequence_value` 统一容器分派、`IbLLMCallResult.is_uncertain` 统一不确定判断；类角色分工固化于 `03_type_system.md` §6.4。全量 pytest 零回归 |
 | PT-DEBT-9 | RecursionError 被 `VM: Call failed` 级联包装掩盖根因 | **R 批次 R1 排查发现（2026-08-07）**：深递归触底时，`leaf.py:315-317` 的 `except Exception` 把 RecursionError（`Exception` 子类）包装为 `VM: Call failed`，且每层调用递归包装一次 → 级联链掩盖真实根因（R1 期间 `f` not defined 的根因即 Python 栈溢出副作用被此掩盖）。关联诊断面（`kernel_diagnostic` 站点可承接异常分类；建议诊断事件区分"环境限制"如栈溢出 vs "语义错误"）。处置：随下次执行层重构或专项诊断改进一并评估 |
-| PT-DEBT-10 | 线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline） | **R1 边界（2026-08-07 如实记录）**：VM 主路径已 trampoline（深递归 Python 深度恒定），但线程体 `_run_task_body` 经 `_drive_generator` **同步驱动** `_vm_call_user_function`——线程内用户函数递归仍嵌套 Python 栈（n≈20 即失败）。**R1 前同样失败（既有行为，非回归）**。复核方向：与阶段 5 `yield` 惰性生成器/"线程无损挂起"主题相关，线程体 trampoline 化列为专项评估；当前接受既有限制 |
+| PT-DEBT-10 | ~~线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline）~~ → **已根治** | **已落地（2026-08-08）**：`_drive_generator` 改显式生成器栈（trampoline，与 `_drive_loop_gen` 同构），UserFunctionCall 压栈而非递归驱动——线程体内深递归不再嵌套 Python 栈。顺带根治线程体模块级函数解析（任务全局作用域链到模块作用域，`ScopeImpl(parent=main_global_scope)`；此前线程体无法解析模块级函数，n≈2 即失败）与线程逻辑栈上限对齐主路径（`max_call_stack`）；修复 `_vm_call_user_function`/`IbUserFunction.call`/`IbLLMFunction.call` push 后 finally 无条件 pop 的栈不均衡潜在 bug（`pushed` 标志）。新增线程体深递归 e2e（depth=300）。全量 pytest 零回归 |
 | PT-DEBT-11 | `_UserFunctionCall` 内部标记类定义位置（handler 依赖 VMExecutor 内部） | **R1 引入（2026-08-07）**：`_UserFunctionCall` 定义于 `vm_executor.py`，但 `leaf.py:293`（handler 层）与 `coordinator.py:316` 从 `vm_executor` import 它——handler 层向上依赖 VMExecutor 内部类，与"handler 是叶子、VMExecutor 调度"的分层方向略有违背。机制正确、功能无误，但按 design-philosophy"模块配合模式统一"应复核下沉（与 Waitable/Signal 同类放 `shared` 层）或改协议化标记。处置：随下次执行层重构一并评估 |
 
 ---

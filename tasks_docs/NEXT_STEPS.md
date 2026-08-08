@@ -53,9 +53,23 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ---
 
-## ✅ 已完成：2026-08-08 批次（穿透根治 + 文档对账治理 + 意图栈历史兼容移除）
+## ✅ 已完成：2026-08-08 批次（PT-DEBT-11/9/10 根治）
 
-> **unsafe-vibe-dev，全量 2026 passed / 1 skipped**。完整记录见 `WORKLOG` 与 git 历史。
+> **unsafe-vibe-dev，全量 2029 passed / 1 skipped**。完整记录见 `WORKLOG` 与 git 历史。
+
+- **PT-DEBT-11**（4bf2644）：`UserFunctionCall` 下沉 `core/runtime/shared/user_call.py`（与 Signal/Waitable
+  同类叶子），handler/线程体不再向上依赖 VMExecutor 内部类——保持"handler 是叶子、VMExecutor 调度"分层方向。
+- **PT-DEBT-9**（c75541f）：环境限制异常（RecursionError/MemoryError/SystemError）根因保留——新建
+  `core/runtime/shared/env_limits.py` 判定 + `diagnostics.handle_environment_limit` 发射 `KDIAG_RUNTIME_ENV_LIMIT`
+  诊断，VM 五处语义错误包装站点（Symbol not defined/VM: Call failed/模块导入/try-except）不再掩盖根因。
+  深递归触底时用户看到 `RecursionError` 而非误导性符号未定义/调用失败（+2 测试）。
+- **PT-DEBT-10**：`_drive_generator` 改显式生成器栈（trampoline，与 `_drive_loop_gen` 同构），线程体内深递归
+  不再嵌套 Python 栈（depth=300 e2e 通过）。顺带根治线程体模块级函数解析（任务全局作用域链到模块作用域，
+  此前线程体无法解析模块级函数，n≈2 即失败）、线程逻辑栈上限对齐主路径（`max_call_stack`）、
+  `_vm_call_user_function`/`IbUserFunction.call`/`IbLLMFunction.call` push 后 finally 无条件 pop 的
+  栈不均衡潜在 bug（`pushed` 标志）（+1 测试）。
+
+## ✅ 已完成：2026-08-08 批次（穿透根治 + 文档对账治理 + 意图栈历史兼容移除）
 
 - **kernel→runtime 穿透根治**（d11bad0）：用户红线"禁止一切 kernel→runtime 穿透"。全仓扫描确认两处
   （registry 惰性 import EventBus、host_interface 惰性 import kernel_diagnostic），改依赖注入——
@@ -76,10 +90,7 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ## 📋 交接要点（下一 session）
 
-- **可选起点（架构缺陷优先，2026-08-08 用户裁定原则：架构缺陷 ≥ 强相关依赖顺序 > 小而快的独立任务 >
-  非紧急功能演进）**：**PT-DEBT-9**（RecursionError 级联包装掩盖根因）与 **PT-DEBT-11**（`_UserFunctionCall`
-  定义位置）为小而独立的架构缺陷修复，可立即开工；**PT-DEBT-10**（线程体递归非 trampoline）与阶段 5
-  yield 强相关，建议并入主线合并设计。完整排序分析见 `PENDING_TASKS.md` §五。
+- **架构缺陷优先起点清空（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 **三项已全部根治**（见下方"已完成"节）。下一主线即阶段 5 `yield` 惰性生成器；无阻塞项。
 - **首要任务（下一主线，阶段 5）**：**`yield` 惰性生成器**（`EXEC_FOUNDATION_DESIGN.md` §5.2，D-08 定案
   yield 自标记函数种类；async 关键字已取消）。前置全部就绪：调度器执行核心 + R 批次（trampoline/通知式
   唤醒/Waitable 家族）稳定。**注意**：这是一个大型独立特性（生成器体需单可恢复驱动，见设计 §5.2），

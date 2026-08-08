@@ -63,6 +63,7 @@ class IbUserFunction(IbFunction):
                     error_code=RUN_CALL_ERROR
                 ) from e
 
+        pushed = False
         try:
             node_data = self.context.get_node_data(self.node_uid)
             params_uids = node_data.get("args", [])
@@ -96,6 +97,7 @@ class IbUserFunction(IbFunction):
                 location=loc,
                 is_user_function=True
             )
+            pushed = True
 
             ib_none = self.ib_class.registry.get_none()
             if receiver and receiver is not ib_none:
@@ -150,7 +152,8 @@ class IbUserFunction(IbFunction):
                 return e.signal.value
             raise  # BREAK/CONTINUE 不应到达函数帧，透传至调用者
         finally:
-            self.context.pop_stack()
+            if pushed:
+                self.context.pop_stack()
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
             rt_context.exit_intent_scope(saved_intent)
@@ -218,6 +221,7 @@ class IbLLMFunction(IbFunction):
                     error_code=RUN_CALL_ERROR
                 ) from e
 
+        pushed = False
         try:
             node_data = self.context.get_node_data(self.node_uid)
             rt_context.enter_scope()
@@ -236,6 +240,7 @@ class IbLLMFunction(IbFunction):
                 location=loc,
                 is_user_function=True
             )
+            pushed = True
 
             params_uids = node_data.get("args", [])
 
@@ -271,7 +276,8 @@ class IbLLMFunction(IbFunction):
             # 公理化调用：通过 KernelRegistry 获取执行器，不再直接持有
             return executor.invoke_llm_function(self, self.context, call_intent=call_intent)
         finally:
-            self.context.pop_stack()
+            if pushed:
+                self.context.pop_stack()
             rt_context.exit_scope()
             # 恢复调用者的意图上下文和模块上下文
             rt_context.exit_intent_scope(saved_intent)

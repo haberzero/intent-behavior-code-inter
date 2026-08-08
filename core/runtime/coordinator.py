@@ -193,12 +193,18 @@ def _run_task_body(
     main_ec = interpreter.execution_context
     registry = interpreter.registry
 
-    # 1. 任务本地 runtime_context（隔离作用域/意图/llmexcept）
-    task_rt = RuntimeContextImpl(registry=registry)
+    # 1. 任务本地 runtime_context（隔离作用域/意图/llmexcept）。
+    #    全局作用域链到入口模块作用域（main interpreter 的 global_scope），使模块级
+    #    函数（含递归目标自身）在任务体可解析；任务对全局的写入落在任务本地全局
+    #    子作用域（parent=模块作用域），不污染主环境（隔离 + 可读模块符号）。
+    from core.runtime.interpreter.runtime_context import ScopeImpl
+    main_global_scope = interpreter.runtime_context.global_scope
+    task_global = ScopeImpl(parent=main_global_scope, registry=registry)
+    task_rt = RuntimeContextImpl(initial_scope=task_global, registry=registry)
     interpreter.setup_context(task_rt)
 
     # 2. 任务本地 EC：共享只读回调（node_pool/side_tables/factory），任务本地状态
-    task_logical_stack = LogicalCallStack()
+    task_logical_stack = LogicalCallStack(max_depth=interpreter.max_call_stack)
     task_ec = ExecutionContextImpl(
         registry=registry,
         factory=main_ec.factory,
@@ -303,9 +309,11 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
 
     任务线程内使用：对 LLM Future / 通信 Channel recv 等 Waitable 阻塞等待。
 
-    生成器契约（与 VM 主循环一致）：首次 ``send(None)`` 启动；后续 yield 的
-    若是 Waitable 则阻塞等待其完成再 ``send(result)`` 恢复；否则（yield child
-    uid）经任务本地 VM 求值后恢复。
+    生成器契约（与 VM 主循环一致）： ``send(None)`` 启动；后续 yield 的
+    若是 Waitable 则阻塞等待其完成再 ``send(result)`` 恢复；yield child
+    uid 经任务本地 VM 求值后恢复；yield ``UserFunctionCall`` 则把函数体
+    生成器作为独立帧压栈（trampoline，R1/PT-DEBT-10——线程体内深递归不
+    再嵌套 Python 栈，与 VM 主路径 ``_drive_loop_gen`` 同构）。
 
     协作式取消：每个挂起点（Waitable 等待 / 子节点驱动前）检查
     ``cancel_event``，命中即抛 ``ThreadCancelled``。``handle`` 为任务句柄标识
@@ -319,43 +327,51 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
         if cancel_event is not None and cancel_event.is_set():
             raise ThreadCancelled(handle)
 
-    def _step(val):
-        try:
-            return gen.send(val), False
-        except StopIteration as si:
-            return si.value, True
-
-    result, done = _step(None)
-    while not done:
+    # 显式生成器栈（trampoline）：UserFunctionCall 压栈而非递归 _drive_generator，
+    # 消除线程体内深递归的 Python/OS 栈嵌套（PT-DEBT-10，与 _drive_loop_gen 同构）。
+    stack = [gen]
+    pending_value: Any = send_first
+    while stack:
         _check_cancel()
-        if isinstance(result, Waitable):
-            result, done = _step(result.result())
-        elif isinstance(result, str) and task_vm.supports(result):
-            # lambda 体 yield 的 child uid：经任务本地 VM 求值后恢复。
+        cur = stack[-1]
+        try:
+            yielded = cur.send(pending_value)
+        except StopIteration as si:
+            stack.pop()
+            pending_value = si.value
+            continue
+        except Exception as e:
+            # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播
+            from core.runtime.observability.diagnostics import handle_environment_limit
+            if handle_environment_limit(e, rc=task_vm.runtime_context):
+                raise
+            raise
+
+        pending_value = None
+        if isinstance(yielded, Waitable):
+            pending_value = yielded.result()
+        elif isinstance(yielded, str) and task_vm.supports(yielded):
+            # 子节点 uid：经任务本地 VM 求值后恢复。
             # RETURN 信号在独立 run() 中无函数上下文 → UnhandledSignal；
             # 此处把它转回 Signal 投递给生成器（函数体用 Signal 表达返回）。
             try:
-                child_result = task_vm.run(result)
+                pending_value = task_vm.run(yielded)
             except UnhandledSignal as us:
-                child_result = us.signal
-            result, done = _step(child_result)
-        elif isinstance(result, UserFunctionCall):
-            # 用户函数调用请求（R1 trampoline）：驱动函数体生成器（同步嵌套，
-            # 线程体内递归深度受 OS 线程栈限制；VM 主路径为真 trampoline）
+                pending_value = us.signal
+        elif isinstance(yielded, UserFunctionCall):
+            # 用户函数调用请求（R1 trampoline）：压栈函数体生成器，循环继续
+            # 驱动栈顶——线程体内深递归 Python 深度恒定（不再嵌套 _drive_generator）。
             from core.runtime.vm.handlers._shared import _vm_call_user_function
 
             inner = _vm_call_user_function(
-                task_vm, result.func, task_vm.registry.get_none(), result.args
+                task_vm, yielded.func, task_vm.registry.get_none(), yielded.args
             )
-            child_result = _drive_generator(
-                task_vm, inner, cancel_event=cancel_event, handle=handle
-            )
-            result, done = _step(child_result)
+            stack.append(inner)
         else:
             raise RuntimeError(
-                f"spawn task: generator yielded non-waitable, non-node value {result!r}"
+                f"spawn task: generator yielded non-waitable, non-node value {yielded!r}"
             )
-    return result
+    return pending_value
 
 
 class RuntimeCoordinator:

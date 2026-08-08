@@ -115,6 +115,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   - **PT-DEBT-11**（`_UserFunctionCall` 定义位置，handler 依赖 VMExecutor 内部类）——分层缺陷、小而独立；
   - **PT-DEBT-10**（线程体递归非 trampoline）——与阶段 5 yield 强相关，建议并入主线合并设计。
   完整排序分析见 `PENDING_TASKS.md` §五 说明与上一 session 汇报。
+  **注（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 三项已在本 session 全部根治（见 §2.2 已完成摘要）。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   `kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
   12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计权威
@@ -137,6 +138,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   ① PT-DEBT-9 RecursionError 被 `VM: Call failed` 级联包装掩盖根因；② PT-DEBT-10 线程体用户函数递归仍同步嵌套
   （`_drive_generator` 非 trampoline，既有行为非回归）；③ PT-DEBT-11 `_UserFunctionCall` 定义位置。
   三项均不阻塞阶段 5；按"架构缺陷优先"原则，9/11 为小而独立起点，10 随阶段 5 合并设计。
+  **三项已于 2026-08-08 全部根治**（见 §2.2）。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev，全量 1984 passed / 1 skipped）**：地基 1a-1e（调度器执行核心/
   Waitable 家族 try_result/阻塞即挂起/协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4
   （非阻塞命名/订阅契约/pubsub EventBus/comm 命名回归/死状态/文档/cell 隔离/引擎级全局事件总线）。
@@ -146,6 +148,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
+- **2026-08-08（PT-DEBT-11/9/10 根治，unsafe-vibe-dev，全量 2029 passed / 1 skipped）**：
+  ① **PT-DEBT-11**（4bf2644）——`UserFunctionCall` 下沉 `core/runtime/shared/user_call.py`（与 Signal/Waitable 同类叶子），handler/线程体不再向上依赖 VMExecutor 内部类；② **PT-DEBT-9**（c75541f）——环境限制异常（RecursionError/MemoryError/SystemError）根因保留：`core/runtime/shared/env_limits.py` 判定 + `diagnostics.handle_environment_limit` 发射 `KDIAG_RUNTIME_ENV_LIMIT` 诊断，VM 五处语义错误包装站点不再掩盖根因（+2 测试）；③ **PT-DEBT-10**——`_drive_generator` 改显式生成器栈（trampoline，与 `_drive_loop_gen` 同构），线程体内深递归不再嵌套 Python 栈；顺带根治线程体模块级函数解析（任务全局作用域链到模块作用域）、线程逻辑栈上限对齐主路径、`_vm_call_user_function`/`IbUserFunction.call`/`IbLLMFunction.call` push 后 finally 无条件 pop 的栈不均衡潜在 bug（+1 测试）。详见 WORKLOG 与 git 历史。
 - **2026-08-08（本 session 收尾，unsafe-vibe-dev，全量 2026 passed / 1 skipped）**：
   ① **kernel→runtime 穿透根治**（d11bad0）——事件总线/诊断发射器依赖注入，kernel 层零 runtime 依赖；
   ② **死代码清理**（ffaffc0）——删 `KernelRegistry.clone()`（零调用方，spawn 隔离走独立 engine 路径）；

@@ -91,6 +91,27 @@ print("done")
     assert lines == ["hi", "done"]
 
 
+def test_thread_body_recursion_trampolined():
+    """PT-DEBT-10：线程体内用户函数递归经 trampoline 驱动，不嵌套 Python 栈。
+
+    R1 前线程体 ``_drive_generator`` 对 UserFunctionCall 递归驱动，线程内深递归
+    （n≈20）即失败；trampoline 化后线程体与 VM 主路径同构，深递归 Python 深度
+    恒定。同时验证线程体可解析模块级函数（全局作用域链到模块作用域）。
+    """
+    code = """
+func compute(int n) -> int:
+    if n <= 1:
+        return 1
+    return compute(n - 1) + 1
+
+thread[int] t = thread(callable=compute, args=[300])
+thread_result[int] r = t.join()
+print((str)r.expect())
+"""
+    lines = run_ibci(code)
+    assert lines == ["300"]
+
+
 def test_thread_cancel():
     code = """
 chan c = chan(str, "message")

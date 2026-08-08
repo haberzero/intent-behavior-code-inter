@@ -263,6 +263,7 @@ def _vm_call_user_function(executor, func, receiver, args):
                 error_code=RUN_CALL_ERROR,
             ) from e
 
+    pushed = False
     try:
         node_data = executor.ec.get_node_data(func.node_uid)
         params_uids = node_data.get("args", [])
@@ -295,6 +296,7 @@ def _vm_call_user_function(executor, func, receiver, args):
             location=loc,
             is_user_function=True,
         )
+        pushed = True
 
         ib_none = func.ib_class.registry.get_none()
         if receiver and receiver is not ib_none:
@@ -335,7 +337,8 @@ def _vm_call_user_function(executor, func, receiver, args):
             return seq_result
         return seq_result
     finally:
-        executor.ec.pop_stack()
+        if pushed:
+            executor.ec.pop_stack()
         rt_context.exit_scope()
         rt_context.exit_intent_scope(saved_intent)
         executor.ec.current_module_name = old_module
