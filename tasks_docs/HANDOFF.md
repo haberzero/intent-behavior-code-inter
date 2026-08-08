@@ -105,6 +105,10 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
+- **新主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——审计确认
+  内核层仍有"任务内同步重入调度器"遗留旁路：用户方法调用 `obj.method()`（F1）、`chan.send` 满阻塞（B1）、
+  `slot.update(fn)` CAS 回调（F2）、prompt hint 同步调用（F3）、及 `.call()` 孪生/驱动重复/LLM 阻塞（M1-M4）。
+  登记 PT-DEBT-12/13/14/15；实施计划见 `tasks_docs/_ASYNC_UNIFY.md`。**F1 用户方法 CPS 化为最高价值**。
 - **阶段 5 `yield` 惰性生成器已完成（2026-08-08，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
   含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消），单可恢复驱动
   `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。

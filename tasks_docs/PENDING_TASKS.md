@@ -129,15 +129,19 @@
 
 ---
 
-## 五、缺陷 / 技术债（PT-DEBT-4/5/6/7/8/9/10/11）
+## 五、缺陷 / 技术债（PT-DEBT-*）
 
 > **优先级排序（2026-08-08 用户裁定原则：架构缺陷 ≥ 强相关依赖顺序 > 小而快的独立任务 > 非紧急功能演进）**：
-> **PT-DEBT-9 / PT-DEBT-11**（架构缺陷、小而独立）→ 可立即开工；
-> **PT-DEBT-10** ~~（与阶段 5 yield 强相关）→ 并入主线合并设计~~ **已根治（2026-08-08）**；
+> **PT-DEBT-9/10/11**（架构缺陷）→ **已根治（2026-08-08）**；
+> **PT-DEBT-12/13/14/15**（异步地基遗留妥协）→ **新主线（2026-08-08 定案，见 `tasks_docs/_ASYNC_UNIFY.md`）**；
 > **PT-DEBT-4/5**（破坏性/暂缓）→ 排后。
 
 | # | 内容 | 说明 |
 |---|------|------|
+| PT-DEBT-12 | 用户方法调用任务内同步重入调度器（F1） | **异步地基遗留（2026-08-08 审计）**：`vm_handle_IbCall` 不展开 `IbBoundMethod` → `receive('__call__')` → `vm.run_body` 嵌套调度器。最常见 `obj.method(x)` 路径；方法含 Waitable 时死锁、深递归方法嵌套 Python 栈。改造：解包 `IbBoundMethod` → CPS trampoline（与函数调用同构）。见 `_ASYNC_UNIFY.md` F1 |
+| PT-DEBT-13 | `chan.send` 有界满通道任务内真阻塞（B1） | **异步地基遗留（2026-08-08 审计）**：`send` 返回 None（满时 `_cond.wait` 阻塞线程），与 `recv`（已转 Waitable）不对称；唯一消费者同调度器时死锁。改造：send 满时返回 Waitable（宿主契约变更需评估）。见 `_ASYNC_UNIFY.md` B1 |
+| PT-DEBT-14 | `slot.update(fn)` CAS 同步回调 / prompt hint 同步调用（F2/F3） | **异步地基遗留（2026-08-08 审计）**：CAS 锁外 `fn.call`（lambda 嵌套调度器、behavior 阻塞 LLM）；`_get_llmoutput_hint` CPS 路径内同步 `.call()`。改造：update 可调用分支返回 Waitable / hint vtable CPS 化。见 `_ASYNC_UNIFY.md` F2/F3 |
+| PT-DEBT-15 | 同步 `.call()` 孪生 / 驱动循环 / LLM 调用双路径（M1-M4） | **异步地基遗留（2026-08-08 审计）**：各 CPS 路径保留同步 `.call()` 双写（M1）、`_drive_generator` vs `_drive_loop_gen` 重复（M2）、prompt 构建双实现（M3）、CPS 内 `_call_llm` 同步阻塞（M4）。改造：收敛单一 CPS 权威路径 + 薄宿主包装 + LLM 真挂起。见 `_ASYNC_UNIFY.md` M1-M4 |
 | PT-DEBT-4 | `file` 模块重命名 | `file` 影子化 Python 内建，长期重命名（如 `fs`/`io`）。当前过渡措施已实施 |
 | PT-DEBT-5 | 全项目文件命名清理 | 过短/欠层次/欠区分度/影子化内建的代码文件命名排查。暂缓，独立窗口执行 |
 | PT-DEBT-6 | `register_module()` 可观测性缺口 | **已落地（2026-08-06）**：用户插件覆盖 kernel-native 时 `warnings.warn`（原静默忽略）。顺带修正测试配置 bug（plugin_paths 指向插件目录本身导致插件从未加载）。全量 pytest 零回归 |
