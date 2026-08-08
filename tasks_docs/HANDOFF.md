@@ -76,7 +76,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 错误集确需用户裁决/与工作模式定论冲突/破坏性重构无法确认边界且独立隔离分支也无法确定
 技术路线）才 update_goal(status="unmet", blocker=具体卡点+建议)。
 
-七、非目标：media Phase 4（PT-SEALED-1）、跨进程/CPU 并行、跨引擎通信、PT-FEAT-1 的 `yield` 惰性生成器（属阶段 5，R 批次之后实现，不在本批次范围；async 函数关键字已由 D-08 定案取消，任意函数可 await）、线程无损挂起/恢复、用户级泛型类（PT-FEAT-3）、Hindley-Milner 约束求解。
+七、非目标：media Phase 4（PT-SEALED-1）、跨进程/CPU 并行、跨引擎通信、线程无损挂起/恢复、用户级泛型类（PT-FEAT-3）、Hindley-Milner 约束求解。`yield` 惰性生成器（PT-FEAT-1）是阶段 5 下一主线，非"非目标"；是否纳入本 goal 视主任务界定。
 ```
 
 ### 1.4 tasks_docs/ 文档结构指针
@@ -94,7 +94,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
 | `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（PT-TEST-1，**已并入 OBSERVABILITY_REFACTOR**） |
-| `OBSERVABILITY_REFACTOR.md` / `test_baseline_20260806.txt` | **当前主线任务控制文档**（可观测性统一重构 Phase 0-4）/ 覆盖基准快照 |
+| `OBSERVABILITY_REFACTOR.md` / `test_baseline_20260806.txt` | 可观测性统一重构任务控制文档（**已完成**，Phase 0-4 落地）/ 覆盖基准快照 |
+| `DIAGNOSTIC_DESIGN.md` | PT-FEAT-9 设计权威（**已完成**，实施步骤 A-E 落地，归档） |
 
 ---
 
@@ -108,10 +109,24 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   await、yield 自标记函数种类，async 关键字已取消）。**前置已全部就绪**：调度器执行核心 + R 批次
   （trampoline/通知式唤醒/Waitable 家族）+ PT-FEAT-9 诊断机制（阶段 4）稳定。大型独立特性
   （生成器体需单可恢复驱动），建议独立分支实验。
+- **可选起点（架构缺陷优先，2026-08-08 用户裁定原则：架构缺陷 ≥ 强相关依赖顺序 > 小而快的独立任务 >
+  非紧急功能演进）**：
+  - **PT-DEBT-9**（RecursionError 被 `VM: Call failed` 级联包装掩盖根因）——架构缺陷、小而独立，可立即开工；
+  - **PT-DEBT-11**（`_UserFunctionCall` 定义位置，handler 依赖 VMExecutor 内部类）——分层缺陷、小而独立；
+  - **PT-DEBT-10**（线程体递归非 trampoline）——与阶段 5 yield 强相关，建议并入主线合并设计。
+  完整排序分析见 `PENDING_TASKS.md` §五 说明与上一 session 汇报。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   `kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
   12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计权威
   `DIAGNOSTIC_DESIGN.md`（实施步骤 A-E 全部完成）。
+- **kernel→runtime 穿透已根治（2026-08-08，unsafe-vibe-dev，commit d11bad0）**：用户红线"禁止一切
+  kernel→runtime 穿透"。两处穿透（registry 惰性 import EventBus、host_interface 惰性 import
+  kernel_diagnostic）改为依赖注入——registry 新增 `set_event_bus`（未注入 get fail-fast、peek fail-open）、
+  HostInterface 新增 `set_diagnostic_emitter`（未注入回退 warnings.warn），engine 组装期注入。
+  残留扫描确认 core/kernel/ 零 runtime import。
+- **意图栈扁平化历史兼容已彻底移除（2026-08-08，unsafe-vibe-dev，commit 3ce9b7d）**：用户裁定"无事实
+  用户，历史兼容不是考虑项"。删除序列化 `intent_stack` 平铺双写与旧格式反序列化回退、`context.intent_stack`
+  property、两处接口协议声明；补意图上下文 6 槽位 round-trip 测试（+3）。
 - **R 批次全部完成（2026-08-07，unsafe-vibe-dev，全量 2001 passed / 1 skipped）**：R4+R3（82c9c0f，1988/1）
   P3 公开协议 + D-04 `IbThread` 满足 Waitable → R6（35f1437，1995/1）嵌套函数自动只读捕获 → R2（c16b05e/c4c63aa，
   1998/1）调度器通知式唤醒 → R1（6dc9214，2001/1）函数调用 trampoline 化（EXEC-1 根治，深递归 Python 深度恒定）。
@@ -119,10 +134,9 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 - **已定案（不再重议）**：R5 撤回（`await` 幂等是 auto-yield 组合承载，改报错破坏 `await collect(h)`）；
   D-08 保留透明 async（CPS 天然可挂起 + auto-yield 组合 + 值契约 + yield 自标记）。
 - **R 批次遗留技术债（2026-08-07 评估登记，见 `PENDING_TASKS.md` §五 PT-DEBT-9/10/11）**：
-  ① PT-DEBT-9 RecursionError 被 `VM: Call failed` 级联包装掩盖根因（随下次执行层重构承接）；
-  ② PT-DEBT-10 线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline，既有行为非回归，与阶段 5 线程主题相关）；
-  ③ PT-DEBT-11 `_UserFunctionCall` 定义位置（handler 层依赖 VMExecutor 内部，建议下沉 `shared` 层或协议化）。
-  三项均不阻塞阶段 5，择机评估。
+  ① PT-DEBT-9 RecursionError 被 `VM: Call failed` 级联包装掩盖根因；② PT-DEBT-10 线程体用户函数递归仍同步嵌套
+  （`_drive_generator` 非 trampoline，既有行为非回归）；③ PT-DEBT-11 `_UserFunctionCall` 定义位置。
+  三项均不阻塞阶段 5；按"架构缺陷优先"原则，9/11 为小而独立起点，10 随阶段 5 合并设计。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev，全量 1984 passed / 1 skipped）**：地基 1a-1e（调度器执行核心/
   Waitable 家族 try_result/阻塞即挂起/协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4
   （非阻塞命名/订阅契约/pubsub EventBus/comm 命名回归/死状态/文档/cell 隔离/引擎级全局事件总线）。
@@ -132,24 +146,32 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
+- **2026-08-08（本 session 收尾，unsafe-vibe-dev，全量 2026 passed / 1 skipped）**：
+  ① **kernel→runtime 穿透根治**（d11bad0）——事件总线/诊断发射器依赖注入，kernel 层零 runtime 依赖；
+  ② **死代码清理**（ffaffc0）——删 `KernelRegistry.clone()`（零调用方，spawn 隔离走独立 engine 路径）；
+  ③ **文档-代码对账治理**（fe80595/5f5e26d/a8de1b1/3368c28）——P0 断链/自相矛盾 4 处、P1 过期/红线/事实错误
+  ~20 处（执行模型对齐调度器、kernel-native 补 iruntime、意图系统穿透代码块、红线清理等）、P2 缺失/格式/体系
+  ~15 处（14_concurrency 补 await/auto-yield、TestHooks、意图语法权威收敛 syntax/09、插件 howto 收敛等）；
+  ④ **意图栈扁平化历史兼容彻底移除**（3ce9b7d）+ 补意图上下文 6 槽位 round-trip 测试（+3）；
+  ⑤ **登记 PT-FEAT-10/11/12**（UID 统一/序列化器自动化/AST UID 字段，原被删愿景中值得保留的未来任务）。
+  详见 WORKLOG 与 git 历史。
+- **2026-08-08（文档-代码对账审查）**：5 个并行 general task 全量审查 + 逐项代码核实 + 独立交叉复核。
+  结论：8 篇文档需修（重点：arch/04、05 执行模型停在旧叙事）；5 篇与代码一致。修复后残留扫描清零。
 - **2026-08-07（PT-FEAT-9 阶段 4 完成）**：内核结构化诊断机制重建——`kernel_diagnostic` helper（单一记录双投影：
   警告不门控 + 事件受 observability 门控，rc best-effort）+ 12 处运行时站点迁移（文案逐字）+ e2e 事件投影测试
   （协议回退双投影/策略忽略 fail-open/门控）+ `docs/architecture/09_observability.md`（观测体系统一文档）。
-  全量 **2021 passed / 1 skipped**。详见 WORKLOG 与 git 历史。
 - **2026-08-07（R 批次完成）**：统一执行地基复核与根治——R4+R3 P3 公开协议 + `IbThread` 满足 Waitable（`await t` 可用）、
   R6 嵌套函数自动只读捕获、R2 调度器通知式唤醒（根治 poll+park）、R1 函数调用 trampoline 化（深递归 Python 深度恒定）。
-  全量 **2001 passed / 1 skipped**。详见 WORKLOG 与 git 历史。
 - **2026-08-06**：**OBSERVABILITY_REFACTOR 主体完成**——Phase 0-2C + 2C-2（idbg 深度收敛：protection_map
   内核化/统一变量视图/snapshot vars bug/LLM 事件流）+ 2D 测试体系全面重建（tests_v2 全域迁移 + 切换 +
-  矩阵三段式 + tests_docs 治理）+ Phase 4 收敛全部落地，全量 **1962 passed / 1 skipped**。测试体系现为
-  单一分层模型（kernel/compiler/runtime/plugins/contracts/e2e/compliance/sdk/meta/fixtures），meta 机器强制
-  （分层/命名/helper 去重/矩阵对账）。commit 明细见 git 历史。
+  矩阵三段式 + tests_docs 治理）+ Phase 4 收敛全部落地。测试体系现为单一分层模型（kernel/compiler/runtime/
+  plugins/contracts/e2e/compliance/sdk/meta/fixtures），meta 机器强制（分层/命名/helper 去重/矩阵对账）。
 - **2026-08-05**：闭包序列化 round-trip 修复 + Axiom 家族分裂收敛 + EnumAxiom 双通道收敛 +
   use_intent_context 守卫修复 + R3 异味四 Zone 处置 + import-* 精确成员枚举根治（含 IBC 文件
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
-- **测试基线**：以实跑为准，不冻结数字（当前 2001 passed / 1 skipped）。
+- **测试基线**：以实跑为准，不冻结数字（当前 2026 passed / 1 skipped）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d 与 R 批次
   exp/exec-ra/rb/rc/rd 保留未合并）。
 

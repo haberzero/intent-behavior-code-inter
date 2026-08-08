@@ -2,7 +2,8 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`。
 >
-> **最后更新**：2026-08-07（PT-FEAT-9 诊断机制（阶段 4）完成；阶段 5 yield 列为下一主线）
+> **最后更新**：2026-08-08（穿透根治 + 文档对账治理 + 意图栈历史兼容移除完成；阶段 5 yield 列为下一主线，
+> 架构缺陷优先起点 PT-DEBT-9/11 可选）
 
 ---
 
@@ -52,8 +53,33 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ---
 
+## ✅ 已完成：2026-08-08 批次（穿透根治 + 文档对账治理 + 意图栈历史兼容移除）
+
+> **unsafe-vibe-dev，全量 2026 passed / 1 skipped**。完整记录见 `WORKLOG` 与 git 历史。
+
+- **kernel→runtime 穿透根治**（d11bad0）：用户红线"禁止一切 kernel→runtime 穿透"。全仓扫描确认两处
+  （registry 惰性 import EventBus、host_interface 惰性 import kernel_diagnostic），改依赖注入——
+  `registry.set_event_bus`（未注入 get fail-fast、peek fail-open）+ `HostInterface.set_diagnostic_emitter`
+  （未注入回退 warnings.warn），engine 组装期注入。残留扫描 core/kernel/ 零 runtime import。
+- **死代码清理**（ffaffc0）：删 `KernelRegistry.clone()`（零调用方，spawn 隔离走独立 engine 路径）。
+- **文档-代码对账治理**（fe80595/5f5e26d/a8de1b1/3368c28）：5 个并行 general task 全量审查 →
+  P0 断链/自相矛盾 4 处、P1 过期/红线/事实错误 ~20 处、P2 缺失/格式/体系 ~15 处全部修复。
+  重点：arch/04、05 执行模型对齐调度器（TaskScheduler/Waitable/trampoline/await/auto-yield）、
+  kernel-native 清单补 iruntime、意图系统穿透代码块、红线清理（日期戳/已落地/阶段5/搁置项）。
+- **意图栈扁平化历史兼容彻底移除**（3ce9b7d）：用户裁定"无事实用户，历史兼容不是考虑项"。删序列化
+  `intent_stack` 平铺双写 + 旧格式反序列化回退 + `context.intent_stack` property + 两处接口协议声明；
+  补意图上下文 6 槽位 round-trip 测试（+3）。
+- **登记 PT-FEAT-10/11/12**（8376195）：原被删愿景（UID 统一/序列化器自动化/AST UID 字段）中值得
+  保留的未来任务。
+
+---
+
 ## 📋 交接要点（下一 session）
 
+- **可选起点（架构缺陷优先，2026-08-08 用户裁定原则：架构缺陷 ≥ 强相关依赖顺序 > 小而快的独立任务 >
+  非紧急功能演进）**：**PT-DEBT-9**（RecursionError 级联包装掩盖根因）与 **PT-DEBT-11**（`_UserFunctionCall`
+  定义位置）为小而独立的架构缺陷修复，可立即开工；**PT-DEBT-10**（线程体递归非 trampoline）与阶段 5
+  yield 强相关，建议并入主线合并设计。完整排序分析见 `PENDING_TASKS.md` §五。
 - **首要任务（下一主线，阶段 5）**：**`yield` 惰性生成器**（`EXEC_FOUNDATION_DESIGN.md` §5.2，D-08 定案
   yield 自标记函数种类；async 关键字已取消）。前置全部就绪：调度器执行核心 + R 批次（trampoline/通知式
   唤醒/Waitable 家族）稳定。**注意**：这是一个大型独立特性（生成器体需单可恢复驱动，见设计 §5.2），
@@ -73,6 +99,10 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
     engine `register_spawn_wake`）；根治 poll+park 与"单待决阻塞"。
   - R1（6dc9214，2001/1）：函数调用 trampoline 化（`_vm_call_user_function` CPS + `_UserFunctionCall` 压栈）；
     EXEC-1 根治，深递归 Python 深度恒定（n=5000 深度恒 13，原 ~130 层栈溢出）。
+- **2026-08-08 批次已完成（unsafe-vibe-dev，全量 2026 passed / 1 skipped）**：
+  穿透根治（d11bad0，事件总线/诊断发射器依赖注入）+ 死代码清理（ffaffc0，删 registry.clone()）+
+  文档对账治理（fe80595/5f5e26d/a8de1b1/3368c28，P0/P1/P2 全修复）+ 意图栈历史兼容移除（3ce9b7d）+
+  登记 PT-FEAT-10/11/12。详见上方"已完成：2026-08-08 批次"节。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev）**：地基 1a-1e（调度器执行核心/Waitable 家族/阻塞即挂起/
   协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4（命名/订阅契约/comm 命名回归/死状态/
   文档/cell 隔离/全局事件总线），全量 **1984 passed / 1 skipped**。
