@@ -906,18 +906,6 @@ class RuntimeContextImpl(RuntimeContext):
         )
 
     @property
-    def intent_stack(self) -> Optional['IntentNode']:
-        return self._intent_ctx.get_intent_top()
-        
-    @intent_stack.setter
-    def intent_stack(self, value: Optional['IntentNode']):
-        """仅支持基于 IntentNode 的链表设置，确保栈状态一致性"""
-        if value is None or isinstance(value, IntentNode):
-            self._intent_ctx.set_intent_top(value)
-        else:
-            raise TypeError(f"Invalid intent stack type: {type(value)}. Must be IntentNode or None.")
-
-    @property
     def current_scope(self) -> Scope:
         return self._current_scope
 

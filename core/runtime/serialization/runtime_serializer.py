@@ -62,7 +62,6 @@ class RuntimeSerializer(BaseFlatSerializer):
             "version": "2.1",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
-            "intent_stack": self._process_value(context.intent_stack),
             "intent_ctx_uid": full_intent_ctx_uid,
             "active_intent_ibobj_uid": active_intent_ibobj_uid,
             "pools": pools
@@ -478,20 +477,6 @@ class RuntimeDeserializer:
                     if active_obj.fields.get("_ctx") is not context.intent_context:
                         active_obj.fields["_ctx"] = context.intent_context
                 context.set_active_intent_ibobj(active_obj)
-        else:
-            if "global_intents" in data:
-                # 恢复全局意图 (通常是 IbIntent 实例)
-                ctx_global = context.get_global_intents()
-                ctx_global.clear()
-                for i_data in data["global_intents"]:
-                    ctx_global.append(self._deserialize_value(i_data))
-
-            # 恢复意图栈 (拓扑结构)
-            intent_stack_raw = data.get("intent_stack")
-            active_intents = self._deserialize_value(intent_stack_raw)
-
-            # 恢复活跃意图栈
-            context.restore_active_intents(active_intents)
 
         # 闭包 cell 重链 post-pass：作用域树与全部可达实例恢复完成后执行。
         self._relink_cells()

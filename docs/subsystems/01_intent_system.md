@@ -414,7 +414,7 @@ _active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork
 
 ### 6.3 序列化 / 反序列化
 
-- **完整 6 槽位**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top_uid` / `smear_queue` / `override` / `global_intents` / `inherited_smear` / `inherited_override`；同时保留 `intent_stack` 平铺方案的读取兼容路径。
+- **唯一 6 槽位表示**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top_uid` / `smear_queue` / `override` / `global_intents` / `inherited_smear` / `inherited_override`，是意图上下文的唯一序列化表示。
 - **共享身份**：通过 `id(ic) → uid` 备忘表保留多处引用同一 `IbIntentContext` 的身份；反序列化端的 `_get_intent_context` 也用 cache 还原"wrapper.fields['_ctx'] is rt_ctx._intent_ctx"不变量。
 - **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 content/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性。
 - **`serialize_context`**：写入 `intent_ctx_uid` 与 `active_intent_ibobj_uid`，调试器断点场景可还原完整意图上下文（含活跃指针身份）。

@@ -1,6 +1,4 @@
 from typing import Any, Protocol, List, Dict, Callable, Optional, Type, Union, runtime_checkable, Mapping, TYPE_CHECKING, Tuple
-if TYPE_CHECKING:
-    from core.kernel import ast as ast
 
 from core.base.interfaces import (
     IssueTracker, ISourceProvider, ICompilerService
@@ -136,9 +134,6 @@ class RuntimeContext(Protocol):
 
     @property
     def intent_context(self) -> Any: ...
-
-    @property
-    def intent_stack(self) -> List['ast.IbIntentInfo']: ...
 
     def push_loop_context(self, index: int, total: int) -> None: ...
     def pop_loop_context(self) -> None: ...

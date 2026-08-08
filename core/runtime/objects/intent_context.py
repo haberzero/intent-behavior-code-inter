@@ -217,11 +217,11 @@ class IbIntentContext:
         return list(self._global_intents)
 
     def get_intent_top(self) -> Optional[Any]:
-        """返回持久意图栈顶节点（IntentNode 链表头）。供 intent_stack property 使用。"""
+        """返回持久意图栈顶节点（IntentNode 链表头）。"""
         return self._intent_top
 
     def set_intent_top(self, node: Optional[Any]) -> None:
-        """直接设置栈顶节点（用于 intent_stack setter / restore_active_intents）。"""
+        """直接设置栈顶节点（供序列化恢复 / restore_active_intents 使用）。"""
         self._intent_top = node
 
     def remove(self, tag: Optional[str] = None, content: Optional[str] = None) -> bool:

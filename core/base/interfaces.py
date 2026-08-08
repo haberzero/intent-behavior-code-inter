@@ -176,15 +176,11 @@ class IExecutionFrame(Protocol):
 
     Protocol 方法约定：
     - current_scope  —— 当前作用域链（局部变量）
-    - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
     - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
     - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照
     """
     @property
     def current_scope(self) -> Any: ...
-
-    @property
-    def intent_stack(self) -> Any: ...
 
     @property
     def intent_context(self) -> Any: ...

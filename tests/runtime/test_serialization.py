@@ -291,3 +291,41 @@ class TestTypeSymbolSerialization:
         # 恢复后类型可构造（类对象保留 instantiate 能力）
         slot_cls = rest.get_symbol("slot").value
         assert hasattr(slot_cls, "instantiate")
+
+
+class TestIntentContextRoundTrip:
+    """意图上下文 6 槽位序列化 round-trip（持久栈 / global intents）。"""
+
+    def _active_intents(self, ctx):
+        return [i.content for i in ctx.get_active_intents()]
+
+    def test_persistent_stack_round_trip(self, engine):
+        """@+ 持久意图栈经序列化 round-trip 后内容保真（展平先入先出）。"""
+        orig, rest = _round_trip(
+            engine,
+            '@+ 意图A\n@+ 意图B\nint seed = 1\n',
+        )
+        assert self._active_intents(orig) == ["意图A", "意图B"]
+        assert self._active_intents(rest) == ["意图A", "意图B"]
+
+    def test_stack_pop_round_trip(self, engine):
+        """@+ 后 @- 弹出，round-trip 后栈内容与弹出后一致。"""
+        orig, rest = _round_trip(
+            engine,
+            '@+ 意图A\n@+ 意图B\n@-\nint seed = 1\n',
+        )
+        assert self._active_intents(orig) == ["意图A"]
+        assert self._active_intents(rest) == ["意图A"]
+
+    def test_global_intents_round_trip(self, engine):
+        """全局意图经序列化 round-trip 后保真。"""
+        engine.run_string('int seed = 1\n', silent=True)
+        orig_ctx = engine.interpreter.runtime_context
+        orig_ctx.set_global_intent("全局意图")
+        data = RuntimeSerializer(engine.registry).serialize_context(
+            orig_ctx, include_static=False
+        )
+        restored = RuntimeDeserializer(
+            engine.registry, factory=engine.interpreter.execution_context.factory
+        ).deserialize_context(data)
+        assert "全局意图" in [i.content for i in restored.get_global_intents()]
