@@ -295,6 +295,69 @@ class _PromptMixin:
 
         return None
 
+    def _get_llmoutput_hint_cps(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext):
+        """CPS 版 :meth:`_get_llmoutput_hint`（F3：hint vtable 分支 CPS 化）。
+
+        与同步版同语义，但用户 hint 方法（``__outputhint_prompt__``）经
+        ``UserFunctionCall`` trampoline 驱动（复用 F1 统一用户方法 CPS 路径），
+        而非同步 ``.call``——后者在 CPS 行为路径内会嵌套调度器，若 hint 方法
+        含 Waitable 则死锁。本方法是生成器，yield ``UserFunctionCall`` 由 VM
+        调度循环压栈驱动；调用方须 ``yield from``。
+        """
+        from core.runtime.shared.user_call import UserFunctionCall
+
+        def _try_axiom_hint(type_name: str) -> Optional[str]:
+            meta_reg = self.registry.get_metadata_registry()
+            if meta_reg:
+                descriptor = meta_reg.resolve(type_name)
+                if descriptor:
+                    hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
+                    if hint_cap:
+                        return hint_cap.__outputhint_prompt__(descriptor)
+            return None
+
+        def _drive_vtable_hint(type_name: str):
+            """用户类 vtable hint：yield UserFunctionCall 驱动（CPS 主路径）。"""
+            ib_class = self.registry.get_class(type_name)
+            if not ib_class:
+                return None
+            method = ib_class.lookup_method('__outputhint_prompt__')
+            if not method:
+                return None
+            from core.runtime.objects.kernel import IbUserFunction, IbLLMFunction
+            if isinstance(method, (IbUserFunction, IbLLMFunction)):
+                result = yield UserFunctionCall(method, [], ib_class)
+            else:
+                # 原生 hint 方法：同步调用（非调度路径，无嵌套调度器）。
+                result = method.call(ib_class, [])
+            hint = result.to_native() if isinstance(result, IbObject) else str(result)
+            return str(hint) if hint is not None else None
+
+        returns_uid = node_data.get("returns")
+        if returns_uid:
+            returns_data = execution_context.get_node_data(returns_uid)
+            if returns_data and returns_data.get("_type") == "IbName":
+                type_name = returns_data.get("id", "str")
+                hint = _try_axiom_hint(type_name)
+                if hint is not None:
+                    return hint
+                hint = yield from _drive_vtable_hint(type_name)
+                if hint is not None:
+                    return hint
+
+        node_to_type = execution_context.get_side_table("node_to_type", node_uid)
+        if node_to_type:
+            type_name = getattr(node_to_type, 'name', None)
+            if type_name:
+                hint = _try_axiom_hint(type_name)
+                if hint is not None:
+                    return hint
+                hint = yield from _drive_vtable_hint(type_name)
+                if hint is not None:
+                    return hint
+
+        return None
+
     def _get_expected_type_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
         """获取预期的类型名称，用于 __from_prompt__ 解析"""
         returns_uid = node_data.get("returns")

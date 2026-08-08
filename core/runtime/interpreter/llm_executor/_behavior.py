@@ -311,7 +311,7 @@ class _BehaviorMixin:
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context)
 
-        llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
+        llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)
 
         sys_prompt = "你是一个意图行为代码执行器。"
 
