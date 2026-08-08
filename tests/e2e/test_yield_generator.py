@@ -157,6 +157,60 @@ for int x in g:
         assert run_ibci(code) == ["0", "1", "2", "3"]
 
 
+class TestNextBuiltin:
+    """阶段 5 增量：``next()`` 内建推进惰性生成器。"""
+
+    def test_next_advances_generator(self):
+        """next(gen) 逐次推进生成器到产出值。"""
+        code = """
+func count(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+generator[int] g = count(3)
+int a = next(g)
+int b = next(g)
+int c = next(g)
+print((str)a)
+print((str)b)
+print((str)c)
+"""
+        assert run_ibci(code) == ["0", "1", "2"]
+
+    def test_next_on_list(self):
+        """next(iterable) 对其它可迭代对象取首个元素。"""
+        code = """
+list[int] a = [1, 2, 3]
+int first = next(a)
+print((str)first)
+"""
+        assert run_ibci(code) == ["1"]
+
+    def test_next_exhausted_catchable(self):
+        """next() 耗尽抛可捕获错误（try/except）。"""
+        code = """
+func count(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+generator[int] g = count(1)
+int a = next(g)
+int b = 0
+try:
+    b = next(g)
+    print("NOERR")
+except:
+    print("CAUGHT")
+"""
+        assert run_ibci(code) == ["CAUGHT"]
+
+
 class TestGeneratorSemantics:
     """编译期语义。"""
 

@@ -69,6 +69,25 @@ def register_seq(manager: Any, execution_context: Any, service_context: Any):
             total = total + unbox(elem)
         return manager.registry.box(total)
 
+    def _next(iterable: IbObject):
+        """next(iterable) -> 推进迭代器/生成器到下一个产出值。
+
+        对惰性生成器（``IbGenerator``）经 ``generic_next`` 惰性推进；耗尽抛
+        ``InterpreterError``。对其它可迭代对象（序列 / __iter__）取首个元素。
+        与 Python ``next()`` 语义对齐（阶段 5 增量）。
+        """
+        from core.runtime.objects.kernel.generator import IbGenerator
+
+        if isinstance(iterable, IbGenerator):
+            try:
+                return iterable.generic_next()
+            except StopIteration:
+                raise InterpreterError("next(): generator is exhausted")
+        elements = _iter_elements(iterable)
+        if not elements:
+            raise InterpreterError("next(): iterator is exhausted")
+        return elements[0]
+
     def _all(iterable: IbObject):
         """all(iterable) -> 全部元素为真。"""
         for elem in _iter_elements(iterable):
@@ -110,6 +129,7 @@ def register_seq(manager: Any, execution_context: Any, service_context: Any):
     manager.register("sorted", _sorted, unbox=False)
     manager.register("reversed", _reversed, unbox=False)
     manager.register("sum", _sum, unbox=False)
+    manager.register("next", _next, unbox=False)
     manager.register("all", _all, unbox=False)
     manager.register("min", _min, unbox=False)
     manager.register("max", _max, unbox=False)

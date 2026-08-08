@@ -269,6 +269,12 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         return_type_name="list"
     ), token)
 
+    registry.register_function("next", factory.create_func(
+        "next",
+        param_type_names=["any"],
+        return_type_name="any"
+    ), token)
+
     registry.register_function("zip", factory.create_func(
         "zip",
         param_type_names=["any"],
