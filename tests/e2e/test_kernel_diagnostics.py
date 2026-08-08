@@ -184,6 +184,31 @@ class TestPolicyOverrideSite:
             reset_current_execution_context(token)
 
 
+class TestEnvLimitDiagnostic:
+    """环境限制分类（PT-DEBT-9）：栈溢出根因保留 + 诊断事件双投影。"""
+
+    def test_recursion_error_emits_classified_diagnostic(self):
+        """深递归触底：RecursionError 根因传播，且发射 KDIAG_RUNTIME_ENV_LIMIT 事件。"""
+        code = """
+func f(int n) -> int:
+    if n <= 1:
+        return 1
+    return f(n - 1) + 1
+
+print(f(5000))
+"""
+        out, warns, kd, exc = _run_and_collect(code)
+        assert isinstance(exc, RecursionError), (
+            f"expected RecursionError root cause, got {type(exc).__name__}: {exc}"
+        )
+        # 警告投影：环境限制分类信息可见
+        assert any("环境限制异常 RecursionError" in wmsg for wmsg in warns)
+        # 事件投影：KDIAG_RUNTIME_ENV_LIMIT 携带 exc_type/message
+        ev = [d for d in kd if d["code"] == "KDIAG_RUNTIME_ENV_LIMIT"]
+        assert ev, f"expected KDIAG_RUNTIME_ENV_LIMIT events, got {kd}"
+        assert ev[0]["detail"]["exc_type"] == "RecursionError"
+
+
 class TestDiagnosticGate:
     """门控：observability 关 → 事件停止，警告保留。"""
 

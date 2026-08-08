@@ -18,6 +18,7 @@ from core.runtime.exceptions import (
     ThrownException,
 )
 from core.kernel.issue import InterpreterError
+from core.runtime.observability.diagnostics import handle_environment_limit
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
     _vm_invoke_behavior,
@@ -362,6 +363,9 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
     except ThrownException as te:
         raised_exc = te
     except Exception as e:
+        # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播，不作为可捕获异常
+        if handle_environment_limit(e, rc=executor.runtime_context):
+            raise
         # 与 StmtHandler.visit_IbTry 同语义：``InterpreterError`` 等
         # 解释器内部包装的 Python 异常也作为可捕获错误对待。
         raised_exc = e

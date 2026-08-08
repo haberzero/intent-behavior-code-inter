@@ -26,6 +26,7 @@ from core.runtime.objects.primitives import IbNone
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.shared.waitable import Waitable
 from core.runtime.shared.user_call import UserFunctionCall
+from core.runtime.observability.diagnostics import handle_environment_limit
 from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,
     _vm_invoke_behavior,
@@ -65,6 +66,9 @@ def vm_handle_IbName(executor, node_uid: str, node_data: Mapping[str, Any]):
     try:
         val = executor.runtime_context.get_variable_by_uid(sym_uid)
     except Exception as e:
+        # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播，不包装
+        if handle_environment_limit(e, rc=executor.runtime_context):
+            raise
         raise RuntimeError(
             f"VM Execution Error: Symbol with UID '{sym_uid}' "
             f"(name: '{node_data.get('id')}') is not defined."
@@ -312,6 +316,9 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 否则会丢失 IBCI 异常类型。
         raise
     except Exception as e:
+        # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播，不包装
+        if handle_environment_limit(e, rc=executor.runtime_context):
+            raise
         # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误
         raise RuntimeError(f"VM: Call failed: {e}") from e
 

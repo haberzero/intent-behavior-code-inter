@@ -30,6 +30,8 @@ from typing import Any, Dict, Optional
 
 from core.runtime.frame import get_current_execution_context
 from core.runtime.observability.events import emit_runtime_event
+from core.runtime.shared.env_limits import is_environment_limit
+from core.base.diagnostics.codes import KDIAG_RUNTIME_ENV_LIMIT
 
 
 def kernel_diagnostic(
@@ -63,3 +65,28 @@ def kernel_diagnostic(
         "kernel_diagnostic",
         {"code": code, "detail": detail or {}, "message": message},
     )
+
+
+def handle_environment_limit(exc: BaseException, *, rc: Any = None) -> bool:
+    """环境限制异常的语义错误包装防护（PT-DEBT-9）。
+
+    若 ``exc`` 是环境限制异常（栈溢出 / 内存耗尽 / 系统错误），发射
+    ``KDIAG_RUNTIME_ENV_LIMIT`` 诊断并返回 ``True``（调用方应原样 ``raise``
+    保留根因，不得包装成语义错误）；否则返回 ``False``。
+
+    用法（VM 语义错误包装站点）::
+
+        except Exception as e:
+            if handle_environment_limit(e, rc=executor.runtime_context):
+                raise
+            raise RuntimeError(f"VM: Call failed: {e}") from e
+    """
+    if not is_environment_limit(exc):
+        return False
+    kernel_diagnostic(
+        KDIAG_RUNTIME_ENV_LIMIT,
+        {"exc_type": type(exc).__name__, "message": str(exc)},
+        message=f"环境限制异常 {type(exc).__name__}: 非语义错误，保留根因传播",
+        rc=rc,
+    )
+    return True

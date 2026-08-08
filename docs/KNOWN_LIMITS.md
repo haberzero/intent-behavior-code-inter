@@ -538,3 +538,13 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 **`signal` 不是关键字，语言面无此原语**：`signal` lex 为普通标识符。原因：零投递机制的通信抽象与 VM 控制流 `Signal` 撞名，且无消费者空壳。需要消息传递时使用 `chan`/`slot`/`subscriber`（见 `docs/syntax/14_concurrency.md`）。
 
 **通信/线程原语**：`chan`/`slot`/`subscriber`/`thread`/`thread_result` 是语言一等公民（构造、方法、类型注解、序列化 round-trip）。线程创建统一使用 `thread[T]` 对象模型，不存在 `spawn`/`task` 形态。`thread_result[T]` 经 `expect()` 解封，失败 fail-fast。
+
+---
+
+## 二十三、递归深度受宿主栈限制（环境限制异常根因保留）
+
+**函数调用经 trampoline（`UserFunctionCall`）使 VM 调用链不消耗 Python 递归栈**（公理 EXEC-1），深递归（数百层）可正常执行。但**作用域链符号解析**（`get_symbol_by_uid` 沿父作用域链向上查找）仍以 Python 递归实现，受 `sys.setrecursionlimit`（默认 1000）限制——深递归到约 980 层时触发宿主 `RecursionError`。
+
+**行为**：此类 `RecursionError`（连同 `MemoryError`/`SystemError`）被判定为**环境限制异常**，在 VM 语义错误包装站点（`Symbol not defined` / `VM: Call failed` / 模块导入 / try-except）**原样重抛**，保留真实根因与调用栈，**不被包装成语义错误**（PT-DEBT-9）。同时发射 `KDIAG_RUNTIME_ENV_LIMIT` 诊断事件（`core/runtime/shared/env_limits.py` 判定；`core/runtime/observability/diagnostics.py` `handle_environment_limit`）。
+
+**含义**：超出宿主递归深度时，用户看到的是 `RecursionError: maximum recursion depth exceeded`（可提升 `sys.setrecursionlimit` 后重试），而非误导性的符号未定义/调用失败信息。递归深度上限本质是宿主栈限制，非语言可配置上限。

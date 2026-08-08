@@ -297,6 +297,31 @@ print(is_even(400))
 """
         assert run_ibci(code) == ["1"]
 
+    def test_recursion_overflow_propagates_root_cause(self):
+        """PT-DEBT-9：深递归触底时 RecursionError 根因不被 ``VM: Call failed`` 掩盖。
+
+        超出宿主递归深度时，环境限制异常（RecursionError）必须原样传播，
+        而非被 VM 语义错误包装站点重写为误导性的 ``Symbol not defined`` /
+        ``VM: Call failed``。断言顶层收到的是 RecursionError 本身。
+        """
+        code = """
+func f(int n) -> int:
+    if n <= 1:
+        return 1
+    return f(n - 1) + 1
+
+print(f(5000))
+"""
+        try:
+            run_ibci(code)
+        except RecursionError:
+            return  # 根因原样传播（预期）
+        except Exception as e:
+            raise AssertionError(
+                f"expected RecursionError root cause, got masked {type(e).__name__}: {e}"
+            ) from e
+        raise AssertionError("expected RecursionError on depth 5000, but succeeded")
+
 
 # ===========================================================================
 # Exception Frame Unwinding (INV-UNWIND-*)

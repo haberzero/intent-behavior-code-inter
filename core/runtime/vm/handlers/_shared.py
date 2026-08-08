@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional, List
 
 from core.base.diagnostics.codes import RUN_CALL_ERROR
+from core.runtime.observability.diagnostics import handle_environment_limit
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.signals import (
     ControlSignal,
@@ -254,6 +255,9 @@ def _vm_call_user_function(executor, func, receiver, args):
             )
             rt_context.current_scope = mod_inst.scope
         except Exception as e:
+            # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播
+            if handle_environment_limit(e, rc=rt_context):
+                raise
             raise InterpreterError(
                 f"Failed to import module '{func.module_name}' for function call: {e}",
                 error_code=RUN_CALL_ERROR,
@@ -424,6 +428,9 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
             )
             rt_context.current_scope = mod_inst.scope
         except Exception as e:
+            # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播
+            if handle_environment_limit(e, rc=rt_context):
+                raise
             # 导入失败必须 fail-fast：否则模块名已切换而 scope 未切换，
             # 函数会在错误模块上下文执行（全局符号解析静默错位）。
             raise InterpreterError(
