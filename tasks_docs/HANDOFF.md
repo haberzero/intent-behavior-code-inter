@@ -105,17 +105,13 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-- **下一主线（阶段 5）**：**`yield` 惰性生成器**——设计 `EXEC_FOUNDATION_DESIGN.md` §5.2（D-08 定案：任意函数可
-  await、yield 自标记函数种类，async 关键字已取消）。**前置已全部就绪**：调度器执行核心 + R 批次
-  （trampoline/通知式唤醒/Waitable 家族）+ PT-FEAT-9 诊断机制（阶段 4）稳定。大型独立特性
-  （生成器体需单可恢复驱动），建议独立分支实验。
-- **可选起点（架构缺陷优先，2026-08-08 用户裁定原则：架构缺陷 ≥ 强相关依赖顺序 > 小而快的独立任务 >
-  非紧急功能演进）**：
-  - **PT-DEBT-9**（RecursionError 被 `VM: Call failed` 级联包装掩盖根因）——架构缺陷、小而独立，可立即开工；
-  - **PT-DEBT-11**（`_UserFunctionCall` 定义位置，handler 依赖 VMExecutor 内部类）——分层缺陷、小而独立；
-  - **PT-DEBT-10**（线程体递归非 trampoline）——与阶段 5 yield 强相关，建议并入主线合并设计。
-  完整排序分析见 `PENDING_TASKS.md` §五 说明与上一 session 汇报。
-  **注（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 三项已在本 session 全部根治（见 §2.2 已完成摘要）。
+- **阶段 5 `yield` 惰性生成器已完成（2026-08-08，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
+  含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消），单可恢复驱动
+  `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。
+  独立分支 exp/yield-generator 实验 → 手动应用 c8b8956。设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
+- **后续增量（可选起点）**：阶段 5 增量（`next()` 内建 / `yield from` / streaming / host async 改进）或
+  待办池（`PENDING_TASKS.md`：PT-FEAT-2 Enum 非 str 成员 / PT-FEAT-5 错误用户友好化 / PT-FEAT-10/11/12）。
+- **架构缺陷优先起点清空（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 **三项已全部根治**（见 §2.2）。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   `kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
   12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计权威
@@ -148,6 +144,14 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
+- **2026-08-08（阶段 5 yield 惰性生成器，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
+  含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消）。词法 `yield` 关键字 + 语法
+  `yield` 表达式（LOWEST 优先级）+ AST `IbYieldExpr`/`is_generator`；语义 `_contains_yield` 自动标记 +
+  yield 仅函数体内（`SEM_YIELD_OUTSIDE_FUNCTION`）+ 返回类型 `generator[T]`；类型 `GENERATOR` TypeKind +
+  `generator[T]` 泛型全链路；VM `vm_handle_IbYieldExpr` yield `GeneratorYield` 标记 + `_drive_generator_loop`
+  单可恢复驱动（与 `_drive_loop_gen` 同构）；运行时 `IbGenerator` 值对象 + `for`/`to_list` 迭代。
+  独立分支 exp/yield-generator 实验 → 手动应用 c8b8956。设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
+  e2e 9 项（基础迭代/状态保留/嵌套循环/条件内 yield/break/生成器 as 值/LLM 组合/auto 赋值/非函数体报错）。
 - **2026-08-08（PT-DEBT-11/9/10 根治，unsafe-vibe-dev，全量 2029 passed / 1 skipped）**：
   ① **PT-DEBT-11**（4bf2644）——`UserFunctionCall` 下沉 `core/runtime/shared/user_call.py`（与 Signal/Waitable 同类叶子），handler/线程体不再向上依赖 VMExecutor 内部类；② **PT-DEBT-9**（c75541f）——环境限制异常（RecursionError/MemoryError/SystemError）根因保留：`core/runtime/shared/env_limits.py` 判定 + `diagnostics.handle_environment_limit` 发射 `KDIAG_RUNTIME_ENV_LIMIT` 诊断，VM 五处语义错误包装站点不再掩盖根因（+2 测试）；③ **PT-DEBT-10**——`_drive_generator` 改显式生成器栈（trampoline，与 `_drive_loop_gen` 同构），线程体内深递归不再嵌套 Python 栈；顺带根治线程体模块级函数解析（任务全局作用域链到模块作用域）、线程逻辑栈上限对齐主路径、`_vm_call_user_function`/`IbUserFunction.call`/`IbLLMFunction.call` push 后 finally 无条件 pop 的栈不均衡潜在 bug（+1 测试）。详见 WORKLOG 与 git 历史。
 - **2026-08-08（本 session 收尾，unsafe-vibe-dev，全量 2026 passed / 1 skipped）**：

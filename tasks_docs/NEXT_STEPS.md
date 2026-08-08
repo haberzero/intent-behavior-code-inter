@@ -53,6 +53,20 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ---
 
+## ✅ 已完成：阶段 5 yield 惰性生成器（2026-08-08）
+
+> **unsafe-vibe-dev，全量 2043 passed / 1 skipped**（基线 2029，+14）。独立分支 exp/yield-generator 实验 → 手动应用（设计/决策见 `tasks_docs/YIELD_GENERATOR_DESIGN.md`）。
+
+- **yield 惰性生成器落地**（c8b8956）：含 `yield` 的函数自动为惰性生成器（D-08 自标记函数种类，无 async 关键字）。
+  - 词法 `yield` 关键字 + 语法 `yield` 表达式（LOWEST 优先级，`yield x+1` 产出 `x+1`）+ AST `IbYieldExpr`/`IbFunctionDef.is_generator`。
+  - 语义 `_contains_yield` 自动标记生成器；yield 仅函数体内（`SEM_YIELD_OUTSIDE_FUNCTION`）；生成器返回类型 = `generator[元素类型]`。
+  - 类型 `GENERATOR` TypeKind + `generator[T]` 泛型（factory/generic/type_ref/artifact_rehydrator 全链路）。
+  - VM `vm_handle_IbYieldExpr` yield `GeneratorYield(value)` 标记 + `_drive_generator_loop` 单可恢复驱动（与 `_drive_loop_gen` 同构，GeneratorYield 挂起交付、Waitable 宿主等待）。
+  - 运行时 `IbGenerator` 值对象 + `for`/`to_list` 迭代；调用路径经 UserFunctionCall/make_generator_driver。
+  - **e2e 9 项**：基础迭代/状态跨 yield 保留/嵌套循环/条件内 yield/break 提前终止/生成器 as 值/LLM 组合（await 正交）/auto 赋值/非函数体 yield 报错。
+  - docs/syntax/05_functions.md §5.8 惰性生成器章节。
+- **架构缺陷优先起点清空**：PT-DEBT-9/10/11 全部根治（上一批次）。下一主线已完成，无阻塞项。
+
 ## ✅ 已完成：2026-08-08 批次（PT-DEBT-11/9/10 根治）
 
 > **unsafe-vibe-dev，全量 2029 passed / 1 skipped**。完整记录见 `WORKLOG` 与 git 历史。
@@ -90,11 +104,8 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ## 📋 交接要点（下一 session）
 
-- **架构缺陷优先起点清空（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 **三项已全部根治**（见下方"已完成"节）。下一主线即阶段 5 `yield` 惰性生成器；无阻塞项。
-- **首要任务（下一主线，阶段 5）**：**`yield` 惰性生成器**（`EXEC_FOUNDATION_DESIGN.md` §5.2，D-08 定案
-  yield 自标记函数种类；async 关键字已取消）。前置全部就绪：调度器执行核心 + R 批次（trampoline/通知式
-  唤醒/Waitable 家族）稳定。**注意**：这是一个大型独立特性（生成器体需单可恢复驱动，见设计 §5.2），
-  建议先独立分支实验。
+- **阶段 5 yield 惰性生成器已完成（2026-08-08）**：下一主线已落地（见上方"已完成"节）。**无阻塞项**；阶段 5 设计权威 `YIELD_GENERATOR_DESIGN.md`。
+- **后续增量（可选起点）**：阶段 5 之后的增量路线——streaming / host async 改进 / `next()` 内建 / `yield from`（见 `YIELD_GENERATOR_DESIGN.md` §五）。亦可转向 `PENDING_TASKS.md` 待办池（PT-FEAT-2 Enum 非 str 成员 / PT-FEAT-5 错误用户友好化 / PT-FEAT-10/11/12 低优先级）。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
   12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。

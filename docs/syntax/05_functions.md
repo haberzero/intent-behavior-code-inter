@@ -213,6 +213,38 @@ str ret = f.__return_type__() # "bool"
 | `f.__return_type__()` | 返回类型规范名（`-> auto` 已按 body/LLM 语义锁定为具体类型） |
 
 签名形态遵循类型名约定（无空格）：`fn_callable[()->int]`、`behavior[(auto)->str]`。返回类型非具体（`-> any`）时退化为裸 `fn_callable`/`behavior`；用户函数（`callable`）的 `type()` 返回裸 `callable`。
+
+### 5.8 惰性生成器（`yield`）
+
+含 `yield` 的函数自动为**惰性生成器**（自标记函数种类，无需 async 关键字）：`yield x` 挂起产出值 `x`，迭代（`for`）恢复继续执行。函数体在 `yield` 点保留**整个帧状态**（循环位置、局部变量），故生成器体由单一可恢复驱动承载。
+
+```ibci
+func count(int n) -> int:   # 含 yield → 惰性生成器（返回类型=generator[int]）
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+for int x in count(3):
+    print(x)           # 0 1 2
+```
+
+**语义要点**：
+
+- `yield` 低优先级解析操作数：`yield x + 1` 产出 `x + 1`。
+- 生成器函数调用返回生成器对象（惰性，不执行函数体）；可赋 `auto` 变量后再迭代。
+- `yield` 只能在函数体内（模块顶层报 `SEM_YIELD_OUTSIDE_FUNCTION`）。
+- 生成器体内可挂起 LLM 行为（`@~...~`）等 Waitable——与 `await` 正交组合。
+- 消费者 `break` 提前终止（生成器不再推进）。
+- 保留类型：`generator[T]`（显式注解）或 `auto` 推断。
+
+```ibci
+auto g = count(4)         # generator[int]
+for int x in g:
+    print(x)
+```
+
 ---
 
 ## 深入指引
