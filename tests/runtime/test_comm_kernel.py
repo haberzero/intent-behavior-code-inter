@@ -265,6 +265,26 @@ class TestSlot:
             t.join()
         assert s.get() == n
 
+    def test_cas_success(self):
+        """单次 CAS：当前值匹配时写回成功。"""
+        s = SlotCore("x", 10)
+        assert s.cas(10, 11) is True
+        assert s.get() == 11
+
+    def test_cas_conflict_returns_false(self):
+        """单次 CAS：当前值被并发修改时不写回，返回 False。"""
+        s = SlotCore("x", 10)
+        assert s.cas(99, 11) is False  # expected 不匹配，不写回
+        assert s.get() == 10
+
+    def test_cas_retry_loop(self):
+        """CAS 冲突后基于最新值重试（与 _SlotUpdateWaitable 同构的循环）。"""
+        s = SlotCore("score", 0)
+        expected = s.get()
+        while not s.cas(expected, expected + 1):
+            expected = s.get()
+        assert s.get() == 1
+
     def test_update_exception_no_write(self):
         s = SlotCore("x", 1)
         with pytest.raises(ValueError):

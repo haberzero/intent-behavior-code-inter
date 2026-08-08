@@ -58,6 +58,18 @@ class SlotCore:
                 current = self._value
             new_value = fn(current)
 
+    def cas(self, expected: Any, new_value: Any) -> bool:
+        """单次 CAS 写回：仅当前值仍为 ``expected`` 时写 ``new_value``。
+
+        返回是否写回成功（False 表示期间被并发修改，调用方应基于最新值重算重试）。
+        供 CPS 驱动的原子读改写（``_SlotUpdateWaitable``）在锁外求值新值后使用。
+        """
+        with self._lock:
+            if self._value is expected:
+                self._value = new_value
+                return True
+            return False
+
     def snapshot(self) -> dict:
         with self._lock:
             return {"name": self._name, "value": self._value}

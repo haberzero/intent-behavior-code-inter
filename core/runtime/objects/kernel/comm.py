@@ -221,30 +221,26 @@ class IbSlot(IbObject):
         """写新值。"""
         self.core.set(unbox(value))
 
-    def update(self, value) -> None:
+    def update(self, value) -> Any:
         """原子读改写：以 value 覆盖，或对可调用对象执行 fn(当前值) → 新值。
 
         语言层 update 接受：
         - 普通值：原子 set（覆盖）；
         - 可调用对象（fn_callable / behavior）：走 SlotCore 的 CAS 读改写，
-          锁外执行 fn（IBCI 函数经同步后备 .call 驱动），冲突时基于最新值重试。
+          锁外执行 fn，冲突时基于最新值重试。
 
         约束：fn 在锁外执行、应无副作用且不内嵌通信操作（否则可能死锁）；
-        behavior 为 LLM 调用，CAS 重试会重复推理，fn 须是确定性函数。
+        CAS 重试会重复调用 fn，故 fn 须是确定性函数。
+
+        **F2（PT-DEBT-14）阻塞即挂起**：fn 为可调用对象时，本方法返回一个
+        Waitable（不再经同步 ``.call`` 驱动——那会嵌套调度器或阻塞 LLM）。
+        VM 经既有 Waitable 挂起路径驱动本 Waitable，在 **当前帧** 内经 CPS
+        驱动 fn 求值并完成 CAS 读改写；宿主经 ``.result()`` 阻塞完成。
         """
         if value.ib_class.name in ("fn_callable", "behavior"):
-            self.core.update(lambda old: unbox(self._invoke_update_fn(value, old)))
-        else:
-            self.core.set(unbox(value))
-
-    def _invoke_update_fn(self, fn, old_value: Any) -> "IbObject":
-        """在 CAS 锁外调用 IBCI 函数：读改写语义 fn(当前值) → 新值。
-
-        复用可调用对象的同步后备 ``.call``（fn_callable → vm.run /
-        behavior → invoke_behavior），返回装箱结果供 unbox 拆为原生值。
-        """
-        boxed_old = self.ib_class.registry.box(old_value)
-        return fn.call(self.ib_class.registry.get_none(), [boxed_old])
+            return _SlotUpdateWaitable(self, value)
+        self.core.set(unbox(value))
+        return None
 
     def __to_prompt__(self) -> str:
         return f"<slot {self.core.name}>"
@@ -261,3 +257,68 @@ class IbSlot(IbObject):
 
     def __repr__(self):
         return f"<Slot name={self.core.name}>"
+
+
+class _SlotUpdateWaitable:
+    """``slot.update(fn)`` 的 CAS 读改写 Waitable（F2：当前帧 CPS 驱动 fn）。
+
+    当 ``update`` 的可调用分支返回本对象时，VM 经既有 Waitable 挂起路径驱动它：
+    ``try_result()`` 在挂起恢复后读取当前值，经 ``_vm_call_fn_callable``
+    （fn_callable）或 ``_vm_invoke_behavior``（behavior）在**当前 VM 帧** CPS 驱动
+    fn 求值得到新值，CAS 写回（冲突则基于最新值重试），完成。消除了经同步 ``.call``
+    驱动（lambda → 嵌套调度器 / behavior → 阻塞 LLM）的遗留妥协。
+    """
+
+    def __init__(self, slot: "IbSlot", fn):
+        self._slot = slot
+        self._fn = fn
+        self._done = False
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+    def _drive(self) -> None:
+        from core.runtime.frame import get_current_execution_context
+        from core.runtime.coordinator import _drive_generator
+        from core.runtime.vm.handlers._shared import _vm_call_fn_callable, _vm_invoke_behavior
+
+        core = self._slot.core
+        registry = self._slot.ib_class.registry
+        fn = self._fn
+        executor = get_current_execution_context()
+        vm = executor.vm_executor if executor is not None else None
+        if vm is None:
+            # 宿主 / 线程体上下文：无当前 VM，回退到同步 .call（非调度路径，无嵌套调度器）。
+            while not self._done:
+                current = core.get()
+                boxed_old = registry.box(current)
+                new_ib = fn.call(registry.get_none(), [boxed_old])
+                new_val = unbox(new_ib)
+                if core.cas(current, new_val):
+                    self._done = True
+            return
+        while not self._done:
+            current = core.get()
+            boxed_old = registry.box(current)
+            if fn.ib_class.name == "fn_callable":
+                gen = _vm_call_fn_callable(vm, fn, [boxed_old])
+            else:
+                gen = _vm_invoke_behavior(vm, fn, [boxed_old])
+            new_ib = _drive_generator(vm, gen)
+            new_val = unbox(new_ib)
+            if core.cas(current, new_val):
+                self._done = True
+
+    def try_result(self):
+        if self._done:
+            return (True, None)
+        self._drive()
+        return (True, None)
+
+    def result(self):
+        self._drive()
+        return None
+
+    def register_wake(self, event) -> None:
+        event.set()
