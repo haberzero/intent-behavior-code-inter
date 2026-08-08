@@ -308,8 +308,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 |--------|------|--------|
 | `__ibcext_vtable__()` | 提供虚表（方法名映射） | Dict[str, Callable] |
 | `__ibcext_metadata__()` | 提供插件元数据 | Dict[str, Any] |
-| `create_factory()` | 工厂函数入口 | Callable |
-| `create_implementation()` | 实现创建函数 | IbPlugin 实例 |
+| `create_implementation()` | 实现创建函数 | 插件实现实例 |
 
 **示例（插件）**：
 ```python
@@ -376,13 +375,13 @@ def __ibcext_vtable__():
 
 #### 7.3.5 二进制打包兼容性
 
-只要保留完整的 Python 解释器，`__attr__` 反射机制、`importlib`、`dir()` 等均能正常工作。
+只要保留完整的 Python 解释器，`importlib`、插件实现 proxy 包装与 `__getattr__` 白名单访问等均能正常工作。
 
 #### 7.3.6 向后兼容策略
 
 | 场景 | 处理方式 |
 |------|----------|
-| **混合使用** | 同时支持 `@ibcext.method` 和 `__ibcext_vtable__()` |
+| **插件声明** | 统一经 `_spec.py` 的 `__ibcext_metadata__()` + `__ibcext_vtable__()` 协议声明 |
 
 #### 7.3.7 编译构建流程（静态类型检查保留）
 

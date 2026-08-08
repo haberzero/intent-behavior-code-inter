@@ -72,6 +72,9 @@
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 | PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | 原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此）：`ibcc` 构建命令 `--pre-scan-specs` 扫描 `_spec.py` 生成 `.ibc_meta` 快照，`export_metadata()`/`load_metadata_from_file()` 使编译器离线复用元数据，减少运行时发现开销。当前为全量 `discover_all() → HostInterface.metadata` 流程 |
 | PT-FEAT-9 | 内核结构化诊断/可观测性机制（CORE_DEBUG 替代物） | **已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：`kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+ 12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计/决策见下方 §12（归档记录） |
+| PT-FEAT-10 | UID 生成统一（符号/节点/类型） | **登记于文档清理（2026-08-08）**：原 `02_metadata_ast.md §九 优化1` 愿景内容。符号/节点/类型 UID 生成逻辑分散（`symbols.py` 作用域链式、`serialization.py` 内容哈希带 `node_` 前缀、类型 `type_{module}.{name}`），建议统一 `UIDGenerator` 单一入口。低优先级，机制正确但可收敛 |
+| PT-FEAT-11 | 序列化器自动化（消除手动 `_collect_*` 调用） | **登记于文档清理（2026-08-08）**：原 `02_metadata_ast.md §九 优化3` 愿景内容。`FlatSerializer` 手动调用 `_collect_node`/`_collect_symbol`，建议按类型自动识别收集。低优先级，现有实现正确 |
+| PT-FEAT-12 | AST 节点 UID 字段（编译期可见） | **登记于文档清理（2026-08-08）**：原 `02_metadata_ast.md §九 优化4` 愿景内容。UID 现仅序列化时生成，编译期不可见；建议 AST 节点加可选 `uid` 字段供编译期查询。低优先级，涉及 AST 结构变更（须查 `02_metadata_ast.md`） |
 
 ---
 

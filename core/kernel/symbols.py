@@ -26,8 +26,6 @@ class Symbol:
     """Static symbol base class.
 
     ``spec`` holds the pure-data IbSpec of this symbol's type.
-    The old field was named ``descriptor`` and held a TypeDescriptor;
-    keeping the field name ``spec`` makes the new semantics explicit.
     """
     name: str
     kind: SymbolKind
