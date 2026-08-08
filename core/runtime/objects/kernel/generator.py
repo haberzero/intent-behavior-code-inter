@@ -9,11 +9,9 @@ core.runtime.objects.kernel.generator — 惰性生成器对象（阶段 5 yield
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, List
 
-from ...shared.signals import GeneratorYield, UnhandledSignal
-from ...shared.waitable import Waitable
-from ...shared.user_call import UserFunctionCall
+from ...shared.signals import GeneratorYield
 from .base import IbValue
 
 
