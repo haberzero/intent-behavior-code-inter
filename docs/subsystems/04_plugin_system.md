@@ -1,7 +1,7 @@
 # IBCI 插件与模块系统
 
 > 本文档描述 IBCI 的模块系统、插件发现机制与用户插件开发流程。面向需要开发或维护插件的开发者。
-> 内置模块（ai/file/ihost/idbg/isys/json）的 API 属语法参考层，见 `docs/syntax/11_modules.md`；
+> 内置模块（ai/file/ihost/idbg/isys/iruntime 内核原生 + json 仓库插件）的 API 属语法参考层，见 `docs/syntax/11_modules.md`；
 > 模块与插件基础语法见 `docs/SYNTAX_REFERENCE.md` §11。
 
 ---

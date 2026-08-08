@@ -71,7 +71,7 @@ python -c "from ibci_sdk.check import check_plugin; r = check_plugin('plugins/my
 
 ## 约定与边界
 
-- 插件名不可与内核原生模块（`ai`/`file`/`ihost`/`idbg`/`isys`）重名。
+- 插件名不可与内核原生模块（`ai`/`file`/`ihost`/`idbg`/`isys`/`iruntime`）重名。
 - 插件应保持无状态：可变数据放在实例字段，不放 Python 模块级全局变量（多引擎共享进程时隔离依赖此约定）。
 - `import` 必须出现在文件顶部。
 

@@ -356,19 +356,19 @@ def dispatch_behavior(node: IbBehaviorExpr):
 
 ---
 
-## 十、参考资料
+## 九、参考资料
 
-### 10.1 相关文档
+### 9.1 相关文档
 
 - `core/compiler/serialization/serializer.py` - 序列化实现
 
-### 10.2 关键代码位置
+### 9.2 关键代码位置
 - AST 定义：`core/kernel/ast.py`
 - 侧表管理：经 `ExecutionContext.get_side_table` 读取 + 序列化器 `side_tables` 承载
 - 序列化器：`core/compiler/serialization/serializer.py`
 - Semantic Passes：`core/compiler/semantic/passes/`
 
-### 10.3 语义分析 4-Phase 流水线
+### 9.3 语义分析 4-Phase 流水线
 
 `core/compiler/semantic/pipeline.py:create_semantic_pipeline()` 创建标准管道：
 
@@ -383,7 +383,7 @@ Phase 间通过 `PassOutput`（symbol_bindings / type_bindings / diagnostics）�
 
 ---
 
-## 十一、Symbol 冲突解析
+## 十、Symbol 冲突解析
 
 `Symbol.provenance: Provenance` 是符号来源的唯一标志。`SymbolTable.define` 使用 `existing.provenance.compatible_with(sym.provenance)` 做冲突检测，分发通过协议方法完成。
 

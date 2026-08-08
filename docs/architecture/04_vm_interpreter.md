@@ -373,7 +373,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ### 8.3 子解释器隔离路径
 
-`spawn_isolated` 走新建独立 `IBCIEngine` 路径：子引擎持有自己的 `KernelRegistry`（类型隔离经 `SpecRegistry` 的克隆机制），与父引擎共享事件总线（观测全局）。主解释器与子解释器不共享 registry 实例。
+`spawn_isolated` 走新建独立 `IBCIEngine` 路径：子引擎持有自己的 `KernelRegistry`（类型隔离经 `SpecRegistry` 的克隆机制）与自己的事件总线。主解释器与子解释器不共享 registry 实例，跨引擎事件不共享（同一引擎内多 interpreter/线程任务共享引擎级总线）。
 
 ### 8.4 合规测试
 

@@ -279,7 +279,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 | 级别 | 说明 | 包含模块/插件 |
 |------|------|---------------|
-| 内核原生（kernel-native）| 随内核发行，构造期预注册，IMPORT_GATED；不位于 `ibci_modules/`，不可被用户插件覆盖 | `ai` / `file` / `ihost` / `idbg` / `isys` |
+| 内核原生（kernel-native）| 随内核发行，构造期经 bootstrap 预注册，IMPORT_GATED；物理位于 `ibci_modules/` 但不可被用户插件覆盖 | `ai` / `file` / `ihost` / `idbg` / `isys` / `iruntime` |
 | 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema` |
 | 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg` |
 

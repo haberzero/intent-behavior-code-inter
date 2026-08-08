@@ -196,7 +196,7 @@ json.set_nested(obj, path, value)    # 按路径设置嵌套值
 
 ### 11.9 用户插件
 
-插件文件须放置于工程的 `./plugins` 目录，以 Python 编写，通过 `_spec.py` 声明元数据。内核原生模块（`ai`/`file`/`ihost`/`idbg`/`isys`）不位于插件目录，不可被用户插件覆盖。
+插件文件须放置于工程的 `./plugins` 目录，以 Python 编写，通过 `_spec.py` 声明元数据。内核原生模块（`ai`/`file`/`ihost`/`idbg`/`isys`/`iruntime`）不位于插件目录，不可被用户插件覆盖。
 ---
 
 ## 深入指引

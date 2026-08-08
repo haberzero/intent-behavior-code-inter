@@ -136,7 +136,7 @@ scheduler 主循环（TaskScheduler.run）:
 
 **公理 ISO-1（独立 RuntimeContext）**：每个子 Interpreter 拥有独立的 `RuntimeContextImpl` 实例，不与主 Interpreter 或其他子 Interpreter 共享任何可变状态。
 
-**公理 ISO-2（只读共享 Registry）**：子 Interpreter 与主 Interpreter 共享 `KernelRegistry`（只读），不共享运行时对象实例。
+**公理 ISO-2（独立 Registry）**：隔离子 Interpreter 运行在新建的独立 `IBCIEngine` 中，持有自己的 `KernelRegistry`（类型隔离经 `SpecRegistry` 克隆）；主 Interpreter 与隔离子引擎不共享 registry 实例。
 
 **公理 ISO-3（线程安全）**：子 Interpreter 在独立线程（`threading.Thread`）中运行；`ContextVar` 在线程中独立，不发生竞争。
 
@@ -239,7 +239,7 @@ python -m pytest tests/compliance/ -v
 | **LLM-3** | 确定性输出 | §3.2 |
 | **LLM-4** | 批量并发执行（`ai.run_batch`） | §3.4 |
 | **ISO-1** | 独立 RuntimeContext | §4.1 |
-| **ISO-2** | 只读共享 Registry | §4.1 |
+| **ISO-2** | 独立 Registry | §4.1 |
 | **ISO-3** | 线程安全 | §4.1 |
 | **ISO-4** | spawn 非阻塞 | §4.2 |
 | **ISO-5** | collect 提取 | §4.2 |
