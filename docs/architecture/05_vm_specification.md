@@ -10,22 +10,23 @@
 
 ## §1 执行模型（Execution Model）
 
-### §1.1 CPS 调度循环
+### §1.1 执行循环（调度器驱动）
 
-IBCI VM 使用**显式帧栈 + CPS（Continuation-Passing Style）调度循环**执行 AST（`core/runtime/vm/vm_executor.py`）：
+IBCI VM 使用**显式帧栈 + CPS（Continuation-Passing Style）执行循环**（`core/runtime/vm/vm_executor.py`），由**协作调度器**（`core/runtime/vm/task_scheduler.py`）驱动：
 
 ```
-while frame_stack:
-    task = frame_stack.top()
-    child_uid = task.generator.send(pending_value)
-    if isinstance(child_uid, str):
-        frame_stack.push(make_task(child_uid))
-    # or:
-    # StopIteration → pop, deliver value to parent
-    # Exception     → pop, throw to parent
+scheduler 主循环（TaskScheduler.run）:
+    对所有活跃任务：
+        step = 任务步进（_drive_loop_gen 内层循环驱动生成器）
+        if 步进 yield Waitable（LLMFuture/HostAwaitable/chan recv）:
+            register_wake(_wake_event) → 挂起任务（非阻塞）
+        elif 步进 yield _UserFunctionCall:
+            trampoline：函数体作为独立 VMTask 压栈（无 Python 递归）
+        else: 推进帧栈（send → 压栈 child / StopIteration 弹栈交付）
+    全部任务挂起时：_wake_event.wait(park)（通知式唤醒，无轮询延迟）
 ```
 
-**公理 EXEC-1（无 Python 递归）**：主执行路径（`VMExecutor._drive_loop`）不使用 Python 递归栈；IBCI 调用深度不受 `sys.setrecursionlimit` 限制。
+**公理 EXEC-1（无 Python 递归）**：主执行路径（`VMExecutor._drive_loop_gen`）不使用 Python 递归栈；IBCI 调用深度不受 `sys.setrecursionlimit` 限制。用户函数调用经 trampoline（`_UserFunctionCall` 压栈为独立 VMTask），深递归下 Python 深度恒定。
 
 **公理 EXEC-2（控制流数据化）**：控制流信号（`return`/`break`/`continue`/`throw`）以数据对象 `Signal(kind, value)` 在帧栈间传播，不使用 Python 异常跨帧传递。外部边界（帧栈空仍持有 Signal）以 `UnhandledSignal` 透传给调用方处理。
 

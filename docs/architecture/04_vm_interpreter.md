@@ -200,23 +200,24 @@ class IExecutionFrame(Protocol):
 
 ### 5.3 运行期：LLMScheduler / LLMFuture
 
-`core/runtime/interpreter/llm_scheduler.py`：
+`core/runtime/interpreter/llm_executor/_scheduler.py`：
 
 | 入口 | 行为 |
 |------|------|
-| `dispatch_eager(node_uid, prompt_args, intent_ctx) -> LLMFuture` | 立即提交 `ThreadPoolExecutor`，返回 Future（不阻塞） |
-| `LLMFuture.resolve()` | 阻塞等待 LLM HTTP 完成，返回真实 `IbObject` |
+| `dispatch_eager(node_uid, execution_context, intent_ctx) -> LLMFuture` | 主线程完成 prompt 段预求值，后台线程执行 `_call_and_parse`；返回 `LLMFuture`（不阻塞） |
+| `LLMFuture`（Waitable） | 满足 Waitable 协议：`is_done` / `try_result` / `register_wake`，供调度器协作消费 |
+| `resolve_future_cps(future)` | CPS 读点：`yield future` 给调度器挂起当前任务，LLM 就绪后恢复——非阻塞当前线程 |
 
 VM 行为：
-- `vm_handle_IbAssign`：`rhs` 是 behavior 且 `dispatch_eligible=True` → `LLMScheduler.dispatch_eager()`，把 `LLMFuture` 写入 scope（`define_raw`）。
-- `vm_handle_IbName`：读取时若拿到 `LLMFuture` → `resolve()` 阻塞 → 真实 `IbObject` 写回 scope，后续读取 O(1)。
+- `vm_handle_IbAssign`：`rhs` 是 behavior 且 `dispatch_eligible=True` → `dispatch_eager()`，把 `LLMFuture` 写入 scope（`define_raw`）。
+- 读点（`vm_handle_IbName` / 操作数求值）：若拿到 `LLMFuture` → `yield from resolve_future_cps(future)` 挂起等待，调度器在通知式唤醒下即时恢复；结果写回 scope，后续读取 O(1)。
 
 ### 5.4 公理（与 `05_vm_specification.md` §3 对齐）
 
 | 公理 | 内容 |
 |------|------|
 | **LLM-1** | dispatch_eligible=True 时立即 dispatch_eager，写入 LLMFuture |
-| **LLM-2** | 读取点 lazy resolve，O(1) 命中后续读取 |
+| **LLM-2** | 读点经 `resolve_future_cps` 挂起等待（协作，不阻塞当前线程），O(1) 命中后续读取 |
 | **LLM-3** | 并发 dispatch 不改变输出顺序，按语句语义顺序提交 |
 
 ### 5.5 LLM 调用路径（当前实现）
@@ -224,10 +225,10 @@ VM 行为：
 ```text
 表达式：x = @~ ... ~
    ├── dispatch_eligible=True：
-   │     vm_handle_IbAssign → LLMScheduler.dispatch_eager()
-   │       → ThreadPoolExecutor.submit(_call_llm)
-   │       → IbLLMFuture 写入 scope
-   │     使用点 vm_handle_IbName → future.resolve()
+   │     vm_handle_IbAssign → LLMExecutor.dispatch_eager()
+   │       → ThreadPoolExecutor.submit(_call_and_parse)
+   │       → LLMFuture 写入 scope（满足 Waitable）
+   │     读点 vm_handle_IbName → resolve_future_cps 挂起 → 恢复得结果
    │
    └── dispatch_eligible=False：
          vm_handle_IbAssign → LLMExecutorImpl.execute_behavior_expression(...)

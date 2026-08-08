@@ -145,7 +145,7 @@ str r = translate("hello")
 >   （例如 `fn[() -> int] f = lambda -> auto: @~...~` 因实际为 str 而报错，须写
 >   `lambda -> int:`）。
 
-其中 `TYPE` 可以是任意类型（包括泛型如 `tuple[int,str]`、`list[str]`，以及用户自定义类名）。**要求 `TYPE` 具备 LLM 解析能力**：内建类型（`int`/`str`/`list` 等）或声明了 `__from_prompt__` 的用户类；否则报 `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE`（详见 `KNOWN_LIMITS.md` §四.1）。
+其中 `TYPE` 可以是任意类型（包括泛型如 `tuple[int,str]`、`list[str]`，以及用户自定义类名）。**要求 `TYPE` 具备 LLM 解析能力**：内建类型（`int`/`str`/`list` 等）或声明了 `__from_prompt__` 的用户类；否则报 `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE`（详见 `docs/KNOWN_LIMITS.md` §四.1）。
 
 ```ibci
 fn add = lambda(int a, int b) -> int: a + b

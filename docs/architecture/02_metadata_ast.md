@@ -193,12 +193,12 @@ def _process_value(self, value):
 **确定性 UID**：保证相同内容生成相同 UID
 
 ```python
-# 符号 UID：基于名字和作用域深度
-symbol.uid = f"{name}@{depth}"
+# 作用域 UID：根 `scope_{name}`，子作用域 `{parent.uid}/{child_name}` 链式
+# 符号 UID：`{scope.uid}:{sym.name}`（作用域链式，见 symbols.py）
 
-# 节点 UID：基于内容哈希
+# 节点 UID：内容哈希带 `node_` 前缀
 content = json.dumps(node_data, sort_keys=True)
-node_uid = hashlib.sha256(content).hexdigest()[:16]
+node_uid = f"node_{hashlib.sha256(content).hexdigest()[:16]}"
 
 # 类型 UID：基于完全限定名
 type_uid = f"type_{module_path}.{name}"
@@ -252,52 +252,34 @@ node.dispatch_eligible = True
 
 ---
 
-## 六、MetadataStore 的重新定位
+## 六、MetadataStore 的职责边界
 
-### 6.1 当前角色（临时中介）
+### 6.1 数据结构
 
-**MetadataStore 是侧表的 UID 版本**，主要用于支持不可变上下文传递：
+`MetadataStore` 键为 AST 节点对象（Python object identity），由 Pipeline 在所有 Phase 完成后从合并的 PassOutput 构建（不可变 dataclass）：
 
 ```python
-@dataclass
+@dataclass(frozen=True)
 class MetadataStore:
-    """编译期查询索引（UID-based）"""
-    symbol_bindings: Dict[str, str]      # node_uid → symbol_uid
-    type_bindings: Dict[str, str]        # node_uid → type_uid
-    callable_instances: Set[str]
-    cell_captured_symbols: Set[str]
-    capture_modes: Dict[str, str]
+    node_to_symbol: Dict[Any, Any]      # AST 节点 → 符号定义
+    node_to_type: Dict[Any, Any]        # AST 节点 → 类型信息
+    node_to_loc: Dict[Any, Any]         # AST 节点 → 源码位置
+    cell_captured_symbols: Set[str]     # 被 Cell 捕获的符号 UID
+    get_symbol(node) / get_type(node) / get_location(node) / is_cell_captured(uid)
 ```
+
+对象键在序列化阶段由 FlatSerializer 统一转换为确定性哈希 UID（`node_{sha256[:16]}`）。
 
 ### 6.2 职责边界
 
 **应该存储的**：
-- 编译器生成的临时绑定（符号绑定、类型绑定）
-- 需要 UID 索引的分析结果（cell_captured_symbols）
+- 编译器生成的临时绑定（符号绑定、类型绑定、位置绑定）
+- 需要按节点查询的分析结果（cell_captured_symbols）
 
 **❌ 不应该存储的**：
 - AST 固有属性（llm_deps, dispatch_eligible）
 - 程序源码信息（已在 AST 上）
 - 运行时状态（属于 VM）
-
-### 6.3 长期愿景：统一序列化
-
-**目标**：消除 MetadataStore 的独立性，直接从侧表序列化
-
-```python
-# 理想架构（未来）
-class Serializer:
-    def serialize(self, context: CompilerContext) -> Artifact:
-        # 自动将 side_table 转换为 UID 映射
-        # AST 中的对象引用自动转换为 UID
-        # 输出统一的 Artifact 格式
-        pass
-```
-
-**优势**：
-- 消除中间层（MetadataStore）
-- 简化数据流（侧表 → 序列化器 → Artifact）
-- 编译器内部仍用 id() 保证性能
 
 ---
 
@@ -371,83 +353,6 @@ def dispatch_behavior(node: IbBehaviorExpr):
 ❌ **不要**在序列化器外部手动进行 id() → UID 转换  
 ❌ **不要**混用 id() 和 UID（除非清楚理解原因）  
 ❌ **不要**在运行时依赖编译器内存布局
-
----
-
-## 九、长期优化方向
-
-### 优化 1：统一 UID 生成策略
-**当前问题**：符号 UID、节点 UID、类型 UID 的生成逻辑分散
-
-**建议**：创建统一的 `UIDGenerator` 类
-```python
-class UIDGenerator:
-    @staticmethod
-    def for_symbol(name: str, depth: int) -> str:
-        return f"{name}@{depth}"
-    
-    @staticmethod
-    def for_node(node_data: dict) -> str:
-        content = json.dumps(node_data, sort_keys=True)
-        return hashlib.sha256(content).hexdigest()[:16]
-    
-    @staticmethod
-    def for_type(module: str, name: str) -> str:
-        return f"type_{module or 'root'}.{name}"
-```
-
-#### 优化 2：简化 MetadataStore
-**当前问题**：MetadataStore 试图通用化，但实际只用于特定场景
-
-**建议**：重命名为 `CompilerBindings`，明确为"编译器临时绑定"
-```python
-@dataclass
-class CompilerBindings:
-    """编译器临时绑定（序列化中介）
-    
-    职责：在序列化时提供 UID 索引，不存储 AST 固有属性
-    """
-    symbol_bindings: Dict[str, str]  # node_uid → symbol_uid
-    type_bindings: Dict[str, str]    # node_uid → type_uid
-    
-    # 特殊分析结果（需要 UID 持久化）
-    cell_captured_symbols: Set[str]
-    capture_modes: Dict[str, str]
-```
-
-#### 优化 3：序列化器自动化
-**当前问题**：需要手动调用 `_collect_node()`, `_collect_symbol()`
-
-**建议**：实现自动类型识别
-```python
-def _process_value(self, value):
-    """智能处理任意值的序列化"""
-    if isinstance(value, ast.IbASTNode):
-        return self._collect_node(value)
-    if isinstance(value, Symbol):
-        return self._collect_symbol(value)
-    if isinstance(value, IbSpec):
-        return self._collect_type(value)
-    if isinstance(value, list):
-        return [self._process_value(v) for v in value]
-    # ... 其他类型
-    return value  # 原始值
-```
-
-#### 优化 4：AST UID 字段
-**当前问题**：UID 在序列化时才生成，编译期不可见
-
-**建议**：在 AST 节点上添加可选的 UID 字段
-```python
-@dataclass
-class IbASTNode:
-    uid: Optional[str] = None  # 可选：编译器可设置
-```
-
-**优势**：
-- 编译期可以使用 UID 进行查询
-- 序列化时优先使用节点自带的 UID
-- 向后兼容（旧代码不设置 UID，序列化器自动生成）
 
 ---
 
