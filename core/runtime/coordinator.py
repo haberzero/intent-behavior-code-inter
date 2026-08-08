@@ -364,7 +364,7 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
             from core.runtime.vm.handlers._shared import _vm_call_user_function
 
             inner = _vm_call_user_function(
-                task_vm, yielded.func, task_vm.registry.get_none(), yielded.args
+                task_vm, yielded.func, yielded.receiver, yielded.args
             )
             stack.append(inner)
         else:

@@ -639,6 +639,7 @@ class Interpreter:
                     declared_type = self._resolve_type_from_symbol(sym_uid)
                     method_name = stmt_data["name"]
                     user_func = IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class)
+                    user_func.is_generator = bool(stmt_data.get("is_generator"))
                     ib_class.register_method(method_name, user_func)
 
                     # 显式绑定运算符方法（统一初始化路径）

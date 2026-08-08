@@ -24,8 +24,9 @@ class UserFunctionCall:
     栈上——深递归 Python 深度恒定（EXEC-1）。
     """
 
-    __slots__ = ("func", "args")
+    __slots__ = ("func", "args", "receiver")
 
-    def __init__(self, func, args):
+    def __init__(self, func, args, receiver=None):
         self.func = func
         self.args = args
+        self.receiver = receiver

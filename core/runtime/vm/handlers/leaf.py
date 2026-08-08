@@ -18,6 +18,7 @@ from core.runtime.objects.kernel import (
 )
 from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.kernel.ib_class import IbClass
+from core.runtime.objects.kernel.functions import IbBoundMethod
 from core.runtime.exceptions import (
     ThrownException,
 )
@@ -324,6 +325,30 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
             return IbGenerator(gen_class, driver)
         result = yield UserFunctionCall(func, args)
         return result
+
+    # F1（PT-DEBT-12）：用户方法调用 CPS 化——解包 IbBoundMethod（obj.method(x)）。
+    # 此前落回 receive('__call__') → IbBoundMethod.call → method.call(receiver)
+    # → IbUserFunction.call → vm.run_body（嵌套调度器，方法含 Waitable 时死锁、
+    # 深递归方法嵌套 Python 栈）。现在把 .method 提取出来经 CPS trampoline 调用，
+    # 并把 receiver 作为 self 注入（与 _vm_call_user_function 的 receiver 契约一致）。
+    if isinstance(func, IbBoundMethod):
+        method = func.method
+        receiver = func.receiver
+        if isinstance(method, IbUserFunction):
+            if getattr(method, "is_generator", False):
+                from core.runtime.objects.kernel.generator import IbGenerator
+                from core.runtime.shared.user_call import UserFunctionCall as _UFC
+
+                driver = yield _UFC(method, args, receiver)
+                gen_class = executor.registry.get_class("callable") or method.ib_class
+                return IbGenerator(gen_class, driver)
+            result = yield UserFunctionCall(method, args, receiver)
+            return result
+        if isinstance(method, IbLLMFunction):
+            result = yield from _vm_invoke_llm_function(
+                executor, method, receiver, args
+            )
+            return result
 
     try:
         # 统一走 receive('__call__') 协议分派（base.receive 内置 .call 兜底），

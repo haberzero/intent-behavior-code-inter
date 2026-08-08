@@ -436,7 +436,7 @@ class VMExecutor:
         from core.runtime.vm.handlers._shared import _vm_call_user_function
 
         gen = _vm_call_user_function(
-            self, call.func, self.registry.get_none(), call.args
+            self, call.func, call.receiver, call.args
         )
         return VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)
 
@@ -452,6 +452,6 @@ class VMExecutor:
         from core.runtime.vm.handlers._shared import _vm_call_user_function
 
         gen = _vm_call_user_function(
-            self, call.func, self.registry.get_none(), call.args
+            self, call.func, call.receiver, call.args
         )
         return self._drive_generator_loop([VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)])
