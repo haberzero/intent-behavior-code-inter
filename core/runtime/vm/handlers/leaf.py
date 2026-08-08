@@ -25,6 +25,7 @@ from core.kernel.issue import InterpreterError
 from core.runtime.objects.primitives import IbNone
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.shared.waitable import Waitable
+from core.runtime.shared.user_call import UserFunctionCall
 from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,
     _vm_invoke_behavior,
@@ -290,9 +291,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     # 不 yield from 生成器（会嵌套 Python 栈），而是 yield 函数调用请求，
     # 由 _drive_loop_gen 把函数体作为独立 VMTask 压栈——深递归 Python 深度恒定。
     if isinstance(func, IbUserFunction):
-        from core.runtime.vm.vm_executor import _UserFunctionCall
-
-        result = yield _UserFunctionCall(func, args)
+        result = yield UserFunctionCall(func, args)
         return result
 
     try:

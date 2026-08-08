@@ -39,22 +39,8 @@ from core.runtime.vm.handlers import (
     build_dispatch_table,
     build_one_shot_intent_from_annotation,
 )
+from core.runtime.shared.user_call import UserFunctionCall
 
-
-class _UserFunctionCall:
-    """用户函数调用请求（R1 trampoline 内部标记）。
-
-    ``vm_handle_IbCall`` 对 :class:`IbUserFunction` 调用 yield 本对象，
-    ``_drive_loop_gen`` 识别后把函数体作为独立 VMTask 压栈（而非 ``yield from``
-    生成器嵌套），使函数体生成器挂起时不在 Python 栈上——深递归 Python 深度恒定
-    （EXEC-1）。
-    """
-
-    __slots__ = ("func", "args")
-
-    def __init__(self, func, args):
-        self.func = func
-        self.args = args
 
 class VMExecutor:
     """显式帧栈 CPS 调度执行器。
@@ -292,7 +278,7 @@ class VMExecutor:
                 # IbUserFunction yield）——把函数体作为独立 VMTask 压栈，
                 # 函数体生成器挂起时不在 Python 栈上（EXEC-1：深递归
                 # Python 深度恒定）。函数完成 return 后调度器 send 回调用点。
-                if isinstance(child_uid, _UserFunctionCall):
+                if isinstance(child_uid, UserFunctionCall):
                     stack.append(self._make_user_function_task(child_uid))
                     continue
 
@@ -349,7 +335,7 @@ class VMExecutor:
         gen = handler(self, node_uid, node_data)
         return VMTask(node_uid=node_uid, generator=gen)
 
-    def _make_user_function_task(self, call: "_UserFunctionCall") -> VMTask:
+    def _make_user_function_task(self, call: "UserFunctionCall") -> VMTask:
         """为 R1 用户函数调用请求创建函数体 VMTask（trampoline 压栈）。
 
         函数体生成器为 ``_vm_call_user_function``（CPS 内联驱动，帧准备 +

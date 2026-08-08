@@ -313,7 +313,7 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
     """
     from core.runtime.shared.waitable import Waitable
     from core.runtime.shared.signals import UnhandledSignal
-    from core.runtime.vm.vm_executor import _UserFunctionCall
+    from core.runtime.shared.user_call import UserFunctionCall
 
     def _check_cancel() -> None:
         if cancel_event is not None and cancel_event.is_set():
@@ -339,7 +339,7 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
             except UnhandledSignal as us:
                 child_result = us.signal
             result, done = _step(child_result)
-        elif isinstance(result, _UserFunctionCall):
+        elif isinstance(result, UserFunctionCall):
             # 用户函数调用请求（R1 trampoline）：驱动函数体生成器（同步嵌套，
             # 线程体内递归深度受 OS 线程栈限制；VM 主路径为真 trampoline）
             from core.runtime.vm.handlers._shared import _vm_call_user_function

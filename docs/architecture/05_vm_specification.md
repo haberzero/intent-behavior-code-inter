@@ -20,13 +20,13 @@ scheduler 主循环（TaskScheduler.run）:
         step = 任务步进（_drive_loop_gen 内层循环驱动生成器）
         if 步进 yield Waitable（LLMFuture/HostAwaitable/chan recv）:
             register_wake(_wake_event) → 挂起任务（非阻塞）
-        elif 步进 yield _UserFunctionCall:
+        elif 步进 yield UserFunctionCall:
             trampoline：函数体作为独立 VMTask 压栈（无 Python 递归）
         else: 推进帧栈（send → 压栈 child / StopIteration 弹栈交付）
     全部任务挂起时：_wake_event.wait(park)（通知式唤醒，无轮询延迟）
 ```
 
-**公理 EXEC-1（无 Python 递归）**：主执行路径（`VMExecutor._drive_loop_gen`）不使用 Python 递归栈；IBCI 调用深度不受 `sys.setrecursionlimit` 限制。用户函数调用经 trampoline（`_UserFunctionCall` 压栈为独立 VMTask），深递归下 Python 深度恒定。
+**公理 EXEC-1（无 Python 递归）**：主执行路径（`VMExecutor._drive_loop_gen`）不使用 Python 递归栈；IBCI 调用深度不受 `sys.setrecursionlimit` 限制。用户函数调用经 trampoline（`UserFunctionCall` 压栈为独立 VMTask），深递归下 Python 深度恒定。
 
 **公理 EXEC-2（控制流数据化）**：控制流信号（`return`/`break`/`continue`/`throw`）以数据对象 `Signal(kind, value)` 在帧栈间传播，不使用 Python 异常跨帧传递。外部边界（帧栈空仍持有 Signal）以 `UnhandledSignal` 透传给调用方处理。
 

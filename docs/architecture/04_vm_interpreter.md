@@ -58,7 +58,7 @@ step(task) → _drive_loop_gen 单步:
         frame_stack.push(make_task(res))
     elif isinstance(res, Waitable):            # yield 阻塞操作 → 挂起任务
         res.register_wake(_wake_event); 任务转 park（协作，不阻塞线程）
-    elif isinstance(res, _UserFunctionCall):   # trampoline：函数体独立压栈
+    elif isinstance(res, UserFunctionCall):      # trampoline：函数体独立压栈
         make_user_function_task(res); frame_stack.push(it)
     elif StopIteration(value):                 # 协程结束
         if isinstance(value, Signal):
@@ -434,7 +434,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ## §11 设计不变量
 
-1. **统一执行入口**：所有 IBCI 代码执行经协作调度器（`TaskScheduler.run`）驱动；用户函数调用经 trampoline（`_UserFunctionCall` 独立压栈），handler 不可绕过调度循环递归调用。
+1. **统一执行入口**：所有 IBCI 代码执行经协作调度器（`TaskScheduler.run`）驱动；用户函数调用经 trampoline（`UserFunctionCall` 独立压栈），handler 不可绕过调度循环递归调用。
 2. **控制流数据化**：`Signal` 是控制流唯一表示；handler 内不允许 `raise ControlSignalException`。
 3. **执行帧抽象**：`IExecutionFrame` 协议是帧的对外契约；不允许直接读 `RuntimeContextImpl` 内部字段实现新功能。
 4. **LLM 服务通道唯一**：所有 LLM 调用必须经 `KernelRegistry.get_llm_executor()` 走 `IILLMExecutor`。
