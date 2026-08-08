@@ -97,6 +97,19 @@ print(counter())    # 3
 - 声明的变量必须在外层作用域中已存在，否则产生 SEM_NONLOCAL_NOT_FOUND 编译错误。
 - `nonlocal a, b` 支持一次声明多个外部变量。
 - nonlocal 变量通过闭包共享机制实现：多个闭包可以共享同一个外部变量，实现状态共享。
+
+**只读捕获（自动）**：嵌套函数体内**读取**外层变量无需 `nonlocal`——引用自动捕获为共享 cell（读捕获自动、写需 `nonlocal`）。
+
+```ibci
+func make_adder() -> fn:
+    int base = 10
+    func add(int x) -> int:
+        return base + x    # 读 base：自动捕获，无需 nonlocal
+    return add
+
+fn adder = make_adder()
+print(adder(5))    # 15
+```
 ---
 
 ## 深入指引

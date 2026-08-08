@@ -180,6 +180,7 @@ python main.py run test_target_proj/01_hello_world.ibci
 
 更多详情请参阅：
 
+- [入门指南](GETTING_STARTED.md)（**新加入者先读**：安装与环境准备）
 - [文档中心导航与治理](docs/README.md)（**新加入者先读**：目录结构、阅读路径、治理纪律）
 - [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
 - [架构原则](docs/ARCHITECTURE.md) (核心设计思路)

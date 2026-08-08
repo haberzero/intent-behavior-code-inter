@@ -393,6 +393,8 @@ class IbValue(IbObject):
 - `lambda`：引用语义。自由变量通过 `ScopeImpl.promote_to_cell()` 升为共享 `IbCell`，调用时读最新值。
 - `snapshot`：值语义。定义时刻对所有自由变量做深克隆形成只读种子，并对意图栈 `fork_intent_snapshot()`。每次调用前再次对种子深克隆注入子作用域——snapshot 不缓存任何结果，是完全无状态且可重入的可调用实例。
 
+**嵌套函数只读捕获**：嵌套函数体内引用的外层只读变量**自动捕获**为共享 `IbCell`（与 lambda 捕获机制同构，`binding_analysis_pass` 分析外层自由变量）。`nonlocal` 声明仅标记**写访问**——读捕获自动、写外层局部须显式 `nonlocal`。真闭包（外层返回后调用）只读捕获可用；写共享 cell 的隔离约束对任务内写主线程共享 cell 保持拦截。
+
 ---
 
 ## §8 Optional[T] 与空安全
@@ -416,7 +418,7 @@ class IbValue(IbObject):
 
 ---
 
-## §10 关联文档
+## §10 深入指引
 
 - 架构原则与设计理念：`docs/architecture/01_principles.md`
 - VM 与解释器架构：`docs/architecture/04_vm_interpreter.md`

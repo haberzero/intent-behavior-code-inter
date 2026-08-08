@@ -64,70 +64,11 @@
 
 ## 4. 用户插件开发
 
-### 4.1 目录结构
+插件的目录结构、`_spec.py` / `__init__.py` 模板与开发阶段校验的**操作指南**见 `docs/howto/write_user_plugin.md`（单点真理）。此处仅保留实现侧关注的 **vtable 参数声明细则**：
 
-```
-my_project/
-├── api_config.json
-├── main.ibci
-└── plugins/              ← 插件目录（自动嗅探）
-    └── my_plugin/
-        ├── __init__.py   ← 实现入口
-        └── _spec.py      ← 元数据声明
-```
+`__ibcext_vtable__()` 中 `params` 每个参数可声明字段：`name`（必填）、`type`（IBCI 类型名）、`default`（默认字面值，声明后参数可选）、`kind`（`POSITIONAL_OR_KEYWORD` 默认 / `VAR_POSITIONAL` / `VAR_KEYWORD` / `KEYWORD_ONLY`）。声明了 `name` 后，IBCI 侧即可对该模块函数进行具名调用与默认值填充；声明的参数名必须被实现函数按名接受（或实现接受 `**kwargs`），否则加载失败。声明 `VAR_KEYWORD`（`**kwargs`）时，实现必须接受 `**kwargs`，未声明的具名实参会在 IBCI 侧归集为 dict 并分传给它。
 
-### 4.2 _spec.py 模板
-
-```python
-def __ibcext_metadata__():
-    return {
-        "name": "my_plugin",
-        "version": "1.0.0",
-        "description": "My custom plugin",
-    }
-
-def __ibcext_vtable__():
-    return {
-        "functions": {
-            "greet": {
-                "params": [
-                    {"name": "name", "type": "str"},
-                    {"name": "punct", "type": "str", "default": "!", "kind": "POSITIONAL_OR_KEYWORD"},
-                ],
-                "return_type": "str",
-            },
-        },
-        "variables": {},
-    }
-```
-
-`params` 中每个参数可声明字段：`name`（必填）、`type`（IBCI 类型名）、`default`（默认字面值，声明后参数可选）、`kind`（`POSITIONAL_OR_KEYWORD` 默认 / `VAR_POSITIONAL` / `VAR_KEYWORD` / `KEYWORD_ONLY`）。声明了 `name` 后，IBCI 侧即可对该模块函数进行具名调用与默认值填充；声明的参数名必须被实现函数按名接受（或实现接受 `**kwargs`），否则加载失败。声明 `VAR_KEYWORD`（`**kwargs`）时，实现必须接受 `**kwargs`，未声明的具名实参会在 IBCI 侧归集为 dict 并分传给它。
-
-### 4.3 __init__.py 模板
-
-```python
-class Impl:
-    def greet(self, name):
-        return "Hello, " + name
-
-def create_implementation():
-    return Impl()
-```
-
-### 4.4 插件检查
-
-使用 `ibci_sdk.check` 模块在开发阶段预检插件：
-
-```python
-from ibci_sdk.check import check_plugin
-
-result = check_plugin("plugins/my_plugin")
-if not result.ok:
-    for err in result.errors:
-        print(err)
-```
-
-检查项包括：`_spec.py` 存在性、`__ibcext_metadata__`/`__ibcext_vtable__` 函数合法性、`create_implementation()` 工厂函数存在性、vtable 声明的方法在实现类上存在、参数数量匹配、`IbStatefulPlugin` 协议完整性等。
+插件检查（`ibci_sdk.check`）的检查项包括：`_spec.py` 存在性、`__ibcext_metadata__`/`__ibcext_vtable__` 函数合法性、`create_implementation()` 工厂函数存在性、vtable 声明的方法在实现类上存在、参数数量匹配、`IbStatefulPlugin` 协议完整性等。
 
 ---
 

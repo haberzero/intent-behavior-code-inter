@@ -16,8 +16,9 @@
 | 事件面 | EventBus 域事件 | 推送（正常流程） | "正常域对象发生了什么" |
 | 诊断面 | `kernel_diagnostic` 事件 + 警告投影 | 推送（异常/降级/策略） | "内核为何降级 / 做了什么异常决策" |
 | 配置面 | `configure()` 控制 | 链式覆盖 | 观测能力的启停 |
+| 测试合作面 | `TestHooks` 协议 | 精确回调 | 测试断言精确的 LLM 调用回调 |
 
-**边界判定法**：正常流程 → 事件面；状态查询 → 状态面；异常/降级/策略 → 诊断面。
+**边界判定法**：正常流程 → 事件面；状态查询 → 状态面；异常/降级/策略 → 诊断面；测试精确回调 → 测试合作面。
 
 **为什么需要诊断面**：内核的异常行为（协议回退、策略忽略、运行时降级）若只散落为裸警告字符串，则不可查询、不可计数、不可过滤、不可程序化消费。诊断面为这些行为提供结构化、可消费的记录面，同时保留警告投影保证开发者可见性。
 
@@ -32,6 +33,8 @@
 **关键性质**：
 - 快照是"现在是什么"的查询，与诊断的"为何降级"时间轴不同。
 - 状态聚合是尽力而为：单源失败不阻断整体快照。
+
+> 名称消歧：观测 snapshot 与 llmexcept 的快照恢复（`syntax/10`）、`snapshot` 值捕获关键字（`syntax/07`）是三个独立概念，仅共享词形。
 
 ---
 
@@ -49,7 +52,7 @@
 |------|------|------|
 | `llm_dispatched` / `llm_resolved` | LLM 执行器 | LLM 调用开始 / 结束（含失败） |
 | `chan_created` / `slot_updated` | VM handler | 通道 / 槽值对象构造 |
-| `configured` | `iruntime` 模块 | 配置变更生效 |
+| `configured` | `iruntime` 模块 | 配置变更生效（经 iruntime 直接广播，手动门控） |
 | `kernel_diagnostic` | 诊断面 | 内核异常/降级/策略（见下一节） |
 
 **事件形态**：`{"type": <str>, "data": {<自由 dict>}}`。域事件 data 为各域自有载荷。
@@ -114,9 +117,9 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 | `KDIAG_PROTOCOL_SNAPSHOT_FALLBACK` | `__snapshot__` | 快照协议失败，回退深克隆 |
 | `KDIAG_PROTOCOL_RESTORE_FALLBACK` | `__restore__` | 恢复协议失败，保持现状（best-effort） |
 | `KDIAG_POLICY_MODULE_OVERRIDE` | kernel-native 模块保护 | 用户插件尝试覆盖 kernel-native 模块被忽略 |
-| `KDIAG_POLICY_MODULE_NO_EXPORT` | 插件加载 | 插件无 `create_implementation()` 导出，跳过 |
+| `KDIAG_POLICY_MODULE_NO_EXPORT` | 插件加载 | 插件无 `create_implementation()` 且无 `implementation` 属性导出，跳过 |
 | `KDIAG_RUNTIME_COLLECT_SKIP` | 隔离收集 | 变量无法转为原生值，跳过 |
-| `KDIAG_RUNTIME_STAGE_SKIP` | 注册表阶段流转 | kernel 令牌缺失，STAGE 6 跳转跳过 |
+| `KDIAG_RUNTIME_STAGE_SKIP` | Interpreter STAGE 6 预评估 | kernel 令牌缺失，STAGE 6 跳转跳过 |
 
 **编译期诊断**：编译器离线、无事件总线与运行时上下文，编译面诊断维持 `warnings`（不引入 compiler → runtime 跨层依赖）。诊断码命名约定与 `SEM_`/`RUN_`/`LEX_` 同构。
 
@@ -140,6 +143,24 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 **门控语义**：`observability` 只控制**事件投影**。警告投影（诊断面投影A）不受其控制——开发者可见性不因观测开关关闭而丢失。
 
 经 `runtime.configure(...)`（用户级 `iruntime` 模块）链式覆盖：全局 → 单调用 → 单实例（后者优先）。
+
+---
+
+## 四·五、测试合作面：TestHooks
+
+**职责**：为测试提供精确的 LLM 调用回调，替代在事件流中过滤匹配。
+
+`TestHooks` 协议（`core/runtime/interfaces.py`）三个回调：
+
+| 回调 | 时机 |
+|------|------|
+| `on_llm_call(node_uid, sys_prompt, user_prompt, target_model, response)` | LLM 调用成功返回 |
+| `on_llm_call_error(node_uid, error)` | LLM provider 失败 |
+| `on_dispatch(node_uid)` | LLM 调用提交调度器（dispatch） |
+
+**注入**：`engine.test_hooks = hooks`（setter）→ 解释器就绪时注入 `ServiceContext.test_hooks` → LLM 执行器消费。未注入时返回 `None`（生产路径零开销）。
+
+**与诊断面的区别**：测试合作面是**精确回调**（测试断言用）；诊断面是**结构化记录**（可计数/过滤）。二者互补，不重叠。
 
 ---
 
@@ -181,7 +202,7 @@ assert ev["data"]["code"] == "KDIAG_..."
 
 ## 约束与边界
 
-- **不重建旧 CORE_DEBUG 机制**：print 推送、级别门控、进程全局单例均为历史包袱，不采用。
+- **观测机制不采用 print 推送、级别门控、进程全局单例**：诊断统一经结构化事件与警告双投影。
 - **不重建流式流程追踪**：流程级因果诊断（如 llmexcept 重试循环）不在诊断面 v1 范围；新增诊断码可非破坏扩展。
 - **诊断面与事件面共用总线与发射入口**（机制同构），仅语义域不同。
 - **kernel 层零 runtime 依赖**：事件总线与诊断发射器均由 engine（runtime 组装层）创建并注入

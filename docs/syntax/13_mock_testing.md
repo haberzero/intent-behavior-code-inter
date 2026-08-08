@@ -224,6 +224,24 @@ str reply = @~ MOCK:STR:hello ~    # 经真实 HTTP 路径返回 hello
 #### 13.6.3 测试 fixture
 
 pytest 环境提供 `mock_server` fixture（`tests/conftest.py`），每个测试自动启动/停止独立服务。
+
+### 13.7 Python 测试钩子（TestHooks）
+
+在 Python 测试中可注入精确的 LLM 调用回调，断言调用参数与结果（不依赖解析事件流）：
+
+```python
+class Hooks:
+    def on_llm_call(self, *, node_uid, sys_prompt, user_prompt, target_model, response):
+        self.seen = (node_uid, response)
+    def on_llm_call_error(self, *, node_uid, error): ...
+    def on_dispatch(self, *, node_uid): ...
+
+engine.test_hooks = Hooks()
+engine.run_string('str r = @~ MOCK:STR:hi ~\n', silent=True)
+assert engine.test_hooks.seen[1] == "hi"
+```
+
+协议三个回调（`on_llm_call` / `on_llm_call_error` / `on_dispatch`）须全实现。设计详见 `docs/architecture/09_observability.md` §四·五。
 ---
 
 ## 深入指引

@@ -36,13 +36,24 @@ func main():
 
 ### 11.2 内置模块
 
+**内核原生模块**（随内核发行，构造期预注册，不可被用户插件覆盖）：
+
 ```ibci
 import ai      # LLM provider 配置（API key、model、retry 等）
 import isys    # 运行时路径查询（entry_path / entry_dir / project_root）
 import idbg    # 调试探查工具
 import ihost   # 动态宿主（隔离子环境运行）
-import json    # JSON 解析
 import file    # 受限文件系统操作
+import iruntime  # 运行时内省（snapshot / subscribe / configure）
+```
+
+**随仓库发行插件**（经插件发现机制自动加载，可被用户插件同名覆盖）：
+
+```ibci
+import json    # JSON 解析
+import math    # 数学函数
+import time    # 时间函数
+import net     # 网络
 ```
 
 > **注意**：`@~ ... ~` 行为描述语句是语言核心特性，**不依赖 `import ai`**。`ai` 模块仅负责配置 LLM provider。

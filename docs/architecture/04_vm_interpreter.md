@@ -446,7 +446,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ---
 
-## §12 关联文档
+## §12 深入指引
 
 - VM 公理化规范（合规测试）：`docs/architecture/05_vm_specification.md`
 - 类型系统设计：`docs/architecture/03_type_system.md`

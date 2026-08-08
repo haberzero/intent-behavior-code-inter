@@ -96,7 +96,28 @@ int v = r.expect()     # 3
 
 `cancel()` 为协作式：运行中的纯 CPU 任务无可挂起点时无法强制中断。
 
-### 14.6 thread_result 结果容器
+### 14.6 await 表达式与自动挂起
+
+`await <expr>` 显式等待一个 Waitable（`LLMFuture` / `HostAwaitable` / 线程句柄 / 通道接收）完成：
+
+```ibci
+func fetch() -> int:
+    return 42
+
+thread[int] t = thread(callable=fetch, args=[])
+int v = await t           # 等待线程完成
+# await thread[T] 的结果类型为 thread_result[T]，等价于 t.join()
+thread_result[int] r = await t
+```
+
+**语义要点**：
+- `await thread[T]` 编译期为 `thread_result[T]`（与 `t.join()` 返回值一致）。
+- 其他 Waitable：`await` 不改变类型，仅等待其完成（幂等——操作数已就绪时原样返回）。
+- 阻塞操作在 VM 任务内为**协作挂起**（挂起当前任务，让出给其它任务，不阻塞线程）；调度器在完成时通知式唤醒。
+
+**自动挂起（auto-yield）**：调用返回 Waitable 的**方法**（如 `collect`、宿主异步操作）时，VM 自动挂起等待完成，无需显式 `await`。**例外**：类构造（如 `thread(...)`）返回的 Waitable 是句柄，不自动挂起——等待须经 `t.join()` / `await t` 显式表达。
+
+### 14.7 thread_result 结果容器
 
 `thread_result[T]` 承载线程结果（成功 `value=T`；失败 `error=异常`，`status` 区分 `done`/`failed`/`cancelled`）。
 

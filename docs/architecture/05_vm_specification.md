@@ -190,7 +190,7 @@ tests/compliance/
 
 **运行方式**（独立验证）：
 ```bash
-python3 -m pytest tests/compliance/ -v
+python -m pytest tests/compliance/ -v
 ```
 
 **使用限制**：所有合规测试仅依赖 `core.engine.IBCIEngine` 公开 API 与标准 Python 库（`os`, `tempfile`, `pytest`）。不依赖任何以 `_` 开头的私有属性（此约束确保跨实现可移植性）。

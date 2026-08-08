@@ -202,7 +202,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 |------|------|
 | **IbSpec 基类能力访问器** | 返回 None 表示"未知"，子类有义务重写 |
 | **TypeDef 返回类型解析** | 公理优先，静态 TypeRef 签名作为编译期后备（双轨制） |
-| **LazySpec 正常情况** | 占位符模式，已解析时返回真实 IbSpec |
+| **跨模块占位符** | 编译器 `scheduler` 预注册空 `ModuleMetadata`（`create_module`）占位，解析后替换为真实 spec |
 
 #### 禁止的 Fallback：妥协性历史兼容
 
@@ -211,12 +211,12 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 | 问题 | 说明 |
 |------|------|
 | **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析经 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 校验；内建名防御和推断规则缺失仍保留为允许的职责分离型回退。类型强化现状：未标注可调用（func/llm/lambda）报 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值采用 `auto` 推断锁定（不隐式 any）；多类型 `list[int,str]` 不支持（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
-| **LazySpec 异常情况** | `resolve()` 失败时应抛出错误而非返回占位符 |
+| **跨模块占位符异常情况** | 占位符号解析失败时应抛出错误（类型未注册）而非静默保留占位 |
 
-**关于 LazySpec 的说明**：
+**关于跨模块占位符的说明**：
 
-LazySpec 是**占位符模式**实现，用于解决编译期循环依赖：
-- **正常情况**：解析成功后返回真实 IbSpec
+跨模块未解析符号在编译期以 `scheduler` 预注册的空 `ModuleMetadata`（`create_module`）占位，解决编译期循环依赖：
+- **正常情况**：解析成功后替换为真实 spec
 - **异常情况**：`resolve()` 失败时理想应抛出错误（类型未注册），而非静默占位
 
 **违反后果**：妥协性 fallback 会导致类型信息丢失、错误掩盖、难以调试等问题，必须在后续迭代中修复。

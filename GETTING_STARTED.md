@@ -4,6 +4,7 @@
 
 ## 教程
 
+0. [环境准备](docs/guide/00_environment.md) — 安装 Python 环境、conda、运行依赖
 1. [配置 LLM 提供者](docs/guide/01_setup.md) — 配置 API key、模型路由和连接验证
 2. [第一个 @~ 调用](docs/guide/02_first_call.md) — 行为表达式基础、变量插值和类型约束
 3. [处理 LLM 调用失败](docs/guide/03_handling_errors.md) — llmexcept、retry 和异常体系
@@ -18,7 +19,7 @@
 
 如果你已经熟悉基础用法，需要查阅语法细节：
 
-- [完整语法参考](docs/SYNTAX_REFERENCE.md) — 类型、变量、控制流、行为表达式等 13 章的完整规范
+- [完整语法参考](docs/SYNTAX_REFERENCE.md) — 类型、变量、控制流、行为表达式等 14 章的完整规范
 - [已知限制](docs/KNOWN_LIMITS.md) — 当前版本的语言边界和使用约束
 
 ---
