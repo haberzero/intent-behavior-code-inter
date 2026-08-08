@@ -363,9 +363,9 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 | 子 Interpreter 异常 | 在 `collect()` 时透传为 `RuntimeError` |
 | `policy.collect_timeout` | `None`（默认）= 无界等待；正数（秒）= 墙钟上限，超时抛 `RuntimeError`，子线程作为 daemon 孤儿继续运行（Python 无法强杀线程） |
 
-### 8.3 KernelRegistry.clone()
+### 8.3 子解释器隔离路径
 
-子解释器初始化路径若走 `clone()`（IsolationLevel != NONE 的旧路径），`_classes` / `_boxers` / `_metadata_registry` / `_builtin_instances` / `_llm_executor` 等字段均传播；`_int_cache` 故意不拷（性能缓存而非正确性）。`spawn_isolated` 走新建独立 `IBCIEngine` 路径，不经 clone。
+`spawn_isolated` 走新建独立 `IBCIEngine` 路径：子引擎持有自己的 `KernelRegistry`（类型隔离经 `SpecRegistry` 的克隆机制），与父引擎共享事件总线（观测全局）。主解释器与子解释器不共享 registry 实例。
 
 ### 8.4 合规测试
 

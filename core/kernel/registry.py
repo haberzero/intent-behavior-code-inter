@@ -447,33 +447,3 @@ class KernelRegistry:
         instance.fields["message"] = self.box(message)
         return instance
 
-    def clone(self) -> 'KernelRegistry':
-        """
-        创建 KernelRegistry 的浅克隆。
-        类定义和函数通过引用共享，但 MetadataRegistry 进行深克隆以确保类型隔离。
-        用于 spawn_interpreter 创建隔离的解释器实例。
-        """
-        new_registry = KernelRegistry()
-        new_registry._classes = dict(self._classes)
-        new_registry._none_instance = self._none_instance
-        new_registry._llm_uncertain_instance = self._llm_uncertain_instance
-        new_registry._box_func = self._box_func
-        new_registry._create_subclass_func = self._create_subclass_func
-        new_registry._boxers = dict(self._boxers)
-        new_registry._metadata_registry = self._metadata_registry.clone()
-        new_registry._is_structure_sealed = self._is_structure_sealed
-        new_registry._is_classes_sealed = self._is_classes_sealed
-        new_registry._state_level = self._state_level
-        new_registry._llm_executor = self._llm_executor
-        new_registry._host_service = self._host_service
-        new_registry._stack_inspector = self._stack_inspector
-        new_registry._state_reader = self._state_reader
-        # 事件总线为引擎级共享实例：clone 不新建，子解释器共享同一总线
-        # （计算隔离、观测全局；子解释器间事件经同一总线广播）。
-        new_registry._event_bus = self._event_bus
-        # 拷贝内置单例字典结构，使子解释器能通过 get_intrinsic_instance() 找到单例。
-        # 子解释器在 Interpreter.__init__ 中会调用 set_runtime_context() 把自己的
-        # runtime_context 重新绑定到单例，因此两个解释器共享同一对象是安全的。
-        new_registry._intrinsic_instances = dict(self._intrinsic_instances)
-        # _int_cache 故意不拷贝：每个引擎实例独享小整数驻留缓存，彼此隔离。
-        return new_registry
