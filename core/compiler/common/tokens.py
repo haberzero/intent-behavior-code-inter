@@ -56,6 +56,7 @@ class TokenType(Enum):
 
     # 异步关键字
     AWAIT = auto()
+    YIELD = auto()
 
     # 并发/通信关键字
     CHAN = auto()

@@ -344,3 +344,24 @@ class SpecFactory:
         )
         spec._axiom_name = "slot"
         return spec
+
+    def create_generator(
+        self,
+        value_type_name: str = "any",
+        value_type_module: Optional[str] = None,
+    ) -> "TypeDef":
+        """Create a ``TypeDef`` for a ``generator[T]`` type annotation.
+
+        ``value_type_name`` is the generator's element (yield) type.
+        ``generator[T]`` 是惰性生成器类型：含 ``yield`` 函数调用产出，迭代
+        （``for``/``next``）产出 ``T`` 值。
+        """
+        gen_name = f"generator[{value_type_name}]" if value_type_name != "any" else "generator"
+        spec = TypeDef(
+            name=gen_name,
+            kind=TypeKind.GENERATOR.value,
+            provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+            value_type=TypeRef.of(value_type_name, value_type_module),
+        )
+        spec._axiom_name = "generator"
+        return spec

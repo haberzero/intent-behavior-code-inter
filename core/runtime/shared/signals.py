@@ -52,7 +52,7 @@ class UnhandledSignal(Exception):
     """VM 顶层未消费信号的边界异常。
 
     ``VMExecutor.run()`` 在帧栈耗尽仍持有未消费 Signal 时以
-    ``raise UnhandledSignal(signal)`` 抛给调用者。
+    ``raise UnhandledSignal(signal)`` 抛给调用方。
 
     调用方通过 ``e.signal.kind`` 判断信号类型（ControlSignal 枚举），
     通过 ``e.signal.value`` 获取关联值。
@@ -65,3 +65,18 @@ class UnhandledSignal(Exception):
     def __init__(self, signal: "Signal"):
         super().__init__(f"UnhandledSignal({signal.kind.value})")
         self.signal = signal
+
+
+class GeneratorYield:
+    """惰性生成器产出值标记（阶段 5 yield）。
+
+    ``vm_handle_IbYieldExpr`` 对 ``yield x`` 求值后 ``yield`` 本对象（而非
+    child uid），生成器驱动循环识别后：暂停生成器体、交付值 ``value`` 给迭代方；
+    迭代恢复后 ``send`` 回驱动循环继续推进。与 ``Waitable``（宿主等待）区分——
+    本对象是**语言级生成器产出**，非异步等待。
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, value):
+        self.value = value

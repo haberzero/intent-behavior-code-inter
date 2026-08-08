@@ -28,6 +28,31 @@ from core.kernel.axioms.prompt_protocol import (
     is_prompt_protocol_method,
 )
 
+
+def _contains_yield(stmts) -> bool:
+    """扫描语句列表是否含 ``IbYieldExpr``（含嵌套 lambda 体，排除嵌套函数定义）。
+
+    用于标记函数为惰性生成器（D-08 自标记函数种类）。不进入嵌套函数定义
+    （``IbFunctionDef``/``IbLLMFunctionDef``/``IbClassDef``）——内层 yield 归属其自身。
+    """
+    from core.kernel import ast as _ast
+
+    def _scan_stmt(stmt) -> bool:
+        if isinstance(stmt, (_ast.IbFunctionDef, _ast.IbLLMFunctionDef, _ast.IbClassDef)):
+            return False
+        for attr in vars(stmt).values():
+            if isinstance(attr, _ast.IbYieldExpr):
+                return True
+            if isinstance(attr, list):
+                for item in attr:
+                    if isinstance(item, _ast.IbASTNode) and _scan_stmt(item):
+                        return True
+            elif isinstance(attr, _ast.IbASTNode) and _scan_stmt(attr):
+                return True
+        return False
+
+    return any(_scan_stmt(s) for s in stmts or [])
+
 # Methods whose signatures are not constrained by parent class
 # (constructors and protocol methods may freely change signature).
 _OVERRIDE_SIGNATURE_FREE: frozenset = frozenset({
@@ -163,6 +188,21 @@ class DeclarationVisitorsMixin:
             self.pop_scope()
             self.in_function_def = old_in_function
             self.auto_return_types = old_auto_returns
+
+        # 含 yield → 惰性生成器（D-08 自标记函数种类）。扫描函数体（含嵌套
+        # lambda，但排除嵌套函数定义——嵌套函数的 yield 归属其自身）。
+        node.is_generator = _contains_yield(node.body)
+
+        # 生成器函数的返回类型 = generator[元素类型]（yield 值的类型即元素类型）。
+        # 声明层解析的元素类型（ret_type）作为生成器元素；函数符号返回类型改为
+        # generator[T]，使 ``auto g = gen()`` / ``for`` 消费正确定型。
+        if node.is_generator and sym and sym.spec and hasattr(sym.spec, 'return_type'):
+            elem_name = ret_type.name if ret_type else "any"
+            elem_mod = getattr(ret_type, "module_path", None) if ret_type else None
+            gen_spec = self.registry.factory.create_generator(
+                value_type_name=elem_name, value_type_module=elem_mod
+            )
+            sym.spec.return_type = TypeRef.of(gen_spec.name, None)
 
         # SEM_DUAL_ASSIGNABLE: Method override signature compatibility check
         if self.in_class_def and self.current_class and sym and sym.spec:

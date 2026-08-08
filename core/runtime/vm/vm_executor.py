@@ -40,6 +40,7 @@ from core.runtime.vm.handlers import (
     build_one_shot_intent_from_annotation,
 )
 from core.runtime.shared.user_call import UserFunctionCall
+from core.runtime.shared.signals import GeneratorYield
 
 
 class VMExecutor:
@@ -278,8 +279,13 @@ class VMExecutor:
                 # IbUserFunction yield）——把函数体作为独立 VMTask 压栈，
                 # 函数体生成器挂起时不在 Python 栈上（EXEC-1：深递归
                 # Python 深度恒定）。函数完成 return 后调度器 send 回调用点。
+                # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
+                # 迭代驱动函数体、yield 点产出值。
                 if isinstance(child_uid, UserFunctionCall):
-                    stack.append(self._make_user_function_task(child_uid))
+                    if getattr(child_uid.func, "is_generator", False):
+                        pending_value = self.make_generator_driver(child_uid)
+                    else:
+                        stack.append(self._make_user_function_task(child_uid))
                     continue
 
                 if isinstance(child_uid, str) and self.supports(child_uid):
@@ -299,6 +305,91 @@ class VMExecutor:
             if pending_exception is not None:
                 raise pending_exception
             # 未消费的顶层 Signal → 以 UnhandledSignal 抛给调用方
+            if isinstance(pending_value, Signal):
+                raise UnhandledSignal(pending_value)
+            return pending_value if pending_value is not None else self.registry.get_none()
+        finally:
+            self._current_stack = prev_stack
+
+    def _drive_generator_loop(self, stack: list) -> Any:
+        """惰性生成器体驱动循环（阶段 5 yield，单可恢复驱动）。
+
+        与 ``_drive_loop_gen`` 同构，但识别 ``GeneratorYield`` 语言级产出标记：
+        ``vm_handle_IbYieldExpr`` 求值后 ``yield`` 该标记，本循环把它**挂起向
+        外交付**（``yield`` 给迭代方），迭代恢复（``send``）后继续推进——保持
+        生成器体循环位置 / 局部变量（EXEC-FOUNDATION §5.2 单可恢复驱动）。
+
+        契约：本循环是生成器，向外 ``yield`` 的只有两类——``GeneratorYield``
+        （语言产出，迭代方取值）与 ``Waitable``（宿主等待，迭代方阻塞后
+        ``send`` 结果）。栈耗尽时 ``return`` 最终结果（生成器结束）。
+        """
+        prev_stack = self._current_stack
+        self._current_stack = stack
+        try:
+            pending_value: Any = None
+            pending_exception: Optional[BaseException] = None
+
+            while stack:
+                task = stack[-1]
+                gen = task.generator
+                try:
+                    if pending_exception is not None:
+                        exc = pending_exception
+                        pending_exception = None
+                        child_uid = gen.throw(exc)
+                    else:
+                        val = pending_value
+                        pending_value = None
+                        child_uid = gen.send(val)
+                except StopIteration as si:
+                    stack.pop()
+                    ret_value = si.value
+                    if isinstance(ret_value, Signal):
+                        pending_value = ret_value
+                    else:
+                        pending_value = (
+                            ret_value if ret_value is not None else self.registry.get_none()
+                        )
+                    continue
+                except UnhandledSignal as use:
+                    stack.pop()
+                    pending_exception = use
+                    continue
+                except Exception as e:
+                    stack.pop()
+                    pending_exception = e
+                    continue
+
+                if isinstance(child_uid, GeneratorYield):
+                    # 语言级产出：挂起向外交付 value，迭代恢复后继续
+                    yielded = child_uid
+                    pending_value = yield yielded
+                    continue
+
+                if child_uid is None:
+                    pending_value = self.registry.get_none()
+                    continue
+
+                if isinstance(child_uid, Waitable):
+                    pending_value = yield child_uid
+                    continue
+
+                if isinstance(child_uid, UserFunctionCall):
+                    stack.append(self._make_user_function_task(child_uid))
+                    continue
+
+                if isinstance(child_uid, str) and self.supports(child_uid):
+                    stack.append(self._make_task(child_uid))
+                else:
+                    node_data = self._ec.get_node_data(child_uid) if isinstance(child_uid, str) else None
+                    node_type = (node_data.get("_type") if node_data else None) or repr(child_uid)
+                    raise RuntimeError(
+                        f"VMExecutor: No CPS handler for node type {node_type!r} "
+                        f"(uid={child_uid!r}) in generator body. Add vm_handle_{node_type}."
+                    )
+
+            if pending_exception is not None:
+                raise pending_exception
             if isinstance(pending_value, Signal):
                 raise UnhandledSignal(pending_value)
             return pending_value if pending_value is not None else self.registry.get_none()
@@ -348,3 +439,19 @@ class VMExecutor:
             self, call.func, self.registry.get_none(), call.args
         )
         return VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)
+
+    def make_generator_driver(self, call: "UserFunctionCall"):
+        """为惰性生成器函数调用创建单可恢复体驱动（阶段 5 yield）。
+
+        生成器函数体经 ``_vm_call_user_function``（CPS 帧准备 + 逐语句 yield）
+        作为**单一** VMTask 压栈，由 ``_drive_generator_loop``（可恢复驱动）推进：
+        在 ``yield`` 点 ``GeneratorYield`` 挂起向外交付、迭代恢复。返回驱动生成器，
+        ``next()`` 取产出值、``send`` 恢复。与普通函数（trampoline 压栈同级，
+        但驱动循环可暂停）同构。
+        """
+        from core.runtime.vm.handlers._shared import _vm_call_user_function
+
+        gen = _vm_call_user_function(
+            self, call.func, self.registry.get_none(), call.args
+        )
+        return self._drive_generator_loop([VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)])

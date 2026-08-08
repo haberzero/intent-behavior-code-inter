@@ -76,6 +76,7 @@ def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
     func = IbUserFunction(node_uid, executor.ec, spec=declared_type)
+    func.is_generator = bool(node_data.get("is_generator"))
     name = node_data.get("name")
 
     # 如果函数有 nonlocal 自由变量，构建 Cell 闭包

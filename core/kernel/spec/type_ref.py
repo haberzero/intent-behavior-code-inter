@@ -212,6 +212,16 @@ class TypeRef:
                 )
             return cls(head="slot", args=(), module=spec.module_path)
 
+        if spec.kind == TypeKind.GENERATOR.value and base == "generator":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="generator",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="generator", args=(), module=spec.module_path)
+
         if spec.kind == TypeKind.OPTIONAL.value:
             return cls(
                 head="Optional",

@@ -175,6 +175,10 @@ class ArtifactRehydrator:
                 value_type_name=data.get("value_type_name", "any"),
                 value_type_module=data.get("value_type_module"),
             ),
+            TypeKind.GENERATOR.value: lambda: factory.create_generator(
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
         }
 
         if name in PRIMITIVE_TYPES and kind == TypeKind.PRIMITIVE.value:

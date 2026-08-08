@@ -30,6 +30,9 @@ class IbUserFunction(IbFunction):
         self.owner_class: Optional['IbClass'] = owner_class
         # nonlocal 闭包：{sym_uid: (name, IbCell)} — 由 vm_handle_IbFunctionDef 设置
         self.closure: Optional[Dict[str, Any]] = None
+        # 惰性生成器（含 yield，D-08 自标记函数种类）。为 True 时 call() 返回
+        # IbGenerator（不执行体），迭代驱动函数体、yield 点产出值。
+        self.is_generator: bool = False
 
     @property
     def spec(self) -> Optional[IbSpec]:

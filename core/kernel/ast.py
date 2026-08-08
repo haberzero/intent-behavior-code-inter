@@ -148,6 +148,7 @@ class IbFunctionDef(IbStmt):
     body: List[IbStmt]
     returns: Optional[IbExpr] = None
     free_vars: List = field(default_factory=list)  # [[name, sym_uid], ...] nonlocal captures
+    is_generator: bool = False  # 含 yield → 惰性生成器（D-08 自标记函数种类）
     
     @property
     def creates_scope(self) -> bool:
@@ -335,6 +336,16 @@ class IbAwaitExpr(IbExpr):
     的等待显式化、通用化（区别于数据流自动 await 的透明便利）。
     """
     value: IbExpr
+
+@dataclass(kw_only=True, eq=False)
+class IbYieldExpr(IbExpr):
+    """``yield <expr>``：惰性生成器产出值。
+
+    含 ``yield`` 的函数为惰性生成器（D-08 自标记函数种类）。``yield x`` 挂起
+    产出值 ``x``；迭代（``next`` / ``for``）恢复继续执行。生成器体须由单一
+    可恢复驱动承载（EXEC_FOUNDATION §5.2），在 yield 点暂停交付值、迭代恢复。
+    """
+    value: Optional[IbExpr] = None
 
 @dataclass(kw_only=True, eq=False)
 class IbChannelExpr(IbExpr):

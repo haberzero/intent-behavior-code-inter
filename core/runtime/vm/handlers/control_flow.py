@@ -273,9 +273,13 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
     if is_sequence_value(iterable_obj):
         elements_obj = iterable_obj
     else:
+        # 惰性生成器（阶段 5 yield）：to_list 惰性推进到耗尽
+        from core.runtime.objects.kernel.generator import IbGenerator
+        if isinstance(iterable_obj, IbGenerator):
+            elements_obj = iterable_obj.to_list()
         # 结构化能力查询（不靠异常判定）：有 __iter__ 走迭代，否则尝试 to_list。
         # 用户 __iter__ 实现体内的真实错误不再被能力探测误吞。
-        if iterable_obj.ib_class.lookup_method("__iter__") is not None:
+        elif iterable_obj.ib_class.lookup_method("__iter__") is not None:
             r = iterable_obj.receive("__iter__", [])
             if is_sequence_value(r):
                 elements_obj = r

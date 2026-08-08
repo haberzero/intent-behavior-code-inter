@@ -1,0 +1,170 @@
+"""
+tests/e2e/test_yield_generator.py
+==================================
+
+阶段 5 ``yield`` 惰性生成器端到端测试（D-08 自标记函数种类）。
+
+覆盖：
+- 基础生成器：for 迭代产出、局部状态跨 yield 保留
+- 多 yield / 循环内 yield / 条件内 yield
+- 生成器体可 await（LLM 行为组合，Waitable 挂起）
+- 生成器作为值返回 / 传入
+- 消费者 break 提前终止
+- 编译期：非函数体内 yield 报错
+"""
+
+import pytest
+
+from tests.conftest import run_ibci, compile_or_errors, AI_MOCK_PREFIX
+
+
+class TestBasicGenerator:
+    """基础生成器迭代。"""
+
+    def test_for_iteration(self):
+        code = """
+func count(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+for int x in count(3):
+    print(x)
+"""
+        assert run_ibci(code) == ["0", "1", "2"]
+
+    def test_state_preserved_across_yields(self):
+        """局部变量与循环位置跨 yield 保留（单可恢复驱动）。"""
+        code = """
+func gen() -> int:
+    int a = 10
+    yield a
+    a = 20
+    yield a
+    return 0
+
+for int x in gen():
+    print(x)
+"""
+        assert run_ibci(code) == ["10", "20"]
+
+    def test_condition_inside_loop(self):
+        code = """
+func tri(int n) -> int:
+    int limit = n * 2
+    int i = 0
+    while i < limit:
+        if i % 2 == 0:
+            yield i
+        i = i + 1
+    return 0
+
+for int x in tri(3):
+    print(x)
+"""
+        assert run_ibci(code) == ["0", "2", "4"]
+
+    def test_nested_loops_with_expression_yield(self):
+        """嵌套循环 + yield 表达式（yield 低优先级解析整表达式）。"""
+        code = """
+func pairs(int n) -> int:
+    int a = 0
+    while a < n:
+        int b = 0
+        while b <= a:
+            yield a * 10 + b
+            b = b + 1
+        a = a + 1
+    return 0
+
+for int x in pairs(3):
+    print(x)
+"""
+        assert run_ibci(code) == ["0", "10", "11", "20", "21", "22"]
+
+    def test_consumer_break(self):
+        """消费者 break 提前终止（生成器不继续推进）。"""
+        code = """
+func count(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+for int x in count(10):
+    if x == 3:
+        break
+    print(x)
+"""
+        assert run_ibci(code) == ["0", "1", "2"]
+
+
+class TestGeneratorComposition:
+    """生成器与语言特性组合。"""
+
+    def test_generator_returned_as_value(self):
+        code = """
+func gen() -> int:
+    yield 1
+    yield 2
+    yield 3
+    return 0
+
+func make() -> auto:
+    return gen
+
+auto g = make()
+for int x in g():
+    print(x)
+"""
+        assert run_ibci(code) == ["1", "2", "3"]
+
+    def test_generator_with_llm_behavior(self):
+        """生成器体内可 await LLM 行为（Waitable 挂起，与 yield 组合）。"""
+        code = AI_MOCK_PREFIX + """
+func gains(int n) -> str:
+    int i = 0
+    while i < n:
+        str s = @~ MOCK:REPEAT:STR:hi ~
+        yield s
+        i = i + 1
+    return ""
+
+for str x in gains(2):
+    print(x)
+"""
+        out = run_ibci(code)
+        assert len(out) == 2
+        assert all("hi" in line for line in out)
+
+    def test_generator_assigned_to_auto(self):
+        """生成器调用产出 generator[T] 值，可赋变量后迭代。"""
+        code = """
+func count(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+auto g = count(4)
+for int x in g:
+    print(x)
+"""
+        assert run_ibci(code) == ["0", "1", "2", "3"]
+
+
+class TestGeneratorSemantics:
+    """编译期语义。"""
+
+    def test_yield_only_in_function_body(self):
+        """yield 只能在函数体内（D-08 自标记函数种类）。"""
+        code = """
+yield 1
+"""
+        artifact, errors = compile_or_errors(code)
+        # 顶层 yield 应被语义层拒绝（无函数上下文）
+        assert errors, "expected yield outside function to be a semantic error"

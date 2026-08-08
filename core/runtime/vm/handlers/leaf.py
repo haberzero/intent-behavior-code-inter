@@ -26,6 +26,7 @@ from core.runtime.objects.primitives import IbNone
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.shared.waitable import Waitable
 from core.runtime.shared.user_call import UserFunctionCall
+from core.runtime.shared.signals import GeneratorYield
 from core.runtime.observability.diagnostics import handle_environment_limit
 from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,
@@ -140,6 +141,23 @@ def vm_handle_IbAwaitExpr(executor, node_uid: str, node_data: Mapping[str, Any])
     elif isinstance(value, Waitable):
         value = yield value
     return value
+
+
+def vm_handle_IbYieldExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``yield <expr>``：惰性生成器产出值（阶段 5）。
+
+    求值操作数后 yield ``GeneratorYield(value)`` 标记（而非 child uid）。
+    生成器驱动循环识别该标记：暂停生成器体、把 ``value`` 交付给迭代方；
+    迭代恢复后 ``send`` 回驱动循环继续推进（保持循环位置/局部变量）。
+    无操作数（``yield``）产出 ``None``。
+    """
+    value = None
+    value_uid = node_data.get("value")
+    if value_uid:
+        value = yield value_uid
+        if _is_llm_uncertain_value(value):
+            return value
+    return (yield GeneratorYield(value))
 
 
 def vm_handle_IbBoolOp(executor, node_uid: str, node_data: Mapping[str, Any]):
@@ -294,7 +312,16 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     # IbUserFunction（普通用户函数）：trampoline 调用（R1，EXEC-1 根治）。
     # 不 yield from 生成器（会嵌套 Python 栈），而是 yield 函数调用请求，
     # 由 _drive_loop_gen 把函数体作为独立 VMTask 压栈——深递归 Python 深度恒定。
+    # 惰性生成器（含 yield，D-08 自标记）：调用产出 IbGenerator（不执行体），
+    # 迭代驱动函数体、yield 点产出值。
     if isinstance(func, IbUserFunction):
+        if getattr(func, "is_generator", False):
+            from core.runtime.objects.kernel.generator import IbGenerator
+            from core.runtime.shared.user_call import UserFunctionCall as _UFC
+
+            driver = yield _UFC(func, args)
+            gen_class = executor.registry.get_class("callable") or func.ib_class
+            return IbGenerator(gen_class, driver)
         result = yield UserFunctionCall(func, args)
         return result
 

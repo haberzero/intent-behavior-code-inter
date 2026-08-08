@@ -73,6 +73,9 @@ class ExpressionComponent(BaseComponent):
         # Await (显式等待一个 Waitable)
         self.register(TokenType.AWAIT, self.await_expr, None, IbPrecedence.UNARY)
 
+        # Yield (惰性生成器产出值)
+        self.register(TokenType.YIELD, self.yield_expr, None, IbPrecedence.LOWEST)
+
         # 并发/通信：chan/slot 构造函数前缀
         self.register(TokenType.CHAN, self.chan_expr, None, IbPrecedence.UNARY)
         self.register(TokenType.SLOT, self.slot_expr, None, IbPrecedence.UNARY)
@@ -294,6 +297,18 @@ class ExpressionComponent(BaseComponent):
         op_token = self.stream.previous()
         operand = self.parse_precedence(IbPrecedence.UNARY)
         return self._loc(ast.IbAwaitExpr(value=operand), op_token)
+
+    def yield_expr(self) -> ast.IbExpr:
+        """``yield <expr>``：惰性生成器产出值（D-08 自标记函数种类）。
+
+        含 ``yield`` 的函数为惰性生成器：``yield x`` 挂起产出值 ``x``，迭代
+        恢复。``yield`` 以 LOWEST 优先级解析操作数——``yield x + 1`` 产出
+        ``x + 1``（与 Python 一致，yield 是低优先级语句级关键字）。无操作数
+        （``yield``）产出 ``None``。
+        """
+        op_token = self.stream.previous()
+        operand = self.parse_precedence(IbPrecedence.LOWEST)
+        return self._loc(ast.IbYieldExpr(value=operand), op_token)
 
     def _expr_name(self, node: Optional[ast.IbExpr]) -> Optional[str]:
         """AST 表达式节点 → 名称字符串（供 chan/slot 的 type_name/mode/name 字段）。

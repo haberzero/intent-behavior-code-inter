@@ -37,6 +37,7 @@ class CoreTokenScanner:
             'lambda': TokenType.LAMBDA,
             'snapshot': TokenType.SNAPSHOT,
             'await': TokenType.AWAIT,
+            'yield': TokenType.YIELD,
             'chan': TokenType.CHAN,
             'slot': TokenType.SLOT,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,

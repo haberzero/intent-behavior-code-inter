@@ -22,6 +22,7 @@ from core.base.diagnostics.codes import (
     SEM_TOO_MANY_POSITIONAL,
     SEM_TYPE_MISMATCH,
     SEM_UNKNOWN_KEYWORD,
+    SEM_YIELD_OUTSIDE_FUNCTION,
     SEM_UNRESOLVED_TYPE,
     ICE_TYPE_LEAK,
 )
@@ -191,6 +192,26 @@ class ExpressionVisitorsMixin:
         result_type = operand_type or self._any_desc
         self.bind_type(node, result_type)
         return result_type
+
+    def visit_IbYieldExpr(self, node: ast.IbYieldExpr) -> Optional[IbSpec]:
+        """访问 ``yield <expr>``：惰性生成器产出值。
+
+        ``yield`` 只能在函数体内（D-08 自标记函数种类）；模块顶层无函数上下文
+        时是语义错误。产出表达式类型即 yield 值类型（生成器元素类型）。
+        """
+        if not self.in_function_def:
+            self.error(
+                "'yield' can only be used inside a function body "
+                "(generator functions are self-marking by 'yield').",
+                node, code=SEM_YIELD_OUTSIDE_FUNCTION,
+                hint="Move 'yield' into a function (func) body.",
+            )
+            result_type = self._any_desc
+        else:
+            result_type = self.visit(node.value) if node.value is not None else self._any_desc
+        final_type = result_type or self._any_desc
+        self.bind_type(node, final_type)
+        return final_type
 
     def visit_IbChannelExpr(self, node: ast.IbChannelExpr) -> Optional[IbSpec]:
         """``chan(T, ...)`` 的类型 = chan[T]（元素类型经 type_name 保真）。

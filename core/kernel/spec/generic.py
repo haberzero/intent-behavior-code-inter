@@ -174,6 +174,12 @@ def _build_slot(factory: "SpecFactory", names: List[str], modules: List[Optional
     return factory.create_slot(value_type_name=value, value_type_module=value_mod)
 
 
+def _build_generator(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
+    value = names[0] if names else "any"
+    value_mod = modules[0] if modules else None
+    return factory.create_generator(value_type_name=value, value_type_module=value_mod)
+
+
 # -- to_typeref（序列化：特化 TypeDef → 结构化 TypeRef） ------------- #
 
 def _to_typeref_list(spec: "TypeDef") -> TypeRef:
@@ -293,6 +299,13 @@ def _restore_slot(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
     )
 
 
+def _restore_generator(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
+    return factory.create_generator(
+        value_type_name=data.get("value_type_name", "any"),
+        value_type_module=data.get("value_type_module"),
+    )
+
+
 # -- resolve_member（泛型成员特化，协议化——替代 _members.py per-type 级联） --- #
 
 def _resolve_member_list(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
@@ -405,5 +418,9 @@ def create_generic_registry() -> GenericTypeRegistry:
     reg.register(GenericTypeDeclaration(
         name="slot", kind=TypeKind.SLOT.value,
         build=_build_slot, to_typeref=_to_typeref_value_typed, restore=_restore_slot,
+    ))
+    reg.register(GenericTypeDeclaration(
+        name="generator", kind=TypeKind.GENERATOR.value,
+        build=_build_generator, to_typeref=_to_typeref_value_typed, restore=_restore_generator,
     ))
     return reg

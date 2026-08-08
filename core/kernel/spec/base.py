@@ -63,6 +63,7 @@ class TypeKind(str, Enum):
     SLOT = "slot"           # 共享状态槽（值类型泛型）
     SUBSCRIBER = "subscriber"  # pubsub 订阅者消费者端点
     THREAD_RESULT = "thread_result"  # 线程结果容器（值类型泛型，thread_result[T]）
+    GENERATOR = "generator"  # 惰性生成器（含 yield 函数调用产出，元素类型泛型 generator[T]）
 
 
 @dataclass(eq=False)
