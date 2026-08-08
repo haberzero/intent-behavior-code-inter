@@ -370,3 +370,76 @@ class TestChannelRecvWaitable:
         w = sub.recv_waitable()
         c.send("m")
         assert w.try_result() == (True, "m")
+
+
+# ------------------------------------------------------------------ #
+# ChannelSendWaitable（B1：通信发送的 Waitable 投影，与 recv 对称）     #
+# ------------------------------------------------------------------ #
+
+class TestChannelSendWaitable:
+    """ChannelSendWaitable：满时挂起、非满立即投递、终态关闭。"""
+
+    def test_not_full_sends_immediately(self):
+        c = ChannelCore(mode="message")
+        w = c.send_waitable("a")
+        assert w.is_done is True
+        assert w.try_result() == (True, None)
+        assert c.recv() == "a"
+
+    def test_full_then_space_becomes_ready(self):
+        c = ChannelCore(mode="message", buffer=1)
+        c.send(1)
+        w = c.send_waitable(2)
+        assert w.is_done is False
+        assert w.try_result() == (False, None)
+        assert c.recv() == 1  # 腾出空间
+        assert w.is_done is True
+        assert w.try_result() == (True, None)
+        assert c.recv() == 2
+
+    def test_closed_raises(self):
+        c = ChannelCore(mode="message")
+        c.close()
+        with pytest.raises(CommClosedError):
+            c.send_waitable("a")
+
+    def test_result_blocks_until_space(self):
+        c = ChannelCore(mode="message", buffer=1)
+        c.send(1)
+        w = c.send_waitable(2)
+
+        def _recv():
+            time.sleep(0.05)
+            return c.recv()
+
+        t = threading.Thread(target=_recv, daemon=True)
+        t.start()
+        assert w.result() is None  # 阻塞投递，等待空间
+        t.join()
+        assert c.recv() == 2
+
+    def test_pubsub_fanout_send_waitable(self):
+        c = ChannelCore(mode="pubsub")
+        s1 = c.subscribe()
+        s2 = c.subscribe()
+        w = c.send_waitable("m")
+        assert w.try_result() == (True, None)
+        assert s1.recv() == "m"
+        assert s2.recv() == "m"
+
+    def test_pubsub_no_subscribers_immediate(self):
+        c = ChannelCore(mode="pubsub")
+        w = c.send_waitable("m")
+        assert w.is_done is True
+        assert w.try_result() == (True, None)
+
+    def test_pubsub_bounded_subscriber_full_pends(self):
+        c = ChannelCore(mode="pubsub")
+        s = c.subscribe(size=1)
+        c.send("a")
+        w = c.send_waitable("b")
+        assert w.is_done is False
+        assert w.try_result() == (False, None)
+        assert s.recv() == "a"  # 腾出空间
+        assert w.try_result() == (True, None)
+        assert s.recv() == "b"

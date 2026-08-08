@@ -71,9 +71,28 @@ class IbChannel(IbObject):
 
     # -- 生产者 ------------------------------------------------ #
 
-    def send(self, value) -> None:
-        """向 Channel 发送数据（阻塞；有界缓冲满时等待）。"""
-        self.core.send(unbox(value))
+    def send(self, value) -> Any:
+        """向 Channel 发送数据。
+
+        **B1（PT-DEBT-13）阻塞即挂起**：非满立即投递返回 ``None``；有界满通道
+        返回发送 Waitable（与 ``recv`` 返回接收 Waitable 对称）——VM 经既有
+        Waitable 挂起路径等待腾出空间，宿主经 ``.result()`` 阻塞投递。消除
+        满通道真阻塞（唯一消费者同调度器时死锁）。
+        """
+        item = unbox(value)
+        core = self.core
+        if core.mode != "pubsub":
+            if core.send_nowait(item):
+                return None  # 非满，立即投递完成
+            return core.send_waitable(item)  # 满 → 发送 Waitable（已关闭在 core 内抛）
+        # pubsub：优先立即全量投递（send_nowait 已投递部分时返回 False，但
+        # 直接丢弃会丢消息）——经 fanout waitable 统一定义投递进度：先尝试
+        # 立即投递，全部到位返回 None；部分未到位返回 waitable 供挂起续投。
+        w = core.send_waitable(item)
+        ok, _ = w.try_result()
+        if ok:
+            return None
+        return w
 
     def send_nowait(self, value) -> "IbObject":
         """非阻塞发送；返回 bool 指示是否投递成功。"""

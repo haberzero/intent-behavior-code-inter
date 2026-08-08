@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from .buffer import CommBuffer, CommClosedError
 from .recv_waitable import ChannelRecvWaitable
+from .send_waitable import ChannelSendWaitable
 
 
 class ChannelCore:
@@ -105,6 +106,25 @@ class ChannelCore:
         if self._primary is None:
             return False
         return self._primary.send_nowait(item)
+
+    def send_waitable(self, item: Any) -> Any:
+        """返回发送 Waitable（B1：满时挂起，统一执行地基 · 阻塞即挂起）。
+
+        与 ``recv_waitable`` 对称。pubsub 模式对当前订阅者快照逐 buffer 构造
+        发送 waitable（任一订阅者满 → 该 waitable 未就绪重轮询）；无订阅者时
+        返回一个立即就绪的 waitable（投递零人即完成）。
+        """
+        if self._mode == "pubsub":
+            with self._lock:
+                if self._closed_flag():
+                    raise CommClosedError()
+                subscribers = list(self._subscribers.values())
+            if not subscribers:
+                return _ImmediateSendWaitable()
+            return _FanoutSendWaitable(subscribers, item)
+        if self._primary is None:
+            raise CommClosedError()
+        return self._primary.send_waitable(item)
 
     # ------------------------------------------------------------------ #
     # 消费者                                                            #
@@ -256,6 +276,10 @@ class _SubscriberView:
         """返回本订阅者端点的接收 Waitable（统一等待语义）。"""
         return ChannelRecvWaitable(self._buffer)
 
+    def send_waitable(self, item: Any) -> "ChannelSendWaitable":
+        """返回本订阅者端点的发送 Waitable（满时挂起，统一执行地基）。"""
+        return self._buffer.send_waitable(item)
+
     def close(self) -> None:
         self._buffer.close()
         self._channel.unsubscribe(self._sub_id)
@@ -266,3 +290,62 @@ class _SubscriberView:
 
     def snapshot(self) -> dict:
         return self._buffer.snapshot()
+
+
+class _ImmediateSendWaitable:
+    """pubsub 无订阅者时的立即完成发送 waitable（投递零人即完成）。"""
+
+    is_done = True
+
+    def try_result(self):
+        return (True, None)
+
+    def result(self):
+        return None
+
+    def register_wake(self, event) -> None:
+        event.set()
+
+
+class _FanoutSendWaitable:
+    """pubsub 扇出发送 waitable（B1：满时挂起，统一执行地基）。
+
+    对构造时的订阅者快照逐 ``CommBuffer`` 委托 ``ChannelSendWaitable``；
+    ``is_done`` 为全部订阅者就绪或通道关闭；``try_result`` 对每个订阅者
+    尝试投递，任一未就绪则返回 ``(False, None)`` 重轮询（防部分投递），
+    全部投递成功返回 ``(True, None)``。与 ``send_nowait`` 的"任一订阅者满
+    即 False"语义对齐（全量投递才成功）。
+    """
+
+    def __init__(self, buffers: List[CommBuffer], item: Any):
+        self._waitables = [ChannelSendWaitable(b, item) for b in buffers]
+        self._delivered = [False] * len(self._waitables)
+
+    @property
+    def is_done(self) -> bool:
+        return all(w.is_done for w in self._waitables)
+
+    def try_result(self):
+        for i, (w, done) in enumerate(zip(self._waitables, self._delivered)):
+            if done:
+                continue
+            try:
+                ok, _ = w.try_result()
+            except CommClosedError:
+                # 订阅者已关闭：视为已投递（跳过，与 send 对已关订阅者跳过对齐）
+                self._delivered[i] = True
+                continue
+            if ok:
+                self._delivered[i] = True
+        if all(self._delivered):
+            return (True, None)
+        return (False, None)
+
+    def result(self):
+        for w in self._waitables:
+            w.result()
+        return None
+
+    def register_wake(self, event) -> None:
+        for w in self._waitables:
+            w.register_wake(event)

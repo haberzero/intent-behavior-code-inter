@@ -105,8 +105,8 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
-  `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）已完成（2026-08-08，全量 2053/1）**；
-  **下一步 PT-DEBT-13（B1 chan.send Waitable 化）**。实施计划见
+  `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）已完成、PT-DEBT-13（B1 chan.send Waitable 化）已完成
+  （2026-08-08，全量 2068/1）**；**下一步 PT-DEBT-14（F2 slot.update + F3 prompt hint CPS）**。实施计划见
   `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。登记 PT-DEBT-12/13/14/15。
 - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
   当前主线后：P0 阶段 5 增量（`next()` 内建 + `yield from`）+ PT-FEAT-5；P1 UID/序列化统一 + `file` 重命名；

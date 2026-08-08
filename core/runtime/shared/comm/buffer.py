@@ -45,6 +45,9 @@ class CommBuffer:
         # R2 通知式唤醒回调表：recv waitable 经 register_wake 注册，
         # send/close 时触发（通知调度器即时唤醒，与 Condition 平行）。
         self._wake_callbacks: list = []
+        # B1（PT-DEBT-13）：send waitable 经 register_send_wake 注册，
+        # recv/close 腾出空间时触发（与 recv 唤醒对称，消除满通道真阻塞）。
+        self._send_wake_callbacks: list = []
 
     # ------------------------------------------------------------------ #
     # R2 通知式唤醒（调度器即时唤醒，与 Condition 平行）                  #
@@ -62,6 +65,18 @@ class CommBuffer:
                 return
             self._wake_callbacks.append(event)
 
+    def register_send_wake(self, event) -> None:
+        """把发送完成通知注册到 ``event``：recv/close 腾出空间时设置（可跨线程）。
+
+        供 ``ChannelSendWaitable`` 委托——调度器等待满通道 send 时注册，
+        消费者取走数据腾出空间（或通道关闭）即唤醒，消除满通道真阻塞。
+        """
+        with self._cond:
+            if self._maxsize == 0 or len(self._queue) < self._maxsize or self._closed:
+                event.set()
+                return
+            self._send_wake_callbacks.append(event)
+
     def _notify_wake(self) -> None:
         """触发全部完成通知（send 有新数据 / close 置关闭态时调用）。
 
@@ -71,6 +86,18 @@ class CommBuffer:
         if not self._wake_callbacks:
             return
         callbacks, self._wake_callbacks = self._wake_callbacks, []
+        for ev in callbacks:
+            ev.set()
+
+    def _notify_send_wake(self) -> None:
+        """触发全部发送完成通知（recv 腾出空间 / close 置关闭态时调用）。
+
+        与 ``_notify_wake`` 平行（调用方须已持有 ``_cond``）；唤醒等待
+        满通道 send 的调度器。
+        """
+        if not self._send_wake_callbacks:
+            return
+        callbacks, self._send_wake_callbacks = self._send_wake_callbacks, []
         for ev in callbacks:
             ev.set()
 
@@ -103,6 +130,20 @@ class CommBuffer:
             self._notify_wake()  # R2：通知调度器即时唤醒（新数据到达）
             return True
 
+    def send_waitable(self, item: Any) -> "ChannelSendWaitable":
+        """返回发送 Waitable（满时挂起，统一执行地基 · 阻塞即挂起）。
+
+        与 ``recv_waitable`` 对称：调度器任务经 ``try_result`` 非阻塞投递
+        （满则 ``(False, None)`` 重轮询），宿主/线程体经 ``result()`` 阻塞投递。
+        已关闭则抛 ``CommClosedError``。
+        """
+        from .send_waitable import ChannelSendWaitable
+
+        with self._cond:
+            if self._closed:
+                raise CommClosedError()
+        return ChannelSendWaitable(self, item)
+
     # ------------------------------------------------------------------ #
     # 消费者                                                            #
     # ------------------------------------------------------------------ #
@@ -116,6 +157,7 @@ class CommBuffer:
                 self._cond.wait()
             item = self._queue.popleft()
             self._cond.notify()  # 唤醒等待 send 的生产者
+            self._notify_send_wake()  # B1：腾出空间，唤醒满通道 send 的调度器
             return item
 
     def recv_nowait(self):
@@ -125,6 +167,7 @@ class CommBuffer:
                 return False, None
             item = self._queue.popleft()
             self._cond.notify()
+            self._notify_send_wake()  # B1：腾出空间，唤醒满通道 send 的调度器
             return True, item
 
     def peek_nowait(self) -> Any:
@@ -149,6 +192,7 @@ class CommBuffer:
             self._closed = True
             self._cond.notify_all()
             self._notify_wake()  # R2：通知调度器即时唤醒（通道已关闭）
+            self._notify_send_wake()  # B1：满通道 send 也被唤醒（关闭即终态）
 
     @property
     def closed(self) -> bool:
