@@ -91,6 +91,13 @@ def main():
     inspect_parser.add_argument("--format", choices=["json", "dot"], default="json", help="Output format")
     inspect_parser.add_argument("--output", "-o", help="Output file (default: stdout)", default=None)
 
+    # Bench command
+    bench_parser = subparsers.add_parser("bench", help="Compile-time benchmark (warmup + N runs)")
+    bench_parser.add_argument("file", help="Path to the .ibci entry file")
+    bench_parser.add_argument("--root", help="Project root directory", default=None)
+    bench_parser.add_argument("--runs", type=int, default=10, help="Number of timed runs (default: 10)")
+    bench_parser.add_argument("--warmup", type=int, default=2, help="Warmup runs before timing (default: 2)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -207,6 +214,48 @@ def main():
             print(f"Exported to: {args.output}")
         else:
             print(output)
+        sys.exit(0)
+
+    elif args.command == "bench":
+        # 编译时间基准（PT-FEAT-5）：warmup + N 次计时，报告 min/avg/max。
+        from core.kernel.issue import CompilerError
+        from core.compiler.diagnostics.formatter import DiagnosticFormatter
+        import statistics
+        import time
+
+        def _run_once() -> float:
+            t0 = time.perf_counter()
+            engine.compile(args.file)
+            return time.perf_counter() - t0
+
+        # warmup（引擎初始化/缓存预热不计入）；编译失败即报错退出
+        for _ in range(max(0, args.warmup)):
+            try:
+                _run_once()
+            except CompilerError as e:
+                print(DiagnosticFormatter.format_all(
+                    e.diagnostics, source_manager=engine.scheduler.source_manager
+                ))
+                sys.exit(1)
+
+        samples = []
+        for _ in range(max(1, args.runs)):
+            try:
+                samples.append(_run_once())
+            except CompilerError as e:
+                print(DiagnosticFormatter.format_all(
+                    e.diagnostics, source_manager=engine.scheduler.source_manager
+                ))
+                sys.exit(1)
+
+        ms = [s * 1000 for s in samples]
+        print(f"bench: {args.file}")
+        print(f"  runs: {len(ms)} (warmup {args.warmup})")
+        print(f"  min:  {min(ms):.2f} ms")
+        print(f"  avg:  {statistics.mean(ms):.2f} ms")
+        print(f"  max:  {max(ms):.2f} ms")
+        if len(ms) > 1:
+            print(f"  stdev:{statistics.stdev(ms):.2f} ms")
         sys.exit(0)
 
 if __name__ == "__main__":

@@ -10,9 +10,14 @@ Validates:
 - EXP-3: dot export produces a well-formed digraph (clusters + edges)
 - EXP-4: json is serializable and round-trips through json.loads
 - EXP-5: handles empty/missing data without crashing (fail-open)
+- CLI-1: `inspect`/`semantic` emit json/dot via subprocess
+- CLI-2: `bench` reports timing stats and exits 0 on success, 1 on compile error
 """
 
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -23,6 +28,9 @@ from core.compiler.diagnostics.exporter import (
     export_dot,
     export_artifact,
 )
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+HELLO = os.path.join(REPO_ROOT, "examples/01_getting_started/01_hello_world.ibci")
 
 
 @pytest.fixture(scope="module")
@@ -92,3 +100,39 @@ class TestFailOpen:
         dot = export_dot(None, _Empty(), module_name="empty")
         assert dot.startswith('digraph "symbols" {')
         assert dot.rstrip().endswith("}")
+
+
+class TestCliIntegration:
+    """inspect/semantic/bench CLI 命令（subprocess，真实命令路径）。"""
+
+    def _run_cli(self, *args):
+        return subprocess.run(
+            [sys.executable, os.path.join(REPO_ROOT, "main.py"), *args],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_inspect_json(self):
+        r = self._run_cli("inspect", HELLO, "--format", "json")
+        assert r.returncode == 0, r.stderr
+        data = json.loads(r.stdout)
+        assert "module" in data and "symbols" in data and "type_bindings" in data
+
+    def test_semantic_dot(self):
+        r = self._run_cli("semantic", HELLO, "--format", "dot")
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.lstrip().startswith('digraph "symbols" {')
+        assert "subgraph cluster_" in r.stdout
+
+    def test_bench_success(self):
+        r = self._run_cli("bench", HELLO, "--runs", "3", "--warmup", "1")
+        assert r.returncode == 0, r.stderr
+        assert "min:" in r.stdout and "avg:" in r.stdout and "max:" in r.stdout
+
+    def test_bench_compile_error_exits_1(self, tmp_path):
+        bad = tmp_path / "bad.ibci"
+        bad.write_text("func f() -> int:\n    undefined_call()\n", encoding="utf-8")
+        r = self._run_cli("bench", str(bad))
+        assert r.returncode == 1
+        assert "SEM_UNDEFINED_SYMBOL" in r.stdout

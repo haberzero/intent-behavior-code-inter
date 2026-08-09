@@ -7,18 +7,20 @@
 
 ## 诊断工具
 
-编译产物（符号表 / 类型绑定）可通过 CLI 导出为 JSON 或 GraphViz dot：
+编译产物（符号表 / 类型绑定）与编译性能可通过 CLI 诊断导出与基准测量：
 
 ```bash
 python main.py inspect <entry.ibci> --format json   # 符号表 + 类型绑定 JSON
 python main.py inspect <entry.ibci> --format dot    # 符号表作用域图 + 类型绑定边
 python main.py semantic <entry.ibci> --format dot   # 同上（semantic 为 inspect 别名语义）
 python main.py inspect <entry.ibci> -o symbols.json # 写文件（默认 stdout）
+python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（min/avg/max/stdev）
 ```
 
 - **JSON**：`symbols`（作用域树递归，每条 name/kind/uid/type/provenance）+ `type_bindings`（节点类型+位置 → 类型名）。
 - **dot**：作用域为 `subgraph cluster`、符号为节点、作用域父子/类型绑定为边；可用 `dot -Tpng symbols.dot -o symbols.png` 渲染。
-- 权威实现：`core/compiler/diagnostics/exporter.py`。
+- **bench**：warmup 后重复编译 N 次，报告 min/avg/max（可加 stdev）；编译失败按诊断码格式报错并以非零码退出。
+- 权威实现：`core/compiler/diagnostics/exporter.py`（导出）；`main.py` `inspect`/`semantic`/`bench` 命令。
 
 ## 如何阅读
 

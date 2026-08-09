@@ -138,8 +138,17 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 - **CLI 修复（两个预存死路径）**：`inspect` 命令原只有 handler 无 subparser 且引用未定义 `module_name`（死代码）；
   `semantic` 命令原只有 subparser 无 handler（静默无输出）。统一接入 exporter，支持 `--format json|dot` 与 `--output`。
 - **契约测试 `tests/contracts/test_diagnostic_exporter.py`**：EXP-1 根符号字段 / EXP-2 类型绑定映射 /
-  EXP-3 dot 结构 / EXP-4 JSON round-trip / EXP-5 空数据 fail-open。
-- **剩余子项**（PT-FEAT-5 未完）：编译时间基准、CI/CD。
+  EXP-3 dot 结构 / EXP-4 JSON round-trip / EXP-5 空数据 fail-open / CLI-1 inspect+semantic 子进程 /
+  CLI-2 bench 成功 + 编译错误退出 1。
+
+## ✅ 已完成：PT-FEAT-5 编译时间基准（`bench` 命令）（2026-08-09）
+
+> **unsafe-vibe-dev，全量 2107 passed / 1 skipped**。PT-FEAT-5 四项中第三项落地。
+
+- **`main.py bench <file> --runs N --warmup M`**：warmup 后重复编译 N 次，报告 min/avg/max/stdev。
+  编译失败按诊断码格式（catalog 说明）报错并以非零码退出（fail-fast）。
+- **CLI 测试**：tests/contracts/test_diagnostic_exporter.py CLI-2（bench 成功输出统计 / 编译错误退出 1）。
+- **剩余子项**（PT-FEAT-5 未完）：**CI/CD**——涉及远程 push，属禁 push 硬原则范围，须用户显式授权后另行执行。
 
 ## 📋 交接要点（下一 session）
 
@@ -155,8 +164,8 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
   P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；P3 VISION。
 - **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
   `tasks_docs/_code_yield_from.md`。
-- **PT-FEAT-5 错误用户友好化已完成两项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出）。
-  剩余子项：编译时间基准、CI/CD（见 `PENDING_TASKS.md`）。
+- **PT-FEAT-5 已完成三项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出 + 编译基准）。
+  剩余：CI/CD（涉远程 push，须用户显式授权后另行执行；见 `PENDING_TASKS.md`）。
 - **阶段 5 yield 惰性生成器已完成（2026-08-08）**：见上方"已完成"节。`YIELD_GENERATOR_DESIGN.md`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
