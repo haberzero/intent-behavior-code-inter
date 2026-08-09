@@ -1,6 +1,6 @@
 # 协程与迭代器设计
 
-> 调度器多任务化与语言级 `await` 表达式为当前实现；语言级生成器（`yield`）为演进方向。**无 async 函数关键字**：任意函数均可 `await`（透明 async），`yield` 使函数成为惰性生成器。当前实现状态以代码为准。
+> 调度器多任务化与语言级 `await` 表达式、语言级惰性生成器（`yield`/`yield from`）为当前实现。**无 async 函数关键字**：任意函数均可 `await`（透明 async），`yield` 使函数成为惰性生成器。当前实现状态以代码为准。
 
 ## 定位
 
@@ -8,8 +8,7 @@
 
 ## 当前状态
 
-- **已实现**：调度器多任务化（`core/runtime/vm/task_scheduler.py`）、语言级 `await` 表达式（AST `IbAwaitExpr`）、宿主异步统一 `Waitable` 协议。
-- **演进方向**：语言级生成器（`yield` 使函数成为惰性生成器），依赖调度器多任务挂起恢复与快照协议覆盖 yield 点，尚未实现。
+- **已实现**：调度器多任务化（`core/runtime/vm/task_scheduler.py`）、语言级 `await` 表达式（AST `IbAwaitExpr`）、宿主异步统一 `Waitable` 协议、语言级惰性生成器（`yield` 使函数自动成为惰性生成器，含 `yield from` 委托；见 `docs/syntax/05_functions.md` §5.8/5.9）。
 
 ## 深入指引
 
