@@ -1,7 +1,7 @@
 # 条件分支与异常嵌套复杂度审计 — 独立分支任务（技术债）
 
 > **来源**：2026-08-02 用户裁定。异常过多的 if-else 并用、异常过深的 if-else、过多过深的 except 嵌套（及同类复杂度异味）属技术债，需独立分支核对分析。
-> **状态**：待执行（独立分支，不与主线混置）
+> **状态**：**进行中**（独立分支，不与主线混置）。§1.2 宽 except 剩余待核验项已核验（2026-08-09）。
 > **方法**：AST 静态度量 + 证据驱动人工复核；每批 `python -m pytest tests/` 全量零回归。
 > **核验基准**：`.opencode/skills/code-quality/SKILL.md` 判定基准（A 合法保留 / B 修复根因 / 死代码删除 / 双通道收敛）。
 
@@ -38,8 +38,8 @@
 | `llm_executor/_prompt.py`（4 处 40/47/81/253） | prompt 降级链 | 待核验【**已核验 2026-08-03**：合法 prompt 表示降级链——对象→prompt 文本转换失败时降级 `to_native()`/`str()`/None（构建提示词的尽力而为韧性），非掩盖程序错误。边缘：用户 `__to_prompt__` 内真 bug 会被静默吞掉并降级，可考虑窄化 except，属可选优化】 |
 | `llm_except_frame.py`（3 处 185/266/318） | 快照/恢复 | 部分设计内（best-effort）【**已核验 2026-08-03**：185 快照协议失败→深克隆兜底；266 恢复协议失败→保留当前状态（best-effort）；318 值比较失败→回退身份比较 `a is b`。均为带注释的 best-effort 协议兜底，设计内】 |
 | `user_functions.py`（2 处 61/220）、`base.py:95/127`、`functions.py:66` 等 | 原生函数包装 | 待核验（部分设计内：ThrownException 穿透）【**已核验 2026-08-02**：**无语言级异常误吞**。`functions.py:66` 为正确示范——显式透传 `InterpreterError` 与 `ThrownException`（用户代码主动抛的语言级异常，须由 IbTry/顶层 try 体系处理），仅将真正的原生 bug 包为 `InterpreterError`；`base.py:95`（cast 失败→透传后抛明确 TypeError）、`:113`（`__to_prompt__` 显示兜底，窄 except `(AttributeError, InterpreterError)`）、`:127`（`__from_prompt__` 协议返 `(False, 错误)`，非静默）、`user_functions.py:61/220`（模块导入失败→`raise InterpreterError(...) from e` 重抛）——均 fail-fast / 协议契约，非掩盖型兜底】 |
-| `ibci_ai/core.py`（4 处 98/167/249/466） | OpenAI 客户端 | 待核验 |
-| `ibci_idbg/core.py`（2 处 383/398）、`auto_discovery.py`（4 处） | 观察者/发现 | 待核验 |
+| `ibci_ai/core.py`（4 处 98/167/249/466） | OpenAI 客户端 | 待核验【**已核验 2026-08-09**：代码已演进窄化——当前无宽 `except Exception`，统一 `_PROVIDER_ERRORS = (openai.OpenAIError, RuntimeError, ValueError)`（core.py:22/25），fail-fast 重抛非吞错。BRANCH_NESTING_AUDIT 2026-08-02 基线的行号已偏移，此家族已由代码演进解决（A 类保留）】 |
+| `ibci_idbg/core.py`（2 处 383/398）、`auto_discovery.py`（4 处） | 观察者/发现 | 待核验【**已核验 2026-08-09**：`ibci_idbg/core.py` 已无宽 except（基线行号 383/398 已偏移，现为 llmexcept 帧读取，无静默吞错）；`auto_discovery.py`（73/87/101/120/126）宽 except 全为"捕获插件加载/元数据错误 → `raise RuntimeError(...) from e`"**fail-fast 重抛**（插件元数据为外部不可控代码，宽捕获合理，保持根因），A 类保留】 |
 | `llm_except_frame.py:318`、`debugger.py:139` | 值比较/调试 | 设计内 |
 
 ### 1.3 嵌套 try（全仓 **5 处**）
