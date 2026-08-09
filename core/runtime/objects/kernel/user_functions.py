@@ -1,15 +1,9 @@
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
-from core.kernel.issue import InterpreterError
-from core.base.diagnostics.codes import RUN_CALL_ERROR
-from core.base.source_atomic import Location
-from core.kernel.intent_logic import IntentRole
 from core.kernel.spec import IbSpec
-from core.runtime.frame import get_current_frame as _get_frame
 
 from .base import IbObject
-from .functions import IbFunction, IbSuperProxy
-from ._helpers import _is_intent_context_param, _should_activate_intent_context_arg
+from .functions import IbFunction
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import IExecutionContext
@@ -39,129 +33,27 @@ class IbUserFunction(IbFunction):
         return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """执行用户定义的函数"""
-        # 切换到函数定义所在的模块上下文
-        from core.runtime.objects.primitives import IbFnCallable, IbBehavior
-        _frame = _get_frame()
-        rt_context = _frame if _frame is not None else self.context.runtime_context
-        old_module = self.context.current_module_name
-        old_scope = rt_context.current_scope
+        """执行用户定义的函数。
 
-        # --- 意图栈作用域隔離（拷贝传递语义）---
-        # 每次函数调用 fork 调用者的意图上下文，函数内的 @+/@- 不泄漏给调用者。
-        # 若需在函数体内屏蔽继承自调用者的意图，请显式调用：
-        #   intent_context.clear_inherited()  - 清空继承来的持久意图栈
-        #   intent_context.use(ctx)           - 以自定义上下文替换当前作用域的意图上下文
-        saved_intent = rt_context.enter_intent_scope()
+        **收敛**：本方法为宿主侧薄包装——委托 CPS 权威路径
+        ``_vm_call_user_function`` + ``_drive_generator``（TaskScheduler 驱动
+        ``_drive_loop_gen``），不再重复模块切换/意图 fork/作用域/闭包/self+super/
+        实参绑定逻辑（消双写）。VM 主路径（leaf.py UserFunctionCall）与线程体
+        （coordinator）本就经 CPS 执行本对象；本方法仅作 vtable receive('__call__')
+        后备与宿主/反序列化同步调用。
+        """
+        from core.runtime.vm.handlers._shared import _vm_call_user_function
+        from core.runtime.coordinator import _drive_generator
 
-        if self.module_name and self.module_name != old_module:
-            self.context.current_module_name = self.module_name
-            # 获取目标模块的作用域
-            try:
-                mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
-                rt_context.current_scope = mod_inst.scope
-            except Exception as e:
-                raise InterpreterError(
-                    f"Failed to import module '{self.module_name}' for function call: {e}",
-                    error_code=RUN_CALL_ERROR
-                ) from e
-
-        pushed = False
-        try:
-            node_data = self.context.get_node_data(self.node_uid)
-            params_uids = node_data.get("args", [])
-
-            rt_context.enter_scope()
-
-            # 绑定 nonlocal 闭包变量（Cell 共享引用）
-            if self.closure:
-                from core.runtime.objects.cell import IbCell
-                for sym_uid, (var_name, cell) in self.closure.items():
-                    if isinstance(cell, IbCell):
-                        # 即使 Cell 为空也需要绑定（内层函数可能先赋值再读取）
-                        initial_value = cell.get() if not cell.is_empty() else self.ib_class.registry.get_none()
-                        rt_context.define_variable(var_name, initial_value, uid=sym_uid)
-                        # 将 Cell 引用附加到新创建的符号上，使赋值时能同步更新
-                        new_sym = rt_context.current_scope.get_symbol_by_uid(sym_uid)
-                        if new_sym is not None:
-                            new_sym.cell = cell
-
-            loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
-            loc = None
-            if loc_data:
-                loc = Location(
-                    file_path=loc_data.get("file_path"),
-                    line=loc_data.get("line", 0),
-                    column=loc_data.get("column", 0)
-                )
-
-            self.context.push_stack(
-                name=node_data.get("name", "anonymous"),
-                location=loc,
-                is_user_function=True
+        vm = self.context.vm_executor
+        if vm is None:
+            raise RuntimeError(
+                "IbUserFunction.call(): vm_executor not available on ExecutionContext. "
+                "Ensure Interpreter.execute_module() has been called before invoking user functions."
             )
-            pushed = True
 
-            ib_none = self.ib_class.registry.get_none()
-            if receiver and receiver is not ib_none:
-                # 查找 self 符号的 UID（语义分析阶段将函数定义节点映射到 self 符号）
-                self_sym = self.context.get_side_table("node_to_symbol", self.node_uid)
-                self_uid = self_sym if isinstance(self_sym, str) else (self_sym.uid if self_sym else None)
-                rt_context.define_variable("self", receiver, uid=self_uid)
-
-                # super() 支持：若该函数有归属类（owner_class）且归属类有父类，
-                # 则在方法作用域内注入 super 代理对象。
-                # super 使用固定 UID "intrinsic:super" 以避免符号查找冲突。
-                if self.owner_class and self.owner_class.parent:
-                    super_proxy = IbSuperProxy(receiver, self.owner_class.parent)
-                    rt_context.define_variable("super", super_proxy, uid="intrinsic:super")
-
-            for i, arg_uid in enumerate(params_uids):
-                arg_data = self.context.get_node_data(arg_uid)
-                is_intent_ctx_param = _is_intent_context_param(self.context, arg_uid, arg_data)
-                actual_arg_uid = arg_uid
-                actual_arg_data = arg_data
-                if arg_data.get("_type") == "IbTypeAnnotatedExpr":
-                    actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = self.context.get_node_data(actual_arg_uid)
-
-                arg_name = actual_arg_data.get("arg")
-                if i < len(args):
-                    arg_value = args[i]
-                    sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
-                    if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
-                        rt_context.use_intent_context(arg_value)
-
-            body = node_data.get("body", [])
-            # Drive function body execution via VMExecutor (CPS main path).
-            # run_body() propagates top-level control signals via UnhandledSignal.
-            # Signals are consumed by except _CSE below; BREAK/CONTINUE are re-thrown.
-            from core.runtime.shared.signals import (
-                ControlSignal as _CS, UnhandledSignal as _CSE,
-            )
-            vm = self.context.vm_executor
-            if vm is None:
-                raise RuntimeError(
-                    "IbUserFunction.call(): vm_executor not available on ExecutionContext. "
-                    "Ensure Interpreter.execute_module() has been called before invoking user functions."
-                )
-            vm.run_body(body)
-
-            return ib_none
-        except _CSE as e:
-            # 捕获 UnhandledSignal，按信号类型处理。
-            if e.signal.kind is _CS.RETURN:
-                return e.signal.value
-            raise  # BREAK/CONTINUE 不应到达函数帧，透传至调用者
-        finally:
-            if pushed:
-                self.context.pop_stack()
-            rt_context.exit_scope()
-            # 恢复调用者的意图上下文和模块上下文
-            rt_context.exit_intent_scope(saved_intent)
-            self.context.current_module_name = old_module
-            rt_context.current_scope = old_scope
+        gen = _vm_call_user_function(vm, self, receiver, args)
+        return _drive_generator(vm, gen)
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)
@@ -189,103 +81,26 @@ class IbLLMFunction(IbFunction):
         return self._spec if self._spec is not None else self.ib_class.spec
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """
-        执行 LLM 函数：负责作用域管理和参数绑定，然后通过 KernelRegistry 分发给执行器。
+        """执行 LLM 函数。
 
-        与 IbBehavior.call() 同构：通过 registry.get_llm_executor() 获取执行器，
-        不再持有 llm_executor 直接引用。
+        **收敛**：本方法为宿主侧薄包装——委托 CPS 权威路径
+        ``_vm_invoke_llm_function`` + ``_drive_generator``（TaskScheduler 驱动
+        ``_drive_loop_gen``），不再重复模块切换/意图 fork/作用域/实参绑定逻辑
+        （消双写）。VM 主路径（leaf.py）本就经 CPS 执行本对象；本方法仅作
+        vtable receive('__call__') 后备与宿主/反序列化同步调用。
         """
-        executor = self.ib_class.registry.get_llm_executor()
-        if executor is None:
+        from core.runtime.vm.handlers._shared import _vm_invoke_llm_function
+        from core.runtime.coordinator import _drive_generator
+
+        vm = self.context.vm_executor
+        if vm is None:
             raise RuntimeError(
-                f"IbLLMFunction '{self.node_uid}': LLM executor not registered in KernelRegistry. "
-                "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
+                "IbLLMFunction.call(): vm_executor not available on ExecutionContext. "
+                "Ensure Interpreter.execute_module() has been called before invoking an LLM function."
             )
 
-        # 切换到函数定义所在的模块上下文
-        rt_context = self.context.runtime_context
-        old_module = self.context.current_module_name
-        old_scope = rt_context.current_scope
-
-        # --- 意图栈作用域隔离（拷贝传递语义）---
-        # 与 IbUserFunction.call() 对称：fork 调用者意图上下文，函数内操作不泄漏。
-        # 若需在函数体内屏蔽继承的意图，请在函数体内显式调用 intent_context.clear_inherited()。
-        saved_intent = rt_context.enter_intent_scope()
-
-        if self.module_name and self.module_name != old_module:
-            self.context.current_module_name = self.module_name
-            # 获取目标模块的作用域
-            try:
-                mod_inst = self.context.module_manager.import_module(self.module_name, self.context)
-                rt_context.current_scope = mod_inst.scope
-            except Exception as e:
-                raise InterpreterError(
-                    f"Failed to import module '{self.module_name}' for function call: {e}",
-                    error_code=RUN_CALL_ERROR
-                ) from e
-
-        pushed = False
-        try:
-            node_data = self.context.get_node_data(self.node_uid)
-            rt_context.enter_scope()
-
-            loc_data = self.context.get_side_table("node_to_loc", self.node_uid)
-            loc = None
-            if loc_data:
-                loc = Location(
-                    file_path=loc_data.get("file_path"),
-                    line=loc_data.get("line", 0),
-                    column=loc_data.get("column", 0)
-                )
-
-            self.context.push_stack(
-                name=node_data.get("name", "llm_anonymous"),
-                location=loc,
-                is_user_function=True
-            )
-            pushed = True
-
-            params_uids = node_data.get("args", [])
-
-            for i, arg_uid in enumerate(params_uids):
-                arg_data = self.context.get_node_data(arg_uid)
-                is_intent_ctx_param = _is_intent_context_param(self.context, arg_uid, arg_data)
-                # 处理类型标注包装
-                actual_arg_uid = arg_uid
-                actual_arg_data = arg_data
-                if arg_data.get("_type") == "IbTypeAnnotatedExpr":
-                    actual_arg_uid = arg_data.get("target")
-                    actual_arg_data = self.context.get_node_data(actual_arg_uid)
-
-                arg_name = actual_arg_data.get("arg")
-                if i < len(args):
-                    arg_value = args[i]
-                    sym_uid = self.context.get_side_table("node_to_symbol", actual_arg_uid)
-                    rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
-                    if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
-                        rt_context.use_intent_context(arg_value)
-
-            # 解析呼叫级意图（函数头上的意图），显式传给执行器
-            call_intent = None
-            intent_uid = node_data.get("intent")
-            if intent_uid:
-                intent_data = self.context.get_node_data(intent_uid)
-                call_intent = self.context.factory.create_intent_from_node(
-                    intent_uid,
-                    intent_data,
-                    role=IntentRole.SMEAR
-                )
-
-            # 公理化调用：通过 KernelRegistry 获取执行器，不再直接持有
-            return executor.invoke_llm_function(self, self.context, call_intent=call_intent)
-        finally:
-            if pushed:
-                self.context.pop_stack()
-            rt_context.exit_scope()
-            # 恢复调用者的意图上下文和模块上下文
-            rt_context.exit_intent_scope(saved_intent)
-            self.context.current_module_name = old_module
-            rt_context.current_scope = old_scope
+        gen = _vm_invoke_llm_function(vm, self, receiver, args)
+        return _drive_generator(vm, gen)
 
 
     def __repr__(self):

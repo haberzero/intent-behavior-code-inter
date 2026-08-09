@@ -124,14 +124,16 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 > **接手起点**：先读本节（当前状态）+ `PENDING_TASKS.md` §〇（优先级总表，单一权威源）+
 > 本 session 成果记录（`WORKLOG.md` 尾部 + git 历史 `c61a6e0..HEAD`）。
 
-- **当前主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治（统一执行模型闭环）**。
+- **当前主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（登记 PT-DEBT-12/13/14/15）：
   - **PT-DEBT-12（F1）用户方法 CPS 化、PT-DEBT-13（B1）chan.send Waitable 化、PT-DEBT-14（F2/F3）
     slot.update + prompt hint CPS 化、PT-DEBT-15（M4）LLM 真挂起——已完成（2026-08-08）**；M3（prompt 单源）
     已确认收敛。
-  - **剩余 PT-DEBT-15 中 M1（.call 双写收敛）/ M2（驱动去重）为大型收敛重构（中严重度，回归风险高）**，
-    实施计划 `_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
-- **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，28 commit，全量 2074 → 2128 passed / 1 skipped）**：
+  - **PT-DEBT-15 剩余 M1（.call 双写收敛）/ M2（驱动去重）已完成（2026-08-09，独立分支 exp/async-m1m2，
+    全量 2137 passed / 1 skipped）**。M2 线程体 `_drive_generator` 复用 `_drive_loop_gen` + `TaskScheduler`
+    （单一权威驱动）；M1 四个可调用对象（IbUserFunction/IbFnCallable/IbBehavior/IbLLMFunction）`.call()` 变薄
+    宿主包装委托 CPS 生成器（消绑定双写）。实施计划与落地状态 `_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4 全部收尾）。
+- **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，全量 2074 → 2137 passed / 1 skipped）**：
   - **P0 阶段 5 增量**：`next()` 内建 + `yield from` 生成器委托（主交付）——顺带根治 `_drive_generator_loop`
     生成器体内调用生成器函数的预存缺陷、迭代解析收敛 `_resolve_iterable`（现居 `shared/iterable.py`）。
   - **PT-FEAT-5 三项**：诊断码目录（`catalog.py` 76 码 + formatter fail-open + `15_diagnostics.md`）、
@@ -140,12 +142,13 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   - **P2 审计**：R4 覆盖率核对（2 处 TRUE_GAP 补测）、R5 聚焦治理、PT-AUDIT-1 smell 全量事实回顾（A/B/C/D 定案）。
   - **质量**：三次独立 general 复核（中间/交付门/兜底专项）全部整改（含 `is_generator` 基类化、迭代解析中立归属、
     非可迭代测试修正、注释卫生）。兜底专项审计结论：全部属职责分离型合法 fallback，无 tricky/兼容妥协。
-  - 设计记录 `tasks_docs/_code_yield_from.md`；完整逐项见 `WORKLOG.md` 与 git 历史。
+  - **异步地基收尾（M1/M2）**：见上——统一执行模型闭环完成。独立分支 exp/async-m1m2 实验，复核（general agent）
+    A/B/D 放行 + C 记录（IbUserFunction void 返回语义向主路径收敛）。补回归测试 +9（`test_call_drive_convergence.py`）。
+  - 设计记录 `tasks_docs/_code_yield_from.md` / `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`；完整逐项见 `WORKLOG.md` 与 git 历史。
 - **下一步候选（按优先级，见 `PENDING_TASKS.md` §〇）**：
-  1. **PT-DEBT-15 剩余 M1/M2**（当前主线未完，大型收敛重构，回归风险高，建议独立分支）。
-  2. **PT-DEBT-4 `file` 模块重命名**（P1，影子化 Python 内建，破坏性变更独立窗口——已授权但需独立窗口审慎执行）。
-  3. **PT-FEAT-5 剩余 CI/CD**（P0，涉远程 push，禁 push 硬原则，须用户显式授权后另行执行）。
-  4. **P3 VISION**（PT-FEAT-8 分层张力已评估待独立窗口；PT-FEAT-2 Enum 非 str 设计冻结级；PT-AUDIT-2 分支嵌套独立分支）。
+  1. **PT-DEBT-4 `file` 模块重命名**（P1，影子化 Python 内建，破坏性变更独立窗口——已授权但需独立窗口审慎执行）。
+  2. **PT-FEAT-5 剩余 CI/CD**（P0，涉远程 push，禁 push 硬原则，须用户显式授权后另行执行）。
+  3. **P3 VISION**（PT-FEAT-8 分层张力已评估待独立窗口；PT-FEAT-2 Enum 非 str 设计冻结级；PT-AUDIT-2 分支嵌套独立分支）。
 - **评估为维持现状（已登记 PENDING_TASKS，勿重复推进）**：PT-FEAT-11（序列化器自动化）、PT-FEAT-12（AST uid 字段）、
   PT-FEAT-2（Enum 非 str 成员）、PT-FEAT-8（`.ibc_meta` 快照，分层张力）。
 - **阶段 5 `yield` 惰性生成器已完成（2026-08-08，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
@@ -180,7 +183,11 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
-- **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计，unsafe-vibe-dev，全量 2074 → 2128 passed / 1 skipped，28 commit）**：
+- **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计 + 异步地基 M1/M2 收尾，unsafe-vibe-dev + 独立分支 exp/async-m1m2，全量 2074 → 2137 passed / 1 skipped）**：
+  - **异步地基 M1/M2 收尾**：PT-DEBT-15 剩余 M1（.call 双写收敛）/ M2（驱动去重）完成——统一执行模型闭环
+    全部收尾。M2 线程体 `_drive_generator` 复用 `_drive_loop_gen` + `TaskScheduler`（单一权威驱动）；M1 四个
+    可调用对象 `.call()` 变薄宿主包装委托 CPS 生成器。独立分支 exp/async-m1m2 实验 + general 复核 + 补回归测试 +9
+    （`test_call_drive_convergence.py`）。设计记录 `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`。
   - **P0 阶段 5 增量**：`next()` 内建（c61a6e0）+ `yield from` 生成器委托（本 session 主交付，6c9555c）——
     完整文法管线（AST `IbYieldFromExpr`/语法 match(FROM)/语义 `SEM_YIELD_OUTSIDE_FUNCTION`/类型 GENERATOR/
     VM 委托 handler），顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数的预存缺陷、迭代解析收敛
@@ -239,7 +246,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
-- **测试基线**：以实跑为准，不冻结数字（当前 **2128 passed / 1 skipped**）。
+- **测试基线**：以实跑为准，不冻结数字（当前 **2137 passed / 1 skipped**）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d 与 R 批次
   exp/exec-ra/rb/rc/rd 保留未合并）。
 
@@ -248,5 +255,5 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 - [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（长期，单一权威源）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
 - [ ] 读 §二 动态状态接续工作（含 2026-08-09 session 成果）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2128 passed / 1 skipped）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2137 passed / 1 skipped）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

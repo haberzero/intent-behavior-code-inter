@@ -88,16 +88,11 @@ class IbFnCallable(IbValue):
         """
         调用 lambda / snapshot：重新执行被延迟的 AST 节点。
 
-        - lambda 模式：每次调用都重新求值（使用当前上下文，自由变量共享 IbCell）。
-        - snapshot 模式：每次调用都重新求值，闭包种子按次再克隆——无缓存，可重入。
-
-        当存在参数（``params_uids`` 非空）或闭包（``closure`` 非空）时，进入
-        独立的子作用域并在其中绑定参数与闭包；调用结束后自动退出。
-
-        EC 解析优先级：调用现场 ContextVar > 定义时刻字段 ``_execution_context``。
-        VM CPS 主路径不走本方法；本方法仅为同步后备（外部 host / 反序列化后调用）。
+        **收敛**：本方法为宿主侧薄包装——委托 CPS 权威路径
+        ``_vm_call_fn_callable`` + ``_drive_generator``（TaskScheduler 驱动
+        ``_drive_loop_gen``），不再重复绑定闭包/实参逻辑（消双写）。VM 主路径
+        本就经 ``_vm_call_fn_callable`` 执行本对象；本方法仅作宿主/反序列化同步后备。
         """
-        # 调用现场 EC 优先于定义时刻快照
         ec = get_current_execution_context() or self._execution_context
         if ec is None:
             raise RuntimeError(
@@ -113,52 +108,11 @@ class IbFnCallable(IbValue):
                 "Ensure Interpreter.execute_module() has been called first."
             )
 
-        rt_context = ec.runtime_context
-        pushed_scope = False
+        from core.runtime.vm.handlers._shared import _vm_call_fn_callable
+        from core.runtime.coordinator import _drive_generator
 
-        try:
-            # 1) 若有参或有闭包，进入子作用域以承载 params 与 closure cells。
-            #    lambda：通过共享 IbCell 读取调用时最新值；
-            #    snapshot：对种子再次深克隆，作为本次调用的私有副本。
-            needs_subscope = bool(self.params_uids) or bool(self.closure)
-            if needs_subscope:
-                rt_context.enter_scope()
-                pushed_scope = True
-
-                is_snapshot = self.capture_mode == "snapshot"
-                for sym_uid, (name, slot) in self.closure.items():
-                    if is_snapshot:
-                        fresh = try_deep_clone(slot) if slot is not None else None
-                        value = fresh if fresh is not None else slot
-                        if value is not None:
-                            rt_context.define_variable(name, value, uid=sym_uid)
-                    elif isinstance(slot, IbCell):
-                        if not slot.is_empty():
-                            rt_context.define_variable(name, slot.get(), uid=sym_uid)
-                    else:
-                        rt_context.define_variable(name, slot, uid=sym_uid)
-
-                # 绑定形参：与 IbUserFunction.call 同构地处理 IbTypeAnnotatedExpr 包装。
-                for i, arg_uid in enumerate(self.params_uids):
-                    arg_data = ec.get_node_data(arg_uid)
-                    actual_arg_uid = arg_uid
-                    actual_arg_data = arg_data
-                    if arg_data and arg_data.get("_type") == "IbTypeAnnotatedExpr":
-                        actual_arg_uid = arg_data.get("target")
-                        actual_arg_data = ec.get_node_data(actual_arg_uid)
-                    arg_name = (actual_arg_data or {}).get("arg")
-                    if arg_name and i < len(args):
-                        sym_uid = ec.get_side_table("node_to_symbol", actual_arg_uid)
-                        rt_context.define_variable(arg_name, args[i], uid=sym_uid)
-
-            # 2) 评估目标节点：参数化路径走 body_uid，否则走 node_uid（防御性回退）。
-            target_uid = self.body_uid if self.body_uid else self.node_uid
-            result = vm.run(target_uid)
-        finally:
-            if pushed_scope:
-                rt_context.exit_scope()
-
-        return result
+        gen = _vm_call_fn_callable(vm, self, args)
+        return _drive_generator(vm, gen)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         # fn_callable 不在执行外暴露值——未执行时显式抛错。
@@ -354,58 +308,34 @@ class IbBehavior(IbValue):
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         """
-        公理化自主调用：通过内核 LLM 执行器完成行为执行。
+        公理化自主调用：委托 CPS 权威路径执行行为体。
 
-        执行流程：
-        1. 从 KernelRegistry 获取 IILLMExecutor（注入点：engine._prepare_interpreter）。
-        2. 调用 executor.invoke_behavior(self, execution_context)：
-           - 使用 captured_intents（snapshot 模式）或当前意图栈（lambda 模式）。
-           - 按 expected_type 解析 LLM 返回值。
-           - 将 LLMResult 写入 RuntimeContext 供 llmexcept 使用。
-        3. 返回解析后的 IbObject。
-
-        参数化路径：当 ``params_uids`` / ``body_uid`` / ``closure`` 任一非空时，
-        进入临时子作用域并绑定参数与闭包 cell，再委托给 executor。executor
-        在 prompt 解析阶段查找 ``$name`` 时即可读取到已绑定的值。
-
-        EC 解析优先级：调用现场 ContextVar > 定义时刻字段。
-        VM CPS 主路径（``_vm_invoke_behavior``）不走本方法；本方法仅为同步后备。
+        **收敛**：本方法为宿主侧薄包装——委托 ``_vm_invoke_behavior`` +
+        ``_drive_generator``（TaskScheduler 驱动 ``_drive_loop_gen``），不再重复
+        子作用域/闭包/实参绑定逻辑（消双写）。VM 主路径（leaf.py）本就经
+        ``_vm_invoke_behavior`` 执行本对象；本方法仅作 vtable receive('__call__')
+        后备与宿主/反序列化同步调用。
         """
-        executor = self.ib_class.registry.get_llm_executor()
-        if executor is None:
-            raise RuntimeError(
-                f"IbBehavior '{self.node}': LLM executor not registered in KernelRegistry. "
-                "Ensure engine._prepare_interpreter() has completed before invoking a behavior."
-            )
-
-        # 调用现场 EC 优先于定义时刻字段
         ec = get_current_execution_context() or self._execution_context
-
-        # lambda / snapshot 模式：每次调用都应是独立的 LLM 推理；先清除可能存在的
-        # 上次结果缓存，避免 execute_behavior_object 早期短路返回旧值。
-        # immediate 模式（capture_mode is None）保留缓存：那是值语义的"求值一次"对象。
-        if self.capture_mode in ("snapshot", "lambda"):
-            self._cache = None
-
-        needs_subscope = bool(self.params_uids) or bool(self.closure)
-        if not needs_subscope:
-            return executor.invoke_behavior(self, ec)
-
         if ec is None:
             raise RuntimeError(
-                f"IbBehavior '{self.node}': no execution_context available for parametric behavior "
-                "(neither call-site ContextVar nor definition-time field)."
+                f"IbBehavior '{self.node}': no execution_context available "
+                "(neither call-site ContextVar nor definition-time field). "
+                "Ensure this behavior is invoked from within an active Interpreter."
             )
 
-        rt_context = ec.runtime_context
-        rt_context.enter_scope()
-        try:
-            bind_behavior_closure(self, rt_context)
-            bind_behavior_call_args(self, args, ec, rt_context)
+        vm = ec.vm_executor
+        if vm is None:
+            raise RuntimeError(
+                f"IbBehavior '{self.node}': vm_executor not available. "
+                "Ensure Interpreter.execute_module() has been called first."
+            )
 
-            return executor.invoke_behavior(self, ec)
-        finally:
-            rt_context.exit_scope()
+        from core.runtime.vm.handlers._shared import _vm_invoke_behavior
+        from core.runtime.coordinator import _drive_generator
+
+        gen = _vm_invoke_behavior(vm, self, args)
+        return _drive_generator(vm, gen)
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         """

@@ -164,21 +164,39 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 - **契约测试 `tests/contracts/test_uid_generator.py`**：UID-1 格式逐字一致 / UID-2 确定性 / UID-3 区分性 /
   UID-4 rt_scope 每次唯一。
 
+## ✅ 已完成：异步地基 M1/M2 收尾（.call 双写收敛 + 驱动去重）（2026-08-09）
+
+> **独立分支 exp/async-m1m2 实验，全量 2137 passed / 1 skipped**。统一执行模型闭环全部收尾。
+> 设计记录 `tasks_docs/_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`；落地状态 `_ASYNC_UNIFY.md`。
+
+- **M2 驱动去重**（31884a8）：线程体 `coordinator._drive_generator` 从"手写阻塞泵"改为复用主 VM 单一权威驱动
+  ——根生成器包装为 `VMTask`，经 `task_vm._drive_loop_gen` + `TaskScheduler` 驱动到完成；trampoline/GeneratorYield/
+  Signal/None 规范化/协作取消统一由 `_drive_loop_gen`+`TaskScheduler` 承担，消双写；`TaskScheduler` park 期取消承接
+  线程体 cancel 中断（初版手写泵对 recv `.result()` 死锁，self-grill+实测发现后改 TaskScheduler）。移除死参数 `send_first`。
+- **M1 `.call` 双写收敛**（0bdecbb/4038102/3060950）：四个可调用对象 `.call()` 变薄宿主包装，委托 CPS 权威路径 +
+  `_drive_generator`——IbFnCallable→`_vm_call_fn_callable`、IbUserFunction→`_vm_call_user_function`、
+  IbLLMFunction→`_vm_invoke_llm_function`、IbBehavior→`_vm_invoke_behavior`；消模块/意图/作用域/闭包/self+super/
+  实参绑定双写。返回值语义探针实测一致（void/none/ret）。清理 user_functions.py 8 个死 import；保留真原生
+  `IbNativeFunction`/`IbBoundMethod`（无 CPS 孪生）与 `bind_behavior_*` helper。
+- **独立复核（general agent）**：A/B/D 放行 + C 记录（IbUserFunction void 返回语义向主路径收敛，方向正确）。
+- **回归测试 +9**（`tests/runtime/test_call_drive_convergence.py`）：宿主 .call void/return/self/fn_callable 返回语义
+  + 线程体取消/深递归保持。修 coordinator 陈旧 docstring；生产代码注释任务代号清除。
+
 ## 📋 交接要点（下一 session）
 
-- **当前最紧要（下一 session 起点）**：优先完成当前主线遗留——**PT-DEBT-15 剩余 M1（.call 双写收敛）/ M2（驱动去重）**
-  （异步地基遗留妥协根治未完，大型收敛重构、回归风险高，建议独立分支按 `_ASYNC_UNIFY.md` 路线）。
-  完成后按优先级总表接续 PT-DEBT-4 `file` 重命名（P1 破坏性变更独立窗口）或 P3 VISION。
+- **当前最紧要（下一 session 起点）**：按优先级总表接续 **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）或 **P3 VISION**。
+  **异步地基遗留妥协根治（统一执行模型闭环）已全部完成（2026-08-09）**。
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、
-  PT-DEBT-14（F2 slot.update + F3 prompt hint CPS 化）、PT-DEBT-15（M4 LLM 真挂起）已完成（2026-08-08，全量 2071/1）；
-  M3（prompt 单源）已确认收敛**。**剩余 PT-DEBT-15 中 M1（.call 双写收敛）/ M2（驱动去重）为大型收敛重构
-  （中严重度，回归风险高）**。实施计划见 `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
+  PT-DEBT-14（F2 slot.update + F3 prompt hint CPS 化）、PT-DEBT-15（M4 LLM 真挂起）已完成（2026-08-08）**；
+  **M1（.call 双写收敛）/ M2（驱动去重）已完成（2026-08-09，独立分支 exp/async-m1m2，全量 2137 passed / 1 skipped）**；
+  M3（prompt 单源）已确认收敛。**统一执行模型闭环全部收尾**。实施计划与落地状态见 `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
   登记 PT-DEBT-12/13/14/15。
  - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
    当前主线后：**P0 阶段 5 增量已完成（2026-08-09）→ PT-FEAT-5 三项已完成（CI/CD 待授权）→
-   P1 PT-FEAT-10 已完成 → P2 R4/R5 审计已执行**；剩余 PT-DEBT-4 `file` 重命名（破坏性变更独立窗口）、P3 VISION。
+   P1 PT-FEAT-10 已完成 → P2 R4/R5 审计已执行 → 异步地基 M1/M2 已完成（2026-08-09）**；
+   剩余 PT-DEBT-4 `file` 重命名（破坏性变更独立窗口）、P3 VISION。
  - **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
    `tasks_docs/_code_yield_from.md`。
  - **PT-FEAT-5 已完成三项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出 + 编译基准）。

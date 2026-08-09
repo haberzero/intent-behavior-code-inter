@@ -177,8 +177,9 @@ def _run_task_body(
     2. 新建任务本地 ``ExecutionContextImpl``（共享只读 node_pool/side_tables，
        任务本地 runtime_context/logical_stack/current_module）。
     3. 新建任务本地 ``VMExecutor`` 绑定到该 EC。
-    4. 若可调用是 ``IbUserFunction``：经其 ``call()`` 驱动（内部 run_body）。
-       否则（lambda/fn_callable/behavior）经 ``_vm_call_fn_callable`` CPS 驱动。
+    4. 依可调用类型分派：``IbUserFunction`` 经 ``_vm_call_user_function`` CPS
+       驱动；``fn_callable``/``behavior`` 经 ``_vm_call_fn_callable`` /
+       ``_vm_invoke_behavior`` CPS 驱动；原生（``IbFunction``）走同步 ``.call``。
 
     ``handle``：任务句柄标识，用于协作式取消错误上报（不再依赖失效的
     ``_task_handle`` 属性读取）。
@@ -304,74 +305,34 @@ def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any], cancel_event
     return _drive_generator(task_vm, gen, cancel_event=cancel_event, handle=handle)
 
 
-def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_event: Optional[threading.Event] = None, handle: str = "") -> Any:
-    """驱动一个 CPS 生成器到完成（阻塞等待每个 Waitable）。
+def _drive_generator(task_vm: Any, gen: Any, cancel_event: Optional[threading.Event] = None, handle: str = "") -> Any:
+    """线程体驱动：复用主 VM 的 ``_drive_loop_gen`` + ``TaskScheduler``（单一权威驱动）。
 
-    任务线程内使用：对 LLM Future / 通信 Channel recv 等 Waitable 阻塞等待。
+    线程体此前独立实现一套阻塞驱动循环（``_drive_generator``），与主 VM
+    ``_drive_loop_gen`` 重复（trampoline / GeneratorYield / Signal / None
+    规范化 / 协作取消双维护）。本函数改为：把根生成器包装为 ``VMTask`` 压栈，
+    经 ``task_vm._drive_loop_gen``（**单一权威驱动循环**）+ ``TaskScheduler``
+    驱动到完成。
 
-    生成器契约（与 VM 主循环一致）： ``send(None)`` 启动；后续 yield 的
-    若是 Waitable 则阻塞等待其完成再 ``send(result)`` 恢复；yield child
-    uid 经任务本地 VM 求值后恢复；yield ``UserFunctionCall`` 则把函数体
-    生成器作为独立帧压栈（trampoline——线程体内深递归不
-    再嵌套 Python 栈，与 VM 主路径 ``_drive_loop_gen`` 同构）。
+    ``TaskScheduler`` 提供统一协作调度：Waitable 经 ``try_result`` 非阻塞消费 +
+    ``register_wake`` 通知式唤醒 + park；**协作取消（``cancel_event``）在 park 期
+    取消等待任务**（D5 闭合）——这是旧代码嵌套 ``task_vm.run`` 的取消中断来源，
+    此处由 TaskScheduler 承担，不再手写泵（消除手写泵对 Waitable ``.result()``
+    永久阻塞、cancel 无法中断的死锁）。
 
-    协作式取消：每个挂起点（Waitable 等待 / 子节点驱动前）检查
-    ``cancel_event``，命中即抛 ``ThreadCancelled``。``handle`` 为任务句柄标识
-    （由调用方传入，不再读取失效的 ``_task_handle`` 属性）。
+    结果转译：``TaskScheduler`` 返回 ``[TaskCancelled]`` 表示协作取消，
+    此处转译为 ``ThreadCancelled`` 保持线程体契约。``handle`` 用于取消错误上报。
     """
-    from core.runtime.shared.waitable import Waitable
-    from core.runtime.shared.signals import UnhandledSignal
-    from core.runtime.shared.user_call import UserFunctionCall
+    from core.runtime.vm.task import VMTask
+    from core.runtime.vm.task_scheduler import TaskScheduler
 
-    def _check_cancel() -> None:
-        if cancel_event is not None and cancel_event.is_set():
-            raise ThreadCancelled(handle)
-
-    # 显式生成器栈（trampoline）：UserFunctionCall 压栈而非递归 _drive_generator，
-    # 消除线程体内深递归的 Python/OS 栈嵌套（与 _drive_loop_gen 同构）。
-    stack = [gen]
-    pending_value: Any = send_first
-    while stack:
-        _check_cancel()
-        cur = stack[-1]
-        try:
-            yielded = cur.send(pending_value)
-        except StopIteration as si:
-            stack.pop()
-            pending_value = si.value
-            continue
-        except Exception as e:
-            # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播
-            from core.runtime.observability.diagnostics import handle_environment_limit
-            if handle_environment_limit(e, rc=task_vm.runtime_context):
-                raise
-            raise
-
-        pending_value = None
-        if isinstance(yielded, Waitable):
-            pending_value = yielded.result()
-        elif isinstance(yielded, str) and task_vm.supports(yielded):
-            # 子节点 uid：经任务本地 VM 求值后恢复。
-            # RETURN 信号在独立 run() 中无函数上下文 → UnhandledSignal；
-            # 此处把它转回 Signal 投递给生成器（函数体用 Signal 表达返回）。
-            try:
-                pending_value = task_vm.run(yielded)
-            except UnhandledSignal as us:
-                pending_value = us.signal
-        elif isinstance(yielded, UserFunctionCall):
-            # 用户函数调用请求（R1 trampoline）：压栈函数体生成器，循环继续
-            # 驱动栈顶——线程体内深递归 Python 深度恒定（不再嵌套 _drive_generator）。
-            from core.runtime.vm.handlers._shared import _vm_call_user_function
-
-            inner = _vm_call_user_function(
-                task_vm, yielded.func, yielded.receiver, yielded.args
-            )
-            stack.append(inner)
-        else:
-            raise RuntimeError(
-                f"spawn task: generator yielded non-waitable, non-node value {yielded!r}"
-            )
-    return pending_value
+    task = VMTask(node_uid="", generator=gen)
+    scheduler = TaskScheduler(cancel_event=cancel_event)
+    scheduler.submit(task_vm._drive_loop_gen([task]))
+    results = scheduler.run()
+    if isinstance(results[0], TaskCancelled):
+        raise ThreadCancelled(handle)
+    return results[0]
 
 
 class RuntimeCoordinator:
