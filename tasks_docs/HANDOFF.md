@@ -39,6 +39,19 @@
 | 工作模式定论 | 禁 compat shim/胶水/tricky/过程式硬编码；质量优先于速度；原则优先于行为维持；可推翻 IBCI 自身设计缺陷 |
 | 破坏性重构授权 / 分支政策 / 禁 push | 见 AGENTS.md（权威源） |
 
+### 1.2.1 goal 配置习惯（每个 session 新配置 goal 时自动采用，2026-08-09 用户定案）
+
+> 创建 goal（`create_goal` / `set_goal`）时按此默认参数，除非用户在本 session 显式覆盖：
+>
+> | 参数 | 值 | 说明 |
+> |------|----|------|
+> | `max_duration_seconds` | **14400（4 小时）** | 最晚结束时间 = 当前时刻 + 4h |
+> | `max_auto_turns` | **10** | 允许 goal 自动续跑次数 |
+> | `token_budget` | **720000（720K）** | token 窗口预算上限 |
+> | token 总预算 | 无上限 | 不设总预算上限 |
+>
+> `objective` 正文仍按下方 §1.3 模板套用（无人值守 + 主线 + 交付纪律 + 工作流 + 停止条件 + 非目标）。
+
 ### 1.3 goal objective 模板（通用骨架，可直接套用）
 
 ```
@@ -118,7 +131,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
     已确认收敛。
   - **剩余 PT-DEBT-15 中 M1（.call 双写收敛）/ M2（驱动去重）为大型收敛重构（中严重度，回归风险高）**，
     实施计划 `_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
-- **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，27 commit，全量 2074 → 2128 passed / 1 skipped）**：
+- **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，28 commit，全量 2074 → 2128 passed / 1 skipped）**：
   - **P0 阶段 5 增量**：`next()` 内建 + `yield from` 生成器委托（主交付）——顺带根治 `_drive_generator_loop`
     生成器体内调用生成器函数的预存缺陷、迭代解析收敛 `_resolve_iterable`（现居 `shared/iterable.py`）。
   - **PT-FEAT-5 三项**：诊断码目录（`catalog.py` 76 码 + formatter fail-open + `15_diagnostics.md`）、
@@ -167,7 +180,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
-- **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计，unsafe-vibe-dev，全量 2074 → 2128 passed / 1 skipped，27 commit）**：
+- **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计，unsafe-vibe-dev，全量 2074 → 2128 passed / 1 skipped，28 commit）**：
   - **P0 阶段 5 增量**：`next()` 内建（c61a6e0）+ `yield from` 生成器委托（本 session 主交付，6c9555c）——
     完整文法管线（AST `IbYieldFromExpr`/语法 match(FROM)/语义 `SEM_YIELD_OUTSIDE_FUNCTION`/类型 GENERATOR/
     VM 委托 handler），顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数的预存缺陷、迭代解析收敛
