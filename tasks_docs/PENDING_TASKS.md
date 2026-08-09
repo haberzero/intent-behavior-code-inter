@@ -17,9 +17,9 @@
 
 | 优先级 | 任务 | 维度 | 说明 |
 |--------|------|------|------|
-| **当前主线** | **PT-DEBT-12/13/14/15 异步地基遗留妥协根治**（`_ASYNC_UNIFY.md`） | 架构健康性 | 统一执行模型闭环——消"任务内同步重入调度器"遗留旁路。F1 用户方法 CPS 化 → B1 send Waitable → F2/F3 → M1-M4 |
-| **P0** | 阶段 5 增量（`next()` 内建 + `yield from`） | 易用性 | 刚落地生成器，语言自然补全；复用既有驱动，改动小 |
-| **P0** | PT-FEAT-5 错误用户友好化 | 易用性 | 实验性语言最直接的用户感知；语义管线已稳定，纯增益 |
+| **当前主线** | **PT-DEBT-12/13/14/15 异步地基遗留妥协根治**（`_ASYNC_UNIFY.md`） | 架构健康性 | 统一执行模型闭环——消"任务内同步重入调度器"遗留旁路。F1→B1→F2/F3→M4 已完成（2026-08-08），M3 已收敛；**剩余 M1（.call 双写收敛）/ M2（驱动去重）为大型收敛重构（中严重度）** |
+| **P0** | 阶段 5 增量（`next()` 内建 + `yield from`） | 易用性 | **已完成（2026-08-09，全量 2083/1）**：`next()`（c61a6e0）+ `yield from` 生成器委托。设计 `_code_yield_from.md` |
+| **P0** | PT-FEAT-5 错误用户友好化 | 易用性 | **下一主线（P0 阶段 5 增量完成后）**：实验性语言最直接的用户感知；语义管线已稳定，纯增益 |
 | **P1** | PT-FEAT-10/11/12 UID/序列化统一 | 架构健康性 | 消"分散实现、机制正确"收敛债；独立分支谨慎回归 |
 | **P1** | PT-DEBT-4 `file` 模块重命名 | 架构健康性 | 影子化 Python 内建，长期隐患；破坏性变更独立窗口 |
 | **P2** | PT-AUDIT-1/2 + R4/R5 | 架构健康性 | 长期周期清扫，阶段边界启动 |
@@ -82,7 +82,7 @@
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**`yield` 惰性生成器已落地（2026-08-08，阶段 5，独立分支 exp/yield-generator → 手动应用 unsafe-vibe-dev，全量 2043/1）**：含 `yield` 函数自动为生成器（D-08 自标记，async 关键字已取消），单可恢复驱动 `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。设计 `YIELD_GENERATOR_DESIGN.md`。**增量**：`next()` 内建 / `yield from` / streaming |
+| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**`yield` 惰性生成器已落地（2026-08-08，阶段 5，独立分支 exp/yield-generator → 手动应用 unsafe-vibe-dev，全量 2043/1）**：含 `yield` 函数自动为生成器（D-08 自标记，async 关键字已取消），单可恢复驱动 `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。设计 `YIELD_GENERATOR_DESIGN.md`。**增量 `next()` 内建 + `yield from` 委托已落地（2026-08-09，全量 2083/1）**。剩余：streaming / host async 改进 |
 | PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |

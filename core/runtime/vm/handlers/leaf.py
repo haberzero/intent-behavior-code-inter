@@ -27,12 +27,13 @@ from core.runtime.objects.primitives import IbNone
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.shared.waitable import Waitable
 from core.runtime.shared.user_call import UserFunctionCall
-from core.runtime.shared.signals import GeneratorYield
+from core.runtime.shared.signals import GeneratorYield, Signal
 from core.runtime.observability.diagnostics import handle_environment_limit
 from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,
     _vm_invoke_behavior,
     _vm_invoke_llm_function,
+    _resolve_iterable,
     _is_llm_uncertain_value,
     _make_uncertain_call_result,
     _raise_uncertain_parse_error,
@@ -159,6 +160,48 @@ def vm_handle_IbYieldExpr(executor, node_uid: str, node_data: Mapping[str, Any])
         if _is_llm_uncertain_value(value):
             return value
     return (yield GeneratorYield(value))
+
+
+def vm_handle_IbYieldFromExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``yield from <expr>``：惰性生成器委托（阶段 5 增量）。
+
+    求值操作数（子迭代对象）后，把其每个产出逐值 ``yield GeneratorYield(v)``
+    透传给外层生成器消费者。子迭代对象为 ``IbGenerator`` 时表达式值 = 其
+    ``return`` 值（``StopIteration.value``，经 ``generic_next`` 透出）；为序列 /
+    ``__iter__`` 对象时为 ``None``。委托目标解析与 ``for`` 循环共用
+    ``_resolve_iterable``。惰性属性由消费方决定：``next()`` 逐值惰性推进；
+    ``for`` 消费经 ``to_list`` 一次性物化（与 ``yield`` 生成器一致）。
+    """
+    value = None
+    value_uid = node_data.get("value")
+    if value_uid:
+        value = yield value_uid
+        if _is_llm_uncertain_value(value):
+            return value
+
+    if isinstance(value, Signal):
+        return value
+
+    from core.runtime.objects.kernel.generator import IbGenerator
+
+    if isinstance(value, IbGenerator):
+        # 嵌套生成器委托：逐值惰性透传；StopIteration.value = 子生成器 return。
+        while True:
+            try:
+                item = value.generic_next()
+            except StopIteration as si:
+                ret = si.value
+                return ret if ret is not None else executor.registry.get_none()
+            yield GeneratorYield(item)
+
+    elements = _resolve_iterable(value)
+    if elements is None:
+        raise RuntimeError(
+            f"yield from: object is not iterable (uid={node_uid})"
+        )
+    for elem in elements.elements:
+        yield GeneratorYield(elem)
+    return executor.registry.get_none()
 
 
 def vm_handle_IbBoolOp(executor, node_uid: str, node_data: Mapping[str, Any]):

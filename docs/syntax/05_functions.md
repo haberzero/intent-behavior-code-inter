@@ -245,6 +245,34 @@ for int x in g:
     print(x)
 ```
 
+### 5.9 生成器委托（`yield from`）
+
+`yield from <expr>` 把子迭代对象的每个产出**逐值透传**为当前生成器的产出。子迭代对象可以是嵌套生成器、序列（list）或有 `__iter__` 的对象。
+
+```ibci
+func inner(int n) -> int:
+    yield 1
+    yield 2
+    return 9
+
+func outer(int n) -> int:
+    int r = yield from inner(n)   # r = 9（子生成器 return 值）
+    yield r
+    return 0
+
+for int x in outer(1):
+    print(x)          # 1 2 9
+```
+
+**语义要点**：
+
+- `yield from <expr>` 表达式值 = 子生成器的 `return` 值（对序列/其它可迭代为 `None`）。
+- 嵌套委托：`yield from` 可链式委托（生成器 → 生成器 → ...）。
+- `yield from` 只能在函数体内（模块顶层报 `SEM_YIELD_OUTSIDE_FUNCTION`）。
+- 生成器体内可直接调用生成器函数（`auto g = inner(n)`）并委托/迭代。
+- 惰性属性由消费方决定：`next()` 逐值惰性推进；`for` 消费经 `to_list` 一次性物化（与 `yield` 生成器一致）。
+- 子生成器体内可挂起 LLM 行为（`@~...~`，同步解析）——与 `yield from` 正交组合；显式 `await` 真异步 Waitable 与既有 `for`/`next` 消费路径同受 `generic_next` "unexpected event" 限制（预存，见 `KNOWN_LIMITS` 记录）。
+
 ---
 
 ## 深入指引

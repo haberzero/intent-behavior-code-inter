@@ -291,7 +291,7 @@ class VMExecutor:
                 if isinstance(child_uid, str) and self.supports(child_uid):
                     stack.append(self._make_task(child_uid))
                 else:
-                    # dispatch table 覆盖所有 43 个 AST 节点类型；到达此处
+                    # dispatch table 覆盖所有 47 个 AST 节点类型；到达此处
                     # 意味着 handler yield 了一个未知节点 uid（artifact 损坏或新
                     # 增了未实现 handler 的节点）。
                     node_data = self._ec.get_node_data(child_uid) if isinstance(child_uid, str) else None
@@ -375,7 +375,13 @@ class VMExecutor:
                     continue
 
                 if isinstance(child_uid, UserFunctionCall):
-                    stack.append(self._make_user_function_task(child_uid))
+                    if getattr(child_uid.func, "is_generator", False):
+                        # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
+                        # 迭代驱动函数体、yield 点产出值。与 _drive_loop_gen 同构——
+                        # 生成器体内调用生成器函数必须产出 IbGenerator 而非压栈执行体。
+                        pending_value = self.make_generator_driver(child_uid)
+                    else:
+                        stack.append(self._make_user_function_task(child_uid))
                     continue
 
                 if isinstance(child_uid, str) and self.supports(child_uid):

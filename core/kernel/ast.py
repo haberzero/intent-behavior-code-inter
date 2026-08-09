@@ -348,6 +348,17 @@ class IbYieldExpr(IbExpr):
     value: Optional[IbExpr] = None
 
 @dataclass(kw_only=True, eq=False)
+class IbYieldFromExpr(IbExpr):
+    """``yield from <expr>``：惰性生成器委托（阶段 5 增量）。
+
+    把子迭代对象（嵌套生成器 / 序列 / 有 ``__iter__`` 的对象）的每个产出
+    逐值透传为当前生成器的产出；子生成器为 ``IbGenerator`` 时表达式值为其
+    ``return`` 值（``StopIteration.value``），对序列为 ``None``。惰性由消费方
+    决定：``next()`` 逐值推进；``for`` 消费经 ``to_list`` 一次性物化。
+    """
+    value: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
 class IbChannelExpr(IbExpr):
     """``chan(T, mode=..., buffer=...)`` 或 ``chan T(...)``：创建 Channel。
 

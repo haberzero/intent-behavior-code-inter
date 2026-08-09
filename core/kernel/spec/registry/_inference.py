@@ -264,6 +264,9 @@ class _InferenceMixin:
             if spec.kind == TypeKind.LIST.value and spec.allowed_element_types:
                 return self.resolve("any")
             return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
+        if spec.kind == TypeKind.GENERATOR.value:
+            # 惰性生成器 generator[T]：元素类型 = value_type（yield 产出类型）。
+            return self.resolve(spec.value_type.head, spec.value_type.module) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom and axiom.has_iter_cap:
             elem_name = axiom.get_element_type_name()

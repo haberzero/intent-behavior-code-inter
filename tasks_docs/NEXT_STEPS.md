@@ -101,6 +101,21 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ---
 
+## ✅ 已完成：P0 阶段 5 增量（`next()` 内建 + `yield from` 生成器委托）（2026-08-09）
+
+> **unsafe-vibe-dev，全量 2083 passed / 1 skipped**（基线 2074）。设计记录 `tasks_docs/_code_yield_from.md`。
+
+- **`next()` 内建**（c61a6e0）：`IbGenerator` 经 `generic_next()` 逐次推进，耗尽抛可捕获 `InterpreterError`；其它可迭代对象取首元素。
+- **`yield from` 生成器委托**（本批次）：把子迭代对象（嵌套生成器 / 序列 / 有 `__iter__` 的对象）的每个产出
+  **逐值透传**为当前生成器的产出（惰性：逐值推进、外层 `break` 提前终止时子迭代不再继续）；子生成器为
+  `IbGenerator` 时表达式值 = 其 `return` 值。全管线：AST `IbYieldFromExpr` + 语法（`yield` 后 `match(FROM)`）+
+  语义（仅函数体内，`SEM_YIELD_OUTSIDE_FUNCTION`）+ 类型（`resolve_iter_element` 补 `GENERATOR` kind）+
+  VM handler（复用 `GeneratorYield`/`generic_next` 既有机制）+ e2e 8 项。
+- **顺带根治预存缺陷**：`_drive_generator_loop` 的 `UserFunctionCall` 分支缺 `is_generator → make_generator_driver`
+  （与 `_drive_loop_gen` 同构）——此前生成器体内调用生成器函数损坏（`yield from inner()` 依赖此修复）。
+- **迭代解析收敛（单一权威源）**：`for` 的迭代解析（序列 / `IbGenerator`→`to_list` / `__iter__` / `to_list`）抽为
+  `_shared._resolve_iterable`，`for` 与 `yield from` 共用——去双写，行为不变（全量零回归验证）。
+
 ## 📋 交接要点（下一 session）
 
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
@@ -111,8 +126,10 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
   （中严重度，回归风险高）**。实施计划见 `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
   登记 PT-DEBT-12/13/14/15。
 - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
-  当前主线后：P0 阶段 5 增量（`next()` 内建 + `yield from`）+ PT-FEAT-5；P1 UID/序列化统一 + `file` 重命名；
-  P2 审计 R4/R5 + Enum；P3 VISION。
+  当前主线后：**P0 阶段 5 增量（`next()` 内建 + `yield from`）已完成（2026-08-09，全量 2083/1）** → **PT-FEAT-5**；
+  P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；P3 VISION。
+- **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
+  `tasks_docs/_code_yield_from.md`。下一 P0 = PT-FEAT-5。
 - **阶段 5 yield 惰性生成器已完成（2026-08-08）**：见上方"已完成"节。`YIELD_GENERATOR_DESIGN.md`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+

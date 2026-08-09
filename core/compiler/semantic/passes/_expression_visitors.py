@@ -213,6 +213,32 @@ class ExpressionVisitorsMixin:
         self.bind_type(node, final_type)
         return final_type
 
+    def visit_IbYieldFromExpr(self, node: ast.IbYieldFromExpr) -> Optional[IbSpec]:
+        """访问 ``yield from <expr>``：惰性生成器委托（阶段 5 增量）。
+
+        ``yield from`` 只能在函数体内（与 ``yield`` 同，D-08 自标记函数种类）；
+        模块顶层无函数上下文时是语义错误。委托目标须可迭代（嵌套生成器 /
+        序列 / 有 ``__iter__`` 的对象）；节点类型 = 目标元素类型（可解析时）。
+        """
+        if not self.in_function_def:
+            self.error(
+                "'yield from' can only be used inside a function body "
+                "(generator functions are self-marking by 'yield').",
+                node, code=SEM_YIELD_OUTSIDE_FUNCTION,
+                hint="Move 'yield from' into a function (func) body.",
+            )
+            result_type = self._any_desc
+        else:
+            operand_type = self.visit(node.value) if node.value is not None else self._any_desc
+            # 元素类型解析（generator[T] → T / list[T] → T），不可解析落 any。
+            elem = None
+            if operand_type is not None and self.registry is not None:
+                elem = self.registry.resolve_iter_element(operand_type)
+            result_type = elem or self._any_desc
+        final_type = result_type or self._any_desc
+        self.bind_type(node, final_type)
+        return final_type
+
     def visit_IbChannelExpr(self, node: ast.IbChannelExpr) -> Optional[IbSpec]:
         """``chan(T, ...)`` 的类型 = chan[T]（元素类型经 type_name 保真）。
 

@@ -80,5 +80,6 @@ for int x in count(3):
 - **生成器体驱动**是全新执行形态（非"逐语句 run"），经 `_drive_generator_loop` 独立验证挂起/恢复正确性。✅
 - `yield` 与 `for`/`while`/`if` 内状态保留（循环位置、局部变量）——由单可恢复驱动保证。✅
 - 生成器与 `await` 组合：驱动区分语言级 yield（`GeneratorYield`）与 Waitable yield。✅
-- **不做**：跨引擎/序列化挂起生成器（瞬态挂起，EXEC_FOUNDATION §七）；`yield from`；`next()` 内建
-  （当前经 `for`/`to_list` 迭代；`next()` 内建按需后续加）；裸 `generator` 注解（须 `generator[T]`）。
+- **不做**：跨引擎/序列化挂起生成器（瞬态挂起，EXEC_FOUNDATION §七）；`yield from` 已落地（2026-08-09，
+  阶段 5 增量，见 `_code_yield_from.md`）；`next()` 内建已落地（2026-08-09，c61a6e0）；
+  裸 `generator` 注解（须 `generator[T]`）。

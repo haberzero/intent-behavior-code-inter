@@ -122,12 +122,16 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消），单可恢复驱动
   `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。
   独立分支 exp/yield-generator 实验 → 手动应用 c8b8956。设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
+- **P0 阶段 5 增量已完成（2026-08-09，unsafe-vibe-dev，全量 2083 passed / 1 skipped）**：
+  `next()` 内建（c61a6e0）+ `yield from` 生成器委托（本 session）——子迭代对象产出逐值透传、表达式值 =
+  子生成器 `return` 值；顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数的缺陷 +
+  迭代解析收敛 `_shared._resolve_iterable`。设计记录 `tasks_docs/_code_yield_from.md`。
 - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
-  当前主线后：P0 阶段 5 增量（`next()` 内建 + `yield from`）+ PT-FEAT-5；P1 UID/序列化统一 + `file` 重命名；
-  P2 审计 R4/R5 + Enum；P3 VISION。
+  当前主线后：**P0 阶段 5 增量（`next()` + `yield from`）已完成 → 下一 P0 = PT-FEAT-5**；
+  P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；P3 VISION。
 - **架构缺陷起点清空（2026-08-08）**：PT-DEBT-9/10/11 已根治（见 §2.2）。
-- **后续增量（可选起点）**：阶段 5 增量（`next()` 内建 / `yield from` / streaming / host async 改进）或
-  待办池（`PENDING_TASKS.md`：PT-FEAT-2 Enum 非 str 成员 / PT-FEAT-5 错误用户友好化 / PT-FEAT-10/11/12）。
+- **后续增量（可选起点）**：streaming / host async 改进 或 PT-FEAT-5 错误用户友好化（下一 P0）或
+  待办池（`PENDING_TASKS.md`：PT-FEAT-2 Enum 非 str 成员 / PT-FEAT-10/11/12）。
 - **架构缺陷优先起点清空（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 **三项已全部根治**（见 §2.2）。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   `kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+

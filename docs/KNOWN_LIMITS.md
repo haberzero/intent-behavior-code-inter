@@ -548,3 +548,11 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 **行为**：此类 `RecursionError`（连同 `MemoryError`/`SystemError`）被判定为**环境限制异常**，在 VM 语义错误包装站点（`Symbol not defined` / `VM: Call failed` / 模块导入 / try-except）**原样重抛**，保留真实根因与调用栈，**不被包装成语义错误**（PT-DEBT-9）。同时发射 `KDIAG_RUNTIME_ENV_LIMIT` 诊断事件（`core/runtime/shared/env_limits.py` 判定；`core/runtime/observability/diagnostics.py` `handle_environment_limit`）。
 
 **含义**：超出宿主递归深度时，用户看到的是 `RecursionError: maximum recursion depth exceeded`（可提升 `sys.setrecursionlimit` 后重试），而非误导性的符号未定义/调用失败信息。递归深度上限本质是宿主栈限制，非语言可配置上限。
+
+## 二十四、生成器消费路径不承载显式 `await` 真异步 Waitable
+
+**惰性生成器（`yield`）与生成器委托（`yield from`）的消费路径**（`for` / `next()` / `to_list`）经 `IbGenerator.generic_next()` 驱动，只处理语言级产出标记 `GeneratorYield`。若生成器体内显式 `await` 一个**真异步 Waitable**（如 `await chan.recv()`），驱动会把该 Waitable 透出到 `generic_next`，后者报 `RuntimeError: generator driver yielded unexpected event`。
+
+**不受限的情形**：生成器体内 LLM 行为（`@~...~`）经 `execute_behavior_expression` **同步解析**（不产生 Waitable），故与 `yield`/`yield from` 组合正常（已有 e2e 覆盖）。
+
+**含义**：这是**既有迭代协议共有的预存限制**（`for`/`next`/`to_list`/`yield from` 同一消费路径），非 `yield from` 引入。生成器体内挂起 I/O 类 Waitable（通道/订阅/宿主异步）属设计边界，未支持；如需，需在 `generic_next` 层引入 Waitable 感知（超出当前范围）。

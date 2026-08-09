@@ -222,3 +222,182 @@ yield 1
         artifact, errors = compile_or_errors(code)
         # 顶层 yield 应被语义层拒绝（无函数上下文）
         assert errors, "expected yield outside function to be a semantic error"
+
+    def test_yield_from_only_in_function_body(self):
+        """yield from 只能在函数体内（与 yield 同，D-08 自标记）。"""
+        code = """
+yield from g
+"""
+        artifact, errors = compile_or_errors(code)
+        assert errors, "expected yield from outside function to be a semantic error"
+
+
+class TestYieldFrom:
+    """阶段 5 增量：``yield from`` 惰性生成器委托。"""
+
+    def test_basic_delegation(self):
+        """yield from 把子生成器产出逐值透传给消费者。"""
+        code = """
+func inner(int n) -> int:
+    yield 1
+    yield 2
+    return 9
+
+func outer(int n) -> int:
+    yield from inner(n)
+    return 0
+
+for int x in outer(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["1", "2"]
+
+    def test_delegation_expression_value(self):
+        """yield from 表达式值 = 子生成器 return 值（可赋变量）。"""
+        code = """
+func inner(int n) -> int:
+    yield 1
+    yield 2
+    return 9
+
+func outer(int n) -> int:
+    int r = yield from inner(n)
+    yield r
+    return 0
+
+for int x in outer(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["1", "2", "9"]
+
+    def test_delegate_to_list(self):
+        """yield from 序列：逐值透传，表达式值 None。"""
+        code = """
+func outer(int n) -> int:
+    yield from [10, 20, 30]
+    return 0
+
+for int x in outer(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["10", "20", "30"]
+
+    def test_nested_delegation(self):
+        """嵌套委托：yield from 可链式委托（生成器 → 生成器 → ...）。"""
+        code = """
+func a(int n) -> int:
+    yield 1
+    return 0
+
+func b(int n) -> int:
+    yield from a(n)
+    yield 2
+    return 0
+
+func c(int n) -> int:
+    yield from b(n)
+    return 0
+
+for int x in c(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["1", "2"]
+
+    def test_break_early_termination(self):
+        """外层 break 提前终止（for 消费：过滤输出，生成器仍被 to_list 急物化）。"""
+        code = """
+func inner(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+func outer(int n) -> int:
+    yield from inner(n)
+    return 0
+
+for int x in outer(5):
+    if x == 2:
+        break
+    print(x)
+"""
+        assert run_ibci(code) == ["0", "1"]
+
+    def test_lazy_next_consumption(self):
+        """next() 逐值惰性委托：消费第一个值后子生成器不继续推进。"""
+        code = """
+func inner(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    print("EXHAUSTED")
+    return 0
+
+func outer(int n) -> int:
+    yield from inner(n)
+    return 0
+
+generator[int] g = outer(3)
+int a = next(g)
+print((str)a)
+"""
+        # next() 推进一个值即停；inner 未跑到耗尽（无 EXHAUSTED 输出）
+        assert run_ibci(code) == ["0"]
+
+    def test_delegate_generator_variable(self):
+        """yield from 生成器变量（先调用后委托）。"""
+        code = """
+func inner(int n) -> int:
+    yield 5
+    yield 6
+    return 0
+
+func outer(int n) -> int:
+    auto g = inner(n)
+    yield from g
+    return 0
+
+for int x in outer(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["5", "6"]
+
+    def test_generator_call_inside_generator_body(self):
+        """生成器体内调用生成器函数产出 IbGenerator（缺陷修复回归）。"""
+        code = """
+func inner(int n) -> int:
+    yield 1
+    yield 2
+    return 0
+
+func outer(int n) -> int:
+    auto g = inner(n)
+    for int v in g:
+        yield v
+    return 0
+
+for int x in outer(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["1", "2"]
+
+    def test_delegation_with_llm_behavior(self):
+        """子生成器体内可 await LLM 行为（与 yield from 组合）。"""
+        code = AI_MOCK_PREFIX + """
+func inner(int n) -> str:
+    str s = @~ MOCK:REPEAT:STR:hi ~
+    yield s
+    return ""
+
+func outer(int n) -> str:
+    yield from inner(n)
+    return ""
+
+for str x in outer(1):
+    print(x)
+"""
+        out = run_ibci(code)
+        assert len(out) == 1
+        assert "hi" in out[0]

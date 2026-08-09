@@ -30,7 +30,7 @@ from core.kernel.axioms.prompt_protocol import (
 
 
 def _contains_yield(stmts) -> bool:
-    """扫描语句列表是否含 ``IbYieldExpr``（含嵌套 lambda 体，排除嵌套函数定义）。
+    """扫描语句列表是否含 ``IbYieldExpr`` / ``IbYieldFromExpr``（含嵌套 lambda 体，排除嵌套函数定义）。
 
     用于标记函数为惰性生成器（D-08 自标记函数种类）。不进入嵌套函数定义
     （``IbFunctionDef``/``IbLLMFunctionDef``/``IbClassDef``）——内层 yield 归属其自身。
@@ -41,7 +41,7 @@ def _contains_yield(stmts) -> bool:
         if isinstance(stmt, (_ast.IbFunctionDef, _ast.IbLLMFunctionDef, _ast.IbClassDef)):
             return False
         for attr in vars(stmt).values():
-            if isinstance(attr, _ast.IbYieldExpr):
+            if isinstance(attr, (_ast.IbYieldExpr, _ast.IbYieldFromExpr)):
                 return True
             if isinstance(attr, list):
                 for item in attr:

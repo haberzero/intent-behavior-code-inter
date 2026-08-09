@@ -20,7 +20,7 @@
 │        ├─ ExecutionContextImpl — node 池、侧表、对象工厂、registry 引用 │
 │        ├─ RuntimeContextImpl — 当前执行帧（scope / intent / llm_except_frames）│
 │        └─ VMExecutor ── CPS 调度循环（运行时唯一执行入口）              │
-│             ├─ build_dispatch_table() — 45 个 AST 节点 handler         │
+│             ├─ build_dispatch_table() — 47 个 AST 节点 handler         │
 │             ├─ Frame stack (List[VMTask])                              │
 │             └─ Signal / UnhandledSignal — 控制流数据化                  │
 └──────────────────────────────────────────────────────────────────────┘
@@ -79,12 +79,13 @@ step(task) → _drive_loop_gen 单步:
 
 ### 2.4 Handler 表
 
-`core/runtime/vm/handlers/dispatch.py:build_dispatch_table()` 注册 45 个 `vm_handle_IbXxx(executor, node_uid, node_data)` 生成器函数：
+`core/runtime/vm/handlers/dispatch.py:build_dispatch_table()` 注册 47 个 `vm_handle_IbXxx(executor, node_uid, node_data)` 生成器函数：
 
 | 类别 | 节点 |
 |------|------|
 | 字面量 / 名字 / 算子 | `IbConstant` `IbName` `IbBinOp` `IbUnaryOp` `IbBoolOp` `IbCompare` `IbIfExp` `IbAwaitExpr` |
 | 表达式 | `IbCall` `IbAttribute` `IbSubscript` `IbTuple` `IbListExpr` `IbDict` `IbSlice` `IbCastExpr` `IbFilteredExpr` |
+| 生成器 | `IbYieldExpr` `IbYieldFromExpr` |
 | 语句 | `IbExprStmt` `IbAssign` `IbAugAssign` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbPass` `IbRaise` `IbSwitch` `IbTry` `IbRetry` `IbGlobalStmt` `IbNonlocalStmt` |
 | 模块 / 引入 | `IbModule` `IbImport` `IbImportFrom` |
 | 声明 | `IbFunctionDef` `IbLLMFunctionDef` `IbClassDef` |
