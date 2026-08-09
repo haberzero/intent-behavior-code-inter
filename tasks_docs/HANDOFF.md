@@ -126,11 +126,13 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   `next()` 内建（c61a6e0）+ `yield from` 生成器委托（本 session）——子迭代对象产出逐值透传、表达式值 =
   子生成器 `return` 值；顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数的缺陷 +
   迭代解析收敛 `_shared._resolve_iterable`。设计记录 `tasks_docs/_code_yield_from.md`。
-- **PT-FEAT-5 错误用户友好化（诊断码目录）已完成第一项（2026-08-09，全量 2092 passed / 1 skipped）**：
-  `core/base/diagnostics/catalog.py`（76 码 → 说明/修复，单点真理）+ `DiagnosticFormatter` 集成（fail-open）+
-  `docs/syntax/15_diagnostics.md` + 契约测试。剩余子项：符号表/类型绑定 JSON/dot 导出、编译时间基准、CI/CD。
+- **PT-FEAT-5 已完成两项（2026-08-09，全量 2103 passed / 1 skipped）**：
+  **诊断码目录**（`core/base/diagnostics/catalog.py` 76 码 → 说明/修复 + `DiagnosticFormatter` 集成 fail-open +
+  `docs/syntax/15_diagnostics.md` + 契约测试）+ **符号表/类型绑定导出**（`core/compiler/diagnostics/exporter.py` +
+  `inspect`/`semantic` CLI 修复——两预存死路径接入，支持 `--format json|dot` + `--output`）。
+  剩余子项：编译时间基准、CI/CD。
 - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
-  **P0 阶段 5 增量已完成；PT-FEAT-5 第一项已完成**；P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；
+  **P0 阶段 5 增量已完成；PT-FEAT-5 两项已完成**；P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；
   P3 VISION。
 - **架构缺陷起点清空（2026-08-08）**：PT-DEBT-9/10/11 已根治（见 §2.2）。
 - **后续增量（可选起点）**：streaming / host async 改进 或 PT-FEAT-5 错误用户友好化（下一 P0）或

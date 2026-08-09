@@ -127,7 +127,19 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
   与目录一一对应（数据驱动，无正文复制）；`SYNTAX_REFERENCE.md` 新增第四部分"诊断与错误"。
 - **契约测试 `tests/contracts/test_diagnostic_catalog.py`**：CAT-1 每码有条目 / CAT-2 无孤儿 / CAT-3 条目规范 /
   CAT-4 已知码渲染说明 / CAT-5 未知码 fail-open。
-- **剩余子项**（PT-FEAT-5 未完）：符号表/类型绑定 JSON/dot 导出、编译时间基准、CI/CD。
+
+## ✅ 已完成：PT-FEAT-5 诊断工具——符号表/类型绑定 JSON/dot 导出（2026-08-09）
+
+> **unsafe-vibe-dev，全量 2103 passed / 1 skipped**。PT-FEAT-5 四项中第二项落地。
+
+- **`core/compiler/diagnostics/exporter.py`**（只读导出，单一权威源）：`export_symbols_json`（作用域树递归，
+  符号 name/kind/uid/type/provenance）+ `export_type_bindings_json`（节点类型+位置 → 类型名）+
+  `export_dot`（作用域 cluster + 符号节点 + 作用域父子/类型绑定边）+ `export_artifact`（按格式统一导出）。
+- **CLI 修复（两个预存死路径）**：`inspect` 命令原只有 handler 无 subparser 且引用未定义 `module_name`（死代码）；
+  `semantic` 命令原只有 subparser 无 handler（静默无输出）。统一接入 exporter，支持 `--format json|dot` 与 `--output`。
+- **契约测试 `tests/contracts/test_diagnostic_exporter.py`**：EXP-1 根符号字段 / EXP-2 类型绑定映射 /
+  EXP-3 dot 结构 / EXP-4 JSON round-trip / EXP-5 空数据 fail-open。
+- **剩余子项**（PT-FEAT-5 未完）：编译时间基准、CI/CD。
 
 ## 📋 交接要点（下一 session）
 
@@ -143,8 +155,8 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
   P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；P3 VISION。
 - **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
   `tasks_docs/_code_yield_from.md`。
-- **PT-FEAT-5 错误用户友好化（诊断码目录）已完成第一项（2026-08-09）**：见上方"已完成"节。
-  剩余子项：符号表/类型绑定 JSON/dot 导出、编译时间基准、CI/CD（见 `PENDING_TASKS.md`）。
+- **PT-FEAT-5 错误用户友好化已完成两项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出）。
+  剩余子项：编译时间基准、CI/CD（见 `PENDING_TASKS.md`）。
 - **阶段 5 yield 惰性生成器已完成（2026-08-08）**：见上方"已完成"节。`YIELD_GENERATOR_DESIGN.md`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+

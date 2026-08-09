@@ -86,7 +86,7 @@
 | PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |
-| PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准。**诊断码目录已落地（2026-08-09，`catalog.py` + Formatter 集成 + `15_diagnostics.md` + 契约测试）**；剩余：符号表/类型绑定 JSON/dot 导出、编译时间基准、CI/CD |
+| PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准。**诊断码目录 + 符号表/类型绑定导出已落地（2026-08-09：`catalog.py` + Formatter 集成 + `15_diagnostics.md` + 契约测试；`exporter.py` + `inspect`/`semantic` CLI 修复）**；剩余：编译时间基准、CI/CD |
 | PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 | PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | 原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此）：`ibcc` 构建命令 `--pre-scan-specs` 扫描 `_spec.py` 生成 `.ibc_meta` 快照，`export_metadata()`/`load_metadata_from_file()` 使编译器离线复用元数据，减少运行时发现开销。当前为全量 `discover_all() → HostInterface.metadata` 流程 |

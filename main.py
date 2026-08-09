@@ -78,10 +78,18 @@ def main():
     parse_parser.add_argument("--format", choices=["json", "pretty"], default="json", help="Output format")
 
     # Semantic command
-    semantic_parser = subparsers.add_parser("semantic", help="Semantic analysis output only")
+    semantic_parser = subparsers.add_parser("semantic", help="Semantic analysis output only (symbols + type bindings)")
     semantic_parser.add_argument("file", help="Path to the .ibci entry file")
     semantic_parser.add_argument("--root", help="Project root directory", default=None)
-    semantic_parser.add_argument("--format", choices=["json", "pretty"], default="json", help="Output format")
+    semantic_parser.add_argument("--format", choices=["json", "dot"], default="json", help="Output format")
+    semantic_parser.add_argument("--output", "-o", help="Output file (default: stdout)", default=None)
+
+    # Inspect command
+    inspect_parser = subparsers.add_parser("inspect", help="Export symbol table and type bindings (json/dot)")
+    inspect_parser.add_argument("file", help="Path to the .ibci entry file")
+    inspect_parser.add_argument("--root", help="Project root directory", default=None)
+    inspect_parser.add_argument("--format", choices=["json", "dot"], default="json", help="Output format")
+    inspect_parser.add_argument("--output", "-o", help="Output file (default: stdout)", default=None)
 
     args = parser.parse_args()
 
@@ -181,27 +189,25 @@ def main():
             sys.exit(0)
         sys.exit(1)
 
-    elif args.command == "inspect":
+    elif args.command in ("inspect", "semantic"):
+        # 符号表 / 类型绑定诊断导出（PT-FEAT-5）——json / dot
+        from core.compiler.diagnostics.exporter import export_artifact
         artifact = engine.compile(args.file)
-        if artifact:
-            entry_module = artifact.entry_module
-            if entry_module in artifact.modules:
-                mod_result = artifact.modules[entry_module]
-                sym_table = mod_result.symbol_table
-                result = {
-                    "module": module_name,
-                    "symbols": {}
-                }
-                if sym_table:
-                    for name, sym in sym_table.symbols.items():
-                        result["symbols"][name] = {
-                            "kind": str(sym.kind),
-                            "type": str(sym.spec) if sym.spec else "None"
-                        }
-                output = json.dumps(result, indent=2, ensure_ascii=False)
-                print(output)
-            sys.exit(0)
-        sys.exit(1)
+        if artifact is None:
+            sys.exit(1)
+        entry_module = artifact.entry_module
+        if entry_module not in artifact.modules:
+            print(f"Error: entry module '{entry_module}' not found in artifact")
+            sys.exit(1)
+        mod_result = artifact.modules[entry_module]
+        output = export_artifact(mod_result, entry_module, fmt=args.format)
+        if getattr(args, "output", None):
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(output)
+            print(f"Exported to: {args.output}")
+        else:
+            print(output)
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
