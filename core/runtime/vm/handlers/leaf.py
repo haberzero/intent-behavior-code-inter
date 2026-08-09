@@ -364,7 +364,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     # 惰性生成器（含 yield，D-08 自标记）：调用产出 IbGenerator（不执行体），
     # 迭代驱动函数体、yield 点产出值。
     if isinstance(func, IbUserFunction):
-        if getattr(func, "is_generator", False):
+        if func.is_generator:
             from core.runtime.objects.kernel.generator import IbGenerator
             from core.runtime.shared.user_call import UserFunctionCall as _UFC
 
@@ -383,7 +383,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         method = func.method
         receiver = func.receiver
         if isinstance(method, IbUserFunction):
-            if getattr(method, "is_generator", False):
+            if method.is_generator:
                 from core.runtime.objects.kernel.generator import IbGenerator
                 from core.runtime.shared.user_call import UserFunctionCall as _UFC
 

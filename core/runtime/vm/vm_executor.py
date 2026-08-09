@@ -282,10 +282,10 @@ class VMExecutor:
                 # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
                 # 迭代驱动函数体、yield 点产出值。
                 if isinstance(child_uid, UserFunctionCall):
-                    # func 可为 IbUserFunction 或 IbLLMFunction（如 prompt hint 经
-                    # UserFunctionCall 驱动）；is_generator 仅 IbUserFunction 定义——
-                    # getattr 缺省 False 是数据属性守卫（非能力探测），缺省走非生成器压栈。
-                    if getattr(child_uid.func, "is_generator", False):
+                    # func 可为 IbUserFunction/IbNativeFunction/IbLLMFunction；
+                    # is_generator 在 IbFunction 基类声明（缺省 False），
+                    # 属性直读分派生成器 vs 普通函数体压栈。
+                    if child_uid.func.is_generator:
                         pending_value = self.make_generator_driver(child_uid)
                     else:
                         stack.append(self._make_user_function_task(child_uid))
@@ -378,9 +378,9 @@ class VMExecutor:
                     continue
 
                 if isinstance(child_uid, UserFunctionCall):
-                    # 同 _drive_loop_gen：func 可为 IbUserFunction/IbLLMFunction，
-                    # is_generator 数据属性守卫（缺省 False 走压栈）。
-                    if getattr(child_uid.func, "is_generator", False):
+                    # 同 _drive_loop_gen：is_generator 基类属性（缺省 False），
+                    # 属性直读分派生成器 vs 普通函数体压栈。
+                    if child_uid.func.is_generator:
                         # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
                         # 迭代驱动函数体、yield 点产出值。与 _drive_loop_gen 同构——
                         # 生成器体内调用生成器函数必须产出 IbGenerator 而非压栈执行体。

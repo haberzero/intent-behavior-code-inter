@@ -14,6 +14,11 @@ class IbFunction(IbObject):
     """
     def __init__(self, ib_class: 'IbClass'):
         super().__init__(ib_class)
+        # 惰性生成器标记（D-08 自标记函数种类）。仅 IbUserFunction 语义上可能
+        # 为 True（含 yield）；其余函数子类（native/LLM）恒 False。基类声明
+        # 使调用方（如 vm_executor 对 UserFunctionCall 分派）可属性直读，
+        # 无需 getattr 探测形态。
+        self.is_generator: bool = False
 
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         raise NotImplementedError()

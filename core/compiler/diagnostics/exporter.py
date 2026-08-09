@@ -34,8 +34,8 @@ def _symbol_dict(sym: Any) -> Dict[str, Any]:
         "kind": sym.kind.name,
         "uid": sym.uid,
         "type": sym.spec.name if sym.spec is not None else None,
-        "provenance": getattr(sym, "provenance", None).name
-        if getattr(sym, "provenance", None) is not None else None,
+        # Symbol dataclass 恒有 provenance 字段（含默认值）——属性直读。
+        "provenance": sym.provenance.name,
     }
 
 
