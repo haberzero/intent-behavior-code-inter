@@ -25,8 +25,8 @@
 | A7 | `vm/handlers/llm_behavior.py:140` | 防御性兜底 handler（"解析器不再生成此节点类型"） | **已失效（2026-08-09 事实回顾）**——目标（不可达 `IbBehaviorInstance` handler）已于 R3 批次（f5d3f94，2026-08-05）删除（dispatch + llm_behavior 清理）；条目行号随文件漂移已失准 |
 | A8 | `llm_except_frame.py:78/245/267` | 深克隆兜底 / `__restore__` 失败 best-effort 保留当前状态 | 待核验（best-effort 语义） |
 | A9 | `vm_executor.py`（CPS 调度循环） | CPS 求值 vs fallback 双路径 | **已核验：结构化分派（2026-08-09）**——调度循环对 child 类型（None/Waitable/UserFunctionCall/str uid）的条件分支是 CPS 协议的结构化处理，非降级兜底 |
-| A10 | `objects/kernel/base.py` `receive` | 内置类型 call 方法 Python 直调兜底 | 待核验（`__call__` 走公理能力探测下沉，非 hasattr 探测） |
-| A11 | `kernel/registry.py:363` | make_llm_parse_error 类查找逐级回退 | 待核验 |
+| A10 | `objects/kernel/base.py` `receive` | 内置类型 call 方法 Python 直调兜底 | **已核验：设计内公理下沉（2026-08-09）**——`__call__` 经公理能力探测下沉（非 hasattr 探测），统一消息分派入口 |
+| A11 | `kernel/registry.py:388` | make_llm_parse_error 类查找逐级回退 | **已核验：设计内错误构造降级链（2026-08-09）**——LLMParseError→Exception→None 为 bootstrap 边界防护；正常路径首分支命中。终态 None 为 edge-case 最后兜底（下游会暴露为运行时错误），非静默吞错 |
 | A12 | `engine.py:183/245/248/270/272` | plugin_paths 多优先级来源 + 嗅探兜底 | 设计内（多优先级，非异味） |
 | A13 | `binding_analysis_pass.py:513/537/899` | 无名称兜底 / 运行时守卫兜底 / 父作用域查找兜底 | 待核验 |
 | A14 | `runtime_context.py:121-122` | 无 UID 引导期 fallback_uid | 设计内（引导期；assert 已强制 uid/name） |
@@ -54,8 +54,8 @@
 | C2 | `module_manager.py:141` | `except AttributeError: pass` | 待核验 |
 | C3 | `llm_executor/_scheduler.py:105` | `except Exception: pass` | 待核验 |
 | C4 | `objects/kernel/native_module.py:115/121` | `except KeyError/AttributeError: pass`（**原 4.3.4 吞错根因面**） | **待核验（已修 4.3 部分，复核残留）** |
-| C5 | `modules/file_impl.py:156` | `except (OSError, ValueError): return False`（**原 5.6：沙箱权限降级"文件不存在"**） | 待核验 |
-| C6 | `kernel/config.py:47` | `except OSError: return {}`（**原 5.8：损坏 JSON 静默吞**） | **待核验（区分"不存在=空"与"损坏=报错"）** |
+| C5 | `modules/file_impl.py:150` | `except (OSError, ValueError): return False`（**原 5.6：沙箱权限降级"文件不存在"**） | **已核验：设计内（2026-08-09）**——`_resolve_path` 沙箱越权抛 `InterpreterError`（不被 except 捕获，正确传播）；except 仅捕 OS 级路径错误（非法路径→"不存在"语义），与 docstring"权限拒绝必须传播"一致 |
+| C6 | `kernel/config.py:47` | `except OSError: return {}`（**原 5.8：损坏 JSON 静默吞**） | **已核验：已解决（2026-08-09）**——JSONDecodeError 已改 fail-fast `raise ValueError`（`Invalid CONFIG_FILENAME: malformed JSON`）；`OSError` 分支为"文件不存在→空配置"（存在性语义）非损坏掩盖 |
 | C7 | `base/support/fuzzy_json.py:29/71/81/108/118` | 5 处 JSONDecodeError/ValueError pass（容错解析） | 待核验（容错 vs 掩盖） |
 | C8 | `base/diagnostics/debugger.py:59` | 配置解析异常 pass | **已解决（2026-08-06，OBSERVABILITY 2A：机制整体移除）** |
 | C9 | `ibci_modules/ibci_idbg/core.py:383/398` | `except Exception: pass` | **已解决（2026-08-06，OBSERVABILITY 2C：show_intents 单一权威源，去双源回退）** |
