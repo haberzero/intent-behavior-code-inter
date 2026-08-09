@@ -83,7 +83,7 @@
 | # | 内容 | 说明 |
 |---|------|------|
 | PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**`yield` 惰性生成器已落地（2026-08-08，阶段 5，独立分支 exp/yield-generator → 手动应用 unsafe-vibe-dev，全量 2043/1）**：含 `yield` 函数自动为生成器（D-08 自标记，async 关键字已取消），单可恢复驱动 `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。设计 `YIELD_GENERATOR_DESIGN.md`。**增量 `next()` 内建 + `yield from` 委托已落地（2026-08-09，全量 2083/1）**。剩余：streaming / host async 改进 |
-| PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | 枚举成员值一律设为名字字符串 → 数字状态码枚举无法 round-trip（VISION） |
+| PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | **评估：维持现状（2026-08-09）**。枚举成员值一律为名字字符串 → 数字状态码枚举无法 round-trip。落地需：成员值声明语法 + 类型系统 + 序列化 round-trip（任意成员值）+ LLM from_prompt 改写，属设计冻结级变更（VISION）。session 时间窗不足，维持登记待独立窗口 |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |
 | PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准。**前三项已落地（2026-08-09：诊断码目录 + 符号表/类型绑定导出 + `bench` 编译基准）**；剩余：CI/CD（涉及远程 push，须用户显式授权后另行执行） |
