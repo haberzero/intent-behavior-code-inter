@@ -46,4 +46,4 @@ IBCI 是实验性意图驱动混合编程语言：Python 风格的确定性代�
 
 | 章 | 文件 | 标题 | 说明 |
 |----|------|------|------|
-| 15 | [15_diagnostics](syntax/15_diagnostics.md) | 诊断码参考 | 全量诊断码的触发条件与修复指引（数据驱动，权威源 `catalog.py`） |
+| 15 | [15_diagnostics](syntax/15_diagnostics.md) | 诊断码参考 | 全量诊断码的触发条件与修复指引（码集合与 catalog 契约一致） |
