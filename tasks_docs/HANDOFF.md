@@ -99,7 +99,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `NEXT_STEPS.md` | 当前最紧要项（下一主线待择定）/ 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED） |
-| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行，R4 覆盖率核对已执行（2026-08-09），R5 doc 审计待做） |
+| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行，R4 覆盖率核对已执行（2026-08-09），R5 doc 聚焦治理已执行（全量待独立窗口）） |
 | `DOC_AUDIT_REPORT.md` | docs/ 治理审核记录（2026-08-06，F0-F4 已执行完成，归档） |
 | `TEST_MATRIX_FINDINGS.md` | 测试矩阵核对发现（PT-TEST-3 研究存档，PT-TEST-1 重构输入） |
 | `THREAD_DESIGN.md` / `PROMPT_DESIGN_REVIEW.md` / `MEDIA_DESIGN.md` | 设计要点迁入（并发 / `__prompt__` 待决项 / media 封存） |
