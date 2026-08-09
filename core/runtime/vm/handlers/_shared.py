@@ -58,26 +58,13 @@ def _expand_starred(executor, value):
 
 
 def _resolve_iterable(iterable_obj: Any):
-    """把可迭代值解析为元素序列对象（单一权威源，供 for 循环 / yield from 共用）。
+    """把可迭代值解析为元素序列对象。
 
-    与 vm_handle_IbFor 的迭代解析同协议：序列直取；IbGenerator → to_list；
-    结构化能力查询（``__iter__`` 预检存在才调用，用户实现体内真实错误不被
-    宽 except 折叠）；to_list 兜底。返回序列对象（IbValue），不可迭代返回 None。
+    委托到 ``core.runtime.shared.iterable.resolve_iterable``（单一权威源，
+    供 VM 与内建共用）；本函数保留为 VM handler 层的命名别名。
     """
-    if is_sequence_value(iterable_obj):
-        return iterable_obj
-    from core.runtime.objects.kernel.generator import IbGenerator
-    if isinstance(iterable_obj, IbGenerator):
-        return iterable_obj.to_list()
-    if iterable_obj.ib_class.lookup_method("__iter__") is not None:
-        r = iterable_obj.receive("__iter__", [])
-        if is_sequence_value(r):
-            return r
-    if iterable_obj.ib_class.lookup_method("to_list") is not None:
-        r = iterable_obj.receive("to_list", [])
-        if is_sequence_value(r):
-            return r
-    return None
+    from core.runtime.shared.iterable import resolve_iterable
+    return resolve_iterable(iterable_obj)
 
 
 def _merge_dstar(executor, keyword_map, value):

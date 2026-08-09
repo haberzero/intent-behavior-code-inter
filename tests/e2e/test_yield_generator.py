@@ -403,19 +403,26 @@ for str x in outer(1):
         assert "hi" in out[0]
 
     def test_yield_from_non_iterable_runtime_error(self):
-        """yield from 不可迭代对象：运行时错误（可捕获）。"""
+        """yield from 无 __iter__/to_list 协议的对象：运行时错误（可捕获）。"""
         code = """
+class Box:
+    int v
+
 func outer(int n) -> int:
-    yield from 42
+    Box b = Box(5)
+    yield from b
     return 0
 
-for int x in outer(1):
-    print(x)
+try:
+    for int x in outer(1):
+        print(x)
+except:
+    print("CAUGHT")
 print("AFTER")
 """
         out = run_ibci(code)
-        # for 消费时 _resolve_iterable(42) 返回 None → 委托报错；外层继续
-        assert "AFTER" in out
+        # 用户类无 __iter__/to_list → _resolve_iterable 返回 None → 委托报错可捕获
+        assert out == ["CAUGHT", "AFTER"]
 
     def test_yield_from_iterable_via_to_list(self):
         """yield from 有 to_list 协议的对象（非序列）：经 to_list 迭代。"""

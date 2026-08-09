@@ -197,7 +197,7 @@ def main():
         sys.exit(1)
 
     elif args.command in ("inspect", "semantic"):
-        # 符号表 / 类型绑定诊断导出（PT-FEAT-5）——json / dot
+        # 符号表 / 类型绑定诊断导出——json / dot
         from core.kernel.issue import CompilerError
         from core.compiler.diagnostics.formatter import DiagnosticFormatter
         from core.compiler.diagnostics.exporter import export_artifact
@@ -223,7 +223,7 @@ def main():
         sys.exit(0)
 
     elif args.command == "bench":
-        # 编译时间基准（PT-FEAT-5）：warmup + N 次计时，报告 min/avg/max。
+        # 编译时间基准：warmup + N 次计时，报告 min/avg/max。
         from core.kernel.issue import CompilerError
         from core.compiler.diagnostics.formatter import DiagnosticFormatter
         import statistics

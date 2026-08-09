@@ -2,17 +2,17 @@ from typing import Any, List
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.kernel.base import unbox
 from core.kernel.issue import InterpreterError
-from core.runtime.vm.handlers._shared import _resolve_iterable
+from core.runtime.shared.iterable import resolve_iterable
 
 
 def _iter_elements(obj: IbObject) -> List[IbObject]:
     """提取可迭代对象的元素列表。
 
-    迭代解析收敛到 ``_resolve_iterable``（单一权威源，与 ``for``/``yield from``
+    迭代解析收敛到 ``resolve_iterable``（单一权威源，与 ``for``/``yield from``
     同协议：序列 / 生成器 / ``__iter__`` / ``to_list``）；不可迭代时抛
     ``InterpreterError``（语义错误而非返回 None）。
     """
-    seq = _resolve_iterable(obj)
+    seq = resolve_iterable(obj)
     if seq is None:
         raise InterpreterError(
             f"Object of type '{obj.ib_class.name}' is not iterable"
