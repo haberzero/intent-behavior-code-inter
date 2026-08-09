@@ -16,6 +16,13 @@ UID 家族：
 - ``sym_anon``：匿名符号（``sym_anon_<hash>``）
 - ``asset``：文本资产哈希（``asset_<sha256[:16]>``）
 - ``rt_scope``：运行时作用域（``rt_scope_<uuid16>``，运行时瞬态标识）
+- ``rt_intent``：运行时意图节点（``intent_<uuid16>``）
+- ``rt_intent_ctx``：运行时意图上下文（``intentctx_<uuid16>``）
+- ``rt_instance``：序列化运行时实例（``inst_<uuid16>``）
+
+**边界（非本模块范围）**：运行时调度器的解释器实例**注册键**（`rt_scheduler.py` / 
+`interpreter.py` 的 ``inst_<uuid8>``/``inst_<id>``）是**进程内查找键**（非序列化 UID，
+长度/语义与序列化实例 UID 不同），不并入本模块——避免强制统一改变其行为。
 
 新增 UID 形态时在此定义，禁止调用方内联字符串。
 """
@@ -75,3 +82,18 @@ def asset_uid(text: str) -> str:
 def rt_scope_uid() -> str:
     """运行时作用域 UID：``rt_scope_<uuid16>``（运行时瞬态，非确定性）。"""
     return f"rt_scope_{uuid.uuid4().hex[:16]}"
+
+
+def rt_intent_uid() -> str:
+    """运行时意图节点 UID：``intent_<uuid16>``（运行时瞬态，非确定性）。"""
+    return f"intent_{uuid.uuid4().hex[:16]}"
+
+
+def rt_intent_ctx_uid() -> str:
+    """运行时意图上下文 UID：``intentctx_<uuid16>``（运行时瞬态，非确定性）。"""
+    return f"intentctx_{uuid.uuid4().hex[:16]}"
+
+
+def rt_instance_uid() -> str:
+    """运行时实例 UID：``inst_<uuid16>``（运行时瞬态，非确定性）。"""
+    return f"inst_{uuid.uuid4().hex[:16]}"

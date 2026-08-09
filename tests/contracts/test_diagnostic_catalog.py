@@ -10,8 +10,10 @@ Validates:
 - CAT-3: Catalog entries are non-empty / well-formed (title + fix)
 - CAT-4: Formatter renders the friendly explanation for known codes
 - CAT-5: Formatter fails open (no crash) for unknown codes
+- CAT-6: The human reference doc (15_diagnostics.md) code set == catalog code set
 """
 
+import os
 import re
 
 import pytest
@@ -82,3 +84,24 @@ class TestFormatterIntegration:
         # 未登记码不阻断展示：正文照常输出，不附加说明段
         assert "SOME_UNREGISTERED_CODE" in out
         assert "说明:" not in out
+
+
+class TestDocParity:
+    """CAT-6：人类参考文档（15_diagnostics.md）码集合 == 目录码集合。"""
+
+    DOC_PATH = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "docs", "syntax", "15_diagnostics.md",
+    )
+
+    def test_doc_code_set_matches_catalog(self):
+        with open(self.DOC_PATH, encoding="utf-8") as f:
+            src = f.read()
+        doc_codes = set(re.findall(r"^### `([A-Z][A-Z0-9_]*)`", src, re.M))
+        catalog_codes = set(CODE_CATALOG)
+        # 新增码登记目录后必须同步文档节；文档孤儿码必须从文档移除。
+        assert doc_codes == catalog_codes, (
+            f"doc/catalog code set drift: "
+            f"in-catalog-not-in-doc={sorted(catalog_codes - doc_codes)}, "
+            f"in-doc-not-in-catalog={sorted(doc_codes - catalog_codes)}"
+        )

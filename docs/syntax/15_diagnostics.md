@@ -1,7 +1,7 @@
 # 15 · 诊断码参考
 
 > 全量诊断码的用户友好参考：每个码的**触发条件**（什么时候产生）与**修复指引**（如何消除）。
-> **单一事实来源**：`core/base/diagnostics/catalog.py`（`CODE_CATALOG`）——`DiagnosticFormatter` 渲染错误时即从该目录附加"说明/修复"段；本文档条目与目录一一对应，**由目录数据驱动**（新码登记目录即需同步本节，`tests/contracts/test_diagnostic_catalog.py` 强制覆盖完备）。
+> **机器权威源**：`core/base/diagnostics/catalog.py`（`CODE_CATALOG`）——`DiagnosticFormatter` 渲染错误时即从该目录附加"说明/修复"段。**本文档是人类参考页**：目录（code → title/fix）以 catalog 为单一事实来源；本文档在目录之上补充人类阅读所需的**触发条件**与**严重级别**，且与目录保持**码集合一致**（`tests/contracts/test_diagnostic_catalog.py` CAT-6 强制文档码集合 == 目录码集合，防新增码漏登记/孤儿）。说明/修复文本如与 catalog 冲突，以 catalog 为准。
 >
 > 诊断码分域：词法 `LEX_` / 语法 `PAR_` / 语义 `SEM_` / 依赖 `DEP_` / 内部 `INT_` / 运行时 `RUN_` / 内核诊断 `KDIAG_`。
 

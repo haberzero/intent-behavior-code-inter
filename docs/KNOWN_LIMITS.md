@@ -556,3 +556,8 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 **不受限的情形**：生成器体内 LLM 行为（`@~...~`）经 `execute_behavior_expression` **同步解析**（不产生 Waitable），故与 `yield`/`yield from` 组合正常（已有 e2e 覆盖）。
 
 **含义**：这是**既有迭代协议共有的预存限制**（`for`/`next`/`to_list`/`yield from` 同一消费路径），非 `yield from` 引入。生成器体内挂起 I/O 类 Waitable（通道/订阅/宿主异步）属设计边界，未支持；如需，需在 `generic_next` 层引入 Waitable 感知（超出当前范围）。
+## 二十五、`yield from` 序列委托的静态类型与运行时值
+
+**`yield from <expr>` 的节点静态类型绑定为委托目标的元素类型**（`generator[T]`→`T`、`list[T]`→`T`，经 `resolve_iter_element`）。对**生成器**操作数无错位（IBCI 类型模型把生成器 return 类型与元素类型合一，`StopIteration.value` 即表达式值）。对**序列/`__iter__` 操作数**，运行时表达式值为 `None`（Python 语义一致）——即 `int r = yield from [10,20,30]` 静态通过（`int`=`int`）但运行时 `r=None`。
+
+**含义**：这是类型绑定设计的取舍后果（静态偏乐观），非实现缺陷；生产代码如需序列委托的返回值，应视为 `None` 使用。如需收紧，需引入"委托目标是否为生成器"的编译期区分（超出当前范围）。

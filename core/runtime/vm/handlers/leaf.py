@@ -182,6 +182,11 @@ def vm_handle_IbYieldFromExpr(executor, node_uid: str, node_data: Mapping[str, A
     if isinstance(value, Signal):
         return value
 
+    if value is None:
+        raise RuntimeError(
+            f"yield from: missing operand (uid={node_uid})"
+        )
+
     from core.runtime.objects.kernel.generator import IbGenerator
 
     if isinstance(value, IbGenerator):

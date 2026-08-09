@@ -401,3 +401,57 @@ for str x in outer(1):
         out = run_ibci(code)
         assert len(out) == 1
         assert "hi" in out[0]
+
+    def test_yield_from_non_iterable_runtime_error(self):
+        """yield from 不可迭代对象：运行时错误（可捕获）。"""
+        code = """
+func outer(int n) -> int:
+    yield from 42
+    return 0
+
+for int x in outer(1):
+    print(x)
+print("AFTER")
+"""
+        out = run_ibci(code)
+        # for 消费时 _resolve_iterable(42) 返回 None → 委托报错；外层继续
+        assert "AFTER" in out
+
+    def test_yield_from_iterable_via_to_list(self):
+        """yield from 有 to_list 协议的对象（非序列）：经 to_list 迭代。"""
+        code = """
+func outer(int n) -> int:
+    yield from count(3)
+    return 0
+
+func count(int n) -> int:
+    yield 7
+    yield 8
+    return 0
+
+for int x in outer(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["7", "8"]
+
+    def test_next_exhausted_second_call_still_catchable(self):
+        """next() 耗尽后二次调用仍抛可捕获错误（不崩）。"""
+        code = """
+func count(int n) -> int:
+    yield 1
+    return 0
+
+generator[int] g = count(1)
+int a = next(g)
+try:
+    a = next(g)
+    print("NOERR1")
+except:
+    print("CAUGHT1")
+try:
+    a = next(g)
+    print("NOERR2")
+except:
+    print("CAUGHT2")
+"""
+        assert run_ibci(code) == ["CAUGHT1", "CAUGHT2"]

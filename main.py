@@ -198,9 +198,15 @@ def main():
 
     elif args.command in ("inspect", "semantic"):
         # 符号表 / 类型绑定诊断导出（PT-FEAT-5）——json / dot
+        from core.kernel.issue import CompilerError
+        from core.compiler.diagnostics.formatter import DiagnosticFormatter
         from core.compiler.diagnostics.exporter import export_artifact
-        artifact = engine.compile(args.file)
-        if artifact is None:
+        try:
+            artifact = engine.compile(args.file)
+        except CompilerError as e:
+            print(DiagnosticFormatter.format_all(
+                e.diagnostics, source_manager=engine.scheduler.source_manager
+            ))
             sys.exit(1)
         entry_module = artifact.entry_module
         if entry_module not in artifact.modules:

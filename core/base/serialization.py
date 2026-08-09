@@ -1,5 +1,4 @@
 from typing import Dict, Any, List, Optional, Union
-import hashlib
 from enum import Enum
 
 from core.base.uid import asset_uid
@@ -15,16 +14,6 @@ class BaseFlatSerializer:
         self.external_assets: Dict[str, str] = {} # 存储外部文本资产: uid -> content
         self.type_map: Dict[int, str] = {} # 映射内存 ID 到稳定 UID
         
-    def _generate_deterministic_uid(self, prefix: str, content: str) -> str:
-        """ 生成确定性 UID，基于内容的 SHA-256 哈希。
-
-        兼容包装：指定前缀的通用哈希 UID（前缀由调用方决定）。资产/节点等
-        具名 UID 形态统一收敛于 ``core.base.uid``（PT-FEAT-10），本方法仅
-        供通用前缀场景使用。
-        """
-        h = hashlib.sha256(content.encode('utf-8')).hexdigest()
-        return f"{prefix}_{h[:16]}"
-
     def _process_value(self, value: Any) -> Any:
         """通用的基础值处理逻辑"""
         if isinstance(value, list):

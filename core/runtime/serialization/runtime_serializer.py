@@ -1,9 +1,8 @@
 import json
-import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.base.enums import StorageModel
-from core.base.uid import rt_scope_uid
+from core.base.uid import rt_scope_uid, rt_intent_uid, rt_intent_ctx_uid, rt_instance_uid
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
 from core.runtime.objects.primitives import IbOptional
@@ -77,7 +76,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if node_id in self.memo:
             return self.memo[node_id]
             
-        uid = f"intent_{uuid.uuid4().hex[:16]}"
+        uid = rt_intent_uid()
         self.memo[node_id] = uid
         
         # 记录节点内容及父节点引用
@@ -191,7 +190,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if ic_id in self.memo:
             return self.memo[ic_id]
 
-        uid = f"intentctx_{uuid.uuid4().hex[:16]}"
+        uid = rt_intent_ctx_uid()
         self.memo[ic_id] = uid
 
         intent_top = ic.get_intent_top()
@@ -215,7 +214,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if obj_id in self.memo:
             return self.memo[obj_id]
             
-        uid = f"inst_{uuid.uuid4().hex[:16]}"
+        uid = rt_instance_uid()
         self.memo[obj_id] = uid
         
         data = {

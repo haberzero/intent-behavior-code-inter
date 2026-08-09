@@ -282,7 +282,7 @@ class VMExecutor:
                 # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
                 # 迭代驱动函数体、yield 点产出值。
                 if isinstance(child_uid, UserFunctionCall):
-                    if getattr(child_uid.func, "is_generator", False):
+                    if child_uid.func.is_generator:
                         pending_value = self.make_generator_driver(child_uid)
                     else:
                         stack.append(self._make_user_function_task(child_uid))
@@ -375,7 +375,7 @@ class VMExecutor:
                     continue
 
                 if isinstance(child_uid, UserFunctionCall):
-                    if getattr(child_uid.func, "is_generator", False):
+                    if child_uid.func.is_generator:
                         # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
                         # 迭代驱动函数体、yield 点产出值。与 _drive_loop_gen 同构——
                         # 生成器体内调用生成器函数必须产出 IbGenerator 而非压栈执行体。

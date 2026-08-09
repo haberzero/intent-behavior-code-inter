@@ -192,9 +192,10 @@ def _process_value(self, value):
 
 **确定性 UID**：保证相同内容生成相同 UID。
 
-**单一权威源**：所有 UID 格式收敛于 `core/base/uid.py`（PT-FEAT-10）——调用方
+**单一权威源**：序列化/符号 UID 格式收敛于 `core/base/uid.py`（PT-FEAT-10）——调用方
 （symbols / serialization / context / runtime_serializer）经 `UIDGenerator` 系列
-函数生成，**禁止内联格式字符串**。
+函数生成，**禁止内联格式字符串**。边界：运行时调度器的解释器实例注册键
+（`inst_<uuid8>`/`inst_<id>`）为进程内查找键，非序列化 UID，不并入。
 
 | 家族 | 函数 | 形态 | 确定性 |
 |------|------|------|--------|
@@ -207,6 +208,9 @@ def _process_value(self, value):
 | 匿名符号 | `anon_symbol_uid(hash)` | `sym_anon_{hash}` | 是 |
 | 文本资产 | `asset_uid(text)` | `asset_{sha256[:16]}` | 是（内容哈希） |
 | 运行时作用域 | `rt_scope_uid()` | `rt_scope_{uuid16}` | 否（瞬态） |
+| 运行时意图节点 | `rt_intent_uid()` | `intent_{uuid16}` | 否（瞬态） |
+| 运行时意图上下文 | `rt_intent_ctx_uid()` | `intentctx_{uuid16}` | 否（瞬态） |
+| 序列化运行时实例 | `rt_instance_uid()` | `inst_{uuid16}` | 否（瞬态） |
 
 **不变量**：集中格式不改变已产出的 UID 值（round-trip 保真）；`tests/contracts/test_uid_generator.py` 固化格式与确定性。
 

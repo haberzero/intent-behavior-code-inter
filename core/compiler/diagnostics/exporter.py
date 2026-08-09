@@ -130,7 +130,8 @@ def export_dot(
         scope_cluster[scope_uid] = safe_uid
         lines.append(f'  subgraph cluster_{safe_uid} {{ label = "{_dot_escape(scope_uid)}";')
         for name, sym in getattr(scope, "symbols", {}).items():
-            sym_id = "sym_" + _dot_escape(sym.uid or f"{scope_uid}:{name}")
+            fallback_uid = f"{scope_uid}:{name}"
+            sym_id = "sym_" + _dot_escape(sym.uid or fallback_uid)
             sym_kind = sym.kind.name if hasattr(sym.kind, "name") else str(sym.kind)
             sym_type = sym.spec.name if sym.spec is not None else ""
             label = f"{_dot_escape(name)}\\n{sym_kind}"
