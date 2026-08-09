@@ -2,7 +2,7 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-08（阶段5 yield 落地 + 异步地基遗留妥协根治定为新主线；优先级总表归 PENDING_TASKS §〇）
+> **最后更新**：2026-08-09（P0 阶段5增量 + PT-FEAT-5 三项 + PT-FEAT-10 + R4/R5 审计完成；剩余 PT-DEBT-4 独立窗口与 P3 VISION）
 
 ---
 
@@ -173,15 +173,16 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
   M3（prompt 单源）已确认收敛**。**剩余 PT-DEBT-15 中 M1（.call 双写收敛）/ M2（驱动去重）为大型收敛重构
   （中严重度，回归风险高）**。实施计划见 `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
   登记 PT-DEBT-12/13/14/15。
-- **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
-  当前主线后：**P0 阶段 5 增量（`next()` 内建 + `yield from`）已完成（2026-08-09，全量 2083/1）** → **PT-FEAT-5**；
-  P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；P3 VISION。
-- **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
-  `tasks_docs/_code_yield_from.md`。
-- **PT-FEAT-5 已完成三项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出 + 编译基准）。
-  剩余：CI/CD（涉远程 push，须用户显式授权后另行执行；见 `PENDING_TASKS.md`）。
-- **P1 PT-FEAT-10 UID 生成统一已完成（2026-08-09）**：见上方"已完成"节。下一 P1：PT-FEAT-11 序列化器自动化 /
-  PT-FEAT-12 AST UID 字段 / PT-DEBT-4 `file` 重命名。
+ - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
+   当前主线后：**P0 阶段 5 增量已完成（2026-08-09）→ PT-FEAT-5 三项已完成（CI/CD 待授权）→
+   P1 PT-FEAT-10 已完成 → P2 R4/R5 审计已执行**；剩余 PT-DEBT-4 `file` 重命名（破坏性变更独立窗口）、P3 VISION。
+ - **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
+   `tasks_docs/_code_yield_from.md`。
+ - **PT-FEAT-5 已完成三项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出 + 编译基准）。
+   剩余：CI/CD（涉远程 push，须用户显式授权后另行执行；见 `PENDING_TASKS.md`）。
+ - **P1 PT-FEAT-10 UID 生成统一已完成（2026-08-09）**：见上方"已完成"节。
+ - **P2 审计 R4/R5 已执行（2026-08-09）**：R4 覆盖率核对（12 项，2 处 TRUE_GAP 补测）+ R5 聚焦治理
+   （session 改动文档核验）。PT-FEAT-11/12、PT-FEAT-2 均评估为维持现状（见 `PENDING_TASKS.md`）。
 - **阶段 5 yield 惰性生成器已完成（2026-08-08）**：见上方"已完成"节。`YIELD_GENERATOR_DESIGN.md`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
