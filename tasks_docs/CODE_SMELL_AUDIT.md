@@ -69,8 +69,8 @@
 
 | # | 位置 | 特征 | 状态 |
 |---|---|---|---|
-| D1 | 约 30 处 `getattr(x, ..., None) or []` 模式 | 防御性兜底（`core/` 内） | **待核验（逐点判恒真/承重）** |
-| D2 | 45 文件含 `hasattr` | 大部分为协议/分层合法反射，需分类复核 | **待核验（按判定基准分类）** |
+| D1 | 约 30 处 `getattr(x, ..., None) or []` 模式 | 防御性兜底（`core/` 内） | 待核验（逐点判恒真/承重；专项独立窗口） |
+| D2 | 45 文件含 `hasattr` | 大部分为协议/分层合法反射，需分类复核 | **抽样已核验（2026-08-09）：协议/primitive 边界判别为主**——`hasattr(val, 'receive')` 系判别 IbObject（可消息分派）vs 原始 Python 值（协议层边界检查，_prompt.py:35/70、module_manager.py:43、media.py:46）；`hasattr(value, '__dict__')` 系 base 层泛型对象遍历（serialization.py:27）。全量逐点分类仍待专项窗口 |
 | D3 | 5 处 to_native/ib_class 鸭子判别保留（B3/B4） | 见 B 分类 | 保留（已证据确认） |
 
 ### E. 本次已处置项的复核边界（技术债收尾）
