@@ -13,7 +13,7 @@
 | R1 | 正式 code-review 复核 | 三阶段主线 + 收尾 L1-L8 独立复核（general agent） | ✅ 已执行（2026-08-05），周期复核 |
 | R2 | code-quality 健康诊断十查 | 全仓健康审计（残留/双通道/双写真相/fail-fast/封装） | ✅ 已执行（2026-08-05），周期复核 |
 | R3 | code-odor 全面异味扫描 | 特征扫描（嵌套分支/能力探测/兜底字样/反射变体） | ✅ 已执行（2026-08-05），周期复核 |
-| R4 | 覆盖率核对 | 新增测试是否覆盖全部新行为（subscriber 生命周期/class_ref/泛型特化/瞬态协议/构造入口/闭包序列化 round-trip/IBC 文件跨模块导入） | ⬜ 待做 |
+| R4 | 覆盖率核对 | 新增测试是否覆盖全部新行为（subscriber 生命周期/class_ref/泛型特化/瞬态协议/构造入口/闭包序列化 round-trip/IBC 文件跨模块导入） | ✅ 已执行（2026-08-09，general agent + 逐项核实）——7 项官方 + 5 项本 session 新功能全核对。2 处 TRUE_GAP 已补测：subscriber 生命周期语言层（`test_vm_comm.py` +2）、generator[T] 泛型身份（`test_generic_model.py` +1）。其余覆盖良好 |
 | R5 | doc-governance 审计 | docs/ 治理流程（配合 PT-DOC-1 文档收敛） | ⬜ 待做 |
 
 > 约束：subagent **仅可用 general agent**；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置

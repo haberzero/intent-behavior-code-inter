@@ -26,8 +26,19 @@ def make_registry():
 class TestGenericTypeRegistry:
     def test_all_builtin_generics_declared(self):
         reg = create_generic_registry()
-        for name in ("list", "dict", "tuple", "Optional", "fn_callable", "behavior", "thread"):
+        for name in ("list", "dict", "tuple", "Optional", "fn_callable", "behavior", "thread", "generator", "chan", "slot"):
             assert name in reg, f"generic '{name}' not declared"
+
+    def test_generator_generic_identity(self):
+        """generator[T] 经 registry 特化且类型名/kind 正确（R4 补强：yield 生成器泛型）。"""
+        from core.kernel.spec.registry.factory import SpecFactory
+        reg = create_generic_registry()
+        gen_decl = reg.get("generator")
+        assert gen_decl is not None
+        factory = SpecFactory()
+        specialized = gen_decl.build(factory, ["int"], [None])
+        assert specialized.name == "generator[int]"
+        assert specialized.kind == TypeKind.GENERATOR.value
 
     def test_registry_indexed_by_name(self):
         """注册表按 name 索引（_by_kind 单值索引已删除——kind 不唯一）。"""

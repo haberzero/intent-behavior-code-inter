@@ -100,6 +100,32 @@ print((str)sub.recv())
 """)
         assert lines == ["False", "1"]
 
+    def test_subscriber_close_lifecycle(self):
+        """语言层 subscriber.close()：已缓存数据仍可读，close 后 recv_nowait 返回 None。"""
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber sub = c.subscribe()
+c.send(1)
+c.send(2)
+print((str)sub.recv())
+sub.close()
+print("CLOSED")
+auto r = sub.recv_nowait()
+print("AFTER_CLOSE")
+""")
+        assert lines == ["1", "CLOSED", "AFTER_CLOSE"]
+
+    def test_channel_close_cascades_to_subscriber(self):
+        """语言层通道 close 级联：订阅者仍可排空已缓存数据。"""
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber sub = c.subscribe()
+c.send(5)
+c.close()
+print((str)sub.recv())
+""")
+        assert lines == ["5"]
+
 
 def test_comm_objects_use_create_blank_protocol():
     """comm 句柄对象经 _create_blank 统一构造协议创建实例。"""

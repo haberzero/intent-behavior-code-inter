@@ -69,6 +69,11 @@
 
 ---
 
+| **PT-AUDIT-3 R4 覆盖率核对（2026-08-09，unsafe-vibe-dev，全量 2128 passed / 1 skipped）** | **阶段边界周期审计（P2）**。general agent 只读核对 12 项（R4 官方 7 项 + 本 session 新增 5 项）：subscriber 生命周期/class_ref/泛型特化/瞬态协议/构造入口/闭包序列化 round-trip/IBC 跨模块导入 + yield/yield from/next/诊断码目录/UID 统一。**结论**：覆盖良好 10 项（含本 session 新功能全部有测试且实跑通过）；**2 处 TRUE_GAP 已补测**：① subscriber 生命周期语言层——补 `test_vm_comm.py` +2（`subscriber.close()` 已缓存可读 + close 后 recv_nowait 返回 None；通道 close 级联订阅者排空缓存）；② generator[T] 泛型身份——`test_all_builtin_generics_declared` 清单补 generator/chan/slot + 新 `test_generator_generic_identity`（registry 特化 → `generator[int]`/kind 断言，`test_generic_model.py` +1）。全量 2128 passed / 1 skipped 零回归 |
+| **本 session 批次（2026-08-09，unsafe-vibe-dev）** | **一次无人值守 session 落地 6 commit + 复核整改**：① P0 阶段5增量 `yield from` 生成器委托（顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数缺陷 + 迭代解析收敛 `_resolve_iterable`）；② PT-FEAT-5 三项（诊断码目录 catalog + 符号表/类型绑定导出 + bench 编译基准，修两处 CLI 死路径）；③ PT-FEAT-10 UID 生成统一（`core/base/uid.py` 单一权威源）；④ code-review 复核整改（UID 收敛补全/迭代解析去双写/文档单点真理/能力探测改直接属性/死守卫清理/KNOWN_LIMITS 补齐）；⑤ Tier B 注释卫生清理（生产代码 8 处任务代号引用清除）；⑥ R4 覆盖率核对 + 2 处 TRUE_GAP 补测。**全量从 2074 基线 → 2128 passed / 1 skipped**（+54 测试）。**评估结论**：PT-FEAT-11（序列化器自动化）评估为维持现状（`_process_value` 已自动分派，手动 `_collect_*` 类型显式，isinstance 分派不降复杂度）已撤销登记；PT-FEAT-12（AST uid 字段）评估为低价值+高风险（uid 入内容哈希需特判排除）不推进。**剩余待做**：PT-FEAT-5 CI/CD（涉远程 push 禁 push 硬原则，须用户授权）；PT-DEBT-4 file 重命名（破坏性变更独立窗口）；PT-FEAT-2 Enum 非 str 成员（P2/VISION）；R5 doc-governance 审计 |
+
+---
+
 ## 仍有效的设计决策
 
 > 收敛至 `PENDING_TASKS.md` §十（单一事实来源，避免双维护）。本文件不再复制。
