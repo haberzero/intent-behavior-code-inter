@@ -31,10 +31,10 @@ def _symbol_dict(sym: Any) -> Dict[str, Any]:
     """单符号 → 可序列化字典（统一形状，供 JSON/dot 共用）。"""
     return {
         "name": sym.name,
-        "kind": sym.kind.name if hasattr(sym.kind, "name") else str(sym.kind),
+        "kind": sym.kind.name,
         "uid": sym.uid,
         "type": sym.spec.name if sym.spec is not None else None,
-        "provenance": getattr(sym.provenance, "name", str(sym.provenance))
+        "provenance": getattr(sym, "provenance", None).name
         if getattr(sym, "provenance", None) is not None else None,
     }
 
@@ -132,7 +132,7 @@ def export_dot(
         for name, sym in getattr(scope, "symbols", {}).items():
             fallback_uid = f"{scope_uid}:{name}"
             sym_id = "sym_" + _dot_escape(sym.uid or fallback_uid)
-            sym_kind = sym.kind.name if hasattr(sym.kind, "name") else str(sym.kind)
+            sym_kind = sym.kind.name
             sym_type = sym.spec.name if sym.spec is not None else ""
             label = f"{_dot_escape(name)}\\n{sym_kind}"
             if sym_type:
