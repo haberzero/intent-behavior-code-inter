@@ -1,6 +1,7 @@
 from typing import List, Optional, TYPE_CHECKING
 from core.kernel.issue import Diagnostic
 from core.base.source_atomic import Location, Severity
+from core.base.diagnostics.catalog import lookup
 
 if TYPE_CHECKING:
     from core.base.source.source_manager import SourceManager
@@ -30,6 +31,16 @@ class DiagnosticFormatter:
         # Header: [ERROR] SEM_UNDEFINED_SYMBOL: Variable 'x' is not defined
         header = f"{color_start}[{severity_label}] {diagnostic.code}: {diagnostic.message}{color_reset}"
         
+        # 用户友好说明（PT-FEAT-5）：诊断码目录补充一句话定位 + 修复指引。
+        # 未登记码（目录漂移）不阻断展示——fail-open，正文照常输出。
+        catalog_line = ""
+        info = lookup(diagnostic.code)
+        if info is not None:
+            catalog_line = (
+                f"\n  {bold}说明:{color_reset} {info.title}\n"
+                f"  {bold}修复:{color_reset} {info.fix}"
+            )
+        
         # Location info
         loc_str = ""
         context_str = ""
@@ -57,7 +68,7 @@ class DiagnosticFormatter:
         if diagnostic.hint:
             hint_str = f"\n  {bold}Hint:{color_reset} {diagnostic.hint}"
             
-        return f"{header}{loc_str}{context_str}{hint_str}"
+        return f"{header}{catalog_line}{loc_str}{context_str}{hint_str}"
 
     @staticmethod
     def format_all(diagnostics: List[Diagnostic], use_color: bool = True, source_manager: Optional['SourceManager'] = None) -> str:

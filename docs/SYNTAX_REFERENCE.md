@@ -41,3 +41,9 @@ IBCI 是实验性意图驱动混合编程语言：Python 风格的确定性代�
 | 12 | [12_builtins](syntax/12_builtins.md) | 内置函数与方法 | 全局内建（print/len/type/类型转换/序列辅助）+ str/list/dict/tuple 方法 |
 | 13 | [13_mock_testing](syntax/13_mock_testing.md) | Mock 测试机制 | TESTONLY 模式、MOCK 指令语法、命名模型 MOCK |
 | 14 | [14_concurrency](syntax/14_concurrency.md) | 并发与通信 | chan/slot/subscriber/thread/thread_result |
+
+### 第四部分：诊断与错误
+
+| 章 | 文件 | 标题 | 说明 |
+|----|------|------|------|
+| 15 | [15_diagnostics](syntax/15_diagnostics.md) | 诊断码参考 | 全量诊断码的触发条件与修复指引（数据驱动，权威源 `catalog.py`） |

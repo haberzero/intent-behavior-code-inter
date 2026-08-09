@@ -116,6 +116,19 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 - **迭代解析收敛（单一权威源）**：`for` 的迭代解析（序列 / `IbGenerator`→`to_list` / `__iter__` / `to_list`）抽为
   `_shared._resolve_iterable`，`for` 与 `yield from` 共用——去双写，行为不变（全量零回归验证）。
 
+## ✅ 已完成：PT-FEAT-5 错误用户友好化——诊断码目录（2026-08-09）
+
+> **unsafe-vibe-dev，全量 2092 passed / 1 skipped**。PT-FEAT-5 四项中第一项（诊断码用户友好化）落地。
+
+- **诊断码目录 `core/base/diagnostics/catalog.py`**（单点真理）：76 个诊断码（LEX/PAR/SEM/DEP/INT/RUN/KDIAG）→
+  `CodeInfo(title, fix)`——一句话定位 + 修复指引。新增码必须登记（契约测试强制覆盖完备，无孤儿条目）。
+- **Formatter 集成**：`DiagnosticFormatter` 渲染时按码附加"说明/修复"段；未登记码 fail-open（正文照常输出不阻断）。
+- **参考文档 `docs/syntax/15_diagnostics.md`**：按 WRITING_GUIDE 诊断码模板（触发条件/严重级别/修复方式），
+  与目录一一对应（数据驱动，无正文复制）；`SYNTAX_REFERENCE.md` 新增第四部分"诊断与错误"。
+- **契约测试 `tests/contracts/test_diagnostic_catalog.py`**：CAT-1 每码有条目 / CAT-2 无孤儿 / CAT-3 条目规范 /
+  CAT-4 已知码渲染说明 / CAT-5 未知码 fail-open。
+- **剩余子项**（PT-FEAT-5 未完）：符号表/类型绑定 JSON/dot 导出、编译时间基准、CI/CD。
+
 ## 📋 交接要点（下一 session）
 
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
@@ -129,7 +142,9 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
   当前主线后：**P0 阶段 5 增量（`next()` 内建 + `yield from`）已完成（2026-08-09，全量 2083/1）** → **PT-FEAT-5**；
   P1 UID/序列化统一 + `file` 重命名；P2 审计 R4/R5 + Enum；P3 VISION。
 - **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
-  `tasks_docs/_code_yield_from.md`。下一 P0 = PT-FEAT-5。
+  `tasks_docs/_code_yield_from.md`。
+- **PT-FEAT-5 错误用户友好化（诊断码目录）已完成第一项（2026-08-09）**：见上方"已完成"节。
+  剩余子项：符号表/类型绑定 JSON/dot 导出、编译时间基准、CI/CD（见 `PENDING_TASKS.md`）。
 - **阶段 5 yield 惰性生成器已完成（2026-08-08）**：见上方"已完成"节。`YIELD_GENERATOR_DESIGN.md`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
