@@ -68,7 +68,7 @@ def kernel_diagnostic(
 
 
 def handle_environment_limit(exc: BaseException, *, rc: Any = None) -> bool:
-    """环境限制异常的语义错误包装防护（PT-DEBT-9）。
+    """环境限制异常的语义错误包装防护。
 
     若 ``exc`` 是环境限制异常（栈溢出 / 内存耗尽 / 系统错误），发射
     ``KDIAG_RUNTIME_ENV_LIMIT`` 诊断并返回 ``True``（调用方应原样 ``raise``

@@ -1,5 +1,5 @@
 """
-core.compiler.diagnostics.exporter — 符号表 / 类型绑定诊断导出（PT-FEAT-5）。
+core.compiler.diagnostics.exporter — 符号表 / 类型绑定诊断导出。
 
 把编译产物（symbol_table / node_to_type / node_to_loc）导出为人类可读的
 **JSON**（结构化数据）与 **GraphViz dot**（可视化图）两种形态，供开发者

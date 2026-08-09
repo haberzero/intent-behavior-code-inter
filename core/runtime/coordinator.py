@@ -312,7 +312,7 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
     生成器契约（与 VM 主循环一致）： ``send(None)`` 启动；后续 yield 的
     若是 Waitable 则阻塞等待其完成再 ``send(result)`` 恢复；yield child
     uid 经任务本地 VM 求值后恢复；yield ``UserFunctionCall`` 则把函数体
-    生成器作为独立帧压栈（trampoline，R1/PT-DEBT-10——线程体内深递归不
+    生成器作为独立帧压栈（trampoline——线程体内深递归不
     再嵌套 Python 栈，与 VM 主路径 ``_drive_loop_gen`` 同构）。
 
     协作式取消：每个挂起点（Waitable 等待 / 子节点驱动前）检查
@@ -328,7 +328,7 @@ def _drive_generator(task_vm: Any, gen: Any, send_first: Any = None, cancel_even
             raise ThreadCancelled(handle)
 
     # 显式生成器栈（trampoline）：UserFunctionCall 压栈而非递归 _drive_generator，
-    # 消除线程体内深递归的 Python/OS 栈嵌套（PT-DEBT-10，与 _drive_loop_gen 同构）。
+    # 消除线程体内深递归的 Python/OS 栈嵌套（与 _drive_loop_gen 同构）。
     stack = [gen]
     pending_value: Any = send_first
     while stack:

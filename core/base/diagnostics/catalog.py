@@ -1,5 +1,5 @@
 """
-core.base.diagnostics.catalog — 诊断码用户友好目录（PT-FEAT-5）。
+core.base.diagnostics.catalog — 诊断码用户友好目录。
 
 把机器可读的诊断码（LEX_/PAR_/SEM_/DEP_/INT_/RUN_/KDIAG_）映射为人类可读的
 **友好说明**（什么情况产生）+ **修复指引**（如何消除）。是错误用户友好化的

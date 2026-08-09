@@ -74,7 +74,7 @@ class IbChannel(IbObject):
     def send(self, value) -> Any:
         """向 Channel 发送数据。
 
-        **B1（PT-DEBT-13）阻塞即挂起**：非满立即投递返回 ``None``；有界满通道
+        **阻塞即挂起**：非满立即投递返回 ``None``；有界满通道
         返回发送 Waitable（与 ``recv`` 返回接收 Waitable 对称）——VM 经既有
         Waitable 挂起路径等待腾出空间，宿主经 ``.result()`` 阻塞投递。消除
         满通道真阻塞（唯一消费者同调度器时死锁）。
@@ -232,7 +232,7 @@ class IbSlot(IbObject):
         约束：fn 在锁外执行、应无副作用且不内嵌通信操作（否则可能死锁）；
         CAS 重试会重复调用 fn，故 fn 须是确定性函数。
 
-        **F2（PT-DEBT-14）阻塞即挂起**：fn 为可调用对象时，本方法返回一个
+        **阻塞即挂起**：fn 为可调用对象时，本方法返回一个
         Waitable（不再经同步 ``.call`` 驱动——那会嵌套调度器或阻塞 LLM）。
         VM 经既有 Waitable 挂起路径驱动本 Waitable，在 **当前帧** 内经 CPS
         驱动 fn 求值并完成 CAS 读改写；宿主经 ``.result()`` 阻塞完成。

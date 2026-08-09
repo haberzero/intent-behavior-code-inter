@@ -31,7 +31,7 @@ class DiagnosticFormatter:
         # Header: [ERROR] SEM_UNDEFINED_SYMBOL: Variable 'x' is not defined
         header = f"{color_start}[{severity_label}] {diagnostic.code}: {diagnostic.message}{color_reset}"
         
-        # 用户友好说明（PT-FEAT-5）：诊断码目录补充一句话定位 + 修复指引。
+        # 用户友好说明：诊断码目录补充一句话定位 + 修复指引。
         # 未登记码（目录漂移）不阻断展示——fail-open，正文照常输出。
         catalog_line = ""
         info = lookup(diagnostic.code)

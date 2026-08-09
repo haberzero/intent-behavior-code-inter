@@ -374,7 +374,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         result = yield UserFunctionCall(func, args)
         return result
 
-    # F1（PT-DEBT-12）：用户方法调用 CPS 化——解包 IbBoundMethod（obj.method(x)）。
+    # 用户方法调用 CPS 化：解包 IbBoundMethod（obj.method(x)）。
     # 此前落回 receive('__call__') → IbBoundMethod.call → method.call(receiver)
     # → IbUserFunction.call → vm.run_body（嵌套调度器，方法含 Waitable 时死锁、
     # 深递归方法嵌套 Python 栈）。现在把 .method 提取出来经 CPS trampoline 调用，

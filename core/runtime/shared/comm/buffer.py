@@ -45,7 +45,7 @@ class CommBuffer:
         # R2 通知式唤醒回调表：recv waitable 经 register_wake 注册，
         # send/close 时触发（通知调度器即时唤醒，与 Condition 平行）。
         self._wake_callbacks: list = []
-        # B1（PT-DEBT-13）：send waitable 经 register_send_wake 注册，
+        # send waitable 经 register_send_wake 注册，
         # recv/close 腾出空间时触发（与 recv 唤醒对称，消除满通道真阻塞）。
         self._send_wake_callbacks: list = []
 

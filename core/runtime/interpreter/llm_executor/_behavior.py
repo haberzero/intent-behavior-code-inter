@@ -367,7 +367,7 @@ class _BehaviorMixin:
     def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
         """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。
 
-        **M4（PT-DEBT-15）LLM 真挂起**：spec 经 ``_prepare_behavior_call_cps``
+        **LLM 真挂起**：spec 经 ``_prepare_behavior_call_cps``
         （段求值 yield）构建，随后 ``_call_and_parse`` 提交线程池并 ``yield``
         返回的 ``LLMFuture``——调度器挂起本根、让出给其它根，LLM 就绪后
         ``send`` 回 ``LLMResult`` 恢复。消除了同步 ``_call_llm`` 阻塞调度线程

@@ -1,5 +1,5 @@
 """
-core.base.uid — UID 生成统一入口（PT-FEAT-10 收敛）。
+core.base.uid — UID 生成统一入口。
 
 把分散在 symbols.py / serialization / context / runtime_serializer 的 UID 格式
 字符串收敛为单一权威源：本模块是**唯一**定义各类 UID 形态的地方。各层调用方
