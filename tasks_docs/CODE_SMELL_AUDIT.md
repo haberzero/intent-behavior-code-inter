@@ -17,15 +17,15 @@
 | # | 位置 | 特征 | 状态 |
 |---|---|---|---|
 | A1 | `compiler/semantic/passes/_expression_visitors.py:303` | resolve_call_return 统一入口外直读 return_type 作最后兜底（功能性双通道） | **已记录并处置** |
-| A2 | `llm_executor/_prompt.py:26/41-48/59/84/315` | to_native/__to_prompt__ 多级 fallback 链（异常驱动逐级降级） | 待核验 |
-| A3 | `llm_parsing_strategy.py:287-316/356` | DefaultParsingStrategy 兜底 + "safe fallback just in case" | 待核验 |
-| A4 | `spec/registry/_inference.py:63/93` | 无显式返回类型 → axiom fallback → `resolve("any")` | 待核验 |
-| A5 | `vm/handlers/_shared.py:241` | 同步后备路径兜底字段（CPS 主路径无视） | 待核验 |
-| A6 | `vm/handlers/assignment.py:82/106` | dispatch_eager 失败兜底同步路径（"极少触发"） | 待核验 |
-| A7 | `vm/handlers/llm_behavior.py:140` | 防御性兜底 handler（"解析器不再生成此节点类型"） | **疑似死代码，优先核验** |
+| A2 | `llm_executor/_prompt.py:26/41-48/59/84/315` | to_native/__to_prompt__ 多级 fallback 链（异常驱动逐级降级） | **已核验：窄化 + fail-fast（2026-08-09）**——`_obj_to_prompt_str`/`_obj_to_payload` 仅对协议缺失（AttributeError）回退，用户实现体内真实 bug（TypeError 等）fail-fast / 经 `kernel_diagnostic` 上报（KDIAG_PROTOCOL_PAYLOAD_PROMPT_FALLBACK），非静默吞错 |
+| A3 | `llm_parsing_strategy.py:287-316/356` | DefaultParsingStrategy 兜底 + "safe fallback just in case" | **已核验：设计内 LLM 重试契约（2026-08-09）**——解析失败→`uncertain_result`（触发 llmexcept retry），是语言层"LLM 输出不确定→重试"的承载，非吞错 |
+| A4 | `spec/registry/_inference.py:63/93` | 无显式返回类型 → axiom fallback → `resolve("any")` | **已核验：设计内动态类型逃生（2026-08-09）**——`any` 是语言显式未知类型标记，方法 docstring 记录解析序尾段，非掩盖 |
+| A5 | `vm/handlers/_shared.py:385-386` | 同步后备路径兜底字段（CPS 主路径无视） | **已核验：设计内同步后备契约（2026-08-09）**——`_execution_context` 仅作 host/反序列化后同步 `.call` 后备；CPS 主路径经 `_vm_invoke_behavior` 无视之（callables.py:97-98 记录 ContextVar 优先解析）。可达（coordinator.py:289 线程体/宿主路径），边界明确非吞错 |
+| A6 | `vm/handlers/assignment.py:52-86` | dispatch_eager 失败兜底同步路径（"极少触发"） | **已核验：显式条件分派（2026-08-09）**——`dispatch_eager` 仅对非 llmexcept/parallel 开/非 cell 捕获目标启用；复杂目标/llmexcept/parallel 关走同步路径是文档化条件决策（非失败兜底），`dispatched_future is None` 是分派判定非降级 |
+| A7 | `vm/handlers/llm_behavior.py:140` | 防御性兜底 handler（"解析器不再生成此节点类型"） | **已失效（2026-08-09 事实回顾）**——目标（不可达 `IbBehaviorInstance` handler）已于 R3 批次（f5d3f94，2026-08-05）删除（dispatch + llm_behavior 清理）；条目行号随文件漂移已失准 |
 | A8 | `llm_except_frame.py:78/245/267` | 深克隆兜底 / `__restore__` 失败 best-effort 保留当前状态 | 待核验（best-effort 语义） |
-| A9 | `vm_executor.py:239` | CPS 求值 vs fallback 双路径 | 待核验 |
-| A10 | `objects/kernel/base.py:46` | 内置类型 call 方法 Python 直调兜底 | 待核验 |
+| A9 | `vm_executor.py`（CPS 调度循环） | CPS 求值 vs fallback 双路径 | **已核验：结构化分派（2026-08-09）**——调度循环对 child 类型（None/Waitable/UserFunctionCall/str uid）的条件分支是 CPS 协议的结构化处理，非降级兜底 |
+| A10 | `objects/kernel/base.py` `receive` | 内置类型 call 方法 Python 直调兜底 | 待核验（`__call__` 走公理能力探测下沉，非 hasattr 探测） |
 | A11 | `kernel/registry.py:363` | make_llm_parse_error 类查找逐级回退 | 待核验 |
 | A12 | `engine.py:183/245/248/270/272` | plugin_paths 多优先级来源 + 嗅探兜底 | 设计内（多优先级，非异味） |
 | A13 | `binding_analysis_pass.py:513/537/899` | 无名称兜底 / 运行时守卫兜底 / 父作用域查找兜底 | 待核验 |
