@@ -86,7 +86,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `NEXT_STEPS.md` | 当前最紧要项（下一主线待择定）/ 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED） |
-| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行，R4/R5 待做） |
+| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行，R4 覆盖率核对已执行（2026-08-09），R5 doc 审计待做） |
 | `DOC_AUDIT_REPORT.md` | docs/ 治理审核记录（2026-08-06，F0-F4 已执行完成，归档） |
 | `TEST_MATRIX_FINDINGS.md` | 测试矩阵核对发现（PT-TEST-3 研究存档，PT-TEST-1 重构输入） |
 | `THREAD_DESIGN.md` / `PROMPT_DESIGN_REVIEW.md` / `MEDIA_DESIGN.md` | 设计要点迁入（并发 / `__prompt__` 待决项 / media 封存） |
@@ -97,7 +97,8 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `OBSERVABILITY_REFACTOR.md` / `test_baseline_20260806.txt` | 可观测性统一重构任务控制文档（**已完成**，Phase 0-4 落地）/ 覆盖基准快照 |
 | `DIAGNOSTIC_DESIGN.md` | PT-FEAT-9 设计权威（**已完成**，实施步骤 A-E 落地，归档） |
 | `YIELD_GENERATOR_DESIGN.md` | 阶段 5 yield 惰性生成器设计权威（**已完成**，独立分支 exp/yield-generator） |
-| `_ASYNC_UNIFY.md` | **当前主线**异步地基遗留妥协根治实施计划（PT-DEBT-12/13/14/15，F1→B1→F2/F3→M1-M4） |
+| `_ASYNC_UNIFY.md` | **当前主线**异步地基遗留妥协根治实施计划（PT-DEBT-12/13/14/15，F1→B1→F2/F3→M1-M4；F1/B1/F2/F3/M4 已完成，M1/M2 剩余） |
+| `_code_yield_from.md` | 阶段 5 增量 `yield from` 生成器委托设计记录（**已完成**，2026-08-09；按惯例汇报后待删，当前保留供追溯） |
 
 ---
 
@@ -107,45 +108,37 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.1 当前任务 / 下一阶段
 
-> **接手起点**：先读本节（当前主线）+ `_ASYNC_UNIFY.md`（主线实施计划）+ `PENDING_TASKS.md` §〇（优先级总表）。
+> **接手起点**：先读本节（当前状态）+ `PENDING_TASKS.md` §〇（优先级总表，单一权威源）+
+> 本 session 成果记录（`WORKLOG.md` 尾部 + git 历史 `c61a6e0..HEAD`）。
 
 - **当前主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治（统一执行模型闭环）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（登记 PT-DEBT-12/13/14/15）：
-  - **PT-DEBT-12（F1，最高价值）**：`vm_handle_IbCall` 不展开 `IbBoundMethod` → 用户方法 `obj.method(x)`
-    落回 `receive('__call__')` → `vm.run_body` 嵌套调度器（方法含 Waitable 死锁、深递归方法嵌套 Python 栈）。
-    改造：解包 `IbBoundMethod` → CPS trampoline（与函数调用同构）。
-  - **PT-DEBT-13（B1）**：`chan.send` 有界满通道任务内真阻塞（与 recv 不对称）。
-  - **PT-DEBT-14（F2/F3）**：`slot.update(fn)` CAS 同步回调 + prompt hint 同步调用。
-  - **PT-DEBT-15（M1-M4）**：`.call()` 孪生双写 / 驱动循环重复 / prompt 双实现 / LLM 调用阻塞。
-  - **实施顺序 F1→B1→F2/F3→M1-M4**，独立分支实验，全量 pytest 零回归后手动 apply。详见 `_ASYNC_UNIFY.md`。
+  - **PT-DEBT-12（F1）用户方法 CPS 化、PT-DEBT-13（B1）chan.send Waitable 化、PT-DEBT-14（F2/F3）
+    slot.update + prompt hint CPS 化、PT-DEBT-15（M4）LLM 真挂起——已完成（2026-08-08）**；M3（prompt 单源）
+    已确认收敛。
+  - **剩余 PT-DEBT-15 中 M1（.call 双写收敛）/ M2（驱动去重）为大型收敛重构（中严重度，回归风险高）**，
+    实施计划 `_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
+- **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，27 commit，全量 2074 → 2128 passed / 1 skipped）**：
+  - **P0 阶段 5 增量**：`next()` 内建 + `yield from` 生成器委托（主交付）——顺带根治 `_drive_generator_loop`
+    生成器体内调用生成器函数的预存缺陷、迭代解析收敛 `_resolve_iterable`（现居 `shared/iterable.py`）。
+  - **PT-FEAT-5 三项**：诊断码目录（`catalog.py` 76 码 + formatter fail-open + `15_diagnostics.md`）、
+    符号表/类型绑定导出（`exporter.py` + 修 `inspect`/`semantic` CLI 死路径）、`bench` 编译基准。
+  - **P1 PT-FEAT-10 UID 生成统一**：`core/base/uid.py` 单一权威源（11 家族），零内联，round-trip 保真。
+  - **P2 审计**：R4 覆盖率核对（2 处 TRUE_GAP 补测）、R5 聚焦治理、PT-AUDIT-1 smell 全量事实回顾（A/B/C/D 定案）。
+  - **质量**：三次独立 general 复核（中间/交付门/兜底专项）全部整改（含 `is_generator` 基类化、迭代解析中立归属、
+    非可迭代测试修正、注释卫生）。兜底专项审计结论：全部属职责分离型合法 fallback，无 tricky/兼容妥协。
+  - 设计记录 `tasks_docs/_code_yield_from.md`；完整逐项见 `WORKLOG.md` 与 git 历史。
+- **下一步候选（按优先级，见 `PENDING_TASKS.md` §〇）**：
+  1. **PT-DEBT-15 剩余 M1/M2**（当前主线未完，大型收敛重构，回归风险高，建议独立分支）。
+  2. **PT-DEBT-4 `file` 模块重命名**（P1，影子化 Python 内建，破坏性变更独立窗口——已授权但需独立窗口审慎执行）。
+  3. **PT-FEAT-5 剩余 CI/CD**（P0，涉远程 push，禁 push 硬原则，须用户显式授权后另行执行）。
+  4. **P3 VISION**（PT-FEAT-8 分层张力已评估待独立窗口；PT-FEAT-2 Enum 非 str 设计冻结级；PT-AUDIT-2 分支嵌套独立分支）。
+- **评估为维持现状（已登记 PENDING_TASKS，勿重复推进）**：PT-FEAT-11（序列化器自动化）、PT-FEAT-12（AST uid 字段）、
+  PT-FEAT-2（Enum 非 str 成员）、PT-FEAT-8（`.ibc_meta` 快照，分层张力）。
 - **阶段 5 `yield` 惰性生成器已完成（2026-08-08，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
   含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消），单可恢复驱动
   `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。
-  独立分支 exp/yield-generator 实验 → 手动应用 c8b8956。设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
-- **P0 阶段 5 增量已完成（2026-08-09，unsafe-vibe-dev，全量 2083 passed / 1 skipped）**：
-  `next()` 内建（c61a6e0）+ `yield from` 生成器委托（本 session）——子迭代对象产出逐值透传、表达式值 =
-  子生成器 `return` 值；顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数的缺陷 +
-  迭代解析收敛 `_shared._resolve_iterable`。设计记录 `tasks_docs/_code_yield_from.md`。
-- **PT-FEAT-5 已完成三项（2026-08-09，全量 2107 passed / 1 skipped）**：
-  **诊断码目录**（`core/base/diagnostics/catalog.py` 76 码 → 说明/修复 + `DiagnosticFormatter` 集成 fail-open +
-  `docs/syntax/15_diagnostics.md` + 契约测试）+ **符号表/类型绑定导出**（`core/compiler/diagnostics/exporter.py` +
-  `inspect`/`semantic` CLI 修复——两预存死路径接入，支持 `--format json|dot` + `--output`）+
-  **编译基准**（`bench` 命令：warmup + N 次，min/avg/max/stdev，编译失败非零退出）。
-  剩余：**CI/CD**（涉远程 push，须用户显式授权后另行执行）。
- - **P1 PT-FEAT-10 UID 生成统一已完成（2026-08-09，全量 2121 passed / 1 skipped）**：
-   `core/base/uid.py` 单一权威源（九家族 UID 函数，零内联格式字符串）；symbols/serialization/context/
-   scheduler/intrinsics/interpreter/runtime_serializer 全部接入；格式逐字不变（round-trip 保真）。
-   契约测试 `test_uid_generator.py`。
- - **P2 PT-AUDIT-3 R4 覆盖率核对已完成（2026-08-09，全量 2128 passed / 1 skipped）**：12 项覆盖核对
-   （R4 官方 7 + 本 session 5），2 处 TRUE_GAP 补测（subscriber 生命周期语言层 +2、generator[T] 泛型身份 +1）。
-   R5 聚焦治理（session 改动文档核验）已完成。PT-FEAT-11/12、PT-FEAT-2 均评估为维持现状（记录于 PENDING_TASKS）。
- - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
-   **P0 阶段 5 增量已完成；PT-FEAT-5 三项已完成（CI/CD 待授权）；P1 PT-FEAT-10 已完成；P2 R4/R5 审计已执行**；
-   剩余：PT-DEBT-4 `file` 重命名（破坏性变更独立窗口）、P3 VISION。
-- **架构缺陷起点清空（2026-08-08）**：PT-DEBT-9/10/11 已根治（见 §2.2）。
-- **后续增量（可选起点）**：streaming / host async 改进 或 PT-DEBT-4 `file` 重命名（破坏性变更独立窗口）或
-  待办池（`PENDING_TASKS.md`：PT-FEAT-2 Enum 非 str 成员 / P3 VISION 项）。
-- **架构缺陷优先起点清空（2026-08-08）**：PT-DEBT-9 / PT-DEBT-11 / PT-DEBT-10 **三项已全部根治**（见 §2.2）。
+  设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   `kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
   12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计权威
@@ -164,20 +157,34 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   各独立分支实验、手动 cherry-pick 应用 unsafe-vibe-dev。设计/决策见 `EXEC_REFACTOR_BATCH.md`（无悬而未决问题）。
 - **已定案（不再重议）**：R5 撤回（`await` 幂等是 auto-yield 组合承载，改报错破坏 `await collect(h)`）；
   D-08 保留透明 async（CPS 天然可挂起 + auto-yield 组合 + 值契约 + yield 自标记）。
-- **R 批次遗留技术债（2026-08-07 评估登记，见 `PENDING_TASKS.md` §五 PT-DEBT-9/10/11）**：
-  ① PT-DEBT-9 RecursionError 被 `VM: Call failed` 级联包装掩盖根因；② PT-DEBT-10 线程体用户函数递归仍同步嵌套
-  （`_drive_generator` 非 trampoline，既有行为非回归）；③ PT-DEBT-11 `_UserFunctionCall` 定义位置。
-  三项均不阻塞阶段 5；按"架构缺陷优先"原则，9/11 为小而独立起点，10 随阶段 5 合并设计。
-  **三项已于 2026-08-08 全部根治**（见 §2.2）。
 - **阶段 1/3 已完成（2026-08-07，unsafe-vibe-dev，全量 1984 passed / 1 skipped）**：地基 1a-1e（调度器执行核心/
   Waitable 家族 try_result/阻塞即挂起/协作取消/llmexcept×await/取消覆盖用户函数）+ 统一清理 W1-W5/P3/P4
   （非阻塞命名/订阅契约/pubsub EventBus/comm 命名回归/死状态/文档/cell 隔离/引擎级全局事件总线）。
-- **后续路线**：阶段 5 `yield` 惰性生成器（`EXEC_FOUNDATION_DESIGN.md` §5.2，下一主线）→ 增量（streaming / host async 改进）。
+- **后续增量（可选起点）**：streaming / host async 改进（`YIELD_GENERATOR_DESIGN.md` §五遗留）或
+  `_ASYNC_UNIFY.md` M1/M2（当前主线未完）。
 - **保留规划**：media Phase 4（PT-SEALED-1，彻底封存）。
 - 要求：subagent 仅 general agent；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置；全程本地 commit、禁 push。
 
 ### 2.2 已完成摘要
 
+- **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计，unsafe-vibe-dev，全量 2074 → 2128 passed / 1 skipped，27 commit）**：
+  - **P0 阶段 5 增量**：`next()` 内建（c61a6e0）+ `yield from` 生成器委托（本 session 主交付，6c9555c）——
+    完整文法管线（AST `IbYieldFromExpr`/语法 match(FROM)/语义 `SEM_YIELD_OUTSIDE_FUNCTION`/类型 GENERATOR/
+    VM 委托 handler），顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数的预存缺陷、迭代解析收敛
+    `_resolve_iterable`（现居 `core/runtime/shared/iterable.py`，VM 与内建共用单一权威源）。e2e 13 项。
+  - **PT-FEAT-5 三项**：诊断码目录（`core/base/diagnostics/catalog.py` 76 码 → 说明/修复 + `DiagnosticFormatter`
+    集成 fail-open + `docs/syntax/15_diagnostics.md` + 契约测试 CAT-1~6）；符号表/类型绑定 JSON/dot 导出
+    （`core/compiler/diagnostics/exporter.py` + 修 `inspect`/`semantic` 两处 CLI 预存死路径 + `bench` 编译基准）。
+  - **P1 PT-FEAT-10 UID 生成统一**：`core/base/uid.py` 单一权威源（11 家族 UID 函数），调用方全部接入、
+    格式逐字不变（round-trip 保真）、零内联格式字符串；契约测试 UID-1~4。
+  - **P2 审计**：R4 覆盖率核对（12 项，2 处 TRUE_GAP 补测：subscriber 语言层生命周期、generator[T] 泛型身份）；
+    R5 聚焦治理（session 改动文档核验）；PT-AUDIT-1 smell 审计全量事实回顾（A/B/C/D 定案，A7/A15 失效确认、
+    多数设计内、C6 已解决）。
+  - **质量**：三次独立 general 复核（中间/交付门/兜底专项）全部整改——含 `is_generator` 基类化（IbFunction）、
+    迭代解析中立归属 `shared/iterable.py`、非可迭代测试修正（`yield from` 无协议对象）、注释卫生（生产代码零任务代号）、
+    文档单点真理（catalog↔doc 契约一致）。**兜底专项审计结论**：全部兜底属职责分离型合法 fallback
+    （声明面能力查询/显式 None/决策点报错/契约强制完备），无 tricky/兼容妥协。
+  - 设计记录 `tasks_docs/_code_yield_from.md`；完整逐项见 `WORKLOG.md` 尾部。
 - **2026-08-08（异步地基遗留妥协审计，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
   用户追问"异步是否已完整接入内核" → general subagent 全面只读审计 + 逐项代码核实。结论：**主流已完整**
   （协作调度器唯一执行核心/阻塞即挂起/Waitable 统一/trampoline/通知式唤醒/线程=IO/await+yield），
@@ -219,13 +226,14 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
-- **测试基线**：以实跑为准，不冻结数字（当前 2026 passed / 1 skipped）。
+- **测试基线**：以实跑为准，不冻结数字（当前 **2128 passed / 1 skipped**）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d 与 R 批次
   exp/exec-ra/rb/rc/rd 保留未合并）。
 
 ### 2.3 交接检查单
 
-- [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS（长期）
+- [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（长期，单一权威源）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 读 §二 动态状态接续工作
+- [ ] 读 §二 动态状态接续工作（含 2026-08-09 session 成果）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2128 passed / 1 skipped）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

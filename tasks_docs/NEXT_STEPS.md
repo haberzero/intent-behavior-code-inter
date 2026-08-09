@@ -166,6 +166,9 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ## 📋 交接要点（下一 session）
 
+- **当前最紧要（下一 session 起点）**：优先完成当前主线遗留——**PT-DEBT-15 剩余 M1（.call 双写收敛）/ M2（驱动去重）**
+  （异步地基遗留妥协根治未完，大型收敛重构、回归风险高，建议独立分支按 `_ASYNC_UNIFY.md` 路线）。
+  完成后按优先级总表接续 PT-DEBT-4 `file` 重命名（P1 破坏性变更独立窗口）或 P3 VISION。
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、
