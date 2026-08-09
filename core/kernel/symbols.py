@@ -5,6 +5,7 @@ from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
 
 from core.base.enums import Provenance
+from core.base.uid import scope_uid, child_scope_uid, symbol_uid
 
 from .spec import IbSpec
 from .spec.base import TypeKind, TypeDef
@@ -134,16 +135,15 @@ class SymbolTable:
         if self._uid:
             return self._uid
         if not self.parent:
-            self._uid = f"scope_{self.name or 'global'}"
+            self._uid = scope_uid(self.name)
         else:
-            child_name = self.name or f"anon_{self._anon_id}"
-            self._uid = f"{self.parent.uid}/{child_name}"
+            self._uid = child_scope_uid(self.parent.uid, self.name, self._anon_id)
         return self._uid
 
     def define(self, sym: Symbol, allow_overwrite: bool = False) -> None:
         """Define a symbol; raise ValueError on conflict."""
         if not sym.uid:
-            sym.uid = f"{self.uid}:{sym.name}"
+            sym.uid = symbol_uid(self.uid, sym.name)
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]

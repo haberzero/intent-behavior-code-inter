@@ -15,6 +15,7 @@ from core.kernel.path import IbPath, PathValidator, ModuleNameSpace, safe_relpat
 from core.compiler.parser.resolver.resolver import ModuleResolver, ModuleResolveError
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
+from core.base.uid import intrinsic_uid
 from core.kernel.host_interface import HostInterface
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INT_INTERNAL_ERROR,
@@ -478,7 +479,7 @@ class Scheduler(ICompilerService):
                                     provenance=Provenance.KERNEL_NATIVE,
                                     # align with runtime setup_context which
                                     # defines these kernel-native classes as `intrinsic:<name>`.
-                                    uid=f"intrinsic:{exported_name}",
+                                    uid=intrinsic_uid(exported_name),
                                 )
                                 analyzer.symbol_table.define(type_sym)
                         

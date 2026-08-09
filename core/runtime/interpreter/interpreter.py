@@ -31,6 +31,7 @@ from core.kernel.issue import (
     InterpreterError, Severity
 )
 from core.base.source_atomic import Location
+from core.base.uid import intrinsic_uid
 from core.base.diagnostics.codes import (
     RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED, KDIAG_RUNTIME_STAGE_SKIP
 )
@@ -423,7 +424,7 @@ class Interpreter:
             if name not in defined_names or force:
                 if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                     # 注入时带上稳定的内核原生符号 UID，与编译器对齐
-                    context.define_variable(name, ib_class, is_const=True, force=force, uid=f"intrinsic:{name}")
+                    context.define_variable(name, ib_class, is_const=True, force=force, uid=intrinsic_uid(name))
                     defined_names.add(name)
 
     def interpret(self, module_uid: str) -> IbObject:

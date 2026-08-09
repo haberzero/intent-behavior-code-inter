@@ -132,9 +132,13 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   `inspect`/`semantic` CLI 修复——两预存死路径接入，支持 `--format json|dot` + `--output`）+
   **编译基准**（`bench` 命令：warmup + N 次，min/avg/max/stdev，编译失败非零退出）。
   剩余：**CI/CD**（涉远程 push，须用户显式授权后另行执行）。
+- **P1 PT-FEAT-10 UID 生成统一已完成（2026-08-09，全量 2121 passed / 1 skipped）**：
+  `core/base/uid.py` 单一权威源（九家族 UID 函数，零内联格式字符串）；symbols/serialization/context/
+  scheduler/intrinsics/interpreter/runtime_serializer 全部接入；格式逐字不变（round-trip 保真）。
+  契约测试 `test_uid_generator.py`。下一 P1：PT-FEAT-11 序列化器自动化 / PT-FEAT-12 AST UID 字段 / PT-DEBT-4 `file` 重命名。
 - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
-  **P0 阶段 5 增量已完成；PT-FEAT-5 三项已完成（CI/CD 待授权）**；P1 UID/序列化统一 + `file` 重命名；
-  P2 审计 R4/R5 + Enum；P3 VISION。
+  **P0 阶段 5 增量已完成；PT-FEAT-5 三项已完成（CI/CD 待授权）；P1 PT-FEAT-10 已完成**；P1 剩余 PT-FEAT-11/12 +
+  `file` 重命名；P2 审计 R4/R5 + Enum；P3 VISION。
 - **架构缺陷起点清空（2026-08-08）**：PT-DEBT-9/10/11 已根治（见 §2.2）。
 - **后续增量（可选起点）**：streaming / host async 改进 或 PT-FEAT-5 错误用户友好化（下一 P0）或
   待办池（`PENDING_TASKS.md`：PT-FEAT-2 Enum 非 str 成员 / PT-FEAT-10/11/12）。

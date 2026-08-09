@@ -3,6 +3,7 @@ import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
 from core.base.enums import StorageModel
+from core.base.uid import rt_scope_uid
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
 from core.runtime.objects.primitives import IbOptional
@@ -95,7 +96,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if scope_id in self.memo:
             return self.memo[scope_id]
             
-        uid = f"rt_scope_{uuid.uuid4().hex[:16]}"
+        uid = rt_scope_uid()
         self.memo[scope_id] = uid
         
         # 序列化当前作用域的所有符号

@@ -1,6 +1,7 @@
 from typing import Dict, Any, Callable, List, Optional
 from core.runtime.objects.kernel import IbNativeFunction, IbObject
 from core.kernel.registry import KernelRegistry
+from core.base.uid import intrinsic_uid
 from core.runtime.interpreter.intrinsics.io import register_io
 from core.runtime.interpreter.intrinsics.collection import register_collection
 from core.runtime.interpreter.intrinsics.seq import register_seq
@@ -19,7 +20,7 @@ class IntrinsicManager:
         """注册一个内置函数"""
         # 获取 callable 类
         callable_class = self.registry.get_class("callable")
-        logic_id = f"intrinsic:{name}"
+        logic_id = intrinsic_uid(name)
         self._intrinsics[name] = IbNativeFunction(
             py_func, 
             unbox_args=unbox, 
@@ -40,7 +41,7 @@ class IntrinsicManager:
             # 能基于属性而非硬编码名单过滤。
             context.define_variable(
                 name, func, is_const=True, force=True,
-                uid=f"intrinsic:{name}", is_intrinsic=True,
+                uid=intrinsic_uid(name), is_intrinsic=True,
             )
         
         # 2. 扫描池中已加载的对象 (用于处理那些被赋值给其他变量的函数)
@@ -50,7 +51,7 @@ class IntrinsicManager:
         
         # 特权：为每个内置函数显式设置逻辑标识
         for name, func in self._intrinsics.items():
-            func.logic_id = f"intrinsic:{name}"
+            func.logic_id = intrinsic_uid(name)
 
     def get_all(self) -> Dict[str, IbNativeFunction]:
         return self._intrinsics

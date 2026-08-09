@@ -1,5 +1,4 @@
 from typing import Dict, Any, List, Optional, Union
-import uuid
 import json
 from enum import Enum
 from core.kernel import ast as ast
@@ -9,6 +8,7 @@ from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
+from core.base.uid import node_uid, type_uid, anon_symbol_uid
 
 class FlatSerializer(BaseFlatSerializer):
     """
@@ -111,7 +111,7 @@ class FlatSerializer(BaseFlatSerializer):
 
         # 序列化为稳定 JSON 字符串并生成哈希
         content_str = json.dumps(node_data, sort_keys=True)
-        uid = self._generate_deterministic_uid("node", content_str)
+        uid = node_uid(content_str)
         
         self.type_map[node_id] = uid
         self.node_pool[uid] = node_data
@@ -126,9 +126,9 @@ class FlatSerializer(BaseFlatSerializer):
         uid = getattr(sym, 'uid', None)
         if not uid:
             if hasattr(sym, 'get_content_hash'):
-                uid = f"sym_anon_{sym.get_content_hash()}"
+                uid = anon_symbol_uid(sym.get_content_hash())
             else:
-                uid = f"sym_anon_{hash(str(sym)) & 0xFFFFFFFFFFFFFFFF:016x}"
+                uid = anon_symbol_uid(f"{hash(str(sym)) & 0xFFFFFFFFFFFFFFFF:016x}")
         
         self.type_map[sym_id] = uid
         
@@ -151,7 +151,7 @@ class FlatSerializer(BaseFlatSerializer):
             return self.type_map[t_id]
             
         # 基于类型全名生成稳定 UID
-        uid = f"type_{t.module_path or 'root'}.{t.name}"
+        uid = type_uid(t.module_path, t.name)
         self.type_map[t_id] = uid
         
         type_data = {

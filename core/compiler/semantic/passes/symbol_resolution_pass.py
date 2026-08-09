@@ -15,6 +15,7 @@ from core.base.diagnostics.codes import (
 )
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
+from core.base.uid import intrinsic_uid
 from core.kernel.spec import IbSpec
 
 from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
@@ -186,7 +187,7 @@ class SymbolResolver(ScopedVisitor):
                         def_node=node,
                         spec=self.registry.resolve("any"),
                     )
-                    super_sym.uid = "intrinsic:super"  # 固定 UID，与 runtime 对齐
+                    super_sym.uid = intrinsic_uid("super")  # 固定 UID，与 runtime 对齐
                     func_scope.define(super_sym)
             elif func_sym:
                 self.bind_symbol(node, func_sym)

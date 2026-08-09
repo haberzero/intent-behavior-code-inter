@@ -150,6 +150,20 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 - **CLI 测试**：tests/contracts/test_diagnostic_exporter.py CLI-2（bench 成功输出统计 / 编译错误退出 1）。
 - **剩余子项**（PT-FEAT-5 未完）：**CI/CD**——涉及远程 push，属禁 push 硬原则范围，须用户显式授权后另行执行。
 
+## ✅ 已完成：PT-FEAT-10 UID 生成统一（2026-08-09）
+
+> **unsafe-vibe-dev，全量 2121 passed / 1 skipped**。P1 第一项落地。
+
+- **`core/base/uid.py` 单一权威源**：UID 生成收敛为九家族函数（`scope_uid`/`child_scope_uid`/`symbol_uid`/
+  `intrinsic_uid`/`node_uid`/`type_uid`/`anon_symbol_uid`/`asset_uid`/`rt_scope_uid`），**零内联格式字符串**。
+- **调用方全部接入**：symbols.py（scope/symbol）、serialization（node/type/anon/asset）、context.py（intrinsic）、
+  scheduler.py（intrinsic）、runtime intrinsics/__init__.py（intrinsic）、interpreter.py（intrinsic）、
+  runtime_serializer（rt_scope）。
+- **格式逐字不变（round-trip 保真）**：收敛只集中格式、不改任何已产出 UID 值——序列化 round-trip 与
+  `intrinsic:` 前缀比对（binding/symbol_resolution/engine）均不受影响。
+- **契约测试 `tests/contracts/test_uid_generator.py`**：UID-1 格式逐字一致 / UID-2 确定性 / UID-3 区分性 /
+  UID-4 rt_scope 每次唯一。
+
 ## 📋 交接要点（下一 session）
 
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
@@ -166,6 +180,8 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
   `tasks_docs/_code_yield_from.md`。
 - **PT-FEAT-5 已完成三项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出 + 编译基准）。
   剩余：CI/CD（涉远程 push，须用户显式授权后另行执行；见 `PENDING_TASKS.md`）。
+- **P1 PT-FEAT-10 UID 生成统一已完成（2026-08-09）**：见上方"已完成"节。下一 P1：PT-FEAT-11 序列化器自动化 /
+  PT-FEAT-12 AST UID 字段 / PT-DEBT-4 `file` 重命名。
 - **阶段 5 yield 惰性生成器已完成（2026-08-08）**：见上方"已完成"节。`YIELD_GENERATOR_DESIGN.md`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   kernel_diagnostic helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
