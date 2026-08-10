@@ -83,6 +83,7 @@ python -m pytest tests/
 
 - 这是**唯一命令**。`pytest.ini` 已配 `-q --tb=short --strict-markers`，无需附加 flag。
 - **运行环境为 conda env `ibci`**（本机位于 `~/miniconda3/envs/ibci`）。先 `conda activate ibci` 再执行；非交互 shell / 脚本内直接用 `~/miniconda3/envs/ibci/bin/python -m pytest tests/`。系统默认 `python`/`python3` 未安装依赖（如 `openai`），不可用于运行与测试。
+- **结果查看固定用法**：全量/分组 pytest 一律用 `... | tail -3` 只留结果摘要（pass/fail/skipped 计数行），禁止加 `-p no:warnings` 等附加 flag、禁止重定向到文件后再 grep 计数（会触发工具输出截断）。若首行尾仍被 warning 挤掉，直接在命令末尾再加 `| tail -3`。
 - 开新分支前必复跑，把 pass/fail 计数写进 PR 描述。
 - 当前基线以实跑为准，不冻结数字（见 `tasks_docs/NEXT_STEPS.md` 顶部锚点）。
 
