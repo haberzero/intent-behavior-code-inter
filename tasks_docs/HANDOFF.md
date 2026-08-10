@@ -141,6 +141,11 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
     `_PROVIDER_ERRORS`、auto_discovery 为 fail-fast 重抛——A 类保留，无代码变更。
   - **docs/ 过时表述修复**（92a1676）：05_coroutine/04_vm 标记 yield 惰性生成器已落地；L3 收敛为生成器内
     LLM 并发流水线未实现。
+- **技术手册三修 + 文档残留清理（2026-08-10，unsafe-vibe-dev，PT-DOC-3）**：① `01_principles.md:255` §6.3
+  改写为现状（意图栈继承由 `IbIntentContext.fork()` 承担公理 IC-1；`IsolationPolicy` 实际字段
+  `inherit_plugins`/`collect_timeout`，跨隔离边界不继承意图）；② `04_vm_interpreter.md:29` 统一执行入口表述
+  （模块入口 `execute_module`→`run_body`；宿主入口 `.call` 薄包装委托 `_vm_call_*`+`_drive_generator`）；
+  ③ `docs/README.md` 目录树补 `15_diagnostics.md`；④ NEXT_STEPS.md:50 旧"遗留技术债"表述改归档记录。
 - **三轴健康盘点（2026-08-09，只读调查，见 `_HEALTH_AUDIT_PLAN.md`）**：从异步统一完整性 + 内核健康 +
   技术手册健康三维度，结合真实代码给出下一步规划（见下方"下一步候选"）。
 - **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，全量 2074 → 2137 passed / 1 skipped）**：

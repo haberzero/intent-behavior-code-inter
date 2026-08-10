@@ -23,7 +23,7 @@
 | **P0** | PT-FEAT-5 错误用户友好化 | 易用性 | **已完成三项（2026-08-09）**：诊断码目录 + 符号表/类型绑定导出 + 编译基准。剩余 **CI/CD**（涉远程 push，禁 push 硬原则范围内，须用户显式授权后另行执行） |
 | **P1** | PT-FEAT-10/11/12 UID/序列化统一 | 架构健康性 | **PT-FEAT-10 已完成（2026-08-09）**；PT-FEAT-11（序列化器自动化）、PT-FEAT-12（AST uid 字段）评估为维持现状（见下） |
 | **P1** | PT-DEBT-4 `file` 模块重命名 | 架构健康性 | 影子化 Python 内建，长期隐患；破坏性变更独立窗口 |
-| **P1** | **技术手册健康待修**（P1/P2） | 文档健康 | `01_principles.md:258` 过时 `inherit_intents`、`04_vm_interpreter.md:29` `.call` 表述、`README` 目录树补 `15_diagnostics.md`。低风险立即可做 |
+| **P1** | **技术手册健康待修**（P1/P2） | 文档健康 | 三修**已完成（2026-08-10，PT-DOC-3）**：`01_principles.md:258` 过时 `inherit_intents`、`04_vm_interpreter.md:29` `.call` 表述、`README` 目录树补 `15_diagnostics.md`。剩余 How-to 层缺口为 P2 规划 |
 | **P2** | PT-AUDIT-1/2 + R4/R5 | 架构健康性 | 长期周期清扫，阶段边界启动。**R4 覆盖率核对已执行 + R5 聚焦治理已执行 + PT-AUDIT-1 smell 全量事实回顾已完成（2026-08-09）**；PT-AUDIT-2（分支嵌套）待独立分支（深层嵌套链 runtime_serializer 深度16/core_scanner 10/binding_analysis 9 未处理） |
 | **P2** | PT-FEAT-2 Enum 非 str 成员 | 易用性+长远 | 数字状态码枚举 round-trip 真实缺口；评估为设计冻结级变更，维持现状待独立窗口（2026-08-09） |
 | **P3** | PT-FEAT-8 `.ibc_meta` 快照 / PT-FEAT-3/4/7 / PT-FEAT-6 | 长远 VISION | 概念验证阶段 / 前置条件多 |
@@ -199,10 +199,8 @@
 **已完成（2026-08-06）**：14 篇 `docs/syntax/*.md` 均已有合格定位段（`> 本章描述...面向...覆盖...`），DOC_AUDIT F3 期间随"深入指引"补齐时一并落地。条目移除。
 
 ### PT-DOC-3 技术手册健康修复（2026-08-09 三轴盘点，低风险）
-> 来源 `_HEALTH_AUDIT_PLAN.md` 文档健康节。均低风险、立即可做。
-- **P1** `docs/architecture/01_principles.md:258`：`IsolationPolicy.inherit_intents` 字段已随意图栈扁平化删除（实为 `inherit_plugins`/`collect_timeout`），§6.3 描述已移除机制——需改写为现状。
-- **P2** `docs/architecture/04_vm_interpreter.md:29`：".call 唯一路径挂 run_body"与已落地变薄包装（`_vm_call_user_function`+`coordinator._drive_generator`，line 248 已正确）不自洽——统一表述。
-- **P2** `docs/README.md` 目录树：`syntax/` 漏列 `15_diagnostics.md`——补条目。
+> 来源 `_HEALTH_AUDIT_PLAN.md` 文档健康节。
+- **P1/P2 三修已完成（2026-08-10）**：① `01_principles.md:255` §6.3 改写为现状（意图栈继承由 `IbIntentContext.fork()` 承担，公理 IC-1；`IsolationPolicy` 实际字段 `inherit_plugins`/`collect_timeout`，跨隔离边界不继承意图）；② `04_vm_interpreter.md:29` 统一表述（模块入口 `execute_module`→`run_body`，宿主入口 `.call` 薄包装委托 `_vm_call_*`+`_drive_generator`）；③ `docs/README.md` 目录树补 `15_diagnostics.md`。
 - **P2（规划）** How-to 层仅 2 篇：生成器/并发/llmexcept/隔离缺操作指南（Reference→How-to 读者旅程断裂），需按 WRITING_GUIDE 评估。
 
 ---

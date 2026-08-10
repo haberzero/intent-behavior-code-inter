@@ -55,12 +55,12 @@
 
 ## 三、技术手册（docs/）健康
 
-### 明确待修（低风险）
+### 明确待修（低风险）——**三修已完成（2026-08-10，PT-DOC-3）**
 | 级别 | 位置 | 问题 |
 |------|------|------|
-| **P1** | `01_principles.md:258` | `IsolationPolicy.inherit_intents` 字段已不存在（实为 `inherit_plugins`/`collect_timeout`）；§6.3 描述已移除机制（意图栈扁平化后遗留） |
-| **P2** | `04_vm_interpreter.md:29` | "唯一路径"把 `.call` 挂在 `run_body` 上，与已落地变薄包装（line 248）不自洽 |
-| **P2** | `docs/README.md` 目录树 | `syntax/` 漏列 `15_diagnostics.md` |
+| ~~**P1**~~ | ~~`01_principles.md:258`~~ | ~~`IsolationPolicy.inherit_intents` 字段已不存在~~（已改写 §6.3 为现状） |
+| ~~**P2**~~ | ~~`04_vm_interpreter.md:29`~~ | ~~"唯一路径"把 `.call` 挂在 `run_body` 上~~（已统一表述） |
+| ~~**P2**~~ | ~~`docs/README.md` 目录树~~ | ~~`syntax/` 漏列 `15_diagnostics.md`~~（已补条目） |
 
 ### 一致性良好（无需动）
 - 04/05 执行模型叙事已高度对齐（TaskScheduler/register_wake/trampoline/_drive_loop_gen/线程体复用/.call 变薄均记录）。

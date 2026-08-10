@@ -47,7 +47,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 - **E docs 治理**：新写 `docs/architecture/09_observability.md`（状态面/事件面/诊断面/配置面四机制
   单点真理）；README/ARCHITECTURE/01_principles 索引同步；WORKLOG 记录。
 
-**遗留技术债**：PT-DEBT-9（RecursionError 级联包装）、PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall` 定义位置）——**均已根治（2026-08-08，见下方"已完成：2026-08-08 批次"节）**，此处为归档旧记录。
+**归档记录（均已根治 2026-08-08，见下方"已完成：2026-08-08 批次"节）**：PT-DEBT-9（RecursionError 级联包装）、PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall` 定义位置）。
 
 ---
 
@@ -185,9 +185,9 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 - **当前最紧要（下一 session 起点）**：见 `PENDING_TASKS.md` §〇 + `tasks_docs/_HEALTH_AUDIT_PLAN.md`（三轴健康盘点）。
   按优先级：
-  1. **技术手册三修**（低风险立即可做）：`01_principles.md:258` P1 过时 `inherit_intents` 字段、`04_vm_interpreter.md:29`
+  1. ~~技术手册三修~~（**已完成 2026-08-10**）：`01_principles.md:258` P1 过时 `inherit_intents` 字段、`04_vm_interpreter.md:29`
      P2 `.call` 路径表述、`README` 目录树补 `15_diagnostics.md`。
-  2. **PT-DEBT-9/10/11 文档残留清理**：NEXT_STEPS.md:50 旧"遗留技术债"表述与根治状态不同步。
+  2. ~~PT-DEBT-9/10/11 文档残留清理~~（**已完成 2026-08-10**）：NEXT_STEPS.md:50 旧"遗留技术债"表述改为归档记录。
   3. **异步统一完整性**（中风险，独立分支）：A1 内联 `@~` 表达式接 CPS（llm_behavior.py:156，最高价值）、
      A4 LLM 函数 CPS-yield（_llm_function.py:202，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器。
   4. **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）。

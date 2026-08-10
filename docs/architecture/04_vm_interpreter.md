@@ -26,7 +26,9 @@
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-执行任意 IBCI 代码的唯一路径：**`Interpreter.execute_module()` / `IbUserFunction.call()` → `VMExecutor.run_body(body)` → CPS 调度循环**。
+执行任意 IBCI 代码的唯一路径（收敛到 `VMExecutor._drive_loop_gen` 的 CPS 调度循环）：
+- **模块/顶层入口**：`Interpreter.execute_module()` → `VMExecutor.run_body(body)` → 逐语句 `VMExecutor.run(uid)`；
+- **函数/可调用对象宿主入口**：`IbUserFunction.call()` / `IbLLMFunction.call()` / `IbBehavior.call()` 为宿主侧薄包装，委托 `_vm_call_*` 助手 + `_drive_generator`（`TaskScheduler` 驱动 `_drive_loop_gen`）。
 
 ---
 
