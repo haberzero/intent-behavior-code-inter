@@ -13,19 +13,19 @@
   `_drive_loop_gen`；线程体与宿主均收敛。
 - `.call` 四类对象变薄包装（M1）、线程体驱动去重（M2）——统一执行模型"地基"闭环成立。
 
-### 真实遗留（任务内同步重入/嵌套调度器，未彻底统一）
+### 真实遗留（任务内同步重入/嵌套调度器，未彻底统一）——**A1/A3/A4 已完成（2026-08-10，独立分支 exp/async-unify-a，全量 2138/1）**
 | # | 路径 | 位置 | 问题 |
 |---|------|------|------|
-| A1 | **内联 `@~` 行为表达式** | `llm_behavior.py:156` | 非赋值上下文（print/实参/返回值）走同步 `execute_behavior_expression` → `vm.run` 重入 + `_call_llm` 阻塞调度线程。CPS 版 `execute_behavior_expression_cps` 存在但未切换。**主缺口**（次要用例） |
-| A2 | **意图消解** | `intent.py:59` `resolve_content`、`runtime_context.py:894` `get_resolved_prompt_intents` | CPS 路径内仍 `vm.run` 同步重入 |
-| A3 | **`_SlotUpdateWaitable._drive`** | `comm.py:281-311` | 有 vm 时经 `coordinator._drive_generator` 新建**嵌套 TaskScheduler**（非并入外层调度器） |
-| A4 | **LLM 函数同步阻塞** | `_llm_function.py:202` `_call_llm` | `execute_llm_function_cps` 内同步阻塞调度线程（behavior 路径已 yield LLMFuture，llm 函数路径未对齐）——PT-FEAT-1 直接项 |
-| A5 | **类构造** | `ib_class.py:128` 字段 `vm.run`、`:154` `init_method.call` | 用户 `__init__`/字段默认值在 VM 循环内嵌套调度器 |
-| A6 | **协议方法 `.call`（条件触发）** | `llm_parsing_strategy.py:196/217`、`llm_except_frame.py:183/273` | 用户定义协议方法时在 VM 循环内嵌套调度器 |
+| ~~A1~~ | ~~**内联 `@~` 行为表达式**~~ | ~~`llm_behavior.py:156`~~ | ~~非赋值上下文走同步 `execute_behavior_expression`~~（已切 `execute_behavior_expression_cps`） |
+| A2 | **意图消解** | `intent.py:59` `resolve_content`、`runtime_context.py:894` `get_resolved_prompt_intents` | CPS 路径内仍 `vm.run` 同步重入（与 A1 同性质，可独立窗口） |
+| ~~A3~~ | ~~**`_SlotUpdateWaitable._drive`**~~ | ~~`comm.py:281-311`~~ | ~~新建嵌套 TaskScheduler~~（已增 `cps_drive` 帧内驱动，`vm_handle_IbCall` 识别并 `yield from`） |
+| ~~A4~~ | ~~**LLM 函数同步阻塞**~~ | ~~`_llm_function.py:202` `_call_llm`~~ | ~~同步阻塞调度线程~~（已 worker 化 + yield LLMFuture，PT-FEAT-1 直接项） |
+| A5 | **类构造** | `ib_class.py:128` 字段 `vm.run`、`:154` `init_method.call` | 用户 `__init__`/字段默认值在 VM 循环内嵌套调度器（语义边界，独立窗口） |
+| A6 | **协议方法 `.call`（条件触发）** | `llm_parsing_strategy.py:196/217`、`llm_except_frame.py:183/273` | 用户定义协议方法时在 VM 循环内嵌套调度器（语义边界，独立窗口） |
 
 ### 判定
-- **主路径（赋值 dispatch_eager）已异步**；以上均为**次要用例/条件触发**遗留。
-- "彻底统一"若要达成，A1（内联表达式）是最高价值；A3/A4 次之；A5/A6 条件触发。
+- **主路径（赋值 dispatch_eager）已异步**；A1/A3/A4 三项次要遗留已消除（2026-08-10）；A2 同性质可续；A5/A6 条件触发且涉语义边界。
+- "彻底统一"剩余项：A2（意图消解）最高价值；A5/A6 条件触发。见 `PENDING_TASKS.md` PT-DEBT-16。
 
 ---
 
@@ -73,14 +73,15 @@
 
 ## 四、建议的下一步（按优先级 + 风险）
 
-### 第一优先（低风险、立即可做、高一致性价值）
+### 第一优先（低风险、立即可做、高一致性价值）——**已完成（2026-08-10）**
 1. **技术手册三修**：`01_principles.md:258` P1 过时字段、`04_vm_interpreter.md:29` P2 表述、`README` 目录树补 `15_diagnostics.md`。纯文档，零回归。
 2. **PT-DEBT-9/10/11 文档残留清理**：NEXT_STEPS.md:50 旧"遗留技术债"表述与根治状态不同步。
 
-### 第二优先（异步统一完整性，中风险，需独立分支/谨慎）
-3. **A1 内联 `@~` 表达式接 CPS**：`vm_handle_IbBehaviorExpr` 切 `execute_behavior_expression_cps`（最高价值，消除主缺口）。
-4. **A4 LLM 函数 CPS-yield**：`_llm_function.py:202` `_call_llm` 对齐 behavior 路径（PT-FEAT-1 直接项）。
-5. **A3 `_SlotUpdateWaitable` 并入当前调度器**：不再新建嵌套 TaskScheduler。
+### 第二优先（异步统一完整性，中风险，独立分支）——**A1/A3/A4 已完成（2026-08-10，exp/async-unify-a）**
+3. **A1 内联 `@~` 表达式接 CPS**：`vm_handle_IbBehaviorExpr` 切 `execute_behavior_expression_cps`（最高价值，消除主缺口）。**已完成**。
+4. **A4 LLM 函数 CPS-yield**：`_llm_function.py:202` `_call_llm` 对齐 behavior 路径（PT-FEAT-1 直接项）。**已完成**。
+5. **A3 `_SlotUpdateWaitable` 并入当前调度器**：不再新建嵌套 TaskScheduler。**已完成**。
+   **剩余**：A2 意图消解（intent.py:59 `vm.run` 重入，与 A1 同性质，可独立窗口续推）。
 
 ### 第三优先（内核健康，中风险，独立分支）
 6. 删疑似死同步包装（`_behavior.py`/`_llm_function.py` 4 个方法，先核验无接口引用）。

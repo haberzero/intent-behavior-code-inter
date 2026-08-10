@@ -146,6 +146,17 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   `inherit_plugins`/`collect_timeout`，跨隔离边界不继承意图）；② `04_vm_interpreter.md:29` 统一执行入口表述
   （模块入口 `execute_module`→`run_body`；宿主入口 `.call` 薄包装委托 `_vm_call_*`+`_drive_generator`）；
   ③ `docs/README.md` 目录树补 `15_diagnostics.md`；④ NEXT_STEPS.md:50 旧"遗留技术债"表述改归档记录。
+- **异步统一完整性 A1/A3/A4 完成（2026-08-10，独立分支 exp/async-unify-a，全量 2138/1，待手动应用 unsafe-vibe-dev）**：
+  - **A1 内联 `@~` 接 CPS**（llm_behavior.py）：`vm_handle_IbBehaviorExpr` 非 callable 分支切
+    `execute_behavior_expression_cps`（段求值 yield 嵌入帧栈 + LLM 线程池挂起）。顺带补 `IbGenerator.generic_next`
+    Waitable 契约缺口（`_drive_generator_loop` 声明"向外 yield 的只有 GeneratorYield 与 Waitable"，迭代侧此前只实现其一）。
+  - **A4 LLM 函数 CPS-yield**（_llm_function.py，PT-FEAT-1 直接项）：`execute_llm_function_cps` 拆分
+    `_prepare_llm_function_call_cps`（CPS 段求值 + `LLMFunctionCallSpec` 快照）+ `_call_and_parse_llm_function`
+    （worker 安全、record_current=False）+ 提交线程池 yield LLMFuture。
+  - **A3 `_SlotUpdateWaitable` 并入调度器**（comm.py + leaf.py）：新增 `cps_drive` 帧内 CPS 驱动生成器；
+    `vm_handle_IbCall` 对 `getattr(result, "cps_drive", None)` 非 None 的 Waitable 帧内 `yield from`（消除
+    `try_result` 内嵌套 TaskScheduler）。宿主 `_drive` 路径保留。
+  - 测试 +1（slot.update(snapshot) 帧内驱动）；独立复核通过；A2（意图消解）/A5（类构造）/A6（协议方法）遗留待评估。
 - **三轴健康盘点（2026-08-09，只读调查，见 `_HEALTH_AUDIT_PLAN.md`）**：从异步统一完整性 + 内核健康 +
   技术手册健康三维度，结合真实代码给出下一步规划（见下方"下一步候选"）。
 - **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，全量 2074 → 2137 passed / 1 skipped）**：

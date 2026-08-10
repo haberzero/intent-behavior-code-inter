@@ -2,7 +2,7 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-09（P0 阶段5增量 + PT-FEAT-5 三项 + PT-FEAT-10 + R4/R5 审计完成；剩余 PT-DEBT-4 独立窗口与 P3 VISION）
+> **最后更新**：2026-08-10（PT-DOC-3 技术手册三修 + 异步统一完整性 A1/A3/A4 完成，全量 2138/1；剩余 A2 意图消解、PT-DEBT-4 独立窗口与 P3 VISION）
 
 ---
 
@@ -188,8 +188,9 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   1. ~~技术手册三修~~（**已完成 2026-08-10**）：`01_principles.md:258` P1 过时 `inherit_intents` 字段、`04_vm_interpreter.md:29`
      P2 `.call` 路径表述、`README` 目录树补 `15_diagnostics.md`。
   2. ~~PT-DEBT-9/10/11 文档残留清理~~（**已完成 2026-08-10**）：NEXT_STEPS.md:50 旧"遗留技术债"表述改为归档记录。
-  3. **异步统一完整性**（中风险，独立分支）：A1 内联 `@~` 表达式接 CPS（llm_behavior.py:156，最高价值）、
-     A4 LLM 函数 CPS-yield（_llm_function.py:202，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器。
+  3. ~~异步统一完整性 A1/A3/A4~~（**已完成 2026-08-10，独立分支 exp/async-unify-a，全量 2138/1**）：A1 内联 `@~` 表达式接
+     CPS（llm_behavior.py）、A4 LLM 函数 CPS-yield（_llm_function.py，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable`
+     并入当前调度器（comm.py+leaf.py）。**剩余 A2 意图消解**（intent.py:59，与 A1 同性质可独立窗口）。
   4. **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）。
   5. **P3 VISION**。
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
