@@ -169,6 +169,20 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   - **A2 意图消解 CPS 化（+76 行）**：`resolve_content_cps`/`IntentResolver.resolve_cps`/
     `get_resolved_prompt_intents_cps`，CPS 预求值路径消除 `vm.run` 同步重入；同步 `_prepare_behavior_call`
     保留（后台线程合法）。
+- **彻查：`run_batch` 三层设计不一致 + 同类排查（2026-08-10，只读彻查，登记 PT-DEBT-17）**：
+  - **PT-DEBT-17 `ai.run_batch` 同步阻塞（确凿，待彻底修复）**：`run_batch`（`_behavior.py:339`）返回
+    `List`（非 Waitable）→ 不走 auto-yield → 主线程 `fut.result()`（:383）同步阻塞等全部 LLM（实测
+    main_thread=True + `_prepare_behavior_call`（:369）`vm.run` 重入 + 同模块 `stream_call`/`stream_channel`
+    返回 Waitable 协作对比范式割裂（design-philosophy §三/§四）。修复方向：CPS 化（预求值改 yield +
+    多 Future 聚合 Waitable）+ `ai.run_batch` vtable return_type 契约评估。涉及对外契约，独立窗口。
+  - **彻查证伪（非问题）**：`ihost.collect`/`run_isolated` 返回 `HostAwaitable`（标准 Waitable），经
+    `request_collect` 精确打点证实 fast 子任务完成后立即返回、总时=max 非 sum——是文档化透明异步契约
+    （`14_concurrency.md` auto-yield），非同步阻塞。一度误判已撤回。
+  - **死代码发现**：同步 `LLMExecutorImpl.resolve()`（`_scheduler.py:78`）与 `LLMFuture.get()`（`llm_result.py:129`）
+    零真实调用（仅 docstring 示例），VM 全走 CPS `resolve_future_cps`——可随 PT-DEBT-17 清理。
+  - **同类排查结论**：`collect`/`stream_call`/`thread`/`stream` 均正确 Waitable 范式；`run_batch` 是唯一
+    "返回非 Waitable 的等待型原语"；无其它 `fut.result()`/`thread.join()` 在 VM 主路径同步阻塞（已全量扫描）。
+  - 详见 WORKLOG 与 PENDING_TASKS PT-DEBT-17。
 - **三轴健康盘点（2026-08-09，只读调查，见 `_HEALTH_AUDIT_PLAN.md`）**：从异步统一完整性 + 内核健康 +
   技术手册健康三维度，结合真实代码给出下一步规划（见下方"下一步候选"）。
 - **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，全量 2074 → 2137 passed / 1 skipped）**：
