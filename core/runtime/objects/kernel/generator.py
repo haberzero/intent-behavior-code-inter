@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any, List
 
 from ...shared.signals import GeneratorYield
+from ...shared.waitable import Waitable
 from .base import IbValue
 
 
@@ -35,7 +36,15 @@ class IbGenerator(IbValue):
     # ------------------------------------------------------------------
 
     def generic_next(self) -> Any:
-        """推进生成器到下一个产出值，返回该值；耗尽抛 StopIteration。"""
+        """推进生成器到下一个产出值，返回该值；耗尽抛 StopIteration。
+
+        驱动循环（``_drive_generator_loop``）向外 yield 的只有两类：
+        ``GeneratorYield``（语言产出）与 ``Waitable``（宿主等待）。本方法
+        作为迭代方：遇 ``GeneratorYield`` 直接取值返回；遇 ``Waitable``
+        （如生成器体内 ``@~`` 行为的 LLMFuture）阻塞等待其完成并把结果
+        ``send`` 注回驱动循环后继续推进——维持生成器体内 LLM 调用的同步
+        解析语义（KNOWN_LIMITS §二十四），驱动契约两侧完备。
+        """
         if self._exhausted:
             raise StopIteration
         try:
@@ -43,6 +52,8 @@ class IbGenerator(IbValue):
         except StopIteration:
             self._exhausted = True
             raise
+        while isinstance(event, Waitable):
+            event = self._driver.send(event.result())
         if isinstance(event, GeneratorYield):
             return event.value
         raise RuntimeError(f"generator driver yielded unexpected event {event!r}")

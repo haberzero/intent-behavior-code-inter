@@ -152,8 +152,11 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     # 提取命名模型 tag（@NAME~ 语法）用于模型路由
     target_model = node_data.get("tag", "")
 
-    # 同步执行（fallback 共享同一 LLMExecutor）
-    result = sc.llm_executor.execute_behavior_expression(
+    # CPS 执行（A1：非赋值上下文内联 @~ 表达式接入 CPS）。
+    # 同步版 execute_behavior_expression 经 _evaluate_segments 的 vm.run 重入
+    # 调度循环且 _call_llm 阻塞调度线程；CPS 版段求值 yield 嵌入外层 VM 帧栈、
+    # LLM 提交线程池 + yield LLMFuture 挂起让出——消除任务内同步重入与阻塞。
+    result = yield from sc.llm_executor.execute_behavior_expression_cps(
         node_uid, executor.ec, call_intent=call_intent,
         target_model=target_model,
     )
