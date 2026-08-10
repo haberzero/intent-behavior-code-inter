@@ -2,7 +2,7 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-10（PT-DOC-3 技术手册三修 + 异步统一完整性 A1-A4 完成 + 内核健康三项[死同步包装/双驱动循环/意图消解] + 测试 warning 清零，全量 2138/1 + 0 warning；彻查确认 PT-DEBT-17 run_batch 同步阻塞[独立窗口]；剩余 A5/A6、PT-DEBT-4 独立窗口与 P3 VISION）
+> **最后更新**：2026-08-11（PT-DEBT-17 `ai.run_batch` 同步阻塞根治完成——CPS 化 + 多 Future 聚合 Waitable，全量 2135/1 + 死代码清理；剩余 A5/A6、PT-DEBT-4 独立窗口与 P3 VISION）
 
 ---
 
@@ -192,13 +192,9 @@ auto-yield 组合 + 值契约 + yield 自标记）。
      CPS（llm_behavior.py）、A2 意图消解 CPS 化（intent.py，`vm.run` 重入消除）、A4 LLM 函数 CPS-yield
      （_llm_function.py，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器（comm.py+leaf.py，
      CPSDrivable 协议分派）。**剩余 A5/A6**（类构造/协议方法，语义边界需独立窗口）。
-  4. **PT-DEBT-17 `ai.run_batch` 同步阻塞修复**（**独立窗口，彻查已确认三层不一致**）：`run_batch` 返回
-     `List`（非 Waitable）→ 主线程 `fut.result()` 同步阻塞 + 同步 `_prepare_behavior_call` `vm.run` 重入 +
-     同模块 `stream_call` 返回 Waitable 范式割裂。修复方向：`run_batch` CPS 化（预求值改 yield + 多 Future
-     聚合 Waitable）+ `ai.run_batch` vtable return_type 契约评估。**已澄清**：`ihost.collect`/`run_isolated`
-     是透明异步 auto-yield（非问题）。可顺带清理同步 `resolve()`/`LLMFuture.get()` 死代码。
-  5. **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）。
-  6. **P3 VISION**。
+   4. **PT-DEBT-17 `ai.run_batch` 同步阻塞修复**（**已完成 2026-08-11，unsafe-vibe-dev ebbb7f8，全量 2135/1**）：`run_batch` 返回 `CPSDrivable` Waitable——CPS 预求值（`_prepare_behavior_call_cps` 消除 vm.run 重入）+ 多 LLM Future 聚合 `LLMBatchFuture` 由调度器非阻塞等待（消除主线程 `fut.result()` 硬阻塞），与 `stream_call` Waitable 范式一致；vtable return_type=list 契约不变（auto-yield 后仍收 boxed IbList）。**顺带清理死代码**：`LLMExecutorImpl.resolve()` + `LLMFuture.get()`（VM 全走 `resolve_future_cps`）+ 其 5 个死测试 + 协议声明同步。`ihost.collect`/`run_isolated` 是透明异步 auto-yield（非问题，已澄清）。详见 `_code_run_batch_cps.md` / WORKLOG。
+   5. **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）。
+   6. **P3 VISION**。
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、

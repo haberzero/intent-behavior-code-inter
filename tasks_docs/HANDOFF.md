@@ -126,6 +126,17 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 > **接手起点**：先读本节（当前状态）+ `PENDING_TASKS.md` §〇（优先级总表，单一权威源）+
 > 本 session 成果记录（`WORKLOG.md` 尾部 + git 历史 `c61a6e0..HEAD`）。
 
+- **PT-DEBT-17 `ai.run_batch` 同步阻塞根治（2026-08-11，独立分支 exp/run-batch-cps → 手动应用 unsafe-vibe-dev ebbb7f8，全量 2135 passed / 1 skipped）**：
+  - **三层不一致全部根治**：`run_batch` 返回 `CPSDrivable` Waitable（与 `stream_call` 返回 `IbStreamHandle`、A3
+    `_SlotUpdateWaitable.cps_drive` 同构）——VM `vm_handle_IbCall` `yield from result.cps_drive(executor)` 帧内驱动。
+    **① 主线程 `fut.result()` 硬阻塞** → `_run_batch_cps` 把多 LLM Future 聚合为 `LLMBatchFuture`（新聚合 Waitable）
+    由调度器非阻塞等待；**② 同步 `_prepare_behavior_call` `vm.run` 重入** → 用 `_prepare_behavior_call_cps`（段求值/
+    意图消解/hint 嵌入 VM 帧栈）消除；**③ 与 `stream_call` Waitable 范式割裂** → 返回 Waitable 统一。vtable
+    return_type=list 契约不变（auto-yield 后仍收 boxed IbList）。宿主/线程体无 VM 走 `_run_batch_sync` 同步兜底。
+  - **顺带清理死代码**：`LLMExecutorImpl.resolve()` + `LLMFuture.get()`（VM 全走 `resolve_future_cps`）+ 其 5 个
+    死测试 + 死 import + `LLMExecutor` 协议声明同步；统一批量聚合 `_aggregate_batch_results`（消除双路径分叉）。
+  - 设计记录 `tasks_docs/_code_run_batch_cps.md`；general 复核 3 建议级全整改；补判别性回归测试
+    `TestRunBatchWaitableContract`（旧实现返回 List 必失败）。文档 `05_vm_specification.md` §3.4 公理 LLM-4 同步。
 - **当前主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（登记 PT-DEBT-12/13/14/15）：
   - **PT-DEBT-12（F1）用户方法 CPS 化、PT-DEBT-13（B1）chan.send Waitable 化、PT-DEBT-14（F2/F3）
@@ -314,6 +325,6 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 - [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（长期，单一权威源）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 读 §二 动态状态接续工作（含 2026-08-10 session 成果：PT-DOC-3 + A1-A4 + 内核健康三项 + PT-DEBT-17 彻查）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2138 passed / 1 skipped，0 warning）
+- [ ] 读 §二 动态状态接续工作（含 2026-08-11 session 成果：PT-DEBT-17 run_batch 同步阻塞根治 + 死代码清理；2026-08-10：PT-DOC-3 + A1-A4 + 内核健康三项 + 彻查）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2135 passed / 1 skipped）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

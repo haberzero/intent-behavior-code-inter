@@ -122,7 +122,7 @@ scheduler 主循环（TaskScheduler.run）:
 
 ### §3.4 批量并发执行（`ai.run_batch`）
 
-**公理 LLM-4（批量执行）**：`ai.run_batch(fn_behavior, items) -> list` 对参数化 fn 行为逐项并发执行，保序返回结果列表。每项在主线程预求值 prompt（参数绑定 + `_prepare_behavior_call`），后台线程仅执行 `_call_and_parse`；结果按 `items` 顺序收集。任一项结果不确定即抛 `LLMParseError`（与无 llmexcept 的同步语义一致，错误粒度为整个批次）。
+**公理 LLM-4（批量执行）**：`ai.run_batch(fn_behavior, items) -> list` 对参数化 fn 行为逐项并发执行，保序返回结果列表。`run_batch` 返回可帧内 CPS 驱动的 Waitable：每项 prompt 预求值经 `_prepare_behavior_call_cps` 嵌入当前 VM 帧栈（CPS，无 `vm.run` 同步重入），多 LLM Future 聚合为 `LLMBatchFuture` 由调度器非阻塞等待（auto-yield 协作挂起，与 `stream_call` 返回 Waitable 同范式）；后台线程仅执行 `_call_and_parse`；结果按 `items` 顺序收集。任一项结果不确定即抛 `LLMParseError`（与无 llmexcept 的同步语义一致，错误粒度为整个批次）。宿主/线程体无活跃 VM 时走同步兜底（`_run_batch_sync`）。
 
 **排除"循环内自动透明并发"**：循环体 / 函数体内行为强制 `dispatch_eligible=False`（§3.1），不做自动并发展开。理由：① `_pending_futures` 按静态 `node_uid` 键控，同一节点多次执行会覆写键导致读点解析错乱与旧 Future 泄漏，改"执行实例"键是运行时模型改动；② 自动展开要求编译器证明循环体为"纯批次"（无控制流 / 跨迭代依赖 / 副作用顺序），证明错判即静默改变程序行为；③ 与"显式优于隐式"公理冲突。需要批量并发时用 `ai.run_batch` 显式表达。
 
