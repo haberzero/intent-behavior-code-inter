@@ -157,6 +157,18 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
     `vm_handle_IbCall` 对 `getattr(result, "cps_drive", None)` 非 None 的 Waitable 帧内 `yield from`（消除
     `try_result` 内嵌套 TaskScheduler）。宿主 `_drive` 路径保留。
   - 测试 +1（slot.update(snapshot) 帧内驱动）；独立复核通过；A2（意图消解）/A5（类构造）/A6（协议方法）遗留待评估。
+- **内核健康三项 + A2（2026-08-10，unsafe-vibe-dev，全量 2138/1，0 warning）**：
+  - **测试持续 warning 修复**：`test_recursion_overflow_propagates_root_cause` 改用 `pytest.warns` 显式断言
+    `KDIAG_RUNTIME_ENV_LIMIT` 警告投影（PT-FEAT-9 设计内"警告不门控"，非缺陷；生产代码不动）。
+  - **死同步包装清理（-241 行）**：删 `invoke_behavior`/`execute_behavior_object`/`execute_llm_function`/
+    `invoke_llm_function`（M1 收敛后零消费者互引成环，协议注释"唯一对外接触点"已过时）；保留
+    `_prepare_behavior_call`/`_evaluate_segments`（dispatch_eager/run_batch 后台线程依赖）与 `run_batch`
+    （ai.run_batch 消费）；同步更新 IILLMExecutor/LLMExecutor 协议声明。
+  - **双驱动循环合并（-105 行）**：`_drive_generator_loop` 并入 `_drive_loop_gen`（`yield_generator_values` 参数），
+    顺带修复生成器体缺 step/cancel 检查。
+  - **A2 意图消解 CPS 化（+76 行）**：`resolve_content_cps`/`IntentResolver.resolve_cps`/
+    `get_resolved_prompt_intents_cps`，CPS 预求值路径消除 `vm.run` 同步重入；同步 `_prepare_behavior_call`
+    保留（后台线程合法）。
 - **三轴健康盘点（2026-08-09，只读调查，见 `_HEALTH_AUDIT_PLAN.md`）**：从异步统一完整性 + 内核健康 +
   技术手册健康三维度，结合真实代码给出下一步规划（见下方"下一步候选"）。
 - **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，全量 2074 → 2137 passed / 1 skipped）**：

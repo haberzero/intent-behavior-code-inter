@@ -13,19 +13,19 @@
   `_drive_loop_gen`；线程体与宿主均收敛。
 - `.call` 四类对象变薄包装（M1）、线程体驱动去重（M2）——统一执行模型"地基"闭环成立。
 
-### 真实遗留（任务内同步重入/嵌套调度器，未彻底统一）——**A1/A3/A4 已完成（2026-08-10，独立分支 exp/async-unify-a，全量 2138/1）**
+### 真实遗留（任务内同步重入/嵌套调度器，未彻底统一）——**A1-A4 已完成（2026-08-10）**
 | # | 路径 | 位置 | 问题 |
 |---|------|------|------|
 | ~~A1~~ | ~~**内联 `@~` 行为表达式**~~ | ~~`llm_behavior.py:156`~~ | ~~非赋值上下文走同步 `execute_behavior_expression`~~（已切 `execute_behavior_expression_cps`） |
-| A2 | **意图消解** | `intent.py:59` `resolve_content`、`runtime_context.py:894` `get_resolved_prompt_intents` | CPS 路径内仍 `vm.run` 同步重入（与 A1 同性质，可独立窗口） |
-| ~~A3~~ | ~~**`_SlotUpdateWaitable._drive`**~~ | ~~`comm.py:281-311`~~ | ~~新建嵌套 TaskScheduler~~（已增 `cps_drive` 帧内驱动，`vm_handle_IbCall` 识别并 `yield from`） |
-| ~~A4~~ | ~~**LLM 函数同步阻塞**~~ | ~~`_llm_function.py:202` `_call_llm`~~ | ~~同步阻塞调度线程~~（已 worker 化 + yield LLMFuture，PT-FEAT-1 直接项） |
+| ~~A2~~ | ~~**意图消解**~~ | ~~`intent.py:59` `resolve_content`~~ | ~~CPS 路径内仍 `vm.run` 同步重入~~（已 CPS 化：`resolve_content_cps`/`IntentResolver.resolve_cps`/`get_resolved_prompt_intents_cps`） |
+| ~~A3~~ | ~~**`_SlotUpdateWaitable._drive`**~~ | ~~`comm.py:281-311`~~ | ~~新建嵌套 TaskScheduler~~（已增 `cps_drive` 帧内驱动） |
+| ~~A4~~ | ~~**LLM 函数同步阻塞**~~ | ~~`_llm_function.py:202` `_call_llm`~~ | ~~同步阻塞调度线程~~（已 worker 化 + yield LLMFuture） |
 | A5 | **类构造** | `ib_class.py:128` 字段 `vm.run`、`:154` `init_method.call` | 用户 `__init__`/字段默认值在 VM 循环内嵌套调度器（语义边界，独立窗口） |
 | A6 | **协议方法 `.call`（条件触发）** | `llm_parsing_strategy.py:196/217`、`llm_except_frame.py:183/273` | 用户定义协议方法时在 VM 循环内嵌套调度器（语义边界，独立窗口） |
 
 ### 判定
-- **主路径（赋值 dispatch_eager）已异步**；A1/A3/A4 三项次要遗留已消除（2026-08-10）；A2 同性质可续；A5/A6 条件触发且涉语义边界。
-- "彻底统一"剩余项：A2（意图消解）最高价值；A5/A6 条件触发。见 `PENDING_TASKS.md` PT-DEBT-16。
+- **主路径（赋值 dispatch_eager）已异步**；A1-A4 四项次要遗留已消除（2026-08-10）。A5/A6 条件触发且涉语义边界。
+- "彻底统一"剩余项：A5/A6（类构造/协议方法，语义边界需独立窗口）。见 `PENDING_TASKS.md` PT-DEBT-16。
 
 ---
 
@@ -39,13 +39,14 @@
 | 9 | `binding_analysis_pass.py` `_analyze_node` @102 | 符号/赋值分析 | 守卫子句 |
 | 9 | `scheduler.py` | 导入解析 | — |
 
-### 疑似死同步包装（CPS 孪生为权威，需核验后删）
-- `_behavior.py:355` `invoke_behavior`、`:331` `execute_behavior_object`（互引成环，无外部调用）
-- `_llm_function.py:126` `invoke_llm_function`、`:23` `execute_llm_function`（互引成环）
-- `_behavior.py:413` `run_batch`（仅 docstring 引用）
+### 疑似死同步包装（CPS 孪生为权威）——**已清理（2026-08-10）**
+- ~~`_behavior.py:355` `invoke_behavior`、`:331` `execute_behavior_object`（互引成环，无外部调用）~~——已删
+- ~~`_llm_function.py:126` `invoke_llm_function`、`:23` `execute_llm_function`（互引成环）~~——已删
+- `run_batch`（`_behavior.py:413`）：**保留**（`ai.run_batch` 语言特性消费，原"仅 docstring 引用"标记为误判）
+- 同步 `_prepare_behavior_call`/`_evaluate_segments`：**保留**（dispatch_eager/run_batch 后台线程预求值依赖）
 
-### 双维护点
-- `_drive_loop_gen`（vm_executor.py:204）与 `_drive_generator_loop`（:317）近全同，仅 GeneratorYield 分支差异。
+### 双维护点——**已合并（2026-08-10）**
+- ~~`_drive_loop_gen`（vm_executor.py:204）与 `_drive_generator_loop`（:317）近全同~~——已合并为单一 `_drive_loop_gen(yield_generator_values=True)`，顺带修复生成器体缺 step/cancel 检查。
 
 ### 合法保留（不处理）
 - `scheduler.py` 宽 except（3 处）为编译器级 fail-fast 重抛，不吞语言级异常。
