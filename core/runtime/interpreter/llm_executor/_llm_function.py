@@ -295,7 +295,7 @@ class _LLMFunctionMixin:
     def execute_llm_function_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None):
         """CPS 版 :meth:`execute_llm_function`；逻辑等价，段求值通过 yield from。
 
-        **LLM 真挂起**（A4：与 behavior 路径 :meth:`execute_behavior_expression_cps`
+        **LLM 真挂起**（与 behavior 路径 :meth:`execute_behavior_expression_cps`
         同构）：prompt 经 ``_prepare_llm_function_call_cps``（段求值 yield）构建
         spec，随后 ``_call_and_parse_llm_function`` 提交线程池并 ``yield`` 返回的
         ``LLMFuture``——调度器挂起本根、让出给其它根，LLM 就绪后 ``send`` 回

@@ -311,7 +311,7 @@ class _SlotUpdateWaitable:
                 self._done = True
 
     def cps_drive(self, executor):
-        """帧内 CPS 驱动（A3：并入当前调度器，消除嵌套 TaskScheduler）。
+        """帧内 CPS 驱动（并入当前调度器，消除嵌套 TaskScheduler）。
 
         与 ``_drive`` 的 VM 分支同语义（CAS 读改写），但 fn 求值经
         ``yield from`` ``_vm_call_fn_callable`` / ``_vm_invoke_behavior``
