@@ -201,16 +201,26 @@ class VMExecutor:
     # 内部：调度循环主体（被 run() / future 入口共享）
     # ------------------------------------------------------------------
 
-    def _drive_loop_gen(self, stack: list) -> Any:
-        """可挂起的调度循环生成器（单源，阶段 1a：唯一驱动生成器）。
+    def _drive_loop_gen(self, stack: list, *, yield_generator_values: bool = False) -> Any:
+        """可挂起的调度循环生成器（单一权威驱动，阶段 1a）。
 
         逐帧推进栈；当某 handler yield 一个 Waitable（如 ``LLMFuture``）时挂起
         （``yield waitable``），把控制权交还调用方；调用方（调度器 / 线程体）
         在 waitable 就绪后 ``send(result)`` 恢复。栈耗尽时返回最终结果。
 
+        ``yield_generator_values=True``：惰性生成器体驱动模式——识别
+        ``GeneratorYield`` 语言级产出标记（``vm_handle_IbYieldExpr`` 求值后
+        yield），把它**挂起向外交付**（``yield`` 给迭代方），迭代恢复（``send``）
+        后继续推进，保持生成器体循环位置 / 局部变量（EXEC-FOUNDATION §5.2
+        单可恢复驱动）。主路径（False）下 GeneratorYield 不产生；若出现则走
+        通用 child 处理（报未知 handler）。
+
         ``_current_stack`` 绑定（供 ``frame_stack_depth`` 观察 CPS 栈深度）在
         本生成器内保存/恢复：多任务下每任务的栈视图随其步进自然切换；嵌套
         ``run`` 重入（如意图消解的 ``vm.run(segment)``）经 finally 恢复外层视图。
+
+        协作取消（``cancel_event``）与步数限制（``max_steps``）在生成器体驱动
+        模式同样生效（覆盖生成器体内深递归）。
         """
         prev_stack = self._current_stack
         self._current_stack = stack
@@ -263,6 +273,11 @@ class VMExecutor:
                     pending_exception = e
                     continue
 
+                if yield_generator_values and isinstance(child_uid, GeneratorYield):
+                    # 语言级产出（生成器体）：挂起向外交付 value，迭代恢复后继续
+                    pending_value = yield child_uid
+                    continue
+
                 # 生成器 yield 了一个子节点 uid：决定是 CPS 求值还是 fallback
                 if child_uid is None:
                     # yield None —— 视作 None 立即返回
@@ -308,99 +323,6 @@ class VMExecutor:
             if pending_exception is not None:
                 raise pending_exception
             # 未消费的顶层 Signal → 以 UnhandledSignal 抛给调用方
-            if isinstance(pending_value, Signal):
-                raise UnhandledSignal(pending_value)
-            return pending_value if pending_value is not None else self.registry.get_none()
-        finally:
-            self._current_stack = prev_stack
-
-    def _drive_generator_loop(self, stack: list) -> Any:
-        """惰性生成器体驱动循环（阶段 5 yield，单可恢复驱动）。
-
-        与 ``_drive_loop_gen`` 同构，但识别 ``GeneratorYield`` 语言级产出标记：
-        ``vm_handle_IbYieldExpr`` 求值后 ``yield`` 该标记，本循环把它**挂起向
-        外交付**（``yield`` 给迭代方），迭代恢复（``send``）后继续推进——保持
-        生成器体循环位置 / 局部变量（EXEC-FOUNDATION §5.2 单可恢复驱动）。
-
-        契约：本循环是生成器，向外 ``yield`` 的只有两类——``GeneratorYield``
-        （语言产出，迭代方取值）与 ``Waitable``（宿主等待，迭代方阻塞后
-        ``send`` 结果）。栈耗尽时 ``return`` 最终结果（生成器结束）。
-        """
-        prev_stack = self._current_stack
-        self._current_stack = stack
-        try:
-            pending_value: Any = None
-            pending_exception: Optional[BaseException] = None
-
-            while stack:
-                task = stack[-1]
-                gen = task.generator
-                try:
-                    if pending_exception is not None:
-                        exc = pending_exception
-                        pending_exception = None
-                        child_uid = gen.throw(exc)
-                    else:
-                        val = pending_value
-                        pending_value = None
-                        child_uid = gen.send(val)
-                except StopIteration as si:
-                    stack.pop()
-                    ret_value = si.value
-                    if isinstance(ret_value, Signal):
-                        pending_value = ret_value
-                    else:
-                        pending_value = (
-                            ret_value if ret_value is not None else self.registry.get_none()
-                        )
-                    continue
-                except UnhandledSignal as use:
-                    stack.pop()
-                    pending_exception = use
-                    continue
-                except Exception as e:
-                    stack.pop()
-                    pending_exception = e
-                    continue
-
-                if isinstance(child_uid, GeneratorYield):
-                    # 语言级产出：挂起向外交付 value，迭代恢复后继续
-                    yielded = child_uid
-                    pending_value = yield yielded
-                    continue
-
-                if child_uid is None:
-                    pending_value = self.registry.get_none()
-                    continue
-
-                if isinstance(child_uid, Waitable):
-                    pending_value = yield child_uid
-                    continue
-
-                if isinstance(child_uid, UserFunctionCall):
-                    # 同 _drive_loop_gen：is_generator 基类属性（缺省 False），
-                    # 属性直读分派生成器 vs 普通函数体压栈。
-                    if child_uid.func.is_generator:
-                        # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
-                        # 迭代驱动函数体、yield 点产出值。与 _drive_loop_gen 同构——
-                        # 生成器体内调用生成器函数必须产出 IbGenerator 而非压栈执行体。
-                        pending_value = self.make_generator_driver(child_uid)
-                    else:
-                        stack.append(self._make_user_function_task(child_uid))
-                    continue
-
-                if isinstance(child_uid, str) and self.supports(child_uid):
-                    stack.append(self._make_task(child_uid))
-                else:
-                    node_data = self._ec.get_node_data(child_uid) if isinstance(child_uid, str) else None
-                    node_type = (node_data.get("_type") if node_data else None) or repr(child_uid)
-                    raise RuntimeError(
-                        f"VMExecutor: No CPS handler for node type {node_type!r} "
-                        f"(uid={child_uid!r}) in generator body. Add vm_handle_{node_type}."
-                    )
-
-            if pending_exception is not None:
-                raise pending_exception
             if isinstance(pending_value, Signal):
                 raise UnhandledSignal(pending_value)
             return pending_value if pending_value is not None else self.registry.get_none()
@@ -455,14 +377,17 @@ class VMExecutor:
         """为惰性生成器函数调用创建单可恢复体驱动（阶段 5 yield）。
 
         生成器函数体经 ``_vm_call_user_function``（CPS 帧准备 + 逐语句 yield）
-        作为**单一** VMTask 压栈，由 ``_drive_generator_loop``（可恢复驱动）推进：
-        在 ``yield`` 点 ``GeneratorYield`` 挂起向外交付、迭代恢复。返回驱动生成器，
-        ``next()`` 取产出值、``send`` 恢复。与普通函数（trampoline 压栈同级，
-        但驱动循环可暂停）同构。
+        作为**单一** VMTask 压栈，由 ``_drive_loop_gen``（可恢复驱动，
+        ``yield_generator_values=True``）推进：在 ``yield`` 点 ``GeneratorYield``
+        挂起向外交付、迭代恢复。返回驱动生成器，``next()`` 取产出值、``send``
+        恢复。与普通函数（trampoline 压栈同级，但驱动循环可暂停）同构。
         """
         from core.runtime.vm.handlers._shared import _vm_call_user_function
 
         gen = _vm_call_user_function(
             self, call.func, call.receiver, call.args
         )
-        return self._drive_generator_loop([VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)])
+        return self._drive_loop_gen(
+            [VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)],
+            yield_generator_values=True,
+        )
