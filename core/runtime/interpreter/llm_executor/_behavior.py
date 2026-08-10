@@ -1,7 +1,9 @@
 """``_BehaviorMixin`` —— behavior 表达式 / 对象执行。
 
-包含 behavior (即时、匿名 LLM 调用) 的同步执行入口及其 CPS 生成器孪生，
-同步与 CPS 版本成对放置于同一文件。
+包含 behavior (即时、匿名 LLM 调用) 的 CPS 执行入口（``execute_behavior_expression_cps``
+/ ``execute_behavior_object_cps`` / ``invoke_behavior_cps``），以及供
+``dispatch_eager``（后台线程）与 ``run_batch``（ai.run_batch）使用的同步预求值
+``_prepare_behavior_call``。
 
 依赖 :class:`LLMExecutorCore` 的 ``_call_llm`` / ``llm_callback`` /
 ``_current_call_info`` 等共享状态，
@@ -287,82 +289,6 @@ class _BehaviorMixin:
                 raw_response=response,
             )
         return self._finalize_call(result, _call_info(response), record_current=False)
-
-    def execute_behavior_expression(
-        self,
-        node_uid: str,
-        execution_context: IExecutionContext,
-        call_intent: Optional[IbIntent] = None,
-        captured_intents: Optional[IbIntentContext] = None,
-        target_model: str = "",
-    ) -> LLMResult:
-        """处理行为描述行（即时、匿名的 LLM 调用）。
-
-        返回 LLMResult：
-        - success=True, is_uncertain=False: 成功且结果确定
-        - success=True, is_uncertain=True: 成功但结果不确定，需要 retry
-        - success=False: 执行失败
-
-        不再抛出 LLMUncertaintyError，所有不确定性通过 LLMResult 返回。
-
-        ``captured_intents`` 协议：
-            - ``None``  → 使用当前 RuntimeContext 的活跃意图栈（lambda 模式）
-            - ``IbIntentContext`` 实例 → 已 fork 的意图值快照（snapshot 模式 / dispatch_eager）
-
-        其他类型一律视为契约违反并 raise TypeError。
-
-        ``target_model``：
-            - ``""``（空字符串）→ 使用默认模型配置（无 tag 的 @~ ... ~ 语法）
-            - 非空字符串 → 路由到命名模型配置（@NAME~ ... ~ 语法中的 NAME）
-
-        本方法为主线程同步入口：``_prepare_behavior_call``（prompt 预求值）
-        + ``_call_and_parse``（LLM 调用 + 解析）顺序执行，结果绑定 call_info，
-        并在尾部记录主线程单写槽。
-        """
-        spec = self._prepare_behavior_call(
-            node_uid, execution_context, call_intent, captured_intents, target_model
-        )
-        result = self._call_and_parse(spec, node_uid, execution_context)
-        if result is not None and result.call_info is not None:
-            self._record_current_call_info(result.call_info)
-        return result
-
-
-    def execute_behavior_object(self, behavior: IbObject, execution_context: IExecutionContext) -> LLMResult:
-        """
-        执行一个被动行为对象。
-        环境（意图栈）已由 Interpreter/Handler 在调用前准备就绪。
-
-        返回 LLMResult。
-
-        缓存策略：``_cache`` 仅对 **immediate** 行为对象（``capture_mode is None``）有意义——
-        那是值语义的「求值一次后复用」对象。对 lambda / snapshot 模式而言，每次调用
-        都必须是独立的 LLM 推理（这是 lambda 「读现场」与 snapshot 「无状态可重入」
-        语义的共同要求），因此跳过缓存读写。
-        """
-        if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
-             return LLMResult.success_result(value=behavior)
-
-        cache_enabled = behavior.capture_mode is None
-        if cache_enabled and behavior._cache is not None:
-            return LLMResult.success_result(value=behavior._cache)
-
-        result = self.execute_behavior_expression(behavior.node, execution_context, captured_intents=behavior.captured_intents)
-        if cache_enabled:
-            behavior._cache = result.value if result else None
-        return result
-
-    def invoke_behavior(self, behavior: IbObject, execution_context: IExecutionContext) -> IbObject:
-        """
-        公理化行为调用入口 —— 供 IbBehavior.call() 使用。
-
-        封装了完整执行流程：
-        1. 委托给 execute_behavior_object 完成 LLM 调用及类型解析；
-        2. 直接返回 IbObject；不确定性结果经 ``_finalize_invoke_result``
-           转译为 ``IbLLMCallResult(is_certain=False)`` 供语句层消费者处理。
-        """
-        result = self.execute_behavior_object(behavior, execution_context)
-        return self._finalize_invoke_result(result)
 
     def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
         """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。

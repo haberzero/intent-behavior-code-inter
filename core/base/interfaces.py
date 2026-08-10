@@ -84,51 +84,19 @@ class IILLMExecutor(Protocol):
 
     职责划分
     --------
-    * ``invoke_behavior``             —— 行为对象公理化调用入口（供 IbBehavior.call() 使用）
-    * ``execute_behavior_expression`` —— 行为描述行底层执行
-    * ``execute_behavior_object``     —— 被动行为对象的底层执行
-    * ``get_current_call_info``       —— 内省最近 resolve 的 LLM 调用诊断信息
+    * ``dispatch_eager``             —— 赋值上下文行为描述行并发派发（线程池 + LLMFuture）
+    * ``resolve``                    —— 阻塞等待 Future 完成
+    * ``run_batch``                  —— 并发批量执行行为对象
+    * ``get_current_call_info``      —— 内省最近 resolve 的 LLM 调用诊断信息
+
+    行为/LLM 函数的 CPS 执行入口（``execute_behavior_expression_cps`` /
+    ``execute_llm_function_cps`` / ``invoke_*_cps``）为运行时内部协作路径，
+    由 VM handler（``_vm_invoke_behavior`` / ``_vm_invoke_llm_function``）经
+    ``yield from`` 驱动，不在此公开协议面。
 
     设计原则：此接口驻留于 core.base，不依赖任何 runtime 具体类型；
     所有参数/返回类型均使用 Any，由实现层负责具体类型约束。
     """
-    def invoke_behavior(self, behavior: Any, context: Any) -> Any:
-        """
-        执行一个行为对象，返回 IbObject 结果。
-
-        该方法封装了全部执行细节（意图捕获、类型推导、结果缓存），
-        是 IbBehavior.call() 的唯一对外接触点，严禁再使用 _execute_behavior。
-        """
-        ...
-
-    def invoke_llm_function(self, func: Any, context: Any, call_intent: Any = None) -> Any:
-        """
-        执行一个命名 LLM 函数对象，返回 IbObject 结果。
-
-        作用域管理和参数绑定已由 IbLLMFunction.call() 完成。
-        ``call_intent`` 为函数头意图（已在调用前解析），显式传参而非经
-        私有属性暂存。
-        此方法负责：调用 execute_llm_function 并把结果经 ``_finalize_invoke_result``
-        转译为 IbObject（不确定性结果转译为 ``IbLLMCallResult(is_certain=False)``
-        供语句层消费者处理），而非直接返回 LLMResult。
-        是 IbLLMFunction.call() 的唯一执行分发点。
-        """
-        ...
-
-    def execute_behavior_expression(
-        self,
-        node_uid: str,
-        context: Any,
-        call_intent: Any = None,
-        captured_intents: Any = None,
-    ) -> Any:
-        """执行行为描述行节点，返回 LLMResult。"""
-        ...
-
-    def execute_behavior_object(self, behavior: Any, context: Any) -> Any:
-        """执行被动行为对象，返回 LLMResult。"""
-        ...
-
     def get_current_call_info(self) -> Dict[str, Any]:
         """获取最近一次 resolve 的 LLM 调用诊断信息。"""
         ...
