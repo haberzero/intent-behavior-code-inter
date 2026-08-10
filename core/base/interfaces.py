@@ -119,7 +119,7 @@ class IILLMExecutor(Protocol):
         ...
 
     def run_batch(self, behavior: Any, items: Any, execution_context: Any) -> Any:
-        """并发批量执行行为对象，保序返回结果列表。"""
+        """并发批量执行行为对象，返回可帧内 CPS 驱动的 Waitable（保序结果列表）。"""
         ...
 
 @runtime_checkable

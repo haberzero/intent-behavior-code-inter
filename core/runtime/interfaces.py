@@ -164,9 +164,6 @@ class RuntimeContext(Protocol):
 class LLMExecutor(Protocol):
     """LLM 执行组件，负责构建 Prompt 并调用 LLM"""
     def get_current_call_info(self) -> Mapping[str, Any]: ...
-    def resolve(self, node_uid: str) -> Any:
-        """阻塞等待 ``node_uid`` 对应的 ``LLMFuture`` 完成，返回结果。"""
-        ...
     def dispatch_eager(
         self,
         node_uid: str,
@@ -178,8 +175,8 @@ class LLMExecutor(Protocol):
     def hydrate(self, service_context: Any) -> None:
         """水化依赖（注入 ``ServiceContext`` 并初始化结果解析器）。"""
         ...
-    def run_batch(self, behavior: Any, items: List[Any], execution_context: IExecutionContext) -> List[Any]:
-        """并发批量执行行为对象，保序返回结果列表。"""
+    def run_batch(self, behavior: Any, items: List[Any], execution_context: IExecutionContext) -> Any:
+        """并发批量执行行为对象，返回可帧内 CPS 驱动的 Waitable（保序结果列表）。"""
         ...
 
 class InterOp(Protocol):

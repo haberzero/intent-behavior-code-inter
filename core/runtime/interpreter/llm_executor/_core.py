@@ -52,7 +52,7 @@ class LLMExecutorCore:
     LLM 执行核心：处理提示词构建、参数插值和意图注入逻辑。
      采用上下文注入模式，支持延迟水化以消除解释器内部的属性补丁。
 
-    新增 ``dispatch_eager`` / ``resolve`` 接口（LLMScheduler 能力），
+    新增 ``dispatch_eager`` / ``resolve_future_cps`` 接口（LLMScheduler 能力），
     内部持有 ``ThreadPoolExecutor`` 以支持 behavior 表达式的并发 LLM 调用。
     """
     def __init__(self,

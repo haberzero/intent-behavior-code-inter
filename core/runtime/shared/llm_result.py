@@ -83,17 +83,13 @@ class LLMResult:
 class LLMFuture:
     """LLM 异步调用的 Future 包装（LLMScheduler 并发 dispatch 基础设施）。
 
-    由 ``LLMExecutorImpl.dispatch_eager()`` 创建，通过 ``resolve()`` 阻塞等待结果。
+    由 ``LLMExecutorImpl.dispatch_eager()`` 创建；调度器经 ``resolve_future_cps``
+    （CPS，``yield future`` 挂起）或本对象的 ``try_result``/``register_wake``
+    （Waitable 契约）等待结果。
 
     字段说明：
     - node_uid: 对应的 IbBehaviorExpr 节点 UID（用于日志与 pending 查询）
     - future: ``concurrent.futures.Future``，持有后台线程的 ``LLMResult``
-
-    使用模式::
-
-        future = scheduler.dispatch_eager(node_uid, ec, intent_ctx)
-        # … 其他工作 …
-        result_obj = scheduler.resolve(node_uid)  # 阻塞等待
     """
 
     node_uid: str
@@ -126,29 +122,39 @@ class LLMFuture:
         """完成通知钩子（R2）：后台 Future 完成时设置 ``event``（可跨线程）。"""
         self.future.add_done_callback(lambda _future: event.set())
 
-    def get(self, registry: Any) -> 'IbObject':
-        """阻塞等待 Future 完成并返回 IbObject。若已完成则零开销。
 
-        若后台线程抛出异常，该异常将在此处重新抛出。
-        若 LLM 调用结果不确定（is_uncertain=True），返回
-        ``IbLLMCallResult(is_certain=False)`` 不确定容器（与统一 llmexcept
-        机制的返回值传递一致），由调用方（``vm_handle_IbName``）检测并处理。
-        """
-        result: LLMResult = self.future.result()
-        if result is not None:
-            if result.value is not None and not result.is_uncertain:
-                return result.value
-            if result.is_uncertain:
-                # 延迟导入避免 shared 叶子模块与 objects 形成导入环
-                from core.runtime.objects.kernel import IbLLMCallResult
+class LLMBatchFuture:
+    """聚合多个 :class:`LLMFuture` 的 Waitable（run_batch 多 Future 聚合）。
 
-                cls = registry.get_class("llm_call_result")
-                if cls is None:
-                    raise RuntimeError("Registry missing 'llm_call_result' class")
-                return IbLLMCallResult(
-                    ib_class=cls,
-                    is_certain=False,
-                    raw_response=result.raw_response or "",
-                    retry_hint=result.retry_hint or "",
-                )
-        return registry.get_none()
+    并发批量行为执行（``ai.run_batch``）把每个 item 的 LLM 调用提交为独立
+    ``LLMFuture``，本对象把它们聚合为单一 Waitable：全部完成才就绪
+    （``is_done``），就绪后经 ``try_result`` **一次保序**取回各 ``LLMResult``
+    列表（按提交序）。调度器非阻塞轮询/通知式唤醒等待，消除了同步
+    ``fut.result()`` 逐个阻塞主线程。
+
+    与 :class:`LLMFuture` 同为结构性 ``Waitable``（is_done 属性 +
+    try_result/result/register_wake）；worker 异常经 ``fut.result()`` 重抛，
+    由调度器 ``try_result`` 捕获并 ``throw`` 进任务（错误粒度 = 整个批次）。
+    """
+
+    def __init__(self, futures: Any):
+        self._futures: list = list(futures)
+
+    @property
+    def is_done(self) -> bool:
+        return all(f.is_done for f in self._futures)
+
+    def try_result(self):
+        """非阻塞取回 ``(ok, [LLMResult...])``；未全部完成则 ``(False, None)``。"""
+        if not self.is_done:
+            return (False, None)
+        return (True, [f.future.result() for f in self._futures])
+
+    def result(self) -> Any:
+        """阻塞取回 ``[LLMResult...]``（宿主/线程体专用，消费一次）。"""
+        return [f.future.result() for f in self._futures]
+
+    def register_wake(self, event) -> None:
+        """任一子 Future 完成即设置 ``event``（调度器即时唤醒；全完成后会再置位）。"""
+        for f in self._futures:
+            f.future.add_done_callback(lambda _f: event.set())

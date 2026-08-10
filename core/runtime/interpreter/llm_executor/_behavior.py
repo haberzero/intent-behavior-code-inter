@@ -17,7 +17,13 @@ from typing import Any, Dict, List, Optional, Union, Mapping
 
 from core.runtime.interfaces import IExecutionContext
 
-from core.runtime.shared.llm_result import LLMResult, LLMFuture, MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
+from core.runtime.shared.llm_result import (
+    LLMResult,
+    LLMFuture,
+    LLMBatchFuture,
+    MOCK_REPAIR_SENTINEL,
+    MOCK_AMBIGUOUS_SENTINEL,
+)
 
 from core.runtime.objects.kernel import IbObject, IbValue
 from core.runtime.objects.intent import IbIntent
@@ -51,6 +57,68 @@ class BehaviorCallSpec:
     global_intents: List[Any] = field(default_factory=list)
     merged_intents: List[Any] = field(default_factory=list)
     pre_resolved: Optional[LLMResult] = None
+
+
+class _RunBatchDrive:
+    """``ai.run_batch`` 的帧内 CPS 驱动 Waitable。
+
+    由 :meth:`_BehaviorMixin.run_batch` 返回；VM ``vm_handle_IbCall`` 识别其为
+    ``Waitable`` + ``CPSDrivable`` 后 ``yield from`` ``cps_drive``，使每项 prompt
+    预求值（``_prepare_behavior_call_cps``）嵌入当前 VM 帧栈（消除 ``vm.run``
+    重入），并把多 LLM Future 聚合为 :class:`LLMBatchFuture` ``yield`` 让出
+    调度线程（消除主线程 ``fut.result()`` 硬阻塞）——与 ``stream_call`` 返回
+    Waitable 的范式一致。
+
+    ``try_result``/``result`` 走同步 :meth:`_BehaviorMixin._run_batch_sync` 兜底
+    （宿主/线程体直接调用、无活跃 VM 时），与 ``_SlotUpdateWaitable`` 的
+    ``_drive`` 同步兜底同构；VM 主路径以 ``cps_drive`` 为权威。
+    """
+
+    def __init__(self, executor, behavior: IbObject, items: List[IbObject], ec):
+        self._executor = executor
+        self._behavior = behavior
+        self._items = items
+        self._ec = ec
+        self._done = False
+        self._results = None
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+    def _drive(self):
+        """宿主/线程体同步驱动（无 VM CPS 上下文时；非权威路径）。"""
+        self._results = self._executor._run_batch_sync(
+            self._behavior, self._items, self._ec
+        )
+        self._done = True
+        return self._results
+
+    def cps_drive(self, executor):
+        """帧内 CPS 驱动（并入当前调度器；VM 权威路径）。
+
+        每项预求值经 ``_prepare_behavior_call_cps`` 嵌入当前 VM 帧栈（由外层
+        ``_drive_loop_gen`` 统一驱动，不新建调度器），聚合 LLM Future 由调度器
+        非阻塞等待，完成后返回 boxed IbList。
+        """
+        self._results = yield from self._executor._run_batch_cps(
+            self._behavior, self._items, executor.ec
+        )
+        self._done = True
+        return self._results
+
+    def try_result(self):
+        if self._done:
+            return (True, self._results)
+        self._drive()
+        return (True, self._results)
+
+    def result(self):
+        self._drive()
+        return self._results
+
+    def register_wake(self, event) -> None:
+        event.set()
 
 
 class _BehaviorMixin:
@@ -341,22 +409,37 @@ class _BehaviorMixin:
         behavior: IbObject,
         items: List[IbObject],
         execution_context: IExecutionContext,
-    ) -> List[IbObject]:
-        """并发批量执行行为对象：逐项绑定参数，并行调用，保序返回。
+    ):
+        """并发批量执行行为对象，返回可帧内 CPS 驱动的 Waitable。
 
         ``items`` 逐项作为行为参数在子作用域中绑定（``bind_behavior_closure``
-        + ``bind_behavior_call_args``），每项在主线程预求值 prompt
-        （``_prepare_behavior_call``），后台并发执行 ``_call_and_parse``
-        （不重入 VM、不写主线程单写槽）。返回结果列表（按 ``items`` 顺序）。
-
-        任一项结果不确定（parse 失败）即抛 ``LLMParseError``——与无
-        llmexcept 的同步语义一致，错误粒度为整个批次。
+        + ``bind_behavior_call_args``）。返回 :class:`_RunBatchDrive`：
+        VM 主路径经 ``cps_drive`` 帧内 CPS 驱动——每项 prompt 预求值用
+        ``_prepare_behavior_call_cps``（段求值/意图消解/hint 嵌入当前 VM 帧栈，
+        消除 ``vm.run`` 同步重入），并把多 LLM Future 聚合为
+        :class:`LLMBatchFuture` 由调度器非阻塞等待（消除主线程 ``fut.result()``
+        硬阻塞），与 ``stream_call`` 的 Waitable 范式一致。宿主/线程体直接调用
+        走 ``try_result``/``result`` 的同步 ``_drive``（旧路径）。
         """
         if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
             raise TypeError(
                 f"run_batch: expected a behavior, got {type(behavior).__name__}"
             )
+        return _RunBatchDrive(self, behavior, list(items), execution_context)
 
+    def _run_batch_sync(
+        self,
+        behavior: IbObject,
+        items: List[IbObject],
+        execution_context: IExecutionContext,
+    ) -> List[IbObject]:
+        """同步版批量执行（宿主/线程体 ``_RunBatchDrive._drive`` 兜底）。
+
+        用同步 ``_prepare_behavior_call``（``vm.run`` 段求值重入）预求值 + 提交
+        Future + ``fut.result()`` 阻塞取回。与 ``_SlotUpdateWaitable._drive``
+        同构——仅非 VM 上下文（无活跃 VM 可 CPS 驱动）时触发；VM 主路径走
+        :meth:`_run_batch_cps` 为权威路径。
+        """
         ec = execution_context
         rt = ec.runtime_context
 
@@ -378,9 +461,64 @@ class _BehaviorMixin:
             pool.submit(self._call_and_parse, spec, behavior.node, ec)
             for spec in specs
         ]
+        llm_results = [fut.result() for fut in futures]
+        return self._aggregate_batch_results(ec, llm_results)
+
+    def _run_batch_cps(
+        self,
+        behavior: IbObject,
+        items: List[IbObject],
+        execution_context: IExecutionContext,
+    ):
+        """CPS 版批量执行（VM 权威路径，生成器）。
+
+        与 :meth:`_run_batch_sync` 同语义，但：预求值用 ``_prepare_behavior_call_cps``
+        （段求值/意图消解/hint ``yield from`` 嵌入当前 VM 帧栈，消除 ``vm.run``
+        重入）；多 LLM Future 聚合为 :class:`LLMBatchFuture` ``yield`` 由调度器
+        非阻塞等待（让出调度线程）。调用方（``_RunBatchDrive.cps_drive``）须
+        ``yield from``。
+        """
+        ec = execution_context
+        rt = ec.runtime_context
+
+        specs: List[BehaviorCallSpec] = []
+        for item in items:
+            rt.enter_scope()
+            try:
+                bind_behavior_closure(behavior, rt)
+                bind_behavior_call_args(behavior, [item], ec, rt)
+                spec = yield from self._prepare_behavior_call_cps(
+                    behavior.node,
+                    ec.get_node_data(behavior.node),
+                    ec,
+                    captured_intents=behavior.captured_intents,
+                )
+                specs.append(spec)
+            finally:
+                rt.exit_scope()
+
+        pool = self._get_thread_pool()
+        futures = [
+            LLMFuture(
+                node_uid=behavior.node,
+                future=pool.submit(self._call_and_parse, spec, behavior.node, ec),
+            )
+            for spec in specs
+        ]
+        results = yield LLMBatchFuture(futures)
+        return self.registry.box(self._aggregate_batch_results(ec, results))
+
+    def _aggregate_batch_results(
+        self, ec: IExecutionContext, llm_results: List[Any]
+    ) -> List[IbObject]:
+        """聚合 LLM 结果列表为语言值列表：任一项不确定即抛 LLMParseError。
+
+        ``llm_results`` 为保序的 :class:`LLMResult` 列表（同步路径经
+        ``fut.result()`` 取回、CPS 路径经 :class:`LLMBatchFuture` 取回）；
+        调用方决定是否装箱（CPS 主路径 ``registry.box`` 为语言层 IbList）。
+        """
         results: List[IbObject] = []
-        for fut in futures:
-            llm_result = fut.result()
+        for llm_result in llm_results:
             if llm_result is not None and llm_result.is_uncertain:
                 error = self.registry.make_llm_parse_error(
                     llm_result.retry_hint or "LLM output could not be parsed",
