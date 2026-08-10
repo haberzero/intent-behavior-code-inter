@@ -11,7 +11,7 @@ VM 层并发/通信 e2e 测试。
 线程（spawn/join/cancel）已被 thread 对象模型取代，
 其测试见 test_thread_model.py / test_vm_instance.py。
 """
-from tests.conftest import run_ibci
+from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
 class TestChannelE2E:
@@ -166,6 +166,22 @@ s.update(bump)
 print((str)s.get())
 """)
         assert lines == ["10"]
+
+    def test_update_with_behavior_drives_in_frame(self):
+        """update(fn)：fn 为 behavior（LLM）时在**当前 VM 帧栈**内 CPS 驱动。
+
+        A3 并轨验证：``s.update(fn)`` 返回的 ``_SlotUpdateWaitable`` 经
+        ``cps_drive`` 在帧内 ``yield from _vm_invoke_behavior`` 求值 fn，
+        而非 ``try_result`` 内嵌套 TaskScheduler。LLM 行为在 fn 内正常
+        挂起/恢复、CAS 写回，语义与纯 lambda 一致。
+        """
+        lines = run_ibci(AI_MOCK_PREFIX + """
+slot s = slot("x", 0)
+fn upd = snapshot -> auto: @~ MOCK:STR:6 ~
+s.update(upd)
+print((str)s.get())
+""")
+        assert lines == ["6"]
 
 
 class TestChannelHostContract:
