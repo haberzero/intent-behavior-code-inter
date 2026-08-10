@@ -310,6 +310,32 @@ class _SlotUpdateWaitable:
             if core.cas(current, new_val):
                 self._done = True
 
+    def cps_drive(self, executor):
+        """帧内 CPS 驱动（A3：并入当前调度器，消除嵌套 TaskScheduler）。
+
+        与 ``_drive`` 的 VM 分支同语义（CAS 读改写），但 fn 求值经
+        ``yield from`` ``_vm_call_fn_callable`` / ``_vm_invoke_behavior``
+        嵌入**当前 VM 帧栈**——由外层调度循环（``_drive_loop_gen``）统一驱动，
+        不再新建 TaskScheduler（``_drive`` 的 ``_drive_generator`` 会在
+        ``try_result`` 内嵌套调度器）。VM 主路径（``vm_handle_IbCall``）
+        识别支持本方法的 Waitable 并 ``yield from``。
+        """
+        from core.runtime.vm.handlers._shared import _vm_call_fn_callable, _vm_invoke_behavior
+
+        core = self._slot.core
+        registry = self._slot.ib_class.registry
+        fn = self._fn
+        while not self._done:
+            current = core.get()
+            boxed_old = registry.box(current)
+            if fn.ib_class.name == "fn_callable":
+                new_ib = yield from _vm_call_fn_callable(executor, fn, [boxed_old])
+            else:
+                new_ib = yield from _vm_invoke_behavior(executor, fn, [boxed_old])
+            new_val = unbox(new_ib)
+            if core.cas(current, new_val):
+                self._done = True
+
     def try_result(self):
         if self._done:
             return (True, None)

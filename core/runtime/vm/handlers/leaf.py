@@ -408,7 +408,14 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         # **句柄**（创建并启动线程后返回句柄，等待应经 t.join()/await t 显式表达），
         # 不自动挂起——否则构造即被解析成完成结果，丢失句柄。
         if isinstance(result, Waitable) and not isinstance(func, IbClass):
-            result = yield result
+            # 支持帧内 CPS 驱动的 Waitable（slot.update(fn)）：yield from 嵌入当前
+            # VM 帧栈由 _drive_loop_gen 统一驱动，而非 yield 挂起后由调度器经
+            # try_result 轮询（后者在 try_result 内嵌套 TaskScheduler）。
+            cps_drive = getattr(result, "cps_drive", None)
+            if cps_drive is not None:
+                result = yield from cps_drive(executor)
+            else:
+                result = yield result
         return result
     except ThrownException:
         # 用户代码主动抛出的语言级异常必须穿透函数调用边界，由 IbTry / 顶层
