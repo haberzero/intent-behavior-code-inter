@@ -306,14 +306,14 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
-- **测试基线**：以实跑为准，不冻结数字（当前 **2137 passed / 1 skipped**）。
-- **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d 与 R 批次
-  exp/exec-ra/rb/rc/rd 保留未合并）。
+- **测试基线**：以实跑为准，不冻结数字（当前 **2138 passed / 1 skipped，0 warning**）。
+- **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d、exp/exec-ra/rb/rc/rd、
+  exp/yield-generator、exp/async-m1m2、exp/async-unify-a 保留未合并）。
 
 ### 2.3 交接检查单
 
 - [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（长期，单一权威源）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 读 §二 动态状态接续工作（含 2026-08-09 session 成果）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2137 passed / 1 skipped）
+- [ ] 读 §二 动态状态接续工作（含 2026-08-10 session 成果：PT-DOC-3 + A1-A4 + 内核健康三项 + PT-DEBT-17 彻查）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2138 passed / 1 skipped，0 warning）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录
