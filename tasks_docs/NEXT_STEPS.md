@@ -47,8 +47,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 - **E docs 治理**：新写 `docs/architecture/09_observability.md`（状态面/事件面/诊断面/配置面四机制
   单点真理）；README/ARCHITECTURE/01_principles 索引同步；WORKLOG 记录。
 
-**遗留技术债（不阻塞阶段 5）**：PT-DEBT-9（RecursionError 级联包装，建议随下次执行层重构承接）、
-PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall` 定义位置）——见 `PENDING_TASKS.md` §五。
+**遗留技术债**：PT-DEBT-9（RecursionError 级联包装）、PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall` 定义位置）——**均已根治（2026-08-08，见下方"已完成：2026-08-08 批次"节）**，此处为归档旧记录。
 
 ---
 
@@ -184,19 +183,32 @@ PT-DEBT-10（线程体递归非 trampoline）、PT-DEBT-11（`_UserFunctionCall`
 
 ## 📋 交接要点（下一 session）
 
-- **当前最紧要（下一 session 起点）**：按优先级总表接续 **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）或 **P3 VISION**。
-  **异步地基遗留妥协根治（统一执行模型闭环）已全部完成（2026-08-09）**。
-- **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治**（统一执行模型闭环）——
+- **当前最紧要（下一 session 起点）**：见 `PENDING_TASKS.md` §〇 + `tasks_docs/_HEALTH_AUDIT_PLAN.md`（三轴健康盘点）。
+  按优先级：
+  1. **技术手册三修**（低风险立即可做）：`01_principles.md:258` P1 过时 `inherit_intents` 字段、`04_vm_interpreter.md:29`
+     P2 `.call` 路径表述、`README` 目录树补 `15_diagnostics.md`。
+  2. **PT-DEBT-9/10/11 文档残留清理**：NEXT_STEPS.md:50 旧"遗留技术债"表述与根治状态不同步。
+  3. **异步统一完整性**（中风险，独立分支）：A1 内联 `@~` 表达式接 CPS（llm_behavior.py:156，最高价值）、
+     A4 LLM 函数 CPS-yield（_llm_function.py:202，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器。
+  4. **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）。
+  5. **P3 VISION**。
+- **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、
   PT-DEBT-14（F2 slot.update + F3 prompt hint CPS 化）、PT-DEBT-15（M4 LLM 真挂起）已完成（2026-08-08）**；
   **M1（.call 双写收敛）/ M2（驱动去重）已完成（2026-08-09，独立分支 exp/async-m1m2，全量 2137 passed / 1 skipped）**；
   M3（prompt 单源）已确认收敛。**统一执行模型闭环全部收尾**。实施计划与落地状态见 `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
   登记 PT-DEBT-12/13/14/15。
+  > **注意**：地基闭环后仍有 6 处"任务内同步重入/嵌套调度器"**次要路径遗留**（`_HEALTH_AUDIT_PLAN.md` 异步 A1-A6）——
+  > 内联 `@~` 表达式、意图消解、`_SlotUpdateWaitable`、LLM 函数同步阻塞、类构造、协议方法。属"彻底统一"的未完项。
  - **优先级总表（用户 2026-08-08 认可，三维度判断）**：见 `PENDING_TASKS.md` §〇（单一权威源）。
    当前主线后：**P0 阶段 5 增量已完成（2026-08-09）→ PT-FEAT-5 三项已完成（CI/CD 待授权）→
    P1 PT-FEAT-10 已完成 → P2 R4/R5 审计已执行 → 异步地基 M1/M2 已完成（2026-08-09）**；
    剩余 PT-DEBT-4 `file` 重命名（破坏性变更独立窗口）、P3 VISION。
+ - **低风险推进已完成（2026-08-09）**：PENDING_REVIEW_ITEMS 状态同步、PT-AUDIT-2 宽 except 核验（A 类保留）、
+   docs/ 过时表述修复（yield 已落地）。见 HANDOFF §2.1。
+ - **三轴健康盘点（2026-08-09，只读）**：见 `tasks_docs/_HEALTH_AUDIT_PLAN.md`——异步遗留 A1-A6 + 内核健康
+   （深层嵌套/死同步包装/双驱动循环）+ 技术手册健康（P1/P2 待修 + How-to 缺口）。
  - **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
    `tasks_docs/_code_yield_from.md`。
  - **PT-FEAT-5 已完成三项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出 + 编译基准）。

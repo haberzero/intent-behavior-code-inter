@@ -78,6 +78,10 @@
 
 ---
 
+| **低风险推进 + 三轴健康盘点（2026-08-09，unsafe-vibe-dev，全量 2137 passed / 1 skipped）** | **低风险任务自主推进（4 commit）+ 三轴健康只读调查（2 general subagent + 主代理交叉核验）**。**低风险推进**：① PENDING_REVIEW_ITEMS 状态同步（29e7017）——D1-D5 已落地、R5 聚焦治理已执行（消除与 PENDING_TASKS 交叉滞后）+ HANDOFF §1.4 同步；② PT-AUDIT-2 宽 except 核验（314e260/5bed073，独立分支 exp/audit-branch-nesting）——ibci_ai 已窄化 `_PROVIDER_ERRORS`（openai.OpenAIError/RuntimeError/ValueError）、auto_discovery 为 fail-fast 重抛（`raise RuntimeError(...) from e`），A 类保留，无代码变更；③ docs/ 过时表述修复（92a1676）——05_coroutine.md 标记 yield 惰性生成器已落地（此前写"尚未实现"）、04_vm_interpreter.md L3 收敛为"生成器内 LLM 并发流水线未实现"；全仓断链扫描 0 处。**三轴健康盘点（只读，产出 `_HEALTH_AUDIT_PLAN.md`）**：**异步统一完整性**——地基闭环属实（单调度器+CPS trampoline+单一权威驱动），但 6 处次要路径仍任务内同步重入/嵌套调度器：A1 内联 `@~` 表达式（llm_behavior.py:156 走 sync 未接 CPS，最高价值）、A2 意图消解（intent.py:59）、A3 `_SlotUpdateWaitable`（comm.py:281-311 嵌套 TaskScheduler）、A4 LLM 函数同步阻塞（_llm_function.py:202，PT-FEAT-1 直接项）、A5 类构造（ib_class.py:128/154）、A6 协议方法 `.call`（条件触发）；**内核健康**——深层嵌套真实存在（runtime_serializer 深度16/17、core_scanner 10、binding_analysis 9）、疑似死同步包装（`_behavior.py`/`_llm_function.py` 4 方法互引成环无外部调用）、`_drive_loop_gen`/`_drive_generator_loop` 双维护循环、scheduler 宽 except 合法保留、局部 import L1-L18 谨慎 tradeoff；**技术手册健康**——01_principles.md:258 过时 `inherit_intents` 字段（P1）、04_vm_interpreter.md:29 `.call` 表述不自洽（P2）、README 目录树漏 `15_diagnostics.md`（P2）、How-to 层仅 2 篇（P2 规划）。**登记**：PENDING_TASKS 增 PT-DEBT-16（A1-A6）+ PT-DOC-3（技术手册健康）+ 优先级表 P1 异步统一/P1 文档健康；PT-AUDIT-2 补内核健康项。**下一步规划见 `_HEALTH_AUDIT_PLAN.md`**。全程本地 commit、禁 push |
+
+---
+
 ## 仍有效的设计决策
 
 > 收敛至 `PENDING_TASKS.md` §十（单一事实来源，避免双维护）。本文件不再复制。

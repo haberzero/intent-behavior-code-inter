@@ -110,8 +110,10 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 | `OBSERVABILITY_REFACTOR.md` / `test_baseline_20260806.txt` | 可观测性统一重构任务控制文档（**已完成**，Phase 0-4 落地）/ 覆盖基准快照 |
 | `DIAGNOSTIC_DESIGN.md` | PT-FEAT-9 设计权威（**已完成**，实施步骤 A-E 落地，归档） |
 | `YIELD_GENERATOR_DESIGN.md` | 阶段 5 yield 惰性生成器设计权威（**已完成**，独立分支 exp/yield-generator） |
-| `_ASYNC_UNIFY.md` | **当前主线**异步地基遗留妥协根治实施计划（PT-DEBT-12/13/14/15，F1→B1→F2/F3→M1-M4；F1/B1/F2/F3/M4 已完成，M1/M2 剩余） |
+| `_ASYNC_UNIFY.md` | 异步地基遗留妥协根治实施计划（PT-DEBT-12/13/14/15，F1→B1→F2/F3→M1-M4 **全部收尾，2026-08-09**） |
 | `_code_yield_from.md` | 阶段 5 增量 `yield from` 生成器委托设计记录（**已完成**，2026-08-09；按惯例汇报后待删，当前保留供追溯） |
+| `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md` | M1 `.call` 双写收敛 / M2 驱动去重设计记录（**已完成**，2026-08-09，独立分支 exp/async-m1m2；保留供追溯） |
+| `_HEALTH_AUDIT_PLAN.md` | **三轴健康盘点**（2026-08-09 只读调查）：异步统一完整性 A1-A6 遗留 + 内核健康（深层嵌套/死同步包装）+ 技术手册健康（P1/P2 待修）。**下一步规划输入** |
 
 ---
 
@@ -133,6 +135,14 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
     全量 2137 passed / 1 skipped）**。M2 线程体 `_drive_generator` 复用 `_drive_loop_gen` + `TaskScheduler`
     （单一权威驱动）；M1 四个可调用对象（IbUserFunction/IbFnCallable/IbBehavior/IbLLMFunction）`.call()` 变薄
     宿主包装委托 CPS 生成器（消绑定双写）。实施计划与落地状态 `_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4 全部收尾）。
+- **低风险推进（2026-08-09，unsafe-vibe-dev，4 commit）**：
+  - **PENDING_REVIEW_ITEMS 状态同步**（29e7017）：D1-D5 已落地、R5 聚焦治理已执行（消除与 PENDING_TASKS 交叉滞后）。
+  - **PT-AUDIT-2 宽 except 核验**（314e260/5bed073，独立分支 exp/audit-branch-nesting）：ibci_ai 已窄化
+    `_PROVIDER_ERRORS`、auto_discovery 为 fail-fast 重抛——A 类保留，无代码变更。
+  - **docs/ 过时表述修复**（92a1676）：05_coroutine/04_vm 标记 yield 惰性生成器已落地；L3 收敛为生成器内
+    LLM 并发流水线未实现。
+- **三轴健康盘点（2026-08-09，只读调查，见 `_HEALTH_AUDIT_PLAN.md`）**：从异步统一完整性 + 内核健康 +
+  技术手册健康三维度，结合真实代码给出下一步规划（见下方"下一步候选"）。
 - **本 session（2026-08-09，崩溃恢复点 c61a6e0 起，全量 2074 → 2137 passed / 1 skipped）**：
   - **P0 阶段 5 增量**：`next()` 内建 + `yield from` 生成器委托（主交付）——顺带根治 `_drive_generator_loop`
     生成器体内调用生成器函数的预存缺陷、迭代解析收敛 `_resolve_iterable`（现居 `shared/iterable.py`）。
@@ -145,10 +155,15 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
   - **异步地基收尾（M1/M2）**：见上——统一执行模型闭环完成。独立分支 exp/async-m1m2 实验，复核（general agent）
     A/B/D 放行 + C 记录（IbUserFunction void 返回语义向主路径收敛）。补回归测试 +9（`test_call_drive_convergence.py`）。
   - 设计记录 `tasks_docs/_code_yield_from.md` / `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`；完整逐项见 `WORKLOG.md` 与 git 历史。
-- **下一步候选（按优先级，见 `PENDING_TASKS.md` §〇）**：
-  1. **PT-DEBT-4 `file` 模块重命名**（P1，影子化 Python 内建，破坏性变更独立窗口——已授权但需独立窗口审慎执行）。
-  2. **PT-FEAT-5 剩余 CI/CD**（P0，涉远程 push，禁 push 硬原则，须用户显式授权后另行执行）。
-  3. **P3 VISION**（PT-FEAT-8 分层张力已评估待独立窗口；PT-FEAT-2 Enum 非 str 设计冻结级；PT-AUDIT-2 分支嵌套独立分支）。
+- **下一步候选（按优先级，见 `PENDING_TASKS.md` §〇 + `_HEALTH_AUDIT_PLAN.md`）**：
+  1. **技术手册三修**（低风险立即可做）：`01_principles.md:258` P1 过时 `inherit_intents` 字段、`04_vm_interpreter.md:29`
+     P2 `.call` 路径表述、`README` 目录树补 `15_diagnostics.md`。
+  2. **PT-DEBT-9/10/11 文档残留清理**：NEXT_STEPS.md:50 旧"遗留技术债"表述与根治状态不同步。
+  3. **异步统一完整性（中风险，独立分支）**：A1 内联 `@~` 表达式接 CPS（llm_behavior.py:156，最高价值）、
+     A4 LLM 函数 CPS-yield（_llm_function.py:202，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器。
+  4. **PT-DEBT-4 `file` 模块重命名**（P1，破坏性变更独立窗口——已授权但需独立窗口审慎执行）。
+  5. **PT-FEAT-5 剩余 CI/CD**（P0，涉远程 push，禁 push 硬原则，须用户显式授权后另行执行）。
+  6. **P3 VISION**（PT-FEAT-8 分层张力待独立窗口；PT-FEAT-2 Enum 设计冻结级；PT-AUDIT-2 深嵌套/长 elif 链独立分支）。
 - **评估为维持现状（已登记 PENDING_TASKS，勿重复推进）**：PT-FEAT-11（序列化器自动化）、PT-FEAT-12（AST uid 字段）、
   PT-FEAT-2（Enum 非 str 成员）、PT-FEAT-8（`.ibc_meta` 快照，分层张力）。
 - **阶段 5 `yield` 惰性生成器已完成（2026-08-08，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
@@ -183,11 +198,14 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 ### 2.2 已完成摘要
 
-- **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计 + 异步地基 M1/M2 收尾，unsafe-vibe-dev + 独立分支 exp/async-m1m2，全量 2074 → 2137 passed / 1 skipped）**：
+- **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计 + 异步地基 M1/M2 收尾 + 低风险推进，unsafe-vibe-dev + 独立分支 exp/async-m1m2 / exp/audit-branch-nesting，全量 2074 → 2137 passed / 1 skipped）**：
   - **异步地基 M1/M2 收尾**：PT-DEBT-15 剩余 M1（.call 双写收敛）/ M2（驱动去重）完成——统一执行模型闭环
     全部收尾。M2 线程体 `_drive_generator` 复用 `_drive_loop_gen` + `TaskScheduler`（单一权威驱动）；M1 四个
     可调用对象 `.call()` 变薄宿主包装委托 CPS 生成器。独立分支 exp/async-m1m2 实验 + general 复核 + 补回归测试 +9
     （`test_call_drive_convergence.py`）。设计记录 `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`。
+  - **低风险推进**：PENDING_REVIEW_ITEMS 状态同步（D1-D5/R5）；PT-AUDIT-2 宽 except 核验（A 类保留）；docs/
+    过时表述修复（yield 已落地）。4 commit（29e7017/314e260/5bed073/92a1676）。
+  - **三轴健康盘点**：只读调查产出 `_HEALTH_AUDIT_PLAN.md`（异步遗留 A1-A6 + 内核健康 + 技术手册健康）。
   - **P0 阶段 5 增量**：`next()` 内建（c61a6e0）+ `yield from` 生成器委托（本 session 主交付，6c9555c）——
     完整文法管线（AST `IbYieldFromExpr`/语法 match(FROM)/语义 `SEM_YIELD_OUTSIDE_FUNCTION`/类型 GENERATOR/
     VM 委托 handler），顺带根治 `_drive_generator_loop` 生成器体内调用生成器函数的预存缺陷、迭代解析收敛

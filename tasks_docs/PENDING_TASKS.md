@@ -18,11 +18,13 @@
 | 优先级 | 任务 | 维度 | 说明 |
 |--------|------|------|------|
 | **当前主线（已完成）** | **PT-DEBT-12/13/14/15 异步地基遗留妥协根治**（`_ASYNC_UNIFY.md`） | 架构健康性 | **统一执行模型闭环——全部收尾（2026-08-09）**。F1→B1→F2/F3→M4 已完成（2026-08-08），M3 已收敛；**M1（.call 双写收敛）/ M2（驱动去重）已完成（2026-08-09，独立分支 exp/async-m1m2，全量 2137/1）**。消"任务内同步重入调度器"遗留旁路 |
+| **P1（异步统一完整）** | **异步统一遗留 A1-A6**（`_HEALTH_AUDIT_PLAN.md`） | 架构健康性 | 地基闭环后 6 处**次要路径**仍任务内同步重入/嵌套调度器：A1 内联 `@~` 表达式（llm_behavior.py:156，最高价值）、A2 意图消解（intent.py:59）、A3 `_SlotUpdateWaitable`（comm.py:281-311）、A4 LLM 函数同步阻塞（_llm_function.py:202，PT-FEAT-1 直接项）、A5 类构造（ib_class.py:128/154）、A6 协议方法 `.call`（条件触发）。A1/A3/A4 可自主推进；A5/A6 涉及语义边界需独立窗口 |
 | **P0** | 阶段 5 增量（`next()` 内建 + `yield from`） | 易用性 | **已完成（2026-08-09，全量 2128/1）**：`next()`（c61a6e0）+ `yield from` 生成器委托。设计 `_code_yield_from.md` |
 | **P0** | PT-FEAT-5 错误用户友好化 | 易用性 | **已完成三项（2026-08-09）**：诊断码目录 + 符号表/类型绑定导出 + 编译基准。剩余 **CI/CD**（涉远程 push，禁 push 硬原则范围内，须用户显式授权后另行执行） |
 | **P1** | PT-FEAT-10/11/12 UID/序列化统一 | 架构健康性 | **PT-FEAT-10 已完成（2026-08-09）**；PT-FEAT-11（序列化器自动化）、PT-FEAT-12（AST uid 字段）评估为维持现状（见下） |
 | **P1** | PT-DEBT-4 `file` 模块重命名 | 架构健康性 | 影子化 Python 内建，长期隐患；破坏性变更独立窗口 |
-| **P2** | PT-AUDIT-1/2 + R4/R5 | 架构健康性 | 长期周期清扫，阶段边界启动。**R4 覆盖率核对已执行 + R5 聚焦治理已执行 + PT-AUDIT-1 smell 全量事实回顾已完成（2026-08-09）**；PT-AUDIT-2（分支嵌套）待独立分支 |
+| **P1** | **技术手册健康待修**（P1/P2） | 文档健康 | `01_principles.md:258` 过时 `inherit_intents`、`04_vm_interpreter.md:29` `.call` 表述、`README` 目录树补 `15_diagnostics.md`。低风险立即可做 |
+| **P2** | PT-AUDIT-1/2 + R4/R5 | 架构健康性 | 长期周期清扫，阶段边界启动。**R4 覆盖率核对已执行 + R5 聚焦治理已执行 + PT-AUDIT-1 smell 全量事实回顾已完成（2026-08-09）**；PT-AUDIT-2（分支嵌套）待独立分支（深层嵌套链 runtime_serializer 深度16/core_scanner 10/binding_analysis 9 未处理） |
 | **P2** | PT-FEAT-2 Enum 非 str 成员 | 易用性+长远 | 数字状态码枚举 round-trip 真实缺口；评估为设计冻结级变更，维持现状待独立窗口（2026-08-09） |
 | **P3** | PT-FEAT-8 `.ibc_meta` 快照 / PT-FEAT-3/4/7 / PT-FEAT-6 | 长远 VISION | 概念验证阶段 / 前置条件多 |
 | **暂缓** | PT-DEBT-5 文件命名清理 | 架构健康性 | 破坏面大纯机械，独立窗口 |
@@ -82,7 +84,7 @@
 
 | # | 内容 | 说明 |
 |---|------|------|
-| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**`yield` 惰性生成器已落地（2026-08-08，阶段 5，独立分支 exp/yield-generator → 手动应用 unsafe-vibe-dev，全量 2043/1）**：含 `yield` 函数自动为生成器（D-08 自标记，async 关键字已取消），单可恢复驱动 `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。设计 `YIELD_GENERATOR_DESIGN.md`。**增量 `next()` 内建 + `yield from` 委托已落地（2026-08-09，全量 2083/1）**。剩余：streaming / host async 改进 |
+| PT-FEAT-1 | 语言级协程完整形态：async 函数 / `yield` 生成器 | `await` 表达式已落地。**`yield` 惰性生成器已落地（2026-08-08，阶段 5，独立分支 exp/yield-generator → 手动应用 unsafe-vibe-dev，全量 2043/1）**：含 `yield` 函数自动为生成器（D-08 自标记，async 关键字已取消），单可恢复驱动 `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。设计 `YIELD_GENERATOR_DESIGN.md`。**增量 `next()` 内建 + `yield from` 委托已落地（2026-08-09，全量 2083/1）**。剩余：**LLM 函数同步阻塞收敛**（`execute_llm_function_cps` 的 `_call_llm` 阻塞调度线程，`_llm_function.py:202`——behavior 路径已 yield LLMFuture，llm 函数路径未对齐，即 `_HEALTH_AUDIT_PLAN.md` A4）、streaming / host async 改进（STREAM 依赖已封存多模态，deferred） |
 | PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | **评估：维持现状（2026-08-09）**。枚举成员值一律为名字字符串 → 数字状态码枚举无法 round-trip。落地需：成员值声明语法 + 类型系统 + 序列化 round-trip（任意成员值）+ LLM from_prompt 改写，属设计冻结级变更（VISION）。session 时间窗不足，维持登记待独立窗口 |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |
@@ -161,14 +163,15 @@
 | PT-DEBT-13 | `chan.send` 有界满通道任务内真阻塞（B1） | **异步地基遗留（2026-08-08 审计）**：`send` 返回 None（满时 `_cond.wait` 阻塞线程），与 `recv`（已转 Waitable）不对称；唯一消费者同调度器时死锁。改造：send 满时返回 Waitable（宿主契约变更需评估）。见 `_ASYNC_UNIFY.md` B1 |
 | PT-DEBT-14 | `slot.update(fn)` CAS 同步回调 / prompt hint 同步调用（F2/F3） | **异步地基遗留（2026-08-08 审计）**：CAS 锁外 `fn.call`（lambda 嵌套调度器、behavior 阻塞 LLM）；`_get_llmoutput_hint` CPS 路径内同步 `.call()`。改造：update 可调用分支返回 Waitable / hint vtable CPS 化。见 `_ASYNC_UNIFY.md` F2/F3 |
 | PT-DEBT-15 | 同步 `.call()` 孪生 / 驱动循环 / LLM 调用双路径（M1-M4） | **异步地基遗留（2026-08-08 审计）→ 全部收尾（2026-08-09）**：各 CPS 路径保留同步 `.call()` 双写（M1）、`_drive_generator` vs `_drive_loop_gen` 重复（M2）、prompt 构建双实现（M3）、CPS 内 `_call_llm` 同步阻塞（M4）。改造：收敛单一 CPS 权威路径 + 薄宿主包装 + LLM 真挂起。**M1/M2 已完成（独立分支 exp/async-m1m2，全量 2137/1）**；M3 已收敛；M4 已完成（2026-08-08）。见 `_ASYNC_UNIFY.md` M1-M4 |
+| PT-DEBT-16 | 异步统一完整性遗留（A1-A6，`_HEALTH_AUDIT_PLAN.md`） | **地基闭环后 6 处次要路径仍任务内同步重入/嵌套调度器（2026-08-09 只读审计）**：**A1** 内联 `@~` 行为表达式走同步 `execute_behavior_expression`（llm_behavior.py:156，未接 CPS，最高价值）；**A2** 意图消解 `resolve_content`/`get_resolved_prompt_intents` 内 `vm.run` 同步重入（intent.py:59）；**A3** `_SlotUpdateWaitable._drive` 新建嵌套 TaskScheduler（comm.py:281-311，未并入外层调度器）；**A4** `execute_llm_function_cps` 内 `_call_llm` 同步阻塞调度线程（_llm_function.py:202，PT-FEAT-1 直接项，behavior 路径已 yield LLMFuture 未对齐）；**A5** 类构造 `instantiate` 字段 `vm.run` / `init_method.call`（ib_class.py:128/154）；**A6** 协议方法 `.call` 条件触发嵌套（llm_parsing_strategy / llm_except_frame）。**处置**：A1/A3/A4 可自主推进（独立分支）；A5/A6 涉及语义边界需独立窗口/用户裁决 |
 | PT-DEBT-4 | `file` 模块重命名 | `file` 影子化 Python 内建，长期重命名（如 `fs`/`io`）。当前过渡措施已实施 |
 | PT-DEBT-5 | 全项目文件命名清理 | 过短/欠层次/欠区分度/影子化内建的代码文件命名排查。暂缓，独立窗口执行 |
 | PT-DEBT-6 | `register_module()` 可观测性缺口 | **已落地（2026-08-06）**：用户插件覆盖 kernel-native 时 `warnings.warn`（原静默忽略）。顺带修正测试配置 bug（plugin_paths 指向插件目录本身导致插件从未加载）。全量 pytest 零回归 |
 | PT-DEBT-7 | 删除 `is_nullable` 字段，全面 `Optional[T]` | **已落地（2026-08-06）**：死字段清理（`is_assignable` 早已用 `Optional[T].wrapped_type`，序列化不消费）。全量 pytest 零回归 |
 | PT-DEBT-8 | ~~折叠 `IbXxx` 为单一 `IbValue`~~ → **重定义为"值层分派收敛审计"** | **已落地（2026-08-06）**：系统层面定论——折叠是伪目标（消 isinstance 动机已由 name 分派达成；具体类=领域方法载体，折叠违反单一职责）。实际收敛：`is_sequence_value` 统一容器分派、`IbLLMCallResult.is_uncertain` 统一不确定判断；类角色分工固化于 `03_type_system.md` §6.4。全量 pytest 零回归 |
-| PT-DEBT-9 | RecursionError 被 `VM: Call failed` 级联包装掩盖根因 | **R 批次 R1 排查发现（2026-08-07）**：深递归触底时，`leaf.py:315-317` 的 `except Exception` 把 RecursionError（`Exception` 子类）包装为 `VM: Call failed`，且每层调用递归包装一次 → 级联链掩盖真实根因（R1 期间 `f` not defined 的根因即 Python 栈溢出副作用被此掩盖）。关联诊断面（`kernel_diagnostic` 站点可承接异常分类；建议诊断事件区分"环境限制"如栈溢出 vs "语义错误"）。处置：随下次执行层重构或专项诊断改进一并评估 |
+| PT-DEBT-9 | ~~RecursionError 被 `VM: Call failed` 级联包装掩盖根因~~ → **已根治（2026-08-08）** | `leaf.py` 等五处语义错误包装站点加环境限制防护（`core/runtime/shared/env_limits.py` 判定 + `diagnostics.handle_environment_limit` 发射 `KDIAG_RUNTIME_ENV_LIMIT`），RecursionError 根因保留传播，不再被掩盖成语义错误。见 NEXT_STEPS 2026-08-08 批次 |
 | PT-DEBT-10 | ~~线程体用户函数递归仍同步嵌套（`_drive_generator` 非 trampoline）~~ → **已根治** | **已落地（2026-08-08）**：`_drive_generator` 改显式生成器栈（trampoline，与 `_drive_loop_gen` 同构），UserFunctionCall 压栈而非递归驱动——线程体内深递归不再嵌套 Python 栈。顺带根治线程体模块级函数解析（任务全局作用域链到模块作用域，`ScopeImpl(parent=main_global_scope)`；此前线程体无法解析模块级函数，n≈2 即失败）与线程逻辑栈上限对齐主路径（`max_call_stack`）；修复 `_vm_call_user_function`/`IbUserFunction.call`/`IbLLMFunction.call` push 后 finally 无条件 pop 的栈不均衡潜在 bug（`pushed` 标志）。新增线程体深递归 e2e（depth=300）。全量 pytest 零回归 |
-| PT-DEBT-11 | `_UserFunctionCall` 内部标记类定义位置（handler 依赖 VMExecutor 内部） | **R1 引入（2026-08-07）**：`_UserFunctionCall` 定义于 `vm_executor.py`，但 `leaf.py:293`（handler 层）与 `coordinator.py:316` 从 `vm_executor` import 它——handler 层向上依赖 VMExecutor 内部类，与"handler 是叶子、VMExecutor 调度"的分层方向略有违背。机制正确、功能无误，但按 design-philosophy"模块配合模式统一"应复核下沉（与 Waitable/Signal 同类放 `shared` 层）或改协议化标记。处置：随下次执行层重构一并评估 |
+| PT-DEBT-11 | ~~`_UserFunctionCall` 内部标记类定义位置（handler 依赖 VMExecutor 内部）~~ → **已根治（2026-08-08）** | `UserFunctionCall` 下沉 `core/runtime/shared/user_call.py`（与 Signal/Waitable 同类叶子），handler/线程体不再向上依赖 VMExecutor 内部类。见 NEXT_STEPS 2026-08-08 批次 |
 
 ---
 
@@ -180,7 +183,7 @@
 | # | 内容 | 说明 |
 |---|------|--------------|
 | PT-AUDIT-1 | 代码异味核对分析 | `CODE_SMELL_AUDIT.md`（单一事实来源），独立分支执行。**周期事实回顾已完成（2026-08-09，A/B/C/D 全量定案）** |
-| PT-AUDIT-2 | 条件分支与异常嵌套复杂度审计 | `BRANCH_NESTING_AUDIT.md`（AST 基线），独立分支执行。**剩余待核验项已核验（2026-08-09）**——ibci_ai 已窄化 `_PROVIDER_ERRORS`、auto_discovery 为 fail-fast 重抛（A 类保留）；深嵌套/长 elif 链待独立窗口 |
+| PT-AUDIT-2 | 条件分支与异常嵌套复杂度审计 | `BRANCH_NESTING_AUDIT.md`（AST 基线），独立分支执行。**剩余待核验项已核验（2026-08-09）**——ibci_ai 已窄化 `_PROVIDER_ERRORS`、auto_discovery 为 fail-fast 重抛（A 类保留）。**深嵌套/长 elif 链待独立窗口**（`runtime_serializer._collect_instance` 深度16/`_get_instance`17、`core_scanner._scan_complex_access` 10、`binding_analysis_pass._analyze_node` 9——巨型 elif 分派链，方向：分派表/守卫子句）。**内核健康补充（2026-08-09，见 `_HEALTH_AUDIT_PLAN.md`）**：疑似死同步包装 `_behavior.py` invoke_behavior/execute_behavior_object、`_llm_function.py` invoke_llm_function/execute_llm_function（互引成环无外部调用，核验后删）；`_drive_loop_gen`/`_drive_generator_loop` 双维护循环（GeneratorYield 分支差异，可合并） |
 | PT-AUDIT-3 | 代码复核审查循环（R 系列） | R1 正式 review / R2 健康诊断 / R3 异味扫描 **已执行（2026-08-05）**；R4 覆盖率核对 **已执行（2026-08-09）**、R5 doc 审计聚焦治理已执行（全量待独立窗口）。复核清单见 `PENDING_REVIEW_ITEMS.md` |
 | PT-AUDIT-4 | 任务控制文档清洗与梳理（文档治理周期） | 删除已完成/无价值任务、无用设计决策、任务代号重整、交叉一致性核对。**已执行（2026-08-05）**，周期复核 |
 | PT-AUDIT-5 | 注释卫生清理（周期） | 删除代码注释中的任务代号、历史实现方案、修复过程叙述，保留功能设计语义。**已执行（2026-08-05）**，周期复核 |
@@ -194,6 +197,13 @@
 
 ### PT-DOC-2 语法手册定位段补充
 **已完成（2026-08-06）**：14 篇 `docs/syntax/*.md` 均已有合格定位段（`> 本章描述...面向...覆盖...`），DOC_AUDIT F3 期间随"深入指引"补齐时一并落地。条目移除。
+
+### PT-DOC-3 技术手册健康修复（2026-08-09 三轴盘点，低风险）
+> 来源 `_HEALTH_AUDIT_PLAN.md` 文档健康节。均低风险、立即可做。
+- **P1** `docs/architecture/01_principles.md:258`：`IsolationPolicy.inherit_intents` 字段已随意图栈扁平化删除（实为 `inherit_plugins`/`collect_timeout`），§6.3 描述已移除机制——需改写为现状。
+- **P2** `docs/architecture/04_vm_interpreter.md:29`：".call 唯一路径挂 run_body"与已落地变薄包装（`_vm_call_user_function`+`coordinator._drive_generator`，line 248 已正确）不自洽——统一表述。
+- **P2** `docs/README.md` 目录树：`syntax/` 漏列 `15_diagnostics.md`——补条目。
+- **P2（规划）** How-to 层仅 2 篇：生成器/并发/llmexcept/隔离缺操作指南（Reference→How-to 读者旅程断裂），需按 WRITING_GUIDE 评估。
 
 ---
 
