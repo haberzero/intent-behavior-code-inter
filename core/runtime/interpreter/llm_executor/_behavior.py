@@ -198,14 +198,14 @@ class _BehaviorMixin:
                 )
             active_list = captured_intents.get_active_intents()
             global_intents = captured_intents.get_global_intents()
-            all_intents = IntentResolver.resolve(
+            all_intents = yield from IntentResolver.resolve_cps(
                 active_intents=active_list,
                 global_intents=global_intents,
                 context=context,
                 execution_context=execution_context,
             )
         else:
-            all_intents = context.get_resolved_prompt_intents(execution_context)
+            all_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
             global_intents = context.get_global_intents()
 
         llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)

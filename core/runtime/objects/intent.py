@@ -9,6 +9,36 @@ from core.kernel.intent_logic import IntentMode, IntentRole
 if TYPE_CHECKING:
     from core.runtime.interpreter.llm_executor import LLMExecutorImpl
 
+
+def _intent_segment_to_prompt(val: Any) -> str:
+    """把意图段求值结果转提示词文本（``__to_prompt__`` 协议，回退 ``to_native``）。
+
+    供 :meth:`IbIntent.resolve_content` 与 :meth:`IbIntent.resolve_content_cps`
+    共用（单一权威，无双写）。协议缺失（AttributeError）→ 回退 to_native()；
+    已注册协议的实现异常（TypeError 等）经 ``kernel_diagnostic`` 告警，不静默降级。
+    """
+    try:
+        prompt_str = val.receive('__to_prompt__', [])
+        if isinstance(prompt_str, IbObject):
+            return str(prompt_str.to_native())
+        return str(prompt_str)
+    except AttributeError:
+        if isinstance(val, IbObject):
+            return str(val.to_native())
+        return str(val)
+    except Exception as e:
+        kernel_diagnostic(
+            code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
+            detail={"context": "intent_resolution", "error": repr(e)},
+            message=(
+                f"__to_prompt__ failed in intent resolution, "
+                f"falling back to to_native(): {e!r}"
+            ),
+        )
+        if isinstance(val, IbObject):
+            return str(val.to_native())
+        return str(val)
+
 @register_ib_type("Intent")
 class IbIntent(IbObject):
     """
@@ -57,37 +87,31 @@ class IbIntent(IbObject):
                     if vm is None:
                         raise RuntimeError("IbIntent.resolve_content: vm_executor not available")
                     val = vm.run(segment)
-                    # 使用统一的协议方法调用（通过 receive）
-                    try:
-                        prompt_str = val.receive('__to_prompt__', [])
-                        if isinstance(prompt_str, IbObject):
-                            content_parts.append(str(prompt_str.to_native()))
-                        else:
-                            content_parts.append(str(prompt_str))
-                    except AttributeError:
-                        # 协议缺失（对象未注册 __to_prompt__）→ 回退 to_native()；
-                        # 已注册协议的实现异常（TypeError 等）告警，不静默降级。
-                        if isinstance(val, IbObject):
-                            content_parts.append(str(val.to_native()))
-                        else:
-                            content_parts.append(str(val))
-                    except Exception as e:
-                        kernel_diagnostic(
-                            code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
-                            detail={"context": "intent_resolution", "error": repr(e)},
-                            message=(
-                                f"__to_prompt__ failed in intent resolution, "
-                                f"falling back to to_native(): {e!r}"
-                            ),
-                        )
-                        if isinstance(val, IbObject):
-                            content_parts.append(str(val.to_native()))
-                        else:
-                            content_parts.append(str(val))
+                    content_parts.append(_intent_segment_to_prompt(val))
                 else:
                     content_parts.append(str(segment))
             return "".join(content_parts).strip()
         
+        return str(self.content).strip()
+
+    def resolve_content_cps(self, context: RuntimeContext, execution_context: Any = None):
+        """CPS 版 :meth:`resolve_content`；node_ UID 片段经 ``yield`` 交外层 VM 帧栈。
+
+        ``resolve_content`` 在段含 node_ 时 ``vm.run(segment)`` 同步重入调度循环
+        （任务内同步重入）；本版本 ``yield segment`` 由外层 ``_drive_loop_gen``
+        作为子任务接管求值，消除重入。非 node_ 段与 ``__to_prompt__`` 解析共用
+        ``_intent_segment_to_prompt``，无双写。返回消解后字符串。
+        """
+        if self.segments and execution_context:
+            content_parts = []
+            for segment in self.segments:
+                if isinstance(segment, str) and segment.startswith("node_"):
+                    val = yield segment
+                    content_parts.append(_intent_segment_to_prompt(val))
+                else:
+                    content_parts.append(str(segment))
+            return "".join(content_parts).strip()
+
         return str(self.content).strip()
 
     @property

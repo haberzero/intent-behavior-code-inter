@@ -905,6 +905,31 @@ class RuntimeContextImpl(RuntimeContext):
             execution_context=execution_context
         )
 
+    def get_resolved_prompt_intents_cps(self, execution_context: Any, call_intent: Optional[Any] = None):
+        """CPS 版 :meth:`get_resolved_prompt_intents`；意图内容解析嵌入外层 VM 帧栈。
+
+        与同步版同语义（override / smear / active / global 优先级与消费逻辑），
+        但意图段求值经 ``resolve_content_cps`` / ``IntentResolver.resolve_cps``
+        （``yield from``）——消除 ``vm.run`` 同步重入调度循环（任务内同步重入）。
+        """
+        if self._intent_ctx.has_override():
+            pending_override = self._intent_ctx.consume_override()
+            self._intent_ctx.consume_smear()  # discard smear when override is active
+            content = yield from pending_override.resolve_content_cps(self, execution_context)
+            return [content] if content else []
+
+        smear_intents = self._intent_ctx.consume_smear()
+        active_intents = self._intent_ctx.get_active_intents()
+        global_intents = self._intent_ctx.get_global_intents()
+
+        resolved = yield from IntentResolver.resolve_cps(
+            active_intents=active_intents + smear_intents,
+            global_intents=global_intents,
+            context=self,
+            execution_context=execution_context
+        )
+        return resolved
+
     @property
     def current_scope(self) -> Scope:
         return self._current_scope

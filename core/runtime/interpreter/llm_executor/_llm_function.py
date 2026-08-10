@@ -78,7 +78,7 @@ class _LLMFunctionMixin:
             node_data.get("user_prompt"), execution_context, param_names
         )
 
-        merged_intents = context.get_resolved_prompt_intents(execution_context)
+        merged_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
         if merged_intents:
             intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
             sys_prompt += intent_block
