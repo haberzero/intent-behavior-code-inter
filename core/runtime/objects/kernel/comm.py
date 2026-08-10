@@ -279,33 +279,21 @@ class _SlotUpdateWaitable:
         return self._done
 
     def _drive(self) -> None:
-        from core.runtime.frame import get_current_execution_context
-        from core.runtime.coordinator import _drive_generator
-        from core.runtime.vm.handlers._shared import _vm_call_fn_callable, _vm_invoke_behavior
+        """宿主同步驱动（无 VM 上下文时）。
 
+        A3 后 VM 主路径经 ``vm_handle_IbCall`` 走 ``cps_drive``（帧内 CPS 驱动）；
+        ``try_result``/``result`` 仅宿主/线程体直接调用时触发——此时
+        ``get_current_execution_context()`` 无活跃 VM（None），走同步 ``.call``
+        完成 CAS（非调度路径，无嵌套调度器）。不再保留 VM 分支：有活跃 VM 时
+        应走 ``cps_drive``，否则为嵌套调度器遗留（已删除）。
+        """
         core = self._slot.core
         registry = self._slot.ib_class.registry
         fn = self._fn
-        executor = get_current_execution_context()
-        vm = executor.vm_executor if executor is not None else None
-        if vm is None:
-            # 宿主 / 线程体上下文：无当前 VM，回退到同步 .call（非调度路径，无嵌套调度器）。
-            while not self._done:
-                current = core.get()
-                boxed_old = registry.box(current)
-                new_ib = fn.call(registry.get_none(), [boxed_old])
-                new_val = unbox(new_ib)
-                if core.cas(current, new_val):
-                    self._done = True
-            return
         while not self._done:
             current = core.get()
             boxed_old = registry.box(current)
-            if fn.ib_class.name == "fn_callable":
-                gen = _vm_call_fn_callable(vm, fn, [boxed_old])
-            else:
-                gen = _vm_invoke_behavior(vm, fn, [boxed_old])
-            new_ib = _drive_generator(vm, gen)
+            new_ib = fn.call(registry.get_none(), [boxed_old])
             new_val = unbox(new_ib)
             if core.cas(current, new_val):
                 self._done = True

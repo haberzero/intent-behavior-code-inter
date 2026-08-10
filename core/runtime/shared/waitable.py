@@ -37,6 +37,25 @@ from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
+class CPSDrivable(Protocol):
+    """可帧内 CPS 驱动协议：Waitable 的可选扩展能力。
+
+    支持在**当前 VM 帧栈**内协作驱动（而非 yield 挂起后由调度器轮询
+    ``try_result``）的 Waitable 实现本协议。``cps_drive`` 是生成器：
+    调用方（``vm_handle_IbCall``）对其 ``yield from``，使内部用户代码
+    （如 ``slot.update(fn)`` 的 fn 求值）嵌入外层调度循环统一驱动，
+    消除 ``try_result`` 内新建嵌套 TaskScheduler 的遗留。
+
+    结构性协议：实现者提供 ``cps_drive`` 方法即满足；缺失的 Waitable
+    走既有调度器轮询路径，非决策分派（与 ``register_wake`` 可选钩子同构）。
+    """
+
+    def cps_drive(self, executor) -> Any:
+        """帧内协作驱动本 waitable 到完成（生成器，调用方 ``yield from``）。"""
+        ...
+
+
+@runtime_checkable
 class Waitable(Protocol):
     """可等待对象协议：调度器据此询问是否就绪并取回完成结果。
 
