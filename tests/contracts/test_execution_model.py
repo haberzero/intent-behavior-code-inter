@@ -303,6 +303,10 @@ print(is_even(400))
         超出宿主递归深度时，环境限制异常（RecursionError）必须原样传播，
         而非被 VM 语义错误包装站点重写为误导性的 ``Symbol not defined`` /
         ``VM: Call failed``。断言顶层收到的是 RecursionError 本身。
+
+        伴随的 ``KDIAG_RUNTIME_ENV_LIMIT`` UserWarning 是 PT-FEAT-9 诊断机制
+        的**警告不门控投影**（设计使然：环境限制须对开发者可见）——此处显式
+        断言（而非让其浮到 pytest 汇总区），既验证警告投影又保持输出整洁。
         """
         code = """
 func f(int n) -> int:
@@ -312,15 +316,16 @@ func f(int n) -> int:
 
 print(f(5000))
 """
-        try:
-            run_ibci(code)
-        except RecursionError:
-            return  # 根因原样传播（预期）
-        except Exception as e:
-            raise AssertionError(
-                f"expected RecursionError root cause, got masked {type(e).__name__}: {e}"
-            ) from e
-        raise AssertionError("expected RecursionError on depth 5000, but succeeded")
+        with pytest.warns(UserWarning, match="环境限制异常 RecursionError"):
+            try:
+                run_ibci(code)
+            except RecursionError:
+                return  # 根因原样传播（预期）
+            except Exception as e:
+                raise AssertionError(
+                    f"expected RecursionError root cause, got masked {type(e).__name__}: {e}"
+                ) from e
+            raise AssertionError("expected RecursionError on depth 5000, but succeeded")
 
 
 # ===========================================================================
