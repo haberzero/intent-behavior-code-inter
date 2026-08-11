@@ -2,9 +2,35 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-12（真实 LLM 全面试用重启交接——原任务基于含 U1-U7 的旧代码执行后中断，修复后需在真实 LLM 下重跑 12 类遍历 + 批判检测；全量 2210/1，见下方"交接要点"与 `_REAL_LLM_E2E_RESTART.md`）
+> **最后更新**：2026-08-12（真实 LLM 全面压力试用重启**已完成**——D1 全语法遍历 + D2 压力试用 +
+> D3 批判检测（C1-C4）+ A1-A5 重验全部基于修复后代码真实 LLM 跑通；发现 4 项 P1 KERNEL_ISSUE +
+> 7 DOC_ISSUE + 5 BOUNDARY，**只记录未修复**；见下方"已完成"节与 `_REAL_LLM_TRIAL_REPORT_20260812.md`）
 
 ---
+
+## ✅ 已完成：真实 LLM 全面压力试用重启（2026-08-12，修复后代码）
+
+> **unsafe-vibe-dev，全量 2210 passed / 1 skipped（试用零回归，未改内核）**。
+> 完整证据：`tasks_docs/_LLM_TRIAL_20260812/`（DESIGN/harness/cases/logs/REGISTER）+ 报告
+> `tasks_docs/_REAL_LLM_TRIAL_REPORT_20260812.md`。
+
+- **试用地基**：三层死循环保护 harness（OS 进程级硬超时 SIGKILL 进程组 + `--max-inst` + LLM 调用
+  超时，无超时不运行，零遗漏）+ 确定性文件化记录（logs/ + register.jsonl + REGISTER.md）。
+- **D1 全语法遍历**：docs/syntax/01-15 每章特性真实 LLM 各跑一遍，~110 次运行全经保护。
+- **A1-A5 重验全通过**：意图 @/@! 赋值路径（7339220 实证：r1=收到）、内建遮蔽+LLM 初始化
+  （sum=7）、generator.to_list（U1）、dispatch 赋值后 idbg 观测（d6d28e1）、run_batch 观测（df1a896）。
+- **B1-B3 补正式记录**：ihost 隔离（child 需自带 api_config.json）/内建/异常。
+- **D2 压力试用**：交叉（生成器+意图+llmexcept、thread+chan+run_batch、类+LLM+slot、闭包+生成器）、
+  正交（@+×run_batch、snapshot vs lambda、双批并发）、多层次（高阶 lambda、循环体 LLM+llmexcept）、
+  多可能性（边界值/遮蔽拒绝/str'0'真值）、多文件（循环导入/插件/隔离子项目）全 PASS。
+- **D3 批判检测**：格式服从稳定、C1 长提示注入完整、C2 非确定性稳定、C4 并发无竞态、
+  llmexcept 真实收敛、耗尽可捕获、意图实证。
+- **暴露问题（只记录，未修复）**：**4 项 P1 KERNEL_ISSUE**（global 写访问失效 /
+  整模块 import+成员访问 INT_INTERNAL_ERROR / provider 失败 LLMCallError 逃逸 try/except /
+  ai.get_retry 等 vtable 未注册）+ **7 DOC_ISSUE** + **5 BOUNDARY**。登记 PENDING_TASKS
+  （PT-DEBT-25~28 + 清单），见 REGISTER §六/报告 §六。
+- **合并条件重估**：检测维度已基于修复后代码确认（无 P0；4 项 P1 不阻断主路径，待独立窗口）；
+  阶段 3 合并/push 仍待用户显式授权（禁 push 硬原则）。
 
 ## ✅ 已完成：合并收尾准备（2026-08-11，doc-health P1/P2 + 版本 0.2.0 + examples 真实跑通 + PT-AUDIT-3）
 
@@ -201,22 +227,21 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **🔴 下一 session 主线（建议）：重启真实 LLM 全面试用 + 语法/语言功能评估**（`_REAL_LLM_E2E_RESTART.md`）。
-  原"真实 LLM e2e 全面试用"（2026-08-11）**基于含不合格操作（U1-U7）的旧代码执行后被中断**——
-  原报告 §四 9/12 类结论在修复前产生，其中意图机制结论已被实证推翻（7339220 纠错为机制缺陷）；
-  后续 U1-U7 / 意图纠错 / T1-T5 / PT-AUDIT-3 / dispatch 观测（d6d28e1）/ run_batch 观测（df1a896）
-  等修复**均未在修复后代码上重新完整跑 12 类真实试用**。重启任务：
-  1. **§四 12 类全语法遍历**（按 `_REAL_LLM_E2E_PLAN.md`），每项真实 LLM 跑一遍；**A1-A5 重验点**：
-     意图 `@`/`@!` 赋值路径真实效果（7339220 修复实证）、内建遮蔽+LLM 表达式（f58d525）、
-     generator.to_list（U1）、dispatch 赋值后 idbg 观测（d6d28e1）、run_batch 观测（df1a896）。
-  2. **§五 批判检测**：格式服从 / llmexcept 收敛 / 意图注入 / **补缺失场景**：长提示复杂
-     `__to_prompt__`（C1）/ 非确定性多次差异（C2）/ 超时断连（C3）/ 并发扩展（C4）。
-  3. **B 类未测项补正式记录**：ihost 隔离 / 内建 / 异常（isolation demo 已真实跑通，记入报告）。
-  4. **更新验证报告**：`_REAL_LLM_E2E_REPORT.md` §四表格基于修复后代码刷新 + §七合并条件重估
-     （不再基于修复前 9/12 推断）。
-  → **通过后**才可向用户报告"合并检测维度已基于修复后代码确认"；阶段 3 合并/push 仍须用户显式授权
-    （禁 push 硬原则）。端点 `localhost:1234`（qwen3.6-35b-a3b）在线；配置机制 C1-C7 已完备；
-    探针素材 `/tmp/opencode/llm_probe/`（30 个）。
+- **✅ 已完成（2026-08-12）**：真实 LLM 全面压力试用重启——**D1 全语法遍历（15 章）+ D2 压力试用
+  （交叉/正交/多层次/多可能性/多文件）+ D3 批判检测（C1-C4）+ A1-A5 重验 + B1-B3 补记录全部完成**
+  （基于修复后代码，真实 LLM ~110 次运行，三层死循环保护，零回归 2210/1）。
+  报告：`_REAL_LLM_TRIAL_REPORT_20260812.md`；证据：`_LLM_TRIAL_20260812/`。
+  **暴露问题（只记录未修复）**：4 项 P1 KERNEL_ISSUE（PT-DEBT-25 global / 26 整模块 import /
+  27 provider 失败 LLMCallError 逃逸 try-except / 28 ai.get_retry vtable 未注册）+ 7 DOC_ISSUE +
+  5 BOUNDARY。**合并检测维度已基于修复后代码确认**；阶段 3 合并/push 仍须用户显式授权。
+
+- **🔴 下一 session 主线（建议）**：
+  1. **缺陷根因修复（独立窗口，用户授权后）**：PT-DEBT-25~28 按 code-workflow 根因修复 + 补测试
+     （KERNEL-ISSUE-001 global / 002 整模块 import / 003 provider 失败异常捕获 / 004 ai vtable）。
+  2. **DOC-ISSUE-001~007 批量文档同步**（低风险，可随文档治理窗口处置）。
+  3. **KNOWN_LIMITS §二十四 复核**（生成器 await chan 实测可用，描述或过时）。
+  4. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认，待用户授权
+     `git merge unsafe-vibe-dev → main` + push。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
   - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；
@@ -229,13 +254,13 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 - **本 session 已完成批次（供回顾，见 git 历史）**：
   U1-U7 修复 → 意图注入纠错（7339220）→ P1-P4 决断 → T1-T5 泛化审计 → **合并收尾准备
   （doc-health P1/P2 + 版本 0.2.0 + examples 真实跑通 + dispatch 观测修复 + 合并就绪报告）→
-  PT-AUDIT-3**。全量 **2210 passed / 1 skipped**（2201 → 2210，净增 9 测试）。
+  PT-AUDIT-3 → **真实 LLM 全面压力试用重启（2026-08-12）**。全量 **2210 passed / 1 skipped**（零回归）。
 
 - **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
   待单独设计"可靠化/实用化"后重新启用，勿自动恢复。
 - **分支政策**：经充分验证零风险/边界清晰改进可**直接合并** unsafe-vibe-dev；大风险仍"独立分支 + 手动 cherry-pick"；永远不触碰 main。
 - **剩余长期项**：PT-DEBT-4 `file` 重命名（独立窗口）、P3 VISION、PT-DEBT-24、F9（已评估）、
-  PT-AUDIT-3 疑似项 S1-S5（独立窗口）。
+  PT-AUDIT-3 疑似项 S1-S5（独立窗口）、**PT-DEBT-25~28（2026-08-12 试用发现，独立窗口）**。
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、
