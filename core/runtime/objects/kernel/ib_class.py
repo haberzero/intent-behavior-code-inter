@@ -102,6 +102,20 @@ class IbClass(IbObject):
                 all_default_fields[name] = val_info
 
         # 延迟执行字段初始化 (Item 2.1 Audit)
+        self._eval_field_defaults(instance, all_default_fields, context)
+        self._invoke_init(instance, args)
+        return instance
+
+    def _eval_field_defaults(
+        self, instance: 'IbObject', all_default_fields: dict, context: Any
+    ) -> None:
+        """求值类字段默认值写入实例字段。
+
+        ``static_val`` 非空用预评估快照（可变容器 list/dict 每次浅拷贝新实例
+        避免共享）；无快照但有 ``val_uid`` 时经 ``vm.run`` 动态求值（JIT caching：
+        首次求值后回写 ``static_val`` 供后续实例复用，非每次构造都重入调度器）；
+        否则置 None。字段默认值求值失败为真实错误——fail-fast，不静默置 None。
+        """
         for name, val_info in all_default_fields.items():
             if isinstance(val_info, IbClassField):
                 if val_info.static_val is not None:
@@ -142,6 +156,14 @@ class IbClass(IbObject):
                 # [Active Defense] 仅支持 IbClassField，确保字段初始化的一致性
                 instance.fields[name] = val_info
 
+    def _invoke_init(self, instance: 'IbObject', args: List['IbObject']) -> None:
+        """调用用户 ``__init__``（宿主侧 ``init_method.call``）。
+
+        契约校验 ``__init__`` 参数数量；无 ``__init__`` 却传参视为契约违背。
+        已知问题：``init_method.call`` 为宿主侧薄包装（``_vm_call_user_function``
+        + ``_drive_generator`` 新建 TaskScheduler），``__init__`` 含 Waitable 时
+        会阻塞主调度线程（类构造未接入 VM 帧内 CPS 驱动）。
+        """
         init_method = self.lookup_method('__init__')
         if init_method:
             # 契约一致性校验：校验 __init__ 参数数量
@@ -155,8 +177,6 @@ class IbClass(IbObject):
         elif args:
             # 如果没有定义 __init__ 但传了参数，也是一种契约违背
             raise InterpreterError(f"TypeError: {self.name}() takes no arguments, but {len(args)} were given")
-
-        return instance
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """

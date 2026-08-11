@@ -213,214 +213,252 @@ class RuntimeSerializer(BaseFlatSerializer):
         obj_id = id(obj)
         if obj_id in self.memo:
             return self.memo[obj_id]
-            
+
         uid = rt_instance_uid()
         self.memo[obj_id] = uid
-        
+
         data = {
             "uid": uid,
             "class_name": obj.ib_class.name,
         }
+        self._collect_instance_meta(obj, data)
+        # 直接形态（命中即写池并返回）：类引用 / 瞬态占位 / 磁盘描述符。
+        for direct in (
+            self._collect_class_ref,
+            self._collect_transient,
+            self._collect_disk_backed,
+        ):
+            if direct(obj, data, uid):
+                return uid
+        # 按类型分派填充 _type 与各类型字段（单一类型一个具名 collector）。
+        self._dispatch_instance_kind(obj, data)
+        self.instance_pool[uid] = data
+        return uid
+
+    def _collect_instance_meta(self, obj: IbObject, data: dict) -> None:
+        """公共元数据：type_ref / value_meta（IbValue 专用）。"""
         if isinstance(obj, IbValue):
             type_ref = obj.type_ref
             data["type_ref"] = str(type_ref) if type_ref is not None else None
-            # 可调用实例（behavior/fn_callable）的完整状态由下方专用分支的字段
-            # 承载（node/params/body/closure/capture_mode/captured_intents 等）；
-            # ``meta`` 中同样冗余拷贝了这些字段，但携带 IbIntentContext/IbCell/
-            # TypeDef 等非 JSON 值，原样落盘会破坏 json 序列化——专用字段才是
-            # 单一事实来源，此处不再重复写入 value_meta。
+            # 可调用实例（behavior/fn_callable）的完整状态由专用分支字段承载；
+            # meta 冗余拷贝非 JSON 值，专用字段才是单一事实来源，不重复写入。
             if obj.meta and obj.ib_class.name not in ("behavior", "fn_callable"):
                 data["value_meta"] = dict(obj.meta)
 
-        # 类元对象（IbClass）：序列化为类引用（类名），反序列化时重绑定 registry
-        # 真实类——类型符号是"类型引用"而非实例值（与 IbModule scope_native
-        # 模式一致），必须保持 IbClass 身份。
-        if isinstance(obj, IbClass):
-            data["_type"] = "class_ref"
-            data["name"] = obj.name
-            self.instance_pool[uid] = data
-            return uid
-
-        # 瞬态对象协议：实现 __transient_state__ 的对象序列化为纯状态存根，不递归
-        # 运行时句柄（thread 的 coordinator 引用环 / chan 的队列 / slot 的值 /
-        # subscriber 的订阅视图）。检测用公开 dunder 协议（与 disk_backed 鸭子
-        # 先例一致），非 per-type 类名分支。state 值经 _process_value 递归
-        # （嵌套 IbObject 如 slot 的值保持完整往返）。
-        if not isinstance(obj, IbClass) and hasattr(obj, "__transient_state__"):
-            state = obj.__transient_state__()
-            data["_type"] = "transient"
-            data["state"] = {k: self._process_value(v) for k, v in state.items()}
-            self.instance_pool[uid] = data
-            return uid
-        
-        # 根据类型名进行差异化序列化（通过 ib_class.name 而非 isinstance 分派）
-        cls_name = obj.ib_class.name
-
-        # 按 storage_model 分发：磁盘型对象序列化为路径描述符，不物化字节。
-        # 注意：只处理实例（IbValue），不处理类元对象（IbClass）。
-        spec = obj.ib_class.spec
-        if isinstance(obj, IbValue) and spec is not None and spec.storage_model is StorageModel.DISK_BACKED:
-            data["_type"] = "disk_backed"
-            descriptor = obj.receive("__to_descriptor__", [])
-            # 协议返回不保证为 IbObject：鸭子拆箱（receive 可返回第三方/原生描述符）
-            if hasattr(descriptor, "to_native"):
-                descriptor = descriptor.to_native()
-            data["descriptor"] = descriptor
-            self.instance_pool[uid] = data
-            return uid
-
-        if isinstance(obj, IbValue) and cls_name == "None":
-            data["_type"] = "none"
-
-        elif isinstance(obj, IbNativeFunction):
-            data["_type"] = "native_func"
-            data["name"] = obj._name
-            data["unbox"] = obj.unbox_args
-            data["is_method"] = obj.is_method
-            if obj.logic_id:
-                data["logic_id"] = obj.logic_id
-                
-        elif isinstance(obj, IbNativeObject):
-            data["_type"] = "native"
-            # 记录原生值；非 JSON 序列化值必须 fail-fast——占位字符串会
-            # 在恢复时静默替换为错误数据，掩盖真实的序列化失败。
-            val = obj.to_native()
-            try:
-                json.dumps(val)
-            except (TypeError, ValueError) as e:
-                raise TypeError(
-                    f"Cannot serialize native object of class '{cls_name}': "
-                    f"to_native() produced non-JSON-serializable value {val!r}"
-                ) from e
-            data["py_value"] = val
-                
-        elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):
-            data["_type"] = "primitive"
-            data["value"] = self._process_value(obj.to_native())
-            
-        elif isinstance(obj, IbValue) and cls_name == "list":
-            data["_type"] = "list"
-            data["elements"] = [self._process_value(e) for e in obj.elements]
-
-        elif isinstance(obj, IbValue) and cls_name == "tuple":
-            data["_type"] = "tuple"
-            data["elements"] = [self._process_value(e) for e in obj.elements]
-            
-        elif isinstance(obj, IbValue) and cls_name == "dict":
-            data["_type"] = "dict"
-            data["fields"] = {str(k): self._process_value(v) for k, v in obj.fields.items()}
-
-        elif isinstance(obj, IbValue) and cls_name == "Optional":
-            data["_type"] = "optional"
-            data["is_some"] = obj._is_some
-            data["inner"] = self._process_value(obj.payload) if obj._is_some else None
-
-        # thread_result 是 IbValue 值对象（payload 承载成功值）——
-        # 按 ib_class.name 分发而非 isinstance。
-        elif cls_name == "thread_result" and not isinstance(obj, IbClass):
-            from core.runtime.objects.thread import ThreadStatus
-            data["_type"] = "thread_result"
-            data["status"] = obj._status
-            data["value"] = self._process_value(obj.payload) if obj._status == ThreadStatus.DONE else None
-            data["error"] = self._process_value(obj._error) if obj._error is not None else None
-
-        elif isinstance(obj, IbModule):
-            data["_type"] = "module"
-            data["name"] = obj.name
-            # Kernel-native modules are backed by an IbNativeObject (the runtime
-            # implementation), not a Scope. They are re-bound at load time by
-            # HostService._rebind_environment, so we must not recurse into the
-            # native implementation here.
-            if hasattr(obj.scope, "get_all_symbols"):
-                data["scope_uid"] = self._collect_runtime_scope(obj.scope)
-            else:
-                data["scope_native"] = True
-
-        elif isinstance(obj, IbBoundMethod):
-            data["_type"] = "bound_method"
-            data["receiver_uid"] = self._collect_instance(obj.receiver)
-            data["method_uid"] = self._collect_instance(obj.method)
-
-        elif isinstance(obj, IbValue) and cls_name == "behavior":
-            data["_type"] = "behavior"
-            data["node_uid"] = obj.node
-            # captured_intents 协议：None 或 IbIntentContext（非可迭代）。
-            # 完整序列化意图上下文（持久栈/涂抹/排他槽），反序列化时经
-            # _get_intent_context 重建共享身份（契约：None 或 IbIntentContext uid）。
-            ci = obj.captured_intents
-            if ci is None:
-                data["captured_intents"] = None
-            elif isinstance(ci, IbIntentContext):
-                data["captured_intents"] = self._collect_intent_context(ci)
-            else:
-                raise TypeError(
-                    "Unexpected captured_intents type "
-                    f"{type(ci).__name__} (contract requires None or IbIntentContext)"
-                )
-            # expected_type 在运行期由调用点经 node_to_type 侧表解析，字段本身
-            # 仅作元数据（serialize_for_debug）——按接口契约 ``Optional[str]``
-            # 以类型名字符串落盘，避免 IbSpec 对象破坏 json 序列化。
-            et = obj.expected_type
-            data["expected_type"] = str(et) if et is not None else None
-            if obj.call_intent is not None:
-                data["call_intent"] = self._process_value(obj.call_intent)
-            data["capture_mode"] = obj.capture_mode
-            if obj.params_uids:
-                data["params_uids"] = list(obj.params_uids)
-            # 内省签名：param_types / return_type 为 JSON 安全字符串。
-            if obj.param_types:
-                data["param_types"] = list(obj.param_types)
-            if obj.return_type is not None:
-                data["return_type"] = obj.return_type
-            data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
-
-        elif isinstance(obj, IbValue) and cls_name == "fn_callable":
-            data["_type"] = "fn_callable"
-            data["node_uid"] = obj.node_uid
-            data["capture_mode"] = obj.capture_mode
-            if obj.params_uids:
-                data["params_uids"] = list(obj.params_uids)
-            if obj.body_uid:
-                data["body_uid"] = obj.body_uid
-            # 内省签名：param_types / return_type 为 JSON 安全字符串。
-            if obj.param_types:
-                data["param_types"] = list(obj.param_types)
-            if obj.return_type is not None:
-                data["return_type"] = obj.return_type
-            data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
-
-        elif cls_name == "intent_context":
-            # ``intent_context`` IBCI 封装实例序列化
-            data["_type"] = "intent_context"
-            ctx = obj.fields.get("_ctx")
-            data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
-            extra_fields = {
-                k: self._process_value(v)
-                for k, v in (obj.fields or {}).items()
-                if k != "_ctx"
-            }
-            if extra_fields:
-                data["fields"] = extra_fields
-
-        elif isinstance(obj, IbIntent):
-            # ``IbIntent`` 使用 ``__slots__`` 存放状态
-            data["_type"] = "intent"
-            data["content"] = obj.content
-            data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
-            data["tag"] = obj.tag
-            data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
-            data["source_uid"] = obj.source_uid
-            data["pop_top"] = obj.pop_top
-            if obj.segments:
-                data["segments"] = [self._process_value(s) for s in obj.segments]
-
-        else:
-            # 普通用户定义对象
-            data["_type"] = "object"
-            data["fields"] = {k: self._process_value(v) for k, v in obj.fields.items()}
-
+    def _collect_class_ref(self, obj: IbObject, data: dict, uid: str) -> bool:
+        """类元对象 → 类引用（类名），反序列化重绑定 registry 真实类。"""
+        if not isinstance(obj, IbClass):
+            return False
+        data["_type"] = "class_ref"
+        data["name"] = obj.name
         self.instance_pool[uid] = data
-        return uid
+        return True
+
+    def _collect_transient(self, obj: IbObject, data: dict, uid: str) -> bool:
+        """瞬态对象 → 纯状态存根（不递归运行时句柄）。"""
+        if isinstance(obj, IbClass) or not hasattr(obj, "__transient_state__"):
+            return False
+        state = obj.__transient_state__()
+        data["_type"] = "transient"
+        data["state"] = {k: self._process_value(v) for k, v in state.items()}
+        self.instance_pool[uid] = data
+        return True
+
+    def _collect_disk_backed(self, obj: IbObject, data: dict, uid: str) -> bool:
+        """磁盘型对象 → 路径描述符（不物化字节）。"""
+        if not isinstance(obj, IbValue):
+            return False
+        spec = obj.ib_class.spec
+        if spec is None or spec.storage_model is not StorageModel.DISK_BACKED:
+            return False
+        data["_type"] = "disk_backed"
+        descriptor = obj.receive("__to_descriptor__", [])
+        # 协议返回不保证为 IbObject：鸭子拆箱（receive 可返回第三方/原生描述符）
+        if hasattr(descriptor, "to_native"):
+            descriptor = descriptor.to_native()
+        data["descriptor"] = descriptor
+        self.instance_pool[uid] = data
+        return True
+
+    def _dispatch_instance_kind(self, obj: IbObject, data: dict) -> None:
+        """按类型分派序列化字段（单一类型一个具名 collector）。"""
+        cls_name = obj.ib_class.name
+        if isinstance(obj, IbValue) and cls_name == "None":
+            self._collect_none(data)
+        elif isinstance(obj, IbNativeFunction):
+            self._collect_native_func(obj, data)
+        elif isinstance(obj, IbNativeObject):
+            self._collect_native(obj, data, cls_name)
+        elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):
+            self._collect_primitive(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "list":
+            self._collect_list(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "tuple":
+            self._collect_tuple(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "dict":
+            self._collect_dict(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "Optional":
+            self._collect_optional(obj, data)
+        elif cls_name == "thread_result" and not isinstance(obj, IbClass):
+            self._collect_thread_result(obj, data)
+        elif isinstance(obj, IbModule):
+            self._collect_module(obj, data)
+        elif isinstance(obj, IbBoundMethod):
+            self._collect_bound_method(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "behavior":
+            self._collect_behavior(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "fn_callable":
+            self._collect_fn_callable(obj, data)
+        elif cls_name == "intent_context":
+            self._collect_intent_context_wrapper(obj, data)
+        elif isinstance(obj, IbIntent):
+            self._collect_intent(obj, data)
+        else:
+            self._collect_object(obj, data)
+
+    def _collect_none(self, data: dict) -> None:
+        data["_type"] = "none"
+
+    def _collect_native_func(self, obj, data):
+        data["_type"] = "native_func"
+        data["name"] = obj._name
+        data["unbox"] = obj.unbox_args
+        data["is_method"] = obj.is_method
+        if obj.logic_id:
+            data["logic_id"] = obj.logic_id
+
+    def _collect_native(self, obj, data, cls_name):
+        data["_type"] = "native"
+        # 记录原生值；非 JSON 序列化值必须 fail-fast——占位字符串会
+        # 在恢复时静默替换为错误数据，掩盖真实的序列化失败。
+        val = obj.to_native()
+        try:
+            json.dumps(val)
+        except (TypeError, ValueError) as e:
+            raise TypeError(
+                f"Cannot serialize native object of class '{cls_name}': "
+                f"to_native() produced non-JSON-serializable value {val!r}"
+            ) from e
+        data["py_value"] = val
+
+    def _collect_primitive(self, obj, data):
+        data["_type"] = "primitive"
+        data["value"] = self._process_value(obj.to_native())
+
+    def _collect_list(self, obj, data):
+        data["_type"] = "list"
+        data["elements"] = [self._process_value(e) for e in obj.elements]
+
+    def _collect_tuple(self, obj, data):
+        data["_type"] = "tuple"
+        data["elements"] = [self._process_value(e) for e in obj.elements]
+
+    def _collect_dict(self, obj, data):
+        data["_type"] = "dict"
+        data["fields"] = {str(k): self._process_value(v) for k, v in obj.fields.items()}
+
+    def _collect_optional(self, obj, data):
+        data["_type"] = "optional"
+        data["is_some"] = obj._is_some
+        data["inner"] = self._process_value(obj.payload) if obj._is_some else None
+
+    def _collect_thread_result(self, obj, data):
+        from core.runtime.objects.thread import ThreadStatus
+        data["_type"] = "thread_result"
+        data["status"] = obj._status
+        data["value"] = self._process_value(obj.payload) if obj._status == ThreadStatus.DONE else None
+        data["error"] = self._process_value(obj._error) if obj._error is not None else None
+
+    def _collect_module(self, obj, data):
+        data["_type"] = "module"
+        data["name"] = obj.name
+        # Kernel-native modules are backed by an IbNativeObject (the runtime
+        # implementation), not a Scope. They are re-bound at load time by
+        # HostService._rebind_environment, so we must not recurse into the
+        # native implementation here.
+        if hasattr(obj.scope, "get_all_symbols"):
+            data["scope_uid"] = self._collect_runtime_scope(obj.scope)
+        else:
+            data["scope_native"] = True
+
+    def _collect_bound_method(self, obj, data):
+        data["_type"] = "bound_method"
+        data["receiver_uid"] = self._collect_instance(obj.receiver)
+        data["method_uid"] = self._collect_instance(obj.method)
+
+    def _collect_behavior(self, obj, data):
+        data["_type"] = "behavior"
+        data["node_uid"] = obj.node
+        # captured_intents 协议：None 或 IbIntentContext（非可迭代）。
+        # 完整序列化意图上下文（持久栈/涂抹/排他槽），反序列化时经
+        # _get_intent_context 重建共享身份（契约：None 或 IbIntentContext uid）。
+        ci = obj.captured_intents
+        if ci is None:
+            data["captured_intents"] = None
+        elif isinstance(ci, IbIntentContext):
+            data["captured_intents"] = self._collect_intent_context(ci)
+        else:
+            raise TypeError(
+                "Unexpected captured_intents type "
+                f"{type(ci).__name__} (contract requires None or IbIntentContext)"
+            )
+        # expected_type 在运行期由调用点经 node_to_type 侧表解析，字段本身仅元数据。
+        et = obj.expected_type
+        data["expected_type"] = str(et) if et is not None else None
+        if obj.call_intent is not None:
+            data["call_intent"] = self._process_value(obj.call_intent)
+        data["capture_mode"] = obj.capture_mode
+        if obj.params_uids:
+            data["params_uids"] = list(obj.params_uids)
+        if obj.param_types:
+            data["param_types"] = list(obj.param_types)
+        if obj.return_type is not None:
+            data["return_type"] = obj.return_type
+        data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
+
+    def _collect_fn_callable(self, obj, data):
+        data["_type"] = "fn_callable"
+        data["node_uid"] = obj.node_uid
+        data["capture_mode"] = obj.capture_mode
+        if obj.params_uids:
+            data["params_uids"] = list(obj.params_uids)
+        if obj.body_uid:
+            data["body_uid"] = obj.body_uid
+        if obj.param_types:
+            data["param_types"] = list(obj.param_types)
+        if obj.return_type is not None:
+            data["return_type"] = obj.return_type
+        data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
+
+    def _collect_intent_context_wrapper(self, obj, data):
+        # ``intent_context`` IBCI 封装实例序列化
+        data["_type"] = "intent_context"
+        ctx = obj.fields.get("_ctx")
+        data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
+        extra_fields = {
+            k: self._process_value(v)
+            for k, v in (obj.fields or {}).items()
+            if k != "_ctx"
+        }
+        if extra_fields:
+            data["fields"] = extra_fields
+
+    def _collect_intent(self, obj, data):
+        # ``IbIntent`` 使用 ``__slots__`` 存放状态
+        data["_type"] = "intent"
+        data["content"] = obj.content
+        data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
+        data["tag"] = obj.tag
+        data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
+        data["source_uid"] = obj.source_uid
+        data["pop_top"] = obj.pop_top
+        if obj.segments:
+            data["segments"] = [self._process_value(s) for s in obj.segments]
+
+    def _collect_object(self, obj, data):
+        data["_type"] = "object"
+        data["fields"] = {k: self._process_value(v) for k, v in obj.fields.items()}
+
 
 class RuntimeDeserializer:
     """
