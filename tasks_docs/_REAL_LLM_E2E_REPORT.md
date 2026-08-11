@@ -131,8 +131,8 @@ C1-C7 全部落地并经真实 LLM 探针验证：
 | 合并条件（`_MAIN_MERGE_PLAN.md` §一） | 状态 |
 |------|------|
 | 真实 LLM e2e 检测通过（无 P0 阻断缺陷） | ✅ 9/12 类特性通过；唯一缺陷（generator.to_list）已由 **U1 正确架构修复**（generator IbClass 注册，非 receive 特判）；其余 P0 缺陷零 |
-| 全量 pytest 零回归 | ✅ **2201 passed / 1 skipped**（修复全程零回归；U1-U7 + 意图注入缺陷 + 配置 fail-fast 硬化净增 32 契约/回归测试） |
-| 文档/README 就绪 | ⏳ 部分（README 本地 LLM 快速开始已具备；`_DOC_HEALTH_20260811.md` 剩余 P1/P2 待清；pyproject 版本评估待做；examples 真实跑通待确认） |
+| 全量 pytest 零回归 | ✅ **2209 passed / 1 skipped**（修复全程零回归；U1-U7 + 意图注入缺陷 + 配置 fail-fast 硬化 + dispatch 观测修复净增 35 契约/回归测试） |
+| 文档/README 就绪 | ✅ **全部完成（2026-08-11 本 session）**：`_DOC_HEALTH_20260811.md` P1（16 项）/P2（12 项）全部处置；README 阅读路径补 subsystems/howto/诊断码/观测体系；pyproject 版本评估 0.1.0 → **0.2.0**；examples 真实 LLM 跑通确认（11 个示例全部通过） |
 | 用户显式授权 push/合并 | ⏳ **未授予**（禁 push 硬原则，合并动作须用户显式授权，不在自主范围） |
 
 ### 7.2 修复质量要点（合并安全性支撑）
@@ -142,12 +142,14 @@ C1-C7 全部落地并经真实 LLM 探针验证：
   比原推断（编译器 UID 新旧分裂）更精确；+2 回归测试 + 示例改回 `int sum` 真实跑通。
 - **U3/U4/U6/U7**：历史遗留重复类清理 + 路径规范化 + fail-fast 加载契约（+3/+4 契约测试）。
 - **U5**：Phase 5 临时文档清理。
+- **本 session 追加（examples 跑通暴露）**：dispatch-before-use 赋值后 `idbg.current_llm()`/
+  `ai.get_current_call_info()` 立即可观测（dispatch 时刻记录单写槽，resolve 补全 response），
+  修复示例 05/06 依赖的 idbg 探查契约（+3 回归测试）。
 - 全程 code-workflow Phase 0-5 + 全量 pytest 零回归逐项验证。
 
 ### 7.3 合并前仍需完成（非本次目标，待用户授权）
 
-1. `_DOC_HEALTH_20260811.md` 剩余 P1（14 项）/P2（12 项）文档健康清理。
-2. `pyproject.toml` 版本评估（0.1.0 → 0.2.0?）。
-3. examples 真实 LLM 跑通确认（验收方式见 `_HANDOFF_ISSUES_LLM_E2E.md` P2 决断：
-   独立项目目录 + api_config.json）。
+1. ~~`_DOC_HEALTH_20260811.md` 剩余 P1（14 项）/P2（12 项）文档健康清理~~ — **已完成（2026-08-11）**。
+2. ~~`pyproject.toml` 版本评估（0.1.0 → 0.2.0?）~~ — **已完成：0.2.0**（0.1.0 后 411 commits / 65 feat，异步地基 + yield 生成器 + 诊断体系 + api_config C1-C7 + 真实 LLM e2e 验证）。
+3. ~~examples 真实 LLM 跑通确认~~ — **已完成（2026-08-11，本地端点 qwen3.6-35b-a3b）**：01_getting_started 6 例 + 02_basic_modules 3 例 + 03_advanced_features（isolation/plugins）2 例全部通过。验收方式 = 独立项目目录 + api_config.json，或 `--root <example_dir>`（plugins/isolation demo 以自身目录为 root，`plugins/`/`sub_project/` 相对 root 解析）。
 4. **用户显式授权 push/合并**（阶段 3 合并动作不在自主范围）。
