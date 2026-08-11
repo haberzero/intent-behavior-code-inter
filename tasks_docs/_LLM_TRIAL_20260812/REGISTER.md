@@ -54,6 +54,19 @@
 | D1-12-001-builtins | 12 §12.1-12.5 | 内建转换/序列辅助/方法 | 全对 DONE | PASS | - | logs/D1-12-001-builtins.log | |
 | D1-14-001-concurrency | 14 §14.2-14.7 | chan/slot/thread/await | msg=hello pubsub=77 slot=42 cas=11 thread=3 await_thread=30 | PASS | - | logs/D1-14-001-concurrency.log | 需修正 await 返回 thread_result（DOC-ISSUE-003） |
 
+## 执行批次 3（D3 批判检测 C1-C3 + 缺陷记录）
+
+| case_id | 文档引用 | 期望 | 实际 | 分类 | 级别 | 证据 | 备注 |
+|---------|---------|------|------|------|------|------|------|
+| D3-C1-longprompt | 06 §6.6 __to_prompt__ + C1 | 复杂对象进提示词 | summary 正常（模型要原文因数据只有标签） | PASS | - | logs/D3-C1-longprompt.log | |
+| D3-C1b-promptcheck | 06 §6.6 | __to_prompt__ 实际注入 | PROMPT_CONTAINS_TITLE/SECTION=True | PASS | - | logs/D3-C1b-promptcheck.log | 注入完整，C1 通过 |
+| D3-C2-nondeterminism | C2 | 非确定性多次差异 | t1=1 t2=1 t3=1 b1/b2=True 稳定 | PASS | - | logs/D3-C2-nondeterminism.log | bool/int 解析稳定 |
+| D3-C3-timeout | C3 + 11 §11.3 | 超时抛 LLMCallError 可捕获 | LLMCallError 逃逸 try/except，程序崩溃 | KERNEL_ISSUE | P1 | logs/D3-C3-timeout.log | 见 KERNEL-ISSUE-003 |
+| D3-C3d-timeout-tryread | C3 + 04 §4.7 | 同上有变量读 | 同样逃逸 | KERNEL_ISSUE | P1 | logs/D3-C3d.log | KERNEL-ISSUE-003 |
+| D3-C3e-llmfn-try | C3 + 04 §4.7 | llm 函数路径同样捕获 | 同样逃逸 | KERNEL_ISSUE | P1 | logs/D3-C3e.log | KERNEL-ISSUE-003（两条路径通用） |
+| D3-C3c-mock-parsefail | 04 §4.7 | MOCK LLMParseError 捕获 | caught_parse=... | PASS | - | logs/D3-C3c.log | 对照：MOCK 路径正常 |
+| D3-C3f-manual-raise | 04 §4.7 | 手动 raise LLMCallError 捕获 | caught=manual fail | PASS | - | logs/D3-C3f.log | 对照：手动路径正常 |
+
 ## 缺陷记录
 
 ### DOC-ISSUE-001 — `02_variables.md §2.6` 示例缺返回标注
@@ -135,3 +148,19 @@
 - **实际**：child 引擎按自身 project_root 加载 api_config.json，不继承 parent 的 ai 配置。
 - **级别**：P3（文档边界未明示；行为与"完全独立"一致，非缺陷）。
 - **证据**：cases/D2-50-isolation-llm.ibci + multifile/child_llm.ibci + logs/D2-50-isolation-llm.log。
+
+### KERNEL-ISSUE-003 — 真实 LLM provider 层失败（超时）的 LLMCallError 逃逸 try/except
+- **复现**：`ai.set_timeout(0.01)` + 真实 LLM 调用（行为表达式 `@~...~` 或 `llm` 函数两条路径）
+  在 `try: ... except LLMCallError/LLMError/Exception` 内——异常**未被捕获**，
+  以 `ThrownException: <LLMCallError object>` 传播，程序崩溃。
+- **文档**：04_control_flow §4.7（LLMCallError 是 LLMError/Exception 子树，except 按继承链匹配；
+  表"没有 llmexcept 保护时的 LLM 失败兜底"）；10_robustness §10.3（"LLM provider 层失败
+  （网络/鉴权）时立即抛出 LLMCallError"）。
+- **对照**：① 手动 `raise LLMCallError("manual fail")` 被正常捕获（D3-C3f PASS）；
+  ② MOCK `LLMParseError` 被正常捕获（D3-C3c PASS）——**缺陷限定在 provider 层失败经
+  worker/Future 投递的路径**。
+- **实际**：provider 失败经 `_call_llm` 抛 `ThrownException(error_obj)`（worker 线程内），
+  经 Future/`try_result` 回传，VM 未按 IBCI 异常匹配 try/except，直接冒泡为 Runtime Error。
+- **级别**：P1（文档承诺的异常捕获契约在真实 provider 失败路径失效；llmexcept 收敛场景 C3 相关）。
+- **证据**：cases/D3-C3/d/e-timeout-try*.ibci + logs/D3-C3/d/e.log；对照 D3-C3c/f。
+- **备注**：KNOWN_LIMITS §十六.6（set_timeout 超时行为需真实 LLM 验证）已被此测试触发。
