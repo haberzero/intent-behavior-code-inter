@@ -1,7 +1,6 @@
 from typing import Optional
 from abc import ABC, abstractmethod
 
-from core.extension.exceptions import PluginError, InterpreterError, CompilerError
 from core.extension.capabilities import PluginCapabilities, ExtensionCapabilities
 
 

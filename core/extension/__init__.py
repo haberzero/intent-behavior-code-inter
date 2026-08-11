@@ -6,23 +6,22 @@ IBC-Inter Extension SDK
     from core.extension import SpecBuilder
 
 或直接导入：
-    from core.extension.ibcext import IbPlugin, PluginError
+    from core.extension.ibcext import IbPlugin
     from core.base.interfaces import ILLMProvider
     from core.extension.spec_builder import SpecBuilder
 """
 
 from core.extension.ibcext import (
     IbPlugin,
-    PluginError,
-    InterpreterError,
-    CompilerError,
     ExtensionCapabilities,
     PluginCapabilities,
 )
+from core.extension.exceptions import PluginError, CompilerError
 from core.extension.capabilities import (
     PluginCapabilities,
     ExtensionCapabilities,
 )
+from core.kernel.issue import InterpreterError
 from core.base.interfaces import ILLMProvider
 from core.extension.spec_builder import SpecBuilder, ClassSpecBuilder
 from core.extension.auto_discovery import (

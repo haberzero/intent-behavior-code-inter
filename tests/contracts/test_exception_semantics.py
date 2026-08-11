@@ -409,3 +409,39 @@ except TypeError as e:
     print("outer caught")
 """
         assert run_ibci(EXC_PRELUDE + code) == ["inner caught", "outer caught"]
+
+
+# ===========================================================================
+# InterpreterError 单一实现契约（PT-DEBT-20 / U3）
+# ===========================================================================
+
+
+class TestInterpreterErrorSingleImplementation:
+    """PT-DEBT-20：全仓只存在一个 InterpreterError（能力完备的 kernel 版）。
+
+    公开名 ``core.extension.InterpreterError`` 必须解析到 ``core.kernel.issue``
+    版本（支持 error_code / location / severity），且 `core.extension.exceptions`
+    不再定义同名重复类（历史遗留清理，防止再引入兼容层）。
+    """
+
+    def test_public_name_resolves_to_kernel_class(self):
+        from core.extension import InterpreterError as Ext
+        from core.kernel.issue import InterpreterError as Kernel
+
+        assert Ext is Kernel
+
+    def test_kernel_class_supports_error_code(self):
+        from core.kernel.issue import InterpreterError
+
+        e = InterpreterError("boom", error_code="RUN_TEST")
+        assert e.error_code == "RUN_TEST"
+        assert "boom" in str(e)
+        assert "[RUN_TEST]" in str(e)
+
+    def test_extension_exceptions_no_longer_defines_interpreter_error(self):
+        import core.extension.exceptions as ext_exc
+
+        assert not hasattr(ext_exc, "InterpreterError"), (
+            "core.extension.exceptions must not redefine InterpreterError "
+            "(single-implementation contract)"
+        )
