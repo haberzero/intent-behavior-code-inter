@@ -61,7 +61,12 @@ _DEFAULT_REASONING = False
 
 
 def _resolve_env(value: Any, context: str) -> str:
-    """解析 ``{env:VAR}`` 引用；非字符串原样透传，VAR 不存在 fail-fast。"""
+    """解析 ``{env:VAR}`` 引用；非字符串原样透传，VAR 缺失或格式非法 fail-fast。
+
+    格式非法（变量名非 ``[A-Z_][A-Z0-9_]*``，如小写/连字符/点号）与变量缺失同样
+    fail-fast——静默把 ``{env:...}`` 当字面量透传给 provider 会在调用期才暴露
+    难定位的鉴权/连接失败。
+    """
     if not isinstance(value, str):
         return value
 
@@ -74,7 +79,13 @@ def _resolve_env(value: Any, context: str) -> str:
             )
         return os.environ[var]
 
-    return _ENV_PATTERN.sub(_sub, value)
+    result = _ENV_PATTERN.sub(_sub, value)
+    if "{env:" in result:
+        raise InterpreterError(
+            f"{context}: 环境变量引用格式非法: {value}（变量名须为大写下划线）",
+            error_code=CFG_CONFIG_ENV_VAR_MISSING,
+        )
+    return result
 
 
 class ApiConfig:
@@ -172,6 +183,22 @@ class ApiConfig:
         return result
 
     @classmethod
+    def _require_nonempty(cls, value: Any, context: str, field: str) -> str:
+        """校验字段为**非空**字符串（空白也拒绝）——空凭据静默透传会在调用期
+        产生无诊断码的泛化错误，与 fail-fast 契约不符。"""
+        if not isinstance(value, str):
+            raise InterpreterError(
+                f"{context}.{field} 必须是字符串",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        if not value.strip():
+            raise InterpreterError(
+                f"{context}.{field} 不能为空",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        return value
+
+    @classmethod
     def _validate_providers(cls, raw: Any) -> Dict[str, Dict[str, Any]]:
         if raw is None:
             return {}
@@ -193,11 +220,7 @@ class ApiConfig:
                         f"providers.{name} 缺少必要字段 {field}",
                         error_code=CFG_CONFIG_MISSING_FIELD,
                     )
-                if not isinstance(prov[field], str):
-                    raise InterpreterError(
-                        f"providers.{name}.{field} 必须是字符串",
-                        error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
-                    )
+                cls._require_nonempty(prov[field], f"providers.{name}", field)
             result[name] = {
                 "base_url": _resolve_env(prov["base_url"], f"providers.{name}.base_url"),
                 "api_key": _resolve_env(prov["api_key"], f"providers.{name}.api_key"),
@@ -235,11 +258,7 @@ class ApiConfig:
                 f"{context} 缺少必要字段 model",
                 error_code=CFG_CONFIG_MISSING_FIELD,
             )
-        if not isinstance(model["model"], str):
-            raise InterpreterError(
-                f"{context}.model 必须是字符串",
-                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
-            )
+        cls._require_nonempty(model["model"], context, "model")
         result: Dict[str, Any] = {"model": model["model"]}
 
         # 连接信息：provider 引用 或 直接 base_url/api_key
@@ -264,11 +283,7 @@ class ApiConfig:
                         f"{context} 缺少必要字段 {field}（或 provider 引用）",
                         error_code=CFG_CONFIG_MISSING_FIELD,
                     )
-                if not isinstance(model[field], str):
-                    raise InterpreterError(
-                        f"{context}.{field} 必须是字符串",
-                        error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
-                    )
+                cls._require_nonempty(model[field], context, field)
             result["base_url"] = _resolve_env(model["base_url"], f"{context}.base_url")
             result["api_key"] = _resolve_env(model["api_key"], f"{context}.api_key")
 

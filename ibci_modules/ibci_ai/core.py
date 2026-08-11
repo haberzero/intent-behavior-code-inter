@@ -8,11 +8,16 @@ from core.kernel.path import PathValidator
 from core.runtime.capability_registry import CapabilityRegistry
 
 from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine
-from ibci_modules.ibci_ai.config_loader import ApiConfig
+from ibci_modules.ibci_ai.config_loader import (
+    ApiConfig,
+    _DEFAULT_TIMEOUT,
+    _DEFAULT_RETRY,
+    _DEFAULT_AUTO_INTENT,
+)
 
-# MOCK 模式哨兵（显式声明进入：_config["mock"]=True 或 env IBC_TEST_MODE=1；不嗅探 url/key）
+# MOCK 模式哨兵（仅显式声明进入：_config["mock"]=True，经 set_mock_mode/apply_config
+# defaults.mock；不嗅探 url/key，不读隐式环境变量——避免环境开关静默压过显式配置）
 MOCK_CLIENT_SENTINEL = "MOCK_CLIENT"
-_MOCK_TEST_MODE_ENV = "IBC_TEST_MODE"
 
 # openai 为可选依赖（与 ibci_net 的 HAS_REQUESTS 同构）。错误收窄覆盖
 # provider 层失败契约：openai SDK 全家族基类 + 本仓约定的 provider 失败信号
@@ -40,9 +45,9 @@ class AIPlugin(IbStatefulPlugin):
             "url": None,
             "key": None,
             "model": None,
-            "retry": 3,
-            "timeout": 30.0,
-            "auto_intent_injection": True,
+            "retry": _DEFAULT_RETRY,
+            "timeout": _DEFAULT_TIMEOUT,
+            "auto_intent_injection": _DEFAULT_AUTO_INTENT,
             "mock": False,
         }
         # 命名模型注册表：用于 @NAME~ 语法的模型路由
@@ -60,12 +65,10 @@ class AIPlugin(IbStatefulPlugin):
         # MOCK 指令语言单点实现（线程安全；seq/retry 状态由引擎持有）
         self._mock_engine = MockScenarioEngine()
         
-        # [NEW] 模型能力策略缓存
+        # 模型能力决策缓存（probe_model / reasoning 声明 / mock 写入，调用路径消费）
         self._model_capabilities = {
-            "probed": False,          # 是否已经探测过
+            "probed": False,          # 是否已探测/声明模型类别
             "is_reasoning": False,    # 是否是强制推理模型
-            "supports_system": True,  # 是否支持 System 角色
-            "extract_strategy": "standard" # 提取策略: standard, tag_based, keyword_based
         }
         # 未 probe 告警去重：仅首次未探测调用告警一次，避免热路径刷屏
         self._unprobed_warned = False
@@ -83,8 +86,8 @@ class AIPlugin(IbStatefulPlugin):
         return reasoning
 
     def _is_test_mode(self) -> bool:
-        """当前是否处于 MOCK 测试模式（显式声明：``_config["mock"]`` 或 env ``IBC_TEST_MODE``）。"""
-        return bool(self._config.get("mock", False)) or os.environ.get(_MOCK_TEST_MODE_ENV) == "1"
+        """当前是否处于 MOCK 测试模式（仅显式声明：``_config["mock"]``）。"""
+        return bool(self._config.get("mock", False))
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
@@ -121,18 +124,26 @@ class AIPlugin(IbStatefulPlugin):
             self._client = MOCK_CLIENT_SENTINEL
             return
 
+        base_url = self._config["url"]
+        key = self._config["key"]
+        # 非 mock 模式下凭据缺失是配置错误——fail-fast，不静默留 None 到调用期
+        # 才抛无诊断码的泛化错误。
+        if not base_url or not key:
+            raise InterpreterError(
+                "LLM 配置缺失：未提供 base_url / api_key。请经 api_config.json 或 "
+                "ai.set_config(url, key, model) 配置，或显式 ai.set_mock_mode()。"
+            )
+
         try:
             from openai import OpenAI
 
-            base_url = self._config["url"]
             # base_url 按用户显式配置原样使用（不再做 localhost /v1 字符串嗅探
             # 启发式——URL 是显式契约，由调用方给出完整 endpoint）。
-            if base_url and self._config["key"]:
-                self._client = OpenAI(
-                    api_key=self._config["key"],
-                    base_url=base_url,
-                    timeout=self._config["timeout"]
-                )
+            self._client = OpenAI(
+                api_key=key,
+                base_url=base_url,
+                timeout=self._config["timeout"]
+            )
         except ImportError:
             raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
         except _PROVIDER_ERRORS as e:
@@ -162,21 +173,29 @@ class AIPlugin(IbStatefulPlugin):
         self._client = MOCK_CLIENT_SENTINEL
         self._model_capabilities["probed"] = True
         self._model_capabilities["is_reasoning"] = False
-        self._model_capabilities["extract_strategy"] = "standard"
         self._unprobed_warned = False
 
     def load_config(self, path: str) -> None:
         """从 ``api_config.json`` 加载配置并应用（原生一等入口）。
 
         替代脚本手动 ``file.exists/json.parse/set_config`` 约定。``path`` 相对
-        于入口文件目录解析；文件不存在或格式错误 fail-fast（带 CFG_ 诊断码，
-        不静默回退 mock）。
+        于**项目根目录（project_root）**解析（与引擎自动加载同锚点——api_config.json
+        是项目级配置，子目录入口脚本下两入口行为一致）；绝对路径原样使用。
+        文件不存在或格式错误 fail-fast（带 CFG_ 诊断码，不静默回退 mock）。
+        路径统一经 ``PathValidator.canonicalize_for_security`` 规范化。
         """
         if self._capabilities is None or self._capabilities.execution_context is None:
             raise InterpreterError(
                 "ai.load_config: 执行上下文不可用，无法解析配置路径"
             )
-        abs_path = self._capabilities.execution_context.resolve_path(path).to_native()
+        ec = self._capabilities.execution_context
+        project_root = ec.get_project_root()
+        if not project_root:
+            raise InterpreterError(
+                "ai.load_config: execution_context 未确立 project_root"
+            )
+        raw = path if os.path.isabs(path) else os.path.join(project_root, path)
+        abs_path = PathValidator.canonicalize_for_security(raw).to_native()
         config = ApiConfig.load(abs_path)
         self.apply_config(config)
 
@@ -206,11 +225,11 @@ class AIPlugin(IbStatefulPlugin):
             self._config["model"] = dm["model"]
         else:
             self.set_config(dm["base_url"], dm["api_key"], dm["model"])
-            if not dm["reasoning"]:
-                self._model_capabilities["probed"] = True
-                self._model_capabilities["is_reasoning"] = False
-                self._model_capabilities["extract_strategy"] = "standard"
-                self._unprobed_warned = False
+            # reasoning 声明对称处理：false → 标准指令模型；true → 强制推理模型。
+            # 两侧都落 probed/is_reasoning（消除不对称与"未探测"误导告警）。
+            self._model_capabilities["probed"] = True
+            self._model_capabilities["is_reasoning"] = bool(dm["reasoning"])
+            self._unprobed_warned = False
 
         for name, model in validated["models"].items():
             self.register_model(
@@ -236,7 +255,7 @@ class AIPlugin(IbStatefulPlugin):
             "url": url,
             "key": key,
             "model": model,
-            "timeout": kwargs.get("timeout", 30.0),
+            "timeout": kwargs.get("timeout", _DEFAULT_TIMEOUT),
         }
         self._model_registry[name] = config
         # 清除缓存的客户端以便下次使用时重新初始化
@@ -283,7 +302,7 @@ class AIPlugin(IbStatefulPlugin):
         is_test_mode = self._is_test_mode()
         if is_test_mode:
             self._model_capabilities.update({
-                "probed": True, "is_reasoning": False, "extract_strategy": "standard"
+                "probed": True, "is_reasoning": False
             })
             return "MOCK_PROBE_SUCCESS"
 
@@ -339,7 +358,6 @@ class AIPlugin(IbStatefulPlugin):
             self._model_capabilities.update({
                 "probed": True,
                 "is_reasoning": is_reasoning,
-                "extract_strategy": "tag_based" if is_reasoning else "standard"
             })
             
             return "REASONING_MODEL" if is_reasoning else "STANDARD_MODEL"
@@ -353,7 +371,6 @@ class AIPlugin(IbStatefulPlugin):
             self._model_capabilities.update({
                 "probed": True,
                 "is_reasoning": True,
-                "extract_strategy": "tag_based"
             })
             return "PROBE_FAILED_FALLBACK_REASONING"
 
@@ -361,7 +378,7 @@ class AIPlugin(IbStatefulPlugin):
         self._config["retry"] = count
 
     def get_retry(self) -> int:
-        return self._config.get("retry", 3)
+        return self._config.get("retry", _DEFAULT_RETRY)
 
     def is_auto_intent_injection_enabled(self) -> bool:
         return self._config.get("auto_intent_injection", True)

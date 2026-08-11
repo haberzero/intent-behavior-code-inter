@@ -263,3 +263,52 @@ class TestAIPluginSetupContract:
         plugin.setup(self._caps(self._ec(str(link_dir))))
         assert plugin._is_test_mode() is True
         assert plugin.has_api_key() is True
+
+
+class TestConfigFailFastHardening:
+    """F1/F2/F4/F6：配置机制 fail-fast 硬化（上一批次遗留，general 彻查发现）。"""
+
+    def test_env_ref_malformed_fails_fast(self):
+        """F1：`{env:lower}` 格式非法（非大写下划线）不得静默透传为字面量。"""
+        with pytest.raises(InterpreterError) as ei:
+            ApiConfig.validate({
+                "default_model": {"base_url": "{env:lower_url}", "api_key": "k", "model": "m"}
+            })
+        assert "env" in str(ei.value)
+
+    def test_empty_credentials_fail_fast(self):
+        """F6：空/空白 base_url/api_key/model 不得通过校验（静默到调用期才报错）。"""
+        for dm in (
+            {"base_url": "", "api_key": "k", "model": "m"},
+            {"base_url": "http://x", "api_key": "  ", "model": "m"},
+            {"base_url": "http://x", "api_key": "k", "model": "  "},
+        ):
+            with pytest.raises(InterpreterError):
+                ApiConfig.validate({"default_model": dm})
+
+    def test_env_test_mode_does_not_override_explicit_config(self, monkeypatch):
+        """F2：环境变量 IBC_TEST_MODE 不得静默压过显式 set_config（mock 显式化）。"""
+        monkeypatch.setenv("IBC_TEST_MODE", "1")
+        plugin = AIPlugin()
+        try:
+            plugin.set_config("http://real/v1", "real-key", "real-model")
+        except RuntimeError:
+            pass  # openai 未安装时 _init_client 失败，但 mock 标志须已清
+        assert plugin._is_test_mode() is False
+        assert plugin._config.get("mock") is False
+
+    def test_reasoning_true_declared_symmetrically(self):
+        """F4：reasoning:true 声明与 false 对称落 probed/is_reasoning（无误导告警）。"""
+        plugin = AIPlugin()
+        plugin.apply_config({
+            "defaults": {},
+            "default_model": {"base_url": "http://x/v1", "api_key": "k", "model": "m", "reasoning": True},
+        })
+        assert plugin._model_capabilities["probed"] is True
+        assert plugin._model_capabilities["is_reasoning"] is True
+
+    def test_dead_capability_fields_removed(self):
+        """F5：extract_strategy/supports_system 死字段已删除（写而不读的预留策略字段）。"""
+        plugin = AIPlugin()
+        assert "extract_strategy" not in plugin._model_capabilities
+        assert "supports_system" not in plugin._model_capabilities

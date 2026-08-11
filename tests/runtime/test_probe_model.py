@@ -105,7 +105,6 @@ class TestProbeMockPath:
         assert plugin.probe_model() == "MOCK_PROBE_SUCCESS"
         assert plugin._model_capabilities["probed"] is True
         assert plugin._model_capabilities["is_reasoning"] is False
-        assert plugin._model_capabilities["extract_strategy"] == "standard"
 
     def test_mock_path_never_builds_network_client(self):
         from ibci_modules.ibci_ai.core import MOCK_CLIENT_SENTINEL
@@ -129,7 +128,6 @@ class TestProbeReasoningDetection:
         )
         assert plugin.probe_model() == "REASONING_MODEL"
         assert plugin._model_capabilities["is_reasoning"] is True
-        assert plugin._model_capabilities["extract_strategy"] == "tag_based"
 
     def test_reasoning_via_reasoning_field(self):
         plugin = _plugin_with_fake(
@@ -152,7 +150,6 @@ class TestProbeReasoningDetection:
         plugin = _plugin_with_fake(responder=lambda *a, **k: _completion(content="YES"))
         assert plugin.probe_model() == "STANDARD_MODEL"
         assert plugin._model_capabilities["is_reasoning"] is False
-        assert plugin._model_capabilities["extract_strategy"] == "standard"
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +165,6 @@ class TestProbeFailureFallback:
         plugin = _plugin_with_fake(responder=boom)
         assert plugin.probe_model() == "PROBE_FAILED_FALLBACK_REASONING"
         assert plugin._model_capabilities["is_reasoning"] is True
-        assert plugin._model_capabilities["extract_strategy"] == "tag_based"
 
 
 # ---------------------------------------------------------------------------
