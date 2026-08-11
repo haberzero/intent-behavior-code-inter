@@ -200,7 +200,7 @@ core/runtime/interpreter/runtime_context.py
 ### 4.1 @ 涂抹意图注入
 
 ```python
-# visit_IbIntentAnnotation（stmt_handler.py）
+# vm_handle_IbIntentAnnotation（vm/handlers/llm_behavior.py）
 # @：涂抹意图，只对下一次 LLM 调用有效，消费后自动清除
 intent = factory.create_intent_from_node(...)
 runtime_context.add_smear_intent(intent)   # → _intent_ctx.add_smear(intent)
@@ -254,7 +254,7 @@ func inspect_intents() -> any:
 ### 4.4 @- 移除意图
 
 ```python
-# visit_IbIntentStackOperation（stmt_handler.py）
+# vm_handle_IbIntentStackOperation（vm/handlers/llm_behavior.py）
 if intent_info.pop_top:
     runtime_context.pop_intent()                       # @-（无参数）：弹出栈顶
 elif intent_info.tag:
@@ -533,7 +533,7 @@ func func_with_custom_ctx():
 **实现要求（当前实现）**：
 - `IbBehavior.call()` 在 `capture_mode == 'snapshot'` 时，executor 使用 `captured_intents`（冻结快照）而非调用处的 `runtime_context._intent_ctx`
 - 执行器必须**主动跳过**消费 `runtime_context._intent_ctx` 中的 smear 队列和 override 槽（不应消费调用处的 `@` 意图）
-- 当前实现：`IbBehavior.__init__` 接受 `captured_intents` 参数，`capture_mode='snapshot'` 时注入；对调用时 smear/override 的进一步约束仍需持续验证
+- 当前实现：`vm_handle_IbBehaviorExpr` 对 `capture_mode == 'snapshot'` 经 `fork_intent_snapshot()` 冻结快照注入 `IbBehavior.__init__` 的 `captured_intents`；对调用处 smear/override 的跳过由该快照机制统一承担
 
 ---
 

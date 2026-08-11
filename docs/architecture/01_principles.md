@@ -99,7 +99,7 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 
 - `kernel/axioms/` 定义 IBC-Inter 类型行为规范
 - `base/source_atomics.py` 定义位置/严重级别等原子概念
-- 这些概念应该可以迁移到 C++ 或任何其他语言
+- 公理化基底与 Python 宿主解耦：同一规范可迁移到 C++ 或任何其他语言
 
 ### 3.3 插件系统三大职责边界
 

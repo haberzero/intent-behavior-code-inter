@@ -119,6 +119,17 @@ step(task) → _drive_loop_gen 单步:
 
 该绑定语义与语义层实参解析（`docs/architecture/03_type_system.md` §3.6、§5.1）一致。运行期各 callee 路径保持按索引绑定不变，参数解析的改动收敛在 `vm_handle_IbCall` 单一入口。
 
+### 2.7 类构造：帧内 CPS 驱动
+
+用户类（不含原生 `__init__`）的构造是 VM 帧内 CPS 驱动，非嵌套调度器：
+
+- `IbClass.receive('__call__')` 对不含原生 `__init__` 的类返回 `_ClassInstantiateDrive`（`Waitable` + `CPSDrivable`）。
+- `vm_handle_IbCall` 识别 `CPSDrivable` 后 `yield from result.cps_drive(executor)`：字段默认值求值与用户 `__init__` 经 `yield`/`UserFunctionCall` 嵌入**当前** VM 帧栈，由外层 CPS 调度循环统一驱动。
+- 宿主 / 线程体无活跃 VM 时 `try_result` / `result` 走同步 `instantiate` 兜底。
+- `thread(...)` 等含原生 `__init__` 的类构造返回 `IbThread` **句柄**（纯 `Waitable`，非 `CPSDrivable`），VM 不 auto-yield——等待须经 `t.join()` / `await t` 显式表达。
+
+类构造 CPS 化的意义：`__init__` 含 LLM 行为 / 通道等待时协作挂起（非阻塞主线程），消除 `vm.run` 嵌套驱动循环与 `init_method.call` 新建 TaskScheduler 的嵌套调度器路径。
+
 ---
 
 ## §3 执行帧与上下文

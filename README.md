@@ -213,8 +213,10 @@ python main.py run test_target_proj/01_hello_world.ibci
 
 - [入门指南](GETTING_STARTED.md)（**新加入者先读**：安装与环境准备）
 - [文档中心导航与治理](docs/README.md)（**新加入者先读**：目录结构、阅读路径、治理纪律）
-- [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
-- [架构原则](docs/ARCHITECTURE.md) (核心设计思路)
+- [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考，含诊断码参考 `docs/syntax/15_diagnostics.md`)
+- [架构原则](docs/ARCHITECTURE.md) (核心设计思路，含观测体系 `docs/architecture/09_observability.md`)
+- [子系统设计](docs/SUBSYSTEM_DESIGN.md)（意图 / 文件容器 / 可调用 / 插件 / 协程内部设计）
+- [操作指南](docs/howto/)（按问题查阅：调试 LLM 调用、编写用户插件）
 - [已知限制](docs/KNOWN_LIMITS.md) (当前版本的语言级约束)
 
 ### 运行测试

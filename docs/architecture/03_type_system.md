@@ -2,6 +2,8 @@
 
 > 本文档是 IBCI 类型系统的正式设计文档，与当前代码（`core/kernel/spec/`、`core/kernel/axioms/`、`core/runtime/objects/`）严格对齐。
 >
+> 面向需要扩展或验证类型系统的编译器/运行时开发者。覆盖类型描述体系（`IbSpec`/`TypeDef`）、公理驱动分派、可空性/泛型/签名形态，以及类型在序列化与值层的呈现。阅读前需了解 AST 节点类型（`docs/architecture/02_metadata_ast.md`）。
+>
 > **路径说明**：以下模块为包结构（目录），正文中 `*.py` 路径请以实际目录为准：
 > `kernel/spec/registry/`、`kernel/axioms/primitives/`、`runtime/objects/{primitives,kernel}/`、
 > `runtime/vm/handlers/`、`runtime/interpreter/llm_executor/`。

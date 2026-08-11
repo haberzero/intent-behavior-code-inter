@@ -96,6 +96,24 @@
 - **P1-14**（15_diagnostics 条目格式）：**已修**——补齐 LEX/PAR/SEM/DEP/INT/RUN 分域引言（与 KDIAG/CFG 一致）；条目本身已统一（86/86 同模板）
 - **P1-15**（11_modules §11.3-11.9 平行模板）：**已修**——isys/idbg/ihost/json 补一句话定位，平行小节统一（一句话定位 + 接口代码）
 - **P1-16**（15:23 + 13:201-202 E9 模块路径）：**已修**——15:23 删 exporter.py/main.py 模块路径改"CLI 命令"；13:201 注释"实现路径见插件"改"随 ibci_ai 插件提供"
+
+## 执行进度更新（2026-08-11 本 session P2 处置）
+
+**P2 各文件处置（doc-governance Phase 4-5）**：
+- **P2-1**（A5 类构造 CPS 变更反映）：**已修**——arch/04 新增 §2.7 类构造帧内 CPS 驱动（`_ClassInstantiateDrive`/`CPSDrivable`/句柄不 auto-yield）；arch/05 新增公理 EXEC-4（与 syntax/14 auto-yield 表述一致）
+- **P2-2**（README §二 阅读路径）：**已修**——进一步阅读补 subsystems/howto/诊断码/观测体系指针
+- **P2-3**（howto 层扩充）：**已修**——新建 `docs/howto/use_generators.md`（yield/yield from/next/LLM 组合）+ `docs/howto/write_concurrent_tasks.md`（thread/chan/slot/await）；docs/README howto 目录注册；llmexcept 已由 guide/03 覆盖不重复
+- **P2-4**（subsystems/01 L203/257 断链）：**已修**——`stmt_handler.py`（不存在）改 `vm/handlers/llm_behavior.py`（代码核实 vm_handle_IbIntentAnnotation/IbIntentStackOperation 所在）
+- **P2-5**（subsystems/01:536 E7 验证记录）：**已修**——"仍需持续验证"状态标记改现状描述（`fork_intent_snapshot` 统一承担调用处 smear/override 跳过，代码核实）
+- **P2-6**（subsystems/02/04 E4 未实现设计）：**评估维持现状**——三处均明确标注"未来设计/未实现/预留/尚未实现"，符合 WRITING_GUIDE E-row 例外（独立标注的未实现设计），非违规
+- **P2-7**（guide/02:101 + 03:122 死引用定义）：**已修**——删除 02 的 `[syntax-07]` 与 03 的 `[syntax-10]` 未使用引用定义（05/06 的对应定义保留仍有效）；全 guide 孤儿引用扫描 0
+- **P2-8**（KNOWN_LIMITS:351 "当前状态"标签）：**已修**——删状态标签，改直接事实陈述
+- **P2-9**（howto/debug_llm_calls:78 指针不精确）：**已修**——§四 补"（行为表达式不可直接用于 `return`）"
+- **P2-10**（01_principles:102 "应该"未标注推测）：**已修**——改陈述式"公理化基底与 Python 宿主解耦：同一规范可迁移到 C++ 或任何其他语言"
+- **P2-11**（03_type_system:3 定位段薄弱）：**已修**——定位段补读者对象（编译器/运行时开发者）+ 覆盖范围 + 前置知识（02_metadata_ast）
+- **P2-12**（09 TestHooks 表未按模板）：**已修**——按 §D 协议方法模板重构（回调/签名/调用时机 + 契约 + 注入）
+
+**交叉核验**：@method/已重构为包/四·五/kernel.py/stmt_handler/当前状态/仍需持续验证/应该可以 残留清零；docs 断链扫描 0；guide/howto 孤儿引用 0
 - P2-1~12（A5 变更反映、README 读者旅程、howto 补充、死引用、定位段等）
 
 ## 干净文件（无需改动）

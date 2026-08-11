@@ -32,6 +32,8 @@ docs/
 │
 ├── howto/                           操作指南（按问题查阅）
 │   ├── debug_llm_calls.md
+│   ├── use_generators.md
+│   ├── write_concurrent_tasks.md
 │   └── write_user_plugin.md
 │
 ├── syntax/                          语法说明详细章节

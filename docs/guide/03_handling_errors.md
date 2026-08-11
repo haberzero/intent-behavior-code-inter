@@ -119,4 +119,3 @@ except LLMRetryExhaustedError:
 **下一步**：[04 · 用意图控制 LLM 行为][]——用意图注释精准控制 LLM 的输出风格和格式。
 
 [04 · 用意图控制 LLM 行为]: ./04_intents.md
-[syntax-10]: ../syntax/10_robustness.md

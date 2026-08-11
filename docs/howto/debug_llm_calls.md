@@ -75,4 +75,4 @@ MOCK 指令语法见 `docs/syntax/13_mock_testing.md`。需要验证传输层行
 
 - 异常体系与重试：`docs/syntax/10_robustness.md`
 - MOCK 测试：`docs/syntax/13_mock_testing.md`
-- 行为输出解析限制：`docs/KNOWN_LIMITS.md` §四
+- 行为输出解析限制：`docs/KNOWN_LIMITS.md` §四（行为表达式不可直接用于 `return`）

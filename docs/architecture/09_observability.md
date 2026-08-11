@@ -155,13 +155,15 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 
 `TestHooks` 协议（`core/runtime/interfaces.py`）三个回调：
 
-| 回调 | 时机 |
-|------|------|
-| `on_llm_call(node_uid, sys_prompt, user_prompt, target_model, response)` | LLM 调用成功返回 |
-| `on_llm_call_error(node_uid, error)` | LLM provider 失败 |
-| `on_dispatch(node_uid)` | LLM 调用提交调度器（dispatch） |
+| 回调 | 签名 | 调用时机 |
+|------|------|---------|
+| `on_llm_call` | `(node_uid, sys_prompt, user_prompt, target_model, response)` | LLM 调用成功返回 |
+| `on_llm_call_error` | `(node_uid, error)` | LLM provider 失败 |
+| `on_dispatch` | `(node_uid)` | LLM 调用提交调度器（dispatch） |
 
-**注入**：`engine.test_hooks = hooks`（setter）→ 解释器就绪时注入 `ServiceContext.test_hooks` → LLM 执行器消费。未注入时返回 `None`（生产路径零开销）。
+**契约**：回调由 LLM 执行器消费；测试断言应基于回调精确匹配，而非在事件流中过滤。未注入时回调不触发（生产路径零开销）。
+
+**注入**：`engine.test_hooks = hooks`（setter）→ 解释器就绪时注入 `ServiceContext.test_hooks` → LLM 执行器消费。
 
 **与诊断面的区别**：测试合作面是**精确回调**（测试断言用）；诊断面是**结构化记录**（可计数/过滤）。二者互补，不重叠。
 

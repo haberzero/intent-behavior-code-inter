@@ -32,6 +32,8 @@ scheduler 主循环（TaskScheduler.run）:
 
 **公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段 `llmexcept_handler` 在编译期统一挂载到被保护语句（`IbAssign`/`IbIf`/`IbWhile`/`IbFor`/`IbSwitch`/`IbExprStmt`）。`IbLLMExceptionalStmt` 节点（`core/kernel/ast.py`）仅作为挂载载体，binding 消费后不入被保护语句的 body。运行期各被保护语句 handler 求值条件/RHS 后，检查返回值是否为 `IbLLMCallResult(is_certain=False)` 不确定容器：有 handler 时创建 `LLMExceptFrame` 并内联执行 handler body + 完整多轮重试（重试循环以 `_retry_llm_uncertain` 收敛于单帧计数内），无 handler 时抛 `LLMParseError`。不存在侧表驱动的隐式重定向机制。
 
+**公理 EXEC-4（类构造帧内 CPS）**：用户类（不含原生 `__init__`）的构造由 VM 帧内 CPS 驱动：构造返回 `_ClassInstantiateDrive`（`Waitable` + `CPSDrivable`），`vm_handle_IbCall` `yield from cps_drive`，字段默认值求值与用户 `__init__` 嵌入当前 VM 帧栈。`__init__` 含 Waitable（LLM 行为 / 通道等待）时协作挂起，非阻塞调度线程。含原生 `__init__` 的类（如 `thread(...)`）返回 `IbThread` 句柄（纯 `Waitable`，不 auto-yield），等待须经 `t.join()` / `await t` 显式表达。
+
 **已知限制**：无——所有节点类型均支持 CPS handler。
 
 ---

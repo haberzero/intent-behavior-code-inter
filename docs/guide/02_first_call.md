@@ -98,4 +98,3 @@ else:
 **下一步**：[03 · 处理 LLM 调用失败][]——处理真实场景中不可避免的 LLM 调用失败。
 
 [03 · 处理 LLM 调用失败]: ./03_handling_errors.md
-[syntax-07]: ../syntax/07_behavior_expressions.md
