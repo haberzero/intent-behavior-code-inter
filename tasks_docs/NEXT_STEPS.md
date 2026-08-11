@@ -186,8 +186,10 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 - **当前最紧要（下一 session 起点，用户 2026-08-11 定案）**：**真实 LLM e2e 全面试用 + 高强度批判检测**
   （`tasks_docs/_REAL_LLM_E2E_PLAN.md`）+ **unsafe-vibe-dev 合并取代 main 规划**（`tasks_docs/_MAIN_MERGE_PLAN.md`）。
   按序：
+  0. **（前置）PT-FEAT-13 C1-C3 配置机制完备化**（`_API_CONFIG_DESIGN.md`）：原生配置加载 + `set_config` 结构化 +
+     配置校验诊断——使本地非思考模型端点配置成为一等机制（替代每脚本 `file/json.parse/set_config` 约定）。
   1. **本地 LLM 服务就绪**：起 Ollama/LM Studio 等 OpenAI 兼容端点（**非思考模型**，防反思死循环）；
-     以 `ai.set_config(base_url, key, model)` 或 `api_config.json` 指向本地端点；最小探针验证连通。
+     用新原生配置声明 `providers.ollama` + `models.local(reasoning:false)`；最小探针验证连通。
   2. **真实 LLM 全面试用**：按 `_REAL_LLM_E2E_PLAN.md` §四 逐项（行为表达式/LLM 函数/提示词协议/意图/
      llmexcept/行为驱动循环/并发异步/动态宿主/用户类/生成器/内建/异常）各跑一遍，记录真实 LLM 行为。
   3. **e2e 高强度批判检测**：非 MOCK 的 e2e/契约用例改指真实 LLM 跑，MOCK-vs-真实差异 = 缺陷候选；

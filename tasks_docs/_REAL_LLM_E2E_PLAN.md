@@ -85,3 +85,14 @@ ai.set_config("http://localhost:11434/v1", "ollama", "qwen3-8b")
 - 破坏性重构按"独立分支 + 零风险直接合并/大风险 cherry-pick"政策
 - 工作日志：所有自主决策/方案取舍/验证差异详尽记录于 WORKLOG
 - demo 对外宣传以"真实 LLM 驱动"为定位；MOCK 仅作工程验证，不作展示主路径
+
+## 八、执行顺序（下一 session 主任务链）
+1. **（前置）PT-FEAT-13 C1-C3 配置机制完备化**（`_API_CONFIG_DESIGN.md`）：原生配置加载（`ai.load_config`/引擎自动，
+   替代每脚本 `file/json.parse/set_config` 约定）+ `set_config` 结构化 + 配置校验诊断（fail-fast/诊断码，不静默回退 mock）。
+   使本地非思考模型端点配置成为一等机制。
+2. **本地 LLM 服务就绪**（§二）+ IBCI 指向（§三）：用新的原生配置声明 `providers.ollama` + `models.local(reasoning:false)`，
+   最小探针验证连通。
+3. **真实 LLM 全面试用**（§四）。
+4. **e2e 高强度批判检测**（§五）。
+5. **暴露问题处置 + 验证报告**（§六）→ 评估 unsafe-vibe-dev 是否可进入 main 合并（`_MAIN_MERGE_PLAN.md`）。
+6. **文档/README 更新**（`_MAIN_MERGE_PLAN.md` §三 + `_DOC_HEALTH_20260811.md` 剩余 P0/P1）。

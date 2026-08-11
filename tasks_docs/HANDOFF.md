@@ -133,18 +133,20 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > **接手起点**：先读本节（当前状态）+ `PENDING_TASKS.md` §〇（优先级总表，单一权威源）+
 > 本 session 成果记录（`WORKLOG.md` 尾部 + git 历史 `c61a6e0..HEAD`）。
 
-- **🔴 下一 session 主任务（2026-08-11 用户定案）**：**基于本地 LLM 服务的真实 e2e 全面试用 + 高强度批判检测**，
-  通过后评估 **unsafe-vibe-dev 合并取代 main**。详细见 `_REAL_LLM_E2E_PLAN.md` + `_MAIN_MERGE_PLAN.md`。
-  - **接手第一步**：起本地 OpenAI 兼容 LLM（Ollama/LM Studio/vLLM，**非思考模型**），`ai.set_config(base_url,key,model)`
-    指向它，最小探针 `str r = @~ 说你好 ~` 验证连通。
-  - **配置机制前置（PT-FEAT-13 C1-C3，`_API_CONFIG_DESIGN.md`）**：现 api_config.json 非原生加载（脚本约定）——
-    建议先落地**原生配置加载 + set_config 结构化 + 校验诊断**，使本地 LLM 试用配置成为一等机制
-    （替代每脚本 `file.exists/json.parse/set_config` 约定；`reasoning:false` 承载非思考模型约束）。
-  - **主任务**：按 `_REAL_LLM_E2E_PLAN.md` §四 全语法特性真实试用 + §五 e2e 批判检测（MOCK-vs-真实差异 = 缺陷候选 +
-    对抗场景），产出验证报告，处置暴露问题，评估合并条件。
+- **🔴 下一 session 主任务（2026-08-11 用户定案）**：**真实 LLM e2e 全面试用 + 高强度批判检测**，
+  通过后评估 **unsafe-vibe-dev 合并取代 main**。详细见 `_REAL_LLM_E2E_PLAN.md`（§八执行顺序）+ `_MAIN_MERGE_PLAN.md`。
+  - **主任务链（按序，每步全量 pytest 零回归 + commit + 同步任务文档）**：
+    1. **PT-FEAT-13 C1-C3 配置机制完备化**（`_API_CONFIG_DESIGN.md`）：原生配置加载（`ai.load_config`/引擎自动，
+       替代每脚本 `file/json.parse/set_config` 约定）+ `set_config` 结构化 + 配置校验诊断（fail-fast/诊断码）。
+    2. **本地 LLM 服务就绪**（Ollama/LM Studio/vLLM，**非思考模型**），用新原生配置声明 `providers.ollama` +
+       `models.local(reasoning:false)`，最小探针 `str r = @~ 说你好 ~` 验证连通。
+    3. **真实 LLM 全面试用**（`_REAL_LLM_E2E_PLAN.md` §四，全语法特性）。
+    4. **e2e 高强度批判检测**（§五，MOCK-vs-真实差异 = 缺陷候选 + 对抗场景）。
+    5. **暴露问题处置 + 验证报告**（§六）→ 评估合并条件（`_MAIN_MERGE_PLAN.md`）。
+    6. **文档/README 更新**（`_MAIN_MERGE_PLAN.md` §三 + `_DOC_HEALTH_20260811.md` 剩余 P0/P1）。
   - **CI/CD**：GitHub 侧已停用自动触发（`ci.yml` → `workflow_dispatch`），勿自动恢复；待单独设计"可靠化/实用化"。
   - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=720000 / 总预算无上限）；
-    objective 套 §1.3 模板，主任务 = 真实 LLM e2e 试用 + 批判检测 + 验证报告 + 合并评估。
+    objective 套 §1.3 模板，主任务 = 上述主任务链 1-6。
 
 - **PT-DEBT-17 `ai.run_batch` 同步阻塞根治（2026-08-11，独立分支 exp/run-batch-cps → 手动应用 unsafe-vibe-dev ebbb7f8，全量 2135 passed / 1 skipped）**：
   - **三层不一致全部根治**：`run_batch` 返回 `CPSDrivable` Waitable（与 `stream_call` 返回 `IbStreamHandle`、A3
