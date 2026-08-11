@@ -2,7 +2,7 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-11（PT-DEBT-17 `ai.run_batch` 同步阻塞根治 + PT-AUDIT-2 `_collect_instance` 拆具名 collector + A5 类构造 CPS 根治 + A6 评估维持现状 + 分支政策"零风险直接合并"细则，全量 2137/1；剩余 PT-DEBT-4 独立窗口与 P3 VISION）
+> **最后更新**：2026-08-11（规划新阶段：真实 LLM e2e 全面试用 + 高强度批判检测（`_REAL_LLM_E2E_PLAN.md`）+ unsafe-vibe-dev 合并取代 main 规划（`_MAIN_MERGE_PLAN.md`）+ CI/CD 退役（GitHub 侧停用自动触发）；文档健康检查 P0/P1 部分完成、剩余问题落档 `_DOC_HEALTH_20260811.md`）
 
 ---
 
@@ -183,19 +183,24 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **当前最紧要（下一 session 起点）**：见 `PENDING_TASKS.md` §〇 + `tasks_docs/_HEALTH_AUDIT_PLAN.md`（三轴健康盘点）。
-  按优先级：
-  1. ~~技术手册三修~~（**已完成 2026-08-10**）：`01_principles.md:258` P1 过时 `inherit_intents` 字段、`04_vm_interpreter.md:29`
-     P2 `.call` 路径表述、`README` 目录树补 `15_diagnostics.md`。
-  2. ~~PT-DEBT-9/10/11 文档残留清理~~（**已完成 2026-08-10**）：NEXT_STEPS.md:50 旧"遗留技术债"表述改为归档记录。
-  3. ~~异步统一完整性 A1-A4~~（**已完成 2026-08-10，全量 2138/1，0 warning**）：A1 内联 `@~` 表达式接
-     CPS（llm_behavior.py）、A2 意图消解 CPS 化（intent.py，`vm.run` 重入消除）、A4 LLM 函数 CPS-yield
-      （_llm_function.py，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器（comm.py+leaf.py，
-      CPSDrivable 协议分派）。**A5 类构造已根治（2026-08-11，`_ClassInstantiateDrive` CPSDrivable，全量 2137/1）**；
-      **A6 协议方法评估维持现状（2026-08-11，niche + 条件触发，登记已知项）**。
-   4. **PT-DEBT-17 `ai.run_batch` 同步阻塞修复**（**已完成 2026-08-11，unsafe-vibe-dev ebbb7f8，全量 2135/1**）：`run_batch` 返回 `CPSDrivable` Waitable——CPS 预求值（`_prepare_behavior_call_cps` 消除 vm.run 重入）+ 多 LLM Future 聚合 `LLMBatchFuture` 由调度器非阻塞等待（消除主线程 `fut.result()` 硬阻塞），与 `stream_call` Waitable 范式一致；vtable return_type=list 契约不变（auto-yield 后仍收 boxed IbList）。**顺带清理死代码**：`LLMExecutorImpl.resolve()` + `LLMFuture.get()`（VM 全走 `resolve_future_cps`）+ 其 5 个死测试 + 协议声明同步。`ihost.collect`/`run_isolated` 是透明异步 auto-yield（非问题，已澄清）。详见 `_code_run_batch_cps.md` / WORKLOG。
-   5. **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）。
-   6. **P3 VISION**。
+- **当前最紧要（下一 session 起点，用户 2026-08-11 定案）**：**真实 LLM e2e 全面试用 + 高强度批判检测**
+  （`tasks_docs/_REAL_LLM_E2E_PLAN.md`）+ **unsafe-vibe-dev 合并取代 main 规划**（`tasks_docs/_MAIN_MERGE_PLAN.md`）。
+  按序：
+  1. **本地 LLM 服务就绪**：起 Ollama/LM Studio 等 OpenAI 兼容端点（**非思考模型**，防反思死循环）；
+     以 `ai.set_config(base_url, key, model)` 或 `api_config.json` 指向本地端点；最小探针验证连通。
+  2. **真实 LLM 全面试用**：按 `_REAL_LLM_E2E_PLAN.md` §四 逐项（行为表达式/LLM 函数/提示词协议/意图/
+     llmexcept/行为驱动循环/并发异步/动态宿主/用户类/生成器/内建/异常）各跑一遍，记录真实 LLM 行为。
+  3. **e2e 高强度批判检测**：非 MOCK 的 e2e/契约用例改指真实 LLM 跑，MOCK-vs-真实差异 = 缺陷候选；
+     对抗场景（格式服从/llmexcept 收敛/意图注入/并发真实调用/非确定性/超时边界），记录"路径+复现+期望vs实际+级别"。
+  4. **暴露问题处置**：能自主修按 code-workflow 修（零回归）；触公理/语义/对外契约登记 PENDING_TASKS 待裁决。
+  5. **产出验证报告**：通过项 + 暴露问题 + 建议 → 评估 unsafe-vibe-dev 是否可进入 main 合并。
+  6. **文档/README 更新（合并前置）**：README 补本地 LLM 快速开始 + demo 定位"真实 LLM 驱动"；
+     `_DOC_HEALTH_20260811.md` 剩余 P0/P1 清完、P2 尽量；`pyproject` 版本评估；examples 真实跑通。
+- **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
+  待单独设计"可靠化/实用化"后重新启用，勿自动恢复。
+- **分支政策**：经充分验证零风险/边界清晰改进可**直接合并** unsafe-vibe-dev；大风险仍"独立分支 + 手动 cherry-pick"。
+- **已完成的近期主线（供回顾）**：见上方"已完成"节与 `PENDING_TASKS.md` §〇。剩余 PT-DEBT-4 `file` 重命名（独立窗口）、
+  P3 VISION、文档健康 P1/P2（`_DOC_HEALTH_20260811.md`）。
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、

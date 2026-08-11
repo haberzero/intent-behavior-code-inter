@@ -117,6 +117,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_code_yield_from.md` | 阶段 5 增量 `yield from` 生成器委托设计记录（**已完成**，2026-08-09；按惯例汇报后待删，当前保留供追溯） |
 | `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md` | M1 `.call` 双写收敛 / M2 驱动去重设计记录（**已完成**，2026-08-09，独立分支 exp/async-m1m2；保留供追溯） |
 | `_HEALTH_AUDIT_PLAN.md` | **三轴健康盘点**（2026-08-09 只读调查）：异步统一完整性 A1-A6 遗留 + 内核健康（深层嵌套/死同步包装）+ 技术手册健康（P1/P2 待修）。**下一步规划输入** |
+| `_REAL_LLM_E2E_PLAN.md` | **真实 LLM e2e 全面试用 + 高强度批判检测**（2026-08-11 用户定案，下一 session 主任务）：本地 LLM 服务搭建、全语法特性试用清单、MOCK-vs-真实差异批判检测、成功门。设计权威 |
+| `_MAIN_MERGE_PLAN.md` | **unsafe-vibe-dev 合并取代 main 规划**（2026-08-11）：合并时机/进度/前置（文档 README 更新/版本评估/examples）/细则/风险 |
+| `_DOC_HEALTH_20260811.md` | **docs/ 全量健康检查记录**（2026-08-11，doc-governance Phase 2 审计）：P0/P1/P2 全部问题清单 + 已修复/剩余标记。**晚上自主续做依据** |
 
 ---
 
@@ -128,6 +131,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 > **接手起点**：先读本节（当前状态）+ `PENDING_TASKS.md` §〇（优先级总表，单一权威源）+
 > 本 session 成果记录（`WORKLOG.md` 尾部 + git 历史 `c61a6e0..HEAD`）。
+
+- **🔴 下一 session 主任务（2026-08-11 用户定案）**：**基于本地 LLM 服务的真实 e2e 全面试用 + 高强度批判检测**，
+  通过后评估 **unsafe-vibe-dev 合并取代 main**。详细见 `_REAL_LLM_E2E_PLAN.md` + `_MAIN_MERGE_PLAN.md`。
+  - **接手第一步**：起本地 OpenAI 兼容 LLM（Ollama/LM Studio/vLLM，**非思考模型**），`ai.set_config(base_url,key,model)`
+    指向它，最小探针 `str r = @~ 说你好 ~` 验证连通。
+  - **主任务**：按 `_REAL_LLM_E2E_PLAN.md` §四 全语法特性真实试用 + §五 e2e 批判检测（MOCK-vs-真实差异 = 缺陷候选 +
+    对抗场景），产出验证报告，处置暴露问题，评估合并条件。
+  - **CI/CD**：GitHub 侧已停用自动触发（`ci.yml` → `workflow_dispatch`），勿自动恢复；待单独设计"可靠化/实用化"。
+  - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=720000 / 总预算无上限）；
+    objective 套 §1.3 模板，主任务 = 真实 LLM e2e 试用 + 批判检测 + 验证报告 + 合并评估。
 
 - **PT-DEBT-17 `ai.run_batch` 同步阻塞根治（2026-08-11，独立分支 exp/run-batch-cps → 手动应用 unsafe-vibe-dev ebbb7f8，全量 2135 passed / 1 skipped）**：
   - **三层不一致全部根治**：`run_batch` 返回 `CPSDrivable` Waitable（与 `stream_call` 返回 `IbStreamHandle`、A3
@@ -330,6 +343,6 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 - [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（长期，单一权威源）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 读 §二 动态状态接续工作（含 2026-08-11 session 成果：PT-DEBT-17 run_batch 根治 + PT-AUDIT-2 _collect_instance 拆具名 collector + A5 类构造 CPS 根治 + A6 评估维持现状 + 分支政策"零风险直接合并"细则）
+- [ ] 读 §二 动态状态接续工作（含 2026-08-11 session：PT-DEBT-17 run_batch 根治 + PT-AUDIT-2 _collect_instance 重构 + A5 类构造 CPS 根治 + A6 维持现状 + 文档健康检查 P0/P1 部分 + 真实 LLM e2e 规划 + main 合并规划 + CI/CD 退役 + 分支政策"零风险直接合并"细则）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2137 passed / 1 skipped）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

@@ -17,11 +17,14 @@
 
 | 优先级 | 任务 | 维度 | 说明 |
 |--------|------|------|------|
+| **当前阶段（下一 session，2026-08-11 用户定案）** | **真实 LLM e2e 全面试用 + 高强度批判检测**（`_REAL_LLM_E2E_PLAN.md`） | 验证/发布 | **不再以 MOCK 为唯一验证/演示手段**：基于本地 LLM 服务（Ollama/LM Studio 等 OpenAI 兼容端点，非思考模型）做 IBCI 全语法特性真实试用 + MOCK-vs-真实差异批判检测。真实检测可能暴露 MOCK 未覆盖的语义缺陷（格式服从/llmexcept 收敛/意图注入/并发真实调用/非确定性），修复后再进入 main 合并 |
+| **当前阶段（评估）** | **unsafe-vibe-dev 合并取代 main**（`_MAIN_MERGE_PLAN.md`） | 发布/稳定性 | 真实 LLM 检测通过后，`unsafe-vibe-dev` **合并取代 `main`**；`unsafe-vibe-dev` 保留作未来开发分支；`main` 保持稳定。前置：文档/README 更新（本地 LLM 快速开始、demo 定位真实 LLM 驱动）、`pyproject` 版本评估、examples 真实跑通、文档健康 P0/P1 清完 |
+| **P0（发布）** | **CI/CD 退役 + 重新设计** | 发布/工程 | **GitHub 侧 CI 自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**。现 CI 与本机 pytest 区别不大、必要性不足；待单独设计"可靠化/实用化"（真实 LLM e2e / 跨平台 / 发布产物）后重新启用，另行规划 |
 | **当前主线（已完成）** | **PT-DEBT-12/13/14/15 异步地基遗留妥协根治**（`_ASYNC_UNIFY.md`） | 架构健康性 | **统一执行模型闭环——全部收尾（2026-08-09）**。F1→B1→F2/F3→M4 已完成（2026-08-08），M3 已收敛；**M1（.call 双写收敛）/ M2（驱动去重）已完成（2026-08-09，独立分支 exp/async-m1m2，全量 2137/1）**。消"任务内同步重入调度器"遗留旁路 |
 | **P1（异步统一完整）** | **异步统一遗留 A1-A6**（`_HEALTH_AUDIT_PLAN.md`） | 架构健康性 | 地基闭环后 6 处**次要路径**仍任务内同步重入/嵌套调度器：**A1-A4 已完成（2026-08-10，全量 2138/1）**；**A5 类构造已根治（2026-08-11，`_ClassInstantiateDrive` CPSDrivable，全量 2137/1）**；**A6 协议方法 `.call` 评估维持现状（2026-08-11，niche + 条件触发，CPS 化成本高收益低，登记已知项）** |
 | **P1** | **PT-DEBT-17 `ai.run_batch` 同步阻塞**（统一执行模型冲突） | 架构健康性 | **已彻底修复（2026-08-11，unsafe-vibe-dev ebbb7f8，全量 2135/1）**：`run_batch` 返回 `CPSDrivable` Waitable（CPS 预求值 `_prepare_behavior_call_cps` 消除 vm.run 重入 + 多 LLM Future 聚合 `LLMBatchFuture` 由调度器非阻塞等待，与 `stream_call` Waitable 范式一致）。vtable return_type=list 契约不变（auto-yield 后仍收 boxed IbList）。顺带清理死代码 `resolve()`/`LLMFuture.get()`。`ihost.collect`/`run_isolated` 为透明异步 auto-yield（非问题，已澄清） |
 | **P0** | 阶段 5 增量（`next()` 内建 + `yield from`） | 易用性 | **已完成（2026-08-09，全量 2128/1）**：`next()`（c61a6e0）+ `yield from` 生成器委托。设计 `_code_yield_from.md` |
-| **P0** | PT-FEAT-5 错误用户友好化 | 易用性 | **已完成三项（2026-08-09）**：诊断码目录 + 符号表/类型绑定导出 + 编译基准。剩余 **CI/CD**（涉远程 push，禁 push 硬原则范围内，须用户显式授权后另行执行） |
+| **P0** | PT-FEAT-5 错误用户友好化 | 易用性 | **已完成三项（2026-08-09）**：诊断码目录 + 符号表/类型绑定导出 + 编译基准。**CI/CD 已停用 GitHub 侧自动触发（2026-08-11 用户裁定）**——现 CI 与本机 pytest 区别不大、必要性不足；待单独设计"可靠化/实用化"后重新启用 |
 | **P1** | PT-FEAT-10/11/12 UID/序列化统一 | 架构健康性 | **PT-FEAT-10 已完成（2026-08-09）**；PT-FEAT-11（序列化器自动化）、PT-FEAT-12（AST uid 字段）评估为维持现状（见下） |
 | **P1** | PT-DEBT-4 `file` 模块重命名 | 架构健康性 | 影子化 Python 内建，长期隐患；破坏性变更独立窗口 |
 | **P1** | **技术手册健康待修**（P1/P2） | 文档健康 | 三修**已完成（2026-08-10，PT-DOC-3）**：`01_principles.md:258` 过时 `inherit_intents`、`04_vm_interpreter.md:29` `.call` 表述、`README` 目录树补 `15_diagnostics.md`。剩余 How-to 层缺口为 P2 规划 |
@@ -89,7 +92,7 @@
 | PT-FEAT-2 | Enum 非 str 成员 + 迭代能力 | **评估：维持现状（2026-08-09）**。枚举成员值一律为名字字符串 → 数字状态码枚举无法 round-trip。落地需：成员值声明语法 + 类型系统 + 序列化 round-trip（任意成员值）+ LLM from_prompt 改写，属设计冻结级变更（VISION）。session 时间窗不足，维持登记待独立窗口 |
 | PT-FEAT-3 | 用户类泛型类型参数 | VISION |
 | PT-FEAT-4 | 用户类运算符重载 | VISION |
-| PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准。**前三项已落地（2026-08-09：诊断码目录 + 符号表/类型绑定导出 + `bench` 编译基准）**；剩余：CI/CD（涉及远程 push，须用户显式授权后另行执行） |
+| PT-FEAT-5 | 语义错误用户友好化 + 诊断工具 + 性能基准 + CI/CD | 语义 4 阶段管线已稳定；错误码 `SEM_xxx` 转用户友好表述、符号表/类型绑定 JSON/dot 导出、编译时间基准。**前三项已落地（2026-08-09：诊断码目录 + 符号表/类型绑定导出 + `bench` 编译基准）**；**CI/CD：GitHub 侧自动触发已停用（2026-08-11 用户裁定，`.github/workflows/ci.yml` 改 `workflow_dispatch` 手动）**——现 CI 与本机 pytest 区别不大、必要性不足；待单独设计"可靠化/实用化"（真实 LLM e2e / 跨平台 / 发布产物等）后重新启用并补充，另行规划 |
 | PT-FEAT-6 | CompilationResult 字段精简 | 前置：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月 |
 | PT-FEAT-7 | 二层 IR 路线评估 | VISION |
 | PT-FEAT-8 | `.ibc_meta` 静态元数据快照 | **评估：维持现状待独立窗口（2026-08-09）**。核心切片（export_metadata/load_metadata_from_file）存在分层张力：加载侧重建要么重复 runtime `ArtifactRehydrator`（违禁双写真相），要么引入跨层入口（kernel→runtime / runtime→compiler 均禁止）。generic registry `restore` 仅覆盖 11 种泛型 kind（primitive/class/function 等需另建重建）。需独立窗口做完整设计冻结再落地。原 `docs/architecture/01_principles.md` §7.3.7 规划（已移除，登记于此） |

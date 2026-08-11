@@ -1,21 +1,25 @@
+# CI（暂时停用，2026-08-11 用户裁定）
+#
+# 当前 GitHub 侧 CI 本质上与本机 `python -m pytest tests/` 区别不大，必要性不充足，
+# 故暂时停用自动触发（仅保留手动 workflow_dispatch）。待后续单独设计 CI/CD 的
+# 可靠化与实用化（真实 LLM e2e / 跨平台 / 发布产物等）后再重新启用并补充。
+#
+# 启用方法：把 `on:` 恢复为 push/PR 触发（见 git 历史）。
+
 name: CI
 
 on:
-  push:
-    branches: [main, unsafe-vibe-dev]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.12"]
 
     steps:
