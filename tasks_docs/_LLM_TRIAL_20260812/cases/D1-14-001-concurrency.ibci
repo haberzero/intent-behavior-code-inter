@@ -1,0 +1,39 @@
+# D1-14-001 chan/slot/thread/await（确定性并发面）
+# doc: docs/syntax/14_concurrency.md §14.2-14.7
+# 期望: chan/slot/thread 基础语义正确；await thread 与 join 等价
+
+chan c = chan(str, "stream")
+c.send("hello")
+str msg = c.recv()
+print("msg=" + msg)
+
+chan pc = chan(int, "pubsub")
+subscriber a = pc.subscribe()
+subscriber b = pc.subscribe()
+pc.send(7)
+int x = a.recv()
+int y = b.recv()
+print("pubsub=" + (str)x + (str)y)
+
+slot st = slot("score", 0)
+st.set(42)
+int v = st.get()
+print("slot=" + (str)v)
+
+slot s2 = slot("x", 10)
+fn inc = lambda(int val) -> auto: (val + 1)
+s2.update(inc)
+print("cas=" + (str)s2.get())
+
+func add(int a, int b) -> int:
+    return a + b
+
+thread[int] t = thread(callable=add, args=[1, 2])
+thread_result[int] r = t.join()
+int v2 = r.expect()
+print("thread=" + (str)v2)
+
+thread[int] t2 = thread(callable=add, args=[10, 20])
+thread_result[int] av = await t2
+print("await_thread=" + (str)av.expect())
+print("DONE")

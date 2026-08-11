@@ -1,0 +1,3 @@
+# D1-11-002b 模块文件（被 D1-11-002-modimport 导入）
+func greet() -> str:
+    return "hello from module"

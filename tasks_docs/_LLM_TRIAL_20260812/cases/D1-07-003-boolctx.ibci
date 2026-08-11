@@ -1,0 +1,15 @@
+# D1-07-003 行为驱动 if/for 布尔上下文
+# doc: docs/syntax/07_behavior_expressions.md §7.3 + KNOWN_LIMITS §二十一
+# 期望: if @~ 0/1 ~ 判定；for @~ 1/0 ~ 循环
+
+str input = "我今天很难过"
+if @~ $input 包含负面情绪吗？只答 1 或 0 ~:
+    print("negative=true")
+else:
+    print("negative=false")
+
+int count = 0
+for @~ $count 小于 3 吗？只回答 1 或 0 ~:
+    count = count + 1
+    print("count=" + (str)count)
+print("DONE")

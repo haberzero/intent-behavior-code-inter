@@ -1,0 +1,37 @@
+# D1-02-003 global / nonlocal + 只读自动捕获
+# doc: docs/syntax/02_variables.md §2.6/§2.7
+# NOTE(DOC-ISSUE-001): 02_variables.md §2.6 示例 func increment(): 缺返回标注，
+#  与 05_functions.md §5.1 强制 -> TYPE 矛盾；此处按 05_functions 修正为 -> void
+# 期望: global 写模块级；nonlocal 写回外层；读外层自动捕获
+
+int counter = 0
+func increment() -> void:
+    global counter
+    counter = counter + 1
+
+increment()
+increment()
+print("counter=" + (str)counter)
+
+func make_counter() -> fn:
+    int count = 0
+    func inc() -> int:
+        nonlocal count
+        count = count + 1
+        return count
+    return inc
+
+fn c = make_counter()
+print("c1=" + (str)c())
+print("c2=" + (str)c())
+print("c3=" + (str)c())
+
+func make_adder() -> fn:
+    int base = 10
+    func add(int x) -> int:
+        return base + x
+    return add
+
+fn adder = make_adder()
+print("adder5=" + (str)adder(5))
+print("DONE")
