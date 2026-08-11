@@ -13,7 +13,9 @@ from typing import Any, List
 
 from ...shared.signals import GeneratorYield
 from ...shared.waitable import Waitable
-from .base import IbValue
+from .base import IbObject, IbValue
+from .functions import IbBoundMethod, IbNativeFunction
+from typing import List
 
 
 class IbGenerator(IbValue):
@@ -25,11 +27,39 @@ class IbGenerator(IbValue):
 
     __slots__ = ("_driver", "_exhausted")
 
+    # IbGenerator 固有的迭代方法名（不经 vtable，由 receive 直接派发）。
+    _ITER_METHODS = frozenset(("to_list", "generic_next"))
+
     def __init__(self, ib_class, driver: Any):
         super().__init__(ib_class)
         # 驱动对象：惰性构造（首次迭代时创建体驱动循环）。
         self._driver = driver
         self._exhausted = False
+
+    # ------------------------------------------------------------------
+    # 消息传递：迭代方法直接派发（IbGenerator 固有能力，不经 vtable）
+    # ------------------------------------------------------------------
+
+    def receive(self, message: str, args: List["IbObject"]) -> "IbObject":
+        """迭代方法（``to_list``/``generic_next``/``next``）是 IbGenerator 固有
+        能力，直接派发；其余消息走基类协议（``ib_class.lookup_method``）。
+
+        ``gen.to_list()`` 经属性访问（``__getattr__``）+ 调用（``__call__``）两步：
+        属性访问时返回绑定原生函数（包装 Python 方法），调用时执行之。
+        """
+        if message == "__getattr__" and args:
+            attr_name = args[0].to_native()
+            if attr_name in self._ITER_METHODS:
+                method = IbNativeFunction(
+                    getattr(self, attr_name),
+                    ib_class=self.ib_class,
+                    name=attr_name,
+                    is_method=False,
+                )
+                return IbBoundMethod(self, method)
+        if message in self._ITER_METHODS:
+            return getattr(self, message)()
+        return super().receive(message, args)
 
     # ------------------------------------------------------------------
     # 可迭代协议（语言级迭代经 __iter__/next）
