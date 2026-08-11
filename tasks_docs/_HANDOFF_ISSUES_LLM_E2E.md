@@ -126,6 +126,12 @@ def receive(self, message, args):
 
 ### U4: AIPlugin.setup 自动加载绕过路径规范化（commit 2fd3117，中严重度）
 
+**✅ 已核销（2026-08-11，本 session 修复）**：config_path 统一经
+`PathValidator.canonicalize_for_security` 规范化（插件层统一走符号链接解析机制，
+与 kernel 层 config 路径处理同源）。与 U6/U7 合并为"加载契约 fail-fast"：注入异常
+fail-fast、配置缺失静默跳过。+4 契约测试（含符号链接 project_root 加载验证）。
+全量 2185 passed / 1 skipped 零回归。
+
 **违反原则**：绕过安全路径规范化
 **症状**：setup 里 `os.path.join(project_root, "api_config.json")` + `os.path.isfile` + `ApiConfig.load` 直接读，未走 canonicalize_for_security
 **位置**：`ibci_modules/ibci_ai/core.py` `AIPlugin.setup`
@@ -171,6 +177,13 @@ if ec is not None:
 
 ### U6: execution_context 持有 project_root 用默认 None（低严重度）
 
+**✅ 已核销（2026-08-11，本 session 修复）**：测试 `_make_ec` 显式传
+`project_root=None` 表意（方式 2）+ `ExecutionContextImpl` 类契约文档注明
+"生产路径（engine 注入 / coordinator 任务 EC）必传，None 仅测试直构未确立态"；
+消费方（AIPlugin.setup）对 project_root 缺失 fail-fast（方式 1+2 组合，哨兵方式
+不必要——生产链 Interpreter 本身允许默认 None 供 spawn 路径，硬性必传无法在
+构造器层强制）。
+
 **违反原则**：向测试妥协的兼容（向后兼容非 fail-fast）
 **症状**：ExecutionContextImpl.__init__ 加 project_root 参数默认 None；测试 _make_ec 不传也 OK
 **位置**：`core/runtime/interpreter/execution_context.py:34`
@@ -191,6 +204,11 @@ if ec is not None:
 ---
 
 ### U7: AIPlugin.setup 自动加载三重 if 容错（低严重度）
+
+**✅ 已核销（2026-08-11，本 session 修复）**：三重 if 收敛为显式加载契约——
+`ec is None` / `project_root` 缺失 = 注入异常 → **fail-fast**（InterpreterError，
+带契约说明）；`os.path.isfile` False（api_config.json 不存在）= 合法态 → 静默跳过
+（注释注明）。与 U4/U6 合并落地，+4 契约测试。
 
 **违反原则**：静默降级（应 fail-fast 或 warn）
 **症状**：`if ec is not None: if project_root: if os.path.isfile: load()`，project_root 缺失静默跳过
