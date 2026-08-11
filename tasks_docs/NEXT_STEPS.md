@@ -2,7 +2,7 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-11（PT-DEBT-17 `ai.run_batch` 同步阻塞根治完成——CPS 化 + 多 Future 聚合 Waitable，全量 2135/1 + 死代码清理；剩余 A5/A6、PT-DEBT-4 独立窗口与 P3 VISION）
+> **最后更新**：2026-08-11（PT-DEBT-17 `ai.run_batch` 同步阻塞根治 + PT-AUDIT-2 `_collect_instance` 拆具名 collector + A5 类构造 CPS 根治 + A6 评估维持现状 + 分支政策"零风险直接合并"细则，全量 2137/1；剩余 PT-DEBT-4 独立窗口与 P3 VISION）
 
 ---
 
@@ -190,8 +190,9 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   2. ~~PT-DEBT-9/10/11 文档残留清理~~（**已完成 2026-08-10**）：NEXT_STEPS.md:50 旧"遗留技术债"表述改为归档记录。
   3. ~~异步统一完整性 A1-A4~~（**已完成 2026-08-10，全量 2138/1，0 warning**）：A1 内联 `@~` 表达式接
      CPS（llm_behavior.py）、A2 意图消解 CPS 化（intent.py，`vm.run` 重入消除）、A4 LLM 函数 CPS-yield
-     （_llm_function.py，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器（comm.py+leaf.py，
-     CPSDrivable 协议分派）。**剩余 A5/A6**（类构造/协议方法，语义边界需独立窗口）。
+      （_llm_function.py，PT-FEAT-1 直接项）、A3 `_SlotUpdateWaitable` 并入当前调度器（comm.py+leaf.py，
+      CPSDrivable 协议分派）。**A5 类构造已根治（2026-08-11，`_ClassInstantiateDrive` CPSDrivable，全量 2137/1）**；
+      **A6 协议方法评估维持现状（2026-08-11，niche + 条件触发，登记已知项）**。
    4. **PT-DEBT-17 `ai.run_batch` 同步阻塞修复**（**已完成 2026-08-11，unsafe-vibe-dev ebbb7f8，全量 2135/1**）：`run_batch` 返回 `CPSDrivable` Waitable——CPS 预求值（`_prepare_behavior_call_cps` 消除 vm.run 重入）+ 多 LLM Future 聚合 `LLMBatchFuture` 由调度器非阻塞等待（消除主线程 `fut.result()` 硬阻塞），与 `stream_call` Waitable 范式一致；vtable return_type=list 契约不变（auto-yield 后仍收 boxed IbList）。**顺带清理死代码**：`LLMExecutorImpl.resolve()` + `LLMFuture.get()`（VM 全走 `resolve_future_cps`）+ 其 5 个死测试 + 协议声明同步。`ihost.collect`/`run_isolated` 是透明异步 auto-yield（非问题，已澄清）。详见 `_code_run_batch_cps.md` / WORKLOG。
    5. **PT-DEBT-4 `file` 重命名**（P1 破坏性变更独立窗口）。
    6. **P3 VISION**。

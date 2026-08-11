@@ -37,7 +37,7 @@
 | 决策纪律 | 需拍板的决断项可大胆激进选方案；底线 = 架构原则/代码质量原则/非妥协/非 tricky/非临时兼容层/大方向主线 |
 | 设计阶段文档 | 设计/决策先写 `tasks_docs/`，落地后按治理写入 `docs/`；`docs/` 只面向人类 |
 | 工作模式定论 | 禁 compat shim/胶水/tricky/过程式硬编码；质量优先于速度；原则优先于行为维持；可推翻 IBCI 自身设计缺陷 |
-| 破坏性重构授权 / 分支政策 / 禁 push | 见 AGENTS.md（权威源） |
+| 破坏性重构授权 / 分支政策 / 禁 push | 见 AGENTS.md（权威源）。**分支合并细则（2026-08-11）**：零风险/边界清晰改进（全量 pytest 零回归 + 复核放行）可**直接合并** unsafe-vibe-dev；大风险/无法确认边界仍走独立分支 + 手动 cherry-pick；判定以"是否确认零风险"为准 |
 
 ### 1.2.1 goal 配置习惯（每个 session 新配置 goal 时自动采用，2026-08-09 用户定案）
 
@@ -70,11 +70,14 @@
 三、交付纪律：全程本地 git commit；禁止 push 到 GitHub（硬原则）——除非用户明确指示允许
 push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权（硬原则）：符合一般工程经验/
 普适性/合理架构设计且经分析确实优于现有体系时，哪怕设计已被文档记录也允许破坏性重构，
-默认已授权自主推进，仅需详尽记录决策依据与工作内容。大范围破坏性重构分支政策（硬原则）：
-无法确认边界/危害程度的破坏性重构 100% 授权在其独立分支实验，独立分支禁止直接合并到
-unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsafe-vibe-dev；永远不允许触碰
-主干分支（main）。工作日志：所有自主决策/方案取舍/变化前后必须详尽记录于 WORKLOG，"只记录，
-不断决"。
+ 默认已授权自主推进，仅需详尽记录决策依据与工作内容。大范围破坏性重构分支政策（硬原则，
+  2026-08-11 补充"零风险直接合并"细则）：无法确认边界/危害程度的破坏性重构 100% 授权在其
+  独立分支实验，独立分支禁止直接合并到 unsafe-vibe-dev 或 main，确认技术路线后仅允许手动
+  单独更新 unsafe-vibe-dev；永远不允许触碰主干分支（main）。**零风险细则**：经充分验证零风险/
+  边界清晰的改进（全量 pytest 零回归 + 复核放行，无对外契约/架构级风险）允许**直接合并**到
+  unsafe-vibe-dev；识别到大风险/无法确认边界的破坏性重构仍走"独立分支 + 手动 cherry-pick 单独
+  更新 unsafe-vibe-dev"。判定以"是否确认零风险"为准，非以改动规模。工作日志：所有自主决策/
+  方案取舍/变化前后必须详尽记录于 WORKLOG，"只记录，不断决"。
 
 四、工作流：每任务走 code-workflow Phase 0-5 + 质量门 + design-philosophy 对照 + self-grill
 自我质询 + code-odor 自查 + 全量 pytest 零回归（python -m pytest tests/）。批量后 code-review
@@ -137,6 +140,7 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
     死测试 + 死 import + `LLMExecutor` 协议声明同步；统一批量聚合 `_aggregate_batch_results`（消除双路径分叉）。
   - 设计记录 `tasks_docs/_code_run_batch_cps.md`；general 复核 3 建议级全整改；补判别性回归测试
     `TestRunBatchWaitableContract`（旧实现返回 List 必失败）。文档 `05_vm_specification.md` §3.4 公理 LLM-4 同步。
+- **A5 用户类构造帧内 CPS 根治（2026-08-11，独立分支 exp/a5-cps-construct → 直接合并 unsafe-vibe-dev 356b0d8，全量 2137 passed / 1 skipped）**：用户类（不含原生 __init__）构造改返回 `_ClassInstantiateDrive`（Waitable+CPSDrivable）——`cps_drive` 在 VM 帧内 yield 字段默认值 + 用户 __init__（UserFunctionCall），消除 `vm.run` 重入与 `init_method.call` 嵌套 TaskScheduler；leaf.py 兜底细化（CPSDrivable 无论 func 是否 IbClass 均帧内驱动，纯 Waitable 仅非 IbClass auto-yield，thread 原生 __init__ 返回 IbThread 句柄仍不 auto-yield）；宿主/线程体走同步 instantiate 兜底。general 复核 5 检查点 PASS + 全量 2137/1 零回归。**A6 评估维持现状**（niche + 条件触发，登记已知项）。**分支政策细则**：2026-08-11 用户明确"零风险直接合并"，A5 因零风险直接合并到 unsafe-vibe-dev。
 - **当前主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（登记 PT-DEBT-12/13/14/15）：
   - **PT-DEBT-12（F1）用户方法 CPS 化、PT-DEBT-13（B1）chan.send Waitable 化、PT-DEBT-14（F2/F3）
@@ -325,6 +329,6 @@ unsafe-vibe-dev 或 main，确认技术路线后仅允许手动单独更新 unsa
 
 - [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（长期，单一权威源）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 读 §二 动态状态接续工作（含 2026-08-11 session 成果：PT-DEBT-17 run_batch 同步阻塞根治 + 死代码清理；2026-08-10：PT-DOC-3 + A1-A4 + 内核健康三项 + 彻查）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2135 passed / 1 skipped）
+- [ ] 读 §二 动态状态接续工作（含 2026-08-11 session 成果：PT-DEBT-17 run_batch 根治 + PT-AUDIT-2 _collect_instance 拆具名 collector + A5 类构造 CPS 根治 + A6 评估维持现状 + 分支政策"零风险直接合并"细则）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 2137 passed / 1 skipped）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录
