@@ -125,3 +125,13 @@
 - **实际**：`.value` 属性 = 绑定方法对象；`.value()` 方法 = 值。
 - **级别**：P3（文档错误）。
 - **证据**：cases/D2-42b/42c-threadresult*.ibci + logs/D2-42b/42c.log。
+
+### BOUNDARY-003 — 隔离子环境不继承父 LLM 配置，子项目须自带 api_config.json
+- **复现**：D2-50 parent 内 `@+ 极简意图` + 真实 LLM 正常；`ihost.run_isolated("../multifile/
+  child_llm.ibci", policy)` 的 child 内真实 LLM 调用报
+  `RuntimeError: LLM 运行配置缺失`；在 child 所在目录（multifile/）放置 api_config.json 后正常。
+- **文档**：11_modules §11.6 "子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）"；
+  未明确说明"LLM provider 配置也不继承"。
+- **实际**：child 引擎按自身 project_root 加载 api_config.json，不继承 parent 的 ai 配置。
+- **级别**：P3（文档边界未明示；行为与"完全独立"一致，非缺陷）。
+- **证据**：cases/D2-50-isolation-llm.ibci + multifile/child_llm.ibci + logs/D2-50-isolation-llm.log。
