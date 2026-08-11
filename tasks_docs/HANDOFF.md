@@ -47,8 +47,7 @@
 > |------|----|------|
 > | `max_duration_seconds` | **14400（4 小时）** | 最晚结束时间 = 当前时刻 + 4h |
 > | `max_auto_turns` | **10** | 允许 goal 自动续跑次数 |
-> | `token_budget` | **720000（720K）** | token 窗口预算上限 |
-> | token 总预算 | 无上限 | 不设总预算上限 |
+> | `token_budget` | **null（无限制）** | 不设 token 预算上限（预算无限制；720K 为模型上下文窗口系统层硬限制，非 goal budget） |
 >
 > `objective` 正文仍按下方 §1.3 模板套用（无人值守 + 主线 + 交付纪律 + 工作流 + 停止条件 + 非目标）。
 
@@ -145,7 +144,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     5. **暴露问题处置 + 验证报告**（§六）→ 评估合并条件（`_MAIN_MERGE_PLAN.md`）。
     6. **文档/README 更新**（`_MAIN_MERGE_PLAN.md` §三 + `_DOC_HEALTH_20260811.md` 剩余 P0/P1）。
   - **CI/CD**：GitHub 侧已停用自动触发（`ci.yml` → `workflow_dispatch`），勿自动恢复；待单独设计"可靠化/实用化"。
-  - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=720000 / 总预算无上限）；
+  - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=null 预算无限制）；
     objective 套 §1.3 模板，主任务 = 上述主任务链 1-6。
 
 - **PT-DEBT-17 `ai.run_batch` 同步阻塞根治（2026-08-11，独立分支 exp/run-batch-cps → 手动应用 unsafe-vibe-dev ebbb7f8，全量 2135 passed / 1 skipped）**：
