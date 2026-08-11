@@ -137,7 +137,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > + git 历史 `3c768a4..HEAD`。
 
 - **🔴 下一 session 主任务（2026-08-11 本 session 完成）**：**不合格操作 U1-U7 修复 + P1-P4 讨论**
-  已全部完成（`_HANDOFF_ISSUES_LLM_E2E.md` 逐项核销，全量 **2194 passed / 1 skipped**）：
+  已全部完成（`_HANDOFF_ISSUES_LLM_E2E.md` 逐项核销，全量 **2201 passed / 1 skipped**）：
   - U1（7260204）generator IbClass 注册根治（删 receive 特判）+ U2（f58d525）内建遮蔽+LLM 表达式
     初始化根因修复 + U3（4a10502）InterpreterError 双实现统一 + U4/U6/U7（b8ea631）setup 路径规范化
     + fail-fast 加载契约 + U5（fa2ce72）临时文档清理 + P1-P4 决断（aeefa0d + 记录）。
@@ -150,7 +150,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     push/合并**（禁 push 硬原则，阶段 3 不在自主范围）。
   - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=null）；objective 套 §1.3 模板。
 
-- **本 session（2026-08-11，不合格操作 U1-U7 修复 + P1-P4 决断 + 意图注入纠错，unsafe-vibe-dev，8 commits，全量 2169 → 2194 passed / 1 skipped）**：
+- **本 session（2026-08-11，不合格操作 U1-U7 修复 + P1-P4 决断 + 意图注入纠错 + T1-T5 泛化审计，unsafe-vibe-dev，13 commits，全量 2169 → 2201 passed / 1 skipped）**：
   - **U1**：GeneratorAxiom（新公理）+ GENERATOR_SPEC + @register_ib_type("generator") + 删
     IbGenerator.receive 特判 + leaf.py 改查 generator 类；顺带闭合 generator[T] `_axiom_name`
     无公理缺口（此前 get_axiom 恒 None）。契约测试 GEN-1~4。
@@ -166,8 +166,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   - **⚠ 意图注入纠错（7339220）**：P1 结论实证推翻——`@`/`@!` 一次性意图在 dispatch-before-use
     路径从未进 prompt（`fork` 移入 `_inherited_*` 而 captured 分支只取 active/global）；修复
     `resolve_to_prompts` 单一权威消解；真实模型实证 qwen3.6 遵循意图。+6 回归测试。
+  - **T1-T5 泛化审计批次（本 session 追加）**：① T1 模式分析（双路径分裂/快照半消费/机制同构
+    假象/探针缺失 4 教训）；② T2 同族审计（dispatch/同步/lambda/snapshot/llmexcept/CPS 孪生
+    逐项验证，无新缺陷，call_intent 登记 PT-DEBT-24）；③ **T3 LLM 调用追踪（c1e63d1）**——
+    `engine.get_llm_call_trace()` 有界环形缓冲（完整 prompt+响应+意图），调试不再靠 monkeypatch；
+    ④ **T4 历史彻查（0eb8939）**——general agent 独立审计发现上批次自审计 D 段误标"正确"的
+    F1-F7（env 透传/环境覆盖/双锚点/reasoning 不对称/死字段/空凭据/字面量重复）全部修复；⑤
+    T5 重规划（PT-DEBT-22/23 已修复 + 24/F9 登记）。
   - **遗留**：`extension.exceptions` PluginError/CompilerError 为 SDK 独立类型未纳入 U3 范围
-    （构造契约不同，无同名冲突）；test_mock_service 一次偶发 flaky（HTTP 时序，与改动无关）。
+    （构造契约不同，无同名冲突）；test_mock_service 一次偶发 flaky（HTTP 时序，与改动无关）；
+    PT-DEBT-24（call_intent 清理）、F9（import ai 配置副作用评估）待独立窗口。
   - **认知**：全程按"工作模式定论"根因修复（不留新兼容层），逐项 code-workflow Phase 0-5 +
     全量 pytest 零回归验证。
 
@@ -376,6 +384,6 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（PT-DEBT-18/19/20/21 已修复）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
 - [ ] 读 §二 动态状态接续工作（2026-08-11 U1-U7 修复批次 + P1-P4 决断）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2194 passed / 1 skipped**）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2201 passed / 1 skipped**）
 - [ ] 合并前待办：DOC_HEALTH P1/P2 清理 + pyproject 版本评估 + examples 真实跑通确认 + 用户显式授权 push/合并
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

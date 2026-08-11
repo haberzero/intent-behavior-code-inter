@@ -131,7 +131,7 @@ C1-C7 全部落地并经真实 LLM 探针验证：
 | 合并条件（`_MAIN_MERGE_PLAN.md` §一） | 状态 |
 |------|------|
 | 真实 LLM e2e 检测通过（无 P0 阻断缺陷） | ✅ 9/12 类特性通过；唯一缺陷（generator.to_list）已由 **U1 正确架构修复**（generator IbClass 注册，非 receive 特判）；其余 P0 缺陷零 |
-| 全量 pytest 零回归 | ✅ **2194 passed / 1 skipped**（修复全程零回归；U1-U7 + 意图注入缺陷净增 22 契约/回归测试） |
+| 全量 pytest 零回归 | ✅ **2201 passed / 1 skipped**（修复全程零回归；U1-U7 + 意图注入缺陷 + 配置 fail-fast 硬化净增 32 契约/回归测试） |
 | 文档/README 就绪 | ⏳ 部分（README 本地 LLM 快速开始已具备；`_DOC_HEALTH_20260811.md` 剩余 P1/P2 待清；pyproject 版本评估待做；examples 真实跑通待确认） |
 | 用户显式授权 push/合并 | ⏳ **未授予**（禁 push 硬原则，合并动作须用户显式授权，不在自主范围） |
 

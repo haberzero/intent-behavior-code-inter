@@ -185,15 +185,32 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 - **🔴 当前最紧要（下一 session 起点）**：**合并取代 main 的收尾动作**（`_MAIN_MERGE_PLAN.md`）。
   上一 session 的不合格操作 U1-U7 **已全部根因修复**（`_HANDOFF_ISSUES_LLM_E2E.md` 逐项核销），
-  P1-P4 设计问题已全部决断，合并条件（检测/工程维度）经重估**重新满足**
-  （`_REAL_LLM_E2E_REPORT.md` §七，全量 **2194 passed / 1 skipped**）。合并前仍需：
+  意图注入缺陷（PT-DEBT-22）与配置 fail-fast 硬化（PT-DEBT-23）也已修复，P1-P4 已决断，
+  合并条件（检测/工程维度）经重估**重新满足**（`_REAL_LLM_E2E_REPORT.md` §七，全量
+  **2201 passed / 1 skipped**）。合并前仍需：
   1. `_DOC_HEALTH_20260811.md` 剩余 P1（14 项）/P2（12 项）文档健康清理。
   2. `pyproject.toml` 版本评估（0.1.0 → 0.2.0?）。
   3. examples 真实 LLM 跑通确认（验收：独立项目目录 + api_config.json，见 P2 决断）。
   4. **用户显式授权 push/合并**（阶段 3 合并动作不在自主范围，禁 push 硬原则）。
-  原始 LLM e2e 主任务链（步骤 0-5）已全部完成，见下方。
 
-- **2026-08-11 不合格操作修复批次 + 意图注入纠错（已完成，unsafe-vibe-dev，全量 2194 passed / 1 skipped）**：
+- **2026-08-11 意图缺陷模式泛化 + 观测增强 + 历史彻查批次（已完成，unsafe-vibe-dev，全量 2201 passed / 1 skipped）**：
+  - **T1 模式分析**：意图缺陷提炼 4 条代码层教训——双路径语义分裂（须共享解析权威）/
+    快照半消费/机制同构假象/探针缺失致误判。
+  - **T2 同族审计**（全链路核查）：dispatch/同步/lambda/snapshot/llmexcept/sync-CPS 孪生
+    逐项验证一致；call_intent 预留机制登记 PT-DEBT-24；无新同族缺陷。
+  - **T3 LLM 可观测性（c1e63d1）**：`LLMExecutorCore._call_trace` 有界环形缓冲 +
+    `engine.get_llm_call_trace()`——完整 prompt + 响应 + 意图，调试区分 LLM vs 内核
+    问题不再靠 monkeypatch 探针。
+  - **T4 历史彻查（0eb8939）**：general agent 独立审计上一批次发现自审计 D 段误标
+    "正确"的 F1-F7（env 透传/环境覆盖/双锚点/reasoning 不对称/死字段/空凭据/字面量重复）
+    全部修复；F8 保留、F9 登记评估。+5 契约测试。
+  - **T5 重规划**：PENDING_TASKS §〇 登记 PT-DEBT-22/23（已修复）/24/F9。
+- **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
+  待单独设计"可靠化/实用化"后重新启用，勿自动恢复。
+- **分支政策**：经充分验证零风险/边界清晰改进可**直接合并** unsafe-vibe-dev；大风险仍"独立分支 + 手动 cherry-pick"。
+- **已完成的近期主线（供回顾）**：见上方"已完成"节与 `PENDING_TASKS.md` §〇。剩余 PT-DEBT-4 `file` 重命名（独立窗口）、
+  P3 VISION、文档健康 P1/P2（`_DOC_HEALTH_20260811.md`）、PT-DEBT-24（call_intent 清理）、F9（import ai 配置副作用评估）。
+- **2026-08-11 不合格操作修复批次（已完成，unsafe-vibe-dev）**（供回顾，详见 git 历史与 `_HANDOFF_ISSUES_LLM_E2E.md` 核销）：
   - **U1（7260204，PT-DEBT-18）**：generator IbClass 注册根治（GeneratorAxiom + GENERATOR_SPEC +
     @register_ib_type + 删 IbGenerator.receive 特判 + leaf.py 改查 generator 类；契约测试 GEN-1~4；
     顺带闭合 generator[T] `_axiom_name` 无公理缺口）。
