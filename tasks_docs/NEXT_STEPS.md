@@ -2,7 +2,7 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-11（合并收尾准备全部完成——doc-health P1/P2 + 版本 0.2.0 + examples 真实 LLM 11 例全过 + 合并就绪报告落档 + PT-AUDIT-3 执行，全量 2209/1；下一 session 主线=待用户显式授权执行阶段 3 合并（`_MAIN_MERGE_PLAN.md`），见下方"交接要点"）
+> **最后更新**：2026-08-12（真实 LLM 全面试用重启交接——原任务基于含 U1-U7 的旧代码执行后中断，修复后需在真实 LLM 下重跑 12 类遍历 + 批判检测；全量 2210/1，见下方"交接要点"与 `_REAL_LLM_E2E_RESTART.md`）
 
 ---
 
@@ -201,17 +201,22 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **🔴 下一 session 主线（建议）：待用户显式授权执行阶段 3 合并**（`_MAIN_MERGE_PLAN.md` 阶段 3）。
-  合并前置（阶段 2 收尾准备）**已全部完成（2026-08-11 本 session）**：
-  1. **`_DOC_HEALTH_20260811.md` P1/P2 全部处置**（P1 16 项复核修齐 + P2 12 项，doc-governance Phase 4-5；
-     已提交 f168215/c4307ad）。
-  2. **`pyproject.toml` 版本评估完成**：0.1.0 → **0.2.0**（0.1.0 后 411 commits / 65 feat）。
-  3. **examples 真实 LLM 跑通确认完成**：11 例全部通过（本地端点 qwen3.6-35b-a3b）；验收方式=独立项目
-     目录 + api_config.json 或 `--root <example_dir>`。**顺带暴露并修复 1 缺陷**（dispatch 赋值后
-     idbg/ai 调用信息不可观测，commit d6d28e1）。
-  4. **合并就绪报告落档**：`tasks_docs/_MERGE_READY_REPORT.md`（合并条件逐条证据，检测/测试/文档/示例
-     全满足；**阶段 3 合并/push 不在自主范围，禁 push 硬原则，须用户显式授权**）。
-  → 用户授权后执行：`git merge unsafe-vibe-dev → main`（`_MAIN_MERGE_PLAN.md` 阶段 3 细则）。
+- **🔴 下一 session 主线（建议）：重启真实 LLM 全面试用 + 语法/语言功能评估**（`_REAL_LLM_E2E_RESTART.md`）。
+  原"真实 LLM e2e 全面试用"（2026-08-11）**基于含不合格操作（U1-U7）的旧代码执行后被中断**——
+  原报告 §四 9/12 类结论在修复前产生，其中意图机制结论已被实证推翻（7339220 纠错为机制缺陷）；
+  后续 U1-U7 / 意图纠错 / T1-T5 / PT-AUDIT-3 / dispatch 观测（d6d28e1）/ run_batch 观测（df1a896）
+  等修复**均未在修复后代码上重新完整跑 12 类真实试用**。重启任务：
+  1. **§四 12 类全语法遍历**（按 `_REAL_LLM_E2E_PLAN.md`），每项真实 LLM 跑一遍；**A1-A5 重验点**：
+     意图 `@`/`@!` 赋值路径真实效果（7339220 修复实证）、内建遮蔽+LLM 表达式（f58d525）、
+     generator.to_list（U1）、dispatch 赋值后 idbg 观测（d6d28e1）、run_batch 观测（df1a896）。
+  2. **§五 批判检测**：格式服从 / llmexcept 收敛 / 意图注入 / **补缺失场景**：长提示复杂
+     `__to_prompt__`（C1）/ 非确定性多次差异（C2）/ 超时断连（C3）/ 并发扩展（C4）。
+  3. **B 类未测项补正式记录**：ihost 隔离 / 内建 / 异常（isolation demo 已真实跑通，记入报告）。
+  4. **更新验证报告**：`_REAL_LLM_E2E_REPORT.md` §四表格基于修复后代码刷新 + §七合并条件重估
+     （不再基于修复前 9/12 推断）。
+  → **通过后**才可向用户报告"合并检测维度已基于修复后代码确认"；阶段 3 合并/push 仍须用户显式授权
+    （禁 push 硬原则）。端点 `localhost:1234`（qwen3.6-35b-a3b）在线；配置机制 C1-C7 已完备；
+    探针素材 `/tmp/opencode/llm_probe/`（30 个）。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
   - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；
@@ -224,7 +229,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 - **本 session 已完成批次（供回顾，见 git 历史）**：
   U1-U7 修复 → 意图注入纠错（7339220）→ P1-P4 决断 → T1-T5 泛化审计 → **合并收尾准备
   （doc-health P1/P2 + 版本 0.2.0 + examples 真实跑通 + dispatch 观测修复 + 合并就绪报告）→
-  PT-AUDIT-3**。全量 **2209 passed / 1 skipped**（2201 → 2209，净增 8 测试）。
+  PT-AUDIT-3**。全量 **2210 passed / 1 skipped**（2201 → 2210，净增 9 测试）。
 
 - **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
   待单独设计"可靠化/实用化"后重新启用，勿自动恢复。

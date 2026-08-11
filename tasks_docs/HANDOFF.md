@@ -116,8 +116,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_code_yield_from.md` | 阶段 5 增量 `yield from` 生成器委托设计记录（**已完成**，2026-08-09；按惯例汇报后待删，当前保留供追溯） |
 | `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md` | M1 `.call` 双写收敛 / M2 驱动去重设计记录（**已完成**，2026-08-09，独立分支 exp/async-m1m2；保留供追溯） |
 | `_HEALTH_AUDIT_PLAN.md` | **三轴健康盘点**（2026-08-09 只读调查）：异步统一完整性 A1-A6 遗留 + 内核健康（深层嵌套/死同步包装）+ 技术手册健康（P1/P2 待修）。**下一步规划输入** |
-| `_REAL_LLM_E2E_PLAN.md` | **真实 LLM e2e 全面试用 + 高强度批判检测**设计权威（2026-08-11用户定案）。本 session 已执行完成（步骤 1-5 + 步骤 6 部分），结论见 `_REAL_LLM_E2E_REPORT.md`（⚠ 含不合格操作自审段） |
-| `_REAL_LLM_E2E_REPORT.md` | 本 session 真实 LLM e2e **执行报告**：9/12 类特性验证通过。§六 不合格操作自审段；**§七 合并条件重估（2026-08-11）——U1-U7 修复后检测/工程维度重新满足** |
+| `_REAL_LLM_E2E_PLAN.md` | **真实 LLM e2e 全面试用 + 高强度批判检测**设计权威（2026-08-11用户定案）。执行顺序 §八 步骤 3-5 为**重启任务**范围（2026-08-12，见 `_REAL_LLM_E2E_RESTART.md`） |
+| `_REAL_LLM_E2E_RESTART.md` | **真实 LLM 全面试用重启交接**（2026-08-12）：原报告基于含 U1-U7 的旧代码执行后中断、意图结论已纠错、修复后未重跑 → 重验清单 A1-A5（意图/内建遮蔽/generator.to_list/dispatch 观测/run_batch 观测）+ B1-B3（未测项）+ C1-C4（批判缺失场景）+ 执行方式 |
+| `_REAL_LLM_E2E_REPORT.md` | 本 session 真实 LLM e2e **执行报告**：9/12 类特性验证通过。§六 不合格操作自审段；**§七 合并条件重估（2026-08-11）——U1-U7 修复后检测/工程维度重新满足**。**⚠ §四 12 类表格基于修复前代码，重启后需刷新（2026-08-12）** |
 | `_HANDOFF_ISSUES_LLM_E2E.md` | **U1-U7 不合格操作 + P1-P4 问题清单**（2026-08-11）。**U1-U7 已全部根因修复核销 + P1-P4 已全部决断**，作为历史追溯保留 |
 | `_MAIN_MERGE_PLAN.md` | **unsafe-vibe-dev 合并取代 main 规划**（2026-08-11）。**阶段 2 收尾准备已完成（2026-08-11）；阶段 3 合并待用户显式授权**（push/合并不在自主范围） |
 | `_MERGE_READY_REPORT.md` | **合并就绪报告**（2026-08-11）：四项合并条件全部核验满足 + examples 运行命令 + 合并执行建议。**阶段 3 授权入口** |
@@ -134,20 +135,30 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.1 当前任务 / 下一阶段
 
-> **接手起点**：先读本节 + `tasks_docs/_MAIN_MERGE_PLAN.md`（阶段 3 待用户授权）
-> + `tasks_docs/_MERGE_READY_REPORT.md`（合并就绪报告：四项条件全满足）
-> + `tasks_docs/_REAL_LLM_E2E_REPORT.md` §七（合并条件重估：已重新满足）
+> **接手起点**：先读本节 + `tasks_docs/_REAL_LLM_E2E_RESTART.md`（**真实 LLM 全面试用重启交接**）
+> + `tasks_docs/_REAL_LLM_E2E_PLAN.md`（设计权威：§四 12 类遍历 + §五 批判检测）
+> + `tasks_docs/_REAL_LLM_E2E_REPORT.md`（旧报告 §四 基于修复前代码，需刷新）
 > + `tasks_docs/PENDING_TASKS.md` §〇（PT-AUDIT-3 已执行，疑似项 S1-S5 待独立窗口）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主线（建议）：待用户显式授权执行阶段 3 合并**（`_MAIN_MERGE_PLAN.md` 阶段 3）。
-  合并前置（阶段 2 收尾准备）**已全部完成（2026-08-11 本 session）**：
-  1. **`_DOC_HEALTH_20260811.md` P1/P2 全部处置**（已提交 f168215/c4307ad）。
-  2. **`pyproject.toml` 版本评估完成**：0.1.0 → **0.2.0**。
-  3. **examples 真实 LLM 跑通确认完成**：11 例全过；顺带暴露并修复 dispatch 观测缺陷（d6d28e1）。
-  4. **合并就绪报告落档**：`tasks_docs/_MERGE_READY_REPORT.md`（合并条件逐条证据；
-     **阶段 3 合并/push 不在自主范围，禁 push 硬原则，须用户显式授权**）。
-  → 用户授权后执行：`git merge unsafe-vibe-dev → main`（阶段 3 细则见 `_MAIN_MERGE_PLAN.md`）。
+- **🔴 下一 session 主线（建议）：重启真实 LLM 全面试用 + 语法/语言功能评估**（`_REAL_LLM_E2E_RESTART.md`）。
+  原任务（2026-08-11）基于含不合格操作（U1-U7）的旧代码执行后被中断；意图机制结论已被实证推翻
+  （7339220 纠错为机制缺陷）。修复后（U1-U7 / 意图纠错 / T1-T5 / PT-AUDIT-3 / dispatch 观测 d6d28e1 /
+  run_batch 观测 df1a896）**未在真实 LLM 下重跑 12 类遍历**。重启范围：
+  1. **§四 12 类全语法遍历**：每项真实 LLM 跑一遍；**A1-A5 重验点**——意图 `@`/`@!` 赋值路径真实效果
+     （7339220 实证）、内建遮蔽+LLM 表达式（f58d525）、generator.to_list（U1）、dispatch 赋值后 idbg
+     观测（d6d28e1）、run_batch 观测（df1a896）。
+  2. **§五 批判检测**：格式服从 / llmexcept 收敛 / 意图注入 / **补缺失场景**：长提示复杂 `__to_prompt__`
+     （C1）/ 非确定性多次差异（C2）/ 超时断连（C3）/ 并发扩展（C4）。
+  3. **B 类未测项补记录**：ihost 隔离 / 内建 / 异常（isolation demo 已真实跑通，记入报告）。
+  4. **更新验证报告**：`_REAL_LLM_E2E_REPORT.md` §四表格基于修复后代码刷新 + §七合并条件重估。
+  → 通过后才可报告"合并检测维度已基于修复后代码确认"；**阶段 3 合并/push 仍须用户显式授权**。
+  端点 `localhost:1234`（qwen3.6-35b-a3b）在线；配置 C1-C7 完备；探针素材 `/tmp/opencode/llm_probe/`。
+
+- **本 session（2026-08-12，真实 LLM 试用重启交接编制）**：评估确认原"真实 LLM e2e 全面试用"报告
+  （`_REAL_LLM_E2E_REPORT.md` §四 9/12 类）基于含 U1-U7 不合格操作的旧代码；意图机制结论已纠错；
+  修复后未重跑。产出 `_REAL_LLM_E2E_RESTART.md`（重启交接：背景/代码事实/重验清单 A1-A5 + B1-B3 +
+  C1-C4/执行方式/约束）；NEXT_STEPS/HANDOFF/PENDING_TASKS 同步。全量 **2210 passed / 1 skipped**。
 
 - **本 session（2026-08-11，合并收尾准备 + PT-AUDIT-3，unsafe-vibe-dev，全量 2169 → 2209 passed / 1 skipped）**：
   - **doc-health P1/P2 全部处置**：P1 16 项（`@method` 陈旧引用改真实 ihost API、`已重构为包` 历史演变清除、
@@ -396,14 +407,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（下一 session 主线=待用户授权执行阶段 3 合并）
-- [ ] 读 `_MAIN_MERGE_PLAN.md`（阶段 3 合并细则；push/合并须用户显式授权）
-- [ ] 读 `_MERGE_READY_REPORT.md`（合并就绪报告：四项条件全满足 + examples 运行命令）
-- [ ] 读 `_REAL_LLM_E2E_REPORT.md` §七（合并条件重估：已重新满足）
+- [ ] 读本节 §2.1（下一 session 主线=**重启真实 LLM 全面试用 + 语法/语言功能评估**）
+- [ ] 读 `_REAL_LLM_E2E_RESTART.md`（重启交接：背景/重验清单 A1-A5 + B1-B3 + C1-C4/执行方式）
+- [ ] 读 `_REAL_LLM_E2E_PLAN.md`（设计权威：§四 12 类遍历 + §五 批判检测）
+- [ ] 读 `_REAL_LLM_E2E_REPORT.md`（旧报告 §四 基于修复前代码，重启后需刷新 §四/§五/§七）
+- [ ] 确认本地端点：`curl localhost:1234/v1/models`（qwen3.6-35b-a3b）；探针素材 `/tmp/opencode/llm_probe/`
 - [ ] 读 `_PT_AUDIT3_RECORD.md`（PT-AUDIT-3 已执行；疑似项 S1-S5 待独立窗口）
 - [ ] 读 `PENDING_TASKS.md` §〇（PT-DEBT-22/23 已修复、24/F9/PT-AUDIT-3 状态、S1-S5 遗留）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2209 passed / 1 skipped**）
-- [ ] 若用户授权：执行阶段 3 合并（`git merge unsafe-vibe-dev → main`）；否则等待授权不自行 push
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2210 passed / 1 skipped**）
+- [ ] 重启任务完成后：更新 `_REAL_LLM_E2E_REPORT.md` §四表格 + §七重估 → 报告"合并检测维度已基于修复后代码确认"
+- [ ] 阶段 3 合并（`git merge unsafe-vibe-dev → main`）仍须用户显式授权；不自行 push
 - [ ] 独立窗口候选：PT-DEBT-4 / PT-DEBT-24 / PT-AUDIT-3 S1-S5 / F9（已评估设计意图）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录
