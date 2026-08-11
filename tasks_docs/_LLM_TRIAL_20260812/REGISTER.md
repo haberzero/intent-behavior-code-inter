@@ -7,7 +7,7 @@
 
 ## 结果总览（截至本 register 收尾）
 
-- **用例总数**：~110 次运行（101 个 cases 文件；含隔离复现与对照），全部经死循环保护 harness。
+- **用例总数**：104 个 cases 文件（含 smoke/deadloop 冒烟验证），113 次 harness 运行；全部经死循环保护。
 - **PASS**：绝大多数特性（D1 全语法遍历 15 章 + D2 交叉/正交/多文件 + D3 批判场景）。
 - **KERNEL_ISSUE（真实缺陷候选，4 项）**：KERNEL-ISSUE-001（global 写访问）/ 002（整模块 import+成员
   访问 INT_INTERNAL_ERROR）/ 003（真实 LLM provider 失败 LLMCallError 逃逸 try/except）/
@@ -135,6 +135,17 @@
 - **级别**：P3（文档）。
 - **处置**：本 trial 用例按 05_functions 正确用法补 `-> void` 后继续。
 
+### DOC-ISSUE-002 — 4 个文档文件 9 处 `func __init__(...)` 缺返回标注
+- **复现**：按文档示例直接书写 `func __init__(self, ...):` → `SEM_MISSING_RETURN_ANNOTATION`
+  编译错误（编译器对 `__init__` 同样要求 `-> TYPE`；tests 用 `-> auto`/`-> void`）。
+- **文档**：docs/syntax/06_oop.md（§6.1/§6.3/§6.4 共 4 处）、docs/syntax/04_control_flow.md
+  （§4.7.2 自定义异常 2 处）、docs/KNOWN_LIMITS.md（§六 2 处）、docs/subsystems/03_callable_fn.md
+  （1 处）——**共 9 处**无返回标注。
+- **实际**：文档示例与编译器要求（05_functions §5.1 强制标注）系统性不一致。
+- **级别**：P3（文档）。
+- **处置**：本 trial 用例按正确用法补 `-> auto`；文档待治理窗口批量修正。
+- **证据**：grep `func __init__\(self[^)]*\):$\s*$`（docs 9 处）+ cases/D1-04-002-switch-exc.ibci。
+
 ### KERNEL-ISSUE-001 — `global` 写访问在函数内运行时未定义变量
 - **复现**：`int counter = 0; func bump() -> void: global counter; counter = counter + 1` 调用 `bump()` →
   `[ERROR][RUN_UNDEFINED_VARIABLE]: Variable UID 'scope_cases.../bump:counter' is not defined`。
@@ -192,7 +203,7 @@
 - **复现**：howto 多处写 `cons.join().value`（期望取到 int 值），且 `print((str)r.value)` 示例；
   实测 `r.value`（属性）返回 **bound method 对象**（`<Instance of bound_method>`），
   正确写法是方法 `r.value()`（返回 42）。
-- **文档**：docs/howto/write_concurrent_tasks.md（`r.value` / `join().value` 4 处）vs
+- **文档**：docs/howto/write_concurrent_tasks.md（`r.value` / `join().value` 2 处）vs
   docs/syntax/14_concurrency.md §14.7（`r.value()` 方法形态，正确）。
 - **实际**：`.value` 属性 = 绑定方法对象；`.value()` 方法 = 值。
 - **级别**：P3（文档错误）。

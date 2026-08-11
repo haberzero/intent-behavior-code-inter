@@ -33,7 +33,8 @@
 
 - **logs/<case_id>.log**：每次运行的完整证据（命令行、退出码、超时标志、时长、stdout+stderr 合并）。
 - **logs/register.jsonl**：每例一行 JSON（case_id/script/dim/doc/expected/timeout_s/exit_code/
-  timed_out/duration_s/out_head），机械字段由 harness 写入，分类字段由试用 agent 审阅后回填。
+  timed_out/duration_s/out_head），机械字段由 harness 写入；**分类/级别等审阅字段以 REGISTER.md 为准**
+  （jsonl 的 classification/severity 留空，避免双写漂移）。
 - **REGISTER.md**：人工可读总表（由 jsonl 整理），供决策与汇报。
 - **PENDING_TASKS.md**：确凿缺陷登记（不修复，注明候选级别）。
 

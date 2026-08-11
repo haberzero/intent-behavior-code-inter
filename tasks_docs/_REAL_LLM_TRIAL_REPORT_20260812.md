@@ -15,7 +15,7 @@
 | 配置 | 引擎自动加载 `api_config.json`（providers/models/defaults，reasoning:false，timeout=30，retry=3） |
 | 保护 | **三层死循环保护强制**：OS 进程级硬超时（SIGKILL 进程组）+ `--max-inst` + LLM 调用级超时；harness 无超时不运行 |
 | 记录 | 确定性文件化：`logs/<case>.log` + `logs/register.jsonl` + `REGISTER.md` |
-| 运行数 | ~110 次（101 cases 文件）；死循环保护冒烟验证通过（8s 超时 SIGKILL） |
+| 运行数 | 104 个 cases 文件 / 113 次 harness 运行（含冒烟/死循环保护验证）；全经保护 |
 | 全量 pytest | **2210 passed / 1 skipped**（试用零回归，未改内核） |
 
 ## 二、D1 全语法遍历结果（docs/syntax/01-15 每章真实 LLM）
