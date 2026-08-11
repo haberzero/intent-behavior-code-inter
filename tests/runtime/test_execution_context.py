@@ -8,6 +8,8 @@ from core.runtime.interpreter.execution_context import ExecutionContextImpl
 
 
 def _make_ec(node_pool):
+    # project_root 显式传 None（表意：本测试直构无 project 上下文；生产路径必传，
+    # 消费方对 None fail-fast——见 ExecutionContextImpl 类契约）。
     ec = ExecutionContextImpl(
         registry=None,
         factory=None,
@@ -21,6 +23,7 @@ def _make_ec(node_pool):
         resolve_type_from_symbol_callback=lambda *a: None,
         extract_name_id_callback=lambda *a: None,
         resolve_value_callback=lambda *a: None,
+        project_root=None,
     )
     ec.node_pool = node_pool
     return ec

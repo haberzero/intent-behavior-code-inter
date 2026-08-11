@@ -209,3 +209,57 @@ class TestEngineAutoLoad:
         engine = IBCIEngine(root_dir=str(tmp_path))
         engine.run(str(script), output_callback=lambda s: outputs.append(s))
         assert "auto-loaded" in "".join(outputs)
+
+
+class TestAIPluginSetupContract:
+    """U4/U7：AIPlugin.setup 加载契约（fail-fast 语义 + 路径规范化）。"""
+
+    @staticmethod
+    def _caps(ec):
+        from core.extension.capabilities import PluginCapabilities
+        return PluginCapabilities(execution_context=ec)
+
+    @staticmethod
+    def _ec(root):
+        class _EC:
+            def __init__(self, root):
+                self._root = root
+
+            def get_project_root(self):
+                return self._root
+        return _EC(root)
+
+    def test_setup_fails_fast_without_execution_context(self):
+        """execution_context 未注入 = 注入异常 → fail-fast（不静默跳过）。"""
+        plugin = AIPlugin()
+        with pytest.raises(InterpreterError):
+            plugin.setup(self._caps(None))
+
+    def test_setup_fails_fast_without_project_root(self):
+        """execution_context 未确立 project_root = 注入异常 → fail-fast。"""
+        plugin = AIPlugin()
+        with pytest.raises(InterpreterError):
+            plugin.setup(self._caps(self._ec(None)))
+
+    def test_setup_skips_silently_when_config_absent(self, tmp_path):
+        """api_config.json 不存在 = 合法状态（用户无配置）→ 静默跳过。"""
+        plugin = AIPlugin()
+        plugin.setup(self._caps(self._ec(str(tmp_path))))
+        assert plugin.has_api_key() is False
+        assert plugin._is_test_mode() is False
+
+    def test_setup_loads_config_via_canonicalized_path(self, tmp_path):
+        """project_root 经符号链接时仍能读到配置（canonicalize_for_security 生效）。"""
+        import os
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        (real_dir / "api_config.json").write_text(json.dumps({
+            "defaults": {"mock": True},
+            "default_model": {"base_url": "http://x/v1", "api_key": "k", "model": "m"},
+        }), encoding="utf-8")
+        link_dir = tmp_path / "link"
+        os.symlink(str(real_dir), str(link_dir))
+        plugin = AIPlugin()
+        plugin.setup(self._caps(self._ec(str(link_dir))))
+        assert plugin._is_test_mode() is True
+        assert plugin.has_api_key() is True

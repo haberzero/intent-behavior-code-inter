@@ -4,6 +4,7 @@ import time
 from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
 from core.kernel.issue import InterpreterError
+from core.kernel.path import PathValidator
 from core.runtime.capability_registry import CapabilityRegistry
 
 from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine
@@ -89,15 +90,29 @@ class AIPlugin(IbStatefulPlugin):
         self._capabilities = capabilities
         # 向能力注册表注册自己为 LLM Provider
         capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
-        # 引擎自动加载 project_root/api_config.json（原生一等机制，零脚本代码）
+        # 引擎自动加载 project_root/api_config.json（原生一等机制，零脚本代码）。
+        # 加载契约（fail-fast 语义）：
+        #   - execution_context / project_root 由引擎加载路径恒注入——缺失是注入
+        #     异常（engine 未正确装配），不得静默跳过（区别于"配置不存在"合法态）。
+        #   - api_config.json 不存在是合法状态（用户无配置）→ 静默跳过。
+        #   - 路径统一经 PathValidator.canonicalize_for_security 规范化（与 kernel
+        #     层 config 路径处理同源，插件层不旁路符号链接解析）。
         ec = capabilities.execution_context
-        if ec is not None:
-            project_root = ec.get_project_root()
-            if project_root:
-                config_path = os.path.join(project_root, "api_config.json")
-                if os.path.isfile(config_path):
-                    config = ApiConfig.load(config_path)
-                    self.apply_config(config)
+        if ec is None:
+            raise InterpreterError(
+                "AIPlugin.setup: 缺少 execution_context 注入——插件须经引擎加载路径初始化"
+            )
+        project_root = ec.get_project_root()
+        if not project_root:
+            raise InterpreterError(
+                "AIPlugin.setup: execution_context 未确立 project_root（engine 注入异常）"
+            )
+        config_path = PathValidator.canonicalize_for_security(
+            os.path.join(project_root, "api_config.json")
+        ).to_native()
+        if os.path.isfile(config_path):
+            config = ApiConfig.load(config_path)
+            self.apply_config(config)
 
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""

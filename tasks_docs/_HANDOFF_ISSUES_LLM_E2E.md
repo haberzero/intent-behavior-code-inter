@@ -94,6 +94,12 @@ def receive(self, message, args):
 
 ### U3: InterpreterError 双实现绕过（commit 2fd3117，中严重度）
 
+**✅ 已核销（2026-08-11，本 session 修复）**：`core.extension.exceptions` 删除
+`InterpreterError` 定义；公开名 `core.extension.InterpreterError` 改指
+`core.kernel.issue.InterpreterError`（能力完备）；清理 ibcext.py 死 import
+（PluginError/InterpreterError/CompilerError 均未被该文件使用）；__init__.py 直接
+导入。+3 契约测试。全量 2181 passed / 1 skipped 零回归。
+
 **违反原则**：原则优先于行为维持 + 历史遗留未清理
 **症状**：发现全仓有两个 InterpreterError 实现，只在 config_loader.py 换 import，未统一清理
 **位置**：
