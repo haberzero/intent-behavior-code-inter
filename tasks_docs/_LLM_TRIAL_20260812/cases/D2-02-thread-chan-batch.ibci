@@ -1,0 +1,33 @@
+# D2-02 交叉：thread 内 LLM + chan 传回 + run_batch 并发扩展（C4）
+# 期望: 线程体内 LLM 调用正常；经 chan 传回；多路并发正确
+
+import ai
+
+chan c = chan(str, "stream")
+
+func worker(str q) -> void:
+    str a = @~ 用一句话回答：$q ~
+    c.send(a)
+
+thread[void] t1 = thread(callable=worker, args=["天空是什么颜色"])
+thread[void] t2 = thread(callable=worker, args=["海洋是什么颜色"])
+thread[void] t3 = thread(callable=worker, args=["沙漠是什么颜色"])
+
+t1.join()
+t2.join()
+t3.join()
+
+str r1 = c.recv()
+str r2 = c.recv()
+str r3 = c.recv()
+print("t1=" + r1)
+print("t2=" + r2)
+print("t3=" + r3)
+
+fn summarize = lambda(str doc) -> str: @~ 用5字内总结：$doc ~
+list docs = ["苹果", "香蕉", "橙子", "葡萄"]
+list results = ai.run_batch(summarize, docs)
+print("batch=" + (str)results.len())
+for any item in results:
+    print("b=" + (str)item)
+print("DONE")

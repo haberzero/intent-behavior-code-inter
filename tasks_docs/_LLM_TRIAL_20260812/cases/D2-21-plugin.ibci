@@ -1,0 +1,14 @@
+# D2-21 多文件：用户插件加载（calc/plugin_info）+ 插件函数调用
+# doc: docs/syntax/11_modules.md §11.9 + examples/plugins_demo
+# 期望: 插件自动发现加载；calc.add/mul 与 plugin_info.version 可用
+
+import calc
+import plugin_info
+
+int result1 = calc.add(10, 20)
+print("add=" + (str)result1)
+int result2 = calc.mul(5, 5)
+print("mul=" + (str)result2)
+str version = plugin_info.version
+print("version=" + version)
+print("DONE")

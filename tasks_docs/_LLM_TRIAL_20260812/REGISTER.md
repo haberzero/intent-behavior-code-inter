@@ -89,3 +89,29 @@
   编译器实际为 `thread_result[T]`（`int v = await t` 报 SEM_TYPE_MISMATCH）。
 - **级别**：P3（文档）。
 - **处置**：本 trial 用例按声明语义改 `thread_result[int] av = await t2; av.expect()`。
+
+### BOUNDARY-001 — 生成器 `for` 消费是 to_list 物化，break 后生成器仍已跑完
+- **复现**：D2-31 `for x in gen(10)` 中 `count==3` 时 break，但生成器体的 `print("GEN_FINISHED")`
+  仍执行（生成器已被完全驱动）。
+- **文档**：05_functions §5.8 "消费者 break 提前终止（生成器不再推进）" vs §5.9
+  "`for` 消费经 `to_list` 一次性物化（与 yield 生成器一致）"——两者张力。
+- **实际**：`for` 消费 = `to_list` 物化（生成器在进入循环前已跑完），break 只终止对物化列表的迭代。
+  "惰性"在 `next()`/`to_list` 层成立，在 `for` 层不成立。
+- **级别**：P3（文档张力/行为边界，非明确缺陷）。
+- **证据**：cases/D2-31-ref-generator-break.ibci + logs/D2-31-ref-generator-break.log。
+
+### BOUNDARY-002 — 生成器体内 `await chan.recv()` 未触发 KNOWN_LIMITS §二十四 所述错误
+- **复现**：D2-32/32b 生成器 `take()` 内 `int v = await c.recv()`（数据未就绪 + 生产者线程）
+  → 正常输出 x=42，未报 "generator driver yielded unexpected event"。
+- **文档**：KNOWN_LIMITS §二十四 声称生成器消费路径不承载显式 await 真异步 Waitable。
+- **实际**：两种形状（数据已就绪/未就绪含生产者线程）均正常完成，未复现文档描述的 RuntimeError。
+- **级别**：P3（文档可能过时，或该测试形状未触达缺陷路径——须内核层复核，不在本任务）。
+- **证据**：cases/D2-32/b-gen-await*.ibci + logs/D2-32/b-gen-await*.log。
+
+### DOC-ISSUE-004 — `11_modules.md §11.3` stream_call/stream_channel 仅列名未列签名
+- **复现**：文档只写 "`stream_call()`、`stream_channel()` 等"，无签名/用法示例；
+  初试按 fn 传入报 `SEM_TYPE_MISMATCH: Argument 'sys_prompt' type mismatch: expected 'str'`。
+- **实际**：正确用法 `ai.stream_call(sys_prompt:str, user_prompt:str) -> Waitable`（tests/runtime/
+  test_streaming.py 佐证）；`str full = await ai.stream_call("sys","user")` 正常。
+- **级别**：P3（文档签名缺失）。
+- **证据**：cases/D2-35-stream.ibci + logs/D2-35-stream.log。

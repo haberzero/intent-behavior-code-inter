@@ -1,0 +1,24 @@
+# D2-31 多可能性：引用语义（KNOWN_LIMITS §五）+ 生成器 break 提前终止
+# doc: docs/KNOWN_LIMITS.md §五 + 05_functions.md §5.8
+# 期望: 引用共享 b.append 影响 a；生成器 break 后不再推进
+
+list a = [1, 2, 3]
+list b = a
+b.append(4)
+print("a_len=" + (str)a.len())
+
+func gen(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    print("GEN_FINISHED")
+    return 0
+
+int count = 0
+for int x in gen(10):
+    count = count + 1
+    if count == 3:
+        break
+print("consumed=" + (str)count)
+print("DONE")
