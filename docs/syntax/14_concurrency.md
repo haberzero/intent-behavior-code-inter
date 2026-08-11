@@ -115,7 +115,7 @@ thread_result[int] r = await t
 - 其他 Waitable：`await` 不改变类型，仅等待其完成（幂等——操作数已就绪时原样返回）。
 - 阻塞操作在 VM 任务内为**协作挂起**（挂起当前任务，让出给其它任务，不阻塞线程）；调度器在完成时通知式唤醒。
 
-**自动挂起（auto-yield）**：调用返回 Waitable 的**方法**（如 `collect`、宿主异步操作）时，VM 自动挂起等待完成，无需显式 `await`。**例外**：类构造（如 `thread(...)`）返回的 Waitable 是句柄，不自动挂起——等待须经 `t.join()` / `await t` 显式表达。
+**自动挂起（auto-yield）**：调用返回 Waitable 的**方法**（如 `collect`、宿主异步操作）时，VM 自动挂起等待完成，无需显式 `await`。**例外**：含原生 `__init__` 的类构造（如 `thread(...)`）返回的 Waitable 是句柄，不自动挂起——等待须经 `t.join()` / `await t` 显式表达。用户类构造（`__init__` 含 Waitable 时）由 VM 帧内 CPS 驱动并协作挂起。
 
 ### 14.7 thread_result 结果容器
 

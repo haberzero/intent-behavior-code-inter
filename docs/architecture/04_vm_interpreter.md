@@ -241,7 +241,7 @@ VM 行为：
    │     读点 vm_handle_IbName → resolve_future_cps 挂起 → 恢复得结果
    │
    └── dispatch_eligible=False：
-         vm_handle_IbAssign → LLMExecutorImpl.execute_behavior_expression(...)
+         vm_handle_IbAssign → LLMExecutorImpl.execute_behavior_expression_cps(...)
            → _call_llm() → axiom.from_prompt(raw, spec)
            → LLMResult(success/value/is_uncertain/raw_response/retry_hint/call_info)
            → 确定：返回 result.value；不确定：返回 IbLLMCallResult(is_certain=False) 容器

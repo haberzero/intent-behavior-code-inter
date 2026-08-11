@@ -130,7 +130,7 @@ class TypeDef(IbSpec):
 
 ### 3.3 字段存储规范
 
-- **TypeRef-only**：所有指向"其他类型"的字段全部以 `TypeRef` 存储；旧 `*_name` / `*_module` 扁平字符串字段已彻底删除。访问统一走 `spec.X.head` / `spec.X.module` / `spec.X.canonical_name`。
+- **TypeRef-only**：所有指向"其他类型"的字段全部以 `TypeRef` 存储，访问统一走 `spec.X.head` / `spec.X.module` / `spec.X.canonical_name`。
 - **MemberSpec 同样 TypeRef 化**：`core/kernel/spec/member.py:MemberSpec.type_ref`、`MethodMemberSpec.return_type` / `param_types` 均为 TypeRef。类方法另以 `MethodMemberSpec.param_descriptors` 携带参数描述符（与 `TypeDef.param_descriptors` 对齐，见 §3.6），由 `_declaration_visitors._sync_class_member` 同步，供方法覆写契约校验消费。
 - **MethodMemberSpec 变异声明**：`MethodMemberSpec.mutating: bool`（默认 False）声明该方法是否修改接收者状态；`MethodMemberSpec.llmexcept_safe: bool`（默认 False）标记该方法在 llmexcept body 内对被保护变量的调用是否被豁免。这两个字段是 `SEM_LLMEXCEPT_MUTATING_CALL` 编译期检查的公理层数据源，由 `binding_analysis_pass.py` 在 BindingPhase 消费。
 - **线协议保留**：序列化 / 反序列化（`core/compiler/serialization/`）仍把 TypeRef 解构为字符串字段（`return_type_name` / `parent_module` 等）以保持向后兼容；in-memory 模型纯 TypeRef。

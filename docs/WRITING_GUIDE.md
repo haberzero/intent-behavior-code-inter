@@ -8,7 +8,7 @@
 > 各索引手册（`SYNTAX_REFERENCE.md`、`ARCHITECTURE.md`、`SUBSYSTEM_DESIGN.md`）。
 > `tasks_docs/` 不在本准则管辖范围内（属任务控制文档，规则见 AGENTS.md）。
 >
-> **`tests_docs/` 纳入本准则管辖（2026-08-06，OBSERVABILITY_REFACTOR 4）**：测试文档遵循本准则的
+> **`tests_docs/` 纳入本准则管辖**：测试文档遵循本准则的
 > 数字纪律（禁冻结通过数字，仅指向 `tasks_docs/NEXT_STEPS.md` 顶部锚点）、禁过程叙述/日期戳/版本号、
 > 禁任务代号；覆盖矩阵必须可机器校验（三段式引用 + `tests/meta/test_matrix_sync.py` 对账）。
 

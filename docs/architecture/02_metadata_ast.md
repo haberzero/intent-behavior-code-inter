@@ -192,7 +192,7 @@ def _process_value(self, value):
 
 **确定性 UID**：保证相同内容生成相同 UID。
 
-**单一权威源**：序列化/符号 UID 格式收敛于 `core/base/uid.py`（PT-FEAT-10）——调用方
+**单一权威源**：序列化/符号 UID 格式收敛于 `core/base/uid.py`——调用方
 （symbols / serialization / context / runtime_serializer）经 `UIDGenerator` 系列
 函数生成，**禁止内联格式字符串**。边界：运行时调度器的解释器实例注册键
 （`inst_<uuid8>`/`inst_<id>`）为进程内查找键，非序列化 UID，不并入。
