@@ -1,0 +1,18 @@
+# D3-22 对抗：MOCK:FAIL 重试耗尽 LLMRetryExhaustedError 捕获（确定性）
+import ai
+ai.set_mock_mode()
+ai.set_retry(2)
+
+try:
+    int n = @~ MOCK:FAIL 提取数字 ~
+    llmexcept:
+        retry "请只返回数字"
+    print("n=" + (str)n)
+except LLMRetryExhaustedError as e:
+    print("exhausted=" + e.message)
+    print("max_retry=" + (str)e.max_retry)
+except LLMParseError as e:
+    print("parse_err=" + e.message)
+except Exception as e:
+    print("gen_err=" + (str)e)
+print("DONE")
