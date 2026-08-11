@@ -120,6 +120,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_REAL_LLM_E2E_PLAN.md` | **真实 LLM e2e 全面试用 + 高强度批判检测**（2026-08-11 用户定案，下一 session 主任务）：本地 LLM 服务搭建、全语法特性试用清单、MOCK-vs-真实差异批判检测、成功门。设计权威 |
 | `_MAIN_MERGE_PLAN.md` | **unsafe-vibe-dev 合并取代 main 规划**（2026-08-11）：合并时机/进度/前置（文档 README 更新/版本评估/examples）/细则/风险 |
 | `_DOC_HEALTH_20260811.md` | **docs/ 全量健康检查记录**（2026-08-11，doc-governance Phase 2 审计）：P0/P1/P2 全部问题清单 + 已修复/剩余标记。**晚上自主续做依据** |
+| `_API_CONFIG_DESIGN.md` | **`api_config.json` 配置机制分析与改进设计**（2026-08-11 用户提出，PT-FEAT-13）：现非原生加载（脚本约定）、schema 极简、无校验、mock 字符串嗅探；改进 C1-C8（原生加载/set_config 结构化/校验诊断/env 引用/mock 配置化/命名路由/reasoning 标志/容器类型）。C1-C3 为真实 LLM e2e 前置 |
 
 ---
 
@@ -136,6 +137,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   通过后评估 **unsafe-vibe-dev 合并取代 main**。详细见 `_REAL_LLM_E2E_PLAN.md` + `_MAIN_MERGE_PLAN.md`。
   - **接手第一步**：起本地 OpenAI 兼容 LLM（Ollama/LM Studio/vLLM，**非思考模型**），`ai.set_config(base_url,key,model)`
     指向它，最小探针 `str r = @~ 说你好 ~` 验证连通。
+  - **配置机制前置（PT-FEAT-13 C1-C3，`_API_CONFIG_DESIGN.md`）**：现 api_config.json 非原生加载（脚本约定）——
+    建议先落地**原生配置加载 + set_config 结构化 + 校验诊断**，使本地 LLM 试用配置成为一等机制
+    （替代每脚本 `file.exists/json.parse/set_config` 约定；`reasoning:false` 承载非思考模型约束）。
   - **主任务**：按 `_REAL_LLM_E2E_PLAN.md` §四 全语法特性真实试用 + §五 e2e 批判检测（MOCK-vs-真实差异 = 缺陷候选 +
     对抗场景），产出验证报告，处置暴露问题，评估合并条件。
   - **CI/CD**：GitHub 侧已停用自动触发（`ci.yml` → `workflow_dispatch`），勿自动恢复；待单独设计"可靠化/实用化"。
