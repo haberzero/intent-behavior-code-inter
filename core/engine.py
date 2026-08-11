@@ -640,6 +640,18 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             return val
         return None
 
+    def get_llm_call_trace(self) -> List[Any]:
+        """[Engine API] 获取最近 LLM 调用追踪（调试观测）。
+
+        每条含 ``sys_prompt``/``user_prompt``/``response``/意图列表——定位
+        "LLM 未服从 vs 内核未注入"时直接查看实际发出的 prompt 与返回。
+        无 LLM executor（未运行）返回空列表。
+        """
+        executor = self.registry.get_llm_executor() if self.registry else None
+        if executor is None:
+            return []
+        return executor.get_call_trace()
+
     def test_snapshot(self) -> EngineTestSnapshot:
         """引擎可观测状态快照（测试内省；替代对私有字段的穿透访问）。
 

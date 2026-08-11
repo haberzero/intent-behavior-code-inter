@@ -30,6 +30,7 @@ LLMScheduler 状态 (由 ``_SchedulerMixin`` 使用):
 """
 
 import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from typing import Any, List, Optional, Dict, Union, Mapping
 
@@ -45,6 +46,9 @@ from core.base.diagnostics.codes import RUN_LLM_ERROR
 from core.runtime.exceptions import ThrownException
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
+
+# 最近 LLM 调用追踪容量（有界环形缓冲，调试观测用）。
+_CALL_TRACE_CAPACITY = 64
 
 
 class LLMExecutorCore:
@@ -69,6 +73,11 @@ class LLMExecutorCore:
         self._execution_context = execution_context
 
         self._current_call_info: Mapping[str, Any] = {}  # 主线程单写槽：最近一次 resolve 的调用信息
+        # 最近 LLM 调用追踪（有界环形缓冲，最近 _CALL_TRACE_CAPACITY 次）。
+        # 每次调用（同步直接记录 / worker 的 resolve 点记录）追加完整调用信息
+        # （sys_prompt/user_prompt/response/意图），供调试"区分 LLM 未服从 vs
+        # 内核未注入"。与 _current_call_info 的区别：保留历史而非仅最近一次。
+        self._call_trace = deque(maxlen=_CALL_TRACE_CAPACITY)
 
         # LLMScheduler 状态
         self._max_workers: int = max_workers
@@ -126,6 +135,19 @@ class LLMExecutorCore:
         """获取最近一次 resolve 的调用信息（主线程单写槽）。"""
         return self._current_call_info
 
+    def get_call_trace(self) -> List[Mapping[str, Any]]:
+        """获取最近 LLM 调用追踪（旧→新，含完整 prompt/响应/意图）。
+
+        调试观测设施：定位"LLM 未服从 vs 内核未注入"时直接查看实际发出的
+        ``sys_prompt``/``user_prompt`` 与返回 ``response``。返回快照拷贝，
+        不暴露内部缓冲。
+        """
+        return list(self._call_trace)
+
+    def _append_call_trace(self, call_info: Mapping[str, Any]) -> None:
+        """把一次 LLM 调用信息追加进追踪缓冲（有界，自动淘汰最旧）。"""
+        self._call_trace.append(dict(call_info))
+
     def pending_futures_count(self) -> int:
         """在途 LLM Future 数量（只读内省，线程安全）。
 
@@ -145,11 +167,13 @@ class LLMExecutorCore:
             result.call_info = call_info
         if record_current:
             self._current_call_info = call_info
+            self._append_call_trace(call_info)
         return result
 
     def _record_current_call_info(self, call_info: Mapping[str, Any]) -> None:
         """记录最近一次 resolve 的调用信息（仅主线程调用）。"""
         self._current_call_info = call_info
+        self._append_call_trace(call_info)
 
     def _finalize_invoke_result(self, result: Any):
         """``invoke_*`` 系列入口的共用后处理（sync 与 CPS 版语义完全一致）。

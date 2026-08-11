@@ -111,3 +111,44 @@ print(r)
         assert captured_sys_prompts
         assert "保持简洁" in captured_sys_prompts[0]
         assert "用冷酷口吻" in captured_sys_prompts[0]
+
+
+class TestLLMCallTraceObservability:
+    """T3：LLM 调用追踪——无需探针即可查看实际发出的完整 prompt。
+
+    区分"LLM 未服从"（prompt 正确但响应不符）vs"内核未注入"（prompt 缺意图）
+    的核心调试设施。
+    """
+
+    def test_engine_trace_captures_prompt_intents_and_response(self):
+        code = AI_MOCK_PREFIX + """
+@ 用冷酷无感情且极简的口吻回复
+str r = @~ MOCK:STR:hi ~
+print(r)
+"""
+        from core.engine import IBCIEngine
+
+        engine = IBCIEngine(root_dir=".", auto_sniff=False)
+        lines = []
+        engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
+        trace = engine.get_llm_call_trace()
+        assert len(trace) == 1
+        assert "用冷酷无感情且极简的口吻回复" in trace[0]["sys_prompt"]
+        assert "MOCK:STR:hi" in trace[0]["user_prompt"]
+        assert trace[0]["response"] == "hi"
+        assert "用冷酷无感情且极简的口吻回复" in trace[0]["merged_intents"]
+
+    def test_engine_trace_preserves_history(self):
+        code = AI_MOCK_PREFIX + """
+str a = @~ MOCK:STR:one ~
+str b = @~ MOCK:STR:two ~
+print(a, b)
+"""
+        from core.engine import IBCIEngine
+
+        engine = IBCIEngine(root_dir=".", auto_sniff=False)
+        lines = []
+        engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
+        trace = engine.get_llm_call_trace()
+        assert [t["response"] for t in trace] == ["one", "two"]
+        assert [t["user_prompt"].strip() for t in trace] == ["MOCK:STR:one", "MOCK:STR:two"]

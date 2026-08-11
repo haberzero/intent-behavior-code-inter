@@ -89,7 +89,8 @@ class _SchedulerMixin:
         with self._pending_futures_lock:
             self._pending_futures.pop(future.node_uid, None)
         if result is not None and result.call_info is not None:
-            self._current_call_info = result.call_info
+            # 经统一记录点（单写槽 + 调用追踪），不直接写槽。
+            self._record_current_call_info(result.call_info)
         return self._finalize_invoke_result(result)
 
     def close(self) -> None:
