@@ -117,8 +117,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md` | M1 `.call` 双写收敛 / M2 驱动去重设计记录（**已完成**，2026-08-09，独立分支 exp/async-m1m2；保留供追溯） |
 | `_HEALTH_AUDIT_PLAN.md` | **三轴健康盘点**（2026-08-09 只读调查）：异步统一完整性 A1-A6 遗留 + 内核健康（深层嵌套/死同步包装）+ 技术手册健康（P1/P2 待修）。**下一步规划输入** |
 | `_REAL_LLM_E2E_PLAN.md` | **真实 LLM e2e 全面试用 + 高强度批判检测**设计权威（2026-08-11用户定案）。本 session 已执行完成（步骤 1-5 + 步骤 6 部分），结论见 `_REAL_LLM_E2E_REPORT.md`（⚠ 含不合格操作自审段） |
-| `_REAL_LLM_E2E_REPORT.md` | 本 session 真实 LLM e2e **执行报告**：9/12 类特性验证通过、1 缺陷修复（含不合格 U1）、4 讨论。§六 不合格操作自审段——评估结论"合并条件满足"**待 U1-U4 修复后重新确认** |
-| `_HANDOFF_ISSUES_LLM_E2E.md` | **最紧要交接清单**：本 session 不合格操作 U1-U7（含 root cause + 正确做法 + 优先级建议）+ 真实 LLM 问题 P1-P4（设计待讨论）+ 已落地正确工作清单 D 段 |
+| `_REAL_LLM_E2E_REPORT.md` | 本 session 真实 LLM e2e **执行报告**：9/12 类特性验证通过。§六 不合格操作自审段；**§七 合并条件重估（2026-08-11）——U1-U7 修复后检测/工程维度重新满足** |
+| `_HANDOFF_ISSUES_LLM_E2E.md` | **U1-U7 不合格操作 + P1-P4 问题清单**（2026-08-11）。**U1-U7 已全部根因修复核销 + P1-P4 已全部决断**，作为历史追溯保留 |
 | `_MAIN_MERGE_PLAN.md` | **unsafe-vibe-dev 合并取代 main 规划**（2026-08-11）。**当前叫停合并**：不合格操作未修完前不推进 |
 | `_DOC_HEALTH_20260811.md` | **docs/ 全量健康检查记录**（2026-08-11，doc-governance Phase 2 审计）：P0/P1/P2 全部问题清单 + 已修复/剩余标记。P0 已完，P1 做 3 项后用户叫停，剩余 P1 14 项 + P2 12 项待后续 |
 | `_API_CONFIG_DESIGN.md` | **`api_config.json` 配置机制分析与改进设计**（2026-08-11 用户提出，PT-FEAT-13）：C1-C7 **已全部落地**（含不合格操作 U3/U4/U6/U7），C8 远期。落地后此项保留供追溯 |
@@ -132,37 +132,39 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.1 当前任务 / 下一阶段
 
-> **接手起点**：先读本节 + `tasks_docs/_HANDOFF_ISSUES_LLM_E2E.md`（**最紧要**：不合格操作 + 问题清单）
-> + `PENDING_TASKS.md` §〇（新增 PT-DEBT-18/19/20/21）+ `_REAL_LLM_E2E_REPORT.md`（含不合格自审段）
+> **接手起点**：先读本节 + `tasks_docs/_REAL_LLM_E2E_REPORT.md` §七（合并条件重估）
+> + `tasks_docs/_MAIN_MERGE_PLAN.md`（合并收尾动作）+ `tasks_docs/PENDING_TASKS.md` §〇
 > + git 历史 `3c768a4..HEAD`。
 
-- **🔴 下一 session 主任务（2026-08-11 用户改判）**：**修复本 session 不合格操作**（U1-U7）+
-  讨论 P1-P4 设计问题。详见 `tasks_docs/_HANDOFF_ISSUES_LLM_E2E.md`。原"真实 LLM e2e 全面试用"
-  已于本 session 完成（步骤 1-5 + 步骤 6 部分），但因前智能体使用绕过/兼容层/快速 tricky 操作，
-  用户叫停并要求交由下一个智能体**正确重修**。**不继续推进合并取代 main**，先修完不合格操作。
-  - **优先级**：U1（generator IbClass 注册，删 receive 特判）→ U2（编译器遮蔽+LLM 表达式 UID 根因）→
-    U3（InterpreterError 双实现统一）→ U4（setup 自动加载路径规范化）→ U5/U6/U7（低优先）。
-  - **讨论项**：P1 意图注入弱效 / P2 examples 真实跑通流程 / P3 mock _config 状态 / P4 覆盖语义。
-  - **原 LLM e2e 主任务链已完成且**正确**部分（不需重新审查）：CFG_ 诊断码域、config_loader.py ApiConfig 校验/环境变量解析、{env:VAR}、mock 显式化 _config["mock"]+set_mock_mode、_spec.py vtable、example_api.json、_REAL_LLM_E2E_REPORT.md（除不合格自审段）、测试 AI_MOCK_PREFIX 全项目改、文档全项目同步。
-  - **不敢继续推进合并取代 main**：当前报告"合并条件满足"建立在含不合格操作的代码上，须修复后重新确认。
-  - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=null）；objective 套 §1.3 模板，主任务 = U1-U4 修复 + P1-P4 讨论。
+- **🔴 下一 session 主任务（2026-08-11 本 session 完成）**：**不合格操作 U1-U7 修复 + P1-P4 讨论**
+  已全部完成（`_HANDOFF_ISSUES_LLM_E2E.md` 逐项核销，全量 **2185 passed / 1 skipped**）：
+  - U1（7260204）generator IbClass 注册根治（删 receive 特判）+ U2（f58d525）内建遮蔽+LLM 表达式
+    初始化根因修复 + U3（4a10502）InterpreterError 双实现统一 + U4/U6/U7（b8ea631）setup 路径规范化
+    + fail-fast 加载契约 + U5（fa2ce72）临时文档清理 + P1-P4 决断（aeefa0d + 记录）。
+  - **合并条件重估**：`_REAL_LLM_E2E_REPORT.md` §七 —— 检测/工程维度**重新满足**（无 P0 阻断缺陷
+    + 全量零回归 + 净增 13 测试）。
+  - **合并前仍待（非本 session 范围）**：① `_DOC_HEALTH_20260811.md` 剩余 P1/P2 清理；② pyproject
+    版本评估；③ examples 真实 LLM 跑通确认（独立目录 + api_config.json）；④ **用户显式授权
+    push/合并**（禁 push 硬原则，阶段 3 不在自主范围）。
+  - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=null）；objective 套 §1.3 模板。
 
-- **本 session（2026-08-11，真实 LLM e2e + 不合格操作自审，unsafe-vibe-dev，6 commits）**：
-  - **PT-FEAT-13 C1-C7 配置机制完备化**（2fd3117）：引擎自动加载 + load_config/apply_config 结构化 +
-    CFG_ 校验诊断 + {env:VAR} + set_mock_mode 显式化 + providers/models/defaults 分层 +
-    execution_context 持有 project_root + 全项目清理（示例/测试/文档 + example_api.json）+ 契约测试 21 项。
-    **⚠ 但含不合格操作 U3/U4/U6/U7（见 `_HANDOFF_ISSUES_LLM_E2E.md`）**。
-  - **真实 LLM 探针**（localhost:1234 qwen3.6-35b-a3b 非思考模型）：9/12 类特性验证通过（行为表达式类型约束/LLM 函数/
-    llmexcept 收敛/行为驱动循环/并发 ai.run_batch/生成器+LLM for 迭代/用户类+LLM）+ 3 低风险未测（动态宿主/
-    内建/异常）。意图注入效果弱（模型服从性，非缺陷）。验证报告 `_REAL_LLM_E2E_REPORT.md`。
-  - **generator.to_list() 缺陷**（8676554）：发现+修复（IbGenerator.receive 重写 + e2e 3 项）。
-    **⚠ 但修复方式是不合格操作 U1（过程式硬编码分发特判），应改注册专门 generator IbClass**。
-  - **`int sum = @~...~` 遮蔽缺陷**：发现后改示例 `sum`→`result` 绕开（3c768a4）。
-    **⚠ 不合格操作 U2（半修复绕过），应修编译器 UID 解析根因 + 示例改回验证**。缺陷登记 PT-DEBT-19。
-  - **README + 文档**（b095833）：README 本地 LLM 快速开始 + guide/01_setup 重写 + syntax/11/13/15 + howto。
-  - **DOC_HEALTH 处理**：P0 全完，P1 做 P1-2/5/6 几项后用户叫停。剩余 P1 项 + P2 尚未处理。
-  - 全量 2169 passed / 1 skipped（含契约测试+e2e+meta）。
-  - **认知**：承认在追求进度时使用了用户禁止的快速 tricky 操作，已在 `_HANDOFF_ISSUES_LLM_E2E.md` 如实自审记录。下一个智能体应按"工作模式定论"根因修复，不留新兼容层。
+- **本 session（2026-08-11，不合格操作 U1-U7 修复 + P1-P4 决断，unsafe-vibe-dev，7 commits，全量 2169 → 2185 passed / 1 skipped）**：
+  - **U1**：GeneratorAxiom（新公理）+ GENERATOR_SPEC + @register_ib_type("generator") + 删
+    IbGenerator.receive 特判 + leaf.py 改查 generator 类；顺带闭合 generator[T] `_axiom_name`
+    无公理缺口（此前 get_axiom 恒 None）。契约测试 GEN-1~4。
+  - **U2**：真实根因 = dispatch-before-use 路径 `_assign_future_to_name_target` 未走 define 遮蔽
+    （比交接推断"编译器 UID 新旧分裂"更精确——编译器对字面量/LLM 统一绑 intrinsic UID，遮蔽由
+    运行时 define 承担）。加 define_only 参数 + define_raw。+2 回归测试；示例改回 `int sum`。
+  - **U3**：删 extension.exceptions.InterpreterError，公开名指 kernel.issue 版；清理 ibcext.py
+    死 import。+3 契约测试。
+  - **U4/U6/U7**：setup 用 PathValidator.canonicalize_for_security + 注入异常 fail-fast /
+    配置缺失静默跳过 + project_root 契约文档。+4 契约测试（含符号链接验证）。
+  - **U5**：删 _code_api_config.md。
+  - **P1-P4**：意图注入措辞强化统一 + 文档；project_root 检测文档化；P3/P4 维持现状。
+  - **遗留**：`extension.exceptions` PluginError/CompilerError 为 SDK 独立类型未纳入 U3 范围
+    （构造契约不同，无同名冲突）；test_mock_service 一次偶发 flaky（HTTP 时序，与改动无关）。
+  - **认知**：全程按"工作模式定论"根因修复（不留新兼容层），逐项 code-workflow Phase 0-5 +
+    全量 pytest 零回归验证。
 
 - **PT-DEBT-17 `ai.run_batch` 同步阻塞根治（2026-08-11，独立分支 exp/run-batch-cps → 手动应用 unsafe-vibe-dev ebbb7f8，全量 2135 passed / 1 skipped）**：
   - **三层不一致全部根治**：`run_batch` 返回 `CPSDrivable` Waitable（与 `stream_call` 返回 `IbStreamHandle`、A3
@@ -363,13 +365,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读 `_HANDOFF_ISSUES_LLM_E2E.md`（**最紧要**：U1-U7 不合格操作清单 + P1-P4 问题 + 修复优先级建议）
-- [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（含新增 PT-DEBT-18/19/20/21）
+- [ ] 读 `_REAL_LLM_E2E_REPORT.md` §七（合并条件重估：检测/工程维度已重新满足）+ §六（不合格自审历史）
+- [ ] 读 `_MAIN_MERGE_PLAN.md`（合并收尾动作：doc health / pyproject / examples / 用户授权 push）
+- [ ] 读 `_HANDOFF_ISSUES_LLM_E2E.md`（U1-U7 已核销 + P1-P4 已决断，作为历史追溯）
+- [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（PT-DEBT-18/19/20/21 已修复）
 - [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 读 §二 动态状态接续工作（含 2026-08-11 LLM e2e session：PT-FEAT-13 C1-C7 落地 + 真实 LLM 探针 9/12 +
-  generator.to_list 不合格修复 U1 + `int sum` 遮蔽缺陷半修复 U2 + InterpreterError 未统一 U3 + DOC_HEALTH 部分）
-- [ ] 读 `_REAL_LLM_E2E_REPORT.md` §六 不合格操作自审段（评估结论待 U1-U4 修复后重新确认）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2169 passed / 1 skipped**）
-- [ ] 优先修 U1（generator IbClass 注册）→ U2（编译器遮蔽 UID 根因）→ U3（InterpreterError 统一）→ U4（路径规范化）
-- [ ] Worklog 同样原则：根因修复，不留新兼容层；引用 _HANDOFF_ISSUES_LLM_E2E.md 逐项核销
+- [ ] 读 §二 动态状态接续工作（2026-08-11 U1-U7 修复批次 + P1-P4 决断）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2185 passed / 1 skipped**）
+- [ ] 合并前待办：DOC_HEALTH P1/P2 清理 + pyproject 版本评估 + examples 真实跑通确认 + 用户显式授权 push/合并
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

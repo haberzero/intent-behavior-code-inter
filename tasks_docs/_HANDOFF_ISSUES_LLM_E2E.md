@@ -239,6 +239,13 @@ if ec is not None:
 **现象**：`@ 用冷酷无感情的口吻回复` 意图注释未明显改变 qwen3.6-35b-a3b 输出风格，LLM 仍回复热情内容。
 `int/bool` 类型约束（格式服从）则稳定生效。
 
+**✅ 已决断（2026-08-11）**：① 注入路径——意图经 `_prepare_behavior_call`（sync+CPS）
+消解为 `all_intents` 后追加到 **system prompt** 的"当前上下文意图"清单块；② 强度——描述性
+清单，非程序化强制；③ 处置——措辞强化为指令式"当前上下文意图（必须严格遵守）"并统一
+`_behavior.py` 两处与 `_llm_function.py` 的表述分歧；`docs/syntax/09_intent_system.md` §9.2
+补"意图效果取决于模型服从性"说明（低服从性模型风格类意图弱效、类型约束稳定，模型特性非缺陷）。
+增强机制（更强 system 角色）评估为过度设计，不引入。
+
 **有待查询**：
 1. auto_intent_injection 机制的实际注入路径（系统提示词？用户提示词？注入位置？）
 2. 意图注入在 prompt 中的强度（是否仅追加，不强制约束？）
@@ -252,6 +259,12 @@ if ec is not None:
 
 **现象**：`main.py run examples/01_getting_started/01_hello_world.ibci` 时 ProjectDetector 向上探测找到仓库根（含 ibci_modules/），所以 project_root=仓库根而非 examples/01_getting_started/。
 examples 子目录放 api_config.json 不会被自动加载（引擎去仓库根找）。
+
+**✅ 已决断（2026-08-11）**：机制正确（ProjectDetector 向上找 `ibci_modules/`/`plugins/`
+等签名是设计语义；`--root` 可显式覆盖）。"examples 真实跑通"验收方式 = **独立项目目录**
+（README 既有 `test_target_proj` 方式：目录内 api_config.json 即被自动加载）+ `--root`
+显式指定兜底；不采纳"examples 子目录加 ibci.json"（侵入仓库结构）。`docs/guide/01_setup.md`
+补 project_root 确定语义（向上探测 + --root 覆盖 + 仓库内运行须放仓库根或 --root）。
 
 **有待查询**：
 1. ProjectDetector.detect_project_root 的探测逻辑（向上找 ibci_modules/plugins/ 签名）
@@ -267,6 +280,12 @@ examples 子目录放 api_config.json 不会被自动加载（引擎去仓库根
 **现象**：`apply_config({"defaults":{"mock":true}, ...})` 时走 set_mock_mode，_config["mock"]=True，但 _config["url"]/["key"] 仍为 None（set_mock_mode 不设 url/key）。
 has_api_key 特判 mock=True 返回 True（规避 url/key 检查）。
 
+**✅ 已决断（2026-08-11）：维持现状**。① mock 下 url/key None 是**诚实状态**（不连接故
+无意义；`model` 已由 apply_config 从 default_model 写入）；设占位值反而在序列化/下游产生
+伪造连接信息，不采纳。② `has_api_key` 的 mock 特判是**合理领域逻辑**（"mock 模式视为已
+就绪"是明确领域语义），非第 4 条"过程式硬编码分发"（该条针对"应用协议驱动却用 if 分发
+决策"）。③ `set_mock_mode` 不设占位 url/key。
+
 **有待查询**：
 1. mock 模式下 url/key/model 的预期状态（None 是否合理？还是应设占位？）
 2. has_api_key 特判 mock 是否属"if 能力标志位分派"（第 4 条）？还是合理领域逻辑？
@@ -277,6 +296,13 @@ has_api_key 特判 mock=True 返回 True（规避 url/key 检查）。
 ### P4: AIPlugin.setup 自动加载 + 用户脚本 set_config 的覆盖语义
 
 **现象**：引擎自动加载 project_root/api_config.json 后，用户脚本仍可 `ai.set_config(...)` 或 `ai.set_mock_mode()` 覆盖。
+
+**✅ 已决断（2026-08-11）：设计正确，维持现状**。① setup 自动加载是**隐式默认**，用户
+脚本显式调用（`set_config`/`set_mock_mode`/`load_config`）在运行时天然后执行 → **显式 >
+隐式**，符合设计。② 自动加载失败（格式错误）经 `ApiConfig.load` raise InterpreterError
+（CFG_ 诊断码）→ 传播到引擎启动，fail-fast 阻止——符合"配置错误应立即暴露"。③ 用户脚本
+`ai.load_config("./other.json")` 显式加载覆盖自动加载（apply_config 重设 _config），符合
+显式 > 隐式。
 
 **有待查询**：
 1. 自动加载 → 用户 set_config 覆盖的顺序是否符合设计（显式 > 隐式）？
@@ -289,19 +315,19 @@ has_api_key 特判 mock=True 返回 True（规避 url/key 检查）。
 
 ## C. 修复优先级建议
 
-| 优先 | 项 | 理由 |
+| 优先 | 项 | 状态（2026-08-11） |
 |------|-----|------|
-| 高 | U1 generator IbClass 注册 | 核心架构正本清源，删除 receive 特判 |
-| 高 | U2 遮蔽 + LLM 表达式 UID 根因 | 编译器深层缺陷，遮挡内建名遮蔽语义 |
-| 中 | U3 InterpreterError 双实现统一 | 历史遗留清理（用户明确要求不保留包袱） |
-| 中 | U4 setup 自动加载路径规范化 | 安全路径规范化绕过 |
-| 低 | U5 _code_api_config 清理 | Phase 5 纪律 |
-| 低 | U6 project_root 默认 None | fail-fast 原则 |
-| 低 | U7 setup 三重 if | 静默降级 |
-| 讨论 | P1 意图注入弱效 | 设计决策（是否增强机制） |
-| 讨论 | P2 examples 真实跑通 | 流程决策（如何验收） |
-| 讨论 | P3 mock _config 状态 | 设计审视 |
-| 讨论 | P4 覆盖语义 | 设计确认 |
+| 高 | U1 generator IbClass 注册 | ✅ 修复（7260204） |
+| 高 | U2 遮蔽 + LLM 表达式 UID 根因 | ✅ 修复（f58d525） |
+| 中 | U3 InterpreterError 双实现统一 | ✅ 修复（4a10502） |
+| 中 | U4 setup 自动加载路径规范化 | ✅ 修复（b8ea631，含 U6/U7） |
+| 低 | U5 _code_api_config 清理 | ✅ 修复（fa2ce72） |
+| 低 | U6 project_root 默认 None | ✅ 修复（b8ea631） |
+| 低 | U7 setup 三重 if | ✅ 修复（b8ea631） |
+| 讨论 | P1 意图注入弱效 | ✅ 决断（措辞强化 + 文档） |
+| 讨论 | P2 examples 真实跑通 | ✅ 决断（独立目录 + --root） |
+| 讨论 | P3 mock _config 状态 | ✅ 决断（维持现状） |
+| 讨论 | P4 覆盖语义 | ✅ 决断（设计正确，维持现状） |
 
 ---
 
@@ -313,7 +339,7 @@ has_api_key 特判 mock=True 返回 True（规避 url/key 检查）。
 2. config_loader.py ApiConfig.load/validate/_validate_model_entry — 正确（单一职责，显式校验）
 3. {env:VAR} 解析(_resolve_env) — 正确（正则 + os.environ，fail-fast）
 4. mock 显式化 _config["mock"] + set_mock_mode + _is_test_mode 读 mock/env — 正确（消字符串嗅探）
-5. has_api_key mock 特判 — **存疑**（见 P3，可能属合理领域逻辑，但需审视）
+5. has_api_key mock 特判 — ✅ 已决断（P3：合理领域逻辑，维持现状）
 6. _spec.py vtable 声明（load_config/apply_config/set_mock_mode）— 正确
 7. example_api.json 新 schema — 正确
 8. _REAL_LLM_E2E_REPORT.md 验证报告 — 正确（除不合格操作段需补充，下方处理）
@@ -322,13 +348,22 @@ has_api_key 特判 mock=True 返回 True（规避 url/key 检查）。
 
 ---
 
-## E. 建议下一个智能体的工作顺序
+## E. 处置状态（2026-08-11 全部完成）
 
-1. 先读本文件 + tasks_docs/_REAL_LLM_E2E_REPORT.md + tasks_docs/PENDING_TASKS.md（新登记项）
-2. 按 C 节优先级：先 U1（generator IbClass）→ U2（遮蔽根因）→ U3（InterpreterError 统一）→ U4（路径规范化）
-3. 每项修复走 code-workflow Phase 0-5，全量 pytest 零回归 + commit
-4. 完成后清理 U5（_code_api_config.md）
-5. 讨论 P1-P4（如能自主决断则推进；不能则上报用户）
+**U1-U7 全部修复 + P1-P4 全部决断**（详见 A/B/C 节核销记录）。
+
+- U1（7260204）generator IbClass 注册根治（删 receive 特判，契约测试 GEN-1~4）
+- U2（f58d525）内建遮蔽 + LLM 表达式初始化根因修复（dispatch 路径 define_only）
+- U3（4a10502）InterpreterError 双实现统一（删 extension 重复类，契约测试 +3）
+- U4/U6/U7（b8ea631）setup 路径规范化 + fail-fast 加载契约（契约测试 +4）
+- U5（fa2ce72）_code_api_config.md 删除
+- P1（aeefa0d）意图注入措辞强化统一 + 文档
+- P2（aeefa0d）project_root 检测文档化
+- P3/P4 决断维持现状（记录于 B 节）
+
+**遗留**：`extension.exceptions` 的 PluginError/CompilerError 为 SDK 独立类型未纳入
+U3 范围（构造契约与 kernel 版不同，无同名冲突）；`_REAL_LLM_E2E_REPORT.md` §六
+评估结论待下方合并条件重估报告刷新。
 
 ---
 

@@ -183,15 +183,31 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **当前最紧要（下一 session 起点，用户 2026-08-11 定案）**：**真实 LLM e2e 全面试用 + 高强度批判检测**
-  （`tasks_docs/_REAL_LLM_E2E_PLAN.md`）+ **unsafe-vibe-dev 合并取代 main 规划**（`tasks_docs/_MAIN_MERGE_PLAN.md`）。
-  按序：
-  0. **（前置）PT-FEAT-13 C1-C7 配置机制完备化（已完成 2026-08-11，全量 2169/1）**——引擎自动加载 + `load_config`/`apply_config` 结构化 + CFG_ 校验诊断 + `{env:VAR}` + `set_mock_mode` 显式化 + providers/models/defaults 分层；`execution_context` 持有 project_root；全项目清理（示例/测试/文档）。
-  1. **本地 LLM 服务就绪（已完成 2026-08-11）**——localhost:1234（qwen3.6-35b-a3b 非思考模型）；引擎自动加载 `api_config.json`；最小探针 `str r = @~ 说你好 ~`→"你好"通过。
-  2. **真实 LLM 全面试用（已完成 2026-08-11，报告 `_REAL_LLM_E2E_REPORT.md`）**——9 类特性真实试用：行为表达式（int/bool 类型约束 ✅）/ LLM 函数（翻译 ✅）/ 提示词协议（隐式 ✅）/ 意图注入（效果弱，模型服从性问题非缺陷 ⚠）/ llmexcept 收敛（✅）/ 行为驱动循环（✅）/ 并发 `ai.run_batch`（✅）/ 生成器+LLM（✅）/ 用户类+LLM（✅）。
-  3. **e2e 高强度批判检测（已完成）**——发现 1 项缺陷：`generator.to_list()` 用户显式调用不可达（`__getattr__` vtable 缺失），**已修复**（IbGenerator.receive 重写 + e2e 3 项）。对抗场景：格式服从✅/llmexcept 收敛✅/意图注入弱（模型特性）/并发无竞态✅。
-  4. **暴露问题处置 + 验证报告（已完成）**——`tasks_docs/_REAL_LLM_E2E_REPORT.md`：缺陷已修复+零回归；评估结论 **unsafe-vibe-dev 合并条件满足**。
-  5. **文档/README 更新（部分完成，待收尾）**——README 本地 LLM 快速开始 ✅ + demo 定位"真实 LLM 驱动" ✅；**待完成**：`_DOC_HEALTH_20260811.md` 剩余 P0/P1 清理、`pyproject` 版本评估、examples 真实跑通确认。
+- **🔴 当前最紧要（下一 session 起点）**：**合并取代 main 的收尾动作**（`_MAIN_MERGE_PLAN.md`）。
+  上一 session 的不合格操作 U1-U7 **已全部根因修复**（`_HANDOFF_ISSUES_LLM_E2E.md` 逐项核销），
+  P1-P4 设计问题已全部决断，合并条件（检测/工程维度）经重估**重新满足**
+  （`_REAL_LLM_E2E_REPORT.md` §七，全量 **2185 passed / 1 skipped**）。合并前仍需：
+  1. `_DOC_HEALTH_20260811.md` 剩余 P1（14 项）/P2（12 项）文档健康清理。
+  2. `pyproject.toml` 版本评估（0.1.0 → 0.2.0?）。
+  3. examples 真实 LLM 跑通确认（验收：独立项目目录 + api_config.json，见 P2 决断）。
+  4. **用户显式授权 push/合并**（阶段 3 合并动作不在自主范围，禁 push 硬原则）。
+  原始 LLM e2e 主任务链（步骤 0-5）已全部完成，见下方。
+
+- **2026-08-11 不合格操作修复批次（已完成，unsafe-vibe-dev，全量 2185 passed / 1 skipped）**：
+  - **U1（7260204，PT-DEBT-18）**：generator IbClass 注册根治（GeneratorAxiom + GENERATOR_SPEC +
+    @register_ib_type + 删 IbGenerator.receive 特判 + leaf.py 改查 generator 类；契约测试 GEN-1~4；
+    顺带闭合 generator[T] `_axiom_name` 无公理缺口）。
+  - **U2（f58d525，PT-DEBT-19）**：内建遮蔽 + LLM 表达式初始化根因修复（dispatch-before-use 路径
+    `_assign_future_to_name_target` 加 define_only 语义，定义路径恒走 define_raw；+2 回归测试；
+    示例 01_hello_world.ibci 改回 `int sum` 真实跑通）。
+  - **U3（4a10502，PT-DEBT-20）**：InterpreterError 双实现统一（删 extension 重复类，公开名指
+    kernel.issue 版；+3 契约测试）。
+  - **U4/U6/U7（b8ea631，PT-DEBT-21）**：AIPlugin.setup 路径规范化（PathValidator）+ fail-fast
+    加载契约 + project_root 契约文档（+4 契约测试含符号链接验证）。
+  - **U5（fa2ce72）**：_code_api_config.md 删除（Phase 5 纪律）。
+  - **P1-P4（aeefa0d + 决断记录）**：P1 意图注入措辞强化统一 + 文档；P2 project_root 检测文档化；
+    P3/P4 维持现状（设计正确）。
+  - 合并条件重估：`_REAL_LLM_E2E_REPORT.md` §七 —— 检测/工程维度**重新满足**。
 - **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
   待单独设计"可靠化/实用化"后重新启用，勿自动恢复。
 - **分支政策**：经充分验证零风险/边界清晰改进可**直接合并** unsafe-vibe-dev；大风险仍"独立分支 + 手动 cherry-pick"。
