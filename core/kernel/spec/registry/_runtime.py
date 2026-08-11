@@ -20,6 +20,7 @@ from ..specs import (
     AUDIO_SPEC, IMAGE_SPEC, VIDEO_SPEC, FILE_HANDLE_SPEC,
     CHANNEL_SPEC, SLOT_SPEC, SUBSCRIBER_SPEC,
     THREAD_SPEC, THREAD_RESULT_SPEC,
+    GENERATOR_SPEC,
 )
 
 if TYPE_CHECKING:
@@ -105,6 +106,7 @@ def create_default_spec_registry(axiom_registry: "AxiomRegistry") -> "SpecRegist
     FILE_HANDLE_SPEC, AUDIO_SPEC, IMAGE_SPEC, VIDEO_SPEC,
     CHANNEL_SPEC, SLOT_SPEC, SUBSCRIBER_SPEC,
     THREAD_SPEC, THREAD_RESULT_SPEC,
+    GENERATOR_SPEC,
     ):
         reg.register(proto)
 

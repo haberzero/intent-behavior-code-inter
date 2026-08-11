@@ -37,6 +37,7 @@ from core.kernel.axioms.primitives.callable import (
     BoundMethodAxiom,
 )
 from core.kernel.axioms.primitives.enum import EnumAxiom
+from core.kernel.axioms.primitives.generator import GeneratorAxiom
 from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom
 from core.kernel.axioms.primitives.file_handle import FileHandleAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
@@ -94,6 +95,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(LLMUncertainAxiom())
     registry.register(ThreadAxiom())
     registry.register(ThreadResultAxiom())
+    registry.register(GeneratorAxiom())
     registry.register(ChannelAxiom())
     registry.register(SubscriberAxiom())
     registry.register(SlotAxiom())

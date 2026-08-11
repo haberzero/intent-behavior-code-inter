@@ -19,6 +19,7 @@ from .ib_class import IbClassField, IbClass
 from .sentinels import IbNone, IbLLMUncertain, IbLLMCallResult
 from .user_functions import IbUserFunction, IbLLMFunction
 from .comm import IbChannel, IbSubscriber, IbSlot
+from .generator import IbGenerator
 
 __all__ = [
     "IbObject",
@@ -39,6 +40,7 @@ __all__ = [
     "IbChannel",
     "IbSubscriber",
     "IbSlot",
+    "IbGenerator",
     "_is_intent_context_param",
     "_should_activate_intent_context_arg",
 ]

@@ -369,7 +369,8 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
             from core.runtime.shared.user_call import UserFunctionCall as _UFC
 
             driver = yield _UFC(func, args)
-            gen_class = executor.registry.get_class("callable") or func.ib_class
+            gen_class = (executor.registry.get_class("generator")
+                         or executor.registry.get_class("callable") or func.ib_class)
             return IbGenerator(gen_class, driver)
         result = yield UserFunctionCall(func, args)
         return result
@@ -388,7 +389,8 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
                 from core.runtime.shared.user_call import UserFunctionCall as _UFC
 
                 driver = yield _UFC(method, args, receiver)
-                gen_class = executor.registry.get_class("callable") or method.ib_class
+                gen_class = (executor.registry.get_class("generator")
+                             or executor.registry.get_class("callable") or method.ib_class)
                 return IbGenerator(gen_class, driver)
             result = yield UserFunctionCall(method, args, receiver)
             return result

@@ -13,53 +13,30 @@ from typing import Any, List
 
 from ...shared.signals import GeneratorYield
 from ...shared.waitable import Waitable
-from .base import IbObject, IbValue
-from .functions import IbBoundMethod, IbNativeFunction
-from typing import List
+from .base import IbValue
+from ..ib_type_mapping import register_ib_type
 
 
+@register_ib_type("generator")
 class IbGenerator(IbValue):
     """惰性生成器值对象（可迭代序列）。
 
     含 ``yield`` 的函数调用产出本对象（不执行函数体）。迭代经内嵌单可恢复
     驱动推进函数体：``yield x`` 暂停并交付 ``x``，`next`/`for` 恢复。
+
+    迭代方法（``to_list``/``generic_next``）经 GeneratorAxiom 声明并由
+    primitive_initializer 注册到专门 "generator" IbClass 的 vtable
+    （axiom 驱动自动化），用户 ``gen.to_list()`` / ``gen.generic_next()``
+    走标准协议分发（``__getattr__`` + vtable），不设 receive 特判。
     """
 
     __slots__ = ("_driver", "_exhausted")
-
-    # IbGenerator 固有的迭代方法名（不经 vtable，由 receive 直接派发）。
-    _ITER_METHODS = frozenset(("to_list", "generic_next"))
 
     def __init__(self, ib_class, driver: Any):
         super().__init__(ib_class)
         # 驱动对象：惰性构造（首次迭代时创建体驱动循环）。
         self._driver = driver
         self._exhausted = False
-
-    # ------------------------------------------------------------------
-    # 消息传递：迭代方法直接派发（IbGenerator 固有能力，不经 vtable）
-    # ------------------------------------------------------------------
-
-    def receive(self, message: str, args: List["IbObject"]) -> "IbObject":
-        """迭代方法（``to_list``/``generic_next``/``next``）是 IbGenerator 固有
-        能力，直接派发；其余消息走基类协议（``ib_class.lookup_method``）。
-
-        ``gen.to_list()`` 经属性访问（``__getattr__``）+ 调用（``__call__``）两步：
-        属性访问时返回绑定原生函数（包装 Python 方法），调用时执行之。
-        """
-        if message == "__getattr__" and args:
-            attr_name = args[0].to_native()
-            if attr_name in self._ITER_METHODS:
-                method = IbNativeFunction(
-                    getattr(self, attr_name),
-                    ib_class=self.ib_class,
-                    name=attr_name,
-                    is_method=False,
-                )
-                return IbBoundMethod(self, method)
-        if message in self._ITER_METHODS:
-            return getattr(self, message)()
-        return super().receive(message, args)
 
     # ------------------------------------------------------------------
     # 可迭代协议（语言级迭代经 __iter__/next）

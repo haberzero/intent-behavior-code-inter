@@ -97,6 +97,11 @@ THREAD_SPEC._axiom_name = "thread"
 THREAD_RESULT_SPEC  = TypeDef(name="thread_result", kind=TypeKind.THREAD_RESULT.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 THREAD_RESULT_SPEC._axiom_name = "thread_result"
 
+# generator —— 惰性生成器类型（generator[T]，T 为元素类型）。
+# 泛型：value_type 承载 T。经 GeneratorAxiom 路由（_axiom_name="generator"）。
+GENERATOR_SPEC  = TypeDef(name="generator", kind=TypeKind.GENERATOR.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+GENERATOR_SPEC._axiom_name = "generator"
+
 ENUM_SPEC = TypeDef(name="Enum", kind=TypeKind.CLASS.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                     parent_type=TypeRef.of("Object"))
 ENUM_SPEC._axiom_name = "enum"

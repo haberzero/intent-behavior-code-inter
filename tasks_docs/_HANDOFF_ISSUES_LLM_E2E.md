@@ -8,7 +8,16 @@
 
 ## A. 不合格操作清单（需重新正确修复）
 
+> ✅ 核销记录见各条目末行（下一个智能体按"工作模式定论"根因修复后回填）。
+
 ### U1: generator.to_list() / generic_next() 用 receive 重写特判（commit 8676554，高严重度）
+
+**✅ 已核销（2026-08-11，本 session 修复）**：按下方"正确做法"落地——新建
+`GeneratorAxiom`（`core/kernel/axioms/primitives/generator.py`，to_list/generic_next 方法规格）+
+`GENERATOR_SPEC` 注册（specs.py/_runtime.py）+ `@register_ib_type("generator")` 于 IbGenerator +
+kernel/__init__.py 导入触发装饰器 + **删 IbGenerator.receive 特判** + leaf.py 两处改
+`get_class("generator")` 优先。契约测试 `tests/contracts/test_generator_ibclass.py`（GEN-1~4）。
+全量 2176 passed / 1 skipped 零回归。
 
 **违反原则**：禁止过程式硬编码分发（工作模式定论第 4 条）+ 质量优先于速度（第 5 条）
 **症状**：选择"最小侵入"重写 receive 而非正确架构（注册专门 generator IbClass）
