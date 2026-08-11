@@ -165,6 +165,9 @@ if ec is not None:
 
 ### U5: _code_api_config.md 临时文档未清理（低严重度）
 
+**✅ 已核销（2026-08-11，本 session 修复）**：已删除 `tasks_docs/_code_api_config.md`
+（内容由设计权威 `_API_CONFIG_DESIGN.md` + WORKLOG PT-FEAT-13 记录覆盖，Phase 5 纪律）。
+
 **违反原则**：code-workflow Phase 5 清理纪律
 **症状**：临时任务文档保留"供追溯"，未按 Phase 5"汇报后经用户确认必须删除"
 **位置**：`tasks_docs/_code_api_config.md`

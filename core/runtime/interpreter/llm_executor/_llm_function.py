@@ -80,7 +80,7 @@ class _LLMFunctionMixin:
 
         merged_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
         if merged_intents:
-            intent_block = "\n你还需要特别额外注意的是：\n" + "\n".join(f"- {i}" for i in merged_intents)
+            intent_block = "\n当前上下文意图（必须严格遵守）：\n" + "\n".join(f"- {i}" for i in merged_intents)
             sys_prompt += intent_block
 
         retry_hint_segments = None

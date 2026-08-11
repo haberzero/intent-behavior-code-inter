@@ -197,7 +197,7 @@ class _BehaviorMixin:
             sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
 
         if all_intents:
-            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
+            intent_block = "\n当前上下文意图（必须严格遵守）：\n" + "\n".join(f"- {i}" for i in all_intents)
             sys_prompt += intent_block
 
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
@@ -290,7 +290,7 @@ class _BehaviorMixin:
             sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
 
         if all_intents:
-            intent_block = "\n当前上下文意图：\n" + "\n".join(f"- {i}" for i in all_intents)
+            intent_block = "\n当前上下文意图（必须严格遵守）：\n" + "\n".join(f"- {i}" for i in all_intents)
             sys_prompt += intent_block
 
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)

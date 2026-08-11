@@ -11,7 +11,18 @@
 
 ## api_config.json 的结构
 
-IBCI 引擎在启动时**自动加载**项目根目录下的 `api_config.json`（与 `.ibci` 入口文件同级目录）。配置是原生一等机制，无需脚本手动 `file.read/json.parse`。
+IBCI 引擎在启动时**自动加载**项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `file.read/json.parse`。
+
+**project_root 的确定**：`main.py run` 时，未显式 `--root` 则经
+`ProjectDetector` 从入口文件所在目录**向上**查找项目标志（`ibci_modules/`、
+`plugins/`、`.ibci/`、`ibci.json` 等），命中即以其为 project_root；未命中则用
+入口文件所在目录。故：
+
+- 独立项目目录（推荐，README 的 `test_target_proj` 方式）：目录内放
+  `api_config.json` 即被自动加载。
+- 在仓库内直接运行 `examples/`（仓库含 `ibci_modules/` 标志）：project_root 被
+  探测为仓库根，`api_config.json` 须放仓库根，或用 `--root <example_dir>` 显式
+  指定为示例目录。
 
 最简配置--仅声明默认模型（兼容旧式）：
 
