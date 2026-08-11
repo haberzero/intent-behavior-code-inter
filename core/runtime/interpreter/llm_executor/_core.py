@@ -175,6 +175,16 @@ class LLMExecutorCore:
         self._current_call_info = call_info
         self._append_call_trace(call_info)
 
+    def _record_dispatch_call_info(self, call_info: Mapping[str, Any]) -> None:
+        """记录 dispatch 时刻的调用信息（仅主线程调用）。
+
+        与 :meth:`_record_current_call_info` 的区别：只写单写槽（idbg 立即可见
+        "最近一次 LLM 调用"），不追加调用追踪——追踪缓冲只保留**已解析**（含
+        response）的完整调用，供"LLM 未服从 vs 内核未注入"调试。resolve 点
+        再用完整 call_info 覆盖槽并追加追踪。
+        """
+        self._current_call_info = call_info
+
     def _finalize_invoke_result(self, result: Any):
         """``invoke_*`` 系列入口的共用后处理（sync 与 CPS 版语义完全一致）。
 

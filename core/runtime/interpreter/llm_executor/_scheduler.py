@@ -62,6 +62,22 @@ class _SchedulerMixin:
             node_uid, execution_context, captured_intents=intent_ctx
         )
 
+        # 记录 dispatch 时刻的调用信息（sys/user prompt + 意图）：调用已提交，
+        # idbg.current_llm() 应立即可见"最近一次 LLM 调用"，而非等变量读取
+        # 触发 resolve 后才可观测。resolve 点（_record_current_call_info 覆盖）
+        # 再补全 response。只写单写槽不追加追踪（追踪保留已解析完整调用）。
+        self._record_dispatch_call_info(
+            {
+                "sys_prompt": spec.sys_prompt,
+                "user_prompt": spec.user_prompt,
+                "response": "",
+                "raw_response": "",
+                "active_intents": list(spec.active_intents),
+                "global_intents": list(spec.global_intents),
+                "merged_intents": list(spec.merged_intents),
+            }
+        )
+
         def _run() -> LLMResult:
             return self._call_and_parse(spec, node_uid, execution_context)
 
