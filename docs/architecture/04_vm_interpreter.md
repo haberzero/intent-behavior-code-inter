@@ -2,9 +2,7 @@
 
 > 本文档是 IBCI 运行时（VM + 解释器）的架构设计文档，覆盖 CPS 调度循环、执行帧、LLM 流水线、llmexcept 机制、意图上下文、多 Interpreter 隔离、内存模型。
 > 公理化可验证规范见 `docs/architecture/05_vm_specification.md`。
->
-> **路径说明**：以下模块已重构为包（目录），正文中 `*.py` 路径请以实际目录为准：
-> `runtime/vm/handlers/`（CPS handler 包）、`runtime/objects/{primitives,kernel}/`、`runtime/interpreter/llm_executor/`。
+> 代码路径以实际目录为准：`runtime/vm/handlers/`、`runtime/objects/{primitives,kernel}/`、`runtime/interpreter/llm_executor/` 等均为包结构。
 
 ---
 
@@ -192,7 +190,7 @@ class IExecutionFrame(Protocol):
 |----|------|------|
 | **L1: LLM 调用流水线** | 单个 LLM 调用 | 当前支持 |
 | **L2: 多 Interpreter 隔离** | 整段程序 | 当前支持 |
-| **L3: 生成器内 LLM 并发流水线** | 单个 yield 点 | 演进方向（未实现）——惰性生成器已落地（`docs/syntax/05_functions.md` §5.8/5.9），但生成器体内 LLM 调用为同步解析，未接入并发流水线（见 `docs/KNOWN_LIMITS.md` §二十四） |
+| **L3: 生成器内 LLM 并发流水线** | 单个 yield 点 | 演进方向（未实现）：生成器体内 LLM 调用为同步解析，未接入并发流水线（见 `docs/KNOWN_LIMITS.md` §二十四） |
 
 ### 5.2 编译期：依赖图（DDG）
 

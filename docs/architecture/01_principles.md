@@ -332,26 +332,10 @@ def create_implementation():
 
 #### 7.3.3 AutoDiscoveryService 嗅探机制
 
-```python
-class AutoDiscoveryService:
-    """全自动插件发现服务"""
-    
-    def discover_plugins(self, plugin_dirs: List[str]) -> List[PluginSpec]:
-        discovered = []
-        for plugin_dir in plugin_dirs:
-            for spec_file in Path(plugin_dir).glob("*/_spec.py"):
-                spec = self._load_spec(spec_file)
-                if self._is_valid_ies22_plugin(spec):
-                    discovered.append(self._create_plugin_spec(spec))
-        return discovered
-    
-    def _load_spec(self, spec_path: Path) -> Dict[str, Any]:
-        """通过 importlib 加载 _spec.py 并调用固定命名方法"""
-        spec_module = importlib.import_module(spec_path.stem, spec_path.parent.name)
-        metadata = getattr(spec_module, '__ibcext_metadata__', lambda: {})()
-        vtable_func = getattr(spec_module, '__ibcext_vtable__', None)
-        return {"metadata": metadata, "vtable": vtable_func}
-```
+`AutoDiscoveryService` 负责全自动插件发现：遍历插件搜索路径下的 `*/_spec.py` 文件，
+经 `importlib` 加载并调用固定命名的 `__ibcext_metadata__()` / `__ibcext_vtable__()`
+方法提取插件元数据与虚表，校验有效后封装为 `PluginSpec`。实现细节见
+`core/runtime/module_system/discovery.py`。
 
 #### 7.3.4 函数名映射机制
 

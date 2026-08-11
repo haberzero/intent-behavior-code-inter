@@ -33,6 +33,10 @@
 | **P2** | PT-FEAT-2 Enum 非 str 成员 | 易用性+长远 | 数字状态码枚举 round-trip 真实缺口；评估为设计冻结级变更，维持现状待独立窗口（2026-08-09） |
 | **P3** | PT-FEAT-8 `.ibc_meta` 快照 / PT-FEAT-3/4/7 / PT-FEAT-6 | 长远 VISION | 概念验证阶段 / 前置条件多 |
 | **暂缓** | PT-DEBT-5 文件命名清理 | 架构健康性 | 破坏面大纯机械，独立窗口 |
+| **当前阶段（LLM e2e 已完成，不合格操作待重修）** | **PT-DEBT-18 generator IbClass 注册 + IbGenerator.receive 特判回退**（`_HANDOFF_ISSUES_LLM_E2E.md` U1） | 架构健康性 | **2026-08-11 真实 LLM e2e session 不合格操作**：generator.to_list() 用 receive 重写特判（违反"禁止过程式硬编码分发"），应改注册专门 generator IbClass + _reg_native(to_list/generic_next) 到 vtable，删 receive 重写。leaf.py:372/391 改用 get_class("generator") |
+| **当前阶段** | **PT-DEBT-19 内建遮蔽 + LLM 表达式 UID 解析缺陷**（`_HANDOFF_ISSUES_LLM_E2E.md` U2） | 编译器正确性 | **真实 LLM e2e 暴露**：`int sum = @~...~`（LLM 表达式 RHS）报 `Cannot reassign constant UID 'intrinsic:sum'`，但 `int sum = 5`（字面量 RHS）遮蔽成功。根因推断：LLM 表达式赋值用编译期旧 UID 而非遮蔽后新符号 UID。前 session 改示例 `sum`→`result` 绕开（半修复，需根因修复 + 示例改回验证） |
+| **当前阶段** | **PT-DEBT-20 InterpreterError 双实现统一**（`_HANDOFF_ISSUES_LLM_E2E.md` U3） | 架构健康性 | 全仓有两个 InterpreterError：`core.extension.exceptions.InterpreterError`（简单 Exception，不支持 error_code）+ `core.kernel.issue.InterpreterError`（IBCBaseException，支持 error_code）。应统一为后者，删前者，全仓 import 统一。前 session 仅在 config_loader.py 改 import，未统一清理（兼容层操作） |
+| **当前阶段** | **PT-DEBT-21 AIPlugin.setup 自动加载路径规范化绕过**（`_HANDOFF_ISSUES_LLM_E2E.md` U4） | 安全 | AIPlugin.setup 用 os.path.join + os.path.isfile 直接读 api_config.json，未走 canonicalize_for_security。应经 kernel 层规范化或显式 PathValidator。project_root 来自受信源但插件层应一致使用规范化机制 |
 
 ---
 
