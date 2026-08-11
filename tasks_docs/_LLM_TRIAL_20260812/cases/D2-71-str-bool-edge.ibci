@@ -1,0 +1,19 @@
+# D2-71 边界：str 定型的行为表达式在布尔上下文（KNOWN_LIMITS §二十一残余边界）
+# doc: docs/KNOWN_LIMITS.md §二十一（显式 str 定型 → "0" 按非空字符串真值判真）
+# 期望: 记录实际行为（"0" 显式 str 定型判真；bool 定型判假）
+
+str s = @~ 判断以下陈述是否成立：1+1=3。只答 0 或 1 ~
+print("str_value=" + s)
+
+if s:
+    print("str_truthy=True")   # KNOWN_LIMITS §二十一：非空字符串判真
+else:
+    print("str_truthy=False")
+
+bool b = @~ 判断以下陈述是否成立：1+1=3。只答 1 或 0 ~
+print("bool_value=" + (str)b)
+if b:
+    print("bool_truthy=True")
+else:
+    print("bool_truthy=False")
+print("DONE")
