@@ -186,18 +186,12 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 - **当前最紧要（下一 session 起点，用户 2026-08-11 定案）**：**真实 LLM e2e 全面试用 + 高强度批判检测**
   （`tasks_docs/_REAL_LLM_E2E_PLAN.md`）+ **unsafe-vibe-dev 合并取代 main 规划**（`tasks_docs/_MAIN_MERGE_PLAN.md`）。
   按序：
-  0. **（前置）PT-FEAT-13 C1-C7 配置机制完备化（已完成 2026-08-11，全量 2161/1）**（`_API_CONFIG_DESIGN.md`）：原生配置加载 + `set_config` 结构化 +
-     配置校验诊断——使本地非思考模型端点配置成为一等机制（替代每脚本 `file/json.parse/set_config` 约定）。
-  1. **本地 LLM 服务就绪**：起 Ollama/LM Studio 等 OpenAI 兼容端点（**非思考模型**，防反思死循环）；
-     用新原生配置声明 `providers.ollama` + `models.local(reasoning:false)`；最小探针验证连通。
-  2. **真实 LLM 全面试用**：按 `_REAL_LLM_E2E_PLAN.md` §四 逐项（行为表达式/LLM 函数/提示词协议/意图/
-     llmexcept/行为驱动循环/并发异步/动态宿主/用户类/生成器/内建/异常）各跑一遍，记录真实 LLM 行为。
-  3. **e2e 高强度批判检测**：非 MOCK 的 e2e/契约用例改指真实 LLM 跑，MOCK-vs-真实差异 = 缺陷候选；
-     对抗场景（格式服从/llmexcept 收敛/意图注入/并发真实调用/非确定性/超时边界），记录"路径+复现+期望vs实际+级别"。
-  4. **暴露问题处置**：能自主修按 code-workflow 修（零回归）；触公理/语义/对外契约登记 PENDING_TASKS 待裁决。
-  5. **产出验证报告**：通过项 + 暴露问题 + 建议 → 评估 unsafe-vibe-dev 是否可进入 main 合并。
-  6. **文档/README 更新（合并前置）**：README 补本地 LLM 快速开始 + demo 定位"真实 LLM 驱动"；
-     `_DOC_HEALTH_20260811.md` 剩余 P0/P1 清完、P2 尽量；`pyproject` 版本评估；examples 真实跑通。
+  0. **（前置）PT-FEAT-13 C1-C7 配置机制完备化（已完成 2026-08-11，全量 2169/1）**——引擎自动加载 + `load_config`/`apply_config` 结构化 + CFG_ 校验诊断 + `{env:VAR}` + `set_mock_mode` 显式化 + providers/models/defaults 分层；`execution_context` 持有 project_root；全项目清理（示例/测试/文档）。
+  1. **本地 LLM 服务就绪（已完成 2026-08-11）**——localhost:1234（qwen3.6-35b-a3b 非思考模型）；引擎自动加载 `api_config.json`；最小探针 `str r = @~ 说你好 ~`→"你好"通过。
+  2. **真实 LLM 全面试用（已完成 2026-08-11，报告 `_REAL_LLM_E2E_REPORT.md`）**——9 类特性真实试用：行为表达式（int/bool 类型约束 ✅）/ LLM 函数（翻译 ✅）/ 提示词协议（隐式 ✅）/ 意图注入（效果弱，模型服从性问题非缺陷 ⚠）/ llmexcept 收敛（✅）/ 行为驱动循环（✅）/ 并发 `ai.run_batch`（✅）/ 生成器+LLM（✅）/ 用户类+LLM（✅）。
+  3. **e2e 高强度批判检测（已完成）**——发现 1 项缺陷：`generator.to_list()` 用户显式调用不可达（`__getattr__` vtable 缺失），**已修复**（IbGenerator.receive 重写 + e2e 3 项）。对抗场景：格式服从✅/llmexcept 收敛✅/意图注入弱（模型特性）/并发无竞态✅。
+  4. **暴露问题处置 + 验证报告（已完成）**——`tasks_docs/_REAL_LLM_E2E_REPORT.md`：缺陷已修复+零回归；评估结论 **unsafe-vibe-dev 合并条件满足**。
+  5. **文档/README 更新（部分完成，待收尾）**——README 本地 LLM 快速开始 ✅ + demo 定位"真实 LLM 驱动" ✅；**待完成**：`_DOC_HEALTH_20260811.md` 剩余 P0/P1 清理、`pyproject` 版本评估、examples 真实跑通确认。
 - **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
   待单独设计"可靠化/实用化"后重新启用，勿自动恢复。
 - **分支政策**：经充分验证零风险/边界清晰改进可**直接合并** unsafe-vibe-dev；大风险仍"独立分支 + 手动 cherry-pick"。
