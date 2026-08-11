@@ -115,7 +115,7 @@ DynamicHost 是**插件接口层**，不是解释器管理层。
 
 | 组件 | 职责 | 说明 |
 |------|------|------|
-| **DynamicHost** | 接口层 | 暴露 @method 给 IBCI 脚本，不持有解释器实例，纯委托 |
+| **DynamicHost** | 接口层 | 暴露 `run_isolated`/`spawn_isolated`/`collect`/`save_state`/`load_state` 给 IBCI 脚本，不持有解释器实例，纯委托 |
 | **HostService** | 服务实现层 | 协调子解释器创建，委托 Engine 执行 |
 | **Engine** | 解释器管理层 | 唯一持有 Interpreter 实例，负责 spawn_interpreter() |
 | **Interpreter** | 执行层 | 单个解释器的执行上下文 |
@@ -451,7 +451,7 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 
 ## 附录：关键文件索引
 
-> 以下模块已重构为包（目录），路径以 `/` 结尾标注：
+> 以下模块为包结构（目录），路径以 `/` 结尾标注：
 > `kernel/spec/registry/`、`kernel/axioms/primitives/`、`runtime/objects/{primitives,kernel}/`、
 > `runtime/vm/handlers/`、`runtime/interpreter/llm_executor/`。
 

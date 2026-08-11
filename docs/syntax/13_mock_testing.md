@@ -198,7 +198,7 @@ MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/complet
 #### 13.6.1 启动与接入
 
 ```python
-# MockServer 由测试代码启动于 127.0.0.1 随机端口（实现路径见 ibci_ai 插件）
+# MockServer 由测试代码启动于 127.0.0.1 随机端口（随 ibci_ai 插件提供）
 from ibci_modules.ibci_ai.mock_service import MockServer
 
 server = MockServer()
@@ -241,7 +241,7 @@ engine.run_string('str r = @~ MOCK:STR:hi ~\n', silent=True)
 assert engine.test_hooks.seen[1] == "hi"
 ```
 
-协议三个回调（`on_llm_call` / `on_llm_call_error` / `on_dispatch`）须全实现。设计详见 `docs/architecture/09_observability.md` §四·五。
+协议三个回调（`on_llm_call` / `on_llm_call_error` / `on_dispatch`）须全实现。设计详见 `docs/architecture/09_observability.md` §五。
 ---
 
 ## 深入指引

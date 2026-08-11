@@ -58,6 +58,8 @@ print(d.speak())    # Rex says Woof!
 
 ### 6.4 `super()`
 
+> `super()` 对所有 IBCI 用户类均有效——所有用户类隐式继承自 `Object` 基类（类似 Python 3）。即使没有显式写 `class Foo(Bar):`，`super()` 也可在方法内使用，此时它指向 `Object`。
+
 ```ibci
 class Base:
     int value

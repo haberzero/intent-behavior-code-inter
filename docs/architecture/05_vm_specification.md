@@ -4,7 +4,7 @@
 > 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。
 > 测试基线请以当次 `python -m pytest tests/compliance/ -q` 输出为准。
 >
-> **路径说明**：本规范层与 Python 宿主实现隔离；正文内偶尔出现的 `*.py` 路径中，`runtime/vm/handlers/`、`runtime/objects/{primitives,kernel}/`、`runtime/interpreter/llm_executor/` 已重构为包（目录），请以实际代码为准。
+> **路径说明**：本规范层与 Python 宿主实现隔离；正文内偶尔出现的 `*.py` 路径中，`runtime/vm/handlers/`、`runtime/objects/{primitives,kernel}/`、`runtime/interpreter/llm_executor/` 为包结构（目录），请以实际代码为准。
 
 ---
 

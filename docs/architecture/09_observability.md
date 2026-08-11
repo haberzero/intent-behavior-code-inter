@@ -120,6 +120,9 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 | `KDIAG_POLICY_MODULE_NO_EXPORT` | 插件加载 | 插件无 `create_implementation()` 且无 `implementation` 属性导出，跳过 |
 | `KDIAG_RUNTIME_COLLECT_SKIP` | 隔离收集 | 变量无法转为原生值，跳过 |
 | `KDIAG_RUNTIME_STAGE_SKIP` | Interpreter STAGE 6 预评估 | kernel 令牌缺失，STAGE 6 跳转跳过 |
+| `KDIAG_RUNTIME_ENV_LIMIT` | 环境限制异常 | `RecursionError`/`MemoryError`/`SystemError` 判定为环境限制，保留根因发射诊断 |
+
+> **码集权威**：完整码集与稳定定义以 `core/base/diagnostics/codes.py` 为机器权威源；人类可读的触发条件与修复指引见 `docs/syntax/15_diagnostics.md`（码集合一致由契约测试强制）。
 
 **编译期诊断**：编译器离线、无事件总线与运行时上下文，编译面诊断维持 `warnings`（不引入 compiler → runtime 跨层依赖）。诊断码命名约定与 `SEM_`/`RUN_`/`LEX_` 同构。
 
@@ -146,7 +149,7 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 
 ---
 
-## 四·五、测试合作面：TestHooks
+## 五、测试合作面：TestHooks
 
 **职责**：为测试提供精确的 LLM 调用回调，替代在事件流中过滤匹配。
 
@@ -164,9 +167,9 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 
 ---
 
-## 五、消费方式
+## 六、消费方式
 
-### 5.1 事件流（IBCI 语言面）
+### 6.1 事件流（IBCI 语言面）
 
 ```ibci
 import iruntime
@@ -178,7 +181,7 @@ loop:
         str code = (str)e["data"]["code"]   # 按 KDIAG_* 过滤
 ```
 
-### 5.2 警告投影（Python 测试面）
+### 6.2 警告投影（Python 测试面）
 
 ```python
 import pytest
@@ -186,7 +189,7 @@ with pytest.warns(UserWarning, match="__from_prompt__ parse failed"):
     ...
 ```
 
-### 5.3 事件投影（Python 测试面）
+### 6.3 事件投影（Python 测试面）
 
 ```python
 from core.engine import IBCIEngine

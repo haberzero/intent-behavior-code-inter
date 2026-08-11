@@ -617,7 +617,7 @@ func make_translator():
 | `core/runtime/vm/handlers/`（包） | `snapshot` 捕获 `fork_intent_snapshot()` 值快照（延迟行为处理） |
 | `core/runtime/interpreter/llm_executor/`（包） | LLM 执行器（调用 `get_resolved_prompt_intents()` 组装提示词） |
 | `core/runtime/interpreter/llm_except_frame.py` | LLM 异常帧（`save_context` 使用 `fork()` 保存意图快照） |
-| `core/runtime/objects/kernel.py` | `IbUserFunction`/`IbLLMFunction` fork/restore 意图上下文（拷贝传递语义）；lambda 参数约束 |
+| `core/runtime/objects/kernel/`（包） | `IbUserFunction`/`IbLLMFunction` fork/restore 意图上下文（拷贝传递语义）；lambda 参数约束 |
 | `core/compiler/semantic/analyzer.py` | `@` 和 `@!` 语义校验：两者必须绑定下一条可执行语句（禁止连续 one-shot） |
 | `ibci_modules/ibci_idbg/core.py` | 调试工具（帧优先模式读取意图/结果状态） |
 ---

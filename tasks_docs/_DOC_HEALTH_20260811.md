@@ -76,6 +76,26 @@
 - P1-12 syntax/05_functions.md:32 vs 07（-> auto 推断矛盾）
 - P1-13/14/15 syntax/04/15/11（小节编号、条目格式、平行模板）
 - P1-16 syntax/15:23 + 13_mock_testing.md:201-202（E9 模块路径）
+
+## 执行进度更新（2026-08-11 本 session 复核 + P1 全部处置完成）
+
+**复核结论（审计是 7be0ca5 快照，逐项对照当前状态）**：
+- **P1-1**（14_concurrency:118 类构造）✅ 已修（7be0ca5）
+- **P1-2**（01_principles §7.3.3 完整类代码）✅ 已修（80783c8 删类代码块，现为描述）
+- **P1-3**（01_principles @method 陈旧 + E9 轻度）：**已修**——DynamicHost 行 `@method` 改真实 ihost API（run_isolated/spawn_isolated/collect/save_state/load_state，代码核实）；调用链图保留（architecture 层组件关系，A.7 允许）
+- **P1-4**（03_type_system:133）✅ 已修（7be0ca5）
+- **P1-5**（04_vm E3 标记）✅ 已修（当前无 E3 残留）
+- **P1-6**（"已重构为包" E2 历史演变）：**已修**——01_principles:454 / 03_type_system:5 / 05_vm_specification:7 改"为包结构（目录）"（04 已先行修复同款）
+- **P1-7**（09 章节编号四·五）：**已修**——`四·五`→`五`，`五消费方式`→`六`（6.1/6.2/6.3 顺延），13_mock_testing:244 引用同步
+- **P1-8**（09 KDIAG 码表缺 KDIAG_RUNTIME_ENV_LIMIT）：**已修**——补码表行 + 标注码集权威源（codes.py 机器源 / 15_diagnostics 人类源，契约强制一致）
+- **P1-9**（06_oop vs KNOWN_LIMITS §六 super 归属）：**已修**——super() 通用语义移 06_oop §6.4（归属唯一），KNOWN_LIMITS §六 保留 auto-init 限制 + 正确用法指针
+- **P1-10**（05_coroutine 状态文档）：**已修**——重写为执行模型说明（去"已实现/当前状态"完成标记，E3/E7 清除）
+- **P1-11**（subsystems/01 L620 断链）：**已修**——kernel.py → kernel/（包）；ibci 代码块为机制说明（subsystems 层允许），保留
+- **P1-12**（05_functions:32 vs 07 -> auto）：**已修**——05_functions 改"行为体 `-> auto` 唯一推断为 str"（代码核实 _expression_visitors.py:774-778），指向 07
+- **P1-13**（04_control_flow 4.6.1/4.6.2 错位）：**已修**——改 4.7.1/4.7.2（try/except 小节编号归位）
+- **P1-14**（15_diagnostics 条目格式）：**已修**——补齐 LEX/PAR/SEM/DEP/INT/RUN 分域引言（与 KDIAG/CFG 一致）；条目本身已统一（86/86 同模板）
+- **P1-15**（11_modules §11.3-11.9 平行模板）：**已修**——isys/idbg/ihost/json 补一句话定位，平行小节统一（一句话定位 + 接口代码）
+- **P1-16**（15:23 + 13:201-202 E9 模块路径）：**已修**——15:23 删 exporter.py/main.py 模块路径改"CLI 命令"；13:201 注释"实现路径见插件"改"随 ibci_ai 插件提供"
 - P2-1~12（A5 变更反映、README 读者旅程、howto 补充、死引用、定位段等）
 
 ## 干净文件（无需改动）

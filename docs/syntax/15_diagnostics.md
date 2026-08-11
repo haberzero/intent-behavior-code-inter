@@ -20,7 +20,7 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 - **JSON**：`symbols`（作用域树递归，每条 name/kind/uid/type/provenance）+ `type_bindings`（节点类型+位置 → 类型名）。
 - **dot**：作用域为 `subgraph cluster`、符号为节点、作用域父子/类型绑定为边；可用 `dot -Tpng symbols.dot -o symbols.png` 渲染。
 - **bench**：warmup 后重复编译 N 次，报告 min/avg/max（可加 stdev）；编译失败按诊断码格式报错并以非零码退出。
-- 权威实现：`core/compiler/diagnostics/exporter.py`（导出）；`main.py` `inspect`/`semantic`/`bench` 命令。
+- CLI 命令：`inspect` / `semantic`（导出）与 `bench`（基准）。
 
 ## 如何阅读
 
@@ -31,6 +31,8 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 ---
 
 ## 词法（LEX_）
+
+源码扫描阶段的诊断。
 
 ### `LEX_INVALID_CHAR`
 遇到了源码中不被语言接受的字符。
@@ -71,6 +73,8 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 ---
 
 ## 语法（PAR_）
+
+解析阶段的诊断。
 
 ### `PAR_EXPECTED_TOKEN`
 语法解析到这里预期某个特定符号，但出现了别的内容。
@@ -123,6 +127,8 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 ---
 
 ## 语义（SEM_）
+
+语义检查阶段的诊断。
 
 ### `SEM_UNDEFINED_SYMBOL`
 引用了未定义的变量/函数/模块名。
@@ -314,6 +320,8 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 ## 依赖（DEP_）
 
+模块导入与依赖图阶段的诊断。
+
 ### `DEP_MODULE_NOT_FOUND`
 导入的模块找不到。
 - **触发条件**：模块路径不存在或不在搜索路径。
@@ -360,6 +368,8 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 ## 内部（INT_）
 
+解释器内部错误（编译器未能归类的内部异常）。
+
 ### `INT_INTERNAL_ERROR`
 编译器内部错误（不应出现在正常输入下）。
 - **触发条件**：编译器内部断言/不变量失败。
@@ -375,6 +385,8 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 ---
 
 ## 运行时（RUN_）
+
+执行阶段的运行时错误。
 
 ### `RUN_GENERIC_ERROR`
 未归类运行时错误。

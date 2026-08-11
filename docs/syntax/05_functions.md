@@ -29,7 +29,8 @@ func identity(int x) -> auto:   # 显式 auto，与显式 TYPE 等价（推断�
 
 > **`-> auto` 推断规则**：编译器从函数体内的 `return` 语句推断实际返回类型。若所有路径
 > 均无 `return`，推断为 `void`；若有多条路径返回不同类型，报 `SEM_TYPE_MISMATCH` 错误。
-> lambda 的 `-> auto` 从 body 表达式推断（行为体保持 behavior 动态语义）。
+> lambda 的 `-> auto` 从 body 表达式推断（行为体 `lambda -> auto: @~...~` 唯一推断为 `str`，
+> 见 `docs/syntax/07_behavior_expressions.md`）。
 
 **`-> None` 与 `-> void` 的区别**
 

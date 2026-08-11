@@ -85,6 +85,8 @@ ai.set_mock_mode()        # 显式进入 MOCK 模式（替代 url/key 字符串�
 
 ### 11.4 isys 模块
 
+运行时路径查询：入口文件与项目根目录的定位。
+
 ```ibci
 import isys
 
@@ -94,6 +96,8 @@ str root   = isys.project_root()  # 项目根目录
 ```
 
 ### 11.5 idbg 模块
+
+调试探查：变量、LLM 调用、重试栈与意图栈的运行时检查。
 
 ```ibci
 import idbg
@@ -121,6 +125,8 @@ idbg.fields(obj)         # 返回对象所有字段
 > 请使用 `idbg.vars()` 代替 `idbg.inspect()`，使用 `idbg.show_intents()` 代替 `idbg.dump_intent_stack()`。
 
 ### 11.6 ihost 动态宿主
+
+隔离子环境运行：启动、收集与状态保存/恢复。
 
 ```ibci
 import ihost
@@ -185,6 +191,8 @@ file.remove("data.txt")
 3. `llmexcept` retry body 中禁用 `file.write`（避免污染 gold snapshot；磁盘型快照是浅路径引用，无法静态判别目标是否已入快照）。涉及可能失败的 LLM 调用时，先完成文件写入再进入可能重试的调用。
 
 ### 11.8 json 模块
+
+JSON 解析与序列化。
 
 ```ibci
 import json

@@ -2,7 +2,7 @@
 
 > 本文档是 IBCI 类型系统的正式设计文档，与当前代码（`core/kernel/spec/`、`core/kernel/axioms/`、`core/runtime/objects/`）严格对齐。
 >
-> **路径说明**：以下模块已重构为包（目录），正文中 `*.py` 路径请以实际目录为准：
+> **路径说明**：以下模块为包结构（目录），正文中 `*.py` 路径请以实际目录为准：
 > `kernel/spec/registry/`、`kernel/axioms/primitives/`、`runtime/objects/{primitives,kernel}/`、
 > `runtime/vm/handlers/`、`runtime/interpreter/llm_executor/`。
 
