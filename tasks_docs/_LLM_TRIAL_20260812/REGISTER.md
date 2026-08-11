@@ -179,9 +179,14 @@
   （`RUN_TYPE_MISMATCH: Cannot assign 'None' to 'int'`）。
 - **文档**：docs/syntax/11_modules.md §11.3 明确列出 `get_retry()`、`is_auto_intent_injection_enabled()` 为可用函数。
 - **对照**：`ai.has_api_key()` ✅、`ai.probe_model()` ✅、`ai.get_current_intent_stack()` ✅、
-  `ai.get_global_intents()` ✅ 均正常——仅这两个文档化 API 失效。
-- **级别**：P1（文档化 API 契约失效）。
-- **证据**：cases/D3-50/51/51b-ai-*.ibci + logs/D3-50/51/51b.log。
+  `ai.get_global_intents()` ✅、`ai.get_return_type_prompt()` ✅、`ai.mask()`（void）✅ 均正常——
+  仅这两个文档化 API 失效。
+- **根因定位（内核阅读，仅此一次）**：Python 实现存在（`ibci_modules/ibci_ai/core.py:380/383`），
+  但 **`ibci_modules/ibci_ai/_spec.py` vtable 未注册**这两个函数（仅注册 has_api_key/
+  get_current_call_info 等）→ IBCI 侧取到模块命名空间的 None，不可调用。
+- **级别**：P1（文档化 API 契约失效；vtable 与文档/实现三方漂移）。
+- **证据**：cases/D3-50/51/51b-ai-*.ibci + logs/D3-50/51/51b.log + `_spec.py` vtable 清单。
+- **备注**：与 PT-DEBT-24（call_intent 死机制）同类"注册表/契约漂移"模式。
 
 ### BOUNDARY-005 — `ai.probe_model()` 将 reasoning:false 的非推理模型误判为"强制推理模型"
 - **复现**：D3-50c 配置 `reasoning:false`（qwen3.6-35b-a3b 非思考模型），`ai.probe_model()`
