@@ -1,0 +1,21 @@
+# D3-61 idbg.fields / show_all / env（文档化 idbg API）
+# doc: docs/syntax/11_modules.md §11.5
+# 期望: fields(obj)/show_all/env 正常
+
+import idbg
+
+class Point:
+    int x
+    int y
+    func __init__(self, int x, int y) -> auto:
+        self.x = x
+        self.y = y
+
+Point p = Point(1, 2)
+dict fields = idbg.fields(p)
+print("fields_ok=" + (str)fields.keys())
+
+dict env = idbg.env()
+print("env_ok=" + (str)env.keys())
+idbg.show_all()
+print("DONE")

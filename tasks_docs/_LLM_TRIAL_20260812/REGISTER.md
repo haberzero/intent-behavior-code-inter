@@ -191,3 +191,12 @@
   响应中出现了模型自述/字段猜测，需内核层复核（不在本任务）。
 - **级别**：P3（工具误判，不影响主路径；但可能误导 reasoning:true 自动注入决策）。
 - **证据**：cases/D3-50c-ai-probe.ibci + logs/D3-50c-ai-probe.log。
+
+### DOC-ISSUE-006 — KNOWN_LIMITS §十二 声称的 `SEM_INTENT_STATIC_CALL` 警告未观察到
+- **复现**：`intent_context.push("这条不会生效")` 类静态调用 + 后续 `@~...~`——行为符合文档
+  （push 静默无效，回复不受影响），但**未见任何 SEM_INTENT_STATIC_CALL 警告输出**
+  （stdout+stderr 均无）。
+- **文档**：KNOWN_LIMITS §十二 声称 TypeCheckingPass 对此发出 SEM_INTENT_STATIC_CALL warning。
+- **实际**：警告未出现（或需特定启用条件/展示通道）。
+- **级别**：P3（文档行为未复现）。
+- **证据**：cases/D3-60-intent-static.ibci + logs/D3-60-intent-static.log。
