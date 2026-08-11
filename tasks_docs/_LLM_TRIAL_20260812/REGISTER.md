@@ -149,8 +149,17 @@
 - **级别**：P3（文档边界未明示；行为与"完全独立"一致，非缺陷）。
 - **证据**：cases/D2-50-isolation-llm.ibci + multifile/child_llm.ibci + logs/D2-50-isolation-llm.log。
 
+### BOUNDARY-004 — `@!` 排他意图在 run_batch 单条语句多 LLM 调用时仅首个调用生效
+- **复现**：D3-40 `@! 只输出：UNKNOWN` + `ai.run_batch(q, ["苹果","香蕉"])` → 第 1 项
+  `batch_item=UNKNOWN`，第 2 项 `batch_item=香甜`（正常输出）。
+- **文档**：09_intent_system §9.1 "`@!` 仅作用于紧随其后的**一条**含 LLM 调用的语句"；
+  §9.2 "意图注入覆盖赋值与表达式路径（dispatch-before-use 一并注入）"。
+- **实际**：run_batch 是单条语句但含多个 LLM 调用——`@!` 被第一个调用消费后失效，
+  后续调用不受排他约束。文档的"一条语句"粒度 vs 实际"一次 LLM 调用"粒度存在张力。
+- **级别**：P3（语义边界，文档粒度未明示）。
+- **证据**：cases/D3-40-batch-intent.ibci + logs/D3-40-batch-intent.log。
+
 ### KERNEL-ISSUE-003 — 真实 LLM provider 层失败（超时）的 LLMCallError 逃逸 try/except
-- **复现**：`ai.set_timeout(0.01)` + 真实 LLM 调用（行为表达式 `@~...~` 或 `llm` 函数两条路径）
   在 `try: ... except LLMCallError/LLMError/Exception` 内——异常**未被捕获**，
   以 `ThrownException: <LLMCallError object>` 传播，程序崩溃。
 - **文档**：04_control_flow §4.7（LLMCallError 是 LLMError/Exception 子树，except 按继承链匹配；
