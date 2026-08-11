@@ -179,6 +179,34 @@ python main.py run test_target_proj/01_hello_world.ibci
 
 *注意！！！ 现阶段不推荐使用任何思考模型接入 IBC-Inter，思考模型在当前 IBCI 版本的提示词约束下，无法合理工作并收敛思考结论，容易陷入思考死循环。特别是本地小尺寸的思考模型，更容易陷入无穷无尽的“等一等，我应该更深入思考”之类的反思中。请务必使用非思考模式。
 
+## 本地 LLM 快速开始（真实 LLM 驱动）
+
+除上述云端 API 外，IBCI 支持本地 LLM 服务（Ollama / LM Studio / vLLM 等 OpenAI 兼容端点）。
+
+1. 起一个 OpenAI 兼容的本地端点（如 LM Studio 打开 Server，默认 `http://localhost:1234/v1`）。
+2. 在目标文件夹下创建 `api_config.json`（引擎自动加载）：
+
+```json
+{
+    "providers": {
+        "local": { "base_url": "http://localhost:1234/v1", "api_key": "lm-studio" }
+    },
+    "models": {
+        "default": { "provider": "local", "model": "qwen3.6-35b-a3b", "reasoning": false }
+    },
+    "default_model": "default"
+}
+```
+
+3. 运行示例（无需脚本内配置代码，引擎自动加载）：
+
+```bash
+python main.py run test_target_proj/01_hello_world.ibci
+```
+
+> `reasoning:false` 声明非思考模型（跳过 probe，直接标准模式），防反思死循环。
+> 完整配置 schema 见 `docs/guide/01_setup.md`。
+
 ## 进一步阅读
 
 更多详情请参阅：
