@@ -200,3 +200,14 @@
 - **实际**：警告未出现（或需特定启用条件/展示通道）。
 - **级别**：P3（文档行为未复现）。
 - **证据**：cases/D3-60-intent-static.ibci + logs/D3-60-intent-static.log。
+
+### DOC-ISSUE-007 — `06_oop.md §6.6` `__from_prompt__` 契约未注明返回 `(bool, instance)` 元组
+- **复现**：按文档"从文本解析为当前类型实例"实现 `func __from_prompt__(self, str raw) -> auto:
+  return Mood(t)` → 运行时报 `LLMParseError: type_name="unknown"`（解析结果被当不确定）。
+  按 tests/e2e/test_prompt_protocol_e2e.py 改为 `return (True, Mood(t))` → 正常解析
+  （mood=开心）。
+- **文档**：06_oop §6.6 协议表仅一句"从文本解析为当前类型实例"，未注明必须返回
+  `(bool, 实例)` 元组（成功标志 + 值）。
+- **实际**：契约 = `(bool, instance)`；返回裸实例被当作不确定失败。
+- **级别**：P3（文档契约缺失）。
+- **证据**：cases/D3-70-fromprompt.ibci + logs/D3-70-fromprompt.log。
