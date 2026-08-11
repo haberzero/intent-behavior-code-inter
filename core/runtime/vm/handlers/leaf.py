@@ -404,17 +404,15 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         result = func.receive("__call__", args)
         # native 调用返回 Waitable（宿主异步句柄）→ 挂起本根，让调度器等待其完成，
         # 而非阻塞当前线程。恢复后 result 为完成值（如 collect 的 dict）。
-        # 例外：类构造调用（func 是 IbClass，如 thread(...)）返回的 Waitable 是
-        # **句柄**（创建并启动线程后返回句柄，等待应经 t.join()/await t 显式表达），
-        # 不自动挂起——否则构造即被解析成完成结果，丢失句柄。
-        if isinstance(result, Waitable) and not isinstance(func, IbClass):
-            # 可帧内 CPS 驱动的 Waitable（slot.update(fn) 的 _SlotUpdateWaitable）：
-            # yield from 嵌入当前 VM 帧栈由 _drive_loop_gen 统一驱动，而非 yield
-            # 挂起后由调度器经 try_result 轮询（后者在 try_result 内嵌套
-            # TaskScheduler）。协议分派（CPSDrivable），非能力探测。
+        # 例外：类构造返回的**句柄** Waitable（如 thread(...) 的 IbThread）不自动
+        # 挂起——否则构造即被解析成完成结果、丢失句柄。但 CPSDrivable 构造（用户类
+        # 的 _ClassInstantiateDrive）仍需帧内驱动，故按 CPSDrivable 结构性协议区分：
+        # CPSDrivable → 帧内驱动（无论 func 是否 IbClass）；纯 Waitable → 仅非
+        # IbClass 时 auto-yield（IbClass 的纯 Waitable = 句柄，原样返回）。
+        if isinstance(result, Waitable):
             if isinstance(result, CPSDrivable):
                 result = yield from result.cps_drive(executor)
-            else:
+            elif not isinstance(func, IbClass):
                 result = yield result
         return result
     except ThrownException:

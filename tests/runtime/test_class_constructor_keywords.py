@@ -67,3 +67,41 @@ print((str)c.port)
 """
     lines = run_ibci(code)
     assert lines == ["localhost", "8080"]
+
+class TestClassConstructionCPS:
+    """A5 类构造接入帧内 CPS：__init__ 含 Waitable 时 auto-yield，不阻塞主调度线程。"""
+
+    def test_init_with_llm_behavior_constructs(self):
+        """__init__ 内含 LLM 行为（Waitable）→ 类构造 auto-yield 帧内驱动，正确返回实例。"""
+        from tests.conftest import AI_MOCK_PREFIX
+        code = AI_MOCK_PREFIX + """
+class Box:
+    str label
+    func __init__(self, str seed) -> void:
+        self.label = @~ MOCK:STR:hi-$seed ~
+Box b = Box("world")
+print(b.label)
+"""
+        lines = run_ibci(code)
+        assert lines and "hi-world" in lines[0]
+
+    def test_init_with_channel_waitable_completes(self):
+        """__init__ 内含 chan.recv（Waitable，由独立线程喂）→ 构造完成不阻塞/死锁。"""
+        code = """
+chan c = chan(int, "stream")
+func feeder(chan x) -> int:
+    x.send(42)
+    return 1
+class Box:
+    int v
+    func __init__(self) -> void:
+        int a = c.recv()
+        self.v = a
+thread[int] t = thread(callable=feeder, args=[c])
+Box b = Box()
+print((str)b.v)
+thread_result[int] r = t.join()
+print((str)r.expect())
+"""
+        lines = run_ibci(code)
+        assert lines == ["42", "1"]

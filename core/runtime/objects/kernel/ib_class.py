@@ -21,6 +21,57 @@ class IbClassField:
     def __repr__(self):
         return f"<ClassField {self.val_uid} (static={self.static_val})>"
 
+class _ClassInstantiateDrive:
+    """用户类构造的帧内 CPS 驱动 Waitable（类构造嵌套调度器根治）。
+
+    由 :meth:`IbClass.receive` 对不含原生 ``__init__`` 的类返回；VM
+    ``vm_handle_IbCall`` 识别其为 ``Waitable`` + ``CPSDrivable`` 后 ``yield from
+    cps_drive``——字段默认值求值 + 用户 ``__init__`` 经 yield 嵌入当前 VM 帧栈
+    （替代 ``instantiate`` 的 ``vm.run`` 嵌套驱动循环与 ``init_method.call``
+    新建 TaskScheduler）。宿主/线程体无活跃 VM 时 ``try_result``/``result`` 走
+    同步 ``instantiate`` 兜底（与 :class:`_RunBatchDrive` 同构）。
+
+    注意：``thread(...)`` 的 ``__init__`` 为原生函数（不走本类），返回
+    ``IbThread`` 句柄（纯 ``Waitable``，非 ``CPSDrivable``），VM 不 auto-yield。
+    """
+
+    def __init__(self, cls, args, context):
+        self._cls = cls
+        self._args = args
+        self._context = context
+        self._done = False
+        self._result = None
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+    def _drive(self):
+        self._result = self._cls.instantiate(self._args, context=self._context)
+        self._done = True
+        return self._result
+
+    def cps_drive(self, executor):
+        self._result = yield from self._cls._instantiate_cps(
+            self._args, self._context
+        )
+        self._done = True
+        return self._result
+
+    def try_result(self):
+        if self._done:
+            return (True, self._result)
+        self._drive()
+        return (True, self._result)
+
+    def result(self):
+        self._drive()
+        return self._result
+
+    def register_wake(self, event) -> None:
+        event.set()
+
+
 @register_ib_type("Type")
 @register_ib_type("Class")
 class IbClass(IbObject):
@@ -178,6 +229,85 @@ class IbClass(IbObject):
             # 如果没有定义 __init__ 但传了参数，也是一种契约违背
             raise InterpreterError(f"TypeError: {self.name}() takes no arguments, but {len(args)} were given")
 
+    def _instantiate_cps(self, args: List['IbObject'], context: Any) -> Any:
+        """CPS 版 :meth:`instantiate`：字段默认值 + 用户 ``__init__`` 经 yield 嵌入 VM 帧栈。
+
+        与 :meth:`instantiate` 同语义，但动态字段默认值用 ``yield val_uid``（由外层
+        ``_drive_loop_gen`` 帧内求值，替代 ``vm.run`` 嵌套驱动循环），用户
+        ``__init__`` 经 ``UserFunctionCall`` trampoline 压栈帧内驱动（替代
+        ``init_method.call`` 新建 TaskScheduler）。类构造并入统一 CPS 执行模型，
+        ``__init__``/字段默认值含 Waitable 时由调度器协作挂起而非阻塞主线程。
+        调用方（:class:`_ClassInstantiateDrive.cps_drive`）须 ``yield from``。
+        """
+        impl_cls = get_ib_implementation(self.name)
+        instance = impl_cls._create_blank(self) if impl_cls is not None else IbObject(self)
+
+        all_default_fields: dict = {}
+        ancestors = []
+        cls = self
+        while cls is not None:
+            ancestors.append(cls)
+            cls = cls.parent
+        for ancestor in reversed(ancestors):
+            for name, val_info in ancestor.default_fields.items():
+                all_default_fields[name] = val_info
+
+        yield from self._eval_field_defaults_cps(instance, all_default_fields, context)
+        yield from self._invoke_init_cps(instance, args)
+        return instance
+
+    def _eval_field_defaults_cps(
+        self, instance: 'IbObject', all_default_fields: dict, context: Any
+    ) -> Any:
+        """CPS 版 :meth:`_eval_field_defaults`：动态字段默认值经 ``yield`` 帧内求值。"""
+        for name, val_info in all_default_fields.items():
+            if isinstance(val_info, IbClassField):
+                if val_info.static_val is not None:
+                    sv = val_info.static_val
+                    if isinstance(sv, IbValue) and sv.ib_class.name == "list":
+                        instance.fields[name] = type(sv)(list(sv.elements), sv.ib_class)
+                    elif isinstance(sv, IbValue) and sv.ib_class.name == "dict":
+                        instance.fields[name] = type(sv)(dict(sv.fields), sv.ib_class)
+                    else:
+                        instance.fields[name] = sv
+                elif val_info.val_uid and context:
+                    old_module = context.current_module_name
+                    context.current_module_name = val_info.module_name
+                    try:
+                        try:
+                            evaluated = yield val_info.val_uid
+                        finally:
+                            context.current_module_name = old_module
+                    except Exception as e:
+                        raise InterpreterError(
+                            f"Field initializer for '{name}' failed: {e}",
+                        ) from e
+                    instance.fields[name] = evaluated
+                    val_info.static_val = evaluated
+                else:
+                    instance.fields[name] = self.registry.get_none()
+            else:
+                instance.fields[name] = val_info
+
+    def _invoke_init_cps(self, instance: 'IbObject', args: List['IbObject']) -> Any:
+        """CPS 版 :meth:`_invoke_init`：用户 ``__init__`` 经 ``UserFunctionCall`` 帧内驱动。"""
+        from core.runtime.shared.user_call import UserFunctionCall
+        from .user_functions import IbUserFunction
+
+        init_method = self.lookup_method('__init__')
+        if init_method:
+            if init_method.spec and init_method.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+                expected_count = len(init_method.spec.param_types)
+                if len(args) != expected_count:
+                    raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
+
+            if isinstance(init_method, IbUserFunction):
+                yield UserFunctionCall(init_method, args, instance)
+            else:
+                init_method.call(instance, args)
+        elif args:
+            raise InterpreterError(f"TypeError: {self.name}() takes no arguments, but {len(args)} were given")
+
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
         类对象的特殊消息处理：
@@ -195,6 +325,12 @@ class IbClass(IbObject):
                 return own_call.call(self, args)
             # 用户类构造器：instantiate 创建新实例。
             context = self.registry.get_execution_context()
+            init_method = self.lookup_method('__init__')
+            # 不含原生 __init__（用户 __init__ 或未定义）→ 返回 CPSDrivable drive，
+            # VM 帧内驱动字段默认值 + __init__（类构造接入统一 CPS 执行模型）。
+            # 含原生 __init__（如 thread）→ 同步 instantiate（返回句柄，不 auto-yield）。
+            if not isinstance(init_method, IbNativeFunction):
+                return _ClassInstantiateDrive(self, args, context)
             return self.instantiate(args, context=context)
 
         if message == "__getattr__" and len(args) > 0:
