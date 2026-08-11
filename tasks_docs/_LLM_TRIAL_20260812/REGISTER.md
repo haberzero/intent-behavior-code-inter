@@ -67,6 +67,49 @@
 | D3-C3c-mock-parsefail | 04 §4.7 | MOCK LLMParseError 捕获 | caught_parse=... | PASS | - | logs/D3-C3c.log | 对照：MOCK 路径正常 |
 | D3-C3f-manual-raise | 04 §4.7 | 手动 raise LLMCallError 捕获 | caught=manual fail | PASS | - | logs/D3-C3f.log | 对照：手动路径正常 |
 
+## 执行批次 4（D2 交叉/正交/多文件 + D3 批判检测补充）
+
+| case_id | 文档引用 | 期望 | 实际 | 分类 | 级别 | 证据 | 备注 |
+|---------|---------|------|------|------|------|------|------|
+| D2-01-gen-intent-llmexcept | D2 交叉 | 生成器+意图+llmexcept | yield=1/2/3 | PASS | - | logs/D2-01.log | |
+| D2-02-thread-chan-batch | D2 交叉 | 线程+chan+run_batch | t1/t2/t3 正确 batch=4 | PASS | - | logs/D2-02.log | |
+| D2-03-class-llm-slot | D2 正交 | 类内 LLM+slot | c1=中 shared=2 | PASS | - | logs/D2-03.log | |
+| D2-10-edgecases | D2 边界 | 边界值/空/除零 | big/neg/empty/div0_caught | PASS | - | logs/D2-10.log | |
+| D2-11-shadow-type | 12 §12.1 | 类型名遮蔽拒绝 | 编译错误 | PASS | - | logs/D2-11.log | |
+| D2-12-shadow-builtin | 12 §12.1 | 内建直接赋值拒绝 | SEM_TYPE_MISMATCH | PASS | - | logs/D2-12.log | |
+| D2-20-circular-a | KNOWN_LIMITS 18 | 循环导入 | DEP_CIRCULAR_IMPORT | PASS | - | logs/D2-20.log | |
+| D2-21-plugin | 11 §11.9 | 插件加载调用 | add=30 mul=25 version=2.0.0 | PASS | - | logs/D2-21.log | |
+| D2-30-subclass-init | KNOWN_LIMITS 6 | auto-init 不含父字段 | breed=Husky name_null=True | PASS | - | logs/D2-30.log | |
+| D2-31-ref-generator-break | KNOWN_LIMITS 5 + 05 §5.8 | 引用共享/break | a_len=4 GEN_FINISHED consumed=3 | PASS | P3注 | logs/D2-31.log | BOUNDARY-001 |
+| D2-32/32b-gen-await | KNOWN_LIMITS 24 | await chan 预期异常 | x=42 正常（未复现文档错误） | BOUNDARY | P3 | logs/D2-32.log | BOUNDARY-002 |
+| D2-33-llmexcept-write | 10 §10.3 | retry 写参与变量拦截 | SEM_LLMEXCEPT_BODY_WRITE | PASS | - | logs/D2-33.log | |
+| D2-34-llmparse | 04 §4.7 | 裸 LLM 解析失败 | n=大数（可解析） | PASS | - | logs/D2-34.log | |
+| D2-35-stream | 11 §11.3 | stream_call 流式 | stream=Python 是... | PASS | P3注 | logs/D2-35.log | DOC-ISSUE-004 |
+| D2-36-filewrite-llmexcept | 10 §10.3 + KNOWN_LIMITS 20 | retry 内 file.write 拦截 | SEM_LLMEXCEPT_FILE_WRITE | PASS | - | logs/D2-36.log | |
+| D2-40-snap-vs-lambda | 07 §7.4 | 意图冻结 vs 敏感 | snap_len=4 lam_len=64 | PASS | - | logs/D2-40.log | |
+| D2-41-higher-order-lambda | 05 §5.6 + 07 §7.4 | 高阶 lambda 调用点意图 | r=你好 | PASS | - | logs/D2-41.log | |
+| D2-42/42b/42c-threadresult | 14 §14.7 vs howto | 成员形态 | .value=bound_method .value()=42 | PASS | P3注 | logs/D2-42*.log | DOC-ISSUE-005 |
+| D2-50-isolation-llm | 11 §11.6 | 隔离+LLM 链 | 子环境需自带 api_config.json | BOUNDARY | P3 | logs/D2-50.log | BOUNDARY-003 |
+| D2-60-closure-generator | 05 §5.4/§5.8 | 闭包+生成器+LLM | x=QQ版 x=QQ版 | PASS | - | logs/D2-60.log | |
+| D2-61-llm-chain | 08 §8.1 | LLM 函数三级链 | s1/s2/s3 连贯 | PASS | - | logs/D2-61.log | |
+| D2-70-loop-llm | KNOWN_LIMITS 15 + 10 §10.1 | 循环体 LLM+llmexcept | score=4/8/3 | PASS | - | logs/D2-70.log | |
+| D2-71-str-bool-edge | KNOWN_LIMITS 21 | str '0' 判真/bool 判假 | str_truthy=True bool_truthy=False | PASS | - | logs/D2-71.log | LIMIT 符合文档 |
+| D2-80-batch-persistent | 09 §9.2 | @+ 意图跨 run_batch | 甜/日（一字） | PASS | - | logs/D2-80.log | |
+| D2-81-two-batch | C4 | 双批并发 | ra=2 rb=3 无竞态 | PASS | - | logs/D2-81.log | |
+| D3-C4-concurrency | C4 | 8路batch+4线程 | batch8=8 thread4=... | PASS | - | logs/D3-C4.log | |
+| D3-20-exhaustion | 10 §10 | retry 收敛 | n=1（hint 生效） | PASS | - | logs/D3-20.log | |
+| D3-21-exhaustion-hard | 10 §10 + 04 §4.7 | 耗尽捕获 | n=0（模型仍收敛） | PASS | - | logs/D3-21.log | 真实模型服从性好 |
+| D3-22-mock-exhaust | 10 §10.3 + 13 | MOCK 耗尽 | exhausted + max_retry=2 | PASS | - | logs/D3-22.log | |
+| D3-30-global-intent | 09 §9.1 + 11 §11.3 | 全局意图/标签移除 | r1=注：... r2=正常 a1/a2 差异 | PASS | - | logs/D3-30.log | |
+| D3-31-concurrent-llmexcept | 10 + 14 | 线程内 llmexcept+slot | r1=3 r2=8 retry=0 | PASS | - | logs/D3-31.log | |
+| D3-40-batch-intent | REPORT §7.0 + A1 | @! + run_batch | 首项 UNKNOWN 次项正常 | BOUNDARY | P3 | logs/D3-40.log | BOUNDARY-004 |
+| D3-50/51/51b-ai-api | 11 §11.3 | ai API 可达性 | get_retry/is_auto 不可调用 | KERNEL_ISSUE | P1 | logs/D3-50*.log | KERNEL-ISSUE-004 |
+| D3-50c-ai-probe | 11 §11.3 | probe_model | 误判强制推理模型 | BOUNDARY | P3 | logs/D3-50c.log | BOUNDARY-005 |
+| D3-60-intent-static | KNOWN_LIMITS 12 | 静态 push 静默无效 | 行为符合；警告未出现 | DOC_ISSUE | P3 | logs/D3-60.log | DOC-ISSUE-006 |
+| D3-61-idbg | 11 §11.5 | fields/env/show_all | 正常 | PASS | - | logs/D3-61.log | |
+| D3-70-fromprompt | 06 §6.6 | 用户类 __from_prompt__ | mood=开心（需 (bool,实例)） | PASS | P3注 | logs/D3-70.log | DOC-ISSUE-007 |
+| D3-80/81-mask | 11 §11.3 | mask/ret_type_prompt | void API 正常；get 正常 | PASS | - | logs/D3-80*.log | |
+
 ## 缺陷记录
 
 ### DOC-ISSUE-001 — `02_variables.md §2.6` 示例缺返回标注
