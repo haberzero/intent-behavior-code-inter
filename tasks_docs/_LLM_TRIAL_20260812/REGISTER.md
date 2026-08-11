@@ -150,7 +150,6 @@
 - **证据**：cases/D2-50-isolation-llm.ibci + multifile/child_llm.ibci + logs/D2-50-isolation-llm.log。
 
 ### BOUNDARY-004 — `@!` 排他意图在 run_batch 单条语句多 LLM 调用时仅首个调用生效
-- **复现**：D3-40 `@! 只输出：UNKNOWN` + `ai.run_batch(q, ["苹果","香蕉"])` → 第 1 项
   `batch_item=UNKNOWN`，第 2 项 `batch_item=香甜`（正常输出）。
 - **文档**：09_intent_system §9.1 "`@!` 仅作用于紧随其后的**一条**含 LLM 调用的语句"；
   §9.2 "意图注入覆盖赋值与表达式路径（dispatch-before-use 一并注入）"。
@@ -173,3 +172,22 @@
 - **级别**：P1（文档承诺的异常捕获契约在真实 provider 失败路径失效；llmexcept 收敛场景 C3 相关）。
 - **证据**：cases/D3-C3/d/e-timeout-try*.ibci + logs/D3-C3/d/e.log；对照 D3-C3c/f。
 - **备注**：KNOWN_LIMITS §十六.6（set_timeout 超时行为需真实 LLM 验证）已被此测试触发。
+
+### KERNEL-ISSUE-004 — 文档化 ai 模块 API `get_retry()` / `is_auto_intent_injection_enabled()` 不可调用
+- **复现**：`ai.get_retry()` → `RuntimeError: VM: Call failed: Object of type 'None' has no method '__call__'`；
+  `ai.is_auto_intent_injection_enabled()` 同样失败。对照 `ai.get_retry_count` 返回 None
+  （`RUN_TYPE_MISMATCH: Cannot assign 'None' to 'int'`）。
+- **文档**：docs/syntax/11_modules.md §11.3 明确列出 `get_retry()`、`is_auto_intent_injection_enabled()` 为可用函数。
+- **对照**：`ai.has_api_key()` ✅、`ai.probe_model()` ✅、`ai.get_current_intent_stack()` ✅、
+  `ai.get_global_intents()` ✅ 均正常——仅这两个文档化 API 失效。
+- **级别**：P1（文档化 API 契约失效）。
+- **证据**：cases/D3-50/51/51b-ai-*.ibci + logs/D3-50/51/51b.log。
+
+### BOUNDARY-005 — `ai.probe_model()` 将 reasoning:false 的非推理模型误判为"强制推理模型"
+- **复现**：D3-50c 配置 `reasoning:false`（qwen3.6-35b-a3b 非思考模型），`ai.probe_model()`
+  输出 "[AI Probe] ... 探测到专用 reasoning 字段，判定为 [强制推理模型]"。
+- **文档**：11_modules §11.3 `probe_model()`（探测模型响应特征）。
+- **实际**：本地端点返回流未含 reasoning 字段，但探测判定为强制推理模型——判据或为
+  响应中出现了模型自述/字段猜测，需内核层复核（不在本任务）。
+- **级别**：P3（工具误判，不影响主路径；但可能误导 reasoning:true 自动注入决策）。
+- **证据**：cases/D3-50c-ai-probe.ibci + logs/D3-50c-ai-probe.log。
