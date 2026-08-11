@@ -740,7 +740,7 @@ def _is_simple_name_target(executor, target_uid: str) -> bool:
     return False
 
 
-def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) -> None:
+def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture, define_only: bool = False) -> None:
     """把 ``LLMFuture`` 占位符直接写入目标变量符号绑定，跳过类型/值校验。
 
     与 ``StmtHandler._assign_to_target`` 中 ``IbName`` 分支语义一致，
@@ -752,6 +752,13 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
     的覆写（``sym.value = future``）仍通过 ``RuntimeSymbolImpl`` 公开属性进行，
     这是有意的——``define_raw`` 仅用于首次定义路径。
 
+    ``define_only``：与 ``_vm_assign_to_target`` 同语义——带类型声明的目标
+    （``IbTypeAnnotatedExpr``）是**定义**而非赋值：即便同名内建符号已存在
+    （如模块级 ``int sum = @~...~`` 遮蔽 ``intrinsic:sum``），也必须经
+    ``define_raw`` 创建全新用户符号（覆盖符号表两条索引），而非在既有
+    （常量）符号对象上原地覆写 ``.value``——否则遮蔽语义失效、使用点回写
+    触发 ``Cannot reassign constant``。
+
     调用方已通过编译期 ``dispatch_eligible=False`` 保证不会对被 lambda
     捕获的变量（cell 变量）产生 LLMFuture，故此处无需 cell 同步检查。
     """
@@ -759,7 +766,7 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
     if not target_data:
         return
     if target_data.get("_type") == "IbTypeAnnotatedExpr":
-        _assign_future_to_name_target(executor, target_data.get("target"), future)
+        _assign_future_to_name_target(executor, target_data.get("target"), future, define_only=True)
         return
 
     sym_uid = executor.ec.get_side_table("node_to_symbol", target_uid)
@@ -775,14 +782,15 @@ def _assign_future_to_name_target(executor, target_uid: str, future: LLMFuture) 
     ):
         target_scope = rc.global_scope
 
-    # 1) 已存在符号 → 直接覆盖 .value，绕过 _check_type 与 box
-    sym = rc.get_symbol_by_uid(sym_uid) if sym_uid else None
-    if sym is not None:
-        sym.value = future
-        sym.current_type = type(future)
-        return
+    # 非定义（纯赋值）且符号已存在 → 直接覆盖 .value，绕过 _check_type 与 box
+    if not define_only:
+        sym = rc.get_symbol_by_uid(sym_uid) if sym_uid else None
+        if sym is not None:
+            sym.value = future
+            sym.current_type = type(future)
+            return
 
-    # 2) 首次定义 → 通过 define_raw() 写入，避免直接操作私有字段
+    # 定义（首次定义或带类型声明的遮蔽）→ 经 define_raw() 写入全新符号
     declared_type = (
         executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
     )

@@ -55,6 +55,15 @@ def receive(self, message, args):
 
 ### U2: `int sum = @~...~` 遮蔽 + LLM 表达式缺陷绕过（commit 3c768a4，高严重度）
 
+**✅ 已核销（2026-08-11，本 session 修复）**：根因比交接推断更精确——编译器对模块级
+`int X = ...` 统一绑定既有 intrinsic 符号 UID（字面量/LLM 同 `intrinsic:X`），遮蔽语义由
+运行时 define 承担；缺陷在 dispatch-before-use 路径 `_assign_future_to_name_target`
+（`_shared.py:743`）——符号已存在时原地覆写 `.value` 而非走 define，intrinsic 常量符号被
+写入 LLMFuture、使用点回写触发 `Cannot reassign constant`。修复：加 `define_only` 参数
+（与 `_vm_assign_to_target` 同构），IbTypeAnnotatedExpr 递归置 True，定义路径恒走
+`define_raw`。+2 回归测试（test_builtin_expansion.py）；示例 01_hello_world.ibci 改回
+`int sum` 真实跑通。全量 2178 passed / 1 skipped 零回归。
+
 **违反原则**：根因优先于症状 + 禁止半修复
 **症状**：改示例变量名 `int sum`→`int result` 绕开，未修根因
 **位置**：`examples/01_getting_started/01_hello_world.ibci:41,43`

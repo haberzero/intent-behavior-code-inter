@@ -130,6 +130,32 @@ class TestAggregationBuiltins:
         code = "int sum = 0\nsum = sum + 5\nprint(sum)\n"
         assert run_ibci(code) == ["5"]
 
+    def test_sum_shadowable_with_llm_init(self):
+        """内建名遮蔽 + LLM 表达式初始化：dispatch-before-use 路径也必须走 define 遮蔽。
+
+        PT-DEBT-19（U2）：模块级 ``int sum = @~...~`` 此前在
+        ``_assign_future_to_name_target`` 原地覆写 ``intrinsic:sum`` 常量符号，
+        使用点回写触发 ``Cannot reassign constant UID 'intrinsic:sum'``。
+        """
+        code = (
+            "import ai\n"
+            "ai.set_mock_mode()\n"
+            "int sum = @~ MOCK:INT:42 ~\n"
+            "print((str)sum)\n"
+        )
+        assert run_ibci(code) == ["42"]
+
+    def test_len_shadowable_with_llm_init(self):
+        """另一个内建名（len）+ LLM 表达式初始化遮蔽（同 U2 根因，防同类回归）。"""
+        code = (
+            "import ai\n"
+            "ai.set_mock_mode()\n"
+            "int len = @~ MOCK:INT:42 ~\n"
+            "print((str)len)\n"
+        )
+        assert run_ibci(code) == ["42"]
+
+
     def test_reversed_returns_new_list(self):
         """reversed 返回新逆序列表，不改动原容器。"""
         lines = run_ibci(
