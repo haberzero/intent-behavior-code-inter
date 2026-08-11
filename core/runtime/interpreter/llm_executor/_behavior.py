@@ -85,13 +85,16 @@ class _RunBatchDrive:
         return self._done
 
     def _drive(self):
-        """宿主/线程体同步驱动（无 VM CPS 上下文时；非权威路径）。"""
-        self._results = self._executor._run_batch_sync(
-            self._behavior, self._items, self._ec
+        """宿主/线程体同步驱动（无 VM CPS 上下文时；非权威路径）。
+
+        与 :meth:`cps_drive` 同返回形态（boxed IbList），保证同一 Waitable
+        对象经任一驱动路径产出语言层一致的 boxed 结果。
+        """
+        self._results = self._executor.registry.box(
+            self._executor._run_batch_sync(self._behavior, self._items, self._ec)
         )
         self._done = True
         return self._results
-
     def cps_drive(self, executor):
         """帧内 CPS 驱动（并入当前调度器；VM 权威路径）。
 
@@ -178,6 +181,7 @@ class _BehaviorMixin:
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context)
             global_intents = context.get_global_intents()
+            active_list = context.get_active_intents()
 
         llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
 
@@ -267,6 +271,7 @@ class _BehaviorMixin:
         else:
             all_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
             global_intents = context.get_global_intents()
+            active_list = context.get_active_intents()
 
         llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)
 
@@ -498,6 +503,13 @@ class _BehaviorMixin:
             for spec in specs
         ]
         results = yield LLMBatchFuture(futures)
+        # 记录最近一次 LLM 调用信息（与单调用路径对齐）：批内最后一次结果
+        # 携带完整 call_info（worker 经 _finalize_call record_current=False 绑定，
+        # 这里统一记录到主线程单写槽）。首项（批量语义上代表本次调用）优先。
+        for llm_result in results:
+            if llm_result is not None and getattr(llm_result, "call_info", None) is not None:
+                self._record_current_call_info(llm_result.call_info)
+                break
         return self.registry.box(self._aggregate_batch_results(ec, results))
 
     def _aggregate_batch_results(

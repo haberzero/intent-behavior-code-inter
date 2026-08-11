@@ -138,3 +138,23 @@ class TestRunBatchWaitableContract:
         )
         assert lines and "5" in lines[0]
         assert lines[1] and "item1" in lines[1] and "item2" in lines[1] and "item3" in lines[1]
+
+
+class TestRunBatchObservability:
+    """run_batch 批路径的 LLM 调用可观测性（PT-AUDIT-3 修复回归）。
+
+    历史缺陷：run_batch 批内 LLM 调用不记录主线程单写槽，`get_current_call_info()`
+    返回空 dict——与单调用路径（inline/dispatch）的"立即可见"契约漂移。
+    """
+
+    def test_run_batch_records_call_info(self):
+        out = run_ibci(
+            'fn label = lambda(int i) -> str: @~ MOCK:STR:item$i ~\n'
+            'list results = ai.run_batch(label, [1, 2, 3])\n'
+            'dict info = ai.get_current_call_info()\n'
+            'print("user_prompt" in info)\n'
+            'print(len(info["user_prompt"]) > 0)\n',
+            ai=True,
+        )
+        assert out == ["True", "True"]
+
