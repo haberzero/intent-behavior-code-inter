@@ -17,8 +17,8 @@
 
 | 优先级 | 任务 | 维度 | 说明 |
 |--------|------|------|------|
-| **当前阶段（下一 session，2026-08-11 用户定案）** | **真实 LLM e2e 全面试用 + 高强度批判检测**（`_REAL_LLM_E2E_PLAN.md`） | 验证/发布 | **不再以 MOCK 为唯一验证/演示手段**：基于本地 LLM 服务（Ollama/LM Studio 等 OpenAI 兼容端点，非思考模型）做 IBCI 全语法特性真实试用 + MOCK-vs-真实差异批判检测。真实检测可能暴露 MOCK 未覆盖的语义缺陷（格式服从/llmexcept 收敛/意图注入/并发真实调用/非确定性），修复后再进入 main 合并 |
-| **当前阶段（评估）** | **unsafe-vibe-dev 合并取代 main**（`_MAIN_MERGE_PLAN.md`） | 发布/稳定性 | 真实 LLM 检测通过后，`unsafe-vibe-dev` **合并取代 `main`**；`unsafe-vibe-dev` 保留作未来开发分支；`main` 保持稳定。前置：文档/README 更新（本地 LLM 快速开始、demo 定位真实 LLM 驱动）、`pyproject` 版本评估、examples 真实跑通、文档健康 P0/P1 清完 |
+| **当前阶段（已完成）** | **真实 LLM e2e 全面试用 + 高强度批判检测**（`_REAL_LLM_E2E_PLAN.md`） | 验证/发布 | **已完成（2026-08-11）**：本地 qwen3.6-35b-a3b 全语法真实试用 + MOCK-vs-真实批判检测，`_REAL_LLM_E2E_REPORT.md` 落档；暴露缺陷全部修复（generator.to_list U1 + dispatch 观测 d6d28e1） |
+| **当前阶段（已完成）** | **unsafe-vibe-dev 合并取代 main**（`_MAIN_MERGE_PLAN.md`） | 发布/稳定性 | **阶段 2 收尾准备已完成（2026-08-11，`_MERGE_READY_REPORT.md` 落档）**：文档健康 P1/P2 清完 + `pyproject` 0.2.0 + examples 真实跑通 11 例 + 合并条件全满足。**阶段 3（`git merge unsafe-vibe-dev → main`）待用户显式授权**（push/合并不在自主范围，禁 push 硬原则） |
 | **P0（发布）** | **CI/CD 退役 + 重新设计** | 发布/工程 | **GitHub 侧 CI 自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**。现 CI 与本机 pytest 区别不大、必要性不足；待单独设计"可靠化/实用化"（真实 LLM e2e / 跨平台 / 发布产物）后重新启用，另行规划 |
 | **P0（真实 LLM e2e 前置）** | **PT-FEAT-13 api_config 配置机制完备化（C1-C3）**（`_API_CONFIG_DESIGN.md`） | 验证/工程 | 现 api_config.json 非原生加载（脚本约定）、无校验、mock 字符串嗅探。为真实 LLM e2e（本地非思考模型）做**一等配置机制**：**C1 原生加载**（ai 模块/引擎自动，替代每脚本 file/json.parse）+ **C2 set_config 结构化** + **C3 校验诊断**（fail-fast/诊断码，不静默回退 mock）。C4-C7 随 e2e 完善、C8 远期 |
 | **当前主线（已完成）** | **PT-DEBT-12/13/14/15 异步地基遗留妥协根治**（`_ASYNC_UNIFY.md`） | 架构健康性 | **统一执行模型闭环——全部收尾（2026-08-09）**。F1→B1→F2/F3→M4 已完成（2026-08-08），M3 已收敛；**M1（.call 双写收敛）/ M2（驱动去重）已完成（2026-08-09，独立分支 exp/async-m1m2，全量 2137/1）**。消"任务内同步重入调度器"遗留旁路 |

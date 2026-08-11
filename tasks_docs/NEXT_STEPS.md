@@ -2,9 +2,27 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-11（U1-U7 修复 + 意图注入纠错 + T1-T5 泛化审计全部完成，全量 2201/1；下一 session 主线=合并取代 main 收尾准备 + PT-AUDIT-3 双路径分裂专项审计，见下方"交接要点"）
+> **最后更新**：2026-08-11（合并收尾准备全部完成——doc-health P1/P2 + 版本 0.2.0 + examples 真实 LLM 11 例全过 + 合并就绪报告落档 + PT-AUDIT-3 执行，全量 2209/1；下一 session 主线=待用户显式授权执行阶段 3 合并（`_MAIN_MERGE_PLAN.md`），见下方"交接要点"）
 
 ---
+
+## ✅ 已完成：合并收尾准备（2026-08-11，doc-health P1/P2 + 版本 0.2.0 + examples 真实跑通 + PT-AUDIT-3）
+
+> **unsafe-vibe-dev，全量 2209 passed / 1 skipped**。合并前置全部完成，`_MERGE_READY_REPORT.md` 落档。
+
+- **doc-health P1/P2 全部处置**（`_DOC_HEALTH_20260811.md`）：P1 16 项复核修齐（已修核对 4 + 实修 12，
+  含 `@method` 陈旧引用、`已重构为包` 历史演变、09 章节编号、KDIAG 码表补全、super 归属唯一化、
+  05_coroutine 状态文档重写、04_control_flow 小节归位、15_diagnostics 分域引言）；P2 12 项
+  （A5 类构造 CPS 变更反映 arch/04 §2.7 + arch/05 公理 EXEC-4、README 阅读路径、howto 扩充 2 篇、
+  死引用清理、定位段强化、TestHooks 模板化）。
+- **pyproject 版本 0.1.0 → 0.2.0**（0.1.0 后 411 commits / 65 feat）。
+- **examples 真实 LLM 跑通确认**：11 例全过（本地 qwen3.6-35b-a3b）；**暴露并修复 dispatch 赋值后
+  idbg/ai 调用信息不可观测缺陷**（`_record_dispatch_call_info` 单写槽即时记录，resolve 补全 response，
+  +3 回归测试，commit d6d28e1）。
+- **PT-AUDIT-3 双路径专项审计执行**（general agent 独立审计）：无 P0；3 确凿 P2 漂移修复
+  （run_batch 观测 / active_intents / _drive 装箱）+ generator 兜底 fail-fast + KNOWN_LIMITS 修正；
+  5 疑似项待独立窗口（`_PT_AUDIT3_RECORD.md`）。
+- **合并就绪报告**：`tasks_docs/_MERGE_READY_REPORT.md`（四项合并条件全满足；阶段 3 待用户授权）。
 
 ## ✅ 已完成：R 批次 —— 统一执行地基复核与根治修复（R1-R6）
 
@@ -183,40 +201,36 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **🔴 下一 session 主线（建议）：合并取代 main 的收尾准备**（`_MAIN_MERGE_PLAN.md` 阶段 2）。
-  当前代码已通过真实 LLM e2e + 高强度批判检测 + 全量 2201/1 零回归，合并条件（检测/工程维度）
-  已重估**重新满足**（`_REAL_LLM_E2E_REPORT.md` §七）。收尾动作（主任务链，每步全量 pytest
-  零回归 + commit + 同步任务文档）：
-  1. **`_DOC_HEALTH_20260811.md` 剩余 P1/P2 清理**（doc-governance Phase 4-8 流程，先读
-     `.opencode/skills/doc-governance/SKILL.md`）。P1 14 项中 P1-2/5/6 已由前批修复，剩余
-     以文件为准；P2 12 项。重点：KDIAG 码表单一权威源、断链修复、模板统一、howto 层扩充。
-  2. **`pyproject.toml` 版本评估**（0.1.0 → 0.2.0?，`readme = "README.md"` 已正确）。
-  3. **examples 真实 LLM 跑通确认**（验收方式：独立项目目录 + api_config.json，或
-     `--root <example_dir>` 显式指定——见 `_HANDOFF_ISSUES_LLM_E2E.md` P2 决断）。
-  4. 产出 **"合并就绪"报告**（`_REAL_LLM_E2E_REPORT.md` 或独立文档），供用户授权时直接执行
-     阶段 3（push/合并本身**不在自主范围**，禁 push 硬原则）。
+- **🔴 下一 session 主线（建议）：待用户显式授权执行阶段 3 合并**（`_MAIN_MERGE_PLAN.md` 阶段 3）。
+  合并前置（阶段 2 收尾准备）**已全部完成（2026-08-11 本 session）**：
+  1. **`_DOC_HEALTH_20260811.md` P1/P2 全部处置**（P1 16 项复核修齐 + P2 12 项，doc-governance Phase 4-5；
+     已提交 f168215/c4307ad）。
+  2. **`pyproject.toml` 版本评估完成**：0.1.0 → **0.2.0**（0.1.0 后 411 commits / 65 feat）。
+  3. **examples 真实 LLM 跑通确认完成**：11 例全部通过（本地端点 qwen3.6-35b-a3b）；验收方式=独立项目
+     目录 + api_config.json 或 `--root <example_dir>`。**顺带暴露并修复 1 缺陷**（dispatch 赋值后
+     idbg/ai 调用信息不可观测，commit d6d28e1）。
+  4. **合并就绪报告落档**：`tasks_docs/_MERGE_READY_REPORT.md`（合并条件逐条证据，检测/测试/文档/示例
+     全满足；**阶段 3 合并/push 不在自主范围，禁 push 硬原则，须用户显式授权**）。
+  → 用户授权后执行：`git merge unsafe-vibe-dev → main`（`_MAIN_MERGE_PLAN.md` 阶段 3 细则）。
 
-- **📌 支线（P0 主线受阻/并行，应用本 session 教训）**：
-  - **PT-AUDIT-3 双路径分裂专项审计**（PENDING_TASKS §〇）：对近期子系统（异步统一 A1-A6 /
-    run_batch CPS / yield 生成器 / generator IbClass / llmexcept / M1-M2 调用收敛）做独立
-    general agent 审计，专项查 sync-CPS 孪生语义一致 + 快照半消费 + 自审计误标。T4 已证明
-    该路径能发现自审计漏网的真问题。
-  - **PT-DEBT-24**（call_intent 死机制清理）、**F9**（import ai 配置副作用评估）：低风险，
-    可顺带或独立窗口。
+- **📌 已完成支线（2026-08-11 本 session）**：
+  - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；
+    3 确凿 P2 修复（run_batch 观测 / active_intents 漂移 / _drive 装箱一致）+ generator 兜底
+    fail-fast + KNOWN_LIMITS §二十四 修正（commit df1a896）；5 疑似项记录待独立窗口
+    （`_PT_AUDIT3_RECORD.md`）。
+  - **PT-DEBT-24**（call_intent 死代码）：PT-AUDIT-3 复核确认，登记待独立窗口清理。
+  - **F9**（import ai 配置副作用）：评估为**设计意图保持**（fail-fast 契约，测试显式处理）。
 
-- **当前已完成批次（供回顾，见 git 历史与 `_HANDOFF_ISSUES_LLM_E2E.md` 核销）**：
-  U1-U7 不合格操作修复（7260204/f58d525/4a10502/b8ea631/fa2ce72）→ 意图注入纠错（7339220）→
-  P1-P4 决断（aeefa0d）→ T1-T5 泛化审计（c1e63d1/0eb8939/c072f0e）。全量 2201 passed / 1 skipped。
+- **本 session 已完成批次（供回顾，见 git 历史）**：
+  U1-U7 修复 → 意图注入纠错（7339220）→ P1-P4 决断 → T1-T5 泛化审计 → **合并收尾准备
+  （doc-health P1/P2 + 版本 0.2.0 + examples 真实跑通 + dispatch 观测修复 + 合并就绪报告）→
+  PT-AUDIT-3**。全量 **2209 passed / 1 skipped**（2201 → 2209，净增 8 测试）。
 
 - **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
   待单独设计"可靠化/实用化"后重新启用，勿自动恢复。
 - **分支政策**：经充分验证零风险/边界清晰改进可**直接合并** unsafe-vibe-dev；大风险仍"独立分支 + 手动 cherry-pick"；永远不触碰 main。
-- **剩余长期项**：PT-DEBT-4 `file` 重命名（独立窗口）、P3 VISION、文档健康 P1/P2（并入主线 1）、PT-DEBT-24、F9。
-- **CI/CD 状态**：**GitHub 侧自动触发已停用（2026-08-11，`.github/workflows/ci.yml` → `workflow_dispatch`）**；
-  待单独设计"可靠化/实用化"后重新启用，勿自动恢复。
-- **分支政策**：经充分验证零风险/边界清晰改进可**直接合并** unsafe-vibe-dev；大风险仍"独立分支 + 手动 cherry-pick"。
-- **已完成的近期主线（供回顾）**：见上方"已完成"节与 `PENDING_TASKS.md` §〇。剩余 PT-DEBT-4 `file` 重命名（独立窗口）、
-  P3 VISION、文档健康 P1/P2（`_DOC_HEALTH_20260811.md`）。
+- **剩余长期项**：PT-DEBT-4 `file` 重命名（独立窗口）、P3 VISION、PT-DEBT-24、F9（已评估）、
+  PT-AUDIT-3 疑似项 S1-S5（独立窗口）。
 - **当前主线（架构健康性优先，用户 2026-08-08 定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
   审计确认内核层仍有"任务内同步重入调度器"遗留旁路（用户方法 `obj.method()` / `slot.update(fn)` / prompt hint /
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、
