@@ -239,12 +239,17 @@ if ec is not None:
 **现象**：`@ 用冷酷无感情的口吻回复` 意图注释未明显改变 qwen3.6-35b-a3b 输出风格，LLM 仍回复热情内容。
 `int/bool` 类型约束（格式服从）则稳定生效。
 
-**✅ 已决断（2026-08-11）**：① 注入路径——意图经 `_prepare_behavior_call`（sync+CPS）
-消解为 `all_intents` 后追加到 **system prompt** 的"当前上下文意图"清单块；② 强度——描述性
-清单，非程序化强制；③ 处置——措辞强化为指令式"当前上下文意图（必须严格遵守）"并统一
-`_behavior.py` 两处与 `_llm_function.py` 的表述分歧；`docs/syntax/09_intent_system.md` §9.2
-补"意图效果取决于模型服从性"说明（低服从性模型风格类意图弱效、类型约束稳定，模型特性非缺陷）。
-增强机制（更强 system 角色）评估为过度设计，不引入。
+**✅ 已决断 + 重大纠错（2026-08-11）**：最初决断为"措辞强化 + 模型服从性边界"，但**复核实证推翻**
+——真实根因是**机制缺陷**：`fork_intent_snapshot()` 把 `@` smear / `@!` override 移入快照的
+`_inherited_smear`/`_inherited_override`，而 `_prepare_behavior_call`（sync+CPS）的
+`captured_intents` 分支只取 `get_active_intents()`+`get_global_intents()`，**丢弃一次性意图** →
+赋值 + 并行预调度（dispatch_eager）场景下 `@`/`@!` 从未进入 prompt。此前真实 LLM 测试用的正是
+赋值场景，故"效果弱"实为意图根本没注入。**修复**：`IbIntentContext.resolve_to_prompts(+cps)`
+（override > smear+active > global，单一权威源）+ 委托重构 + captured 分支改快照方法
+（commit 7339220）。**实证（localhost:1234 qwen3.6-35b-a3b）**：修复后 `@ 用冷酷无感情且极简的
+口吻回复` + 赋值 → prompt 含意图 → 模型回"你好。"（冷酷极简），无意图对照回"有什么我可以帮你
+处理的任务或代码需求吗？"——**qwen3.6 指令遵循能力足够**。+6 回归测试。措辞强化（aeefa0d）
+保留为顺带改进。
 
 **有待查询**：
 1. auto_intent_injection 机制的实际注入路径（系统提示词？用户提示词？注入位置？）
@@ -324,7 +329,7 @@ has_api_key 特判 mock=True 返回 True（规避 url/key 检查）。
 | 低 | U5 _code_api_config 清理 | ✅ 修复（fa2ce72） |
 | 低 | U6 project_root 默认 None | ✅ 修复（b8ea631） |
 | 低 | U7 setup 三重 if | ✅ 修复（b8ea631） |
-| 讨论 | P1 意图注入弱效 | ✅ 决断（措辞强化 + 文档） |
+| 讨论 | P1 意图注入弱效 | ✅ 决断（**纠错**：dispatch 路径丢 @/@! 意图缺陷已修复 7339220 + 措辞强化） |
 | 讨论 | P2 examples 真实跑通 | ✅ 决断（独立目录 + --root） |
 | 讨论 | P3 mock _config 状态 | ✅ 决断（维持现状） |
 | 讨论 | P4 覆盖语义 | ✅ 决断（设计正确，维持现状） |

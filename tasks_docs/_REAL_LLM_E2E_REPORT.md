@@ -108,6 +108,22 @@ C1-C7 全部落地并经真实 LLM 探针验证：
 > U1-U7 不合格操作已全部根因修复（`_HANDOFF_ISSUES_LLM_E2E.md` 逐项核销），
 > P1-P4 设计问题已全部决断。本报告 §四 的"合并条件满足"结论据此**重新确认**。
 
+### 7.0 意图注入重大纠错（复核后发现原结论错误）
+
+**§四 4.1"意图注入效果弱 = 模型服从性问题（非缺陷）"结论被推翻**：
+复核实证发现是**机制缺陷**——`@` / `@!` 一次性意图在 dispatch-before-use
+（赋值 + 并行预调度 `dispatch_eager`）路径下从未进入发送给 LLM 的 prompt：
+`fork_intent_snapshot()` 把 smear/override 移入快照 `_inherited_*` 槽位，
+而 `_prepare_behavior_call` 的 captured 分支只取 active/global，丢弃一次性意图。
+同步路径（表达式语句）正常，故此前"模型服从性低"的判断是**误判**。
+
+修复（commit 7339220）：`IbIntentContext.resolve_to_prompts(+cps)` 单一权威消解
+（override > smear+active > global），`RuntimeContextImpl.get_resolved_prompt_intents`
+委托之，captured 分支改用快照方法。**真实模型实证（localhost:1234 qwen3.6-35b-a3b）**：
+修复后 `@ 用冷酷无感情且极简的口吻回复` + 赋值 → prompt 含意图 → 模型回"你好。"（冷酷极简）；
+无意图对照回"有什么我可以帮你处理的任务或代码需求吗？"。**qwen3.6 指令遵循能力足够**。
++6 回归测试。类型约束稳定生效（§四 4.1 其余结论保持）。
+
 ### 7.1 重估结论
 
 **✅ unsafe-vibe-dev 合并条件（检测与工程维度）已重新满足**：
@@ -115,7 +131,7 @@ C1-C7 全部落地并经真实 LLM 探针验证：
 | 合并条件（`_MAIN_MERGE_PLAN.md` §一） | 状态 |
 |------|------|
 | 真实 LLM e2e 检测通过（无 P0 阻断缺陷） | ✅ 9/12 类特性通过；唯一缺陷（generator.to_list）已由 **U1 正确架构修复**（generator IbClass 注册，非 receive 特判）；其余 P0 缺陷零 |
-| 全量 pytest 零回归 | ✅ **2185 passed / 1 skipped**（修复全程零回归；U1-U7 净增 13 契约/回归测试） |
+| 全量 pytest 零回归 | ✅ **2194 passed / 1 skipped**（修复全程零回归；U1-U7 + 意图注入缺陷净增 22 契约/回归测试） |
 | 文档/README 就绪 | ⏳ 部分（README 本地 LLM 快速开始已具备；`_DOC_HEALTH_20260811.md` 剩余 P1/P2 待清；pyproject 版本评估待做；examples 真实跑通待确认） |
 | 用户显式授权 push/合并 | ⏳ **未授予**（禁 push 硬原则，合并动作须用户显式授权，不在自主范围） |
 
