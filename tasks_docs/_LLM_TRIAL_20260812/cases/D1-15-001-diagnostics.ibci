@@ -1,0 +1,8 @@
+# D1-15-001 诊断码抽查：编译错误信息 + catalog 说明（15_diagnostics）
+# doc: docs/syntax/15_diagnostics.md
+# 期望: 已知错误码显示"说明/修复"段（catalog 集成）；错误码与文档一致
+
+# 触发一个已知编译错误：函数缺返回标注（SEM_MISSING_RETURN_ANNOTATION）
+func bad() :
+    print("x")
+print("UNREACHABLE")

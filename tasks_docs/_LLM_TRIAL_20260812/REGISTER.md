@@ -5,6 +5,21 @@
 > 级别：P0（崩溃/死循环/数据损坏）/ P1（明确缺陷，重要语义错误）/ P2（缺陷，较轻）/ P3（文档/体验）。
 > 详细机械记录见 `logs/register.jsonl`；完整运行输出见 `logs/<case_id>.log`。
 
+## 结果总览（截至本 register 收尾）
+
+- **用例总数**：~110 次运行（101 个 cases 文件；含隔离复现与对照），全部经死循环保护 harness。
+- **PASS**：绝大多数特性（D1 全语法遍历 15 章 + D2 交叉/正交/多文件 + D3 批判场景）。
+- **KERNEL_ISSUE（真实缺陷候选，4 项）**：KERNEL-ISSUE-001（global 写访问）/ 002（整模块 import+成员
+  访问 INT_INTERNAL_ERROR）/ 003（真实 LLM provider 失败 LLMCallError 逃逸 try/except）/
+  004（ai.get_retry 等文档化 API vtable 未注册）。
+- **DOC_ISSUE（7 项）**：DOC-ISSUE-001~007（02_variables 示例缺返回标注 / __init__ 返回标注 /
+  await thread 示例矛盾 / stream_call 签名缺失 / howto thread_result .value / SEM_INTENT_STATIC_CALL
+  警告未现 / __from_prompt__ 契约未注明）。
+- **BOUNDARY（5 项）**：BOUNDARY-001~005（for=to_list 物化 / 生成器 await chan 未复现 KNOWN_LIMITS 24 /
+  隔离子环境不继承 LLM 配置 / @! 在 run_batch 仅首调用生效 / probe_model 误判推理模型）。
+- **A1-A5 重验点全部通过**；B1-B3 已补正式记录；C1-C4 已测。
+- **零死循环**：所有用例在 OS 级超时保护下运行，唯一 TIMEOUT-KILLED 为死循环保护冒烟验证本身。
+
 ## 执行批次 1（D1 01-02 章，确定性核心）
 
 | case_id | 文档引用 | 期望 | 实际 | 分类 | 级别 | 证据 | 备注 |
@@ -109,6 +124,7 @@
 | D3-61-idbg | 11 §11.5 | fields/env/show_all | 正常 | PASS | - | logs/D3-61.log | |
 | D3-70-fromprompt | 06 §6.6 | 用户类 __from_prompt__ | mood=开心（需 (bool,实例)） | PASS | P3注 | logs/D3-70.log | DOC-ISSUE-007 |
 | D3-80/81-mask | 11 §11.3 | mask/ret_type_prompt | void API 正常；get 正常 | PASS | - | logs/D3-80*.log | |
+| D1-15-001-diagnostics | 15_diagnostics | 诊断码说明/修复 | SEM_MISSING_RETURN_ANNOTATION + 说明/修复段 | PASS | - | logs/D1-15-001.log | catalog 集成生效 |
 
 ## 缺陷记录
 
