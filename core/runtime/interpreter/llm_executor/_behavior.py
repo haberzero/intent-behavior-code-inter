@@ -34,8 +34,6 @@ from core.runtime.objects.primitives.callables import (
 )
 from core.runtime.exceptions import ThrownException
 
-from core.kernel.intent_resolver import IntentResolver
-
 
 @dataclass
 class BehaviorCallSpec:
@@ -173,12 +171,10 @@ class _BehaviorMixin:
                 )
             active_list = captured_intents.get_active_intents()
             global_intents = captured_intents.get_global_intents()
-            all_intents = IntentResolver.resolve(
-                active_intents=active_list,
-                global_intents=global_intents,
-                context=context,
-                execution_context=execution_context,
-            )
+            # 快照解析必须含 override/smear（@! / @ 一次性意图）：fork() 已把它们
+            # 移入快照的 _inherited_override/_inherited_smear，仅取 active/global
+            # 会丢弃它们——此前并行预调度（赋值 dispatch）下 @ 意图从未进 prompt。
+            all_intents = captured_intents.resolve_to_prompts(context, execution_context)
         else:
             all_intents = context.get_resolved_prompt_intents(execution_context)
             global_intents = context.get_global_intents()
@@ -266,12 +262,8 @@ class _BehaviorMixin:
                 )
             active_list = captured_intents.get_active_intents()
             global_intents = captured_intents.get_global_intents()
-            all_intents = yield from IntentResolver.resolve_cps(
-                active_intents=active_list,
-                global_intents=global_intents,
-                context=context,
-                execution_context=execution_context,
-            )
+            # 快照解析必须含 override/smear（@! / @ 一次性意图）：与同步版同因。
+            all_intents = yield from captured_intents.resolve_to_prompts_cps(context, execution_context)
         else:
             all_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
             global_intents = context.get_global_intents()

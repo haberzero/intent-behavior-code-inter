@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
+from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent_node import IntentNode
 
 if TYPE_CHECKING:
@@ -160,6 +161,55 @@ class IbIntentContext:
         if self._intent_top is None:
             return []
         return self._intent_top.to_list()
+
+    def resolve_to_prompts(self, context: Any, execution_context: Any = None) -> List[str]:
+        """把本意图上下文消解为 Prompt 字符串列表（override > smear+active > global）。
+
+        与 ``RuntimeContextImpl.get_resolved_prompt_intents`` 同语义，但直接操作
+        本（快照）上下文——dispatch-before-use 路径（``_prepare_behavior_call``
+        的 ``captured_intents`` 分支）必须经本方法解析：``fork()`` 把父帧的
+        一次性意图移入本快照的 ``_inherited_smear``/``_inherited_override``，
+        而仅取 ``get_active_intents``/``get_global_intents`` 会丢弃它们，导致
+        ``@`` 一次性意图 / ``@!`` 排他意图在并行预调度赋值场景下从未进入 prompt。
+
+        消费操作（``consume_override``/``consume_smear``）在值快照上安全：
+        dispatch 每次 fork 新快照（调用方私有）；``_inherited_*`` 槽位本就
+        参与解析但不被消费（跨调用语义与持久意图一致）。
+        """
+        if self.has_override():
+            pending_override = self.consume_override()
+            self.consume_smear()  # override 激活时丢弃 smear（与 resolve 同步语义一致）
+            content = pending_override.resolve_content(context, execution_context)
+            return [content] if content else []
+        smear_intents = self.consume_smear()
+        active_intents = self.get_active_intents()
+        global_intents = self.get_global_intents()
+        return IntentResolver.resolve(
+            active_intents=active_intents + smear_intents,
+            global_intents=global_intents,
+            context=context,
+            execution_context=execution_context,
+        )
+
+    def resolve_to_prompts_cps(self, context: Any, execution_context: Any = None):
+        """CPS 版 :meth:`resolve_to_prompts`；意图段求值经 ``yield from`` 嵌入外层 VM 帧栈。
+
+        与同步版同语义（override > smear+active > global）。调用方须 ``yield from``。
+        """
+        if self.has_override():
+            pending_override = self.consume_override()
+            self.consume_smear()
+            content = yield from pending_override.resolve_content_cps(context, execution_context)
+            return [content] if content else []
+        smear_intents = self.consume_smear()
+        active_intents = self.get_active_intents()
+        global_intents = self.get_global_intents()
+        return (yield from IntentResolver.resolve_cps(
+            active_intents=active_intents + smear_intents,
+            global_intents=global_intents,
+            context=context,
+            execution_context=execution_context,
+        ))
 
     def merge(self, snapshot: "IbIntentContext") -> None:
         """

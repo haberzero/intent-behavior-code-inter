@@ -9,7 +9,6 @@ from core.base.diagnostics.codes import RUN_UNDEFINED_VARIABLE, RUN_TYPE_MISMATC
 from core.kernel.registry import KernelRegistry
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
-from core.kernel.intent_resolver import IntentResolver
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction, IbNone
 from core.runtime.objects.kernel.base import unbox
@@ -885,25 +884,13 @@ class RuntimeContextImpl(RuntimeContext):
         3. 持久意图栈（active_intents via @+）
         4. 全局意图
 
+        实现委托 ``IbIntentContext.resolve_to_prompts``（单一权威源，与
+        dispatch-before-use 路径的快照解析共用同一逻辑）。
+
         ``call_intent`` 为协议预留参数（当前消解逻辑未消费；签名与
         ``IRuntimeContext`` 对齐）。
         """
-        if self._intent_ctx.has_override():
-            pending_override = self._intent_ctx.consume_override()
-            self._intent_ctx.consume_smear()  # discard smear when override is active
-            content = pending_override.resolve_content(self, execution_context)
-            return [content] if content else []
-
-        smear_intents = self._intent_ctx.consume_smear()
-        active_intents = self._intent_ctx.get_active_intents()
-        global_intents = self._intent_ctx.get_global_intents()
-
-        return IntentResolver.resolve(
-            active_intents=active_intents + smear_intents,
-            global_intents=global_intents,
-            context=self,
-            execution_context=execution_context
-        )
+        return self._intent_ctx.resolve_to_prompts(self, execution_context)
 
     def get_resolved_prompt_intents_cps(self, execution_context: Any, call_intent: Optional[Any] = None):
         """CPS 版 :meth:`get_resolved_prompt_intents`；意图内容解析嵌入外层 VM 帧栈。
@@ -911,24 +898,9 @@ class RuntimeContextImpl(RuntimeContext):
         与同步版同语义（override / smear / active / global 优先级与消费逻辑），
         但意图段求值经 ``resolve_content_cps`` / ``IntentResolver.resolve_cps``
         （``yield from``）——消除 ``vm.run`` 同步重入调度循环（任务内同步重入）。
+        实现委托 ``IbIntentContext.resolve_to_prompts_cps``（单一权威源）。
         """
-        if self._intent_ctx.has_override():
-            pending_override = self._intent_ctx.consume_override()
-            self._intent_ctx.consume_smear()  # discard smear when override is active
-            content = yield from pending_override.resolve_content_cps(self, execution_context)
-            return [content] if content else []
-
-        smear_intents = self._intent_ctx.consume_smear()
-        active_intents = self._intent_ctx.get_active_intents()
-        global_intents = self._intent_ctx.get_global_intents()
-
-        resolved = yield from IntentResolver.resolve_cps(
-            active_intents=active_intents + smear_intents,
-            global_intents=global_intents,
-            context=self,
-            execution_context=execution_context
-        )
-        return resolved
+        return (yield from self._intent_ctx.resolve_to_prompts_cps(self, execution_context))
 
     @property
     def current_scope(self) -> Scope:
