@@ -115,3 +115,13 @@
   test_streaming.py 佐证）；`str full = await ai.stream_call("sys","user")` 正常。
 - **级别**：P3（文档签名缺失）。
 - **证据**：cases/D2-35-stream.ibci + logs/D2-35-stream.log。
+
+### DOC-ISSUE-005 — `howto/write_concurrent_tasks.md` thread_result `.value` 属性形态错误
+- **复现**：howto 多处写 `cons.join().value`（期望取到 int 值），且 `print((str)r.value)` 示例；
+  实测 `r.value`（属性）返回 **bound method 对象**（`<Instance of bound_method>`），
+  正确写法是方法 `r.value()`（返回 42）。
+- **文档**：docs/howto/write_concurrent_tasks.md（`r.value` / `join().value` 4 处）vs
+  docs/syntax/14_concurrency.md §14.7（`r.value()` 方法形态，正确）。
+- **实际**：`.value` 属性 = 绑定方法对象；`.value()` 方法 = 值。
+- **级别**：P3（文档错误）。
+- **证据**：cases/D2-42b/42c-threadresult*.ibci + logs/D2-42b/42c.log。
