@@ -321,9 +321,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   跨模块导入三层断裂修复）+ `type()` 内建落地 + 任务控制文档全面重整（任务代号按性质分域）。
 - **线程对象模型方向修正（A-F）** + **通信领域设计完善三阶段** + **收尾 L1-L8 + T2** +
   **代码复核审查（code-review / 健康诊断 / 异味扫描）** + **类型强化** 全部落地（详见 git 历史）。
-- **测试基线**：以实跑为准，不冻结数字（当前 **2138 passed / 1 skipped，0 warning**）。
+- **测试基线**：以实跑为准，不冻结数字（当前 **2137 passed / 1 skipped**）。
 - **分支**：unsafe-vibe-dev（唯一活动分支；main 永不触碰；实验分支 exp/obs-2a/2b/2c/2c2/2d、exp/exec-ra/rb/rc/rd、
-  exp/yield-generator、exp/async-m1m2、exp/async-unify-a 保留未合并）。
+  exp/yield-generator、exp/async-m1m2、exp/async-unify-a、exp/run-batch-cps、exp/refactor-nesting、exp/a5-cps-construct
+  保留供追溯——其中 exp/a5-cps-construct 因零风险已直接合并 unsafe-vibe-dev，其余未合并/部分已手动应用）。
 
 ### 2.3 交接检查单
 
