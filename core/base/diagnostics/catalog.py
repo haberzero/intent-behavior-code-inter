@@ -351,6 +351,47 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="运行时环境限制异常（栈溢出/内存/系统错误）根因保留。",
         fix="按真实根因处理（如提升宿主递归上限、优化内存使用）。",
     ),
+    # ==================== 配置 (CFG_) ====================
+    "CFG_CONFIG_NOT_FOUND": CodeInfo(
+        title="ai.load_config 指定的配置文件不存在。",
+        fix="确认路径正确（相对路径锚定入口文件目录），或创建 api_config.json。",
+    ),
+    "CFG_CONFIG_INVALID_JSON": CodeInfo(
+        title="配置文件不是合法的 JSON。",
+        fix="检查 JSON 语法（引号、逗号、括号配对），可用 JSON 校验工具排查。",
+    ),
+    "CFG_CONFIG_NOT_OBJECT": CodeInfo(
+        title="配置文件顶层不是 JSON 对象（dict）。",
+        fix="配置必须是对象，如 {\"default_model\": {...}}。",
+    ),
+    "CFG_CONFIG_MISSING_DEFAULT": CodeInfo(
+        title="配置缺少 default_model 字段。",
+        fix="添加 default_model 字段（对象形态或命名模型引用字符串）。",
+    ),
+    "CFG_CONFIG_MODEL_NOT_OBJECT": CodeInfo(
+        title="模型条目不是 JSON 对象（dict）。",
+        fix="每个模型条目必须是对象，含 base_url/api_key/model 字段。",
+    ),
+    "CFG_CONFIG_MISSING_FIELD": CodeInfo(
+        title="模型条目缺少必要字段（base_url/api_key/model）。",
+        fix="补全缺失字段；三个字段均为必填。",
+    ),
+    "CFG_CONFIG_INVALID_FIELD_TYPE": CodeInfo(
+        title="配置字段类型错误（如 base_url 不是字符串、timeout 不是数字）。",
+        fix="按字段类型要求修正：base_url/api_key/model 为 str，timeout 为 number，reasoning 为 bool。",
+    ),
+    "CFG_CONFIG_UNKNOWN_MODEL_REF": CodeInfo(
+        title="default_model 引用的命名模型在 named_models 中不存在。",
+        fix="确认 default_model 字符串与 named_models 的键名一致（区分大小写）。",
+    ),
+    "CFG_CONFIG_UNKNOWN_PROVIDER": CodeInfo(
+        title="模型引用的 provider 在 providers 中不存在。",
+        fix="确认 model 的 provider 字段与 providers 的键名一致（区分大小写）。",
+    ),
+    "CFG_CONFIG_ENV_VAR_MISSING": CodeInfo(
+        title="配置中 {env:VAR} 引用的环境变量未设置。",
+        fix="设置对应环境变量，或移除该 {env:VAR} 引用改为直接写值。",
+    ),
 }
 
 

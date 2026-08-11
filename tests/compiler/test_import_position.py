@@ -16,7 +16,7 @@ class TestImportPositionEnforcement:
         code = (
             "import ai\n"
             "import idbg\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             'str x = "hello"\n'
             "print(x)\n"
         )
@@ -27,7 +27,7 @@ class TestImportPositionEnforcement:
     def test_import_after_statement_reports_dep_003(self):
         code = (
             "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             'str x = "hello"\n'
             "print(x)\n"
             "import idbg\n"
@@ -37,7 +37,7 @@ class TestImportPositionEnforcement:
     def test_from_import_after_statement_reports_dep_003(self):
         code = (
             "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             'str x = "hello"\n'
             "print(x)\n"
             "from idbg import show_intents\n"
@@ -47,7 +47,7 @@ class TestImportPositionEnforcement:
     def test_misplaced_import_not_reported_as_sem_001(self):
         code = (
             "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             'str x = "hello"\n'
             "import idbg\n"
         )
@@ -61,7 +61,7 @@ class TestImportPositionEnforcement:
             "\n"
             "# more comments\n"
             "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             'print("ok")\n'
         )
         artifact, errors = compile_or_errors(code)
@@ -80,7 +80,7 @@ class TestImportPositionEnforcement:
     def test_correct_imports_followed_by_other_imports_after_code_reports_only_misplaced(self):
         code = (
             "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             'print("a")\n'
             "import idbg\n"
             'print("b")\n'

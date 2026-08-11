@@ -2,7 +2,7 @@
 
 > 用户 2026-08-11 提出：当前 api_config.json 内容结构/形式/机制都太简陋，结合 opencode.json 配置模式，
 > 思考 json 文件改进 + 对应 IBCI 语法/功能层面改进，使配置机制功能完备可行。
-> 本文件为设计权威；落地后按 doc-governance 收敛写入技术手册。
+> 本文件为设计权威；**C1-C7 已全部落地（2026-08-11，unsafe-vibe-dev，全量 2161 passed / 1 skipped）**，落地后按 doc-governance 收敛写入技术手册。
 
 ## 一、现状分析（代码核实）
 

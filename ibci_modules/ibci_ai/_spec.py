@@ -26,6 +26,21 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                 ],
                 "return_type": "void",
             },
+            "load_config": {
+                "params": [{"name": "path", "type": "str"}],
+                "return_type": "void",
+                "description": "从 api_config.json 加载配置（原生入口，替代脚本手动 file/json.parse）",
+            },
+            "apply_config": {
+                "params": [{"name": "config", "type": "dict"}],
+                "return_type": "void",
+                "description": "应用结构化配置 dict（defaults + default_model + models）",
+            },
+            "set_mock_mode": {
+                "params": [],
+                "return_type": "void",
+                "description": "显式进入 MOCK 测试模式（替代 url/key 字符串嗅探）",
+            },
             "register_model": {
                 "params": [
                     {"name": "name", "type": "str"},

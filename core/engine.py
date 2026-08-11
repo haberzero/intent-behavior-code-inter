@@ -313,7 +313,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 result.append(p)
         return result
 
-    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, entry_file: str = None, entry_dir: str = None) -> Interpreter:
+    def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, entry_file: str = None, entry_dir: str = None, project_root: str = None) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
         instance_id = self.rt_scheduler.spawn(
             artifact=artifact,
@@ -329,6 +329,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             input_callback=None,
             entry_file=entry_file,
             entry_dir=entry_dir,
+            project_root=project_root,
             capability_registry=self.capability_registry
         )
         return self.rt_scheduler.instances[instance_id]
@@ -338,6 +339,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # entry_dir 从 PathContext（锚点容器）读取——保证其始终有意义：
         # run → entry_file.parent；run_string → project_root。
         _ctx_entry_dir = self._path_ctx.entry_dir.to_native() if self._path_ctx else None
+        _ctx_project_root = self._path_ctx.project_root.to_native() if self._path_ctx else None
         self.interpreter = self.spawn_interpreter(
             artifact=artifact,
             registry=self.registry,
@@ -345,7 +347,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             root_dir=self.root_dir,
             parent_context=None,
             entry_file=self._entry_file,
-            entry_dir=_ctx_entry_dir
+            entry_dir=_ctx_entry_dir,
+            project_root=_ctx_project_root
         )
         
         # Post-construction wiring: inject orchestrator and output_callback into ServiceContext.

@@ -25,7 +25,7 @@ from tests.conftest import run_ibci
 _MEDIA_PREFIX = (
     'import ai\n'
     'import file\n'
-    'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+    'ai.set_mock_mode()\n'
 )
 
 

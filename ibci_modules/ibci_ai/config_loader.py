@@ -1,0 +1,326 @@
+"""api_config.json 加载与校验器。
+
+把 api_config.json 从"脚本级约定"提升为 ai 模块原生一等机制：``ai.load_config``
+与引擎自动加载经本模块读取、解析、校验配置，失败时 fail-fast（带 CFG_ 诊断码），
+不静默回退 mock。
+
+schema（完备形态）::
+
+    {
+      "defaults": {                       # 可选；全局默认
+        "timeout": 30.0,                  # number（默认 30.0）
+        "retry": 3,                       # int（默认 3）
+        "auto_intent_injection": true,    # bool（默认 true）
+        "mock": false                     # bool（默认 false；显式 mock 声明，替代字符串嗅探）
+      },
+      "providers": {                      # 可选；连接层（base_url + api_key）
+        "ollama": { "base_url": "http://localhost:11434/v1", "api_key": "{env:OLLAMA_KEY}" }
+      },
+      "models": {                         # 可选；命名模型（引用 provider + 模型名 + 每模型参数）
+        "default": { "provider": "ollama", "model": "qwen3-8b", "reasoning": false },
+        "local":   { "provider": "ollama", "model": "qwen3-8b", "timeout": 60.0 }
+      },
+      "default_model": "default"          # 必需；字符串引用 models，或对象形态（直接含连接信息）
+    }
+
+兼容旧式（无 providers/models，直接 default_model 对象）::
+
+    { "default_model": { "base_url": "...", "api_key": "...", "model": "..." } }
+
+env 引用：``{env:VAR}`` 在 providers/models 的 base_url/api_key 字段加载时解析，
+变量不存在 fail-fast（CFG_CONFIG_ENV_VAR_MISSING）。
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+from typing import Any, Dict
+
+from core.base.diagnostics.codes import (
+    CFG_CONFIG_ENV_VAR_MISSING,
+    CFG_CONFIG_INVALID_FIELD_TYPE,
+    CFG_CONFIG_INVALID_JSON,
+    CFG_CONFIG_MISSING_DEFAULT,
+    CFG_CONFIG_MISSING_FIELD,
+    CFG_CONFIG_MODEL_NOT_OBJECT,
+    CFG_CONFIG_NOT_FOUND,
+    CFG_CONFIG_NOT_OBJECT,
+    CFG_CONFIG_UNKNOWN_MODEL_REF,
+    CFG_CONFIG_UNKNOWN_PROVIDER,
+)
+from core.kernel.issue import InterpreterError
+
+_ENV_PATTERN = re.compile(r"\{env:([A-Z_][A-Z0-9_]*)\}")
+
+_DEFAULT_TIMEOUT = 30.0
+_DEFAULT_RETRY = 3
+_DEFAULT_AUTO_INTENT = True
+_DEFAULT_MOCK = False
+_DEFAULT_REASONING = False
+
+
+def _resolve_env(value: Any, context: str) -> str:
+    """解析 ``{env:VAR}`` 引用；非字符串原样透传，VAR 不存在 fail-fast。"""
+    if not isinstance(value, str):
+        return value
+
+    def _sub(m: "re.Match[str]") -> str:
+        var = m.group(1)
+        if var not in os.environ:
+            raise InterpreterError(
+                f"{context}: 环境变量 '{var}' 未设置",
+                error_code=CFG_CONFIG_ENV_VAR_MISSING,
+            )
+        return os.environ[var]
+
+    return _ENV_PATTERN.sub(_sub, value)
+
+
+class ApiConfig:
+    """``api_config.json`` 加载与校验器（单一职责：读取 + 解析 + 校验 + env 解析）。
+
+    路径解析由调用方（``AIPlugin.load_config`` / 引擎自动加载）负责；
+    本类只处理已定位的文件或已加载的 dict。
+    """
+
+    @classmethod
+    def load(cls, path: str) -> Dict[str, Any]:
+        """读取 + 解析 + 校验 ``api_config.json``，返回结构化配置 dict。
+
+        失败 raise ``InterpreterError(error_code=CFG_xxx)``（fail-fast）。
+        """
+        if not os.path.isfile(path):
+            raise InterpreterError(
+                f"配置文件不存在: {path}",
+                error_code=CFG_CONFIG_NOT_FOUND,
+            )
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise InterpreterError(
+                f"配置文件 JSON 解析失败: {path}: {e}",
+                error_code=CFG_CONFIG_INVALID_JSON,
+            ) from e
+        return cls.validate(data)
+
+    @classmethod
+    def validate(cls, data: Any) -> Dict[str, Any]:
+        """校验配置 schema，返回结构化配置 dict。
+
+        返回结构：``{"defaults": {...}, "default_model": {...}, "models": {NAME: {...}}}``。
+        每个模型 dict 已解析 env 引用、补全默认值（timeout/reasoning）。
+        """
+        if not isinstance(data, dict):
+            raise InterpreterError(
+                "配置顶层必须是 JSON 对象",
+                error_code=CFG_CONFIG_NOT_OBJECT,
+            )
+
+        defaults = cls._validate_defaults(data.get("defaults"))
+        providers = cls._validate_providers(data.get("providers"))
+        models = cls._validate_models(data.get("models"), providers, defaults)
+
+        if "default_model" not in data:
+            raise InterpreterError(
+                "配置缺少 default_model 字段",
+                error_code=CFG_CONFIG_MISSING_DEFAULT,
+            )
+
+        dm = data["default_model"]
+        if isinstance(dm, str):
+            if dm not in models:
+                raise InterpreterError(
+                    f"default_model 引用的命名模型 '{dm}' 不存在",
+                    error_code=CFG_CONFIG_UNKNOWN_MODEL_REF,
+                )
+            default_model = models[dm]
+        elif isinstance(dm, dict):
+            default_model = cls._validate_model_entry(dm, "default_model", providers, defaults)
+        else:
+            raise InterpreterError(
+                "default_model 必须是对象或命名模型引用字符串",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+
+        return {
+            "defaults": defaults,
+            "default_model": default_model,
+            "models": models,
+        }
+
+    @classmethod
+    def _validate_defaults(cls, raw: Any) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "timeout": _DEFAULT_TIMEOUT,
+            "retry": _DEFAULT_RETRY,
+            "auto_intent_injection": _DEFAULT_AUTO_INTENT,
+            "mock": _DEFAULT_MOCK,
+        }
+        if raw is None:
+            return result
+        if not isinstance(raw, dict):
+            raise InterpreterError(
+                "defaults 必须是 JSON 对象",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        cls._check_number(raw, "defaults", "timeout", result)
+        cls._check_int(raw, "defaults", "retry", result)
+        cls._check_bool(raw, "defaults", "auto_intent_injection", result)
+        cls._check_bool(raw, "defaults", "mock", result)
+        return result
+
+    @classmethod
+    def _validate_providers(cls, raw: Any) -> Dict[str, Dict[str, Any]]:
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            raise InterpreterError(
+                "providers 必须是 JSON 对象",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        result: Dict[str, Dict[str, Any]] = {}
+        for name, prov in raw.items():
+            if not isinstance(prov, dict):
+                raise InterpreterError(
+                    f"providers.{name} 必须是 JSON 对象",
+                    error_code=CFG_CONFIG_MODEL_NOT_OBJECT,
+                )
+            for field in ("base_url", "api_key"):
+                if field not in prov:
+                    raise InterpreterError(
+                        f"providers.{name} 缺少必要字段 {field}",
+                        error_code=CFG_CONFIG_MISSING_FIELD,
+                    )
+                if not isinstance(prov[field], str):
+                    raise InterpreterError(
+                        f"providers.{name}.{field} 必须是字符串",
+                        error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                    )
+            result[name] = {
+                "base_url": _resolve_env(prov["base_url"], f"providers.{name}.base_url"),
+                "api_key": _resolve_env(prov["api_key"], f"providers.{name}.api_key"),
+            }
+        return result
+
+    @classmethod
+    def _validate_models(
+        cls, raw: Any, providers: Dict[str, Dict[str, Any]], defaults: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            raise InterpreterError(
+                "models 必须是 JSON 对象",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        result: Dict[str, Dict[str, Any]] = {}
+        for name, model in raw.items():
+            result[name] = cls._validate_model_entry(model, f"models.{name}", providers, defaults)
+        return result
+
+    @classmethod
+    def _validate_model_entry(
+        cls, model: Any, context: str, providers: Dict[str, Dict[str, Any]], defaults: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        if not isinstance(model, dict):
+            raise InterpreterError(
+                f"{context} 必须是 JSON 对象",
+                error_code=CFG_CONFIG_MODEL_NOT_OBJECT,
+            )
+
+        if "model" not in model:
+            raise InterpreterError(
+                f"{context} 缺少必要字段 model",
+                error_code=CFG_CONFIG_MISSING_FIELD,
+            )
+        if not isinstance(model["model"], str):
+            raise InterpreterError(
+                f"{context}.model 必须是字符串",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        result: Dict[str, Any] = {"model": model["model"]}
+
+        # 连接信息：provider 引用 或 直接 base_url/api_key
+        if "provider" in model:
+            prov_name = model["provider"]
+            if not isinstance(prov_name, str):
+                raise InterpreterError(
+                    f"{context}.provider 必须是字符串",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            if prov_name not in providers:
+                raise InterpreterError(
+                    f"{context} 引用的 provider '{prov_name}' 不存在",
+                    error_code=CFG_CONFIG_UNKNOWN_PROVIDER,
+                )
+            result["base_url"] = providers[prov_name]["base_url"]
+            result["api_key"] = providers[prov_name]["api_key"]
+        else:
+            for field in ("base_url", "api_key"):
+                if field not in model:
+                    raise InterpreterError(
+                        f"{context} 缺少必要字段 {field}（或 provider 引用）",
+                        error_code=CFG_CONFIG_MISSING_FIELD,
+                    )
+                if not isinstance(model[field], str):
+                    raise InterpreterError(
+                        f"{context}.{field} 必须是字符串",
+                        error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                    )
+            result["base_url"] = _resolve_env(model["base_url"], f"{context}.base_url")
+            result["api_key"] = _resolve_env(model["api_key"], f"{context}.api_key")
+
+        # timeout（可选，覆盖 defaults）
+        timeout = model.get("timeout", defaults["timeout"])
+        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool):
+            raise InterpreterError(
+                f"{context}.timeout 必须是数字",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        result["timeout"] = float(timeout)
+
+        # reasoning（可选，默认 false）
+        reasoning = model.get("reasoning", _DEFAULT_REASONING)
+        if not isinstance(reasoning, bool):
+            raise InterpreterError(
+                f"{context}.reasoning 必须是布尔值",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        result["reasoning"] = reasoning
+
+        return result
+
+    @staticmethod
+    def _check_number(raw: Dict[str, Any], ctx: str, key: str, out: Dict[str, Any]) -> None:
+        if key in raw:
+            v = raw[key]
+            if not isinstance(v, (int, float)) or isinstance(v, bool):
+                raise InterpreterError(
+                    f"{ctx}.{key} 必须是数字",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            out[key] = float(v)
+
+    @staticmethod
+    def _check_int(raw: Dict[str, Any], ctx: str, key: str, out: Dict[str, Any]) -> None:
+        if key in raw:
+            v = raw[key]
+            if not isinstance(v, int) or isinstance(v, bool):
+                raise InterpreterError(
+                    f"{ctx}.{key} 必须是整数",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            out[key] = v
+
+    @staticmethod
+    def _check_bool(raw: Dict[str, Any], ctx: str, key: str, out: Dict[str, Any]) -> None:
+        if key in raw:
+            v = raw[key]
+            if not isinstance(v, bool):
+                raise InterpreterError(
+                    f"{ctx}.{key} 必须是布尔值",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            out[key] = v

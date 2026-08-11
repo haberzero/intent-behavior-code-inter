@@ -22,7 +22,7 @@ IBCI 的 MOCK 模式让你无需 API key、无需网络即可测试 LLM 逻辑�
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 ```
 
 配置后，所有 `@~ ... ~` 行为表达式和 LLM 函数调用都不会连接真实 API，而是**在表达式或 `__user__` 块中查找 MOCK 指令，直接返回预设值**。
@@ -35,7 +35,7 @@ MOCK 指令写在行为表达式中，用 `MOCK:类型:值` 格式：
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 str reply = @~ MOCK:STR:hello world ~
 print(reply)          # hello world
@@ -70,7 +70,7 @@ if @~ MOCK:FALSE 另一个条件 ~:
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 llm 翻译(str 文本, str 目标语言) -> str:
 __sys__
@@ -93,7 +93,7 @@ print(r)                     # 翻译结果
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 # 无需真实注册，MOCK 模式直接截获
 str result = @GPT4o~ MOCK:STR:来自 GPT4o 的 mock 结果 ~
@@ -108,7 +108,7 @@ print(result)
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 try:
     int r = @~ MOCK:FAIL ~
@@ -133,7 +133,7 @@ print((str)result)                     # 99
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 # 第一次返回 "通过"，第二次返回 "优秀"，第三次返回 "不合格"
 str s1 = @~ MOCK:SEQ:[通过,优秀,不合格] evaluation ~
@@ -156,7 +156,7 @@ print(s3)   # 不合格
 ```ibci
 import ai
 import idbg
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 @+ 用简洁的语言回答
 str r = @~ MOCK:STR:hello ~

@@ -18,7 +18,7 @@ from tests.conftest import run_ibci, compile_or_errors, expect_runtime_error
 
 # 文件内核测试专用前缀（含 `import file`；独立于 conftest 的 AI_MOCK_PREFIX，
 # 避免同名遮蔽）。
-FILE_MOCK_PREFIX = 'import ai\nimport file\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+FILE_MOCK_PREFIX = 'import ai\nimport file\nai.set_mock_mode()\n'
 
 
 def _write_media(tmp_path, filename: str, payload: bytes = b"fake_media_payload"):

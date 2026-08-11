@@ -70,7 +70,8 @@ class RuntimeSchedulerImpl:
             instance_id=instance_id,
             strict_mode=kwargs.get('strict_mode', True),
             entry_file=kwargs.get('entry_file'),
-            entry_dir=kwargs.get('entry_dir')
+            entry_dir=kwargs.get('entry_dir'),
+            project_root=kwargs.get('project_root')
         )
 
         # 4. 装配 ServiceContext（延迟注入，打破循环依赖）

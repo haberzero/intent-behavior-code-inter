@@ -80,7 +80,7 @@ class TestDriveUnification:
 
         lines = run_ibci(
             "import ai\n"
-            "ai.set_config(\"TESTONLY\", \"TESTONLY\", \"TESTONLY\")\n"
+            "ai.set_mock_mode()\n"
             "chan c = chan(str, \"message\")\n"
             "func work(chan x) -> int:\n"
             "    str m = x.recv()\n"
@@ -99,7 +99,7 @@ class TestDriveUnification:
 
         lines = run_ibci(
             "import ai\n"
-            "ai.set_config(\"TESTONLY\", \"TESTONLY\", \"TESTONLY\")\n"
+            "ai.set_mock_mode()\n"
             "func countdown(int n) -> int:\n"
             "    if n <= 0:\n"
             "        return 0\n"

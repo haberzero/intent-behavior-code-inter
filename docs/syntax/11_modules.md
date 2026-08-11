@@ -60,22 +60,28 @@ import net     # 网络
 
 ### 11.3 ai 模块
 
+引擎启动时自动加载 `project_root/api_config.json`（若存在）。代码中也可显式加载或配置：
+
 ```ibci
 import ai
 
-ai.set_config("https://api.example.com", "API_KEY", "model-name")
+# 配置入口（三选一）
+ai.load_config("./api_config.json")              # 从文件加载（原生入口）
+ai.apply_config({"default_model": {...}})         # 应用结构化 dict
+ai.set_config(url, key, model)                    # 低级位置参数配置
+
 ai.set_retry(3)           # 设置重试次数（默认 3）
 ai.set_timeout(30)        # 设置超时（秒）
 ai.register_model(name, url, key, model)   # 注册命名模型（供 @NAME~ 路由）
 ```
 
-其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`stream()`、`mask(pattern)` 等。
-
-TESTONLY 模式（结合 MOCK 指令使用）：
+MOCK 模式（离线测试/开发，结合 MOCK 指令使用）：
 
 ```ibci
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()        # 显式进入 MOCK 模式（替代 url/key 字符串嗅探）
 ```
+
+其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`stream_call()`、`stream_channel()`、`mask(pattern)` 等。
 
 ### 11.4 isys 模块
 

@@ -186,7 +186,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 - **当前最紧要（下一 session 起点，用户 2026-08-11 定案）**：**真实 LLM e2e 全面试用 + 高强度批判检测**
   （`tasks_docs/_REAL_LLM_E2E_PLAN.md`）+ **unsafe-vibe-dev 合并取代 main 规划**（`tasks_docs/_MAIN_MERGE_PLAN.md`）。
   按序：
-  0. **（前置）PT-FEAT-13 C1-C3 配置机制完备化**（`_API_CONFIG_DESIGN.md`）：原生配置加载 + `set_config` 结构化 +
+  0. **（前置）PT-FEAT-13 C1-C7 配置机制完备化（已完成 2026-08-11，全量 2161/1）**（`_API_CONFIG_DESIGN.md`）：原生配置加载 + `set_config` 结构化 +
      配置校验诊断——使本地非思考模型端点配置成为一等机制（替代每脚本 `file/json.parse/set_config` 约定）。
   1. **本地 LLM 服务就绪**：起 Ollama/LM Studio 等 OpenAI 兼容端点（**非思考模型**，防反思死循环）；
      用新原生配置声明 `providers.ollama` + `models.local(reasoning:false)`；最小探针验证连通。

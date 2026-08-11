@@ -223,6 +223,7 @@ def _run_task_body(
         strict_mode=True,
         entry_file=main_ec.get_entry_path(),
         entry_dir=main_ec.get_entry_dir(),
+        project_root=main_ec.get_project_root(),
     )
     task_ec.runtime_context = task_rt
     task_ec.node_pool = main_ec.node_pool

@@ -31,7 +31,8 @@ class ExecutionContextImpl:
                  module_manager: Any = None,
                  strict_mode: bool = False,
                  entry_file: str = None,
-                 entry_dir: str = None):
+                 entry_dir: str = None,
+                 project_root: str = None):
         self._node_pool: Mapping[str, Any] = {}
         self._symbol_pool: Mapping[str, Any] = {}
         self._scope_pool: Mapping[str, Any] = {}
@@ -46,6 +47,7 @@ class ExecutionContextImpl:
         self._strict_mode = strict_mode
         self._entry_file = entry_file
         self._entry_dir = entry_dir
+        self._project_root = project_root
         # 规范路径解析器（entry_dir 单锚点）。
         self._path_resolver = PathResolver(
             entry_dir=IbPath.from_native(entry_dir) if entry_dir else None
@@ -313,6 +315,10 @@ class ExecutionContextImpl:
     def get_entry_dir(self) -> Optional[str]:
         """获取入口文件目录"""
         return self._entry_dir
+
+    def get_project_root(self) -> Optional[str]:
+        """获取项目根目录（沙箱边界 + 配置加载锚点）。"""
+        return self._project_root
 
     def resolve_path(self, path: str) -> IbPath:
         """

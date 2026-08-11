@@ -154,17 +154,20 @@ pip install -e .
 
 创建一个独立的目标文件夹，例如`test_target_proj`
 
-在目标文件夹下创建一个 `api_config.json`，填写信息：
+在目标文件夹下创建一个 `api_config.json`（引擎启动时自动加载），填写信息：
 
 ```json
 {
     "default_model": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key": "这里填你刚才复制的 API-KEY",
-        "model": "qwen3-30b-a3b"
+        "model": "qwen3-30b-a3b",
+        "reasoning": false
     }
 }
 ```
+
+> 配置支持 `providers`/`models`/`defaults` 分层、`{env:VAR}` 环境变量引用、`mock:true` 显式 MOCK 模式等。完整 schema 见 `docs/guide/01_setup.md`。
 
 复制`examples/01_getting_started/01_hello_world.ibci`到`test_target_proj`
 

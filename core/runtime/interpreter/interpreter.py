@@ -125,8 +125,9 @@ class Interpreter:
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None,
                  kernel_token: Optional[Any] = None,
                  instance_id: str = "main",
-                 entry_file: str = None,
-                 entry_dir: str = None):
+                  entry_file: str = None,
+                  entry_dir: str = None,
+                  project_root: str = None):
         
         # 0. 启动内核引导
         self._registry = registry or KernelRegistry()
@@ -152,7 +153,8 @@ class Interpreter:
             resolve_value_callback=self._resolve_value,
             strict_mode=strict_mode,
             entry_file=entry_file,
-            entry_dir=entry_dir
+            entry_dir=entry_dir,
+            project_root=project_root
         )
 
         # 注册执行上下文引用到 Registry，底层仅持有该容器

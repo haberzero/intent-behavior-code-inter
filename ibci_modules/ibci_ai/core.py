@@ -3,13 +3,13 @@ import re
 import time
 from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
+from core.kernel.issue import InterpreterError
 from core.runtime.capability_registry import CapabilityRegistry
 
 from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine
+from ibci_modules.ibci_ai.config_loader import ApiConfig
 
-# MOCK 模式判定与哨兵常量（统一字面量，供配置比对）
-MOCK_CONFIG_URL = "TESTONLY"
-MOCK_CONFIG_KEY = "MOCK_KEY"
+# MOCK 模式哨兵（显式声明进入：_config["mock"]=True 或 env IBC_TEST_MODE=1；不嗅探 url/key）
 MOCK_CLIENT_SENTINEL = "MOCK_CLIENT"
 _MOCK_TEST_MODE_ENV = "IBC_TEST_MODE"
 
@@ -41,7 +41,8 @@ class AIPlugin(IbStatefulPlugin):
             "model": None,
             "retry": 3,
             "timeout": 30.0,
-            "auto_intent_injection": True
+            "auto_intent_injection": True,
+            "mock": False,
         }
         # 命名模型注册表：用于 @NAME~ 语法的模型路由
         # 格式: { "NAME": {"url": ..., "key": ..., "model": ..., "timeout": ...} }
@@ -69,15 +70,6 @@ class AIPlugin(IbStatefulPlugin):
         self._unprobed_warned = False
 
     @staticmethod
-    def _is_test_config(url: Optional[str], key: Optional[str]) -> bool:
-        """TESTONLY / MOCK 模式统一判定。"""
-        return (
-            url == MOCK_CONFIG_URL
-            or key == MOCK_CONFIG_KEY
-            or os.environ.get(_MOCK_TEST_MODE_ENV) == "1"
-        )
-
-    @staticmethod
     def _extract_reasoning(message: Any) -> Optional[str]:
         """从 provider 消息对象提取推理字段（reasoning / reasoning_content）。
 
@@ -90,13 +82,22 @@ class AIPlugin(IbStatefulPlugin):
         return reasoning
 
     def _is_test_mode(self) -> bool:
-        """当前默认配置是否处于 MOCK 测试模式。"""
-        return self._is_test_config(self._config.get("url"), self._config.get("key"))
+        """当前是否处于 MOCK 测试模式（显式声明：``_config["mock"]`` 或 env ``IBC_TEST_MODE``）。"""
+        return bool(self._config.get("mock", False)) or os.environ.get(_MOCK_TEST_MODE_ENV) == "1"
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
         # 向能力注册表注册自己为 LLM Provider
         capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
+        # 引擎自动加载 project_root/api_config.json（原生一等机制，零脚本代码）
+        ec = capabilities.execution_context
+        if ec is not None:
+            project_root = ec.get_project_root()
+            if project_root:
+                config_path = os.path.join(project_root, "api_config.json")
+                if os.path.isfile(config_path):
+                    config = ApiConfig.load(config_path)
+                    self.apply_config(config)
 
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""
@@ -126,6 +127,7 @@ class AIPlugin(IbStatefulPlugin):
         self._config["url"] = url
         self._config["key"] = key
         self._config["model"] = model
+        self._config["mock"] = False  # 显式 set_config 退出 mock 模式
 
         if "auto_intent_injection" in kwargs:
             self._config["auto_intent_injection"] = bool(kwargs["auto_intent_injection"])
@@ -134,6 +136,72 @@ class AIPlugin(IbStatefulPlugin):
         self._model_capabilities["probed"] = False
         self._unprobed_warned = False
         self._init_client()
+
+    def set_mock_mode(self) -> None:
+        """显式进入 MOCK 测试模式（替代 url/key 字符串嗅探）。
+
+        MOCK 模式下 LLM 调用经 ``MockScenarioEngine`` 处理（``MOCK:xxx`` 指令语言），
+        不发起真实网络请求。测试与离线开发用。
+        """
+        self._config["mock"] = True
+        self._client = MOCK_CLIENT_SENTINEL
+        self._model_capabilities["probed"] = True
+        self._model_capabilities["is_reasoning"] = False
+        self._model_capabilities["extract_strategy"] = "standard"
+        self._unprobed_warned = False
+
+    def load_config(self, path: str) -> None:
+        """从 ``api_config.json`` 加载配置并应用（原生一等入口）。
+
+        替代脚本手动 ``file.exists/json.parse/set_config`` 约定。``path`` 相对
+        于入口文件目录解析；文件不存在或格式错误 fail-fast（带 CFG_ 诊断码，
+        不静默回退 mock）。
+        """
+        if self._capabilities is None or self._capabilities.execution_context is None:
+            raise InterpreterError(
+                "ai.load_config: 执行上下文不可用，无法解析配置路径"
+            )
+        abs_path = self._capabilities.execution_context.resolve_path(path).to_native()
+        config = ApiConfig.load(abs_path)
+        self.apply_config(config)
+
+    def apply_config(self, config) -> None:
+        """应用结构化配置 dict（``defaults`` + ``default_model`` + ``models``）。
+
+        ``config`` 为 api_config.json 解析后的 dict（或 IBCI dict 经 unbox 后的
+        Python dict）。经 ``ApiConfig.validate`` 校验 + 规范化后应用：
+
+        - ``defaults`` -> retry / auto_intent_injection / mock 全局默认
+        - ``default_model`` -> ``set_config`` + timeout + reasoning 声明（或 mock 模式）
+        - ``models`` -> 逐个 ``register_model``（供 ``@NAME~`` 路由）
+
+        ``defaults.mock:true`` 进入 mock 模式；``default_model.reasoning:false`` 声明
+        非思考模型，跳过 ``probe_model`` 直接按标准指令模型处理。
+        """
+        validated = ApiConfig.validate(config)
+        defaults = validated["defaults"]
+        self._config["retry"] = defaults["retry"]
+        self._config["auto_intent_injection"] = defaults["auto_intent_injection"]
+
+        dm = validated["default_model"]
+        self._config["timeout"] = dm["timeout"]
+
+        if defaults["mock"]:
+            self.set_mock_mode()
+            self._config["model"] = dm["model"]
+        else:
+            self.set_config(dm["base_url"], dm["api_key"], dm["model"])
+            if not dm["reasoning"]:
+                self._model_capabilities["probed"] = True
+                self._model_capabilities["is_reasoning"] = False
+                self._model_capabilities["extract_strategy"] = "standard"
+                self._unprobed_warned = False
+
+        for name, model in validated["models"].items():
+            self.register_model(
+                name, model["base_url"], model["api_key"], model["model"],
+                timeout=model["timeout"],
+            )
 
     def register_model(self, name: str, url: str, key: str, model: str, **kwargs) -> None:
         """注册命名模型配置，用于 @NAME~ 语法的模型路由。
@@ -170,11 +238,6 @@ class AIPlugin(IbStatefulPlugin):
                 f"未注册的命名模型 '{name}'。请先使用 ai.register_model(\"{name}\", url, key, model) 注册。"
             )
 
-        is_test_mode = self._is_test_config(config["url"], config["key"])
-        if is_test_mode:
-            self._named_clients[name] = MOCK_CLIENT_SENTINEL
-            return MOCK_CLIENT_SENTINEL
-
         try:
             from openai import OpenAI
             base_url = config["url"]
@@ -191,11 +254,10 @@ class AIPlugin(IbStatefulPlugin):
             raise RuntimeError(f"命名模型 '{name}' 的 OpenAI 客户端初始化失败: {str(e)}")
 
     def has_api_key(self) -> bool:
-        """检查是否已配置 API 密钥"""
-        key = self._config.get("key", "")
-        url = self._config.get("url", "")
-        model = self._config.get("model", "")
-        return bool(key and url and model)
+        """检查是否已配置 API 密钥（MOCK 模式视为已就绪）。"""
+        if self._config.get("mock", False):
+            return True
+        return bool(self._config.get("key") and self._config.get("url") and self._config.get("model"))
 
     def probe_model(self) -> str:
         """

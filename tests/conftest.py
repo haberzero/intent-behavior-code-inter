@@ -16,7 +16,7 @@ Helpers:
 - ``expect_runtime_error(code, error_pattern, *, prefix="", ai=False, root_dir=None)``
 
 Constants:
-- ``AI_MOCK_PREFIX`` — 标准 ``import ai`` + ``set_config(TESTONLY,...)`` 前缀（单点真理）
+- ``AI_MOCK_PREFIX`` — 标准 ``import ai`` + ``set_mock_mode()`` 前缀（单点真理）
 - ``REPO_ROOT`` / ``TESTS_ROOT``
 
 Fixtures:
@@ -72,7 +72,7 @@ def pytest_configure(config):
 # AI mock prefix — single source of truth
 # ---------------------------------------------------------------------------
 
-AI_MOCK_PREFIX = 'import ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+AI_MOCK_PREFIX = 'import ai\nai.set_mock_mode()\n'
 
 
 # ---------------------------------------------------------------------------

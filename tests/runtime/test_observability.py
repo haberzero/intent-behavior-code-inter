@@ -92,7 +92,7 @@ print(e)
             "str r = @~ MOCK:STR:hello ~\n"
             "dict e = ev.recv()\n"
             "print(e)\n",
-            prefix='import iruntime\nimport ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n',
+            prefix='import iruntime\nimport ai\nai.set_mock_mode()\n',
         )
         assert len(lines) == 1
         assert "llm" in lines[0]

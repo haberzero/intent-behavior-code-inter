@@ -32,7 +32,7 @@ def _run_code(code: str):
 
 AI_SETUP = (
     'import ai\n'
-    'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+    'ai.set_mock_mode()\n'
 )
 
 

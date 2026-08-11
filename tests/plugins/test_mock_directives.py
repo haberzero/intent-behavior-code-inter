@@ -15,7 +15,7 @@ from ibci_modules.ibci_ai.core import AIPlugin
 def mock_plugin():
     """创建一个处于 TESTONLY mock 模式的 AIPlugin 实例。"""
     plugin = AIPlugin()
-    plugin.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+    plugin.set_mock_mode()
     return plugin
 
 

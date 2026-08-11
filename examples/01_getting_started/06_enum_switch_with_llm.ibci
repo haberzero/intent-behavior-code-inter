@@ -13,7 +13,7 @@
 import ai
 import idbg
 
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 # ============================================================
 # 1. 定义 Mood 枚举

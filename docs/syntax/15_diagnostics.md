@@ -513,3 +513,67 @@ LLM 调用失败（网络/密钥/提供者错误）。
 - **触发条件**：`RecursionError`/`MemoryError`/`SystemError` 被判定为环境限制异常。
 - **严重级别**：WARNING。
 - **修复方式**：按真实根因处理（如提升宿主递归上限、优化内存使用）。
+
+## 配置（CFG_）
+
+`api_config.json` 加载与校验失败的诊断码（`ai.load_config` / `ai.apply_config` / 引擎自动加载）。校验失败 fail-fast raise `InterpreterError`，不静默回退 mock。
+
+### `CFG_CONFIG_NOT_FOUND`
+`ai.load_config` 指定的配置文件不存在。
+- **触发条件**：load_config 的路径下无 api_config.json。
+- **严重级别**：ERROR。
+- **修复方式**：确认路径正确（相对路径锚定入口文件目录），或创建 api_config.json。
+
+### `CFG_CONFIG_INVALID_JSON`
+配置文件不是合法的 JSON。
+- **触发条件**：api_config.json 内容 JSON 解析失败。
+- **严重级别**：ERROR。
+- **修复方式**：检查 JSON 语法（引号、逗号、括号配对）。
+
+### `CFG_CONFIG_NOT_OBJECT`
+配置文件顶层不是 JSON 对象（dict）。
+- **触发条件**：api_config.json 顶层非对象。
+- **严重级别**：ERROR。
+- **修复方式**：配置必须是对象，如 `{"default_model": {...}}`。
+
+### `CFG_CONFIG_MISSING_DEFAULT`
+配置缺少 default_model 字段。
+- **触发条件**：api_config.json 无 default_model 字段。
+- **严重级别**：ERROR。
+- **修复方式**：添加 default_model 字段（对象形态或命名模型引用字符串）。
+
+### `CFG_CONFIG_MODEL_NOT_OBJECT`
+模型条目不是 JSON 对象（dict）。
+- **触发条件**：default_model 或 models 的某条目非对象。
+- **严重级别**：ERROR。
+- **修复方式**：每个模型条目必须是对象，含 base_url/api_key/model（或 provider 引用）。
+
+### `CFG_CONFIG_MISSING_FIELD`
+模型条目缺少必要字段（base_url/api_key/model 或 provider 引用）。
+- **触发条件**：模型条目缺必需字段。
+- **严重级别**：ERROR。
+- **修复方式**：补全缺失字段；model 必需，连接信息经 provider 引用或直接 base_url/api_key。
+
+### `CFG_CONFIG_INVALID_FIELD_TYPE`
+配置字段类型错误（如 base_url 不是字符串、timeout 不是数字）。
+- **触发条件**：字段值类型不符 schema。
+- **严重级别**：ERROR。
+- **修复方式**：按字段类型要求修正：base_url/api_key/model 为 str，timeout 为 number，reasoning 为 bool。
+
+### `CFG_CONFIG_UNKNOWN_MODEL_REF`
+default_model 引用的命名模型在 models 中不存在。
+- **触发条件**：default_model 为字符串但 models 无该键。
+- **严重级别**：ERROR。
+- **修复方式**：确认 default_model 字符串与 models 的键名一致（区分大小写）。
+
+### `CFG_CONFIG_UNKNOWN_PROVIDER`
+模型引用的 provider 在 providers 中不存在。
+- **触发条件**：model 的 provider 字段在 providers 中无对应键。
+- **严重级别**：ERROR。
+- **修复方式**：确认 model 的 provider 字段与 providers 的键名一致（区分大小写）。
+
+### `CFG_CONFIG_ENV_VAR_MISSING`
+配置中 `{env:VAR}` 引用的环境变量未设置。
+- **触发条件**：providers/models 的 base_url/api_key 含 `{env:VAR}` 但 VAR 未设置。
+- **严重级别**：ERROR。
+- **修复方式**：设置对应环境变量，或移除 `{env:VAR}` 引用改为直接写值。

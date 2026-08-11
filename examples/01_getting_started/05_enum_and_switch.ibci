@@ -9,7 +9,7 @@
 import ai
 import idbg
 
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 # ============================================================
 # 1. Enum 定义

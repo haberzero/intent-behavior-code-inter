@@ -8,7 +8,7 @@
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 ```
 
 在 TESTONLY 模式下，所有 LLM 调用不会连接真实 API，而是解析行为表达式或 LLM 函数中的 MOCK 指令返回预设值。
@@ -81,7 +81,7 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 str reply = @~ MOCK:STR:hello world ~
 print(reply)    # hello world
@@ -94,7 +94,7 @@ print((str)n)   # 42
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 # MOCK:FAIL 始终失败，需要 try/except 兜底
 try:
@@ -109,7 +109,7 @@ except LLMRetryExhaustedError as e:
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 # 首次失败，重试后返回 99
 int result = @~ MOCK:REPAIR:INT:99 ~
@@ -122,7 +122,7 @@ print((str)result)   # 99
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 str s1 = @~ MOCK:SEQ:[first,second,third] mykey ~   # first
 str s2 = @~ MOCK:SEQ:[first,second,third] mykey ~   # second
@@ -133,7 +133,7 @@ str s3 = @~ MOCK:SEQ:[first,second,third] mykey ~   # third
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 if @~ MOCK:TRUE 今天天气好吗？ ~:
     print("条件为真")
@@ -150,7 +150,7 @@ LLM 函数 MOCK 时，`__user__` 块必须**只包含** MOCK 指令：
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 llm 测试函数(str input) -> str:
 __sys__
@@ -169,7 +169,7 @@ print(r)   # mock_result
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 ai.register_model("WHISPER", "TESTONLY", "TESTONLY", "TESTONLY")
 
 # 路由到命名模型

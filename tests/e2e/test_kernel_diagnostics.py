@@ -216,7 +216,7 @@ class TestDiagnosticGate:
         code = (
             "import iruntime\n"
             "import ai\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             "iruntime.configure(observability=False)\n"
             """
 class Watcher:

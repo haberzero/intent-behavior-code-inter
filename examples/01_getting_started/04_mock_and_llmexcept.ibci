@@ -17,13 +17,9 @@ import idbg
 
 print("\n=== Mock 机制演示 ===\n")
 
-ai.set_config(
-    "TESTONLY",
-    "TESTONLY",
-    "TESTONLY"
-)
+ai.set_mock_mode()
 
-print("使用 TESTONLY 模式启用 Mock")
+print("使用 MOCK 模式启用 Mock")
 
 # ============================================================
 # Mock 指令格式说明

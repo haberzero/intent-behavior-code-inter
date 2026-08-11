@@ -64,7 +64,7 @@ llmexcept:
 
 ```ibci
 import ai
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 str r = @~ MOCK:STR:hello ~    # 确定返回 "hello"
 ```

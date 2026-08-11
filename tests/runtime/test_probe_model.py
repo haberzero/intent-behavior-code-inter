@@ -84,7 +84,7 @@ def _plugin_with_fake(responder=None):
 def _plugin_mock():
     """构造 MOCK 配置的 AIPlugin（``_is_test_mode()`` 为 True）。"""
     plugin = AIPlugin()
-    plugin.set_config("TESTONLY", "MOCK_KEY", "mock")
+    plugin.set_mock_mode()
     return plugin
 
 

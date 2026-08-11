@@ -15,7 +15,7 @@ class TestImportPositionRuntimeRegression:
         code = (
             "import ai\n"
             "import idbg\n"
-            'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+            'ai.set_mock_mode()\n'
             'str x = "hello"\n'
             "print(x)\n"
             "idbg.show_intents()\n"
