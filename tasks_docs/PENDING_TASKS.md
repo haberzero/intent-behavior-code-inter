@@ -41,6 +41,7 @@
 | **当前阶段** | ~~**PT-DEBT-23 配置机制 fail-fast 硬化**~~（commit 0eb8939，F1-F7）**已修复 2026-08-11** | 工程正确性 | general agent 独立彻查上一批次发现（自审计 D 段误标'正确'）：**F1** `{env:VAR}` 格式非法静默透传→残留检测 fail-fast；**F2** IBC_TEST_MODE 隐式覆盖显式 set_config→删 env 分支（mock 显式化）；**F3** load_config 锚 entry_dir vs setup 锚 project_root 分叉→统一锚 project_root；**F4** reasoning:true 不对称→对称落 probed/is_reasoning；**F5** extract_strategy/supports_system 死字段→删除；**F6** 空/空白凭据过校验→_require_nonempty+_init_client fail-fast；**F7** 默认值字面量三重复→引用 config_loader 常量。+5 契约测试。全量 2201/1 |
 | **P2** | **PT-DEBT-24 call_intent 预留机制核查**（T2 审计发现） | 架构健康性 | `IbBehaviorExpr` AST 无 intent 字段，`_prepare_behavior_call`/`invoke_llm_function_cps` 的 `call_intent` 短路路径（auto_intent=False 时）正常代码不可达——预留/遗留机制。低优先清理或删除待独立窗口 |
 | **P2** | **F9 配置副作用与 import ai 耦合评估**（T4 审计发现） | 设计评估 | 真实配置 + 未装 openai 时 `import ai` 即抛 RuntimeError（setup→apply_config→set_config→_init_client）。fail-fast 清晰但配置副作用绑定到模块导入；脚本只用 mock 或从不调 LLM 也会失败。评估是否延迟到首次调用（独立窗口） |
+| **P2** | **PT-AUDIT-3 双路径分裂专项审计**（T1/T4 教训驱动，新增） | 架构健康性 | 意图缺陷（PT-DEBT-22）揭示"双路径语义分裂 + 快照半消费 + 自审计不可全信"三类模式；T4 独立审计已证明 general agent 能发现自审计 D 段误标的真问题。**对近期子系统做独立审计**：异步统一 A1-A6 / run_batch CPS（exp/run-batch-cps）/ yield 生成器 / generator IbClass / llmexcept / M1-M2 调用收敛——专项查：① sync vs CPS 孪生语义一致；② 快照/双路径"复制完整消费部分"；③ 自审计标注"正确"但实际漂移。用 general agent 独立执行 + 主代理交叉核验 |
 
 ---
 

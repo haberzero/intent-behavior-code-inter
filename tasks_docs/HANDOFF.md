@@ -132,22 +132,24 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.1 当前任务 / 下一阶段
 
-> **接手起点**：先读本节 + `tasks_docs/_REAL_LLM_E2E_REPORT.md` §七（合并条件重估）
-> + `tasks_docs/_MAIN_MERGE_PLAN.md`（合并收尾动作）+ `tasks_docs/PENDING_TASKS.md` §〇
-> + git 历史 `3c768a4..HEAD`。
+> **接手起点**：先读本节 + `tasks_docs/_MAIN_MERGE_PLAN.md`（合并收尾）
+> + `tasks_docs/_REAL_LLM_E2E_REPORT.md` §七（合并条件重估：已重新满足）
+> + `tasks_docs/_DOC_HEALTH_20260811.md`（合并前置文档健康剩余项）
+> + `tasks_docs/PENDING_TASKS.md` §〇（含 PT-AUDIT-3 专项审计）
+> + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主任务（2026-08-11 本 session 完成）**：**不合格操作 U1-U7 修复 + P1-P4 讨论**
-  已全部完成（`_HANDOFF_ISSUES_LLM_E2E.md` 逐项核销，全量 **2201 passed / 1 skipped**）：
-  - U1（7260204）generator IbClass 注册根治（删 receive 特判）+ U2（f58d525）内建遮蔽+LLM 表达式
-    初始化根因修复 + U3（4a10502）InterpreterError 双实现统一 + U4/U6/U7（b8ea631）setup 路径规范化
-    + fail-fast 加载契约 + U5（fa2ce72）临时文档清理 + P1-P4 决断（aeefa0d + 记录）。
-  - **⚠ 意图注入纠错（7339220）**：P1 原结论（模型服从性低）被实证推翻——`@`/`@!` 一次性意图在
-    dispatch-before-use 路径从未进入 prompt（机制缺陷），修复 + 真实模型实证（qwen3.6 遵循意图）。
-  - **合并条件重估**：`_REAL_LLM_E2E_REPORT.md` §七 —— 检测/工程维度**重新满足**（含 §7.0 纠错；
-    无 P0 阻断缺陷 + 全量零回归 + 净增 22 测试）。
-  - **合并前仍待（非本 session 范围）**：① `_DOC_HEALTH_20260811.md` 剩余 P1/P2 清理；② pyproject
-    版本评估；③ examples 真实 LLM 跑通确认（独立目录 + api_config.json）；④ **用户显式授权
-    push/合并**（禁 push 硬原则，阶段 3 不在自主范围）。
+- **🔴 下一 session 主线（建议）：合并取代 main 的收尾准备**（`_MAIN_MERGE_PLAN.md` 阶段 2）。
+  代码侧已全部就绪（U1-U7 修复 + 意图注入纠错 + T1-T5 审计，全量 **2201 passed / 1 skipped**，
+  合并条件检测/工程维度**重新满足**）。主任务链（每步全量 pytest 零回归 + commit + 同步文档）：
+  1. **`_DOC_HEALTH_20260811.md` 剩余 P1/P2 清理**（doc-governance Phase 4-8 流程，先读
+     `.opencode/skills/doc-governance/SKILL.md`；P1-2/5/6 已修复，剩余以文件为准）。
+     重点：KDIAG 码表单一权威源、断链、模板统一、howto 层扩充。
+  2. **`pyproject.toml` 版本评估**（0.1.0 → 0.2.0?）。
+  3. **examples 真实 LLM 跑通确认**（独立项目目录 + api_config.json，或 `--root` 显式指定）。
+  4. 产出 **"合并就绪"报告**，供用户授权时执行阶段 3（push/合并**不在自主范围**，禁 push 硬原则）。
+  - **支线**（主线受阻/并行）：**PT-AUDIT-3 双路径分裂专项审计**（general agent 独立审计近期
+    子系统，查 sync-CPS 孪生语义一致 / 快照半消费 / 自审计误标——T4 已证明该路径有效）；
+    **PT-DEBT-24**（call_intent 死机制清理）、**F9**（import ai 配置副作用评估）。
   - **goal 配置**：按 §1.2.1（max_duration_seconds=14400 / max_auto_turns=10 / token_budget=null）；objective 套 §1.3 模板。
 
 - **本 session（2026-08-11，不合格操作 U1-U7 修复 + P1-P4 决断 + 意图注入纠错 + T1-T5 泛化审计，unsafe-vibe-dev，13 commits，全量 2169 → 2201 passed / 1 skipped）**：
@@ -378,12 +380,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读 `_REAL_LLM_E2E_REPORT.md` §七（合并条件重估：检测/工程维度已重新满足）+ §六（不合格自审历史）
-- [ ] 读 `_MAIN_MERGE_PLAN.md`（合并收尾动作：doc health / pyproject / examples / 用户授权 push）
-- [ ] 读 `_HANDOFF_ISSUES_LLM_E2E.md`（U1-U7 已核销 + P1-P4 已决断，作为历史追溯）
-- [ ] 读 NEXT_STEPS（当前最紧要）+ PENDING_TASKS §〇（PT-DEBT-18/19/20/21 已修复）
-- [ ] 读本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 读 §二 动态状态接续工作（2026-08-11 U1-U7 修复批次 + P1-P4 决断）
+- [ ] 读本节 §2.1（下一 session 主线=合并收尾准备 + PT-AUDIT-3 专项审计）
+- [ ] 读 `_MAIN_MERGE_PLAN.md`（合并收尾：doc health / pyproject / examples / 用户授权 push）
+- [ ] 读 `_DOC_HEALTH_20260811.md`（剩余 P1/P2 文档健康项，合并前置）
+- [ ] 读 `_REAL_LLM_E2E_REPORT.md` §七（合并条件重估：检测/工程维度已重新满足）
+- [ ] 读 `PENDING_TASKS.md` §〇（PT-DEBT-22/23 已修复、24/F9/PT-AUDIT-3 待办）
+- [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2201 passed / 1 skipped**）
-- [ ] 合并前待办：DOC_HEALTH P1/P2 清理 + pyproject 版本评估 + examples 真实跑通确认 + 用户显式授权 push/合并
+- [ ] 主任务链：DOC_HEALTH P1/P2 → pyproject 版本评估 → examples 真实跑通 → 合并就绪报告
+- [ ] 支线：PT-AUDIT-3 双路径分裂专项审计（general agent 独立审计）；PT-DEBT-24 / F9
 - [ ] 工作全程本地 commit、禁 push、工作日志记录
