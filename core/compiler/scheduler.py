@@ -423,8 +423,8 @@ class Scheduler(ICompilerService):
                             analyzer.symbol_table.define(root_sym)
 
                         # 各嵌套段统一以 MemberSpec 纯数据形态写入父模块 members
-                        # （成员契约与 PT-DEBT-26 一致——resolve_member 只认该形态，
-                        # 直接存 Symbol 会因无 type_ref 触发 INT_INTERNAL_ERROR）。
+                        # （成员契约统一——resolve_member 只认该形态，直接存 Symbol
+                        # 会因无 type_ref 触发 INT_INTERNAL_ERROR）。
                         # 中间段 spec 以完整点路径注册为模块，使属性访问可解析回容器；
                         # 叶子段指向真实编译模块 spec。
                         curr_mod = root_sym.spec
@@ -439,17 +439,11 @@ class Scheduler(ICompilerService):
                                 next_spec = None
                                 if isinstance(next_mod_sym, MemberSpec):
                                     next_spec = self.registry.resolve_typeref(next_mod_sym.type_ref)
-                                elif next_mod_sym is not None and getattr(next_mod_sym, "spec", None) is not None:
-                                    # 历史形态容错（本修复前以原始 Symbol 存入）
-                                    next_spec = next_mod_sym.spec
                                 if next_spec is None or next_spec.kind != TypeKind.MODULE.value:
                                     next_mod_type = self.registry.factory.create_module(
                                         ".".join(parts[: i + 1])
                                     )
                                     next_spec = self.registry.register(next_mod_type)
-                                    inter_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_spec)
-                                    curr_mod.members[part_name] = self._symbol_to_member(part_name, inter_sym)
-                                elif not isinstance(curr_mod.members.get(part_name), MemberSpec):
                                     inter_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_spec)
                                     curr_mod.members[part_name] = self._symbol_to_member(part_name, inter_sym)
                                 curr_mod = next_spec

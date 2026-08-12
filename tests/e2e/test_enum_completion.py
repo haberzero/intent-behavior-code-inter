@@ -59,6 +59,18 @@ print((str)(c == Color.GREEN))
         out = run_ibci(code, ai=True)
         assert out == ["GREEN", "True"]
 
+    def test_negative_literal_int_enum_llm(self):
+        """负数字面量成员（-1）经一元负号解析，LLM 成员名映射回负数值。"""
+        code = """class Code(Enum):
+    int OK = 200
+    int NEG = -1
+Code c = @~MOCK:STR:NEG~
+print((str)c)
+print((str)(c == Code.NEG))
+"""
+        out = run_ibci(code, ai=True)
+        assert out == ["-1", "True"]
+
 
 class TestEnumIteration:
     def test_for_iterates_str_member_values(self):

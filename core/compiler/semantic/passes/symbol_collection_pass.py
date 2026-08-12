@@ -285,16 +285,34 @@ class SymbolCollector:
                 )
                 self._define(sym, target)
                 # 枚举成员字面值 → MemberSpec.metadata["value"]（供 EnumAxiom 映射成员名→值）。
-                # 仅限常量字面量（int/float/bool/str）；非字面量成员回退"名==值"语义。
-                if self.current_class_is_enum and isinstance(node.value, ast.IbConstant):
-                    literal = node.value.value
-                    if isinstance(literal, (bool, int, float, str)):
-                        member = self.current_class.members.get(name)
-                        if member is not None and member.kind == "field":
-                            member.metadata["value"] = literal
+                # 仅限枚举类体内的常量字面量（含一元负号字面量 -1/-1.5）；非字面量
+                # 表达式成员回退"名==值"。
+                literal = self._extract_literal_value(node.value)
+                if self.current_class_is_enum and literal is not None:
+                    member = self.current_class.members.get(name)
+                    if member is not None and member.kind == "field":
+                        member.metadata["value"] = literal
 
         # 递归扫描（处理嵌套结构）
         self.generic_visit(node)
+
+    def _extract_literal_value(self, node: ast.IbASTNode):
+        """提取赋值右侧的常量字面值（int/float/bool/str，含一元负号）。
+
+        供枚举成员 metadata["value"] 使用；非字面量表达式（变量引用/运算等）返回
+        None，调用方回退"名==值"语义。一元负号字面量（``-1``/``-1.5``）解析为
+        ``IbUnaryOp``，折叠回负数字面量，避免与"名==值"回退静默分歧。
+        """
+        if isinstance(node, ast.IbConstant):
+            return node.value if isinstance(node.value, (bool, int, float, str)) else None
+        if (
+            isinstance(node, ast.IbUnaryOp)
+            and node.op == "-"
+            and isinstance(node.operand, ast.IbConstant)
+            and isinstance(node.operand.value, (int, float))
+        ):
+            return -node.operand.value
+        return None
 
     def _resolve_annotation(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:
         """Resolve a type annotation to an IbSpec (best-effort at collection time).
