@@ -265,15 +265,46 @@ class DeclarationComponent(BaseComponent):
     def class_declaration(self) -> ast.IbClassDef:
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect class name.").value
-        
+
+        type_params = []
+        if self.stream.match(TokenType.LBRACKET):
+            # 泛型类型参数：class Box[T] / class Box[T, U]
+            while True:
+                type_params.append(
+                    self.stream.consume(TokenType.IDENTIFIER, "Expect type parameter name.").value
+                )
+                if not self.stream.match(TokenType.COMMA):
+                    break
+            self.stream.consume(TokenType.RBRACKET, "Expect ']' after type parameters.")
+            if not type_params:
+                raise self.stream.error(
+                    self.stream.previous(),
+                    "Type parameters must not be empty (e.g. class Box[T]).",
+                    code=PAR_UNEXPECTED_TOKEN,
+                )
+
         parent = None
+        parent_args = []
         if self.stream.match(TokenType.LPAREN):
             parent = self.stream.consume(TokenType.IDENTIFIER, "Expect parent class name.").value
+            # 父类泛型实参：class Sub[T](Box[T])
+            if self.stream.match(TokenType.LBRACKET):
+                while True:
+                    parent_args.append(
+                        self.stream.consume(TokenType.IDENTIFIER, "Expect parent type argument name.").value
+                    )
+                    if not self.stream.match(TokenType.COMMA):
+                        break
+                self.stream.consume(TokenType.RBRACKET, "Expect ']' after parent type arguments.")
             self.stream.consume(TokenType.RPAREN, "Expect ')' after parent class name.")
-            
+
         self.stream.consume(TokenType.COLON, "Expect ':' before class body.")
-        
-        class_node = self._loc(ast.IbClassDef(name=name, parent=parent, body=[], methods=[], fields=[]), start_token)
+
+        class_node = self._loc(
+            ast.IbClassDef(name=name, parent=parent, parent_args=parent_args,
+                           type_params=type_params, body=[], methods=[], fields=[]),
+            start_token,
+        )
         
         body = self.statement.block()
         

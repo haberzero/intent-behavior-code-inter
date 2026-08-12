@@ -106,6 +106,29 @@ class IbBehaviorExpr:
 
 这些节点由解析器组件 `parameters()`（`core/compiler/parser/components/declaration.py`）与 `call()`（`core/compiler/parser/components/expression.py`）共享，用户函数、fn-lambda、behavior 与 LLM 函数因此天然获得同一参数语法。序列化器对 AST 节点字段通用序列化（`vars(node)`），`default` / `kind` / `keywords` 随节点自动持久化，无需额外映射。
 
+### 2.6 类定义节点
+
+`IbClassDef`（`core/kernel/ast.py`）承载类声明：
+
+```python
+class IbClassDef(IbStmt):
+    name: str
+    body: List[IbStmt]
+    parent: Optional[str] = None      # 父类名（裸名）
+    parent_args: List[str] = []       # 父类泛型实参名（class Sub[T](Box[T]) → ["T"]）
+    type_params: List[str] = []       # 泛型类型参数名（class Box[T] → ["T"]）
+    methods: List[IbFunctionDef | IbLLMFunctionDef]
+    fields: List[IbAssign]
+```
+
+- `type_params` / `parent_args` 是**程序源码结构**（AST 固有属性），随节点序列化。
+  泛型类型参数的语义（占位 spec、特化替换）落在 `TypeDef.type_params`
+  （`core/kernel/spec/base.py`）——类型级属性归 IbSpec（见 §2.4），AST 只存
+  源码结构。
+- 父类泛型引用（`class Sub[T](Box[T])`）经 `parent_args` 承载，语义层把
+  `parent_type` 构造为泛型 TypeRef（`TypeRef.generic("Box", TypeRef("T"))`），
+  特化时递归替换。
+
 ---
 
 ## 三、侧表层：编译期的临时工作区

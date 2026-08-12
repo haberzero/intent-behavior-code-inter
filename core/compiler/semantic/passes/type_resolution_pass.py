@@ -56,6 +56,10 @@ class TypeAnnotationResolver:
         self.diagnostics: List[Diagnostic] = []
         self.resolved_types: Dict[Any, IbSpec] = {}
 
+        # 用户类泛型类型参数上下文栈：resolve_IbClassDef 进入类体时压入
+        # 当前类的 type_params 集合，供类内 T 解析为占位 spec。
+        self._type_param_stack: List[List[str]] = []
+
         # 常用类型描述符缓存
         self._any_desc = self.registry.resolve("any")
         if self._any_desc is None:
@@ -93,6 +97,9 @@ class TypeAnnotationResolver:
             return None
 
         if isinstance(annotation, ast.IbName):
+            # 用户类泛型类型参数：类体内 T 解析为占位 spec（TYPE_PARAM kind）。
+            if self._type_param_stack and annotation.id in self._type_param_stack[-1]:
+                return self._build_type_param_spec(annotation.id)
             spec = self.registry.resolve(annotation.id)
             if not spec:
                 self.error(
@@ -164,8 +171,24 @@ class TypeAnnotationResolver:
 
     def resolve_IbClassDef(self, node: ast.IbClassDef):
         """解析类定义"""
-        for stmt in node.body:
-            self.resolve(stmt)
+        self._type_param_stack.append(list(node.type_params))
+        try:
+            for stmt in node.body:
+                self.resolve(stmt)
+        finally:
+            self._type_param_stack.pop()
+
+    @staticmethod
+    def _build_type_param_spec(name: str) -> IbSpec:
+        """构造类型参数占位 spec（与 SpecFactory.create_type_param 同构）。"""
+        from core.base.enums import Provenance, Visibility
+        from core.kernel.spec.base import TypeKind, TypeDef
+        return TypeDef(
+            name=name,
+            kind=TypeKind.TYPE_PARAM.value,
+            provenance=Provenance.USER_DEFINED,
+            visibility=Visibility.IMPORT_GATED,
+        )
 
     def resolve_IbAssign(self, node: ast.IbAssign):
         """解析赋值中的类型标注"""

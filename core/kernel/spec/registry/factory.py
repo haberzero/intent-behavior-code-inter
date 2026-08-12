@@ -43,6 +43,19 @@ class SpecFactory:
             visibility=Visibility.PRELUDE_VISIBLE,
         )
 
+    def create_type_param(self, name: str) -> TypeDef:
+        """创建用户类泛型类型参数占位 spec（class Box[T] 的 T）。
+
+        TYPE_PARAM 非实体类型（无 axiom/成员/运行时类），仅承载类型参数名
+        供语义层解析与特化替换。
+        """
+        return TypeDef(
+            name=name,
+            kind=TypeKind.TYPE_PARAM.value,
+            provenance=Provenance.USER_DEFINED,
+            visibility=Visibility.IMPORT_GATED,
+        )
+
     def create_func(
         self,
         name: str = "callable",

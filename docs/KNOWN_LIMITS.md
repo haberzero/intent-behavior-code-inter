@@ -208,7 +208,7 @@ class Dog(Animal):
 Dog d = Dog("Husky")    # 只设置 breed；d.name = None
 ```
 
-**正确用法**：在子类中显式定义 `__init__` 并通过 `super().__init__(...)` 初始化父类字段（`super()` 用法见 `docs/syntax/06_oop.md` §6.4）：
+**正确用法**：在子类中显式定义 `__init__` 并通过 `super().__init__(...)` 初始化父类字段（`super()` 用法见 `docs/syntax/06_oop.md` §6.5）：
 
 ```ibci
 class Dog(Animal):
@@ -382,10 +382,8 @@ str r = @~ ... ~
 
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
-1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置泛型（`list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` / `thread[T]` / `thread_result[T]`）统一经 `GenericTypeRegistry`（`core/kernel/spec/generic.py`）创建/解析/序列化/还原，用户类型无对应入口。
+1. **用户类泛型参数已支持（2026-08-12）**：`class Box[T]:` 全链路落地——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**已支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器不合并继承链的声明字段（与普通继承一致）；④ 无约束裸类型参数（`T: Bound` 不支持）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
 2. **运算符重载覆盖有限**：用户类可定义 dunder 方法并被运算符分派调用。2026-08-12 实测（运算符 + 返回类型契约核对）：**比较类** `==`(`__eq__`)/`!=`(`__ne__`)/`<`(`__lt__`)/`>`(`__gt__`)/`<=`(`__le__`)/`>=`(`__ge__`)、**算术类** `+`(`__add__`)/`-`(`__sub__`)/`*`(`__mul__`)/`%`(`__mod__`)、**一元类** `-`(`__neg__`)/`~`(`__invert__`)/`not`(`__not__`)、**成员** `in`(`__contains__`) 均可覆写。**`is` 恒为身份比较，不可覆写**（与 Python 一致）。该机制经 `IbClass.receive` 的 vtable 分派实现；与内置 axiom 的能力级分派（Integer/Float/Str 的 `+`/`==`/`<`）是两套路径，未覆写的运算符在用户类上退化为身份比较（`==`）或运行时错误。
-
-**能力差距**：用户类泛型参数属于语言能力扩展方向，当前不支持。
 
 ---
 

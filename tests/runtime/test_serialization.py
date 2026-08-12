@@ -293,6 +293,50 @@ class TestTypeSymbolSerialization:
         assert hasattr(slot_cls, "instantiate")
 
 
+class TestGenericUserClassRoundTrip:
+    """用户类泛型（class Box[T]）round-trip 后特化类身份与类型保持。"""
+
+    def test_specialized_class_ref_round_trip(self, engine):
+        """Box[int] 特化类对象序列化后保持类身份。"""
+        engine.run_string(
+            'class Box[T]:\n'
+            '    T value\n'
+            'Box[int] bi = Box[int](1)\n',
+            silent=True,
+        )
+        ec = engine.interpreter.execution_context
+        data = RuntimeSerializer(engine.registry).serialize_context(
+            ec.runtime_context, include_static=False
+        )
+        pool = data["pools"]["instances"]
+        refs = [v for v in pool.values() if v.get("_type") == "class_ref"]
+        names = {v.get("name") for v in refs}
+        assert "Box" in names
+        # bi 实例以特化类身份序列化（_type == "object"，承载 ib_class 名）
+        bi_entries = [
+            v for v in pool.values()
+            if v.get("_type") == "object" and v.get("class_name") == "Box[int]"
+        ]
+        assert bi_entries, f"Box[int] 实例身份丢失；refs={sorted(names)}"
+
+    def test_specialized_instance_value_round_trip(self, engine):
+        """Box[int] 实例 round-trip 后字段值保真、方法可达。"""
+        orig, rest = _round_trip(
+            engine,
+            'class Box[T]:\n'
+            '    T value\n'
+            '    func get(self) -> T:\n'
+            '        return self.value\n'
+            'Box[int] bi = Box[int](7)\n',
+        )
+        inst = rest.get_variable("bi")
+        assert inst is not None
+        assert inst.fields.get("value").to_native() == 7
+        getter = inst.receive("get", [])
+        result = getter.to_native() if hasattr(getter, "to_native") else getter
+        assert result == 7
+
+
 class TestIntentContextRoundTrip:
     """意图上下文 6 槽位序列化 round-trip（持久栈 / global intents）。"""
 

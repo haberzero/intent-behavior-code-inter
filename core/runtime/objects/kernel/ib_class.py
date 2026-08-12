@@ -376,12 +376,111 @@ class IbClass(IbObject):
         elif args:
             raise InterpreterError(f"TypeError: {self.name}() takes no arguments, but {len(args)} were given")
 
+    def _slice_type_objs(self, slice_obj: 'IbObject') -> List['IbObject']:
+        """从类型特化下标 slice 提取类型标识对象列表。
+
+        ``Box[int]`` → [int 类对象]；``Pair[str,int]`` → [str, int]（IbTuple
+        经 to_native 得 tuple）。非类型下标（普通值下标）返回 []。
+        """
+        if isinstance(slice_obj, IbClass):
+            return [slice_obj]
+        try:
+            native = slice_obj.to_native()
+        except Exception:
+            return []
+        if isinstance(native, tuple):
+            items = native
+        elif isinstance(native, list):
+            items = native
+        else:
+            return [slice_obj]
+        out = []
+        for it in items:
+            if isinstance(it, IbClass):
+                out.append(it)
+            else:
+                out.append(self.registry.box(it))
+        return out
+
+    def _specialize(self, type_objs: List['IbObject']) -> 'IbObject':
+        """类型特化下标 ``Box[int]`` → 特化类对象（IbClass）。
+
+        ``Box[int]`` 表达式中 slice ``int`` 求值为类型标识（IbClass）。据此
+        拼接特化名 ``"Box[int]"`` 并从注册表查/建特化类：
+
+        - 已注册（编译期 resolve_specialization + artifact rehydrate 已建
+          特化 spec 与 IbClass）→ 直接返回。
+        - 未注册（无编译期特化、运行时首次遇到）→ 从 metadata registry
+          解析特化 spec 并 ``create_subclass``。
+        - 非泛型类下标（Box[42]）→ AttributeError（不是类型特化）。
+        """
+        if not self._spec or not getattr(self._spec, "type_params", None):
+            # 内置泛型类（list/dict/Optional 等）作嵌套实参（``Box[list[int]]``）：
+            # 下标求值为类型特化标识（boxed 特化名字符串），供外层特化提取。
+            type_names = [self._type_ref_name(o) for o in type_objs]
+            if all(n is not None for n in type_names) and type_names:
+                return self.registry.box(f"{self.name}[{','.join(type_names)}]")
+            raise AttributeError(
+                f"Class '{self.name}' is not generic; cannot subscript it."
+            )
+        if not type_objs:
+            raise AttributeError(
+                f"Class '{self.name}' subscript expects type identifier(s) "
+                f"(e.g. {self.name}[int]), got a value."
+            )
+        type_names = [self._type_ref_name(o) for o in type_objs]
+        if any(n is None for n in type_names):
+            raise AttributeError(
+                f"Class '{self.name}' subscript expects type identifier(s) "
+                f"(e.g. {self.name}[int]), got a value."
+            )
+        specialized_name = f"{self.name}[{','.join(type_names)}]"
+        existing = self.registry.get_class(specialized_name)
+        if existing is not None:
+            return existing
+
+        spec_reg = self.registry.get_metadata_registry()
+        specialized_spec = spec_reg.resolve(specialized_name) if spec_reg else None
+        if specialized_spec is None:
+            raise RuntimeError(
+                f"Generic class '{self.name}' has no registered specialization "
+                f"for type '{','.join(type_names)}'."
+            )
+        # 父类：若 parent_type 带泛型实参（class Sub[T](Box[T]) → Box[int]），
+        # parent 类名须用特化名（继承链对齐特化类，非裸基类）。
+        if specialized_spec.parent_type is not None and specialized_spec.parent_type.args:
+            p_head = specialized_spec.parent_type.head
+            p_args = ",".join(a.canonical_name for a in specialized_spec.parent_type.args)
+            parent_name = f"{p_head}[{p_args}]"
+        else:
+            parent_name = (
+                specialized_spec.parent_type.head
+                if specialized_spec.parent_type is not None else "Object"
+            )
+        return self.registry.create_subclass(
+            specialized_name, specialized_spec, parent_name
+        )
+
+    @staticmethod
+    def _type_ref_name(type_obj: 'IbObject') -> Optional[str]:
+        """从类型标识对象取类型名（IbClass → name；原生类型对象 → str）。"""
+        if isinstance(type_obj, IbClass):
+            return type_obj.name
+        try:
+            native = type_obj.to_native()
+        except Exception:
+            return None
+        if isinstance(native, str):
+            return native
+        return None
+
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
         类对象的特殊消息处理：
         1. __call__ -> 实例化 (Instantiate) 或 类级别的 __call__
         2. __getattr__ -> 访问类字段 (default_fields)
-        3. 其他 -> 正常消息处理 (查找静态方法等)
+        3. __getitem__ -> 泛型类型特化下标（Box[int] → 特化类对象）
+        4. 其他 -> 正常消息处理 (查找静态方法等)
         """
         from .functions import IbBoundMethod, IbNativeFunction
         if message == "__call__":
@@ -401,6 +500,12 @@ class IbClass(IbObject):
                 return _ClassInstantiateDrive(self, args, context)
             return self.instantiate(args, context=context)
 
+        if message == "__getitem__" and len(args) > 0:
+            # 类型特化下标：``Box[int]``（泛型用户类）表达式求值为特化类对象。
+            # slice 求值为类型标识（IbClass，如 int 类对象）或类型元组
+            # （``Pair[str,int]``）→ 查/建特化类。
+            type_objs = self._slice_type_objs(args[0])
+            return self._specialize(type_objs)
         if message == "__getattr__" and len(args) > 0:
             attr_name = args[0].to_native()
             # 优先查找类字段 (default_fields)

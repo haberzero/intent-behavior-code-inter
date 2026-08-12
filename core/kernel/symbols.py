@@ -20,6 +20,7 @@ class SymbolKind(Enum):
     CLASS = auto()
     INTENT = auto()
     MODULE = auto()
+    TYPE_PARAM = auto()  # 用户类泛型类型参数（class Box[T] 的 T）
 
 
 @dataclass(eq=False)

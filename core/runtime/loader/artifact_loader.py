@@ -35,6 +35,21 @@ class ArtifactLoader:
     def __init__(self, registry: KernelRegistry):
         self.registry = registry
 
+    def _is_concrete_arg(self, name: str) -> bool:
+        """判断泛型实参是否为**具体类型**（非类型参数占位）。
+
+        模板父引用 ``class Sub[T](Box[T])`` 的实参 T 是类型参数名，运行时无
+        对应实体类；特化父引用 ``Sub[int]`` 的实参 int 是具体类型。判据：
+        实参名可被 metadata registry 解析（具体类型）即 concrete；解析失败
+        视为类型参数占位。
+        """
+        spec_reg = self.registry.get_metadata_registry()
+        if spec_reg is not None:
+            spec = spec_reg.resolve(name)
+            if spec is not None and getattr(spec, "kind", None) != "type_param":
+                return True
+        return False
+
     def load(self, artifact_dict: Mapping[str, Any]) -> LoadedArtifact:
         """从扁平化字典中加载并执行类型重水化"""
         if not isinstance(artifact_dict, Mapping):
@@ -75,7 +90,20 @@ class ArtifactLoader:
             last_count = len(remaining)
             still_remaining = []
             for cls_desc in remaining:
-                parent_name = (cls_desc.parent_type.head if cls_desc.parent_type else None) or "Object"
+                # 父类名：parent_type 带**具体**泛型实参时用特化全名
+                # （class Sub[T](Box[T]) 特化 Sub[int] → "Box[int]"），继承链
+                # 对齐特化类；实参含类型参数占位（模板自身 Box[T] 的 T）或
+                # 未注册类型则回退裸基类名。
+                if cls_desc.parent_type is not None and cls_desc.parent_type.args:
+                    p_args = [a.canonical_name for a in cls_desc.parent_type.args]
+                    if all(self._is_concrete_arg(a) for a in p_args):
+                        parent_name = "{}[{}]".format(
+                            cls_desc.parent_type.head, ",".join(p_args)
+                        )
+                    else:
+                        parent_name = cls_desc.parent_type.head
+                else:
+                    parent_name = (cls_desc.parent_type.head if cls_desc.parent_type else None) or "Object"
                 
                 # [Enum Hook] 检查父类是否已在 _classes 中注册
                 # 如果父类已存在（如 Enum），则直接创建子类

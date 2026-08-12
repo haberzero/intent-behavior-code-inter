@@ -10,6 +10,8 @@ from typing import Optional
 
 from core.base.diagnostics.codes import (
     SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE,
+    SEM_GENERIC_TYPE_ARG_COUNT,
+    SEM_GENERIC_TYPE_NEEDS_ARGS,
     SEM_MULTI_TYPE_LIST_REMOVED,
     SEM_UNCATEGORIZED,
     SEM_UNRESOLVED_TYPE,
@@ -215,11 +217,26 @@ class TypeCheckBase:
         if annotation is None:
             return self._any_desc
         if isinstance(annotation, ast.IbName):
+            # 用户类泛型类型参数：类体内 T 解析为占位 spec（非实体类型），
+            # 供特化时替换。在类作用域符号表链查找（含嵌套方法作用域）。
+            if self.current_class is not None:
+                type_param_spec = self._lookup_type_param(annotation.id)
+                if type_param_spec is not None:
+                    return type_param_spec
             resolved = self.registry.resolve(annotation.id)
             if not resolved:
                 self.error(
                     f"Unknown type '{annotation.id}'",
                     annotation, code=SEM_UNRESOLVED_TYPE,
+                )
+                return self._any_desc
+            # 泛型类裸用拦截（class Box[T] 无类型参数直接作类型注解 → SEM）。
+            # 特化 `Box[int]` 走 IbSubscript 分支，不在此处。
+            if resolved.kind == TypeKind.CLASS.value and getattr(resolved, "type_params", None):
+                self.error(
+                    f"Generic class '{annotation.id}' requires type arguments "
+                    f"(e.g. {annotation.id}[int]).",
+                    annotation, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
                 )
                 return self._any_desc
             return resolved
@@ -260,9 +277,41 @@ class TypeCheckBase:
                         )
                     # 使用 registry.resolve_specialization 解析特化
                     result = self.registry.resolve_specialization(base_type, generic_args)
-                    return result if result is not None else base_type
+                    if result is not None:
+                        return result
+                    # 用户类泛型实参数量不匹配（resolve_specialization 拒绝构造）→ SEM。
+                    if (base_type.kind == TypeKind.CLASS.value
+                            and getattr(base_type, "type_params", None)
+                            and len(generic_args) != len(base_type.type_params)):
+                        self.error(
+                            f"Generic class '{base_type.name}' expects "
+                            f"{len(base_type.type_params)} type argument(s), "
+                            f"got {len(generic_args)}.",
+                            annotation, code=SEM_GENERIC_TYPE_ARG_COUNT,
+                        )
+                        return self._any_desc
+                    return base_type
                 return self._any_desc
             return self._any_desc
         else:
             # 其他类型标注
             return self._any_desc
+
+    def _lookup_type_param(self, name: str) -> Optional[IbSpec]:
+        """在类作用域内查找用户类泛型类型参数（class Box[T] 的 T）。
+
+        权威源 = ``current_class.type_params``（symbol_collection 已落 TypeDef）。
+        命中返回占位 spec（TYPE_PARAM kind）；未命中返回 None。
+        """
+        cls_spec = self.current_class
+        if cls_spec is None:
+            return None
+        if getattr(cls_spec, "type_params", None) and name in cls_spec.type_params:
+            from core.kernel.spec.base import TypeKind
+            return TypeDef(
+                name=name,
+                kind=TypeKind.TYPE_PARAM.value,
+                provenance=cls_spec.provenance,
+                visibility=cls_spec.visibility,
+            )
+        return None

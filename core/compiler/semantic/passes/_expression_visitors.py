@@ -15,6 +15,7 @@ from core.base.diagnostics.codes import (
     SEM_CAST_NO_CONVERTER,
     SEM_CONTAINER_METHOD_HINT,
     SEM_DUPLICATE_KEYWORD,
+    SEM_GENERIC_TYPE_NEEDS_ARGS,
     SEM_INTENT_STATIC_CALL,
     SEM_MISSING_RETURN_ANNOTATION,
     SEM_MISSING_REQUIRED_ARG,
@@ -368,6 +369,18 @@ class ExpressionVisitorsMixin:
         # (not a type reference), route through __call__ protocol.
         if func_type.kind == TypeKind.CLASS.value and isinstance(node.func, ast.IbName):
             sym = self.lookup_symbol(node.func.id)
+            # 泛型类裸实例化拦截：`x = Box(1)`（func 是裸类名，非 Box[int] 下标）。
+            # 必须特化使用；`Box[int](...)` 走 IbSubscript func，不在此处。
+            if (getattr(func_type, "type_params", None)
+                    and node.func.id in (getattr(func_type, "name", ""),)
+                    and (sym is None or sym.is_type)):
+                self.error(
+                    f"Generic class '{node.func.id}' requires type arguments "
+                    f"(e.g. {node.func.id}[int]).",
+                    node, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
+                )
+                self.bind_type(node, self._any_desc)
+                return self._any_desc
             if sym and not sym.is_type and '__call__' in func_type.members:
                 def scope_lookup(class_name: str, method_name: str) -> Optional[IbSpec]:
                     class_sym = self.lookup_symbol(class_name)
@@ -669,6 +682,19 @@ class ExpressionVisitorsMixin:
         if not value_type:
             self.bind_type(node, self._any_desc)
             return self._any_desc
+
+        # 用户类泛型特化下标（表达式位置）：Box[int] → 触发特化 spec 创建，
+        # 使运行时 metadata_registry 有对应特化（print(Box[int]) 等场景）。
+        if (value_type.kind == TypeKind.CLASS.value
+                and getattr(value_type, "type_params", None)
+                and isinstance(node.slice, ast.IbName)
+                and not isinstance(node.slice, ast.IbSlice)):
+            arg_spec = self._resolve_type(node.slice)
+            if arg_spec is not None:
+                specialized = self.registry.resolve_specialization(value_type, [arg_spec])
+                if specialized is not None:
+                    self.bind_type(node, specialized)
+                    return specialized
 
         # 切片操作返回同类型容器
         if isinstance(node.slice, ast.IbSlice):

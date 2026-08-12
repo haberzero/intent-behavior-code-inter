@@ -159,6 +159,8 @@ class IbClassDef(IbStmt):
     name: str
     body: List[IbStmt] # Includes methods and class variables
     parent: Optional[str] = None # Parent class name
+    parent_args: List[str] = field(default_factory=list) # 父类泛型实参名（class Sub[T](Box[T])）
+    type_params: List[str] = field(default_factory=list) # 泛型类型参数名（class Box[T]）
     methods: List[Union['IbFunctionDef', 'IbLLMFunctionDef']] = field(default_factory=list)
     fields: List['IbAssign'] = field(default_factory=list)
     

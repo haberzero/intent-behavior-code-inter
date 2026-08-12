@@ -6,6 +6,7 @@ from core.kernel.symbols import Symbol, SymbolTable
 from core.kernel.spec import IbSpec, TypeDef
 from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
+from core.kernel.spec.type_ref import TypeRef
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 from core.base.uid import node_uid, type_uid, anon_symbol_uid
@@ -15,11 +16,14 @@ class FlatSerializer(BaseFlatSerializer):
     平铺化序列化器：将嵌套的 AST 和 符号表 结构
     序列化为扁平的、基于 UID 引用的字典格式。
     """
-    def __init__(self):
+    def __init__(self, registry: Optional[Any] = None):
         super().__init__()
         self.node_pool: Dict[str, Any] = {}
         self.symbol_pool: Dict[str, Any] = {}
         self.scope_pool: Dict[str, Any] = {}
+        # 类型注册表（可选）：用于把 CLASS 父类泛型实参（TypeRef）解析为
+        # spec 并递归收集（父特化 spec 非符号/绑定引用的孤点）。
+        self.registry = registry
 
     def serialize_artifact(self, artifact: CompilationArtifact) -> Dict[str, Any]:
         """序列化整个蓝图产物"""
@@ -253,6 +257,22 @@ class FlatSerializer(BaseFlatSerializer):
             p_ref = t.parent_type
             type_data["parent_name"] = p_ref.head if p_ref is not None else None
             type_data["parent_module"] = p_ref.module if p_ref is not None else None
+            # 父类泛型实参（class Sub[T](Box[T]) / 特化 Sub[int] 的 Box[int]）：
+            # 持久化实参名，rehydrator 据此重建泛型 parent_type。父特化 spec
+            # （如 Box[int]）非符号/绑定引用，须在此经 registry 解析并收集。
+            if p_ref is not None and p_ref.args:
+                type_data["parent_args"] = [a.canonical_name for a in p_ref.args]
+                # 父特化 spec（Box[int]）非符号/绑定引用孤点：经 registry 按
+                # 特化全名解析并收集，否则运行时 metadata_registry 缺父特化。
+                if self.registry is not None:
+                    parent_spec = self.registry.resolve(
+                        p_ref.canonical_name, p_ref.module
+                    )
+                    if parent_spec is not None:
+                        self._collect_type(parent_spec)
+            # 用户类泛型类型参数（class Box[T]）：持久化供 rehydrate 重建。
+            if getattr(t, "type_params", None):
+                type_data["type_params"] = list(t.type_params)
             
         # 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来

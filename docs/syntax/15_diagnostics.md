@@ -304,6 +304,18 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 - **严重级别**：ERROR。
 - **修复方式**：把文件写移到 `llmexcept` 保护区域之外。
 
+### `SEM_GENERIC_TYPE_NEEDS_ARGS`
+泛型类未提供类型参数即作类型使用（如裸 `Box`）。
+- **触发条件**：`class Box[T]` 后直接 `Box b = ...`（无类型实参）。
+- **严重级别**：ERROR。
+- **修复方式**：特化使用，提供类型实参，如 `Box[int]`。
+
+### `SEM_GENERIC_TYPE_ARG_COUNT`
+泛型类类型实参数量与声明不符。
+- **触发条件**：`class Box[T]` 后 `Box[int, str]`（实参数与声明参数数不等）。
+- **严重级别**：ERROR。
+- **修复方式**：按类声明补全/裁剪类型实参（`class Box[T]` → `Box[int]`）。
+
 ### `SEM_UNCATEGORIZED`
 未归类语义错误（无专属码）。
 - **触发条件**：语义错误无对应专属诊断码。

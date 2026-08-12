@@ -214,6 +214,15 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="llmexcept 保护区域内执行了文件写操作（快照隔离下不允许）。",
         fix="把文件写移到 llmexcept 保护区域之外。",
     ),
+    # -- 用户类泛型 --
+    "SEM_GENERIC_TYPE_NEEDS_ARGS": CodeInfo(
+        title="泛型类未提供类型参数即作类型使用（如裸 Box）。",
+        fix="特化使用：提供类型实参，如 Box[int]（或 Box[str]）。",
+    ),
+    "SEM_GENERIC_TYPE_ARG_COUNT": CodeInfo(
+        title="泛型类类型实参数量与声明不符。",
+        fix="按类声明补全/裁剪类型实参（class Box[T] → Box[int]）。",
+    ),
     # -- 特殊 --
     "SEM_UNCATEGORIZED": CodeInfo(
         title="未归类语义错误（无专属码）。",

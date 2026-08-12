@@ -135,6 +135,7 @@ class ArtifactRehydrator:
             TypeKind.CLASS.value: lambda: factory.create_class(
                 name, parent_name=data.get("parent_name")
             ),
+            TypeKind.TYPE_PARAM.value: lambda: factory.create_type_param(name),
             TypeKind.BOUND_METHOD.value: lambda: TypeDef(
                 name="bound_method",
                 provenance=Provenance.KERNEL_NATIVE,
@@ -208,6 +209,44 @@ class ArtifactRehydrator:
             )
         return kind
 
+    @staticmethod
+    def _parse_arg_ref(text: str) -> TypeRef:
+        """把泛型实参名解析为 TypeRef（支持嵌套："int" / "list[int]"）。
+
+        serializer 用 ``TypeRef.canonical_name`` 持久化实参（如 "list[int]"），
+        此处按 ``[`` 递归解析恢复嵌套结构。
+        """
+        text = text.strip()
+        if "[" not in text:
+            return TypeRef.of(text)
+        head, rest = text.split("[", 1)
+        inner = rest.rstrip("]")
+        args = tuple(
+            ArtifactRehydrator._parse_arg_ref(a)
+            for a in ArtifactRehydrator._split_args(inner)
+        )
+        return TypeRef(head=head.strip(), args=args)
+
+    @staticmethod
+    def _split_args(inner: str):
+        """按逗号切分实参列表（注意嵌套方括号内的逗号不应切分）。"""
+        parts, depth, current = [], 0, []
+        for ch in inner:
+            if ch == "[":
+                depth += 1
+                current.append(ch)
+            elif ch == "]":
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0:
+                parts.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append("".join(current))
+        return parts
+
     def _fill_descriptor(self, uid: str) -> Optional[IbSpec]:
         """填充 spec 的详细字段 (Phase 2)"""
         spec = self.memo.get(uid)
@@ -256,7 +295,23 @@ class ArtifactRehydrator:
         elif spec.kind == TypeKind.CLASS.value:
             p_name = data.get("parent_name")
             p_mod = data.get("parent_module")
-            spec.parent_type = TypeRef.of(p_name, p_mod) if p_name else None
+            p_args = data.get("parent_args") or []
+            if p_args:
+                # 父类泛型实参（class Sub[T](Box[T]) → Box[T]；特化 Sub[int] →
+                # Box[int]）：重建泛型 parent_type（TypeRef 递归 args 用别名）。
+                # 实参名可含嵌套（"int" / "list[int]"），需解析为嵌套 TypeRef。
+                spec.parent_type = TypeRef(
+                    head=p_name or "Object",
+                    args=tuple(self._parse_arg_ref(a) for a in p_args),
+                    module=p_mod,
+                )
+            elif p_name:
+                spec.parent_type = TypeRef.of(p_name, p_mod)
+            else:
+                spec.parent_type = None
+            # 用户类泛型类型参数（class Box[T]）：重建供特化/检查。
+            if data.get("type_params"):
+                spec.type_params = list(data["type_params"])
         elif spec.kind == TypeKind.MODULE.value:
             spec.exported_types = list(data.get("exported_types", []))
 

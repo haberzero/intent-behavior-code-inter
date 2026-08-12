@@ -606,7 +606,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 "（root-dependent 设置延迟到首次编译/运行）。",
                 None,
             )
-        serializer = FlatSerializer()
+        serializer = FlatSerializer(registry=self.scheduler.registry)
         artifact_dict = serializer.serialize_artifact(artifact)
 
         # 包装为 ImmutableArtifact，防止解释器修改 artifact

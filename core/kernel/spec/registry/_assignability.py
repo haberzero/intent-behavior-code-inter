@@ -6,9 +6,10 @@ _AssignabilityMixin — assignment compatibility and generic specialisation.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from ..base import IbSpec, TypeKind
+from ..type_ref import TypeRef
 
 
 class _AssignabilityMixin:
@@ -175,4 +176,131 @@ class _AssignabilityMixin:
                 for m_name, m_spec in method_specs.items():
                     result.members.setdefault(m_name, m_spec)
             return result
+
+        # 用户类泛型：class Box[T] → Box[int]（特化 spec 构造）。
+        if spec.kind == TypeKind.CLASS.value and getattr(spec, "type_params", None):
+            return self._specialize_user_class(spec, arg_specs)
         return None
+
+    def _specialize_user_class(self, spec: "IbSpec", arg_specs: List[IbSpec]) -> Optional[IbSpec]:
+        """构造用户类泛型特化 spec（``class Box[T]`` → ``Box[int]``）。
+
+        - 校验类型实参数量 == 类型参数数量（不等报语义错误，调用方报告）。
+        - 特化名 ``"Box[int]"``（对齐内置泛型 ``f"{base}[{args}]"`` 缓存键）。
+        - 复制基类 spec（kind=CLASS，parent 递归特化），成员类型经
+          ``TypeRef.substitute`` 把类型参数占位替换为实参。
+        - 已注册（缓存命中）直接返回。
+        """
+        type_params = list(spec.type_params)
+        if len(arg_specs) != len(type_params):
+            return None  # 参数数量不匹配：语义层报 SEM，这里不构造
+        mapping = {
+            param: TypeRef.of(a.name, getattr(a, "module_path", None))
+            for param, a in zip(type_params, arg_specs)
+        }
+        arg_names = [a.name for a in arg_specs]
+        specialized_name = f"{spec.name}[{','.join(arg_names)}]"
+        cached = self.resolve(specialized_name)
+        if cached is not None:
+            return cached
+
+        result = self.factory.create_class(
+            name=specialized_name,
+            parent_name=None,
+            parent_module=None,
+            provenance=spec.provenance,
+            visibility=spec.visibility,
+        )
+        # 特化 spec 不携带类型参数（已代入）。
+        result.type_params = []
+        # 父类特化：基类 parent 若是泛型引用（class Sub[T](Box[T])）递归替换。
+        if spec.parent_type is not None:
+            parent_ref = spec.parent_type.substitute(mapping)
+            result.parent_type = parent_ref
+            # 父特化 spec 递归创建并注册：Sub[T](Box[T]) 特化为 Sub[str] 时，
+            # 父 Box[str] 特化 spec 须存在（否则序列化/运行时继承链断裂）。
+            # 仅对**具体**实参（非类型参数占位）递归——模板自身（Sub[T]）的
+            # 父引用 Box[T] 是占位，不创建 Box[T] 实体。
+            self._ensure_parent_specialization(parent_ref)
+        result.members = self._substitute_members(spec.members, mapping)
+        result = self.register(result)
+        return result
+
+    def _ensure_parent_specialization(self, parent_ref: TypeRef) -> None:
+        """递归创建并注册父特化 spec（Sub[str] 的父 Box[str]）。
+
+        ``parent_ref`` 是泛型父引用（带 args）。对**具体**实参（可被注册表
+        解析且非类型参数占位）递归 ``resolve_specialization`` 创建父特化——
+        否则序列化/运行时继承链找不到父特化类。类型参数占位（模板自身
+        ``Sub[T]`` 的父 ``Box[T]``）不创建（无实体）。
+        """
+        if not parent_ref.args:
+            return
+        # 解析父基类 spec。
+        base_spec = self.resolve(parent_ref.head, parent_ref.module)
+        if base_spec is None:
+            return
+        # 实参递归：嵌套泛型实参（list[int]）也须已特化存在。
+        for a in parent_ref.args:
+            if a.args:
+                self._ensure_parent_specialization(a)
+        # 把实参 TypeRef 解析为 spec（递归经 resolve_specialization）。
+        arg_specs = []
+        for a in parent_ref.args:
+            if a.args:
+                arg_specs.append(self.resolve(a.canonical_name))
+            else:
+                arg_specs.append(self.resolve(a.head, a.module))
+        arg_specs = [s for s in arg_specs if s is not None]
+        if len(arg_specs) != len(parent_ref.args):
+            return  # 含占位/未解析实参 → 模板形态，跳过
+        if getattr(base_spec, "type_params", None):
+            self.resolve_specialization(base_spec, arg_specs)
+
+    def _substitute_members(self, members: Dict[str, Any], mapping: dict) -> Dict[str, Any]:
+        """对类成员表的类型做类型参数替换。
+
+        字段（MemberSpec.type_ref）、方法（MethodMemberSpec 的
+        type_ref/param_types/return_type/param_descriptors）中的类型参数占位
+        → 实参 TypeRef。返回新 dict（不改写原成员——基类 spec 保持未特化形态）。
+        """
+        from ..member import MethodMemberSpec, ParamDescriptor
+
+        out: Dict[str, Any] = {}
+        for name, member in members.items():
+            if member is None:
+                out[name] = None
+                continue
+            if isinstance(member, MethodMemberSpec):
+                new_member = MethodMemberSpec(
+                    name=member.name,
+                    kind=member.kind,
+                    type_ref=member.type_ref.substitute(mapping),
+                )
+                new_member.param_types = [
+                    p.substitute(mapping) for p in member.param_types
+                ]
+                new_member.return_type = member.return_type.substitute(mapping)
+                # param_descriptors 深度替换：ParamDescriptor.type_ref 中的
+                # 类型参数占位 → 实参（特化方法参数类型在调用侧据此校验）。
+                new_member.param_descriptors = [
+                    ParamDescriptor(
+                        name=d.name,
+                        kind=d.kind,
+                        type_ref=d.type_ref.substitute(mapping),
+                        has_default=d.has_default,
+                        default_value=d.default_value,
+                    )
+                    for d in member.param_descriptors
+                ]
+                new_member.metadata = dict(member.metadata)
+                out[name] = new_member
+            else:
+                new_member = type(member)(
+                    name=member.name,
+                    kind=member.kind,
+                    type_ref=member.type_ref.substitute(mapping),
+                    metadata=dict(getattr(member, "metadata", {}) or {}),
+                )
+                out[name] = new_member
+        return out

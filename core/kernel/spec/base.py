@@ -64,6 +64,7 @@ class TypeKind(str, Enum):
     SUBSCRIBER = "subscriber"  # pubsub 订阅者消费者端点
     THREAD_RESULT = "thread_result"  # 线程结果容器（值类型泛型，thread_result[T]）
     GENERATOR = "generator"  # 惰性生成器（含 yield 函数调用产出，元素类型泛型 generator[T]）
+    TYPE_PARAM = "type_param"  # 用户类泛型类型参数占位（class Box[T] 的 T，非实体类型）
 
 
 @dataclass(eq=False)
@@ -204,6 +205,10 @@ class TypeDef(IbSpec):
 
     # -- Class inheritance (CLASS kind) -----------------------------------
     parent_type: Optional["TypeRef"] = None
+
+    # -- 用户类泛型类型参数（CLASS kind）-------------------------------
+    # ``class Box[T]`` 的 ["T"]。特化 spec（如 "Box[int]"）type_params 置空。
+    type_params: List[str] = field(default_factory=list)
 
     # -- Container element / key / value types (LIST / TUPLE / DICT) -----
     element_type: "TypeRef" = field(default_factory=lambda: _ANY_REF)

@@ -135,14 +135,22 @@ class SymbolCollector:
                         method_spec.param_types = list(sym.spec.param_types)
                         method_spec.return_type = sym.spec.return_type
                     self.current_class.members[sym.name] = method_spec
+                elif sym.kind == SymbolKind.TYPE_PARAM:
+                    # 类型参数符号不落类成员表（成员表只放字段/方法）。
+                    pass
                 else:
-                    spec_name = "any"
-                    if sym.spec:
-                        spec_name = sym.spec.head if isinstance(sym.spec, TypeRef) else sym.spec.name
+                    # 字段类型：优先结构化 TypeRef（保留 list[T] 等泛型实参，
+                    # 供特化替换）；退化 fallback 用扁平名。
+                    if isinstance(sym.spec, TypeRef):
+                        field_type_ref = sym.spec
+                    elif sym.spec is not None:
+                        field_type_ref = TypeRef.from_spec(sym.spec)
+                    else:
+                        field_type_ref = TypeRef.of("any")
                     self.current_class.members[sym.name] = MemberSpec(
                         name=sym.name,
                         kind="field",
-                        type_ref=TypeRef.of(spec_name)
+                        type_ref=field_type_ref
                     )
 
         except ValueError as e:
@@ -165,10 +173,33 @@ class SymbolCollector:
             provenance=Provenance.USER_DEFINED,
             visibility=Visibility.IMPORT_GATED,
         )
+        cls_meta.type_params = list(node.type_params)
+        # 父类泛型实参（class Sub[T](Box[T])）：parent_type 构造为泛型引用
+        # TypeRef(Box, (T,))，供特化时递归替换。
+        if node.parent_args:
+            parent_head = effective_parent or "Object"
+            cls_meta.parent_type = TypeRef.generic(
+                parent_head, *[TypeRef.of(a) for a in node.parent_args]
+            )
+            # 首版边界：非泛型子类继承具体特化（class Sub(Box[int])）不支持——
+            # 子类无 type_params 却继承带实参父类，特化参数无传递来源，fail-fast。
+            if not node.type_params:
+                self.error(
+                    f"Class '{node.name}' inherits a specialized generic parent "
+                    f"'{parent_head}[...]' without declaring type parameters "
+                    f"(e.g. class {node.name}[T]({parent_head}[T])).",
+                    node, code=SEM_UNCATEGORIZED,
+                )
 
         # Enum Hook: 如果继承 Enum，设置 axiom_name
         if node.parent == "Enum":
             cls_meta._axiom_name = "enum"
+            # Enum 值模型不支持类型参数（成员=底层值非实例，泛型实例化冲突）。
+            if node.type_params:
+                self.error(
+                    f"Enum class '{node.name}' does not support type parameters.",
+                    node, code=SEM_UNCATEGORIZED,
+                )
 
         # 注册到 registry
         registered_meta = self.registry.register(cls_meta)
@@ -193,6 +224,35 @@ class SymbolCollector:
         self.current_class_is_enum = node.parent == "Enum"
 
         try:
+            # 注册泛型类型参数符号（class Box[T] 的 T）——类体内 T 作类型占位
+            # 解析，不落类成员表。显式优于隐式：参数名与类内已有成员同名冲突
+            # 时 fail-fast（语义错误）。
+            for tp_name in node.type_params:
+                if tp_name in self.symbol_table.symbols:
+                    self.error(
+                        f"Type parameter '{tp_name}' conflicts with existing member name in class '{node.name}'.",
+                        node, code=SEM_UNCATEGORIZED,
+                    )
+                    continue
+                # 类型参数名不得遮蔽内置/已注册类型（class Box[int] 非法）：
+                # 特化时实参名与参数名同构会歧义。
+                if self.registry.resolve(tp_name) is not None:
+                    self.error(
+                        f"Type parameter '{tp_name}' shadows existing type "
+                        f"'{tp_name}'. Choose a different name.",
+                        node, code=SEM_UNCATEGORIZED,
+                    )
+                    continue
+                tp_spec = self.registry.factory.create_type_param(tp_name)
+                self._define(
+                    TypeSymbol(
+                        name=tp_name,
+                        kind=SymbolKind.TYPE_PARAM,
+                        def_node=node,
+                        spec=tp_spec,
+                    ),
+                    node,
+                )
             for stmt in node.body:
                 self.visit(stmt)
             # 记录类作用域
@@ -263,6 +323,15 @@ class SymbolCollector:
     def visit_IbAssign(self, node: ast.IbAssign):
         """访问赋值节点（收集全局/类成员变量）"""
         for name, target in SymbolExtractor.get_assigned_names(node):
+            # 字段与类型参数同名冲突（类作用域内）→ fail-fast：类型参数是
+            # 类级占位名，字段遮蔽它会造成特化替换歧义。
+            if (self.current_class is not None
+                    and name in (getattr(self.current_class, "type_params", None) or [])):
+                self.error(
+                    f"Field '{name}' conflicts with type parameter of class '{self.current_class.name}'.",
+                    node, code=SEM_UNCATEGORIZED,
+                )
+                continue
             # 避免重复定义
             if name not in self.symbol_table.symbols:
                 # 尝试从类型标注解析 spec
@@ -320,9 +389,13 @@ class SymbolCollector:
         支持泛型注解：``list[int]`` / ``dict[str,int]`` / ``Optional[int]``
         等经 ``resolve_specialization`` 解析为特化 spec——符号 declared_type 保留
         泛型身份（此前只处理 ``IbName``，泛型注解退化为 any/基础类型，运行时
-        内省/序列化丢泛型参数）。
+        内省/序列化丢泛型参数）。用户类泛型内层（``list[T]``）经类型参数
+        符号解析为占位 spec（T），特化时替换。
         """
         if isinstance(annotation, ast.IbName):
+            tp = self._lookup_type_param(annotation.id)
+            if tp is not None:
+                return tp
             return self.registry.resolve(annotation.id)
         if isinstance(annotation, ast.IbSubscript):
             if isinstance(annotation.value, ast.IbName):
@@ -340,10 +413,27 @@ class SymbolCollector:
             return None
         return None
 
+    def _lookup_type_param(self, name: str) -> Optional[IbSpec]:
+        """在类作用域内查找用户类泛型类型参数（class Box[T] 的 T）。
+
+        命中返回占位 spec（TYPE_PARAM kind）；未命中返回 None。
+        """
+        if self.current_class is not None:
+            tps = getattr(self.current_class, "type_params", None) or []
+            if name in tps:
+                return self.registry.factory.create_type_param(name)
+        return None
+
     def _annotation_to_typeref(self, annotation: ast.IbASTNode) -> TypeRef:
         """Convert an AST annotation node to a TypeRef."""
         if isinstance(annotation, ast.IbName):
             return TypeRef.of(annotation.id)
+        if isinstance(annotation, ast.IbSubscript) and isinstance(annotation.value, ast.IbName):
+            if isinstance(annotation.slice, ast.IbTuple):
+                args = [self._annotation_to_typeref(elt) for elt in annotation.slice.elts]
+            else:
+                args = [self._annotation_to_typeref(annotation.slice)]
+            return TypeRef(annotation.value.id, tuple(args))
         return TypeRef.of("any")
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):

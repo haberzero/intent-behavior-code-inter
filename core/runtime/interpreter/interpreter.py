@@ -618,7 +618,17 @@ class Interpreter:
     def _hydrate_user_classes(self, class_to_node: Dict[str, Any]):
         """ STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
         old_module = self.current_module_name
+        # 特化类（Box[int]）与基类（Box）共享 AST 节点：把以 "Name[" 开头的
+        # 特化类也映射到基类节点，复用同一方法/字段绑定逻辑。
+        resolved = {}
         for name, info in class_to_node.items():
+            resolved[name] = info
+        for name, ib_class in self.registry.get_all_classes().items():
+            if "[" in name and ib_class.spec and getattr(ib_class.spec, "provenance", None) == Provenance.USER_DEFINED:
+                base = name.split("[", 1)[0]
+                if base in resolved:
+                    resolved.setdefault(name, resolved[base])
+        for name, info in resolved.items():
             node_uid, module_name = info if isinstance(info, tuple) else (info, "main")
             self.current_module_name = module_name
             
