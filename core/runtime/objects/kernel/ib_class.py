@@ -242,16 +242,16 @@ class IbClass(IbObject):
             if isinstance(val_info, IbClassField):
                 if val_info.static_val is not None:
                     # 优先使用预评估好的快照，但可变容器（list/dict）必须每次创建新实例，
-                    # 避免所有实例共享同一容器对象（浅拷贝快照，元素引用共享）。
-                    sv = val_info.static_val
-                    # 可变容器（list/dict）需每次创建新实例以避免共享——
-                    # 使用 type(sv)(...) 保持多态性，无需引入具体类名。
-                    if isinstance(sv, IbValue) and sv.ib_class.name == "list":
-                        instance.fields[name] = type(sv)(list(sv.elements), sv.ib_class)
-                    elif isinstance(sv, IbValue) and sv.ib_class.name == "dict":
-                        instance.fields[name] = type(sv)(dict(sv.fields), sv.ib_class)
+                    # 避免所有实例共享同一容器对象。用递归深克隆（try_deep_clone）——
+                    # 补全"每实例独立默认值"的既有意图：此前仅 list/dict 首层浅拷贝，
+                    # 内层 list 与用户对象默认值跨实例共享（静默泄漏）。
+                    # 深克隆失败（函数/行为等不可克隆）→ 回退共享引用（值语义等价）。
+                    from core.runtime.objects.deep_clone import try_deep_clone
+                    cloned = try_deep_clone(val_info.static_val)
+                    if cloned is not None:
+                        instance.fields[name] = cloned
                     else:
-                        instance.fields[name] = sv
+                        instance.fields[name] = val_info.static_val
                 elif val_info.val_uid and context:
                     # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
@@ -334,13 +334,14 @@ class IbClass(IbObject):
         for name, val_info in all_default_fields.items():
             if isinstance(val_info, IbClassField):
                 if val_info.static_val is not None:
-                    sv = val_info.static_val
-                    if isinstance(sv, IbValue) and sv.ib_class.name == "list":
-                        instance.fields[name] = type(sv)(list(sv.elements), sv.ib_class)
-                    elif isinstance(sv, IbValue) and sv.ib_class.name == "dict":
-                        instance.fields[name] = type(sv)(dict(sv.fields), sv.ib_class)
+                    # 递归深克隆可变默认值（与 _eval_field_defaults 同步版一致）：
+                    # 补全每实例独立默认值意图；不可克隆 → 共享引用。
+                    from core.runtime.objects.deep_clone import try_deep_clone
+                    cloned = try_deep_clone(val_info.static_val)
+                    if cloned is not None:
+                        instance.fields[name] = cloned
                     else:
-                        instance.fields[name] = sv
+                        instance.fields[name] = val_info.static_val
                 elif val_info.val_uid and context:
                     old_module = context.current_module_name
                     context.current_module_name = val_info.module_name

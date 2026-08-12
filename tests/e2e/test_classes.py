@@ -638,3 +638,53 @@ print(c.greeting())
         lines = run_ibci(code)
         # self.name() inside Base.greeting() should resolve to Child.name() via virtual dispatch
         assert "I am Child (via super)" in lines
+
+
+class TestFieldDefaultIndependence:
+    """字段默认值每实例独立（PT-DEBT-O2，2026-08-12）。
+
+    此前仅 list/dict 首层浅拷贝：内层 list 与用户对象默认值跨实例共享
+    （静默泄漏）。修复=static_val 递归深克隆（try_deep_clone）补全
+    "每实例独立默认值"既有意图；不可克隆值（函数等）回退共享引用。
+    """
+
+    def test_nested_list_default_not_shared(self):
+        code = """class Holder:
+    list[list[int]] grid = [[1]]
+
+Holder a = Holder()
+Holder b = Holder()
+a.grid[0][0] = 99
+print((str)b.grid[0][0])
+"""
+        assert run_ibci(code) == ["1"]
+
+    def test_user_object_default_not_shared(self):
+        code = """class Inner:
+    int v
+    func __init__(self) -> auto:
+        self.v = 0
+
+class Holder:
+    Inner inner = Inner()
+
+Holder a = Holder()
+Holder b = Holder()
+a.inner.v = 5
+print((str)b.inner.v)
+"""
+        assert run_ibci(code) == ["0"]
+
+    def test_plain_list_default_independent(self):
+        code = """class Holder:
+    list[int] plain = []
+
+Holder a = Holder()
+Holder b = Holder()
+a.plain.append(7)
+print((str)a.plain.len())
+print((str)b.plain.len())
+"""
+        lines = run_ibci(code)
+        assert "1" in lines
+        assert "0" in lines
