@@ -2,11 +2,30 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-12（真实 LLM 全面压力试用重启**已完成**——D1 全语法遍历 + D2 压力试用 +
-> D3 批判检测（C1-C4）+ A1-A5 重验全部基于修复后代码真实 LLM 跑通；发现 4 项 P1 KERNEL_ISSUE +
-> 7 DOC_ISSUE + 5 BOUNDARY，**只记录未修复**；见下方"已完成"节与 `_REAL_LLM_TRIAL_REPORT_20260812.md`）
+> **最后更新**：2026-08-12（试用暴露缺陷修复**已完成**——PT-DEBT-25/26/27/28 + O1/I1/O2 + 文档修正
+> 全部落地，全量 **2252 passed / 1 skipped**；见下方"已完成"节）
 
 ---
+
+## ✅ 已完成：真实 LLM 压力试用暴露缺陷修复（2026-08-12，unsafe-vibe-dev，全量 2252 passed / 1 skipped）
+
+> 按 `_FIX_PROPOSAL_CRITICAL_REVIEW_20260812.md` 修正后方案 + `_KERNEL_ISSUES_ANALYSIS_20260812.md`
+> 根因分析执行（用户授权破坏性变更）。修复后独立复核全部 PASS。
+
+- **批次 A（低风险直接合并）**：**PT-DEBT-27** 真实 LLM provider 失败异常投递对称化
+  （`_drive_loop_gen` Waitable yield except→pending_exception 重投递，TaskCancelled 穿透；+4 测试）；
+  **PT-DEBT-25** `global` 关键字镜像 nonlocal（visit_IbGlobalStmt + prescan 排除 global 名，
+  运行时零改动；+6 测试）；**PT-DEBT-28** `_spec.py` vtable 补注册 `ai.get_retry`/
+  `is_auto_intent_injection_enabled`（+3 测试）。
+- **批次 B（专项）**：**PT-DEBT-26** 整模块 import 档3 写入侧统一 MemberSpec 形态
+  （`_symbol_to_member`/`_spec_to_typeref`）+ 档2 零参数 callable 按 kind 绑定（+4 测试）。
+- **批次 C（设计级）**：**O1+I1** 用户类协议方法（`__call__`/`__iter__`）帧内 CPS 驱动
+  （`_UserCallDrive` Waitable+CPSDrivable，根治嵌套调度器；生成器方法经 IbUserFunction.call 返回
+  IbGenerator + resolve_iterable to_list；+9 测试）。设计记录 `_code_call_cps_drive.md`。
+- **批次 D**：**O2** 字段默认值递归深克隆（try_deep_clone，消除内层 list/用户对象跨实例共享；+3 测试）；
+  **文档修正**（05_functions §5.8/§5.9、KNOWN_LIMITS §二十四/§十四 #2/§一）。
+- **遗留待独立窗口**：嵌套包 `import subpkg.util` + 成员访问的 INT_INTERNAL_ERROR（修复前既有）；
+  DOC-ISSUE-001~007 文档同步；BOUNDARY 记录。
 
 ## ✅ 已完成：真实 LLM 全面压力试用重启（2026-08-12，修复后代码）
 
@@ -235,12 +254,14 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   27 provider 失败 LLMCallError 逃逸 try-except / 28 ai.get_retry vtable 未注册）+ 7 DOC_ISSUE +
   5 BOUNDARY。**合并检测维度已基于修复后代码确认**；阶段 3 合并/push 仍须用户显式授权。
 
+- **✅ 已完成（2026-08-12）**：试用暴露缺陷修复——PT-DEBT-25/26/27/28 + O1/I1/O2 + 文档修正全部落地
+  （全量 2252 passed / 1 skipped，见上方"已完成"节）。
+
 - **🔴 下一 session 主线（建议）**：
-  1. **缺陷根因修复（独立窗口，用户授权后）**：PT-DEBT-25~28 按 code-workflow 根因修复 + 补测试
-     （KERNEL-ISSUE-001 global / 002 整模块 import / 003 provider 失败异常捕获 / 004 ai vtable）。
-  2. **DOC-ISSUE-001~007 批量文档同步**（低风险，可随文档治理窗口处置）。
-  3. **KNOWN_LIMITS §二十四 复核**（生成器 await chan 实测可用，描述或过时）。
-  4. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认，待用户授权
+  1. **遗留缺陷独立窗口**：嵌套包 `import subpkg.util` + 成员访问的 INT_INTERNAL_ERROR
+     （修复前既有，与 PT-DEBT-26 同族形态问题）；DOC-ISSUE-001~007 批量文档同步；
+     BOUNDARY-003（隔离子环境不继承 LLM 配置）/005（probe_model 误判）处置。
+  2. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认，待用户授权
      `git merge unsafe-vibe-dev → main` + push。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
