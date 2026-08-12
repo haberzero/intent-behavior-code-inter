@@ -131,7 +131,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_FIX_PROPOSAL_CRITICAL_REVIEW_20260812.md` | **修复方案批判性审查**（2026-08-12）：架构一致性/代码健康四维度复审全部提案（档1 鸭子类型/档3 统一形态判定；O1 特判 vs 协议分派） |
 | `_USABILITY_AUDIT_20260812.md` | **试用易用性问题审计**（2026-08-12）：while true 小写 / return@~ 文档漂移 / switch break 等根源 + 修复状态 |
 | `_SWITCH_ENUM_ASSESSMENT_20260812.md` | **switch 设计评估 + enum 现状盘点**（2026-08-12）：维持自动跳出设计；enum 任意类型成员已放开 + 非 str LLM 集成缺陷 |
-| `_ENUM_SWITCH_COMPLETION_HANDOFF.md` | **enum/switch 补全评估 + KNOWN_LIMITS 分类交接**（2026-08-12）：enum 地基已备（axiom/prompt/iter 机制成熟）+ KNOWN_LIMITS 25 章分类 + 下一 session 核查清单 |
+| `_ENUM_SWITCH_COMPLETION_HANDOFF.md` | **enum/switch 补全评估 + KNOWN_LIMITS 分类交接**（2026-08-12）：enum 地基已备（axiom/prompt/iter 机制成熟）+ KNOWN_LIMITS 25 章分类 + 下一 session 核查清单。**enum 补全已落地（2026-08-12，见 `_code_enum_completion.md`）**，保留供追溯 |
+| `_code_enum_completion.md` | **enum 补全实现记录**（2026-08-12）：值模型定论（成员=底层值非实例）+ 非 str LLM 集成修复 + 迭代/数量 + KNOWN_LIMITS §二 + 实例化枚举设计候选 |
+| `_LLM_TRIAL_ENUM_IMPORT_20260812/` | **enum/import/运算符 用户试用**（2026-08-12）：9 例全过（含真实 LLM 非 str 枚举集成实证），无新增缺陷。DESIGN.md + REGISTER.md |
 
 ---
 
@@ -142,36 +144,36 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 ### 2.1 当前任务 / 下一阶段
 
 > **接手起点**：先读本节 + `tasks_docs/NEXT_STEPS.md`（当前最紧要）+
-> `tasks_docs/_ENUM_SWITCH_COMPLETION_HANDOFF.md`（**enum/switch 补全评估 + KNOWN_LIMITS 分类交接**）
-> + `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
+> `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主线（建议）：enum 补全（地基已备，优先）**（`_ENUM_SWITCH_COMPLETION_HANDOFF.md`）。
-  enum 现状（2026-08-12 全实测）：任意类型成员已放开；str 枚举全能力可用；**非 str 枚举 LLM 集成
-  不工作**（EnumAxiom.from_prompt 返回成员名非值）；迭代/数量/自定义方法不支持。地基（axiom 体系 /
-  get_method_specs / GenericTypeRegistry / prompt 协议 / CPS 驱动）全部成熟。建议范围：
-  1. **非 str 枚举 LLM 集成修复**（核心易用性陷阱）：编译期把成员值写入 `MemberSpec.metadata["value"]`，
-     `EnumAxiom.from_prompt` 解析成员名后映射回值。
-  2. **枚举自定义方法**：核对枚举类方法注册路径（与用户类方法对齐）。
-  3. **迭代 `for v in Color:` / 数量 `len(Color)`**：`has_iter_cap = True` + `get_method_specs`
-     注册 to_list/len（GeneratorAxiom 先例）。
-  4. **KNOWN_LIMITS §二 更新**（删"仅支持 str"过时；补迭代/数量/方法/LLM 集成状态）。
+- **🔴 下一 session 主线（建议）**：**阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）——检测/测试/文档维度
+  已确认（含 2026-08-12 enum/import 批次 + 用户试用），**待用户显式授权** `git merge unsafe-vibe-dev → main`
+  + push（禁 push 硬原则）。随后或并行：**枚举实例化设计候选**（`_code_enum_completion.md`，值模型
+  定论后独立设计窗口）、KNOWN_LIMITS §十四 #1 用户类泛型参数（独立大任务）、PT-DEBT-4、PT-DEBT-24、
+  PT-AUDIT-3 S1-S5。
 
-- **✅ 已完成（2026-08-12，unsafe-vibe-dev，全量 2270 passed / 1 skipped）**：
-  - **真实 LLM 全面压力试用重启**（`_REAL_LLM_TRIAL_REPORT_20260812.md`）：D1 全语法遍历 + D2 压力试用
-    + D3 批判检测（C1-C4）+ A1-A5 重验 + B1-B3，全部基于修复后代码真实 LLM 跑通。
-  - **试用暴露缺陷修复**（`_KERNEL_ISSUES_ANALYSIS_20260812.md` + `_FIX_PROPOSAL_CRITICAL_REVIEW_20260812.md`）：
-    PT-DEBT-25（global）/26（整模块 import）/27（异常逃逸）/28（ai vtable）+ O1（可调用实例 CPS）/
-    I1（生成器 __iter__）/O2（字段默认值深克隆）+ 文档修正，独立复核全部 PASS。
-  - **修复后回归试用**（REVERIFY，`_LLM_TRIAL_20260812/REVERIFY.md`）：50 次运行，已修复问题确认
-    已处理 + 受影响子系统回归全 PASS。
-  - **易用性修复**（`_USABILITY_AUDIT_20260812.md`）：return@~ 拦截随迁 v2（补全设计意图）、
-    switch 内 break 消费为 no-op、布尔字面量错误引导、KNOWN_LIMITS §十一 更新。
-  - **switch 设计评估**（`_SWITCH_ENUM_ASSESSMENT_20260812.md`）：维持"自动跳出"设计，不引入 C fall-through。
-  - 阶段 3 合并（`_MAIN_MERGE_PLAN.md`）检测/测试/文档维度已确认，**待用户显式授权**（禁 push 硬原则）。
+- **✅ 已完成（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）**：
+  - **enum 补全（PT-FEAT-2）**：非 str 枚举 LLM 集成修复（成员名→值映射，真实 LLM 实证 qwen
+    成员名→值 200→switch 命中）+ 迭代 `for v in Color:` + `len(Color)` + KNOWN_LIMITS §二 更新。
+    **自定义方法 = 值模型边界**（`Color.RED` 是底层值非实例）——实例化枚举为独立设计候选
+    （`_code_enum_completion.md`）。
+  - **嵌套包 import 根治**：`import subpkg.util` + 成员访问 INT_INTERNAL_ERROR 三层根因全部修复
+    （嵌套段 MemberSpec 统一 + 中间段 create_module 全名注册 + 绑定根段 + 运行时包命名空间幂等合并）。
+  - **文档批次**：DOC-ISSUE-001~007 批量同步 + BOUNDARY-001~005 处置 + KNOWN_LIMITS §十四 #2
+    运算符覆盖度实测核对（比较/算术/一元/成员全可用，`is` 恒身份；+6 回归测试）。
+  - **用户试用**：自建 `_LLM_TRIAL_ENUM_IMPORT_20260812/`（harness 复用），9 例全过（含真实 LLM
+    非 str 枚举集成实证），**无新增缺陷**。
+  - **独立复核（general agent）PASS** + 建议项整改（负数成员映射/注释卫生/死分支清理）。
 
-- **遗留待独立窗口**：嵌套包 `import subpkg.util` INT_INTERNAL_ERROR（修复前既有）；DOC-ISSUE-001~007
-  文档同步；BOUNDARY-003/005 处置；KNOWN_LIMITS §十四（用户类泛型/运算符覆盖度）独立评估。
+- **遗留待独立窗口**：枚举实例化设计候选；KNOWN_LIMITS §十四 #1 用户类泛型参数；PT-DEBT-4
+  （file 重命名）；PT-DEBT-24（call_intent 死代码）；PT-AUDIT-3 S1-S5；`import subpkg`（纯包目录）
+  DEP_MODULE_NOT_FOUND（Python 同语义）。
+
+- **本 session（2026-08-12，enum 补全 + 独立窗口打包 + 用户试用）**：按用户确认的建议打包推进。
+  enum 补全（值模型下 ①③④ 实现，② 根因为值模型文档化为边界）→ 嵌套包 import 根治 → DOC/BOUNDARY
+  文档批次 → 运算符覆盖度核对 → 自建用户试用 9 例全过。全量 2270 → 2308 passed / 1 skipped。
+  详见 WORKLOG 与本文件 §2.2。
 
 - **本 session（2026-08-12，真实 LLM 试用重启交接编制）**：评估确认原"真实 LLM e2e 全面试用"报告
   （`_REAL_LLM_E2E_REPORT.md` §四 9/12 类）基于含 U1-U7 不合格操作的旧代码；意图机制结论已纠错；
@@ -352,6 +354,24 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.2 已完成摘要
 
+- **2026-08-12（enum 补全 + 独立窗口打包 + 用户试用，unsafe-vibe-dev，全量 2270 → 2308 passed / 1 skipped）**：
+  - **enum 补全（PT-FEAT-2）**：① 非 str 枚举 LLM 集成修复——symbol_collection_pass 写常量成员值到
+    `MemberSpec.metadata["value"]`（含负数 `-1`），`EnumAxiom` 成员名→值映射 + from_prompt 大小写不敏感
+    返回值；str 零回归/值≠名正确；**真实 LLM 实证**（qwen 输出成员名 OK→值 200→switch 命中）。
+    ② 迭代 `for v in Color:` / `len(Color)`（has_iter_cap + get_method_specs + 运行时 Enum 基类绑定）。
+    ③ **枚举自定义方法 = 值模型边界**（`Color.RED` 返回底层值 static_val 非实例，根因是值模型非注册
+    缺口；实例化枚举为独立设计候选）。④ KNOWN_LIMITS §二 更新。设计记录 `_code_enum_completion.md`。
+  - **嵌套包 import 根治**：`import subpkg.util` + 成员访问 INT_INTERNAL_ERROR——三层根因（嵌套段原始
+    Symbol 入 members / visit_IbImport 绑定全名 / 中间段 PRIMITIVE kind 重导入守卫 + 运行时缺包命名空间）
+    全部修复；2层/3层/同包多导入合并 e2e 全过。
+  - **文档批次**：DOC-ISSUE-001~007 批量同步 + BOUNDARY-001~005 处置 + KNOWN_LIMITS §十四 #2 运算符
+    覆盖度实测核对（比较/算术/一元/成员全可用，`is` 恒身份；+6 回归测试）。
+  - **用户试用**：自建 `_LLM_TRIAL_ENUM_IMPORT_20260812/`（harness 三层保护复用），9 例全过，
+    无新增缺陷。
+  - **独立复核（general agent）PASS** + 建议项整改（负数映射/注释卫生/死分支清理/KNOWN_LIMITS 落档）。
+- **2026-08-12（本 session 合并前）**：真实 LLM 全面压力试用重启（D1 全语法 + D2 压力 + D3 批判 +
+  A1-A5 重验，2210/1）→ 试用暴露缺陷修复（PT-DEBT-25/26/27/28 + O1/I1/O2，2252/1）→ REVERIFY →
+  易用性修复（return@~ 拦截/switch break/布尔引导，2270/1）。详见 NEXT_STEPS。
 - **2026-08-09（本 session：P0 阶段5增量 + PT-FEAT-5×3 + PT-FEAT-10 + P2 审计 + 异步地基 M1/M2 收尾 + 低风险推进，unsafe-vibe-dev + 独立分支 exp/async-m1m2 / exp/audit-branch-nesting，全量 2074 → 2137 passed / 1 skipped）**：
   - **异步地基 M1/M2 收尾**：PT-DEBT-15 剩余 M1（.call 双写收敛）/ M2（驱动去重）完成——统一执行模型闭环
     全部收尾。M2 线程体 `_drive_generator` 复用 `_drive_loop_gen` + `TaskScheduler`（单一权威驱动）；M1 四个
@@ -425,16 +445,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（下一 session 主线=**重启真实 LLM 全面试用 + 语法/语言功能评估**）
-- [ ] 读 `_REAL_LLM_E2E_RESTART.md`（重启交接：背景/重验清单 A1-A5 + B1-B3 + C1-C4/执行方式）
-- [ ] 读 `_REAL_LLM_E2E_PLAN.md`（设计权威：§四 12 类遍历 + §五 批判检测）
-- [ ] 读 `_REAL_LLM_E2E_REPORT.md`（旧报告 §四 基于修复前代码，重启后需刷新 §四/§五/§七）
-- [ ] 确认本地端点：`curl localhost:1234/v1/models`（qwen3.6-35b-a3b）；探针素材 `/tmp/opencode/llm_probe/`
-- [ ] 读 `_PT_AUDIT3_RECORD.md`（PT-AUDIT-3 已执行；疑似项 S1-S5 待独立窗口）
-- [ ] 读 `PENDING_TASKS.md` §〇（PT-DEBT-22/23 已修复、24/F9/PT-AUDIT-3 状态、S1-S5 遗留）
+- [ ] 读本节 §2.1（下一 session 主线=**阶段 3 合并待用户授权** + 枚举实例化设计候选 + 独立窗口）
+- [ ] 读 `_MAIN_MERGE_PLAN.md` + `_MERGE_READY_REPORT.md`（合并条件已确认，阶段 3 待授权）
+- [ ] 读 `_code_enum_completion.md`（enum 补全记录 + 实例化枚举设计候选）
+- [ ] 读 `_LLM_TRIAL_ENUM_IMPORT_20260812/REGISTER.md`（enum/import/运算符 用户试用 9 例全过）
+- [ ] 读 `PENDING_TASKS.md` §〇（PT-FEAT-2 已完成、嵌套包 import 已修复、DOC/BOUNDARY 已处置）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2210 passed / 1 skipped**）
-- [ ] 重启任务完成后：更新 `_REAL_LLM_E2E_REPORT.md` §四表格 + §七重估 → 报告"合并检测维度已基于修复后代码确认"
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2308 passed / 1 skipped**）
+- [ ] 独立窗口候选：PT-DEBT-4 / PT-DEBT-24 / PT-AUDIT-3 S1-S5 / KNOWN_LIMITS §十四 #1 用户类泛型
 - [ ] 阶段 3 合并（`git merge unsafe-vibe-dev → main`）仍须用户显式授权；不自行 push
-- [ ] 独立窗口候选：PT-DEBT-4 / PT-DEBT-24 / PT-AUDIT-3 S1-S5 / F9（已评估设计意图）
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

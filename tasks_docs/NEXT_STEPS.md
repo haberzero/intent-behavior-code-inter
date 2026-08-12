@@ -2,11 +2,35 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-12（试用暴露缺陷修复 + 易用性修复**已完成**——PT-DEBT-25/26/27/28 +
-> O1/I1/O2 + return@~ 拦截/switch break/布尔引导 + 文档修正全部落地，全量 **2270 passed / 1 skipped**；
-> 见下方"已完成"节）
+> **最后更新**：2026-08-12（enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**已完成**——
+> 全量 **2308 passed / 1 skipped**；见下方"已完成"节）
 
 ---
+
+## ✅ 已完成：enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）
+
+> 按 `_ENUM_SWITCH_COMPLETION_HANDOFF.md` + 独立窗口打包（用户确认）。设计记录
+> `_code_enum_completion.md`；独立复核（general agent）PASS + 建议项整改；用户试用
+> `_LLM_TRIAL_ENUM_IMPORT_20260812/`（9 例全过）。
+
+- **enum 补全（PT-FEAT-2）**：① **非 str 枚举 LLM 集成修复**——编译期枚举常量成员
+  （含负数 `-1`）写 `MemberSpec.metadata["value"]`，`EnumAxiom` 建 `{成员名→成员值}`
+  映射，from_prompt 大小写不敏感返回值；str 零回归、值≠名正确，真实 LLM 实证
+  （qwen 输出成员名 OK→值 200→switch 命中）。② **迭代/数量**——`has_iter_cap` +
+  `get_method_specs(to_list/len)` + 运行时 Enum 基类绑定（子类经父链继承）；
+  `for v in Color:` / `len(Color)` 可用。③ **自定义方法 = 值模型边界**（`Color.RED`
+  是底层值非实例，方法不可达）——文档化 KNOWN_LIMITS §二 §2.4，实例化枚举记设计候选。
+  ④ KNOWN_LIMITS §二 更新。+22 契约/e2e 测试。
+- **嵌套包 import 根治**：`import subpkg.util` + `subpkg.util.fn()` INT_INTERNAL_ERROR
+  三层根因（嵌套段原始 Symbol 入 members / visit_IbImport 绑定全名 / 中间段 PRIMITIVE
+  kind 重导入守卫 + 运行时缺包命名空间）全部修复；2 层/3 层/同包多导入合并全过；+4 e2e。
+- **文档批次**：DOC-ISSUE-001~007 批量同步 + BOUNDARY-001~005 处置（001/002 已修核验，
+  003/004/005 文档精确化）+ KNOWN_LIMITS §十四 #2 运算符覆盖度实测核对
+  （比较/算术/一元/成员全可用，`is` 恒身份；+6 回归测试）。
+- **用户试用**：自建 `_LLM_TRIAL_ENUM_IMPORT_20260812/`（harness 三层保护复用），
+  9 例全过（含真实 LLM 非 str 枚举集成实证），**无新增缺陷**。
+- **遗留**：枚举实例化（设计候选，独立窗口）；KNOWN_LIMITS §十四 #1 用户类泛型参数（独立大任务）；
+  嵌套包 `import subpkg`（无子模块的纯包）仍 DEP_MODULE_NOT_FOUND（包目录非模块，Python 同）。
 
 ## ✅ 已完成：真实 LLM 压力试用暴露缺陷修复 + 易用性修复（2026-08-12，unsafe-vibe-dev，全量 2270 passed / 1 skipped）
 
@@ -253,28 +277,21 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **✅ 已完成（2026-08-12）**：真实 LLM 全面压力试用重启——**D1 全语法遍历（15 章）+ D2 压力试用
-  （交叉/正交/多层次/多可能性/多文件）+ D3 批判检测（C1-C4）+ A1-A5 重验 + B1-B3 补记录全部完成**
-  （基于修复后代码，真实 LLM ~110 次运行，三层死循环保护，零回归 2210/1）。
-  报告：`_REAL_LLM_TRIAL_REPORT_20260812.md`；证据：`_LLM_TRIAL_20260812/`。
-  **暴露问题（只记录未修复）**：4 项 P1 KERNEL_ISSUE（PT-DEBT-25 global / 26 整模块 import /
-  27 provider 失败 LLMCallError 逃逸 try-except / 28 ai.get_retry vtable 未注册）+ 7 DOC_ISSUE +
-  5 BOUNDARY。**合并检测维度已基于修复后代码确认**；阶段 3 合并/push 仍须用户显式授权。
-
-- **✅ 已完成（2026-08-12）**：试用暴露缺陷修复（PT-DEBT-25/26/27/28 + O1/I1/O2 + 文档修正）
-  + 易用性修复（return@~ 拦截 / switch break / 布尔引导 / KNOWN_LIMITS §十一）全部落地，
-  全量 **2270 passed / 1 skipped**（见上方"已完成"节与 `_USABILITY_AUDIT_20260812.md`）。
+- **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
+  （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成
+  真实模型实证 / 迭代 / 数量 / KNOWN_LIMITS §二）+ 嵌套包 `import subpkg.util` INT_INTERNAL_ERROR
+  根治（2层/3层/同包多导入合并）+ DOC-ISSUE-001~007 + BOUNDARY-001~005 + 运算符覆盖度核对。
+  独立复核 PASS + 用户试用 `_LLM_TRIAL_ENUM_IMPORT_20260812/` 9 例全过（无新增缺陷）。
+  详见上方"已完成"节与 `_code_enum_completion.md`。
 
 - **🔴 下一 session 主线（建议）**：
-  1. **enum 补全（地基已备，优先）**：见 `_ENUM_SWITCH_COMPLETION_HANDOFF.md`——
-     ① 非 str 枚举 LLM 集成修复（成员名→值映射，核心易用性陷阱）；② 枚举自定义方法；
-     ③ 迭代 `for v in Color:` / 数量 `len(Color)`（GeneratorAxiom 先例）；④ KNOWN_LIMITS §二 更新。
-  2. **遗留缺陷独立窗口**：嵌套包 `import subpkg.util` + 成员访问的 INT_INTERNAL_ERROR
-     （修复前既有，与 PT-DEBT-26 同族形态问题）；DOC-ISSUE-001~007 批量文档同步；
-     BOUNDARY-003（隔离子环境不继承 LLM 配置）/005（probe_model 误判）处置；
-     KNOWN_LIMITS §十四（用户类泛型参数/运算符覆盖度）独立评估。
-  3. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认，待用户授权
-     `git merge unsafe-vibe-dev → main` + push。
+  1. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认（含本 session 用户试用），
+     待用户显式授权 `git merge unsafe-vibe-dev → main` + push（禁 push 硬原则）。
+  2. **遗留独立窗口**：**枚举实例化设计候选**（成员携带 name/value 与方法；值模型定论后
+     独立设计窗口，见 `_code_enum_completion.md`）；KNOWN_LIMITS §十四 #1 用户类泛型参数
+     （独立大任务）；PT-DEBT-4 `file` 重命名；PT-DEBT-24（call_intent 死代码）；
+     PT-AUDIT-3 疑似项 S1-S5；BOUNDARY 已处置；`import subpkg`（纯包目录）DEP_MODULE_NOT_FOUND
+     （Python 同语义，包须含可导入模块）。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
   - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；
