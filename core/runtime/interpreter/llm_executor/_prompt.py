@@ -19,6 +19,22 @@ from core.kernel import ast as ib_ast
 
 
 class _PromptMixin:
+    def _try_axiom_output_hint(self, type_name: str) -> Optional[str]:
+        """Axiom 输出格式约束查找（sync/CPS 两路径共享单一实现）。
+
+        经 ``meta_reg.get_llm_output_hint_cap(descriptor)`` 查询内置类型的
+        ``__outputhint_prompt__``；用户类 vtable 分支由各路径各自驱动
+        （sync ``.call`` / CPS ``UserFunctionCall``），不在本方法内。
+        """
+        meta_reg = self.registry.get_metadata_registry()
+        if meta_reg:
+            descriptor = meta_reg.resolve(type_name)
+            if descriptor:
+                hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
+                if hint_cap:
+                    return hint_cap.__outputhint_prompt__(descriptor)
+        return None
+
     @staticmethod
     def _obj_to_prompt_str(val: Any) -> str:
         """Unified protocol-aware conversion of an IbObject to prompt string.
@@ -244,19 +260,9 @@ class _PromptMixin:
         """获取 __outputhint_prompt__ 用于注入到提示词
 
         查找顺序：
-        1. Axiom 内置类型：通过 meta_reg.get_llm_output_hint_cap(descriptor)
+        1. Axiom 内置类型：经 ``_try_axiom_output_hint``（共享实现）
         2. 用户自定义 IBCI 类：通过类 vtable 查找 __outputhint_prompt__ 方法
         """
-        def _try_axiom_hint(type_name: str) -> Optional[str]:
-            meta_reg = self.registry.get_metadata_registry()
-            if meta_reg:
-                descriptor = meta_reg.resolve(type_name)
-                if descriptor:
-                    hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
-                    if hint_cap:
-                        return hint_cap.__outputhint_prompt__(descriptor)
-            return None
-
         def _try_vtable_hint(type_name: str) -> Optional[str]:
             """回退：通过用户类 vtable 查找 __outputhint_prompt__（类方法语义）"""
             ib_class = self.registry.get_class(type_name)
@@ -275,7 +281,7 @@ class _PromptMixin:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
                 type_name = returns_data.get("id", "str")
-                hint = _try_axiom_hint(type_name)
+                hint = self._try_axiom_output_hint(type_name)
                 if hint is not None:
                     return hint
                 hint = _try_vtable_hint(type_name)
@@ -286,7 +292,7 @@ class _PromptMixin:
         if node_to_type:
             type_name = getattr(node_to_type, 'name', None)
             if type_name:
-                hint = _try_axiom_hint(type_name)
+                hint = self._try_axiom_output_hint(type_name)
                 if hint is not None:
                     return hint
                 hint = _try_vtable_hint(type_name)
@@ -305,16 +311,6 @@ class _PromptMixin:
         调度循环压栈驱动；调用方须 ``yield from``。
         """
         from core.runtime.shared.user_call import UserFunctionCall
-
-        def _try_axiom_hint(type_name: str) -> Optional[str]:
-            meta_reg = self.registry.get_metadata_registry()
-            if meta_reg:
-                descriptor = meta_reg.resolve(type_name)
-                if descriptor:
-                    hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
-                    if hint_cap:
-                        return hint_cap.__outputhint_prompt__(descriptor)
-            return None
 
         def _drive_vtable_hint(type_name: str):
             """用户类 vtable hint：yield UserFunctionCall 驱动（CPS 主路径）。"""
@@ -338,7 +334,7 @@ class _PromptMixin:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
                 type_name = returns_data.get("id", "str")
-                hint = _try_axiom_hint(type_name)
+                hint = self._try_axiom_output_hint(type_name)
                 if hint is not None:
                     return hint
                 hint = yield from _drive_vtable_hint(type_name)
@@ -349,7 +345,7 @@ class _PromptMixin:
         if node_to_type:
             type_name = getattr(node_to_type, 'name', None)
             if type_name:
-                hint = _try_axiom_hint(type_name)
+                hint = self._try_axiom_output_hint(type_name)
                 if hint is not None:
                     return hint
                 hint = yield from _drive_vtable_hint(type_name)
