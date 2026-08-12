@@ -98,14 +98,10 @@ class _UserCallDrive:
         return self._done
 
     def _drive(self):
-        from core.runtime.vm.handlers._shared import _vm_call_user_function
-        from core.runtime.coordinator import _drive_generator
-
-        vm = self._method.context.vm_executor
-        if vm is None:
-            raise RuntimeError("User method call: vm_executor not available")
-        gen = _vm_call_user_function(vm, self._method, self._receiver, self._args)
-        self._result = _drive_generator(vm, gen)
+        # 宿主同步兜底：委托 IbUserFunction.call（现对生成器方法返回 IbGenerator、
+        # 普通方法经 _drive_generator 驱动），与 VM 主路径语义对齐——避免本类
+        # 再实现一份生成器/普通分派（消双写）。
+        self._result = self._method.call(self._receiver, self._args)
         self._done = True
         return self._result
 
