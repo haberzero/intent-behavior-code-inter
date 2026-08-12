@@ -194,9 +194,10 @@ class SymbolResolver(ScopedVisitor):
 
             self._register_params(node.args, func_scope)
 
-            # 收集 nonlocal 声明的名称，这些不应被 prescan 注册为局部变量
+            # 收集 nonlocal/global 声明的名称，这些不应被 prescan 注册为局部变量
             nonlocal_names = self._collect_nonlocal_names(node.body)
-            self._prescan_body_locals(node.body, func_scope, nonlocal_names)
+            global_names = self._collect_global_names(node.body)
+            self._prescan_body_locals(node.body, func_scope, nonlocal_names, global_names)
 
             for stmt in node.body:
                 self.visit(stmt)
@@ -545,21 +546,61 @@ class SymbolResolver(ScopedVisitor):
             if name not in self.current_scope.symbols:
                 self.current_scope.symbols[name] = outer_sym
 
+    def visit_IbGlobalStmt(self, node: ast.IbGlobalStmt):
+        """访问 global 声明节点（docs/syntax/02_variables.md §2.6）。
+
+        global 使函数内对声明的读写作用于模块级作用域（与 Python 语义一致）。
+        把每个 global 名称解析/占位到模块根作用域，使函数内引用与赋值绑定到
+        模块级符号 UID（scope_<module>:<name>），运行时经 UID 链命中全局路由。
+        """
+        global_scope = self.current_scope.get_global_scope() if self.current_scope else None
+        for name in node.names:
+            if global_scope is None:
+                self.error(
+                    f"global declaration of '{name}' not allowed",
+                    node, code=SEM_INTENT_PLACEMENT
+                )
+                continue
+            sym = global_scope.resolve(name)
+            if sym is None:
+                # 声明先于定义（Python 语义：global 之后才定义全局变量）→
+                # 在模块作用域占位 any，运行时 define_variable_at_global 承载。
+                sym = VariableSymbol(
+                    name=name,
+                    kind=SymbolKind.VARIABLE,
+                    def_node=node,
+                    spec=self.registry.resolve("any"),
+                )
+                sym.is_global = True
+                global_scope.define(sym)
+            else:
+                sym.is_global = True
+            global_scope.add_global_ref(name)
+            # 当前函数作用域内注册对该全局符号的引用（不创建新局部符号），
+            # 使 visit_IbName / visit_IbAssign 解析到模块级 UID。
+            if name not in self.current_scope.symbols:
+                self.current_scope.symbols[name] = sym
+
     # ========== 辅助方法 ==========
 
-    def _prescan_body_locals(self, body: list, scope: SymbolTable, nonlocal_names: Optional[set] = None):
+    def _prescan_body_locals(self, body: list, scope: SymbolTable, nonlocal_names: Optional[set] = None,
+                             global_names: Optional[set] = None):
         """预扫描函数体，将赋值目标预注册为局部变量。
 
         确保函数体内的变量在被引用时已经有定义（避免 SEM_UNDEFINED_SYMBOL 误报）。
         nonlocal_names 中的变量名不会被注册为局部变量（它们引用外层作用域）。
+        global_names 中的变量名同样不会被注册为局部变量（它们引用模块级作用域）。
         """
         if nonlocal_names is None:
             nonlocal_names = set()
+        if global_names is None:
+            global_names = set()
+        excluded = nonlocal_names | global_names
 
         for stmt in body:
             if isinstance(stmt, ast.IbAssign):
                 for name, target in SymbolExtractor.get_assigned_names(stmt):
-                    if name not in scope.symbols and name not in nonlocal_names:
+                    if name not in scope.symbols and name not in excluded:
                         sym = VariableSymbol(
                             name=name,
                             kind=SymbolKind.VARIABLE,
@@ -583,7 +624,7 @@ class SymbolResolver(ScopedVisitor):
                 if stmt.target:
                     if isinstance(stmt.target, ast.IbName):
                         name = stmt.target.id
-                        if name not in scope.symbols:
+                        if name not in scope.symbols and name not in excluded:
                             sym = VariableSymbol(
                                 name=name,
                                 kind=SymbolKind.VARIABLE,
@@ -597,7 +638,7 @@ class SymbolResolver(ScopedVisitor):
                 for attr in vars(stmt):
                     child = getattr(stmt, attr)
                     if isinstance(child, list) and all(isinstance(i, ast.IbASTNode) for i in child):
-                        self._prescan_body_locals(child, scope, nonlocal_names)
+                        self._prescan_body_locals(child, scope, nonlocal_names, global_names)
 
     def _collect_nonlocal_names(self, body: list) -> set:
         """从函数体中收集所有 nonlocal 声明的变量名。
@@ -607,5 +648,16 @@ class SymbolResolver(ScopedVisitor):
         names = set()
         for stmt in body:
             if isinstance(stmt, ast.IbNonlocalStmt):
+                names.update(stmt.names)
+        return names
+
+    def _collect_global_names(self, body: list) -> set:
+        """从函数体中收集所有 global 声明的变量名。
+
+        扫描函数体顶层语句中的 IbGlobalStmt 节点。
+        """
+        names = set()
+        for stmt in body:
+            if isinstance(stmt, ast.IbGlobalStmt):
                 names.update(stmt.names)
         return names
