@@ -147,11 +147,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主线（建议）**：**阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）——检测/测试/文档维度
-  已确认（含 2026-08-12 enum/import 批次 + 用户试用），**待用户显式授权** `git merge unsafe-vibe-dev → main`
-  + push（禁 push 硬原则）。随后或并行：**枚举实例化设计候选**（`_code_enum_completion.md`，值模型
-  定论后独立设计窗口）、KNOWN_LIMITS §十四 #1 用户类泛型参数（独立大任务）、PT-DEBT-4、PT-DEBT-24、
+- **🔴 下一 session 主线（建议）**：**枚举实例化设计候选**（`_code_enum_completion.md`，值模型定论后
+  独立设计窗口）、KNOWN_LIMITS §十四 #1 用户类泛型参数（独立大任务）、PT-DEBT-4、PT-DEBT-24、
   PT-AUDIT-3 S1-S5。
+
+- **✅ 已完成（2026-08-12，合并执行）**：**阶段 3 合并**（用户显式授权）——`unsafe-vibe-dev` 全面
+  合并取代 `main`（merge commit `eb4a7d1`，main 树 == unsafe-vibe-dev 树，全量 2308/1 验证通过 +
+  push）；原 unsafe-vibe-dev 本地+远端删除，从新 main 分支出新 unsafe-vibe-dev（== origin/unsafe-vibe-dev
+  == eb4a7d1）供后续开发。main 现为稳定基线。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）**：
   - **enum 补全（PT-FEAT-2）**：非 str 枚举 LLM 集成修复（成员名→值映射，真实 LLM 实证 qwen

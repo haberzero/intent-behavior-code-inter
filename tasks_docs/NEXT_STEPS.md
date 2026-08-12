@@ -284,14 +284,16 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   独立复核 PASS + 用户试用 `_LLM_TRIAL_ENUM_IMPORT_20260812/` 9 例全过（无新增缺陷）。
   详见上方"已完成"节与 `_code_enum_completion.md`。
 
+- **✅ 已完成（2026-08-12）**：**阶段 3 合并执行**——`unsafe-vibe-dev` 全面合并取代 `main`（用户显式授权）。
+  `git merge --no-ff`（merge commit `eb4a7d1`），main 树 == unsafe-vibe-dev 树，全量 **2308 passed / 1 skipped**
+  验证通过；push main 到 origin。原 unsafe-vibe-dev 本地 + 远端已删除，从新 main 分支出新 unsafe-vibe-dev
+  （== origin/unsafe-vibe-dev == eb4a7d1）供后续开发。
+
 - **🔴 下一 session 主线（建议）**：
-  1. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认（含本 session 用户试用），
-     待用户显式授权 `git merge unsafe-vibe-dev → main` + push（禁 push 硬原则）。
-  2. **遗留独立窗口**：**枚举实例化设计候选**（成员携带 name/value 与方法；值模型定论后
-     独立设计窗口，见 `_code_enum_completion.md`）；KNOWN_LIMITS §十四 #1 用户类泛型参数
-     （独立大任务）；PT-DEBT-4 `file` 重命名；PT-DEBT-24（call_intent 死代码）；
-     PT-AUDIT-3 疑似项 S1-S5；BOUNDARY 已处置；`import subpkg`（纯包目录）DEP_MODULE_NOT_FOUND
-     （Python 同语义，包须含可导入模块）。
+  1. **枚举实例化设计候选**（成员携带 name/value 与方法；值模型定论后独立设计窗口，见 `_code_enum_completion.md`）。
+  2. **遗留独立窗口**：KNOWN_LIMITS §十四 #1 用户类泛型参数（独立大任务）；PT-DEBT-4 `file` 重命名；
+     PT-DEBT-24（call_intent 死代码）；PT-AUDIT-3 疑似项 S1-S5；`import subpkg`（纯包目录）
+     DEP_MODULE_NOT_FOUND（Python 同语义，包须含可导入模块）。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
   - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；
