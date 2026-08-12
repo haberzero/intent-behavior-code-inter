@@ -2,15 +2,17 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-12（试用暴露缺陷修复**已完成**——PT-DEBT-25/26/27/28 + O1/I1/O2 + 文档修正
-> 全部落地，全量 **2252 passed / 1 skipped**；见下方"已完成"节）
+> **最后更新**：2026-08-12（试用暴露缺陷修复 + 易用性修复**已完成**——PT-DEBT-25/26/27/28 +
+> O1/I1/O2 + return@~ 拦截/switch break/布尔引导 + 文档修正全部落地，全量 **2270 passed / 1 skipped**；
+> 见下方"已完成"节）
 
 ---
 
-## ✅ 已完成：真实 LLM 压力试用暴露缺陷修复（2026-08-12，unsafe-vibe-dev，全量 2252 passed / 1 skipped）
+## ✅ 已完成：真实 LLM 压力试用暴露缺陷修复 + 易用性修复（2026-08-12，unsafe-vibe-dev，全量 2270 passed / 1 skipped）
 
 > 按 `_FIX_PROPOSAL_CRITICAL_REVIEW_20260812.md` 修正后方案 + `_KERNEL_ISSUES_ANALYSIS_20260812.md`
-> 根因分析执行（用户授权破坏性变更）。修复后独立复核全部 PASS。
+> 根因分析执行（用户授权破坏性变更）。修复后独立复核全部 PASS。易用性修复见
+> `_USABILITY_AUDIT_20260812.md`。
 
 - **批次 A（低风险直接合并）**：**PT-DEBT-27** 真实 LLM provider 失败异常投递对称化
   （`_drive_loop_gen` Waitable yield except→pending_exception 重投递，TaskCancelled 穿透；+4 测试）；
@@ -24,8 +26,13 @@
   IbGenerator + resolve_iterable to_list；+9 测试）。设计记录 `_code_call_cps_drive.md`。
 - **批次 D**：**O2** 字段默认值递归深克隆（try_deep_clone，消除内层 list/用户对象跨实例共享；+3 测试）；
   **文档修正**（05_functions §5.8/§5.9、KNOWN_LIMITS §二十四/§十四 #2/§一）。
+- **易用性批次**：**return@~ 编译期拦截随迁 v2**（补全设计意图，消除"文档说禁止实际通过+运行时
+  类型错"陷阱；+4 测试）；**switch 内 break 消费为 no-op**（C 习惯冗余写法不再报
+  RUN_GENERIC_ERROR，CONTINUE 透传；+3 测试）；**布尔字面量错误引导**（true/false/none 报
+  "Did you mean True/False/None"；+3 测试）；**KNOWN_LIMITS §十一 更新**（switch 基本可用 +
+  使用约束）。
 - **遗留待独立窗口**：嵌套包 `import subpkg.util` + 成员访问的 INT_INTERNAL_ERROR（修复前既有）；
-  DOC-ISSUE-001~007 文档同步；BOUNDARY 记录。
+  DOC-ISSUE-001~007 文档同步；BOUNDARY 记录；**enum 补全（见 `_ENUM_SWITCH_COMPLETION_HANDOFF.md`）**。
 
 ## ✅ 已完成：真实 LLM 全面压力试用重启（2026-08-12，修复后代码）
 
@@ -254,8 +261,9 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   27 provider 失败 LLMCallError 逃逸 try-except / 28 ai.get_retry vtable 未注册）+ 7 DOC_ISSUE +
   5 BOUNDARY。**合并检测维度已基于修复后代码确认**；阶段 3 合并/push 仍须用户显式授权。
 
-- **✅ 已完成（2026-08-12）**：试用暴露缺陷修复——PT-DEBT-25/26/27/28 + O1/I1/O2 + 文档修正全部落地
-  （全量 2252 passed / 1 skipped，见上方"已完成"节）。
+- **✅ 已完成（2026-08-12）**：试用暴露缺陷修复（PT-DEBT-25/26/27/28 + O1/I1/O2 + 文档修正）
+  + 易用性修复（return@~ 拦截 / switch break / 布尔引导 / KNOWN_LIMITS §十一）全部落地，
+  全量 **2270 passed / 1 skipped**（见上方"已完成"节与 `_USABILITY_AUDIT_20260812.md`）。
 
 - **🔴 下一 session 主线（建议）**：
   1. **enum 补全（地基已备，优先）**：见 `_ENUM_SWITCH_COMPLETION_HANDOFF.md`——

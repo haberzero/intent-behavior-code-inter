@@ -126,6 +126,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_DOC_HEALTH_20260811.md` | **docs/ 全量健康检查记录**（2026-08-11，doc-governance Phase 2 审计 + Phase 4-5 处置）：P0/P1/P2 全部处置完成（P0 4 项 + P1 16 项 + P2 12 项），进度同步于文件内 |
 | `_API_CONFIG_DESIGN.md` | **`api_config.json` 配置机制分析与改进设计**（2026-08-11 用户提出，PT-FEAT-13）：C1-C7 **已全部落地**（含不合格操作 U3/U4/U6/U7），C8 远期。落地后此项保留供追溯 |
 | `_code_api_config.md` | PT-FEAT-13 临时任务文档（code-workflow Phase 5 本应删除，**待 U5 清理**）。保留供追溯交接 |
+| `_REAL_LLM_TRIAL_REPORT_20260812.md` | **真实 LLM 全面压力试用重启报告**（2026-08-12，修复后代码）：D1 全语法遍历 + D2 压力试用 + D3 批判检测（C1-C4）+ A1-A5 重验 + 暴露问题清单 + 合并条件重估 |
+| `_KERNEL_ISSUES_ANALYSIS_20260812.md` | **内核缺陷根因分析**（2026-08-12）：PT-DEBT-25/26/27/28 + O1/I1/O2 根因全链路证据 + 修复方案分档 |
+| `_FIX_PROPOSAL_CRITICAL_REVIEW_20260812.md` | **修复方案批判性审查**（2026-08-12）：架构一致性/代码健康四维度复审全部提案（档1 鸭子类型/档3 统一形态判定；O1 特判 vs 协议分派） |
+| `_USABILITY_AUDIT_20260812.md` | **试用易用性问题审计**（2026-08-12）：while true 小写 / return@~ 文档漂移 / switch break 等根源 + 修复状态 |
+| `_SWITCH_ENUM_ASSESSMENT_20260812.md` | **switch 设计评估 + enum 现状盘点**（2026-08-12）：维持自动跳出设计；enum 任意类型成员已放开 + 非 str LLM 集成缺陷 |
+| `_ENUM_SWITCH_COMPLETION_HANDOFF.md` | **enum/switch 补全评估 + KNOWN_LIMITS 分类交接**（2026-08-12）：enum 地基已备（axiom/prompt/iter 机制成熟）+ KNOWN_LIMITS 25 章分类 + 下一 session 核查清单 |
 
 ---
 
@@ -135,25 +141,37 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.1 当前任务 / 下一阶段
 
-> **接手起点**：先读本节 + `tasks_docs/_REAL_LLM_E2E_RESTART.md`（**真实 LLM 全面试用重启交接**）
-> + `tasks_docs/_REAL_LLM_E2E_PLAN.md`（设计权威：§四 12 类遍历 + §五 批判检测）
-> + `tasks_docs/_REAL_LLM_E2E_REPORT.md`（旧报告 §四 基于修复前代码，需刷新）
-> + `tasks_docs/PENDING_TASKS.md` §〇（PT-AUDIT-3 已执行，疑似项 S1-S5 待独立窗口）
+> **接手起点**：先读本节 + `tasks_docs/NEXT_STEPS.md`（当前最紧要）+
+> `tasks_docs/_ENUM_SWITCH_COMPLETION_HANDOFF.md`（**enum/switch 补全评估 + KNOWN_LIMITS 分类交接**）
+> + `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主线（建议）：重启真实 LLM 全面试用 + 语法/语言功能评估**（`_REAL_LLM_E2E_RESTART.md`）。
-  原任务（2026-08-11）基于含不合格操作（U1-U7）的旧代码执行后被中断；意图机制结论已被实证推翻
-  （7339220 纠错为机制缺陷）。修复后（U1-U7 / 意图纠错 / T1-T5 / PT-AUDIT-3 / dispatch 观测 d6d28e1 /
-  run_batch 观测 df1a896）**未在真实 LLM 下重跑 12 类遍历**。重启范围：
-  1. **§四 12 类全语法遍历**：每项真实 LLM 跑一遍；**A1-A5 重验点**——意图 `@`/`@!` 赋值路径真实效果
-     （7339220 实证）、内建遮蔽+LLM 表达式（f58d525）、generator.to_list（U1）、dispatch 赋值后 idbg
-     观测（d6d28e1）、run_batch 观测（df1a896）。
-  2. **§五 批判检测**：格式服从 / llmexcept 收敛 / 意图注入 / **补缺失场景**：长提示复杂 `__to_prompt__`
-     （C1）/ 非确定性多次差异（C2）/ 超时断连（C3）/ 并发扩展（C4）。
-  3. **B 类未测项补记录**：ihost 隔离 / 内建 / 异常（isolation demo 已真实跑通，记入报告）。
-  4. **更新验证报告**：`_REAL_LLM_E2E_REPORT.md` §四表格基于修复后代码刷新 + §七合并条件重估。
-  → 通过后才可报告"合并检测维度已基于修复后代码确认"；**阶段 3 合并/push 仍须用户显式授权**。
-  端点 `localhost:1234`（qwen3.6-35b-a3b）在线；配置 C1-C7 完备；探针素材 `/tmp/opencode/llm_probe/`。
+- **🔴 下一 session 主线（建议）：enum 补全（地基已备，优先）**（`_ENUM_SWITCH_COMPLETION_HANDOFF.md`）。
+  enum 现状（2026-08-12 全实测）：任意类型成员已放开；str 枚举全能力可用；**非 str 枚举 LLM 集成
+  不工作**（EnumAxiom.from_prompt 返回成员名非值）；迭代/数量/自定义方法不支持。地基（axiom 体系 /
+  get_method_specs / GenericTypeRegistry / prompt 协议 / CPS 驱动）全部成熟。建议范围：
+  1. **非 str 枚举 LLM 集成修复**（核心易用性陷阱）：编译期把成员值写入 `MemberSpec.metadata["value"]`，
+     `EnumAxiom.from_prompt` 解析成员名后映射回值。
+  2. **枚举自定义方法**：核对枚举类方法注册路径（与用户类方法对齐）。
+  3. **迭代 `for v in Color:` / 数量 `len(Color)`**：`has_iter_cap = True` + `get_method_specs`
+     注册 to_list/len（GeneratorAxiom 先例）。
+  4. **KNOWN_LIMITS §二 更新**（删"仅支持 str"过时；补迭代/数量/方法/LLM 集成状态）。
+
+- **✅ 已完成（2026-08-12，unsafe-vibe-dev，全量 2270 passed / 1 skipped）**：
+  - **真实 LLM 全面压力试用重启**（`_REAL_LLM_TRIAL_REPORT_20260812.md`）：D1 全语法遍历 + D2 压力试用
+    + D3 批判检测（C1-C4）+ A1-A5 重验 + B1-B3，全部基于修复后代码真实 LLM 跑通。
+  - **试用暴露缺陷修复**（`_KERNEL_ISSUES_ANALYSIS_20260812.md` + `_FIX_PROPOSAL_CRITICAL_REVIEW_20260812.md`）：
+    PT-DEBT-25（global）/26（整模块 import）/27（异常逃逸）/28（ai vtable）+ O1（可调用实例 CPS）/
+    I1（生成器 __iter__）/O2（字段默认值深克隆）+ 文档修正，独立复核全部 PASS。
+  - **修复后回归试用**（REVERIFY，`_LLM_TRIAL_20260812/REVERIFY.md`）：50 次运行，已修复问题确认
+    已处理 + 受影响子系统回归全 PASS。
+  - **易用性修复**（`_USABILITY_AUDIT_20260812.md`）：return@~ 拦截随迁 v2（补全设计意图）、
+    switch 内 break 消费为 no-op、布尔字面量错误引导、KNOWN_LIMITS §十一 更新。
+  - **switch 设计评估**（`_SWITCH_ENUM_ASSESSMENT_20260812.md`）：维持"自动跳出"设计，不引入 C fall-through。
+  - 阶段 3 合并（`_MAIN_MERGE_PLAN.md`）检测/测试/文档维度已确认，**待用户显式授权**（禁 push 硬原则）。
+
+- **遗留待独立窗口**：嵌套包 `import subpkg.util` INT_INTERNAL_ERROR（修复前既有）；DOC-ISSUE-001~007
+  文档同步；BOUNDARY-003/005 处置；KNOWN_LIMITS §十四（用户类泛型/运算符覆盖度）独立评估。
 
 - **本 session（2026-08-12，真实 LLM 试用重启交接编制）**：评估确认原"真实 LLM e2e 全面试用"报告
   （`_REAL_LLM_E2E_REPORT.md` §四 9/12 类）基于含 U1-U7 不合格操作的旧代码；意图机制结论已纠错；
