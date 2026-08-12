@@ -24,8 +24,6 @@ class TestIntentPropagation:
     """Validate intent propagation across frames and scopes.
 
     References:
-    - IBCI_SYNTAX_REFERENCE.md §6 Intent System
-    - docs/COMPLETED.md NS-2b/2c/2d
     - tests/e2e/test_e2e_intent.py
     """
 
@@ -76,10 +74,6 @@ print(y)
 
 class TestIntentPriority:
     """Validate intent mode and role priority rules.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §6.2 Intent Modes
-    - docs/VM_AND_INTERPRETER_DESIGN.md §7
     """
 
     def test_override_replaces_existing(self):
@@ -124,7 +118,6 @@ class TestIntentRetryRestoration:
     """Validate intent restoration after retry.
 
     References:
-    - docs/COMPLETED.md NS-2c (2026-05-11)
     - Issue #42 intent leak in retry
     """
 
@@ -196,7 +189,7 @@ print(y)
     def test_single_intent_on_regular_call_no_llm_path_does_not_leak(self):
         """INV-INTENT-SCOPE-3: one-shot on regular call with no LLM path is cleaned per statement."""
         code = """
-func pure_no_llm():
+func pure_no_llm() -> auto:
     int x = 1
     return
 
@@ -220,9 +213,6 @@ else:
 
 class TestIntentControlFlow:
     """Validate intent behavior in control flow.
-
-    References:
-    - tests/e2e/test_e2e_intent.py (legacy)
     """
 
     def test_intent_in_loop_iteration(self):

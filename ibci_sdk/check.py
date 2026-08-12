@@ -128,10 +128,18 @@ def check_plugin(plugin_dir: str) -> CheckResult:
                 if not isinstance(fspec, dict):
                     errors.append(f"vtable function '{fname}' spec must be a dict")
                     continue
-                if "param_types" not in fspec:
-                    warnings.append(f"vtable function '{fname}' missing 'param_types'")
-                elif not isinstance(fspec["param_types"], list):
-                    errors.append(f"vtable function '{fname}' 'param_types' must be a list")
+                if "params" not in fspec:
+                    warnings.append(f"vtable function '{fname}' missing 'params'")
+                elif not isinstance(fspec["params"], list):
+                    errors.append(f"vtable function '{fname}' 'params' must be a list")
+                elif not all(
+                    isinstance(p, dict) and "name" in p and "type" in p
+                    for p in fspec["params"]
+                ):
+                    errors.append(
+                        f"vtable function '{fname}' 'params' must be a list of "
+                        "{{'name': str, 'type': str}} descriptors"
+                    )
                 if "return_type" not in fspec:
                     warnings.append(f"vtable function '{fname}' missing 'return_type'")
                 elif not isinstance(fspec["return_type"], str):
@@ -182,9 +190,9 @@ def check_plugin(plugin_dir: str) -> CheckResult:
             if not callable(py_func):
                 errors.append(f"'{fname}' exists but is not callable")
                 continue
-            # 参数数量检查
-            if isinstance(fspec, dict) and "param_types" in fspec:
-                expected_count = len(fspec["param_types"])
+            # 参数数量检查（新格式 `params`：具名参数描述符列表）
+            if isinstance(fspec, dict) and "params" in fspec:
+                expected_count = len(fspec["params"])
                 sig = inspect.signature(py_func)
                 fixed_params = [
                     p for k, p in sig.parameters.items()
@@ -205,22 +213,13 @@ def check_plugin(plugin_dir: str) -> CheckResult:
                 errors.append(f"Variable '{vname}' declared in vtable but not found in implementation")
 
     # 8. IbStatefulPlugin 协议完整性
-    try:
-        # 不 import core.* — 直接检查方法名
-        is_stateful = (
-            hasattr(impl, "save_plugin_state") and
-            hasattr(impl, "restore_plugin_state")
-        )
-        is_stateless_marker = type(impl).__name__ in dir(type(impl).__mro__)
-        # 如果有其中一个但没有另一个，报警告
-        has_save = hasattr(impl, "save_plugin_state")
-        has_restore = hasattr(impl, "restore_plugin_state")
-        if has_save and not has_restore:
-            errors.append("save_plugin_state() found but restore_plugin_state() missing (IbStatefulPlugin incomplete)")
-        if has_restore and not has_save:
-            errors.append("restore_plugin_state() found but save_plugin_state() missing (IbStatefulPlugin incomplete)")
-    except Exception:
-        pass
+    # 不 import core.* — 直接检查方法名。若有其中一个但没有另一个，报警告。
+    has_save = hasattr(impl, "save_plugin_state")
+    has_restore = hasattr(impl, "restore_plugin_state")
+    if has_save and not has_restore:
+        errors.append("save_plugin_state() found but restore_plugin_state() missing (IbStatefulPlugin incomplete)")
+    if has_restore and not has_save:
+        errors.append("restore_plugin_state() found but save_plugin_state() missing (IbStatefulPlugin incomplete)")
 
     return result
 
@@ -231,6 +230,10 @@ def _load_module(name: str, path: str, extra_sys_paths: Optional[List[str]] = No
 
     对 __init__.py（含相对导入的包），使用 importlib.import_module() 方式加载。
     对独立文件（如 _spec.py），使用 spec_from_file_location 方式加载。
+
+    每次加载前调用 importlib.invalidate_caches() 清除 sys.path_importer_cache，
+    避免 TemporaryDirectory 创建/删除后 FileFinder 持有陈旧目录列表导致导入失败
+    （Windows 下目录 mtime 分辨率约 1-2 秒，短时间内的增删无法自动失效缓存）。
     """
     added = []
     try:
@@ -247,6 +250,8 @@ def _load_module(name: str, path: str, extra_sys_paths: Optional[List[str]] = No
             # 推断父包名（如 ibci_modules.ibci_math）
             parent_dir = os.path.dirname(pkg_dir)
             parent_name = os.path.basename(parent_dir)
+            # 清除路径导入缓存，确保 FileFinder 看到最新目录列表
+            importlib.invalidate_caches()
             # 检查 parent_dir 是否是 Python 包（有 __init__.py）
             if os.path.exists(os.path.join(parent_dir, "__init__.py")):
                 full_name = f"{parent_name}.{pkg_name}"

@@ -1,0 +1,20 @@
+# D1-01-001 基础类型 + 字面量 + type() 内省
+# doc: docs/syntax/01_types.md §1.1 + docs/syntax/12_builtins.md §12.1 type()
+# 期望: 各基础类型正确赋值，type() 返回规范名
+
+int a = 42
+float b = 3.14
+str c = "hello"
+bool d = True
+list[int] e = [1, 2, 3]
+tuple f = (1, "a", True)
+dict[str, int] g = {"k": 1}
+
+print("a_type=" + type(a))
+print("b_type=" + type(b))
+print("c_type=" + type(c))
+print("d_type=" + type(d))
+print("e_type=" + type(e))
+print("f_type=" + type(f))
+print("g_type=" + type(g))
+print("DONE")

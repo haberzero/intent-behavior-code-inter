@@ -1,0 +1,11 @@
+# R2-004 I1 修复：生成器 __iter__ for 迭代（修复前 GeneratorYield 崩溃）
+# 期望: x=1 x=2
+class Range:
+    func __iter__(self) -> int:
+        yield 1
+        yield 2
+
+Range r = Range()
+for int x in r:
+    print("x=" + (str)x)
+print("DONE")

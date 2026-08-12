@@ -29,7 +29,6 @@ class ICompilerService(Protocol):
     编译器服务接口。允许运行时动态编译代码或查询模块信息。
     """
     def compile_file(self, file_path: str) -> Any: ...
-    def compile_to_artifact_dict(self, file_path: str) -> Dict[str, Any]: ...
     def resolve_module_path(self, module_name: str) -> Optional[str]: ...
     def get_module_source(self, module_name: str) -> Optional[str]: ...
 
@@ -51,7 +50,6 @@ class IStateReader(Protocol):
     def get_vars_snapshot(self) -> Dict[str, Any]: ...
     def get_vars(self) -> Dict[str, Any]: ...
     def get_active_intents(self) -> List[Any]: ...
-    def get_last_llm_result(self) -> Optional[Any]: ...
     def get_llm_except_frames(self) -> List[Any]: ...
 
 @runtime_checkable
@@ -64,15 +62,19 @@ class ISymbolView(Protocol):
 @runtime_checkable
 class ILLMProvider(Protocol):
     """LLM 服务提供者标准接口"""
-    def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str: ...
-    def get_last_call_info(self) -> Dict[str, Any]: ...
-    def set_retry_hint(self, hint: str) -> None: ...
-    def get_retry_prompt(self, node_type: str) -> Optional[str]: ...
+    def __call__(self, sys_prompt: str, user_prompt: str) -> str: ...
+    def get_current_call_info(self) -> Dict[str, Any]: ...
+    # 返回类型提示：注入并约束模型输出格式（无对应注册时返回 None）
+    def get_return_type_prompt(self, type_name: str) -> Optional[str]: ...
+    # 最大 LLM 重试次数：llmexcept 重试循环读取（默认 3）
+    def get_retry(self) -> int: ...
+    # 自动意图注入开关：prompt 拼装前读取 provider 配置（默认 True）
+    def is_auto_intent_injection_enabled(self) -> bool: ...
 
 @runtime_checkable
 class ILLMExecutor(Protocol):
     """提供对内核 LLM 执行器的内省能力。"""
-    def get_last_call_info(self) -> Dict[str, Any]: ...
+    def get_current_call_info(self) -> Dict[str, Any]: ...
 
 
 @runtime_checkable
@@ -82,50 +84,42 @@ class IILLMExecutor(Protocol):
 
     职责划分
     --------
-    * ``invoke_behavior``             —— 行为对象公理化调用入口（供 IbBehavior.call() 使用）
-    * ``execute_behavior_expression`` —— 行为描述行底层执行
-    * ``execute_behavior_object``     —— 被动行为对象的底层执行
-    * ``get_last_call_info``          —— 内省上次 LLM 调用的诊断信息
+    * ``dispatch_eager``             —— 赋值上下文行为描述行并发派发（线程池 + LLMFuture）
+    * ``resolve``                    —— 阻塞等待 Future 完成
+    * ``run_batch``                  —— 并发批量执行行为对象
+    * ``get_current_call_info``      —— 内省最近 resolve 的 LLM 调用诊断信息
+
+    行为/LLM 函数的 CPS 执行入口（``execute_behavior_expression_cps`` /
+    ``execute_llm_function_cps`` / ``invoke_*_cps``）为运行时内部协作路径，
+    由 VM handler（``_vm_invoke_behavior`` / ``_vm_invoke_llm_function``）经
+    ``yield from`` 驱动，不在此公开协议面。
 
     设计原则：此接口驻留于 core.base，不依赖任何 runtime 具体类型；
     所有参数/返回类型均使用 Any，由实现层负责具体类型约束。
     """
-    def invoke_behavior(self, behavior: Any, context: Any) -> Any:
-        """
-        执行一个行为对象，返回 IbObject 结果。
-
-        该方法封装了全部执行细节（意图捕获、类型推导、结果缓存），
-        是 IbBehavior.call() 的唯一对外接触点，严禁再使用 _execute_behavior。
-        """
+    def get_current_call_info(self) -> Dict[str, Any]:
+        """获取最近一次 resolve 的 LLM 调用诊断信息。"""
         ...
 
-    def invoke_llm_function(self, func: Any, context: Any) -> Any:
-        """
-        执行一个命名 LLM 函数对象，返回 IbObject 结果。
-
-        作用域管理和参数绑定已由 IbLLMFunction.call() 完成。
-        此方法负责：调用 execute_llm_function、回写 last_llm_result（供 llmexcept 使用），
-        并返回解析后的 IbObject，而非 LLMResult。
-        是 IbLLMFunction.call() 的唯一执行分发点。
-        """
+    def resolve(self, node_uid: str) -> Any:
+        """阻塞等待 ``node_uid`` 对应的 ``LLMFuture`` 完成，返回结果。"""
         ...
 
-    def execute_behavior_expression(
+    def dispatch_eager(
         self,
         node_uid: str,
-        context: Any,
-        call_intent: Any = None,
-        captured_intents: Any = None,
+        execution_context: Any,
+        intent_ctx: Any = None,
     ) -> Any:
-        """执行行为描述行节点，返回 LLMResult。"""
+        """立即将 LLM 调用提交到后台线程池，返回 ``LLMFuture``（非阻塞）。"""
         ...
 
-    def execute_behavior_object(self, behavior: Any, context: Any) -> Any:
-        """执行被动行为对象，返回 LLMResult。"""
+    def hydrate(self, service_context: Any) -> None:
+        """水化依赖（注入 ``ServiceContext`` 并初始化结果解析器）。"""
         ...
 
-    def get_last_call_info(self) -> Dict[str, Any]:
-        """获取最后一次 LLM 调用的诊断信息。"""
+    def run_batch(self, behavior: Any, items: Any, execution_context: Any) -> Any:
+        """并发批量执行行为对象，返回可帧内 CPS 驱动的 Waitable（保序结果列表）。"""
         ...
 
 @runtime_checkable
@@ -150,22 +144,30 @@ class IExecutionFrame(Protocol):
 
     Protocol 方法约定：
     - current_scope  —— 当前作用域链（局部变量）
-    - intent_stack   —— 意图栈顶节点（IntentNode 链表，或 IbIntentContext 对象）
     - get_llm_except_frames() —— LLM 异常帧栈（只读副本）
-    - get_last_llm_result()   —— LLM 结果寄存器
     - fork_intent_snapshot()  —— 为 dispatch/retry 返回意图快照
     """
     @property
     def current_scope(self) -> Any: ...
 
     @property
-    def intent_stack(self) -> Any: ...
+    def intent_context(self) -> Any: ...
 
     def get_llm_except_frames(self) -> List[Any]: ...
 
-    def get_last_llm_result(self) -> Optional[Any]: ...
-
     def fork_intent_snapshot(self) -> Any: ...
+
+    def clear_inherited_intents(self) -> None: ...
+
+    def use_intent_context(self, ctx: Any) -> None: ...
+
+    def get_active_intent_ibobj(self) -> Any: ...
+
+    def enter_intent_scope(self) -> tuple: ...
+
+    def exit_intent_scope(self, saved: tuple) -> None: ...
+
+    def replace_intent_context(self, new_ctx: Any) -> None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -174,13 +176,11 @@ class IExecutionFrame(Protocol):
 
 @runtime_checkable
 class IVMTask(Protocol):
-    """VM 调度单元协议（公理 VM-T1）。
+    """VM 调度单元协议。
 
     每个 VMTask 包装一个生成器协程，形态等价于 CPU 寄存器组：
     ``node_uid`` 标识当前帧对应的 AST 节点；``generator`` 是按 yield 协议表达的
     协程，节点之间通过 ``yield child_uid`` 让出控制权。
-
-    实现位于 ``core.runtime.vm.task.VMTask``；该协议仅声明对外可观测属性。
     """
     node_uid: str
     generator: Any

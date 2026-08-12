@@ -1,13 +1,24 @@
+# Python plugin loading boundary — native paths intentional.
+#
+# 本模块位于 IBCI 运行时与 Python importlib 的交界：扫描到的目录最终喂给
+# os.listdir / os.path.isdir 以及 spec_from_file_location。
+# 这些 API 必须使用原生字符串，因此本文件保留 os.path 进行 FS 查询与
+# importlib 路径构造，不在每个边界点强行 IbPath 化。
+#
+# 路径规范化责任上移：IBCIEngine._resolve_plugin_search_paths 已通过
+# PathValidator.canonicalize_for_security / InstallPaths.modules_dir().to_native()
+# 提供绝对原生路径，此处不再重复 os.path.abspath。
 import os
-import sys
-import json
 import inspect
 import importlib.util
 from typing import Dict, List, Optional, Any
-from core.runtime.host.host_interface import HostInterface
-from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind
-from core.base.enums import RegistrationState
+
+from core.base.path import IbPath
+from core.kernel.host_interface import HostInterface
+from core.kernel.spec import TypeDef, MethodMemberSpec, MemberSpec, IbSpec, TypeKind, ParamDescriptor
+from core.base.enums import RegistrationState, Visibility
 from core.kernel.spec.type_ref import TypeRef
+from core.runtime.path import InstallPaths
 
 
 class ModuleDiscoveryService:
@@ -16,29 +27,36 @@ class ModuleDiscoveryService:
     负责在多个搜索路径（如 ibci_modules/ 和 plugins/）中发现并加载模块元数据。
     """
     def __init__(self, search_paths: List[str]):
-        self.search_paths = [os.path.abspath(p) for p in search_paths]
+        # 仅做分隔符规范化；调用方保证路径为绝对路径。
+        self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
 
-    def discover_all(self, registry: Optional[Any] = None) -> HostInterface:
+    def discover_all(self, registry: Optional[Any] = None, host: Optional[HostInterface] = None) -> HostInterface:
         """
         扫描所有搜索路径，加载所有发现的模块 spec。
 
         ``registry`` 必须是已完成 STAGE_3_PLUGIN_METADATA 初始化的 KernelRegistry，
         以确保 HostInterface 与引擎共享同一 SpecRegistry 实例（消除元数据双轨）。
         仅在无 registry 的孤立测试场景下允许省略。
+
+        ``host`` 为可选的已有 HostInterface；传入时直接向其追加发现结果，
+        用于保留构造期预注册的 kernel-native 模块。
         """
         if registry:
             registry.verify_level(RegistrationState.STAGE_3_PLUGIN_METADATA.value)
-            metadata_registry = registry.get_metadata_registry()
-            if metadata_registry is None:
-                raise ValueError(
-                    "discover_all(): registry.get_metadata_registry() returned None. "
-                    "Ensure initialize_builtin_classes() has been called before discover_all()."
-                )
-            host = HostInterface(external_registry=metadata_registry)
+            if host is None:
+                metadata_registry = registry.get_metadata_registry()
+                if metadata_registry is None:
+                    raise ValueError(
+                        "discover_all(): registry.get_metadata_registry() returned None. "
+                        "Ensure initialize_primitive_classes() has been called before discover_all()."
+                    )
+                host = HostInterface(external_registry=metadata_registry)
         else:
-            # 孤立使用（如独立单元测试）：创建独立 SpecRegistry 实例。
-            # 主引擎路径必须传入 registry 以确保注册表共享。
-            host = HostInterface()
+            if host is None:
+                # 孤立使用（如独立单元测试）：创建独立 SpecRegistry 实例。
+                # 主引擎路径必须传入 registry 以确保注册表共享。
+                host = HostInterface()
+
         discovered_modules = set()
 
         for path in self.search_paths:
@@ -56,6 +74,12 @@ class ModuleDiscoveryService:
                 spec_path = os.path.join(module_dir, "_spec.py")
 
                 if os.path.exists(spec_path):
+                    # 已预注册的 kernel-native 模块不再从磁盘重复加载
+                    logical_name = host.get_module_by_discovery_name(entry)
+                    if logical_name is not None and host.is_kernel_native(logical_name):
+                        discovered_modules.add(entry)
+                        continue
+
                     try:
                         spec_metadata = self._load_spec(entry, spec_path)
                         if spec_metadata:
@@ -66,28 +90,6 @@ class ModuleDiscoveryService:
                         raise RuntimeError(f"Fatal Error: Failed to load spec for module '{entry}': {e}") from e
 
         return host
-
-    def export_metadata(self, host: HostInterface, output_path: str) -> None:
-        """
-        将发现的元数据导出为 .ibc_meta 文件。
-
-        实现构建时元数据快照，使编译器能在编译前获取插件类型签名。
-        """
-        metadata_snapshot = {
-            "version": "1.0",
-            "modules": {}
-        }
-
-        registry = host.metadata
-        if hasattr(registry, 'to_dict'):
-            snapshot = registry.to_dict()
-            metadata_snapshot["modules"] = snapshot.get("modules", {})
-            metadata_snapshot["classes"] = snapshot.get("classes", {})
-            metadata_snapshot["functions"] = snapshot.get("functions", {})
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata_snapshot, f, indent=2, ensure_ascii=False)
 
     def _load_spec(self, module_name: str, spec_path: str) -> Optional[TypeDef]:
         """
@@ -101,25 +103,28 @@ class ModuleDiscoveryService:
 
         这确保 IBC-Inter 内核完全独立于 Python 反射机制。
         """
-        ibci_modules_path = os.path.dirname(os.path.dirname(spec_path))
-        if ibci_modules_path not in sys.path:
-            sys.path.insert(0, ibci_modules_path)
-
         parent_dir = os.path.basename(os.path.dirname(spec_path))
-        internal_name = f"ibci_{parent_dir}._spec"
+        # 对 ibci_modules/ 下的一方模块，使用完整命名空间 ibci_modules.<pkg>._spec，
+        # 与实现层导入命名空间保持一致，避免 namespace package 产生重复模块对象。
+        install_path = InstallPaths.modules_dir().to_native()
+        is_install_spec = os.path.normcase(os.path.dirname(os.path.dirname(spec_path))) == os.path.normcase(install_path)
+        internal_name = (
+            f"ibci_modules.{parent_dir}._spec"
+            if is_install_spec
+            else f"ibci_{parent_dir}._spec"
+        )
 
-        try:
-            spec = importlib.util.spec_from_file_location(internal_name, spec_path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-        except ImportError:
-            mod = None
+        # _spec.py 导入失败直接上抛（由 discover_all 的 Fatal Error 包装给出可读
+        # 诊断）。仓内全部 _spec.py 仅依赖标准库，无合法可选导入场景。
+        spec = importlib.util.spec_from_file_location(internal_name, spec_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
 
         raw_name = module_name
         # 读取插件种类声明：
         #   "method_module" — 工具/方法插件（math, ai, json 等），必须显式 import 后才可用。
         #   "type_module"   — 内置类型扩展，可由 Prelude 预注入为全局符号。
-        # 缺省值为 "method_module"，以确保向前兼容（所有未声明 kind 的旧插件
+        # 缺省值为 "method_module"（未声明 kind 的插件
         # 均被视为 method_module，不会意外成为预注入全局符号）。
         plugin_kind = "method_module"
 
@@ -130,27 +135,25 @@ class ModuleDiscoveryService:
                 plugin_kind = metadata_dict.get("kind", "method_module")
 
         if mod and hasattr(mod, '__ibcext_vtable__'):
-            try:
-                vtable = mod.__ibcext_vtable__()
+            # __ibcext_vtable__() 内部异常（含 ImportError）直接上抛，不静默吞掉
+            # （同 _load_spec 导入失败：由 discover_all Fatal Error 暴露）。
+            vtable = mod.__ibcext_vtable__()
 
-                # 协议2：深度嵌入模块直接返回 TypeDef
-                if isinstance(vtable, IbSpec) and vtable.kind == TypeKind.MODULE.value:
-                    vtable.name = raw_name
-                    # 方法插件必须显式 import 才可用，不预注入为全局内置符号
-                    if plugin_kind == "method_module":
-                        vtable.is_user_defined = True
-                    return vtable
+            # 协议2：深度嵌入模块直接返回 TypeDef
+            if isinstance(vtable, IbSpec) and vtable.kind == TypeKind.MODULE.value:
+                vtable.name = raw_name
+                # 方法插件必须显式 import 才可用，不预注入为全局内置符号
+                if plugin_kind == "method_module":
+                    vtable.visibility = Visibility.IMPORT_GATED
+                return vtable
 
-                # 协议1：标准插件（字典格式，零侵入）
-                if vtable and isinstance(vtable, dict):
-                    spec = self._build_spec_from_dict(raw_name, vtable)
-                    # 方法插件必须显式 import 才可用，不预注入为全局内置符号
-                    if plugin_kind == "method_module":
-                        spec.is_user_defined = True
-                    return spec
-
-            except ImportError:
-                pass
+            # 协议1：标准插件（字典格式，零侵入）
+            if vtable and isinstance(vtable, dict):
+                spec = self._build_spec_from_dict(raw_name, vtable)
+                # 方法插件必须显式 import 才可用，不预注入为全局内置符号
+                if plugin_kind == "method_module":
+                    spec.visibility = Visibility.IMPORT_GATED
+                return spec
 
         return None
 
@@ -159,14 +162,14 @@ class ModuleDiscoveryService:
         从字典格式元数据构建 TypeDef。
 
         支持两种函数描述格式：
-        1. 显式字典：{"param_types": ["str", "int"], "return_type": "float"}
-        2. 可调用对象：直接传入 Python 函数/方法，自动通过 inspect.signature() 提取参数类型注解
+        1. 显式字典：{"params": [{"name","type","default","kind"}], "return_type": "str"}
+        2. 可调用对象：直接传入 Python 函数/方法，自动通过 inspect.signature() 提取签名
 
         字典格式：
         {
             "functions": {
                 "parse": {
-                    "param_types": ["str"],
+                    "params": [{"name": "s", "type": "str"}],
                     "return_type": "dict"
                 },
                 "auto_sig_func": some_python_callable,  # 自动推导签名
@@ -189,19 +192,23 @@ class ModuleDiscoveryService:
         functions = vtable.get("functions", {})
         for func_name, func_sig in functions.items():
             if callable(func_sig):
-                # 自动从 Python 函数签名提取参数类型名
-                param_types, return_type = self._extract_signature(func_sig)
+                # 自动从 Python 函数签名提取参数描述
+                param_specs, return_type = self._extract_signature(func_sig)
+                if param_specs is None:
+                    raise RuntimeError(
+                        f"Module '{name_val}': callable '{func_name}' cannot have its "
+                        f"signature introspected (C builtin / dynamic callable). Declare "
+                        f"the signature explicitly as a dict in the vtable instead of "
+                        f"relying on silent 'any' fabrication."
+                    )
+                member = self._build_method_member(func_name, param_specs, return_type)
             elif isinstance(func_sig, dict):
-                param_types = func_sig.get("param_types", [])
                 return_type = func_sig.get("return_type", "void")
+                member = self._build_method_member(
+                    func_name, func_sig.get("params", []), return_type
+                )
             else:
-                param_types = []
-                return_type = "void"
-
-            member = MethodMemberSpec(
-                name=func_name,
-                kind="method",
-                type_ref=TypeRef.of(return_type), return_type=TypeRef.of(return_type), param_types=[TypeRef.of(p) for p in param_types])
+                member = self._build_method_member(func_name, [], "void")
             spec.members[func_name] = member
 
         variables = vtable.get("variables", {})
@@ -210,6 +217,30 @@ class ModuleDiscoveryService:
             spec.members[var_name] = MemberSpec(name=var_name, kind="field", type_ref=TypeRef.of(type_name))
 
         return spec
+
+    def _build_method_member(self, func_name: str, param_specs: list, return_type: str) -> MethodMemberSpec:
+        """从参数描述列表构建 MethodMemberSpec（类型列表 + 参数描述符）。"""
+        param_type_refs = []
+        descriptors = []
+        for p in param_specs:
+            ptype = p.get("type", "any") if isinstance(p, dict) else "any"
+            pname = p.get("name", "") if isinstance(p, dict) else ""
+            param_type_refs.append(TypeRef.of(ptype))
+            descriptors.append(ParamDescriptor(
+                name=pname,
+                kind=p.get("kind", "POSITIONAL_OR_KEYWORD") if isinstance(p, dict) else "POSITIONAL_OR_KEYWORD",
+                type_ref=TypeRef.of(ptype),
+                has_default=isinstance(p, dict) and "default" in p,
+                default_value=p.get("default") if isinstance(p, dict) else None,
+            ))
+        return MethodMemberSpec(
+            name=func_name,
+            kind="method",
+            type_ref=TypeRef.of(return_type),
+            return_type=TypeRef.of(return_type),
+            param_types=param_type_refs,
+            param_descriptors=descriptors,
+        )
 
     # Python type annotation → IBCI type name mapping
     _PY_TYPE_TO_IBCI: Dict[str, str] = {
@@ -224,16 +255,25 @@ class ModuleDiscoveryService:
         "None": "void",
     }
 
+    _KIND_MAP = {
+        inspect.Parameter.POSITIONAL_ONLY: "POSITIONAL_OR_KEYWORD",
+        inspect.Parameter.POSITIONAL_OR_KEYWORD: "POSITIONAL_OR_KEYWORD",
+        inspect.Parameter.VAR_POSITIONAL: "VAR_POSITIONAL",
+        inspect.Parameter.KEYWORD_ONLY: "KEYWORD_ONLY",
+        inspect.Parameter.VAR_KEYWORD: "VAR_KEYWORD",
+    }
+
     def _extract_signature(self, func: Any) -> tuple:
         """
-        通过 inspect.signature() 从 Python 函数自动提取参数类型名和返回类型名。
+        通过 inspect.signature() 从 Python 函数自动提取参数描述与返回类型名。
 
         - 跳过第一个参数（约定为 self）
         - 有注解则映射为 IBCI 类型名，无注解默认为 "any"
+        - 参数默认值与种类（*args/**kwargs/keyword-only）一并提取
         - 返回类型无注解时默认为 "any"
 
         返回:
-            (param_type_names: List[str], return_type_name: str)
+            (param_specs: List[Dict], return_type_name: str)
         """
         try:
             sig = inspect.signature(func)
@@ -242,13 +282,20 @@ class ModuleDiscoveryService:
             if params and params[0].name in ("self", "cls"):
                 params = params[1:]
 
-            param_types = []
+            param_specs = []
             for p in params:
                 if p.annotation is inspect.Parameter.empty:
-                    param_types.append("any")
+                    ptype = "any"
                 else:
                     ann_name = getattr(p.annotation, "__name__", str(p.annotation))
-                    param_types.append(self._PY_TYPE_TO_IBCI.get(ann_name, "any"))
+                    ptype = self._PY_TYPE_TO_IBCI.get(ann_name, "any")
+                spec: Dict[str, Any] = {"name": p.name, "type": ptype}
+                if p.default is not inspect.Parameter.empty:
+                    spec["default"] = p.default
+                kind = self._KIND_MAP.get(p.kind, "POSITIONAL_OR_KEYWORD")
+                if kind != "POSITIONAL_OR_KEYWORD":
+                    spec["kind"] = kind
+                param_specs.append(spec)
 
             ret_ann = sig.return_annotation
             if ret_ann is inspect.Signature.empty:
@@ -257,6 +304,8 @@ class ModuleDiscoveryService:
                 ret_name = getattr(ret_ann, "__name__", str(ret_ann))
                 return_type = self._PY_TYPE_TO_IBCI.get(ret_name, "any")
 
-            return param_types, return_type
+            return param_specs, return_type
         except (ValueError, TypeError):
-            return [], "any"
+            # 显式"无签名"状态：C 内建 / 动态 callable 无法内省。交由调用方
+            # fail-fast——伪造空契约会把类型错误静默推迟到运行时才炸。
+            return None, None

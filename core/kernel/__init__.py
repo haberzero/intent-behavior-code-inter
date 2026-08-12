@@ -1,5 +1,5 @@
 # IBC-Inter Domain Layer
-# builtin_schema removed (Axiom-driven)
+# primitive_schema removed (Axiom-driven)
 
 from .registry import KernelRegistry
 

@@ -1,5 +1,6 @@
 from typing import List, Optional
 from contextlib import contextmanager
+from core.base.diagnostics.codes import PAR_EXPECTED_TOKEN
 from core.compiler.common.tokens import Token, TokenType
 from core.kernel import ast as ast
 from core.compiler.common.diagnostics import DiagnosticReporter
@@ -42,12 +43,12 @@ class TokenStream:
             self.current += 1
         return self.previous()
 
-    def consume(self, type: TokenType, message: str, code: str = "PAR_001") -> Token:
+    def consume(self, type: TokenType, message: str, code: str = PAR_EXPECTED_TOKEN) -> Token:
         if self.check(type):
             return self.advance()
         raise self.error(self.peek(), message, code=code)
 
-    def consume_end_of_statement(self, message: str, code: str = "PAR_001"):
+    def consume_end_of_statement(self, message: str, code: str = PAR_EXPECTED_TOKEN):
         if self.check(TokenType.NEWLINE):
             self.advance()
         elif self.is_at_end():
@@ -92,6 +93,6 @@ class TokenStream:
             if success:
                 old_tracker.merge(temp_tracker)
 
-    def error(self, token: Token, message: str, code: str = "PAR_001") -> Exception:
+    def error(self, token: Token, message: str, code: str = PAR_EXPECTED_TOKEN) -> Exception:
         self.issue_tracker.error(message, token, code=code)
         return ParseControlFlowError()

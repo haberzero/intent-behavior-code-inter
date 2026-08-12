@@ -17,13 +17,9 @@ import idbg
 
 print("\n=== Mock 机制演示 ===\n")
 
-ai.set_config(
-    "TESTONLY",
-    "TESTONLY",
-    "TESTONLY"
-)
+ai.set_mock_mode()
 
-print("使用 TESTONLY 模式启用 Mock")
+print("使用 MOCK 模式启用 Mock")
 
 # ============================================================
 # Mock 指令格式说明
@@ -111,16 +107,16 @@ print("MOCK:DICT name = " + (str)person["name"])
 print("MOCK:DICT age  = " + (str)person["age"])
 
 # 通过 idbg 确认 LLM 调用详情（中间变量探查）
-any last4 = idbg.last_llm()
-print("idbg.last_llm() 含 MOCK:DICT 标记: " + (str)("MOCK:DICT" in (str)last4))
+any last4 = idbg.current_llm()
+print("idbg.current_llm() 含 MOCK:DICT 标记: " + (str)("MOCK:DICT" in (str)last4))
 
 # ============================================================
-# 5. llmexcept 与 idbg.last_result()
+# 5. llmexcept 与 idbg.current_result()
 # ============================================================
 
-print("\n=== 5. llmexcept 与 idbg.last_result() ===\n")
+print("\n=== 5. llmexcept 与 idbg.current_result() ===\n")
 
-print("使用 idbg.last_result() 获取详细的 LLM 响应信息...")
+print("使用 idbg.current_result() 获取详细的 LLM 响应信息...")
 
 str query = "hello"
 print("查询: " + query)
@@ -128,10 +124,10 @@ print("查询: " + query)
 try:
     str result7 = @~ MOCK:FAIL 请翻译 "$query" ~
     llmexcept:
-        any last_info = idbg.last_result()
+        any last_info = idbg.current_result()
         print("进入 llmexcept 处理块")
-        print("idbg.last_result() raw_response: " + (str)last_info["raw_response"])
-        print("idbg.last_result() success:      " + (str)last_info["success"])
+        print("idbg.current_result() raw_response: " + (str)last_info["raw_response"])
+        print("idbg.current_result() success:      " + (str)last_info["success"])
         retry "请直接翻译为中文，不要其他文字"
 
     print("翻译结果: " + (str)result7)

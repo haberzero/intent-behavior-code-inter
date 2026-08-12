@@ -1,0 +1,229 @@
+"""多任务协作调度器（统一执行地基 · 阶段 1a：等待策略接入）。
+
+本模块是 VM 多任务化的**执行核心**：管理多个可挂起任务（每个是可挂起生成器），
+在单线程内轮转推进，当一个任务等待 IO（waitable）时挂起、让出给其它任务。
+
+任务契约（生成器）：
+- ``yield waitable`` —— 挂起，等待 ``waitable`` 就绪（调度器就绪后 ``send(result)`` 恢复）
+- ``return value``    —— 完成（``StopIteration.value``）
+
+    等待策略（阶段 1a + R2 通知式唤醒）：
+    - 每轮推进：先恢复就绪的等待任务（poll ``is_done``），再推进就绪任务；
+    - 无就绪但有待决任务时 **park**（等待 ``_wake_event``；waitable 完成时经
+      ``register_wake`` 即时设置，无轮询延迟）后重新轮询；安全超时仅兜底
+      （未注册通知的 waitable / 跨线程竞态下不至于永久阻塞）。
+
+帧数控制（深递归友好）：
+- ``run`` 循环**内联**推进与恢复逻辑（不拆 ``_advance``/``_step`` 方法）——用户函数递归
+  调用每层经 ``run_body → run → scheduler.run`` 嵌套，方法帧会推高 Python 递归栈；
+  内联使每层帧数低于旧 ``_drive_loop`` 路径（EXEC-1 无 Python 递归是目标，函数调用
+  路径的 trampoline 化列为阶段 1 后续工作项，本阶段先保证不劣于基线）。
+
+设计原则：
+- 生成器本身就是可挂起状态（yield=挂起、send=恢复），无需额外帧快照协议。
+- 单线程协作式，无锁；是 VM 主路径（``run``/``run_many``）与线程体（阶段 1e）的公共地基。
+- 目的：**服务 LLM 调用**（IO 密集，等待释放 GIL）。受 Python GIL 限制，不追求
+  CPU 并行或通用并发框架——本调度器只做多路 LLM IO 的协作式推进。
+
+与现有 ``control.ControlSignal`` 的关系：本模块先用纯 waitable 契约表达挂起，
+不引入新的控制流信号；后续语言级 async/await 再在其上构建显式语法。
+"""
+from __future__ import annotations
+
+import threading
+import time
+from dataclasses import dataclass
+from typing import Any, Generator, List, Optional
+
+from core.runtime.shared.signals import Signal, ControlSignal
+from core.runtime.shared.waitable import Waitable
+
+# Waitable 协议定义于叶子模块 core/runtime/shared/waitable.py（避免 vm ↔ host /
+# vm ↔ bootstrapper 循环导入）；此处重导出，保持 ``from core.runtime.vm.task_scheduler
+# import Waitable`` 的既有导入路径可用。
+__all__ = ["Task", "TaskScheduler", "TaskCancelled", "Waitable"]
+
+
+class TaskCancelled(BaseException):
+    """任务被协作式取消（调度器级统一信号）。
+
+    继承 :class:`BaseException`（非 Exception）：不被用户 try-except（捕获 Exception）
+    与 ``_drive_loop_gen`` 的 ``except Exception`` 拦截，沿 CPS 栈直接传播——
+    调度器在步进边界 ``gen.throw(TaskCancelled())`` 送达，任务体的 ``finally``
+    正常执行（资源清理），随后任务结果槽标记为取消。
+    """
+
+
+@dataclass
+class Task:
+    """调度器中的一个可挂起任务。
+
+    ``index`` 为提交序号（自 0 起），用于把完成值按提交序收集到结果槽位，
+    保证 ``run()`` 返回序与提交序一致（而非完成序——完成序不可预测）。
+
+    ``cancelled``：协作取消标志（调度器在步进边界检查，阶段 1c 接线）。
+
+    resume 状态（waitable 就绪后投递给任务）：
+    - ``resumed``：是否有待投递的 resume payload（值或异常）。
+    - ``resume_value`` / ``resume_exception``：待投递的值 / 异常（互斥）。
+    """
+
+    gen: Any
+    index: int = 0
+    node_uid: str = ""
+    waiting_on: Optional[Waitable] = None
+    cancelled: bool = False
+    resumed: bool = False
+    resume_value: Any = None
+    resume_exception: Optional[BaseException] = None
+
+
+class TaskScheduler:
+    """多任务协作调度器。
+
+    用法：``submit(gen)`` 加入任务，``run()`` 推进到全部完成，返回各任务返回值。
+
+    结果序契约：``run()`` 返回的列表**按提交序**（与 ``submit`` 调用顺序一致），
+    而非完成序——完成序不可预测，按提交序才使调用方能按索引取回对应任务结果。
+
+    等待策略：poll ``is_done`` + 通知式唤醒（R2）——任务转等待时对 waitable
+    注册 ``register_wake(self._wake_event)``；全等待时 ``_wake_event.wait``
+    （完成即被唤醒，无轮询延迟）；未注册通知的 waitable 退回首轮询 + 安全
+    超时兜底。
+    ``run`` 循环内联推进/恢复/等待（帧数控制见模块 docstring）。
+    """
+
+    def __init__(self, park_interval: float = 0.001, cancel_event: Any = None):
+        self._ready: List[Task] = []
+        self._waiting: List[Task] = []
+        self._submit_count: int = 0
+        self._results: List[Any] = []
+        self._park_interval = park_interval
+        # 通知式唤醒事件：waitable 完成时经 register_wake 设置，唤醒全等待 park。
+        self._wake_event = threading.Event()
+        self._cancel_event = cancel_event  # 可选：设置后 park 期间取消全部等待任务
+        self._lock = threading.Lock()  # 保护 cancel() 的并发取消（跨线程）
+
+    def submit(self, gen: Generator, node_uid: str = "") -> None:
+        task = Task(gen=gen, index=self._submit_count, node_uid=node_uid)
+        self._submit_count += 1
+        self._results.append(None)  # 预分配结果槽位，按提交序收集
+        self._ready.append(task)
+
+    def cancel(self, index: Optional[int] = None) -> None:
+        """协作式取消任务（线程安全；跨线程可调用）。
+
+        ``index=None`` 取消全部；否则取消指定提交序的任务。取消是**协作式**：
+        调度器在下一个步进边界 ``gen.throw(TaskCancelled())`` 送达，任务体
+        ``finally`` 执行后结果槽标记为 ``TaskCancelled``。纯 CPU 任务无可挂起点
+        时无法立即打断（与线程 cancel 一致）。
+        """
+        with self._lock:
+            targets = [t for t in self._ready if index is None or t.index == index]
+            targets += [t for t in self._waiting if index is None or t.index == index]
+            for t in targets:
+                t.cancelled = True
+
+    def run(self) -> List[Any]:
+        """运行到所有任务完成，返回各任务的完成值（按提交序）。
+
+        循环（帧数内联）：
+        1. 恢复等待任务（``try_result()`` 非阻塞取：ok → 投递值；抛异常 → 投递
+           终态错误；未就绪 → 继续等待）；
+        2. 推进就绪任务（``send`` 一步；yield Waitable → 等待表；完成 → 写结果槽）；
+        3. 无就绪但有等待 → park 短睡眠后重新轮询。
+
+        调度器**只**经 ``try_result()`` 消费（永不阻塞、每个 waitable 恰一次）；
+        ``result()`` 为宿主/线程体专用，调度器不得调用（HostAwaitable 消耗性）。
+        """
+        park = self._park_interval
+        while self._ready or self._waiting:
+            # 1) 恢复等待任务（已取消 → 直接进入取消投递；未取消 → try_result 非阻塞取）
+            still_waiting: List[Task] = []
+            for t in self._waiting:
+                if t.cancelled:
+                    t.waiting_on = None
+                    self._ready.append(t)
+                elif t.waiting_on is None:
+                    still_waiting.append(t)
+                else:
+                    try:
+                        ok, val = t.waiting_on.try_result()
+                    except Exception as e:
+                        # 终态错误（通道关闭空队列 / Future 失败）→ 投递进任务，
+                        # 经 CPS 传播让 try-except / llmexcept 处理。
+                        t.resume_exception = e
+                        t.resumed = True
+                        t.waiting_on = None
+                        self._ready.append(t)
+                    else:
+                        if ok:
+                            t.resume_value = val
+                            t.resumed = True
+                            t.waiting_on = None
+                            self._ready.append(t)
+                        else:
+                            still_waiting.append(t)
+            self._waiting = still_waiting
+
+            # 2) 推进本轮就绪任务（每步进边界检查协作取消）
+            still_ready: List[Task] = []
+            for t in self._ready:
+                try:
+                    if t.cancelled:
+                        yielded = t.gen.throw(TaskCancelled())
+                    elif t.resume_exception is not None:
+                        exc = t.resume_exception
+                        t.resume_exception = None
+                        t.resumed = False
+                        yielded = t.gen.throw(exc)
+                    elif t.resumed:
+                        val = t.resume_value
+                        t.resumed = False
+                        yielded = t.gen.send(val)
+                    else:
+                        # 首次推进（submit 后第一步）
+                        yielded = t.gen.send(None)
+                except StopIteration as si:
+                    self._results[t.index] = si.value
+                    continue
+                except TaskCancelled:
+                    # 协作取消：任务体 finally 已执行（gen.throw 展开），结果槽标记取消
+                    self._results[t.index] = TaskCancelled()
+                    continue
+
+                # 任务 yield 了一个 waitable → 挂起（下一轮 step 1 经 try_result 恢复）。
+                # R2：注册完成通知，waitable 完成时即时唤醒调度器（无 ~1ms 轮询延迟）。
+                if isinstance(yielded, Waitable):
+                    t.waiting_on = yielded
+                    self._waiting.append(t)
+                    try:
+                        yielded.register_wake(self._wake_event)
+                    except AttributeError:
+                        # register_wake 是可选通知钩子（结构性协议允许缺失）——
+                        # 缺失即"无通知能力"，退回首轮询 + 安全超时兜底。
+                        # 注意：不是决策分派（决策仍经 try_result），故 AttributeError
+                        # 回退不违反"禁止能力探测"——本回退只是放弃性能优化。
+                        pass
+                else:
+                    # 非 waitable（未知 yield 值）→ fail-fast：任务契约只允许 yield waitable
+                    raise RuntimeError(
+                        f"TaskScheduler: 任务 yield 了非 waitable 值 {yielded!r}（task={t.node_uid!r}）。"
+                        f"任务契约只允许 yield Waitable 或 return 完成值。"
+                    )
+            self._ready = still_ready
+
+            # 3) 无就绪但有待决 → 等待唤醒事件（完成即被唤醒），安全超时兜底
+            if not self._ready and self._waiting:
+                if self._cancel_event is not None and self._cancel_event.is_set():
+                    # 协作取消：等待中的任务也取消（park 期间唤醒）
+                    for t in self._waiting:
+                        t.cancelled = True
+                    # 立即唤醒：已取消任务不再依赖 waitable 完成，直接进入下一轮投递
+                    self._wake_event.set()
+                # 等待通知式唤醒：waitable 完成时经 register_wake 设置事件，
+                # 立即唤醒重 poll（无轮询延迟）；park_interval 作安全超时兜底
+                # （未注册通知的 waitable / 事件竞态下不至于永久阻塞）。
+                self._wake_event.wait(timeout=park)
+                self._wake_event.clear()
+        return self._results

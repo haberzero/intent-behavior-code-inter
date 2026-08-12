@@ -1,14 +1,16 @@
 """
-IBCI Path Module - 路径管理模块
+IBCI runtime path — 运行时/环境特有的路径服务。
 
-提供 IBCI 独立的路径管理能力，与 Python os.path 解耦。
+纯路径原语与 IBCI 路径模型位于 base/path 与 kernel/path。
+本包仅保留运行时/环境特有的能力：安装发现（InstallPaths）。
+
+注意：``InstallPaths`` ``import ibci_modules``（安装发现），属于环境/运行时关注点，
+故留 runtime 层；compiler 不需要它（search_paths 由 engine 传入）。
+
+InstallPaths：精确表达安装根路径语义。
 """
-from .ib_path import IbPath
-from .resolver import PathResolver
-from .validator import PathValidator
+from .install import InstallPaths
 
 __all__ = [
-    "IbPath",
-    "PathResolver",
-    "PathValidator",
+    "InstallPaths",
 ]

@@ -24,7 +24,6 @@ class TestCPSExecutionModel:
     """Validate CPS execution model guarantees.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §2 CPS Architecture
     - core/runtime/interpreter/cps_interpreter.py
     """
 
@@ -81,7 +80,6 @@ class TestSignalPropagation:
     """Validate control flow signal propagation.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §5 Signal Handling
     - core/runtime/interpreter/signals.py
     """
 
@@ -154,7 +152,6 @@ class TestFrameStackManagement:
     """Validate frame stack management and isolation.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §3 Frame Stack
     - core/runtime/interpreter/runtime_context.py
     """
 
@@ -227,8 +224,6 @@ print(test2())
 class TestRecursionGuarantees:
     """Validate recursion depth guarantees.
 
-    References:
-    - docs/COMPLETED.md PT-1.3 (Frame depth limits)
     """
 
     def test_reasonable_recursion_depth(self):
@@ -258,6 +253,80 @@ print(countdown(100, 0))
         result = run_ibci(code)
         assert result  # Should compute sum without overflow
 
+    def test_deep_recursion_500(self):
+        """R1 trampoline：500 层递归成功（原同步嵌套路径在 ~130 层即 Python 栈溢出）。
+
+        EXEC-1 根治：函数调用不再嵌套 Python 栈，深递归 Python 深度恒定。
+        """
+        code = """
+func f(int n) -> int:
+    if n <= 1:
+        return 1
+    return f(n - 1) + 1
+
+print(f(500))
+"""
+        assert run_ibci(code) == ["500"]
+
+    def test_deep_recursion_800(self):
+        """R1 trampoline：800 层递归成功（逼近 Python 默认 recursionlimit 边界）。"""
+        code = """
+func f(int n) -> int:
+    if n <= 1:
+        return 1
+    return f(n - 1) + 1
+
+print(f(800))
+"""
+        assert run_ibci(code) == ["800"]
+
+    def test_deep_mutual_recursion(self):
+        """R1 trampoline：深互递归（各 200 层，共 400 层调用链）。"""
+        code = """
+func is_even(int n) -> int:
+    if n == 0:
+        return 1
+    return is_odd(n - 1)
+
+func is_odd(int n) -> int:
+    if n == 0:
+        return 0
+    return is_even(n - 1)
+
+print(is_even(400))
+"""
+        assert run_ibci(code) == ["1"]
+
+    def test_recursion_overflow_propagates_root_cause(self):
+        """PT-DEBT-9：深递归触底时 RecursionError 根因不被 ``VM: Call failed`` 掩盖。
+
+        超出宿主递归深度时，环境限制异常（RecursionError）必须原样传播，
+        而非被 VM 语义错误包装站点重写为误导性的 ``Symbol not defined`` /
+        ``VM: Call failed``。断言顶层收到的是 RecursionError 本身。
+
+        伴随的 ``KDIAG_RUNTIME_ENV_LIMIT`` UserWarning 是 PT-FEAT-9 诊断机制
+        的**警告不门控投影**（设计使然：环境限制须对开发者可见）——此处显式
+        断言（而非让其浮到 pytest 汇总区），既验证警告投影又保持输出整洁。
+        """
+        code = """
+func f(int n) -> int:
+    if n <= 1:
+        return 1
+    return f(n - 1) + 1
+
+print(f(5000))
+"""
+        with pytest.warns(UserWarning, match="环境限制异常 RecursionError"):
+            try:
+                run_ibci(code)
+            except RecursionError:
+                return  # 根因原样传播（预期）
+            except Exception as e:
+                raise AssertionError(
+                    f"expected RecursionError root cause, got masked {type(e).__name__}: {e}"
+                ) from e
+            raise AssertionError("expected RecursionError on depth 5000, but succeeded")
+
 
 # ===========================================================================
 # Exception Frame Unwinding (INV-UNWIND-*)
@@ -266,9 +335,6 @@ print(countdown(100, 0))
 
 class TestExceptionUnwinding:
     """Validate exception unwinding behavior.
-
-    References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §6 Error Handling
     """
 
     def test_error_unwinds_to_llmexcept(self):
@@ -311,18 +377,39 @@ print(outer())
 
 class TestFrameContextPropagation:
     """Validate context propagation across frames.
-
-    References:
-    - tests/e2e/test_e2e_higher_order.py (legacy)
     """
 
     def test_closure_captures_parent_frame(self):
         """INV-CONTEXT-1: Closures capture parent frame variables."""
-        pytest.skip("PT-5.1: Returning inner function as closure loses parent frame variable bindings")
+        code = """
+func make_adder(int b) -> fn:
+    fn inner = lambda(int x) -> int: x + b
+    return inner
+
+fn a5 = make_adder(5)
+auto r = a5(3)
+print((str)r)
+"""
+        assert run_ibci(code) == ["8"]
 
     def test_multiple_closures_independent_frames(self):
         """INV-CONTEXT-2: Multiple closures maintain independent frames."""
-        pytest.skip("PT-5.1: Closures returning inner counter function not supported (write-back semantics)")
+        code = """
+func make_counter(int start) -> fn:
+    int count = start
+    func inc() -> int:
+        nonlocal count
+        count = count + 1
+        return count
+    return inc
+
+fn c1 = make_counter(0)
+fn c2 = make_counter(10)
+print(c1())
+print(c1())
+print(c2())
+"""
+        assert run_ibci(code) == ["1", "2", "11"]
 
     def test_nested_closure_access_chain(self):
         """INV-CONTEXT-3: Nested closures access entire scope chain."""

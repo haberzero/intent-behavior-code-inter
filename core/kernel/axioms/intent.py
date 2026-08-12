@@ -19,21 +19,10 @@ IbIntent 是 IbObject 的子类。本公理为类型系统提供 Intent 对象�
 """
 from __future__ import annotations
 
-from typing import Dict, Optional
-from core.kernel.spec.type_ref import TypeRef
+from core.kernel.axioms.primitives.base import BaseAxiom, _m
 
 
-def _m(name: str, params: Optional[list] = None, ret: str = "void"):
-    from core.kernel.spec.member import MethodMemberSpec
-    return MethodMemberSpec(
-        name=name,
-        kind="method",
-        return_type=TypeRef.of(ret),
-        param_types=[TypeRef.of(p) for p in (params or [])],
-    )
-
-
-class IntentAxiom:
+class IntentAxiom(BaseAxiom):
     """
     公理：Intent 类型（运行时意图对象）。
 
@@ -42,17 +31,6 @@ class IntentAxiom:
     * is_compatible 仅接受 "Intent" 自身
     * get_parent_axiom_name() = "Object"
     """
-
-    # All capability flags default to False (matches BaseAxiom contract).
-    has_call_cap = False
-    has_iter_cap = False
-    has_subscript_cap = False
-    has_operator_cap = False
-    has_converter_cap = False
-    has_parser_cap = False
-    has_from_prompt_cap = False
-    has_output_hint_cap = False
-    has_llm_call_cap = False
 
     @property
     def name(self) -> str:
@@ -65,36 +43,5 @@ class IntentAxiom:
             "get_mode":    _m("get_mode",    ret="str"),
         }
 
-    def get_operators(self) -> Dict[str, str]:
-        return {}
-
-    # ---- TypeAxiom required no-op defaults (no capabilities declared) ---- #
-    def resolve_return_type_name(self, arg_type_names): return None
-    def get_element_type_name(self) -> str: return "any"
-    def resolve_item_type_name(self, key_type_name): return None
-    def resolve_operation_type_name(self, op, other_name): return None
-    def can_convert_from(self, source_type_name): return False
-    def parse_value(self, raw_value): return raw_value
-    def from_prompt(self, raw_response, spec=None): return (False, "Intent does not support from_prompt")
-    def __outputhint_prompt__(self, spec=None) -> str: return ""
-
-    def is_dynamic(self) -> bool:
-        return False
-
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "Intent"
-
     def is_class(self) -> bool:
         return True
-
-    def is_module(self) -> bool:
-        return False
-
-    def can_return_from_isolated(self) -> bool:
-        return False
-
-    def get_parent_axiom_name(self) -> Optional[str]:
-        return "Object"
-
-    def get_diff_hint(self, other_name: str) -> Optional[str]:
-        return None

@@ -1,0 +1,212 @@
+"""
+tests/runtime/test_vm_comm.py
+=============================
+
+VM 层并发/通信 e2e 测试。
+
+锁定：
+- chan 构造 + send/recv（语言面）
+- slot 构造 + set/get（语言面）
+
+线程（spawn/join/cancel）已被 thread 对象模型取代，
+其测试见 test_thread_model.py / test_vm_instance.py。
+"""
+from tests.conftest import run_ibci, AI_MOCK_PREFIX
+
+
+class TestChannelE2E:
+    def test_chan_send_recv(self):
+        lines = run_ibci("""
+chan c = chan(str, "stream")
+c.send("hello")
+str msg = c.recv()
+print(msg)
+""")
+        assert lines == ["hello"]
+
+    def test_chan_multiple_messages(self):
+        lines = run_ibci("""
+chan c = chan(int, "message")
+c.send(1)
+c.send(2)
+int a = c.recv()
+int b = c.recv()
+print((str)a)
+print((str)b)
+""")
+        assert lines == ["1", "2"]
+
+    def test_chan_recv_nowait_empty(self):
+        lines = run_ibci("""
+chan c = chan(str, "stream")
+any none = c.recv_nowait()
+print(none)
+""")
+        # 空缓冲非阻塞返回 None
+        assert lines == ["None"]
+
+
+class TestSlotE2E:
+    def test_slot_get_set(self):
+        lines = run_ibci("""
+slot st = slot("score", 0)
+st.set(42)
+int v = st.get()
+print((str)v)
+""")
+        assert lines == ["42"]
+
+
+class TestChannelPubSubE2E:
+    """pubsub 语言层（subscribe → subscriber 端点 + send_nowait 语义）。"""
+
+    def test_pubsub_subscribe_recv(self):
+        lines = run_ibci("""
+chan c = chan(str, "pubsub")
+subscriber sub = c.subscribe()
+c.send("hello")
+str msg = sub.recv()
+print(msg)
+""")
+        assert lines == ["hello"]
+
+    def test_pubsub_fanout(self):
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber a = c.subscribe()
+subscriber b = c.subscribe()
+c.send(7)
+print((str)a.recv())
+print((str)b.recv())
+""")
+        assert lines == ["7", "7"]
+
+    def test_pubsub_send_nowait_no_subscribers_false(self):
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+bool r = c.send_nowait(1)
+print((str)r)
+""")
+        assert lines == ["False"]
+
+    def test_pubsub_bounded_subscriber(self):
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber sub = c.subscribe(1)
+c.send(1)
+bool r = c.send_nowait(2)
+print((str)r)
+print((str)sub.recv())
+""")
+        assert lines == ["False", "1"]
+
+    def test_subscriber_close_lifecycle(self):
+        """语言层 subscriber.close()：已缓存数据仍可读，close 后 recv_nowait 返回 None。"""
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber sub = c.subscribe()
+c.send(1)
+c.send(2)
+print((str)sub.recv())
+sub.close()
+print("CLOSED")
+auto r = sub.recv_nowait()
+print("AFTER_CLOSE")
+""")
+        assert lines == ["1", "CLOSED", "AFTER_CLOSE"]
+
+    def test_channel_close_cascades_to_subscriber(self):
+        """语言层通道 close 级联：订阅者仍可排空已缓存数据。"""
+        lines = run_ibci("""
+chan c = chan(int, "pubsub")
+subscriber sub = c.subscribe()
+c.send(5)
+c.close()
+print((str)sub.recv())
+""")
+        assert lines == ["5"]
+
+
+def test_comm_objects_use_create_blank_protocol():
+    """comm 句柄对象经 _create_blank 统一构造协议创建实例。"""
+    from core.runtime.objects.kernel import IbChannel, IbSlot, IbSubscriber
+    assert isinstance(IbChannel._create_blank(None), IbChannel)
+    assert isinstance(IbSlot._create_blank(None), IbSlot)
+    assert isinstance(IbSubscriber._create_blank(None), IbSubscriber)
+
+
+class TestSlotUpdateE2E:
+    """slot.update 语言面：普通值 set 形态 + 可调用对象 CAS 读改写形态。"""
+
+    def test_update_with_plain_value_sets(self):
+        lines = run_ibci("""
+slot s = slot("x", 0)
+s.update(5)
+print((str)s.get())
+""")
+        assert lines == ["5"]
+
+    def test_update_with_fn_does_read_modify_write(self):
+        """update(fn)：fn(当前值) → 新值，原子 CAS 读改写。"""
+        lines = run_ibci("""
+slot s = slot("x", 10)
+fn inc = lambda(int v) -> auto: (v + 1)
+s.update(inc)
+print((str)s.get())
+""")
+        assert lines == ["11"]
+
+    def test_update_with_fn_via_closure(self):
+        """update(fn)：闭包 lambda 读改写（锁外计算，RMW 语义）。"""
+        lines = run_ibci("""
+slot s = slot("x", 0)
+s.set(7)
+fn bump = lambda -> auto: (s.get() + 3)
+s.update(bump)
+print((str)s.get())
+""")
+        assert lines == ["10"]
+
+    def test_update_with_behavior_drives_in_frame(self):
+        """update(fn)：fn 为 behavior（LLM）时在**当前 VM 帧栈**内 CPS 驱动。
+
+        A3 并轨验证：``s.update(fn)`` 返回的 ``_SlotUpdateWaitable`` 经
+        ``cps_drive`` 在帧内 ``yield from _vm_invoke_behavior`` 求值 fn，
+        而非 ``try_result`` 内嵌套 TaskScheduler。LLM 行为在 fn 内正常
+        挂起/恢复、CAS 写回，语义与纯 lambda 一致。
+        """
+        lines = run_ibci(AI_MOCK_PREFIX + """
+slot s = slot("x", 0)
+fn upd = snapshot -> auto: @~ MOCK:STR:6 ~
+s.update(upd)
+print((str)s.get())
+""")
+        assert lines == ["6"]
+
+
+class TestChannelHostContract:
+    """IbChannel.recv() Python 宿主契约：返回 Waitable，.result() 取回装箱值。"""
+
+    def test_recv_returns_waitable_host(self, engine):
+        from core.runtime.objects.kernel import IbChannel
+        from core.runtime.shared.waitable import Waitable
+
+        cls = engine.registry.get_class("chan")
+        c = IbChannel(ib_class=cls)
+        c.send(42)
+        w = c.recv()
+        assert isinstance(w, Waitable)
+        assert w.result().to_native() == 42
+
+    def test_subscriber_recv_returns_waitable_host(self, engine):
+        from core.runtime.objects.kernel import IbChannel
+        from core.runtime.shared.comm.channel import ChannelCore
+        from core.runtime.shared.waitable import Waitable
+
+        cls = engine.registry.get_class("chan")
+        c = IbChannel(ib_class=cls, core=ChannelCore(mode="pubsub"))
+        sub = c.subscribe()
+        w = sub.recv()
+        assert isinstance(w, Waitable)
+        c.send("m")
+        assert w.result().to_native() == "m"

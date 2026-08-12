@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, List, Any, Set, TYPE_CHECKING
 from enum import Enum, auto
 
+from core.base.enums import Provenance
+from core.base.uid import scope_uid, child_scope_uid, symbol_uid
+
 from .spec import IbSpec
-from .spec.base import TypeKind
+from .spec.base import TypeKind, TypeDef
 
 
 # --- Symbol System ---
@@ -24,8 +27,6 @@ class Symbol:
     """Static symbol base class.
 
     ``spec`` holds the pure-data IbSpec of this symbol's type.
-    The old field was named ``descriptor`` and held a TypeDescriptor;
-    keeping the field name ``spec`` makes the new semantics explicit.
     """
     name: str
     kind: SymbolKind
@@ -36,6 +37,10 @@ class Symbol:
 
     # The IbSpec for this symbol's type (pure data, no runtime state).
     spec: Optional[IbSpec] = None
+
+    # Typed provenance replaces the flat metadata keys
+    # ``is_intrinsic`` / ``is_external_module`` / ``axiom_provided``.
+    provenance: Provenance = Provenance.USER_DEFINED
 
     # ------------------------------------------------------------------
     # Helpers
@@ -83,7 +88,11 @@ class TypeSymbol(Symbol):
 
 @dataclass
 class FunctionSymbol(Symbol):
-    """A function (regular or LLM)."""
+    """A function (regular or LLM).
+
+    The spec field is always a TypeDef (function type descriptor).
+    """
+    spec: Optional['TypeDef'] = None  # TypeDef with function signature
 
 
 @dataclass
@@ -126,32 +135,25 @@ class SymbolTable:
         if self._uid:
             return self._uid
         if not self.parent:
-            self._uid = f"scope_{self.name or 'global'}"
+            self._uid = scope_uid(self.name)
         else:
-            child_name = self.name or f"anon_{self._anon_id}"
-            self._uid = f"{self.parent.uid}/{child_name}"
+            self._uid = child_scope_uid(self.parent.uid, self.name, self._anon_id)
         return self._uid
 
     def define(self, sym: Symbol, allow_overwrite: bool = False) -> None:
         """Define a symbol; raise ValueError on conflict."""
         if not sym.uid:
-            sym.uid = f"{self.uid}:{sym.name}"
+            sym.uid = symbol_uid(self.uid, sym.name)
 
         if not allow_overwrite and sym.name in self.symbols:
             existing = self.symbols[sym.name]
-            is_compatible = (
-                (existing.metadata.get("is_builtin") and sym.metadata.get("is_builtin"))
-                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_builtin"))
-                or (existing.metadata.get("is_builtin") and sym.metadata.get("is_external_module"))
-                or (existing.metadata.get("is_external_module") and sym.metadata.get("is_external_module"))
-            )
-            if is_compatible:
+            if existing.provenance.compatible_with(sym.provenance):
                 if existing.spec and sym.spec:
                     if existing.spec is not sym.spec:
                         if existing.spec.name == sym.spec.name:
                             return  # same-name external module dup
                         raise ValueError(
-                            f"Builtin Symbol Conflict: '{sym.name}' redefined with "
+                            f"Intrinsic Symbol Conflict: '{sym.name}' redefined with "
                             f"incompatible spec (existing: '{existing.spec.name}')"
                         )
                 self.symbols[sym.name] = sym
@@ -191,10 +193,10 @@ class SymbolFactory:
         return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=spec)
 
     @staticmethod
-    def create_builtin_method(name: str, spec: IbSpec) -> 'FunctionSymbol':
+    def create_intrinsic_method(name: str, spec: IbSpec) -> 'FunctionSymbol':
         return FunctionSymbol(
             name=name,
             kind=SymbolKind.FUNCTION,
             spec=spec,
-            metadata={"is_builtin": True, "axiom_provided": True},
+            provenance=Provenance.AXIOM_PROVIDED,
         )

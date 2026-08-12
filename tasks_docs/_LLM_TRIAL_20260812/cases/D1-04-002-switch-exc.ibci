@@ -1,0 +1,47 @@
+# D1-04-002 switch/case + 异常 + pass
+# doc: docs/syntax/04_control_flow.md §4.5/§4.6/§4.7
+# NOTE(DOC-ISSUE-002): 文档示例 __init__ 缺返回标注；编译器要求 -> TYPE，此处补 -> auto
+# 期望: switch 匹配；try/except/raise/finally；自定义异常 + 类型窄化
+
+str status = "ok"
+switch status:
+    case "ok":
+        print("sw_ok")
+    case "error":
+        print("sw_err")
+    default:
+        print("sw_unknown")
+
+func divide(int a, int b) -> int:
+    if b == 0:
+        raise Exception("division by zero")
+    return a / b
+
+try:
+    int q = divide(10, 0)
+except Exception as e:
+    print("caught=" + e.message)
+finally:
+    print("finally")
+
+class AppError(Exception):
+    func __init__(self, str msg) -> auto:
+        self.message = msg
+
+class NetworkError(AppError):
+    int code
+    func __init__(self, str msg, int code) -> auto:
+        self.message = msg
+        self.code = code
+
+try:
+    raise NetworkError("conn refused", 503)
+except NetworkError as e:
+    print("narrowed_code=" + (str)e.code)
+except AppError as e:
+    print("app_err=" + e.message)
+
+func placeholder() -> void:
+    pass
+placeholder()
+print("DONE")

@@ -1,11 +1,15 @@
 import json
-import uuid
 from typing import Dict, Any, List, Optional, Union, Callable
 from core.base.serialization import BaseFlatSerializer
+from core.base.enums import StorageModel
+from core.base.uid import rt_scope_uid, rt_intent_uid, rt_intent_ctx_uid, rt_instance_uid
 from core.runtime.interfaces import IExecutionContext, IStateProvider, Scope, RuntimeSymbol, IObjectFactory, RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbValue, IbClass, IbModule, IbFunction, IbNativeObject, IbNativeFunction, IbBoundMethod
-from core.runtime.interpreter.runtime_context import IntentNode
+from core.runtime.objects.primitives import IbOptional
+from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent import IbIntent
+from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.objects.cell import IbCell
 from core.kernel.intent_logic import IntentMode, IntentRole
 
 class RuntimeSerializer(BaseFlatSerializer):
@@ -40,38 +44,26 @@ class RuntimeSerializer(BaseFlatSerializer):
             pools["scopes"] = execution_context.scope_pool
             pools["types"] = execution_context.type_pool
             # 合并现有的资产池
-            if hasattr(execution_context, 'asset_pool'):
-                self.external_assets.update(execution_context.asset_pool)
+            self.external_assets.update(execution_context.asset_pool)
 
         # 完整 IbIntentContext + 活跃 intent_context IBCI 指针。
+        # 快照序列化失败必须 fail-fast：静默丢弃会使恢复端拿到错误的意图上下文。
         full_intent_ctx_uid = None
-        try:
-            intent_ctx = getattr(context, "_intent_ctx", None)
-            if intent_ctx is not None:
-                full_intent_ctx_uid = self._collect_intent_context(intent_ctx)
-        except Exception:
-            full_intent_ctx_uid = None
+        intent_ctx = context.intent_context
+        if intent_ctx is not None:
+            full_intent_ctx_uid = self._collect_intent_context(intent_ctx)
 
         active_intent_ibobj_uid = None
-        try:
-            active = (
-                context.get_active_intent_ibobj()
-                if hasattr(context, "get_active_intent_ibobj")
-                else None
-            )
-            if active is not None:
-                active_intent_ibobj_uid = self._collect_instance(active)
-        except Exception:
-            active_intent_ibobj_uid = None
+        active = context.get_active_intent_ibobj()
+        if active is not None:
+            active_intent_ibobj_uid = self._collect_instance(active)
 
         return {
             "version": "2.1",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
-            "intent_stack": self._process_value(context.intent_stack),
             "intent_ctx_uid": full_intent_ctx_uid,
             "active_intent_ibobj_uid": active_intent_ibobj_uid,
-            "intent_exclusive_depth": getattr(context, "intent_exclusive_depth", 0),
             "pools": pools
         }
 
@@ -84,7 +76,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if node_id in self.memo:
             return self.memo[node_id]
             
-        uid = f"intent_{uuid.uuid4().hex[:16]}"
+        uid = rt_intent_uid()
         self.memo[node_id] = uid
         
         # 记录节点内容及父节点引用
@@ -103,7 +95,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if scope_id in self.memo:
             return self.memo[scope_id]
             
-        uid = f"rt_scope_{uuid.uuid4().hex[:16]}"
+        uid = rt_scope_uid()
         self.memo[scope_id] = uid
         
         # 序列化当前作用域的所有符号
@@ -112,11 +104,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             symbols_data[name] = self._serialize_symbol(sym)
             
         uid_symbols_data = {}
-        # 注意：_uid_to_symbol 目前不在 Scope 接口中，但这是内部实现细节
-        # 如果需要彻底解耦，应在 Scope 接口中增加获取 UID 符号的方法
-        if hasattr(scope, '_uid_to_symbol'):
-            for suid, sym in getattr(scope, '_uid_to_symbol').items():
-                uid_symbols_data[suid] = self._serialize_symbol(sym)
+        for suid, sym in scope.get_all_symbols_by_uid().items():
+            uid_symbols_data[suid] = self._serialize_symbol(sym)
 
         self.runtime_scope_pool[uid] = {
             "uid": uid,
@@ -127,12 +116,51 @@ class RuntimeSerializer(BaseFlatSerializer):
         return uid
 
     def _serialize_symbol(self, sym: RuntimeSymbol) -> Dict[str, Any]:
+        # Cell 变量（被内层闭包捕获、已提升）的当前值以 IbCell 为准（与
+        # ScopeImpl.get 语义一致：cell 是读写的单一真相源）。
+        is_cell = getattr(sym, "cell", None) is not None
+        if is_cell and not sym.cell.is_empty():
+            value = sym.cell.get()
+        else:
+            value = sym.value
         return {
             "name": sym.name,
-            "value": self._process_value(sym.value),
+            "value": self._process_value(value),
             "is_const": sym.is_const,
-            "declared_type": str(sym.declared_type) if sym.declared_type else None
+            "declared_type": str(sym.declared_type) if sym.declared_type else None,
+            "is_cell": is_cell,
         }
+
+    def _serialize_closure(self, closure: Dict[str, Any], capture_mode: Optional[str]) -> List[Dict[str, Any]]:
+        """序列化闭包表（``{sym_uid: (name, slot)}``）。
+
+        - ``cell`` 模式（lambda）：slot 为共享 ``IbCell``，序列化其当前值。
+          值在作用域符号中同样可获，但此处冗余携带——闭包持有者可能已离开
+          cell 所有者作用域（公理 LT-2 堆语义），仅靠作用域树无法重建该 cell。
+        - ``value`` 模式（snapshot）：slot 为定义时刻深克隆种子，直接序列化。
+        """
+        is_snapshot = capture_mode == "snapshot"
+        entries: List[Dict[str, Any]] = []
+        for sym_uid, (name, slot) in closure.items():
+            if is_snapshot:
+                entries.append({
+                    "sym_uid": sym_uid,
+                    "name": name,
+                    "mode": "value",
+                    "value": self._process_value(slot) if slot is not None else None,
+                })
+                continue
+            if isinstance(slot, IbCell) and not slot.is_empty():
+                cell_value = self._process_value(slot.get())
+            else:
+                cell_value = self._process_value(slot) if slot is not None else None
+            entries.append({
+                "sym_uid": sym_uid,
+                "name": name,
+                "mode": "cell",
+                "value": cell_value,
+            })
+        return entries
 
     def _process_value(self, value: Any) -> Any:
         # 处理 IbObject 及其子类
@@ -140,18 +168,11 @@ class RuntimeSerializer(BaseFlatSerializer):
             return self._collect_instance(value)
         
         # 拓扑序列化 IntentNode，保留结构共享
-        # 注意：此处使用鸭子类型判定以避免循环依赖 (RuntimeSerializer 不直接导入 IntentNode 实现类)
-        if hasattr(value, 'intent') and hasattr(value, 'parent') and hasattr(value, 'to_list'):
+        if isinstance(value, IntentNode):
             return self._collect_intent_node(value)
 
-        # 拓扑序列化 IbIntentContext Python 值。
-        # 鸭子类型：避免循环依赖。
-        if (
-            hasattr(value, "get_intent_top")
-            and hasattr(value, "get_active_intents")
-            and hasattr(value, "fork")
-            and hasattr(value, "_smear_queue")
-        ):
+        # 拓扑序列化 IbIntentContext Python 值
+        if isinstance(value, IbIntentContext):
             return self._collect_intent_context(value)
 
         # 处理基本 Python 类型 (Fallback)
@@ -160,15 +181,16 @@ class RuntimeSerializer(BaseFlatSerializer):
     def _collect_intent_context(self, ic: Any) -> str:
         """序列化完整的 ``IbIntentContext`` Python 对象。
 
-        保留全部 4 个槽位：``_intent_top`` (持久栈) / ``_smear_queue`` (涂抹队列) /
-        ``_override`` (排他槽) / ``_global_intents`` (Engine 级注入)。
+        保留全部 6 个槽位：``_intent_top`` (持久栈) / ``_smear_queue`` (涂抹队列) /
+        ``_override`` (排他槽) / ``_global_intents`` (Engine 级注入) /
+        ``_inherited_smear`` (从父帧继承的涂抹) / ``_inherited_override`` (从父帧继承的排他)。
         通过 Python id memo 维持身份共享。
         """
         ic_id = id(ic)
         if ic_id in self.memo:
             return self.memo[ic_id]
 
-        uid = f"intentctx_{uuid.uuid4().hex[:16]}"
+        uid = rt_intent_ctx_uid()
         self.memo[ic_id] = uid
 
         intent_top = ic.get_intent_top()
@@ -178,6 +200,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             "smear_queue": [self._process_value(i) for i in ic._smear_queue],
             "override": self._process_value(ic._override) if ic._override is not None else None,
             "global_intents": [self._process_value(i) for i in ic._global_intents],
+            "inherited_smear": [self._process_value(i) for i in ic._inherited_smear],
+            "inherited_override": self._process_value(ic._inherited_override) if ic._inherited_override is not None else None,
         }
         # 复用 instance_pool 作为统一对象池；以 ``_type == "intent_context_native"``
         # 区分于 IBCI ``intent_context`` 封装实例。
@@ -189,123 +213,252 @@ class RuntimeSerializer(BaseFlatSerializer):
         obj_id = id(obj)
         if obj_id in self.memo:
             return self.memo[obj_id]
-            
-        uid = f"inst_{uuid.uuid4().hex[:16]}"
+
+        uid = rt_instance_uid()
         self.memo[obj_id] = uid
-        
+
         data = {
             "uid": uid,
             "class_name": obj.ib_class.name,
         }
-        if isinstance(obj, IbValue):
-            type_ref = getattr(obj, "type_ref", None)
-            data["type_ref"] = str(type_ref) if type_ref is not None else None
-            if getattr(obj, "meta", None):
-                data["value_meta"] = dict(obj.meta)
-        
-        # 根据类型名进行差异化序列化（通过 ib_class.name 而非 isinstance 分派）
-        cls_name = obj.ib_class.name
-        if isinstance(obj, IbValue) and cls_name == "None":
-            data["_type"] = "none"
-
-        elif isinstance(obj, IbNativeFunction):
-            data["_type"] = "native_func"
-            data["name"] = obj._name
-            data["unbox"] = obj.unbox_args
-            data["is_method"] = obj.is_method
-            if hasattr(obj, 'logic_id') and obj.logic_id:
-                data["logic_id"] = obj.logic_id
-                
-        elif isinstance(obj, IbNativeObject):
-            data["_type"] = "native"
-            # 尝试记录原生值
-            val = obj.to_native()
-            try:
-                json.dumps(val)
-                data["py_value"] = val
-            except:
-                data["py_value"] = f"<Non-Serializable: {repr(val)}>"
-                
-        elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):
-            data["_type"] = "primitive"
-            data["value"] = self._process_value(obj.to_native())
-            
-        elif isinstance(obj, IbValue) and cls_name == "list":
-            data["_type"] = "list"
-            data["elements"] = [self._process_value(e) for e in obj.elements]
-
-        elif isinstance(obj, IbValue) and cls_name == "tuple":
-            data["_type"] = "tuple"
-            data["elements"] = [self._process_value(e) for e in obj.elements]
-            
-        elif isinstance(obj, IbValue) and cls_name == "dict":
-            data["_type"] = "dict"
-            data["fields"] = {str(k): self._process_value(v) for k, v in obj.fields.items()}
-            
-        elif isinstance(obj, IbModule):
-            data["_type"] = "module"
-            data["name"] = obj.name
-            data["scope_uid"] = self._collect_runtime_scope(obj.scope)
-
-        elif isinstance(obj, IbBoundMethod):
-            data["_type"] = "bound_method"
-            data["receiver_uid"] = self._collect_instance(obj.receiver)
-            data["method_uid"] = self._collect_instance(obj.method)
-
-        elif isinstance(obj, IbValue) and cls_name == "behavior":
-            data["_type"] = "behavior"
-            data["node_uid"] = obj.node
-            # captured_intents 协议：None 或 IbIntentContext。
-            # 此处展开为 active_intents 的 list 形态以兼容序列化反序列化的读取方。
-            ci = obj.captured_intents
-            if ci is None:
-                data["captured_intents"] = []
-            elif hasattr(ci, "get_active_intents"):
-                data["captured_intents"] = [self._process_value(i) for i in ci.get_active_intents()]
-            else:
-                # 不应到达：IIbBehavior 契约要求 None 或 IbIntentContext。
-                data["captured_intents"] = []
-            data["expected_type"] = obj.expected_type
-            if obj.call_intent is not None:
-                data["call_intent"] = self._process_value(obj.call_intent)
-
-        elif isinstance(obj, IbValue) and cls_name == "fn_callable":
-            data["_type"] = "fn_callable"
-            data["node_uid"] = obj.node_uid
-            data["capture_mode"] = obj.capture_mode
-
-        elif cls_name == "intent_context":
-            # ``intent_context`` IBCI 封装实例序列化
-            data["_type"] = "intent_context"
-            ctx = obj.fields.get("_ctx") if hasattr(obj, "fields") else None
-            data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
-            extra_fields = {
-                k: self._process_value(v)
-                for k, v in (obj.fields or {}).items()
-                if k != "_ctx"
-            }
-            if extra_fields:
-                data["fields"] = extra_fields
-
-        elif isinstance(obj, IbIntent):
-            # ``IbIntent`` 使用 ``__slots__`` 存放状态
-            data["_type"] = "intent"
-            data["content"] = obj.content
-            data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
-            data["tag"] = obj.tag
-            data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
-            data["source_uid"] = obj.source_uid
-            data["pop_top"] = obj.pop_top
-            if obj.segments:
-                data["segments"] = [self._process_value(s) for s in obj.segments]
-
-        else:
-            # 普通用户定义对象
-            data["_type"] = "object"
-            data["fields"] = {k: self._process_value(v) for k, v in obj.fields.items()}
-
+        self._collect_instance_meta(obj, data)
+        # 直接形态（命中即写池并返回）：类引用 / 瞬态占位 / 磁盘描述符。
+        for direct in (
+            self._collect_class_ref,
+            self._collect_transient,
+            self._collect_disk_backed,
+        ):
+            if direct(obj, data, uid):
+                return uid
+        # 按类型分派填充 _type 与各类型字段（单一类型一个具名 collector）。
+        self._dispatch_instance_kind(obj, data)
         self.instance_pool[uid] = data
         return uid
+
+    def _collect_instance_meta(self, obj: IbObject, data: dict) -> None:
+        """公共元数据：type_ref / value_meta（IbValue 专用）。"""
+        if isinstance(obj, IbValue):
+            type_ref = obj.type_ref
+            data["type_ref"] = str(type_ref) if type_ref is not None else None
+            # 可调用实例（behavior/fn_callable）的完整状态由专用分支字段承载；
+            # meta 冗余拷贝非 JSON 值，专用字段才是单一事实来源，不重复写入。
+            if obj.meta and obj.ib_class.name not in ("behavior", "fn_callable"):
+                data["value_meta"] = dict(obj.meta)
+
+    def _collect_class_ref(self, obj: IbObject, data: dict, uid: str) -> bool:
+        """类元对象 → 类引用（类名），反序列化重绑定 registry 真实类。"""
+        if not isinstance(obj, IbClass):
+            return False
+        data["_type"] = "class_ref"
+        data["name"] = obj.name
+        self.instance_pool[uid] = data
+        return True
+
+    def _collect_transient(self, obj: IbObject, data: dict, uid: str) -> bool:
+        """瞬态对象 → 纯状态存根（不递归运行时句柄）。"""
+        if isinstance(obj, IbClass) or not hasattr(obj, "__transient_state__"):
+            return False
+        state = obj.__transient_state__()
+        data["_type"] = "transient"
+        data["state"] = {k: self._process_value(v) for k, v in state.items()}
+        self.instance_pool[uid] = data
+        return True
+
+    def _collect_disk_backed(self, obj: IbObject, data: dict, uid: str) -> bool:
+        """磁盘型对象 → 路径描述符（不物化字节）。"""
+        if not isinstance(obj, IbValue):
+            return False
+        spec = obj.ib_class.spec
+        if spec is None or spec.storage_model is not StorageModel.DISK_BACKED:
+            return False
+        data["_type"] = "disk_backed"
+        descriptor = obj.receive("__to_descriptor__", [])
+        # 协议返回不保证为 IbObject：鸭子拆箱（receive 可返回第三方/原生描述符）
+        if hasattr(descriptor, "to_native"):
+            descriptor = descriptor.to_native()
+        data["descriptor"] = descriptor
+        self.instance_pool[uid] = data
+        return True
+
+    def _dispatch_instance_kind(self, obj: IbObject, data: dict) -> None:
+        """按类型分派序列化字段（单一类型一个具名 collector）。"""
+        cls_name = obj.ib_class.name
+        if isinstance(obj, IbValue) and cls_name == "None":
+            self._collect_none(data)
+        elif isinstance(obj, IbNativeFunction):
+            self._collect_native_func(obj, data)
+        elif isinstance(obj, IbNativeObject):
+            self._collect_native(obj, data, cls_name)
+        elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):
+            self._collect_primitive(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "list":
+            self._collect_list(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "tuple":
+            self._collect_tuple(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "dict":
+            self._collect_dict(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "Optional":
+            self._collect_optional(obj, data)
+        elif cls_name == "thread_result" and not isinstance(obj, IbClass):
+            self._collect_thread_result(obj, data)
+        elif isinstance(obj, IbModule):
+            self._collect_module(obj, data)
+        elif isinstance(obj, IbBoundMethod):
+            self._collect_bound_method(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "behavior":
+            self._collect_behavior(obj, data)
+        elif isinstance(obj, IbValue) and cls_name == "fn_callable":
+            self._collect_fn_callable(obj, data)
+        elif cls_name == "intent_context":
+            self._collect_intent_context_wrapper(obj, data)
+        elif isinstance(obj, IbIntent):
+            self._collect_intent(obj, data)
+        else:
+            self._collect_object(obj, data)
+
+    def _collect_none(self, data: dict) -> None:
+        data["_type"] = "none"
+
+    def _collect_native_func(self, obj, data):
+        data["_type"] = "native_func"
+        data["name"] = obj._name
+        data["unbox"] = obj.unbox_args
+        data["is_method"] = obj.is_method
+        if obj.logic_id:
+            data["logic_id"] = obj.logic_id
+
+    def _collect_native(self, obj, data, cls_name):
+        data["_type"] = "native"
+        # 记录原生值；非 JSON 序列化值必须 fail-fast——占位字符串会
+        # 在恢复时静默替换为错误数据，掩盖真实的序列化失败。
+        val = obj.to_native()
+        try:
+            json.dumps(val)
+        except (TypeError, ValueError) as e:
+            raise TypeError(
+                f"Cannot serialize native object of class '{cls_name}': "
+                f"to_native() produced non-JSON-serializable value {val!r}"
+            ) from e
+        data["py_value"] = val
+
+    def _collect_primitive(self, obj, data):
+        data["_type"] = "primitive"
+        data["value"] = self._process_value(obj.to_native())
+
+    def _collect_list(self, obj, data):
+        data["_type"] = "list"
+        data["elements"] = [self._process_value(e) for e in obj.elements]
+
+    def _collect_tuple(self, obj, data):
+        data["_type"] = "tuple"
+        data["elements"] = [self._process_value(e) for e in obj.elements]
+
+    def _collect_dict(self, obj, data):
+        data["_type"] = "dict"
+        data["fields"] = {str(k): self._process_value(v) for k, v in obj.fields.items()}
+
+    def _collect_optional(self, obj, data):
+        data["_type"] = "optional"
+        data["is_some"] = obj._is_some
+        data["inner"] = self._process_value(obj.payload) if obj._is_some else None
+
+    def _collect_thread_result(self, obj, data):
+        from core.runtime.objects.thread import ThreadStatus
+        data["_type"] = "thread_result"
+        data["status"] = obj._status
+        data["value"] = self._process_value(obj.payload) if obj._status == ThreadStatus.DONE else None
+        data["error"] = self._process_value(obj._error) if obj._error is not None else None
+
+    def _collect_module(self, obj, data):
+        data["_type"] = "module"
+        data["name"] = obj.name
+        # Kernel-native modules are backed by an IbNativeObject (the runtime
+        # implementation), not a Scope. They are re-bound at load time by
+        # HostService._rebind_environment, so we must not recurse into the
+        # native implementation here.
+        if hasattr(obj.scope, "get_all_symbols"):
+            data["scope_uid"] = self._collect_runtime_scope(obj.scope)
+        else:
+            data["scope_native"] = True
+
+    def _collect_bound_method(self, obj, data):
+        data["_type"] = "bound_method"
+        data["receiver_uid"] = self._collect_instance(obj.receiver)
+        data["method_uid"] = self._collect_instance(obj.method)
+
+    def _collect_behavior(self, obj, data):
+        data["_type"] = "behavior"
+        data["node_uid"] = obj.node
+        # captured_intents 协议：None 或 IbIntentContext（非可迭代）。
+        # 完整序列化意图上下文（持久栈/涂抹/排他槽），反序列化时经
+        # _get_intent_context 重建共享身份（契约：None 或 IbIntentContext uid）。
+        ci = obj.captured_intents
+        if ci is None:
+            data["captured_intents"] = None
+        elif isinstance(ci, IbIntentContext):
+            data["captured_intents"] = self._collect_intent_context(ci)
+        else:
+            raise TypeError(
+                "Unexpected captured_intents type "
+                f"{type(ci).__name__} (contract requires None or IbIntentContext)"
+            )
+        # expected_type 在运行期由调用点经 node_to_type 侧表解析，字段本身仅元数据。
+        et = obj.expected_type
+        data["expected_type"] = str(et) if et is not None else None
+        if obj.call_intent is not None:
+            data["call_intent"] = self._process_value(obj.call_intent)
+        data["capture_mode"] = obj.capture_mode
+        if obj.params_uids:
+            data["params_uids"] = list(obj.params_uids)
+        if obj.param_types:
+            data["param_types"] = list(obj.param_types)
+        if obj.return_type is not None:
+            data["return_type"] = obj.return_type
+        data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
+
+    def _collect_fn_callable(self, obj, data):
+        data["_type"] = "fn_callable"
+        data["node_uid"] = obj.node_uid
+        data["capture_mode"] = obj.capture_mode
+        if obj.params_uids:
+            data["params_uids"] = list(obj.params_uids)
+        if obj.body_uid:
+            data["body_uid"] = obj.body_uid
+        if obj.param_types:
+            data["param_types"] = list(obj.param_types)
+        if obj.return_type is not None:
+            data["return_type"] = obj.return_type
+        data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
+
+    def _collect_intent_context_wrapper(self, obj, data):
+        # ``intent_context`` IBCI 封装实例序列化
+        data["_type"] = "intent_context"
+        ctx = obj.fields.get("_ctx")
+        data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
+        extra_fields = {
+            k: self._process_value(v)
+            for k, v in (obj.fields or {}).items()
+            if k != "_ctx"
+        }
+        if extra_fields:
+            data["fields"] = extra_fields
+
+    def _collect_intent(self, obj, data):
+        # ``IbIntent`` 使用 ``__slots__`` 存放状态
+        data["_type"] = "intent"
+        data["content"] = obj.content
+        data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
+        data["tag"] = obj.tag
+        data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
+        data["source_uid"] = obj.source_uid
+        data["pop_top"] = obj.pop_top
+        if obj.segments:
+            data["segments"] = [self._process_value(s) for s in obj.segments]
+
+    def _collect_object(self, obj, data):
+        data["_type"] = "object"
+        data["fields"] = {k: self._process_value(v) for k, v in obj.fields.items()}
+
 
 class RuntimeDeserializer:
     """
@@ -318,10 +471,14 @@ class RuntimeDeserializer:
         self.scope_cache: Dict[str, Scope] = {}
         self.intent_cache: Dict[str, IntentNode] = {}
         self.intent_ctx_cache: Dict[str, Any] = {}
-        self.asset_pool: Dict[str, str] = {} 
+        self.asset_pool: Dict[str, str] = {}
+        # 闭包 cell 待重链登记：[(闭包持有对象, sym_uid)]。作用域与实例全部
+        # 恢复后经 ``_relink_cells`` 按 sym_uid 重链到恢复作用域树中的共享 cell。
+        self._pending_cell_relinks: List[tuple] = []
 
     def deserialize_context(self, data: Dict[str, Any]) -> RuntimeContext:
         """从字典数据重建运行时上下文"""
+        self._pending_cell_relinks = []
         pools = data.get("pools", {})
         self.node_pool = pools.get("nodes", {})
         self.symbol_pool = pools.get("symbols", {})
@@ -343,41 +500,24 @@ class RuntimeDeserializer:
             global_scope = global_scope.parent
             
         context = self.factory.create_context(initial_scope=global_scope)
-        # 使用反射设置私有属性，保持接口纯净
-        if hasattr(context, '_current_scope'):
-            setattr(context, '_current_scope', current_scope)
+        context.current_scope = current_scope
 
         intent_ctx_uid = data.get("intent_ctx_uid")
         if intent_ctx_uid:
             restored_ctx = self._get_intent_context(intent_ctx_uid)
-            if restored_ctx is not None and hasattr(context, "_intent_ctx"):
-                context._intent_ctx = restored_ctx
+            if restored_ctx is not None:
+                context.replace_intent_context(restored_ctx)
             active_uid = data.get("active_intent_ibobj_uid")
-            if active_uid and hasattr(context, "set_active_intent_ibobj"):
+            if active_uid:
                 active_obj = self._get_instance(active_uid)
                 # 确保共享引用不变量
-                if active_obj is not None and hasattr(active_obj, "fields"):
-                    if active_obj.fields.get("_ctx") is not getattr(context, "_intent_ctx", None):
-                        active_obj.fields["_ctx"] = context._intent_ctx
-                    context.set_active_intent_ibobj(active_obj)
-        else:
-            if "global_intents" in data:
-                # 恢复全局意图 (通常是 IbIntent 实例)
-                ctx_global = context.get_global_intents()
-                ctx_global.clear()
-                for i_data in data["global_intents"]:
-                    ctx_global.append(self._deserialize_value(i_data))
+                if active_obj is not None:
+                    if active_obj.fields.get("_ctx") is not context.intent_context:
+                        active_obj.fields["_ctx"] = context.intent_context
+                context.set_active_intent_ibobj(active_obj)
 
-            # 恢复意图栈 (拓扑结构)
-            intent_stack_raw = data.get("intent_stack")
-            active_intents = self._deserialize_value(intent_stack_raw)
-
-            # 恢复活跃意图栈
-            if hasattr(context, 'restore_active_intents'):
-                getattr(context, 'restore_active_intents')(active_intents)
-
-        if hasattr(context, '_intent_exclusive_depth'):
-            setattr(context, '_intent_exclusive_depth', data.get("intent_exclusive_depth", 0))
+        # 闭包 cell 重链 post-pass：作用域树与全部可达实例恢复完成后执行。
+        self._relink_cells()
 
         return context
 
@@ -388,7 +528,6 @@ class RuntimeDeserializer:
         data = self.instance_pool.get(uid)
         if data is None or data.get("_type") != "intent_context_native":
             return None
-        from core.runtime.objects.intent_context import IbIntentContext
         ic = IbIntentContext()
         # 先入缓存以打断潜在的循环引用
         self.intent_ctx_cache[uid] = ic
@@ -410,6 +549,15 @@ class RuntimeDeserializer:
             iv = self._deserialize_value(gv)
             if iv is not None:
                 ic._global_intents.append(iv)
+        # inherited_smear
+        for sv in data.get("inherited_smear", []) or []:
+            iv = self._deserialize_value(sv)
+            if iv is not None:
+                ic._inherited_smear.append(iv)
+        # inherited_override
+        iov = data.get("inherited_override")
+        if iov is not None:
+            ic._inherited_override = self._deserialize_value(iov)
         return ic
 
     def _get_intent_node(self, uid: str) -> IntentNode:
@@ -446,14 +594,68 @@ class RuntimeDeserializer:
         
         for name, sym_data in data.get("symbols", {}).items():
             sym = self._deserialize_symbol(sym_data)
-            scope.define_variable(name, sym.value, declared_type=sym.declared_type, is_const=sym.is_const)
+            scope.define(name, sym.value, declared_type=sym.declared_type, is_const=sym.is_const)
             
         for suid, sym_data in data.get("uid_to_symbol", {}).items():
             sym = self._deserialize_symbol(sym_data)
-            if hasattr(scope, 'bind_symbol_by_uid'):
-                getattr(scope, 'bind_symbol_by_uid')(suid, sym)
-            
+            scope.bind_symbol_by_uid(suid, sym)
+            # Cell 变量（is_cell）经 promote_to_cell 语义重建 IbCell：cell 值
+            # 来自符号当前值（序列化端以 cell 值为准），供闭包 post-pass 重链共享。
+            if sym_data.get("is_cell"):
+                scope.promote_to_cell(suid)
+
         return scope
+
+    def _deserialize_closure(self, data: Dict[str, Any]) -> tuple:
+        """从序列化闭包表重建 ``{sym_uid: (name, slot)}``，返回 (closure, pending_uids)。
+
+        - ``value``（snapshot）：种子直接重建；调用路径每次再深克隆。
+        - ``cell``（lambda）：先以携带值重建**自包含** IbCell（保证恢复即可用），
+          同时登记待重链 sym_uid——post-pass 若在恢复的作用域树中找到该符号的
+          共享 cell，则替换为共享 cell（保持外层赋值可见与多闭包共享同步）。
+        """
+        closure: Dict[str, Any] = {}
+        pending_uids: List[str] = []
+        for entry in data.get("closure") or []:
+            sym_uid = entry["sym_uid"]
+            name = entry.get("name", "")
+            if entry.get("mode", "cell") == "value":
+                closure[sym_uid] = (name, self._deserialize_value(entry.get("value")))
+            else:
+                val = self._deserialize_value(entry.get("value"))
+                closure[sym_uid] = (name, IbCell(val) if val is not None else IbCell())
+                pending_uids.append(sym_uid)
+        return closure, pending_uids
+
+    def _relink_cells(self) -> None:
+        """闭包 cell 重链 post-pass：按 sym_uid 共享恢复作用域树中的 IbCell。
+
+        修复档位 A 的两个退化：
+        - 外层重赋值不可见：闭包自建 cell 与作用域符号 cell 分家；
+        - 多闭包共享分叉：同一 sym_uid 的多个闭包各自持有独立 cell。
+        仅当作用域树中存在持有该 sym_uid 的作用域时才重链；闭包捕获的 cell
+        来自已退出作用域（不在恢复树中）时保留自包含 cell（公理 LT-2 语义）。
+        """
+        for obj, sym_uid in self._pending_cell_relinks:
+            entry = obj.closure.get(sym_uid)
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                continue
+            name, slot = entry
+            if not isinstance(slot, IbCell):
+                continue
+            owning = self._find_owning_scope(sym_uid)
+            if owning is None:
+                continue
+            shared = owning.promote_to_cell(sym_uid)
+            if shared is not None and shared is not slot:
+                obj.closure[sym_uid] = (name, shared)
+
+    def _find_owning_scope(self, sym_uid: str) -> Optional[Scope]:
+        """在恢复的作用域树中查找持有 sym_uid 符号的作用域（不含父递归）。"""
+        for scope in self.scope_cache.values():
+            if sym_uid in scope.get_all_symbols_by_uid():
+                return scope
+        return None
 
     def _deserialize_symbol(self, data: Dict[str, Any]) -> RuntimeSymbol:
         val = self._deserialize_value(data["value"])
@@ -465,19 +667,26 @@ class RuntimeDeserializer:
 
     def _deserialize_value(self, val: Any) -> Any:
         if isinstance(val, str):
-            if val.startswith("inst_"):
+            # 引用解析守卫：仅当字符串确实是本池中的引用 UID 才按引用解析，
+            # 否则视为普通字面量——避免用户数据撞 inst_/intent_ 前缀被误判
+            # 为引用（仅当确实是本池中的引用 UID，避免用户数据撞前缀被误判）。
+            if val.startswith("inst_") and (val in self.instance_pool or val in self.instance_cache):
                 return self._get_instance(val)
-            if val.startswith("intent_") and not val.startswith("intentctx_"):
+            if val.startswith("intent_") and not val.startswith("intentctx_") and (
+                val in self.intent_pool or val in self.intent_cache
+            ):
                 return self._get_intent_node(val)
-            if val.startswith("intentctx_"):
+            if val.startswith("intentctx_") and (
+                val in self.instance_pool or val in self.intent_ctx_cache
+            ):
                 return self._get_intent_context(val)
-            
+
         if isinstance(val, dict) and val.get("_type") == "ext_ref":
             uid = val.get("uid")
             if uid in self.asset_pool:
                 return self.asset_pool[uid]
             return f"__EXT_ASSET_MISSING_{uid}__"
-            
+
         return val
 
     def _get_instance(self, uid: str) -> IbObject:
@@ -491,10 +700,29 @@ class RuntimeDeserializer:
         obj = None
         _type = data.get("_type")
 
-        if _type == "intent_context_native":
+        if _type == "class_ref":
+            # 类引用：重绑定 registry 真实类——类型符号是"类型引用"
+            # 而非实例值，反序列化后必须仍为 IbClass（类型身份保留）。
+            # 必须 return：否则落入下方 else 分支被覆盖为 IbObject(ib_class)。
+            obj = self.registry.get_class(data.get("name"))
+            self.instance_cache[uid] = obj
+            return obj
+
+        elif _type == "intent_context_native":
             # 该条目不是 IbObject 实例，由 ``_get_intent_context`` 处理。
             # 调用方误以 inst_ 前缀来到这里时，回退到 native 路径。
             return self._get_intent_context(uid)
+
+        if _type == "disk_backed":
+            descriptor = data.get("descriptor", {})
+            descriptor_obj = (
+                self.factory.create_dict(dict(descriptor))
+                if self.factory is not None
+                else descriptor
+            )
+            obj = ib_class.receive("__from_descriptor__", [descriptor_obj])
+            self.instance_cache[uid] = obj
+            return obj
 
         if _type == "none":
             obj = self.registry.get_none()
@@ -522,10 +750,42 @@ class RuntimeDeserializer:
             obj = self.factory.create_dict({})
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
-            
+
+        elif _type == "optional":
+            is_some = data.get("is_some", False)
+            inner = self._deserialize_value(data.get("inner")) if is_some else None
+            obj = IbOptional(ib_class, inner, is_some)
+            self.instance_cache[uid] = obj
+
+        elif _type == "thread_result":
+            from core.runtime.objects.thread import ThreadStatus
+            from core.runtime.objects.thread_result import IbThreadResult
+            status = data.get("status", ThreadStatus.DONE)
+            value = self._deserialize_value(data.get("value")) if status == ThreadStatus.DONE else None
+            error = self._deserialize_value(data.get("error")) if data.get("error") is not None else None
+            obj = IbThreadResult(ib_class, value=value, error=error, status=status)
+            self.instance_cache[uid] = obj
+
+        elif _type == "transient":
+            # 瞬态对象不可复活（活体句柄/队列/订阅视图），重建为携带已知状态的
+            # 占位 IbObject 供内省（快照恢复后仍可读取 mode/name/value/state 等）。
+            # thread 原 thread_transient 亦走本路径（行为不变，多保留状态）。
+            obj = IbObject(ib_class)
+            self.instance_cache[uid] = obj
+            obj.fields["_transient_state"] = {
+                k: self._deserialize_value(v) for k, v in data.get("state", {}).items()
+            }
+
         elif _type == "module":
-            scope = self._get_scope(data["scope_uid"])
-            obj = self.factory.create_module(data["name"], scope)
+            if data.get("scope_native"):
+                # Kernel-native module: the real implementation is re-bound at
+                # load time. We only need a stable placeholder here.
+                obj = self.factory.create_module(
+                    data["name"], self.factory.create_scope(parent=None)
+                )
+            else:
+                scope = self._get_scope(data["scope_uid"])
+                obj = self.factory.create_module(data["name"], scope)
             self.instance_cache[uid] = obj
             
         elif _type == "native":
@@ -552,14 +812,51 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             
         elif _type == "behavior":
-            captured = [self._deserialize_value(i) for i in data.get("captured_intents", [])]
+            ci_raw = data.get("captured_intents")
+            if ci_raw is None:
+                captured = None
+            elif isinstance(ci_raw, str):
+                captured = self._get_intent_context(ci_raw)
+            else:
+                raise TypeError(
+                    "Unexpected captured_intents payload "
+                    f"{type(ci_raw).__name__} (contract requires None or intent_context uid)"
+                )
             call_intent_raw = data.get("call_intent")
             call_intent = self._deserialize_value(call_intent_raw) if call_intent_raw is not None else None
-            obj = self.factory.create_behavior(data["node_uid"], captured, data.get("expected_type"), call_intent=call_intent)
+            closure, pending_uids = self._deserialize_closure(data)
+            obj = self.factory.create_behavior(
+                data["node_uid"], captured, data.get("expected_type"),
+                call_intent=call_intent,
+                capture_mode=data.get("capture_mode"),
+                params_uids=data.get("params_uids"),
+                closure=closure,
+                param_types=data.get("param_types"),
+                return_type=data.get("return_type"),
+            )
             self.instance_cache[uid] = obj
+            for suid in pending_uids:
+                self._pending_cell_relinks.append((obj, suid))
+
+        elif _type == "fn_callable":
+            # 重建完整 fn_callable（node/closure/params/body 保真）并登记闭包
+            # cell 重链——不得落入 else 展开为空 IbObject。
+            closure, pending_uids = self._deserialize_closure(data)
+            obj = self.factory.create_fn_callable(
+                data["node_uid"],
+                capture_mode=data.get("capture_mode", "lambda"),
+                params_uids=data.get("params_uids"),
+                body_uid=data.get("body_uid"),
+                closure=closure,
+                param_types=data.get("param_types"),
+                return_type=data.get("return_type"),
+            )
+            self.instance_cache[uid] = obj
+            for suid in pending_uids:
+                self._pending_cell_relinks.append((obj, suid))
 
         elif _type == "intent_context":
-            # PT-2.2: ``intent_context`` IBCI 封装实例 — 先入缓存（打断潜在循环），
+            # ``intent_context`` IBCI 封装实例 — 先入缓存（打断潜在循环），
             # 再恢复 ``_ctx`` 字段为对应的 native IbIntentContext（共享身份）。
             obj = IbObject(ib_class)
             self.instance_cache[uid] = obj
@@ -573,12 +870,14 @@ class RuntimeDeserializer:
             # ``IbIntent`` 反序列化分支
             try:
                 mode = IntentMode(data.get("mode", "+"))
-            except Exception:
-                mode = IntentMode.APPEND
+            except Exception as e:
+                # 序列化端恒写合法 .value；异常只来自损坏/版本漂移数据。
+                # 静默降级会改变意图语义（OVERRIDE→APPEND）——fail-fast 显式暴露。
+                raise ValueError(f"deserialize intent mode {data.get('mode')!r} invalid: {e!r}") from e
             try:
                 role = IntentRole(data.get("role", "block"))
-            except Exception:
-                role = IntentRole.BLOCK
+            except Exception as e:
+                raise ValueError(f"deserialize intent role {data.get('role')!r} invalid: {e!r}") from e
             segments_raw = data.get("segments") or []
             segments = [self._deserialize_value(s) for s in segments_raw]
             obj = IbIntent(

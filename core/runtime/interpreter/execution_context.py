@@ -1,9 +1,8 @@
-import os
 from typing import Any, Mapping, Optional, List, Dict, TYPE_CHECKING, Callable
 from core.runtime.interfaces import IExecutionContext, IStackInspector
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
-from core.runtime.path import IbPath
+from core.kernel.path import IbPath, PathResolver
 
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject
@@ -15,6 +14,11 @@ class ExecutionContextImpl:
     同时，它持有指向 Interpreter 逻辑的回调函数，以实现物理层面的逻辑与数据分离。
     所有 AST 节点求值均通过 vm_executor（VMExecutor CPS 调度循环）完成；
     不存在 visit() 回调路径。
+
+    ``project_root`` 契约：**生产路径（engine 注入 / coordinator 任务 EC）必传**——
+    引擎在 run/compile 前经 ``_establish_project_root`` 确立；None 仅出现于
+    测试直构等"未确立"状态。消费方（如 AIPlugin 自动加载 api_config.json）对
+    project_root 缺失 fail-fast，不静默降级。
     """
     def __init__(self,
                  registry: Any,
@@ -32,7 +36,8 @@ class ExecutionContextImpl:
                  module_manager: Any = None,
                  strict_mode: bool = False,
                  entry_file: str = None,
-                 entry_dir: str = None):
+                 entry_dir: str = None,
+                 project_root: str = None):
         self._node_pool: Mapping[str, Any] = {}
         self._symbol_pool: Mapping[str, Any] = {}
         self._scope_pool: Mapping[str, Any] = {}
@@ -47,11 +52,19 @@ class ExecutionContextImpl:
         self._strict_mode = strict_mode
         self._entry_file = entry_file
         self._entry_dir = entry_dir
+        self._project_root = project_root
+        # 规范路径解析器（entry_dir 单锚点）。
+        self._path_resolver = PathResolver(
+            entry_dir=IbPath.from_native(entry_dir) if entry_dir else None
+        )
         # VMExecutor 直接引用（由 Interpreter 在构造完成后注入）。
         # 替代 IbUserFunction.call() 中通过 self.context._interpreter._get_vm_executor()
         # 三级 getattr 的脆弱查找路径。多 Interpreter 并发场景下，每个执行上下文
         # 必须通过此属性直接获得对应的 VMExecutor，避免静默 fallback。
         self._vm_executor: Optional[Any] = None
+        # 后注入槽（由 Interpreter / llmexcept 机制显式初始化，未注入时默认空）。
+        self._permission_manager: Optional[Any] = None
+        self._llmexcept_body_depth: int = 0
         
         # Logic Callbacks
         self._get_node_data_callback = get_node_data_callback
@@ -127,7 +140,7 @@ class ExecutionContextImpl:
 
     @property
     def vm_executor(self) -> Any:
-        """C13：当前 ExecutionContext 关联的 VMExecutor（由 Interpreter 注入）。
+        """当前 ExecutionContext 关联的 VMExecutor（由 Interpreter 注入）。
 
         当 IbUserFunction.call() 等代码需要驱动函数体语句的 CPS 执行时，应通过
         本属性获取 VMExecutor，而不是穿透到 ``self._interpreter`` 上调用
@@ -168,6 +181,28 @@ class ExecutionContextImpl:
         self._module_manager = value
 
     @property
+    def permission_manager(self) -> Any:
+        """由 Interpreter 注入，供 file_handle/media I/O 做沙箱校验。"""
+        return self._permission_manager
+
+    @permission_manager.setter
+    def permission_manager(self, value: Any):
+        self._permission_manager = value
+
+    @property
+    def llmexcept_body_depth(self) -> int:
+        """当前处于 llmexcept retry body 的嵌套深度（0 = 不在其中）。"""
+        return self._llmexcept_body_depth
+
+    def enter_llmexcept_body(self) -> None:
+        """进入 llmexcept retry body 时调用。"""
+        self._llmexcept_body_depth = self.llmexcept_body_depth + 1
+
+    def exit_llmexcept_body(self) -> None:
+        """退出 llmexcept retry body 时调用（需与 enter 配对）。"""
+        self._llmexcept_body_depth = max(0, self.llmexcept_body_depth - 1)
+
+    @property
     def strict_mode(self) -> bool:
         return self._strict_mode
 
@@ -180,6 +215,44 @@ class ExecutionContextImpl:
 
     def get_side_table(self, table_name: str, key: str) -> Any:
         return self._get_side_table_callback(table_name, key)
+
+    def get_llmexcept_protection_map(self) -> Dict[str, str]:
+        """llmexcept 保护映射（被保护节点 UID -> handler UID）。
+
+        内核拥有 node_pool 节点格式语义，一次性 O(n) 扫描（非热路径），
+        对外只暴露结构化映射契约。消费方（idbg 等）不直读原始节点结构。
+
+        - 直接 ``llmexcept`` 语句：``IbLLMExceptionalStmt`` 的 ``target`` → 语句节点
+        - 条件 for 的内联保护：``IbFor`` 的 ``llmexcept_handler`` → ``iter``
+          （若 iter 为 ``IbFilteredExpr``，真实受保护条件为其 ``expr``）
+        """
+        protection_mapping: Dict[str, str] = {}
+        for node_uid, node in self._node_pool.items():
+            if not isinstance(node, dict):
+                continue
+            node_type = node.get("_type")
+
+            if node_type == "IbLLMExceptionalStmt":
+                target_uid = node.get("target")
+                if isinstance(target_uid, str) and target_uid:
+                    protection_mapping[target_uid] = node_uid
+                continue
+
+            if node_type == "IbFor":
+                handler_uid = node.get("llmexcept_handler")
+                iter_uid = node.get("iter")
+                if not (isinstance(handler_uid, str) and handler_uid
+                        and isinstance(iter_uid, str) and iter_uid):
+                    continue
+                actual_target_uid = iter_uid
+                iter_node = self._node_pool.get(iter_uid)
+                if isinstance(iter_node, dict) and iter_node.get("_type") == "IbFilteredExpr":
+                    expr_uid = iter_node.get("expr")
+                    if isinstance(expr_uid, str) and expr_uid:
+                        actual_target_uid = expr_uid
+                protection_mapping[actual_target_uid] = handler_uid
+
+        return protection_mapping
 
     def push_stack(self, name: str, location: Optional[Any] = None, is_user_function: bool = False, **kwargs) -> None:
         self._push_stack_callback(name, location, is_user_function, **kwargs)
@@ -248,22 +321,15 @@ class ExecutionContextImpl:
         """获取入口文件目录"""
         return self._entry_dir
 
+    def get_project_root(self) -> Optional[str]:
+        """获取项目根目录（沙箱边界 + 配置加载锚点）。"""
+        return self._project_root
+
     def resolve_path(self, path: str) -> IbPath:
         """
-        所有相对路径的统一解析入口
+        所有相对路径的统一解析入口（委托 PathResolver）。
 
         所有相对路径都基于入口文件目录解析，确保无论在哪个 IBCI 文件中执行，
         相对路径都相对于入口文件目录。
         """
-        if not path:
-            return IbPath.from_native("")
-
-        ib_path = IbPath.from_native(path)
-
-        if ib_path.is_absolute:
-            return ib_path.resolve_dot_segments()
-
-        if self._entry_dir:
-            return (IbPath.from_native(self._entry_dir) / ib_path).resolve_dot_segments()
-
-        return ib_path
+        return self._path_resolver.resolve(path)

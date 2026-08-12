@@ -1,6 +1,5 @@
 from typing import Any, Optional, TYPE_CHECKING, Callable
 from core.runtime.objects.kernel import IbObject
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.base.interfaces import IssueTracker, ISourceProvider, ICompilerService
 from core.runtime.interfaces import IKernelOrchestrator
 
@@ -26,8 +25,6 @@ class ServiceContextImpl:
                  registry: Any,
                  host_service: Optional['IHostService'] = None,
                  source_provider: Optional[ISourceProvider] = None,
-                 orchestrator: Optional[IKernelOrchestrator] = None,
-                 debugger: Any = None,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
                  scheduler: Optional['IRuntimeScheduler'] = None,
@@ -42,13 +39,21 @@ class ServiceContextImpl:
         self._registry = registry
         self._host_service = host_service
         self._source_provider = source_provider
-        self._orchestrator = orchestrator
-        self._debugger = debugger
         self._output_callback = output_callback
         self._input_callback = input_callback
         self._scheduler = scheduler
         self._capability_registry = capability_registry
         self._interpreter = interpreter
+        self._orchestrator = None
+        self._test_hooks = None
+
+    @property
+    def test_hooks(self) -> Optional[Any]:
+        return self._test_hooks
+
+    @test_hooks.setter
+    def test_hooks(self, hooks: Optional[Any]) -> None:
+        self._test_hooks = hooks
 
     @property
     def scheduler(self) -> Optional['IRuntimeScheduler']:
@@ -119,11 +124,23 @@ class ServiceContextImpl:
         return self._orchestrator
 
     def set_orchestrator(self, orchestrator: Optional[IKernelOrchestrator]) -> None:
-        """注入内核协调器（Engine 在解释器创建完毕后调用）。"""
+        """注入内核协调器（Engine 在解释器创建完毕后调用）。
+
+        orchestrator 的唯一注入点：同时写入本容器与已装配的 HostService
+        （HostService 构造不接收 orchestrator，统一经本方法注入）。
+        """
         self._orchestrator = orchestrator
-        if self._host_service and hasattr(self._host_service, 'orchestrator'):
+        if self._host_service:
             self._host_service.orchestrator = orchestrator
 
-    @property
-    def debugger(self) -> Any:
-        return self._debugger
+    def set_scheduler(self, scheduler: Optional['IRuntimeScheduler']) -> None:
+        """注入运行时调度器（延迟注入，打破 rt_scheduler <-> ServiceContext 循环依赖）。"""
+        self._scheduler = scheduler
+
+    def set_capability_registry(self, capability_registry: Optional[Any]) -> None:
+        """注入能力注册中心（Engine 在解释器创建完毕后通过 kwargs 链传入）。"""
+        self._capability_registry = capability_registry
+
+    def set_host_service(self, host_service: Optional['IHostService']) -> None:
+        """注入宿主服务（rt_scheduler.spawn 创建 HostService 后调用）。"""
+        self._host_service = host_service

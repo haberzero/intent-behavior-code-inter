@@ -21,14 +21,12 @@ Capability query pattern (kept stable for callers):
     if axiom and axiom.has_operator_cap:
         result_name = axiom.resolve_operation_type_name("+", "float")
 
-The convenience accessor ``SpecRegistry.get_operator_cap(spec)`` returns
-the axiom itself when capable, else ``None`` — preserving the truthy-check
-idiom used throughout the compiler and runtime.
+调用方经 ``get_axiom(spec)`` 直接查询能力标志（truthy-check 惯用法）。
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Protocol, Tuple, TYPE_CHECKING, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, Tuple, Union, TYPE_CHECKING, runtime_checkable
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -69,6 +67,7 @@ class TypeAxiom(Protocol):
     has_parser_cap: bool
     has_from_prompt_cap: bool
     has_output_hint_cap: bool
+    has_payload_prompt_cap: bool
     has_llm_call_cap: bool
 
     # ---- Capability methods (default no-op in BaseAxiom) ------------ #
@@ -84,6 +83,9 @@ class TypeAxiom(Protocol):
         self, raw_response: str, spec: Optional["IbSpec"] = None
     ) -> Tuple[bool, Any]: ...
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str: ...
+    def __payload_prompt__(
+        self, value: Any, spec: Optional["IbSpec"] = None
+    ) -> Union[str, Dict[str, Any], List[Dict[str, Any]]]: ...
 
     # ---- Method / operator specs ------------------------------------ #
     def get_method_specs(self) -> "Dict[str, MethodMemberSpec]":
@@ -99,6 +101,5 @@ class TypeAxiom(Protocol):
     def is_compatible(self, other_name: str) -> bool: ...
     def is_class(self) -> bool: ...
     def is_module(self) -> bool: ...
-    def can_return_from_isolated(self) -> bool: ...
     def get_parent_axiom_name(self) -> Optional[str]: ...
     def get_diff_hint(self, other_name: str) -> Optional[str]: ...

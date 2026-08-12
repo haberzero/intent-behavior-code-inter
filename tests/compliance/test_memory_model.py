@@ -2,9 +2,9 @@
 tests/compliance/test_memory_model.py
 ======================================
 
-IBCI VM 合规测试：内存模型契约（M1/M2 / SPEC §2）。
+IBCI VM 合规测试：内存模型契约。
 
-覆盖 docs/VM_SPEC.md §2 定义的以下契约：
+覆盖以下契约：
   - 公理 SC-3/SC-4（IbCell）：lambda 通过共享 Cell 访问自由变量，
     外部修改对 lambda 可见（共享引用语义）
   - 公理 SC-3/SC-4（IbCell）：snapshot 通过独立 Cell 副本冻结自由变量，
@@ -29,17 +29,17 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 # ===========================================================================
-# SPEC §2.1 — lambda 共享 Cell 语义（公理 SC-3/SC-4）
+# lambda 共享 Cell 语义（公理 SC-3/SC-4）
 # ===========================================================================
 
 class TestLambdaSharedCell:
-    """SPEC §2.1：lambda 通过共享 IbCell 读取自由变量（SC-3/SC-4）。"""
+    """lambda 通过共享 IbCell 读取自由变量（SC-3/SC-4）。"""
 
     def test_lambda_sees_latest_value_after_external_mutation(self):
         """lambda 应读到外部最新写入的值（共享 Cell 引用语义）。"""
         code = """
 int x = 10
-fn get_x = lambda: x
+fn get_x = lambda -> auto: x
 x = 20
 print((str)(int)get_x())
 """
@@ -50,8 +50,8 @@ print((str)(int)get_x())
         """两个 lambda 捕获同一变量，修改对两者均可见（Cell 共享）。"""
         code = """
 int counter = 0
-fn get_a = lambda: counter
-fn get_b = lambda: counter
+fn get_a = lambda -> auto: counter
+fn get_b = lambda -> auto: counter
 counter = 42
 int va = (int)get_a()
 int vb = (int)get_b()
@@ -68,7 +68,7 @@ print((str)vb)
         code = """
 int a = 1
 int b = 2
-fn sum_ab = lambda: a + b
+fn sum_ab = lambda -> auto: a + b
 a = 10
 int result = (int)sum_ab()
 print((str)result)
@@ -78,17 +78,17 @@ print((str)result)
 
 
 # ===========================================================================
-# SPEC §2.2 — snapshot 值快照语义（公理 SC-3/SC-4）
+# snapshot 值快照语义（公理 SC-3/SC-4）
 # ===========================================================================
 
 class TestSnapshotFrozenCell:
-    """SPEC §2.2：snapshot 通过独立 Cell 副本冻结自由变量（SC-4 值快照语义）。"""
+    """snapshot 通过独立 Cell 副本冻结自由变量（SC-4 值快照语义）。"""
 
     def test_snapshot_is_unaffected_by_external_mutation(self):
         """snapshot 定义时冻结自由变量值，外部修改对 snapshot 不可见。"""
         code = """
 int x = 10
-fn frozen = snapshot: x
+fn frozen = snapshot -> auto: x
 x = 99
 int result = (int)frozen()
 print((str)result)
@@ -100,8 +100,8 @@ print((str)result)
         """相同自由变量被 snapshot 和 lambda 同时捕获后，外部修改只影响 lambda。"""
         code = """
 int val = 5
-fn snap = snapshot: val
-fn lam = lambda: val
+fn snap = snapshot -> auto: val
+fn lam = lambda -> auto: val
 val = 100
 int snap_result = (int)snap()
 int lam_result = (int)lam()
@@ -114,18 +114,18 @@ print((str)lam_result)
 
 
 # ===========================================================================
-# SPEC §2.3 — Cell 延长生命周期（公理 LT-2）
+# Cell 延长生命周期（公理 LT-2）
 # ===========================================================================
 
 class TestCellLifetimeExtension:
-    """SPEC §2.3：外层作用域退出后，lambda 捕获的 Cell 仍可访问（LT-2）。"""
+    """外层作用域退出后，lambda 捕获的 Cell 仍可访问（LT-2）。"""
 
     def test_lambda_survives_outer_function_return(self):
         """返回 lambda 的工厂函数：lambda 在工厂作用域销毁后仍然可调用。"""
         code = """
 func make_counter(int start) -> fn:
     int n = start
-    fn increment = lambda: n + 1
+    fn increment = lambda -> auto: n + 1
     return increment
 
 fn counter = make_counter(10)
@@ -139,7 +139,7 @@ print((str)result)
         """snapshot 在创建时捕获值，而非调用时（与 lambda 行为对比）。"""
         code = """
 func make_snapshot(int v) -> fn:
-    fn snap = snapshot: v
+    fn snap = snapshot -> auto: v
     return snap
 
 fn s = make_snapshot(7)
@@ -151,11 +151,11 @@ print((str)result)
 
 
 # ===========================================================================
-# SPEC §2.4 — 值类型赋值深拷贝等价（公理 OM-2）
+# 值类型赋值深拷贝等价（公理 OM-2）
 # ===========================================================================
 
 class TestValueTypeSemantics:
-    """SPEC §2.4：值类型（int/str/bool）赋值等价于深拷贝，无共享引用副作用。"""
+    """值类型（int/str/bool）赋值等价于深拷贝，无共享引用副作用。"""
 
     def test_int_assignment_is_independent(self):
         """int 赋值后，修改原变量不影响副本变量。"""
@@ -195,11 +195,11 @@ else:
 
 
 # ===========================================================================
-# SPEC §2.5 — lambda 作为高阶函数参数传递（公理 SC-4 / M2）
+# lambda 作为高阶函数参数传递（公理 SC-4）
 # ===========================================================================
 
 class TestHigherOrderFunctionPassing:
-    """SPEC §2.5：lambda 对象可以自由作为高阶函数参数传递（M2 出口契约）。"""
+    """lambda 对象可以自由作为高阶函数参数传递。。"""
 
     def test_lambda_passed_to_function_and_called(self):
         """lambda 可作为函数参数传入并在函数内被调用。"""
@@ -207,7 +207,7 @@ class TestHigherOrderFunctionPassing:
 func apply(fn f, int n) -> auto:
     return f(n)
 
-fn double = lambda(int x): x * 2
+fn double = lambda(int x) -> auto: x * 2
 int result = (int)apply(double, 6)
 print((str)result)
 """
@@ -218,7 +218,7 @@ print((str)result)
         """函数返回的 lambda 在外层作用域仍然可调用。"""
         code = """
 func make_adder(int base) -> fn:
-    fn adder = lambda(int x): base + x
+    fn adder = lambda(int x) -> auto: base + x
     return adder
 
 fn add5 = make_adder(5)

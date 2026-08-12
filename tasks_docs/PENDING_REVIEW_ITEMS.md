@@ -1,0 +1,42 @@
+# 完整复核审查清单（PT-AUDIT-3，周期循环）
+
+> 审查动作是**长期周期性持续清扫**，非一次性完成：每轮主线改动后按需复核。R1-R5 均已执行
+> （R1-R3 2026-08-05；R4 2026-08-09；R5 聚焦治理 2026-08-09，全量待独立窗口）。随阶段边界循环执行。
+> 任务代号：审查动作归 `PT-AUDIT-3`，docs 同步归 `PT-DOC-1`。
+
+---
+
+## 一、审查动作（R 系列 → PT-AUDIT-3，周期循环）
+
+| # | 内容 | 说明 | 状态 |
+|---|------|------|------|
+| R1 | 正式 code-review 复核 | 三阶段主线 + 收尾 L1-L8 独立复核（general agent） | ✅ 已执行（2026-08-05），周期复核 |
+| R2 | code-quality 健康诊断十查 | 全仓健康审计（残留/双通道/双写真相/fail-fast/封装） | ✅ 已执行（2026-08-05），周期复核 |
+| R3 | code-odor 全面异味扫描 | 特征扫描（嵌套分支/能力探测/兜底字样/反射变体） | ✅ 已执行（2026-08-05），周期复核 |
+| R4 | 覆盖率核对 | 新增测试是否覆盖全部新行为（subscriber 生命周期/class_ref/泛型特化/瞬态协议/构造入口/闭包序列化 round-trip/IBC 文件跨模块导入） | ✅ 已执行（2026-08-09，general agent + 逐项核实）——7 项官方 + 5 项本 session 新功能全核对。2 处 TRUE_GAP 已补测：subscriber 生命周期语言层（`test_vm_comm.py` +2）、generator[T] 泛型身份（`test_generic_model.py` +1）。其余覆盖良好 |
+| R5 | doc-governance 审计 | docs/ 治理流程（配合 PT-DOC-1 文档收敛） | ✅ 聚焦治理已执行（2026-08-09，session 改动文档核验 + 索引校准）；全量 docs/ 治理待独立窗口 |
+
+> 约束：subagent **仅可用 general agent**；每批全量 pytest 零回归；新缺陷按"不删也不修"两档处置
+> （根本修复或彻底删除）；commit 留痕（仅本地，禁 push）。
+
+---
+
+## 二、docs/ 技术手册未同步（PT-DOC-1，随 R5 收敛）
+
+> **D1-D5 已全部落地（2026-08-06）**：新写 `docs/syntax/14_concurrency.md`（chan/slot/subscriber/thread/thread_result + pubsub/send_nowait 语义 + signal 移除说明），KNOWN_LIMITS §二十二，SYNTAX_REFERENCE/README 接入。详见 PENDING_TASKS PT-DOC-1 与 WORKLOG。本节保留为历史清单。
+
+| # | 内容 | 影响文档 | 状态 |
+|---|------|---------|------|
+| D1 | `signal` 关键字/类型移除 | `docs/subsystems` 通信/并发章节、语法文档、`KNOWN_LIMITS.md` | ✅ 已落地（2026-08-06） |
+| D2 | pubsub 语言面打通 + `subscriber` 新类型 | 通信/并发文档、类型参考 | ✅ 已落地（2026-08-06） |
+| D3 | 通信 Signal 移除裁定（零消费者空壳 + 撞名） | 相关设计记录 | ✅ 已落地（2026-08-06） |
+| D4 | `send_nowait` 语言面补齐 + 语义变化（无订阅者 False） | 通信文档 | ✅ 已落地（2026-08-06） |
+| D5 | 线程对象模型细化（thread 槽位化/thread_result IbValue/瞬态序列化协议） | 线程/值对象文档 | ✅ 已落地（2026-08-06） |
+
+---
+
+## 三、thread 架构/类型系统隐患调查（T 系列——已全部落地）
+
+> 调查结论浓缩（2026-08-04）：thread 特有突兀分支 + 构造机制三轨，根因 = 统一泛型模型
+> 半落地。落地：成员特化协议化 ✅ / 瞬态序列化协议化 ✅ / 公理 any 机制化 ✅ /
+> `_create_blank` 统一构造入口 ✅。完整决策见 git 历史。

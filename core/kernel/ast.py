@@ -5,6 +5,13 @@ from core.base.source_atomic import Location
 from .intent_logic import IntentMode
 
 
+# --- 函数参数种类（IbArg.kind） ---
+ARG_POSITIONAL_OR_KEYWORD = "POSITIONAL_OR_KEYWORD"
+ARG_VAR_POSITIONAL = "VAR_POSITIONAL"
+ARG_VAR_KEYWORD = "VAR_KEYWORD"
+ARG_KEYWORD_ONLY = "KEYWORD_ONLY"
+
+
 # --- AST Nodes ---
 
 @dataclass(eq=False, unsafe_hash=True)
@@ -140,6 +147,8 @@ class IbFunctionDef(IbStmt):
     args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
     body: List[IbStmt]
     returns: Optional[IbExpr] = None
+    free_vars: List = field(default_factory=list)  # [[name, sym_uid], ...] nonlocal captures
+    is_generator: bool = False  # 含 yield → 惰性生成器（D-08 自标记函数种类）
     
     @property
     def creates_scope(self) -> bool:
@@ -175,6 +184,10 @@ class IbGlobalStmt(IbStmt):
     names: List[str]
 
 @dataclass(kw_only=True, eq=False)
+class IbNonlocalStmt(IbStmt):
+    names: List[str]
+
+@dataclass(kw_only=True, eq=False)
 class IbReturn(IbStmt):
     value: Optional[IbExpr] = None
 
@@ -183,6 +196,7 @@ class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
     capture_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbAugAssign(IbStmt):
@@ -206,18 +220,21 @@ class IbWhile(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbIf(IbStmt):
     test: IbExpr
     body: List[IbStmt]
     orelse: List[IbStmt] = field(default_factory=list)
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbSwitch(IbStmt):
     """Switch-Case 语句"""
     test: IbExpr  # 要匹配的表达式
     cases: List['IbCase']  # case 列表
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbCase(IbASTNode):
@@ -256,6 +273,7 @@ class IbImportFrom(IbStmt):
 @dataclass(kw_only=True, eq=False)
 class IbExprStmt(IbStmt):
     value: IbExpr
+    llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)
 class IbPass(IbStmt):
@@ -310,6 +328,60 @@ class IbUnaryOp(IbExpr):
     operand: IbExpr
 
 @dataclass(kw_only=True, eq=False)
+class IbAwaitExpr(IbExpr):
+    """``await <expr>``：显式等待一个 Waitable 完成，返回其结果。
+
+    操作数求值为 ``Waitable``（少数 ``LLMFuture`` / 宿主 ``HostAwaitable``）。
+    VM 对该 Waitable ``yield`` 挂起，恢复后返回 ``result()``。使对任意 Waitable
+    的等待显式化、通用化（区别于数据流自动 await 的透明便利）。
+    """
+    value: IbExpr
+
+@dataclass(kw_only=True, eq=False)
+class IbYieldExpr(IbExpr):
+    """``yield <expr>``：惰性生成器产出值。
+
+    含 ``yield`` 的函数为惰性生成器（D-08 自标记函数种类）。``yield x`` 挂起
+    产出值 ``x``；迭代（``next`` / ``for``）恢复继续执行。生成器体须由单一
+    可恢复驱动承载（EXEC_FOUNDATION §5.2），在 yield 点暂停交付值、迭代恢复。
+    """
+    value: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
+class IbYieldFromExpr(IbExpr):
+    """``yield from <expr>``：惰性生成器委托（阶段 5 增量）。
+
+    把子迭代对象（嵌套生成器 / 序列 / 有 ``__iter__`` 的对象）的每个产出
+    逐值透传为当前生成器的产出；子生成器为 ``IbGenerator`` 时表达式值为其
+    ``return`` 值（``StopIteration.value``），对序列为 ``None``。惰性由消费方
+    决定：``next()`` 逐值推进；``for`` 消费经 ``to_list`` 一次性物化。
+    """
+    value: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
+class IbChannelExpr(IbExpr):
+    """``chan(T, mode=..., buffer=...)`` 或 ``chan T(...)``：创建 Channel。
+
+    ``type_name`` 为元素类型名（首参经 ``parse_type_annotation`` 解析）；
+    ``mode`` 为 stream / message / pubsub；``buffer`` 为有界缓冲大小（0=无界）；
+    ``name`` 为可选具名 Channel（用于跨作用域寻址）。
+    """
+    type_name: Optional[str] = None
+    mode: str = "message"
+    buffer: int = 0
+    name: Optional[str] = None
+
+@dataclass(kw_only=True, eq=False)
+class IbSlotExpr(IbExpr):
+    """``slot T(name)`` 或 ``slot(name, value)``：创建/访问 Slot。
+
+    ``name`` 为具名标识；``type_name`` 可选元素类型；``value`` 可选初始值。
+    """
+    name: str
+    type_name: Optional[str] = None
+    value: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
 class IbIfExp(IbExpr):
     test: IbExpr
     body: IbExpr
@@ -336,6 +408,8 @@ class IbCompare(IbExpr):
 class IbCall(IbExpr):
     func: IbExpr
     args: List[IbExpr]
+    # 具名实参列表。IbKeyword.arg 为参数名；arg=None 表示 **expr 字典解包。
+    # 序列解包 *expr 以 IbStarred 节点出现在 args 中。
     keywords: List['IbKeyword']
 
 @dataclass(kw_only=True, eq=False)
@@ -399,10 +473,11 @@ class IbBehaviorExpr(IbExpr):
     #
     # 默认值的语义：
     # * ``llm_deps == []`` ：本 behavior 无 LLM 依赖（只引用普通变量）
-    # * ``dispatch_eligible == True`` ：可独立调度（无依赖或依赖图无环时由
-    #   依赖分析在后保留；分析未运行时也按 True 默认，与现有行为一致）
+    # * ``dispatch_eligible == False`` ：并发 dispatch 未默认启用。
+    #   DDG 分析仍计算 ``llm_deps`` 供未来接通使用，但 ``dispatch_eligible``
+    #   一律置 False，behavior 走同步求值路径。
     llm_deps: List["IbBehaviorExpr"] = field(default_factory=list)
-    dispatch_eligible: bool = True
+    dispatch_eligible: bool = False
 
 @dataclass(kw_only=True, eq=False)
 class IbBehaviorInstance(IbExpr):
@@ -461,11 +536,11 @@ class IbLambdaExpr(IbExpr):
     params: List[Union['IbArg', 'IbTypeAnnotatedExpr']] = field(default_factory=list)
     body: Optional[IbExpr] = None
     capture_mode: str = 'lambda'  # 'lambda' | 'snapshot'
-    # D2：表达式侧返回类型标注节点（IbName/IbSubscript 等）。
+    # 表达式侧返回类型标注节点（IbName/IbSubscript 等）。
     # 由解析器在 lambda_expr() 中填充；None 表示返回类型待推导。
     # 序列化为 node_data["returns"]（UID 引用），运行时 handler 不读取该字段。
     returns: Optional['IbExpr'] = None
-    # 编译期自由变量列表（由 Pass 4 语义分析器填充）。
+    # 编译期自由变量列表（由 BindingPhase 语义分析器填充）。
     # 每项为 [name, sym_uid]，name 是变量名，sym_uid 是 Symbol.uid（作用域 UID + 名称）。
     # 序列化后进入 artifact node_data["free_vars"]，运行时 vm_handle_IbLambdaExpr
     # 直接读取，无需在运行时走访 AST 收集自由变量。
@@ -485,7 +560,7 @@ class IbCallableType(IbExpr):
     ``fn[...]`` appears in a type-annotation context and the subscript
     content follows the callable signature form ``(type_list) -> type``.
 
-    D3: supports ``fn[(param_types) -> return_type]`` syntax for HOF parameter
+    supports ``fn[(param_types) -> return_type]`` syntax for HOF parameter
     type annotations and variable declaration type overrides.
 
     Examples::
@@ -509,11 +584,25 @@ class IbCallableType(IbExpr):
 @dataclass(kw_only=True, eq=False)
 class IbArg(IbASTNode):
     arg: str
+    annotation: Optional[IbExpr] = None  # Type annotation for the parameter
+    # 默认值表达式（None 表示无默认值）。仅 POSITIONAL_OR_KEYWORD / KEYWORD_ONLY
+    # 参数可携带。
+    default: Optional[IbExpr] = None
+    # 参数种类：ARG_POSITIONAL_OR_KEYWORD / ARG_VAR_POSITIONAL / ARG_VAR_KEYWORD
+    # / ARG_KEYWORD_ONLY。VAR_POSITIONAL (*args) 与 VAR_KEYWORD (**kwargs) 参数
+    # 无类型标注、无默认值；KEYWORD_ONLY 为 *args 之后的参数，只能具名传入。
+    kind: str = ARG_POSITIONAL_OR_KEYWORD
+
+
+@dataclass(kw_only=True, eq=False)
+class IbStarred(IbExpr):
+    """序列解包表达式（*expr），仅出现在调用实参位置。"""
+    value: IbExpr
 
 
 @dataclass(kw_only=True, eq=False)
 class IbKeyword(IbASTNode):
-    arg: Optional[str]
+    arg: Optional[str]  # 参数名；None 表示 **expr 字典解包
     value: IbExpr
 
 @dataclass(kw_only=True, eq=False)

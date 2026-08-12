@@ -1,4 +1,5 @@
 from typing import List, Optional, Union, TYPE_CHECKING
+from core.base.diagnostics.codes import PAR_INVALID_SYNTAX, PAR_UNEXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType, Token
 
 from core.compiler.parser.core.token_stream import TokenStream as ParserTokenStream
@@ -9,6 +10,7 @@ from core.compiler.parser.core.syntax import ID_AUTO, IbPrecedence
 from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 from core.compiler.parser.core.token_stream import TokenStream, ParseControlFlowError
+from core.compiler.parser.components.type_def import ID_FN
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -73,7 +75,6 @@ class DeclarationComponent(BaseComponent):
         4. auto x: int = 1 (显式覆盖)
         5. (int x, int y) = (10, 20) (元组解包声明)
         """
-        from core.compiler.parser.components.type_def import ID_FN
         # Handle tuple destructuring declaration: (int x, int y) = expr
         if not explicit_auto and not explicit_fn and self.stream.check(TokenType.LPAREN):
             return self._tuple_variable_declaration()
@@ -102,7 +103,7 @@ class DeclarationComponent(BaseComponent):
         elif explicit_fn:
             # 'fn' keyword already consumed — callable type inference
             type_token = self.stream.previous()
-            # D3: check for fn[(...)→(...)] callable signature form before
+            # check for fn[(...)→(...)] callable signature form before
             # defaulting to bare fn type annotation.
             if self.stream.check(TokenType.LBRACKET):
                 callable_sig = self.type_def._try_parse_callable_sig(type_token)
@@ -129,7 +130,7 @@ class DeclarationComponent(BaseComponent):
                     "Declaration-side return type annotation 'TYPE fn NAME = ...' is not supported. "
                     "Return types must be specified on the expression side: 'fn NAME = lambda -> TYPE: EXPR'. "
                     "For example: 'fn f = lambda -> int: 1 + 1' or 'fn f = lambda(int a) -> str: \"hi\"'.",
-                    code="PAR_003",
+                    code=PAR_INVALID_SYNTAX,
                 )
             else:
                 name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name.")
@@ -292,19 +293,62 @@ class DeclarationComponent(BaseComponent):
     def parameters(self) -> List[ast.IbArg]:
         params = []
         if not self.stream.check(TokenType.RPAREN):
+            saw_var_pos = False
+            saw_var_kw = False
+            saw_default = False
             while True:
+                if saw_var_kw:
+                    raise self.stream.error(self.stream.peek(), "Parameter cannot follow '**kwargs'.", code=PAR_UNEXPECTED_TOKEN)
                 if self.stream.check(TokenType.SELF):
                     self.stream.advance()
                     if not self.stream.match(TokenType.COMMA):
                         break
                     continue
 
-                annotation = self.type_def.parse_type_annotation(IbPrecedence.TUPLE)
-                name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+                kind = ast.ARG_POSITIONAL_OR_KEYWORD
+                if self.stream.match(TokenType.STAR_STAR):
+                    kind = ast.ARG_VAR_KEYWORD
+                elif self.stream.match(TokenType.STAR):
+                    kind = ast.ARG_VAR_POSITIONAL
 
-                param_node = self._loc(ast.IbArg(arg=name_token.value), name_token)
-                if annotation:
-                    param_node = self._loc(ast.IbTypeAnnotatedExpr(target=param_node, annotation=annotation), name_token)
+                if kind == ast.ARG_VAR_KEYWORD and saw_var_kw:
+                    raise self.stream.error(self.stream.previous(), "Duplicate '**kwargs' parameter.", code=PAR_UNEXPECTED_TOKEN)
+                if kind == ast.ARG_VAR_POSITIONAL and saw_var_pos:
+                    raise self.stream.error(self.stream.previous(), "Duplicate '*args' parameter.", code=PAR_UNEXPECTED_TOKEN)
+
+                if kind == ast.ARG_POSITIONAL_OR_KEYWORD:
+                    annotation = self.type_def.parse_type_annotation(IbPrecedence.TUPLE)
+                    name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+
+                    default = None
+                    if self.stream.match(TokenType.ASSIGN):
+                        # 默认值表达式以 TUPLE 优先级解析，避免吞掉后续参数分隔逗号
+                        default = self.expression.parse_expression(IbPrecedence.TUPLE)
+                        saw_default = True
+
+                    # *args 之后的普通参数为 keyword-only（Python 语义）
+                    if saw_var_pos:
+                        kind = ast.ARG_KEYWORD_ONLY
+
+                    param_node = self._loc(ast.IbArg(arg=name_token.value, annotation=annotation, default=default, kind=kind), name_token)
+                else:
+                    # *args / **kwargs：无类型标注、无默认值
+                    name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+                    param_node = self._loc(ast.IbArg(arg=name_token.value, annotation=None, default=None, kind=kind), name_token)
+                    if kind == ast.ARG_VAR_POSITIONAL:
+                        saw_var_pos = True
+                    else:
+                        saw_var_kw = True
+
+                if kind != ast.ARG_VAR_POSITIONAL and kind != ast.ARG_VAR_KEYWORD:
+                    if saw_default and param_node.default is None and not saw_var_pos:
+                        # 默认值后不允许出现无默认值的普通参数（keyword-only 除外）
+                        raise self.stream.error(
+                            self.stream.previous(),
+                            f"Parameter '{param_node.arg}' cannot follow a parameter with a default value.",
+                            code=PAR_UNEXPECTED_TOKEN,
+                        )
+
                 params.append(param_node)
 
                 if not self.stream.match(TokenType.COMMA):
@@ -328,7 +372,7 @@ class DeclarationComponent(BaseComponent):
             elif self.stream.match(TokenType.NEWLINE):
                 continue
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', '__llmretry__', or 'llmend'.", code="PAR_002")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', '__llmretry__', or 'llmend'.", code=PAR_UNEXPECTED_TOKEN)
 
         self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
         return sys_prompt, user_prompt, retry_hint
@@ -351,6 +395,6 @@ class DeclarationComponent(BaseComponent):
                 var_ref = self._loc(ast.IbName(id=var_name, ctx='Load'), token)
                 segments.append(var_ref)
             else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code="PAR_002")
+                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code=PAR_UNEXPECTED_TOKEN)
 
         return segments

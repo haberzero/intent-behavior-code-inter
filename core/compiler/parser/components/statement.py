@@ -1,4 +1,5 @@
 from typing import List, Optional, TYPE_CHECKING
+from core.base.diagnostics.codes import PAR_EXPECTED_TOKEN, PAR_UNEXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
@@ -6,6 +7,7 @@ from core.kernel.intent_logic import IntentMode
 from core.compiler.parser.core.component import BaseComponent
 from core.compiler.parser.core.syntax import IbPrecedence
 from core.compiler.parser.core.syntax import ID_AUTO, COMPOUND_OP_MAP
+from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent
@@ -37,6 +39,8 @@ class StatementComponent(BaseComponent):
             return self.return_statement()
         if self.stream.match(TokenType.GLOBAL):
             return self.global_statement()
+        if self.stream.match(TokenType.NONLOCAL):
+            return self.nonlocal_statement()
         if self.stream.match(TokenType.SWITCH):
             return self.switch_statement()
         if self.stream.match(TokenType.IF):
@@ -92,7 +96,7 @@ class StatementComponent(BaseComponent):
         if self.stream.check(TokenType.IMPORT) or self.stream.check(TokenType.FROM):
             raise self.stream.error(self.stream.peek(), 
                              "Import statements are only allowed at the top level of a module.", 
-                             code="PAR_002")
+                             code=PAR_UNEXPECTED_TOKEN)
         
         return self.expression_statement()
 
@@ -114,6 +118,17 @@ class StatementComponent(BaseComponent):
                 break
         self.stream.consume_end_of_statement("Expect newline after global declaration.")
         return self._loc(ast.IbGlobalStmt(names=names), start_token)
+
+    def nonlocal_statement(self) -> ast.IbNonlocalStmt:
+        start_token = self.stream.previous()
+        names = []
+        while True:
+            name_token = self.stream.consume(TokenType.IDENTIFIER, "Expect variable name in nonlocal declaration.")
+            names.append(name_token.value)
+            if not self.stream.match(TokenType.COMMA):
+                break
+        self.stream.consume_end_of_statement("Expect newline after nonlocal declaration.")
+        return self._loc(ast.IbNonlocalStmt(names=names), start_token)
 
     def llm_except_statement(self) -> ast.IbLLMExceptionalStmt:
         """
@@ -307,7 +322,6 @@ class StatementComponent(BaseComponent):
 
     def switch_statement(self) -> ast.IbStmt:
         """解析 switch-case 语句"""
-        from core.compiler.common.tokens import TokenType
         start_token = self.stream.previous()
 
         # 解析 switch 表达式
@@ -414,7 +428,7 @@ class StatementComponent(BaseComponent):
                 self.stream.previous(),
                 "The 'while ... if ...:' filter syntax is not supported. "
                 "Use an explicit 'if/continue' inside the loop body instead.",
-                code="PAR_002",
+                code=PAR_UNEXPECTED_TOKEN,
             )
             
         self.stream.consume(TokenType.COLON, "Expect ':' after condition.")
@@ -428,7 +442,6 @@ class StatementComponent(BaseComponent):
         
         # 支持带类型标注的循环目标 (e.g. for str name in names)
         # 或者元组声明 (e.g. for (int x, int y) in coords)
-        from core.compiler.parser.core.recognizer import SyntaxRecognizer, SyntaxRole
         
         target_candidate = None
         if SyntaxRecognizer.get_role(self.stream) == SyntaxRole.VARIABLE_DECLARATION:
@@ -461,7 +474,7 @@ class StatementComponent(BaseComponent):
             target = None
             iter_expr = target_candidate
         else:
-            raise self.stream.error(self.stream.peek(), "Expect 'in' or ':' in for statement.", code="PAR_001")
+            raise self.stream.error(self.stream.peek(), "Expect 'in' or ':' in for statement.", code=PAR_EXPECTED_TOKEN)
             
         if self.stream.match(TokenType.IF):
             filter_expr = self.expression.parse_expression()
@@ -570,7 +583,7 @@ class StatementComponent(BaseComponent):
             finalbody = self.block()
             
         if not handlers and not finalbody:
-             raise self.stream.error(start_token, "Expect 'except' or 'finally' after 'try'.", code="PAR_001")
+             raise self.stream.error(start_token, "Expect 'except' or 'finally' after 'try'.", code=PAR_EXPECTED_TOKEN)
              
         return self._loc(ast.IbTry(body=body, handlers=handlers, orelse=orelse, finalbody=finalbody), start_token)
 

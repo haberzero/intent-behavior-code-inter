@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from core.extension.ibcext import IbPlugin, ExtensionCapabilities
+from core.runtime.objects.kernel import IbObject
 
 
 class IDbgPlugin(IbPlugin):
@@ -17,16 +18,10 @@ class IDbgPlugin(IbPlugin):
     """
     def __init__(self):
         super().__init__()
-        self._capabilities: Optional[ExtensionCapabilities] = None
         self._kr: Optional[Any] = None          # KernelRegistry 引用
-        self._cap_registry: Optional[Any] = None  # CapabilityRegistry 引用
 
     def setup(self, capabilities: ExtensionCapabilities):
-        self._capabilities = capabilities
         self._kr = capabilities.kernel_registry
-        self._cap_registry = capabilities._capability_registry
-        # 向能力注册表注册自己为 Debugger Provider
-        capabilities.expose("debugger_provider", self)
 
     # ------------------------------------------------------------------
     # 内部辅助：懒获取内核服务
@@ -44,13 +39,57 @@ class IDbgPlugin(IbPlugin):
         """通过 KernelRegistry 获取 IILLMExecutor 实例。"""
         return self._kr.get_llm_executor() if self._kr else None
 
-    def _llm_provider(self) -> Optional[Any]:
-        """通过 CapabilityRegistry 获取 LLM Provider（由 ibci_ai 注册）。"""
-        return self._cap_registry.get("llm_provider") if self._cap_registry else None
-
     def _execution_context(self) -> Optional[Any]:
         """通过 KernelRegistry 获取 IExecutionContext 实例。"""
         return self._kr.get_execution_context() if self._kr else None
+
+    # ------------------------------------------------------------------
+    # 内部：统一数据形态助手
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _result_to_dict(res: Any) -> Dict[str, Any]:
+        """IbLLMCallResult → 统一 dict 形态（success/uncertainty/error/hint/raw）。"""
+        return {
+            "success": res.is_certain,
+            "is_uncertain": not res.is_certain,
+            "error": res.retry_hint if not res.is_certain else None,
+            "retry_hint": res.retry_hint,
+            "raw_response": res.raw_response,
+        }
+
+    @staticmethod
+    def _value_type(value: Any) -> str:
+        """值层类型内省：IbObject → ``ib_class.name``（与 ``type()`` 内建同源）；其余 Python 类型名。"""
+        if isinstance(value, IbObject):
+            return value.ib_class.name
+        return type(value).__name__
+
+    @staticmethod
+    def _print_prompt_segments(label: str, prompt: Any) -> None:
+        """打印提示词片段（str / 多模态 content block list / 其它）。
+
+        多模态 list 中 dict 元素为结构化 content block（role/content），
+        content 可为 str 或分块 list——统一拼接为可读文本。
+        """
+        print(f"  [{label}]")
+        if isinstance(prompt, str):
+            print(f"    {prompt}")
+            return
+        if isinstance(prompt, list):
+            for seg in prompt:
+                if isinstance(seg, dict):
+                    role = seg.get("role", "unknown")
+                    content = seg.get("content", "")
+                    if isinstance(content, list):
+                        content = "".join(str(c) for c in content)
+                    print(f"    {role}: {content}")
+                elif isinstance(seg, str):
+                    print(f"    {seg}")
+                else:
+                    print(f"    {seg}")
+            return
+        print(f"    {prompt}")
 
     # ------------------------------------------------------------------
     # 公开接口
@@ -63,59 +102,43 @@ class IDbgPlugin(IbPlugin):
         return sr.get_vars()
 
     def print_vars(self):
-        """打印当前作用域中所有变量及其值（vars() 的便捷打印版本）"""
+        """打印当前作用域中所有变量及其值（含值层类型内省，与 ``type()`` 同源）。"""
         variables = self.vars()
         if not variables:
             print("[IDBG] (无可用变量)")
             return
         print("[IDBG] 当前变量：")
         for name, value in variables.items():
-            print(f"  {name} = {value}")
+            print(f"  {name}: {self._value_type(value)} = {value}")
 
-    def last_llm(self) -> Dict[str, Any]:
-        """获取最近一次 LLM 调用的完整详情 (合并 Executor 与 Provider 信息)"""
+    def current_llm(self) -> Dict[str, Any]:
+        """获取最近一次 LLM 调用的完整详情 (Executor 主线程单写槽)"""
         info = {}
 
-        # 1. 优先获取 Executor 记录的高层调用信息 (包含自动注入的意图和重试提示)
+        # 1. 获取 Executor 记录的高层调用信息 (包含自动注入的意图和重试提示)
         executor = self._llm_executor()
         if executor:
-            executor_info = executor.get_last_call_info()
+            executor_info = executor.get_current_call_info()
             if executor_info:
                 info.update(executor_info)
 
-        # 2. 如果 Provider 有更底层或不同的记录 (如原生插件调用)，进行合并
-        provider = self._llm_provider()
-        if provider:
-            provider_info = provider.get_last_call_info()
-            if provider_info:
-                # 仅当 Executor 信息为空或 Provider 信息更新时覆盖
-                for k, v in provider_info.items():
-                    if k not in info or not info[k]:
-                        info[k] = v
-
-        # 3. 合并 LLMCallResult 状态
-        # §9.3: 优先从活跃的 llmexcept 帧读取（per-snapshot 权威来源），
-        # 无活跃帧时回退到共享字段（llmexcept 外部的普通 LLM 调用路径）。
+        # 2. 合并 LLMCallResult 状态
+        # 优先从活跃的 llmexcept 帧读取（per-snapshot 权威来源，target_result
+        # 是帧私有的 certainty 信号载体）；无活跃帧时无可用结果。
         sr = self._state_reader()
         if sr:
             frames = sr.get_llm_except_frames()
-            res = frames[-1].last_result if frames else sr.get_last_llm_result()
+            res = frames[-1].target_result if frames else None
 
             if res:
-                info["result"] = {
-                    "success": res.is_certain,
-                    "is_uncertain": not res.is_certain,
-                    "error": res.retry_hint if not res.is_certain else None,
-                    "retry_hint": res.retry_hint,
-                    "raw_response": res.raw_response
-                }
+                info["result"] = self._result_to_dict(res)
         return info
 
-    def show_last_prompt(self):
+    def show_target_prompt(self):
         """直接打印最近一次 LLM 调用的完整提示词（IBCI 友好）"""
         print("[IDBG] 最近一次 LLM 调用提示词:")
 
-        info = self.last_llm()
+        info = self.current_llm()
         if not info:
             print("  (无可用信息)")
             return
@@ -124,42 +147,10 @@ class IDbgPlugin(IbPlugin):
         user_prompt = info.get("user_prompt", "")
 
         if sys_prompt:
-            print("  [系统提示词]")
-            if isinstance(sys_prompt, str):
-                print(f"    {sys_prompt}")
-            elif isinstance(sys_prompt, list):
-                for seg in sys_prompt:
-                    if isinstance(seg, dict):
-                        role = seg.get("role", "unknown")
-                        content = seg.get("content", "")
-                        if isinstance(content, list):
-                            content = "".join(str(c) for c in content)
-                        print(f"    {role}: {content}")
-                    elif isinstance(seg, str):
-                        print(f"    {seg}")
-                    else:
-                        print(f"    {seg}")
-            else:
-                print(f"    {sys_prompt}")
+            self._print_prompt_segments("系统提示词", sys_prompt)
 
         if user_prompt:
-            print("  [用户提示词]")
-            if isinstance(user_prompt, str):
-                print(f"    {user_prompt}")
-            elif isinstance(user_prompt, list):
-                for seg in user_prompt:
-                    if isinstance(seg, dict):
-                        role = seg.get("role", "unknown")
-                        content = seg.get("content", "")
-                        if isinstance(content, list):
-                            content = "".join(str(c) for c in content)
-                        print(f"    {role}: {content}")
-                    elif isinstance(seg, str):
-                        print(f"    {seg}")
-                    else:
-                        print(f"    {seg}")
-            else:
-                print(f"    {user_prompt}")
+            self._print_prompt_segments("用户提示词", user_prompt)
 
         active_intents = info.get("active_intents", [])
         if active_intents:
@@ -179,11 +170,11 @@ class IDbgPlugin(IbPlugin):
             for idx, intent in enumerate(merged_intents):
                 print(f"    [{idx}] {intent}")
 
-    def show_last_result(self):
+    def show_target_result(self):
         """直接打印最近一次 LLM 调用的结果（IBCI 友好）"""
         print("[IDBG] 最近一次 LLM 调用结果:")
 
-        res_info = self.last_result()
+        res_info = self.current_result()
         if not res_info:
             print("  (无可用信息)")
             return
@@ -220,33 +211,27 @@ class IDbgPlugin(IbPlugin):
         print()
         self.show_protection_map()
         print()
-        self.show_last_prompt()
+        self.show_target_prompt()
         print()
-        self.show_last_result()
+        self.show_target_result()
 
-    def last_result(self) -> Dict[str, Any]:
+    def current_result(self) -> Dict[str, Any]:
         """获取最近一次 LLM 调用的 IbLLMCallResult 详情"""
         sr = self._state_reader()
         if not sr:
             return {}
 
-        # §9.3: _last_llm_result 生命周期已缩短为"快照内通信"；
-        # llmexcept body 执行期间该字段为 None，结果存于 LLMExceptFrame.last_result。
-        # 优先从活跃帧读取（per-snapshot 权威来源），无活跃帧时回退到共享字段。
+        # certainty 经 IbLLMCallResult 返回值传递，结果存于 LLMExceptFrame.target_result。
+        # 优先从活跃帧读取（per-snapshot 权威来源），无活跃帧时无可用结果。
         frames = sr.get_llm_except_frames()
-        res = frames[-1].last_result if frames else sr.get_last_llm_result()
+        res = frames[-1].target_result if frames else None
 
         if not res:
             return {}
 
-        return {
-            "success": res.is_certain,
-            "is_uncertain": not res.is_certain,
-            "value": str(res.result_value) if res.result_value else None,
-            "error": res.retry_hint if not res.is_certain else None,
-            "raw_response": res.raw_response,
-            "retry_hint": res.retry_hint
-        }
+        result = self._result_to_dict(res)
+        result["value"] = str(res.result_value) if res.result_value else None
+        return result
 
     def retry_stack(self) -> list:
         """获取当前的重试帧栈信息 (LLMExceptFrameStack)"""
@@ -262,63 +247,29 @@ class IDbgPlugin(IbPlugin):
                 "type": f.node_type,
                 "retry": f.retry_count,
                 "max_retry": f.max_retry,
-                "is_fallback": f.is_in_fallback,
             }
-            # §9.3: last_result 是帧私有字段（per-snapshot），包含上次不确定调用的详情。
-            if f.last_result:
-                entry["last_result"] = {
-                    "is_certain": f.last_result.is_certain,
-                    "raw_response": (f.last_result.raw_response or "")[:120],
-                    "retry_hint": f.last_result.retry_hint
+            # target_result 是帧私有字段（per-snapshot），包含上次不确定调用的详情。
+            if f.target_result:
+                entry["target_result"] = {
+                    "is_certain": f.target_result.is_certain,
+                    "raw_response": (f.target_result.raw_response or "")[:120],
+                    "retry_hint": f.target_result.retry_hint
                 }
             else:
-                entry["last_result"] = None
+                entry["target_result"] = None
             result.append(entry)
         return result
 
     def protection_map(self) -> Dict[str, str]:
-        """获取节点保护映射（被保护节点 UID -> llmexcept handler UID）。"""
+        """获取节点保护映射（被保护节点 UID -> llmexcept handler UID）。
+
+        消费内核结构化查询 ``IExecutionContext.get_llmexcept_protection_map()``，
+        不直读 node_pool 原始节点结构（内核拥有节点格式语义）。
+        """
         ec = self._execution_context()
         if not ec:
             return {}
-
-        node_pool = getattr(ec, "node_pool", None)
-        if not node_pool:
-            return {}
-
-        protection_mapping: Dict[str, str] = {}
-
-        # 调试态一次性 O(n) 扫描：node_pool 常驻内存且 protection_map 非热路径调用。
-        for node_uid, node in node_pool.items():
-            if not isinstance(node, dict):
-                continue
-            node_type = node.get("_type")
-
-            # 1) 直接 llmexcept 语句：handler(target=...)
-            if node_type == "IbLLMExceptionalStmt":
-                target_uid = node.get("target")
-                if isinstance(target_uid, str) and target_uid:
-                    protection_mapping[target_uid] = node_uid
-                continue
-
-            # 2) 条件 for 的 llmexcept 内联保护：for 节点持有 llmexcept_handler 字段
-            if node_type == "IbFor":
-                handler_uid = node.get("llmexcept_handler")
-                iter_uid = node.get("iter")
-                has_handler_uid = isinstance(handler_uid, str) and bool(handler_uid)
-                has_iter_uid = isinstance(iter_uid, str) and bool(iter_uid)
-                if not (has_handler_uid and has_iter_uid):
-                    continue
-                # 若 iter 是 IbFilteredExpr，真实受保护条件是其 expr
-                actual_target_uid = iter_uid
-                iter_node = node_pool.get(iter_uid)
-                if isinstance(iter_node, dict) and iter_node.get("_type") == "IbFilteredExpr":
-                    expr_uid = iter_node.get("expr")
-                    if isinstance(expr_uid, str) and expr_uid:
-                        actual_target_uid = expr_uid
-                protection_mapping[actual_target_uid] = handler_uid
-
-        return protection_mapping
+        return dict(ec.get_llmexcept_protection_map())
 
     def show_retry_stack(self):
         """直接打印当前 llmexcept 重试帧栈。"""
@@ -331,13 +282,12 @@ class IDbgPlugin(IbPlugin):
             print(
                 f"  [{idx}] target={entry.get('target')} "
                 f"type={entry.get('type')} "
-                f"retry={entry.get('retry')}/{entry.get('max_retry')} "
-                f"fallback={entry.get('is_fallback')}"
+                f"retry={entry.get('retry')}/{entry.get('max_retry')}"
             )
-            lr = entry.get("last_result")
+            lr = entry.get("target_result")
             if lr:
                 print(
-                    f"       last_result: certain={lr.get('is_certain')} "
+                    f"       target_result: certain={lr.get('is_certain')} "
                     f"retry_hint={lr.get('retry_hint')} "
                     f"raw={lr.get('raw_response')}"
                 )
@@ -368,49 +318,31 @@ class IDbgPlugin(IbPlugin):
         if not sr:
             return []
         intents = sr.get_active_intents()
+        # IStateReader.get_active_intents() 契约返回 List[IbIntent]——直访契约成员
+        # （mode/role 恒为枚举），不做逐元素 hasattr 能力探测。
         return [
             {
-                "content": i.content if hasattr(i, 'content') else str(i),
-                "mode": i.mode.name if hasattr(i, 'mode') and hasattr(i.mode, 'name') else str(getattr(i, 'mode', '+')),
-                "tag": getattr(i, 'tag', None),
-                "role": i.role.name if hasattr(i, 'role') and hasattr(i.role, 'name') else str(getattr(i, 'role', 'DYNAMIC'))
+                "content": i.content,
+                "mode": i.mode.name,
+                "tag": i.tag,
+                "role": i.role.name,
             }
             for i in intents
         ]
 
     def show_intents(self):
-        """直接打印意图栈到控制台（IBCI 友好）"""
+        """直接打印意图栈到控制台（IBCI 友好）。
+
+        单一权威源：经 :meth:`intents` 读取 ``IStateReader.get_active_intents()``
+        （富 List[IbIntent]），不维护多来源回退。
+        """
         print("[IDBG] 意图栈:")
-
-        si = self._stack_inspector()
-        if si:
-            try:
-                if hasattr(si, 'get_active_intents'):
-                    raw = si.get_active_intents()
-                    if raw:
-                        print("  (via stack_inspector)")
-                        for idx, content in enumerate(raw):
-                            print(f"  [{idx}] {content}")
-                        return
-            except Exception:
-                pass
-
-        sr = self._state_reader()
-        if sr:
-            try:
-                intents = sr.get_active_intents()
-                if intents:
-                    print("  (via state_reader)")
-                    for idx, i in enumerate(intents):
-                        content = i.content if hasattr(i, 'content') else str(i)
-                        mode = i.mode.name if hasattr(i, 'mode') and hasattr(i.mode, 'name') else str(getattr(i, 'mode', '+'))
-                        role = i.role.name if hasattr(i, 'role') and hasattr(i.role, 'name') else str(getattr(i, 'role', '?'))
-                        print(f"  [{idx}] {mode} | {role} | {content}")
-                    return
-            except Exception:
-                pass
-
-        print("  (空)")
+        intents = self.intents()
+        if not intents:
+            print("  (空)")
+            return
+        for idx, i in enumerate(intents):
+            print(f"  [{idx}] {i['mode']} | {i['role']} | {i['content']}")
 
     def env(self) -> Dict[str, Any]:
         si = self._stack_inspector()
@@ -424,20 +356,24 @@ class IDbgPlugin(IbPlugin):
         }
 
     def fields(self, obj: Any) -> Dict[str, Any]:
-        if hasattr(obj, 'fields'):
-            if hasattr(obj, 'serialize_for_debug'):
-                data = obj.serialize_for_debug()
-            else:
-                data = obj.fields
+        """返回对象字段的 JSON 安全视图（IIbObject 协议直访；非 IbObject 返回空）。
 
-            def _to_native(v):
-                if hasattr(v, 'to_native'): return v.to_native()
-                if isinstance(v, dict): return {k: _to_native(i) for k, i in v.items()}
-                if isinstance(v, list): return [_to_native(i) for i in v]
-                return v
+        不使用 hasattr 能力探测：经 ``isinstance(IbObject)`` 判别后直访
+        公开 ``fields`` 属性与 ``to_native()`` 协议方法。
+        """
+        if not isinstance(obj, IbObject):
+            return {}
 
-            return {k: _to_native(v) for k, v in data.items()}
-        return {}
+        def _to_native(v):
+            if isinstance(v, IbObject):
+                return v.to_native()
+            if isinstance(v, dict):
+                return {k: _to_native(i) for k, i in v.items()}
+            if isinstance(v, list):
+                return [_to_native(i) for i in v]
+            return v
+
+        return {k: _to_native(v) for k, v in obj.fields.items()}
 
 
 def create_implementation():

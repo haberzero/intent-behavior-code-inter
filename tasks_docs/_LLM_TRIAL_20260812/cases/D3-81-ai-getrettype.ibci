@@ -1,0 +1,7 @@
+# D3-81 get_return_type_prompt 隔离
+import ai
+
+ai.set_return_type_prompt("int", "只输出整数")
+any p = ai.get_return_type_prompt("int")
+print("ret_type_prompt_ok=" + (str)(p != None))
+print("DONE")

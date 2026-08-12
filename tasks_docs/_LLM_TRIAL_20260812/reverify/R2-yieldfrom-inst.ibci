@@ -1,0 +1,15 @@
+# R2-006 I1 修复：yield from <生成器 __iter__ 实例>
+# 期望: x=1 x=2
+class Range:
+    func __iter__(self) -> int:
+        yield 1
+        yield 2
+
+func outer(int n) -> int:
+    Range r = Range()
+    yield from r
+    return 0
+
+for int x in outer(1):
+    print("x=" + (str)x)
+print("DONE")

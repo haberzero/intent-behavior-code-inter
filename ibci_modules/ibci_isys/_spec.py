@@ -11,7 +11,7 @@ def __ibcext_metadata__() -> dict:
         "name": "isys",
         "kind": "method_module",
         "version": "2.0.0",
-        "description": "IBCI 内核运行时状态与系统控制模块（合并自 isys + sys）",
+        "description": "IBCI 内核运行时状态与系统控制模块",
         "dependencies": [],
     }
 
@@ -22,28 +22,28 @@ def __ibcext_vtable__() -> dict:
         "functions": {
             # --- 路径信息 ---
             "entry_path": {
-                "param_types": [],
+                "params": [],
                 "return_type": "str",
                 "description": "获取入口文件的绝对路径"
             },
             "entry_dir": {
-                "param_types": [],
+                "params": [],
                 "return_type": "str",
                 "description": "获取入口文件所在的目录"
             },
             "project_root": {
-                "param_types": [],
+                "params": [],
                 "return_type": "str",
                 "description": "获取项目根目录（沙箱边界）"
             },
             # --- 沙箱控制 ---
             "is_sandboxed": {
-                "param_types": [],
+                "params": [],
                 "return_type": "bool",
                 "description": "检查当前是否在沙箱模式下运行"
             },
             "request_external_access": {
-                "param_types": [],
+                "params": [],
                 "return_type": "void",
                 "description": "请求启用外部访问权限（允许访问项目目录之外的文件）"
             },

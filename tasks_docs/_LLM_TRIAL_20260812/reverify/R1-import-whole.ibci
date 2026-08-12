@@ -1,0 +1,8 @@
+# R1-002 整模块 import 修复复验（PT-DEBT-26）
+# 期望: 函数+变量成员访问正常（修复前 INT_INTERNAL_ERROR）
+import greeting_mod
+str g = greeting_mod.greet()
+print("greet=" + g)
+int v = greeting_mod.answer
+print("ans=" + (str)v)
+print("DONE")

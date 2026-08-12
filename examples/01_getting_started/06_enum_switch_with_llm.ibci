@@ -13,7 +13,7 @@
 import ai
 import idbg
 
-ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")
+ai.set_mock_mode()
 
 # ============================================================
 # 1. 定义 Mood 枚举
@@ -53,12 +53,11 @@ print("")
 str mood_str = @~ MOCK:STR:HAPPY ~
 
 # idbg 探查：确认 LLM 调用的完整上下文
-any call_info = idbg.last_llm()
+any call_info = idbg.current_llm()
 print("=== idbg 探查 LLM 调用 ===")
 print("  user_prompt : " + (str)call_info["user_prompt"])
 print("  response    : " + (str)call_info["response"])
 print("  raw_response: " + (str)call_info["raw_response"])
-print("  scene       : " + (str)call_info["scene"])
 print("")
 
 print("LLM 识别到的情感字符串: '" + mood_str + "'")
@@ -111,9 +110,9 @@ while ti < test_texts.len():
     # 用 MOCK:SEQ 模拟 LLM 分析结果
     str detected = @~ MOCK:SEQ:[SAD,HAPPY,NEUTRAL] mood_seq ~
 
-    # idbg 确认每次调用的返回值（last_llm 记录最近一次 LLM 调用的完整上下文）
-    any seq_info = idbg.last_llm()
-    print("  idbg last_llm response: " + (str)seq_info["response"])
+    # idbg 确认每次调用的返回值（current_llm 记录最近一次 LLM 调用的完整上下文）
+    any seq_info = idbg.current_llm()
+    print("  idbg current_llm response: " + (str)seq_info["response"])
     print("  detected = '" + detected + "'")
     print("")
     ti = ti + 1

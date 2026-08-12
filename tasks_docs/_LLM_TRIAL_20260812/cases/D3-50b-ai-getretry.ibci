@@ -1,0 +1,8 @@
+# D3-50b 逐个 ai API 隔离测试
+import ai
+
+print("has_key=" + (str)ai.has_api_key())
+
+any g = ai.get_retry()
+print("get_retry_ok")
+print("DONE")

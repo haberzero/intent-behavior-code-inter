@@ -1,0 +1,25 @@
+# D2-03 正交：用户类 + LLM + 类内线程 + slot 共享 + 枚举
+# 期望: 类内方法 LLM；类字段经 slot 共享；枚举解析
+
+import ai
+
+class ScoreTracker:
+    int total
+    func __init__(self) -> auto:
+        self.total = 0
+    func classify(self, str text) -> str:
+        str c = @~ 给一句话打分（好/中/差），只输出一个好、中或差 ~
+        return c
+
+ScoreTracker st2 = ScoreTracker()
+slot shared = slot("score", 0)
+
+str c1 = st2.classify("今天天气很好")
+print("c1=" + c1)
+
+slot s = slot("x", 0)
+fn inc = lambda(int val) -> auto: (val + 1)
+s.update(inc)
+s.update(inc)
+print("shared=" + (str)s.get())
+print("DONE")

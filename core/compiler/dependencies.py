@@ -2,7 +2,6 @@
 from dataclasses import dataclass, field
 from typing import List, Set, Optional, Dict, Any
 from enum import Enum, auto
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 
 class ImportType(Enum):
     IMPORT = auto()      # import module
@@ -55,10 +54,9 @@ class DependencyGraph:
     """
     Analyzes dependency graph for cycles and compilation order.
     """
-    def __init__(self, modules: Dict[str, ModuleInfo], debugger: Optional[Any] = None):
+    def __init__(self, modules: Dict[str, ModuleInfo]):
         self.modules = modules
         self.adj_list: Dict[str, List[str]] = {}
-        self.debugger = debugger or core_debugger
         self._build_graph()
 
         
@@ -92,14 +90,12 @@ class DependencyGraph:
                         dfs(neighbor, current_path)
                     elif neighbor in recursion_stack:
                         # Cycle detected!
-                        # Extract the cycle part from current_path
-                        # neighbor is the start of the cycle
-                        try:
-                            idx = current_path.index(neighbor)
-                            cycle = current_path[idx:] + [neighbor]
-                        except ValueError:
-                            cycle = [neighbor, node, neighbor]
-                            
+                        # neighbor is the start of the cycle.
+                        # DFS 不变量：recursion_stack 与 current_path 严格同步（同入同出），
+                        # 故 neighbor ∈ recursion_stack ⟹ index 必成功（原 except ValueError
+                        # 伪环兜底为死分支）。
+                        idx = current_path.index(neighbor)
+                        cycle = current_path[idx:] + [neighbor]
                         raise CircularDependencyError(cycle)
                         
             recursion_stack.remove(node)
@@ -112,16 +108,11 @@ class DependencyGraph:
 
     def get_compilation_order(self) -> List[str]:
         """
-        Returns a list of file paths to compile.
-        If there are no cycles, this is a topological sort (dependencies first).
-        If there are cycles, it returns a best-effort order.
+        Returns a list of file paths to compile in topological order
+        (dependencies first). Raises CircularDependencyError if the
+        import graph contains a cycle.
         """
-        # [MOD] 允许循环引用，不再强制报错。
-        # 运行时由 ModuleManager 的缓存机制处理循环加载。
-        try:
-            self.check_cycles()
-        except CircularDependencyError as e:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Note: Circular dependency detected (allowed): {e}")
+        self.check_cycles()
         
         visited = set()
         order = []

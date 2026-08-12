@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import Dict, List, Optional, Any, Set
 from collections import OrderedDict
 from core.compiler.dependencies import ModuleInfo, ImportInfo, CircularDependencyError, ModuleStatus, ImportType, DependencyGraph
@@ -6,45 +7,48 @@ from core.kernel.ast import IbModule
 from core.compiler.lexer.lexer import Lexer
 from core.compiler.common.tokens import Token
 from core.compiler.parser.parser import Parser
-from core.compiler.semantic.passes.semantic_analyzer import SemanticAnalyzer
+from core.compiler.semantic.analyzer import SemanticAnalyzer
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.base.source.source_manager import SourceManager
-from core.compiler.parser.resolver.resolver import ModuleResolver
+from core.kernel.path import IbPath, PathValidator, ModuleNameSpace, safe_relpath
+from core.compiler.parser.resolver.resolver import ModuleResolver, ModuleResolveError
 from core.kernel.issue import Severity, CompilerError
 from core.base.source_atomic import Location
-from core.runtime.host.host_interface import HostInterface
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
+from core.base.uid import intrinsic_uid
+from core.kernel.host_interface import HostInterface
 from core.base.diagnostics.codes import (
-    DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INTERNAL_ERROR,
-    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT
+    DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INT_INTERNAL_ERROR,
+    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT, SEM_UNDEFINED_SYMBOL, DEP_CIRCULAR_IMPORT
 )
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 
 from core.base.interfaces import (
     ISourceProvider, ICompilerService
 )
+from core.base.enums import Provenance
 from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
 from core.kernel.spec import TypeDef as ModuleMetadata, IbSpec, TypeKind
-# from core.compiler.semantic.bridge import TypeBridge # REMOVED: File does not exist
-
+from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 class Scheduler(ICompilerService):
     """
     Top-level scheduler for multi-file compilation.
-    Orchestrates Lexer, Parser, and SemanticAnalyzer.
+    Orchestrates Lexer, Parser, and Semantic Analyzer.
     """
     MAX_CACHE_SIZE = 100 # Maximum modules to keep in memory
 
-    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, debugger: Optional[Any] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
-        self.root_dir = os.path.realpath(root_dir)
+    def __init__(self, root_dir: str, host_interface: Optional[HostInterface] = None, issue_tracker: Optional[DiagnosticReporter] = None, registry: Optional[Any] = None):
+        # root_dir 已由 engine 经 canonicalize_for_security 规范化（单一 realpath 源），
+        # 消费者信任传入值，仅做 IbPath 类型包装（不再重复 realpath——幂等冗余）。
+        self._project_root = IbPath.from_native(root_dir)
+        self.root_dir = root_dir
         self.source_manager = SourceManager()
         self.issue_tracker = issue_tracker or IssueTracker(source_provider=self.source_manager)
         self.resolver = ModuleResolver(self.root_dir)
         self.host_interface = host_interface or HostInterface()
-        self.debugger = debugger or core_debugger
-        self.registry = registry # 注册表实例，用于类型同步
+        self.registry = registry
         
         # Initial symbols to pre-populate in every module's global scope
         self.predefined_symbols: Dict[str, Any] = {}
@@ -54,6 +58,7 @@ class Scheduler(ICompilerService):
         self.ast_cache: OrderedDict[str, IbModule] = OrderedDict()   # Path -> AST
         self.symbol_table_cache: OrderedDict[str, Any] = OrderedDict() # Path -> SymbolTable
         self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
+        self.import_star_cache: OrderedDict[str, Dict[str, List[str]]] = OrderedDict()  # Path -> {导入模块名: 注入成员名}
         self.module_name_to_path: Dict[str, str] = {} # Name -> Path (Fast lookup)
         
         # 插件类型缓存：用于存储已转换的外部插件模块类型，支持跨插件继承
@@ -68,7 +73,7 @@ class Scheduler(ICompilerService):
 
     def allow_file(self, file_path: str):
         """Explicitly allow a file outside root_dir."""
-        abs_path = os.path.realpath(file_path)
+        abs_path = PathValidator.canonicalize_for_security(file_path).to_native()
         self.allowed_files.add(abs_path)
         self.resolver.allow_file(abs_path)
 
@@ -78,12 +83,6 @@ class Scheduler(ICompilerService):
         """ICompilerService: Compiles a file and its dependencies."""
         return self.compile_project(file_path)
 
-    def compile_to_artifact_dict(self, file_path: str) -> Dict[str, Any]:
-        """ICompilerService: 编译文件并返回平铺化的字典产物，供解释器直接加载。"""
-        artifact = self.compile_file(file_path)
-        from core.compiler.serialization.serializer import FlatSerializer
-        return FlatSerializer().serialize_artifact(artifact)
-
     def resolve_module_path(self, module_name: str) -> Optional[str]:
         """ICompilerService: Resolves a module name to its absolute file path."""
         # Check cache first
@@ -92,8 +91,11 @@ class Scheduler(ICompilerService):
         
         # Try resolving relative to root_dir
         try:
-            return self.resolver.resolve(module_name, os.path.join(self.root_dir, "__init__.ibci"))
-        except:
+            return self.resolver.resolve(module_name, (IbPath.from_native(self.root_dir) / "__init__.ibci").to_native())
+        except ModuleResolveError as e:
+            # 安全错误（越权访问）必须传播——降级为 None 会把安全违规掩盖成"模块未找到"
+            if getattr(e, 'code', None) == DEP_SECURITY_ERROR:
+                raise
             return None
 
     def get_module_source(self, module_name: str) -> Optional[str]:
@@ -110,7 +112,6 @@ class Scheduler(ICompilerService):
         Compiles the project starting from entry_file.
         Returns a CompilationArtifact (Blueprint) for the interpreter.
         """
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Starting project compilation: {entry_file}")
         # 0. Clear previous state
         self.issue_tracker.clear()
         self.modules.clear()
@@ -120,27 +121,28 @@ class Scheduler(ICompilerService):
         
         # 1. Scan Dependencies (Recursive)
         # We manually drive the scanning process here to control token caching
-        entry_file = os.path.abspath(entry_file)
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 1: Scanning dependencies starting from {entry_file}")
+        # entry 经 canonicalize_for_security 规范化（与 root 同源，解 symlink），
+        # 替代散点 os.path.abspath（engine 上游已规范化，此处统一收口）。
+        entry_file = PathValidator.canonicalize_for_security(entry_file).to_native()
         self._scan_and_cache(entry_file)
             
         if self.issue_tracker.has_errors():
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Dependency scanning failed with errors.")
             raise CompilerError(self.issue_tracker.diagnostics)
 
         # 2. Build Dependency Graph and Get Order
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, "Phase 2: Building dependency graph and determining compilation order.")
-        graph = DependencyGraph(self.modules, debugger=self.debugger)
+        graph = DependencyGraph(self.modules)
         try:
             compilation_order = graph.get_compilation_order()
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Compilation order determined:", data=compilation_order)
+        except CircularDependencyError as e:
+            self.issue_tracker.error(str(e), code=DEP_CIRCULAR_IMPORT)
+            raise CompilerError(self.issue_tracker.diagnostics)
         except Exception as e:
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Circular dependency or graph error: {str(e)}")
             self.issue_tracker.error(str(e), code=DEP_GRAPH_ERROR)
-            raise e
+            # 图构建异常也是内部 bug，但须以契约内异常（CompilerError）承载——
+            # 否则记录的诊断成为孤儿，上层只按 "Runtime Error" 重抛（双通道）。
+            raise CompilerError(self.issue_tracker.diagnostics)
 
         # 3. Compile in Topological Order
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Phase 3: Compiling {len(compilation_order)} files in topological order.")
         for file_path in compilation_order:
             mod_info = self.modules.get(file_path)
             if not mod_info:
@@ -155,49 +157,43 @@ class Scheduler(ICompilerService):
                         failed_deps.append(imp.module_name)
             
             if failed_deps:
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Skipping {file_path} because dependencies failed: {failed_deps}")
                 self.issue_tracker.error(f"IbModule '{file_path}' cannot be compiled because its dependencies failed: {', '.join(failed_deps)}", code=DEP_FAILED_DEPENDENCY)
                 mod_info.status = ModuleStatus.FAILED
                 continue
 
             # Determine module name
-            rel_path = os.path.relpath(file_path, self.root_dir)
-            base_name = os.path.splitext(rel_path)[0]
-            module_name = base_name.replace(os.sep, '.')
+            rel_path = safe_relpath(file_path, self.root_dir)
+            module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
             self.module_name_to_path[module_name] = file_path
 
             # Check mtime or cache
             last_mtime = self.build_cache.get(file_path, 0.0)
             if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                 # Recompile
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Compiling file: {file_path} (Cache miss/Outdated)")
                 try:
                     res = self._compile_file(file_path, artifact)
                     artifact.add_module(module_name, res)
+                    self.import_star_cache[file_path] = dict(res.import_star_members)
                     mod_info.status = ModuleStatus.SUCCESS
                 except CompilerError:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to compile: {file_path}")
                     mod_info.status = ModuleStatus.FAILED
                 self.build_cache[file_path] = mod_info.mtime
             else:
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Using cached AST for: {file_path}")
                 # Reconstruct result from cache
                 res = CompilationResult(
                     module_ast=self.ast_cache[file_path], 
                     symbol_table=self.symbol_table_cache.get(file_path)
                 )
+                res.import_star_members = self.import_star_cache.get(file_path, {})
                 artifact.add_module(module_name, res)
                 mod_info.status = ModuleStatus.SUCCESS
             
         if self.issue_tracker.has_errors():
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation failed with errors.")
             raise CompilerError(self.issue_tracker.diagnostics)
-            
-        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, "Project compilation successful.")
         
         # Set entry point
-        entry_rel = os.path.relpath(entry_file, self.root_dir)
-        artifact.entry_module = os.path.splitext(entry_rel)[0].replace(os.sep, '.')
+        entry_rel = safe_relpath(entry_file, self.root_dir)
+        artifact.entry_module = ModuleNameSpace.relpath_to_module_name(entry_rel)
         artifact.global_symbols = self.predefined_symbols
 
         return artifact
@@ -205,15 +201,16 @@ class Scheduler(ICompilerService):
     def _prune_cache(self):
         """
         Maintains the LRU cache by removing oldest items if capacity exceeded.
+
+        统一剪枝 ast/token/symbol_table/build 五缓存（R2-E4：此前只剪 ast+token，
+        symbol_table/build 无界增长；同路径的其它缓存条目一并淘汰）。
         """
         while len(self.ast_cache) > self.MAX_CACHE_SIZE:
             oldest_path, _ = self.ast_cache.popitem(last=False)
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Pruning cache for {oldest_path}")
-            # Optionally remove from other caches if they are tightly coupled
-            if oldest_path in self.token_cache:
-                self.token_cache.pop(oldest_path)
-            # Note: scope_cache is harder to prune because it's used for cross-file analysis.
-            # For now, we keep scopes as they are relatively small.
+            self.token_cache.pop(oldest_path, None)
+            self.symbol_table_cache.pop(oldest_path, None)
+            self.import_star_cache.pop(oldest_path, None)
+            self.build_cache.pop(oldest_path, None)
 
     def _scan_and_cache(self, entry_file: str):
         """
@@ -234,19 +231,14 @@ class Scheduler(ICompilerService):
             
             visited.add(current_path)
             processed_in_this_scan.add(current_path)
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Scanning: {current_path}")
             
             # Security Check: Ensure file is within root_dir or explicitly allowed
-            try:
-                abs_root = self.root_dir
-                abs_path = os.path.realpath(current_path)
-                if abs_path not in self.allowed_files and os.path.commonpath([abs_root, abs_path]) != abs_root:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Security violation: Access denied for {current_path}")
+            # 统一沙箱检查走 PathValidator（canonicalize_for_security 解符号链接 + is_within 判定）。
+            abs_path_ib = PathValidator.canonicalize_for_security(current_path)
+            if abs_path_ib.to_native() not in self.allowed_files:
+                if not PathValidator.is_within(self._project_root, abs_path_ib):
                     self.issue_tracker.error(f"Security Error: Access denied for file outside root: {current_path}", code=DEP_SECURITY_ERROR)
                     continue
-            except ValueError:
-                 self.issue_tracker.error(f"Security Error: Access denied (drive mismatch): {current_path}", code=DEP_SECURITY_ERROR)
-                 continue
 
             # 1. Read Content & Lex (if not cached or outdated)
             try:
@@ -254,7 +246,6 @@ class Scheduler(ICompilerService):
                     content = f.read()
                     mtime = os.path.getmtime(current_path)
             except (FileNotFoundError, OSError):
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"File not found: {current_path}")
                 self.issue_tracker.error(f"File not found: {current_path}", code=DEP_FILE_NOT_FOUND)
                 continue
             
@@ -262,25 +253,21 @@ class Scheduler(ICompilerService):
             self.source_manager.add_source(current_path, content)
             
             # Lexing
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Lexing for dependencies: {current_path}")
-            lexer = Lexer(content, self.issue_tracker, debugger=self.debugger)
+            lexer = Lexer(content, self.issue_tracker)
             try:
                 tokens = lexer.tokenize()
                 self.token_cache[current_path] = tokens
-            except Exception:
-                # Lexer error reported to issue_tracker
+            except CompilerError:
+                # Lexer 诊断已上报 tracker，跳过该模块（依赖分析继续）。
                 continue
                 
             # 2. Scan Imports using Main Parser (parse_imports_only)
             # Replaced ImportScanner with Parser.parse_imports_only
             parser = Parser(
                 tokens, 
-                self.issue_tracker, 
-                debugger=self.debugger
+                self.issue_tracker
             )
             imports = parser.parse_imports_only()
-            
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DATA, f"Found imports in {current_path}:", data=[i.module_name for i in imports])
             
             # Create ModuleInfo
             mod_info = ModuleInfo(
@@ -296,28 +283,21 @@ class Scheduler(ICompilerService):
                 # Skip external modules - they don't have source files
                 # 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
                 module_name = imp.module_name
-                if self.host_interface.metadata.resolve(module_name) is not None:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module: {module_name}")
-                    continue
-                if module_name in self.host_interface._module_metadata_map:
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Found external module via alias: {module_name}")
+                resolved_spec = self.host_interface.metadata.resolve(module_name)
+                if resolved_spec is not None and getattr(resolved_spec, 'kind', None) == TypeKind.MODULE.value:
                     continue
 
                 try:
                     resolved_path = self.resolver.resolve(imp.module_name, current_path)
                     imp.file_path = resolved_path
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Resolved import '{imp.module_name}' to {resolved_path}")
                     
                     # Cycle Prevention: Only add to queue if not visited
                     if resolved_path not in visited and resolved_path not in queue:
                         queue.append(resolved_path)
                         
                 except Exception as e:
-                     self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Failed to resolve '{imp.module_name}': {str(e)}")
-                     # Use appropriate error code based on message
-                     code = DEP_MODULE_NOT_FOUND
-                     if "Security Error" in str(e):
-                         code = DEP_SECURITY_ERROR
+                     # 结构化错误码分派（ModuleResolveError 携带 code 字段）
+                     code = getattr(e, 'code', None) or DEP_MODULE_NOT_FOUND
                      
                      self.issue_tracker.report(
                          Severity.ERROR, 
@@ -336,9 +316,8 @@ class Scheduler(ICompilerService):
             return 
 
         # Determine module name
-        rel_path = os.path.relpath(file_path, self.root_dir)
-        base_name = os.path.splitext(rel_path)[0]
-        module_name = base_name.replace(os.sep, '.')
+        rel_path = safe_relpath(file_path, self.root_dir)
+        module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
         self.module_name_to_path[module_name] = file_path
         
         # Get content
@@ -353,68 +332,66 @@ class Scheduler(ICompilerService):
             tokens = self.token_cache.get(file_path)
             if not tokens:
                 # re-lex 纯粹的防御机制，常规情况下，理论上来讲不应该出现
-                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Token cache miss for {file_path}, re-lexing.")
-                lexer = Lexer(source, file_tracker, debugger=self.debugger)
+                lexer = Lexer(source, file_tracker)
                 tokens = lexer.tokenize()
             
             # 2. Parse
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Parsing: {file_path} (IbModule: {module_name})")
             parser = Parser(
                 tokens, 
                 file_tracker, 
                 package_name=module_name, 
                 module_resolver=self.resolver,
-                host_interface=self.host_interface,
-                debugger=self.debugger
+                host_interface=self.host_interface
             )
             ast_node = parser.parse()
             
             # 3. Semantic Analysis
-            self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL, f"Semantic Analysis: {file_path}")
             
             # 在分析前预注册空的 ModuleMetadata 到注册表
             # 这样 TypeDef 才能在解析时找到目标，即使当前模块还未分析完
-            pre_mod_meta = self.registry.factory.create_module(module_name) if self.registry else ModuleMetadata(name=module_name)
+            if self.registry is None:
+                raise RuntimeError("Scheduler.registry is required for compilation")
+            pre_mod_meta = self.registry.factory.create_module(module_name)
             self.registry.register(pre_mod_meta)
             
-            analyzer = SemanticAnalyzer(file_tracker, debugger=self.debugger, registry=self.registry, module_name=module_name)
+            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():
                 if isinstance(val, Symbol):
                     analyzer.symbol_table.define(val)
                 else:
-                    # Log a warning for non-Symbol predefined symbols (should not happen now)
-                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.BASIC, f"Warning: Predefined symbol '{name}' is not a Symbol object, skipping.")
+                    # 非 Symbol 的预定义符号是内部异常（正常路径下不会出现）
+                    warnings.warn(
+                        f"Scheduler: predefined symbol '{name}' is not a Symbol object, skipping.",
+                        stacklevel=2,
+                    )
             
             # Inject imported modules
-            # [CLEANUP] Local imports removed and consolidated at top
-            # TypeBridge import removed as file does not exist
-            
+            # ``from x import *`` 实际注入的成员名（按导入模块名记录）——精确契约
+            # 集合只在编译期存在，序列化进 artifact 供运行时精确枚举。
+            import_star_members: Dict[str, List[str]] = {}
             for imp in module_info.imports:
                 # 查找已编译的结果或外部元数据
                 s_mod_type = None
-                imp_res = None
                 
                 if imp.file_path:
-                    rel_imp_path = os.path.relpath(imp.file_path, self.root_dir)
-                    imp_mod_name = os.path.splitext(rel_imp_path)[0].replace(os.sep, '.')
-                    
-                    # 统一使用 TypeDef 解决循环依赖问题
-                    # 无论该模块是否已编译，都先注入 Lazy 描述符，
-                    # 真正的成员解析将推迟到语义分析阶段通过 MetadataRegistry 自动解包。
-                    s_mod_type = TypeDef(name=imp_mod_name)
+                    rel_imp_path = safe_relpath(imp.file_path, self.root_dir)
+                    imp_mod_name = ModuleNameSpace.relpath_to_module_name(rel_imp_path)
+
+                    # 解析已编译文件模块的真实元数据（其成员在依赖模块编译完成后已
+                    # 由 _compile_file 写入 registry）：依赖图按拓扑序编译，被导入
+                    # 模块先于导入者完成，故 resolve 必含真实成员（Lazy 空描述符
+                    # members 恒为空，无法承载 from-import 成员解析）。
+                    s_mod_type = self.registry.resolve(imp_mod_name) or ModuleMetadata(name=imp_mod_name)
                     # 必须绑定注册表以便后续解包
-                elif imp.module_name in self.host_interface._module_metadata_map:
-                    s_mod_type = self.host_interface._module_metadata_map[imp.module_name]
-                elif self.host_interface.metadata.resolve(imp.module_name) is not None:
-                    if imp.module_name in self.plugin_type_cache:
-                        s_mod_type = self.plugin_type_cache[imp.module_name]
-                    else:
-                        # 直接从宿主接口的元数据注册表解析描述符
-                        s_mod_type = self.host_interface.metadata.resolve(imp.module_name)
-                        if s_mod_type:
-                            # [UTS 2.0 Hydration] 确保从 Host 加载的元数据被正确水合到当前编译注册表
+                else:
+                    resolved_spec = self.host_interface.metadata.resolve(imp.module_name)
+                    if resolved_spec is not None and getattr(resolved_spec, 'kind', None) == TypeKind.MODULE.value:
+                        if imp.module_name in self.plugin_type_cache:
+                            s_mod_type = self.plugin_type_cache[imp.module_name]
+                        else:
+                            s_mod_type = resolved_spec
                             self.registry.register(s_mod_type)
                             self.plugin_type_cache[imp.module_name] = s_mod_type
                 
@@ -440,43 +417,46 @@ class Scheduler(ICompilerService):
                             or not root_sym.spec
                             or root_sym.spec.kind != TypeKind.MODULE.value
                         ):
-                            # 使用工厂创建
-                            root_mod_type = self.registry.factory.create_primitive("module")
-                            root_mod_type.name = root_name
+                            # 使用工厂创建（MODULE kind：重导入守卫按 kind 判别）
+                            root_mod_type = self.registry.factory.create_module(root_name)
                             root_sym = VariableSymbol(name=root_name, kind=SymbolKind.MODULE, spec=root_mod_type)
                             analyzer.symbol_table.define(root_sym)
-                        
+
+                        # 各嵌套段统一以 MemberSpec 纯数据形态写入父模块 members
+                        # （成员契约统一——resolve_member 只认该形态，直接存 Symbol
+                        # 会因无 type_ref 触发 INT_INTERNAL_ERROR）。
+                        # 中间段 spec 以完整点路径注册为模块，使属性访问可解析回容器；
+                        # 叶子段指向真实编译模块 spec。
                         curr_mod = root_sym.spec
                         for i in range(1, len(parts)):
                             part_name = parts[i]
                             is_last = (i == len(parts) - 1)
                             if is_last:
-                                target_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=s_mod_type)
-                                curr_mod.exported_scope.define(target_sym)
+                                leaf_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=s_mod_type)
+                                curr_mod.members[part_name] = self._symbol_to_member(part_name, leaf_sym)
                             else:
-                                next_mod_sym = curr_mod.exported_scope.resolve(part_name)
-                                # 使用 is_module() 代替 isinstance
-                                if (
-                                    not next_mod_sym
-                                    or not next_mod_sym.spec
-                                    or next_mod_sym.spec.kind != TypeKind.MODULE.value
-                                ):
-                                    next_mod_type = self.registry.factory.create_primitive("module")
-                                    next_mod_type.name = part_name
-                                    next_mod_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_mod_type)
-                                    curr_mod.exported_scope.define(next_mod_sym)
-                                curr_mod = next_mod_sym.spec
+                                next_mod_sym = curr_mod.members.get(part_name)
+                                next_spec = None
+                                if isinstance(next_mod_sym, MemberSpec):
+                                    next_spec = self.registry.resolve_typeref(next_mod_sym.type_ref)
+                                if next_spec is None or next_spec.kind != TypeKind.MODULE.value:
+                                    next_mod_type = self.registry.factory.create_module(
+                                        ".".join(parts[: i + 1])
+                                    )
+                                    next_spec = self.registry.register(next_mod_type)
+                                    inter_sym = VariableSymbol(name=part_name, kind=SymbolKind.MODULE, spec=next_spec)
+                                    curr_mod.members[part_name] = self._symbol_to_member(part_name, inter_sym)
+                                curr_mod = next_spec
                     else:
                         # 普通导入或带别名导入
                         existing = analyzer.symbol_table.resolve(local_name)
                         if existing:
                             if existing.kind == SymbolKind.MODULE:
                                 # 同名 MODULE 符号已存在（同一模块被重复导入）——幂等跳过即可。
-                                self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                    f"[import] Symbol '{local_name}' already exists as MODULE in '{file_path}', skipping re-injection.")
+                                pass
                             else:
-                                # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突（§9.2）。
-                                # 用户自有符号优先；发出 SEM_009 WARNING 提示用户检查命名。
+                                # 用户定义的符号（CLASS / FUNCTION 等）与导入名冲突。
+                                # 用户自有符号优先；发出 SEM_IMPORT_CONFLICT WARNING 提示用户检查命名。
                                 file_tracker.warning(
                                     f"Import '{local_name}' conflicts with an already-defined "
                                     f"{existing.kind.name.lower()} symbol of the same name. "
@@ -485,30 +465,59 @@ class Scheduler(ICompilerService):
                                     code=SEM_IMPORT_CONFLICT,
                                 )
                         else:
-                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, metadata={"is_external_module": True})
+                            mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, provenance=Provenance.EXTERNAL_MODULE)
                             analyzer.symbol_table.define(mod_sym)
+                            # `import file` also gates the disk-backed types
+                            # (file_handle / audio / image / video) into the importing scope.
+                            for exported_name in getattr(s_mod_type, "exported_types", []):
+                                existing_exported = analyzer.symbol_table.resolve(exported_name)
+                                if existing_exported:
+                                    continue
+                                exported_spec = self.registry.resolve(exported_name)
+                                if exported_spec is None:
+                                    continue
+                                type_sym = TypeSymbol(
+                                    name=exported_name,
+                                    kind=SymbolKind.CLASS,
+                                    spec=exported_spec,
+                                    provenance=Provenance.KERNEL_NATIVE,
+                                    # align with runtime setup_context which
+                                    # defines these kernel-native classes as `intrinsic:<name>`.
+                                    uid=intrinsic_uid(exported_name),
+                                )
+                                analyzer.symbol_table.define(type_sym)
                         
                 elif imp.import_type == ImportType.FROM_IMPORT:
                     # 2. 处理 from mod import a, b as c, *
                     for alias in imp.names:
                         if alias.name == '*':
-                            # 注入所有导出的符号；跳过已存在同名符号（幂等）
-                            for name, sym in s_mod_type.exported_scope.symbols.items():
+                            injected_names: List[str] = []
+                            for name, member in s_mod_type.members.items():
                                 existing = analyzer.symbol_table.resolve(name)
                                 if existing:
-                                    self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                        f"[from-import *] Symbol '{name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
+                                    if existing.kind != SymbolKind.MODULE:
+                                        file_tracker.warning(
+                                            f"'from {imp.module_name} import *' conflicts with an already-defined "
+                                            f"{existing.kind.name.lower()} symbol '{name}'. "
+                                            f"The import is ignored; the locally-defined symbol takes precedence.",
+                                            location=Location(file_path=file_path, line=imp.lineno, column=1),
+                                            code=SEM_IMPORT_CONFLICT,
+                                        )
                                 else:
-                                    new_sym = SymbolFactory.create_from_descriptor(name, sym.spec) if sym.spec else sym
-                                    analyzer.symbol_table.define(new_sym)
+                                    new_sym = self._create_symbol_from_member(name, member)
+                                    if new_sym:
+                                        analyzer.symbol_table.define(new_sym)
+                                        injected_names.append(name)
+                            if injected_names:
+                                import_star_members.setdefault(imp.module_name, []).extend(injected_names)
                         else:
                             # 注入特定符号
-                            target_sym = s_mod_type.exported_scope.resolve(alias.name)
-                            if target_sym:
+                            target_member = s_mod_type.members.get(alias.name)
+                            if target_member:
                                 local_name = alias.asname if alias.asname else alias.name
                                 existing = analyzer.symbol_table.resolve(local_name)
                                 if existing:
-                                    # 用户定义的符号与 from-import 名冲突（§9.2）。
+                                    # 用户定义的符号与 from-import 名冲突。
                                     if existing.kind != SymbolKind.MODULE:
                                         file_tracker.warning(
                                             f"'from {imp.module_name} import {alias.name}' conflicts with an already-defined "
@@ -517,35 +526,40 @@ class Scheduler(ICompilerService):
                                             location=Location(file_path=file_path, line=imp.lineno, column=1),
                                             code=SEM_IMPORT_CONFLICT,
                                         )
-                                    else:
-                                        self.debugger.trace(CoreModule.SCHEDULER, DebugLevel.DETAIL,
-                                            f"[from-import] Symbol '{local_name}' from module '{imp.module_name}' conflicts with existing symbol in '{file_path}', skipping.")
                                 else:
-                                    # 使用 descriptor 参数，而不是 var_type/type_signature
-                                    if target_sym.kind == SymbolKind.VARIABLE:
-                                        new_sym = VariableSymbol(name=local_name, kind=SymbolKind.VARIABLE, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
-                                    elif target_sym.kind == SymbolKind.FUNCTION:
-                                        new_sym = FunctionSymbol(name=local_name, kind=SymbolKind.FUNCTION, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
+                                    new_sym = self._create_symbol_from_member(local_name, target_member)
+                                    if new_sym:
+                                        analyzer.symbol_table.define(new_sym)
                                     else:
-                                        new_sym = TypeSymbol(name=local_name, kind=target_sym.kind, spec=target_sym.spec, def_node=target_sym.def_node, metadata={"is_external_module": True})
-
-                                    analyzer.symbol_table.define(new_sym)
+                                        analyzer.issue_tracker.report(
+                                            Severity.ERROR, SEM_UNDEFINED_SYMBOL,
+                                            f"Symbol '{alias.name}' in module '{imp.module_name}' has an unresolved type",
+                                            location=Location(file_path=file_path, line=imp.lineno, column=1)
+                                        )
                             else:
                                 # 符号未找到报错
                                 analyzer.issue_tracker.report(
-                                    Severity.ERROR, "SEM_001", 
+                                    Severity.ERROR, SEM_UNDEFINED_SYMBOL,
                                     f"Symbol '{alias.name}' not found in module '{imp.module_name}'",
                                     location=Location(file_path=file_path, line=imp.lineno, column=1)
                                 )
             
             result = analyzer.analyze(ast_node)
+            result.import_star_members = import_star_members
             
             # 语义分析完成后，更新注册表中的元数据成员
             # 这确保了 TypeDef 在解析时能看到完整的符号表
             final_mod_meta = self.registry.resolve(module_name)
             if final_mod_meta:
-                # 过滤掉非导出的符号（如内部变量）可以在这里做，目前默认全量导出
-                final_mod_meta.members = result.symbol_table.symbols
+                # 成员契约统一为 MemberSpec/MethodMemberSpec 纯数据形态（与原生模块
+                # discovery 填充、命名导入 _create_symbol_from_member 消费一致）——
+                # resolve_member 只认该形态；符号表 Symbol 不可直接入 members
+                # （无 type_ref，此前整模块 import + 成员访问触发 INT_INTERNAL_ERROR）。
+                final_mod_meta.members = {
+                    name: self._symbol_to_member(name, sym)
+                    for name, sym in result.symbol_table.symbols.items()
+                    if sym.provenance != Provenance.KERNEL_NATIVE
+                }
             
             # Cache AST, Tokens, and SymbolTable
             self.ast_cache[file_path] = ast_node
@@ -564,13 +578,129 @@ class Scheduler(ICompilerService):
         except CompilerError:
             raise
         except Exception as e:
-            file_tracker.error(f"Internal compiler error: {str(e)}", code=INTERNAL_ERROR)
+            file_tracker.error(f"Internal compiler error: {str(e)}", code=INT_INTERNAL_ERROR)
             raise CompilerError(file_tracker.diagnostics) from e
         finally:
             self.issue_tracker.merge(file_tracker)
             
         if file_tracker.has_errors():
             raise CompilerError(file_tracker.diagnostics)
+
+    def _spec_to_typeref(self, spec: Any) -> Any:
+        """把 TypeDef spec 转换为 TypeRef（含泛型/签名结构化形态）。
+
+        ``resolve_typeref`` 消费 TypeRef；TypeDef 的 name/module 是类型身份，
+        kind 决定泛型结构。与 artifact_rehydrator 的反序列化构造同构。
+        """
+        from core.kernel.spec.type_ref import TypeRef
+
+        if spec is None:
+            return TypeRef.of("any")
+        kind = getattr(spec, "kind", None)
+        name = getattr(spec, "name", "") or "any"
+        module = getattr(spec, "module", None)
+        if kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value,
+                    TypeKind.CALLABLE_INSTANCE.value):
+            # 函数签名：fn[(args...) -> ret] 结构化 ref，保留签名结构
+            # （调用点可校验参数/返回）。
+            args = TypeRef("__args__", args=tuple(
+                TypeRef.of(p.head, p.module) for p in (getattr(spec, "param_types", []) or [])
+            ))
+            ret = getattr(spec, "return_type", None) or TypeRef.of("void")
+            return TypeRef.generic("fn", args, ret)
+        if kind == TypeKind.LIST.value:
+            elem = getattr(spec, "element_type", None) or TypeRef.of("any")
+            return TypeRef.generic("list", elem)
+        if kind == TypeKind.DICT.value:
+            key = getattr(spec, "key_type", None) or TypeRef.of("any")
+            val = getattr(spec, "value_type", None) or TypeRef.of("any")
+            return TypeRef.generic("dict", key, val)
+        if kind == TypeKind.OPTIONAL.value:
+            wrapped = getattr(spec, "wrapped_type", None) or TypeRef.of("any")
+            return TypeRef.generic("Optional", wrapped)
+        if kind == TypeKind.TUPLE.value:
+            positional = getattr(spec, "positional_element_types", None) or []
+            if positional:
+                return TypeRef("tuple", args=tuple(
+                    TypeRef.of(p.head, p.module) for p in positional
+                ))
+            elem = getattr(spec, "element_type", None) or TypeRef.of("any")
+            return TypeRef.generic("tuple", elem)
+        if kind == TypeKind.THREAD.value:
+            elem = getattr(spec, "element_type", None) or TypeRef.of("void")
+            return TypeRef.generic("thread", elem)
+        if kind == TypeKind.THREAD_RESULT.value:
+            elem = getattr(spec, "element_type", None) or TypeRef.of("void")
+            return TypeRef.generic("thread_result", elem)
+        # 原始类型 / 类 / 模块等：裸名引用。
+        return TypeRef.of(name, module)
+
+    def _symbol_to_member(self, name: str, sym: Symbol) -> Any:
+        """把已编译 IBCI 模块的符号表 Symbol 转换为纯数据 MemberSpec 形态。
+
+        模块元数据 ``members`` 的契约是 MemberSpec / MethodMemberSpec（与原生模块
+        discovery 填充、resolve_member 消费、命名导入 _create_symbol_from_member
+        处理三方一致）。符号表 Symbol（FunctionSymbol/VariableSymbol/TypeSymbol）
+        不可直接入 members——resolve_member 只认带 type_ref 的 MemberSpec 形态，
+        此前整模块 import + 成员访问因形态不匹配触发 INT_INTERNAL_ERROR。
+
+        类型经 spec 的结构化字段提取为 TypeRef，零运行时耦合。
+        """
+        from core.kernel.spec.type_ref import TypeRef
+
+        if isinstance(sym, FunctionSymbol):
+            spec = sym.spec
+            param_types = list(getattr(spec, "param_types", []) or [])
+            return_type = getattr(spec, "return_type", None) or TypeRef.of("void")
+            member = MethodMemberSpec(
+                name=name,
+                kind="method",
+                type_ref=return_type,
+                return_type=return_type,
+                param_types=list(param_types),
+            )
+            member.param_descriptors = list(getattr(spec, "param_descriptors", []) or [])
+            return member
+        # 变量 / 类 / 枚举：以字段形态暴露类型引用。变量 spec 的 name 即其类型
+        # 身份（int/list[int]/用户类），经结构化 TypeRef 还原。
+        return MemberSpec(name=name, kind="field", type_ref=self._spec_to_typeref(sym.spec))
+
+    def _create_symbol_from_member(self, name: str, member: Any) -> Optional[Symbol]:
+        """
+        from-import 符号构造：从 MemberSpec（插件模块）或 Symbol（已编译 IBCI 模块）
+        创建可注入当前作用域的 Symbol。
+
+        - MemberSpec / MethodMemberSpec：通过 registry.resolve_typeref 解析类型，
+          构造 FunctionSymbol（method）或 VariableSymbol（field）。
+        - Symbol（来自已编译模块的 members）：按原始 kind 重建同 kind Symbol。
+        """
+        if isinstance(member, Symbol):
+            if member.kind == SymbolKind.FUNCTION:
+                return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=member.spec, provenance=Provenance.EXTERNAL_MODULE)
+            elif member.kind == SymbolKind.VARIABLE:
+                return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=member.spec, provenance=Provenance.EXTERNAL_MODULE)
+            else:
+                return TypeSymbol(name=name, kind=member.kind, spec=member.spec, provenance=Provenance.EXTERNAL_MODULE)
+
+        if isinstance(member, MethodMemberSpec):
+            # 构造 FUNCTION kind 的 TypeDef，携带 return_type 和 param_types，
+            # 使语义分析器通过 get_call_cap 判定为可调用、通过 return_type 解析返回类型。
+            func_spec = ModuleMetadata(
+                name=name,
+                kind=TypeKind.FUNCTION.value,
+                return_type=member.return_type,
+                param_types=list(member.param_types),
+            )
+            func_spec.param_descriptors = list(getattr(member, 'param_descriptors', None) or [])
+            return FunctionSymbol(name=name, kind=SymbolKind.FUNCTION, spec=func_spec, provenance=Provenance.EXTERNAL_MODULE)
+
+        if isinstance(member, MemberSpec):
+            val_spec = self.registry.resolve_typeref(member.type_ref)
+            if val_spec is None:
+                val_spec = self.registry.resolve("any")
+            return VariableSymbol(name=name, kind=SymbolKind.VARIABLE, spec=val_spec, provenance=Provenance.EXTERNAL_MODULE)
+
+        return None
 
 # DependencyGraph logic moved to core.compiler.dependencies
 # This file imports DependencyGraph from there.

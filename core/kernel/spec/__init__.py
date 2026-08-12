@@ -5,7 +5,7 @@ Public API for the spec layer.
 """
 
 from .base import IbSpec, TypeDef, TypeKind
-from .member import MemberSpec, MethodMemberSpec
+from .member import MemberSpec, MethodMemberSpec, ParamDescriptor
 from .type_ref import TypeRef
 from .specs import (
     # Built-in prototype constants
@@ -34,6 +34,9 @@ from .specs import (
     LLM_PARSE_ERROR_SPEC,
     LLM_RETRY_EXHAUSTED_ERROR_SPEC,
     LLM_CALL_ERROR_SPEC,
+    AUDIO_SPEC,
+    IMAGE_SPEC,
+    VIDEO_SPEC,
 )
 from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
 
@@ -45,6 +48,7 @@ __all__ = [
     # Member specs
     "MemberSpec",
     "MethodMemberSpec",
+    "ParamDescriptor",
     # TypeRef
     "TypeRef",
     # Built-in constants
@@ -73,6 +77,9 @@ __all__ = [
     "LLM_PARSE_ERROR_SPEC",
     "LLM_RETRY_EXHAUSTED_ERROR_SPEC",
     "LLM_CALL_ERROR_SPEC",
+    "AUDIO_SPEC",
+    "IMAGE_SPEC",
+    "VIDEO_SPEC",
     # Registry / factory
     "SpecRegistry",
     "SpecFactory",

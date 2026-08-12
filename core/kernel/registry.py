@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Optional, Callable, Union, TYPE_CHECKING
 import threading
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_trace
 from core.base.enums import PrivilegeLevel, RegistrationState
 
 if TYPE_CHECKING:
@@ -12,7 +11,7 @@ if TYPE_CHECKING:
 class KernelRegistry:
     """
     IBC-Inter 内核对象注册表。
-    用于解耦 Kernel, Builtins 和 Bootstrapper 之间的循环引用。
+    用于解耦 Kernel, primitives 包 和 Bootstrapper 之间的循环引用。
     [Active Defense] 增强的令牌审计机制，区分内核特权与普通扩展权限。
     """
     def __init__(self):
@@ -27,7 +26,11 @@ class KernelRegistry:
         # 绑定执行上下文数据，不再持有整个解释器实例
         self._execution_context: Optional[Any] = None
         self._execution_context_lock = threading.Lock()
-        self._registry_lock = threading.Lock()
+
+        # 引擎级共享事件总线（观测全局：所有 RuntimeContextImpl 共享同一 EventBus，
+        # 线程任务事件可达主订阅者——计算隔离、观测全局）
+        self._event_bus: Optional[Any] = None
+        self._event_bus_lock = threading.Lock()
         
         # 注册状态机级别。默认为 1。
         self._state_level = 1
@@ -44,8 +47,8 @@ class KernelRegistry:
         self._is_structure_sealed = False
         self._is_classes_sealed = False
 
-        # [Builtin Instances] 内置单例实例 (如 IntentStack)
-        self._builtin_instances: Dict[str, Any] = {}
+        # [Intrinsic Instances] 内核单例实例 (如 IntentStack)
+        self._intrinsic_instances: Dict[str, Any] = {}
 
         # [LLM Executor] 内核 LLM 执行器引用（由解释器在启动时注入）
         self._llm_executor: Any = None
@@ -69,7 +72,6 @@ class KernelRegistry:
         if new_level <= self._state_level:
             raise PermissionError(f"Registry: Invalid level transition from {self._state_level} to {new_level}. Levels must progress forward.")
         
-        core_trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Registry level transition: {self._state_level} -> {new_level}")
         self._state_level = new_level
 
     def verify_level(self, required_level: int):
@@ -172,24 +174,24 @@ class KernelRegistry:
         self._verify_kernel(token)
         self._metadata_registry = metadata_registry
 
-    def register_builtin_instance(self, name: str, instance: Any):
+    def register_intrinsic_instance(self, name: str, instance: Any):
         """
         注册内置单例实例（如 IntentStack）。
 
         此方法刻意不进行 token 校验：内置单例（如 IntentStack）依赖 IbClass 体系
         就绪后才能创建，需要在结构封印之后的引导阶段末期注册，而 token 机制保护的
-        是封印前的结构性注册。该方法仅应由 builtin_initializer 在引导流程中调用，
+        是封印前的结构性注册。该方法仅应由 primitive_initializer 在引导流程中调用，
         调用窗口极短，不对外暴露。
 
         封印后的保护由时序约束（结构封印时序）而非 token 提供。
         """
         if self._is_structure_sealed:
-            raise PermissionError("Registry: Cannot register builtin instance after structure is sealed.")
-        self._builtin_instances[name] = instance
+            raise PermissionError("Registry: Cannot register intrinsic instance after structure is sealed.")
+        self._intrinsic_instances[name] = instance
 
-    def get_builtin_instance(self, name: str) -> Optional[Any]:
+    def get_intrinsic_instance(self, name: str) -> Optional[Any]:
         """获取内置单例实例。"""
-        return self._builtin_instances.get(name)
+        return self._intrinsic_instances.get(name)
 
     def register_llm_executor(self, executor: Any, token: Any) -> None:
         """
@@ -270,22 +272,33 @@ class KernelRegistry:
         with self._execution_context_lock:
             return self._execution_context
 
-    def create_instance(self, class_name: str, *args, **kwargs) -> Any:
+    def get_event_bus(self) -> Any:
+        """引擎级共享事件总线（由 runtime 组装层注入，线程安全）。
+
+        观测全局：所有 RuntimeContextImpl（主/线程任务）共享同一 EventBus，
+        线程任务内事件可达主订阅者（计算隔离、观测全局，D3 闭合）。
+
+        事件总线是 runtime 层观测设施，经 ``set_event_bus`` 注入（与
+        ``register_llm_executor`` 等同模式）。未注入即调用属装配错误，
+        fail-fast 暴露（观测尽力而为经 ``peek_event_bus`` 的 None 语义）。
         """
-        统一对象实例化入口。
-        确保每个实例都绑定到当前的 Registry，并根据真相源获取类定义。
-        """
-        ib_class = self.get_class(class_name)
-        if not ib_class:
-            raise ValueError(f"Registry: Class '{class_name}' not found.")
-        
-        # 优先调用类对象的 instantiate 方法
-        if hasattr(ib_class, 'instantiate'):
-            # 这里的 args 应该是 IbObject 列表
-            return ib_class.instantiate(list(args))
-        
-        # Fallback: 如果是普通 Python 类 (例如在引导阶段)
-        return ib_class(*args, **kwargs)
+        with self._event_bus_lock:
+            if self._event_bus is None:
+                raise RuntimeError(
+                    "KernelRegistry.event_bus is not injected. "
+                    "Engine must call set_event_bus(EventBus()) during assembly."
+                )
+            return self._event_bus
+
+    def set_event_bus(self, bus: Any) -> None:
+        """注入引擎级共享事件总线（runtime 组装层调用一次，线程安全）。"""
+        with self._event_bus_lock:
+            self._event_bus = bus
+
+    def peek_event_bus(self) -> Optional[Any]:
+        """事件总线只读（未注入返回 None，不产生副作用）。"""
+        with self._event_bus_lock:
+            return self._event_bus
 
     def register_class(self, name: str, ib_class: Any, token: Any, spec: 'IbSpec'):
         """
@@ -311,9 +324,8 @@ class KernelRegistry:
         ib_class.spec = spec
         self._classes[name] = ib_class
         
-        # 绑定注册表引用
-        if hasattr(ib_class, 'registry'):
-            ib_class.registry = self
+        # 绑定注册表引用（IbClass.registry 槽恒存在：__init__ 强制要求 registry）
+        ib_class.registry = self
 
     def register_function(self, name: str, descriptor: 'IbSpec', token: Any):
         """注册全局函数元数据 (仅用于编译器发现)"""
@@ -373,18 +385,6 @@ class KernelRegistry:
             return self._box_func(self, value, memo)
         return value
 
-    def is_truthy(self, obj: Any) -> bool:
-        """ 判定对象的真值 (Truthy)。"""
-        if obj is None or obj is self._none_instance:
-            return False
-        if hasattr(obj, 'to_bool'):
-            res = obj.to_bool()
-            # to_bool 应该返回 IbInteger(0 或 1)
-            return bool(res.value) if hasattr(res, 'value') else bool(res)
-        if hasattr(obj, 'value'):
-            return bool(obj.value)
-        return True
-
     def make_llm_parse_error(self, message: str, raw_response: str = "", type_name: str = "") -> Any:
         """Construct an LLMParseError IbObject with the given fields."""
         cls = self.get_class("LLMParseError")
@@ -425,30 +425,25 @@ class KernelRegistry:
         instance.fields["provider_error"] = self.box(provider_error)
         return instance
 
-    def clone(self) -> 'KernelRegistry':
-        """
-        创建 KernelRegistry 的浅克隆。
-        类定义和函数通过引用共享，但 MetadataRegistry 进行深克隆以确保类型隔离。
-        用于 spawn_interpreter 创建隔离的解释器实例。
-        """
-        new_registry = KernelRegistry()
-        new_registry._classes = dict(self._classes)
-        new_registry._none_instance = self._none_instance
-        new_registry._llm_uncertain_instance = self._llm_uncertain_instance
-        new_registry._box_func = self._box_func
-        new_registry._create_subclass_func = self._create_subclass_func
-        new_registry._boxers = dict(self._boxers)
-        new_registry._metadata_registry = self._metadata_registry.clone()
-        new_registry._is_structure_sealed = self._is_structure_sealed
-        new_registry._is_classes_sealed = self._is_classes_sealed
-        new_registry._state_level = self._state_level
-        new_registry._llm_executor = self._llm_executor
-        new_registry._host_service = self._host_service
-        new_registry._stack_inspector = self._stack_inspector
-        new_registry._state_reader = self._state_reader
-        # 拷贝内置单例字典结构，使子解释器能通过 get_builtin_instance() 找到单例。
-        # 子解释器在 Interpreter.__init__ 中会调用 set_runtime_context() 把自己的
-        # runtime_context 重新绑定到单例，因此两个解释器共享同一对象是安全的。
-        new_registry._builtin_instances = dict(self._builtin_instances)
-        # _int_cache 故意不拷贝：每个引擎实例独享小整数驻留缓存，彼此隔离。
-        return new_registry
+    def make_thread_cancelled(self, message: str = "Task was cancelled") -> Any:
+        """Construct a ThreadCancelled err IbObject."""
+        cls = self.get_class("ThreadCancelled")
+        if not cls:
+            cls = self.get_class("ThreadError") or self.get_class("Exception")
+        if not cls:
+            return self.get_none()
+        instance = cls.instantiate([])
+        instance.fields["message"] = self.box(message)
+        return instance
+
+    def make_thread_failed(self, message: str = "Task failed") -> Any:
+        """Construct a ThreadFailed err IbObject."""
+        cls = self.get_class("ThreadFailed")
+        if not cls:
+            cls = self.get_class("ThreadError") or self.get_class("Exception")
+        if not cls:
+            return self.get_none()
+        instance = cls.instantiate([])
+        instance.fields["message"] = self.box(message)
+        return instance
+

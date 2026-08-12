@@ -35,6 +35,7 @@ print("  数据库: " + (str)db["name"])
 
 print("\n[2] 保存配置到文件")
 str config_file = "./config_demo.json"
+# write（new 模式）：从无到有创建新文件，返回 handle（此处忽略）。
 file.write(config_file, (str)config)
 print("✓ 配置已保存: " + config_file)
 

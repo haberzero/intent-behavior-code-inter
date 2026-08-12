@@ -1,0 +1,16 @@
+# R1-001 global 修复复验（PT-DEBT-25）
+# 期望: counter=1 counter2=99（修复前 RUN_UNDEFINED_VARIABLE 崩溃）
+int counter = 0
+func bump() -> void:
+    global counter
+    counter = counter + 1
+
+func setter(int v) -> void:
+    global counter
+    counter = v
+
+bump()
+print("counter=" + (str)counter)
+setter(99)
+print("counter2=" + (str)counter)
+print("DONE")

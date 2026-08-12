@@ -1,57 +1,54 @@
 """
-tests/conftest.py
-=================
+tests/conftest.py — 新测试体系统一基础设施（黑盒 API 层）。
 
-测试体系**统一基础设施**：fixture、helper、常量。
+**本文件只承载黑盒 API**（编译/运行/断言/常量/会话 fixtures）。
+白盒 helper（``make_vm``/``find_node*``/``native``/``make_intent``）下沉到
+``tests/runtime/conftest.py``（runtime 层，允许 internals 访问）。
+禁止各测试文件再自行定义 ``run_ibci``/``compile_ibci`` 等（meta 强制）。
 
-本文件由 ``docs/TESTS_REORGANIZATION_TASK.md`` §2.2 规约定义，**所有测试文件
-必须使用本文件提供的统一形态**，禁止再各自复刻 ``run_and_capture`` /
-``make_engine`` / ``make_vm`` / ``ai_setup`` / ``find_node_uid`` 等。
-
-────────────────────────────────────────────────────────────────────────────
-Public API（在测试中通过 fixture 或 ``from tests.conftest import ...`` 使用）
-────────────────────────────────────────────────────────────────────────────
-
-Fixtures
---------
-- ``repo_root``        (session) — 仓库根目录绝对路径
-- ``tests_root``       (session) — ``tests/`` 目录绝对路径
-- ``engine``           (function) — 全新 IBCIEngine
-- ``engine_session``   (session)  — 长寿命引擎（只读 registry 查询用）
-- ``ctx``              (function) — 独立裸 ``RuntimeContextImpl``
-- ``intent_class``     (session)  — registry.get_class("Intent")
-- ``intent_context_class`` (session) — registry.get_class("intent_context")
-- ``captured_output``  (function) — ``(lines, callback)`` 元组，用于 print 捕获
-
-Helpers（普通函数，可 import 也可由 fixture ``helpers`` 暴露）
--------------------------------------------------------------
+Public API
+----------
+Helpers:
 - ``run_ibci(code, *, prefix="", ai=False, root_dir=None) -> List[str]``
 - ``compile_ibci(code, *, root_dir=None) -> CompilationArtifact``
 - ``compile_or_errors(code, *, root_dir=None) -> Tuple[Artifact|None, Set[str]]``
-- ``expect_compile_error(code, error_code, *, root_dir=None)`` — 期望编译失败
-- ``expect_runtime_error(code, error_pattern, *, prefix="", ai=False, root_dir=None)`` — 期望运行时失败
-- ``make_vm(engine) -> VMExecutor``
-- ``find_node(engine, node_type, *, predicate=None) -> Tuple[uid, data]``
-- ``find_nodes(engine, node_type, *, predicate=None) -> List[Tuple[uid, data]]``
-- ``find_node_uid(engine, node_type, *, predicate=None) -> str``
-- ``find_node_uids(engine, node_type, *, predicate=None) -> List[str]``
-- ``native(obj) -> Any``
-- ``make_intent(registry, content, *, mode=APPEND, role=SMEAR, tag=None)``
+- ``expect_compile_error(code, error_code, *, root_dir=None)``
+- ``expect_runtime_error(code, error_pattern, *, prefix="", ai=False, root_dir=None)``
 
-Constants
----------
-- ``AI_MOCK_PREFIX`` — 标准 ``import ai`` + ``set_config(TESTONLY,...)`` 前缀
-- ``REPO_ROOT``     — 仓库根目录（path string）
-- ``TESTS_ROOT``    — tests 根目录（path string）
+Constants:
+- ``AI_MOCK_PREFIX`` — 标准 ``import ai`` + ``set_mock_mode()`` 前缀（单点真理）
+- ``REPO_ROOT`` / ``TESTS_ROOT``
 
-────────────────────────────────────────────────────────────────────────────
+Fixtures:
+- ``repo_root`` / ``tests_root``（session）
+- ``engine`` / ``engine_session``
+- ``ctx`` / ``captured_output`` / ``mock_server``
 """
+
 from __future__ import annotations
 
 import os
+import threading
+import faulthandler
 from typing import Any, Callable, List, Optional, Set, Tuple
 
 import pytest
+
+# ---------------------------------------------------------------------------
+# 死锁/卡死防护看门狗（进程级，纯 stdlib）
+# ---------------------------------------------------------------------------
+_DEADLOCK_TIMEOUT_S = 90
+
+
+def _deadlock_watchdog() -> None:
+    import time
+
+    time.sleep(_DEADLOCK_TIMEOUT_S)
+    faulthandler.dump_traceback()
+    os._exit(124)
+
+
+threading.Thread(target=_deadlock_watchdog, daemon=True).start()
 
 # ---------------------------------------------------------------------------
 # Path constants
@@ -62,18 +59,27 @@ REPO_ROOT = os.path.dirname(TESTS_ROOT)
 
 
 # ---------------------------------------------------------------------------
+# pytest_configure — force temp directories under repo root
+# ---------------------------------------------------------------------------
+
+def pytest_configure(config):
+    basetemp = os.path.join(REPO_ROOT, ".tmp_pytest")
+    os.makedirs(basetemp, exist_ok=True)
+    config.option.basetemp = basetemp
+
+
+# ---------------------------------------------------------------------------
 # AI mock prefix — single source of truth
 # ---------------------------------------------------------------------------
 
-AI_MOCK_PREFIX = 'import ai\nai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+AI_MOCK_PREFIX = 'import ai\nai.set_mock_mode()\n'
 
 
 # ---------------------------------------------------------------------------
-# Engine helpers
+# Black-box engine helpers
 # ---------------------------------------------------------------------------
 
 def _default_root() -> str:
-    """tests 根作为 IBCIEngine 的 root_dir 默认值。"""
     return TESTS_ROOT
 
 
@@ -84,16 +90,8 @@ def run_ibci(
     ai: bool = False,
     root_dir: Optional[str] = None,
 ) -> List[str]:
-    """编译 + 执行一段 IBCI 代码，返回 ``print`` 输出的字符串列表。
-
-    Parameters
-    ----------
-    code     : IBCI 源代码
-    prefix   : 在 ``code`` 之前自动拼接的额外前缀（如自定义 import）
-    ai       : 是否在最前面自动拼接 ``AI_MOCK_PREFIX``
-    root_dir : 自定义 root_dir；默认 ``tests/`` 根
-    """
-    from core.engine import IBCIEngine  # 局部 import：避免测试启动阶段强依赖
+    """编译 + 执行一段 IBCI 代码，返回 ``print`` 输出的字符串列表。"""
+    from core.engine import IBCIEngine
 
     full = (AI_MOCK_PREFIX if ai else "") + prefix + code
     lines: List[str] = []
@@ -123,23 +121,10 @@ def compile_or_errors(code: str, *, root_dir: Optional[str] = None) -> Tuple[Any
 
 
 def expect_compile_error(code: str, error_code: str, *, root_dir: Optional[str] = None):
-    """期望编译失败并匹配特定错误码；如果成功编译或错误码不匹配则抛 AssertionError。
-
-    Parameters
-    ----------
-    code       : IBCI 源代码
-    error_code : 期望的错误码（如 "SEM_001", "PAR_042"）
-    root_dir   : 自定义 root_dir；默认 ``tests/`` 根
-
-    Example
-    -------
-    expect_compile_error("int x = None", "SEM_023")  # Optional 类型错误
-    """
+    """期望编译失败并匹配特定错误码。"""
     artifact, errors = compile_or_errors(code, root_dir=root_dir)
     assert artifact is None, f"Expected compilation to fail, but succeeded"
-    assert error_code in errors, (
-        f"Expected error code {error_code}, but got: {errors}"
-    )
+    assert error_code in errors, f"Expected error code {error_code}, but got: {errors}"
 
 
 def expect_runtime_error(
@@ -150,20 +135,7 @@ def expect_runtime_error(
     ai: bool = False,
     root_dir: Optional[str] = None,
 ):
-    """期望运行时失败并匹配异常信息模式；如果成功执行则抛 AssertionError。
-
-    Parameters
-    ----------
-    code          : IBCI 源代码
-    error_pattern : 期望的异常信息子串或正则模式
-    prefix        : 在 ``code`` 之前自动拼接的额外前缀
-    ai            : 是否在最前面自动拼接 ``AI_MOCK_PREFIX``
-    root_dir      : 自定义 root_dir；默认 ``tests/`` 根
-
-    Example
-    -------
-    expect_runtime_error("Optional[int] x = None\nprint(x.get())", "None")
-    """
+    """期望运行时失败并匹配异常信息模式。"""
     from core.engine import IBCIEngine
     import re
 
@@ -173,12 +145,12 @@ def expect_runtime_error(
     try:
         lines: List[str] = []
         engine.run_string(full, output_callback=lambda t: lines.append(str(t)), silent=True)
-        raise AssertionError(f"Expected runtime error matching '{error_pattern}', but execution succeeded")
+        raise AssertionError(
+            f"Expected runtime error matching '{error_pattern}', but execution succeeded"
+        )
     except Exception as e:
-        # 跳过 AssertionError（那是我们自己抛的）
         if isinstance(e, AssertionError):
             raise
-        # 验证异常信息匹配
         error_msg = str(e)
         if error_pattern not in error_msg and not re.search(error_pattern, error_msg):
             raise AssertionError(
@@ -187,110 +159,8 @@ def expect_runtime_error(
 
 
 # ---------------------------------------------------------------------------
-# VM helpers
-# ---------------------------------------------------------------------------
-
-def make_vm(engine):
-    """构造 ``VMExecutor``（统一参数顺序）。"""
-    from core.runtime.vm import VMExecutor
-
-    return VMExecutor(
-        engine.interpreter._execution_context,
-        interpreter=engine.interpreter,
-    )
-
-
-def find_nodes(
-    engine,
-    node_type: str,
-    *,
-    predicate: Optional[Callable[[str, dict], bool]] = None,
-) -> List[Tuple[str, dict]]:
-    """在 ``engine.interpreter.node_pool`` 中查找所有匹配节点。"""
-    out: List[Tuple[str, dict]] = []
-    for uid, data in engine.interpreter.node_pool.items():
-        if data.get("_type") != node_type:
-            continue
-        if predicate is None or predicate(uid, data):
-            out.append((uid, data))
-    return out
-
-
-def find_node(
-    engine,
-    node_type: str,
-    *,
-    predicate: Optional[Callable[[str, dict], bool]] = None,
-) -> Tuple[str, dict]:
-    """查找单个匹配节点；不存在或多于一个时抛 AssertionError。
-
-    注：历史 ``find_node_uid`` 实际上接受多匹配并返回第一个；为兼容旧用法，
-    本函数在 predicate 为 None 时不严格要求唯一，仅返回首个匹配。当 predicate
-    存在时仍允许多匹配（返回首个）—— 严格唯一性请用 ``find_nodes`` + 自检。
-    """
-    nodes = find_nodes(engine, node_type, predicate=predicate)
-    if not nodes:
-        raise AssertionError(f"No {node_type} node found in node_pool")
-    return nodes[0]
-
-
-def find_node_uid(
-    engine,
-    node_type: str,
-    *,
-    predicate: Optional[Callable[[str, dict], bool]] = None,
-) -> str:
-    """``find_node`` 的便捷形态：只返回 uid。"""
-    return find_node(engine, node_type, predicate=predicate)[0]
-
-
-def find_node_uids(
-    engine,
-    node_type: str,
-    *,
-    predicate: Optional[Callable[[str, dict], bool]] = None,
-) -> List[str]:
-    """``find_nodes`` 的便捷形态：只返回 uid 列表。"""
-    return [uid for uid, _ in find_nodes(engine, node_type, predicate=predicate)]
-
-
-def native(obj) -> Any:
-    """将 IBCI 对象转为原生 Python 值；非 IBCI 对象原样返回。"""
-    return obj.to_native() if hasattr(obj, "to_native") else obj
-
-
-# ---------------------------------------------------------------------------
-# Intent helpers
-# ---------------------------------------------------------------------------
-
-def make_intent(
-    registry,
-    content: str,
-    *,
-    mode=None,
-    role=None,
-    tag: Optional[str] = None,
-):
-    """构造 ``IbIntent``。
-
-    ``mode`` 默认 ``IntentMode.APPEND``；``role`` 默认 ``IntentRole.SMEAR``。
-    在函数体内延迟 import 以避免顶层依赖。
-    """
-    from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-
-    return IbIntent(
-        ib_class=registry.get_class("Intent"),
-        content=content,
-        mode=mode if mode is not None else IntentMode.APPEND,
-        role=role if role is not None else IntentRole.SMEAR,
-        tag=tag,
-    )
-
-
-# ===========================================================================
 # Fixtures
-# ===========================================================================
-
+# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 def repo_root() -> str:
@@ -312,23 +182,10 @@ def engine():
 
 @pytest.fixture(scope="session")
 def engine_session():
-    """长寿命 IBCIEngine：仅用于只读查询 registry / kernel 元数据，
-    切勿在其中执行用户代码（会污染后续测试）。"""
+    """长寿命 IBCIEngine：仅用于只读查询 registry / kernel 元数据。"""
     from core.engine import IBCIEngine
 
     return IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
-
-
-@pytest.fixture(scope="session")
-def intent_class(engine_session):
-    """``registry.get_class("Intent")``。"""
-    return engine_session.registry.get_class("Intent")
-
-
-@pytest.fixture(scope="session")
-def intent_context_class(engine_session):
-    """``registry.get_class("intent_context")``。"""
-    return engine_session.registry.get_class("intent_context")
 
 
 @pytest.fixture
@@ -351,24 +208,13 @@ def captured_output():
 
 
 @pytest.fixture
-def helpers():
-    """聚合 helper 命名空间，便于 ``helpers.run_ibci(...)`` 风格调用。"""
+def mock_server():
+    """启动一个线程内 MOCK HTTP 服务（function 级，自动停止）。"""
+    from ibci_modules.ibci_ai.mock_service import MockServer
 
-    class _H:
-        run_ibci = staticmethod(run_ibci)
-        compile_ibci = staticmethod(compile_ibci)
-        compile_or_errors = staticmethod(compile_or_errors)
-        expect_compile_error = staticmethod(expect_compile_error)
-        expect_runtime_error = staticmethod(expect_runtime_error)
-        make_vm = staticmethod(make_vm)
-        find_node = staticmethod(find_node)
-        find_nodes = staticmethod(find_nodes)
-        find_node_uid = staticmethod(find_node_uid)
-        find_node_uids = staticmethod(find_node_uids)
-        native = staticmethod(native)
-        make_intent = staticmethod(make_intent)
-        AI_MOCK_PREFIX = AI_MOCK_PREFIX
-        REPO_ROOT = REPO_ROOT
-        TESTS_ROOT = TESTS_ROOT
-
-    return _H()
+    server = MockServer()
+    server.start()
+    try:
+        yield server
+    finally:
+        server.stop()

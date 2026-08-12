@@ -1,0 +1,26 @@
+# D1-06-003 Enum + switch + LLM 输出枚举
+# doc: docs/syntax/06_oop.md §6.5 + KNOWN_LIMITS §二（Enum 支持 LLM 输出成员名）
+# 期望: LLM 输出枚举成员名被解析为对应枚举值
+
+class Color(Enum):
+    str RED   = "RED"
+    str GREEN = "GREEN"
+    str BLUE  = "BLUE"
+
+Color c = Color.BLUE
+if c == Color.BLUE:
+    print("is_blue")
+
+Color chosen = @~ 给以下单词选一个颜色标签：grass。只输出 RED、GREEN 或 BLUE ~
+print("chosen=" + (str)chosen)
+
+switch chosen:
+    case Color.GREEN:
+        print("sw_green")
+    case Color.RED:
+        print("sw_red")
+    case Color.BLUE:
+        print("sw_blue")
+    default:
+        print("sw_other")
+print("DONE")

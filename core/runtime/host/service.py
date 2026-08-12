@@ -16,11 +16,15 @@ import json
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IExecutionContext, IKernelOrchestrator
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 from core.kernel.registry import KernelRegistry
-from core.runtime.host.sync_manager import SyncManager
 from core.runtime.objects.kernel import IbObject
+from core.kernel.issue import InterpreterError
+from core.runtime.host.awaitable import HostAwaitable
 from core.extension.ibcext import IbStatefulPlugin
+
+# 序列化格式约定：save_state 外化资产时用此哨兵占位，load_state 据此回填。
+_EXTERNAL_FILE_REF_SENTINEL = "__EXTERNAL_FILE_REF__"
 
 class HostService(IHostService):
     """
@@ -31,62 +35,120 @@ class HostService(IHostService):
                  registry: KernelRegistry,
                  execution_context: IExecutionContext,
                  interop: InterOp,
-                 orchestrator: Optional[IKernelOrchestrator],
                  setup_context_callback: Callable,
                  get_current_module_callback: Callable):
         self.registry = registry
         self.execution_context = execution_context
         self.interop = interop
-        self.orchestrator = orchestrator
+        self._orchestrator = None
         self.setup_context_callback = setup_context_callback
         self.get_current_module_callback = get_current_module_callback
-        self._sync_manager = SyncManager()
 
-    def sync(self) -> bool:
+    @property
+    def orchestrator(self) -> Optional[IKernelOrchestrator]:
+        """内核协调器（由 ServiceContext.set_orchestrator 统一注入）。"""
+        return self._orchestrator
+
+    @orchestrator.setter
+    def orchestrator(self, value: Optional[IKernelOrchestrator]) -> None:
+        self._orchestrator = value
+
+    @staticmethod
+    def _contains_disk_backed_instance(execution_context: IExecutionContext) -> bool:
+        """扫描当前及外层作用域，检查是否存在 disk-backed 实例（file/media）。
+
+        仅检查**实例**（值为 IbClass 的类型对象不算——类是类型定义，非
+        disk-backed 数据）；class file_handle/audio/image/video 的类对象
+        常驻 prelude，若误判会导致 save_state 永久拒绝。
         """
-         安全点同步 (Safe Point Sync) 原语。
-        等待所有执行上下文达到一致状态后返回。
-        """
-        return self._sync_manager.sync()
+        from core.runtime.objects.kernel.ib_class import IbClass
+
+        runtime_context = execution_context.runtime_context
+        if runtime_context is None:
+            return False
+        scope = runtime_context.get_current_scope()
+        while scope is not None:
+            for sym in scope.get_all_symbols().values():
+                val = sym.value
+                if val is None:
+                    continue
+                if isinstance(val, IbClass):
+                    # 类型对象（类）不是实例，跳过。
+                    continue
+                ib_class = getattr(val, "ib_class", None)
+                spec = getattr(ib_class, "spec", None)
+                if spec is not None and getattr(spec, "is_disk_backed", False):
+                    return True
+            scope = getattr(scope, "parent", None)
+        return False
 
     def save_state(self, path: str):
         """深度序列化当前运行时上下文并保存到磁盘"""
-        self.sync() # 必须先同步
+        # 路径经 IbPath 规范化；资产外化布局委托 SnapshotLayout（策略集中化）。
+        # 注：save_state 是宿主级特权操作（用户显式调用），不经 PermissionManager 沙箱校验--
+        # 这是有意设计（host op 应能写用户指定位置），非安全缺口。
+        # 注：assets 的 "__EXTERNAL_FILE_REF__" 哨兵是序列化格式约定。
+        from core.kernel.path import IbPath, SnapshotLayout
+
+        # 在序列化之前扫描活跃变量，若存在磁盘型容器则直接拒绝。
+        if self._contains_disk_backed_instance(self.execution_context):
+            raise InterpreterError(
+                "save_state is not supported when the execution context contains "
+                "active file_handle/audio/image/video variables. "
+                "Use file.write to persist artifacts explicitly."
+            )
+
+        # 线程对象/容器是瞬态；save_state 时检测到未完成线程直接失败。
+        runtime_context = self.execution_context.runtime_context
+        coordinator = runtime_context.peek_runtime_coordinator() if runtime_context is not None else None
+        if coordinator is not None:
+            unfinished = coordinator.unfinished_handles()
+            if unfinished:
+                raise InterpreterError(
+                    "save_state is not supported while threads are running: "
+                    f"unfinished thread(s) {unfinished}. "
+                    "Join or cancel all threads before saving state."
+                )
+
         data = self.snapshot()
-        
-        abs_path = os.path.abspath(path)
-        base_dir = os.path.dirname(abs_path)
+
+        save_path = IbPath.from_native(path).resolve_dot_segments()
+        abs_path = save_path.to_native()
+        base_dir = (save_path.parent.to_native() if save_path.parent else "")
         os.makedirs(base_dir, exist_ok=True)
-        
-        # 文本资产外部化持久化
+
+        # 文本资产外部化持久化（布局走 SnapshotLayout）
         assets = data["pools"].get("assets", {})
         if assets:
-            asset_dir = abs_path + ".assets"
-            os.makedirs(asset_dir, exist_ok=True)
+            asset_dir_path = SnapshotLayout.asset_dir_for(save_path)
+            os.makedirs(asset_dir_path.to_native(), exist_ok=True)
             for uid, content in assets.items():
-                asset_path = os.path.join(asset_dir, f"{uid}.txt")
+                asset_path = SnapshotLayout.asset_file(asset_dir_path, uid).to_native()
                 with open(asset_path, "w", encoding="utf-8") as af:
                     af.write(content)
-            data["pools"]["assets"] = {uid: f"__EXTERNAL_FILE_REF__" for uid in assets}
+            data["pools"]["assets"] = {uid: _EXTERNAL_FILE_REF_SENTINEL for uid in assets}
 
         with open(abs_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def load_state(self, path: str):
         """从磁盘加载快照并恢复当前现场"""
-        abs_path = os.path.abspath(path)
+        from core.kernel.path import IbPath, SnapshotLayout
+        save_path = IbPath.from_native(path).resolve_dot_segments()
+        abs_path = save_path.to_native()
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"State file not found: {abs_path}")
-            
+
         with open(abs_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            
-        # 恢复外部文本资产
-        asset_dir = abs_path + ".assets"
+
+        # 恢复外部文本资产（布局走 SnapshotLayout，与 save_state 一致）
+        asset_dir_path = SnapshotLayout.asset_dir_for(save_path)
+        asset_dir = asset_dir_path.to_native()
         if os.path.exists(asset_dir):
             assets = data["pools"].get("assets", {})
             for uid in assets:
-                asset_path = os.path.join(asset_dir, f"{uid}.txt")
+                asset_path = SnapshotLayout.asset_file(asset_dir_path, uid).to_native()
                 if os.path.exists(asset_path):
                     with open(asset_path, "r", encoding="utf-8") as af:
                         assets[uid] = af.read()
@@ -113,11 +175,9 @@ class HostService(IHostService):
         for name in self.interop.get_all_package_names():
             pkg = self.interop.get_package(name)
             if pkg and isinstance(pkg, IbStatefulPlugin):
-                try:
-                    plugin_states[name] = pkg.save_plugin_state()
-                except Exception as e:
-                    # 插件状态保存失败不中断快照，但需要记录
-                    plugin_states[name] = {"__save_error__": str(e)}
+                # 显式持久化契约：插件状态保存失败必须暴露（fail-fast），
+                # 不静默降级为哨兵——否则 save_state 用户无感知地丢数据。
+                plugin_states[name] = pkg.save_plugin_state()
         if plugin_states:
             snapshot["plugin_states"] = plugin_states
         return snapshot
@@ -139,51 +199,38 @@ class HostService(IHostService):
                     # 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
                     pkg_obj = self.execution_context.factory.create_native_object(
                         pkg,
-                        self.registry.get_class("Object")
+                        self.registry.get_class("Object"),
+                        registry_id=self.interop.get_registry_id(name),
                     )
                 else:
                     pkg_obj = pkg
                 # 强制覆盖常量符号
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
 
-        # 3. 恢复有状态插件的内部状态
+        # 3. 恢复有状态插件的内部状态（fail-fast：恢复失败必须暴露，不静默跳过）
         if plugin_states:
             for name, saved in plugin_states.items():
                 pkg = self.interop.get_package(name)
-                if pkg and isinstance(pkg, IbStatefulPlugin) and "__save_error__" not in saved:
-                    try:
-                        pkg.restore_plugin_state(saved)
-                    except Exception:
-                        pass  # 恢复失败不中断整体流程
+                if pkg and isinstance(pkg, IbStatefulPlugin):
+                    pkg.restore_plugin_state(saved)
 
-    def run_isolated(self, path: str, policy: Dict[str, Any]) -> IbObject:
+    def run_isolated(self, path: str, policy: Dict[str, Any]) -> "HostAwaitable":
         """
-         通过内核协调器开启完全隔离的解释器环境。
-        不再负责手动孵化实例或编译代码，而是将请求作为系统调用上报。
+        隔离执行：在独立子引擎中运行 ``path``，返回 ``HostAwaitable``（可等待句柄）。
+
+        语义与 ``spawn_isolated`` 统一——子引擎在后台线程中运行；本方法返回
+        ``HostAwaitable``，VM 调度器对它 ``yield`` 挂起并等待完成，经 ``result()``
+        取回子环境导出的变量字典（多返回值）。对脚本而言即"阻塞式"运行并等待。
+
+        父与子之间不做隐式内存交互，变量不跨隔离边界继承；父->子 数据传递应
+        通过显式 file 读写完成。
         """
         if not self.orchestrator:
             raise RuntimeError("Kernel Orchestrator not available. Isolated execution cannot be performed.")
-            
-        # 根据 policy 提取 initial_vars (如果需要传递状态)
-        initial_vars = None
-        if policy.get("inherit_variables", False):
-            # 提取父环境的全局变量 (排除内部变量)
-            global_symbols = self.execution_context.runtime_context.global_scope.get_all_symbols()
-            initial_vars = {}
-            for name, sym in global_symbols.items():
-                if not name.startswith("__") and not sym.metadata.get("is_builtin", False):
-                    # 仅传递基础类型值或可安全序列化的值，此处简化为值引用传递，
-                    # 实际在 Engine 接收端会被装箱
-                    val = self.execution_context.runtime_context.global_scope.resolve(name)
-                    if hasattr(val, 'get_value'):
-                        initial_vars[name] = val.get_value()
 
-        # 发起系统调用，阻塞等待执行完成
         abs_path = self._resolve_isolated_path(path)
-        success = self.orchestrator.request_isolated_run(abs_path, policy, initial_vars)
-        
-        # 返回执行结果（当前简化为布尔值；多返回值改进见 PENDING_TASKS.md §10.2）
-        return self.registry.box(success)
+        handle = self.orchestrator.request_spawn_isolated(abs_path, policy, silent=False)
+        return HostAwaitable(self.orchestrator, handle)
 
     def spawn_isolated(self, path: str, policy: Dict[str, Any]) -> str:
         """
@@ -196,40 +243,28 @@ class HostService(IHostService):
         abs_path = self._resolve_isolated_path(path)
         return self.orchestrator.request_spawn_isolated(abs_path, policy)
 
-    def collect(self, handle: str) -> Dict[str, Any]:
+    def collect(self, handle: str) -> "HostAwaitable":
         """
-        阻塞等待 spawn_isolated 对应的子执行完成，返回子环境导出的全局变量字典。
-        handle 消费后失效；重复 collect 同一 handle 将抛出 RuntimeError。
+        返回 ``HostAwaitable``（可等待句柄）：VM 调度器对它 ``yield`` 挂起，等待
+        对应 ``spawn_isolated`` 子执行完成，经 ``result()`` 取回子环境导出的变量
+        字典。handle 消费后失效；重复 collect 同一 handle 将抛出 RuntimeError。
         """
         if not self.orchestrator:
             raise RuntimeError("Kernel Orchestrator not available.")
 
-        return self.orchestrator.request_collect(handle)
+        return HostAwaitable(self.orchestrator, handle)
 
     def _resolve_isolated_path(self, path: str) -> str:
         """
         把 ``ihost.run_isolated``/``spawn_isolated`` 传入的脚本路径解析为绝对路径。
 
-        - 绝对路径：直通（``os.path.abspath`` 进行规范化）。
-        - 相对路径：基于**当前执行脚本的入口目录** (``execution_context.get_entry_dir()``)
-          解析，与 ``file.read("./api_config.json")`` / ``isys.entry_dir()`` 保持一致；
-          仅当入口目录不可用时，才回退到 ``os.path.abspath`` 的 cwd 解析。
-
-        H3 修复（详见 docs/COMPLETED.md 2026-05-14 锚点）：历史实现统一走 ``os.path.abspath``，
-        相对 cwd 解析，与 ``file.read`` 的"相对入口目录"语义不一致，导致 README §5 与
-        ``examples/03_advanced_features/isolation_demo/parent.ibci`` 仅在 cwd 恰好为入口目录
-        时才能跑通。
+        委托规范解析器 ``PathResolver``（entry_dir 单锚点契约），与
+        ``ExecutionContextImpl.resolve_path`` / ``file.read`` 的相对入口目录语义一致。
         """
-        if os.path.isabs(path):
-            return os.path.abspath(path)
-        entry_dir = None
-        try:
-            entry_dir = self.execution_context.get_entry_dir()
-        except Exception:
-            entry_dir = None
-        if entry_dir:
-            return os.path.abspath(os.path.join(entry_dir, path))
-        return os.path.abspath(path)
+        from core.kernel.path import PathResolver, IbPath
+        entry_dir = self.execution_context.get_entry_dir()
+        resolver = PathResolver(entry_dir=IbPath.from_native(entry_dir) if entry_dir else None)
+        return resolver.resolve(path).to_native()
 
     def get_source(self) -> str:
         """元编程：获取当前运行模块的源代码"""

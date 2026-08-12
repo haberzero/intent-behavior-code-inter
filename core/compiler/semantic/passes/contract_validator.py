@@ -3,26 +3,22 @@ from core.kernel.spec import IbSpec, TypeDef
 from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.kernel.spec.base import TypeKind
 from core.compiler.diagnostics.issue_tracker import IssueTracker
-from core.base.diagnostics.debugger import CoreDebugger, CoreModule, DebugLevel
+from core.base.diagnostics.codes import SEM_REDEFINITION
 
 class ContractValidator:
     """
     全局契约校验器。
-    在系统启动前（STAGE 7），对所有已注册的类进行深度审计，
+    在系统启动前，对所有已注册的类进行深度审计，
     确保方法签名对齐父类契约（协变/逆变）以及公理契约。
     """
-    def __init__(self, registry: Any, issue_tracker: IssueTracker, debugger: Optional[CoreDebugger] = None):
+    def __init__(self, registry: Any, issue_tracker: IssueTracker):
         self.registry = registry
         self.issue_tracker = issue_tracker
-        self.debugger = debugger
 
     def validate_all(self):
         """
         遍历注册表中的所有描述符，验证其内部契约一致性。
         """
-        if self.debugger:
-            self.debugger.trace(CoreModule.UTS, DebugLevel.BASIC, "Starting Global Contract Validation (STAGE 7)...")
-
         all_descs = self.registry.all_specs
         for desc in all_descs.values():
             # 1. 审计类契约
@@ -47,6 +43,7 @@ class ContractValidator:
         _SIGNATURE_FREE_METHODS = frozenset({
             "__init__", "__snapshot__", "__restore__",
             "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
+            "__validate_prompt__",
         })
         for name, member in cls_desc.members.items():
             # member is a MemberSpec/MethodMemberSpec (pure data, type stored as type_name string)
@@ -82,14 +79,14 @@ class ContractValidator:
                 self.issue_tracker.report_error(
                     f"Contract Violation: Global function '{func_desc.name}' has unhydrated parameter type at index {i}.",
                     file_path="<metadata>",
-                    line=0, column=0, code="SEM_002"
+                    line=0, column=0, code=SEM_REDEFINITION
                 )
 
         if func_desc.return_type.head is None:
             self.issue_tracker.report_error(
                 f"Contract Violation: Global function '{func_desc.name}' has unhydrated return type.",
                 file_path="<metadata>",
-                line=0, column=0, code="SEM_002"
+                line=0, column=0, code=SEM_REDEFINITION
             )
 
     def _check_method_compatibility_by_name(self, cls_desc: TypeDef, name: str,
@@ -102,8 +99,19 @@ class ContractValidator:
         super_params = super_sig.param_types
 
         if len(sub_params) != len(super_params):
-            self.issue_tracker.report_error(
-                f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
-                f"but parent defines {len(super_params)} parameters.",
-                file_path="<metadata>", line=0, column=0, code="SEM_002"
-            )
+            # 子类允许增加参数，但多出的参数必须带默认值或为 varargs，
+            # 否则调用父类签名的调用方在子类上会缺少实参（契约破坏）。
+            sub_desc = getattr(member, 'param_descriptors', None) or []
+            extra = len(sub_params) - len(super_params)
+            flexible = False
+            if extra > 0 and len(sub_desc) >= extra:
+                flexible = all(
+                    d.has_default or d.kind in ("VAR_POSITIONAL", "VAR_KEYWORD")
+                    for d in sub_desc[-extra:]
+                )
+            if not flexible:
+                self.issue_tracker.report_error(
+                    f"Contract Violation: Method '{name}' in class '{cls_desc.name}' has {len(sub_params)} parameters, "
+                    f"but parent defines {len(super_params)} parameters.",
+                    file_path="<metadata>", line=0, column=0, code=SEM_REDEFINITION
+                )

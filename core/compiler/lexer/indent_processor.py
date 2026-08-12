@@ -1,4 +1,5 @@
 from typing import List, Optional, Tuple
+from core.base.diagnostics.codes import LEX_INVALID_ESCAPE
 from core.compiler.common.tokens import Token, TokenType
 from core.compiler.lexer.str_stream import StrStream
 from core.compiler.common.diagnostics import DiagnosticReporter
@@ -58,7 +59,7 @@ class IndentProcessor:
                 self.issue_tracker.error(
                     "Unindent does not match any outer indentation level",
                     self.scanner,
-                    code="LEX_005"
+                    code=LEX_INVALID_ESCAPE
                 )
         
         return current_indent, tokens

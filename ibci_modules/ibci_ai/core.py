@@ -1,116 +1,297 @@
 import os
+import re
 import time
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Union
 from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
+from core.kernel.issue import InterpreterError
+from core.kernel.path import PathValidator
+from core.runtime.capability_registry import CapabilityRegistry
+
+from ibci_modules.ibci_ai.mock_scenario import MockScenarioEngine
+from ibci_modules.ibci_ai.config_loader import (
+    ApiConfig,
+    _DEFAULT_TIMEOUT,
+    _DEFAULT_RETRY,
+    _DEFAULT_AUTO_INTENT,
+)
+
+# MOCK 模式哨兵（仅显式声明进入：_config["mock"]=True，经 set_mock_mode/apply_config
+# defaults.mock；不嗅探 url/key，不读隐式环境变量——避免环境开关静默压过显式配置）
+MOCK_CLIENT_SENTINEL = "MOCK_CLIENT"
+
+# openai 为可选依赖（与 ibci_net 的 HAS_REQUESTS 同构）。错误收窄覆盖
+# provider 层失败契约：openai SDK 全家族基类 + 本仓约定的 provider 失败信号
+# RuntimeError（含 mock/第三方 provider）+ 响应格式 ValueError；TypeError /
+# AttributeError 等内部代码缺陷原样传播（fail-fast），不被误标为 LLM 调用失败。
+try:
+    import openai
+    _PROVIDER_ERRORS = (openai.OpenAIError, RuntimeError, ValueError)
+except ImportError:  # pragma: no cover - 未安装时仅走 MOCK / 配置错误路径
+    openai = None  # type: ignore[assignment]
+    _PROVIDER_ERRORS = (RuntimeError, ValueError)
 
 
 class AIPlugin(IbStatefulPlugin):
     """
     AI LLM 供应者插件。
-    通过 capabilities.expose("llm_provider", self) 向内核注册 LLM provider。
+    通过 capabilities.expose(CAP_LLM_PROVIDER, self) 向内核注册 LLM provider。
 
     实现 IbStatefulPlugin 协议：LLM 配置、提示词定制等均为跨断点状态，
     断点保存/恢复时由 HostService 负责持久化与恢复。
     """
     def __init__(self):
-        self._retry_hint: Optional[str] = None
-        self._last_call_info: Dict[str, Any] = {}
         self._client = None
         self._config = {
             "url": None,
             "key": None,
             "model": None,
-            "retry": 3,
-            "timeout": 30.0,
-            "auto_type_constraint": True,
-            "auto_intent_injection": True
+            "retry": _DEFAULT_RETRY,
+            "timeout": _DEFAULT_TIMEOUT,
+            "auto_intent_injection": _DEFAULT_AUTO_INTENT,
+            "mock": False,
         }
+        # 命名模型注册表：用于 @NAME~ 语法的模型路由
+        # 格式: { "NAME": {"url": ..., "key": ..., "model": ..., "timeout": ...} }
+        self._model_registry: Dict[str, Dict[str, Any]] = {}
+        # 命名模型的已初始化客户端缓存
+        self._named_clients: Dict[str, Any] = {}
         self._return_type_prompts = {
             "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
             "float": "请仅返回一个浮点数作为回答，禁止包含任何其他解释文字。",
             "list": "请仅返回一个合法的 JSON 数组（List）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。",
             "dict": "请仅返回一个合法的 JSON 对象（Dict）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。"
         }
-        self._retry_prompts = {
-            "IbIf": "此处的逻辑判断存在歧义。请严格基于事实，返回 1 (条件成立) 或 0 (条件不成立)。",
-            "IbWhile": "循环条件判断模糊。请确认当前任务是否已完成：返回 0 表示完成（跳出循环），返回 1 表示继续。",
-            "IbExprStmt": "当前行为描述执行失败或结果不明确。请尝试以更直接、更具确定性的方式重新执行。",
-            "IbAssign": "目标值计算模糊。请确保返回的内容能被清晰地识别并赋值给变量。"
-        }
         self._capabilities: Optional[ExtensionCapabilities] = None
-        self._mock_state: Dict[str, int] = {}
-        self._mock_retry_counts: Dict[str, int] = {}
-        # SEQ mock: per-key call index counter
-        self._mock_seq_counters: Dict[str, int] = {}
+        # MOCK 指令语言单点实现（线程安全；seq/retry 状态由引擎持有）
+        self._mock_engine = MockScenarioEngine()
         
-        # [NEW] 模型能力策略缓存
+        # 模型能力决策缓存（probe_model / reasoning 声明 / mock 写入，调用路径消费）
         self._model_capabilities = {
-            "probed": False,          # 是否已经探测过
+            "probed": False,          # 是否已探测/声明模型类别
             "is_reasoning": False,    # 是否是强制推理模型
-            "supports_system": True,  # 是否支持 System 角色
-            "extract_strategy": "standard" # 提取策略: standard, tag_based, keyword_based
         }
+        # 未 probe 告警去重：仅首次未探测调用告警一次，避免热路径刷屏
+        self._unprobed_warned = False
 
-    def reset_mock_state(self) -> None:
-        """重置Mock状态，用于测试隔离"""
-        self._mock_state.clear()
-        self._mock_retry_counts.clear()
-        self._mock_seq_counters.clear()
+    @staticmethod
+    def _extract_reasoning(message: Any) -> Optional[str]:
+        """从 provider 消息对象提取推理字段（reasoning / reasoning_content）。
+
+        不同 provider 的 SDK 消息字段名各异——这是对第三方 SDK 对象的合法适配
+        探测（非 IBCI 内部对象私有穿透）。probe 与调用两路径共用，消除重复。
+        """
+        reasoning = getattr(message, "reasoning", None)
+        if reasoning is None and hasattr(message, "reasoning_content"):
+            reasoning = message.reasoning_content
+        return reasoning
+
+    def _is_test_mode(self) -> bool:
+        """当前是否处于 MOCK 测试模式（仅显式声明：``_config["mock"]``）。"""
+        return bool(self._config.get("mock", False))
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
         # 向能力注册表注册自己为 LLM Provider
-        capabilities.expose("llm_provider", self)
+        capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
+        # 引擎自动加载 project_root/api_config.json（原生一等机制，零脚本代码）。
+        # 加载契约（fail-fast 语义）：
+        #   - execution_context / project_root 由引擎加载路径恒注入——缺失是注入
+        #     异常（engine 未正确装配），不得静默跳过（区别于"配置不存在"合法态）。
+        #   - api_config.json 不存在是合法状态（用户无配置）→ 静默跳过。
+        #   - 路径统一经 PathValidator.canonicalize_for_security 规范化（与 kernel
+        #     层 config 路径处理同源，插件层不旁路符号链接解析）。
+        ec = capabilities.execution_context
+        if ec is None:
+            raise InterpreterError(
+                "AIPlugin.setup: 缺少 execution_context 注入——插件须经引擎加载路径初始化"
+            )
+        project_root = ec.get_project_root()
+        if not project_root:
+            raise InterpreterError(
+                "AIPlugin.setup: execution_context 未确立 project_root（engine 注入异常）"
+            )
+        config_path = PathValidator.canonicalize_for_security(
+            os.path.join(project_root, "api_config.json")
+        ).to_native()
+        if os.path.isfile(config_path):
+            config = ApiConfig.load(config_path)
+            self.apply_config(config)
 
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""
-        is_test_mode = (
-            self._config["url"] == "TESTONLY" or
-            os.environ.get("IBC_TEST_MODE") == "1"
-        )
+        is_test_mode = self._is_test_mode()
         if is_test_mode:
-            self._client = "MOCK_CLIENT"
+            self._client = MOCK_CLIENT_SENTINEL
             return
+
+        base_url = self._config["url"]
+        key = self._config["key"]
+        # 非 mock 模式下凭据缺失是配置错误——fail-fast，不静默留 None 到调用期
+        # 才抛无诊断码的泛化错误。
+        if not base_url or not key:
+            raise InterpreterError(
+                "LLM 配置缺失：未提供 base_url / api_key。请经 api_config.json 或 "
+                "ai.set_config(url, key, model) 配置，或显式 ai.set_mock_mode()。"
+            )
 
         try:
             from openai import OpenAI
-            
-            base_url = self._config["url"]
-            # 自动补充 /v1 后缀，如果用户没写且不是特殊本地服务
-            if base_url and "/v1" not in base_url and ("127.0.0.1" in base_url or "localhost" in base_url):
-                base_url = f"{base_url.rstrip('/')}/v1"
-            
-            if base_url and self._config["key"]:
-                self._client = OpenAI(
-                    api_key=self._config["key"],
-                    base_url=base_url,
-                    timeout=self._config["timeout"]
-                )
+
+            # base_url 按用户显式配置原样使用（不再做 localhost /v1 字符串嗅探
+            # 启发式——URL 是显式契约，由调用方给出完整 endpoint）。
+            self._client = OpenAI(
+                api_key=key,
+                base_url=base_url,
+                timeout=self._config["timeout"]
+            )
         except ImportError:
             raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
-        except Exception as e:
+        except _PROVIDER_ERRORS as e:
             raise RuntimeError(f"OpenAI 客户端初始化失败: {str(e)}")
 
     def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
         self._config["url"] = url
         self._config["key"] = key
         self._config["model"] = model
+        self._config["mock"] = False  # 显式 set_config 退出 mock 模式
 
-        if "auto_type_constraint" in kwargs:
-            self._config["auto_type_constraint"] = bool(kwargs["auto_type_constraint"])
         if "auto_intent_injection" in kwargs:
             self._config["auto_intent_injection"] = bool(kwargs["auto_intent_injection"])
 
         # 如果切换了模型，重置探测状态
         self._model_capabilities["probed"] = False
+        self._unprobed_warned = False
         self._init_client()
 
+    def set_mock_mode(self) -> None:
+        """显式进入 MOCK 测试模式（替代 url/key 字符串嗅探）。
+
+        MOCK 模式下 LLM 调用经 ``MockScenarioEngine`` 处理（``MOCK:xxx`` 指令语言），
+        不发起真实网络请求。测试与离线开发用。
+        """
+        self._config["mock"] = True
+        self._client = MOCK_CLIENT_SENTINEL
+        self._model_capabilities["probed"] = True
+        self._model_capabilities["is_reasoning"] = False
+        self._unprobed_warned = False
+
+    def load_config(self, path: str) -> None:
+        """从 ``api_config.json`` 加载配置并应用（原生一等入口）。
+
+        替代脚本手动 ``file.exists/json.parse/set_config`` 约定。``path`` 相对
+        于**项目根目录（project_root）**解析（与引擎自动加载同锚点——api_config.json
+        是项目级配置，子目录入口脚本下两入口行为一致）；绝对路径原样使用。
+        文件不存在或格式错误 fail-fast（带 CFG_ 诊断码，不静默回退 mock）。
+        路径统一经 ``PathValidator.canonicalize_for_security`` 规范化。
+        """
+        if self._capabilities is None or self._capabilities.execution_context is None:
+            raise InterpreterError(
+                "ai.load_config: 执行上下文不可用，无法解析配置路径"
+            )
+        ec = self._capabilities.execution_context
+        project_root = ec.get_project_root()
+        if not project_root:
+            raise InterpreterError(
+                "ai.load_config: execution_context 未确立 project_root"
+            )
+        raw = path if os.path.isabs(path) else os.path.join(project_root, path)
+        abs_path = PathValidator.canonicalize_for_security(raw).to_native()
+        config = ApiConfig.load(abs_path)
+        self.apply_config(config)
+
+    def apply_config(self, config) -> None:
+        """应用结构化配置 dict（``defaults`` + ``default_model`` + ``models``）。
+
+        ``config`` 为 api_config.json 解析后的 dict（或 IBCI dict 经 unbox 后的
+        Python dict）。经 ``ApiConfig.validate`` 校验 + 规范化后应用：
+
+        - ``defaults`` -> retry / auto_intent_injection / mock 全局默认
+        - ``default_model`` -> ``set_config`` + timeout + reasoning 声明（或 mock 模式）
+        - ``models`` -> 逐个 ``register_model``（供 ``@NAME~`` 路由）
+
+        ``defaults.mock:true`` 进入 mock 模式；``default_model.reasoning:false`` 声明
+        非思考模型，跳过 ``probe_model`` 直接按标准指令模型处理。
+        """
+        validated = ApiConfig.validate(config)
+        defaults = validated["defaults"]
+        self._config["retry"] = defaults["retry"]
+        self._config["auto_intent_injection"] = defaults["auto_intent_injection"]
+
+        dm = validated["default_model"]
+        self._config["timeout"] = dm["timeout"]
+
+        if defaults["mock"]:
+            self.set_mock_mode()
+            self._config["model"] = dm["model"]
+        else:
+            self.set_config(dm["base_url"], dm["api_key"], dm["model"])
+            # reasoning 声明对称处理：false → 标准指令模型；true → 强制推理模型。
+            # 两侧都落 probed/is_reasoning（消除不对称与"未探测"误导告警）。
+            self._model_capabilities["probed"] = True
+            self._model_capabilities["is_reasoning"] = bool(dm["reasoning"])
+            self._unprobed_warned = False
+
+        for name, model in validated["models"].items():
+            self.register_model(
+                name, model["base_url"], model["api_key"], model["model"],
+                timeout=model["timeout"],
+            )
+
+    def register_model(self, name: str, url: str, key: str, model: str, **kwargs) -> None:
+        """注册命名模型配置，用于 @NAME~ 语法的模型路由。
+
+        Args:
+            name: 模型标识名（对应 @NAME~ 中的 NAME，大小写敏感，必须与使用时完全一致）
+            url: API endpoint URL
+            key: API key
+            model: 模型名称
+            **kwargs: 其他可选配置（timeout 等）
+
+        Example (IBCI code):
+            ai.register_model("GPT4o", "https://api.openai.com/v1", "sk-...", "gpt-4o")
+            str answer = @GPT4o~ 请解释量子力学 ~
+        """
+        config = {
+            "url": url,
+            "key": key,
+            "model": model,
+            "timeout": kwargs.get("timeout", _DEFAULT_TIMEOUT),
+        }
+        self._model_registry[name] = config
+        # 清除缓存的客户端以便下次使用时重新初始化
+        self._named_clients.pop(name, None)
+
+    def _get_named_client(self, name: str):
+        """获取或创建命名模型的 OpenAI 客户端。"""
+        if name in self._named_clients:
+            return self._named_clients[name]
+
+        config = self._model_registry.get(name)
+        if not config:
+            raise RuntimeError(
+                f"未注册的命名模型 '{name}'。请先使用 ai.register_model(\"{name}\", url, key, model) 注册。"
+            )
+
+        try:
+            from openai import OpenAI
+            base_url = config["url"]
+            client = OpenAI(
+                api_key=config["key"],
+                base_url=base_url,
+                timeout=config["timeout"]
+            )
+            self._named_clients[name] = client
+            return client
+        except ImportError:
+            raise RuntimeError("未安装 'openai' 库，请运行 'pip install openai'。")
+        except _PROVIDER_ERRORS as e:
+            raise RuntimeError(f"命名模型 '{name}' 的 OpenAI 客户端初始化失败: {str(e)}")
+
     def has_api_key(self) -> bool:
-        """检查是否已配置 API 密钥"""
-        key = self._config.get("key", "")
-        url = self._config.get("url", "")
-        model = self._config.get("model", "")
-        return bool(key and url and model)
+        """检查是否已配置 API 密钥（MOCK 模式视为已就绪）。"""
+        if self._config.get("mock", False):
+            return True
+        return bool(self._config.get("key") and self._config.get("url") and self._config.get("model"))
 
     def probe_model(self) -> str:
         """
@@ -118,10 +299,10 @@ class AIPlugin(IbStatefulPlugin):
         通过发送特定的测试请求，动态检测模型是否属于"强制推理模型" (Reasoning/CoT Model)，
         并在内部缓存探测结果以指导后续所有的工作流调用策略。
         """
-        is_test_mode = (self._config["key"] == "MOCK_KEY" or self._config["url"] == "TESTONLY")
+        is_test_mode = self._is_test_mode()
         if is_test_mode:
             self._model_capabilities.update({
-                "probed": True, "is_reasoning": False, "extract_strategy": "standard"
+                "probed": True, "is_reasoning": False
             })
             return "MOCK_PROBE_SUCCESS"
 
@@ -152,21 +333,10 @@ class AIPlugin(IbStatefulPlugin):
             print("    -> [System] Called llm once (Probe).")
             
             raw_content = completion.choices[0].message.content
-            reasoning = getattr(completion.choices[0].message, "reasoning", None)
-            if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
-                reasoning = completion.choices[0].message.reasoning_content
+            reasoning = self._extract_reasoning(completion.choices[0].message)
                 
             if raw_content is None:
                 raw_content = ""
-                
-            # 记录调用信息以便调试
-            self._last_call_info = {
-                "sys_prompt": sys_prompt,
-                "user_prompt": user_prompt,
-                "response": raw_content,
-                "raw_response": raw_content,
-                "scene": "probe"
-            }
 
             is_reasoning = False
             # 判定条件：
@@ -188,17 +358,19 @@ class AIPlugin(IbStatefulPlugin):
             self._model_capabilities.update({
                 "probed": True,
                 "is_reasoning": is_reasoning,
-                "extract_strategy": "tag_based" if is_reasoning else "standard"
             })
             
             return "REASONING_MODEL" if is_reasoning else "STANDARD_MODEL"
             
-        except Exception as e:
+        except _PROVIDER_ERRORS as e:
+            # 能力探测的保守降级（设计）：provider 层失败（网络/鉴权/响应格式）
+            # 无法判定模型类型 → 安全回退为按推理模型处理。仅对 provider 异常
+            # 降级；探测逻辑自身的内部缺陷（TypeError/AttributeError 等）原样
+            # 传播，避免静默误分类模型导致后续所有调用策略失真。
             print(f"  => [!警告] 探测失败 ({e})，将使用安全回退策略 (当作推理模型处理)。")
             self._model_capabilities.update({
                 "probed": True,
                 "is_reasoning": True,
-                "extract_strategy": "tag_based"
             })
             return "PROBE_FAILED_FALLBACK_REASONING"
 
@@ -206,27 +378,14 @@ class AIPlugin(IbStatefulPlugin):
         self._config["retry"] = count
 
     def get_retry(self) -> int:
-        return self._config.get("retry", 3)
+        return self._config.get("retry", _DEFAULT_RETRY)
+
+    def is_auto_intent_injection_enabled(self) -> bool:
+        return self._config.get("auto_intent_injection", True)
 
     def set_timeout(self, seconds: float) -> None:
         self._config["timeout"] = seconds
         self._init_client()
-
-    def set_general_prompt(self, prompt: str) -> None:
-        self._scene_prompts["general"] = prompt
-
-    def set_branch_prompt(self, prompt: str) -> None:
-        self._scene_prompts["branch"] = prompt
-
-    def set_loop_prompt(self, prompt: str) -> None:
-        self._scene_prompts["loop"] = prompt
-
-    def set_scene_config(self, scene: str, config: Dict[str, Any]) -> None:
-        if "prompt" in config:
-            self._scene_prompts[scene] = config["prompt"]
-
-    def get_retry_prompt(self, node_type: str) -> Optional[str]:
-        return self._retry_prompts.get(node_type)
 
     def set_return_type_prompt(self, type_name: str, prompt: str) -> None:
         self._return_type_prompts[type_name] = prompt
@@ -234,11 +393,66 @@ class AIPlugin(IbStatefulPlugin):
     def get_return_type_prompt(self, type_name: str) -> Optional[str]:
         return self._return_type_prompts.get(type_name)
 
-    def set_retry_hint(self, hint: str) -> None:
-        self._retry_hint = hint
+    def get_current_call_info(self) -> Dict[str, Any]:
+        """获取最近一次 resolve 的调用信息（委托内核 LLM 执行器的主线程单写槽）。"""
+        kr = self._capabilities.kernel_registry if self._capabilities else None
+        if kr is not None:
+            executor = kr.get_llm_executor()
+            if executor is not None:
+                return dict(executor.get_current_call_info())
+        return {}
 
-    def get_last_call_info(self) -> Dict[str, Any]:
-        return self._last_call_info
+    def run_batch(self, behavior: Any, items: List[Any]) -> List[Any]:
+        """并发批量执行行为对象（`ai.run_batch`）。
+
+        对参数化 fn 行为（``fn f = lambda(str x) -> str: @~ ... $x ... ~``）
+        逐项并发执行，保序返回结果列表。任一项 parse 失败抛 ``LLMParseError``。
+        """
+        kr = self._capabilities.kernel_registry if self._capabilities else None
+        if kr is None:
+            raise RuntimeError("run_batch: LLM executor not available")
+        executor = kr.get_llm_executor()
+        if executor is None:
+            raise RuntimeError("run_batch: LLM executor does not support batch execution")
+        from core.runtime.frame import get_current_execution_context
+
+        # 调用现场 EC 是运行期的单一真相源（CPS 主路径仅使用调用现场 ContextVar，
+        # behavior._execution_context 字段是 core 内部同步后备，插件不做私有穿透）。
+        ec = get_current_execution_context()
+        if ec is None:
+            raise RuntimeError("run_batch: no execution context available")
+        return executor.run_batch(behavior, list(items), ec)
+
+    def stream_call(self, sys_prompt: str, user_prompt: str) -> Any:
+        """流式 LLM 调用：返回 ``IbStreamHandle``（Waitable）。
+
+        后台线程消费 provider 增量并推入内部 stream Channel；调用方经
+        ``await`` / VM 协作等待取回完整文本，或经 ``stream_channel`` 逐块渲染。
+        """
+        from core.runtime.objects.stream import IbStreamHandle
+        return IbStreamHandle(
+            producer=lambda: self.stream(sys_prompt, user_prompt)
+        )
+
+    def stream_channel(self, sys_prompt: str, user_prompt: str) -> Any:
+        """流式 LLM 调用：返回承载增量块的 stream Channel。
+
+        返回语言层 ``IbChannel``（包装 IbStreamHandle 的内部 Channel），供
+        渲染线程 ``recv`` 逐块消费。
+        """
+        from core.runtime.objects.stream import IbStreamHandle
+        from core.runtime.objects.kernel import IbChannel
+        from core.runtime.frame import get_current_execution_context
+
+        handle = IbStreamHandle(
+            producer=lambda: self.stream(sys_prompt, user_prompt)
+        )
+        ec = get_current_execution_context()
+        registry = getattr(ec, "registry", None) if ec is not None else None
+        if registry is None:
+            raise RuntimeError("ai.stream_channel: no registry available")
+        chan_cls = registry.get_class("chan")
+        return IbChannel(ib_class=chan_cls, core=handle.channel)
 
     def set_global_intent(self, intent: str) -> None:
         if self._capabilities and self._capabilities.intent_manager:
@@ -275,338 +489,262 @@ class AIPlugin(IbStatefulPlugin):
             return res
         return []
 
-    def __call__(self, sys_prompt: str, user_prompt: str, scene: str = "general") -> str:
-        is_test_mode = (
-            self._config["url"] == "TESTONLY" or
-            os.environ.get("IBC_TEST_MODE") == "1"
-        )
+    def __call__(self, sys_prompt: str, user_prompt: "Union[str, List]", *, target_model: str = "") -> str:
+        """LLM 调用入口（ILLMProvider 协议）。"""
+        is_test_mode = self._is_test_mode()
         
+        # 多模态内容：将 List 转换为纯文本用于 MOCK 或传递给 API
+        # 对于 MOCK 模式和纯文本路径，需要将 List 展平为 str
+        user_prompt_text = user_prompt if isinstance(user_prompt, str) else self._flatten_content_parts(user_prompt)
+
         # 统一对输入内容进行清洗
-        user_prompt = user_prompt.strip()
+        user_prompt_text = user_prompt_text.strip()
 
         # 在注入约束后缀前，先检查 Mock 指令
         if is_test_mode:
-            res = self._handle_mock_response(user_prompt, scene)
-            self._last_call_info = {"sys_prompt": sys_prompt, "user_prompt": user_prompt, "response": res, "scene": scene}
-            return res
+            return self._handle_mock_response(user_prompt_text)
 
-        # 强化决策场景的 User Prompt 约束
-        scene_str = str(scene).lower()
-        if any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice")):
-            user_prompt += "\n\n(重要：只允许返回 0 或 1。如果条件成立则返回 1，不成立则返回 0。)"
-            
-        if not is_test_mode:
+        # 命名模型路由：@NAME~ 语法
+        if target_model:
+            if target_model not in self._model_registry:
+                raise RuntimeError(
+                    f"未注册的命名模型 '{target_model}'。"
+                    f"请先使用 ai.register_model(\"{target_model}\", url, key, model) 注册。"
+                )
+            named_config = self._model_registry[target_model]
+            active_client = self._get_named_client(target_model)
+            active_model = named_config["model"]
+        else:
+            # 默认模型路径
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
                 raise RuntimeError("LLM 运行配置缺失")
-            
+
             # 优先使用预初始化的客户端 (单例复用)
-            if not self._client or self._client == "MOCK_CLIENT":
+            if not self._client or self._client == MOCK_CLIENT_SENTINEL:
                 self._init_client()
-            
-            if not self._client or self._client == "MOCK_CLIENT":
+
+            if not self._client or self._client == MOCK_CLIENT_SENTINEL:
                 raise RuntimeError("未安装 'openai' 库或客户端初始化失败，请运行 'pip install openai'。")
-            
-            # 决策场景下限制 max_tokens
-            is_decision = any(keyword in scene_str for keyword in ("branch", "loop", "decision", "choice"))
-            
-            # 如果没有主动探测过，可以在这里触发一次懒加载探测，或者直接使用默认策略
-            if not self._model_capabilities["probed"]:
-                # 为避免隐式延迟，这里默认回退到保守的推理策略，
-                # 但推荐用户在脚本中显式调用 ai.probe_model()
-                is_reasoning_model = True
-            else:
-                is_reasoning_model = self._model_capabilities["is_reasoning"]
-            
-            # 动态调整策略：
-            if is_reasoning_model:
-                # 强制推理模型：放宽 Token 限制，并要求用 ANSWER 标签包裹最终结果
-                decision_max_tokens = 4096
-                enhanced_sys_prompt = sys_prompt + "\nIMPORTANT: You are a reasoning model. You MUST output your final, conclusive, and brief answer at the very end of your response, starting with 'ANSWER:'."
-            else:
-                # 标准指令模型：严格限制 Token 以防噪音，直接使用原 Prompt
-                decision_max_tokens = 10
-                enhanced_sys_prompt = sys_prompt
 
-            try:
-                completion = self._client.chat.completions.create(
-                    model=self._config["model"],
-                    messages=[
-                        {"role": "system", "content": enhanced_sys_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    max_tokens=decision_max_tokens if is_decision else 4096,
-                    extra_body={
-                        "enable_thinking": False,
-                        "chat_template_kwargs": {"enable_thinking": False}
-                    }
-                )
-                
-                # 调试输出，偶尔会使用。注释并保留
-                # print("    -> [System] Called llm once.")
-                
-                if not completion or not hasattr(completion, 'choices') or not completion.choices:
-                    raise RuntimeError(f"LLM 返回异常响应: {completion}")
+            active_client = self._client
+            active_model = self._config["model"]
 
-                raw_content = completion.choices[0].message.content
-                
-                # 兼容性处理：尝试提取 Reasoning 字段
-                reasoning = getattr(completion.choices[0].message, "reasoning", None)
-                if reasoning is None and hasattr(completion.choices[0].message, "reasoning_content"):
-                    reasoning = completion.choices[0].message.reasoning_content
-                
-                # 如果 content 为空且 reasoning 有值，说明这是强制推理模型把结果都放进 reasoning 里了
-                if (raw_content is None or raw_content.strip() == "") and reasoning:
-                    raw_content = reasoning
-                
-                if raw_content is None:
-                    res = ""
+        # 未显式探测时的回退策略。
+        #
+        # 设计立场：本阶段 IBCI 不推荐使用 thinking 模型，推荐
+        # 直接输出模式（standard）。thinking 模型现阶段允许但非推荐；未来将专门
+        # 设计"直接输出 vs thinking 后输出"的映射/分配策略（届时再细化）。
+        #
+        # 未 probe 时本应显式失败（fail-fast），但为保持既有调用可用，此处保守
+        # 按推理模型处理，并仅在首次告警一次，提示调用方显式 ai.probe_model()
+        # 以选用直接输出模式。告警去重见 self._unprobed_warned。
+        if not self._model_capabilities["probed"]:
+            if not self._unprobed_warned:
+                print("[AI Probe] 警告：未调用 ai.probe_model()，按推理模型保守处理。建议显式探测以选用直接输出模式。")
+                self._unprobed_warned = True
+            is_reasoning_model = True
+        else:
+            is_reasoning_model = self._model_capabilities["is_reasoning"]
+
+        # 动态调整策略：
+        if is_reasoning_model:
+            # 强制推理模型：放宽 Token 限制，并要求用 ANSWER 标签包裹最终结果
+            enhanced_sys_prompt = sys_prompt + "\nIMPORTANT: You are a reasoning model. You MUST output your final, conclusive, and brief answer at the very end of your response, starting with 'ANSWER:'."
+        else:
+            # 标准指令模型：直接使用原 Prompt
+            enhanced_sys_prompt = sys_prompt
+
+        try:
+            # 构建 messages：支持纯文本和多模态两种路径
+            user_content = self._build_user_content(user_prompt, user_prompt_text)
+            completion = active_client.chat.completions.create(
+                model=active_model,
+                messages=[
+                    {"role": "system", "content": enhanced_sys_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                max_tokens=4096,
+                extra_body={
+                    "enable_thinking": False,
+                    "chat_template_kwargs": {"enable_thinking": False}
+                }
+            )
+
+            # 调试输出，偶尔会使用。注释并保留
+            # print("    -> [System] Called llm once.")
+
+            if not completion or not hasattr(completion, 'choices') or not completion.choices:
+                raise RuntimeError(f"LLM 返回异常响应: {completion}")
+
+            raw_content = completion.choices[0].message.content
+
+            # 兼容性处理：尝试提取 Reasoning 字段
+            reasoning = self._extract_reasoning(completion.choices[0].message)
+
+            # 如果 content 为空且 reasoning 有值，说明这是强制推理模型把结果都放进 reasoning 里了
+            if (raw_content is None or raw_content.strip() == "") and reasoning:
+                raw_content = reasoning
+
+            if raw_content is None:
+                res = ""
+            else:
+                raw_content = raw_content.strip()
+                # === 核心改造：后处理提取器 ===
+                # 1. 尝试匹配 ANSWER: 前缀
+                if "ANSWER:" in raw_content:
+                    res = raw_content.split("ANSWER:")[-1].strip()
+                elif "Answer:" in raw_content:
+                    res = raw_content.split("Answer:")[-1].strip()
                 else:
-                    raw_content = raw_content.strip()
-                    # === 核心改造：后处理提取器 ===
-                    # 1. 尝试匹配 ANSWER: 前缀
-                    if "ANSWER:" in raw_content:
-                        res = raw_content.split("ANSWER:")[-1].strip()
-                    elif "Answer:" in raw_content:
-                        res = raw_content.split("Answer:")[-1].strip()
+                    # 2. 回退处理：如果模型没写前缀，但是写了 Thinking Process 或思考过程
+                    # 我们假定思考过程结束后的最后一段文字就是答案
+
+                    # 剔除可能存在的 Thinking Process 块
+                    if "Thinking Process:" in raw_content:
+                        parts = raw_content.split("Thinking Process:")
+                        raw_content = parts[-1]
+
+                    # 按行分割，过滤掉看起来像推理步骤的行
+                    lines = [line.strip() for line in raw_content.split('\n') if line.strip()]
+                    valid_lines = []
+                    for line in lines:
+                        if not re.match(r'^[\d\-\*\s]+(Analyze|Consider|Think|Hypothesis|Wait|Wait,|Let\'s|Actually|Alternative|Decision|Correction|Hypothesis \d+|So|Since)', line, re.IGNORECASE):
+                            valid_lines.append(line)
+
+                    if valid_lines:
+                        # 取最后一行作为结论
+                        res = valid_lines[-1]
                     else:
-                        # 2. 回退处理：如果模型没写前缀，但是写了 Thinking Process 或思考过程
-                        # 我们假定思考过程结束后的最后一段文字就是答案
-                        
-                        # 剔除可能存在的 Thinking Process 块
-                        if "Thinking Process:" in raw_content:
-                            parts = raw_content.split("Thinking Process:")
-                            raw_content = parts[-1]
-                        
-                        # 按行分割，过滤掉看起来像推理步骤的行
-                        lines = [line.strip() for line in raw_content.split('\n') if line.strip()]
-                        valid_lines = []
-                        import re
-                        for line in lines:
-                            if not re.match(r'^[\d\-\*\s]+(Analyze|Consider|Think|Hypothesis|Wait|Wait,|Let\'s|Actually|Alternative|Decision|Correction|Hypothesis \d+|So|Since)', line, re.IGNORECASE):
-                                valid_lines.append(line)
-                        
-                        if valid_lines:
-                            # 取最后一行作为结论
-                            res = valid_lines[-1]
-                        else:
-                            res = raw_content
+                        res = raw_content
 
-                self._last_call_info = {"sys_prompt": enhanced_sys_prompt, "user_prompt": user_prompt, "response": res, "raw_response": raw_content, "scene": scene}
-                return res
-            except Exception as e:
-                raise RuntimeError(f"LLM 调用失败: {str(e)}")
+            return res
+        except _PROVIDER_ERRORS as e:
+            raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
-        return "[REAL_LLM_NOT_IMPLEMENTED_IN_CORE]"
 
-    def _handle_mock_response(self, user_prompt: str, scene: str) -> str:
+    def stream(self, sys_prompt: str, user_prompt: "Union[str, List]", *, target_model: str = "") -> Any:
+        """LLM 流式调用入口（ILLMProvider 协议扩展）。
+
+        返回一个**增量迭代器**（逐步产出 str 增量），调用方（IbStreamHandle）
+        把增量推入 stream Channel 供渲染。非流式场景不应调用本方法。
+
+        实现：
+        - MOCK 模式：返回单块（完整响应）——MockServer 流式端点经真实
+          OpenAI 客户端测试时由 SSE 分块；进程内 MOCK 路径直接单块。
+        - 真实模式：调用 OpenAI 流式 API（``stream=True``），逐 delta 产出。
         """
-        处理 MOCK 前缀指令。所有指令关键字**区分大小写，必须全大写**。
+        is_test_mode = self._is_test_mode()
 
-        **重要约束（LLM 函数 MOCK）**：
-        LLM 函数的 ``__user__`` 块在测试时必须**只包含单独一行 MOCK 指令**，不允许与
-        其他文字混合书写。MOCK 指令必须是 user_prompt 的完整内容（去空白后以 "MOCK:" 开头）。
-        错误示例：
-            __user__
-            请分析以下代码：
-            MOCK:STR:ok         ← 错误！MOCK 不在首位，不会被识别
-            给出建议
-        正确示例：
-            __user__
-            MOCK:STR:ok         ← 正确：__user__ 块仅含此 MOCK 指令
+        user_prompt_text = user_prompt if isinstance(user_prompt, str) else self._flatten_content_parts(user_prompt)
+        user_prompt_text = user_prompt_text.strip()
 
-        **裸行为表达式（@~...~）的 MOCK**：MOCK 指令直接写在行为描述内容中即可，
-        例如 ``str r = @~MOCK:STR:hello~``，无此约束。
+        if is_test_mode:
+            # 进程内 MOCK：单块产出完整响应
+            result = self._mock_engine.handle(user_prompt_text)
+            if result.error_status is not None:
+                raise RuntimeError(f"MOCK:ERROR injected ({result.error_status})")
+            return iter([result.content])
 
-        ---
-
-        [基础指令]（不带额外参数）
-        MOCK:FAIL    - 触发 llmexcept（模拟 LLM 不确定/拒绝）
-        MOCK:TRUE    - 返回 "1"（bool 真）
-        MOCK:FALSE   - 返回 "0"（bool 假）
-        MOCK:REPAIR  - 首次返回模糊值触发重试，重试后返回 "1"（默认 truthy 值）
-
-        [二级类型指令]（指令关键字必须大写）
-        MOCK:INT:<value>          - 返回整数，如 MOCK:INT:42
-        MOCK:STR:<value>          - 返回字符串，如 MOCK:STR:"hello"
-        MOCK:FLOAT:<value>        - 返回浮点数，如 MOCK:FLOAT:3.14
-        MOCK:BOOL:TRUE/FALSE      - 返回布尔值，如 MOCK:BOOL:TRUE
-        MOCK:LIST:<json>          - 返回列表，如 MOCK:LIST:[1,2,3]
-        MOCK:DICT:<json>          - 返回字典，如 MOCK:DICT:{"key":"value"}
-        MOCK:SEQ:[v1,v2,...] key  - 按序返回值；成员必须全大写；FAIL/TRUE/FALSE 为哨兵
-
-        [扩展 REPAIR 指令]
-        MOCK:REPAIR:<FALLBACK_DIRECTIVE>
-                    - 首次返回模糊值；重试后按 FALLBACK_DIRECTIVE 执行（可使用任意二级指令）
-                    - 例：MOCK:REPAIR:STR:repaired → 修复后返回字符串 "repaired"
-                    - 例：MOCK:REPAIR:INT:42       → 修复后返回整数 42
-                    - 例：MOCK:REPAIR:BOOL:TRUE    → 修复后返回 bool true
-
-        """
-        if not user_prompt.startswith("MOCK:"):
-            # Validation: warn if a MOCK directive appears somewhere in the prompt but is not
-            # the sole content.  LLM function mock testing requires the __user__ block to
-            # contain ONLY a single MOCK directive line — mixing MOCK with other text is not
-            # supported and the directive will be silently ignored.
-            if "MOCK:" in user_prompt:
-                import warnings
-                # stacklevel=4: __call__ → run_string → engine → user code; keeps the
-                # warning pointing at the user's LLM function definition rather than
-                # this internal helper.
-                warnings.warn(
-                    "A MOCK: directive was found in the LLM prompt but is not at the start. "
-                    "LLM function MOCK must be the sole content of the __user__ block "
-                    "(a single 'MOCK:<directive>' line with no other text). "
-                    "The directive will be ignored and a generic mock response will be used instead.",
-                    UserWarning,
-                    stacklevel=4,
+        # 真实模式：选客户端
+        if target_model:
+            if target_model not in self._model_registry:
+                raise RuntimeError(
+                    f"未注册的命名模型 '{target_model}'。"
+                    f"请先使用 ai.register_model(\"{target_model}\", url, key, model) 注册。"
                 )
-            if scene in ("branch", "loop"):
-                return "1"
-            return f"[MOCK] {user_prompt}"
+            named_config = self._model_registry[target_model]
+            active_client = self._get_named_client(target_model)
+            active_model = named_config["model"]
+        else:
+            if not self._config["key"] or not self._config["url"] or not self._config["model"]:
+                raise RuntimeError("LLM 运行配置缺失")
+            if not self._client or self._client == MOCK_CLIENT_SENTINEL:
+                self._init_client()
+            active_client = self._client
+            active_model = self._config["model"]
 
-        content_after_mock = user_prompt[5:].strip()
-        # 如果 user_prompt 是多行模板的一部分，MOCK 指令通常在第一行；
-        # 只取第一行内容进行解析，避免后续内容干扰。
-        first_line_after_mock = content_after_mock.split("\n", 1)[0].strip()
+        user_content = self._build_user_content(user_prompt, user_prompt_text)
+
+        def _gen():
+            try:
+                stream_resp = active_client.chat.completions.create(
+                    model=active_model,
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    stream=True,
+                    max_tokens=4096,
+                )
+                for chunk in stream_resp:
+                    if not chunk or not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta
+                    piece = getattr(delta, "content", None)
+                    if piece:
+                        yield piece
+            except _PROVIDER_ERRORS as e:
+                raise RuntimeError(f"LLM 流式调用失败: {str(e)}")
+
+        return _gen()
+
+    @staticmethod
+    def _flatten_content_parts(parts: "List") -> str:
+        """将多模态 content parts 列表展平为纯文本表示。
         
-        # 1. 处理二级类型指令 (MOCK:INT:xxx, MOCK:STR:xxx, etc.)
-        if ':' in first_line_after_mock:
-            type_parts = first_line_after_mock.split(':', 2)
-            if len(type_parts) >= 2:
-                mock_type = type_parts[0]
-                mock_value = type_parts[1] if len(type_parts) == 2 else ':'.join(type_parts[1:])
-                
-                if mock_type == "INT":
-                    # Strip any trailing key/label (first word only is the value)
-                    int_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return str(int(int_val))
-                elif mock_type == "STR":
-                    # Strip surrounding matched quotes (added by behavior-expression parser),
-                    # then strip any trailing key/label (text after the first whitespace).
-                    if len(mock_value) >= 2 and (
-                        (mock_value[0] == '"' and '"' in mock_value[1:]) or
-                        (mock_value[0] == "'" and "'" in mock_value[1:])
-                    ):
-                        q = mock_value[0]
-                        close = mock_value.index(q, 1)
-                        return mock_value[1:close]
-                    # Unquoted: value is everything up to the first whitespace
-                    str_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return str_val
-                elif mock_type == "FLOAT":
-                    # Strip any trailing key/label
-                    float_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return str(float(float_val))
-                elif mock_type == "BOOL":
-                    # Strip any trailing key/label; comparison remains uppercase-only
-                    bool_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return "1" if bool_val == "TRUE" else "0"
-                elif mock_type == "LIST":
-                    # Value must start with '['; strip trailing key after the closing ']'
-                    if mock_value.startswith('['):
-                        close = mock_value.find(']')
-                        if close != -1:
-                            return mock_value[:close + 1]
-                    return f"[{mock_value.split()[0] if mock_value.split() else mock_value}]"
-                elif mock_type == "DICT":
-                    # Value must start with '{'; strip trailing key after the closing '}'
-                    if mock_value.startswith('{'):
-                        close = mock_value.find('}')
-                        if close != -1:
-                            return mock_value[:close + 1]
-                    return "{" + (mock_value.split()[0] if mock_value.split() else mock_value) + "}"
-                elif mock_type == "REPAIR":
-                    # Extended MOCK:REPAIR syntax with a fallback directive.
-                    # Format: MOCK:REPAIR:<FALLBACK_MOCK_DIRECTIVE>
-                    # e.g.  MOCK:REPAIR:STR:hello   → first call uncertain, repaired as "hello"
-                    #       MOCK:REPAIR:INT:42       → repaired as integer 42
-                    #       MOCK:REPAIR:BOOL:TRUE    → repaired as bool true
-                    # The legacy bare form "MOCK:REPAIR" (no colon-directive) is handled in
-                    # section 2 below for backward compatibility.
-                    repair_fallback = mock_value  # e.g. "STR:hello" or "BOOL:TRUE"
-                    retry_key = f"_repair_ext_{repair_fallback}"
-                    if retry_key not in self._mock_retry_counts:
-                        self._mock_retry_counts[retry_key] = 0
-                    if self._mock_retry_counts[retry_key] == 0:
-                        self._mock_retry_counts[retry_key] = 1
-                        return "__MOCK_REPAIR__"
-                    else:
-                        self._mock_retry_counts[retry_key] = 0
-                        if repair_fallback:
-                            # Recursively process the fallback as a standard mock directive
-                            return self._handle_mock_response(f"MOCK:{repair_fallback}", scene)
-                        return "1"  # no fallback → default truthy value
-                elif mock_type == "SEQ":
-                    # MOCK:SEQ:[v1,v2,...] optional_key
-                    # Returns values in sequence per call, keyed by 'key'.
-                    # Special sentinel values: FAIL → ambiguous (triggers llmexcept),
-                    # TRUE → "1", FALSE → "0". Repeats last value when exhausted.
-                    # NOTE: bracket format [v1,v2,...] is REQUIRED; bare comma-separated
-                    # values are rejected to avoid ambiguous key/value boundary detection.
-                    mv = mock_value.strip()
-                    if mv.startswith('[') and ']' in mv:
-                        bracket_end = mv.index(']')
-                        seq_values_str = mv[1:bracket_end]
-                        remainder = mv[bracket_end + 1:].strip()
-                        seq_key = remainder if remainder else ""
-                    else:
-                        import warnings
-                        warnings.warn(
-                            "MOCK:SEQ requires bracket format: MOCK:SEQ:[v1,v2,...] optional_key. "
-                            "Bare comma-separated values are no longer supported and will be ignored. "
-                            f"Got: MOCK:SEQ:{mv!r}",
-                            UserWarning,
-                            stacklevel=2,
-                        )
-                        return ""
-                    values = [v.strip() for v in seq_values_str.split(',') if v.strip()]
-                    counter_key = f"_seq_{seq_key}"
-                    idx = self._mock_seq_counters.get(counter_key, 0)
-                    self._mock_seq_counters[counter_key] = idx + 1
-                    val = values[idx] if idx < len(values) else (values[-1] if values else "")
-                    if val == "FAIL":
-                        return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
-                    if val == "TRUE":
-                        return "1"
-                    if val == "FALSE":
-                        return "0"
-                    return val
-
-        # 2. 处理命名指令（区分大小写，MOCK 指令必须全大写）
-        # first_line_after_mock 已在上方提取（第一行内容，去除空白）。
-        parts = first_line_after_mock.split(" ", 1)
-        mock_cmd = parts[0] if parts else ""
-        mock_content = parts[1] if len(parts) > 1 else ""
-
-        if mock_cmd == "FAIL":
-            self._mock_state[mock_content] = -1
-            return "MAYBE_YES_MAYBE_NO_this_is_ambiguous"
-
-        if mock_cmd == "TRUE":
-            self._mock_state[mock_content] = 1
-            return "1"
-
-        if mock_cmd == "FALSE":
-            self._mock_state[mock_content] = 0
-            return "0"
-
-        if mock_cmd == "REPAIR":
-            retry_key = f"_repair_{mock_content}"
-            if retry_key not in self._mock_retry_counts:
-                self._mock_retry_counts[retry_key] = 0
-
-            if self._mock_retry_counts[retry_key] == 0:
-                self._mock_retry_counts[retry_key] = 1
-                self._mock_state[mock_content] = -1
-                return "__MOCK_REPAIR__"
+        用于 MOCK 模式和需要纯文本回退的场景。
+        str 片段直接拼接，dict 片段用占位符表示。
+        """
+        text_parts = []
+        for part in parts:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict):
+                part_type = part.get("type", "unknown")
+                text_parts.append(f"[{part_type}]")
             else:
-                self._mock_retry_counts[retry_key] = 0
-                self._mock_state[mock_content] = 1
-                return "1"
+                text_parts.append(str(part))
+        return "".join(text_parts)
 
-        if scene in ("branch", "loop"):
-            return "1"
-        return f"[MOCK] {user_prompt}"
+    @staticmethod
+    def _build_user_content(user_prompt: "Union[str, List]", user_prompt_text: str) -> "Union[str, List[Dict[str, Any]]]":
+        """构建 OpenAI API messages 中的 user content 字段。
+        
+        - 纯文本路径：直接返回 user_prompt_text (str)
+        - 多模态路径：将 List[Union[str, dict]] 转换为 OpenAI multimodal content format
+          即 List[{"type": "text", "text": "..."} | {"type": "image_url", ...}]
+        """
+        if isinstance(user_prompt, str):
+            return user_prompt_text
+        
+        # 多模态路径：构建 OpenAI content blocks
+        content_blocks = []
+        for part in user_prompt:
+            if isinstance(part, str):
+                if part.strip():  # 跳过空文本块
+                    content_blocks.append({"type": "text", "text": part})
+            elif isinstance(part, dict):
+                # 已经是结构化 content block，直接传递
+                content_blocks.append(part)
+        
+        # 如果转换后为空（不应发生），回退到纯文本
+        if not content_blocks:
+            return user_prompt_text
+        
+        return content_blocks
+
+    def _handle_mock_response(self, user_prompt: str) -> str:
+        """处理 MOCK 指令（委托 :class:`MockScenarioEngine` 单点实现）。
+
+        指令语言定义见 ``ibci_modules/ibci_ai/mock_scenario.py``。
+        内联路径忽略传输层控制（``SLEEP`` 延迟），但 ``ERROR`` 指令在此
+        模拟 provider 基础设施失败（raise），使 ``_call_llm`` 的
+        ``ThrownException`` 路径不经 HTTP 即可被测试覆盖。
+        """
+        result = self._mock_engine.handle(user_prompt)
+        if result.error_status is not None:
+            raise RuntimeError(f"MOCK:ERROR injected ({result.error_status})")
+        return result.content
 
     # ------------------------------------------------------------------
     # IbStatefulPlugin 协议：断点保存/恢复
@@ -619,14 +757,12 @@ class AIPlugin(IbStatefulPlugin):
         保存内容：
         - _config：LLM 连接配置（url/key/model/timeout 等）
         - _return_type_prompts：用户自定义的返回类型提示词
-        - _retry_prompts：用户自定义的重试提示词
         注意：_client 为外部连接对象，不可序列化，恢复后由 _init_client() 重建。
         注意：全局意图由 capabilities.intent_manager 管理，不在此处保存。
         """
         return {
             "config": dict(self._config),
             "return_type_prompts": dict(self._return_type_prompts),
-            "retry_prompts": dict(self._retry_prompts),
         }
 
     def restore_plugin_state(self, state: dict) -> None:
@@ -640,11 +776,10 @@ class AIPlugin(IbStatefulPlugin):
             self._config.update(state["config"])
         if "return_type_prompts" in state:
             self._return_type_prompts.update(state["return_type_prompts"])
-        if "retry_prompts" in state:
-            self._retry_prompts.update(state["retry_prompts"])
         # 重建 LLM 客户端（连接对象无法序列化，必须在恢复后重建）
         self._client = None
         self._model_capabilities["probed"] = False
+        self._unprobed_warned = False
         if self._config.get("url") and self._config.get("key"):
             self._init_client()
 

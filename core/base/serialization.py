@@ -1,7 +1,8 @@
 from typing import Dict, Any, List, Optional, Union
-import uuid
-import hashlib
 from enum import Enum
+
+from core.base.uid import asset_uid
+
 
 class BaseFlatSerializer:
     """
@@ -13,11 +14,6 @@ class BaseFlatSerializer:
         self.external_assets: Dict[str, str] = {} # 存储外部文本资产: uid -> content
         self.type_map: Dict[int, str] = {} # 映射内存 ID 到稳定 UID
         
-    def _generate_deterministic_uid(self, prefix: str, content: str) -> str:
-        """ 生成确定性 UID，基于内容的 SHA-256 哈希"""
-        h = hashlib.sha256(content.encode('utf-8')).hexdigest()
-        return f"{prefix}_{h[:16]}"
-
     def _process_value(self, value: Any) -> Any:
         """通用的基础值处理逻辑"""
         if isinstance(value, list):
@@ -46,7 +42,7 @@ class BaseFlatSerializer:
                 return {"_type": "ext_ref", "uid": self.type_map[text_id]}
                 
             # 改为确定性哈希，确保 Prompt Cache 命中率
-            uid = self._generate_deterministic_uid("asset", text)
+            uid = asset_uid(text)
             self.type_map[text_id] = uid
             self.external_assets[uid] = text
             return {"_type": "ext_ref", "uid": uid}

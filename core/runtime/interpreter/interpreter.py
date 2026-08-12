@@ -1,16 +1,16 @@
-import os
 import re
 import json
+import traceback
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 
 # =============================================================================
-# 架构边界说明：Interpreter = 纯协调器（P7 后最终架构）
+# 架构边界说明：Interpreter = 纯协调器
 # =============================================================================
 # Interpreter 是单个 IBCI 执行会话的隔离单元。
 # 职责：接受已编译的 Artifact，在独立的运行时上下文中执行它，并返回结果。
 #
-# 最终文件结构（P2-P7 全部完成后）：
+# 最终文件结构：
 # core/runtime/
 # ├── vm/
 # │   ├── handlers.py       ← 唯一 AST → 执行映射（43+ CPS handlers）
@@ -20,10 +20,9 @@ from typing import Any, Dict, List, Optional, Callable, Union, Mapping
 # │   └── interpreter.py    ← 纯协调器（execute_module, STAGE 1-5 初始化）
 # ├── objects/
 # │   ├── kernel.py         ← IbUserFunction.call() 调用 vm.run_body()
-# │   └── builtins.py       ← IbFnCallable.call() 调用 vm.run()
+# │   └── primitives/      ← IbFnCallable.call() 调用 vm.run()
 # └── exceptions.py         ← 只剩 ThrownException + 基础架构异常
 #
-# 不存在任何向后兼容包装层或遗留 visit() 路径。
 # VMExecutor CPS 调度循环是唯一的执行入口。
 # Signal 数据对象是唯一的 IBCI 控制流载体。
 # =============================================================================
@@ -31,11 +30,12 @@ from core.kernel import ast as ast
 from core.kernel.issue import (
     InterpreterError, Severity
 )
-from core.runtime.host.isolation_policy import IsolationPolicy
 from core.base.source_atomic import Location
+from core.base.uid import intrinsic_uid
 from core.base.diagnostics.codes import (
-    RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED
+    RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED, KDIAG_RUNTIME_STAGE_SKIP
 )
+from core.runtime.observability.diagnostics import kernel_diagnostic
 from core.runtime.interfaces import (
     Interpreter as InterpreterInterface,
     RuntimeContext, LLMExecutor, InterOp, ModuleManager, ServiceContext, IssueTracker,
@@ -43,26 +43,30 @@ from core.runtime.interfaces import (
     Registry
 )
 from core.runtime.interpreter.runtime_context import RuntimeContextImpl
+from core.runtime.shared.op_constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
-from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbClassField, IbValue
-from core.runtime.bootstrap.builtin_initializer import initialize_builtin_classes
+from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbClassField, IbValue, IbLLMCallResult, IbLLMUncertain
+from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.kernel.registry import KernelRegistry
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 from core.runtime.interfaces import IStackInspector, IExecutionContext
-from core.base.diagnostics.debugger import CoreModule, DebugLevel, core_debugger
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.interpreter.intrinsics import IntrinsicManager
 from core.runtime.interpreter.ast_view import ReadOnlyNodePool
 from core.runtime.loader import ArtifactLoader
 from core.runtime.host.service import HostService
+from core.runtime.frame import (
+    set_current_frame, reset_current_frame,
+    set_current_execution_context, reset_current_execution_context,
+)
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
-from core.base.enums import RegistrationState
-from core.runtime.vm.task import UnhandledSignal
+from core.base.enums import Provenance, RegistrationState
+from core.runtime.shared.signals import UnhandledSignal
 
 
 class Interpreter:
@@ -70,6 +74,9 @@ class Interpreter:
     IBC-Inter 2.0 消息传递解释器。
     彻底转向基于 IbObject 的统一对象模型。
     """
+    # 运算符 dunder 方法集合（从 op_constants 派生，单点收敛）。
+    _OPERATOR_METHODS: Optional[set] = None
+
     def get_call_stack_depth(self) -> int:
         return self.logical_stack.depth if self.logical_stack else 0
 
@@ -83,51 +90,18 @@ class Interpreter:
         """ 获取指定对象（如 Behavior）捕获的意图栈内容。
 
         ``obj.captured_intents`` 现在协议为 ``None`` 或 ``IbIntentContext`` 实例
-        （详见 ``core.runtime.objects.builtins.IbBehavior``）。
+        （详见 ``core.runtime.objects.primitives.IbBehavior``）。
         """
         if not (isinstance(obj, IbValue) and obj.ib_class.name == "behavior"):
             return []
         ci = obj.captured_intents
         if ci is None:
             return []
-        if hasattr(ci, "get_active_intents"):
-            return [i.content if isinstance(i, IbIntent) else str(i)
-                    for i in ci.get_active_intents()]
-        # Defensive: should be unreachable per IIbBehavior contract.
-        return [str(ci)]
-
-    def sync_state(self, parent_context: RuntimeContext, policy: Dict[str, Any]):
-        """从父上下文同步/继承状态，消除 HostService 直接穿透操作"""
-        isolation_policy = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
-
-        if isolation_policy.inherit_intents:
-            self.runtime_context.intent_stack = parent_context.intent_stack
-            for intent in parent_context.get_global_intents():
-                self.runtime_context.set_global_intent(intent)
-
-        if isolation_policy.inherit_variables and isolation_policy.level == "FULL":
-            self._sync_variables_from(parent_context)
-
-        if isolation_policy.inherit_classes:
-            self._sync_classes_from(parent_context)
-
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC,
-            f"Interpreter state synced from parent context with policy: {policy}")
-
-    def _sync_variables_from(self, parent_context: RuntimeContext):
-        """从父上下文同步变量"""
-        parent_scope = parent_context.current_scope
-        current_scope = self.runtime_context.current_scope
-        for name, symbol in parent_scope._symbols.items():
-            if not name.startswith("__"):
-                current_scope.define(name, symbol.spec, is_const=symbol.is_const, force=True)
-
-    def _sync_classes_from(self, parent_context: RuntimeContext):
-        """ 从父上下文同步类定义"""
-        pass
+        return [i.content if isinstance(i, IbIntent) else str(i)
+                for i in ci.get_active_intents()]
 
 
-    # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险（见 PENDING_TASKS.md §10.3）
+    # 注意：instance_id 默认值 "main" 在多解释器场景下存在碰撞风险
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
@@ -135,7 +109,6 @@ class Interpreter:
                  max_call_stack: int = 1000,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
-                 debugger: Optional[Any] = None,
                  root_dir: str = ".",
                  strict_mode: bool = True,
                  registry: Optional[Registry] = None,
@@ -152,9 +125,9 @@ class Interpreter:
                  plugin_loader: Optional[Callable[[ServiceContext], None]] = None,
                  kernel_token: Optional[Any] = None,
                  instance_id: str = "main",
-                 orchestrator: Optional[Any] = None,
-                 entry_file: str = None,
-                 entry_dir: str = None):
+                  entry_file: str = None,
+                  entry_dir: str = None,
+                  project_root: str = None):
         
         # 0. 启动内核引导
         self._registry = registry or KernelRegistry()
@@ -180,7 +153,8 @@ class Interpreter:
             resolve_value_callback=self._resolve_value,
             strict_mode=strict_mode,
             entry_file=entry_file,
-            entry_dir=entry_dir
+            entry_dir=entry_dir,
+            project_root=project_root
         )
 
         # 注册执行上下文引用到 Registry，底层仅持有该容器
@@ -193,7 +167,7 @@ class Interpreter:
         
         # 仅在注册表未初始化时执行引导
         if not self.registry.is_initialized:
-            initialize_builtin_classes(self.registry)
+            initialize_primitive_classes(self.registry)
             
         # 加载内置函数插件 (Intrinsics)
         self.intrinsic_manager = IntrinsicManager(self.registry)
@@ -201,7 +175,6 @@ class Interpreter:
         
         self.issue_tracker = issue_tracker
         self.host_interface = host_interface or HostInterface()
-        self.debugger = debugger or core_debugger
         self.source_provider = source_provider
         self.compiler = compiler
         self.factory = factory
@@ -217,6 +190,7 @@ class Interpreter:
             # 外部注入模式
             self.service_context = service_context
             self._execution_context.module_manager = self.service_context.module_manager
+            self._execution_context.permission_manager = self.service_context.permission_manager
         else:
             # 内部组装模式：确保所有依赖在构造期闭合
             interop = interop or InterOpImpl(host_interface=self.host_interface)
@@ -231,12 +205,11 @@ class Interpreter:
             
             # 初始化 ModuleManager，注入最小依赖与回调
             module_manager = module_manager or ModuleManagerImpl(
-                interop=interop, 
+                interop=interop,
                 registry=self.registry,
                 object_factory=object_factory,
                 execute_module_callback=self.execute_module,
                 artifact=self.artifact_dict,
-                root_dir=root_dir
             )
             
             # 宿主能力由注入的 ServiceContext 提供，不再主动实例化 HostService
@@ -250,8 +223,6 @@ class Interpreter:
                 registry=self.registry,
                 host_service=None, # 将由外界注入或通过 scheduler 获取
                 source_provider=self.source_provider,
-                orchestrator=orchestrator,
-                debugger=self.debugger,
                 output_callback=output_callback,
                 input_callback=input_callback,
                 scheduler=None, # 占位，由 Engine 统一装配
@@ -259,10 +230,10 @@ class Interpreter:
                 interpreter=self # 注入解释器实例引用
             )
             self._execution_context.module_manager = self.service_context.module_manager
+            self._execution_context.permission_manager = self.service_context.permission_manager
             
             # 完成延迟水化
-            if hasattr(llm_executor, 'hydrate'):
-                llm_executor.hydrate(self.service_context)
+            llm_executor.hydrate(self.service_context)
             
         # 2.  加载内置函数 (不再穿透持有 Interpreter)
         self.intrinsic_manager.load_defaults(self._execution_context, self.service_context)
@@ -302,8 +273,11 @@ class Interpreter:
             self.registry.set_state_level(RegistrationState.STAGE_6_PRE_EVAL.value, self._kernel_token)
         else:
             # 在某些脱离 Engine 的测试环境下，如果没有令牌，系统将无法正确追踪状态流转
-            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, 
-                "Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.")
+            kernel_diagnostic(
+                code=KDIAG_RUNTIME_STAGE_SKIP,
+                detail={},
+                message="Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.",
+            )
 
         # 运行限制初始化
         self.max_instructions = max_instructions
@@ -317,7 +291,7 @@ class Interpreter:
         self.setup_context(self.runtime_context)
 
         # IntentStack 与 runtime_context 关联
-        intent_stack = self.registry.get_builtin_instance("IntentStack")
+        intent_stack = self.registry.get_intrinsic_instance("IntentStack")
         if intent_stack and hasattr(intent_stack, 'set_runtime_context'):
             intent_stack.set_runtime_context(self.runtime_context)
 
@@ -450,9 +424,9 @@ class Interpreter:
         # 仅注入非用户定义的内置类，用户类由 IbClassDef 访问时定义
         for name, ib_class in self.registry.get_all_classes().items():
             if name not in defined_names or force:
-                if not getattr(ib_class.spec, 'is_user_defined', True):
-                    # 注入时带上稳定的内置符号 UID，与编译器对齐
-                    context.define_variable(name, ib_class, is_const=True, force=force, uid=f"builtin:{name}")
+                if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
+                    # 注入时带上稳定的内核原生符号 UID，与编译器对齐
+                    context.define_variable(name, ib_class, is_const=True, force=force, uid=intrinsic_uid(name))
                     defined_names.add(name)
 
     def interpret(self, module_uid: str) -> IbObject:
@@ -461,10 +435,6 @@ class Interpreter:
 
     def run(self) -> IbObject:
         """从入口模块开始执行完整的项目"""
-        from core.runtime.frame import (
-            set_current_frame, reset_current_frame,
-            set_current_execution_context, reset_current_execution_context,
-        )
         _token = set_current_frame(self.runtime_context)
         _ec_token = set_current_execution_context(self._execution_context)
         try:
@@ -479,7 +449,6 @@ class Interpreter:
             return result if result is not None else self.registry.get_none()
         except Exception as e:
             if not isinstance(e, InterpreterError):
-                import traceback
                 traceback.print_exc()
             raise e
         finally:
@@ -492,13 +461,13 @@ class Interpreter:
         VMExecutor 在 ``execute_module()`` 与 ``IbUserFunction.call()`` 中作为
         主路径调度器使用（覆盖全部 43 种 AST 节点类型）。
 
-        C13 增强：构造完成后立即把引用写入 ``ExecutionContext.vm_executor``，
+        构造完成后立即把引用写入 ``ExecutionContext.vm_executor``，
         使 ``IbUserFunction.call()`` 等持有 ExecutionContext 的代码不再需要
         通过 ``getattr(self.context, "_interpreter", ...)._get_vm_executor()``
         三级穿透查找。
         """
         if self._vm_executor is None:
-            from core.runtime.vm.vm_executor import VMExecutor
+            from core.runtime.vm.vm_executor import VMExecutor  # 局部导入：打破 vm ↔ interpreter 循环依赖
             self._vm_executor = VMExecutor(
                 self._execution_context, interpreter=self
             )
@@ -508,11 +477,6 @@ class Interpreter:
         return self._vm_executor
 
     def execute_module(self, module_uid: str, module_name: str = "main", scope: Optional[Scope] = None) -> IbObject:
-        self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, f"Starting execution of module {module_name} ({module_uid})...")
-        from core.runtime.frame import (
-            set_current_frame, reset_current_frame,
-            set_current_execution_context, reset_current_execution_context,
-        )
         _frame_token = set_current_frame(self.runtime_context)
         _ec_token = set_current_execution_context(self._execution_context)
 
@@ -562,7 +526,6 @@ class Interpreter:
             vm = self._get_vm_executor()
             body = module_data.get("body", [])
             result = vm.run_body(body)
-            self.debugger.trace(CoreModule.INTERPRETER, DebugLevel.BASIC, "Execution complete.")
             return result
         except InterpreterError:
             raise
@@ -627,9 +590,9 @@ class Interpreter:
         saved_diag_count = len(self.issue_tracker._diagnostics)
         
         for name, ib_class in self.registry.get_all_classes().items():
-            if not getattr(ib_class.spec, 'is_user_defined', False):
+            if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                 continue
-            
+
             # 遍历所有默认字段并尝试预求值
             for field_name, val_info in ib_class.default_fields.items():
                 if not isinstance(val_info, IbClassField) or val_info.static_val is not None:
@@ -637,13 +600,12 @@ class Interpreter:
                 
                 # 通过 VMExecutor（CPS 主路径）预求值复杂表达式 (如 1+2, "hello".upper())。
                 # 关键修复：设置正确的模块上下文，确保符号查找正确。
-                # P1：使用 _get_vm_executor().run() 代替旧递归 visit()，消除一处
-                # 双轨制锚点——预求值不再经过 Expression Eval Path。
+                # 使用 _get_vm_executor().run() 预求值（CPS 主路径）。
                 self.current_module_name = val_info.module_name
                 try:
                     evaluated = self._get_vm_executor().run(val_info.val_uid)
                     val_info.static_val = evaluated
-                except Exception:
+                except Exception as e:
                     # 预评估失败是允许的，留待实例化时 (instantiate) 再次尝试
                     pass
         
@@ -661,7 +623,7 @@ class Interpreter:
             self.current_module_name = module_name
             
             ib_class = self.registry.get_class(name)
-            if not ib_class or not getattr(ib_class.spec, 'is_user_defined', False):
+            if not ib_class or getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                 continue
             
             node_data = self.get_node_data(node_uid)
@@ -678,7 +640,16 @@ class Interpreter:
                 if stmt_data["_type"] == "IbFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(stmt_data["name"], IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class))
+                    method_name = stmt_data["name"]
+                    user_func = IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class)
+                    user_func.is_generator = bool(stmt_data.get("is_generator"))
+                    ib_class.register_method(method_name, user_func)
+
+                    # 显式绑定运算符方法（统一初始化路径）
+                    # 如果方法名是运算符dunder方法（如__add__、__eq__等），
+                    # 通过公理系统显式绑定到运算符符号，确保运算符派发正确工作
+                    if self._is_operator_method(method_name):
+                        self._bind_operator_method(ib_class, method_name, user_func)
                 elif stmt_data["_type"] == "IbLLMFunctionDef":
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
@@ -710,7 +681,6 @@ class Interpreter:
                 def _make_auto_init(fnames):
                     def _auto_init(self_obj, *args):
                         if len(args) != len(fnames):
-                            from core.kernel.issue import InterpreterError
                             raise InterpreterError(
                                 f"TypeError: {self_obj.ib_class.name}() expected {len(fnames)} argument(s), but got {len(args)}"
                             )
@@ -719,13 +689,16 @@ class Interpreter:
                         return self_obj.ib_class.registry.get_none()
                     return _auto_init
 
-                from core.runtime.objects.kernel import IbNativeFunction
                 auto_init_fn = IbNativeFunction(
                     _make_auto_init(field_names),
                     unbox_args=False,
                     is_method=True,
                     name=f"{name}.__init__",
                     ib_class=ib_class,
+                    param_meta=[
+                        (fname, "POSITIONAL_OR_KEYWORD", None)
+                        for fname in field_names
+                    ],
                 )
                 ib_class.register_method('__init__', auto_init_fn)
         
@@ -741,6 +714,63 @@ class Interpreter:
             return None
         # 通过 hydrator 获取或重建描述符
         return self.type_hydrator.hydrate(type_uid)
+
+    def _is_operator_method(self, method_name: str) -> bool:
+        """检查方法名是否为运算符 dunder 方法。
+
+        运算符集合从 ``op_constants`` 单一权威源派生（R2-D3 收敛：
+        此前此处硬编码一份镜像，与 op_constants 双写真相）。
+        ``__not__`` 属 base 协议（非运算符语法绑定），排除。
+        """
+        if self._OPERATOR_METHODS is None:
+            self._OPERATOR_METHODS = set(OP_MAPPING.values()) | {
+                UNARY_OP_MAPPING[k] for k in ("-", "+", "~")
+            }
+        return method_name in self._OPERATOR_METHODS
+
+    def _bind_operator_method(self, ib_class: 'IbClass', method_name: str, user_func: Any) -> None:
+        """显式绑定用户类的运算符方法到运算符符号
+
+        **架构说明**：用户类与内置类的运算符绑定机制本质不同：
+
+        1. **内置类**（primitive_initializer.py:_auto_bind_operators）：
+           - 有 Python 实现类（如 IbInteger）
+           - 通过 getattr(py_impl_cls, magic_name) 获取 Python 方法
+           - 显式调用 _reg_native() 注册到 IbClass.methods
+
+        2. **用户类**（本方法）：
+           - 没有 Python 实现类，方法定义在 IBCI AST 中
+           - 方法已通过 register_method() 注册到 IbClass.methods
+           - 运算符派发通过 receive() 机制自动工作
+
+        **编译时保证**：
+        - SpecRegistry.resolve_op() 在编译期检查 spec.members 中的运算符方法
+        - 类型检查确保运算符方法签名正确
+
+        **运行时派发**：
+        - VM 执行二元运算时，通过 IbObject.receive(magic_name, args) 调用
+        - receive() 查找 vtable（即 IbClass.methods），找到用户定义的方法
+
+        本方法存在的意义是**架构对称性**和**显式声明**：
+        虽然当前实现中无需额外操作（方法已注册），但保留此函数确保：
+        1. 代码意图清晰：明确标记"这是运算符方法"
+        2. 未来扩展点：如需增强运算符派发逻辑，在此处统一修改
+        3. 与 primitive_initializer.py 的对称性：两处都有 "bind operator" 步骤
+
+        参数:
+            ib_class: 用户定义的类对象
+            method_name: 运算符方法名（如 '__add__'）
+            user_func: 用户定义的方法函数对象（IbUserFunction）
+        """
+        # 验证方法已正确注册（防御性检查）
+        if method_name not in ib_class.methods:
+            from core.kernel.issue import InterpreterError
+            raise InterpreterError(
+                f"Internal error: operator method {method_name} not registered for class {ib_class.name}"
+            )
+
+        # 当前架构下，用户类运算符通过 receive() 自动工作，无需额外绑定步骤
+        # 未来如需运算符特殊处理（如优化、类型转换），可在此扩展
 
     def _extract_name_id(self, node_uid: str) -> Optional[str]:
         """从表达式节点中提取变量名（处理类型标注等情况）"""
@@ -764,6 +794,37 @@ class Interpreter:
         )
 
     def is_truthy(self, value: IbObject) -> bool:
-        """UTS: 使用 to_bool 协议判断真值"""
+        """UTS: 使用 to_bool 协议判断真值。
+
+        LLM-aware: 当字符串变量在 llmexcept 保护帧内被用于布尔判定时（如 ``if str_var:``），
+        执行严格的布尔语义匹配。模糊值（如 "maybe"）返回 ``IbLLMCallResult(is_certain=False)``
+        不确定容器，由条件消费者（if/while/for）触发 llmexcept 重试。此逻辑从
+        IbString.to_bool() 迁移至此，因为 LLM 不确定性检测属于解释器层职责，
+        不应由原始包装层越层访问 runtime_context。
+        """
+        # 不确定容器直接透传（供表达式 handler 传播到语句层消费者）
+        if isinstance(value, IbLLMCallResult) and value.is_uncertain:
+            return value
+        # 先检查是否为字符串值在 llmexcept 帧内的模糊布尔判定
+        if isinstance(value, IbObject) and value.ib_class and value.ib_class.name == "str":
+            rc = self.runtime_context
+            if rc is not None and rc.get_current_llm_except_frame() is not None:
+                raw_val = value.to_native() if isinstance(value, IbObject) else str(value)
+                val = raw_val.strip().lower() if isinstance(raw_val, str) else str(raw_val).strip().lower()
+                if val in ("1", "true", "yes", "on"):
+                    return True
+                if val in ("0", "false", "no", "off", "null", "none", ""):
+                    return False
+                # 模糊回复触发不确定性标志：返回不确定容器而非 False
+                ib_cls = self._registry.get_class("llm_call_result")
+                if ib_cls is None:
+                    raise RuntimeError("Registry missing 'llm_call_result' class")
+                return IbLLMCallResult(
+                    ib_class=ib_cls,
+                    is_certain=False,
+                    raw_response=raw_val,
+                    retry_hint=f"模糊的布尔判定结果: '{raw_val}'。期望 'true'/'false'/'yes'/'no'/'1'/'0'。",
+                )
+
         res = value.receive('to_bool', [])
         return res.to_native() != 0

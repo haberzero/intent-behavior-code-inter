@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibci-inter"
+version = "0.2.0"
+description = "IBC-Inter (Intent Behavior Code - Interactive): an experimental intent-driven hybrid programming language"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Nan Shi" }]
+keywords = ["language", "llm", "intent", "interpreter", "hybrid"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Interpreters",
+]
+dependencies = [
+    "openai>=1.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "ibci_modules*", "ibci_sdk*"]

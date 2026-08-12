@@ -25,38 +25,21 @@ from ibci_sdk.gen_spec import gen_spec, gen_spec_file, _py_type_to_ibci
 # ---------------------------------------------------------------------------
 
 class TestTypeMapping:
-    def test_str(self):
-        assert _py_type_to_ibci(str) == "str"
-
-    def test_int(self):
-        assert _py_type_to_ibci(int) == "int"
-
-    def test_float(self):
-        assert _py_type_to_ibci(float) == "float"
-
-    def test_bool(self):
-        assert _py_type_to_ibci(bool) == "bool"
-
-    def test_list(self):
-        assert _py_type_to_ibci(list) == "list"
-
-    def test_dict(self):
-        assert _py_type_to_ibci(dict) == "dict"
-
-    def test_none_type(self):
-        assert _py_type_to_ibci(type(None)) == "void"
-
-    def test_none_literal(self):
-        assert _py_type_to_ibci(None) == "void"
-
-    def test_typing_list(self):
-        assert _py_type_to_ibci(List[str]) == "list"
-
-    def test_typing_dict(self):
-        assert _py_type_to_ibci(Dict[str, int]) == "dict"
-
-    def test_optional_maps_to_any(self):
-        assert _py_type_to_ibci(Optional[int]) == "any"
+    @pytest.mark.parametrize("py_type,expected", [
+        pytest.param(str, "str", id="str"),
+        pytest.param(int, "int", id="int"),
+        pytest.param(float, "float", id="float"),
+        pytest.param(bool, "bool", id="bool"),
+        pytest.param(list, "list", id="list"),
+        pytest.param(dict, "dict", id="dict"),
+        pytest.param(type(None), "void", id="none_type"),
+        pytest.param(None, "void", id="none_literal"),
+        pytest.param(List[str], "list", id="typing_list"),
+        pytest.param(Dict[str, int], "dict", id="typing_dict"),
+        pytest.param(Optional[int], "any", id="optional_maps_to_any"),
+    ])
+    def test_py_type_mapping(self, py_type, expected):
+        assert _py_type_to_ibci(py_type) == expected
 
     def test_unknown_type_maps_to_any(self):
         class CustomType:
@@ -127,12 +110,12 @@ class TestGenSpec:
     def test_hello_method_in_vtable(self):
         result = gen_spec(SamplePlugin, name="sample")
         assert '"hello"' in result
-        assert "['str']" in result  # param_types
+        assert "{'name': 'name', 'type': 'str'}" in result  # params 具名描述符
 
     def test_add_method_in_vtable(self):
         result = gen_spec(SamplePlugin, name="sample")
         assert '"add"' in result
-        assert "['int', 'int']" in result
+        assert "'int'" in result and "params" in result
 
     def test_no_return_maps_to_void(self):
         result = gen_spec(SamplePlugin, name="sample")
@@ -145,21 +128,15 @@ class TestGenSpec:
         assert '"no_annotation"' in result
         assert "'any'" in result
 
-    def test_private_methods_skipped(self):
-        result = gen_spec(SamplePlugin, name="sample", skip_private=True)
-        assert "_private_method" not in result
-
-    def test_private_methods_included_when_disabled(self):
-        result = gen_spec(SamplePlugin, name="sample", skip_private=False)
-        assert "_private_method" in result
-
-    def test_setup_skipped_by_default(self):
-        result = gen_spec(SamplePlugin, name="sample", skip_setup=True)
-        assert '"setup"' not in result
-
-    def test_setup_included_when_disabled(self):
-        result = gen_spec(SamplePlugin, name="sample", skip_setup=False)
-        assert '"setup"' in result
+    @pytest.mark.parametrize("kwargs,needle,expected", [
+        pytest.param({"skip_private": True}, "_private_method", False, id="private_methods_skipped"),
+        pytest.param({"skip_private": False}, "_private_method", True, id="private_methods_included_when_disabled"),
+        pytest.param({"skip_setup": True}, '"setup"', False, id="setup_skipped_by_default"),
+        pytest.param({"skip_setup": False}, '"setup"', True, id="setup_included_when_disabled"),
+    ])
+    def test_skip_toggle_membership(self, kwargs, needle, expected):
+        result = gen_spec(SamplePlugin, name="sample", **kwargs)
+        assert (needle in result) is expected
 
     def test_class_level_annotations_as_variables(self):
         result = gen_spec(SamplePlugin, name="sample")
@@ -247,12 +224,12 @@ class TestGenSpecEdgeCases:
             def method(self, a: int, *args, **kwargs) -> str:
                 pass
         result = gen_spec(VarArgsPlugin, name="varargs")
-        # *args and **kwargs should not appear in param_types
+        # *args and **kwargs should not appear in params
         namespace = {}
         exec(result, namespace)
         vtable = namespace["__ibcext_vtable__"]()
         method_spec = vtable["functions"]["method"]
-        assert method_spec["param_types"] == ["int"]
+        assert method_spec["params"] == [{"name": "a", "type": "int"}]
 
     def test_method_docstring_as_description(self):
         class DocPlugin:

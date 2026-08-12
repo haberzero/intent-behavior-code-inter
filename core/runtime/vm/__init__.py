@@ -7,7 +7,6 @@ IBCI AST 求值的主执行引擎，基于 Python 生成器实现的 trampoline 
 核心组成
 --------
 * :class:`VMTask`           —— 单个调度单元（包装一个生成器协程）
-* :class:`VMTaskResult`     —— 调度结果数据对象（DONE/SUSPEND/SIGNAL）
 * :class:`ControlSignal`    —— 控制流信号枚举（return/break/continue/throw）
 * :class:`VMExecutor`       —— 调度循环主类，维护显式 ``frame_stack``
 
@@ -26,7 +25,6 @@ CPS dispatch table 覆盖全部 43 种 AST 节点类型，
 """
 from core.runtime.vm.task import (
     VMTask,
-    VMTaskResult,
     ControlSignal,
     UnhandledSignal,
     Signal,
@@ -35,7 +33,6 @@ from core.runtime.vm.vm_executor import VMExecutor
 
 __all__ = [
     "VMTask",
-    "VMTaskResult",
     "ControlSignal",
     "UnhandledSignal",
     "Signal",

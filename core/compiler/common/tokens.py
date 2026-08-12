@@ -28,6 +28,7 @@ class TokenType(Enum):
     AUTO = auto()
     FN = auto()          # fn keyword: callable type inference (like auto but for callables)
     GLOBAL = auto()
+    NONLOCAL = auto()
     PASS = auto()
     BREAK = auto()
     CONTINUE = auto()
@@ -52,6 +53,14 @@ class TokenType(Enum):
     LLM_EXCEPT = auto()
     RETRY = auto()
     LLM_RETRY = auto()
+
+    # 异步关键字
+    AWAIT = auto()
+    YIELD = auto()
+
+    # 并发/通信关键字
+    CHAN = auto()
+    SLOT = auto()
 
     # 标识符与字面量
     IDENTIFIER = auto()

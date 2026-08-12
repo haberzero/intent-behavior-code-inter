@@ -7,10 +7,10 @@ from core.kernel.spec import (
 from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
-from core.base.enums import RegistrationState
+from core.base.enums import RegistrationState, Provenance, StorageModel, Visibility
 
-# 统一内置原始类型列表，确保水化阶段一致性
-BUILTIN_TYPES = [
+# 统一原语类型列表，确保水化阶段一致性
+PRIMITIVE_TYPES = [
     "int", "str", "float", "bool", "void", "any", "auto", "fn", "callable",
     "list", "dict", "behavior", "Optional", "None", "llm_uncertain"
 ]
@@ -26,12 +26,12 @@ class ArtifactRehydrator:
         self.registry = registry
         self.memo: Dict[str, IbSpec] = {}
         
-        # 预注册内置基础描述符，防止重复创建
-        self._init_builtins()
+        # 预注册原语基础描述符，防止重复创建
+        self._init_primitives()
 
-    def _init_builtins(self):
-        """同步注册表中的内置描述符到 memo"""
-        for name in BUILTIN_TYPES:
+    def _init_primitives(self):
+        """同步注册表中的原语描述符到 memo"""
+        for name in PRIMITIVE_TYPES:
             desc = self.registry.resolve(name)
             if desc:
                 # 寻找池中对应的内置类型（如果存在）并关联
@@ -82,24 +82,69 @@ class ArtifactRehydrator:
         data = self.type_pool[uid]
         kind = self._resolve_kind(data, uid)
         name = data.get("name", "")
-        is_user_defined = data.get("is_user_defined", False)
-        
+        provenance = Provenance[data.get("provenance", Provenance.KERNEL_NATIVE.name)]
+        visibility = Visibility[data.get("visibility", Visibility.PRELUDE_VISIBLE.name)]
+        storage_model = StorageModel[data.get("storage_model", StorageModel.MEMORY_BACKED.name)]
+
         factory = self.registry.factory
-        
+
         # 映射驱动的 Shell 创建
         shell_creators = {
-            TypeKind.LIST.value: lambda: TypeDef(name="list", is_user_defined=False),
-            TypeKind.DICT.value: lambda: TypeDef(name="dict", is_user_defined=False),
-            TypeKind.FUNCTION.value: lambda: TypeDef(name=name or "callable", is_user_defined=False),
+            # list[T] / dict[K,V] / tuple[T]：经 factory 重建特化 spec——
+            # 特化工厂按泛型实参重建 spec（硬编码基础 TypeDef 会丢失实参）。
+            TypeKind.LIST.value: lambda: (
+                factory.create_list(
+                    allowed_element_type_names=data.get("allowed_element_type_names"),
+                    allowed_element_type_modules=data.get("allowed_element_type_modules"),
+                )
+                if data.get("allowed_element_type_names")
+                else factory.create_list(
+                    element_type_name=data.get("element_type_name", "any"),
+                    element_type_module=data.get("element_type_module"),
+                )
+            ),
+            TypeKind.DICT.value: lambda: factory.create_dict(
+                key_type_name=data.get("key_type_name", "any"),
+                key_type_module=data.get("key_type_module"),
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
+            TypeKind.TUPLE.value: lambda: (
+                factory.create_tuple(
+                    positional_element_type_names=data.get("positional_type_names"),
+                    positional_element_type_modules=data.get("positional_type_modules"),
+                )
+                if data.get("positional_type_names")
+                else factory.create_tuple(
+                    element_type_name=data.get("element_type_name", "any"),
+                    element_type_module=data.get("element_type_module"),
+                )
+            ),
+            TypeKind.FUNCTION.value: lambda: TypeDef(
+                name=name or "callable",
+                provenance=Provenance.KERNEL_NATIVE,
+                visibility=Visibility.PRELUDE_VISIBLE,
+            ),
             TypeKind.CALLABLE_SIG.value: lambda: TypeDef(
                 name="fn",
-                is_user_defined=False,
+                provenance=Provenance.KERNEL_NATIVE,
+                visibility=Visibility.PRELUDE_VISIBLE,
                 return_type=TypeRef.of(data.get("return_type_name", "auto")),
                 param_types=[TypeRef.of(p) for p in data.get("param_type_names", [])],
             ),
-            TypeKind.CLASS.value: lambda: factory.create_class(name, parent_name=data.get("parent_name"), is_user_defined=is_user_defined),
-            TypeKind.BOUND_METHOD.value: lambda: TypeDef(name="bound_method", is_user_defined=False),
-            TypeKind.MODULE.value: lambda: TypeDef(name=name, is_user_defined=False),
+            TypeKind.CLASS.value: lambda: factory.create_class(
+                name, parent_name=data.get("parent_name")
+            ),
+            TypeKind.BOUND_METHOD.value: lambda: TypeDef(
+                name="bound_method",
+                provenance=Provenance.KERNEL_NATIVE,
+                visibility=Visibility.PRELUDE_VISIBLE,
+            ),
+            TypeKind.MODULE.value: lambda: TypeDef(
+                name=name,
+                provenance=Provenance.KERNEL_NATIVE,
+                visibility=Visibility.PRELUDE_VISIBLE,
+            ),
             # Callable-instance specs ("fn_callable[T]" / "behavior[T]") — reconstruct
             # the proper variant so that get_base_name() routes to the matching
             # axiom ("fn_callable" / "behavior").  The axiom selection key is the
@@ -114,9 +159,29 @@ class ArtifactRehydrator:
                 wrapped_type_name=data.get("wrapped_type_name", "any"),
                 wrapped_type_module=data.get("wrapped_type_module"),
             ),
+            TypeKind.THREAD.value: lambda: factory.create_thread(
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
+            TypeKind.THREAD_RESULT.value: lambda: factory.create_thread_result(
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
+            TypeKind.CHANNEL.value: lambda: factory.create_chan(
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
+            TypeKind.SLOT.value: lambda: factory.create_slot(
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
+            TypeKind.GENERATOR.value: lambda: factory.create_generator(
+                value_type_name=data.get("value_type_name", "any"),
+                value_type_module=data.get("value_type_module"),
+            ),
         }
 
-        if name in BUILTIN_TYPES and kind == TypeKind.PRIMITIVE.value:
+        if name in PRIMITIVE_TYPES and kind == TypeKind.PRIMITIVE.value:
             spec = self.registry.resolve(name) or factory.create_primitive(name)
         else:
             creator = shell_creators.get(kind)
@@ -124,9 +189,11 @@ class ArtifactRehydrator:
                 spec = creator()
             else:
                 spec = self.registry.resolve(name) or IbSpec(name=name)
-            
+
         if spec:
-            spec.is_user_defined = is_user_defined
+            spec.provenance = provenance
+            spec.visibility = visibility
+            spec.storage_model = storage_model
             spec = self.registry.register(spec)
             
         self.memo[uid] = spec
@@ -182,9 +249,15 @@ class ArtifactRehydrator:
             w_name = data.get("wrapped_type_name", spec.wrapped_type.head)
             w_mod = data.get("wrapped_type_module", spec.wrapped_type.module)
             spec.wrapped_type = TypeRef.of(w_name, w_mod)
+        elif spec.kind == TypeKind.THREAD.value:
+            v_name = data.get("value_type_name", spec.value_type.head if spec.value_type else "any")
+            v_mod = data.get("value_type_module", spec.value_type.module if spec.value_type else None)
+            spec.value_type = TypeRef.of(v_name, v_mod)
         elif spec.kind == TypeKind.CLASS.value:
             p_name = data.get("parent_name")
             p_mod = data.get("parent_module")
             spec.parent_type = TypeRef.of(p_name, p_mod) if p_name else None
+        elif spec.kind == TypeKind.MODULE.value:
+            spec.exported_types = list(data.get("exported_types", []))
 
         return spec

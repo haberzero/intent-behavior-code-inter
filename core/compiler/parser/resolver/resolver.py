@@ -1,11 +1,15 @@
 import os
 from typing import Optional
 
+from core.kernel.path import IbPath, PathValidator, ModuleNameSpace
+from core.base.diagnostics.codes import DEP_SECURITY_ERROR
+
 class ModuleResolveError(Exception):
-    def __init__(self, module_name: str, importer_path: Optional[str] = None, message: Optional[str] = None):
+    def __init__(self, module_name: str, importer_path: Optional[str] = None, message: Optional[str] = None, code: Optional[str] = None):
         self.module_name = module_name
         self.importer_path = importer_path
         self.message = message
+        self.code = code
         
         if message:
             msg = message
@@ -21,7 +25,9 @@ class ModuleResolver:
     Acts as the Single Source of Truth for path resolution.
     """
     def __init__(self, root_dir: str):
-        self.root_dir = os.path.realpath(root_dir)
+        # root_dir 已由 engine 规范化，消费者信任，仅 IbPath 包装。
+        self._project_root = IbPath.from_native(root_dir)
+        self.root_dir = root_dir
         # Extensions to probe, in order of preference
         self.extensions = ['.ibci', '.py', '']
         # Explicitly allowed files outside root (e.g. for run_string)
@@ -29,32 +35,28 @@ class ModuleResolver:
 
     def allow_file(self, file_path: str):
         """Explicitly allow a file outside root_dir."""
-        self.allowed_files.add(os.path.realpath(file_path))
+        self.allowed_files.add(PathValidator.canonicalize_for_security(file_path).to_native())
 
     def _check_path_security(self, path: str):
         """
         Ensure the path is within the project root directory.
         Prevents Path Traversal attacks.
         """
-        # Resolve symlinks to ensure we are checking the real location
-        abs_path = os.path.realpath(path)
-        
+        # 经 PathValidator 规范化（解符号链接）+ 沙箱判定，全仓统一。
+        abs_path_ib = PathValidator.canonicalize_for_security(path)
+        abs_path = abs_path_ib.to_native()
+
         # 1. Check if explicitly allowed
         if abs_path in self.allowed_files:
             return
-            
-        # 2. Check if within root
-        abs_root = self.root_dir # Already realpath
-        
-        # Use commonpath to correctly handle path separators and subdirectories
-        try:
-            common = os.path.commonpath([abs_root, abs_path])
-        except ValueError:
-            # Can happen on Windows if paths are on different drives
-            raise ModuleResolveError("", None, message=f"Security Error: Path '{path}' is on a different drive than root '{self.root_dir}'")
-            
-        if common != abs_root:
-            raise ModuleResolveError("", None, message=f"Security Error: Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'")
+
+        # 2. is_within 沙箱检查（跨盘由内部返回 False 覆盖）。
+        if not PathValidator.is_within(self._project_root, abs_path_ib):
+            raise ModuleResolveError(
+                "", None,
+                message=f"Path '{path}' resolves to '{abs_path}' which is outside project root '{self.root_dir}'",
+                code=DEP_SECURITY_ERROR,
+            )
 
     def _get_candidate_path(self, module_name: str, context_file: Optional[str] = None) -> str:
         """Helper to calculate candidate path without probing."""
@@ -78,25 +80,28 @@ class ModuleResolver:
             suffix = module_name[level:]
             
             # Start from the directory containing the importer file
-            current_dir = os.path.dirname(os.path.abspath(context_file))
-            
+            # 经 IbPath 规范化（替代散点 os.path.abspath/dirname）。
+            current_dir = IbPath.from_native(context_file).resolve_dot_segments().parent
+            current_dir = current_dir.to_native() if current_dir is not None else ""
+
             # Go up (level - 1) times
             base_dir = current_dir
             for _ in range(level - 1):
-                base_dir = os.path.dirname(base_dir)
+                _parent = IbPath.from_native(base_dir).parent
+                base_dir = _parent.to_native() if _parent is not None else ""
                 
             # Construct relative path
             if suffix:
-                rel_path = suffix.replace('.', os.sep)
-                candidate_path = os.path.join(base_dir, rel_path)
+                rel_path = ModuleNameSpace.module_to_relpath(suffix)
+                candidate_path = (IbPath.from_native(base_dir) / rel_path).to_native() if base_dir else rel_path
             else:
                 # Import is just '..', e.g. from .. import X -> importing form __init__ of parent
                 candidate_path = base_dir
-                
+
         else:
             # Absolute import (from root)
-            rel_path = module_name.replace('.', os.sep)
-            candidate_path = os.path.join(self.root_dir, rel_path)
+            rel_path = ModuleNameSpace.module_to_relpath(module_name)
+            candidate_path = (IbPath.from_native(self.root_dir) / rel_path).to_native()
             
         # Security Check
         self._check_path_security(candidate_path)
@@ -126,14 +131,6 @@ class ModuleResolver:
             
         raise ModuleResolveError(module_name, context_file)
 
-    def is_package_dir(self, module_name: str, context_file: Optional[str] = None) -> bool:
-        """Check if the module name resolves to an existing directory (namespace package)."""
-        try:
-            candidate_path = self._get_candidate_path(module_name, context_file)
-            return os.path.isdir(candidate_path)
-        except Exception:
-            return False
-
     def _probe_file(self, base_path: str) -> Optional[str]:
         """Check for file existence with various extensions and package inits."""
         # 1. Check direct file: path.ibci
@@ -144,7 +141,7 @@ class ModuleResolver:
                 
         # 2. Check package init: path/__init__.ibci
         for ext in self.extensions:
-            init_path = os.path.join(base_path, '__init__' + ext)
+            init_path = (IbPath.from_native(base_path) / ('__init__' + ext)).to_native()
             if os.path.isfile(init_path):
                 return init_path
                 

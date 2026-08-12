@@ -18,25 +18,81 @@ def __ibcext_vtable__() -> Dict[str, Any]:
     """
     return {
         "functions": {
-            "set_config": {"param_types": ["str", "str", "str"], "return_type": "void"},
-            "has_api_key": {"param_types": [], "return_type": "bool"},
-            "probe_model": {"param_types": [], "return_type": "str"},
-            "set_retry": {"param_types": ["int"], "return_type": "void"},
-            "set_timeout": {"param_types": ["float"], "return_type": "void"},
-            "set_general_prompt": {"param_types": ["str"], "return_type": "void"},
-            "set_branch_prompt": {"param_types": ["str"], "return_type": "void"},
-            "set_loop_prompt": {"param_types": ["str"], "return_type": "void"},
-            "set_scene_config": {"param_types": ["str", "dict"], "return_type": "void"},
-            "get_retry_prompt": {"param_types": ["str"], "return_type": "str"},
-            "set_return_type_prompt": {"param_types": ["str", "str"], "return_type": "void"},
-            "get_return_type_prompt": {"param_types": ["str"], "return_type": "str"},
-            "set_retry_hint": {"param_types": ["str"], "return_type": "void"},
-            "get_last_call_info": {"param_types": [], "return_type": "dict"},
-            "set_global_intent": {"param_types": ["str"], "return_type": "void"},
-            "clear_global_intents": {"param_types": [], "return_type": "void"},
-            "remove_global_intent": {"param_types": ["str"], "return_type": "void"},
-            "mask": {"param_types": ["str"], "return_type": "void"},
-            "get_global_intents": {"param_types": [], "return_type": "list"},
-            "get_current_intent_stack": {"param_types": [], "return_type": "list"}
+            "set_config": {
+                "params": [
+                    {"name": "url", "type": "str"},
+                    {"name": "key", "type": "str"},
+                    {"name": "model", "type": "str"},
+                ],
+                "return_type": "void",
+            },
+            "load_config": {
+                "params": [{"name": "path", "type": "str"}],
+                "return_type": "void",
+                "description": "从 api_config.json 加载配置（原生入口，替代脚本手动 file/json.parse）",
+            },
+            "apply_config": {
+                "params": [{"name": "config", "type": "dict"}],
+                "return_type": "void",
+                "description": "应用结构化配置 dict（defaults + default_model + models）",
+            },
+            "set_mock_mode": {
+                "params": [],
+                "return_type": "void",
+                "description": "显式进入 MOCK 测试模式（替代 url/key 字符串嗅探）",
+            },
+            "register_model": {
+                "params": [
+                    {"name": "name", "type": "str"},
+                    {"name": "url", "type": "str"},
+                    {"name": "key", "type": "str"},
+                    {"name": "model", "type": "str"},
+                ],
+                "return_type": "void",
+            },
+            "has_api_key": {"params": [], "return_type": "bool"},
+            "probe_model": {"params": [], "return_type": "str"},
+            "set_retry": {"params": [{"name": "count", "type": "int"}], "return_type": "void"},
+            "get_retry": {"params": [], "return_type": "int"},
+            "is_auto_intent_injection_enabled": {"params": [], "return_type": "bool"},
+            "set_timeout": {"params": [{"name": "seconds", "type": "float"}], "return_type": "void"},
+            "set_return_type_prompt": {
+                "params": [
+                    {"name": "type_name", "type": "str"},
+                    {"name": "prompt", "type": "str"},
+                ],
+                "return_type": "void",
+            },
+            "get_return_type_prompt": {"params": [{"name": "type_name", "type": "str"}], "return_type": "str"},
+            "get_current_call_info": {"params": [], "return_type": "dict"},
+            "run_batch": {
+                "params": [
+                    {"name": "behavior", "type": "behavior"},
+                    {"name": "items", "type": "list"},
+                ],
+                "return_type": "list",
+            },
+            "set_global_intent": {"params": [{"name": "intent", "type": "str"}], "return_type": "void"},
+            "clear_global_intents": {"params": [], "return_type": "void"},
+            "remove_global_intent": {"params": [{"name": "intent", "type": "str"}], "return_type": "void"},
+            "mask": {"params": [{"name": "tag_pattern", "type": "str"}], "return_type": "void"},
+            "get_global_intents": {"params": [], "return_type": "list"},
+            "get_current_intent_stack": {"params": [], "return_type": "list"},
+            "stream_call": {
+                "params": [
+                    {"name": "sys_prompt", "type": "str"},
+                    {"name": "user_prompt", "type": "str"},
+                ],
+                "return_type": "any",
+                "description": "流式 LLM 调用：后台消费增量，返回可等待句柄（Waitable）",
+            },
+            "stream_channel": {
+                "params": [
+                    {"name": "sys_prompt", "type": "str"},
+                    {"name": "user_prompt", "type": "str"},
+                ],
+                "return_type": "chan",
+                "description": "流式 LLM 调用：返回承载增量块的 stream Channel（渲染用）",
+            }
         }
     }

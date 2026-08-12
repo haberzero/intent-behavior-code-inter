@@ -22,7 +22,7 @@ MemberSpec          — base (field or alias)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .type_ref import TypeRef
 
@@ -60,8 +60,44 @@ class MethodMemberSpec(MemberSpec):
 
     The ``kind`` field defaults to ``"method"``; pass ``kind="llm_method"`` for
     LLM functions.
+
+    ``mutating`` declares that this method modifies the receiver's state.
+    Used by llmexcept body protection to block mutation of LLM-participating
+    variables. Propagates transitively: a user function calling a mutating
+    method on its parameter is inferred as mutating.
+
+    ``llmexcept_safe`` marks methods that are sanctioned for use inside
+    llmexcept handler bodies (e.g. ai.set_retry_hint, print).
     """
 
     kind: str = "method"
     param_types: List[TypeRef] = field(default_factory=list)
     return_type: TypeRef = field(default_factory=lambda: _VOID_REF)
+    mutating: bool = False
+    llmexcept_safe: bool = False
+    # 参数描述符（与 TypeDef.param_descriptors 对齐）。供方法覆写契约校验
+    # 判断"子类多出的参数是否带默认值 / 是否为 varargs"。
+    param_descriptors: List[ParamDescriptor] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ParamDescriptor:
+    """
+    Pure-data description of a single callable parameter.
+
+    Mirrors the ``IbArg`` AST node shape (name / kind / annotation /
+    default-presence) in a resolved form (``TypeRef``), so that semantic
+    argument resolution (positional → named → default fill → varargs) and
+    future vtable declarations share one structure.
+
+    ``kind`` values align with the ``ARG_*`` constants in ``core.kernel.ast``:
+    POSITIONAL_OR_KEYWORD / VAR_POSITIONAL / VAR_KEYWORD.
+    """
+
+    name: str
+    kind: str = "POSITIONAL_OR_KEYWORD"
+    type_ref: TypeRef = field(default_factory=lambda: _ANY_REF)
+    has_default: bool = False
+    # 默认值字面值（仅原生模块函数声明使用：_spec.py 中显式给出的 Python 值）。
+    # 用户级函数默认值是 AST 表达式，运行期经惰性求值，本字段保持 None。
+    default_value: Any = None

@@ -1,0 +1,18 @@
+# D1-02-001 auto 推断锁定 + 裸赋值 auto 语义
+# doc: docs/syntax/02_variables.md §2.2/§2.3
+# 期望: auto 锁定首赋值类型；裸赋值同 auto 语义；异类型重赋编译期报错
+
+auto x = 42
+auto s = "hello"
+auto nums = [1, 2]
+
+print("x=" + (str)x)
+print("s=" + s)
+print("nums_len=" + (str)nums.len())
+
+y = 42
+print("y=" + (str)y)
+
+# 异类型重赋应编译报错（SEM_TYPE_MISMATCH）——下述被注释，避免阻塞本用例
+# y = "s"
+print("DONE")

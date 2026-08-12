@@ -18,9 +18,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
+from core.kernel.intent_resolver import IntentResolver
+from core.runtime.objects.intent_node import IntentNode
+
 if TYPE_CHECKING:
     from core.runtime.objects.kernel import IbObject, IbClass
-    from core.runtime.interpreter.runtime_context import IntentNode
     from core.runtime.objects.intent import IbIntent, IntentMode
 
 
@@ -45,11 +47,17 @@ class IbIntentContext:
         smear_queue: Optional[List[Any]] = None,
         override: Optional[Any] = None,
         global_intents: Optional[List[Any]] = None,
+        *,
+        inherited_smear: Optional[List[Any]] = None,
+        inherited_override: Optional[Any] = None,
     ) -> None:
         self._intent_top = intent_top
         self._smear_queue: List[Any] = smear_queue if smear_queue is not None else []
         self._override: Optional[Any] = override
         self._global_intents: List[Any] = global_intents if global_intents is not None else []
+        # 从父帧 fork 继承的 smear/override — 参与 resolve 但不被消费
+        self._inherited_smear: List[Any] = inherited_smear if inherited_smear is not None else []
+        self._inherited_override: Optional[Any] = inherited_override
 
     # ------------------------------------------------------------------ #
     # Core capability: fork() — value snapshot                            #
@@ -57,20 +65,32 @@ class IbIntentContext:
 
     def fork(self) -> "IbIntentContext":
         """
-        返回当前意图上下文的值快照（不可变副本）。
+        返回当前意图上下文的值快照（子帧副本）。
 
         用途：
         1. LLM 流水线 dispatch 时刻：为 Future 绑定此刻的意图快照
         2. LLMExceptFrame.save_context()：安全地保存意图状态（不是裸引用）
+        3. 函数调用进入子帧：fork-on-call 语义
 
-        设计：_intent_top 是不可变链表（IntentNode），结构共享是安全的。
-        _smear_queue 和 _override 需要浅拷贝（它们在消费后清除，不会被修改）。
+        设计（方案 B）：
+        - 父帧的 _smear_queue + _inherited_smear 合并后复制到子帧的 _inherited_smear
+        - 子帧的 _smear_queue 初始化为空（子帧自身的一次性 smear）
+        - 同理 override：父帧的有效 override 复制到子帧 _inherited_override，
+          子帧 _override 初始化为 None
+        - _inherited_smear / _inherited_override 参与 resolve 但不被 consume 消费
+        - 父帧的 cleanup_statement_one_shot_intent 仍在父帧的 _smear_queue 上操作
         """
+        # 合并父帧自身的 inherited + 当前 smear 作为子帧的 inherited
+        child_inherited_smear = list(self._inherited_smear) + list(self._smear_queue)
+        # 有效 override = 子帧自身 override 优先，否则继承父帧的
+        effective_override = self._override if self._override is not None else self._inherited_override
         return IbIntentContext(
             intent_top=self._intent_top,          # 不可变链表，结构共享安全
-            smear_queue=list(self._smear_queue),  # 浅拷贝，避免消费影响快照
-            override=self._override,              # Optional 标量，安全
+            smear_queue=[],                       # 子帧自身的 smear 从空开始
+            override=None,                        # 子帧自身的 override 从空开始
             global_intents=list(self._global_intents),  # 浅拷贝
+            inherited_smear=child_inherited_smear,
+            inherited_override=effective_override,
         )
 
     # ------------------------------------------------------------------ #
@@ -82,7 +102,6 @@ class IbIntentContext:
         压入持久意图（@+ 语义）。
         仅修改当前 IbIntentContext 实例，不影响父上下文。
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         self._intent_top = IntentNode(intent, self._intent_top)
 
     def pop(self) -> Optional[Any]:
@@ -106,8 +125,11 @@ class IbIntentContext:
         return False
 
     def consume_smear(self) -> List[Any]:
-        """消费并清除所有涂抹意图。"""
-        result = list(self._smear_queue)
+        """消费并清除子帧自身的涂抹意图，返回 inherited + own 合并列表。
+
+        inherited_smear 参与结果但不被消费（它们是从父帧继承的持久上下文）。
+        """
+        result = list(self._inherited_smear) + list(self._smear_queue)
         self._smear_queue.clear()
         return result
 
@@ -123,13 +145,16 @@ class IbIntentContext:
         return False
 
     def consume_override(self) -> Optional[Any]:
-        """消费并清除排他意图。"""
-        intent = self._override
-        self._override = None
-        return intent
+        """消费并清除排他意图。优先消费子帧自身的 override，否则返回 inherited（不消费）。"""
+        if self._override is not None:
+            intent = self._override
+            self._override = None
+            return intent
+        # inherited override 参与 resolve 但不被消费
+        return self._inherited_override
 
     def has_override(self) -> bool:
-        return self._override is not None
+        return self._override is not None or self._inherited_override is not None
 
     def get_active_intents(self) -> List[Any]:
         """获取持久意图栈的内容（展平为列表）。"""
@@ -137,14 +162,62 @@ class IbIntentContext:
             return []
         return self._intent_top.to_list()
 
+    def resolve_to_prompts(self, context: Any, execution_context: Any = None) -> List[str]:
+        """把本意图上下文消解为 Prompt 字符串列表（override > smear+active > global）。
+
+        与 ``RuntimeContextImpl.get_resolved_prompt_intents`` 同语义，但直接操作
+        本（快照）上下文——dispatch-before-use 路径（``_prepare_behavior_call``
+        的 ``captured_intents`` 分支）必须经本方法解析：``fork()`` 把父帧的
+        一次性意图移入本快照的 ``_inherited_smear``/``_inherited_override``，
+        而仅取 ``get_active_intents``/``get_global_intents`` 会丢弃它们，导致
+        ``@`` 一次性意图 / ``@!`` 排他意图在并行预调度赋值场景下从未进入 prompt。
+
+        消费操作（``consume_override``/``consume_smear``）在值快照上安全：
+        dispatch 每次 fork 新快照（调用方私有）；``_inherited_*`` 槽位本就
+        参与解析但不被消费（跨调用语义与持久意图一致）。
+        """
+        if self.has_override():
+            pending_override = self.consume_override()
+            self.consume_smear()  # override 激活时丢弃 smear（与 resolve 同步语义一致）
+            content = pending_override.resolve_content(context, execution_context)
+            return [content] if content else []
+        smear_intents = self.consume_smear()
+        active_intents = self.get_active_intents()
+        global_intents = self.get_global_intents()
+        return IntentResolver.resolve(
+            active_intents=active_intents + smear_intents,
+            global_intents=global_intents,
+            context=context,
+            execution_context=execution_context,
+        )
+
+    def resolve_to_prompts_cps(self, context: Any, execution_context: Any = None):
+        """CPS 版 :meth:`resolve_to_prompts`；意图段求值经 ``yield from`` 嵌入外层 VM 帧栈。
+
+        与同步版同语义（override > smear+active > global）。调用方须 ``yield from``。
+        """
+        if self.has_override():
+            pending_override = self.consume_override()
+            self.consume_smear()
+            content = yield from pending_override.resolve_content_cps(context, execution_context)
+            return [content] if content else []
+        smear_intents = self.consume_smear()
+        active_intents = self.get_active_intents()
+        global_intents = self.get_global_intents()
+        return (yield from IntentResolver.resolve_cps(
+            active_intents=active_intents + smear_intents,
+            global_intents=global_intents,
+            context=context,
+            execution_context=execution_context,
+        ))
+
     def merge(self, snapshot: "IbIntentContext") -> None:
         """
         将快照的意图状态**替换**式合并回当前上下文（retry 恢复路径）。
 
         语义：**REPLACE** — 调用后 self 的 ``_intent_top`` / ``_smear_queue``
         / ``_override`` 与 ``snapshot`` 完全一致（全局意图保持不变）。
-        这是 LLMExceptFrame restore 历史路径与 ``intent_context.merge(other)``
-        OOP API 共享的实现：均为"用 other 内容覆盖 self"。
+        这是 ``intent_context.merge(other)`` 的实现：均为"用 other 内容覆盖 self"。
 
         要做加法式合并（保留 self 已有意图，再叠加 other 的意图）请使用
         :meth:`combine`。
@@ -152,6 +225,8 @@ class IbIntentContext:
         self._intent_top = snapshot._intent_top
         self._smear_queue = list(snapshot._smear_queue)
         self._override = snapshot._override
+        self._inherited_smear = list(snapshot._inherited_smear)
+        self._inherited_override = snapshot._inherited_override
 
     def combine(self, other: "IbIntentContext") -> None:
         """
@@ -162,7 +237,7 @@ class IbIntentContext:
         override 取 other 的（若 other 未设置则保留 self 原值）。全局意图
         不参与合并（属 Engine 级数据）。
 
-        典型场景（PT-2.1 多 intent_context 组合）::
+        典型场景::
 
             intent_context base = intent_context.get_current()
             intent_context extra = intent_context()
@@ -170,7 +245,6 @@ class IbIntentContext:
             base.combine(extra)           # base 同时拥有原意图与 extra 的意图
             intent_context.use(base)      # 采纳为当前帧活跃上下文
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         # 持久栈：``other.get_active_intents()`` 返回 other 栈底→栈顶；按此顺序
         # 依次压入 self 栈顶，使 other 的栈顶最终成为合并后栈的新栈顶。
         # 新 IntentNode 链没有缓存，无需手动失效。
@@ -178,9 +252,13 @@ class IbIntentContext:
             self._intent_top = IntentNode(intent, self._intent_top)
         # smear_queue：追加
         self._smear_queue.extend(other._smear_queue)
+        # inherited_smear：追加
+        self._inherited_smear.extend(other._inherited_smear)
         # override：other 的 override 覆盖 self（若有）
         if other._override is not None:
             self._override = other._override
+        if other._inherited_override is not None:
+            self._inherited_override = other._inherited_override
 
     def set_global_intents(self, intents: List[Any]) -> None:
         self._global_intents = list(intents)
@@ -189,11 +267,11 @@ class IbIntentContext:
         return list(self._global_intents)
 
     def get_intent_top(self) -> Optional[Any]:
-        """返回持久意图栈顶节点（IntentNode 链表头）。供 intent_stack property 使用。"""
+        """返回持久意图栈顶节点（IntentNode 链表头）。"""
         return self._intent_top
 
     def set_intent_top(self, node: Optional[Any]) -> None:
-        """直接设置栈顶节点（用于 intent_stack setter / restore_active_intents）。"""
+        """直接设置栈顶节点（供序列化恢复 / restore_active_intents 使用）。"""
         self._intent_top = node
 
     def remove(self, tag: Optional[str] = None, content: Optional[str] = None) -> bool:
@@ -216,10 +294,8 @@ class IbIntentContext:
     def _remove_by_tag(self, tag: str) -> bool:
         """按标签移除意图（栈顶优先）。
 
-        通过重建不含目标节点的新链表来实现移除，保证结构共享安全
-        （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
+        通过重建不含目标节点的新链表来实现移除，保证结构共享安全。
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         intents: List[Any] = []
         found = False
         current = self._intent_top
@@ -240,10 +316,8 @@ class IbIntentContext:
     def _remove_by_content(self, content: str) -> bool:
         """按内容移除意图（栈顶优先）。
 
-        通过重建不含目标节点的新链表来实现移除，保证结构共享安全
-        （旧代码通过原地修改 previous.parent 破坏共享结构的 Bug 已修复）。
+        通过重建不含目标节点的新链表来实现移除，保证结构共享安全。
         """
-        from core.runtime.interpreter.runtime_context import IntentNode
         intents: List[Any] = []
         found = False
         current = self._intent_top
@@ -267,7 +341,7 @@ class IbIntentContext:
     def to_prompt(self) -> str:
         """渲染当前意图上下文为 LLM 提示词友好的多行文本。
 
-        用于 PT-2.1：把 ``intent_context`` 实例注入到 behavior 表达式的
+        把 ``intent_context`` 实例注入到 behavior 表达式的
         ``@~ ... $ctx ... ~`` 动态变量替换路径。提示词内容形如：
 
             意图上下文：
@@ -287,11 +361,15 @@ class IbIntentContext:
             content = getattr(intent, "content", None) or str(intent)
             lines.append(content)
         # 涂抹与排他独立列出（一次性效果）
+        for intent in self._inherited_smear:
+            content = getattr(intent, "content", None) or str(intent)
+            lines.append(content)
         for intent in self._smear_queue:
             content = getattr(intent, "content", None) or str(intent)
             lines.append(content)
-        if self._override is not None:
-            content = getattr(self._override, "content", None) or str(self._override)
+        effective_override = self._override if self._override is not None else self._inherited_override
+        if effective_override is not None:
+            content = getattr(effective_override, "content", None) or str(effective_override)
             lines.append(content)
 
         if not lines:
@@ -317,5 +395,7 @@ class IbIntentContext:
             f"IbIntentContext("
             f"stack_depth={stack_depth}, "
             f"smear={len(self._smear_queue)}, "
-            f"override={'yes' if self._override else 'no'})"
+            f"inherited_smear={len(self._inherited_smear)}, "
+            f"override={'yes' if self._override else 'no'}, "
+            f"inherited_override={'yes' if self._inherited_override else 'no'})"
         )

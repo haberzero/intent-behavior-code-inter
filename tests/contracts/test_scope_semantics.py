@@ -12,7 +12,7 @@ Validates:
 """
 
 import pytest
-from tests.conftest import run_ibci, expect_runtime_error
+from tests.conftest import run_ibci, expect_runtime_error, expect_compile_error
 
 
 # ===========================================================================
@@ -24,7 +24,6 @@ class TestCellSharedReferences:
     """Validate IbCell shared reference semantics.
 
     References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §4 Scope Model
     - core/runtime/objects/cell.py
     """
 
@@ -43,7 +42,16 @@ print(get_x())
 
     def test_multiple_closures_share_cell(self):
         """INV-CELL-2: Multiple closures sharing a variable see updates."""
-        pytest.skip("PT-5.1: Multiple closures over the same outer variable do not currently share mutations across calls")
+        code = """
+int x = 10
+fn f1 = lambda -> auto: x
+fn f2 = lambda -> auto: x
+x = 42
+print((str)f1())
+print((str)f2())
+"""
+        # Both lambdas share the same Cell for 'x'; after reassignment both see 42
+        assert run_ibci(code) == ["42", "42"]
 
 
 # ===========================================================================
@@ -53,17 +61,13 @@ print(get_x())
 
 class TestLambdaCapture:
     """Validate lambda reference capture behavior.
-
-    References:
-    - docs/COMPLETED.md §NS-3 Lambda/Snapshot Semantics
-    - tests/e2e/test_e2e_higher_order.py (legacy)
     """
 
     def test_lambda_captures_by_reference(self):
         """INV-LAMBDA-1: Lambda captures variables by reference (shared Cell)."""
         code = """
 int x = 5
-fn[()->int] f = lambda: x
+fn[()->int] f = lambda -> auto: x
 x = 10
 print(f())
 """
@@ -74,7 +78,7 @@ print(f())
         code = """
 list[fn[()->int]] funcs = []
 for int i in range(3):
-    funcs.append(lambda: i)
+    funcs.append(lambda -> auto: i)
 
 # All lambdas share same 'i', which is now 2 (last value)
 print(funcs[0]())
@@ -84,10 +88,6 @@ print(funcs[2]())
         result = run_ibci(code)
         # All should print 2 (loop variable final value)
         assert result == ["2", "2", "2"]
-
-    def test_lambda_modifies_captured_variable(self):
-        """INV-LAMBDA-3: Lambda can modify captured variables."""
-        pytest.skip("PT-5.1: Walrus operator (:=) and lambda body assignments not in IBCI syntax")
 
 
 # ===========================================================================
@@ -99,8 +99,6 @@ class TestSnapshotSemantics:
     """Validate snapshot value capture and isolation.
 
     References:
-    - docs/COMPLETED.md §2026-05-11 Snapshot Semantics
-    - tests/e2e/test_e2e_snapshot_semantics.py (legacy)
     - core/runtime/objects/deep_clone.py
     """
 
@@ -108,7 +106,7 @@ class TestSnapshotSemantics:
         """INV-SNAPSHOT-1: Snapshot captures value at definition time."""
         code = """
 int x = 5
-fn[()->int] f = snapshot: x
+fn[()->int] f = snapshot -> auto: x
 x = 10
 print(f())
 """
@@ -119,7 +117,7 @@ print(f())
         """INV-SNAPSHOT-2: Snapshot deep clones mutable objects."""
         code = """
 list[int] nums = [1, 2]
-fn[()->list[int]] get = snapshot: nums
+fn[()->list[int]] get = snapshot -> auto: nums
 nums.append(3)
 print(get())
 print(nums)
@@ -132,7 +130,7 @@ print(nums)
         """INV-SNAPSHOT-3: Each snapshot call gets fresh isolated clone."""
         code = """
 list[int] base = [1]
-fn[()->list[int]] maker = snapshot: base
+fn[()->list[int]] maker = snapshot -> auto: base
 
 auto a = maker()
 a.append(2)
@@ -157,14 +155,7 @@ print(b)
 
 class TestLexicalScoping:
     """Validate lexical scoping rules.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §2.3 Scoping
     """
-
-    def test_inner_scope_shadows_outer(self):
-        """INV-SCOPE-1: Inner scope shadows outer scope variables."""
-        pytest.skip("PT-5.1: SEM_002 forbids redeclaring same-name variable in if-block (no shadowing allowed)")
 
     def test_function_creates_new_scope(self):
         """INV-SCOPE-2: Function creates independent scope."""
@@ -200,3 +191,43 @@ for int i in range(3):
 print(i)
 """
         assert run_ibci(code) == ["2"]
+
+
+class TestBuiltinShadowing:
+    """内建函数名可被用户变量声明遮蔽（intrinsic 是可遮蔽默认绑定）。"""
+
+    def test_module_level_shadow_builtin(self):
+        """int len = 5 遮蔽内建 len；后续 len 指用户变量。"""
+        code = """
+int len = 5
+print(len)
+"""
+        assert run_ibci(code) == ["5"]
+
+    def test_shadowed_builtin_is_reassignable(self):
+        code = """
+int len = 5
+len = 9
+print(len)
+"""
+        assert run_ibci(code) == ["9"]
+
+    def test_builtin_still_works_when_not_shadowed(self):
+        assert run_ibci("print(len([1, 2, 3]))\n") == ["3"]
+
+    def test_function_local_shadow(self):
+        code = """
+func f() -> int:
+    int range = 7
+    return range
+print(f())
+"""
+        assert run_ibci(code) == ["7"]
+
+    def test_type_name_not_shadowable(self):
+        """内建类型名（is_intrinsic=False）不可被变量声明遮蔽。"""
+        expect_runtime_error("int int = 5\n", "Cannot redefine constant")
+
+    def test_plain_assignment_to_builtin_rejected(self):
+        """对内建名的直接赋值（非声明）被编译期拒绝。"""
+        expect_compile_error("print = 5", "SEM_TYPE_MISMATCH")

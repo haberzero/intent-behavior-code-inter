@@ -1,5 +1,4 @@
 from typing import Dict, Any, List, Optional, Union
-import uuid
 import json
 from enum import Enum
 from core.kernel import ast as ast
@@ -9,6 +8,7 @@ from core.kernel.spec.specs import TypeDef
 from core.kernel.spec.base import TypeKind
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
+from core.base.uid import node_uid, type_uid, anon_symbol_uid
 
 class FlatSerializer(BaseFlatSerializer):
     """
@@ -71,31 +71,19 @@ class FlatSerializer(BaseFlatSerializer):
             type_uid = self._collect_type(type_obj)
             remaped_node_to_type[node_uid] = type_uid
 
-        remaped_node_is_callable_instance = {}
-        for node, val in result.node_is_callable_instance.items():
-            node_uid = self._collect_node(node)
-            remaped_node_is_callable_instance[node_uid] = val
-
         remaped_node_to_loc = {}
         for node, loc in result.node_to_loc.items():
             node_uid = self._collect_node(node)
             remaped_node_to_loc[node_uid] = loc
 
-        remaped_node_capture_mode = {}
-        for node, mode in result.node_capture_mode.items():
-            node_uid = self._collect_node(node)
-            if node_uid:
-                remaped_node_capture_mode[node_uid] = mode
-
         return {
             "root_node_uid": root_node_uid,
             "root_scope_uid": root_scope_uid,
+            "import_star_members": dict(result.import_star_members),
             "side_tables": {
                 "node_to_symbol": remaped_node_to_symbol,
                 "node_to_type": remaped_node_to_type,
-                "node_is_callable_instance": remaped_node_is_callable_instance,
-                "node_to_loc": remaped_node_to_loc,
-                "node_capture_mode": remaped_node_capture_mode
+                "node_to_loc": remaped_node_to_loc
             },
             "pools": {
                 "nodes": self.node_pool,
@@ -123,7 +111,7 @@ class FlatSerializer(BaseFlatSerializer):
 
         # 序列化为稳定 JSON 字符串并生成哈希
         content_str = json.dumps(node_data, sort_keys=True)
-        uid = self._generate_deterministic_uid("node", content_str)
+        uid = node_uid(content_str)
         
         self.type_map[node_id] = uid
         self.node_pool[uid] = node_data
@@ -138,9 +126,9 @@ class FlatSerializer(BaseFlatSerializer):
         uid = getattr(sym, 'uid', None)
         if not uid:
             if hasattr(sym, 'get_content_hash'):
-                uid = f"sym_anon_{sym.get_content_hash()}"
+                uid = anon_symbol_uid(sym.get_content_hash())
             else:
-                uid = f"sym_anon_{hash(str(sym)) & 0xFFFFFFFFFFFFFFFF:016x}"
+                uid = anon_symbol_uid(f"{hash(str(sym)) & 0xFFFFFFFFFFFFFFFF:016x}")
         
         self.type_map[sym_id] = uid
         
@@ -163,7 +151,7 @@ class FlatSerializer(BaseFlatSerializer):
             return self.type_map[t_id]
             
         # 基于类型全名生成稳定 UID
-        uid = f"type_{t.module_path or 'root'}.{t.name}"
+        uid = type_uid(t.module_path, t.name)
         self.type_map[t_id] = uid
         
         type_data = {
@@ -171,8 +159,10 @@ class FlatSerializer(BaseFlatSerializer):
             "kind": t.kind,
             "name": t.name,
             "module_path": t.module_path,
-            "is_nullable": t.is_nullable,
-            "is_user_defined": t.is_user_defined,
+            "provenance": t.provenance.name,
+            "visibility": t.visibility.name,
+            "storage_model": t.storage_model.name,
+            "exported_types": list(getattr(t, "exported_types", [])),
         }
 
         # Persist scalar fields for callable-instance specs (fn_callable[T] / behavior[T])
@@ -184,20 +174,68 @@ class FlatSerializer(BaseFlatSerializer):
         # (IbFnCallable/IbBehavior) and on the AST node, both of which round-trip
         # through their own channels.
         if t.kind == TypeKind.CALLABLE_INSTANCE.value:
-            v_ref = getattr(t, "value_type", None)
+            v_ref = t.value_type
             type_data["value_type_name"] = v_ref.head if v_ref is not None else "auto"
             type_data["axiom_name"] = t.get_base_name()
 
         # Persist TypeDef inner-type scalar fields for artifact rehydration.
         if t.kind == TypeKind.OPTIONAL.value:
-            w_ref = getattr(t, "wrapped_type", None)
+            w_ref = t.wrapped_type
             type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
             type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
+        # Persist inner-type scalars for list[T] / dict[K,V] / tuple[T]：
+        # 泛型实参持久化，运行时 rehydrator 据此重建特化 spec（否则符号
+        # declared_type 会退化为基础 list/dict[any,any]，泛型身份丢失）。
+        if t.kind == TypeKind.LIST.value:
+            if t.allowed_element_types:
+                type_data["allowed_element_type_names"] = [r.head for r in t.allowed_element_types]
+                type_data["allowed_element_type_modules"] = [r.module for r in t.allowed_element_types]
+            else:
+                e_ref = t.element_type
+                type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
+                type_data["element_type_module"] = e_ref.module if e_ref is not None else None
+
+        if t.kind == TypeKind.DICT.value:
+            k_ref = t.key_type
+            v_ref = t.value_type
+            type_data["key_type_name"] = k_ref.head if k_ref is not None else "any"
+            type_data["key_type_module"] = k_ref.module if k_ref is not None else None
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
+        if t.kind == TypeKind.TUPLE.value:
+            if t.positional_element_types:
+                type_data["positional_type_names"] = [p.head for p in t.positional_element_types]
+                type_data["positional_type_modules"] = [p.module for p in t.positional_element_types]
+            else:
+                e_ref = t.element_type
+                type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
+                type_data["element_type_module"] = e_ref.module if e_ref is not None else None
+
+        # Persist the value type for thread[T] (join 返回类型)。
+        if t.kind == TypeKind.THREAD.value:
+            v_ref = t.value_type
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
+        # Persist the value type for thread_result[T] (join 返回容器负载类型)。
+        if t.kind == TypeKind.THREAD_RESULT.value:
+            v_ref = t.value_type
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
+        # Persist the value type for chan[T] / slot[T]（纳入统一泛型模型，
+        # 注解实参经 value_type 承载持久化，rehydrator 据此重建特化 spec）。
+        if t.kind in (TypeKind.CHANNEL.value, TypeKind.SLOT.value):
+            v_ref = t.value_type
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
         # Persist TypeDef param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
-            type_data["param_type_names"] = [p.head for p in getattr(t, "param_types", [])]
-            ret_ref = getattr(t, "return_type", None)
+            type_data["param_type_names"] = [p.head for p in t.param_types]
+            ret_ref = t.return_type
             type_data["return_type_name"] = ret_ref.head if ret_ref is not None else "auto"
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
@@ -212,7 +250,7 @@ class FlatSerializer(BaseFlatSerializer):
         # 使用 is_class() 代替 isinstance 检查
         if t.kind == TypeKind.CLASS.value:
             # 父类引用：从 parent_type TypeRef 提取扁平名供反序列化使用
-            p_ref = getattr(t, "parent_type", None)
+            p_ref = t.parent_type
             type_data["parent_name"] = p_ref.head if p_ref is not None else None
             type_data["parent_module"] = p_ref.module if p_ref is not None else None
             

@@ -24,7 +24,6 @@ class TestMOCKProtocol:
     """Validate MOCK protocol for deterministic LLM testing.
 
     References:
-    - tests/e2e/test_e2e_llm_basic.py (legacy)
     - LLM testing infrastructure
     """
 
@@ -44,19 +43,19 @@ print(result)
 """
         assert run_ibci(code) == ["False"]
 
-    @pytest.mark.parametrize("mock_directive,expected_type", [
-        ("MOCK:INT:42", "int"),
-        ("MOCK:STR:hello", "str"),
-        ("MOCK:LIST:[1,2,3]", "list"),
+    @pytest.mark.parametrize("mock_directive,expected_value", [
+        ("MOCK:INT:42", "42"),
+        ("MOCK:STR:hello", "hello"),
+        ("MOCK:LIST:[1,2,3]", "[1,2,3]"),
+        ("MOCK:FLOAT:3.14", "3.14"),
     ])
-    def test_mock_typed_returns(self, mock_directive, expected_type):
-        """INV-MOCK-3: MOCK:TYPE:value returns typed value."""
+    def test_mock_typed_returns(self, mock_directive, expected_value):
+        """INV-MOCK-3: MOCK:TYPE:value returns the typed value."""
         code = AI_MOCK_PREFIX + f"""
 auto result = @~ {mock_directive} ~
 print(result)
 """
-        result = run_ibci(code)
-        assert result  # Execution succeeded
+        assert run_ibci(code) == [expected_value]
 
 
 # ===========================================================================
@@ -66,10 +65,6 @@ print(result)
 
 class TestBehaviorExpression:
     """Validate behavior expression execution.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §5.1 Behavior Expressions
-    - docs/TEST_PHILOSOPHY.md
     """
 
     def test_behavior_expression_executes(self):
@@ -90,11 +85,22 @@ print(x)
 
     def test_behavior_in_expression(self):
         """INV-BEHAVIOR-3: Behavior can be used in expressions."""
-        pytest.skip("PT-5.1: Behavior expressions inside arithmetic operations not yet supported (SEM_003)")
+        code = AI_MOCK_PREFIX + """
+int x = 5
+int y = x + @~ MOCK:INT:3 ~
+print(y)
+"""
+        assert run_ibci(code) == ["8"]
 
     def test_behavior_in_control_flow(self):
         """INV-BEHAVIOR-4: Behavior can be used in control flow."""
-        pytest.skip("PT-5.1: Behavior expressions inside if-conditions not yet supported (PAR_001)")
+        code = AI_MOCK_PREFIX + """
+if @~ MOCK:INT:1 ~:
+    print("branch_taken")
+else:
+    print("branch_skipped")
+"""
+        assert run_ibci(code) == ["branch_taken"]
 
 
 # ===========================================================================
@@ -104,9 +110,6 @@ print(x)
 
 class TestLLMFunction:
     """Validate LLM function semantics.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §5.2 LLM Functions
     """
 
     def test_llm_function_definition_and_call(self):
@@ -161,10 +164,6 @@ print(result)
 
 class TestIntentWithLLM:
     """Validate intent context in LLM calls.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §6 Intent System
-    - tests/e2e/test_e2e_intent.py (legacy)
     """
 
     def test_intent_affects_llm_call(self):
@@ -212,9 +211,6 @@ print(y)
 
 class TestLLMDispatch:
     """Validate LLM dispatch and execution ordering.
-
-    References:
-    - docs/VM_AND_INTERPRETER_DESIGN.md §5 LLM Pipeline
     """
 
     def test_sequential_llm_calls_execute_in_order(self):

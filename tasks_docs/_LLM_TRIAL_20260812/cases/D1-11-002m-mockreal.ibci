@@ -1,0 +1,9 @@
+# D1-11-002m MOCK 指令在真实 LLM 模式下（无 set_mock_mode）的行为
+# doc: docs/syntax/13_mock_testing.md §13.1（MOCK 需显式 set_mock_mode）
+# 期望: 未启用 MOCK 模式时，MOCK: 字样作为普通提示词发给真实 LLM（或按真实模型行为处理）
+
+import ai
+
+str r = @~ MOCK:STR:hello world 现在真实回复 ~
+print("r=" + r)
+print("DONE")

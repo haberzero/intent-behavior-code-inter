@@ -2,9 +2,9 @@
 tests/compliance/test_execution_isolation.py
 ============================================
 
-IBCI VM 合规测试：多 Interpreter 执行隔离（M4 / SPEC §4）。
+IBCI VM 合规测试：多 Interpreter 执行隔离。
 
-覆盖 docs/VM_SPEC.md §4 定义的以下契约：
+覆盖以下契约：
   - 子 Interpreter 拥有独立 RuntimeContext，与主 Interpreter 完全隔离
   - 子 Interpreter 的变量写入不影响主 Interpreter 的变量空间
   - 主 Interpreter 的变量写入不影响子 Interpreter 的执行
@@ -16,6 +16,7 @@ IBCI VM 合规测试：多 Interpreter 执行隔离（M4 / SPEC §4）。
 可作为未来跨宿主实现的合规验证测试集。
 """
 import os
+import time
 import tempfile
 import pytest
 
@@ -36,11 +37,11 @@ def write_child(code: str) -> str:
 
 
 # ===========================================================================
-# SPEC §4.1 — 子 Interpreter 变量不泄漏到主 Interpreter
+# 子 Interpreter 变量不泄漏到主 Interpreter
 # ===========================================================================
 
 class TestVariableIsolation:
-    """SPEC §4.1：子 Interpreter 变量写入与主 Interpreter 完全隔离。"""
+    """子 Interpreter 变量写入与主 Interpreter 完全隔离。"""
 
     def test_child_variable_not_visible_in_parent(self):
         """子 Interpreter 定义的变量不应出现在主 Interpreter 的作用域中。"""
@@ -52,21 +53,24 @@ class TestVariableIsolation:
             child_vars = eng.request_collect(handle)
             # 子环境变量可从 collect 读取
             assert child_vars.get("secret") == "child_only"
-            # 主解释器不存在该变量
-            with pytest.raises(Exception):
-                eng.interpreter.runtime_context.get_variable("secret")
+            # 主解释器从未运行（interpreter 未就绪），子变量天然不可见——
+            # 不存在可被读取的"主 secret"。
+            assert eng.interpreter is None
         finally:
             os.unlink(child_path)
 
     def test_parent_variable_not_inherited_by_child(self):
-        """子 Interpreter 不继承主 Interpreter 的变量（隔离策略）。"""
+        """子 Interpreter 不继承主 Interpreter 的变量（隔离策略）。
+
+        R2-E7：用公开 Engine API ``set_variable`` 注入主变量（激活该 API）。
+        """
         # 子脚本尝试读取一个在主环境中存在的变量（会触发 undefined variable）
         child_code = 'str result = "ok_without_parent"\n'
         child_path = write_child(child_code)
         try:
-            # 先在主环境定义一个变量
+            # 先在主环境定义一个变量（经公开 Engine API）
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
-            eng.run_string('str main_var = "main_value"\n', silent=True)
+            eng.set_variable("main_var", "main_value")
             # 子 Interpreter 正常运行，不受主环境变量影响
             handle = eng.request_spawn_isolated(child_path, {})
             result = eng.request_collect(handle)
@@ -92,11 +96,11 @@ class TestVariableIsolation:
 
 
 # ===========================================================================
-# SPEC §4.2 — collect 结果语义
+# collect 结果语义
 # ===========================================================================
 
 class TestCollectSemantics:
-    """SPEC §4.2：collect 返回值的类型和内容约束。"""
+    """collect 返回值的类型和内容约束。"""
 
     def test_collect_returns_dict(self):
         child = write_child('int x = 42\n')
@@ -138,8 +142,8 @@ class TestCollectSemantics:
         finally:
             os.unlink(child)
 
-    def test_collect_excludes_builtin_symbols(self):
-        """collect 不应返回内置函数（print/len/range 等）。"""
+    def test_collect_excludes_intrinsic_symbols(self):
+        """collect 不应返回内核原生函数（print/len/range 等）。"""
         child = write_child('int x = 1\n')
         try:
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
@@ -166,11 +170,11 @@ class TestCollectSemantics:
 
 
 # ===========================================================================
-# SPEC §4.3 — collect 幂等性保护 + 错误传播
+# collect 幂等性保护 + 错误传播
 # ===========================================================================
 
 class TestCollectConstraints:
-    """SPEC §4.3：collect 的错误语义。"""
+    """collect 的错误语义。"""
 
     def test_double_collect_raises(self):
         """对同一 handle 重复 collect 应抛出 RuntimeError（幂等性保护）。"""
@@ -185,12 +189,12 @@ class TestCollectConstraints:
             os.unlink(child)
 
     def test_child_compile_error_propagates_to_collect(self):
-        """子 Interpreter 编译失败时，collect 应传播错误（RuntimeError 或 Exception）。"""
+        """子 Interpreter 编译失败时，collect 应传播错误（RuntimeError 包装）。"""
         child = write_child('THIS IS NOT VALID IBCI @@@@\n')
         try:
             eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
             h = eng.request_spawn_isolated(child, {})
-            with pytest.raises(Exception):
+            with pytest.raises(RuntimeError, match="raised an exception"):
                 eng.request_collect(h)
         finally:
             os.unlink(child)
@@ -203,5 +207,64 @@ class TestCollectConstraints:
             h = eng.request_spawn_isolated(child, {})
             assert isinstance(h, str) and len(h) > 0
             eng.request_collect(h)  # 等待完成，避免悬挂线程
+        finally:
+            os.unlink(child)
+
+
+# ===========================================================================
+# collect 超时契约（ISO-9）
+# ===========================================================================
+
+class TestCollectTimeout:
+    """collect 的墙钟超时行为（ISO-9）。"""
+
+    def test_default_policy_is_unbounded(self):
+        """默认 policy（无 collect_timeout）保持无界等待，正常脚本可被收集。"""
+        child = write_child('str x = "ok"\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {})
+            result = eng.request_collect(h)
+            assert result.get("x") == "ok"
+        finally:
+            os.unlink(child)
+
+    def test_explicit_none_timeout_collects_normally(self):
+        """显式 collect_timeout=None 等价于无界，正常脚本可被收集。"""
+        child = write_child('int n = 7\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {"collect_timeout": None})
+            result = eng.request_collect(h)
+            assert result.get("n") == 7
+        finally:
+            os.unlink(child)
+
+    def test_generous_timeout_allows_completion(self):
+        """宽裕的超时值不应干扰正常收集。"""
+        child = write_child('str s = "done"\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {"collect_timeout": 30.0})
+            result = eng.request_collect(h)
+            assert result.get("s") == "done"
+        finally:
+            os.unlink(child)
+
+    def test_timeout_raises_when_child_exceeds_deadline(self):
+        """子执行未在 collect_timeout 内完成时，collect 应抛 RuntimeError。
+
+        采用极小超时（1ms）：子引擎启动（构造 Engine + 编译 + 运行）远超 1ms，
+        故 collect 必然超时。超时后子线程作为 daemon 孤儿继续运行；短暂等待
+        让其自行结束，避免残留线程读取已被 finally 删除的临时文件。
+        """
+        child = write_child('str x = "ok"\n')
+        try:
+            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            h = eng.request_spawn_isolated(child, {"collect_timeout": 0.001})
+            with pytest.raises(RuntimeError, match=r"(?i)timed out|timeout"):
+                eng.request_collect(h)
+            # 让未被 join 的 daemon 子线程自行结束
+            time.sleep(0.3)
         finally:
             os.unlink(child)

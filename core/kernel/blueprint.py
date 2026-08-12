@@ -16,9 +16,11 @@ class CompilationResult:
     symbol_table: SymbolTable
     node_to_symbol: Dict[ast_domain.IbASTNode, Symbol] = field(default_factory=dict) # Node object -> Symbol object
     node_to_type: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Type name
-    node_is_callable_instance: Dict[ast_domain.IbASTNode, bool] = field(default_factory=dict) # Node object -> bool
-    node_capture_mode: Dict[ast_domain.IbASTNode, str] = field(default_factory=dict) # Node object -> 'lambda'|'snapshot'
     node_to_loc: Dict[ast_domain.IbASTNode, Any] = field(default_factory=dict) # Node object -> Location info
+    # ``from <module> import *`` 实际注入的成员名（导入模块名 → 成员名列表）。
+    # 由 Scheduler 在 import-* 注入时精确记录——运行时据此枚举，替代"读整张模块
+    # 根作用域表 + dir(package) 交集"的粗糙代理（精确契约集合只在编译期存在）。
+    import_star_members: Dict[str, List[str]] = field(default_factory=dict)
     
     @property
     def has_errors(self) -> bool:

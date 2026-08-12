@@ -1,6 +1,7 @@
 from typing import Optional, Any
+import sys
 from core.runtime.objects.kernel import IbObject, IbNativeFunction
-from core.runtime.objects.builtins import IbNone
+from core.runtime.objects.primitives import IbNone
 from core.kernel.registry import KernelRegistry
 
 def register_io(manager: Any, execution_context: Any, service_context: Any):
@@ -11,16 +12,15 @@ def register_io(manager: Any, execution_context: Any, service_context: Any):
         # 核心：通过 service_context 获取输出回调，严禁直接访问 interpreter
         callback = service_context.output_callback
         
-        # 遵循 UTS: 使用 __to_prompt__ 协议
-        texts = [str(arg.receive('__to_prompt__', []).to_native()) if hasattr(arg, 'receive') else str(arg) for arg in args]
+        # 遵循 UTS: 使用 __to_prompt__ 协议（结构化 isinstance 判定，非能力探测）
+        texts = [str(arg.receive('__to_prompt__', []).to_native()) if isinstance(arg, IbObject) else str(arg) for arg in args]
         msg = " ".join(texts)
         
         if callback:
             callback(msg)
         else:
             try:
-                # [WINDOWS FIX] 尝试以 UTF-8 编码打印
-                import sys
+                # 尝试以 UTF-8 编码打印（Windows 控制台兼容）
                 if hasattr(sys.stdout, 'reconfigure'):
                     try:
                         sys.stdout.reconfigure(encoding='utf-8')

@@ -19,10 +19,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import ClassVar, Dict, List, Optional, TYPE_CHECKING
 
+from core.base.enums import Provenance, StorageModel, Visibility
+
 from .type_ref import TypeRef as _TypeRef
 
 if TYPE_CHECKING:
-    from .member import MemberSpec
+    from .member import MemberSpec, ParamDescriptor
     from .type_ref import TypeRef
 
 
@@ -55,6 +57,13 @@ class TypeKind(str, Enum):
     CALLABLE_INSTANCE = "callable_instance"
     CALLABLE_SIG = "callable_sig"
     LAZY = "lazy"
+    # 并发/通信类型（task/signal 类型已删除）
+    THREAD = "thread"       # 线程句柄（thread[T]，join 返回 thread_result）
+    CHANNEL = "channel"     # 数据流通道（元素类型泛型）
+    SLOT = "slot"           # 共享状态槽（值类型泛型）
+    SUBSCRIBER = "subscriber"  # pubsub 订阅者消费者端点
+    THREAD_RESULT = "thread_result"  # 线程结果容器（值类型泛型，thread_result[T]）
+    GENERATOR = "generator"  # 惰性生成器（含 yield 函数调用产出，元素类型泛型 generator[T]）
 
 
 @dataclass(eq=False)
@@ -83,8 +92,9 @@ class IbSpec:
     name: str = ""
     module_path: Optional[str] = None
     kind: str = TypeKind.PRIMITIVE.value
-    is_nullable: bool = True
-    is_user_defined: bool = True
+    provenance: Provenance = Provenance.USER_DEFINED
+    visibility: Visibility = Visibility.IMPORT_GATED
+    storage_model: StorageModel = StorageModel.MEMORY_BACKED
 
     # Members are MemberSpec objects (pure data, no Symbol references).
     # Populated by the compiler's collector/resolver passes and by axiom
@@ -134,6 +144,11 @@ class IbSpec:
         """Return True if spec.kind matches one of provided kinds."""
         return self.kind in kinds
 
+    @property
+    def is_disk_backed(self) -> bool:
+        """Return True if this type uses the disk-backed storage model."""
+        return self.storage_model is StorageModel.DISK_BACKED
+
     # ------------------------------------------------------------------ #
     # Cloning                                                              #
     # ------------------------------------------------------------------ #
@@ -174,14 +189,18 @@ class TypeDef(IbSpec):
     Type-reference fields are stored as :class:`TypeRef` (frozen, hashable,
     structurally recursive).  All access goes through the TypeRef API
     (``spec.return_type.head``, ``[t.head for t in spec.param_types]``, …);
-    there are no legacy flat-string accessors.
+    there are no flat-string accessors.
     """
 
     # -- Function-like signature (FUNCTION + BOUND_METHOD + CALLABLE_INSTANCE
     #    + CALLABLE_SIG kinds use these). ---------------------------------
     param_types: List["TypeRef"] = field(default_factory=list)
     return_type: "TypeRef" = field(default_factory=lambda: _ANY_REF.replace_head("void"))
-    is_llm: bool = False
+
+    # 函数参数描述符（FUNCTION kind，用户函数 / LLM 函数）。
+    # 与 ``param_types`` 并列：前者只存类型，后者携带名称/种类/默认值存在性，
+    # 供语义层实参解析（位置 → 具名 → 默认填充 → varargs）与 vtable 声明复用。
+    param_descriptors: List["ParamDescriptor"] = field(default_factory=list)
 
     # -- Class inheritance (CLASS kind) -----------------------------------
     parent_type: Optional["TypeRef"] = None
@@ -207,6 +226,11 @@ class TypeDef(IbSpec):
     # -- TypeDef fields ------------------------------------------------
     required_capabilities: List[str] = field(default_factory=list)
 
+    # -- Module-only: names of types that an `import mod` statement also
+    # brings into the importing module's scope (e.g. `import file` exposes
+    # file_handle / audio / image / video).  Empty for non-module specs.
+    exported_types: List[str] = field(default_factory=list)
+
     # -- Kind → base-name mapping (used by get_base_name) ----------------
     _KIND_BASE_NAMES: ClassVar[Dict[str, str]] = {}
 
@@ -230,4 +254,8 @@ TypeDef._KIND_BASE_NAMES = {
     # ``fn_callable[int]``) to dispatch to the correct axiom.
     TypeKind.CALLABLE_SIG.value:  "callable_sig",
     TypeKind.LAZY.value:          "module",
+    TypeKind.THREAD.value:        "thread",
+    TypeKind.CHANNEL.value:       "chan",
+    TypeKind.SLOT.value:          "slot",
+    TypeKind.SUBSCRIBER.value:    "subscriber",
 }

@@ -3,11 +3,7 @@ core/runtime/objects/deep_clone.py
 
 通用的 IbObject 深克隆辅助。
 
-历史
-----
-原实现集中在 ``LLMExceptFrame._try_deep_clone``，仅服务于 llmexcept 快照。
-随着 snapshot 语义被澄清为「定义时深克隆、调用时再克隆、全过程无状态可重入」，
-snapshot 路径也需要同样的深克隆能力。把它抽到独立模块以避免循环依赖与重复实现。
+snapshot 路径也需要同样的深克隆能力，抽到独立模块以避免循环依赖与重复实现。
 
 语义约束
 --------
@@ -21,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from core.base.enums import StorageModel
 from core.runtime.objects.kernel import IbObject as KernelIbObject
 from core.runtime.objects.kernel import IbValue, IbNone
 
@@ -40,6 +37,13 @@ def try_deep_clone(
     val_id = id(val)
     if val_id in memo:
         return memo[val_id]
+
+    # 按类型级 storage_model 分发：磁盘型对象走协议级浅拷贝，不物化字节。
+    # 只处理 IbValue 实例；类元对象（IbClass）不是克隆目标。
+    ib_class = getattr(val, "ib_class", None)
+    spec = getattr(ib_class, "spec", None)
+    if isinstance(val, IbValue) and spec is not None and getattr(spec, "storage_model", None) is StorageModel.DISK_BACKED:
+        return val.receive("__clone_ref__", [])
 
     # 不可变原语：引用复用即可
     if isinstance(val, IbNone) or (
@@ -74,8 +78,8 @@ def try_deep_clone(
         return placeholder_dict
 
     # ``IbIntentContext`` Python 值（``intent_context`` 实例的 ``_ctx`` 字段）：
-    # 调用 ``fork()`` 得到值快照。PT-2.1：使 ``intent_context`` 作为类字段
-    # 参与 llmexcept 快照/恢复时获得正确的"独立副本"语义——retry body 内对
+    # 调用 ``fork()`` 得到值快照。使 ``intent_context`` 作为类字段
+    # 参与 llmexcept 快照/恢复时获得正确的"独立副本"语义--retry body 内对
     # ctx 的修改不会污染保存的快照。
     #
     # 用鸭子类型（``hasattr(val, "fork")`` + ``hasattr(val, "get_active_intents")``）
@@ -84,6 +88,22 @@ def try_deep_clone(
         forked = val.fork()
         memo[val_id] = forked
         return forked
+
+    # 内存型 ``IbValue`` 子类（如 media / file_handle）：克隆 payload 与字段。
+    if isinstance(val, IbValue):
+        new_val = type(val).__new__(type(val))
+        new_val.ib_class = val.ib_class
+        new_val.type_ref = val.type_ref
+        new_val.meta = dict(val.meta)
+        memo[val_id] = new_val
+        new_val.fields = {}
+        cloned_payload = try_deep_clone(val.payload, memo) if val.payload is not None else None
+        new_val.payload = cloned_payload if cloned_payload is not None else val.payload
+        for fname, fval in val.fields.items():
+            cloned_fval = try_deep_clone(fval, memo)
+            if cloned_fval is not None:
+                new_val.fields[fname] = cloned_fval
+        return new_val
 
     # 用户自定义 IbObject 实例（type 严格为 KernelIbObject，不含内置子类）
     if type(val) is KernelIbObject:

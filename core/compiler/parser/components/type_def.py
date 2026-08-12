@@ -1,5 +1,7 @@
+from core.base.diagnostics.codes import PAR_EXPECTED_TOKEN
 from core.compiler.common.tokens import TokenType
 from core.compiler.parser.core.syntax import ID_AUTO
+from core.compiler.parser.core.token_stream import ParseControlFlowError
 from core.kernel import ast as ast
 from core.compiler.parser.core.component import BaseComponent
 
@@ -29,7 +31,7 @@ class TypeComponent(BaseComponent):
             base_type = self._loc(ast.IbName(id=ID_AUTO, ctx='Load'), name_token)
         elif self.stream.match(TokenType.FN):
             # Allow 'fn' as a type annotation: fn f = myFunc
-            # D3: also handle callable signature form: fn[(param_types) -> return_type]
+            # also handle callable signature form: fn[(param_types) -> return_type]
             name_token = self.stream.previous()
             base_type = self._loc(ast.IbName(id=ID_FN, ctx='Load'), name_token)
             # Peek ahead: if '[' follows, try to parse as a callable signature.
@@ -48,8 +50,16 @@ class TypeComponent(BaseComponent):
             #   None  — function explicitly returns the None value (assignable to any/Optional[T])
             name_token = self.stream.previous()
             base_type = self._loc(ast.IbName(id="None", ctx='Load'), name_token)
+        elif self.stream.match(TokenType.CHAN):
+            # 'chan' as a type annotation: chan[str] c = chan(str, "stream")
+            name_token = self.stream.previous()
+            base_type = self._loc(ast.IbName(id="chan", ctx='Load'), name_token)
+        elif self.stream.match(TokenType.SLOT):
+            # 'slot' as a type annotation: slot[int] s = slot("score", 0)
+            name_token = self.stream.previous()
+            base_type = self._loc(ast.IbName(id="slot", ctx='Load'), name_token)
         else:
-            raise self.stream.error(self.stream.peek(), "Expect type name.", code="PAR_001")
+            raise self.stream.error(self.stream.peek(), "Expect type name.", code=PAR_EXPECTED_TOKEN)
 
         # 2. Generics: list[int], dict[str, Any]
         if self.stream.match(TokenType.LBRACKET):
@@ -71,12 +81,12 @@ class TypeComponent(BaseComponent):
         return base_type
 
     # ---------------------------------------------------------------------- #
-    # D3: callable signature parsing                                          #
+    # callable signature parsing                                          #
     # ---------------------------------------------------------------------- #
 
     def _try_parse_callable_sig(self, fn_token) -> ast.IbCallableType:
         """
-        Speculatively attempt to parse a D3 callable signature of the form::
+        Speculatively attempt to parse a callable signature of the form::
 
             fn[(param_type, ...) -> return_type]
 
@@ -104,7 +114,7 @@ class TypeComponent(BaseComponent):
 
             # Parse the callable signature: (type, ...) -> return_type
             return self._parse_fn_signature(fn_token)
-        except Exception:
+        except ParseControlFlowError:
             self.stream.restore_checkpoint(saved_pos)
             return None
 

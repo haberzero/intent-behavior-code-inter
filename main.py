@@ -15,7 +15,6 @@ from core.project_detector import ProjectDetector
 from core.kernel.issue import CompilerError
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.lexer.lexer import Lexer
-from core.runtime.objects.kernel import CoreModule, DebugLevel
 
 def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
     """从本地 Python 文件动态加载插件"""
@@ -51,7 +50,6 @@ def main():
     run_parser.add_argument("--auto", action="append", help="Set variable (key=value)")
     run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
     run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
-    run_parser.add_argument("--core-debug", help="Core debugger config (JSON string or file path)", default=None)
     run_parser.add_argument('--max-inst', type=int, default=100000000, help='Max instructions (default: 100000000)')
 
     # Check command
@@ -80,10 +78,25 @@ def main():
     parse_parser.add_argument("--format", choices=["json", "pretty"], default="json", help="Output format")
 
     # Semantic command
-    semantic_parser = subparsers.add_parser("semantic", help="Semantic analysis output only")
+    semantic_parser = subparsers.add_parser("semantic", help="Semantic analysis output only (symbols + type bindings)")
     semantic_parser.add_argument("file", help="Path to the .ibci entry file")
     semantic_parser.add_argument("--root", help="Project root directory", default=None)
-    semantic_parser.add_argument("--format", choices=["json", "pretty"], default="json", help="Output format")
+    semantic_parser.add_argument("--format", choices=["json", "dot"], default="json", help="Output format")
+    semantic_parser.add_argument("--output", "-o", help="Output file (default: stdout)", default=None)
+
+    # Inspect command
+    inspect_parser = subparsers.add_parser("inspect", help="Export symbol table and type bindings (json/dot)")
+    inspect_parser.add_argument("file", help="Path to the .ibci entry file")
+    inspect_parser.add_argument("--root", help="Project root directory", default=None)
+    inspect_parser.add_argument("--format", choices=["json", "dot"], default="json", help="Output format")
+    inspect_parser.add_argument("--output", "-o", help="Output file (default: stdout)", default=None)
+
+    # Bench command
+    bench_parser = subparsers.add_parser("bench", help="Compile-time benchmark (warmup + N runs)")
+    bench_parser.add_argument("file", help="Path to the .ibci entry file")
+    bench_parser.add_argument("--root", help="Project root directory", default=None)
+    bench_parser.add_argument("--runs", type=int, default=10, help="Number of timed runs (default: 10)")
+    bench_parser.add_argument("--warmup", type=int, default=2, help="Warmup runs before timing (default: 2)")
 
     args = parser.parse_args()
 
@@ -110,23 +123,8 @@ def main():
 
     # 初始化引擎，决定是否自动嗅探
     auto_sniff = not getattr(args, 'no_sniff', False)
-    
-    # 处理内核调试配置
-    core_debug_config = None
-    if hasattr(args, 'core_debug') and args.core_debug:
-        if os.path.exists(args.core_debug):
-            try:
-                with open(args.core_debug, 'r', encoding='utf-8') as f:
-                    core_debug_config = json.load(f)
-            except Exception as e:
-                print(f"Warning: Failed to load core debug config file: {e}")
-        else:
-            try:
-                core_debug_config = json.loads(args.core_debug)
-            except Exception as e:
-                print(f"Warning: Failed to parse core debug JSON string: {e}")
 
-    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff, core_debug_config=core_debug_config)
+    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff)
 
     # 1. 加载插件
     if getattr(args, 'plugin', None):
@@ -142,8 +140,12 @@ def main():
                     cli_variables[k] = v
 
         # 运行引擎
-        success = engine.run(args.file, variables=cli_variables)
-        sys.exit(0 if success else 1)
+        try:
+            engine.run(args.file, variables=cli_variables)
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        sys.exit(0)
 
     elif args.command == "check":
         success = engine.check(args.file)
@@ -169,7 +171,7 @@ def main():
         from core.compiler.lexer.lexer import Lexer
         with open(args.file, 'r', encoding='utf-8') as f:
             content = f.read()
-        lexer = Lexer(content, engine.issue_tracker, debugger=engine.debugger)
+        lexer = Lexer(content, engine.issue_tracker)
         tokens = lexer.tokenize()
         for tok in tokens:
             print(tok)
@@ -194,27 +196,73 @@ def main():
             sys.exit(0)
         sys.exit(1)
 
-    elif args.command == "inspect":
-        artifact = engine.compile(args.file)
-        if artifact:
-            entry_module = artifact.entry_module
-            if entry_module in artifact.modules:
-                mod_result = artifact.modules[entry_module]
-                sym_table = mod_result.symbol_table
-                result = {
-                    "module": module_name,
-                    "symbols": {}
-                }
-                if sym_table:
-                    for name, sym in sym_table.symbols.items():
-                        result["symbols"][name] = {
-                            "kind": str(sym.kind),
-                            "type": str(sym.spec) if sym.spec else "None"
-                        }
-                output = json.dumps(result, indent=2, ensure_ascii=False)
-                print(output)
-            sys.exit(0)
-        sys.exit(1)
+    elif args.command in ("inspect", "semantic"):
+        # 符号表 / 类型绑定诊断导出——json / dot
+        from core.kernel.issue import CompilerError
+        from core.compiler.diagnostics.formatter import DiagnosticFormatter
+        from core.compiler.diagnostics.exporter import export_artifact
+        try:
+            artifact = engine.compile(args.file)
+        except CompilerError as e:
+            print(DiagnosticFormatter.format_all(
+                e.diagnostics, source_manager=engine.scheduler.source_manager
+            ))
+            sys.exit(1)
+        entry_module = artifact.entry_module
+        if entry_module not in artifact.modules:
+            print(f"Error: entry module '{entry_module}' not found in artifact")
+            sys.exit(1)
+        mod_result = artifact.modules[entry_module]
+        output = export_artifact(mod_result, entry_module, fmt=args.format)
+        if getattr(args, "output", None):
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(output)
+            print(f"Exported to: {args.output}")
+        else:
+            print(output)
+        sys.exit(0)
+
+    elif args.command == "bench":
+        # 编译时间基准：warmup + N 次计时，报告 min/avg/max。
+        from core.kernel.issue import CompilerError
+        from core.compiler.diagnostics.formatter import DiagnosticFormatter
+        import statistics
+        import time
+
+        def _run_once() -> float:
+            t0 = time.perf_counter()
+            engine.compile(args.file)
+            return time.perf_counter() - t0
+
+        # warmup（引擎初始化/缓存预热不计入）；编译失败即报错退出
+        for _ in range(max(0, args.warmup)):
+            try:
+                _run_once()
+            except CompilerError as e:
+                print(DiagnosticFormatter.format_all(
+                    e.diagnostics, source_manager=engine.scheduler.source_manager
+                ))
+                sys.exit(1)
+
+        samples = []
+        for _ in range(max(1, args.runs)):
+            try:
+                samples.append(_run_once())
+            except CompilerError as e:
+                print(DiagnosticFormatter.format_all(
+                    e.diagnostics, source_manager=engine.scheduler.source_manager
+                ))
+                sys.exit(1)
+
+        ms = [s * 1000 for s in samples]
+        print(f"bench: {args.file}")
+        print(f"  runs: {len(ms)} (warmup {args.warmup})")
+        print(f"  min:  {min(ms):.2f} ms")
+        print(f"  avg:  {statistics.mean(ms):.2f} ms")
+        print(f"  max:  {max(ms):.2f} ms")
+        if len(ms) > 1:
+            print(f"  stdev:{statistics.stdev(ms):.2f} ms")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

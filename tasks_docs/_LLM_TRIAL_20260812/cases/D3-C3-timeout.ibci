@@ -1,0 +1,19 @@
+# D3-C3 超时/断连边界（ai.set_timeout 短路）
+# doc: docs/syntax/11_modules.md §11.3 ai.set_timeout + _REAL_LLM_E2E_RESTART.md C3
+# 期望: 极短超时触发 LLMCallError（provider 层硬失败，跳过 llmexcept retry）；可 try/except 捕获
+
+import ai
+
+ai.set_timeout(0.01)
+ai.set_retry(1)
+
+try:
+    str r = @~ 请写一篇500字作文 ~
+    print("unexpected_success=" + r)
+except LLMCallError as e:
+    print("llm_call_error=" + e.message)
+except LLMError as e:
+    print("llm_error=" + e.message)
+except Exception as e:
+    print("gen_error=" + e.message)
+print("DONE")

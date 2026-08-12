@@ -22,17 +22,13 @@ from tests.conftest import run_ibci, expect_compile_error, expect_runtime_error
 
 class TestOptionalNullSafety:
     """Validate Optional[T] null safety guarantees.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §3.2 Optional Types
-    - docs/TEST_PHILOSOPHY.md §7.1 Optional Example
     """
 
     def test_optional_none_access_raises(self):
         """INV-OPT-1: Accessing a None Optional yields the fallback via or_else.
 
         Compile-time validates that Optional[int].or_else(int) → int is well-typed.
-        Runtime method dispatch for Optional is not yet wired (see PT-5.1).
+        Runtime method dispatch for Optional is not yet wired.
         """
         from tests.conftest import compile_ibci
         code = """
@@ -52,7 +48,7 @@ int y = x.or_else(0)
 
         Original test used the non-existent Some(...) constructor and .get(); IBCI
         wraps values implicitly and exposes .unwrap()/.or_else() (compile-time
-        contract). Runtime dispatch for these methods is pending (PT-5.1).
+        contract). Runtime dispatch for these methods is pending.
         """
         from tests.conftest import compile_ibci
         code = f"""
@@ -90,10 +86,6 @@ Optional[int] y = x
 
 class TestGenericTypeInvariants:
     """Validate generic type constraints (list[T], dict[K,V]).
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §3.3 Generic Types
-    - docs/TESTS_REORGANIZATION_TASK.md §11.2
     """
 
     @pytest.mark.parametrize("elem_type,valid_values", [
@@ -142,9 +134,6 @@ print(d)
 
 class TestTypeCastInvariants:
     """Validate type casting correctness.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §3.6 Type Casting
     """
 
     @pytest.mark.parametrize("from_val,to_type,expected", [
@@ -180,10 +169,6 @@ print(y)
 
 class TestTuplePositionalTypes:
     """Validate tuple[T1, T2, ...] positional element types.
-
-    References:
-    - NS-7 (2026-05-12)
-    - tests/compiler/test_tuple_positional_types.py (legacy)
     """
 
     def test_tuple_positional_access_type(self):
@@ -228,9 +213,6 @@ print(b)
 
 class TestTypeInferenceInvariants:
     """Validate type inference correctness.
-
-    References:
-    - IBCI_SYNTAX_REFERENCE.md §3.1 Type Annotations
     """
 
     @pytest.mark.parametrize("literal,expected_output", [

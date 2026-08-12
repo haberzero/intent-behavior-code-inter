@@ -2,9 +2,9 @@
 tests/compliance/test_concurrent_llm.py
 ========================================
 
-IBCI VM 合规测试：LLM dispatch-before-use 行为确定性（M5c / SPEC §3）。
+IBCI VM 合规测试：LLM dispatch-before-use 行为确定性。
 
-覆盖 docs/VM_SPEC.md §3 定义的以下契约：
+覆盖以下契约：
   - 数据无关的 behavior 赋值应同时 dispatch（并发 LLM 调用）
   - 有数据依赖的 behavior 赋值不得并发 dispatch（正确性保证）
   - 读取变量时 lazy resolve 不改变最终值的正确性
@@ -32,16 +32,16 @@ def _run_code(code: str):
 
 AI_SETUP = (
     'import ai\n'
-    'ai.set_config("TESTONLY", "TESTONLY", "TESTONLY")\n'
+    'ai.set_mock_mode()\n'
 )
 
 
 # ===========================================================================
-# SPEC §3.1 — 并发派发行为
+# 并发派发行为
 # ===========================================================================
 
 class TestParallelDispatch:
-    """SPEC §3.1：无数据依赖的 behavior 赋值应并发派发（dispatch_eligible=True）。"""
+    """无数据依赖的 behavior 赋值应并发派发（dispatch_eligible=True）。"""
 
     def test_two_independent_assignments_produce_correct_values(self):
         """两个独立 behavior 赋值的最终值均正确（并发不影响确定性）。"""
@@ -92,24 +92,23 @@ class TestParallelDispatch:
 
 
 # ===========================================================================
-# SPEC §3.2 — 数据依赖的串行化
+# 数据依赖的串行化
 # ===========================================================================
 
 class TestDependentBehaviorSerialized:
-    """SPEC §3.2：有数据依赖的 behavior 赋值不得并发 dispatch（结果仍应正确）。"""
+    """有数据依赖的 behavior 赋值不得并发 dispatch（结果仍应正确）。"""
 
     def test_dependent_behavior_reads_resolved_dependency(self):
         """y 依赖 x（插值 $x），x 应先 resolve，y 再使用正确的 x 值。"""
-        # x 先 resolve 为 "hello"，y 再使用 $x 插值（结果中含 "hello"）
+        # x 先 resolve 为 "hello"，y 的 prompt 插值 $x → 结果中含 "hello"。
+        # 数据依赖使 y 不可并发 dispatch（R2-23：真依赖用例，替代此前"语义独立"的误名测试）。
         code = AI_SETUP + (
             "str x = @~ MOCK:STR:hello ~\n"
-            "str y = @~ MOCK:STR:world ~\n"  # y 在语义上独立，此测试验证串行路径不报错
-            "print(x)\n"
+            "str y = @~ 把 $x 复制一遍 ~\n"
             "print(y)\n"
         )
         _, out = _run_code(code)
         assert any("hello" in line for line in out)
-        assert any("world" in line for line in out)
 
     def test_behavior_in_loop_produces_all_results(self):
         """循环内的 behavior 赋值（不可 dispatch）每次迭代仍产生正确值。"""
@@ -126,11 +125,11 @@ class TestDependentBehaviorSerialized:
 
 
 # ===========================================================================
-# SPEC §3.3 — 乱序结果确定性
+# 乱序结果确定性
 # ===========================================================================
 
 class TestOutOfOrderDeterminism:
-    """SPEC §3.3：即使 LLM 结果乱序完成，程序输出仍应确定性正确。"""
+    """即使 LLM 结果乱序完成，程序输出仍应确定性正确。"""
 
     def test_output_order_matches_program_order_not_dispatch_order(self):
         """程序输出顺序遵从程序语义（print 调用顺序），而非 dispatch 顺序。"""
@@ -166,11 +165,11 @@ class TestOutOfOrderDeterminism:
 
 
 # ===========================================================================
-# SPEC §3.4 — llmexcept 保护路径（同步路径正确性）
+# llmexcept 保护路径（同步路径正确性）
 # ===========================================================================
 
 class TestLlmExceptPathCorrectness:
-    """SPEC §3.4：llmexcept 保护的 behavior 走同步路径，结果仍正确。"""
+    """llmexcept 保护的 behavior 走同步路径，结果仍正确。"""
 
     def test_llmexcept_behavior_value_correct(self):
         """llmexcept 保护的 behavior 赋值（不可 dispatch）值正确。"""

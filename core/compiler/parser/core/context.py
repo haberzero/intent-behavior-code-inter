@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 from core.compiler.parser.core.token_stream import TokenStream
 from core.compiler.common.diagnostics import DiagnosticReporter
 from core.compiler.parser.resolver.resolver import ModuleResolver
-from core.runtime.host.host_interface import HostInterface
+from core.kernel.host_interface import HostInterface
 
 if TYPE_CHECKING:
     from core.compiler.parser.components.expression import ExpressionComponent

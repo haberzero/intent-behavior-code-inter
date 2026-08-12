@@ -1,0 +1,35 @@
+# D1-03-001 算术运算符（含地板除/浮点除/幂/位/移位）
+# doc: docs/syntax/03_operators.md §3.1
+# 期望: 各运算符按文档求值
+
+int a = 10 + 3
+int b = 7 / 2
+float c = 7.0 / 2
+int d = 7 // 2
+int e = 2 ** 3
+int f = 6 & 3
+int g = 6 | 1
+int h = 1 << 3
+int i = 8 >> 2
+int j = 6 ^ 3
+int k = ~5
+int l = 7 % 3
+
+print("a=" + (str)a)
+print("b=" + (str)b)
+print("c=" + (str)c)
+print("d=" + (str)d)
+print("e=" + (str)e)
+print("f=" + (str)f)
+print("g=" + (str)g)
+print("h=" + (str)h)
+print("i=" + (str)i)
+print("j=" + (str)j)
+print("k=" + (str)k)
+print("l=" + (str)l)
+
+str s = "ab" * 3
+list[int] ll = [1, 2] * 2
+print("s=" + s)
+print("ll_len=" + (str)ll.len())
+print("DONE")

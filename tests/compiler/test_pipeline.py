@@ -148,7 +148,7 @@ class TestCompileFunctions:
         assert artifact is not None
 
     def test_void_function(self, engine):
-        code = """func greet(str name):
+        code = """func greet(str name) -> auto:
     print("hello " + name)
 """
         artifact = engine.compile_string(code, silent=True)
@@ -225,7 +225,7 @@ str result = @~ hello world ~
         assert artifact is not None
 
     def test_behavior_with_type_cast(self, engine):
-        """(Type) @~...~ 语法已废弃，编译器必须发出 PAR_010 错误。"""
+        """(Type) @~...~ 语法已废弃，编译器必须发出 PAR_DEPRECATED_CAST_SYNTAX 错误。"""
         code = """import ai
 int x = (int) @~ what is 1+1 ~
 """
@@ -246,6 +246,72 @@ fn my_behavior = lambda -> int: @~ what is 1+1 ~
 fn my_snap = snapshot -> str: @~ say hello ~
 """
         artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+
+class TestBehaviorOutputParseability:
+    """行为输出目标类型必须可被 LLM 解析（SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE）。
+
+    声明的具体类型无 __from_prompt__/parser 时，运行期只能把 LLM 字符串静默
+    box 成 str——错误类型流入。编译期 fail-fast 暴露根因。
+    """
+
+    _POINT_NO_FROM = (
+        "class Point:\n"
+        "    int x\n"
+        "    func __init__(self, int x) -> auto:\n"
+        "        self.x = x\n"
+    )
+    _POINT_WITH_FROM = _POINT_NO_FROM + (
+        "    func __from_prompt__(self, str raw) -> auto:\n"
+        "        return (True, 1)\n"
+    )
+
+    def _error_codes(self, engine, code):
+        from core.kernel.issue import CompilerError
+        with pytest.raises(CompilerError) as exc_info:
+            engine.compile_string(code, silent=True)
+        return {d.code for d in exc_info.value.diagnostics}
+
+    def test_lambda_behavior_no_from_prompt_rejected(self, engine):
+        codes = self._error_codes(engine, self._POINT_NO_FROM +
+            "fn f = lambda -> Point: @~ MOCK:STR:hi ~\n")
+        assert "SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE" in codes
+
+    def test_lambda_behavior_with_from_prompt_allowed(self, engine):
+        artifact = engine.compile_string(
+            self._POINT_WITH_FROM + "fn f = lambda -> Point: @~ MOCK:STR:hi ~\n",
+            silent=True)
+        assert artifact is not None
+
+    def test_lambda_behavior_parseable_primitives_allowed(self, engine):
+        for decl in ("int", "str", "auto", "any"):
+            artifact = engine.compile_string(
+                f"fn f = lambda -> {decl}: @~ MOCK:STR:hi ~\n", silent=True)
+            assert artifact is not None, f"-> {decl} 应可编译"
+
+    def test_typed_assignment_rejected(self, engine):
+        codes = self._error_codes(engine, self._POINT_NO_FROM +
+            "Point p = @~ MOCK:STR:hi ~\n")
+        assert "SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE" in codes
+
+    def test_typed_assignment_with_from_prompt_allowed(self, engine):
+        artifact = engine.compile_string(
+            self._POINT_WITH_FROM + "Point p = @~ MOCK:STR:hi ~\n", silent=True)
+        assert artifact is not None
+
+    def test_subclass_inherits_from_prompt_allowed(self, engine):
+        artifact = engine.compile_string(
+            self._POINT_WITH_FROM +
+            "class Point3(Point):\n"
+            "    int z\n"
+            "fn f = lambda -> Point3: @~ MOCK:STR:hi ~\n",
+            silent=True)
+        assert artifact is not None
+
+    def test_bare_behavior_unconstrained_allowed(self, engine):
+        artifact = engine.compile_string(
+            "auto x = @~ MOCK:STR:hi ~\n", silent=True)
         assert artifact is not None
 
     def test_llm_function_def(self, engine):
@@ -345,16 +411,16 @@ class TestCompileErrors:
 
 
 # ---------------------------------------------------------------------------
-# 12. llmexcept body read-only constraint (SEM_052 — §9.2)
+# 12. llmexcept body read-only constraint (SEM_LLMEXCEPT_BODY_WRITE)
 # ---------------------------------------------------------------------------
 
 class TestLLMExceptBodyReadOnly:
     """
-    验证 §9.2 快照隔离编译期约束：llmexcept body 内向外部作用域变量写入产生 SEM_052。
+    验证快照隔离编译期约束：llmexcept body 内向 LLM 参与变量写入产生 SEM_LLMEXCEPT_BODY_WRITE。
     """
 
     def test_assign_to_outer_var_raises(self, engine):
-        """llmexcept body 内直接对外部变量赋值应产生编译期错误 (SEM_052)。"""
+        """llmexcept body 内直接对外部变量赋值应产生编译期错误 (SEM_LLMEXCEPT_BODY_WRITE)。"""
         code = """str result = @~ greet ~
 llmexcept:
     result = "fallback"
@@ -363,10 +429,10 @@ llmexcept:
         with pytest.raises(CompilerError) as exc_info:
             engine.compile_string(code, silent=True)
         codes = [d.code for d in exc_info.value.diagnostics]
-        assert "SEM_052" in codes
+        assert "SEM_LLMEXCEPT_BODY_WRITE" in codes
 
     def test_redeclare_outer_var_raises(self, engine):
-        """llmexcept body 内用类型标注重声明外部变量也应产生 SEM_052。"""
+        """llmexcept body 内用类型标注重声明外部变量也应产生 SEM_LLMEXCEPT_BODY_WRITE。"""
         code = """str result = @~ greet ~
 llmexcept:
     str result = "fallback"
@@ -375,10 +441,10 @@ llmexcept:
         with pytest.raises(CompilerError) as exc_info:
             engine.compile_string(code, silent=True)
         codes = [d.code for d in exc_info.value.diagnostics]
-        assert "SEM_052" in codes
+        assert "SEM_LLMEXCEPT_BODY_WRITE" in codes
 
     def test_new_local_var_allowed(self, engine):
-        """llmexcept body 内定义全新的局部变量是允许的（不产生 SEM_052）。"""
+        """llmexcept body 内定义全新的局部变量是允许的（不产生 SEM_LLMEXCEPT_BODY_WRITE）。"""
         code = """str result = @~ greet ~
 llmexcept:
     str hint = "please try again with a clear answer"
@@ -389,7 +455,7 @@ llmexcept:
         assert artifact is not None
 
     def test_retry_statement_allowed(self, engine):
-        """llmexcept body 内使用 retry 语句是允许的（不产生 SEM_052）。"""
+        """llmexcept body 内使用 retry 语句是允许的（不产生 SEM_LLMEXCEPT_BODY_WRITE）。"""
         code = """str result = @~ greet ~
 llmexcept:
     retry "try again"
@@ -398,7 +464,7 @@ llmexcept:
         assert artifact is not None
 
     def test_read_outer_var_allowed(self, engine):
-        """llmexcept body 内读取外部变量是允许的（不产生 SEM_052）。"""
+        """llmexcept body 内读取外部变量是允许的（不产生 SEM_LLMEXCEPT_BODY_WRITE）。"""
         code = """str context = "context info"
 str result = @~ greet ~
 llmexcept:
@@ -408,15 +474,113 @@ llmexcept:
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None
 
-    def test_assign_to_outer_int_var_raises(self, engine):
-        """llmexcept body 内对整型外部变量写入也应产生 SEM_052。"""
+    def test_assign_to_non_llm_var_allowed(self, engine):
+        """llmexcept body 内对非 LLM 参与变量写入是允许的（辅助统计用途）。"""
         code = """int counter = 0
 str result = @~ greet ~
 llmexcept:
     counter = 1
     retry "hint"
 """
+        result = engine.compile_string(code, silent=True)
+        assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# 13. llmexcept body 文件写/删禁令 (SEM_LLMEXCEPT_FILE_WRITE)
+# ---------------------------------------------------------------------------
+
+class TestLLMExceptFileWrite:
+    """llmexcept body 内禁止文件写/删（浅路径引用快照污染）。编译期 spec 驱动判定。"""
+
+    @staticmethod
+    def _assert_file_write_error(engine, code):
         with pytest.raises(CompilerError) as exc_info:
             engine.compile_string(code, silent=True)
         codes = [d.code for d in exc_info.value.diagnostics]
-        assert "SEM_052" in codes
+        assert "SEM_LLMEXCEPT_FILE_WRITE" in codes
+
+    def test_direct_write_new_mode_raises(self, engine):
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    file.write("log.txt", "failed")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_direct_remove_raises(self, engine):
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    file.remove("log.txt")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_direct_write_overwrite_mode_raises(self, engine):
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    file.write("log.txt", "failed", overwrite_flag="overwrite")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_indirect_via_user_func_raises(self, engine):
+        """用户函数体内含文件写，retry body 调用它亦禁止（递归传导）。"""
+        code = """import file
+func helper() -> auto:
+    file.write("log.txt", "x")
+str result = @~ greet ~
+llmexcept:
+    helper()
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_indirect_two_levels_raises(self, engine):
+        """多层间接：a() 调 b()，b() 写文件 -> a() 在 retry body 内亦禁止。"""
+        code = """import file
+func b() -> auto:
+    file.write("log.txt", "x")
+func a() -> auto:
+    b()
+str result = @~ greet ~
+llmexcept:
+    a()
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_aliased_import_raises(self, engine):
+        """import file as f 别名：spec 驱动 resolve 别名符号，仍命中。"""
+        code = """import file as f
+str result = @~ greet ~
+llmexcept:
+    f.write("log.txt", "x")
+    retry "hint"
+"""
+        self._assert_file_write_error(engine, code)
+
+    def test_read_allowed(self, engine):
+        """file.read 是只读，retry body 内允许。"""
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    str info = file.read("a.txt")
+    retry "hint"
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None
+
+    def test_exists_allowed(self, engine):
+        """file.exists 是只读查询，retry body 内允许。"""
+        code = """import file
+str result = @~ greet ~
+llmexcept:
+    bool b = file.exists("a.txt")
+    retry "hint"
+"""
+        artifact = engine.compile_string(code, silent=True)
+        assert artifact is not None

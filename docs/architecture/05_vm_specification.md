@@ -1,0 +1,263 @@
+﻿# IBCI VM 规范
+
+> **文档性质**：本文档是 IBCI 虚拟机的**正式规范层定义**，与 Python 宿主实现隔离。
+> 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。
+> 测试基线请以当次 `python -m pytest tests/compliance/ -q` 输出为准。
+>
+> **路径说明**：本规范层与 Python 宿主实现隔离；正文内偶尔出现的 `*.py` 路径中，`runtime/vm/handlers/`、`runtime/objects/{primitives,kernel}/`、`runtime/interpreter/llm_executor/` 为包结构（目录），请以实际代码为准。
+
+---
+
+## §1 执行模型（Execution Model）
+
+### §1.1 执行循环（调度器驱动）
+
+IBCI VM 使用**显式帧栈 + CPS（Continuation-Passing Style）执行循环**（`core/runtime/vm/vm_executor.py`），由**协作调度器**（`core/runtime/vm/task_scheduler.py`）驱动：
+
+```
+scheduler 主循环（TaskScheduler.run）:
+    对所有活跃任务：
+        step = 任务步进（_drive_loop_gen 内层循环驱动生成器）
+        if 步进 yield Waitable（LLMFuture/HostAwaitable/chan recv）:
+            register_wake(_wake_event) → 挂起任务（非阻塞）
+        elif 步进 yield UserFunctionCall:
+            trampoline：函数体作为独立 VMTask 压栈（无 Python 递归）
+        else: 推进帧栈（send → 压栈 child / StopIteration 弹栈交付）
+    全部任务挂起时：_wake_event.wait(park)（通知式唤醒，无轮询延迟）
+```
+
+**公理 EXEC-1（无 Python 递归）**：主执行路径（`VMExecutor._drive_loop_gen`）不使用 Python 递归栈；IBCI 调用深度不受 `sys.setrecursionlimit` 限制。用户函数调用经 trampoline（`UserFunctionCall` 压栈为独立 VMTask），深递归下 Python 深度恒定。
+
+**公理 EXEC-2（控制流数据化）**：控制流信号（`return`/`break`/`continue`/`throw`）以数据对象 `Signal(kind, value)` 在帧栈间传播，不使用 Python 异常跨帧传递。外部边界（帧栈空仍持有 Signal）以 `UnhandledSignal` 透传给调用方处理。
+
+**公理 EXEC-3（llmexcept 显式驱动）**：llmexcept 关联通过 AST 字段 `llmexcept_handler` 在编译期统一挂载到被保护语句（`IbAssign`/`IbIf`/`IbWhile`/`IbFor`/`IbSwitch`/`IbExprStmt`）。`IbLLMExceptionalStmt` 节点（`core/kernel/ast.py`）仅作为挂载载体，binding 消费后不入被保护语句的 body。运行期各被保护语句 handler 求值条件/RHS 后，检查返回值是否为 `IbLLMCallResult(is_certain=False)` 不确定容器：有 handler 时创建 `LLMExceptFrame` 并内联执行 handler body + 完整多轮重试（重试循环以 `_retry_llm_uncertain` 收敛于单帧计数内），无 handler 时抛 `LLMParseError`。不存在侧表驱动的隐式重定向机制。
+
+**公理 EXEC-4（类构造帧内 CPS）**：用户类（不含原生 `__init__`）的构造由 VM 帧内 CPS 驱动：构造返回 `_ClassInstantiateDrive`（`Waitable` + `CPSDrivable`），`vm_handle_IbCall` `yield from cps_drive`，字段默认值求值与用户 `__init__` 嵌入当前 VM 帧栈。`__init__` 含 Waitable（LLM 行为 / 通道等待）时协作挂起，非阻塞调度线程。含原生 `__init__` 的类（如 `thread(...)`）返回 `IbThread` 句柄（纯 `Waitable`，不 auto-yield），等待须经 `t.join()` / `await t` 显式表达。
+
+**已知限制**：无——所有节点类型均支持 CPS handler。
+
+---
+
+### §1.2 节点类型分类
+
+| 分类 | 节点类型 | CPS 状态 |
+|------|---------|---------|
+| 语句 | `IbModule` `IbIf` `IbWhile` `IbFor` `IbReturn` `IbBreak` `IbContinue` `IbRaise` `IbAssign` `IbAugAssign` `IbPass` `IbTry` `IbExceptHandler` `IbRetry` `IbSwitch`(含子节点 `IbCase`) `IbExprStmt` `IbGlobalStmt` `IbNonlocalStmt` `IbIntentAnnotation` `IbIntentStackOperation` | CPS handler |
+| 语句 | `IbLLMExceptionalStmt`（挂载载体，binding 消费后不入 body） | CPS handler |
+| 表达式 | `IbName` `IbConstant` `IbBinOp` `IbUnaryOp` `IbCompare` `IbBoolOp` `IbCall` `IbAttribute` `IbSubscript` `IbTuple` `IbListExpr` `IbDict` `IbSlice` `IbIfExp` `IbCastExpr` `IbAwaitExpr` `IbChannelExpr` `IbSlotExpr` | CPS handler |
+| 表达式 | `IbBehaviorExpr` | CPS handler |
+| 表达式 | `IbTypeAnnotatedExpr` `IbIntentInfo` `IbFilteredExpr` | CPS handler |
+| 表达式 | `IbLambdaExpr` `IbBehaviorInstance` `IbCallableType` | CPS handler |
+| 声明 | `IbFunctionDef` `IbLLMFunctionDef` `IbClassDef` `IbImport` `IbImportFrom` | CPS handler |
+
+---
+
+## §2 内存模型（Memory Model）
+
+### §2.1 对象模型公理
+
+**公理 OM-1（对象存在性）**：IBCI 程序中的一切运行时值都是"IBCI 对象"（IbObject），由 `(类型标签, 有效载荷, 元数据)` 三元组构成。
+
+**公理 OM-2（类型二分）**：
+- **值类型（Value）**：`int`, `float`, `bool`, `str`, `None`, `Uncertain`。赋值语义等价于深拷贝，不具有可变身份。
+- **引用类型（Ref）**：`list`, `dict`, 用户类实例, `fn`, `behavior`。赋值语义为引用复制，具有对象身份。
+
+### §2.2 作用域与变量分类
+
+**公理 SC-1（词法嵌套）**：每个作用域有词法父作用域，构成树；全局作用域是树根。
+
+**公理 SC-2（变量分类）**：
+- **本地变量（Local）**：函数体内声明且未被内层函数引用。
+- **Cell 变量（Cell）**：函数体内声明且被至少一个内层 lambda/snapshot 引用；通过 `IbCell` 间接存储。
+- **自由变量（Free）**：在函数体内引用但未在此函数体内声明。
+
+**公理 SC-3（Cell 语义）**：Cell 变量通过 `IbCell` 间接存储。`IbCell` 是独立于任何 `ScopeImpl` 的堆对象，包含字段 `value`。对 Cell 变量的读写是对 `IbCell.value` 的读写。
+
+**公理 SC-4（自由变量捕获）**：嵌套函数/lambda 被创建时，所有自由变量的 `IbCell` 引用写入该函数对象的 `closure` 字典；此后函数对象持有 Cell 引用，与外层 ScopeImpl 生命周期解耦。
+
+### §2.3 生命周期公理
+
+**公理 LT-1（作用域生命周期）**：ScopeImpl 的设计生命周期为对应函数调用持续时间。
+
+**公理 LT-2（Cell 延长生命周期）**：Cell 变量的 `IbCell` 生命周期由 closure 字典决定；只要有 fn 对象持有 Cell 引用，Cell 即活跃。
+
+**公理 LT-3（snapshot 自包含性）**：`snapshot` 类型的 fn 对象完全自包含，不依赖外部作用域或意图上下文的生命周期。
+
+**公理 LT-4（IntentContext 生命周期）**：`IbIntentContext` 通过 `fork()` 在函数调用时隔离，函数返回时恢复调用者的 context。
+
+### §2.4 GC 模型
+
+**公理 GC-1（追踪式 GC）**：IBCI 规定使用追踪式 GC（Tracing GC），不依赖引用计数；允许循环引用。
+
+**公理 GC-2（根集合）**：GC 根集合 = 全局作用域符号值 ∪ 活跃调用栈帧局部变量 ∪ 所有活跃 fn 对象的 `closure` 字典中的 Cell 值（lambda 模式）或冻结种子（snapshot 模式）∪ 所有活跃 snapshot 对象持有的 `frozen_intent_ctx`。
+
+**公理 GC-3（回收条件）**：对象当且仅当从根集合不可达时可被回收，不依赖 Python 的引用计数机制。
+
+---
+
+## §3 LLM 数据流模型（LLM Dataflow Model）
+
+### §3.1 DDG 编译期分析
+
+编译阶段（`BehaviorDependencyAnalyzer` Pass 5）分析 `IbBehaviorExpr` 节点之间的数据依赖：
+
+- `llm_deps: List[IbBehaviorExpr]`：此 behavior 直接依赖的其他 behavior 节点列表。
+- `dispatch_eligible: bool`：若依赖图为 DAG（无环且无未知依赖），标注为 True（可并发 dispatch）；否则 False（串行同步路径）。
+
+**规则**：以下情况强制 `dispatch_eligible = False`：
+- 目标变量是插值依赖（前序 behavior 的输出是当前 behavior 的 $var 输入）
+- 赋值目标是 Cell 变量（IbCell 不允许持有 LLMFuture 占位符）
+- 节点处于 llmexcept 保护下（snapshot 隔离约束）
+- 节点处于可重复执行上下文（循环体或可重入函数体内）：同一节点多次执行会以相同 `node_uid` 覆写 `_pending_futures` 条目，导致旧 Future 泄漏且读点解析错乱
+
+### §3.2 LLMScheduler + LLMFuture
+
+**公理 LLM-1（dispatch_eager）**：`dispatch_eligible=True` 时，VM 在赋值点立即调用 `LLMScheduler.dispatch_eager()`，提交 LLM HTTP 调用到 `ThreadPoolExecutor`，返回 `LLMFuture` 占位符写入符号表（`ScopeImpl.define_raw()`）。
+
+**公理 LLM-2（lazy resolve）**：读取点（`vm_handle_IbName`）检测到 `LLMFuture` 时，经 `resolve_future_cps` 挂起当前任务等待 LLM 完成（协作，不阻塞当前线程），将真实 `IbObject` 写回符号表，后续读取直接命中 IbObject（O(1)）。`LLMFuture` 满足 Waitable 协议（`is_done` / `try_result` / `register_wake`），供调度器消费。
+
+**公理 LLM-3（确定性输出）**：并发 dispatch 不改变程序的输出确定性——程序输出顺序遵从语句语义顺序（print 调用顺序），而非 dispatch 完成顺序。
+
+### §3.3 合规测试
+
+`tests/compliance/test_concurrent_llm.py` 验证以上公理的可观察行为，以 MOCK LLM driver 作为后端，不依赖外部网络。
+
+### §3.4 批量并发执行（`ai.run_batch`）
+
+**公理 LLM-4（批量执行）**：`ai.run_batch(fn_behavior, items) -> list` 对参数化 fn 行为逐项并发执行，保序返回结果列表。`run_batch` 返回可帧内 CPS 驱动的 Waitable：每项 prompt 预求值经 `_prepare_behavior_call_cps` 嵌入当前 VM 帧栈（CPS，无 `vm.run` 同步重入），多 LLM Future 聚合为 `LLMBatchFuture` 由调度器非阻塞等待（auto-yield 协作挂起，与 `stream_call` 返回 Waitable 同范式）；后台线程仅执行 `_call_and_parse`；结果按 `items` 顺序收集。任一项结果不确定即抛 `LLMParseError`（与无 llmexcept 的同步语义一致，错误粒度为整个批次）。宿主/线程体无活跃 VM 时走同步兜底（`_run_batch_sync`）。
+
+**排除"循环内自动透明并发"**：循环体 / 函数体内行为强制 `dispatch_eligible=False`（§3.1），不做自动并发展开。理由：① `_pending_futures` 按静态 `node_uid` 键控，同一节点多次执行会覆写键导致读点解析错乱与旧 Future 泄漏，改"执行实例"键是运行时模型改动；② 自动展开要求编译器证明循环体为"纯批次"（无控制流 / 跨迭代依赖 / 副作用顺序），证明错判即静默改变程序行为；③ 与"显式优于隐式"公理冲突。需要批量并发时用 `ai.run_batch` 显式表达。
+
+**未来方向**：列表推导式 `[ @~ ... ~ for item in items ]`（需元素类型推断设计）；循环内软件流水线 / 严格纯度分析下的自动展开（远期探索）。
+
+---
+
+## §4 多 Interpreter 并发（Layer 2 Execution Isolation）
+
+### §4.1 执行隔离公理
+
+**公理 ISO-1（独立 RuntimeContext）**：每个子 Interpreter 拥有独立的 `RuntimeContextImpl` 实例，不与主 Interpreter 或其他子 Interpreter 共享任何可变状态。
+
+**公理 ISO-2（独立 Registry）**：隔离子 Interpreter 运行在新建的独立 `IBCIEngine` 中，持有自己的 `KernelRegistry`（类型隔离经 `SpecRegistry` 克隆）；主 Interpreter 与隔离子引擎不共享 registry 实例。
+
+**公理 ISO-3（线程安全）**：子 Interpreter 在独立线程（`threading.Thread`）中运行；`ContextVar` 在线程中独立，不发生竞争。
+
+### §4.2 spawn/collect 契约
+
+**公理 ISO-4（spawn 非阻塞）**：`spawn_isolated(path, policy)` 立即返回字符串 handle，不等待子 Interpreter 完成。
+
+**公理 ISO-5（collect 提取）**：`collect(handle)` 返回 `HostAwaitable`（Waitable）。语言层 VM 经 `yield` 协作挂起等待子 Interpreter 完成并返回其用户变量字典 `Dict[str, native_value]`；宿主侧经 `result()` 阻塞等待。
+
+**公理 ISO-6（collect 幂等保护）**：对同一 handle 重复调用 `collect()` 抛出 `RuntimeError`。
+
+**公理 ISO-7（collect 类型过滤）**：collect 仅返回可序列化的值类型（str/int/float/bool/list/dict）；函数对象、behavior 对象、内置符号不包含在结果中。
+
+**公理 ISO-8（错误传播）**：子 Interpreter 运行期或编译期抛出的异常，在 `collect()` 时传播为 `RuntimeError`。
+
+**公理 ISO-9（collect 超时，默认无界）**：`IsolationPolicy.collect_timeout` 控制 `collect()` 的墙钟等待上限。`None`（默认）= 无界等待，严格遵循 ISO-5；正数（秒）= 等待上限，超时则 `collect()` 抛 `RuntimeError`。Python 宿主无法强杀线程，超时后子 Interpreter 线程作为 daemon 孤儿继续运行直至自身结束或进程退出--超时的语义是"放弃等待"而非"停止子任务"。该超时为可选安全网，不改变 ISO-5 的默认阻塞契约。
+
+**公理 ISO-10（插件可见性隔离）**：插件层的隔离落在 IBCI 可见性层，不落在 Python 模块代码层。每个 Engine 拥有独立 `HostInterface`/`InterOp` 注册表，IBCI 脚本只能 `import` 本引擎注册表登记的插件（可见性每引擎隔离）；插件的 Python 实现代码由 `importlib` 按进程级常规机制加载，`sys.modules` 全局缓存、按名命中，同名插件"先加载者胜"作为进程级身份唯一性；插件实例每引擎独立（`create_implementation()` 经 `BoundPlugin` 容器绑定引擎 registry 身份）。IBC-Inter 不插手 Python import 机制（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离--无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §十九。
+
+### §4.3 合规测试
+
+`tests/compliance/test_execution_isolation.py` 验证以上公理的可观察行为，独立可运行。
+
+---
+
+## §5 意图上下文模型（IbIntentContext Model）
+
+### §5.1 公理
+
+**公理 IC-1（fork 隔离）**：每次函数调用时 `IbIntentContext.fork()` 创建子 context；子 context 从父 context 继承意图栈快照，后续修改互不影响。
+
+**公理 IC-2（restore 还原）**：函数返回时恢复调用者的 context，不论函数体内对意图栈的任何修改。
+
+**公理 IC-3（llmexcept snapshot）**：`llmexcept` 框架在执行前对 context 进行完整快照（scope 变量 + intent + loop context），retry 时恢复该快照，使重试语义完整隔离。certainty 信号经 `LLMExceptFrame.target_result`（`IbLLMCallResult` 容器）传递，不参与 save/restore。
+
+**公理 IC-4（llmexcept body 只读约束）**：llmexcept handler body 对参与 LLM 调用的变量（`$` 插值、意图引用、赋值目标）实施只读保护。编译期通过 `SEM_LLMEXCEPT_BODY_WRITE`（赋值/属性/下标变异）和 `SEM_LLMEXCEPT_MUTATING_CALL`（mutating 方法调用）拦截；运行期通过 `verify_snapshot_integrity()` 比对黄金快照作为安全网，违规时强制恢复并发出 `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION`。非 LLM 参与变量的修改不受限制。
+
+**公理 IC-5（llmexcept body 文件写/删禁令）**：磁盘型快照是浅路径引用，retry body 内任何文件写/删都会污染黄金快照。retry body 内禁止全部 `file` 模块写/删函数（`file.write` + `remove`）。编译期以 `SEM_LLMEXCEPT_FILE_WRITE` spec 驱动拦截直接与间接（经用户函数递归传导）调用，运行时以 `llmexcept_body_depth` 守卫兜底动态分派等漏检情形。只读操作（`open`/`read`/`read_bytes`/`exists`）放行。外部进程触碰 backing 文件为固有边界，不在拦截范围（详见 `docs/KNOWN_LIMITS.md`）。
+
+---
+
+## §6 合规测试套件（Compliance Test Suite）
+
+```
+tests/compliance/
+├── __init__.py              — 套件说明文档
+├── test_execution_isolation.py  — §4 多 Interpreter 隔离
+├── test_concurrent_llm.py       — §3 LLM dispatch-before-use
+└── test_memory_model.py         — §2 内存模型
+```
+
+**运行方式**（独立验证）：
+```bash
+python -m pytest tests/compliance/ -v
+```
+
+**使用限制**：所有合规测试仅依赖 `core.engine.IBCIEngine` 公开 API 与标准 Python 库（`os`, `tempfile`, `pytest`）。不依赖任何以 `_` 开头的私有属性（此约束确保跨实现可移植性）。
+
+---
+
+## §7 与架构文档的对应关系
+
+| 本文档章节 | 架构文档（`docs/architecture/04_vm_interpreter.md`） |
+|-----------|------------------------------------------|
+| §1 执行模型 | §2 CPS 调度循环 |
+| §2.1 对象模型 | §9 内存模型与 GC |
+| §2.2 作用域 | §4 作用域与闭包 |
+| §2.3 生命周期 | §4.2 IbCell / §3 执行帧 |
+| §2.4 GC | §9.2 GC 公理 |
+| §3 LLM 数据流 | §5 LLM 流水线 |
+| §4 多 Interpreter | §8 多 Interpreter 隔离 |
+| §5 意图上下文 | §7 意图上下文 |
+
+---
+
+## §8 公理注册表
+
+本节是 IBCI VM 全部公理的**唯一注册表**。每个公理族以独立前缀命名空间隔离，不允许跨族复用。
+
+| 公理 | 含义 | 定义章节 |
+|------|------|---------|
+| **EXEC-1** | 无 Python 递归 | §1.1 |
+| **EXEC-2** | 控制流数据化（Signal 数据对象传播） | §1.1 |
+| **EXEC-3** | llmexcept 显式驱动（AST 字段绑定，非侧表） | §1.1 |
+| **OM-1** | 对象存在性（一切值均为 IbObject） | §2.1 |
+| **OM-2** | 类型二分（值类型 vs 引用类型） | §2.1 |
+| **SC-1** | 词法嵌套（作用域树） | §2.2 |
+| **SC-2** | 变量分类（Local / Cell / Free） | §2.2 |
+| **SC-3** | Cell 语义（IbCell 间接存储） | §2.2 |
+| **SC-4** | 自由变量捕获（closure 字典） | §2.2 |
+| **LT-1** | 作用域生命周期 | §2.3 |
+| **LT-2** | Cell 延长生命周期 | §2.3 |
+| **LT-3** | snapshot 自包含性 | §2.3 |
+| **LT-4** | IntentContext 生命周期 | §2.3 |
+| **GC-1** | 追踪式 GC | §2.4 |
+| **GC-2** | 根集合 | §2.4 |
+| **GC-3** | 回收条件 | §2.4 |
+| **LLM-1** | dispatch_eager | §3.2 |
+| **LLM-2** | lazy resolve | §3.2 |
+| **LLM-3** | 确定性输出 | §3.2 |
+| **LLM-4** | 批量并发执行（`ai.run_batch`） | §3.4 |
+| **ISO-1** | 独立 RuntimeContext | §4.1 |
+| **ISO-2** | 独立 Registry | §4.1 |
+| **ISO-3** | 线程安全 | §4.1 |
+| **ISO-4** | spawn 非阻塞 | §4.2 |
+| **ISO-5** | collect 提取 | §4.2 |
+| **ISO-6** | collect 幂等保护 | §4.2 |
+| **ISO-7** | collect 类型过滤 | §4.2 |
+| **ISO-8** | 错误传播 | §4.2 |
+| **ISO-9** | collect 超时（默认无界） | §4.2 |
+| **ISO-10** | 插件可见性隔离（不碰 Python import） | §4.2 |
+| **IC-1** | fork 隔离 | §5.1 |
+| **IC-2** | restore 还原 | §5.1 |
+| **IC-3** | llmexcept snapshot | §5.1 |
+| **IC-4** | llmexcept body 只读约束 | §5.1 |
+| **IC-5** | llmexcept body 文件写/删禁令 | §5.1 |
+
+**命名空间分配**：EXEC / OM / SC / LT / GC / LLM / ISO / IC。新增公理族须先在此表注册新前缀，禁止复用已有前缀。
+
+---
+
+*本文档与 `tests/compliance/` 构成 IBCI VM 的可验证规范。每次合规测试套件全部通过即代表当前 Python 宿主实现符合本规范。*

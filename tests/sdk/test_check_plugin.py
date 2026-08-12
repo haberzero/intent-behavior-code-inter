@@ -167,7 +167,7 @@ def __ibcext_metadata__():
 def __ibcext_vtable__():
     return {
         "functions": {
-            "do_something": {"param_types": ["str"], "return_type": "str"},
+            "do_something": {"params": [{"name": "x", "type": "str"}], "return_type": "str"},
         }
     }
 """)
@@ -195,7 +195,7 @@ def __ibcext_metadata__():
 def __ibcext_vtable__():
     return {
         "functions": {
-            "add": {"param_types": ["int", "int", "int"], "return_type": "int"},
+            "add": {"params": [{"name": "a", "type": "int"}, {"name": "b", "type": "int"}, {"name": "c", "type": "int"}], "return_type": "int"},
         }
     }
 """)

@@ -1,4 +1,5 @@
 from typing import Dict, Any, Mapping, Optional
+from core.base.enums import Provenance
 from .artifact_rehydrator import ArtifactRehydrator
 from core.kernel.registry import KernelRegistry
 
@@ -67,7 +68,7 @@ class ArtifactLoader:
                     class_to_node[stmt_data.get("name")] = (stmt_uid, module_name)
 
         # 2. 预注册用户定义的类 (支持继承依赖)
-        remaining = [c for c in user_classes if c.is_user_defined]
+        remaining = [c for c in user_classes if c.provenance == Provenance.USER_DEFINED]
         last_count = -1
         
         while remaining and len(remaining) != last_count:
@@ -81,18 +82,15 @@ class ArtifactLoader:
                 parent_class = self.registry.get_class(parent_name)
                 if parent_class:
                     # 父类已存在，直接创建子类
-                    try:
+                    if self.registry.get_class(cls_desc.name) is None:
+                        # 类不存在才创建；已注册（如预注册的 Enum 基类/重复类）有意跳过
                         self.registry.create_subclass(
-                            cls_desc.name, 
-                            cls_desc, 
+                            cls_desc.name,
+                            cls_desc,
                             parent_name
                         )
-                    except ValueError:
-                        # 类可能已存在，忽略
-                        pass
-                    except PermissionError:
-                        # 注册表已封印，类可能已被注册，忽略
-                        pass
+                    # 其余 ValueError/PermissionError 是真实错误（封印/描述符失配），
+                    # 不再被静默吞掉
                 else:
                     try:
                         self.registry.create_subclass(

@@ -1,0 +1,19 @@
+# D3-21 对抗：llmexcept 重试耗尽真实触发（强制不可满足约束）
+# 期望: retry 无法满足时 LLMRetryExhaustedError 被捕获；记录重试次数
+
+import ai
+ai.set_retry(2)
+
+try:
+    int n = @~ 用中文大写数字（壹贰叁）写出数字一 ~
+    llmexcept:
+        retry "严禁返回任何汉字，只返回纯阿拉伯数字"
+    print("n=" + (str)n)
+except LLMRetryExhaustedError as e:
+    print("exhausted_msg=" + e.message)
+    print("exhausted_max_retry=" + (str)e.max_retry)
+except LLMParseError as e:
+    print("parse_err=" + e.message)
+except Exception as e:
+    print("gen_err=" + (str)e)
+print("DONE")

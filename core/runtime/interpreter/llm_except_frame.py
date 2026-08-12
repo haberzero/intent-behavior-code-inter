@@ -7,29 +7,34 @@ LLM 异常处理现场帧 (LLMExceptFrame)。
 
 核心设计思想（快照隔离模型）:
 1. 状态化:   重试相关的所有状态都集中在一个帧对象中
-2. 快照隔离: 每次 LLM 语句执行进入独立快照（vars/intent_ctx/loop_ctx），retry 前
-             自动 restore_snapshot()，保证 LLM 始终看到一致的输入状态
+2. 快照隔离: 帧创建时保存一次快照（save_context），retry 时还原，保证
+             LLM 始终看到一致的输入状态
 3. 可追踪:   记录重试次数、最后 LLM 结果等调试信息
 
-使用方式（影子执行驱动，由 visit_IbLLMExceptionalStmt 主控）:
+快照/恢复调用规则:
+    - ``__snapshot__()``：帧创建时调用**一次**（save_context 内部）
+    - ``__restore__(state)``：**仅在 retry 时**调用，且**每轮 retry 恰好一次**。
+      首次迭代不调用（刚 save_context 完成，状态一致）。
+    - ``retry`` 语句本身**不**调用 restore_snapshot（只设置 should_retry 标志），
+      restore 统一由外层 while 循环顶部执行，消除冗余双重 restore。
+
+使用方式（消费者驱动，由各被保护语句 handler 主控）:
     # 1. 保存快照（save_llm_except_state 内部调用 frame.save_context()）
     frame = runtime_context.save_llm_except_state(target_uid, node_type, max_retry)
 
-    # 2. 驱动循环
+    # 2. 驱动循环（见 vm/handlers/_shared._retry_llm_uncertain）
+    frame.target_result = uncertain_result       # 记录本次不确定结果
+    first_attempt = True
     while frame.should_continue_retrying():
-        frame.restore_snapshot(runtime_context)           # 恢复快照
-        runtime_context.set_last_llm_result(None)         # 清除上次信号
-        execution_context.visit(target_uid)               # 驱动 LLM 节点执行
-
-        result = runtime_context.get_last_llm_result()
-        if result is None or result.is_certain:
-            break                                          # 成功，commit 到目标变量
-
-        # LLM 返回不确定（is_uncertain=True）
-        for stmt_uid in body_uids:                         # 执行 llmexcept body
-            visit(stmt_uid)
+        if not first_attempt:
+            frame.restore_snapshot(runtime_context)     # retry 前恢复快照
+            value = yield re_eval_uid                   # 重新求值被保护表达式
+            if 值确定: break
+            frame.target_result = value
+        first_attempt = False
+        # 执行 llmexcept body（retry 语句设 should_retry / retry_hint）
         if not frame.increment_retry():
-            break                                          # 重试耗尽
+            raise LLMRetryExhaustedError
 
     # 3. 清理
     runtime_context.pop_llm_except_frame()
@@ -41,6 +46,14 @@ Status: Active
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from core.runtime.objects.kernel import IbObject, IbValue, IbNone
+from core.runtime.objects.kernel.base import unbox
+from core.runtime.objects.deep_clone import try_deep_clone
+from core.runtime.observability.diagnostics import kernel_diagnostic
+from core.base.diagnostics.codes import (
+    KDIAG_PROTOCOL_SNAPSHOT_FALLBACK,
+    KDIAG_PROTOCOL_RESTORE_FALLBACK,
+)
+from core.kernel.issue import InterpreterError
 
 if TYPE_CHECKING:
     from core.runtime.interpreter.runtime_context import RuntimeContextImpl, RuntimeSymbol
@@ -58,23 +71,20 @@ class LLMExceptFrame:
         node_type: 节点类型 (如 "IbIf", "IbExprStmt" 等)
         retry_count: 当前重试次数
         max_retry: 最大重试次数 (默认 3)
-        saved_vars: 方案A深克隆变量快照 {变量名 → 克隆值}
-        saved_protocol_states: 方案B用户协议快照 {变量名 → (原始对象, __snapshot__()返回值)}
+        saved_vars: 深克隆变量快照 {变量名 → 克隆值}
+        saved_protocol_states: 用户协议快照 {变量名 → (原始对象, __snapshot__()返回值)}
         saved_intent_ctx: 重试前保存的意图上下文快照（IbIntentContext.fork()）
         saved_loop_context: 重试前保存的循环上下文
         saved_retry_hint: 重试前保存的提示词
-        last_error: 最后一次捕获的异常
-        last_llm_response: 最后一次 LLM 响应
-        is_in_fallback: 是否正在执行 fallback 块
         should_retry: 是否应该继续重试
 
-    快照策略（方案B优先，方案A兜底）:
+    快照策略（用户协议优先，深克隆兜底）:
         若用户 IBCI 类定义了 ``func __snapshot__(self)`` 和 ``func __restore__(self, state)``，
         llmexcept 帧优先使用该协议：在进入帧时调用 ``__snapshot__()``，
         在每次 retry 前调用 ``__restore__(state)`` 原地恢复对象状态。
         用户对快照粒度拥有完全控制权（可以只保存关键字段）。
 
-        对于未定义 ``__snapshot__`` 的类型，自动使用方案A（``_try_deep_clone``）。
+        对于未定义 ``__snapshot__`` 的类型，自动使用深克隆（``_try_deep_clone``）。
     """
     
     # 基本信息
@@ -84,7 +94,7 @@ class LLMExceptFrame:
     # 重试状态
     retry_count: int = 0
     max_retry: int = 3
-    saved_retry_hint: Optional[str] = None
+    retry_hint: Optional[str] = None  # 持续覆盖，不参与 save/restore（retry "hint" 写入，跨轮次存活）
     
     # 上下文快照
     saved_vars: Dict[str, IbObject] = field(default_factory=dict)
@@ -93,7 +103,7 @@ class LLMExceptFrame:
     # 否则 llmexcept body 内部对意图策略的切换（``use(ctx)``/``clear_inherited()``）
     # 在 retry 后仍会"残留"于活跃指针，造成与 ``_intent_ctx`` 的双轨断裂。
     saved_active_intent_ibobj: Any = field(default=None, repr=False)
-    saved_loop_context: Optional[Dict[str, int]] = None
+    saved_loop_context: Optional[List[Dict[str, int]]] = None
 
     # 循环迭代器断点恢复索引
     # 映射: for 循环节点 UID → 当次重试应从哪个迭代索引开始。
@@ -102,27 +112,14 @@ class LLMExceptFrame:
     # 能从失败的迭代处继续，而不是从头开始。
     loop_resume: Dict[str, int] = field(default_factory=dict)
 
-    # 方案B：用户协议快照（__snapshot__ / __restore__）
-    # 映射: 变量名 → (原始对象引用, __snapshot__() 返回的状态对象)
-    # 当用户 IBCI 类定义了 func __snapshot__ / func __restore__，此字段优先于方案A（_try_deep_clone）。
+    # 用户协议快照（__snapshot__ / __restore__）
+    # 映射: 变量名 -> (原始对象引用, __snapshot__() 返回的状态对象)
+    # 当用户 IBCI 类定义了 func __snapshot__ / func __restore__，此字段优先于深克隆（_try_deep_clone）。
     saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
-    # 错误信息
-    last_error: Optional[Exception] = None
-    last_llm_response: Optional[str] = None
-    last_result: Optional[Any] = None  # LLMResult 对象
-    # 重试错误历史，按发生顺序追加。
-    # 每项结构：
-    #   {
-    #       "retry_count": int,
-    #       "error_type": str,
-    #       "error_message": str,
-    #       "response": Optional[str],
-    #   }
-    error_history: List[Dict[str, Any]] = field(default_factory=list)
-    
+    target_result: Optional[Any] = None  # 最近一次不确定调用的 IbLLMCallResult（certainty 信号载体）
+
     # 状态标志
-    is_in_fallback: bool = False
     should_retry: bool = True
     
     def save_context(self, runtime_context: 'RuntimeContextImpl') -> None:
@@ -142,18 +139,10 @@ class LLMExceptFrame:
 
         self.saved_intent_ctx = runtime_context.intent_context.fork()
         # 同时快照活跃实例指针，restore 时一并还原。
-        if hasattr(runtime_context, "get_active_intent_ibobj"):
-            self.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
+        self.saved_active_intent_ibobj = runtime_context.get_active_intent_ibobj()
 
-        if hasattr(runtime_context, '_loop_stack') and runtime_context._loop_stack:
-            # 深拷贝 dict 对象，确保保存的快照与运行时 _loop_stack 完全独立，
-            # 即使 (将来) 循环上下文 dict 被就地修改，也不影响快照的正确性。
-            self.saved_loop_context = {
-                'iterators': [dict(d) for d in runtime_context._loop_stack]
-            }
-
-        if hasattr(runtime_context, 'retry_hint'):
-            self.saved_retry_hint = runtime_context.retry_hint
+        if runtime_context.get_loop_context_stack():
+            self.saved_loop_context = runtime_context.get_loop_context_stack()
 
     def _save_vars_snapshot(self, runtime_context: 'RuntimeContextImpl') -> None:
         """
@@ -161,13 +150,13 @@ class LLMExceptFrame:
 
         查找顺序（每个变量独立决策）：
 
-        **方案B（用户协议，优先）**：
+        **用户协议，优先**：
         - 目标类型为用户自定义 IbObject 且 vtable 中定义了 `func __snapshot__(self)`
         - 调用 `obj.__snapshot__()` 获取状态对象（可以是任意类型）
         - 存入 `saved_protocol_states`；`_restore_vars` 时调用 `__restore__(state)` 原地恢复
-        - 如果 `__snapshot__` 调用出现异常，自动降级到方案A
+        - 如果 `__snapshot__` 调用出现异常，自动降级到深克隆
 
-        **方案A（自动深克隆，回退）**：
+        **自动深克隆，回退**：
         - None 及标量类型（int/float/str/bool）—— 不可变原语，直接共享引用
         - list/tuple —— 递归深克隆所有元素
         - dict —— 递归深克隆所有键值对
@@ -181,23 +170,30 @@ class LLMExceptFrame:
         self.saved_protocol_states = {}
         scope = runtime_context.get_current_scope()
 
-        from core.runtime.objects.kernel import IbObject as KernelIbObject
-
         for name, symbol in scope.get_all_symbols().items():
             val = symbol.value
 
-            # 方案B 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
-            if type(val) is KernelIbObject:
+            # 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
+            # isinstance（非 type() is）确保 IbObject 子类（如未来的 IbAudio/IbImage）也能匹配；
+            # 但需要 val.ib_class 存在才能查找方法
+            if isinstance(val, IbObject) and val.ib_class:
                 snapshot_method = val.ib_class.lookup_method('__snapshot__')
                 if snapshot_method:
                     try:
                         state = snapshot_method.call(val, [])
                         self.saved_protocol_states[name] = (val, state)
-                        continue  # 跳过方案A克隆
-                    except Exception:
-                        pass  # 协议调用失败，降级到方案A
+                        continue  # 跳过克隆
+                    except Exception as e:
+                        kernel_diagnostic(
+                            code=KDIAG_PROTOCOL_SNAPSHOT_FALLBACK,
+                            detail={"name": name, "error": repr(e)},
+                            message=(
+                                f"__snapshot__ protocol call failed for '{name}', "
+                                f"falling back to deep clone: {e!r}"
+                            ),
+                        )
 
-            # 方案A：自动深克隆
+            # 自动深克隆
             cloned = self._try_deep_clone(val)
             if cloned is not None:
                 self.saved_vars[name] = cloned
@@ -209,7 +205,6 @@ class LLMExceptFrame:
         实际逻辑下沉到 ``core.runtime.objects.deep_clone.try_deep_clone``，
         与 snapshot lambda 路径共用同一深克隆实现。
         """
-        from core.runtime.objects.deep_clone import try_deep_clone
         return try_deep_clone(val, memo)
 
     def restore_context(self, runtime_context: 'RuntimeContextImpl') -> None:
@@ -236,27 +231,10 @@ class LLMExceptFrame:
         if self.saved_intent_ctx is not None:
             # 直接以快照 fork 替换 ``_intent_ctx``（取代 ``merge()``）。
             forked = self.saved_intent_ctx.fork()
-            runtime_context._intent_ctx = forked
-            # 同步重建活跃实例指针：保留命名身份（ib_class），但 _ctx 指向新底层。
-            if hasattr(runtime_context, "_set_active_intent_ibobj_for_current_ctx"):
-                intent_context_class = None
-                saved_ibobj = self.saved_active_intent_ibobj
-                if saved_ibobj is not None and hasattr(saved_ibobj, "ib_class"):
-                    intent_context_class = saved_ibobj.ib_class
-                else:
-                    registry = getattr(runtime_context, "_registry", None)
-                    if registry is not None and hasattr(registry, "get_class"):
-                        intent_context_class = registry.get_class("intent_context")
-                if intent_context_class is not None:
-                    runtime_context._set_active_intent_ibobj_for_current_ctx(intent_context_class)
-                else:
-                    runtime_context.set_active_intent_ibobj(None)
+            runtime_context.replace_intent_context(forked)
 
-        if hasattr(runtime_context, '_loop_stack') and self.saved_loop_context:
-            runtime_context._loop_stack = self.saved_loop_context.get('iterators', [])
-
-        if hasattr(runtime_context, 'retry_hint'):
-            runtime_context.retry_hint = self.saved_retry_hint
+        if self.saved_loop_context is not None:
+            runtime_context.restore_loop_context_stack(self.saved_loop_context)
 
         # 注意：loop_resume 字段故意不在此处重置。
         # visit_IbFor 依赖 loop_resume[node_uid] 来判断 retry 后应从哪个迭代索引继续，
@@ -268,13 +246,13 @@ class LLMExceptFrame:
 
         恢复顺序：
 
-        **方案B（用户协议，原地恢复）**：
+        **用户协议，原地恢复**：
         - 遍历 `saved_protocol_states`，找到对应变量的原始对象引用
         - 若变量槽已被替换为其他对象，先将变量重新指向原始对象
         - 调用 `original_obj.__restore__(saved_state)` 原地恢复字段状态
         - 若 `__restore__` 未定义或调用失败，保留当前状态（最佳努力语义）
 
-        **方案A（替换绑定）**：
+        **替换绑定**：
         - 遍历 `saved_vars`（深克隆副本），将变量槽替换为克隆副本
         - 只恢复已存在的变量（通过 assign）；不存在的变量直接跳过
 
@@ -282,7 +260,7 @@ class LLMExceptFrame:
         """
         scope = runtime_context.get_current_scope()
 
-        # 方案B：通过 __restore__ 协议原地恢复用户对象
+        # 通过 __restore__ 协议原地恢复用户对象
         for name, (original_obj, saved_state) in self.saved_protocol_states.items():
             symbol = scope.get_symbol(name)
             if symbol and not symbol.is_const:
@@ -293,15 +271,27 @@ class LLMExceptFrame:
                         scope.assign(name, original_obj)
                     try:
                         restore_method.call(original_obj, [saved_state])
-                    except Exception:
-                        pass  # 协议调用失败：保留当前状态（最佳努力）
+                    except Exception as e:
+                        kernel_diagnostic(
+                            code=KDIAG_PROTOCOL_RESTORE_FALLBACK,
+                            detail={"name": name, "error": repr(e)},
+                            message=(
+                                f"__restore__ protocol call failed for '{name}', "
+                                f"keeping current state (best-effort): {e!r}"
+                            ),
+                        )
 
-        # 方案A：每次恢复时从黄金快照重新深克隆，防止上一轮 llmexcept body 修改了快照对象
+        # 每次恢复时从黄金快照重新深克隆，防止上一轮 llmexcept body 修改了快照对象
         for name, val in self.saved_vars.items():
             symbol = scope.get_symbol(name)
             if symbol and not symbol.is_const:
                 fresh = self._try_deep_clone(val)
-                scope.assign(name, fresh if fresh is not None else val)
+                if fresh is None:
+                    raise InterpreterError(
+                        f"Cannot re-clone variable '{name}' from golden snapshot during retry. "
+                        f"This indicates an environment change that invalidates the snapshot."
+                    )
+                scope.assign(name, fresh)
     
     def increment_retry(self) -> bool:
         """
@@ -314,6 +304,42 @@ class LLMExceptFrame:
         self.retry_count += 1
         self.should_retry = self.retry_count < self.max_retry
         return self.should_retry
+
+    def verify_snapshot_integrity(self, runtime_context: 'RuntimeContextImpl') -> list:
+        """校验 llmexcept body 执行后被保护变量是否被篡改。
+
+        比对当前作用域中的变量值与黄金快照。返回被篡改的变量名列表。
+        调用方负责发出 WARNING 并在下一轮 retry 前强制恢复。
+        """
+        violations = []
+        scope = runtime_context.get_current_scope()
+        for name, golden_val in self.saved_vars.items():
+            symbol = scope.get_symbol(name)
+            if symbol is None:
+                continue
+            current_val = symbol.value
+            if current_val is golden_val:
+                continue
+            if not self._values_equal(current_val, golden_val):
+                violations.append(name)
+        return violations
+
+    def _values_equal(self, a, b) -> bool:
+        """浅层值比较：对 IbValue 使用 to_native()，否则用 identity/==。
+
+        值比较降级链路（llmexcept 篡改完整性校验的最后一环，设计机制）：
+        1. 正常路径：原生值 ``==`` 比较；
+        2. 降级路径：``==`` 抛异常（自定义对象 ``__eq__`` 故障 / 类型不可比较）
+           → 保守判定"不相等"（返回 False）。这是有意的 fail-safe 方向：
+           完整性校验宁可误报篡改而触发恢复，也不可漏报。调用方对 False
+           一律视为"被篡改"。（调用方在进入本方法前已排除同对象恒等情况。）
+        """
+        a_native = unbox(a)
+        b_native = unbox(b)
+        try:
+            return a_native == b_native
+        except Exception:
+            return False
 
     def should_continue_retrying(self) -> bool:
         """
@@ -332,56 +358,6 @@ class LLMExceptFrame:
         """restore_context 的别名，用于代码可读性"""
         self.restore_context(runtime_context)
     
-    def set_error(self, error: Exception, response: Optional[str] = None) -> None:
-        """
-        设置错误信息。
-        
-        参数:
-            error: 捕获的异常
-            response: LLM 的原始响应 (如果有)
-        """
-        self.last_error = error
-        self.last_llm_response = response
-        self.error_history.append({
-            "retry_count": self.retry_count,
-            "error_type": type(error).__name__,
-            "error_message": str(error),
-            "response": response,
-        })
-    
-    def reset_for_retry(self) -> None:
-        """
-        重置状态以准备下一次重试。
-
-        设计注：会清除 ``last_error``/``last_llm_response``（当前尝试状态），
-        但保留 ``error_history`` 作为跨重试可追踪历史。
-        """
-        self.last_error = None
-        self.last_llm_response = None
-        self.should_retry = True
-    
-    def get_retry_info(self) -> Dict[str, Any]:
-        """
-        获取重试信息的摘要。
-        
-        用于调试和日志记录。
-        
-        返回:
-            包含重试相关信息的字典
-        """
-        return {
-            'target_uid': self.target_uid,
-            'node_type': self.node_type,
-            'retry_count': self.retry_count,
-            'max_retry': self.max_retry,
-            'should_retry': self.should_retry,
-            'has_error': self.last_error is not None,
-            'error_type': type(self.last_error).__name__ if self.last_error else None,
-            'error_message': str(self.last_error) if self.last_error else None,
-            'error_history_count': len(self.error_history),
-            'error_history': list(self.error_history),
-        }
-    
     def __repr__(self) -> str:
         return (
             f"LLMExceptFrame(target={self.target_uid}, "
@@ -391,60 +367,3 @@ class LLMExceptFrame:
         )
 
 
-class LLMExceptFrameStack:
-    """
-    LLM 异常处理帧栈。
-    
-    用于管理嵌套的 llmexcept 块。
-    在复杂场景下，可能会有多层嵌套的 llmexcept，
-    帧栈确保每个层级都有独立的现场状态。
-
-    支持最大嵌套深度限制，防止异常情况下的无界增长。
-    默认最大深度为 128：足够覆盖深层业务嵌套，同时抑制异常路径的栈爆炸风险。
-    """
-    
-    DEFAULT_MAX_DEPTH = 128
-
-    def __init__(self, max_depth: int = DEFAULT_MAX_DEPTH):
-        self._frames: List[LLMExceptFrame] = []
-        self._max_depth = max_depth
-    
-    def push(self, frame: LLMExceptFrame) -> None:
-        """压入一个新帧"""
-        if len(self._frames) >= self._max_depth:
-            raise RuntimeError(
-                f"LLMExceptFrameStack overflow: max depth {self._max_depth} exceeded"
-            )
-        self._frames.append(frame)
-    
-    def pop(self) -> Optional[LLMExceptFrame]:
-        """弹出栈顶帧"""
-        if self._frames:
-            return self._frames.pop()
-        return None
-    
-    def peek(self) -> Optional[LLMExceptFrame]:
-        """查看栈顶帧但不弹出"""
-        if self._frames:
-            return self._frames[-1]
-        return None
-    
-    def is_empty(self) -> bool:
-        """检查栈是否为空"""
-        return len(self._frames) == 0
-    
-    def size(self) -> int:
-        """返回栈的大小"""
-        return len(self._frames)
-
-    @property
-    def max_depth(self) -> int:
-        """返回帧栈允许的最大嵌套深度"""
-        return self._max_depth
-    
-    def clear(self) -> None:
-        """清空栈"""
-        self._frames.clear()
-    
-    def __repr__(self) -> str:
-        return f"LLMExceptFrameStack(size={len(self._frames)})"

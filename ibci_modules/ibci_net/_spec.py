@@ -21,73 +21,73 @@ def __ibcext_vtable__() -> dict:
         "functions": {
             # --- 会话级配置 ---
             "set_timeout": {
-                "param_types": ["float"],
+                "params": [{"name": "seconds", "type": "float"}],
                 "return_type": "void",
                 "description": "设置全局请求超时时间（秒）"
             },
             "set_default_headers": {
-                "param_types": ["dict"],
+                "params": [{"name": "headers", "type": "dict"}],
                 "return_type": "void",
                 "description": "设置全局默认请求头"
             },
             "set_bearer_token": {
-                "param_types": ["str"],
+                "params": [{"name": "token", "type": "str"}],
                 "return_type": "void",
                 "description": "设置 Bearer Token 认证头"
             },
             "set_basic_auth": {
-                "param_types": ["str", "str"],
+                "params": [{"name": "username", "type": "str"}, {"name": "password", "type": "str"}],
                 "return_type": "void",
                 "description": "设置 Basic Auth 认证（用户名、密码）"
             },
             "clear_auth": {
-                "param_types": [],
+                "params": [],
                 "return_type": "void",
                 "description": "清除认证头"
             },
             # --- HTTP 方法 ---
             "get": {
-                "param_types": ["str"],
+                "params": [{"name": "url", "type": "str"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "str",
                 "description": "发送 GET 请求，返回响应文本"
             },
             "get_json": {
-                "param_types": ["str"],
+                "params": [{"name": "url", "type": "str"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "dict",
                 "description": "发送 GET 请求，自动解析 JSON 响应"
             },
             "post": {
-                "param_types": ["str", "dict"],
+                "params": [{"name": "url", "type": "str"}, {"name": "body", "type": "dict"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "str",
                 "description": "发送 POST 请求（JSON body），返回响应文本"
             },
             "post_json": {
-                "param_types": ["str", "dict"],
+                "params": [{"name": "url", "type": "str"}, {"name": "body", "type": "dict"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "dict",
                 "description": "发送 POST 请求（JSON body），自动解析 JSON 响应"
             },
             "post_form": {
-                "param_types": ["str", "dict"],
+                "params": [{"name": "url", "type": "str"}, {"name": "data", "type": "dict"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "str",
                 "description": "发送 POST 表单请求（application/x-www-form-urlencoded）"
             },
             "put": {
-                "param_types": ["str", "dict"],
+                "params": [{"name": "url", "type": "str"}, {"name": "body", "type": "dict"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "str",
                 "description": "发送 PUT 请求（JSON body），返回响应文本"
             },
             "delete": {
-                "param_types": ["str"],
+                "params": [{"name": "url", "type": "str"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "str",
                 "description": "发送 DELETE 请求，返回响应文本"
             },
             "head": {
-                "param_types": ["str"],
+                "params": [{"name": "url", "type": "str"}, {"name": "headers", "type": "dict", "default": None}],
                 "return_type": "dict",
                 "description": "发送 HEAD 请求，返回响应头 dict"
             },
             "get_status_code": {
-                "param_types": ["str"],
+                "params": [{"name": "url", "type": "str"}],
                 "return_type": "int",
                 "description": "发送 GET 请求，仅返回 HTTP 状态码"
             },

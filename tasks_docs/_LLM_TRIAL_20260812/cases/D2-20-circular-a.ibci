@@ -1,0 +1,5 @@
+# D2-20 多文件：循环导入（KNOWN_LIMITS §十八 DEP_CIRCULAR_IMPORT）
+# 期望: 编译期致命错误 DEP_CIRCULAR_IMPORT
+
+import mod_a
+print("DONE")

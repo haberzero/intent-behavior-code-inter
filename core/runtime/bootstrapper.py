@@ -1,8 +1,10 @@
 from typing import Dict, Optional, Any
+from core.base.enums import Provenance, Visibility
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
 from core.kernel.registry import KernelRegistry
 from core.kernel.factory import create_default_registry
 from core.kernel.spec import IbSpec, TypeDef
+from core.runtime.shared.waitable import Waitable
 
 class Bootstrapper:
     """
@@ -48,7 +50,8 @@ class Bootstrapper:
 
         # 内核类不属于用户定义类
         for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc, intent_stack_desc]:
-            d.is_user_defined = False
+            d.provenance = Provenance.KERNEL_NATIVE
+            d.visibility = Visibility.PRELUDE_VISIBLE
 
         # Step 1: Create Type Shells (注入内存)
         self.TypeClass = IbClass("Type", registry=self.registry)
@@ -179,6 +182,11 @@ class Bootstrapper:
         if isinstance(val, IbObject): return val
         if val is None:
             return registry.get_none()
+        # Waitable（异步操作句柄：LLMFuture / HostAwaitable）原样透传，不装箱——
+        # 装箱会破坏其 Waitable 身份，导致 VM 调度器无法识别并挂起。Waitable 是
+        # 异步基础设施对象，非普通值，不应被包装为 primitive。
+        if isinstance(val, Waitable):
+            return val
         # Uncertain 字面量哨兵：Uncertain 关键字被解析为此特殊字符串常量，
         # 此处将其映射到 llm_uncertain 单例，与 None → get_none() 的模式完全对称。
         if val == "__IBCI_UNCERTAIN_LITERAL__":

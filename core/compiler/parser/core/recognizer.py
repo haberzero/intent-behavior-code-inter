@@ -59,7 +59,11 @@ class SyntaxRecognizer:
         
         if token.type == TokenType.FN:
             return SyntaxRole.VARIABLE_DECLARATION
-        
+
+        # 并发/通信类型关键字（chan/slot）作声明起始
+        if token.type in (TokenType.CHAN, TokenType.SLOT):
+            return SyntaxRole.VARIABLE_DECLARATION
+
         # Check for implicit declaration: Type Name (e.g., int x, MyClass c)
         if token.type == TokenType.IDENTIFIER:
             if SyntaxRecognizer._is_declaration_lookahead(stream):
@@ -149,7 +153,7 @@ class SyntaxRecognizer:
             return True
             
         # 2b. Heuristic check: '... ID lambda/snapshot/fn ID'
-        # Covers `int fn f` (caught as PAR_003), `TYPE lambda x` (caught by declaration path), etc.
+        # Covers `int fn f` (caught as PAR_INVALID_SYNTAX), `TYPE lambda x` (caught by declaration path), etc.
         if next_t.type in (TokenType.LAMBDA, TokenType.SNAPSHOT, TokenType.FN):
             return True
             

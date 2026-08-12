@@ -1,0 +1,11 @@
+# R2-003 O1 修复：__call__ 内 LLM 行为（Waitable 帧内驱动）
+# 期望: 真实 LLM 回复正常
+class Chatty:
+    func __call__(self, str name) -> str:
+        str g = @~ 打个招呼：$name ~
+        return g
+
+Chatty c = Chatty()
+str r = c("小明")
+print("r=" + r)
+print("DONE")

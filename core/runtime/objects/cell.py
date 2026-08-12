@@ -26,9 +26,9 @@ IbCell —— 词法闭包 Cell 变量的独立堆容器。
   作为 IBCI 对象传递。这避免了被误用作通用 IBCI 值。
 * 身份语义优先于值语义：两个 cell 即使持有相等的 value 也不被视为相等——
   共享 cell 必须通过共享同一个 ``IbCell`` 实例实现，这是闭包共享语义的前提。
-* 提供 ``trace_refs()`` 钩子供未来 GC 根集合扫描使用 (公理 GC-2)。
+* 提供 ``trace_refs()`` 钩子供未来 GC 根集合扫描使用。
 
-本模块为 fn 新语法（IbCell 集成）与 GC 根集合（公理 GC-2）提供基础原语；
+本模块为 fn 新语法（IbCell 集成）与 GC 根集合提供基础原语；
 本身不引用任何 ``ScopeImpl`` / ``IbFnCallable`` / ``IbBehavior``，保持纯粹。
 """
 
@@ -71,7 +71,7 @@ class IbCell:
     确保 cell 可以作为字典键，且两个独立 cell 即使 value 相等也不相等。
     """
 
-    __slots__ = ("_value",)
+    __slots__ = ("_value", "_shared_with_main")
 
     # 公开常量：未初始化哨兵。外部读取时可与 ``IbCell.EMPTY`` 比较。
     EMPTY: Any = _EMPTY
@@ -87,6 +87,8 @@ class IbCell:
             本类不主动 box，以保持 "纯容器" 语义、避免对 registry 的依赖。
         """
         self._value = value
+        # 隔离标记：该 cell 是否已共享给线程任务（任务内写入报错，P3）。
+        self._shared_with_main = False
 
     # ------------------------------------------------------------------
     # 核心读写 API
@@ -115,12 +117,30 @@ class IbCell:
         """
         self._value = new_value
 
+    # ------------------------------------------------------------------
+    # 隔离标记（P3：任务内禁止写共享 cell）
+    # ------------------------------------------------------------------
+
+    @property
+    def shared_with_main(self) -> bool:
+        """该 cell 是否已共享给线程任务（任务内写入应报隔离错误）。"""
+        return self._shared_with_main
+
+    def mark_shared_with_main(self) -> None:
+        """标记该 cell 已共享给线程任务（任务内写入应报隔离错误，P3）。
+
+        由线程任务启动路径（``coordinator._run_task_body``）调用：把与主线程
+        共享的闭包 cell 标记为"任务内禁写"，使 ``runtime_context._check_cell_isolation``
+        能拦截任务内对捕获变量的赋值。
+        """
+        self._shared_with_main = True
+
     def is_empty(self) -> bool:
         """是否处于未初始化状态。"""
         return self._value is _EMPTY
 
     # ------------------------------------------------------------------
-    # GC 钩子（供追踪式 GC 根集合扫描使用，公理 GC-2）
+    # GC 钩子（供追踪式 GC 根集合扫描使用）
     # ------------------------------------------------------------------
 
     def trace_refs(self) -> Iterator[Any]:

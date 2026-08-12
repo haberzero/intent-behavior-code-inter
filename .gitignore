@@ -20,3 +20,15 @@ api_config.json
 backup_tests
 
 diff_output_ibci_all.md
+
+# pytest temp directories (forced under repo root by conftest.py)
+.tmp_pytest/
+.tmp_run/
+pytest-of-*/
+ref/
+
+# packaging / build artifacts
+*.egg-info/
+build/
+dist/
+.eggs/

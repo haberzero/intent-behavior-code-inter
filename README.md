@@ -1,4 +1,4 @@
-# IBC-Inter (Intent Behavior Code - Interactive)
+﻿# IBC-Inter (Intent Behavior Code - Interactive)
 
 **请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
 
@@ -80,7 +80,7 @@ retry 指令会使 ibci 代码回到 `if @~检查 $greeting 是否包含情感�
 
 llmexcept 不仅仅可以保护if语句，事实上，llmexcept可以用来保护所有行为描述语句
 
-llmexcept 机制与 IBC-Inter 的 `__to_prompt__` 以及 `__from_prompt__` 协议紧密相关，详情请见 [IBCI 语法手册](docs/IBCI_SYNTAX_REFERENCE.md)
+llmexcept 机制与 IBC-Inter 的 `__to_prompt__` 以及 `__from_prompt__` 协议紧密相关，详情请见 [IBCI 语法手册](docs/SYNTAX_REFERENCE.md)
 
 ### 4. 行为描述驱动循环
 
@@ -129,11 +129,18 @@ cd intent-behavior-code-inter
 
 ### 第二步：安装 Python 与运行依赖
 
-确保你的电脑安装了 **Python 3.10** 或更高版本。然后在终端运行：
+使用 conda 创建独立环境并安装全部依赖（依赖分组与完整步骤见 `docs/guide/00_environment.md`）：
 
 ```bash
-# 安装连接 AI 所需的官方库
-pip install openai
+# 从项目根目录创建名为 ibci 的 conda 环境（含可编辑安装 + 测试依赖）
+conda env create -f environment.yml
+conda activate ibci
+```
+
+不熟悉 conda 时，也可直接用 pip 安装运行时依赖（`openai`）：
+
+```bash
+pip install -e .
 ```
 
 ### 第三步：获取你的 AI API Key (以阿里云百炼为例)
@@ -147,17 +154,20 @@ pip install openai
 
 创建一个独立的目标文件夹，例如`test_target_proj`
 
-在目标文件夹下创建一个 `api_config.json`，填写信息：
+在目标文件夹下创建一个 `api_config.json`（引擎启动时自动加载），填写信息：
 
 ```json
 {
     "default_model": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key": "这里填你刚才复制的 API-KEY",
-        "model": "qwen3-30b-a3b"
+        "model": "qwen3-30b-a3b",
+        "reasoning": false
     }
 }
 ```
+
+> 配置支持 `providers`/`models`/`defaults` 分层、`{env:VAR}` 环境变量引用、`mock:true` 显式 MOCK 模式等。完整 schema 见 `docs/guide/01_setup.md`。
 
 复制`examples/01_getting_started/01_hello_world.ibci`到`test_target_proj`
 
@@ -169,12 +179,52 @@ python main.py run test_target_proj/01_hello_world.ibci
 
 *注意！！！ 现阶段不推荐使用任何思考模型接入 IBC-Inter，思考模型在当前 IBCI 版本的提示词约束下，无法合理工作并收敛思考结论，容易陷入思考死循环。特别是本地小尺寸的思考模型，更容易陷入无穷无尽的“等一等，我应该更深入思考”之类的反思中。请务必使用非思考模式。
 
-## 其它
+## 本地 LLM 快速开始（真实 LLM 驱动）
+
+除上述云端 API 外，IBCI 支持本地 LLM 服务（Ollama / LM Studio / vLLM 等 OpenAI 兼容端点）。
+
+1. 起一个 OpenAI 兼容的本地端点（如 LM Studio 打开 Server，默认 `http://localhost:1234/v1`）。
+2. 在目标文件夹下创建 `api_config.json`（引擎自动加载）：
+
+```json
+{
+    "providers": {
+        "local": { "base_url": "http://localhost:1234/v1", "api_key": "lm-studio" }
+    },
+    "models": {
+        "default": { "provider": "local", "model": "qwen3.6-35b-a3b", "reasoning": false }
+    },
+    "default_model": "default"
+}
+```
+
+3. 运行示例（无需脚本内配置代码，引擎自动加载）：
+
+```bash
+python main.py run test_target_proj/01_hello_world.ibci
+```
+
+> `reasoning:false` 声明非思考模型（跳过 probe，直接标准模式），防反思死循环。
+> 完整配置 schema 见 `docs/guide/01_setup.md`。
+
+## 进一步阅读
 
 更多详情请参阅：
 
-- [IBC-Inter 语法手册](docs/IBCI_SYNTAX_REFERENCE.md) (语法与类型系统的完整参考)
-- [架构原则](docs/ARCHITECTURE_PRINCIPLES.md) (核心设计思路)
+- [入门指南](GETTING_STARTED.md)（**新加入者先读**：安装与环境准备）
+- [文档中心导航与治理](docs/README.md)（**新加入者先读**：目录结构、阅读路径、治理纪律）
+- [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考，含诊断码参考 `docs/syntax/15_diagnostics.md`)
+- [架构原则](docs/ARCHITECTURE.md) (核心设计思路，含观测体系 `docs/architecture/09_observability.md`)
+- [子系统设计](docs/SUBSYSTEM_DESIGN.md)（意图 / 文件容器 / 可调用 / 插件 / 协程内部设计）
+- [操作指南](docs/howto/)（按问题查阅：调试 LLM 调用、编写用户插件）
 - [已知限制](docs/KNOWN_LIMITS.md) (当前版本的语言级约束)
+
+### 运行测试
+
+```bash
+python -m pytest tests/
+```
+
+测试基线以当次 pytest 输出为准。
 
 ***

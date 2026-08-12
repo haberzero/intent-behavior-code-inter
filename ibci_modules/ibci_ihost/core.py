@@ -54,29 +54,25 @@ class IHostPlugin(IbPlugin):
         if hs:
             hs.load_state(path)
 
-    def run_isolated(self, path: str, policy: Dict[str, Any]) -> bool:
-        """在隔离环境中运行另一个 .ibci 脚本，返回是否成功。"""
+    def run_isolated(self, path: str, policy: Dict[str, Any]) -> "HostAwaitable":
+        """在隔离环境中运行另一个 .ibci 脚本，返回可等待句柄（多值 dict）。"""
         hs = self._host_service()
         if not hs:
-            return False
-        result = hs.run_isolated(path, policy)
-        # HostService.run_isolated 返回 IbObject(bool)；对外统一拆箱为 Python bool
-        if hasattr(result, 'get_value'):
-            return bool(result.get_value())
-        return bool(result)
+            raise RuntimeError("IHost service not available; cannot run_isolated.")
+        return hs.run_isolated(path, policy)
 
     def spawn_isolated(self, path: str, policy: Dict[str, Any]) -> str:
         """在隔离后台线程中异步启动另一个 .ibci 脚本，返回 handle 字符串。"""
         hs = self._host_service()
         if not hs:
-            return ""
+            raise RuntimeError("IHost service not available; cannot spawn_isolated.")
         return hs.spawn_isolated(path, policy)
 
-    def collect(self, handle: str) -> dict:
-        """阻塞等待 spawn_isolated 返回的 handle 执行完成，返回子环境导出的变量字典。"""
+    def collect(self, handle: str) -> "HostAwaitable":
+        """返回可等待句柄：等待 spawn_isolated 子执行完成，取回子环境导出的变量字典。"""
         hs = self._host_service()
         if not hs:
-            return {}
+            raise RuntimeError("IHost service not available; cannot collect.")
         return hs.collect(handle)
 
     def get_source(self) -> str:

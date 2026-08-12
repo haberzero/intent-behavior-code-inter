@@ -20,7 +20,7 @@ from core.compiler.common.tokens import TokenType
 
 def tokenize(code: str):
     """Helper: tokenize code and return list of (type, value) tuples."""
-    lexer = Lexer(code, issue_tracker=None, debugger=None)
+    lexer = Lexer(code, issue_tracker=None)
     tokens = lexer.tokenize()
     return [(t.type, t.value) for t in tokens]
 

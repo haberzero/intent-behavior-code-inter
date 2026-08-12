@@ -1,0 +1,12 @@
+# R2-001 O1 修复：obj() 深递归（修复前 RecursionError at ~300）
+# 期望: 400 正常（EXEC-1 trampoline）
+class Rec:
+    func __call__(self, int n) -> int:
+        if n <= 1:
+            return 1
+        return self(n - 1) + 1
+
+Rec r = Rec()
+int v = r(400)
+print("v=" + (str)v)
+print("DONE")

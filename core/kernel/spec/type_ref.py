@@ -6,7 +6,7 @@ TypeRef — 类型系统的"地址"层。
 TypeRef 是纯不可变值，代表对一个类型的引用。它只持有类型的"地址"
 （名字 + 泛型实参 + 模块限定），不包含任何成员信息或运行逻辑。
 
-设计原则（来自 IBCI_TYPE_SYSTEM_FROM_ZERO_ARCHITECTURE.md §1.1）：
+设计原则：
   - 可哈希：能作为 dict key、放入 set
   - 递归结构化：list[dict[str,int]] 直接通过 args 表达，不靠字符串拼接
   - 不依赖注册表：构造 TypeRef 无需任何全局状态
@@ -124,10 +124,14 @@ class TypeRef:
         不导入 IbSpec 子类（避免循环），通过 ``get_base_name()`` 分派。
         """
         base = spec.get_base_name()
+        # 延迟导入打破 base↔type_ref 的循环依赖（base 运行时已导入本模块）。
+        from .base import TypeKind
 
-        # TypeDef: element_type
-        if base == "list" and hasattr(spec, "element_type"):
-            elem_ref = getattr(spec, "element_type", None)
+        # 容器 kind 以 TypeKind 分派，不用名字 + 字段探测：hasattr 副守卫
+        # 恒真（仅 TypeDef 携带这些字段），且同名非容器 kind（如名为 "list"
+        # 的用户类）会误命中——须以 kind 判定。
+        if spec.kind == TypeKind.LIST.value:
+            elem_ref = spec.element_type
             if elem_ref is not None and elem_ref.head != "any":
                 return cls(
                     head="list",
@@ -136,9 +140,8 @@ class TypeRef:
                 )
             return cls(head="list", args=(), module=spec.module_path)
 
-        # TypeDef: element_type
-        if base == "tuple" and hasattr(spec, "element_type"):
-            elem_ref = getattr(spec, "element_type", None)
+        if spec.kind == TypeKind.TUPLE.value:
+            elem_ref = spec.element_type
             if elem_ref is not None and elem_ref.head != "any":
                 return cls(
                     head="tuple",
@@ -147,19 +150,16 @@ class TypeRef:
                 )
             return cls(head="tuple", args=(), module=spec.module_path)
 
-        # TypeDef: key_type + value_type
-        if base == "dict" and hasattr(spec, "key_type"):
-            key_ref = getattr(spec, "key_type", cls.of("any"))
-            val_ref = getattr(spec, "value_type", cls.of("any"))
+        if spec.kind == TypeKind.DICT.value:
             return cls(
                 head="dict",
-                args=(key_ref, val_ref),
+                args=(spec.key_type, spec.value_type),
                 module=spec.module_path,
             )
 
-        # TypeDef / TypeDef: value_type
-        if base in ("fn_callable", "behavior") and hasattr(spec, "value_type"):
-            val_ref = getattr(spec, "value_type", None)
+        # fn_callable / behavior 共享 CALLABLE_INSTANCE kind，按名字区分 head
+        if spec.kind == TypeKind.CALLABLE_INSTANCE.value and base in ("fn_callable", "behavior"):
+            val_ref = spec.value_type
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
                 return cls(
                     head=base,
@@ -168,12 +168,64 @@ class TypeRef:
                 )
             return cls(head=base, args=(), module=spec.module_path)
 
-        # TypeDef: wrapped_type
-        if base == "Optional" and hasattr(spec, "wrapped_type"):
-            wrapped_ref = getattr(spec, "wrapped_type", cls.of("any"))
+        # thread / thread_result 是"值承载"泛型（join 结果类型 T 承载于 value_type）。
+        # 旧 TASK kind（task 类型）已删除，THREAD kind 现唯一指 thread。
+        if spec.kind == TypeKind.THREAD.value and base == "thread":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="thread",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="thread", args=(), module=spec.module_path)
+
+        if spec.kind == TypeKind.THREAD_RESULT.value and base == "thread_result":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="thread_result",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="thread_result", args=(), module=spec.module_path)
+
+        # chan[T] / slot[T] 也是"值承载"泛型（消息元素类型/槽值类型承载于
+        # value_type，纳入统一泛型模型后符号→TypeRef 身份保真）。
+        if spec.kind == TypeKind.CHANNEL.value and base == "chan":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="chan",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="chan", args=(), module=spec.module_path)
+
+        if spec.kind == TypeKind.SLOT.value and base == "slot":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="slot",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="slot", args=(), module=spec.module_path)
+
+        if spec.kind == TypeKind.GENERATOR.value and base == "generator":
+            val_ref = spec.value_type
+            if val_ref is not None and val_ref.head not in ("auto", "any", "", None):
+                return cls(
+                    head="generator",
+                    args=(val_ref,),
+                    module=spec.module_path,
+                )
+            return cls(head="generator", args=(), module=spec.module_path)
+
+        if spec.kind == TypeKind.OPTIONAL.value:
             return cls(
                 head="Optional",
-                args=(wrapped_ref,),
+                args=(spec.wrapped_type,),
                 module=spec.module_path,
             )
 
@@ -214,8 +266,8 @@ class TypeRef:
         """True if this TypeRef has type arguments (is a generic instantiation)."""
         return bool(self.args)
 
-    def is_builtin(self) -> bool:
-        """True if this TypeRef has no module qualifier (built-in or current module)."""
+    def is_intrinsic(self) -> bool:
+        """True if this TypeRef has no module qualifier (intrinsic/primitive or current module)."""
         return self.module is None
 
     def with_module(self, module: Optional[str]) -> "TypeRef":

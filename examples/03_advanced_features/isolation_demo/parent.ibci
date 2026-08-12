@@ -18,7 +18,7 @@ dict policy = {
     "registry_isolation": True,
     "inherit_variables": False
 }
-# 使用绝对路径（需要确保路径正确）
-ihost.run_isolated("examples/03_advanced_features/isolation_demo/sub_project/child.ibci", policy)
+# 使用相对路径（基于入口文件所在目录解析）
+ihost.run_isolated("./sub_project/child.ibci", policy)
 
 print("\n--- [PARENT] Finished ---")

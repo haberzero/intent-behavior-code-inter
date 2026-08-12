@@ -1,4 +1,5 @@
 from typing import List, Tuple, Optional
+from core.base.diagnostics.codes import LEX_INVALID_CHAR, LEX_INVALID_ESCAPE, LEX_UNTERMINATED_BEHAVIOR, LEX_UNTERMINATED_BLOCK, LEX_UNTERMINATED_STRING
 from core.compiler.common.tokens import Token, TokenType, SubState
 from core.compiler.lexer.str_stream import StrStream
 from core.compiler.common.diagnostics import DiagnosticReporter
@@ -35,10 +36,14 @@ class CoreTokenScanner:
             'func': TokenType.FUNC, 'return': TokenType.RETURN,
             'lambda': TokenType.LAMBDA,
             'snapshot': TokenType.SNAPSHOT,
+            'await': TokenType.AWAIT,
+            'yield': TokenType.YIELD,
+            'chan': TokenType.CHAN,
+            'slot': TokenType.SLOT,
             'if': TokenType.IF, 'elif': TokenType.ELIF, 'else': TokenType.ELSE,
             'switch': TokenType.SWITCH, 'case': TokenType.CASE, 'default': TokenType.DEFAULT,
             'for': TokenType.FOR, 'while': TokenType.WHILE, 'in': TokenType.IN,
-            'auto': TokenType.AUTO, 'fn': TokenType.FN, 'global': TokenType.GLOBAL, 'pass': TokenType.PASS,
+            'auto': TokenType.AUTO, 'fn': TokenType.FN, 'global': TokenType.GLOBAL, 'nonlocal': TokenType.NONLOCAL, 'pass': TokenType.PASS,
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
             'try': TokenType.TRY, 'except': TokenType.EXCEPT,
             'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,
@@ -159,9 +164,9 @@ class CoreTokenScanner:
     def check_eof_state(self):
         """Check for unclosed states at EOF."""
         if self.sub_state == SubState.IN_STRING:
-            self.issue_tracker.error("Unexpected EOF while scanning string literal", self.scanner, code="LEX_002")
+            self.issue_tracker.error("Unexpected EOF while scanning string literal", self.scanner, code=LEX_UNTERMINATED_STRING)
         elif self.sub_state == SubState.IN_BEHAVIOR:
-            self.issue_tracker.error("Unexpected EOF while scanning behavior description", self.scanner, code="LEX_006")
+            self.issue_tracker.error("Unexpected EOF while scanning behavior description", self.scanner, code=LEX_UNTERMINATED_BEHAVIOR)
 
     def _handle_newline(self, tokens: List[Token]) -> bool:
         """
@@ -219,7 +224,14 @@ class CoreTokenScanner:
         # 1. Variable Reference (Support $ in NORMAL mode for 'intent $x:')
         # 使用尝试性扫描，避免物理回退
         if char == '$':
-            self.try_scan(tokens, self._scan_var_ref)
+            # 失败时消费 $ 作为普通文本（与 IN_INTENT 路径对齐），避免回滚后
+            # 同字符死循环。当前 _scan_var_ref 恒成功，此分支为防御纵深。
+            if not self.try_scan(tokens, self._scan_var_ref):
+                self.scanner.advance()
+                tokens.append(Token(
+                    TokenType.RAW_TEXT, "$",
+                    self.scanner.line, self.scanner.col,
+                ))
             return False
 
         # 正常消费一个字符
@@ -231,7 +243,7 @@ class CoreTokenScanner:
                 self.continuation_mode = True
                 return False
             else:
-                self.issue_tracker.error(f"Unexpected character '\\' or invalid escape sequence", self.scanner, code="LEX_005")
+                self.issue_tracker.error(f"Unexpected character '\\' or invalid escape sequence", self.scanner, code=LEX_INVALID_ESCAPE)
                 return False
 
         # 3. Whitespace
@@ -269,7 +281,7 @@ class CoreTokenScanner:
             
             # Check for behavior marker: @~ or @tag~
             offset = 0
-            while self.scanner.peek(offset).isalpha():
+            while self.scanner.peek(offset).isalnum():
                 offset += 1
             
             if self.scanner.peek(offset) == '~' and mode == "":
@@ -397,21 +409,21 @@ class CoreTokenScanner:
             return False
 
         # 9. Identifiers / Numbers
-        if char.isalpha() or char == '_' or '\u4e00' <= char <= '\u9fff':
+        if char.isalpha() or char == '_':
             self._scan_identifier(char, tokens)
             return False
         if char.isdigit():
             self._scan_number(char, tokens)
             return False
             
-        self.issue_tracker.error(f"Unexpected character '{char}'", self.scanner, code="LEX_001")
+        self.issue_tracker.error(f"Unexpected character '{char}'", self.scanner, code=LEX_INVALID_CHAR)
         return False
 
     def _scan_string_char(self, tokens: List[Token]):
         char = self.scanner.advance()
         
         if char == '\n':
-            self.issue_tracker.error("EOL while scanning string literal", self.scanner, code="LEX_002")
+            self.issue_tracker.error("EOL while scanning string literal", self.scanner, code=LEX_UNTERMINATED_STRING)
             return
 
         if char == '\\':
@@ -557,13 +569,13 @@ class CoreTokenScanner:
             
             # 换行 - 字符串不支持跨行
             if char == '\n':
-                self.issue_tracker.error("Unexpected newline in string literal inside behavior expression", self.scanner, code="LEX_002")
+                self.issue_tracker.error("Unexpected newline in string literal inside behavior expression", self.scanner, code=LEX_UNTERMINATED_STRING)
                 return
             
             string_content += self.scanner.advance()
         
         # 未闭合的字符串
-        self.issue_tracker.error("Unterminated string literal in behavior expression", self.scanner, code="LEX_002")
+        self.issue_tracker.error("Unterminated string literal in behavior expression", self.scanner, code=LEX_UNTERMINATED_STRING)
         if string_content:
             tokens.append(self.scanner.create_token(TokenType.STRING, string_content))
 
@@ -643,7 +655,7 @@ class CoreTokenScanner:
                 # Top-level: only allow .attr or [
                 if peek == '.':
                     next_char = self.scanner.peek(1)
-                    if next_char.isalpha() or next_char == '_' or '\u4e00' <= next_char <= '\u9fff':
+                    if next_char.isalpha() or next_char == '_':
                         self.scanner.start_token()
                         self.scanner.advance() # .
                         tokens.append(self.scanner.create_token(TokenType.DOT, "."))
@@ -651,7 +663,7 @@ class CoreTokenScanner:
                         # Scan identifier
                         self.scanner.start_token()
                         id_val = ""
-                        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
                             id_val += self.scanner.advance()
                         tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
                     else:
@@ -696,12 +708,12 @@ class CoreTokenScanner:
                         tokens.append(self.scanner.create_token(TokenType.STRING, s_val))
                     else:
                         # This is a real unclosed string error
-                        self.issue_tracker.error("Unclosed string literal in behavior subscript", self.scanner, code="LEX_002")
+                        self.issue_tracker.error("Unclosed string literal in behavior subscript", self.scanner, code=LEX_UNTERMINATED_STRING)
                         break
-                elif peek.isalpha() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
+                elif peek.isalpha() or peek == '_':
                     self.scanner.start_token()
                     id_val = ""
-                    while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+                    while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
                         id_val += self.scanner.advance()
                     tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, id_val))
                 elif peek in ' \t':
@@ -715,11 +727,11 @@ class CoreTokenScanner:
                     break
         
         if subscript_depth > 0:
-            self.issue_tracker.error(f"Unclosed subscript '[' in behavior expression (depth: {subscript_depth})", self.scanner, code="LEX_003")
+            self.issue_tracker.error(f"Unclosed subscript '[' in behavior expression (depth: {subscript_depth})", self.scanner, code=LEX_UNTERMINATED_BLOCK)
 
     def _scan_identifier(self, first_char: str, tokens: List[Token]):
         value = first_char
-        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+        while not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
             value += self.scanner.advance()
             
         if value in self.KEYWORDS:
@@ -743,24 +755,6 @@ class CoreTokenScanner:
             tokens.append(self.scanner.create_token(TokenType.IDENTIFIER, value, self.is_new_line_flag))
             
         self.is_new_line_flag = False
-
-    def _is_at_expression_start(self) -> bool:
-        """检查是否处于表达式开头（用于判断负号是负号还是减号）"""
-        idx = self.scanner.pos
-        while idx > 0:
-            pos = idx - 1
-            if pos < 0:
-                break
-            char = self.scanner.source[pos]
-            if char == ' ' or char == '\t':
-                idx = pos
-                continue
-            if char == '\n':
-                return True
-            if char in '+-*/%=<>!&|,':
-                return True
-            return False
-        return True
 
     def _scan_number(self, first_char: str, tokens: List[Token]):
         value = first_char
@@ -812,22 +806,6 @@ class CoreTokenScanner:
                 while self.scanner.peek().isdigit():
                     value += self.scanner.advance()
 
-        # Check for negative number
-        # Only treat as negative if this is at the start of an expression (after whitespace, operator, or at beginning of line)
-        if self.is_new_line_flag or self._is_at_expression_start():
-            if self.scanner.peek() == '-':
-                self.scanner.advance()
-                next_char = self.scanner.peek()
-                if next_char.isdigit():
-                    value = '-' + value
-                    while self.scanner.peek().isdigit():
-                        value += self.scanner.advance()
-                    # Check for negative float
-                    if self.scanner.peek() == '.' and self.scanner.peek(1).isdigit():
-                        value += self.scanner.advance()
-                        while self.scanner.peek().isdigit():
-                            value += self.scanner.advance()
-
         tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
         self.is_new_line_flag = False
 
@@ -836,14 +814,14 @@ class CoreTokenScanner:
         self.scanner.advance() # $
         name = ""
         
-        if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_' or '\u4e00' <= self.scanner.peek() <= '\u9fff'):
+        if not self.scanner.is_at_end() and (self.scanner.peek().isalnum() or self.scanner.peek() == '_'):
             name += self.scanner.advance()
         else:
-            self.issue_tracker.warning(r"Empty variable reference '$'. Did you mean '\$'?", self.scanner, code="LEX_001")
+            self.issue_tracker.warning(r"Empty variable reference '$'. Did you mean '\$'?", self.scanner, code=LEX_INVALID_CHAR)
 
         while not self.scanner.is_at_end():
             peek = self.scanner.peek()
-            if peek.isalnum() or peek == '_' or '\u4e00' <= peek <= '\u9fff':
+            if peek.isalnum() or peek == '_':
                 name += self.scanner.advance()
             else:
                 break

@@ -1,0 +1,19 @@
+# D2-32 边界：生成器体内 await 真异步 Waitable（KNOWN_LIMITS §二十四）
+# doc: docs/KNOWN_LIMITS.md §二十四（生成器消费路径不承载显式 await 真异步 Waitable，
+#   generic_next 报 RuntimeError: generator driver yielded unexpected event）
+# 期望: 记录实际行为——按文档为预存限制（异常），确认异常形态
+
+chan c = chan(int, "stream")
+
+func producer() -> void:
+    c.send(42)
+
+thread[void] t = thread(callable=producer, args=[])
+
+func take() -> int:
+    int v = await c.recv()
+    yield v
+
+for int x in take():
+    print("x=" + (str)x)
+print("DONE")
