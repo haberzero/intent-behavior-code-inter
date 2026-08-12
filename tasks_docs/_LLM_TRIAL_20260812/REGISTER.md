@@ -20,6 +20,68 @@
 - **A1-A5 重验点全部通过**；B1-B3 已补正式记录；C1-C4 已测。
 - **零死循环**：所有用例在 OS 级超时保护下运行，唯一 TIMEOUT-KILLED 为死循环保护冒烟验证本身。
 
+## 执行批次 5（REVERIFY 修复后回归试用，2026-08-12，全量 pytest 2252 passed / 1 skipped）
+
+> 修复后重验：PT-DEBT-25/26/27/28 + O1/I1/O2 复现用例确认已处理 + 受影响子系统回归。
+> 全部经死循环保护 harness；50 次运行，48 干净 + 2 预期（编译期类型错验证 + RecursionError 根因验证）。
+
+| case_id | 验证目标 | 期望 | 实际 | 分类 |
+|---------|---------|------|------|------|
+| R1-global | PT-DEBT-25 global 修复 | counter=1 counter2=99 | ✅ counter=1 counter2=99 DONE | PASS |
+| R1-import-whole | PT-DEBT-26 整模块 import | 函数+变量成员访问正常 | ✅ greet=hello from module ans=42 | PASS |
+| R1-import-zero | PT-DEBT-26 档2 零参数类型 | 编译期 SEM_TYPE_MISMATCH | ✅ Cannot assign 'str' to 'int'（编译期） | PASS |
+| R1-ai | PT-DEBT-28 ai API | retry/auto 可调用 | ✅ retry=7 auto=True | PASS |
+| R2-obj-recursion | O1 obj() 深递归 | depth=400 正常 | ✅ v=400 | PASS |
+| R2-obj-fnref | O1 fn 引用 | hi world | ✅ r=hi world | PASS |
+| R2-obj-llm | O1 __call__+LLM | 真实 LLM 回复 | ✅ 你好，小明！👋 | PASS |
+| R2-iter-gen | I1 生成器 __iter__ | for x=1,2 | ✅ x=1 x=2 | PASS |
+| R2-gen-call | I1 生成器 __call__ | for x=10,5 | ✅ x=10 x=5 | PASS |
+| R2-yieldfrom-inst | I1 yield from 实例 | x=1,2 | ✅ x=1 x=2 | PASS |
+| R2-field-default | O2 字段默认值 | 每实例独立 | ✅ b_grid=1 b_inner=0 b_plain_len=0 | PASS |
+| R3-provider-timeout | PT-DEBT-27 异常捕获（真实超时） | caught_llmcall | ✅ caught_llmcall after_catch DONE | PASS |
+| REV-D1-10-001-llmexcept | llmexcept 回归 | 收敛 | ✅ result=2 | PASS |
+| REV-D1-05-008-generator | 生成器+LLM 回归 | to_list=3 | ✅ gen_type=generator items_len=3 | PASS |
+| REV-D1-05-008b-tolist | to_list 回归 | 4/0/generator | ✅ | PASS |
+| REV-D1-05-006-lambda | lambda 回归 | 行为体 str | ✅ | PASS |
+| REV-D1-05-002-recursion | fn 签名/内省回归 | sig/ret | ✅ fn_callable[(int,str)->bool] | PASS |
+| REV-D1-06-001-oop | OOP 回归 | dist/speak/greet | ✅ | PASS |
+| REV-D1-06-003-enum | Enum+LLM 回归 | GREEN/sw_green | ✅ | PASS |
+| REV-D1-09-001-intent | 意图回归 | @/@!/@+ 生效 | ✅ r1=执行 b1=True a1/a2 短 a3 长 | PASS |
+| REV-D1-09-004-intentctx | intent_context 回归 | use 生效 | ✅ | PASS |
+| REV-D3-30-global-intent | 全局意图回归 | 注：前缀 | ✅ | PASS |
+| REV-D3-31-concurrent-llmexcept | 并发 llmexcept 回归 | r1/r2 正确 | ✅ | PASS |
+| REV-D3-C4-concurrency | 并发扩展回归 | 8 路+4 线程 | ✅ batch8=8 | PASS |
+| REV-D2-03-class-llm-slot | 类+LLM+slot 回归 | c1=中 shared=2 | ✅ | PASS |
+| REV-D2-21-plugin | 插件回归 | add=30 mul=25 | ✅ | PASS |
+| REV-D1-11-006-filejson | file/json 回归 | 读写正确 | ✅ | PASS |
+| REV-D1-14-001-concurrency | 并发原语回归 | msg/pubsub/cas/thread | ✅ | PASS |
+| REV-D1-11-002g-namedimport | 命名导入回归 | square=36 | ✅ | PASS |
+| REV-D1-11-002-modimport | 整模块 import 回归 | greet+square | ✅ | PASS |
+| REV-D1-11-005-ihost | 隔离回归 | CHILD_RUNNING | ✅ | PASS |
+| REV2-D1-02-003-scope | global/nonlocal 回归 | counter | ✅ | PASS |
+| REV2-D1-03-001-arith | 算术回归 | 全对 | ✅ | PASS |
+| REV2-D1-04-001-flow | 控制流回归 | 全对 | ✅ | PASS |
+| REV2-D1-04-002-switch-exc | 异常回归 | caught/finally | ✅ | PASS |
+| REV2-D1-05-001-funcs | 函数回归 | 全对 | ✅ | PASS |
+| REV2-D1-05-003b-deeprec | 深递归边界 | RecursionError 根因 | ✅ RecursionError×3（预期） | PASS |
+| REV2-D1-05-007-snapshot | snapshot 回归 | 冻结意图 | ✅ | PASS |
+| REV2-D1-07-002-typed | 类型约束回归 | int/bool/float/list | ✅ | PASS |
+| REV2-D1-07-003-boolctx | 布尔上下文回归 | negative/count | ✅ | PASS |
+| REV2-D1-07-005-runbatch | run_batch 回归 | batch_len=3 | ✅ | PASS |
+| REV2-D1-08-001-llmfunc | LLM 函数回归 | 翻译/解析 | ✅ | PASS |
+| REV2-D1-11-001-modules | 模块回归 | info_keys | ✅ | PASS |
+| REV2-D1-12-001-builtins | 内建回归 | 全对 | ✅ | PASS |
+| REV2-D2-01-gen-intent-llmexcept | 交叉回归 | yield=1/2/3 | ✅ | PASS |
+| REV2-D2-40-snap-vs-lambda | 意图对比回归 | snap_len=4 lam_len=81 | ✅ | PASS |
+| REV2-D2-70-loop-llm | 循环体 LLM 回归 | score | ✅ | PASS |
+| REV2-D2-71-str-bool-edge | str'0'真值回归 | truthy 差异 | ✅ | PASS |
+| REV2-D3-20-exhaustion | 重试收敛回归 | n= | ✅ | PASS |
+| REV2-D3-22-mock-exhaust | MOCK 耗尽回归 | exhausted+max_retry | ✅ | PASS |
+
+**重验结论**：已修复问题全部确认已处理（R1 四组 + R3 provider 超时真实捕获）；受影响子系统
+（调用分派/生成器/模块导入/异常/类型绑定/意图/并发/插件/隔离）真实 LLM 回归全 PASS；全量
+pytest 2252 passed / 1 skipped。**无本次修复引入的回归**。
+
 ## 执行批次 1（D1 01-02 章，确定性核心）
 
 | case_id | 文档引用 | 期望 | 实际 | 分类 | 级别 | 证据 | 备注 |

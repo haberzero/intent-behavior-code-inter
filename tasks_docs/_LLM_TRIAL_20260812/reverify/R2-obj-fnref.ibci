@@ -1,0 +1,11 @@
+# R2-002 O1 修复：fn f = instance; f() 路径
+# 期望: hi world
+class Greeter:
+    func __call__(self, str name) -> str:
+        return "hi " + name
+
+Greeter g = Greeter()
+fn f = g
+str r = f("world")
+print("r=" + r)
+print("DONE")

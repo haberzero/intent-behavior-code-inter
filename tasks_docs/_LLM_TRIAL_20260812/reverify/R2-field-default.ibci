@@ -1,0 +1,21 @@
+# R2-007 O2 修复：字段默认值每实例独立（修复前内层 list/用户对象共享）
+# 期望: b_grid=1 b_inner=0 b_plain_len=0
+class Inner:
+    int v
+    func __init__(self) -> auto:
+        self.v = 0
+
+class Holder:
+    list[list[int]] grid = [[1]]
+    Inner inner = Inner()
+    list[int] plain = []
+
+Holder a = Holder()
+Holder b = Holder()
+a.grid[0][0] = 99
+a.inner.v = 5
+a.plain.append(7)
+print("b_grid=" + (str)b.grid[0][0])
+print("b_inner=" + (str)b.inner.v)
+print("b_plain_len=" + (str)b.plain.len())
+print("DONE")
