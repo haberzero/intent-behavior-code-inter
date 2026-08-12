@@ -130,3 +130,79 @@ class TestIbcFileMultiModule:
         mod = d["modules"][artifact.entry_module]
         star = mod.get("import_star_members", {})
         assert sorted(star.get("helper", [])) == ["answer", "greet"]
+
+
+class TestIbcFileWholeImport:
+    """``import mod`` 整模块导入 + 成员访问（PT-DEBT-26，2026-08-12）。
+
+    此前模块元数据 members 以 Symbol 形态写入，resolve_member 只认
+    MemberSpec 形态 → 整模块 import + 成员访问触发 INT_INTERNAL_ERROR
+    （FunctionSymbol/VariableSymbol 无 type_ref）。修复=scheduler 写入侧
+    统一为 MemberSpec/MethodMemberSpec（_symbol_to_member）。
+    """
+
+    def test_whole_import_function_call(self, tmp_path):
+        _write(
+            tmp_path,
+            "helper.ibci",
+            "func greet() -> str:\n    return \"hi\"\n",
+        )
+        _write(tmp_path, "main.ibci", "import helper\nprint(helper.greet())\n")
+        assert _run(tmp_path) == ["hi"]
+
+    def test_whole_import_variable_access(self, tmp_path):
+        _write(tmp_path, "helper.ibci", "int answer = 42\n")
+        _write(tmp_path, "main.ibci", "import helper\nprint((str)helper.answer)\n")
+        assert _run(tmp_path) == ["42"]
+
+    def test_whole_import_function_and_variable_mixed(self, tmp_path):
+        _write(
+            tmp_path,
+            "helper.ibci",
+            "func double(int x) -> int:\n    return x * 2\nint base = 10\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import helper\nint v = helper.double(helper.base)\nprint((str)v)\n",
+        )
+        assert _run(tmp_path) == ["20"]
+
+    def test_whole_import_consistency_with_named_import_type_check(self, tmp_path):
+        """同一符号经 mod.x 与 from mod import x 的类型诊断应一致。
+
+        档2 修复：零参数函数成员此前退化到 any（运行时才报类型错）；
+        现在整模块与命名导入一样编译期报 SEM_TYPE_MISMATCH。
+        """
+        _write(
+            tmp_path,
+            "helper.ibci",
+            "func greet() -> str:\n    return \"hi\"\n",
+        )
+        # 整模块路径：int x = helper.greet() 必须编译期报错
+        _write(
+            tmp_path,
+            "main_whole.ibci",
+            "import helper\nint x = helper.greet()\n",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        try:
+            engine.compile(str(tmp_path / "main_whole.ibci"), silent=True)
+            raise AssertionError("整模块导入的零参数函数类型错应编译期报错")
+        except Exception as e:
+            codes = {d.code for d in getattr(e, "diagnostics", [])}
+            assert "SEM_TYPE_MISMATCH" in codes, codes
+
+        # 命名导入路径对照
+        _write(
+            tmp_path,
+            "main_named.ibci",
+            "from helper import greet\nint x = greet()\n",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        try:
+            engine.compile(str(tmp_path / "main_named.ibci"), silent=True)
+            raise AssertionError("命名导入的零参数函数类型错应编译期报错")
+        except Exception as e:
+            codes = {d.code for d in getattr(e, "diagnostics", [])}
+            assert "SEM_TYPE_MISMATCH" in codes, codes

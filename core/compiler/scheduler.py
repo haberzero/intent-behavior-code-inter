@@ -547,8 +547,13 @@ class Scheduler(ICompilerService):
             # 这确保了 TypeDef 在解析时能看到完整的符号表
             final_mod_meta = self.registry.resolve(module_name)
             if final_mod_meta:
+                # 成员契约统一为 MemberSpec/MethodMemberSpec 纯数据形态（与原生模块
+                # discovery 填充、命名导入 _create_symbol_from_member 消费一致）——
+                # resolve_member 只认该形态；符号表 Symbol 不可直接入 members
+                # （无 type_ref，此前整模块 import + 成员访问触发 INT_INTERNAL_ERROR）。
                 final_mod_meta.members = {
-                    name: sym for name, sym in result.symbol_table.symbols.items()
+                    name: self._symbol_to_member(name, sym)
+                    for name, sym in result.symbol_table.symbols.items()
                     if sym.provenance != Provenance.KERNEL_NATIVE
                 }
             
@@ -576,6 +581,85 @@ class Scheduler(ICompilerService):
             
         if file_tracker.has_errors():
             raise CompilerError(file_tracker.diagnostics)
+
+    def _spec_to_typeref(self, spec: Any) -> Any:
+        """把 TypeDef spec 转换为 TypeRef（含泛型/签名结构化形态）。
+
+        ``resolve_typeref`` 消费 TypeRef；TypeDef 的 name/module 是类型身份，
+        kind 决定泛型结构。与 artifact_rehydrator 的反序列化构造同构。
+        """
+        from core.kernel.spec.type_ref import TypeRef
+
+        if spec is None:
+            return TypeRef.of("any")
+        kind = getattr(spec, "kind", None)
+        name = getattr(spec, "name", "") or "any"
+        module = getattr(spec, "module", None)
+        if kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value,
+                    TypeKind.CALLABLE_INSTANCE.value):
+            # 函数签名：fn[(args...) -> ret] 结构化 ref，保留签名结构
+            # （调用点可校验参数/返回）。
+            args = TypeRef("__args__", args=tuple(
+                TypeRef.of(p.head, p.module) for p in (getattr(spec, "param_types", []) or [])
+            ))
+            ret = getattr(spec, "return_type", None) or TypeRef.of("void")
+            return TypeRef.generic("fn", args, ret)
+        if kind == TypeKind.LIST.value:
+            elem = getattr(spec, "element_type", None) or TypeRef.of("any")
+            return TypeRef.generic("list", elem)
+        if kind == TypeKind.DICT.value:
+            key = getattr(spec, "key_type", None) or TypeRef.of("any")
+            val = getattr(spec, "value_type", None) or TypeRef.of("any")
+            return TypeRef.generic("dict", key, val)
+        if kind == TypeKind.OPTIONAL.value:
+            wrapped = getattr(spec, "wrapped_type", None) or TypeRef.of("any")
+            return TypeRef.generic("Optional", wrapped)
+        if kind == TypeKind.TUPLE.value:
+            positional = getattr(spec, "positional_element_types", None) or []
+            if positional:
+                return TypeRef("tuple", args=tuple(
+                    TypeRef.of(p.head, p.module) for p in positional
+                ))
+            elem = getattr(spec, "element_type", None) or TypeRef.of("any")
+            return TypeRef.generic("tuple", elem)
+        if kind == TypeKind.THREAD.value:
+            elem = getattr(spec, "element_type", None) or TypeRef.of("void")
+            return TypeRef.generic("thread", elem)
+        if kind == TypeKind.THREAD_RESULT.value:
+            elem = getattr(spec, "element_type", None) or TypeRef.of("void")
+            return TypeRef.generic("thread_result", elem)
+        # 原始类型 / 类 / 模块等：裸名引用。
+        return TypeRef.of(name, module)
+
+    def _symbol_to_member(self, name: str, sym: Symbol) -> Any:
+        """把已编译 IBCI 模块的符号表 Symbol 转换为纯数据 MemberSpec 形态。
+
+        模块元数据 ``members`` 的契约是 MemberSpec / MethodMemberSpec（与原生模块
+        discovery 填充、resolve_member 消费、命名导入 _create_symbol_from_member
+        处理三方一致）。符号表 Symbol（FunctionSymbol/VariableSymbol/TypeSymbol）
+        不可直接入 members——resolve_member 只认带 type_ref 的 MemberSpec 形态，
+        此前整模块 import + 成员访问因形态不匹配触发 INT_INTERNAL_ERROR。
+
+        类型经 spec 的结构化字段提取为 TypeRef，零运行时耦合。
+        """
+        from core.kernel.spec.type_ref import TypeRef
+
+        if isinstance(sym, FunctionSymbol):
+            spec = sym.spec
+            param_types = list(getattr(spec, "param_types", []) or [])
+            return_type = getattr(spec, "return_type", None) or TypeRef.of("void")
+            member = MethodMemberSpec(
+                name=name,
+                kind="method",
+                type_ref=return_type,
+                return_type=return_type,
+                param_types=list(param_types),
+            )
+            member.param_descriptors = list(getattr(spec, "param_descriptors", []) or [])
+            return member
+        # 变量 / 类 / 枚举：以字段形态暴露类型引用。变量 spec 的 name 即其类型
+        # 身份（int/list[int]/用户类），经结构化 TypeRef 还原。
+        return MemberSpec(name=name, kind="field", type_ref=self._spec_to_typeref(sym.spec))
 
     def _create_symbol_from_member(self, name: str, member: Any) -> Optional[Symbol]:
         """

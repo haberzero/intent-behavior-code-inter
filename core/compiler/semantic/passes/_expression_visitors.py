@@ -637,10 +637,10 @@ class ExpressionVisitorsMixin:
         if obj_type:
             member_spec = self.registry.resolve_member(obj_type, node.attr)
             if member_spec:
-                # IbSpec with callable kind and non-void param info: use directly
+                # IbSpec with callable kind: use directly（含零参数函数——param_types
+                # 为空列表时此前真值判定退化到 any，这里按 kind 判定而非参数数量）。
                 if (hasattr(member_spec, 'kind') and member_spec.kind
-                        and member_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value)
-                        and getattr(member_spec, 'param_types', None)):
+                        and member_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value)):
                     self.bind_type(node, member_spec)
                     return member_spec
                 # Non-callable member with meaningful kind: use directly
