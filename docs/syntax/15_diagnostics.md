@@ -528,13 +528,13 @@ LLM 调用失败（网络/密钥/提供者错误）。
 
 ## 配置（CFG_）
 
-`api_config.json` 加载与校验失败的诊断码（`ai.load_config` / `ai.apply_config` / 引擎自动加载）。校验失败 fail-fast raise `InterpreterError`，不静默回退 mock。
+`api_config.json` 加载与校验失败的诊断码（`ai.load_project_config` / `ai.load_config` / `ai.apply_config`）。校验失败 fail-fast raise `InterpreterError`，不静默回退 mock。配置加载为显式动作（F9）：`ai.load_project_config()` 对缺失文件为 no-op（合法态），存在但校验失败则 fail-fast。
 
 ### `CFG_CONFIG_NOT_FOUND`
-`ai.load_config` 指定的配置文件不存在。
-- **触发条件**：load_config 的路径下无 api_config.json。
+配置加载指定的配置文件不存在。
+- **触发条件**：`ai.load_config` 指定路径下无 api_config.json（`load_project_config` 对缺失文件 no-op，不触发本码）。
 - **严重级别**：ERROR。
-- **修复方式**：确认路径正确（相对路径锚定入口文件目录），或创建 api_config.json。
+- **修复方式**：确认路径正确（相对路径锚定 project_root），或创建 api_config.json。
 
 ### `CFG_CONFIG_INVALID_JSON`
 配置文件不是合法的 JSON。

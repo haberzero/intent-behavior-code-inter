@@ -154,7 +154,7 @@ pip install -e .
 
 创建一个独立的目标文件夹，例如`test_target_proj`
 
-在目标文件夹下创建一个 `api_config.json`（引擎启动时自动加载），填写信息：
+在目标文件夹下创建一个 `api_config.json`，填写信息：
 
 ```json
 {
@@ -184,7 +184,7 @@ python main.py run test_target_proj/01_hello_world.ibci
 除上述云端 API 外，IBCI 支持本地 LLM 服务（Ollama / LM Studio / vLLM 等 OpenAI 兼容端点）。
 
 1. 起一个 OpenAI 兼容的本地端点（如 LM Studio 打开 Server，默认 `http://localhost:1234/v1`）。
-2. 在目标文件夹下创建 `api_config.json`（引擎自动加载）：
+2. 在目标文件夹下创建 `api_config.json`：
 
 ```json
 {
@@ -198,7 +198,7 @@ python main.py run test_target_proj/01_hello_world.ibci
 }
 ```
 
-3. 运行示例（无需脚本内配置代码，引擎自动加载）：
+3. 运行示例（脚本内 `ai.load_project_config()` 显式加载配置；配置加载为显式动作，引擎不再自动加载）：
 
 ```bash
 python main.py run test_target_proj/01_hello_world.ibci

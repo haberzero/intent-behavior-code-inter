@@ -11,7 +11,7 @@
 
 ## api_config.json 的结构
 
-IBCI 引擎在启动时**自动加载**项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `file.read/json.parse`。
+IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project_config()`，引擎即加载项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `file.read/json.parse`。引擎启动**不再自动加载**（F9：隐式副作用 → 显式调用点）。
 
 **project_root 的确定**：`main.py run` 时，未显式 `--root` 则经
 `ProjectDetector` 从入口文件所在目录**向上**查找项目标志（`ibci_modules/`、
@@ -19,7 +19,7 @@ IBCI 引擎在启动时**自动加载**项目根目录（`project_root`）下的
 入口文件所在目录。故：
 
 - 独立项目目录（推荐，README 的 `test_target_proj` 方式）：目录内放
-  `api_config.json` 即被自动加载。
+  `api_config.json`，脚本内 `ai.load_project_config()` 即加载。
 - 在仓库内直接运行 `examples/`（仓库含 `ibci_modules/` 标志）：project_root 被
   探测为仓库根，`api_config.json` 须放仓库根，或用 `--root <example_dir>` 显式
   指定为示例目录。
@@ -107,11 +107,12 @@ IBCI 引擎在启动时**自动加载**项目根目录（`project_root`）下的
 
 ## 验证连接
 
-引擎启动时自动加载 `api_config.json`。代码中经 `ai.has_api_key()` 检查是否已配置：
+脚本入口显式加载 `api_config.json`，再经 `ai.has_api_key()` 检查是否已配置：
 
 ```ibci
 import ai
 
+ai.load_project_config()          # 显式加载 project_root/api_config.json（不存在则 no-op）
 if not ai.has_api_key():
     print("未检测到 api_config.json，切换至 MOCK 模式。")
     ai.set_mock_mode()

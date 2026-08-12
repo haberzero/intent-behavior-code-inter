@@ -17,8 +17,8 @@ class ExecutionContextImpl:
 
     ``project_root`` 契约：**生产路径（engine 注入 / coordinator 任务 EC）必传**——
     引擎在 run/compile 前经 ``_establish_project_root`` 确立；None 仅出现于
-    测试直构等"未确立"状态。消费方（如 AIPlugin 自动加载 api_config.json）对
-    project_root 缺失 fail-fast，不静默降级。
+    测试直构等"未确立"状态。消费方（如 AIPlugin ``load_project_config`` 定位
+    api_config.json）对 project_root 缺失 fail-fast，不静默降级。
     """
     def __init__(self,
                  registry: Any,

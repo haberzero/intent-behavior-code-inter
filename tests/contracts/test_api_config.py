@@ -1,7 +1,7 @@
 """tests/contracts/test_api_config.py - api_config.json 加载与校验契约测试。
 
 覆盖 ApiConfig（load/validate/env 引用/诊断码）+ AIPlugin（apply_config/set_mock_mode/
-引擎自动加载）。
+显式 load_project_config）。配置加载为显式动作（F9）：引擎启动不再自动加载。
 """
 import json
 
@@ -184,9 +184,9 @@ class TestAIPluginConfig:
         assert result == "hello"
 
 
-class TestEngineAutoLoad:
-    def test_engine_auto_loads_api_config(self, tmp_path, monkeypatch):
-        """引擎启动时自动加载 project_root/api_config.json（mock 配置）。"""
+class TestEngineExplicitConfigLoad:
+    def test_engine_no_auto_load_without_explicit_call(self, tmp_path):
+        """引擎启动不再自动加载 api_config.json——脚本不显式调用则无配置（F9）。"""
         from core.engine import IBCIEngine
 
         config_file = tmp_path / "api_config.json"
@@ -208,7 +208,33 @@ class TestEngineAutoLoad:
         outputs = []
         engine = IBCIEngine(root_dir=str(tmp_path))
         engine.run(str(script), output_callback=lambda s: outputs.append(s))
-        assert "auto-loaded" in "".join(outputs)
+        assert "not-loaded" in "".join(outputs)
+
+    def test_engine_loads_config_via_explicit_call(self, tmp_path):
+        """脚本显式调用 ai.load_project_config() 后配置生效（F9）。"""
+        from core.engine import IBCIEngine
+
+        config_file = tmp_path / "api_config.json"
+        config_file.write_text(json.dumps({
+            "defaults": {"mock": True},
+            "default_model": {"base_url": "http://x/v1", "api_key": "k", "model": "m"},
+        }), encoding="utf-8")
+
+        script = tmp_path / "probe.ibci"
+        script.write_text(
+            "import ai\n"
+            "ai.load_project_config()\n"
+            "if ai.has_api_key():\n"
+            "    print(\"loaded\")\n"
+            "else:\n"
+            "    print(\"not-loaded\")\n",
+            encoding="utf-8",
+        )
+
+        outputs = []
+        engine = IBCIEngine(root_dir=str(tmp_path))
+        engine.run(str(script), output_callback=lambda s: outputs.append(s))
+        assert "loaded" in "".join(outputs)
 
 
 class TestDocumentedAiApiReachable:
@@ -253,9 +279,18 @@ class TestDocumentedAiApiReachable:
         assert "None has no method" not in out
         assert "VM: Call failed" not in out
 
+    def test_load_project_config_language_level(self, tmp_path):
+        """语言级 ai.load_project_config() 可调用（无配置 no-op 合法态）。"""
+        out = self._run(tmp_path, "ai.load_project_config()\nprint(\"ok\")\n")
+        assert "ok" in out
 
-class TestAIPluginSetupContract:
-    """U4/U7：AIPlugin.setup 加载契约（fail-fast 语义 + 路径规范化）。"""
+
+class TestLoadProjectConfigContract:
+    """F9：ai.load_project_config 显式加载契约（fail-fast 语义 + 路径规范化）。
+
+    原 AIPlugin.setup 自动加载契约迁移至此——配置加载成为显式动作，契约
+    （ec/project_root 注入 fail-fast、配置不存在 no-op、符号链接规范化）保留。
+    """
 
     @staticmethod
     def _caps(ec):
@@ -272,26 +307,28 @@ class TestAIPluginSetupContract:
                 return self._root
         return _EC(root)
 
-    def test_setup_fails_fast_without_execution_context(self):
+    def test_fails_fast_without_execution_context(self):
         """execution_context 未注入 = 注入异常 → fail-fast（不静默跳过）。"""
         plugin = AIPlugin()
         with pytest.raises(InterpreterError):
-            plugin.setup(self._caps(None))
+            plugin.load_project_config()
 
-    def test_setup_fails_fast_without_project_root(self):
-        """execution_context 未确立 project_root = 注入异常 → fail-fast。"""
+    def test_fails_fast_without_project_root(self):
+        """execution_context 已注入但未确立 project_root = 注入异常 → fail-fast。"""
         plugin = AIPlugin()
+        plugin.setup(self._caps(self._ec(None)))
         with pytest.raises(InterpreterError):
-            plugin.setup(self._caps(self._ec(None)))
+            plugin.load_project_config()
 
-    def test_setup_skips_silently_when_config_absent(self, tmp_path):
-        """api_config.json 不存在 = 合法状态（用户无配置）→ 静默跳过。"""
+    def test_skips_silently_when_config_absent(self, tmp_path):
+        """api_config.json 不存在 = 合法状态（用户无配置）→ no-op 静默跳过。"""
         plugin = AIPlugin()
         plugin.setup(self._caps(self._ec(str(tmp_path))))
+        plugin.load_project_config()
         assert plugin.has_api_key() is False
         assert plugin._is_test_mode() is False
 
-    def test_setup_loads_config_via_canonicalized_path(self, tmp_path):
+    def test_loads_config_via_canonicalized_path(self, tmp_path):
         """project_root 经符号链接时仍能读到配置（canonicalize_for_security 生效）。"""
         import os
         real_dir = tmp_path / "real"
@@ -304,8 +341,22 @@ class TestAIPluginSetupContract:
         os.symlink(str(real_dir), str(link_dir))
         plugin = AIPlugin()
         plugin.setup(self._caps(self._ec(str(link_dir))))
+        plugin.load_project_config()
         assert plugin._is_test_mode() is True
         assert plugin.has_api_key() is True
+
+    def test_idempotent(self, tmp_path):
+        """重复调用覆盖式应用，无累积副作用。"""
+        (tmp_path / "api_config.json").write_text(json.dumps({
+            "defaults": {"mock": True, "retry": 3},
+            "default_model": {"base_url": "http://x/v1", "api_key": "k", "model": "m"},
+        }), encoding="utf-8")
+        plugin = AIPlugin()
+        plugin.setup(self._caps(self._ec(str(tmp_path))))
+        plugin.load_project_config()
+        plugin.load_project_config()
+        assert plugin._is_test_mode() is True
+        assert plugin._config.get("retry") == 3
 
 
 class TestConfigFailFastHardening:

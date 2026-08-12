@@ -1,8 +1,8 @@
 """api_config.json 加载与校验器。
 
-把 api_config.json 从"脚本级约定"提升为 ai 模块原生一等机制：``ai.load_config``
-与引擎自动加载经本模块读取、解析、校验配置，失败时 fail-fast（带 CFG_ 诊断码），
-不静默回退 mock。
+把 api_config.json 从"脚本级约定"提升为 ai 模块原生一等机制：``ai.load_project_config``
+（显式加载项目根配置）/ ``ai.load_config``（指定路径）经本模块读取、解析、校验配置，
+失败时 fail-fast（带 CFG_ 诊断码），不静默回退 mock。
 
 schema（完备形态）::
 
@@ -91,7 +91,7 @@ def _resolve_env(value: Any, context: str) -> str:
 class ApiConfig:
     """``api_config.json`` 加载与校验器（单一职责：读取 + 解析 + 校验 + env 解析）。
 
-    路径解析由调用方（``AIPlugin.load_config`` / 引擎自动加载）负责；
+    路径解析由调用方（``AIPlugin.load_project_config`` / ``AIPlugin.load_config``）负责；
     本类只处理已定位的文件或已加载的 dict。
     """
 

@@ -353,8 +353,8 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
     ),
     # ==================== 配置 (CFG_) ====================
     "CFG_CONFIG_NOT_FOUND": CodeInfo(
-        title="ai.load_config 指定的配置文件不存在。",
-        fix="确认路径正确（相对路径锚定入口文件目录），或创建 api_config.json。",
+        title="配置加载指定的配置文件不存在（ai.load_config / ai.load_project_config）。",
+        fix="确认路径正确（相对路径锚定 project_root），或创建 api_config.json；load_project_config 对缺失文件为 no-op。",
     ),
     "CFG_CONFIG_INVALID_JSON": CodeInfo(
         title="配置文件不是合法的 JSON。",

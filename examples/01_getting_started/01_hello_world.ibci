@@ -16,7 +16,9 @@ import json
 
 print("\n--- AI 配置 ---\n")
 
-# 引擎自动加载 project_root/api_config.json（若存在）；无配置时 MOCK 模式开箱即跑
+# 显式加载 project_root/api_config.json（F9：配置加载为显式动作，引擎不再自动加载）；
+# 无配置时 MOCK 模式开箱即跑
+ai.load_project_config()
 if not ai.has_api_key():
     print("未检测到 api_config.json，切换至 MOCK 模式。")
     ai.set_mock_mode()

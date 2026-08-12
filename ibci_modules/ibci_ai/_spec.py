@@ -29,7 +29,12 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "load_config": {
                 "params": [{"name": "path", "type": "str"}],
                 "return_type": "void",
-                "description": "从 api_config.json 加载配置（原生入口，替代脚本手动 file/json.parse）",
+                "description": "从指定 api_config.json 文件加载配置（指定路径入口）",
+            },
+            "load_project_config": {
+                "params": [],
+                "return_type": "void",
+                "description": "显式加载 project_root/api_config.json 并应用（一等入口；不存在则 no-op）",
             },
             "apply_config": {
                 "params": [{"name": "config", "type": "dict"}],

@@ -60,13 +60,15 @@ import net     # 网络
 
 ### 11.3 ai 模块
 
-引擎启动时自动加载 `project_root/api_config.json`（若存在）。代码中也可显式加载或配置：
+配置加载为**显式动作**（F9：引擎启动不再自动加载）。入口调用
+`ai.load_project_config()` 加载项目根目录 `api_config.json`；也可显式加载或配置：
 
 ```ibci
 import ai
 
-# 配置入口（三选一）
-ai.load_config("./api_config.json")              # 从文件加载（原生入口）
+# 配置入口（四选一）
+ai.load_project_config()                        # 加载 project_root/api_config.json（一等入口，不存在则 no-op）
+ai.load_config("./api_config.json")              # 从指定文件加载（路径入口）
 ai.apply_config({"default_model": {...}})         # 应用结构化 dict
 ai.set_config(url, key, model)                    # 低级位置参数配置
 
@@ -154,7 +156,7 @@ ihost.load_state(path)                # 加载状态
 str src = ihost.get_source()          # 获取当前入口源码
 ```
 
-子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境按自身 `project_root` 加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
+子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境经 `ai.load_project_config()` 按自身 `project_root` 显式加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json` 并调用 `ai.load_project_config()`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
 
 ### 11.7 file 模块
 

@@ -108,7 +108,7 @@ KDIAG_RUNTIME_STAGE_SKIP = "KDIAG_RUNTIME_STAGE_SKIP"
 KDIAG_RUNTIME_ENV_LIMIT = "KDIAG_RUNTIME_ENV_LIMIT"
 
 # === 配置 (CFG_) ===
-# api_config.json 加载与校验失败（ai.load_config / ai.apply_config）。
+# api_config.json 加载与校验失败（ai.load_project_config / ai.load_config / ai.apply_config）。
 CFG_CONFIG_NOT_FOUND = "CFG_CONFIG_NOT_FOUND"
 CFG_CONFIG_INVALID_JSON = "CFG_CONFIG_INVALID_JSON"
 CFG_CONFIG_NOT_OBJECT = "CFG_CONFIG_NOT_OBJECT"

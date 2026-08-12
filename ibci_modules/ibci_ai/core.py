@@ -93,29 +93,6 @@ class AIPlugin(IbStatefulPlugin):
         self._capabilities = capabilities
         # 向能力注册表注册自己为 LLM Provider
         capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
-        # 引擎自动加载 project_root/api_config.json（原生一等机制，零脚本代码）。
-        # 加载契约（fail-fast 语义）：
-        #   - execution_context / project_root 由引擎加载路径恒注入——缺失是注入
-        #     异常（engine 未正确装配），不得静默跳过（区别于"配置不存在"合法态）。
-        #   - api_config.json 不存在是合法状态（用户无配置）→ 静默跳过。
-        #   - 路径统一经 PathValidator.canonicalize_for_security 规范化（与 kernel
-        #     层 config 路径处理同源，插件层不旁路符号链接解析）。
-        ec = capabilities.execution_context
-        if ec is None:
-            raise InterpreterError(
-                "AIPlugin.setup: 缺少 execution_context 注入——插件须经引擎加载路径初始化"
-            )
-        project_root = ec.get_project_root()
-        if not project_root:
-            raise InterpreterError(
-                "AIPlugin.setup: execution_context 未确立 project_root（engine 注入异常）"
-            )
-        config_path = PathValidator.canonicalize_for_security(
-            os.path.join(project_root, "api_config.json")
-        ).to_native()
-        if os.path.isfile(config_path):
-            config = ApiConfig.load(config_path)
-            self.apply_config(config)
 
     def _init_client(self):
         """初始化 OpenAI 客户端 (单例/复用模式)"""
@@ -176,13 +153,13 @@ class AIPlugin(IbStatefulPlugin):
         self._unprobed_warned = False
 
     def load_config(self, path: str) -> None:
-        """从 ``api_config.json`` 加载配置并应用（原生一等入口）。
+        """从 ``api_config.json`` 加载配置并应用（指定路径入口）。
 
         替代脚本手动 ``file.exists/json.parse/set_config`` 约定。``path`` 相对
-        于**项目根目录（project_root）**解析（与引擎自动加载同锚点——api_config.json
-        是项目级配置，子目录入口脚本下两入口行为一致）；绝对路径原样使用。
-        文件不存在或格式错误 fail-fast（带 CFG_ 诊断码，不静默回退 mock）。
-        路径统一经 ``PathValidator.canonicalize_for_security`` 规范化。
+        于**项目根目录（project_root）**解析（与 ``load_project_config`` 同锚点——
+        api_config.json 是项目级配置，子目录入口脚本下两入口行为一致）；绝对路径
+        原样使用。文件不存在或格式错误 fail-fast（带 CFG_ 诊断码，不静默回退
+        mock）。路径统一经 ``PathValidator.canonicalize_for_security`` 规范化。
         """
         if self._capabilities is None or self._capabilities.execution_context is None:
             raise InterpreterError(
@@ -197,6 +174,40 @@ class AIPlugin(IbStatefulPlugin):
         raw = path if os.path.isabs(path) else os.path.join(project_root, path)
         abs_path = PathValidator.canonicalize_for_security(raw).to_native()
         config = ApiConfig.load(abs_path)
+        self.apply_config(config)
+
+    def load_project_config(self) -> None:
+        """显式加载 ``project_root/api_config.json`` 并应用（一等入口）。
+
+        配置加载是**显式动作**（F9 裁定）：引擎启动不再自动加载，用户在主函数/
+        入口文件显式调用本方法。契约：
+
+        - ``api_config.json`` 不存在 → **no-op 合法态**（用户无配置，静默跳过）。
+        - 存在 → 加载 + 校验 + 应用（``set_config``/``_init_client`` 副作用在
+          本调用点立即生效；配置校验失败带 CFG_ 诊断码 fail-fast；未装 openai
+          抛 ``RuntimeError``）。
+        - **幂等**：重复调用覆盖式应用，无累积副作用。
+        - 未调用即调 LLM → 既有的 "LLM 运行配置缺失" fail-fast（``__call__``）。
+
+        路径统一经 ``PathValidator.canonicalize_for_security`` 规范化（与 kernel
+        层 config 路径处理同源，插件层不旁路符号链接解析）。
+        """
+        if self._capabilities is None or self._capabilities.execution_context is None:
+            raise InterpreterError(
+                "ai.load_project_config: 执行上下文不可用，无法定位 api_config.json"
+            )
+        ec = self._capabilities.execution_context
+        project_root = ec.get_project_root()
+        if not project_root:
+            raise InterpreterError(
+                "ai.load_project_config: execution_context 未确立 project_root"
+            )
+        config_path = PathValidator.canonicalize_for_security(
+            os.path.join(project_root, "api_config.json")
+        ).to_native()
+        if not os.path.isfile(config_path):
+            return
+        config = ApiConfig.load(config_path)
         self.apply_config(config)
 
     def apply_config(self, config) -> None:
