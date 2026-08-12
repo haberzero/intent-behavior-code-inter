@@ -1,0 +1,3 @@
+import subpkg.util
+print(subpkg.util.util_fn())
+print((str)subpkg.util.util_const)

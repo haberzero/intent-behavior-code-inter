@@ -1,0 +1,8 @@
+class Color(Enum):
+    str RED = "RED"
+
+    func is_done(self) -> bool:
+        return True
+
+Color c = Color.RED
+print((str)c.is_done())
