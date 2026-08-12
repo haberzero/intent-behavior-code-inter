@@ -147,9 +147,18 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主线（建议）**：**枚举实例化设计候选**（`_code_enum_completion.md`，值模型定论后
-  独立设计窗口）、KNOWN_LIMITS §十四 #1 用户类泛型参数（独立大任务）、PT-DEBT-4、PT-DEBT-24、
-  PT-AUDIT-3 S1-S5。
+- **🔴 下一 session 主线（建议）**：**PT-DEBT-4 `file` 重命名**（独立窗口）、KNOWN_LIMITS §十四 #1
+  用户类泛型参数（独立大任务）、PT-AUDIT-3 S1-S3 已知边界（跨线程 EC 状态共享 / dispatch hint
+  嵌套调度器 / 单写槽线程化，各需设计窗口）、**枚举实例化设计候选**（`_enum_instancing_assessment.md`，
+  维持现状 + 独立设计冻结）。
+
+- **✅ 已完成（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）**：
+  - **PT-DEBT-24（S4）call_intent 预留机制死代码清理**：AST 均无 intent 字段 → call_intent 恒 None →
+    全链清理（behavior 短路分支 / pre_resolved / LLM 函数穿透参数 / IbBehavior.call_intent 值字段+序列化）。
+  - **PT-AUDIT-3 S5**：共享 axiom hint 查找抽单一实现（`_try_axiom_output_hint`），消漂移面。
+  - **PT-AUDIT-3 S1/S2/S3 复核**：登记为已知边界（niche / 跨线程 EC 共享 / 可观测性竞态），见 `_PT_AUDIT3_RECORD.md`。
+  - **枚举实例化设计候选评估**：`_enum_instancing_assessment.md`——维持现状（LLM 集成改造为
+    核心硬伤，kernel 层无法构造实例 + 通用解析路径需类型感知包裹），独立设计冻结候选。
 
 - **✅ 已完成（2026-08-12，合并执行）**：**阶段 3 合并**（用户显式授权）——`unsafe-vibe-dev` 全面
   合并取代 `main`（merge commit `eb4a7d1`，main 树 == unsafe-vibe-dev 树，全量 2308/1 验证通过 +
@@ -448,13 +457,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（下一 session 主线=**阶段 3 合并待用户授权** + 枚举实例化设计候选 + 独立窗口）
-- [ ] 读 `_MAIN_MERGE_PLAN.md` + `_MERGE_READY_REPORT.md`（合并条件已确认，阶段 3 待授权）
-- [ ] 读 `_code_enum_completion.md`（enum 补全记录 + 实例化枚举设计候选）
-- [ ] 读 `_LLM_TRIAL_ENUM_IMPORT_20260812/REGISTER.md`（enum/import/运算符 用户试用 9 例全过）
-- [ ] 读 `PENDING_TASKS.md` §〇（PT-FEAT-2 已完成、嵌套包 import 已修复、DOC/BOUNDARY 已处置）
+- [ ] 读本节 §2.1（下一 session 主线=PT-DEBT-4 / 用户类泛型 / S1-S3 设计窗口 / 枚举实例化候选）
+- [ ] 读 `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态：S4 已根治、S5 部分处置、S1-S3 已知边界）
+- [ ] 读 `_enum_instancing_assessment.md`（枚举实例化设计候选评估：维持现状）
+- [ ] 读 `PENDING_TASKS.md` §〇（PT-DEBT-24 已清理、PT-AUDIT-3 处置、合并已完成）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2308 passed / 1 skipped**）
-- [ ] 独立窗口候选：PT-DEBT-4 / PT-DEBT-24 / PT-AUDIT-3 S1-S5 / KNOWN_LIMITS §十四 #1 用户类泛型
-- [ ] 阶段 3 合并（`git merge unsafe-vibe-dev → main`）仍须用户显式授权；不自行 push
+- [ ] 独立窗口候选：PT-DEBT-4 / KNOWN_LIMITS §十四 #1 / PT-AUDIT-3 S1-S3
 - [ ] 工作全程本地 commit、禁 push、工作日志记录

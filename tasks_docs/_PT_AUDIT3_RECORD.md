@@ -22,11 +22,11 @@
 
 | # | 问题 | 位置 | 评估 |
 |---|------|------|------|
-| S1 | dispatch 路径 `__outputhint_prompt__` 同步 `.call` 嵌套调度器（hint 含 Waitable 时） | `_prompt.py:268` vs `:328-332` | 提示词结果一致（非行为漂移），仅执行方式漂移；P2 设计级，独立窗口 |
-| S2 | `IbClass.receive('__call__')` 捕获主 EC，spawned task 内类构造跨线程改写主 EC 模块名 | `ib_class.py:327/273-284` | 后台线程瞬态改写主线程模块名风险；需设计评审，独立窗口 |
-| S3 | task 线程内生成器驱动写主线程单写槽（`_record_current_call_info` 契约"仅主线程"） | `_core.py:173` | 常见路径（单线程调度器）无实际并发；设计边界，独立窗口 |
-| S4 | call_intent 短路仅 inline 可达（dispatch/run_batch 不传，AST 无 intent 字段）——死代码 | `_behavior.py:150-162/238-252` | **与 PT-DEBT-24 同源**，已登记待清理 |
-| S5 | `_get_llmoutput_hint` 与 `_cps` 双实现（除驱动方式外同构） | `_prompt.py:243-359` | 维护性（改一处忘一处），非缺陷；独立窗口评估 |
+| S1 | dispatch 路径 `__outputhint_prompt__` 同步 `.call` 嵌套调度器（hint 含 Waitable 时） | `_prompt.py:268` vs `:328-332` | **登记为已知边界（2026-08-12 复核）**：同步 `_get_llmoutput_hint` 由 dispatch_eager（主 VM 线程任务内同步预求值）与 run_batch 调用；vtable hint 分支经 `method.call` → `_drive_generator` 嵌套 TaskScheduler（EXEC-1 违反）。**可观察危害仅当用户 `__outputhint_prompt__` 含依赖外层调度器的 Waitable**（chan.recv 等）——hint 按惯例为纯字符串格式化，属极端 niche（与 A6 同性质：niche + 条件触发）。CPS 路径（`_get_llmoutput_hint_cps`）已用 UserFunctionCall 帧内驱动（F3）。彻底根治需 dispatch_eager 预求值 CPS 化（改造面大），不本批做 |
+| S2 | `IbClass.receive('__call__')` 捕获主 EC，spawned task 内类构造跨线程改写主 EC 模块名 | `ib_class.py:327/273-284` | **登记为已知边界（2026-08-12 复核）**：`receive('__call__')` 捕获共享主 EC（`registry.get_execution_context()`），同步 `instantiate` 的 `_eval_field_defaults` 瞬态改写 `context.current_module_name`。需 worker 线程同步构造用户类（LLM 解析 `__from_prompt__` 中 `Class(...)`）且与主 VM 读模块名并发才竞态；且 worker 构造返回 drive 非实例（该路径本就非预期）。VM 主路径已 CPS 化（`_instantiate_cps` 同线程安全）。跨线程 EC 状态共享为架构层面，根治需 EC 线程隔离，独立设计窗口 |
+| S3 | task 线程内生成器驱动写主线程单写槽（`_record_current_call_info` 契约"仅主线程"） | `_core.py:173` | **登记为已知边界（2026-08-12 复核）**：线程体经 `_drive_generator` → `_drive_loop_gen` → `execute_behavior_expression_cps` 的 resolve 点调用 `_record_current_call_info`（任务线程写共享单写槽）→ 与主线程写 `_current_call_info` 竞态（GIL 下无崩溃，仅 idbg/`get_current_call_info` 显示值不确定）。纯可观测性影响，非语义正确性。根治需单写槽线程化，独立设计窗口 |
+| S4 | call_intent 短路仅 inline 可达（dispatch/run_batch 不传，AST 无 intent 字段，`_behavior.py:150-162/238-252` 死代码） | `_behavior.py:150-162/238-252` | **✅ 已根治（2026-08-12，PT-DEBT-24）**：AST 均无 intent 字段 → call_intent 恒 None → 死代码全链清理（_prepare_behavior_call 短路分支 / BehaviorCallSpec.pre_resolved / execute_behavior_expression_cps 参数 / LLM 函数穿透参数 / IbBehavior.call_intent 值字段+序列化）。保留 `get_resolved_prompt_intents` 的 call_intent 协议预留参数（docstring 注明未消费） |
+| S5 | `_get_llmoutput_hint` 与 `_cps` 双实现（除驱动方式外同构） | `_prompt.py:243-359` | **✅ 部分处置（2026-08-12）**：共享 axiom 查找抽为 `_try_axiom_output_hint` 单一实现（两路径共用，消"改一处忘一处"漂移面）。vtable 驱动分支保持各自实现（sync `.call` / CPS `UserFunctionCall`——驱动机制不同，非双写真相） |
 
 ## 四、已核对干净区域
 

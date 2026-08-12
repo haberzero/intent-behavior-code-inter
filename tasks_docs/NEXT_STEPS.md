@@ -290,10 +290,12 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   （== origin/unsafe-vibe-dev == eb4a7d1）供后续开发。
 
 - **🔴 下一 session 主线（建议）**：
-  1. **枚举实例化设计候选**（成员携带 name/value 与方法；值模型定论后独立设计窗口，见 `_code_enum_completion.md`）。
-  2. **遗留独立窗口**：KNOWN_LIMITS §十四 #1 用户类泛型参数（独立大任务）；PT-DEBT-4 `file` 重命名；
-     PT-DEBT-24（call_intent 死代码）；PT-AUDIT-3 疑似项 S1-S5；`import subpkg`（纯包目录）
-     DEP_MODULE_NOT_FOUND（Python 同语义，包须含可导入模块）。
+  1. **遗留独立窗口**：PT-DEBT-4 `file` 重命名；KNOWN_LIMITS §十四 #1 用户类泛型参数
+     （独立大任务）；PT-AUDIT-3 S1-S3 已知边界（跨线程 EC 状态共享 / dispatch hint 嵌套
+     调度器 / 单写槽线程化，各需设计窗口）；`import subpkg`（纯包目录）DEP_MODULE_NOT_FOUND
+     （Python 同语义，包须含可导入模块）。
+  2. **枚举实例化设计候选**：评估已产出 `_enum_instancing_assessment.md`（维持现状；
+     LLM 集成改造为核心硬伤，独立设计冻结候选）。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
   - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；
