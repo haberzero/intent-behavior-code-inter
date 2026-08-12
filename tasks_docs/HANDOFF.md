@@ -147,10 +147,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主线（建议）**：**PT-DEBT-4 `file` 重命名**（独立窗口）、KNOWN_LIMITS §十四 #1
-  用户类泛型参数（独立大任务）、PT-AUDIT-3 S1-S3 已知边界（跨线程 EC 状态共享 / dispatch hint
-  嵌套调度器 / 单写槽线程化，各需设计窗口）、**枚举实例化设计候选**（`_enum_instancing_assessment.md`，
-  维持现状 + 独立设计冻结）。
+- **🔴 下一 session 主线（2026-08-12 用户升主线）**：**用户类泛型参数（PT-FEAT-3）**——
+  `class Box[T]:` 语法（lexer/parser/AST `IbClassDef.type_params`）+ 语义（类型参数符号 +
+  `resolve_specialization` 特化）+ 序列化（type_params 落 artifact + rehydrate）+ e2e。
+  地基已备（`GenericTypeRegistry` 全链路）；**设计冻结先行**（`tasks_docs/`，落地后 docs 治理）。
+  独立窗口（错峰）：PT-DEBT-4 / PT-AUDIT-3 S1-S3 / 枚举实例化设计冻结 / `import subpkg` /
+  CI/CD 重新设计 / PT-FEAT-13 C4-C7/C8 / F9（`ai.autoset` 显式配置，设计评估中）。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）**：
   - **PT-DEBT-24（S4）call_intent 预留机制死代码清理**：AST 均无 intent 字段 → call_intent 恒 None →

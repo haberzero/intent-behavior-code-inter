@@ -289,13 +289,15 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   验证通过；push main 到 origin。原 unsafe-vibe-dev 本地 + 远端已删除，从新 main 分支出新 unsafe-vibe-dev
   （== origin/unsafe-vibe-dev == eb4a7d1）供后续开发。
 
-- **🔴 下一 session 主线（建议）**：
-  1. **遗留独立窗口**：PT-DEBT-4 `file` 重命名；KNOWN_LIMITS §十四 #1 用户类泛型参数
-     （独立大任务）；PT-AUDIT-3 S1-S3 已知边界（跨线程 EC 状态共享 / dispatch hint 嵌套
-     调度器 / 单写槽线程化，各需设计窗口）；`import subpkg`（纯包目录）DEP_MODULE_NOT_FOUND
-     （Python 同语义，包须含可导入模块）。
-  2. **枚举实例化设计候选**：评估已产出 `_enum_instancing_assessment.md`（维持现状；
-     LLM 集成改造为核心硬伤，独立设计冻结候选）。
+- **🔴 下一 session 主线（建议，2026-08-12 用户升主线）**：**用户类泛型参数（PT-FEAT-3）**——
+  `class Box[T]:` 语法（lexer/parser/AST `IbClassDef.type_params`）+ 语义（类型参数符号 +
+  `resolve_specialization` 特化）+ 序列化（type_params 落 artifact + rehydrate）+ e2e。
+  地基已备（`GenericTypeRegistry` 全链路）；**设计冻结先行**（写 `tasks_docs/`，落地后 docs 治理）。
+- **📌 独立窗口（与主线错峰）**：PT-DEBT-4 `file` 重命名（破坏性）；PT-AUDIT-3 S1-S3 已知边界
+  （跨线程 EC 状态共享 / dispatch hint 嵌套调度器 / 单写槽线程化，各需设计窗口）；
+  枚举实例化设计冻结（`_enum_instancing_assessment.md`）；`import subpkg`（纯包目录）
+  DEP_MODULE_NOT_FOUND（Python 同语义）；CI/CD 重新设计（P0，独立规划）；
+  PT-FEAT-13 C4-C7/C8；F9（import ai 副作用，用户倾向改为显式配置 `ai.autoset`，设计评估中）。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
   - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；
