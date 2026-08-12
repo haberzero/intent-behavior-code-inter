@@ -286,8 +286,17 @@ class VMExecutor:
 
                 # 生成器 yield 了一个 Waitable（如 LLMFuture）→ 挂起，等待其完成。
                 # 调度器挂起该根、让出给其它根，就绪后 send 结果恢复。
+                # 异常对称投递：Waitable 失败时调度器把 worker 线程异常经
+                # gen.throw 投进本 yield 点（此处于内部 try/except 之外）。
+                # 捕获后置入 pending_exception，经循环顶部 gen.throw 重投递给
+                # 挂起该 Waitable 的 innermost 任务帧——其 try/except 优先处理，
+                # 未捕获则走下方弹栈通道沿 CPS 栈上抛。TaskCancelled 为
+                # BaseException，不被 except Exception 捕获，正常穿透给调度器。
                 if isinstance(child_uid, Waitable):
-                    pending_value = yield child_uid
+                    try:
+                        pending_value = yield child_uid
+                    except Exception as e:
+                        pending_exception = e
                     continue
 
                 # R1 trampoline：用户函数调用请求（vm_handle_IbCall 对
