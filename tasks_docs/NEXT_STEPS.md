@@ -258,10 +258,14 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   （全量 2252 passed / 1 skipped，见上方"已完成"节）。
 
 - **🔴 下一 session 主线（建议）**：
-  1. **遗留缺陷独立窗口**：嵌套包 `import subpkg.util` + 成员访问的 INT_INTERNAL_ERROR
+  1. **enum 补全（地基已备，优先）**：见 `_ENUM_SWITCH_COMPLETION_HANDOFF.md`——
+     ① 非 str 枚举 LLM 集成修复（成员名→值映射，核心易用性陷阱）；② 枚举自定义方法；
+     ③ 迭代 `for v in Color:` / 数量 `len(Color)`（GeneratorAxiom 先例）；④ KNOWN_LIMITS §二 更新。
+  2. **遗留缺陷独立窗口**：嵌套包 `import subpkg.util` + 成员访问的 INT_INTERNAL_ERROR
      （修复前既有，与 PT-DEBT-26 同族形态问题）；DOC-ISSUE-001~007 批量文档同步；
-     BOUNDARY-003（隔离子环境不继承 LLM 配置）/005（probe_model 误判）处置。
-  2. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认，待用户授权
+     BOUNDARY-003（隔离子环境不继承 LLM 配置）/005（probe_model 误判）处置；
+     KNOWN_LIMITS §十四（用户类泛型参数/运算符覆盖度）独立评估。
+  3. **阶段 3 合并**（`_MAIN_MERGE_PLAN.md`）：检测/测试/文档维度已确认，待用户授权
      `git merge unsafe-vibe-dev → main` + push。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
