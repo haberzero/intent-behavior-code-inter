@@ -237,7 +237,9 @@ for int x in count(3):
 - 生成器函数调用返回生成器对象（惰性，不执行函数体）；可赋 `auto` 变量后再迭代。
 - `yield` 只能在函数体内（模块顶层报 `SEM_YIELD_OUTSIDE_FUNCTION`）。
 - 生成器体内可挂起 LLM 行为（`@~...~`）等 Waitable——与 `await` 正交组合。
-- 消费者 `break` 提前终止（生成器不再推进）。
+- **消费语义**：`for` 消费经 `to_list` **一次性物化**（生成器在进入循环前已跑完，见 §5.9）；
+  `next()` 逐值惰性推进（见 `docs/syntax/12_builtins.md` `next()`）。消费者 `break` 终止的是
+  对物化结果的迭代，**生成器本身已被完全驱动**（物化发生先于循环）。
 - 保留类型：`generator[T]`（显式注解）或 `auto` 推断。
 
 ```ibci
@@ -272,7 +274,9 @@ for int x in outer(1):
 - `yield from` 只能在函数体内（模块顶层报 `SEM_YIELD_OUTSIDE_FUNCTION`）。
 - 生成器体内可直接调用生成器函数（`auto g = inner(n)`）并委托/迭代。
 - 惰性属性由消费方决定：`next()` 逐值惰性推进；`for` 消费经 `to_list` 一次性物化（与 `yield` 生成器一致）。
-- 子生成器体内可挂起 LLM 行为（`@~...~`，同步解析）——与 `yield from` 正交组合；显式 `await` 真异步 Waitable 与既有 `for`/`next` 消费路径同受 `generic_next` "unexpected event" 限制（预存，见 `KNOWN_LIMITS` 记录）。
+- 子生成器体内可挂起 LLM 行为（`@~...~`，同步解析）——与 `yield from` 正交组合；生成器体内显式
+  `await` 真异步 Waitable（如 `await chan.recv()`）由 `generic_next` 阻塞等待其完成并注回驱动循环
+  （同步阻塞消费，见 `docs/KNOWN_LIMITS.md §二十四`）。
 
 ---
 

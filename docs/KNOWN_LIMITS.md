@@ -10,20 +10,20 @@
 
 **限制说明**
 
-可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）**基础调用可用**（见 `docs/subsystems/03_callable_fn.md`），但在**特定跨路径**下存在设计限制，需谨慎使用。
-
-**根源**
-
-`fn` 类型推断对 `__call__` 协议、闭包捕获、意图栈副作用等交叉路径存在不一致。尤其当可调用类实例内部触发 `@~...~` 或意图栈相关副作用时，类型推断与运行时分发之间的错位可能产生静默错误。
+可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）基础调用可用（见 `docs/subsystems/03_callable_fn.md`）。2026-08-12 起，`obj()` 调用经**帧内 CPS 驱动**（`_UserCallDrive`，与类构造 `CPSDrivable` 同构）——深递归 `__call__` Python 深度恒定（EXEC-1），`__call__` 内含 Waitable（LLM 行为 / `await chan.recv()`）时由调度器协作挂起。`fn f = instance; f()` 与生成器 `__call__`（`for x in gc(n)`）同样支持。
 
 ```ibci
 class MyCallable:
-    func __call__():
-        ...
+    func __call__(self, int n) -> int:
+        if n <= 1:
+            return 1
+        return self(n - 1) + 1   # 深递归走 trampoline，不嵌套 Python 栈
 
 MyCallable obj = MyCallable()
-obj()  # ⚠️ 基础调用可用；闭包捕获/意图副作用跨路径存在限制
+int v = obj(400)   # ✅ 400
 ```
+
+**剩余边界**：`__call__` 方法经 `_UserCallDrive` 驱动时要求 receiver 是用户类实例且方法是 `IbUserFunction`；原生 `__call__` 与类构造（`IbClass.receive`）走各自既有路径，不受影响。
 
 ---
 
@@ -362,9 +362,9 @@ str r = @~ ... ~
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
 1. **用户类无法定义泛型参数**：`class Box[T]:` 在词法 / 语法 / AST（`IbClassDef` 无 `type_params`）/ 语义层均未实现。内置泛型（`list[T]` / `dict[K,V]` / `Optional[T]` / `tuple[T,...]` / `thread[T]` / `thread_result[T]`）统一经 `GenericTypeRegistry`（`core/kernel/spec/generic.py`）创建/解析/序列化/还原，用户类型无对应入口。
-2. **用户类无法重载二元/比较运算符**：`__add__` / `__eq__` / `__lt__` / ... 等运算符 dunder 协议在 `core/runtime/objects/kernel/`（包）的 IbClass 中无注册机制；内置 axiom（Integer/Float/Str 等）可派遣 `+` / `==` / `<`，用户类不能。`==` 在用户类上退化为身份比较。
+2. **运算符重载覆盖有限**：用户类可定义 `__eq__` / `__add__` 等 dunder 方法并被运算符分派调用（2026-08-12 实测 `==` / `+` 生效）；但该机制经 `IbClass.receive` 的 vtable 分派实现，**与内置 axiom 的能力级分派（Integer/Float/Str 的 `+`/`==`/`<`）是两套路径**，未逐一核对所有运算符（`<`/`in`/`is`/一元运算等）的用户类覆写覆盖度。未覆写的运算符在用户类上退化为身份比较（`==`）或运行时错误。
 
-**能力差距**：用户类泛型参数与运算符重载属于语言能力扩展方向，当前不支持。
+**能力差距**：用户类泛型参数属于语言能力扩展方向，当前不支持。
 
 ---
 
@@ -547,13 +547,13 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 
 **含义**：超出宿主递归深度时，用户看到的是 `RecursionError: maximum recursion depth exceeded`（可提升 `sys.setrecursionlimit` 后重试），而非误导性的符号未定义/调用失败信息。递归深度上限本质是宿主栈限制，非语言可配置上限。
 
-## 二十四、生成器消费路径不承载显式 `await` 真异步 Waitable
+## 二十四、生成器消费路径的 Waitable 处理是同步阻塞（非协作挂起）
 
-**惰性生成器（`yield`）与生成器委托（`yield from`）的消费路径**（`for` / `next()` / `to_list`）经 `IbGenerator.generic_next()` 驱动，只处理语言级产出标记 `GeneratorYield`。若生成器体内显式 `await` 一个**真异步 Waitable**（如 `await chan.recv()`），驱动会把该 Waitable 透出到 `generic_next`，后者报 `RuntimeError: generator driver yielded unexpected event`。
+**惰性生成器（`yield`）与生成器委托（`yield from`）的消费路径**（`for` / `next()` / `to_list`）经 `IbGenerator.generic_next()` 驱动。`generic_next` 对生成器驱动循环产出的 `Waitable`（含 `LLMFuture`、`chan.recv()` 等真异步句柄）统一**阻塞等待**（`event.result()`）并注回驱动循环——即生成器体内 `await chan.recv()` **可用**，但消费是**同步阻塞 VM 线程**而非协作挂起。
 
-**不受限的情形**：生成器体内 LLM 行为（`@~...~`）经 `execute_behavior_expression_cps` 产生 `LLMFuture`，由 `IbGenerator.generic_next()` 阻塞等待其完成并注回驱动循环（生成器视角同步解析），故与 `yield`/`yield from` 组合正常（已有 e2e 覆盖）。
+**风险**：若被等待的 Waitable 只能靠 VM 调度器推进才能完成（如同一调度器上的其它任务投递通道），生成器消费会**死锁**——`generic_next` 阻塞消费无法让出 CPU。当前该场景无生产调用（生成器体内 `@~...~` LLM 行为由独立 worker 线程完成，`LLMFuture.result()` 不依赖 VM 推进，故正常）。
 
-**含义**：这是**既有迭代协议共有的预存限制**（`for`/`next`/`to_list`/`yield from` 同一消费路径），非 `yield from` 引入。生成器体内挂起 I/O 类 Waitable（通道/订阅/宿主异步）属设计边界，未支持；如需，需在 `generic_next` 层引入 Waitable 感知（超出当前范围）。
+**含义**：生成器消费是同步阻塞模型；需让出型消费（Waitable 依赖 VM 推进时）属设计边界，未支持。如需协作式生成器消费，需在 `generic_next` 层引入 Waitable 感知挂起（超出当前范围）。
 ## 二十五、`yield from` 序列委托的静态类型与运行时值
 
 **`yield from <expr>` 的节点静态类型绑定为委托目标的元素类型**（`generator[T]`→`T`、`list[T]`→`T`，经 `resolve_iter_element`）。对**生成器**操作数无错位（IBCI 类型模型把生成器 return 类型与元素类型合一，`StopIteration.value` 即表达式值）。对**序列/`__iter__` 操作数**，运行时表达式值为 `None`（Python 语义一致）——即 `int r = yield from [10,20,30]` 静态通过（`int`=`int`）但运行时 `r=None`。
