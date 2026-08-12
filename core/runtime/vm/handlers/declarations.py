@@ -9,6 +9,7 @@ from core.runtime.shared.signals import (
     Signal,
 )
 from core.runtime.objects.kernel import (
+    IbModule,
     IbUserFunction,
     IbLLMFunction,
 )
@@ -39,12 +40,56 @@ def vm_handle_IbImport(executor, node_uid: str, node_data: Mapping[str, Any]):
             name = alias_data.get("name")
             asname = alias_data.get("asname")
             mod_inst = sc.module_manager.import_module(name, executor.ec)
-            target_name = asname if asname else name
             sym_uid = executor.ec.get_side_table("node_to_symbol", alias_uid)
-            executor.runtime_context.define_variable(
-                target_name, mod_inst, is_const=True, uid=sym_uid
-            )
+            target_name = asname if asname else name
+            if asname or "." not in name:
+                executor.runtime_context.define_variable(
+                    target_name, mod_inst, is_const=True, uid=sym_uid
+                )
+            else:
+                _bind_package_chain(executor, name, mod_inst, sym_uid)
     return executor.registry.get_none()
+
+
+def _bind_package_chain(executor, module_name: str, module_instance, sym_uid):
+    """多段导入（``import a.b``）无别名：把根段绑定为包命名空间。
+
+    包命名空间 = 合成 ``IbModule``，其 scope 持有各子模块实例；``a.b`` 属性
+    访问经包模块 ``__getattr__ -> scope.get("b")`` 解析。同一包被多次导入
+    （``import subpkg.a`` + ``import subpkg.b``）时复用既有根包，把新子模块
+    并入其 scope（幂等合并）。
+    """
+    sc = executor.service_context
+    parts = module_name.split(".")
+    root_name = parts[0]
+    rc = executor.runtime_context
+    existing_root = rc.get_symbol(root_name)
+    if existing_root is not None and isinstance(existing_root.value, IbModule):
+        root_pkg = existing_root.value
+    else:
+        root_pkg = sc.object_factory.create_module(
+            root_name, sc.object_factory.create_scope(parent=None)
+        )
+    node = root_pkg
+    for i in range(1, len(parts)):
+        seg = parts[i]
+        is_last = (i == len(parts) - 1)
+        node_scope = node.scope
+        if is_last:
+            node_scope.define(seg, module_instance, is_const=True, force=True)
+        else:
+            child_sym = node_scope.get_symbol(seg)
+            if child_sym is not None and isinstance(child_sym.value, IbModule):
+                node = child_sym.value
+            else:
+                sub_pkg = sc.object_factory.create_module(
+                    ".".join(parts[: i + 1]),
+                    sc.object_factory.create_scope(parent=None),
+                )
+                node_scope.define(seg, sub_pkg, is_const=True, force=True)
+                node = sub_pkg
+    if existing_root is None:
+        rc.define_variable(root_name, root_pkg, is_const=True, uid=sym_uid)
 
 
 def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]):

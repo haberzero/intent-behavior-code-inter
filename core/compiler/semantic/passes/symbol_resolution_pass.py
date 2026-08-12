@@ -486,7 +486,11 @@ class SymbolResolver(ScopedVisitor):
         """
         for alias in node.names:
             name = alias.asname or alias.name
-            sym = self.lookup_symbol(name)
+            # 多段导入（import a.b）无别名：局部绑定根段 a（Python 语义）。
+            # scheduler 只注入根段符号；全名段经属性访问解析（subpkg.util 的
+            # util 段在 subpkg 模块 spec 的 members 中，MemberSpec 纯数据形态）。
+            local_name = name.split(".")[0] if (alias.asname is None and "." in name) else name
+            sym = self.lookup_symbol(local_name)
             if sym:
                 self.bind_symbol(alias, sym)
             else:

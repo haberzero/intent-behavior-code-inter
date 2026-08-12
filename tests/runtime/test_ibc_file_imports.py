@@ -206,3 +206,57 @@ class TestIbcFileWholeImport:
         except Exception as e:
             codes = {d.code for d in getattr(e, "diagnostics", [])}
             assert "SEM_TYPE_MISMATCH" in codes, codes
+
+
+def _write_nested(tmp_path, rel_path, content):
+    p = tmp_path / rel_path
+    os.makedirs(p.parent, exist_ok=True)
+    p.write_text(content, encoding="utf-8")
+    return str(p)
+
+
+class TestIbcFileNestedPackageImport:
+    """嵌套包 `import subpkg.util` + 成员访问（2026-08-12 根治）。
+
+    此前中间模块符号以原始 Symbol 形态存入 members（无 type_ref）→
+    resolve_member 触发 INT_INTERNAL_ERROR；且 visit_IbImport 绑定全名而
+    scheduler 只注入根段 → SEM_UNDEFINED_SYMBOL；运行时缺包命名空间绑定。
+    修复：嵌套段统一 MemberSpec 形态 + 绑定根段 + 运行时包命名空间。
+    """
+
+    def test_nested_import_function_call(self, tmp_path):
+        _write_nested(tmp_path, "subpkg/util.ibci", 'func util_fn() -> str:\n    return "util-value"\n')
+        _write_nested(tmp_path, "subpkg/__init__.ibci", "")
+        _write(tmp_path, "main.ibci", "import subpkg.util\nprint(subpkg.util.util_fn())\n")
+        assert _run(tmp_path) == ["util-value"]
+
+    def test_nested_three_level(self, tmp_path):
+        _write_nested(tmp_path, "a/b/c.ibci", 'func cf() -> str:\n    return "c-value"\n')
+        _write_nested(tmp_path, "a/b/__init__.ibci", "")
+        _write_nested(tmp_path, "a/__init__.ibci", "")
+        _write(tmp_path, "main.ibci", "import a.b.c\nprint(a.b.c.cf())\n")
+        assert _run(tmp_path) == ["c-value"]
+
+    def test_multi_import_same_package_merges(self, tmp_path):
+        """同一包多次导入：根包命名空间幂等合并（a.b.c + a.b.d 均可达）。"""
+        _write_nested(tmp_path, "a/b/c.ibci", 'func cf() -> str:\n    return "c-value"\n')
+        _write_nested(tmp_path, "a/b/d.ibci", 'func df() -> str:\n    return "d-value"\n')
+        _write_nested(tmp_path, "a/b/__init__.ibci", "")
+        _write_nested(tmp_path, "a/__init__.ibci", "")
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import a.b.c\nimport a.b.d\nprint(a.b.c.cf())\nprint(a.b.d.df())\n",
+        )
+        assert _run(tmp_path) == ["c-value", "d-value"]
+
+    def test_nested_import_alias_and_named_still_work(self, tmp_path):
+        _write_nested(tmp_path, "subpkg/util.ibci", 'func util_fn() -> str:\n    return "util-value"\n')
+        _write_nested(tmp_path, "subpkg/__init__.ibci", "")
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import subpkg.util as m\nfrom subpkg.util import util_fn\n"
+            "print(m.util_fn())\nprint(util_fn())\n",
+        )
+        assert _run(tmp_path) == ["util-value", "util-value"]
