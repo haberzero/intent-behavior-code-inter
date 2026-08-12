@@ -2,10 +2,25 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-12（enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**已完成**——
-> 全量 **2308 passed / 1 skipped**；见下方"已完成"节）
+> **最后更新**：2026-08-12（遗留独立窗口批次已完成 + **用户类泛型升主线** + F9/`ai.autoset` 方案
+> 已产出设计记录；全量 **2308 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
 
 ---
+
+## ✅ 已完成：遗留独立窗口批次——PT-DEBT-24 call_intent 清理 + PT-AUDIT-3 S1-S5 处置 + 枚举实例化评估（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）
+
+> general agent 独立复核 PASS；设计记录 `_enum_instancing_assessment.md`。
+
+- **PT-DEBT-24（S4）call_intent 死代码根治**：AST 均无 intent 字段 → call_intent 恒 None →
+  全链清理（behavior 短路分支 / BehaviorCallSpec.pre_resolved / LLM 函数穿透参数 /
+  IbBehavior.call_intent 值字段+序列化 / 工厂 / 协议）；保留 get_resolved_prompt_intents
+  协议预留参数。
+- **PT-AUDIT-3 S1-S5**：S4 根治；S5 双实现去重（共享 `_try_axiom_output_hint`）；
+  S1/S2/S3 复核为已知边界（S1 dispatch hint 同步 .call 嵌套调度器仅 hint 含 VM 依赖 Waitable
+  时可观察；S2 跨线程 EC 模块名改写需 worker 同步构造类且 drive 返回非实例；S3 task 线程写
+  单写槽为纯可观测性竞态）——各登记独立设计窗口（`_PT_AUDIT3_RECORD.md` §三）。
+- **枚举实例化设计候选评估**：`_enum_instancing_assessment.md`——维持现状（LLM 集成改造为
+  核心硬伤：kernel 层无法构造实例 + 通用解析路径需类型感知包裹），独立设计冻结候选。
 
 ## ✅ 已完成：enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）
 
@@ -289,15 +304,25 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   验证通过；push main 到 origin。原 unsafe-vibe-dev 本地 + 远端已删除，从新 main 分支出新 unsafe-vibe-dev
   （== origin/unsafe-vibe-dev == eb4a7d1）供后续开发。
 
-- **🔴 下一 session 主线（建议，2026-08-12 用户升主线）**：**用户类泛型参数（PT-FEAT-3）**——
-  `class Box[T]:` 语法（lexer/parser/AST `IbClassDef.type_params`）+ 语义（类型参数符号 +
-  `resolve_specialization` 特化）+ 序列化（type_params 落 artifact + rehydrate）+ e2e。
-  地基已备（`GenericTypeRegistry` 全链路）；**设计冻结先行**（写 `tasks_docs/`，落地后 docs 治理）。
-- **📌 独立窗口（与主线错峰）**：PT-DEBT-4 `file` 重命名（破坏性）；PT-AUDIT-3 S1-S3 已知边界
-  （跨线程 EC 状态共享 / dispatch hint 嵌套调度器 / 单写槽线程化，各需设计窗口）；
-  枚举实例化设计冻结（`_enum_instancing_assessment.md`）；`import subpkg`（纯包目录）
-  DEP_MODULE_NOT_FOUND（Python 同语义）；CI/CD 重新设计（P0，独立规划）；
-  PT-FEAT-13 C4-C7/C8；F9（import ai 副作用，用户倾向改为显式配置 `ai.autoset`，设计评估中）。
+- **✅ 已完成（2026-08-12）**：**遗留独立窗口批次**——PT-DEBT-24 call_intent 死代码根治 +
+  PT-AUDIT-3 S1-S5 处置（S4 根治 / S5 去重 / S1-S3 已知边界）+ 枚举实例化设计候选评估
+  （`_enum_instancing_assessment.md`，维持现状）。独立复核 PASS，全量 2308/1 零回归。
+
+- **🔴 下一 session 主线（2026-08-12 用户升主线）**：**用户类泛型参数（PT-FEAT-3）**——
+  **设计起点已落档 `tasks_docs/_code_user_class_generics.md`**：地基盘点（`GenericTypeRegistry`
+  九类内置泛型全链路、`resolve_specialization` 集成点、`IbClassDef` 需新增 `type_params`）+ 设计范围
+  （语法/语义/序列化/运行时/e2e）+ 6 项开放设计问题 + 建议实施路径（先设计冻结，再按 a-f 落地）。
+  下一 session 从设计冻结开始。
+
+- **📌 独立窗口（与主线错峰）**：
+  - **F9/`ai.autoset`（用户倾向显式配置，设计记录已产出 `_code_ai_autoset.md`）**：把配置加载
+    从"引擎启动自动"改为"显式 `ai.autoset()` 入口调用"。**待用户拍板：方法命名（`ai.autoset` /
+    `ai.load_project_config` / `ai.configure`）**，确认后实施（全仓示例/测试/文档更新）。
+  - PT-DEBT-4 `file` 重命名（破坏性）；PT-AUDIT-3 S1-S3 已知边界（跨线程 EC 状态共享 /
+    dispatch hint 嵌套调度器 / 单写槽线程化，各需设计窗口）；枚举实例化设计冻结
+    （`_enum_instancing_assessment.md`）；`import subpkg`（纯包目录）DEP_MODULE_NOT_FOUND
+    （Python 同语义，低优先增强）；CI/CD 重新设计（P0，独立规划）；PT-FEAT-13 C4-C7 已落地、
+    C8（容器类型改善）远期。
 
 - **📌 已完成支线（2026-08-11 本 session）**：
   - **PT-AUDIT-3 双路径分裂专项审计已执行**（general agent 独立审计 + 主代理核验）：无 P0；

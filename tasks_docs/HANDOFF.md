@@ -134,6 +134,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_ENUM_SWITCH_COMPLETION_HANDOFF.md` | **enum/switch 补全评估 + KNOWN_LIMITS 分类交接**（2026-08-12）：enum 地基已备（axiom/prompt/iter 机制成熟）+ KNOWN_LIMITS 25 章分类 + 下一 session 核查清单。**enum 补全已落地（2026-08-12，见 `_code_enum_completion.md`）**，保留供追溯 |
 | `_code_enum_completion.md` | **enum 补全实现记录**（2026-08-12）：值模型定论（成员=底层值非实例）+ 非 str LLM 集成修复 + 迭代/数量 + KNOWN_LIMITS §二 + 实例化枚举设计候选 |
 | `_LLM_TRIAL_ENUM_IMPORT_20260812/` | **enum/import/运算符 用户试用**（2026-08-12）：9 例全过（含真实 LLM 非 str 枚举集成实证），无新增缺陷。DESIGN.md + REGISTER.md |
+| `_code_user_class_generics.md` | **用户类泛型主线设计起点**（2026-08-12）：地基盘点 + 设计范围 + 6 项开放设计问题 + 实施路径（下一 session 从设计冻结开始） |
+| `_code_ai_autoset.md` | **F9/ai.autoset 显式配置设计记录**（2026-08-12）：现状副作用 + 显式方案 + 变更清单 + 命名候选（待用户拍板） |
+| `_enum_instancing_assessment.md` | **实例化枚举设计候选评估**（2026-08-12）：维持现状（LLM 集成改造为核心硬伤），独立设计冻结候选 |
 
 ---
 
@@ -155,12 +158,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   CI/CD 重新设计 / PT-FEAT-13 C4-C7/C8 / F9（`ai.autoset` 显式配置，设计评估中）。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）**：
-  - **PT-DEBT-24（S4）call_intent 预留机制死代码清理**：AST 均无 intent 字段 → call_intent 恒 None →
-    全链清理（behavior 短路分支 / pre_resolved / LLM 函数穿透参数 / IbBehavior.call_intent 值字段+序列化）。
-  - **PT-AUDIT-3 S5**：共享 axiom hint 查找抽单一实现（`_try_axiom_output_hint`），消漂移面。
-  - **PT-AUDIT-3 S1/S2/S3 复核**：登记为已知边界（niche / 跨线程 EC 共享 / 可观测性竞态），见 `_PT_AUDIT3_RECORD.md`。
-  - **枚举实例化设计候选评估**：`_enum_instancing_assessment.md`——维持现状（LLM 集成改造为
-    核心硬伤，kernel 层无法构造实例 + 通用解析路径需类型感知包裹），独立设计冻结候选。
+  - **遗留独立窗口批次**：PT-DEBT-24 call_intent 死代码根治（S4）+ PT-AUDIT-3 S1-S5 处置
+    （S4 根治 / S5 去重 / S1-S3 已知边界）+ 枚举实例化设计候选评估（`_enum_instancing_assessment.md`，
+    维持现状）。独立复核 PASS。
+  - **用户类泛型（PT-FEAT-3）升主线（用户裁定）**：设计起点 `_code_user_class_generics.md`。
+  - **F9/`ai.autoset` 方案**：设计记录 `_code_ai_autoset.md`（显式配置，待用户拍板命名）。
 
 - **✅ 已完成（2026-08-12，合并执行）**：**阶段 3 合并**（用户显式授权）——`unsafe-vibe-dev` 全面
   合并取代 `main`（merge commit `eb4a7d1`，main 树 == unsafe-vibe-dev 树，全量 2308/1 验证通过 +
@@ -459,11 +461,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（下一 session 主线=PT-DEBT-4 / 用户类泛型 / S1-S3 设计窗口 / 枚举实例化候选）
-- [ ] 读 `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态：S4 已根治、S5 部分处置、S1-S3 已知边界）
-- [ ] 读 `_enum_instancing_assessment.md`（枚举实例化设计候选评估：维持现状）
-- [ ] 读 `PENDING_TASKS.md` §〇（PT-DEBT-24 已清理、PT-AUDIT-3 处置、合并已完成）
+- [ ] 读本节 §2.1（下一 session 主线=**用户类泛型 PT-FEAT-3**，设计起点 `_code_user_class_generics.md`）
+- [ ] 读 `_code_user_class_generics.md`（地基盘点 + 开放设计问题 + 实施路径；从设计冻结开始）
+- [ ] 读 `_code_ai_autoset.md`（F9 显式配置方案；**待用户拍板命名**后再实施）
+- [ ] 读 `_enum_instancing_assessment.md` + `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态）
+- [ ] 读 `PENDING_TASKS.md` §〇（用户类泛型=当前主线；PT-DEBT-24 已清理；合并已完成）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2308 passed / 1 skipped**）
-- [ ] 独立窗口候选：PT-DEBT-4 / KNOWN_LIMITS §十四 #1 / PT-AUDIT-3 S1-S3
-- [ ] 工作全程本地 commit、禁 push、工作日志记录
+- [ ] 独立窗口候选：PT-DEBT-4 / PT-AUDIT-3 S1-S3 / 枚举实例化 / import subpkg / CI/CD / PT-FEAT-13 C8
+- [ ] 工作全程本地 commit、禁 push（除非用户显式授权；当前本地领先 origin 5 commits 未推送）
