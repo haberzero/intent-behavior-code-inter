@@ -898,6 +898,8 @@ class RuntimeContextImpl(RuntimeContext):
         与同步版同语义（override / smear / active / global 优先级与消费逻辑），
         但意图段求值经 ``resolve_content_cps`` / ``IntentResolver.resolve_cps``
         （``yield from``）——消除 ``vm.run`` 同步重入调度循环（任务内同步重入）。
+        ``call_intent`` 为协议预留参数（当前消解逻辑未消费；签名与
+        ``IRuntimeContext`` 对齐）。
         实现委托 ``IbIntentContext.resolve_to_prompts_cps``（单一权威源）。
         """
         return (yield from self._intent_ctx.resolve_to_prompts_cps(self, execution_context))

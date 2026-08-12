@@ -302,10 +302,10 @@ class _PromptMixin:
         return None
 
     def _get_llmoutput_hint_cps(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext):
-        """CPS 版 :meth:`_get_llmoutput_hint`（F3：hint vtable 分支 CPS 化）。
+        """CPS 版 :meth:`_get_llmoutput_hint`（用户 hint vtable 分支 CPS 化）。
 
         与同步版同语义，但用户 hint 方法（``__outputhint_prompt__``）经
-        ``UserFunctionCall`` trampoline 驱动（复用 F1 统一用户方法 CPS 路径），
+        ``UserFunctionCall`` trampoline 驱动（复用统一用户方法 CPS 路径），
         而非同步 ``.call``——后者在 CPS 行为路径内会嵌套调度器，若 hint 方法
         含 Waitable 则死锁。本方法是生成器，yield ``UserFunctionCall`` 由 VM
         调度循环压栈驱动；调用方须 ``yield from``。
