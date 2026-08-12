@@ -33,13 +33,17 @@ int v = obj(400)   # ✅ 400
 
 ### 2.1 声明方式
 
-`Enum` 通过继承内置 `Enum` 类实现，成员字段必须显式声明类型（当前版本仅支持 `str` 类型的枚举成员）：
+`Enum` 通过继承内置 `Enum` 类实现，成员字段必须显式声明类型（支持 `str` / `int` / `float` / `bool` 类型的枚举成员）：
 
 ```ibci
 class Color(Enum):
     str RED   = "RED"
     str GREEN = "GREEN"
     str BLUE  = "BLUE"
+
+class Code(Enum):
+    int OK  = 200
+    int ERR = 500
 ```
 
 ### 2.2 访问与比较
@@ -49,8 +53,8 @@ class Color(Enum):
 ```ibci
 Color c = Color.BLUE
 
-# 访问
-print((str)Color.RED)    # 输出: RED
+# 访问（成员值为其声明的底层值，`(str)Color.RED` 输出 "RED"、`(str)Code.OK` 输出 "200"）
+print((str)Color.RED)
 
 # 比较
 if c == Color.BLUE:
@@ -66,12 +70,24 @@ switch c:
         print("other")
 ```
 
-### 2.3 当前限制
+### 2.3 迭代与数量
 
-- **仅支持 `str` 类型成员**：枚举成员的底层值只能声明为 `str` 类型，不支持 `int` 等其他类型成员。
-- **不支持枚举迭代**：当前无法对枚举类的所有成员进行遍历（如 `for v in Color:`）。
-- **不支持枚举数量/序数查询**：`len(Color)`、成员序号等功能暂不支持。
-- **LLM 集成**：`Enum` 类型已具备 `has_output_hint_cap = True` 能力，LLM 函数可以直接输出枚举成员名称并自动解析为对应枚举值。
+```ibci
+# 迭代全部成员值（按声明顺序）
+for v in Color:
+    print((str)v)
+
+# 成员数量
+print((str)len(Color))
+```
+
+### 2.4 当前限制
+
+- **成员值是底层值，非枚举实例**：`Color.RED` 直接返回其声明的底层值（`str`/`int`/`float`/`bool` 装箱值），
+  不是 `Color` 类型的实例。因此**枚举自定义方法不可在成员值上调用**（`Color c = Color.RED; c.my_method()`
+  分派到底层类型的方法表）。若需实例化枚举（成员携带 `name`/`value` 与方法），属独立设计方向，当前不支持。
+- **LLM 集成**：`Enum` 类型具备 `has_output_hint_cap` / `has_from_prompt_cap` 能力，LLM 输出枚举**成员名**
+  后自动映射回**成员值**（非 str 成员亦正确，2026-08-12 修复；此前 str 因值==名碰巧工作）。
 
 ---
 

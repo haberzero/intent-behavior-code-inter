@@ -81,6 +81,9 @@ class SymbolCollector:
 
         # 状态变量
         self.current_class: Optional[IbSpec] = None
+        # 当前类是否为枚举（继承 Enum）：枚举成员字面值写入 MemberSpec.metadata["value"]，
+        # 供 EnumAxiom.from_prompt 做"成员名 → 成员值"映射（非 str 枚举 LLM 集成）。
+        self.current_class_is_enum: bool = False
 
         # 使用 registry 的 _any_desc
         self._any_desc = context.registry.resolve("any")
@@ -186,6 +189,9 @@ class SymbolCollector:
         old_class = self.current_class
         self.current_class = registered_meta
 
+        old_is_enum = self.current_class_is_enum
+        self.current_class_is_enum = node.parent == "Enum"
+
         try:
             for stmt in node.body:
                 self.visit(stmt)
@@ -193,6 +199,7 @@ class SymbolCollector:
             sym.owned_scope = self.symbol_table
         finally:
             self.current_class = old_class
+            self.current_class_is_enum = old_is_enum
             self.symbol_table = old_table
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
@@ -277,6 +284,14 @@ class SymbolCollector:
                     spec=spec
                 )
                 self._define(sym, target)
+                # 枚举成员字面值 → MemberSpec.metadata["value"]（供 EnumAxiom 映射成员名→值）。
+                # 仅限常量字面量（int/float/bool/str）；非字面量成员回退"名==值"语义。
+                if self.current_class_is_enum and isinstance(node.value, ast.IbConstant):
+                    literal = node.value.value
+                    if isinstance(literal, (bool, int, float, str)):
+                        member = self.current_class.members.get(name)
+                        if member is not None and member.kind == "field":
+                            member.metadata["value"] = literal
 
         # 递归扫描（处理嵌套结构）
         self.generic_visit(node)

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
-from core.kernel.axioms.primitives.base import BaseAxiom
+from core.kernel.axioms.primitives.base import BaseAxiom, _m
+from core.kernel.spec.member import MethodMemberSpec
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -34,12 +35,13 @@ class EnumAxiom(BaseAxiom):
     * All type parameters use string names (no IbSpec objects required).
     """
 
+    has_iter_cap = True
     has_from_prompt_cap = True
     has_output_hint_cap = True
     has_converter_cap = True
 
     def __init__(self) -> None:
-        self._enum_index_registry: Dict[str, Dict[str, str]] = {}
+        self._enum_index_registry: Dict[str, Dict[str, Any]] = {}
 
     @property
     def name(self) -> str:
@@ -54,8 +56,18 @@ class EnumAxiom(BaseAxiom):
     def can_convert_from(self, source_type_name: str) -> bool:
         return source_type_name == "str"
 
-    def _get_enum_index_map(self, spec: Optional["IbSpec"]) -> Optional[Dict[str, str]]:
-        """Build / return the {member_name → member_name} map for the enum."""
+    def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
+        return {
+            "to_list": _m("to_list", ret="list"),
+            "len": _m("len", ret="int"),
+        }
+
+    def _get_enum_index_map(self, spec: Optional["IbSpec"]) -> Optional[Dict[str, Any]]:
+        """Build / return the {member_name → member value} map for the enum.
+
+        成员值取自编译期写入的 ``MemberSpec.metadata["value"]``（symbol_collection_pass
+        对常量字面量成员填充）；无值（非字面量成员 / 测试桩等）回退"名==值"。
+        """
         if spec is None:
             return None
         class_name = spec.name
@@ -71,11 +83,17 @@ class EnumAxiom(BaseAxiom):
             "__getitem__", "__setitem__", "sort", "pop",
             "append", "clear", "__eq__", "__init__",
         }
-        name_to_value: Dict[str, str] = {}
+        name_to_value: Dict[str, Any] = {}
         for mname in members:
             if mname.startswith("_") or mname in intrinsic_method_names:
                 continue
-            name_to_value[mname] = mname
+            value: Any = mname
+            if isinstance(members, dict):
+                mspec = members.get(mname)
+                meta = getattr(mspec, "metadata", None) if mspec is not None else None
+                if isinstance(meta, dict) and "value" in meta:
+                    value = meta["value"]
+            name_to_value[mname] = value
 
         self._enum_index_registry[class_name] = name_to_value
         return name_to_value
@@ -108,7 +126,10 @@ class EnumAxiom(BaseAxiom):
             return (False, "无法解析枚举值：缺少成员信息")
 
         if upper in index_map:
-            return (True, upper)
+            return (True, index_map[upper])
+        for mname, mval in index_map.items():
+            if mname.upper() == upper:
+                return (True, mval)
 
         names = list(index_map.keys())
         preview = ", ".join(names[:5]) + (" 等" if len(names) > 5 else "")

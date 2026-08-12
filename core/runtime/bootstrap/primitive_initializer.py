@@ -1,7 +1,7 @@
 from typing import Any, List, Dict, Optional, Callable, TYPE_CHECKING
 from core.runtime.objects.ib_type_mapping import get_ib_implementation
 from core.runtime.objects.kernel.base import unbox
-from ..objects.kernel import IbClass, IbNativeFunction, IbNone, IbObject, IbValue, IbLLMUncertain
+from ..objects.kernel import IbClass, IbClassField, IbNativeFunction, IbNone, IbObject, IbValue, IbLLMUncertain
 from ..objects.primitives import IbInteger, IbFloat, IbString, IbList, IbTuple, IbDict, IbBehavior, IbBool
 from ..objects.file_handle import IbFileHandle
 from ..objects.media_types import audio_from_file, image_from_file, video_from_file
@@ -215,7 +215,41 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         name="__eq__"
     )
     enum_class.register_method("__eq__", eq_method)
-    
+
+    # [Enum 补全] Enum 基类注册 to_list / len（成员值列表 / 成员数量）。
+    # 值模型下枚举成员访问返回 static_val（原始值）；to_list 收集全部成员的
+    # static_val，len 返回成员数。用户枚举子类经父链继承（lookup_method 沿
+    # parent 递归），全体枚举类共享这两个方法。
+    def enum_to_list_impl(receiver):
+        vals = []
+        for _fname, vinfo in receiver.default_fields.items():
+            if isinstance(vinfo, IbClassField):
+                if vinfo.static_val is not None:
+                    vals.append(vinfo.static_val)
+            else:
+                vals.append(vinfo)
+        return registry.box(vals)
+
+    def enum_len_impl(receiver):
+        count = 0
+        for _fname, vinfo in receiver.default_fields.items():
+            if isinstance(vinfo, IbClassField):
+                if vinfo.static_val is not None:
+                    count += 1
+            else:
+                count += 1
+        return registry.box(count)
+
+    for _name, _impl in (("to_list", enum_to_list_impl), ("len", enum_len_impl)):
+        _m = IbNativeFunction(
+            _impl,
+            unbox_args=False,
+            is_method=True,
+            ib_class=enum_class,
+            name=_name
+        )
+        enum_class.register_method(_name, _m)
+
     registry.register_class("Enum", enum_class, registry._kernel_token, metadata_registry.resolve("Enum"))
     
     # 4. 注册内置全局函数元数据 (供编译器发现)
