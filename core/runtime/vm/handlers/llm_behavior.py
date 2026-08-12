@@ -7,7 +7,7 @@ from typing import Any, Mapping, Optional, Dict, List
 from core.runtime.shared.signals import (
     Signal,
 )
-from core.runtime.objects.intent import IbIntent, IntentRole
+from core.runtime.objects.intent import IntentRole
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.vm.handlers._shared import (
@@ -117,15 +117,6 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     """
     is_callable_instance = node_data.get("is_callable_instance")
 
-    intent_uid = node_data.get("intent")
-    call_intent: Optional[IbIntent] = None
-    if intent_uid:
-        intent_data = executor.ec.get_node_data(intent_uid)
-        intent_class = executor.registry.get_class("Intent")
-        call_intent = IbIntent.from_node_data(
-            intent_uid, intent_data, intent_class, role=IntentRole.SMEAR
-        )
-
     sc = executor.service_context
 
     if is_callable_instance:
@@ -142,7 +133,6 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
             node_uid,
             captured_intents,
             expected_type=expected_type,
-            call_intent=call_intent,
             capture_mode=capture_mode,
             execution_context=executor.ec,
             param_types=param_types,
@@ -157,8 +147,7 @@ def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, An
     # 调度循环且 _call_llm 阻塞调度线程；CPS 版段求值 yield 嵌入外层 VM 帧栈、
     # LLM 提交线程池 + yield LLMFuture 挂起让出——消除任务内同步重入与阻塞。
     result = yield from sc.llm_executor.execute_behavior_expression_cps(
-        node_uid, executor.ec, call_intent=call_intent,
-        target_model=target_model,
+        node_uid, executor.ec, target_model=target_model,
     )
     if result is not None and result.is_uncertain:
         return _make_uncertain_call_result(

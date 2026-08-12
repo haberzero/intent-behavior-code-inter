@@ -405,8 +405,6 @@ class RuntimeSerializer(BaseFlatSerializer):
         # expected_type 在运行期由调用点经 node_to_type 侧表解析，字段本身仅元数据。
         et = obj.expected_type
         data["expected_type"] = str(et) if et is not None else None
-        if obj.call_intent is not None:
-            data["call_intent"] = self._process_value(obj.call_intent)
         data["capture_mode"] = obj.capture_mode
         if obj.params_uids:
             data["params_uids"] = list(obj.params_uids)
@@ -822,12 +820,9 @@ class RuntimeDeserializer:
                     "Unexpected captured_intents payload "
                     f"{type(ci_raw).__name__} (contract requires None or intent_context uid)"
                 )
-            call_intent_raw = data.get("call_intent")
-            call_intent = self._deserialize_value(call_intent_raw) if call_intent_raw is not None else None
             closure, pending_uids = self._deserialize_closure(data)
             obj = self.factory.create_behavior(
                 data["node_uid"], captured, data.get("expected_type"),
-                call_intent=call_intent,
                 capture_mode=data.get("capture_mode"),
                 params_uids=data.get("params_uids"),
                 closure=closure,

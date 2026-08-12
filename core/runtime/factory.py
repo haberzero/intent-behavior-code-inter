@@ -39,8 +39,8 @@ class RuntimeObjectFactory(IObjectFactory):
     def create_native_object(self, py_obj: Any, ib_class: IIbClass, vtable: Optional[Dict[str, Any]] = None, whitelist: Optional[List[str]] = None, registry_id: Optional[int] = None) -> IIbObject:
         return IbNativeObject(py_obj, ib_class, vtable=vtable, whitelist=whitelist, registry_id=registry_id)
 
-    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, call_intent: Optional[Any] = None, capture_mode: Optional[str] = None, execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, closure: Optional[Dict[str, Any]] = None, param_types: Optional[List[str]] = None, return_type: Optional[str] = None) -> Any:
-        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, call_intent=call_intent, capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, closure=closure, param_types=param_types, return_type=return_type)
+    def create_behavior(self, node_uid: str, captured_intents: List[Any], expected_type: Optional[str] = None, capture_mode: Optional[str] = None, execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, closure: Optional[Dict[str, Any]] = None, param_types: Optional[List[str]] = None, return_type: Optional[str] = None) -> Any:
+        return IbBehavior(node_uid, captured_intents, ib_class=self._registry.get_class("behavior"), expected_type=expected_type, capture_mode=capture_mode, execution_context=execution_context, params_uids=params_uids, closure=closure, param_types=param_types, return_type=return_type)
 
     def create_fn_callable(self, node_uid: str, capture_mode: str = "lambda", execution_context: Optional[Any] = None, params_uids: Optional[List[str]] = None, body_uid: Optional[str] = None, closure: Optional[Dict[str, Any]] = None, param_types: Optional[List[str]] = None, return_type: Optional[str] = None) -> Any:
         """Create a fn_callable expression object (for non-behavior lambda/snapshot)."""

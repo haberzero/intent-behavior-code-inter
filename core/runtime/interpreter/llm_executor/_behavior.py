@@ -26,7 +26,6 @@ from core.runtime.shared.llm_result import (
 )
 
 from core.runtime.objects.kernel import IbObject, IbValue
-from core.runtime.objects.intent import IbIntent
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.primitives.callables import (
     bind_behavior_closure,
@@ -42,9 +41,6 @@ class BehaviorCallSpec:
     拆分的边界：主线程预求值 prompt 段（``_evaluate_segments`` / 意图消解 /
     output hint / retry_hint），把与执行线程无关的输入快照进本对象；
     worker 线程只读本对象执行 ``_call_llm`` + 解析，不访问 live context。
-
-    ``pre_resolved``：auto_intent 关闭且携带 ``call_intent`` 时的短路结果
-    （不经 LLM 调用），由调用方直接返回。
     """
 
     sys_prompt: str
@@ -54,7 +50,6 @@ class BehaviorCallSpec:
     active_intents: List[Any] = field(default_factory=list)
     global_intents: List[Any] = field(default_factory=list)
     merged_intents: List[Any] = field(default_factory=list)
-    pre_resolved: Optional[LLMResult] = None
 
 
 class _RunBatchDrive:
@@ -127,7 +122,6 @@ class _BehaviorMixin:
         self,
         node_uid: str,
         execution_context: IExecutionContext,
-        call_intent: Optional[IbIntent] = None,
         captured_intents: Optional[IbIntentContext] = None,
         target_model: str = "",
     ) -> BehaviorCallSpec:
@@ -144,25 +138,6 @@ class _BehaviorMixin:
             target_model = node_data.get("tag", "")
 
         content = self._evaluate_segments(node_data.get("segments"), execution_context)
-
-        provider = self.llm_callback
-        auto_intent = True
-        if provider:
-            auto_intent = provider.is_auto_intent_injection_enabled()
-
-        if not auto_intent:
-            if call_intent:
-                content_str = call_intent.resolve_content(context, execution_context)
-                return BehaviorCallSpec(
-                    sys_prompt="",
-                    user_prompt=content_str,
-                    type_hint=None,
-                    target_model=target_model,
-                    pre_resolved=LLMResult.success_result(
-                        value=self.registry.box(content_str),
-                        raw_response=content_str,
-                    ),
-                )
 
         active_list: List[Any] = []
         global_intents: List[Any] = []
@@ -217,7 +192,6 @@ class _BehaviorMixin:
         node_uid: str,
         node_data: Mapping[str, Any],
         execution_context: IExecutionContext,
-        call_intent: Optional[IbIntent] = None,
         captured_intents: Optional[IbIntentContext] = None,
         target_model: str = "",
     ):
@@ -233,27 +207,6 @@ class _BehaviorMixin:
             target_model = node_data.get("tag", "")
 
         content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
-
-        provider = self.llm_callback
-        auto_intent = True
-        if provider:
-            auto_intent = provider.is_auto_intent_injection_enabled()
-
-        if not auto_intent:
-            if call_intent:
-                content_str = call_intent.resolve_content(
-                    execution_context.runtime_context, execution_context
-                )
-                return BehaviorCallSpec(
-                    sys_prompt="",
-                    user_prompt=content_str,
-                    type_hint=None,
-                    target_model=target_model,
-                    pre_resolved=LLMResult.success_result(
-                        value=self.registry.box(content_str),
-                        raw_response=content_str,
-                    ),
-                )
 
         context = execution_context.runtime_context
         active_list: List[Any] = []
@@ -310,9 +263,6 @@ class _BehaviorMixin:
         只读 :class:`BehaviorCallSpec`，不写主线程单写槽（``_current_call_info``
         由调用方在 sync 尾部或 resolve 点记录）；不访问 live context。
         """
-        if spec.pre_resolved is not None:
-            return spec.pre_resolved
-
         response = self._call_llm(spec.sys_prompt, spec.user_prompt, node_uid, target_model=spec.target_model)
 
         def _call_info(resp: str) -> dict:
@@ -355,7 +305,7 @@ class _BehaviorMixin:
             )
         return self._finalize_call(result, _call_info(response), record_current=False)
 
-    def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
+    def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
         """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。
 
         **LLM 真挂起**：spec 经 ``_prepare_behavior_call_cps``
@@ -366,10 +316,8 @@ class _BehaviorMixin:
         """
         node_data = execution_context.get_node_data(node_uid)
         spec = yield from self._prepare_behavior_call_cps(
-            node_uid, node_data, execution_context, call_intent, captured_intents, target_model
+            node_uid, node_data, execution_context, captured_intents, target_model
         )
-        if spec.pre_resolved is not None:
-            return spec.pre_resolved
 
         future = self._get_thread_pool().submit(
             self._call_and_parse, spec, node_uid, execution_context

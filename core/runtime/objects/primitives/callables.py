@@ -203,7 +203,6 @@ class IbBehavior(IbValue):
         captured_intents: Optional[Any],  # Optional[IbIntentContext]
         ib_class: IbClass,
         expected_type: Optional[str] = None,
-        call_intent: Optional[Any] = None,
         capture_mode: Optional[str] = None,
         execution_context: Optional[Any] = None,
         params_uids: Optional[List[str]] = None,
@@ -213,7 +212,6 @@ class IbBehavior(IbValue):
     ):
         """
         IbBehavior 是纯粹的数据描述符与自主执行单元。
-        call_intent 用于保存 @! 排他意图，使延迟执行时意图不丢失。
         capture_mode: 'lambda' | 'snapshot' | None (immediate)
         execution_context: 创建时的执行上下文引用（供 call() 使用）。
         captured_intents: None（lambda 模式）或 IbIntentContext fork 值快照（snapshot
@@ -235,7 +233,6 @@ class IbBehavior(IbValue):
             meta={
                 "captured_intents": captured_intents,
                 "expected_type": expected_type,
-                "call_intent": call_intent,
                 "capture_mode": capture_mode,
                 "params_uids": list(params_uids) if params_uids else [],
                 "closure": dict(closure) if closure else {},
@@ -244,7 +241,6 @@ class IbBehavior(IbValue):
         self.node = node_uid
         self.captured_intents = captured_intents
         self.expected_type = expected_type
-        self.call_intent = call_intent
         self.capture_mode = capture_mode
         self._execution_context = execution_context
         self._cache: Optional[IbObject] = None

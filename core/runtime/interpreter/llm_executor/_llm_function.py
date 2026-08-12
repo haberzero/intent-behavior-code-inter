@@ -17,7 +17,6 @@ from core.runtime.interfaces import IExecutionContext
 from core.runtime.shared.llm_result import LLMResult, LLMFuture, MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
 
 from core.runtime.objects.kernel import IbObject
-from core.runtime.objects.intent import IbIntent
 
 
 @dataclass
@@ -175,7 +174,7 @@ class _LLMFunctionMixin:
             record_current=False,
         )
 
-    def execute_llm_function_cps(self, node_uid: str, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None):
+    def execute_llm_function_cps(self, node_uid: str, execution_context: IExecutionContext):
         """CPS 版 :meth:`execute_llm_function`；逻辑等价，段求值通过 yield from。
 
         **LLM 真挂起**（与 behavior 路径 :meth:`execute_behavior_expression_cps`
@@ -199,9 +198,7 @@ class _LLMFunctionMixin:
             self._record_current_call_info(result.call_info)
         return result
 
-    def invoke_llm_function_cps(self, func: IbObject, execution_context: IExecutionContext, call_intent: Optional[IbIntent] = None):
+    def invoke_llm_function_cps(self, func: IbObject, execution_context: IExecutionContext):
         """CPS 版 :meth:`invoke_llm_function`；段求值嵌入外层 VM 帧栈。"""
-        result = yield from self.execute_llm_function_cps(
-            func.node_uid, execution_context, call_intent=call_intent
-        )
+        result = yield from self.execute_llm_function_cps(func.node_uid, execution_context)
         return self._finalize_invoke_result(result)

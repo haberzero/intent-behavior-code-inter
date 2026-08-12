@@ -488,18 +488,8 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
                 if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
                     rt_context.use_intent_context(arg_value)
 
-        intent_uid = node_data.get("intent")
-        call_intent = None
-        if intent_uid:
-            intent_data = func.context.get_node_data(intent_uid)
-            call_intent = func.context.factory.create_intent_from_node(
-                intent_uid,
-                intent_data,
-                role=IntentRole.SMEAR,
-            )
-
         yield None
-        result = yield from llm_exec.invoke_llm_function_cps(func, func.context, call_intent=call_intent)
+        result = yield from llm_exec.invoke_llm_function_cps(func, func.context)
         return result
     finally:
         func.context.pop_stack()
