@@ -301,20 +301,22 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 ---
 
-## 十一、Switch 语句设计未稳定
+## 十一、Switch 语句使用约束
 
 **限制说明**
 
-`switch`/`case` 语法的 AST 节点位于 `core/kernel/ast.py` 的 `IbSwitch` 类，基本功能可用，但语义设计存在待改进问题。
+`switch`/`case` 基本功能可用（2026-08-12 实测验证：值比较 / 字符串匹配 / Enum 匹配 / `default` 兜底 / 匹配后自动跳出均正常）。
 
-**根源**
+**使用约束**
 
-- case 匹配语义不完整（值比较、类型匹配、模式匹配的边界不清晰）
-- default 语句的兜底行为需要明确定义
-- switch 内控制流（break/continue/return）与其他控制流的一致性待验证
-- 与 if/elif/else 的语义差异与使用场景未充分区分
+- **`case` 分支体必须换行书写**：`case 1: print("x")` 单行形式不支持（报 `PAR_EXPECTED_TOKEN`），须
+  ```ibci
+  case 1:
+      print("x")
+  ```
+- **匹配后自动跳出 case**（无 C 语言 fall-through）：命中分支执行后自动跳过其余 `case`。因此 **case 内 `break` 是冗余但合法的**（消费为 no-op，不会报错）；`continue` 透传给外层循环（switch 本身不是循环）。
 
-**当前建议**：暂不在生产代码中使用 `switch`/`case` 语句，优先使用 `if`/`elif`/`else` 实现条件分支逻辑。
+**建议**：分支逻辑清晰、值匹配确定时使用 `switch`；复杂模式匹配（类型/结构匹配）仍用 `if`/`elif`/`else`。
 
 ---
 

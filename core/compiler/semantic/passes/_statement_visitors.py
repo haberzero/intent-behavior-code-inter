@@ -393,6 +393,20 @@ class StatementVisitorsMixin:
     def visit_IbReturn(self, node: ast.IbReturn) -> Optional[IbSpec]:
         """访问 return 语句"""
         if node.value:
+            # 禁止 `return @~...~`：行为表达式（@~）的输出类型与提示词约束
+            # 由左值类型驱动，return 处没有左值——直接书写无法确定 LLM 输出
+            # 的解析目标，运行时将按字符串 box（-> int 等具体类型失效，静默
+            # 类型错流入）。用户应先赋值给有类型的局部变量，再 return 该变量。
+            # （v1 曾实现此拦截，v2 语义重构时未随迁——此处补全设计意图。）
+            rhs = node.value
+            rhs_inner = rhs.value if isinstance(rhs, ast.IbAwaitExpr) else rhs
+            if isinstance(rhs_inner, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
+                self.error(
+                    "Cannot use a behavior expression directly in a return statement. "
+                    "Assign it to a typed local variable first, then return that variable.",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+                return self._void_desc
             ret_type = self.visit(node.value)
             # 如果在 auto 返回类型函数中，累积返回类型
             if self.auto_return_types is not None:

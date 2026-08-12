@@ -80,7 +80,18 @@ class SymbolResolver(ScopedVisitor):
         # 查找符号定义
         sym = self.lookup_symbol(node.id)
         if not sym:
-            self.error(f"Undefined symbol '{node.id}'", node, code=SEM_UNDEFINED_SYMBOL)
+            # 布尔/空值字面量大小写引导：IBCI 与 Python 一致，字面量大写
+            # （True/False/None）。用户写小写（true/false/none）时给出修正
+            # 提示，避免误判为未定义变量。
+            lower = node.id.lower()
+            if lower in ("true", "false", "none"):
+                self.error(
+                    f"Undefined symbol '{node.id}'. Did you mean '{lower.capitalize()}'? "
+                    f"IBCI boolean/null literals are capitalized (True/False/None).",
+                    node, code=SEM_UNDEFINED_SYMBOL,
+                )
+            else:
+                self.error(f"Undefined symbol '{node.id}'", node, code=SEM_UNDEFINED_SYMBOL)
             return
 
         # 绑定到 metadata

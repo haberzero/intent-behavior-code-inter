@@ -183,7 +183,11 @@ def vm_handle_IbSwitch(executor, node_uid: str, node_data: Mapping[str, Any]):
         if matched:
             res = yield from _vm_execute_stmt_sequence(executor, case_data.get("body", []))
             if isinstance(res, Signal):
-                return res
+                # IBCI switch 语义是"匹配后自动跳出 case"（无 fall-through），
+                # case 内 `break` 是 C 语言习惯的冗余写法——消费为 no-op。
+                # RETURN/THROW/CONTINUE 透传（CONTINUE 可透传给外层循环）。
+                if res.kind is not ControlSignal.BREAK:
+                    return res
             break
     return executor.registry.get_none()
 
