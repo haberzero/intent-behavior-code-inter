@@ -1,8 +1,21 @@
-# REVERIFY — 修复后回归试用计划（2026-08-12）
+# REVERIFY — 修复后回归试用（2026-08-12）
 
 > 背景：PT-DEBT-25/26/27/28 + O1/I1/O2 修复 + 文档修正已落地（全量 2252 passed / 1 skipped）。
 > 本次重验目的：① 已修复问题的复现用例确认已处理；② 修复触及的子系统的回归验证；
 > ③ 与修复相关（可能受影响/可能已被处理）的问题再测试。全部经死循环保护 harness。
+
+## 结果（2026-08-12 完成）
+
+- **50 次运行**（全部死循环保护），48 干净 + 2 预期（编译期类型错验证 + RecursionError 根因验证），零超时。
+- **R1 已修复问题复现确认**：global（counter=1/99）/ 整模块 import（greet+ans）/ 零参数类型
+  （编译期 SEM_TYPE_MISMATCH）/ ai API（retry=7 auto=True）/ **真实超时 provider 失败被
+  except LLMCallError 捕获**（修复前逃逸崩溃）。
+- **R2 O1/I1/O2 确认**：obj() 深递归 400 / fn 引用 / __call__+LLM / 生成器 __iter__ /
+  生成器 __call__ / yield from 实例 / 字段默认值每实例独立 全 PASS。
+- **R3/REV2 受影响子系统回归**：调用分派 / 生成器 / 模块导入 / 异常 / 类型绑定 / 意图 /
+  并发 / 插件 / 隔离 真实 LLM 回归全 PASS（~38 例）。
+- **全量 pytest 2252 passed / 1 skipped**（test_mock_service 已知 flaky 单跑通过，非回归）。
+- **结论：无本次修复引入的回归。**
 
 ## 修复触及的核心文件 → 受影响子系统
 
