@@ -21,7 +21,7 @@ IBCI 支持以下"可被调用"的类型通过 `fn` 关键字统一承载：
 ```ibci
 class Adder:
     int base
-    func __init__(self, int b):
+    func __init__(self, int b) -> auto:
         self.base = b
     func __call__(self, int x) -> int:
         return self.base + x

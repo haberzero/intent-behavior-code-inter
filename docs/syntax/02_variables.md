@@ -60,7 +60,7 @@ int b = 2
 ```ibci
 int counter = 0
 
-func increment():
+func increment() -> void:
     global counter
     counter = counter + 1
 

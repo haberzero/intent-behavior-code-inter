@@ -81,7 +81,20 @@ MOCK 模式（离线测试/开发，结合 MOCK 指令使用）：
 ai.set_mock_mode()        # 显式进入 MOCK 模式（替代 url/key 字符串嗅探）
 ```
 
-其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`stream_call()`、`stream_channel()`、`mask(pattern)` 等。
+其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`mask(pattern)` 等。
+
+> **`probe_model()` 与推理模型判定**：若在 `api_config.json` 的 `default_model` 声明了 `reasoning: false`（非思考模型）或 `reasoning: true`（强制推理模型），引擎**跳过实际探测**，直接按声明分类（两侧都落能力缓存）。`probe_model()` 是手动探测工具，用启发式判定（专用 reasoning 字段 / "Thinking Process" 特征串 / 输出冗长程度），存在**保守误判**可能——模型无视"只回一词"指令输出冗长内容时会被保守判为强制推理模型。本地非思考模型建议直接声明 `reasoning: false`，而非依赖自动探测。
+
+流式调用（增量渲染）：
+
+```ibci
+str full = await ai.stream_call("sys", "MOCK:STREAM:Hello| World|!")
+# stream_call(sys_prompt: str, user_prompt: str) -> Waitable，await 后返回完整文本
+any h = ai.stream_call("sys", "MOCK:STREAM:Hi| there")   # 赋值自动等待（auto-yield）
+
+chan c = ai.stream_channel("sys", "MOCK:STREAM:Hello| World|!")
+# stream_channel(sys_prompt: str, user_prompt: str) -> chan，逐块消费
+```
 
 ### 11.4 isys 模块
 
@@ -141,7 +154,7 @@ ihost.load_state(path)                # 加载状态
 str src = ihost.get_source()          # 获取当前入口源码
 ```
 
-子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）。
+子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境按自身 `project_root` 加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
 
 ### 11.7 file 模块
 

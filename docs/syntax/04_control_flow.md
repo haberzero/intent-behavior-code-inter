@@ -214,12 +214,12 @@ except Exception as e:
 
 ```ibci
 class AppError(Exception):
-    func __init__(self, str msg):
+    func __init__(self, str msg) -> auto:
         self.message = msg
 
 class NetworkError(AppError):
     int code
-    func __init__(self, str msg, int code):
+    func __init__(self, str msg, int code) -> auto:
         self.message = msg
         self.code = code
 

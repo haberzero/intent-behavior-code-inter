@@ -20,7 +20,7 @@ func fetch(int x) -> int:
 
 thread[int] t = thread(callable=fetch, args=[21])
 thread_result[int] r = t.join()      # 等待完成 → 结果容器
-print((str)r.value)                  # 42
+print((str)r.value())                # 42
 ```
 
 - `T` 为返回类型（`void` 亦可）。
@@ -53,7 +53,7 @@ func consumer() -> str:
 
 thread[void] p = thread(callable=producer, args=[])
 thread[str] cons = thread(callable=consumer, args=[])
-str out = cons.join().value         # "第一 第二"
+str out = cons.join().value()         # "第一 第二"
 ```
 
 > 精确的消费结束信号（如通道关闭检测）以 `docs/syntax/14_concurrency.md` 当前语义为准；需要非阻塞轮询用 `recv_nowait()`（空缓冲返回 `None`）。

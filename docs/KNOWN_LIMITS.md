@@ -174,7 +174,7 @@ for int x in a:
 ```ibci
 class Stack:
     list items
-    func __init__(self):
+    func __init__(self) -> auto:
         self.items = []  # 每个实例独立创建
 ```
 
@@ -210,7 +210,7 @@ Dog d = Dog("Husky")    # 只设置 breed；d.name = None
 ```ibci
 class Dog(Animal):
     str breed
-    func __init__(self, str n, str b):
+    func __init__(self, str n, str b) -> auto:
         super().__init__(n)
         self.breed = b
 ```
@@ -358,7 +358,7 @@ str r = @~ ... ~
 
 **作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `core/runtime/bootstrap/primitive_initializer.py` 中对应方法注册段的注释）。
 
-**编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL warning，提示用户先通过 `get_current()` 获取实例。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
+**编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL **编译期警告**（记录于编译器 issue tracker，可经 `compile` API / 诊断工具读取）。该警告是编译期诊断，**不在运行时输出打印**（`run` 成功路径不展示非致命编译警告）。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
 ---
 

@@ -105,9 +105,9 @@ func fetch() -> int:
     return 42
 
 thread[int] t = thread(callable=fetch, args=[])
-int v = await t           # 等待线程完成
-# await thread[T] 的结果类型为 thread_result[T]，等价于 t.join()
+# await thread[T] 的结果类型为 thread_result[T]（等价于 t.join()）
 thread_result[int] r = await t
+int v = r.expect()        # 取成功值 42
 ```
 
 **语义要点**：

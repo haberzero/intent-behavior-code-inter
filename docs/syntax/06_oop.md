@@ -9,7 +9,7 @@ class Point:
     int x
     int y
 
-    func __init__(self, int x, int y):
+    func __init__(self, int x, int y) -> auto:
         self.x = x
         self.y = y
 
@@ -40,7 +40,7 @@ print((str)p.distance()) # 25.0
 class Animal:
     str name
 
-    func __init__(self, str name):
+    func __init__(self, str name) -> auto:
         self.name = name
 
     func speak(self) -> str:
@@ -64,7 +64,7 @@ print(d.speak())    # Rex says Woof!
 class Base:
     int value
 
-    func __init__(self, int v):
+    func __init__(self, int v) -> auto:
         self.value = v
 
     func describe(self) -> str:
@@ -74,7 +74,7 @@ class Base:
 class Derived(Base):
     str label
 
-    func __init__(self, int v, str label):
+    func __init__(self, int v, str label) -> auto:
         super().__init__(v)
         self.label = label
 
@@ -96,9 +96,9 @@ if s == Status.RUNNING:
     print("正在运行")
 ```
 
-> **Known Limit (docs/KNOWN_LIMITS.md §二)**：
-> - 枚举成员目前仅支持 `str` 类型。
-> - 不支持枚举迭代和数量查询。
+> **Known Limit (docs/KNOWN_LIMITS.md §二)**：枚举成员值是其声明类型的底层值（非枚举实例），
+> 因此枚举自定义方法不可在成员值上调用。枚举支持任意底层类型（`str`/`int`/`float`/`bool`）、
+> 迭代（`for v in Color:`）与数量（`len(Color)`）。
 
 ### 6.6 特殊方法（协议）
 
@@ -108,7 +108,7 @@ if s == Status.RUNNING:
 | `__call__(self, ...)` | 对实例 `obj(...)` 调用时 | 可调用对象协议 |
 | `__iter__(self)` | `for x in obj:` 时 | 迭代器协议，返回可遍历列表 |
 | `__to_prompt__(self)` | 变量插值到 `@~ ... ~` 时 | 转为 LLM 提示词文本 |
-| `__from_prompt__(str raw)` | LLM 返回值解析时 | 从文本解析为当前类型实例 |
+| `__from_prompt__(str raw)` | LLM 返回值解析时 | 从文本解析为当前类型实例。**必须返回 `(bool, 实例)` 元组**——首元素为成功标志，次元素为解析出的实例（返回裸实例会被当作不确定失败） |
 | `__outputhint_prompt__(self)` | 类型作为 LLM 输出目标时 | 提示 LLM 期望的输出格式 |
 | `__payload_prompt__(self)` | 变量插值到多模态 `@~ ... ~` 时 | 返回结构化 content block（图像/音频等） |
 | `__snapshot__(self)` | llmexcept 快照进入时 | 返回用于恢复状态的快照值 |
