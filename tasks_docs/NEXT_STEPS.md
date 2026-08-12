@@ -314,10 +314,15 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   （语法/语义/序列化/运行时/e2e）+ 6 项开放设计问题 + 建议实施路径（先设计冻结，再按 a-f 落地）。
   下一 session 从设计冻结开始。
 
+- **✅ 已完成（2026-08-12，unsafe-vibe-dev a49555b，全量 2311 passed / 1 skipped）**：**F9 显式配置**——
+  用户拍板命名 `ai.load_project_config` + 本轮实施。`setup()` 去自动加载段；新增
+  `load_project_config()`（ec/project_root 缺失 fail-fast + 路径规范化 + 缺失 no-op + 幂等）；
+  vtable 注册；测试（无调用不加载/显式调用加载/fail-fast/符号链接/幂等/语言级可达）；examples
+  01/02/03 判断前加显式调用；文档同步（README/guide 01+02/syntax 11+15/config_loader/
+  execution_context/catalog/codes）。独立复核 PASS（5 项整改全完成）。设计记录 `_code_ai_autoset.md`
+  + 实施记录 `_code_f9_load_project_config.md`。
+
 - **📌 独立窗口（与主线错峰）**：
-  - **F9/`ai.autoset`（用户倾向显式配置，设计记录已产出 `_code_ai_autoset.md`）**：把配置加载
-    从"引擎启动自动"改为"显式 `ai.autoset()` 入口调用"。**待用户拍板：方法命名（`ai.autoset` /
-    `ai.load_project_config` / `ai.configure`）**，确认后实施（全仓示例/测试/文档更新）。
   - PT-DEBT-4 `file` 重命名（破坏性）；PT-AUDIT-3 S1-S3 已知边界（跨线程 EC 状态共享 /
     dispatch hint 嵌套调度器 / 单写槽线程化，各需设计窗口）；枚举实例化设计冻结
     （`_enum_instancing_assessment.md`）；`import subpkg`（纯包目录）DEP_MODULE_NOT_FOUND
