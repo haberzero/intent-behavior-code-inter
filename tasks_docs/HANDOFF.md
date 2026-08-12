@@ -134,7 +134,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_ENUM_SWITCH_COMPLETION_HANDOFF.md` | **enum/switch 补全评估 + KNOWN_LIMITS 分类交接**（2026-08-12）：enum 地基已备（axiom/prompt/iter 机制成熟）+ KNOWN_LIMITS 25 章分类 + 下一 session 核查清单。**enum 补全已落地（2026-08-12，见 `_code_enum_completion.md`）**，保留供追溯 |
 | `_code_enum_completion.md` | **enum 补全实现记录**（2026-08-12）：值模型定论（成员=底层值非实例）+ 非 str LLM 集成修复 + 迭代/数量 + KNOWN_LIMITS §二 + 实例化枚举设计候选 |
 | `_LLM_TRIAL_ENUM_IMPORT_20260812/` | **enum/import/运算符 用户试用**（2026-08-12）：9 例全过（含真实 LLM 非 str 枚举集成实证），无新增缺陷。DESIGN.md + REGISTER.md |
-| `_code_user_class_generics.md` | **用户类泛型主线设计起点**（2026-08-12）：地基盘点 + 设计范围 + 6 项开放设计问题 + 实施路径（下一 session 从设计冻结开始） |
+| `_code_user_class_generics.md` | **用户类泛型主线设计起点**（2026-08-12）：地基盘点 + 设计范围 + 6 项开放设计问题 + 实施路径。**已落地（35bb2de）**，保留供追溯 |
+| `PT_FEAT3_DESIGN.md` | **用户类泛型设计冻结**（2026-08-12）：6 项开放问题逐项决断 + 实施蓝图 a-f + 边界登记。**已实施**，保留供追溯 |
 | `_code_ai_autoset.md` | **F9/ai 显式配置设计记录**（2026-08-12）：现状副作用 + 显式方案 + 变更清单 + 命名候选。**命名已拍板 `ai.load_project_config` + 本轮实施完成（a49555b）**，保留供追溯 |
 | `_code_f9_load_project_config.md` | **F9 显式配置落地实施记录**（2026-08-12）：设计决策（ec 契约迁移/幂等/历史试用档案不改）+ 变更清单 + 验证。Phase 5 汇报后清理 |
 | `_enum_instancing_assessment.md` | **实例化枚举设计候选评估**（2026-08-12）：维持现状（LLM 集成改造为核心硬伤），独立设计冻结候选 |
@@ -151,18 +152,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 下一 session 主线（2026-08-12 用户升主线）**：**用户类泛型参数（PT-FEAT-3）**——
-  `class Box[T]:` 语法（lexer/parser/AST `IbClassDef.type_params`）+ 语义（类型参数符号 +
-  `resolve_specialization` 特化）+ 序列化（type_params 落 artifact + rehydrate）+ e2e。
-  地基已备（`GenericTypeRegistry` 全链路）；**设计冻结先行**（`tasks_docs/`，落地后 docs 治理）。
-   独立窗口（错峰）：PT-DEBT-4 / PT-AUDIT-3 S1-S3 / 枚举实例化设计冻结 / `import subpkg` /
-   CI/CD 重新设计 / PT-FEAT-13 C8。
-
-- **✅ 已完成（2026-08-12，unsafe-vibe-dev a49555b，全量 2311 passed / 1 skipped）**：
+- **✅ 已完成（2026-08-12，unsafe-vibe-dev 35bb2de，全量 2339 passed / 1 skipped）**：
+  - **用户类泛型参数（PT-FEAT-3 主线）完整落地**：设计冻结 `PT_FEAT3_DESIGN.md`（6 项开放问题
+    决断）+ 全链路（AST/parser/语义/序列化/运行时/诊断/文档）。已支持多特化/字段·方法参数·返回
+    类型特化/嵌套泛型/多参数 `Pair[K,V]`/泛型继承 `class Sub[T](Box[T])`；守卫（裸用/实参数/
+    字段-T 冲突/Enum 泛型/类型参数遮蔽内置/非泛型子类继承特化）；21 e2e + 2 round-trip；
+    独立复核两轮 PASS（P2-1/P2-2 全整改）。
   - **遗留独立窗口批次**：PT-DEBT-24 call_intent 死代码根治（S4）+ PT-AUDIT-3 S1-S5 处置
     （S4 根治 / S5 去重 / S1-S3 已知边界）+ 枚举实例化设计候选评估（`_enum_instancing_assessment.md`，
     维持现状）。独立复核 PASS。
-  - **用户类泛型（PT-FEAT-3）升主线（用户裁定）**：设计起点 `_code_user_class_generics.md`。
   - **F9 显式配置（用户拍板命名 `ai.load_project_config` + 本轮实施）**：`setup()` 去自动加载段；
     新增 `load_project_config()`（ec/project_root 缺失 fail-fast + 路径规范化 + 缺失 no-op + 幂等）；
     vtable 注册；测试 + examples 01/02/03 + 文档同步。独立复核 PASS。设计记录 `_code_ai_autoset.md`
@@ -465,11 +463,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（下一 session 主线=**用户类泛型 PT-FEAT-3**，设计起点 `_code_user_class_generics.md`）
-- [ ] 读 `_code_user_class_generics.md`（地基盘点 + 开放设计问题 + 实施路径；从设计冻结开始）
+- [ ] 读本节 §2.1（PT-FEAT-3 用户类泛型**已落地 35bb2de**；F9 `ai.load_project_config` 已落地 a49555b；下一主线待择定）
+- [ ] 读 `PT_FEAT3_DESIGN.md`（设计冻结 + 边界 ①-⑧）+ `_code_user_class_generics.md`（设计起点，保留追溯）
 - [ ] 读 `_enum_instancing_assessment.md` + `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态）
-- [ ] 读 `PENDING_TASKS.md` §〇（用户类泛型=当前主线；F9 已完成 a49555b；合并已完成）
+- [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空，剩余独立窗口项待择定）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2311 passed / 1 skipped**）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2339 passed / 1 skipped**）
 - [ ] 独立窗口候选：PT-DEBT-4 / PT-AUDIT-3 S1-S3 / 枚举实例化 / import subpkg / CI/CD / PT-FEAT-13 C8
-- [ ] 工作全程本地 commit、禁 push（除非用户显式授权；当前本地领先 origin 5 commits 未推送）
+- [ ] 工作全程本地 commit、禁 push（除非用户显式授权；当前本地领先 origin 8 commits 未推送）

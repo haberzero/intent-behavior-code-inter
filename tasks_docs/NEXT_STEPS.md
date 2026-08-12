@@ -2,10 +2,38 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-12（遗留独立窗口批次已完成 + **用户类泛型升主线** + F9/`ai.autoset` 方案
-> 已产出设计记录；全量 **2308 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
+> **最后更新**：2026-08-12（**用户类泛型 PT-FEAT-3 完整落地** + F9 `ai.load_project_config` 实施完成；
+> 全量 **2339 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
 
 ---
+
+## ✅ 已完成：用户类泛型参数 PT-FEAT-3 完整落地（2026-08-12，unsafe-vibe-dev 35bb2de，全量 2339 passed / 1 skipped）
+
+> 设计冻结 `PT_FEAT3_DESIGN.md`；独立复核两轮 PASS（P2-1 父特化恒注册 / P2-2 嵌套实参映射 全整改）。
+
+- **全链路**：AST `IbClassDef.type_params`+`parent_args` + parser（`class Box[T]`/`(Box[T])`）+
+  `TypeKind.TYPE_PARAM`/`TypeDef.type_params` + 语义类型参数占位解析 + `resolve_specialization`
+  用户类分支（特化 spec 构造 + members 替换 + 父特化递归注册）+ 序列化（type_params/parent_args
+  落 artifact）+ 运行时（`IbClass.__getitem__` 类型特化 + 特化类 hydration）。
+- **已支持**：多特化并存 / 字段·方法参数·返回类型特化（含嵌套 `Box[list[int]]` 参数类型检查）/
+  嵌套泛型 `list[Box[int]]` / 多参数 `Pair[K,V]` / 泛型继承 `class Sub[T](Box[T])`。
+- **守卫**：裸用（注解+实例化）/ 实参数不匹配 / 字段-T 冲突 / Enum 泛型 / 类型参数遮蔽内置 /
+  非泛型子类继承特化，均 fail-fast。
+- **测试**：21 e2e + 2 序列化 round-trip（全量 2311→2339）。文档：06_oop §6.4 / KNOWN_LIMITS
+  §十四 #1 / arch/02 §2.6 / 15_diagnostics。
+- **边界**（KNOWN_LIMITS §十四#1 ①-⑧）：bound 约束 / `class Sub(Box[int])` / 父引用嵌套实参 /
+  Enum 泛型，后续增量。
+
+## ✅ 已完成：F9 显式配置 `ai.load_project_config`（2026-08-12，unsafe-vibe-dev a49555b，全量 2311 passed / 1 skipped）
+
+> 用户拍板命名 + 本轮实施。独立复核 PASS（5 项整改全完成）。设计记录 `_code_ai_autoset.md` +
+> 实施记录 `_code_f9_load_project_config.md`。
+
+- `setup()` 去自动加载段（引擎启动不再自动加载 api_config.json）；新增 `load_project_config()`
+  （ec/project_root 缺失 fail-fast + 路径规范化 + 缺失 no-op + 幂等）；vtable 注册；测试
+  （无调用不加载/显式调用加载/fail-fast/符号链接/幂等/语言级可达）；examples 01/02/03 判断前
+  加显式调用；文档同步（README/guide 01+02/syntax 11+15/config_loader/execution_context/
+  catalog/codes）。
 
 ## ✅ 已完成：遗留独立窗口批次——PT-DEBT-24 call_intent 清理 + PT-AUDIT-3 S1-S5 处置 + 枚举实例化评估（2026-08-12，unsafe-vibe-dev，全量 2308 passed / 1 skipped）
 
@@ -308,11 +336,11 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   PT-AUDIT-3 S1-S5 处置（S4 根治 / S5 去重 / S1-S3 已知边界）+ 枚举实例化设计候选评估
   （`_enum_instancing_assessment.md`，维持现状）。独立复核 PASS，全量 2308/1 零回归。
 
-- **🔴 下一 session 主线（2026-08-12 用户升主线）**：**用户类泛型参数（PT-FEAT-3）**——
-  **设计起点已落档 `tasks_docs/_code_user_class_generics.md`**：地基盘点（`GenericTypeRegistry`
-  九类内置泛型全链路、`resolve_specialization` 集成点、`IbClassDef` 需新增 `type_params`）+ 设计范围
-  （语法/语义/序列化/运行时/e2e）+ 6 项开放设计问题 + 建议实施路径（先设计冻结，再按 a-f 落地）。
-  下一 session 从设计冻结开始。
+- **✅ 已完成（2026-08-12，unsafe-vibe-dev 35bb2de，全量 2339 passed / 1 skipped）**：**用户类泛型参数（PT-FEAT-3）**——
+  设计冻结 `tasks_docs/PT_FEAT3_DESIGN.md`（6 项开放问题决断）+ 全链路落地（AST/parser/语义/序列化/运行时/
+  诊断/文档）。已支持多特化并存/字段·方法参数·返回类型特化/嵌套泛型/多参数/泛型继承；守卫含裸用拦截、
+  实参数不匹配、字段-T 冲突、Enum 泛型拒绝、类型参数遮蔽内置拒绝。21 e2e + 2 序列化 round-trip；
+  独立复核两轮 PASS（P2-1 父特化恒注册 / P2-2 嵌套实参映射 全整改）。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev a49555b，全量 2311 passed / 1 skipped）**：**F9 显式配置**——
   用户拍板命名 `ai.load_project_config` + 本轮实施。`setup()` 去自动加载段；新增
