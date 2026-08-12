@@ -53,6 +53,8 @@ def __ibcext_vtable__() -> Dict[str, Any]:
             "has_api_key": {"params": [], "return_type": "bool"},
             "probe_model": {"params": [], "return_type": "str"},
             "set_retry": {"params": [{"name": "count", "type": "int"}], "return_type": "void"},
+            "get_retry": {"params": [], "return_type": "int"},
+            "is_auto_intent_injection_enabled": {"params": [], "return_type": "bool"},
             "set_timeout": {"params": [{"name": "seconds", "type": "float"}], "return_type": "void"},
             "set_return_type_prompt": {
                 "params": [

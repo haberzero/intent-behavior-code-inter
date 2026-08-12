@@ -211,6 +211,49 @@ class TestEngineAutoLoad:
         assert "auto-loaded" in "".join(outputs)
 
 
+class TestDocumentedAiApiReachable:
+    """docs/syntax/11_modules.md §11.3 文档化的 ai API 语言级可达性。
+
+    PT-DEBT-28：get_retry/is_auto_intent_injection_enabled 此前 vtable 未注册，
+    IBCI 侧取到 None 不可调用（其余 §11.3 API 已全部对账）。修复=补 _spec.py 注册。
+    """
+
+    def _run(self, tmp_path, code):
+        from core.engine import IBCIEngine
+
+        script = tmp_path / "probe.ibci"
+        script.write_text("import ai\n" + code, encoding="utf-8")
+        outputs = []
+        engine = IBCIEngine(root_dir=str(tmp_path))
+        engine.run(str(script), output_callback=lambda s: outputs.append(s))
+        return "".join(outputs)
+
+    def test_get_retry_roundtrip(self, tmp_path):
+        out = self._run(tmp_path, "ai.set_retry(7)\nprint((str)ai.get_retry())\n")
+        assert "7" in out
+
+    def test_is_auto_intent_injection_enabled(self, tmp_path):
+        out = self._run(tmp_path, "print((str)ai.is_auto_intent_injection_enabled())\n")
+        assert "True" in out
+
+    def test_documented_api_swarm(self, tmp_path):
+        """§11.3 文档化查询类 API 全部可调用（防漏注册再发）。"""
+        out = self._run(
+            tmp_path,
+            "print((str)ai.has_api_key())\n"
+            "print((str)ai.get_global_intents())\n"
+            "print((str)ai.get_current_intent_stack())\n"
+            "ai.set_return_type_prompt(\"int\", \"x\")\n"
+            "print((str)ai.get_return_type_prompt(\"int\"))\n"
+            "print((str)ai.get_current_call_info())\n"
+            "ai.set_mock_mode()\n"
+            "print((str)ai.get_retry())\n",
+        )
+        # 每行都应正常输出（无 VM: Call failed / None has no method）
+        assert "None has no method" not in out
+        assert "VM: Call failed" not in out
+
+
 class TestAIPluginSetupContract:
     """U4/U7：AIPlugin.setup 加载契约（fail-fast 语义 + 路径规范化）。"""
 
