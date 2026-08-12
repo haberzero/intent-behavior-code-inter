@@ -72,6 +72,77 @@ class _ClassInstantiateDrive:
         event.set()
 
 
+class _UserCallDrive:
+    """用户类实例协议方法（``__call__`` 等）的帧内 CPS 驱动 Waitable。
+
+    由 :meth:`IbObject.receive` 对"含用户定义协议方法的类实例"返回；VM
+    ``vm_handle_IbCall`` 识别其为 ``Waitable`` + ``CPSDrivable`` 后 ``yield from
+    cps_drive``——用户方法经 ``UserFunctionCall`` trampoline 压栈帧内驱动
+    （替代 ``method.call`` 新建嵌套 TaskScheduler：EXEC-1 深递归 Python 深度
+    恒定的保证恢复、方法含 Waitable 时由调度器协作挂起而非阻塞主线程）。
+    宿主/线程体无活跃 VM 时 ``try_result``/``result`` 走同步 ``_drive_generator``
+    兜底（与 :class:`_ClassInstantiateDrive` 同构）。
+
+    ``receive`` 保持唯一协议分派入口（返回本 drive，而非 VM 侧加特判分支）。
+    """
+
+    def __init__(self, method, args, receiver):
+        self._method = method
+        self._args = args
+        self._receiver = receiver
+        self._done = False
+        self._result = None
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+    def _drive(self):
+        from core.runtime.vm.handlers._shared import _vm_call_user_function
+        from core.runtime.coordinator import _drive_generator
+
+        vm = self._method.context.vm_executor
+        if vm is None:
+            raise RuntimeError("User method call: vm_executor not available")
+        gen = _vm_call_user_function(vm, self._method, self._receiver, self._args)
+        self._result = _drive_generator(vm, gen)
+        self._done = True
+        return self._result
+
+    def cps_drive(self, executor):
+        from core.runtime.shared.user_call import UserFunctionCall
+        from core.runtime.objects.kernel.generator import IbGenerator
+
+        call = UserFunctionCall(self._method, self._args, self._receiver)
+        # 生成器方法：_drive_loop_gen 经 make_generator_driver 返回驱动生成器，
+        # 包装为 IbGenerator（与 VM 主路径 vm_handle_IbCall 的 is_generator 分支
+        # 同构），不驱动函数体。普通方法：trampoline 压栈驱动到完成。
+        if getattr(self._method, "is_generator", False):
+            driver = yield call
+            gen_class = executor.registry.get_class("generator")
+            if gen_class is None:
+                raise RuntimeError("generator class not registered (bootstrap invariant violated)")
+            self._result = IbGenerator(gen_class, driver)
+            self._done = True
+            return self._result
+        self._result = yield call
+        self._done = True
+        return self._result
+
+    def try_result(self):
+        if self._done:
+            return (True, self._result)
+        self._drive()
+        return (True, self._result)
+
+    def result(self):
+        self._drive()
+        return self._result
+
+    def register_wake(self, event) -> None:
+        event.set()
+
+
 @register_ib_type("Type")
 @register_ib_type("Class")
 class IbClass(IbObject):

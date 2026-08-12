@@ -57,6 +57,16 @@ class IbObject:
                     # 直接走 Python .call（isinstance 精确判别，替代 hasattr 探测）。
                     if isinstance(self, IbFunction):
                         return self.call(self.ib_class.registry.get_none(), args)
+            # 用户类实例 + 用户定义的 __call__ 协议方法：返回 CPSDrivable drive，
+            # VM 经 cps_drive 帧内驱动（UserFunctionCall trampoline，EXEC-1 根治）。
+            # 不再落回 method.call → 嵌套调度器（深递归 Python 栈 + Waitable 死锁）。
+            # receive 保持唯一协议分派入口（返回 drive，非 VM 侧特判）。
+            method = self.ib_class.lookup_method('__call__')
+            if method is not None:
+                from .ib_class import _UserCallDrive
+                from .user_functions import IbUserFunction
+                if isinstance(method, IbUserFunction):
+                    return _UserCallDrive(method, args, self)
 
         if message == '__getattr__' and len(args) > 0:
             attr_name = args[0].to_native()

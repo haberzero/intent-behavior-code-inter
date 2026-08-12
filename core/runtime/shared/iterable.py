@@ -33,6 +33,12 @@ def resolve_iterable(iterable_obj: Any):
         r = iterable_obj.receive("__iter__", [])
         if is_sequence_value(r):
             return r
+        # 用户类 __iter__ 写成分片生成器方法：receive 返回 IbGenerator
+        # （IbUserFunction.call 的生成器感知），与顶层 IbGenerator 处理一致
+        # to_list 物化——消除 `for x in obj` 的 GeneratorYield 泄漏崩溃。
+        from core.runtime.objects.kernel.generator import IbGenerator
+        if isinstance(r, IbGenerator):
+            return r.to_list()
     if iterable_obj.ib_class.lookup_method("to_list") is not None:
         r = iterable_obj.receive("to_list", [])
         if is_sequence_value(r):

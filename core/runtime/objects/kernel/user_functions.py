@@ -41,9 +41,16 @@ class IbUserFunction(IbFunction):
         实参绑定逻辑（消双写）。VM 主路径（leaf.py UserFunctionCall）与线程体
         （coordinator）本就经 CPS 执行本对象；本方法仅作 vtable receive('__call__')
         后备与宿主/反序列化同步调用。
+
+        **生成器方法**：宿主同步路径对生成器方法返回 IbGenerator（不驱动函数体），
+        与 VM 主路径 ``make_generator_driver`` 同构——否则经非 generator 模式的
+        ``_drive_loop_gen`` 驱动体时 GeneratorYield 泄漏（用户类 ``__iter__`` 等
+        协议方法经 receive 调用的崩溃根因，PT-DEBT-O1/I1）。
         """
         from core.runtime.vm.handlers._shared import _vm_call_user_function
         from core.runtime.coordinator import _drive_generator
+        from core.runtime.shared.user_call import UserFunctionCall
+        from core.runtime.objects.kernel.generator import IbGenerator
 
         vm = self.context.vm_executor
         if vm is None:
@@ -51,6 +58,15 @@ class IbUserFunction(IbFunction):
                 "IbUserFunction.call(): vm_executor not available on ExecutionContext. "
                 "Ensure Interpreter.execute_module() has been called before invoking user functions."
             )
+
+        if self.is_generator:
+            driver = vm.make_generator_driver(
+                UserFunctionCall(self, args, receiver)
+            )
+            gen_class = vm.registry.get_class("generator")
+            if gen_class is None:
+                raise RuntimeError("generator class not registered (bootstrap invariant violated)")
+            return IbGenerator(gen_class, driver)
 
         gen = _vm_call_user_function(vm, self, receiver, args)
         return _drive_generator(vm, gen)
