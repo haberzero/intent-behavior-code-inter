@@ -406,10 +406,15 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   B5 meta docstring 历史锚定扫描规则永久化。
 
 - **🔴 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
-  - **泛型体系剩余边界彻底修复**（用户裁定 2026-08-13，交接文档 `_HANDOFF_GENERIC_REMAINING.md`）：
-    ① 句柄类值身份水化（thread/chan/slot/generator，根治可能高）；② `_rehydrate_type_pool_spec`
-    module 匹配；③ generator value_type 结构化 + `_slice_type_objs_for` 健壮化；④ 元组解包
-    类型检查；⑤ `-> auto` 泛型实参推断；⑥ `*expr` 部分缓解。
+  - **泛型体系剩余边界彻底修复**（用户裁定 2026-08-13，交接文档 `_HANDOFF_GENERIC_REMAINING.md` +
+    **地基深挖分析 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`（2026-08-13）**）：
+    **深度分析证实：7 项表面边界中 6 项同源于同一地基缺陷——"类型身份无单一结构化权威模型
+    + 特化创建点扁平化嵌套实参"**。**根治点 = `GenericTypeDeclaration.build`/`SpecFactory.create_*`
+    从字符串接口升级为结构化 TypeRef 接口**（改一处治愈 B/C/D/G/H 下游）。处理顺序修正：
+    ③ 结构化构建（根治点）先于 ② name 匹配（表层补丁）。明细：① 句柄类值身份水化（须先给
+    句柄值创建点接入 node_to_type 侧表 + rebind，仅水化白名单不足）；② `_rehydrate_type_pool_spec`
+    module 匹配（先修特化 spec module 承载）；③ generator value_type 结构化 + `_slice_type_objs_for`
+    健壮化；④ 元组解包类型检查（依赖 ③）；⑤ `-> auto` 泛型实参推断（依赖 ③）；⑥ `*expr` 部分缓解（真局部根本限制）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。

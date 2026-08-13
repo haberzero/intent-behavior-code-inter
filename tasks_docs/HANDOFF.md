@@ -498,6 +498,6 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [ ] GEN-FIX 方案与实施：`tasks_docs/GEN_FIX_ARCHITECTURE.md`（GEN-5/GEN-6 四层修复定案与记录）+ `docs/architecture/03_type_system.md` §3.4bis（TypeRef 唯一权威入口规则）
 - [ ] 测试套件规范：`tests/meta/test_naming_conventions.py` TestDocstringHistoryAnchors（docstring 禁历史锚定，规则永久化）
 - [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 已修复；单一状态权威）
-- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）；**内置泛型两缺陷已修复**（`HANDOFF_GENERIC_ASSIGNABILITY.md` 标已修复，设计 `_code_generic_type_identity.md`）；**值层身份已彻底收敛**（`_code_generic_value_convergence.md`）；🔴 下一 session 交接：`_HANDOFF_GENERIC_REMAINING.md`（泛型剩余边界 7 项彻底修复分析：句柄类值身份 / type_pool 匹配 / 元组解包检查 / auto 推断 / *expr 缓解）
+- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）；**内置泛型两缺陷已修复**（`HANDOFF_GENERIC_ASSIGNABILITY.md` 标已修复，设计 `_code_generic_type_identity.md`）；**值层身份已彻底收敛**（`_code_generic_value_convergence.md`）；🔴 下一 session 交接：`_HANDOFF_GENERIC_REMAINING.md`（泛型剩余边界 7 项彻底修复分析：句柄类值身份 / type_pool 匹配 / 元组解包检查 / auto 推断 / *expr 缓解）+ **地基深挖分析 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`（2026-08-13）**：证实 7 项边界 6 项同源同一地基缺陷（类型身份扁平字符串双轨 + 特化创建点扁平化嵌套实参），根治方向 = build/create_* 升级结构化 TypeRef 接口，处理顺序修正（③ 结构化构建先于 ② name 匹配）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2559 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）
