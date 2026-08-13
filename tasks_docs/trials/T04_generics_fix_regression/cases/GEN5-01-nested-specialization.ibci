@@ -1,0 +1,17 @@
+# GEN5-01 KERNEL_ISSUE 触发用例：用户泛型类下标在表达式位置运行时特化未注册
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: box_slice=Box[list[int]] / DONE
+# 当前实际: RuntimeError: Generic class 'Box' has no registered specialization
+# for type 'list[int]'（git stash 实证为预存缺陷，与 2026-08-13 G3/Finding C 修复无关）
+# 分类: KERNEL_ISSUE（KERNEL_ISSUE-GEN-5，待独立窗口）
+# 根因方向（2026-08-13 探针实证）：`Box[list[int]]`（内置泛型 list 作实参的用户类特化）
+# 在**表达式位置**（如 type() 参数）求值时，编译期未注册特化 spec → 运行时 _specialize
+# 查 metadata registry 失败。对照：注解位置 `Box[list[int]] bl = Box[list[int]]([])`
+# 会触发编译期注册、正常运行。本用例保留持续复现证据；修复后应输出 box_slice=Box[list[int]] / DONE。
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+
+print("box_slice=" + type(Box[list[int]]))
+print("DONE")

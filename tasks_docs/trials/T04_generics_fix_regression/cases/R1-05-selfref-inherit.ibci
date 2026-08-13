@@ -1,7 +1,6 @@
 # R1-05 G2 自引用 + 继承
 # doc: docs/syntax/06_oop.md §6.4
-# 期望: 继承链 + 自引用字段组合（auto-init 合并继承链无默认值字段，G3 修复后多参构造）
-# 2026-08-13 适配：Linked[int](5) → Linked[int](5, "A")（tag 为无默认值字段须传参）
+# 期望: 继承链 + 自引用字段组合
 import ai
 ai.set_mock_mode()
 class Node[T]:
@@ -15,9 +14,11 @@ class Linked[T](Node[T]):
     func describe(self) -> str:
         return self.tag + ":" + (str)self.get()
 
-Linked[int] l1 = Linked[int](5, "A")
-Linked[int] l2 = Linked[int](6, "B")
+Linked[int] l1 = Linked[int](5)
+Linked[int] l2 = Linked[int](6)
 l1.next = l2
+l1.tag = "A"
+l2.tag = "B"
 print("d1=" + l1.describe())
 print("d2=" + (str)l1.next.get())
 print("DONE")

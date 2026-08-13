@@ -7,8 +7,10 @@
 > 唯一 TIMEOUT-KILLED 为死循环保护冒烟验证本身。
 > **规范（2026-08-13 迁移）**：本套现位于 `trials/T04_generics_fix_regression/`；分类/级别/编号
 > 规范见 `trials/_toolkit/CLASSIFICATION.md`。缺陷编号已映射为新格式（见文末"编号映射"节）。
-> **用例修正（2026-08-13）**：R1-05/R5-01 适配 G3 修复后 chain-aware auto-init 语义
-> （多参构造）；R5-04 适配（None 哨兵不可行 → 固定次数遍历 + Box 简化规避 GEN-5）。
+> **历史冻结 + 适配用例（2026-08-13）**：历史用例 R1-05/R5-01/R5-04 **保持原始形态冻结**
+> （与 logs/register.jsonl 证据一致，register.jsonl 中 R5-04 exit=1 为原始崩溃证据）；
+> G3 修复后语义验证改用新增适配用例（R1-05b 多参构造 / R5-01b / R5-04b 合法遍历 /
+> GEN5-01 GEN-5 触发用例）。
 
 ## 结果总览
 
@@ -75,9 +77,9 @@
 
 | 旧编号 | 新编号 | 状态 |
 |--------|--------|------|
-| KERNEL-ISSUE-G3（继承特化父类字段丢失） | `KERNEL_ISSUE-GEN-4` | **已修复（2026-08-13 b0f4d74）**：交接诊断纠偏后根治（chain-aware auto-init），见 PENDING_TASKS |
-| BOUNDARY-G2（自引用链 while"类型退化"） | `BOUNDARY-GEN-2` | **已修复（2026-08-13 b0f4d74）**：用例无效 + Finding C 根治，见 PENDING_TASKS |
-| （2026-08-13 新发现，R5-04 Box 部分） | `KERNEL_ISSUE-GEN-5` | 待修复（嵌套内置泛型实参特化注册缺失，独立窗口） |
+| KERNEL-ISSUE-G3（继承特化父类字段丢失） | `KERNEL_ISSUE-GEN-4` | **已修复（2026-08-13 b0f4d74）**：交接诊断纠偏后根治（chain-aware auto-init），见 PENDING_TASKS；历史 R1-05/R5-01 冻结为缺陷证据，语义验证用 R1-05b/R5-01b |
+| BOUNDARY-G2（自引用链 while"类型退化"） | `BOUNDARY-GEN-2` | **已修复（2026-08-13 b0f4d74）**：用例无效 + Finding C 根治，见 PENDING_TASKS；历史 R5-04 冻结，合法遍历用 R5-04b |
+| （2026-08-13 新发现，R5-04 Box 部分） | `KERNEL_ISSUE-GEN-5` | 待修复（独立窗口）——**根因方向更新（探针实证）**：`Box[list[int]]` 在**表达式位置**（如 `type()` 参数）求值时编译期未注册特化 spec → 运行时 `_specialize` 报 "no registered specialization"；注解位置注册正常。触发用例 `GEN5-01-nested-specialization.ibci` 持续复现 |
 
 ## 修复成果结论
 

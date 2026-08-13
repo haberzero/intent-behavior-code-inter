@@ -1,6 +1,8 @@
-# R5-01 回归面：既有核心泛型功能复跑
+# R5-01b G3 修复后适配：多参构造核心回归（历史 R5-01 为冻结证据）
 # doc: docs/syntax/06_oop.md §6.4
-# 期望: 多特化/嵌套/继承核心全正常
+# 期望输出: bi=42 / bs=hi / len=3 / box=2 / sub=7L / DONE
+# 2026-08-13 新增：G3 修复后 Sub[int](7, "L") 多参构造（value+label 全链绑定）；
+# 历史 R5-01 保持原始单参形态作为缺陷证据。
 import ai
 ai.set_mock_mode()
 class Box[T]:
@@ -17,8 +19,7 @@ Box[int] bi = Box[int](42)
 Box[str] bs = Box[str]("hi")
 Box[list[int]] bl = Box[list[int]]([1, 2, 3])
 list[Box[int]] boxes = [Box[int](1), Box[int](2)]
-Sub[int] sb = Sub[int](7)
-sb.label = "L"
+Sub[int] sb = Sub[int](7, "L")
 print("bi=" + (str)bi.get())
 print("bs=" + bs.get())
 print("len=" + (str)bl.get().len())
