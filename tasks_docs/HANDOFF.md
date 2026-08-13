@@ -481,6 +481,6 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [ ] GEN-FIX 方案与实施：`tasks_docs/GEN_FIX_ARCHITECTURE.md`（GEN-5/GEN-6 四层修复定案与记录）+ `docs/architecture/03_type_system.md` §3.4bis（TypeRef 唯一权威入口规则）
 - [ ] 测试套件规范：`tests/meta/test_naming_conventions.py` TestDocstringHistoryAnchors（docstring 禁历史锚定，规则永久化）
 - [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 已修复；单一状态权威）
-- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）
+- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）+ **`HANDOFF_GENERIC_ASSIGNABILITY.md`**（内置泛型赋值检查缺失 P1 + `type()` 内省不对称 P3，待核实处理）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2519 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）

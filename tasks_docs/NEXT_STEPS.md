@@ -392,6 +392,8 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。
 - **🟡 独立缺陷窗口（不阻塞主线）**：
+  - **内置泛型赋值检查缺失**（P1，`HANDOFF_GENERIC_ASSIGNABILITY.md`）：10/11 类内置泛型 `X[int]`→`X[str]` 编译期放行，根因=axiom is_compatible 前缀匹配。待核实修复。
+  - **`type()` 泛型内省不对称**（P3，`HANDOFF_GENERIC_ASSIGNABILITY.md` §二）：内建泛型 type() 返回基名 vs 用户类泛型返回特化名，待文档精确化。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
 - **📌 本 session 已完成**（临时问题全部闭环）：T01 LLM 批真实重跑 55P+2G；过期文档删除 40；
   套件重构（不冻结原则）；classification 写回 100%；gen_register 报告生成器 + 收敛流程硬规则；
