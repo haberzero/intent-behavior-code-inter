@@ -15,6 +15,24 @@ PRIMITIVE_TYPES = [
     "list", "dict", "behavior", "Optional", "None", "llm_uncertain"
 ]
 
+# S4 声明驱动：payload 字段名 → 序列化字段名映射（与 serializer._PAYLOAD_FIELD_NAMES
+# 同步）。positional_element_types 的序列化键为 positional_type_names。
+_PAYLOAD_FIELD_NAMES = {
+    "positional_element_types": "positional_type",
+}
+
+
+def _base_name_from_name(name: str) -> str:
+    """从特化 spec 名提取基类名（"fn_callable[int]" → "fn_callable"）。"""
+    if "[" in name:
+        return name.split("[", 1)[0]
+    return name
+
+
+def _is_placeholder_ref(value: str) -> bool:
+    """是否为占位类型名（any/auto）：裸基类/缺字段时序列化写 any，还原时跳过。"""
+    return value in ("any", "auto", "")
+
 class ArtifactRehydrator:
     """
     类型重水化器：将序列化后的 type_pool 还原为运行时的 IbSpec 对象树。
@@ -90,36 +108,11 @@ class ArtifactRehydrator:
 
         # 映射驱动的 Shell 创建
         shell_creators = {
-            # list[T] / dict[K,V] / tuple[T]：经 factory 重建特化 spec——
-            # 特化工厂按泛型实参重建 spec（硬编码基础 TypeDef 会丢失实参）。
-            TypeKind.LIST.value: lambda: (
-                factory.create_list(
-                    allowed_element_type_names=data.get("allowed_element_type_names"),
-                    allowed_element_type_modules=data.get("allowed_element_type_modules"),
-                )
-                if data.get("allowed_element_type_names")
-                else factory.create_list(
-                    element_type_name=data.get("element_type_name", "any"),
-                    element_type_module=data.get("element_type_module"),
-                )
-            ),
-            TypeKind.DICT.value: lambda: factory.create_dict(
-                key_type_name=data.get("key_type_name", "any"),
-                key_type_module=data.get("key_type_module"),
-                value_type_name=data.get("value_type_name", "any"),
-                value_type_module=data.get("value_type_module"),
-            ),
-            TypeKind.TUPLE.value: lambda: (
-                factory.create_tuple(
-                    positional_element_type_names=data.get("positional_type_names"),
-                    positional_element_type_modules=data.get("positional_type_modules"),
-                )
-                if data.get("positional_type_names")
-                else factory.create_tuple(
-                    element_type_name=data.get("element_type_name", "any"),
-                    element_type_module=data.get("element_type_module"),
-                )
-            ),
+            # 泛型值承载 kind（LIST/DICT/TUPLE/OPTIONAL/THREAD/THREAD_RESULT/
+            # CHANNEL/SLOT/GENERATOR/CALLABLE_INSTANCE）：经 GenericTypeDeclaration
+            # 声明驱动还原（S4）——从序列化 payload_fields 读字符串，TypeRef.parse
+            # 结构化重建后调 build。消除 per-kind 手工 factory 分支。
+            # 非泛型 kind 保留既有 shell（FUNCTION/CALLABLE_SIG/CLASS/...）。
             TypeKind.FUNCTION.value: lambda: TypeDef(
                 name=name or "callable",
                 provenance=Provenance.KERNEL_NATIVE,
@@ -146,50 +139,18 @@ class ArtifactRehydrator:
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
             ),
-            # Callable-instance specs ("fn_callable[T]" / "behavior[T]") — reconstruct
-            # the proper variant so that get_base_name() routes to the matching
-            # axiom ("fn_callable" / "behavior").  The axiom selection key is the
-            # axiom name embedded in the serialized data, falling back to the
-            # spec's own name prefix.
-            TypeKind.CALLABLE_INSTANCE.value: lambda: (
-                factory.create_behavior(value_type_name=data.get("value_type_name", "auto"))
-                if (data.get("axiom_name") or name).startswith("behavior")
-                else factory.create_fn_callable(value_type_name=data.get("value_type_name", "auto"))
-            ),
-            TypeKind.OPTIONAL.value: lambda: factory.create_optional(
-                wrapped_type_name=data.get("wrapped_type_name", "any"),
-                wrapped_type_module=data.get("wrapped_type_module"),
-            ),
-            TypeKind.THREAD.value: lambda: factory.create_thread(
-                value_type_name=data.get("value_type_name", "any"),
-                value_type_module=data.get("value_type_module"),
-            ),
-            TypeKind.THREAD_RESULT.value: lambda: factory.create_thread_result(
-                value_type_name=data.get("value_type_name", "any"),
-                value_type_module=data.get("value_type_module"),
-            ),
-            TypeKind.CHANNEL.value: lambda: factory.create_chan(
-                value_type_name=data.get("value_type_name", "any"),
-                value_type_module=data.get("value_type_module"),
-            ),
-            TypeKind.SLOT.value: lambda: factory.create_slot(
-                value_type_name=data.get("value_type_name", "any"),
-                value_type_module=data.get("value_type_module"),
-            ),
-            TypeKind.GENERATOR.value: lambda: factory.create_generator(
-                value_type_name=data.get("value_type_name", "any"),
-                value_type_module=data.get("value_type_module"),
-            ),
         }
 
         if name in PRIMITIVE_TYPES and kind == TypeKind.PRIMITIVE.value:
             spec = self.registry.resolve(name) or factory.create_primitive(name)
         else:
-            creator = shell_creators.get(kind)
-            if creator:
-                spec = creator()
-            else:
-                spec = self.registry.resolve(name) or IbSpec(name=name)
+            spec = self._generic_restore(kind, name, data, factory, shell_creators)
+            if spec is None:
+                creator = shell_creators.get(kind)
+                if creator:
+                    spec = creator()
+                else:
+                    spec = self.registry.resolve(name) or IbSpec(name=name)
 
         if spec:
             spec.provenance = provenance
@@ -218,6 +179,55 @@ class ArtifactRehydrator:
         不维护第二份切分实现。
         """
         return TypeRef.parse(text)
+
+    def _generic_restore(self, kind: str, name: str, data: Dict[str, Any], factory, shell_creators: dict):
+        """声明驱动泛型还原（S4）：经 GenericTypeDeclaration 重建泛型特化 spec。
+
+        从序列化 payload_fields（``{field}_name``/``{field}_module``）读字符串，
+        ``TypeRef.parse`` 结构化后按实参序调 ``build``。消除 per-kind 手工
+        factory 分支（LIST/DICT/TUPLE/OPTIONAL/THREAD/THREAD_RESULT/CHANNEL/SLOT/
+        GENERATOR/CALLABLE_INSTANCE）。非泛型 kind 返回 None（走 shell_creators）。
+        """
+        from core.kernel.spec.base import TypeKind
+
+        if kind not in (
+            TypeKind.LIST.value, TypeKind.DICT.value, TypeKind.TUPLE.value,
+            TypeKind.OPTIONAL.value, TypeKind.THREAD.value, TypeKind.THREAD_RESULT.value,
+            TypeKind.CHANNEL.value, TypeKind.SLOT.value, TypeKind.GENERATOR.value,
+            TypeKind.CALLABLE_INSTANCE.value,
+        ):
+            return None
+        generic_types = getattr(self.registry, "generic_types", None)
+        if generic_types is None:
+            return None
+        # CALLABLE_INSTANCE 按 axiom_name 选 behavior/fn_callable 声明。
+        base_name = data.get("axiom_name") or _base_name_from_name(name)
+        decl = generic_types.get(base_name)
+        if decl is None or not decl.payload_fields:
+            return None
+        arg_refs = []
+        arg_modules = []
+        for field in decl.payload_fields:
+            name_key = _PAYLOAD_FIELD_NAMES.get(field, field)
+            # 先试复数（列表字段 positional_type_names），再试单数
+            list_val = data.get(f"{name_key}_names")
+            if list_val is not None:
+                for v, m in zip(list_val, data.get(f"{name_key}_modules") or [None] * len(list_val)):
+                    if _is_placeholder_ref(v):
+                        continue
+                    arg_refs.append(TypeRef.parse(v, m))
+                    arg_modules.append(m)
+                continue
+            val = data.get(f"{name_key}_name")
+            if val is not None and not _is_placeholder_ref(val):
+                mod = data.get(f"{name_key}_module")
+                arg_refs.append(TypeRef.parse(val, mod))
+                arg_modules.append(mod)
+        # 至少一个实参可重建才调 build（tuple 单类型/裸基类等缺字段时按
+        # 缺省建——由调用方回落裸 spec）；全缺返回 None 走 shell_creators 兜底。
+        if not arg_refs:
+            return None
+        return decl.build(factory, arg_refs, arg_modules)
 
     def _fill_descriptor(self, uid: str) -> Optional[IbSpec]:
         """填充 spec 的详细字段 (Phase 2)"""

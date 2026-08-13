@@ -193,6 +193,44 @@ def test_generator_spec_serialization_preserves_value_type():
     )
 
 
+def test_declaration_driven_rehydrator_roundtrip():
+    """声明驱动还原（S4）：序列化→rehydrator 经 GenericTypeDeclaration 重建。
+
+    serializer 经 payload_fields 统一持久化类型实参（消除 per-kind 手工分支），
+    rehydrator 经声明 build 结构化还原。跨引擎 round-trip 结构保真。
+    """
+    from core.compiler.serialization.serializer import FlatSerializer
+    from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+    from core.kernel.factory import create_default_registry
+    from core.kernel.spec.type_ref import TypeRef
+
+    engine = _engine()
+    code = (
+        "func worker() -> int:\n"
+        "    return 1\n"
+        "list[list[int]] m = [[1],[2]]\n"
+        'dict[str,list[int]] dd = {"a":[1]}\n'
+        "thread[int] t = thread(callable=worker, args=[])\n"
+    )
+    artifact = engine.compile_string(code, silent=True)
+    d = FlatSerializer().serialize_artifact(artifact)
+    types = d["modules"][artifact.entry_module]["pools"]["types"]
+    reg = create_default_registry()
+    reh = ArtifactRehydrator(types, reg)
+    expect = {
+        "list[list[int]]": ("element_type", "list[int]"),
+        "dict[str,list[int]]": ("value_type", "list[int]"),
+        "thread[int]": ("value_type", "int"),
+    }
+    for name, (field, want) in expect.items():
+        uid = next(k for k, v in types.items() if v.get("name") == name)
+        spec = reh.hydrate(uid)
+        assert spec.name == name, f"{name} 还原退化: {spec.name}"
+        assert getattr(spec, field) == TypeRef.parse(want), (
+            f"{name}.{field} 应结构化保真，got {getattr(spec, field)!r}"
+        )
+
+
 def test_thread_value_identity_materialized():
     """thread[int] 值经声明类型 rebind 特化类（S3 句柄类物化覆盖）。
 

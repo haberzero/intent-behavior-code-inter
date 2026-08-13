@@ -74,6 +74,55 @@ class TestGenericTypeRegistry:
             assert decl is not None
             assert decl.resolve_member is None, f"{name} 不应携带成员特化回调"
 
+    def test_payload_fields_declared_for_value_bearing_generics(self):
+        """值承载泛型声明 payload_fields（S4 声明驱动序列化/还原）。
+
+        每个泛型声明声明其承载类型实参的 TypeDef 字段，serializer/rehydrator
+        据此统一收集/还原——新增泛型只需声明 payload_fields 一处，消除
+        per-kind 手工分支。
+        """
+        reg = create_generic_registry()
+        expect = {
+            "list": ("element_type",),
+            "dict": ("key_type", "value_type"),
+            "tuple": ("positional_element_types", "element_type"),
+            "Optional": ("wrapped_type",),
+            "fn_callable": ("value_type",),
+            "behavior": ("value_type",),
+            "thread": ("value_type",),
+            "thread_result": ("value_type",),
+            "chan": ("value_type",),
+            "slot": ("value_type",),
+            "generator": ("value_type",),
+        }
+        for name, fields in expect.items():
+            decl = reg.get(name)
+            assert decl is not None
+            assert decl.payload_fields == fields, (
+                f"{name} payload_fields 应为 {fields}，got {decl.payload_fields}"
+            )
+
+    def test_declaration_driven_restore(self):
+        """声明驱动还原：经 payload_fields + build 重建特化 spec（S4）。
+
+        从序列化字符串（canonical_name）parse 结构化实参后调 build，消除
+        rehydrator per-kind 手工 factory 分支。
+        """
+        from core.kernel.spec.registry.factory import SpecFactory
+        from core.kernel.spec.type_ref import TypeRef
+
+        reg = create_generic_registry()
+        factory = SpecFactory()
+        # list[int]：payload element_type -> 实参 [int]
+        decl = reg.get("list")
+        spec = decl.build(factory, [TypeRef.parse("int")], [None])
+        assert spec.name == "list[int]"
+        assert spec.element_type == TypeRef.parse("int")
+        # generator[list[int]]：payload value_type -> 实参 [list[int]]
+        decl = reg.get("generator")
+        spec = decl.build(factory, [TypeRef.parse("list[int]")], [None])
+        assert spec.value_type == TypeRef.parse("list[int]")
+
 
 class TestUnifiedResolve:
     def test_list_int(self):

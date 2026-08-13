@@ -11,6 +11,12 @@ from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 from core.base.uid import node_uid, type_uid, anon_symbol_uid
 
+# S4 声明驱动：payload 字段名 → 序列化字段名映射（历史兼容）。
+# positional_element_types 的序列化键为 positional_type_names（rehydrator 历史约定）。
+_PAYLOAD_FIELD_NAMES = {
+    "positional_element_types": "positional_type",
+}
+
 class FlatSerializer(BaseFlatSerializer):
     """
     平铺化序列化器：将嵌套的 AST 和 符号表 结构
@@ -24,6 +30,13 @@ class FlatSerializer(BaseFlatSerializer):
         # 类型注册表（可选）：用于把 CLASS 父类泛型实参（TypeRef）解析为
         # spec 并递归收集（父特化 spec 非符号/绑定引用的孤点）。
         self.registry = registry
+        # 泛型声明表（S4 声明驱动）：经 GenericTypeRegistry 驱动泛型承载字段
+        # 收集（payload_fields），消除 per-kind 手工分支。
+        self.generic_types = None
+        if registry is not None:
+            generic_types = getattr(registry, "generic_types", None)
+            if generic_types is not None:
+                self.generic_types = generic_types
 
     def serialize_artifact(self, artifact: CompilationArtifact) -> Dict[str, Any]:
         """序列化整个蓝图产物"""
@@ -178,71 +191,12 @@ class FlatSerializer(BaseFlatSerializer):
         # (IbFnCallable/IbBehavior) and on the AST node, both of which round-trip
         # through their own channels.
         if t.kind == TypeKind.CALLABLE_INSTANCE.value:
-            v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "auto"
             type_data["axiom_name"] = t.get_base_name()
 
-        # Persist TypeDef inner-type scalar fields for artifact rehydration.
-        if t.kind == TypeKind.OPTIONAL.value:
-            w_ref = t.wrapped_type
-            type_data["wrapped_type_name"] = w_ref.canonical_name if w_ref is not None else "any"
-            type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
-
-        # Persist inner-type scalars for list[T] / dict[K,V] / tuple[T]：
-        # 泛型实参持久化，运行时 rehydrator 据此重建特化 spec（否则符号
-        # declared_type 会退化为基础 list/dict[any,any]，泛型身份丢失）。
-        if t.kind == TypeKind.LIST.value:
-            if t.allowed_element_types:
-                type_data["allowed_element_type_names"] = [r.canonical_name for r in t.allowed_element_types]
-                type_data["allowed_element_type_modules"] = [r.module for r in t.allowed_element_types]
-            else:
-                e_ref = t.element_type
-                type_data["element_type_name"] = e_ref.canonical_name if e_ref is not None else "any"
-                type_data["element_type_module"] = e_ref.module if e_ref is not None else None
-
-        if t.kind == TypeKind.DICT.value:
-            k_ref = t.key_type
-            v_ref = t.value_type
-            type_data["key_type_name"] = k_ref.canonical_name if k_ref is not None else "any"
-            type_data["key_type_module"] = k_ref.module if k_ref is not None else None
-            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
-            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
-
-        if t.kind == TypeKind.TUPLE.value:
-            if t.positional_element_types:
-                type_data["positional_type_names"] = [p.canonical_name for p in t.positional_element_types]
-                type_data["positional_type_modules"] = [p.module for p in t.positional_element_types]
-            else:
-                e_ref = t.element_type
-                type_data["element_type_name"] = e_ref.canonical_name if e_ref is not None else "any"
-                type_data["element_type_module"] = e_ref.module if e_ref is not None else None
-
-        # Persist the value type for thread[T] (join 返回类型)。
-        if t.kind == TypeKind.THREAD.value:
-            v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
-            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
-
-        # Persist the value type for thread_result[T] (join 返回容器负载类型)。
-        if t.kind == TypeKind.THREAD_RESULT.value:
-            v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
-            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
-
-        # Persist the value type for chan[T] / slot[T]（纳入统一泛型模型，
-        # 注解实参经 value_type 承载持久化，rehydrator 据此重建特化 spec）。
-        if t.kind in (TypeKind.CHANNEL.value, TypeKind.SLOT.value):
-            v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
-            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
-
-        # Persist the value type for generator[T]（惰性生成器元素类型）。
-        # 缺此分支导致 generator[list[int]] 特化 spec 序列化丢实参，rehydrator
-        # 恢复为裸 generator（value_type=any），赋值/迭代类型检查失效。
-        if t.kind == TypeKind.GENERATOR.value:
-            v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
-            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+        # 声明驱动泛型承载字段（S4）：经 GenericTypeDeclaration.payload_fields
+        # 统一收集类型实参（value_type/element_type/wrapped_type 等），消除
+        # per-kind 手工分支。非泛型 kind（CLASS/FUNCTION 等）不在此列。
+        self._collect_generic_payload(t, type_data)
 
         # Persist TypeDef param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
@@ -297,6 +251,47 @@ class FlatSerializer(BaseFlatSerializer):
             
         self.type_pool[uid] = type_data
         return uid
+
+    def _collect_generic_payload(self, t: "TypeDef", type_data: dict) -> None:
+        """声明驱动泛型承载字段收集（S4）。
+
+        经 ``GenericTypeDeclaration.payload_fields`` 统一持久化类型实参——
+        value_type/element_type/wrapped_type 等 TypeRef 字段写
+        ``{field}_name``/``{field}_module``（canonical_name 保真嵌套），
+        key_type/value_type 为 dict 双字段。消除 per-kind 手工分支
+        （serializer 曾对 thread/thread_result/chan/slot/generator 各写一份
+        value_type 持久化代码）。非泛型 kind（CLASS/FUNCTION 等）无声明，跳过。
+        """
+        from core.kernel.spec.base import TypeKind
+
+        if t.kind in (TypeKind.CLASS.value, TypeKind.FUNCTION.value,
+                      TypeKind.BOUND_METHOD.value, TypeKind.MODULE.value,
+                      TypeKind.CALLABLE_SIG.value, TypeKind.TYPE_PARAM.value,
+                      TypeKind.PRIMITIVE.value, TypeKind.LAZY.value,
+                      TypeKind.SUBSCRIBER.value):
+            return
+        base_name = t.get_base_name()
+        generic_types = self.generic_types
+        if generic_types is None:
+            # 无 registry 路径：构建默认 GenericTypeRegistry（声明驱动不依赖
+            # 具体注册表实例，纯声明表）。消除 per-kind 手工分支。
+            from core.kernel.spec.generic import create_generic_registry
+            generic_types = create_generic_registry()
+        decl = generic_types.get(base_name)
+        if decl is None or not decl.payload_fields:
+            return
+        for field in decl.payload_fields:
+            refs = getattr(t, field, None)
+            # 序列化字段名（历史兼容映射：positional_element_types → positional_type）
+            name_key = _PAYLOAD_FIELD_NAMES.get(field, field)
+            if isinstance(refs, list):
+                if not refs:
+                    continue
+                type_data[f"{name_key}_names"] = [r.canonical_name for r in refs]
+                type_data[f"{name_key}_modules"] = [r.module for r in refs]
+            elif refs is not None:
+                type_data[f"{name_key}_name"] = refs.canonical_name
+                type_data[f"{name_key}_module"] = refs.module
 
     def _collect_scope(self, scope: SymbolTable) -> str:
         scope_id = id(scope)

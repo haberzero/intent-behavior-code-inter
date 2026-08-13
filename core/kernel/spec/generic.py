@@ -56,6 +56,10 @@ class GenericTypeDeclaration:
     ``build``     : ``(factory, arg_refs, arg_modules) -> TypeDef``
                     从结构化实参 TypeRef 构造特化 TypeDef（嵌套实参保真，
                     不再经字符串名扁平化）。
+    ``payload_fields``: 泛型承载字段名元组（序列化/还原声明驱动，S4）。
+                    承载"类型实参"的 TypeDef 字段（如 list→("element_type",)、
+                    thread→("value_type",)、Optional→("wrapped_type",)）。serializer/
+                    rehydrator 据此统一收集/还原类型实参，消除 per-kind 手工分支。
     ``resolve_member``: ``(registry, spec, attr_name, member) -> Optional[MemberSpecialization]``
                     泛型成员特化（协议化，替代 _members.py per-type 级联）。
     """
@@ -63,6 +67,7 @@ class GenericTypeDeclaration:
     name: str
     kind: str
     build: Callable[["SpecFactory", List["TypeRef"], List[Optional[str]]], "TypeDef"]
+    payload_fields: Tuple[str, ...] = ()
     resolve_member: Optional[
         Callable[["SpecRegistry", "TypeDef", str, "MethodMemberSpec"], Optional[MemberSpecialization]]
     ] = None
@@ -239,50 +244,61 @@ def create_generic_registry() -> GenericTypeRegistry:
     reg.register(GenericTypeDeclaration(
         name="list", kind=TypeKind.LIST.value,
         build=_build_list,
+        payload_fields=("element_type",),
         resolve_member=_resolve_member_list,
     ))
     reg.register(GenericTypeDeclaration(
         name="dict", kind=TypeKind.DICT.value,
         build=_build_dict,
+        payload_fields=("key_type", "value_type"),
         resolve_member=_resolve_member_dict,
     ))
     reg.register(GenericTypeDeclaration(
         name="tuple", kind=TypeKind.TUPLE.value,
         build=_build_tuple,
+        payload_fields=("positional_element_types", "element_type"),
     ))
     reg.register(GenericTypeDeclaration(
         name="Optional", kind=TypeKind.OPTIONAL.value,
         build=_build_optional,
+        payload_fields=("wrapped_type",),
         resolve_member=_resolve_member_optional,
     ))
     reg.register(GenericTypeDeclaration(
         name="fn_callable", kind=TypeKind.CALLABLE_INSTANCE.value,
         build=_build_fn_callable,
+        payload_fields=("value_type",),
     ))
     reg.register(GenericTypeDeclaration(
         name="behavior", kind=TypeKind.CALLABLE_INSTANCE.value,
         build=_build_behavior,
+        payload_fields=("value_type",),
     ))
     reg.register(GenericTypeDeclaration(
         name="thread", kind=TypeKind.THREAD.value,
         build=_build_thread,
+        payload_fields=("value_type",),
         resolve_member=_resolve_member_thread,
     ))
     reg.register(GenericTypeDeclaration(
         name="thread_result", kind=TypeKind.THREAD_RESULT.value,
         build=_build_thread_result,
+        payload_fields=("value_type",),
         resolve_member=_resolve_member_thread_result,
     ))
     reg.register(GenericTypeDeclaration(
         name="chan", kind=TypeKind.CHANNEL.value,
         build=_build_chan,
+        payload_fields=("value_type",),
     ))
     reg.register(GenericTypeDeclaration(
         name="slot", kind=TypeKind.SLOT.value,
         build=_build_slot,
+        payload_fields=("value_type",),
     ))
     reg.register(GenericTypeDeclaration(
         name="generator", kind=TypeKind.GENERATOR.value,
         build=_build_generator,
+        payload_fields=("value_type",),
     ))
     return reg
