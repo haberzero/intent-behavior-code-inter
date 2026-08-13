@@ -94,7 +94,7 @@
 | Phase B 断言迁移 | ✅ T01（2026-08-13 真实重跑） | 57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**（零 HARNESS/零缺陷复现）；断言从基线 `DONE` 精化为确定性行；修复 8 个脚本缺陷（5 import 位置 + 2 守卫断言 + 1 API 类型）；child_llm F9 适配 |
 | Phase C 干净清理 | ✅ 过期文档删除（2026-08-13） | 用户裁定：任务控制文档不做编号替换；直接删除 40 个过期文档（设计/报告/审计/记录/临时 `_code_*`），git 历史保留可追溯 |
 | Phase C 干净清理 | ✅ 套件重构 + classification 写回（2026-08-13） | 用户原则：**不冻结历史资产，问题直接重构**（唯一底线：不为规避缺陷改套件，缺陷触发用例保留）。T02 T3/T4/T5 断言重构（映射有效性）；T04 R1-05/R5-01/R5-04 重构为修复后语义、删 b 变体；4 套 register.jsonl classification 100%（T01 55 PASS+2 GUARD / T02 8 PASS+1 LIMIT / T03 22 PASS+6 GUARD+1 KI+1 HARNESS / T04 24 PASS+7 GUARD+1 KI+1 HARNESS） |
-| Phase D 自动化衔接 | 待设计 | 试用→确定性测试收敛 + 报告自动生成 |
+| Phase D 自动化衔接 | ✅ 设计+工具落地（2026-08-13） | `_toolkit/gen_register.py` 报告生成器（register.jsonl→REGISTER 骨架）+ 收敛流程硬规则落档 `_toolkit/PHASE_D_AUTOMATION.md`（缺陷修复=根因修复+tests/ 回归双交付验收门） |
 
 ---
 
@@ -115,7 +115,7 @@
 
 1. **✅ T01 LLM 批真实重跑验证**（Phase B 收尾）：57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**（零 HARNESS/零缺陷复现）。
 2. **✅ Phase C 干净彻底**：过期文档删除（40 个）+ 套件重构（用户原则：不冻结、问题直接重构）+ register classification 写回 100%。
-3. **Phase D 自动化衔接**：试用→确定性测试收敛 + 报告自动生成设计。
+3. **✅ Phase D 自动化衔接**：报告自动生成 `_toolkit/gen_register.py` + 收敛流程硬规则 `_toolkit/PHASE_D_AUTOMATION.md`（缺陷修复=根因+tests/ 回归双交付）。
 4. **独立缺陷窗口**：GEN-5 / GEN-6（PENDING_TASKS 已登记 + 触发用例）。
 5. **供应商感知思考禁用机制**（待设计）。
 
@@ -125,5 +125,8 @@
 |------|------|
 | 本任务控制文档 | `tasks_docs/TRIAL_SYSTEM_REDESIGN.md` |
 | 试用体系规范（Phase 1-2 产物） | `tasks_docs/trials/_toolkit/CLASSIFICATION.md` |
+| 用例即契约（Phase B） | `tasks_docs/trials/_toolkit/CONTRACT_FORMAT.md` |
+| 报告自动生成器（Phase D） | `tasks_docs/trials/_toolkit/gen_register.py` |
+| 收敛流程+自动化设计（Phase D） | `tasks_docs/trials/_toolkit/PHASE_D_AUTOMATION.md` |
 | 跨套索引/编号映射 | `tasks_docs/trials/INDEX.md` |
 | 缺陷登记（GEN-5 等） | `tasks_docs/PENDING_TASKS.md` |
