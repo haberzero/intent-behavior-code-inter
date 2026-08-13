@@ -424,9 +424,25 @@ class SymbolCollector:
         return None
 
     def _annotation_to_typeref(self, annotation: ast.IbASTNode) -> TypeRef:
-        """Convert an AST annotation node to a TypeRef."""
+        """Convert an AST annotation node to a TypeRef (结构化递归).
+
+        ``fn[(args) -> ret]``（CALLABLE_SIG）保留结构化签名形态
+        ``TypeRef('fn', (TypeRef('__args__', <params>), <ret>))``，与
+        type-check 阶段 ``_param_type_ref`` 的 CALLABLE_SIG 分支同构——消除
+        "param_types 与 param_descriptors 双真相"（S2：descriptor 双构造源收敛）。
+        """
         if isinstance(annotation, ast.IbName):
             return TypeRef.of(annotation.id)
+        if isinstance(annotation, ast.IbCallableType):
+            params = tuple(
+                self._annotation_to_typeref(pt) for pt in annotation.param_types
+            )
+            ret = annotation.return_type
+            ret_ref = self._annotation_to_typeref(ret) if ret is not None else TypeRef.of("auto")
+            return TypeRef(
+                "fn",
+                (TypeRef("__args__", params), ret_ref),
+            )
         if isinstance(annotation, ast.IbSubscript) and isinstance(annotation.value, ast.IbName):
             if isinstance(annotation.slice, ast.IbTuple):
                 args = [self._annotation_to_typeref(elt) for elt in annotation.slice.elts]

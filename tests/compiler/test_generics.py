@@ -543,3 +543,49 @@ class TestNestedGenericStructurePreserved:
         assert restored.element_type == TypeRef.parse("list[int]"), (
             f"还原 element_type 应结构化，got {restored.element_type!r}"
         )
+
+
+class TestCallableSigParamTypesStructured:
+    """CALLABLE_SIG 参数在 symbol_collection 结构化（S2：descriptor 双真相收敛）。
+
+    修复前 `_annotation_to_typeref` 对 `fn[(int)->int]` 落 `TypeRef.of("any")`
+    退化；修复后产出结构化 `TypeRef('fn', (TypeRef('__args__',(int,)), int))`，
+    与 type-check 阶段 `_param_type_ref` 的 CALLABLE_SIG 分支同构——param_types
+    与 param_descriptors 单一语义源（消除双构造源分裂）。
+    """
+
+    def test_callable_sig_param_type_structured(self, engine):
+        """fn[(int)->int] 参数的 param_types 结构化（不再退化 any）。"""
+        from core.kernel.spec.type_ref import TypeRef
+
+        engine.compile_string(
+            "func apply(fn[(int) -> int] f, int x) -> int:\n"
+            "    return f(x)\n",
+            silent=True,
+        )
+        reg = engine.registry.get_metadata_registry()
+        sp = reg.resolve("apply")
+        assert sp is not None
+        assert sp.param_types[0] == TypeRef(
+            "fn", (TypeRef("__args__", (TypeRef("int"),)), TypeRef("int"))
+        ), f"CALLABLE_SIG param_types 应结构化，got {sp.param_types[0]!r}"
+
+    def test_nested_generic_member_descriptor_consistent(self, engine):
+        """Box[int].make 的 param_types 与 param_descriptors 结构一致（S2）。"""
+        engine.compile_string(
+            "class Box[T]:\n"
+            "    func make(self, list[list[T]] grid) -> list[list[T]]:\n"
+            "        return grid\n"
+            "\n"
+            "Box[int] b = Box[int]()\n",
+            silent=True,
+        )
+        reg = engine.registry.get_metadata_registry()
+        box_int = reg.resolve("Box[int]")
+        assert box_int is not None
+        m = box_int.members.get("make")
+        assert m is not None
+        assert m.param_types[0] == m.param_descriptors[0].type_ref, (
+            "param_types 与 param_descriptors 应一致（同一签名单一真相），"
+            f"got {m.param_types[0]!r} vs {m.param_descriptors[0].type_ref!r}"
+        )
