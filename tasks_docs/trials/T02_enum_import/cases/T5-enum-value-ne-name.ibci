@@ -1,3 +1,5 @@
+# expect-class: PASS
+# expect-out: a | True
 import ai
 
 class Status(Enum):

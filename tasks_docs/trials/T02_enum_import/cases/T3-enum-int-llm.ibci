@@ -1,3 +1,5 @@
+# expect-class: PASS
+# expect-out: 200 | got-ok
 import ai
 
 class Code(Enum):

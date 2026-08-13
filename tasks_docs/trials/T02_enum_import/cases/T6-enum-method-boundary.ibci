@@ -1,3 +1,5 @@
+# expect-class: LIMIT
+# expect-exit: nonzero
 class Color(Enum):
     str RED = "RED"
 

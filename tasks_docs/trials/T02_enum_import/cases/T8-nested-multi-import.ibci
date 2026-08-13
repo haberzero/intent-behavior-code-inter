@@ -1,3 +1,5 @@
+# expect-class: PASS
+# expect-out: c-value | d-value
 import a.b.c
 import a.b.d
 print(a.b.c.cf())

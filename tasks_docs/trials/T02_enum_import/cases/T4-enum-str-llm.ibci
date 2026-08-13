@@ -1,3 +1,5 @@
+# expect-class: PASS
+# expect-out: RED | False
 import ai
 
 class Color(Enum):

@@ -1,3 +1,5 @@
+# expect-class: PASS
+# expect-out: 3 | True
 class Status(Enum):
     str PENDING = "PENDING"
     str RUNNING = "RUNNING"

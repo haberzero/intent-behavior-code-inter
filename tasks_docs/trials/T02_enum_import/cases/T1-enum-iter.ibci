@@ -1,3 +1,5 @@
+# expect-class: PASS
+# expect-out: RED | GREEN | BLUE | --- | found-green
 class Color(Enum):
     str RED = "RED"
     str GREEN = "GREEN"

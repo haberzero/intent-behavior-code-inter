@@ -1,3 +1,5 @@
+# expect-class: PASS
+# expect-out: True | 3 | True | -1 | True | False | True
 class Vec:
     int x
     func __init__(self, int v) -> auto:
