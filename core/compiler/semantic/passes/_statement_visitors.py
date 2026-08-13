@@ -152,6 +152,12 @@ class StatementVisitorsMixin:
 
             # 绑定类型
             self.bind_type(target, target_type)
+            # 容器字面量 RHS 绑定目标特化类型（list[int] li = [1,2] → [1,2]
+            # 节点的 node_to_type = list[int]），运行时值创建据此水化特化类
+            # （缺陷二根治：内置泛型值层类型身份保真）。
+            if target_type is not None and rhs_inner is not None and rhs is rhs_inner:
+                if isinstance(rhs_inner, (ast.IbListExpr, ast.IbDict, ast.IbTuple)):
+                    self.bind_type(rhs_inner, target_type)
             # 更新符号 spec：当 target_type 比已有 spec 更具体时更新
             if sym and target_type and target_type is not self._any_desc:
                 existing = sym.spec

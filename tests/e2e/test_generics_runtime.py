@@ -228,6 +228,68 @@ class TestBuiltinGenericAssignabilityRuntime:
 
 
 # ===========================================================================
+# 内置泛型值层类型身份保真（缺陷二：特化 spec 水化为运行时特化类）
+# ===========================================================================
+
+class TestBuiltinGenericValueIdentity:
+    """内置泛型容器值带特化身份（type() 内省一致 + type_ref 带实参）。
+
+    修复前：list[int] 值运行时用基类 list（擦除），type() 返回 list，
+    与用户类泛型 Box[int] 值（Box[int]）双轨分裂。
+    修复后：容器字面量经编译期 node_to_type 感知特化，值绑定特化类。
+    """
+
+    def test_list_int_value_identity(self):
+        lines = run_ibci(
+            "list[int] li = [1, 2]\n"
+            "print(type(li))\n"
+        )
+        assert lines == ["list[int]"], f"Expected ['list[int]'], got {lines}"
+
+    def test_list_str_value_identity_distinct(self):
+        """list[str] 与 list[int] 值身份区分（值层类型安全）。"""
+        lines = run_ibci(
+            "list[str] ls = [\"a\"]\n"
+            "print(type(ls))\n"
+        )
+        assert lines == ["list[str]"], f"Expected ['list[str]'], got {lines}"
+
+    def test_dict_tuple_value_identity(self):
+        lines = run_ibci(
+            "dict[str,int] d = {\"a\": 1}\n"
+            "tuple[int,str] t = (1, \"a\")\n"
+            "print(type(d))\n"
+            "print(type(t))\n"
+        )
+        assert lines == ["dict[str,int]", "tuple[int,str]"], f"got {lines}"
+
+    def test_nested_generic_value_identity(self):
+        lines = run_ibci(
+            "list[list[int]] nested = [[1], [2]]\n"
+            "print(type(nested))\n"
+        )
+        assert lines == ["list[list[int]]"], f"got {lines}"
+
+    def test_bare_list_stays_bare(self):
+        """裸 list 值保持裸身份（无特化不水化）。"""
+        lines = run_ibci(
+            "list bare = [1, 2]\n"
+            "print(type(bare))\n"
+        )
+        assert lines == ["list"], f"Expected ['list'], got {lines}"
+
+    def test_value_identity_correct_after_mutation(self):
+        """特化值可正常增删元素（实现类沿基类名解析，方法继承可用）。"""
+        lines = run_ibci(
+            "list[int] li = [1]\n"
+            "li.append(2)\n"
+            "li.append(3)\n"
+            "print(li)\n"
+        )
+        assert lines and "[1, 2, 3]" in lines[0]
+
+
+# ===========================================================================
 # Nested generic subscript — list[list[int]][0] → list[int]
 # ===========================================================================
 

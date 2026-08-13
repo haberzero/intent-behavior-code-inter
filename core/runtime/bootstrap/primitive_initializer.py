@@ -737,7 +737,9 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
             func_obj = args[0] if len(args) > 0 else registry.get_none()
             args_obj = args[1] if len(args) > 1 else registry.box([])
-            if isinstance(args_obj, IbValue) and args_obj.ib_class.name == "list":
+            _args_spec = getattr(getattr(args_obj, "ib_class", None), "spec", None)
+            _args_base = _args_spec.get_base_name() if _args_spec is not None else getattr(getattr(args_obj, "ib_class", None), "name", "")
+            if isinstance(args_obj, IbValue) and _args_base == "list":
                 arg_list = list(args_obj.elements)
             elif isinstance(args_obj, IbObject):
                 native_args = args_obj.to_native()

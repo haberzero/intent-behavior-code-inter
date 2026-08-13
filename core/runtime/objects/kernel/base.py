@@ -319,8 +319,15 @@ def is_sequence_value(value: Any) -> bool:
     """判断值是否为原生序列容器（list/tuple）。
 
     值层容器分派的单一判定入口：语义是"可直接取 ``.elements`` 的原生序列"，
-    经 ``IbValue.ib_class.name`` 判定（与 ``IbList``↔``"list"``、
-    ``IbTuple``↔``"tuple"`` 的恒定对应一致）。非 ``IbValue`` 对象（内核结构、
-    AST 节点等）一律 False。
+    经值对象 kind 基类名判定（特化类 ``list[int]`` 沿 spec 基名 ``list``；
+    与 ``runtime_serializer._value_base_name`` 同构）。非 ``IbValue`` 对象
+    （内核结构、AST 节点等）一律 False。
     """
-    return isinstance(value, IbValue) and value.ib_class.name in ("list", "tuple")
+    if not isinstance(value, IbValue):
+        return False
+    ib_class = getattr(value, "ib_class", None)
+    if ib_class is None:
+        return False
+    spec = getattr(ib_class, "spec", None)
+    base = spec.get_base_name() if spec is not None else ib_class.name
+    return base in ("list", "tuple")

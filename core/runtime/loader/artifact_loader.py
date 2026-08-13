@@ -50,6 +50,50 @@ class ArtifactLoader:
                 return True
         return False
 
+    def _hydrate_builtin_generic_classes(self, type_pool: Dict[str, Mapping[str, Any]]) -> None:
+        """内置泛型容器特化类水化（缺陷二根治，registry 封印前执行）。
+
+        编译产物 type_pool 中出现的内置泛型特化 spec（``list[int]`` /
+        ``dict[str,int]`` / ``tuple[int,str]`` / ``Optional[int]``——LIST/TUPLE/
+        DICT/OPTIONAL kind 且 name 含 ``[``）预创建为运行时特化类，parent 指向
+        基类（list/dict/tuple/Optional）。值创建点（vm 字面量 handler /
+        反序列化）据此把容器值绑定特化类，使 ``IbValue.type_ref`` 带实参
+        （``type()`` 内省一致 + 运行时类型安全）。
+
+        与用户类泛型特化类（hydrate_all → 下方预注册 CLASS 特化 spec）机制
+        同构。幂等：特化类已注册则跳过；水化失败不影响加载（容器值回落基类）。
+        """
+        from core.kernel.spec.base import TypeKind
+
+        spec_reg = self.registry.get_metadata_registry()
+        if spec_reg is None:
+            return
+        for data in type_pool.values():
+            if not isinstance(data, Mapping):
+                continue
+            name = data.get("name", "")
+            kind = data.get("kind", "")
+            if "[" not in name or kind not in (
+                TypeKind.LIST.value,
+                TypeKind.TUPLE.value,
+                TypeKind.DICT.value,
+                TypeKind.OPTIONAL.value,
+            ):
+                continue
+            if self.registry.get_class(name) is not None:
+                continue
+            spec = spec_reg.resolve(name)
+            if spec is None:
+                continue
+            base_name = spec.get_base_name()
+            if not base_name or self.registry.get_class(base_name) is None:
+                continue
+            try:
+                self.registry.create_subclass(name, spec, base_name)
+            except Exception:
+                # 特化类水化失败（spec 未完全填充/父类缺失）保守跳过，值回落基类。
+                continue
+
     def load(self, artifact_dict: Mapping[str, Any]) -> LoadedArtifact:
         """从扁平化字典中加载并执行类型重水化"""
         if not isinstance(artifact_dict, Mapping):
@@ -67,6 +111,13 @@ class ArtifactLoader:
         # 执行重水化 (UTS 闭环)
         hydrator = ArtifactRehydrator(type_pool, self.registry.get_metadata_registry())
         user_classes = hydrator.hydrate_all(self.registry)
+
+        # 内置泛型容器特化类水化（缺陷二根治）：编译产物中出现的内置泛型
+        # 特化 spec（list[int] / dict[str,int] / tuple[int,str] / Optional[int]）
+        # 预创建为运行时特化类——与用户类泛型特化类（hydrate_all 产出 CLASS
+        # 特化 spec → 下方预注册）同构。registry 未封印（STAGE_5），值创建点
+        # （vm 字面量/反序列化）据此把容器值绑定特化类，使 type_ref 带实参。
+        self._hydrate_builtin_generic_classes(type_pool)
 
         # STAGE 5: 预水合用户类实体，并记录类名到节点 UID 的映射
         class_to_node = {}

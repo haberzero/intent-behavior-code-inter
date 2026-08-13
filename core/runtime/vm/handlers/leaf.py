@@ -23,6 +23,7 @@ from core.runtime.exceptions import (
     ThrownException,
 )
 from core.kernel.issue import InterpreterError
+from core.kernel.spec.type_ref import TypeRef as _TypeRef
 from core.runtime.objects.primitives import IbNone
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.shared.waitable import Waitable, CPSDrivable
@@ -457,7 +458,8 @@ def vm_handle_IbTuple(executor, node_uid: str, node_data: Mapping[str, Any]):
         if _is_llm_uncertain_value(elt):
             return elt
         elts.append(elt)
-    return executor.registry.box(tuple(elts))
+    value = executor.registry.box(tuple(elts))
+    return _bind_container_specialization(executor, node_uid, value, "tuple")
 
 
 def vm_handle_IbListExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
@@ -467,10 +469,92 @@ def vm_handle_IbListExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
         if _is_llm_uncertain_value(elt):
             return elt
         elts.append(elt)
-    return executor.registry.box(elts)
+    value = executor.registry.box(elts)
+    return _bind_container_specialization(executor, node_uid, value, "list")
 
 
 # === 简单表达式扩展 ===
+
+def _bind_container_specialization(executor, node_uid: str, value, container_kind: str):
+    """把容器字面量值绑定到编译期特化类型（缺陷二根治）。
+
+    编译期 ``list[int] li = [1,2]`` 使字面量节点 ``node_to_type = list[int]``；
+    此处查侧表：若节点类型是内置泛型特化（LIST/DICT/TUPLE 等），把值对象
+    重绑定到水化特化类（``get_class("list[int]")``，未注册则经 ``_specialize``
+    创建），使 ``IbValue.type_ref`` 带实参（type() 内省一致 + 运行时类型安全）。
+
+    无特化类型（裸 list/dict/tuple）→ 原样返回（既有行为）。非容器目标或
+    节点类型缺失 → 原样返回（保守语义）。
+    """
+    from core.kernel.spec.base import TypeKind
+
+    if value is None or not isinstance(value, IbValue):
+        return value
+    if getattr(value, "ib_class", None) is None:
+        return value
+    if value.ib_class.name != container_kind:
+        return value
+    node_spec = executor.ec.get_side_table("node_to_type", node_uid)
+    if node_spec is None or not isinstance(node_spec, object):
+        return value
+    try:
+        kind = getattr(node_spec, "kind", None)
+        if kind != getattr(TypeKind, container_kind.upper()).value:
+            return value
+        # 特化类（list[int]）水化；裸类型（list）node_spec.name == "list" 无特化。
+        specialized_name = node_spec.name
+        if specialized_name == container_kind:
+            return value
+        base_cls = executor.registry.get_class(container_kind)
+        if base_cls is None:
+            return value
+        spec_reg = executor.registry.get_metadata_registry()
+        if spec_reg is None or spec_reg.resolve(specialized_name) is None:
+            return value
+        specialized_cls = executor.registry.get_class(specialized_name)
+        if specialized_cls is None:
+            specialized_cls = base_cls._specialize(
+                _slice_type_objs_for(executor, node_spec)
+            )
+            if specialized_cls is None:
+                return value
+        value.ib_class = specialized_cls
+        value.type_ref = _TypeRef.from_spec(node_spec)
+    except Exception:
+        # 特化水化失败保守回退（保留基类值，不破坏程序执行）。
+        return value
+    return value
+
+
+def _slice_type_objs_for(executor, node_spec):
+    """从特化 spec 提取 slice 类型标识对象列表（供 _specialize 水化特化类）。
+
+    与 ``IbClass._slice_type_objs`` 同构：把特化实参（element_type /
+    positional_element_types / key_type+value_type / value_type）转换为
+    IbClass 标识对象。
+    """
+    from core.kernel.spec.base import TypeKind
+
+    args: list = []
+    kind = node_spec.kind
+    if kind == TypeKind.LIST.value:
+        args = [node_spec.element_type]
+    elif kind == TypeKind.TUPLE.value:
+        pos = getattr(node_spec, "positional_element_types", None) or []
+        args = list(pos) or [node_spec.element_type]
+    elif kind == TypeKind.DICT.value:
+        args = [node_spec.key_type, node_spec.value_type]
+    else:
+        args = [getattr(node_spec, "value_type", None)]
+    out = []
+    for ref in args:
+        if ref is None or ref.head in ("any", "auto", ""):
+            continue
+        cls = executor.registry.get_class(ref.head)
+        if cls is not None:
+            out.append(cls)
+    return out
+
 
 def vm_handle_IbDict(executor, node_uid: str, node_data: Mapping[str, Any]):
     """字典字面量 -> 装箱 dict（以 native key 索引）。"""
@@ -489,7 +573,8 @@ def vm_handle_IbDict(executor, node_uid: str, node_data: Mapping[str, Any]):
             return val_obj
         native_key = unbox(key_obj)
         data[native_key] = val_obj
-    return executor.registry.box(data)
+    value = executor.registry.box(data)
+    return _bind_container_specialization(executor, node_uid, value, "dict")
 
 
 def vm_handle_IbSlice(executor, node_uid: str, node_data: Mapping[str, Any]):

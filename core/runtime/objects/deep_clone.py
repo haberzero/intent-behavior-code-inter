@@ -22,6 +22,23 @@ from core.runtime.objects.kernel import IbObject as KernelIbObject
 from core.runtime.objects.kernel import IbValue, IbNone
 
 
+def _value_base_name(val: Any) -> str:
+    """值对象 kind 基类名（特化类沿 spec 基名，普通类即自身名）。
+
+    与 ``runtime_serializer._value_base_name`` / ``is_sequence_value`` 同构：
+    内置泛型特化值（``list[int]``）的 ``ib_class.name`` 含方括号，容器/原语
+    分派须按基类名判定。
+    """
+    ib_class = getattr(val, "ib_class", None)
+    spec = getattr(ib_class, "spec", None)
+    if spec is not None:
+        base = spec.get_base_name()
+        if base:
+            return base
+    name = getattr(ib_class, "name", "")
+    return name
+
+
 def try_deep_clone(
     val: Any,
     memo: Optional[Dict[int, Any]] = None,
@@ -47,12 +64,12 @@ def try_deep_clone(
 
     # 不可变原语：引用复用即可
     if isinstance(val, IbNone) or (
-        isinstance(val, IbValue) and val.ib_class.name in ("int", "float", "str", "bool")
+        isinstance(val, IbValue) and _value_base_name(val) in ("int", "float", "str", "bool")
     ):
         return val
 
     # list / tuple：递归克隆 elements
-    if isinstance(val, IbValue) and val.ib_class.name in ("list", "tuple"):
+    if isinstance(val, IbValue) and _value_base_name(val) in ("list", "tuple"):
         new_elements: list = []
         placeholder = type(val)(new_elements, val.ib_class)
         memo[val_id] = placeholder
@@ -61,12 +78,12 @@ def try_deep_clone(
             if cloned_elem is None:
                 return None
             new_elements.append(cloned_elem)
-        if val.ib_class.name == "tuple":
+        if _value_base_name(val) == "tuple":
             placeholder.elements = tuple(new_elements)
         return placeholder
 
     # dict：递归克隆所有键值对
-    if isinstance(val, IbValue) and val.ib_class.name == "dict":
+    if isinstance(val, IbValue) and _value_base_name(val) == "dict":
         new_fields: dict = {}
         placeholder_dict = type(val)(new_fields, val.ib_class)
         memo[val_id] = placeholder_dict

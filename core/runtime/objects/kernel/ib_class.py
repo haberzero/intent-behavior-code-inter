@@ -200,10 +200,28 @@ class IbClass(IbObject):
             raise PermissionError(f"Sealed Registry Violation: Cannot register field '{name}' to class '{self.name}' in READY state.")
         self.default_fields[name] = default_value
 
+    def _impl_cls(self) -> Any:
+        """解析值对象的 Python 实现类。
+
+        优先按类名精确匹配（``get_ib_implementation(name)``）；特化类
+        （``list[int]`` / ``Box[int]``）的 name 无直接实现注册，沿 spec 基类名
+        解析（LIST kind → ``list`` 等，经 ``get_base_name``），使特化类实例化
+        复用基类实现（机制同构于用户类泛型特化类的父链继承）。
+        """
+        impl = get_ib_implementation(self.name)
+        if impl is not None:
+            return impl
+        if self._spec is not None:
+            base = self._spec.get_base_name()
+            impl = get_ib_implementation(base)
+            if impl is not None:
+                return impl
+        return None
+
     def instantiate(self, args: List[IbObject], context: Optional['IExecutionContext'] = None) -> IbObject:
         # 值对象类型化构造钩子：实现类覆写 _create_blank 则产生
         # 其类型化实例（如 IbThread），否则默认普通 IbObject（既有行为）。
-        impl_cls = get_ib_implementation(self.name)
+        impl_cls = self._impl_cls()
         instance = impl_cls._create_blank(self) if impl_cls is not None else IbObject(self)
 
         # 收集完整的字段继承链（父类字段 + 子类字段）
@@ -306,7 +324,7 @@ class IbClass(IbObject):
         ``__init__``/字段默认值含 Waitable 时由调度器协作挂起而非阻塞主线程。
         调用方（:class:`_ClassInstantiateDrive.cps_drive`）须 ``yield from``。
         """
-        impl_cls = get_ib_implementation(self.name)
+        impl_cls = self._impl_cls()
         instance = impl_cls._create_blank(self) if impl_cls is not None else IbObject(self)
 
         all_default_fields: dict = {}
@@ -412,17 +430,11 @@ class IbClass(IbObject):
           特化 spec 与 IbClass）→ 直接返回。
         - 未注册（无编译期特化、运行时首次遇到）→ 从 metadata registry
           解析特化 spec 并 ``create_subclass``。
+        - 内置泛型类（list/dict/Optional 等）作下标（``list[int]`` 表达式、
+          ``Box[list[int]]`` 嵌套实参）→ 水化为特化类（缺陷二根治：内置泛型
+          特化 spec 与用户类泛型同构地水化为运行时特化类）。
         - 非泛型类下标（Box[42]）→ AttributeError（不是类型特化）。
         """
-        if not self._spec or not getattr(self._spec, "type_params", None):
-            # 内置泛型类（list/dict/Optional 等）作嵌套实参（``Box[list[int]]``）：
-            # 下标求值为类型特化标识（boxed 特化名字符串），供外层特化提取。
-            type_names = [self._type_ref_name(o) for o in type_objs]
-            if all(n is not None for n in type_names) and type_names:
-                return self.registry.box(f"{self.name}[{','.join(type_names)}]")
-            raise AttributeError(
-                f"Class '{self.name}' is not generic; cannot subscript it."
-            )
         if not type_objs:
             raise AttributeError(
                 f"Class '{self.name}' subscript expects type identifier(s) "
@@ -442,16 +454,41 @@ class IbClass(IbObject):
         spec_reg = self.registry.get_metadata_registry()
         specialized_spec = spec_reg.resolve(specialized_name) if spec_reg else None
         if specialized_spec is None:
-            raise RuntimeError(
-                f"Generic class '{self.name}' has no registered specialization "
-                f"for type '{','.join(type_names)}'."
+            # 无 type_params 的内置泛型类（list/dict/Optional 等）作嵌套实参
+            # （``Box[list[int]]``）：编译期未注册特化 spec 时，boxed 特化名
+            # 字符串供外层特化提取（保留既有契约）。
+            if not self._spec or not getattr(self._spec, "type_params", None):
+                type_names_b = [self._type_ref_name(o) for o in type_objs]
+                if all(n is not None for n in type_names_b) and type_names_b:
+                    return self.registry.box(f"{self.name}[{','.join(type_names_b)}]")
+            raise AttributeError(
+                f"Class '{self.name}' is not generic; cannot subscript it."
             )
+        # 内置泛型特化类（list[int]）：水化阶段（loader）已预创建；此处仅作
+        # 兜底。registry 已封印时不可 create_subclass——回落 boxed 特化名
+        # 字符串（嵌套实参语义：供外层特化提取），不抛错（与既有 boxed 路径
+        # 行为一致；水化阶段缺失的类表示该特化未在编译产物中使用）。
+        if not getattr(self._spec, "type_params", None):
+            if self.registry.is_sealed:
+                return self.registry.box(specialized_name)
+            base_cls = self.registry.get_class(self.name)
+            if base_cls is not None:
+                try:
+                    return self.registry.create_subclass(
+                        specialized_name, specialized_spec, self.name
+                    )
+                except Exception:
+                    return self.registry.box(specialized_name)
         # 父类：若 parent_type 带泛型实参（class Sub[T](Box[T]) → Box[int]），
         # parent 类名须用特化名（继承链对齐特化类，非裸基类）。
         if specialized_spec.parent_type is not None and specialized_spec.parent_type.args:
             p_head = specialized_spec.parent_type.head
             p_args = ",".join(a.canonical_name for a in specialized_spec.parent_type.args)
             parent_name = f"{p_head}[{p_args}]"
+        elif not getattr(self._spec, "type_params", None):
+            # 内置泛型特化类（list[int]）的 parent = 基类（list）——特化类
+            # 继承基类实现与方法（get_ib_implementation 沿基类名解析）。
+            parent_name = self.name
         else:
             parent_name = (
                 specialized_spec.parent_type.head

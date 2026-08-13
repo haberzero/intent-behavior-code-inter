@@ -283,38 +283,57 @@ class RuntimeSerializer(BaseFlatSerializer):
     def _dispatch_instance_kind(self, obj: IbObject, data: dict) -> None:
         """按类型分派序列化字段（单一类型一个具名 collector）。"""
         cls_name = obj.ib_class.name
-        if isinstance(obj, IbValue) and cls_name == "None":
+        # 特化类名（list[int]/Box[int]）沿 spec 基类名分派值层 kind——
+        # 内置泛型特化类与用户类特化类均复用基类 collector（缺陷二根治：
+        # 值层身份保真后序列化不落入 object 兜底）。
+        base_name = self._value_base_name(obj)
+        if isinstance(obj, IbValue) and base_name == "None":
             self._collect_none(data)
         elif isinstance(obj, IbNativeFunction):
             self._collect_native_func(obj, data)
         elif isinstance(obj, IbNativeObject):
             self._collect_native(obj, data, cls_name)
-        elif isinstance(obj, IbValue) and cls_name in ("int", "float", "str", "bool"):
+        elif isinstance(obj, IbValue) and base_name in ("int", "float", "str", "bool"):
             self._collect_primitive(obj, data)
-        elif isinstance(obj, IbValue) and cls_name == "list":
+        elif isinstance(obj, IbValue) and base_name == "list":
             self._collect_list(obj, data)
-        elif isinstance(obj, IbValue) and cls_name == "tuple":
+        elif isinstance(obj, IbValue) and base_name == "tuple":
             self._collect_tuple(obj, data)
-        elif isinstance(obj, IbValue) and cls_name == "dict":
+        elif isinstance(obj, IbValue) and base_name == "dict":
             self._collect_dict(obj, data)
-        elif isinstance(obj, IbValue) and cls_name == "Optional":
+        elif isinstance(obj, IbValue) and base_name == "Optional":
             self._collect_optional(obj, data)
-        elif cls_name == "thread_result" and not isinstance(obj, IbClass):
+        elif base_name == "thread_result" and not isinstance(obj, IbClass):
             self._collect_thread_result(obj, data)
         elif isinstance(obj, IbModule):
             self._collect_module(obj, data)
         elif isinstance(obj, IbBoundMethod):
             self._collect_bound_method(obj, data)
-        elif isinstance(obj, IbValue) and cls_name == "behavior":
+        elif isinstance(obj, IbValue) and base_name == "behavior":
             self._collect_behavior(obj, data)
-        elif isinstance(obj, IbValue) and cls_name == "fn_callable":
+        elif isinstance(obj, IbValue) and base_name == "fn_callable":
             self._collect_fn_callable(obj, data)
-        elif cls_name == "intent_context":
+        elif base_name == "intent_context":
             self._collect_intent_context_wrapper(obj, data)
         elif isinstance(obj, IbIntent):
             self._collect_intent(obj, data)
         else:
             self._collect_object(obj, data)
+
+    @staticmethod
+    def _value_base_name(obj: IbObject) -> str:
+        """值对象的 kind 基类名（特化类沿 spec 基名，普通类即自身名）。
+
+        特化类（``list[int]`` / ``Box[int]``）的 ``ib_class.name`` 含方括号，
+        序列化分派须按基类名（``list`` / ``Box``）路由——值层 kind 判定与
+        ``IbClass._impl_cls``（沿 base 名解析实现类）同构。
+        """
+        spec = getattr(obj.ib_class, "spec", None)
+        if spec is not None:
+            base = spec.get_base_name()
+            if base:
+                return base
+        return obj.ib_class.name
 
     def _collect_none(self, data: dict) -> None:
         data["_type"] = "none"
@@ -655,6 +674,50 @@ class RuntimeDeserializer:
                 return scope
         return None
 
+    def _hydrate_specialized_class(self, cls_name: str):
+        """按需水化特化类（list[int]）——反序列化 round-trip 用。
+
+        从 metadata registry 解析特化 spec，沿基类名（``list``）create_subclass，
+        特化类父链指向基类（方法继承 + is_assignable 继承链）。
+        """
+        spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None
+        if spec_reg is None:
+            return None
+        spec = spec_reg.resolve(cls_name)
+        if spec is None:
+            return None
+        base_name = spec.get_base_name()
+        if not base_name or not self.registry.get_class(base_name):
+            return None
+        try:
+            return self.registry.create_subclass(cls_name, spec, parent_name=base_name)
+        except Exception:
+            return None
+
+    def _create_container_obj(self, ib_class, kind: str, seed):
+        """按特化类构造容器值对象（round-trip 特化保真）。
+
+        ``ib_class`` 为特化类（``list[int]``）时用其构造（type_ref 带实参）；
+        基类/None 回落 ``factory.create_list/tuple/dict``（既有行为）。
+        """
+        if ib_class is not None and "[" in getattr(ib_class, "name", ""):
+            from core.runtime.objects.primitives import IbList, IbTuple, IbDict
+            if kind == "list":
+                return IbList([], ib_class)
+            if kind == "tuple":
+                return IbTuple((), ib_class)
+            if kind == "dict":
+                return IbDict({}, ib_class)
+        if self.factory is None:
+            raise RuntimeError("RuntimeDeserializer: ObjectFactory is required.")
+        if kind == "list":
+            return self.factory.create_list([])
+        if kind == "tuple":
+            return self.factory.create_tuple(())
+        if kind == "dict":
+            return self.factory.create_dict({})
+        raise RuntimeError(f"Unknown container kind: {kind}")
+
     def _deserialize_symbol(self, data: Dict[str, Any]) -> RuntimeSymbol:
         val = self._deserialize_value(data["value"])
         return self.factory.create_runtime_symbol(
@@ -694,6 +757,11 @@ class RuntimeDeserializer:
         data = self.instance_pool[uid]
         cls_name = data["class_name"] if "class_name" in data else None
         ib_class = self.registry.get_class(cls_name) if cls_name else None
+        if ib_class is None and cls_name and "[" in cls_name:
+            # 特化类（list[int]）round-trip：运行时未注册时按需水化——
+            # 从 metadata registry 解析特化 spec，沿基类（list）create_subclass。
+            # 与 IbClass._specialize 机制同构（单一权威水化路径）。
+            ib_class = self._hydrate_specialized_class(cls_name)
         
         obj = None
         _type = data.get("_type")
@@ -731,21 +799,21 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             
         elif _type == "list":
-            obj = self.factory.create_list([])
+            obj = self._create_container_obj(ib_class, "list", [])
             self.instance_cache[uid] = obj 
             obj.elements = [self._deserialize_value(e) for e in data.get("elements", [])]
 
         elif _type == "tuple":
             # Cache an empty IbTuple first to break potential circular references,
             # then fill elements (mirroring the cache-before-recurse pattern used for IbList).
-            obj = self.factory.create_tuple(())
+            obj = self._create_container_obj(ib_class, "tuple", ())
             self.instance_cache[uid] = obj
             obj.elements = tuple(self._deserialize_value(e) for e in data.get("elements", []))
             
         elif _type == "dict":
             # Cache an empty IbDict first to break potential circular references,
             # then fill fields (mirroring the cache-before-recurse pattern used for IbList/IbTuple).
-            obj = self.factory.create_dict({})
+            obj = self._create_container_obj(ib_class, "dict", {})
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
 

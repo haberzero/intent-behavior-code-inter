@@ -1,0 +1,15 @@
+# G6-02 内置泛型值层类型身份保真（缺陷二触发用例）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: list[int] 值 type() 返回 list[int]（修复前擦除为 list，与用户类 Box[int] 双轨分裂）
+# expect-class: PASS
+# expect-out: list[int] | list[str] | list | DONE
+# expect-exit: 0
+import ai
+ai.set_mock_mode()
+list[int] li = [1, 2]
+list[str] ls = ["a"]
+list bare = [True]
+print(type(li))
+print(type(ls))
+print(type(bare))
+print("DONE")
