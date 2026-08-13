@@ -1,6 +1,9 @@
 # R2-03 G1 嵌套实参 Box[list[int]] 方法体
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 嵌套实参方法体命中特化
+# expect-class: PASS
+# expect-out: len=3 | first=1 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Box[T]:

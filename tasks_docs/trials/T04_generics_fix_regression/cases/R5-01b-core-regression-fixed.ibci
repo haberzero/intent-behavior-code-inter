@@ -1,11 +1,9 @@
-# R5-01b G3 修复后适配：多参构造核心回归（历史 R5-01 为冻结证据）
+# 泛型核心回归：Sub[int](7, "L") 多参构造（value+label 全链绑定）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望输出: bi=42 / bs=hi / len=3 / box=2 / sub=7L / DONE
 # expect-class: PASS
 # expect-out: bi=42 | bs=hi | len=3 | box=2 | sub=7L | DONE
 # expect-exit: 0
-# 2026-08-13 新增：G3 修复后 Sub[int](7, "L") 多参构造（value+label 全链绑定）；
-# 历史 R5-01 保持原始单参形态作为缺陷证据。
 import ai
 ai.set_mock_mode()
 class Box[T]:

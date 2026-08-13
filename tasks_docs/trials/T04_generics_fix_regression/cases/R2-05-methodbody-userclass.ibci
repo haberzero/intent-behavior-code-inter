@@ -1,6 +1,9 @@
 # R2-05 G1 嵌套用户类 Box[Box[int]] 方法体
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 用户类嵌套特化方法体
+# expect-class: PASS
+# expect-out: inner=8 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Box[T]:

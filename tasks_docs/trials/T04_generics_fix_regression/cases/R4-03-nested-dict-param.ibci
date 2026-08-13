@@ -1,6 +1,8 @@
 # R4-03 双通道 Box[dict[str,int]] 参数正/负
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 负例拦截，正例通过
+# expect-class: PASS
+# expect-out: key=2 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

@@ -16,14 +16,17 @@
 # expect-out: <精确输出行；多行用 | 分隔；按出现顺序匹配（允许间隔）>
 # expect-exit: <0 | 1 | nonzero>
 # expect-code: <诊断码，如 SEM_TYPE_MISMATCH / RUN_TYPE_MISMATCH；可多值逗号分隔>
+# expect-llm: <true | false>   # 可选；true = 依赖真实 LLM（本机服务见 LLM_SERVICE.md）
 ```
 
-- `expect-class` 必填（harness 据此归类 + 判定目标）。
-- `expect-out` / `expect-exit` / `expect-code` 至少一个（否则无法判定）。
-- **无断言的用例判 `HARNESS`**（note：`<无断言：用例必须声明 expect-class + 至少一个断言条件>`）。
-  **不保留人工判定双轨**——历史用例无断言的一律补断言（见 §六 历史迁移）。
-- 所有声明的断言**全过**才判定为目标分类；任一断言失败 → 标 `HARNESS`
-  （note 注明哪个断言失败 + 实际值）——**防止"跑通即 PASS"掩盖断言缺口**。
+- `expect-llm: true` 用例须本机 LLM 服务可达才跑（批量运行器分层：先 mock 后 llm，
+  单用例超时 SIGKILL 不拖垮整批，见 `run_batch.py`）。
+- 用例注释**只保留功能说明与 `# doc:` 引用**；不得含时间戳、任务代号、缺陷编号、
+  决策/过程叙述（与逻辑无关的标记，见 docs/README §3.6 精神）。
+- `expect-class` 必填；`expect-out`/`expect-exit`/`expect-code` 至少一个（否则无法判定）。
+- **无断言的用例判 `HARNESS`**（不保留人工判定双轨，历史用例一律补断言，见 §六）。
+- 所有断言**全过**才判定为目标分类；任一失败 → `HARNESS`（防"跑通即 PASS"掩盖断言缺口）。
+- `expect-llm` 为元信息（批量分层），不参与单用例判定。
 
 ### 分类 → 断言语义
 

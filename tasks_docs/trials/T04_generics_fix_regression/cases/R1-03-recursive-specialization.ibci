@@ -1,6 +1,9 @@
 # R1-03 G2 递归特化 Node[Node[int]]
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: Node[Node[int]] 双重 get 正确
+# expect-class: PASS
+# expect-out: inner=9 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Node[T]:

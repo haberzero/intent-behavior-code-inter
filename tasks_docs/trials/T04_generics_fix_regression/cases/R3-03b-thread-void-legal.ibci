@@ -1,4 +1,6 @@
 # R3-03b thread[void] 合法（守卫例外）
+# expect-class: PASS
+# expect-out: w | DONE
 import ai
 ai.set_mock_mode()
 func worker() -> void:

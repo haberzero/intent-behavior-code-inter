@@ -1,6 +1,8 @@
 # R4-05 双通道 继承特化类方法参数类型检查
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 继承特化类方法参数校验
+# expect-class: PASS
+# expect-out: v=5 | DONE
 import ai
 ai.set_mock_mode()
 class Base[T]:

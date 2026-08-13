@@ -1,6 +1,9 @@
 # R2-01 G1 方法体 Box[T] 构造（int/str 多特化）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 多特化互不干扰
+# expect-class: PASS
+# expect-out: v=2 | s=b | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Box[T]:

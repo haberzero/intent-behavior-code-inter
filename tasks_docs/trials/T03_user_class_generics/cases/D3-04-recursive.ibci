@@ -3,8 +3,7 @@
 # 期望: 递归特化工作或明确报错（不崩溃/不死循环）
 # expect-class: PASS
 # expect-out: n1=1 | next=2 | nested=1 | DONE
-# 2026-08-13 适配：`Node[T] next` 原无默认值（decl-only），单参构造缺参（G2 修复后
-# 编译错消失、运行时缺参暴露）→ 与 R1 系列用例一致补 `= any` 默认值。
+# Node[T] next 自引用字段带默认值
 import ai
 ai.set_mock_mode()
 class Node[T]:

@@ -1,6 +1,9 @@
 # R1-02 G2 自引用链遍历
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 多节点链遍历正确
+# expect-class: PASS
+# expect-out: h=1 | m=2 | t=3 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Node[T]:

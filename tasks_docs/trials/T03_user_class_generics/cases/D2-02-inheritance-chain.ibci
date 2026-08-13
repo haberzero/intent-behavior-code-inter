@@ -3,8 +3,7 @@
 # 期望: 特化沿多级继承链传递
 # expect-class: PASS
 # expect-out: all=123 | DONE
-# 2026-08-13 适配：G3 修复（chain-aware auto-init）后构造参数 = 全链无默认值字段
-# （base_val, sub1_val, sub2_val 父先），`Sub2[int](0)` 单参不再成立 → 改多参构造。
+# 构造参数 = 全链无默认值字段（base_val, sub1_val, sub2_val 父先）
 import ai
 ai.set_mock_mode()
 class Base[T]:

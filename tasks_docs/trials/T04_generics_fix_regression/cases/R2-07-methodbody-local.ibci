@@ -1,6 +1,8 @@
 # R2-07 G1 方法体内 T 作局部变量/表达式
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 方法内 T 局部变量与运算
+# expect-class: PASS
+# expect-out: r1=9 | r2=y | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

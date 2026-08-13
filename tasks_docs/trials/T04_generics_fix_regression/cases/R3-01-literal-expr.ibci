@@ -1,6 +1,9 @@
-# R3-01 BOUNDARY-G1 字面量 Box[42] 表达式位置（预期报错）
+# R3-01 字面量 Box[42] 表达式位置（预期报错）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: SEM_GENERIC_TYPE_NEEDS_ARGS（守卫是特性）
+# expect-class: GUARD
+# expect-code: SEM_GENERIC_TYPE_NEEDS_ARGS
+# expect-exit: nonzero
 import ai
 ai.set_mock_mode()
 class Box[T]:

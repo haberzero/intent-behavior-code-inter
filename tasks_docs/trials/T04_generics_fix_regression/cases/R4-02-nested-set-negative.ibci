@@ -1,6 +1,9 @@
 # R4-02 双通道 Box[list[int]].set("str") 负例（预期报错）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: SEM_TYPE_MISMATCH（嵌套实参参数检查）
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
 import ai
 ai.set_mock_mode()
 class Box[T]:

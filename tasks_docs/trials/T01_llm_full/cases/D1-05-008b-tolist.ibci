@@ -1,6 +1,6 @@
 # D1-05-008b 生成器 to_list() 用户显式调用（A3 重验，U1 修复）
 # doc: docs/syntax/05_functions.md §5.8 + 12_builtins（generator 方法）
-# 期望: 生成器显式 .to_list()/.generic_next() 协议分发正常（GEN-1~4 契约）
+# 期望: 生成器显式 .to_list()/.generic_next() 协议分发正常
 
 func count(int n) -> int:
     int i = 0

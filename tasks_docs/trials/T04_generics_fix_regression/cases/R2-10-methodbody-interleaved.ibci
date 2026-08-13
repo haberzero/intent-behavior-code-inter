@@ -1,6 +1,8 @@
 # R2-10 G1 交替特化调用（int/str/list 轮流 make）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 交替调用 T 解析互不污染
+# expect-class: PASS
+# expect-out: bi=2 | bs=s2 | blen=2 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

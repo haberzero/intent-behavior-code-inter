@@ -1,6 +1,8 @@
 # R2-09 G1 深层嵌套实参方法体（潜在递归/性能）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 深层嵌套不崩不死循环
+# expect-class: PASS
+# expect-out: len=1 | inner=2 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

@@ -1,6 +1,8 @@
 # R5-03 回归面：泛型 × 并发/生成器/闭包
 # doc: docs/syntax/06_oop.md §6.4 + 14_concurrency + 05_functions
 # 期望: 跨面泛型正常
+# expect-class: PASS
+# expect-out: chan=5 | gen_sum=3 | closure=15 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

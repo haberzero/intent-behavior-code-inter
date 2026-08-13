@@ -1,6 +1,9 @@
 # R2-04 G1 嵌套实参 Box[dict[str,int]] 方法体
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: dict 嵌套方法体命中特化
+# expect-class: PASS
+# expect-out: key=2 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Box[T]:

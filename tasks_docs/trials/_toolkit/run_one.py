@@ -41,7 +41,8 @@ import sys
 import time
 
 # 诊断码前缀（对齐 core/base/diagnostics/codes.py 命名制：LEX/PAR/SEM/DEP/INT/RUN/KDIAG/CFG）
-_CODE_RE = re.compile(r"\b(SEM|PAR|LEX|DEP|INT|RUN|KDIAG|CFG)_[A-Z0-9_]+\b")
+# 非捕获组：findall 返回整匹配而非捕获组
+_CODE_RE = re.compile(r"\b(?:SEM|PAR|LEX|DEP|INT|RUN|KDIAG|CFG)_[A-Z0-9_]+\b")
 _EXPECT_RE = re.compile(r"^#\s*expect-(\w+)\s*:\s*(.*)$")
 
 VALID_CLASSES = {

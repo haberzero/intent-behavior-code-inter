@@ -1,6 +1,9 @@
 # R1-04 G2 自引用字段 + 容器
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: list[Node[int]] 含自引用字段元素
+# expect-class: PASS
+# expect-out: a=1 | b=2 | len=2 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Node[T]:

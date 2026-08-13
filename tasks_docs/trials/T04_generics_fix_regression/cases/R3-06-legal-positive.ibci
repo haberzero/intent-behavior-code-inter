@@ -1,6 +1,8 @@
-# R3-06 BOUNDARY-G1 合法实参不受影响（正向）
+# R3-06 合法实参不受影响（正向）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: int/list[int]/Pair[str,int] 正常
+# expect-class: PASS
+# expect-out: bi=1 | len=2 | pb=3 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

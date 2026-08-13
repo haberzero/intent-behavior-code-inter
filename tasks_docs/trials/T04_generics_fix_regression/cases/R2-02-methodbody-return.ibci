@@ -1,6 +1,9 @@
 # R2-02 G1 方法体 Box[T] 返回 + 特化方法访问
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 返回特化类实例后 get 返回特化类型
+# expect-class: PASS
+# expect-out: r=2 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Box[T]:
