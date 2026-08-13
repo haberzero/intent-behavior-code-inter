@@ -145,6 +145,15 @@ class TypeRef:
             return cls(head="list", args=(), module=spec.module_path)
 
         if spec.kind == TypeKind.TUPLE.value:
+            # 位置元素类型优先：tuple[int,str] 是多参 tuple 的位置元素（合法特性），
+            # 必须保真（此前只读 element_type 丢失位置元素 → TypeRef('tuple')）。
+            positional = getattr(spec, "positional_element_types", None) or []
+            if positional:
+                return cls(
+                    head="tuple",
+                    args=tuple(positional),
+                    module=spec.module_path,
+                )
             elem_ref = spec.element_type
             if elem_ref is not None and elem_ref.head != "any":
                 return cls(

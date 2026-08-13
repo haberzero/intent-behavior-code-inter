@@ -215,6 +215,107 @@ def _write_nested(tmp_path, rel_path, content):
     return str(p)
 
 
+class TestIbcFileGenericExport:
+    """泛型变量经整模块 import 导出的类型保真（GEN-FIX 收敛判别性回归）。
+
+    模块导出符号经 _spec_to_typeref 收敛（委托 TypeRef.from_spec）后，thread[T]/
+    chan[T]/fn_callable[T]/用户类特化/多参 tuple 必须结构化保真。
+    修复前：thread[int]→thread[any]（读错字段）、chan[str]→扁平、
+    fn_callable[int]→fn[__args__()->void]（kind 级腐蚀）、tuple[int,str]→tuple
+    （丢位置元素）。
+    """
+
+    def _scheduler_typeref(self, spec):
+        """经 scheduler._spec_to_typeref 收敛产出 TypeRef（white-box 契约）。"""
+        from core.compiler.scheduler import Scheduler
+        s = Scheduler(root_dir=".")
+        return s._spec_to_typeref(spec).canonical_name
+
+    def test_thread_typeref_structured(self):
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="thread[int]", kind=TypeKind.THREAD.value, value_type=TypeRef.of("int"),
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        assert self._scheduler_typeref(sp) == "thread[int]"
+
+    def test_chan_typeref_structured(self):
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="chan[str]", kind=TypeKind.CHANNEL.value, value_type=TypeRef.of("str"),
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        assert self._scheduler_typeref(sp) == "chan[str]"
+
+    def test_fn_callable_typeref_structured(self):
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="fn_callable[int]", kind=TypeKind.CALLABLE_INSTANCE.value,
+                     value_type=TypeRef.of("int"),
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        assert self._scheduler_typeref(sp) == "fn_callable[int]"
+
+    def test_user_generic_typeref_structured(self):
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="Box[int]", kind=TypeKind.CLASS.value, type_params=["T"],
+                     type_args=[TypeRef.of("int")], base_name="Box",
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        assert self._scheduler_typeref(sp) == "Box[int]"
+
+    def test_tuple_positional_typeref_structured(self):
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="tuple", kind=TypeKind.TUPLE.value,
+                     positional_element_types=[TypeRef.of("int"), TypeRef.of("str")],
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        assert self._scheduler_typeref(sp) == "tuple[int,str]"
+
+    def test_function_signature_still_structured(self):
+        """FUNCTION kind 保留 fn[(args)->ret] 结构化签名（模块导出函数契约）。"""
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="double", kind=TypeKind.FUNCTION.value,
+                     param_types=[TypeRef.of("int")], return_type=TypeRef.of("int"),
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        assert self._scheduler_typeref(sp) == "fn[__args__[int],int]"
+
+    def test_whole_import_fn_callable_callable(self, tmp_path):
+        """fn_callable 导出后可调用（可观察契约）。"""
+        _write(
+            tmp_path,
+            "helper.ibci",
+            "fn_callable[int] f = lambda() -> int: 1\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import helper\n"
+            "print(type(helper.f))\n"
+            "int v = helper.f()\n"
+            "print((str)v)\n",
+        )
+        assert _run(tmp_path) == ["fn_callable[()->int]", "1"]
+
+    def test_whole_import_user_generic_value(self, tmp_path):
+        """用户泛型导出后字段可访问（可观察契约）。"""
+        _write(
+            tmp_path,
+            "helper.ibci",
+            "class Box[T]:\n"
+            "    T value\n"
+            "    func __init__(self, T value) -> void:\n"
+            "        self.value = value\n"
+            "Box[int] b = Box[int](42)\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import helper\n"
+            "print(type(helper.b))\n"
+            "print((str)helper.b.value)\n",
+        )
+        assert _run(tmp_path) == ["Box[int]", "42"]
+
+
 class TestIbcFileNestedPackageImport:
     """嵌套包 `import subpkg.util` + 成员访问（2026-08-12 根治）。
 
