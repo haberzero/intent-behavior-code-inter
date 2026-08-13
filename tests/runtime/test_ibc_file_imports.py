@@ -336,14 +336,15 @@ class TestIbcFileNestedPackageImport:
 
 
 class TestCrossModuleSameNameClass:
-    """跨模块同名类身份隔离（S5 根治）。
+    """跨模块同名类编译期/元数据层隔离（S5 根治）。
 
     修复前 `geo.Box` 与 `graph.Box` 编译期坍缩为同一 spec（register merge
-    members），方法表互相串扰（geo.Box 的 get 可能用 graph 的签名）；修复后
-    module 限定分离，各模块类独立。
+    members），序列化/round-trip 冲突；修复后 module 限定分离——编译期 spec
+    独立、特化继承 module、序列化保真。
+    注：运行时类表仍 name-only（known limit，见 KNOWN_LIMITS §10.2）。
     """
 
-    def test_same_name_class_module_isolation(self, tmp_path):
+    def test_same_name_class_compile_time_isolation(self, tmp_path):
         _write(
             tmp_path,
             "geo.ibci",
@@ -366,12 +367,44 @@ class TestCrossModuleSameNameClass:
             "import geo\n"
             "import graph\n"
             "geo.Box[int] a = geo.Box[int](5)\n"
+            "graph.Box[int] b = graph.Box[int](\"hello\")\n"
             "print(type(a.get()))\n"
-            'graph.Box[int] b = graph.Box[int]("hello")\n'
             "print(type(b.get()))\n",
         )
-        # geo.Box.get() 返回 int（5），graph.Box.get() 返回 str——方法表不串扰
+        # 编译期 spec 分离：geo.Box 与 graph.Box 各自正确
         assert _run(tmp_path) == ["int", "str"]
+
+    def test_same_name_class_spec_isolated(self, tmp_path):
+        """编译期注册表：geo.Box 与 graph.Box 是独立 spec（module 区分）。"""
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n",
+        )
+        _write(
+            tmp_path,
+            "graph.ibci",
+            "class Box[T]:\n"
+            "    str name\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "import graph\n",
+        )
+        engine.run(str(tmp_path / "main.ibci"), silent=True)
+        reg = engine.registry.get_metadata_registry()
+        geo_box = reg.resolve("Box", "geo")
+        graph_box = reg.resolve("Box", "graph")
+        assert geo_box is not None and graph_box is not None
+        assert geo_box is not graph_box, (
+            "geo.Box 与 graph.Box 应编译期隔离（独立 spec）"
+        )
+        assert geo_box.module_path == "geo"
+        assert graph_box.module_path == "graph"
 
     def test_multi_import_same_package_merges(self, tmp_path):
         """同一包多次导入：根包命名空间幂等合并（a.b.c + a.b.d 均可达）。"""

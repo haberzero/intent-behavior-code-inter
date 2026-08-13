@@ -318,9 +318,11 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
-### 10.2 跨模块同名类身份（已根治）
+### 10.2 跨模块同名类身份（编译期已根治，运行时类表 name-only 边界）
 
-多模块编译时两个模块定义**同名类**（`geo.Box` / `graph.Box`）现已**隔离**（S5 根治）：被 import 的模块用户类带 module 限定（`geo.Box` / `graph.Box` 独立 spec + 运行时类），方法表不串扰；入口/单模块保持根命名空间。模块内自身类裸名引用经 `SpecRegistry.current_module` 上下文正确解析。
+多模块编译时两个模块定义**同名类**（`geo.Box` / `graph.Box`）：**编译期/元数据层已隔离**（S5 根治）——被 import 的模块用户类带 module 限定，`geo.Box`/`graph.Box` 独立 spec + 特化继承 module + 序列化/round-trip 保真；入口/单模块保持根命名空间；模块内自身类裸名引用经 `SpecRegistry.current_module` 上下文正确解析。
+
+**运行时类表仍 name-only**（`get_class(name)` 按裸名索引，`bootstrapper._class_registry`）：两个同名类的运行时 IbClass 坍缩为一个，**方法表按后编译者覆盖**——若同名类方法签名不同，运行时方法分派可能串扰。这是运行时类表结构的独立边界（module 感知键重构），罕见场景（两个模块定义同名类且方法签名不同），登记为已知边界不修复。
 
 ### 10.3 容器字面量类型推断（S6）+ *expr 元素级校验
 

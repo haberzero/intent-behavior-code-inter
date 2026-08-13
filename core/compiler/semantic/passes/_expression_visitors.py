@@ -41,6 +41,22 @@ from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.registry.factory import _PRIMITIVE_CONSTRUCTORS
 
 
+def _first_pos_descriptor_after(descriptors, count: int):
+    """返回跳过 ``count`` 个 position-or-keyword 描述符后的首个位置形参。
+
+    ``*expr`` 展开实参从"显式位置实参之后"开始填充形参：``f('x', *l)`` 时
+    ``*l`` 首元素对应第二个位置形参。取该位置目标形参供元素级类型校验。
+    无剩余位置形参（展开实参将落到 varargs/越界）返回 None（跳过校验）。
+    """
+    remaining = count
+    for d in descriptors:
+        if d.kind == ast.ARG_POSITIONAL_OR_KEYWORD:
+            if remaining == 0:
+                return d
+            remaining -= 1
+    return None
+
+
 class ExpressionVisitorsMixin:
     """Expression visit methods (literals, operators, calls, access, HOF)."""
 
@@ -639,17 +655,17 @@ class ExpressionVisitorsMixin:
             name is None for name, _ in keyword_specs
         )
         # *expr 元素级类型校验（遗留边界修复）：`*lst` 展开实参静态数量未知，
-        # 但元素类型可静态确定（特化容器 list[int]）——元素须可赋给首个位置
-        # 形参（展开后首实参对应首形参）。数量不足/超限仍由运行期裁决。
+        # 但元素类型可静态确定（特化容器 list[int]）——元素须可赋给展开首个
+        # 实参对应的目标形参（跳过显式位置实参数后的首个位置形参）。
+        # 数量不足/超限仍由运行期裁决。
         if starred_specs and descriptors:
-            first_pos = next(
-                (d for d in descriptors if d.kind == ast.ARG_POSITIONAL_OR_KEYWORD),
-                None,
+            target = _first_pos_descriptor_after(
+                descriptors, len(positional_specs)
             )
-            if first_pos is not None:
+            if target is not None:
                 for starred_spec in starred_specs:
                     self._check_starred_element_type(
-                        node, starred_spec, first_pos
+                        node, starred_spec, target
                     )
         for issue in binding.issues:
             if issue.code == TOO_MANY_POSITIONAL:
