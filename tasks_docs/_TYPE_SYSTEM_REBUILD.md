@@ -1,155 +1,166 @@
-# 设计：类型体系地基地基根治——泛型特化机制重建（摆脱历史错误设计）
+# 设计：类型体系地基根治——修正物化路线的实现缺陷（非推翻路线）
 
-> 2026-08-13 编制。承接 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`。
-> 用户裁定（2026-08-13）：演进已到必须脱离原始错误设计思路的位置，**要摆脱历史
-> 决策的错误设计**，考虑彻底重构根治方案。
-> 本文件冻结根治方向与分阶段实施设计；实现与验证记录另见 WORKLOG。
-
----
-
-## 〇、根治目标（从原始架构意图出发）
-
-原始类型系统架构文档（git 2138870a）已给出正确设计，M1-M5 迁移未按此改造特化机制。
-本重建把特化机制**拉回原始意图 + 修正其过时部分**：
-
-| 原始意图 | 本方案落地 |
-|---------|-----------|
-| "特化机制是一个**纯函数**……比每特化造 ListSpec 然后注册简洁数十倍"（§8.1） | **特化 spec 由声明驱动的纯函数构建**（`GenericTypeDeclaration.build` 唯一权威），`SpecFactory.create_*` 收尾 |
-| "**泛型实参随值走**，不依赖外部上下文"（§7.2） | 值对象 type_ref 携带结构化实参（含句柄类），值创建点统一侧表绑定 |
-| "类型引用必须**结构化、递归**（不是字符串拼接）"（§0） | 特化构建接口全面 TypeRef 化，`TypeRef.of(泛型名)` 全禁用 |
-| "编译产物纯数据，运行时**不能动态创建新类型**"（§5.3） | 运行时特化类水化收敛到加载期；sealed 后 `_specialize` 字符串魔法回落删除 |
+> 2026-08-13 编制。**v2（重启分析后重写）**。
+> 用户质询：为什么是"拉回原始架构意图"？原始文档是更正确还是更落后？
+> 要求从架构远景 + 长远收益判断，绝不机械遵循历史文档。
+> **v2 结论：拉回原始架构意图是错误方向——那会走回头路（擦除式）。当前物化路线
+> 正确（C#/Kotlin reified 现代主流），真正要修的是物化路线的实现缺陷。**
 
 ---
 
-## 一、根治方向（统一根因 → 三个桩）
+## 〇、v1 的框架错误（诚实记录）
 
-### 桩 1（P0）：`GenericTypeDeclaration.build` + `SpecFactory.create_*` 字符串接口 → 结构化 TypeRef 接口
+v1（`_TYPE_SYSTEM_REBUILD.md` 初版）把"特化机制拉回原始架构意图（2138870a）"作为
+根治方向。**重启分析后确认这是框架错误**：
 
-**现状**：`_assignability.py:275` 把内层实参名（`a.name`）作字符串传给 `build`；
-`generic.py:_build_*` 经 `factory.create_list(element_type_name=...)` 用
-`TypeRef.of("list[int]")` 扁平化——**这是唯一特化创建点，嵌套实参在此丢失结构**。
+1. **混淆了原始文档的"原则"与"机制"**：原始文档的正确原则是"类型引用结构化递归
+   （不是字符串拼接）"；但 §8.1 的"特化机制是纯函数 substitute，不落地新 TypeDef"
+   是**擦除式泛型**的机制，与"物化"对立。
+2. **隐含"历史文档=权威"的错误前提**：用户明确要求"遵循架构文档的前提是文档的正确性
+   与长期收益，绝不机械遵循历史文档"。我 v1 用"拉回原始意图"作框架，正是机械遵循。
+3. **未评估现代语言主流**：主流现代语言（C#/Kotlin/Rust）的 reified/monomorphization
+   都是**物化**路线，IBCI 当前实现恰与此一致。
 
-**改动**：
-- `GenericTypeDeclaration.build` 签名：`(factory, args: List[TypeRef], arg_modules) -> TypeDef`
-  （原 `List[str]`）。
-- `SpecFactory.create_list/dict/tuple/optional/thread/chan/slot/generator/thread_result/
-  fn_callable/behavior` 增加结构化入口（接受 TypeRef），字符串入口保留为兼容壳或删除。
-- `resolve_specialization`（_assignability.py:248-295）不再 `arg_names=[a.name]`，
-  直接传 `arg_specs` 的 TypeRef；`candidate_key` 用 `TypeRef.canonical_name` 派生（结构化）。
-- `_specialize_user_class`（:297-344）`type_args` 存结构化 TypeRef（现 `TypeRef.of(a.name)` 扁平）。
-
-**效果**：`list[list[int]]` 的 `element_type` 变结构化 `TypeRef('list',(int,))`；
-`substitute` 可穿透嵌套；descriptor 双真相（缺陷 B）同源治愈；跨引擎水化不再丢内层。
-
-**验收**：`Box[int].make(list[list[str]])` 编译期报 `SEM_TYPE_MISMATCH`（判别性回归）。
-
-### 桩 2（P1）：`get_base_name()` 收敛为单义 + 运行时值层身份统一
-
-**现状**：`base.py:251-254` 三种取值路径（`_axiom_name`/`_KIND_BASE_NAMES`/`self.name`），
-用户泛型特化 `Box[int]` 返回含方括号全名，独立 `base_name` 字段旁置；
-运行时 `_impl_cls`（ib_class.py:215）取不到族名 → 用户泛型实例回落裸 IbObject。
-
-**改动**：
-- `TypeDef.get_base_name()` 统一返回**族名**（读 `base_name` 字段优先，回落
-  `_axiom_name`/`_KIND_BASE_NAMES`/`name`），消除"含方括号全名"形态。
-- 值层 kind 分派（`_value_base_name`/`is_sequence_value`/deep_clone/runtime_serializer）
-  改用统一 `get_base_name()`，删三处平行实现。
-- **句柄类值身份**：给 thread/chan/slot/generator/thread_result 值创建点接入
-  `node_to_type` 侧表（与容器 `_bind_container_specialization` 同构），值对象按声明
-  类型 rebind 特化类；`_check_type` 对句柄值实参校验（thread[int]/thread[str] 运行时区分）。
-- sealed 运行时 `_specialize` 字符串魔法回落（ib_class.py:471-481）改为 fail-fast 或
-  真实特化类。
-
-**验收**：`type(thread[int]值)=thread[int]`；`thread[int] t = thread_str()` 运行时报错。
-
-### 桩 3（P1）：特化生命周期声明驱动——删 per-kind 手工并联表
-
-**现状**：serializer（11 分支）/ rehydrator shell（16）/ fill（9）/ factory（11）/
-from_spec（11）是 6-7 张独立 kind 硬编码表，新增一种泛型需补 ≥7 处（GENERATOR 事件实证）。
-`GenericTypeDeclaration` 只剩 build+resolve_member，serialize/restore 不经过它。
-
-**改动**：
-- `GenericTypeDeclaration` 增加 `serialize`/`restore` 生命周期钩子（或声明 `kind_fields`
-  驱动反射收集），使序列化/还原经声明路由。
-- `TypeDef.get_references()` 实现（现返回 `{}` 死通道），`serializer._collect_type`
-  结构化收集嵌套实参（`*_uid` 通道复活），rehydrator uid 重建分支不再死代码。
-- `_parse_arg_ref`（rehydrator）与 `_build_*` 统一为同一结构化解析语义。
-
-**验收**：新增泛型类型只改 `generic.py` 一处；嵌套 `list[list[int]]` 跨引擎 round-trip
-结构保真（`element_type` 结构化断言）。
-
-### 桩 4（P2）：module 身份承载（跨模块同名坍缩）
-
-**现状**：特化 spec `module_path=None` 出生即丢（`_specialize_user_class:319` 不传 module、
-内置泛型 factory 全默认 None）→ 多模块同名特化在注册表/type_pool/运行时类表三层坍缩。
-
-**改动**：特化 spec 沿基类 module 填充；`candidate_key`/`specialized_name`/`type_uid`
-三处拼接统一带 module；`_rehydrate_type_pool_spec` 按 `(module,name)` 匹配。
-（运行时 IbClass 表 name-only 是天花板，随桩 3 声明驱动一并评估。）
+**v1 唯一正确的部分**：识别出"特化创建点字符串接口扁平化嵌套实参"是实现缺陷——
+但该缺陷的修复方向是**在物化路线内修正**，不是推翻路线。
 
 ---
 
-## 二、分阶段实施计划（独立分支，全量零回归门）
+## 一、决定性分析：物化路线是正确且现代的（非历史包袱）
+
+### 1.1 主流语言泛型模型对照（2026 视角）
+
+| 模型 | 代表 | type(x) 运行时身份 | IBCI 定位 |
+|------|------|-------------------|----------|
+| **Reified（物化）** | C#、Kotlin | `List<int>` ≠ `List<string>`，运行时保留实参 | **IBCI 当前路线 ✓** |
+| **Monomorphization** | Rust、C++ | 编译期展开，运行时无泛型身份 | 与物化同方向（值层身份靠具体类型） |
+| **Erasure（擦除）** | Java、TypeScript | `type(x)` 只返回 raw type `List` | **原始文档 §8.1 的方向 ✗** |
+
+### 1.2 决定性证据（实测）
+
+| 特性 | 当前 IBCI（物化） | 原始文档纯函数 substitute（擦除） |
+|------|------------------|----------------------------------|
+| `type(list[int]值)` | `list[int]`（已工作） | 退化 `list`（丢失运行时身份） |
+| `list[int]` vs `list[str]` 运行时区分 | 可区分 + `is_assignable` 拦截（已工作） | 无法区分（值层类型安全失效） |
+| 用户类泛型 `Box[int]` | 特化类物化（与内置同构） | 无对应机制（回到内置/用户双轨） |
+| 序列化 round-trip | 保真（已工作） | 实参丢失 |
+
+**结论：IBCI 已通过缺陷一+缺陷二根治，走上 C#/Kotlin reified 现代路线。拉回原始
+架构意图 = 回到 Java erasure 过时方向 = 走回头路 + 回归已修特性。**
+
+### 1.3 真正的历史包袱是什么？
+
+历史包袱**不是"物化路线"**，而是：
+
+- **创建点字符串接口**（`GenericTypeDeclaration.build`/`SpecFactory.create_*` 接受
+  `List[str]`，`TypeRef.of("list[int]")` 扁平化）——这是 2026-05 时代字符串 spec 的
+  残留，物化路线不应继承。
+- **per-kind 手工并联表**（serializer/rehydrator/factory/from_spec 6-7 张）——工程
+  组织缺陷，非路线问题。
+- **句柄类值身份未覆盖**（物化覆盖不完整：容器水化了，thread/chan/slot/generator 没）——
+  物化路线应一致性覆盖，当前是缺口。
+
+**这些才是要"摆脱"的历史决策残留——它们与原始文档的过时机制同源（字符串构建），
+但修复方向是"物化路线内结构化"，不是"回到擦除"。**
+
+---
+
+## 二、根治方向（v2 修正）
+
+**目标模型：物化特化身份（Reified Specialization Identity）——保持运行时一等特化
+类身份（C#/Kotlin 路线），在物化路线内彻底结构化。**
+
+| 桩 | v1 表述（拉回原始意图） | v2 修正（物化路线内结构化） |
+|----|------------------------|---------------------------|
+| 桩1 | build/create_* 结构化 TypeRef 接口 | 同（创建点字符串→结构化）——但**保留特化 spec 物化注册**，非纯函数 substitute |
+| 桩2 | get_base_name 单义 + 句柄类侧表 | 同（身份单义 + 覆盖完整） |
+| 桩3 | 特化生命周期声明驱动 | 同（删 per-kind 手工表，声明驱动） |
+| 桩4 | module 承载 | 同 |
+
+**关键修正**：桩1 的 `resolve_specialization` **保留物化注册**（特化 spec 仍落注册表、
+特化类仍水化），只是把创建点的**输入从字符串换成结构化 TypeRef**。这与 C# 的
+`List<int>` 物化一致——物化不代表丢结构，恰恰相反，物化的前提就是结构保真。
+
+---
+
+## 三、七个表面边界 → v2 处置（物化路线内）
+
+| # | 边界 | v2 判定 | 与路线的关系 |
+|---|------|---------|-------------|
+| 1/7 | 句柄类值身份未水化 | **修**：物化覆盖一致性扩展（thread/chan/slot/generator 水化 + 创建点侧表） | 物化路线内补齐 |
+| 2 | type_pool 按 name 匹配 | **修**：module 承载 + (module,name) 匹配 | 物化身份保真 |
+| 3 | generator value_type 扁平化 | **修**：创建点结构化（桩1） | 物化前提 |
+| 4 | 元组解包不检查 | **修**：按位置 is_assignable | 独立语言缺口 |
+| 5 | -> auto 实参推断 | **修**：容器字面量带实参推断 | 独立推断缺口 |
+| 6 | *expr | 部分缓解（元素级） | 根本限制 |
+| 7 | 句柄类值身份（同#1） | 同 #1 | — |
+
+---
+
+## 四、分阶段实施计划（独立分支，全量零回归门）
 
 | 阶段 | 内容 | 风险 | 判别性回归 |
 |------|------|------|-----------|
 | **S0** | 基线固化 + 独立分支 `exp/type-identity-rebuild` + 现状测试快照 | 零 | — |
-| **S1** | 桩 1：build/create_* 结构化 TypeRef 接口 + resolve_specialization 改造 | 中（内核 spec 层 + 语义层消费方 45+ resolve_typeref） | `Box[int].make(list[list[str]])` 编译期拦截 |
-| **S2** | 桩 1 连带：descriptor 双真相收敛（param_types/param_descriptors 单一构造源） | 中（_declaration_visitors/symbol_collection） | descriptor 与 param_types 结构一致断言 |
-| **S3** | 桩 2：get_base_name 单义 + 运行时值层身份统一（句柄类侧表 + _check_type + 删字符串魔法） | 高（运行时值层 70+ ib_class.name 消费点） | 句柄类值 type() 一致 + 运行时实参校验 |
-| **S4** | 桩 3：声明驱动序列化/还原 + get_references 复活 | 中（serializer/rehydrator） | 嵌套泛型跨引擎 round-trip 结构断言 |
-| **S5** | 桩 4：module 承载 + 三处拼接统一 | 低-中 | 多模块同名特化区分 |
-| **S6** | 已知边界重估：`-> auto` 推断 / 元组解包检查 / `*expr` 元素级 | 中 | 每项判别性回归 |
-| **S7** | 文档治理：generic.py docstring restore 残留 / 02_metadata_ast §2.4 校准 / L1-L5 重估 | 零 | — |
-
-**每阶段门**：全量 pytest 零回归 + 判别性回归 + 独立复核（general agent）+ commit。
-**分支政策**：S1-S6 独立分支 `exp/type-identity-rebuild` 实验；每阶段确认零风险后
-手动 cherry-pick 更新 unsafe-vibe-dev；**不触碰 main**。
+| **S1** | 桩1：build/create_* 结构化 TypeRef 接口 + resolve_specialization 结构化（**保留物化注册**） | 中 | `Box[int].make(list[list[str]])` 编译期拦截 + `type(list[list[int]]值)=list[list[int]]` |
+| **S2** | descriptor 双真相收敛（param_types/param_descriptors 单一构造源） | 中 | descriptor 与 param_types 结构一致断言 |
+| **S3** | 桩2：get_base_name 单义 + 句柄类值身份物化覆盖（水化 + 侧表 + _check_type） | 高 | `type(thread[int]值)=thread[int]` + 运行时实参校验 |
+| **S4** | 桩3：声明驱动序列化/还原 + get_references 复活 | 中 | 嵌套泛型跨引擎 round-trip 结构断言 |
+| **S5** | 桩4：module 承载 | 低-中 | 多模块同名特化区分 |
+| **S6** | 元组解包检查 / -> auto 推断 / *expr 元素级 | 中 | 每项判别性回归 |
+| **S7** | 文档治理 + 已知边界重估 | 零 | — |
 
 ---
 
-## 三、改造面量化（实测）
+## 五、改造面量化（实测）
 
 | 面 | 数量 | 说明 |
 |----|------|------|
-| `create_*` 字符串接口调用点 | 43 | 桩 1 主战场 |
-| `resolve_typeref` 消费点 | 45 | 桩 1 连带验证 |
-| `get_base_name()` 消费点 | 38 | 桩 2 |
-| `ib_class.name` 直接使用 | 70 | 桩 2 运行时身份 |
-| `TypeRef.of(` 调用 | 112 | 须审计：纯名构造合法 vs 泛型名扁平构造（禁） |
-| `substitute(` 调用 | 9 | 桩 1 受益方 |
-| 序列化 kind 分支 | 26 | 桩 3 |
+| `create_*` 字符串接口调用点 | 43 | 桩1 主战场 |
+| `resolve_typeref` 消费点 | 45 | 桩1 连带验证 |
+| `get_base_name()` 消费点 | 38 | 桩2 |
+| `ib_class.name` 直接使用 | 70 | 桩2 运行时身份 |
+| `TypeRef.of(` 调用 | 112 | 审计：纯名构造合法 vs 泛型名扁平构造（禁） |
+| `substitute(` 调用 | 9 | 桩1 受益方 |
+| 序列化 kind 分支 | 26 | 桩3 |
 | 泛型/特化相关测试 | 49 文件 / 57 用例 | 判别性回归素材 |
 | 全量测试 | 124 文件 / 2586 passed | 零回归门 |
 
 ---
 
-## 四、风险与对策
+## 六、风险与对策
 
-1. **TypeRef.of( 112 处审计**：区分"纯名构造（合法）"与"泛型名扁平构造（禁）"——后者
-   是缺陷 A 的复现点，逐处迁移到结构化。S1 前置一个全仓扫描，产出"禁点清单"。
-2. **运行时值层 70 处 ib_class.name**：多数是分派惯用法（沿基名），随桩 2 的
-   `get_base_name()` 统一后自动对齐；须逐处确认无"含方括号全名匹配"依赖。
-3. **序列化格式兼容**：编译器产物版本字段（"2.1"）——桩 3 若改线协议字段，须保留
-   旧版读取（或版本提升 + 迁移）；评估后决定。
-4. **行为漂移**：`is_assignable` 裸→特化方向、协变、Optional 分支等既有语义
-   必须保留（全量测试守护）。
+1. **TypeRef.of( 112 处审计**：区分"纯名构造（合法）"与"泛型名扁平构造（禁）"——
+   后者是扁平化复现点，逐处迁移结构化。S1 前置全仓扫描，产出"禁点清单"。
+2. **运行时值层 70 处 ib_class.name**：多数是分派惯用法（沿基名），随桩2 的
+   `get_base_name()` 统一后自动对齐；逐处确认无"含方括号全名匹配"依赖。
+3. **序列化格式兼容**：产物版本字段——桩3 若改线协议字段，保留旧版读取或版本提升。
+4. **行为漂移**：`is_assignable` 裸→特化方向、协变、Optional 分支等既有语义必须保留
+   （全量测试守护）。
 
 ---
 
-## 五、非目标（明确不做）
+## 七、为什么这不是"为原始文档背书"也不是"走回头路"
 
+1. **不是为原始文档背书**：v1 确实犯了"拉回原始意图"的框架错误；v2 明确放弃该框架，
+   改为在**现代 reified 物化路线**（C#/Kotlin 主流）内修正实现缺陷。原始文档 §8.1 的
+   纯函数 substitute（擦除式）被**明确拒绝**——因为它会让已实现的运行时类型身份
+   特性回归。
+2. **不是走回头路**：v2 保留当前物化路线（已与用户类泛型、值层身份根治一致的
+   C#/Kotlin 方向），只修正其实现缺陷（创建点字符串接口 / per-kind 手工表 / 句柄类
+   覆盖缺口）。这些缺陷与原始文档的过时机制同源（字符串构建），修复方向是"物化内
+   结构化"。
+3. **长期收益**：物化路线让 `type(x)` 内省、运行时值层类型安全、序列化 round-trip
+   这些 IBCI 差异化特性成立；结构化创建点 + 声明驱动生命周期让新增泛型类型从 7 处
+   手工补丁收敛为 1 处声明。两者叠加是"现代 + 干净"。
+
+---
+
+## 八、非目标（明确不做）
+
+- **不**改为擦除式泛型（Java 方向）——会回归 `type(list[int]值)=list[int]` 特性。
+- **不**删除特化 spec 物化注册/特化类水化——那是 reified 路线核心。
 - 不重写 TypeRef 数据结构（已正确）。
-- 不重写 Axiom 字符串边界（§4.3，公理层纯字符串是既定架构；结构化交给 spec 层）。
-- 不引入用户级泛型 bound 约束 / 更复杂类型推断（PT-FEAT-3 边界不变）。
+- 不动 Axiom 字符串边界（公理层纯字符串是既定架构）。
+- 不引入用户级泛型 bound 约束（PT-FEAT-3 边界不变）。
 - 不动 `*expr` 的静态限制本质（仅元素级缓解）。
-
----
-
-## 六、验收总纲
-
-- **根因级**：`list[list[int]]` spec.element_type 结构化断言（unit）；
-  `Box[int].make(list[list[str]])` 编译期拦截（判别性回归）。
-- **身份级**：句柄类值 `type()` 一致；`thread[int]`/`thread[str]` 运行时区分。
-- **生命周期级**：嵌套泛型跨引擎 round-trip 结构保真；新增泛型只改声明一处。
-- **回归级**：全量 pytest 零回归（2586/1 基线）+ 独立复核 + 分支政策。

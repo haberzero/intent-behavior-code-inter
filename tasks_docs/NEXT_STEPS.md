@@ -407,14 +407,18 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   B5 meta docstring 历史锚定扫描规则永久化。
 
 - **🔴 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
-  - **类型体系地基地基根治（用户裁定 2026-08-13：演进已到必须脱离原始错误设计思路的位置，要摆脱历史决策的错误设计）**：
-    设计冻结 `tasks_docs/_TYPE_SYSTEM_REBUILD.md`（承接地基深挖 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`）。
-    **根治方向 = 把泛型特化机制拉回原始架构意图**（2138870a：结构化递归 TypeRef + 纯函数 substitute + 泛型实参随值走）：
-    ① 桩1 `GenericTypeDeclaration.build`+`SpecFactory.create_*` 字符串接口 → 结构化 TypeRef 接口（唯一特化创建点扁平化根治）；
-    ② 桩2 `get_base_name()` 单义 + 运行时值层身份统一（句柄类 node_to_type 侧表 + 删 sealed 字符串魔法回落）；
-    ③ 桩3 特化生命周期声明驱动（serialize/restore 经 GenericTypeDeclaration，删 7+ per-kind 手工并联表）；
-    ④ 桩4 module 身份承载（跨模块同名坍缩）。
-    **分阶段 S0-S7**（独立分支 exp/type-identity-rebuild，每阶段全量零回归 + 判别性回归 + 独立复核 + cherry-pick 更新 unsafe-vibe-dev）。改造面量化：create_* 43 调用点 / resolve_typeref 45 / get_base_name 38 / ib_class.name 70 / TypeRef.of 112（禁点清单审计）。
+  - **类型体系地基根治（用户裁定 2026-08-13：摆脱历史错误设计；v2 重启分析确认方向）**：
+    设计冻结 `tasks_docs/_TYPE_SYSTEM_REBUILD.md`（v2）+ 地基深挖 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`。
+    **v2 关键修正（决定性分析）**：**不是拉回原始架构意图**——原始文档 §8.1"纯函数 substitute"
+    是擦除式泛型方向，照搬会让已实现的 `type(list[int]值)=list[int]` 运行时身份特性回归。
+    当前"物化特化类"路线（C#/Kotlin reified 现代主流）正确，**真正要修的是物化路线内的
+    实现缺陷**：① 桩1 `GenericTypeDeclaration.build`+`SpecFactory.create_*` 字符串接口 →
+    结构化 TypeRef 接口（创建点扁平化根治，**保留物化注册**）；② 桩2 `get_base_name()` 单义 +
+    句柄类值身份物化覆盖完整（thread/chan/slot/generator 水化 + 侧表 + 删 sealed 字符串魔法）；
+    ③ 桩3 特化生命周期声明驱动（serialize/restore 经 GenericTypeDeclaration，删 per-kind 手工表）；
+    ④ 桩4 module 承载。**分阶段 S0-S7**（独立分支 exp/type-identity-rebuild，每阶段全量零回归 +
+    判别性回归 + 独立复核 + cherry-pick 更新 unsafe-vibe-dev）。改造面：create_* 43 / resolve_typeref 45 /
+    get_base_name 38 / ib_class.name 70 / TypeRef.of 112（禁点清单审计）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。
