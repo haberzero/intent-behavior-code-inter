@@ -3,7 +3,8 @@
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
 > **最后更新**：2026-08-13（**试用体系重构 + GEN-5/GEN-6 架构级修复 + spec→TypeRef 收敛
-> + 测试套件重构 + 内置泛型类型身份双轨根治（缺陷一+缺陷二）+ 值层身份收敛 + 泛型剩余边界交接全部完成**；全量 **2586 passed / 1 skipped**；
+> + 测试套件重构 + 内置泛型类型身份双轨根治（缺陷一+缺陷二）+ 值层身份收敛 + 泛型剩余边界交接
+> + 类型体系地基地基深挖分析 + 文档化记录核实 + 根治方案冻结全部完成**；全量 **2586 passed / 1 skipped**；
 > 见下方"已完成"与"交接要点"节）
 
 ---
@@ -406,15 +407,14 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   B5 meta docstring 历史锚定扫描规则永久化。
 
 - **🔴 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
-  - **泛型体系剩余边界彻底修复**（用户裁定 2026-08-13，交接文档 `_HANDOFF_GENERIC_REMAINING.md` +
-    **地基深挖分析 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`（2026-08-13）**）：
-    **深度分析证实：7 项表面边界中 6 项同源于同一地基缺陷——"类型身份无单一结构化权威模型
-    + 特化创建点扁平化嵌套实参"**。**根治点 = `GenericTypeDeclaration.build`/`SpecFactory.create_*`
-    从字符串接口升级为结构化 TypeRef 接口**（改一处治愈 B/C/D/G/H 下游）。处理顺序修正：
-    ③ 结构化构建（根治点）先于 ② name 匹配（表层补丁）。明细：① 句柄类值身份水化（须先给
-    句柄值创建点接入 node_to_type 侧表 + rebind，仅水化白名单不足）；② `_rehydrate_type_pool_spec`
-    module 匹配（先修特化 spec module 承载）；③ generator value_type 结构化 + `_slice_type_objs_for`
-    健壮化；④ 元组解包类型检查（依赖 ③）；⑤ `-> auto` 泛型实参推断（依赖 ③）；⑥ `*expr` 部分缓解（真局部根本限制）。
+  - **类型体系地基地基根治（用户裁定 2026-08-13：演进已到必须脱离原始错误设计思路的位置，要摆脱历史决策的错误设计）**：
+    设计冻结 `tasks_docs/_TYPE_SYSTEM_REBUILD.md`（承接地基深挖 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`）。
+    **根治方向 = 把泛型特化机制拉回原始架构意图**（2138870a：结构化递归 TypeRef + 纯函数 substitute + 泛型实参随值走）：
+    ① 桩1 `GenericTypeDeclaration.build`+`SpecFactory.create_*` 字符串接口 → 结构化 TypeRef 接口（唯一特化创建点扁平化根治）；
+    ② 桩2 `get_base_name()` 单义 + 运行时值层身份统一（句柄类 node_to_type 侧表 + 删 sealed 字符串魔法回落）；
+    ③ 桩3 特化生命周期声明驱动（serialize/restore 经 GenericTypeDeclaration，删 7+ per-kind 手工并联表）；
+    ④ 桩4 module 身份承载（跨模块同名坍缩）。
+    **分阶段 S0-S7**（独立分支 exp/type-identity-rebuild，每阶段全量零回归 + 判别性回归 + 独立复核 + cherry-pick 更新 unsafe-vibe-dev）。改造面量化：create_* 43 调用点 / resolve_typeref 45 / get_base_name 38 / ib_class.name 70 / TypeRef.of 112（禁点清单审计）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。
