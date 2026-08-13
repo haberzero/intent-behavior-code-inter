@@ -3,7 +3,7 @@
 > 2026-08-12。重点检测最近泛型修复（G1 方法体 / G2 自引用 / BOUNDARY-G1 非法实参 /
 > 双通道 descriptors）成果。每例一行：用例 / 期望 vs 实际 / 分类 / 级别 / 证据日志。
 > 分类：PASS | KERNEL_ISSUE | BOUNDARY | GUARD（守卫生效）。
-> 全部经死循环保护 harness（进程组 SIGKILL + --max-inst + timeout）；29 用例 + 1 冒烟，
+> 全部经死循环保护 harness（进程组 SIGKILL + --max-inst + timeout）；31 用例 + 1 冒烟，
 > 唯一 TIMEOUT-KILLED 为死循环保护冒烟验证本身。
 > **规范（2026-08-13 迁移）**：本套现位于 `trials/T04_generics_fix_regression/`；分类/级别/编号
 > 规范见 `trials/_toolkit/CLASSIFICATION.md`。缺陷编号已映射为新格式（见文末"编号映射"节）。
@@ -12,7 +12,7 @@
 
 ## 结果总览
 
-- **用例总数**：28 个用例 + 1 冒烟；29 次 harness 运行；全部经死循环保护。
+- **用例总数**：31 个用例 + 1 冒烟；32 次 harness 运行；全部经死循环保护。
 - **修复成果验证（PASS）**：G1 方法体类型参数（R2 全组含嵌套/多参数/交替/生成器/深层）、
   BOUNDARY-G1 非法实参守卫（R3 全组含 None/void/auto/嵌套/正向/thread[void]）、
   双通道 descriptors（R4 全组含嵌套/多参数/继承）、G2 自引用基础（R1-01~04）。

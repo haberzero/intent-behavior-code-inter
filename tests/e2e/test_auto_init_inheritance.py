@@ -105,6 +105,22 @@ Sub s = Sub(5)
 """
         expect_runtime_error(code, "missing required argument")
 
+    def test_explicit_init_ancestor_bypassed(self):
+        # 祖先显式 __init__ + 子类 auto-init：子类 auto-init 接管全链 decl-only 字段，
+        # 祖先 init 副作用不执行（KNOWN_LIMITS §六 note：auto-init 不调用祖先 __init__）。
+        code = """class Base:
+    int data
+    func __init__(self, int v) -> auto:
+        self.data = v * 2
+class Sub(Base):
+    str tag
+Sub s = Sub(5, "A")
+print((str)s.data)
+print(s.tag)
+"""
+        lines = run_ibci(code)
+        assert lines == ["5", "A"]
+
 
 class TestDynamicAnyRecheckUserClass:
     def test_any_class_object_to_user_class_raises(self):
