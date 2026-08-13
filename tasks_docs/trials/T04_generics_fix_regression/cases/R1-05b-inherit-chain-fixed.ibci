@@ -1,6 +1,9 @@
 # R1-05b G3 修复后适配：chain-aware auto-init 多参构造（历史 R1-05 为冻结证据）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望输出: d1=A:5 / d2=6 / DONE
+# expect-class: PASS
+# expect-out: d1=A:5 | d2=6 | DONE
+# expect-exit: 0
 # 2026-08-13 新增：G3 修复（auto-init 合并继承链无默认值字段）后，Linked[int](data, tag)
 # 一并绑定父类字段 data 与自身字段 tag；历史 R1-05 保持原始单参形态作为缺陷证据。
 import ai

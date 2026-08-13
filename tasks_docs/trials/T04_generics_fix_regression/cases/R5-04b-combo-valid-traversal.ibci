@@ -1,6 +1,9 @@
 # R5-04b 组合轰炸适配：合法链遍历（历史 R5-04 为冻结证据，其 None 哨兵模式不可行）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望输出: total=6 / make=20 / DONE
+# expect-class: PASS
+# expect-out: total=6 | make=20 | DONE
+# expect-exit: 0
 # 2026-08-13 新增：Node[int]（非 Optional）编译期禁止赋 None，`while cur is not None`
 # 哨兵模式类型不可行（历史 R5-04 冻结为缺陷证据）。本用例用固定次数遍历验证自引用链 +
 # 容器 + 控制流组合；Box 用简单实参规避 GEN-5（嵌套内置泛型实参特化注册缺失，独立用例
