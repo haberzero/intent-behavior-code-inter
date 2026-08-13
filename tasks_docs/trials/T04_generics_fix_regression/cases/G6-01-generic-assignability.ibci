@@ -1,0 +1,14 @@
+# G6-01 内置泛型赋值实参校验（缺陷一触发用例）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: list[str] 传 list[int] 参数编译期拦截（修复前静默放行，错误类型流入）
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+import ai
+ai.set_mock_mode()
+func consume(list[int] items) -> void:
+    print("consumed")
+
+list[str] strs = ["a", "b"]
+consume(strs)
+print("DONE")

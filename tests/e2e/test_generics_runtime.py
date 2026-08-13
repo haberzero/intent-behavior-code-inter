@@ -188,6 +188,46 @@ class TestListGetitem:
 
 
 # ===========================================================================
+# 内置泛型特化实参赋值运行时判别（缺陷一：X[int] → X[str] 编译期拦截）
+# ===========================================================================
+
+class TestBuiltinGenericAssignabilityRuntime:
+    """语言层判别：内置泛型特化实参不匹配编译期拦截（compile + e2e 双向）。"""
+
+    def test_list_str_into_list_int_param_rejected(self):
+        """list[str] 传 list[int] 参数编译期报 SEM_TYPE_MISMATCH（修复前放行）。"""
+        _, errors = _compile_code(
+            "func consume(list[int] items) -> void:\n"
+            "    return\n"
+            "list[str] strs = [\"a\"]\n"
+            "consume(strs)\n"
+        )
+        assert "SEM_TYPE_MISMATCH" in {d.code for d in errors}, (
+            f"Expected SEM_TYPE_MISMATCH, got {[d.code for d in errors]}"
+        )
+
+    def test_thread_int_into_thread_str_annotation_rejected(self):
+        """thread[int] 赋给 thread[str] 变量编译期报 SEM_TYPE_MISMATCH。"""
+        _, errors = _compile_code(
+            "func compute() -> int:\n"
+            "    return 42\n"
+            "thread[int] t = thread(callable=compute, args=[])\n"
+            "thread[str] t2 = t\n"
+        )
+        assert "SEM_TYPE_MISMATCH" in {d.code for d in errors}
+
+    def test_list_int_into_list_int_param_ok(self):
+        """同家族同实参正常编译运行（不误报）。"""
+        lines = run_ibci(
+            "func consume(list[int] items) -> void:\n"
+            "    print(items)\n"
+            "list[int] nums = [1, 2]\n"
+            "consume(nums)\n"
+        )
+        assert lines and "[1, 2]" in lines[0]
+
+
+# ===========================================================================
 # Nested generic subscript — list[list[int]][0] → list[int]
 # ===========================================================================
 

@@ -62,6 +62,36 @@ class _AssignabilityMixin:
         if src.name == target.name and src.module_path == target.module_path:
             return True
 
+        # 内置泛型特化实参比较（缺陷一根治）：同泛型家族（list/dict/tuple/thread/
+        # chan/slot/generator/fn_callable/behavior）的赋值必须校验特化实参——axiom
+        # ``is_compatible`` 此前用前缀匹配（``startswith("list[")``）无视实参，导致
+        # ``list[int]`` 可赋给 ``list[str]`` 等错误类型静默流入。此处按结构化实参
+        # 逐个 ``is_assignable`` 递归（与用户类泛型特化（type_args）路径机制同构）。
+        # 用户类（CLASS kind）不走本分支：其无 axiom、经 name 比较 + 继承链已正确拦截。
+        if (
+            src.kind != TypeKind.CLASS.value
+            and target.kind != TypeKind.CLASS.value
+        ):
+            src_fam = src.get_base_name()
+            if src_fam and src_fam == target.get_base_name():
+                src_args = self._generic_spec_args(src)
+                tgt_args = self._generic_spec_args(target)
+                if src_args:
+                    if not tgt_args:
+                        # 协变：list[int] → list（特化 → 裸基类）放行。
+                        return True
+                    if len(src_args) != len(tgt_args):
+                        # 实参数量不匹配（如 dict 单键 vs 双键、tuple 位置元素数不等）。
+                        return False
+                    for sa, ta in zip(src_args, tgt_args):
+                        s_spec = self.resolve_typeref(sa) or self.resolve("any")
+                        t_spec = self.resolve_typeref(ta) or self.resolve("any")
+                        if not self.is_assignable(s_spec, t_spec):
+                            return False
+                    return True
+                # src 为裸基类（无实参）→ 保持既有语义（axiom 前缀匹配放行），
+                # 不在本分支收紧"裸 → 特化"方向（另一语义决策点）。
+
         # Multi-type list compatibility: list[int,str] is assignable to list or list[int,str]
         if src.kind == TypeKind.LIST.value and target.kind == TypeKind.LIST.value:
             src_allowed = src.allowed_element_types
@@ -132,6 +162,55 @@ class _AssignabilityMixin:
                         and not self.is_assignable(src_ret_spec, tgt_ret_spec)):
                     return False
         return True
+
+    def _generic_spec_args(self, spec: IbSpec) -> List[TypeRef]:
+        """提取内置泛型特化 spec 的结构化实参 TypeRef 列表。
+
+        各 kind 的实参承载字段（与 ``SpecFactory``/``TypeRef.from_spec`` 同构，
+        单一权威源）：
+        - list → ``element_type``；dict → ``key_type`` + ``value_type``
+        - tuple → ``positional_element_types``（多参）或 ``element_type``（单参）
+        - thread/thread_result/chan/slot/generator → ``value_type``
+        - fn_callable/behavior → ``value_type``（语义 = 返回类型，与用户类泛型
+          实参意义不同：``fn_callable[int]`` 的 ``int`` 是调用返回类型）
+        - 裸基类（无实参）返回空列表——调用方据此区分"特化 vs 裸"。
+
+        返回空列表表示"裸类型/无实参"，不参与实参比较。
+        """
+        kind = spec.kind
+        if kind == TypeKind.LIST.value:
+            el = spec.element_type
+            if el is not None and el.head != "any":
+                return [el]
+            return []
+        if kind == TypeKind.DICT.value:
+            args = []
+            if spec.key_type is not None and spec.key_type.head != "any":
+                args.append(spec.key_type)
+            if spec.value_type is not None and spec.value_type.head != "any":
+                args.append(spec.value_type)
+            return args
+        if kind == TypeKind.TUPLE.value:
+            pos = getattr(spec, "positional_element_types", None) or []
+            if pos:
+                return list(pos)
+            el = spec.element_type
+            if el is not None and el.head != "any":
+                return [el]
+            return []
+        if kind in (
+            TypeKind.THREAD.value,
+            TypeKind.THREAD_RESULT.value,
+            TypeKind.CHANNEL.value,
+            TypeKind.SLOT.value,
+            TypeKind.GENERATOR.value,
+            TypeKind.CALLABLE_INSTANCE.value,
+        ):
+            val = spec.value_type
+            if val is not None and val.head not in ("any", "auto", "", None):
+                return [val]
+            return []
+        return []
 
     def resolve_specialization(
         self,

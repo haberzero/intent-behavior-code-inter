@@ -577,7 +577,7 @@ class ExpressionVisitorsMixin:
                 and not self.registry.is_dynamic(actual_spec)
                 and not self.registry.is_assignable(actual_spec, exp_spec)):
             self.error(
-                f"Argument '{name}' type mismatch: expected '{descriptor.type_ref.head}', "
+                f"Argument '{name}' type mismatch: expected '{exp_spec.name}', "
                 f"but got '{actual_spec.name}'.",
                 node, code=SEM_TYPE_MISMATCH,
                 hint=self.registry.get_diff_hint(actual_spec, exp_spec),

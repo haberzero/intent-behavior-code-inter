@@ -10,6 +10,8 @@ tests/compiler/test_generics.py — 泛型编译期契约（compile-only）。
 
 运行时执行用例见 tests/e2e/test_generics_runtime.py（mixed-concerns 拆分）。
 """
+import pytest
+
 from core.kernel.factory import create_default_registry
 from core.kernel.issue import CompilerError
 from core.kernel.spec import SpecRegistry, TypeDef
@@ -76,6 +78,126 @@ class TestSpecializationCache:
         created = reg.resolve_specialization(list_spec, [int_spec])
         looked_up = reg.resolve("list[int]")
         assert created is looked_up
+
+
+# ===========================================================================
+# 内置泛型赋值特化实参校验（缺陷一：X[int] → X[str] 编译期拦截）
+# ===========================================================================
+
+class TestGenericAssignability:
+    """内置泛型同家族特化赋值必须校验实参（axiom 前缀匹配缺陷根治）。
+
+    修复前：axiom ``is_compatible`` 用 ``startswith("list[")`` 前缀匹配无视实参，
+    10/11 类内置泛型 ``X[int]`` 可赋给 ``X[str]``（Optional 与用户类本就正确拦截）。
+    修复后：``is_assignable`` 在 axiom 兼容前先做同家族结构化实参比较。
+    """
+
+    def _specialize(self, reg, base: str, *arg_names: str):
+        base_spec = reg.resolve(base)
+        args = [reg.resolve(a) for a in arg_names]
+        return reg.resolve_specialization(base_spec, args)
+
+    @pytest.mark.parametrize("base,args_src,args_tgt", [
+        ("thread", ["int"], ["str"]),
+        ("thread_result", ["int"], ["str"]),
+        ("chan", ["int"], ["str"]),
+        ("slot", ["int"], ["str"]),
+        ("generator", ["int"], ["str"]),
+        ("fn_callable", ["int"], ["str"]),
+        ("behavior", ["int"], ["str"]),
+        ("list", ["int"], ["str"]),
+        ("tuple", ["int", "str"], ["str", "int"]),
+    ])
+    def test_same_family_mismatched_args_rejected(self, base, args_src, args_tgt):
+        """同泛型家族、实参不兼容（X[int]→X[str]）必须拒绝。"""
+        reg = make_registry()
+        src = self._specialize(reg, base, *args_src)
+        tgt = self._specialize(reg, base, *args_tgt)
+        assert not reg.is_assignable(src, tgt), (
+            f"{src.name} should NOT be assignable to {tgt.name}"
+        )
+
+    def test_dict_mismatched_value_type_rejected(self):
+        """dict[str,int] → dict[str,str] 必须拒绝（key 同、value 异）。"""
+        reg = make_registry()
+        src = self._specialize(reg, "dict", "str", "int")
+        tgt = self._specialize(reg, "dict", "str", "str")
+        assert not reg.is_assignable(src, tgt)
+
+    def test_same_family_same_args_allowed(self):
+        """同泛型家族、实参相同仍放行（is_assignable 早期 :62 name 命中）。"""
+        reg = make_registry()
+        src = self._specialize(reg, "list", "int")
+        tgt = self._specialize(reg, "list", "int")
+        assert reg.is_assignable(src, tgt)
+
+    def test_covariance_specialized_to_bare_allowed(self):
+        """协变：list[int] → list（特化 → 裸基类）放行。"""
+        reg = make_registry()
+        src = self._specialize(reg, "list", "int")
+        tgt = reg.resolve("list")
+        assert reg.is_assignable(src, tgt), "list[int] should be assignable to list"
+
+    def test_bare_to_specialized_keeps_existing_semantics(self):
+        """裸 → 特化（list → list[int]）保持既有放行语义（不收紧方向）。"""
+        reg = make_registry()
+        src = reg.resolve("list")
+        tgt = self._specialize(reg, "list", "int")
+        assert reg.is_assignable(src, tgt)
+
+    def test_optional_mismatch_still_rejected(self):
+        """Optional[int] → Optional[str] 由 OPTIONAL 专门分支拦截（不回归）。"""
+        reg = make_registry()
+        src = self._specialize(reg, "Optional", "int")
+        tgt = self._specialize(reg, "Optional", "str")
+        assert not reg.is_assignable(src, tgt)
+
+    def test_non_generic_subtype_compat_preserved(self):
+        """非泛型子类型兼容（bool isa int）不受影响。"""
+        reg = make_registry()
+        assert reg.is_assignable(reg.resolve("bool"), reg.resolve("int"))
+
+    def test_nested_generic_mismatch_rejected(self):
+        """嵌套泛型实参递归：list[list[int]] → list[list[str]] 拒绝。"""
+        reg = make_registry()
+        li = self._specialize(reg, "list", "int")
+        ls = self._specialize(reg, "list", "str")
+        src = reg.resolve_specialization(reg.resolve("list"), [li])
+        tgt = reg.resolve_specialization(reg.resolve("list"), [ls])
+        assert not reg.is_assignable(src, tgt), (
+            "list[list[int]] should NOT be assignable to list[list[str]]"
+        )
+
+    def test_compile_thread_mismatch_rejected(self):
+        """语言层判别：thread[int] 赋给 thread[str] 编译期报 SEM_TYPE_MISMATCH。"""
+        expect_compile_error(
+            "func compute() -> int:\n"
+            "    return 42\n"
+            "thread[int] t = thread(callable=compute, args=[])\n"
+            "thread[str] t2 = t\n",
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_compile_list_param_mismatch_rejected(self):
+        """语言层判别：list[str] 传 list[int] 参数编译期报 SEM_TYPE_MISMATCH。"""
+        expect_compile_error(
+            "func consume(list[int] items) -> void:\n"
+            "    return\n"
+            "list[str] strs = [\"a\"]\n"
+            "consume(strs)\n",
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_compile_same_family_same_args_ok(self):
+        """同家族同实参编译通过（非误报）。"""
+        _, diagnostics = _compile_code(
+            "func compute() -> int:\n"
+            "    return 42\n"
+            "thread[int] t = thread(callable=compute, args=[])\n"
+            "thread[int] t2 = t\n"
+        )
+        errors = _sem_errors(diagnostics)
+        assert len(errors) == 0, f"Unexpected errors: {errors}"
 
 
 # ===========================================================================
