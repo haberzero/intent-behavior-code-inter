@@ -406,19 +406,14 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   B2 空洞测试强化 + B3 47 文件历史锚定措辞清理 + B4 脆弱断言评估（4 类均合理保留）+
   B5 meta docstring 历史锚定扫描规则永久化。
 
-- **🔴 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
-  - **类型体系地基根治（用户裁定 2026-08-13：摆脱历史错误设计；v2 重启分析确认方向）**：
-    设计冻结 `tasks_docs/_TYPE_SYSTEM_REBUILD.md`（v2）+ 地基深挖 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`。
-    **v2 关键修正（决定性分析）**：**不是拉回原始架构意图**——原始文档 §8.1"纯函数 substitute"
-    是擦除式泛型方向，照搬会让已实现的 `type(list[int]值)=list[int]` 运行时身份特性回归。
-    当前"物化特化类"路线（C#/Kotlin reified 现代主流）正确，**真正要修的是物化路线内的
-    实现缺陷**：① 桩1 `GenericTypeDeclaration.build`+`SpecFactory.create_*` 字符串接口 →
-    结构化 TypeRef 接口（创建点扁平化根治，**保留物化注册**）；② 桩2 `get_base_name()` 单义 +
-    句柄类值身份物化覆盖完整（thread/chan/slot/generator 水化 + 侧表 + 删 sealed 字符串魔法）；
-    ③ 桩3 特化生命周期声明驱动（serialize/restore 经 GenericTypeDeclaration，删 per-kind 手工表）；
-    ④ 桩4 module 承载。**分阶段 S0-S7**（独立分支 exp/type-identity-rebuild，每阶段全量零回归 +
-    判别性回归 + 独立复核 + cherry-pick 更新 unsafe-vibe-dev）。改造面：create_* 43 / resolve_typeref 45 /
-    get_base_name 38 / ib_class.name 70 / TypeRef.of 112（禁点清单审计）。
+- **✅ 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
+  - **✅ 类型体系地基根治已完成（S0-S7 + 遗留边界，全量 2608/1）**：见上方"已完成"节。
+  - **🔴 跨模块同名类运行时类表 module 化（2026-08-14 用户指出，待彻底修复）**：
+    S5 只根治编译期/元数据层；**运行时类表仍 name-only 坍缩（方法表串扰，实证
+    `geo.Box[int](5).get()` 报 `int+str` 错误）**。完整交接见
+    `_HANDOFF_GENERIC_REMAINING.md` §九——运行时类表 module 感知键（bootstrapper/
+    registry 81 处 get_class 审计 + _specialize + artifact_loader + 跨引擎 round-trip），
+    高风险，独立分支实验，判别性回归（geo.Box.get()=105 / graph.Box.get()="hi!"）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。

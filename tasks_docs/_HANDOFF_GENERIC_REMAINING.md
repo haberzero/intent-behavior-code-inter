@@ -6,6 +6,8 @@
 > 当前基线：unsafe-vibe-dev HEAD d797e418，全量 2586 passed / 1 skipped。
 >
 > **✅ 已根治（2026-08-13，`_TYPE_SYSTEM_REBUILD.md` v2 桩1-3 + S6 + 遗留边界彻底修复）**：本清单 7 项全部收敛——桩1 创建点结构化 TypeRef（#3 generator 嵌套扁平化根治）、桩2 get_base_name 单义 + 句柄类物化（#1/#7 值身份）、桩3 声明驱动（#2 type_pool 匹配 + 序列化结构保真）、S6 元组解包检查（#4）+ 容器字面量带实参推断（#5 -> auto 已覆盖）、**S5 跨模块同名类 module 化根治（e849f36d）**、**#6 *expr 元素级校验（e849f36d）**。明细见 `_TYPE_SYSTEM_REBUILD_PLAN.md` + WORKLOG。
+>
+> **🔴 新增交接（2026-08-14，用户指出）**：S5 跨模块同名类**仅编译期/元数据层根治，运行时类表仍 name-only 坍缩（方法表串扰，实证运行期错误）**——见 §九，等待下一 session 彻底修复。
 
 ---
 
@@ -208,3 +210,58 @@ RHS 非元组字面量（变量/函数返回）时，逐个元素校验（解包
 - 分支政策：无法确认边界走独立分支；确认零风险可直接合并 unsafe-vibe-dev；不触碰 main。
 - 全程本地 commit、禁 push。
 - WORKLOG 详尽记录决策与变化前后。
+
+---
+
+## 九、🔴 新增交接：跨模块同名类运行时类表 module 化（下一 session 彻底修复）
+
+> 2026-08-14 用户指出：S5 跨模块同名类**只修复了编译期/元数据层，运行期仍会出错**，
+> 须记录交接等待彻底修复。本清单原 7 项已收敛，本节为 S5 根治的**未完成部分**。
+
+### 9.1 现状（实证）
+
+- **编译期/元数据层已根治**（e849f36d）：`geo.Box`/`graph.Box` 独立 spec（module 限定）、
+  特化继承 module、序列化/round-trip 保真、`SpecRegistry.current_module` 上下文使模块内
+  裸名引用正确解析。
+- **运行时类表仍 name-only 坍缩**：`bootstrapper._class_registry` 与
+  `KernelRegistry._classes` 均按 `ib_class.name`（裸名）索引，两个同名类坍缩为一个
+  IbClass，**方法表按后编译者覆盖**。
+- **运行期缺陷实证**：`geo.Box`（`get()->int`，体 `self.v+100`）与 `graph.Box`
+  （`get()->str`，体 `self.name+'!'`）——`geo.Box[int](5).get()` 报
+  `int.__add__ failed: unsupported operand type(s) for +: 'int' and 'str'`
+  （geo 的 get 方法体被 graph 的覆盖，`5` 与 `'!'` 拼接）。**真实缺陷，非理论边界。**
+
+### 9.2 根因
+
+运行时类注册键 = `ib_class.name`（裸名），未包含 spec 的 `module_path`。编译期已
+module 化（spec.qualified_name 区分），但运行时 `_class_registry[name]`/`_classes[name]`
+仍裸名——编译期与运行期的类身份键**不对称**。
+
+### 9.3 根治方向（运行时类表 module 感知键）
+
+1. **注册键 module 化**：`bootstrapper.register_class`/`KernelRegistry.register_class`
+   用 spec 的 `qualified_name`（`module.name` 或裸 `name`）作 `_class_registry`/`_classes`
+   键；`IbClass.name` 保留裸名（`type()` 显示/语言内标识）。
+2. **`get_class` 消费点审计**：81 处 `get_class(name)` 调用，分三类——
+   a) 内置类型（int/str/list，module=None，键=裸名，不受影响）；
+   b) 入口模块类（module=None，键=裸名，不受影响）；
+   c) 跨模块用户类（`_specialize`/`instantiate`/artifact_loader 用 `cls_desc.name`
+      裸名查——须改为 module 感知）。
+3. **`_specialize`（ib_class.py）**：特化类名拼接 `specialized_name` 带 module
+   （`self.registry.get_class(f"{module}.{name}[...]")`）。
+4. **artifact_loader 用户类水化**：`create_subclass` 用 `cls_desc.qualified_name`。
+5. **跨引擎 round-trip**：运行时类表键与序列化 module_path 对齐。
+
+### 9.4 工作量/风险
+
+- 改动面：运行时类注册（bootstrapper/registry）+ 81 处 `get_class` 审计 + `_specialize`
+  + artifact_loader + 跨引擎 round-trip。
+- 风险：**高**（运行时类表是 IbClass 身份地基，81 处消费点，方法继承/特化/序列化联动）。
+- 触发面：两个模块定义同名类 + 方法签名不同（罕见但真实可复现）。
+
+### 9.5 建议
+
+- 独立分支实验（无法确认边界）；确认零风险后手动 cherry-pick 更新 unsafe-vibe-dev。
+- 判别性回归：`geo.Box[int](5).get()` 返回 105（int 语义）、`graph.Box[int]("hi").get()`
+  返回 "hi!"（str 语义）——方法表不串扰。
+- 全量 pytest 零回归门。

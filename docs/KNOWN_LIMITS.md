@@ -318,11 +318,11 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
-### 10.2 跨模块同名类身份（编译期已根治，运行时类表 name-only 边界）
+### 10.2 跨模块同名类身份（编译期已根治，运行时类表 name-only **未完成**）
 
 多模块编译时两个模块定义**同名类**（`geo.Box` / `graph.Box`）：**编译期/元数据层已隔离**（S5 根治）——被 import 的模块用户类带 module 限定，`geo.Box`/`graph.Box` 独立 spec + 特化继承 module + 序列化/round-trip 保真；入口/单模块保持根命名空间；模块内自身类裸名引用经 `SpecRegistry.current_module` 上下文正确解析。
 
-**运行时类表仍 name-only**（`get_class(name)` 按裸名索引，`bootstrapper._class_registry`）：两个同名类的运行时 IbClass 坍缩为一个，**方法表按后编译者覆盖**——若同名类方法签名不同，运行时方法分派可能串扰。这是运行时类表结构的独立边界（module 感知键重构），罕见场景（两个模块定义同名类且方法签名不同），登记为已知边界不修复。
+**⚠ 运行时类表仍 name-only（未完成修复）**：`get_class(name)` 按裸名索引（`bootstrapper._class_registry`），两个同名类的运行时 IbClass 坍缩为一个，**方法表按后编译者覆盖**——同名类方法签名不同时运行时方法分派串扰（实证：`geo.Box[int](5).get()` 报 `int + str` 错误，geo 的 get 方法体被 graph 的覆盖）。**这是运行时类表结构的独立缺陷（module 感知键重构，涉及 81 处 `get_class` 消费点），须彻底修复，等待下一 session**（见 `_HANDOFF_GENERIC_REMAINING.md` §九）。
 
 ### 10.3 容器字面量类型推断（S6）+ *expr 元素级校验
 
