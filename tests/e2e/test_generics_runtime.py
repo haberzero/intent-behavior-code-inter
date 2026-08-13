@@ -454,6 +454,24 @@ class TestValueIdentityConverged:
         )
         assert lines == ["list[int]"], f"got {lines}"
 
+    def test_for_literal_source_identity(self):
+        """for 循环源字面量：for list[int] row in [[1],[2]] 元素保真。"""
+        lines = run_ibci(
+            "for list[int] row in [[1], [2]]:\n"
+            "    print(type(row))\n"
+        )
+        assert lines == ["list[int]", "list[int]"], f"got {lines}"
+
+    def test_for_nested_literal_source_identity(self):
+        """for 嵌套源：for list[list[int]] grid in [[[1]]] 全层保真。"""
+        lines = run_ibci(
+            "for list[list[int]] grid in [[[1]]]:\n"
+            "    print(type(grid))\n"
+            "    for list[int] row in grid:\n"
+            "        print(type(row))\n"
+        )
+        assert lines == ["list[list[int]]", "list[int]"], f"got {lines}"
+
     def test_optional_wrapped_container_identity(self):
         """Optional 包裹容器：Optional[list[int]] o=[1,2] 内层容器保真。"""
         lines = run_ibci(

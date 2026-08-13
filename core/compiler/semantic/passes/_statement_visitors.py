@@ -393,7 +393,22 @@ class StatementVisitorsMixin:
                 if node.target is None:
                     self._bind_condition_behavior_types(node.iter)
         if node.target:
-            self.visit(node.target)
+            target_type = self.visit(node.target)
+            # for list[int] row in [[1],[2]]：迭代源字面量绑"元素类型容器"——
+            # row 类型 list[int] → 迭代源 [[1],[2]] 绑 list[list[int]]（值创建点
+            # 据此水化，迭代元素保真）。仅当 target 有具体类型（非动态）时。
+            if target_type and node.iter is not None and not self.registry.is_dynamic(target_type):
+                if isinstance(node.iter, ast.IbFilteredExpr):
+                    iter_literal = node.iter.expr
+                else:
+                    iter_literal = node.iter
+                # 迭代源容器类型 = list[T]（T = 循环变量完整 spec，结构化构造——
+                # 嵌套 target_type 不扁平化）。经 resolve_typeref 懒构建特化 spec。
+                from core.kernel.spec.type_ref import TypeRef
+                elem_ref = TypeRef.from_spec(target_type)
+                src_spec = self.registry.resolve_typeref(TypeRef.generic("list", elem_ref))
+                if src_spec is not None:
+                    self._bind_literal_with_type(iter_literal, src_spec)
         # 访问 for...if 的过滤条件（此时循环变量已注册）；filter 恒为布尔位置
         if node.iter and isinstance(node.iter, ast.IbFilteredExpr):
             self.visit(node.iter.filter)
