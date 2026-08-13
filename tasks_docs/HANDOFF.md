@@ -125,12 +125,20 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - **🔴 当前交接（2026-08-14 用户指示，下一 session 主任务）**：
   **T05 批判性压力试用问题处置——以代码问题为优先**。
   完整交接见 `tasks_docs/_HANDOFF_T05_ISSUES.md`（每项现状/证据/粗略根因/修复方向/判别性回归）。
-  处理顺序：**① KI-1 线程 worker 内跨模块用户类不可用（P1，根因已定位）→ ② KI-2
-  Optional-None `is None` 语义 + `is_none()` 缺失（P2）→ ③ mock STR/BOOL 值语义
-  （实现/文档抉择）→ ④ 8 个幽灵诊断码 + 快照篡改警告未发射 → ⑤ `set_mock_mode()`
-  单向开关 → ⑥ DOC_ISSUE-1~23 文档批次（doc-governance）**。
+  **① KI-1 已根治（2026-08-14，统一类身份模型 S4，见下方已完成项）**。
+  处理顺序：**② KI-2 Optional-None `is None` 语义 + `is_none()` 缺失（P2）→ ③ mock
+  STR/BOOL 值语义（实现/文档抉择）→ ④ 8 个幽灵诊断码 + 快照篡改警告未发射 →
+  ⑤ `set_mock_mode()` 单向开关 → ⑥ DOC_ISSUE-1~23 文档批次（doc-governance）**。
   试验据与复现用例：`trials/T05_critical_stress/`（40 用例 37P+1G+2KI + 23 DOC_ISSUE，
   `REGISTER.md` + `REPORT.md`）。
+
+- **✅ 已完成（2026-08-14，统一类身份模型 S1-S4，独立复核放行后 cherry-pick unsafe-vibe-dev，全量 2614→2616 passed / 1 skipped）**：
+  **同名类运行时类表宏观根治（`_code_class_identity_unify.md`）**。S1 run_string 稳定入口
+  锚点（`__string_exec__`）；S2 类身份统一（删 qualify_types 双轨——所有模块含入口用户类
+  qualified，get_class 裸名回落仅内置，LLM parse/hint module 感知）；S3 单类表（删
+  Bootstrapper 影子表，Enum 缺口自动弥合）；S4 KI-1 线程侧表 module 感知 + is_truthy 任务
+  本地化。判别性回归 +2（线程 worker imported/入口类）。独立复核 PASS（反向实验实证
+  KI-1 回归测试有效）。**KI-1（CROSSMOD-THREAD-1）核销**。
 
 - **✅ 已完成（2026-08-14，exp/runtime-class-module → 手动 cherry-pick unsafe-vibe-dev 6e68329c，全量 2614 passed / 1 skipped）**：
   **跨模块同名类运行时类表 module 化根治（S5 运行期闭环）**。注册键 = `spec.qualified_name`

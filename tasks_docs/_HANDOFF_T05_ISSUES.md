@@ -6,6 +6,10 @@
 > 问题；以代码问题为优先。**
 > 基线：unsafe-vibe-dev 6e68329c（全量 2614 passed / 1 skipped）。
 > 本文件交接每项的现状 / 证据 / 粗略根因 / 修复方向 / 建议判别性回归。
+>
+> **✅ KI-1 已根治（2026-08-14，统一类身份模型 S4，全量 2616 passed / 1 skipped）**：
+> `get_side_table` module 参数化 + `is_truthy` 任务本地化（见 `_code_class_identity_unify.md`
+> S4 与 §2.1 更新）。判别性回归：线程 worker 内 imported/入口类 405/405 + 105/105。
 
 ---
 
@@ -13,7 +17,7 @@
 
 | 优先级 | 项 | 性质 | 级别 | 建议窗口 |
 |--------|----|------|------|----------|
-| **P0** | KI-1 线程 worker 内跨模块用户类不可用 | 代码缺陷 | P1 | 独立窗口（根因已定位） |
+| **✅ 已根治** | **KI-1 线程 worker 内跨模块用户类不可用** | 代码缺陷 | P1 | **已完成（2026-08-14，S4）** |
 | **P1** | KI-2 Optional-None `is None` 语义 + `is_none()` 缺失 | 代码缺陷 | P2 | 独立窗口（与 DOC-5/-6 同修） |
 | **P1** | mock STR/BOOL 值语义（实现 vs 文档抉择） | 代码/文档 | P1 | 独立窗口 |
 | **P2** | 8 个幽灵诊断码 + 快照篡改警告未发射 | 代码缺陷 | P2 | 独立窗口（诊断码发射纪律） |
@@ -26,9 +30,11 @@
 
 ### 2.1 KI-1｜KERNEL_ISSUE-CROSSMOD-THREAD-1（P1）——线程 worker 内被 import 模块的用户类不可用
 
+**✅ 已根治（2026-08-14，统一类身份模型 S4，全量 2616 passed / 1 skipped）**。
+
 **现状/现象**
 - 主上下文 `geo.Box(5).get()` = 405；线程 worker 内同调用抛 `ThrownException(ThreadFailed)`
-  （底层 `VM Execution Error: Symbol UID missing for name 'v'. Artifact is corrupted or unanalyzed`）。
+  （底层 `VM Execution Error: Symbol UID missing for name 'v'`. Artifact is corrupted or unanalyzed`）。
 - 入口模块类（entry-main）在 worker 内正常（main2 = 405）。
 - **base（main 分支 eb4a7d10）同现**——既有缺陷，非跨模块 module 化引入。
 
@@ -36,7 +42,7 @@
 - `tasks_docs/trials/T05_critical_stress/cases/D1-10/main.ibci`（thread + `geo.Box(5).get()`）
 - 最小探针：`/tmp/opencode/threadtest/main9.ibci`（主上下文 405 / 线程 -1）
 
-**粗略根因（代码实证）**
+**根因（S4 实证）**
 1. 线程任务本地 EC：`coordinator.py:213` `get_side_table_callback=interpreter.get_side_table`。
 2. `interpreter.get_side_table`（interpreter.py:350-368）读 `self.current_module_name`
    （**interpreter 共享值**）→ 查 `artifact.modules[module_name].side_tables`。
@@ -46,17 +52,13 @@
    `node_to_symbol` 查错模块 → 查空。
 4. 入口类方法体因 main==entry 模块恰好命中 → 幸存。
 
-**修复方向**
-- 侧表查询须以**调用方 EC 的 current_module_name** 为准：回调改为使用 task_ec 自身
-  模块（如 `interpreter.get_side_table` 增加 module 参数，或回调绑定 task_ec 的
-  current_module_name），对齐 coordinator.py:177-178 注释"任务本地 current_module"设计意图。
-- 排查同类"任务本地状态 vs 共享回调"裂缝（node_to_symbol / node_to_loc / node_to_type
-  等全部侧表 + resolve_type_from_symbol 等回调是否同病）。
-
-**建议判别性回归**
-- `geo.Box[int](5).get()` 在线程内 = 105（int 语义）、`graph.Box[str]("hi").get()` 在线程内
-  = "hi!"；主/线程结果一致。
-- 入口类线程内行为不回归。
+**根治（S4，`_code_class_identity_unify.md`）**
+- `get_side_table` 增加 module 参数：`ExecutionContextImpl.get_side_table` 透传自身
+  `current_module_name`（任务本地值）→ 侧表查询以调用方 EC 为准。
+- 同族裂缝 `is_truthy` 任务本地化：llmexcept 帧检测改经 `get_current_execution_context`
+  读任务本地 runtime_context（线程内 `if str_var:` 模糊布尔判定正确）。
+- **判别性回归 +2**（`test_ibc_file_imports.py`）：imported 类线程 worker 405/405、
+  入口类线程 worker 105/105。独立复核 PASS（反向实验证明 S4 前回归测试失败）。
 
 ### 2.2 KI-2｜KERNEL_ISSUE-OPTIONAL-ISNONE-1（P2）——`Optional[T] a = None; a is None` 返回 False + `is_none()` 缺失
 
@@ -187,7 +189,7 @@
 
 ## 四、建议处理顺序（代码优先）
 
-1. **KI-1**（P1）：线程 worker 侧表 module 上下文修复 + 判别性回归 + 并发裂缝排查。
+1. **KI-1**（P1）：**✅ 已根治（2026-08-14，S4，见 §2.1）**。
 2. **KI-2 + DOC-5/-6**（P2）：Optional 判空语义统一 + `is_none()` + 文档同步。
 3. **mock STR/BOOL**（P1）：实现/文档抉择 + 判别性回归。
 4. **幽灵诊断码**（P2）：发射实现或文档删减 + 可发射性契约测试。
