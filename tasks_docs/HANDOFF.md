@@ -122,6 +122,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev e45dbb75，全量 2519 passed / 1 skipped）**：
+  **spec→TypeRef 收敛 + 测试套件重构（反思分析驱动）**。
+  **A 内核收敛**（反思揭示 spec→TypeRef 三实现分裂）：A1 `_spec_to_typeref` 委托
+  `from_spec`（修 fn_callable 腐蚀/thread 读错字段/chan 扁平化）+ A2 `from_spec` 补
+  tuple positional 分支 + A3 死接口清理（删 to_typeref/restore，TestToTyperef→
+  TestTypeRefFromSpec）。**B 测试套件重构**（测试目标回归"应该具备的行为"）：B1 b 类
+  反向断言改正面契约 + B2 空洞测试强化 + B3 47 文件历史锚定措辞清理 + B4 脆弱断言评估
+  （4 类均合理保留）+ B5 meta docstring 历史锚定扫描规则永久化。
+
 - **✅ 已完成（2026-08-13，unsafe-vibe-dev 0fee0c43，全量 2377 passed / 1 skipped）**：
   **GEN-5/GEN-6 架构级修复（`GEN_FIX_ARCHITECTURE.md` 四层全部落地）**。统一根因 =
   **TypeRef 生命周期双端口径漂移**（构造端扁平化 + 解析端丢实参 + 注册端机制不全）。
@@ -464,13 +473,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（试用体系重构 + GEN-5/GEN-6 修复**已全部完成**；全量 2377 passed / 1 skipped）
+- [ ] 读本节 §2.1（试用体系重构 + GEN-5/GEN-6 修复 + spec→TypeRef 收敛 + 测试套件重构**已全部完成**；全量 2519 passed / 1 skipped）
 - [ ] 读 `NEXT_STEPS.md`（当前最紧要：供应商感知思考禁用机制 / CI-CD 重设计等主线候选）
 - [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；试用体系规范化行已标完成）
 - [ ] 读 `TRIAL_SYSTEM_REDESIGN.md`（试用体系重构执行状态：Phase A-D 全部完成）
 - [ ] 试用体系规范：`trials/_toolkit/CLASSIFICATION.md`（分类/编号）+ `CONTRACT_FORMAT.md`（用例即契约）+ `LLM_SERVICE.md`（本机真实 LLM 服务）+ `gen_register.py`（报告生成）+ `PHASE_D_AUTOMATION.md`（收敛流程硬规则）
 - [ ] GEN-FIX 方案与实施：`tasks_docs/GEN_FIX_ARCHITECTURE.md`（GEN-5/GEN-6 四层修复定案与记录）+ `docs/architecture/03_type_system.md` §3.4bis（TypeRef 唯一权威入口规则）
+- [ ] 测试套件规范：`tests/meta/test_naming_conventions.py` TestDocstringHistoryAnchors（docstring 禁历史锚定，规则永久化）
 - [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 已修复；单一状态权威）
 - [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2377 passed / 1 skipped**）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2519 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）

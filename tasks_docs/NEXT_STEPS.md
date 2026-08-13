@@ -2,9 +2,8 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-13（**试用体系重构 + GEN-5/GEN-6 架构级修复全部完成**：
-> T01 LLM 批真实重跑 55P+2G + Phase C 套件重构/classification 100% + Phase D 自动化衔接 +
-> GEN-5/GEN-6 四层修复（TypeRef 唯一权威入口）；全量 **2377 passed / 1 skipped**；
+> **最后更新**：2026-08-13（**试用体系重构 + GEN-5/GEN-6 架构级修复 + spec→TypeRef 收敛
+> + 测试套件重构全部完成**；全量 **2519 passed / 1 skipped**；
 > 见下方"已完成"与"交接要点"节）
 
 ---
@@ -379,6 +378,15 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   4. **第 4 层（0fee0c43）**：`03_type_system.md` §3.4bis 登记 TypeRef 唯一权威入口 + docstring 标注。
   判别性回归 +11（test_operator_overrides +3 / test_user_class_generics +8）。
 
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev e45dbb75，全量 2519 passed / 1 skipped）**：
+  **spec→TypeRef 收敛 + 测试套件重构（反思分析驱动）**。
+  **A 内核收敛**（反思揭示三实现分裂）：A1 `_spec_to_typeref` 委托 `from_spec`
+  （修复 fn_callable 腐蚀/thread 读错字段/chan 扁平化）+ A2 `from_spec` 补 tuple
+  positional 分支 + A3 死接口清理（删 to_typeref/restore，TestToTyperef→TestTypeRefFromSpec）。
+  **B 测试套件重构**（测试目标回归"应该具备的行为"）：B1 b 类反向断言改正面契约 +
+  B2 空洞测试强化 + B3 47 文件历史锚定措辞清理 + B4 脆弱断言评估（4 类均合理保留）+
+  B5 meta docstring 历史锚定扫描规则永久化。
+
 - **🔴 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
@@ -387,7 +395,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
 - **📌 本 session 已完成**（临时问题全部闭环）：T01 LLM 批真实重跑 55P+2G；过期文档删除 40；
   套件重构（不冻结原则）；classification 写回 100%；gen_register 报告生成器 + 收敛流程硬规则；
-  **GEN-5/GEN-6 架构级修复（四层）**。
+  **GEN-5/GEN-6 架构级修复（四层）**；**spec→TypeRef 收敛 + 测试套件重构（A+B）**。
 
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成
