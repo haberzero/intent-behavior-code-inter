@@ -91,7 +91,7 @@ def _bind_literal_with_type(self, node, spec):
 
 ---
 
-## 三、工作量评估
+## 三、工作量评估（实现后更新）
 
 | 层 | 改动文件 | 预估改动量 | 风险 |
 |----|---------|-----------|------|
@@ -112,9 +112,40 @@ def _bind_literal_with_type(self, node, spec):
 - 机制已建立（helper + 特化类水化），推广是增量，非破坏性重构；但涉及编译期多 visitor
   状态共享，按分支政策仍建议独立分支实验确认零风险后 cherry-pick。
 
-## 四、验证计划
+---
+
+## 四、验证计划（实现后更新）
 
 - 判别性回归：边界 1-7 各 1+ 用例（type() 断言 + 运行时 is_assignable + round-trip）
 - 全量 pytest 零回归
 - 嵌套递归正确性（`list[list[list[int]]]` 三层）
 - Optional 特化类 round-trip
+
+---
+
+## 五、实现状态（2026-08-13）
+
+**✅ 全部完成**（unsafe-vibe-dev 经独立分支 exp/generic-value-convergence 合入，
+4 commits：f3c0491f / 7050f669 / 36ae1906 / 951d2c58，全量 2579 passed / 1 skipped）。
+
+**已收敛场景**（19 判别性回归 + 全量探针实证）：
+- 编译期（`_bind_literal_with_type` 递归 + 调用点扩展）：顶层赋值 / 函数返回（
+  `func_return_types` 栈）/ lambda 返回 / 调用实参（位置+具名）/ 下标赋值 /
+  复合赋值 / 条件表达式 / 函数默认参数 / for 循环源（迭代源绑 list[T]，结构化
+  构造）/ 嵌套内层元素 / Optional 包裹容器（递归 wrapped_type）/ 生成器 yield
+  容器（标准 `-> T` 与显式 `generator[T]` 两种写法）
+- 运行时：切片（__getitem__ slice 用 self.ib_class）/ 运算符（__add__/__mul__）/
+  Optional（_wrap_optional 特化类）/ 跨引擎反序列化（type_pool 重建 spec）
+
+**两轮独立复核（general agent）**：首轮发现 3 类遗漏（Optional 内层 / 生成器
+yield / auto 返回）+ 守卫异味，前两项整改；第二轮确认零风险 + 发现生成器标准
+写法遗漏（-> T）+ for 源遗漏，继续整改。auto 返回泛型实参推断为 auto 语义固有
+局限（独立类型推断增强窗口），复核确认非本收敛引入。
+
+**已知边界（登记，独立窗口）**：
+1. `-> auto` 返回/生成器 yield 容器泛型实参推断（auto 语义不保留实参，独立类型
+   推断增强）
+2. `-> generator[T]` 显式标注时 `_declaration_visitors:206-212` 二次包裹为
+   `generator[generator[T]]`（预存缺陷 c8b89564，yield 值绑定走 func_returns 栈
+   不受影响，独立增量）
+3. `*expr` 展开实参静态不可绑定（根本限制）
