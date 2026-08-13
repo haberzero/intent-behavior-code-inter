@@ -2,10 +2,10 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**跨模块同名类运行期类表 module 化根治（S5 运行期闭环）
-> + 内置泛型父误加前缀根治 + 独立复核整改 + T05 批判性压力试用（40 用例 37P+1G+2KI
-> + 23 DOC_ISSUE）+ 内核粗略问题分析报告**；全量 **2614 passed / 1 skipped**；
-> 见下方"已完成"节与"交接要点"节）
+> **最后更新**：2026-08-14（**跨模块同名类运行期 module 化根治 + T05 批判试用
+> （37P+1G+2KI + 23 DOC_ISSUE）+ 内核问题分析 + 交接准备**；全量 **2614 passed / 1 skipped**；
+> **🔴 下一 session 主任务：T05 问题处置（代码优先）**，见"交接要点"节与
+> `tasks_docs/_HANDOFF_T05_ISSUES.md`）
 
 ---
 
@@ -420,6 +420,27 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   + 线程体取消/深递归保持。修 coordinator 陈旧 docstring；生产代码注释任务代号清除。
 
 ## 📋 交接要点（下一 session）
+
+- **🔴 下一 session 主线（用户 2026-08-14 指示）**：**T05 批判性压力试用问题处置——
+  以代码问题为优先**。完整交接 `tasks_docs/_HANDOFF_T05_ISSUES.md`。处理顺序：
+  ① **KI-1 线程 worker 内跨模块用户类不可用（P1）**——task_ec 侧表回调读 interpreter
+  共享 current_module_name 忽略任务本地模块切换，根因已定位（coordinator.py:213 +
+  interpreter.py:352 + _shared.py:261）；② **KI-2 Optional-None `is None` 返回 False +
+  `is_none()` 缺失（P2）**——`is` 用 isinstance(IbNone) 不识别 Optional 包装；③ **mock
+  STR/BOOL 值语义**（实现 `split()[0]`/仅大写 TRUE 判真 vs 文档，实现/文档抉择）；
+  ④ **8 个幽灵诊断码 + 快照篡改警告未发射**（RUN_*/LEX_*/PAR_* 全仓零引用，issue.py
+  默认码未注册）；⑤ **`set_mock_mode()` 单向无 off API**；⑥ **DOC_ISSUE-1~23 文档批次**
+  （doc-governance；KNOWN_LIMITS 自身 §七/§八/§十三 三条不成立）。试验据与复现用例：
+  `trials/T05_critical_stress/`（40 用例 37P+1G+2KI + 23 DOC_ISSUE，REGISTER/REPORT）。
+
+- **✅ 已完成（2026-08-14，跨模块同名类运行期 module 化根治 + T05 批判试用 + 内核分析）**：
+  **跨模块同名类运行期类表 module 化（S5 运行期闭环）**——注册键=spec.qualified_name +
+  get_class module 感知 + _specialize/artifact_loader/序列化 module 化 + resolve_class_module
+  权威父 module 解析；判别性回归 +6（geo.Box=105/graph.Box="hi!"）；独立复核 P1 已整改；
+  cherry-pick unsafe-vibe-dev 6e68329c，全量 2614/1。**T05 批判性压力试用**——40 用例
+  37P+1G+2KI（跨模块回归 12 全 PASS + 对抗 17P+1G + 真实 LLM 8 全 PASS）+ 文档核验
+  23 DOC_ISSUE；内核粗略根因分析 2 项（CROSSMOD-THREAD-1/OPTIONAL-ISNONE-1）。
+  详见上方"已完成"节与 `_HANDOFF_T05_ISSUES.md`。
 
 - **✅ 已完成（2026-08-13，unsafe-vibe-dev b0f4d74，全量 2365 passed / 1 skipped）**：
   **G3 继承特化父类字段值丢失 + Finding C any 逃生阀用户类复查 根治**。交接诊断经代码

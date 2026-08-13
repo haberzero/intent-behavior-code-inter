@@ -122,6 +122,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **🔴 当前交接（2026-08-14 用户指示，下一 session 主任务）**：
+  **T05 批判性压力试用问题处置——以代码问题为优先**。
+  完整交接见 `tasks_docs/_HANDOFF_T05_ISSUES.md`（每项现状/证据/粗略根因/修复方向/判别性回归）。
+  处理顺序：**① KI-1 线程 worker 内跨模块用户类不可用（P1，根因已定位）→ ② KI-2
+  Optional-None `is None` 语义 + `is_none()` 缺失（P2）→ ③ mock STR/BOOL 值语义
+  （实现/文档抉择）→ ④ 8 个幽灵诊断码 + 快照篡改警告未发射 → ⑤ `set_mock_mode()`
+  单向开关 → ⑥ DOC_ISSUE-1~23 文档批次（doc-governance）**。
+  试验据与复现用例：`trials/T05_critical_stress/`（40 用例 37P+1G+2KI + 23 DOC_ISSUE，
+  `REGISTER.md` + `REPORT.md`）。
+
 - **✅ 已完成（2026-08-14，exp/runtime-class-module → 手动 cherry-pick unsafe-vibe-dev 6e68329c，全量 2614 passed / 1 skipped）**：
   **跨模块同名类运行时类表 module 化根治（S5 运行期闭环）**。注册键 = `spec.qualified_name`
   + `get_class(name, module)` module 感知 + `_specialize`/artifact_loader/序列化 module 化
@@ -135,8 +145,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   （task_ec 侧表回调读 interpreter 共享 current_module_name，忽略任务本地模块切换）；
   ② **OPTIONAL-ISNONE-1（P2）** `Optional[T] a = None; a is None` 返回 False
   （`is` 用 isinstance(IbNone)，Optional 包装不识别；`is_none()` 文档有实现缺）。
-  报告 `REPORT.md` + `REGISTER.md`；完整明细 NEXT_STEPS 已完成节。**下一候选**：
-  修上述 2 项 + DOC_ISSUE 批次（mock 值语义/KNOWN_LIMITS 三条不成立/8 幽灵诊断码）。
+  报告 `REPORT.md` + `REGISTER.md`；完整明细 NEXT_STEPS 已完成节。**处置见上方当前交接**。
 
 - **✅ 已完成（2026-08-13/14，类型体系地基根治 S0-S7 + 遗留边界，全量 2608 passed / 1 skipped）**：
   **类型体系地基根治（`_TYPE_SYSTEM_REBUILD.md` v2，物化路线内结构化）**。桩1 创建点结构化
