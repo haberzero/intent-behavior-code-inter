@@ -22,12 +22,42 @@
   本模型的思考。
 - **影响**：每次真实调用有思考 token 开销 + 响应慢（10-30s）；`content` 为空时
   IBCI 回退用 reasoning 提取答案（postprocess 剔除思考块，可靠性依赖模型输出形态）。
-- **配置建议**：`reasoning: false` 声明与实际不符时，IBCI 会在运行时发**思考禁用失败警告**
-  （一次性去重），引导用户联系开发者 / 提交 issue 并附供应商文档——**不引导用户改配置
-  绕开**（掩盖而非解决）。**供应商感知的思考禁用机制（按供应商参数形态禁用/检测失败）为
-  开发者待完善项**（登记 PENDING_TASKS），当前仅识别"请求抑制但仍思考"并警告。
 - **死机/超时防护**：思考模型响应慢，批量试用用 `run_batch.py`（每用例 harness 超时
   SIGKILL，进程组清理彻底）；避免大量用例并发压爆 LM Studio。
+
+## 二.2 LM Studio 禁用思考模式 — 官方机制调查（2026-08-13 专项）
+
+**官方机制（modelyaml 文档 `https://lmstudio.ai/docs/app/modelyaml`）**：模型的思考由
+`model.yaml` 的 `customFields.enableThinking` + Jinja 模板 `enable_thinking` 变量控制：
+
+```yaml
+customFields:
+  - key: enableThinking
+    displayName: Enable Thinking
+    description: Controls whether the model will think before replying
+    type: boolean
+    defaultValue: true
+    effects:
+      - type: setJinjaVariable
+        variable: enable_thinking
+```
+
+Jinja 模板须含 `enable_thinking` 变量分支（qwen3-8b 官方示例：`enable_thinking is false`
+→ 输出空 `<think> </think>` 标签 = 禁用思考）。
+
+**qwen3.6-35b-a3b**：LM Studio Hub 有官方 model.yaml（含 enableThinking + 上述模板）。
+**本机问题**：本地模型目录用的是**纯 GGUF（无 model.yaml）**，不走官方配置 → API 参数
+`enable_thinking` 无效（实测）。
+
+**可靠禁用方案**：
+1. **（推荐）用官方 model.yaml 加载模型**：LM Studio 界面从 Hub 添加 qwen3.6-35b-a3b
+   （官方 model.yaml 版本），或为本机 GGUF 补 model.yaml（声明 enableThinking + 提供
+   含 enable_thinking 分支的 Jinja 模板），LM Studio 重载模型后 API 传
+   `enable_thinking: false` 生效。
+2. **（降级）换非思考模板模型**（如 qwen2.5 系列）。
+3. **IBCI 侧**：已传 `enable_thinking: false`（对支持它的模型有效）+ **禁用失败警告**
+   （probe/调用检测"请求抑制但仍思考"→ 一次性警告，引导联系开发者/提交 issue，
+   不引导用户改配置绕开——见 PENDING_TASKS"供应商感知思考禁用"）。
 
 ## 二、可用性探测（每次试用前必做）
 
