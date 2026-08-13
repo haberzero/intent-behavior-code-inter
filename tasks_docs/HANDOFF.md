@@ -122,15 +122,19 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 当前交接（2026-08-14 用户指示，下一 session 主任务）**：
-  **T05 批判性压力试用问题处置——以代码问题为优先**。
-  完整交接见 `tasks_docs/_HANDOFF_T05_ISSUES.md`（每项现状/证据/粗略根因/修复方向/判别性回归）。
-  **① KI-1 已根治（2026-08-14，统一类身份模型 S4，见下方已完成项）**。
-  处理顺序：**② KI-2 Optional-None `is None` 语义 + `is_none()` 缺失（P2）→ ③ mock
-  STR/BOOL 值语义（实现/文档抉择）→ ④ 8 个幽灵诊断码 + 快照篡改警告未发射 →
-  ⑤ `set_mock_mode()` 单向开关 → ⑥ DOC_ISSUE-1~23 文档批次（doc-governance）**。
-  试验据与复现用例：`trials/T05_critical_stress/`（40 用例 37P+1G+2KI + 23 DOC_ISSUE，
-  `REGISTER.md` + `REPORT.md`）。
+- **🔴 当前交接（2026-08-14，本 session 已完成三大任务，下一 session 候选）**：
+  **T05 剩余问题处置 + T06 新暴露缺陷**。
+  - **① KI-1 已根治**（2026-08-14，统一类身份模型 S4 + T06 D4-01 核销）。
+  - **⑥ DOC_ISSUE-1~23 文档批次已全部治理**（2026-08-14，doc-governance）。
+  - **下一候选**：**② KI-2 Optional-None `is None` 语义 + `is_none()` 缺失（P2，
+    文档已修正为 `== None` 判空，实现修复待独立窗口）→ ③ mock STR/BOOL 值语义
+    （实现/文档抉择，文档已精确化，实现保持）→ ④ 8 个幽灵诊断码 + 快照篡改警告
+    （文档已标注未发射，实现/删减待决）→ ⑤ `set_mock_mode()` 对称开关（P3）**。
+  - **🔴 T06 新暴露 KERNEL_ISSUE-CROSSMOD-LLM-1（P1，pre-existing）**：跨模块用户类
+    作行为表达式 LLM 输出目标（`geo.Counter c = @~...~`）node_to_type 未传播 → 运行时
+    `__call__ on None`。根因：`_resolve_type` 对 IbAttribute 点号限定注解未解析目标 spec。
+    独立窗口（见 `trials/T06_class_identity/REGISTER.md` + PENDING_TASKS）。
+  试验据与复现用例：`trials/T05_critical_stress/` + `trials/T06_class_identity/`。
 
 - **✅ 已完成（2026-08-14，统一类身份模型 S1-S4，独立复核放行后 cherry-pick unsafe-vibe-dev，全量 2614→2616 passed / 1 skipped）**：
   **同名类运行时类表宏观根治（`_code_class_identity_unify.md`）**。S1 run_string 稳定入口
@@ -139,6 +143,22 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   Bootstrapper 影子表，Enum 缺口自动弥合）；S4 KI-1 线程侧表 module 感知 + is_truthy 任务
   本地化。判别性回归 +2（线程 worker imported/入口类）。独立复核 PASS（反向实验实证
   KI-1 回归测试有效）。**KI-1（CROSSMOD-THREAD-1）核销**。
+
+- **✅ 已完成（2026-08-14，`trials/T06_class_identity/`，全量 2616 passed / 1 skipped）**：
+  **统一类身份模型回归 + 真实试用**。20 用例 18 PASS + 2 KERNEL_ISSUE（同一根因）。
+  T05 KI-1 触发用例核销（D4-01）；入口类 qualified/单类表/get_class 回落/线程侧表/
+  is_truthy 全验证；真实 LLM 8 例（思考已禁用，响应<1-2s）。**新暴露 pre-existing
+  KERNEL_ISSUE-CROSSMOD-LLM-1（P1）**：跨模块用户类作行为表达式 LLM 输出目标
+  node_to_type 未传播 → `__call__ on None`（base 同现）。详见 REGISTER/REPORT。
+
+- **✅ 已完成（2026-08-14，doc-governance，全量 2616 passed / 1 skipped）**：
+  **docs/ 全量文档治理**。四路并行审计 + 分阶段修复。KNOWN_LIMITS 三条不成立实证修正
+  （§七/§八/§十三）+ 系统性日期戳/里程碑清理；syntax/（mock 值语义精确化、Optional
+  is None、幽灵码标注、诊断码级别、cast_to/lambda 示例修复、TESTONLY→MOCK）；
+  architecture/（is_none 删除、快照警告改静默恢复、ISO-2 矛盾、§3.4bis 元信息清理）；
+  guide/howto（llmexcept 绑定修正、生成器语义统一、概念去重、补返回标注）；
+  索引/根（GETTING_STARTED 计数、SUBSYSTEM_DESIGN、SYNTAX_REFERENCE）。**T05
+  DOC_ISSUE-1~23 全部覆盖**（含 DOC-10 super 实证修正）。
 
 - **✅ 已完成（2026-08-14，exp/runtime-class-module → 手动 cherry-pick unsafe-vibe-dev 6e68329c，全量 2614 passed / 1 skipped）**：
   **跨模块同名类运行时类表 module 化根治（S5 运行期闭环）**。注册键 = `spec.qualified_name`

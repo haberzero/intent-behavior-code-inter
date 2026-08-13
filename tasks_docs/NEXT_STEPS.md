@@ -2,11 +2,11 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**同名类运行时类表宏观根治——统一类身份模型
-> （S1-S4 全部落地 + 独立复核放行 + cherry-pick unsafe-vibe-dev）**；全量
-> **2616 passed / 1 skipped**；
-> **🔴 下一 session 主线：T05 剩余问题处置（代码优先）**，见"交接要点"节与
-> `tasks_docs/_HANDOFF_T05_ISSUES.md`）
+> **最后更新**：2026-08-14（**同名类运行时类表宏观根治（S1-S4）+ T06 真实试用 +
+> docs/ 全量文档治理全部完成**；全量 **2616 passed / 1 skipped**；
+> **🔴 下一 session 主线候选**：T05 剩余问题处置（KI-2 Optional is None /
+> mock 语义 / 幽灵诊断码 / set_mock_mode）或 T06 新暴露的 KERNEL_ISSUE-CROSSMOD-LLM-1，
+> 见"交接要点"节与 `tasks_docs/_HANDOFF_T05_ISSUES.md`）
 
 ---
 

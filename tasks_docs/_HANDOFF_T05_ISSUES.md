@@ -10,6 +10,15 @@
 > **✅ KI-1 已根治（2026-08-14，统一类身份模型 S4，全量 2616 passed / 1 skipped）**：
 > `get_side_table` module 参数化 + `is_truthy` 任务本地化（见 `_code_class_identity_unify.md`
 > S4 与 §2.1 更新）。判别性回归：线程 worker 内 imported/入口类 405/405 + 105/105。
+>
+> **✅ DOC_ISSUE-1~23 文档部分已全部治理（2026-08-14，doc-governance）**：KNOWN_LIMITS
+> §七/§八/§十三 实证修正、mock 值语义文档精确化、幽灵码标注、快照警告、Optional 判空、
+> 示例修复、TESTONLY→MOCK 等。**剩余为代码联动项**（见 §三 处置方向）：mock 语义实现、
+> 幽灵码发射/删减、`is_none()` 实现（与 KI-2 合并）、`set_mock_mode` 对称开关。
+>
+> **🔴 T06 新暴露 KERNEL_ISSUE-CROSSMOD-LLM-1（P1，pre-existing）**：跨模块用户类作
+> 行为表达式 LLM 输出目标（`geo.Counter c = @~...~`）node_to_type 未传播 → 运行时
+> `__call__ on None`。见 `trials/T06_class_identity/REGISTER.md` + PENDING_TASKS。
 
 ---
 
