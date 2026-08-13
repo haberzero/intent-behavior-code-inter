@@ -56,7 +56,7 @@ class StatementVisitorsMixin:
 
         # Resolve TypeRef → IbSpec early to avoid downstream crashes
         if isinstance(val_type, TypeRef):
-            resolved = self.registry.resolve(val_type.head)
+            resolved = self.registry.resolve_typeref(val_type)
             if not resolved:
                 self.error(
                     f"Unresolved type '{val_type.head}' in assignment",
@@ -79,7 +79,7 @@ class StatementVisitorsMixin:
                         f"reached type checking (symbol spec leak)",
                         node, code=ICE_TYPE_LEAK,
                     )
-                    declared_type = self.registry.resolve(declared_type.head) or self._any_desc
+                    declared_type = self.registry.resolve_typeref(declared_type) or self._any_desc
                 # 类型推断策略
                 target_type = self._infer_target_type_from_declared(declared_type, val_type)
             elif sym and sym.spec:
@@ -91,7 +91,7 @@ class StatementVisitorsMixin:
                         f"'{var_name}' reached type checking (symbol spec leak)",
                         node, code=ICE_TYPE_LEAK,
                     )
-                    spec = self.registry.resolve(spec.head) or self._any_desc
+                    spec = self.registry.resolve_typeref(spec) or self._any_desc
                 if getattr(spec, "name", None) == "auto":
                     # 裸赋值符号（auto 占位）：从首次赋值推断并锁定实际类型。
                     # 与 `auto x = expr` 语义一致——静态锁定，不再隐式退化为 any。
@@ -332,8 +332,8 @@ class StatementVisitorsMixin:
         sig_ret = sig.return_type
         actual_ret = actual.value_type if is_callable_instance else actual.return_type
         if sig_ret and actual_ret:
-            exp_ret = self.registry.resolve(sig_ret.head)
-            act_ret = self.registry.resolve(actual_ret.head)
+            exp_ret = self.registry.resolve_typeref(sig_ret)
+            act_ret = self.registry.resolve_typeref(actual_ret)
             if (exp_ret and act_ret
                     and not self.registry.is_dynamic(exp_ret)
                     and not self.registry.is_dynamic(act_ret)

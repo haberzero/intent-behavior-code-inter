@@ -45,11 +45,11 @@ class _AssignabilityMixin:
             return False
 
         if target.kind == TypeKind.OPTIONAL.value:
-            inner_target = self.resolve(target.wrapped_type.head, target.wrapped_type.module) or self.resolve("any")
+            inner_target = self.resolve_typeref(target.wrapped_type) or self.resolve("any")
             if src.name == "None":
                 return True
             if src.kind == TypeKind.OPTIONAL.value:
-                inner_src = self.resolve(src.wrapped_type.head, src.wrapped_type.module) or self.resolve("any")
+                inner_src = self.resolve_typeref(src.wrapped_type) or self.resolve("any")
                 # 基础 Optional（wrapped=any）缺失类型精度，可赋值给任何 Optional[T]。
                 if inner_src.name == "any":
                     return True

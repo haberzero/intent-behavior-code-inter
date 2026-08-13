@@ -125,7 +125,7 @@ class TypeCheckBase:
             parent_ref = getattr(cur, "parent_type", None)
             if parent_ref is None:
                 break
-            cur = self.registry.resolve(parent_ref.head)
+            cur = self.registry.resolve_typeref(parent_ref)
         return False
 
     def _has_llm_parse_cap(self, spec: Optional[IbSpec]) -> bool:
@@ -180,7 +180,7 @@ class TypeCheckBase:
         if not source or not target:
             return True
         if isinstance(source, TypeRef):
-            resolved = self.registry.resolve(source.head)
+            resolved = self.registry.resolve_typeref(source)
             if not resolved:
                 self.error(
                     f"Unresolved type '{source.head}' in assignability check",
@@ -189,7 +189,7 @@ class TypeCheckBase:
                 resolved = self._any_desc
             source = resolved
         if isinstance(target, TypeRef):
-            resolved = self.registry.resolve(target.head)
+            resolved = self.registry.resolve_typeref(target)
             if not resolved:
                 self.error(
                     f"Unresolved type '{target.head}' in assignability check",

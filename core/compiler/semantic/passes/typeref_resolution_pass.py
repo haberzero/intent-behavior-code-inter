@@ -50,7 +50,7 @@ class TypeRefResolutionPass(BasePass):
                 if table_type_params and sym.spec.head in table_type_params:
                     sym.spec = self._type_param_spec(sym.spec.head)
                     continue
-                resolved = registry.resolve(sym.spec.head)
+                resolved = registry.resolve_typeref(sym.spec)
                 if resolved:
                     sym.spec = resolved
                 else:

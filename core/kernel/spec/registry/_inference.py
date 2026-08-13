@@ -250,8 +250,10 @@ class _InferenceMixin:
                 # User class has this operator method in its type definition
                 method_member = spec.members[method_name]
                 if method_member.is_method():
-                    # Use the declared return type
-                    return self.resolve(method_member.return_type.head, method_member.return_type.module) or self.resolve("any")
+                    # Use the declared return type. resolve_typeref 保留结构化
+                    # 实参（Vec[T] → Vec[int]），避免 resolve(head) 丢弃类型实参
+                    # 把特化结果降级为基类（GEN-6A）。
+                    return self.resolve_typeref(method_member.return_type) or self.resolve("any")
                 # Default: assume operator returns same type as left operand
                 return spec
 
@@ -263,10 +265,10 @@ class _InferenceMixin:
             # Multi-type list: element access returns any (user must cast explicitly)
             if spec.kind == TypeKind.LIST.value and spec.allowed_element_types:
                 return self.resolve("any")
-            return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
+            return self.resolve_typeref(spec.element_type) or self.resolve("any")
         if spec.kind == TypeKind.GENERATOR.value:
             # 惰性生成器 generator[T]：元素类型 = value_type（yield 产出类型）。
-            return self.resolve(spec.value_type.head, spec.value_type.module) or self.resolve("any")
+            return self.resolve_typeref(spec.value_type) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom and axiom.has_iter_cap:
             elem_name = axiom.get_element_type_name()
@@ -285,9 +287,9 @@ class _InferenceMixin:
                 # Multi-type list: subscript access returns any
                 if spec.kind == TypeKind.LIST.value and spec.allowed_element_types:
                     return self.resolve("any")
-                return self.resolve(spec.element_type.head, spec.element_type.module) or self.resolve("any")
+                return self.resolve_typeref(spec.element_type) or self.resolve("any")
         if spec.kind == TypeKind.DICT.value:
-            return self.resolve(spec.value_type.head, spec.value_type.module) or self.resolve("any")
+            return self.resolve_typeref(spec.value_type) or self.resolve("any")
         axiom = self.get_axiom(spec)
         if axiom and axiom.has_subscript_cap:
             item_name = axiom.resolve_item_type_name(key_spec.get_base_name())

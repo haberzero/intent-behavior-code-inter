@@ -118,3 +118,68 @@ print((str)(a is a))
 """
         out = run_ibci(code)
         assert out == ["False", "True"]
+
+
+class TestGenericOperatorOverrides:
+    """GEN-6A：泛型类 × 运算符重载——返回类型特化（KERNEL_ISSUE-GEN-6 判别性回归）。
+
+    运算符方法返回 `Vec[T]` 时，`a + b` 结果类型须为特化 `Vec[int]`（resolve_op
+    经 resolve_typeref 保留实参），而非降级为基类 Vec。
+    修复前：SEM_TYPE_MISMATCH: Cannot assign 'Vec' to 'Vec[int]'。
+    """
+
+    def test_generic_add_returns_specialized(self):
+        code = """class Vec[T]:
+    T x
+    T y
+    func __init__(self, T x, T y) -> void:
+        self.x = x
+        self.y = y
+    func __add__(self, Vec[T] other) -> Vec[T]:
+        return Vec[T](self.x + other.x, self.y + other.y)
+    func __eq__(self, Vec[T] other) -> bool:
+        return self.x == other.x and self.y == other.y
+
+Vec[int] a = Vec[int](1, 2)
+Vec[int] b = Vec[int](3, 4)
+Vec[int] c = a + b
+print("cx=" + (str)c.x)
+print("cy=" + (str)c.y)
+print("eq=" + (str)(a == Vec[int](1, 2)))
+print("neq=" + (str)(a == b))
+"""
+        out = run_ibci(code)
+        assert out == ["cx=4", "cy=6", "eq=True", "neq=False"]
+
+    def test_generic_add_bare_T_param(self):
+        """裸 T 参数 + 泛型返回同样生效（触发因子是返回类型，非参数形态）。"""
+        code = """class Box[T]:
+    T value
+    func __init__(self, T value) -> void:
+        self.value = value
+    func __add__(self, T other) -> Box[T]:
+        return Box[T](self.value + other)
+Box[int] b = Box[int](1)
+Box[int] c = b + 2
+print((str)c.value)
+"""
+        out = run_ibci(code)
+        assert out == ["3"]
+
+    def test_generic_add_in_expression_context(self):
+        """泛型运算符结果在嵌套表达式（如 list 元素）中使用。"""
+        code = """class Vec[T]:
+    T x
+    T y
+    func __init__(self, T x, T y) -> void:
+        self.x = x
+        self.y = y
+    func __add__(self, Vec[T] other) -> Vec[T]:
+        return Vec[T](self.x + other.x, self.y + other.y)
+Vec[int] a = Vec[int](1, 2)
+Vec[int] b = Vec[int](3, 4)
+list[Vec[int]] lst = [a + b]
+print((str)lst[0].x)
+"""
+        out = run_ibci(code)
+        assert out == ["4"]

@@ -57,7 +57,7 @@ class ExpressionVisitorsMixin:
                     f"'{node.id}' reached type checking (symbol spec leak)",
                     node, code=ICE_TYPE_LEAK,
                 )
-                spec = self.registry.resolve(spec.head) or self._any_desc
+                spec = self.registry.resolve_typeref(spec) or self._any_desc
             self.bind_type(node, spec)
             return spec
         # 未定义符号在 SymbolPhase 已报错，这里返回 any
@@ -731,7 +731,7 @@ class ExpressionVisitorsMixin:
             positional = value_type.positional_element_types
             if 0 <= idx < len(positional):
                 pos_ref = positional[idx]
-                resolved = self.registry.resolve(pos_ref.head, pos_ref.module)
+                resolved = self.registry.resolve_typeref(pos_ref)
                 if resolved is not None:
                     self.bind_type(node, resolved)
                     return resolved
