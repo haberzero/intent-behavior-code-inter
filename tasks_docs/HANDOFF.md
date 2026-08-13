@@ -138,6 +138,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `PT_FEAT3_DESIGN.md` | **用户类泛型设计冻结**（2026-08-12）：6 项开放问题逐项决断 + 实施蓝图 a-f + 边界登记。**已实施**，保留供追溯 |
 | `_GENERICS_TRIAL_20260812/` | **泛型压力/恶意试用**（2026-08-12）：D1 核心语义 + D2 正交交叉（11 维度）+ D3 恶意挑刺（10）。深度核验 + 两轮独立复核后，G1/G2/BOUNDARY-G1/双通道**全部修复**（32484fe/3fe98d6/d100ee1），+11 e2e |
 | `_GENERICS_TRIAL_FIX_20260812/` | **泛型修复回归试用**（2026-08-12）：28 用例 + 冒烟全经死循环保护。修复成果验证：G1 方法体/G2 自引用基础/BOUNDARY-G1 守卫/双通道 全 PASS。**新发现 2 项既有缺陷**（非本次引入）：G3 继承特化父类字段值丢失（P1，静默 None）+ BOUNDARY-G2 自引用链 while 类型退化（P2）——登记 PENDING_TASKS |
+| `TRIAL_SYSTEM_DESIGN.md` | **试用体系规范化设计记录**（2026-08-12，**下一阶段主要目标**）：现状盘点（4 套试用地基已统一 harness/jsonl，命名/分类/编号碎片化）+ 规范化目标（单一权威源/机制同构/设计语言统一）+ 草案（命名/分类/编号/模板）+ 实施规划（Phase 1 机制 → 2 历史定型 → 3 收尾）。**只设计未实施** |
+| `_HANDOFF_GENERICS_FIX.md` | **泛型缺陷修复交接**（2026-08-12）：G3/BOUNDARY-G2 复现+根因起点+修复路径+验证方法 + **试用体系规范化 §七**。下一智能体任务交接 |
 | `_code_ai_autoset.md` | **F9/ai 显式配置设计记录**（2026-08-12）：现状副作用 + 显式方案 + 变更清单 + 命名候选。**命名已拍板 `ai.load_project_config` + 本轮实施完成（a49555b）**，保留供追溯 |
 | `_code_f9_load_project_config.md` | **F9 显式配置落地实施记录**（2026-08-12）：设计决策（ec 契约迁移/幂等/历史试用档案不改）+ 变更清单 + 验证。Phase 5 汇报后清理 |
 | `_enum_instancing_assessment.md` | **实例化枚举设计候选评估**（2026-08-12）：维持现状（LLM 集成改造为核心硬伤），独立设计冻结候选 |
@@ -478,7 +480,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [ ] 读 `PT_FEAT3_DESIGN.md`（设计冻结 + 边界 ①-⑧）+ `_code_user_class_generics.md`（设计起点，保留追溯）
 - [ ] 读 `_GENERICS_TRIAL_20260812/REGISTER.md`（泛型压力试用：G1/G2/BOUNDARY-G1/双通道**已全部修复**，全量 2350/1）
 - [ ] 读 `_GENERICS_TRIAL_FIX_20260812/REGISTER.md`（修复回归试用：成果全 PASS；**新发现 G3 继承特化字段丢失 P1 + BOUNDARY-G2 类型退化 P2**，待独立窗口）
-- [ ] **🔴 修复交接**：读 `_HANDOFF_GENERICS_FIX.md`（G3 + BOUNDARY-G2 的复现/根因起点/修复路径/验证方法）——下一智能体修复任务
+- [ ] **🔴 修复交接**：读 `_HANDOFF_GENERICS_FIX.md`（G3 + BOUNDARY-G2 的复现/根因起点/修复路径/验证方法 + **试用体系规范化 §七**）——下一智能体任务
+- [ ] **🔴 试用体系规范化**：读 `TRIAL_SYSTEM_DESIGN.md`（设计起点：机制/日志体系化 + 历史记录整理定型，下一阶段主要目标）
 - [ ] 读 `_enum_instancing_assessment.md` + `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态）
 - [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空；泛型试用缺陷 G1/G2/BOUNDARY-G1/双通道 已全部修复；G3/BOUNDARY-G2 待修复）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）

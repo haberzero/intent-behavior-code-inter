@@ -320,6 +320,14 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
+- **🔴 下一 session 目标（2026-08-12 用户提出）**：
+  1. **试用体系规范化**（主要目标，设计起点 `TRIAL_SYSTEM_DESIGN.md`）：试用机制体系化、
+     日志体系化、历史记录整理定型——单一 harness（`trials/_toolkit/`）+ 统一分类/级别/命名
+     + REGISTER 统一模板 + 历史 4 套 git mv 迁移 + 编号映射 + `trials/INDEX.md`。
+  2. **泛型缺陷 G3/BOUNDARY-G2 修复**（交接 `_HANDOFF_GENERICS_FIX.md`）：继承特化父类字段
+     丢失（P1）+ 自引用链 while 类型退化（P2）。
+  - 两者错峰；顺序由接手者自主排定（可先 Phase 1 机制规范化工具化）。
+
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成
   真实模型实证 / 迭代 / 数量 / KNOWN_LIMITS §二）+ 嵌套包 `import subpkg.util` INT_INTERNAL_ERROR

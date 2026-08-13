@@ -1,8 +1,11 @@
 # HANDOFF — 泛型缺陷 G3 / BOUNDARY-G2 修复交接
 
-> 2026-08-12 编制。**本文件是给下一智能体（接手者）的修复任务交接**。
-> 目标：修复泛型修复回归试用中新发现的 2 项缺陷（G3 / BOUNDARY-G2）。
-> 交接内容：缺陷现象与证据、根因分析起点、修复方向建议、验证方法、约束。
+> 2026-08-12 编制。**本文件是给下一智能体（接手者）的任务交接**。
+> 目标：
+> ① 修复泛型修复回归试用中新发现的 2 项缺陷（G3 / BOUNDARY-G2）；
+> ② **试用体系规范化**（机制/日志体系化 + 历史记录整理定型，见 §七）。
+> 交接内容：缺陷现象与证据、根因分析起点、修复方向建议、验证方法、约束 +
+> 试用体系规范化设计起点。
 
 ---
 
@@ -157,3 +160,49 @@ python main.py run tasks_docs/_GENERICS_TRIAL_FIX_20260812/cases/R5-04-combo-bom
 | | `core/runtime/interpreter/interpreter.py`（_hydrate_user_classes） |
 | | `core/runtime/vm/handlers/leaf.py` + `_shared.py`（赋值/属性访问类型） |
 | 设计记录 | `tasks_docs/PT_FEAT3_DESIGN.md`（泛型设计冻结 + 边界） |
+
+---
+
+## 七、试用体系规范化（下一阶段主要目标，与修复任务并列）
+
+> 用户在 2026-08-12 提出：**试用机制体系化、规范化**；**试用日志体系化、规范化**；
+> **历史试用记录体系化整理定型** 作为下一阶段主要目标。
+> 设计起点已落档：**`tasks_docs/TRIAL_SYSTEM_DESIGN.md`**（现状盘点 + 规范化目标 + 草案 + 实施规划）。
+
+### 7.1 现状（已核实）
+- 4 套试用地基：`_LLM_TRIAL_20260812/`、`_LLM_TRIAL_ENUM_IMPORT_20260812/`、
+  `_GENERICS_TRIAL_20260812/`、`_GENERICS_TRIAL_FIX_20260812/`。
+- **已统一**：harness（4 份 `run_one.py` md5 一致，死循环保护 + register.jsonl 机械记录）、
+  register.jsonl 15 字段、api_config mock。
+- **碎片化（规范化对象）**：命名不统一（`_LLM_TRIAL_`/`_GENERICS_TRIAL_`/`_..._ENUM_IMPORT_`）、
+  分类体系两套（LLM 7 类 vs 泛型 4 类）、REGISTER 格式/缺陷编号不统一
+  （`KERNEL-ISSUE-001` vs `-G1` vs `G3`）、harness 物理 4 份复制非单一权威源。
+
+### 7.2 规范化方向（对照 design-philosophy）
+1. **单一权威源**：harness 收敛为单一 `tasks_docs/trials/_toolkit/`（引用非复制）；分类/级别/
+   命名规范为单一 `CLASSIFICATION.md`。
+2. **机制同构**：统一目录骨架 + 运行入口 + 产出格式（DESIGN_TEMPLATE / REGISTER_TEMPLATE）。
+3. **设计语言统一**：分类归一到统一清单（PASS/GUARD/KERNEL_ISSUE/BOUNDARY/DOC_ISSUE/
+   LLM_BEHAVIOR/LIMIT/HARNESS）；级别 P0-P3 统一；缺陷编号 `KERNEL-ISSUE-<域>-<n>`。
+4. **可追溯**：`trials/INDEX.md` 跨套索引 + 历史编号映射表。
+
+### 7.3 实施规划（3 阶段，见 TRIAL_SYSTEM_DESIGN.md §四）
+- **Phase 1 机制规范化**：建 `_toolkit/`（单一 harness + CLASSIFICATION.md + 模板）；4 套改造
+  引用而非复制；`git mv` 迁移新命名。
+- **Phase 2 历史记录定型**：4 套 REGISTER 按统一模板重排；缺陷编号统一 + 映射表；
+  PENDING_TASKS 引用同步；`INDEX.md`。
+- **Phase 3 收尾**：全量 pytest 零回归（仅文档/脚本，不涉内核）；docs 治理评估；
+  新试用从模板起步。
+
+### 7.4 与 G3/G2 修复的关系
+- **错峰**：试用体系规范化不混入 G3/BOUNDARY-G2 修复（两者独立推进）。
+- 顺序建议：可先做 Phase 1 机制规范化（工具化，低风险），再做 G3/G2 修复（会用新试用地基
+  验证）；或按主线优先级由接手者自主排定。
+- 二者共同目标：让"发现缺陷 → 登记 → 修复 → 回归试用"闭环体系化、可持续。
+
+### 7.5 相关文件
+| 用途 | 路径 |
+|------|------|
+| 试用体系设计记录（设计起点） | `tasks_docs/TRIAL_SYSTEM_DESIGN.md` |
+| 现有试用地基（4 套） | `tasks_docs/_LLM_TRIAL_20260812/`、`_LLM_TRIAL_ENUM_IMPORT_20260812/`、`_GENERICS_TRIAL_20260812/`、`_GENERICS_TRIAL_FIX_20260812/` |
+| 规范单一 harness 候选 | 任一套 `harness/run_one.py`（md5 一致） |
