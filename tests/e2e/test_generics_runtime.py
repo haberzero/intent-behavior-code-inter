@@ -531,6 +531,48 @@ class TestGeneratorReturnIdentity:
 
 
 # ===========================================================================
+# 元组解包容器身份 + lambda yield 误标记（独立复核发现）
+# ===========================================================================
+
+class TestTupleUnpackAndLambdaYield:
+    """独立复核（general agent）发现的 B1/B2 修复回归。
+
+    - B1：元组解包 list[int] a, list[str] b = [1,2], ["x"] 各元素值身份保真。
+    - B2：lambda 内 yield 不再误标外层函数为生成器（_contains_yield 排除 lambda）。
+    """
+
+    def test_tuple_unpack_container_identity(self):
+        """元组解包容器字面量：各元素绑各自声明特化类型。"""
+        lines = run_ibci(
+            "list[int] a, list[str] b = [1, 2], [\"x\"]\n"
+            "print(type(a))\n"
+            "print(type(b))\n"
+        )
+        assert lines == ["list[int]", "list[str]"], f"got {lines}"
+
+    def test_tuple_unpack_nested_identity(self):
+        """元组解包嵌套：list[list[int]] a, dict[str,int] b 全层保真。"""
+        lines = run_ibci(
+            "list[list[int]] a, dict[str,int] b = [[1],[2]], {\"k\": 1}\n"
+            "print(type(a))\n"
+            "print(type(a[0]))\n"
+            "print(type(b))\n"
+        )
+        assert lines == ["list[list[int]]", "list[int]", "dict[str,int]"], f"got {lines}"
+
+    def test_lambda_yield_not_mark_outer_generator(self):
+        """lambda 内 yield 不误标外层函数为生成器（修复前返回 generator 实例）。"""
+        lines = run_ibci(
+            "func f() -> int:\n"
+            "    fn g = lambda -> int: yield 5\n"
+            "    return 42\n"
+            "auto r = f()\n"
+            "print(r)\n"
+        )
+        assert lines == ["42"], f"got {lines}"
+
+
+# ===========================================================================
 # Nested generic subscript — list[list[int]][0] → list[int]
 # ===========================================================================
 

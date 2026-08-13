@@ -142,10 +142,33 @@ yield / auto 返回）+ 守卫异味，前两项整改；第二轮确认零风�
 写法遗漏（-> T）+ for 源遗漏，继续整改。auto 返回泛型实参推断为 auto 语义固有
 局限（独立类型推断增强窗口），复核确认非本收敛引入。
 
+**第三轮全面隐患扫描（general agent）**：发现并修复 2 项真 bug——① **generator[T]
+显式标注二次包裹**（`_declaration_visitors` 对 `-> generator[list[int]]` 再包一层
+generator[generator[list[int]]]，调用点退化 any，错误元素类型赋值未拦截）→ 修复
+（ret_base=='generator' 时直接用 from_spec，不二次包裹）+ **generator value_type
+序列化缺失**（serializer 缺 GENERATOR 分支，rehydrator 恢复裸 generator）→ 修复
+（serializer 补持久化 + rehydrator 补恢复分支）；② **B1 元组解包容器身份丢失**
+（list[int] a, list[str] b = [1,2], ["x"] 元素裸 list）→ 修复（按位置绑定
+rhs_tuple.elts[i] ↔ elt 声明类型）；③ **B2 `_contains_yield` 误标 lambda**（lambda
+内 yield 计为外层函数生成器）→ 修复（_scan_stmt 排除 IbLambdaExpr）。
+
+**评估为设计边界（登记不修）**：
+- **句柄类值身份未水化**（L3）：thread/thread_result/chan/slot/generator 值
+  `type()` 返回裸名（thread/chan/slot/generator）。编译期类型检查已封闭（实测
+  `generator[int] g = gen_str()` 编译期 SEM_TYPE_MISMATCH）；值由运行时语义创建
+  （非字面量），水化句柄类值身份改动面大、仅 type() 内省一致，登记独立窗口。
+- **`_rehydrate_type_pool_spec` 按 name 匹配**（L5 理论）：跨引擎反序列化时
+  type_pool 含多模块同名特化才可能选错；内置泛型无 module 限定，用户类特化跨模块
+  同名罕见，低风险理论隐患。
+- **generator value_type 嵌套扁平化**（L1）：value_type 为 `TypeRef('list[int]')`
+  （head 含方括号非递归）。正常编译流靠注册表解析兜底正确；跨引擎缺内层 spec 时
+  resolve_typeref 退化 any。独立增强窗口。
+- **`_slice_type_objs_for` 残缺实参**（L2）：嵌套实参类未水化时静默跳过，可能构造
+  错误特化名。正常流程 loader 已预水化，兜底路径基本不可达。
+- **元组解包错误类型不检查**：`list[int] a, list[str] b = ["x"], [1]` 编译期不拦截
+  （解包元素用 _any_desc，无类型检查）——预存，独立语言缺口，非值层身份范围。
+
 **已知边界（登记，独立窗口）**：
 1. `-> auto` 返回/生成器 yield 容器泛型实参推断（auto 语义不保留实参，独立类型
    推断增强）
-2. `-> generator[T]` 显式标注时 `_declaration_visitors:206-212` 二次包裹为
-   `generator[generator[T]]`（预存缺陷 c8b89564，yield 值绑定走 func_returns 栈
-   不受影响，独立增量）
-3. `*expr` 展开实参静态不可绑定（根本限制）
+2. `*expr` 展开实参静态不可绑定（根本限制）
