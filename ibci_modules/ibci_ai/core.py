@@ -107,8 +107,9 @@ class AIPlugin(IbStatefulPlugin):
         # 才抛无诊断码的泛化错误。
         if not base_url or not key:
             raise InterpreterError(
-                "LLM 配置缺失：未提供 base_url / api_key。请经 api_config.json 或 "
-                "ai.set_config(url, key, model) 配置，或显式 ai.set_mock_mode()。"
+                "LLM 配置缺失：未提供 base_url / api_key。请先调用 "
+                "ai.load_project_config() 加载项目 api_config.json，或 "
+                "ai.set_config(url, key, model) 显式配置，或 ai.set_mock_mode()。"
             )
 
         try:
@@ -528,7 +529,10 @@ class AIPlugin(IbStatefulPlugin):
         else:
             # 默认模型路径
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
-                raise RuntimeError("LLM 运行配置缺失")
+                raise RuntimeError(
+                    "LLM 运行配置缺失：请先调用 ai.load_project_config() 加载项目 "
+                    "api_config.json，或 ai.set_config(url, key, model) 显式配置。"
+                )
 
             # 优先使用预初始化的客户端 (单例复用)
             if not self._client or self._client == MOCK_CLIENT_SENTINEL:
@@ -668,7 +672,10 @@ class AIPlugin(IbStatefulPlugin):
             active_model = named_config["model"]
         else:
             if not self._config["key"] or not self._config["url"] or not self._config["model"]:
-                raise RuntimeError("LLM 运行配置缺失")
+                raise RuntimeError(
+                    "LLM 运行配置缺失：请先调用 ai.load_project_config() 加载项目 "
+                    "api_config.json，或 ai.set_config(url, key, model) 显式配置。"
+                )
             if not self._client or self._client == MOCK_CLIENT_SENTINEL:
                 self._init_client()
             active_client = self._client

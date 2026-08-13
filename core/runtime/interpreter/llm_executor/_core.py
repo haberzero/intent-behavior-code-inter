@@ -257,7 +257,8 @@ class LLMExecutorCore:
         # 如果没有回调，说明配置缺失，抛出错误
         raise InterpreterError(
             "LLM 运行配置缺失：未配置有效的 LLM 调用接口。\n"
-            "请确保已导入 'ai' 模块并正确调用了 'ai.set_config'。",
+            "请先调用 'ai.load_project_config()' 加载项目 api_config.json，\n"
+            "或显式 'ai.set_config(url, key, model)' / 'ai.set_mock_mode()'。",
             node_uid,
             error_code=RUN_LLM_ERROR
         )

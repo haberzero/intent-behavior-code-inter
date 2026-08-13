@@ -1,1 +1,4 @@
+# 冒烟：harness 死循环保护验证（非独立契约用例）
+# expect-class: HARNESS
+# expect-llm: false
 print("SMOKE-OK")

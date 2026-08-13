@@ -1,3 +1,6 @@
+# 死循环冒烟：应被 OS 级超时 SIGKILL（非独立契约用例）
+# expect-class: HARNESS
+# expect-llm: false
 int i = 0
 while i >= 0:
     i = i + 1

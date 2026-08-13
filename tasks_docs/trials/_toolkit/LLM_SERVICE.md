@@ -10,8 +10,23 @@
 |----|----|
 | 服务类型 | LM Studio 本地推理服务 |
 | 端点 | `http://127.0.0.1:1234/v1` |
-| 模型 | `qwen3.6-35b-a3b`（非思考模型，reasoning:false） |
+| 模型 | `qwen3.6-35b-a3b`（**实测为强制思考模型**，见 §二.1） |
 | 备用模型 | `text-embedding-nomic-embed-text-v1.5`（embedding，试用不常用） |
+
+## 二.1 模型思考模式（实测事实，2026-08-13）
+
+- **qwen3.6-35b-a3b 在 LM Studio 上强制思考**：即使传 `enable_thinking: false` /
+  `thinking: {"enabled": false}` / `chat_template_kwargs: {"enable_thinking": false}`
+  （全部 API 形态，已逐一实测），模型仍输出 `reasoning_content` 思考，且 `content`
+  在 `max_tokens` 被思考吃满时为**空**（`reasoning_tokens` 计数）。**API 参数无法关闭**
+  本模型的思考。
+- **影响**：每次真实调用有思考 token 开销 + 响应慢（10-30s）；`content` 为空时
+  IBCI 回退用 reasoning 提取答案（postprocess 剔除思考块，可靠性依赖模型输出形态）。
+- **配置建议**：`api_config.json` 的 `default_model.reasoning` 应**声明 true**（与实际
+  思考行为一致，IBCI 走 ANSWER 标签策略更可靠）；声明 `false`（原假设非思考）与
+  实际不符，仅在 `content` 恒非空时可用。
+- **死机/超时防护**：思考模型响应慢，批量试用用 `run_batch.py`（每用例 harness 超时
+  SIGKILL，进程组清理彻底）；避免大量用例并发压爆 LM Studio。
 
 ## 二、可用性探测（每次试用前必做）
 
