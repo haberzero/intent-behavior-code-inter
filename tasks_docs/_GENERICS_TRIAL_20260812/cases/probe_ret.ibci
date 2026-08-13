@@ -1,0 +1,15 @@
+import ai
+ai.set_mock_mode()
+class Vec[T]:
+    T x
+    T y
+    func __init__(self, T x, T y) -> void:
+        self.x = x
+        self.y = y
+    func make(self, T a, T b) -> Vec[T]:
+        return Vec[T](a, b)
+
+Vec[int] v = Vec[int](1, 2)
+Vec[int] w = v.make(3, 4)
+print("wx=" + (str)w.x)
+print("DONE")

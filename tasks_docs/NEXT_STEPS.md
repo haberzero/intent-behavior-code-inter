@@ -342,6 +342,14 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   实参数不匹配、字段-T 冲突、Enum 泛型拒绝、类型参数遮蔽内置拒绝。21 e2e + 2 序列化 round-trip；
   独立复核两轮 PASS（P2-1 父特化恒注册 / P2-2 嵌套实参映射 全整改）。
 
+- **🟡 泛型压力/恶意试用完成（2026-08-12，`_GENERICS_TRIAL_20260812/`，30 次运行全经死循环保护）**：
+  D1 核心语义（7）+ D2 正交交叉（泛型×运算符/继承/协议/容器/控制流/函数/并发/生成器/行为/闭包/多文件，
+  11）+ D3 恶意挑刺（10，守卫类 PASS）。**发现 2 项 P1 KERNEL_ISSUE + 1 项 P2 BOUNDARY（根因已定位）**：
+  ① **G1/G2 泛型类自引用特化缺失**（方法体 `Box[T]` / 自引用字段 `Node[T] next` 被扁平化为
+  `TypeRef('Node[T]')`，substitute 无法替换）——链表/树/工厂方法模式不可用；② **BOUNDARY-G1** 非法
+  特化实参（`Box[42]`）编译期未拦，运行期裸 AttributeError。**均已登记 PENDING_TASKS 待独立窗口**。
+  详情 `_GENERICS_TRIAL_20260812/REGISTER.md`。
+
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev a49555b，全量 2311 passed / 1 skipped）**：**F9 显式配置**——
   用户拍板命名 `ai.load_project_config` + 本轮实施。`setup()` 去自动加载段；新增
   `load_project_config()`（ec/project_root 缺失 fail-fast + 路径规范化 + 缺失 no-op + 幂等）；

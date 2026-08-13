@@ -1,0 +1,10 @@
+# D3-02 恶意：非法特化实参（Box[42] 字面量 / Box[None]）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 非类型实参报错（守卫是特性）
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+
+Box[int] b = Box[42](1)
+print("DONE")

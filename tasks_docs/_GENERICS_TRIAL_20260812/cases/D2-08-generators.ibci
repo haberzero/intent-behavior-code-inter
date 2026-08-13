@@ -1,0 +1,20 @@
+# D2-08 泛型 × 生成器（yield 泛型类实例 / 生成器返回泛型类）
+# doc: docs/syntax/06_oop.md §6.4 + 05_functions §5.8
+# 期望: 生成器产出泛型实例可迭代
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+
+func gen_boxes() -> generator[Box[int]]:
+    yield Box[int](1)
+    yield Box[int](2)
+    yield Box[int](3)
+
+int sum = 0
+for Box[int] b in gen_boxes():
+    sum = sum + b.get()
+print("sum=" + (str)sum)
+print("DONE")

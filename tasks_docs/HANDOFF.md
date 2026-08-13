@@ -136,6 +136,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_LLM_TRIAL_ENUM_IMPORT_20260812/` | **enum/import/运算符 用户试用**（2026-08-12）：9 例全过（含真实 LLM 非 str 枚举集成实证），无新增缺陷。DESIGN.md + REGISTER.md |
 | `_code_user_class_generics.md` | **用户类泛型主线设计起点**（2026-08-12）：地基盘点 + 设计范围 + 6 项开放设计问题 + 实施路径。**已落地（35bb2de）**，保留供追溯 |
 | `PT_FEAT3_DESIGN.md` | **用户类泛型设计冻结**（2026-08-12）：6 项开放问题逐项决断 + 实施蓝图 a-f + 边界登记。**已实施**，保留供追溯 |
+| `_GENERICS_TRIAL_20260812/` | **泛型压力/恶意试用**（2026-08-12）：D1 核心语义 + D2 正交交叉（11 维度）+ D3 恶意挑刺（10）。发现 G1/G2 泛型自引用特化缺失（P1）+ BOUNDARY-G1 非法实参未拦截（P2），根因已定位，登记 PENDING_TASKS |
 | `_code_ai_autoset.md` | **F9/ai 显式配置设计记录**（2026-08-12）：现状副作用 + 显式方案 + 变更清单 + 命名候选。**命名已拍板 `ai.load_project_config` + 本轮实施完成（a49555b）**，保留供追溯 |
 | `_code_f9_load_project_config.md` | **F9 显式配置落地实施记录**（2026-08-12）：设计决策（ec 契约迁移/幂等/历史试用档案不改）+ 变更清单 + 验证。Phase 5 汇报后清理 |
 | `_enum_instancing_assessment.md` | **实例化枚举设计候选评估**（2026-08-12）：维持现状（LLM 集成改造为核心硬伤），独立设计冻结候选 |
@@ -158,6 +159,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     类型特化/嵌套泛型/多参数 `Pair[K,V]`/泛型继承 `class Sub[T](Box[T])`；守卫（裸用/实参数/
     字段-T 冲突/Enum 泛型/类型参数遮蔽内置/非泛型子类继承特化）；21 e2e + 2 round-trip；
     独立复核两轮 PASS（P2-1/P2-2 全整改）。
+  - **🟡 泛型压力/恶意试用（`_GENERICS_TRIAL_20260812/`，30 次运行全经死循环保护）**：D1 核心
+    语义 + D2 正交交叉（运算符/继承/协议/容器/控制流/函数/并发/生成器/行为/闭包/多文件）+ D3
+    恶意挑刺。**发现 G1/G2 泛型类自引用特化缺失（P1，根因定位）+ BOUNDARY-G1 非法实参未拦截
+    （P2）**——登记 PENDING_TASKS 待独立窗口。详见 REGISTER.md。
   - **遗留独立窗口批次**：PT-DEBT-24 call_intent 死代码根治（S4）+ PT-AUDIT-3 S1-S5 处置
     （S4 根治 / S5 去重 / S1-S3 已知边界）+ 枚举实例化设计候选评估（`_enum_instancing_assessment.md`，
     维持现状）。独立复核 PASS。
@@ -465,8 +470,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 - [ ] 读本节 §2.1（PT-FEAT-3 用户类泛型**已落地 35bb2de**；F9 `ai.load_project_config` 已落地 a49555b；下一主线待择定）
 - [ ] 读 `PT_FEAT3_DESIGN.md`（设计冻结 + 边界 ①-⑧）+ `_code_user_class_generics.md`（设计起点，保留追溯）
+- [ ] 读 `_GENERICS_TRIAL_20260812/REGISTER.md`（泛型压力试用：G1/G2 自引用缺失 P1 + BOUNDARY-G1 P2，待独立窗口）
 - [ ] 读 `_enum_instancing_assessment.md` + `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态）
-- [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空，剩余独立窗口项待择定）
+- [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空；泛型试用缺陷 G1/G2/BOUNDARY-G1 已登记）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2339 passed / 1 skipped**）
 - [ ] 独立窗口候选：PT-DEBT-4 / PT-AUDIT-3 S1-S3 / 枚举实例化 / import subpkg / CI/CD / PT-FEAT-13 C8

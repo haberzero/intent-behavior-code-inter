@@ -1,0 +1,10 @@
+# D3-06 恶意：类型隔离 Box[int] vs Box[str] 互赋值
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 不同特化互赋值编译报错（类型隔离）
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+Box[int] bi = Box[int](1)
+Box[str] bs = bi
+print("DONE")
