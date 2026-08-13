@@ -1,0 +1,17 @@
+# 生成器 yield from + break + next + 提前终止
+# doc: docs/syntax/05_functions.md 5.8
+# expect-class: PASS
+# expect-out: 1 | 2 | 3 | 1 | done
+# expect-exit: 0
+func gen() -> generator[int]:
+    for i in [1,2,3,4,5]:
+        yield i
+func gen2() -> generator[int]:
+    yield from gen()
+generator[int] g = gen2()
+for v in g:
+    if v == 4:
+        break
+    print(v)
+print(next(gen()))
+print("done")

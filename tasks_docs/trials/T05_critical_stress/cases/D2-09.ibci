@@ -1,0 +1,23 @@
+# switch/case 边界（default/无 fallthrough/字符串）
+# doc: docs/syntax/04_control_flow.md switch
+# expect-class: PASS
+# expect-out: two | default-hit | a-string | after
+# expect-exit: 0
+switch 2:
+    case 1:
+        print("one")
+    case 2:
+        print("two")
+    case 3:
+        print("three")
+    default:
+        print("no")
+switch 99:
+    default:
+        print("default-hit")
+switch "a":
+    case "b":
+        print("b")
+    case "a":
+        print("a-string")
+print("after")

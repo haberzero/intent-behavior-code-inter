@@ -1,0 +1,22 @@
+# 运算符重载泛型（Vec[T] __add__/__eq__）
+# doc: docs/syntax/06_oop.md 运算符
+# expect-class: PASS
+# expect-out: 4 | 6 | True | False
+# expect-exit: 0
+class Vec[T]:
+    T x
+    T y
+    func __init__(self, T x, T y) -> void:
+        self.x = x
+        self.y = y
+    func __add__(self, Vec[T] other) -> Vec[T]:
+        return Vec[T](self.x + other.x, self.y + other.y)
+    func __eq__(self, Vec[T] other) -> bool:
+        return self.x == other.x and self.y == other.y
+Vec[int] a = Vec[int](1,2)
+Vec[int] b = Vec[int](3,4)
+Vec[int] c = a + b
+print(c.x)
+print(c.y)
+print(a == a)
+print(a == b)

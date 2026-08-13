@@ -1,0 +1,13 @@
+# 意图 @/@! 真实模型遵循（批判：意图是否稳定到达并被遵循）
+# doc: docs/syntax/09_intents.md
+# expect-class: PASS
+# expect-out: got_reply | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+@! 你的回答必须以单词'好'结尾。回应：天气如何
+str r = @~ 天气如何 ~
+if r.endswith("好"):
+    print("got_reply")
+print("DONE")

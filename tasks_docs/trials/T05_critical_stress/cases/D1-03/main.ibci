@@ -1,0 +1,11 @@
+# 跨模块同名非泛型类隔离
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: 42 | HI
+# expect-exit: 0
+import geo
+import graph
+geo.Wrap a = geo.Wrap(21)
+graph.Wrap b = graph.Wrap("hi")
+print(a.get())
+print(b.get())

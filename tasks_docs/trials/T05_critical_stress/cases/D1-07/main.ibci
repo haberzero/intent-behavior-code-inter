@@ -1,0 +1,11 @@
+# 泛型继承同模块父 + 同名冲突模块并存（Sub[T](Box[T]) 父链 module 化）
+# doc: docs/syntax/06_oop.md 泛型继承
+# expect-class: PASS
+# expect-out: geo-base | geo-sub | 7
+# expect-exit: 0
+import geo
+import graph
+geo.Sub[int] s = geo.Sub[int](7)
+print(s.base())
+print(s.sub())
+print(s.v)

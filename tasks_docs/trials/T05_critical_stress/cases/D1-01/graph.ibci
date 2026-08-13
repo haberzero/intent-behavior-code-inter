@@ -1,0 +1,4 @@
+class Box[T]:
+    str name
+    func get(self) -> str:
+        return self.name + "!"

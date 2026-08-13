@@ -1,0 +1,12 @@
+# 入口模块类 + 导入同名类共存（遮蔽）
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: entry | geo | entry
+# expect-exit: 0
+import geo
+class Box:
+    func who(self) -> str:
+        return "entry"
+print(Box().who())
+print(geo.Box().who())
+print(Box().who())

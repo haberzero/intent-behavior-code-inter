@@ -1,0 +1,10 @@
+# 遮蔽内建守卫：用户函数重定义内置 len → SEM_REDEFINITION
+# doc: docs/syntax/03_variables.md
+# expect-class: GUARD
+# expect-exit: nonzero
+# expect-code: SEM_REDEFINITION
+int sum = 7
+print(sum)
+func len(any x) -> int:
+    return 2
+print(len([1,2,3]))

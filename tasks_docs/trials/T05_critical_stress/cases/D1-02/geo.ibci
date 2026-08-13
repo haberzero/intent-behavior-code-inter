@@ -1,0 +1,6 @@
+class Box[T]:
+    T val
+    func set(self, T v) -> void:
+        self.val = v
+    func get(self) -> T:
+        return self.val

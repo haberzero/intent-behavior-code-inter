@@ -1,0 +1,14 @@
+# 深递归 fib（depth 边界）+ 深递归线程体
+# doc: docs/syntax/05_functions.md
+# expect-class: PASS
+# expect-out: 6765 | 6765
+# expect-exit: 0
+func fib(int n) -> int:
+    if n < 2:
+        return n
+    return fib(n-1) + fib(n-2)
+func worker() -> int:
+    return fib(20)
+print(fib(20))
+thread[int] t = thread(callable=worker, args=[])
+print(t.join().expect())

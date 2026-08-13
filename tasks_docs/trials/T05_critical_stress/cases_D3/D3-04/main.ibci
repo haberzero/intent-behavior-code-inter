@@ -1,0 +1,15 @@
+# enum LLM 成员名→值解析（批判：非 str 枚举集成）
+# doc: docs/syntax/06_oop.md enum + KNOWN_LIMITS 二
+# expect-class: PASS
+# expect-out: status_200 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Status(Enum):
+    OK = 200
+    ERR = 500
+Status s = @~ 服务器正常返回，状态码应输出 OK ~
+if s == 200:
+    print("status_200")
+print("DONE")

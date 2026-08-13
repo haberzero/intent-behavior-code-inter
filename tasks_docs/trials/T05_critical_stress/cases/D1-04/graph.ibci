@@ -1,0 +1,4 @@
+class Box[T]:
+    str name
+    func tag(self) -> str:
+        return self.name + "-data"

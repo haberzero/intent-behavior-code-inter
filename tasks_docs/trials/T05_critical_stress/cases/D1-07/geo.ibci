@@ -1,0 +1,7 @@
+class Box[T]:
+    int v
+    func base(self) -> str:
+        return "geo-base"
+class Sub[T](Box[T]):
+    func sub(self) -> str:
+        return "geo-sub"

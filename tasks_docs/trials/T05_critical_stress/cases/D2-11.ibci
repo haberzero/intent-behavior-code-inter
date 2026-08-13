@@ -1,0 +1,21 @@
+# thread/chan/slot 并发 + 生成器组合
+# doc: docs/syntax/14_coroutine.md
+# expect-class: PASS
+# expect-out: 10 | 20 | 5 | done
+# expect-exit: 0
+func add(int a) -> int:
+    return a + 10
+func mul(int a) -> int:
+    return a * 2
+func w1() -> int:
+    return add(0)
+func w2() -> int:
+    return mul(10)
+thread[int] t1 = thread(callable=w1, args=[])
+thread[int] t2 = thread(callable=w2, args=[])
+print(t1.join().expect())
+print(t2.join().expect())
+chan[int] ch = chan()
+ch.send(5)
+print(ch.recv())
+print("done")

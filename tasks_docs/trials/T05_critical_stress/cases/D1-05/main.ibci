@@ -1,0 +1,11 @@
+# 三模块同名类互不干扰
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: 1 | 2 | 3
+# expect-exit: 0
+import m1
+import m2
+import m3
+print(m1.Item(1).get())
+print(m2.Item(2).get())
+print(m3.Item(3).get())

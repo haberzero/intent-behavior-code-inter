@@ -1,0 +1,12 @@
+# 函数默认参数容器/深克隆隔离
+# doc: docs/syntax/05_functions.md 默认参数
+# expect-class: PASS
+# expect-out: 2 | 2
+# expect-exit: 0
+func f(list[int] xs = [1]) -> list[int]:
+    xs.append(2)
+    return xs
+list[int] r1 = f()
+list[int] r2 = f()
+print(len(r1))
+print(len(r2))

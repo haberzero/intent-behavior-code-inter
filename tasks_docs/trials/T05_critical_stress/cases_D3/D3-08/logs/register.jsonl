@@ -1,0 +1,1 @@
+{"case_id": "D3-08", "script": "main.ibci", "dim": "D3", "doc": "real-llm stress", "expected": "real llm", "timeout_s": 80.0, "max_inst": 5000000, "exit_code": 0, "timed_out": false, "duration_s": 0.75, "out_head": "DONE ", "err_head": "", "classification": "PASS", "severity": "", "note": "auto-judged"}

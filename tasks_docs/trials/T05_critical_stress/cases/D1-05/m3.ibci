@@ -1,0 +1,4 @@
+class Item:
+    int n
+    func get(self) -> int:
+        return self.n

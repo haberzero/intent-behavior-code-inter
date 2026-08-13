@@ -1,0 +1,13 @@
+# 同模块多特化并存：geo.Box[int] 与 geo.Box[str] 独立值层
+# doc: docs/syntax/06_oop.md 泛型
+# expect-class: PASS
+# expect-out: 100 | geo | str | int
+# expect-exit: 0
+import geo
+geo.Box[int] a = geo.Box[int](5)
+a.set(100)
+print(a.get())
+geo.Box[str] s = geo.Box[str]("geo")
+print(s.get())
+print(type(s.get()))
+print(type(a.get()))

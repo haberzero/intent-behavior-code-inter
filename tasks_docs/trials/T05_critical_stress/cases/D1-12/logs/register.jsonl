@@ -1,0 +1,1 @@
+{"case_id": "D1-12", "script": "main.ibci", "dim": "D1", "doc": "cross-module", "expected": "cross-module class isolation", "timeout_s": 40.0, "max_inst": 5000000, "exit_code": 0, "timed_out": false, "duration_s": 0.42, "out_head": "entry geo entry ", "err_head": "", "classification": "PASS", "severity": "", "note": "auto-judged"}

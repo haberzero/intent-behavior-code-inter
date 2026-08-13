@@ -1,0 +1,11 @@
+# lambda 捕获：lambda 活捕获（读最新值）/ snapshot 创建时快照
+# doc: docs/syntax/05_functions.md
+# expect-class: PASS
+# expect-out: 2 | 1
+# expect-exit: 0
+int x = 1
+fn_callable[int] f = lambda -> int: x
+fn_callable[int] g = snapshot -> int: x
+x = 2
+print(f())
+print(g())

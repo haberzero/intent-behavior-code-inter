@@ -1,0 +1,13 @@
+# geo/graph 同名类方法表隔离（module 化根治判别性）
+# doc: docs/syntax/06_oop.md 泛型/跨模块
+# expect-class: PASS
+# expect-out: 105 | hi! | int | str
+# expect-exit: 0
+import geo
+import graph
+geo.Box[int] a = geo.Box[int](5)
+graph.Box[str] b = graph.Box[str]("hi")
+print(a.get())
+print(b.get())
+print(type(a.get()))
+print(type(b.get()))

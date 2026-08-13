@@ -1,0 +1,12 @@
+# 字符串操作边界（split/join/format/空串）
+# doc: docs/syntax/01_types.md
+# expect-class: PASS
+# expect-out: 3 | a-b-c | 5 | 0
+# expect-exit: 0
+str s = "a,b,c"
+list[str] parts = s.split(",")
+print(len(parts))
+print("-".join(parts))
+str t = "{}".format(5)
+print(t)
+print(len(""))

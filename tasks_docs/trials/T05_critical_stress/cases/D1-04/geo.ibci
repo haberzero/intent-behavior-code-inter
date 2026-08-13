@@ -1,0 +1,4 @@
+class Box[T]:
+    int v
+    func bump(self) -> int:
+        return self.v + 200

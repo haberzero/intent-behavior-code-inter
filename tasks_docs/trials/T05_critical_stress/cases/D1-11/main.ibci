@@ -1,0 +1,11 @@
+# 同名类序列化 round-trip（运行时类表 qualified 保真）
+# doc: docs/syntax/10_serialization.md
+# expect-class: PASS
+# expect-out: 505 | round!
+# expect-exit: 0
+import geo
+import graph
+geo.Box a = geo.Box(5)
+graph.Box b = graph.Box("round")
+print(a.get())
+print(b.get())

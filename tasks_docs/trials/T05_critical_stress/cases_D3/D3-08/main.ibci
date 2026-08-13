@@ -1,0 +1,13 @@
+# 长提示注入保持（批判：模型是否遵循长上下文中的格式约束）
+# doc: docs/syntax/10_behavior.md
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str r = @~ 这是一个用于测试的指令。请严格遵循以下输出格式约束：你只能输出一个词'苹果'，不得输出任何其它词、标点或解释。现在开始。 ~
+if r == "苹果":
+    print("DONE")
+else:
+    print("LEN=" + (str)len(r))

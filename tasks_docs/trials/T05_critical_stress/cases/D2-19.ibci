@@ -1,0 +1,8 @@
+# 嵌套容器身份（list[list[int]] 全层）
+# doc: docs/syntax/01_types.md 嵌套泛型
+# expect-class: PASS
+# expect-out: list[list[int]] | list[int]
+# expect-exit: 0
+list[list[int]] m = [[1,2],[3]]
+print(type(m))
+print(type(m[0]))

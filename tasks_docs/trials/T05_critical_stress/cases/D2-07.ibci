@@ -1,0 +1,15 @@
+# 闭包捕获/改写（nonlocal/cell 共享）
+# doc: docs/syntax/05_functions.md 闭包
+# expect-class: PASS
+# expect-out: 2 | 3
+# expect-exit: 0
+func make() -> fn_callable[int]:
+    int counter = 1
+    func inc() -> int:
+        nonlocal counter
+        counter = counter + 1
+        return counter
+    return lambda -> int: inc()
+fn_callable[int] f = make()
+print(f())
+print(f())

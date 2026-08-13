@@ -1,0 +1,13 @@
+# LLM 数字解析边界（批判：数字输出是否被正确解析为 int/float）
+# doc: docs/syntax/10_behavior.md
+# expect-class: PASS
+# expect-out: 42 | 3.5 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+int a = @~ 只输出数字 42 ~
+print(a)
+float f = @~ 只输出数字 3.5 ~
+print(f)
+print("DONE")

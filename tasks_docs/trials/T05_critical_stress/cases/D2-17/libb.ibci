@@ -1,0 +1,3 @@
+int val = 2
+func other() -> int:
+    return 3

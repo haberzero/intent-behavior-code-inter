@@ -1,0 +1,11 @@
+# 跨模块类作内置泛型实参（list[geo.Box[int]]）
+# doc: docs/syntax/06_oop.md 嵌套泛型
+# expect-class: PASS
+# expect-out: 105 | graph!
+# expect-exit: 0
+import geo
+import graph
+list[geo.Box[int]] xs = [geo.Box[int](5)]
+print(xs[0].get())
+list[graph.Box[str]] ys = [graph.Box[str]("graph")]
+print(ys[0].get())

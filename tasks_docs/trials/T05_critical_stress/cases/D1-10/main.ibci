@@ -1,0 +1,17 @@
+# 跨模块类作 thread 值类型 + join 结果
+# doc: docs/syntax/14_concurrency.md
+# expect-class: KERNEL_ISSUE
+# expect-out: 405 | thread-ok
+# expect-exit: 0
+import geo
+import graph
+func compute() -> int:
+    return geo.Box(5).get()
+func compute2() -> str:
+    return graph.Box("thread").get()
+print(compute())
+print(compute2())
+thread[int] t = thread(callable=compute, args=[])
+print(t.join().expect())
+thread[str] t2 = thread(callable=compute2, args=[])
+print(t2.join().expect())

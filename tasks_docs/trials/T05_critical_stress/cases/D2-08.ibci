@@ -1,0 +1,13 @@
+# enum 迭代/数量/非 str 值（for v in Color 产出成员值）
+# doc: docs/syntax/04_control_flow.md enum
+# expect-class: PASS
+# expect-out: 3 | 1 | 2 | 3 | OK
+# expect-exit: 0
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+    BLUE = 3
+print(len(Color))
+for c in Color:
+    print(c)
+print("OK")

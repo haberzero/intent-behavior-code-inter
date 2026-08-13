@@ -1,0 +1,14 @@
+# LLM 函数 + 意图注入 + auto_intent（批判：注入意图是否进 prompt）
+# doc: docs/syntax/09_intents.md
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+@ 回答必须包含单词'函数'
+str r = @~ 用一句话解释什么是函数 ~
+if "函数" in r:
+    print("DONE")
+else:
+    print("MISS")

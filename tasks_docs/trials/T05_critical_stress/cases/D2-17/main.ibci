@@ -1,0 +1,10 @@
+# import 星号/具名 + 同名符号碰撞
+# doc: docs/syntax/02_modules.md
+# expect-class: PASS
+# expect-out: 1 | 2 | 3
+# expect-exit: 0
+from liba import val
+from libb import val as val2, other
+print(val)
+print(val2)
+print(other())

@@ -1,0 +1,11 @@
+# 模块限定类型注解（geo.Box[int] 作声明类型）
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: 205 | graph-data
+# expect-exit: 0
+import geo
+import graph
+geo.Box[int] a = geo.Box[int](5)
+graph.Box[str] b = graph.Box[str]("graph")
+print(a.bump())
+print(b.tag())

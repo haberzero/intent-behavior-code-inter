@@ -1,0 +1,20 @@
+# 真实 LLM → mock 切换（批判：set_mock_mode 单向进入 mock）
+# doc: docs/syntax/11_config.md
+# expect-class: PASS
+# expect-out: real-ok | mock-ok | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str r = @~ 输出单词'真实' ~
+if r == "真实":
+    print("real-ok")
+else:
+    print("real-len=" + (str)len(r))
+ai.set_mock_mode()
+str m = @~ MOCK:STR:mocked 测试 ~
+if m == "mocked":
+    print("mock-ok")
+else:
+    print("mock-miss")
+print("DONE")

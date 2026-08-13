@@ -1,0 +1,4 @@
+class Wrap:
+    int v
+    func get(self) -> int:
+        return self.v * 2

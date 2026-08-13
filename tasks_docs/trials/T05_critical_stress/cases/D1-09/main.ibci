@@ -1,0 +1,13 @@
+# 跨模块类作函数参数/返回类型
+# doc: docs/syntax/05_functions.md + 06_oop.md
+# expect-class: PASS
+# expect-out: 305 | graph-ret
+# expect-exit: 0
+import geo
+import graph
+func use(geo.Box b) -> int:
+    return b.get()
+func use2(graph.Box b) -> str:
+    return b.get()
+print(use(geo.Box(5)))
+print(use2(graph.Box("graph")))

@@ -1,0 +1,1 @@
+{"case_id": "D1-06", "script": "main.ibci", "dim": "D1", "doc": "cross-module", "expected": "cross-module class isolation", "timeout_s": 40.0, "max_inst": 5000000, "exit_code": 0, "timed_out": false, "duration_s": 0.44, "out_head": "from-a from-b ", "err_head": "", "classification": "PASS", "severity": "", "note": "auto-judged"}

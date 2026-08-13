@@ -1,0 +1,4 @@
+class Wrap:
+    str name
+    func get(self) -> str:
+        return self.name.upper()

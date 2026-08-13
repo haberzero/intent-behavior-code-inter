@@ -1,0 +1,12 @@
+# @~ 行为输出解析到类型值（批判：解析稳定性）
+# doc: docs/syntax/10_behavior.md
+# expect-class: PASS
+# expect-out: int-ok | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+int n = @~ 只输出数字 7，不要输出其它任何内容 ~
+if n == 7:
+    print("int-ok")
+print("DONE")

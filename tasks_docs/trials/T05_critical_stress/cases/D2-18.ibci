@@ -1,0 +1,12 @@
+# while True + break 守卫（防死循环）
+# doc: docs/syntax/04_control_flow.md
+# expect-class: PASS
+# expect-out: 0 | 1 | 2 | 3 | break
+# expect-exit: 0
+int i = 0
+while True:
+    if i >= 4:
+        break
+    print(i)
+    i = i + 1
+print("break")

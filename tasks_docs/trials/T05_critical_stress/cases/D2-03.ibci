@@ -1,0 +1,10 @@
+# Optional None 流：is None 对 Optional 包装的 None 语义（文档称 x is None 判 None）
+# doc: docs/syntax/03_operators.md 70（x is None 判断是否为 None）
+# expect-class: KERNEL_ISSUE
+# expect-out: True | False | True
+# expect-exit: 0
+Optional[int] a = None
+any b = None
+print(a is None)
+print(b is None)
+print(a.is_some())

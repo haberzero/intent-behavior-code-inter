@@ -1,0 +1,15 @@
+# llmexcept 真实 LLM 共存（批判：llmexcept 块在真实模型成功路径不误触）
+# doc: docs/syntax/12_exceptions.md
+# expect-class: PASS
+# expect-out: n=3 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+int attempts = 0
+int n = @~ 只输出数字 3，不要输出其它 ~
+llmexcept:
+    attempts = attempts + 1
+    retry "请只输出一个数字"
+print("n=" + (str)n)
+print("DONE")

@@ -1,0 +1,14 @@
+# any 逃生守卫：动态 any 赋用户类变量 → 守卫（caught）
+# doc: docs/KNOWN_LIMITS.md 七
+# expect-class: PASS
+# expect-out: caught
+# expect-exit: 0
+class Point:
+    int x
+func make() -> any:
+    return any()
+try:
+    Point p = make()
+    print("no-guard")
+except:
+    print("caught")
