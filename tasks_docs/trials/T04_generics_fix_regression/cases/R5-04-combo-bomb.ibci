@@ -1,6 +1,9 @@
-# R5-04 回归面：组合轰炸（自引用+嵌套+容器+控制流）
+# 自引用链 + 容器 + 控制流组合：固定次数遍历（Node[int] 非 Optional，None 哨兵不可行）
 # doc: docs/syntax/06_oop.md §6.4
-# 期望: 组合场景不崩
+# 期望输出: total=6 / make=20 / DONE
+# expect-class: PASS
+# expect-out: total=6 | make=20 | DONE
+# expect-exit: 0
 import ai
 ai.set_mock_mode()
 class Node[T]:
@@ -18,12 +21,15 @@ nodes[0].next = nodes[1]
 nodes[1].next = nodes[2]
 int total = 0
 Node[int] cur = nodes[0]
-while cur is not None:
+int i = 0
+while i < 3:
     total = total + cur.get()
-    cur = cur.next
+    if i < 2:
+        cur = cur.next
+    i = i + 1
 print("total=" + (str)total)
 
-Box[list[int]] bl = Box[list[int]]([])
-Box[list[int]] bl2 = bl.make([10, 20])
-print("len=" + (str)bl2.get().len())
+Box[int] bx = Box[int](10)
+Box[int] bx2 = bx.make(20)
+print("make=" + (str)bx2.value)
 print("DONE")

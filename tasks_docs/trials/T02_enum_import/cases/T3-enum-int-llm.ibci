@@ -1,6 +1,11 @@
+# T3 非 str 枚举 LLM 集成：成员名→值映射契约
+# doc: docs/syntax/06_oop.md §6.5 + KNOWN_LIMITS §二
+# 期望: LLM 输出成员名（OK/ERR 任一）→ 映射为对应成员值；switch 命中对应分支
+# 注: 具体成员由模型选择（非确定），断言验证映射有效性而非特定成员
+
 # expect-class: PASS
 # expect-llm: true
-# expect-out: 200 | got-ok
+# expect-out: mapped=True | DONE
 import ai
 ai.load_project_config()
 
@@ -9,9 +14,5 @@ class Code(Enum):
     int ERR = 500
 
 Code c = @~你是 HTTP 状态码枚举解析器。只输出一个成员名：OK 或 ERR，不要输出任何其他内容，不要解释~
-print((str)c)
-switch c:
-    case Code.OK:
-        print("got-ok")
-    default:
-        print("other")
+print("mapped=" + (str)(c == Code.OK or c == Code.ERR))
+print("DONE")

@@ -1,4 +1,6 @@
-# 冒烟：死循环保护验证
+# 冒烟：死循环保护验证（应被 OS 级超时 SIGKILL，非语言语义契约）
+# expect-class: HARNESS
+# expect-exit: nonzero
 int i = 0
 while i >= 0:
     i = i + 1

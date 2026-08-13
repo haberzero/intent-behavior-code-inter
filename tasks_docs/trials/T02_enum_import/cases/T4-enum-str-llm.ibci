@@ -1,6 +1,11 @@
+# T4 str 枚举 LLM 集成：成员名→值映射 + 值≠名
+# doc: docs/syntax/06_oop.md §6.5 + KNOWN_LIMITS §二
+# 期望: LLM 输出成员名（RED/GREEN/BLUE 任一）→ 映射为对应成员值（str 值≠名场景）
+# 注: 具体成员由模型选择（非确定），断言验证映射有效性而非特定成员
+
 # expect-class: PASS
 # expect-llm: true
-# expect-out: RED | False
+# expect-out: mapped=True | DONE
 import ai
 ai.load_project_config()
 
@@ -10,5 +15,5 @@ class Color(Enum):
     str BLUE = "BLUE"
 
 Color c = @~你是颜色枚举解析器。只输出一个成员名：RED、GREEN 或 BLUE，不要输出任何其他内容~
-print((str)c)
-print((str)(c == Color.GREEN))
+print("mapped=" + (str)(c == Color.RED or c == Color.GREEN or c == Color.BLUE))
+print("DONE")

@@ -9,9 +9,9 @@
 | 套 | 主题 | 日期 | 用例 | 结果概览 | 主要缺陷（新编号） |
 |----|------|------|------|----------|--------------------|
 | `T01_llm_full` | 真实 LLM 全语法/压力/批判试用（原 `_LLM_TRIAL_20260812`） | 2026-08-12 | 104 cases / 113 运行 | D1-D3 全过；A1-A5/C1-C4 验证 | `KERNEL_ISSUE-VM-1`~`CONFIG-1`（已修）、`DOC-ISSUE-001~007`（已处置）、`BOUNDARY-*-*`（已记录） |
-| `T02_enum_import` | enum 补全 + 嵌套包 import 用户试用（原 `_LLM_TRIAL_ENUM_IMPORT_20260812`） | 2026-08-12 | 9 例 | 全 PASS / 1 LIMIT | 无 |
-| `T03_user_class_generics` | 用户类泛型压力/恶意试用（原 `_GENERICS_TRIAL_20260812`） | 2026-08-12 | 30 运行 | 23 PASS；守卫生效 | `KERNEL_ISSUE-GEN-1/2/3`、`BOUNDARY-GEN-1`（已修） |
-| `T04_generics_fix_regression` | 泛型修复回归试用（原 `_GENERICS_TRIAL_FIX_20260812`） | 2026-08-12 | 29 用例 | 修复验证全 PASS；新暴露 G3/G2 | `KERNEL_ISSUE-GEN-4`（已修）、`BOUNDARY-GEN-2`（已修）、`KERNEL_ISSUE-GEN-5`（待修） |
+| `T02_enum_import` | enum 补全 + 嵌套包 import 用户试用（原 `_LLM_TRIAL_ENUM_IMPORT_20260812`） | 2026-08-12 | 9 例 | 全 PASS / 1 LIMIT（2026-08-13 重构断言，映射有效性） | 无 |
+| `T03_user_class_generics` | 用户类泛型压力/恶意试用（原 `_GENERICS_TRIAL_20260812`） | 2026-08-12 | 30 运行 | 22 PASS + 6 GUARD + 1 KI（D2-01=GEN-6）+ 1 HARNESS（smoke） | `KERNEL_ISSUE-GEN-1/2/3`、`BOUNDARY-GEN-1`（已修）、`KERNEL_ISSUE-GEN-6`（待修） |
+| `T04_generics_fix_regression` | 泛型修复回归试用（原 `_GENERICS_TRIAL_FIX_20260812`） | 2026-08-12 | 33 例 | 24 PASS + 7 GUARD + 1 KI（GEN5-01）+ 1 HARNESS（smoke） | `KERNEL_ISSUE-GEN-4`（已修）、`BOUNDARY-GEN-2`（已修，用例重构核销）、`KERNEL_ISSUE-GEN-5`（待修） |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 
@@ -27,11 +27,11 @@
 | KERNEL-ISSUE-G1 | `KERNEL_ISSUE-GEN-1` | 泛型方法体内类型参数运行时失效（运行期） | 已修复 32484fe | — |
 | KERNEL-ISSUE-G2 | `KERNEL_ISSUE-GEN-2` | 泛型类自引用字段特化替换失效（编译期） | 已修复 32484fe | — |
 | 双通道 descriptors | `KERNEL_ISSUE-GEN-3` | 特化方法参数 descriptors 两套实现 | 已修复 32484fe | — |
-| KERNEL-ISSUE-G3 | `KERNEL_ISSUE-GEN-4` | 继承特化父类字段丢失（auto-init 只收自身） | 已修复 b0f4d74（2026-08-13） | 历史 R1-05/R5-01 冻结；核销用 R1-05b/R5-01b（PASS） |
+| KERNEL-ISSUE-G3 | `KERNEL_ISSUE-GEN-4` | 继承特化父类字段丢失（auto-init 只收自身） | 已修复 b0f4d74（2026-08-13） | R1-05/R5-01 已重构为修复后语义（2026-08-13，PASS 核销） |
 | — | `KERNEL_ISSUE-GEN-5` | 用户泛型类下标表达式位置特化未注册 | **发现/登记**（待独立窗口） | `T04/.../GEN5-01-nested-specialization.ibci` |
 | — | `KERNEL_ISSUE-GEN-6` | 泛型运算符方法参数含 T 的特化未生效（G1 修复不完整） | **发现/登记**（待独立窗口） | `T03/.../D2-01-operator-override.ibci` |
 | BOUNDARY-G1 | `BOUNDARY-GEN-1` | 非法特化实参（Box[42]/Box[None]）编译期未拦 | 已修复 3fe98d6 | — |
-| BOUNDARY-G2 | `BOUNDARY-GEN-2` | 自引用链 while"类型退化"（实为用例无效 + any 复查缺口） | 已修复 b0f4d74（2026-08-13） | 历史 R5-04 冻结；合法遍历用 R5-04b（PASS） |
+| BOUNDARY-G2 | `BOUNDARY-GEN-2` | 自引用链 while"类型退化"（实为用例无效 + any 复查缺口） | 已修复 b0f4d74（2026-08-13） | R5-04 已重构为合法遍历（2026-08-13，PASS 核销） |
 
 ### 域 LLM/VM/IMPORT/CONFIG/SEQ/ASYNC（T01）
 

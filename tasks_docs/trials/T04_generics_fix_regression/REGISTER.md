@@ -7,17 +7,15 @@
 > 唯一 TIMEOUT-KILLED 为死循环保护冒烟验证本身。
 > **规范（2026-08-13 迁移）**：本套现位于 `trials/T04_generics_fix_regression/`；分类/级别/编号
 > 规范见 `trials/_toolkit/CLASSIFICATION.md`。缺陷编号已映射为新格式（见文末"编号映射"节）。
-> **历史冻结 + 适配用例（2026-08-13）**：历史用例 R1-05/R5-01/R5-04 **保持原始形态冻结**
-> （与 logs/register.jsonl 证据一致，register.jsonl 中 R5-04 exit=1 为原始崩溃证据）；
-> G3 修复后语义验证改用新增适配用例（R1-05b 多参构造 / R5-01b / R5-04b 合法遍历 /
-> GEN5-01 GEN-5 触发用例）。
+> **重构（2026-08-13）**：用户原则——套件不冻结历史资产，问题直接重构（唯一底线：不为规避缺陷改套件，缺陷触发用例保留）。R1-05/R5-01/R5-04 原为 G3/BOUNDARY-G2 触发形态，已**直接重构为修复后正确语义**（R1-05 多参构造 d1=A:5/d2=6、R5-01 全链构造 sub=7L、R5-04 固定次数合法遍历 total=6/make=20），原 b 变体并入主用例删除；GEN5-01 保留为 GEN-5 缺陷触发用例（真实缺陷，不得规避）。
 
 ## 结果总览
 
-- **用例总数**：31 个用例 + 1 冒烟；32 次 harness 运行；全部经死循环保护。
+- **用例总数**：32 个用例 + 1 冒烟；33 次 harness 运行；全部经死循环保护。
 - **修复成果验证（PASS）**：G1 方法体类型参数（R2 全组含嵌套/多参数/交替/生成器/深层）、
   BOUNDARY-G1 非法实参守卫（R3 全组含 None/void/auto/嵌套/正向/thread[void]）、
   双通道 descriptors（R4 全组含嵌套/多参数/继承）、G2 自引用基础（R1-01~04）。
+- **当前判定（2026-08-13 重跑）**：24 PASS + 7 GUARD + 1 KERNEL_ISSUE（GEN5-01，GEN-5 缺陷复现）+ 1 HARNESS（smoke 死循环预期）。
 - **发现缺陷（2 项，均非本次修复引入，试用暴露）**：
   - **KERNEL-ISSUE-G3（P1）**：继承特化 + 父类字段值丢失——`class Linked[T](Node[T])`
     → `Linked[int](5).get()` 返回 None（R1-05/R5-01）。**已用 git worktree 在修复前
@@ -33,7 +31,7 @@
 | R1-02 | G2 自引用链遍历 | 正确 | ✅ h=1 m=2 t=3 | PASS | - |
 | R1-03 | G2 递归特化 Node[Node[int]] | 正确 | ✅ inner=9 | PASS | - |
 | R1-04 | G2 自引用+容器 | 正确 | ✅ a=1 b=2 len=2 | PASS | - |
-| R1-05 | G2 自引用+继承 | 正确 | ❌ d1=A:None d2=None | KERNEL_ISSUE-G3 | P1 |
+| R1-05 | G2 自引用+继承 | 正确 | ✅ d1=A:5 d2=6（2026-08-13 重构为多参构造，G3 修复后语义） | PASS | - |
 | R2-01 | G1 方法体构造 int/str | 正确 | ✅ v=2 s=b | PASS | - |
 | R2-02 | G1 方法体返回+访问 | 正确 | ✅ r=2 | PASS | - |
 | R2-03 | G1 Box[list[int]] 方法体 | 正确 | ✅ len=3 first=1 | PASS | - |
@@ -56,10 +54,10 @@
 | R4-03 | Box[dict[str,int]] 参数 | 正确 | ✅ key=2 | PASS | - |
 | R4-04 | Pair[A,B] 参数检查 | 正确 | ✅ a=hi b=7 | PASS | - |
 | R4-05 | 继承特化参数检查 | 正确 | ✅ v=5 | PASS | - |
-| R5-01 | 核心回归 | 正确 | ❌ sub=NoneL（G3） | KERNEL_ISSUE-G3 | P1 |
+| R5-01 | 核心回归 | 正确 | ✅ sub=7L（2026-08-13 重构为全链构造，G3 修复后语义） | PASS | - |
 | R5-02 | 序列化 round-trip | 保真 | ✅ before=11 | PASS | - |
 | R5-03 | 并发/生成器/闭包 | 正确 | ✅ chan=5 gen_sum=3 closure=15 | PASS | - |
-| R5-04 | 组合轰炸 | 不崩 | ❌ cur 退化 any → AttributeError | BOUNDARY-G2 | P2 |
+| R5-04 | 组合轰炸 | 不崩 | ✅ total=6 make=20（2026-08-13 重构为固定次数合法遍历，BOUNDARY-G2 用例无效修正） | PASS | - |
 | SMOKE | 死循环保护 | SIGKILL | ✅ 5s 被杀 | PASS | - |
 
 ## 缺陷登记（PENDING_TASKS，不修复）
@@ -77,8 +75,8 @@
 
 | 旧编号 | 新编号 | 状态 |
 |--------|--------|------|
-| KERNEL-ISSUE-G3（继承特化父类字段丢失） | `KERNEL_ISSUE-GEN-4` | **已修复（2026-08-13 b0f4d74）**：交接诊断纠偏后根治（chain-aware auto-init），见 PENDING_TASKS；历史 R1-05/R5-01 冻结为缺陷证据，语义验证用 R1-05b/R5-01b |
-| BOUNDARY-G2（自引用链 while"类型退化"） | `BOUNDARY-GEN-2` | **已修复（2026-08-13 b0f4d74）**：用例无效 + Finding C 根治，见 PENDING_TASKS；历史 R5-04 冻结，合法遍历用 R5-04b |
+| KERNEL-ISSUE-G3（继承特化父类字段丢失） | `KERNEL_ISSUE-GEN-4` | **已修复（2026-08-13 b0f4d74）**：交接诊断纠偏后根治（chain-aware auto-init），见 PENDING_TASKS；触发用例 R1-05/R5-01 已**重构为修复后正确语义**并核销（2026-08-13） |
+| BOUNDARY-G2（自引用链 while"类型退化"） | `BOUNDARY-GEN-2` | **已修复（2026-08-13 b0f4d74）**：用例无效 + Finding C 根治，见 PENDING_TASKS；触发用例 R5-04 已**重构为合法遍历**并核销（2026-08-13） |
 | （2026-08-13 新发现，R5-04 Box 部分） | `KERNEL_ISSUE-GEN-5` | 待修复（独立窗口）——**根因方向更新（探针实证）**：`Box[list[int]]` 在**表达式位置**（如 `type()` 参数）求值时编译期未注册特化 spec → 运行时 `_specialize` 报 "no registered specialization"；注解位置注册正常。触发用例 `GEN5-01-nested-specialization.ibci` 持续复现 |
 
 ## 修复成果结论

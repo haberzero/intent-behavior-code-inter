@@ -4,6 +4,10 @@
 > 证据：`logs/<case>.log` + `logs/register.jsonl`。分类体系见 `DESIGN.md` §四。
 > **规范（2026-08-13 迁移）**：本套现位于 `trials/T02_enum_import/`；分类/级别/编号
 > 规范见 `trials/_toolkit/CLASSIFICATION.md`。本套无缺陷编号（全部 PASS/LIMIT）。
+> **断言重构（2026-08-13）**：用户原则——套件不冻结历史资产，问题直接重构（唯一底线：
+> 不为规避缺陷改套件）。T3/T4/T5 真实 LLM 用例断言从"固定成员"改为"映射有效性"——
+> 具体成员由模型选择非确定（本次重跑 T3 输出 ERR→500、T4 输出 BLUE），断言改为验证
+> 成员名→值映射契约成立（`c == 任一成员` 为 True），消除 LLM 非确定性导致的假 HARNESS。
 
 ## 一、运行环境
 
@@ -20,9 +24,9 @@
 |---|------|------|------|-------------|------|
 | T1 | T1-enum-iter.ibci | 枚举 | ✅ | RED / GREEN / BLUE / --- / found-green | PASS |
 | T2 | T2-enum-len.ibci | 枚举 | ✅ | 3 / True | PASS |
-| T3 | T3-enum-int-llm.ibci | 枚举+真实LLM | ✅ | **200 / got-ok**（模型输出成员名 OK → 映射为值 200 → switch 命中） | PASS |
-| T4 | T4-enum-str-llm.ibci | 枚举+真实LLM | ✅ | RED / False（c=RED≠GREEN，正确） | PASS |
-| T5 | T5-enum-value-ne-name.ibci | 枚举+真实LLM | ✅ | **a / True**（模型输出成员名 ACTIVE → 映射为值 "a"） | PASS |
+| T3 | T3-enum-int-llm.ibci | 枚举+真实LLM | ✅ | mapped=True（成员名→值映射契约：OK→200 / ERR→500，2026-08-13 重构断言） | PASS |
+| T4 | T4-enum-str-llm.ibci | 枚举+真实LLM | ✅ | mapped=True（str 枚举成员名→值映射契约，2026-08-13 重构断言） | PASS |
+| T5 | T5-enum-value-ne-name.ibci | 枚举+真实LLM | ✅ | mapped=True（值≠名映射契约 ACTIVE→a / INACTIVE→i，2026-08-13 重构断言） | PASS |
 | T6 | T6-enum-method-boundary.ibci | 枚举边界 | ⚠ 预期报错 | `Object of type 'None' has no method '__call__'` | **LIMIT**（KNOWN_LIMITS §二 §2.4 文档化边界） |
 | T7 | T7-nested-import.ibci | 嵌套 import | ✅ | util-value / 7（`import subpkg.util` + 成员访问） | PASS |
 | T8 | T8-nested-multi-import.ibci | 嵌套 import | ✅ | c-value / d-value（同包多导入合并） | PASS |
