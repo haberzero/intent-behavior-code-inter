@@ -12,8 +12,9 @@ core/kernel/spec/generic.py
 
 本模块引入 **GenericTypeDeclaration**（内置泛型类型声明）作为单一权威源：
 每个内置泛型类型声明一次，描述其生命周期操作：
-- ``build``    ：创建（经 SpecFactory 从类型实参名构造特化 TypeDef）
-- ``restore``  ：还原（经 SpecFactory 从序列化数据重建特化 TypeDef）
+- ``build``         ：创建（经 SpecFactory 从结构化实参 TypeRef 构造特化 TypeDef）
+- ``payload_fields``：承载类型实参的 TypeDef 字段（序列化/还原声明驱动，S4）
+- ``resolve_member``：泛型成员特化（协议化，替代 _members.py per-type 级联）
 
 设计哲学（design-philosophy）：单一权威源、机制同构、设计语言统一。
 "thread[T]" 是本模型的第一个正式消费者。

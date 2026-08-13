@@ -318,6 +318,14 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
+### 10.2 跨模块同名类身份坍缩（设计边界）
+
+多模块编译时若两个模块定义**同名类**（`geo.Box` / `graph.Box`），特化身份在注册表/type_pool 坍缩为一个（运行时 `registry.get_class(name)` 表按裸名索引，无法按 module 区分）。这是结构上限（运行时类表 name-only），罕见场景，登记为设计边界不修复。
+
+### 10.3 容器字面量类型推断（S6）
+
+容器字面量推断带实参：`[1,2]` → `list[int]`、`{"k":1}` → `dict[str,int]`、`(1,2)` → `tuple[int,int]`；元素类型不一致/含动态/空 → 裸容器。`auto x = [1,2]` 推断 `list[int]`；显式裸声明（`list bare = [1,2]`）值层保持裸 `list`。
+
 ---
 
 ## 十一、Switch 语句使用约束
