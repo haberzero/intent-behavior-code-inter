@@ -483,6 +483,54 @@ class TestValueIdentityConverged:
 
 
 # ===========================================================================
+# 生成器返回类型/值层身份（双包根治 + 序列化保真 + 类型检查）
+# ===========================================================================
+
+class TestGeneratorReturnIdentity:
+    """生成器返回类型一致性（预存缺陷根治）。
+
+    - ``-> generator[T]`` 显式标注此前被二次包裹为 generator[generator[T]]
+      （c8b89564 预存），致调用点返回类型退化为 any，错误元素类型赋值未拦截。
+    - generator[T] 特化 spec 序列化此前丢 value_type（serializer 缺分支），
+      rehydrator 恢复为裸 generator。
+    """
+
+    def test_explicit_generator_return_type_rejected(self):
+        """显式 -> generator[list[int]] 赋 generator[list[str]] 编译期拦截。"""
+        _, errors = _compile_code(
+            "func gen() -> generator[list[int]]:\n"
+            "    yield [1, 2]\n"
+            "generator[list[str]] bad = gen()\n"
+        )
+        assert "SEM_TYPE_MISMATCH" in {d.code for d in errors}, (
+            f"Expected SEM_TYPE_MISMATCH, got {[d.code for d in errors]}"
+        )
+
+    def test_standard_generator_return_type_rejected(self):
+        """标准写法 -> list[int] 赋 generator[list[str]] 编译期拦截。"""
+        _, errors = _compile_code(
+            "func gen() -> list[int]:\n"
+            "    yield [1, 2]\n"
+            "generator[list[str]] bad = gen()\n"
+        )
+        assert "SEM_TYPE_MISMATCH" in {d.code for d in errors}, (
+            f"Expected SEM_TYPE_MISMATCH, got {[d.code for d in errors]}"
+        )
+
+    def test_generator_correct_type_allowed(self):
+        """生成器赋正确类型放行（显式 + 标准两种写法）。"""
+        lines = run_ibci(
+            "func gen() -> list[int]:\n"
+            "    yield [1, 2]\n"
+            "generator[list[int]] g = gen()\n"
+            "print(type(g))\n"
+            "for list[int] row in g:\n"
+            "    print(type(row))\n"
+        )
+        assert lines == ["generator", "list[int]"], f"got {lines}"
+
+
+# ===========================================================================
 # Nested generic subscript — list[list[int]][0] → list[int]
 # ===========================================================================
 

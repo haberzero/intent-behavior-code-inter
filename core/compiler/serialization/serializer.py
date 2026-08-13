@@ -236,6 +236,14 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
+        # Persist the value type for generator[T]（惰性生成器元素类型）。
+        # 缺此分支导致 generator[list[int]] 特化 spec 序列化丢实参，rehydrator
+        # 恢复为裸 generator（value_type=any），赋值/迭代类型检查失效。
+        if t.kind == TypeKind.GENERATOR.value:
+            v_ref = t.value_type
+            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_module"] = v_ref.module if v_ref is not None else None
+
         # Persist TypeDef param/return signature for structural checking.
         if t.kind == TypeKind.CALLABLE_SIG.value:
             type_data["param_type_names"] = [p.head for p in t.param_types]

@@ -117,3 +117,35 @@ def test_cross_engine_deserialization_preserves_identity():
         f"跨引擎 round-trip 特化身份丢失: {val.ib_class.name}"
     )
     assert [e.to_native() for e in val.elements] == [1, 2]
+
+
+def test_generator_spec_serialization_preserves_value_type():
+    """generator[list[int]] 特化 spec 序列化 round-trip 保真（value_type 持久化）。
+
+    修复前：serializer 缺 GENERATOR 分支，value_type 未持久化，rehydrator 恢复
+    为裸 generator（value_type=any）——赋值/迭代类型检查失效。
+    """
+    from core.compiler.serialization.serializer import FlatSerializer
+    from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+    from core.kernel.factory import create_default_registry
+
+    engine = _engine()
+    code = (
+        "func gen() -> generator[list[int]]:\n"
+        "    yield [1, 2]\n"
+    )
+    artifact = engine.compile_string(code, silent=True)
+    d = FlatSerializer().serialize_artifact(artifact)
+    types = d["modules"][artifact.entry_module]["pools"]["types"]
+    uid = next((u for u, t in types.items() if t.get("name") == "generator[list[int]]"), None)
+    assert uid is not None, "generator[list[int]] 未序列化"
+    assert types[uid].get("value_type_name") == "list[int]", (
+        "generator value_type 未持久化（serializer 缺分支）"
+    )
+    reg = create_default_registry()
+    reh = ArtifactRehydrator(types, reg)
+    spec = reh.hydrate(uid)
+    assert spec.name == "generator[list[int]]", f"rehydrate 退化: {spec.name}"
+    assert spec.value_type.head == "list[int]", (
+        f"generator value_type 恢复失败: {spec.value_type}"
+    )

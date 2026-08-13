@@ -292,6 +292,10 @@ class ArtifactRehydrator:
             v_name = data.get("value_type_name", spec.value_type.head if spec.value_type else "any")
             v_mod = data.get("value_type_module", spec.value_type.module if spec.value_type else None)
             spec.value_type = TypeRef.of(v_name, v_mod)
+        elif spec.kind == TypeKind.GENERATOR.value:
+            v_name = data.get("value_type_name", spec.value_type.head if spec.value_type else "any")
+            v_mod = data.get("value_type_module", spec.value_type.module if spec.value_type else None)
+            spec.value_type = TypeRef.of(v_name, v_mod)
         elif spec.kind == TypeKind.CLASS.value:
             p_name = data.get("parent_name")
             p_mod = data.get("parent_module")

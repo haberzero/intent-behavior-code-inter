@@ -203,13 +203,19 @@ class DeclarationVisitorsMixin:
         # 生成器函数的返回类型 = generator[元素类型]（yield 值的类型即元素类型）。
         # 声明层解析的元素类型（ret_type）作为生成器元素；函数符号返回类型改为
         # generator[T]，使 ``auto g = gen()`` / ``for`` 消费正确定型。
+        # 显式 ``-> generator[T]`` 标注时 ret_type 已是 generator 特化 spec，
+        # 直接用（不二次包裹——否则 generator[generator[T]] 双包致调用点退化 any）。
         if node.is_generator and sym and sym.spec and hasattr(sym.spec, 'return_type'):
-            elem_name = ret_type.name if ret_type else "any"
-            elem_mod = getattr(ret_type, "module_path", None) if ret_type else None
-            gen_spec = self.registry.factory.create_generator(
-                value_type_name=elem_name, value_type_module=elem_mod
-            )
-            sym.spec.return_type = TypeRef.of(gen_spec.name, None)
+            ret_base = ret_type.get_base_name() if ret_type is not None else None
+            if ret_base == "generator":
+                sym.spec.return_type = TypeRef.from_spec(ret_type)
+            else:
+                elem_name = ret_type.name if ret_type else "any"
+                elem_mod = getattr(ret_type, "module_path", None) if ret_type else None
+                gen_spec = self.registry.factory.create_generator(
+                    value_type_name=elem_name, value_type_module=elem_mod
+                )
+                sym.spec.return_type = TypeRef.from_spec(gen_spec)
 
         # SEM_DUAL_ASSIGNABLE: Method override signature compatibility check
         if self.in_class_def and self.current_class and sym and sym.spec:
