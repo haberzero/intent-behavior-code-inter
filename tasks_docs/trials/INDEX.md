@@ -10,7 +10,7 @@
 |----|------|------|------|----------|--------------------|
 | `T01_llm_full` | 真实 LLM 全语法/压力/批判试用（原 `_LLM_TRIAL_20260812`） | 2026-08-12 | 104 cases / 113 运行 | D1-D3 全过；A1-A5/C1-C4 验证 | `KERNEL_ISSUE-VM-1`~`CONFIG-1`（已修）、`DOC-ISSUE-001~007`（已处置）、`BOUNDARY-*-*`（已记录） |
 | `T02_enum_import` | enum 补全 + 嵌套包 import 用户试用（原 `_LLM_TRIAL_ENUM_IMPORT_20260812`） | 2026-08-12 | 9 例 | 全 PASS / 1 LIMIT（2026-08-13 重构断言，映射有效性） | 无 |
-| `T03_user_class_generics` | 用户类泛型压力/恶意试用（原 `_GENERICS_TRIAL_20260812`） | 2026-08-12 | 30 运行 | 22 PASS + 6 GUARD + 1 KI（D2-01=GEN-6）+ 1 HARNESS（smoke） | `KERNEL_ISSUE-GEN-1/2/3`、`BOUNDARY-GEN-1`（已修）、`KERNEL_ISSUE-GEN-6`（待修） |
+| `T03_user_class_generics` | 用户类泛型压力/恶意试用（原 `_GENERICS_TRIAL_20260812`） | 2026-08-12 | 30 运行 | 23 PASS + 6 GUARD + 1 HARNESS（smoke） | `KERNEL_ISSUE-GEN-1/2/3`、`BOUNDARY-GEN-1`（已修）、`KERNEL_ISSUE-GEN-6`（**已修 2026-08-13**） |
 | `T04_generics_fix_regression` | 泛型修复回归试用（原 `_GENERICS_TRIAL_FIX_20260812`） | 2026-08-12 | 33 例 | 25 PASS + 7 GUARD + 1 HARNESS（smoke） | `KERNEL_ISSUE-GEN-4`（已修）、`BOUNDARY-GEN-2`（已修，用例重构核销）、`KERNEL_ISSUE-GEN-5`（**已修 2026-08-13**） |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
@@ -29,7 +29,7 @@
 | 双通道 descriptors | `KERNEL_ISSUE-GEN-3` | 特化方法参数 descriptors 两套实现 | 已修复 32484fe | — |
 | KERNEL-ISSUE-G3 | `KERNEL_ISSUE-GEN-4` | 继承特化父类字段丢失（auto-init 只收自身） | 已修复 b0f4d74（2026-08-13） | R1-05/R5-01 已重构为修复后语义（2026-08-13，PASS 核销） |
 | — | `KERNEL_ISSUE-GEN-5` | 用户泛型类下标表达式位置特化未注册 | **已修复 2026-08-13**（visit_IbSubscript 复用 _resolve_type 递归；触发用例 GEN5-01 PASS 核销） | `T04/.../GEN5-01-nested-specialization.ibci` |
-| — | `KERNEL_ISSUE-GEN-6` | 泛型运算符方法参数含 T 的特化未生效（G1 修复不完整） | **发现/登记**（待独立窗口） | `T03/.../D2-01-operator-override.ibci` |
+| — | `KERNEL_ISSUE-GEN-6` | 泛型运算符方法参数含 T 的特化未生效（G1 修复不完整） | **已修复 2026-08-13**（解析端 resolve_typeref + 构造端 from_spec 统一；触发用例 D2-01 PASS 核销） | `T03/.../D2-01-operator-override.ibci` |
 | BOUNDARY-G1 | `BOUNDARY-GEN-1` | 非法特化实参（Box[42]/Box[None]）编译期未拦 | 已修复 3fe98d6 | — |
 | BOUNDARY-G2 | `BOUNDARY-GEN-2` | 自引用链 while"类型退化"（实为用例无效 + any 复查缺口） | 已修复 b0f4d74（2026-08-13） | R5-04 已重构为合法遍历（2026-08-13，PASS 核销） |
 

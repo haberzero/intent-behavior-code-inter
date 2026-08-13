@@ -7,7 +7,7 @@
 > 唯一 TIMEOUT-KILLED 为死循环保护冒烟验证本身。
 > **规范（2026-08-13 迁移）**：本套现位于 `trials/T04_generics_fix_regression/`；分类/级别/编号
 > 规范见 `trials/_toolkit/CLASSIFICATION.md`。缺陷编号已映射为新格式（见文末"编号映射"节）。
-> **重构（2026-08-13）**：用户原则——套件不冻结历史资产，问题直接重构（唯一底线：不为规避缺陷改套件，缺陷触发用例保留）。R1-05/R5-01/R5-04 原为 G3/BOUNDARY-G2 触发形态，已**直接重构为修复后正确语义**（R1-05 多参构造 d1=A:5/d2=6、R5-01 全链构造 sub=7L、R5-04 固定次数合法遍历 total=6/make=20），原 b 变体并入主用例删除；GEN5-01 保留为 GEN-5 缺陷触发用例（真实缺陷，不得规避）。
+> **重构（2026-08-13）**：用户原则——套件不冻结历史资产，问题直接重构（唯一底线：不为规避缺陷改套件，缺陷触发用例保留）。R1-05/R5-01/R5-04 原为 G3/BOUNDARY-G2 触发形态，已**直接重构为修复后正确语义**（R1-05 多参构造 d1=A:5/d2=6、R5-01 全链构造 sub=7L、R5-04 固定次数合法遍历 total=6/make=20），原 b 变体并入主用例删除；GEN5-01 曾为 GEN-5 缺陷触发用例，**已修复核销（2026-08-13，PASS）**。
 
 ## 结果总览
 
@@ -15,7 +15,7 @@
 - **修复成果验证（PASS）**：G1 方法体类型参数（R2 全组含嵌套/多参数/交替/生成器/深层）、
   BOUNDARY-G1 非法实参守卫（R3 全组含 None/void/auto/嵌套/正向/thread[void]）、
   双通道 descriptors（R4 全组含嵌套/多参数/继承）、G2 自引用基础（R1-01~04）。
-- **当前判定（2026-08-13 重跑）**：24 PASS + 7 GUARD + 1 KERNEL_ISSUE（GEN5-01，GEN-5 缺陷复现）+ 1 HARNESS（smoke 死循环预期）。
+- **当前判定（2026-08-13 重跑，GEN-5 修复后）**：25 PASS + 7 GUARD + 1 HARNESS（smoke 死循环预期）；GEN5-01 已核销（PASS）。
 - **发现缺陷（2 项，均非本次修复引入，试用暴露）**：
   - **KERNEL-ISSUE-G3（P1）**：继承特化 + 父类字段值丢失——`class Linked[T](Node[T])`
     → `Linked[int](5).get()` 返回 None（R1-05/R5-01）。**已用 git worktree 在修复前
@@ -77,7 +77,7 @@
 |--------|--------|------|
 | KERNEL-ISSUE-G3（继承特化父类字段丢失） | `KERNEL_ISSUE-GEN-4` | **已修复（2026-08-13 b0f4d74）**：交接诊断纠偏后根治（chain-aware auto-init），见 PENDING_TASKS；触发用例 R1-05/R5-01 已**重构为修复后正确语义**并核销（2026-08-13） |
 | BOUNDARY-G2（自引用链 while"类型退化"） | `BOUNDARY-GEN-2` | **已修复（2026-08-13 b0f4d74）**：用例无效 + Finding C 根治，见 PENDING_TASKS；触发用例 R5-04 已**重构为合法遍历**并核销（2026-08-13） |
-| （2026-08-13 新发现，R5-04 Box 部分） | `KERNEL_ISSUE-GEN-5` | 待修复（独立窗口）——**根因方向更新（探针实证）**：`Box[list[int]]` 在**表达式位置**（如 `type()` 参数）求值时编译期未注册特化 spec → 运行时 `_specialize` 报 "no registered specialization"；注解位置注册正常。触发用例 `GEN5-01-nested-specialization.ibci` 持续复现 |
+| （2026-08-13 新发现，R5-04 Box 部分） | `KERNEL_ISSUE-GEN-5` | **已修复（2026-08-13，visit_IbSubscript 复用 _resolve_type 递归）**：表达式位置 `Box[list[int]]` 编译期注册特化 spec；触发用例 `GEN5-01` 核销（PASS）。见 `tasks_docs/GEN_FIX_ARCHITECTURE.md` |
 
 ## 修复成果结论
 

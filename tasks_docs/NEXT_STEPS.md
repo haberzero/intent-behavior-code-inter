@@ -2,9 +2,10 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-13（**试用体系重构完成**：T01 LLM 批真实重跑 55P+2G + Phase C
-> 套件重构/过期文档删除/classification 100% + Phase D 自动化衔接；
-> 全量 **2366 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
+> **最后更新**：2026-08-13（**试用体系重构 + GEN-5/GEN-6 架构级修复全部完成**：
+> T01 LLM 批真实重跑 55P+2G + Phase C 套件重构/classification 100% + Phase D 自动化衔接 +
+> GEN-5/GEN-6 四层修复（TypeRef 唯一权威入口）；全量 **2377 passed / 1 skipped**；
+> 见下方"已完成"与"交接要点"节）
 
 ---
 
@@ -366,17 +367,27 @@ auto-yield 组合 + 值契约 + yield 自标记）。
      骨架）+ 收敛流程硬规则 `_toolkit/PHASE_D_AUTOMATION.md`（缺陷修复=根因修复+tests/ 回归双交付
      验收门）。
 
-- **🔴 下一 session 主线候选**（试用体系重构已收尾，按 `PENDING_TASKS.md` §〇 择定）：
-  - **独立缺陷窗口**（高价值，非阻塞）：**KERNEL_ISSUE-GEN-6**（P1，运算符方法参数含 T 特化未生效，
-    触发用例 D2-01）与 **KERNEL_ISSUE-GEN-5**（P2，表达式位置特化未注册，触发用例 GEN5-01）。
-    修复须按 Phase D 收敛义务双交付（根因修复 + tests/ 回归）。
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev 0fee0c43，全量 2377 passed / 1 skipped）**：
+  **GEN-5/GEN-6 架构级修复（`GEN_FIX_ARCHITECTURE.md` 四层方案全部落地）**。
+  统一根因 = **TypeRef 生命周期双端口径漂移**（构造端扁平化 + 解析端丢实参 + 注册端机制不全）。
+  1. **第 3 层（GEN-5，c00c87bb）**：`visit_IbSubscript` 表达式位置复用 `_resolve_type` 递归，
+     GEN5-01 核销（PASS）。
+  2. **第 1 层（GEN-6A，8f7fff8a）**：运算符结果类型推断改 `resolve_typeref` + 14 个 `.head`
+     解析点迁移（记录根因纠偏：触发因子是 `-> Vec[T]` 返回类型，非参数形态）。
+  3. **第 2 层（GEN-6B，52e7992f）**：`_param_type_ref` 复用 `from_spec` + engine 扁平残留 +
+     `to_typeref`/`from_spec` 双实现收敛（统一委托）；D2-01 核销（PASS）。
+  4. **第 4 层（0fee0c43）**：`03_type_system.md` §3.4bis 登记 TypeRef 唯一权威入口 + docstring 标注。
+  判别性回归 +11（test_operator_overrides +3 / test_user_class_generics +8）。
+
+- **🔴 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
+  - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
+    PT-AUDIT-1/2 长期审计。
 - **🟡 独立缺陷窗口（不阻塞主线）**：
-  - **KERNEL_ISSUE-GEN-5**（P2）：用户泛型类下标表达式位置特化未注册（触发用例 GEN5-01）。
-  - **KERNEL_ISSUE-GEN-6**（P1）：泛型运算符方法参数含 T 特化未生效，G1 修复不完整（触发用例 D2-01）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
 - **📌 本 session 已完成**（临时问题全部闭环）：T01 LLM 批真实重跑 55P+2G；过期文档删除 40；
-  套件重构（不冻结原则）；classification 写回 100%；gen_register 报告生成器 + 收敛流程硬规则。
+  套件重构（不冻结原则）；classification 写回 100%；gen_register 报告生成器 + 收敛流程硬规则；
+  **GEN-5/GEN-6 架构级修复（四层）**。
 
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成

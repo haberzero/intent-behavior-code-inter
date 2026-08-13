@@ -122,6 +122,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev 0fee0c43，全量 2377 passed / 1 skipped）**：
+  **GEN-5/GEN-6 架构级修复（`GEN_FIX_ARCHITECTURE.md` 四层全部落地）**。统一根因 =
+  **TypeRef 生命周期双端口径漂移**（构造端扁平化 + 解析端丢实参 + 注册端机制不全）。
+  ① 第 3 层 GEN-5（c00c87bb）：`visit_IbSubscript` 复用 `_resolve_type` 递归，GEN5-01 核销；
+  ② 第 1 层 GEN-6A（8f7fff8a）：运算符推断改 `resolve_typeref` + 14 个 `.head` 解析点迁移；
+  ③ 第 2 层 GEN-6B（52e7992f）：`_param_type_ref` 复用 `from_spec` + engine 扁平残留 +
+  `to_typeref`/`from_spec` 双实现收敛，D2-01 核销；④ 第 4 层（0fee0c43）：`03_type_system.md`
+  §3.4bis 规则永久化。判别性回归 +11。
+
 - **✅ 已完成（2026-08-13，unsafe-vibe-dev 620de1c4，全量 2366 passed / 1 skipped）**：
   **试用体系重构（TRIAL_SYSTEM_REDESIGN.md）Phase B 收尾 + Phase C + Phase D 全部完成**。
   ① **T01 LLM 批真实重跑**（Phase B 收尾）：57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**
@@ -132,7 +141,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   R1-05/R5-01/R5-04 重构为修复后语义、删 b 变体）；4 套 register.jsonl classification 写回
   **100%**。③ **Phase D 自动化衔接**：报告自动生成器 `_toolkit/gen_register.py` +
   收敛流程硬规则 `_toolkit/PHASE_D_AUTOMATION.md`（缺陷修复=根因修复+tests/ 回归双交付）。
-  **遗留独立窗口**：KERNEL_ISSUE-GEN-5/GEN-6（触发用例保留）、供应商感知思考禁用机制。
+  **遗留独立窗口**：供应商感知思考禁用机制（待设计）。
   详见 NEXT_STEPS 交接要点 + WORKLOG。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev 35bb2de，全量 2339 passed / 1 skipped）**：
@@ -455,14 +464,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（试用体系重构**已全部完成 620de1c4**；全量 2366 passed / 1 skipped）
-- [ ] 读 `NEXT_STEPS.md`（当前最紧要：独立缺陷窗口 GEN-5/GEN-6 + 思考禁用机制）
+- [ ] 读本节 §2.1（试用体系重构 + GEN-5/GEN-6 修复**已全部完成**；全量 2377 passed / 1 skipped）
+- [ ] 读 `NEXT_STEPS.md`（当前最紧要：供应商感知思考禁用机制 / CI-CD 重设计等主线候选）
 - [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；试用体系规范化行已标完成）
 - [ ] 读 `TRIAL_SYSTEM_REDESIGN.md`（试用体系重构执行状态：Phase A-D 全部完成）
 - [ ] 试用体系规范：`trials/_toolkit/CLASSIFICATION.md`（分类/编号）+ `CONTRACT_FORMAT.md`（用例即契约）+ `LLM_SERVICE.md`（本机真实 LLM 服务）+ `gen_register.py`（报告生成）+ `PHASE_D_AUTOMATION.md`（收敛流程硬规则）
-- [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 待修单一状态权威）
-- [ ] 独立缺陷窗口（修复须按 Phase D 收敛义务双交付：根因修复 + tests/ 回归）：
-  `KERNEL_ISSUE-GEN-6`（P1，D2-01 触发）/ `KERNEL_ISSUE-GEN-5`（P2，GEN5-01 触发）/
-  供应商感知思考禁用机制（P2 待设计）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2366 passed / 1 skipped**）
+- [ ] GEN-FIX 方案与实施：`tasks_docs/GEN_FIX_ARCHITECTURE.md`（GEN-5/GEN-6 四层修复定案与记录）+ `docs/architecture/03_type_system.md` §3.4bis（TypeRef 唯一权威入口规则）
+- [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 已修复；单一状态权威）
+- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2377 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）
