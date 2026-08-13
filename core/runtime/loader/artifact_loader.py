@@ -16,7 +16,7 @@ class LoadedArtifact:
                  entry_module: str,
                  artifact_rehydrator: ArtifactRehydrator,
                  artifact_dict: Dict[str, Any],
-                 class_to_node: Dict[str, str]):
+                 class_to_node: Dict[Any, Any]):
         self.node_pool = node_pool
         self.symbol_pool = symbol_pool
         self.scope_pool = scope_pool
@@ -154,12 +154,18 @@ class ArtifactLoader:
                 # （class Sub[T](Box[T]) 特化 Sub[int] → "Box[int]"），继承链
                 # 对齐特化类；实参含类型参数占位（模板自身 Box[T] 的 T）或
                 # 未注册类型则回退裸基类名。
-                # [Module Identity] 父名 module 化：parent_type 缺 module（同模块
-                # 父）时以 cls_desc.module_path 补全 → 父名 = qualified_name
-                # （geo.Sub[int] 的父 = "geo.Box[int]"），get_class 命中 qualified 键。
+                # [Module Identity] 父名 module 化：parent_type 缺 module 时以
+                # 权威解析补全——内置泛型父（list[T] 等，module 恒 None）**不加**
+                # 前缀；同模块用户父（编译期前向引用未解析）以 cls_desc.module_path
+                # 补全 → 父名 = qualified_name（geo.Sub[int] 的父 = "geo.Box[int]"），
+                # get_class 命中 qualified 键。
                 p_ref = cls_desc.parent_type
-                if p_ref is not None and p_ref.module is None and cls_desc.module_path:
-                    p_ref = p_ref.with_module(cls_desc.module_path)
+                if p_ref is not None and p_ref.module is None:
+                    parent_module = self.registry.resolve_class_module(
+                        p_ref.head, cls_desc.module_path
+                    )
+                    if parent_module:
+                        p_ref = p_ref.with_module(parent_module)
                 if p_ref is not None and p_ref.args:
                     p_args = [a.canonical_name for a in p_ref.args]
                     if all(self._is_concrete_arg(a) for a in p_args):

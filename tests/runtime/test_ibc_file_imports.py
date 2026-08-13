@@ -504,6 +504,46 @@ class TestCrossModuleSameNameClass:
         )
         assert _run(tmp_path) == ["geo-base", "geo-sub", "7"]
 
+    def test_builtin_generic_parent_no_module_prefix(self, tmp_path):
+        """被 import 模块内继承内置泛型父（MyList[T](list[T])）：父名不加 module 前缀。
+
+        父类权威解析：内置泛型父（module 恒 None）不应被补成 "geo.list[int]"
+        （永不注册 → 继承链断裂）；同模块用户父才补全 module。声明路径物化
+        特化类后其父链 = 内置 list[int]（裸名键）。
+        """
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class MyList[T](list[T]):\n"
+            "    func size(self) -> int:\n"
+            "        return len(self)\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "geo.MyList[int] a = geo.MyList[int]([1,2])\n"
+            "print(a.size())\n",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        try:
+            engine.run(str(tmp_path / "main.ibci"), silent=True)
+        except Exception:
+            # 特化类水化须成功（继承链不因 module 前缀断裂）；实例化经既有
+            # auto-init 边界报错（用户泛型继承内置容器无字段），不属本测试范围。
+            pass
+        # 模板父 = 内置 list（裸名，不加 module 前缀）
+        tmpl = engine.registry.get_class("geo.MyList")
+        assert tmpl is not None and tmpl.parent.qualified_name == "list", (
+            f"模板 MyList 父应为内置 list，got {tmpl.parent.qualified_name}"
+        )
+        # 特化父 = 内置 list[int]（裸名键），非 "geo.list[int]"
+        spec = engine.registry.get_class("geo.MyList[int]")
+        assert spec is not None, "特化类应水化成功（继承链不因 module 前缀误配断裂）"
+        assert spec.parent.qualified_name == "list[int]", (
+            f"MyList[int] 父应为内置 list[int]，got {spec.parent.qualified_name}"
+        )
+
     def test_same_name_class_cross_engine_roundtrip(self, tmp_path):
         """跨引擎 round-trip：geo.Box 实例 class_name qualified 保真。"""
         from core.runtime.serialization.runtime_serializer import (
@@ -552,6 +592,58 @@ class TestCrossModuleSameNameClass:
             f"round-trip class_name 应保真 qualified，got {a.ib_class.qualified_name}"
         )
         assert b.ib_class.qualified_name == "graph.Box[int]"
+
+    def test_rehydrate_type_pool_spec_module_matching(self, tmp_path):
+        """_rehydrate_type_pool_spec 按 (module_path, name) 联合匹配（修 #2）。
+
+        跨引擎反序列化时 type_pool 含 geo.Box[int] 与 graph.Box[int]（同裸名
+        特化名，异 module）；按裸名匹配会误选，联合匹配须各自命中正确 spec。
+        注：未编译引擎的完整用户类重建受注册表封印限制（既有边界），本测试
+        白盒验证匹配逻辑本身。
+        """
+        from core.runtime.serialization.runtime_serializer import (
+            RuntimeSerializer,
+            RuntimeDeserializer,
+        )
+
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n",
+        )
+        _write(
+            tmp_path,
+            "graph.ibci",
+            "class Box[T]:\n"
+            "    str name\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "import graph\n"
+            "geo.Box[int] a = geo.Box[int](5)\n"
+            "graph.Box[int] b = graph.Box[int](\"hi\")\n",
+        )
+        engine_a = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_a.run(str(tmp_path / "main.ibci"), silent=True)
+        ec = engine_a.interpreter.execution_context
+        data = RuntimeSerializer(engine_a.registry).serialize_context(
+            ec.runtime_context, include_static=True, execution_context=ec
+        )
+
+        engine_b = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_b.run(str(tmp_path / "main.ibci"), silent=True)
+        deser = RuntimeDeserializer(engine_b.registry, factory=engine_b.object_factory)
+        deser.deserialize_context(data)
+        geo_spec = deser._rehydrate_type_pool_spec("geo.Box[int]")
+        graph_spec = deser._rehydrate_type_pool_spec("graph.Box[int]")
+        assert geo_spec is not None and graph_spec is not None
+        assert geo_spec.module_path == "geo" and graph_spec.module_path == "graph"
+        assert geo_spec is not graph_spec, (
+            "同裸名特化名（Box[int]）异 module 应联合匹配各自 spec，不误选"
+        )
 
     def test_multi_import_same_package_merges(self, tmp_path):
         """同一包多次导入：根包命名空间幂等合并（a.b.c + a.b.d 均可达）。"""

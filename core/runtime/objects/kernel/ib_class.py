@@ -499,12 +499,17 @@ class IbClass(IbObject):
                     return self.registry.box(specialized_name)
         # 父类：若 parent_type 带泛型实参（class Sub[T](Box[T]) → Box[int]），
         # parent 类名须用特化名（继承链对齐特化类，非裸基类）。父类与子类同模块
-        # （parser 仅支持单标识符父名）；parent_type 缺 module 时以特化 spec 的
-        # module 补全，使 ``get_class`` 命中 qualified 键。
+        # （parser 仅支持单标识符父名）；parent_type 缺 module 时权威解析——
+        # 内置泛型父（list[T] 等，module 恒 None）不加前缀；同模块用户父以特化
+        # spec 的 module 补全，使 ``get_class`` 命中 qualified 键。
         if specialized_spec.parent_type is not None and specialized_spec.parent_type.args:
             p_ref = specialized_spec.parent_type
-            if p_ref.module is None and specialized_spec.module_path:
-                p_ref = p_ref.with_module(specialized_spec.module_path)
+            if p_ref.module is None:
+                parent_module = self.registry.resolve_class_module(
+                    p_ref.head, specialized_spec.module_path
+                )
+                if parent_module:
+                    p_ref = p_ref.with_module(parent_module)
             parent_name = p_ref.qualified_name
         elif not getattr(self._spec, "type_params", None):
             # 内置泛型特化类（list[int]）的 parent = 基类（list）——特化类
@@ -512,8 +517,12 @@ class IbClass(IbObject):
             parent_name = self.name
         elif specialized_spec.parent_type is not None:
             p_ref = specialized_spec.parent_type
-            if p_ref.module is None and specialized_spec.module_path:
-                p_ref = p_ref.with_module(specialized_spec.module_path)
+            if p_ref.module is None:
+                parent_module = self.registry.resolve_class_module(
+                    p_ref.head, specialized_spec.module_path
+                )
+                if parent_module:
+                    p_ref = p_ref.with_module(parent_module)
             parent_name = p_ref.qualified_name
         else:
             parent_name = "Object"

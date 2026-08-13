@@ -366,6 +366,29 @@ class KernelRegistry:
                 return cls
         return self._classes.get(name)
 
+    def resolve_class_module(
+        self, head: str, default_module: Optional[str] = None
+    ) -> Optional[str]:
+        """解析类型名的权威 module（父链 module 补全用）。
+
+        经 metadata registry 解析 ``head`` 的 spec：内置/入口类型 module_path 为
+        None（权威值，不补前缀）；被 import 模块的用户类返回其 module_path。
+        未解析（前向引用同模块用户父）→ ``default_module`` 兜底。
+
+        用途：``class MyList[T](list[T])``（内置泛型父，module 恒 None，不加
+        前缀）与 ``class Sub[T](Box[T])``（同模块用户父，编译期前向引用可能缺
+        module）的父名 module 判定。
+        """
+        spec_reg = self.get_metadata_registry()
+        if spec_reg is not None:
+            if default_module:
+                spec = spec_reg.resolve(head, default_module)
+            else:
+                spec = spec_reg.resolve(head)
+            if spec is not None:
+                return spec.module_path
+        return default_module
+
     def get_all_classes(self) -> Dict[str, Any]:
         return dict(self._classes)
 
