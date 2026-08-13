@@ -342,14 +342,15 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   实参数不匹配、字段-T 冲突、Enum 泛型拒绝、类型参数遮蔽内置拒绝。21 e2e + 2 序列化 round-trip；
   独立复核两轮 PASS（P2-1 父特化恒注册 / P2-2 嵌套实参映射 全整改）。
 
-- **🟡 泛型压力/恶意试用完成（2026-08-12，`_GENERICS_TRIAL_20260812/`，30 次运行全经死循环保护）**：
+- **✅ 泛型压力/恶意试用完成（2026-08-12，`_GENERICS_TRIAL_20260812/`，30 次运行全经死循环保护）**：
   D1 核心语义（7）+ D2 正交交叉（泛型×运算符/继承/协议/容器/控制流/函数/并发/生成器/行为/闭包/多文件，
-  11）+ D3 恶意挑刺（10，守卫类 PASS）。**发现 2 项 P1 KERNEL_ISSUE + 1 项 P2 BOUNDARY（根因已定位）**：
-  ① **G1（运行期）泛型方法体内 `Box[T]` 类型参数表达式失效** + **G2（编译期）自引用字段
-  `Node[T]` 特化替换失效**（深度核验确认两者为独立缺陷：G1 运行期符号解析、G2 `from_spec`
-  扁平化既有行为暴露）——链表/树/工厂方法模式不可用；② **BOUNDARY-G1** 非法
-  特化实参（`Box[42]`）编译期未拦，运行期裸 AttributeError。**均已登记 PENDING_TASKS 待独立窗口**。
-  详情 `_GENERICS_TRIAL_20260812/REGISTER.md`。
+  11）+ D3 恶意挑刺（10，守卫类 PASS）。**发现并全部修复**（深度核验 + 两轮独立复核）：
+  ① **G2（编译期）自引用字段 `Node[T]` 特化替换失效**（`from_spec` 扁平化既有行为暴露）——
+  修复：TypeDef.type_args+base_name + from_spec 结构化；② **G1（运行期）方法体 `Box[T]`
+  类型参数表达式失效**（运行期符号解析）——修复：type_param_uids 编译期收集 +
+  方法帧 _bind_type_params 注册；③ **BOUNDARY-G1** 非法特化实参（`Box[42]`/`Box[None]`/
+  `Box[void]`）编译期未拦——修复：语义层拦截；④ **双通道设计缺陷** descriptors 两套实现——
+  修复：type_args 结构化单一权威源。全量 2339→2350，+11 e2e。详情 REGISTER.md 与 PENDING_TASKS。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev a49555b，全量 2311 passed / 1 skipped）**：**F9 显式配置**——
   用户拍板命名 `ai.load_project_config` + 本轮实施。`setup()` 去自动加载段；新增
