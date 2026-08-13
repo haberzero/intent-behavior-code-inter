@@ -439,3 +439,16 @@ class TestGenericNoneArgRejected:
             "Box[None] b = Box[int](1)\n",
             "SEM_GENERIC_TYPE_NEEDS_ARGS",
         )
+
+
+class TestGenericVoidArgRejected:
+    """用户泛型 void 实参拦截（thread[void] 例外）回归。"""
+
+    def test_void_arg_user_class_rejected(self):
+        """Box[void] 用户泛型 → SEM_GENERIC_TYPE_NEEDS_ARGS（幻影 spec 拦截）。"""
+        expect_compile_error(
+            "class Box[T]:\n"
+            "    T value\n"
+            "Box[void] b = Box[int](1)\n",
+            "SEM_GENERIC_TYPE_NEEDS_ARGS",
+        )

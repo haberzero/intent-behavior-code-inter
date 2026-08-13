@@ -924,7 +924,6 @@ def _bind_type_params(executor, rt_context, func, receiver) -> None:
     base_type_params = getattr(base_spec, "type_params", None) or []
     if len(type_args) != len(base_type_params):
         return
-    arg_type_names = [a.head for a in type_args]
     # 编译期收集的类型参数引用存于函数节点（IbFunctionDef.type_param_uids）。
     node_data = executor.ec.get_node_data(getattr(func, "node_uid", "")) or {}
     tp_refs = node_data.get("type_param_uids") or []

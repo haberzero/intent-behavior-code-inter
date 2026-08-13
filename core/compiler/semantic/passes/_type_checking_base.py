@@ -278,11 +278,18 @@ class TypeCheckBase:
                     else:
                         generic_args = [self._resolve_type(annotation.slice)]
                     # 泛型实参不得为哨兵/动态类型（None/auto）——它们不是实体类型，
-                    # 特化会产生幻影 spec（Box[None]）。void 例外（thread[void] 合法）。
+                    # 特化会产生幻影 spec（Box[None]）。void 仅对内置 thread 合法
+                    # （thread[void] 无返回线程）；用户泛型/其它 base 拒绝。
                     for _ga in generic_args:
-                        if _ga is not None and getattr(_ga, "name", None) in ("None", "auto"):
+                        _ga_name = getattr(_ga, "name", None)
+                        _void_ok = (
+                            _ga_name == "void"
+                            and base_type.name == "thread"
+                            and base_type.kind == TypeKind.THREAD.value
+                        )
+                        if _ga is not None and (_ga_name in ("None", "auto") or (_ga_name == "void" and not _void_ok)):
                             self.error(
-                                f"Generic type argument '{_ga.name}' is not a concrete "
+                                f"Generic type argument '{_ga_name}' is not a concrete "
                                 f"type. Use an entity type such as int/str/list[..].",
                                 annotation, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
                             )

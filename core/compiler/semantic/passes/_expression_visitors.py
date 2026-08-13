@@ -698,9 +698,17 @@ class ExpressionVisitorsMixin:
                 return self._any_desc
             if isinstance(node.slice, ast.IbName) and not isinstance(node.slice, ast.IbSlice):
                 arg_spec = self._resolve_type(node.slice)
-                if arg_spec is not None and getattr(arg_spec, "name", None) in ("None", "auto"):
+                _ga_name = getattr(arg_spec, "name", None)
+                _void_ok = (
+                    _ga_name == "void"
+                    and value_type.name == "thread"
+                    and value_type.kind == TypeKind.THREAD.value
+                )
+                if arg_spec is not None and (
+                    _ga_name in ("None", "auto") or (_ga_name == "void" and not _void_ok)
+                ):
                     self.error(
-                        f"Generic type argument '{arg_spec.name}' is not a concrete type. "
+                        f"Generic type argument '{_ga_name}' is not a concrete type. "
                         f"Use an entity type such as int/str/list[..].",
                         node, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
                     )
