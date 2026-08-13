@@ -347,9 +347,17 @@ class Interpreter:
     def stack_inspector(self) -> IStackInspector:
         return self._execution_context
 
-    def get_side_table(self, table_name: str, node_uid: str) -> Any:
-        """从当前活跃模块的侧表中获取数据"""
-        module_name = self.current_module_name or self.entry_module
+    def get_side_table(self, table_name: str, node_uid: str, module: Optional[str] = None) -> Any:
+        """从侧表中获取数据（module 感知，KI-1 根治）。
+
+        ``module`` 参数由调用方 EC 提供（``ExecutionContextImpl.get_side_table``
+        透传自身 ``current_module_name``）——线程 worker 内 task_ec 的
+        current_module_name 是任务本地值（``_shared._vm_call_user_function``
+        已切换），侧表查询以调用方 EC 为准，不再读 interpreter 共享模块状态
+        （此前读 ``self.current_module_name`` 忽略任务本地切换，被 import 模块
+        方法体在 worker 内查空报 Symbol UID missing）。
+        """
+        module_name = module or self.current_module_name or self.entry_module
         if not module_name:
             return None
             
@@ -854,7 +862,14 @@ class Interpreter:
             return value
         # 先检查是否为字符串值在 llmexcept 帧内的模糊布尔判定
         if isinstance(value, IbObject) and value.ib_class and value.ib_class.name == "str":
-            rc = self.runtime_context
+            # 任务本地 runtime_context（KI-1 同族裂缝根治）：线程 worker 内
+            # llmexcept 帧检测须读任务本地上下文（coordinator 已 set
+            # current execution_context），而非主 interpreter 的共享 runtime
+            # context——否则任务内 ``if str_var:`` 的 LLM 模糊布尔判定误读
+            # 主线程帧状态。
+            from core.runtime.frame import get_current_execution_context
+            ec = get_current_execution_context()
+            rc = ec.runtime_context if ec is not None else self.runtime_context
             if rc is not None and rc.get_current_llm_except_frame() is not None:
                 raw_val = value.to_native() if isinstance(value, IbObject) else str(value)
                 val = raw_val.strip().lower() if isinstance(raw_val, str) else str(raw_val).strip().lower()

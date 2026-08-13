@@ -668,3 +668,49 @@ class TestCrossModuleSameNameClass:
             "print(m.util_fn())\nprint(util_fn())\n",
         )
         assert _run(tmp_path) == ["util-value", "util-value"]
+
+    def test_imported_module_class_in_thread_worker(self, tmp_path):
+        """KI-1 回归：线程 worker 内被 import 模块用户类方法调用成功。
+
+        修复前 task_ec 的 get_side_table 回调读主 interpreter 共享
+        current_module_name（忽略任务本地模块切换），imported 方法体在 worker
+        内侧表查空报 Symbol UID missing（T05 KERNEL_ISSUE-CROSSMOD-THREAD-1）。
+        修复后侧表查询以调用方 EC 的 current_module_name 为准。
+        """
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box:\n"
+            "    int v\n"
+            "    func get(self) -> int:\n"
+            "        return self.v + 400\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "func compute() -> int:\n"
+            "    return geo.Box(5).get()\n"
+            "print(compute())\n"
+            "thread[int] t = thread(callable=compute, args=[])\n"
+            "print(t.join().expect())\n",
+        )
+        # 主上下文 405 且线程 worker 内 405（此前线程内抛 ThreadFailed）
+        assert _run(tmp_path) == ["405", "405"]
+
+    def test_entry_module_class_in_thread_worker(self, tmp_path):
+        """KI-1 回归：入口模块类在线程 worker 内不回归（此前已幸存）。"""
+        _write(
+            tmp_path,
+            "main.ibci",
+            "class Box:\n"
+            "    int v\n"
+            "    func get(self) -> int:\n"
+            "        return self.v + 100\n"
+            "func compute() -> int:\n"
+            "    return Box(5).get()\n"
+            "print(compute())\n"
+            "thread[int] t = thread(callable=compute, args=[])\n"
+            "print(t.join().expect())\n",
+        )
+        assert _run(tmp_path) == ["105", "105"]

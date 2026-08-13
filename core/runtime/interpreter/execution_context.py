@@ -214,7 +214,13 @@ class ExecutionContextImpl:
         return self._get_node_data_callback(node_uid)
 
     def get_side_table(self, table_name: str, key: str) -> Any:
-        return self._get_side_table_callback(table_name, key)
+        """侧表查询：以本 EC 的 current_module_name 为模块上下文（KI-1 根治）。
+
+        线程 worker 内 task_ec 的 current_module_name 是任务本地值（VM
+        ``_shared`` 已切换），侧表查询以调用方 EC 为准——不再经共享回调读主
+        interpreter 的模块状态。
+        """
+        return self._get_side_table_callback(table_name, key, self._current_module_name)
 
     def get_llmexcept_protection_map(self) -> Dict[str, str]:
         """llmexcept 保护映射（被保护节点 UID -> handler UID）。
