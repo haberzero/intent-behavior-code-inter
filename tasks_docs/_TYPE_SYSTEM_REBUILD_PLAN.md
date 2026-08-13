@@ -24,21 +24,17 @@
 **保留物化注册**（特化 spec 仍落注册表）。
 
 判别性回归：
-- `Box[int].make(list[list[str]])` 编译期报 SEM_TYPE_MISMATCH
-- `type(list[list[int]]值)=list[list[int]]`（运行时身份保真）
+- `Box[int].make(list[list[str]])` 编译期报 SEM_TYPE_MISMATCH ✓
+- `type(list[list[int]]值)=list[list[int]]`（运行时身份保真）✓
 
-改动点（已定位）：
-1. `generic.py`：`GenericTypeDeclaration.build` 签名 `List[str]`→`List[TypeRef]`；
-   `_build_*` 回调（list/dict/tuple/optional/fn_callable/behavior/thread/thread_result/
-   chan/slot/generator）改结构化。
-2. `factory.py`：`create_*` 增加结构化入口（TypeRef 实参），字符串入口保留为兼容壳
-   或删除（评估后定）。`allowed_element_type_names` 保留（multi-type list 历史契约）。
-3. `_assignability.py resolve_specialization`（:248-295）：arg_names→arg_specs 结构化，
-   candidate_key 用 canonical_name 派生。
-4. `_assignability.py _specialize_user_class`（:297-344）：type_args 存结构化 TypeRef。
-5. 连带：`_declaration_visitors._param_type_ref`（:459-484）验证 substitute 生效。
-6. 禁点清理：serializer/expression_visitors/declaration_visitors 中
-   `TypeRef.of(泛型名)` 扁平构造迁移。
+状态：**已完成（2026-08-13，a8219040，全量 2592/1 零回归）**。
+改动：① `TypeRef.parse` 单一权威解析器；② factory.create_* 类型承载字段结构化
+（TypeRef.parse + *_ref 入口）；③ `GenericTypeDeclaration.build` 签名 List[str]→
+List[TypeRef]；④ resolve_specialization/_specialize_user_class 结构化实参；
+⑤ serializer canonical_name 持久化 + rehydrator 结构化重建；⑥ 运行时
+_slice_type_objs_for 结构化实参递归解析。
+判别性测试 +6（TestNestedGenericStructurePreserved 4 + 白盒 2），历史锚定断言 3 更新。
+**待独立复核放行后 cherry-pick 更新 unsafe-vibe-dev。**
 
 ## S2 descriptor 双真相收敛（P0 连带）
 
