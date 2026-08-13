@@ -1,3 +1,0 @@
-# D1-11-005b 隔离子脚本（被 run_isolated 调用）
-int child_var = 99
-print("CHILD_RUNNING")

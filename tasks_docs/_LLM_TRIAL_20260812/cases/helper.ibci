@@ -1,3 +1,0 @@
-# D1-11-002c 模块文件（被 D1-11-002-modimport 命名导入）
-func square(int x) -> int:
-    return x * x

@@ -1,6 +1,0 @@
-# D3-51d get_global_intents 隔离
-import ai
-
-any g = ai.get_global_intents()
-print("global_ok=" + (str)(g != None))
-print("DONE")

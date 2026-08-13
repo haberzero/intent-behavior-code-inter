@@ -1,7 +1,0 @@
-# D3-80c mask/set_return_type_prompt 作为 void 语句调用
-import ai
-
-ai.mask("pattern")
-ai.set_return_type_prompt("int", "只输出整数")
-print("void_api_ok")
-print("DONE")

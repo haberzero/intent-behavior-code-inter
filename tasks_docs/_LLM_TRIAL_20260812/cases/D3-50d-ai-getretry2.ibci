@@ -1,7 +1,0 @@
-# D3-50d get_retry 别名测试（可能与函数名冲突）
-import ai
-
-print("has_key=" + (str)ai.has_api_key())
-int n = ai.get_retry_count
-print("n=" + (str)n)
-print("DONE")

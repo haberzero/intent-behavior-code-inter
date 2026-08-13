@@ -1,6 +1,0 @@
-# D3-80b 隔离：get_return_type_prompt 与 mask 分开
-import ai
-
-any m = ai.mask("pattern")
-print("mask_ok=" + (str)(m != None))
-print("DONE")

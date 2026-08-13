@@ -1,6 +1,0 @@
-# D1-11-002d 最小复现：整模块 import（含函数导出）
-import greeting_mod
-
-str g = greeting_mod.greet()
-print("greet=" + g)
-print("DONE")

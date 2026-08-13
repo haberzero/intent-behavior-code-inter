@@ -1,5 +1,0 @@
-# 模块文件：同时导出函数与变量（供整模块 import 回归测试）
-func greet() -> str:
-    return "hello from module"
-
-int answer = 42

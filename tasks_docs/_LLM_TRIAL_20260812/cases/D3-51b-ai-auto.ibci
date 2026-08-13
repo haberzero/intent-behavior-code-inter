@@ -1,5 +1,0 @@
-# D3-51b is_auto_intent_injection_enabled 隔离
-import ai
-
-print("is_auto=" + (str)ai.is_auto_intent_injection_enabled())
-print("DONE")

@@ -1,7 +1,0 @@
-# R3-03b thread[void] 合法（守卫例外）
-import ai
-ai.set_mock_mode()
-func worker() -> void:
-    print("w")
-thread[void] t = thread(callable=worker, args=[])
-print("DONE")

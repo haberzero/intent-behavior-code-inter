@@ -1,2 +1,0 @@
-func cf() -> str:
-    return "c-value"

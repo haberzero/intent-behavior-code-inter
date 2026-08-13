@@ -1,6 +1,0 @@
-# D2-12 多可能性：对内建函数名直接赋值（恶意）
-# doc: docs/syntax/12_builtins.md §12.1（对内建名的直接赋值仍被拒绝）
-# 期望: print = 5 被拒绝（编译错误）
-
-print = 5
-print("DONE")

@@ -1,5 +1,0 @@
-# 冒烟：死循环保护验证
-int i = 0
-while i >= 0:
-    i = i + 1
-print("NEVER")

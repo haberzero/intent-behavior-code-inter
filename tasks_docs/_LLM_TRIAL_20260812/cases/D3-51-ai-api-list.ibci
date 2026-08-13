@@ -1,9 +1,0 @@
-# D3-51 批量测试 ai 文档化 API 可达性（11_modules §11.3 清单）
-import ai
-
-print("has_api_key=" + (str)ai.has_api_key())
-print("get_retry=" + (str)ai.get_retry())
-print("is_auto_intent=" + (str)ai.is_auto_intent_injection_enabled())
-print("get_intent_stack=" + (str)ai.get_current_intent_stack())
-print("get_global_intents=" + (str)ai.get_global_intents())
-print("DONE")

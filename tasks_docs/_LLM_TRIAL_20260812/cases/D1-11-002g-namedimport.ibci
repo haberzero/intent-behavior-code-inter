@@ -1,6 +1,0 @@
-# D1-11-002g 最小复现：命名导入 from helper import square
-from helper import square
-
-int s = square(6)
-print("square=" + (str)s)
-print("DONE")

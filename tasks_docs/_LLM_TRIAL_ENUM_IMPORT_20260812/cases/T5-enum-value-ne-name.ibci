@@ -1,9 +1,0 @@
-import ai
-
-class Status(Enum):
-    str ACTIVE = "a"
-    str INACTIVE = "i"
-
-Status c = @~你是状态枚举解析器。只输出一个成员名：ACTIVE 或 INACTIVE，不要输出任何其他内容~
-print((str)c)
-print((str)(c == Status.ACTIVE))

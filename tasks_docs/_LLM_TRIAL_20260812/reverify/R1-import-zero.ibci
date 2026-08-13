@@ -1,5 +1,0 @@
-# R1-003 零参数函数类型（档2 修复）
-# 期望: int x = mod.greet() 编译期报 SEM_TYPE_MISMATCH（修复前退化 any 运行时才报）
-import greeting_mod
-int x = greeting_mod.greet()
-print("DONE")
