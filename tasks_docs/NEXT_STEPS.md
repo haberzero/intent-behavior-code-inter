@@ -2,8 +2,9 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-13（**G3 继承特化父类字段丢失 + Finding C any 逃生阀复查 根治**；
-> 全量 **2365 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
+> **最后更新**：2026-08-13（**试用体系重构完成**：T01 LLM 批真实重跑 55P+2G + Phase C
+> 套件重构/过期文档删除/classification 100% + Phase D 自动化衔接；
+> 全量 **2366 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
 
 ---
 
@@ -351,24 +352,31 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   §七 契约失效）→ 修复为对动态 any 逃生值强制 `RUN_TYPE_MISMATCH`。+10 e2e；
   KNOWN_LIMITS §六/§七/§十四#1③ + 06_oop 文档同步。
 
-- **🔴 下一 session 主线（试用体系重构收尾，`TRIAL_SYSTEM_REDESIGN.md`）**：
-  1. **T01 LLM 批真实重跑验证**（Phase B 收尾）——57 个真实 LLM 用例目前为基线断言
-     （`expect-out: DONE`）；用真实 LLM 服务重跑（**用户已手动应用禁用思考预设**，响应快 +
-     content 稳定），按实际输出精化断言并验证判定。
-  2. **Phase C 干净彻底**——旧编号 85 处 + 旧路径 42 处全量替换（`KERNEL_ISSUE-<域>-<n>` /
-     `trials/T0x`）；用例 ID 统一；register.jsonl classification 写回（0%→100%）；
-     过时设计文档归档（`TRIAL_SYSTEM_DESIGN.md`、历史报告）。
-  3. **Phase D 自动化衔接**——试用→确定性测试收敛流程（缺陷必须落 `tests/` 回归）+
-     报告自动生成设计。
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev 620de1c4，全量 2366 passed / 1 skipped）**：
+  **试用体系重构（Phase B 收尾 + Phase C + Phase D 全部完成）**。
+  1. **T01 LLM 批真实重跑验证**（Phase B 收尾）：57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**
+     （零 HARNESS/零缺陷复现）。断言从基线 `DONE` 精化为稳定确定性行；修复 8 个脚本缺陷
+     （5 import 位置 F9 适配遗留 + 2 守卫断言 + 1 API 类型）+ child_llm F9 配置。
+  2. **Phase C 干净彻底**：用户原则确立——**套件不冻结历史资产、问题直接重构，唯一底线不为
+     规避缺陷改套件（缺陷触发用例保留）**。删除 40 个过期文档（设计/报告/审计/临时 `_code_*`）；
+     套件重构（T02 T3/T4/T5 断言改映射有效性 / T04 R1-05/R5-01/R5-04 重构为修复后语义、删 b
+     变体）；4 套 register.jsonl classification 写回 **100%**（T01 55P+2G / T02 8P+1L /
+     T03 22P+6G+1KI+1H / T04 24P+7G+1KI+1H）。
+  3. **Phase D 自动化衔接**：报告自动生成器 `_toolkit/gen_register.py`（register.jsonl→REGISTER
+     骨架）+ 收敛流程硬规则 `_toolkit/PHASE_D_AUTOMATION.md`（缺陷修复=根因修复+tests/ 回归双交付
+     验收门）。
+
+- **🔴 下一 session 主线候选**（试用体系重构已收尾，按 `PENDING_TASKS.md` §〇 择定）：
+  - **独立缺陷窗口**（高价值，非阻塞）：**KERNEL_ISSUE-GEN-6**（P1，运算符方法参数含 T 特化未生效，
+    触发用例 D2-01）与 **KERNEL_ISSUE-GEN-5**（P2，表达式位置特化未注册，触发用例 GEN5-01）。
+    修复须按 Phase D 收敛义务双交付（根因修复 + tests/ 回归）。
+  - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
 - **🟡 独立缺陷窗口（不阻塞主线）**：
   - **KERNEL_ISSUE-GEN-5**（P2）：用户泛型类下标表达式位置特化未注册（触发用例 GEN5-01）。
   - **KERNEL_ISSUE-GEN-6**（P1）：泛型运算符方法参数含 T 特化未生效，G1 修复不完整（触发用例 D2-01）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
-- **📌 本 session 已完成**（临时问题全部闭环）：试用套件超时保护（run_one SIGKILL 兜底）+
-  分阶段并发（run_batch，llm 阶段限并发防过载）；LLM 运行配置缺失友好提示 + 思考禁用失败警告；
-  T04/T03/T02 断言迁移 + T01 mock 42 已验证 + T01 真实 LLM 用例 F9 适配（load_project_config）；
-  LM Studio 禁用思考专项调查（官方机制 = model.yaml enableThinking；本机 model.yaml local 不可行；
-  非思考 Qwen 模板已提供，用户已应用预设）。
+- **📌 本 session 已完成**（临时问题全部闭环）：T01 LLM 批真实重跑 55P+2G；过期文档删除 40；
+  套件重构（不冻结原则）；classification 写回 100%；gen_register 报告生成器 + 收敛流程硬规则。
 
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成

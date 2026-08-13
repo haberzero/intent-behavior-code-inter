@@ -101,48 +101,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `NEXT_STEPS.md` | 当前最紧要项（下一主线待择定）/ 已完成摘要 / 工作模式定论 / 工作规则 |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED） |
+| `TRIAL_SYSTEM_REDESIGN.md` | 试用体系重构任务控制（Phase A-D 全部完成；缺陷/用例/工具状态单一权威） |
+| `trials/` | 试用地基 4 套（T01_llm_full / T02_enum_import / T03_user_class_generics / T04_generics_fix_regression） |
+| `trials/_toolkit/` | 试用工具链：run_one.py（harness）/ run_batch.py（批量）/ CLASSIFICATION.md（分类编号）/ CONTRACT_FORMAT.md（用例即契约）/ LLM_SERVICE.md（本机真实 LLM）/ gen_register.py（报告生成）/ PHASE_D_AUTOMATION.md（收敛流程） |
 | `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行，R4 覆盖率核对已执行（2026-08-09），R5 doc 聚焦治理已执行（全量待独立窗口）） |
-| `DOC_AUDIT_REPORT.md` | docs/ 治理审核记录（2026-08-06，F0-F4 已执行完成，归档） |
-| `TEST_MATRIX_FINDINGS.md` | 测试矩阵核对发现（PT-TEST-3 研究存档，PT-TEST-1 重构输入） |
 | `THREAD_DESIGN.md` / `PROMPT_DESIGN_REVIEW.md` / `MEDIA_DESIGN.md` | 设计要点迁入（并发 / `__prompt__` 待决项 / media 封存） |
 | `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md` §十） |
 | `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
 | `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
-| `TEST_REFACTOR.md` / `TEST_REFACTOR_REPORTS.md` | 测试体系重构（PT-TEST-1，**已并入 OBSERVABILITY_REFACTOR**） |
-| `OBSERVABILITY_REFACTOR.md` / `test_baseline_20260806.txt` | 可观测性统一重构任务控制文档（**已完成**，Phase 0-4 落地）/ 覆盖基准快照 |
-| `DIAGNOSTIC_DESIGN.md` | PT-FEAT-9 设计权威（**已完成**，实施步骤 A-E 落地，归档） |
-| `YIELD_GENERATOR_DESIGN.md` | 阶段 5 yield 惰性生成器设计权威（**已完成**，独立分支 exp/yield-generator） |
-| `_ASYNC_UNIFY.md` | 异步地基遗留妥协根治实施计划（PT-DEBT-12/13/14/15，F1→B1→F2/F3→M1-M4 **全部收尾，2026-08-09**） |
-| `_code_yield_from.md` | 阶段 5 增量 `yield from` 生成器委托设计记录（**已完成**，2026-08-09；按惯例汇报后待删，当前保留供追溯） |
-| `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md` | M1 `.call` 双写收敛 / M2 驱动去重设计记录（**已完成**，2026-08-09，独立分支 exp/async-m1m2；保留供追溯） |
-| `_HEALTH_AUDIT_PLAN.md` | **三轴健康盘点**（2026-08-09 只读调查）：异步统一完整性 A1-A6 遗留 + 内核健康（深层嵌套/死同步包装）+ 技术手册健康（P1/P2 待修）。**下一步规划输入** |
-| `_REAL_LLM_E2E_PLAN.md` | **真实 LLM e2e 全面试用 + 高强度批判检测**设计权威（2026-08-11用户定案）。执行顺序 §八 步骤 3-5 为**重启任务**范围（2026-08-12，见 `_REAL_LLM_E2E_RESTART.md`） |
-| `_REAL_LLM_E2E_RESTART.md` | **真实 LLM 全面试用重启交接**（2026-08-12）：原报告基于含 U1-U7 的旧代码执行后中断、意图结论已纠错、修复后未重跑 → 重验清单 A1-A5（意图/内建遮蔽/generator.to_list/dispatch 观测/run_batch 观测）+ B1-B3（未测项）+ C1-C4（批判缺失场景）+ 执行方式 |
-| `_REAL_LLM_E2E_REPORT.md` | 本 session 真实 LLM e2e **执行报告**：9/12 类特性验证通过。§六 不合格操作自审段；**§七 合并条件重估（2026-08-11）——U1-U7 修复后检测/工程维度重新满足**。**⚠ §四 12 类表格基于修复前代码，重启后需刷新（2026-08-12）** |
-| `_HANDOFF_ISSUES_LLM_E2E.md` | **U1-U7 不合格操作 + P1-P4 问题清单**（2026-08-11）。**U1-U7 已全部根因修复核销 + P1-P4 已全部决断**，作为历史追溯保留 |
-| `_MAIN_MERGE_PLAN.md` | **unsafe-vibe-dev 合并取代 main 规划**（2026-08-11）。**阶段 2 收尾准备已完成（2026-08-11）；阶段 3 合并待用户显式授权**（push/合并不在自主范围） |
-| `_MERGE_READY_REPORT.md` | **合并就绪报告**（2026-08-11）：四项合并条件全部核验满足 + examples 运行命令 + 合并执行建议。**阶段 3 授权入口** |
-| `_PT_AUDIT3_RECORD.md` | **PT-AUDIT-3 双路径分裂专项审计记录**（2026-08-11，general agent 独立审计）：无 P0；3 确凿 P2 已修复 + 5 疑似项 S1-S5 待独立窗口 |
-| `_DOC_HEALTH_20260811.md` | **docs/ 全量健康检查记录**（2026-08-11，doc-governance Phase 2 审计 + Phase 4-5 处置）：P0/P1/P2 全部处置完成（P0 4 项 + P1 16 项 + P2 12 项），进度同步于文件内 |
-| `_API_CONFIG_DESIGN.md` | **`api_config.json` 配置机制分析与改进设计**（2026-08-11 用户提出，PT-FEAT-13）：C1-C7 **已全部落地**（含不合格操作 U3/U4/U6/U7），C8 远期。落地后此项保留供追溯 |
-| `_code_api_config.md` | PT-FEAT-13 临时任务文档（code-workflow Phase 5 本应删除，**待 U5 清理**）。保留供追溯交接 |
-| `_REAL_LLM_TRIAL_REPORT_20260812.md` | **真实 LLM 全面压力试用重启报告**（2026-08-12，修复后代码）：D1 全语法遍历 + D2 压力试用 + D3 批判检测（C1-C4）+ A1-A5 重验 + 暴露问题清单 + 合并条件重估 |
-| `_KERNEL_ISSUES_ANALYSIS_20260812.md` | **内核缺陷根因分析**（2026-08-12）：PT-DEBT-25/26/27/28 + O1/I1/O2 根因全链路证据 + 修复方案分档 |
-| `_FIX_PROPOSAL_CRITICAL_REVIEW_20260812.md` | **修复方案批判性审查**（2026-08-12）：架构一致性/代码健康四维度复审全部提案（档1 鸭子类型/档3 统一形态判定；O1 特判 vs 协议分派） |
-| `_USABILITY_AUDIT_20260812.md` | **试用易用性问题审计**（2026-08-12）：while true 小写 / return@~ 文档漂移 / switch break 等根源 + 修复状态 |
-| `_SWITCH_ENUM_ASSESSMENT_20260812.md` | **switch 设计评估 + enum 现状盘点**（2026-08-12）：维持自动跳出设计；enum 任意类型成员已放开 + 非 str LLM 集成缺陷 |
-| `_ENUM_SWITCH_COMPLETION_HANDOFF.md` | **enum/switch 补全评估 + KNOWN_LIMITS 分类交接**（2026-08-12）：enum 地基已备（axiom/prompt/iter 机制成熟）+ KNOWN_LIMITS 25 章分类 + 下一 session 核查清单。**enum 补全已落地（2026-08-12，见 `_code_enum_completion.md`）**，保留供追溯 |
-| `_code_enum_completion.md` | **enum 补全实现记录**（2026-08-12）：值模型定论（成员=底层值非实例）+ 非 str LLM 集成修复 + 迭代/数量 + KNOWN_LIMITS §二 + 实例化枚举设计候选 |
-| `_LLM_TRIAL_ENUM_IMPORT_20260812/` | **enum/import/运算符 用户试用**（2026-08-12）：9 例全过（含真实 LLM 非 str 枚举集成实证），无新增缺陷。DESIGN.md + REGISTER.md |
-| `_code_user_class_generics.md` | **用户类泛型主线设计起点**（2026-08-12）：地基盘点 + 设计范围 + 6 项开放设计问题 + 实施路径。**已落地（35bb2de）**，保留供追溯 |
-| `PT_FEAT3_DESIGN.md` | **用户类泛型设计冻结**（2026-08-12）：6 项开放问题逐项决断 + 实施蓝图 a-f + 边界登记。**已实施**，保留供追溯 |
-| `_GENERICS_TRIAL_20260812/` | **泛型压力/恶意试用**（2026-08-12）：D1 核心语义 + D2 正交交叉（11 维度）+ D3 恶意挑刺（10）。深度核验 + 两轮独立复核后，G1/G2/BOUNDARY-G1/双通道**全部修复**（32484fe/3fe98d6/d100ee1），+11 e2e |
-| `_GENERICS_TRIAL_FIX_20260812/` | **泛型修复回归试用**（2026-08-12）：28 用例 + 冒烟全经死循环保护。修复成果验证：G1 方法体/G2 自引用基础/BOUNDARY-G1 守卫/双通道 全 PASS。**新发现 2 项既有缺陷**（非本次引入）：G3 继承特化父类字段值丢失（P1，静默 None）+ BOUNDARY-G2 自引用链 while 类型退化（P2）——登记 PENDING_TASKS |
-| `TRIAL_SYSTEM_DESIGN.md` | **试用体系规范化设计记录**（2026-08-12，**下一阶段主要目标**）：现状盘点（4 套试用地基已统一 harness/jsonl，命名/分类/编号碎片化）+ 规范化目标（单一权威源/机制同构/设计语言统一）+ 草案（命名/分类/编号/模板）+ 实施规划（Phase 1 机制 → 2 历史定型 → 3 收尾）。**只设计未实施** |
-| `_HANDOFF_GENERICS_FIX.md` | **泛型缺陷修复交接**（2026-08-12）：G3/BOUNDARY-G2 复现+根因起点+修复路径+验证方法 + **试用体系规范化 §七**。下一智能体任务交接 |
-| `_code_ai_autoset.md` | **F9/ai 显式配置设计记录**（2026-08-12）：现状副作用 + 显式方案 + 变更清单 + 命名候选。**命名已拍板 `ai.load_project_config` + 本轮实施完成（a49555b）**，保留供追溯 |
-| `_code_f9_load_project_config.md` | **F9 显式配置落地实施记录**（2026-08-12）：设计决策（ec 契约迁移/幂等/历史试用档案不改）+ 变更清单 + 验证。Phase 5 汇报后清理 |
-| `_enum_instancing_assessment.md` | **实例化枚举设计候选评估**（2026-08-12）：维持现状（LLM 集成改造为核心硬伤），独立设计冻结候选 |
 
 ---
 
@@ -155,6 +121,19 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > **接手起点**：先读本节 + `tasks_docs/NEXT_STEPS.md`（当前最紧要）+
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
+
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev 620de1c4，全量 2366 passed / 1 skipped）**：
+  **试用体系重构（TRIAL_SYSTEM_REDESIGN.md）Phase B 收尾 + Phase C + Phase D 全部完成**。
+  ① **T01 LLM 批真实重跑**（Phase B 收尾）：57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**
+  （零 HARNESS/零缺陷复现）；断言从基线 `DONE` 精化为稳定确定性行；修复 8 个脚本缺陷
+  （5 import 位置 / 2 守卫断言 / 1 API 类型）+ child_llm F9 配置。② **Phase C 干净彻底**：
+  **用户原则确立——套件不冻结历史资产、问题直接重构，唯一底线不为规避缺陷改套件（缺陷
+  触发用例保留）**；删除 40 个过期文档；套件重构（T02 T3/T4/T5 断言改映射有效性 / T04
+  R1-05/R5-01/R5-04 重构为修复后语义、删 b 变体）；4 套 register.jsonl classification 写回
+  **100%**。③ **Phase D 自动化衔接**：报告自动生成器 `_toolkit/gen_register.py` +
+  收敛流程硬规则 `_toolkit/PHASE_D_AUTOMATION.md`（缺陷修复=根因修复+tests/ 回归双交付）。
+  **遗留独立窗口**：KERNEL_ISSUE-GEN-5/GEN-6（触发用例保留）、供应商感知思考禁用机制。
+  详见 NEXT_STEPS 交接要点 + WORKLOG。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev 35bb2de，全量 2339 passed / 1 skipped）**：
   - **用户类泛型参数（PT-FEAT-3 主线）完整落地**：设计冻结 `PT_FEAT3_DESIGN.md`（6 项开放问题
@@ -476,15 +455,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（PT-FEAT-3 用户类泛型**已落地 35bb2de**；F9 `ai.load_project_config` 已落地 a49555b；下一主线待择定）
-- [ ] 读 `PT_FEAT3_DESIGN.md`（设计冻结 + 边界 ①-⑧）+ `_code_user_class_generics.md`（设计起点，保留追溯）
-- [ ] 读 `_GENERICS_TRIAL_20260812/REGISTER.md`（泛型压力试用：G1/G2/BOUNDARY-G1/双通道**已全部修复**，全量 2350/1）
-- [ ] 读 `_GENERICS_TRIAL_FIX_20260812/REGISTER.md`（修复回归试用：成果全 PASS；**新发现 G3 继承特化字段丢失 P1 + BOUNDARY-G2 类型退化 P2**，待独立窗口）
-- [ ] **🔴 修复交接**：读 `_HANDOFF_GENERICS_FIX.md`（G3 + BOUNDARY-G2 的复现/根因起点/修复路径/验证方法 + **试用体系规范化 §七**）——下一智能体任务
-- [ ] **🔴 试用体系规范化**：读 `TRIAL_SYSTEM_DESIGN.md`（设计起点：机制/日志体系化 + 历史记录整理定型，下一阶段主要目标）
-- [ ] 读 `_enum_instancing_assessment.md` + `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态）
-- [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空；泛型试用缺陷 G1/G2/BOUNDARY-G1/双通道 已全部修复；G3/BOUNDARY-G2 待修复）
-- [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2350 passed / 1 skipped**）
-- [ ] 独立窗口候选：PT-DEBT-4 / PT-AUDIT-3 S1-S3 / 枚举实例化 / import subpkg / CI/CD / PT-FEAT-13 C8
-- [ ] 工作全程本地 commit、禁 push（除非用户显式授权；当前本地领先 origin 20 commits 未推送）
+- [ ] 读本节 §2.1（试用体系重构**已全部完成 620de1c4**；全量 2366 passed / 1 skipped）
+- [ ] 读 `NEXT_STEPS.md`（当前最紧要：独立缺陷窗口 GEN-5/GEN-6 + 思考禁用机制）
+- [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；试用体系规范化行已标完成）
+- [ ] 读 `TRIAL_SYSTEM_REDESIGN.md`（试用体系重构执行状态：Phase A-D 全部完成）
+- [ ] 试用体系规范：`trials/_toolkit/CLASSIFICATION.md`（分类/编号）+ `CONTRACT_FORMAT.md`（用例即契约）+ `LLM_SERVICE.md`（本机真实 LLM 服务）+ `gen_register.py`（报告生成）+ `PHASE_D_AUTOMATION.md`（收敛流程硬规则）
+- [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 待修单一状态权威）
+- [ ] 独立缺陷窗口（修复须按 Phase D 收敛义务双交付：根因修复 + tests/ 回归）：
+  `KERNEL_ISSUE-GEN-6`（P1，D2-01 触发）/ `KERNEL_ISSUE-GEN-5`（P2，GEN5-01 触发）/
+  供应商感知思考禁用机制（P2 待设计）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2366 passed / 1 skipped**）
+- [ ] 工作全程本地 commit、禁 push（除非用户显式授权）
