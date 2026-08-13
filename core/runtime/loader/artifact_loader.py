@@ -175,8 +175,8 @@ class ArtifactLoader:
                 else:
                     parent_name = (p_ref.head if p_ref is not None else None) or "Object"
                 
-                # [Enum Hook] 检查父类是否已在 _classes 中注册
-                # 如果父类已存在（如 Enum），则直接创建子类
+                # 父类已存在（如预注册的 Enum 基类）：直接创建子类。
+                # [S3 单类表] 无双表缺口——父类存在性检查统一走唯一权威类表。
                 parent_class = self.registry.get_class(parent_name, module=cls_desc.module_path)
                 if parent_class:
                     # 父类已存在，直接创建子类

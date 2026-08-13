@@ -129,8 +129,8 @@ class Scheduler(ICompilerService):
         # entry 经 canonicalize_for_security 规范化（与 root 同源，解 symlink），
         # 替代散点 os.path.abspath（engine 上游已规范化，此处统一收口）。
         entry_file = PathValidator.canonicalize_for_security(entry_file).to_native()
-        # 入口模块锚点（S5 跨模块同名类身份根治）：仅非入口（被 import 的）模块
-        # 用户类 module 限定——入口模块是根命名空间（module=None）。
+        # 入口模块锚点（类身份统一 S2）：所有模块（含入口）用户类 module 限定，
+        # 无"入口=根命名空间"特例。
         self._entry_file = entry_file
         self._entry_module_name = entry_module_name
         self._scan_and_cache(entry_file)

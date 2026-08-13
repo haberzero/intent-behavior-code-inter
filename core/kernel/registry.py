@@ -305,9 +305,9 @@ class KernelRegistry:
         注册类（内置或用户定义），并强制关联其 UTS 描述符。
         [Active Defense] 拒绝任何无元数据描述或名称不匹配的裸类注入。
         [Module Identity] 注册键 = ``spec.qualified_name``（与编译期 spec 身份
-        (module_path, name) 对齐）：跨模块同名用户类（geo.Box / graph.Box）独立
-        注册，消除运行期类表裸名坍缩。入口/单模块类与内置类 module_path 为 None，
-        键 = 裸名（行为不变）。
+        (module_path, name) 对齐）：跨模块同名用户类（geo.Box / graph.Box /
+        main.Box）独立注册，消除运行期类表裸名坍缩。内置类 module_path 为
+        None，键 = 裸名。
         """
         self._verify_class_registration(token)
         

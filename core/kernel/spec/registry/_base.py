@@ -121,8 +121,9 @@ class SpecRegistryBase:
             spec = self._specs.get(f"{module}.{name}")
             if spec:
                 return spec
-        # 当前模块优先：非入口模块内对自身类的裸名引用解析到带 module 的 spec
-        # （S5 跨模块同名类身份根治）。miss 回落裸名（内置类型/入口模块类）。
+        # 当前模块优先：模块内对自身类的裸名引用解析到带 module 的 spec
+        # （类身份统一：所有模块用户类均 module 限定）。miss 回落裸名
+        # （内置类 / 根命名空间）。
         if module is None and self.current_module:
             spec = self._specs.get(f"{self.current_module}.{name}")
             if spec:

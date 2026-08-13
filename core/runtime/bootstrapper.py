@@ -151,7 +151,7 @@ class Bootstrapper:
         [S3 单类表] 不再写影子表——KernelRegistry.register_class 是唯一写入
         点（键 = spec.qualified_name，与编译期 spec 身份 (module_path, name)
         对齐）。[Module Identity] 跨模块同名用户类独立注册（geo.Box /
-        graph.Box），入口/单模块类与内置类 module_path 为 None，键 = 裸名。
+        graph.Box / main.Box），内置类 module_path 为 None，键 = 裸名。
         """
         if self.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = self.TypeClass

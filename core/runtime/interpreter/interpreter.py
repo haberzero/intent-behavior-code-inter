@@ -61,6 +61,7 @@ from core.runtime.host.service import HostService
 from core.runtime.frame import (
     set_current_frame, reset_current_frame,
     set_current_execution_context, reset_current_execution_context,
+    get_current_execution_context,
 )
 from core.runtime.interpreter.service_context import ServiceContextImpl
 from core.runtime.interpreter.execution_context import ExecutionContextImpl
@@ -867,7 +868,6 @@ class Interpreter:
             # current execution_context），而非主 interpreter 的共享 runtime
             # context——否则任务内 ``if str_var:`` 的 LLM 模糊布尔判定误读
             # 主线程帧状态。
-            from core.runtime.frame import get_current_execution_context
             ec = get_current_execution_context()
             rc = ec.runtime_context if ec is not None else self.runtime_context
             if rc is not None and rc.get_current_llm_except_frame() is not None:
