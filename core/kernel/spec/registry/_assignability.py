@@ -73,7 +73,11 @@ class _AssignabilityMixin:
             and target.kind != TypeKind.CLASS.value
         ):
             src_fam = src.get_base_name()
-            if src_fam and src_fam == target.get_base_name():
+            # 家族兼容：src 家族与 target 家族相同，或 src 家族是 target 家族
+            # 的 axiom 子类型链成员（behavior → fn_callable → callable）。此类
+            # 跨家族赋值（behavior[int] → fn_callable[str]）是合法子类型转换，
+            # 但特化实参必须校验（实参不兼容应拒绝）。
+            if src_fam and self._generic_family_compatible(src_fam, target.get_base_name()):
                 src_args = self._generic_spec_args(src)
                 tgt_args = self._generic_spec_args(target)
                 if src_args:
@@ -163,6 +167,29 @@ class _AssignabilityMixin:
                     return False
         return True
 
+    def _generic_family_compatible(self, src_fam: str, tgt_fam: str) -> bool:
+        """泛型家族兼容判定：src 家族与 target 家族相同，或 src 家族是 target
+        家族的 axiom 子类型链成员。
+
+        behavior → fn_callable → callable（axiom 父链）：``behavior[int]`` 赋给
+        ``fn_callable[str]`` 是合法子类型转换方向，但实参须校验。非泛型家族
+        （无法经 axiom 解析）视为不兼容（返回 False，保持既有行为）。
+        """
+        if src_fam == tgt_fam:
+            return True
+        cur = src_fam
+        visited = set()
+        while cur and cur not in visited:
+            visited.add(cur)
+            axiom = self._axiom_registry.get_axiom(cur)
+            if axiom is None:
+                return False
+            parent = axiom.get_parent_axiom_name()
+            if parent == tgt_fam:
+                return True
+            cur = parent
+        return False
+
     def _generic_spec_args(self, spec: IbSpec) -> List[TypeRef]:
         """提取内置泛型特化 spec 的结构化实参 TypeRef 列表。
 
@@ -184,11 +211,17 @@ class _AssignabilityMixin:
                 return [el]
             return []
         if kind == TypeKind.DICT.value:
+            # dict[K,V] 双实参（key + value）。不过滤 any：``dict[K]`` 是
+            # ``dict[K,any]``（value 动态），保留完整实参让递归 is_assignable
+            # 经 is_dynamic 自然放行（``dict[K,V] → dict[K]`` 合法协变）。
+            # 裸基类（key/value 均 any）返回空列表（视为无实参，不参与比较）。
             args = []
-            if spec.key_type is not None and spec.key_type.head != "any":
+            if spec.key_type is not None:
                 args.append(spec.key_type)
-            if spec.value_type is not None and spec.value_type.head != "any":
+            if spec.value_type is not None:
                 args.append(spec.value_type)
+            if all(a.head == "any" for a in args):
+                return []
             return args
         if kind == TypeKind.TUPLE.value:
             pos = getattr(spec, "positional_element_types", None) or []

@@ -518,6 +518,10 @@ def _bind_container_specialization(executor, node_uid: str, value, container_kin
             )
             if specialized_cls is None:
                 return value
+        # _specialize 对内置泛型 sealed 时可能回落 boxed 字符串（嵌套实参
+        # 语义），非 IbClass 时不可作值对象 ib_class——保守回退基类值。
+        if not isinstance(specialized_cls, IbClass):
+            return value
         value.ib_class = specialized_cls
         value.type_ref = _TypeRef.from_spec(node_spec)
     except Exception:

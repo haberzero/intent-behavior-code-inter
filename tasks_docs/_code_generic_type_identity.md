@@ -134,6 +134,23 @@ spec_reg 有特化 spec 但 `get_class("list[int]")` 为 None。
   实验，确认技术路线后手动 cherry-pick 更新 unsafe-vibe-dev；**不触碰 main**。
 - **实施顺序**：缺陷一（独立可修，先做）→ 缺陷二（独立分支，后做）。
 
+### 2.6 已确认边界（独立复核核实，非本次核心，记录待增量）
+
+1. **函数返回字面量**：`func f() -> list[int]: return [1,2]` → `type(f())` = `list`。
+   返回语句的容器字面量未绑函数返回类型。
+2. **函数调用实参字面量**：`f([1,2])`（形参 `list[int]`）→ `type(items)` = `list`。
+3. **下标/属性赋值字面量**：`m[0] = [9]`（`m: list[list[int]]`）→ `type(m[0])` = `list`。
+4. **嵌套容器内层元素**：`list[list[int]] n=[[1],[2]]` → 外层 `n` 保真为 `list[list[int]]`，
+   内层 `n[0]` 擦除为 `list`。根因：内层 IbListExpr 节点 `node_to_type` 未绑 `list[int]`
+   （编译期只 bind 顶层 RHS）。补齐需编译期递归类型传播（外层特化 element_type → 内层节点）。
+5. **容器切片**：`li[0:2]` 返回裸 list（`collections.py` 切片 `registry.box`）。
+6. **Optional 值身份**：`Optional[int]` 值绑基类 `Optional`（`_wrap_optional`），type() 返回
+   `Optional`。Optional 有专门分支（编译期/运行时 is_assignable 正确），值层身份为独立增量。
+7. **跨引擎反序列化**：目标引擎 spec_reg 无该特化时回退基类（安全不保真；同引擎 round-trip
+   保真）。可增强：反序列化从序列化 type_pool 重建 spec。
+
+以上均不构成回归（修复前即为擦除行为），属值层身份根治的后续增量。
+
 ---
 
 ## 三、文档同步计划

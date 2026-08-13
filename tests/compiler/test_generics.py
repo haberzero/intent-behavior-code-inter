@@ -168,6 +168,40 @@ class TestGenericAssignability:
             "list[list[int]] should NOT be assignable to list[list[str]]"
         )
 
+    def test_cross_family_behavior_to_fn_callable_mismatch_rejected(self):
+        """跨家族子类型：behavior[int] → fn_callable[str] 实参不兼容拒绝。"""
+        reg = make_registry()
+        src = self._specialize(reg, "behavior", "int")
+        tgt = self._specialize(reg, "fn_callable", "str")
+        assert not reg.is_assignable(src, tgt), (
+            "behavior[int] should NOT be assignable to fn_callable[str]"
+        )
+
+    def test_cross_family_behavior_to_fn_callable_same_args_allowed(self):
+        """跨家族子类型：behavior[int] → fn_callable[int]（子→父，实参兼容）放行。"""
+        reg = make_registry()
+        src = self._specialize(reg, "behavior", "int")
+        tgt = self._specialize(reg, "fn_callable", "int")
+        assert reg.is_assignable(src, tgt), (
+            "behavior[int] should be assignable to fn_callable[int]"
+        )
+
+    def test_cross_family_fn_callable_to_behavior_rejected(self):
+        """跨家族父→子：fn_callable[int] → behavior[int] 拒绝（非子类型方向）。"""
+        reg = make_registry()
+        src = self._specialize(reg, "fn_callable", "int")
+        tgt = self._specialize(reg, "behavior", "int")
+        assert not reg.is_assignable(src, tgt)
+
+    def test_dict_covariant_value_any_allowed(self):
+        """dict[str,int] → dict[str]（= dict[str,any]）value 动态协变放行。"""
+        reg = make_registry()
+        src = self._specialize(reg, "dict", "str", "int")
+        tgt = self._specialize(reg, "dict", "str")
+        assert reg.is_assignable(src, tgt), (
+            "dict[str,int] should be assignable to dict[str,any]"
+        )
+
     def test_compile_thread_mismatch_rejected(self):
         """语言层判别：thread[int] 赋给 thread[str] 编译期报 SEM_TYPE_MISMATCH。"""
         expect_compile_error(
