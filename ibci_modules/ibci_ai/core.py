@@ -72,6 +72,8 @@ class AIPlugin(IbStatefulPlugin):
         }
         # 未 probe 告警去重：仅首次未探测调用告警一次，避免热路径刷屏
         self._unprobed_warned = False
+        # 思考禁用失败告警去重：请求已带 enable_thinking=false 但模型仍输出思考 → 警告一次
+        self._thinking_suppress_failed_warned = False
 
     @staticmethod
     def _extract_reasoning(message: Any) -> Optional[str]:
@@ -84,6 +86,35 @@ class AIPlugin(IbStatefulPlugin):
         if reasoning is None and hasattr(message, "reasoning_content"):
             reasoning = message.reasoning_content
         return reasoning
+
+    def _warn_thinking_suppress_failed(self, config_declared_non_reasoning: bool = False) -> None:
+        """思考禁用失败告警（一次性去重）。
+
+        请求已带 ``enable_thinking=false`` 抑制思考，但模型响应仍含 ``reasoning``——
+        该模型在所用后端强制思考，API 参数无法关闭。这是 IBCI 的**待完善覆盖缺口**
+        （供应商感知的思考禁用机制，见 ``LLM_SERVICE.md``）。提示用户联系开发者 /
+        提交 issue，附供应商文档说明——**不引导用户改配置绕开**（那是掩盖而非解决）。
+        """
+        if self._thinking_suppress_failed_warned:
+            return
+        self._thinking_suppress_failed_warned = True
+        model = self._config.get("model", "?")
+        if config_declared_non_reasoning:
+            print(
+                f"[警告] 模型 '{model}' 输出思考内容，但配置声明 reasoning:false（非思考）。\n"
+                "        尝试的思考抑制参数（enable_thinking=false / thinking.enabled=false）"
+                "对该模型无效（后端强制思考）。\n"
+                "        这是 IBCI 待完善的覆盖缺口（供应商感知的思考禁用），请联系开发者或\n"
+                "        提交 issue，并附供应商（LM Studio）文档说明："
+                "https://lmstudio.ai/docs（模型思考由提示模板决定，API 参数对部分模型无效）。"
+            )
+        else:
+            print(
+                f"[警告] 探测到模型 '{model}' 输出思考内容（reasoning），尽管已请求启用思考抑制\n"
+                "        （enable_thinking=false）——API 参数对该模型无效（后端强制思考）。\n"
+                "        这是 IBCI 待完善的覆盖缺口（供应商感知的思考禁用），请联系开发者或\n"
+                "        提交 issue，并附供应商文档说明。"
+            )
 
     def _is_test_mode(self) -> bool:
         """当前是否处于 MOCK 测试模式（仅显式声明：``_config["mock"]``）。"""
@@ -358,6 +389,10 @@ class AIPlugin(IbStatefulPlugin):
             if reasoning:
                 is_reasoning = True
                 print("  => 探测到专用 reasoning 字段，判定为 [强制推理模型]。")
+                # 思考禁用失败警告：探测请求已带 enable_thinking=false 抑制思考，但模型
+                # 仍输出 reasoning——该模型在后端强制思考，API 参数无法关闭。提示用户
+                # 在服务端（LM Studio 模型加载设置/模板）关闭思考，或改用非思考模型。
+                self._warn_thinking_suppress_failed()
             elif "Thinking Process:" in raw_content or "<think>" in raw_content:
                 is_reasoning = True
                 print("  => 探测到 Thinking 特征字符串，判定为 [强制推理模型]。")
@@ -595,6 +630,14 @@ class AIPlugin(IbStatefulPlugin):
 
             # 兼容性处理：尝试提取 Reasoning 字段
             reasoning = self._extract_reasoning(completion.choices[0].message)
+
+            # 思考禁用失败告警：请求已带 enable_thinking=false 抑制思考，但响应仍含
+            # reasoning——后端强制思考，API 参数无效。配置声明非思考（is_reasoning_model
+            # 为 False）时额外提示配置与实际不符（建议 reasoning:true）。
+            if reasoning:
+                self._warn_thinking_suppress_failed(
+                    config_declared_non_reasoning=not is_reasoning_model
+                )
 
             # 如果 content 为空且 reasoning 有值，说明这是强制推理模型把结果都放进 reasoning 里了
             if (raw_content is None or raw_content.strip() == "") and reasoning:
