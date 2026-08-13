@@ -5,13 +5,7 @@
 > `_code_generic_type_identity.md` + `_code_generic_value_convergence.md`。
 > 当前基线：unsafe-vibe-dev HEAD d797e418，全量 2586 passed / 1 skipped。
 >
-> **✅ 已根治（2026-08-13，`_TYPE_SYSTEM_REBUILD.md` v2 桩1-3 + S6）**：本清单 7 项中
-> 6 项（除 #6 *expr 语言级根本限制）已由类型体系地基根治收敛——桩1 创建点结构化
-> TypeRef（#3 generator 嵌套扁平化根治）、桩2 get_base_name 单义 + 句柄类物化
-> （#1/#7 值身份）、桩3 声明驱动（#2 type_pool 匹配 + 序列化结构保真）、S6 元组
-> 解包检查（#4）。**遗留**：#5（-> auto 推断，已部分由 S6 容器推断覆盖）、#6（*expr
-> 静态限制）、S5 module 身份（跨模块同名，评估为设计边界）。明细见
-> `_TYPE_SYSTEM_REBUILD_PLAN.md` + WORKLOG。
+> **✅ 已根治（2026-08-13，`_TYPE_SYSTEM_REBUILD.md` v2 桩1-3 + S6 + 遗留边界彻底修复）**：本清单 7 项全部收敛——桩1 创建点结构化 TypeRef（#3 generator 嵌套扁平化根治）、桩2 get_base_name 单义 + 句柄类物化（#1/#7 值身份）、桩3 声明驱动（#2 type_pool 匹配 + 序列化结构保真）、S6 元组解包检查（#4）+ 容器字面量带实参推断（#5 -> auto 已覆盖）、**S5 跨模块同名类 module 化根治（e849f36d）**、**#6 *expr 元素级校验（e849f36d）**。明细见 `_TYPE_SYSTEM_REBUILD_PLAN.md` + WORKLOG。
 
 ---
 

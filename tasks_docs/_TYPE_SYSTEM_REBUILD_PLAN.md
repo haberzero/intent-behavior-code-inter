@@ -82,20 +82,28 @@ _slice_type_objs_for 结构化实参递归解析。
 
 判别性回归：`list[geo.Point]` vs `list[graph.Point]` 区分。
 
-状态：**评估后登记为设计边界，不随本批实施（2026-08-13）**。
-实证：多模块编译同名类 `geo.Box`/`graph.Box` 在 type_pool 坍缩为一个 `Box`
-（module=None）；运行时 `registry.get_class(name)` 表是 name-only（结构性天花板）。
-完整修复需重构：① 编译器模块注册（scheduler 跨模块类 module_path 承载）；②
-serializer/rehydrator 模块身份；③ 运行时 IbClass 表按 (module,name) 索引——改动面
-深、风险高、触发面罕见（跨模块同名类）。**半修 module 会留新洞（违反"禁止半修复"）**，
-故保持为已知边界：登记 KNOWN_LIMITS + AIMLESS_REVIEW，待独立窗口评估运行时类表
-module 化。同模块特化 round-trip（S4 验证）不受影响。
+状态：**已彻底根治（2026-08-13，e849f36d，破坏性 module 化非兼容双轨）**。
+用户裁定允许破坏性修复。用户类身份统一 (module_path, name)：被 import 的非入口
+模块用户类带 module 限定（geo.Box/graph.Box 独立 spec + 运行时类 + 特化继承 module +
+序列化保真），入口/单模块保持根命名空间；SpecRegistry.current_module 上下文使模块
+内裸名引用正确解析（finally 重置防污染）；rehydrator CLASS shell 传 module。
+判别性测试 +1（TestCrossModuleSameNameClass）。全量 2607/1。
 
 ## S6 已知边界重估（独立语言缺口）
 
 目标：元组解包类型检查 + -> auto 泛型实参推断 + *expr 元素级缓解。
 
 判别性回归：每项 1+ 用例。
+
+状态：**已完成（2026-08-13，8330cf51 + e849f36d，全量 2607/1 零回归）**。
+① 元组解包类型检查（按位置 is_assignable，拦截错误类型）；② 容器字面量带实参
+推断（list[int]/dict[str,int]/tuple[int,int]，auto 推断精确 + type() 内省带实参；
+显式裸声明覆盖推断；**-> auto 函数返回容器实证已覆盖**）；③ **\*expr 元素级校验
+（e849f36d）**：特化容器展开时元素类型与目标形参可赋值校验（list[str] *-> f(int)
+编译期拦截，位置偏移经复核整改），裸容器/动态/数量不足运行期裁决（静态数量
+未知本质限制保留）。
+判别性测试 +6（TestTupleUnpackTypeChecking 3 + TestStarredElementTypeChecking 3）。
+**已复核后 cherry-pick 更新 unsafe-vibe-dev。**
 
 ## S7 文档治理（零风险）
 
