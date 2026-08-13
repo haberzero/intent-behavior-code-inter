@@ -640,9 +640,6 @@ class Interpreter:
             if not node_data: continue
             
             body = node_data.get("body", [])
-            # Track declaration-only fields (no default value) in order
-            decl_only_fields: List[str] = []
-            
             for stmt_uid in body:
                 stmt_data = self.get_node_data(stmt_uid)
                 if not stmt_data: continue
@@ -680,39 +677,72 @@ class Interpreter:
                                 static_val=static_val, 
                                 module_name=module_name
                             )
-                            # 无默认值的声明字段需要通过构造函数参数赋值
-                            if val_uid is None and static_val is None:
-                                decl_only_fields.append(target_name)
 
-            # 若类没有显式 __init__ 但存在声明字段，自动生成位置参数 __init__
-            if decl_only_fields and '__init__' not in ib_class.methods:
-                field_names = decl_only_fields
+        # 第二 pass：无显式 __init__ 的类自动生成位置参数构造器（chain-aware）——
+        # 构造器参数 = 继承链上全部有效无默认值字段（父类优先、子类同名覆盖）。
+        # 与 instantiate 的字段收集同构（消除"auto-init 只收自身 body"的机制分裂）。
+        # 须在全部类字段 hydrate 完成后执行（父类 default_fields 已填充），
+        # 故独立于主循环之外。
+        for name in resolved:
+            ib_cls = self.registry.get_class(name)
+            if not ib_cls or getattr(ib_cls.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
+                continue
+            if '__init__' in ib_cls.methods:
+                continue  # 用户显式构造器优先
+            field_names = self._collect_chain_decl_only_fields(ib_cls)
+            if not field_names:
+                continue  # 链上无无默认值字段：经 lookup_method 继承父类构造器
+            auto_init_fn = IbNativeFunction(
+                self._make_chain_auto_init(field_names),
+                unbox_args=False,
+                is_method=True,
+                name=f"{name}.__init__",
+                ib_class=ib_cls,
+                param_meta=[
+                    (fname, "POSITIONAL_OR_KEYWORD", None)
+                    for fname in field_names
+                ],
+            )
+            ib_cls.register_method('__init__', auto_init_fn)
 
-                def _make_auto_init(fnames):
-                    def _auto_init(self_obj, *args):
-                        if len(args) != len(fnames):
-                            raise InterpreterError(
-                                f"TypeError: {self_obj.ib_class.name}() expected {len(fnames)} argument(s), but got {len(args)}"
-                            )
-                        for fname, val in zip(fnames, args):
-                            self_obj.fields[fname] = val
-                        return self_obj.ib_class.registry.get_none()
-                    return _auto_init
-
-                auto_init_fn = IbNativeFunction(
-                    _make_auto_init(field_names),
-                    unbox_args=False,
-                    is_method=True,
-                    name=f"{name}.__init__",
-                    ib_class=ib_class,
-                    param_meta=[
-                        (fname, "POSITIONAL_OR_KEYWORD", None)
-                        for fname in field_names
-                    ],
-                )
-                ib_class.register_method('__init__', auto_init_fn)
-        
         self.current_module_name = old_module
+
+    def _collect_chain_decl_only_fields(self, ib_class) -> list:
+        """收集类构造器需绑定的继承链无默认值字段（父类优先、子类同名覆盖）。
+
+        与 :meth:`instantiate`（ib_class.py ``all_default_fields`` 收集）同构：
+        沿继承链 Object → ... → 自身遍历，子类同名字段覆盖父类；最终仅保留
+        仍为无默认值声明（``IbClassField`` 且 ``val_uid``/``static_val`` 均为空）的
+        字段——这些字段须经构造器位置参数赋值。
+        """
+        chain = []
+        cls = ib_class
+        while cls is not None:
+            chain.append(cls)
+            cls = cls.parent
+        effective = {}
+        for ancestor in reversed(chain):
+            for fname, finfo in ancestor.default_fields.items():
+                effective[fname] = finfo
+        return [
+            fname
+            for fname, finfo in effective.items()
+            if isinstance(finfo, IbClassField)
+            and finfo.val_uid is None
+            and finfo.static_val is None
+        ]
+
+    def _make_chain_auto_init(self, field_names: list):
+        """构造 chain-aware 自动位置参数构造器闭包（设置字段 + 参数数量校验）。"""
+        def _auto_init(self_obj, *args):
+            if len(args) != len(field_names):
+                raise InterpreterError(
+                    f"TypeError: {self_obj.ib_class.name}() expected {len(field_names)} argument(s), but got {len(args)}"
+                )
+            for fname, val in zip(field_names, args):
+                self_obj.fields[fname] = val
+            return self_obj.ib_class.registry.get_none()
+        return _auto_init
 
     def _resolve_type_from_symbol(self, sym_uid: str) -> Optional[Any]:
         """从符号池中解析声明的类型描述符"""
