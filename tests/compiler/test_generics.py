@@ -617,3 +617,19 @@ class TestTupleUnpackTypeChecking:
         assert sp.name == "list[int]", (
             f"auto 容器应推断带实参，got {sp.name}"
         )
+
+    def test_tuple_unpack_bare_declaration_stays_bare(self, engine):
+        """tuple 解包显式裸声明值层保持裸（S6 复核修复）。
+
+        修复前 `list a, list b = [1,2],["x"]` 的 RHS 推断 list[int] 覆盖声明，
+        type(a)=list[int]；修复后声明类型最后生效，type(a)=list。
+        """
+        engine.run_string(
+            'list a, list b = [1, 2], ["x"]\n',
+            silent=True,
+        )
+        rc = engine.interpreter.execution_context.runtime_context
+        a = rc.get_symbol("a").value
+        assert a.ib_class.name == "list", (
+            f"裸声明解包应保持裸 list，got {a.ib_class.name}"
+        )

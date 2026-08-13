@@ -195,20 +195,21 @@ class StatementVisitorsMixin:
         elif isinstance(target, ast.IbTuple):
             # 元组解包：各元素按位置接收 RHS 元素的实际类型并校验声明类型
             # （S6 补类型检查：此前各元素用 _any_desc 跳过 is_assignable）。
-            # RHS 是元组字面量时按位置绑定容器元素特化类型
-            # （list[int] a, list[str] b = [1,2], ["x"] → [1,2] 绑 list[int]、
-            # ["x"] 绑 list[str]），值创建点据此水化特化类（值层身份收敛）。
+            # RHS 是元组字面量时按位置绑定声明类型（含显式裸声明覆盖推断，
+            # 与简单赋值 _bind_literal_with_type 同构）。
             rhs_tuple = node.value if isinstance(node.value, ast.IbTuple) else None
             for idx, elt in enumerate(target.elts):
                 if rhs_tuple is not None and idx < len(rhs_tuple.elts):
                     rhs_elt = rhs_tuple.elts[idx]
                     elt_type = self.visit(elt)
-                    if elt_type is not None:
-                        self._bind_literal_with_type(rhs_elt, elt_type)
                     # RHS 元素实际类型（visit 得字面量推断类型），经
                     # _handle_assign_target 触发 is_assignable 校验。
                     rhs_elt_type = self.visit(rhs_elt)
                     self._handle_assign_target(node, elt, rhs_elt_type or self._any_desc)
+                    # 声明类型最后生效（覆盖推断）：显式裸 list/特化声明
+                    # 使值层按声明类型水化/保持裸——与简单赋值路径同构。
+                    if elt_type is not None:
+                        self._bind_literal_with_type(rhs_elt, elt_type)
                 else:
                     # RHS 非元组字面量（变量/函数返回）：逐元素接收 any，
                     # 实际类型在运行时由 VM 赋值（既有语义）。
