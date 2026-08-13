@@ -136,7 +136,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 | `_LLM_TRIAL_ENUM_IMPORT_20260812/` | **enum/import/运算符 用户试用**（2026-08-12）：9 例全过（含真实 LLM 非 str 枚举集成实证），无新增缺陷。DESIGN.md + REGISTER.md |
 | `_code_user_class_generics.md` | **用户类泛型主线设计起点**（2026-08-12）：地基盘点 + 设计范围 + 6 项开放设计问题 + 实施路径。**已落地（35bb2de）**，保留供追溯 |
 | `PT_FEAT3_DESIGN.md` | **用户类泛型设计冻结**（2026-08-12）：6 项开放问题逐项决断 + 实施蓝图 a-f + 边界登记。**已实施**，保留供追溯 |
-| `_GENERICS_TRIAL_20260812/` | **泛型压力/恶意试用**（2026-08-12）：D1 核心语义 + D2 正交交叉（11 维度）+ D3 恶意挑刺（10）。深度核验 + 两轮独立复核后，G1（运行期类型参数表达式）/G2（编译期自引用字段扁平化）/BOUNDARY-G1（非法实参）/双通道（descriptors 两套实现）**全部修复**（32484fe/3fe98d6/d100ee1），+11 e2e |
+| `_GENERICS_TRIAL_20260812/` | **泛型压力/恶意试用**（2026-08-12）：D1 核心语义 + D2 正交交叉（11 维度）+ D3 恶意挑刺（10）。深度核验 + 两轮独立复核后，G1/G2/BOUNDARY-G1/双通道**全部修复**（32484fe/3fe98d6/d100ee1），+11 e2e |
+| `_GENERICS_TRIAL_FIX_20260812/` | **泛型修复回归试用**（2026-08-12）：28 用例 + 冒烟全经死循环保护。修复成果验证：G1 方法体/G2 自引用基础/BOUNDARY-G1 守卫/双通道 全 PASS。**新发现 2 项既有缺陷**（非本次引入）：G3 继承特化父类字段值丢失（P1，静默 None）+ BOUNDARY-G2 自引用链 while 类型退化（P2）——登记 PENDING_TASKS |
 | `_code_ai_autoset.md` | **F9/ai 显式配置设计记录**（2026-08-12）：现状副作用 + 显式方案 + 变更清单 + 命名候选。**命名已拍板 `ai.load_project_config` + 本轮实施完成（a49555b）**，保留供追溯 |
 | `_code_f9_load_project_config.md` | **F9 显式配置落地实施记录**（2026-08-12）：设计决策（ec 契约迁移/幂等/历史试用档案不改）+ 变更清单 + 验证。Phase 5 汇报后清理 |
 | `_enum_instancing_assessment.md` | **实例化枚举设计候选评估**（2026-08-12）：维持现状（LLM 集成改造为核心硬伤），独立设计冻结候选 |
@@ -163,6 +164,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     语义 + D2 正交交叉（运算符/继承/协议/容器/控制流/函数/并发/生成器/行为/闭包/多文件）+ D3
     恶意挑刺。深度核验 + 两轮独立复核后 G1/G2/BOUNDARY-G1/双通道**全部修复**
     （32484fe/3fe98d6/d100ee1，+11 e2e，全量 2350/1）。详见 REGISTER.md。
+  - **🟡 泛型修复回归试用（`_GENERICS_TRIAL_FIX_20260812/`，28 用例 + 冒烟全经死循环保护）**：
+    修复成果验证 G1 方法体/G2 自引用基础/BOUNDARY-G1 守卫/双通道 全 PASS。**新发现 2 项
+    既有缺陷**（git worktree 在修复前 35bb2de 复现，非本次引入）：G3 继承特化父类字段值
+    丢失（P1，静默 None——`Linked[int](5).get()` 返回 None）+ BOUNDARY-G2 自引用链 while
+    遍历类型退化（P2）——登记 PENDING_TASKS。
   - **遗留独立窗口批次**：PT-DEBT-24 call_intent 死代码根治（S4）+ PT-AUDIT-3 S1-S5 处置
     （S4 根治 / S5 去重 / S1-S3 已知边界）+ 枚举实例化设计候选评估（`_enum_instancing_assessment.md`，
     维持现状）。独立复核 PASS。
@@ -471,6 +477,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [ ] 读本节 §2.1（PT-FEAT-3 用户类泛型**已落地 35bb2de**；F9 `ai.load_project_config` 已落地 a49555b；下一主线待择定）
 - [ ] 读 `PT_FEAT3_DESIGN.md`（设计冻结 + 边界 ①-⑧）+ `_code_user_class_generics.md`（设计起点，保留追溯）
 - [ ] 读 `_GENERICS_TRIAL_20260812/REGISTER.md`（泛型压力试用：G1/G2/BOUNDARY-G1/双通道**已全部修复**，全量 2350/1）
+- [ ] 读 `_GENERICS_TRIAL_FIX_20260812/REGISTER.md`（修复回归试用：成果全 PASS；**新发现 G3 继承特化字段丢失 P1 + BOUNDARY-G2 类型退化 P2**，待独立窗口）
 - [ ] 读 `_enum_instancing_assessment.md` + `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态）
 - [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空；泛型试用缺陷 G1/G2/BOUNDARY-G1/双通道 已全部修复）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）

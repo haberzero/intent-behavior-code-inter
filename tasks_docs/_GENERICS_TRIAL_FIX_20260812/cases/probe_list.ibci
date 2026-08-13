@@ -1,0 +1,10 @@
+import ai
+ai.set_mock_mode()
+class Node[T]:
+    T data
+    func get(self) -> T:
+        return self.data
+list[Node[int]] nodes = [Node[int](1), Node[int](2)]
+Node[int] first = nodes[0]
+print("f=" + (str)first.get())
+print("DONE")

@@ -349,8 +349,15 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   修复：TypeDef.type_args+base_name + from_spec 结构化；② **G1（运行期）方法体 `Box[T]`
   类型参数表达式失效**（运行期符号解析）——修复：type_param_uids 编译期收集 +
   方法帧 _bind_type_params 注册；③ **BOUNDARY-G1** 非法特化实参（`Box[42]`/`Box[None]`/
-  `Box[void]`）编译期未拦——修复：语义层拦截；④ **双通道设计缺陷** descriptors 两套实现——
-  修复：type_args 结构化单一权威源。全量 2339→2350，+11 e2e。详情 REGISTER.md 与 PENDING_TASKS。
+   `Box[void]`）编译期未拦——修复：语义层拦截；④ **双通道设计缺陷** descriptors 两套实现——
+   修复：type_args 结构化单一权威源。全量 2339→2350，+11 e2e。详情 REGISTER.md 与 PENDING_TASKS。
+
+- **✅ 泛型修复回归试用完成（2026-08-12，`_GENERICS_TRIAL_FIX_20260812/`，28 用例 + 冒烟全经死循环保护）**：
+  修复成果验证：G1 方法体类型参数（标量/嵌套/多参数/交替/生成器/深层嵌套）、G2 自引用基础、
+  BOUNDARY-G1 守卫（None/auto/void 按 base/字面量/嵌套）、双通道 descriptors 全 PASS。
+  **新发现 2 项既有缺陷**（git worktree 在修复前 35bb2de 复现，非本次引入）：
+  ① **G3** 继承特化 + 父类字段值丢失（P1，静默 None——`Linked[int](5).get()` 返回 None）；
+  ② **BOUNDARY-G2** 自引用链 while 遍历 `cur = cur.next` 类型退化 any（P2）。登记 PENDING_TASKS。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev a49555b，全量 2311 passed / 1 skipped）**：**F9 显式配置**——
   用户拍板命名 `ai.load_project_config` + 本轮实施。`setup()` 去自动加载段；新增

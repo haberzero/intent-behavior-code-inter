@@ -1,0 +1,19 @@
+# R2-07 G1 方法体内 T 作局部变量/表达式
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 方法内 T 局部变量与运算
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func process(self, T v) -> T:
+        T local = v
+        self.value = local
+        return self.value
+
+Box[int] bi = Box[int](0)
+int r1 = bi.process(9)
+print("r1=" + (str)r1)
+Box[str] bs = Box[str]("x")
+str r2 = bs.process("y")
+print("r2=" + r2)
+print("DONE")

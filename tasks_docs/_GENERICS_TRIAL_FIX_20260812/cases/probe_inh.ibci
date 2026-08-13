@@ -1,0 +1,15 @@
+import ai
+ai.set_mock_mode()
+class Node[T]:
+    T data
+    func get(self) -> T:
+        return self.data
+
+class Linked[T](Node[T]):
+    str tag
+
+Linked[int] l1 = Linked[int](5)
+l1.tag = "A"
+print("data=" + (str)l1.data)
+print("get=" + (str)l1.get())
+print("DONE")

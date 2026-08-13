@@ -1,0 +1,9 @@
+# R3-03 BOUNDARY-G1 Box[void] 用户泛型（预期报错）/ thread[void] 放行
+# doc: docs/syntax/06_oop.md §6.4 + 14_concurrency
+# 期望: Box[void] 拦截；thread[void] 合法
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+Box[void] b = Box[int](1)
+print("DONE")

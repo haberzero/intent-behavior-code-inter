@@ -1,0 +1,16 @@
+# R4-04 双通道 Pair[A,B] 方法参数类型检查
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: A/B 参数类型分别校验
+import ai
+ai.set_mock_mode()
+class Pair[A, B]:
+    A a
+    B b
+    func set_both(self, A x, B y) -> void:
+        self.a = x
+        self.b = y
+Pair[str, int] p = Pair[str, int]("", 0)
+p.set_both("hi", 7)
+print("a=" + p.a)
+print("b=" + (str)p.b)
+print("DONE")

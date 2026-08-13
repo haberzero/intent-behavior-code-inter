@@ -1,0 +1,27 @@
+# R5-01 回归面：既有核心泛型功能复跑
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 多特化/嵌套/继承核心全正常
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+class Pair[K, V]:
+    K key
+    V val
+class Sub[T](Box[T]):
+    str label
+
+Box[int] bi = Box[int](42)
+Box[str] bs = Box[str]("hi")
+Box[list[int]] bl = Box[list[int]]([1, 2, 3])
+list[Box[int]] boxes = [Box[int](1), Box[int](2)]
+Sub[int] sb = Sub[int](7)
+sb.label = "L"
+print("bi=" + (str)bi.get())
+print("bs=" + bs.get())
+print("len=" + (str)bl.get().len())
+print("box=" + (str)boxes[1].get())
+print("sub=" + (str)sb.get() + sb.label)
+print("DONE")
