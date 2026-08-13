@@ -351,15 +351,24 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   §七 契约失效）→ 修复为对动态 any 逃生值强制 `RUN_TYPE_MISMATCH`。+10 e2e；
   KNOWN_LIMITS §六/§七/§十四#1③ + 06_oop 文档同步。
 
-- **🔴 下一 session 目标（2026-08-12 用户提出）**：
-  1. **试用体系规范化**（主要目标）——**✅ Phase 1-2 已完成（2026-08-13，commit 22ae5ee5）**：
-     单一 harness `trials/_toolkit/run_one.py`（4 套复制改软链）+ `CLASSIFICATION.md`（统一分类/
-     级别/编号 + **登记前分诊闸门**：命中已知限制 ≠ 免罪，进待修候选池）+ DESIGN/REGISTER 模板
-     + 4 套 git mv 迁移（`trials/T01_llm_full` 等）+ REGISTER 编号映射 + `trials/INDEX.md` 全局
-     索引。**剩余 Phase 3**：docs 治理评估（试用体系规范是否入 docs/，按 WRITING_GUIDE）。
-  2. ~~泛型缺陷 G3/BOUNDARY-G2 修复~~（`_HANDOFF_GENERICS_FIX.md`）——**已完成（2026-08-13）**，
-     交接文件已归档删除。**遗留**：KERNEL_ISSUE-GEN-5（嵌套内置泛型实参的用户类特化注册缺失，
-     预存缺陷，T04 R5-04 Box 部分暴露；独立窗口深挖，见 PENDING_TASKS）。
+- **🔴 下一 session 主线（试用体系重构收尾，`TRIAL_SYSTEM_REDESIGN.md`）**：
+  1. **T01 LLM 批真实重跑验证**（Phase B 收尾）——57 个真实 LLM 用例目前为基线断言
+     （`expect-out: DONE`）；用真实 LLM 服务重跑（**用户已手动应用禁用思考预设**，响应快 +
+     content 稳定），按实际输出精化断言并验证判定。
+  2. **Phase C 干净彻底**——旧编号 85 处 + 旧路径 42 处全量替换（`KERNEL_ISSUE-<域>-<n>` /
+     `trials/T0x`）；用例 ID 统一；register.jsonl classification 写回（0%→100%）；
+     过时设计文档归档（`TRIAL_SYSTEM_DESIGN.md`、历史报告）。
+  3. **Phase D 自动化衔接**——试用→确定性测试收敛流程（缺陷必须落 `tests/` 回归）+
+     报告自动生成设计。
+- **🟡 独立缺陷窗口（不阻塞主线）**：
+  - **KERNEL_ISSUE-GEN-5**（P2）：用户泛型类下标表达式位置特化未注册（触发用例 GEN5-01）。
+  - **KERNEL_ISSUE-GEN-6**（P1）：泛型运算符方法参数含 T 特化未生效，G1 修复不完整（触发用例 D2-01）。
+  - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
+- **📌 本 session 已完成**（临时问题全部闭环）：试用套件超时保护（run_one SIGKILL 兜底）+
+  分阶段并发（run_batch，llm 阶段限并发防过载）；LLM 运行配置缺失友好提示 + 思考禁用失败警告；
+  T04/T03/T02 断言迁移 + T01 mock 42 已验证 + T01 真实 LLM 用例 F9 适配（load_project_config）；
+  LM Studio 禁用思考专项调查（官方机制 = model.yaml enableThinking；本机 model.yaml local 不可行；
+  非思考 Qwen 模板已提供，用户已应用预设）。
 
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成

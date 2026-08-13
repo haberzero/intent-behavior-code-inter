@@ -89,13 +89,36 @@
 | Phase A-1 恢复历史用例 | ✅ 完成 | commit 25365e63 |
 | Phase A-2 新增适配用例 | ✅ 完成 | R1-05b/R5-01b/R5-04b（同上） |
 | Phase A-3 GEN-5 触发用例 | ✅ 完成 | GEN5-01（同上，根因方向精确化：表达式位置特化注册缺失） |
-| Phase B 用例即契约 | 🚧 设计+实施中 | 设计文档 `trials/_toolkit/CONTRACT_FORMAT.md` |
-| Phase C 干净清理 | 待执行 | — |
-| Phase D 自动化衔接 | 待设计 | — |
+| Phase B 用例即契约机制 | ✅ 完成 | harness 断言自动判定 + CONTRACT_FORMAT + run_batch 分层并发（f31ee634/09a8eca0/3f0f4d3d） |
+| Phase B 断言迁移 | ✅ T04/T03/T02 | 32+29+9 用例判定已验证 |
+| Phase B 断言迁移 | 🚧 T01 | 104 用例全有断言；mock 42 已验证 PASS/GUARD；**57 个 LLM 用例为基线断言（expect-out: DONE）未真实重跑验证** |
+| Phase C 干净清理 | 待执行 | 旧编号 85 处 + 旧路径 42 处替换 / 用例 ID 统一 / register classification 写回 / 过时文档归档 |
+| Phase D 自动化衔接 | 待设计 | 试用→确定性测试收敛 + 报告自动生成 |
 
 ---
 
-## 四、相关文件
+## 五、本 session 发现的潜藏 bug（试用迁移/调试期）
+
+| 编号 | 严重级别 | 现象 | 状态 |
+|------|----------|------|------|
+| **KERNEL_ISSUE-GEN-5** | P2 | 用户泛型类下标在**表达式位置**（`type(Box[list[int]])`）编译期未注册特化 spec → 运行时 `_specialize` 报 "no registered specialization"（注解位置正常） | 待修复，独立窗口，触发用例 `GEN5-01` |
+| **KERNEL_ISSUE-GEN-6** | P1 | 泛型**运算符方法参数含 T**（`__add__(self, Vec[T] other) -> Vec[T]`）特化未生效（G1 修复不完整，T04 回归参数均为裸 T 未覆盖此形态）→ `Cannot assign 'Vec' to 'Vec[int]'` | 待修复，独立窗口，触发用例 `D2-01` |
+| **G3 语义变更破坏面** | — | chain-aware auto-init 使"依赖 auto-init 只收自身字段"的既有用例构造参数变化 → T03 D2-02 / T01 D2-30 / T03 D3-04 已适配多参构造/默认值 | 已适配 |
+| **Finding C**（any 用户类复查） | — | `_check_type` 对用户类目标跳过运行时复查，any 静默流入 → 已修复（b0f4d74） | 已修复 |
+| **LLM 运行配置缺失旧文案** | — | F9 后忘记 load_project_config 的提示只提 set_config → 已统一引导（2a259d8e） | 已修复 |
+| **思考禁用失败**（qwen3.6 强制思考） | — | LM Studio 上 enable_thinking 全参数无效；已实现禁用失败警告 + 用户已手动应用禁用思考预设 | 警告已实现；供应商感知机制待设计 |
+| **run_one SIGKILL 兜底** | — | SIGKILL 后 communicate 卡住（顽固子进程）→ 已加最终超时兜底 | 已修复 |
+| **脚本误覆盖用例** | — | smoke/deadloop_probe 被清理脚本覆盖丢代码 → 已恢复 | 已修复 |
+
+## 六、交接要点（下一 session）
+
+1. **T01 LLM 批真实重跑验证**（Phase B 收尾）：57 个 LLM 用例基线断言（expect-out: DONE）用真实 LLM 重跑（用户已应用禁用思考预设，响应快 + content 稳定），按实际输出精化断言。
+2. **Phase C 干净彻底**：旧编号 85 处 + 旧路径 42 处全量替换；用例 ID 统一；register classification 写回；过时文档归档。
+3. **Phase D 自动化衔接**：试用→确定性测试收敛 + 报告自动生成设计。
+4. **独立缺陷窗口**：GEN-5 / GEN-6（PENDING_TASKS 已登记 + 触发用例）。
+5. **供应商感知思考禁用机制**（待设计）。
+
+## 七、相关文件
 
 | 用途 | 路径 |
 |------|------|
