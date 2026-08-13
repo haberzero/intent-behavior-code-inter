@@ -535,7 +535,10 @@ def _slice_type_objs_for(executor, node_spec):
 
     与 ``IbClass._slice_type_objs`` 同构：把特化实参（element_type /
     positional_element_types / key_type+value_type / value_type）转换为
-    IbClass 标识对象。
+    IbClass 标识对象。实参为结构化 TypeRef（S1 根治后：``list[list[int]]``
+    的 element_type = ``TypeRef('list',(int,))``）时沿 args 递归解析特化类
+    （``get_class("list[int]")``），而非按 head 取基类——否则嵌套实参静默
+    降级为基类，特化类水化失败。
     """
     from core.kernel.spec.base import TypeKind
 
@@ -554,10 +557,36 @@ def _slice_type_objs_for(executor, node_spec):
     for ref in args:
         if ref is None or ref.head in ("any", "auto", ""):
             continue
-        cls = executor.registry.get_class(ref.head)
+        cls = _resolve_specialized_class(executor, ref)
         if cls is not None:
             out.append(cls)
     return out
+
+
+def _resolve_specialized_class(executor, ref):
+    """把类型实参 TypeRef 解析为 IbClass（结构化嵌套递归）。
+
+    - 无实参（``int``）：``get_class("int")``。
+    - 有实参（``list[int]`` / ``list[list[int]]``）：先查特化类
+      ``get_class("list[int]")``；未水化则经基类 ``_specialize`` 按结构化
+      实参创建（S1 根治后嵌套实参结构保真，不再按 head 降级）。
+    """
+    if ref.args:
+        specialized_name = ref.canonical_name
+        cls = executor.registry.get_class(specialized_name)
+        if cls is not None:
+            return cls
+        base_cls = executor.registry.get_class(ref.head)
+        if base_cls is None:
+            return None
+        try:
+            sub_args = [_resolve_specialized_class(executor, a) for a in ref.args]
+            if any(a is None for a in sub_args):
+                return None
+            return base_cls._specialize(sub_args)
+        except Exception:
+            return None
+    return executor.registry.get_class(ref.head)
 
 
 def vm_handle_IbDict(executor, node_uid: str, node_data: Mapping[str, Any]):

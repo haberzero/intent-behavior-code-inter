@@ -105,6 +105,58 @@ class TypeRef:
         """
         return cls(head=head, args=args, module=module)
 
+    @classmethod
+    def parse(cls, text: str, module: Optional[str] = None) -> "TypeRef":
+        """
+        从规范名字符串构造结构化 TypeRef（字符串→结构单一权威解析器）。
+
+        递归解析嵌套泛型实参：``"int"`` → ``TypeRef('int')``；
+        ``"list[int]"`` → ``TypeRef('list', (TypeRef('int'),))``；
+        ``"dict[str,list[int]]"`` → 递归嵌套。
+
+        这是唯一允许"字符串 → 结构"的解析入口（与 ``canonical_name`` 方向相反）。
+        避免 ``TypeRef.of(泛型名)`` 的扁平化（head 含方括号、args 空）——
+        扁平形态无法被 ``substitute`` 穿透。本方法吸收并取代
+        ``ArtifactRehydrator._parse_arg_ref`` 的字符串切分逻辑。
+        """
+        text = text.strip()
+        if "[" not in text:
+            return cls(head=text, args=(), module=module)
+        head, rest = text.split("[", 1)
+        if not rest.endswith("]"):
+            raise ValueError(f"Malformed generic type name: {text!r}")
+        inner = rest[:-1]
+        return cls(
+            head=head.strip(),
+            args=tuple(cls._split_arg(a) for a in cls._split_args(inner)),
+            module=module,
+        )
+
+    @staticmethod
+    def _split_args(inner: str):
+        """按顶层逗号切分实参列表（嵌套方括号内的逗号不切分）。"""
+        parts, depth, current = [], 0, []
+        for ch in inner:
+            if ch == "[":
+                depth += 1
+                current.append(ch)
+            elif ch == "]":
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0:
+                parts.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append("".join(current))
+        return parts
+
+    @classmethod
+    def _split_arg(cls, text: str) -> "TypeRef":
+        """解析单个实参（递归：实参自身可为嵌套泛型）。"""
+        return cls.parse(text.strip())
+
     def replace_head(self, head: str) -> "TypeRef":
         """Return a copy of this TypeRef with ``head`` replaced.
 

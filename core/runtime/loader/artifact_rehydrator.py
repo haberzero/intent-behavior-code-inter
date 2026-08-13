@@ -256,18 +256,21 @@ class ArtifactRehydrator:
         data = self.type_pool[uid]
         
         if spec.kind == TypeKind.LIST.value:
-            elem = self.hydrate(data.get("element_type_uid"))
-            if elem:
-                spec.element_type = TypeRef.of(elem.name, elem.module_path)
-                spec.name = f"list[{elem.name}]"
+            # shell 创建已经 factory.create_list(element_type_name=...) 结构化
+            # （factory 内部 TypeRef.parse）；此处从序列化字符串字段精化，
+            # 不再依赖 element_type_uid（死通道）与扁平 TypeRef.of。
+            e_name = data.get("element_type_name")
+            if e_name is not None:
+                spec.element_type = TypeRef.parse(e_name, data.get("element_type_module"))
+                spec.name = f"list[{spec.element_type.canonical_name}]" if spec.element_type.head != "any" else "list"
         elif spec.kind == TypeKind.DICT.value:
-            key = self.hydrate(data.get("key_type_uid"))
-            val = self.hydrate(data.get("value_type_uid"))
-            if key:
-                spec.key_type = TypeRef.of(key.name, key.module_path)
-            if val:
-                spec.value_type = TypeRef.of(val.name, val.module_path)
-            spec.name = f"dict[{spec.key_type.head},{spec.value_type.head}]"
+            k_name = data.get("key_type_name")
+            v_name = data.get("value_type_name")
+            if k_name is not None:
+                spec.key_type = TypeRef.parse(k_name, data.get("key_type_module"))
+            if v_name is not None:
+                spec.value_type = TypeRef.parse(v_name, data.get("value_type_module"))
+            spec.name = f"dict[{spec.key_type.canonical_name},{spec.value_type.canonical_name}]"
         elif spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             param_uids = data.get("param_types_uids", [])
             spec.param_types = [
@@ -282,20 +285,17 @@ class ArtifactRehydrator:
             # belongs to the runtime value (IbFnCallable/IbBehavior) and to the AST
             # node (IbLambdaExpr), both of which are serialized through their own
             # channels.
-            v_name = data.get("value_type_name", spec.value_type.head)
-            spec.value_type = TypeRef.of(v_name)
+            v_name = data.get("value_type_name")
+            if v_name is not None:
+                spec.value_type = TypeRef.parse(v_name, data.get("value_type_module"))
         elif spec.kind == TypeKind.OPTIONAL.value:
-            w_name = data.get("wrapped_type_name", spec.wrapped_type.head)
-            w_mod = data.get("wrapped_type_module", spec.wrapped_type.module)
-            spec.wrapped_type = TypeRef.of(w_name, w_mod)
-        elif spec.kind == TypeKind.THREAD.value:
-            v_name = data.get("value_type_name", spec.value_type.head if spec.value_type else "any")
-            v_mod = data.get("value_type_module", spec.value_type.module if spec.value_type else None)
-            spec.value_type = TypeRef.of(v_name, v_mod)
-        elif spec.kind == TypeKind.GENERATOR.value:
-            v_name = data.get("value_type_name", spec.value_type.head if spec.value_type else "any")
-            v_mod = data.get("value_type_module", spec.value_type.module if spec.value_type else None)
-            spec.value_type = TypeRef.of(v_name, v_mod)
+            w_name = data.get("wrapped_type_name")
+            if w_name is not None:
+                spec.wrapped_type = TypeRef.parse(w_name, data.get("wrapped_type_module"))
+        elif spec.kind in (TypeKind.THREAD.value, TypeKind.GENERATOR.value):
+            v_name = data.get("value_type_name")
+            if v_name is not None:
+                spec.value_type = TypeRef.parse(v_name, data.get("value_type_module"))
         elif spec.kind == TypeKind.CLASS.value:
             p_name = data.get("parent_name")
             p_mod = data.get("parent_module")

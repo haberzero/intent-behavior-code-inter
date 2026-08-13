@@ -479,3 +479,67 @@ class TestGenericAnnotationDeclaredType:
             restored = reh.hydrate(target)
             assert restored.name == name
             assert restored.value_type.head == want
+
+
+class TestNestedGenericStructurePreserved:
+    """创建点结构化 TypeRef（S1 根治）：嵌套泛型实参不再扁平化。
+
+    修复前 `resolve_specialization` 用 `a.name` 字符串喂 factory，`TypeRef.of`
+    把 `"list[int]"` 塞进 head（args 空）——substitute 无法穿透嵌套、错误实参
+    静默放行。修复后实参结构化，编译期可精确拦截嵌套泛型不匹配。
+    """
+
+    def test_nested_spec_element_type_is_structured(self):
+        """list[list[int]] 的 element_type 是结构化 TypeRef（非扁平）。"""
+        from core.kernel.spec.type_ref import TypeRef
+
+        reg = make_registry()
+        base = reg.resolve("list")
+        inner = reg.resolve_specialization(base, [reg.resolve("int")])
+        outer = reg.resolve_specialization(base, [inner])
+        assert outer.element_type == TypeRef.parse("list[int]"), (
+            f"嵌套实参应结构化保真，got {outer.element_type!r}"
+        )
+
+    def test_nested_substitute_penetrates(self):
+        """嵌套泛型经 TypeRef.substitute 可替换内层形参。"""
+        from core.kernel.spec.type_ref import TypeRef
+
+        ref = TypeRef.generic("list", TypeRef.generic("list", TypeRef.of("T")))
+        after = ref.substitute({"T": TypeRef.of("int")})
+        assert after == TypeRef.parse("list[list[int]]"), (
+            f"嵌套 substitute 应穿透，got {after!r}"
+        )
+
+    def test_user_generic_nested_param_rejected(self, engine):
+        """Box[int].make(list[list[str]]) 编译期拦截（descriptor 结构保真后）。"""
+        code = (
+            "class Box[T]:\n"
+            "    func make(self, list[list[T]] grid) -> list[list[T]]:\n"
+            "        return grid\n"
+            "\n"
+            "Box[int] b = Box[int]()\n"
+            'list[list[str]] g = [["a"], ["b"]]\n'
+            "list[list[int]] r = b.make(g)\n"
+        )
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+    def test_nested_spec_serialization_roundtrip(self, engine):
+        """嵌套泛型 spec 序列化→还原 element_type 结构保真（canonical_name 持久化）。"""
+        from core.compiler.serialization.serializer import FlatSerializer
+        from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+        from core.kernel.spec.type_ref import TypeRef
+
+        artifact = engine.compile_string("list[list[int]] m = [[1],[2]]\n")
+        d = FlatSerializer().serialize_artifact(artifact)
+        types = d["modules"][artifact.entry_module]["pools"]["types"]
+        target = next(k for k, v in types.items() if v.get("name") == "list[list[int]]")
+        assert types[target]["element_type_name"] == "list[int]", (
+            f"序列化 element_type_name 应含嵌套实参，got {types[target]['element_type_name']}"
+        )
+        reg = create_default_registry()
+        reh = ArtifactRehydrator(type_pool=types, registry=reg)
+        restored = reh.hydrate(target)
+        assert restored.element_type == TypeRef.parse("list[int]"), (
+            f"还原 element_type 应结构化，got {restored.element_type!r}"
+        )

@@ -578,12 +578,20 @@ class TestTupleUnpackAndLambdaYield:
 
 class TestNestedGenerics:
     def test_nested_list_subscript_returns_inner_list_spec(self):
-        """list[list[int]] subscript by int returns list[int] spec."""
+        """list[list[int]] subscript by int returns list[int] spec.
+
+        element_type 结构化保真（S1 根治：创建点不再扁平化嵌套实参）——
+        canonical_name 为 "list[int]"（head 为 "list" 是结构化形态）。
+        """
+        from core.kernel.spec.type_ref import TypeRef
+
         reg = make_registry()
         list_int = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
         list_list_int = reg.resolve_specialization(reg.resolve("list"), [list_int])
         assert isinstance(list_list_int, TypeDef)
-        assert list_list_int.element_type.head == "list[int]"
+        assert list_list_int.element_type == TypeRef.parse("list[int]"), (
+            f"嵌套 element_type 应结构化，got {list_list_int.element_type!r}"
+        )
 
         result = reg.resolve_subscript(list_list_int, reg.resolve("int"))
         assert result is not None

@@ -179,13 +179,13 @@ class FlatSerializer(BaseFlatSerializer):
         # through their own channels.
         if t.kind == TypeKind.CALLABLE_INSTANCE.value:
             v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.head if v_ref is not None else "auto"
+            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "auto"
             type_data["axiom_name"] = t.get_base_name()
 
         # Persist TypeDef inner-type scalar fields for artifact rehydration.
         if t.kind == TypeKind.OPTIONAL.value:
             w_ref = t.wrapped_type
-            type_data["wrapped_type_name"] = w_ref.head if w_ref is not None else "any"
+            type_data["wrapped_type_name"] = w_ref.canonical_name if w_ref is not None else "any"
             type_data["wrapped_type_module"] = w_ref.module if w_ref is not None else None
 
         # Persist inner-type scalars for list[T] / dict[K,V] / tuple[T]：
@@ -193,47 +193,47 @@ class FlatSerializer(BaseFlatSerializer):
         # declared_type 会退化为基础 list/dict[any,any]，泛型身份丢失）。
         if t.kind == TypeKind.LIST.value:
             if t.allowed_element_types:
-                type_data["allowed_element_type_names"] = [r.head for r in t.allowed_element_types]
+                type_data["allowed_element_type_names"] = [r.canonical_name for r in t.allowed_element_types]
                 type_data["allowed_element_type_modules"] = [r.module for r in t.allowed_element_types]
             else:
                 e_ref = t.element_type
-                type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
+                type_data["element_type_name"] = e_ref.canonical_name if e_ref is not None else "any"
                 type_data["element_type_module"] = e_ref.module if e_ref is not None else None
 
         if t.kind == TypeKind.DICT.value:
             k_ref = t.key_type
             v_ref = t.value_type
-            type_data["key_type_name"] = k_ref.head if k_ref is not None else "any"
+            type_data["key_type_name"] = k_ref.canonical_name if k_ref is not None else "any"
             type_data["key_type_module"] = k_ref.module if k_ref is not None else None
-            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
         if t.kind == TypeKind.TUPLE.value:
             if t.positional_element_types:
-                type_data["positional_type_names"] = [p.head for p in t.positional_element_types]
+                type_data["positional_type_names"] = [p.canonical_name for p in t.positional_element_types]
                 type_data["positional_type_modules"] = [p.module for p in t.positional_element_types]
             else:
                 e_ref = t.element_type
-                type_data["element_type_name"] = e_ref.head if e_ref is not None else "any"
+                type_data["element_type_name"] = e_ref.canonical_name if e_ref is not None else "any"
                 type_data["element_type_module"] = e_ref.module if e_ref is not None else None
 
         # Persist the value type for thread[T] (join 返回类型)。
         if t.kind == TypeKind.THREAD.value:
             v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
         # Persist the value type for thread_result[T] (join 返回容器负载类型)。
         if t.kind == TypeKind.THREAD_RESULT.value:
             v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
         # Persist the value type for chan[T] / slot[T]（纳入统一泛型模型，
         # 注解实参经 value_type 承载持久化，rehydrator 据此重建特化 spec）。
         if t.kind in (TypeKind.CHANNEL.value, TypeKind.SLOT.value):
             v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
         # Persist the value type for generator[T]（惰性生成器元素类型）。
@@ -241,7 +241,7 @@ class FlatSerializer(BaseFlatSerializer):
         # 恢复为裸 generator（value_type=any），赋值/迭代类型检查失效。
         if t.kind == TypeKind.GENERATOR.value:
             v_ref = t.value_type
-            type_data["value_type_name"] = v_ref.head if v_ref is not None else "any"
+            type_data["value_type_name"] = v_ref.canonical_name if v_ref is not None else "any"
             type_data["value_type_module"] = v_ref.module if v_ref is not None else None
 
         # Persist TypeDef param/return signature for structural checking.

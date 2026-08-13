@@ -30,15 +30,26 @@ class TestGenericTypeRegistry:
             assert name in reg, f"generic '{name}' not declared"
 
     def test_generator_generic_identity(self):
-        """generator[T] 经 registry 特化且类型名/kind 正确（R4 补强：yield 生成器泛型）。"""
+        """generator[T] 经 registry 特化且类型名/kind 正确（R4 补强：yield 生成器泛型）。
+
+        build 契约接受结构化 TypeRef 实参（S1 根治：创建点不再扁平化嵌套）。
+        """
         from core.kernel.spec.registry.factory import SpecFactory
+        from core.kernel.spec.type_ref import TypeRef
         reg = create_generic_registry()
         gen_decl = reg.get("generator")
         assert gen_decl is not None
         factory = SpecFactory()
-        specialized = gen_decl.build(factory, ["int"], [None])
+        specialized = gen_decl.build(factory, [TypeRef.of("int")], [None])
         assert specialized.name == "generator[int]"
         assert specialized.kind == TypeKind.GENERATOR.value
+        # 嵌套实参结构化（S1）：generator[list[int]] 的 value_type 非扁平
+        nested = gen_decl.build(
+            factory, [TypeRef.parse("list[int]")], [None]
+        )
+        assert nested.value_type == TypeRef.parse("list[int]"), (
+            f"嵌套 value_type 应结构化，got {nested.value_type!r}"
+        )
 
     def test_registry_indexed_by_name(self):
         """注册表按 name 索引（_by_kind 单值索引已删除——kind 不唯一）。"""

@@ -104,7 +104,16 @@ class SpecFactory:
         element_type_module: Optional[str] = None,
         allowed_element_type_names: Optional[list] = None,
         allowed_element_type_modules: Optional[list] = None,
+        element_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
+        """Create a ``list[T]`` TypeDef.
+
+        ``element_type`` (TypeRef) 优先；缺失时由 ``element_type_name`` 经
+        ``TypeRef.parse`` 结构化解析（嵌套泛型名 ``"list[int]"`` 保真为
+        ``TypeRef('list',(int,))``，避免 ``TypeRef.of`` 扁平化）。
+        """
+        if element_type is None:
+            element_type = TypeRef.parse(element_type_name, element_type_module)
         if allowed_element_type_names:
             modules = allowed_element_type_modules or [None] * len(allowed_element_type_names)
             sorted_pairs = sorted(
@@ -120,15 +129,15 @@ class SpecFactory:
                 provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
                 allowed_element_types=[
-                    TypeRef.of(n, m) for n, m in zip(sorted_names, sorted_modules)
+                    TypeRef.parse(n, m) for n, m in zip(sorted_names, sorted_modules)
                 ],
             )
-        list_name = f"list[{element_type_name}]" if element_type_name != "any" else "list"
+        list_name = f"list[{element_type.canonical_name}]" if element_type.head != "any" else "list"
         return TypeDef(
             name=list_name,
             kind=TypeKind.LIST.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            element_type=TypeRef.of(element_type_name, element_type_module),
+            element_type=element_type,
         )
 
     def create_dict(
@@ -137,13 +146,20 @@ class SpecFactory:
         value_type_name: str = "any",
         key_type_module: Optional[str] = None,
         value_type_module: Optional[str] = None,
+        key_type: Optional["TypeRef"] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
+        """Create a ``dict[K,V]`` TypeDef（类型实参结构化，嵌套保真）。"""
+        if key_type is None:
+            key_type = TypeRef.parse(key_type_name, key_type_module)
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
         return TypeDef(
-            name=f"dict[{key_type_name},{value_type_name}]",
+            name=f"dict[{key_type.canonical_name},{value_type.canonical_name}]",
             kind=TypeKind.DICT.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            key_type=TypeRef.of(key_type_name, key_type_module),
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            key_type=key_type,
+            value_type=value_type,
         )
 
     def create_tuple(
@@ -152,32 +168,37 @@ class SpecFactory:
         element_type_module: Optional[str] = None,
         positional_element_type_names: Optional[list] = None,
         positional_element_type_modules: Optional[list] = None,
+        element_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         # 位置元素类型路径（`tuple[T1, T2, ...]`，元素数 ≥ 2）。
         # 与单类型路径 `tuple[T]` 互斥；前者使用 ``positional_element_types``，
         # 后者保持 ``element_type`` 单字段。
         if positional_element_type_names and len(positional_element_type_names) >= 2:
             # 保持位置顺序：tuple[int, str] ≠ tuple[str, int]
-            tuple_name = f"tuple[{','.join(positional_element_type_names)}]"
+            positional = [
+                TypeRef.parse(n, m)
+                for n, m in zip(
+                    positional_element_type_names,
+                    positional_element_type_modules
+                    or [None] * len(positional_element_type_names),
+                )
+            ]
+            tuple_name = f"tuple[{','.join(p.canonical_name for p in positional)}]"
             return TypeDef(
                 name=tuple_name,
                 kind=TypeKind.TUPLE.value,
                 provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                 element_type=TypeRef.of("any"),
-                positional_element_types=[
-                    TypeRef.of(n, m) for n, m in zip(
-                        positional_element_type_names,
-                        positional_element_type_modules
-                        or [None] * len(positional_element_type_names),
-                    )
-                ],
+                positional_element_types=positional,
             )
-        tuple_name = f"tuple[{element_type_name}]" if element_type_name != "any" else "tuple"
+        if element_type is None:
+            element_type = TypeRef.parse(element_type_name, element_type_module)
+        tuple_name = f"tuple[{element_type.canonical_name}]" if element_type.head != "any" else "tuple"
         return TypeDef(
             name=tuple_name,
             kind=TypeKind.TUPLE.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            element_type=TypeRef.of(element_type_name, element_type_module),
+            element_type=element_type,
         )
 
     def create_bound_method(
@@ -206,6 +227,7 @@ class SpecFactory:
         self,
         value_type_name: str = "auto",
         value_type_module: Optional[str] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         """Create a TypeDef describing a fn_callable (lambda/snapshot) expression.
 
@@ -213,13 +235,18 @@ class SpecFactory:
         (``IbFnCallable.capture_mode``) and of the creating AST node
         (``IbLambdaExpr.capture_mode``); it is intentionally NOT stored on the
         type spec.
+
+        ``value_type`` (TypeRef) 优先；缺失时经 ``TypeRef.parse`` 结构化解析
+        （嵌套泛型名保真）。
         """
-        fn_callable_name = f"fn_callable[{value_type_name}]" if value_type_name != "auto" else "fn_callable"
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
+        fn_callable_name = f"fn_callable[{value_type.canonical_name}]" if value_type.head != "auto" else "fn_callable"
         spec = TypeDef(
             name=fn_callable_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            value_type=value_type,
         )
         # Route axiom dispatch to the "fn_callable" axiom even for parameterised
         # specs like "fn_callable[int]".
@@ -230,19 +257,23 @@ class SpecFactory:
         self,
         wrapped_type_name: str = "any",
         wrapped_type_module: Optional[str] = None,
+        wrapped_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
-        """Create an Optional[T] spec."""
+        """Create an Optional[T] spec（嵌套保真结构化）。"""
+        if wrapped_type is None:
+            wrapped_type = TypeRef.parse(wrapped_type_name, wrapped_type_module)
         return TypeDef(
-            name=f"Optional[{wrapped_type_name}]",
+            name=f"Optional[{wrapped_type.canonical_name}]" if wrapped_type.head != "any" else "Optional",
             kind=TypeKind.OPTIONAL.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            wrapped_type=TypeRef.of(wrapped_type_name, wrapped_type_module),
+            wrapped_type=wrapped_type,
         )
 
     def create_behavior(
         self,
         value_type_name: str = "auto",
         value_type_module: Optional[str] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         """
         Create a ``TypeDef`` for a typed ``@~...~`` behavior expression.
@@ -259,12 +290,14 @@ class SpecFactory:
             # fn f = lambda -> int: @~...~  →  create_behavior(value_type_name="int")
             factory.create_behavior(value_type_name="int")
         """
-        beh_name = f"behavior[{value_type_name}]" if value_type_name != "auto" else "behavior"
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
+        beh_name = f"behavior[{value_type.canonical_name}]" if value_type.head != "auto" else "behavior"
         spec = TypeDef(
             name=beh_name,
             kind=TypeKind.CALLABLE_INSTANCE.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            value_type=value_type,
         )
         # Route axiom dispatch to the "behavior" axiom even for parameterised
         # specs like "behavior[int]".
@@ -275,18 +308,21 @@ class SpecFactory:
         self,
         value_type_name: str = "any",
         value_type_module: Optional[str] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         """Create a ``TypeDef`` for a ``thread[T]`` type annotation.
 
         ``value_type_name`` is the thread's return value type (join 结果类型).
         ``thread[T]`` 是必选泛型注解；``t.join()`` yields ``T``。
         """
-        thread_name = f"thread[{value_type_name}]" if value_type_name != "any" else "thread"
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
+        thread_name = f"thread[{value_type.canonical_name}]" if value_type.head != "any" else "thread"
         spec = TypeDef(
             name=thread_name,
             kind=TypeKind.THREAD.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            value_type=value_type,
         )
         # Route axiom dispatch to the "thread" axiom even for parameterised
         # specs like "thread[int]".
@@ -297,6 +333,7 @@ class SpecFactory:
         self,
         value_type_name: str = "any",
         value_type_module: Optional[str] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         """Create a ``TypeDef`` for a ``thread_result[T]`` container.
 
@@ -304,12 +341,14 @@ class SpecFactory:
         ``thread_result[T]`` is the container returned by ``t.join()``;
         ``T`` is the payload type (success value).
         """
-        result_name = f"thread_result[{value_type_name}]" if value_type_name != "any" else "thread_result"
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
+        result_name = f"thread_result[{value_type.canonical_name}]" if value_type.head != "any" else "thread_result"
         spec = TypeDef(
             name=result_name,
             kind=TypeKind.THREAD_RESULT.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            value_type=value_type,
         )
         # Route axiom dispatch to the "thread_result" axiom even for parameterised
         # specs like "thread_result[int]".
@@ -320,6 +359,7 @@ class SpecFactory:
         self,
         value_type_name: str = "any",
         value_type_module: Optional[str] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         """Create a ``TypeDef`` for a ``chan[T]`` type annotation.
 
@@ -327,12 +367,14 @@ class SpecFactory:
         ``chan[T]`` 经统一泛型模型承载：此前注解实参丢弃，符号 declared_type
         退化为裸 chan；纳入 GenericTypeDeclaration 后身份保留。
         """
-        chan_name = f"chan[{value_type_name}]" if value_type_name != "any" else "chan"
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
+        chan_name = f"chan[{value_type.canonical_name}]" if value_type.head != "any" else "chan"
         spec = TypeDef(
             name=chan_name,
             kind=TypeKind.CHANNEL.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            value_type=value_type,
         )
         spec._axiom_name = "chan"
         return spec
@@ -341,6 +383,7 @@ class SpecFactory:
         self,
         value_type_name: str = "any",
         value_type_module: Optional[str] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         """Create a ``TypeDef`` for a ``slot[T]`` type annotation.
 
@@ -348,12 +391,14 @@ class SpecFactory:
         ``slot[T]`` 经统一泛型模型承载：此前注解实参丢弃，符号 declared_type
         退化为裸 slot。
         """
-        slot_name = f"slot[{value_type_name}]" if value_type_name != "any" else "slot"
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
+        slot_name = f"slot[{value_type.canonical_name}]" if value_type.head != "any" else "slot"
         spec = TypeDef(
             name=slot_name,
             kind=TypeKind.SLOT.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            value_type=value_type,
         )
         spec._axiom_name = "slot"
         return spec
@@ -362,6 +407,7 @@ class SpecFactory:
         self,
         value_type_name: str = "any",
         value_type_module: Optional[str] = None,
+        value_type: Optional["TypeRef"] = None,
     ) -> "TypeDef":
         """Create a ``TypeDef`` for a ``generator[T]`` type annotation.
 
@@ -369,12 +415,14 @@ class SpecFactory:
         ``generator[T]`` 是惰性生成器类型：含 ``yield`` 函数调用产出，迭代
         （``for``/``next``）产出 ``T`` 值。
         """
-        gen_name = f"generator[{value_type_name}]" if value_type_name != "any" else "generator"
+        if value_type is None:
+            value_type = TypeRef.parse(value_type_name, value_type_module)
+        gen_name = f"generator[{value_type.canonical_name}]" if value_type.head != "any" else "generator"
         spec = TypeDef(
             name=gen_name,
             kind=TypeKind.GENERATOR.value,
             provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
-            value_type=TypeRef.of(value_type_name, value_type_module),
+            value_type=value_type,
         )
         spec._axiom_name = "generator"
         return spec

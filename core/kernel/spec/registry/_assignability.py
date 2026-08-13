@@ -272,14 +272,16 @@ class _AssignabilityMixin:
         base_name = spec.get_base_name()
         decl = self.generic_types.get(base_name)
         if decl is not None:
-            arg_names = [a.name for a in arg_specs]
+            # 结构化实参 TypeRef（嵌套泛型保真）：从 arg_specs 经 from_spec 构造，
+            # 不经 `a.name` 字符串——扁平化会使 substitute 无法穿透嵌套实参。
+            arg_refs = [TypeRef.from_spec(a) for a in arg_specs]
             arg_modules = [a.module_path for a in arg_specs]
             # 使用完整特化名（含参数）作缓存键，支持嵌套泛型 list[list[int]]。
-            candidate_key = f"{base_name}[{','.join(arg_names)}]"
+            candidate_key = f"{base_name}[{','.join(r.canonical_name for r in arg_refs)}]"
             cached = self.resolve(candidate_key)
             if cached is not None:
                 return cached
-            result = decl.build(self.factory, arg_names, arg_modules)
+            result = decl.build(self.factory, arg_refs, arg_modules)
             result = self.register(result)
             # Bootstrap axiom methods for the newly registered specialised spec.
             axiom = self.get_axiom(result)
@@ -306,11 +308,14 @@ class _AssignabilityMixin:
         type_params = list(spec.type_params)
         if len(arg_specs) != len(type_params):
             return None  # 参数数量不匹配：语义层报 SEM，这里不构造
+        # 结构化实参 TypeRef（嵌套泛型 Box[list[int]] 保真）：经 from_spec 构造，
+        # 供 substitute 穿透与序列化 round-trip。
+        arg_refs = [TypeRef.from_spec(a) for a in arg_specs]
         mapping = {
-            param: TypeRef.of(a.name, getattr(a, "module_path", None))
+            param: TypeRef.from_spec(a)
             for param, a in zip(type_params, arg_specs)
         }
-        arg_names = [a.name for a in arg_specs]
+        arg_names = [r.canonical_name for r in arg_refs]
         specialized_name = f"{spec.name}[{','.join(arg_names)}]"
         cached = self.resolve(specialized_name)
         if cached is not None:
@@ -327,9 +332,7 @@ class _AssignabilityMixin:
         result.type_params = []
         # 特化实参 + 原始基类名：供 from_spec 结构化构造与序列化保真。
         result.base_name = spec.name
-        result.type_args = [
-            TypeRef.of(a.name, getattr(a, "module_path", None)) for a in arg_specs
-        ]
+        result.type_args = list(arg_refs)
         # 父类特化：基类 parent 若是泛型引用（class Sub[T](Box[T])）递归替换。
         if spec.parent_type is not None:
             parent_ref = spec.parent_type.substitute(mapping)

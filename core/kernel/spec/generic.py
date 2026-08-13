@@ -53,15 +53,16 @@ class GenericTypeDeclaration:
 
     ``name``      : 基础类型名（不含方括号），如 "list"、"thread"、"Optional"
     ``kind``      : 特化 TypeDef 的 TypeKind
-    ``build``     : ``(factory, arg_names, arg_modules) -> TypeDef``
-                    从实参类型名构造特化 TypeDef。
+    ``build``     : ``(factory, arg_refs, arg_modules) -> TypeDef``
+                    从结构化实参 TypeRef 构造特化 TypeDef（嵌套实参保真，
+                    不再经字符串名扁平化）。
     ``resolve_member``: ``(registry, spec, attr_name, member) -> Optional[MemberSpecialization]``
                     泛型成员特化（协议化，替代 _members.py per-type 级联）。
     """
 
     name: str
     kind: str
-    build: Callable[["SpecFactory", List[str], List[Optional[str]]], "TypeDef"]
+    build: Callable[["SpecFactory", List["TypeRef"], List[Optional[str]]], "TypeDef"]
     resolve_member: Optional[
         Callable[["SpecRegistry", "TypeDef", str, "MethodMemberSpec"], Optional[MemberSpecialization]]
     ] = None
@@ -101,78 +102,70 @@ class GenericTypeRegistry:
 # 内置泛型类型声明（构建默认注册表）                                  #
 # ------------------------------------------------------------------ #
 
-def _build_list(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    if len(names) == 1:
+def _build_list(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    if len(refs) == 1:
         return factory.create_list(
-            element_type_name=names[0],
-            element_type_module=modules[0] if modules else None,
+            element_type=refs[0],
         )
-    return factory.create_list(allowed_element_type_names=list(names))
+    return factory.create_list(allowed_element_type_names=[r.canonical_name for r in refs])
 
 
-def _build_dict(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    key = names[0] if len(names) > 0 else "any"
-    val = names[1] if len(names) > 1 else "any"
-    key_mod = modules[0] if modules and len(modules) > 0 else None
-    val_mod = modules[1] if modules and len(modules) > 1 else None
-    return factory.create_dict(key_type_name=key, value_type_name=val,
-                               key_type_module=key_mod, value_type_module=val_mod)
+def _build_dict(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    key = refs[0] if len(refs) > 0 else None
+    val = refs[1] if len(refs) > 1 else None
+    return factory.create_dict(
+        key_type=key,
+        value_type=val,
+    )
 
 
-def _build_tuple(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    if len(names) >= 2:
-        return factory.create_tuple(positional_element_type_names=list(names))
-    elem = names[0] if names else "any"
-    elem_mod = modules[0] if modules else None
-    return factory.create_tuple(element_type_name=elem, element_type_module=elem_mod)
+def _build_tuple(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    if len(refs) >= 2:
+        return factory.create_tuple(
+            positional_element_type_names=[r.canonical_name for r in refs],
+        )
+    elem = refs[0] if refs else None
+    return factory.create_tuple(element_type=elem)
 
 
-def _build_optional(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    wrapped = names[0] if names else "any"
-    wrapped_mod = modules[0] if modules else None
-    return factory.create_optional(wrapped_type_name=wrapped, wrapped_type_module=wrapped_mod)
+def _build_optional(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    wrapped = refs[0] if refs else None
+    return factory.create_optional(wrapped_type=wrapped)
 
 
-def _build_fn_callable(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    value = names[0] if names else "auto"
-    value_mod = modules[0] if modules else None
-    return factory.create_fn_callable(value_type_name=value, value_type_module=value_mod)
+def _build_fn_callable(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    value = refs[0] if refs else None
+    return factory.create_fn_callable(value_type=value)
 
 
-def _build_behavior(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    value = names[0] if names else "auto"
-    value_mod = modules[0] if modules else None
-    return factory.create_behavior(value_type_name=value, value_type_module=value_mod)
+def _build_behavior(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    value = refs[0] if refs else None
+    return factory.create_behavior(value_type=value)
 
 
-def _build_thread(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    value = names[0] if names else "any"
-    value_mod = modules[0] if modules else None
-    return factory.create_thread(value_type_name=value, value_type_module=value_mod)
+def _build_thread(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    value = refs[0] if refs else None
+    return factory.create_thread(value_type=value)
 
 
-def _build_thread_result(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    value = names[0] if names else "any"
-    value_mod = modules[0] if modules else None
-    return factory.create_thread_result(value_type_name=value, value_type_module=value_mod)
+def _build_thread_result(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    value = refs[0] if refs else None
+    return factory.create_thread_result(value_type=value)
 
 
-def _build_chan(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    value = names[0] if names else "any"
-    value_mod = modules[0] if modules else None
-    return factory.create_chan(value_type_name=value, value_type_module=value_mod)
+def _build_chan(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    value = refs[0] if refs else None
+    return factory.create_chan(value_type=value)
 
 
-def _build_slot(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    value = names[0] if names else "any"
-    value_mod = modules[0] if modules else None
-    return factory.create_slot(value_type_name=value, value_type_module=value_mod)
+def _build_slot(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    value = refs[0] if refs else None
+    return factory.create_slot(value_type=value)
 
 
-def _build_generator(factory: "SpecFactory", names: List[str], modules: List[Optional[str]]) -> "TypeDef":
-    value = names[0] if names else "any"
-    value_mod = modules[0] if modules else None
-    return factory.create_generator(value_type_name=value, value_type_module=value_mod)
+def _build_generator(factory: "SpecFactory", refs: List["TypeRef"], modules: List[Optional[str]]) -> "TypeDef":
+    value = refs[0] if refs else None
+    return factory.create_generator(value_type=value)
 
 
 # -- resolve_member（泛型成员特化，协议化——替代 _members.py per-type 级联） --- #

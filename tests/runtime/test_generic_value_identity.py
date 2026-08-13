@@ -90,6 +90,47 @@ def test_serialization_roundtrip_specialized_identity():
     )
 
 
+def test_nested_value_type_ref_is_structured():
+    """嵌套泛型值 type_ref 结构保真（S1 根治：创建点不再扁平化）。
+
+    修复前 `list[list[int]]` 值的 type_ref = TypeRef('list',(TypeRef('list[int]'),))
+    （内层扁平 head 含方括号、args 空）；修复后内层实参结构化递归。
+    """
+    from core.kernel.spec.type_ref import TypeRef
+
+    engine = _engine()
+    engine.run_string("list[list[int]] m = [[1],[2]]\n", silent=True)
+    rc = engine.interpreter.execution_context.runtime_context
+    m = rc.get_symbol("m").value
+    assert m.ib_class.name == "list[list[int]]", (
+        f"嵌套特化类身份丢失: {m.ib_class.name}"
+    )
+    assert m.type_ref == TypeRef.parse("list[list[int]]"), (
+        f"嵌套值 type_ref 应结构化，got {m.type_ref!r}"
+    )
+    assert m.elements[0].type_ref == TypeRef.parse("list[int]"), (
+        f"内层元素 type_ref 应结构化，got {m.elements[0].type_ref!r}"
+    )
+
+
+def test_three_level_nested_value_identity():
+    """三层嵌套 list[list[list[int]]] 全层值身份保真（S1）。"""
+    from core.kernel.spec.type_ref import TypeRef
+
+    engine = _engine()
+    engine.run_string(
+        "list[list[list[int]]] d = [[[1]], [[2]]]\n", silent=True
+    )
+    rc = engine.interpreter.execution_context.runtime_context
+    d = rc.get_symbol("d").value
+    assert d.ib_class.name == "list[list[list[int]]]", (
+        f"三层特化类身份丢失: {d.ib_class.name}"
+    )
+    assert d.type_ref == TypeRef.parse("list[list[list[int]]]")
+    assert d.elements[0].ib_class.name == "list[list[int]]"
+    assert d.elements[0].elements[0].ib_class.name == "list[int]"
+
+
 def test_cross_engine_deserialization_preserves_identity():
     """跨引擎反序列化特化身份保真（边界 7）。
 
@@ -146,6 +187,7 @@ def test_generator_spec_serialization_preserves_value_type():
     reh = ArtifactRehydrator(types, reg)
     spec = reh.hydrate(uid)
     assert spec.name == "generator[list[int]]", f"rehydrate 退化: {spec.name}"
-    assert spec.value_type.head == "list[int]", (
-        f"generator value_type 恢复失败: {spec.value_type}"
+    from core.kernel.spec.type_ref import TypeRef
+    assert spec.value_type == TypeRef.parse("list[int]"), (
+        f"generator value_type 恢复失败（应结构化保真）: {spec.value_type}"
     )
