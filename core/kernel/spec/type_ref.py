@@ -119,7 +119,11 @@ class TypeRef:
         """
         桥接方法：从现有 IbSpec 构造对应的 TypeRef。
 
-        [INFO] 通过 IbSpec 上的 TypeRef 字段（``element_type``/``key_type``/
+        [INFO] **唯一权威构造入口**（GEN-FIX 第 4 层规则）：spec → TypeRef 一律走
+        本方法，禁止 ``TypeRef.of(泛型名)``（如 ``of("list[int]")``）——那会扁平化
+        为 head 含方括号、args 空的形态，导致 ``substitute`` 无法替换类型参数。
+
+        通过 IbSpec 上的 TypeRef 字段（``element_type``/``key_type``/
         ``value_type``/``wrapped_type``）直接构造结构化 TypeRef。
         不导入 IbSpec 子类（避免循环），通过 ``get_base_name()`` 分派。
         """

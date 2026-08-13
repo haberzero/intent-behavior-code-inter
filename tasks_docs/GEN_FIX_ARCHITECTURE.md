@@ -149,26 +149,27 @@
 
 **四层实施**（每层独立 commit + 判别性回归 + 回归试用核销 D2-01/GEN5-01）：
 
-### 第 1 层：解析端统一（GEN-6A + 14 个 `.head` 解析点迁移）
+### 第 1 层：解析端统一（GEN-6A + 14 个 `.head` 解析点迁移）✅ 完成（commit 8f7fff8a）
 - `_inference.py:254` 及其余 14 个"类型推断/检查类"`.head` 解析点改 `resolve_typeref`。
 - 判别性回归：D2-01 修复后期望 `cx=4|cy=6|eq=True|neq=False` 达成。
 - 全量 pytest 零回归验证无副作用。
 
-### 第 2 层：构造端统一（GEN-6B + engine 残留 + to_typeref/from_spec 双实现收敛）
+### 第 2 层：构造端统一（GEN-6B + engine 残留 + to_typeref/from_spec 双实现收敛）✅ 完成（commit 52e7992f）
 - `_param_type_ref` 复用 `TypeRef.from_spec`（保留 CALLABLE_SIG 分支）。
 - `engine.py:174` `TypeRef.of("list[int]")` → 结构化 `TypeRef.generic("list", TypeRef.of("int"))`。
-- `generic.py` `_to_typeref_*` 收敛：委托 `TypeRef.from_spec`（消除双实现）。
+- `generic.py` `_to_typeref_*` 收敛：统一委托 `TypeRef.from_spec`（消除双实现，TestToTyperef 契约保留）。
 - 判别性回归：特化类方法参数校验正确（`Vec[int]` 方法收 `str` 报 SEM_TYPE_MISMATCH）。
+- 保留 `scheduler._spec_to_typeref`（FUNCTION/BOUND_METHOD 模块导出专用，非重复实现）。
 
-### 第 3 层：注册端统一（GEN-5）
+### 第 3 层：注册端统一（GEN-5）✅ 完成（commit c00c87bb）
 - `visit_IbSubscript` 表达式位置用 `self._resolve_type(node.slice)` 作为 slice 解析入口
   （复用现成递归），覆盖嵌套/多参/非法实参拦截。
 - 判别性回归：`type(Box[list[int]])` / `Pair[str,int]` / `Box[dict[str,int]]` 表达式位置可用。
+- GEN5-01 触发用例核销（PASS）。
 
-### 第 4 层：规则永久化
-- 治理文档登记"TypeRef 构造/解析唯一权威入口"：构造走 `from_spec`、解析走 `resolve_typeref`；
-  禁 `TypeRef.of(泛型)`、禁 `resolve(head)` 消费泛型 TypeRef。
-- `from_spec`/`resolve_typeref` docstring 标注唯一权威；新代码同则。
+### 第 4 层：规则永久化 ✅ 完成（本阶段）
+- 治理文档 `docs/architecture/03_type_system.md` §3.4bis 登记"TypeRef 唯一权威入口"规则。
+- `from_spec`/`resolve_typeref` docstring 标注唯一权威。
 
 ---
 

@@ -122,8 +122,9 @@ class SpecRegistryBase:
         specialization from the structured args (R2-D1：结构化 ref 懒构建，
         不再依赖调用方预注册特化 spec）。
 
-        This method is the primary resolution path for new code that already
-        holds a TypeRef and needs an IbSpec for capability queries.
+        This method is the **唯一权威解析入口**（GEN-FIX 第 4 层规则）：TypeRef → spec
+        一律走本方法，禁止 ``resolve(ref.head)`` 消费泛型 TypeRef（丢弃实参，把特化
+        结果降级为基类）。它 holds a TypeRef and needs an IbSpec for capability queries.
         """
         # fn[(args) -> ret]：结构化 CALLABLE_SIG ref（param descriptor 保留签名
         # 结构，避免扁平化为裸 fn 后调用点跳过校验）。

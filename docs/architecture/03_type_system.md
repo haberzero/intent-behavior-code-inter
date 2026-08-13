@@ -155,6 +155,25 @@ class TypeDef(IbSpec):
 
 注册表持有的 spec 是原型的克隆，保证多引擎实例间状态隔离（`SpecRegistry.register` 内部 `clone()`）。
 
+### 3.4bis TypeRef 唯一权威入口（GEN-FIX 第 4 层规则，2026-08-13）
+
+TypeRef 生命周期两端口径必须收敛，避免"结构化 vs 扁平化"两套表示漂移（曾致
+GEN-5/GEN-6 缺陷：扁平 `TypeRef('Vec[T]')` head 含方括号、args 空，`substitute`
+无法替换；`resolve(head)` 消费丢实参）：
+
+| 方向 | 唯一权威入口 | 禁止 |
+|------|-------------|------|
+| **构造**（spec → TypeRef） | `TypeRef.from_spec(spec)` | `TypeRef.of(泛型名)`（如 `of("list[int]")`）；需手写 per-type 分支 |
+| **解析**（TypeRef → spec） | `SpecRegistry.resolve_typeref(ref)` | `resolve(ref.head)` 消费泛型 TypeRef（丢实参） |
+
+- 泛型类方法参数 descriptor 构造必须走 `from_spec`（`_param_type_ref`），保证特化
+  `substitute` 可替换（GEN-6B）。
+- 表达式位置泛型下标（`Box[list[int]]` 作表达式）须复用 `_resolve_type` 递归解析，
+  与注解路径同构，保证编译期特化注册（GEN-5）。
+- 运算符结果类型推断须经 `resolve_typeref(return_type)` 保留实参（GEN-6A）。
+- 例外：`scheduler._spec_to_typeref` 的 FUNCTION/BOUND_METHOD/CALLABLE 分支产出
+  `fn[...]` 签名形态，是模块导入导出专用（head 语义与 `fn_callable` 不同），非重复实现。
+
 ### 3.5 SpecFactory
 
 `core/kernel/spec/registry.py:SpecFactory` 提供面向编译器的**字符串入口**（`*_name` / `*_module`），内部统一桥接到 TypeRef 后写入 TypeDef 字段。这是仅有的"字符串构造 API"，TypeDef 本身不接受字符串 kwargs。
