@@ -685,16 +685,24 @@ class ExpressionVisitorsMixin:
 
         # 用户类泛型特化下标（表达式位置）：Box[int] → 触发特化 spec 创建，
         # 使运行时 metadata_registry 有对应特化（print(Box[int]) 等场景）。
-        if (value_type.kind == TypeKind.CLASS.value
-                and getattr(value_type, "type_params", None)
-                and isinstance(node.slice, ast.IbName)
-                and not isinstance(node.slice, ast.IbSlice)):
-            arg_spec = self._resolve_type(node.slice)
-            if arg_spec is not None:
-                specialized = self.registry.resolve_specialization(value_type, [arg_spec])
-                if specialized is not None:
-                    self.bind_type(node, specialized)
-                    return specialized
+        # 字面量 slice（Box[42]）为非法特化——fail-fast 而非运行期裸 AttributeError。
+        if value_type.kind == TypeKind.CLASS.value and getattr(value_type, "type_params", None):
+            if isinstance(node.slice, ast.IbConstant):
+                self.error(
+                    f"Generic type argument must be a type, not a value "
+                    f"('{node.slice.value}'). Use e.g. "
+                    f"{getattr(node.value, 'id', str(node.value))}[int].",
+                    node, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
+                )
+                self.bind_type(node, self._any_desc)
+                return self._any_desc
+            if isinstance(node.slice, ast.IbName) and not isinstance(node.slice, ast.IbSlice):
+                arg_spec = self._resolve_type(node.slice)
+                if arg_spec is not None:
+                    specialized = self.registry.resolve_specialization(value_type, [arg_spec])
+                    if specialized is not None:
+                        self.bind_type(node, specialized)
+                        return specialized
 
         # 切片操作返回同类型容器
         if isinstance(node.slice, ast.IbSlice):

@@ -710,6 +710,9 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
     def __init__(self, context: SemanticContext):
         super().__init__(context)
         self.lambda_captures: Dict[str, Set[str]] = {}
+        # 泛型方法体内类型参数收集状态（Box[T] 表达式位置的 T）。
+        self._func_node_stack: List[ast.IbFunctionDef] = []
+        self._type_param_refs: Set[tuple] = set()
 
     def analyze(self):
         """分析 Lambda 捕获"""
@@ -728,16 +731,49 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
             with self.enter_scope(func_scope):
                 # 分析 nonlocal 声明：为包含 nonlocal 的函数填充 free_vars
                 self._analyze_function_captures(node)
-                for stmt in node.body:
-                    self._analyze_node(stmt)
+                # 泛型方法体内引用的类型参数收集（Box[T] 的 T 表达式位置）。
+                self._func_node_stack.append(node)
+                try:
+                    for stmt in node.body:
+                        self._analyze_node(stmt)
+                finally:
+                    self._func_node_stack.pop()
+                # 回收类型参数 [name, uid] 对到函数节点（序列化→运行时注册）。
+                if self._type_param_refs:
+                    node.type_param_uids = sorted(
+                        list(self._type_param_refs), key=lambda x: x[0]
+                    )
+                    self._type_param_refs = set()
 
         elif isinstance(node, ast.IbClassDef):
-            for stmt in node.body:
-                self._analyze_node(stmt)
+            # 进入类作用域（含类型参数符号），使方法体内 T 可 resolve 到
+            # TYPE_PARAM 符号（Box[T] 表达式位置收集）。
+            class_scope = None
+            class_sym = self.current_scope.resolve(node.name) if self.current_scope else None
+            if class_sym is not None and getattr(class_sym, "owned_scope", None):
+                class_scope = class_sym.owned_scope
+            if class_scope is not None:
+                with self.enter_scope(class_scope):
+                    for stmt in node.body:
+                        self._analyze_node(stmt)
+            else:
+                for stmt in node.body:
+                    self._analyze_node(stmt)
 
         elif isinstance(node, ast.IbLambdaExpr):
             # 分析 Lambda 捕获
             self._analyze_lambda(node)
+
+        elif isinstance(node, ast.IbName):
+            # 泛型方法体内类型参数引用收集：T（TYPE_PARAM 符号）在表达式位置
+            # 需运行时值（Box[T] slice），编译期收集 [name, sym_uid] 对供
+            # 方法帧按 UID 注册特化实参的类型标识。
+            if self._func_node_stack:
+                sym = self.current_scope.resolve(node.id)
+                if (sym is not None
+                        and getattr(sym, "kind", None) == SymbolKind.TYPE_PARAM
+                        and getattr(sym, "uid", None)):
+                    self._type_param_refs.add((node.id, sym.uid))
 
         else:
             # 递归分析子节点

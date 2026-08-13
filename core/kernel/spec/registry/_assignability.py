@@ -213,6 +213,11 @@ class _AssignabilityMixin:
         )
         # 特化 spec 不携带类型参数（已代入）。
         result.type_params = []
+        # 特化实参 + 原始基类名：供 from_spec 结构化构造与序列化保真。
+        result.base_name = spec.name
+        result.type_args = [
+            TypeRef.of(a.name, getattr(a, "module_path", None)) for a in arg_specs
+        ]
         # 父类特化：基类 parent 若是泛型引用（class Sub[T](Box[T])）递归替换。
         if spec.parent_type is not None:
             parent_ref = spec.parent_type.substitute(mapping)

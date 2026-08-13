@@ -261,6 +261,17 @@ class TypeCheckBase:
             if isinstance(annotation.value, ast.IbName):
                 base_type = self.registry.resolve(annotation.value.id)
                 if base_type:
+                    # 泛型实参必须为**类型**（IbName/IbSubscript/IbCallableType）。
+                    # 字面量/None 等值（Box[42]）是非法特化——fail-fast 而非
+                    # 运行期裸 AttributeError。
+                    if isinstance(annotation.slice, ast.IbConstant):
+                        self.error(
+                            f"Generic type argument must be a type, not a value "
+                            f"('{annotation.slice.value}'). Use e.g. "
+                            f"{annotation.value.id}[int].",
+                            annotation, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
+                        )
+                        return self._any_desc
                     # 解析泛型参数
                     if isinstance(annotation.slice, ast.IbTuple):
                         generic_args = [self._resolve_type(elt) for elt in annotation.slice.elts]

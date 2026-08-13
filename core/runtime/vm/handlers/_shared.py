@@ -320,6 +320,12 @@ def _vm_call_user_function(executor, func, receiver, args):
                 super_proxy = IbSuperProxy(receiver, func.owner_class.parent)
                 rt_context.define_variable("super", super_proxy, uid="intrinsic:super")
 
+        # 泛型方法体内类型参数绑定（Box[T] 表达式位置的 T → 特化实参类型标识）。
+        # 编译期在函数节点收集 [name, sym_uid] 对（binding_analysis），此处把
+        # receiver 特化类（Box[int]）的实参类型对象按符号 UID 注册到方法作用域，
+        # 使方法体内 Box[T] slice 的 T 求值为类型标识（对齐 Box[int] slice int）。
+        _bind_type_params(executor, rt_context, func, receiver)
+
         for i, arg_uid in enumerate(params_uids):
             arg_data = executor.ec.get_node_data(arg_uid)
             is_intent_ctx_param = _is_intent_context_param(executor.ec, arg_uid, arg_data)
@@ -893,3 +899,41 @@ def _vm_assign_to_target(executor, target_uid: str, value: Any, define_only: boo
             )
         for t_uid, val in zip(elts, vals):
             yield from _vm_assign_to_target(executor, t_uid, val, define_only=define_only)
+
+
+def _bind_type_params(executor, rt_context, func, receiver) -> None:
+    """泛型方法体内类型参数绑定（Box[T] 表达式位置的 T → 特化实参类型标识）。
+
+    编译期在函数节点收集 ``[[name, sym_uid], ...]``（binding_analysis），此处把
+    receiver 特化类（``Box[int]``）的实参类型对象按符号 UID 注册到方法作用域，
+    使方法体内 ``Box[T]`` slice 的 T 求值为类型标识（对齐 ``Box[int]`` slice
+    int 求值为 IbClass 的既有机制）。无特化信息（非泛型方法）静默跳过。
+    """
+    owner_class = getattr(func, "owner_class", None)
+    if owner_class is None or getattr(owner_class, "spec", None) is None:
+        return
+    spec = owner_class.spec
+    base_name = getattr(spec, "base_name", None)
+    type_args = getattr(spec, "type_args", None) or []
+    if not base_name or not type_args:
+        return
+    spec_reg = executor.registry.get_metadata_registry()
+    base_spec = spec_reg.resolve(base_name) if spec_reg else None
+    if base_spec is None:
+        return
+    base_type_params = getattr(base_spec, "type_params", None) or []
+    if len(type_args) != len(base_type_params):
+        return
+    arg_type_names = [a.head for a in type_args]
+    # 编译期收集的类型参数引用存于函数节点（IbFunctionDef.type_param_uids）。
+    node_data = executor.ec.get_node_data(getattr(func, "node_uid", "")) or {}
+    tp_refs = node_data.get("type_param_uids") or []
+    for name, sym_uid in tp_refs:
+        if name not in base_type_params:
+            continue
+        idx = base_type_params.index(name)
+        arg_name = arg_type_names[idx]
+        type_obj = executor.registry.get_class(arg_name)
+        if type_obj is None:
+            continue
+        rt_context.define_variable(name, type_obj, uid=sym_uid)

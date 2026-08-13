@@ -283,3 +283,104 @@ class TestGenericMultiParamAndNested:
             ai=True,
         )
         assert out == ["2"]
+
+
+class TestGenericSelfReference:
+    """泛型类自引用（G2 字段 / G1 方法体类型参数）回归。
+
+    深度核验确认两处独立缺陷，已修复：
+    - G2：自引用字段 `Node[T] next` 曾被 from_spec 扁平化为 TypeRef('Node[T]')，
+      substitute 无法替换 → 特化后仍 Node[T]。现结构化 TypeRef('Node',(T,))。
+    - G1：方法体内 `Box[T]` 表达式 slice T 运行时查变量失败。现方法帧按
+      receiver 特化实参注册类型参数符号。
+    """
+
+    def test_self_reference_field(self):
+        """自引用字段 Node[T] next 特化后正确替换为 Node[int]。"""
+        out = run_ibci(
+            "class Node[T]:\n"
+            "    T data\n"
+            "    Node[T] next = any\n"
+            "    func get(self) -> T:\n"
+            "        return self.data\n"
+            "Node[int] n1 = Node[int](1)\n"
+            "n1.next = Node[int](2)\n"
+            "print(n1.get())\n"
+            "print(n1.next.get())\n",
+            ai=True,
+        )
+        assert out == ["1", "2"]
+
+    def test_method_body_generic_construct(self):
+        """方法体内 Box[T](v) 构造（G1）：多特化分别正确。"""
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "    func make(self, T v) -> Box[T]:\n"
+            "        return Box[T](v)\n"
+            "Box[int] b = Box[int](1)\n"
+            "Box[int] b2 = b.make(2)\n"
+            "print(b2.value)\n"
+            "Box[str] s = Box[str](\"a\")\n"
+            "Box[str] s2 = s.make(\"b\")\n"
+            "print(s2.value)\n",
+            ai=True,
+        )
+        assert out == ["2", "b"]
+
+    def test_method_body_generic_return_usage(self):
+        """方法体内 Box[T] 返回后经特化方法访问（get 返回特化类型）。"""
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "    func get(self) -> T:\n"
+            "        return self.value\n"
+            "    func make(self, T v) -> Box[T]:\n"
+            "        return Box[T](v)\n"
+            "Box[int] b = Box[int](1)\n"
+            "Box[int] b2 = b.make(2)\n"
+            "int r = b2.get()\n"
+            "print(r)\n",
+            ai=True,
+        )
+        assert out == ["2"]
+
+    def test_recursive_nested_specialization(self):
+        """递归特化 Node[Node[int]] 的 get 双重解引用。"""
+        out = run_ibci(
+            "class Node[T]:\n"
+            "    T data\n"
+            "    func get(self) -> T:\n"
+            "        return self.data\n"
+            "Node[int] leaf = Node[int](9)\n"
+            "Node[Node[int]] wrapped = Node[Node[int]](leaf)\n"
+            "print(wrapped.get().get())\n",
+            ai=True,
+        )
+        assert out == ["9"]
+
+
+class TestGenericIllegalArgs:
+    """非法特化实参编译期拦截（BOUNDARY-G1 回归）。
+
+    Box[42]/Box[None] 此前编译通过、运行期裸 AttributeError；现语义层
+    fail-fast 报 SEM_GENERIC_TYPE_NEEDS_ARGS。
+    """
+
+    def test_literal_arg_rejected(self):
+        """表达式位置 Box[42] → SEM_GENERIC_TYPE_NEEDS_ARGS。"""
+        expect_compile_error(
+            "class Box[T]:\n"
+            "    T value\n"
+            "Box[int] b = Box[42](1)\n",
+            "SEM_GENERIC_TYPE_NEEDS_ARGS",
+        )
+
+    def test_none_arg_rejected(self):
+        """表达式位置 Box[None] → SEM_GENERIC_TYPE_NEEDS_ARGS。"""
+        expect_compile_error(
+            "class Box[T]:\n"
+            "    T value\n"
+            "Box[int] b = Box[None](1)\n",
+            "SEM_GENERIC_TYPE_NEEDS_ARGS",
+        )

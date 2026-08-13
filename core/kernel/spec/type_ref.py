@@ -229,6 +229,16 @@ class TypeRef:
                 module=spec.module_path,
             )
 
+        # 用户类泛型特化 spec（Box[int]）：用结构化实参构造 TypeRef——
+        # 避免扁平化（TypeRef('Box[int]') head 含方括号、args 空）导致
+        # substitute 无法替换类型参数。基类（模板）无 type_args 走 fallback。
+        if spec.kind == TypeKind.CLASS.value and getattr(spec, "type_args", None):
+            return cls(
+                head=spec.base_name or spec.get_base_name(),
+                args=tuple(spec.type_args),
+                module=spec.module_path,
+            )
+
         # [INFO] Default fallback uses the base name to avoid embedding
         # encoded generic brackets such as "list[int]" into the head field.
         return cls(head=base, args=(), module=spec.module_path)

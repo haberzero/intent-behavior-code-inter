@@ -7,7 +7,7 @@ LLM-function) plus the override-compatibility helper. Split out from
 no logic changes.
 """
 
-from typing import Any, List, Optional
+from typing import Optional
 from core.base.enums import Provenance, Visibility
 
 from core.base.diagnostics.codes import (
@@ -60,42 +60,6 @@ _OVERRIDE_SIGNATURE_FREE: frozenset = frozenset({
     "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
     "__validate_prompt__",
 })
-
-
-def _split_top_level_args(inner: str) -> List[str]:
-    """按逗号切分泛型实参（忽略嵌套方括号内的逗号）。
-
-    "int" → ["int"]；"list[int],str" → ["list[int]","str"]。
-    """
-    parts: List[str] = []
-    depth = 0
-    current: List[str] = []
-    for ch in inner:
-        if ch == "[":
-            depth += 1
-            current.append(ch)
-        elif ch == "]":
-            depth -= 1
-            current.append(ch)
-        elif ch == "," and depth == 0:
-            parts.append("".join(current).strip())
-            current = []
-        else:
-            current.append(ch)
-    if current:
-        parts.append("".join(current).strip())
-    return parts
-
-
-def _parse_type_ref_name(text: str) -> Any:
-    """把泛型实参名解析为 TypeRef（支持嵌套："list[int]" → list[int]）。"""
-    from core.kernel.spec.type_ref import TypeRef
-    text = text.strip()
-    if "[" not in text:
-        return TypeRef.of(text)
-    head, rest = text.split("[", 1)
-    args = tuple(_parse_type_ref_name(a) for a in _split_top_level_args(rest.rstrip("]")))
-    return TypeRef(head=head.strip(), args=args)
 
 
 class DeclarationVisitorsMixin:
@@ -516,19 +480,28 @@ class DeclarationVisitorsMixin:
         """把基类方法 descriptors 同步到所有特化类同名成员（类型参数替换）。
 
         遍历 registry 中所有 ``{base_name}[...]`` 特化 spec，对其同名成员用
-        各特化 spec 的 type_params→实参映射替换 descriptors 中的类型参数。
+        各特化 spec 的 ``type_args``（结构化实参）与基类 ``type_params``
+        配对构造映射，替换 descriptors 中的类型参数。特化 spec 的 type_args
+        由 ``_specialize_user_class`` 填充（非字符串反推——单一权威源）。
         """
         base_name = self.current_class.name
         base_type_params = list(getattr(self.current_class, "type_params", []) or [])
+        if not base_type_params:
+            return
         all_specs = getattr(self.registry, "all_specs", {}) or {}
         for spec in all_specs.values():
             spec_name = getattr(spec, "name", "")
             if not spec_name.startswith(base_name + "["):
                 continue
+            type_args = getattr(spec, "type_args", None) or []
+            if len(type_args) != len(base_type_params):
+                continue
             m = spec.members.get(method_name)
             if m is None or not hasattr(m, "param_descriptors"):
                 continue
-            mapping = self._type_param_mapping(spec_name, base_type_params)
+            mapping = {
+                param: arg for param, arg in zip(base_type_params, type_args)
+            }
             m.param_descriptors = [
                 ParamDescriptor(
                     name=d.name,
@@ -539,22 +512,3 @@ class DeclarationVisitorsMixin:
                 )
                 for d in param_descriptors
             ]
-
-    @staticmethod
-    def _type_param_mapping(spec_name: str, base_type_params: List[str]) -> dict:
-        """构造特化 spec 的类型参数映射（Box[int] + ["T"] → {"T": TypeRef(int)}）。
-
-        基类 type_params 与特化名实参按序配对。实参可嵌套（``Box[list[int]]``），
-        用平衡括号解析提取顶层实参名（防嵌套逗号误切）。
-        """
-        from core.kernel.spec.type_ref import TypeRef
-        if "[" not in spec_name or not base_type_params:
-            return {}
-        head, rest = spec_name.split("[", 1)
-        arg_names = _split_top_level_args(rest.rstrip("]"))
-        if len(arg_names) != len(base_type_params):
-            return {}
-        return {
-            param: _parse_type_ref_name(arg)
-            for param, arg in zip(base_type_params, arg_names)
-        }

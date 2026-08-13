@@ -312,6 +312,12 @@ class ArtifactRehydrator:
             # 用户类泛型类型参数（class Box[T]）：重建供特化/检查。
             if data.get("type_params"):
                 spec.type_params = list(data["type_params"])
+            # 用户类泛型特化实参（Box[int]）+ 原始基类名：重建供 from_spec
+            # 结构化构造（round-trip 保真）。
+            if data.get("type_args"):
+                spec.type_args = [self._parse_arg_ref(a) for a in data["type_args"]]
+            if data.get("base_name"):
+                spec.base_name = data["base_name"]
         elif spec.kind == TypeKind.MODULE.value:
             spec.exported_types = list(data.get("exported_types", []))
 

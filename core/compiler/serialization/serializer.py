@@ -273,6 +273,12 @@ class FlatSerializer(BaseFlatSerializer):
             # 用户类泛型类型参数（class Box[T]）：持久化供 rehydrate 重建。
             if getattr(t, "type_params", None):
                 type_data["type_params"] = list(t.type_params)
+            # 用户类泛型特化实参（Box[int] → ["int"]）+ 原始基类名：
+            # 持久化供 from_spec 结构化构造与 rehydrate 重建。
+            if getattr(t, "type_args", None):
+                type_data["type_args"] = [a.canonical_name for a in t.type_args]
+            if getattr(t, "base_name", None):
+                type_data["base_name"] = t.base_name
             
         # 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来
