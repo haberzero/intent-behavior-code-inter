@@ -120,6 +120,8 @@ class TypeRef:
         ``ArtifactRehydrator._parse_arg_ref`` 的字符串切分逻辑。
         """
         text = text.strip()
+        if not text:
+            raise ValueError("TypeRef.parse: empty type name")
         if "[" not in text:
             return cls(head=text, args=(), module=module)
         head, rest = text.split("[", 1)

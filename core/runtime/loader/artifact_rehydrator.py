@@ -213,39 +213,11 @@ class ArtifactRehydrator:
     def _parse_arg_ref(text: str) -> TypeRef:
         """把泛型实参名解析为 TypeRef（支持嵌套："int" / "list[int]"）。
 
-        serializer 用 ``TypeRef.canonical_name`` 持久化实参（如 "list[int]"），
-        此处按 ``[`` 递归解析恢复嵌套结构。
+        serializer 用 ``TypeRef.canonical_name`` 持久化实参（如 "list[int]"）。
+        统一委托 ``TypeRef.parse``（字符串→结构单一权威解析器，S1 收敛），
+        不维护第二份切分实现。
         """
-        text = text.strip()
-        if "[" not in text:
-            return TypeRef.of(text)
-        head, rest = text.split("[", 1)
-        inner = rest.rstrip("]")
-        args = tuple(
-            ArtifactRehydrator._parse_arg_ref(a)
-            for a in ArtifactRehydrator._split_args(inner)
-        )
-        return TypeRef(head=head.strip(), args=args)
-
-    @staticmethod
-    def _split_args(inner: str):
-        """按逗号切分实参列表（注意嵌套方括号内的逗号不应切分）。"""
-        parts, depth, current = [], 0, []
-        for ch in inner:
-            if ch == "[":
-                depth += 1
-                current.append(ch)
-            elif ch == "]":
-                depth -= 1
-                current.append(ch)
-            elif ch == "," and depth == 0:
-                parts.append("".join(current))
-                current = []
-            else:
-                current.append(ch)
-        if current:
-            parts.append("".join(current))
-        return parts
+        return TypeRef.parse(text)
 
     def _fill_descriptor(self, uid: str) -> Optional[IbSpec]:
         """填充 spec 的详细字段 (Phase 2)"""
