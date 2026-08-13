@@ -210,16 +210,19 @@ class ExpressionVisitorsMixin:
             result_type = self._any_desc
         else:
             result_type = self.visit(node.value) if node.value is not None else self._any_desc
-            # 生成器 yield 容器字面量绑定元素类型：func gen() -> generator[list[int]]
-            # 的 yield [1,2] → [1,2] 节点 node_to_type = list[int]。经
-            # func_return_types 栈取当前生成器返回类型，解析 generator[T] 的 T。
+            # 生成器 yield 容器字面量绑定元素类型：标准写法 func gen() -> list[int]:
+            # yield [1,2]（yield 值类型 = 声明返回类型）或显式 generator[T] 标注
+            # （yield 值类型 = T）。经 func_return_types 栈取当前函数返回类型。
             func_returns = getattr(self, "func_return_types", None) or []
             if func_returns and func_returns[-1] is not None and node.value is not None:
                 gen_ret = func_returns[-1]
                 gen_base = gen_ret.get_base_name() if hasattr(gen_ret, "get_base_name") else None
                 if gen_base == "generator":
                     elem = self.registry.resolve_typeref(gen_ret.value_type) or self._any_desc
-                    self._bind_literal_with_type(node.value, elem)
+                else:
+                    # 标准写法：-> T（含 yield 自动变 generator[T]），yield 值类型 = T。
+                    elem = gen_ret
+                self._bind_literal_with_type(node.value, elem)
         final_type = result_type or self._any_desc
         self.bind_type(node, final_type)
         return final_type
