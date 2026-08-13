@@ -113,7 +113,9 @@ print(sb.describe())    # SB:7
 
 ### 6.5 `super()`
 
-> `super()` 对所有 IBCI 用户类均有效——所有用户类隐式继承自 `Object` 基类（类似 Python 3）。即使没有显式写 `class Foo(Bar):`，`super()` 也可在方法内使用，此时它指向 `Object`。
+> `super()` 用于调用**显式父类**的方法——`class Derived(Base)` 中 `Derived` 的方法
+> 内可用 `super()` 访问 `Base` 的同名方法。无显式父类的类使用 `super()` 会抛运行时
+> 错误（隐式基类 `Object` 不提供用户可调用的方法）。
 
 ```ibci
 class Base:
