@@ -66,14 +66,12 @@ s.startswith("  Hello")     # True
 s.endswith("  ")            # True
 s.contains("World")         # True
 s.find("World")             # 8
-s.find_last("l")            # 9
+s.find_last("l")            # 11
 s.is_empty()                # False
 
-# 字符串拼接与重复
+# 拼接、重复与下标访问
 str a = "ab" + "cd"    # "abcd"
 str b = "ab" * 3       # "ababab"
-
-# 下标访问
 str ch = s[0]          # " "
 ```
 

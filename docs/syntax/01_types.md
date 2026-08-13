@@ -78,10 +78,13 @@ any a = (any)x          # any 类型
 class Temperature:
     float value
 
-    func cast_to(self, target) -> any:
-        if target == str:
+    func cast_to(self, any target) -> any:
+        if type(target) == "str":
             return (str)self.value + "°C"
         return self
+
+Temperature t = Temperature(25.0)
+str s = (str)t          # "25.0°C"
 ```
 
 **编译期检查**：对于声明了转换规则的类型，编译器会在转换明显不合法时报 `SEM_CAST_NO_CONVERTER` 错误（如 `(int)file_handle`）。未声明转换规则的类型不做编译期校验，由运行时裁定。

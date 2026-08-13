@@ -32,17 +32,15 @@ str a1 = @~ 描述一下天空 ~
 str a2 = @~ 描述一下海洋 ~
 @-   # 移除刚才追加的意图
 
-# 排他注入（单次）：只覆盖紧随其后的一条 LLM 调用
+# 排他注入（单次）：只覆盖其后一条 LLM 调用
 @! 只输出：YES 或 NO，不要任何其他内容
 bool result = @~ 1+1=2 吗 ~
-# 这里 @! 已自动失效，原意图栈已自然恢复，无需写 @-
 
 # 也可修饰普通函数调用（语句窗口语义）
 func wrap() -> str:
     return @~ MOCK:STR:ok ~
 @ 在内部调用时带上这条 one-shot
 str x = wrap()
-# one-shot 仅绑定到这条赋值语句，不会泄漏到后续语句
 ```
 
 ### 9.2 意图栈语义
@@ -70,10 +68,12 @@ ai.set_config("YOUR_URL", "YOUR_KEY", "YOUR_MODEL")
 intent_context ctx = intent_context.get_current()   # 获取当前帧的意图上下文
 
 ctx.push("请用简洁的语言回答")
+intent_context.use(ctx)   # 安装到当前作用域，否则 push 不生效
 str r1 = @~ 描述天空 ~
 ctx.pop()
 
 ctx.push("用详细专业的语言回答")
+intent_context.use(ctx)
 str r2 = @~ 描述天空 ~
 ctx.pop()
 ```

@@ -42,7 +42,7 @@ thread_result[int] r = await t       # 同 t.join()
 ```ibci
 chan c = chan(str, "stream")
 
-func producer():
+func producer() -> void:
     c.send("第一")
     c.send("第二")
 
@@ -77,7 +77,7 @@ int vb = b.recv()   # 7
 ```ibci
 slot counter = slot("counter", 0)
 
-func bump(int n):
+func bump(int n) -> void:
     int i = 0
     while i < n:
         counter.update(lambda(int v) -> auto: (v + 1))   # CAS 读改写

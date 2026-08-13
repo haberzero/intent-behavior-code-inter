@@ -1,12 +1,12 @@
 # 07 · MOCK 测试与调试
 
-> 本章是 IBCI MOCK 测试与调试机制的入门教程。面向需要在不连接真实 LLM API 的情况下测试 LLM 相关代码的 IBCI 用户。覆盖 TESTONLY 模式、MOCK 指令语法、序列 MOCK、以及 `idbg` 调试模块。
+> 本章是 IBCI MOCK 测试与调试机制的入门教程。面向需要在不连接真实 LLM API 的情况下测试 LLM 相关代码的 IBCI 用户。覆盖 MOCK 模式、MOCK 指令语法、序列 MOCK、以及 `idbg` 调试模块。
 
 ---
 
 ## 你将会学到
 
-- 启用 TESTONLY 模式，用 MOCK 指令替代真实 LLM 调用
+- 启用 MOCK 模式，用 MOCK 指令替代真实 LLM 调用
 - 为不同数据类型编写对应的 MOCK 指令
 - 用序列 MOCK 模拟多次调用的不同返回值
 - 用 `idbg` 模块探查提示词、意图栈和调用结果
@@ -37,30 +37,17 @@ MOCK 指令写在行为表达式中，用 `MOCK:类型:值` 格式：
 import ai
 ai.set_mock_mode()
 
-str reply = @~ MOCK:STR:hello world ~
+str reply = @~ MOCK:STR:"hello world" ~
 print(reply)          # hello world
 
 int n = @~ MOCK:INT:42 ~
 print((str)n)         # 42
 
-float pi = @~ MOCK:FLOAT:3.14 ~
-print((str)pi)        # 3.14
-
-bool yes = @~ MOCK:BOOL:1 ~
-print((str)yes)       # 1
+bool yes = @~ MOCK:BOOL:TRUE ~
+print((str)yes)       # True
 ```
 
-布尔类型有两个快捷指令，无需写值：
-
-```ibci
-if @~ MOCK:TRUE 条件判断 ~:
-    print("这个分支会执行")      # 总是执行
-
-if @~ MOCK:FALSE 另一个条件 ~:
-    print("这个分支不会执行")    # 永远不执行
-```
-
-完整 MOCK 指令表（含 `MOCK:LIST`、`MOCK:DICT`）见 [语法参考 / MOCK 测试][syntax-13]。
+布尔类型另有 `MOCK:TRUE` / `MOCK:FALSE` 快捷指令，直接返回真/假。完整指令表（含 `MOCK:FLOAT`、`MOCK:LIST`、`MOCK:DICT` 与含空格字符串的引号规则）见 [语法参考 / MOCK 测试][syntax-13]。
 
 ---
 
@@ -89,16 +76,18 @@ print(r)                     # 翻译结果
 
 ## 命名模型 MOCK
 
-对使用 `@NAME~` 路由到特定模型的调用，MOCK 同样有效——未注册的模型名在 MOCK 模式下不会报错，MOCK 拦截在模型路由之前：
+对使用 `@NAME~` 路由到特定模型的调用，MOCK 同样有效：
 
 ```ibci
 import ai
 ai.set_mock_mode()
 
 # 无需真实注册，MOCK 模式直接截获
-str result = @GPT4o~ MOCK:STR:来自 GPT4o 的 mock 结果 ~
-print(result)
+str result = @GPT4o~ MOCK:STR:"来自 GPT4o 的 mock 结果" ~
+print(result)                   # 来自 GPT4o 的 mock 结果
 ```
+
+MOCK 拦截发生在模型路由之前，MOCK 模式下未注册的模型名不报错（命名模型路由规则见 [语法参考 / 行为表达式][syntax-07]）。
 
 ---
 
@@ -123,7 +112,7 @@ llmexcept:
 print((str)result)                     # 99
 ```
 
-`MOCK:REPAIR` 支持所有基本类型（`STR`、`INT`、`BOOL`、`FLOAT`、`LIST`、`DICT`），详见 [语法参考 / MOCK 测试][syntax-13]。
+`MOCK:REPAIR` 支持所有基本类型作回退值，完整语法见 [语法参考 / MOCK 测试][syntax-13]。
 
 ---
 
@@ -165,15 +154,15 @@ idbg.show_intents()          # 打印当前意图栈
 idbg.show_target_prompt()    # 打印最近 LLM 调用的完整提示词
 idbg.current_llm()           # 返回最近调用的完整信息（dict）
 idbg.current_result()        # 返回最近调用的结果对象
-idbg.vars()               # 返回当前作用域所有变量（dict）
-idbg.print_vars()         # 打印当前作用域所有变量
+idbg.vars()                 # 返回当前作用域所有变量（dict）
+idbg.print_vars()           # 打印当前作用域所有变量
 ```
 
 ---
 
 ## MOCK 模式的边界
 
-MOCK 模式无法验证意图注释（`@`/`@+`/`@!`）、`__outputhint_prompt__`、`__to_prompt__`/`__from_prompt__` 协议、多模态 payload、`llmexcept` retry hint 以及 LLM 函数提示词组装对真实 LLM 的行为影响——这些需要连接真实 API。完整列表见 [已知限制 / MOCK 模式下无法验证的 LLM 功能][known-17]。
+MOCK 模式验证指令解析与控制流逻辑，无法验证意图注入、提示词协议、多模态与 `llmexcept` retry hint 对真实 LLM 的行为影响——这些需要连接真实 API。完整列表见 [已知限制 / MOCK 模式下无法验证的 LLM 功能][known-17]。
 
 ---
 
@@ -187,7 +176,7 @@ MOCK 模式无法验证意图注释（`@`/`@+`/`@!`）、`__outputhint_prompt__`
 
 ## 你现在能做什么
 
-- 在 TESTONLY 模式下用 MOCK 指令为 `@~` 和 LLM 函数提供预设返回值
+- 在 MOCK 模式下用 MOCK 指令为 `@~` 和 LLM 函数提供预设返回值
 - 用 `MOCK:FAIL` / `MOCK:REPAIR` 验证容错逻辑
 - 用 `MOCK:SEQ` 模拟多次调用的不同返回序列
 - 用 `idbg.show_intents()` 和 `idbg.show_target_prompt()` 调试 LLM 交互
@@ -196,5 +185,6 @@ MOCK 模式无法验证意图注释（`@`/`@+`/`@!`）、`__outputhint_prompt__`
 深入查阅：MOCK 指令的完整语法见 [语法参考 / MOCK 测试][syntax-13]，语言级限制见 [已知限制][known-17]。
 
 [06 · 构建多步骤 LLM 工作流]: ./06_multistep.md
+[syntax-07]: ../syntax/07_behavior_expressions.md
 [syntax-13]: ../syntax/13_mock_testing.md
 [known-17]: ../KNOWN_LIMITS.md#十六mock-模式下无法验证的-llm-功能

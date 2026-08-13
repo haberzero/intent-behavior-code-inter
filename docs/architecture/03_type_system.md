@@ -155,11 +155,11 @@ class TypeDef(IbSpec):
 
 注册表持有的 spec 是原型的克隆，保证多引擎实例间状态隔离（`SpecRegistry.register` 内部 `clone()`）。
 
-### 3.4bis TypeRef 唯一权威入口（GEN-FIX 第 4 层规则，2026-08-13）
+### 3.4bis TypeRef 唯一权威入口
 
-TypeRef 生命周期两端口径必须收敛，避免"结构化 vs 扁平化"两套表示漂移（曾致
-GEN-5/GEN-6 缺陷：扁平 `TypeRef('Vec[T]')` head 含方括号、args 空，`substitute`
-无法替换；`resolve(head)` 消费丢实参）：
+TypeRef 生命周期两端口径必须收敛，避免"结构化 vs 扁平化"两套表示漂移。扁平
+`TypeRef('Vec[T]')` 的 head 含方括号、args 为空，`substitute` 无法替换；
+`resolve(head)` 消费泛型 TypeRef 会丢失实参：
 
 | 方向 | 唯一权威入口 | 禁止 |
 |------|-------------|------|
@@ -168,17 +168,17 @@ GEN-5/GEN-6 缺陷：扁平 `TypeRef('Vec[T]')` head 含方括号、args 空，`
 | **字符串 → 结构** | `TypeRef.parse(name)`（递归嵌套解析） | 手写字符串切分/扁平 `of` |
 
 - 泛型类方法参数 descriptor 构造必须走 `from_spec`（`_param_type_ref`），保证特化
-  `substitute` 可替换（GEN-6B）。
+  `substitute` 可替换。
 - 表达式位置泛型下标（`Box[list[int]]` 作表达式）须复用 `_resolve_type` 递归解析，
-  与注解路径同构，保证编译期特化注册（GEN-5）。
-- 运算符结果类型推断须经 `resolve_typeref(return_type)` 保留实参（GEN-6A）。
+  与注解路径同构，保证编译期特化注册。
+- 运算符结果类型推断须经 `resolve_typeref(return_type)` 保留实参。
 - 例外：`scheduler._spec_to_typeref` 的 FUNCTION/BOUND_METHOD/CALLABLE 分支产出
   `fn[...]` 签名形态，是模块导入导出专用（head 语义与 `fn_callable` 不同），非重复实现。
-- **创建点结构化（S1 根治）**：`GenericTypeDeclaration.build` 接受结构化实参
-  `List[TypeRef]`（非字符串），`SpecFactory.create_*` 类型承载字段经 `TypeRef.parse`
-  结构化——嵌套泛型实参（`list[list[int]]`）不再扁平化，`substitute` 可穿透。
-- **声明驱动序列化/还原（S4）**：`GenericTypeDeclaration.payload_fields` 声明泛型
-  承载字段，serializer/rehydrator 据此统一收集/还原（消除 per-kind 手工分支）。
+- **创建点结构化**：`GenericTypeDeclaration.build` 接受结构化实参 `List[TypeRef]`
+  （非字符串），`SpecFactory.create_*` 类型承载字段经 `TypeRef.parse` 结构化——
+  嵌套泛型实参（`list[list[int]]`）不再扁平化，`substitute` 可穿透。
+- **声明驱动序列化/还原**：`GenericTypeDeclaration.payload_fields` 声明泛型承载字段，
+  serializer/rehydrator 据此统一收集/还原（消除 per-kind 手工分支）。
 
 ### 3.5 SpecFactory
 
@@ -219,7 +219,7 @@ GEN-5/GEN-6 缺陷：扁平 `TypeRef('Vec[T]')` head 含方括号、args 空，`
 **与其他机制的交互**：
 - 语义层 `visit_IbCall` 以描述符为权威做结构/类型校验（见 §5.1 编译期调用）。
 - 语义层与运行期共用同一绑定算法核心（`core/kernel/arg_binding.py`），见 `docs/architecture/04_vm_interpreter.md` §2.6。
-- 原生模块函数的描述符由 discovery 从 vtable `params` 声明构建（格式见 `docs/subsystems/04_plugin_system.md` §4.2）。
+- 原生模块函数的描述符由 discovery 从 vtable `params` 声明构建（格式见 `docs/subsystems/04_plugin_system.md` §4）。
 
 ---
 
@@ -266,7 +266,7 @@ class TypeAxiom(Protocol):
 
 ### 4.2 BaseAxiom
 
-`core/kernel/axioms/primitives.py:BaseAxiom` 提供安全 no-op 默认（所有 `has_*_cap = False`、能力方法返回 `None` / `False` / 空集）。具体公理只重写需要的部分；不再多重继承能力 mixin。
+`core/kernel/axioms/primitives/base.py:BaseAxiom` 提供安全 no-op 默认（所有 `has_*_cap = False`、能力方法返回 `None` / `False` / 空集）。具体公理只重写需要的部分；不再多重继承能力 mixin。
 
 ### 4.3 字符串边界
 
@@ -337,7 +337,7 @@ VMExecutor handler
 
 ## §6 运行时值层（IbValue 单一承载）
 
-> 所有运行时值统一通过 `core/runtime/objects/kernel.py:IbValue` 承载；`IbInteger` / `IbFloat` / `IbString` / `IbBool` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbFnCallable` / `IbBehavior` 是该模型的子体系。
+> 所有运行时值统一通过 `core/runtime/objects/kernel/base.py:IbValue` 承载；`IbInteger` / `IbFloat` / `IbString` / `IbBool` / `IbList` / `IbTuple` / `IbDict` / `IbNone` / `IbLLMUncertain` / `IbLLMCallResult` / `IbFnCallable` / `IbBehavior` 是该模型的子体系。
 
 ### 6.1 IbValue 四元结构
 
@@ -365,8 +365,8 @@ class IbValue(IbObject):
 
 - `isinstance(obj, IbValue) and obj.ib_class.name == "list"` 是分派 list 类型的惯用法（`IbClass` 自指 `ib_class=self` 会让裸 `ib_class.name` 误中，必须先做 `IbValue` 判定）。**内置泛型特化值（`list[int]`）沿 spec 基类名分派**：特化类 `ib_class.name` 含方括号（`"list[int]"`），值层 kind 判定统一走 `spec.get_base_name()`（如 `runtime_serializer._value_base_name` / `deep_clone._value_base_name` / `base.is_sequence_value`），基类名 `"list"` 命中。
 - 容器分派收敛为单一判定入口：`core/runtime/objects/kernel/base.py:is_sequence_value(value)`（原生序列 list/tuple 判断，沿 spec 基名），VM 与 intrinsics 统一经它。
-- 工厂入口：`core/runtime/factory.py:RuntimeObjectFactory` 提供 `create_int / create_str / create_list / create_tuple / create_dict / create_fn_callable / create_behavior` 等方法，**不**在调用方导入具体类。内置泛型特化值（`list[int]`）由特化类水化（ArtifactLoader 加载期预创建 + VM 字面量 handler 绑定）承载，见 `tasks_docs/_code_generic_type_identity.md`。
-- **句柄类值身份物化（S3 根治）**：`thread/chan/slot/generator/thread_result` 值经声明类型上下文 rebind 特化类（`_check_type` 在赋值绑定点生效，仅限值承载句柄 kind）——`type(thread[int]值)=thread[int]`，运行时区分 `thread[int]`/`thread[str]`（any 逃生路径 `RUN_TYPE_MISMATCH`）。`get_base_name()` 单义（特化 spec 读 `base_name` 字段返回族名），值层 kind 分派统一沿族名。
+- 工厂入口：`core/runtime/factory.py:RuntimeObjectFactory` 提供 `create_int / create_str / create_list / create_tuple / create_dict / create_fn_callable / create_behavior` 等方法，**不**在调用方导入具体类。内置泛型特化值（`list[int]`）由特化类水化（ArtifactLoader 加载期预创建 + VM 字面量 handler 绑定）承载。
+- **句柄类值身份物化**：`thread/chan/slot/generator/thread_result` 值经声明类型上下文 rebind 特化类（`_check_type` 在赋值绑定点生效，仅限值承载句柄 kind）——`type(thread[int]值)=thread[int]`，运行时区分 `thread[int]`/`thread[str]`（any 逃生路径 `RUN_TYPE_MISMATCH`）。`get_base_name()` 单义（特化 spec 读 `base_name` 字段返回族名），值层 kind 分派统一沿族名。
 
 ### 6.4 类角色分工（设计决策）
 
@@ -431,8 +431,8 @@ class IbValue(IbObject):
 - 赋值规则：
   - 非 `Optional` 类型**禁止**接收 `None`；
   - `Optional[T]` 接受 `T` / `None` / `Optional[T]`；
-- 解封 API：`OptionalAxiom` 暴露 `unwrap` / `or_else` / `is_some` / `is_none` 方法。
-- `None` 的运行时单例由 `KernelRegistry._builtin_instances["IbNone"]` 持有；运行时 `isinstance` 检查仍保留作哨兵比较（不属于类型分派）。
+- 解封 API：`OptionalAxiom` 暴露 `unwrap` / `or_else` / `is_some` / `to_bool` / `cast_to` 方法。
+- `None` 的运行时单例由 `KernelRegistry._none_instance`（`core/kernel/registry.py`）持有；运行时 `isinstance` 检查仍保留作哨兵比较（不属于类型分派）。
 
 ---
 

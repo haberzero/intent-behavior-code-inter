@@ -214,7 +214,7 @@ str greeting = @~ 打个招呼 ~
 
 - 模型名称**区分大小写**（`@GPT4o~` 与 `@gpt4o~` 是不同的模型）
 - 模型名称支持字母+数字（如 `@GPT4o~`、`@WHISPER~`）
-- MOCK/TESTONLY 模式下，未注册的模型名称不会报错（MOCK 拦截在路由之前）
+- MOCK 模式下，未注册的模型名称不会报错（MOCK 拦截在路由之前）
 
 ### 7.6 多模态 payload 协议（`__payload_prompt__`）
 

@@ -1,6 +1,6 @@
 ## 13. MOCK 测试机制
 
-> 本章描述 IBCI 的 MOCK 测试机制，用于在没有真实 LLM API 的环境中测试 LLM 相关功能。面向需要编写测试的 IBCI 开发者。覆盖 TESTONLY 模式、MOCK 指令语法与命名模型 MOCK。
+> 本章描述 IBCI 的 MOCK 测试机制，用于在没有真实 LLM API 的环境中测试 LLM 相关功能。面向需要编写测试的 IBCI 开发者。覆盖 MOCK 模式、MOCK 指令语法与命名模型 MOCK。
 
 ---
 
@@ -11,7 +11,7 @@ import ai
 ai.set_mock_mode()
 ```
 
-在 TESTONLY 模式下，所有 LLM 调用不会连接真实 API，而是解析行为表达式或 LLM 函数中的 MOCK 指令返回预设值。
+在 MOCK 模式下，所有 LLM 调用不会连接真实 API，而是解析行为表达式或 LLM 函数中的 MOCK 指令返回预设值。
 
 ---
 
@@ -23,12 +23,16 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 
 | 指令 | 说明 | 示例 |
 |------|------|------|
-| `MOCK:STR:value` | 返回指定字符串 | `MOCK:STR:hello world` |
+| `MOCK:STR:value` | 返回指定字符串；含空格需用引号包裹 | `MOCK:STR:"hello world"` → `hello world`；`MOCK:STR:hello` → `hello` |
 | `MOCK:INT:value` | 返回指定整数字符串 | `MOCK:INT:42` |
 | `MOCK:FLOAT:value` | 返回指定浮点字符串 | `MOCK:FLOAT:3.14` |
-| `MOCK:BOOL:value` | 返回 `1`（True）或 `0`（False） | `MOCK:BOOL:True` |
+| `MOCK:BOOL:value` | 返回 `1`（True）或 `0`（False）；仅 `TRUE`（大写）判真 | `MOCK:BOOL:TRUE` → `1`；`MOCK:BOOL:1` → `0` |
 | `MOCK:LIST:value` | 返回 JSON 数组字符串 | `MOCK:LIST:[1,2,3]` |
 | `MOCK:DICT:value` | 返回 JSON 对象字符串 | `MOCK:DICT:{"a":1}` |
+
+> **值解析约定**：STR/INT/FLOAT/BOOL/LIST/DICT 的未加引号值仅取首个空白分隔 token
+> （`hello world` 返回 `hello`）；STR 需完整含空格值时用引号包裹（`"hello world"`）。
+> BOOL 判真仅接受大写 `TRUE`（`true`/`True`/`1` 均判 False）。
 
 #### 13.2.2 布尔快捷指令
 
@@ -64,7 +68,7 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 
 #### 13.2.5 控制指令（HTTP 服务模式）
 
-以下指令仅在 MOCK HTTP 服务（§6）下生效，内联模式忽略：
+以下指令仅在 MOCK HTTP 服务（§13.6）下生效，内联模式忽略：
 
 | 指令 | 说明 |
 |------|------|
@@ -83,7 +87,7 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块�
 import ai
 ai.set_mock_mode()
 
-str reply = @~ MOCK:STR:hello world ~
+str reply = @~ MOCK:STR:"hello world" ~
 print(reply)    # hello world
 
 int n = @~ MOCK:INT:42 ~
@@ -191,7 +195,7 @@ MOCK 拦截发生在模型路由之前，因此 MOCK 模式下未注册的模型
 
 ### 13.6 MOCK HTTP 服务
 
-内联 MOCK（`TESTONLY` 模式）在进程内即时返回，零延迟、零基础设施失败，无法验证 LLM 调用的传输层行为（超时、并发时序、HTTP 错误）。
+内联 MOCK（`set_mock_mode` 模式）在进程内即时返回，零延迟、零基础设施失败，无法验证 LLM 调用的传输层行为（超时、并发时序、HTTP 错误）。
 
 MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/completions` 端点（含 SSE 流式），由测试代码启动于 `127.0.0.1` 随机端口。将 `ai.set_config` 指向服务地址后，IBCI 走**真实的 `OpenAI` 客户端路径**发起 HTTP 调用。这作为机制测试的完整传输彩排。
 
@@ -217,7 +221,7 @@ str reply = @~ MOCK:STR:hello ~    # 经真实 HTTP 路径返回 hello
 
 #### 13.6.2 与内联 MOCK 的关系
 
-- **值场景**（结果正确性）：内联 `TESTONLY` 与 HTTP 服务行为一致，指令语言为同一实现。
+- **值场景**（结果正确性）：内联 MOCK 与 HTTP 服务行为一致，指令语言为同一实现。
 - **机制场景**（时序/失败/并发）：必须使用 HTTP 服务。
 - 服务每个实例持有独立场景状态，测试间以独立实例隔离。
 

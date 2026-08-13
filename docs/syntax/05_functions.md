@@ -213,7 +213,7 @@ str ret = f.__return_type__() # "bool"
 | `type(f)` | fn_callable/behavior 返回签名形态；其余值返回规范类型名 |
 | `f.__return_type__()` | 返回类型规范名（`-> auto` 已按 body/LLM 语义锁定为具体类型） |
 
-签名形态遵循类型名约定（无空格）：`fn_callable[()->int]`、`behavior[(auto)->str]`。返回类型非具体（`-> any`）时退化为裸 `fn_callable`/`behavior`；用户函数（`callable`）的 `type()` 返回裸 `callable`。
+签名形态遵循类型名约定（无空格）：`fn_callable[()->int]`、`behavior[()->str]`。返回类型非具体（`-> any`）时退化为裸 `fn_callable`/`behavior`；用户函数（`callable`）的 `type()` 返回裸 `callable`。
 
 ### 5.8 惰性生成器（`yield`）
 

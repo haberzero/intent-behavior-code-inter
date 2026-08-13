@@ -83,6 +83,8 @@ MOCK 模式（离线测试/开发，结合 MOCK 指令使用）：
 ai.set_mock_mode()        # 显式进入 MOCK 模式（替代 url/key 字符串嗅探）
 ```
 
+`set_mock_mode()` 是单向入口，**无对应的 off API**。退出 MOCK 模式需调用 `ai.set_config(url, key, model)` 或 `ai.apply_config({...})`（配置 `defaults.mock` 为假），二者会清除 MOCK 模式。
+
 其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`mask(pattern)` 等。
 
 > **`probe_model()` 与推理模型判定**：若在 `api_config.json` 的 `default_model` 声明了 `reasoning: false`（非思考模型）或 `reasoning: true`（强制推理模型），引擎**跳过实际探测**，直接按声明分类（两侧都落能力缓存）。`probe_model()` 是手动探测工具，用启发式判定（专用 reasoning 字段 / "Thinking Process" 特征串 / 输出冗长程度），存在**保守误判**可能——模型无视"只回一词"指令输出冗长内容时会被保守判为强制推理模型。本地非思考模型建议直接声明 `reasoning: false`，而非依赖自动探测。
@@ -173,21 +175,12 @@ list[int] bytes = fh.read_bytes()
 
 # 直接按路径读取
 str content2 = file.read("data.txt")
-list[int] bytes2 = file.read_bytes("data.txt")
 
 # 统一写入：file.write(target, data, overwrite_flag)
-#   overwrite_flag="new"（默认）：target 为路径，创建/覆盖文件，返回 file_handle
-#   overwrite_flag="overwrite"：target 为路径或 file_handle，就地覆盖，返回 file_handle
-# data 为 str（文本）或 list[int]（字节），自动判别
+#   overwrite_flag="new"：target 为路径，创建/覆盖，返回 file_handle
+#   overwrite_flag="overwrite"：target 为路径或 file_handle，就地覆盖
 file_handle copy = file.write("data_v2.txt", "new content")
-file_handle copy_b = file.write("data_v2.bin", [65, 66])
-
-# 显式副作用写入：覆盖原文件，所有共享该路径引用的变量看到变化
 file.write(fh, "mutated content", overwrite_flag="overwrite")
-file.write(fh, [65, 66], overwrite_flag="overwrite")
-
-# 创建新文件：无需 source handle，返回指向新文件的只读 handle
-file_handle fresh = file.write("data_v3.txt", "brand new")
 
 # 存在检查与删除
 bool exists = file.exists("data.txt")

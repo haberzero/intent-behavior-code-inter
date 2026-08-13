@@ -67,11 +67,11 @@ bool b3 = "key" in {"key": 1}     # True（字典键检测）
 `is` 和 `is not` 检测两个表达式是否指向同一个运行时对象（身份比较，非值比较）。
 
 ```ibci
-bool b1 = x is None          # x 是否为 None
-bool b2 = x is not None      # x 是否不为 None
+bool b1 = x is None          # x 是否为真正的 None 值
+bool b2 = x is not None      # x 是否不为真正的 None 值
 ```
 
-与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个对象实例。对于 `None` 字面量，`is` 使用类型检测而非实例身份。
+与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个对象实例。对于 `None` 字面量，`is` 使用类型检测而非实例身份——仅对真正的 `None` 值（`any` / 无类型变量）为 `True`。`Optional[T]` 的空值由 `Optional` 包装对象持有，`a is None` 返回 `False`；判空请用 `a == None`（返回 `True`）。
 ---
 
 ## 深入指引

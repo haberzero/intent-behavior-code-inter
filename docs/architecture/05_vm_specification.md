@@ -128,8 +128,6 @@ scheduler 主循环（TaskScheduler.run）:
 
 **排除"循环内自动透明并发"**：循环体 / 函数体内行为强制 `dispatch_eligible=False`（§3.1），不做自动并发展开。理由：① `_pending_futures` 按静态 `node_uid` 键控，同一节点多次执行会覆写键导致读点解析错乱与旧 Future 泄漏，改"执行实例"键是运行时模型改动；② 自动展开要求编译器证明循环体为"纯批次"（无控制流 / 跨迭代依赖 / 副作用顺序），证明错判即静默改变程序行为；③ 与"显式优于隐式"公理冲突。需要批量并发时用 `ai.run_batch` 显式表达。
 
-**未来方向**：列表推导式 `[ @~ ... ~ for item in items ]`（需元素类型推断设计）；循环内软件流水线 / 严格纯度分析下的自动展开（远期探索）。
-
 ---
 
 ## §4 多 Interpreter 并发（Layer 2 Execution Isolation）
@@ -174,7 +172,7 @@ scheduler 主循环（TaskScheduler.run）:
 
 **公理 IC-3（llmexcept snapshot）**：`llmexcept` 框架在执行前对 context 进行完整快照（scope 变量 + intent + loop context），retry 时恢复该快照，使重试语义完整隔离。certainty 信号经 `LLMExceptFrame.target_result`（`IbLLMCallResult` 容器）传递，不参与 save/restore。
 
-**公理 IC-4（llmexcept body 只读约束）**：llmexcept handler body 对参与 LLM 调用的变量（`$` 插值、意图引用、赋值目标）实施只读保护。编译期通过 `SEM_LLMEXCEPT_BODY_WRITE`（赋值/属性/下标变异）和 `SEM_LLMEXCEPT_MUTATING_CALL`（mutating 方法调用）拦截；运行期通过 `verify_snapshot_integrity()` 比对黄金快照作为安全网，违规时强制恢复并发出 `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION`。非 LLM 参与变量的修改不受限制。
+**公理 IC-4（llmexcept body 只读约束）**：llmexcept handler body 对参与 LLM 调用的变量（`$` 插值、意图引用、赋值目标）实施只读保护。编译期通过 `SEM_LLMEXCEPT_BODY_WRITE`（赋值/属性/下标变异）和 `SEM_LLMEXCEPT_MUTATING_CALL`（mutating 方法调用）拦截；运行期通过 `verify_snapshot_integrity()` 比对黄金快照作为安全网，违规时静默恢复快照。非 LLM 参与变量的修改不受限制。
 
 **公理 IC-5（llmexcept body 文件写/删禁令）**：磁盘型快照是浅路径引用，retry body 内任何文件写/删都会污染黄金快照。retry body 内禁止全部 `file` 模块写/删函数（`file.write` + `remove`）。编译期以 `SEM_LLMEXCEPT_FILE_WRITE` spec 驱动拦截直接与间接（经用户函数递归传导）调用，运行时以 `llmexcept_body_depth` 守卫兜底动态分派等漏检情形。只读操作（`open`/`read`/`read_bytes`/`exists`）放行。外部进程触碰 backing 文件为固有边界，不在拦截范围（详见 `docs/KNOWN_LIMITS.md`）。
 

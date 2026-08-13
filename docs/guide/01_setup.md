@@ -11,12 +11,11 @@
 
 ## api_config.json 的结构
 
-IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project_config()`，引擎即加载项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `file.read/json.parse`。引擎启动**不再自动加载**（F9：隐式副作用 → 显式调用点）。
+IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project_config()`，引擎即加载项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `file.read/json.parse`。引擎启动不自动加载配置，须显式调用 `ai.load_project_config()`。
 
-**project_root 的确定**：`main.py run` 时，未显式 `--root` 则经
-`ProjectDetector` 从入口文件所在目录**向上**查找项目标志（`ibci_modules/`、
-`plugins/`、`.ibci/`、`ibci.json` 等），命中即以其为 project_root；未命中则用
-入口文件所在目录。故：
+**project_root 的确定**：`main.py run` 时，未显式 `--root` 则引擎自动从入口文件
+所在目录**向上**查找项目标志（`ibci_modules/`、`plugins/`、`.ibci/`、`ibci.json`
+等），命中即以其为 project_root；未命中则用入口文件所在目录。故：
 
 - 独立项目目录（推荐，README 的 `test_target_proj` 方式）：目录内放
   `api_config.json`，脚本内 `ai.load_project_config()` 即加载。
@@ -24,7 +23,7 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
   探测为仓库根，`api_config.json` 须放仓库根，或用 `--root <example_dir>` 显式
   指定为示例目录。
 
-最简配置--仅声明默认模型（兼容旧式）：
+最简配置--仅声明默认模型：
 
 ```json
 {
@@ -43,22 +42,16 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
     "defaults": {
         "timeout": 30.0,
         "retry": 3,
-        "auto_intent_injection": true,
         "mock": false
     },
     "providers": {
         "dashscope": {
             "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "api_key": "{env:DASHSCOPE_API_KEY}"
-        },
-        "ollama": {
-            "base_url": "http://localhost:11434/v1",
-            "api_key": "ollama"
         }
     },
     "models": {
-        "default": { "provider": "dashscope", "model": "qwen3-30b-a3b", "reasoning": false },
-        "local":   { "provider": "ollama", "model": "qwen3-8b", "reasoning": false, "timeout": 60.0 }
+        "default": { "provider": "dashscope", "model": "qwen3-30b-a3b", "reasoning": false }
     },
     "default_model": "default"
 }
@@ -67,10 +60,10 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 字段说明：
 - `providers`：连接层，声明 `base_url` + `api_key`（支持 `{env:VAR}` 环境变量引用）。
 - `models`：命名模型，引用 `provider` + 模型名 + 每模型参数（`timeout`/`reasoning`）。
-- `defaults`：全局默认（`timeout`/`retry`/`auto_intent_injection`/`mock`）。
+- `defaults`：全局默认（`timeout`/`retry`/`mock`）。
 - `default_model`：默认模型引用（字符串指向 `models` 的键，或对象形态直接声明）。
 
-`api_key` 支持 `{env:VAR}` 引用环境变量，避免硬编码密钥。`reasoning:false` 声明非思考模型（跳过 `probe_model`，直接按标准指令模型处理）。`mock:true` 显式进入 MOCK 模式（替代字符串嗅探）。
+`api_key` 支持 `{env:VAR}` 引用环境变量，避免硬编码密钥。`reasoning:false` 声明非思考模型（跳过 `probe_model`，直接按标准指令模型处理）。`mock:true` 显式进入 MOCK 模式。
 
 ## 获取 API 密钥
 

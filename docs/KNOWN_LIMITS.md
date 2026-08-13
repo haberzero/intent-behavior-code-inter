@@ -10,7 +10,7 @@
 
 **限制说明**
 
-可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）基础调用可用（见 `docs/subsystems/03_callable_fn.md`）。2026-08-12 起，`obj()` 调用经**帧内 CPS 驱动**（`_UserCallDrive`，与类构造 `CPSDrivable` 同构）——深递归 `__call__` Python 深度恒定（EXEC-1），`__call__` 内含 Waitable（LLM 行为 / `await chan.recv()`）时由调度器协作挂起。`fn f = instance; f()` 与生成器 `__call__`（`for x in gc(n)`）同样支持。
+可调用类实例（即实现了 `__call__` 方法的用户自定义类的实例）基础调用可用（见 `docs/subsystems/03_callable_fn.md`）。`obj()` 调用经**帧内 CPS 驱动**（`_UserCallDrive`，与类构造 `CPSDrivable` 同构）——深递归 `__call__` Python 深度恒定，`__call__` 内含 Waitable（LLM 行为 / `await chan.recv()`）时由调度器协作挂起。`fn f = instance; f()` 与生成器 `__call__`（`for x in gc(n)`）同样支持。
 
 ```ibci
 class MyCallable:
@@ -87,7 +87,7 @@ print((str)len(Color))
   不是 `Color` 类型的实例。因此**枚举自定义方法不可在成员值上调用**（`Color c = Color.RED; c.my_method()`
   分派到底层类型的方法表）。若需实例化枚举（成员携带 `name`/`value` 与方法），属独立设计方向，当前不支持。
 - **LLM 集成**：`Enum` 类型具备 `has_output_hint_cap` / `has_from_prompt_cap` 能力，LLM 输出枚举**成员名**
-  后自动映射回**成员值**（非 str 成员亦正确，2026-08-12 修复；此前 str 因值==名碰巧工作）。
+  后自动映射回**成员值**（非 str 成员亦正确）。
   常量字面量成员（含负数字面量 `int NEG = -1`）可正确映射；**非字面量表达式成员**
   （如 `int CALM = some_var`）在 LLM 解析路径回退"名==值"（LLM 输出成员名时解析为成员名字符串），
   而成员访问返回其求值后的 `static_val`——两者可能不一致，属编译期元数据无法求值表达式的边界。
@@ -192,9 +192,9 @@ fn g = f            # g 也引用同一个函数
 
 ---
 
-## 六、子类 auto-init 已合并继承链无默认值字段
+## 六、子类 auto-init 合并继承链无默认值字段
 
-当子类没有显式 `__init__`，运行时自动生成一个 `__init__`，**参数 = 继承链上全部无默认值字段（父类优先、子类同名覆盖）**。此前仅接受当前类自身声明的字段、父类字段静默丢失的缺口已根治（2026-08-13）。
+当子类没有显式 `__init__`，运行时自动生成一个 `__init__`，**参数 = 继承链上全部无默认值字段（父类优先、子类同名覆盖）**。
 
 ```ibci
 class Animal:
@@ -234,10 +234,10 @@ class Dog(Animal):
 > **any 逃生后的重处理机制**：`any` 值用于有类型检查的上下文（如赋给 `int y`）时，
 > **编译期放行，运行时强制类型校验**——值类型不匹配即抛 `RUN_TYPE_MISMATCH`。这与
 > TypeScript `any` / Dart `dynamic` 的渐进类型模型一致：`any` 是逃生阀，运行时复查是
-> 逃生阀的"明确重处理机制"，而非编译期禁止。**用户类目标同样强制**：动态 `any` 类对象
-> 赋给用户类变量报 `RUN_TYPE_MISMATCH`（2026-08-13 补全——此前对用户类目标静默跳过，
-> 导致 any 值流入后访问报困惑的 AttributeError）。需要时用强制类型转换（`(int)x`）取得目标
-> 类型使检查通过：
+> 逃生阀的"明确重处理机制"，而非编译期禁止。**仅当值本身携带 any 类装箱标记时**才触发
+> 运行时拦截（`any` 类对象流入用户类变量）；普通 `any` 值（真实类型实例经 `any` 变量
+> 传递）不校验，静默流入目标类型。需要时用强制类型转换（`(int)x`）取得目标类型使检查
+> 通过：
 > ```ibci
 > any x = 42
 > int y = x          # 编译通过；运行时值类型匹配（42 是 int）→ 成功
@@ -261,21 +261,23 @@ class Dog(Animal):
   any val = mixed[0]
   int n = (int)val      # 必须先取到 any，再强制转换
   ```
-- **不允许** 通过 `auto` 直接承载容器元素取值赋值（编译期推断会失败）：
+- **`auto` 承载容器元素取值**：`auto x = mixed[0]` 编译通过，`x` 锁定为该元素的
+  **具体类型**（`list[any]` 元素读取类型为 `any`，此时锁定为 `any`——`auto` 语义
+  从首次赋值推断并锁定）。若需后续重新赋值不同类型，用 `any` 中转：
   ```ibci
-  auto x = mixed[0]    # ❌ 不推荐
-  any x = mixed[0]     # ✅ 建议始终用 any 中转
-  int n = (int)x        # ✅ 再强制转换到目标类型
+  auto x = mixed[0]    # 锁定为该元素的实际类型
+  any x2 = mixed[0]    # 保持动态，可重新赋值
+  int n = (int)x2      # 再强制转换到目标类型
   ```
 
 ---
 
-## 九、已废弃语法（产生硬编译错误）
+## 九、废弃语法（产生硬编译错误）
 
 ### `(Type) @~...~` 强制类型转换语法（PAR_DEPRECATED_CAST_SYNTAX）
 
 ```ibci
-# ❌ 已废弃，产生 PAR_DEPRECATED_CAST_SYNTAX 编译错误
+# ❌ 废弃，产生 PAR_DEPRECATED_CAST_SYNTAX 编译错误
 int sum = (int) @~ 请计算 $a 和 $b 之和 ~
 
 # ✅ 正确写法：LHS 类型自动成为 LLM 输出格式约束
@@ -318,17 +320,24 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
-### 10.2 跨模块同名类身份（统一类身份模型，底层→顶层根治）
+### 10.2 跨模块同名类身份（统一类身份模型）
 
-多模块编译时两个模块定义**同名类**（`geo.Box` / `graph.Box`）：**类身份统一模型**（S2，2026-08-14）——*每一个用户类（含入口模块类）的身份 = `(module_path, name)`*，module_path = 其定义模块名；入口模块类不再裸名（根命名空间特例删除）。编译期 `geo.Box`/`graph.Box`/`main.Box` 独立 spec；运行期 `KernelRegistry._classes`（**单类表**，S3 Bootstrapper 影子表删除）注册键 = `spec.qualified_name`，`get_class(name, module)` module 感知查找，方法表不串扰（`geo.Box[int](5).get()` = 105 / `graph.Box[str]("hi").get()` = "hi!"）。`get_class` 裸名回落仅命中内置/内核类（module_path=None），不再命中任何用户类（确定性合法回退）。内置类键 = 裸名，行为不变。run_string 入口模块名锚定为 `__string_exec__`（稳定可复现）。
+多模块编译时两个模块定义**同名类**（`geo.Box` / `graph.Box`）：*每一个用户类
+（含入口模块类）的身份 = `(module_path, name)`*，module_path = 其定义模块名。
+编译期 `geo.Box`/`graph.Box`/`main.Box` 独立 spec；运行期 `KernelRegistry._classes`
+（单类表，Bootstrapper 委托）注册键 = `spec.qualified_name`，
+`get_class(name, module)` module 感知查找，方法表不串扰（`geo.Box[int](5).get()` =
+105 / `graph.Box[str]("hi").get()` = "hi!"）。`get_class` 裸名回落仅命中内置/内核类
+（module_path=None），不再命中任何用户类（确定性合法回退）。内置类键 = 裸名，
+行为不变。run_string 入口模块名锚定为 `__string_exec__`（稳定可复现）。
 
 **已知边界**：
 - LLM 输出解析到跨模块用户类（`__from_prompt__`/`__outputhint_prompt__`）：**parse 链 module 感知**（type_name 为 qualified 名，`_get_expected_type_hint` 优先 node_to_type spec；`returns` IbName 裸名按当前模块上下文解析）。**outputhint 裸名返回路径**（`returns` IbName 无 module 信息）仍为 graceful 退化——vtable 查找查不到该类 → 回落默认格式约束（不误配到异模块同名类）。
 - 跨引擎 round-trip 的**未编译目标引擎**用户类重建受注册表封印限制（`create_subclass` sealed 后禁用）——用户类特化跨引擎重建须目标引擎已编译该类（内置泛型特化不受限，加载期预创建）。
 
-### 10.3 容器字面量类型推断（S6）+ *expr 元素级校验
+### 10.3 容器字面量类型推断 + *expr 元素级校验
 
-容器字面量推断带实参：`[1,2]` → `list[int]`、`{"k":1}` → `dict[str,int]`、`(1,2)` → `tuple[int,int]`；元素类型不一致/含动态/空 → 裸容器。`auto x = [1,2]` 推断 `list[int]`；显式裸声明（`list bare = [1,2]`）值层保持裸 `list`。`-> auto` 函数返回容器也带实参（S6 覆盖）。
+容器字面量推断带实参：`[1,2]` → `list[int]`、`{"k":1}` → `dict[str,int]`、`(1,2)` → `tuple[int,int]`；元素类型不一致/含动态/空 → 裸容器。`auto x = [1,2]` 推断 `list[int]`；显式裸声明（`list bare = [1,2]`）值层保持裸 `list`。`-> auto` 函数返回容器也带实参。
 
 `*expr` 展开实参（遗留边界修复）：特化容器（`list[int]`）展开时元素类型与目标形参做可赋值校验（`list[str] *-> f(int)` 编译期拦截）；裸容器/动态/数量不足由运行期裁决（静态数量未知是本质限制）。**仅保证 `*expr` 位于位置实参末尾时的目标形参偏移正确**（`f('x', *l)` 首元素对应第二形参）；中置/前导星（`f(10, *l, 30)`）的计数偏移为既有局限性。
 
@@ -338,7 +347,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 **限制说明**
 
-`switch`/`case` 基本功能可用（2026-08-12 实测验证：值比较 / 字符串匹配 / Enum 匹配 / `default` 兜底 / 匹配后自动跳出均正常）。
+`switch`/`case` 基本功能可用（值比较 / 字符串匹配 / Enum 匹配 / `default` 兜底 / 匹配后自动跳出均正常）。
 
 **使用约束**
 
@@ -379,16 +388,21 @@ str r = @~ ... ~
 
 ---
 
-## 十三、`@` 意图注释的放置约束
+## 十三、`@` 意图注释的行为
 
-以下规则由编译期 `SEM_INTENT_PLACEMENT` 与 VM 语句调度共同保证：
+`@`（smear）与 `@!`（override）是**语句级 one-shot**，行为由 VM 语句调度保证：
 
-1. `@`（smear）与 `@!`（override）必须紧跟**下一条可执行语句**（可以是普通函数调用、赋值、控制流语句等），不能作为块末尾孤立存在。
-2. `@` / `@!` 是"语句级 one-shot"：绑定到紧随其后的**一条语句执行窗口**。该语句执行期间若触发 LLM 调用会消费它；若该语句路径没有任何 LLM 调用，窗口结束后也会被清理，不会泄漏到后续语句。
-3. 连续两个 `@` / `@!`（one-shot）不允许：编译期报 `SEM_INTENT_PLACEMENT`。`@+` / `@-` 作为栈操作可独立存在并与 one-shot 组合。
-4. `@-` 是合法语法：支持无参弹栈、按内容移除、按标签移除（`@- #tag`）。
+1. `@` / `@!` 绑定到紧随其后的**一条语句执行窗口**。该语句执行期间若触发 LLM 调用会
+   消费它；若该语句路径没有任何 LLM 调用，窗口结束后也会被清理，不会泄漏到后续语句。
+2. 连续两个 `@` / `@!`（one-shot）：**后者覆盖前者**，编译期不拦截。
+3. 块末尾悬空的 one-shot（下一条语句不存在）：**静默丢弃**，编译期不拦截。
+4. `@+` / `@-` 作为栈操作可独立存在并与 one-shot 组合。`@-` 支持无参弹栈、按内容移除、
+   按标签移除（`@- #tag`）。
+5. `SEM_INTENT_PLACEMENT` 仅对 `nonlocal`/`global` 关键字的误用位置发射，与 one-shot
+   放置无关。
 
-**根源**：意图注释设计为对"下一条语句执行窗口"的修饰；该规则让编译期能确定 one-shot 的归属，同时让运行时在无 LLM 路径上也保持无泄漏的一致语义。
+**根源**：意图注释设计为对"下一条语句执行窗口"的修饰；运行时在无 LLM 路径上保持无
+泄漏的一致语义，但不做编译期放置约束（悬空/连续由语言语义自然处理）。
 
 ---
 
@@ -396,8 +410,8 @@ str r = @~ ... ~
 
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
-1. **用户类泛型参数已支持（2026-08-12）**：`class Box[T]:` 全链路落地——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**已支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器合并继承链的无默认值字段（父类优先，2026-08-13 根治，见 §六）；④ 无约束裸类型参数（`T: Bound` 不支持）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
-2. **运算符重载覆盖有限**：用户类可定义 dunder 方法并被运算符分派调用。2026-08-12 实测（运算符 + 返回类型契约核对）：**比较类** `==`(`__eq__`)/`!=`(`__ne__`)/`<`(`__lt__`)/`>`(`__gt__`)/`<=`(`__le__`)/`>=`(`__ge__`)、**算术类** `+`(`__add__`)/`-`(`__sub__`)/`*`(`__mul__`)/`%`(`__mod__`)、**一元类** `-`(`__neg__`)/`~`(`__invert__`)/`not`(`__not__`)、**成员** `in`(`__contains__`) 均可覆写。**`is` 恒为身份比较，不可覆写**（与 Python 一致）。该机制经 `IbClass.receive` 的 vtable 分派实现；与内置 axiom 的能力级分派（Integer/Float/Str 的 `+`/`==`/`<`）是两套路径，未覆写的运算符在用户类上退化为身份比较（`==`）或运行时错误。
+1. **用户类泛型参数**：`class Box[T]:` 全链路支持——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器合并继承链的无默认值字段（父类优先，见 §六）；④ 无约束裸类型参数（`T: Bound` 不支持）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
+2. **运算符重载覆盖有限**：用户类可定义 dunder 方法并被运算符分派调用：**比较类** `==`(`__eq__`)/`!=`(`__ne__`)/`<`(`__lt__`)/`>`(`__gt__`)/`<=`(`__le__`)/`>=`(`__ge__`)、**算术类** `+`(`__add__`)/`-`(`__sub__`)/`*`(`__mul__`)/`%`(`__mod__`)、**一元类** `-`(`__neg__`)/`~`(`__invert__`)/`not`(`__not__`)、**成员** `in`(`__contains__`) 均可覆写。**`is` 恒为身份比较，不可覆写**（与 Python 一致）。该机制经 `IbClass.receive` 的 vtable 分派实现；与内置 axiom 的能力级分派（Integer/Float/Str 的 `+`/`==`/`<`）是两套路径，未覆写的运算符在用户类上退化为身份比较（`==`）或运行时错误。
 
 ---
 
@@ -416,7 +430,7 @@ str r = @~ ... ~
 
 ## 十六、MOCK 模式下无法验证的 LLM 功能
 
-以下功能需要连接真实 LLM API 才能完整验证，MOCK/TESTONLY 模式无法覆盖：
+以下功能需要连接真实 LLM API 才能完整验证，MOCK 模式无法覆盖：
 
 1. `__to_prompt__` 协议对真实 LLM 提示词的实际影响
 2. `__from_prompt__` 解析真实 LLM 非结构化输出
@@ -574,7 +588,7 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 
 ## 二十三、递归深度受宿主栈限制（环境限制异常根因保留）
 
-**函数调用经 trampoline（`UserFunctionCall`）使 VM 调用链不消耗 Python 递归栈**（公理 EXEC-1），深递归（数百层）可正常执行。但**作用域链符号解析**（`get_symbol_by_uid` 沿父作用域链向上查找）仍以 Python 递归实现，受 `sys.setrecursionlimit`（默认 1000）限制——深递归到约 980 层时触发宿主 `RecursionError`。
+**函数调用经 trampoline（`UserFunctionCall`）使 VM 调用链不消耗 Python 递归栈**，深递归（数百层）可正常执行。但**作用域链符号解析**（`get_symbol_by_uid` 沿父作用域链向上查找）仍以 Python 递归实现，受 `sys.setrecursionlimit`（默认 1000）限制——深递归到约 980 层时触发宿主 `RecursionError`。
 
 **行为**：此类 `RecursionError`（连同 `MemoryError`/`SystemError`）被判定为**环境限制异常**，在 VM 语义错误包装站点（`Symbol not defined` / `VM: Call failed` / 模块导入 / try-except）**原样重抛**，保留真实根因与调用栈，**不被包装成语义错误**。同时发射 `KDIAG_RUNTIME_ENV_LIMIT` 诊断事件（`core/runtime/shared/env_limits.py` 判定；`core/runtime/observability/diagnostics.py` `handle_environment_limit`）。
 

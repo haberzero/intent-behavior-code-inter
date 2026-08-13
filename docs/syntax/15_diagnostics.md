@@ -26,7 +26,7 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 - **触发条件**：该诊断在何种输入下产生（精确判断）。
 - **修复指引**：如何消除该诊断。
-- 严重级别：编译期诊断（LEX/PAR/SEM/DEP/INT）为 `ERROR`（编译中止）；运行时（RUN）在执行时抛出；内核诊断（KDIAG）为运行时告警/事件（不阻断执行）。
+- 严重级别：编译期诊断（LEX/PAR/SEM/DEP/INT）为 `ERROR`（编译中止），除标注 `WARNING` 者外（`SEM_IMPORT_CONFLICT` / `SEM_INTENT_STATIC_CALL` / `SEM_PROTOCOL_SIGNATURE`）；运行时（RUN）在执行时抛出；内核诊断（KDIAG）为运行时告警/事件（不阻断执行）。
 
 ---
 
@@ -54,7 +54,7 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 ### `LEX_INVALID_NUMBER`
 数字字面量格式非法（如多余小数点、非法进制前缀）。
-- **触发条件**：数字字面量不符合语言格式规则。
+- **触发条件**：数字字面量不符合语言格式规则（**当前实现未发射该码**，码保留于目录以维持码集合契约）。
 - **严重级别**：ERROR。
 - **修复方式**：按语言数字字面量规则书写（如 `0x`/`0b` 前缀、单一小数点）。
 
@@ -102,13 +102,13 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 ### `PAR_INDENTATION_ERROR`
 缩进不符合语言规则（块结构依赖缩进表达层级）。
-- **触发条件**：缩进层级不一致或空格/制表符混用。
+- **触发条件**：缩进层级不一致或空格/制表符混用（**当前实现未发射该码**，码保留于目录以维持码集合契约）。
 - **严重级别**：ERROR。
 - **修复方式**：统一使用一致的缩进（空格/制表符不要混用），对齐所属块的缩进级别。
 
 ### `PAR_MULTIPLE_INTENTS`
 同一位置出现了多个意图声明。
-- **触发条件**：同一语句/块位置出现多个意图注释。
+- **触发条件**：同一语句/块位置出现多个意图注释（**当前实现未发射该码**，码保留于目录以维持码集合契约）。
 - **严重级别**：ERROR。
 - **修复方式**：每条语句/块只保留一个意图注释。
 
@@ -145,7 +145,7 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 ### `SEM_IMPORT_CONFLICT`
 导入的名称与已有符号冲突。
 - **触发条件**：导入名与当前作用域符号冲突。
-- **严重级别**：ERROR。
+- **严重级别**：WARNING。
 - **修复方式**：改用别名导入（`as`）或调整本地声明，消除命名冲突。
 
 ### `SEM_TYPE_MISMATCH`
@@ -265,7 +265,7 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 ### `SEM_INTENT_STATIC_CALL`
 意图上下文方法被静态（类级）调用。
 - **触发条件**：类级静态调用意图相关方法。
-- **严重级别**：ERROR。
+- **严重级别**：WARNING。
 - **修复方式**：通过实例访问意图相关方法，而非类级静态调用。
 
 ### `SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE`
@@ -420,19 +420,19 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 ### `RUN_DIVISION_BY_ZERO`
 除数为零。
-- **触发条件**：执行除法/取模时除数为零。
+- **触发条件**：执行除法/取模时除数为零（**当前实现未发射该码**，码保留于目录以维持码集合契约）。
 - **严重级别**：ERROR。
 - **修复方式**：在除法前校验除数非零，或调整算法避免除零。
 
 ### `RUN_ATTRIBUTE_ERROR`
 对象上没有该属性/方法。
-- **触发条件**：访问对象不存在的属性/方法。
+- **触发条件**：访问对象不存在的属性/方法（**当前实现未发射该码**，码保留于目录以维持码集合契约）。
 - **严重级别**：ERROR。
 - **修复方式**：确认对象类型，使用其真实存在的成员。
 
 ### `RUN_INDEX_ERROR`
 索引越界或键不存在。
-- **触发条件**：下标越界或字典键不存在。
+- **触发条件**：下标越界或字典键不存在（**当前实现未发射该码**，码保留于目录以维持码集合契约）。
 - **严重级别**：ERROR。
 - **修复方式**：访问前校验索引范围/键存在性。
 
@@ -456,13 +456,13 @@ LLM 调用失败（网络/密钥/提供者错误）。
 
 ### `RUN_PERMISSION_ERROR`
 运行时操作被权限策略拒绝。
-- **触发条件**：操作超出权限策略允许范围。
+- **触发条件**：操作超出权限策略允许范围（**当前实现未发射该码**，码保留于目录以维持码集合契约）。
 - **严重级别**：ERROR。
 - **修复方式**：调整权限策略或避开被禁止的操作。
 
 ### `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION`
 运行时违反了 `llmexcept` 快照隔离约束。
-- **触发条件**：快照隔离区域内执行被禁止的写入/副作用。
+- **触发条件**：快照隔离区域内执行被禁止的写入/副作用。**当前实现为静默恢复**：检测到篡改时直接恢复黄金快照并继续重试，未发射本警告。
 - **严重级别**：ERROR。
 - **修复方式**：避免在快照隔离区域内执行被禁止的写入/副作用。
 
@@ -540,7 +540,7 @@ LLM 调用失败（网络/密钥/提供者错误）。
 
 ## 配置（CFG_）
 
-`api_config.json` 加载与校验失败的诊断码（`ai.load_project_config` / `ai.load_config` / `ai.apply_config`）。校验失败 fail-fast raise `InterpreterError`，不静默回退 mock。配置加载为显式动作（F9）：`ai.load_project_config()` 对缺失文件为 no-op（合法态），存在但校验失败则 fail-fast。
+`api_config.json` 加载与校验失败的诊断码（`ai.load_project_config` / `ai.load_config` / `ai.apply_config`）。校验失败 fail-fast raise `InterpreterError`，不静默回退 mock。配置加载为显式动作：`ai.load_project_config()` 对缺失文件为 no-op（合法态），存在但校验失败则 fail-fast。
 
 ### `CFG_CONFIG_NOT_FOUND`
 配置加载指定的配置文件不存在。

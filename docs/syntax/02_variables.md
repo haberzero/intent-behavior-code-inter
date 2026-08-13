@@ -18,7 +18,7 @@ dict[str,int] scores = {"Alice": 95}
 ```ibci
 auto x = 42          # 推断为 int，x 的类型被锁定为 int
 auto s = "hello"     # 推断为 str
-auto nums = [1, 2]   # 推断为 list
+auto nums = [1, 2]   # 推断为 list[int]
 ```
 
 `auto` 会在首次赋值时推断并锁定类型，后续赋值必须兼容该类型。

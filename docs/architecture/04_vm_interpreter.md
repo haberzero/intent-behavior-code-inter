@@ -219,7 +219,7 @@ class IExecutionFrame(Protocol):
 
 ### 5.3 运行期：LLMScheduler / LLMFuture
 
-`core/runtime/interpreter/llm_executor/_scheduler.py`：
+`core/runtime/interpreter/llm_executor/_scheduler.py`（`LLMFuture` 定义于 `core/runtime/shared/llm_result.py`）：
 
 | 入口 | 行为 |
 |------|------|
@@ -306,7 +306,8 @@ vm_handle_IbIf / IbWhile / IbFor / IbSwitch / IbAssign / IbExprStmt
 
 ### 6.4 完整规范
 
-详见 `docs/architecture/05_vm_specification.md` §5（意图上下文模型公理）。
+llmexcept 的完整语义由公理定义：快照隔离（IC-3）、body 只读约束（IC-4）、
+body 文件写/删禁令（IC-5），见 `docs/architecture/05_vm_specification.md` §5。
 
 ### 6.5 Body 保护机制（编译期 + 运行期双层防御）
 
@@ -324,7 +325,7 @@ mutating 推断从公理层 `mutating=True` 标注出发，沿用户函数调用
 
 **运行期**（`LLMExceptFrame.verify_snapshot_integrity()`）：
 
-body 执行后、retry 前，比对被保护变量当前值与黄金快照。若检测到篡改（编译期未捕获的间接路径），发出 `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION` 警告并强制恢复快照后继续 retry。
+body 执行后、retry 前，比对被保护变量当前值与黄金快照。若检测到篡改（编译期未捕获的间接路径），静默恢复快照后继续 retry。
 
 ---
 
@@ -359,7 +360,8 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ### 7.3 完整设计
 
-详见 `docs/subsystems/01_intent_system.md`。
+意图系统的完整设计（语法形式、意图优先级与消解顺序、OOP 意图对象、运行时上下文结构）
+定义于 `docs/subsystems/01_intent_system.md`。
 
 ---
 
@@ -370,7 +372,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 | 公理 | 内容 |
 |------|------|
 | **ISO-1 独立 RuntimeContext** | 每个子 Interpreter 拥有独立 RuntimeContextImpl |
-| **ISO-2 只读共享 Registry** | 共享 KernelRegistry（只读），不共享运行时实例 |
+| **ISO-2 独立 Registry** | 持有自己的 KernelRegistry，不共享运行时实例 |
 | **ISO-3 线程安全** | 子 Interpreter 在独立 `threading.Thread`；ContextVar 隔离 |
 
 ### 8.2 spawn / collect 契约
