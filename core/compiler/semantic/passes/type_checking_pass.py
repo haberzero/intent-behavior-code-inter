@@ -82,6 +82,10 @@ class TypeCheckingVisitor(
         # auto 返回类型累积（用于 -> auto 函数）
         self.auto_return_types: Optional[List[IbSpec]] = None
 
+        # 当前函数返回类型栈（供 visit_IbReturn 绑定返回字面量特化类型）。
+        # 函数定义处 push、退出 pop（与 in_function_def 同生命周期）。
+        self.func_return_types: list = []
+
         # 状态标志
         self.in_function_def = False
         self.in_class_def = False

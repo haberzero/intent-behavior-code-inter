@@ -145,6 +145,11 @@ class DeclarationVisitorsMixin:
         if is_auto_return:
             self.auto_return_types = []
 
+        # 当前函数返回类型入栈（visit_IbReturn 绑定返回字面量特化类型用）。
+        # 显式返回类型即 ret_type；auto 在函数体遍历后统一推断回填。
+        func_returns = self.func_return_types
+        func_returns.append(ret_type if not is_auto_return else None)
+
         self.push_scope(func_scope)
         try:
             # 注册参数到函数作用域（使用解析后的类型，非 any）
@@ -188,6 +193,8 @@ class DeclarationVisitorsMixin:
             self.pop_scope()
             self.in_function_def = old_in_function
             self.auto_return_types = old_auto_returns
+            if func_returns:
+                func_returns.pop()
 
         # 含 yield → 惰性生成器（D-08 自标记函数种类）。扫描函数体（含嵌套
         # lambda，但排除嵌套函数定义——嵌套函数的 yield 归属其自身）。
@@ -425,6 +432,10 @@ class DeclarationVisitorsMixin:
             ))
             if arg_node.default is not None and arg_node.kind in (ast.ARG_POSITIONAL_OR_KEYWORD, ast.ARG_KEYWORD_ONLY):
                 default_spec = self.visit(arg_node.default)
+                # 默认值容器字面量绑定参数特化类型（func f(list[int] items=[1,2])
+                # → [1,2] 节点 node_to_type = list[int]），运行时默认值创建据此
+                # 水化特化类（缺陷二根治推广：函数默认参数路径值层身份保真）。
+                self._bind_literal_with_type(arg_node.default, arg_type)
                 if (default_spec and arg_type != self._any_desc
                         and not self.registry.is_dynamic(default_spec)
                         and not self.registry.is_dynamic(arg_type)

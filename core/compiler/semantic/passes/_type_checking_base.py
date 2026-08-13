@@ -86,6 +86,64 @@ class TypeCheckBase:
         if node and type_spec:
             self.type_bindings[node] = type_spec
 
+    def _bind_literal_with_type(self, node: Optional[ast.IbASTNode], spec: Optional[IbSpec]) -> None:
+        """把目标特化类型绑到容器字面量节点（含递归内层元素）。
+
+        值创建点类型化的统一传递机制（缺陷二根治推广）：编译期建立
+        ``node_to_type = 特化类型``，运行时 VM 字面量 handler 据此水化特化类。
+        与简单变量赋值（``_statement_visitors``）同构，覆盖函数返回 / 调用实参 /
+        下标赋值 / 嵌套内层元素等全部容器字面量上下文。
+
+        仅容器字面量 + 内置泛型特化目标参与：裸基类（list/dict/tuple/Optional）
+        无特化身份，不 bind（保持既有行为）；非容器节点 / 非内置泛型不处理。
+        """
+        if node is None or spec is None:
+            return
+        # 条件表达式：结果类型传播到两分支（list[int] a = [1] if c else [2]
+        # → [1]/[2] 节点绑 list[int]）。
+        if isinstance(node, ast.IbIfExp):
+            self._bind_literal_with_type(node.body, spec)
+            self._bind_literal_with_type(node.orelse, spec)
+            return
+        if not isinstance(node, (ast.IbListExpr, ast.IbDict, ast.IbTuple)):
+            return
+        kind = getattr(spec, "kind", None)
+        if kind not in (
+            TypeKind.LIST.value,
+            TypeKind.TUPLE.value,
+            TypeKind.DICT.value,
+            TypeKind.OPTIONAL.value,
+        ):
+            return
+        # 裸基类（无特化实参）：name 无方括号，不 bind。
+        if spec.name not in (
+            TypeKind.LIST.value,
+            TypeKind.TUPLE.value,
+            TypeKind.DICT.value,
+            "Optional",
+        ) and "[" not in spec.name:
+            return
+        self.bind_type(node, spec)
+        # 递归内层元素：从 spec 提取元素类型传内层容器字面量。
+        if isinstance(node, ast.IbListExpr) and kind == TypeKind.LIST.value:
+            elem = self.registry.resolve_typeref(spec.element_type) or self._any_desc
+            for elt in node.elts:
+                self._bind_literal_with_type(elt, elem)
+        elif isinstance(node, ast.IbDict) and kind == TypeKind.DICT.value:
+            val = self.registry.resolve_typeref(spec.value_type) or self._any_desc
+            for v in node.values:
+                self._bind_literal_with_type(v, val)
+        elif isinstance(node, ast.IbTuple) and kind == TypeKind.TUPLE.value:
+            positional = getattr(spec, "positional_element_types", None) or []
+            if positional:
+                for elt, ref in zip(node.elts, positional):
+                    inner = self.registry.resolve_typeref(ref) or self._any_desc
+                    self._bind_literal_with_type(elt, inner)
+            else:
+                elem = self.registry.resolve_typeref(spec.element_type) or self._any_desc
+                for elt in node.elts:
+                    self._bind_literal_with_type(elt, elem)
+
     def _bind_condition_behavior_types(self, node: Optional[ast.IbASTNode]):
         """把布尔上下文中的行为表达式定型为 ``bool``（递归传播）。
 

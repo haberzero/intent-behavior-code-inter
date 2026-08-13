@@ -88,3 +88,32 @@ def test_serialization_roundtrip_specialized_identity():
     assert val.ib_class.name == "list[int]", (
         f"round-trip 特化身份丢失: {val.ib_class.name}"
     )
+
+
+def test_cross_engine_deserialization_preserves_identity():
+    """跨引擎反序列化特化身份保真（边界 7）。
+
+    目标引擎未编译该特化（spec_reg 无 list[int]），从序列化 type_pool 重建
+    spec 再水化特化类——与用户类泛型跨引擎 round-trip 机制同构。
+    """
+    from core.runtime.serialization.runtime_serializer import (
+        RuntimeSerializer,
+        RuntimeDeserializer,
+    )
+
+    engine_a = _engine()
+    engine_a.run_string("list[int] li = [1, 2]\n", silent=True)
+    ec = engine_a.interpreter.execution_context
+    orig_ctx = ec.runtime_context
+    data = RuntimeSerializer(engine_a.registry).serialize_context(
+        orig_ctx, include_static=True, execution_context=ec
+    )
+
+    engine_b = _engine()  # 未编译 list[int]
+    deser = RuntimeDeserializer(engine_b.registry, factory=engine_b.object_factory)
+    restored = deser.deserialize_context(data)
+    val = restored.get_variable("li")
+    assert val.ib_class.name == "list[int]", (
+        f"跨引擎 round-trip 特化身份丢失: {val.ib_class.name}"
+    )
+    assert [e.to_native() for e in val.elements] == [1, 2]

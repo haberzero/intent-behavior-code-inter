@@ -154,10 +154,10 @@ class StatementVisitorsMixin:
             self.bind_type(target, target_type)
             # 容器字面量 RHS 绑定目标特化类型（list[int] li = [1,2] → [1,2]
             # 节点的 node_to_type = list[int]），运行时值创建据此水化特化类
-            # （缺陷二根治：内置泛型值层类型身份保真）。
+            # （缺陷二根治：内置泛型值层类型身份保真）。递归 helper 覆盖
+            # 嵌套内层元素（list[list[int]] n = [[1],[2]] 的内层 [1]/[2]）。
             if target_type is not None and rhs_inner is not None and rhs is rhs_inner:
-                if isinstance(rhs_inner, (ast.IbListExpr, ast.IbDict, ast.IbTuple)):
-                    self.bind_type(rhs_inner, target_type)
+                self._bind_literal_with_type(rhs_inner, target_type)
             # 更新符号 spec：当 target_type 比已有 spec 更具体时更新
             if sym and target_type and target_type is not self._any_desc:
                 existing = sym.spec
@@ -185,6 +185,12 @@ class StatementVisitorsMixin:
                     f"Cannot assign '{getattr(val_type, 'name', str(val_type))}' to '{getattr(target_type, 'name', str(target_type))}'",
                     node, code=SEM_TYPE_MISMATCH, hint=hint
                 )
+
+            # 下标/属性赋值 RHS 容器字面量绑定目标特化类型（m[0] = [9] 且
+            # m: list[list[int]] → [9] 节点 node_to_type = list[int]），值创建点
+            # 据此水化特化类（缺陷二根治推广：下标赋值路径值层身份保真）。
+            if target_type is not None and node.value is not None:
+                self._bind_literal_with_type(node.value, target_type)
 
         elif isinstance(target, ast.IbTuple):
             # 元组解包：各元素接收 any（实际类型在运行时由 VM 赋值）
@@ -414,6 +420,12 @@ class StatementVisitorsMixin:
                 )
                 return self._void_desc
             ret_type = self.visit(node.value)
+            # 返回容器字面量绑定函数返回特化类型（func f() -> list[int]:
+            # return [1,2] → [1,2] 节点 node_to_type = list[int]），值创建点
+            # 据此水化特化类（缺陷二根治推广：函数返回路径值层身份保真）。
+            func_returns = getattr(self, "func_return_types", None) or []
+            if func_returns and func_returns[-1] is not None:
+                self._bind_literal_with_type(rhs_inner, func_returns[-1])
             # 如果在 auto 返回类型函数中，累积返回类型
             if self.auto_return_types is not None:
                 self.auto_return_types.append(ret_type)
@@ -480,6 +492,10 @@ class StatementVisitorsMixin:
                     f"Augmented assignment operator '{node.op}' not supported for type '{target_type.name}'",
                     node, code=SEM_TYPE_MISMATCH
                 )
+            # 复合赋值 RHS 容器字面量绑定目标特化类型（list[int] a += [2] → [2]
+            # 节点 node_to_type = list[int]），值创建点据此水化特化类（缺陷二
+            # 根治推广：复合赋值路径值层身份保真）。
+            self._bind_literal_with_type(node.value, target_type)
         return None
 
     def visit_IbImport(self, node: ast.IbImport) -> Optional[IbSpec]:

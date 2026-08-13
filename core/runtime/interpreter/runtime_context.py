@@ -123,7 +123,7 @@ class ScopeImpl:
             return value
         if isinstance(value, IbOptional):
             return value
-        optional_class = self._registry.get_class("Optional")
+        optional_class = self._registry.get_class(declared_type.name) or self._registry.get_class("Optional")
         if optional_class is None:
             return value
         is_some = not isinstance(value, IbNone)

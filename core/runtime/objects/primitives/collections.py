@@ -73,8 +73,10 @@ class IbList(IbValue):
         try:
             res = self.elements[idx]
             if isinstance(idx, slice):
-                # 切片返回的是 IbObject 列表，需要重新装箱为 IbList
-                return self.ib_class.registry.box(res)
+                # 切片返回 IbObject 列表，重新装箱为 IbList——沿用自身 ib_class
+                # （特化类 list[int] 保留特化身份；裸 list 保持裸），使
+                # ``type(li[0:2]) == type(li)``（缺陷二根治：切片值层身份保真）。
+                return IbList(list(res), self.ib_class)
             return res
         except IndexError:
             raise InterpreterError(f"IndexError: list index out of range: {idx}")
@@ -135,14 +137,17 @@ class IbList(IbValue):
         """列表拼接。对齐 Python list + list"""
         if not isinstance(other, IbList):
             raise InterpreterError(f"TypeError: can only concatenate list (not '{other.ib_class.name}') to list")
-        return self.elements + other.elements
+        # 沿用自身 ib_class（特化类 list[int] 保留特化身份），使
+        # ``list[int] a += [2]`` 结果仍为 list[int]（缺陷二根治：复合赋值
+        # 值层身份保真；与切片 __getitem__ slice 分支同构）。
+        return IbList(list(self.elements) + list(other.elements), self.ib_class)
 
     def __mul__(self, other: IbObject) -> Any:
         """列表重复: list * int"""
         n = unbox(other)
         if not isinstance(n, int):
             raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
-        return self.elements * n
+        return IbList(list(self.elements) * n, self.ib_class)
 
 @register_ib_type("tuple")
 class IbTuple(IbValue):
@@ -204,7 +209,11 @@ class IbTuple(IbValue):
         try:
             res = self.elements[idx]
             if isinstance(idx, slice):
-                return self.ib_class.registry.box(tuple(res) if isinstance(res, (list, tuple)) else res)
+                # 切片返回 IbObject 元组，重新装箱为 IbTuple——沿用自身 ib_class
+                # （特化类 tuple[int,str] 保留特化身份），使
+                # ``type(t[0:2]) == type(t)``（缺陷二根治：切片值层身份保真）。
+                native = tuple(res) if isinstance(res, (list, tuple)) else res
+                return IbTuple(native, self.ib_class)
             return res
         except IndexError:
             raise InterpreterError(f"IndexError: tuple index out of range: {idx}")

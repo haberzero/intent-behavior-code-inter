@@ -525,14 +525,18 @@ class ExpressionVisitorsMixin:
         pos_or_kw_count = sum(
             1 for d in descriptors if d.kind == ast.ARG_POSITIONAL_OR_KEYWORD
         )
+        # 位置实参节点（非 *expr）：与 positional_specs 顺序一致（收集时跳过 starred）。
+        positional_nodes = [a for a in node.args if not isinstance(a, ast.IbStarred)]
         for i, actual in enumerate(positional_specs[:pos_or_kw_count]):
-            self._check_call_arg_type(node, descriptors[i].name, actual, descriptors[i])
+            arg_node = positional_nodes[i] if i < len(positional_nodes) else None
+            self._check_call_arg_type(node, descriptors[i].name, actual, descriptors[i], arg_node)
 
         # 具名实参：重复 / 未知 结构错误 + 绑定槽位类型校验（按关键字序）
         for (name, actual), outcome in zip(keyword_specs, binding.keyword_outcomes):
             if outcome[0] == "bound":
                 desc = descriptors[outcome[1]]
-                self._check_call_arg_type(node, name, actual, desc)
+                kw_node = next((kw.value for kw in node.keywords if kw.arg == name), None)
+                self._check_call_arg_type(node, name, actual, desc, kw_node)
             elif outcome[0] == "duplicate":
                 self.error(
                     f"Keyword argument '{name}' provided multiple times.",
@@ -567,11 +571,19 @@ class ExpressionVisitorsMixin:
 
         return positional_specs
 
-    def _check_call_arg_type(self, node: ast.IbCall, name: str, actual_spec, descriptor) -> None:
-        """单参数类型可赋值性校验（SEM_TYPE_MISMATCH）。"""
+    def _check_call_arg_type(self, node: ast.IbCall, name: str, actual_spec, descriptor, arg_node=None) -> None:
+        """单参数类型可赋值性校验（SEM_TYPE_MISMATCH）。
+
+        ``arg_node`` 为实参节点（可选）：容器字面量实参绑定形参特化类型
+        （``consume([1,2])`` 且形参 ``list[int]`` → ``[1,2]`` 节点
+        node_to_type = list[int]），值创建点据此水化特化类（缺陷二根治推广：
+        调用实参路径值层身份保真）。
+        """
         if not descriptor.type_ref:
             return
         exp_spec = self.registry.resolve_typeref(descriptor.type_ref)
+        if arg_node is not None and exp_spec is not None:
+            self._bind_literal_with_type(arg_node, exp_spec)
         if (exp_spec and actual_spec
                 and not self.registry.is_dynamic(exp_spec)
                 and not self.registry.is_dynamic(actual_spec)
@@ -802,6 +814,11 @@ class ExpressionVisitorsMixin:
                     lambda_scope.define(param_sym)
 
             body_type = self.visit(node.body) if node.body else self._void_desc
+            # lambda 返回容器字面量绑定返回特化类型（lambda -> list[int]: [1,2]
+            # → [1,2] 节点 node_to_type = list[int]），值创建点据此水化特化类
+            # （缺陷二根治推广：lambda 返回路径值层身份保真）。
+            if node.body is not None and returns_type is not None and not is_auto_return:
+                self._bind_literal_with_type(node.body, returns_type)
         finally:
             self.pop_scope()
 

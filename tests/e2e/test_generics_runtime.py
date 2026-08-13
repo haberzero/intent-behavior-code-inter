@@ -290,6 +290,152 @@ class TestBuiltinGenericValueIdentity:
 
 
 # ===========================================================================
+# 值层身份彻底收敛（统一"类型上下文→字面量"传递：函数返回/实参/嵌套/切片/Optional）
+# ===========================================================================
+
+class TestValueIdentityConverged:
+    """边界场景值层身份保真（缺陷二根治推广）。
+
+    此前边界：函数返回字面量 / 调用实参字面量 / 下标赋值字面量 / 嵌套内层元素 /
+    容器切片 / Optional 值身份——值运行时擦除为裸 list/Optional。统一传递机制
+    （编译期 _bind_literal_with_type 递归 + 运行时切片/Optional 特化类）后全部保真。
+    """
+
+    def test_function_return_literal_identity(self):
+        lines = run_ibci(
+            "func f() -> list[int]:\n"
+            "    return [1, 2]\n"
+            "list[int] r = f()\n"
+            "print(type(r))\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
+    def test_function_return_nested_identity(self):
+        lines = run_ibci(
+            "func f() -> list[list[int]]:\n"
+            "    return [[1], [2]]\n"
+            "list[list[int]] r = f()\n"
+            "list[int] row = r[0]\n"
+            "print(type(r))\n"
+            "print(type(row))\n"
+        )
+        assert lines == ["list[list[int]]", "list[int]"], f"got {lines}"
+
+    def test_call_argument_literal_identity(self):
+        lines = run_ibci(
+            "func consume(list[int] items) -> void:\n"
+            "    print(type(items))\n"
+            "consume([1, 2])\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
+    def test_subscript_assignment_literal_identity(self):
+        lines = run_ibci(
+            "list[list[int]] m = [[1], [2]]\n"
+            "m[0] = [9]\n"
+            "print(type(m[0]))\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
+    def test_nested_inner_element_identity(self):
+        lines = run_ibci(
+            "list[list[int]] n = [[1], [2]]\n"
+            "print(type(n))\n"
+            "print(type(n[0]))\n"
+        )
+        assert lines == ["list[list[int]]", "list[int]"], f"got {lines}"
+
+    def test_slice_identity(self):
+        lines = run_ibci(
+            "list[int] li = [1, 2, 3, 4]\n"
+            "print(type(li[0:2]))\n"
+            "tuple[int,str] t = (1, \"a\")\n"
+            "print(type(t[0:1]))\n"
+        )
+        assert lines == ["list[int]", "tuple[int,str]"], f"got {lines}"
+
+    def test_optional_value_identity(self):
+        lines = run_ibci(
+            "Optional[int] o = 5\n"
+            "print(type(o))\n"
+            "int v = o.unwrap()\n"
+            "print(v)\n"
+        )
+        assert lines == ["Optional[int]", "5"], f"got {lines}"
+
+    def test_deep_nested_triple(self):
+        """三层嵌套递归：list[list[list[int]]] 全层身份保真。"""
+        lines = run_ibci(
+            "list[list[list[int]]] d = [[[1]], [[2]]]\n"
+            "print(type(d))\n"
+            "list[list[int]] mid = d[0]\n"
+            "print(type(mid))\n"
+            "list[int] leaf = mid[0]\n"
+            "print(type(leaf))\n"
+        )
+        assert lines == ["list[list[list[int]]]", "list[list[int]]", "list[int]"], f"got {lines}"
+
+    def test_aug_assign_identity(self):
+        """复合赋值：list[int] a += [2] 结果保留特化身份。"""
+        lines = run_ibci(
+            "list[int] a = [1]\n"
+            "a += [2]\n"
+            "print(type(a))\n"
+            "print(a)\n"
+        )
+        assert lines[0] == "list[int]", f"got {lines}"
+        assert "[1, 2]" in lines[1]
+
+    def test_conditional_literal_identity(self):
+        """条件表达式：list[int] a = [1] if c else [2] 分支值保真。"""
+        lines = run_ibci(
+            "list[int] a = [1] if True else [2]\n"
+            "print(type(a))\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
+    def test_list_concat_identity(self):
+        """list + list 运算符：list[int] 结果保留特化身份。"""
+        lines = run_ibci(
+            "list[int] a = [1, 2]\n"
+            "list[int] b = a + [3]\n"
+            "print(type(b))\n"
+            "print(b)\n"
+        )
+        assert lines[0] == "list[int]", f"got {lines}"
+        assert "[1, 2, 3]" in lines[1]
+
+    def test_list_mul_identity(self):
+        """list * int 运算符：list[int] 结果保留特化身份。"""
+        lines = run_ibci(
+            "list[int] a = [1]\n"
+            "list[int] b = a * 3\n"
+            "print(type(b))\n"
+            "print(b)\n"
+        )
+        assert lines[0] == "list[int]", f"got {lines}"
+        assert "[1, 1, 1]" in lines[1]
+
+    def test_lambda_return_identity(self):
+        """lambda 返回：lambda -> list[int]: [1,2] 调用结果保真。"""
+        lines = run_ibci(
+            "fn f = lambda -> list[int]: [1, 2]\n"
+            "list[int] r = f()\n"
+            "print(type(r))\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
+    def test_default_param_identity(self):
+        """函数默认参数：func f(list[int] items=[1,2]) 默认值保真。"""
+        lines = run_ibci(
+            "func f(list[int] items = [1, 2]) -> void:\n"
+            "    print(type(items))\n"
+            "f()\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
+
+# ===========================================================================
 # Nested generic subscript — list[list[int]][0] → list[int]
 # ===========================================================================
 

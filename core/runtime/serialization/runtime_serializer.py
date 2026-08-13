@@ -679,11 +679,17 @@ class RuntimeDeserializer:
 
         从 metadata registry 解析特化 spec，沿基类名（``list``）create_subclass，
         特化类父链指向基类（方法继承 + is_assignable 继承链）。
+
+        跨引擎 round-trip：目标引擎 spec_reg 可能无该特化（未编译），此时从
+        序列化携带的 ``type_pool`` 重建 spec（经 ArtifactRehydrator 统一水化），
+        再 create_subclass——特化身份跨引擎保真（缺陷二根治推广：边界 7）。
         """
+        spec = None
         spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None
-        if spec_reg is None:
-            return None
-        spec = spec_reg.resolve(cls_name)
+        if spec_reg is not None:
+            spec = spec_reg.resolve(cls_name)
+        if spec is None:
+            spec = self._rehydrate_type_pool_spec(cls_name)
         if spec is None:
             return None
         base_name = spec.get_base_name()
@@ -691,6 +697,28 @@ class RuntimeDeserializer:
             return None
         try:
             return self.registry.create_subclass(cls_name, spec, parent_name=base_name)
+        except Exception:
+            return None
+
+    def _rehydrate_type_pool_spec(self, cls_name: str):
+        """从序列化 type_pool 重建特化 spec（跨引擎反序列化用）。
+
+        ``self.type_pool``（``deserialize_context`` 已设）含编译产物全部类型；
+        经 ArtifactRehydrator 按 UID 水化目标 spec。目标 spec 不在池中返回 None。
+        """
+        type_pool = getattr(self, "type_pool", None)
+        if not type_pool:
+            return None
+        spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None
+        if spec_reg is None:
+            return None
+        uid = next((u for u, d in type_pool.items() if d.get("name") == cls_name), None)
+        if uid is None:
+            return None
+        try:
+            from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+            reh = ArtifactRehydrator(type_pool, spec_reg)
+            return reh.hydrate(uid)
         except Exception:
             return None
 
