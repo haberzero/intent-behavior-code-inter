@@ -416,12 +416,8 @@ class KernelRegistry:
         if descriptor.name != name and descriptor.qualified_name != name:
             raise ValueError(f"Registry: Subclass descriptor name '{descriptor.name}' does not match '{name}'.")
         
-        # [Enum Hook] 检查父类是否已在 _classes 中注册
-        # 如果父类已存在（如 Enum），则直接调用 Bootstrapper.create_subclass
-        if self.get_class(parent_name, module=descriptor.module_path):
-            if self._create_subclass_func:
-                return self._create_subclass_func(self, name, descriptor, parent_name)
-            
+        # [S3 单类表] 委托 Bootstrapper 工厂（父查找/存在性检查在其内部统一走
+        # 唯一权威类表，无双表缺口需兜底）。
         if self._create_subclass_func:
             return self._create_subclass_func(self, name, descriptor, parent_name)
         return None

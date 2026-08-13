@@ -17,7 +17,10 @@ class Bootstrapper:
     def __init__(self, registry: KernelRegistry):
         self.registry = registry
         self._token = registry.get_kernel_token() # 获取内核特权令牌
-        self._class_registry: Dict[str, IbClass] = {}
+        # [S3 单类表] 不再维护独立 _class_registry——KernelRegistry._classes 是
+        # 运行期类表唯一权威（Bootstrapper 全委托）。此前双表（Bootstrapper
+        # 影子表 + KernelRegistry 权威表）是历史包袱：Enum 仅注册权威表不经
+        # 影子表，两处 [Enum Hook] 兜底即为弥合缺口；单表后自动消除。
         self.TypeClass: Optional[IbClass] = None
         self.ObjectClass: Optional[IbClass] = None
         self.CallableClass: Optional[IbClass] = None
@@ -143,33 +146,30 @@ class Bootstrapper:
         self.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True, ib_class=self.TypeClass))
 
     def register_class(self, ib_class: IbClass, spec: 'IbSpec'):
-        """向实例表注册类，并确保其 ib_class 指向 TypeClass。强制绑定 spec。
+        """向单类表（KernelRegistry._classes）注册类，并确保其 ib_class 指向 TypeClass。
 
-        [Module Identity] 注册键 = ``spec.qualified_name``（与编译期 spec 身份
-        (module_path, name) 对齐）：跨模块同名用户类（geo.Box / graph.Box）独立
-        注册，消除运行期类表裸名坍缩。入口/单模块类与内置类 module_path 为 None，
-        键 = 裸名（行为不变）。
+        [S3 单类表] 不再写影子表——KernelRegistry.register_class 是唯一写入
+        点（键 = spec.qualified_name，与编译期 spec 身份 (module_path, name)
+        对齐）。[Module Identity] 跨模块同名用户类独立注册（geo.Box /
+        graph.Box），入口/单模块类与内置类 module_path 为 None，键 = 裸名。
         """
         if self.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = self.TypeClass
-        key = spec.qualified_name if spec is not None else ib_class.name
-        self._class_registry[key] = ib_class
         self.registry.register_class(ib_class.name, ib_class, self._token, spec=spec)
 
     def get_class(self, name: str, module: Optional[str] = None) -> Optional[IbClass]:
-        """module 感知类查找（与 KernelRegistry.get_class 同构，见其 docstring）。"""
-        if module and "." not in name:
-            cls = self._class_registry.get(f"{module}.{name}")
-            if cls is not None:
-                return cls
-        return self._class_registry.get(name)
+        """module 感知类查找（委托 KernelRegistry 单表，逻辑同构）。"""
+        return self.registry.get_class(name, module=module)
 
     def get_all_classes(self) -> Dict[str, IbClass]:
-        return dict(self._class_registry)
+        """全部类（委托 KernelRegistry 单表）。"""
+        return self.registry.get_all_classes()
 
     def create_subclass(self, registry: KernelRegistry, name: str, spec: 'IbSpec', parent_name: str = "Object") -> IbClass:
         """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定 spec。
 
+        [S3 单类表] 存在性检查与父查找均委托 KernelRegistry（唯一权威表，
+        涵盖此前仅注册于权威表的 Enum 等内置类——不再需要 [Enum Hook] 兜底）。
         ``name`` 可为裸类名（``Box[int]``）或 qualified 名（``geo.Box[int]``）；
         注册键 = 描述符 ``qualified_name``（跨模块同名类独立）。裸类名自末段
         提取（module 可含点，类名不可含点）。父类查找 module 感知（spec 的
@@ -177,22 +177,16 @@ class Bootstrapper:
         父名；qualified 父名直接精确命中）。
         """
         key = spec.qualified_name if spec is not None else name
-        if key in self._class_registry:
-            return self._class_registry[key]
+        if self.registry.get_class(key) is not None:
+            return self.registry.get_class(key)
 
         bare = name.rsplit(".", 1)[-1] if "." in name else name
         module = spec.module_path if spec is not None else None
-        # 优先从 _class_registry 查找父类
-        parent = self.get_class(parent_name, module=module)
-        
-        # [Enum Hook] 如果在 _class_registry 中找不到父类，检查 registry._classes
-        # 这样可以支持已注册到 KernelRegistry._classes 但未注册到 Bootstrapper._class_registry 的内置类
-        if not parent and parent_name != "Object":
-            parent = registry.get_class(parent_name, module=module)
-        
-        if not parent and bare != "Object": # Object has no parent
+        parent = self.registry.get_class(parent_name, module=module)
+
+        if not parent and parent_name != "Object": # Object has no parent
             raise ValueError(f"Parent class '{parent_name}' not found")
-        
+
         new_class = IbClass(bare, parent=parent, registry=registry)
         self.register_class(new_class, spec)
         return new_class
@@ -225,13 +219,13 @@ class Bootstrapper:
 
         # 2. Callable 与 Native 对象映射路径
         if callable(val):
-            # 获取 None 类或 Object 类
-            callable_class = self.get_class("callable") or self.get_class("Object")
+            # 获取 None 类或 Object 类（委托 KernelRegistry 单表）
+            callable_class = registry.get_class("callable") or registry.get_class("Object")
             res = IbNativeFunction(val, unbox_args=True, ib_class=callable_class)
             memo[id(val)] = res
             return res
 
-        obj_class = self.get_class("Object")
+        obj_class = registry.get_class("Object")
         res = IbNativeObject(val, ib_class=obj_class)
         memo[id(val)] = res
         return res
