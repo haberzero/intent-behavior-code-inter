@@ -249,8 +249,19 @@ class TypeDef(IbSpec):
     _KIND_BASE_NAMES: ClassVar[Dict[str, str]] = {}
 
     def get_base_name(self) -> str:
+        """族名（axiom 查询键 / 值层 kind 分派）。
+
+        优先级：
+        1. ``_axiom_name``（fn_callable/behavior/thread 等特化 spec 重定向）。
+        2. 用户类泛型特化 spec 的 ``base_name`` 字段（``Box[int]`` → ``"Box"``，
+           与内置泛型特化经 ``_KIND_BASE_NAMES`` 返回族名一致——消除双轨不对称）。
+        3. ``_KIND_BASE_NAMES``（内置 kind → 族名映射）。
+        4. ``self.name`` 回落（非特化/普通类）。
+        """
         if self._axiom_name:
             return self._axiom_name
+        if self.base_name:
+            return self.base_name
         return TypeDef._KIND_BASE_NAMES.get(self.kind, self.name)
 
 

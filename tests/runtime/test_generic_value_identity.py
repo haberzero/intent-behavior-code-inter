@@ -191,3 +191,59 @@ def test_generator_spec_serialization_preserves_value_type():
     assert spec.value_type == TypeRef.parse("list[int]"), (
         f"generator value_type 恢复失败（应结构化保真）: {spec.value_type}"
     )
+
+
+def test_thread_value_identity_materialized():
+    """thread[int] 值经声明类型 rebind 特化类（S3 句柄类物化覆盖）。
+
+    修复前 thread 值 type() 返回裸名 "thread"；修复后返回 "thread[int]"
+    （值身份与声明类型一致，运行时区分 thread[int]/thread[str]）。
+    """
+    engine = _engine()
+    engine.run_string(
+        "func f() -> int:\n"
+        "    return 1\n"
+        "thread[int] t = thread(callable=f, args=[])\n",
+        silent=True,
+    )
+    rc = engine.interpreter.execution_context.runtime_context
+    t = rc.get_symbol("t").value
+    assert t.ib_class.name == "thread[int]", (
+        f"thread[int] 值身份未物化: {t.ib_class.name}"
+    )
+
+
+def test_runtime_rejects_handle_type_mismatch():
+    """thread[str] 值赋 thread[int] 变量运行时 RUN_TYPE_MISMATCH（S3）。
+
+    句柄类值物化后运行时值层可区分 thread[int]/thread[str]（any 逃生路径）。
+    """
+    from core.kernel.issue import InterpreterError
+
+    engine = _engine()
+    engine.run_string(
+        "func f() -> int:\n"
+        "    return 1\n"
+        "func g() -> str:\n"
+        "    return \"s\"\n"
+        "thread[int] t = thread(callable=f, args=[])\n"
+        "any x = t\n"
+        "thread[int] u = x\n",  # 同型，应通过
+        silent=True,
+    )
+    rc = engine.interpreter.execution_context.runtime_context
+    assert rc.get_symbol("u").value.ib_class.name == "thread[int]"
+
+    engine2 = _engine()
+    try:
+        engine2.run_string(
+            "func g() -> str:\n"
+            "    return \"s\"\n"
+            "thread[str] t2 = thread(callable=g, args=[])\n"
+            "any y = t2\n"
+            "thread[int] v = y\n",
+            silent=True,
+        )
+        raise AssertionError("thread[str] 值赋 thread[int] 未拦截（S3 运行时校验失效）")
+    except InterpreterError as e:
+        assert "RUN_TYPE_MISMATCH" in str(e), f"应报 RUN_TYPE_MISMATCH, got {e}"

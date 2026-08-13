@@ -51,20 +51,32 @@ class ArtifactLoader:
         return False
 
     def _hydrate_builtin_generic_classes(self, type_pool: Dict[str, Mapping[str, Any]]) -> None:
-        """内置泛型容器特化类水化（缺陷二根治，registry 封印前执行）。
+        """内置泛型特化类水化（缺陷二根治 + S3 句柄类覆盖，registry 封印前执行）。
 
         编译产物 type_pool 中出现的内置泛型特化 spec（``list[int]`` /
-        ``dict[str,int]`` / ``tuple[int,str]`` / ``Optional[int]``——LIST/TUPLE/
-        DICT/OPTIONAL kind 且 name 含 ``[``）预创建为运行时特化类，parent 指向
-        基类（list/dict/tuple/Optional）。值创建点（vm 字面量 handler /
-        反序列化）据此把容器值绑定特化类，使 ``IbValue.type_ref`` 带实参
-        （``type()`` 内省一致 + 运行时类型安全）。
+        ``dict[str,int]`` / ``tuple[int,str]`` / ``Optional[int]`` /
+        ``thread[int]`` / ``chan[str]`` / ``slot[int]`` / ``generator[int]``
+        / ``thread_result[int]``——全部值承载 kind 且 name 含 ``[``）预创建为
+        运行时特化类，parent 指向基类。值创建点据此把值绑定特化类，使
+        ``IbValue.type_ref`` 带实参（``type()`` 内省一致 + 运行时类型安全）。
 
         与用户类泛型特化类（hydrate_all → 下方预注册 CLASS 特化 spec）机制
-        同构。幂等：特化类已注册则跳过；水化失败不影响加载（容器值回落基类）。
+        同构。幂等：特化类已注册则跳过；水化失败不影响加载（值回落基类）。
         """
         from core.kernel.spec.base import TypeKind
 
+        hydrated_kinds = (
+            TypeKind.LIST.value,
+            TypeKind.TUPLE.value,
+            TypeKind.DICT.value,
+            TypeKind.OPTIONAL.value,
+            TypeKind.THREAD.value,
+            TypeKind.THREAD_RESULT.value,
+            TypeKind.CHANNEL.value,
+            TypeKind.SLOT.value,
+            TypeKind.GENERATOR.value,
+            TypeKind.CALLABLE_INSTANCE.value,
+        )
         spec_reg = self.registry.get_metadata_registry()
         if spec_reg is None:
             return
@@ -73,12 +85,7 @@ class ArtifactLoader:
                 continue
             name = data.get("name", "")
             kind = data.get("kind", "")
-            if "[" not in name or kind not in (
-                TypeKind.LIST.value,
-                TypeKind.TUPLE.value,
-                TypeKind.DICT.value,
-                TypeKind.OPTIONAL.value,
-            ):
+            if "[" not in name or kind not in hydrated_kinds:
                 continue
             if self.registry.get_class(name) is not None:
                 continue

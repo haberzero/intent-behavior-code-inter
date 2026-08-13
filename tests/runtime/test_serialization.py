@@ -229,7 +229,11 @@ class TestTransientObjectSerialization:
         assert slot["state"]["value"].startswith("inst_")
 
     def test_thread_serialized_as_transient(self, engine):
-        """thread 由专用 thread_transient 分支迁移至统一 transient 协议（回归）。"""
+        """thread 由专用 thread_transient 分支迁移至统一 transient 协议（回归）。
+
+        S3 句柄类值身份物化：thread[int] 值 rebind 特化类，class_name 含实参
+        （"thread[int]"），沿 spec 基名（"thread"）仍走 transient 分派。
+        """
         engine.run_string("""
 func f() -> int:
     return 1
@@ -242,7 +246,7 @@ thread[int] t = thread(callable=f, args=[])
         pool = data["pools"]["instances"]
         thread = next(
             v for v in pool.values()
-            if v.get("class_name") == "thread" and v.get("_type") == "transient"
+            if v.get("class_name") == "thread[int]" and v.get("_type") == "transient"
         )
         assert thread["state"]["state"] in ("idle", "running", "done")
 

@@ -518,7 +518,11 @@ class TestGeneratorReturnIdentity:
         )
 
     def test_generator_correct_type_allowed(self):
-        """生成器赋正确类型放行（显式 + 标准两种写法）。"""
+        """生成器赋正确类型放行（显式 + 标准两种写法）。
+
+        S3 句柄类值身份物化：generator[list[int]] 值经声明类型 rebind 特化类，
+        type(g) 返回含实参的特化名（旧为裸 generator）。
+        """
         lines = run_ibci(
             "func gen() -> list[int]:\n"
             "    yield [1, 2]\n"
@@ -527,7 +531,7 @@ class TestGeneratorReturnIdentity:
             "for list[int] row in g:\n"
             "    print(type(row))\n"
         )
-        assert lines == ["generator", "list[int]"], f"got {lines}"
+        assert lines == ["generator[list[int]]", "list[int]"], f"got {lines}"
 
 
 # ===========================================================================

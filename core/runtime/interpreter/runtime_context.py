@@ -10,7 +10,7 @@ from core.kernel.registry import KernelRegistry
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbLLMUncertain, IbFunction, IbNone
+from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbValue, IbLLMUncertain, IbFunction, IbNone
 from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.primitives import IbOptional
 from core.runtime.objects.intent_node import IntentNode
@@ -32,6 +32,17 @@ class RuntimeSymbolImpl:
         # 当变量被内层 lambda 捕获时，提升为 Cell 变量；
         # 此字段指向独立堆对象 IbCell，确保赋值能同步到所有持有该 Cell 的 lambda 闭包。
         self.cell: Optional[Any] = None  # Optional[IbCell]
+
+# 句柄类值承载 kind（S3 物化绑定白名单）：thread/chan/slot/generator/
+# thread_result 值绑基类时可经声明类型 rebind 特化类。排除
+# CALLABLE_INSTANCE（fn_callable/behavior 自持签名，非声明类型物化）。
+_HANDLE_VALUE_KINDS = frozenset({
+    "thread",
+    "channel",
+    "slot",
+    "generator",
+    "thread_result",
+})
 
 class ScopeImpl:
     def __init__(self, parent: Optional['Scope'] = None, registry: Optional[Registry] = None):
@@ -97,6 +108,47 @@ class ScopeImpl:
         # 强契约：运行时类型校验
         if not isinstance(value, IbObject):
             value = self._registry.box(value)
+
+        val_spec = value.ib_class.spec if value.ib_class else None
+
+        # 句柄类值身份物化（S3）：值绑基类（裸 thread/chan/slot/generator/
+        # thread_result）+ 声明为特化（thread[int]）时，rebind 值到特化类——
+        # 与容器 `_bind_container_specialization` 同构，但句柄值创建点无字面量
+        # 节点，声明类型上下文在此统一生效（type() 内省一致 + 运行时区分
+        # thread[int]/thread[str]）。仅限值承载句柄 kind（THREAD/CHANNEL/SLOT/
+        # GENERATOR/THREAD_RESULT），排除 CALLABLE_INSTANCE（fn_callable/behavior
+        # 是自持签名值，非声明类型物化）。rebind 幂等：特化类不存在则保守保持基类。
+        if (
+            isinstance(declared_type, IbSpec)
+            and "[" in getattr(declared_type, "name", "")
+            and isinstance(value, IbObject)
+            and value.ib_class is not None
+            and value.ib_class.spec is not None
+            and "[" not in getattr(value.ib_class, "name", "")
+            and getattr(declared_type, "kind", None) == value.ib_class.spec.kind
+            and getattr(declared_type, "kind", None) in _HANDLE_VALUE_KINDS
+            and value.ib_class.spec.get_base_name() == declared_type.get_base_name()
+        ):
+            specialized_cls = self._registry.get_class(declared_type.name)
+            if specialized_cls is None:
+                try:
+                    spec_reg = self._registry.get_metadata_registry()
+                    spec = (
+                        spec_reg.resolve(declared_type.name)
+                        if spec_reg is not None else None
+                    )
+                    if spec is not None and not self._registry.is_sealed:
+                        specialized_cls = self._registry.create_subclass(
+                            declared_type.name, spec, value.ib_class.spec.get_base_name()
+                        )
+                except Exception:
+                    specialized_cls = None
+            if specialized_cls is not None:
+                from core.kernel.spec.type_ref import TypeRef
+
+                value.ib_class = specialized_cls
+                if isinstance(value, IbValue):
+                    value.type_ref = TypeRef.from_spec(declared_type)
 
         val_spec = value.ib_class.spec if value.ib_class else None
 
