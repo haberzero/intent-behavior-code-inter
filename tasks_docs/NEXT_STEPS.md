@@ -2,10 +2,30 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-12（**用户类泛型 PT-FEAT-3 完整落地** + F9 `ai.load_project_config` 实施完成；
-> 全量 **2339 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
+> **最后更新**：2026-08-13（**G3 继承特化父类字段丢失 + Finding C any 逃生阀复查 根治**；
+> 全量 **2365 passed / 1 skipped**；见下方"已完成"与"交接要点"节）
 
 ---
+
+## ✅ 已完成：G3 继承特化父类字段丢失 + Finding C any 逃生阀用户类复查（2026-08-13，unsafe-vibe-dev b0f4d74，全量 2365 passed / 1 skipped）
+
+> 交接诊断经代码实证纠偏后根治（详见 PENDING_TASKS G3/BOUNDARY-G2 行 + WORKLOG）。
+
+- **G3（chain-aware auto-init）**：交接推断"特化父类字段未绑定"被实证否定（`Node[int]`
+  `default_fields` 含 `data`/`next`，继承链收集正确）。真实根因：`_hydrate_user_classes`
+  自动构造器只收集**类自身 body** 无默认值字段 → 子类 auto-init 参数被削减并遮蔽父
+  auto-init → 继承父类无默认值字段静默 None（原为文档化 Known Limit §六，按
+  "文档化限制=修复候选"重新定性为真实缺陷）。**修复**：auto-init 参数 = 继承链全部有效
+  无默认值字段（父类优先、子类同名覆盖），与 instantiate 字段收集同构（机制同构）；
+  构造器生成拆为独立第二 pass。非泛型/泛型/多级继承全修；少传参 fail-fast 报缺参。
+  文档：KNOWN_LIMITS §六/§十四#1③ + 06_oop。
+- **BOUNDARY-G2 + Finding C（any 逃生阀复查）**：交接推断"运行时类型退化"被实证否定
+  （`cur` 持续 `Node[int]`）。真实根因：试用用例无效（`Node[int]` 编译期禁止赋 None，
+  None 哨兵不可行；`= any` 默认是非 None truthy any 类对象）+ 底层真实缺口 **Finding C**
+  ——`_check_type` 对 USER_DEFINED CLASS 目标无条件跳过运行时复查 → any 类对象静默流入
+  用户类变量（KNOWN_LIMITS §七 契约失效）。**修复**：对动态 any 逃生值强制
+  `RUN_TYPE_MISMATCH`（is_assignable 因"类可调用"会放行，直接判定）。R5-04 现报清晰
+  诊断码而非困惑 AttributeError。文档：KNOWN_LIMITS §七。
 
 ## ✅ 已完成：用户类泛型参数 PT-FEAT-3 完整落地（2026-08-12，unsafe-vibe-dev 35bb2de，全量 2339 passed / 1 skipped）
 
@@ -320,13 +340,27 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev b0f4d74，全量 2365 passed / 1 skipped）**：
+  **G3 继承特化父类字段值丢失 + Finding C any 逃生阀用户类复查 根治**。交接诊断经代码
+  实证纠偏：G3 非"特化父类字段未绑定"而是**自动构造器只收自身 body 无默认值字段**
+  （文档化 Known Limit §六，按"文档化限制=修复候选"重新定性为真实缺陷）→ 修复为
+  **chain-aware auto-init**（构造器参数=继承链全部有效无默认值字段，父类优先、子类同名
+  覆盖，与 instantiate 收集同构）；BOUNDARY-G2 非"类型退化"而是试用用例无效（`Node[int]`
+  禁止赋 None，None 哨兵不可行；`= any` 默认是非 None truthy any 类对象）+ 底层真实
+  缺口 **Finding C**（`_check_type` 对用户类目标无条件跳过运行时复查，any 类对象静默流入，
+  §七 契约失效）→ 修复为对动态 any 逃生值强制 `RUN_TYPE_MISMATCH`。+10 e2e；
+  KNOWN_LIMITS §六/§七/§十四#1③ + 06_oop 文档同步。
+
 - **🔴 下一 session 目标（2026-08-12 用户提出）**：
   1. **试用体系规范化**（主要目标，设计起点 `TRIAL_SYSTEM_DESIGN.md`）：试用机制体系化、
      日志体系化、历史记录整理定型——单一 harness（`trials/_toolkit/`）+ 统一分类/级别/命名
      + REGISTER 统一模板 + 历史 4 套 git mv 迁移 + 编号映射 + `trials/INDEX.md`。
-  2. **泛型缺陷 G3/BOUNDARY-G2 修复**（交接 `_HANDOFF_GENERICS_FIX.md`）：继承特化父类字段
-     丢失（P1）+ 自引用链 while 类型退化（P2）。
-  - 两者错峰；顺序由接手者自主排定（可先 Phase 1 机制规范化工具化）。
+     **新增分诊闸门**（本 session 教训）：非 PASS 用例须先对照 KNOWN_LIMITS/docs 分诊
+     （KERNEL_ISSUE / BOUNDARY / LIMIT / 用例错误）；命中已知限制 ≠ 免罪，须进入待修候选池。
+     **待处理**：R1-05/R5-01 试用用例须适配新 auto-init 语义（多参构造），R5-04 用例无效
+     （None 哨兵不可行）须改用 `Optional[Node[T]]` 或显式哨兵。
+  2. ~~泛型缺陷 G3/BOUNDARY-G2 修复~~（`_HANDOFF_GENERICS_FIX.md`）——**已完成（2026-08-13）**，
+     交接文件可归档删除。
 
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成

@@ -192,23 +192,21 @@ fn g = f            # g 也引用同一个函数
 
 ---
 
-## 六、子类 auto-init 不含父类字段
+## 六、子类 auto-init 已合并继承链无默认值字段
 
-**严重级别**：低（符合 Python 语义，但与 C++/Java 使用者直觉不符）
-
-当子类没有显式 `__init__`，编译器会自动生成一个 `__init__`，**仅接受当前类自身声明的字段**，不包含父类字段。
+当子类没有显式 `__init__`，运行时自动生成一个 `__init__`，**参数 = 继承链上全部无默认值字段（父类优先、子类同名覆盖）**。此前仅接受当前类自身声明的字段、父类字段静默丢失的缺口已根治（2026-08-13）。
 
 ```ibci
 class Animal:
     str name
 
 class Dog(Animal):
-    str breed       # Dog 的 auto-init 只接受 breed，不接受 name
+    str breed
 
-Dog d = Dog("Husky")    # 只设置 breed；d.name = None
+Dog d = Dog("Husky", "Lab")    # name="Husky"; breed="Lab"
 ```
 
-**正确用法**：在子类中显式定义 `__init__` 并通过 `super().__init__(...)` 初始化父类字段（`super()` 用法见 `docs/syntax/06_oop.md` §6.5）：
+**自定义构造（副作用/变换）**：显式定义 `__init__` 并通过 `super().__init__(...)` 初始化父类字段（`super()` 用法见 `docs/syntax/06_oop.md` §6.5）。显式 `__init__` 优先于自动构造器：
 
 ```ibci
 class Dog(Animal):
@@ -218,7 +216,7 @@ class Dog(Animal):
         self.breed = b
 ```
 
-**根源**：auto-init 生成逻辑（`interpreter.py:_hydrate_user_classes`）仅遍历当前类 `body` 中声明的字段。父类字段通过 `default_fields` 继承，但不加入构造函数参数。此设计与 Python 行为一致（子类不自动调用 `super().__init__`）。
+> 注意：auto-init 只绑定字段值，不调用祖先的显式 `__init__`（其副作用不会执行）。需要祖先自定义构造逻辑时须显式 `__init__` + `super`。
 
 ---
 
@@ -236,7 +234,9 @@ class Dog(Animal):
 > **any 逃生后的重处理机制**：`any` 值用于有类型检查的上下文（如赋给 `int y`）时，
 > **编译期放行，运行时强制类型校验**——值类型不匹配即抛 `RUN_TYPE_MISMATCH`。这与
 > TypeScript `any` / Dart `dynamic` 的渐进类型模型一致：`any` 是逃生阀，运行时复查是
-> 逃生阀的"明确重处理机制"，而非编译期禁止。需要时用强制类型转换（`(int)x`）取得目标
+> 逃生阀的"明确重处理机制"，而非编译期禁止。**用户类目标同样强制**：动态 `any` 类对象
+> 赋给用户类变量报 `RUN_TYPE_MISMATCH`（2026-08-13 补全——此前对用户类目标静默跳过，
+> 导致 any 值流入后访问报困惑的 AttributeError）。需要时用强制类型转换（`(int)x`）取得目标
 > 类型使检查通过：
 > ```ibci
 > any x = 42
@@ -382,7 +382,7 @@ str r = @~ ... ~
 
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
-1. **用户类泛型参数已支持（2026-08-12）**：`class Box[T]:` 全链路落地——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**已支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器不合并继承链的声明字段（与普通继承一致）；④ 无约束裸类型参数（`T: Bound` 不支持）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
+1. **用户类泛型参数已支持（2026-08-12）**：`class Box[T]:` 全链路落地——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**已支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器合并继承链的无默认值字段（父类优先，2026-08-13 根治，见 §六）；④ 无约束裸类型参数（`T: Bound` 不支持）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
 2. **运算符重载覆盖有限**：用户类可定义 dunder 方法并被运算符分派调用。2026-08-12 实测（运算符 + 返回类型契约核对）：**比较类** `==`(`__eq__`)/`!=`(`__ne__`)/`<`(`__lt__`)/`>`(`__gt__`)/`<=`(`__le__`)/`>=`(`__ge__`)、**算术类** `+`(`__add__`)/`-`(`__sub__`)/`*`(`__mul__`)/`%`(`__mod__`)、**一元类** `-`(`__neg__`)/`~`(`__invert__`)/`not`(`__not__`)、**成员** `in`(`__contains__`) 均可覆写。**`is` 恒为身份比较，不可覆写**（与 Python 一致）。该机制经 `IbClass.receive` 的 vtable 分派实现；与内置 axiom 的能力级分派（Integer/Float/Str 的 `+`/`==`/`<`）是两套路径，未覆写的运算符在用户类上退化为身份比较（`==`）或运行时错误。
 
 ---
