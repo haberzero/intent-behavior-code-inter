@@ -286,12 +286,11 @@ class TestGenericMultiParamAndNested:
 
 
 class TestGenericSelfReference:
-    """泛型类自引用（G2 字段 / G1 方法体类型参数）回归。
+    """泛型类自引用行为：自引用字段与方法体类型参数特化。
 
-    深度核验确认两处独立缺陷，已修复：
-    - G2：自引用字段 `Node[T] next` 曾被 from_spec 扁平化为 TypeRef('Node[T]')，
-      substitute 无法替换 → 特化后仍 Node[T]。现结构化 TypeRef('Node',(T,))。
-    - G1：方法体内 `Box[T]` 表达式 slice T 运行时查变量失败。现方法帧按
+    - 自引用字段 `Node[T] next` 结构化为 TypeRef('Node',(T,))，特化后
+      substitute 可替换为 Node[int]。
+    - 方法体内 `Box[T]` 表达式 slice T 查运行时变量成功：方法帧按
       receiver 特化实参注册类型参数符号。
     """
 
@@ -312,7 +311,7 @@ class TestGenericSelfReference:
         assert out == ["1", "2"]
 
     def test_method_body_generic_construct(self):
-        """方法体内 Box[T](v) 构造（G1）：多特化分别正确。"""
+        """方法体内 Box[T](v) 构造：多特化分别正确。"""
         out = run_ibci(
             "class Box[T]:\n"
             "    T value\n"
@@ -361,10 +360,9 @@ class TestGenericSelfReference:
 
 
 class TestGenericIllegalArgs:
-    """非法特化实参编译期拦截（BOUNDARY-G1 回归）。
+    """非法特化实参编译期拦截。
 
-    Box[42]/Box[None] 此前编译通过、运行期裸 AttributeError；现语义层
-    fail-fast 报 SEM_GENERIC_TYPE_NEEDS_ARGS。
+    表达式位置 Box[42]/Box[None] 经语义层 fail-fast 报 SEM_GENERIC_TYPE_NEEDS_ARGS。
     """
 
     def test_literal_arg_rejected(self):
@@ -387,7 +385,7 @@ class TestGenericIllegalArgs:
 
 
 class TestGenericNestedMethodBodyArg:
-    """嵌套泛型实参方法体 Box[T]（P2 复核发现）回归。"""
+    """嵌套泛型实参方法体 Box[T] 行为。"""
 
     def test_nested_list_arg_method_body(self):
         """Box[list[int]] 方法体内 Box[T] 构造命中特化。"""
@@ -419,7 +417,7 @@ class TestGenericNestedMethodBodyArg:
 
 
 class TestGenericNoneArgRejected:
-    """注解位置 Box[None] 幻影特化拦截（P3 复核发现）回归。"""
+    """注解位置 Box[None] 幻影特化拦截行为。"""
 
     def test_none_arg_annotation_rejected(self):
         """Box[None] 作参数注解 → SEM_GENERIC_TYPE_NEEDS_ARGS（非幻影特化）。"""
@@ -442,7 +440,7 @@ class TestGenericNoneArgRejected:
 
 
 class TestGenericVoidArgRejected:
-    """用户泛型 void 实参拦截（thread[void] 例外）回归。"""
+    """用户泛型 void 实参拦截（thread[void] 例外）行为。"""
 
     def test_void_arg_user_class_rejected(self):
         """Box[void] 用户泛型 → SEM_GENERIC_TYPE_NEEDS_ARGS（幻影 spec 拦截）。"""
@@ -455,11 +453,10 @@ class TestGenericVoidArgRejected:
 
 
 class TestExpressionPositionSpecialization:
-    """GEN-5：用户泛型类下标在表达式位置的特化注册（KERNEL_ISSUE-GEN-5 判别性回归）。
+    """用户泛型类下标在表达式位置的特化注册。
 
-    表达式位置（type() 参数 / 变量值 / 打印）的 Box[list[int]] 须触发编译期
+    表达式位置（type() 参数 / 变量值 / 打印）的 Box[list[int]] 触发编译期
     特化 spec 注册（复用 _resolve_type 递归 slice 解析），运行时可用。
-    修复前：runtime RuntimeError "no registered specialization"。
     """
 
     def test_expr_position_nested_generic(self):
@@ -518,12 +515,10 @@ class TestExpressionPositionSpecialization:
 
 
 class TestGenericMethodParamDescriptor:
-    """GEN-6B：泛型类方法参数 descriptor 结构化（KERNEL_ISSUE-GEN-6 判别性回归）。
+    """泛型类方法参数 descriptor 结构化。
 
-    方法参数 `Vec[T] other` 的 param_descriptor 须结构化（TypeRef.from_spec），
+    方法参数 `Vec[T] other` 的 param_descriptor 结构化（TypeRef.from_spec），
     特化后 substitute 可替换为 Vec[int]，显式方法调用参数校验正确。
-    修复前：param_descriptors 扁平化 TypeRef('Vec[T]') 无法替换 →
-    SEM_TYPE_MISMATCH "expected 'Vec[T]', but got 'Vec[int]'"。
     """
 
     def test_explicit_method_call_specialized_param(self):

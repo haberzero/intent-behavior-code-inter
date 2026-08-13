@@ -1,12 +1,10 @@
 """
 tests/e2e/test_chan_send_waitable.py
 
-B1（PT-DEBT-13）：``chan.send`` 满通道 Waitable 化（与 ``recv`` 对称）。
+``chan.send`` 满通道 Waitable 化（与 ``recv`` 对称）。
 
-此前 ``IbChannel.send`` → ``CommBuffer.send`` 满时 ``_cond.wait()`` 真阻塞线程，
-与已转 Waitable 的 ``recv`` 不对称；唯一消费者同调度器时死锁。改造后非满
-立即投递返回 ``None``，有界满通道返回发送 Waitable——VM 经既有 Waitable 挂起
-路径等待腾出空间（协作挂起而非阻塞线程），消除死锁。
+机制：非满 send 立即投递返回 ``None``；有界满通道返回发送 Waitable——VM 经
+既有 Waitable 挂起路径等待腾出空间后恢复（协作挂起，不阻塞线程）。
 
 覆盖：
 - 有界满通道 send 协作挂起，消费者腾出空间后恢复（不阻塞线程、不死锁）
@@ -22,9 +20,8 @@ class TestSendWaitable:
     def test_bounded_send_suspends_threaddrain(self):
         """有界满通道 send 协作挂起，消费者线程 recv 腾出空间后恢复。
 
-        主线程 fill 满 capacity=1 通道后第二次 send 协作挂起（经 Waitable，
-        不阻塞解释器线程）；消费者线程 recv 腾出空间，send 恢复完成——
-        消除了"满通道 send 真阻塞线程"的遗留妥协。
+        主线程 fill 满 capacity=1 通道后第二次 send 经 Waitable 协作挂起
+        （不阻塞解释器线程）；消费者线程 recv 腾出空间，send 恢复完成。
         """
         code = """
 chan c = chan(int, "stream", buffer=1)

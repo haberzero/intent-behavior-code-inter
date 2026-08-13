@@ -2,7 +2,7 @@
 tests/e2e/test_for_filter_compound.py
 ==========================================
 
-for...if 过滤与复合赋值运算符的 e2e 覆盖（此前两特性零 e2e 测试）。
+for...if 过滤与复合赋值运算符的 e2e 覆盖。
 
 覆盖：
 * ``for T name in iterable if filter:`` 过滤（数值/字符串/函数调用条件）。

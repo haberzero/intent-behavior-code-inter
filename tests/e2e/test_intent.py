@@ -33,9 +33,8 @@ print(result)
         assert "1" in lines
 
     def test_single_intent_does_not_pollute_persistent_stack(self):
-        """@ 是一次性意图，LLM 调用后不应残留在持久意图栈中。
-        回归测试：验证第二次 LLM 调用能正常执行（若 @ 意图错误地永久入栈，
-        第二次调用仍会携带该意图，虽然 MOCK 模式下不影响结果，但不应报错）。"""
+        """@ 是一次性意图，LLM 调用后不残留在持久意图栈中；第二次 LLM 调用
+        不携带前次 @ 意图，正常执行。"""
         code = AI_MOCK_PREFIX + """
 @ be concise
 str result1 = @~ MOCK:TRUE first ~
@@ -126,7 +125,7 @@ print(result2)
         assert lines.count("1") >= 2
 
     def test_lambda_behavior_uses_call_time_intents(self):
-        """lambda 延迟行为应在调用时使用当前意图栈，而非定义时的空栈（回归验证）。
+        """lambda 延迟行为在调用时使用当前意图栈，而非定义时的空栈。
         注：直接赋值到具体类型（int/str）需编译器类型推断改进，当前通过 print() 调用验证。"""
         code = AI_MOCK_PREFIX + """
 @+ use formal language
@@ -220,7 +219,7 @@ print(result)
         assert "77" in lines
 
     def test_use_with_non_intent_context_fails_fast(self):
-        """intent_context.use(非法对象) 必须可读报错（此前静默 return False 吞错）。"""
+        """intent_context.use(非法对象) 必须可读报错。"""
         code = "intent_context.use(42)\n"
         engine = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
         try:

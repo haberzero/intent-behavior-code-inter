@@ -1,7 +1,7 @@
 """tests/contracts/test_api_config.py - api_config.json 加载与校验契约测试。
 
 覆盖 ApiConfig（load/validate/env 引用/诊断码）+ AIPlugin（apply_config/set_mock_mode/
-显式 load_project_config）。配置加载为显式动作（F9）：引擎启动不再自动加载。
+显式 load_project_config）。配置加载为显式动作（F9）：引擎启动不自动加载。
 """
 import json
 
@@ -186,7 +186,7 @@ class TestAIPluginConfig:
 
 class TestEngineExplicitConfigLoad:
     def test_engine_no_auto_load_without_explicit_call(self, tmp_path):
-        """引擎启动不再自动加载 api_config.json——脚本不显式调用则无配置（F9）。"""
+        """引擎启动不自动加载 api_config.json——脚本不显式调用则无配置（F9）。"""
         from core.engine import IBCIEngine
 
         config_file = tmp_path / "api_config.json"
@@ -240,8 +240,8 @@ class TestEngineExplicitConfigLoad:
 class TestDocumentedAiApiReachable:
     """docs/syntax/11_modules.md §11.3 文档化的 ai API 语言级可达性。
 
-    PT-DEBT-28：get_retry/is_auto_intent_injection_enabled 此前 vtable 未注册，
-    IBCI 侧取到 None 不可调用（其余 §11.3 API 已全部对账）。修复=补 _spec.py 注册。
+    get_retry/is_auto_intent_injection_enabled 必须经 vtable 注册、IBCI 侧可调用
+    （与 §11.3 其余文档化 API 一致）。
     """
 
     def _run(self, tmp_path, code):
@@ -360,7 +360,7 @@ class TestLoadProjectConfigContract:
 
 
 class TestConfigFailFastHardening:
-    """F1/F2/F4/F6：配置机制 fail-fast 硬化（上一批次遗留，general 彻查发现）。"""
+    """F1/F2/F4/F6：配置机制 fail-fast 硬化。"""
 
     def test_env_ref_malformed_fails_fast(self):
         """F1：`{env:lower}` 格式非法（非大写下划线）不得静默透传为字面量。"""

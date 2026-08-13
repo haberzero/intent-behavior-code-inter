@@ -92,11 +92,11 @@ print("done")
 
 
 def test_thread_body_recursion_trampolined():
-    """PT-DEBT-10：线程体内用户函数递归经 trampoline 驱动，不嵌套 Python 栈。
+    """线程体内用户函数递归经 trampoline 驱动，不嵌套 Python 栈。
 
-    R1 前线程体 ``_drive_generator`` 对 UserFunctionCall 递归驱动，线程内深递归
-    （n≈20）即失败；trampoline 化后线程体与 VM 主路径同构，深递归 Python 深度
-    恒定。同时验证线程体可解析模块级函数（全局作用域链到模块作用域）。
+    线程体 ``_drive_generator`` 经 trampoline 驱动 UserFunctionCall 递归，与
+    VM 主路径同构：线程内深递归（n≈20）Python 深度恒定。同时验证线程体
+    可解析模块级函数（全局作用域链到模块作用域）。
     """
     code = """
 func compute(int n) -> int:
@@ -258,7 +258,7 @@ print((str)r.expect())
 
 
 class TestThreadWaitableDirect:
-    """R3：IbThread 本体满足 Waitable（D-04 意图修复，exp/exec-ra）。
+    """IbThread 本体满足 Waitable 协议。
 
     语言 ``await t`` 直接可用；``t.join()`` 返回自身；``t.is_done()`` 语言
     方法保留（auto-bind 对 property 的包装，读 property + 装箱）。

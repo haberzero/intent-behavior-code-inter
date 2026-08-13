@@ -2,17 +2,11 @@
 tests/e2e/test_switch_usability.py
 ===================================
 
-switch/case 易用性回归测试（2026-08-12）。
+switch/case 易用性行为。
 
-背景：KNOWN_LIMITS §十一 声称"switch 暂不在生产使用"（过度保守——实测 switch
-功能完整）。且 case 内写 `break`（C 语言习惯）此前报 `RUN_GENERIC_ERROR:
-Control flow statement used outside of function or loop`——IBCI switch 语义是
-"匹配后自动跳出 case"（无 fall-through），break 是冗余但无害，应被接受为 no-op。
-
-修复：
-- vm_handle_IbSwitch 消费 case body 的 BREAK Signal（no-op）；
-  RETURN/THROW/CONTINUE 透传（CONTINUE 可透传给外层循环）。
-- KNOWN_LIMITS §十一 更新为"基本可用 + 使用约束"。
+语义：IBCI switch 是"匹配后自动跳出 case"（无 fall-through）。case 内写
+`break`（C 语言习惯）是冗余但无害，接受为 no-op；RETURN/THROW/CONTINUE
+透传（CONTINUE 可透传给外层循环）。
 """
 from tests.conftest import run_ibci
 

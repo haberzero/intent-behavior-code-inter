@@ -1,10 +1,9 @@
 """
 tests/e2e/test_method_cps.py
 
-F1（PT-DEBT-12）：用户方法调用 CPS 化——``obj.method(x)`` 不再落回
-``receive('__call__')`` → ``IbBoundMethod.call`` → ``vm.run_body``（嵌套调度器，
-方法含 Waitable 时死锁、深递归方法嵌套 Python 栈），而是解包 ``IbBoundMethod``
-经 CPS trampoline 调用（与函数调用同构），receiver 作为 ``self`` 注入。
+用户方法调用 CPS 化：``obj.method(x)`` 解包 ``IbBoundMethod`` 经 CPS trampoline
+调用（与函数调用同构），receiver 作为 ``self`` 注入。方法含 Waitable 时帧内
+挂起/恢复，深递归方法 Python 深度恒定。
 
 覆盖：
 - 方法内 await 通道 recv（Waitable），挂起/恢复正确（不重入调度器、不死锁）
@@ -50,7 +49,7 @@ print((str)b)
         assert run_ibci(code) == ["15", "22"]
 
     def test_deep_recursive_method_no_python_overflow(self):
-        """深递归方法经 trampoline 驱动，Python 深度恒定（F1 根治嵌套栈）。"""
+        """深递归方法经 trampoline 驱动，Python 深度恒定。"""
         code = """
 class Recur:
     func f(self, int n) -> int:

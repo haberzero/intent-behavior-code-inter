@@ -73,7 +73,7 @@ class TestTypeAnnotations:
         assert_compiles(code)
 
     def test_chan_keyword_mode_normalized(self):
-        """chan(str, mode=\"stream\") 的 mode/type_name 归一为字面值（A-D5 回归）。"""
+        """chan(str, mode="stream") 的 mode/type_name 归一为字面值。"""
         from core.compiler.serialization.serializer import FlatSerializer
         artifact = compile_ibci('chan c = chan(str, mode="stream")\n')
         d = FlatSerializer().serialize_artifact(artifact)

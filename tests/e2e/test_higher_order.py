@@ -362,7 +362,7 @@ print(r2)
             AI_MOCK_PREFIX + "\nfn f = lambda -> auto: @~MOCK:STR:hi~\nint r = f()", "SEM_TYPE_MISMATCH")
 
     def test_fn_sig_param_validates_behavior_lambda_return(self):
-        """`fn[()->int]` 参数调用点校验行为 lambda 返回类型（此前被跳过致运行期不一致）。"""
+        """`fn[()->int]` 参数调用点校验行为 lambda 返回类型与 fn 签名一致。"""
         # 行为 auto(=str) 传 fn[()->int] 参数 → 编译错误
         expect_compile_error(
             AI_MOCK_PREFIX + (

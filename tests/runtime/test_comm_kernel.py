@@ -195,8 +195,8 @@ class TestChannelPubSub:
     def test_close_clears_subscribers(self):
         """close() 清空订阅者注册表，subscriber_count 如实归零。
 
-        此前 close() 仅关闭订阅者 buffer 不移出 _subscribers，内省
-        snapshot()["subscriber_count"] 在通道关闭后仍计入已关订阅者。
+        close() 关闭订阅者 buffer 并将订阅者移出 _subscribers；通道关闭后
+        snapshot()["subscriber_count"] 应为 0，不残留已关订阅者。
         """
         c = ChannelCore(mode="pubsub")
         s1 = c.subscribe()
@@ -210,8 +210,8 @@ class TestChannelPubSub:
     def test_send_skips_concurrently_closed_subscriber(self):
         """send fan-out 跳过已关闭订阅者，异常不泄漏给生产者。
 
-        通道整体未关闭，但某订阅者在快照后并发 close——此前 CommClosedError
-        从该订阅者泄漏；修复后消息仍投递给存活订阅者。
+        通道整体未关闭，但某订阅者并发 close：send 应跳过已关订阅者，
+        不抛 CommClosedError，仍将消息投递给存活订阅者。
         """
         c = ChannelCore(mode="pubsub")
         alive = c.subscribe()

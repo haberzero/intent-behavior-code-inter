@@ -2,16 +2,15 @@
 tests/runtime/test_ibc_file_imports.py
 =======================================
 
-IBC 文件跨模块导入（具名 / import-*）回归测试。
+IBC 文件跨模块导入（具名 / import-*）行为契约。
 
-背景：该路径此前**完全断裂**（零测试覆盖）——
-1. scheduler.py 用裸 `TypeDef`（别名 `ModuleMetadata` 后 NameError → INT_INTERNAL_ERROR）；
-2. 文件模块元数据用 Lazy 空描述符，members 恒空 → 具名/星号导入全部 SEM_UNDEFINED_SYMBOL；
-3. 运行时 `module_instance.get_variable`（IbModule 无此方法）→ AttributeError。
-根治重构（B-D6 断层修复）同时修复了这三层断裂。
+该路径须满足：
+1. scheduler.py 以 `ModuleMetadata` 别名承载文件模块元数据（不得 NameError → INT_INTERNAL_ERROR）；
+2. 文件模块元数据 members 非空 → 具名/星号导入正常解析（不得 SEM_UNDEFINED_SYMBOL）；
+3. 运行时 `module_instance.get_variable` 可访问（IbModule 提供此方法，不得 AttributeError）。
 
 同时锁定 import-* 的"精确成员枚举"机制（编译器记录 import_star_members，
-运行时据此枚举，不再 dir(package) ∩ 整张模块表）。
+运行时据此枚举，不依赖 dir(package) ∩ 整张模块表）。
 """
 import os
 
@@ -115,7 +114,7 @@ class TestIbcFileMultiModule:
         assert _run(tmp_path) == ["30"]
 
     def test_import_star_members_recorded_in_artifact(self, tmp_path):
-        """编译器把 import-* 的精确成员名记录进 artifact（根治机制的序列化契约）。"""
+        """编译器把 import-* 的精确成员名记录进 artifact（精确成员枚举的序列化契约）。"""
         _write(
             tmp_path,
             "helper.ibci",
@@ -133,12 +132,11 @@ class TestIbcFileMultiModule:
 
 
 class TestIbcFileWholeImport:
-    """``import mod`` 整模块导入 + 成员访问（PT-DEBT-26，2026-08-12）。
+    """``import mod`` 整模块导入 + 成员访问行为契约。
 
-    此前模块元数据 members 以 Symbol 形态写入，resolve_member 只认
-    MemberSpec 形态 → 整模块 import + 成员访问触发 INT_INTERNAL_ERROR
-    （FunctionSymbol/VariableSymbol 无 type_ref）。修复=scheduler 写入侧
-    统一为 MemberSpec/MethodMemberSpec（_symbol_to_member）。
+    模块元数据 members 以 MemberSpec/MethodMemberSpec 形态写入（scheduler
+    写入侧经 _symbol_to_member 转换）；resolve_member 按 MemberSpec 解析，
+    整模块 import + 成员访问不得触发 INT_INTERNAL_ERROR（Symbol 形态缺 type_ref）。
     """
 
     def test_whole_import_function_call(self, tmp_path):
@@ -171,8 +169,8 @@ class TestIbcFileWholeImport:
     def test_whole_import_consistency_with_named_import_type_check(self, tmp_path):
         """同一符号经 mod.x 与 from mod import x 的类型诊断应一致。
 
-        档2 修复：零参数函数成员此前退化到 any（运行时才报类型错）；
-        现在整模块与命名导入一样编译期报 SEM_TYPE_MISMATCH。
+        零参数函数成员保持精确类型（不退化到 any）；整模块与命名导入一样，
+        类型不匹配时编译期报 SEM_TYPE_MISMATCH。
         """
         _write(
             tmp_path,
@@ -216,13 +214,12 @@ def _write_nested(tmp_path, rel_path, content):
 
 
 class TestIbcFileGenericExport:
-    """泛型变量经整模块 import 导出的类型保真（GEN-FIX 收敛判别性回归）。
+    """泛型变量经整模块 import 导出的类型保真。
 
     模块导出符号经 _spec_to_typeref 收敛（委托 TypeRef.from_spec）后，thread[T]/
-    chan[T]/fn_callable[T]/用户类特化/多参 tuple 必须结构化保真。
-    修复前：thread[int]→thread[any]（读错字段）、chan[str]→扁平、
-    fn_callable[int]→fn[__args__()->void]（kind 级腐蚀）、tuple[int,str]→tuple
-    （丢位置元素）。
+    chan[T]/fn_callable[T]/用户类特化/多参 tuple 必须结构化保真：
+    thread[int] 读字段不腐蚀、chan[str] 不扁平化、fn_callable[int] 保留参数
+    类型、tuple[int,str] 保留位置元素。
     """
 
     def _scheduler_typeref(self, spec):
@@ -317,12 +314,11 @@ class TestIbcFileGenericExport:
 
 
 class TestIbcFileNestedPackageImport:
-    """嵌套包 `import subpkg.util` + 成员访问（2026-08-12 根治）。
+    """嵌套包 `import subpkg.util` + 成员访问行为契约。
 
-    此前中间模块符号以原始 Symbol 形态存入 members（无 type_ref）→
-    resolve_member 触发 INT_INTERNAL_ERROR；且 visit_IbImport 绑定全名而
-    scheduler 只注入根段 → SEM_UNDEFINED_SYMBOL；运行时缺包命名空间绑定。
-    修复：嵌套段统一 MemberSpec 形态 + 绑定根段 + 运行时包命名空间。
+    中间模块符号以 MemberSpec 形态存入 members（带 type_ref），resolve_member
+    不触发 INT_INTERNAL_ERROR；visit_IbImport 绑定全名且 scheduler 注入根段，
+    不报 SEM_UNDEFINED_SYMBOL；运行时提供包命名空间绑定。
     """
 
     def test_nested_import_function_call(self, tmp_path):

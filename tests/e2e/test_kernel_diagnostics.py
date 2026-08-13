@@ -2,7 +2,7 @@
 tests/e2e/test_kernel_diagnostics.py
 ======================================
 
-诊断面（PT-FEAT-9）端到端事件投影测试。
+诊断面端到端事件投影测试。
 
 验证三件事（黑盒，经 Python 侧订阅引擎级事件总线 + pytest.warns 断言警告投影）：
 1. 协议回退站点：真实执行中 ``__snapshot__`` 协议失败 → 同时产生
@@ -185,7 +185,7 @@ class TestPolicyOverrideSite:
 
 
 class TestEnvLimitDiagnostic:
-    """环境限制分类（PT-DEBT-9）：栈溢出根因保留 + 诊断事件双投影。"""
+    """环境限制分类：栈溢出根因保留 + 诊断事件双投影。"""
 
     def test_recursion_error_emits_classified_diagnostic(self):
         """深递归触底：RecursionError 根因传播，且发射 KDIAG_RUNTIME_ENV_LIMIT 事件。"""

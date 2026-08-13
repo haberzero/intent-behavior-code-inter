@@ -86,7 +86,7 @@ class TestRealMediaPayloadDispatch:
         assert base64.b64decode(payload["input_audio"]["data"]) == raw
 
     def test_to_prompt_text_uses_correct_type_name(self, tmp_path):
-        """__to_prompt__ 文本描述使用各自正确的类型名（回归：曾因闭包晚绑定全部显示 'video'）。"""
+        """__to_prompt__ 文本描述使用各自正确的类型名（audio/image/video 各用其类型名）。"""
         engine = _media_engine(tmp_path)
         audio_obj = IbAudio(FileBacking(_write_tmp(tmp_path, "a.wav", b"x")), _get_media_class("audio", engine))
         image_obj = IbImage(FileBacking(_write_tmp(tmp_path, "i.png", b"x")), _get_media_class("image", engine))

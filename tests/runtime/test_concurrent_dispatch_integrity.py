@@ -14,8 +14,8 @@ PT-SYNC-1 并发正确性验证：executor 并行 dispatch（`dispatch_eager`/`r
   ③ 乱序完成下输出仍按程序序（确定性）
   ④ 批次间无状态泄漏（多次并发批互不污染）
 
-价值场景：Stage 1 去共享化的根因（worker 线程不写主线程单写槽）的正确性
-不被回归——若后台 worker 污染共享状态，①-④ 之一会失败。
+价值场景：worker 线程不写主线程单写槽（去共享化）的正确性——若后台
+worker 污染共享状态，①-④ 之一会失败。
 """
 from tests.conftest import run_ibci
 

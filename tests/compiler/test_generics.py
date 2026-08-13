@@ -226,9 +226,9 @@ class TestCovariance:
 class TestGenericAnnotationDeclaredType:
     """泛型注解符号声明保留泛型身份（运行时内省/序列化不退化）。
 
-    此前缺陷：symbol_collection 只处理 IbName 注解，list[int] 等退化为
-    any/基础类型；serializer 未持久化 list/dict/tuple 泛型实参，rehydrator
-    shell 硬编码基础 TypeDef——运行时符号 declared_type 丢泛型参数。
+    symbol_collection 处理全部泛型注解（含 list[int] 等），不退化为基础类型；
+    serializer 持久化 list/dict/tuple 泛型实参，rehydrator 还原完整泛型身份——
+    运行时符号 declared_type 保留泛型参数。
     """
 
     def test_generic_annotations_preserve_type_args(self, engine):
@@ -251,10 +251,10 @@ class TestGenericAnnotationDeclaredType:
             assert sp.name == want, f"{name}: 期望 {want!r}，got {sp.name!r}（泛型身份回归）"
 
     def test_multi_type_list_removed(self, engine):
-        """多类型 list（list[int,str]）已移除——必须显式 list[any]。
+        """多类型 list（list[int,str]）不支持——必须显式 list[any]。
 
         无 union 类型机制，多元素 list 的"元素读取返回 any"实为隐式异构，
-        击穿元素类型设计。异构容器改为显式声明 list[any]。
+        击穿元素类型设计。异构容器须显式声明 list[any]。
         """
         expect_compile_error(
             "list[int,str] mixed = [1, \"a\"]\n",
@@ -269,8 +269,8 @@ class TestGenericAnnotationDeclaredType:
     def test_positional_tuple_preserves_elements(self, engine):
         """tuple[int,str] 位置元素类型经 artifact 序列化→还原不退化。
 
-        此前 serializer 只存 positional_type_names（head），位置顺序保真但
-        positional_type_modules 未持久化（与 dict key/value 双字段对齐）。
+        serializer 持久化 positional_type_names 与 positional_type_modules
+        （位置顺序与元素类型模块均保真，与 dict key/value 双字段对齐）。
         """
         from core.compiler.serialization.serializer import FlatSerializer
         from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
@@ -290,9 +290,9 @@ class TestGenericAnnotationDeclaredType:
     def test_chan_slot_annotation_preserves_type_args(self, engine):
         """chan[T]/slot[T] 注解纳入统一泛型模型，泛型身份保真。
 
-        此前 chan/slot 不在 GenericTypeDeclaration，注解实参丢弃（符号退化
-        为裸 chan/slot），与 ChannelAxiom/SlotAxiom docstring 声称的
-        "value_type 承载"矛盾——属半接通，根本修复。
+        chan/slot 与统一 GenericTypeDeclaration 模型一致：注解实参持久化
+        （符号保留 chan[T]/slot[T] 泛型身份），value_type 由
+        ChannelAxiom/SlotAxiom 承载——符号与公理声称保持一致。
         """
         engine.run_string(
             'chan[str] c = chan(str, "stream")\n'

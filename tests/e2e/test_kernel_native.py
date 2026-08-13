@@ -2,8 +2,7 @@
 tests/e2e/test_kernel_native.py
 ====================================
 
-端到端回归：ai/ihost/idbg/isys 提升为 kernel-native 后，
-既有 IBCI 层 API 行为保持不变。
+ai/ihost/idbg/isys 为 kernel-native 内建，既有 IBCI 层 API 行为保持一致。
 """
 from core.engine import IBCIEngine
 from tests.conftest import AI_MOCK_PREFIX, run_ibci

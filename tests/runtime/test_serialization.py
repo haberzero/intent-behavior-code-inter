@@ -133,10 +133,9 @@ class TestSerializationStructureAndContract:
 class TestThreadResultSerializationRoundTrip:
     """thread_result 序列化往返保真。
 
-    背景：``IbThreadResult`` 继承 ``IbObject`` 而非 ``IbValue``，旧守卫
-    ``isinstance(obj, IbValue) and cls_name == "thread_result"``
-    永不触发 → 序列化为 ``{"_type": "object", "fields": {}}``，value/error/status
-    静默丢失，反序列化分支（``_type == "thread_result"``）因此不可达。
+    契约：``IbThreadResult``（继承 ``IbObject`` 而非 ``IbValue``）须序列化为
+    ``_type="thread_result"`` 判别标记，value/error/status 随值保真，反序列化
+    分支（``_type == "thread_result"``）可达并重建。
     """
 
     _SUCCESS_CODE = (
@@ -268,9 +267,8 @@ thread[int] t = thread(callable=f, args=[])
 class TestTypeSymbolSerialization:
     """类型符号（IbClass）序列化为类引用，round-trip 后保持类型身份。
 
-    此前缺陷：IbClass 落 else object 分支展开为空 fields，反序列化时被
-    registry.get_class 构造为对应类的空普通实例（IbObject）——类型符号身份破坏，
-    `slot(...)` 等类型构造在恢复后失效。
+    契约：IbClass 须序列化为类引用（非展开为空 fields 的普通实例），反序列化
+    经 registry.get_class 重建为对应类，`slot(...)` 等类型构造在恢复后可用。
     """
 
     def test_serialized_type_symbols_are_class_ref(self, engine):

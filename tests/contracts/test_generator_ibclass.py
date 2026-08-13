@@ -2,10 +2,10 @@
 tests/contracts/test_generator_ibclass.py
 ==========================================
 
-Contract tests for the dedicated ``generator`` IbClass (PT-DEBT-18 / U1).
+Contract tests for the dedicated ``generator`` IbClass.
 
-Guards the root-cause fix that replaced the process-hardcoded ``receive``
-special-case on ``IbGenerator`` with a properly registered generator class:
+Guards protocol-driven generator dispatch through a properly registered
+generator class:
 
 - GEN-1: A dedicated ``generator`` IbClass exists in the kernel registry.
 - GEN-2: Its vtable carries ``to_list`` / ``generic_next`` (protocol-driven
@@ -13,7 +13,7 @@ special-case on ``IbGenerator`` with a properly registered generator class:
 - GEN-3: A generator value produced by a ``yield`` function carries
   ``ib_class.name == "generator"`` (not the generic ``callable`` class).
 - GEN-4: User-explicit ``gen.to_list()`` / ``gen.generic_next()`` dispatch
-  through the vtable (the exact regression the special-case papered over).
+  through the vtable.
 """
 
 from tests.conftest import run_ibci
@@ -30,7 +30,7 @@ class TestGeneratorIbClassRegistry:
         assert gen_cls is not None, "dedicated 'generator' IbClass must exist"
         assert gen_cls.lookup_method("to_list") is not None
         assert gen_cls.lookup_method("generic_next") is not None
-        # 不得再依赖 callable 类兜底承载生成器方法
+        # callable 类不承载生成器方法，生成器方法只挂在 generator 类 vtable 上
         callable_cls = engine.registry.get_class("callable")
         assert callable_cls.lookup_method("to_list") is None
         assert callable_cls.lookup_method("generic_next") is None

@@ -365,7 +365,7 @@ for int x in outer(1):
         assert run_ibci(code) == ["5", "6"]
 
     def test_generator_call_inside_generator_body(self):
-        """生成器体内调用生成器函数产出 IbGenerator（缺陷修复回归）。"""
+        """生成器体内调用生成器函数产出 IbGenerator。"""
         code = """
 func inner(int n) -> int:
     yield 1

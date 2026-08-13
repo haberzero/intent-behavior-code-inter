@@ -1,11 +1,11 @@
 """
 tests/e2e/test_enum_completion.py
 
-Enum 补全回归测试（PT-FEAT-2）：
+Enum 补全行为：
 * 非 str 枚举 LLM 集成（成员名 → 成员值映射，switch 命中）。
 * 迭代 ``for v in Color:``（成员值列表）。
 * 数量 ``len(Color)``。
-* str 枚举 LLM 集成零回归（值==名）+ 值≠名场景。
+* str 枚举 LLM 集成（值==名）+ 值≠名场景。
 """
 
 from tests.conftest import run_ibci

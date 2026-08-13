@@ -261,7 +261,7 @@ except LLMError as e:
 
 class TestExceptionAcrossFunctionBoundary:
     """
-    回归：用户异常跨函数调用边界类型/字段必须保留。
+    用户异常跨函数调用边界时类型/字段必须保留。
 
 
     """

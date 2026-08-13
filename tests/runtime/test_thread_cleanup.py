@@ -19,8 +19,8 @@ from tests.conftest import REPO_ROOT, run_ibci
 def test_thread_result_imports_without_circular_import():
     """干净解释器下直接 import thread_result / thread 不触发循环导入。
 
-    旧缺陷：thread_result → primitives.optional → primitives/__init__ → ..thread_result，
-    直接导入抛 ImportError（依赖隐式导入顺序存活）。
+    thread_result ↔ primitives 的模块依赖图须无环：干净解释器直接导入
+    必须成功，不依赖隐式导入顺序。
     """
     code = (
         "import core.runtime.objects.thread_result\n"
@@ -180,8 +180,8 @@ c.send("x")
 def test_cancel_on_finished_thread_returns_none():
     """已结束线程 cancel() 返回 None，不翻转状态为 CANCELLED。
 
-    此前 cancel() 仅查 _spawned is None，已 join 的线程调用会返回
-    ThreadCancelled err 并把 _state 从 done 翻转为 cancelled（违背 docstring）。
+    cancel() 对已结束（joined）线程应返回 None；不得返回 ThreadCancelled
+    错误，也不得把 _state 从 done 翻转为 cancelled。
     """
     lines = run_ibci("""
 func f() -> int:
@@ -199,8 +199,8 @@ print(t.is_done())
 def test_is_done_reflects_natural_completion():
     """线程自然完成（未 join）后 is_done() 返回 True。
 
-    此前 is_done() 读 _state（仅 join/cancel 时刷新），自然完成未 join 会
-    滞后为 running 而误报 False；现在以 _spawned.is_done 为权威完成信号。
+    is_done() 以 _spawned.is_done 为权威完成信号（而非仅 join/cancel 时
+    刷新的 _state）；自然完成未 join 也应立即反映 True。
     """
     import time
     from core.engine import IBCIEngine

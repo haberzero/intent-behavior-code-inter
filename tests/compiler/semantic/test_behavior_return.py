@@ -2,16 +2,11 @@
 tests/compiler/semantic/test_behavior_return.py
 ===============================================
 
-``return @~...~`` 编译期拦截回归测试（2026-08-12）。
+``return @~...~`` 编译期拦截的行为契约。
 
-背景：KNOWN_LIMITS §四 声称"行为表达式不可直接用于 return，报 SEM_TYPE_MISMATCH"，
-但 v1 语义重构（afe9644 删除 v1 semantic code）时该拦截未随迁到 v2
-（_statement_visitors.py）——文档与实现漂移：直接写 return @~ 编译通过、
-运行时按字符串 box（-> int 等具体类型失效，静默类型错流入）。
-
-修复：visit_IbReturn 补全设计意图拦截（镜像 visit_IbAssign 的行为表达式处理），
-`return @~...~` 编译期报 SEM_TYPE_MISMATCH；正确写法（先赋值局部变量再 return）
-不受影响。
+行为表达式不可直接用于 return：`return @~...~` 编译期报 SEM_TYPE_MISMATCH
+（visit_IbReturn 镜像 visit_IbAssign 的行为表达式处理）；正确写法
+（先赋值有类型局部变量再 return）不受影响。
 """
 from tests.conftest import expect_compile_error, run_ibci, AI_MOCK_PREFIX
 
@@ -57,10 +52,10 @@ print((str)add(1, 2))
 
 
 class TestBooleanLiteralGuidance:
-    """小写 true/false/none 未定义时的引导信息（2026-08-12）。
+    """小写 true/false/none 未定义时给出引导信息。
 
-    背景：IBCI 布尔/空值字面量大写（True/False/None，与 Python 一致）。
-    用户写小写时此前报裸 "Undefined symbol 'true'"（误导）；现加引导。
+    IBCI 布尔/空值字面量大写（True/False/None，与 Python 一致）。
+    用户写小写时，在 "Undefined symbol" 之外附带大写形式的引导。
     """
 
     def _compile_errors(self, code):

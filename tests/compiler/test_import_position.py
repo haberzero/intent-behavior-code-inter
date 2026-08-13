@@ -1,9 +1,8 @@
 """
 tests/compiler/test_import_position.py — import 位置契约（compile-only）。
 
-``import`` 必须位于文件顶部；错位报 ``DEP_INVALID_IMPORT_POSITION``，
-而非误导性的 ``SEM_UNDEFINED_SYMBOL``。运行时回归见 e2e/test_import_position_runtime.py
-（mixed-concerns 拆分）。
+``import`` 必须位于文件顶部；错位报 ``DEP_INVALID_IMPORT_POSITION``。
+运行时行为见 e2e/test_import_position_runtime.py（mixed-concerns 拆分）。
 """
 
 from tests.conftest import compile_or_errors, expect_compile_error

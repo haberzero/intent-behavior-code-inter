@@ -101,7 +101,7 @@ class TestDependentBehaviorSerialized:
     def test_dependent_behavior_reads_resolved_dependency(self):
         """y 依赖 x（插值 $x），x 应先 resolve，y 再使用正确的 x 值。"""
         # x 先 resolve 为 "hello"，y 的 prompt 插值 $x → 结果中含 "hello"。
-        # 数据依赖使 y 不可并发 dispatch（R2-23：真依赖用例，替代此前"语义独立"的误名测试）。
+        # 数据依赖使 y 不可并发 dispatch（R2-23 真依赖用例）。
         code = AI_SETUP + (
             "str x = @~ MOCK:STR:hello ~\n"
             "str y = @~ 把 $x 复制一遍 ~\n"

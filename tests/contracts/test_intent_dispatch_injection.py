@@ -3,11 +3,10 @@
 
 Intent 一次性/排他意图在 dispatch-before-use（并行预调度赋值）路径的注入契约。
 
-覆盖真实 LLM e2e 暴露的机制缺陷（原被误判为"模型服从性"）：
+覆盖 dispatch 路径下意图必须进入发送给 LLM 的 system prompt 的行为：
 - INV-INTENT-DISPATCH-*: ``@`` smear / ``@!`` override 意图在赋值 + 并行预调度
-  （``dispatch_eager`` → 意图快照）路径下必须进入发送给 LLM 的 system prompt。
-  此前 ``_prepare_behavior_call`` 的 captured_intents 分支只取 active/global，
-  fork() 移入快照 ``_inherited_smear``/``_inherited_override`` 的一次性意图被丢弃。
+  （``dispatch_eager`` → 意图快照）路径下必须进入发送给 LLM 的 system prompt，
+  含 fork() 移入快照 ``_inherited_smear``/``_inherited_override`` 的一次性意图。
 """
 
 import pytest
@@ -27,7 +26,7 @@ def _intent(content):
 
 
 class TestIntentContextResolveToPrompts:
-    """``IbIntentContext.resolve_to_prompts``（修复后的单一权威消解）。"""
+    """``IbIntentContext.resolve_to_prompts``（单一权威消解）。"""
 
     def test_resolve_merges_active_smear_global(self):
         from core.runtime.objects.intent_context import IbIntentContext
@@ -77,7 +76,7 @@ class TestIntentDispatchPathInjection:
     """一次性意图在赋值 dispatch-before-use 路径下必须进入 system prompt。"""
 
     def test_smear_intent_injected_in_dispatch_assignment(self, captured_sys_prompts):
-        """``@`` 一次性意图 + 赋值（dispatch 路径）：此前意图被丢弃。"""
+        """``@`` 一次性意图 + 赋值（dispatch 路径）：意图须注入 system prompt。"""
         code = AI_MOCK_PREFIX + """
 @ 用冷酷无感情且极简的口吻回复
 str r = @~ MOCK:STR:hi ~
@@ -88,7 +87,7 @@ print(r)
         assert "用冷酷无感情且极简的口吻回复" in captured_sys_prompts[0]
 
     def test_override_intent_injected_in_dispatch_assignment(self, captured_sys_prompts):
-        """``@!`` 排他意图 + 赋值（dispatch 路径）：此前意图被丢弃。"""
+        """``@!`` 排他意图 + 赋值（dispatch 路径）：意图须注入 system prompt。"""
         code = AI_MOCK_PREFIX + """
 @! 只回复一个词
 str r = @~ MOCK:STR:hi ~

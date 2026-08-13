@@ -2,29 +2,23 @@
 tests/e2e/test_instance_call_cps.py
 ====================================
 
-用户类实例协议方法调用的帧内 CPS 驱动回归测试（PT-DEBT-O1/I1，2026-08-12）。
+用户类实例协议方法调用的帧内 CPS 驱动行为。
 
-背景：``obj()``（可调用类实例）与用户类生成器 ``__iter__`` 此前经
-``receive(protocol)`` → ``method.call`` → ``_drive_generator``（新建嵌套
-TaskScheduler，非 generator 模式）：
-- O1：``obj()`` 深递归触发 Python RecursionError（违反 EXEC-1 trampoline 保证），
-  ``__call__`` 含 Waitable 时死锁。
-- I1：用户类 ``__iter__`` 写成分片生成器方法 → 崩溃 ``No CPS handler for
-  'GeneratorYield'``（GeneratorYield 泄漏）；``yield from <实例>`` 同样受影响。
-
-修复（机制同构 A5 _ClassInstantiateDrive）：
+机制：``obj()``（可调用类实例）与用户类生成器 ``__iter__`` 经帧内 CPS 驱动：
 - ``IbObject.receive('__call__')`` 对含用户 ``__call__`` 的类实例返回
   ``_UserCallDrive``（Waitable + CPSDrivable），VM 经 ``cps_drive`` 帧内驱动
-  （UserFunctionCall trampoline）。
+  （UserFunctionCall trampoline）：深递归走 trampoline（EXEC-1，Python 深度
+  恒定），含 Waitable 的 ``__call__`` 可帧内挂起/恢复。
 - ``IbUserFunction.call`` 对生成器方法返回 IbGenerator（与 VM 主路径同构）；
-  ``resolve_iterable`` 对 ``__iter__`` 返回的 IbGenerator 做 to_list。
+  ``resolve_iterable`` 对 ``__iter__`` 返回的 IbGenerator 做 to_list，
+  ``yield from <实例>`` 委托产出。
 """
 
 from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
 class TestCallableInstanceCPS:
-    """``obj()`` 可调用类实例（O1）。"""
+    """``obj()`` 可调用类实例。"""
 
     def test_callable_instance_basic(self):
         code = """
@@ -38,8 +32,7 @@ print((str)v)
         assert run_ibci(code) == ["42"]
 
     def test_callable_instance_deep_recursion(self):
-        """深递归 __call__ 必须走 trampoline（EXEC-1），Python 深度恒定——
-        修复前 depth~300 即 RecursionError。"""
+        """深递归 __call__ 走 trampoline（EXEC-1），Python 深度恒定。"""
         code = """
 class Rec:
     func __call__(self, int n) -> int:
@@ -79,7 +72,7 @@ print(r)
         assert run_ibci(code) == ["greetingx"]
 
     def test_callable_instance_method_await_chan(self):
-        """__call__ 内 await 通道 recv（Waitable）——修复前嵌套调度器死锁/重入。"""
+        """__call__ 内 await 通道 recv（Waitable）：帧内挂起/恢复，不重入调度器。"""
         code = """
 chan c = chan(str, "stream")
 c.send("hello")
@@ -95,7 +88,7 @@ print(out)
 
 
 class TestGeneratorIterProtocol:
-    """用户类生成器 __iter__（I1）。"""
+    """用户类生成器 __iter__。"""
 
     def test_generator_iter_for_loop(self):
         code = """

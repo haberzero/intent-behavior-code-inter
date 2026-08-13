@@ -1,5 +1,5 @@
 """
-M1/M2 驱动去重与 .call 双写收敛回归测试。
+M1/M2 驱动去重与 .call 双写收敛测试。
 
 覆盖：
 - M2：线程体驱动经单一权威循环（_drive_loop_gen + TaskScheduler），

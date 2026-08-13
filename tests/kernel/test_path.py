@@ -612,18 +612,15 @@ class TestSnapshotLayout:
         assert isinstance(SnapshotLayout.asset_dir_for(save), IbPath)
 
     def test_asset_dir_for_produces_sibling_not_child(self):
-        """asset_dir_for 必须产出同级目录，而非子目录。
-
-        旧 BUG：``save_path + ".assets"`` 经 IbPath.__add__（路径 join）产出
-        ``state.json/.assets``（子目录）。修复后须为 ``state.json.assets``（同级）。
-        """
+        """asset_dir_for 必须产出同级目录：``state.json.assets``（同级），非
+        ``state.json/.assets``（子目录）。"""
         save = IbPath.from_native("D:/proj/state.json")
         asset_dir = SnapshotLayout.asset_dir_for(save)
         native = asset_dir.to_native()
         norm = native.replace("\\", "/")
         # 同级契约：basename = state.json.assets
         assert norm.endswith("state.json.assets")
-        # 反向断言（守护 BUG）：不得在 state.json 与 .assets 之间出现路径分隔符
+        # 同级契约：state.json 与 .assets 目录直接相邻（无路径分隔符插入）
         assert "state.json/.assets" not in norm
         assert "state.json\\.assets" not in native
 

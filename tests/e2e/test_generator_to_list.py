@@ -1,8 +1,7 @@
-"""tests/e2e/test_generator_to_list.py — generator.to_list() 用户显式调用 e2e。
+"""tests/e2e/test_generator_to_list.py — generator.to_list() 用户显式调用行为。
 
-验证 ``IbGenerator.receive`` 重写使 ``to_list``/``generic_next``/``next`` 经
-``__getattr__`` + ``__call__`` 链式调用可达（此前仅 ``for`` 内部绕过 vtable 可用，
-用户显式 ``gen(3).to_list()`` 报 ``Object of type 'None' has no method '__call__'``）。
+验证 ``to_list``/``generic_next``/``next`` 经 ``__getattr__`` + ``__call__``
+链式调用对用户显式调用可达：``gen(3).to_list()`` 等可直接调用。
 """
 from tests.conftest import run_ibci
 

@@ -5,9 +5,9 @@ tests/runtime/test_builtin_expansion.py
 内建函数群完善测试：
 
 * 类型转换全局函数：``int(x)`` / ``str(x)`` / ``float(x)`` / ``bool(x)``
-  （此前仅 ``(int) x`` 强转语法可用，全局函数调用缺位）。
+  （与 ``(int) x`` 强转语法并存，全局函数调用可用）。
 * 序列辅助：``enumerate`` / ``zip`` / ``sorted``。
-* for 循环元组解包：``for (int i, int v) in ...``（编译器符号注册修复）。
+* for 循环元组解包：``for (int i, int v) in ...``（依赖编译器符号注册）。
 """
 import pytest
 
@@ -126,16 +126,16 @@ class TestAggregationBuiltins:
         assert run_ibci(code) == expected
 
     def test_sum_shadowable(self):
-        """sum 内建名可被用户变量遮蔽（遮蔽修复使 sum 重新纳入成为可能）。"""
+        """sum 内建名可被用户变量遮蔽（遮蔽后使用点解析到用户变量，优先于内建名）。"""
         code = "int sum = 0\nsum = sum + 5\nprint(sum)\n"
         assert run_ibci(code) == ["5"]
 
     def test_sum_shadowable_with_llm_init(self):
         """内建名遮蔽 + LLM 表达式初始化：dispatch-before-use 路径也必须走 define 遮蔽。
 
-        PT-DEBT-19（U2）：模块级 ``int sum = @~...~`` 此前在
-        ``_assign_future_to_name_target`` 原地覆写 ``intrinsic:sum`` 常量符号，
-        使用点回写触发 ``Cannot reassign constant UID 'intrinsic:sum'``。
+        模块级 ``int sum = @~...~`` 经 define 遮蔽创建新符号；不得在
+        ``_assign_future_to_name_target`` 原地覆写 ``intrinsic:sum`` 常量符号
+        （否则使用点回写触发 ``Cannot reassign constant UID 'intrinsic:sum'``）。
         """
         code = (
             "import ai\n"
@@ -146,7 +146,7 @@ class TestAggregationBuiltins:
         assert run_ibci(code) == ["42"]
 
     def test_len_shadowable_with_llm_init(self):
-        """另一个内建名（len）+ LLM 表达式初始化遮蔽（同 U2 根因，防同类回归）。"""
+        """另一个内建名（len）+ LLM 表达式初始化遮蔽（同一 define 遮蔽路径）。"""
         code = (
             "import ai\n"
             "ai.set_mock_mode()\n"
@@ -168,7 +168,7 @@ class TestAggregationBuiltins:
 
 
 class TestForLoopTupleUnpacking:
-    """for 循环元组解包（编译器符号注册修复）。"""
+    """for 循环元组解包（依赖编译器符号注册）。"""
 
     @pytest.mark.parametrize("code,expected", [
         pytest.param(

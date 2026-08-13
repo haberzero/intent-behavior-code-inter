@@ -2,16 +2,13 @@
 tests/compiler/semantic/test_scope_global.py
 ============================================
 
-``global`` 关键字回归测试（PT-DEBT-25，2026-08-12）。
+``global`` 关键字作用域语义的行为契约。
 
-背景：``global counter`` 声明的函数内读写此前运行时
-``RUN_UNDEFINED_VARIABLE: .../bump:counter``——symbol_resolution_pass 未消费
-global 声明（缺 visit_IbGlobalStmt + prescan 未排除 global 名），函数内赋值目标
-被预声明为局部符号（局部 UID），运行时 global 路由（define_variable_at_global /
-_assign_name_target 的 is_global_symbol_uid 分支）因收不到模块级 UID 而永不触发。
-
-修复：visit_IbGlobalStmt 把名称解析/占位到模块根作用域并共享符号引用；
-_prescan_body_locals 排除 global_names（与 nonlocal 同构）。
+``global name`` 声明的函数内读写绑定模块级符号：visit_IbGlobalStmt 把名称解析/占位
+到模块根作用域并共享符号引用；_prescan_body_locals 排除 global_names（与 nonlocal
+同构）——函数内赋值目标不预声明为局部符号，运行时 global 路由
+（define_variable_at_global / _assign_name_target 的 is_global_symbol_uid 分支）
+收到模块级 UID 而正确触发。
 """
 import pytest
 

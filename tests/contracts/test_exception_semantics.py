@@ -412,16 +412,16 @@ except TypeError as e:
 
 
 # ===========================================================================
-# InterpreterError 单一实现契约（PT-DEBT-20 / U3）
+# InterpreterError 单一实现契约
 # ===========================================================================
 
 
 class TestInterpreterErrorSingleImplementation:
-    """PT-DEBT-20：全仓只存在一个 InterpreterError（能力完备的 kernel 版）。
+    """全仓只存在一个 InterpreterError（能力完备的 kernel 版）。
 
     公开名 ``core.extension.InterpreterError`` 必须解析到 ``core.kernel.issue``
     版本（支持 error_code / location / severity），且 `core.extension.exceptions`
-    不再定义同名重复类（历史遗留清理，防止再引入兼容层）。
+    不定义同名重复类（单一实现契约）。
     """
 
     def test_public_name_resolves_to_kernel_class(self):

@@ -2,7 +2,7 @@
 tests/kernel/test_enum_axiom.py
 ================================
 
-EnumAxiom.from_prompt 收敛回归测试（PT-ARCH-33）。
+EnumAxiom.from_prompt 解析行为契约。
 
 覆盖：
 * str 契约下枚举成员解析（大小写不敏感）。

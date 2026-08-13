@@ -1,5 +1,5 @@
 """
-tests/e2e/test_generics_runtime.py — 泛型运行时黑盒回归。
+tests/e2e/test_generics_runtime.py — 泛型运行时黑盒行为。
 
 自 tests/compiler/test_generics.py 拆分（mixed-concerns）：完整程序执行用例归
 e2e/（含类内少量 compile-only 校验）；纯编译期契约归 tests/compiler/test_generics.py。

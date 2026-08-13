@@ -37,7 +37,7 @@ print(snap)
         assert "channels" in lines[0]
 
     def test_snapshot_collects_module_variables(self):
-        """snapshot()[\"vars\"] 收集用户变量（统一变量视图；回归：消费端曾按原始值误读富 dict 而恒空）。"""
+        """snapshot()[\"vars\"] 收集用户变量（统一变量视图；消费端按统一视图取值，不因富 dict 形态而恒空）。"""
         lines = run_ibci("""
 import iruntime
 int x = 42
@@ -85,7 +85,7 @@ print(e)
     def test_subscribe_receives_llm_lifecycle_events(self):
         """LLM 调用生命周期事件（llm_dispatched/llm_resolved）经事件流送达。
 
-        回归：事件类型早已声明但从未发射（空壳机制）。
+        LLM 调用期间应实际发射这些事件（发射机制有效，非仅声明类型）。
         """
         lines = run_ibci(
             "subscriber ev = iruntime.subscribe()\n"
@@ -109,7 +109,7 @@ print(snap)
         assert "llm" in lines[0]
 
     def test_thread_task_events_reach_main_subscriber(self):
-        """全局事件总线（P4）：线程任务内事件可达主订阅者（D3 闭合回归）。"""
+        """全局事件总线：线程任务内事件可达主订阅者（跨线程送达）。"""
         lines = run_ibci("""
 import iruntime
 subscriber ev = iruntime.subscribe()

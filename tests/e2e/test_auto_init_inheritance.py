@@ -1,11 +1,10 @@
 """tests/e2e/test_auto_init_inheritance.py — 自动构造器继承链绑定 + any 逃生阀复查。
 
 自动构造器继承链绑定：无显式 ``__init__`` 的类，构造器参数 = 继承链上全部有效无默认值
-字段（父类优先、子类同名覆盖）——消除"auto-init 只收自身 body"导致的父类字段静默丢失
-（此前 ``class Sub(Base): str tag`` + ``Sub(5)`` 会把 5 绑到 ``tag``、``data`` 静默 None）。
+字段（父类优先、子类同名覆盖），父类字段不静默丢失。
 
-any 逃生阀复查：动态 any 类对象赋给用户类变量时运行时强制 ``RUN_TYPE_MISMATCH``
-（any 值用于类型化上下文时运行时强制校验契约），不再静默流入后报困惑的 AttributeError。
+any 逃生阀校验：动态 any 类对象赋给用户类变量时运行时强制 ``RUN_TYPE_MISMATCH``
+（any 值用于类型化上下文时运行时强制校验契约）。
 """
 from tests.conftest import run_ibci, expect_runtime_error
 
@@ -24,7 +23,7 @@ print(s.tag)
         assert lines == ["5", "A"]
 
     def test_generic_parent_chain_binding(self):
-        # G3 原始场景：继承特化 + 父类无默认值字段经构造器绑定
+        # 继承特化 + 父类无默认值字段经构造器绑定
         code = """class Node[T]:
     T data
     Node[T] next = any
@@ -122,7 +121,7 @@ print(s.tag)
 
 class TestDynamicAnyRecheckUserClass:
     def test_any_class_object_to_user_class_raises(self):
-        # Finding C：any 类对象赋给用户类变量 → RUN_TYPE_MISMATCH
+        # any 类对象赋给用户类变量 → RUN_TYPE_MISMATCH
         code = """class Node[T]:
     T data
 any a = any

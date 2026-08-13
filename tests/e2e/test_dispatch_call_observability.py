@@ -2,13 +2,12 @@
 tests/e2e/test_dispatch_call_observability.py
 ===============================================
 
-dispatch-before-use 路径下 LLM 调用观测性回归验证。
+dispatch-before-use 路径下 LLM 调用观测性验证。
 
 dispatch-before-use（赋值 + 并行预调度）把 LLMFuture 写入目标变量、延迟到
-变量读取才 resolve。历史回归：dispatch 优化后 `idbg.current_llm()` /
-`ai.get_current_call_info()` 在赋值语句后立即查询返回空 dict（调用已提交但
-主线程单写槽未记录）——示例 05/06 的 idbg 探查即依赖"赋值后立即可观测"。
-本测试固化"dispatch 时刻即记录调用信息（sys/user prompt + 意图）"契约。
+变量读取才 resolve。契约：dispatch 时刻即记录调用信息（sys/user prompt +
+意图），`idbg.current_llm()` / `ai.get_current_call_info()` 在赋值语句后
+立即查询可见（示例 05/06 的 idbg 探查依赖"赋值后立即可观测"）。
 """
 
 from tests.conftest import run_ibci

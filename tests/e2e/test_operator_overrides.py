@@ -1,7 +1,7 @@
 """
 tests/e2e/test_operator_overrides.py
 
-用户类运算符覆写覆盖度回归测试（KNOWN_LIMITS §十四 #2 核对，2026-08-12）。
+用户类运算符覆写覆盖度行为。
 
 实测锁定：比较（==/!=/</>/<=/>=）、算术（+/-/*/%）、一元（-/~/not）、
 成员（in via __contains__）均可经 dunder 方法覆写；`is` 恒为身份比较。
@@ -121,11 +121,10 @@ print((str)(a is a))
 
 
 class TestGenericOperatorOverrides:
-    """GEN-6A：泛型类 × 运算符重载——返回类型特化（KERNEL_ISSUE-GEN-6 判别性回归）。
+    """泛型类 × 运算符重载——返回类型特化。
 
-    运算符方法返回 `Vec[T]` 时，`a + b` 结果类型须为特化 `Vec[int]`（resolve_op
+    运算符方法返回 `Vec[T]` 时，`a + b` 结果类型为特化 `Vec[int]`（resolve_op
     经 resolve_typeref 保留实参），而非降级为基类 Vec。
-    修复前：SEM_TYPE_MISMATCH: Cannot assign 'Vec' to 'Vec[int]'。
     """
 
     def test_generic_add_returns_specialized(self):

@@ -2,18 +2,13 @@
 tests/e2e/test_provider_failure_catch.py
 ========================================
 
-真实 LLM provider 层失败（网络/超时/断连）的异常投递回归测试。
+真实 LLM provider 层失败（网络/超时/断连）的异常投递行为。
 
-背景（PT-DEBT-27，2026-08-12）：真实 provider 失败经 worker 线程 + Future
-回传时，调度器 ``gen.throw(exc)`` 把异常投进 ``_drive_loop_gen`` 的 Waitable
-挂起点（``vm_executor.py`` ``pending_value = yield child_uid``，位于内部
-try/except 之外）——异常穿透整个 VM，未被 ``try/except`` 捕获。
+机制：provider 失败经 worker 线程 + Future 回传时，异常投递与值对称——Waitable
+挂起点记录 ``pending_exception`` 并重投递给挂起该 Waitable 的任务帧，其
+try/except 优先处理；未捕获则经弹栈通道沿 CPS 栈上抛。
 
-修复：Waitable yield 加 ``except Exception: pending_exception = e``，
-使异常与值投递对称——重投递给挂起该 Waitable 的任务帧，其 try/except 优先
-处理，未捕获则经弹栈通道沿 CPS 栈上抛。
-
-本文件锁定"真实 provider 失败可被 try/except 捕获"契约（MOCK 路径本就正常）。
+契约：真实 provider 失败可被 try/except 捕获（MOCK 路径本就正常）。
 """
 import pytest
 
@@ -111,7 +106,7 @@ print("after_catch")
 
     def test_llmexcept_provider_failure_caught_by_outer_try(self):
         """provider 层失败 → LLMCallError 直接抛出（跳过 llmexcept retry，见
-        10_robustness §10.3/04 §4.7）→ 外层 try/except 捕获（修复前逃逸崩溃）。"""
+        10_robustness §10.3/04 §4.7）→ 外层 try/except 捕获。"""
         code = """
 try:
     int n = @~ 返回一个数字 ~

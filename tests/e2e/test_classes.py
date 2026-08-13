@@ -641,11 +641,10 @@ print(c.greeting())
 
 
 class TestFieldDefaultIndependence:
-    """字段默认值每实例独立（PT-DEBT-O2，2026-08-12）。
+    """字段默认值每实例独立。
 
-    此前仅 list/dict 首层浅拷贝：内层 list 与用户对象默认值跨实例共享
-    （静默泄漏）。修复=static_val 递归深克隆（try_deep_clone）补全
-    "每实例独立默认值"既有意图；不可克隆值（函数等）回退共享引用。
+    字段默认值经 static_val 递归深克隆（try_deep_clone）保证"每实例独立"：
+    内层 list 与用户对象默认值不跨实例共享；不可克隆值（函数等）回退共享引用。
     """
 
     def test_nested_list_default_not_shared(self):

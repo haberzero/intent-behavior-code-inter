@@ -1,5 +1,5 @@
 """
-tests/e2e/test_type_annotations_runtime.py — 类型标注运行时黑盒回归。
+tests/e2e/test_type_annotations_runtime.py — 类型标注运行时黑盒行为。
 
 自 tests/compiler/test_type_annotations.py 拆分（mixed-concerns）：完整程序执行
 用例（callable HOF / tuple 位置类型运行时）归 e2e/；纯编译期契约归

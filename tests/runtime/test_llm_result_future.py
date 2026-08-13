@@ -9,9 +9,8 @@ tests/runtime/test_llm_result_future.py
 - ``success_result`` / ``uncertain_result`` / ``error_result`` 三工厂语义
 - ``LLMFuture.is_done``：反映底层 ``concurrent.futures.Future`` 完成态
 
-（同步阻塞取回 API ``LLMFuture.get()`` 已随 PT-DEBT-17 移除——生产路径
-VM 全走 CPS ``resolve_future_cps`` / Waitable ``try_result``，该同步取值 API
-为死代码。）
+（生产取值路径：VM 全走 CPS ``resolve_future_cps`` / Waitable ``try_result``，
+无同步阻塞取回 API；本文件仅锁定 ``LLMResult``/``LLMFuture`` 的状态与工厂语义。）
 
 这些类为叶子模块（executor 无关），可独立单测 —— 是语义锁定的最小、稳健载体。
 """

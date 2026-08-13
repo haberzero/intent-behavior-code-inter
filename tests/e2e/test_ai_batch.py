@@ -7,8 +7,8 @@ tests/e2e/test_ai_batch.py
 经 MOCK HTTP 服务（``mock_server``）验证真实并发：SLEEP 指令的逐项
 延迟在并行调度下总时近似 max 而非 sum。
 
-另含 PT-DEBT-17 回归：``run_batch`` 现返回 ``CPSDrivable`` Waitable
-（不再主线程 ``fut.result()`` 同步阻塞），与 ``stream_call`` 范式一致。
+``run_batch`` 返回 ``CPSDrivable`` Waitable（不同步阻塞主线程），
+与 ``stream_call`` 范式一致。
 """
 import time
 
@@ -87,14 +87,13 @@ class TestAiRunBatch:
 
 
 class TestRunBatchWaitableContract:
-    """PT-DEBT-17：run_batch 返回 CPSDrivable Waitable（不再同步阻塞主线程）。"""
+    """run_batch 返回 CPSDrivable Waitable，不同步阻塞主线程。"""
 
     def test_executor_run_batch_returns_waitable(self, engine):
-        """executor.run_batch 返回 Waitable+CPSDrivable（非普通 List）——契约回归。
+        """executor.run_batch 返回懒 Waitable+CPSDrivable（非普通 List）。
 
-        旧实现返回 ``List[IbObject]`` 并在主线程 ``fut.result()`` 同步阻塞；
-        新实现返回懒 Waitable，由 VM ``cps_drive`` 帧内驱动 + 调度器非阻塞等待
-        （与 stream_call 返回 Waitable 范式一致）。此断言在旧实现下必失败。
+        懒构造即返回、不预求值、不阻塞；由 VM ``cps_drive`` 帧内驱动 +
+        调度器非阻塞等待（与 stream_call 返回 Waitable 范式一致）。
         """
         from core.runtime.shared.waitable import Waitable, CPSDrivable
         from tests.conftest import AI_MOCK_PREFIX
@@ -141,10 +140,10 @@ class TestRunBatchWaitableContract:
 
 
 class TestRunBatchObservability:
-    """run_batch 批路径的 LLM 调用可观测性（PT-AUDIT-3 修复回归）。
+    """run_batch 批路径的 LLM 调用可观测性。
 
-    历史缺陷：run_batch 批内 LLM 调用不记录主线程单写槽，`get_current_call_info()`
-    返回空 dict——与单调用路径（inline/dispatch）的"立即可见"契约漂移。
+    run_batch 批内 LLM 调用记录主线程单写槽，`get_current_call_info()` 立即可见，
+    与单调用路径（inline/dispatch）的契约一致。
     """
 
     def test_run_batch_records_call_info(self):

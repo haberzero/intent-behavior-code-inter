@@ -440,15 +440,16 @@ def test_type_checking_func_call_uses_return_type(registry, pipeline):
 
 
 # ===========================================================================
-# 布尔上下文行为表达式定型（恒真陷阱修复）
+# 布尔上下文行为表达式定型（恒真陷阱防护）
 # ===========================================================================
 
 
 class TestBehaviorBooleanContextTyping:
-    """布尔上下文中的行为表达式应定型为 bool（与直接条件一致）。
+    """布尔上下文中的行为表达式定型为 bool（与直接条件一致）。
 
-    修复前：`while @~...~ and True:` / `if not @~...~:` 中的行为表达式落到
-    `behavior` 占位符 → 运行期装箱为 str → "0" 按 Python 真值语义判真 → 恒真陷阱。
+    `while @~...~ and True:` / `if not @~...~:` 中的行为表达式定型为 bool，
+    不落入 `behavior` 占位符、不按字符串装箱——避免 "0" 按 Python 真值语义
+    判真导致的恒真陷阱。
     """
 
     @staticmethod

@@ -531,11 +531,10 @@ print((str)obj.value)
         assert "99" in lines
 
 
-class TestE2EConditionUncertainBugA:
+class TestUncertainConditionGuards:
     """
-    BUG #A 回归测试：if/while/for 在面对不确定 LLM 条件时应统一抛出 LLMParseError。
-
-    此测试确保 if-condition-uncertain 路径有回归保护。
+    不确定 LLM 条件的行为契约：if/while/for 条件返回模糊值时
+    应统一抛出 LLMParseError（经 llmexcept 捕获），而非静默跳过。
     """
 
     def test_if_condition_uncertain_raises_llm_parse_error(self):
@@ -567,7 +566,7 @@ except:
         assert "should_not_reach" not in lines
 
     def test_if_and_while_uncertain_both_raise_consistently(self):
-        """if 和 while 条件不确定时应一致地抛出错误（BUG #A 正交性验证）。"""
+        """if 和 while 条件不确定时一致抛出错误（正交性验证）。"""
         # if 测试
         code_if = AI_MOCK_PREFIX + """
 try:
@@ -595,7 +594,7 @@ except:
 
 class TestE2EUnifiedMechanism:
     """
-    统一 llmexcept 机制回归测试：certainty 经 IbLLMCallResult 返回值传递，
+    统一 llmexcept 机制的行为契约：certainty 经 IbLLMCallResult 返回值传递，
     各被保护语句 handler 内联重试，不确定容器经表达式层透传到语句消费者。
 
     覆盖：
@@ -668,11 +667,11 @@ except:
 
 class TestE2EBoolContextTyping:
     """
-    布尔上下文行为表达式定型 bool（恒真陷阱修复）的 e2e 回归。
+    布尔上下文行为表达式定型 bool 的 e2e 行为契约。
 
-    修复前：`while @~...~ and True:` / `if not @~...~:` 中行为表达式落到
-    `behavior` 占位符 → 运行期装箱为 str → "0" 按 Python 真值语义判真 → 恒真死循环。
-    修复后：布尔上下文行为定型 bool，0/1 正确判定，循环正常终止。
+    契约：``while @~...~ and True:`` / ``if not @~...~:`` 中行为表达式定型为
+    bool，0/1 正确判定，循环正常终止（不落入 behavior 占位符、不按字符串真值
+    判真导致恒真死循环）。
     """
 
     def test_while_boolop_condition_terminates(self):

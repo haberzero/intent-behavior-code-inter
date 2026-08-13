@@ -254,9 +254,9 @@ print(countdown(100, 0))
         assert result  # Should compute sum without overflow
 
     def test_deep_recursion_500(self):
-        """R1 trampoline：500 层递归成功（原同步嵌套路径在 ~130 层即 Python 栈溢出）。
+        """R1 trampoline：500 层递归成功。
 
-        EXEC-1 根治：函数调用不再嵌套 Python 栈，深递归 Python 深度恒定。
+        EXEC-1：函数调用不嵌套 Python 栈，深递归时 Python 栈深度恒定。
         """
         code = """
 func f(int n) -> int:
@@ -298,14 +298,14 @@ print(is_even(400))
         assert run_ibci(code) == ["1"]
 
     def test_recursion_overflow_propagates_root_cause(self):
-        """PT-DEBT-9：深递归触底时 RecursionError 根因不被 ``VM: Call failed`` 掩盖。
+        """深递归触底时 RecursionError 根因不被 ``VM: Call failed`` 掩盖。
 
         超出宿主递归深度时，环境限制异常（RecursionError）必须原样传播，
         而非被 VM 语义错误包装站点重写为误导性的 ``Symbol not defined`` /
         ``VM: Call failed``。断言顶层收到的是 RecursionError 本身。
 
-        伴随的 ``KDIAG_RUNTIME_ENV_LIMIT`` UserWarning 是 PT-FEAT-9 诊断机制
-        的**警告不门控投影**（设计使然：环境限制须对开发者可见）——此处显式
+        伴随的 ``KDIAG_RUNTIME_ENV_LIMIT`` UserWarning 是诊断机制的
+        **警告不门控投影**（设计使然：环境限制须对开发者可见）——此处显式
         断言（而非让其浮到 pytest 汇总区），既验证警告投影又保持输出整洁。
         """
         code = """
