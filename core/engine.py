@@ -485,7 +485,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             self._path_ctx = PathContext.from_native(
                 entry_dir=project_root, project_root=project_root
             )
-            return self.compile(temp_path, variables, silent=silent)
+            # 入口模块名显式锚定（稳定身份）：源码经 tempfile 载体、路径派生名
+            # 非确定，传合成锚点名（__string_exec__）使入口模块身份稳定可复现。
+            return self.compile(temp_path, variables, silent=silent,
+                                entry_module_name="__string_exec__")
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -557,12 +560,16 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 print(f"\nRuntime Error: {str(e)}")
             raise e
 
-    def compile(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> Any:
+    def compile(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False,
+                entry_module_name: Optional[str] = None) -> Any:
         """
          核心解耦：仅执行静态编译和语义分析，返回 CompilationArtifact。
 
          多阶段启动：确立 project_root（= 显式 OR entry_dir）+ root-dependent 初始化。
          锚点（_entry_file / _path_ctx）由语义调用方（run / compile_string）确立。
+
+         ``entry_module_name``：可选入口模块名覆盖（compile_string 场景——源码经
+         tempfile 载体、路径派生名非确定，传稳定锚点名使入口模块身份可复现）。
         """
         # 确立 project_root + root-dependent 初始化（幂等）
         project_root = self._establish_project_root(entry_file)
@@ -589,7 +596,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         # 1. 调用调度器进行项目级编译
         
-        return self.scheduler.compile_project(abs_entry)
+        return self.scheduler.compile_project(abs_entry, entry_module_name=entry_module_name)
 
     def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
         """

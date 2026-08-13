@@ -107,10 +107,15 @@ class Scheduler(ICompilerService):
 
     # ---------------------------------------
 
-    def compile_project(self, entry_file: str) -> CompilationArtifact:
+    def compile_project(self, entry_file: str, entry_module_name: Optional[str] = None) -> CompilationArtifact:
         """
         Compiles the project starting from entry_file.
         Returns a CompilationArtifact (Blueprint) for the interpreter.
+
+        ``entry_module_name``：可选入口模块名覆盖（run_string 场景——源码经
+        tempfile 载体、入口锚点为合成路径，模块名无法从路径稳定派生；显式传
+        稳定名使 artifact.entry_module / modules 键 / spec.module_path 可复现）。
+        默认 None → 从入口文件相对路径派生（既有行为）。
         """
         # 0. Clear previous state
         self.issue_tracker.clear()
@@ -127,6 +132,7 @@ class Scheduler(ICompilerService):
         # 入口模块锚点（S5 跨模块同名类身份根治）：仅非入口（被 import 的）模块
         # 用户类 module 限定——入口模块是根命名空间（module=None）。
         self._entry_file = entry_file
+        self._entry_module_name = entry_module_name
         self._scan_and_cache(entry_file)
             
         if self.issue_tracker.has_errors():
@@ -168,6 +174,10 @@ class Scheduler(ICompilerService):
             rel_path = safe_relpath(file_path, self.root_dir)
             module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
             self.module_name_to_path[module_name] = file_path
+            # 入口模块名覆盖（run_string 场景）：源码经 tempfile 载体、路径派生名
+            # 非确定，显式入口锚点名使模块身份稳定可复现。
+            if file_path == getattr(self, "_entry_file", None) and self._entry_module_name:
+                module_name = self._entry_module_name
 
             # Check mtime or cache
             last_mtime = self.build_cache.get(file_path, 0.0)
@@ -198,8 +208,11 @@ class Scheduler(ICompilerService):
             raise CompilerError(self.issue_tracker.diagnostics)
         
         # Set entry point
-        entry_rel = safe_relpath(entry_file, self.root_dir)
-        artifact.entry_module = ModuleNameSpace.relpath_to_module_name(entry_rel)
+        if self._entry_module_name:
+            artifact.entry_module = self._entry_module_name
+        else:
+            entry_rel = safe_relpath(entry_file, self.root_dir)
+            artifact.entry_module = ModuleNameSpace.relpath_to_module_name(entry_rel)
         artifact.global_symbols = self.predefined_symbols
 
         return artifact
@@ -325,6 +338,10 @@ class Scheduler(ICompilerService):
         rel_path = safe_relpath(file_path, self.root_dir)
         module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
         self.module_name_to_path[module_name] = file_path
+        # 入口模块名覆盖（run_string 场景，与 compile_project 主循环一致）：
+        # 源码经 tempfile 载体、路径派生名非确定，显式锚点名使模块身份稳定。
+        if file_path == getattr(self, "_entry_file", None) and self._entry_module_name:
+            module_name = self._entry_module_name
         
         # Get content
         source = module_info.content
