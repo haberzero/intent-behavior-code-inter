@@ -1,0 +1,14 @@
+# 入口类与导入类同名不误配：方法表各自独立（get_class 裸名回落仅内置）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 5 | 401
+# expect-exit: 0
+import geo
+class Box:
+    int v
+    func get(self) -> int:
+        return self.v + 4
+Box b = Box(1)
+geo.Box g = geo.Box(1)
+print(b.get())
+print(g.get())

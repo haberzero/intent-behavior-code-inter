@@ -1,0 +1,17 @@
+# 意图 @/@! + 入口类组合（真实模型遵循意图，入口类语义不破坏）
+# doc: docs/syntax/09_intents.md
+# expect-class: PASS
+# expect-out: ok | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Greeter:
+    func greet(self) -> str:
+        str r = @~ 用一句话打招呼 ~
+        return r
+Greeter g = Greeter()
+str rr = g.greet()
+if len(rr) > 0:
+    print("ok")
+print("DONE")

@@ -1,0 +1,13 @@
+# 入口类泛型特化值身份（qualified 键下 type()/值保真）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 7 | 7
+# expect-exit: 0
+class Box[T]:
+    T v
+    func get(self) -> T:
+        return self.v
+Box[int] b = Box[int](7)
+print(b.get())
+Box[int] c = b
+print(c.get())

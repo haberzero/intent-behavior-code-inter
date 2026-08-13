@@ -1,0 +1,15 @@
+# 三模块同名类（geo/graph/data）+ 入口类共存（4 路隔离）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: geo | graph | data | main
+# expect-exit: 0
+import geo
+import graph
+import data
+class Box:
+    func who(self) -> str:
+        return "main"
+print(geo.Box().who())
+print(graph.Box().who())
+print(data.Box().who())
+print(Box().who())

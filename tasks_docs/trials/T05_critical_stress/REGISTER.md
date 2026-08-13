@@ -4,6 +4,10 @@
 > 40 用例：**37 PASS + 1 GUARD + 2 KERNEL_ISSUE**；文档核验产出 **23 DOC_ISSUE**。
 > 用例脚本错误（thread args / fn_callable 形态 / llmexcept 结构等）均已修正为合法用法，
 > 不含内核问题。
+>
+> **状态更新（2026-08-14）**：KERNEL_ISSUE-CROSSMOD-THREAD-1 **已修复并核销**（统一
+> 类身份模型 S4 + T06 D4-01 回归验证）；KERNEL_ISSUE-OPTIONAL-ISNONE-1 与
+> DOC_ISSUE-1~23 待修。
 
 ## 一、结果总览
 
@@ -30,6 +34,10 @@
 - **级别**：P1（明确缺陷：跨模块类在并发路径不可用，与 14_concurrency §14.1"共享只读
   类型定义"的承诺矛盾）。
 - **登记**：PENDING_TASKS（待独立窗口；本任务不修复）。
+- **✅ 已修复（2026-08-14，统一类身份模型 S4）**：`get_side_table` module 参数化 +
+  `is_truthy` 任务本地化（见 `_code_class_identity_unify.md` S4）。**T06 D4-01 核销**
+  （线程 worker 内 `geo.Box(5).get()` = 405，主/线程一致）；判别性回归
+  `test_ibc_file_imports.py::test_imported_module_class_in_thread_worker`。
 
 ### KERNEL_ISSUE-OPTIONAL-ISNONE-1（P2）— `Optional[T] a = None; a is None` 返回 False
 

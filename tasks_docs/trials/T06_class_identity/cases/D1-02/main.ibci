@@ -1,0 +1,16 @@
+# 入口类与导入同名类彻底隔离（main.Box vs geo.Box 方法表不串扰）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: main-box | geo-box | Box | Box
+# expect-exit: 0
+import geo
+class Box:
+    str name
+    func tag(self) -> str:
+        return "main-box"
+Box b = Box("m")
+geo.Box g = geo.Box("g")
+print(b.tag())
+print(g.tag())
+print(type(b))
+print(type(g))

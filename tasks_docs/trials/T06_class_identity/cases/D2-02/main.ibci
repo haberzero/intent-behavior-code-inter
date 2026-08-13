@@ -1,0 +1,15 @@
+# 入口类非泛型继承链（is_assignable 父 module 补全）
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: 7 | dog-7
+# expect-exit: 0
+class Animal:
+    int id
+    func get(self) -> int:
+        return self.id
+class Dog(Animal):
+    func label(self) -> str:
+        return "dog-" + str(self.id)
+Dog d = Dog(7)
+print(d.get())
+print(d.label())

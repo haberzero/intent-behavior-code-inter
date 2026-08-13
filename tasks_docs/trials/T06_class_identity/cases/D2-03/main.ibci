@@ -1,0 +1,18 @@
+# 入口类 LLM 输出类型解析（-> Point __from_prompt__ module 感知）
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: 42
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Point:
+    int x
+    func __init__(self, int x) -> auto:
+        self.x = x
+    func __from_prompt__(str raw) -> tuple:
+        return (True, Point(42))
+    func get(self) -> int:
+        return self.x
+Point p = @~ 返回点坐标 ~
+print(p.get())

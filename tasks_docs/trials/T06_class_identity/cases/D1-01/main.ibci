@@ -1,0 +1,12 @@
+# 入口模块类 qualified：type() 仍显示裸名（用户语义不变）
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: Box | 1
+# expect-exit: 0
+class Box:
+    int v
+    func get(self) -> int:
+        return self.v
+Box b = Box(1)
+print(type(b))
+print(b.get())

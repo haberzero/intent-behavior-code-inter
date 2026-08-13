@@ -1,0 +1,11 @@
+# 跨模块类 -> geo.Box 真实 LLM 输出（跨模块用户类 LLM 解析）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 10
+# expect-exit: 0
+# expect-llm: true
+import ai
+import geo
+ai.load_project_config()
+geo.Counter c = @~ 给一个数字 10 ~
+print(c.value())

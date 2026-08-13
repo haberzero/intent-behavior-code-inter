@@ -1,0 +1,20 @@
+# 线程 worker 内入口类 + 导入类双路径（KI-1 核销判别性）
+# doc: docs/syntax/14_concurrency.md
+# expect-class: PASS
+# expect-out: 105 | 405 | 105 | 405
+# expect-exit: 0
+import geo
+class Box:
+    int v
+    func get(self) -> int:
+        return self.v + 100
+func entry_compute() -> int:
+    return Box(5).get()
+func geo_compute() -> int:
+    return geo.Box(5).get()
+print(entry_compute())
+print(geo_compute())
+thread[int] t1 = thread(callable=entry_compute, args=[])
+thread[int] t2 = thread(callable=geo_compute, args=[])
+print(t1.join().expect())
+print(t2.join().expect())

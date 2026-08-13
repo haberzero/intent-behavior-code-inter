@@ -1,0 +1,21 @@
+# 线程 + LLM 组合：worker 内 LLM 调用 module 上下文正确（KI-1 同族验证）
+# doc: docs/syntax/14_concurrency.md
+# expect-class: PASS
+# expect-out: 405 | nonempty
+# expect-exit: 0
+# expect-llm: true
+import ai
+import geo
+ai.load_project_config()
+func geo_compute() -> int:
+    geo.Box[int] b = geo.Box[int](5)
+    return b.get()
+func llm_in_thread() -> str:
+    str s = @~ 返回单词 hello ~
+    return s
+thread[int] t1 = thread(callable=geo_compute, args=[])
+thread[str] t2 = thread(callable=llm_in_thread, args=[])
+print(t1.join().expect())
+str rs = t2.join().expect()
+if len(rs) > 0:
+    print("nonempty")

@@ -1,0 +1,4 @@
+class Box[T]:
+    T v
+    func get(self) -> T:
+        return self.v + 400

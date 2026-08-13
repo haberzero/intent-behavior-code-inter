@@ -1,0 +1,8 @@
+class Counter:
+    int n
+    func __init__(self, int n) -> auto:
+        self.n = n
+    func __from_prompt__(str raw) -> tuple:
+        return (True, Counter(10))
+    func value(self) -> int:
+        return self.n

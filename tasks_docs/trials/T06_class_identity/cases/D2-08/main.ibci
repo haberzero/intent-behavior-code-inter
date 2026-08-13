@@ -1,0 +1,13 @@
+# 入口类作内置泛型实参（list[入口类]）
+# doc: docs/syntax/01_types.md
+# expect-class: PASS
+# expect-out: 2 | 5 | 9
+# expect-exit: 0
+class Box:
+    int v
+    func get(self) -> int:
+        return self.v
+list[Box] bs = [Box(5), Box(9)]
+print(len(bs))
+print(bs[0].get())
+print(bs[1].get())

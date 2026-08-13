@@ -1,0 +1,3 @@
+class Box:
+    func who(self) -> str:
+        return "data"

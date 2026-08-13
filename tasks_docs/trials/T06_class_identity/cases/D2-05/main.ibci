@@ -1,0 +1,11 @@
+# 跨模块类 LLM 输出 hint（node_to_type module 感知，不误配入口同名类）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: geo-hint
+# expect-exit: 0
+# expect-llm: true
+import ai
+import geo
+ai.load_project_config()
+geo.Point p = @~ 给我一个 geo 点 ~
+print(p.hint())

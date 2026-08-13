@@ -1,0 +1,13 @@
+# T05 D1-10 核销：线程 worker 内 geo.Box(5).get() = 405（KI-1 已根治）
+# doc: docs/syntax/14_concurrency.md
+# expect-class: PASS
+# expect-out: 405 | 405 | thread-ok | DONE
+# expect-exit: 0
+import geo
+func compute() -> int:
+    return geo.Box(5).get()
+print(compute())
+thread[int] t = thread(callable=compute, args=[])
+print(t.join().expect())
+print("thread-ok")
+print("DONE")

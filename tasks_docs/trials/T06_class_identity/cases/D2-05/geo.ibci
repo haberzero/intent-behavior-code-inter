@@ -1,0 +1,6 @@
+class Point:
+    int x
+    func __outputhint_prompt__(self) -> str:
+        return "geo-hint-format"
+    func hint(self) -> str:
+        return "geo-hint"

@@ -1,0 +1,4 @@
+class Box:
+    str name
+    func tag(self) -> str:
+        return "geo-box"

@@ -1,0 +1,12 @@
+# 单类表：Bootstrapper 委托 KernelRegistry（Enum 无 [Enum Hook] 仍正确）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 1 | 2 | 1 | 2
+# expect-exit: 0
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+print(Color.RED)
+print(len(Color))
+for c in Color:
+    print(c)

@@ -1,0 +1,12 @@
+# 入口类泛型特化 qualified（main.Box[int]）运行 + type() 显示
+# doc: docs/syntax/06_oop.md
+# expect-class: PASS
+# expect-out: 105 | Box[int]
+# expect-exit: 0
+class Box[T]:
+    T v
+    func get(self) -> T:
+        return self.v + 100
+Box[int] b = Box[int](5)
+print(b.get())
+print(type(b))

@@ -1,0 +1,18 @@
+# mock → 真实切换 + 入口类语义不破坏（S2 后入口类 qualified 不影响 LLM/mock 路径）
+# doc: docs/syntax/13_mock_testing.md
+# expect-class: PASS
+# expect-out: mocked | 7 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Box:
+    int v
+    func get(self) -> int:
+        return self.v + 2
+Box b = Box(5)
+ai.set_mock_mode()
+str m = @~ MOCK:STR:mocked 测试 ~
+print(m)
+print(b.get())
+print("DONE")

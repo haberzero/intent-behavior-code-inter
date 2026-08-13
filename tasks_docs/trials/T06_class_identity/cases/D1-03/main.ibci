@@ -1,0 +1,12 @@
+# run_string 入口模块名稳定（模块内类型引用正确解析）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 1 | Box
+# expect-exit: 0
+class Box:
+    int v
+    func get(self) -> int:
+        return self.v
+Box b = Box(1)
+print(b.get())
+print(type(b))
