@@ -4,6 +4,11 @@
 > 编译期/元数据层已 module 化（S5，e849f36d）；本设计完成**运行时类表** module 化，
 > 从底层到顶层闭环跨模块同名类身份隔离。破坏性重构（用户授权），不留历史包袱、
 > 无 compat/tricky/快速修复。独立分支 `exp/runtime-class-module` 实验。
+>
+> **✅ 已被 `_code_class_identity_unify.md`（S2-S3，2026-08-14）超越**：本设计的
+> "入口/单模块与内置类保持裸名"已被推翻——统一类身份模型下入口模块类亦
+> qualified（module_path=模块名），Bootstrapper 影子表删除（单类表）。本文件
+> 保留为 S5 阶段设计历史，宏观统一见 `_code_class_identity_unify.md`。
 
 ## 一、问题定义（实证）
 

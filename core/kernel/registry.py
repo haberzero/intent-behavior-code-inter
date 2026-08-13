@@ -373,9 +373,10 @@ class KernelRegistry:
     ) -> Optional[str]:
         """解析类型名的权威 module（父链 module 补全用）。
 
-        经 metadata registry 解析 ``head`` 的 spec：内置/入口类型 module_path 为
-        None（权威值，不补前缀）；被 import 模块的用户类返回其 module_path。
-        未解析（前向引用同模块用户父）→ ``default_module`` 兜底。
+        经 metadata registry 解析 ``head`` 的 spec：内置类型 module_path 为
+        None（权威值，不补前缀）；用户类（含入口模块类，S2 后已 module 化）
+        返回其 module_path。未解析（前向引用同模块用户父）→ ``default_module``
+        兜底（确定性回退：父类与子类同模块）。
 
         用途：``class MyList[T](list[T])``（内置泛型父，module 恒 None，不加
         前缀）与 ``class Sub[T](Box[T])``（同模块用户父，编译期前向引用可能缺

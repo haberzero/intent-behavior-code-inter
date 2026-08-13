@@ -318,12 +318,12 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 `dict[str, int]` 的键类型在运行时下标访问时不校验。键类型安全由用户自行保证，编译器/运行时不提供保护。
 
-### 10.2 跨模块同名类身份（编译期 + 运行期已根治）
+### 10.2 跨模块同名类身份（统一类身份模型，底层→顶层根治）
 
-多模块编译时两个模块定义**同名类**（`geo.Box` / `graph.Box`）：**编译期/元数据层隔离**（S5）——被 import 的模块用户类带 module 限定，`geo.Box`/`graph.Box` 独立 spec + 特化继承 module + 序列化/round-trip 保真；入口/单模块保持根命名空间；模块内自身类裸名引用经 `SpecRegistry.current_module` 上下文正确解析。**运行期类表已同步 module 化**（S5 运行期闭环，2026-08-14）——`KernelRegistry._classes`/`Bootstrapper._class_registry` 注册键 = `spec.qualified_name`（`geo.Box` / `graph.Box` 独立 IbClass），`get_class(name, module)` module 感知查找，方法表不再串扰（`geo.Box[int](5).get()` = 105 / `graph.Box[str]("hi").get()` = "hi!"）。内置/入口类（module_path=None）键 = 裸名，行为不变。
+多模块编译时两个模块定义**同名类**（`geo.Box` / `graph.Box`）：**类身份统一模型**（S2，2026-08-14）——*每一个用户类（含入口模块类）的身份 = `(module_path, name)`*，module_path = 其定义模块名；入口模块类不再裸名（根命名空间特例删除）。编译期 `geo.Box`/`graph.Box`/`main.Box` 独立 spec；运行期 `KernelRegistry._classes`（**单类表**，S3 Bootstrapper 影子表删除）注册键 = `spec.qualified_name`，`get_class(name, module)` module 感知查找，方法表不串扰（`geo.Box[int](5).get()` = 105 / `graph.Box[str]("hi").get()` = "hi!"）。`get_class` 裸名回落仅命中内置/内核类（module_path=None），不再命中任何用户类（确定性合法回退）。内置类键 = 裸名，行为不变。run_string 入口模块名锚定为 `__string_exec__`（稳定可复现）。
 
 **已知边界**：
-- LLM 输出解析到跨模块用户类（`__from_prompt__`/`__outputhint_prompt__`）：node_to_type 路径 module 化已同步；AST 裸名返回路径（`returns` IbName 无 module 信息）为 graceful 退化——`can_handle` 查不到该类 → 回落默认解析（不误配到异模块同名类，但跨模块 LLM 类型解析需模块限定声明）。
+- LLM 输出解析到跨模块用户类（`__from_prompt__`/`__outputhint_prompt__`）：parse/hint 链均 module 感知（type_name 为 qualified 名，`_get_expected_type_hint` 优先 node_to_type spec）；AST 裸名返回路径（`returns` IbName 无 module 信息）按当前模块上下文解析，解析失败时为 graceful 退化——回落默认解析（不误配到异模块同名类）。
 - 跨引擎 round-trip 的**未编译目标引擎**用户类重建受注册表封印限制（`create_subclass` sealed 后禁用）——用户类特化跨引擎重建须目标引擎已编译该类（内置泛型特化不受限，加载期预创建）。
 
 ### 10.3 容器字面量类型推断（S6）+ *expr 元素级校验

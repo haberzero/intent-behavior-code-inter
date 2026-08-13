@@ -4,6 +4,11 @@
 > 彻底改善同名类运行时类表相关工作，不留历史包袱、不做兼容性修复、不做
 > tricky/快速修复。独立分支 `exp/class-identity-unify` 实验，确认零风险后
 > 手动 cherry-pick 更新 unsafe-vibe-dev；不触碰 main；禁 push。
+>
+> **✅ 实施完成（2026-08-14，exp/class-identity-unify）**：S1-S4 全部落地，
+> 全量 2616 passed / 1 skipped 零回归。S1 run_string 入口锚点固化 →
+> S2 类身份统一（入口模块类 qualified + LLM module 感知）→ S3 单类表 →
+> S4 KI-1 线程侧表 + is_truthy 任务本地化。待 S5（文档 + 独立复核 + cherry-pick）。
 
 ## 一、宏观现状（实证审计）
 
