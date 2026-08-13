@@ -357,9 +357,9 @@ class IbValue(IbObject):
 
 ### 6.3 类型分派要点
 
-- `isinstance(obj, IbValue) and obj.ib_class.name == "list"` 是分派 list 类型的唯一惯用法（`IbClass` 自指 `ib_class=self` 会让裸 `ib_class.name` 误中，必须先做 `IbValue` 判定）。
-- 容器分派收敛为单一判定入口：`core/runtime/objects/kernel/base.py:is_sequence_value(value)`（原生序列 list/tuple 判断），VM 与 intrinsics 统一经它。
-- 工厂入口：`core/runtime/factory.py:RuntimeObjectFactory` 提供 `create_int / create_str / create_list / create_tuple / create_dict / create_fn_callable / create_behavior` 等方法，**不**在调用方导入具体类。
+- `isinstance(obj, IbValue) and obj.ib_class.name == "list"` 是分派 list 类型的惯用法（`IbClass` 自指 `ib_class=self` 会让裸 `ib_class.name` 误中，必须先做 `IbValue` 判定）。**内置泛型特化值（`list[int]`）沿 spec 基类名分派**：特化类 `ib_class.name` 含方括号（`"list[int]"`），值层 kind 判定统一走 `spec.get_base_name()`（如 `runtime_serializer._value_base_name` / `deep_clone._value_base_name` / `base.is_sequence_value`），基类名 `"list"` 命中。
+- 容器分派收敛为单一判定入口：`core/runtime/objects/kernel/base.py:is_sequence_value(value)`（原生序列 list/tuple 判断，沿 spec 基名），VM 与 intrinsics 统一经它。
+- 工厂入口：`core/runtime/factory.py:RuntimeObjectFactory` 提供 `create_int / create_str / create_list / create_tuple / create_dict / create_fn_callable / create_behavior` 等方法，**不**在调用方导入具体类。内置泛型特化值（`list[int]`）由特化类水化（ArtifactLoader 加载期预创建 + VM 字面量 handler 绑定）承载，见 `tasks_docs/_code_generic_type_identity.md`。
 
 ### 6.4 类角色分工（设计决策）
 

@@ -122,6 +122,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev 80294a64/447ad35c/7a15c1b9，全量 2559 passed / 1 skipped）**：
+  **内置泛型类型身份双轨根治（缺陷一 + 缺陷二）**。统一根因 = 内置泛型与用户类泛型
+  类型身份模型双轨不对称。缺陷一（is_assignable 同家族结构化实参比较 + 跨家族 axiom 父链）
+  → 10/11 类 `X[int]→X[str]` 编译期拦截；缺陷二（特化 spec 水化为运行时特化类四层）→
+  `type(list[int]值)=list[int]`、运行时值层类型安全闭环、深克隆/序列化 round-trip 保真。
+  独立复核整改 3 项（dict 协变/boxed 防御/跨家族）。设计冻结
+  `tasks_docs/_code_generic_type_identity.md`；边界增量（函数返回/实参/嵌套内层/切片/
+  Optional/跨引擎反序列化）记录 §2.6。详见 NEXT_STEPS 已完成节 + WORKLOG。
+
 - **✅ 已完成（2026-08-13，unsafe-vibe-dev e45dbb75，全量 2519 passed / 1 skipped）**：
   **spec→TypeRef 收敛 + 测试套件重构（反思分析驱动）**。
   **A 内核收敛**（反思揭示 spec→TypeRef 三实现分裂）：A1 `_spec_to_typeref` 委托
@@ -473,14 +482,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（试用体系重构 + GEN-5/GEN-6 修复 + spec→TypeRef 收敛 + 测试套件重构**已全部完成**；全量 2519 passed / 1 skipped）
+- [ ] 读本节 §2.1（试用体系重构 + GEN-5/GEN-6 修复 + spec→TypeRef 收敛 + 测试套件重构 + **内置泛型类型身份双轨根治（缺陷一+缺陷二）已全部完成**；全量 2559 passed / 1 skipped）
 - [ ] 读 `NEXT_STEPS.md`（当前最紧要：供应商感知思考禁用机制 / CI-CD 重设计等主线候选）
-- [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；试用体系规范化行已标完成）
+- [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；试用体系规范化行已标完成；内置泛型两缺陷行已标修复）
 - [ ] 读 `TRIAL_SYSTEM_REDESIGN.md`（试用体系重构执行状态：Phase A-D 全部完成）
 - [ ] 试用体系规范：`trials/_toolkit/CLASSIFICATION.md`（分类/编号）+ `CONTRACT_FORMAT.md`（用例即契约）+ `LLM_SERVICE.md`（本机真实 LLM 服务）+ `gen_register.py`（报告生成）+ `PHASE_D_AUTOMATION.md`（收敛流程硬规则）
 - [ ] GEN-FIX 方案与实施：`tasks_docs/GEN_FIX_ARCHITECTURE.md`（GEN-5/GEN-6 四层修复定案与记录）+ `docs/architecture/03_type_system.md` §3.4bis（TypeRef 唯一权威入口规则）
 - [ ] 测试套件规范：`tests/meta/test_naming_conventions.py` TestDocstringHistoryAnchors（docstring 禁历史锚定，规则永久化）
 - [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 已修复；单一状态权威）
-- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）+ **`HANDOFF_GENERIC_ASSIGNABILITY.md`**（内置泛型赋值检查缺失 P1 + `type()` 内省不对称 P3，待核实处理）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2519 passed / 1 skipped**）
+- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）；**内置泛型两缺陷已修复**（`HANDOFF_GENERIC_ASSIGNABILITY.md` 标已修复，设计 `_code_generic_type_identity.md`）；值层身份根治后续增量（§2.6：函数返回/实参/嵌套内层/切片/Optional/跨引擎反序列化）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2559 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）

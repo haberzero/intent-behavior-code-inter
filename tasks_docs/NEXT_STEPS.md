@@ -3,10 +3,23 @@
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
 > **最后更新**：2026-08-13（**试用体系重构 + GEN-5/GEN-6 架构级修复 + spec→TypeRef 收敛
-> + 测试套件重构全部完成**；全量 **2519 passed / 1 skipped**；
+> + 测试套件重构 + 内置泛型类型身份双轨根治（缺陷一+缺陷二）全部完成**；全量 **2559 passed / 1 skipped**；
 > 见下方"已完成"与"交接要点"节）
 
 ---
+
+## ✅ 已完成：内置泛型类型身份双轨根治（缺陷一 + 缺陷二，2026-08-13，unsafe-vibe-dev 80294a64/447ad35c/7a15c1b9，全量 2559 passed / 1 skipped）
+
+> 用户裁定（2026-08-13）：两缺陷均根治，架构统一性/长期收益/代码质量优先。
+> 统一根因 = 内置泛型与用户类泛型类型身份模型双轨不对称。设计冻结 `_code_generic_type_identity.md`；
+> 独立复核（general agent）发现 3 项全部整改。
+
+- **缺陷一（P1，80294a64）内置泛型赋值实参校验缺失**：`is_assignable` 在 axiom 前缀匹配前插入同家族结构化实参比较——`_generic_spec_args`（list→element_type / dict→key+value / tuple→positional / thread·chan·slot·generator·fn_callable·behavior→value_type）+ `_generic_family_compatible`（沿 axiom 父链处理 behavior→fn_callable 跨家族）。10/11 类 `X[int]→X[str]` 编译期拦截；协变（`list[int]→list` / `dict[str,int]→dict[str,any]`）保留；bool isa int / Optional 专门分支 / 裸→特化语义不破坏。
+- **缺陷二（P1-P2，447ad35c+7a15c1b9）内建泛型值层类型擦除**：特化 spec 水化为运行时特化类四层——① ArtifactLoader 加载期（sealed 前）预创建 type_pool 内置泛型特化类（parent=基类）；② `IbClass._specialize` 内置泛型下标水化特化类（sealed 回落 boxed 嵌套实参字符串）+ `_impl_cls` 沿 spec 基类名解析实现类；③ 编译期赋值 visitor 对容器字面量 RHS `bind_type(target_type)` → VM 字面量 handler `_bind_container_specialization` 按特化类绑值 + type_ref 结构化；④ 值层分派沿 spec 基名统一（deep_clone / is_sequence_value / runtime_serializer 分派+反序列化重建 / thread 构造 args）。
+- **效果**：`type(list[int]值)=list[int]`（原 list，与用户类 Box[int] 一致）；运行时值层可区分 `list[int]`/`list[str]`（与缺陷一联动 is_assignable 拦截）；深克隆/同引擎序列化 round-trip 保真；嵌套泛型 `list[list[int]]` 外层值身份。
+- **独立复核整改（7a15c1b9）**：① dict 协变假拒绝（`_generic_spec_args` 过滤 any → `dict[str,int]→dict[str,any]` 被 len 比较误拒）——不过滤 any，仅裸基类（key/value 均 any）返回空；② `_bind_container_specialization` boxed 字符串回落直接赋 `value.ib_class` 损坏值——加 `isinstance(specialized_cls, IbClass)` 防御；③ 跨家族残留 `behavior[int]→fn_callable[str]` 放行——`_generic_family_compatible` 沿 src axiom 父链判定子类型关系，跨家族也校验实参。
+- **测试**：判别性回归 +25（compiler TestGenericAssignability 23 + e2e TestBuiltinGenericValueIdentity 12 + runtime 白盒 test_generic_value_identity 4，去重净增）；触发用例 G6-01（GUARD）+ G6-02（PASS）入 T04。
+- **已确认边界（`_code_generic_type_identity.md` §2.6 待增量）**：函数返回字面量 / 调用实参字面量 / 下标赋值字面量 / 嵌套内层元素 / 容器切片 / Optional 值身份 / 跨引擎反序列化——均非回归（修复前即擦除），属值层身份根治后续增量。
 
 ## ✅ 已完成：G3 继承特化父类字段丢失 + Finding C any 逃生阀用户类复查（2026-08-13，unsafe-vibe-dev b0f4d74，全量 2365 passed / 1 skipped）
 
@@ -391,13 +404,17 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。
+- **✅ 独立缺陷窗口已完成（2026-08-13，unsafe-vibe-dev 80294a64/447ad35c/7a15c1b9，全量 2559 passed / 1 skipped）**：
+  - **内置泛型赋值检查缺失（缺陷一，P1）**：`HANDOFF_GENERIC_ASSIGNABILITY.md` §一。`is_assignable` 同家族结构化实参比较根治，10/11 类拦截，协变/子类型兼容保留。
+  - **内建泛型值层类型擦除（缺陷二，P1-P2）**：`HANDOFF_GENERIC_ASSIGNABILITY.md` §二。特化 spec 水化为运行时特化类，`type(list[int]值)=list[int]`，运行时值层类型安全闭环。
+  - 详见上方"已完成"节与 `PENDING_TASKS.md` §〇。
+- **🟡 值层身份根治后续增量**（`_code_generic_type_identity.md` §2.6，非回归）：函数返回/调用实参/下标赋值字面量、嵌套内层元素、容器切片、Optional 值身份、跨引擎反序列化的值层身份保真。
 - **🟡 独立缺陷窗口（不阻塞主线）**：
-  - **内置泛型赋值检查缺失**（P1，`HANDOFF_GENERIC_ASSIGNABILITY.md`）：10/11 类内置泛型 `X[int]`→`X[str]` 编译期放行，根因=axiom is_compatible 前缀匹配。待核实修复。
-  - **内建泛型值层类型擦除**（P1-P2，`HANDOFF_GENERIC_ASSIGNABILITY.md` §二，重新分析升格）：特化 spec 从未水化为运行时特化类，值层无法区分 `list[int]`/`list[str]`（type() 分裂 + 运行时类型安全缺失）。根治需独立设计窗口，近期阻断缺陷一。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
 - **📌 本 session 已完成**（临时问题全部闭环）：T01 LLM 批真实重跑 55P+2G；过期文档删除 40；
   套件重构（不冻结原则）；classification 写回 100%；gen_register 报告生成器 + 收敛流程硬规则；
-  **GEN-5/GEN-6 架构级修复（四层）**；**spec→TypeRef 收敛 + 测试套件重构（A+B）**。
+  **GEN-5/GEN-6 架构级修复（四层）**；**spec→TypeRef 收敛 + 测试套件重构（A+B）**；
+  **内置泛型类型身份双轨根治（缺陷一+缺陷二）**。
 
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成

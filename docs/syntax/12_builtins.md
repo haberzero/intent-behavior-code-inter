@@ -12,7 +12,7 @@
 | `range(start, end)` | 生成 `[start, end)` 整数序列 |
 | `range(start, end, step)` | 生成 `[start, end)` 整数序列（步进） |
 | `len(container)` | 获取容器长度（列表/字符串/字典） |
-| `type(value)` | 返回值的规范类型名（`int`/`list`/`Box` 等）；对 fn_callable/behavior 返回含签名形态（如 `fn_callable[()->int]`，见 `05_functions.md` §5.7） |
+| `type(value)` | 返回值的规范类型名（`int`/`str`/`list[int]`/`Box[int]` 等）；内置泛型容器值保留特化实参（`list[int]` 值 → `list[int]`），对 fn_callable/behavior 返回含签名形态（如 `fn_callable[()->int]`，见 `05_functions.md` §5.7） |
 | `int(value)` / `str(value)` / `float(value)` / `bool(value)` | 类型转换：`int("42")` → 42、`str(42)` → "42"、`float("3.5")` → 3.5、`bool(1)` → True（零参：`int()` → 0 等） |
 | `enumerate(iterable)` | 生成 `[(索引, 值), ...]` 元组列表（与 `for (int i, str v) in ...` 搭配） |
 | `zip(a, b, ...)` | 按位置组合多个序列为元组列表（按最短截断） |
