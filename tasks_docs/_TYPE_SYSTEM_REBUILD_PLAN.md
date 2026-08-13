@@ -82,10 +82,14 @@ _slice_type_objs_for 结构化实参递归解析。
 
 判别性回归：`list[geo.Point]` vs `list[graph.Point]` 区分。
 
-改动点：
-1. 特化 spec 沿基类 module 填充。
-2. candidate_key/specialized_name/type_uid 三处拼接统一带 module。
-3. `_rehydrate_type_pool_spec` 按 (module,name) 匹配。
+状态：**评估后登记为设计边界，不随本批实施（2026-08-13）**。
+实证：多模块编译同名类 `geo.Box`/`graph.Box` 在 type_pool 坍缩为一个 `Box`
+（module=None）；运行时 `registry.get_class(name)` 表是 name-only（结构性天花板）。
+完整修复需重构：① 编译器模块注册（scheduler 跨模块类 module_path 承载）；②
+serializer/rehydrator 模块身份；③ 运行时 IbClass 表按 (module,name) 索引——改动面
+深、风险高、触发面罕见（跨模块同名类）。**半修 module 会留新洞（违反"禁止半修复"）**，
+故保持为已知边界：登记 KNOWN_LIMITS + AIMLESS_REVIEW，待独立窗口评估运行时类表
+module 化。同模块特化 round-trip（S4 验证）不受影响。
 
 ## S6 已知边界重估（独立语言缺口）
 
