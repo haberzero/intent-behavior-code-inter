@@ -2,8 +2,9 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**跨模块同名类运行时类表 module 化根治（S5 运行期闭环）
-> + 内置泛型父误加前缀根治 + 独立复核整改**；全量 **2614 passed / 1 skipped**；
+> **最后更新**：2026-08-14（**跨模块同名类运行期类表 module 化根治（S5 运行期闭环）
+> + 内置泛型父误加前缀根治 + 独立复核整改 + T05 批判性压力试用（40 用例 37P+1G+2KI
+> + 23 DOC_ISSUE）+ 内核粗略问题分析报告**；全量 **2614 passed / 1 skipped**；
 > 见下方"已完成"节与"交接要点"节）
 
 ---
@@ -12,7 +13,8 @@
 
 > 用户 2026-08-14 指出：S5 只根治编译期/元数据层，运行期类表仍 name-only 坍缩。
 > 设计 `_code_runtime_class_module.md`；独立复核（general agent）PASS-with-findings
-> （1 项 P1 已整改 + 文档同步）。
+> （1 项 P1 已整改 + 文档同步）。**同 session 的 T05 批判试用确认根治稳健**（D1 12 例
+> 全 PASS 零回归），并暴露 2 项既有缺陷 + 23 文档问题（见下方 T05 节）。
 
 - **根因**：编译期 spec 身份 = (module_path, name)；运行期 IbClass 身份 = 裸 name
   （`_classes[name]`/`_class_registry[ib_class.name]`）——两端不对称，运行期坍缩使
@@ -34,6 +36,37 @@
 - **已知边界**（KNOWN_LIMITS §10.2）：LLM 输出解析跨模块用户类的 AST 裸名返回路径
   graceful 退化（不误配）；跨引擎 round-trip 未编译目标引擎的用户类重建受注册表封印
   限制（既有边界）。
+
+---
+
+## ✅ 已完成：T05 批判性压力试用 + 内核粗略问题分析（2026-08-14，`trials/T05_critical_stress/`，全量 2614 passed / 1 skipped）
+
+> 跨模块类表 module 化后内核的全方位批判试用（mock 对抗 + 真实 LLM + 文档全量核验）。
+> 40 用例 **37 PASS + 1 GUARD + 2 KERNEL_ISSUE**；文档核验 **23 DOC_ISSUE**。
+> **本任务是试用/记录/汇报任务，不修复**；发现只登记（PENDING_TASKS）。
+
+- **D1 跨模块根治回归 12 例全 PASS**：方法表隔离（105/hi!）/同模块多特化/非泛型同名/
+  三模块/嵌套包/泛型继承/内置泛型实参/函数参数/thread 值类型/序列化/入口遮蔽。
+- **D2 对抗 20 例**（深递归/遮蔽/Optional/any 守卫/容器/生成器/闭包/enum/switch/
+  llmexcept/并发/字符串/lambda/auto/解包/运算符重载/import/while/嵌套身份/默认参数）：
+  17 PASS + 1 GUARD（遮蔽守卫）+ 2 KERNEL_ISSUE。
+- **D3 真实 LLM 8 例全 PASS**：意图 @/@! 遵循、@~ typed 解析、enum 成员名→值、
+  llmexcept 共存、mock↔真实切换、长提示格式约束。本机服务响应 <1s（reasoning_tokens=0，
+  与 LLM_SERVICE 记录的思考耗时不符——环境事实）。
+- **KERNEL_ISSUE 2 项（均既有缺陷，非本 session 引入；粗略根因已分析）**：
+  - **CROSSMOD-THREAD-1（P1）**：线程 worker 内被 import 模块用户类方法调用失败
+    （`Symbol UID missing`）。根因方向：task_ec 的 `get_side_table` 回调读 interpreter
+    共享 current_module_name（coordinator.py:213 + interpreter.py:352），忽略任务本地
+    module 切换（_shared.py:261）。base 同现。
+  - **OPTIONAL-ISNONE-1（P2）**：`Optional[int] a = None; a is None` → False（文档声称
+    True）。根因方向：`is` 的 None 分支 `isinstance(left, IbNone)`（leaf.py:269），
+    Optional 空值被 IbOptional 包装；`is_none()` 文档有声明实现缺失。
+- **DOC_ISSUE 23 条**（P1×4/P2×11/P3×8）：mock STR/BOOL 值语义、KNOWN_LIMITS 自身
+  3 条不成立（§七/§八/§十三）、15_diagnostics 8 个幽灵诊断码、Optional 判空误导、
+  2 处 P1 示例不能编译、文档间矛盾（intent/生成器/并发）、TESTONLY 遗留术语等。
+- **批判性评价**：跨模块根治稳健零回归；**并发模块上下文隔离是主要风险面**（KI-1 +
+  14_concurrency 相反承诺）；Optional 判空三路径不一致；文档健康度显著低于代码。
+  报告 `REPORT.md` + `REGISTER.md`。
 
 ---
 

@@ -122,20 +122,27 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 当前交接（2026-08-14 用户指出，待下一 session 彻底修复）**：
-  **跨模块同名类运行时类表 module 化**。S5 只根治编译期/元数据层（`geo.Box`/`graph.Box`
-  独立 spec + 特化继承 module + 序列化保真）；**运行时 `_class_registry`/`_classes` 仍
-  name-only 坍缩，方法表按后编译者覆盖**——实证 `geo.Box[int](5).get()` 报 `int+str`
-  （geo 的 get 方法体被 graph 覆盖）。完整交接见 `_HANDOFF_GENERIC_REMAINING.md` §九：
-  运行时类表 module 感知键（bootstrapper/registry 81 处 get_class 审计 + `_specialize` +
-  artifact_loader + 跨引擎 round-trip），高风险独立分支，判别性回归
-  （geo.Box.get()=105 / graph.Box.get()="hi!"）。
+- **✅ 已完成（2026-08-14，exp/runtime-class-module → 手动 cherry-pick unsafe-vibe-dev 6e68329c，全量 2614 passed / 1 skipped）**：
+  **跨模块同名类运行时类表 module 化根治（S5 运行期闭环）**。注册键 = `spec.qualified_name`
+  + `get_class(name, module)` module 感知 + `_specialize`/artifact_loader/序列化 module 化
+  + `resolve_class_module` 权威父 module 解析（内置泛型父不加前缀）。判别性回归 +6（含
+  105/hi! 方法表隔离）。独立复核（general agent）P1 已整改。设计 `_code_runtime_class_module.md`。
+
+- **✅ 已完成（2026-08-14，`trials/T05_critical_stress/`，全量 2614 passed / 1 skipped）**：
+  **T05 批判性压力试用 + 内核粗略问题分析（汇报任务，不修复）**。40 用例 37 PASS + 1 GUARD
+  + 2 KERNEL_ISSUE；文档核验 23 DOC_ISSUE。**KERNEL_ISSUE 2 项（既有缺陷）**：
+  ① **CROSSMOD-THREAD-1（P1）** 线程 worker 内被 import 模块用户类方法调用失败
+  （task_ec 侧表回调读 interpreter 共享 current_module_name，忽略任务本地模块切换）；
+  ② **OPTIONAL-ISNONE-1（P2）** `Optional[T] a = None; a is None` 返回 False
+  （`is` 用 isinstance(IbNone)，Optional 包装不识别；`is_none()` 文档有实现缺）。
+  报告 `REPORT.md` + `REGISTER.md`；完整明细 NEXT_STEPS 已完成节。**下一候选**：
+  修上述 2 项 + DOC_ISSUE 批次（mock 值语义/KNOWN_LIMITS 三条不成立/8 幽灵诊断码）。
 
 - **✅ 已完成（2026-08-13/14，类型体系地基根治 S0-S7 + 遗留边界，全量 2608 passed / 1 skipped）**：
   **类型体系地基根治（`_TYPE_SYSTEM_REBUILD.md` v2，物化路线内结构化）**。桩1 创建点结构化
   TypeRef、descriptor 双真相收敛、桩2 get_base_name 单义 + 句柄类物化、桩3 声明驱动序列化、
   元组解包检查 + 容器推断（含 `-> auto`）、`*expr` 元素级校验、S5 跨模块同名类编译期 module 化。
-  判别性回归 +25。**遗留未完成**：跨模块同名类运行时类表 module 化（见上）。详见 NEXT_STEPS + WORKLOG。
+  判别性回归 +25。**运行期 module 化已在本 session 闭环（见上）**。详见 NEXT_STEPS + WORKLOG。
 
 - **✅ 已完成（2026-08-13，unsafe-vibe-dev 617fb3a6/503f92fd 等 5 commits，全量 2579 passed / 1 skipped）**：
   **值层身份彻底收敛（`_code_generic_value_convergence.md`）**。统一"类型上下文→字面量"
