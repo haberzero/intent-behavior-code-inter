@@ -352,15 +352,14 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   KNOWN_LIMITS §六/§七/§十四#1③ + 06_oop 文档同步。
 
 - **🔴 下一 session 目标（2026-08-12 用户提出）**：
-  1. **试用体系规范化**（主要目标，设计起点 `TRIAL_SYSTEM_DESIGN.md`）：试用机制体系化、
-     日志体系化、历史记录整理定型——单一 harness（`trials/_toolkit/`）+ 统一分类/级别/命名
-     + REGISTER 统一模板 + 历史 4 套 git mv 迁移 + 编号映射 + `trials/INDEX.md`。
-     **新增分诊闸门**（本 session 教训）：非 PASS 用例须先对照 KNOWN_LIMITS/docs 分诊
-     （KERNEL_ISSUE / BOUNDARY / LIMIT / 用例错误）；命中已知限制 ≠ 免罪，须进入待修候选池。
-     **待处理**：R1-05/R5-01 试用用例须适配新 auto-init 语义（多参构造），R5-04 用例无效
-     （None 哨兵不可行）须改用 `Optional[Node[T]]` 或显式哨兵。
+  1. **试用体系规范化**（主要目标）——**✅ Phase 1-2 已完成（2026-08-13，commit 22ae5ee5）**：
+     单一 harness `trials/_toolkit/run_one.py`（4 套复制改软链）+ `CLASSIFICATION.md`（统一分类/
+     级别/编号 + **登记前分诊闸门**：命中已知限制 ≠ 免罪，进待修候选池）+ DESIGN/REGISTER 模板
+     + 4 套 git mv 迁移（`trials/T01_llm_full` 等）+ REGISTER 编号映射 + `trials/INDEX.md` 全局
+     索引。**剩余 Phase 3**：docs 治理评估（试用体系规范是否入 docs/，按 WRITING_GUIDE）。
   2. ~~泛型缺陷 G3/BOUNDARY-G2 修复~~（`_HANDOFF_GENERICS_FIX.md`）——**已完成（2026-08-13）**，
-     交接文件可归档删除。
+     交接文件已归档删除。**遗留**：KERNEL_ISSUE-GEN-5（嵌套内置泛型实参的用户类特化注册缺失，
+     预存缺陷，T04 R5-04 Box 部分暴露；独立窗口深挖，见 PENDING_TASKS）。
 
 - **✅ 已完成（2026-08-12）**：**enum 补全 + 嵌套包 import 根治 + 文档批次 + 用户试用**
   （unsafe-vibe-dev，全量 **2308 passed / 1 skipped**）。enum 补全（非 str 枚举 LLM 集成
