@@ -73,9 +73,9 @@ class ScopeImpl:
 
         # 用户定义类（含枚举）的赋值由编译器在语义分析阶段验证，运行时跳过类型检查。
         # 例外：值为动态 any 逃生阀（`any` 类型类对象）时编译器无法静态验证，须运行时
-        # 强制校验（对齐 KNOWN_LIMITS §七"any 值用于类型化上下文时运行时强制校验"）——
-        # 否则 any 类对象静默流入用户类变量，后续访问报困惑的 AttributeError 而非
-        # 清晰的 RUN_TYPE_MISMATCH。注意 is_assignable 对动态 any 源会因"类可调用"
+        # 强制校验（"any 值用于类型化上下文时运行时强制校验"契约）——否则 any 类对象
+        # 静默流入用户类变量，后续访问报困惑的 AttributeError 而非清晰的
+        # RUN_TYPE_MISMATCH。注意 is_assignable 对动态 any 源会因"类可调用"
         # （is_callable）放行，故此处直接判定、不依赖 assignability。
         is_dynamic_any_marker = (
             isinstance(value, IbObject)

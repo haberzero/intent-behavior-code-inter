@@ -1,13 +1,11 @@
 """tests/e2e/test_auto_init_inheritance.py — 自动构造器继承链绑定 + any 逃生阀复查。
 
-G3 修复（chain-aware auto-init）：无显式 ``__init__`` 的类，构造器参数 = 继承链上
-全部有效无默认值字段（父类优先、子类同名覆盖）——消除"auto-init 只收自身 body"
-导致的父类字段静默丢失（此前 ``class Sub(Base): str tag`` + ``Sub(5)`` 会把 5 绑到
-``tag``、``data`` 静默 None）。
+自动构造器继承链绑定：无显式 ``__init__`` 的类，构造器参数 = 继承链上全部有效无默认值
+字段（父类优先、子类同名覆盖）——消除"auto-init 只收自身 body"导致的父类字段静默丢失
+（此前 ``class Sub(Base): str tag`` + ``Sub(5)`` 会把 5 绑到 ``tag``、``data`` 静默 None）。
 
-Finding C 修复（any 逃生阀复查）：动态 any 类对象赋给用户类变量时运行时强制
-``RUN_TYPE_MISMATCH``（对齐 KNOWN_LIMITS §七"any 值用于类型化上下文时运行时强制校验"），
-不再静默流入后报困惑的 AttributeError。
+any 逃生阀复查：动态 any 类对象赋给用户类变量时运行时强制 ``RUN_TYPE_MISMATCH``
+（any 值用于类型化上下文时运行时强制校验契约），不再静默流入后报困惑的 AttributeError。
 """
 from tests.conftest import run_ibci, expect_runtime_error
 
