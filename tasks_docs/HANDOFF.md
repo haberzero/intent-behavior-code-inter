@@ -478,9 +478,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [ ] 读 `PT_FEAT3_DESIGN.md`（设计冻结 + 边界 ①-⑧）+ `_code_user_class_generics.md`（设计起点，保留追溯）
 - [ ] 读 `_GENERICS_TRIAL_20260812/REGISTER.md`（泛型压力试用：G1/G2/BOUNDARY-G1/双通道**已全部修复**，全量 2350/1）
 - [ ] 读 `_GENERICS_TRIAL_FIX_20260812/REGISTER.md`（修复回归试用：成果全 PASS；**新发现 G3 继承特化字段丢失 P1 + BOUNDARY-G2 类型退化 P2**，待独立窗口）
+- [ ] **🔴 修复交接**：读 `_HANDOFF_GENERICS_FIX.md`（G3 + BOUNDARY-G2 的复现/根因起点/修复路径/验证方法）——下一智能体修复任务
 - [ ] 读 `_enum_instancing_assessment.md` + `_PT_AUDIT3_RECORD.md` §三（S1-S5 处置状态）
-- [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空；泛型试用缺陷 G1/G2/BOUNDARY-G1/双通道 已全部修复）
+- [ ] 读 `PENDING_TASKS.md` §〇（当前主线已清空；泛型试用缺陷 G1/G2/BOUNDARY-G1/双通道 已全部修复；G3/BOUNDARY-G2 待修复）
 - [ ] 读 NEXT_STEPS（交接要点）+ 本文件 §一 固定化内容（goal 模板 / 流程 / 原则）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2339 passed / 1 skipped**）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2350 passed / 1 skipped**）
 - [ ] 独立窗口候选：PT-DEBT-4 / PT-AUDIT-3 S1-S3 / 枚举实例化 / import subpkg / CI/CD / PT-FEAT-13 C8
-- [ ] 工作全程本地 commit、禁 push（除非用户显式授权；当前本地领先 origin 8 commits 未推送）
+- [ ] 工作全程本地 commit、禁 push（除非用户显式授权；当前本地领先 origin 20 commits 未推送）
