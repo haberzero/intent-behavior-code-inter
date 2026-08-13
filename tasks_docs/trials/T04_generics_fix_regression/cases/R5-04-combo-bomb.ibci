@@ -1,0 +1,34 @@
+# R5-04 回归面：组合轰炸（自引用+嵌套+容器+控制流）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 组合场景不崩
+# 2026-08-13 适配：原 while cur is not None 哨兵在 Node[int]（非 Optional）上不可行
+# （编译期禁止赋 None）→ 改固定次数遍历；nodes[2].next 未赋值保持 any 默认。
+import ai
+ai.set_mock_mode()
+class Node[T]:
+    T data
+    Node[T] next = any
+    func get(self) -> T:
+        return self.data
+class Box[T]:
+    T value
+    func make(self, T v) -> Box[T]:
+        return Box[T](v)
+
+list[Node[int]] nodes = [Node[int](1), Node[int](2), Node[int](3)]
+nodes[0].next = nodes[1]
+nodes[1].next = nodes[2]
+int total = 0
+Node[int] cur = nodes[0]
+int i = 0
+while i < 3:
+    total = total + cur.get()
+    if i < 2:
+        cur = cur.next
+    i = i + 1
+print("total=" + (str)total)
+
+Box[int] bx = Box[int](10)
+Box[int] bx2 = bx.make(20)
+print("make=" + (str)bx2.value)
+print("DONE")

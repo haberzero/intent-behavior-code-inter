@@ -1,0 +1,19 @@
+# D1-04 全使用面：字段/方法参数/返回/局部变量
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 类型参数在各类位置全部替换
+import ai
+ai.set_mock_mode()
+class Holder[T]:
+    T field
+    func process(self, T inp) -> T:
+        T local = inp
+        self.field = local
+        return self.field
+
+Holder[int] hi = Holder[int](0)
+int r1 = hi.process(99)
+print("r1=" + (str)r1)
+Holder[str] hs = Holder[str]("a")
+str r2 = hs.process("b")
+print("r2=" + r2)
+print("DONE")

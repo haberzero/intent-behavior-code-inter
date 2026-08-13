@@ -1,0 +1,4 @@
+func util_fn() -> str:
+    return "util-value"
+
+int util_const = 7

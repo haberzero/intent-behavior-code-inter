@@ -1,0 +1,12 @@
+# D1-02-003b global 最小复现（独立确认）
+# doc: docs/syntax/02_variables.md §2.6
+# 期望: global counter 声明后函数内读写模块级 counter；输出 counter=1
+
+int counter = 0
+func bump() -> void:
+    global counter
+    counter = counter + 1
+
+bump()
+print("counter=" + (str)counter)
+print("DONE")

@@ -1,0 +1,18 @@
+# R3-001 PT-DEBT-27 异常逃逸修复：真实超时 + try/except 捕获
+# 期望: 超时抛 LLMCallError 被捕获（修复前逃逸崩溃）
+import ai
+ai.set_timeout(0.01)
+ai.set_retry(1)
+
+try:
+    str r = @~ 请写一篇500字作文 ~
+    print((str)r.len())
+    print("unexpected_success")
+except LLMCallError as e:
+    print("caught_llmcall")
+except LLMError as e:
+    print("caught_llm")
+except Exception as e:
+    print("caught_gen")
+print("after_catch")
+print("DONE")

@@ -1,0 +1,25 @@
+# D1-03 嵌套实参 Box[list[int]] / Box[dict[str,int]] / list[Box[int]]
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 嵌套特化身份与成员访问正确
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+    func set(self, T v) -> void:
+        self.value = v
+
+Box[list[int]] bl = Box[list[int]]([1, 2, 3])
+list[int] inner = bl.get()
+print("inner_len=" + (str)inner.len())
+print("first=" + (str)inner[0])
+
+Box[dict[str, int]] bd = Box[dict[str, int]]({"a": 1})
+dict[str, int] d = bd.get()
+print("dict_a=" + (str)d["a"])
+
+list[Box[int]] boxes = [Box[int](10), Box[int](20)]
+print("box0=" + (str)boxes[0].get())
+print("box1=" + (str)boxes[1].get())
+print("DONE")

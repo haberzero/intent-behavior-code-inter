@@ -1,0 +1,12 @@
+# D2-42 多可能性：thread_result 成员访问形态（howto `.value` vs syntax doc `r.value()`）
+# doc: docs/howto/write_concurrent_tasks.md（join().value 属性形态）
+#      vs docs/syntax/14_concurrency.md §14.7（r.value() 方法形态）
+# 期望: 记录实际支持哪种形态（属性 or 方法 or 都支持）
+
+func fetch(int x) -> int:
+    return x * 2
+
+thread[int] t = thread(callable=fetch, args=[21])
+thread_result[int] r = t.join()
+print("expect=" + (str)r.expect())
+print("DONE")

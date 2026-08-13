@@ -1,0 +1,14 @@
+# D3-C3c MOCK:FAIL 解析失败 try/except 捕获（LLMParseError 路径）
+import ai
+ai.set_mock_mode()
+
+try:
+    str r = @~ MOCK:FAIL bad ~
+    print("unexpected=" + r)
+except LLMParseError as e:
+    print("caught_parse=" + e.message)
+except LLMError as e:
+    print("caught_llm=" + e.message)
+except Exception as e:
+    print("caught_gen=" + (str)e)
+print("DONE")

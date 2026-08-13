@@ -1,0 +1,21 @@
+# D1-01 基础特化：int/str/float/bool
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 四种基础类型特化各自正确
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+    func set(self, T v) -> void:
+        self.value = v
+
+Box[int] bi = Box[int](42)
+Box[str] bs = Box[str]("hi")
+Box[float] bf = Box[float](3.14)
+Box[bool] bb = Box[bool](True)
+print("int=" + (str)bi.get())
+print("str=" + bs.get())
+print("float=" + (str)bf.get())
+print("bool=" + (str)bb.get())
+print("DONE")

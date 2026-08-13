@@ -1,0 +1,16 @@
+# R2-04 G1 嵌套实参 Box[dict[str,int]] 方法体
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: dict 嵌套方法体命中特化
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+    func make(self, T v) -> Box[T]:
+        return Box[T](v)
+
+Box[dict[str, int]] bd = Box[dict[str, int]]({"a": 1})
+Box[dict[str, int]] bd2 = bd.make({"b": 2})
+print("key=" + (str)bd2.get()["b"])
+print("DONE")

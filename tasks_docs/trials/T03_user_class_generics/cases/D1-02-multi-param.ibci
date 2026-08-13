@@ -1,0 +1,26 @@
+# D1-02 多类型参数 Pair[K,V] / Triple[A,B,C]
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 多参数按序映射
+import ai
+ai.set_mock_mode()
+class Pair[K, V]:
+    K key
+    V val
+    func get_key(self) -> K:
+        return self.key
+    func get_val(self) -> V:
+        return self.val
+
+class Triple[A, B, C]:
+    A a
+    B b
+    C c
+    func sum_str(self) -> str:
+        return (str)self.a + (str)self.b + (str)self.c
+
+Pair[str, int] p = Pair[str, int]("k", 7)
+print("key=" + p.get_key())
+print("val=" + (str)p.get_val())
+Triple[int, str, float] t = Triple[int, str, float](1, "x", 2.5)
+print("triple=" + t.sum_str())
+print("DONE")

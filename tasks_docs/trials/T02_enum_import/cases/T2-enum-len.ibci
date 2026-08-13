@@ -1,0 +1,8 @@
+class Status(Enum):
+    str PENDING = "PENDING"
+    str RUNNING = "RUNNING"
+    str DONE = "DONE"
+
+print((str)len(Status))
+int n = len(Status)
+print((str)(n == 3))

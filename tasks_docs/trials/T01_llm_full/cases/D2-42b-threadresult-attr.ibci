@@ -1,0 +1,8 @@
+# D2-42b 多可能性：thread_result `.value` 属性形态（howto 写法）
+func fetch(int x) -> int:
+    return x * 2
+
+thread[int] t = thread(callable=fetch, args=[21])
+thread_result[int] r = t.join()
+print("value_attr=" + (str)r.value)
+print("DONE")

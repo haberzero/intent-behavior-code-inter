@@ -1,0 +1,14 @@
+# R1-03 G2 递归特化 Node[Node[int]]
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: Node[Node[int]] 双重 get 正确
+import ai
+ai.set_mock_mode()
+class Node[T]:
+    T data
+    func get(self) -> T:
+        return self.data
+
+Node[int] leaf = Node[int](9)
+Node[Node[int]] wrapped = Node[Node[int]](leaf)
+print("inner=" + (str)wrapped.get().get())
+print("DONE")

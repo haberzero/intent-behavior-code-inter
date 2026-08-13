@@ -1,0 +1,29 @@
+# D3-C1b 长提示调试：检查 __to_prompt__ 实际注入内容
+import idbg
+
+class Report:
+    str title
+    list[str] sections
+    func __init__(self, str t, list[str] s) -> auto:
+        self.title = t
+        self.sections = s
+    func __to_prompt__(self) -> str:
+        str acc = "报告标题：" + self.title
+        int i = 0
+        while i < self.sections.len():
+            acc = acc + " | 章节" + (str)i + "：" + self.sections[i]
+            i = i + 1
+        return acc
+
+list[str] secs = ["背景介绍", "核心发现"]
+Report rep = Report("报告", secs)
+
+str summary = @~ 根据 $rep 概括核心发现 ~
+print("summary=" + summary)
+
+dict info = idbg.current_llm()
+str user = info["user_prompt"]
+print("PROMPT_CONTAINS_TITLE=" + (str)user.contains("报告标题：报告"))
+print("PROMPT_CONTAINS_SECTION=" + (str)user.contains("核心发现"))
+print("PROMPT=" + user)
+print("DONE")

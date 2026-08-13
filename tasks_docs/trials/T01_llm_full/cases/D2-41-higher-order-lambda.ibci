@@ -1,0 +1,13 @@
+# D2-41 多层次：高阶函数传 lambda + LLM（调用点意图敏感 + 传参链）
+# doc: docs/syntax/05_functions.md §5.6 + 07 §7.4
+# 期望: lambda 作高阶函数参数，调用时使用调用点意图栈
+
+@+ 回复要极简，不超过6字
+func run2(fn[(str) -> str] cb, str input) -> str:
+    return cb(input)
+
+fn cb = lambda(str x) -> str: @~ 用中文回复：$x ~
+str r = run2(cb, "你好")
+@-
+print("r=" + r)
+print("DONE")

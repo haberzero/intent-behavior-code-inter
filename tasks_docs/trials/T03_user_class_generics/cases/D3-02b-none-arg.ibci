@@ -1,0 +1,6 @@
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+Box[None] b = Box[None](None)
+print("done")

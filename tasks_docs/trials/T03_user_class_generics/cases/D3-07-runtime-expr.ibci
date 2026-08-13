@@ -1,0 +1,19 @@
+# D3-07 恶意：运行时特化表达式（print(Box[int]) / 特化作函数参数）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 表达式位置特化可用或明确报错（不崩溃）
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+
+print((str)type(Box[int](1)))
+
+func ident(Box[int] x) -> int:
+    return x.get()
+
+Box[int] b = Box[int](5)
+int r = ident(b)
+print("r=" + (str)r)
+print("DONE")

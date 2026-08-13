@@ -1,0 +1,16 @@
+# R2-05 G1 嵌套用户类 Box[Box[int]] 方法体
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 用户类嵌套特化方法体
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+    func make(self, T v) -> Box[T]:
+        return Box[T](v)
+
+Box[Box[int]] bb = Box[Box[int]](Box[int](7))
+Box[Box[int]] bb2 = bb.make(Box[int](8))
+print("inner=" + (str)bb2.get().get())
+print("DONE")

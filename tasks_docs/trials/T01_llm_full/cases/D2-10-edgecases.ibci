@@ -1,0 +1,31 @@
+# D2-10 多可能性：类型错配 / 边界值 / 空输入 / 保留名遮蔽
+# 期望: 类型错配编译期拦截；边界值正确；空输入行为明确（记录实际）
+
+# 边界值
+int big = 2147483647
+int neg = -2147483648
+print("big=" + (str)big)
+print("neg=" + (str)neg)
+
+# 字符串操作边界
+str empty = ""
+print("empty_len=" + (str)empty.len())
+print("empty_upper=" + empty.upper())
+
+# 列表边界
+list[int] l = []
+print("list_empty=" + (str)l.len())
+list[int] l2 = [1]
+int first = l2[0]
+print("first=" + (str)first)
+
+# 保留名遮蔽（类型名不可遮蔽——记录实际）
+# int int = 5  # 预期编译错误，单独用例验证
+
+# 除零
+try:
+    int z = 10 / 0
+    print("z=" + (str)z)
+except Exception as e:
+    print("div0_caught=" + e.message)
+print("DONE")

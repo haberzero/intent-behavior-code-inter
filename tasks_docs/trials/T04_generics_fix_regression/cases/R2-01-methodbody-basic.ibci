@@ -1,0 +1,19 @@
+# R2-01 G1 方法体 Box[T] 构造（int/str 多特化）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 多特化互不干扰
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+    func make(self, T v) -> Box[T]:
+        return Box[T](v)
+
+Box[int] b = Box[int](1)
+Box[int] b2 = b.make(2)
+print("v=" + (str)b2.get())
+Box[str] s = Box[str]("a")
+Box[str] s2 = s.make("b")
+print("s=" + s2.get())
+print("DONE")

@@ -1,0 +1,31 @@
+# D1-05-001 func 声明 + auto 推断 + void/None + 默认值/具名/*args/**kwargs
+# doc: docs/syntax/05_functions.md §5.1/§5.1.1
+# 期望: 各种函数形态正确调用
+
+func double(int x) -> auto:
+    return x * 2
+
+func say_hello(str name) -> void:
+    print("hello " + name)
+
+func greet(str name, str punct = "!") -> str:
+    return "hi " + name + punct
+
+func add(int a, int b) -> int:
+    return a + b
+
+func collect(str tag, *rest, int limit = 1, **kw) -> dict:
+    return {"tag": tag, "rest": rest, "limit": limit, "kw": kw}
+
+print("double=" + (str)double(5))
+say_hello("world")
+print("greet1=" + greet("x"))
+print("greet2=" + greet("x", "?"))
+print("named=" + (str)add(b=2, a=1))
+print("mixed=" + (str)add(1, b=2))
+
+list m = [1, 2]
+dict kw = {"a": 1, "b": 2}
+print("splat=" + (str)add(*m))
+print("kw_splat=" + (str)add(**kw))
+print("DONE")

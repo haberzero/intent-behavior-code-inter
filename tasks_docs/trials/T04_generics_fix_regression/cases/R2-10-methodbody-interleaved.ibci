@@ -1,0 +1,23 @@
+# R2-10 G1 交替特化调用（int/str/list 轮流 make）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 交替调用 T 解析互不污染
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+    func make(self, T v) -> Box[T]:
+        return Box[T](v)
+
+Box[int] bi = Box[int](1)
+Box[str] bs = Box[str]("a")
+Box[list[int]] bl = Box[list[int]]([])
+for int i in range(3):
+    bi = bi.make(i)
+    bs = bs.make("s" + (str)i)
+    bl = bl.make([i, i + 1])
+print("bi=" + (str)bi.get())
+print("bs=" + bs.get())
+print("blen=" + (str)bl.get().len())
+print("DONE")

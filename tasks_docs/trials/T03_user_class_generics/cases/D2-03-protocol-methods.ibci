@@ -1,0 +1,21 @@
+# D2-03 泛型 × 协议方法（__call__/__iter__/__to_prompt__）
+# doc: docs/syntax/06_oop.md §6.7
+# 期望: 泛型类协议方法可用
+import ai
+ai.set_mock_mode()
+class Counter[T]:
+    T total
+    func __init__(self) -> void:
+        self.total = 0
+    func __call__(self, T step) -> T:
+        self.total = self.total + step
+        return self.total
+    func __iter__(self) -> list:
+        return [self.total]
+
+Counter[int] c = Counter[int]()
+int r1 = c(5)
+int r2 = c(3)
+print("r1=" + (str)r1)
+print("r2=" + (str)r2)
+print("DONE")

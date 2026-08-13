@@ -1,0 +1,24 @@
+# D3-C1 长提示/复杂 __to_prompt__（批判缺失场景补测）
+# doc: docs/syntax/06_oop.md §6.6 __to_prompt__ + _REAL_LLM_E2E_RESTART.md C1
+# 期望: 复杂对象经 __to_prompt__ 序列化进提示词；长文本边界正常
+
+class Report:
+    str title
+    list[str] sections
+    func __init__(self, str t, list[str] s) -> auto:
+        self.title = t
+        self.sections = s
+    func __to_prompt__(self) -> str:
+        str acc = "报告标题：" + self.title
+        int i = 0
+        while i < self.sections.len():
+            acc = acc + " | 章节" + (str)i + "：" + self.sections[i]
+            i = i + 1
+        return acc
+
+list[str] secs = ["背景介绍", "核心发现", "风险提示", "结论建议", "附录数据"]
+Report rep = Report("年度技术总结报告", secs)
+
+str summary = @~ 根据 $rep 内容，用一句话概括核心发现章节的要点 ~
+print("summary=" + summary)
+print("DONE")

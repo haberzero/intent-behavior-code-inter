@@ -1,0 +1,12 @@
+# D3-80 ai.mask + set_return_type_prompt/get_return_type_prompt
+# doc: docs/syntax/11_modules.md §11.3
+# 期望: 各 API 正常（记录实际行为）
+
+import ai
+
+ai.set_return_type_prompt("int", "只输出整数，无任何其他文字")
+str p = ai.get_return_type_prompt("int")
+print("ret_type_prompt=" + p)
+any m = ai.mask("pattern")
+print("mask_ok=" + (str)(m != None))
+print("DONE")

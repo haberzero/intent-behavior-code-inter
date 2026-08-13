@@ -1,0 +1,16 @@
+# R1-01 G2 自引用字段基础（int）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: Node[T] next 特化后 Node[int]，赋值读取正确
+import ai
+ai.set_mock_mode()
+class Node[T]:
+    T data
+    Node[T] next = any
+    func get(self) -> T:
+        return self.data
+
+Node[int] n1 = Node[int](1)
+n1.next = Node[int](2)
+print("n1=" + (str)n1.get())
+print("next=" + (str)n1.next.get())
+print("DONE")

@@ -1,0 +1,10 @@
+# D3-C3b LLMCallError 捕获最小复现（MOCK:ERROR 经 HTTP 服务？先试内联）
+import ai
+ai.set_mock_mode()
+
+try:
+    str r = @~ MOCK:STR:ok ~
+    print("mock_ok=" + r)
+except Exception as e:
+    print("caught=" + (str)e)
+print("DONE")

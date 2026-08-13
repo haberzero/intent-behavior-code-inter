@@ -1,0 +1,15 @@
+# D3-50 ai 辅助 API：has_api_key/probe_model/mask/get_retry
+# doc: docs/syntax/11_modules.md §11.3
+# 期望: 各 API 在真实配置下返回合理值
+
+import ai
+
+bool has = ai.has_api_key()
+print("has_key=" + (str)has)
+
+int retry_count = ai.get_retry()
+print("retry=" + (str)retry_count)
+
+bool probe = ai.probe_model()
+print("probe=" + (str)probe)
+print("DONE")

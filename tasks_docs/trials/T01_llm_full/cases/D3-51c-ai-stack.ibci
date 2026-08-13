@@ -1,0 +1,6 @@
+# D3-51c get_current_intent_stack 隔离
+import ai
+
+any s = ai.get_current_intent_stack()
+print("stack_ok=" + (str)(s != None))
+print("DONE")

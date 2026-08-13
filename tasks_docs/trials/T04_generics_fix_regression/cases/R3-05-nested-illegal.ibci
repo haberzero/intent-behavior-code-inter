@@ -1,0 +1,9 @@
+# R3-05 BOUNDARY-G1 嵌套非法 Box[list[None]]（预期报错）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 嵌套非法实参拦截
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+Box[list[None]] b = Box[list[int]]([1])
+print("DONE")

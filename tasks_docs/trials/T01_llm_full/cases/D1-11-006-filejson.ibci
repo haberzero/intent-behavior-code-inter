@@ -1,0 +1,36 @@
+# D1-11-006 file 模块读写 + 沙箱 + json 模块
+# doc: docs/syntax/11_modules.md §11.7/§11.8
+# 期望: file 读写/覆盖语义正确；json parse/stringify 正确；越界被沙箱拦截
+
+import file
+import json
+
+file_handle fh = file.open("data.txt")
+str p = fh.path
+print("path_ok=" + (str)p.len())
+
+file.write("data_v2.txt", "new content")
+file_handle f2 = file.open("data_v2.txt")
+str content = f2.read()
+print("content=" + content)
+
+file_handle fresh = file.write("data_v3.txt", "brand new")
+str c3 = fresh.read()
+print("c3=" + c3)
+
+file.write(fresh, "mutated", overwrite_flag="overwrite")
+str c3b = fresh.read()
+print("c3b=" + c3b)
+
+bool exists = file.exists("data_v2.txt")
+print("exists=" + (str)exists)
+
+str raw = '{"name": "Alice", "age": 30}'
+dict parsed = json.parse(raw)
+print("parsed_name=" + (str)parsed.get("name", ""))
+str serialized = json.stringify(parsed)
+print("serialized_len=" + (str)serialized.len())
+
+file.remove("data_v2.txt")
+file.remove("data_v3.txt")
+print("DONE")

@@ -1,0 +1,17 @@
+# R3-06 BOUNDARY-G1 合法实参不受影响（正向）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: int/list[int]/Pair[str,int] 正常
+import ai
+ai.set_mock_mode()
+class Box[T]:
+    T value
+class Pair[A, B]:
+    A a
+    B b
+Box[int] bi = Box[int](1)
+Box[list[int]] bl = Box[list[int]]([1, 2])
+Pair[str, int] p = Pair[str, int]("x", 3)
+print("bi=" + (str)bi.value)
+print("len=" + (str)bl.value.len())
+print("pb=" + (str)p.b)
+print("DONE")

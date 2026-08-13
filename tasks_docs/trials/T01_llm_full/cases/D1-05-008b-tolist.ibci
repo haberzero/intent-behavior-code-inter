@@ -1,0 +1,20 @@
+# D1-05-008b 生成器 to_list() 用户显式调用（A3 重验，U1 修复）
+# doc: docs/syntax/05_functions.md §5.8 + 12_builtins（generator 方法）
+# 期望: 生成器显式 .to_list()/.generic_next() 协议分发正常（GEN-1~4 契约）
+
+func count(int n) -> int:
+    int i = 0
+    while i < n:
+        yield i
+        i = i + 1
+    return 0
+
+auto g = count(4)
+list items = g.to_list()
+print("to_list_len=" + (str)items.len())
+
+auto g2 = count(3)
+int first = g2.generic_next()
+print("next_first=" + (str)first)
+print("gen_type=" + type(g2))
+print("DONE")

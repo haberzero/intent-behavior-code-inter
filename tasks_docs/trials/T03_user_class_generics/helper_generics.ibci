@@ -1,0 +1,9 @@
+# 跨模块泛型类 helper（供 D2-11 引用）
+class Stack[T]:
+    list[T] items
+    func push(self, T v) -> void:
+        self.items.append(v)
+    func pop(self) -> T:
+        return self.items.pop()
+    func __init__(self) -> void:
+        self.items = []

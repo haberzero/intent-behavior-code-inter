@@ -1,0 +1,13 @@
+import ai
+
+class Code(Enum):
+    int OK = 200
+    int ERR = 500
+
+Code c = @~你是 HTTP 状态码枚举解析器。只输出一个成员名：OK 或 ERR，不要输出任何其他内容，不要解释~
+print((str)c)
+switch c:
+    case Code.OK:
+        print("got-ok")
+    default:
+        print("other")

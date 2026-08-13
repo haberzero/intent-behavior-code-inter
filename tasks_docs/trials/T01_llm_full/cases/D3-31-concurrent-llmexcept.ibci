@@ -1,0 +1,28 @@
+# D3-31 对抗：并发 + llmexcept + slot 统计（线程内重试与共享计数）
+# 期望: 线程体内 llmexcept 重试正常；slot 统计正确
+
+import ai
+
+slot stats = slot("retries", 0)
+
+func work(str q) -> str:
+    int n = @~ 提取一个整数（用中文写也行）：$q ~
+    llmexcept:
+        stats.update(lambda(int v) -> auto: (v + 1))
+        retry "请只返回一个纯数字"
+    return (str)n
+
+chan c = chan(str, "stream")
+func runner(str q) -> void:
+    str res = work(q)
+    c.send(res)
+
+thread[void] t1 = thread(callable=runner, args=["三"])
+thread[void] t2 = thread(callable=runner, args=["八"])
+t1.join()
+t2.join()
+str r1 = c.recv()
+str r2 = c.recv()
+print("r1=" + r1 + " r2=" + r2)
+print("retry_count=" + (str)stats.get())
+print("DONE")

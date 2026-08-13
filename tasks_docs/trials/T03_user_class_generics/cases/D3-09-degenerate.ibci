@@ -1,0 +1,18 @@
+# D3-09 恶意：退化形态（空 body 泛型类 / 仅方法泛型类）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 退化形态可用或明确报错（不崩溃）
+import ai
+ai.set_mock_mode()
+class Empty[T]:
+    pass
+
+Empty[int] e = Empty[int]()
+print("empty_ok")
+
+class OnlyMethods[T]:
+    func ping(self) -> str:
+        return "pong"
+
+OnlyMethods[int] om = OnlyMethods[int]()
+print("om=" + om.ping())
+print("DONE")

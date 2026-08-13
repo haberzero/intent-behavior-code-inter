@@ -1,0 +1,12 @@
+# D2-36 多可能性：llmexcept retry body 内 file.write（SEM_LLMEXCEPT_FILE_WRITE 拦截）
+# doc: docs/syntax/10_robustness.md §10.3 磁盘型 + KNOWN_LIMITS §二十
+# 期望: 编译期 SEM_LLMEXCEPT_FILE_WRITE 拦截
+
+import file
+
+file_handle fh = file.open("data.txt")
+str result = @~ 根据 $fh 总结内容 ~
+llmexcept:
+    file.write(fh, "mutated", overwrite_flag="overwrite")
+    retry "请只返回摘要"
+print("DONE")

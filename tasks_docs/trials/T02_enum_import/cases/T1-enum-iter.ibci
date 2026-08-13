@@ -1,0 +1,11 @@
+class Color(Enum):
+    str RED = "RED"
+    str GREEN = "GREEN"
+    str BLUE = "BLUE"
+
+for v in Color:
+    print((str)v)
+print("---")
+for v in Color:
+    if v == Color.GREEN:
+        print("found-green")

@@ -1,0 +1,8 @@
+# D3-03 恶意：类型参数名怪异（遮蔽内置 int / 与成员重名）
+# doc: docs/syntax/06_oop.md §6.4
+# 期望: 遮蔽内置/成员冲突报错（守卫是特性）
+import ai
+ai.set_mock_mode()
+class Bad1[int]:
+    int value
+print("DONE")

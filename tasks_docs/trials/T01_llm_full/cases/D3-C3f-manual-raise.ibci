@@ -1,0 +1,11 @@
+# D3-C3f 对照：手动 raise LLMCallError 可被 try/except 捕获
+# 期望: 手动 raise 的 LLMCallError 被捕获（证明 try/except 对 LLMCallError 本身有效，
+#   缺陷限定在"provider 层失败投递路径"）
+
+try:
+    raise LLMCallError("manual fail", "", "provider")
+except LLMCallError as e:
+    print("caught=" + e.message)
+except LLMError as e:
+    print("caught_llm=" + e.message)
+print("DONE")
