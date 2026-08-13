@@ -1,11 +1,10 @@
 # 用户泛型类下标在表达式位置（type() 参数）的特化注册验证
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 表达式位置 Box[list[int]] 特化应注册并输出类型名
-# expect-class: KERNEL_ISSUE
+# 核销: KERNEL_ISSUE-GEN-5 已修复（2026-08-13，visit_IbSubscript 复用 _resolve_type 递归）
+# expect-class: PASS
 # expect-out: box_slice=Box[list[int]] | DONE
 # expect-exit: 0
-# 当前实际: RuntimeError: Generic class 'Box' has no registered specialization
-# for type 'list[int]'（表达式位置编译期未注册特化 spec；注解位置注册正常）
 import ai
 ai.set_mock_mode()
 class Box[T]:

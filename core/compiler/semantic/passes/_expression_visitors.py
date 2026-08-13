@@ -696,26 +696,22 @@ class ExpressionVisitorsMixin:
                 )
                 self.bind_type(node, self._any_desc)
                 return self._any_desc
-            if isinstance(node.slice, ast.IbName) and not isinstance(node.slice, ast.IbSlice):
-                arg_spec = self._resolve_type(node.slice)
-                _ga_name = getattr(arg_spec, "name", None)
-                _void_ok = (
-                    _ga_name == "void"
-                    and value_type.name == "thread"
-                    and value_type.kind == TypeKind.THREAD.value
-                )
-                if arg_spec is not None and (
-                    _ga_name in ("None", "auto") or (_ga_name == "void" and not _void_ok)
-                ):
-                    self.error(
-                        f"Generic type argument '{_ga_name}' is not a concrete type. "
-                        f"Use an entity type such as int/str/list[..].",
-                        node, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
-                    )
-                    self.bind_type(node, self._any_desc)
-                    return self._any_desc
-                if arg_spec is not None:
-                    specialized = self.registry.resolve_specialization(value_type, [arg_spec])
+            # 递归解析 slice 全部形态（裸名 / 嵌套泛型 list[int] / 多参 tuple）：
+            # _resolve_type 已含嵌套递归、None/auto/void 守卫、list 多参拒绝、
+            # 实参数量校验（SEM_GENERIC_TYPE_ARG_COUNT）——与注解路径同构。
+            # 单元素 slice 直接递归；多参（Pair[str,int]）逐元素解析后合并特化。
+            if isinstance(node.slice, ast.IbSlice):
+                # 切片操作（a[1:2]）非类型特化，落到下方切片分支处理。
+                pass
+            else:
+                if isinstance(node.slice, ast.IbTuple):
+                    arg_specs = [self._resolve_type(elt) for elt in node.slice.elts]
+                else:
+                    arg_spec = self._resolve_type(node.slice)
+                    arg_specs = [arg_spec] if arg_spec is not None else []
+                arg_specs = [s for s in arg_specs if s is not None]
+                if arg_specs:
+                    specialized = self.registry.resolve_specialization(value_type, arg_specs)
                     if specialized is not None:
                         self.bind_type(node, specialized)
                         return specialized

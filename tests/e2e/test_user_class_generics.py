@@ -452,3 +452,66 @@ class TestGenericVoidArgRejected:
             "Box[void] b = Box[int](1)\n",
             "SEM_GENERIC_TYPE_NEEDS_ARGS",
         )
+
+
+class TestExpressionPositionSpecialization:
+    """GEN-5：用户泛型类下标在表达式位置的特化注册（KERNEL_ISSUE-GEN-5 判别性回归）。
+
+    表达式位置（type() 参数 / 变量值 / 打印）的 Box[list[int]] 须触发编译期
+    特化 spec 注册（复用 _resolve_type 递归 slice 解析），运行时可用。
+    修复前：runtime RuntimeError "no registered specialization"。
+    """
+
+    def test_expr_position_nested_generic(self):
+        """表达式位置嵌套泛型实参：type(Box[list[int]]) → Box[list[int]]。"""
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "print(type(Box[list[int]]))\n",
+            ai=True,
+        )
+        assert out == ["Box[list[int]]"]
+
+    def test_expr_position_multi_param(self):
+        """表达式位置多参：type(Pair[str,int]) → Pair[str,int]。"""
+        out = run_ibci(
+            "class Pair[K, V]:\n"
+            "    K key\n"
+            "    V val\n"
+            "print(type(Pair[str, int]))\n",
+            ai=True,
+        )
+        assert out == ["Pair[str,int]"]
+
+    def test_expr_position_nested_dict(self):
+        """表达式位置嵌套字典实参：type(Box[dict[str,int]])。"""
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "print(type(Box[dict[str, int]]))\n",
+            ai=True,
+        )
+        assert out == ["Box[dict[str,int]]"]
+
+    def test_expr_position_bare_class_ref(self):
+        """表达式位置裸类引用（type(Box)）合法：类对象值，非类型注解裸用。
+
+        裸用拦截针对类型注解/实例化位置（Box b / Box(1)）；type(Box) 的 Box
+        是类对象值表达式，返回泛型类基名。
+        """
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "print(type(Box))\n",
+            ai=True,
+        )
+        assert out == ["Box"]
+
+    def test_expr_position_literal_rejected(self):
+        """表达式位置字面量实参（Box[42]）仍拦截。"""
+        expect_compile_error(
+            "class Box[T]:\n"
+            "    T value\n"
+            "print(type(Box[42]))\n",
+            "SEM_GENERIC_TYPE_NEEDS_ARGS",
+        )
