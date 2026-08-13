@@ -115,13 +115,14 @@ class TypeCheckBase:
             TypeKind.OPTIONAL.value,
         ):
             return
-        # 裸基类（无特化实参）：name 无方括号，不 bind。
-        if spec.name not in (
-            TypeKind.LIST.value,
-            TypeKind.TUPLE.value,
-            TypeKind.DICT.value,
-            "Optional",
-        ) and "[" not in spec.name:
+        # 裸基类（无特化实参）：name 无方括号，无特化身份，不 bind。
+        if "[" not in spec.name:
+            return
+        # Optional[list[int]] o = [1,2]：容器字面量绑内层 wrapped_type（list[int]），
+        # 非 Optional 本身——运行时 _bind_container_specialization 按容器 kind 匹配。
+        if kind == TypeKind.OPTIONAL.value:
+            wrapped = self.registry.resolve_typeref(spec.wrapped_type) or self._any_desc
+            self._bind_literal_with_type(node, wrapped)
             return
         self.bind_type(node, spec)
         # 递归内层元素：从 spec 提取元素类型传内层容器字面量。

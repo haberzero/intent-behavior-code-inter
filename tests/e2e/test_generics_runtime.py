@@ -434,6 +434,25 @@ class TestValueIdentityConverged:
         )
         assert lines == ["list[int]"], f"got {lines}"
 
+    def test_generator_yield_container_identity(self):
+        """生成器 yield 容器：-> generator[list[int]] 的 yield [1,2] 元素保真。"""
+        lines = run_ibci(
+            "func gen() -> generator[list[int]]:\n"
+            "    yield [1, 2]\n"
+            "for list[int] row in gen():\n"
+            "    print(type(row))\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
+    def test_optional_wrapped_container_identity(self):
+        """Optional 包裹容器：Optional[list[int]] o=[1,2] 内层容器保真。"""
+        lines = run_ibci(
+            "Optional[list[int]] o = [1, 2]\n"
+            "list[int] l = o.unwrap()\n"
+            "print(type(l))\n"
+        )
+        assert lines == ["list[int]"], f"got {lines}"
+
 
 # ===========================================================================
 # Nested generic subscript — list[list[int]][0] → list[int]
