@@ -3,7 +3,7 @@
 # 期望: 翻译调用返回真实翻译；retry 块存在
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: parsed=12 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

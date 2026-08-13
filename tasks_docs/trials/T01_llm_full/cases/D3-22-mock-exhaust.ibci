@@ -1,6 +1,6 @@
 # D3-22 对抗：MOCK:FAIL 重试耗尽 LLMRetryExhaustedError 捕获（确定性）
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: exhausted=LLM call retry exhausted after 2 attempt(s); no certain result was produced | max_retry=2 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

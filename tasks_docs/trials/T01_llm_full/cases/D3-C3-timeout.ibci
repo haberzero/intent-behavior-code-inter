@@ -3,7 +3,7 @@
 # 期望: 极短超时触发 LLMCallError（provider 层硬失败，跳过 llmexcept retry）；可 try/except 捕获
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: llm_call_error=LLM 调用失败: Request timed out. | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

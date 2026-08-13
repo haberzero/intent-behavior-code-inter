@@ -1,8 +1,9 @@
 # D3-31 对抗：并发 + llmexcept + slot 统计（线程内重试与共享计数）
 # 期望: 线程体内 llmexcept 重试正常；slot 统计正确
+# 注: r1/r2 为并发 recv 顺序不定（3/8 任序）；只断言确定性行 retry_count/DONE
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: retry_count=0 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

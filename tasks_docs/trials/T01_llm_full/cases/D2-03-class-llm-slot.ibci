@@ -2,7 +2,7 @@
 # 期望: 类内方法 LLM；类字段经 slot 共享；枚举解析
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: shared=2 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

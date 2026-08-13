@@ -3,7 +3,7 @@
 # 期望: 记录实际行为（"0" 显式 str 定型判真；bool 定型判假）
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: str_value=0 | str_truthy=True | bool_value=False | bool_truthy=False | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

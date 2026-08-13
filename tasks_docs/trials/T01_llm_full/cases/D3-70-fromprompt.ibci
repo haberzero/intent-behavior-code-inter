@@ -5,7 +5,7 @@
 # 期望: LLM 输出经 __from_prompt__ 解析为用户类实例
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: mood=开心 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

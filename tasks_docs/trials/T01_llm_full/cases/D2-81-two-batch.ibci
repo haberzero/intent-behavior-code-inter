@@ -3,7 +3,7 @@
 # 期望: 多批 run_batch 并发无交错/无竞态
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: ra=2 | rb=3 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

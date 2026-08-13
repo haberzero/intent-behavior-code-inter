@@ -1,4 +1,6 @@
 # D2-50b 隔离子脚本：child 内真实 LLM + 意图独立性
+import ai
+ai.load_project_config()
 print("CHILD_START")
 str c = @~ 用一句话描述天空 ~
 print("child_r=" + c)

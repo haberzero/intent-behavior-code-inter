@@ -1,6 +1,6 @@
 # D3-C3d 真实 LLM 超时 + try/except，变量在 try 内读取
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: caught_llmcall=LLM 调用失败: Request timed out. | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

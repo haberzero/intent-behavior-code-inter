@@ -1,6 +1,6 @@
 # D3-51b is_auto_intent_injection_enabled 隔离
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: is_auto=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

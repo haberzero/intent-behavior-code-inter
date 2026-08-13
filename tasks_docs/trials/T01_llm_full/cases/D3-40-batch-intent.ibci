@@ -3,7 +3,7 @@
 # 期望: @! 排他意图在 run_batch 各行为调用中都注入（覆盖 active/global）
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: batch_item=UNKNOWN | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

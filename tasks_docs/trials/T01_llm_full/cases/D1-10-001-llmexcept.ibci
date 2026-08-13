@@ -3,7 +3,7 @@
 # 期望: retry 引导 LLM 正确格式；重试收敛
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: result=2 | res_len=2 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

@@ -3,7 +3,7 @@
 # 期望: 同一输入多次结果差异被语言层正确处（bool/int 解析稳定）；记录差异
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: t1=1 t2=1 t3=1 | b1=True b2=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

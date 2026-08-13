@@ -3,7 +3,7 @@
 # 期望: 8 路 run_batch + 4 线程并发，全部正确返回无竞态
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: batch8=8 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

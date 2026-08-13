@@ -3,7 +3,7 @@
 # 期望: 各 API 在真实配置下返回合理值
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: has_key=True | retry=3 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
@@ -15,6 +15,6 @@ print("has_key=" + (str)has)
 int retry_count = ai.get_retry()
 print("retry=" + (str)retry_count)
 
-bool probe = ai.probe_model()
-print("probe=" + (str)probe)
+str probe = ai.probe_model()
+print("probe=" + probe)
 print("DONE")

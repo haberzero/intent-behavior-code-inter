@@ -3,7 +3,7 @@
 # 期望: 生成器逐值产出；体内 LLM 挂起可组合
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: gen_type=generator | items_len=3 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

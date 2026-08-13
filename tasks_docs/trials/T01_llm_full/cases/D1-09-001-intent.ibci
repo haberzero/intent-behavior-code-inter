@@ -3,7 +3,7 @@
 # 期望: 意图真实进入 prompt；赋值路径生效
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: b1=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

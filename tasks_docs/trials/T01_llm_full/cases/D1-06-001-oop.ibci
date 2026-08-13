@@ -3,7 +3,7 @@
 # 期望: 类与继承正确；协议方法在 LLM 路径生效
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: dist=25.0 | speak=Rex says Woof! | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

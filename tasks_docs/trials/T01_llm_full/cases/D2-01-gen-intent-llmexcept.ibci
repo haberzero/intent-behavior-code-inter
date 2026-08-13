@@ -2,7 +2,7 @@
 # 期望: 生成器体内挂起 LLM，且意图/llmexcept 在生成器多次恢复间正确保持
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: yield=1 | yield=2 | yield=3 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

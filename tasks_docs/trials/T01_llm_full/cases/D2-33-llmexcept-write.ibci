@@ -2,9 +2,9 @@
 # doc: docs/syntax/10_robustness.md §10.3（SEM_LLMEXCEPT_BODY_WRITE / SEM_LLMEXCEPT_MUTATING_CALL）
 # 期望: 编译期报错拦截
 
-# expect-class: PASS
-# expect-out: DONE
-# expect-exit: 0
+# expect-class: GUARD
+# expect-code: SEM_LLMEXCEPT_BODY_WRITE
+# expect-exit: nonzero
 # expect-llm: true
 import ai
 ai.load_project_config()

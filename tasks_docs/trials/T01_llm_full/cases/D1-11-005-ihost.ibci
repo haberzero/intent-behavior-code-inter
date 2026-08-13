@@ -3,13 +3,13 @@
 # 期望: run_isolated 隔离执行子脚本，返回子环境变量字典
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: CHILD_RUNNING | result_ok=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
-ai.load_project_config()
 import ihost
 import isys
+ai.load_project_config()
 
 dict policy = {"isolated": True}
 dict result = ihost.run_isolated("../multifile/child_basic.ibci", policy)

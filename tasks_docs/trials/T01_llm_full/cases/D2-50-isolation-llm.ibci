@@ -3,12 +3,12 @@
 # 期望: parent 经 run_isolated 运行 child，child 内真实 LLM 调用正常；parent 意图不泄漏
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: PARENT_START | CHILD_START | CHILD_DONE | PARENT_DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
-ai.load_project_config()
 import ihost
+ai.load_project_config()
 
 print("PARENT_START")
 @+ 回复要极简，不超过5字

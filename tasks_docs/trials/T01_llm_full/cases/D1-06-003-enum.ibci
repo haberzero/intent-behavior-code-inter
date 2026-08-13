@@ -3,7 +3,7 @@
 # 期望: LLM 输出枚举成员名被解析为对应枚举值
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: is_blue | chosen=GREEN | sw_green | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

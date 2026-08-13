@@ -91,7 +91,7 @@
 | Phase A-3 GEN-5 触发用例 | ✅ 完成 | GEN5-01（同上，根因方向精确化：表达式位置特化注册缺失） |
 | Phase B 用例即契约机制 | ✅ 完成 | harness 断言自动判定 + CONTRACT_FORMAT + run_batch 分层并发（f31ee634/09a8eca0/3f0f4d3d） |
 | Phase B 断言迁移 | ✅ T04/T03/T02 | 32+29+9 用例判定已验证 |
-| Phase B 断言迁移 | 🚧 T01 | 104 用例全有断言；mock 42 已验证 PASS/GUARD；**57 个 LLM 用例为基线断言（expect-out: DONE）未真实重跑验证** |
+| Phase B 断言迁移 | ✅ T01（2026-08-13 真实重跑） | 57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**（零 HARNESS/零缺陷复现）；断言从基线 `DONE` 精化为确定性行；修复 8 个脚本缺陷（5 import 位置 + 2 守卫断言 + 1 API 类型）；child_llm F9 适配 |
 | Phase C 干净清理 | 待执行 | 旧编号 85 处 + 旧路径 42 处替换 / 用例 ID 统一 / register classification 写回 / 过时文档归档 |
 | Phase D 自动化衔接 | 待设计 | 试用→确定性测试收敛 + 报告自动生成 |
 

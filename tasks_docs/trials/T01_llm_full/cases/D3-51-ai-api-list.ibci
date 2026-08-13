@@ -1,6 +1,6 @@
 # D3-51 批量测试 ai 文档化 API 可达性（11_modules §11.3 清单）
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: has_api_key=True | get_retry=3 | is_auto_intent=True | get_intent_stack=[] | get_global_intents=[] | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

@@ -2,7 +2,7 @@
 # 期望: 线程体内 LLM 调用正常；经 chan 传回；多路并发正确
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: batch=4 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

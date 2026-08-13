@@ -3,7 +3,7 @@
 # 期望: if @~ 0/1 ~ 判定；for @~ 1/0 ~ 循环
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: negative=true | count=1 | count=2 | count=3 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

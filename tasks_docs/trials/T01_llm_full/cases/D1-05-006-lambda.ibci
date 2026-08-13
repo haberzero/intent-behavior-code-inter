@@ -3,7 +3,7 @@
 # 期望: lambda 定义时不调用 LLM；调用时触发；带参数 lambda；-> auto 行为体=str
 
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: defined_no_call | result=2 | add=7 | g_type=str | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

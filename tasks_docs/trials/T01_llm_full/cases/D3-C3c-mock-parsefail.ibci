@@ -1,6 +1,6 @@
 # D3-C3c MOCK:FAIL 解析失败 try/except 捕获（LLMParseError 路径）
 # expect-class: PASS
-# expect-out: DONE
+# expect-out: caught_parse=MOCK:FAIL - 模拟 LLM 返回不确定结果，请通过 llmexcept 处理 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
