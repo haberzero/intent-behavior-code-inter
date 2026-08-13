@@ -515,3 +515,68 @@ class TestExpressionPositionSpecialization:
             "print(type(Box[42]))\n",
             "SEM_GENERIC_TYPE_NEEDS_ARGS",
         )
+
+
+class TestGenericMethodParamDescriptor:
+    """GEN-6B：泛型类方法参数 descriptor 结构化（KERNEL_ISSUE-GEN-6 判别性回归）。
+
+    方法参数 `Vec[T] other` 的 param_descriptor 须结构化（TypeRef.from_spec），
+    特化后 substitute 可替换为 Vec[int]，显式方法调用参数校验正确。
+    修复前：param_descriptors 扁平化 TypeRef('Vec[T]') 无法替换 →
+    SEM_TYPE_MISMATCH "expected 'Vec[T]', but got 'Vec[int]'"。
+    """
+
+    def test_explicit_method_call_specialized_param(self):
+        """显式方法调用 Vec[T] 参数：a.add(b) 正常（无 expected 'Vec[T]' 误报）。"""
+        out = run_ibci(
+            "class Vec[T]:\n"
+            "    T x\n"
+            "    T y\n"
+            "    func __init__(self, T x, T y) -> void:\n"
+            "        self.x = x\n"
+            "        self.y = y\n"
+            "    func add(self, Vec[T] other) -> Vec[T]:\n"
+            "        return Vec[T](self.x + other.x, self.y + other.y)\n"
+            "Vec[int] a = Vec[int](1, 2)\n"
+            "Vec[int] b = Vec[int](3, 4)\n"
+            "Vec[int] c = a.add(b)\n"
+            "print((str)c.x)\n"
+            "print((str)c.y)\n",
+            ai=True,
+        )
+        assert out == ["4", "6"]
+
+    def test_wrong_param_type_still_checked(self):
+        """特化类方法参数类型校验仍生效：Vec[int].add 收 str → SEM_TYPE_MISMATCH。"""
+        expect_compile_error(
+            "class Vec[T]:\n"
+            "    T x\n"
+            "    T y\n"
+            "    func __init__(self, T x, T y) -> void:\n"
+            "        self.x = x\n"
+            "        self.y = y\n"
+            "    func add(self, Vec[T] other) -> Vec[T]:\n"
+            "        return Vec[T](self.x + other.x, self.y + other.y)\n"
+            "Vec[int] a = Vec[int](1, 2)\n"
+            "Vec[int] b = Vec[int](3, 4)\n"
+            "Vec[int] c = a.add(\"str\")\n",
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_generic_list_param_descriptor(self):
+        """list[T] 参数 descriptor 结构化：add_list([1,2,3]) 正常。"""
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "    func __init__(self, T value) -> void:\n"
+            "        self.value = value\n"
+            "    func sum_all(self, list[T] items) -> T:\n"
+            "        T total = self.value\n"
+            "        for T v in items:\n"
+            "            total = total + v\n"
+            "        return total\n"
+            "Box[int] b = Box[int](0)\n"
+            "print((str)b.sum_all([1, 2, 3]))\n",
+            ai=True,
+        )
+        assert out == ["6"]

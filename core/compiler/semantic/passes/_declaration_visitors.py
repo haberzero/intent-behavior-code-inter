@@ -445,6 +445,11 @@ class DeclarationVisitorsMixin:
         ``TypeRef('fn')`` 后调用点只见到裸 fn（动态）而跳过校验，导致
         ``fn[()->int]`` 参数收到返回类型不匹配的可调用时编译放行、运行期失败。
         结构化形态：``TypeRef('fn', (TypeRef('__args__', <params>), <ret>))``。
+
+        其余类型统一走 ``TypeRef.from_spec``（结构化构造，保留泛型实参）——
+        避免 ``TypeRef.of(name)`` 对泛型类参数（``Vec[T]``/``Vec[int]``）扁平化为
+        ``TypeRef('Vec[T]')``（head 含方括号、args 空），导致特化时
+        ``TypeRef.substitute`` 无法替换、调用点参数校验失效（GEN-6B）。
         """
         if getattr(arg_type, "kind", None) == TypeKind.CALLABLE_SIG.value:
             params = tuple(
@@ -457,7 +462,7 @@ class DeclarationVisitorsMixin:
                 (TypeRef("__args__", params), TypeRef.of(ret.head, getattr(ret, "module", None))),
                 getattr(arg_type, "module_path", None),
             )
-        return TypeRef.of(arg_type.name, getattr(arg_type, "module_path", None))
+        return TypeRef.from_spec(arg_type)
 
     def _sync_class_member(self, method_name: str, param_descriptors: list) -> None:
         """把精化后的参数描述符同步到类成员表（供运行期契约校验消费）。

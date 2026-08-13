@@ -171,8 +171,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     param_types=[TypeRef.of("any")], return_type=TypeRef.of("str"),
                 ),
                 "read_bytes": MethodMemberSpec(
-                    name="read_bytes", kind="method", type_ref=TypeRef.of("list[int]"),
-                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("list[int]"),
+                    name="read_bytes", kind="method", type_ref=TypeRef.generic("list", TypeRef.of("int")),
+                    param_types=[TypeRef.of("any")], return_type=TypeRef.generic("list", TypeRef.of("int")),
                 ),
                 "write": MethodMemberSpec(
                     name="write", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
