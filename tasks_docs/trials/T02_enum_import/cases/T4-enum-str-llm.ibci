@@ -1,6 +1,8 @@
 # expect-class: PASS
+# expect-llm: true
 # expect-out: RED | False
 import ai
+ai.load_project_config()
 
 class Color(Enum):
     str RED = "RED"
