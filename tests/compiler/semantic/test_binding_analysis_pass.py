@@ -167,7 +167,7 @@ def test_behavior_dep_assigns_behavior_expr_to_symbol(spec_registry):
 
 
 def test_behavior_dep_non_behavior_assign_no_crash(spec_registry):
-    """Non-behavior assignment should not crash (regression for the isinstance bug)."""
+    """非行为赋值不受行为依赖分析影响：不产生诊断、不崩溃。"""
     const = ast.IbConstant(value=42)
     name_target = ast.IbName(id="x", ctx="store")
     assign = ast.IbAssign(targets=[name_target], value=const)

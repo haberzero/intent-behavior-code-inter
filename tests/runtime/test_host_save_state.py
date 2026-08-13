@@ -2,11 +2,12 @@
 tests/runtime/test_host_save_state.py
 ======================================
 
-HostService.save_state / load_state 资产外化集成测试（第 4 项）。
+HostService.save_state / load_state 资产外化集成测试。
 
-守护 SnapshotLayout BUG 的真实运行时影响路径：
-- save_state 必须把文本资产外化到 ``<state>.assets`` **同级**目录（非子目录）；
-- load_state 必须从同一同级目录读回资产（round-trip）。
+契约：
+- save_state 把文本资产外化到 ``<state>.assets`` **同级**目录（非子目录）；
+- load_state 从同一同级目录读回资产（round-trip）；
+- 资产外化不改变 state.json 本身的常规文件布局。
 
 
 设计：HostService 用最小桩构造（参考 test_runtime_host_collect.py），
@@ -53,10 +54,10 @@ def _make_service():
 
 
 class TestSaveStateAssetsExternalization:
-    """save_state 的资产外化文件布局（BUG 直接运行时守护）。"""
+    """save_state 的资产外化文件布局契约。"""
 
     def test_assets_dir_created_as_sibling_not_child(self, tmp_path, monkeypatch):
-        """资产目录必须是 state 文件的同级，而非子目录。"""
+        """资产目录是 state 文件的同级，state.json 保持常规文件。"""
         service = _make_service()
         monkeypatch.setattr(
             service, "snapshot",
@@ -66,11 +67,10 @@ class TestSaveStateAssetsExternalization:
 
         service.save_state(state_file)
 
-        # 同级 .assets 目录必须存在
+        # 资产目录与 state.json 同级共存：资产入同级 .assets 目录，state.json 保持常规文件
         sibling_asset_dir = tmp_path / "state.json.assets"
         assert sibling_asset_dir.is_dir(), "资产目录应作为 state.json 的同级目录存在"
-        # 反向断言（守护 BUG）：state.json 本身必须是文件（BUG 下会变成目录）
-        assert (tmp_path / "state.json").is_file(), "state.json 必须是文件（BUG 下 makedirs 会把它变成目录）"
+        assert (tmp_path / "state.json").is_file(), "state.json 必须是常规文件，与资产目录同级共存"
 
     def test_asset_files_written_into_sibling_dir(self, tmp_path, monkeypatch):
         """每个资产 uid 对应一个 <uid>.txt 文件写入同级目录。"""
@@ -113,7 +113,7 @@ class TestSaveStateAssetsExternalization:
         assert (tmp_path / "state.json").is_file()
 
     def test_save_state_succeeds_on_second_run(self, tmp_path, monkeypatch):
-        """二次 save 不应因目录布局冲突失败（守护 BUG 下 NotADirectoryError）。"""
+        """重复 save 覆盖既有同级目录时不因布局冲突失败。"""
         service = _make_service()
         monkeypatch.setattr(
             service, "snapshot",

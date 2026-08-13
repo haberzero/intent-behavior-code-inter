@@ -301,15 +301,29 @@ class TestFullFileCompilation:
         os.path.join(REPO_ROOT, "examples/01_getting_started/06_enum_switch_with_llm.ibci"),
     ])
     def test_example_compiles_without_crash(self, source_mgr, full_registry, example_file):
-        """Analyzer should compile example files without raising exceptions.
+        """示例文件语法可解析、结构完整、无语法级错误。
 
-        文件缺失即失败（不静默 skip）——示例被删/改名时红线必须变红。
+        契约：
+        - 语法/结构层零错误（词法+语法解析成功，AST/符号表/类型绑定产出完整）——
+          这是示例作为正确工作模式的**语法契约**；
+        - 语义层依赖外部原生模块（ai/file/idbg 等），裸 analyzer 不加载模块，
+          故语义模块错误不属于本测试契约（由真实 engine 集成测试覆盖）。
+        文件缺失即失败（不静默 skip）。
         """
         with open(example_file, encoding='utf-8') as f:
             code = f.read()
 
         tracker = IssueTracker(source_provider=source_mgr)
         ast_node = parse_code(code, tracker)
+
+        # 语法契约：解析阶段不得产生错误
+        parse_errors = [d for d in tracker.diagnostics
+                        if d.severity.name in ("ERROR", "FATAL")]
+        assert not parse_errors, (
+            f"示例 {os.path.basename(example_file)} 存在语法错误: "
+            f"{[d.code for d in parse_errors][:5]}"
+        )
+
         analyzer = SemanticAnalyzer(tracker, registry=full_registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 

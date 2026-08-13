@@ -154,7 +154,11 @@ class TestThreadResultSerializationRoundTrip:
     )
 
     def test_serialized_entry_has_thread_result_type(self, engine):
-        """序列化产物必须出现 ``_type == "thread_result"``（旧守卫从未触发的回归）。"""
+        """thread_result 值序列化时保留类型判别标记与完成状态。
+
+        序列化格式契约：thread_result 实例须带 ``_type="thread_result"`` 判别标记，
+        且完成状态（status="done"）随值保真，供反序列化正确重建。
+        """
         engine.run_string(self._SUCCESS_CODE, silent=True)
         ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(

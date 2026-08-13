@@ -77,7 +77,11 @@ class TestFnCallableRoundTrip:
         assert _call(ec, f, 41).to_native() == 42
 
     def test_serialized_with_fn_callable_type(self, engine):
-        """序列化产物必须出现 _type='fn_callable'（反序列化分支可达的回归）。"""
+        """fn_callable 值序列化保留类型判别标记与 lambda 属性。
+
+        序列化格式契约：fn_callable 实例须带 ``_type='fn_callable'`` 判别标记，
+        并保留 node_uid / capture_mode，供反序列化正确重建闭包。
+        """
         engine.run_string("fn f = lambda -> auto: 42\n", silent=True)
         ec = engine.interpreter.execution_context
         data = _serialize(engine, ec.runtime_context)
