@@ -1,6 +1,8 @@
 # D1-06 泛型类 as 值类型 / type() 内省
 # doc: docs/syntax/06_oop.md §6.4 + docs/syntax/01_types.md
 # 期望: 特化类实例的类型内省正确
+# expect-class: PASS
+# expect-out: type_bi=Box[int] | recovered=1 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

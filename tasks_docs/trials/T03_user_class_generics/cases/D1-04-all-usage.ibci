@@ -1,6 +1,8 @@
 # D1-04 全使用面：字段/方法参数/返回/局部变量
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 类型参数在各类位置全部替换
+# expect-class: PASS
+# expect-out: r1=99 | r2=b | DONE
 import ai
 ai.set_mock_mode()
 class Holder[T]:

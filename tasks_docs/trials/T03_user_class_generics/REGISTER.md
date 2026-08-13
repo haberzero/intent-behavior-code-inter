@@ -7,6 +7,12 @@
 > TIMEOUT-KILLED 为死循环保护冒烟验证本身。
 > **规范（2026-08-13 迁移）**：本套现位于 `trials/T03_user_class_generics/`；分类/级别/编号
 > 规范见 `trials/_toolkit/CLASSIFICATION.md`。缺陷编号已映射为新格式（见文末"编号映射"节）。
+> **断言迁移 + 用例适配（2026-08-13）**：全部 28 用例补 `# expect-*:` 断言（21 PASS +
+> 1 KERNEL_ISSUE + 6 GUARD，harness 自动判定验证）。用例适配：D2-02 多级继承链改多参构造
+> （G3 chain-aware auto-init 语义）；D3-04 的 `Node[T] next` 补 `= any` 默认值（原无默认值
+> 单参构造缺参，G2 修复后编译错消失暴露）。**新发现 KERNEL_ISSUE-GEN-6**：D2-01 运算符
+> 重载方法参数含 T（`Vec[T] other`）的特化未生效（G1 修复不完整，T04 R2 组未覆盖参数嵌套
+> 用户泛型类形态）——登记 PENDING_TASKS + INDEX.md。删除临时探针 probe_ret.ibci。
 
 ## 结果总览
 

@@ -1,6 +1,9 @@
 # D3-01 恶意：特化数量不匹配（少参/多参/零参）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 数量不匹配编译报 SEM_GENERIC_TYPE_ARG_COUNT（守卫是特性）
+# expect-class: GUARD
+# expect-code: SEM_GENERIC_TYPE_ARG_COUNT
+# expect-exit: nonzero
 import ai
 ai.set_mock_mode()
 class Box[T]:

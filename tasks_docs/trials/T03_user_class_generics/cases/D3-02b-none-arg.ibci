@@ -1,3 +1,6 @@
+# expect-class: GUARD
+# expect-code: SEM_GENERIC_TYPE_NEEDS_ARGS
+# expect-exit: nonzero
 import ai
 ai.set_mock_mode()
 class Box[T]:

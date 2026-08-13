@@ -1,6 +1,8 @@
 # D2-10 泛型 × 闭包（lambda 闭包捕获 / lambda 调泛型方法）
 # doc: docs/syntax/06_oop.md §6.4 + 05_functions §5.5
 # 期望: lambda 闭包捕获 + 调用泛型方法
+# expect-class: PASS
+# expect-out: r1=15 | r2=42 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

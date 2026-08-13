@@ -1,11 +1,15 @@
 # D3-04 恶意：递归特化 Node[Node[int]] / 自引用字段
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 递归特化工作或明确报错（不崩溃/不死循环）
+# expect-class: PASS
+# expect-out: n1=1 | next=2 | nested=1 | DONE
+# 2026-08-13 适配：`Node[T] next` 原无默认值（decl-only），单参构造缺参（G2 修复后
+# 编译错消失、运行时缺参暴露）→ 与 R1 系列用例一致补 `= any` 默认值。
 import ai
 ai.set_mock_mode()
 class Node[T]:
     T data
-    Node[T] next
+    Node[T] next = any
     func get(self) -> T:
         return self.data
 

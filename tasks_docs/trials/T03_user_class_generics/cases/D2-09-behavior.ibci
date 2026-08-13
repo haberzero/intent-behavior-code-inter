@@ -1,6 +1,8 @@
 # D2-09 泛型 × 行为/LLM 面（mock：@~ 返回初始化泛型字段 / llmexcept 保护泛型）
 # doc: docs/syntax/06_oop.md §6.4 + 09_intent_system + KNOWN_LIMITS
 # 期望: 泛型类字段可经 LLM 赋值；llmexcept 保护泛型实例状态
+# expect-class: PASS
+# expect-out: llm_val=42 | after_except=a | DONE
 import ai
 ai.set_mock_mode()
 class Score[T]:

@@ -1,6 +1,8 @@
 # D2-05 泛型 × 控制流（for 泛型列表 / switch 泛型值 / if 泛型字段）
 # doc: docs/syntax/06_oop.md §6.4 + 04_control_flow §4.6
 # 期望: 泛型实例参与控制流
+# expect-class: PASS
+# expect-out: sum=6 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

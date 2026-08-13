@@ -13,21 +13,25 @@
 | `T03_user_class_generics` | 用户类泛型压力/恶意试用（原 `_GENERICS_TRIAL_20260812`） | 2026-08-12 | 30 运行 | 23 PASS；守卫生效 | `KERNEL_ISSUE-GEN-1/2/3`、`BOUNDARY-GEN-1`（已修） |
 | `T04_generics_fix_regression` | 泛型修复回归试用（原 `_GENERICS_TRIAL_FIX_20260812`） | 2026-08-12 | 29 用例 | 修复验证全 PASS；新暴露 G3/G2 | `KERNEL_ISSUE-GEN-4`（已修）、`BOUNDARY-GEN-2`（已修）、`KERNEL_ISSUE-GEN-5`（待修） |
 
-## 二、历史编号映射表（旧 → 新，全局）
+## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 
-> 统一格式见 `CLASSIFICATION.md` §三。PENDING_TASKS 引用以新编号为准（历史行保留旧号，经本表追溯）。
+> 统一格式见 `CLASSIFICATION.md` §三。**生命周期状态机**（CONTRACT_FORMAT §五）：
+> `发现 → 登记 → 修复（tests/ 补回归）→ 回归试用（触发用例核销）→ 已修复/已核销`。
+> 本表为状态单一权威源；REGISTER/PENDING_TASKS 引用一致。触发用例 `expect-class:
+> KERNEL_ISSUE` + `expect-out: <修复后期望>` 为核销判据（达成即转 PASS 待核销）。
 
 ### 域 GEN（泛型，T03/T04）
 
-| 旧 | 新 | 主题 | 状态 |
-|----|----|------|------|
-| KERNEL-ISSUE-G1 | `KERNEL_ISSUE-GEN-1` | 泛型方法体内类型参数运行时失效（运行期） | 已修 32484fe |
-| KERNEL-ISSUE-G2 | `KERNEL_ISSUE-GEN-2` | 泛型类自引用字段特化替换失效（编译期） | 已修 32484fe |
-| 双通道 descriptors | `KERNEL_ISSUE-GEN-3` | 特化方法参数 descriptors 两套实现 | 已修 32484fe |
-| KERNEL-ISSUE-G3 | `KERNEL_ISSUE-GEN-4` | 继承特化父类字段丢失（auto-init 只收自身） | **已修 b0f4d74（2026-08-13）** |
-| — | `KERNEL_ISSUE-GEN-5` | 嵌套内置泛型实参的用户类特化运行时未注册 | **待修（独立窗口）** |
-| BOUNDARY-G1 | `BOUNDARY-GEN-1` | 非法特化实参（Box[42]/Box[None]）编译期未拦 | 已修 3fe98d6 |
-| BOUNDARY-G2 | `BOUNDARY-GEN-2` | 自引用链 while"类型退化"（实为用例无效 + any 复查缺口） | **已修 b0f4d74（2026-08-13）** |
+| 旧 | 新 | 主题 | 状态 | 触发用例 |
+|----|----|------|------|----------|
+| KERNEL-ISSUE-G1 | `KERNEL_ISSUE-GEN-1` | 泛型方法体内类型参数运行时失效（运行期） | 已修复 32484fe | — |
+| KERNEL-ISSUE-G2 | `KERNEL_ISSUE-GEN-2` | 泛型类自引用字段特化替换失效（编译期） | 已修复 32484fe | — |
+| 双通道 descriptors | `KERNEL_ISSUE-GEN-3` | 特化方法参数 descriptors 两套实现 | 已修复 32484fe | — |
+| KERNEL-ISSUE-G3 | `KERNEL_ISSUE-GEN-4` | 继承特化父类字段丢失（auto-init 只收自身） | 已修复 b0f4d74（2026-08-13） | 历史 R1-05/R5-01 冻结；核销用 R1-05b/R5-01b（PASS） |
+| — | `KERNEL_ISSUE-GEN-5` | 用户泛型类下标表达式位置特化未注册 | **发现/登记**（待独立窗口） | `T04/.../GEN5-01-nested-specialization.ibci` |
+| — | `KERNEL_ISSUE-GEN-6` | 泛型运算符方法参数含 T 的特化未生效（G1 修复不完整） | **发现/登记**（待独立窗口） | `T03/.../D2-01-operator-override.ibci` |
+| BOUNDARY-G1 | `BOUNDARY-GEN-1` | 非法特化实参（Box[42]/Box[None]）编译期未拦 | 已修复 3fe98d6 | — |
+| BOUNDARY-G2 | `BOUNDARY-GEN-2` | 自引用链 while"类型退化"（实为用例无效 + any 复查缺口） | 已修复 b0f4d74（2026-08-13） | 历史 R5-04 冻结；合法遍历用 R5-04b（PASS） |
 
 ### 域 LLM/VM/IMPORT/CONFIG/SEQ/ASYNC（T01）
 

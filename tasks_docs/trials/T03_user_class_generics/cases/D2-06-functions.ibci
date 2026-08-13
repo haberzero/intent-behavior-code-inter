@@ -1,6 +1,8 @@
 # D2-06 泛型 × 函数（参数/返回泛型类）
 # doc: docs/syntax/06_oop.md §6.4 + 05_functions
 # 期望: 泛型实例作函数参数与返回
+# expect-class: PASS
+# expect-out: r=55 | s=hello | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

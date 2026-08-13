@@ -1,6 +1,8 @@
 # D1-07 序列化 round-trip（含继承）——经 ihost 保存/加载路径
 # doc: docs/syntax/11_modules.md + docs/howto
 # 期望: 泛型特化类实例经状态保存/恢复后值保真
+# expect-class: PASS
+# expect-out: before=77 | DONE
 import ai
 import ihost
 ai.set_mock_mode()

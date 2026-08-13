@@ -1,6 +1,8 @@
 # D2-03 泛型 × 协议方法（__call__/__iter__/__to_prompt__）
 # doc: docs/syntax/06_oop.md §6.7
 # 期望: 泛型类协议方法可用
+# expect-class: PASS
+# expect-out: r1=5 | r2=8 | DONE
 import ai
 ai.set_mock_mode()
 class Counter[T]:

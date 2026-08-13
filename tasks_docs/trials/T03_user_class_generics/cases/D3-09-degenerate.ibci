@@ -1,6 +1,8 @@
 # D3-09 恶意：退化形态（空 body 泛型类 / 仅方法泛型类）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 退化形态可用或明确报错（不崩溃）
+# expect-class: PASS
+# expect-out: om=pong | DONE
 import ai
 ai.set_mock_mode()
 class Empty[T]:

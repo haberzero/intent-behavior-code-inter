@@ -1,6 +1,8 @@
 # D3-08 恶意：组合轰炸（嵌套特化 + 多级继承 + 容器 + 控制流 + 并发）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 组合场景不崩溃（尽力正确）
+# expect-class: PASS
+# expect-out: total=3 | m_len=2 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

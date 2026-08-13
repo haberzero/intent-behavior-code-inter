@@ -1,6 +1,8 @@
 # D2-04 泛型 × 容器（list[Box]/dict 值/tuple 内）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 泛型实例作容器元素
+# expect-class: PASS
+# expect-out: m_a=1 | tp0=x | tp1=3 | joined=pq | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

@@ -1,6 +1,8 @@
 # D1-03 嵌套实参 Box[list[int]] / Box[dict[str,int]] / list[Box[int]]
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 嵌套特化身份与成员访问正确
+# expect-class: PASS
+# expect-out: inner_len=3 | first=1 | dict_a=1 | box0=10 | box1=20 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

@@ -1,6 +1,9 @@
 # D3-02 恶意：非法特化实参（Box[42] 字面量 / Box[None]）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 非类型实参报错（守卫是特性）
+# expect-class: GUARD
+# expect-code: SEM_GENERIC_TYPE_NEEDS_ARGS
+# expect-exit: nonzero
 import ai
 ai.set_mock_mode()
 class Box[T]:

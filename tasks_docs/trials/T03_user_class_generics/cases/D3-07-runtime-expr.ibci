@@ -1,6 +1,8 @@
 # D3-07 恶意：运行时特化表达式（print(Box[int]) / 特化作函数参数）
 # doc: docs/syntax/06_oop.md §6.4
 # 期望: 表达式位置特化可用或明确报错（不崩溃）
+# expect-class: PASS
+# expect-out: r=5 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:

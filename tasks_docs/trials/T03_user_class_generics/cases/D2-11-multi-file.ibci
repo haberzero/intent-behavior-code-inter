@@ -1,6 +1,8 @@
 # D2-11 泛型 × 多文件（跨模块泛型类 import 后特化）
 # doc: docs/syntax/06_oop.md §6.4 + 11_modules
 # 期望: 跨文件泛型类可特化使用
+# expect-class: PASS
+# expect-out: pop1=2 | pop2=1 | DONE
 import ai
 import helper_generics
 ai.set_mock_mode()

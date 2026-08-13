@@ -1,6 +1,8 @@
 # D2-01 泛型 × 运算符覆写
 # doc: docs/syntax/06_oop.md §6.4 + docs/KNOWN_LIMITS.md §十四 #2
 # 期望: 泛型类内运算符方法可用且特化后正常工作
+# expect-class: KERNEL_ISSUE
+# expect-out: cx=4 | cy=6 | eq=True | neq=False | DONE
 import ai
 ai.set_mock_mode()
 class Vec[T]:

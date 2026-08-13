@@ -1,6 +1,8 @@
 # D2-07 泛型 × 并发（thread 内构造泛型类 / chan 传泛型 / slot 存泛型）
 # doc: docs/syntax/06_oop.md §6.4 + 14_concurrency
 # 期望: 泛型实例跨并发面工作
+# expect-class: PASS
+# expect-out: chan=5 | thread=in_thread | slot=9 | DONE
 import ai
 ai.set_mock_mode()
 class Box[T]:
