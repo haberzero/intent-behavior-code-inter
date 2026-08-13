@@ -65,10 +65,17 @@
 
 ## 缺陷登记（PENDING_TASKS，不修复）
 
-- **KERNEL-ISSUE-G1/G2**：泛型类自引用（方法体内 `Box[T]` / 自引用字段 `Node[T]`）特化替换
-  缺失。根因同一：特化只替换成员表类型与 `resolve_member`，未覆盖方法体 AST 内与自引用字段
-  的 `Box[T]`。修复方向：`_substitute_members` 对自引用字段 type_ref 递归替换（`Node[T]`→
-  `Node[int]` 应已支持但未生效——需查 `TypeRef.substitute` 对 head=Node+args=(T,) 的处理）；
-  方法体内 `Box[T]` 表达式需在特化类上下文解析为 `Box[int]`（方法体符号表/类型绑定级替换）。
-- **BOUNDARY-G1**：非法特化实参（字面量/None）编译期未拦。修复方向：语义层 `_resolve_type`
-  IbSubscript 分支对非类型 slice 报 SEM_GENERIC_TYPE_NEEDS_ARGS（或新码）。
+> 2026-08-12 深度核验后修正：G1/G2 原判"单根因"不准确，实为**两个独立缺陷**（不同层：
+> G2 编译期类型系统扁平化、G1 运行期符号解析）。另补一项复核 H1 引入的双通道设计缺陷。
+
+- **KERNEL-ISSUE-G2（编译期，P1）**：泛型类自引用字段 `Node[T] next` 特化替换失效。根因链：
+  `_resolve_annotation` → `resolve_specialization(Node,[T])` 创建 `Node[T]` 特化 spec →
+  `from_spec` CLASS fallback 扁平化为 `TypeRef('Node[T]')` → substitute 无法替换。`from_spec`
+  扁平化是既有行为（type_ref.py 零改动），用户类泛型首次触发。修复方向已验证：结构化
+  `TypeRef('Node',(TypeRef('T'),))` 可被 substitute 正确替换。
+- **KERNEL-ISSUE-G1（运行期，P1）**：泛型方法体内 `Box[T]`（slice T 为类型参数）运行时
+  `vm_handle_IbName` 查变量失败（`Box:T` UID 未注册）。编译期语义正确；纯运行期类型参数
+  表达式求值缺失。修复方向：slice T 解析为类型标识（对齐 `Box[int]` slice int 求值为 IbClass）。
+- **BOUNDARY-G1（P2）**：`Box[42]`/`Box[None]` 编译期未拦，运行期裸 AttributeError。
+- **双通道设计缺陷（P2，深度核验新增）**：`_substitute_members`（真实 mapping）与
+  `_sync_specialized_members`（字符串反推 mapping）两套 descriptors 替换实现，违反机制同构。
