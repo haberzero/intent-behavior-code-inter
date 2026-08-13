@@ -19,7 +19,13 @@
 - **效果**：`type(list[int]值)=list[int]`（原 list，与用户类 Box[int] 一致）；运行时值层可区分 `list[int]`/`list[str]`（与缺陷一联动 is_assignable 拦截）；深克隆/同引擎序列化 round-trip 保真；嵌套泛型 `list[list[int]]` 外层值身份。
 - **独立复核整改（7a15c1b9）**：① dict 协变假拒绝（`_generic_spec_args` 过滤 any → `dict[str,int]→dict[str,any]` 被 len 比较误拒）——不过滤 any，仅裸基类（key/value 均 any）返回空；② `_bind_container_specialization` boxed 字符串回落直接赋 `value.ib_class` 损坏值——加 `isinstance(specialized_cls, IbClass)` 防御；③ 跨家族残留 `behavior[int]→fn_callable[str]` 放行——`_generic_family_compatible` 沿 src axiom 父链判定子类型关系，跨家族也校验实参。
 - **测试**：判别性回归 +25（compiler TestGenericAssignability 23 + e2e TestBuiltinGenericValueIdentity 12 + runtime 白盒 test_generic_value_identity 4，去重净增）；触发用例 G6-01（GUARD）+ G6-02（PASS）入 T04。
-- **已确认边界（`_code_generic_type_identity.md` §2.6 待增量）**：函数返回字面量 / 调用实参字面量 / 下标赋值字面量 / 嵌套内层元素 / 容器切片 / Optional 值身份 / 跨引擎反序列化——均非回归（修复前即擦除），属值层身份根治后续增量。
+- **✅ 已收敛（2026-08-13，unsafe-vibe-dev 617fb3a6/503f92fd 等 5 commits，全量 2579 passed / 1 skipped）**：
+  **值层身份彻底收敛**（`_code_generic_type_identity.md` §2.6 全部边界 → `_code_generic_value_convergence.md`）：
+  函数返回 / lambda 返回 / 调用实参 / 下标赋值 / 复合赋值 / 条件表达式 / 函数默认参数 /
+  for 循环源 / 嵌套内层元素 / Optional 包裹容器 / 生成器 yield 容器 / 容器切片 / 运算符 /
+  跨引擎反序列化——全部 type(list[int]值)=list[int]。统一"类型上下文→字面量"递归传递机制。
+  两轮独立复核零风险。**剩余已知边界**（独立窗口）：`-> auto` 泛型实参推断（auto 语义固有）、
+  `-> generator[T]` 显式标注二次包裹（预存 c8b89564）、`*expr` 展开实参（根本限制）。
 
 ## ✅ 已完成：G3 继承特化父类字段丢失 + Finding C any 逃生阀用户类复查（2026-08-13，unsafe-vibe-dev b0f4d74，全量 2365 passed / 1 skipped）
 
@@ -408,7 +414,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   - **内置泛型赋值检查缺失（缺陷一，P1）**：`HANDOFF_GENERIC_ASSIGNABILITY.md` §一。`is_assignable` 同家族结构化实参比较根治，10/11 类拦截，协变/子类型兼容保留。
   - **内建泛型值层类型擦除（缺陷二，P1-P2）**：`HANDOFF_GENERIC_ASSIGNABILITY.md` §二。特化 spec 水化为运行时特化类，`type(list[int]值)=list[int]`，运行时值层类型安全闭环。
   - 详见上方"已完成"节与 `PENDING_TASKS.md` §〇。
-- **🟡 值层身份根治后续增量**（`_code_generic_type_identity.md` §2.6，非回归）：函数返回/调用实参/下标赋值字面量、嵌套内层元素、容器切片、Optional 值身份、跨引擎反序列化的值层身份保真。
+- **✅ 值层身份根治已完成**（`_code_generic_value_convergence.md`，2026-08-13）：全部容器字面量产生路径值层身份保真。**剩余已知边界**（独立窗口）：`-> auto` 泛型实参推断（auto 语义固有局限）/ `-> generator[T]` 显式标注二次包裹（预存 c8b89564）/ `*expr` 展开实参（根本限制）。
 - **🟡 独立缺陷窗口（不阻塞主线）**：
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
 - **📌 本 session 已完成**（临时问题全部闭环）：T01 LLM 批真实重跑 55P+2G；过期文档删除 40；

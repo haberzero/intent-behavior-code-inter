@@ -122,6 +122,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-13，unsafe-vibe-dev 617fb3a6/503f92fd 等 5 commits，全量 2579 passed / 1 skipped）**：
+  **值层身份彻底收敛（`_code_generic_value_convergence.md`）**。统一"类型上下文→字面量"
+  递归传递机制（`_bind_literal_with_type`）覆盖全部容器字面量产生路径：函数返回/lambda
+  返回/调用实参/下标赋值/复合赋值/条件表达式/函数默认参数/for 循环源/嵌套内层/Optional
+  包裹/生成器 yield/切片/运算符/跨引擎反序列化——`type(list[int]值)=list[int]` 全场景一致。
+  两轮独立复核零风险。剩余已知边界（独立窗口）：`-> auto` 泛型实参推断 / `-> generator[T]`
+  二次包裹（预存 c8b89564）/ `*expr` 展开实参（根本限制）。详见 NEXT_STEPS + WORKLOG。
+
 - **✅ 已完成（2026-08-13，unsafe-vibe-dev 80294a64/447ad35c/7a15c1b9，全量 2559 passed / 1 skipped）**：
   **内置泛型类型身份双轨根治（缺陷一 + 缺陷二）**。统一根因 = 内置泛型与用户类泛型
   类型身份模型双轨不对称。缺陷一（is_assignable 同家族结构化实参比较 + 跨家族 axiom 父链）
@@ -490,6 +498,6 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [ ] GEN-FIX 方案与实施：`tasks_docs/GEN_FIX_ARCHITECTURE.md`（GEN-5/GEN-6 四层修复定案与记录）+ `docs/architecture/03_type_system.md` §3.4bis（TypeRef 唯一权威入口规则）
 - [ ] 测试套件规范：`tests/meta/test_naming_conventions.py` TestDocstringHistoryAnchors（docstring 禁历史锚定，规则永久化）
 - [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 已修复；单一状态权威）
-- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）；**内置泛型两缺陷已修复**（`HANDOFF_GENERIC_ASSIGNABILITY.md` 标已修复，设计 `_code_generic_type_identity.md`）；值层身份根治后续增量（§2.6：函数返回/实参/嵌套内层/切片/Optional/跨引擎反序列化）
+- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）；**内置泛型两缺陷已修复**（`HANDOFF_GENERIC_ASSIGNABILITY.md` 标已修复，设计 `_code_generic_type_identity.md`）；**值层身份已彻底收敛**（`_code_generic_value_convergence.md`）；剩余已知边界：`-> auto` 泛型实参推断 / `-> generator[T]` 二次包裹（预存）/ `*expr` 展开实参（根本限制）
 - [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2559 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）
