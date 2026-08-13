@@ -615,14 +615,24 @@ class Interpreter:
         
         self.current_module_name = old_module
 
-    def _hydrate_user_classes(self, class_to_node: Dict[str, Any]):
+    def _hydrate_user_classes(self, class_to_node: Dict[Any, Any]):
         """ STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
         old_module = self.current_module_name
-        # 特化类（Box[int]）与基类（Box）共享 AST 节点：把以 "Name[" 开头的
-        # 特化类也映射到基类节点，复用同一方法/字段绑定逻辑。
+        # class_to_node 键 = (module_name, name) 元组（跨模块同名类不碰撞）。
+        # 解析为运行期类键：入口模块（module_path=None）→ 裸名；被 import 的
+        # 模块 → f"{module}.{name}"——与运行期类表 qualified 键对齐（S5 运行期
+        # 根治：geo.Box / graph.Box 独立绑定方法与字段）。
+        def _class_key(module_name: Optional[str], name: str) -> str:
+            if module_name and module_name != self.entry_module:
+                return f"{module_name}.{name}"
+            return name
+
         resolved = {}
-        for name, info in class_to_node.items():
-            resolved[name] = info
+        for (module_name, name), info in class_to_node.items():
+            resolved[_class_key(module_name, name)] = info
+        # 特化类（geo.Box[int]）与基类（geo.Box）共享 AST 节点：把以 "Name[" 开头的
+        # 特化类也映射到基类节点，复用同一方法/字段绑定逻辑。get_all_classes 键
+        # 已 module 化（qualified），"[" 前缀解析仍正确。
         for name, ib_class in self.registry.get_all_classes().items():
             if "[" in name and ib_class.spec and getattr(ib_class.spec, "provenance", None) == Provenance.USER_DEFINED:
                 base = name.split("[", 1)[0]

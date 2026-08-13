@@ -169,6 +169,22 @@ class IbClass(IbObject):
     def spec(self, value: Optional[IbSpec]) -> None:
         self._spec = value
 
+    @property
+    def module_path(self) -> Optional[str]:
+        """类的模块限定（自 spec 派生，单点真理）。"""
+        return self._spec.module_path if self._spec is not None else None
+
+    @property
+    def qualified_name(self) -> str:
+        """运行期类注册键：module_path 非空时 ``f"{module}.{name}"``，否则裸名。
+
+        与编译期 spec 身份 ``(module_path, name)`` 对齐——跨模块同名类
+        （geo.Box / graph.Box）以此区分，消除运行期类表裸名坍缩。IbClass.name
+        保留裸名（type() 显示 / 方法查找 / _impl_cls）。
+        """
+        mp = self.module_path
+        return f"{mp}.{self.name}" if mp else self.name
+
     def lookup_method(self, name: str) -> Optional['IbFunction']:
         """在虚表中查找方法 (支持继承)"""
         if name in self.methods:
@@ -446,7 +462,9 @@ class IbClass(IbObject):
                 f"Class '{self.name}' subscript expects type identifier(s) "
                 f"(e.g. {self.name}[int]), got a value."
             )
-        specialized_name = f"{self.name}[{','.join(type_names)}]"
+        # 特化名带 module 限定（geo.Box[int]）：与运行期类表 qualified 键对齐，
+        # 跨模块同名类特化不坍缩（S5 运行期根治）。
+        specialized_name = f"{self.qualified_name}[{','.join(type_names)}]"
         existing = self.registry.get_class(specialized_name)
         if existing is not None:
             return existing
@@ -480,20 +498,25 @@ class IbClass(IbObject):
                 except Exception:
                     return self.registry.box(specialized_name)
         # 父类：若 parent_type 带泛型实参（class Sub[T](Box[T]) → Box[int]），
-        # parent 类名须用特化名（继承链对齐特化类，非裸基类）。
+        # parent 类名须用特化名（继承链对齐特化类，非裸基类）。父类与子类同模块
+        # （parser 仅支持单标识符父名）；parent_type 缺 module 时以特化 spec 的
+        # module 补全，使 ``get_class`` 命中 qualified 键。
         if specialized_spec.parent_type is not None and specialized_spec.parent_type.args:
-            p_head = specialized_spec.parent_type.head
-            p_args = ",".join(a.canonical_name for a in specialized_spec.parent_type.args)
-            parent_name = f"{p_head}[{p_args}]"
+            p_ref = specialized_spec.parent_type
+            if p_ref.module is None and specialized_spec.module_path:
+                p_ref = p_ref.with_module(specialized_spec.module_path)
+            parent_name = p_ref.qualified_name
         elif not getattr(self._spec, "type_params", None):
             # 内置泛型特化类（list[int]）的 parent = 基类（list）——特化类
             # 继承基类实现与方法（get_ib_implementation 沿基类名解析）。
             parent_name = self.name
+        elif specialized_spec.parent_type is not None:
+            p_ref = specialized_spec.parent_type
+            if p_ref.module is None and specialized_spec.module_path:
+                p_ref = p_ref.with_module(specialized_spec.module_path)
+            parent_name = p_ref.qualified_name
         else:
-            parent_name = (
-                specialized_spec.parent_type.head
-                if specialized_spec.parent_type is not None else "Object"
-            )
+            parent_name = "Object"
         return self.registry.create_subclass(
             specialized_name, specialized_spec, parent_name
         )

@@ -129,12 +129,14 @@ class ScopeImpl:
             and getattr(declared_type, "kind", None) in _HANDLE_VALUE_KINDS
             and value.ib_class.spec.get_base_name() == declared_type.get_base_name()
         ):
-            specialized_cls = self._registry.get_class(declared_type.name)
+            specialized_cls = self._registry.get_class(
+                declared_type.name, module=declared_type.module_path
+            )
             if specialized_cls is None:
                 try:
                     spec_reg = self._registry.get_metadata_registry()
                     spec = (
-                        spec_reg.resolve(declared_type.name)
+                        spec_reg.resolve(declared_type.name, declared_type.module_path)
                         if spec_reg is not None else None
                     )
                     if spec is not None and not self._registry.is_sealed:

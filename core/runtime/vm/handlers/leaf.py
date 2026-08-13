@@ -502,7 +502,8 @@ def _bind_container_specialization(executor, node_uid: str, value, container_kin
         if kind != getattr(TypeKind, container_kind.upper()).value:
             return value
         # 特化类（list[int]）水化；裸类型（list）node_spec.name == "list" 无特化。
-        specialized_name = node_spec.name
+        # [Module Identity] 特化名用 qualified（内置容器 module_path=None，同裸名）。
+        specialized_name = node_spec.qualified_name
         if specialized_name == container_kind:
             return value
         base_cls = executor.registry.get_class(container_kind)
@@ -564,19 +565,20 @@ def _slice_type_objs_for(executor, node_spec):
 
 
 def _resolve_specialized_class(executor, ref):
-    """把类型实参 TypeRef 解析为 IbClass（结构化嵌套递归）。
+    """把类型实参 TypeRef 解析为 IbClass（结构化嵌套递归，module 感知）。
 
-    - 无实参（``int``）：``get_class("int")``。
-    - 有实参（``list[int]`` / ``list[list[int]]``）：先查特化类
-      ``get_class("list[int]")``；未水化则经基类 ``_specialize`` 按结构化
-      实参创建（S1 根治后嵌套实参结构保真，不再按 head 降级）。
+    - 无实参（``int``）：``get_class("int", module=ref.module)``。
+    - 有实参（``list[int]`` / ``geo.Box[int]``）：先查特化类
+      ``get_class(ref.qualified_name)``（module 限定键）；未水化则经基类
+      ``_specialize`` 按结构化实参创建（S1 根治后嵌套实参结构保真，不再按
+      head 降级）。跨模块用户类实参经 ``ref.module`` 命中 qualified 键。
     """
     if ref.args:
-        specialized_name = ref.canonical_name
+        specialized_name = ref.qualified_name
         cls = executor.registry.get_class(specialized_name)
         if cls is not None:
             return cls
-        base_cls = executor.registry.get_class(ref.head)
+        base_cls = executor.registry.get_class(ref.head, module=ref.module)
         if base_cls is None:
             return None
         try:
@@ -586,7 +588,7 @@ def _resolve_specialized_class(executor, ref):
             return base_cls._specialize(sub_args)
         except Exception:
             return None
-    return executor.registry.get_class(ref.head)
+    return executor.registry.get_class(ref.head, module=ref.module)
 
 
 def vm_handle_IbDict(executor, node_uid: str, node_data: Mapping[str, Any]):
@@ -653,7 +655,9 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     target_descriptor = executor.ec.get_side_table("node_to_type", node_uid)
     if not target_descriptor:
         return value
-    target_class = executor.registry.get_class(target_descriptor.name)
+    target_class = executor.registry.get_class(
+        target_descriptor.name, module=target_descriptor.module_path
+    )
     if not target_class:
         return value
     try:

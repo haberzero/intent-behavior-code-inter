@@ -31,6 +31,7 @@ class _FakeRegistry:
 
 class _FakeIbClass:
     name = "disk_test"
+    qualified_name = "disk_test"
     registry = _FakeRegistry()
     spec = IbSpec(name="disk_test", storage_model=StorageModel.DISK_BACKED)
 

@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Any, List, Optional, Union, Callable
+from typing import Dict, Any, List, Optional, Union, Callable, Mapping
 from core.base.serialization import BaseFlatSerializer
 from core.base.enums import StorageModel
 from core.base.uid import rt_scope_uid, rt_intent_uid, rt_intent_ctx_uid, rt_instance_uid
@@ -219,7 +219,10 @@ class RuntimeSerializer(BaseFlatSerializer):
 
         data = {
             "uid": uid,
-            "class_name": obj.ib_class.name,
+            # [Module Identity] 存 qualified 类名（geo.Box / geo.Box[int]）——
+            # 跨引擎 round-trip 恢复时按运行期类表 qualified 键重绑（内置/入口类
+            # qualified == 裸名，零影响）。
+            "class_name": obj.ib_class.qualified_name,
         }
         self._collect_instance_meta(obj, data)
         # 直接形态（命中即写池并返回）：类引用 / 瞬态占位 / 磁盘描述符。
@@ -250,7 +253,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         if not isinstance(obj, IbClass):
             return False
         data["_type"] = "class_ref"
-        data["name"] = obj.name
+        data["name"] = obj.qualified_name
         self.instance_pool[uid] = data
         return True
 
@@ -693,10 +696,18 @@ class RuntimeDeserializer:
         if spec is None:
             return None
         base_name = spec.get_base_name()
-        if not base_name or not self.registry.get_class(base_name):
+        # [Module Identity] 基类按 module 感知查找（geo.Box[int] 的父 = "geo.Box"），
+        # create_subclass 父名用 qualified——继承链对齐 qualified 键。
+        if not base_name:
             return None
+        parent_class = self.registry.get_class(base_name, module=spec.module_path)
+        if parent_class is None:
+            return None
+        # [Module Identity] 父名 = 基类 qualified（geo.Box[int] 的父 = "geo.Box"），
+        # 继承链对齐 qualified 键（内置/入口基类 qualified == 裸名，零影响）。
+        parent_name = parent_class.qualified_name
         try:
-            return self.registry.create_subclass(cls_name, spec, parent_name=base_name)
+            return self.registry.create_subclass(cls_name, spec, parent_name=parent_name)
         except Exception:
             return None
 
@@ -705,6 +716,8 @@ class RuntimeDeserializer:
 
         ``self.type_pool``（``deserialize_context`` 已设）含编译产物全部类型；
         经 ArtifactRehydrator 按 UID 水化目标 spec。目标 spec 不在池中返回 None。
+        [Module Identity] 按 (module_path, name) 联合匹配 qualified 类名
+        （修 #2 按 name 匹配——跨引擎多模块同名特化不误选）。
         """
         type_pool = getattr(self, "type_pool", None)
         if not type_pool:
@@ -712,7 +725,13 @@ class RuntimeDeserializer:
         spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None
         if spec_reg is None:
             return None
-        uid = next((u for u, d in type_pool.items() if d.get("name") == cls_name), None)
+
+        def _qualified(data: Mapping[str, Any]) -> str:
+            mp = data.get("module_path")
+            nm = data.get("name")
+            return f"{mp}.{nm}" if mp and nm else (nm or "")
+
+        uid = next((u for u, d in type_pool.items() if _qualified(d) == cls_name), None)
         if uid is None:
             return None
         try:

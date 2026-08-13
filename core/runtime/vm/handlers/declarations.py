@@ -164,7 +164,11 @@ def vm_handle_IbClassDef(executor, node_uid: str, node_data: Mapping[str, Any]):
     的 self.report_error 等价的"严格模式"）。
     """
     name = node_data.get("name")
-    existing_class = executor.registry.get_class(name)
+    # [Module Identity] 类定义语句在所属模块作用域执行：以当前模块限定查找
+    # （geo 模块内 "Box" → "geo.Box"），跨模块同名类各自绑定自身类对象。
+    existing_class = executor.registry.get_class(
+        name, module=executor.ec.current_module_name
+    )
     if not existing_class:
         raise RuntimeError(
             f"VM: Sealed Registry Error: Class '{name}' must be pre-hydrated in STAGE 5."

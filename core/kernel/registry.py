@@ -304,6 +304,10 @@ class KernelRegistry:
         """
         注册类（内置或用户定义），并强制关联其 UTS 描述符。
         [Active Defense] 拒绝任何无元数据描述或名称不匹配的裸类注入。
+        [Module Identity] 注册键 = ``spec.qualified_name``（与编译期 spec 身份
+        (module_path, name) 对齐）：跨模块同名用户类（geo.Box / graph.Box）独立
+        注册，消除运行期类表裸名坍缩。入口/单模块类与内置类 module_path 为 None，
+        键 = 裸名（行为不变）。
         """
         self._verify_class_registration(token)
         
@@ -313,8 +317,9 @@ class KernelRegistry:
         if spec.name != name:
              raise ValueError(f"Registry: Spec name '{spec.name}' does not match registered name '{name}'.")
 
-        if name in self._classes:
-             raise ValueError(f"Registry: Class '{name}' is already registered. Duplicate registration is forbidden in strict mode.")
+        key = spec.qualified_name
+        if key in self._classes:
+             raise ValueError(f"Registry: Class '{key}' is already registered. Duplicate registration is forbidden in strict mode.")
 
         # 自动同步到元数据注册表，并获取克隆后的隔离副本
         if self._metadata_registry:
@@ -322,7 +327,7 @@ class KernelRegistry:
             
         # 强制绑定到类对象 (此时 spec 已经是注册表返回的隔离副本)
         ib_class.spec = spec
-        self._classes[name] = ib_class
+        self._classes[key] = ib_class
         
         # 绑定注册表引用（IbClass.registry 槽恒存在：__init__ 强制要求 registry）
         ib_class.registry = self
@@ -346,7 +351,19 @@ class KernelRegistry:
     def get_boxer(self, py_type: type) -> Any:
         return self._boxers.get(py_type)
 
-    def get_class(self, name: str) -> Any:
+    def get_class(self, name: str, module: Optional[str] = None) -> Any:
+        """按 (module, name) 查运行期类；module 感知（跨模块同名类根治）。
+
+        - ``module`` 提供且 ``name`` 无点（裸名）：先查 ``{module}.{name}``
+          （被 import 模块内对自身类的引用命中带 module 的键），miss 回落裸名
+          （内置类型 / 入口模块类）。
+        - ``name`` 已含点（qualified，如 ``geo.Box[int]``）：精确查键。
+        - 内置类与入口模块类（module_path=None，键=裸名）行为不变。
+        """
+        if module and "." not in name:
+            cls = self._classes.get(f"{module}.{name}")
+            if cls is not None:
+                return cls
         return self._classes.get(name)
 
     def get_all_classes(self) -> Dict[str, Any]:
@@ -359,19 +376,24 @@ class KernelRegistry:
         return self._none_instance
 
     def create_subclass(self, name: str, descriptor: 'IbSpec', parent_name: str = "Object") -> Any:
-        """[Authorized] 通过内核绑定的工厂方法创建类。强制校验封印状态。"""
+        """[Authorized] 通过内核绑定的工厂方法创建类。强制校验封印状态。
+
+        ``name`` 可为裸类名（``Box[int]`` / ``Box``）或 qualified 名
+        （``geo.Box[int]``）；注册键 = 描述符 ``qualified_name``（跨模块同名类
+        独立，见 register_class）。qualified 名时自末段提取裸名供 IbClass.name。
+        """
         # 类注册封印后，禁止通过任何途径（包括工厂）创建新类
         if self._is_classes_sealed:
             raise PermissionError(f"Sealed Registry Violation: Cannot create subclass '{name}' after registry is sealed.")
             
         if not descriptor:
             raise ValueError(f"Registry: Cannot create subclass '{name}' without a UTS descriptor.")
-        if descriptor.name != name:
+        if descriptor.name != name and descriptor.qualified_name != name:
             raise ValueError(f"Registry: Subclass descriptor name '{descriptor.name}' does not match '{name}'.")
         
         # [Enum Hook] 检查父类是否已在 _classes 中注册
         # 如果父类已存在（如 Enum），则直接调用 Bootstrapper.create_subclass
-        if self.get_class(parent_name):
+        if self.get_class(parent_name, module=descriptor.module_path):
             if self._create_subclass_func:
                 return self._create_subclass_func(self, name, descriptor, parent_name)
             

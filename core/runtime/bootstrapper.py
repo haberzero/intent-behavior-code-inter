@@ -143,35 +143,57 @@ class Bootstrapper:
         self.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True, ib_class=self.TypeClass))
 
     def register_class(self, ib_class: IbClass, spec: 'IbSpec'):
-        """向实例表注册类，并确保其 ib_class 指向 TypeClass。强制绑定 spec。"""
+        """向实例表注册类，并确保其 ib_class 指向 TypeClass。强制绑定 spec。
+
+        [Module Identity] 注册键 = ``spec.qualified_name``（与编译期 spec 身份
+        (module_path, name) 对齐）：跨模块同名用户类（geo.Box / graph.Box）独立
+        注册，消除运行期类表裸名坍缩。入口/单模块类与内置类 module_path 为 None，
+        键 = 裸名（行为不变）。
+        """
         if self.TypeClass and not ib_class.ib_class:
             ib_class.ib_class = self.TypeClass
-        self._class_registry[ib_class.name] = ib_class
+        key = spec.qualified_name if spec is not None else ib_class.name
+        self._class_registry[key] = ib_class
         self.registry.register_class(ib_class.name, ib_class, self._token, spec=spec)
 
-    def get_class(self, name: str) -> Optional[IbClass]:
+    def get_class(self, name: str, module: Optional[str] = None) -> Optional[IbClass]:
+        """module 感知类查找（与 KernelRegistry.get_class 同构，见其 docstring）。"""
+        if module and "." not in name:
+            cls = self._class_registry.get(f"{module}.{name}")
+            if cls is not None:
+                return cls
         return self._class_registry.get(name)
 
     def get_all_classes(self) -> Dict[str, IbClass]:
         return dict(self._class_registry)
 
     def create_subclass(self, registry: KernelRegistry, name: str, spec: 'IbSpec', parent_name: str = "Object") -> IbClass:
-        """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定 spec。"""
-        if name in self._class_registry:
-            return self._class_registry[name]
-        
+        """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定 spec。
+
+        ``name`` 可为裸类名（``Box[int]``）或 qualified 名（``geo.Box[int]``）；
+        注册键 = 描述符 ``qualified_name``（跨模块同名类独立）。裸类名自末段
+        提取（module 可含点，类名不可含点）。父类查找 module 感知（spec 的
+        module_path 作为父模块上下文——父类与子类同模块，parser 仅支持单标识符
+        父名；qualified 父名直接精确命中）。
+        """
+        key = spec.qualified_name if spec is not None else name
+        if key in self._class_registry:
+            return self._class_registry[key]
+
+        bare = name.rsplit(".", 1)[-1] if "." in name else name
+        module = spec.module_path if spec is not None else None
         # 优先从 _class_registry 查找父类
-        parent = self.get_class(parent_name)
+        parent = self.get_class(parent_name, module=module)
         
         # [Enum Hook] 如果在 _class_registry 中找不到父类，检查 registry._classes
         # 这样可以支持已注册到 KernelRegistry._classes 但未注册到 Bootstrapper._class_registry 的内置类
         if not parent and parent_name != "Object":
-            parent = registry._classes.get(parent_name)
+            parent = registry.get_class(parent_name, module=module)
         
-        if not parent and name != "Object": # Object has no parent
+        if not parent and bare != "Object": # Object has no parent
             raise ValueError(f"Parent class '{parent_name}' not found")
         
-        new_class = IbClass(name, parent=parent, registry=registry)
+        new_class = IbClass(bare, parent=parent, registry=registry)
         self.register_class(new_class, spec)
         return new_class
 

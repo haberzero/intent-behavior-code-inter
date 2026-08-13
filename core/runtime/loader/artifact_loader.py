@@ -138,7 +138,9 @@ class ArtifactLoader:
             for stmt_uid in root_node.get("body", []):
                 stmt_data = node_pool.get(stmt_uid)
                 if stmt_data and stmt_data.get("_type") == "IbClassDef":
-                    class_to_node[stmt_data.get("name")] = (stmt_uid, module_name)
+                    # 键 = (module_name, name) 元组：跨模块同名类不碰撞
+                    # （geo.Box / graph.Box 各自对应自己的 AST 节点）。
+                    class_to_node[(module_name, stmt_data.get("name"))] = (stmt_uid, module_name)
 
         # 2. 预注册用户定义的类 (支持继承依赖)
         remaining = [c for c in user_classes if c.provenance == Provenance.USER_DEFINED]
@@ -152,23 +154,27 @@ class ArtifactLoader:
                 # （class Sub[T](Box[T]) 特化 Sub[int] → "Box[int]"），继承链
                 # 对齐特化类；实参含类型参数占位（模板自身 Box[T] 的 T）或
                 # 未注册类型则回退裸基类名。
-                if cls_desc.parent_type is not None and cls_desc.parent_type.args:
-                    p_args = [a.canonical_name for a in cls_desc.parent_type.args]
+                # [Module Identity] 父名 module 化：parent_type 缺 module（同模块
+                # 父）时以 cls_desc.module_path 补全 → 父名 = qualified_name
+                # （geo.Sub[int] 的父 = "geo.Box[int]"），get_class 命中 qualified 键。
+                p_ref = cls_desc.parent_type
+                if p_ref is not None and p_ref.module is None and cls_desc.module_path:
+                    p_ref = p_ref.with_module(cls_desc.module_path)
+                if p_ref is not None and p_ref.args:
+                    p_args = [a.canonical_name for a in p_ref.args]
                     if all(self._is_concrete_arg(a) for a in p_args):
-                        parent_name = "{}[{}]".format(
-                            cls_desc.parent_type.head, ",".join(p_args)
-                        )
+                        parent_name = p_ref.qualified_name
                     else:
-                        parent_name = cls_desc.parent_type.head
+                        parent_name = p_ref.head
                 else:
-                    parent_name = (cls_desc.parent_type.head if cls_desc.parent_type else None) or "Object"
+                    parent_name = (p_ref.head if p_ref is not None else None) or "Object"
                 
                 # [Enum Hook] 检查父类是否已在 _classes 中注册
                 # 如果父类已存在（如 Enum），则直接创建子类
-                parent_class = self.registry.get_class(parent_name)
+                parent_class = self.registry.get_class(parent_name, module=cls_desc.module_path)
                 if parent_class:
                     # 父类已存在，直接创建子类
-                    if self.registry.get_class(cls_desc.name) is None:
+                    if self.registry.get_class(cls_desc.name, module=cls_desc.module_path) is None:
                         # 类不存在才创建；已注册（如预注册的 Enum 基类/重复类）有意跳过
                         self.registry.create_subclass(
                             cls_desc.name,

@@ -336,22 +336,22 @@ class TestIbcFileNestedPackageImport:
 
 
 class TestCrossModuleSameNameClass:
-    """跨模块同名类编译期/元数据层隔离（S5 根治）。
+    """跨模块同名类身份隔离（S5 编译期 + 运行期 module 化根治）。
 
-    修复前 `geo.Box` 与 `graph.Box` 编译期坍缩为同一 spec（register merge
-    members），序列化/round-trip 冲突；修复后 module 限定分离——编译期 spec
-    独立、特化继承 module、序列化保真。
-    注：运行时类表仍 name-only（known limit，见 KNOWN_LIMITS §10.2）。
+    修复前 `geo.Box` 与 `graph.Box` 编译期坍缩为同一 spec、运行期类表 name-only
+    坍缩——方法表按后编译者覆盖（`geo.Box[int](5).get()` 报 int+str 错误）；
+    修复后 module 限定分离：编译期 spec 独立 + 运行期类表 qualified 键独立。
     """
 
     def test_same_name_class_compile_time_isolation(self, tmp_path):
+        """编译期 + 运行期隔离：方法体语义不串扰（判别性回归）。"""
         _write(
             tmp_path,
             "geo.ibci",
             "class Box[T]:\n"
             "    int v\n"
             "    func get(self) -> int:\n"
-            "        return self.v\n",
+            "        return self.v + 100\n",
         )
         _write(
             tmp_path,
@@ -359,7 +359,7 @@ class TestCrossModuleSameNameClass:
             "class Box[T]:\n"
             "    str name\n"
             "    func get(self) -> str:\n"
-            "        return self.name\n",
+            "        return self.name + \"!\"\n",
         )
         _write(
             tmp_path,
@@ -367,12 +367,15 @@ class TestCrossModuleSameNameClass:
             "import geo\n"
             "import graph\n"
             "geo.Box[int] a = geo.Box[int](5)\n"
-            "graph.Box[int] b = graph.Box[int](\"hello\")\n"
+            "graph.Box[int] b = graph.Box[int](\"hi\")\n"
+            "print(a.get())\n"
+            "print(b.get())\n"
             "print(type(a.get()))\n"
             "print(type(b.get()))\n",
         )
-        # 编译期 spec 分离：geo.Box 与 graph.Box 各自正确
-        assert _run(tmp_path) == ["int", "str"]
+        # 运行期方法表隔离：geo.get() = v+100 = 105；graph.get() = name+"!" = "hi!"
+        # （方法体语义各自独立，互不串扰）
+        assert _run(tmp_path) == ["105", "hi!", "int", "str"]
 
     def test_same_name_class_spec_isolated(self, tmp_path):
         """编译期注册表：geo.Box 与 graph.Box 是独立 spec（module 区分）。"""
@@ -405,6 +408,150 @@ class TestCrossModuleSameNameClass:
         )
         assert geo_box.module_path == "geo"
         assert graph_box.module_path == "graph"
+
+    def test_same_name_class_runtime_registry_isolated(self, tmp_path):
+        """运行期类表：geo.Box / graph.Box 独立 IbClass（qualified 键）。"""
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n",
+        )
+        _write(
+            tmp_path,
+            "graph.ibci",
+            "class Box[T]:\n"
+            "    str name\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "import graph\n",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine.run(str(tmp_path / "main.ibci"), silent=True)
+        geo_box = engine.registry.get_class("geo.Box")
+        graph_box = engine.registry.get_class("graph.Box")
+        assert geo_box is not None and graph_box is not None
+        assert geo_box is not graph_box, (
+            "geo.Box 与 graph.Box 应运行期隔离（独立 IbClass，不坍缩）"
+        )
+        assert geo_box.qualified_name == "geo.Box"
+        assert graph_box.qualified_name == "graph.Box"
+        # module 感知查找：geo 模块内裸名 Box → geo.Box，graph 内 → graph.Box
+        assert engine.registry.get_class("Box", module="geo") is geo_box
+        assert engine.registry.get_class("Box", module="graph") is graph_box
+
+    def test_same_name_non_generic_class_isolated(self, tmp_path):
+        """跨模块同名**非泛型**类运行期隔离（不依赖特化机制）。"""
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Wrap:\n"
+            "    int v\n"
+            "    func get(self) -> int:\n"
+            "        return self.v * 2\n",
+        )
+        _write(
+            tmp_path,
+            "graph.ibci",
+            "class Wrap:\n"
+            "    str name\n"
+            "    func get(self) -> str:\n"
+            "        return self.name.upper()\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "import graph\n"
+            "geo.Wrap a = geo.Wrap(21)\n"
+            "graph.Wrap b = graph.Wrap(\"hi\")\n"
+            "print(a.get())\n"
+            "print(b.get())\n",
+        )
+        assert _run(tmp_path) == ["42", "HI"]
+
+    def test_generic_inheritance_same_module_parent(self, tmp_path):
+        """被 import 模块内泛型继承（Sub[T](Box[T])）特化父链对齐 qualified 键。"""
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n"
+            "    func base(self) -> str:\n"
+            "        return \"geo-base\"\n"
+            "class Sub[T](Box[T]):\n"
+            "    func sub(self) -> str:\n"
+            "        return \"geo-sub\"\n",
+        )
+        _write(
+            tmp_path,
+            "graph.ibci",
+            "class Box[T]:\n"
+            "    str name\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "import graph\n"
+            "geo.Sub[int] s = geo.Sub[int](7)\n"
+            "print(s.base())\n"
+            "print(s.sub())\n"
+            "print(s.v)\n",
+        )
+        assert _run(tmp_path) == ["geo-base", "geo-sub", "7"]
+
+    def test_same_name_class_cross_engine_roundtrip(self, tmp_path):
+        """跨引擎 round-trip：geo.Box 实例 class_name qualified 保真。"""
+        from core.runtime.serialization.runtime_serializer import (
+            RuntimeSerializer,
+            RuntimeDeserializer,
+        )
+
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n"
+            "    func get(self) -> int:\n"
+            "        return self.v + 100\n",
+        )
+        _write(
+            tmp_path,
+            "graph.ibci",
+            "class Box[T]:\n"
+            "    str name\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "import graph\n"
+            "geo.Box[int] a = geo.Box[int](5)\n"
+            "graph.Box[int] b = graph.Box[int](\"hi\")\n",
+        )
+        engine_a = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_a.run(str(tmp_path / "main.ibci"), silent=True)
+        ec = engine_a.interpreter.execution_context
+        data = RuntimeSerializer(engine_a.registry).serialize_context(
+            ec.runtime_context, include_static=True, execution_context=ec
+        )
+
+        engine_b = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_b.run(str(tmp_path / "main.ibci"), silent=True)
+        deser = RuntimeDeserializer(engine_b.registry, factory=engine_b.object_factory)
+        restored = deser.deserialize_context(data)
+        a = restored.get_variable("a")
+        b = restored.get_variable("b")
+        # 值对象 ib_class = qualified 类（geo.Box[int] / graph.Box[int]），
+        # 方法体语义各自正确（round-trip 后仍可区分）。
+        assert a.ib_class.qualified_name == "geo.Box[int]", (
+            f"round-trip class_name 应保真 qualified，got {a.ib_class.qualified_name}"
+        )
+        assert b.ib_class.qualified_name == "graph.Box[int]"
 
     def test_multi_import_same_package_merges(self, tmp_path):
         """同一包多次导入：根包命名空间幂等合并（a.b.c + a.b.d 均可达）。"""

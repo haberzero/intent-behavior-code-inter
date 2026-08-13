@@ -947,5 +947,5 @@ def _resolve_type_identifier(executor, arg_ref) -> Optional[Any]:
     """
     registry = executor.registry
     if not arg_ref.args:
-        return registry.get_class(arg_ref.head)
+        return registry.get_class(arg_ref.head, module=arg_ref.module)
     return registry.box(arg_ref.canonical_name)

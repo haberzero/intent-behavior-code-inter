@@ -183,8 +183,19 @@ class SymbolCollector:
         # TypeRef(Box, (T,))，供特化时递归替换。
         if node.parent_args:
             parent_head = effective_parent or "Object"
+            # [Module Identity] 父引用带 module（S5 运行期根治）：同模块父经
+            # SpecRegistry.current_module 上下文解析出 module_path，运行期父链
+            # 据此对齐 qualified 键（geo.Sub[int] 的父 = "geo.Box[int]"）。
+            # 父类尚未注册（前向引用）时 module 缺省，运行期以子类 module 补全。
+            parent_module = None
+            if self.registry is not None:
+                parent_spec = self.registry.resolve(parent_head)
+                if parent_spec is not None:
+                    parent_module = parent_spec.module_path
             cls_meta.parent_type = TypeRef.generic(
-                parent_head, *[TypeRef.of(a) for a in node.parent_args]
+                parent_head,
+                *[TypeRef.of(a) for a in node.parent_args],
+                module=parent_module,
             )
             # 首版边界：非泛型子类继承具体特化（class Sub(Box[int])）不支持——
             # 子类无 type_params 却继承带实参父类，特化参数无传递来源，fail-fast。

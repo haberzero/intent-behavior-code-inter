@@ -263,9 +263,9 @@ class _PromptMixin:
         1. Axiom 内置类型：经 ``_try_axiom_output_hint``（共享实现）
         2. 用户自定义 IBCI 类：通过类 vtable 查找 __outputhint_prompt__ 方法
         """
-        def _try_vtable_hint(type_name: str) -> Optional[str]:
+        def _try_vtable_hint(type_name: str, module: Optional[str] = None) -> Optional[str]:
             """回退：通过用户类 vtable 查找 __outputhint_prompt__（类方法语义）"""
-            ib_class = self.registry.get_class(type_name)
+            ib_class = self.registry.get_class(type_name, module=module)
             if ib_class:
                 method = ib_class.lookup_method('__outputhint_prompt__')
                 if method:
@@ -295,7 +295,12 @@ class _PromptMixin:
                 hint = self._try_axiom_output_hint(type_name)
                 if hint is not None:
                     return hint
-                hint = _try_vtable_hint(type_name)
+                # [Module Identity] 用户类 hint 查找按 module 限定
+                # （node_to_type spec 携带 module_path；跨模块同名类不误选）。
+                hint = _try_vtable_hint(
+                    type_name,
+                    module=getattr(node_to_type, "module_path", None),
+                )
                 if hint is not None:
                     return hint
 
@@ -312,9 +317,9 @@ class _PromptMixin:
         """
         from core.runtime.shared.user_call import UserFunctionCall
 
-        def _drive_vtable_hint(type_name: str):
+        def _drive_vtable_hint(type_name: str, module: Optional[str] = None):
             """用户类 vtable hint：yield UserFunctionCall 驱动（CPS 主路径）。"""
-            ib_class = self.registry.get_class(type_name)
+            ib_class = self.registry.get_class(type_name, module=module)
             if not ib_class:
                 return None
             method = ib_class.lookup_method('__outputhint_prompt__')
@@ -348,7 +353,10 @@ class _PromptMixin:
                 hint = self._try_axiom_output_hint(type_name)
                 if hint is not None:
                     return hint
-                hint = yield from _drive_vtable_hint(type_name)
+                hint = yield from _drive_vtable_hint(
+                    type_name,
+                    module=getattr(node_to_type, "module_path", None),
+                )
                 if hint is not None:
                     return hint
 
