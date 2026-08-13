@@ -393,7 +393,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
     PT-AUDIT-1/2 长期审计。
 - **🟡 独立缺陷窗口（不阻塞主线）**：
   - **内置泛型赋值检查缺失**（P1，`HANDOFF_GENERIC_ASSIGNABILITY.md`）：10/11 类内置泛型 `X[int]`→`X[str]` 编译期放行，根因=axiom is_compatible 前缀匹配。待核实修复。
-  - **`type()` 泛型内省不对称**（P3，`HANDOFF_GENERIC_ASSIGNABILITY.md` §二）：内建泛型 type() 返回基名 vs 用户类泛型返回特化名，待文档精确化。
+  - **内建泛型值层类型擦除**（P1-P2，`HANDOFF_GENERIC_ASSIGNABILITY.md` §二，重新分析升格）：特化 spec 从未水化为运行时特化类，值层无法区分 `list[int]`/`list[str]`（type() 分裂 + 运行时类型安全缺失）。根治需独立设计窗口，近期阻断缺陷一。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
 - **📌 本 session 已完成**（临时问题全部闭环）：T01 LLM 批真实重跑 55P+2G；过期文档删除 40；
   套件重构（不冻结原则）；classification 写回 100%；gen_register 报告生成器 + 收敛流程硬规则；

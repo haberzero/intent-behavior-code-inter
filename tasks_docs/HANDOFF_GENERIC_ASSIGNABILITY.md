@@ -84,7 +84,10 @@ if src_axiom and src_axiom.is_compatible(target.name):
 
 ---
 
-## 二、缺陷二（疑似）：`type()` 对泛型值内省不对称（非缺陷，待文档精确化）
+## 二、缺陷二（升格）：内建泛型运行时值层类型擦除 = 初期设计缺陷/架构妥协
+
+> ⚠️ **2026-08-13 重新分析纠正**：此现象此前被定性为"设计使然，非缺陷"——**错误**。
+> 深挖后确认是**初期设计缺陷/架构妥协**（双轨不对称），非有意的统一设计。
 
 ### 2.1 现象
 
@@ -106,26 +109,35 @@ print(type(oi))   # Optional   ← 内建泛型无实参
 
 `core/runtime/interpreter/intrinsics/meta.py:17-30` `_type` 返回 `obj.ib_class.name`：
 - **用户类泛型**：特化生成独立 IbClass（`ib_class.py:458` create_subclass），name=`Box[int]`，带实参
-- **内建泛型**：值对象运行时用**单一基类**——`core/runtime/factory.py:50` `IbList(elements, ib_class=self._registry.get_class("list"))`；`@register_ib_type("list")` 注册单类。值层**不携带特化实参元数据**（类型擦除）
+- **内建泛型**：值对象运行时用**单一基类**——`core/runtime/factory.py:50` `IbList(elements, ib_class=self._registry.get_class("list"))`；`@register_ib_type("list")` 注册单类
 
-### 2.3 判定
+**决定性证据（重新分析新增）**：
+1. **编译期/运行期割裂**：编译 `list[int] li = ...` 后，`spec_reg.resolve("list[int]")` 返回特化 spec（有），但 `registry.get_class("list[int]")` 为 **None**（无）——**特化 spec 从未水化为运行时特化类**。
+2. **`IbValue.type_ref` 机制被绕过**：`IbValue.__init__`（base.py:251-255）从 `ib_class.spec` 构造 type_ref；但内建泛型值对象的 ib_class 是基类（spec 无 type_args）→ type_ref 擦除为 `list`。机制存在但调用方（factory）不喂特化类。
+3. **历史根源**：`create_list` 用 `get_class("list")` 基类**自最初实现（早期 commit 680e1024）从未改变**；用户类泛型（2026-08-12）引入 create_subclass 特化类机制后**未回填内建泛型**——两套机制并存且不一致。
 
-- **非缺陷**：内建容器值层单类设计合理（对齐 Python `type([])`→`list`），`12_builtins.md:15` 文档化"返回规范类型名"
-- **但两个问题**：
-  1. **用户类泛型 vs 内建泛型 `type()` 行为不一致**（Box[int] 带实参 vs list 不带）——同是泛型，内省形态分裂，可能造成依赖 `type()` 分派的代码困惑
-  2. **文档未注明此差异**（`12_builtins.md` 未说明内建泛型返回基名、用户类泛型返回特化名）
+### 2.3 判定（纠正后）
 
-### 2.4 处置建议
+**这是初期设计缺陷/架构妥协，非"设计使然"**：
+- 早期内建容器用"单 Python 类 + 类型擦除"是最快实现（Python 原生 list 直接包装）
+- 用户类泛型后来引入真特化类 → **机制同构缺失**（design-philosophy §四违反）
+- 两轨从未统一 → **设计语言分裂**（§二：同是泛型，list 与 Box 运行时形态不同）
+- **实际后果**：
+  1. `type()` 内省分裂（P3）
+  2. **值层无法区分 `list[int]`/`list[str]`** → 运行时类型安全缺失（与缺陷一联动：`list[str]` 传 `list[int]` 参数编译期放行、运行时 `RUN_TYPE_MISMATCH`）
+  3. 运行时无法内省泛型实参（长期内省能力缺失）
 
-- 若**维持现状**（内建值层擦除）：在 `12_builtins.md` 补充说明"内建泛型（list/thread/Optional 等）返回基名，用户类泛型返回特化名（Box[int]）"
-- 若**改进内省完整性**（P2 远期）：为内建泛型值对象携带类型实参元数据（如 IbList 持有 element spec），`type()` 返回 `list[int]`——但改动面大（值层构造/序列化/round-trip），需独立设计窗口
-- **推荐**：先做文档精确化（低风险），值层带实参留待独立设计评估
+### 2.4 处置建议（升格）
+
+- **根治方向**：让内建泛型特化 spec 也水化为运行时特化类（`list[int]` IbClass），值对象挂特化类（type_ref 保留实参）——与用户类泛型机制同构（design-philosophy §四）。涉及：factory.create_list/dict/tuple 等按特化 spec 选 ib_class、运行时 `_specialize` 对内置泛型也 create_subclass（现 :406-408 只 box 字符串）、序列化值层 `_type` 带实参。改动面大，**需独立设计窗口**。
+- **近期缓解**：缺陷一（is_assignable 泛型实参校验）独立修复（§1.4 方案 A），阻断运行时错误延迟。
+- **文档**：`12_builtins.md` 补充现状说明（若维持擦除），但长期目标仍是机制统一。
 
 ---
 
 ## 三、交接建议
 
-1. **优先处理缺陷一**（P1 编译期类型安全）：核实 1.2 根因后按 1.4 方案 A 修复，判别性回归 + 触发用例
-2. **缺陷二**：做文档精确化（2.4 第一项），值层内省改进留独立窗口
+1. **优先处理缺陷一**（P1 编译期类型安全）：核实 1.2 根因后按 1.4 方案 A 修复，判别性回归 + 触发用例——**这是值层擦除的直接后果，独立可修**
+2. **缺陷二升格为 P1-P2 架构缺陷**：内建泛型值层擦除 = 初期设计妥协。根治需"内建泛型特化类水化"独立设计窗口（§2.4）；近期先文档化现状 + 阻断缺陷一
 3. 两者均登记 PENDING_TASKS（建议 PT-DEBT-xx 域），修复按 Phase D 收敛义务双交付
-4. 完整证据日志：本 session 探针脚本已存 `/tmp/opencode/`（type_probe/type_list/chan_check/th_same 等），WORKLOG 有过程记录
+4. 完整证据日志：本 session 探针脚本已存 `/tmp/opencode/`（type_probe/type_list/chan_check/th_same/list_param 等），WORKLOG 有过程记录；`03_type_system.md` §6 宣称 IbValue.type_ref "运行时类型身份（结构化）"但内建泛型值实际擦除——文档-代码漂移待修
