@@ -3,7 +3,7 @@
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
 > **最后更新**：2026-08-13（**试用体系重构 + GEN-5/GEN-6 架构级修复 + spec→TypeRef 收敛
-> + 测试套件重构 + 内置泛型类型身份双轨根治（缺陷一+缺陷二）全部完成**；全量 **2559 passed / 1 skipped**；
+> + 测试套件重构 + 内置泛型类型身份双轨根治（缺陷一+缺陷二）+ 值层身份收敛 + 泛型剩余边界交接全部完成**；全量 **2586 passed / 1 skipped**；
 > 见下方"已完成"与"交接要点"节）
 
 ---
@@ -24,7 +24,7 @@
   函数返回 / lambda 返回 / 调用实参 / 下标赋值 / 复合赋值 / 条件表达式 / 函数默认参数 /
   for 循环源 / 嵌套内层元素 / Optional 包裹容器 / 生成器 yield 容器 / 容器切片 / 运算符 /
   跨引擎反序列化——全部 type(list[int]值)=list[int]。统一"类型上下文→字面量"递归传递机制。
-  两轮独立复核 + 第三轮全面扫描。**剩余已知边界**（独立窗口）：`-> auto` 泛型实参推断（auto 语义固有）、`*expr` 展开实参（根本限制）、句柄类（thread/chan/slot/generator）值身份未水化（type() 裸名，编译期已封闭）。
+  两轮独立复核 + 第三轮全面扫描。**🔴 下一 session 交接**（`_HANDOFF_GENERIC_REMAINING.md`）：泛型体系剩余边界 7 项彻底修复分析（句柄类值身份/type_pool 匹配/元组解包检查/auto 推断/*expr 缓解等）。
 
 ## ✅ 已完成：G3 继承特化父类字段丢失 + Finding C any 逃生阀用户类复查（2026-08-13，unsafe-vibe-dev b0f4d74，全量 2365 passed / 1 skipped）
 
@@ -406,6 +406,10 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   B5 meta docstring 历史锚定扫描规则永久化。
 
 - **🔴 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
+  - **泛型体系剩余边界彻底修复**（用户裁定 2026-08-13，交接文档 `_HANDOFF_GENERIC_REMAINING.md`）：
+    ① 句柄类值身份水化（thread/chan/slot/generator，根治可能高）；② `_rehydrate_type_pool_spec`
+    module 匹配；③ generator value_type 结构化 + `_slice_type_objs_for` 健壮化；④ 元组解包
+    类型检查；⑤ `-> auto` 泛型实参推断；⑥ `*expr` 部分缓解。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。
