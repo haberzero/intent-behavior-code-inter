@@ -918,7 +918,14 @@ def _bind_type_params(executor, rt_context, func, receiver) -> None:
     if not base_name or not type_args:
         return
     spec_reg = executor.registry.get_metadata_registry()
-    base_spec = spec_reg.resolve(base_name) if spec_reg else None
+    # [S2 类身份统一] 基类按 owner_class 的 module 感知解析（入口类 base_name
+    # 为裸名 "Box" 而 spec 注册键为 qualified "__string_exec__.Box"）——裸名
+    # 解析 miss 会漏绑类型参数（方法体内 T 未注册报 RUN_UNDEFINED_VARIABLE）。
+    base_spec = (
+        spec_reg.resolve(base_name, module=spec.module_path)
+        if spec_reg is not None
+        else None
+    )
     if base_spec is None:
         return
     base_type_params = getattr(base_spec, "type_params", None) or []

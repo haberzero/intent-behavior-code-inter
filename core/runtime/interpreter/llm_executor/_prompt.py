@@ -363,17 +363,33 @@ class _PromptMixin:
         return None
 
     def _get_expected_type_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
-        """获取预期的类型名称，用于 __from_prompt__ 解析"""
+        """获取预期的类型名称（module 感知），用于 __from_prompt__ 解析。
+
+        [S2 类身份统一] 优先 node_to_type 侧表（含 module_path 的 spec）——
+        返回 qualified 名（``main.Point`` / ``str``），策略内 ``resolve`` /
+        ``get_class`` 精确命中 qualified 键（入口类已 module 化不再裸名）。
+        returns IbName 裸名路径按当前模块上下文解析为 qualified（与
+        ``SpecRegistry.resolve(name, module)`` 同构）。
+        """
+        node_to_type = execution_context.get_side_table("node_to_type", node_uid)
+        if node_to_type:
+            name = getattr(node_to_type, "name", None)
+            if name:
+                module = getattr(node_to_type, "module_path", None)
+                return f"{module}.{name}" if module else name
+
         returns_uid = node_data.get("returns")
         if returns_uid:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
-                return returns_data.get("id", "str")
-
-        node_to_type = execution_context.get_side_table("node_to_type", node_uid)
-        if node_to_type:
-            if hasattr(node_to_type, 'name'):
-                return node_to_type.name
+                bare_name = returns_data.get("id", "str")
+                module = getattr(execution_context, "current_module_name", None)
+                meta_reg = self.registry.get_metadata_registry()
+                if meta_reg is not None and module:
+                    spec = meta_reg.resolve(bare_name, module)
+                    if spec is not None and getattr(spec, "module_path", None):
+                        return f"{spec.module_path}.{bare_name}"
+                return bare_name
 
         return None
 

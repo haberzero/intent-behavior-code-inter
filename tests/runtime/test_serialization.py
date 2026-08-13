@@ -303,13 +303,19 @@ class TestGenericUserClassRoundTrip:
     """用户类泛型（class Box[T]）round-trip 后特化类身份与类型保持。"""
 
     def test_specialized_class_ref_round_trip(self, engine):
-        """Box[int] 特化类对象序列化后保持类身份。"""
+        """Box[int] 特化类对象序列化后保持类身份。
+
+        [S2 类身份统一] 入口模块用户类已 module 化（class_ref name 为 qualified
+        名 ``__string_exec__.Box``），断言按 entry_module 解析。
+        """
         engine.run_string(
             'class Box[T]:\n'
             '    T value\n'
             'Box[int] bi = Box[int](1)\n',
             silent=True,
         )
+        entry = engine.interpreter.entry_module
+        box_qname = f"{entry}.Box"
         ec = engine.interpreter.execution_context
         data = RuntimeSerializer(engine.registry).serialize_context(
             ec.runtime_context, include_static=False
@@ -317,11 +323,12 @@ class TestGenericUserClassRoundTrip:
         pool = data["pools"]["instances"]
         refs = [v for v in pool.values() if v.get("_type") == "class_ref"]
         names = {v.get("name") for v in refs}
-        assert "Box" in names
-        # bi 实例以特化类身份序列化（_type == "object"，承载 ib_class 名）
+        assert box_qname in names
+        # bi 实例以特化类身份序列化（_type == "object"，承载 ib_class qualified 名）
+        bi_qname = f"{entry}.Box[int]"
         bi_entries = [
             v for v in pool.values()
-            if v.get("_type") == "object" and v.get("class_name") == "Box[int]"
+            if v.get("_type") == "object" and v.get("class_name") == bi_qname
         ]
         assert bi_entries, f"Box[int] 实例身份丢失；refs={sorted(names)}"
 

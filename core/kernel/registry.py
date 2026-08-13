@@ -355,10 +355,12 @@ class KernelRegistry:
         """按 (module, name) 查运行期类；module 感知（跨模块同名类根治）。
 
         - ``module`` 提供且 ``name`` 无点（裸名）：先查 ``{module}.{name}``
-          （被 import 模块内对自身类的引用命中带 module 的键），miss 回落裸名
-          （内置类型 / 入口模块类）。
+          （模块内对自身类的引用命中带 module 的键），miss 回落裸名——仅命中
+          内置/内核类（module_path=None，键=裸名）。S2 类身份统一后入口模块
+          用户类亦 qualified（main.Box），裸名回退不再命中任何用户类，
+          语义收缩为"内置根命名空间"的确定性合法回退。
         - ``name`` 已含点（qualified，如 ``geo.Box[int]``）：精确查键。
-        - 内置类与入口模块类（module_path=None，键=裸名）行为不变。
+        - 内置类与内核类（module_path=None，键=裸名）行为不变。
         """
         if module and "." not in name:
             cls = self._classes.get(f"{module}.{name}")

@@ -167,14 +167,24 @@ class SymbolCollector:
         # 所有用户类隐式继承 Object（与运行时 artifact_loader 的默认行为对齐）。
         # Object 自身不设置父类以避免循环。
         effective_parent = node.parent if node.parent else ("Object" if node.name != "Object" else None)
-        # 用户类身份统一 (module_path, name)：非入口模块（被 import 的模块）
-        # 带 module 限定（S5 跨模块同名类身份根治——geo.Box / graph.Box 独立）；
-        # 入口/单模块保持 module=None（根命名空间，裸名可用）。
-        class_module = self.context.module_name if self.context.flags.get("qualify_types") else None
+        # 用户类身份统一 (module_path, name)：所有模块（含入口）带 module 限定
+        # （S2 类身份统一——入口模块类不再裸名，与被 import 模块类对称，
+        # geo.Box / graph.Box / main.Box 各自独立）。
+        class_module = self.context.module_name
+        # 父引用 module（类身份统一 S2）：非泛型父（class Dog(Animal)）的
+        # parent_type 亦须带 module——否则运行时 resolve_typeref(parent_type)
+        # 裸名解析 miss（入口父已 qualified），is_assignable 继承链断裂。
+        # 内置父（Object/list 等）module_path=None，parent_module=None 不加前缀。
+        parent_module = None
+        if self.registry is not None and effective_parent:
+            parent_spec = self.registry.resolve(effective_parent)
+            if parent_spec is not None:
+                parent_module = parent_spec.module_path
         cls_meta = self.registry.factory.create_class(
             name=node.name,
             module=class_module,
             parent_name=effective_parent,
+            parent_module=parent_module,
             provenance=Provenance.USER_DEFINED,
             visibility=Visibility.IMPORT_GATED,
         )

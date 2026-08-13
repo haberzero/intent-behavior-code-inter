@@ -619,13 +619,10 @@ class Interpreter:
         """ STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
         old_module = self.current_module_name
         # class_to_node 键 = (module_name, name) 元组（跨模块同名类不碰撞）。
-        # 解析为运行期类键：入口模块（module_path=None）→ 裸名；被 import 的
-        # 模块 → f"{module}.{name}"——与运行期类表 qualified 键对齐（S5 运行期
-        # 根治：geo.Box / graph.Box 独立绑定方法与字段）。
+        # 解析为运行期类键：统一 qualified（S2 类身份统一——入口模块类不再裸名，
+        # 与运行期类表 qualified 键对齐：main.Box / geo.Box 独立绑定方法与字段）。
         def _class_key(module_name: Optional[str], name: str) -> str:
-            if module_name and module_name != self.entry_module:
-                return f"{module_name}.{name}"
-            return name
+            return f"{module_name}.{name}" if module_name else name
 
         resolved = {}
         for (module_name, name), info in class_to_node.items():

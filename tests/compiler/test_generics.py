@@ -571,7 +571,11 @@ class TestCallableSigParamTypesStructured:
         ), f"CALLABLE_SIG param_types 应结构化，got {sp.param_types[0]!r}"
 
     def test_nested_generic_member_descriptor_consistent(self, engine):
-        """Box[int].make 的 param_types 与 param_descriptors 结构一致（S2）。"""
+        """Box[int].make 的 param_types 与 param_descriptors 结构一致（S2）。
+
+        [S2 类身份统一] 入口模块用户类已 module 化，特化 spec 键为 qualified
+        （__string_exec__.Box[int]），resolve 按入口模块限定。
+        """
         engine.compile_string(
             "class Box[T]:\n"
             "    func make(self, list[list[T]] grid) -> list[list[T]]:\n"
@@ -581,7 +585,7 @@ class TestCallableSigParamTypesStructured:
             silent=True,
         )
         reg = engine.registry.get_metadata_registry()
-        box_int = reg.resolve("Box[int]")
+        box_int = reg.resolve("Box[int]", "__string_exec__")
         assert box_int is not None
         m = box_int.members.get("make")
         assert m is not None

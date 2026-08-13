@@ -184,10 +184,7 @@ class Scheduler(ICompilerService):
             if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                 # Recompile
                 try:
-                    res = self._compile_file(
-                        file_path, artifact,
-                        qualify_types=(file_path != getattr(self, "_entry_file", None)),
-                    )
+                    res = self._compile_file(file_path, artifact)
                     artifact.add_module(module_name, res)
                     self.import_star_cache[file_path] = dict(res.import_star_members)
                     mod_info.status = ModuleStatus.SUCCESS
@@ -325,7 +322,7 @@ class Scheduler(ICompilerService):
                          location=Location(file_path=current_path, line=imp.lineno, column=1)
                      )
                          
-    def _compile_file(self, file_path: str, artifact: CompilationArtifact, qualify_types: bool = False):
+    def _compile_file(self, file_path: str, artifact: CompilationArtifact):
         """
         Compiles a single file: Lex (reuse) -> Parse -> Semantic.
         Populates caches.
@@ -377,7 +374,7 @@ class Scheduler(ICompilerService):
             pre_mod_meta = self.registry.factory.create_module(module_name)
             self.registry.register(pre_mod_meta)
             
-            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name, qualify_types=qualify_types)
+            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():

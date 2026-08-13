@@ -98,12 +98,7 @@ class _LLMFunctionMixin:
                 raise TypeError("retry hint segments must produce text-only content")
             sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
 
-        type_name = "str"
-        returns_uid = node_data.get("returns")
-        if returns_uid:
-            returns_data = execution_context.get_node_data(returns_uid)
-            if returns_data and returns_data["_type"] == "IbName":
-                type_name = returns_data.get("id", "str")
+        type_name = self._get_expected_type_hint(node_uid, node_data, execution_context) or "str"
 
         if self.llm_callback:
             type_prompt = self.llm_callback.get_return_type_prompt(type_name)

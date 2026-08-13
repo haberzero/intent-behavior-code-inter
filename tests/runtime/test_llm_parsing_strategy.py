@@ -43,7 +43,12 @@ class TestDefaultParsingStrategy:
             assert res.value.to_native() == "raw"
 
     def test_declared_unparseable_type_returns_uncertain(self, engine):
-        """已声明的具体类型（用户类）无解析能力 → uncertain，携带可读 retry_hint。"""
+        """已声明的具体类型（用户类）无解析能力 → uncertain，携带可读 retry_hint。
+
+        [S2 类身份统一] 入口模块用户类已 module 化（qualified 名），LLM parse
+        链的 type_name 为 qualified 名（__string_exec__.Point），策略内
+        ``meta_reg.resolve`` 精确命中 qualified 键。
+        """
         engine.run_string(
             "class Point:\n"
             "    int x\n"
@@ -51,7 +56,12 @@ class TestDefaultParsingStrategy:
             "        self.x = x\n",
             silent=True,
         )
-        res = self._strategy(engine).parse("raw", "Point", "n1", None)
+        meta_reg = engine.registry.get_metadata_registry()
+        entry_module = engine.interpreter.entry_module
+        point = meta_reg.resolve("Point", entry_module)
+        assert point is not None and point.module_path == entry_module
+        type_name = point.qualified_name
+        res = self._strategy(engine).parse("raw", type_name, "n1", None)
         assert res.is_uncertain
         assert "Point" in res.retry_hint
 
