@@ -412,7 +412,6 @@ class SymbolCollector:
                 return self.registry.resolve_specialization(base, arg_specs)
             return None
         return None
-
     def _lookup_type_param(self, name: str) -> Optional[IbSpec]:
         """在类作用域内查找用户类泛型类型参数（class Box[T] 的 T）。
 

@@ -698,6 +698,14 @@ class ExpressionVisitorsMixin:
                 return self._any_desc
             if isinstance(node.slice, ast.IbName) and not isinstance(node.slice, ast.IbSlice):
                 arg_spec = self._resolve_type(node.slice)
+                if arg_spec is not None and getattr(arg_spec, "name", None) in ("None", "auto"):
+                    self.error(
+                        f"Generic type argument '{arg_spec.name}' is not a concrete type. "
+                        f"Use an entity type such as int/str/list[..].",
+                        node, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
+                    )
+                    self.bind_type(node, self._any_desc)
+                    return self._any_desc
                 if arg_spec is not None:
                     specialized = self.registry.resolve_specialization(value_type, [arg_spec])
                     if specialized is not None:

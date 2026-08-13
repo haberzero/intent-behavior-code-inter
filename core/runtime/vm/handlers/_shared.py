@@ -932,8 +932,21 @@ def _bind_type_params(executor, rt_context, func, receiver) -> None:
         if name not in base_type_params:
             continue
         idx = base_type_params.index(name)
-        arg_name = arg_type_names[idx]
-        type_obj = executor.registry.get_class(arg_name)
+        type_obj = _resolve_type_identifier(executor, type_args[idx])
         if type_obj is None:
             continue
         rt_context.define_variable(name, type_obj, uid=sym_uid)
+
+
+def _resolve_type_identifier(executor, arg_ref) -> Optional[Any]:
+    """把特化实参 TypeRef 解析为运行时类型标识对象。
+
+    简单实参（``int``）→ ``registry.get_class("int")``（IbClass，对齐
+    ``Box[int]`` slice int 求值）。嵌套泛型实参（``list[int]``）→ boxed
+    特化名（对齐 ``IbClass._specialize`` 对内置泛型返回 boxed 标识的机制），
+    ``_type_ref_name`` 可提取 "list[int]" 使 ``Box[T]`` 命中特化。
+    """
+    registry = executor.registry
+    if not arg_ref.args:
+        return registry.get_class(arg_ref.head)
+    return registry.box(arg_ref.canonical_name)

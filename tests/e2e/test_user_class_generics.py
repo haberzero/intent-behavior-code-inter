@@ -384,3 +384,58 @@ class TestGenericIllegalArgs:
             "Box[int] b = Box[None](1)\n",
             "SEM_GENERIC_TYPE_NEEDS_ARGS",
         )
+
+
+class TestGenericNestedMethodBodyArg:
+    """嵌套泛型实参方法体 Box[T]（P2 复核发现）回归。"""
+
+    def test_nested_list_arg_method_body(self):
+        """Box[list[int]] 方法体内 Box[T] 构造命中特化。"""
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "    func make(self, T v) -> Box[T]:\n"
+            "        return Box[T](v)\n"
+            "Box[list[int]] bl = Box[list[int]]([])\n"
+            "Box[list[int]] bl2 = bl.make([1, 2, 3])\n"
+            "print(bl2.value.len())\n",
+            ai=True,
+        )
+        assert out == ["3"]
+
+    def test_nested_dict_arg_method_body(self):
+        """Box[dict[str,int]] 方法体内 Box[T] 构造命中特化。"""
+        out = run_ibci(
+            "class Box[T]:\n"
+            "    T value\n"
+            "    func make(self, T v) -> Box[T]:\n"
+            "        return Box[T](v)\n"
+            "Box[dict[str, int]] bd = Box[dict[str, int]]({\"a\": 1})\n"
+            "Box[dict[str, int]] bd2 = bd.make({\"b\": 2})\n"
+            "print(bd2.value[\"b\"])\n",
+            ai=True,
+        )
+        assert out == ["2"]
+
+
+class TestGenericNoneArgRejected:
+    """注解位置 Box[None] 幻影特化拦截（P3 复核发现）回归。"""
+
+    def test_none_arg_annotation_rejected(self):
+        """Box[None] 作参数注解 → SEM_GENERIC_TYPE_NEEDS_ARGS（非幻影特化）。"""
+        expect_compile_error(
+            "class Box[T]:\n"
+            "    T value\n"
+            "func f(Box[None] x) -> void:\n"
+            "    pass\n",
+            "SEM_GENERIC_TYPE_NEEDS_ARGS",
+        )
+
+    def test_none_arg_declaration_rejected(self):
+        """Box[None] b 声明 → SEM_GENERIC_TYPE_NEEDS_ARGS（非 SEM_TYPE_MISMATCH）。"""
+        expect_compile_error(
+            "class Box[T]:\n"
+            "    T value\n"
+            "Box[None] b = Box[int](1)\n",
+            "SEM_GENERIC_TYPE_NEEDS_ARGS",
+        )

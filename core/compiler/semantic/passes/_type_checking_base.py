@@ -277,6 +277,16 @@ class TypeCheckBase:
                         generic_args = [self._resolve_type(elt) for elt in annotation.slice.elts]
                     else:
                         generic_args = [self._resolve_type(annotation.slice)]
+                    # 泛型实参不得为哨兵/动态类型（None/auto）——它们不是实体类型，
+                    # 特化会产生幻影 spec（Box[None]）。void 例外（thread[void] 合法）。
+                    for _ga in generic_args:
+                        if _ga is not None and getattr(_ga, "name", None) in ("None", "auto"):
+                            self.error(
+                                f"Generic type argument '{_ga.name}' is not a concrete "
+                                f"type. Use an entity type such as int/str/list[..].",
+                                annotation, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
+                            )
+                            return self._any_desc
                     # 多类型 list（list[int,str]）已移除：无 union 类型机制，元素读取
                     # 本应显式 any。异构容器必须显式声明 list[any]，不允许隐式异构
                     # 击穿元素类型（tuple 多参为位置元素类型，属合法特性，不受影响）。
