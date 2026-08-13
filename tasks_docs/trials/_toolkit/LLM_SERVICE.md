@@ -50,14 +50,37 @@ Jinja 模板须含 `enable_thinking` 变量分支（qwen3-8b 官方示例：`ena
 `enable_thinking` 无效（实测）。
 
 **可靠禁用方案**：
-1. **（推荐）用官方 model.yaml 加载模型**：LM Studio 界面从 Hub 添加 qwen3.6-35b-a3b
-   （官方 model.yaml 版本），或为本机 GGUF 补 model.yaml（声明 enableThinking + 提供
-   含 enable_thinking 分支的 Jinja 模板），LM Studio 重载模型后 API 传
-   `enable_thinking: false` 生效。
-2. **（降级）换非思考模板模型**（如 qwen2.5 系列）。
-3. **IBCI 侧**：已传 `enable_thinking: false`（对支持它的模型有效）+ **禁用失败警告**
+1. **（推荐）LM Studio 界面改本机模型 prompt template**：本机模型（qwen3.6-35b-a3b）→
+   高级设置 → 提示模板 → 替换为**不含 think 标签**的 Qwen 模板（见 §二.3）→ 重载模型后
+   禁用思考生效（不依赖 model.yaml，无下载）。
+2. **（官方）从 Hub 添加 qwen3.6-35b-a3b**：用官方 model.yaml（含 enableThinking 开关），
+   界面关闭 Enable Thinking；需下载官方 GGUF/MLX（本机 UD 变体与官方 repo 不匹配，
+   LM Studio 会重新下载）。
+3. **（降级）换非思考模板模型**（如 qwen2.5 系列）。
+4. **IBCI 侧**：已传 `enable_thinking: false`（对支持它的模型有效）+ **禁用失败警告**
    （probe/调用检测"请求抑制但仍思考"→ 一次性警告，引导联系开发者/提交 issue，
    不引导用户改配置绕开——见 PENDING_TASKS"供应商感知思考禁用"）。
+
+**实验结论（2026-08-13）**：在模型目录放 model.yaml（base 用 `type: local` 指向本机 GGUF）
+**不被 LM Studio 支持**——model.yaml 规范当前仅 `type: huggingface` source
+（`lmstudio-js VirtualModelDefinition` 实证），`type: local` 导致虚拟模型 base 无法解析、
+模型从 `lms ls` 消失（已删除恢复）。
+
+## 二.3 非思考 Qwen 提示模板（LM Studio 界面可粘贴）
+
+```jinja
+{{- '<|im_start|>system\n' }}
+{%- if system_message %}{{- system_message }}{%- endif %}
+{{- '<|im_end|>\n' }}
+{%- for message in messages %}
+{{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}
+{%- endfor %}
+{%- if add_generation_prompt %}
+{{- '<|im_start|>assistant\n' }}
+{%- endif %}
+```
+
+替换本机模型模板后模型不再输出 think 标签（禁用思考）。
 
 ## 二、可用性探测（每次试用前必做）
 
