@@ -589,3 +589,31 @@ class TestCallableSigParamTypesStructured:
             "param_types 与 param_descriptors 应一致（同一签名单一真相），"
             f"got {m.param_types[0]!r} vs {m.param_descriptors[0].type_ref!r}"
         )
+
+
+class TestTupleUnpackTypeChecking:
+    """元组解包按位置类型检查（S6）。
+
+    修复前 IbTuple 解包各元素用 _any_desc 跳过 is_assignable，错误类型静默
+    流入；修复后 RHS 元组字面量元素类型经 is_assignable 校验。
+    """
+
+    def test_tuple_unpack_wrong_type_rejected(self):
+        """list[int] a, list[str] b = [\"x\"], [1] 编译期拦截。"""
+        expect_compile_error(
+            'list[int] a, list[str] b = ["x"], [1]\n',
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_tuple_unpack_correct_type_passes(self):
+        """list[int] a, list[str] b = [1], [\"x\"] 编译通过。"""
+        _compile_code('list[int] a, list[str] b = [1], ["x"]\n')
+
+    def test_auto_container_infers_type_args(self, engine):
+        """auto x = [1,2] 推断 list[int]（容器字面量带实参推断，S6）。"""
+        engine.run_string("auto x = [1, 2]\n", silent=True)
+        rc = engine.interpreter.execution_context.runtime_context
+        sp = rc.get_symbol("x").declared_type
+        assert sp.name == "list[int]", (
+            f"auto 容器应推断带实参，got {sp.name}"
+        )

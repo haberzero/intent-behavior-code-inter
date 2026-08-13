@@ -193,7 +193,8 @@ class StatementVisitorsMixin:
                 self._bind_literal_with_type(node.value, target_type)
 
         elif isinstance(target, ast.IbTuple):
-            # 元组解包：各元素接收 any（实际类型在运行时由 VM 赋值）。
+            # 元组解包：各元素按位置接收 RHS 元素的实际类型并校验声明类型
+            # （S6 补类型检查：此前各元素用 _any_desc 跳过 is_assignable）。
             # RHS 是元组字面量时按位置绑定容器元素特化类型
             # （list[int] a, list[str] b = [1,2], ["x"] → [1,2] 绑 list[int]、
             # ["x"] 绑 list[str]），值创建点据此水化特化类（值层身份收敛）。
@@ -204,7 +205,14 @@ class StatementVisitorsMixin:
                     elt_type = self.visit(elt)
                     if elt_type is not None:
                         self._bind_literal_with_type(rhs_elt, elt_type)
-                self._handle_assign_target(node, elt, self._any_desc)
+                    # RHS 元素实际类型（visit 得字面量推断类型），经
+                    # _handle_assign_target 触发 is_assignable 校验。
+                    rhs_elt_type = self.visit(rhs_elt)
+                    self._handle_assign_target(node, elt, rhs_elt_type or self._any_desc)
+                else:
+                    # RHS 非元组字面量（变量/函数返回）：逐元素接收 any，
+                    # 实际类型在运行时由 VM 赋值（既有语义）。
+                    self._handle_assign_target(node, elt, self._any_desc)
 
     def _resolve_target_name_and_type(self, target: ast.IbASTNode):
         """从赋值目标提取变量名和声明类型"""

@@ -76,27 +76,100 @@ class ExpressionVisitorsMixin:
         return self._any_desc
 
     def visit_IbListExpr(self, node: ast.IbListExpr) -> Optional[IbSpec]:
-        """访问列表字面量"""
+        """访问列表字面量 — 元素类型联合推断（S6：容器字面量带实参）。
+
+        非空且元素类型一致 → list[元素类型]（[1,2] → list[int]）；元素类型
+        不一致或含动态 → list[any]；空列表 → 裸 list（无元素类型可推断）。
+        使 `-> auto` 返回 / 元组解包 / 类型检查能精确拦截容器元素错配。
+        """
+        elem_specs = []
         for elt in node.elts:
-            self.visit(elt)
-        # 简化处理：返回 list 类型
-        list_type = self.registry.resolve("list")
+            es = self.visit(elt)
+            if es is not None:
+                elem_specs.append(es)
+        if not node.elts:
+            list_type = self.registry.resolve("list")
+            self.bind_type(node, list_type)
+            return list_type
+        # 元素类型联合：全一致取之；含 any/auto 或不一致 → any。
+        heads = {getattr(s, "name", None) for s in elem_specs}
+        if len(heads) == 1 and "any" not in heads and "auto" not in heads:
+            elem_spec = elem_specs[0]
+            from core.kernel.spec.type_ref import TypeRef
+            specialized = self.registry.resolve_typeref(
+                TypeRef.generic("list", TypeRef.from_spec(elem_spec))
+            )
+            list_type = specialized or self.registry.resolve("list")
+        else:
+            list_type = self.registry.resolve("list[any]") or self.registry.resolve("list")
         self.bind_type(node, list_type)
         return list_type
 
     def visit_IbDict(self, node: ast.IbDict) -> Optional[IbSpec]:
-        """访问字典字面量"""
+        """访问字典字面量 — 键/值类型联合推断（S6，与 list 同构）。
+
+        键与值类型各自一致且非动态 → dict[K,V]；否则裸 dict。
+        """
+        key_specs = []
+        val_specs = []
         for key, value in zip(node.keys, node.values):
-            self.visit(key)
-            self.visit(value)
-        dict_type = self.registry.resolve("dict")
+            ks = self.visit(key)
+            if ks is not None:
+                key_specs.append(ks)
+            vs = self.visit(value)
+            if vs is not None:
+                val_specs.append(vs)
+        if not node.values:
+            dict_type = self.registry.resolve("dict")
+            self.bind_type(node, dict_type)
+            return dict_type
+        from core.kernel.spec.type_ref import TypeRef
+        key_heads = {getattr(s, "name", None) for s in key_specs}
+        val_heads = {getattr(s, "name", None) for s in val_specs}
+        if (len(key_heads) == 1 and "any" not in key_heads and "auto" not in key_heads
+                and len(val_heads) == 1 and "any" not in val_heads and "auto" not in val_heads):
+            specialized = self.registry.resolve_typeref(
+                TypeRef.generic(
+                    "dict",
+                    TypeRef.from_spec(key_specs[0]),
+                    TypeRef.from_spec(val_specs[0]),
+                )
+            )
+            dict_type = specialized or self.registry.resolve("dict")
+        else:
+            dict_type = self.registry.resolve("dict")
         self.bind_type(node, dict_type)
         return dict_type
 
     def visit_IbTuple(self, node: ast.IbTuple) -> Optional[IbSpec]:
-        """访问元组字面量"""
+        """访问元组字面量 — 位置元素类型推断（S6，与 list 同构）。"""
+        positional = []
         for elt in node.elts:
-            self.visit(elt)
+            es = self.visit(elt)
+            if es is not None:
+                positional.append(es)
+        if not node.elts:
+            tuple_type = self.registry.resolve("tuple")
+            self.bind_type(node, tuple_type)
+            return tuple_type
+        from core.kernel.spec.type_ref import TypeRef
+        all_concrete = all(
+            getattr(s, "name", None) not in ("any", "auto") for s in positional
+        )
+        if all_concrete and len(positional) >= 2:
+            args = [TypeRef.from_spec(s) for s in positional]
+            specialized = self.registry.resolve_typeref(TypeRef.generic("tuple", *args))
+            if specialized is not None:
+                self.bind_type(node, specialized)
+                return specialized
+        # 单元素 / 含动态：退化为 list 风格单元素 tuple 或裸 tuple。
+        if all_concrete and len(positional) == 1:
+            specialized = self.registry.resolve_typeref(
+                TypeRef.generic("tuple", TypeRef.from_spec(positional[0]))
+            )
+            if specialized is not None:
+                self.bind_type(node, specialized)
+                return specialized
         tuple_type = self.registry.resolve("tuple")
         self.bind_type(node, tuple_type)
         return tuple_type

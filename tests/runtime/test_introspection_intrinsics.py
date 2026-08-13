@@ -28,12 +28,14 @@ class TestTypeIntrinsic:
         assert lines == ["int", "float", "str", "bool"]
 
     def test_type_of_containers(self):
+        """容器字面量推断带实参（S6：type([1,2])=list[int]、type((1,2))=tuple[int,int]、
+        type({"k":1})=dict[str,int]）。"""
         lines = run_ibci(
             "print(type([1, 2]))\n"
             "print(type({\"k\": 1}))\n"
             "print(type((1, 2)))\n"
         )
-        assert lines == ["list", "dict", "tuple"]
+        assert lines == ["list[int]", "dict[str,int]", "tuple[int,int]"]
 
     def test_type_of_none(self):
         lines = run_ibci("auto n = None\nprint(type(n))\n")

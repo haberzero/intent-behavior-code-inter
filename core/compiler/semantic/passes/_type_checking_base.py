@@ -115,8 +115,11 @@ class TypeCheckBase:
             TypeKind.OPTIONAL.value,
         ):
             return
-        # 裸基类（无特化实参）：name 无方括号，无特化身份，不 bind。
+        # 裸基类（无特化实参）：name 无方括号，无特化身份，但须显式 bind——
+        # 覆盖 S6 容器字面量推断（`list bare = [1,2]` 的 RHS 推断 list[int]，
+        # 显式裸声明应强制值层保持裸 list，不水化特化类）。
         if "[" not in spec.name:
+            self.bind_type(node, spec)
             return
         # Optional[list[int]] o = [1,2]：容器字面量绑内层 wrapped_type（list[int]），
         # 非 Optional 本身——运行时 _bind_container_specialization 按容器 kind 匹配。
