@@ -213,10 +213,11 @@ RHS 非元组字面量（变量/函数返回）时，逐个元素校验（解包
 
 ---
 
-## 九、🔴 新增交接：跨模块同名类运行时类表 module 化（下一 session 彻底修复）
+## 九、🔴 新增交接：跨模块同名类运行时类表 module 化（**✅ 已彻底根治 2026-08-14**）
 
 > 2026-08-14 用户指出：S5 跨模块同名类**只修复了编译期/元数据层，运行期仍会出错**，
-> 须记录交接等待彻底修复。本清单原 7 项已收敛，本节为 S5 根治的**未完成部分**。
+> 须记录交接等待彻底修复。**本 session 已完成运行期闭环**（设计 `_code_runtime_class_module.md`，
+> 独立分支 exp/runtime-class-module，全量 2614 passed / 1 skipped 零回归 + 独立复核放行）。
 
 ### 9.1 现状（实证）
 
@@ -237,31 +238,30 @@ RHS 非元组字面量（变量/函数返回）时，逐个元素校验（解包
 module 化（spec.qualified_name 区分），但运行时 `_class_registry[name]`/`_classes[name]`
 仍裸名——编译期与运行期的类身份键**不对称**。
 
-### 9.3 根治方向（运行时类表 module 感知键）
+### 9.3 ✅ 根治方案（已落地，`_code_runtime_class_module.md`）
 
 1. **注册键 module 化**：`bootstrapper.register_class`/`KernelRegistry.register_class`
-   用 spec 的 `qualified_name`（`module.name` 或裸 `name`）作 `_class_registry`/`_classes`
+   用 spec 的 `qualified_name`（module.name 或裸 name）作 `_class_registry`/`_classes`
    键；`IbClass.name` 保留裸名（`type()` 显示/语言内标识）。
-2. **`get_class` 消费点审计**：81 处 `get_class(name)` 调用，分三类——
-   a) 内置类型（int/str/list，module=None，键=裸名，不受影响）；
-   b) 入口模块类（module=None，键=裸名，不受影响）；
-   c) 跨模块用户类（`_specialize`/`instantiate`/artifact_loader 用 `cls_desc.name`
-      裸名查——须改为 module 感知）。
-3. **`_specialize`（ib_class.py）**：特化类名拼接 `specialized_name` 带 module
-   （`self.registry.get_class(f"{module}.{name}[...]")`）。
-4. **artifact_loader 用户类水化**：`create_subclass` 用 `cls_desc.qualified_name`。
-5. **跨引擎 round-trip**：运行时类表键与序列化 module_path 对齐。
+2. **`get_class` module 感知**：`get_class(name, module)`——module 且裸名 → 先查
+   `{module}.{name}` miss 回落裸名；qualified 名精确查；内置/入口（module=None）
+   键=裸名不变。
+3. **`_specialize`（ib_class.py）**：特化类名带 module（`geo.Box[int]`）；父链 module
+   权威解析（内置泛型父不加前缀，同模块用户父补全）。
+4. **artifact_loader 用户类水化**：父名/重复检查 module 感知；`class_to_node` 键改
+   `(module_name, name)` 元组。
+5. **跨引擎 round-trip**：class_name/class_ref 存 qualified；`_rehydrate_type_pool_spec`
+   按 `(module_path, name)` 联合匹配。
+6. **VM/类型解析**：class def 语句/类型解析/cast/句柄 rebind/hint 查找 module 感知。
 
-### 9.4 工作量/风险
+### 9.4 判别性回归
 
-- 改动面：运行时类注册（bootstrapper/registry）+ 81 处 `get_class` 审计 + `_specialize`
-  + artifact_loader + 跨引擎 round-trip。
-- 风险：**高**（运行时类表是 IbClass 身份地基，81 处消费点，方法继承/特化/序列化联动）。
-- 触发面：两个模块定义同名类 + 方法签名不同（罕见但真实可复现）。
+- `geo.Box[int](5).get()` = 105 / `graph.Box[int]("hi").get()` = "hi!"（方法表不串扰）
+- 运行期注册表隔离（geo.Box is not graph.Box）、非泛型同名隔离、泛型继承同模块父、
+  跨引擎 round-trip qualified 保真、`_rehydrate_type_pool_spec` 联合匹配、内置泛型父不加前缀。
+- 全量 2608→2614 passed / 1 skipped 零回归 + 独立复核（general agent）P1 发现已整改。
 
-### 9.5 建议
+### 9.5 已知边界（登记 KNOWN_LIMITS §10.2）
 
-- 独立分支实验（无法确认边界）；确认零风险后手动 cherry-pick 更新 unsafe-vibe-dev。
-- 判别性回归：`geo.Box[int](5).get()` 返回 105（int 语义）、`graph.Box[int]("hi").get()`
-  返回 "hi!"（str 语义）——方法表不串扰。
-- 全量 pytest 零回归门。
+- LLM 输出解析跨模块用户类：`returns` AST 裸名路径 graceful 退化（不误配）。
+- 跨引擎 round-trip 未编译目标引擎的用户类重建受注册表封印限制（既有边界）。

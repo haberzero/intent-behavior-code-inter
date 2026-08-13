@@ -2,10 +2,38 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-13（**试用体系重构 + GEN-5/GEN-6 架构级修复 + spec→TypeRef 收敛
-> + 测试套件重构 + 内置泛型类型身份双轨根治（缺陷一+缺陷二）+ 值层身份收敛 + 泛型剩余边界交接
-> + 类型体系地基地基深挖分析 + 文档化记录核实 + 根治方案冻结全部完成**；全量 **2586 passed / 1 skipped**；
-> 见下方"已完成"与"交接要点"节）
+> **最后更新**：2026-08-14（**跨模块同名类运行时类表 module 化根治（S5 运行期闭环）
+> + 内置泛型父误加前缀根治 + 独立复核整改**；全量 **2614 passed / 1 skipped**；
+> 见下方"已完成"节与"交接要点"节）
+
+---
+
+## ✅ 已完成：跨模块同名类运行时类表 module 化（S5 运行期闭环，2026-08-14，exp/runtime-class-module，全量 2614 passed / 1 skipped）
+
+> 用户 2026-08-14 指出：S5 只根治编译期/元数据层，运行期类表仍 name-only 坍缩。
+> 设计 `_code_runtime_class_module.md`；独立复核（general agent）PASS-with-findings
+> （1 项 P1 已整改 + 文档同步）。
+
+- **根因**：编译期 spec 身份 = (module_path, name)；运行期 IbClass 身份 = 裸 name
+  （`_classes[name]`/`_class_registry[ib_class.name]`）——两端不对称，运行期坍缩使
+  S5 编译期隔离失效（`geo.Box[int](5).get()` 报 int+str，方法表按后编译者覆盖）。
+- **根治（运行期闭环）**：注册键 = `spec.qualified_name`（geo.Box/graph.Box 独立）；
+  `get_class(name, module)` module 感知（裸名+module 优先、qualified 精确、miss 回落
+  裸名——内置/入口键=裸名零影响）；`IbClass` 新增 `module_path`/`qualified_name`；
+  `_specialize` 特化名/父链 module 化；artifact_loader 水化/class_to_node 键
+  (module_name,name) module 化；VM class def/类型解析/cast/句柄 rebind/hint module 感知；
+  跨引擎 round-trip 存 qualified 类名 + `_rehydrate_type_pool_spec` (module_path,name)
+  联合匹配（修 #2）。
+- **独立复核整改（P1）**：内置泛型父（list[T]/dict[K,T]，module 恒 None 为权威值）
+  被无条件补前缀 → `geo.list[int]` 永不注册 → 继承链断裂。修复：`KernelRegistry
+  .resolve_class_module` 权威解析（内置/入口→None 不加前缀；已注册用户父→其 module；
+  未解析前向引用→default_module 兜底）。
+- **判别性回归 +6**：运行期方法表隔离（105/hi!）、运行期注册表隔离、非泛型同名隔离、
+  泛型继承同模块父、内置泛型父不加前缀、跨引擎 round-trip qualified 保真 +
+  `_rehydrate_type_pool_spec` 联合匹配。
+- **已知边界**（KNOWN_LIMITS §10.2）：LLM 输出解析跨模块用户类的 AST 裸名返回路径
+  graceful 退化（不误配）；跨引擎 round-trip 未编译目标引擎的用户类重建受注册表封印
+  限制（既有边界）。
 
 ---
 
@@ -408,12 +436,13 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 - **✅ 下一 session 主线候选**（按 `PENDING_TASKS.md` §〇 择定）：
   - **✅ 类型体系地基根治已完成（S0-S7 + 遗留边界，全量 2608/1）**：见上方"已完成"节。
-  - **🔴 跨模块同名类运行时类表 module 化（2026-08-14 用户指出，待彻底修复）**：
-    S5 只根治编译期/元数据层；**运行时类表仍 name-only 坍缩（方法表串扰，实证
-    `geo.Box[int](5).get()` 报 `int+str` 错误）**。完整交接见
-    `_HANDOFF_GENERIC_REMAINING.md` §九——运行时类表 module 感知键（bootstrapper/
-    registry 81 处 get_class 审计 + _specialize + artifact_loader + 跨引擎 round-trip），
-    高风险，独立分支实验，判别性回归（geo.Box.get()=105 / graph.Box.get()="hi!"）。
+  - **✅ 跨模块同名类运行时类表 module 化已根治（2026-08-14，全量 2614/1）**：
+    S5 运行期闭环——注册键 = spec.qualified_name + get_class module 感知 + _specialize
+    特化名/父链 module 化 + artifact_loader 水化/class_to_node module 化 + 跨引擎
+    round-trip qualified 名 + (module,name) 联合匹配。判别性回归 `geo.Box.get()`=105 /
+    `graph.Box.get()`="hi!"（方法表不串扰）。设计 `_code_runtime_class_module.md`；
+    已知边界（LLM 裸名返回路径 graceful 退化 / 未编译目标引擎用户类重建受封印限制）
+    登记 KNOWN_LIMITS §10.2。
   - **供应商感知思考禁用机制**（P2 待设计）：逐供应商参数形态覆盖思考禁用 + 检测失败警告。
   - 或按 `PENDING_TASKS.md` §〇 其余项：CI/CD 重新设计、PT-DEBT-4 `file` 重命名、
     PT-AUDIT-1/2 长期审计。

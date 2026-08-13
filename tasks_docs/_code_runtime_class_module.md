@@ -79,8 +79,9 @@ geo 的 `get()` 方法体被 graph 覆盖（运行期 `_classes`/`_class_registr
   `specialized_name` 经 spec（builtin 裸名）保留。
 - `leaf.py vm_handle_IbCastExpr`：`get_class(target_descriptor.name,
   module=target_descriptor.module_path)`。
-- `runtime_context._check_type`（句柄 rebind 分支）+ `_wrap_optional`：
-  `get_class(declared_type.name, module=declared_type.module_path)`。
+- `runtime_context._check_type`（句柄 rebind 分支）：`get_class(declared_type.name,
+  module=declared_type.module_path)`。`_wrap_optional`（OPTIONAL 内置 kind，
+  module_path=None，键=裸名）无需 module 化（实现保持）。
 - `_shared.py _resolve_type_identifier`：`get_class(arg_ref.head, module=arg_ref.module)`。
 
 ### 3.7 序列化 round-trip（core/runtime/serialization/runtime_serializer.py）
@@ -102,9 +103,11 @@ geo 的 `get()` 方法体被 graph 覆盖（运行期 `_classes`/`_class_registr
 
 ### 3.9 LLM 类型解析（边界，尽力而为）
 
-- `_prompt.py` node_to_type 路径：`get_class(type_name, module=node_to_type.module_path)`。
-- `returns_data` 裸名路径（AST 无 module）：跨模块 LLM 输出类型为 niche 边界，
-  登记 KNOWN_LIMITS（graceful 退化：`can_handle` 查不到 → 默认解析，不崩溃）。
+- `_prompt.py` node_to_type 路径：`get_class(type_name, module=node_to_type.module_path)`
+  （已同步 module 化）。
+- `returns_data` 裸名路径（AST `IbName` 无 module）：跨模块 LLM 输出类型为 niche
+  边界，登记 KNOWN_LIMITS §10.2（graceful 退化：`can_handle` 查不到 → 默认解析，
+  不误配到异模块同名类）。
 
 ## 四、判别性回归（缺陷=根因修复+tests/ 双交付）
 
