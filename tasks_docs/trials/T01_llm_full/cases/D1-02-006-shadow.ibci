@@ -2,6 +2,12 @@
 # doc: docs/syntax/12_builtins.md §12.1（内建函数名可被用户变量声明遮蔽）+ 07 §7.2
 # 期望: int sum = @~...~ 遮蔽内建 sum 后正确赋值；int len = 5 遮蔽内建 len
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 int sum = @~ 3+4 等于几？只答数字 ~
 print("sum=" + (str)sum)
 

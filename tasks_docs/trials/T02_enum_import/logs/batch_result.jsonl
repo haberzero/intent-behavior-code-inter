@@ -1,9 +1,0 @@
-{"case": "T1-enum-iter", "line": "[B-T1-enum-iter] exit=0  dur=0.44s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T1-enum-iter.log"}
-{"case": "T2-enum-len", "line": "[B-T2-enum-len] exit=0  dur=0.45s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T2-enum-len.log"}
-{"case": "T6-enum-method-boundary", "line": "[B-T6-enum-method-boundary] exit=1  dur=0.46s  cls=LIMIT  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T6-enum-method-boundary.log"}
-{"case": "T7-nested-import", "line": "[B-T7-nested-import] exit=0  dur=0.44s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T7-nested-import.log"}
-{"case": "T8-nested-multi-import", "line": "[B-T8-nested-multi-import] exit=0  dur=0.45s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T8-nested-multi-import.log"}
-{"case": "T9-operator-override", "line": "[B-T9-operator-override] exit=0  dur=0.42s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T9-operator-override.log"}
-{"case": "T3-enum-int-llm", "line": "[B-T3-enum-int-llm] exit=0  dur=3.87s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T3-enum-int-llm.log"}
-{"case": "T4-enum-str-llm", "line": "[B-T4-enum-str-llm] exit=0  dur=4.0s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T4-enum-str-llm.log"}
-{"case": "T5-enum-value-ne-name", "line": "[B-T5-enum-value-ne-name] exit=0  dur=5.97s  cls=PASS  log=/home/haber/proj/intent-behavior-code-inter/tasks_docs/trials/T02_enum_import/logs/B-T5-enum-value-ne-name.log"}

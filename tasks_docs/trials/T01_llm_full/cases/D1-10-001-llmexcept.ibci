@@ -2,6 +2,12 @@
 # doc: docs/syntax/10_robustness.md §10.1-10.2
 # 期望: retry 引导 LLM 正确格式；重试收敛
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 int result = @~ 1+1 等于几？只答数字 ~
 llmexcept:
     print("retrying...")

@@ -2,6 +2,12 @@
 # doc: docs/syntax/05_functions.md §5.4/§5.8 + 07 §7.1
 # 期望: 闭包工厂返回生成器函数，体内 LLM 组合正常
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 func make_gen(str prefix) -> fn:
     func gen(int n) -> str:
         int i = 0

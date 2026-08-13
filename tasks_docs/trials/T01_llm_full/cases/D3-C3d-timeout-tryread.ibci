@@ -1,5 +1,10 @@
 # D3-C3d 真实 LLM 超时 + try/except，变量在 try 内读取
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 ai.set_timeout(0.01)
 ai.set_retry(1)

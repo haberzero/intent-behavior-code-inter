@@ -2,6 +2,10 @@
 # doc: docs/syntax/11_modules.md §11.3
 # 期望: 各 API 正常（记录实际行为）
 
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+# expect-llm: false
 import ai
 
 ai.set_return_type_prompt("int", "只输出整数，无任何其他文字")

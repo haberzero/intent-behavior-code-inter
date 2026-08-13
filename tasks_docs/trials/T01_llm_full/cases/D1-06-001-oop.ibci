@@ -2,6 +2,12 @@
 # doc: docs/syntax/06_oop.md §6.1-6.4/§6.6 + 07_behavior_expressions.md §7.4
 # 期望: 类与继承正确；协议方法在 LLM 路径生效
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 class Point:
     int x
     int y

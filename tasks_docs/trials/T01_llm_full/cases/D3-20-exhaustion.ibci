@@ -1,7 +1,12 @@
 # D3-20 对抗：llmexcept retry 收敛压力（硬约束 + 长文本）
 # 期望: 连续不确定输入下 retry 有限次数收敛；或耗尽后 LLMRetryExhaustedError 可捕获
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 ai.set_retry(3)
 
 try:

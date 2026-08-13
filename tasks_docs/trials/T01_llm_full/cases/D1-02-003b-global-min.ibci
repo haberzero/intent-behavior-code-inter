@@ -2,6 +2,10 @@
 # doc: docs/syntax/02_variables.md §2.6
 # 期望: global counter 声明后函数内读写模块级 counter；输出 counter=1
 
+# expect-class: PASS
+# expect-out: counter=1 | DONE
+# expect-exit: 0
+# expect-llm: false
 int counter = 0
 func bump() -> void:
     global counter

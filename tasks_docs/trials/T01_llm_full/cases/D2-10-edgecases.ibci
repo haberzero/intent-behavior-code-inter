@@ -2,6 +2,10 @@
 # 期望: 类型错配编译期拦截；边界值正确；空输入行为明确（记录实际）
 
 # 边界值
+# expect-class: PASS
+# expect-out: big=2147483647 | neg=-2147483648 | empty_len=0 | empty_upper= | list_empty=0 | first=1
+# expect-exit: 0
+# expect-llm: false
 int big = 2147483647
 int neg = -2147483648
 print("big=" + (str)big)

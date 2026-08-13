@@ -1,5 +1,10 @@
 # D3-50c probe_model 隔离测试
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 any p = ai.probe_model()
 print("probe_ok")

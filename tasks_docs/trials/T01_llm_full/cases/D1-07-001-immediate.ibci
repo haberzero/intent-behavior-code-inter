@@ -2,6 +2,12 @@
 # doc: docs/syntax/07_behavior_expressions.md §7.1
 # 期望: 真实 LLM 返回字符串；$变量插值生效
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 str name = "Alice"
 str greeting = @~ 用 $name 打个招呼，中文 ~
 print("greeting=" + greeting)

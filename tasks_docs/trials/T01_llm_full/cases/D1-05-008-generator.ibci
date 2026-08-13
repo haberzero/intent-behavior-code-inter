@@ -2,6 +2,12 @@
 # doc: docs/syntax/05_functions.md §5.8
 # 期望: 生成器逐值产出；体内 LLM 挂起可组合
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 func greetings(int n) -> str:
     int i = 0
     while i < n:

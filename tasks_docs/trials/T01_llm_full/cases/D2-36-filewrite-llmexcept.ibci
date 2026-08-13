@@ -2,6 +2,12 @@
 # doc: docs/syntax/10_robustness.md §10.3 磁盘型 + KNOWN_LIMITS §二十
 # 期望: 编译期 SEM_LLMEXCEPT_FILE_WRITE 拦截
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 import file
 
 file_handle fh = file.open("data.txt")

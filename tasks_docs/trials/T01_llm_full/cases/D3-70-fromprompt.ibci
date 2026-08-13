@@ -4,6 +4,12 @@
 #  docs/06_oop.md §6.6 未注明；此处按 tests/e2e/test_prompt_protocol_e2e.py 正确写法
 # 期望: LLM 输出经 __from_prompt__ 解析为用户类实例
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 class Mood:
     str label
     func __init__(self, str label) -> auto:

@@ -2,7 +2,12 @@
 # doc: docs/syntax/09_intent_system.md §9.1 + 11_modules §11.3 ai.set_global_intent
 # 期望: 标签意图移除正确；全局意图注入影响真实 LLM
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 ai.set_global_intent("回复时必须以'注：'开头")
 str r1 = @~ 打个招呼 ~

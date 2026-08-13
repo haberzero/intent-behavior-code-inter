@@ -3,6 +3,10 @@
 #   generic_next 报 RuntimeError: generator driver yielded unexpected event）
 # 期望: 记录实际行为——按文档为预存限制（异常），确认异常形态
 
+# expect-class: PASS
+# expect-out: x=42 | DONE
+# expect-exit: 0
+# expect-llm: false
 chan c = chan(int, "stream")
 
 func producer() -> void:

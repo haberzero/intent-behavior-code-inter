@@ -1,4 +1,8 @@
 # D3-81 get_return_type_prompt 隔离
+# expect-class: PASS
+# expect-out: ret_type_prompt_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
 import ai
 
 ai.set_return_type_prompt("int", "只输出整数")

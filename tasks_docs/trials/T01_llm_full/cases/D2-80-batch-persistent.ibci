@@ -2,7 +2,12 @@
 # doc: docs/syntax/09_intent_system.md §9.2（@+ 影响后续所有 LLM 调用）
 # 期望: run_batch 各行为都收到 @+ 持久意图
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 @+ 回复必须只用一个字
 fn q = lambda(str word) -> str: @~ 用一字形容 $word ~

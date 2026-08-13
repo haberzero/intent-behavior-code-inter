@@ -1,4 +1,8 @@
 # D1-11-002d 最小复现：整模块 import（含函数导出）
+# expect-class: PASS
+# expect-out: greet=hello from module | DONE
+# expect-exit: 0
+# expect-llm: false
 import greeting_mod
 
 str g = greeting_mod.greet()

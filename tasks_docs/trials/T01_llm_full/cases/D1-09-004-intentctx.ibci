@@ -2,7 +2,12 @@
 # doc: docs/syntax/09_intent_system.md §9.3 + KNOWN_LIMITS §十二
 # 期望: ctx 实例 push/pop/use 影响当前作用域意图（须 use 生效）
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 intent_context ctx = intent_context.get_current()
 ctx.push("请用简洁的语言回答，不超过10字")

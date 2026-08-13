@@ -2,6 +2,12 @@
 # doc: _REAL_LLM_E2E_RESTART.md C2
 # 期望: 同一输入多次结果差异被语言层正确处（bool/int 解析稳定）；记录差异
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 int t1 = @~ 1+1=2 吗？只答 1 或 0 ~
 int t2 = @~ 1+1=2 吗？只答 1 或 0 ~
 int t3 = @~ 1+1=2 吗？只答 1 或 0 ~

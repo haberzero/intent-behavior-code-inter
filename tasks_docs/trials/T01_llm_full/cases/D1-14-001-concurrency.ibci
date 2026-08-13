@@ -2,6 +2,10 @@
 # doc: docs/syntax/14_concurrency.md §14.2-14.7
 # 期望: chan/slot/thread 基础语义正确；await thread 与 join 等价
 
+# expect-class: PASS
+# expect-out: msg=hello | pubsub=77 | slot=42 | cas=11 | thread=3 | await_thread=30
+# expect-exit: 0
+# expect-llm: false
 chan c = chan(str, "stream")
 c.send("hello")
 str msg = c.recv()

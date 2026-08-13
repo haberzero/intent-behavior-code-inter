@@ -2,6 +2,12 @@
 # doc: docs/syntax/10_robustness.md §10.3 + 04_control_flow.md §4.7
 # 期望: 无 llmexcept 时解析失败抛 LLMParseError，可被 try/except 捕获
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 try:
     int n = @~ 返回一个非常大的数字，大于普通整数范围 ~
     print("n=" + (str)n)

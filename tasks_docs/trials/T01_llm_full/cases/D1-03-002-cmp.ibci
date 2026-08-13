@@ -2,6 +2,10 @@
 # doc: docs/syntax/03_operators.md §3.2-§3.5 + docs/syntax/04_control_flow.md §4.1
 # 期望: 各运算符正确；三元两种风格正确
 
+# expect-class: PASS
+# expect-out: cmp=TrueTrueTrue | logic=FalseTrueFalse | membership=TrueTrueTrue | identity=TrueFalse | ternary=11 | DONE
+# expect-exit: 0
+# expect-llm: false
 bool cmp1 = "apple" < "banana"
 bool cmp2 = 3 <= 3
 bool cmp3 = 5 > 2

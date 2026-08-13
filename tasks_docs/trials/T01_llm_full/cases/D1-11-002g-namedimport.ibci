@@ -1,4 +1,8 @@
 # D1-11-002g 最小复现：命名导入 from helper import square
+# expect-class: PASS
+# expect-out: square=36 | DONE
+# expect-exit: 0
+# expect-llm: false
 from helper import square
 
 int s = square(6)

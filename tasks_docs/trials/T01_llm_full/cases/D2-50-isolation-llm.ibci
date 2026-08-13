@@ -2,6 +2,12 @@
 # doc: docs/syntax/11_modules.md §11.6 + examples/isolation_demo
 # 期望: parent 经 run_isolated 运行 child，child 内真实 LLM 调用正常；parent 意图不泄漏
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 import ihost
 
 print("PARENT_START")

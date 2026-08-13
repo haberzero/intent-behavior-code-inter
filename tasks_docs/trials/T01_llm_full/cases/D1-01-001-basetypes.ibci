@@ -2,6 +2,10 @@
 # doc: docs/syntax/01_types.md §1.1 + docs/syntax/12_builtins.md §12.1 type()
 # 期望: 各基础类型正确赋值，type() 返回规范名
 
+# expect-class: PASS
+# expect-out: a_type=int | b_type=float | c_type=str | d_type=bool | e_type=list | f_type=tuple
+# expect-exit: 0
+# expect-llm: false
 int a = 42
 float b = 3.14
 str c = "hello"

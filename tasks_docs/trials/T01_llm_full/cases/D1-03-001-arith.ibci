@@ -2,6 +2,10 @@
 # doc: docs/syntax/03_operators.md §3.1
 # 期望: 各运算符按文档求值
 
+# expect-class: PASS
+# expect-out: a=13 | b=3 | c=3.5 | d=3 | e=8 | f=2
+# expect-exit: 0
+# expect-llm: false
 int a = 10 + 3
 int b = 7 / 2
 float c = 7.0 / 2

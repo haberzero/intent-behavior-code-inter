@@ -1,5 +1,10 @@
 # D3-50b 逐个 ai API 隔离测试
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 print("has_key=" + (str)ai.has_api_key())
 

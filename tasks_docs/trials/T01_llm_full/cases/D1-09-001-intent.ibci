@@ -2,6 +2,12 @@
 # doc: docs/syntax/09_intent_system.md §9.1/§9.2
 # 期望: 意图真实进入 prompt；赋值路径生效
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 @ 用冷酷无感情且极简的口吻回复，只回两个字
 str r1 = @~ 打个招呼 ~
 print("r1=" + r1)

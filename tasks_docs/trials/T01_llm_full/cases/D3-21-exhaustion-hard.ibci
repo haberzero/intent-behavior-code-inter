@@ -1,7 +1,12 @@
 # D3-21 对抗：llmexcept 重试耗尽真实触发（强制不可满足约束）
 # 期望: retry 无法满足时 LLMRetryExhaustedError 被捕获；记录重试次数
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 ai.set_retry(2)
 
 try:

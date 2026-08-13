@@ -1,5 +1,10 @@
 # D3-22 对抗：MOCK:FAIL 重试耗尽 LLMRetryExhaustedError 捕获（确定性）
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 ai.set_mock_mode()
 ai.set_retry(2)
 

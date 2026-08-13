@@ -1,4 +1,8 @@
 # D3-80c mask/set_return_type_prompt 作为 void 语句调用
+# expect-class: PASS
+# expect-out: void_api_ok | DONE
+# expect-exit: 0
+# expect-llm: false
 import ai
 
 ai.mask("pattern")

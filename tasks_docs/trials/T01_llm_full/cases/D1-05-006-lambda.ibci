@@ -2,6 +2,12 @@
 # doc: docs/syntax/07_behavior_expressions.md §7.4 + 05_functions.md §5.5
 # 期望: lambda 定义时不调用 LLM；调用时触发；带参数 lambda；-> auto 行为体=str
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 fn compute = lambda -> int: @~ 1+1 等于几？只答数字 ~
 print("defined_no_call")   # 此时不应有 LLM 调用
 int result = compute()

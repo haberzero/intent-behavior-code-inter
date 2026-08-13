@@ -1,4 +1,8 @@
 # D3-80b 隔离：get_return_type_prompt 与 mask 分开
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+# expect-llm: false
 import ai
 
 any m = ai.mask("pattern")

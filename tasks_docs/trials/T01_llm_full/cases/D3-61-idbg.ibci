@@ -2,6 +2,10 @@
 # doc: docs/syntax/11_modules.md §11.5
 # 期望: fields(obj)/show_all/env 正常
 
+# expect-class: PASS
+# expect-out: fields_ok=[x, y]
+# expect-exit: 0
+# expect-llm: false
 import idbg
 
 class Point:

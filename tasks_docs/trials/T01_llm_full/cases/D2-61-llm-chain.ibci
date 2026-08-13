@@ -2,6 +2,12 @@
 # doc: docs/syntax/08_llm_functions.md §8.1-8.2
 # 期望: 三级 LLM 函数串联正常
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 llm 提炼(str text) -> str:
 __sys__
 你是摘要专家。

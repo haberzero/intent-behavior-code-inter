@@ -2,6 +2,10 @@
 # doc: docs/syntax/05_functions.md §5.1/§5.1.1
 # 期望: 各种函数形态正确调用
 
+# expect-class: PASS
+# expect-out: double=10 | hello world | greet1=hi x! | greet2=hi x? | named=3 | mixed=3
+# expect-exit: 0
+# expect-llm: false
 func double(int x) -> auto:
     return x * 2
 

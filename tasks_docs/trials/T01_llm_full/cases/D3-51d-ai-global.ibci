@@ -1,4 +1,8 @@
 # D3-51d get_global_intents 隔离
+# expect-class: PASS
+# expect-out: global_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
 import ai
 
 any g = ai.get_global_intents()

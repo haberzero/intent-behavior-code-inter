@@ -2,7 +2,12 @@
 # doc: docs/syntax/11_modules.md §11.3（stream_call 仅列名未列签名 → DOC-ISSUE-004）
 # 期望: 流式调用返回完整文本（真实 LLM）
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 any h = ai.stream_call("你是助手", "用一句话介绍Python")
 str full = await h

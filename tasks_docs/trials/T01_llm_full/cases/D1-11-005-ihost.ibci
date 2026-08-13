@@ -2,6 +2,12 @@
 # doc: docs/syntax/11_modules.md §11.6 + examples/isolation_demo
 # 期望: run_isolated 隔离执行子脚本，返回子环境变量字典
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 import ihost
 import isys
 

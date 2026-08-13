@@ -2,6 +2,12 @@
 # doc: docs/syntax/08_llm_functions.md §8.1-8.3
 # 期望: 翻译调用返回真实翻译；retry 块存在
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 llm 翻译(str 文本, str 目标语言) -> str:
 __sys__
 你是一个专业翻译，直接输出翻译结果，不加任何解释。

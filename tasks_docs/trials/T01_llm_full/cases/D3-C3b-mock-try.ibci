@@ -1,5 +1,10 @@
 # D3-C3b LLMCallError 捕获最小复现（MOCK:ERROR 经 HTTP 服务？先试内联）
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 ai.set_mock_mode()
 
 try:

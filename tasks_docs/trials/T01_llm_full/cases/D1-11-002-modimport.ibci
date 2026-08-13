@@ -2,6 +2,10 @@
 # doc: docs/syntax/11_modules.md §11.1
 # 期望: 跨文件模块导入符号可用；命名导入可用
 
+# expect-class: PASS
+# expect-out: greet=hello from module | square=36 | DONE
+# expect-exit: 0
+# expect-llm: false
 import greeting_mod
 from helper import square
 

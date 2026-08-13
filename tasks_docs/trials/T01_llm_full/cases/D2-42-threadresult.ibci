@@ -3,6 +3,10 @@
 #      vs docs/syntax/14_concurrency.md §14.7（r.value() 方法形态）
 # 期望: 记录实际支持哪种形态（属性 or 方法 or 都支持）
 
+# expect-class: PASS
+# expect-out: expect=42 | DONE
+# expect-exit: 0
+# expect-llm: false
 func fetch(int x) -> int:
     return x * 2
 

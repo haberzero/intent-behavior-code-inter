@@ -2,7 +2,12 @@
 # doc: docs/KNOWN_LIMITS.md §十二
 # 期望: 静态调用不生效（记录实际 + warning 是否发出）
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 intent_context.push("这条不会生效")
 str r = @~ 描述天空 ~

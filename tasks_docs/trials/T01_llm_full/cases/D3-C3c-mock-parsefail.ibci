@@ -1,5 +1,10 @@
 # D3-C3c MOCK:FAIL 解析失败 try/except 捕获（LLMParseError 路径）
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 ai.set_mock_mode()
 
 try:

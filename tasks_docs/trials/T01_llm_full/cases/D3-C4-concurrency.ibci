@@ -2,7 +2,12 @@
 # doc: _REAL_LLM_E2E_RESTART.md C4（原只测 2 路）
 # 期望: 8 路 run_batch + 4 线程并发，全部正确返回无竞态
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 fn classify = lambda(str w) -> str: @~ 用两个字归类：$w ~
 list words = ["苹果", "香蕉", "橙子", "葡萄", "西瓜", "草莓", "蓝莓", "猕猴桃"]

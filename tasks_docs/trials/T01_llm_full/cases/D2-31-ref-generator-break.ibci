@@ -2,6 +2,10 @@
 # doc: docs/KNOWN_LIMITS.md §五 + 05_functions.md §5.8
 # 期望: 引用共享 b.append 影响 a；生成器 break 后不再推进
 
+# expect-class: PASS
+# expect-out: a_len=4 | GEN_FINISHED | consumed=3 | DONE
+# expect-exit: 0
+# expect-llm: false
 list a = [1, 2, 3]
 list b = a
 b.append(4)

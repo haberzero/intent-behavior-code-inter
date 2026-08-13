@@ -2,6 +2,10 @@
 # doc: docs/syntax/01_types.md §1.4/§1.3
 # 期望: (str)x / (float)42 / (bool)1 / (any)x 正确；(str)None = "None"；None 布尔假
 
+# expect-class: PASS
+# expect-out: s=42 | fl=42.0 | bb=True | a_ok=True | none_str=None | none_is_false
+# expect-exit: 0
+# expect-llm: false
 int x = 42
 str s = (str)x
 float fl = (float)42

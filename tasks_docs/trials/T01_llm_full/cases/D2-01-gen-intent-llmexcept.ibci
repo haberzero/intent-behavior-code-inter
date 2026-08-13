@@ -1,6 +1,12 @@
 # D2-01 交叉：生成器 + LLM + 意图 + llmexcept 四正交组合
 # 期望: 生成器体内挂起 LLM，且意图/llmexcept 在生成器多次恢复间正确保持
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 @+ 回复要极简，不超过8字
 func gen(int n) -> str:
     int i = 0

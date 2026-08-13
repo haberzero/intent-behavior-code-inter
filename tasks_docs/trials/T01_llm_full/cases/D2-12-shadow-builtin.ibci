@@ -2,5 +2,9 @@
 # doc: docs/syntax/12_builtins.md §12.1（对内建名的直接赋值仍被拒绝）
 # 期望: print = 5 被拒绝（编译错误）
 
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+# expect-llm: false
 print = 5
 print("DONE")

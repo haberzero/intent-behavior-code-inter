@@ -2,6 +2,10 @@
 # doc: docs/syntax/02_variables.md §2.4/§2.5
 # 期望: 元组解包正确；(a,b)=(b,a) 交换
 
+# expect-class: PASS
+# expect-out: a=10 b=20 | xyz=pqr | after_swap a2=2 b2=1 | DONE
+# expect-exit: 0
+# expect-llm: false
 (int a, int b) = (10, 20)
 (str x, str y, str z) = ("p", "q", "r")
 

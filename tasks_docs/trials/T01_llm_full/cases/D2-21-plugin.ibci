@@ -2,6 +2,10 @@
 # doc: docs/syntax/11_modules.md §11.9 + examples/plugins_demo
 # 期望: 插件自动发现加载；calc.add/mul 与 plugin_info.version 可用
 
+# expect-class: PASS
+# expect-out: add=30 | mul=25 | version=2.0.0 | DONE
+# expect-exit: 0
+# expect-llm: false
 import calc
 import plugin_info
 

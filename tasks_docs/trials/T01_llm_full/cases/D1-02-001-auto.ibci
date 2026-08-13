@@ -2,6 +2,10 @@
 # doc: docs/syntax/02_variables.md §2.2/§2.3
 # 期望: auto 锁定首赋值类型；裸赋值同 auto 语义；异类型重赋编译期报错
 
+# expect-class: PASS
+# expect-out: x=42 | s=hello | nums_len=2 | y=42 | DONE
+# expect-exit: 0
+# expect-llm: false
 auto x = 42
 auto s = "hello"
 auto nums = [1, 2]

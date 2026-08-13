@@ -2,7 +2,12 @@
 # doc: docs/syntax/11_modules.md §11.3
 # 期望: 各 API 在真实配置下返回合理值
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 bool has = ai.has_api_key()
 print("has_key=" + (str)has)

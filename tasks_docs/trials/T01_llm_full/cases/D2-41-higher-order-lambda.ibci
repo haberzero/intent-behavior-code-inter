@@ -2,6 +2,12 @@
 # doc: docs/syntax/05_functions.md §5.6 + 07 §7.4
 # 期望: lambda 作高阶函数参数，调用时使用调用点意图栈
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 @+ 回复要极简，不超过6字
 func run2(fn[(str) -> str] cb, str input) -> str:
     return cb(input)

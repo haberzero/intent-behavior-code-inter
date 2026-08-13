@@ -2,7 +2,12 @@
 # doc: _REAL_LLM_E2E_REPORT.md §7.0（dispatch-before-use 曾丢失一次性意图，7339220 修复）
 # 期望: @! 排他意图在 run_batch 各行为调用中都注入（覆盖 active/global）
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 fn q = lambda(str word) -> str: @~ 用一个词形容 $word ~
 

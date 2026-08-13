@@ -2,6 +2,12 @@
 # doc: docs/syntax/07_behavior_expressions.md §7.4 snapshot + 09_intent_system.md §9.2
 # 期望: snapshot 定义时冻结意图；调用时不受后续意图影响
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 @+ 聚焦于正面回答
 fn handler = snapshot -> str: @~ 根据 $context 生成回复 ~
 @-

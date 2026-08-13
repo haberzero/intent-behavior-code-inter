@@ -221,8 +221,20 @@ def main():
             try:
                 out, _ = proc.communicate(timeout=5)
             except subprocess.TimeoutExpired:
-                proc.kill()
-                out, _ = proc.communicate()
+                # 最终兜底：SIGKILL 后 communicate 仍阻塞（顽固子进程持有管道）时，
+                # 再 kill + 有限等待；仍不退出则放弃并记录（harness 永不永久卡死）。
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                try:
+                    out, _ = proc.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    out = "<HARNESS: process unresponsive after SIGKILL, abandoned>\n"
+                    try:
+                        proc.wait(timeout=2)
+                    except Exception:
+                        pass
         exit_code = proc.returncode
     except Exception as exc:  # harness-level guard: never leave a hung process
         out = f"[HARNESS-ERROR] {exc}\n"

@@ -1,5 +1,10 @@
 # D3-50d get_retry 别名测试（可能与函数名冲突）
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 print("has_key=" + (str)ai.has_api_key())
 int n = ai.get_retry_count

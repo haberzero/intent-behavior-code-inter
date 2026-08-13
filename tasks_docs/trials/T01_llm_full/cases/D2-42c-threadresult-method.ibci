@@ -1,4 +1,8 @@
 # D2-42c 多可能性：thread_result `.value()` 方法形态（syntax doc §14.7）
+# expect-class: PASS
+# expect-out: value_method=42 | DONE
+# expect-exit: 0
+# expect-llm: false
 func fetch(int x) -> int:
     return x * 2
 

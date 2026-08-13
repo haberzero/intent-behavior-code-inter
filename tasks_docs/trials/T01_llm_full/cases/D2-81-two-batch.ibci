@@ -2,7 +2,12 @@
 # doc: _REAL_LLM_E2E_RESTART.md C4
 # 期望: 多批 run_batch 并发无交错/无竞态
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 fn a = lambda(str x) -> str: @~ 用两个字回答：$x ~
 fn b = lambda(str y) -> str: @~ 用三个字回答：$y ~

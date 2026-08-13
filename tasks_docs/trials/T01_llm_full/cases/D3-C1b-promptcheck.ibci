@@ -1,4 +1,10 @@
 # D3-C1b 长提示调试：检查 __to_prompt__ 实际注入内容
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 import idbg
 
 class Report:

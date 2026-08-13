@@ -2,6 +2,12 @@
 # doc: docs/syntax/11_modules.md §11.1/§11.3-11.5
 # 期望: import 顶部约束；isys 路径；idbg 调用信息在 dispatch 赋值后立即可观测（d6d28e1）
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
 import isys
 import idbg
 

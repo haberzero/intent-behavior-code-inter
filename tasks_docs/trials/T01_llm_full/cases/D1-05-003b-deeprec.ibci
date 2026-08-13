@@ -4,6 +4,10 @@
 # 期望: 深递归（如 2000 层）触发 RecursionError 根因（或正常完成）；不被包装为
 #   "Symbol not defined"/"VM: Call failed" 语义错误；KDIAG_RUNTIME_ENV_LIMIT
 
+# expect-class: PASS
+# expect-out: RecursionError: maximum recursion depth exceeded
+# expect-exit: nonzero
+# expect-llm: false
 func deep(int n) -> int:
     if n <= 0:
         return 0

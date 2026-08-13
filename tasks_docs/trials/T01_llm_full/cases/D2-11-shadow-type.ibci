@@ -2,5 +2,9 @@
 # 期望: 类型名不可被遮蔽；对 int 直接赋值被拒绝（记录实际行为）
 
 # 类型名遮蔽——预期编译错误
+# expect-class: GUARD
+# expect-code: RUN_TYPE_MISMATCH
+# expect-exit: nonzero
+# expect-llm: false
 int int = 5
 print("DONE")

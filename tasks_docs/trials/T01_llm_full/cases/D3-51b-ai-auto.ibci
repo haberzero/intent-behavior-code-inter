@@ -1,5 +1,10 @@
 # D3-51b is_auto_intent_injection_enabled 隔离
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 print("is_auto=" + (str)ai.is_auto_intent_injection_enabled())
 print("DONE")

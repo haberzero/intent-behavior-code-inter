@@ -3,6 +3,10 @@
 # NOTE(DOC-ISSUE-002): 文档示例 __init__ 缺返回标注；编译器要求 -> TYPE，此处补 -> auto
 # 期望: switch 匹配；try/except/raise/finally；自定义异常 + 类型窄化
 
+# expect-class: PASS
+# expect-out: sw_ok | caught=division by zero | finally | narrowed_code=503 | DONE
+# expect-exit: 0
+# expect-llm: false
 str status = "ok"
 switch status:
     case "ok":

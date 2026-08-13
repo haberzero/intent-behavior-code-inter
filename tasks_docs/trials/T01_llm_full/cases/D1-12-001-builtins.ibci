@@ -2,6 +2,10 @@
 # doc: docs/syntax/12_builtins.md §12.1-12.5
 # 期望: 内建转换与序列辅助正确；方法正确
 
+# expect-class: PASS
+# expect-out: conv=42423.5True | en=0a | en=1b | sorted=123 | reversed=213 | sum=6
+# expect-exit: 0
+# expect-llm: false
 int a = int("42")
 str b = str(42)
 float c = float("3.5")

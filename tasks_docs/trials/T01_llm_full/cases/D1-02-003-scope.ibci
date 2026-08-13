@@ -4,6 +4,10 @@
 #  与 05_functions.md §5.1 强制 -> TYPE 矛盾；此处按 05_functions 修正为 -> void
 # 期望: global 写模块级；nonlocal 写回外层；读外层自动捕获
 
+# expect-class: PASS
+# expect-out: counter=2 | c1=1 | c2=2 | c3=3 | adder5=15 | DONE
+# expect-exit: 0
+# expect-llm: false
 int counter = 0
 func increment() -> void:
     global counter

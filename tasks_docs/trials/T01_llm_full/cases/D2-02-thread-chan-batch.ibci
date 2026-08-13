@@ -1,7 +1,12 @@
 # D2-02 交叉：thread 内 LLM + chan 传回 + run_batch 并发扩展（C4）
 # 期望: 线程体内 LLM 调用正常；经 chan 传回；多路并发正确
 
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 chan c = chan(str, "stream")
 

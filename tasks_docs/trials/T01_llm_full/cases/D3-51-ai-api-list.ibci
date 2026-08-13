@@ -1,5 +1,10 @@
 # D3-51 批量测试 ai 文档化 API 可达性（11_modules §11.3 清单）
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
 import ai
+ai.load_project_config()
 
 print("has_api_key=" + (str)ai.has_api_key())
 print("get_retry=" + (str)ai.get_retry())

@@ -1,4 +1,8 @@
 # D2-42b 多可能性：thread_result `.value` 属性形态（howto 写法）
+# expect-class: PASS
+# expect-out: value_attr=<Instance of bound_method> | DONE
+# expect-exit: 0
+# expect-llm: false
 func fetch(int x) -> int:
     return x * 2
 

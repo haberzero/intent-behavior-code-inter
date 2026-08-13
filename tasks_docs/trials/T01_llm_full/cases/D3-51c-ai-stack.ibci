@@ -1,4 +1,8 @@
 # D3-51c get_current_intent_stack 隔离
+# expect-class: PASS
+# expect-out: stack_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
 import ai
 
 any s = ai.get_current_intent_stack()
