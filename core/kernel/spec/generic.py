@@ -13,7 +13,6 @@ core/kernel/spec/generic.py
 本模块引入 **GenericTypeDeclaration**（内置泛型类型声明）作为单一权威源：
 每个内置泛型类型声明一次，描述其生命周期操作：
 - ``build``    ：创建（经 SpecFactory 从类型实参名构造特化 TypeDef）
-- ``to_typeref``：序列化（特化 TypeDef → 结构化 TypeRef，委托 ``TypeRef.from_spec``）
 - ``restore``  ：还原（经 SpecFactory 从序列化数据重建特化 TypeDef）
 
 设计哲学（design-philosophy）：单一权威源、机制同构、设计语言统一。
@@ -56,7 +55,6 @@ class GenericTypeDeclaration:
     ``kind``      : 特化 TypeDef 的 TypeKind
     ``build``     : ``(factory, arg_names, arg_modules) -> TypeDef``
                     从实参类型名构造特化 TypeDef。
-    ``restore``   : ``(factory, data) -> TypeDef`` 从序列化数据还原特化 TypeDef。
     ``resolve_member``: ``(registry, spec, attr_name, member) -> Optional[MemberSpecialization]``
                     泛型成员特化（协议化，替代 _members.py per-type 级联）。
     """
@@ -64,8 +62,6 @@ class GenericTypeDeclaration:
     name: str
     kind: str
     build: Callable[["SpecFactory", List[str], List[Optional[str]]], "TypeDef"]
-    to_typeref: Callable[["TypeDef"], TypeRef]
-    restore: Callable[["SpecFactory", Dict[str, Any]], "TypeDef"]
     resolve_member: Optional[
         Callable[["SpecRegistry", "TypeDef", str, "MethodMemberSpec"], Optional[MemberSpecialization]]
     ] = None
@@ -179,98 +175,6 @@ def _build_generator(factory: "SpecFactory", names: List[str], modules: List[Opt
     return factory.create_generator(value_type_name=value, value_type_module=value_mod)
 
 
-# -- to_typeref（序列化：特化 TypeDef → 结构化 TypeRef） ------------- #
-
-def _to_typeref_delegate(spec: "TypeDef") -> TypeRef:
-    """序列化特化 spec → 结构化 TypeRef。
-
-    统一委托 ``TypeRef.from_spec``（单一权威源）——避免 per-type 双实现
-    漂移（GEN-FIX 第 2 层收敛）。
-    """
-    return TypeRef.from_spec(spec)
-
-
-# -- restore（还原：序列化数据 → 特化 TypeDef） ----------------------- #
-
-def _restore_list(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_list(
-        element_type_name=data.get("element_type_name", "any"),
-        element_type_module=data.get("element_type_module"),
-    )
-
-
-def _restore_dict(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_dict(
-        key_type_name=data.get("key_type_name", "any"),
-        value_type_name=data.get("value_type_name", "any"),
-        key_type_module=data.get("key_type_module"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
-def _restore_tuple(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_tuple(
-        element_type_name=data.get("element_type_name", "any"),
-        element_type_module=data.get("element_type_module"),
-    )
-
-
-def _restore_optional(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_optional(
-        wrapped_type_name=data.get("wrapped_type_name", "any"),
-        wrapped_type_module=data.get("wrapped_type_module"),
-    )
-
-
-def _restore_fn_callable(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_fn_callable(
-        value_type_name=data.get("value_type_name", "auto"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
-def _restore_behavior(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_behavior(
-        value_type_name=data.get("value_type_name", "auto"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
-def _restore_thread(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_thread(
-        value_type_name=data.get("value_type_name", "any"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
-def _restore_thread_result(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_thread_result(
-        value_type_name=data.get("value_type_name", "any"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
-def _restore_chan(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_chan(
-        value_type_name=data.get("value_type_name", "any"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
-def _restore_slot(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_slot(
-        value_type_name=data.get("value_type_name", "any"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
-def _restore_generator(factory: "SpecFactory", data: Dict[str, Any]) -> "TypeDef":
-    return factory.create_generator(
-        value_type_name=data.get("value_type_name", "any"),
-        value_type_module=data.get("value_type_module"),
-    )
-
-
 # -- resolve_member（泛型成员特化，协议化——替代 _members.py per-type 级联） --- #
 
 def _resolve_member_list(registry: "SpecRegistry", spec: "TypeDef", attr_name: str, member: "MethodMemberSpec") -> Optional[MemberSpecialization]:
@@ -341,51 +245,51 @@ def create_generic_registry() -> GenericTypeRegistry:
     reg = GenericTypeRegistry()
     reg.register(GenericTypeDeclaration(
         name="list", kind=TypeKind.LIST.value,
-        build=_build_list, to_typeref=_to_typeref_delegate, restore=_restore_list,
+        build=_build_list,
         resolve_member=_resolve_member_list,
     ))
     reg.register(GenericTypeDeclaration(
         name="dict", kind=TypeKind.DICT.value,
-        build=_build_dict, to_typeref=_to_typeref_delegate, restore=_restore_dict,
+        build=_build_dict,
         resolve_member=_resolve_member_dict,
     ))
     reg.register(GenericTypeDeclaration(
         name="tuple", kind=TypeKind.TUPLE.value,
-        build=_build_tuple, to_typeref=_to_typeref_delegate, restore=_restore_tuple,
+        build=_build_tuple,
     ))
     reg.register(GenericTypeDeclaration(
         name="Optional", kind=TypeKind.OPTIONAL.value,
-        build=_build_optional, to_typeref=_to_typeref_delegate, restore=_restore_optional,
+        build=_build_optional,
         resolve_member=_resolve_member_optional,
     ))
     reg.register(GenericTypeDeclaration(
         name="fn_callable", kind=TypeKind.CALLABLE_INSTANCE.value,
-        build=_build_fn_callable, to_typeref=_to_typeref_delegate, restore=_restore_fn_callable,
+        build=_build_fn_callable,
     ))
     reg.register(GenericTypeDeclaration(
         name="behavior", kind=TypeKind.CALLABLE_INSTANCE.value,
-        build=_build_behavior, to_typeref=_to_typeref_delegate, restore=_restore_behavior,
+        build=_build_behavior,
     ))
     reg.register(GenericTypeDeclaration(
         name="thread", kind=TypeKind.THREAD.value,
-        build=_build_thread, to_typeref=_to_typeref_delegate, restore=_restore_thread,
+        build=_build_thread,
         resolve_member=_resolve_member_thread,
     ))
     reg.register(GenericTypeDeclaration(
         name="thread_result", kind=TypeKind.THREAD_RESULT.value,
-        build=_build_thread_result, to_typeref=_to_typeref_delegate, restore=_restore_thread_result,
+        build=_build_thread_result,
         resolve_member=_resolve_member_thread_result,
     ))
     reg.register(GenericTypeDeclaration(
         name="chan", kind=TypeKind.CHANNEL.value,
-        build=_build_chan, to_typeref=_to_typeref_delegate, restore=_restore_chan,
+        build=_build_chan,
     ))
     reg.register(GenericTypeDeclaration(
         name="slot", kind=TypeKind.SLOT.value,
-        build=_build_slot, to_typeref=_to_typeref_delegate, restore=_restore_slot,
+        build=_build_slot,
     ))
     reg.register(GenericTypeDeclaration(
         name="generator", kind=TypeKind.GENERATOR.value,
-        build=_build_generator, to_typeref=_to_typeref_delegate, restore=_restore_generator,
+        build=_build_generator,
     ))
     return reg

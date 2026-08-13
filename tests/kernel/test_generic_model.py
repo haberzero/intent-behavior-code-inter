@@ -134,36 +134,62 @@ class TestThreadGeneric:
         assert reg.is_assignable(sp, reg.resolve("thread"))
 
 
-class TestToTyperef:
+class TestTypeRefFromSpec:
+    """TypeRef.from_spec —— spec→TypeRef 唯一权威构造入口的行为契约。
+
+    覆盖全部泛型 kind 的结构化实参保留（list/dict/tuple/Optional/thread/
+    thread_result/fn_callable + 用户类特化）。from_spec 是 GEN-FIX 收敛后的
+    唯一权威构造入口，本测试验证其真实契约（含 tuple positional 缺口修复）。
+    """
+
     def test_list(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
-        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
-        assert tr.canonical_name == "list[int]"
+        from core.kernel.spec.type_ref import TypeRef
+        assert TypeRef.from_spec(sp).canonical_name == "list[int]"
 
     def test_dict(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("dict"), [reg.resolve("str"), reg.resolve("int")])
-        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
-        assert tr.canonical_name == "dict[str,int]"
+        from core.kernel.spec.type_ref import TypeRef
+        assert TypeRef.from_spec(sp).canonical_name == "dict[str,int]"
 
     def test_optional(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("Optional"), [reg.resolve("int")])
-        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
-        assert tr.canonical_name == "Optional[int]"
+        from core.kernel.spec.type_ref import TypeRef
+        assert TypeRef.from_spec(sp).canonical_name == "Optional[int]"
 
     def test_thread(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("thread"), [reg.resolve("int")])
-        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
-        assert tr.canonical_name == "thread[int]"
+        from core.kernel.spec.type_ref import TypeRef
+        assert TypeRef.from_spec(sp).canonical_name == "thread[int]"
 
     def test_thread_result(self):
         reg = make_registry()
         sp = reg.resolve_specialization(reg.resolve("thread_result"), [reg.resolve("int")])
-        tr = reg.generic_types.get(sp.get_base_name()).to_typeref(sp)
-        assert tr.canonical_name == "thread_result[int]"
+        from core.kernel.spec.type_ref import TypeRef
+        assert TypeRef.from_spec(sp).canonical_name == "thread_result[int]"
+
+    def test_tuple_positional_preserved(self):
+        """tuple[int,str] 位置元素保真（此前丢位置元素返回 'tuple'）。"""
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="tuple", kind=TypeKind.TUPLE.value,
+                     positional_element_types=[TypeRef.of("int"), TypeRef.of("str")],
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        assert TypeRef.from_spec(sp).canonical_name == "tuple[int,str]"
+
+    def test_user_generic_specialization(self):
+        """用户类特化 Box[int] 结构化实参保留（非扁平 TypeRef('Box[int]')）。"""
+        from core.kernel.spec.type_ref import TypeRef
+        from core.kernel.spec.base import TypeKind, TypeDef, Provenance, Visibility
+        sp = TypeDef(name="Box[int]", kind=TypeKind.CLASS.value, type_params=["T"],
+                     type_args=[TypeRef.of("int")], base_name="Box",
+                     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+        tr = TypeRef.from_spec(sp)
+        assert tr.head == "Box" and tr.args == (TypeRef.of("int"),)
 
 
 class TestTypeRefFromSpecThreadKinds:
