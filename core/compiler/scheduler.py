@@ -124,6 +124,9 @@ class Scheduler(ICompilerService):
         # entry 经 canonicalize_for_security 规范化（与 root 同源，解 symlink），
         # 替代散点 os.path.abspath（engine 上游已规范化，此处统一收口）。
         entry_file = PathValidator.canonicalize_for_security(entry_file).to_native()
+        # 入口模块锚点（S5 跨模块同名类身份根治）：仅非入口（被 import 的）模块
+        # 用户类 module 限定——入口模块是根命名空间（module=None）。
+        self._entry_file = entry_file
         self._scan_and_cache(entry_file)
             
         if self.issue_tracker.has_errors():
@@ -171,7 +174,10 @@ class Scheduler(ICompilerService):
             if mod_info.mtime > last_mtime or file_path not in self.ast_cache:
                 # Recompile
                 try:
-                    res = self._compile_file(file_path, artifact)
+                    res = self._compile_file(
+                        file_path, artifact,
+                        qualify_types=(file_path != getattr(self, "_entry_file", None)),
+                    )
                     artifact.add_module(module_name, res)
                     self.import_star_cache[file_path] = dict(res.import_star_members)
                     mod_info.status = ModuleStatus.SUCCESS
@@ -306,7 +312,7 @@ class Scheduler(ICompilerService):
                          location=Location(file_path=current_path, line=imp.lineno, column=1)
                      )
                          
-    def _compile_file(self, file_path: str, artifact: CompilationArtifact):
+    def _compile_file(self, file_path: str, artifact: CompilationArtifact, qualify_types: bool = False):
         """
         Compiles a single file: Lex (reuse) -> Parse -> Semantic.
         Populates caches.
@@ -354,7 +360,7 @@ class Scheduler(ICompilerService):
             pre_mod_meta = self.registry.factory.create_module(module_name)
             self.registry.register(pre_mod_meta)
             
-            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name)
+            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name, qualify_types=qualify_types)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():

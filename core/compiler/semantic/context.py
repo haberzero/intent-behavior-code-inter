@@ -95,6 +95,7 @@ class ContextBuilder:
         self.ast: Optional[ibci_ast.IbASTNode] = None
         self.registry: Optional[Any] = None
         self.module_name: str = "<unknown>"
+        self.qualify_types: bool = False
 
     def with_ast(self, ast: ibci_ast.IbASTNode) -> 'ContextBuilder':
         self.ast = ast
@@ -106,6 +107,10 @@ class ContextBuilder:
 
     def with_module_name(self, module_name: str) -> 'ContextBuilder':
         self.module_name = module_name
+        return self
+
+    def with_qualify_types(self, qualify: bool) -> 'ContextBuilder':
+        self.qualify_types = qualify
         return self
 
     def build(self) -> SemanticContext:
@@ -144,4 +149,5 @@ class ContextBuilder:
             module_name=self.module_name,
             symbol_table=symbol_table,
             type_environment=type_environment,
+            flags={"qualify_types": self.qualify_types},
         )

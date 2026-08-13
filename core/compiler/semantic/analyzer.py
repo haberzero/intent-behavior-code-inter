@@ -36,29 +36,48 @@ class SemanticAnalyzer:
         issue_tracker: Any,
         registry: Optional[Any] = None,
         module_name: str = "<main>",
+        qualify_types: bool = False,
     ):
         self.issue_tracker = issue_tracker
         self.registry = registry
         self.module_name = module_name
+        # 是否给用户类 spec 加 module 限定（S5 跨模块同名类身份根治）：
+        # 仅被 import 的非入口模块启用；入口/单模块保持裸名（不破坏 142 处
+        # 裸名消费与 round-trip）。
+        self.qualify_types = qualify_types
 
         # scheduler 通过此属性注入导入符号
         self.symbol_table = SymbolTable(parent=None, name=module_name)
 
     def analyze(self, node: ibci_ast.IbASTNode, raise_on_error: bool = True) -> CompilationResult:
         """执行完整的语义分析，返回 CompilationResult。"""
-        context = self._build_context(node)
+        # 设置当前编译模块（S5）：非入口模块编译期间裸名解析 module 优先。
+        # 仅被 import 的模块（qualify_types=True）设置；入口/单模块不设（裸名直查）。
+        # 编译结束后重置（finally），避免残留污染运行期裸名解析。
+        if self.qualify_types and self.registry is not None:
+            set_current = getattr(self.registry, "set_current_module", None)
+            if set_current is not None:
+                set_current(self.module_name)
+        try:
+            context = self._build_context(node)
 
-        pipeline = create_semantic_pipeline()
-        result = pipeline.run(context)
+            pipeline = create_semantic_pipeline()
+            result = pipeline.run(context)
 
-        compilation_result = pipeline_result_to_compilation_result(
-            result, issue_tracker=self.issue_tracker
-        )
+            compilation_result = pipeline_result_to_compilation_result(
+                result, issue_tracker=self.issue_tracker
+            )
 
-        if raise_on_error and result.has_errors:
-            self.issue_tracker.check_errors()
+            if raise_on_error and result.has_errors:
+                self.issue_tracker.check_errors()
 
-        return compilation_result
+            return compilation_result
+        finally:
+            # 重置当前模块（编译期上下文结束；运行期裸名解析不受残留影响）。
+            if self.qualify_types and self.registry is not None:
+                set_current = getattr(self.registry, "set_current_module", None)
+                if set_current is not None:
+                    set_current(None)
 
     def _build_context(self, node: ibci_ast.IbASTNode) -> SemanticContext:
         """构建 pipeline 的初始 SemanticContext。"""
@@ -67,6 +86,7 @@ class SemanticAnalyzer:
             .with_ast(node)
             .with_registry(self.registry)
             .with_module_name(self.module_name)
+            .with_qualify_types(self.qualify_types)
             .build()
         )
 

@@ -334,6 +334,45 @@ class TestIbcFileNestedPackageImport:
         _write(tmp_path, "main.ibci", "import a.b.c\nprint(a.b.c.cf())\n")
         assert _run(tmp_path) == ["c-value"]
 
+
+class TestCrossModuleSameNameClass:
+    """跨模块同名类身份隔离（S5 根治）。
+
+    修复前 `geo.Box` 与 `graph.Box` 编译期坍缩为同一 spec（register merge
+    members），方法表互相串扰（geo.Box 的 get 可能用 graph 的签名）；修复后
+    module 限定分离，各模块类独立。
+    """
+
+    def test_same_name_class_module_isolation(self, tmp_path):
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n"
+            "    func get(self) -> int:\n"
+            "        return self.v\n",
+        )
+        _write(
+            tmp_path,
+            "graph.ibci",
+            "class Box[T]:\n"
+            "    str name\n"
+            "    func get(self) -> str:\n"
+            "        return self.name\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "import graph\n"
+            "geo.Box[int] a = geo.Box[int](5)\n"
+            "print(type(a.get()))\n"
+            'graph.Box[int] b = graph.Box[int]("hello")\n'
+            "print(type(b.get()))\n",
+        )
+        # geo.Box.get() 返回 int（5），graph.Box.get() 返回 str——方法表不串扰
+        assert _run(tmp_path) == ["int", "str"]
+
     def test_multi_import_same_package_merges(self, tmp_path):
         """同一包多次导入：根包命名空间幂等合并（a.b.c + a.b.d 均可达）。"""
         _write_nested(tmp_path, "a/b/c.ibci", 'func cf() -> str:\n    return "c-value"\n')

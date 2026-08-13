@@ -63,6 +63,17 @@ class SpecRegistryBase:
         # 创建/解析/序列化/还原统一经此路由。
         from ..generic import create_generic_registry
         self.generic_types = create_generic_registry()
+        # 当前编译模块（S5 跨模块同名类身份根治）：非入口模块编译期间设置，
+        # ``resolve`` 裸名解析先查 ``{current_module}.{name}``——被 import 模块内
+        # 对自身类的裸名引用解析到带 module 的 spec。入口/单模块为空（裸名直查）。
+        self.current_module: Optional[str] = None
+
+    def set_current_module(self, module_name: Optional[str]) -> None:
+        """设置当前编译模块（编译期由 scheduler/analyzer 调用）。
+
+        ``None`` 表示入口/根命名空间（裸名解析不 module 限定）。
+        """
+        self.current_module = module_name
 
     # ---------------------------------------------------------- #
     # Registration                                               #
@@ -108,6 +119,12 @@ class SpecRegistryBase:
         """
         if module:
             spec = self._specs.get(f"{module}.{name}")
+            if spec:
+                return spec
+        # 当前模块优先：非入口模块内对自身类的裸名引用解析到带 module 的 spec
+        # （S5 跨模块同名类身份根治）。miss 回落裸名（内置类型/入口模块类）。
+        if module is None and self.current_module:
+            spec = self._specs.get(f"{self.current_module}.{name}")
             if spec:
                 return spec
         return self._specs.get(name)

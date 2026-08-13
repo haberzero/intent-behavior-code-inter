@@ -167,8 +167,13 @@ class SymbolCollector:
         # 所有用户类隐式继承 Object（与运行时 artifact_loader 的默认行为对齐）。
         # Object 自身不设置父类以避免循环。
         effective_parent = node.parent if node.parent else ("Object" if node.name != "Object" else None)
+        # 用户类身份统一 (module_path, name)：非入口模块（被 import 的模块）
+        # 带 module 限定（S5 跨模块同名类身份根治——geo.Box / graph.Box 独立）；
+        # 入口/单模块保持 module=None（根命名空间，裸名可用）。
+        class_module = self.context.module_name if self.context.flags.get("qualify_types") else None
         cls_meta = self.registry.factory.create_class(
             name=node.name,
+            module=class_module,
             parent_name=effective_parent,
             provenance=Provenance.USER_DEFINED,
             visibility=Visibility.IMPORT_GATED,

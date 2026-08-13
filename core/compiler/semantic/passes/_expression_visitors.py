@@ -638,6 +638,19 @@ class ExpressionVisitorsMixin:
         has_dynamic = bool(starred_specs) or any(
             name is None for name, _ in keyword_specs
         )
+        # *expr 元素级类型校验（遗留边界修复）：`*lst` 展开实参静态数量未知，
+        # 但元素类型可静态确定（特化容器 list[int]）——元素须可赋给首个位置
+        # 形参（展开后首实参对应首形参）。数量不足/超限仍由运行期裁决。
+        if starred_specs and descriptors:
+            first_pos = next(
+                (d for d in descriptors if d.kind == ast.ARG_POSITIONAL_OR_KEYWORD),
+                None,
+            )
+            if first_pos is not None:
+                for starred_spec in starred_specs:
+                    self._check_starred_element_type(
+                        node, starred_spec, first_pos
+                    )
         for issue in binding.issues:
             if issue.code == TOO_MANY_POSITIONAL:
                 if not has_dynamic:
@@ -679,6 +692,34 @@ class ExpressionVisitorsMixin:
                 f"but got '{actual_spec.name}'.",
                 node, code=SEM_TYPE_MISMATCH,
                 hint=self.registry.get_diff_hint(actual_spec, exp_spec),
+            )
+
+    def _check_starred_element_type(self, node: ast.IbCall, starred_spec, first_pos_descriptor) -> None:
+        """*expr 元素级类型校验（遗留边界修复）。
+
+        ``*lst`` 展开实参静态数量未知，但若 lst 是特化容器（list[int]），元素
+        类型可静态确定。展开后首实参对应首位置形参——元素类型须可赋给形参类型。
+        元素类型不可确定（裸容器/any）时跳过（运行期裁决）；动态形参/实参跳过。
+        """
+        if starred_spec is None or first_pos_descriptor is None:
+            return
+        exp_spec = self.registry.resolve_typeref(first_pos_descriptor.type_ref)
+        if exp_spec is None or self.registry.is_dynamic(exp_spec):
+            return
+        # 元素类型：特化容器（list[int]/generator[int]）经 resolve_iter_element；
+        # 裸容器返回 any（不可确定）→ 跳过。
+        elem_spec = self.registry.resolve_iter_element(starred_spec)
+        if elem_spec is None or self.registry.is_dynamic(elem_spec):
+            return
+        if self.registry.is_dynamic(starred_spec):
+            return
+        if not self.registry.is_assignable(elem_spec, exp_spec):
+            self.error(
+                f"Argument '*<container>' element type mismatch: expected "
+                f"'{exp_spec.name}', but container elements are "
+                f"'{elem_spec.name}'.",
+                node, code=SEM_TYPE_MISMATCH,
+                hint=self.registry.get_diff_hint(elem_spec, exp_spec),
             )
 
     def _check_intent_context_static_call(self, node: ast.IbCall):

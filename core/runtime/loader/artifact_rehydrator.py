@@ -126,7 +126,7 @@ class ArtifactRehydrator:
                 param_types=[TypeRef.of(p) for p in data.get("param_type_names", [])],
             ),
             TypeKind.CLASS.value: lambda: factory.create_class(
-                name, parent_name=data.get("parent_name")
+                name, module=data.get("module_path"), parent_name=data.get("parent_name")
             ),
             TypeKind.TYPE_PARAM.value: lambda: factory.create_type_param(name),
             TypeKind.BOUND_METHOD.value: lambda: TypeDef(

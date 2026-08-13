@@ -633,3 +633,39 @@ class TestTupleUnpackTypeChecking:
         assert a.ib_class.name == "list", (
             f"裸声明解包应保持裸 list，got {a.ib_class.name}"
         )
+
+
+class TestStarredElementTypeChecking:
+    """*expr 展开实参元素级类型校验（遗留边界修复）。
+
+    修复前 `*lst` 只用于跳过必填检查，元素类型不校验——`list[str] *-> f(int)`
+    编译期放行；修复后特化容器的元素类型与首位置形参做可赋值校验。
+    """
+
+    def test_starred_wrong_element_type_rejected(self):
+        """list[str] 展开传给 f(int) 编译期拦截。"""
+        expect_compile_error(
+            "func f(int a, int b) -> int:\n"
+            "    return a + b\n"
+            'list[str] l = ["x", "y"]\n'
+            "int r = f(*l)\n",
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_starred_correct_element_type_passes(self):
+        """list[int] 展开传给 f(int) 编译通过。"""
+        _compile_code(
+            "func f(int a, int b) -> int:\n"
+            "    return a + b\n"
+            "list[int] l = [1, 2]\n"
+            "int r = f(*l)\n"
+        )
+
+    def test_starred_bare_container_skips(self):
+        """裸 list（元素类型不可确定）展开跳过校验。"""
+        _compile_code(
+            "func f(int a, int b) -> int:\n"
+            "    return a + b\n"
+            "list l = [1, 2]\n"
+            "int r = f(*l)\n"
+        )

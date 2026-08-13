@@ -317,12 +317,13 @@ class _AssignabilityMixin:
         }
         arg_names = [r.canonical_name for r in arg_refs]
         specialized_name = f"{spec.name}[{','.join(arg_names)}]"
-        cached = self.resolve(specialized_name)
+        cached = self.resolve(specialized_name, getattr(spec, "module_path", None))
         if cached is not None:
             return cached
 
         result = self.factory.create_class(
             name=specialized_name,
+            module=getattr(spec, "module_path", None),
             parent_name=None,
             parent_module=None,
             provenance=spec.provenance,
