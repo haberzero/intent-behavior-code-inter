@@ -93,7 +93,7 @@
 | Phase B 断言迁移 | ✅ T04/T03/T02 | 32+29+9 用例判定已验证 |
 | Phase B 断言迁移 | ✅ T01（2026-08-13 真实重跑） | 57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**（零 HARNESS/零缺陷复现）；断言从基线 `DONE` 精化为确定性行；修复 8 个脚本缺陷（5 import 位置 + 2 守卫断言 + 1 API 类型）；child_llm F9 适配 |
 | Phase C 干净清理 | ✅ 过期文档删除（2026-08-13） | 用户裁定：任务控制文档不做编号替换；直接删除 40 个过期文档（设计/报告/审计/记录/临时 `_code_*`），git 历史保留可追溯 |
-| Phase C 干净清理 | 待执行 | 用例 ID 统一 / register classification 写回（历史套） |
+| Phase C 干净清理 | ✅ 套件重构 + classification 写回（2026-08-13） | 用户原则：**不冻结历史资产，问题直接重构**（唯一底线：不为规避缺陷改套件，缺陷触发用例保留）。T02 T3/T4/T5 断言重构（映射有效性）；T04 R1-05/R5-01/R5-04 重构为修复后语义、删 b 变体；4 套 register.jsonl classification 100%（T01 55 PASS+2 GUARD / T02 8 PASS+1 LIMIT / T03 22 PASS+6 GUARD+1 KI+1 HARNESS / T04 24 PASS+7 GUARD+1 KI+1 HARNESS） |
 | Phase D 自动化衔接 | 待设计 | 试用→确定性测试收敛 + 报告自动生成 |
 
 ---
@@ -114,7 +114,7 @@
 ## 六、交接要点（下一 session）
 
 1. **✅ T01 LLM 批真实重跑验证**（Phase B 收尾）：57 个 LLM 用例真实重跑 **55 PASS + 2 GUARD**（零 HARNESS/零缺陷复现）。
-2. **Phase C 干净彻底**：**✅ 过期文档删除已完成（40 个）**；剩余用例 ID 统一 + register classification 写回（历史套）。
+2. **✅ Phase C 干净彻底**：过期文档删除（40 个）+ 套件重构（用户原则：不冻结、问题直接重构）+ register classification 写回 100%。
 3. **Phase D 自动化衔接**：试用→确定性测试收敛 + 报告自动生成设计。
 4. **独立缺陷窗口**：GEN-5 / GEN-6（PENDING_TASKS 已登记 + 触发用例）。
 5. **供应商感知思考禁用机制**（待设计）。
