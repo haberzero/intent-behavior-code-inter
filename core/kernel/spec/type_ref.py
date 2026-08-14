@@ -296,6 +296,39 @@ class TypeRef:
                 module=spec.module_path,
             )
 
+        # 函数签名结构化形态：BOUND_METHOD / CALLABLE_SIG 恒产
+        # ``fn[(args) -> ret]``（head="fn"，args=(__args__params, ret)）。
+        # FUNCTION kind 三义：callable 类型（CALLABLE_SPEC）/ fn 动态哨兵
+        # （FN_SPEC）/ 真实函数签名。前两者是"类型标记"，保留裸 TypeRef
+        # （resolve_typeref 经 resolve(name) 回到原 spec——`-> callable` 返回
+        # 推断为 callable 而非结构化 fn[()->auto]，`-> fn` 保持动态哨兵）；
+        # 真实函数签名产结构化形态（调用点可校验参数/返回）。
+        # 收敛 scheduler._spec_to_typeref 与 _param_type_ref 的部分实现（单一权威源）：
+        # 参数/返回保留其既有结构化形态（TypeRef 已是结构化值，含嵌套泛型实参）；
+        # 消费方经 resolve_typeref 的 fn 分支恢复 CALLABLE_SIG spec（参数按 .head
+        # 扁平化，与既有行为一致——嵌套实参经名称回绕，潜伏边界不变）。
+        if spec.kind == TypeKind.FUNCTION.value:
+            if spec.name in ("callable", "fn"):
+                return cls(head=spec.name, args=(), module=getattr(spec, "module_path", None))
+            params = tuple(getattr(spec, "param_types", None) or ())
+            ret_ref = getattr(spec, "return_type", None) or cls.of("void")
+            return cls(
+                "fn",
+                (cls("__args__", params), ret_ref),
+                getattr(spec, "module_path", None),
+            )
+        if spec.kind in (
+            TypeKind.BOUND_METHOD.value,
+            TypeKind.CALLABLE_SIG.value,
+        ):
+            params = tuple(getattr(spec, "param_types", None) or ())
+            ret_ref = getattr(spec, "return_type", None) or cls.of("void")
+            return cls(
+                "fn",
+                (cls("__args__", params), ret_ref),
+                getattr(spec, "module_path", None),
+            )
+
         # 用户类泛型特化 spec（Box[int]）：用结构化实参构造 TypeRef——
         # 避免扁平化（TypeRef('Box[int]') head 含方括号、args 空）导致
         # substitute 无法替换类型参数。基类（模板）无 type_args 走 fallback。

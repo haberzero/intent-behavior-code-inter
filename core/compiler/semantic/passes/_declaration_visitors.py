@@ -20,7 +20,6 @@ from core.base.diagnostics.codes import (
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
 from core.kernel.spec import IbSpec
-from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.member import ParamDescriptor
 from core.kernel.axioms.prompt_protocol import (
@@ -118,14 +117,21 @@ class DeclarationVisitorsMixin:
                          isinstance(node.returns, ast.IbName) and
                          node.returns.id == "auto")
 
-        # 回填函数 spec（用 factory.create_func 重建 TypeDef 携带签名）
+        # 回填函数 spec（用 factory.create_func 重建 TypeDef 携带签名）。
+        # 传结构化 TypeRef（TypeRef.from_spec 单一权威源）——`-> fn[(...)->...]`/
+        # `-> list[int]`/`-> Optional[int]` 等结构化返回不再经 `.name` 字符串
+        # 降级为裸名（类型身份架构断层根治：此前的字符串回填把 symbol_collection
+        # 已产出的结构化 spec 覆盖成扁平 spec）。
         if sym and sym.spec and self.registry:
-            param_type_names = [(p.name if p else "any") for p in param_types]
-            ret_type_name = ret_type.name if ret_type else "void"
             updated_spec = self.registry.factory.create_func(
                 name=node.name,
-                param_type_names=param_type_names,
-                return_type_name=ret_type_name,
+                param_types=[
+                    TypeRef.from_spec(p) if p is not None else TypeRef.of("any")
+                    for p in param_types
+                ],
+                return_type=(
+                    TypeRef.from_spec(ret_type) if ret_type is not None else TypeRef.of("void")
+                ),
                 provenance=Provenance.USER_DEFINED,
                 visibility=Visibility.IMPORT_GATED,
             )
@@ -200,9 +206,10 @@ class DeclarationVisitorsMixin:
                         node, code=SEM_TYPE_MISMATCH
                     )
                     inferred_return = self._any_desc
-                # 更新符号的返回类型
+                # 更新符号的返回类型（from_spec 结构化——`-> auto` 推断出
+                # list[int]/Optional[int] 时不再经 `.name` 字符串扁平化）。
                 if sym and sym.spec and hasattr(sym.spec, 'return_type'):
-                    sym.spec.return_type = TypeRef.of(inferred_return.name, getattr(inferred_return, "module_path", None))
+                    sym.spec.return_type = TypeRef.from_spec(inferred_return)
 
         finally:
             self.pop_scope()
@@ -398,12 +405,15 @@ class DeclarationVisitorsMixin:
         ret_type = self._resolve_type(node.returns) if node.returns else self._any_desc
 
         if sym and sym.spec and self.registry:
-            param_type_names = [(p.name if p else "any") for p in param_types]
-            ret_type_name = ret_type.name if ret_type else "void"
             updated_spec = self.registry.factory.create_func(
                 name=node.name,
-                param_type_names=param_type_names,
-                return_type_name=ret_type_name,
+                param_types=[
+                    TypeRef.from_spec(p) if p is not None else TypeRef.of("any")
+                    for p in param_types
+                ],
+                return_type=(
+                    TypeRef.from_spec(ret_type) if ret_type is not None else TypeRef.of("void")
+                ),
                 provenance=Provenance.USER_DEFINED,
                 visibility=Visibility.IMPORT_GATED,
             )
@@ -478,22 +488,13 @@ class DeclarationVisitorsMixin:
         ``fn[()->int]`` 参数收到返回类型不匹配的可调用时编译放行、运行期失败。
         结构化形态：``TypeRef('fn', (TypeRef('__args__', <params>), <ret>))``。
 
-        其余类型统一走 ``TypeRef.from_spec``（结构化构造，保留泛型实参）——
+        统一委托 ``TypeRef.from_spec``（单一权威源，GEN-FIX 第 4 层规则）——
+        from_spec 已覆盖 FUNCTION/BOUND_METHOD/CALLABLE_SIG 三种 kind 的
+        签名结构化形态。其余类型同样走 from_spec（结构化构造，保留泛型实参）——
         避免 ``TypeRef.of(name)`` 对泛型类参数（``Vec[T]``/``Vec[int]``）扁平化为
         ``TypeRef('Vec[T]')``（head 含方括号、args 空），导致特化时
         ``TypeRef.substitute`` 无法替换、调用点参数校验失效（GEN-6B）。
         """
-        if getattr(arg_type, "kind", None) == TypeKind.CALLABLE_SIG.value:
-            params = tuple(
-                TypeRef.of(p.head, getattr(p, "module", None))
-                for p in arg_type.param_types
-            )
-            ret = arg_type.return_type
-            return TypeRef(
-                "fn",
-                (TypeRef("__args__", params), TypeRef.of(ret.head, getattr(ret, "module", None))),
-                getattr(arg_type, "module_path", None),
-            )
         return TypeRef.from_spec(arg_type)
 
     def _sync_class_member(self, method_name: str, param_descriptors: list) -> None:

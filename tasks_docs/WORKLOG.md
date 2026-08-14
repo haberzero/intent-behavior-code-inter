@@ -2,7 +2,11 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-13（G3 继承特化父类字段丢失 + Finding C any 逃生阀用户类复查 根治；全量 2365 passed / 1 skipped）
+> 最后更新：2026-08-14（函数/可调用类型身份架构断层根治；全量 2746 passed / 1 skipped）
+
+---
+
+| **函数/可调用类型身份架构断层根治（2026-08-14，exp/func-callable-identity → unsafe-vibe-dev，全量 2746 passed / 1 skipped）** | **P0 主线完成（`_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md` + 深化分析）**。**深化分析结论**：用户猜想"fn 早于泛型体系存在历史包袱"证实，且为**三层系统性断层**（比交接更进一步）：① spec→TypeRef 转换无单一权威（`TypeRef.from_spec` 缺 FUNCTION/BOUND_METHOD/CALLABLE_SIG，存在 `scheduler._spec_to_typeref` + `_param_type_ref` 两个部分实现）；② type_checking 回填用 `.name` 字符串覆盖 symbol_collection 已产出的结构化 spec（`-> fn[(...)->...]` 退化为裸 fn；`-> list[int]`/`Optional[int]` 因 canonical-name 回绕仍可用，唯独 CALLABLE_SIG 彻底失效）；③ 函数签名序列化缺口（FUNCTION `get_references` 基类空 + rehydrator `_fill_descriptor` 读恒空 uid 通道回退 void——运行期函数 spec 恒 void 返回）。**五项根治**：A from_spec 补三 kind（FUNCTION 按名区分 callable/fn 标记与真实签名）；B create_func 结构化升级（字符串向后兼容）+ 编译期函数/LLM 函数/`-> auto` 回填传 from_spec；C resolve_member 非 MODULE 方法成员产出 BOUND_METHOD（签名 + receiver_type，BoundMethodAxiom 编译期接线），4 消费点补 kind（resolve_callable_instance_return/容器 hint/contract_validator/fn sig 匹配）；D `_wrap_function_result` 单一 helper 接线三返回消费点（用户函数/lambda 表达式体/LLM 函数，含方法 owner_class 成员签名路径）；E 序列化 FUNCTION/BOUND_METHOD/CALLABLE_SIG 持久化 canonical_name + rehydrator shell/_fill_descriptor 对称恢复。**判别性回归 +29**（`test_func_callable_identity.py` 19 用例 + `TestBoundMethodReturn` 反转 + 方法包装）；触发探针 q1-q12 全 PASS。**独立复核（general agent）**：P1（方法返回 Optional 包装——node_to_symbol 对方法 def 绑定 self 参数符号、func.spec 为类 spec，经 owner_class 成员表签名解析）+ P2（双包装去重/KNOWN_LIMITS §10.4）已整改；P2-4 核验为编译期 SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE 拦截（非问题）。**潜伏边界记录**：KNOWN_LIMITS §10.4（fn 签名内嵌套泛型实参名称回绕可用/结构化操作不可穿透）。设计/实施 `tasks_docs/_code_func_callable_identity.md`。**决策**：全量零回归 + 复核放行 + 无对外契约/架构级风险 → 按零风险细则直接合并 unsafe-vibe-dev |
 
 ---
 

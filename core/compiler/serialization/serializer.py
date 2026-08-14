@@ -199,10 +199,14 @@ class FlatSerializer(BaseFlatSerializer):
         self._collect_generic_payload(t, type_data)
 
         # Persist TypeDef param/return signature for structural checking.
-        if t.kind == TypeKind.CALLABLE_SIG.value:
-            type_data["param_type_names"] = [p.head for p in t.param_types]
+        # FUNCTION/BOUND_METHOD/CALLABLE_SIG 统一持久化签名（canonical_name
+        # 嵌套保真——类型身份架构断层：FUNCTION 此前不持久化签名，运行期水化出
+        # void 返回的函数 spec，函数返回值类型在运行期不可得（Optional 链式消费
+        # 包装失效的直接根因）。
+        if t.kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value, TypeKind.CALLABLE_SIG.value):
+            type_data["param_type_names"] = [p.canonical_name for p in t.param_types]
             ret_ref = t.return_type
-            type_data["return_type_name"] = ret_ref.head if ret_ref is not None else "auto"
+            type_data["return_type_name"] = ret_ref.canonical_name if ret_ref is not None else "auto"
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()

@@ -56,7 +56,7 @@ class ContractValidator:
 
             # 寻找父类中同名成员
             parent_member_spec = self.registry.resolve_member(parent, name)
-            if parent_member_spec and parent_member_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+            if parent_member_spec and parent_member_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value):
                 self._check_method_compatibility_by_name(cls_desc, name, member, parent_member_spec)
 
         # 2. 检查公理契约 (Axiom Contract)

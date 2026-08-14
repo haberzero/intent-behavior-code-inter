@@ -63,20 +63,40 @@ class SpecFactory:
         param_type_modules: Optional[List[Optional[str]]] = None,
         return_type_name: str = "void",
         return_type_module: Optional[str] = None,
+        param_types: Optional[List["TypeRef"]] = None,
+        return_type: Optional["TypeRef"] = None,
         provenance: Provenance = Provenance.KERNEL_NATIVE,
         visibility: Visibility = Visibility.PRELUDE_VISIBLE,
     ) -> "TypeDef":
-        names = list(param_type_names or [])
-        mods = list(param_type_modules or [])
-        while len(mods) < len(names):
-            mods.append(None)
+        """创建 FUNCTION kind 函数 spec。
+
+        ``param_types`` / ``return_type``（结构化 TypeRef）**优先**——早期
+        "字符串级" API（``TypeRef.of`` 扁平化 fn[(签名)]/泛型/Optional 返回）的
+        架构断层根治：结构化注解解析出的 spec 不再被 `.name` 字符串降级。
+        缺失时由 ``param_type_names`` / ``return_type_name`` 经 ``TypeRef.parse``
+        结构化解析（与 create_list/create_optional 同构，嵌套泛型名保真）。
+        """
+        if param_types is not None:
+            refs = list(param_types)
+        elif param_type_names:
+            mods = list(param_type_modules or [])
+            while len(mods) < len(param_type_names):
+                mods.append(None)
+            refs = [TypeRef.parse(n, m) for n, m in zip(param_type_names, mods)]
+        else:
+            refs = []
+        ret_ref = (
+            return_type
+            if return_type is not None
+            else TypeRef.parse(return_type_name, return_type_module)
+        )
         return TypeDef(
             name=name,
             kind=TypeKind.FUNCTION.value,
             provenance=provenance,
             visibility=visibility,
-            return_type=TypeRef.of(return_type_name, return_type_module),
-            param_types=[TypeRef.of(n, m) for n, m in zip(names, mods)],
+            return_type=ret_ref,
+            param_types=refs,
         )
 
     def create_class(
