@@ -296,6 +296,25 @@ class TypeRef:
                 module=spec.module_path,
             )
 
+        # 函数签名（FUNCTION / BOUND_METHOD / CALLABLE_SIG）：统一产
+        # ``fn[(args) -> ret]`` 结构化形态（head="fn"，args=(__args__params, ret)）。
+        # 收敛 scheduler._spec_to_typeref 与 _param_type_ref 的部分实现（单一权威源）：
+        # 参数/返回保留其既有结构化形态（TypeRef 已是结构化值，含嵌套泛型实参）；
+        # 消费方经 resolve_typeref 的 fn 分支恢复 CALLABLE_SIG spec（参数按 .head
+        # 扁平化，与既有行为一致——嵌套实参经名称回绕，潜伏边界不变）。
+        if spec.kind in (
+            TypeKind.FUNCTION.value,
+            TypeKind.BOUND_METHOD.value,
+            TypeKind.CALLABLE_SIG.value,
+        ):
+            params = tuple(getattr(spec, "param_types", None) or ())
+            ret_ref = getattr(spec, "return_type", None) or cls.of("void")
+            return cls(
+                "fn",
+                (cls("__args__", params), ret_ref),
+                getattr(spec, "module_path", None),
+            )
+
         # 用户类泛型特化 spec（Box[int]）：用结构化实参构造 TypeRef——
         # 避免扁平化（TypeRef('Box[int]') head 含方括号、args 空）导致
         # substitute 无法替换类型参数。基类（模板）无 type_args 走 fallback。

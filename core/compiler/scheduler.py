@@ -609,32 +609,17 @@ class Scheduler(ICompilerService):
     def _spec_to_typeref(self, spec: Any) -> Any:
         """把 TypeDef spec 转换为 TypeRef（含泛型/签名结构化形态）。
 
-        ``resolve_typeref`` 消费 TypeRef；TypeDef 的 name/module 是类型身份，
-        kind 决定泛型结构。与 artifact_rehydrator 的反序列化构造同构。
-
-        收敛原则（GEN-FIX 第 4 层规则）：函数签名（FUNCTION/BOUND_METHOD）
-        保留本方法的结构化 ``fn[(args)->ret]`` 形态（``TypeRef.from_spec`` 未覆盖
-        这两种 kind 的签名结构，模块导出函数签名需要保留参数/返回供调用点校验）；
-        其余类型统一委托 ``TypeRef.from_spec``（唯一权威构造入口）——避免扁平化
-        （``TypeRef('chan[str]')`` head 含方括号）、读错承载字段（thread 的
-        ``value_type`` vs ``element_type``）、以及 ``fn_callable`` 值类型被腐蚀为
-        ``fn[__args__()->void]``（kind 级变化）。
+        统一委托 ``TypeRef.from_spec``（唯一权威构造入口，GEN-FIX 第 4 层规则）——
+        from_spec 已覆盖函数签名（FUNCTION/BOUND_METHOD）与 CALLABLE_SIG 的
+        ``fn[(args)->ret]`` 结构化形态，以及其余类型（容器/句柄/Optional/特化）
+        的泛型实参保留。避免扁平化（``TypeRef('chan[str]')`` head 含方括号）、
+        读错承载字段（thread 的 ``value_type`` vs ``element_type``）、以及
+        ``fn_callable`` 值类型被腐蚀为 ``fn[__args__()->void]``（kind 级变化）。
         """
         from core.kernel.spec.type_ref import TypeRef
 
         if spec is None:
             return TypeRef.of("any")
-        kind = getattr(spec, "kind", None)
-        if kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value):
-            # 函数签名：fn[(args...) -> ret] 结构化 ref，保留签名结构
-            # （调用点可校验参数/返回）。from_spec 无此 kind 覆盖。
-            args = TypeRef("__args__", args=tuple(
-                TypeRef.of(p.head, p.module) for p in (getattr(spec, "param_types", []) or [])
-            ))
-            ret = getattr(spec, "return_type", None) or TypeRef.of("void")
-            return TypeRef.generic("fn", args, ret)
-        # 其余（含 CALLABLE_INSTANCE/THREAD/THREAD_RESULT/chan/slot/generator/
-        # 容器/用户类特化）统一走唯一权威构造入口，保证结构化实参保留。
         return TypeRef.from_spec(spec)
 
     def _symbol_to_member(self, name: str, sym: Symbol) -> Any:
