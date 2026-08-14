@@ -11,6 +11,7 @@ Validates:
 - CAT-4: Formatter renders the friendly explanation for known codes
 - CAT-5: Formatter fails open (no crash) for unknown codes
 - CAT-6: The human reference doc (15_diagnostics.md) code set == catalog code set
+- CAT-7: Every catalog code has a real production emission/use site (杜绝幽灵码)
 """
 
 import os
@@ -104,4 +105,57 @@ class TestDocParity:
             f"doc/catalog code set drift: "
             f"in-catalog-not-in-doc={sorted(catalog_codes - doc_codes)}, "
             f"in-doc-not-in-catalog={sorted(doc_codes - catalog_codes)}"
+        )
+
+
+class TestEmitAbility:
+    """CAT-7：每个目录码都有真实的生产发射/使用点（杜绝幽灵码）。
+
+    幽灵码 = 仅在 codes.py/catalog.py 定义、生产代码（core/ / ibci_modules/）
+    零引用的诊断码。这类码让用户看到文档却永远无法触发，属死契约。
+
+    检查方式：在 core/ 与 ibci_modules/ 下扫描每个码常量名（排除定义文件
+    codes.py 与目录 catalog.py，排除 __init__ 再导出）。至少一个生产文件
+    引用即通过。
+    """
+
+    _PROD_ROOTS = ("core", "ibci_modules")
+    _EXCLUDED_FILES = ("codes.py", "catalog.py", "__init__.py")
+
+    @staticmethod
+    def _prod_files():
+        """生产目录下所有 .py 文件（排除定义/目录/包再导出文件）。"""
+        import os
+
+        repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        for root in TestEmitAbility._PROD_ROOTS:
+            base = os.path.join(repo, root)
+            for dirpath, _, files in os.walk(base):
+                for fn in files:
+                    if not fn.endswith(".py"):
+                        continue
+                    if fn in TestEmitAbility._EXCLUDED_FILES:
+                        continue
+                    yield os.path.join(dirpath, fn)
+
+    def test_every_catalog_code_has_production_emission_site(self):
+        import os
+
+        # 收集每个码的生产引用文件
+        prod_sources = {}
+        for p in self._prod_files():
+            try:
+                src = open(p, encoding="utf-8").read()
+            except OSError:
+                continue
+            for name in _all_code_names():
+                if re.search(rf"\b{name}\b", src):
+                    prod_sources.setdefault(name, []).append(p)
+
+        orphan_codes = sorted(
+            name for name in _all_code_names() if name not in prod_sources
+        )
+        assert not orphan_codes, (
+            f"幽灵诊断码（生产代码零引用）: {orphan_codes}. "
+            f"每个目录码必须有真实发射/使用点；无发射点的码应从 codes.py/catalog.py/文档删除。"
         )

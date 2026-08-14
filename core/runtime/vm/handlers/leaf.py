@@ -23,6 +23,7 @@ from core.runtime.exceptions import (
     ThrownException,
 )
 from core.kernel.issue import InterpreterError
+from core.runtime.objects.kernel.functions import _runtime_error_code_for
 from core.kernel.spec.type_ref import TypeRef as _TypeRef
 from core.runtime.objects.primitives import IbNone, IbList, IbTuple, IbDict
 from core.runtime.objects.primitives.optional import is_none_value
@@ -430,7 +431,13 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播，不包装
         if handle_environment_limit(e, rc=executor.runtime_context):
             raise
-        # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误
+        # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误。
+        # 原生 Python 异常类型（AttributeError/IndexError/KeyError 等）映射为
+        # 具体诊断码（幽灵码发射：属性缺失 → RUN_ATTRIBUTE_ERROR 等），
+        # 替代裸 RUNTIME_ERROR/VM: Call failed。
+        code = _runtime_error_code_for(e)
+        if code is not None:
+            raise InterpreterError(str(e), error_code=code) from e
         raise RuntimeError(f"VM: Call failed: {e}") from e
 
 

@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional
-from core.base.diagnostics.codes import LEX_INVALID_CHAR, LEX_INVALID_ESCAPE, LEX_UNTERMINATED_BEHAVIOR, LEX_UNTERMINATED_BLOCK, LEX_UNTERMINATED_STRING
+from core.base.diagnostics.codes import LEX_INVALID_CHAR, LEX_INVALID_ESCAPE, LEX_INVALID_NUMBER, LEX_UNTERMINATED_BEHAVIOR, LEX_UNTERMINATED_BLOCK, LEX_UNTERMINATED_STRING
 from core.compiler.common.tokens import Token, TokenType, SubState
 from core.compiler.lexer.str_stream import StrStream
 from core.compiler.common.diagnostics import DiagnosticReporter
@@ -758,12 +758,19 @@ class CoreTokenScanner:
 
     def _scan_number(self, first_char: str, tokens: List[Token]):
         value = first_char
-        
+
         # 1. Hexadecimal (0x...)
         if first_char == '0' and (self.scanner.peek() == 'x' or self.scanner.peek() == 'X'):
             value += self.scanner.advance()
             while not self.scanner.is_at_end() and (self.scanner.peek().isdigit() or self.scanner.peek() in 'abcdefABCDEF'):
                 value += self.scanner.advance()
+            # 0x 后必须至少一位十六进制数字；否则是残缺字面量（此前
+            # 落入 int('0x') → INT_INTERNAL_ERROR 内部错误）。
+            if value == '0x' or value == '0X':
+                self.issue_tracker.error(
+                    f"Invalid number literal '{value}': hexadecimal prefix requires at least one digit (e.g. 0xFF).",
+                    self.scanner, code=LEX_INVALID_NUMBER,
+                )
             tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
             self.is_new_line_flag = False
             return
@@ -773,6 +780,11 @@ class CoreTokenScanner:
             value += self.scanner.advance()
             while not self.scanner.is_at_end() and self.scanner.peek() in '01':
                 value += self.scanner.advance()
+            if value == '0b' or value == '0B':
+                self.issue_tracker.error(
+                    f"Invalid number literal '{value}': binary prefix requires at least one digit (e.g. 0b101).",
+                    self.scanner, code=LEX_INVALID_NUMBER,
+                )
             tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
             self.is_new_line_flag = False
             return
@@ -782,6 +794,11 @@ class CoreTokenScanner:
             value += self.scanner.advance()
             while not self.scanner.is_at_end() and self.scanner.peek() in '01234567':
                 value += self.scanner.advance()
+            if value == '0o' or value == '0O':
+                self.issue_tracker.error(
+                    f"Invalid number literal '{value}': octal prefix requires at least one digit (e.g. 0o17).",
+                    self.scanner, code=LEX_INVALID_NUMBER,
+                )
             tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
             self.is_new_line_flag = False
             return
@@ -789,13 +806,13 @@ class CoreTokenScanner:
         # 3. Decimal / Float
         while self.scanner.peek().isdigit():
             value += self.scanner.advance()
-            
+
         # Fraction part
         if self.scanner.peek() == '.' and self.scanner.peek(1).isdigit():
             value += self.scanner.advance()
             while self.scanner.peek().isdigit():
                 value += self.scanner.advance()
-                
+
         # Scientific notation
         if self.scanner.peek() in 'eE':
             next_char = self.scanner.peek(1)
@@ -805,6 +822,16 @@ class CoreTokenScanner:
                     value += self.scanner.advance()
                 while self.scanner.peek().isdigit():
                     value += self.scanner.advance()
+
+        # 数字后紧跟字母/下划线（如 12abc / 1e 后无数字）→ 非法数字字面量。
+        # 不合法则报 LEX_INVALID_NUMBER，避免后续误当作两个 token 产生
+        # 令人困惑的 PAR 错误。
+        if not self.scanner.is_at_end() and (self.scanner.peek().isalpha() or self.scanner.peek() == '_'):
+            self.issue_tracker.error(
+                f"Invalid number literal '{value}': unexpected character "
+                f"'{self.scanner.peek()}' after number (identifiers must not start with a digit).",
+                self.scanner, code=LEX_INVALID_NUMBER,
+            )
 
         tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
         self.is_new_line_flag = False

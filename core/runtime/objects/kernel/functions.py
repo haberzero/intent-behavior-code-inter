@@ -1,11 +1,35 @@
 from typing import Callable, Optional, List, Any
 
+from core.base.diagnostics.codes import (
+    RUN_ATTRIBUTE_ERROR,
+    RUN_DIVISION_BY_ZERO,
+    RUN_INDEX_ERROR,
+    RUN_PERMISSION_ERROR,
+)
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import IbSpec
 from core.runtime.exceptions import ThrownException
 
 from .base import IbObject, unbox
+
+
+def _runtime_error_code_for(exc: Exception) -> Optional[str]:
+    """原生函数边界异常 → 运行时诊断码（幽灵码发射：除零/越界/属性/权限）。
+
+    原生 Python 异常（ZeroDivisionError / IndexError / KeyError /
+    AttributeError / PermissionError）经此映射为具体诊断码，替代裸
+    ``RUNTIME_ERROR``。无法归类的异常返回 None（回落默认 RUNTIME_ERROR）。
+    """
+    if isinstance(exc, ZeroDivisionError):
+        return RUN_DIVISION_BY_ZERO
+    if isinstance(exc, (IndexError, KeyError)):
+        return RUN_INDEX_ERROR
+    if isinstance(exc, AttributeError):
+        return RUN_ATTRIBUTE_ERROR
+    if isinstance(exc, PermissionError):
+        return RUN_PERMISSION_ERROR
+    return None
 
 
 class IbFunction(IbObject):
@@ -76,7 +100,11 @@ class IbNativeFunction(IbFunction):
             # try-except 体系处理；不可被包装为 InterpreterError。
             if isinstance(e, ThrownException):
                 raise
-            raise InterpreterError(f"Native function '{self._name}' failed: {e}") from e
+            code = _runtime_error_code_for(e)
+            raise InterpreterError(
+                f"Native function '{self._name}' failed: {e}",
+                error_code=code,
+            ) from e
 
 
 class IbBoundMethod(IbFunction):

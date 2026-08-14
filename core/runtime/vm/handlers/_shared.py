@@ -4,8 +4,8 @@ core.runtime.vm.handlers._shared — 跨类别 CPS 辅助函数。
 from __future__ import annotations
 from typing import Any, Mapping, Optional, List
 
-from core.base.diagnostics.codes import RUN_CALL_ERROR
-from core.runtime.observability.diagnostics import handle_environment_limit
+from core.base.diagnostics.codes import RUN_CALL_ERROR, RUN_LLMEXCEPT_SNAPSHOT_VIOLATION
+from core.runtime.observability.diagnostics import handle_environment_limit, kernel_diagnostic
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.signals import (
     ControlSignal,
@@ -682,6 +682,16 @@ def _retry_llm_uncertain(executor, uncertain_result, handler_uid: str, re_eval_u
             # 运行期影子存储校验：检测被保护变量是否在 body 中被篡改
             violations = frame.verify_snapshot_integrity(executor.runtime_context)
             if violations:
+                # 快照篡改检测 → 发警告（可观测性），随后恢复黄金快照。
+                # 恢复本身是确定性行为，故为警告而非错误（不阻断 retry）。
+                kernel_diagnostic(
+                    code=RUN_LLMEXCEPT_SNAPSHOT_VIOLATION,
+                    detail={"violated_vars": list(violations)},
+                    message=(
+                        "llmexcept 快照隔离违规：检测到受保护变量被篡改"
+                        f" {list(violations)}；已恢复黄金快照并继续重试。"
+                    ),
+                )
                 frame.restore_snapshot(executor.runtime_context)
 
             if not frame.increment_retry():

@@ -78,10 +78,6 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="缩进不符合语言规则（块结构依赖缩进表达层级）。",
         fix="统一使用一致的缩进（空格/制表符不要混用），对齐所属块的缩进级别。",
     ),
-    "PAR_MULTIPLE_INTENTS": CodeInfo(
-        title="同一位置出现了多个意图声明。",
-        fix="每条语句/块只保留一个意图注释。",
-    ),
     "PAR_DEPRECATED_CAST_SYNTAX": CodeInfo(
         title="使用了已废弃的强制类型转换语法。",
         fix="改用现行语法（如 (Type)expr 的新形式），详见语法文档。",

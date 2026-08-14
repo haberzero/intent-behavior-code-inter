@@ -1,4 +1,5 @@
 from typing import Optional
+from core.base.diagnostics.codes import RUN_PERMISSION_ERROR
 from core.kernel.issue import InterpreterError
 from core.runtime.objects.kernel import IbObject
 from core.kernel.path import IbPath, PathValidator
@@ -51,5 +52,6 @@ class PermissionManager:
         if not is_valid:
             raise InterpreterError(
                 f"Security Error: Permission denied for {operation} on path outside workspace: {path}. "
-                f"IBC-Inter is currently restricted to its root directory."
+                f"IBC-Inter is currently restricted to its root directory.",
+                error_code=RUN_PERMISSION_ERROR,
             )

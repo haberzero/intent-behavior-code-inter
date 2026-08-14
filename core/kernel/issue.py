@@ -62,7 +62,7 @@ class ParserError(IBCBaseException):
 
 class InterpreterError(IBCBaseException):
     def __init__(self, message: str, location: Optional[Location] = None, error_code: Optional[str] = None):
-        super().__init__(message, location, severity=Severity.ERROR, error_code=error_code or "RUNTIME_ERROR")
+        super().__init__(message, location, severity=Severity.ERROR, error_code=error_code or "RUN_GENERIC_ERROR")
 
 class PluginError(IBCBaseException):
     """

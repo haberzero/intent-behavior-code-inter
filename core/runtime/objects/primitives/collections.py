@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 from ..kernel import IbObject, IbValue, IbClass
 from ..kernel.base import unbox
 from core.kernel.issue import InterpreterError
+from core.base.diagnostics.codes import RUN_INDEX_ERROR
 from ..ib_type_mapping import register_ib_type
 
 
@@ -124,7 +125,10 @@ class IbList(IbValue):
                 return IbList(list(res), self.ib_class)
             return res
         except IndexError:
-            raise InterpreterError(f"IndexError: list index out of range: {idx}")
+            raise InterpreterError(
+                f"IndexError: list index out of range: {idx}",
+                error_code=RUN_INDEX_ERROR,
+            )
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
         idx = unbox(key)
@@ -347,7 +351,10 @@ class IbDict(IbValue):
         try:
             return self.fields[k]
         except KeyError:
-            raise InterpreterError(f"KeyError: '{k}'")
+            raise InterpreterError(
+                f"KeyError: '{k}'",
+                error_code=RUN_INDEX_ERROR,
+            )
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
         k = unbox(key)
