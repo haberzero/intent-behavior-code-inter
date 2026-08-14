@@ -122,6 +122,20 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-14 无人值守 session，unsafe-vibe-dev 19920d39，全量 2714 passed / 1 skipped 零回归）**：
+  **DOC-29 + BOUNDARY-NESTED-FUNC-1 两项根因修复**（E 批判批次发现的架构级修复）。
+  **BOUNDARY-NESTED-FUNC-1（架构级，深度分析修正定性）**——真实根因=编译期 `visit_IbReturn`
+  返回类型兼容校验整体缺失（`-> fn_callable[int]: return inner` 编译期放行、运行期
+  RUN_TYPE_MISMATCH；实测 `-> int: return "abc"` 亦放行，非"嵌套函数类型身份"）。修复：
+  `visit_IbReturn` 对非动态可调用返回类型（FUNCTION/BOUND_METHOD/CALLABLE_SIG/
+  CALLABLE_INSTANCE）补 is_assignable 校验，与直接赋值路径语义对齐（fn_callable 槽只
+  接受 lambda/behavior 实例；`-> fn` 动态哨兵跳过；普通类型返回保持宽松）。判别性回归
+  +13（test_return_type_validation.py）。**DOC-29**——空 Optional 操作（for 迭代/unwrap）
+  补 error_code=RUN_ATTRIBUTE_ERROR，三处发射点收敛 + 文档 arch/03 §8 一致。判别性回归
+  +4（TestOptionalEmptyErrorCode）。E1/E2/E3 触发用例全部核销转 PASS（E3 语义改进：运行时
+  RUN_TYPE_MISMATCH → 编译期 SEM_TYPE_MISMATCH，fail-fast 提前）。设计 `_code_return_type_check.md`。
+  详见 PENDING_TASKS 两行 + WORKLOG + REGISTER §八bis。
+
 - **✅ 已完成（2026-08-14 第二 session 复核，未改内核，全量 2693 passed / 1 skipped）**：
   **push github + 试用套件复核 T07 三项 P1 修复有效性 + 零退化确认 + E 批判补充批次**。
   push 已执行（124 commits → origin/unsafe-vibe-dev）。T07 全量 43 例重跑 + 旧套件

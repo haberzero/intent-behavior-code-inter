@@ -1,7 +1,7 @@
-# 批判：空 Optional unwrap 诊断码（文档承诺 RUN_ATTRIBUTE_ERROR）
+# 批判：空 Optional unwrap 诊断码（修复后统一 RUN_ATTRIBUTE_ERROR，DOC-29 核销）
 # doc: docs/architecture/03_type_system.md §8
-# expect-class: DOC_ISSUE
-# expect-code: RUN_GENERIC_ERROR
+# expect-class: PASS
+# expect-code: RUN_ATTRIBUTE_ERROR
 # expect-exit: nonzero
 Optional[int] e = None
 print(e.unwrap())

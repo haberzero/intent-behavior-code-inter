@@ -460,12 +460,16 @@ class StatementVisitorsMixin:
             if func_returns and func_returns[-1] is not None:
                 self._bind_literal_with_type(rhs_inner, func_returns[-1])
                 # 可调用返回类型兼容校验（BOUNDARY-NESTED-FUNC-1 根因根治）：
-                # 函数声明返回具体可调用类型（fn_callable[T]/callable/behavior[T]，
-                # 非动态）时，返回表达式的类型须可赋值——与直接赋值路径
-                # （fn_callable[T] g = inner 编译期拦截）语义一致。此前
-                # visit_IbReturn 从不比对 ret_type 与声明返回类型，导致
+                # 函数声明返回具体可调用类型（fn_callable[T]/callable/behavior[T]/
+                # fn[(...) -> (...)]，非动态）时，返回表达式的类型须可赋值——与
+                # 直接赋值路径（fn_callable[T] g = inner 编译期拦截）语义一致。
+                # 此前 visit_IbReturn 从不比对 ret_type 与声明返回类型，导致
                 # `-> fn_callable[int]: return inner`（函数引用）编译期放行、
                 # 运行期 RUN_TYPE_MISMATCH。动态声明（`-> fn` 推断哨兵）跳过。
+                # self.is_assignable 与赋值路径同方法（含 None 宽容 + TypeRef
+                # 解析）；CALLABLE_SIG 的逐参数强校验由 `_infer_fn_type_with_sig`
+                # 在赋值路径承担，return 路径复用 is_assignable（对 lambda 的
+                # CALLABLE_SIG spec 因参数丢失 pre-existing bug 两者行为一致）。
                 declared_ret = func_returns[-1]
                 if (
                     declared_ret is not None
@@ -477,11 +481,11 @@ class StatementVisitorsMixin:
                         TypeKind.CALLABLE_INSTANCE.value,
                     )
                     and not self.registry.is_dynamic(declared_ret)
-                    and not self.registry.is_assignable(ret_type, declared_ret)
+                    and not self.is_assignable(ret_type, declared_ret)
                 ):
                     self.error(
-                        f"Cannot return '{getattr(ret_type, 'name', 'auto')}' from function "
-                        f"declared '{declared_ret.name}'",
+                        f"Cannot return '{getattr(ret_type, 'name', 'auto')}' "
+                        f"from function declared '{declared_ret.name}'",
                         node, code=SEM_TYPE_MISMATCH,
                     )
                     return self._void_desc

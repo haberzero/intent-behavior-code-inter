@@ -175,6 +175,22 @@
 **E 批次结论**：三项修复主路径全部有效（E4/E5/E7/E8 确认委托链在读取/下标/迭代/切片/变异全场景正确）；
 发现 **2 项文档矛盾（空值错误码）** 与 **1 项 pre-existing 边界（嵌套函数返回类型）**，均不阻断修复有效性。
 
+### 八bis、E 批次发现修复核销（2026-08-14 无人值守 session）
+
+> 两项发现经深度根因分析 + 架构级修复（commit 19920d39，全量 2714 passed / 1 skipped）后，
+> E1/E2/E3 触发用例全部核销转 PASS。
+
+| case_id | 修复前 | 修复后 | 核销 |
+|---------|--------|--------|------|
+| E1-empty-optional-code | RUN_GENERIC_ERROR（文档矛盾） | RUN_ATTRIBUTE_ERROR（iterable.py 补 error_code） | **PASS**（DOC-29） |
+| E2-empty-optional-unwrap-code | RUN_GENERIC_ERROR | RUN_ATTRIBUTE_ERROR（optional.py unwrap 补 error_code） | **PASS**（DOC-29） |
+| E3-nested-func-return | 运行时 RUN_TYPE_MISMATCH | 编译期 SEM_TYPE_MISMATCH（visit_IbReturn 补校验，fail-fast 提前） | **PASS**（BOUNDARY-NESTED-FUNC-1） |
+
+**深度分析关键修正**：BOUNDARY-NESTED-FUNC-1 真实根因非"嵌套函数类型身份"，而是编译期
+`visit_IbReturn` 返回类型兼容校验整体缺失（实测 `-> int: return "abc"` 亦放行）。修复只对
+非动态可调用返回类型补校验，与直接赋值路径语义对齐；`-> fn` 动态哨兵与普通类型返回保持
+既有语义（不扩大影响面）。
+
 ## 九、结论
 
 - **四项修复面（CROSSMOD-LLM-1 / KI-2 / 幽灵诊断码 / set_mock_mode）批判性对抗全部通过**：

@@ -6,6 +6,18 @@
 > 1 skipped** 零回归（2665 基线 + 28 判别性回归）；触发用例 D2-09/D2-10/D1-13 全部核销
 > 转 PASS。完整记录见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`（已标记完成）与 WORKLOG）
 >
+> **✅ 已完成（2026-08-14，unsafe-vibe-dev 19920d39，全量 2714 passed / 1 skipped 零回归）**：
+> **DOC-29 + BOUNDARY-NESTED-FUNC-1 两项根因修复**（E 批判批次发现，无人值守 session）。
+> **BOUNDARY-NESTED-FUNC-1（架构级）**——深度分析修正定性：真实根因=编译期 `visit_IbReturn`
+> 返回类型兼容校验整体缺失（`-> fn_callable[int]: return inner` 编译期放行、运行期
+> RUN_TYPE_MISMATCH；实测 `-> int: return "abc"` 亦放行）。修复：`visit_IbReturn` 对非动态
+> 可调用返回类型（FUNCTION/BOUND_METHOD/CALLABLE_SIG/CALLABLE_INSTANCE）补 is_assignable
+> 校验，与直接赋值路径语义对齐（fn_callable 槽只接受 lambda/behavior 实例）；`-> fn`
+> 动态哨兵跳过、普通类型返回保持宽松。判别性回归 +13。**DOC-29**——空 Optional 操作
+> （for 迭代/unwrap）补 error_code=RUN_ATTRIBUTE_ERROR，三处发射点收敛 + 文档一致。
+> 判别性回归 +4。E1/E2/E3 触发用例全部核销转 PASS。设计 `_code_return_type_check.md`。
+> 详见 PENDING_TASKS 两行 + WORKLOG + REGISTER §八bis。
+>
 > **📋 第二 session 复核（2026-08-14，未改内核）**：push 已授权执行；T07 全量 43 例重跑 +
 > 旧套件 T01-T06 238 例重跑**零回归**（三项修复有效、无内核退化）；E 批判补充批次 8 例
 > （5 PASS + 1 BOUNDARY + 2 DOC_ISSUE）新登记 **DOC-29**（空 Optional 操作错误码

@@ -164,3 +164,46 @@ class TestReturnCallableValidation:
             "print(f(5))\n"
         )
         assert run_ibci(code) == ["15"]
+
+
+class TestBoundMethodReturn:
+    """绑定方法返回可调用类型——与直接赋值路径语义一致（F2 复核锁定）。
+
+    编译器把成员访问（``a.calc``）建模为 FUNCTION-kind spec（name=calc），
+    BoundMethodAxiom（bound_method IS-A callable）不触发，故绑定方法赋
+    callable/fn_callable 槽在直接赋值路径即被拦截（pre-existing，非本修复
+    引入）。本测试锁定 return 路径与赋值路径的一致性。
+    """
+
+    def test_return_bound_method_to_callable_rejected(self):
+        """``-> callable: return a.calc`` 编译期拦截（与 ``callable f = a.calc``
+        直接赋值一致——pre-existing 绑定方法建模，非本次修复回归）。"""
+        code = (
+            "class Adder:\n"
+            "    int base\n"
+            "    func __init__(self, int b) -> auto:\n"
+            "        self.base = b\n"
+            "    func calc(self) -> int:\n"
+            "        return self.base + 1\n"
+            "func make(Adder a) -> callable:\n"
+            "    return a.calc\n"
+            "callable f = make(Adder(10))\n"
+            "print(f())\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_return_bound_method_to_fn_allowed(self):
+        """``-> fn``（动态）返回绑定方法放行（fn 推断哨兵，与赋值一致）。"""
+        code = (
+            "class Adder:\n"
+            "    int base\n"
+            "    func __init__(self, int b) -> auto:\n"
+            "        self.base = b\n"
+            "    func calc(self) -> int:\n"
+            "        return self.base + 1\n"
+            "func make(Adder a) -> fn:\n"
+            "    return a.calc\n"
+            "fn f = make(Adder(10))\n"
+            "print(f())\n"
+        )
+        assert run_ibci(code) == ["11"]

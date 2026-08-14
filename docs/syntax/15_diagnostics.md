@@ -419,12 +419,15 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 - **修复方式**：在除法前校验除数非零，或调整算法避免除零。
 
 ### `RUN_ATTRIBUTE_ERROR`
-对象上没有该属性/方法。
+对象上没有该属性/方法，或对空 `Optional` 执行不可用操作。
 - **触发条件**：访问对象不存在的属性/方法——属性**读取**（`p.missing`）与
   方法**调用**（`p.missing()`）路径均报此码（属性缺失显式报错，不静默返回
-  None）。
+  None）；**空 `Optional` 上执行不可用操作**（`unwrap()` / `len` / 下标 /
+  `for` 迭代 / `next()`）亦报此码（`docs/architecture/03_type_system.md` §8
+  "Optional 容器委托"：空值操作 fail-fast，不静默返回错误值）。
 - **严重级别**：ERROR。
-- **修复方式**：确认对象类型，使用其真实存在的成员。
+- **修复方式**：确认对象类型，使用其真实存在的成员；空 `Optional` 先经
+  `is_some()`/`is_none()` 判空或 `or_else(default)` 提供兜底值再操作。
 
 ### `RUN_INDEX_ERROR`
 索引越界或键不存在。
