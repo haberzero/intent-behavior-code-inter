@@ -32,3 +32,4 @@ ref/
 build/
 dist/
 .eggs/
+tasks_docs/trials/T07_fixes_critical_stress/_scratch/

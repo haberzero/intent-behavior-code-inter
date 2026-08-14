@@ -1,2 +1,0 @@
-chan[str] ch = chan(str, "stream")
-print(type(ch))

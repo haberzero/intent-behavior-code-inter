@@ -1,8 +1,0 @@
-class Box[T]:
-    T value
-    func get(self) -> T:
-        return self.value
-slot[Box[int]] sl = slot()
-sl.update(Box[int](9))
-Box[int] s = sl.get()
-print(s.get())

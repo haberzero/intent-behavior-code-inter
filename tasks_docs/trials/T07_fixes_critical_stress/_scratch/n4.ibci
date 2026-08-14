@@ -1,9 +1,0 @@
-class Box[T]:
-    T value
-    func get(self) -> T:
-        return self.value
-func make_box() -> Box[str]:
-    return Box[str]("in_thread")
-thread[Box[str]] th = thread(callable=make_box, args=[])
-thread_result[Box[str]] r = await th
-print(r.unwrap())

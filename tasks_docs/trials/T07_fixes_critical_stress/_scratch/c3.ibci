@@ -1,6 +1,0 @@
-class Box[T]:
-    T value
-    func get(self) -> T:
-        return self.value
-auto ch = chan(Box[int], "message")
-print(type(ch))
