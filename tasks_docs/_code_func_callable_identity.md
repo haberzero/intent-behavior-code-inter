@@ -106,6 +106,28 @@ define 包装后值再经本 helper 不重复包装）。三个消费点统一�
 - 连带：`-> list[int]`/`-> Optional[int]` 返回在"未赋值直接消费"路径（`type(make())`、`make()[0]`、`make().unwrap()`）
 - 反转 `tests/e2e/test_return_type_validation.py TestBoundMethodReturn` 旧预期（
   `-> callable: return a.calc` 从 SEM 拦截 → 放行）
+- 判别性回归文件 `tests/e2e/test_func_callable_identity.py`（18 用例，编译期 + 运行期 + type 身份）
+
+## 三bis、实施中发现的新根因（超出交接文档）
+
+1. **函数签名序列化缺口（问题 3 运行期包装的直接根因）**：FUNCTION spec 的
+   `get_references()` 基类默认空（type_ref.py 无重载），序列化器不持久化签名；
+   但 rehydrator `_fill_descriptor` 读 `param_types_uids`/`return_type_uid`（恒空）
+   → 回退 `TypeRef.of("void")` 覆盖 shell —— 运行期函数 spec 恒 void 返回，
+   声明返回类型在运行期完全不可得。**修复**：serializer 对 FUNCTION/BOUND_METHOD/
+   CALLABLE_SIG 统一持久化 `param_type_names`/`return_type_name`（canonical_name
+   嵌套保真），rehydrator shell + `_fill_descriptor` 对称恢复。
+2. **`-> auto` 返回回填同源扁平化**（`_declaration_visitors.py:211`）：
+   `TypeRef.of(inferred_return.name)` → from_spec 收敛。
+3. **FUNCTION kind 三义**：CALLABLE_SPEC（name="callable"）/ FN_SPEC（name="fn"）/
+   真实函数签名共用 FUNCTION kind。from_spec 按名区分（前两者裸 TypeRef，签名
+   产 fn[(args)->ret]）——否则 `-> callable` 返回会误推断为结构化 fn[()->auto]。
+4. **潜伏边界（保持既有行为，记录不修）**：CALLABLE_SIG 构造/重建（`_type_checking_base`
+   :367 / `symbol_resolution_pass` :371 / `resolve_typeref` fn 分支 / 序列化 canonical）
+   对嵌套泛型实参按 `.head`/name 扁平化——q6/q9 实证 `fn[(list[int])->int]`/
+   `fn[(Box[int])->int]` 经注册表名称回绕仍工作；改为结构化实参需协调
+   `_check_callable_sig_match`（当前按 `resolve(head)` 解析实参，结构化会破坏
+   用户类泛型匹配）。不阻塞本次修复，KNOWLEDGE 记录于 KNOWN_LIMITS §十四。
 
 ## 四、执行纪律
 
