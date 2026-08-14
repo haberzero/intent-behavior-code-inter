@@ -2,9 +2,20 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**✅ 已完成：fn/callable 关键字体系重构（方向 A）**。
-> 用户 2026-08-14 拍板：移除用户面 `callable` 类型注解（内部化），`fn` 参数/返回
-> 收紧为"强制可调用"。设计分析 `_DESIGN_FN_CALLABLE.md`）
+> **最后更新**：2026-08-14（**✅ 已完成：fn[(...)->...]（CALLABLE_SIG）签名模型根治**。
+> KNOWN_LIMITS §10.4 潜伏边界已根治（类型安全漏洞关闭）。设计分析
+> `_DESIGN_CALLABLE_SIG_SIGNATURE.md`）
+>
+> **✅ 已完成（2026-08-14，exp/callable-sig-signature → unsafe-vibe-dev，全量 2775 passed / 1 skipped 零回归）**：
+> **CALLABLE_SIG 签名模型架构碎片化根治**。深挖推翻 §10.4"潜伏"定性——为真实类型安全
+> 漏洞：① 匹配双通道（`_matches_callable_sig` 只查数量+返回，`fn[(Box[int])->int]` 收
+> `get2(str)->int` 漏检）；② 嵌套类型参数不替换（扁平构造 `TypeRef('Box[T]')` substitute
+> 不可穿透 → 调用点 resolve miss → 检查静默跳过）。**根治**：结构化构造（`TypeRef.from_spec`
+> 替代 `TypeRef.of(p.name)` 扁平化）+ 结构化重建（resolve_typeref 保留嵌套实参）+
+> 统一匹配（`_matches_callable_sig` 补逐参数类型检查，两 matcher 改 resolve_typeref）+
+> 延后规则（仅裸类型参数占位延后；any 通配不误拒模板；带实参不可解析 fail-fast）。
+> 判别性回归 +10（TestCallableSigSignature）+ 模板回归 2；两轮独立复核 P1 已整改。
+> 已知残留：`list[fn]` 容器元素级强制可调用未接线（独立于签名模型）。
 >
 > **✅ 已完成（2026-08-14，exp/fn-callable-redesign → unsafe-vibe-dev，全量 2765 passed / 1 skipped 零回归）**：
 > **fn/callable 关键字体系重构（方向 A）**。彻查结论（`_DESIGN_FN_CALLABLE.md`）：

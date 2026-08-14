@@ -2,7 +2,7 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-14（fn/callable 关键字体系重构 方向 A；全量 2765 passed / 1 skipped）
+> 最后更新：2026-08-14（fn[(...)->...]（CALLABLE_SIG）签名模型根治；全量 2775 passed / 1 skipped）
 
 ---
 
@@ -11,6 +11,10 @@
 ---
 
 | **fn/callable 关键字体系重构 · 方向 A（2026-08-14，exp/fn-callable-redesign → unsafe-vibe-dev，全量 2765 passed / 1 skipped）** | **用户 2026-08-14 拍板：移除用户面 `callable` 类型（内部化），`fn` 参数/返回收紧为"强制可调用"**。**彻查结论**（`_DESIGN_FN_CALLABLE.md`）：`callable` 作为用户类型是"内部概念泄漏 + 半成品"——实证只对 lambda/绑定方法生效、误拒裸函数/可调用类实例/容器（`list[callable]` 报迷惑错误）；唯一净能力"强制可调用"（拒 42）也误伤合法可调用；与文档"不引入统一 callable 基类"鸭子类型哲学矛盾；与 `fn`（动态）职责重叠；一词四义（运行期基类名 type(make)="callable" / 公理族根 / 用户类型 / thread(callable=...) 参数名）。**实施**：① 三注解解析器（`_resolve_type`/`_resolve_annotation_spec`/`_annotation_to_typeref`，IbName+IbSubscript base+基类继承）对 `callable` 报 `SEM_UNRESOLVED_TYPE` 引导用 `fn`；② `fn` 参数（`_check_call_arg_type`）与返回（`visit_IbReturn`）对 bare fn 哨兵校验可调用——CLASS 按 `__call__` 成员判定（P1 整改，is_callable(CLASS) 恒真漏检无 __call__ 实例，与声明路径 `_infer_fn_type` 对齐；类名构造器引用放行），动态 any/auto 放行；③ `_infer_fn_type` 兜底 `resolve("callable")`→`resolve("fn")`；④ 共享 helper `_fn_callable.py`（`is_fn_callable_value`/`is_constructor_ref_expr`/`CALLABLE_INTERNAL_TYPE_MSG` 单点真理）。**判别性回归 +19**（TestCallableInternalization 4 + TestFnCallabilityEnforcement 13 + 迁移反转 + P1/P2 追加）。**独立复核（general agent）**：P1（fn 参数/返回 CLASS 按 __call__ 判定）+ P2（class X(callable) 继承守卫 / 共享消息常量）已整改。**已知残留**：`list[fn]` 容器元素级强制可调用未接线。**文档**：KNOWN_LIMITS §七 / 03_callable_fn / 03_type_system §7 / 05_functions §5.6。 |
+
+---
+
+| **fn[(...)->...]（CALLABLE_SIG）签名模型根治（2026-08-14，exp/callable-sig-signature → unsafe-vibe-dev，全量 2775 passed / 1 skipped）** | **KNOWN_LIMITS §10.4"潜伏边界"深挖推翻——真实类型安全漏洞根治**。**深挖实证**：① 匹配双通道——`_matches_callable_sig`（is_assignable 路径）只查参数数量+返回类型，不查逐参数类型，`fn[(Box[int])->int]` 收 `get2(str)->int` 编译期放行、运行期 RUN_TYPE_MISMATCH（漏洞 1）；② 嵌套类型参数不替换——扁平构造 `TypeRef('Box[T]')` substitute 不可穿透，`Host[int]` 特化后 `fn[(Box[T])->int]` 的 `T` 未替换 → 调用点 `resolve("Box[T]")` miss → 检查静默跳过（漏洞 2）。**根因**：CALLABLE_SIG 构造用 `TypeRef.of(p.name)` 扁平化（与 fn/callable 断层同源——泛型结构化地基后签名构造/匹配未跟随升级），且匹配双实现。**根治**：① 结构化构造（`TypeRef.from_spec` 替代扁平化，产出 TypeRef('Box',(T,))，substitute 可穿透）；② 结构化重建（resolve_typeref fn 分支保留嵌套实参）；③ 统一匹配（`_matches_callable_sig` 补逐参数类型检查 + 两 matcher/strategy-2 改 resolve_typeref，收敛双通道）；④ 延后规则（仅裸类型参数占位延后；`spec_has_any_generic_arg` 结构化判定 any 通配/T 降级不误拒模板；带实参不可解析 fail-fast）。**判别性回归 +10**（TestCallableSigSignature：漏洞 1/2 编译期拦截、泛型特化替换匹配、嵌套实参常规消费、协变返回、lambda 返回/参数数量不匹配、序列化 round-trip）+ 模板回归 2。**两轮独立复核（general agent）P1 已整改**（fail-fast 过度误拒模板 → 延后；`spec_has_any_generic_arg` name 子串假阳性 → 结构化逐实参）。KNOWN_LIMITS §10.4 定性更新（潜伏→已根治）。设计/实施 `_DESIGN_CALLABLE_SIG_SIGNATURE.md`。**已知残留**：`list[fn]` 容器元素级强制可调用未接线。 |
 
 ---
 

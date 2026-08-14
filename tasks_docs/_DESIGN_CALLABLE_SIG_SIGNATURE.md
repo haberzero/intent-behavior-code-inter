@@ -84,6 +84,15 @@
 4. **静默跳过 fail-fast**：签名参数类型解析 miss（如未特化占位）不再静默跳过——
    显式报错或按动态放行并记录（fail-fast 纪律）。
 
+### 实施状态（2026-08-14 已完成，exp/callable-sig-signature → unsafe-vibe-dev）
+
+四项全部落地 + 判别性回归 +10（`TestCallableSigSignature`）+ 全量 2775 passed / 1
+skipped 零回归。两轮独立复核（general agent）：首轮 P1（fail-fast 过度误拒泛型模板）
+已整改；聚焦复核 P1（`spec_has_any_generic_arg` name 子串假阳性——Company 等含
+"any" 子串类型名误判）已整改为结构化逐实参判定。**延后规则收窄**：仅裸类型参数占位
+（T，无实参）延后至特化后校验；带实参不可解析（module 限定 concrete）拒绝/报错
+（fail-fast，不静默跳过）。any 通配（T 降级 Box[any] 或显式 any）延后不误拒模板。
+
 ### 连带核验
 - 序列化往返：serializer 已 canonical_name + rehydrator TypeRef.parse（嵌套保真），
   与结构化构造一致；核验 round-trip 后结构化保真。

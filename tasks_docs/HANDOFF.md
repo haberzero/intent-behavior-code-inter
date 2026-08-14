@@ -122,6 +122,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-14，exp/callable-sig-signature → unsafe-vibe-dev 合并，全量 2775 passed / 1 skipped 零回归）**：
+  **fn[(...)->...]（CALLABLE_SIG）签名模型根治**。KNOWN_LIMITS §10.4"潜伏边界"深挖
+  推翻为真实类型安全漏洞（匹配双通道只查数量+返回 / 嵌套类型参数不替换致检查静默
+  跳过），根治（结构化构造/重建 + 统一匹配逐参数检查 + 延后规则），判别性回归 +12，
+  两轮独立复核 P1 已整改。已知残留：`list[fn]` 容器元素级强制可调用未接线。
+  **下一主线候选**：见 `NEXT_STEPS.md`。
+
 - **✅ 已完成（2026-08-14，exp/fn-callable-redesign → unsafe-vibe-dev 合并，全量 2765 passed / 1 skipped 零回归）**：
   **fn/callable 关键字体系重构（方向 A）**。用户 2026-08-14 拍板：移除用户面
   `callable` 类型注解（内部化为运行期基类名/公理族根/thread 参数名），`fn` 参数/返回
