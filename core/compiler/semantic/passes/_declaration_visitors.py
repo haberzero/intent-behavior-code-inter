@@ -206,9 +206,10 @@ class DeclarationVisitorsMixin:
                         node, code=SEM_TYPE_MISMATCH
                     )
                     inferred_return = self._any_desc
-                # 更新符号的返回类型
+                # 更新符号的返回类型（from_spec 结构化——`-> auto` 推断出
+                # list[int]/Optional[int] 时不再经 `.name` 字符串扁平化）。
                 if sym and sym.spec and hasattr(sym.spec, 'return_type'):
-                    sym.spec.return_type = TypeRef.of(inferred_return.name, getattr(inferred_return, "module_path", None))
+                    sym.spec.return_type = TypeRef.from_spec(inferred_return)
 
         finally:
             self.pop_scope()
