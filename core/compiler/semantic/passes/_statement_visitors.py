@@ -287,11 +287,13 @@ class StatementVisitorsMixin:
                     f"to make its instances callable via 'fn'.",
                     self._current_node, code=SEM_TYPE_MISMATCH
                 )
-                return self.registry.resolve("callable") or self._any_desc
+                # 错误恢复不再泄漏内部 callable 类型——回退 fn 动态哨兵（方向 A）。
+                return self.registry.resolve("fn") or self._any_desc
         elif self.registry.is_callable(val_type):
             return val_type
         elif self.registry.is_dynamic(val_type):
-            return self.registry.resolve("callable") or self._any_desc
+            # 动态 RHS（any/auto）：保持动态——回退 fn 哨兵而非内部 callable 类型。
+            return self.registry.resolve("fn") or self._any_desc
         else:
             self.error(
                 f"'fn' requires a callable on the right-hand side, "
@@ -299,7 +301,7 @@ class StatementVisitorsMixin:
                 f"Use 'fn f = myFunction' or 'fn f = myLambda'.",
                 self._current_node, code=SEM_TYPE_MISMATCH
             )
-            return self.registry.resolve("callable") or self._any_desc
+            return self.registry.resolve("fn") or self._any_desc
 
     def _infer_fn_type_with_sig(self, declared_type: IbSpec, val_type: IbSpec) -> IbSpec:
         """fn[(...)→(...)] 签名标注时，检查结构签名匹配。"""
@@ -472,6 +474,21 @@ class StatementVisitorsMixin:
                 # 在赋值路径承担，return 路径复用 is_assignable（对 lambda 的
                 # CALLABLE_SIG spec 因参数丢失 pre-existing bug 两者行为一致）。
                 declared_ret = func_returns[-1]
+                # bare fn 返回（动态哨兵，name=="fn"）＝"任意可调用"抽象：返回表达式
+                # 必须是可调用（方向 A 收紧——此前 is_dynamic 跳过致 `-> fn: return 42`
+                # 放行）。动态返回表达式（any/auto）静态不可判，放行交运行期裁决。
+                if (declared_ret is not None
+                        and getattr(declared_ret, "name", None) == "fn"
+                        and self.registry.is_dynamic(declared_ret)
+                        and ret_type is not None
+                        and not self.registry.is_dynamic(ret_type)
+                        and not self.registry.is_callable(ret_type)):
+                    self.error(
+                        f"Cannot return '{getattr(ret_type, 'name', 'auto')}' "
+                        f"from function declared 'fn' (fn 返回要求可调用)",
+                        node, code=SEM_TYPE_MISMATCH,
+                    )
+                    return self._void_desc
                 if (
                     declared_ret is not None
                     and declared_ret.kind

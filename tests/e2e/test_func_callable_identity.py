@@ -34,8 +34,9 @@ def _errs(code: str):
 ################################################################################
 
 class TestBoundMethodIdentity:
-    def test_assign_to_callable(self):
-        """``callable f = a.calc`` 编译放行，调用正确（此前 SEM_TYPE_MISMATCH）。"""
+    def test_assign_to_fn(self):
+        """``fn f = a.calc`` 编译放行，调用正确（方向 A 后用户面统一 fn；此前
+        callable 槽误拒裸函数、绑定方法修复后 fn 承载）。"""
         code = (
             "class Adder:\n"
             "    int base\n"
@@ -44,7 +45,7 @@ class TestBoundMethodIdentity:
             "    func calc(self) -> int:\n"
             "        return self.base + 1\n"
             "Adder a = Adder(10)\n"
-            "callable f = a.calc\n"
+            "fn f = a.calc\n"
             "print(f())\n"
         )
         assert run_ibci(code) == ["11"]
@@ -88,8 +89,8 @@ class TestBoundMethodIdentity:
         )
         assert run_ibci(code) == ["42"]
 
-    def test_return_bound_method_to_callable(self):
-        """``-> callable: return a.calc`` 编译放行（此前 SEM 拦截）。"""
+    def test_return_bound_method_to_fn(self):
+        """``-> fn: return a.calc`` 编译放行（方向 A 后用户面统一 fn）。"""
         code = (
             "class Adder:\n"
             "    int base\n"
@@ -97,9 +98,9 @@ class TestBoundMethodIdentity:
             "        self.base = b\n"
             "    func calc(self) -> int:\n"
             "        return self.base + 1\n"
-            "func make(Adder a) -> callable:\n"
+            "func make(Adder a) -> fn:\n"
             "    return a.calc\n"
-            "callable f = make(Adder(10))\n"
+            "fn f = make(Adder(10))\n"
             "print(f())\n"
         )
         assert run_ibci(code) == ["11"]
@@ -289,3 +290,158 @@ class TestFunctionReturnOptionalWrap:
             "print(maybe().unwrap())\n"
         )
         assert run_ibci(code) == ["Optional[int]", "5"]
+
+
+################################################################################
+# 方向 A：callable 内部化（用户面统一 fn 族）+ fn 参数/返回强制可调用
+################################################################################
+
+class TestCallableInternalization:
+    """`callable` 是内部类型名，作为用户类型注解报清晰错误（引导用 fn）。"""
+
+    def test_callable_annotation_rejected(self):
+        code = "callable f = 1\n"
+        assert "SEM_UNRESOLVED_TYPE" in _errs(code)
+
+    def test_callable_param_rejected(self):
+        code = (
+            "func f() -> int:\n"
+            "    return 1\n"
+            "func apply(callable cb) -> int:\n"
+            "    return 1\n"
+            "print(apply(f))\n"
+        )
+        assert "SEM_UNRESOLVED_TYPE" in _errs(code)
+
+    def test_callable_return_rejected(self):
+        code = (
+            "func inner() -> int:\n"
+            "    return 5\n"
+            "func make() -> callable:\n"
+            "    return inner\n"
+        )
+        assert "SEM_UNRESOLVED_TYPE" in _errs(code)
+
+    def test_callable_container_rejected(self):
+        code = (
+            "func f() -> int:\n"
+            "    return 1\n"
+            "list[callable] xs = [f]\n"
+        )
+        assert "SEM_UNRESOLVED_TYPE" in _errs(code)
+
+
+class TestFnCallabilityEnforcement:
+    """`fn` 参数/返回收紧为"任意可调用（强制）"——拒绝非可调用（方向 A）。"""
+
+    def test_fn_param_rejects_non_callable(self):
+        code = (
+            "func apply(fn cb) -> int:\n"
+            "    return 1\n"
+            "print(apply(42))\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_param_accepts_function(self):
+        code = (
+            "func f() -> int:\n"
+            "    return 9\n"
+            "func apply(fn cb) -> int:\n"
+            "    return cb()\n"
+            "print(apply(f))\n"
+        )
+        assert run_ibci(code) == ["9"]
+
+    def test_fn_param_accepts_lambda(self):
+        code = (
+            "func apply(fn cb) -> int:\n"
+            "    return cb()\n"
+            "print(apply(lambda -> int: 7))\n"
+        )
+        assert run_ibci(code) == ["7"]
+
+    def test_fn_param_accepts_bound_method(self):
+        code = (
+            "class A:\n"
+            "    func calc(self) -> int:\n"
+            "        return 3\n"
+            "A a = A()\n"
+            "func apply(fn cb) -> int:\n"
+            "    return cb()\n"
+            "print(apply(a.calc))\n"
+        )
+        assert run_ibci(code) == ["3"]
+
+    def test_fn_param_accepts_callable_class_instance(self):
+        code = (
+            "class Adder:\n"
+            "    func __call__(self, int x) -> int:\n"
+            "        return x + 1\n"
+            "Adder ad = Adder()\n"
+            "func apply(fn cb) -> int:\n"
+            "    return cb(1)\n"
+            "print(apply(ad))\n"
+        )
+        assert run_ibci(code) == ["2"]
+
+    def test_fn_return_rejects_non_callable(self):
+        code = (
+            "func make() -> fn:\n"
+            "    return 42\n"
+            "fn f = make()\n"
+            "print(f())\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_return_accepts_function(self):
+        code = (
+            "func inner() -> int:\n"
+            "    return 5\n"
+            "func make() -> fn:\n"
+            "    return inner\n"
+            "fn c = make()\n"
+            "print(c())\n"
+        )
+        assert run_ibci(code) == ["5"]
+
+    def test_fn_return_accepts_lambda(self):
+        code = (
+            "func make() -> fn:\n"
+            "    return lambda -> int: 7\n"
+            "fn c = make()\n"
+            "print(c())\n"
+        )
+        assert run_ibci(code) == ["7"]
+
+    def test_fn_return_accepts_bound_method(self):
+        code = (
+            "class A:\n"
+            "    func calc(self) -> int:\n"
+            "        return 3\n"
+            "A a = A()\n"
+            "func make() -> fn:\n"
+            "    return a.calc\n"
+            "fn c = make()\n"
+            "print(c())\n"
+        )
+        assert run_ibci(code) == ["3"]
+
+    def test_fn_return_accepts_callable_class_instance(self):
+        code = (
+            "class Adder:\n"
+            "    int base\n"
+            "    func __init__(self, int b) -> auto:\n"
+            "        self.base = b\n"
+            "    func __call__(self, int x) -> int:\n"
+            "        return self.base + x\n"
+            "func make() -> fn:\n"
+            "    return Adder(10)\n"
+            "fn f = make()\n"
+            "print(f(5))\n"
+        )
+        assert run_ibci(code) == ["15"]
+
+    def test_fn_declaration_inference_rejects_non_callable(self):
+        """`fn f = 42` 声明处仍拒非可调用（既有语义保持）。"""
+        code = "fn f = 42\n"
+        assert SEM in _errs(code)

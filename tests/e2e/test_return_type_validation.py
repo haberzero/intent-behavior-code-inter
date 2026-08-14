@@ -83,15 +83,40 @@ class TestReturnCallableValidation:
         )
         assert run_ibci(code) == ["Hello, Alice"]
 
-    def test_return_callable_declared_rejected_for_nested_func(self):
-        """``-> callable: return inner``——callable 是具体可调用类型，函数引用
-        赋 callable 槽同样应拦截（与 ``callable f = add`` 一致）。"""
+    def test_return_callable_internal_type_rejected(self):
+        """``-> callable`` 是内部类型名，作为用户返回类型注解报错（方向 A：
+        callable 降级为纯内部概念，用户面统一为 fn 族）。"""
         code = (
             "func outer() -> callable:\n"
             "    func inner() -> int:\n"
             "        return 42\n"
             "    return inner\n"
-            "callable g = outer()\n"
+            "fn g = outer()\n"
+            "print(g())\n"
+        )
+        assert "SEM_UNRESOLVED_TYPE" in _errs(code)
+
+    def test_return_fn_allows_nested_func(self):
+        """``-> fn: return inner``（动态哨兵）返回嵌套函数放行——fn 是"任意可调用"
+        抽象（方向 A 收紧后仍接受函数引用）。"""
+        code = (
+            "func outer() -> fn:\n"
+            "    func inner() -> int:\n"
+            "        return 42\n"
+            "    return inner\n"
+            "fn g = outer()\n"
+            "print(g())\n"
+        )
+        assert run_ibci(code) == ["42"]
+
+    def test_return_fn_sig_mismatch_rejected(self):
+        """``-> fn[(...) -> int]`` 签名不匹配（嵌套函数参数数量不符）编译期拦截。"""
+        code = (
+            "func outer() -> fn[() -> int]:\n"
+            "    func inner(int x) -> int:\n"
+            "        return x\n"
+            "    return inner\n"
+            "fn g = outer()\n"
             "print(g())\n"
         )
         assert SEM in _errs(code)
@@ -131,10 +156,8 @@ class TestReturnCallableValidation:
         )
         assert SEM in _errs(code)
 
-    def test_return_callable_declared_rejected_for_user_call_class(self):
-        """``-> callable: return Adder(10)``（用户类 __call__ 实例）——与直接赋值
-        ``callable f = Adder(10)`` 编译期拦截一致（is_assignable 不含 __call__
-        类实例放行；``fn`` 动态路径不受影响）。"""
+    def test_return_callable_internal_type_rejected_for_user_call_class(self):
+        """``-> callable`` 内部类型名作为返回注解报错（方向 A）。"""
         code = (
             "class Adder:\n"
             "    int base\n"
@@ -144,13 +167,13 @@ class TestReturnCallableValidation:
             "        return self.base + x\n"
             "func make() -> callable:\n"
             "    return Adder(10)\n"
-            "callable f = make()\n"
+            "fn f = make()\n"
             "print(f(5))\n"
         )
-        assert SEM in _errs(code)
+        assert "SEM_UNRESOLVED_TYPE" in _errs(code)
 
     def test_return_fn_declared_allows_user_call_class(self):
-        """``-> fn``（动态）返回用户类 __call__ 实例放行（现有 fn 语义）。"""
+        """``-> fn``（动态）返回用户类 __call__ 实例放行（fn 收可调用类实例）。"""
         code = (
             "class Adder:\n"
             "    int base\n"
@@ -171,12 +194,13 @@ class TestBoundMethodReturn:
 
     编译器把成员访问（``a.calc``）建模为 BOUND_METHOD kind（携带签名、不含
     self），BoundMethodAxiom（bound_method IS-A callable）编译期生效——
-    ``-> callable: return a.calc`` 与直接赋值 ``callable f = a.calc`` 均放行
-    （此前无条件 FUNCTION kind 使两者均被拒，编译期/运行期身份不对称）。
+    ``-> fn: return a.calc`` 与直接赋值 ``fn f = a.calc`` 均放行
+    （此前无条件 FUNCTION kind 使赋 callable 槽被拒，编译期/运行期身份不对称；
+    方向 A 后用户面 callable 类型移除，统一用 ``fn``）。
     """
 
-    def test_return_bound_method_to_callable_allowed(self):
-        """``-> callable: return a.calc`` 编译放行，绑定方法调用正确。"""
+    def test_return_bound_method_to_fn_allowed(self):
+        """``-> fn: return a.calc`` 编译放行，绑定方法调用正确。"""
         code = (
             "class Adder:\n"
             "    int base\n"
@@ -184,15 +208,15 @@ class TestBoundMethodReturn:
             "        self.base = b\n"
             "    func calc(self) -> int:\n"
             "        return self.base + 1\n"
-            "func make(Adder a) -> callable:\n"
+            "func make(Adder a) -> fn:\n"
             "    return a.calc\n"
-            "callable f = make(Adder(10))\n"
+            "fn f = make(Adder(10))\n"
             "print(f())\n"
         )
         assert run_ibci(code) == ["11"]
 
-    def test_bound_method_direct_assignment_to_callable_allowed(self):
-        """``callable f = a.calc`` 直接赋值放行（与 return 路径语义一致）。"""
+    def test_bound_method_direct_assignment_to_fn_allowed(self):
+        """``fn f = a.calc`` 直接赋值放行（与 return 路径语义一致）。"""
         code = (
             "class Adder:\n"
             "    int base\n"
@@ -201,7 +225,7 @@ class TestBoundMethodReturn:
             "    func calc(self) -> int:\n"
             "        return self.base + 1\n"
             "Adder a = Adder(10)\n"
-            "callable f = a.calc\n"
+            "fn f = a.calc\n"
             "print(f())\n"
         )
         assert run_ibci(code) == ["11"]
@@ -247,19 +271,3 @@ class TestBoundMethodReturn:
         assert bm.kind == TypeKind.BOUND_METHOD.value
         assert reg.is_callable(bm)
         assert reg.is_assignable(bm, reg.resolve("callable"))
-
-    def test_return_bound_method_to_fn_allowed(self):
-        """``-> fn``（动态）返回绑定方法放行（fn 推断哨兵，与赋值一致）。"""
-        code = (
-            "class Adder:\n"
-            "    int base\n"
-            "    func __init__(self, int b) -> auto:\n"
-            "        self.base = b\n"
-            "    func calc(self) -> int:\n"
-            "        return self.base + 1\n"
-            "func make(Adder a) -> fn:\n"
-            "    return a.calc\n"
-            "fn f = make(Adder(10))\n"
-            "print(f())\n"
-        )
-        assert run_ibci(code) == ["11"]

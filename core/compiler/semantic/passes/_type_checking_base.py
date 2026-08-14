@@ -306,6 +306,16 @@ class TypeCheckBase:
         if annotation is None:
             return self._any_desc
         if isinstance(annotation, ast.IbName):
+            # callable 是内部类型名（运行期函数对象基类 + 公理族根），不作为用户
+            # 可写类型（方向 A：用户面统一为 fn 族）。`callable f`/`-> callable`
+            # 报清晰错误而非半成品语义（此前只对 lambda/绑定方法生效、误拒裸函数）。
+            if annotation.id == "callable":
+                self.error(
+                    "'callable' is an internal type name and cannot be used as a user type. "
+                    "Use 'fn' for an unconstrained callable, or 'fn[(...)]' for a signature constraint.",
+                    annotation, code=SEM_UNRESOLVED_TYPE,
+                )
+                return self._any_desc
             # 用户类泛型类型参数：类体内 T 解析为占位 spec（非实体类型），
             # 供特化时替换。在类作用域符号表链查找（含嵌套方法作用域）。
             if self.current_class is not None:
@@ -373,6 +383,14 @@ class TypeCheckBase:
             # 泛型类型：list[int], dict[str, int], tuple[int, str], Optional[int] 等
             if isinstance(annotation.value, (ast.IbName, ast.IbAttribute)):
                 if isinstance(annotation.value, ast.IbName):
+                    # callable 内部类型名守卫（list[callable] 等基类形态）。
+                    if annotation.value.id == "callable":
+                        self.error(
+                            "'callable' is an internal type name and cannot be used as a user type. "
+                            "Use 'fn' for an unconstrained callable, or 'fn[(...)]' for a signature constraint.",
+                            annotation, code=SEM_UNRESOLVED_TYPE,
+                        )
+                        return self._any_desc
                     base_type = self.registry.resolve(annotation.value.id)
                     base_display = annotation.value.id
                 else:
