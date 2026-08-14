@@ -2,9 +2,16 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**T07 三项 P1 修复 + 文档同步全部完成**：全量 **2693 passed /
-> 1 skipped** 零回归（2665 基线 + 28 判别性回归）；触发用例 D2-09/D2-10/D1-13 全部核销
-> 转 PASS。完整记录见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`（已标记完成）与 WORKLOG）
+> **最后更新**：2026-08-14（**🔴 下一 session 主线：函数/可调用类型身份架构断层根治**。
+> 用户 2026-08-14 提升三个未修复问题优先级 + 深挖，证实存在深层次架构级问题。
+> 交接文档：`tasks_docs/_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md` + PENDING_TASKS §〇 P0 行）
+>
+> **🔴 下一 session 主线（用户 2026-08-14 指令，P0）**：**函数/可调用类型身份架构断层
+> 根治**。用户猜想"fn 设计早于泛型体系存在历史包袱"已证实——三个问题（绑定方法建模
+> FUNCTION kind / `create_func` 字符串级回填丢失签名 / 函数返回值 Optional 包装缺失）
+> 同源于"类型身份在函数与可调用类型关键路径上被扁平化"的架构断层，与既有
+> `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md` 地基分析同源（函数/可调用侧面）。
+> 详见 `_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md`（逐环实证根因 + 修复方向 + 判别性回归）。
 >
 > **✅ 已完成（2026-08-14，unsafe-vibe-dev 19920d39，全量 2714 passed / 1 skipped 零回归）**：
 > **DOC-29 + BOUNDARY-NESTED-FUNC-1 两项根因修复**（E 批判批次发现，无人值守 session）。

@@ -122,6 +122,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **🔴 当前主线（用户 2026-08-14 提升优先级）：函数/可调用类型身份架构断层根治**。
+  用户猜想"fn 设计早于泛型体系存在历史包袱"已证实——三个问题（绑定方法建模
+  FUNCTION kind / `create_func` 字符串级回填丢失签名 / 函数返回值 Optional 包装缺失）
+  同源于"类型身份在函数与可调用类型关键路径上被扁平化"的架构断层。交接文档
+  `tasks_docs/_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md`（逐环实证根因 + 修复方向 +
+  判别性回归建议）；PENDING_TASKS §〇 P0 行。修复为破坏性重构（create_func API
+  升级影响 8 调用点），独立分支实验后确认零风险再更新 unsafe-vibe-dev。
+
 - **✅ 已完成（2026-08-14 无人值守 session，unsafe-vibe-dev 19920d39，全量 2714 passed / 1 skipped 零回归）**：
   **DOC-29 + BOUNDARY-NESTED-FUNC-1 两项根因修复**（E 批判批次发现的架构级修复）。
   **BOUNDARY-NESTED-FUNC-1（架构级，深度分析修正定性）**——真实根因=编译期 `visit_IbReturn`
