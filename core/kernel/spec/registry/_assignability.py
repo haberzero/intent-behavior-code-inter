@@ -154,8 +154,18 @@ class _AssignabilityMixin:
             for sp, tp in zip(src_params, tgt_params):
                 s_spec = self.resolve_typeref(sp)
                 t_spec = self.resolve_typeref(tp)
+                # 任一侧不可解析：延后（跳过该参数）。CALLABLE_SIG 构造时已对参数
+                # 调 _resolve_type 校验，真破损类型在构造期拦截；此处 None 只可能是
+                # 泛型模板的类型参数占位（T / Box[T]，模板定义期未注册）——延至
+                # 特化后校验，不误拒合法模板。
                 if s_spec is None or t_spec is None:
-                    return False
+                    continue
+                # 任一侧含 any 泛型实参（T 降级占位 Box[any] 或显式 any 通配）：
+                # 动态通配无法静态拒绝，延后（模板字段/参数赋值不误拒）。
+                from ..base import spec_has_any_generic_arg
+
+                if spec_has_any_generic_arg(s_spec) or spec_has_any_generic_arg(t_spec):
+                    continue
                 if (not self.is_dynamic(s_spec) and not self.is_dynamic(t_spec)
                         and not self.is_assignable(s_spec, t_spec)):
                     return False

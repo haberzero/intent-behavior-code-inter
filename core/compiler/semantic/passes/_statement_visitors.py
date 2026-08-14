@@ -15,6 +15,7 @@ from core.kernel.symbols import SymbolKind
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
+from core.kernel.spec.base import spec_has_any_generic_arg
 from ._fn_callable import is_fn_callable_value
 
 
@@ -351,16 +352,16 @@ class StatementVisitorsMixin:
             return
 
         # Per-parameter type compatibility（结构化 ref 经 resolve_typeref；任一侧
-        # 不可解析即报错——fail-fast，不静默跳过）。
+        # 不可解析或含 any 通配即延后——CALLABLE_SIG 构造时已对参数调 _resolve_type
+        # 校验，真破损类型在构造期拦截；此处不可解析只可能是泛型模板类型参数占位
+        # （T / Box[T]），含 any（Box[any]）是 T 降级或显式通配——均延至特化后校验，
+        # 不误拒合法模板）。
         for i, (exp_ref, act_ref) in enumerate(zip(expected_params, actual_params)):
             exp_spec = self.registry.resolve_typeref(exp_ref)
             act_spec = self.registry.resolve_typeref(act_ref)
             if exp_spec is None or act_spec is None:
-                self.error(
-                    f"Callable signature mismatch: cannot resolve parameter {i + 1} type "
-                    f"('{exp_ref.canonical_name}' / '{act_ref.canonical_name}').",
-                    node, code=SEM_UNRESOLVED_TYPE,
-                )
+                continue
+            if spec_has_any_generic_arg(exp_spec) or spec_has_any_generic_arg(act_spec):
                 continue
             if (not self.registry.is_dynamic(exp_spec)
                     and not self.registry.is_dynamic(act_spec)
@@ -382,8 +383,8 @@ class StatementVisitorsMixin:
                     and not self.registry.is_dynamic(act_ret)
                     and not self.registry.is_assignable(act_ret, exp_ret)):
                 self.error(
-                    f"Callable signature mismatch: expected return type '{sig_ret.head}', "
-                    f"but the callable returns '{actual_ret.head}'.",
+                    f"Callable signature mismatch: expected return type '{sig_ret.canonical_name}', "
+                    f"but the callable returns '{actual_ret.canonical_name}'.",
                     node, code=SEM_TYPE_MISMATCH,
                 )
 

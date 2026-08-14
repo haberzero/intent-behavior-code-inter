@@ -34,6 +34,22 @@ if TYPE_CHECKING:
 _ANY_REF = _TypeRef.of("any")
 
 
+def spec_has_any_generic_arg(spec: Optional["IbSpec"]) -> bool:
+    """spec 的泛型实参中是否含 ``any``（T 降级占位或显式 any 通配）。
+
+    模板上下文中类型参数占位经解析可能降级为 ``Box[any]``（T→any），与保留的
+    ``Box[T]`` 不对称；``any`` 是动态通配，无法静态拒绝——含 any 的实参比较应
+    延后（CALLABLE_SIG 签名模型根治：不误拒模板字段/参数赋值）。
+    """
+    if spec is None:
+        return False
+    name = getattr(spec, "name", "")
+    if "[" not in name:
+        return False
+    inner = name[name.index("[") + 1:-1]
+    return "any" in inner
+
+
 class TypeKind(str, Enum):
     PRIMITIVE = "primitive"
     FUNCTION = "function"

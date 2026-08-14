@@ -637,3 +637,39 @@ class TestCallableSigSignature:
         apply_entry = next((v for v in tp.values() if v.get("name") == "apply"), None)
         assert apply_entry is not None
         assert "list[int]" in apply_entry.get("param_type_names", [])
+
+    def test_fn_sig_template_field_assignment(self):
+        """泛型模板内 `self.cb = c`（字段与参数同为 fn[(Box[T])->int]）放行——
+        类型参数占位两侧一致（P1 整改：prescan 解析类型参数，消除 Box[any]/Box[T]
+        不对称）。"""
+        code = (
+            "class Box[T]:\n"
+            "    T data\n"
+            "    func __init__(self, T v) -> auto:\n"
+            "        self.data = v\n"
+            "class Host[T]:\n"
+            "    fn[(Box[T]) -> int] cb\n"
+            "    func __init__(self, fn[(Box[T]) -> int] c) -> auto:\n"
+            "        self.cb = c\n"
+            "func get(Box[int] b) -> int:\n"
+            "    return b.data\n"
+            "Host[int] h = Host[int](get)\n"
+            "print(1)\n"
+        )
+        assert run_ibci(code) == ["1"]
+
+    def test_fn_sig_template_body_placeholder(self):
+        """模板方法体内 `fn[(T) -> int] x = c`（T 未特化占位）放行——延至特化后
+        校验（P1 整改：占位不可解析不误拒）。"""
+        code = (
+            "class Host[T]:\n"
+            "    func store(self, fn[(T) -> int] c) -> fn[(T) -> int]:\n"
+            "        fn[(T) -> int] x = c\n"
+            "        return x\n"
+            "func inc(int v) -> int:\n"
+            "    return v + 1\n"
+            "Host[int] h = Host[int]()\n"
+            "fn[(int) -> int] r = h.store(inc)\n"
+            "print(r(41))\n"
+        )
+        assert run_ibci(code) == ["42"]
