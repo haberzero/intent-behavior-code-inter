@@ -37,6 +37,21 @@ int result = my_fn(5)   # 调用 adder.__call__(5)
 
 `fn` 是类似 `auto` 的**类型推断哨兵**，而非一个内置类型。所有实现了公理层 `__call__` 的类型都可由 `fn` 承载，无需继承任何公共基类。这与 IBCI 的"鸭子类型 + 能力协议"设计哲学一致。
 
+### 方向 A（2026-08-14 用户定案）：`callable` 内部化，用户面统一 `fn` 族
+
+- **`callable` 不作为用户可写类型**：`callable f` / `-> callable` / `list[callable]`
+  编译期报 `SEM_UNRESOLVED_TYPE`（引导用 `fn`）。它保留为**内部概念**：运行期函数
+  对象基类名（`type(make)`="callable"）、公理族根（fn_callable/behavior/bound_method
+  的父公理）、`thread(callable=...)` 内置函数参数名。
+- **`fn` 是唯一的用户面"可调用"抽象**，三种形态位置语义一致：
+  - 声明推断：`fn f = add` ⇒ 推断 f 为具体 callable spec；RHS 必须是可调用。
+  - 抽象槽（参数/返回/容器）：`fn` = "任意可调用（强制）"——`apply(42)`、
+    `-> fn: return 42` 编译期拦截；动态实参/返回（any/auto）放行交运行期。
+  - 签名约束：`fn[(args)->ret]` 结构匹配。
+- 背景：`callable` 作为用户类型曾是半成品（只对 lambda/绑定方法生效、误拒裸函数/
+  可调用类实例），与 `fn` 职责重叠且与"不引入统一基类"哲学矛盾。设计分析见
+  `tasks_docs/_DESIGN_FN_CALLABLE.md`。
+
 ### 已知 `fn` 限制
 
 详见 `docs/KNOWN_LIMITS.md` §一（`__call__` 协议）和 §七（`auto` / `fn` / `any`）—— `fn` 在跨场景调用、与 OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的若干路径上仍存在一致性不足，需要等待整体重设计。

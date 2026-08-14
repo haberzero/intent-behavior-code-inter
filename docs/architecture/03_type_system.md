@@ -118,7 +118,7 @@ class TypeDef(IbSpec):
 | 枚举值 | 含义 | 典型实例 |
 |--------|------|---------|
 | `PRIMITIVE` | 标量基础类型 | `int` / `float` / `str` / `bool` / `void` / `any` / `auto` / `None` / `slice` |
-| `FUNCTION` | 函数类型（含 `fn` 哨兵 / `callable`） | 用户 `func`、内置函数、`fn` 推导 |
+| `FUNCTION` | 函数类型（含 `fn` 哨兵；`callable` 为内部基类名，非用户可写类型） | 用户 `func`、内置函数、`fn` 推导 |
 | `CLASS` | 类（含内置 Exception 系列） | 用户类、`Enum` / `Exception` / `Intent` |
 | `LIST` / `TUPLE` / `DICT` | 容器 | `list[int]` 等 |
 | `OPTIONAL` | 空安全包装 | `Optional[T]` |
@@ -407,6 +407,13 @@ class IbValue(IbObject):
 - `fn f = myFunc` ⇒ 推导 `f` 类型为 `myFunc` 的 FuncSpec
 - `fn g = lambda(int x) -> int: x+1` ⇒ 推导 g 类型为 `CALLABLE_INSTANCE[int]`
 - `fn h = lambda -> auto: @~ ... ~` ⇒ 行为体 `-> auto` 唯一推断 str ⇒ `CALLABLE_INSTANCE[str]`
+
+**`fn` 参数/返回位置＝"任意可调用（强制）"（方向 A，2026-08-14）**：`fn` 作为参数
+类型或返回类型（裸 `fn` 哨兵，非 `fn[(...)]`）时，实参/返回表达式必须是可调用——
+`apply(42)`、`-> fn: return 42` 编译期 `SEM_TYPE_MISMATCH`；动态实参/返回（`any`/
+`auto`）静态不可判，放行交运行期裁决。`fn` 接受裸函数 / lambda / snapshot /
+绑定方法 / 可调用类实例。用户可写类型中**无 `callable`**（内部基类名 + 公理族根，
+`type(make)`="callable" 为内部身份，不可作类型注解）。
 
 ### 7.3 类型标注侧 `fn[(...)→(...)]`
 

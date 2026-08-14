@@ -106,8 +106,17 @@
 单一概念族消除"同名不同物"；移除半坏关键字远期收益最大；`callable` 作为内部基类名/
 公理根仍有其位，只是不暴露为用户类型。
 
-待用户拍板的语义决策（公理层/用户面语言设计，超出自主范围）：
-1. **方向 A vs 方向 B**：移除用户面 `callable` 类型（A）还是修复为抽象类型（B）？
-2. 若选 A：`fn` 参数/返回收紧为"强制可调用"是否接受（行为变更）？`type(make)`="callable"
-   内部名是否保持？`thread(callable=...)` 参数名是否改 `fn`？
-3. `fn` 在"声明推断"与"抽象槽"两种位置语义并存（都强制可调用）是否构成可接受的设计语言？
+## 六、定案与实施（2026-08-14 用户拍板）
+
+- **方向 A 定案**：移除用户面 `callable` 类型注解；`callable` 降级为纯内部概念
+  （运行期基类名 `type(make)`="callable" + 公理族根 + `thread(callable=...)` 参数名，
+  保持并文档说明）。
+- **`fn` 收紧定案**：参数/返回处 `fn`＝"任意可调用（强制）"，拒绝非可调用
+  （`apply(42)`、`-> fn: return 42` 编译期拦截）；动态实参/返回（any/auto）放行。
+- 实施：守卫三注解解析器（`_resolve_type` / `_resolve_annotation_spec` /
+  `_annotation_to_typeref`，IbName + IbSubscript base）对 `callable` 报
+  `SEM_UNRESOLVED_TYPE`；`_infer_fn_type` 兜底 `resolve("callable")`→`resolve("fn")`；
+  `_check_call_arg_type` + `visit_IbReturn` 加 bare-fn 强制可调用检查。
+- 测试迁移 + 判别性回归（`TestCallableInternalization` 4 + `TestFnCallabilityEnforcement`
+  10）；文档同步（KNOWN_LIMITS §七 / 03_callable_fn / 03_type_system §7 / 05_functions §5.6）。
+- 已知残留（本次范围外）：`list[fn]` 容器元素级强制可调用未接线（动态元素含非可调用）。
