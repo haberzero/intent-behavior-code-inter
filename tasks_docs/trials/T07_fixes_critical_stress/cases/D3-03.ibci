@@ -1,0 +1,9 @@
+# Optional 作 LLM 输出目标 → 编译期守卫（PT-DECIDE-1：行为输出须可解析）
+# doc: docs/syntax/15_diagnostics.md SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE
+# expect-class: GUARD
+# expect-code: SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE
+# expect-exit: nonzero
+import ai
+ai.load_project_config()
+Optional[int] r = @~ 返回数字 7 ~
+print(r)

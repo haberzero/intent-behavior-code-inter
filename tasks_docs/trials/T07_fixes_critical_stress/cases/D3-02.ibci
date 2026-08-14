@@ -1,0 +1,16 @@
+# 跨模块类 LLM 输出 + 同一模块也有同名类（不误配 main.Point）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: geo-point | main-point
+# expect-exit: 0
+# expect-llm: true
+import ai
+import geo
+ai.load_project_config()
+class Point:
+    func hint(self) -> str:
+        return "main-point"
+geo.Point p = @~ 给我一个 geo 点 ~
+print(p.hint())
+Point m = Point()
+print(m.hint())

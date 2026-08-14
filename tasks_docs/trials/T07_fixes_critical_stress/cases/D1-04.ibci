@@ -1,0 +1,15 @@
+# CROSSMOD-LLM-1：跨模块类作字段类型注解
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 42
+# expect-exit: 0
+import geo
+class Wrapper:
+    geo.Counter c
+    func __init__(self, geo.Counter c) -> auto:
+        self.c = c
+    func total(self) -> int:
+        return self.c.get()
+geo.Counter c = geo.Counter(42)
+Wrapper w = Wrapper(c)
+print(w.total())

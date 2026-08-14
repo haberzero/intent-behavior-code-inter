@@ -1,0 +1,13 @@
+# 对抗：lambda + Optional 捕获（Optional 值经 is_none 判定/返回 Optional）
+# doc: docs/syntax/05_functions.md
+# expect-class: PASS
+# expect-out: True | True | 5
+# expect-exit: 0
+Optional[int] x = None
+fn_callable[bool] f = lambda -> bool: x is None
+print(f())
+x = 5
+fn_callable[bool] g = lambda -> bool: x.is_some()
+print(g())
+fn_callable[Optional[int]] h = lambda -> Optional[int]: x
+print(h().unwrap())

@@ -1,0 +1,16 @@
+# 深层模块限定（嵌套包 import）测试面
+class Counter:
+    int n
+    func __init__(self, int n) -> auto:
+        self.n = n
+    func add(self, int x) -> int:
+        self.n = self.n + x
+        return self.n
+class Point:
+    int x
+    func __init__(self, int x) -> auto:
+        self.x = x
+    func __from_prompt__(str raw) -> tuple:
+        return (True, Point(7))
+    func get(self) -> int:
+        return self.x

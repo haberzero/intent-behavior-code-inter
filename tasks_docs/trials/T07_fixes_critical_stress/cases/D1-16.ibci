@@ -1,0 +1,15 @@
+# set_mock_mode 对称开关：mock→真实→mock 往返（mock 层配置状态）
+# doc: docs/syntax/11_modules.md
+# expect-class: PASS
+# expect-out: 42 | 99 | done
+# expect-exit: 0
+import ai
+ai.load_project_config()
+ai.set_mock_mode()
+int r1 = @~ MOCK:INT 42 ~
+print(r1)
+ai.set_mock_mode(False)
+ai.set_mock_mode()
+int r3 = @~ MOCK:INT 99 ~
+print(r3)
+print("done")

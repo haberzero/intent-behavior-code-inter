@@ -1,0 +1,7 @@
+# 幽灵码：字典键缺失 → RUN_INDEX_ERROR（文档 428 行"键不存在"覆盖）
+# doc: docs/syntax/15_diagnostics.md RUN_INDEX_ERROR
+# expect-class: GUARD
+# expect-code: RUN_INDEX_ERROR
+# expect-exit: nonzero
+dict[str, int] d = {"a": 1}
+print(d["zz"])

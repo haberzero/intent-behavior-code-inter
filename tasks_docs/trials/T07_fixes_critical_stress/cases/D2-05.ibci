@@ -1,0 +1,9 @@
+# 对抗：容器深嵌套 + Optional（dict[str, list[Optional[int]]]）
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: PASS
+# expect-out: True | 5 | 3
+# expect-exit: 0
+dict[str, list[Optional[int]]] m = {"a": [None, 5, 3]}
+print(m["a"][0] is None)
+print(m["a"][1])
+print(len(m["a"]))

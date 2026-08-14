@@ -1,0 +1,10 @@
+# 幽灵码：除零在嵌套函数内 → RUN_DIVISION_BY_ZERO
+# doc: docs/syntax/15_diagnostics.md RUN_DIVISION_BY_ZERO
+# expect-class: GUARD
+# expect-code: RUN_DIVISION_BY_ZERO
+# expect-exit: nonzero
+func div(int a, int b) -> int:
+    return a // b
+func outer() -> int:
+    return div(10, 0)
+print(outer())

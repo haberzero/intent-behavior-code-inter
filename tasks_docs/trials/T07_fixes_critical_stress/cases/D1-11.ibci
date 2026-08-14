@@ -1,0 +1,7 @@
+# 幽灵码：越界 → RUN_INDEX_ERROR
+# doc: docs/syntax/15_diagnostics.md RUN_INDEX_ERROR
+# expect-class: GUARD
+# expect-code: RUN_INDEX_ERROR
+# expect-exit: nonzero
+list[int] xs = [1, 2, 3]
+print(xs[5])

@@ -1,0 +1,1 @@
+{"case_id": "B-D1-03", "script": "main.ibci", "dim": "RERUN", "doc": "", "expected": "", "timeout_s": 90.0, "max_inst": 5000000, "exit_code": 0, "timed_out": false, "duration_s": 0.47, "out_head": "1 Box ", "err_head": "", "classification": "PASS", "severity": "", "note": "auto-judged"}

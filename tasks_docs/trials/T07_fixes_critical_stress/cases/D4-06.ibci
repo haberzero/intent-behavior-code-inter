@@ -1,0 +1,12 @@
+# 泛型剩余边界 #2：跨模块同名特化值身份（geo.Box[int] 值正确，type() 显示特化名）
+# doc: docs/syntax/10_serialization.md
+# expect-class: PASS
+# expect-out: 105 | hi! | Box[int]
+# expect-exit: 0
+import geo
+import graph
+geo.Box[int] a = geo.Box[int](105)
+graph.Box[str] b = graph.Box[str]("hi!")
+print(a.get())
+print(b.get())
+print(type(a))

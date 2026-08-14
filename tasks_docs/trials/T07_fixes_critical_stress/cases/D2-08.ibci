@@ -1,0 +1,10 @@
+# 对抗：深递归 + 幽灵码（递归内除零触发 RUN_DIVISION_BY_ZERO）
+# doc: docs/syntax/15_diagnostics.md
+# expect-class: GUARD
+# expect-code: RUN_DIVISION_BY_ZERO
+# expect-exit: nonzero
+func dive(int n) -> int:
+    if n == 0:
+        return 1 // 0
+    return dive(n - 1)
+print(dive(3))

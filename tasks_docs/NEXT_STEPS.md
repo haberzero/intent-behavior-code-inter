@@ -1,18 +1,18 @@
-﻿# NEXT_STEPS - 当前最紧要项
+# NEXT_STEPS - 当前最紧要项
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**T05/T06 剩余代码缺陷四项全部修复完成**；全量 **2665 passed /
-> 1 skipped**：① CROSSMOD-LLM-1 跨模块类型注解解析 ② KI-2 统一 Optional 值模型
-> ③ 幽灵诊断码根治 ④ set_mock_mode 对称开关，完整记录见 `_code_optional_unify.md`/
-> `_code_ghost_codes.md`/`_code_set_mock_mode.md` 与 WORKLOG；下一主线候选见交接要点与
-> PENDING_TASKS §〇）
+> **最后更新**：2026-08-14（**T07 批判性对抗试用 + 旧套件全量重跑完成**：43 新用例
+> 28 PASS + 12 GUARD + 3 KERNEL_ISSUE，真实 LLM 7/7；旧套件 T01-T06 238 用例重跑
+> 202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言) + 9 HARNESS(5 陈旧断言+4 设计内)，
+> 零回归；KI-1 / CROSSMOD-LLM-1 核销，KI-2 修复行为确认。完整记录见
+> `trials/T07_fixes_critical_stress/REGISTER.md`/`REPORT.md` 与 WORKLOG）
 >
-> **🔴 下一 session 主任务（2026-08-14 用户指示）：重启真实批判性试用 + 文档内容
-> 全方位同步更新**。完整交接见 `tasks_docs/_HANDOFF_NEXT_TRIAL.md`——针对本 session
-> 四项修复面做对抗验证（新建 `trials/T07_fixes_critical_stress/`）+ 泛型剩余边界复测
-> + 真实 LLM 批判 + 试用后文档全方位同步（重点：KNOWN_LIMITS §10.2 跨模块类措辞
-> 在 CROSSMOD-LLM-1 修复后可能过时）。
+> **🔴 下一 session 主任务（T07 已执行完毕，2026-08-14）**：T07 试用新暴露
+> **3 项 P1 KERNEL_ISSUE 待独立窗口修复**（OPTIONAL-SCOPE-1 函数内 Optional unwrap/is_some
+> 失败 / OPTIONAL-CONTAINER-1 Optional 容器方法不可用 / ATTR-READ-1 属性读取静默 None）
+> + 5 处旧套件陈旧断言更新（PHASE_D）+ DOC-24~27 文档同步（KNOWN_LIMITS §10.2 可补
+> qualified 路径实证）。细节见 `trials/T07_fixes_critical_stress/REGISTER.md` 与 PENDING_TASKS §〇。
 
 ---
 

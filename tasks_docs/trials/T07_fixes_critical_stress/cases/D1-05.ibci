@@ -1,0 +1,14 @@
+# KI-2 统一 Optional 值模型：嵌套/容器全组合（list/dict/tuple 元素级）
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: PASS
+# expect-out: True | True | 5 | False | x
+# expect-exit: 0
+Optional[Optional[int]] a = None
+print(a is None)
+list[Optional[int]] c = [None, 5]
+print(c[0] is None)
+print(c[1])
+dict[str, Optional[int]] d = {"k": 5}
+print(d["k"] is None)
+tuple[Optional[int], str] t = (None, "x")
+print(t[1])

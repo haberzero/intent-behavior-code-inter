@@ -1,0 +1,9 @@
+# graph 模块：与 geo 同名类（跨模块同名隔离测试面）
+class Box[T]:
+    T data
+    func __init__(self, T data) -> auto:
+        self.data = data
+    func get(self) -> T:
+        return self.data
+    func hi(self) -> str:
+        return "hi!"

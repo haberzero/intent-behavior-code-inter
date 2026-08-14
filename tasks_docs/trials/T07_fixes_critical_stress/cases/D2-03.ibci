@@ -1,0 +1,15 @@
+# 对抗：生成器 + Optional（yield Optional[int]）
+# doc: docs/syntax/05_functions.md
+# expect-class: PASS
+# expect-out: T | 5 | done
+# expect-exit: 0
+func gen() -> generator[Optional[int]]:
+    yield None
+    yield 5
+generator[Optional[int]] g = gen()
+for Optional[int] v in g:
+    if v is None:
+        print("T")
+    else:
+        print(v)
+print("done")

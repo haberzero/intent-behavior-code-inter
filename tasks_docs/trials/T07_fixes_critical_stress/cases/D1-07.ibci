@@ -1,0 +1,12 @@
+# KI-2：None==x / x==None / None is x / x is None 全对称
+# doc: docs/syntax/03_operators.md §3.5
+# expect-class: PASS
+# expect-out: True | True | True | True | True | True
+# expect-exit: 0
+Optional[int] a = None
+print(None == a)
+print(a == None)
+print(None is a)
+print(a is None)
+print(a.is_none())
+print(not a.is_some())

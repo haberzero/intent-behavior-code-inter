@@ -1,0 +1,20 @@
+# 泛型剩余边界 #1/#7：句柄类值身份特化名（thread/chan/slot/generator/thread_result）
+# doc: docs/architecture/03_type_system.md
+# expect-class: PASS
+# expect-out: thread[int] | chan[int] | slot[int] | generator[int] | int
+# expect-exit: 0
+func gen() -> generator[int]:
+    yield 1
+func add(int a) -> int:
+    return a + 1
+thread[int] t = thread(callable=add, args=[1])
+print(type(t))
+chan[int] ch = chan()
+print(type(ch))
+slot[int] sl = slot()
+print(type(sl))
+generator[int] g = gen()
+print(type(g))
+thread[int] t2 = thread(callable=add, args=[2])
+int r = t2.join().expect()
+print(type(r))

@@ -1,0 +1,10 @@
+# KI-2：for Optional[int] x in [None,5] 迭代元素包装
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: PASS
+# expect-out: None | 5
+# expect-exit: 0
+for Optional[int] x in [None, 5]:
+    if x is None:
+        print("None")
+    else:
+        print(x)

@@ -1,0 +1,16 @@
+# CROSSMOD-LLM-1 修复面：跨模块类作函数参数/返回类型注解
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 11 | 12 | 42
+# expect-exit: 0
+import geo
+func bump(geo.Counter c) -> geo.Counter:
+    c.inc()
+    return c
+geo.Counter c = geo.Counter(10)
+geo.Counter r = bump(c)
+print(r.get())
+bump(c)
+print(c.get())
+geo.Point p = geo.Point(42)
+print(p.get())

@@ -1,0 +1,10 @@
+# 泛型剩余边界 #5：-> auto 泛型实参推断（容器字面量带实参）
+# doc: docs/syntax/05_functions.md
+# expect-class: PASS
+# expect-out: list[int] | 1
+# expect-exit: 0
+func f() -> auto:
+    return [1, 2, 3]
+list[int] r = f()
+print(type(r))
+print(r[0])

@@ -1,0 +1,21 @@
+# 对抗：线程 worker 内跨模块类 + Optional 组合（is None 判定 + 值返回）
+# doc: docs/syntax/14_concurrency.md
+# expect-class: PASS
+# expect-out: 5 | True | done
+# expect-exit: 0
+import geo
+func work() -> int:
+    geo.Box[int] b = geo.Box[int](5)
+    Optional[int] tag = None
+    tag = b.get()
+    if tag is None:
+        return 0
+    return tag
+func work2() -> bool:
+    Optional[int] x = None
+    return x is None
+thread[int] t = thread(callable=work, args=[])
+print(t.join().expect())
+thread[bool] t2 = thread(callable=work2, args=[])
+print(t2.join().expect())
+print("done")

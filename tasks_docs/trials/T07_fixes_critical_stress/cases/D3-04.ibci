@@ -1,0 +1,11 @@
+# subpkg.util.Point 深层模块限定 LLM 输出
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 7
+# expect-exit: 0
+# expect-llm: true
+import ai
+import subpkg.util
+ai.load_project_config()
+subpkg.util.Point p = @~ 返回 subpkg 的点 ~
+print(p.get())

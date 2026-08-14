@@ -1,0 +1,12 @@
+# CROSSMOD-LLM-1 核销重验：跨模块类 LLM 输出（geo.Point）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: geo-point | 42
+# expect-exit: 0
+# expect-llm: true
+import ai
+import geo
+ai.load_project_config()
+geo.Point p = @~ 给我一个 geo 点 ~
+print(p.hint())
+print(p.get())

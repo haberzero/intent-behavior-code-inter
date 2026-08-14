@@ -1,0 +1,11 @@
+# 对抗：chan + Optional 值传递
+# doc: docs/syntax/14_concurrency.md
+# expect-class: PASS
+# expect-out: True | 5 | done
+# expect-exit: 0
+chan[Optional[int]] ch = chan()
+ch.send(None)
+ch.send(5)
+print(ch.recv() is None)
+print(ch.recv())
+print("done")

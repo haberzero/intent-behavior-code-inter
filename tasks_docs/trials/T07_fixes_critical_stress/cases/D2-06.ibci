@@ -1,0 +1,10 @@
+# 对抗：跨模块类作内置泛型实参 + Optional 组合（Optional[geo.Box[int]]）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 5 | True
+# expect-exit: 0
+import geo
+Optional[geo.Box[int]] ob = geo.Box[int](5)
+print(ob.unwrap().get())
+Optional[geo.Box[int]] nb = None
+print(nb is None)

@@ -1,0 +1,8 @@
+# Optional 值模型观察：Optional[list[int]] 有值包装后 len()/下标抛 RUN_ATTRIBUTE_ERROR
+# （文档 arch/03_type_system §8 称 Optional[T] 接受 T）
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: KERNEL_ISSUE
+# expect-out: 3
+# expect-exit: 0
+Optional[list[int]] b = [1, 2, 3]
+print(len(b))

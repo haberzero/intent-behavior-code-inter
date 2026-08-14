@@ -1,0 +1,19 @@
+# KI-2：Optional 作字段默认值 + 继承链（auto-init）
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: PASS
+# expect-out: True | 5 | 1
+# expect-exit: 0
+class Base:
+    Optional[int] tag = None
+    int v
+    func __init__(self, int v) -> auto:
+        self.v = v
+class Sub(Base):
+    str name
+    func __init__(self, int v, str name) -> auto:
+        super().__init__(v)
+        self.name = name
+Sub s = Sub(5, "n")
+print(s.tag is None)
+print(s.v)
+print(len(s.name))

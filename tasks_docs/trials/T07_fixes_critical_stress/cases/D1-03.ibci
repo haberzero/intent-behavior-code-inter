@@ -1,0 +1,10 @@
+# CROSSMOD-LLM-1：深层模块限定注解 subpkg.util.Counter（嵌套包）
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 30
+# expect-exit: 0
+import subpkg.util
+func add_all(subpkg.util.Counter c, int x) -> int:
+    return c.add(x)
+subpkg.util.Counter c = subpkg.util.Counter(20)
+print(add_all(c, 10))

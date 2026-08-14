@@ -1,0 +1,28 @@
+# geo 模块：跨模块注解解析 / 同名类隔离测试面
+class Counter:
+    int n
+    func __init__(self, int n) -> auto:
+        self.n = n
+    func inc(self) -> int:
+        self.n = self.n + 1
+        return self.n
+    func get(self) -> int:
+        return self.n
+class Box[T]:
+    T data
+    func __init__(self, T data) -> auto:
+        self.data = data
+    func get(self) -> T:
+        return self.data
+class Point:
+    int x
+    func __init__(self, int x) -> auto:
+        self.x = x
+    func __from_prompt__(str raw) -> tuple:
+        return (True, Point(42))
+    func __outputhint_prompt__(self) -> str:
+        return "geo-point-format"
+    func hint(self) -> str:
+        return "geo-point"
+    func get(self) -> int:
+        return self.x

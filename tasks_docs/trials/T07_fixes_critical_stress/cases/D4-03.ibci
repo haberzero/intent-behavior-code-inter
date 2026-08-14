@@ -1,0 +1,7 @@
+# 泛型剩余边界 #4：元组解包错误类型检查（元素类型不匹配 → 编译期拦）
+# doc: docs/syntax/03_variables.md
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+int a, int b = "x", 1
+print(a)

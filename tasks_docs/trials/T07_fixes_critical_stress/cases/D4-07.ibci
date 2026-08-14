@@ -1,0 +1,9 @@
+# 泛型剩余边界 #7/#1：句柄类特化编译期封闭（generator[int] = gen_str() → 拦截）
+# doc: docs/syntax/15_diagnostics.md SEM_TYPE_MISMATCH
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+func gen_str() -> generator[str]:
+    yield "x"
+generator[int] g = gen_str()
+print(g)

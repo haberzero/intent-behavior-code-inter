@@ -1,0 +1,11 @@
+# 泛型剩余边界 #3：generator[list[int]] 嵌套值身份
+# doc: docs/architecture/03_type_system.md
+# expect-class: PASS
+# expect-out: list[int] | 1
+# expect-exit: 0
+func gen() -> generator[list[int]]:
+    yield [1, 2]
+generator[list[int]] g = gen()
+list[int] v = next(g)
+print(type(v))
+print(v[0])

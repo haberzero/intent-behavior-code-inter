@@ -1,0 +1,11 @@
+# 幽灵码观察：未声明属性读取（p.y）→ 实际返回 None（文档称应报 RUN_ATTRIBUTE_ERROR）
+# doc: docs/syntax/15_diagnostics.md RUN_ATTRIBUTE_ERROR
+# expect-class: KERNEL_ISSUE
+# expect-code: RUN_ATTRIBUTE_ERROR
+# expect-exit: nonzero
+class Point:
+    int x
+    func __init__(self, int x) -> auto:
+        self.x = x
+Point p = Point(1)
+print(p.y)

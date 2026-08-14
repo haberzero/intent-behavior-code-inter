@@ -1,0 +1,7 @@
+# 幽灵码：进制尾字母 0x1g → LEX_INVALID_NUMBER
+# doc: docs/syntax/15_diagnostics.md LEX_INVALID_NUMBER
+# expect-class: GUARD
+# expect-code: LEX_INVALID_NUMBER
+# expect-exit: nonzero
+int x = 0x1g
+print(x)

@@ -1,0 +1,13 @@
+# 意图 @/@! + 跨模块类组合
+# doc: docs/syntax/09_intents.md
+# expect-class: PASS
+# expect-out: geo-point | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+import geo
+ai.load_project_config()
+@! 你的回答必须符合输出格式提示，不得解释。
+geo.Point p = @~ 给我一个 geo 点 ~
+print(p.hint())
+print("DONE")

@@ -1,0 +1,20 @@
+# 对抗：诊断码在控制流内（try-except 内除零/嵌套函数越界 可捕获）
+# doc: docs/syntax/12_exceptions.md
+# expect-class: PASS
+# expect-out: caught | caught2 | DONE
+# expect-exit: 0
+func div(int a, int b) -> int:
+    return a // b
+try:
+    print(div(10, 0))
+    print("no-catch")
+except:
+    print("caught")
+func idx(list[int] xs) -> int:
+    return xs[9]
+try:
+    print(idx([1]))
+    print("no-catch2")
+except:
+    print("caught2")
+print("DONE")

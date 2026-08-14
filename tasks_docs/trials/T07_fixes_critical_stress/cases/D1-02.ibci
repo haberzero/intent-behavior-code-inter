@@ -1,0 +1,15 @@
+# CROSSMOD-LLM-1：跨模块泛型注解 geo.Box[int] 作函数参数/返回 + 容器元素
+# doc: docs/KNOWN_LIMITS.md §10.2
+# expect-class: PASS
+# expect-out: 5 | 5 | 7
+# expect-exit: 0
+import geo
+func wrap(geo.Box[int] b) -> geo.Box[int]:
+    return b
+geo.Box[int] b = geo.Box[int](5)
+geo.Box[int] r = wrap(b)
+print(r.get())
+list[geo.Box[int]] xs = [geo.Box[int](5)]
+print(xs[0].get())
+geo.Box[geo.Box[int]] nested = geo.Box[geo.Box[int]](geo.Box[int](7))
+print(nested.get().get())

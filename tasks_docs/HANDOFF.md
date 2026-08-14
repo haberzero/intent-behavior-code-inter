@@ -122,16 +122,18 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 当前交接（2026-08-14 用户指示，下一 session 主任务）**：
-  **重启真实批判性试用 + 文档内容全方位同步更新**（完整交接见
-  `tasks_docs/_HANDOFF_NEXT_TRIAL.md`）。本 session 已完成 T05/T06 剩余代码缺陷
-  四项修复（CROSSMOD-LLM-1 / KI-2 统一 Optional 值模型 / 幽灵诊断码 / set_mock_mode
-  对称开关，全量 2665 passed / 1 skipped 零回归）。下一 session：
-  **① 重启真实批判性试用（新建 `trials/T07_fixes_critical_stress/`）**——针对
-  本 session 四项修复面做对抗验证 + 泛型剩余边界复测 + 真实 LLM 批判；
-  **② 文档全方位同步**——试用暴露的行为与文档不一致处修正（doc-governance），
-  重点核对 KNOWN_LIMITS §10.2 跨模块类措辞（CROSSMOD-LLM-1 修复后可能过时）。
-  设计记录：`_code_optional_unify.md` / `_code_ghost_codes.md` / `_code_set_mock_mode.md`。
+- **🔴 当前交接（2026-08-14，T07 批判性对抗试用 + 旧套件全量重跑已执行完毕）**：
+  **本 session 主任务完成**（完整记录见 `tasks_docs/trials/T07_fixes_critical_stress/`
+  `REGISTER.md`/`REPORT.md`）：43 新用例 **28 PASS + 12 GUARD + 3 KERNEL_ISSUE**（真实 LLM 7/7），
+  旧套件 T01-T06 238 用例重跑 **202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言)
+  + 9 HARNESS**（零回归）；KI-1 / CROSSMOD-LLM-1 **核销**、KI-2 修复行为确认。
+  **下一 session**：① **3 项新 P1 KERNEL_ISSUE 修复**（OPTIONAL-SCOPE-1 函数内 Optional
+  unwrap/is_some 失败 / OPTIONAL-CONTAINER-1 Optional 容器 len/下标不可用 /
+  ATTR-READ-1 属性读取静默 None，均 PENDING_TASKS 登记，含 tests/ 判别性回归）；
+  ② 5 处旧套件陈旧断言更新（T01 D1-01-001/D1-05-008/D1-05-008b、T03 D2-07、T04 R5-03、
+  T05 D2-03，PHASE_D 流程）；③ DOC-24~27 文档同步（arch/03_type_system §8 任何路径可用/
+  容器方法、15_diagnostics RUN_ATTRIBUTE_ERROR 触发条件、KNOWN_LIMITS §10.2 补 qualified
+  路径实证——doc-governance，正文修改按用户 2026-08-14 指示待确认后执行）。
 
 - **✅ 已完成（2026-08-14，T05/T06 剩余代码缺陷四项修复，全量 2665 passed / 1 skipped 零回归）**：
   **① CROSSMOD-LLM-1**（`_resolve_type` 支持 IbAttribute 点号限定注解，行为节点

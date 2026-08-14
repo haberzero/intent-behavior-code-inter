@@ -1,0 +1,14 @@
+# 长提示格式约束（T05 D3-08 同类，跨模块类目标保持）
+# doc: docs/syntax/10_behavior.md
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+import geo
+ai.load_project_config()
+str r = @~ 这是一个用于测试的指令。请严格遵循以下输出格式提示：只能输出"geo-point-format"这五个字符，不得输出任何其它内容。现在开始。 ~
+if r == "geo-point-format":
+    print("DONE")
+else:
+    print("GOT=" + (str)len(r))

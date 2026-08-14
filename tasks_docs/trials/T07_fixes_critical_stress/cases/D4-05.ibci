@@ -1,0 +1,9 @@
+# 泛型剩余边界 #6：*expr 元素级校验（元素类型不匹配 → 编译期拦）
+# doc: docs/syntax/05_functions.md
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+func f(int a, int b) -> int:
+    return a + b
+list[str] ys = ["x", "y"]
+print(f(*ys))

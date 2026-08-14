@@ -1,0 +1,7 @@
+# 幽灵码：残缺科学计数 1e → LEX_INVALID_NUMBER
+# doc: docs/syntax/15_diagnostics.md LEX_INVALID_NUMBER
+# expect-class: GUARD
+# expect-code: LEX_INVALID_NUMBER
+# expect-exit: nonzero
+float x = 1e
+print(x)

@@ -1,0 +1,8 @@
+# 幽灵码：缩进失配嵌套块 → PAR_INDENTATION_ERROR
+# doc: docs/syntax/15_diagnostics.md PAR_INDENTATION_ERROR
+# expect-class: GUARD
+# expect-code: PAR_INDENTATION_ERROR
+# expect-exit: nonzero
+if True:
+    print("a")
+   print("b")
