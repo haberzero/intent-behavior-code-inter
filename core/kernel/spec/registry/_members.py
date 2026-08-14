@@ -40,14 +40,31 @@ class _MemberMixin:
                             effective_params = spec_result.param_types
 
                 from ..base import TypeDef
+
+                # 实例方法成员建模为 BOUND_METHOD kind（BoundMethodAxiom：
+                # bound_method IS-A callable 编译期接线——此前无条件 FUNCTION kind
+                # 使 `a.calc` 编译期类型恒为 FUNCTION、BoundMethodAxiom 从不触发，
+                # 编译期/运行期类型身份不对称）。MODULE 函数（模块级符号、无
+                # receiver）保持 FUNCTION。容器/类等对象类型的方法均视为绑定
+                # 接收者的实例方法：携带签名（param_types 不含 self——parser 把
+                # self 消费为保留 token，不进入成员 param_types；return_type
+                # 结构化保真），receiver_type 记录接收者类型。
+                if spec.kind == TypeKind.MODULE.value:
+                    resolved_kind = TypeKind.FUNCTION.value
+                    resolved_name = attr_name
+                else:
+                    resolved_kind = TypeKind.BOUND_METHOD.value
+                    resolved_name = "bound_method"
                 resolved_member = TypeDef(
-                    name=attr_name,
-                    kind=TypeKind.FUNCTION.value,
+                    name=resolved_name,
+                    kind=resolved_kind,
                     provenance=spec.provenance,
                     visibility=spec.visibility,
                     return_type=effective_return,
                     param_types=list(effective_params),
                 )
+                if resolved_kind == TypeKind.BOUND_METHOD.value:
+                    resolved_member.receiver_type = TypeRef.from_spec(spec)
                 # 携带模块成员声明的参数描述符（具名/默认/varargs 实参校验依据）。
                 # 容器特化方法无描述符（空列表），拷贝为空操作。
                 resolved_member.param_descriptors = list(member.param_descriptors)

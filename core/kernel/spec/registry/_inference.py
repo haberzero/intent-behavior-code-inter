@@ -200,7 +200,7 @@ class _InferenceMixin:
         if not call_spec:
             call_spec = self.resolve_member(callee_spec, '__call__')
 
-        if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+        if call_spec and call_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value):
             ret_ref = call_spec.return_type
             if ret_ref and ret_ref.head:
                 return self.resolve_typeref(ret_ref) or self.resolve("any")

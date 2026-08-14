@@ -321,6 +321,7 @@ class StatementVisitorsMixin:
             TypeKind.FUNCTION.value,
             TypeKind.CALLABLE_SIG.value,
             TypeKind.CALLABLE_INSTANCE.value,
+            TypeKind.BOUND_METHOD.value,
         ):
             self._check_callable_sig_match(declared_type, val_type, self._current_node)
 

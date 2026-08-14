@@ -167,17 +167,16 @@ class TestReturnCallableValidation:
 
 
 class TestBoundMethodReturn:
-    """绑定方法返回可调用类型——与直接赋值路径语义一致（F2 复核锁定）。
+    """绑定方法返回可调用类型——BoundMethodAxiom 编译期接线后语义。
 
-    编译器把成员访问（``a.calc``）建模为 FUNCTION-kind spec（name=calc），
-    BoundMethodAxiom（bound_method IS-A callable）不触发，故绑定方法赋
-    callable/fn_callable 槽在直接赋值路径即被拦截（pre-existing，非本修复
-    引入）。本测试锁定 return 路径与赋值路径的一致性。
+    编译器把成员访问（``a.calc``）建模为 BOUND_METHOD kind（携带签名、不含
+    self），BoundMethodAxiom（bound_method IS-A callable）编译期生效——
+    ``-> callable: return a.calc`` 与直接赋值 ``callable f = a.calc`` 均放行
+    （此前无条件 FUNCTION kind 使两者均被拒，编译期/运行期身份不对称）。
     """
 
-    def test_return_bound_method_to_callable_rejected(self):
-        """``-> callable: return a.calc`` 编译期拦截（与 ``callable f = a.calc``
-        直接赋值一致——pre-existing 绑定方法建模，非本次修复回归）。"""
+    def test_return_bound_method_to_callable_allowed(self):
+        """``-> callable: return a.calc`` 编译放行，绑定方法调用正确。"""
         code = (
             "class Adder:\n"
             "    int base\n"
@@ -190,7 +189,64 @@ class TestBoundMethodReturn:
             "callable f = make(Adder(10))\n"
             "print(f())\n"
         )
+        assert run_ibci(code) == ["11"]
+
+    def test_bound_method_direct_assignment_to_callable_allowed(self):
+        """``callable f = a.calc`` 直接赋值放行（与 return 路径语义一致）。"""
+        code = (
+            "class Adder:\n"
+            "    int base\n"
+            "    func __init__(self, int b) -> auto:\n"
+            "        self.base = b\n"
+            "    func calc(self) -> int:\n"
+            "        return self.base + 1\n"
+            "Adder a = Adder(10)\n"
+            "callable f = a.calc\n"
+            "print(f())\n"
+        )
+        assert run_ibci(code) == ["11"]
+
+    def test_bound_method_signature_slot_allowed(self):
+        """``fn[(int) -> int] f = a.calc`` 签名匹配放行（bound 签名不含 self）。"""
+        code = (
+            "class Adder:\n"
+            "    int base\n"
+            "    func __init__(self, int b) -> auto:\n"
+            "        self.base = b\n"
+            "    func calc(self, int x) -> int:\n"
+            "        return self.base + x\n"
+            "Adder a = Adder(10)\n"
+            "fn[(int) -> int] f = a.calc\n"
+            "print(f(5))\n"
+        )
+        assert run_ibci(code) == ["15"]
+
+    def test_bound_method_signature_slot_mismatch_rejected(self):
+        """``fn[(int, int) -> int] f = a.calc`` 参数数量不匹配编译期拦截。"""
+        code = (
+            "class Adder:\n"
+            "    func calc(self, int x) -> int:\n"
+            "        return x\n"
+            "Adder a = Adder()\n"
+            "fn[(int, int) -> int] f = a.calc\n"
+            "print(f(5, 6))\n"
+        )
         assert SEM in _errs(code)
+
+    def test_bound_method_type_identity(self):
+        """``a.calc`` 编译期类型身份为 BOUND_METHOD（is_callable + 签名保真）。"""
+        from core.kernel.factory import create_default_registry
+        from core.kernel.spec.base import TypeKind
+
+        reg = create_default_registry()
+        # BOUND_METHOD 身份：BoundMethodAxiom 生效（IS-A callable），签名承载。
+        bm = reg.factory.create_bound_method(
+            receiver_type_name="Adder",
+            func_spec_name="calc",
+        )
+        assert bm.kind == TypeKind.BOUND_METHOD.value
+        assert reg.is_callable(bm)
+        assert reg.is_assignable(bm, reg.resolve("callable"))
 
     def test_return_bound_method_to_fn_allowed(self):
         """``-> fn``（动态）返回绑定方法放行（fn 推断哨兵，与赋值一致）。"""

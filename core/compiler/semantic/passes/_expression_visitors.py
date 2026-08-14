@@ -582,7 +582,7 @@ class ExpressionVisitorsMixin:
                             node, code=SEM_TYPE_MISMATCH,
                             hint=self.registry.get_diff_hint(actual_type, exp_spec),
                         )
-        elif func_type.kind == TypeKind.FUNCTION.value:
+        elif func_type.kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value):
             # 容器特化写方法的类型提示（如 list[int].append("x")）
             param_type_names = [t.head for t in param_types]
             for i, (expected_name, actual_type) in enumerate(zip(param_type_names, positional_specs)):
