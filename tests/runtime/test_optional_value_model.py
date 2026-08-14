@@ -139,9 +139,9 @@ def test_optional_field_reassign_after_construction():
 
 
 def test_none_is_literal_and_identity_preserved():
-    """is None 对字面量 None 作 None 语义检测；空 Optional 之间仍恒等（实例身份）。
+    """is None 对字面量 None 作 None 语义检测（双向）；空 Optional 之间仍恒等。
 
-    ``a is None``（右侧为字面量 None）→ True（None 语义检测，KI-2 修复）；
+    ``a is None`` / ``None is a``（任一侧为字面量 None）→ True（None 语义检测）；
     ``a is b``（两个不同空 Optional 实例）→ False（保持恒等，实例身份不被
     None 语义放宽吞并）。
     """
@@ -149,7 +149,9 @@ def test_none_is_literal_and_identity_preserved():
         "Optional[int] a = None\n"
         "Optional[int] b = None\n"
         "print(a is None)\n"
+        "print(None is a)\n"
         "print(a is not None)\n"
+        "print(None is not a)\n"
         "print(a is b)\n"
         "print(a is not b)\n"
         "print(a is a)\n"
@@ -157,7 +159,7 @@ def test_none_is_literal_and_identity_preserved():
         "print(None is not None)\n"
     )
     assert run_ibci(code) == [
-        "True", "False", "False", "True", "True", "True", "False",
+        "True", "True", "False", "False", "False", "True", "True", "True", "False",
     ]
 
 
@@ -270,3 +272,24 @@ def test_optional_list_add_mul_elements_wrapped():
         "print(lm[0].is_none())\n"
     )
     assert run_ibci(code) == ["Optional[int]", "True", "Optional[int]", "False"]
+
+
+def test_optional_tuple_elements_wrapped():
+    """tuple[Optional[T], ...] 位置元素按声明类型包装。
+
+    复核修正：tuple 不可变（elements 为只读 tuple），原地写元素抛 TypeError
+    被 except 吞掉 → 元素裸存。改为重建 tuple 后元素保持 IbOptional。
+    """
+    code = (
+        'tuple[Optional[int], str] t = (None, "x")\n'
+        "print(t[0] is None)\n"
+        "print(t[0].is_none())\n"
+        "print(type(t[0]))\n"
+        "print(type(t[1]))\n"
+        "tuple[Optional[int], str] t2 = (5, \"y\")\n"
+        "print(t2[0].is_none())\n"
+        "print(t2[0] == 5)\n"
+    )
+    assert run_ibci(code) == [
+        "True", "True", "Optional[int]", "str", "False", "True",
+    ]

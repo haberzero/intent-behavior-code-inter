@@ -771,6 +771,13 @@ class CoreTokenScanner:
                     f"Invalid number literal '{value}': hexadecimal prefix requires at least one digit (e.g. 0xFF).",
                     self.scanner, code=LEX_INVALID_NUMBER,
                 )
+            # 十六进制数字后紧跟字母（0x1fg）→ 非法字面量（与十进制分支一致）。
+            elif not self.scanner.is_at_end() and (self.scanner.peek().isalpha() or self.scanner.peek() == '_'):
+                self.issue_tracker.error(
+                    f"Invalid number literal '{value}': unexpected character "
+                    f"'{self.scanner.peek()}' after hexadecimal literal.",
+                    self.scanner, code=LEX_INVALID_NUMBER,
+                )
             tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
             self.is_new_line_flag = False
             return
@@ -785,6 +792,12 @@ class CoreTokenScanner:
                     f"Invalid number literal '{value}': binary prefix requires at least one digit (e.g. 0b101).",
                     self.scanner, code=LEX_INVALID_NUMBER,
                 )
+            elif not self.scanner.is_at_end() and (self.scanner.peek().isalpha() or self.scanner.peek() == '_'):
+                self.issue_tracker.error(
+                    f"Invalid number literal '{value}': unexpected character "
+                    f"'{self.scanner.peek()}' after binary literal.",
+                    self.scanner, code=LEX_INVALID_NUMBER,
+                )
             tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
             self.is_new_line_flag = False
             return
@@ -797,6 +810,12 @@ class CoreTokenScanner:
             if value == '0o' or value == '0O':
                 self.issue_tracker.error(
                     f"Invalid number literal '{value}': octal prefix requires at least one digit (e.g. 0o17).",
+                    self.scanner, code=LEX_INVALID_NUMBER,
+                )
+            elif not self.scanner.is_at_end() and (self.scanner.peek().isalpha() or self.scanner.peek() == '_'):
+                self.issue_tracker.error(
+                    f"Invalid number literal '{value}': unexpected character "
+                    f"'{self.scanner.peek()}' after octal literal.",
                     self.scanner, code=LEX_INVALID_NUMBER,
                 )
             tokens.append(self.scanner.create_token(TokenType.NUMBER, value))
@@ -814,19 +833,31 @@ class CoreTokenScanner:
                 value += self.scanner.advance()
 
         # Scientific notation
+        sci_incomplete = False
         if self.scanner.peek() in 'eE':
             next_char = self.scanner.peek(1)
             if next_char.isdigit() or next_char in '+-':
                 value += self.scanner.advance() # 'e' or 'E'
                 if self.scanner.peek() in '+-':
                     value += self.scanner.advance()
+                exp_start = len(value)
                 while self.scanner.peek().isdigit():
                     value += self.scanner.advance()
+                # e 后无指数数字（1e / 1e+ / 1e-）→ 残缺科学计数，报非法字面量
+                # （此前落入 int('1e+') → INT_INTERNAL_ERROR 内部错误）。
+                if len(value) == exp_start:
+                    sci_incomplete = True
 
         # 数字后紧跟字母/下划线（如 12abc / 1e 后无数字）→ 非法数字字面量。
         # 不合法则报 LEX_INVALID_NUMBER，避免后续误当作两个 token 产生
         # 令人困惑的 PAR 错误。
-        if not self.scanner.is_at_end() and (self.scanner.peek().isalpha() or self.scanner.peek() == '_'):
+        if sci_incomplete:
+            self.issue_tracker.error(
+                f"Invalid number literal '{value}': scientific notation requires "
+                f"exponent digits (e.g. 1e3 / 1e+3).",
+                self.scanner, code=LEX_INVALID_NUMBER,
+            )
+        elif not self.scanner.is_at_end() and (self.scanner.peek().isalpha() or self.scanner.peek() == '_'):
             self.issue_tracker.error(
                 f"Invalid number literal '{value}': unexpected character "
                 f"'{self.scanner.peek()}' after number (identifiers must not start with a digit).",

@@ -19,7 +19,7 @@ def _runtime_error_code_for(exc: Exception) -> Optional[str]:
 
     原生 Python 异常（ZeroDivisionError / IndexError / KeyError /
     AttributeError / PermissionError）经此映射为具体诊断码，替代裸
-    ``RUNTIME_ERROR``。无法归类的异常返回 None（回落默认 RUNTIME_ERROR）。
+    ``RUN_GENERIC_ERROR``。无法归类的异常返回 None（回落默认 RUN_GENERIC_ERROR）。
     """
     if isinstance(exc, ZeroDivisionError):
         return RUN_DIVISION_BY_ZERO

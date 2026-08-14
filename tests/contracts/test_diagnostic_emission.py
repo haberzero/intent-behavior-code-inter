@@ -106,6 +106,28 @@ class TestLexerParserEmission:
     def test_invalid_number_trailing_ident(self):
         assert "LEX_INVALID_NUMBER" in _compile_err_codes("int a = 12abc\n")
 
+    def test_invalid_number_hex_trailing_ident(self):
+        assert "LEX_INVALID_NUMBER" in _compile_err_codes("int a = 0x1fg\n")
+
+    def test_invalid_number_incomplete_scientific(self):
+        assert "LEX_INVALID_NUMBER" in _compile_err_codes("int a = 1e+\n")
+
+    def test_valid_number_literals_still_compile(self):
+        """合法数字字面量不误报（0x/0b/0o/小数/科学计数）。"""
+        from tests.conftest import _default_root
+
+        engine = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+        code = (
+            "int h = 0x1f\n"
+            "int b = 0b101\n"
+            "float f = 1e3\n"
+            "float d = 12.5\n"
+            "print(h)\n"
+        )
+        lines = []
+        engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
+        assert lines == ["31"]
+
     def test_indentation_error_code(self):
         code = (
             "func f() -> int:\n"

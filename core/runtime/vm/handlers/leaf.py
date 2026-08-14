@@ -268,15 +268,21 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
             native = unbox(contained)
             cmp_res = executor.registry.box(not bool(native))
         elif op == "is":
-            if isinstance(right, IbNone):
-                cmp_res = executor.registry.box(is_none_value(current_left))
+            # None 语义检测双向对称：左右任一为字面量 None（IbNone）时，
+            # 判断另一侧是否 None 语义（空 Optional / 裸 None 均为 None）。
+            if isinstance(right, IbNone) or isinstance(current_left, IbNone):
+                cmp_res = executor.registry.box(
+                    is_none_value(current_left) and is_none_value(right)
+                )
             elif isinstance(right, IbLLMUncertain):
                 cmp_res = executor.registry.box(isinstance(current_left, IbLLMUncertain))
             else:
                 cmp_res = executor.registry.box(current_left is right)
         elif op == "is not":
-            if isinstance(right, IbNone):
-                cmp_res = executor.registry.box(not is_none_value(current_left))
+            if isinstance(right, IbNone) or isinstance(current_left, IbNone):
+                cmp_res = executor.registry.box(
+                    not (is_none_value(current_left) and is_none_value(right))
+                )
             elif isinstance(right, IbLLMUncertain):
                 cmp_res = executor.registry.box(not isinstance(current_left, IbLLMUncertain))
             else:
@@ -434,7 +440,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 与 ExprHandler.visit_IbCall 同语义：对外汇报为通用调用错误。
         # 原生 Python 异常类型（AttributeError/IndexError/KeyError 等）映射为
         # 具体诊断码（幽灵码发射：属性缺失 → RUN_ATTRIBUTE_ERROR 等），
-        # 替代裸 RUNTIME_ERROR/VM: Call failed。
+        # 替代裸 RUN_GENERIC_ERROR/VM: Call failed。
         code = _runtime_error_code_for(e)
         if code is not None:
             raise InterpreterError(str(e), error_code=code) from e
@@ -572,15 +578,19 @@ def _wrap_container_elements(value, node_spec, registry):
         elif kind == TypeKind.TUPLE.value and isinstance(value, IbTuple):
             positional = getattr(node_spec, "positional_element_types", None) or []
             if positional:
+                new_elts = list(value.elements)
                 for i, (elt, ref) in enumerate(zip(value.elements, positional)):
                     elem_spec = _resolve(ref)
                     if elem_spec is not None:
-                        value.elements[i] = wrap_optional(elt, elem_spec, registry)
+                        new_elts[i] = wrap_optional(elt, elem_spec, registry)
+                # tuple 不可变：重建而非原地写（元素包装后整体替换 elements）。
+                value.elements = tuple(new_elts)
             else:
                 elem_spec = _resolve(getattr(node_spec, "element_type", None))
                 if elem_spec is not None:
-                    for i, elt in enumerate(value.elements):
-                        value.elements[i] = wrap_optional(elt, elem_spec, registry)
+                    value.elements = tuple(
+                        wrap_optional(elt, elem_spec, registry) for elt in value.elements
+                    )
         elif kind == TypeKind.DICT.value and isinstance(value, IbDict):
             val_spec = _resolve(getattr(node_spec, "value_type", None))
             if val_spec is not None:
