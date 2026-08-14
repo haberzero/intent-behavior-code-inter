@@ -80,10 +80,14 @@ ai.register_model(name, url, key, model)   # 注册命名模型（供 @NAME~ 路
 MOCK 模式（离线测试/开发，结合 MOCK 指令使用）：
 
 ```ibci
-ai.set_mock_mode()        # 显式进入 MOCK 模式（替代 url/key 字符串嗅探）
+ai.set_mock_mode()            # 进入 MOCK 模式（替代 url/key 字符串嗅探）
+ai.set_mock_mode(False)       # 退出 MOCK 模式，重建真实客户端
 ```
 
-`set_mock_mode()` 是单向入口，**无对应的 off API**。退出 MOCK 模式需调用 `ai.set_config(url, key, model)` 或 `ai.apply_config({...})`（配置 `defaults.mock` 为假），二者会清除 MOCK 模式。
+`set_mock_mode(enable: bool = True)` 是对称开关：`enable=True`（默认）进入 MOCK
+模式；`enable=False` 退出并重新初始化真实客户端（未配置 url/key 时 fail-fast，
+不静默停留在半配置状态）。也可经 `ai.set_config(url, key, model)` 或
+`ai.apply_config({...})`（`defaults.mock` 为假）退出 MOCK 模式。
 
 其它可用函数：`has_api_key()`、`probe_model()`、`get_retry()`、`is_auto_intent_injection_enabled()`、`set_global_intent(content)`、`clear_global_intents()`、`remove_global_intent(content)`、`get_global_intents()`、`get_current_intent_stack()`、`set_return_type_prompt(type, prompt)`、`get_return_type_prompt(type)`、`get_current_call_info()`、`run_batch()`、`mask(pattern)` 等。
 

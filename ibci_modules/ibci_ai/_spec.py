@@ -42,9 +42,11 @@ def __ibcext_vtable__() -> Dict[str, Any]:
                 "description": "应用结构化配置 dict（defaults + default_model + models）",
             },
             "set_mock_mode": {
-                "params": [],
+                "params": [
+                    {"name": "enable", "type": "bool", "default": True},
+                ],
                 "return_type": "void",
-                "description": "显式进入 MOCK 测试模式（替代 url/key 字符串嗅探）",
+                "description": "对称开关：set_mock_mode() 进入 MOCK 测试模式；set_mock_mode(False) 退出并重建真实客户端",
             },
             "register_model": {
                 "params": [

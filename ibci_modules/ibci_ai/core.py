@@ -172,17 +172,27 @@ class AIPlugin(IbStatefulPlugin):
         self._unprobed_warned = False
         self._init_client()
 
-    def set_mock_mode(self) -> None:
-        """显式进入 MOCK 测试模式（替代 url/key 字符串嗅探）。
+    def set_mock_mode(self, enable: bool = True) -> None:
+        """显式进入/退出 MOCK 测试模式（对称开关，替代单向 url/key 字符串嗅探）。
 
-        MOCK 模式下 LLM 调用经 ``MockScenarioEngine`` 处理（``MOCK:xxx`` 指令语言），
-        不发起真实网络请求。测试与离线开发用。
+        - ``enable=True``（默认）：进入 MOCK 模式。LLM 调用经 ``MockScenarioEngine``
+          处理（``MOCK:xxx`` 指令语言），不发起真实网络请求。测试与离线开发用。
+        - ``enable=False``：退出 MOCK 模式，重新初始化真实客户端。若未显式配置
+          （无 url/key），fail-fast 报配置缺失（不静默停留在半配置状态）。
         """
-        self._config["mock"] = True
-        self._client = MOCK_CLIENT_SENTINEL
-        self._model_capabilities["probed"] = True
-        self._model_capabilities["is_reasoning"] = False
+        if enable:
+            self._config["mock"] = True
+            self._client = MOCK_CLIENT_SENTINEL
+            self._model_capabilities["probed"] = True
+            self._model_capabilities["is_reasoning"] = False
+            self._unprobed_warned = False
+            return
+        # 退出 MOCK 模式：清 mock 标志并重建真实客户端。无凭据配置 → fail-fast
+        # （与 _init_client 非 mock 分支一致），避免"退出后静默无法调用"。
+        self._config["mock"] = False
+        self._model_capabilities["probed"] = False
         self._unprobed_warned = False
+        self._init_client()
 
     def load_config(self, path: str) -> None:
         """从 ``api_config.json`` 加载配置并应用（指定路径入口）。
