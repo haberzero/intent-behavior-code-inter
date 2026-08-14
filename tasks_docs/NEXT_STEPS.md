@@ -8,12 +8,12 @@
 > 零回归；KI-1 / CROSSMOD-LLM-1 核销，KI-2 修复行为确认。完整记录见
 > `trials/T07_fixes_critical_stress/REGISTER.md`/`REPORT.md` 与 WORKLOG）
 >
-> **🔴 下一 session 主任务（T07 已执行完毕，2026-08-14）**：T07 试用新暴露
-> **3 项 P1 KERNEL_ISSUE 待独立窗口修复**（OPTIONAL-SCOPE-1 函数内 Optional unwrap/is_some
-> 失败 / OPTIONAL-CONTAINER-1 Optional 容器方法不可用 / ATTR-READ-1 属性读取静默 None）
-> + DOC-24~27 文档同步（KNOWN_LIMITS §10.2 可补
-> qualified 路径实证；**6 处陈旧断言已修复（2026-08-14 用户授权，详见 WORKLOG）**）。细节见
-> `trials/T07_fixes_critical_stress/REGISTER.md` 与 PENDING_TASKS §〇。
+> **🔴 下一 session 主任务（2026-08-14，T07 新发现三项 P1 修复 + 文档同步）**：
+> 完整交接见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`——① KERNEL_ISSUE-OPTIONAL-SCOPE-1
+> （函数内 Optional unwrap/is_some 失败）、② KERNEL_ISSUE-OPTIONAL-CONTAINER-1（Optional
+> 容器方法不可用）、③ KERNEL_ISSUE-ATTR-READ-1（属性读取静默 None），每项含触发用例/
+> 行为事实矩阵/修复方向/判别性回归建议；④ DOC-24~28 文档同步批次；⑤ BOUNDARY-CHAN-ARGS-1
+> 文档同步。基线全量 2665 passed / 1 skipped；6 处陈旧断言已修复（用户授权，WORKLOG）。
 
 ---
 

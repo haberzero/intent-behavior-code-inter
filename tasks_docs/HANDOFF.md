@@ -122,18 +122,19 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 当前交接（2026-08-14，T07 批判性对抗试用 + 旧套件全量重跑已执行完毕）**：
-  **本 session 主任务完成**（完整记录见 `tasks_docs/trials/T07_fixes_critical_stress/`
-  `REGISTER.md`/`REPORT.md`）：43 新用例 **28 PASS + 12 GUARD + 3 KERNEL_ISSUE**（真实 LLM 7/7），
-  旧套件 T01-T06 238 用例重跑 **202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言)
-  + 9 HARNESS**（零回归）；KI-1 / CROSSMOD-LLM-1 **核销**、KI-2 修复行为确认。
-  **下一 session**：① **3 项新 P1 KERNEL_ISSUE 修复**（OPTIONAL-SCOPE-1 函数内 Optional
-  unwrap/is_some 失败 / OPTIONAL-CONTAINER-1 Optional 容器 len/下标不可用 /
-  ATTR-READ-1 属性读取静默 None，均 PENDING_TASKS 登记，含 tests/ 判别性回归）；
-  ② **6 处旧套件陈旧断言已修复转 PASS**（2026-08-14 用户授权，T01×3/T05 D2-03 核销/T03 D2-07、T04 R5-03 chan 普适写法；BOUNDARY-CHAN-ARGS-1 于 INDEX）；③ 剩余陈旧断言项不再存在，
-  T05 D2-03，PHASE_D 流程）；③ DOC-24~27 文档同步（arch/03_type_system §8 任何路径可用/
-  容器方法、15_diagnostics RUN_ATTRIBUTE_ERROR 触发条件、KNOWN_LIMITS §10.2 补 qualified
-  路径实证——doc-governance，正文修改按用户 2026-08-14 指示待确认后执行）。
+- **🔴 当前交接（2026-08-14，下一 session 主任务 = T07 新发现三项 P1 修复 + 文档同步）**：
+  **完整交接见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`**。T07 批判性对抗试用（43 新用例
+  28 PASS + 12 GUARD + 3 KERNEL_ISSUE，真实 LLM 7/7）+ 旧套件 T01-T06 238 用例重跑
+  （零回归，KI-1/CROSSMOD-LLM-1 核销）已完成并全部记录；**下一 session 主任务**：
+  ① **KERNEL_ISSUE-OPTIONAL-SCOPE-1**（函数内 Optional 先 None 后赋值 unwrap/is_some
+  报 Object of type None，P1）；② **KERNEL_ISSUE-OPTIONAL-CONTAINER-1**（Optional 容器
+  len/下标不可用，P1）；③ **KERNEL_ISSUE-ATTR-READ-1**（属性读取静默 None，P1）——
+  每项含触发用例/行为事实矩阵/修复方向建议/判别性回归建议（交接文档 §一），修复走
+  code-workflow + Phase D 收敛义务（根因修复 + tests/ 回归 + 触发用例核销）；
+  ④ DOC-24~28 文档同步批次（arch/03 §8 / 15_diagnostics / KNOWN_LIMITS §10.2 /
+  14_concurrency，doc-governance，已登记 PENDING_TASKS）；⑤ BOUNDARY-CHAN-ARGS-1
+  文档同步。**旧套件 6 处陈旧断言已修复**（2026-08-14 用户授权，T01×3/T05 D2-03 核销/
+  T03 D2-07、T04 R5-03 chan 普适写法）。基线全量 2665 passed / 1 skipped。
 
 - **✅ 已完成（2026-08-14，T05/T06 剩余代码缺陷四项修复，全量 2665 passed / 1 skipped 零回归）**：
   **① CROSSMOD-LLM-1**（`_resolve_type` 支持 IbAttribute 点号限定注解，行为节点
