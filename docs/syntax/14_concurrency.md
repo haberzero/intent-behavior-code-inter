@@ -10,6 +10,8 @@
 
 `chan(T, name, mode=..., buffer=...)` 构造通道；`T` 为消息元素类型，`name` 供注册表内省，`mode` 选择消息语义，`buffer` 为队列容量（0=无界，>0 有界）。
 
+> **`T` 实参形态**：`T` 宜传**裸类型类对象**（`chan(str, "stream")` → `chan[str]`）。**特化类对象实参**（`chan(Box[int], "message")`）当前被降级为裸类（`chan[Box]`）——普适写法是**类型在声明处、构造只传运行时参数**：`chan[E] ch = chan()`（含 `await` 均正常）。
+
 | 方法 | 语义 |
 |------|------|
 | `c.send(x)` | 阻塞投递（message/stream 排入队列；pubsub 广播给全部订阅者） |

@@ -1,4 +1,4 @@
-﻿# IBC-Inter 已知限制（语言级）
+# IBC-Inter 已知限制（语言级）
 
 > 本文档记录 IBCI 当前版本中正式承认的语言设计限制与使用约束。面向需要了解 IBCI 语言边界的所有开发者和使用者。每个限制条目包含限制说明、根源分析与规避建议。
 >
@@ -332,7 +332,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 行为不变。run_string 入口模块名锚定为 `__string_exec__`（稳定可复现）。
 
 **已知边界**：
-- LLM 输出解析到跨模块用户类（`__from_prompt__`/`__outputhint_prompt__`）：**parse 链 module 感知**（type_name 为 qualified 名，`_get_expected_type_hint` 优先 node_to_type spec；`returns` IbName 裸名按当前模块上下文解析）。**outputhint 裸名返回路径**（`returns` IbName 无 module 信息）仍为 graceful 退化——vtable 查找查不到该类 → 回落默认格式约束（不误配到异模块同名类）。
+- LLM 输出解析到跨模块用户类（`__from_prompt__`/`__outputhint_prompt__`）：**parse 链 module 感知**（type_name 为 qualified 名，`_get_expected_type_hint` 优先 node_to_type spec；`returns` IbName 裸名按当前模块上下文解析）。**outputhint 裸名返回路径**（`returns` IbName 无 module 信息）仍为 graceful 退化——vtable 查找查不到该类 → 回落默认格式约束（不误配到异模块同名类）。**qualified 注解路径已验证可用**（`geo.Counter c = @~...~` / 跨模块类型注解解析，CROSSMOD-LLM-1 根治后 T07 D3 实证）。
 - 跨引擎 round-trip 的**未编译目标引擎**用户类重建受注册表封印限制（`create_subclass` sealed 后禁用）——用户类特化跨引擎重建须目标引擎已编译该类（内置泛型特化不受限，加载期预创建）。
 
 ### 10.3 容器字面量类型推断 + *expr 元素级校验

@@ -68,6 +68,15 @@ class ScopeImpl:
         if declared_type is None:
             return
 
+        # 类型参数占位（泛型方法体内 ``T x = ...`` 注解）：编译期特化已按实参
+        # 校验类型（Box[int] 方法体内 T=int），运行时无对应真实类型（T 的真实
+        # 类型由特化决定）——跳过检查，避免 TYPE_PARAM 占位误拒合法值。
+        if (
+            isinstance(declared_type, IbSpec)
+            and declared_type.kind == TypeKind.TYPE_PARAM.value
+        ):
+            return
+
         # 特殊处理：IbLLMUncertain 可以赋值给任何类型
         if isinstance(value, IbLLMUncertain):
             return
@@ -228,13 +237,17 @@ class ScopeImpl:
             # 运行时类型校验
             self._check_type(boxed_value, symbol.declared_type, name)
             
-            symbol.value = self._wrap_optional(boxed_value, symbol.declared_type)
+            wrapped = self._wrap_optional(boxed_value, symbol.declared_type)
+            symbol.value = wrapped
             symbol.current_type = type(boxed_value)
             # Cell 变量赋值时同步更新共享 IbCell，使持有该 Cell 的
-            # lambda 闭包在下次调用时读到最新值。
+            # lambda 闭包在下次调用时读到最新值。**Cell 同步必须与
+            # symbol.value 一致（包装后值）**——读取路径优先 Cell
+            # （get 先查 cell），写未包装值会使 Optional 包装丢失
+            # （nonlocal 写 Optional 后 unwrap 失败的表示分叉根源）。
             if symbol.cell is not None:
                 self._check_cell_isolation(symbol.name or name, symbol.cell)
-                symbol.cell.set(boxed_value)
+                symbol.cell.set(wrapped)
             return True
         if self._parent:
             return self._parent.assign(name, value)
@@ -252,12 +265,14 @@ class ScopeImpl:
             if not skip_type_check:
                 self._check_type(boxed_value, symbol.declared_type, symbol.name or uid)
             
-            symbol.value = self._wrap_optional(boxed_value, symbol.declared_type)
+            wrapped = self._wrap_optional(boxed_value, symbol.declared_type)
+            symbol.value = wrapped
             symbol.current_type = type(boxed_value)
-            # Cell 变量赋值时同步更新共享 IbCell。
+            # Cell 变量赋值时同步更新共享 IbCell（与 symbol.value 一致的
+            # 包装后值，见 assign 注释——读取优先 Cell）。
             if symbol.cell is not None:
                 self._check_cell_isolation(symbol.name or uid, symbol.cell)
-                symbol.cell.set(boxed_value)
+                symbol.cell.set(wrapped)
             return True
         if self._parent:
             return self._parent.assign_by_uid(uid, value, skip_type_check=skip_type_check)

@@ -115,11 +115,13 @@ class ArtifactRehydrator:
             # 非泛型 kind 保留既有 shell（FUNCTION/CALLABLE_SIG/CLASS/...）。
             TypeKind.FUNCTION.value: lambda: TypeDef(
                 name=name or "callable",
+                kind=TypeKind.FUNCTION.value,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
             ),
             TypeKind.CALLABLE_SIG.value: lambda: TypeDef(
                 name="fn",
+                kind=TypeKind.CALLABLE_SIG.value,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
                 return_type=TypeRef.of(data.get("return_type_name", "auto")),
@@ -131,11 +133,13 @@ class ArtifactRehydrator:
             TypeKind.TYPE_PARAM.value: lambda: factory.create_type_param(name),
             TypeKind.BOUND_METHOD.value: lambda: TypeDef(
                 name="bound_method",
+                kind=TypeKind.BOUND_METHOD.value,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
             ),
             TypeKind.MODULE.value: lambda: TypeDef(
                 name=name,
+                kind=TypeKind.MODULE.value,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
             ),

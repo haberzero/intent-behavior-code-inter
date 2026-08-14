@@ -4,6 +4,7 @@ from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject,
 from core.kernel.registry import KernelRegistry
 from core.kernel.factory import create_default_registry
 from core.kernel.spec import IbSpec, TypeDef
+from core.kernel.issue import InterpreterError
 from core.runtime.shared.waitable import Waitable
 
 class Bootstrapper:
@@ -120,7 +121,14 @@ class Bootstrapper:
             method = self.ib_class.lookup_method(name)
             if method:
                 return IbBoundMethod(self, method)
-            return self.ib_class.registry.get_none()
+            # 3. 未声明属性：fail-fast（RUN_ATTRIBUTE_ERROR）。
+            #    此前静默返回 None——错误值流入用户程序（读取未声明属性得到
+            #    None，随后调用报困惑的 "Object of type 'None' has no method
+            #    '__call__'"）。属性缺失是程序错误，按工作模式定论应显式报错。
+            raise InterpreterError(
+                f"AttributeError: '{self.ib_class.name}' object has no attribute '{name}'",
+                error_code="RUN_ATTRIBUTE_ERROR",
+            )
 
         def _default_setattr(self, name_obj, val):
             attr = name_obj.to_native()

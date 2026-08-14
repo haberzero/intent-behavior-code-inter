@@ -152,17 +152,23 @@ def bind_behavior_closure(behavior: "IbBehavior", rt_context: Any) -> None:
     lambda 通过 IbCell 读最新值。``rt_context`` 必须是已 enter_scope 的当前作用域。
     """
     is_snapshot = behavior.capture_mode == "snapshot"
+    ec = behavior._execution_context
     for sym_uid, (name, slot) in behavior.closure.items():
+        # declared_type 与单次调用路径同构解析（统一 Optional 值模型：行为
+        # 闭包捕获的 Optional 变量保持包装语义）。resolve 经 execution_context。
+        declared_type = (
+            ec.resolve_type_from_symbol(sym_uid) if ec is not None and sym_uid else None
+        )
         if is_snapshot:
             fresh = try_deep_clone(slot) if slot is not None else None
             value = fresh if fresh is not None else slot
             if value is not None:
-                rt_context.define_variable(name, value, uid=sym_uid)
+                rt_context.define_variable(name, value, uid=sym_uid, declared_type=declared_type)
         elif isinstance(slot, IbCell):
             if not slot.is_empty():
-                rt_context.define_variable(name, slot.get(), uid=sym_uid)
+                rt_context.define_variable(name, slot.get(), uid=sym_uid, declared_type=declared_type)
         else:
-            rt_context.define_variable(name, slot, uid=sym_uid)
+            rt_context.define_variable(name, slot, uid=sym_uid, declared_type=declared_type)
 
 
 def bind_behavior_call_args(behavior: "IbBehavior", args: List[Any], ec: Any, rt_context: Any) -> None:

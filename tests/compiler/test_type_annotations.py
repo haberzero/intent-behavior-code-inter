@@ -427,3 +427,84 @@ class TestTaskThreadArtifactRehydrator:
         assert spec.kind == "thread_result"
         assert spec.value_type.head == "int"
         assert spec.get_base_name() == "thread_result"
+
+
+################################################################################
+# 函数局部变量声明类型绑定（判别性回归）
+################################################################################
+
+class TestFunctionLocalTypeAnnotations:
+    """函数作用域局部变量的声明类型必须在编译期绑定并检查。
+
+    函数局部变量声明类型须参与编译期类型检查：重赋值类型不符（``int x = 5;
+    x = "abc"``）报 SEM_TYPE_MISMATCH；符号池承载的声明类型使运行时 Optional
+    值包装可用。本组锁定此语义。
+    """
+
+    def test_function_local_reassign_type_checked(self):
+        """函数内带注解局部变量重赋值类型不符 → SEM_TYPE_MISMATCH。"""
+        assert_error_codes("""
+func work() -> int:
+    int x = 5
+    x = "abc"
+    return x
+""", "SEM_TYPE_MISMATCH")
+
+    def test_function_local_first_assign_type_checked(self):
+        """函数内带注解局部变量首次赋值类型不符 → SEM_TYPE_MISMATCH。"""
+        assert_error_codes("""
+func work() -> int:
+    int x = "abc"
+    return x
+""", "SEM_TYPE_MISMATCH")
+
+    def test_function_local_plain_assign_auto_locked(self):
+        """函数内无注解裸赋值 auto 首赋值锁定（与模块级一致）。"""
+        assert_error_codes("""
+func work() -> int:
+    x = 5
+    x = "abc"
+    return x
+""", "SEM_TYPE_MISMATCH")
+
+    def test_function_local_optional_type_checked(self):
+        """函数内 Optional 局部变量重赋值类型不符 → SEM_TYPE_MISMATCH。"""
+        assert_error_codes("""
+func work() -> int:
+    Optional[int] tag = None
+    tag = "abc"
+    return tag.unwrap()
+""", "SEM_TYPE_MISMATCH")
+
+    def test_function_local_valid_reassignment_compiles(self):
+        """函数内合法重赋值（int→int / Optional→int 兼容）编译通过。"""
+        assert_compiles("""
+func work() -> int:
+    int x = 5
+    x = 7
+    Optional[int] tag = None
+    tag = 405
+    return tag.unwrap() + x
+print(work())
+""")
+
+    def test_nested_function_local_type_checked(self):
+        """嵌套函数内局部变量重赋值类型检查同样生效。"""
+        assert_error_codes("""
+func outer() -> int:
+    func inner() -> int:
+        int y = 1
+        y = "abc"
+        return y
+    return inner()
+""", "SEM_TYPE_MISMATCH")
+
+    def test_class_method_local_type_checked(self):
+        """类方法内局部变量重赋值类型检查生效。"""
+        assert_error_codes("""
+class C:
+    func run(self) -> int:
+        int y = 1
+        y = "abc"
+        return y
+""", "SEM_TYPE_MISMATCH")

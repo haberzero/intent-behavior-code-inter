@@ -26,6 +26,19 @@ def resolve_iterable(iterable_obj: Any):
     """
     if is_sequence_value(iterable_obj):
         return iterable_obj
+    # Optional 透明包装：持有值时按内层值解析（Optional[list[int]] 可 for 迭代 /
+    # enumerate / zip / next——与 len/下标/方法调用的委托语义一致）；空值
+    # fail-fast（明确"空 Optional 不可迭代"，不静默返回空序列掩盖错误值）。
+    from core.runtime.objects.primitives.optional import IbOptional
+
+    if isinstance(iterable_obj, IbOptional):
+        if not iterable_obj._is_some:
+            from core.kernel.issue import InterpreterError
+
+            raise InterpreterError(
+                "Cannot iterate an empty Optional"
+            )
+        return resolve_iterable(iterable_obj.payload)
     from core.runtime.objects.kernel.generator import IbGenerator
     if isinstance(iterable_obj, IbGenerator):
         return iterable_obj.to_list()

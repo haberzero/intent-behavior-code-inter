@@ -17,6 +17,8 @@ from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.base.uid import intrinsic_uid
 from core.kernel.spec import IbSpec
+from core.kernel.spec.base import TypeDef
+from core.kernel.spec.type_ref import TypeRef
 
 from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
@@ -346,6 +348,34 @@ class SymbolResolver(ScopedVisitor):
             return self.registry.resolve("any")
         if isinstance(annotation, ast.IbName):
             return self.registry.resolve(annotation.id) or self.registry.resolve("any")
+        if isinstance(annotation, ast.IbCallableType):
+            # callable signature 约束 ``fn[(params) -> ret]``：与 type_checking
+            # ``_resolve_type`` 同构，产出结构化 CALLABLE_SIG spec（否则退化为
+            # 裸 fn，调用点参数个数/类型检查失效——参数/局部变量符号池承载
+            # 的声明类型必须完整）。
+            from core.kernel.spec.base import TypeKind
+            from core.base.enums import Provenance, Visibility
+
+            param_specs = [
+                p for p in (self._resolve_annotation_spec(pt) for pt in annotation.param_types)
+                if p is not None
+            ]
+            ret_spec = (
+                self._resolve_annotation_spec(annotation.return_type)
+                if annotation.return_type is not None
+                else None
+            )
+            return TypeDef(
+                name="fn",
+                kind=TypeKind.CALLABLE_SIG.value,
+                param_types=[TypeRef.of(p.name, getattr(p, "module_path", None)) for p in param_specs],
+                return_type=TypeRef.of(
+                    ret_spec.name if ret_spec is not None else "any",
+                    getattr(ret_spec, "module_path", None) if ret_spec is not None else None,
+                ),
+                provenance=Provenance.KERNEL_NATIVE,
+                visibility=Visibility.PRELUDE_VISIBLE,
+            )
         if isinstance(annotation, ast.IbAttribute):
             from ._type_checking_base import module_qualified_annotation
 
@@ -650,11 +680,30 @@ class SymbolResolver(ScopedVisitor):
 
     # ========== 辅助方法 ==========
 
+    def _prescan_target_spec(self, target: ast.IbASTNode) -> IbSpec:
+        """预注册目标符号的类型 spec：带注解解析注解；无注解 auto 占位。
+
+        与模块级语义对齐（``symbol_collection_pass``：带注解解析、裸赋值 auto
+        占位由类型检查首赋值锁定）。此前硬编码 ``any`` 使函数局部变量的声明
+        类型丢失（symbol_pool type_uid=any）：运行时 Optional 值包装失效、
+        重赋值类型检查失效。注解解析失败回退 ``any``（prescan 宽容，不因
+        前向引用误报）。
+        """
+        if isinstance(target, ast.IbTypeAnnotatedExpr) and target.annotation:
+            spec = self._resolve_annotation_spec(target.annotation)
+            if spec is not None:
+                return spec
+            return self.registry.resolve("any")
+        return self.registry.resolve("auto")
+
     def _prescan_body_locals(self, body: list, scope: SymbolTable, nonlocal_names: Optional[set] = None,
                              global_names: Optional[set] = None):
         """预扫描函数体，将赋值目标预注册为局部变量。
 
         确保函数体内的变量在被引用时已经有定义（避免 SEM_UNDEFINED_SYMBOL 误报）。
+        预注册即携带声明类型（``_prescan_target_spec``），非 any 占位——
+        函数局部变量与模块级/参数路径的声明类型流转一致（统一 Optional 值
+        模型 + 重赋值类型检查的编译期前提）。
         nonlocal_names 中的变量名不会被注册为局部变量（它们引用外层作用域）。
         global_names 中的变量名同样不会被注册为局部变量（它们引用模块级作用域）。
         """
@@ -672,7 +721,7 @@ class SymbolResolver(ScopedVisitor):
                             name=name,
                             kind=SymbolKind.VARIABLE,
                             def_node=stmt,
-                            spec=self.registry.resolve("any"),
+                            spec=self._prescan_target_spec(target),
                         )
                         scope.define(sym)
             elif isinstance(stmt, ast.IbFunctionDef):
@@ -687,18 +736,18 @@ class SymbolResolver(ScopedVisitor):
                     )
                     scope.define(sym)
             elif isinstance(stmt, ast.IbFor):
-                # for 循环变量
-                if stmt.target:
-                    if isinstance(stmt.target, ast.IbName):
-                        name = stmt.target.id
-                        if name not in scope.symbols and name not in excluded:
-                            sym = VariableSymbol(
-                                name=name,
-                                kind=SymbolKind.VARIABLE,
-                                def_node=stmt,
-                                spec=self.registry.resolve("any"),
-                            )
-                            scope.define(sym)
+                # for 循环变量（含带注解目标 ``for int x in``）：预注册即携带
+                # 声明类型（visit_IbFor 的 ``_register_loop_variable`` 会再次
+                # 精化，prescan 保持同语义不退化）。
+                for name, target in SymbolExtractor.get_assigned_names(stmt):
+                    if name not in scope.symbols and name not in excluded:
+                        sym = VariableSymbol(
+                            name=name,
+                            kind=SymbolKind.VARIABLE,
+                            def_node=stmt,
+                            spec=self._prescan_target_spec(target),
+                        )
+                        scope.define(sym)
             # 递归进入嵌套结构（vars() 遍历覆盖 body/orelse 等语句列表；不进入嵌套函数/类定义；
             # 仅递归纯 IbASTNode 列表——behavior 段等混合字符串字段须跳过）
             if not isinstance(stmt, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):

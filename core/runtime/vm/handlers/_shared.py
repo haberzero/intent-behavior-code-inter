@@ -194,21 +194,26 @@ def _vm_call_fn_callable(executor, func, args):
         rt_context.enter_scope()
     try:
         # 绑定闭包：lambda 走共享 IbCell，snapshot 走每次调用的独立深克隆。
+        # declared_type 与参数绑定同构解析（统一 Optional 值模型：捕获的
+        # Optional 变量在闭包内保持包装语义，nonlocal/lambda 读写一致）。
         is_snapshot = func.capture_mode == "snapshot"
         for sym_uid, (name, slot) in func.closure.items():
+            declared = (
+                executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+            )
             if is_snapshot:
                 # snapshot：种子已是定义时刻的深克隆，调用时再克隆一份注入子作用域，
                 # 保证函数体内的就地修改不会跨调用泄漏。
                 fresh = try_deep_clone(slot) if slot is not None else None
                 value = fresh if fresh is not None else slot
                 if value is not None:
-                    rt_context.define_variable(name, value, uid=sym_uid)
+                    rt_context.define_variable(name, value, uid=sym_uid, declared_type=declared)
             elif isinstance(slot, IbCell):
                 # lambda：共享 cell，调用时 deref 读最新值
                 if not slot.is_empty():
-                    rt_context.define_variable(name, slot.get(), uid=sym_uid)
+                    rt_context.define_variable(name, slot.get(), uid=sym_uid, declared_type=declared)
             else:
-                rt_context.define_variable(name, slot, uid=sym_uid)
+                rt_context.define_variable(name, slot, uid=sym_uid, declared_type=declared)
 
         # 绑定形参（与 IbUserFunction.call 同构：处理 IbTypeAnnotatedExpr 包装）
         for i, arg_uid in enumerate(func.params_uids):
@@ -293,7 +298,12 @@ def _vm_call_user_function(executor, func, receiver, args):
                     initial_value = (
                         cell.get() if not cell.is_empty() else func.ib_class.registry.get_none()
                     )
-                    rt_context.define_variable(var_name, initial_value, uid=sym_uid)
+                    rt_context.define_variable(
+                        var_name, initial_value, uid=sym_uid,
+                        declared_type=(
+                            executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+                        ),
+                    )
                     new_sym = rt_context.current_scope.get_symbol_by_uid(sym_uid)
                     if new_sym is not None:
                         new_sym.cell = cell

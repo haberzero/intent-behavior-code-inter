@@ -122,19 +122,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 当前交接（2026-08-14，下一 session 主任务 = T07 新发现三项 P1 修复 + 文档同步）**：
-  **完整交接见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`**。T07 批判性对抗试用（43 新用例
-  28 PASS + 12 GUARD + 3 KERNEL_ISSUE，真实 LLM 7/7）+ 旧套件 T01-T06 238 用例重跑
-  （零回归，KI-1/CROSSMOD-LLM-1 核销）已完成并全部记录；**下一 session 主任务**：
-  ① **KERNEL_ISSUE-OPTIONAL-SCOPE-1**（函数内 Optional 先 None 后赋值 unwrap/is_some
-  报 Object of type None，P1）；② **KERNEL_ISSUE-OPTIONAL-CONTAINER-1**（Optional 容器
-  len/下标不可用，P1）；③ **KERNEL_ISSUE-ATTR-READ-1**（属性读取静默 None，P1）——
-  每项含触发用例/行为事实矩阵/修复方向建议/判别性回归建议（交接文档 §一），修复走
-  code-workflow + Phase D 收敛义务（根因修复 + tests/ 回归 + 触发用例核销）；
-  ④ DOC-24~28 文档同步批次（arch/03 §8 / 15_diagnostics / KNOWN_LIMITS §10.2 /
-  14_concurrency，doc-governance，已登记 PENDING_TASKS）；⑤ BOUNDARY-CHAN-ARGS-1
-  文档同步。**旧套件 6 处陈旧断言已修复**（2026-08-14 用户授权，T01×3/T05 D2-03 核销/
-  T03 D2-07、T04 R5-03 chan 普适写法）。基线全量 2665 passed / 1 skipped。
+- **✅ 已完成（2026-08-14，unsafe-vibe-dev，全量 2693 passed / 1 skipped 零回归）**：
+  **T07 三项 P1 修复 + DOC-24~28 文档同步**（承接 `_HANDOFF_T07_FINDINGS.md`，已标完成）。
+  ① **OPTIONAL-SCOPE-1**（函数作用域局部变量声明类型编译期丢失的系统性根治：prescan
+  解析注解 + type_checking 复用 owned_scope + 闭包/cell 写包装对齐 + rehydrator kind
+  保真 + TYPE_PARAM 检查放行）；② **OPTIONAL-CONTAINER-1**（IbOptional.receive 统一
+  委托链 + resolve_iterable 识别 Optional）；③ **ATTR-READ-1**（`_default_getattr`
+  未命中改抛 RUN_ATTRIBUTE_ERROR，读取/调用一致 fail-fast）。触发用例 D2-09/D2-10/D1-13
+  全部核销转 PASS；判别性回归 +28；DOC-24~28 全部同步（含 BOUNDARY-CHAN-ARGS-1 文档说明）。
+  完整记录见 NEXT_STEPS"已完成"节 + WORKLOG。
 
 - **✅ 已完成（2026-08-14，T05/T06 剩余代码缺陷四项修复，全量 2665 passed / 1 skipped 零回归）**：
   **① CROSSMOD-LLM-1**（`_resolve_type` 支持 IbAttribute 点号限定注解，行为节点
@@ -560,13 +556,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（🔴 下一 session 主任务：**重启真实批判性试用 + 文档全方位同步**，完整交接 `_HANDOFF_NEXT_TRIAL.md`；T05/T06 四项修复已完成，全量 2665 passed / 1 skipped）
-- [ ] 读 `NEXT_STEPS.md`（当前最紧要：见 §2.1；四项修复已完成记录）
-- [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；四行已标修复；供应商感知思考禁用机制 / CI-CD 重设计等主线候选）
-- [ ] 读 `_HANDOFF_NEXT_TRIAL.md`（下一 session 权威交接：真实批判性试用 T07 矩阵 + 文档同步清单）
+- [ ] 读本节 §2.1（✅ 已完成：**T07 三项 P1 修复 + DOC-24~28 文档同步**，承接 `_HANDOFF_T07_FINDINGS.md` 已标完成；全量 **2693 passed / 1 skipped**）
+- [ ] 读 `NEXT_STEPS.md`（当前最紧要：见 §2.1；T07 三项修复已完成记录）
+- [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；T07 三项 KI + DOC 批次已标修复/已同步；供应商感知思考禁用机制 / CI-CD 重设计等主线候选）
 - [ ] 试用体系规范：`trials/_toolkit/CLASSIFICATION.md`（分类/编号）+ `CONTRACT_FORMAT.md`（用例即契约）+ `LLM_SERVICE.md`（本机真实 LLM 服务，当前在线且思考已禁用）+ `gen_register.py`（报告生成）+ `PHASE_D_AUTOMATION.md`（收敛流程硬规则）+ `run_batch.py`（分层批量）
 - [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（单一状态权威；新缺陷从 `KERNEL_ISSUE-*` 继续编号）
-- [ ] 本 session 修复面：`_code_optional_unify.md`（CROSSMOD-LLM-1 + KI-2 统一 Optional 值模型）+ `_code_ghost_codes.md`（幽灵诊断码 + CAT-7）+ `_code_set_mock_mode.md`（对称开关）
-- [ ] 泛型剩余边界：`_HANDOFF_GENERIC_REMAINING.md`（7 项已知边界，建议 T07 D4 复测）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2665 passed / 1 skipped**）
+- [ ] 本 session 修复面：`_code_optional_unify.md`（CROSSMOD-LLM-1 + KI-2 统一 Optional 值模型）+ `_code_ghost_codes.md`（幽灵诊断码 + CAT-7）+ `_code_set_mock_mode.md`（对称开关）+ WORKLOG（T07 三项 KI 系统性根因与修复）
+- [ ] 泛型剩余边界：`_HANDOFF_GENERIC_REMAINING.md`（7 项已知边界）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2693 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）

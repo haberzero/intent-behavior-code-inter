@@ -2,18 +2,58 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**T07 批判性对抗试用 + 旧套件全量重跑完成**：43 新用例
-> 28 PASS + 12 GUARD + 3 KERNEL_ISSUE，真实 LLM 7/7；旧套件 T01-T06 238 用例重跑
-> 202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言) + 9 HARNESS(5 陈旧断言+4 设计内)，
-> 零回归；KI-1 / CROSSMOD-LLM-1 核销，KI-2 修复行为确认。完整记录见
-> `trials/T07_fixes_critical_stress/REGISTER.md`/`REPORT.md` 与 WORKLOG）
+> **最后更新**：2026-08-14（**T07 三项 P1 修复 + 文档同步全部完成**：全量 **2693 passed /
+> 1 skipped** 零回归（2665 基线 + 28 判别性回归）；触发用例 D2-09/D2-10/D1-13 全部核销
+> 转 PASS。完整记录见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`（已标记完成）与 WORKLOG）
 >
-> **🔴 下一 session 主任务（2026-08-14，T07 新发现三项 P1 修复 + 文档同步）**：
-> 完整交接见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`——① KERNEL_ISSUE-OPTIONAL-SCOPE-1
-> （函数内 Optional unwrap/is_some 失败）、② KERNEL_ISSUE-OPTIONAL-CONTAINER-1（Optional
-> 容器方法不可用）、③ KERNEL_ISSUE-ATTR-READ-1（属性读取静默 None），每项含触发用例/
-> 行为事实矩阵/修复方向/判别性回归建议；④ DOC-24~28 文档同步批次；⑤ BOUNDARY-CHAN-ARGS-1
-> 文档同步。基线全量 2665 passed / 1 skipped；6 处陈旧断言已修复（用户授权，WORKLOG）。
+> **✅ 已完成（2026-08-14，unsafe-vibe-dev）**：**T07 新发现三项 P1 修复 + DOC-24~28 文档同步**
+> （详见"已完成"节）——① **OPTIONAL-SCOPE-1**：函数作用域局部变量声明类型编译期丢失
+> （系统性根因：`_prescan_body_locals` 硬编码 any → 符号池 type_uid=any → 运行时
+> wrap_optional 不包装；同源：函数内类型化局部变量重赋值检查失效、闭包/cell 写不包装）
+> 根治（prescan 解析注解 + type_checking 复用 owned_scope + 闭包/cell 写包装对齐 +
+> rehydrator FUNCTION/CALLABLE_SIG/BOUND_METHOD/MODULE kind 保真 + TYPE_PARAM 检查放行）；
+> ② **OPTIONAL-CONTAINER-1**：IbOptional.receive 统一委托链 + resolve_iterable 识别
+> Optional；③ **ATTR-READ-1**：`_default_getattr` 未命中属性改抛 RUN_ATTRIBUTE_ERROR
+> （读取/调用一致 fail-fast）。④ DOC-24~28 全部同步；BOUNDARY-CHAN-ARGS-1 文档说明。
+> 判别性回归 +28（compiler 7 + Optional 运行时 13 + 属性 fail-fast 4 + 追加 4）。
+
+---
+
+## ✅ 已完成：T07 三项 P1 修复 + DOC-24~28 文档同步（2026-08-14，unsafe-vibe-dev，全量 2693 passed / 1 skipped）
+
+> 承接 `_HANDOFF_T07_FINDINGS.md`（T07 试用只记录，本 session 修复）。三项 KI
+> 均围绕 KI-2 统一 Optional 值模型改动面深挖，发现**系统性根因**（不止交接
+> 推断的局部现象），按"彻底根治、不补丁"原则实施。触发用例 D2-09/D2-10/D1-13
+> 全部核销转 PASS。设计/分析记录见下方各节与 WORKLOG。
+
+- **① KERNEL_ISSUE-OPTIONAL-SCOPE-1（P1）——函数作用域局部变量声明类型编译期丢失（系统性）**：
+  `_prescan_body_locals`（symbol_resolution_pass）预注册函数局部变量**硬编码 any**
+  → 符号池 type_uid=any → 运行时 declared_type=any → wrap_optional 不包装（函数内
+  `Optional[int] tag = None` 裸 IbNone）。**同源系统性缺陷**（探针实证）：
+  函数内 `int x = 5; x = "abc"` 编译通过（类型检查作用域链不含局部符号，重赋值走
+  "首次定义推断"）；闭包/cell 写路径（nonlocal 写 Optional）也不包装。**根治**：
+  ① prescan 解析类型注解（带注解→正确 spec，无注解→auto 占位，与模块级一致）；
+  ② type_checking visit_IbFunctionDef 复用 `func_sym.owned_scope`（局部符号可见，
+  重赋值按声明类型检查）；③ 闭包绑定 3 处 + cell 写 2 处 declared_type 对齐；
+  ④ **连带预存缺陷**：rehydrator FUNCTION/CALLABLE_SIG/BOUND_METHOD/MODULE shell
+  创建不传 kind（TypeDef 默认 primitive）→ 嵌套函数符号水化 kind 错；
+  `_resolve_annotation_spec` 缺 IbCallableType 分支（fn[...] 参数退化为裸 fn）；
+  TYPE_PARAM 声明运行时 _check_type 放行。判别性回归（compiler 7 + runtime 7）。
+- **② KERNEL_ISSUE-OPTIONAL-CONTAINER-1（P1）——Optional 容器协议委托**：
+  `IbOptional.receive` 无内层值委托（len/下标对包装对象不可用）+ `resolve_iterable`
+  不支持 Optional（for 迭代失败）。**根治**：IbOptional.receive 统一委托链（内层值
+  优先 + Optional 专属方法回退 + 空值 fail-fast RUN_ATTRIBUTE_ERROR）+ resolve_iterable
+  识别 Optional（有值按内层解析、空值 fail-fast）。判别性回归（runtime 5）。
+- **③ KERNEL_ISSUE-ATTR-READ-1（P1）——未声明属性读取静默 None**：
+  `_default_getattr`（Object 基类 __getattr__ 兜底）未命中成员时 `return get_none()`。
+  **根治**：改抛 `InterpreterError(RUN_ATTRIBUTE_ERROR)`（读取/调用路径一致
+  fail-fast，符合"不静默错误值"工程原则）。判别性回归（runtime 4，含线程内）。
+- **④ DOC-24~28 文档同步**（doc-governance，与修复联动）：arch/03 §8 值创建路径
+  枚举补函数局部/闭包捕获 + 新增"Optional 容器委托"条目；15_diagnostics
+  RUN_ATTRIBUTE_ERROR 触发条件精确化；KNOWN_LIMITS §10.2 补 qualified 路径实证；
+  14_concurrency chan T 实参形态说明（BOUNDARY-CHAN-ARGS-1）。
+- **核销**：D2-09（405）/D2-10（3）/D1-13（RUN_ATTRIBUTE_ERROR）全 PASS；
+  REGISTER/INDEX/PENDING_TASKS 状态更新。
 
 ---
 
@@ -429,11 +469,15 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **🔴 下一 session 主任务（2026-08-14 用户指示）**：**重启真实批判性试用 + 文档内容
-  全方位同步更新**。完整交接 `tasks_docs/_HANDOFF_NEXT_TRIAL.md`。新建
-  `trials/T07_fixes_critical_stress/` 针对本 session 四项修复面做对抗验证 +
-  泛型剩余边界复测（`_HANDOFF_GENERIC_REMAINING.md`）+ 真实 LLM 批判；
-  试用后文档全方位同步（doc-governance，重点 KNOWN_LIMITS §10.2 跨模块类措辞重估）。
+- **✅ 已完成（2026-08-14，unsafe-vibe-dev，全量 2693 passed / 1 skipped）**：
+  **T07 三项 P1 修复 + DOC-24~28 文档同步**（承接 `_HANDOFF_T07_FINDINGS.md`）。
+  ① OPTIONAL-SCOPE-1（函数作用域局部变量声明类型编译期丢失的系统性根治：
+  prescan 解析注解 + type_checking 复用 owned_scope + 闭包/cell 写包装对齐 +
+  rehydrator kind 保真 + TYPE_PARAM 检查放行）；② OPTIONAL-CONTAINER-1
+  （IbOptional.receive 统一委托链 + resolve_iterable 识别 Optional）；
+  ③ ATTR-READ-1（_default_getattr 未命中改抛 RUN_ATTRIBUTE_ERROR，读取/调用
+  一致 fail-fast）。触发用例 D2-09/D2-10/D1-13 全部核销转 PASS；判别性回归 +28。
+  详见上方"已完成"节与 WORKLOG。
 
 - **✅ 已完成（2026-08-14，T05/T06 剩余代码缺陷四项全部修复）**：
   **CROSSMOD-LLM-1 跨模块类型注解解析（P1）**——`_resolve_type` 支持 IbAttribute

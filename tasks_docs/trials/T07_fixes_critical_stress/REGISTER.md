@@ -29,7 +29,7 @@
 - **证据**：`cases/D2-09.ibci` + `logs/B-D2-09.log`；探针 v1-v4/w1-w3（`_scratch` 已清理，见 REGISTER 记录）。
 - **文档依据**：`docs/architecture/03_type_system.md` §8 明确"is_none() / is_some() / unwrap() / or_else() **在任何路径可用**"。
 - **级别**：P1（文档声明 API 在函数作用域路径不可用，静默错误/错误路径崩溃；顶层与 lambda 正常，路径不一致）。
-- **修复状态**：待修复（独立窗口，本任务不修）。
+- **修复状态**：**已修复（2026-08-14，unsafe-vibe-dev）**。触发用例 D2-09 转 PASS（expect-out 405 达成）。根因：函数作用域局部变量声明类型编译期丢失（符号池 type_uid=any）→ 运行时 wrap_optional 不包装；同源系统性缺陷：函数内类型化局部变量重赋值检查失效、闭包/cell 写路径不包装。
 - **登记**：PENDING_TASKS + trials/INDEX.md。
 
 ### KERNEL_ISSUE-OPTIONAL-CONTAINER-1（P1）— Optional[list[int]] 有值包装，len()/下标方法不可用
@@ -42,7 +42,7 @@
 - **文档依据**：`docs/architecture/03_type_system.md` §8 "Optional[T] 接受 T" + 统一值模型（容器元素亦包装）——
   用户按 `T` 语义使用容器方法时必然失败；文档未说明需先解封。
 - **级别**：P1（Optional 包装容器后基础容器操作不可用，语义断裂）。
-- **修复状态**：待修复（独立窗口，本任务不修）。
+ - **修复状态**：**已修复（2026-08-14，unsafe-vibe-dev）**。触发用例 D2-10 转 PASS（expect-out 3 达成）。根因：IbOptional 值对象协议无内层值委托（容器方法 len/下标/迭代不可用）；连带 resolve_iterable 不支持 Optional 委托。修复：IbOptional.receive 委托链（内层值优先 + Optional 专属方法回退 + 空值 fail-fast）+ resolve_iterable 识别 Optional。
 - **登记**：PENDING_TASKS + trials/INDEX.md。
 
 ### KERNEL_ISSUE-ATTR-READ-1（P1）— 未声明属性读取返回 None（文档称应报 RUN_ATTRIBUTE_ERROR）
@@ -54,7 +54,7 @@
 - **证据**：`cases/D1-13.ibci` + `logs/B-D1-13.log`；探针 p9/p10。
 - **文档依据**：`docs/syntax/15_diagnostics.md` RUN_ATTRIBUTE_ERROR "触发条件：访问对象不存在的属性/方法"。
 - **级别**：P1（静默错误值——用户按文档期望报错，实际拿到 None 继续运算，错误传播隐蔽）。
-- **修复状态**：待修复（独立窗口，本任务不修）。
+ - **修复状态**：**已修复（2026-08-14，unsafe-vibe-dev）**。触发用例 D1-13 转 PASS（RUN_ATTRIBUTE_ERROR 达成）。根因：Object 基类 __getattr__ 兜底（_default_getattr）未命中成员时静默返回 None。修复：改抛 InterpreterError(RUN_ATTRIBUTE_ERROR)（读取/调用路径一致 fail-fast）。
 - **登记**：PENDING_TASKS + trials/INDEX.md。
 
 ## 三、旧套件全量重跑对照（T01-T06，当前 HEAD 17e75d72，B- 最新记录）
@@ -81,16 +81,19 @@
 | KERNEL_ISSUE-CROSSMOD-THREAD-1（P1） | T05 D1-10 | **PASS**（线程 worker 内 geo.Box 方法调用 405） | **已核销**（S4 修复有效） |
 | KERNEL_ISSUE-OPTIONAL-ISNONE-1（P2） | T05 D2-03 | 实际 True|True|False（`a is None`=True 已修复）；用例断言陈旧 | **修复行为确认**（T07 D1-05/D1-06/D1-07 独立验证 is None/is_none/is_some/对称全 PASS） |
 | KERNEL_ISSUE-CROSSMOD-LLM-1（P1） | T06 D2-05/D3-02 | **PASS** + T07 D3-01/D3-02/D3-04 全 PASS | **已核销**（跨模块类 LLM 输出 module 感知生效） |
+| KERNEL_ISSUE-OPTIONAL-SCOPE-1（P1） | T07 D2-09 | **PASS**（函数内先 None 后赋值 unwrap=405） | **已核销**（2026-08-14，函数局部声明类型绑定根治） |
+| KERNEL_ISSUE-OPTIONAL-CONTAINER-1（P1） | T07 D2-10 | **PASS**（Optional[list[int]] len=3） | **已核销**（2026-08-14，Optional 容器委托根治） |
+| KERNEL_ISSUE-ATTR-READ-1（P1） | T07 D1-13 | **PASS**（未声明属性读取报 RUN_ATTRIBUTE_ERROR） | **已核销**（2026-08-14，属性读取 fail-fast 根治） |
 
 ## 五、DOC_ISSUE 记录（D5 文档核验；正文修改待用户确认）
 
 | # | 级别 | 文件 | 内容 |
 |---|------|------|------|
-| DOC-24 | P2 | arch/03_type_system §8 | "unwrap/or_else/is_some/is_none **在任何路径可用**"与实现不符：函数作用域先 None 后赋值路径报 RUN_ATTRIBUTE_ERROR（同 KERNEL_ISSUE-OPTIONAL-SCOPE-1） |
-| DOC-25 | P2 | arch/03_type_system §8 | Optional 包装容器（Optional[list[int]]）len/下标不可用未说明；"接受 T"语义下用户按容器用法失败（同 KERNEL_ISSUE-OPTIONAL-CONTAINER-1） |
-| DOC-26 | P2 | 15_diagnostics RUN_ATTRIBUTE_ERROR | "访问对象不存在的属性/方法"触发条件与实现不符：属性**读取**返回 None 不触发，仅**调用**触发（同 KERNEL_ISSUE-ATTR-READ-1） |
-| DOC-27 | P3 | KNOWN_LIMITS §10.2 | 措辞核对：裸名返回路径 graceful 退化表述在 CROSSMOD-LLM-1 修复后**仍成立**（LLM 输出用 qualified 注解则 module 感知；outputhint 裸名返回仍退化），T07 D3-01~04 实证 qualified 路径全部生效——建议补一句"qualified 注解路径已验证可用"；§8 统一值模型声明与 DOC-24/25 同源待修 |
-| DOC-28 | P3 | T01/T03/T04/T05 用例断言 | 5 处陈旧断言需按值层身份收敛新语义更新（type() 特化名 / chan 泛型实参拦截 / D2-03 is None 新语义），PHASE_D 流程 |
+| DOC-24 | P2 | arch/03_type_system §8 | "unwrap/or_else/is_some/is_none **在任何路径可用**"与实现不符：函数作用域先 None 后赋值路径报 RUN_ATTRIBUTE_ERROR（同 KERNEL_ISSUE-OPTIONAL-SCOPE-1）——**已同步（2026-08-14）**：§8 值创建路径枚举补函数作用域局部变量/闭包捕获与 cell 写 |
+| DOC-25 | P2 | arch/03_type_system §8 | Optional 包装容器（Optional[list[int]]）len/下标不可用未说明；"接受 T"语义下用户按容器用法失败（同 KERNEL_ISSUE-OPTIONAL-CONTAINER-1）——**已同步（2026-08-14）**：§8 新增"Optional 容器委托"条目（有值按 T 语义、空值 fail-fast） |
+| DOC-26 | P2 | 15_diagnostics RUN_ATTRIBUTE_ERROR | "访问对象不存在的属性/方法"触发条件与实现不符：属性**读取**返回 None 不触发，仅**调用**触发（同 KERNEL_ISSUE-ATTR-READ-1）——**已同步（2026-08-14）**：触发条件精确化（读取/调用均报此码，不静默 None） |
+| DOC-27 | P3 | KNOWN_LIMITS §10.2 | 措辞核对：裸名返回路径 graceful 退化表述在 CROSSMOD-LLM-1 修复后**仍成立**（LLM 输出用 qualified 注解则 module 感知；outputhint 裸名返回仍退化），T07 D3-01~04 实证 qualified 路径全部生效——建议补一句"qualified 注解路径已验证可用"；§8 统一值模型声明与 DOC-24/25 同源待修——**已同步（2026-08-14）**：补 qualified 注解路径实证 |
+| DOC-28 | P3 | T01/T03/T04/T05 用例断言 | 5 处陈旧断言需按值层身份收敛新语义更新（type() 特化名 / chan 泛型实参拦截 / D2-03 is None 新语义），PHASE_D 流程——**已处置（2026-08-14）**：陈旧断言全部更新转 PASS（见 §三）；chan 项核实为 BOUNDARY-CHAN-ARGS-1，14_concurrency 已补说明 |
 
 ## 六、BOUNDARY / LLM_BEHAVIOR 记录
 

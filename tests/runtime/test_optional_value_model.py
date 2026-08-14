@@ -293,3 +293,165 @@ def test_optional_tuple_elements_wrapped():
     assert run_ibci(code) == [
         "True", "True", "Optional[int]", "str", "False", "True",
     ]
+
+
+# ---------------------------------------------------------------------------
+# 函数作用域 Optional 值模型（判别性回归）
+# ---------------------------------------------------------------------------
+
+def test_optional_function_local_reassign_unwrap():
+    """函数内 Optional 先 None 后赋值，unwrap() 可用（与顶层/lambda/参数
+    路径一致——函数普通作用域路径同样返回包装值）。"""
+    code = """
+func work() -> int:
+    Optional[int] tag = None
+    tag = 405
+    return tag.unwrap()
+print(work())
+"""
+    assert run_ibci(code) == ["405"]
+
+
+def test_optional_function_local_is_some():
+    """函数内 Optional 先 None 后赋值，is_some()/is_none() 可用。"""
+    code = """
+func work() -> str:
+    Optional[int] tag = None
+    tag = 405
+    return str(tag.is_some()) + "|" + str(tag.is_none())
+print(work())
+"""
+    assert run_ibci(code) == ["True|False"]
+
+
+def test_optional_function_local_empty_is_none():
+    """函数内 Optional 空值保持包装（is None / is_none() 对齐顶层）。"""
+    code = """
+func work() -> str:
+    Optional[int] tag = None
+    return str(tag is None) + "|" + str(tag.is_none()) + "|" + str(type(tag))
+print(work())
+"""
+    assert run_ibci(code) == ["True|True|Optional[int]"]
+
+
+def test_optional_function_local_init_wrapped():
+    """函数内 Optional 初始化即包装（type()=Optional[int]）。"""
+    code = """
+func work() -> str:
+    Optional[int] tag = None
+    return str(type(tag))
+print(work())
+"""
+    assert run_ibci(code) == ["Optional[int]"]
+
+
+def test_optional_class_method_local():
+    """类方法内 Optional 局部变量（类方法体同样走函数局部路径）。"""
+    code = """
+class Counter:
+    int base
+    func __init__(self, int base) -> auto:
+        self.base = base
+    func compute(self) -> int:
+        Optional[int] tag = None
+        tag = self.base + 1
+        return tag.unwrap()
+Counter c = Counter(10)
+print(c.compute())
+"""
+    assert run_ibci(code) == ["11"]
+
+
+def test_optional_nested_function_nonlocal_write():
+    """嵌套函数 nonlocal 写外层 Optional：包装保留（cell 写路径同族修复）。"""
+    code = """
+func outer() -> int:
+    Optional[int] x = None
+    func inner() -> int:
+        nonlocal x
+        x = 808
+        return x.unwrap()
+    return inner()
+print(outer())
+"""
+    assert run_ibci(code) == ["808"]
+
+
+def test_optional_lambda_capture_read():
+    """lambda 捕获外层 Optional：读取路径包装保留。"""
+    code = """
+func outer() -> int:
+    Optional[int] x = 405
+    fn f = lambda() -> int: x.unwrap()
+    return f()
+print(outer())
+"""
+    assert run_ibci(code) == ["405"]
+
+
+# ---------------------------------------------------------------------------
+# Optional 容器方法委托（判别性回归）
+# ---------------------------------------------------------------------------
+
+def test_optional_container_len():
+    """Optional[list[int]] 有值包装 len() 可用（委托内层容器）。"""
+    code = """
+Optional[list[int]] b = [1, 2, 3]
+print(b is None)
+print(len(b))
+"""
+    assert run_ibci(code) == ["False", "3"]
+
+
+def test_optional_container_subscript():
+    """Optional[list[int]] 有值包装下标访问可用。"""
+    code = """
+Optional[list[int]] b = [10, 20, 30]
+print(b[1])
+"""
+    assert run_ibci(code) == ["20"]
+
+
+def test_optional_container_iterate():
+    """Optional[list[int]] 有值包装可 for 迭代（resolve_iterable 委托）。"""
+    code = """
+Optional[list[int]] b = [1, 2, 3]
+total = 0
+for v in b:
+    total = total + v
+print(total)
+"""
+    assert run_ibci(code) == ["6"]
+
+
+def test_optional_container_method_call():
+    """Optional[list[int]] 有值包装容器方法调用（to_list 属性路径）。"""
+    code = """
+Optional[list[int]] b = [1, 2, 3]
+print(len(b.to_list()))
+"""
+    assert run_ibci(code) == ["3"]
+
+
+def test_optional_empty_container_op_fails():
+    """空 Optional 上容器操作 fail-fast（明确报错，不静默）。"""
+    code = """
+Optional[list[int]] b = None
+try:
+    print(len(b))
+except Exception as e:
+    print("caught")
+"""
+    assert run_ibci(code) == ["caught"]
+
+
+def test_optional_optional_methods_still_work_on_empty():
+    """空 Optional 专属方法（is_some/is_none/unwrap/or_else）保持可用。"""
+    code = """
+Optional[int] a = None
+print(a.is_some())
+print(a.is_none())
+print(a.or_else(99))
+"""
+    assert run_ibci(code) == ["False", "True", "99"]

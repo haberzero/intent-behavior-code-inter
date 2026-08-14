@@ -5,6 +5,10 @@
 > **用户指示（2026-08-14）：先登记任务，交接给下一 session 接手；本任务为代码修复任务**
 > （T07 试用阶段纪律已解除——试用只记录，修复是下一 session 的事）。
 >
+> **✅ 已完成（2026-08-14，unsafe-vibe-dev，全量 2693 passed / 1 skipped 零回归）**：
+> 三项 KI 全部根治（系统性根因分析 + 修复见 WORKLOG/NEXT_STEPS"已完成"节），
+> 触发用例 D2-09/D2-10/D1-13 全部核销转 PASS；DOC-24~28 全部同步。
+>
 > 基线：unsafe-vibe-dev HEAD a63a692b，全量 2665 passed / 1 skipped。
 > LLM 服务在线：qwen3.6-35b-a3b @ 127.0.0.1:1234（思考已禁用，响应 <1-2s）。
 

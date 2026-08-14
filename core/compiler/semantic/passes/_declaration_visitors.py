@@ -135,10 +135,20 @@ class DeclarationVisitorsMixin:
         # 同步精化后的签名到类成员表（运行期契约校验消费）
         self._sync_class_member(node.name, param_descriptors)
 
-        # 创建函数作用域
-        func_scope = SymbolTable(parent=self.current_scope, name=node.name)
-        if sym and hasattr(sym, 'owned_scope'):
-            sym.owned_scope = func_scope
+        # 创建函数作用域：优先复用符号收集阶段（symbol_resolution）已填充的
+        # owned_scope——其中已注册参数 / 函数体局部变量 / self / super 符号且
+        # 携带正确声明类型。此前此处新建空作用域只注册参数，函数体局部变量
+        # 符号不可见：重赋值走"首次定义推断"路径（target_type=val_type，类型
+        # 约束丢失）、符号 spec 恒 any（运行时 Optional 值包装失效）。复用后
+        # 函数体 lookup_symbol 命中预注册符号，_handle_assign_target 以声明
+        # 类型检查重赋值。无 owned_scope（异常路径）回退新建作用域。
+        func_scope = None
+        if sym is not None and getattr(sym, "owned_scope", None) is not None:
+            func_scope = sym.owned_scope
+        else:
+            func_scope = SymbolTable(parent=self.current_scope, name=node.name)
+            if sym is not None and hasattr(sym, "owned_scope"):
+                sym.owned_scope = func_scope
 
         old_in_function = self.in_function_def
         old_auto_returns = self.auto_return_types
@@ -154,13 +164,16 @@ class DeclarationVisitorsMixin:
 
         self.push_scope(func_scope)
         try:
-            # 注册参数到函数作用域（使用解析后的类型，非 any）
+            # 注册参数到函数作用域（使用解析后的类型，非 any）。
+            # 复用 owned_scope 时参数已由符号收集阶段注册（spec 同为注解
+            # 解析），仅补注册缺失的参数符号（防御 owned_scope 缺参数路径），
+            # 避免同名重复注册触发 SymbolTable 冲突。
             for i, arg_node in enumerate(node.args):
                 arg_name = self._extract_arg_name(arg_node)
                 # 类方法有 self 偏移
                 sig_idx = i + 1 if (self.in_class_def and self.current_class) else i
                 arg_type = param_types[sig_idx] if sig_idx < len(param_types) else self._any_desc
-                if arg_name:
+                if arg_name and arg_name not in func_scope.symbols:
                     param_sym = VariableSymbol(
                         name=arg_name,
                         kind=SymbolKind.VARIABLE,

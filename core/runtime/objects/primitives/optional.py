@@ -135,6 +135,46 @@ class IbOptional(IbValue):
         if message == "__ne__":
             right = args[0] if args else None
             return self.ib_class.registry.box(not self._eq(right))
+
+        # 统一委托链（Optional[T] 是 T 的透明包装：T 的成员/方法经此透传，
+        # Optional 专属方法 unwrap/is_some/is_none/or_else 回退 vtable）。
+        #
+        # 1. 持有值：委托内层值（容器协议 len/下标/迭代/成员访问透传）。
+        #    __getattr__ 委托的"未命中"（内层 _default_getattr fail-fast 抛
+        #    InterpreterError）须回退 Optional 自身方法；其它消息委托抛
+        #    InterpreterError 是内层方法体的真实错误，必须传播不吞。
+        if self._is_some and isinstance(self.payload, IbObject):
+            try:
+                return self.payload.receive(message, args)
+            except AttributeError:
+                pass
+            except InterpreterError:
+                if message != "__getattr__":
+                    raise
+        # 2. Optional 自身/父链 vtable（unwrap/is_some/is_none/or_else/to_bool/
+        #    cast_to/__to_prompt__）。__getattr__ 消息按 attr_name 查方法并返回
+        #    **绑定方法**（属性访问语义，调用由 vm_handle_IbCall 承接；直接
+        #    method.call 会把 __getattr__ 的 attr 参数误当方法实参）。Object
+        #    基类 __getattr__ 兜底在此属最后防线，不短路委托。
+        if message == "__getattr__":
+            attr_name = args[0].to_native()
+            method = self.ib_class.lookup_method(attr_name)
+            if method is not None:
+                from ..kernel.functions import IbBoundMethod
+
+                return IbBoundMethod(self, method)
+        else:
+            method = self.ib_class.lookup_method(message)
+            if method is not None:
+                return method.call(self, args)
+        # 3. 空值：协议操作 fail-fast（明确诊断，不静默——空 Optional 上
+        #    len/下标/成员访问等操作无意义，报错优于返回错误值）。
+        if not self._is_some:
+            raise InterpreterError(
+                f"Operation '{message}' is not available on an empty Optional",
+                error_code="RUN_ATTRIBUTE_ERROR",
+            )
+        # 4. 非空但内层与自身均无此成员：基类语义（AttributeError → 诊断码）。
         return super().receive(message, args)
 
     def _eq(self, other: Any) -> bool:
