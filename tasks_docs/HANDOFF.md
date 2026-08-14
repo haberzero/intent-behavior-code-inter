@@ -130,7 +130,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **下一 session**：① **3 项新 P1 KERNEL_ISSUE 修复**（OPTIONAL-SCOPE-1 函数内 Optional
   unwrap/is_some 失败 / OPTIONAL-CONTAINER-1 Optional 容器 len/下标不可用 /
   ATTR-READ-1 属性读取静默 None，均 PENDING_TASKS 登记，含 tests/ 判别性回归）；
-  ② 5 处旧套件陈旧断言更新（T01 D1-01-001/D1-05-008/D1-05-008b、T03 D2-07、T04 R5-03、
+  ② **6 处旧套件陈旧断言已修复转 PASS**（2026-08-14 用户授权，T01×3/T05 D2-03 核销/T03 D2-07、T04 R5-03 chan 普适写法；BOUNDARY-CHAN-ARGS-1 于 INDEX）；③ 剩余陈旧断言项不再存在，
   T05 D2-03，PHASE_D 流程）；③ DOC-24~27 文档同步（arch/03_type_system §8 任何路径可用/
   容器方法、15_diagnostics RUN_ATTRIBUTE_ERROR 触发条件、KNOWN_LIMITS §10.2 补 qualified
   路径实证——doc-governance，正文修改按用户 2026-08-14 指示待确认后执行）。

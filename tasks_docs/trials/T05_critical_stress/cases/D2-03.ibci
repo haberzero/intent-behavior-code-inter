@@ -1,7 +1,7 @@
-# Optional None 流：is None 对 Optional 包装的 None 语义（文档称 x is None 判 None）
+# Optional None 流：is None 对 Optional 包装的 None 语义（KI-2 修复后核销：a is None=True / b is None=True / a.is_some()=False）
 # doc: docs/syntax/03_operators.md 70（x is None 判断是否为 None）
-# expect-class: KERNEL_ISSUE
-# expect-out: True | False | True
+# expect-class: PASS
+# expect-out: True | True | False
 # expect-exit: 0
 Optional[int] a = None
 any b = None

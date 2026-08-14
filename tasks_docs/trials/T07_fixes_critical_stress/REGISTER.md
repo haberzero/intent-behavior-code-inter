@@ -61,17 +61,18 @@
 
 | 套件 | 用例 | PASS | GUARD | LIMIT | KERNEL_ISSUE | HARNESS | 重跑结论 |
 |------|------|------|-------|-------|--------------|---------|----------|
-| T01_llm_full | 104 | 89 | 8 | 0 | 0 | 7 | 3 真实用例 HARNESS = **陈旧断言**（type() 显示特化名：`list`→`list[int]`/`generator`→`generator[str]`，值层身份收敛的预期行为变化，用例断言未同步）；4 HARNESS = helper/greeting_mod/smoke/deadloop_probe 设计内 |
+| T01_llm_full | 104 | 92 | 8 | 0 | 0 | 4 | 3 处陈旧断言**已修复转 PASS**（2026-08-14：type() 特化名新语义 `list[int]`/`generator[str]`/`generator[int]`）；4 HARNESS = helper/greeting_mod/smoke/deadloop_probe 设计内 |
 | T02_enum_import | 9 | 8 | 0 | 1 | 0 | 0 | T6-enum-method-boundary = 文档化边界 LIMIT（enum 方法边界，KNOWN_LIMITS 二） |
-| T03_user_class_generics | 30 | 22 | 6 | 0 | 0 | 2 | D2-07-concurrency HARNESS = 陈旧断言（`chan[Box]`→`chan[Box[int]]` 编译期拦截，值层身份收敛行为收紧）；smoke_deadloop 设计内 |
-| T04_generics_fix_regression | 35 | 25 | 8 | 0 | 0 | 2 | R5-03 HARNESS = 陈旧断言（同上 chan 泛型实参拦截）；smoke_deadloop 设计内 |
-| T05_critical_stress | 40 | 38 | 1 | 0 | 1 | 0 | **D1-10 KI-1 触发用例转 PASS 核销 ✓**；D2-03 KI-2 触发用例仍判 KERNEL_ISSUE 系**陈旧断言**（实际输出 True|True|False，修复后行为已达成；用例 expect-out 未更新） |
+| T03_user_class_generics | 30 | 23 | 6 | 0 | 0 | 1 | D2-07 已修复转 PASS（2026-08-14：chan 迁普适写法 `chan[E] ch = chan()`；原 `chan(Box[int],...)` 特化实参降级记录为 BOUNDARY-CHAN-ARGS-1）；smoke_deadloop 设计内 |
+| T04_generics_fix_regression | 35 | 26 | 8 | 0 | 0 | 1 | R5-03 已修复转 PASS（2026-08-14：同上 chan 普适写法）；smoke_deadloop 设计内 |
+| T05_critical_stress | 40 | 39 | 1 | 0 | 0 | 0 | **D1-10 KI-1 触发用例转 PASS 核销 ✓**；D2-03 KI-2 触发用例**已核销转 PASS**（2026-08-14：expect-out 更新为修复后语义 True|True|False） |
 | T06_class_identity | 20 | 20 | 0 | 0 | 0 | 0 | **CROSSMOD-LLM-1 触发用例 D2-05/D3-02 转 PASS 核销 ✓**；D3-01~04 真实 LLM 全 PASS |
-| **合计** | **238** | **202** | **24** | **1** | **1** | **9** | 零回归、零新内核缺陷；5 陈旧断言 + 4 设计内 HARNESS；2 项核销达成 |
+| **合计** | **238** | **206** | **24** | **1** | **0** | **6** | 零回归、零新内核缺陷；**6 处陈旧断言全部修复转 PASS（2026-08-14，用户授权）**；4 设计内 HARNESS；2 项核销达成 |
 
-> **陈旧断言处理**（按 PHASE_D 收敛流程"语义变更→用例重构为新语义"，但本任务不修改任何内容）：
-> 5 处旧套件用例断言需按新语义更新（T01 D1-01-001/D1-05-008/D1-05-008b、T03 D2-07、T04 R5-03、
-> T05 D2-03）——登记为待更新项，留待后续任务（本任务只记录）。
+> **陈旧断言处理（2026-08-14 用户授权后已执行）**：6 处旧套件用例按新语义更新并重跑确认 PASS（T01
+> D1-01-001/D1-05-008/D1-05-008b：type() 特化名；T03 D2-07/T04 R5-03：chan 迁普适写法 \`chan()\`；
+> T05 D2-03：KI-2 核销 True|True|False）。原判"陈旧断言"的 chan 项经普适性原则核实为
+> **BOUNDARY-CHAN-ARGS-1**（chan(T,...) 特化类对象实参降级，非内核缺陷——普适写法全通）。
 
 ## 四、核销确认（T05/T06 遗留缺陷状态核对）
 

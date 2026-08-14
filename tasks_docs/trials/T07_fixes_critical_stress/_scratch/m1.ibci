@@ -1,0 +1,4 @@
+chan[str] ch = chan(str, "stream")
+ch.send("hi")
+str v = await ch.recv()
+print(v)

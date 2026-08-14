@@ -3,7 +3,7 @@
 # 期望: 生成器显式 .to_list()/.generic_next() 协议分发正常
 
 # expect-class: PASS
-# expect-out: to_list_len=4 | next_first=0 | gen_type=generator | DONE
+# expect-out: to_list_len=4 | next_first=0 | gen_type=generator[int] | DONE
 # expect-exit: 0
 # expect-llm: false
 func count(int n) -> int:

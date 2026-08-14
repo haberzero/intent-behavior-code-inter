@@ -3,7 +3,7 @@
 # 期望: 各基础类型正确赋值，type() 返回规范名
 
 # expect-class: PASS
-# expect-out: a_type=int | b_type=float | c_type=str | d_type=bool | e_type=list | f_type=tuple
+# expect-out: a_type=int | b_type=float | c_type=str | d_type=bool | e_type=list[int] | f_type=tuple
 # expect-exit: 0
 # expect-llm: false
 int a = 42

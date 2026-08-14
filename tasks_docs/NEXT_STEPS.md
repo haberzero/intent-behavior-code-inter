@@ -11,8 +11,9 @@
 > **🔴 下一 session 主任务（T07 已执行完毕，2026-08-14）**：T07 试用新暴露
 > **3 项 P1 KERNEL_ISSUE 待独立窗口修复**（OPTIONAL-SCOPE-1 函数内 Optional unwrap/is_some
 > 失败 / OPTIONAL-CONTAINER-1 Optional 容器方法不可用 / ATTR-READ-1 属性读取静默 None）
-> + 5 处旧套件陈旧断言更新（PHASE_D）+ DOC-24~27 文档同步（KNOWN_LIMITS §10.2 可补
-> qualified 路径实证）。细节见 `trials/T07_fixes_critical_stress/REGISTER.md` 与 PENDING_TASKS §〇。
+> + DOC-24~27 文档同步（KNOWN_LIMITS §10.2 可补
+> qualified 路径实证；**6 处陈旧断言已修复（2026-08-14 用户授权，详见 WORKLOG）**）。细节见
+> `trials/T07_fixes_critical_stress/REGISTER.md` 与 PENDING_TASKS §〇。
 
 ---
 

@@ -1,0 +1,4 @@
+chan[int] ch = chan(int, "pubsub")
+ch.send(5)
+int v = await ch.recv()
+print(v)

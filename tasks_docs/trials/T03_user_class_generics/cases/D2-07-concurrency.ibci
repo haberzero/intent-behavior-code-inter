@@ -1,6 +1,6 @@
 # D2-07 泛型 × 并发（thread 内构造泛型类 / chan 传泛型 / slot 存泛型）
 # doc: docs/syntax/06_oop.md §6.4 + 14_concurrency
-# 期望: 泛型实例跨并发面工作
+# 期望: 泛型实例跨并发面工作（KERNEL_ISSUE-CHAN-ARGS-1 触发用例：chan(Box[int],...) 显式类型实参被降级为 chan[Box]，编译期 SEM_TYPE_MISMATCH，修复后期望 = 全输出）
 # expect-class: PASS
 # expect-out: chan=5 | thread=in_thread | slot=9 | DONE
 import ai
@@ -10,7 +10,7 @@ class Box[T]:
     func get(self) -> T:
         return self.value
 
-chan[Box[int]] ch = chan(Box[int], "message")
+chan[Box[int]] ch = chan()
 ch.send(Box[int](5))
 Box[int] from_chan = await ch.recv()
 print("chan=" + (str)from_chan.get())

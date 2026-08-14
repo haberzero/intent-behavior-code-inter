@@ -1,0 +1,8 @@
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+chan[Box[int]] ch = chan()
+ch.send(Box[int](5))
+Box[int] v = await ch.recv()
+print(v.get())
