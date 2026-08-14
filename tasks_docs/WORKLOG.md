@@ -2,11 +2,15 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-14（函数/可调用类型身份架构断层根治；全量 2746 passed / 1 skipped）
+> 最后更新：2026-08-14（fn/callable 关键字体系重构 方向 A；全量 2765 passed / 1 skipped）
 
 ---
 
 | **函数/可调用类型身份架构断层根治（2026-08-14，exp/func-callable-identity → unsafe-vibe-dev，全量 2746 passed / 1 skipped）** | **P0 主线完成（`_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md` + 深化分析）**。**深化分析结论**：用户猜想"fn 早于泛型体系存在历史包袱"证实，且为**三层系统性断层**（比交接更进一步）：① spec→TypeRef 转换无单一权威（`TypeRef.from_spec` 缺 FUNCTION/BOUND_METHOD/CALLABLE_SIG，存在 `scheduler._spec_to_typeref` + `_param_type_ref` 两个部分实现）；② type_checking 回填用 `.name` 字符串覆盖 symbol_collection 已产出的结构化 spec（`-> fn[(...)->...]` 退化为裸 fn；`-> list[int]`/`Optional[int]` 因 canonical-name 回绕仍可用，唯独 CALLABLE_SIG 彻底失效）；③ 函数签名序列化缺口（FUNCTION `get_references` 基类空 + rehydrator `_fill_descriptor` 读恒空 uid 通道回退 void——运行期函数 spec 恒 void 返回）。**五项根治**：A from_spec 补三 kind（FUNCTION 按名区分 callable/fn 标记与真实签名）；B create_func 结构化升级（字符串向后兼容）+ 编译期函数/LLM 函数/`-> auto` 回填传 from_spec；C resolve_member 非 MODULE 方法成员产出 BOUND_METHOD（签名 + receiver_type，BoundMethodAxiom 编译期接线），4 消费点补 kind（resolve_callable_instance_return/容器 hint/contract_validator/fn sig 匹配）；D `_wrap_function_result` 单一 helper 接线三返回消费点（用户函数/lambda 表达式体/LLM 函数，含方法 owner_class 成员签名路径）；E 序列化 FUNCTION/BOUND_METHOD/CALLABLE_SIG 持久化 canonical_name + rehydrator shell/_fill_descriptor 对称恢复。**判别性回归 +29**（`test_func_callable_identity.py` 19 用例 + `TestBoundMethodReturn` 反转 + 方法包装）；触发探针 q1-q12 全 PASS。**独立复核（general agent）**：P1（方法返回 Optional 包装——node_to_symbol 对方法 def 绑定 self 参数符号、func.spec 为类 spec，经 owner_class 成员表签名解析）+ P2（双包装去重/KNOWN_LIMITS §10.4）已整改；P2-4 核验为编译期 SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE 拦截（非问题）。**潜伏边界记录**：KNOWN_LIMITS §10.4（fn 签名内嵌套泛型实参名称回绕可用/结构化操作不可穿透）。设计/实施 `tasks_docs/_code_func_callable_identity.md`。**决策**：全量零回归 + 复核放行 + 无对外契约/架构级风险 → 按零风险细则直接合并 unsafe-vibe-dev |
+
+---
+
+| **fn/callable 关键字体系重构 · 方向 A（2026-08-14，exp/fn-callable-redesign → unsafe-vibe-dev，全量 2765 passed / 1 skipped）** | **用户 2026-08-14 拍板：移除用户面 `callable` 类型（内部化），`fn` 参数/返回收紧为"强制可调用"**。**彻查结论**（`_DESIGN_FN_CALLABLE.md`）：`callable` 作为用户类型是"内部概念泄漏 + 半成品"——实证只对 lambda/绑定方法生效、误拒裸函数/可调用类实例/容器（`list[callable]` 报迷惑错误）；唯一净能力"强制可调用"（拒 42）也误伤合法可调用；与文档"不引入统一 callable 基类"鸭子类型哲学矛盾；与 `fn`（动态）职责重叠；一词四义（运行期基类名 type(make)="callable" / 公理族根 / 用户类型 / thread(callable=...) 参数名）。**实施**：① 三注解解析器（`_resolve_type`/`_resolve_annotation_spec`/`_annotation_to_typeref`，IbName+IbSubscript base+基类继承）对 `callable` 报 `SEM_UNRESOLVED_TYPE` 引导用 `fn`；② `fn` 参数（`_check_call_arg_type`）与返回（`visit_IbReturn`）对 bare fn 哨兵校验可调用——CLASS 按 `__call__` 成员判定（P1 整改，is_callable(CLASS) 恒真漏检无 __call__ 实例，与声明路径 `_infer_fn_type` 对齐；类名构造器引用放行），动态 any/auto 放行；③ `_infer_fn_type` 兜底 `resolve("callable")`→`resolve("fn")`；④ 共享 helper `_fn_callable.py`（`is_fn_callable_value`/`is_constructor_ref_expr`/`CALLABLE_INTERNAL_TYPE_MSG` 单点真理）。**判别性回归 +19**（TestCallableInternalization 4 + TestFnCallabilityEnforcement 13 + 迁移反转 + P1/P2 追加）。**独立复核（general agent）**：P1（fn 参数/返回 CLASS 按 __call__ 判定）+ P2（class X(callable) 继承守卫 / 共享消息常量）已整改。**已知残留**：`list[fn]` 容器元素级强制可调用未接线。**文档**：KNOWN_LIMITS §七 / 03_callable_fn / 03_type_system §7 / 05_functions §5.6。 |
 
 ---
 

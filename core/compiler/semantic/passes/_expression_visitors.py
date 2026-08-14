@@ -39,6 +39,7 @@ from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.registry.factory import _PRIMITIVE_CONSTRUCTORS
+from ._fn_callable import is_fn_callable_value
 
 
 def _first_pos_descriptor_after(descriptors, count: int):
@@ -699,6 +700,21 @@ class ExpressionVisitorsMixin:
         exp_spec = self.registry.resolve_typeref(descriptor.type_ref)
         if arg_node is not None and exp_spec is not None:
             self._bind_literal_with_type(arg_node, exp_spec)
+        # bare fn 参数（动态哨兵，name=="fn" 且非 CALLABLE_SIG）＝"任意可调用"抽象：
+        # 实参必须是可调用（方向 A 收紧——此前 is_dynamic 跳过致 `apply(42)` 放行）。
+        # 动态实参（any/auto）静态不可判，放行交运行期裁决。
+        if (exp_spec is not None
+                and getattr(exp_spec, "name", None) == "fn"
+                and self.registry.is_dynamic(exp_spec)
+                and actual_spec is not None
+                and not self.registry.is_dynamic(actual_spec)
+                and not is_fn_callable_value(self.registry, actual_spec, arg_node, self.lookup_symbol)):
+            self.error(
+                f"Argument '{name}' must be callable (fn 参数要求可调用), "
+                f"but got '{actual_spec.name}'.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return
         if (exp_spec and actual_spec
                 and not self.registry.is_dynamic(exp_spec)
                 and not self.registry.is_dynamic(actual_spec)

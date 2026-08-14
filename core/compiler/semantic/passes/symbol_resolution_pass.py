@@ -12,7 +12,9 @@ from core.base.diagnostics.codes import (
     SEM_INTENT_PLACEMENT,
     SEM_NONLOCAL_NOT_FOUND,
     SEM_UNDEFINED_SYMBOL,
+    SEM_UNRESOLVED_TYPE,
 )
+from ._fn_callable import CALLABLE_INTERNAL_TYPE_MSG
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.base.uid import intrinsic_uid
@@ -347,6 +349,13 @@ class SymbolResolver(ScopedVisitor):
         if annotation is None:
             return self.registry.resolve("any")
         if isinstance(annotation, ast.IbName):
+            # callable 内部类型名守卫（方向 A：用户面统一为 fn 族）。
+            if annotation.id == "callable":
+                self.error(
+                    CALLABLE_INTERNAL_TYPE_MSG,
+                    annotation, code=SEM_UNRESOLVED_TYPE,
+                )
+                return self.registry.resolve("any")
             return self.registry.resolve(annotation.id) or self.registry.resolve("any")
         if isinstance(annotation, ast.IbCallableType):
             # callable signature 约束 ``fn[(params) -> ret]``：与 type_checking
