@@ -229,3 +229,42 @@ def test_optional_single_carrier():
     """Optional 单承载——内层值存 payload，无 _inner 双载槽。"""
     from core.runtime.objects.primitives.optional import IbOptional
     assert "_inner" not in IbOptional.__slots__
+
+class TestOptionalEmptyErrorCode:
+    """空 Optional 操作统一报 RUN_ATTRIBUTE_ERROR（DOC-29 根治）。
+
+    修复前：``unwrap()`` / ``for`` 迭代 / ``next()`` 抛 InterpreterError 未指定
+    error_code → 默认 RUN_GENERIC_ERROR，与 receive 委托链空值路径
+    （RUN_ATTRIBUTE_ERROR）及文档 arch/03 §8 承诺不一致。
+    修复后：三处发射点统一 RUN_ATTRIBUTE_ERROR。
+    """
+
+    def test_unwrap_empty_raises_run_attribute_error(self):
+        from tests.conftest import expect_runtime_error
+        expect_runtime_error(
+            "Optional[int] e = None\n"
+            "print(e.unwrap())\n",
+            "RUN_ATTRIBUTE_ERROR",
+        )
+
+    def test_for_iter_empty_raises_run_attribute_error(self):
+        from tests.conftest import expect_runtime_error
+        expect_runtime_error(
+            "Optional[list[int]] e = None\n"
+            "for x in e:\n"
+            "    print(x)\n",
+            "RUN_ATTRIBUTE_ERROR",
+        )
+
+    def test_receive_empty_raises_run_attribute_error(self):
+        """委托链空值路径（修复前已正确）回归确认。"""
+        from tests.conftest import expect_runtime_error
+        expect_runtime_error(
+            "Optional[list[int]] e = None\n"
+            "print(len(e))\n",
+            "RUN_ATTRIBUTE_ERROR",
+        )
+
+    def test_unwrap_some_still_works(self):
+        """非空 unwrap 不受影响（回归）。"""
+        assert run_ibci("Optional[int] x = 5\nprint(x.unwrap())\n") == ["5"]

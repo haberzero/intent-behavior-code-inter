@@ -87,7 +87,8 @@ class IbOptional(IbValue):
         """返回内层值；空 Optional 时 fail-fast 抛错。"""
         if not self._is_some:
             raise InterpreterError(
-                "unwrap() called on an empty Optional"
+                "unwrap() called on an empty Optional",
+                error_code="RUN_ATTRIBUTE_ERROR",
             )
         return self.payload
 

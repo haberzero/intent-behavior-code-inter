@@ -459,6 +459,32 @@ class StatementVisitorsMixin:
             func_returns = getattr(self, "func_return_types", None) or []
             if func_returns and func_returns[-1] is not None:
                 self._bind_literal_with_type(rhs_inner, func_returns[-1])
+                # 可调用返回类型兼容校验（BOUNDARY-NESTED-FUNC-1 根因根治）：
+                # 函数声明返回具体可调用类型（fn_callable[T]/callable/behavior[T]，
+                # 非动态）时，返回表达式的类型须可赋值——与直接赋值路径
+                # （fn_callable[T] g = inner 编译期拦截）语义一致。此前
+                # visit_IbReturn 从不比对 ret_type 与声明返回类型，导致
+                # `-> fn_callable[int]: return inner`（函数引用）编译期放行、
+                # 运行期 RUN_TYPE_MISMATCH。动态声明（`-> fn` 推断哨兵）跳过。
+                declared_ret = func_returns[-1]
+                if (
+                    declared_ret is not None
+                    and declared_ret.kind
+                    in (
+                        TypeKind.FUNCTION.value,
+                        TypeKind.BOUND_METHOD.value,
+                        TypeKind.CALLABLE_SIG.value,
+                        TypeKind.CALLABLE_INSTANCE.value,
+                    )
+                    and not self.registry.is_dynamic(declared_ret)
+                    and not self.registry.is_assignable(ret_type, declared_ret)
+                ):
+                    self.error(
+                        f"Cannot return '{getattr(ret_type, 'name', 'auto')}' from function "
+                        f"declared '{declared_ret.name}'",
+                        node, code=SEM_TYPE_MISMATCH,
+                    )
+                    return self._void_desc
             # 如果在 auto 返回类型函数中，累积返回类型
             if self.auto_return_types is not None:
                 self.auto_return_types.append(ret_type)

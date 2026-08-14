@@ -36,7 +36,8 @@ def resolve_iterable(iterable_obj: Any):
             from core.kernel.issue import InterpreterError
 
             raise InterpreterError(
-                "Cannot iterate an empty Optional"
+                "Cannot iterate an empty Optional",
+                error_code="RUN_ATTRIBUTE_ERROR",
             )
         return resolve_iterable(iterable_obj.payload)
     from core.runtime.objects.kernel.generator import IbGenerator
