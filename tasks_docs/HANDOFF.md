@@ -122,18 +122,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 当前交接（2026-08-14，本 session 已完成三大任务，下一 session 候选）**：
-  **T05 剩余问题处置 + T06 新暴露缺陷**。
-  - **① KI-1 已根治**（2026-08-14，统一类身份模型 S4 + T06 D4-01 核销）。
-  - **⑥ DOC_ISSUE-1~23 文档批次已全部治理**（2026-08-14，doc-governance）。
-  - **下一候选**：**② KI-2 Optional-None `is None` 语义 + `is_none()` 缺失（P2，
-    文档已修正为 `== None` 判空，实现修复待独立窗口）→ ③ mock STR/BOOL 值语义
-    （实现/文档抉择，文档已精确化，实现保持）→ ④ 8 个幽灵诊断码 + 快照篡改警告
-    （文档已标注未发射，实现/删减待决）→ ⑤ `set_mock_mode()` 对称开关（P3）**。
-  - **🔴 T06 新暴露 KERNEL_ISSUE-CROSSMOD-LLM-1（P1，pre-existing）**：跨模块用户类
-    作行为表达式 LLM 输出目标（`geo.Counter c = @~...~`）node_to_type 未传播 → 运行时
-    `__call__ on None`。根因：`_resolve_type` 对 IbAttribute 点号限定注解未解析目标 spec。
-    独立窗口（见 `trials/T06_class_identity/REGISTER.md` + PENDING_TASKS）。
+- **🔴 当前交接（2026-08-14 用户指示，下一 session 主任务）**：
+  **修复 T05/T06 剩余代码缺陷**（完整交接见 `tasks_docs/_HANDOFF_T05_ISSUES.md` §六，
+  每项含现状/代码实证/根因/修复方向/判别性回归）。
+  **① KERNEL_ISSUE-CROSSMOD-LLM-1（P1）**：跨模块用户类作行为表达式 LLM 输出目标
+  （`geo.Counter c = @~...~`）node_to_type 未传播 → `__call__ on None`；根因
+  `_resolve_type` 对 IbAttribute 点号限定注解未解析目标 spec。**② KI-2 Optional-None
+  `is None` 语义 + `is_none()` 缺失（P2）**：文档已修正为 `== None` 判空，实现待修。
+  **③ 8 个幽灵诊断码 + 快照篡改警告（P2）**：文档已标注未发射，实现发射/删减待决。
+  **④ `set_mock_mode()` 对称开关（P3）**。
   试验据与复现用例：`trials/T05_critical_stress/` + `trials/T06_class_identity/`。
 
 - **✅ 已完成（2026-08-14，统一类身份模型 S1-S4，独立复核放行后 cherry-pick unsafe-vibe-dev，全量 2614→2616 passed / 1 skipped）**：

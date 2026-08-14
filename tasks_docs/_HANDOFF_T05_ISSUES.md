@@ -7,18 +7,23 @@
 > 基线：unsafe-vibe-dev 6e68329c（全量 2614 passed / 1 skipped）。
 > 本文件交接每项的现状 / 证据 / 粗略根因 / 修复方向 / 建议判别性回归。
 >
+> **🔴 下一 session 主任务（2026-08-14 用户指示）：修复 §六 四项代码缺陷**——
+> ① CROSSMOD-LLM-1（P1）② KI-2 + is_none（P2）③ 幽灵诊断码（P2）④ set_mock_mode
+> 对称开关（P3）。每项含现状/代码实证/根因/修复方向/判别性回归。试验据：
+> `trials/T06_class_identity/`（CROSSMOD-LLM-1）+ `trials/T05_critical_stress/`。
+>
 > **✅ KI-1 已根治（2026-08-14，统一类身份模型 S4，全量 2616 passed / 1 skipped）**：
 > `get_side_table` module 参数化 + `is_truthy` 任务本地化（见 `_code_class_identity_unify.md`
 > S4 与 §2.1 更新）。判别性回归：线程 worker 内 imported/入口类 405/405 + 105/105。
 >
 > **✅ DOC_ISSUE-1~23 文档部分已全部治理（2026-08-14，doc-governance）**：KNOWN_LIMITS
 > §七/§八/§十三 实证修正、mock 值语义文档精确化、幽灵码标注、快照警告、Optional 判空、
-> 示例修复、TESTONLY→MOCK 等。**剩余为代码联动项**（见 §三 处置方向）：mock 语义实现、
-> 幽灵码发射/删减、`is_none()` 实现（与 KI-2 合并）、`set_mock_mode` 对称开关。
+> 示例修复、TESTONLY→MOCK 等。**剩余为代码联动项**（见 §六）：幽灵码发射/删减、
+> `is_none()` 实现（与 KI-2 合并）、`set_mock_mode` 对称开关。
 >
 > **🔴 T06 新暴露 KERNEL_ISSUE-CROSSMOD-LLM-1（P1，pre-existing）**：跨模块用户类作
 > 行为表达式 LLM 输出目标（`geo.Counter c = @~...~`）node_to_type 未传播 → 运行时
-> `__call__ on None`。见 `trials/T06_class_identity/REGISTER.md` + PENDING_TASKS。
+> `__call__ on None`。见 §六.1 完整交接。
 
 ---
 
@@ -85,7 +90,8 @@
    `IbOptional(is_some=False)` 包装（非 IbNone）→ False。
 2. `IbOptional` docstring（optional.py:14-19）自述"空（payload 为 None，**语义上是
    None**）"——与 `is None` False 结果自相矛盾。
-3. `OptionalAxiom` 声明 `is_none`（arch/03_type_system §8），`IbOptional` 未实现。
+3. `OptionalAxiom`（sentinels.py:114-122）声明 is_some/unwrap/or_else，**无 is_none**；
+   `IbOptional`（optional.py）无 is_none 实现——判空 API 缺失。
 
 **修复方向**
 - 方案 A（语义一致）：`is` 的 None 分支对 `IbOptional` 且 `is_some==False` 返回 True
@@ -99,6 +105,8 @@
 
 ### 2.3 mock STR/BOOL 值语义（实现 vs 文档抉择，P1）
 
+**✅ 已决断（2026-08-14，doc-governance）**：**修文档，保持实现**。
+
 **现状/现象**
 - `MOCK:STR:hello world` → `"hello"`（`mock_scenario.py` `_resolve_locked` 对 STR 用
   `mock_value.split()[0]`）；`MOCK:BOOL:1`/`MOCK:BOOL:True` → False（仅 `"TRUE"` 大写
@@ -106,12 +114,13 @@
 - 文档（13_mock_testing §13.2.1/§13.3.1、guide/07:40-49、07_behavior_expressions §7.5）
   声称多词 STR 完整返回、`BOOL:1` 判真。
 
-**处置方向（须决断，倾向代码为准修文档或修实现）**
-- 若 `MOCK:STR:hello world`（无引号）取首 token 是有意设计 → 修文档示例为
-  `MOCK:STR:"hello world"`（带引号才完整）。
-- 若应支持多词 → 修 `mock_scenario` 解析（strip 后整体作为值）。
-- BOOL 建议统一大小写不敏感判定（`bool_val.upper() == "TRUE"`）或文档只示范 `TRUE`。
-- **判别性回归**：`MOCK:STR:hello world`（决定后语义）+ `MOCK:BOOL:TRUE`/`MOCK:BOOL:1`。
+**决断理由**：实现自洽（STR 带引号取完整、无引号取首 token；BOOL 仅大写 TRUE 判真是
+明确约定）。文档示例误导，非实现缺陷——不改变测试工具行为（避免回归），修文档使其
+精确反映实现。
+**已落文档**：13_mock_testing 指令表注明"含空格需引号包裹/仅大写 TRUE 判真"；guide/07
+示例改为 `MOCK:STR:"hello world"` 与 `MOCK:BOOL:TRUE`。
+**遗留（可选，不阻塞）**：若未来希望无引号多词 STR 返回完整值，可改 `mock_scenario`
+解析（strip 后整体作为值）——独立窗口，非缺陷。
 
 ### 2.4 幽灵诊断码 + 快照篡改警告未发射（P2）
 
@@ -126,11 +135,12 @@
   （_shared.py:668-672 restore_snapshot 无警告）。
 - `indent_processor.py:60` 误用 `LEX_INVALID_ESCAPE` 上报缩进失配。
 
-**处置方向**
+**处置方向（文档侧已治理；实现侧待 §六.3）**
 - 逐码决断：实现发射（越界→RUN_INDEX_ERROR、除零→RUN_DIVISION_BY_ZERO、
-  属性缺失→RUN_ATTRIBUTE_ERROR）或从文档删除/标注未实现。
+  属性缺失→RUN_ATTRIBUTE_ERROR）或从 catalog 删减。
 - `issue.py` 默认 RUNTIME_ERROR 登记入 catalog（或换已注册码）。
-- 快照篡改：按文档语义补警告发射（或改文档为静默恢复）。
+- 快照篡改：已按静默恢复修正文档（10_robustness/arch/15_diagnostics）；若需补警告
+  发射为独立实现项。
 - `indent_processor` 错误码修正。
 - **建议**：新增契约测试——catalog 码须有真实发射点（杜绝幽灵码；CAT-6 目前只校验
   码集合一致性不校验可发射性）。
@@ -140,9 +150,9 @@
 **现状/现象**
 - `set_mock_mode()` 仅进入 mock（core.py:175-185 置 `_config["mock"]=True`），无 off API。
   退出只能 `ai.set_config(...)`（内部 mock=False）或 `ai.apply_config`。
-- 文档（11_modules、guide/01）未说明单向性（DOC-23）。
+- 文档已补单向性说明（11_modules、guide/01，本 session）。
 
-**处置方向**
+**处置方向（待 §六.4）**
 - 补 `set_mock_mode(False)` 或 `set_mock_mode(enable: bool = True)`（对称开关）；
   或维持单向并文档明示。倾向补对称开关（易用性）。
 - **判别性回归**：mock→真实→mock 往返切换。
@@ -198,12 +208,14 @@
 
 ## 四、建议处理顺序（代码优先）
 
-1. **KI-1**（P1）：**✅ 已根治（2026-08-14，S4，见 §2.1）**。
-2. **KI-2 + DOC-5/-6**（P2）：Optional 判空语义统一 + `is_none()` + 文档同步。
-3. **mock STR/BOOL**（P1）：实现/文档抉择 + 判别性回归。
-4. **幽灵诊断码**（P2）：发射实现或文档删减 + 可发射性契约测试。
-5. **`set_mock_mode` 对称开关**（P3）。
-6. **DOC 批次**（P1-P3，doc-governance）：P1 示例 → P2 语义/矛盾 → P3 口径/术语。
+> **✅ 已根治（2026-08-14，本 session）**：KI-1（S4，线程侧表）+ DOC_ISSUE-1~23 文档部分
+> （doc-governance）。**剩余代码项 = 下一 session 修复主任务**（见 §六）。
+
+1. **KERNEL_ISSUE-CROSSMOD-LLM-1**（P1，T06 新暴露）：跨模块用户类作行为表达式 LLM
+   输出目标修复（见 §六.1）。
+2. **KI-2 + DOC-5/-6**（P2）：Optional 判空语义统一 + `is_none()` + 文档同步（见 §六.2）。
+3. **幽灵诊断码**（P2）：发射实现或文档删减 + 可发射性契约测试（见 §六.3）。
+4. **`set_mock_mode` 对称开关**（P3）（见 §六.4）。
 
 ## 五、纪律与验证
 
@@ -213,3 +225,73 @@
 - 分支政策：无法确认边界走独立分支；确认零风险可直接合并 unsafe-vibe-dev；不触碰 main。
 - 全程本地 commit、禁 push。
 - WORKLOG 详尽记录决策与变化前后。
+
+---
+
+## 六、下一 session 修复交接（2026-08-14 用户指示）
+
+> 四项代码缺陷交接（每条含现状 / 代码实证 / 根因 / 修复方向 / 判别性回归）。基线：
+> unsafe-vibe-dev（本 session 后），全量 2616 passed / 1 skipped。
+
+### 6.1 KERNEL_ISSUE-CROSSMOD-LLM-1（P1，T06 试用发现，pre-existing）
+
+- **触发**：`geo.Counter c = @~ 给一个数字 ~`（跨模块用户类作行为表达式 LLM 输出目标）
+  运行时抛 `VM: Call failed: Object of type 'None' has no method '__call__'`。
+- **复现**：`tasks_docs/trials/T06_class_identity/cases/D3-02/`、`D2-05/`（均 KERNEL_ISSUE）。
+- **根因（编译期实证）**：`_statement_visitors.py:110-117` 对 IbName 目标（`Point p =
+  @~...~`）正确 `bind_type(rhs_inner, target_type)` → node_to_type = `main.Point`；但对
+  **模块限定注解**（`geo.Counter c = ...`，annotation 为 `IbAttribute` 点号限定）——
+  `_resolve_target_name_and_type`（:218-230）→ `_resolve_type(annotation)` 未解析出
+  geo.Counter spec → target_type 退化 → 行为节点 node_to_type = `type_root.behavior` →
+  `_get_expected_type_hint` 返回 `'behavior'` → LLM parse 链无法解析 → 运行时
+  `__call__ on None`。
+- **定性**：pre-existing（base 7ed9d274 同现），非类身份模型引入。比 KNOWN_LIMITS §10.2
+  "graceful 退化"更严重（运行时崩溃）。
+- **修复方向**：`_resolve_type` 支持 `IbAttribute` 点号限定注解解析为目标 spec（或
+  behavior 绑定路径对 module 限定注解补全），使行为节点 node_to_type = `geo.Counter`。
+- **判别性回归（建议）**：`geo.Counter c = @~...~` → `c.value()` 正常（与入口类
+  `Point p = @~...~` 对称，后者当前已 PASS）。
+
+### 6.2 KI-2 + DOC-5/-6（P2，T05 发现，pre-existing）
+
+- **触发**：`Optional[int] a = None; a is None` → **False**（应 True）；`a == None` →
+  True；`any b = None; b is None` → True。`a.is_none()` 不存在。
+- **代码实证**：`leaf.py:269/277`（`is`/`is not` 的 None 分支用 `isinstance(current_left,
+  IbNone)`，Optional 空值被 `IbOptional(is_some=False)` 包装非 IbNone）；`optional.py:21`
+  docstring 自述"空值语义上是 None"却 `is None` False（自相矛盾）；`OptionalAxiom`
+  （sentinels.py:114-122）声明 is_some/unwrap/or_else，**无 is_none**；`IbOptional` 无
+  is_none 实现。
+- **文档已修正**（本 session）：03_operators 说明 Optional 判空用 `== None`。
+- **修复方向（A+B 结合）**：A）`is` 的 None 分支对 `IbOptional` 且 `is_some==False` 返回
+  True（与 `== None` 一致），`is not` 对称；B）实现 `is_none()`（OptionalAxiom 声明 +
+  IbOptional 实现），文档统一判空 API。
+- **判别性回归（建议）**：`Optional[int] a = None; a is None` → True；`a.is_none()` →
+  True；`Optional[int] b = 5; b is None` → False；`any c = None; c is None` → True（不回归）。
+
+### 6.3 幽灵诊断码 + 快照篡改警告（P2，T05 发现）
+
+- **现状（代码实证）**：8 个诊断码全仓零发射（core/+ibci_modules/ 无任何发射点，仅
+  codes.py/catalog.py 注册）：`RUN_DIVISION_BY_ZERO`/`RUN_ATTRIBUTE_ERROR`/
+  `RUN_INDEX_ERROR`/`RUN_PERMISSION_ERROR`/`RUN_LLMEXCEPT_SNAPSHOT_VIOLATION`/
+  `LEX_INVALID_NUMBER`/`PAR_INDENTATION_ERROR`/`PAR_MULTIPLE_INTENTS`。越界/除零/属性
+  缺失报裸 `[ERROR][RUNTIME_ERROR]`（issue.py 默认码）。快照篡改（_shared.py:668-670）
+  为静默恢复。`indent_processor.py:60` 误用 `LEX_INVALID_ESCAPE` 上报缩进失配。
+- **文档已修正**（本 session）：15_diagnostics 8 码标注"未发射"；10_robustness/arch 改
+  "静默恢复"。
+- **处置方向（逐码决断）**：① 实现发射——越界→RUN_INDEX_ERROR、除零→
+  RUN_DIVISION_BY_ZERO、属性缺失→RUN_ATTRIBUTE_ERROR（各错误站点加诊断码）；②
+  `issue.py` 默认 RUNTIME_ERROR 登记入 catalog；③ 快照篡改按文档语义补警告发射（或
+  维持静默并文档精确化——本 session 已按静默恢复修正文档）；④ `indent_processor` 错误
+  码修正；⑤ 新增契约测试——catalog 码须有真实发射点（杜绝幽灵码；CAT-6 只校验码集合
+  一致性不校验可发射性）。
+- **判别性回归（建议）**：越界/除零/属性缺失报具体诊断码（非裸 RUNTIME_ERROR）。
+
+### 6.4 `set_mock_mode()` 对称开关（P3，T05 发现）
+
+- **现状（代码实证）**：`core.py:175-181` `set_mock_mode()` 仅置 `_config["mock"]=True`；
+  退出只能 `ai.set_config`（:161-165，内部置 mock=False）或 `apply_config`（mock:false）。
+  vtable 无 off API。
+- **文档已修正**（本 session）：11_modules/guide/01 说明单向性。
+- **处置方向**：补 `set_mock_mode(enable: bool = True)` 对称开关（易用性）；或维持单向并
+  文档明示。倾向补对称开关。
+- **判别性回归（建议）**：mock→真实→mock 往返切换。

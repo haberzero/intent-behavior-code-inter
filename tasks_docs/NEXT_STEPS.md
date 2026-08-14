@@ -4,9 +4,9 @@
 >
 > **最后更新**：2026-08-14（**同名类运行时类表宏观根治（S1-S4）+ T06 真实试用 +
 > docs/ 全量文档治理全部完成**；全量 **2616 passed / 1 skipped**；
-> **🔴 下一 session 主线候选**：T05 剩余问题处置（KI-2 Optional is None /
-> mock 语义 / 幽灵诊断码 / set_mock_mode）或 T06 新暴露的 KERNEL_ISSUE-CROSSMOD-LLM-1，
-> 见"交接要点"节与 `tasks_docs/_HANDOFF_T05_ISSUES.md`）
+> **🔴 下一 session 主任务：T05/T06 剩余代码缺陷修复**——① KERNEL_ISSUE-CROSSMOD-LLM-1
+> （P1）② KI-2 Optional `is None`/`is_none()`（P2）③ 幽灵诊断码（P2）④ `set_mock_mode`
+> 对称开关（P3），完整交接见 `tasks_docs/_HANDOFF_T05_ISSUES.md` §六）
 
 ---
 
@@ -422,17 +422,29 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## 📋 交接要点（下一 session）
 
-- **🔴 下一 session 主线（用户 2026-08-14 指示）**：**T05 批判性压力试用问题处置——
-  以代码问题为优先**。完整交接 `tasks_docs/_HANDOFF_T05_ISSUES.md`。处理顺序：
-  ① **KI-1 线程 worker 内跨模块用户类不可用（P1）**——task_ec 侧表回调读 interpreter
-  共享 current_module_name 忽略任务本地模块切换，根因已定位（coordinator.py:213 +
-  interpreter.py:352 + _shared.py:261）；② **KI-2 Optional-None `is None` 返回 False +
-  `is_none()` 缺失（P2）**——`is` 用 isinstance(IbNone) 不识别 Optional 包装；③ **mock
-  STR/BOOL 值语义**（实现 `split()[0]`/仅大写 TRUE 判真 vs 文档，实现/文档抉择）；
-  ④ **8 个幽灵诊断码 + 快照篡改警告未发射**（RUN_*/LEX_*/PAR_* 全仓零引用，issue.py
-  默认码未注册）；⑤ **`set_mock_mode()` 单向无 off API**；⑥ **DOC_ISSUE-1~23 文档批次**
-  （doc-governance；KNOWN_LIMITS 自身 §七/§八/§十三 三条不成立）。试验据与复现用例：
-  `trials/T05_critical_stress/`（40 用例 37P+1G+2KI + 23 DOC_ISSUE，REGISTER/REPORT）。
+- **🔴 下一 session 主任务（2026-08-14 用户指示）**：**修复 T05/T06 剩余代码缺陷**。
+  完整交接 `tasks_docs/_HANDOFF_T05_ISSUES.md` §六（每项含现状/代码实证/根因/修复方向/
+  判别性回归）。处理顺序：
+  ① **KERNEL_ISSUE-CROSSMOD-LLM-1（P1，T06 新暴露）**——跨模块用户类作行为表达式
+  LLM 输出目标（`geo.Counter c = @~...~`）node_to_type 未传播 → 运行时 `__call__ on
+  None`；根因：`_resolve_type` 对 IbAttribute 点号限定注解未解析目标 spec
+  （`_statement_visitors.py:110-117` bind_type 仅对 IbName 目标生效）；复现
+  `trials/T06_class_identity/cases/D3-02|D2-05`。
+  ② **KI-2 Optional-None `is None` 返回 False + `is_none()` 缺失（P2）**——`is` 的
+  None 分支 `isinstance(IbNone)`（leaf.py:269/277）不识别 `IbOptional(is_some=False)`
+  包装；`OptionalAxiom`/`IbOptional` 均无 is_none。修复 A+B：`is` None 分支识别
+  IbOptional 空值 + 实现 `is_none()` + 文档统一判空 API。
+  ③ **8 个幽灵诊断码 + 快照篡改警告（P2）**——RUN_*/LEX_*/PAR_* 全仓零发射，issue.py
+  默认码未注册；逐码决断实现发射或删减 + 可发射性契约测试（文档已标注未发射）。
+  ④ **`set_mock_mode()` 单向无 off API（P3）**——补对称开关 `set_mock_mode(enable)`。
+  试验据与复现用例：`trials/T06_class_identity/` + `trials/T05_critical_stress/`。
+
+- **✅ 已完成（2026-08-14，统一类身份模型 + T06 试用 + docs 治理）**：
+  **同名类运行时类表宏观根治（`_code_class_identity_unify.md`）**——S1 run_string
+  入口锚点 / S2 入口类 qualified（删 qualify_types 双轨）/ S3 单类表 / S4 KI-1 线程
+  侧表 + is_truthy 任务本地化，独立复核放行后 cherry-pick unsafe-vibe-dev，全量
+  2616/1。**T06 真实试用**（20 用例 18P+2KI，KI-1 核销，CROSSMOD-LLM-1 登记）。
+  **docs/ 全量治理**（DOC_ISSUE-1~23 + T06 新发现，doc-governance）。详见已完成节。
 
 - **✅ 已完成（2026-08-14，跨模块同名类运行期 module 化根治 + T05 批判试用 + 内核分析）**：
   **跨模块同名类运行期类表 module 化（S5 运行期闭环）**——注册键=spec.qualified_name +
