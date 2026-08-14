@@ -2,9 +2,24 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**✅ 已完成：函数/可调用类型身份架构断层根治**。
-> 独立分支 `exp/func-callable-identity` 实验 + 独立复核（general agent）放行后
-> 合并 unsafe-vibe-dev。设计/实施记录：`tasks_docs/_code_func_callable_identity.md`）
+> **最后更新**：2026-08-14（**✅ 已完成：fn/callable 关键字体系重构（方向 A）**。
+> 用户 2026-08-14 拍板：移除用户面 `callable` 类型注解（内部化），`fn` 参数/返回
+> 收紧为"强制可调用"。设计分析 `_DESIGN_FN_CALLABLE.md`）
+>
+> **✅ 已完成（2026-08-14，exp/fn-callable-redesign → unsafe-vibe-dev，全量 2765 passed / 1 skipped 零回归）**：
+> **fn/callable 关键字体系重构（方向 A）**。彻查结论（`_DESIGN_FN_CALLABLE.md`）：
+> `callable` 作为用户类型是"内部概念泄漏 + 半成品"（只对 lambda/绑定方法生效、误拒
+> 裸函数/可调用类实例，与文档"不引入统一 callable 基类"鸭子类型哲学矛盾，且与 `fn`
+> 职责重叠）。**定案方向 A**：① `callable` 降级为纯内部概念（运行期基类名
+> `type(make)`="callable" + 公理族根 + `thread(callable=...)` 参数名保留），用户注解
+> `callable f`/`-> callable`/`list[callable]`/`class X(callable)` 报 SEM_UNRESOLVED_TYPE
+> 引导用 `fn`；② `fn` 参数/返回收紧为"任意可调用（强制）"（`apply(42)`/`-> fn: return 42`
+> 编译期拦截；CLASS 按 `__call__` 判定；动态 any/auto 放行）；③ `_infer_fn_type` 兜底
+> 改 `fn` 哨兵（不再泄漏内部 callable 类型）。判别性回归 +19（TestCallableInternalization
+> 4 + TestFnCallabilityEnforcement 13 + 迁移反转）；独立复核（general agent）P1/P2 已整改
+> （fn 参数/返回按 __call__ 判定 + class X(callable) 守卫 + 共享消息常量）。已知残留：
+> `list[fn]` 容器元素级强制可调用未接线。文档同步 KNOWN_LIMITS §七 / 03_callable_fn /
+> 03_type_system §7 / 05_functions §5.6。
 >
 > **✅ 已完成（2026-08-14，exp/func-callable-identity → unsafe-vibe-dev，全量 2746 passed / 1 skipped 零回归）**：
 > **函数/可调用类型身份架构断层根治**（P0，`_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md` +

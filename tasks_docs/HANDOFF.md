@@ -122,6 +122,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-14，exp/fn-callable-redesign → unsafe-vibe-dev 合并，全量 2765 passed / 1 skipped 零回归）**：
+  **fn/callable 关键字体系重构（方向 A）**。用户 2026-08-14 拍板：移除用户面
+  `callable` 类型注解（内部化为运行期基类名/公理族根/thread 参数名），`fn` 参数/返回
+  收紧为"任意可调用（强制）"。彻查 `_DESIGN_FN_CALLABLE.md`；判别性回归 +19；独立
+  复核（general agent）P1/P2 已整改。已知残留 `list[fn]` 容器元素级强制可调用未接线。
+  **下一主线候选**：见 `NEXT_STEPS.md`。
+
 - **✅ 已完成（2026-08-14，exp/func-callable-identity → unsafe-vibe-dev 合并，全量 2746 passed / 1 skipped 零回归）**：
   **函数/可调用类型身份架构断层根治**（用户 2026-08-14 提升优先级的 P0 主线）。
   用户猜想"fn 设计早于泛型体系存在历史包袱"证实且深挖为**三层系统性断层**（spec→TypeRef
