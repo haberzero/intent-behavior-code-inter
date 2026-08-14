@@ -118,14 +118,16 @@ class ArtifactRehydrator:
                 kind=TypeKind.FUNCTION.value,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
+                return_type=TypeRef.parse(data.get("return_type_name", "void")),
+                param_types=[TypeRef.parse(p) for p in data.get("param_type_names", [])],
             ),
             TypeKind.CALLABLE_SIG.value: lambda: TypeDef(
                 name="fn",
                 kind=TypeKind.CALLABLE_SIG.value,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
-                return_type=TypeRef.of(data.get("return_type_name", "auto")),
-                param_types=[TypeRef.of(p) for p in data.get("param_type_names", [])],
+                return_type=TypeRef.parse(data.get("return_type_name", "auto")),
+                param_types=[TypeRef.parse(p) for p in data.get("param_type_names", [])],
             ),
             TypeKind.CLASS.value: lambda: factory.create_class(
                 name, module=data.get("module_path"), parent_name=data.get("parent_name")
@@ -136,6 +138,8 @@ class ArtifactRehydrator:
                 kind=TypeKind.BOUND_METHOD.value,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
+                return_type=TypeRef.parse(data.get("return_type_name", "void")),
+                param_types=[TypeRef.parse(p) for p in data.get("param_type_names", [])],
             ),
             TypeKind.MODULE.value: lambda: TypeDef(
                 name=name,
@@ -258,13 +262,17 @@ class ArtifactRehydrator:
                 spec.value_type = TypeRef.parse(v_name, data.get("value_type_module"))
             spec.name = f"dict[{spec.key_type.canonical_name},{spec.value_type.canonical_name}]"
         elif spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-            param_uids = data.get("param_types_uids", [])
+            # 签名恢复经 canonical_name 字符串通道（嵌套保真，与 serializer 对称——
+            # serializer 持久化 param_type_names/return_type_name）。旧的
+            # param_types_uids/return_type_uid 引用通道对 FUNCTION 无产出
+            # （get_references 基类默认空），此前回退 void 覆盖 shell 签名——
+            # 运行期函数 spec 恒 void 返回，返回值类型在运行期不可得（类型身份
+            # 架构断层：Optional 链式消费包装失效的直接根因）。
             spec.param_types = [
-                TypeRef.of(s.name, s.module_path) for uid in param_uids
-                if (s := self.hydrate(uid)) is not None
+                TypeRef.parse(p) for p in data.get("param_type_names", [])
             ]
-            ret = self.hydrate(data.get("return_type_uid"))
-            spec.return_type = TypeRef.of(ret.name, ret.module_path) if ret else TypeRef.of("void")
+            ret_name = data.get("return_type_name")
+            spec.return_type = TypeRef.parse(ret_name) if ret_name else TypeRef.of("void")
         elif spec.kind == TypeKind.CALLABLE_INSTANCE.value:
             # Restore the value type for callable-instance specs (fn_callable[T] / behavior[T]).
             # ``capture_mode`` is intentionally NOT restored at the type level: it
