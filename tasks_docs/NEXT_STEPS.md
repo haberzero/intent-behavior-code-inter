@@ -2,16 +2,26 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**🔴 下一 session 主线：函数/可调用类型身份架构断层根治**。
-> 用户 2026-08-14 提升三个未修复问题优先级 + 深挖，证实存在深层次架构级问题。
-> 交接文档：`tasks_docs/_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md` + PENDING_TASKS §〇 P0 行）
+> **最后更新**：2026-08-14（**✅ 已完成：函数/可调用类型身份架构断层根治**。
+> 独立分支 `exp/func-callable-identity` 实验 + 独立复核（general agent）放行后
+> 合并 unsafe-vibe-dev。设计/实施记录：`tasks_docs/_code_func_callable_identity.md`）
 >
-> **🔴 下一 session 主线（用户 2026-08-14 指令，P0）**：**函数/可调用类型身份架构断层
-> 根治**。用户猜想"fn 设计早于泛型体系存在历史包袱"已证实——三个问题（绑定方法建模
-> FUNCTION kind / `create_func` 字符串级回填丢失签名 / 函数返回值 Optional 包装缺失）
-> 同源于"类型身份在函数与可调用类型关键路径上被扁平化"的架构断层，与既有
-> `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md` 地基分析同源（函数/可调用侧面）。
-> 详见 `_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md`（逐环实证根因 + 修复方向 + 判别性回归）。
+> **✅ 已完成（2026-08-14，exp/func-callable-identity → unsafe-vibe-dev，全量 2746 passed / 1 skipped 零回归）**：
+> **函数/可调用类型身份架构断层根治**（P0，`_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md` +
+> 本 session 深化分析）。用户猜想"fn 设计早于泛型体系存在历史包袱"证实，且比交接
+> 更进一步：断层为**三层系统性**——① spec→TypeRef 转换无单一权威（from_spec 缺
+> FUNCTION/BOUND_METHOD/CALLABLE_SIG 三种 kind，存在 scheduler._spec_to_typeref 与
+> _param_type_ref 两个部分实现）；② type_checking 回填用 `.name` 字符串覆盖
+> symbol_collection 已产出的结构化 spec（`-> fn[(...)->...]` 退化为裸 fn）；
+> ③ 函数签名序列化缺口（FUNCTION get_references 恒空 + rehydrator `_fill_descriptor`
+> uid 通道回退 void——运行期函数 spec 恒 void 返回）。**五项根治**：A from_spec 补
+> 三 kind（FUNCTION 按名区分 callable/fn 标记与真实签名）；B create_func 结构化升级
+> + 编译期回填传 from_spec + `-> auto` 收敛；C resolve_member 产出 BOUND_METHOD
+> （BoundMethodAxiom 编译期接线，4 消费点补 kind）；D 函数返回 Optional 包装
+> （`_wrap_function_result` 单一 helper 接线三消费点，含方法 owner_class 签名路径）；
+> E 序列化 canonical_name 签名保真（FUNCTION/BOUND_METHOD/CALLABLE_SIG）。判别性
+> 回归 +29（test_func_callable_identity 19 + TestBoundMethodReturn 反转 + 方法包装）。
+> 潜伏边界 KNOWN_LIMITS §10.4。详见 `_code_func_callable_identity.md` + WORKLOG。
 >
 > **✅ 已完成（2026-08-14，unsafe-vibe-dev 19920d39，全量 2714 passed / 1 skipped 零回归）**：
 > **DOC-29 + BOUNDARY-NESTED-FUNC-1 两项根因修复**（E 批判批次发现，无人值守 session）。
