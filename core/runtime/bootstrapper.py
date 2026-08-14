@@ -123,7 +123,12 @@ class Bootstrapper:
             return self.ib_class.registry.get_none()
 
         def _default_setattr(self, name_obj, val):
-            self.fields[name_obj.to_native()] = val
+            attr = name_obj.to_native()
+            # 统一 Optional 值模型：字段声明为 Optional[T] 时，写入前按字段
+            # 声明类型包装（空值 → IbOptional(is_some=False)，与局部变量/
+            # 参数/返回路径一致）。字段类型经 member_types 缓存沿继承链解析
+            # （子类/父类字段均命中），无缓存/非 Optional 原样写入。
+            self.fields[attr] = self.ib_class._wrap_field_value(attr, val)
             return self.ib_class.registry.get_none()
 
         self.ObjectClass.register_method('__getattr__', IbNativeFunction(_default_getattr, is_method=True, ib_class=self.ObjectClass))

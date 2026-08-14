@@ -714,3 +714,96 @@ class TestCrossModuleSameNameClass:
             "print(t.join().expect())\n",
         )
         assert _run(tmp_path) == ["105", "105"]
+
+    def test_cross_module_behavior_llm_output_node_to_type(self, tmp_path):
+        """CROSSMOD-LLM-1 回归：跨模块用户类作行为表达式目标时，行为节点
+        node_to_type 绑定到 module 限定的 spec（而非退化 any/behavior）。
+
+        修复前 ``geo.Counter c = @~...~`` 的 annotation 为 IbAttribute 点号限定，
+        ``_resolve_type`` 未解析 → node_to_type 退化 → 运行时 LLM parse 链
+        type_hint='behavior' → ``__call__ on None``。
+        """
+        from core.kernel import ast
+
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Counter:\n"
+            "    int n\n"
+            "    func __from_prompt__(str raw) -> tuple:\n"
+            "        return (True, Counter(10))\n"
+            "    func value(self) -> int:\n"
+            "        return self.n\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "geo.Counter c = @~ 给一个数字 ~\n"
+            "print(c)\n",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        artifact = engine.compile(str(tmp_path / "main.ibci"))
+        main_mod = artifact.modules.get("main")
+        assert main_mod is not None
+        behavior_nodes = [
+            n for n in main_mod.node_to_type
+            if isinstance(n, (ast.IbBehaviorExpr, ast.IbBehaviorInstance))
+        ]
+        assert behavior_nodes, "main 模块应有行为表达式节点"
+        for node in behavior_nodes:
+            spec = main_mod.node_to_type[node]
+            assert spec is not None
+            assert spec.name == "Counter", f"行为节点应绑定 geo.Counter，got {spec.name}"
+            assert spec.module_path == "geo", (
+                f"行为节点 spec 应携带 module（geo），got {spec.module_path}"
+            )
+
+    def test_cross_module_behavior_llm_output_generic_annotation(self, tmp_path):
+        """CROSSMOD-LLM-1 泛型形态：模块限定泛型注解 geo.Box[int] 正常解析（不退化 any）。"""
+        from core.kernel import ast
+
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n"
+            "    func get(self) -> int:\n"
+            "        return self.v + 100\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "geo.Box[int] b = geo.Box[int](5)\n"
+            "print(b.get())\n",
+        )
+        assert _run(tmp_path) == ["105"]
+
+    def test_cross_module_behavior_llm_output_unparseable_fails_fast(self, tmp_path):
+        """跨模块用户类无 __from_prompt__ 时编译期 SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE
+        （fail-fast，而非静默退化到运行时崩溃）。"""
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Point:\n"
+            "    int x\n"
+            "    func hint(self) -> str:\n"
+            "        return \"geo-hint\"\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "import geo\n"
+            "geo.Point p = @~ 给我一个点 ~\n",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        try:
+            engine.compile(str(tmp_path / "main.ibci"))
+        except Exception as exc:
+            codes = []
+            for diag in getattr(exc, "diagnostics", []):
+                codes.append(getattr(diag, "code", ""))
+            assert "SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE" in codes, codes
+            return
+        raise AssertionError("无 __from_prompt__ 的跨模块类应被编译期拦截")

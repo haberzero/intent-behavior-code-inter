@@ -6,6 +6,50 @@ from ..ib_type_mapping import register_ib_type
 from core.kernel.issue import InterpreterError
 
 
+def wrap_optional(value: Any, declared_type: Any, registry: Any) -> Any:
+    """Optional 值统一包装权威（单一绑定入口）。
+
+    ``declared_type`` 为 Optional 类型（IbSpec 或解析后 spec）时，把非
+    ``IbOptional`` 值包装进 ``IbOptional``（空值 → ``is_some=False``，
+    非空 → ``is_some=True``）；否则原样返回。幂等：已是 ``IbOptional``
+    不重复包装。
+
+    **单一权威源**：局部变量/函数参数/返回/类字段/容器元素的 Optional 值
+    创建一律经本函数，杜绝"同一 Optional 类型在不同路径产生 IbOptional 与
+    裸 IbNone 两种空值表示"的表示分叉（统一 Optional 值模型根治）。
+    """
+    from core.kernel.spec.base import TypeKind
+
+    if declared_type is None:
+        return value
+    if getattr(declared_type, "kind", None) != TypeKind.OPTIONAL.value:
+        return value
+    if isinstance(value, IbOptional):
+        return value
+    if registry is None:
+        return value
+    optional_class = (
+        registry.get_class(declared_type.name) or registry.get_class("Optional")
+    )
+    if optional_class is None:
+        return value
+    is_some = not isinstance(value, IbNone)
+    return IbOptional(optional_class, value, is_some)
+
+
+def is_none_value(value: Any) -> bool:
+    """值是否为 None 语义（统一判空权威）。
+
+    ``is None``/``is not None`` 的 None 分支据此判定：裸 ``IbNone`` 与
+    空 ``IbOptional``（``is_some=False``）均为 None。与 ``== None`` 对齐。
+    """
+    if isinstance(value, IbNone):
+        return True
+    if isinstance(value, IbOptional):
+        return not value._is_some
+    return False
+
+
 @register_ib_type("Optional")
 class IbOptional(IbValue):
     """
@@ -34,6 +78,10 @@ class IbOptional(IbValue):
     def is_some(self) -> IbObject:
         """返回是否持有值（bool）。"""
         return self.ib_class.registry.box(self._is_some)
+
+    def is_none(self) -> IbObject:
+        """返回是否为空（bool）——``is_some`` 的对称判空 API。"""
+        return self.ib_class.registry.box(not self._is_some)
 
     def unwrap(self) -> IbObject:
         """返回内层值；空 Optional 时 fail-fast 抛错。"""

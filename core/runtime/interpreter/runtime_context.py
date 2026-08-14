@@ -10,9 +10,8 @@ from core.kernel.registry import KernelRegistry
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
-from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbValue, IbLLMUncertain, IbFunction, IbNone
+from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbValue, IbLLMUncertain, IbFunction
 from core.runtime.objects.kernel.base import unbox
-from core.runtime.objects.primitives import IbOptional
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.cell import IbCell
@@ -170,18 +169,12 @@ class ScopeImpl:
         当 ``declared_type`` 是 Optional 类型（且值尚未是 ``IbOptional``）时，
         把值包装进 ``IbOptional``；否则原样返回。这是 Optional 运行时值的
         单一绑定入口——所有变量定义/赋值/函数参数/LLMFuture 解析均经此包装。
+
+        统一委托 ``wrap_optional`` 权威函数（单一实现，杜绝表示分叉）。
         """
-        if declared_type is None or not isinstance(declared_type, IbSpec):
-            return value
-        if declared_type.kind != TypeKind.OPTIONAL.value:
-            return value
-        if isinstance(value, IbOptional):
-            return value
-        optional_class = self._registry.get_class(declared_type.name) or self._registry.get_class("Optional")
-        if optional_class is None:
-            return value
-        is_some = not isinstance(value, IbNone)
-        return IbOptional(optional_class, value, is_some)
+        from core.runtime.objects.primitives.optional import wrap_optional
+
+        return wrap_optional(value, declared_type, self._registry)
 
     def define(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_intrinsic: bool = False) -> None:
         """定义符号。如果 force=True，允许覆盖已存在的常量符号（用于内核特权恢复路径）"""

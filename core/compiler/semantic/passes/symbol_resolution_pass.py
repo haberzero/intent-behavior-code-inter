@@ -124,16 +124,21 @@ class SymbolResolver(ScopedVisitor):
             self.visit(stmt)
 
     def _register_params(self, args: list, scope: SymbolTable):
-        """将函数参数注册为局部符号，并绑定 IbArg 节点到 node_to_symbol。"""
+        """将函数参数注册为局部符号，并绑定 IbArg 节点到 node_to_symbol。
 
+        参数符号 spec 从类型标注解析（非恒 any）——运行时符号池（序列化）
+        据此承载声明类型，使参数绑定路径可做 Optional 值包装（统一 Optional
+        值模型：函数参数 Optional[T] 空值包装为 IbOptional，而非裸 None）。
+        """
         for arg_node in args:
             arg_name = self._extract_arg_name(arg_node)
             if arg_name:
+                param_spec = self._resolve_param_annotation(arg_node)
                 param_sym = VariableSymbol(
                     name=arg_name,
                     kind=SymbolKind.VARIABLE,
                     def_node=arg_node,
-                    spec=self.registry.resolve("any"),
+                    spec=param_spec,
                 )
                 scope.define(param_sym)
 
@@ -141,6 +146,13 @@ class SymbolResolver(ScopedVisitor):
                 # All args are now IbArg (no IbTypeAnnotatedExpr wrapper)
                 if isinstance(arg_node, ast.IbArg):
                     self.bind_symbol(arg_node, param_sym)
+
+    def _resolve_param_annotation(self, arg_node: ast.IbASTNode) -> Optional[IbSpec]:
+        """从参数节点类型标注解析 spec（含泛型/模块限定；未标注回落 any）。"""
+        annotation = getattr(arg_node, "annotation", None)
+        if annotation is None:
+            return self.registry.resolve("any")
+        return self._resolve_annotation_spec(annotation)
 
     @staticmethod
     def _visit_param_defaults(visitor, args: list):
@@ -324,11 +336,51 @@ class SymbolResolver(ScopedVisitor):
             self.visit(stmt)
 
     def _resolve_annotation_spec(self, annotation: Optional[ast.IbASTNode]) -> Optional[IbSpec]:
-        """解析循环变量声明的类型标注（简单名类型）；复杂标注由类型检查 pass 精确处理。"""
+        """解析类型标注（简单名 / 泛型 / 模块限定）。
+
+        与 symbol_collection_pass ``_resolve_annotation`` 同构；未标注/无法解析
+        回落 any。参数符号 spec 由此获得声明类型（运行时符号池承载），使参数
+        绑定路径的 Optional 值包装可行。
+        """
         if annotation is None:
             return self.registry.resolve("any")
         if isinstance(annotation, ast.IbName):
             return self.registry.resolve(annotation.id) or self.registry.resolve("any")
+        if isinstance(annotation, ast.IbAttribute):
+            from ._type_checking_base import module_qualified_annotation
+
+            module_path, type_name = module_qualified_annotation(annotation)
+            if type_name is None:
+                return self.registry.resolve("any")
+            return (
+                self.registry.resolve(type_name, module=module_path)
+                or self.registry.resolve("any")
+            )
+        if isinstance(annotation, ast.IbSubscript):
+            if isinstance(annotation.value, (ast.IbName, ast.IbAttribute)):
+                if isinstance(annotation.value, ast.IbName):
+                    base = self.registry.resolve(annotation.value.id)
+                else:
+                    from ._type_checking_base import module_qualified_annotation
+
+                    module_path, type_name = module_qualified_annotation(annotation.value)
+                    base = self.registry.resolve(type_name, module=module_path) if type_name else None
+                if base is None:
+                    return self.registry.resolve("any")
+                if isinstance(annotation.slice, ast.IbTuple):
+                    arg_specs = [
+                        self._resolve_annotation_spec(elt) for elt in annotation.slice.elts
+                    ]
+                else:
+                    arg_specs = [self._resolve_annotation_spec(annotation.slice)]
+                arg_specs = [s for s in arg_specs if s is not None]
+                if not arg_specs:
+                    return base
+                return (
+                    self.registry.resolve_specialization(base, arg_specs)
+                    or base
+                )
+            return self.registry.resolve("any")
         return self.registry.resolve("any")
 
     def _register_loop_variable(self, name: str, target_node: ast.IbASTNode, def_node: ast.IbASTNode,

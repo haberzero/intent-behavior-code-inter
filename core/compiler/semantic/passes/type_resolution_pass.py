@@ -16,6 +16,7 @@ from core.kernel.spec import IbSpec
 from ..result import PassResult, PassOutput, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
+from ._type_checking_base import module_qualified_annotation, module_qualified_display
 
 
 class TypeResolutionPass(BasePass):
@@ -113,8 +114,12 @@ class TypeAnnotationResolver:
             # 泛型类型: list[int], dict[str, int], Optional[str]
             # 经 resolve_specialization 保真实参（与 symbol_collection_pass 一致），
             # 不再擦除为基类型（消除 erasure/preserve 双口径）。
-            if isinstance(annotation.value, ast.IbName):
-                base_spec = self.registry.resolve(annotation.value.id)
+            if isinstance(annotation.value, (ast.IbName, ast.IbAttribute)):
+                if isinstance(annotation.value, ast.IbName):
+                    base_spec = self.registry.resolve(annotation.value.id)
+                else:
+                    module_path, type_name = module_qualified_annotation(annotation.value)
+                    base_spec = self.registry.resolve(type_name, module=module_path) if type_name else None
                 if base_spec:
                     if isinstance(annotation.slice, ast.IbTuple):
                         arg_specs = [
@@ -129,6 +134,21 @@ class TypeAnnotationResolver:
                             return specialized
                     return base_spec
             return self._any_desc
+
+        elif isinstance(annotation, ast.IbAttribute):
+            # 模块限定类型标注：geo.Counter / subpkg.util.Counter。
+            # 与 _resolve_type 同构解析目标 spec（跨模块用户类）。
+            module_path, type_name = module_qualified_annotation(annotation)
+            if type_name is None:
+                return self._any_desc
+            spec = self.registry.resolve(type_name, module=module_path)
+            if not spec:
+                self.error(
+                    f"Unknown type '{module_qualified_display(annotation)}'",
+                    annotation, code=SEM_INVALID_SCOPE
+                )
+                return self._any_desc
+            return spec
 
         elif isinstance(annotation, ast.IbCallableType):
             # fn[(param_types) -> return_type] 类型标注

@@ -258,6 +258,28 @@ class IbClass(IbObject):
         self._invoke_init(instance, args)
         return instance
 
+    def _wrap_field_value(self, name: str, value: Any) -> Any:
+        """按字段声明类型包装 Optional 值（统一 Optional 值模型）。
+
+        字段声明为 ``Optional[T]`` 时，写入前按字段类型包装空值
+        （``IbOptional(is_some=False)``），与局部变量/参数/返回路径一致。
+        字段类型经 ``member_types`` 缓存（spec.members 水化时填充）——
+        沿继承链向上查找（子类字段 / 父类字段均命中），避免继承字段漏包装。
+        无缓存 / 非 Optional 原样返回。
+        """
+        field_spec = None
+        cls = self
+        while cls is not None:
+            field_spec = getattr(cls, "member_types", {}).get(name)
+            if field_spec is not None:
+                break
+            cls = cls.parent
+        if field_spec is None:
+            return value
+        from core.runtime.objects.primitives.optional import wrap_optional
+
+        return wrap_optional(value, field_spec, self.registry)
+
     def _eval_field_defaults(
         self, instance: 'IbObject', all_default_fields: dict, context: Any
     ) -> None:
@@ -279,9 +301,9 @@ class IbClass(IbObject):
                     from core.runtime.objects.deep_clone import try_deep_clone
                     cloned = try_deep_clone(val_info.static_val)
                     if cloned is not None:
-                        instance.fields[name] = cloned
+                        instance.fields[name] = self._wrap_field_value(name, cloned)
                     else:
-                        instance.fields[name] = val_info.static_val
+                        instance.fields[name] = self._wrap_field_value(name, val_info.static_val)
                 elif val_info.val_uid and context:
                     # 动态求值并尝试更新描述符以供后续实例复用 (JIT caching)
                     try:
@@ -294,7 +316,7 @@ class IbClass(IbObject):
                             evaluated = vm.run(val_info.val_uid)
                         finally:
                             context.current_module_name = old_module
-                        instance.fields[name] = evaluated
+                        instance.fields[name] = self._wrap_field_value(name, evaluated)
                         val_info.static_val = evaluated
                     except Exception as e:
                         # 实例化时字段默认值求值失败是真实错误——fail-fast，
@@ -303,10 +325,12 @@ class IbClass(IbObject):
                             f"Field initializer for '{name}' failed: {e}",
                         ) from e
                 else:
-                    instance.fields[name] = self.registry.get_none()
+                    instance.fields[name] = self._wrap_field_value(
+                        name, self.registry.get_none()
+                    )
             else:
                 # [Active Defense] 仅支持 IbClassField，确保字段初始化的一致性
-                instance.fields[name] = val_info
+                instance.fields[name] = self._wrap_field_value(name, val_info)
 
     def _invoke_init(self, instance: 'IbObject', args: List['IbObject']) -> None:
         """调用用户 ``__init__``（宿主侧 ``init_method.call``）。
@@ -369,9 +393,9 @@ class IbClass(IbObject):
                     from core.runtime.objects.deep_clone import try_deep_clone
                     cloned = try_deep_clone(val_info.static_val)
                     if cloned is not None:
-                        instance.fields[name] = cloned
+                        instance.fields[name] = self._wrap_field_value(name, cloned)
                     else:
-                        instance.fields[name] = val_info.static_val
+                        instance.fields[name] = self._wrap_field_value(name, val_info.static_val)
                 elif val_info.val_uid and context:
                     old_module = context.current_module_name
                     context.current_module_name = val_info.module_name
@@ -384,12 +408,14 @@ class IbClass(IbObject):
                         raise InterpreterError(
                             f"Field initializer for '{name}' failed: {e}",
                         ) from e
-                    instance.fields[name] = evaluated
+                    instance.fields[name] = self._wrap_field_value(name, evaluated)
                     val_info.static_val = evaluated
                 else:
-                    instance.fields[name] = self.registry.get_none()
+                    instance.fields[name] = self._wrap_field_value(
+                        name, self.registry.get_none()
+                    )
             else:
-                instance.fields[name] = val_info
+                instance.fields[name] = self._wrap_field_value(name, val_info)
 
     def _invoke_init_cps(self, instance: 'IbObject', args: List['IbObject']) -> Any:
         """CPS 版 :meth:`_invoke_init`：用户 ``__init__`` 经 ``UserFunctionCall`` 帧内驱动。"""

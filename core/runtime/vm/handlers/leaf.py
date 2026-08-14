@@ -24,7 +24,8 @@ from core.runtime.exceptions import (
 )
 from core.kernel.issue import InterpreterError
 from core.kernel.spec.type_ref import TypeRef as _TypeRef
-from core.runtime.objects.primitives import IbNone
+from core.runtime.objects.primitives import IbNone, IbList, IbTuple, IbDict
+from core.runtime.objects.primitives.optional import is_none_value
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.shared.waitable import Waitable, CPSDrivable
 from core.runtime.shared.user_call import UserFunctionCall
@@ -267,14 +268,14 @@ def vm_handle_IbCompare(executor, node_uid: str, node_data: Mapping[str, Any]):
             cmp_res = executor.registry.box(not bool(native))
         elif op == "is":
             if isinstance(right, IbNone):
-                cmp_res = executor.registry.box(isinstance(current_left, IbNone))
+                cmp_res = executor.registry.box(is_none_value(current_left))
             elif isinstance(right, IbLLMUncertain):
                 cmp_res = executor.registry.box(isinstance(current_left, IbLLMUncertain))
             else:
                 cmp_res = executor.registry.box(current_left is right)
         elif op == "is not":
             if isinstance(right, IbNone):
-                cmp_res = executor.registry.box(not isinstance(current_left, IbNone))
+                cmp_res = executor.registry.box(not is_none_value(current_left))
             elif isinstance(right, IbLLMUncertain):
                 cmp_res = executor.registry.box(not isinstance(current_left, IbLLMUncertain))
             else:
@@ -525,10 +526,62 @@ def _bind_container_specialization(executor, node_uid: str, value, container_kin
             return value
         value.ib_class = specialized_cls
         value.type_ref = _TypeRef.from_spec(node_spec)
+        _wrap_container_elements(value, node_spec, executor.registry)
     except Exception:
         # 特化水化失败保守回退（保留基类值，不破坏程序执行）。
         return value
     return value
+
+
+def _wrap_container_elements(value, node_spec, registry):
+    """按容器元素类型包装元素（统一 Optional 值模型）。
+
+    ``list[Optional[int]] li = [None]`` / ``dict[str, Optional[int]]`` /
+    ``tuple[Optional[int], str]`` 等：元素声明为 Optional 时，写入前把每个
+    元素按元素类型包装（空值 → ``IbOptional(is_some=False)``），使容器元素
+    与局部变量/参数/返回路径的空值表示一致（``li[0] is None`` / ``is_none()``
+    可用）。非 Optional 元素类型原样保留。``_bind_container_specialization``
+    已把容器绑定特化类（spec 携带元素类型），据此包装。
+    """
+    from core.kernel.spec.base import TypeKind
+    from core.runtime.objects.primitives.optional import wrap_optional
+
+    if value is None or node_spec is None:
+        return
+    kind = getattr(node_spec, "kind", None)
+    spec_reg = registry.get_metadata_registry() if registry else None
+
+    def _resolve(ref):
+        if spec_reg is None or ref is None:
+            return None
+        return spec_reg.resolve_typeref(ref)
+
+    try:
+        if kind == TypeKind.LIST.value and isinstance(value, IbList):
+            elem_spec = _resolve(getattr(node_spec, "element_type", None))
+            if elem_spec is not None:
+                for i, elt in enumerate(value.elements):
+                    value.elements[i] = wrap_optional(elt, elem_spec, registry)
+        elif kind == TypeKind.TUPLE.value and isinstance(value, IbTuple):
+            positional = getattr(node_spec, "positional_element_types", None) or []
+            if positional:
+                for i, (elt, ref) in enumerate(zip(value.elements, positional)):
+                    elem_spec = _resolve(ref)
+                    if elem_spec is not None:
+                        value.elements[i] = wrap_optional(elt, elem_spec, registry)
+            else:
+                elem_spec = _resolve(getattr(node_spec, "element_type", None))
+                if elem_spec is not None:
+                    for i, elt in enumerate(value.elements):
+                        value.elements[i] = wrap_optional(elt, elem_spec, registry)
+        elif kind == TypeKind.DICT.value and isinstance(value, IbDict):
+            val_spec = _resolve(getattr(node_spec, "value_type", None))
+            if val_spec is not None:
+                for k in value.fields:
+                    value.fields[k] = wrap_optional(value.fields[k], val_spec, registry)
+    except Exception:
+        # 元素包装失败保守回退（保留原值，不破坏程序执行）。
+        return
 
 
 def _slice_type_objs_for(executor, node_spec):

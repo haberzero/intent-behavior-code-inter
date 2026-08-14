@@ -694,6 +694,26 @@ class Interpreter:
                                 module_name=module_name
                             )
 
+        # 填充类字段声明类型缓存（member_types）：从 spec.members 的字段
+        # MemberSpec.type_ref 解析为 IbSpec。统一 Optional 值模型依赖字段声明
+        # 类型在运行时可查（字段默认值求值/字段赋值的 Optional 值包装）。
+        # spec.members 由 artifact 水化（type_ref 结构化），此处一次性解析缓存。
+        spec_reg = self.registry.get_metadata_registry()
+        for name, ib_cls in self.registry.get_all_classes().items():
+            if not ib_cls or getattr(ib_cls.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
+                continue
+            if spec_reg is None:
+                continue
+            for m_name, m in (getattr(ib_cls.spec, "members", None) or {}).items():
+                if getattr(m, "kind", None) != "field":
+                    continue
+                type_ref = getattr(m, "type_ref", None)
+                if type_ref is None:
+                    continue
+                field_spec = spec_reg.resolve_typeref(type_ref)
+                if field_spec is not None:
+                    ib_cls.member_types[m_name] = field_spec
+
         # 第二 pass：无显式 __init__ 的类自动生成位置参数构造器（chain-aware）——
         # 构造器参数 = 继承链上全部有效无默认值字段（父类优先、子类同名覆盖）。
         # 与 instantiate 的字段收集同构（消除"auto-init 只收自身 body"的机制分裂）。
@@ -756,7 +776,7 @@ class Interpreter:
                     f"TypeError: {self_obj.ib_class.name}() expected {len(field_names)} argument(s), but got {len(args)}"
                 )
             for fname, val in zip(field_names, args):
-                self_obj.fields[fname] = val
+                self_obj.fields[fname] = self_obj.ib_class._wrap_field_value(fname, val)
             return self_obj.ib_class.registry.get_none()
         return _auto_init
 

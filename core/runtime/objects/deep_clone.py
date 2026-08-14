@@ -94,6 +94,19 @@ def try_deep_clone(
             new_fields[k] = cloned_v
         return placeholder_dict
 
+    # Optional：专分支克隆，保留 ``_is_some`` 槽（通用 IbValue 分支不复制
+    # slot，克隆产物 ``_is_some`` 未初始化——统一 Optional 值模型下，Optional
+    # 参与 llmexcept 快照/深克隆时须保真 is_some/is_none 语义）。payload 递归
+    # 深克隆（空值 payload 为 None 直接复用）。
+    if isinstance(val, IbValue) and _value_base_name(val) == "Optional":
+        payload = val.payload
+        cloned_payload = try_deep_clone(payload, memo) if payload is not None else None
+        from core.runtime.objects.primitives.optional import IbOptional
+
+        new_opt = IbOptional(val.ib_class, cloned_payload, val._is_some)
+        memo[val_id] = new_opt
+        return new_opt
+
     # ``IbIntentContext`` Python 值（``intent_context`` 实例的 ``_ctx`` 字段）：
     # 调用 ``fork()`` 得到值快照。使 ``intent_context`` 作为类字段
     # 参与 llmexcept 快照/恢复时获得正确的"独立副本"语义--retry body 内对

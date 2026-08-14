@@ -4,6 +4,51 @@ from ..kernel.base import unbox
 from core.kernel.issue import InterpreterError
 from ..ib_type_mapping import register_ib_type
 
+
+def _element_spec_for(container: 'IbValue') -> Any:
+    """解析容器值声明的元素类型 spec（统一 Optional 值模型用）。
+
+    容器值绑定特化类（``list[Optional[int]]``）时，``ib_class.spec`` 携带
+    元素类型 TypeRef（list/tuple → ``element_type``；dict → ``value_type``）；
+    经 metadata registry 解析为 IbSpec。裸容器（``list``）spec 无元素类型
+    → None。
+
+    按 kind 分派：DICT 的 ``element_type`` 恒为 ``TypeRef("any")``（非 None
+    非 Optional，遮蔽 ``value_type``），故 dict 必须优先 ``value_type``；
+    list/tuple 读 ``element_type``。
+    """
+    from core.kernel.spec.base import TypeKind
+
+    spec = getattr(container.ib_class, "spec", None)
+    if spec is None:
+        return None
+    spec_reg = getattr(container.ib_class.registry, "get_metadata_registry", lambda: None)()
+    if spec_reg is None:
+        return None
+    if getattr(spec, "kind", None) == TypeKind.DICT.value:
+        ref = getattr(spec, "value_type", None)
+    else:
+        ref = getattr(spec, "element_type", None)
+    if ref is None:
+        return None
+    return spec_reg.resolve_typeref(ref)
+
+
+def _wrap_element_value(container: 'IbValue', value: Any) -> Any:
+    """按容器元素声明类型包装 Optional 值（统一 Optional 值模型）。
+
+    ``list[Optional[int]]`` 等容器写入元素（``__setitem__``/``append``/
+    ``insert``/``update``）时，元素声明为 Optional 则按元素类型包装
+    （空值 → ``IbOptional(is_some=False)``），与容器字面量/局部变量路径一致。
+    非 Optional 元素类型原样返回。
+    """
+    elem_spec = _element_spec_for(container)
+    if elem_spec is None:
+        return value
+    from core.runtime.objects.primitives.optional import wrap_optional
+
+    return wrap_optional(value, elem_spec, container.ib_class.registry)
+
 @register_ib_type("list")
 class IbList(IbValue):
     """
@@ -52,7 +97,7 @@ class IbList(IbValue):
         return self.ib_class.registry.get_none()
 
     def append(self, item: IbObject) -> IbObject:
-        self.elements.append(item)
+        self.elements.append(_wrap_element_value(self, item))
         return self.ib_class.registry.get_none()
 
     def len(self) -> IbObject:
@@ -83,7 +128,7 @@ class IbList(IbValue):
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
         idx = unbox(key)
-        self.elements[idx] = val
+        self.elements[idx] = _wrap_element_value(self, val)
 
     def sort(self) -> IbObject:
         self.elements.sort(key=lambda x: x.to_native())
@@ -97,7 +142,7 @@ class IbList(IbValue):
     def insert(self, index: Any, item: IbObject) -> IbObject:
         """在指定位置插入元素。对齐 Python list.insert(index, item)"""
         idx = index.to_native() if isinstance(index, IbObject) else int(index)
-        self.elements.insert(idx, item)
+        self.elements.insert(idx, _wrap_element_value(self, item))
         return self.ib_class.registry.get_none()
 
     def remove(self, item: Any) -> IbObject:
@@ -140,14 +185,22 @@ class IbList(IbValue):
         # 沿用自身 ib_class（特化类 list[int] 保留特化身份），使
         # ``list[int] a += [2]`` 结果仍为 list[int]（缺陷二根治：复合赋值
         # 值层身份保真；与切片 __getitem__ slice 分支同构）。
-        return IbList(list(self.elements) + list(other.elements), self.ib_class)
+        # 元素统一按自身元素类型包装（list[Optional[int]] 拼接含 None 的
+        # 列表时，产物元素保持 IbOptional 表示——统一 Optional 值模型）。
+        return IbList(
+            [_wrap_element_value(self, e) for e in list(self.elements) + list(other.elements)],
+            self.ib_class,
+        )
 
     def __mul__(self, other: IbObject) -> Any:
         """列表重复: list * int"""
         n = unbox(other)
         if not isinstance(n, int):
             raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
-        return IbList(list(self.elements) * n, self.ib_class)
+        return IbList(
+            [_wrap_element_value(self, e) for e in list(self.elements) * n],
+            self.ib_class,
+        )
 
 @register_ib_type("tuple")
 class IbTuple(IbValue):
@@ -265,12 +318,16 @@ class IbDict(IbValue):
     def update(self, other: Any) -> IbObject:
         """将另一个字典合并到当前字典。对齐 Python dict.update(other)"""
         if isinstance(other, IbDict):
-            self.fields.update(other.fields)
+            self.fields.update({
+                k: _wrap_element_value(self, v) for k, v in other.fields.items()
+            })
         elif isinstance(other, IbObject):
             src = other.to_native()
             if isinstance(src, dict):
                 for k, v in src.items():
-                    self.fields[k] = self.ib_class.registry.box(v)
+                    self.fields[k] = _wrap_element_value(
+                        self, self.ib_class.registry.box(v)
+                    )
         return self.ib_class.registry.get_none()
 
     def len(self) -> IbObject:
@@ -294,7 +351,7 @@ class IbDict(IbValue):
 
     def __setitem__(self, key: Any, val: IbObject) -> None:
         k = unbox(key)
-        self.fields[k] = val
+        self.fields[k] = _wrap_element_value(self, val)
 
     def get(self, key: Any, default: Optional[IbObject] = None) -> IbObject:
         k = unbox(key)

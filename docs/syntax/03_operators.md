@@ -71,7 +71,7 @@ bool b1 = x is None          # x 是否为真正的 None 值
 bool b2 = x is not None      # x 是否不为真正的 None 值
 ```
 
-与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个对象实例。对于 `None` 字面量，`is` 使用类型检测而非实例身份——仅对真正的 `None` 值（`any` / 无类型变量）为 `True`。`Optional[T]` 的空值由 `Optional` 包装对象持有，`a is None` 返回 `False`；判空请用 `a == None`（返回 `True`）。
+与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个运行时对象实例。对于 `None` 字面量，`is` 使用 None 语义检测而非实例身份——裸 `None` 值（`any` / 无类型变量）与**空 `Optional[T]`**（`is_some == False` 的包装对象）均判为 `True`。`Optional[T]` 的空值统一由 `Optional` 包装对象持有，`a is None` / `a == None` / `a.is_none()` 三者等价（统一 Optional 值模型：局部变量/参数/返回/类字段/容器元素均一致）。
 ---
 
 ## 深入指引

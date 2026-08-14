@@ -273,7 +273,11 @@ class VTableParsingStrategy(ParsingStrategy):
                 auto_instance = ib_class.instantiate([], context=execution_context)
                 if ib_class.default_fields:
                     first_field = next(iter(ib_class.default_fields))
-                    auto_instance.fields[first_field] = parsed_val
+                    # 统一 Optional 值模型：首字段声明为 Optional 时经字段
+                    # 包装权威写入（避免 LLM 自动装箱路径裸存 None）。
+                    auto_instance.fields[first_field] = (
+                        ib_class._wrap_field_value(first_field, parsed_val)
+                    )
                 return auto_instance
             except Exception as e2:
                 # 两策略均失败，返回原始值（下游类型校验承接）

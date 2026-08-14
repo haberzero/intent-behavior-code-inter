@@ -27,6 +27,33 @@ from core.kernel.spec.type_ref import TypeRef
 from ..result import Diagnostic, DiagnosticLevel
 
 
+def module_qualified_annotation(node: ast.IbASTNode):
+    """从点号限定类型注解（IbAttribute 链）提取 (module_path, type_name)。
+
+    ``geo.Counter`` → ("geo", "Counter")；``subpkg.util.Counter`` →
+    ("subpkg.util", "Counter")。裸名（IbName）返回 (None, name)；
+    其它节点返回 (None, None)。
+    """
+    parts: list = []
+    cur = node
+    while isinstance(cur, ast.IbAttribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if not isinstance(cur, ast.IbName):
+        return None, None
+    parts.append(cur.id)
+    parts.reverse()
+    return ".".join(parts[:-1]) or None, parts[-1]
+
+
+def module_qualified_display(node: ast.IbASTNode) -> str:
+    """点号限定类型注解的可读全名（``geo.Counter``）；非限定返回单名。"""
+    module, name = module_qualified_annotation(node)
+    if name is None:
+        return ""
+    return f"{module}.{name}" if module else name
+
+
 class TypeCheckBase:
     """Infrastructure mixin for ``TypeCheckingVisitor``.
 
@@ -302,6 +329,30 @@ class TypeCheckBase:
                 )
                 return self._any_desc
             return resolved
+        elif isinstance(annotation, ast.IbAttribute):
+            # 模块限定类型注解：geo.Counter / subpkg.util.Counter。
+            # 解析目标 spec（跨模块用户类），使行为表达式 node_to_type 等
+            # 绑定到带 module 的 spec（CROSSMOD-LLM-1 根治：此前退化 any）。
+            module_path, type_name = module_qualified_annotation(annotation)
+            if type_name is None:
+                return self._any_desc
+            resolved = self.registry.resolve(type_name, module=module_path)
+            if not resolved:
+                self.error(
+                    f"Unknown type '{module_qualified_display(annotation)}'",
+                    annotation, code=SEM_UNRESOLVED_TYPE,
+                )
+                return self._any_desc
+            # 泛型类裸用拦截（class geo.Box[T] 无类型参数直接作类型注解 → SEM）。
+            # 特化 `geo.Box[int]` 走 IbSubscript 分支，不在此处。
+            if resolved.kind == TypeKind.CLASS.value and getattr(resolved, "type_params", None):
+                self.error(
+                    f"Generic class '{module_qualified_display(annotation)}' requires "
+                    f"type arguments (e.g. {module_qualified_display(annotation)}[int]).",
+                    annotation, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
+                )
+                return self._any_desc
+            return resolved
         elif isinstance(annotation, ast.IbCallableType):
             # callable signature constraint fn[(param_types) -> return_type]
             param_specs = [self._resolve_type(pt) for pt in annotation.param_types]
@@ -320,8 +371,14 @@ class TypeCheckBase:
             )
         elif isinstance(annotation, ast.IbSubscript):
             # 泛型类型：list[int], dict[str, int], tuple[int, str], Optional[int] 等
-            if isinstance(annotation.value, ast.IbName):
-                base_type = self.registry.resolve(annotation.value.id)
+            if isinstance(annotation.value, (ast.IbName, ast.IbAttribute)):
+                if isinstance(annotation.value, ast.IbName):
+                    base_type = self.registry.resolve(annotation.value.id)
+                    base_display = annotation.value.id
+                else:
+                    module_path, type_name = module_qualified_annotation(annotation.value)
+                    base_type = self.registry.resolve(type_name, module=module_path) if type_name else None
+                    base_display = module_qualified_display(annotation.value)
                 if base_type:
                     # 泛型实参必须为**类型**（IbName/IbSubscript/IbCallableType）。
                     # 字面量/None 等值（Box[42]）是非法特化——fail-fast 而非
@@ -330,7 +387,7 @@ class TypeCheckBase:
                         self.error(
                             f"Generic type argument must be a type, not a value "
                             f"('{annotation.slice.value}'). Use e.g. "
-                            f"{annotation.value.id}[int].",
+                            f"{base_display}[int].",
                             annotation, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
                         )
                         return self._any_desc

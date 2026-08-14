@@ -47,6 +47,7 @@ from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from core.runtime.objects.kernel import IbObject, IbValue, IbNone
 from core.runtime.objects.kernel.base import unbox
+from core.runtime.objects.kernel.ib_class import IbClass
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.observability.diagnostics import kernel_diagnostic
 from core.base.diagnostics.codes import (
@@ -172,6 +173,13 @@ class LLMExceptFrame:
 
         for name, symbol in scope.get_all_symbols().items():
             val = symbol.value
+
+            # 跳过类型/类符号（值为 IbClass 的类对象）——类对象是类型元数据，
+            # 非受保护的可变实例状态；且若类声明了 __snapshot__/__restore__
+            # 协议方法，快照会把类对象误当协议变量捕获（__restore__ 以类为
+            # receiver 调用，参数绑定类型检查失败暴露）。只快照真实实例/值。
+            if isinstance(val, IbClass):
+                continue
 
             # 优先：用户类定义了 __snapshot__ / __restore__ 协议方法
             # isinstance（非 type() is）确保 IbObject 子类（如未来的 IbAudio/IbImage）也能匹配；

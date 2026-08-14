@@ -19,6 +19,7 @@ from core.kernel.spec.member import MethodMemberSpec, MemberSpec
 from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
+from ._type_checking_base import module_qualified_annotation
 
 
 class SymbolExtractor:
@@ -423,9 +424,19 @@ class SymbolCollector:
             if tp is not None:
                 return tp
             return self.registry.resolve(annotation.id)
+        if isinstance(annotation, ast.IbAttribute):
+            # 模块限定类型注解：geo.Counter / subpkg.util.Counter
+            module_path, type_name = module_qualified_annotation(annotation)
+            if type_name is None:
+                return None
+            return self.registry.resolve(type_name, module=module_path)
         if isinstance(annotation, ast.IbSubscript):
-            if isinstance(annotation.value, ast.IbName):
-                base = self.registry.resolve(annotation.value.id)
+            if isinstance(annotation.value, (ast.IbName, ast.IbAttribute)):
+                if isinstance(annotation.value, ast.IbName):
+                    base = self.registry.resolve(annotation.value.id)
+                else:
+                    module_path, type_name = module_qualified_annotation(annotation.value)
+                    base = self.registry.resolve(type_name, module=module_path) if type_name else None
                 if base is None:
                     return None
                 if isinstance(annotation.slice, ast.IbTuple):
@@ -459,6 +470,13 @@ class SymbolCollector:
         """
         if isinstance(annotation, ast.IbName):
             return TypeRef.of(annotation.id)
+        if isinstance(annotation, ast.IbAttribute):
+            # 模块限定类型注解：geo.Counter → TypeRef("Counter", module="geo")。
+            # 与 _resolve_annotation 同构，结构化保 module 限定。
+            module_path, type_name = module_qualified_annotation(annotation)
+            if type_name is None:
+                return TypeRef.of("any")
+            return TypeRef.of(type_name, module=module_path)
         if isinstance(annotation, ast.IbCallableType):
             params = tuple(
                 self._annotation_to_typeref(pt) for pt in annotation.param_types
@@ -469,12 +487,18 @@ class SymbolCollector:
                 "fn",
                 (TypeRef("__args__", params), ret_ref),
             )
-        if isinstance(annotation, ast.IbSubscript) and isinstance(annotation.value, ast.IbName):
+        if isinstance(annotation, ast.IbSubscript) and isinstance(annotation.value, (ast.IbName, ast.IbAttribute)):
+            if isinstance(annotation.value, ast.IbName):
+                args = [self._annotation_to_typeref(elt) for elt in annotation.slice.elts] if isinstance(annotation.slice, ast.IbTuple) else [self._annotation_to_typeref(annotation.slice)]
+                return TypeRef(annotation.value.id, tuple(args))
+            module_path, type_name = module_qualified_annotation(annotation.value)
+            if type_name is None:
+                return TypeRef.of("any")
             if isinstance(annotation.slice, ast.IbTuple):
                 args = [self._annotation_to_typeref(elt) for elt in annotation.slice.elts]
             else:
                 args = [self._annotation_to_typeref(annotation.slice)]
-            return TypeRef(annotation.value.id, tuple(args))
+            return TypeRef(type_name, tuple(args), module=module_path)
         return TypeRef.of("any")
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):

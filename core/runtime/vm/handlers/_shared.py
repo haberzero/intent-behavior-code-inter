@@ -221,7 +221,12 @@ def _vm_call_fn_callable(executor, func, args):
             arg_name = (actual_arg_data or {}).get("arg")
             if arg_name and i < len(args):
                 sym_uid = executor.ec.get_side_table("node_to_symbol", actual_arg_uid)
-                rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+                param_declared = (
+                    executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+                )
+                rt_context.define_variable(
+                    arg_name, args[i], uid=sym_uid, declared_type=param_declared
+                )
 
         # CPS 执行函数体
         target_uid = func.body_uid if func.body_uid else func.node_uid
@@ -338,7 +343,12 @@ def _vm_call_user_function(executor, func, receiver, args):
             if i < len(args):
                 arg_value = args[i]
                 sym_uid = executor.ec.get_side_table("node_to_symbol", actual_arg_uid)
-                rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                param_declared = (
+                    executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+                )
+                rt_context.define_variable(
+                    arg_name, arg_value, uid=sym_uid, declared_type=param_declared
+                )
                 if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
                     rt_context.use_intent_context(arg_value)
 
@@ -490,7 +500,12 @@ def _vm_invoke_llm_function(executor, func, receiver, args):
             if i < len(args):
                 arg_value = args[i]
                 sym_uid = func.context.get_side_table("node_to_symbol", actual_arg_uid)
-                rt_context.define_variable(arg_name, arg_value, uid=sym_uid)
+                param_declared = (
+                    func.context.resolve_type_from_symbol(sym_uid) if sym_uid else None
+                )
+                rt_context.define_variable(
+                    arg_name, arg_value, uid=sym_uid, declared_type=param_declared
+                )
                 if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
                     rt_context.use_intent_context(arg_value)
 

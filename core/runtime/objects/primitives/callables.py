@@ -177,7 +177,10 @@ def bind_behavior_call_args(behavior: "IbBehavior", args: List[Any], ec: Any, rt
         arg_name = (actual_arg_data or {}).get("arg")
         if arg_name and i < len(args):
             sym_uid = ec.get_side_table("node_to_symbol", actual_arg_uid)
-            rt_context.define_variable(arg_name, args[i], uid=sym_uid)
+            param_declared = (
+                ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+            )
+            rt_context.define_variable(arg_name, args[i], uid=sym_uid, declared_type=param_declared)
 
 
 @register_ib_type("behavior")

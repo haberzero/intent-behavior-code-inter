@@ -1,5 +1,9 @@
 class Point:
     int x
+    func __init__(self, int x) -> auto:
+        self.x = x
+    func __from_prompt__(str raw) -> tuple:
+        return (True, Point(42))
     func __outputhint_prompt__(self) -> str:
         return "geo-hint-format"
     func hint(self) -> str:

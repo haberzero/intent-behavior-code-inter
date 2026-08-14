@@ -4,6 +4,18 @@ from ..ib_type_mapping import register_ib_type
 from .base import IbObject, IbValue
 
 
+def is_none_value(value: Any) -> bool:
+    """值是否为 None 语义（统一判空权威）。
+
+    ``None == x`` / ``None != x`` 的相等性据此判定：裸 ``IbNone`` 与空
+    ``IbOptional``（``is_some=False``）均为 None。与 ``x == None`` 对称
+    （消除 ``None == 空 Optional`` 与 ``空 Optional == None`` 的不对称）。
+    """
+    from core.runtime.objects.primitives.optional import is_none_value as _impl
+
+    return _impl(value)
+
+
 class IbNone(IbValue):
     """
     IBC-Inter 的空对象 (None)。
@@ -15,10 +27,10 @@ class IbNone(IbValue):
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         if message == '__eq__':
             right = args[0] if args else None
-            return self.ib_class.registry.box(isinstance(right, IbNone))
+            return self.ib_class.registry.box(is_none_value(right))
         if message == '__ne__':
             right = args[0] if args else None
-            return self.ib_class.registry.box(not isinstance(right, IbNone))
+            return self.ib_class.registry.box(not is_none_value(right))
         return super().receive(message, args)
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
