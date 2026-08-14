@@ -7,6 +7,12 @@
 > ③ 幽灵诊断码根治 ④ set_mock_mode 对称开关，完整记录见 `_code_optional_unify.md`/
 > `_code_ghost_codes.md`/`_code_set_mock_mode.md` 与 WORKLOG；下一主线候选见交接要点与
 > PENDING_TASKS §〇）
+>
+> **🔴 下一 session 主任务（2026-08-14 用户指示）：重启真实批判性试用 + 文档内容
+> 全方位同步更新**。完整交接见 `tasks_docs/_HANDOFF_NEXT_TRIAL.md`——针对本 session
+> 四项修复面做对抗验证（新建 `trials/T07_fixes_critical_stress/`）+ 泛型剩余边界复测
+> + 真实 LLM 批判 + 试用后文档全方位同步（重点：KNOWN_LIMITS §10.2 跨模块类措辞
+> 在 CROSSMOD-LLM-1 修复后可能过时）。
 
 ---
 
@@ -421,6 +427,12 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   + 线程体取消/深递归保持。修 coordinator 陈旧 docstring；生产代码注释任务代号清除。
 
 ## 📋 交接要点（下一 session）
+
+- **🔴 下一 session 主任务（2026-08-14 用户指示）**：**重启真实批判性试用 + 文档内容
+  全方位同步更新**。完整交接 `tasks_docs/_HANDOFF_NEXT_TRIAL.md`。新建
+  `trials/T07_fixes_critical_stress/` 针对本 session 四项修复面做对抗验证 +
+  泛型剩余边界复测（`_HANDOFF_GENERIC_REMAINING.md`）+ 真实 LLM 批判；
+  试用后文档全方位同步（doc-governance，重点 KNOWN_LIMITS §10.2 跨模块类措辞重估）。
 
 - **✅ 已完成（2026-08-14，T05/T06 剩余代码缺陷四项全部修复）**：
   **CROSSMOD-LLM-1 跨模块类型注解解析（P1）**——`_resolve_type` 支持 IbAttribute

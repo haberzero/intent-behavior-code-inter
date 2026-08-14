@@ -123,15 +123,26 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > + git 历史 `80783c8..HEAD`。
 
 - **🔴 当前交接（2026-08-14 用户指示，下一 session 主任务）**：
-  **修复 T05/T06 剩余代码缺陷**（完整交接见 `tasks_docs/_HANDOFF_T05_ISSUES.md` §六，
-  每项含现状/代码实证/根因/修复方向/判别性回归）。
-  **① KERNEL_ISSUE-CROSSMOD-LLM-1（P1）**：跨模块用户类作行为表达式 LLM 输出目标
-  （`geo.Counter c = @~...~`）node_to_type 未传播 → `__call__ on None`；根因
-  `_resolve_type` 对 IbAttribute 点号限定注解未解析目标 spec。**② KI-2 Optional-None
-  `is None` 语义 + `is_none()` 缺失（P2）**：文档已修正为 `== None` 判空，实现待修。
-  **③ 8 个幽灵诊断码 + 快照篡改警告（P2）**：文档已标注未发射，实现发射/删减待决。
-  **④ `set_mock_mode()` 对称开关（P3）**。
-  试验据与复现用例：`trials/T05_critical_stress/` + `trials/T06_class_identity/`。
+  **重启真实批判性试用 + 文档内容全方位同步更新**（完整交接见
+  `tasks_docs/_HANDOFF_NEXT_TRIAL.md`）。本 session 已完成 T05/T06 剩余代码缺陷
+  四项修复（CROSSMOD-LLM-1 / KI-2 统一 Optional 值模型 / 幽灵诊断码 / set_mock_mode
+  对称开关，全量 2665 passed / 1 skipped 零回归）。下一 session：
+  **① 重启真实批判性试用（新建 `trials/T07_fixes_critical_stress/`）**——针对
+  本 session 四项修复面做对抗验证 + 泛型剩余边界复测 + 真实 LLM 批判；
+  **② 文档全方位同步**——试用暴露的行为与文档不一致处修正（doc-governance），
+  重点核对 KNOWN_LIMITS §10.2 跨模块类措辞（CROSSMOD-LLM-1 修复后可能过时）。
+  设计记录：`_code_optional_unify.md` / `_code_ghost_codes.md` / `_code_set_mock_mode.md`。
+
+- **✅ 已完成（2026-08-14，T05/T06 剩余代码缺陷四项修复，全量 2665 passed / 1 skipped 零回归）**：
+  **① CROSSMOD-LLM-1**（`_resolve_type` 支持 IbAttribute 点号限定注解，行为节点
+  node_to_type 绑定 module 限定 spec；D3-02/D2-05 转 PASS）。**② KI-2 统一 Optional
+  值模型**（`wrap_optional` 单一包装权威覆盖全值创建路径 + `is None` 双向语义 +
+  `is_none()` + `None==Opt` 对称 + deep_clone 保 _is_some + llmexcept 类符号跳过；
+  判别性回归 +20）。**③ 幽灵诊断码**（7 发射 + PAR_MULTIPLE_INTENTS 删减 +
+  RUNTIME_ERROR→RUN_GENERIC_ERROR + CAT-7 可发射性契约；判别性回归 +10）。
+  **④ set_mock_mode 对称开关**（enable=False 退出 + fail-fast；判别性回归 +3）。
+  独立复核（general agent）两轮全整改（tuple 元素/`is` 双向/进制尾字母/残缺科学计数）。
+  完整记录见 `_code_optional_unify.md` / `_code_ghost_codes.md` / `_code_set_mock_mode.md`。
 
 - **✅ 已完成（2026-08-14，统一类身份模型 S1-S4，独立复核放行后 cherry-pick unsafe-vibe-dev，全量 2614→2616 passed / 1 skipped）**：
   **同名类运行时类表宏观根治（`_code_class_identity_unify.md`）**。S1 run_string 稳定入口
@@ -546,14 +557,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.3 交接检查单
 
-- [ ] 读本节 §2.1（试用体系重构 + GEN-5/GEN-6 修复 + spec→TypeRef 收敛 + 测试套件重构 + **内置泛型类型身份双轨根治（缺陷一+缺陷二）已全部完成**；全量 2559 passed / 1 skipped）
-- [ ] 读 `NEXT_STEPS.md`（当前最紧要：供应商感知思考禁用机制 / CI-CD 重设计等主线候选）
-- [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；试用体系规范化行已标完成；内置泛型两缺陷行已标修复）
-- [ ] 读 `TRIAL_SYSTEM_REDESIGN.md`（试用体系重构执行状态：Phase A-D 全部完成）
-- [ ] 试用体系规范：`trials/_toolkit/CLASSIFICATION.md`（分类/编号）+ `CONTRACT_FORMAT.md`（用例即契约）+ `LLM_SERVICE.md`（本机真实 LLM 服务）+ `gen_register.py`（报告生成）+ `PHASE_D_AUTOMATION.md`（收敛流程硬规则）
-- [ ] GEN-FIX 方案与实施：`tasks_docs/GEN_FIX_ARCHITECTURE.md`（GEN-5/GEN-6 四层修复定案与记录）+ `docs/architecture/03_type_system.md` §3.4bis（TypeRef 唯一权威入口规则）
-- [ ] 测试套件规范：`tests/meta/test_naming_conventions.py` TestDocstringHistoryAnchors（docstring 禁历史锚定，规则永久化）
-- [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（GEN-5/GEN-6 已修复；单一状态权威）
-- [ ] 独立缺陷窗口：供应商感知思考禁用机制（P2 待设计）；**内置泛型两缺陷已修复**（`HANDOFF_GENERIC_ASSIGNABILITY.md` 标已修复，设计 `_code_generic_type_identity.md`）；**值层身份已彻底收敛**（`_code_generic_value_convergence.md`）；🔴 下一 session 交接：`_HANDOFF_GENERIC_REMAINING.md`（泛型剩余边界 7 项彻底修复分析：句柄类值身份 / type_pool 匹配 / 元组解包检查 / auto 推断 / *expr 缓解）+ **地基深挖分析 `_DEEP_ANALYSIS_TYPE_SYSTEM_FOUNDATION.md`（2026-08-13）**：证实 7 项边界 6 项同源同一地基缺陷（类型身份扁平字符串双轨 + 特化创建点扁平化嵌套实参），根治方向 = build/create_* 升级结构化 TypeRef 接口，处理顺序修正（③ 结构化构建先于 ② name 匹配）
-- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2559 passed / 1 skipped**）
+- [ ] 读本节 §2.1（🔴 下一 session 主任务：**重启真实批判性试用 + 文档全方位同步**，完整交接 `_HANDOFF_NEXT_TRIAL.md`；T05/T06 四项修复已完成，全量 2665 passed / 1 skipped）
+- [ ] 读 `NEXT_STEPS.md`（当前最紧要：见 §2.1；四项修复已完成记录）
+- [ ] 读 `PENDING_TASKS.md` §〇（优先级总表；四行已标修复；供应商感知思考禁用机制 / CI-CD 重设计等主线候选）
+- [ ] 读 `_HANDOFF_NEXT_TRIAL.md`（下一 session 权威交接：真实批判性试用 T07 矩阵 + 文档同步清单）
+- [ ] 试用体系规范：`trials/_toolkit/CLASSIFICATION.md`（分类/编号）+ `CONTRACT_FORMAT.md`（用例即契约）+ `LLM_SERVICE.md`（本机真实 LLM 服务，当前在线且思考已禁用）+ `gen_register.py`（报告生成）+ `PHASE_D_AUTOMATION.md`（收敛流程硬规则）+ `run_batch.py`（分层批量）
+- [ ] 跨套索引/缺陷状态：`trials/INDEX.md`（单一状态权威；新缺陷从 `KERNEL_ISSUE-*` 继续编号）
+- [ ] 本 session 修复面：`_code_optional_unify.md`（CROSSMOD-LLM-1 + KI-2 统一 Optional 值模型）+ `_code_ghost_codes.md`（幽灵诊断码 + CAT-7）+ `_code_set_mock_mode.md`（对称开关）
+- [ ] 泛型剩余边界：`_HANDOFF_GENERIC_REMAINING.md`（7 项已知边界，建议 T07 D4 复测）
+- [ ] 确认测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（当前 **2665 passed / 1 skipped**）
 - [ ] 工作全程本地 commit、禁 push（除非用户显式授权）
