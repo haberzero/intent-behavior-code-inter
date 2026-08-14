@@ -12,6 +12,13 @@
 > 对称开关（P3）。每项含现状/代码实证/根因/修复方向/判别性回归。试验据：
 > `trials/T06_class_identity/`（CROSSMOD-LLM-1）+ `trials/T05_critical_stress/`。
 >
+> **✅ 四项全部已修复（2026-08-14，全量 2665 passed / 1 skipped 零回归）**：
+> ① CROSSMOD-LLM-1 → `_resolve_type` 支持 IbAttribute 注解（`_code_optional_unify.md`
+> 变更 A）；② KI-2 + is_none → 统一 Optional 值模型（`_code_optional_unify.md`）；
+> ③ 幽灵诊断码 → 7 发射 + 1 删减 + RUNTIME_ERROR 替换 + CAT-7（`_code_ghost_codes.md`）；
+> ④ set_mock_mode → 对称开关（`_code_set_mock_mode.md`）。判别性回归合计 +36。
+> 独立复核（general agent）两轮全整改。详见下方 §六 各行已标"已修复"。
+>
 > **✅ KI-1 已根治（2026-08-14，统一类身份模型 S4，全量 2616 passed / 1 skipped）**：
 > `get_side_table` module 参数化 + `is_truthy` 任务本地化（见 `_code_class_identity_unify.md`
 > S4 与 §2.1 更新）。判别性回归：线程 worker 内 imported/入口类 405/405 + 105/105。
@@ -235,6 +242,11 @@
 
 ### 6.1 KERNEL_ISSUE-CROSSMOD-LLM-1（P1，T06 试用发现，pre-existing）
 
+> **✅ 已修复（2026-08-14，`_code_optional_unify.md` 变更 A，全量 2665/1 零回归）**：
+> `_resolve_type` 新增 `module_qualified_annotation` 帮助函数 + `IbAttribute` 点号
+> 限定注解分支（geo.Counter）+ `IbSubscript` 支持 IbAttribute base；平行解析器
+> （type_resolution/symbol_collection）同步。判别性回归 +3；D3-02/D2-05 真实 LLM 转 PASS。
+
 - **触发**：`geo.Counter c = @~ 给一个数字 ~`（跨模块用户类作行为表达式 LLM 输出目标）
   运行时抛 `VM: Call failed: Object of type 'None' has no method '__call__'`。
 - **复现**：`tasks_docs/trials/T06_class_identity/cases/D3-02/`、`D2-05/`（均 KERNEL_ISSUE）。
@@ -254,6 +266,11 @@
 
 ### 6.2 KI-2 + DOC-5/-6（P2，T05 发现，pre-existing）
 
+> **✅ 已修复（2026-08-14，`_code_optional_unify.md`，全量 2665/1 零回归）**：
+> 统一 Optional 值模型——`wrap_optional` 单一包装权威覆盖全部值创建路径（含参数
+> spec 解析/字段 member_types/容器元素）+ `is None` 双向语义 + `is_none()` +
+> `None==Opt` 对称 + deep_clone 保 _is_some。判别性回归 +20。
+
 - **触发**：`Optional[int] a = None; a is None` → **False**（应 True）；`a == None` →
   True；`any b = None; b is None` → True。`a.is_none()` 不存在。
 - **代码实证**：`leaf.py:269/277`（`is`/`is not` 的 None 分支用 `isinstance(current_left,
@@ -269,6 +286,11 @@
   True；`Optional[int] b = 5; b is None` → False；`any c = None; c is None` → True（不回归）。
 
 ### 6.3 幽灵诊断码 + 快照篡改警告（P2，T05 发现）
+
+> **✅ 已修复（2026-08-14，`_code_ghost_codes.md`，全量 2665/1 零回归）**：
+> 7 码实现发射（异常映射 + 显式码 + 快照警告 + 词法器 + indent_processor 改码）、
+> PAR_MULTIPLE_INTENTS 删减、RUNTIME_ERROR 默认码替换 RUN_GENERIC_ERROR、
+> CAT-7 可发射性契约 + 判别性回归 10 项。
 
 - **现状（代码实证）**：8 个诊断码全仓零发射（core/+ibci_modules/ 无任何发射点，仅
   codes.py/catalog.py 注册）：`RUN_DIVISION_BY_ZERO`/`RUN_ATTRIBUTE_ERROR`/
@@ -287,6 +309,10 @@
 - **判别性回归（建议）**：越界/除零/属性缺失报具体诊断码（非裸 RUNTIME_ERROR）。
 
 ### 6.4 `set_mock_mode()` 对称开关（P3，T05 发现）
+
+> **✅ 已修复（2026-08-14，`_code_set_mock_mode.md`，全量 2665/1 零回归）**：
+> `set_mock_mode(enable: bool = True)` 对称开关（enable=False 退出 + 重建客户端 +
+> 未配置 fail-fast）；无参调用兼容。判别性回归 3 项。
 
 - **现状（代码实证）**：`core.py:175-181` `set_mock_mode()` 仅置 `_config["mock"]=True`；
   退出只能 `ai.set_config`（:161-165，内部置 mock=False）或 `apply_config`（mock:false）。
