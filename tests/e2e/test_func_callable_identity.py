@@ -492,3 +492,184 @@ class TestFnCallabilityEnforcement:
             "    int a\n"
         )
         assert "SEM_UNRESOLVED_TYPE" in _errs(code)
+
+
+################################################################################
+# CALLABLE_SIG 签名模型根治：逐参数类型检查 + 嵌套泛型实参保真（漏洞 1/2）
+################################################################################
+
+class TestCallableSigSignature:
+    """`fn[(...) -> ...]` 签名约束：逐参数类型检查（漏洞 1）+ 嵌套泛型实参
+    结构化保真与特化替换（漏洞 2）。"""
+
+    def test_fn_sig_param_rejects_wrong_param_type(self):
+        """`fn[(Box[int]) -> int]` 参数收参数类型不符的函数编译期拦截（此前仅
+        查数量+返回，str 参数漏检——漏洞 1）。"""
+        code = (
+            "class Box[T]:\n"
+            "    T data\n"
+            "    func __init__(self, T v) -> auto:\n"
+            "        self.data = v\n"
+            "func apply(fn[(Box[int]) -> int] cb, Box[int] b) -> int:\n"
+            "    return cb(b)\n"
+            "func get2(str s) -> int:\n"
+            "    return len(s)\n"
+            "print(apply(get2, Box[int](7)))\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_sig_generic_param_rejects_wrong_param_type(self):
+        """`Host[int]` 特化后 `fn[(Box[T]) -> int]` 参数经 substitute 替换为
+        `fn[(Box[int]) -> int]`，收错误签名编译期拦截（此前嵌套 T 不替换致
+        检查静默跳过——漏洞 2）。"""
+        code = (
+            "class Box[T]:\n"
+            "    T data\n"
+            "    func __init__(self, T v) -> auto:\n"
+            "        self.data = v\n"
+            "class Host[T]:\n"
+            "    func apply(self, fn[(Box[T]) -> int] cb, Box[T] b) -> int:\n"
+            "        return cb(b)\n"
+            "func get2(str s) -> int:\n"
+            "    return len(s)\n"
+            "Host[int] h = Host[int]()\n"
+            "print(h.apply(get2, Box[int](7)))\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_sig_generic_substitution_matches(self):
+        """`Host[int]` 特化后嵌套 T 正确替换，正确签名匹配并运行。"""
+        code = (
+            "class Box[T]:\n"
+            "    T data\n"
+            "    func __init__(self, T v) -> auto:\n"
+            "        self.data = v\n"
+            "class Host[T]:\n"
+            "    func apply(self, fn[(Box[T]) -> int] cb, Box[T] b) -> int:\n"
+            "        return cb(b)\n"
+            "func get(Box[int] b) -> int:\n"
+            "    return b.data\n"
+            "Host[int] h = Host[int]()\n"
+            "print(h.apply(get, Box[int](7)))\n"
+        )
+        assert run_ibci(code) == ["7"]
+
+    def test_fn_sig_nested_concrete_matches(self):
+        """`fn[(list[int]) -> int]` / `fn[(Box[int]) -> int]` 嵌套泛型实参常规消费保持。"""
+        code = (
+            "class Box[T]:\n"
+            "    T data\n"
+            "    func __init__(self, T v) -> auto:\n"
+            "        self.data = v\n"
+            "func apply_list(fn[(list[int]) -> int] f, list[int] xs) -> int:\n"
+            "    return f(xs)\n"
+            "func get_len(list[int] l) -> int:\n"
+            "    return len(l)\n"
+            "func apply_box(fn[(Box[int]) -> int] f, Box[int] b) -> int:\n"
+            "    return f(b)\n"
+            "func get_data(Box[int] b) -> int:\n"
+            "    return b.data\n"
+            "print(apply_list(get_len, [1, 2, 3]))\n"
+            "print(apply_box(get_data, Box[int](7)))\n"
+        )
+        assert run_ibci(code) == ["3", "7"]
+
+    def test_fn_sig_covariant_return_allowed(self):
+        """签名返回协变保持：`fn[() -> Animal]` 收返回 Dog 的函数。"""
+        code = (
+            "class Animal:\n"
+            "    int a\n"
+            "class Dog(Animal):\n"
+            "    int d\n"
+            "func g() -> Dog:\n"
+            "    return Dog()\n"
+            "fn[() -> Animal] f = g\n"
+            "print(1)\n"
+        )
+        assert run_ibci(code) == ["1"]
+
+    def test_fn_sig_lambda_return_mismatch_rejected(self):
+        """lambda 返回类型不匹配仍编译期拦截（CALLABLE_INSTANCE 路径）。"""
+        code = (
+            "fn[() -> int] f = lambda -> str: \"hi\"\n"
+            "print(f())\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_sig_param_count_mismatch_rejected(self):
+        """参数数量不匹配编译期拦截（既有语义保持）。"""
+        code = (
+            "func g(int a, int b) -> int:\n"
+            "    return a + b\n"
+            "fn[(int) -> int] f = g\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_sig_nested_serialization_roundtrip(self):
+        """嵌套 CALLABLE_SIG 构造结构化 + 序列化 round-trip 嵌套保真。"""
+        from core.engine import IBCIEngine
+        from core.compiler.serialization.serializer import FlatSerializer
+        import tempfile
+
+        root = tempfile.mkdtemp()
+        engine = IBCIEngine(root_dir=root, auto_sniff=False)
+        artifact = engine.compile_string(
+            "func apply(fn[(list[int]) -> int] f, list[int] xs) -> int:\n"
+            "    return f(xs)\n",
+            silent=True,
+        )
+        # 构造结构化：apply 的首参数描述符 type_ref = fn[__args__(list[int]) -> int]
+        cache = engine.scheduler.symbol_table_cache
+        sym = None
+        for st in cache.values():
+            sym = st.resolve("apply")
+            if sym is not None:
+                break
+        assert sym is not None and sym.spec is not None
+        desc_ref = sym.spec.param_descriptors[0].type_ref
+        assert desc_ref.head == "fn"
+        assert desc_ref.args[0].args[0].canonical_name == "list[int]"
+        # 序列化 round-trip：canonical_name 持久化，rehydrator TypeRef.parse 恢复
+        ser = FlatSerializer(registry=engine.scheduler.registry)
+        d = ser.serialize_artifact(artifact)
+        pools = d.get("pools", {})
+        tp = pools.get("types", {})
+        apply_entry = next((v for v in tp.values() if v.get("name") == "apply"), None)
+        assert apply_entry is not None
+        assert "list[int]" in apply_entry.get("param_type_names", [])
+
+    def test_fn_sig_template_field_assignment(self):
+        """泛型模板内 `self.cb = c`（字段与参数同为 fn[(Box[T])->int]）放行——
+        类型参数占位两侧一致（P1 整改：prescan 解析类型参数，消除 Box[any]/Box[T]
+        不对称）。"""
+        code = (
+            "class Box[T]:\n"
+            "    T data\n"
+            "    func __init__(self, T v) -> auto:\n"
+            "        self.data = v\n"
+            "class Host[T]:\n"
+            "    fn[(Box[T]) -> int] cb\n"
+            "    func __init__(self, fn[(Box[T]) -> int] c) -> auto:\n"
+            "        self.cb = c\n"
+            "func get(Box[int] b) -> int:\n"
+            "    return b.data\n"
+            "Host[int] h = Host[int](get)\n"
+            "print(1)\n"
+        )
+        assert run_ibci(code) == ["1"]
+
+    def test_fn_sig_template_body_placeholder(self):
+        """模板方法体内 `fn[(T) -> int] x = c`（T 未特化占位）放行——延至特化后
+        校验（P1 整改：占位不可解析不误拒）。"""
+        code = (
+            "class Host[T]:\n"
+            "    func store(self, fn[(T) -> int] c) -> fn[(T) -> int]:\n"
+            "        fn[(T) -> int] x = c\n"
+            "        return x\n"
+            "func inc(int v) -> int:\n"
+            "    return v + 1\n"
+            "Host[int] h = Host[int]()\n"
+            "fn[(int) -> int] r = h.store(inc)\n"
+            "print(r(41))\n"
+        )
+        assert run_ibci(code) == ["42"]

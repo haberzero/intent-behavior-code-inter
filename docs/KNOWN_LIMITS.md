@@ -353,13 +353,16 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 `*expr` 展开实参（遗留边界修复）：特化容器（`list[int]`）展开时元素类型与目标形参做可赋值校验（`list[str] *-> f(int)` 编译期拦截）；裸容器/动态/数量不足由运行期裁决（静态数量未知是本质限制）。**仅保证 `*expr` 位于位置实参末尾时的目标形参偏移正确**（`f('x', *l)` 首元素对应第二形参）；中置/前导星（`f(10, *l, 30)`）的计数偏移为既有局限性。
 
-### 10.4 `fn[(...) -> ...]` 签名内嵌套泛型实参（潜伏边界）
+### 10.4 `fn[(...) -> ...]` 签名内嵌套泛型实参（已根治 2026-08-14）
 
-`fn[(list[int]) -> int]` / `fn[(Box[int]) -> int]` 等**签名内部**的嵌套泛型实参在
-编译期/序列化按名称保真并经注册表名称回绕解析——`apply(get_len, [1,2,3])`、
-`apply(get_data, Box[int](7))` 均正确工作（2026-08-14 实证）。仅当对签名内部实参
-执行**结构化操作**（`TypeRef.substitute` 类型参数替换）时，扁平形态无法穿透
-（head 含方括号的退化形态）。属既有潜伏边界，不阻塞常规使用。
+`fn[(list[int]) -> int]` / `fn[(Box[int]) -> int]` 等**签名内部**的嵌套泛型实参
+已**结构化根治**（CALLABLE_SIG 签名模型：构造经 `TypeRef.from_spec` 结构化、
+`resolve_typeref` 重建保真、匹配统一为逐参数类型检查、`TypeRef.substitute` 可穿透
+嵌套类型参数）。此前为"潜伏边界"（扁平 `TypeRef.of(p.name)` 构造，substitute 不可
+穿透嵌套 `T`，且 `is_assignable` 路径只查参数数量+返回类型、解析 miss 静默跳过）——
+实为**类型安全漏洞**：`fn[(Box[int]) -> int]` 收 `get2(str)->int`（参数类型不符）、
+`Host[int]` 特化后 `fn[(Box[T]) -> int]` 收错误签名，均曾编译期放行、运行期
+`RUN_TYPE_MISMATCH`。现均为编译期拦截。设计/实施：`tasks_docs/_DESIGN_CALLABLE_SIG_SIGNATURE.md`。
 
 ---
 

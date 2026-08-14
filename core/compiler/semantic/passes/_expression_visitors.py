@@ -563,22 +563,23 @@ class ExpressionVisitorsMixin:
 
         # 策略二：仅位置签名
         if func_type.kind == TypeKind.CALLABLE_SIG.value:
-            expected_names = [t.head for t in param_types]
-            if len(positional_specs) != len(expected_names):
+            if len(positional_specs) != len(param_types):
                 self.error(
-                    f"Callable expected {len(expected_names)} argument(s), "
+                    f"Callable expected {len(param_types)} argument(s), "
                     f"but got {len(positional_specs)}.",
                     node, code=SEM_ARG_COUNT_MISMATCH,
                 )
             else:
-                for i, (exp_name, actual_type) in enumerate(zip(expected_names, positional_specs)):
-                    exp_spec = self.registry.resolve(exp_name)
+                # 结构化 ref 经 resolve_typeref（CALLABLE_SIG 签名模型根治：嵌套泛型
+                # 实参保真，与 is_assignable/_check_callable_sig_match 一致）。
+                for i, (exp_ref, actual_type) in enumerate(zip(param_types, positional_specs)):
+                    exp_spec = self.registry.resolve_typeref(exp_ref)
                     if (exp_spec and actual_type
                             and not self.registry.is_dynamic(exp_spec)
                             and not self.registry.is_dynamic(actual_type)
                             and not self.registry.is_assignable(actual_type, exp_spec)):
                         self.error(
-                            f"Argument {i + 1} type mismatch: expected '{exp_name}', "
+                            f"Argument {i + 1} type mismatch: expected '{exp_ref.canonical_name}', "
                             f"but got '{actual_type.name}'.",
                             node, code=SEM_TYPE_MISMATCH,
                             hint=self.registry.get_diff_hint(actual_type, exp_spec),

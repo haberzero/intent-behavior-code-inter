@@ -15,6 +15,7 @@ from core.kernel.symbols import SymbolKind
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
+from core.kernel.spec.base import spec_has_any_generic_arg
 from ._fn_callable import is_fn_callable_value
 
 
@@ -331,13 +332,15 @@ class StatementVisitorsMixin:
         return declared_type
 
     def _check_callable_sig_match(self, sig: IbSpec, actual: IbSpec, node: ast.IbASTNode):
-        """Best-effort structural compatibility check between a CALLABLE_SIG constraint and a concrete callable."""
-        expected_params = [t.head for t in sig.param_types]
+        """CALLABLE_SIG 签名约束的结构匹配（CALLABLE_SIG 签名模型根治：结构化
+        参数 ref 经 resolve_typeref 解析——嵌套泛型实参保真；与 is_assignable 路径
+        ``_matches_callable_sig`` 语义对齐，消除双通道）。"""
+        expected_params = list(sig.param_types)
 
         # CALLABLE_INSTANCE（behavior/fn lambda）：spec 不携带 param_types，只按
         # value_type 校验返回类型；参数约束由调用处实参解析覆盖。
         is_callable_instance = actual.kind == TypeKind.CALLABLE_INSTANCE.value
-        actual_params = [] if is_callable_instance else [t.head for t in actual.param_types]
+        actual_params = [] if is_callable_instance else list(actual.param_types)
 
         # Param count check
         if not is_callable_instance and len(actual_params) != len(expected_params):
@@ -348,17 +351,36 @@ class StatementVisitorsMixin:
             )
             return
 
-        # Per-parameter type compatibility
-        for i, (exp_name, act_name) in enumerate(zip(expected_params, actual_params)):
-            exp_spec = self.registry.resolve(exp_name)
-            act_spec = self.registry.resolve(act_name)
-            if (exp_spec and act_spec
-                    and not self.registry.is_dynamic(exp_spec)
+        # Per-parameter type compatibility（结构化 ref 经 resolve_typeref；任一侧
+        # 不可解析或含 any 通配即延后——CALLABLE_SIG 构造时已对参数调 _resolve_type
+        # 校验，真破损类型在构造期拦截；此处不可解析只可能是泛型模板类型参数占位
+        # （T / Box[T]），含 any（Box[any]）是 T 降级或显式通配——均延至特化后校验，
+        # 不误拒合法模板）。
+        for i, (exp_ref, act_ref) in enumerate(zip(expected_params, actual_params)):
+            exp_spec = self.registry.resolve_typeref(exp_ref)
+            act_spec = self.registry.resolve_typeref(act_ref)
+            # 裸类型参数占位（T，无实参）不可解析：延后至特化后校验。
+            if exp_spec is None and not getattr(exp_ref, "args", None):
+                continue
+            if act_spec is None and not getattr(act_ref, "args", None):
+                continue
+            # 带实参的 ref 不可解析（module 限定 concrete 解析失败）→ fail-fast 报错，
+            # 不静默跳过（否则漏洞 2 重新打开）。
+            if exp_spec is None or act_spec is None:
+                self.error(
+                    f"Callable signature mismatch: cannot resolve parameter {i + 1} type "
+                    f"('{exp_ref.canonical_name}' / '{act_ref.canonical_name}').",
+                    node, code=SEM_UNRESOLVED_TYPE,
+                )
+                continue
+            if spec_has_any_generic_arg(exp_spec) or spec_has_any_generic_arg(act_spec):
+                continue
+            if (not self.registry.is_dynamic(exp_spec)
                     and not self.registry.is_dynamic(act_spec)
                     and not self.registry.is_assignable(act_spec, exp_spec)):
                 self.error(
                     f"Callable signature mismatch: parameter {i + 1} expects "
-                    f"'{exp_name}', but the callable declares '{act_name}'.",
+                    f"'{exp_ref.canonical_name}', but the callable declares '{act_ref.canonical_name}'.",
                     node, code=SEM_TYPE_MISMATCH,
                 )
 
@@ -373,8 +395,8 @@ class StatementVisitorsMixin:
                     and not self.registry.is_dynamic(act_ret)
                     and not self.registry.is_assignable(act_ret, exp_ret)):
                 self.error(
-                    f"Callable signature mismatch: expected return type '{sig_ret.head}', "
-                    f"but the callable returns '{actual_ret.head}'.",
+                    f"Callable signature mismatch: expected return type '{sig_ret.canonical_name}', "
+                    f"but the callable returns '{actual_ret.canonical_name}'.",
                     node, code=SEM_TYPE_MISMATCH,
                 )
 

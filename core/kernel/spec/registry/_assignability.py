@@ -135,6 +135,9 @@ class _AssignabilityMixin:
 
         - 动态源（auto / fn / 裸动态可调用）：推迟到运行时，放行。
         - 参数数量：CALLABLE_INSTANCE（lambda）spec 不携带参数信息，跳过。
+        - 逐参数类型：结构化 ref 经 resolve_typeref 解析（CALLABLE_SIG 签名模型
+          根治：补 is_assignable 路径的逐参数检查——此前只查数量+返回，漏洞 1）。
+          任一侧不可解析即拒绝（fail-fast，不静默跳过）。
         - 返回类型：FUNCTION/BOUND_METHOD 用 ``return_type``，CALLABLE_INSTANCE 用
           ``value_type``；任一侧为动态（any/auto）即放行，否则必须可赋值。
         """
@@ -142,12 +145,34 @@ class _AssignabilityMixin:
             return True
         if not self.is_callable(src):
             return False
-        # 参数数量（CALLABLE_INSTANCE 无参数签名，跳过）
+        # 参数数量 + 逐参数类型（CALLABLE_INSTANCE 无参数签名，跳过）
         if src.kind != TypeKind.CALLABLE_INSTANCE.value:
             src_params = getattr(src, "param_types", None) or []
             tgt_params = getattr(target, "param_types", None) or []
             if len(src_params) != len(tgt_params):
                 return False
+            for sp, tp in zip(src_params, tgt_params):
+                s_spec = self.resolve_typeref(sp)
+                t_spec = self.resolve_typeref(tp)
+                # 裸类型参数占位（T，无实参）不可解析：延后至特化后校验（模板体内
+                # fn[(T)->int] x = c 不误拒）。
+                if s_spec is None and not getattr(sp, "args", None):
+                    continue
+                if t_spec is None and not getattr(tp, "args", None):
+                    continue
+                # 带实参的 ref 不可解析（如 module 限定 concrete 解析失败）→ 拒绝
+                # （fail-fast，不静默跳过——否则漏洞 2 重新打开）。
+                if s_spec is None or t_spec is None:
+                    return False
+                # 任一侧含 any 泛型实参（T 降级占位 Box[any] 或显式 any 通配）：
+                # 动态通配无法静态拒绝，延后（模板字段/参数赋值不误拒）。
+                from ..base import spec_has_any_generic_arg
+
+                if spec_has_any_generic_arg(s_spec) or spec_has_any_generic_arg(t_spec):
+                    continue
+                if (not self.is_dynamic(s_spec) and not self.is_dynamic(t_spec)
+                        and not self.is_assignable(s_spec, t_spec)):
+                    return False
         # 返回类型
         if src.kind == TypeKind.CALLABLE_INSTANCE.value:
             src_ret = getattr(src, "value_type", None)
@@ -155,16 +180,13 @@ class _AssignabilityMixin:
             src_ret = getattr(src, "return_type", None)
         tgt_ret = getattr(target, "return_type", None)
         if src_ret is not None and tgt_ret is not None:
-            src_head = getattr(src_ret, "head", None)
-            tgt_head = getattr(tgt_ret, "head", None)
-            if (src_head and tgt_head
-                    and src_head not in ("any", "auto")
-                    and tgt_head not in ("any", "auto")):
-                src_ret_spec = self.resolve(src_head, getattr(src_ret, "module", None))
-                tgt_ret_spec = self.resolve(tgt_head, getattr(tgt_ret, "module", None))
-                if (src_ret_spec and tgt_ret_spec
-                        and not self.is_assignable(src_ret_spec, tgt_ret_spec)):
-                    return False
+            src_ret_spec = self.resolve_typeref(src_ret)
+            tgt_ret_spec = self.resolve_typeref(tgt_ret)
+            if (src_ret_spec and tgt_ret_spec
+                    and not self.is_dynamic(src_ret_spec)
+                    and not self.is_dynamic(tgt_ret_spec)
+                    and not self.is_assignable(src_ret_spec, tgt_ret_spec)):
+                return False
         return True
 
     def _generic_family_compatible(self, src_fam: str, tgt_fam: str) -> bool:

@@ -149,11 +149,14 @@ class SpecRegistryBase:
         if ref.head == "fn" and len(ref.args) == 2 and ref.args[0].head == "__args__":
             param_refs = list(ref.args[0].args)
             ret_ref = ref.args[1]
+            # 保留嵌套实参（CALLABLE_SIG 签名模型根治）：参数/返回直接用 ref 原样
+            # （TypeRef('Box',(int,)) 等结构化形态），不 TypeRef.of(a.head) 再扁平化
+            # ——否则结构化 ref 被降级为 head 含方括号的扁平形态，substitute/解析失效。
             return TypeDef(
                 name="fn",
                 kind=TypeKind.CALLABLE_SIG.value,
-                param_types=[TypeRef.of(a.head, a.module) for a in param_refs],
-                return_type=TypeRef.of(ret_ref.head, ret_ref.module),
+                param_types=list(param_refs),
+                return_type=ret_ref,
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
             )

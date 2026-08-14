@@ -371,11 +371,21 @@ class TypeCheckBase:
                 if annotation.return_type is not None
                 else self._any_desc
             )
+            # 结构化构造（CALLABLE_SIG 签名模型根治）：参数/返回经 TypeRef.from_spec
+            # 产结构化 ref（list[int] → TypeRef('list',(int,))；Box[T] 特化 → 
+            # TypeRef('Box',(T,))）——替代 TypeRef.of(p.name) 扁平化（head 含方括号、
+            # args 空），使 substitute 可穿透嵌套类型参数（Box[T]→Box[int]），
+            # resolve_typeref 可结构化恢复。
             return TypeDef(
                 name="fn",
                 kind=TypeKind.CALLABLE_SIG.value,
-                param_types=[TypeRef.of(p.name, getattr(p, 'module_path', None)) for p in param_specs],
-                return_type=TypeRef.of(ret_spec.name, getattr(ret_spec, 'module_path', None)),
+                param_types=[
+                    TypeRef.from_spec(p) if p is not None else TypeRef.of("any")
+                    for p in param_specs
+                ],
+                return_type=(
+                    TypeRef.from_spec(ret_spec) if ret_spec is not None else TypeRef.of("any")
+                ),
                 provenance=Provenance.KERNEL_NATIVE,
                 visibility=Visibility.PRELUDE_VISIBLE,
             )
