@@ -127,7 +127,11 @@ define 包装后值再经本 helper 不重复包装）。三个消费点统一�
    对嵌套泛型实参按 `.head`/name 扁平化——q6/q9 实证 `fn[(list[int])->int]`/
    `fn[(Box[int])->int]` 经注册表名称回绕仍工作；改为结构化实参需协调
    `_check_callable_sig_match`（当前按 `resolve(head)` 解析实参，结构化会破坏
-   用户类泛型匹配）。不阻塞本次修复，KNOWLEDGE 记录于 KNOWN_LIMITS §十四。
+   用户类泛型匹配）。不阻塞本次修复，已记录 KNOWN_LIMITS §10.4。
+5. **方法返回类型运行期来源（独立复核 P1 整改）**：node_to_symbol 对方法 def
+   绑定 self 参数符号，`func.spec` 为类 spec（return_type 恒 void）——
+   `_wrap_function_result` 对方法经 `owner_class.spec.members[name].return_type`
+   解析声明返回类型（类成员表结构化签名）。
 
 ## 四、执行纪律
 

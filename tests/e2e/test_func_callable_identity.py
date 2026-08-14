@@ -262,6 +262,18 @@ class TestFunctionReturnOptionalWrap:
         )
         assert run_ibci(code) == ["Optional[list[int]]", "[7, 8]", "2"]
 
+    def test_method_return_wrap(self):
+        """类方法返回 Optional 同样包装（owner_class 成员表签名路径）。"""
+        code = (
+            "class C:\n"
+            "    func maybe(self) -> Optional[int]:\n"
+            "        return 9\n"
+            "C c = C()\n"
+            "print(type(c.maybe()))\n"
+            "print(c.maybe().unwrap())\n"
+        )
+        assert run_ibci(code) == ["Optional[int]", "9"]
+
     def test_llm_function_return_wrap(self):
         """LLM 函数返回 Optional 包装（invoke_llm_function 路径）。"""
         from tests.conftest import AI_MOCK_PREFIX

@@ -183,21 +183,42 @@ def _wrap_function_result(executor, func, value):
     直接消费路径缺失包装（类型身份架构断层问题 3）。幂等：``wrap_optional``
     对已包装值 no-op（赋值后值再经本函数不重复包装）。
 
-    ``func`` 声明返回类型来源：IbUserFunction/IbLLMFunction 经 ``spec.return_type``
-    （结构化 TypeRef，经 metadata registry resolve_typeref 恢复）；IbFnCallable
-    （lambda/snapshot）经 ``return_type`` 字符串（运行时捕获的签名，经名称解析）。
+    声明返回类型来源：
+    - **方法**（``func.owner_class`` 非空）：node_to_symbol 对方法 def 绑定
+      self 参数符号，``func.spec`` 为类 spec（return_type 恒 void）——方法真实
+      返回类型经类成员表解析（``owner_class.spec.members[name].return_type``，
+      结构化保真）。
+    - IbUserFunction/IbLLMFunction：经 ``spec.return_type``（结构化 TypeRef，
+      经 metadata registry resolve_typeref 恢复）。
+    - IbFnCallable（lambda/snapshot，无 spec）：经 ``return_type`` 字符串
+      （运行时捕获的签名，经名称解析）。
     """
+    meta_reg = executor.registry.get_metadata_registry()
+    if meta_reg is None:
+        return value
+
     declared = None
-    spec = getattr(func, "spec", None)
-    meta_reg = executor.registry.get_metadata_registry() if hasattr(executor.registry, "get_metadata_registry") else None
-    if spec is not None and meta_reg is not None:
-        ret_ref = getattr(spec, "return_type", None)
-        if ret_ref is not None:
-            declared = meta_reg.resolve_typeref(ret_ref)
-    elif meta_reg is not None:
-        ret_name = getattr(func, "return_type", None)
-        if ret_name and ret_name not in ("auto", "any"):
-            declared = meta_reg.resolve(ret_name)
+    owner = getattr(func, "owner_class", None)
+    if owner is not None:
+        node_data = executor.ec.get_node_data(func.node_uid) if func.node_uid else None
+        m_name = node_data.get("name") if node_data else None
+        cls_spec = getattr(owner, "spec", None)
+        member = None
+        if m_name is not None and cls_spec is not None:
+            member = (getattr(cls_spec, "members", None) or {}).get(m_name)
+        if member is not None and getattr(member, "return_type", None) is not None:
+            declared = meta_reg.resolve_typeref(member.return_type)
+    else:
+        spec = getattr(func, "spec", None)
+        if spec is not None:
+            ret_ref = getattr(spec, "return_type", None)
+            if ret_ref is not None:
+                declared = meta_reg.resolve_typeref(ret_ref)
+        else:
+            ret_name = getattr(func, "return_type", None)
+            if ret_name and ret_name not in ("auto", "any"):
+                declared = meta_reg.resolve(ret_name)
+
     if declared is None:
         return value
     from core.runtime.objects.primitives.optional import wrap_optional
@@ -274,8 +295,9 @@ def _vm_call_fn_callable(executor, func, args):
                 result = _wrap_function_result(executor, func, result.value)
             else:
                 return result  # finally 会负责 exit_scope
-        # 表达式体（lambda body 直接求值，非 Signal）：按声明返回类型包装
-        result = _wrap_function_result(executor, func, result)
+        else:
+            # 表达式体（lambda body 直接求值，非 Signal）：按声明返回类型包装
+            result = _wrap_function_result(executor, func, result)
     finally:
         if needs_subscope:
             rt_context.exit_scope()
