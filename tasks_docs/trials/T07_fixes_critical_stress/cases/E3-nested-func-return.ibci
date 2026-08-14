@@ -1,0 +1,11 @@
+# 批判：函数返回嵌套函数赋 fn_callable 类型（base 同现，登记边界）
+# doc: docs/syntax/05_functions.md
+# expect-class: BOUNDARY
+# expect-code: RUN_TYPE_MISMATCH
+# expect-exit: nonzero
+func outer() -> fn_callable[int]:
+    func inner() -> int:
+        return 42
+    return inner
+fn_callable[int] g = outer()
+print(g())

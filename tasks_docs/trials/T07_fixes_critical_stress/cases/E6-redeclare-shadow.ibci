@@ -1,0 +1,10 @@
+# 批判：函数内同名重声明静默遮蔽（模块级/base 一致=语言既有语义，登记观察）
+# doc: docs/syntax/02_identifiers.md
+# expect-class: PASS
+# expect-out: 2
+# expect-exit: 0
+func f() -> int:
+    int x = 1
+    int x = 2
+    return x
+print(f())

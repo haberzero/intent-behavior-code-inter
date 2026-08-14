@@ -1,0 +1,12 @@
+# 批判：空 Optional 迭代错误可捕获性（try-except 内不逃逸）
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: PASS
+# expect-out: caught | True
+# expect-exit: 0
+Optional[list[int]] e = None
+try:
+    for x in e:
+        print(x)
+except:
+    print("caught")
+print(e.is_none())

@@ -1,0 +1,9 @@
+# 批判：Optional[list] 切片类型推断保留包装（与下标解开不同——登记观察）
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: PASS
+# expect-out: 2 | True
+# expect-exit: 0
+Optional[list[int]] b = [1, 2, 3, 4, 5]
+Optional[list[int]] s = b[1:3]
+print(len(s))
+print(s.is_some())

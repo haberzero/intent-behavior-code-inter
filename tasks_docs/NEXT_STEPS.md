@@ -6,6 +6,13 @@
 > 1 skipped** 零回归（2665 基线 + 28 判别性回归）；触发用例 D2-09/D2-10/D1-13 全部核销
 > 转 PASS。完整记录见 `tasks_docs/_HANDOFF_T07_FINDINGS.md`（已标记完成）与 WORKLOG）
 >
+> **📋 第二 session 复核（2026-08-14，未改内核）**：push 已授权执行；T07 全量 43 例重跑 +
+> 旧套件 T01-T06 238 例重跑**零回归**（三项修复有效、无内核退化）；E 批判补充批次 8 例
+> （5 PASS + 1 BOUNDARY + 2 DOC_ISSUE）新登记 **DOC-29**（空 Optional 操作错误码
+> RUN_GENERIC_ERROR vs 文档承诺 RUN_ATTRIBUTE_ERROR）与 **BOUNDARY-NESTED-FUNC-1**
+> （函数返回嵌套函数赋 fn_callable 类型 RUN_TYPE_MISMATCH，base 同现）。详见
+> `trials/T07_fixes_critical_stress/REGISTER.md` §八 + PENDING_TASKS。
+>
 > **✅ 已完成（2026-08-14，unsafe-vibe-dev）**：**T07 新发现三项 P1 修复 + DOC-24~28 文档同步**
 > （详见"已完成"节）——① **OPTIONAL-SCOPE-1**：函数作用域局部变量声明类型编译期丢失
 > （系统性根因：`_prescan_body_locals` 硬编码 any → 符号池 type_uid=any → 运行时

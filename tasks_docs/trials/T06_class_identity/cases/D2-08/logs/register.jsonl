@@ -1,1 +1,2 @@
 {"case_id": "B-D2-08", "script": "main.ibci", "dim": "RERUN", "doc": "", "expected": "", "timeout_s": 90.0, "max_inst": 5000000, "exit_code": 0, "timed_out": false, "duration_s": 0.44, "out_head": "2 5 9 ", "err_head": "", "classification": "PASS", "severity": "", "note": "auto-judged"}
+{"case_id": "B-D2-08", "script": "main.ibci", "dim": "RERUN", "doc": "", "expected": "", "timeout_s": 60.0, "max_inst": 5000000, "exit_code": 0, "timed_out": false, "duration_s": 0.47, "out_head": "2 5 9 ", "err_head": "", "classification": "PASS", "severity": "", "note": "auto-judged"}

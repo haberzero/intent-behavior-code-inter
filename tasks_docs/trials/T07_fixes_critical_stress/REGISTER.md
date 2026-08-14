@@ -154,7 +154,28 @@
 | D4-06 | 跨模块同名特化值身份 | PASS | 0 | logs/B-D4-06.log |
 | D4-07 | generator 特化赋值拦截 | GUARD | 1 | logs/B-D4-07.log |
 
-## 八、结论
+## 八、E 批判补充批次（2026-08-14 第二 session 复核，T07 三项 P1 修复后独立挑刺）
+
+> 目的：验证上一 session T07 三项 P1 修复（OPTIONAL-SCOPE-1 / OPTIONAL-CONTAINER-1 /
+> ATTR-READ-1）有效性 + 找边界缺陷。8 例：**5 PASS + 1 BOUNDARY + 2 DOC_ISSUE**。
+> 补充了既有 D 维未覆盖的边界面（空值诊断码一致性、嵌套函数返回、下标/切片类型推断、
+> 同名重声明遮蔽）。
+
+| case_id | 目标 | 分类 | 观察 |
+|---------|------|------|------|
+| E1-empty-optional-code | 空 Optional for 迭代诊断码 | DOC_ISSUE | 抛 `RUN_GENERIC_ERROR`，arch/03 §8 承诺空值操作 fail-fast 报 `RUN_ATTRIBUTE_ERROR`——**文档矛盾**（15_diagnostics RUN_GENERIC_ERROR 定义"未归类运行时错误"与 arch/03 §8 承诺不符）。修复②把 base 的裸 RuntimeError 改进为有码错误（进步），但码与文档承诺不一致 |
+| E2-empty-optional-unwrap-code | 空 Optional unwrap 诊断码 | DOC_ISSUE | 同上：`unwrap()` 抛 `RUN_GENERIC_ERROR`（optional.py:90 未指定 error_code）vs 文档承诺 `RUN_ATTRIBUTE_ERROR`；委托链空值路径（optional.py:174）已指定 RUN_ATTRIBUTE_ERROR——**同文件内两处空值错误码不一致** |
+| E3-nested-func-return | 函数返回嵌套函数赋 fn_callable 类型 | BOUNDARY | `return inner`（嵌套函数）赋 `fn_callable[int]` 报 `RUN_TYPE_MISMATCH: Cannot assign 'callable'`；lambda 返回正常。**base（30511d4f）同现=pre-existing**，与修复①声称的 rehydrator kind 保真无关（运行时 `_check_type` 路径）。登记待修 |
+| E4-opt-subscript-method-consistency | Optional[list] b[0] 类型一致性 | PASS | `b[0]` 编译期推断 int、运行时委托返回裸 int——一致；`b[0].is_some()` 编译期放行是**编译期成员检查宽松**（裸 `int.is_some()` 同样放行），非修复引入 |
+| E5-opt-slice-type | Optional[list] 切片类型推断 | PASS | `b[1:3]` 编译期推断 `Optional[list[int]]`（保留包装）与下标推断 int（解开）不同——两者均正确，登记观察（下标/切片推断不对称） |
+| E6-redeclare-shadow | 函数内同名重声明 | PASS | `int x=1; int x=2` 编译通过返回 2（静默遮蔽）。模块级/base 一致=语言既有语义（重声明遮蔽非报错），登记观察 |
+| E7-empty-opt-try-catch | 空 Optional 迭代 try 内可捕获 | PASS | try/except 内捕获不逃逸；空值错误可编程处理（语义合理） |
+| E8-opt-container-full-matrix | Optional 容器委托完整矩阵 | PASS | 有值 len/下标/append 变异/切片/越界传播全正常（越界错误正确传播不吞） |
+
+**E 批次结论**：三项修复主路径全部有效（E4/E5/E7/E8 确认委托链在读取/下标/迭代/切片/变异全场景正确）；
+发现 **2 项文档矛盾（空值错误码）** 与 **1 项 pre-existing 边界（嵌套函数返回类型）**，均不阻断修复有效性。
+
+## 九、结论
 
 - **四项修复面（CROSSMOD-LLM-1 / KI-2 / 幽灵诊断码 / set_mock_mode）批判性对抗全部通过**：
   D1 18 例（含 6 守卫）零回归；跨模块注解解析在函数参数/返回/容器/字段/深层模块全场景可用；
@@ -170,3 +191,8 @@
   KI-2 修复行为确认；5 处旧用例断言为陈旧（值层身份收敛新语义），待后续按 PHASE_D 更新。
 - **下一步**：3 项新 KERNEL_ISSUE + DOC-24~26 待独立窗口修复（根因分析留待后续任务）；
   5 处陈旧断言待更新；KNOWN_LIMITS §10.2 可补 qualified 路径实证表述。
+- **E 批判补充批次**：三项 P1 修复有效性复核通过（触发用例 D2-09/D2-10/D1-13 全核销 +
+  委托链全矩阵 PASS）；新发现 2 项文档矛盾（空 Optional 迭代/`unwrap()` 错误码
+  RUN_GENERIC_ERROR vs arch/03 §8 承诺 RUN_ATTRIBUTE_ERROR，iterable.py:39 /
+  optional.py:90 未指定 error_code）+ 1 项 pre-existing 边界（嵌套函数返回赋
+  fn_callable 类型 RUN_TYPE_MISMATCH，base 同现）。登记 PENDING_TASKS + INDEX。

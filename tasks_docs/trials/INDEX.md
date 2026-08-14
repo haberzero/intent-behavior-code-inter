@@ -15,6 +15,7 @@
 | `T05_critical_stress` | 批判性压力试用（跨模块类表 module 化后内核 + 真实 LLM + 文档全量核验） | 2026-08-14 | 40 用例 | 37 PASS + 1 GUARD + 2 KERNEL_ISSUE | `KERNEL_ISSUE-CROSSMOD-THREAD-1`（**已核销 2026-08-14，T07 D1-10 转 PASS**）、`KERNEL_ISSUE-OPTIONAL-ISNONE-1`（**已核销 2026-08-14，D2-03 转 PASS True|True|False**）、`DOC_ISSUE-1~23`（代码联动项已修，文档部分已治理） |
 | `T06_class_identity` | 统一类身份模型回归 + 真实试用（Task1 S1-S4 根治验证 + T05 KI-1 核销） | 2026-08-14 | 20 用例 | 18 PASS + 2 KERNEL_ISSUE（同一根因） | `KERNEL_ISSUE-CROSSMOD-LLM-1`（**已核销 2026-08-14，T07 D3 重验**） |
 | `T07_fixes_critical_stress` | 四项修复批判性对抗 + 旧套件 T01-T06 全量重跑（用户强调） + 泛型边界复测 | 2026-08-14 | 43 用例 + 旧套件 238 重跑 | 28 PASS + 12 GUARD + 3 KERNEL_ISSUE；旧套件 202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言) + 9 HARNESS | `KERNEL_ISSUE-OPTIONAL-SCOPE-1`、`KERNEL_ISSUE-OPTIONAL-CONTAINER-1`、`KERNEL_ISSUE-ATTR-READ-1`（均**已修复 2026-08-14，触发用例核销**） |
+| `T07_fixes_critical_stress`（E 批判补充批次，2026-08-14 第二 session 复核） | 三项 P1 修复有效性 + 边界挑刺（T07 后置独立批） | 2026-08-14 | +8 用例（E1-E8） | **5 PASS + 1 BOUNDARY + 2 DOC_ISSUE**（委托链全矩阵 PASS；空值错误码不一致 + 嵌套函数返回类型边界） | `DOC-29`（空 Optional 错误码）、`BOUNDARY-NESTED-FUNC-1`（base 同现） |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 
@@ -49,6 +50,13 @@
 | 编号 | 主题 | 状态 |
 |------|------|------|
 | `BOUNDARY-CHAN-ARGS-1` | `chan(T, name, ...)` 的 T 实参传**特化类对象**（如 `chan(Box[int], “message”)`）时特化实参被降级为裸类（`chan[Box]`，type() 实证）；裸类型实参（`chan(str, “stream”)` → `chan[str]`）与无参声明式（`chan[E] ch = chan()`）均正常。普适写法 = 类型在声明处，构造只传运行时参数。文档 `14_concurrency.md` 宜补充说明 | 记录（非缺陷，待文档同步） |
+
+### 域 E 批判补充（T07 后置，2026-08-14 第二 session 复核登记）
+
+| 编号 | 主题 | 状态 | 触发用例 |
+|------|------|------|----------|
+| `DOC-29` | 空 Optional 操作（`for x in e` / `next(e)` / `e.unwrap()`）抛 `RUN_GENERIC_ERROR`，文档 arch/03 §8 承诺 `RUN_ATTRIBUTE_ERROR`；委托链空值路径（optional.py:174）与迭代/`unwrap` 路径（iterable.py:39 / optional.py:90）码不一致 | 登记待修（需裁决：修实现补码 or 文档同步；base 同现=pre-existing） | `T07/.../E1-empty-optional-code.ibci` / `E2-empty-optional-unwrap-code.ibci` |
+| `BOUNDARY-NESTED-FUNC-1` | 函数返回嵌套函数（`return inner`）赋 `fn_callable[T]` 运行时 `RUN_TYPE_MISMATCH`（嵌套函数被识别为裸 callable）；lambda 返回正常。base 同现=pre-existing，与 rehydrator kind 保真（修复①）无关 | 登记（base 同现，待独立窗口） | `T07/.../E3-nested-func-return.ibci` |
 ### 域 LLM/VM/IMPORT/CONFIG/SEQ/ASYNC（T01）
 
 | 旧 | 新 | 主题 | 状态 |

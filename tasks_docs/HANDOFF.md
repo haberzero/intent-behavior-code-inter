@@ -122,6 +122,18 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **✅ 已完成（2026-08-14 第二 session 复核，未改内核，全量 2693 passed / 1 skipped）**：
+  **push github + 试用套件复核 T07 三项 P1 修复有效性 + 零退化确认 + E 批判补充批次**。
+  push 已执行（124 commits → origin/unsafe-vibe-dev）。T07 全量 43 例重跑 + 旧套件
+  T01-T06 238 例重跑**零回归**（三项修复有效、无内核退化；触发用例 D2-09/D2-10/D1-13
+  全核销 PASS）。E 批判批次 8 例（`trials/T07_fixes_critical_stress/cases/E1-E8`）：
+  5 PASS + 1 BOUNDARY + 2 DOC_ISSUE——**新登记 DOC-29**（空 Optional 迭代/`unwrap()`
+  抛 RUN_GENERIC_ERROR vs arch/03 §8 承诺 RUN_ATTRIBUTE_ERROR，iterable.py:39 /
+  optional.py:90 未指定 error_code；base 同现=pre-existing，修复②已改进为有码但码与
+  文档承诺不符）与 **BOUNDARY-NESTED-FUNC-1**（函数返回嵌套函数赋 `fn_callable[T]`
+  RUN_TYPE_MISMATCH，base 同现，与修复①的 rehydrator kind 保真无关）。详见
+  REGISTER §八 E 批次 + PENDING_TASKS + trials/INDEX。
+
 - **✅ 已完成（2026-08-14，unsafe-vibe-dev，全量 2693 passed / 1 skipped 零回归）**：
   **T07 三项 P1 修复 + DOC-24~28 文档同步**（承接 `_HANDOFF_T07_FINDINGS.md`，已标完成）。
   ① **OPTIONAL-SCOPE-1**（函数作用域局部变量声明类型编译期丢失的系统性根治：prescan

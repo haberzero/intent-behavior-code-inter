@@ -1,0 +1,7 @@
+# 批判：Optional[list] b[0] 编译期推断 int 与运行时委托一致（is_some 编译放行运行报错=宽松检查，登记观察）
+# doc: docs/architecture/03_type_system.md §8
+# expect-class: PASS
+# expect-out: int
+# expect-exit: 0
+Optional[list[int]] b = [5, 6, 7]
+print(type(b[0]))
