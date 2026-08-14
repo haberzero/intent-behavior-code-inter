@@ -445,3 +445,50 @@ class TestFnCallabilityEnforcement:
         """`fn f = 42` 声明处仍拒非可调用（既有语义保持）。"""
         code = "fn f = 42\n"
         assert SEM in _errs(code)
+
+    def test_fn_param_rejects_non_callable_instance(self):
+        """`fn` 参数拒"无 __call__ 的类实例"（与声明路径一致；is_callable(CLASS)
+        恒真须按 __call__ 成员判定——P1 整改）。"""
+        code = (
+            "class Plain:\n"
+            "    func f(self) -> int:\n"
+            "        return 1\n"
+            "Plain d = Plain()\n"
+            "func apply(fn cb) -> int:\n"
+            "    return cb()\n"
+            "print(apply(d))\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_return_rejects_non_callable_instance(self):
+        """`-> fn` 返回拒"无 __call__ 的类实例"（P1 整改）。"""
+        code = (
+            "class Plain:\n"
+            "    func f(self) -> int:\n"
+            "        return 1\n"
+            "Plain d = Plain()\n"
+            "func make() -> fn:\n"
+            "    return d\n"
+        )
+        assert SEM in _errs(code)
+
+    def test_fn_param_accepts_callable_class_instance(self):
+        """`fn` 参数收"有 __call__ 的类实例"（P1 判定不误伤）。"""
+        code = (
+            "class Adder:\n"
+            "    func __call__(self, int x) -> int:\n"
+            "        return x + 1\n"
+            "Adder ad = Adder()\n"
+            "func apply(fn cb) -> int:\n"
+            "    return cb(1)\n"
+            "print(apply(ad))\n"
+        )
+        assert run_ibci(code) == ["2"]
+
+    def test_class_callable_base_rejected(self):
+        """`class X(callable)` 基类继承位置亦不可用内部类型名（P2 整改）。"""
+        code = (
+            "class X(callable):\n"
+            "    int a\n"
+        )
+        assert "SEM_UNRESOLVED_TYPE" in _errs(code)

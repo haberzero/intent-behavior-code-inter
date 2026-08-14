@@ -25,6 +25,7 @@ from core.kernel.spec.base import TypeKind, TypeDef
 from core.kernel.spec.type_ref import TypeRef
 
 from ..result import Diagnostic, DiagnosticLevel
+from ._fn_callable import CALLABLE_INTERNAL_TYPE_MSG
 
 
 def module_qualified_annotation(node: ast.IbASTNode):
@@ -311,8 +312,7 @@ class TypeCheckBase:
             # 报清晰错误而非半成品语义（此前只对 lambda/绑定方法生效、误拒裸函数）。
             if annotation.id == "callable":
                 self.error(
-                    "'callable' is an internal type name and cannot be used as a user type. "
-                    "Use 'fn' for an unconstrained callable, or 'fn[(...)]' for a signature constraint.",
+                    CALLABLE_INTERNAL_TYPE_MSG,
                     annotation, code=SEM_UNRESOLVED_TYPE,
                 )
                 return self._any_desc
@@ -386,8 +386,7 @@ class TypeCheckBase:
                     # callable 内部类型名守卫（list[callable] 等基类形态）。
                     if annotation.value.id == "callable":
                         self.error(
-                            "'callable' is an internal type name and cannot be used as a user type. "
-                            "Use 'fn' for an unconstrained callable, or 'fn[(...)]' for a signature constraint.",
+                            CALLABLE_INTERNAL_TYPE_MSG,
                             annotation, code=SEM_UNRESOLVED_TYPE,
                         )
                         return self._any_desc

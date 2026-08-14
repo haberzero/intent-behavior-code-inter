@@ -39,6 +39,7 @@ from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.registry.factory import _PRIMITIVE_CONSTRUCTORS
+from ._fn_callable import is_fn_callable_value
 
 
 def _first_pos_descriptor_after(descriptors, count: int):
@@ -707,7 +708,7 @@ class ExpressionVisitorsMixin:
                 and self.registry.is_dynamic(exp_spec)
                 and actual_spec is not None
                 and not self.registry.is_dynamic(actual_spec)
-                and not self.registry.is_callable(actual_spec)):
+                and not is_fn_callable_value(self.registry, actual_spec, arg_node, self.lookup_symbol)):
             self.error(
                 f"Argument '{name}' must be callable (fn 参数要求可调用), "
                 f"but got '{actual_spec.name}'.",

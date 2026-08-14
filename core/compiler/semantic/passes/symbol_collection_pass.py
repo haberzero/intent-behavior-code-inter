@@ -9,6 +9,7 @@ Symbol Collection Pass (SymbolPhase sub-step 1)
 from typing import Optional, List, Tuple
 
 from core.base.diagnostics.codes import SEM_REDEFINITION, SEM_UNCATEGORIZED, SEM_UNRESOLVED_TYPE
+from ._fn_callable import CALLABLE_INTERNAL_TYPE_MSG
 from core.base.enums import Provenance, Visibility
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, TypeSymbol, FunctionSymbol, VariableSymbol, SymbolKind
@@ -168,6 +169,13 @@ class SymbolCollector:
         # 所有用户类隐式继承 Object（与运行时 artifact_loader 的默认行为对齐）。
         # Object 自身不设置父类以避免循环。
         effective_parent = node.parent if node.parent else ("Object" if node.name != "Object" else None)
+        # callable 内部类型名守卫（方向 A）：`class X(callable)` 基类继承位置
+        # 亦不可使用内部类型名（callable 非 CLASS kind，本就不能作为基类）。
+        if effective_parent == "callable":
+            self.error(
+                CALLABLE_INTERNAL_TYPE_MSG,
+                node, code=SEM_UNRESOLVED_TYPE,
+            )
         # 用户类身份统一 (module_path, name)：所有模块（含入口）带 module 限定
         # （S2 类身份统一——入口模块类不再裸名，与被 import 模块类对称，
         # geo.Box / graph.Box / main.Box 各自独立）。
@@ -472,8 +480,7 @@ class SymbolCollector:
             # callable 内部类型名守卫（方向 A：用户面统一为 fn 族）。
             if annotation.id == "callable":
                 self.error(
-                    "'callable' is an internal type name and cannot be used as a user type. "
-                    "Use 'fn' for an unconstrained callable, or 'fn[(...)]' for a signature constraint.",
+                    CALLABLE_INTERNAL_TYPE_MSG,
                     annotation, code=SEM_UNRESOLVED_TYPE,
                 )
                 return TypeRef.of("any")
@@ -500,8 +507,7 @@ class SymbolCollector:
                 # callable 内部类型名守卫（list[callable] 等基类形态）。
                 if annotation.value.id == "callable":
                     self.error(
-                        "'callable' is an internal type name and cannot be used as a user type. "
-                        "Use 'fn' for an unconstrained callable, or 'fn[(...)]' for a signature constraint.",
+                        CALLABLE_INTERNAL_TYPE_MSG,
                         annotation, code=SEM_UNRESOLVED_TYPE,
                     )
                     return TypeRef.of("any")

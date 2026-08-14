@@ -15,6 +15,7 @@ from core.kernel.symbols import SymbolKind
 from core.kernel.spec import IbSpec
 from core.kernel.spec.base import TypeKind
 from core.kernel.spec.type_ref import TypeRef
+from ._fn_callable import is_fn_callable_value
 
 
 class StatementVisitorsMixin:
@@ -482,7 +483,7 @@ class StatementVisitorsMixin:
                         and self.registry.is_dynamic(declared_ret)
                         and ret_type is not None
                         and not self.registry.is_dynamic(ret_type)
-                        and not self.registry.is_callable(ret_type)):
+                        and not is_fn_callable_value(self.registry, ret_type, rhs_inner, self.lookup_symbol)):
                     self.error(
                         f"Cannot return '{getattr(ret_type, 'name', 'auto')}' "
                         f"from function declared 'fn' (fn 返回要求可调用)",

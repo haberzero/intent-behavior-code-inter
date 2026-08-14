@@ -14,6 +14,7 @@ from core.base.diagnostics.codes import (
     SEM_UNDEFINED_SYMBOL,
     SEM_UNRESOLVED_TYPE,
 )
+from ._fn_callable import CALLABLE_INTERNAL_TYPE_MSG
 from core.kernel import ast
 from core.kernel.symbols import Symbol, SymbolTable, SymbolKind, VariableSymbol
 from core.base.uid import intrinsic_uid
@@ -351,8 +352,7 @@ class SymbolResolver(ScopedVisitor):
             # callable 内部类型名守卫（方向 A：用户面统一为 fn 族）。
             if annotation.id == "callable":
                 self.error(
-                    "'callable' is an internal type name and cannot be used as a user type. "
-                    "Use 'fn' for an unconstrained callable, or 'fn[(...)]' for a signature constraint.",
+                    CALLABLE_INTERNAL_TYPE_MSG,
                     annotation, code=SEM_UNRESOLVED_TYPE,
                 )
                 return self.registry.resolve("any")
