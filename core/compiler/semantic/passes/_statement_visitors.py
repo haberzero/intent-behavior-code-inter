@@ -359,7 +359,19 @@ class StatementVisitorsMixin:
         for i, (exp_ref, act_ref) in enumerate(zip(expected_params, actual_params)):
             exp_spec = self.registry.resolve_typeref(exp_ref)
             act_spec = self.registry.resolve_typeref(act_ref)
+            # 裸类型参数占位（T，无实参）不可解析：延后至特化后校验。
+            if exp_spec is None and not getattr(exp_ref, "args", None):
+                continue
+            if act_spec is None and not getattr(act_ref, "args", None):
+                continue
+            # 带实参的 ref 不可解析（module 限定 concrete 解析失败）→ fail-fast 报错，
+            # 不静默跳过（否则漏洞 2 重新打开）。
             if exp_spec is None or act_spec is None:
+                self.error(
+                    f"Callable signature mismatch: cannot resolve parameter {i + 1} type "
+                    f"('{exp_ref.canonical_name}' / '{act_ref.canonical_name}').",
+                    node, code=SEM_UNRESOLVED_TYPE,
+                )
                 continue
             if spec_has_any_generic_arg(exp_spec) or spec_has_any_generic_arg(act_spec):
                 continue

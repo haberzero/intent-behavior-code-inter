@@ -34,20 +34,52 @@ if TYPE_CHECKING:
 _ANY_REF = _TypeRef.of("any")
 
 
+def _typeref_has_any_arg(ref) -> bool:
+    """TypeRef 或其泛型实参中是否含 ``any``（head=="any" 或递归嵌套）。
+
+    结构化逐实参判定，避免 name 字符串子串误命中（``Company`` 等类型名含
+    "any" 子串的假阳性——`spec_has_any_generic_arg` 的 P1 整改）。
+    """
+    if ref is None:
+        return False
+    if getattr(ref, "head", None) == "any":
+        return True
+    if not getattr(ref, "args", None):
+        return False
+    return any(_typeref_has_any_arg(a) for a in ref.args)
+
+
 def spec_has_any_generic_arg(spec: Optional["IbSpec"]) -> bool:
     """spec 的泛型实参中是否含 ``any``（T 降级占位或显式 any 通配）。
 
     模板上下文中类型参数占位经解析可能降级为 ``Box[any]``（T→any），与保留的
     ``Box[T]`` 不对称；``any`` 是动态通配，无法静态拒绝——含 any 的实参比较应
     延后（CALLABLE_SIG 签名模型根治：不误拒模板字段/参数赋值）。
+
+    按 spec 的结构化泛型承载字段（type_args / element_type / key+value /
+    positional / value_type / wrapped_type）逐实参判定，不依赖 name 子串。
     """
     if spec is None:
         return False
-    name = getattr(spec, "name", "")
-    if "[" not in name:
-        return False
-    inner = name[name.index("[") + 1:-1]
-    return "any" in inner
+    kind = getattr(spec, "kind", None)
+    args = []
+    if kind == TypeKind.LIST.value:
+        args = [getattr(spec, "element_type", None)]
+    elif kind == TypeKind.DICT.value:
+        args = [getattr(spec, "key_type", None), getattr(spec, "value_type", None)]
+    elif kind == TypeKind.TUPLE.value:
+        positional = getattr(spec, "positional_element_types", None) or []
+        args = list(positional) if positional else [getattr(spec, "element_type", None)]
+    elif kind == TypeKind.CLASS.value:
+        args = list(getattr(spec, "type_args", None) or [])
+    elif kind in (
+        TypeKind.THREAD.value, TypeKind.THREAD_RESULT.value, TypeKind.CHANNEL.value,
+        TypeKind.SLOT.value, TypeKind.GENERATOR.value, TypeKind.CALLABLE_INSTANCE.value,
+        TypeKind.OPTIONAL.value,
+    ):
+        args = [getattr(spec, "value_type", None), getattr(spec, "wrapped_type", None)]
+    # PRIMITIVE/FUNCTION/BOUND_METHOD/MODULE/TYPE_PARAM 等无泛型实参 → False
+    return any(_typeref_has_any_arg(a) for a in args if a is not None)
 
 
 class TypeKind(str, Enum):

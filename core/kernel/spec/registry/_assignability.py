@@ -154,12 +154,16 @@ class _AssignabilityMixin:
             for sp, tp in zip(src_params, tgt_params):
                 s_spec = self.resolve_typeref(sp)
                 t_spec = self.resolve_typeref(tp)
-                # 任一侧不可解析：延后（跳过该参数）。CALLABLE_SIG 构造时已对参数
-                # 调 _resolve_type 校验，真破损类型在构造期拦截；此处 None 只可能是
-                # 泛型模板的类型参数占位（T / Box[T]，模板定义期未注册）——延至
-                # 特化后校验，不误拒合法模板。
-                if s_spec is None or t_spec is None:
+                # 裸类型参数占位（T，无实参）不可解析：延后至特化后校验（模板体内
+                # fn[(T)->int] x = c 不误拒）。
+                if s_spec is None and not getattr(sp, "args", None):
                     continue
+                if t_spec is None and not getattr(tp, "args", None):
+                    continue
+                # 带实参的 ref 不可解析（如 module 限定 concrete 解析失败）→ 拒绝
+                # （fail-fast，不静默跳过——否则漏洞 2 重新打开）。
+                if s_spec is None or t_spec is None:
+                    return False
                 # 任一侧含 any 泛型实参（T 降级占位 Box[any] 或显式 any 通配）：
                 # 动态通配无法静态拒绝，延后（模板字段/参数赋值不误拒）。
                 from ..base import spec_has_any_generic_arg
