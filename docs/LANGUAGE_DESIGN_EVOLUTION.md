@@ -341,3 +341,27 @@ IBCI 已经有一个比大多数脚本语言更认真的类型地基，尤其是
 > 把协议作为内核一等公民，让 Prompt 协议、意图、LLM 函数、泛型约束、插件扩展全部收敛到同一套协议机制上。
 
 这不是一次语法更新，而是一次从 `TypeRef / TypeDef / TypeAxiom / SpecRegistry` 到编译器、运行时、插件、意图、LLM 装配的体系化重构。
+
+---
+
+## 附：`exp/protocol-kernel` 分支实验进度
+
+> 本节记录实际分支推进情况，随实验更新。
+
+### 已完成（第一轮协议内核化）
+
+- 新增 `ProtocolDef` / `ProtocolRegistry`，作为内核协议身份的唯一权威。
+- `SpecRegistry` 新增 `satisfies_protocol()`，支持内建协议与用户注册协议的结构化满足判断。
+- `TypeKind` 新增 `PROTOCOL`，为未来协议类型实体预留位置。
+- 新增统一 `PromptRenderer`，LLM executor 与 intent 系统均委托到该渲染器。
+- 新增 `PromptPart` / `assemble_prompt_parts` / `build_prompt_parts`，统一 behavior prompt 的段落装配模型。
+- 编译器与运行时的 LLM parse/output-hint 能力查询开始走协议注册表。
+- 新增协议注册表、PromptRenderer、PromptAssembly 测试。
+
+### 尚未开始（后续阶段）
+
+- 用户可写 `protocol` / `implements` 语法。
+- 泛型约束 `T: SomeProtocol` 与泛型函数。
+- 意图值栈与函数型意图。
+- LLM 函数与普通函数的执行路径完全统一。
+- 协议注册表的序列化 / 动态宿主隔离 / 诊断码。
