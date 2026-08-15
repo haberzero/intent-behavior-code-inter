@@ -448,7 +448,14 @@ class AIPlugin(IbStatefulPlugin):
         self._return_type_prompts[type_name] = prompt
 
     def get_return_type_prompt(self, type_name: str) -> Optional[str]:
-        return self._return_type_prompts.get(type_name)
+        """返回注册的类型提示；泛型类型按基名回退（list[int] -> list）。"""
+        prompt = self._return_type_prompts.get(type_name)
+        if prompt is not None:
+            return prompt
+        if type_name and "[" in type_name:
+            base_name = type_name.split("[", 1)[0].strip()
+            return self._return_type_prompts.get(base_name)
+        return None
 
     def get_current_call_info(self) -> Dict[str, Any]:
         """获取最近一次 resolve 的调用信息（委托内核 LLM 执行器的主线程单写槽）。"""
