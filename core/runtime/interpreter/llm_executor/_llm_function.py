@@ -6,7 +6,7 @@
 
 依赖 :class:`LLMExecutorCore` 的 ``_call_llm`` / ``llm_callback`` / ``_current_call_info``
 等共享状态，以及 :class:`_PromptMixin` 的 ``_get_function_param_names`` /
-``_evaluate_segments`` / ``_evaluate_segments_cps`` / ``_parse_result``。
+``_evaluate_segments_cps`` / ``_parse_result``。
 """
 
 from dataclasses import dataclass, field
@@ -205,7 +205,7 @@ class _LLMFunctionMixin:
         )
 
     def execute_llm_function_cps(self, node_uid: str, execution_context: IExecutionContext):
-        """CPS 版 :meth:`execute_llm_function`；逻辑等价，段求值通过 yield from。
+        """LLM 函数 CPS 执行入口；段求值通过 yield from。
 
         **LLM 真挂起**（与 behavior 路径 :meth:`execute_behavior_expression_cps`
         同构）：prompt 经 ``_prepare_llm_function_call_cps``（段求值 yield）构建
