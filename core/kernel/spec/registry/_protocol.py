@@ -57,6 +57,9 @@ class _ProtocolMixin:
             return False
         if self.is_dynamic(spec):
             return True
+        # A protocol declaration is not itself an implementation.
+        if spec.kind == TypeKind.PROTOCOL.value:
+            return False
         protocol = self.get_protocol(protocol_name)
         if protocol is None:
             return False

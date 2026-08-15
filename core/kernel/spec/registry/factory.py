@@ -99,6 +99,28 @@ class SpecFactory:
             param_types=refs,
         )
 
+    def create_protocol(
+        self,
+        name: str,
+        module: Optional[str] = None,
+        provenance: Provenance = Provenance.USER_DEFINED,
+        visibility: Visibility = Visibility.IMPORT_GATED,
+    ) -> "TypeDef":
+        """Create a PROTOCOL kind TypeDef.
+
+        Protocol method signatures are stored in ``members``, exactly like
+        class methods.  This is the type-system representation of a protocol;
+        the runtime ProtocolRegistry can be derived from it via
+        ``ProtocolRegistry.register_from_spec``.
+        """
+        return TypeDef(
+            name=name,
+            kind=TypeKind.PROTOCOL.value,
+            module_path=module,
+            provenance=provenance,
+            visibility=visibility,
+        )
+
     def create_class(
         self,
         name: str,

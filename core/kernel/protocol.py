@@ -77,6 +77,25 @@ class ProtocolRegistry:
     def __contains__(self, name: str) -> bool:
         return name in self._protocols
 
+    def register_from_spec(self, spec: Any) -> Optional[ProtocolDef]:
+        """Register a protocol from a PROTOCOL-kind TypeDef.
+
+        The protocol's required methods are derived from the spec's ``members``
+        dictionary.  This is the bridge between the type-system representation
+        of protocols and the runtime protocol registry.
+        """
+        name = getattr(spec, "name", None)
+        if not name:
+            return None
+        members = getattr(spec, "members", None) or {}
+        methods = tuple(sorted(members.keys()))
+        protocol = ProtocolDef(
+            name=name,
+            methods=methods,
+            description="User-defined protocol",
+        )
+        return self.register(protocol)
+
 
 # ---------------------------------------------------------------------------
 # Built-in protocol definitions

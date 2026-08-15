@@ -110,3 +110,23 @@ class TestCustomProtocolStructuralSatisfaction:
         spec = _make_class("NoDump", ["load"])
         reg.register(spec)
         assert reg.satisfies_protocol(spec, "Dumpable") is False
+
+
+class TestProtocolSpecBridge:
+    def test_create_protocol_spec_and_register(self):
+        from core.kernel.protocol import ProtocolDef
+        reg = create_default_registry()
+        proto_spec = reg.factory.create_protocol("MyProto")
+        proto_spec.members["do_it"] = MethodMemberSpec(
+            name="do_it",
+            kind="method",
+            return_type=TypeRef.of("str"),
+            param_types=[],
+        )
+        reg.register(proto_spec)
+        reg.register_protocol(ProtocolDef(name="MyProto", methods=("do_it",)))
+        assert reg.satisfies_protocol(reg.resolve("MyProto"), "MyProto") is False
+        # A class implementing the method satisfies structurally.
+        impl = _make_class("MyImpl", ["do_it"])
+        reg.register(impl)
+        assert reg.satisfies_protocol(impl, "MyProto") is True
