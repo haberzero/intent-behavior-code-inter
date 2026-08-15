@@ -23,6 +23,7 @@ from core.kernel.spec import IbSpec, TypeKind
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.member import ParamDescriptor
 from core.kernel.axioms.prompt_protocol import (
+    PROMPT_PROTOCOL_NAMES,
     validate_prompt_protocol_signature,
     is_prompt_protocol_method,
 )
@@ -56,11 +57,9 @@ def _contains_yield(stmts) -> bool:
 
 # Methods whose signatures are not constrained by parent class
 # (constructors and protocol methods may freely change signature).
-_OVERRIDE_SIGNATURE_FREE: frozenset = frozenset({
-    "__init__", "__snapshot__", "__restore__",
-    "__to_prompt__", "__from_prompt__", "__outputhint_prompt__",
-    "__validate_prompt__",
-})
+_OVERRIDE_SIGNATURE_FREE: frozenset = frozenset(
+    {"__init__", "__snapshot__", "__restore__"} | set(PROMPT_PROTOCOL_NAMES)
+)
 
 
 class DeclarationVisitorsMixin:
