@@ -124,9 +124,19 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         description="Values that can parse raw text into a typed value.",
     ),
     ProtocolDef(
+        name="to_prompt",
+        methods=("__to_prompt__",),
+        description="Values that can render themselves into LLM prompt text.",
+    ),
+    ProtocolDef(
         name="from_prompt",
         methods=("__from_prompt__",),
         description="Values that can parse LLM output into a typed value.",
+    ),
+    ProtocolDef(
+        name="validate_prompt",
+        methods=("__validate_prompt__",),
+        description="Values that can pre-validate raw LLM output.",
     ),
     ProtocolDef(
         name="output_hint",
