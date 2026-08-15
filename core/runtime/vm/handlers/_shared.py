@@ -108,7 +108,7 @@ def _get_callee_param_specs(executor, func):
     """
     if isinstance(func, IbBoundMethod):
         return _get_callee_param_specs(executor, func.method)
-    if isinstance(func, (IbUserFunction, IbLLMFunction)):
+    if isinstance(func, IbUserFunction):
         node_data = executor.ec.get_node_data(func.node_uid)
         return _build_runtime_param_specs(executor, node_data.get("args", [])) or None
     if isinstance(func, IbValue):

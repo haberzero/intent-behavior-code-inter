@@ -431,7 +431,7 @@ class DeclarationComponent(BaseComponent):
         
         # Categorize body elements
         for stmt in body:
-            if isinstance(stmt, (ast.IbFunctionDef, ast.IbLLMFunctionDef)):
+            if isinstance(stmt, ast.IbFunctionDef):
                 class_node.methods.append(stmt)
             elif isinstance(stmt, ast.IbAssign):
                 class_node.fields.append(stmt)

@@ -844,7 +844,7 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
         result = []
         if isinstance(node, ast.IbName):
             result.append(node)
-        elif isinstance(node, (ast.IbFunctionDef, ast.IbLLMFunctionDef, ast.IbClassDef)):
+        elif isinstance(node, (ast.IbFunctionDef, ast.IbClassDef)):
             # 嵌套定义体：不递归（内层引用由内层函数自己的捕获分析处理）
             return result
         elif isinstance(node, ast.IbASTNode):

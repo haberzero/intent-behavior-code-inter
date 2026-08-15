@@ -39,7 +39,7 @@ def _contains_yield(stmts) -> bool:
     from core.kernel import ast as _ast
 
     def _scan_stmt(stmt) -> bool:
-        if isinstance(stmt, (_ast.IbFunctionDef, _ast.IbLLMFunctionDef, _ast.IbClassDef, _ast.IbLambdaExpr)):
+        if isinstance(stmt, (_ast.IbFunctionDef, _ast.IbClassDef, _ast.IbLambdaExpr)):
             return False
         for attr in vars(stmt).values():
             if isinstance(attr, (_ast.IbYieldExpr, _ast.IbYieldFromExpr)):

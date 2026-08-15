@@ -272,7 +272,7 @@ class _PromptMixin:
             if not method:
                 return None
             from core.runtime.objects.kernel import IbUserFunction, IbLLMFunction
-            if isinstance(method, (IbUserFunction, IbLLMFunction)):
+            if isinstance(method, IbUserFunction):
                 result = yield UserFunctionCall(method, [], ib_class)
             else:
                 # 原生 hint 方法：同步调用（非调度路径，无嵌套调度器）。
