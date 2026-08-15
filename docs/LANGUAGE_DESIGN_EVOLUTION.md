@@ -374,10 +374,25 @@ IBCI 已经有一个比大多数脚本语言更认真的类型地基，尤其是
 - 编译器与运行时的 LLM parse/output-hint 能力查询开始走协议注册表。
 - 新增协议注册表、PromptRenderer、PromptAssembly 测试。
 
+### 已完成（第二轮：统一收尾 + 梳理清洁）
+
+- **IbLLMFunctionDef / IbLLMFunction 残留清理**：AST/运行时类层次统一后的
+  残留分支全部收敛——VM handler、interpreter 方法水化、四个语义 pass 的
+  LLM 特殊分支并入 IbFunctionDef/IbUserFunction 统一路径（仅
+  `callable_kind` 标记与 LLM 专属校验保留）；删除 `IbLLMFunction = IbUserFunction`
+  兼容别名（compat shim 禁止）；`_protocol.py` 重复 `protocol_methods` 删除；
+  binding_analysis 不可达 elif 删除；FunctionContext 休眠 API 与过渡委托删除。
+- **LLM prompt 预求值 sync/CPS 双通道收敛**：`_prepare_behavior_call` /
+  `_evaluate_segments` / `_get_llmoutput_hint` 同步版全部删除——同步路径经
+  `_pump_cps` 泵驱动单一 CPS 权威实现（dispatch_eager 主线程预求值行为不变）。
+- **retroactive implementation 推进到"可为已有类型补充方法"**：
+  `impl SomeProtocol for SomeType:` 可携带方法定义体，为既有用户类补充协议
+  缺失方法（self 可用、继承链可见、可作泛型 bound 实参、多 impl 块合并）；
+  协议满足检查在"类自身方法 + impl 补充方法"并集上进行并校验签名兼容。
+  v1 边界（fail-fast）：泛型/内置目标、非方法语句、与类自身成员冲突。
+
 ### 尚未开始（后续阶段）
 
-- 用户可写 `protocol` / `implements` 语法。
-- 泛型约束 `T: SomeProtocol` 与泛型函数。
 - 意图值栈与函数型意图。
-- LLM 函数与普通函数的执行路径完全统一。
-- 协议注册表的序列化 / 动态宿主隔离 / 诊断码。
+- 协议注册表的动态宿主隔离 / 诊断码。
+- impl 对泛型类、内置类型的支持（v1 边界扩展）。

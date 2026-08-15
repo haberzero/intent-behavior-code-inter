@@ -1,4 +1,4 @@
-﻿# IBCI 元数据架构设计文档
+# IBCI 元数据架构设计文档
 
 > 本文档澄清 AST、侧表、MetadataStore 的职责边界和设计原则。
 > 读者对象：需要修改编译管线数据流或新增 AST 字段/侧表的开发者。
@@ -128,6 +128,29 @@ class IbClassDef(IbStmt):
 - 父类泛型引用（`class Sub[T](Box[T])`）经 `parent_args` 承载，语义层把
   `parent_type` 构造为泛型 TypeRef（`TypeRef.generic("Box", TypeRef("T"))`），
   特化时递归替换。
+
+### 2.7 协议与 retroactive implementation 节点
+
+`IbProtocolDef`（`core/kernel/ast.py`）承载协议声明：`name` / `parent` /
+`type_params` / `body` / `methods`。协议是编译期契约：方法体被忽略（占位
+`pass`），仅签名进入协议成员表，语义层注册 PROTOCOL-kind TypeDef 与内核
+`ProtocolDef`。
+
+`IbImplDef` 承载 retroactive implementation 声明：
+
+```python
+class IbImplDef(IbStmt):
+    protocol_name: str
+    type_name: str
+    body: List[IbStmt] = []       # 方法定义（func）；空 = 仅声明形式
+```
+
+- `body` 是**程序源码结构**（AST 固有属性，随节点序列化）。带 body 时 impl
+  为既有用户类补充协议缺失方法：方法经四个语义 pass 以目标类成员上下文
+  收集/解析/精化（与类方法同构），运行期在水化阶段（封印前）注册到目标类。
+- 方法体可读 `self`（self/super 注入与 node_to_symbol 绑定与类方法一致）。
+- v1 边界：目标须为同模块用户类（非泛型、非内置）；body 仅 `func` 方法；
+  与类自身成员同名冲突 fail-fast。
 
 ---
 

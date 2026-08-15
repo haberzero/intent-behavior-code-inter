@@ -26,7 +26,7 @@
 
 执行任意 IBCI 代码的唯一路径（收敛到 `VMExecutor._drive_loop_gen` 的 CPS 调度循环）：
 - **模块/顶层入口**：`Interpreter.execute_module()` → `VMExecutor.run_body(body)` → 逐语句 `VMExecutor.run(uid)`；
-- **函数/可调用对象宿主入口**：`IbUserFunction.call()` / `IbLLMFunction.call()` / `IbBehavior.call()` 为宿主侧薄包装，委托 `_vm_call_*` 助手 + `_drive_generator`（`TaskScheduler` 驱动 `_drive_loop_gen`）。
+- **函数/可调用对象宿主入口**：`IbUserFunction.call()`（普通/LLM 函数统一，`callable_kind` 区分）/ `IbBehavior.call()` 为宿主侧薄包装，委托 `_vm_call_*` 助手 + `_drive_generator`（`TaskScheduler` 驱动 `_drive_loop_gen`）。
 
 ---
 
@@ -256,7 +256,7 @@ VM 行为：
            → 确定：返回 result.value；不确定：返回 IbLLMCallResult(is_certain=False) 容器
 ```
 
-> LLM 调用路径：`IbBehavior.call()` / `IbLLMFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers/` 包中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
+> LLM 调用路径：`IbBehavior.call()` / `IbUserFunction.call()`（LLM 函数，`callable_kind="llm_function"`）在 VM CPS 主路径下由 `core/runtime/vm/handlers/` 包中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
 
 ---
 
@@ -432,7 +432,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ### 10.1 IILLMExecutor
 
-`core/base/interfaces.py:IILLMExecutor`（Protocol） + `KernelRegistry.register_llm_executor(executor, token)` 在 `Engine._prepare_interpreter()` 末尾注入。`IbBehavior.call()` / `IbLLMFunction` 通过 `registry.get_llm_executor()` 合法取得 LLM 服务，无架构穿透。
+`core/base/interfaces.py:IILLMExecutor`（Protocol） + `KernelRegistry.register_llm_executor(executor, token)` 在 `Engine._prepare_interpreter()` 末尾注入。`IbBehavior.call()` / `IbUserFunction.call()`（LLM 函数）通过 `registry.get_llm_executor()` 合法取得 LLM 服务，无架构穿透。
 
 ### 10.2 HostService 与插件
 

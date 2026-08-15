@@ -172,6 +172,61 @@ if s == Status.RUNNING:
 | `__restore__(self, state)` | llmexcept retry 前 | 从快照值恢复对象状态 |
 ---
 
+### 6.8 用户协议与 retroactive implementation
+
+**协议（protocol）** 是方法签名的命名集合，用作类型约束：
+
+```ibci
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+```
+
+- 协议支持继承：`protocol Child(Parent):`，子协议要求父协议的全部方法。
+- 泛型协议：`protocol Container[T]:`，实现侧 `class Box implements Container[int]:`。
+- 协议作为泛型约束：`class Box[T: Greeter]`（类型实参须满足协议）、
+  `func call[T: Greeter](T x) -> str`（调用点从实参推断并检查约束）。
+- 方法签名须与协议兼容：参数数量一致、参数类型可放宽、返回类型协变。
+- `implements` 声明但缺失方法、或签名不兼容，均在编译期报错。
+
+**retroactive implementation（`impl`）** 为既有类型声明协议满足关系：
+
+```ibci
+impl Greeter for Foo:
+
+```
+
+空 body 形式仅校验并记录：类型必须已提供协议全部方法。
+
+`impl` 可携带方法定义体，为既有类型**补充缺失的协议方法**（不改原类定义）：
+
+```ibci
+protocol Renderable:
+    func render(self) -> str:
+        pass
+
+class Box:
+    str label
+
+impl Renderable for Box:
+    func render(self) -> str:
+        return "[" + self.label + "]"
+
+print(Box("a").render())   # [a]
+```
+
+- 补充的方法体可读 `self` 与字段；子类经继承链可见补充方法。
+- 同一类型可写多个 `impl` 块（不同协议各自补充）。
+- 协议满足检查在"类自身方法 + impl 补充方法"并集上进行。
+- **限制**：目标须为本模块用户类（泛型类与内置类型不支持）；body 仅允许
+  `func` 方法；与类自身成员同名的方法报编译期错误。
+
+---
+
 ## 深入指引
 
 - 用户类能力差距：docs/KNOWN_LIMITS.md §十四
