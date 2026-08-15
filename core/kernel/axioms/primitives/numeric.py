@@ -229,10 +229,10 @@ class BoolAxiom(BaseAxiom):
             return (True, True)
         if val in ("false", "no", "0"):
             return (True, False)
-        return (False, f"无法从 '{raw_response}' 解析布尔值。请只返回 true 或 false")
+        return (False, f"无法从 '{raw_response}' 解析布尔值。请返回 true/false、yes/no 或 1/0")
 
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
-        return "请只返回 true 或 false，不要包含任何其他文字"
+        return "请返回一个布尔值：true/false、yes/no 或 1/0，不要包含任何其他文字"
 
     def is_compatible(self, other_name: str) -> bool:
         return other_name in ("bool", "int")
