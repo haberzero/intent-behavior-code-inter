@@ -2,9 +2,14 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**✅ 已完成：fn[(...)->...]（CALLABLE_SIG）签名模型根治**。
-> KNOWN_LIMITS §10.4 潜伏边界已根治（类型安全漏洞关闭）。设计分析
-> `_DESIGN_CALLABLE_SIG_SIGNATURE.md`）
+> **最后更新**：2026-08-14（**🔴 下一 session 主线候选：IBCI LLM 调用机制改进**。
+> T5 枚举解析失败深挖——实证机制 bug（枚举输出约束未注入提示词）+ 三结构性弱点。
+> 交接文档：`tasks_docs/_HANDOFF_LLM_PROMPT_MECHANISM.md` + PENDING_TASKS §〇 行）
+>
+> **✅ 已完成（2026-08-14，完整 IBCI 真实代码试用核查）**：T01-T07 全量重跑，近期改动
+> （断层根治 + fn/callable 方向 A + CALLABLE_SIG 根治）对已知试用代码**零回归**；更新
+> 4 例过期触发用例 expect-class→PASS（核销）；记录 T02 T5 真实 LLM 间歇失败。详见
+> `tasks_docs/trials/VERIFICATION_20260814.md`。
 >
 > **✅ 已完成（2026-08-14，exp/callable-sig-signature → unsafe-vibe-dev，全量 2775 passed / 1 skipped 零回归）**：
 > **CALLABLE_SIG 签名模型架构碎片化根治**。深挖推翻 §10.4"潜伏"定性——为真实类型安全

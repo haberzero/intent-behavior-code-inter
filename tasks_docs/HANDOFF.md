@@ -122,6 +122,18 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **🔴 下一 session 主线候选（2026-08-14 深挖实证）：IBCI LLM 调用机制改进**。
+  T5 枚举解析真实 LLM 间歇失败深挖——实证机制 bug（枚举 `__outputhint_prompt__` 未注入
+  提示词：`_get_llmoutput_hint` 裸名 resolve 断链，S2/S5 module 化后注入端未升级；实际
+  sys_prompt 无 `[输出格式要求]`）+ 三结构性弱点（程序化调用纪律缺失 / 期望类型不注入 /
+  retry 无自动错误回喂）。修复方向 A-E。交接 `_HANDOFF_LLM_PROMPT_MECHANISM.md` +
+  PENDING_TASKS §〇 P0 行。
+
+- **✅ 已完成（2026-08-14，完整 IBCI 真实代码试用核查）**：T01-T07 全量重跑，近期改动
+  （断层根治 + fn/callable 方向 A + CALLABLE_SIG 根治）对已知试用代码零回归；更新 4 例
+  过期触发用例 expect-class→PASS（核销）；记录 T02 T5 真实 LLM 间歇失败。报告
+  `tasks_docs/trials/VERIFICATION_20260814.md`。
+
 - **✅ 已完成（2026-08-14，exp/callable-sig-signature → unsafe-vibe-dev 合并，全量 2775 passed / 1 skipped 零回归）**：
   **fn[(...)->...]（CALLABLE_SIG）签名模型根治**。KNOWN_LIMITS §10.4"潜伏边界"深挖
   推翻为真实类型安全漏洞（匹配双通道只查数量+返回 / 嵌套类型参数不替换致检查静默

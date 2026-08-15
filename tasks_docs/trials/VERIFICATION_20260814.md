@@ -40,12 +40,14 @@
 - `T07/cases/D2-09.ibci`（OPTIONAL-SCOPE-1，期望 405）
 - `T07/cases/D2-10.ibci`（OPTIONAL-CONTAINER-1，期望 3）
 
-### 3.2 真实 LLM 间歇失败（记录，非内核缺陷）
-- **T02 T5-enum-value-ne-name**：`Status c = @~...~` 枚举成员名→底层值映射，
-  真实 LLM 间歇输出格式偏离 → 严格解析器 LLMParseError（3 次 2 败 1 过）。
-  分类 **LLM_BEHAVIOR**（模型非确定性），非近期改动回归。用例本身忠实呈现
-  枚举→值映射契约（不绕过缺陷）；失败模式提示严格解析器对模型轻微格式偏离
-  零容忍，可作解析器鲁棒性候选（P3，需 raw response 实证后登记，本次仅记录）。
+### 3.2 真实 LLM 间歇失败（深挖后定性为机制 bug，2026-08-14 后续调查）
+- **T02 T5-enum-value-ne-name**：`Status c = @~...~` 枚举成员名→底层值映射，真实 LLM
+  间歇输出格式偏离 → 严格解析器 LLMParseError（3 次 2 败 1 过）。
+- **深挖结论**：**非单纯模型非确定性**——实证为机制 bug：枚举 `__outputhint_prompt__`
+  （"Reply with exactly one of: ACTIVE, INACTIVE."）**未注入提示词**（`_get_llmoutput_hint`
+  裸名 resolve 断链，S2/S5 module 化后注入端未升级；实际 sys_prompt 无 `[输出格式要求]`），
+  加上三结构性弱点（程序化调用纪律缺失 / 期望类型不注入 / retry 无自动错误回喂）。
+  详见 `_HANDOFF_LLM_PROMPT_MECHANISM.md`。记录不修复（核查任务纪律）。
 
 ### 3.3 无新增内核缺陷 / 边界 / 文档问题
 本次全量重跑未发现近期改动引入的新 KERNEL_ISSUE / BOUNDARY / DOC_ISSUE。

@@ -2,7 +2,7 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-14（完整 IBCI 真实代码试用核查；近期改动零回归）
+> 最后更新：2026-08-14（IBCI LLM 调用机制深挖：枚举输出约束注入断链 bug + 三结构性弱点，交接下一 session）
 
 ---
 
@@ -19,6 +19,10 @@
 ---
 
 | **完整 IBCI 真实代码试用核查（2026-08-14，只记录不修复内核）** | **用户指示：确认近期代码改动（断层根治 + fn/callable 方向 A + CALLABLE_SIG 根治）对已知试用代码的影响；试用问题只记录，试用代码过期则更新；试用代码贴近一般编程语言体验、不绕过 IBCI 缺陷、缺陷忠实呈现**。**全量重跑**：T01-T07 试用地基（mock 批 run_batch --mock-only + 真实 LLM 批 run_batch --llm-only + T05/T06 子目录 run_one --root=用例目录，qwen3.6-35b-a3b 在线）。**结果：近期改动对已知试用代码零回归**——T01 mock 37P+6G+4H(支持/探针) / LLM 55P+2G；T02 mock 5P+1L / LLM 2P+1 LLM_BEHAVIOR；T03 23P+6G+1H(故意超时)；T04 26P+8G+1H；T05 平铺 18P+1G + 子目录 13P；T06 子目录 20P（含真实 LLM D3-02 核销）；T07 mock 32P+12G / LLM 7P。**处置**：① 4 例过期触发用例（T05 D1-10 CROSSMOD-THREAD-1 / T07 D1-13 ATTR-READ-1 / D2-09 OPTIONAL-SCOPE-1 / D2-10 OPTIONAL-CONTAINER-1）缺陷已修复、.ibci 仍声明 KERNEL_ISSUE → 更新 expect-class→PASS（核销契约，触发场景保留）；② T02 T5-enum-value-ne-name 真实 LLM 间歇格式偏离（3 次 2 败 1 过，严格解析器 LLMParseError）→ 记录 LLM_BEHAVIOR（模型非确定性，非内核回归；解析器鲁棒性候选 P3，需 raw response 实证后登记）；③ 无新增 KERNEL_ISSUE/BOUNDARY/DOC_ISSUE。试用代码卫生核对：无绕过 IBCI 缺陷的特定代码，触发用例忠实保留场景。报告 `tasks_docs/trials/VERIFICATION_20260814.md`；INDEX.md 同步。 |
+
+---
+
+| **IBCI LLM 调用机制深挖（2026-08-14，只记录+交接，不改内核）** | **用户指示：严肃评估 T02 T5 枚举解析真实 LLM 间歇失败是否为机制设计失误（prompt 协议/提示词设计/llmretry 反馈），对照 OpenAI 标准对话机制评估 IBCI LLM 调用机制**。**实证**：① 捕获失败原始响应——模型完全滑入"对话助手"模式（"请提供需要解析的状态值。"/"无法提供不存在的系统内部状态信息。作为人工智能助手..."安全幻觉拒绝），非接近但格式偏，而是完全偏离指令；② 插桩实证实际 sys_prompt = `'你是一个意图行为代码执行器。'`——**无 `[输出格式要求]` 段，枚举 `__outputhint_prompt__` 未注入**（根因：`_get_llmoutput_hint` 用裸名 `resolve("Status")` 查枚举，S2/S5 module 化后注册为 `__string_exec__.Status` → None；`_try_vtable_hint` 也失败——枚举 hint 在 EnumAxiom 不在类 vtable；type_hint 仅用于解析不注入）；③ 解析端 module 感知（`_get_expected_type_hint` 返回 qualified 名），注入端非 module 感知——**不对称**，S2/S5 module 化后注入端未同步升级（与 create_func/resolve_member 断层同族）。**三结构性弱点**：系统提示词过弱未建立程序化调用纪律 / 期望类型不注入 prompt / llmexcept/retry 只回喂用户手写 retry_hint 不自动回喂解析错误或上次响应。**vs OpenAI 标准**：IBCI `@~...~` = "裸用户单轮 + 通用系统提示"最弱框架，缺 function/tool 框架、schema 注入、错误回喂重试。**结论**：T5 非单纯模型非确定性，是机制弱点（1 可直接复现 bug + 3 结构性弱点），修复方向 A-E 明确。**交接** `tasks_docs/_HANDOFF_LLM_PROMPT_MECHANISM.md` + PENDING_TASKS §〇 P0 行 + NEXT_STEPS 主线候选。 |
 
 ---
 
