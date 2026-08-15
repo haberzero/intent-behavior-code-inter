@@ -12,7 +12,6 @@ from core.runtime.shared.op_constants import (
 )
 from core.runtime.objects.kernel import (
     IbValue,
-    IbLLMFunction,
     IbLLMUncertain,
     IbUserFunction,
 )
@@ -361,13 +360,8 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     if isinstance(func, IbValue) and func.ib_class.name == "behavior":
         result = yield from _vm_invoke_behavior(executor, func, args)
         return result
-    if isinstance(func, IbLLMFunction):
-        result = yield from _vm_invoke_llm_function(
-            executor, func, executor.registry.get_none(), args
-        )
-        return result
 
-    # IbUserFunction（普通用户函数）：trampoline 调用（R1，EXEC-1 根治）。
+    # IbUserFunction / IbLLMFunction：统一走 trampoline 调用（R1，EXEC-1 根治）。
     # 不 yield from 生成器（会嵌套 Python 栈），而是 yield 函数调用请求，
     # 由 _drive_loop_gen 把函数体作为独立 VMTask 压栈——深递归 Python 深度恒定。
     # 惰性生成器（含 yield，D-08 自标记）：调用产出 IbGenerator（不执行体），
@@ -404,11 +398,6 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
                     raise RuntimeError("generator class not registered (bootstrap invariant violated)")
                 return IbGenerator(gen_class, driver)
             result = yield UserFunctionCall(method, args, receiver)
-            return result
-        if isinstance(method, IbLLMFunction):
-            result = yield from _vm_invoke_llm_function(
-                executor, method, receiver, args
-            )
             return result
 
     try:

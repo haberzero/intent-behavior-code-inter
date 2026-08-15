@@ -367,10 +367,11 @@ class VMExecutor:
         逐语句 yield），作为独立 VMTask 压入同一帧栈。函数完成后其返回值
         经 ``_drive_loop_gen`` 的 ``StopIteration.value`` send 回调用点。
         """
-        from core.runtime.vm.handlers._shared import _vm_call_user_function
+        from core.runtime.vm.handlers._shared import _vm_call_function
 
-        gen = _vm_call_user_function(
-            self, call.func, call.receiver, call.args
+        gen = _vm_call_function(
+            self, call.func, call.receiver, call.args,
+            is_llm=(getattr(call.func, "callable_kind", "user_function") == "llm_function"),
         )
         return VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)
 
@@ -383,10 +384,11 @@ class VMExecutor:
         挂起向外交付、迭代恢复。返回驱动生成器，``next()`` 取产出值、``send``
         恢复。与普通函数（trampoline 压栈同级，但驱动循环可暂停）同构。
         """
-        from core.runtime.vm.handlers._shared import _vm_call_user_function
+        from core.runtime.vm.handlers._shared import _vm_call_function
 
-        gen = _vm_call_user_function(
-            self, call.func, call.receiver, call.args
+        gen = _vm_call_function(
+            self, call.func, call.receiver, call.args,
+            is_llm=(getattr(call.func, "callable_kind", "user_function") == "llm_function"),
         )
         return self._drive_loop_gen(
             [VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)],

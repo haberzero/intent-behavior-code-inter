@@ -172,7 +172,13 @@ class VTableParsingStrategy(ParsingStrategy):
             return False
 
         method = ib_class.lookup_method('__from_prompt__')
-        return method is not None
+        if method is None:
+            return False
+        # Protocol-kernel path: prefer satisfies_protocol when available.
+        meta = self.registry.get_metadata_registry()
+        if meta is not None and getattr(ib_class, "spec", None) is not None:
+            return meta.satisfies_protocol(ib_class.spec, "from_prompt")
+        return True
 
     def parse(self, raw_res: str, type_name: str, node_uid: str,
               execution_context: Optional['IExecutionContext'] = None) -> Optional[LLMResult]:
