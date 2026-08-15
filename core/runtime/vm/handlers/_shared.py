@@ -759,6 +759,10 @@ def _retry_llm_uncertain(executor, uncertain_result, handler_uid: str, re_eval_u
                 )
                 frame.restore_snapshot(executor.runtime_context)
 
+            # 记录本轮失败尝试（含 handler 刚写入的 retry_hint），供下一轮
+            # 重试以标准多轮对话形式回喂 assistant 输出 + 纠错 user 消息。
+            frame.record_uncertain_attempt()
+
             if not frame.increment_retry():
                 error = executor.registry.make_llm_retry_exhausted_error(
                     f"LLM call retry exhausted after {frame.max_retry} attempt(s); "

@@ -208,7 +208,15 @@ class LLMExecutorCore:
             return result.value
         return self.registry.get_none()
 
-    def _call_llm(self, sys_prompt: str, user_prompt: Union[str, List[Union[str, Dict[str, Any]]]], node_uid: str, execution_context: Optional[IExecutionContext] = None, target_model: str = "") -> str:
+    def _call_llm(
+        self,
+        sys_prompt: str,
+        user_prompt: Union[str, List[Union[str, Dict[str, Any]]]],
+        node_uid: str,
+        execution_context: Optional[IExecutionContext] = None,
+        target_model: str = "",
+        message_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """底层 LLM 调用。成功时返回 response 字符串。
         失败時（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。
 
@@ -220,13 +228,22 @@ class LLMExecutorCore:
 
         ``target_model``：命名模型标识符，传递给 LLM provider 用于路由到特定模型配置。
         空字符串表示使用默认模型。
+
+        ``message_history``：标准多轮对话历史（``assistant``/``user`` 消息序列），
+        由 provider 追加在 ``system``/``user`` 首轮消息之后；重试场景用于回喂
+        上次失败输出与纠错指令，而不是把历史文本拼进 system prompt。
         """
         if self.llm_callback:
             self._emit_llm_event(
                 "llm_dispatched", {"node_uid": node_uid, "target_model": target_model}
             )
             try:
-                response = self.llm_callback(sys_prompt, user_prompt, target_model=target_model)
+                response = self.llm_callback(
+                    sys_prompt,
+                    user_prompt,
+                    target_model=target_model,
+                    message_history=message_history,
+                )
                 hooks = self._test_hooks()
                 if hooks is not None:
                     hooks.on_llm_call(

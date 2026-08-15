@@ -49,8 +49,9 @@ class TestBehaviorPromptMechanism:
         )
         assert lines == ["hi"]
         assert prompts, "LLM provider 应被调用"
-        assert "被 IBCI 程序调用的函数" in prompts[0]
-        assert "禁止输出问候语" in prompts[0]
+        assert "只输出任务要求的结果数据本身" in prompts[0]
+        assert "禁止输出任何解释" in prompts[0]
+        assert "IBCI" not in prompts[0]
 
     def test_str_behavior_gets_generic_expected_type_declaration(self):
         lines, prompts = _run_with_hooks(
@@ -60,7 +61,6 @@ class TestBehaviorPromptMechanism:
         )
         assert lines == ["hi"]
         assert prompts
-        assert "[期望输出类型]" in prompts[0]
         assert "必须返回一个 str 值" in prompts[0]
 
     def test_enum_outputhint_injected_for_behavior(self):
@@ -92,7 +92,24 @@ print(c)
 
 
 class TestRetryFeedbackMechanism:
-    def test_llmexcept_retry_feeds_back_previous_response_and_parse_error(self):
+    def test_llmexcept_retry_uses_standard_multiturn_messages(self, monkeypatch):
+        from ibci_modules.ibci_ai.core import AIPlugin
+
+        captured = []
+        orig_call = AIPlugin.__call__
+
+        def spy(self, sys_prompt, user_prompt, *, target_model="", message_history=None):
+            captured.append((sys_prompt, message_history))
+            return orig_call(
+                self,
+                sys_prompt,
+                user_prompt,
+                target_model=target_model,
+                message_history=message_history,
+            )
+
+        monkeypatch.setattr(AIPlugin, "__call__", spy)
+
         code = AI_MOCK_PREFIX + """
 try:
     str x = @~ MOCK:FAIL boom ~
@@ -103,16 +120,41 @@ except Exception as e:
 """
         lines, prompts = _run_with_hooks(code)
         assert "caught" in lines
-        assert len(prompts) >= 2, "llmexcept 重试应产生至少两次 LLM 调用"
-        retry_prompt = prompts[1]
-        assert "[重试反馈]" in retry_prompt
-        assert "上一次调用返回的内容" in retry_prompt
-        assert "MAYBE_YES_MAYBE_NO_this_is_ambiguous" in retry_prompt
-        assert "MOCK:FAIL" in retry_prompt
-        assert "请只返回纯文本" in retry_prompt
+        assert len(captured) >= 2, "llmexcept 重试应产生至少两次 LLM 调用"
+
+        first_sys_prompt, first_history = captured[0]
+        assert first_history is None
+        assert "[重试反馈]" not in first_sys_prompt
+
+        retry_sys_prompt, retry_history = captured[1]
+        assert "[重试反馈]" not in retry_sys_prompt
+        assert retry_history, "重试应携带标准多轮对话历史"
+        assert [m["role"] for m in retry_history] == ["assistant", "user"]
+        assert "MAYBE_YES_MAYBE_NO_this_is_ambiguous" in retry_history[0]["content"]
+        assert "MOCK:FAIL" in retry_history[1]["content"]
+        assert "请只返回纯文本" in retry_history[1]["content"]
 
 
 class TestLLMFunctionPromptMechanism:
+    def test_llm_function_llmretry_not_injected_on_first_call(self):
+        code = AI_MOCK_PREFIX + """
+llm f() -> int:
+__sys__
+你是数字解析器。
+__user__
+MOCK:INT:3
+__llmretry__
+请只返回整数
+llmend
+int x = f()
+print(x)
+"""
+        lines, prompts = _run_with_hooks(code)
+        assert lines == ["3"]
+        assert prompts
+        assert "[重试提示]" not in prompts[0]
+        assert "请只返回整数" not in prompts[0]
+
     def test_llm_function_returning_enum_gets_outputhint(self):
         code = AI_MOCK_PREFIX + """
 class Status(Enum):

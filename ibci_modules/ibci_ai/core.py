@@ -546,8 +546,20 @@ class AIPlugin(IbStatefulPlugin):
             return res
         return []
 
-    def __call__(self, sys_prompt: str, user_prompt: "Union[str, List]", *, target_model: str = "") -> str:
-        """LLM 调用入口（ILLMProvider 协议）。"""
+    def __call__(
+        self,
+        sys_prompt: str,
+        user_prompt: "Union[str, List]",
+        *,
+        target_model: str = "",
+        message_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
+        """LLM 调用入口（ILLMProvider 协议）。
+
+        ``message_history``：标准多轮对话历史（``assistant``/``user`` 消息
+        序列），追加在 ``system``/``user`` 首轮消息之后；用于 retry 场景
+        把上次失败输出与纠错指令以原生对话轮次回喂模型。
+        """
         is_test_mode = self._is_test_mode()
         
         # 多模态内容：将 List 转换为纯文本用于 MOCK 或传递给 API
@@ -615,14 +627,19 @@ class AIPlugin(IbStatefulPlugin):
             enhanced_sys_prompt = sys_prompt
 
         try:
-            # 构建 messages：支持纯文本和多模态两种路径
+            # 构建 messages：支持纯文本和多模态两种路径。
+            # retry 场景把历史 assistant/user 轮次追加在首轮之后，形成标准
+            # 多轮对话（而非把历史文本拼进 system prompt）。
             user_content = self._build_user_content(user_prompt, user_prompt_text)
+            messages = [
+                {"role": "system", "content": enhanced_sys_prompt},
+                {"role": "user", "content": user_content},
+            ]
+            if message_history:
+                messages.extend(message_history)
             completion = active_client.chat.completions.create(
                 model=active_model,
-                messages=[
-                    {"role": "system", "content": enhanced_sys_prompt},
-                    {"role": "user", "content": user_content}
-                ],
+                messages=messages,
                 max_tokens=4096,
                 extra_body={
                     "enable_thinking": False,

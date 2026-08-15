@@ -27,7 +27,7 @@ from core.runtime.shared.llm_result import (
 
 from core.runtime.interpreter.llm_executor._prompt_assembly import (
     build_behavior_system_prompt,
-    build_retry_feedback,
+    build_retry_message_history_from_attempts,
 )
 
 from core.runtime.objects.kernel import IbObject, IbValue
@@ -52,6 +52,7 @@ class BehaviorCallSpec:
     user_prompt: Union[str, List[Union[str, Dict[str, Any]]]]
     type_hint: Optional[str]
     target_model: str
+    message_history: Optional[List[Dict[str, Any]]] = None
     active_intents: List[Any] = field(default_factory=list)
     global_intents: List[Any] = field(default_factory=list)
     merged_intents: List[Any] = field(default_factory=list)
@@ -128,30 +129,32 @@ class _BehaviorMixin:
         *,
         llmoutput_hint: Optional[str],
         type_hint: Optional[str],
-        frame: Optional[Any],
         all_intents: List[Any],
     ) -> str:
         """把 behavior 提示词组件组装为完整 system prompt（sync/CPS 共用）。
 
         单一权威组装在 :func:`build_behavior_system_prompt`；本方法只负责
-        从 live frame / provider 提取组件，不再各自拼接字符串。
+        从 provider 提取显式类型提示，不再各自拼接字符串。
         """
         provider_type_prompt = None
         if type_hint and self.llm_callback:
             provider_type_prompt = self.llm_callback.get_return_type_prompt(type_hint)
-        retry_feedback = None
-        if frame is not None:
-            retry_feedback = build_retry_feedback(
-                user_hint=frame.retry_hint,
-                parse_error=frame.last_llm_error,
-                raw_response=frame.last_llm_response,
-            )
         return build_behavior_system_prompt(
             output_hint=llmoutput_hint,
             type_hint=type_hint,
             provider_type_prompt=provider_type_prompt,
-            retry_feedback=retry_feedback,
             intents=all_intents,
+        )
+
+    def _build_retry_message_history(self, frame: Optional[Any]) -> Optional[List[Dict[str, Any]]]:
+        """从 llmexcept 帧构造标准多轮对话的重试消息历史。
+
+        只在存在重试帧且已记录失败尝试时返回非空；初调（无帧）返回 None。
+        """
+        if frame is None:
+            return None
+        return build_retry_message_history_from_attempts(
+            getattr(frame, "attempt_history", None)
         )
 
     def _prepare_behavior_call(
@@ -200,15 +203,16 @@ class _BehaviorMixin:
         sys_prompt = self._assemble_behavior_sys_prompt(
             llmoutput_hint=llmoutput_hint,
             type_hint=type_hint,
-            frame=frame,
             all_intents=all_intents,
         )
+        message_history = self._build_retry_message_history(frame)
 
         return BehaviorCallSpec(
             sys_prompt=sys_prompt,
             user_prompt=content,
             type_hint=type_hint,
             target_model=target_model,
+            message_history=message_history,
             active_intents=[i.content if hasattr(i, "content") else str(i) for i in active_list],
             global_intents=[i.content if hasattr(i, "content") else str(i) for i in global_intents],
             merged_intents=all_intents,
@@ -259,15 +263,16 @@ class _BehaviorMixin:
         sys_prompt = self._assemble_behavior_sys_prompt(
             llmoutput_hint=llmoutput_hint,
             type_hint=type_hint,
-            frame=frame,
             all_intents=all_intents,
         )
+        message_history = self._build_retry_message_history(frame)
 
         return BehaviorCallSpec(
             sys_prompt=sys_prompt,
             user_prompt=content,
             type_hint=type_hint,
             target_model=target_model,
+            message_history=message_history,
             active_intents=[i.content if hasattr(i, "content") else str(i) for i in active_list],
             global_intents=[i.content if hasattr(i, "content") else str(i) for i in global_intents],
             merged_intents=all_intents,
@@ -281,7 +286,13 @@ class _BehaviorMixin:
         只读 :class:`BehaviorCallSpec`，不写主线程单写槽（``_current_call_info``
         由调用方在 sync 尾部或 resolve 点记录）；不访问 live context。
         """
-        response = self._call_llm(spec.sys_prompt, spec.user_prompt, node_uid, target_model=spec.target_model)
+        response = self._call_llm(
+            spec.sys_prompt,
+            spec.user_prompt,
+            node_uid,
+            target_model=spec.target_model,
+            message_history=spec.message_history,
+        )
 
         def _call_info(resp: str) -> dict:
             return {
@@ -292,6 +303,7 @@ class _BehaviorMixin:
                 "active_intents": list(spec.active_intents),
                 "global_intents": list(spec.global_intents),
                 "merged_intents": list(spec.merged_intents),
+                "message_history": spec.message_history,
             }
 
         if response == MOCK_REPAIR_SENTINEL:

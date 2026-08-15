@@ -10,7 +10,7 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Any, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from core.runtime.interfaces import IExecutionContext
 
@@ -20,7 +20,7 @@ from core.runtime.objects.kernel import IbObject
 
 from core.runtime.interpreter.llm_executor._prompt_assembly import (
     build_intent_section,
-    build_retry_feedback_section,
+    build_retry_message_history_from_attempts,
     build_type_constraint_section,
 )
 
@@ -39,6 +39,7 @@ class LLMFunctionCallSpec:
     user_prompt: str
     type_name: str
     node_uid: str
+    message_history: Optional[List[Dict[str, Any]]] = None
     active_intents: List[Any] = field(default_factory=list)
     global_intents: List[Any] = field(default_factory=list)
     merged_intents: List[Any] = field(default_factory=list)
@@ -110,11 +111,13 @@ class _LLMFunctionMixin:
             sys_prompt += f"\n\n{type_constraint}"
 
         retry_hint_segments = None
-        current_retry_hint = frame.retry_hint if frame else None
-        if current_retry_hint:
-            retry_hint_segments = [current_retry_hint]
-        else:
-            retry_hint_segments = node_data.get("retry_hint")
+        if frame is not None:
+            # 重试场景：``retry "..."`` 的用户提示经多轮对话 user 消息回喂
+            # （attempt_history），不重复注入 sys_prompt；``__llmretry__``
+            # 块（node_data.retry_hint）仍按设计注入 sys_prompt。
+            if not frame.retry_hint:
+                retry_hint_segments = node_data.get("retry_hint")
+        # 首次调用（无重试帧）不注入 __llmretry__；该块只在重试时生效。
 
         if retry_hint_segments:
             retry_hint_text = yield from self._evaluate_segments_cps(
@@ -124,19 +127,18 @@ class _LLMFunctionMixin:
                 raise TypeError("retry hint segments must produce text-only content")
             sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
 
+        message_history = None
         if frame is not None:
-            retry_feedback = build_retry_feedback_section(
-                parse_error=frame.last_llm_error,
-                raw_response=frame.last_llm_response,
+            message_history = build_retry_message_history_from_attempts(
+                getattr(frame, "attempt_history", None)
             )
-            if retry_feedback:
-                sys_prompt += f"\n\n{retry_feedback}"
 
         return LLMFunctionCallSpec(
             sys_prompt=sys_prompt,
             user_prompt=user_prompt,
             type_name=type_name,
             node_uid=node_uid,
+            message_history=message_history,
             active_intents=[
                 i.content if hasattr(i, "content") else str(i)
                 for i in context.get_active_intents()
@@ -157,7 +159,12 @@ class _LLMFunctionMixin:
         不写主线程单写槽（``record_current=False``，由调用方在 yield 恢复点
         记录）。与 :meth:`_call_and_parse`（behavior 路径）同构。
         """
-        raw_res = self._call_llm(spec.sys_prompt, spec.user_prompt, node_uid)
+        raw_res = self._call_llm(
+            spec.sys_prompt,
+            spec.user_prompt,
+            node_uid,
+            message_history=spec.message_history,
+        )
 
         def _call_info(resp: str) -> dict:
             return {
@@ -168,6 +175,7 @@ class _LLMFunctionMixin:
                 "active_intents": list(spec.active_intents),
                 "global_intents": list(spec.global_intents),
                 "merged_intents": list(spec.merged_intents),
+                "message_history": spec.message_history,
             }
 
         if raw_res == MOCK_REPAIR_SENTINEL:

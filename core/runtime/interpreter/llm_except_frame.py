@@ -119,20 +119,19 @@ class LLMExceptFrame:
     saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
     target_result: Optional[Any] = None  # 最近一次不确定调用的 IbLLMCallResult（certainty 信号载体）
+    # 失败尝试历史（标准多轮重试对话用）。每项：
+    #   {"raw_response": 上次原始响应, "parse_error": 解析错误, "user_hint": 下一轮用户补充要求}
+    # 由 _retry_llm_uncertain 在每轮 handler body 执行后、下一轮重试前记录。
+    attempt_history: List[Dict[str, Any]] = field(default_factory=list)
 
-    @property
-    def last_llm_response(self) -> Optional[str]:
-        """上一次 LLM 调用的原始响应（用于自动重试回喂）。"""
+    def record_uncertain_attempt(self) -> None:
+        """把当前不确定调用记录进重试历史（多轮对话的 assistant 输出 + 下一轮纠错）。"""
         if isinstance(self.target_result, IbLLMCallResult) and self.target_result.is_uncertain:
-            return self.target_result.raw_response or None
-        return None
-
-    @property
-    def last_llm_error(self) -> Optional[str]:
-        """上一次 LLM 解析失败的诊断信息（用于自动重试回喂）。"""
-        if isinstance(self.target_result, IbLLMCallResult) and self.target_result.is_uncertain:
-            return self.target_result.retry_hint or None
-        return None
+            self.attempt_history.append({
+                "raw_response": self.target_result.raw_response or "",
+                "parse_error": self.target_result.retry_hint or None,
+                "user_hint": self.retry_hint,
+            })
 
     # 状态标志
     should_retry: bool = True

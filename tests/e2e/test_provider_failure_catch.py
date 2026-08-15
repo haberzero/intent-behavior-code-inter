@@ -21,7 +21,7 @@ from tests.conftest import _default_root
 class _FailingProvider:
     """每次调用都抛异常的真实 provider（模拟超时/断连）。"""
 
-    def __call__(self, sys_prompt, user_prompt, target_model=""):
+    def __call__(self, sys_prompt, user_prompt, target_model="", message_history=None):
         raise RuntimeError("provider timeout")
 
     def get_current_call_info(self):

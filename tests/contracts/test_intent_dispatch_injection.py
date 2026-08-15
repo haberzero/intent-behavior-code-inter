@@ -64,9 +64,15 @@ def captured_sys_prompts(monkeypatch):
 
     orig_call = AIPlugin.__call__
 
-    def spy(self, sys_prompt, user_prompt, *, target_model=""):
+    def spy(self, sys_prompt, user_prompt, *, target_model="", message_history=None):
         box.append(sys_prompt)
-        return orig_call(self, sys_prompt, user_prompt, target_model=target_model)
+        return orig_call(
+            self,
+            sys_prompt,
+            user_prompt,
+            target_model=target_model,
+            message_history=message_history,
+        )
 
     monkeypatch.setattr(AIPlugin, "__call__", spy)
     return box

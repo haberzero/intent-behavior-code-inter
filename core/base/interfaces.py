@@ -62,7 +62,14 @@ class ISymbolView(Protocol):
 @runtime_checkable
 class ILLMProvider(Protocol):
     """LLM 服务提供者标准接口"""
-    def __call__(self, sys_prompt: str, user_prompt: str) -> str: ...
+    def __call__(
+        self,
+        sys_prompt: str,
+        user_prompt: str,
+        *,
+        target_model: str = "",
+        message_history: Optional[List[Dict[str, Any]]] = None,
+    ) -> str: ...
     def get_current_call_info(self) -> Dict[str, Any]: ...
     # 返回类型提示：注入并约束模型输出格式（无对应注册时返回 None）
     def get_return_type_prompt(self, type_name: str) -> Optional[str]: ...

@@ -187,7 +187,10 @@ def _make_handler(
         @staticmethod
         def _extract_user_prompt(body: Dict[str, Any]) -> str:
             messages = body.get("messages", [])
-            for message in reversed(messages):
+            # 取首个 user 消息（原始任务）。retry 多轮对话会在其后追加
+            # assistant/user 历史；MOCK 指令始终位于首轮 user 任务中，
+            # 不应被末轮纠错 user 消息覆盖。
+            for message in messages:
                 if message.get("role") == "user":
                     content = message.get("content")
                     if isinstance(content, str):
