@@ -5,6 +5,32 @@
 > **最后更新**：2026-08-16（用户拍板：**协议化内核大重构为当前主线**，
 > 压力测试/真实试用在其后；exp/protocol-kernel 交接恢复，正式任务控制文档已补齐登记）
 >
+> **✅ 已完成（2026-08-16，exp/protocol-kernel，全量 2897 passed / 1 skipped 零回归）**：
+> **协议化批次 1-3 + 架构级重构（交接清单全部落地）**。
+> ① **IbLLMFunctionDef/IbLLMFunction 残留清理**（7839fd70）：VM handler/
+> interpreter 水化/四语义 pass 的 LLM 特殊分支并入统一路径（callable_kind
+> 标记保留）；删 IbLLMFunction 兼容别名、_protocol.py 重复 protocol_methods、
+> binding_analysis 不可达 elif、FunctionContext 休眠 API、过渡委托。
+> ② **Prompt sync/CPS 双通道收敛**（d594480d）：_prepare_behavior_call/
+> _evaluate_segments/_get_llmoutput_hint 同步版删除，同步路径经 _pump_cps
+> 泵驱动单一 CPS 权威（消 ~150 行双写）。
+> ③ **retroactive implementation 推进到"可为已有类型补充方法"**（5b9fe7b6）：
+> impl 可携带方法定义体（AST+parser+四语义 pass+序列化+封印前水化注册），
+> 协议满足检查后置到并集 + 签名兼容校验；v1 边界 fail-fast；+14 测试。
+> ④ **序列化 payload 字段键历史兼容映射清除**（b3bfc71c）：serializer/
+> rehydrator 双写真相收敛为"payload 字段名即序列化键"。
+> ⑤ **dispatch_eager 同步重入消除**（e1042108，架构级）：dispatch-before-use
+> 路径 CPS 预求值嵌入当前 VM 帧栈（消 vm.run 嵌套调度器重入），同步版
+> 保留为泵薄包装。
+> ⑥ 文档同步（2ff48bea/8ddde8c2）：LANGUAGE_DESIGN_EVOLUTION/02_metadata_ast
+> §2.7/06_oop §6.8/04_vm_interpreter 过时引用/WORKLOG 登记。
+> **能力判断核查**：runtime/compiler 能力标志直读归零（全走协议注册表）；
+> 序列化/插件体系无 LLM 类型分支残留；方法对象 spec=类 spec 为文档化已知
+> 行为（消费点已规避，记录不整改）。
+> **待做**：独立复核整改（general agent 复核中）；随后按用户指令在最新
+> 代码上开启全方位真实 LLM + 真实 IBCI 试用（trials 套件）确认重构影响，
+> 再启动新压力测试（原 T08 压力试用主线顺延至此之后）。
+>
 > **🔴 当前主线（2026-08-16 用户指定，进行中）**：
 > **协议化内核大重构 + 内核全方位梳理清洁 + 架构级重构**（`exp/protocol-kernel`
 > 独立分支）。上一 session 2026-08-16 01:29 因 context 超限中断，恢复交接见
@@ -14,12 +40,10 @@
 > 签名兼容）/泛型约束与泛型函数/泛型协议/retroactive implementation（声明式）/
 > 普通函数与 LLM 函数全链路统一（AST+运行时+CPS+trampoline，删独立 IbLLMFunction）/
 > 协议注册表替换硬编码能力（多站点）。中断前未提交的 base.py 改动已验证
-> （全量 2877 passed / 1 skipped 零回归）后提交 0518e1bf。**待做**：剩余硬编码
-> 能力替换、IbLLMFunctionDef 残留清理、Prompt 装配散落统一、序列化/动态宿主/
-> 插件体系类型分支清理、retroactive 推进到可补方法、文档同步。每阶段全量
-> pytest 零回归门。**完成后**：在最新代码上开启一轮全方位真实 LLM + 真实 IBCI
-> 试用（利用 trials 套件）确认重构影响，再启动新压力测试（原 T08 压力试用
-> 主线顺延至此之后）。
+> （全量 2877 passed / 1 skipped 零回归）后提交 0518e1bf。**交接清单已全部
+> 落地**（见上方"已完成"节）。每阶段全量 pytest 零回归门。**完成后**：在最新
+> 代码上开启一轮全方位真实 LLM + 真实 IBCI 试用（利用 trials 套件）确认重构
+> 影响，再启动新压力测试（原 T08 压力试用主线顺延至此之后）。
 >
 > **✅ 已完成（2026-08-15，T08 第一轮，全量 pytest 零回归）**：
 > **IBCI LLM 全能力真实压力试用（第一轮）**。41 例：32 PASS + 2 GUARD +
