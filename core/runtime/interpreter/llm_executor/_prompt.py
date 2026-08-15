@@ -13,8 +13,6 @@ from core.runtime.shared.llm_result import LLMResult
 
 from core.runtime.interpreter.llm_parsing_strategy import LLMResultParser
 from core.runtime.objects.kernel.base import IbObject
-from core.runtime.observability.diagnostics import kernel_diagnostic
-from core.base.diagnostics.codes import KDIAG_PROTOCOL_PAYLOAD_PROMPT_FALLBACK
 from core.kernel import ast as ib_ast
 
 
@@ -42,83 +40,29 @@ class _PromptMixin:
     def _obj_to_prompt_str(val: Any) -> str:
         """Unified protocol-aware conversion of an IbObject to prompt string.
 
-        Resolution order:
-        1. __to_prompt__() method via receive() (the canonical prompt protocol)
-        2. to_native() fallback (primitive unwrapping)
-        3. str() last resort
-
-        This replaces scattered ``hasattr(val, '__to_prompt__')`` checks
-        throughout the prompt construction pipeline, using unified vtable dispatch.
+        This method is a thin delegate to :class:`PromptRenderer`, the single
+        authority for prompt rendering.  It exists so existing call sites keep
+        working while the renderer is introduced.
         """
-        # Try __to_prompt__ through receive() (unified protocol dispatch)
-        if hasattr(val, 'receive'):
-            try:
-                result = val.receive('__to_prompt__', [])
-                # Unwrap if result is an IbObject
-                if isinstance(result, IbObject):
-                    return str(result.to_native())
-                return str(result)
-            except AttributeError:
-                # 协议缺失（receive 对未声明方法抛 AttributeError）→ 回退；
-                # 用户 __to_prompt__ 实现体内的真实 bug（TypeError 等）fail-fast，
-                # 不再被宽 except 吞掉后静默降级 str()。
-                pass
-
-        # Fallback to to_native() for primitives
-        if isinstance(val, IbObject):
-            try:
-                return str(val.to_native())
-            except AttributeError:
-                pass
-
-        # Last resort: str()
-        return str(val)
+        from core.runtime.shared.prompt_renderer import PromptRenderer
+        return PromptRenderer.to_prompt_str(val)
 
     @staticmethod
     def _obj_to_payload(val: Any) -> Union[str, Dict[str, Any], List[Dict[str, Any]]]:
         """Protocol-aware conversion of an IbObject to payload content block.
 
-        Resolution order:
-        1. __payload_prompt__() via receive() — returns str, dict, or list of dicts
-        2. Fallback to _obj_to_prompt_str() (pure text)
-
-        When a value has __payload_prompt__ capability, it can return structured
-        content blocks for multi-modal LLM API payloads (e.g. image_url, input_audio).
-        If the value only supports __to_prompt__, falls back to plain text.
+        Delegates to :class:`PromptRenderer`; the registry is resolved from the
+        value's own class when available so protocol membership is respected.
         """
-        if hasattr(val, 'receive'):
-            # Try __payload_prompt__ first (multi-modal protocol)
-            try:
-                result = val.receive('__payload_prompt__', [])
-                if result is not None:
-                    # Unwrap IbObject wrappers
-                    if isinstance(result, IbObject):
-                        native = result.to_native()
-                        # dict or list of dicts → structured content block
-                        if isinstance(native, (dict, list)):
-                            return native
-                        return str(native)
-                    # Already a dict/list (raw return from user class)
-                    if isinstance(result, (dict, list)):
-                        return result
-                    return str(result)
-            except AttributeError:
-                # 协议缺失（receive 对未声明方法抛 AttributeError）→ 回退纯文本；
-                # 用户 __payload_prompt__ 实现体内的真实 bug（TypeError 等）告警，
-                # 不再被宽 except 吞掉后静默降级为纯文本。
-                pass
-            except Exception as e:
-                kernel_diagnostic(
-                    code=KDIAG_PROTOCOL_PAYLOAD_PROMPT_FALLBACK,
-                    detail={"error": repr(e)},
-                    message=(
-                        f"__payload_prompt__ dispatch failed, "
-                        f"falling back to text: {e!r}"
-                    ),
-                )
-
-        # Fallback to plain text via __to_prompt__
-        return _PromptMixin._obj_to_prompt_str(val)
+        from core.runtime.shared.prompt_renderer import PromptRenderer
+        registry = None
+        ib_class = getattr(val, 'ib_class', None)
+        if ib_class is not None:
+            reg = getattr(ib_class, 'registry', None)
+            if reg is not None:
+                get_meta = getattr(reg, 'get_metadata_registry', None)
+                registry = get_meta() if get_meta is not None else reg
+        return PromptRenderer.to_payload(val, registry=registry)
 
     def _get_function_param_names(self, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Set[str]:
         """

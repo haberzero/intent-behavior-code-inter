@@ -29,6 +29,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from ..base import IbSpec, TypeDef, TypeKind
 from ..type_ref import TypeRef
+from core.kernel.protocol import ProtocolRegistry, register_builtin_protocols
 from .factory import SpecFactory
 from core.base.enums import Provenance, Visibility
 
@@ -63,6 +64,8 @@ class SpecRegistryBase:
         # 创建/解析/序列化/还原统一经此路由。
         from ..generic import create_generic_registry
         self.generic_types = create_generic_registry()
+        self.protocols = ProtocolRegistry()
+        register_builtin_protocols(self.protocols)
         # 当前编译模块（S5 跨模块同名类身份根治）：非入口模块编译期间设置，
         # ``resolve`` 裸名解析先查 ``{current_module}.{name}``——被 import 模块内
         # 对自身类的裸名引用解析到带 module 的 spec。入口/单模块为空（裸名直查）。

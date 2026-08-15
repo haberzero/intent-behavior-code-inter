@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from ._base import SpecRegistryBase
 from ._capabilities import _CapabilityMixin
+from ._protocol import _ProtocolMixin
 from ._inference import _InferenceMixin
 from ._members import _MemberMixin
 from ._assignability import _AssignabilityMixin
@@ -46,6 +47,7 @@ class SpecRegistry(
     _MemberMixin,
     _InferenceMixin,
     _CapabilityMixin,
+    _ProtocolMixin,
     SpecRegistryBase,
 ):
     pass

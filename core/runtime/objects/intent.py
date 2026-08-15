@@ -14,18 +14,12 @@ def _intent_segment_to_prompt(val: Any) -> str:
     """把意图段求值结果转提示词文本（``__to_prompt__`` 协议，回退 ``to_native``）。
 
     供 :meth:`IbIntent.resolve_content` 与 :meth:`IbIntent.resolve_content_cps`
-    共用（单一权威，无双写）。协议缺失（AttributeError）→ 回退 to_native()；
-    已注册协议的实现异常（TypeError 等）经 ``kernel_diagnostic`` 告警，不静默降级。
+    共用（单一权威，无双写）。实现委托给统一的 :class:`PromptRenderer`；
+    协议实现异常经 ``kernel_diagnostic`` 告警，不静默降级。
     """
+    from core.runtime.shared.prompt_renderer import PromptRenderer
     try:
-        prompt_str = val.receive('__to_prompt__', [])
-        if isinstance(prompt_str, IbObject):
-            return str(prompt_str.to_native())
-        return str(prompt_str)
-    except AttributeError:
-        if isinstance(val, IbObject):
-            return str(val.to_native())
-        return str(val)
+        return PromptRenderer.to_prompt_str(val)
     except Exception as e:
         kernel_diagnostic(
             code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
