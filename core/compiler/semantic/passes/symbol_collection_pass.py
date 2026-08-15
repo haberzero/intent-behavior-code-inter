@@ -238,6 +238,7 @@ class SymbolCollector:
             visibility=Visibility.IMPORT_GATED,
         )
         cls_meta.type_params = list(node.type_params)
+        cls_meta.type_param_bounds = dict(node.type_param_bounds)
         cls_meta.implements = list(node.implements)
         # 父类泛型实参（class Sub[T](Box[T])）：parent_type 构造为泛型引用
         # TypeRef(Box, (T,))，供特化时递归替换。

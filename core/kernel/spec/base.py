@@ -259,6 +259,11 @@ class TypeDef(IbSpec):
     # ``class Box[T]`` 的 ["T"]。特化 spec（如 "Box[int]"）type_params 置空。
     type_params: List[str] = field(default_factory=list)
 
+    # -- 用户类泛型类型参数约束（CLASS kind）-------------------------
+    # ``class Box[T: Greeter]`` 的 {"T": "Greeter"}。特化时要求实参满足
+    # 对应协议，否则编译期拒绝。
+    type_param_bounds: Dict[str, str] = field(default_factory=dict)
+
     # -- 用户类实现的协议（CLASS kind）-------------------------------
     # ``class Foo implements Bar`` 的 ["Bar"]。编译期用于协议满足校验；
     # 运行期目前不改变分派，但保留在类型描述中供序列化和未来动态分派使用。

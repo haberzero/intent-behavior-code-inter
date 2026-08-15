@@ -330,6 +330,9 @@ class _AssignabilityMixin:
         type_params = list(spec.type_params)
         if len(arg_specs) != len(type_params):
             return None  # 参数数量不匹配：语义层报 SEM，这里不构造
+        # 类型参数协议约束：实参不满足 bound 时拒绝构造（语义层负责报错）。
+        if self.type_param_bound_errors(spec, arg_specs):
+            return None
         # 结构化实参 TypeRef（嵌套泛型 Box[list[int]] 保真）：经 from_spec 构造，
         # 供 substitute 穿透与序列化 round-trip。
         arg_refs = [TypeRef.from_spec(a) for a in arg_specs]

@@ -304,12 +304,18 @@ class DeclarationComponent(BaseComponent):
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect class name.").value
 
         type_params = []
+        type_param_bounds = {}
         if self.stream.match(TokenType.LBRACKET):
-            # 泛型类型参数：class Box[T] / class Box[T, U]
+            # 泛型类型参数：class Box[T] / class Box[T, U] / class Box[T: Proto]
             while True:
-                type_params.append(
-                    self.stream.consume(TokenType.IDENTIFIER, "Expect type parameter name.").value
-                )
+                tp_name = self.stream.consume(TokenType.IDENTIFIER, "Expect type parameter name.").value
+                type_params.append(tp_name)
+                if self.stream.match(TokenType.COLON):
+                    bound = self.stream.consume(
+                        TokenType.IDENTIFIER,
+                        "Expect protocol name after ':' in type parameter bound.",
+                    ).value
+                    type_param_bounds[tp_name] = bound
                 if not self.stream.match(TokenType.COMMA):
                     break
             self.stream.consume(TokenType.RBRACKET, "Expect ']' after type parameters.")
@@ -348,7 +354,8 @@ class DeclarationComponent(BaseComponent):
 
         class_node = self._loc(
             ast.IbClassDef(name=name, parent=parent, parent_args=parent_args,
-                           type_params=type_params, implements=implements,
+                           type_params=type_params, type_param_bounds=type_param_bounds,
+                           implements=implements,
                            body=[], methods=[], fields=[]),
             start_token,
         )

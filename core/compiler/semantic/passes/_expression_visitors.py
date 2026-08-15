@@ -887,6 +887,19 @@ class ExpressionVisitorsMixin:
                     if specialized is not None:
                         self.bind_type(node, specialized)
                         return specialized
+                    # 类型参数协议约束失败：给出具体错误。
+                    bound_errors = self.registry.type_param_bound_errors(
+                        value_type, arg_specs
+                    )
+                    if bound_errors:
+                        for msg in bound_errors:
+                            self.error(
+                                msg,
+                                node,
+                                code=SEM_TYPE_MISMATCH,
+                            )
+                        self.bind_type(node, self._any_desc)
+                        return self._any_desc
 
         # 切片操作返回同类型容器
         if isinstance(node.slice, ast.IbSlice):

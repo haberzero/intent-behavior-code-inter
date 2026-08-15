@@ -139,6 +139,34 @@ class _ProtocolMixin:
             return self._class_has_all_methods(spec, protocol.methods)
         return False
 
+    def type_param_bound_errors(
+        self,
+        spec: Optional[IbSpec],
+        arg_specs: list,
+    ) -> list:
+        """Return a list of human-readable bound violations for a generic class.
+
+        ``spec`` is a generic class TypeDef with ``type_params`` and
+        ``type_param_bounds``.  Each type argument is checked against the
+        protocol bound declared for the corresponding type parameter.
+        """
+        if spec is None:
+            return []
+        type_params = list(getattr(spec, "type_params", None) or [])
+        bounds = dict(getattr(spec, "type_param_bounds", None) or {})
+        if not bounds:
+            return []
+        errors = []
+        for param, arg in zip(type_params, arg_specs):
+            bound = bounds.get(param)
+            if bound and not self.satisfies_protocol(arg, bound):
+                arg_name = getattr(arg, "name", str(arg))
+                errors.append(
+                    f"Type argument '{arg_name}' for '{param}' does not satisfy "
+                    f"protocol '{bound}'"
+                )
+        return errors
+
     # ---------------------------------------------------------- #
     # Internal helpers                                            #
     # ---------------------------------------------------------- #

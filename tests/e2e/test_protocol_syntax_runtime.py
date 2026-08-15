@@ -65,3 +65,25 @@ class Foo implements Child:
 print(Foo().base() + Foo().child())
 """
         assert run_ibci(code) == ["bc"]
+
+
+class TestGenericProtocolBoundsRuntime:
+    def test_bounded_generic_class_runs(self):
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+
+class Box[T: Greeter]:
+    T value
+    func get(self) -> T:
+        return self.value
+
+Box[Foo] b = Box[Foo](Foo())
+print(b.get().greet())
+"""
+        assert run_ibci(code) == ["hi"]

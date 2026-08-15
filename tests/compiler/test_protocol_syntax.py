@@ -91,3 +91,34 @@ class Foo implements Child:
         return "c"
 """
         expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+
+class TestGenericProtocolBounds:
+    def test_bounded_generic_class_compiles(self):
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+
+class Box[T: Greeter]:
+    T value
+"""
+        assert compile_ibci(code) is not None
+
+    def test_bounded_generic_class_rejects_non_conforming_arg(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Box[T: Greeter]:
+    T value
+
+Box[int] b = Box[int](1)
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")

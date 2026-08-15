@@ -13,6 +13,7 @@ from core.base.diagnostics.codes import (
     SEM_GENERIC_TYPE_ARG_COUNT,
     SEM_GENERIC_TYPE_NEEDS_ARGS,
     SEM_MULTI_TYPE_LIST_REMOVED,
+    SEM_TYPE_MISMATCH,
     SEM_UNCATEGORIZED,
     SEM_UNRESOLVED_TYPE,
     ICE_TYPE_LEAK,
@@ -454,6 +455,20 @@ class TypeCheckBase:
                     result = self.registry.resolve_specialization(base_type, generic_args)
                     if result is not None:
                         return result
+                    # 用户类泛型类型参数协议约束失败（resolve_specialization 拒绝）→ SEM。
+                    if (base_type.kind == TypeKind.CLASS.value
+                            and getattr(base_type, "type_params", None)):
+                        bound_errors = self.registry.type_param_bound_errors(
+                            base_type, generic_args
+                        )
+                        if bound_errors:
+                            for msg in bound_errors:
+                                self.error(
+                                    msg,
+                                    annotation,
+                                    code=SEM_TYPE_MISMATCH,
+                                )
+                            return self._any_desc
                     # 用户类泛型实参数量不匹配（resolve_specialization 拒绝构造）→ SEM。
                     if (base_type.kind == TypeKind.CLASS.value
                             and getattr(base_type, "type_params", None)
