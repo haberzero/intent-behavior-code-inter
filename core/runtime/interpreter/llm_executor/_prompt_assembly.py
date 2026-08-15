@@ -7,6 +7,7 @@
 本模块只做纯文本/消息结构组装，不访问 live context / provider / registry。
 """
 
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
 # ---------------------------------------------------------------------------
@@ -37,6 +38,59 @@ _NO_CONTRACT_TYPE_BASES = frozenset({
     "void",
     "none",
 })
+
+
+@dataclass(frozen=True)
+class PromptPart:
+    """A single named section of a system prompt.
+
+    ``kind`` identifies the source of the part (e.g. ``discipline``,
+    ``type_constraint``, ``intent``) so that future protocol-driven prompt
+    contributors can add new kinds without changing the assembly core.
+    """
+
+    kind: str
+    text: str
+
+
+def assemble_prompt_parts(parts: Iterable[PromptPart]) -> str:
+    """Join non-empty prompt parts with the standard blank-line separator."""
+    return "\n\n".join(p.text for p in parts if p.text)
+
+
+def build_prompt_parts(
+    *,
+    behavior_discipline: bool = False,
+    output_hint: Optional[str] = None,
+    type_hint: Optional[str] = None,
+    provider_type_prompt: Optional[str] = None,
+    include_generic_type: bool = True,
+    intents: Optional[Iterable[str]] = None,
+) -> List[PromptPart]:
+    """Build the standard ordered prompt-part list.
+
+    This is the single authority for prompt section ordering.  Both behavior
+    and LLM-function paths can use it; behavior enables the discipline part,
+    while LLM functions use their own user-provided system prompt.
+    """
+    parts: List[PromptPart] = []
+    if behavior_discipline:
+        parts.append(PromptPart(kind="discipline", text=BEHAVIOR_SYSTEM_PROMPT))
+
+    type_constraint = build_type_constraint_section(
+        output_hint=output_hint,
+        type_hint=type_hint,
+        provider_type_prompt=provider_type_prompt,
+        include_generic_type=include_generic_type,
+    )
+    if type_constraint:
+        parts.append(PromptPart(kind="type_constraint", text=type_constraint))
+
+    intent_section = build_intent_section(intents)
+    if intent_section:
+        parts.append(PromptPart(kind="intent", text=intent_section))
+
+    return parts
 
 
 def _base_type_name(type_hint: str) -> str:
@@ -168,19 +222,12 @@ def build_behavior_system_prompt(
 
     顺序：输出纪律 → 输出格式/期望类型 → 意图要求。
     """
-    sections = [BEHAVIOR_SYSTEM_PROMPT]
-
-    type_constraint = build_type_constraint_section(
+    parts = build_prompt_parts(
+        behavior_discipline=True,
         output_hint=output_hint,
         type_hint=type_hint,
         provider_type_prompt=provider_type_prompt,
         include_generic_type=True,
+        intents=intents,
     )
-    if type_constraint:
-        sections.append(type_constraint)
-
-    intent_section = build_intent_section(intents)
-    if intent_section:
-        sections.append(intent_section)
-
-    return "\n\n".join(sections)
+    return assemble_prompt_parts(parts)
