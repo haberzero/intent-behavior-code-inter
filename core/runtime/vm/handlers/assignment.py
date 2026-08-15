@@ -25,7 +25,8 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     """赋值语句完整 CPS 实现。
 
     当 RHS 为 ``IbBehaviorExpr`` 且其 ``dispatch_eligible=True``、非 fn_callable
-    时，调用 ``LLMScheduler.dispatch_eager`` 立即提交后台 LLM 调用，得到
+    时，调用 ``LLMScheduler.dispatch_eager_cps``（CPS 预求值嵌入当前帧栈）
+    立即提交后台 LLM 调用，得到
     ``LLMFuture`` 占位符并直接绑定到目标变量；后续在使用点（``IbName``）解析。
     这是 LLM 数据流流水线的核心机制：相邻独立 LLM 表达式可并发执行，时序近似
     ``max(T_a, T_b, ..)`` 而非 ``sum``。

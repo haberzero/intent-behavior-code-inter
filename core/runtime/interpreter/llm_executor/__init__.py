@@ -4,7 +4,7 @@
 
 - :class:`LLMExecutorCore` (``_core``)         —— 共享状态、属性、类型栈、``_call_llm``
 - :class:`_PromptMixin` (``_prompt``)          —— 提示词构建与结果解析（CPS 唯一实现 + 同步泵）
-- :class:`_SchedulerMixin` (``_scheduler``)    —— ``dispatch_eager`` / ``resolve`` / 线程池
+- :class:`_SchedulerMixin` (``_scheduler``)    —— ``dispatch_eager_cps``（CPS 权威）/ ``resolve`` / 线程池
 - :class:`_LLMFunctionMixin` (``_llm_function``) —— 命名 LLM 函数执行 (CPS)
 - :class:`_BehaviorMixin` (``_behavior``)       —— behavior 表达式执行 (CPS + 同步薄包装)
 

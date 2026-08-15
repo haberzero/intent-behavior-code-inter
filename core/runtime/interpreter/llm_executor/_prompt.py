@@ -80,7 +80,7 @@ class _PromptMixin:
         """同步泵：驱动 CPS 生成器到完成（``vm.run`` 重入）。
 
         CPS 权威路径由 VM 调度循环 ``yield from`` 驱动；本泵供无 CPS 上下文
-        的同步路径（``dispatch_eager`` 主线程预求值 / 宿主直调）使用：
+        的同步薄包装（``dispatch_eager`` / ``_prepare_behavior_call`` / 宿主直调）使用：
         yield 出的节点 UID 经 ``vm.run`` 求值、``UserFunctionCall`` 经宿主
         ``.call`` 同步调用（leaf 级兜底——``vm.run`` 只接受节点 UID）。
 
@@ -111,8 +111,8 @@ class _PromptMixin:
 
         ``yield`` 出待求值的子节点 UID，调用方负责把求值结果通过 ``send`` 注回；
         最终用 ``return`` 返回拼接后的字符串。VM 调度循环把段求值作为子任务
-        接管（消除 ``vm.run`` 重入的"同步旁路"）；同步路径（dispatch_eager
-        预求值）经 :meth:`_pump_cps` 驱动同一生成器。
+        接管（消除 ``vm.run`` 重入的"同步旁路"）；同步薄包装（dispatch_eager
+        等）经 :meth:`_pump_cps` 驱动同一生成器。
 
         返回值：
         - 纯文本情况：返回拼接后的 str
