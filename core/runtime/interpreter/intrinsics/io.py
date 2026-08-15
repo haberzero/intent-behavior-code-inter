@@ -12,8 +12,9 @@ def register_io(manager: Any, execution_context: Any, service_context: Any):
         # 核心：通过 service_context 获取输出回调，严禁直接访问 interpreter
         callback = service_context.output_callback
         
-        # 遵循 UTS: 使用 __to_prompt__ 协议（结构化 isinstance 判定，非能力探测）
-        texts = [str(arg.receive('__to_prompt__', []).to_native()) if isinstance(arg, IbObject) else str(arg) for arg in args]
+        # 遵循 UTS: 使用统一的 PromptRenderer（协议内核化后的单一权威）。
+        from core.runtime.shared.prompt_renderer import PromptRenderer
+        texts = [PromptRenderer.to_prompt_str(arg) for arg in args]
         msg = " ".join(texts)
         
         if callback:
