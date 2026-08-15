@@ -1,0 +1,13 @@
+# T08-D4-06 真实 LLM llmexcept 自动错误回喂 + retry 收敛
+# doc: docs/syntax/10_robustness.md §10.1
+# expect-class: PASS
+# expect-out: final=7 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+int n = @~ 请只回复三个字母 abc，不要数字 ~
+llmexcept:
+    retry "请务必只返回数字 7"
+print("final=" + (str)n)
+print("DONE")

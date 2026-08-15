@@ -17,6 +17,7 @@
 | `T06_class_identity` | 统一类身份模型回归 + 真实试用（Task1 S1-S4 根治验证 + T05 KI-1 核销） | 2026-08-14 | 20 用例 | 18 PASS + 2 KERNEL_ISSUE（同一根因） | `KERNEL_ISSUE-CROSSMOD-LLM-1`（**已核销 2026-08-14，T07 D3 重验**） |
 | `T07_fixes_critical_stress` | 四项修复批判性对抗 + 旧套件 T01-T06 全量重跑（用户强调） + 泛型边界复测 | 2026-08-14 | 43 用例 + 旧套件 238 重跑 | 28 PASS + 12 GUARD + 3 KERNEL_ISSUE；旧套件 202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言) + 9 HARNESS | `KERNEL_ISSUE-OPTIONAL-SCOPE-1`、`KERNEL_ISSUE-OPTIONAL-CONTAINER-1`、`KERNEL_ISSUE-ATTR-READ-1`（均**已修复 2026-08-14，触发用例核销**） |
 | `T07_fixes_critical_stress`（E 批判补充批次，2026-08-14 第二 session 复核） | 三项 P1 修复有效性 + 边界挑刺（T07 后置独立批） | 2026-08-14 | +8 用例（E1-E8） | **5 PASS + 1 BOUNDARY + 2 DOC_ISSUE**（委托链全矩阵 PASS；空值错误码不一致 + 嵌套函数返回类型边界）→ **E1-E8 全 PASS**（2026-08-14 修复后核销） | `DOC-29`（空 Optional 错误码，**已修复 19920d39**）、`BOUNDARY-NESTED-FUNC-1`（返回类型校验，**已修复 19920d39**） |
+| `T08_llm_pressure` | LLM 全能力真实压力试用（第一轮，本地 qwen） | 2026-08-15 | 41 例 | 32 PASS + 2 GUARD + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 LIMIT | `KERNEL_ISSUE-LLM-2`（**已修复**）、`KERNEL_ISSUE-LLM-3`（**已修复**）、`DOC_ISSUE-30`、`BOUNDARY-LLM-2`、`BOUNDARY-LLM-3` |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 
@@ -72,6 +73,16 @@
 | BOUNDARY-004 | `BOUNDARY-LLM-1` | @! run_batch 粒度 | 已记录 |
 | BOUNDARY-005 | `BOUNDARY-CONFIG-2` | probe_model 误判 | 已记录 |
 | DOC-ISSUE-001~007 | `DOC-ISSUE-001~007` | 文档批次 | 已处置 6f8506d |
+
+### 域 LLM（T08，2026-08-15 第一轮压力试用）
+
+| 编号 | 主题 | 状态 | 触发用例 |
+|------|------|------|----------|
+| `KERNEL_ISSUE-LLM-2` | LLM 函数返回 `list[int]` / `dict[str,int]` 未按容器解析，默认退化为 str | **已修复（2026-08-15）**：`_get_expected_type_hint` 读取 returns `node_to_type` 覆盖 IbSubscript；Optional 保持旧路径。回归 `test_llm_basic.py::TestE2ELLMFunctionContainerReturn` | `T08/.../D4-01-llmfunc-typed.ibci`（已转 PASS） |
+| `KERNEL_ISSUE-LLM-3` | `ai.set_retry(0)` + `llmexcept` 不抛 `LLMRetryExhaustedError`，把不确定容器赋给目标导致 `RUN_TYPE_MISMATCH` | **已修复（2026-08-15）**：`_retry_llm_uncertain` 在 `max_retry<=0` 时立即抛耗尽。回归 `test_llmexcept.py::TestE2ELLMExceptZeroRetry` | `T08/.../D6-04-retry-edge.ibci`（已转 PASS） |
+| `DOC_ISSUE-30` | `docs/syntax/09_intent_system.md` 称 `@!` + run_batch 仅首调用生效；实现（28540336）对批内每个调用注入 one-shot 意图 | **已同步（2026-08-15）**：文档改为“当前实现为批内每个调用独立 fork 意图快照” | `T08/.../D3-08-runbatch-oneshot-obs.ibci` |
+| `BOUNDARY-LLM-2` | LLM 函数 `-> void` 编译通过但运行期 `LLMParseError`，文档未声明支持 | 记录，待评估 | `T08/.../D4-04-llmfunc-void.ibci` |
+| `BOUNDARY-LLM-3` | `stream_call` / `stream_channel` 后 `ai.get_current_call_info()` 为空，观测 API 未覆盖流式调用 | 记录，待评估 | `T08/.../D5-08-stream-call-info.ibci` |
 
 ## 三、登记前分诊闸门（强制，见 CLASSIFICATION §四）
 

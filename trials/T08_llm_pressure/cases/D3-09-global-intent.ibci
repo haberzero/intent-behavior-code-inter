@@ -1,0 +1,16 @@
+# T08-D3-09 ai.set_global_intent / clear / get 与真实 LLM 注入
+# doc: docs/syntax/11_modules.md §11.3 + docs/syntax/09_intent_system.md
+# expect-class: PASS
+# expect-out: sys_has=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+ai.set_global_intent("只输出：GLOBAL_OK")
+list g = ai.get_global_intents()
+print("global_len=" + (str)g.len())
+str r = @~ 请回应我 ~
+dict info = ai.get_current_call_info()
+print("sys_has=" + (str)("GLOBAL_OK" in (str)info["sys_prompt"]))
+ai.clear_global_intents()
+print("DONE")

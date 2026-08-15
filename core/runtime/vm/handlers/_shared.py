@@ -709,6 +709,16 @@ def _retry_llm_uncertain(executor, uncertain_result, handler_uid: str, re_eval_u
     )
     try:
         frame.target_result = uncertain_result
+        if frame.max_retry <= 0:
+            # retry=0 表示首次失败后不允许任何重试：必须立即抛重试耗尽，
+            # 不能把不确定容器返回给赋值点（否则会以 RUN_TYPE_MISMATCH 暴露）。
+            error = executor.registry.make_llm_retry_exhausted_error(
+                f"LLM call retry exhausted after {frame.max_retry} attempt(s); "
+                f"no certain result was produced",
+                max_retry=frame.max_retry,
+                raw_response=getattr(frame.target_result, "raw_response", "") or "",
+            )
+            raise ThrownException(error)
         first_attempt = True
         final_value = uncertain_result
         while frame.should_continue_retrying():

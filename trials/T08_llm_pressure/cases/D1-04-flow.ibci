@@ -1,0 +1,20 @@
+# T08-D1-04 内联行为：条件/循环/dispatch-before-use 组合
+# doc: docs/syntax/07_behavior_expressions.md §7.3
+# expect-class: PASS
+# expect-out: cond=True | loop=3 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+bool cond = @~ 1+1=2 吗？只答 1 或 0 ~
+if cond:
+    print("cond=True")
+else:
+    print("cond=False")
+int count = 0
+for @~ $count 小于 3 吗？只答 1 或 0 ~:
+    count = count + 1
+print("loop=" + (str)count)
+str a = @~ 返回字母A ~
+str b = @~ 返回字母B ~
+print("DONE")

@@ -1,0 +1,27 @@
+# T08-D4-01 LLM 函数返回 list[int] / dict[str,int] 应解析，实际按 str 返回
+# doc: docs/syntax/08_llm_functions.md §8.1-8.2 + docs/syntax/07_behavior_expressions.md §7.4
+# expect-class: PASS
+# expect-out: list_ok=True | dict_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+llm 取数字列表() -> list[int]:
+__sys__
+你只返回 JSON 数组，不要其它内容。
+__user__
+返回 [1,2,3]
+llmend
+
+llm 取分数() -> dict[str,int]:
+__sys__
+你只返回 JSON 对象，不要其它内容。
+__user__
+返回 {"math":90,"english":85}
+llmend
+
+list[int] nums = 取数字列表()
+print("list_ok=" + (str)(nums.len() == 3 and nums[0] == 1 and nums[2] == 3))
+dict[str,int] scores = 取分数()
+print("dict_ok=" + (str)(scores.len() == 2 and scores["math"] == 90))
+print("DONE")

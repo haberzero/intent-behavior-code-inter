@@ -1,0 +1,14 @@
+# T08-D5-06 LLM 结果经 chan 传递（stream/message）
+# doc: docs/syntax/14_concurrency.md §14.2 + docs/syntax/07_behavior_expressions.md
+# expect-class: PASS
+# expect-out: msg_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+chan c = chan(str, "message")
+str s = @~ 只回答：CHAN_OK ~
+c.send(s)
+str got = c.recv()
+print("msg_ok=" + (str)("CHAN_OK" in got))
+print("DONE")

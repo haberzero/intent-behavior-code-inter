@@ -1,0 +1,10 @@
+# T08-D6-05 ai.get_current_call_info 在无调用时返回空 dict 不崩溃
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: empty=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+dict info = ai.get_current_call_info()
+print("empty=" + (str)(info.len() == 0))
+print("DONE")

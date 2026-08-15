@@ -1,0 +1,27 @@
+# T08-D4-05 LLM 函数返回用户类（__from_prompt__）
+# doc: docs/syntax/08_llm_functions.md + docs/syntax/06_oop.md §6.7
+# expect-class: PASS
+# expect-out: got=OK | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Resp:
+    str text
+    func __init__(self, str text) -> auto:
+        self.text = text
+    func __from_prompt__(self, str raw) -> tuple:
+        return (True, Resp(raw.strip()))
+    func __outputhint_prompt__(self) -> str:
+        return "只输出 OK"
+
+llm 取响应() -> Resp:
+__sys__
+你是一个简洁的助手。
+__user__
+只回答：OK
+llmend
+
+Resp r = 取响应()
+print("got=" + r.text)
+print("DONE")

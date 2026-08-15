@@ -1,0 +1,15 @@
+# T08-D6-01 真实 provider 不可达：LLMCallError 可捕获（读取结果触发）
+# doc: docs/syntax/10_robustness.md §10.3 + docs/howto/debug_llm_calls.md
+# expect-class: PASS
+# expect-out: caught=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.set_config("http://127.0.0.1:1/v1", "bad", "bad-model")
+try:
+    str s = @~ 你好 ~
+    print("s_len=" + (str)s.len())
+    print("no_catch")
+except LLMCallError as e:
+    print("caught=True")
+print("DONE")

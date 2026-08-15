@@ -1,0 +1,13 @@
+# T08-D3-12 ai.run_batch 返回 list[int] 类型化结果
+# doc: docs/syntax/07_behavior_expressions.md §7.4
+# expect-class: PASS
+# expect-out: first_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+fn f = lambda(int x) -> list[int]: @~ 返回包含 $x 的JSON数组 [ $x ] ~
+list results = ai.run_batch(f, [1, 2])
+list first = results[0]
+print("first_ok=" + (str)(first.len() == 1 and first[0] == 1))
+print("DONE")

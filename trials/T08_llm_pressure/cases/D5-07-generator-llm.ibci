@@ -1,0 +1,18 @@
+# T08-D5-07 生成器内真实 LLM 调用（间接 LLM）
+# doc: docs/syntax/05_functions.md 生成器 + docs/syntax/07_behavior_expressions.md
+# expect-class: PASS
+# expect-out: first_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+func gen() -> generator[str]:
+    str a = @~ 只回答：GEN_A ~
+    yield a
+    str b = @~ 只回答：GEN_B ~
+    yield b
+
+generator[str] g = gen()
+str first = next(g)
+print("first_ok=" + (str)("GEN_A" in first))
+print("DONE")

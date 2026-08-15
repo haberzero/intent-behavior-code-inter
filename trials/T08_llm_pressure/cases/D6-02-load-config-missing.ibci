@@ -1,0 +1,8 @@
+# T08-D6-02 ai.load_config 缺失文件 fail-fast（CFG 诊断）
+# doc: docs/syntax/15_diagnostics.md CFG 段
+# expect-class: GUARD
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.load_config("./no_such_api_config.json")
+print("DONE")

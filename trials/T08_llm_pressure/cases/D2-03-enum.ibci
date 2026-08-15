@@ -1,0 +1,20 @@
+# T08-D2-03 Enum LLM 输出：str 与 int 成员名→值
+# doc: docs/syntax/06_oop.md §6.6 + docs/KNOWN_LIMITS.md §二
+# expect-class: PASS
+# expect-out: color_ok=True | code_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Color(Enum):
+    str RED = "RED"
+    str GREEN = "GREEN"
+    str BLUE = "BLUE"
+class Code(Enum):
+    int OK = 200
+    int ERR = 500
+Color c = @~ 交通灯是红色，返回 RED ~
+print("color_ok=" + (str)(c == "RED"))
+Code code = @~ 服务器正常，返回 OK ~
+print("code_ok=" + (str)(code == 200))
+print("DONE")

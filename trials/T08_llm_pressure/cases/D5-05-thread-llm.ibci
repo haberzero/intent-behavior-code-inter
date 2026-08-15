@@ -1,0 +1,17 @@
+# T08-D5-05 线程体内真实 LLM 调用（thread_result 返回）
+# doc: docs/syntax/14_concurrency.md §14.5 + docs/syntax/07_behavior_expressions.md
+# expect-class: PASS
+# expect-out: val_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+func ask() -> int:
+    int n = @~ 只返回数字 42 ~
+    return n
+
+thread[int] t = thread(callable=ask, args=[])
+thread_result[int] r = t.join()
+int v = r.expect()
+print("val_ok=" + (str)(v == 42))
+print("DONE")

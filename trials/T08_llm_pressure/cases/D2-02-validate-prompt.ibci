@@ -1,0 +1,28 @@
+# T08-D2-02 __validate_prompt__ 拒绝 bad 后经 llmexcept 重试到 good（MOCK:SEQ 控制）
+# doc: core/kernel/axioms/prompt_protocol.py + docs/syntax/10_robustness.md
+# expect-class: PASS
+# expect-out: val=good | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class Strict:
+    str value
+    func __init__(self) -> auto:
+        self.value = ""
+    func __validate_prompt__(self, str raw) -> tuple:
+        if raw == "bad":
+            return (False, "input must not be bad")
+        return (True, "")
+    func __from_prompt__(self, str raw) -> tuple:
+        Strict s = Strict()
+        s.value = raw
+        return (True, s)
+    func __outputhint_prompt__(self) -> str:
+        return "Return valid data"
+
+Strict s = @~ MOCK:SEQ:[bad,good] validate_seq ~
+llmexcept:
+    retry "return good"
+print("val=" + s.value)
+print("DONE")

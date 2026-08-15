@@ -89,6 +89,43 @@ print(result)
         assert "Greet Alice" in lines[0]
 
 
+class TestE2ELLMFunctionContainerReturn:
+    def test_llm_function_returns_list_int(self):
+        """LLM 函数返回 list[int] 应按容器类型解析，而不是退化为 str。"""
+        code = AI_MOCK_PREFIX + """
+llm 取列表() -> list[int]:
+__sys__
+你只返回 JSON 数组。
+__user__
+MOCK:LIST:[1,2,3]
+llmend
+
+list[int] nums = 取列表()
+print((str)nums.len())
+print((str)nums[0])
+print((str)nums[2])
+"""
+        lines = run_ibci(code)
+        assert lines == ["3", "1", "3"]
+
+    def test_llm_function_returns_dict_str_int(self):
+        """LLM 函数返回 dict[str,int] 应按容器类型解析。"""
+        code = AI_MOCK_PREFIX + """
+llm 取分数() -> dict[str,int]:
+__sys__
+你只返回 JSON 对象。
+__user__
+MOCK:DICT:{"math":90,"english":85}
+llmend
+
+dict[str,int] scores = 取分数()
+print((str)scores.len())
+print((str)scores["math"])
+"""
+        lines = run_ibci(code)
+        assert lines == ["2", "90"]
+
+
 class TestE2EMockRepair:
     def test_repair_first_fails_then_succeeds(self):
         code = AI_MOCK_PREFIX + """

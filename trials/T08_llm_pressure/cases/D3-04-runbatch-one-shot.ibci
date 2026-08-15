@@ -1,0 +1,16 @@
+# T08-D3-04 @! 排他意图 + ai.run_batch：模型服从性观察（注入正确性由 D3-08 观测）
+# doc: docs/syntax/09_intent_system.md §9.1
+# expect-class: LLM_BEHAVIOR
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+fn f = lambda(str x) -> str: @~ 用一句话描述 $x ~
+@! 只输出：FIRST_ONLY
+list res = ai.run_batch(f, ["苹果", "香蕉"])
+str first = (str)res[0]
+str second = (str)res[1]
+print("first_ok=" + (str)("FIRST_ONLY" in first))
+print("later_ok=" + (str)("FIRST_ONLY" not in second))
+print("DONE")

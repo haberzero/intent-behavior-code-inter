@@ -1,0 +1,12 @@
+# T08-D5-02 流式通道 ai.stream_channel 真实 LLM：逐块消费
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: got_gt0=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+chan chunks = ai.stream_channel("你是一个简洁的助手。", "只回答：HELLO")
+str first = chunks.recv()
+print("got_gt0=" + (str)(first.len() > 0))
+print("DONE")

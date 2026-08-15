@@ -377,13 +377,25 @@ class _PromptMixin:
         node_to_type = execution_context.get_side_table("node_to_type", node_uid)
         if node_to_type:
             name = getattr(node_to_type, "name", None)
-            if name:
+            if name and not name.startswith("Optional["):
                 module = getattr(node_to_type, "module_path", None)
                 return f"{module}.{name}" if module else name
 
         returns_uid = node_data.get("returns")
         if returns_uid:
             returns_data = execution_context.get_node_data(returns_uid)
+            # 优先 returns 节点自身的 node_to_type：覆盖 IbSubscript（list[int]、
+            # dict[str,int]）与所有已解析类型标注，避免容器返回类型退化为 str。
+            returns_node_to_type = execution_context.get_side_table(
+                "node_to_type", returns_uid
+            )
+            if returns_node_to_type:
+                name = getattr(returns_node_to_type, "name", None)
+                # Optional[T] 不是可直接 LLM 解析的具体类型：保持旧路径
+                # （默认 str 解析 + 函数返回包装），避免 LLMParseError。
+                if name and not name.startswith("Optional["):
+                    module = getattr(returns_node_to_type, "module_path", None)
+                    return f"{module}.{name}" if module else name
             if returns_data and returns_data.get("_type") == "IbName":
                 bare_name = returns_data.get("id", "str")
                 module = getattr(execution_context, "current_module_name", None)

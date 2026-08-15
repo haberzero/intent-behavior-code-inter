@@ -1,0 +1,12 @@
+# T08-D5-08 stream_call 后 get_current_call_info 为空（观测缺口）
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: BOUNDARY
+# expect-out: has_info=False | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str full = await ai.stream_call("你是一个简洁的助手。", "只回答：OK")
+dict info = ai.get_current_call_info()
+print("has_info=" + (str)(info.len() > 0))
+print("DONE")

@@ -1,0 +1,15 @@
+# T08-D3-06 run_batch + @+ 持久意图：打印实际结果（模型服从性观察）
+# doc: docs/syntax/09_intent_system.md §9.1
+# expect-class: LLM_BEHAVIOR
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+@+ 只输出一个词：BANANA
+fn f = lambda(str x) -> str: @~ 用一词回应 $x ~
+list res = ai.run_batch(f, ["苹果", "香蕉", "橙子"])
+@-
+for any item in res:
+    print("item=" + (str)item)
+print("DONE")

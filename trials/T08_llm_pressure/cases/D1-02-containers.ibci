@@ -1,0 +1,15 @@
+# T08-D1-02 内联行为：list/dict/tuple 容器类型输出解析
+# doc: docs/syntax/07_behavior_expressions.md §7.2 + docs/syntax/01_types.md §1.2
+# expect-class: PASS
+# expect-out: list_len=3 | dict_ok=True | tuple_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+list[str] tags = @~ 给"苹果"打3个中文标签，JSON数组格式 ~
+print("list_len=" + (str)tags.len())
+dict[str,int] scores = @~ 返回JSON对象 {"math":90,"english":85} ~
+print("dict_ok=" + (str)(scores.len() == 2 and scores["math"] == 90))
+tuple[int,str] pair = @~ 返回JSON数组 [7, "seven"] ~
+print("tuple_ok=" + (str)(pair[0] == 7 and pair[1] == "seven"))
+print("DONE")

@@ -2,9 +2,21 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-15（**用户改主线**：PT-FEAT-14 暂缓；
-> 🔴 下一主线：**IBCI LLM 全能力真实压力试用（本地 qwen）**。
-> 全量 pytest 当前 2789 passed / 1 skipped）
+> **最后更新**：2026-08-15（**T08 第一轮压力试用完成**；
+> 🔴 当前主线：**IBCI LLM 全能力真实压力试用（本地 qwen）继续扩展**。
+> 全量 pytest 修复后实跑零回归）
+>
+> **✅ 已完成（2026-08-15，T08 第一轮，全量 pytest 零回归）**：
+> **IBCI LLM 全能力真实压力试用（第一轮）**。41 例：32 PASS + 2 GUARD +
+> 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 LIMIT。覆盖内联/容器/协议/批量/意图/
+> LLM 函数/流式/路由/线程/chan/生成器/配置错误。**修复 2 项内核缺陷**：
+> ① `KERNEL_ISSUE-LLM-2` LLM 函数返回 `list[int]`/`dict[str,int]` 未按容器解析
+> （`_get_expected_type_hint` 忽略 IbSubscript returns，默认退化为 str）；
+> ② `KERNEL_ISSUE-LLM-3` `set_retry(0)` + llmexcept 不抛 `LLMRetryExhaustedError`
+> （重试循环零次不进直接返回 uncertain）。均补回归测试。**新登记**：
+> `DOC_ISSUE-30`（`@!`+run_batch 文档与实现不一致）、`BOUNDARY-LLM-2`（LLM 函数
+> `-> void`）、`BOUNDARY-LLM-3`（stream 调用不入 call_info）。详见
+> `trials/T08_llm_pressure/REGISTER.md` + `PENDING_TASKS.md`。
 >
 > **✅ 已完成（2026-08-15，真实 LLM 调用专项试用，全量 2789 passed / 1 skipped 零回归）**：
 > 真实 LLM 全量扫描：T01 57（54 PASS + 2 预期 GUARD + 1 LLM_BEHAVIOR）、
@@ -15,9 +27,9 @@
 > 基名回退。自检结论：修复遵循既有 fork 快照/单一权威组装模式，无兼容层、
 > 无 tricky、无纯快速修复。
 >
-> **🔴 下一主线（2026-08-15 用户指定）**：
-> **IBCI LLM 全能力真实压力试用（本地 qwen）**。用本地 qwen 模型真实调用，
-> 检查 IBCI 承诺的所有直接/间接 LLM 能力。范围与工作模式详见
+> **🔴 当前主线（2026-08-15 用户指定，进行中）**：
+> **IBCI LLM 全能力真实压力试用（本地 qwen）**。第一轮已完成，继续扩展
+> 长提示/超时/并发压测/多模态真实文件等压力维度。范围与工作模式详见
 > `PENDING_TASKS.md` §〇 P0 行 + `HANDOFF.md` §2.1 交接块。PT-FEAT-14
 > 已暂缓（见 PENDING_TASKS §〇 暂缓行）。
 >

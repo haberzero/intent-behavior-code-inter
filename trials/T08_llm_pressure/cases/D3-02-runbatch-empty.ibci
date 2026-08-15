@@ -1,0 +1,12 @@
+# T08-D3-02 ai.run_batch 空列表边界
+# doc: docs/syntax/07_behavior_expressions.md §7.4
+# expect-class: PASS
+# expect-out: len=0 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+fn f = lambda(str x) -> str: @~ 处理 $x ~
+list results = ai.run_batch(f, [])
+print("len=" + (str)results.len())
+print("DONE")

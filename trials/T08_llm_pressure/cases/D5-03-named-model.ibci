@@ -1,0 +1,12 @@
+# T08-D5-03 命名模型路由 @NAME~ 真实 LLM（同一本地端点注册别名）
+# doc: docs/syntax/07_behavior_expressions.md §7.5
+# expect-class: PASS
+# expect-out: named_len=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+ai.register_model("ALT", "http://127.0.0.1:1234/v1", "lm-studio", "qwen3.6-35b-a3b")
+str s = @ALT~ 只回答：NAMED_OK ~
+print("named_len=" + (str)(s.len() > 0))
+print("DONE")

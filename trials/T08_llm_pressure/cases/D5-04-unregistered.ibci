@@ -1,0 +1,9 @@
+# T08-D5-04 未注册命名模型路由应报错（真实模式）
+# doc: docs/syntax/07_behavior_expressions.md §7.5
+# expect-class: GUARD
+# expect-exit: nonzero
+# expect-llm: true
+import ai
+ai.load_project_config()
+str s = @NOPE~ 只回答：X ~
+print(s)

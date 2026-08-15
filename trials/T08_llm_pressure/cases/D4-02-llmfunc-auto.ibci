@@ -1,0 +1,18 @@
+# T08-D4-02 LLM 函数返回 auto（应等价 str）
+# doc: docs/syntax/08_llm_functions.md §8.1
+# expect-class: PASS
+# expect-out: is_str=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+llm 说() -> auto:
+__sys__
+你是一个简洁的助手。
+__user__
+只回答：HI
+llmend
+
+auto r = 说()
+print("is_str=" + (str)(type(r) == "str"))
+print("DONE")

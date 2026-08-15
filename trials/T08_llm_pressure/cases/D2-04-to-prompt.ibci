@@ -1,0 +1,19 @@
+# T08-D2-04 __to_prompt__ 插值对真实 LLM 可见（echo token）
+# doc: docs/syntax/06_oop.md §6.7
+# expect-class: PASS
+# expect-out: echo_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Secret:
+    str code
+    func __init__(self, str code) -> auto:
+        self.code = code
+    func __to_prompt__(self) -> str:
+        return "TOKEN_XYZ_789"
+
+Secret sec = Secret("ignored")
+str r = @~ 请只原样输出我提供给你的 token，不要任何其它内容：$sec ~
+print("echo_ok=" + (str)("TOKEN_XYZ_789" in r))
+print("DONE")

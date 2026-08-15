@@ -1,0 +1,14 @@
+# T08-D3-08 run_batch + @! 排他意图：sys_prompt 是否注入（观测 last call）
+# doc: docs/syntax/09_intent_system.md §9.1
+# expect-class: PASS
+# expect-out: has_override=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+fn f = lambda(str x) -> str: @~ 用一句话描述 $x ~
+@! 只输出：FIRST_ONLY
+list res = ai.run_batch(f, ["苹果", "香蕉"])
+dict info = ai.get_current_call_info()
+print("has_override=" + (str)("FIRST_ONLY" in (str)info["sys_prompt"]))
+print("DONE")

@@ -1,0 +1,14 @@
+# T08-D3-01 ai.run_batch 类型化结果（int）保序与数量
+# doc: docs/syntax/07_behavior_expressions.md §7.4 批量并发
+# expect-class: PASS
+# expect-out: len=3 | first=1 | last=3 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+fn num = lambda(int x) -> int: @~ 只返回数字 $x ~
+list results = ai.run_batch(num, [1, 2, 3])
+print("len=" + (str)results.len())
+print("first=" + (str)results[0])
+print("last=" + (str)results[2])
+print("DONE")

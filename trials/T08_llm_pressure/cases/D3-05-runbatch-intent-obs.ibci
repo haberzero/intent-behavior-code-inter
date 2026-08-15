@@ -1,0 +1,15 @@
+# T08-D3-05 run_batch 意图注入可观测性：sys_prompt 含持久意图
+# doc: docs/syntax/09_intent_system.md §9.1 + docs/syntax/11_modules.md get_current_call_info
+# expect-class: PASS
+# expect-out: has_intent=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+@+ 只输出：BANANA
+fn f = lambda(str x) -> str: @~ 用一词回应 $x ~
+list res = ai.run_batch(f, ["苹果"])
+@-
+dict info = ai.get_current_call_info()
+print("has_intent=" + (str)("BANANA" in (str)info["sys_prompt"]))
+print("DONE")

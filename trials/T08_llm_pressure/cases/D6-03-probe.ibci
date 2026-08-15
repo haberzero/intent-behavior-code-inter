@@ -1,0 +1,11 @@
+# T08-D6-03 ai.probe_model 真实调用返回可观测状态
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: probe_len=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str p = ai.probe_model()
+print("probe_len=" + (str)(p.len() > 0))
+print("DONE")

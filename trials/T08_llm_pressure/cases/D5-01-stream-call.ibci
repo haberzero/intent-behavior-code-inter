@@ -1,0 +1,11 @@
+# T08-D5-01 流式调用 ai.stream_call 真实 LLM：await 取完整文本
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: len_gt0=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str full = await ai.stream_call("你是一个简洁的助手。", "只回答：OK")
+print("len_gt0=" + (str)(full.len() > 0))
+print("DONE")

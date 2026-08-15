@@ -1,0 +1,17 @@
+# T08-D6-04 ai.set_retry(0) + llmexcept：应抛 LLMRetryExhaustedError 可捕获，实际 RUN_TYPE_MISMATCH
+# doc: docs/syntax/10_robustness.md §10.1 + docs/syntax/11_modules.md
+# expect-class: PASS
+# expect-out: caught=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+ai.set_retry(0)
+try:
+    int x = @~ MOCK:FAIL ~
+    llmexcept:
+        retry "请只返回数字"
+    print("DONE")
+except LLMRetryExhaustedError as e:
+    print("caught=True")
+print("DONE")

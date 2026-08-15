@@ -50,6 +50,26 @@ print("after_catch")
         assert "after_catch" in lines
 
 
+class TestE2ELLMExceptZeroRetry:
+    def test_set_retry_zero_raises_exhausted(self):
+        """set_retry(0) 时首次失败应立即抛 LLMRetryExhaustedError，可被捕获。"""
+        code = AI_MOCK_PREFIX + """
+ai.set_retry(0)
+try:
+    int x = @~ MOCK:FAIL zero_retry ~
+    llmexcept:
+        retry "请只返回数字"
+    print("unexpected_success")
+except LLMRetryExhaustedError as e:
+    print("retry_exhausted_caught")
+print("after_catch")
+"""
+        lines = run_ibci(code)
+        assert "retry_exhausted_caught" in lines
+        assert "unexpected_success" not in lines
+        assert "after_catch" in lines
+
+
 class TestE2ELLMExceptNested:
     def test_outer_and_inner_llmexcept_independent_retry(self):
         """外层 llmexcept 与内层 llmexcept 互不干扰，各自独立重试。

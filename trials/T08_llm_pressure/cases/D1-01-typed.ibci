@@ -1,0 +1,17 @@
+# T08-D1-01 内联行为：int/float/bool/str 类型约束与解析
+# doc: docs/syntax/07_behavior_expressions.md §7.1-7.2
+# expect-class: PASS
+# expect-out: int_ok=True | float_ok=True | bool_ok=True | str_len=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+int n = @~ 1+1 等于几？只答数字 ~
+print("int_ok=" + (str)(n == 2))
+float f = @~ 圆周率约等于多少？只答数字 ~
+print("float_ok=" + (str)(f > 3.0 and f < 4.0))
+bool b = @~ 1+1=2 吗？只答 1 或 0 ~
+print("bool_ok=" + (str)b)
+str s = @~ 用中文说你好 ~
+print("str_len=" + (str)(s.len() > 0))
+print("DONE")

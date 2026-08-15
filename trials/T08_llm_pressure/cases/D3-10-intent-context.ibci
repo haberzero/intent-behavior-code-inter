@@ -1,0 +1,16 @@
+# T08-D3-10 intent_context 实例 + use 真实 LLM 注入
+# doc: docs/syntax/09_intent_system.md §9.3
+# expect-class: PASS
+# expect-out: sys_has=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+intent_context ctx = intent_context.get_current()
+ctx.push("只输出：CTX_OK")
+intent_context.use(ctx)
+str r = @~ 请回应我 ~
+dict info = ai.get_current_call_info()
+print("sys_has=" + (str)("CTX_OK" in (str)info["sys_prompt"]))
+ctx.pop()
+print("DONE")

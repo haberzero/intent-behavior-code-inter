@@ -1,0 +1,10 @@
+# T08-D6-06 未读取的 LLM 赋值在 provider 失败时静默通过（已知 dispatch 残留面）
+# doc: docs/KNOWN_LIMITS.md §十五
+# expect-class: LIMIT
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.set_config("http://127.0.0.1:1/v1", "bad", "bad-model")
+str s = @~ 你好 ~
+print("DONE")

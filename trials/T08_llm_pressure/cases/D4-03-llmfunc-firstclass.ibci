@@ -1,0 +1,19 @@
+# T08-D4-03 LLM 函数作为函数值传递并调用
+# doc: docs/syntax/08_llm_functions.md + docs/syntax/05_functions.md
+# expect-class: PASS
+# expect-out: DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+llm 问候(str name) -> str:
+__sys__
+你是一个友好的助手。
+__user__
+向 $name 问好，只回答你好。
+llmend
+
+fn f = 问候
+str r = f("张三")
+print("r_len=" + (str)(r.len() > 0))
+print("DONE")

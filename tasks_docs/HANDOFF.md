@@ -115,17 +115,24 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
-- **🔴 当前主线（2026-08-15 用户指定，下一 session 接手执行）：IBCI LLM 全能力真实压力试用（本地 qwen）**。
+- **✅ 已完成（2026-08-15，T08 第一轮）**：**IBCI LLM 全能力真实压力试用（第一轮）**。
+  41 例：32 PASS + 2 GUARD + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 LIMIT。
+  修复 `KERNEL_ISSUE-LLM-2`（LLM 函数容器返回解析）与 `KERNEL_ISSUE-LLM-3`
+  （`set_retry(0)` 重试耗尽）；登记 `DOC_ISSUE-30`、`BOUNDARY-LLM-2`、
+  `BOUNDARY-LLM-3`。详见 `trials/T08_llm_pressure/REGISTER.md`。
+
+- **🔴 当前主线（2026-08-15 用户指定，进行中）：IBCI LLM 全能力真实压力试用（本地 qwen）**。
   **目标**：真实调用本地 qwen 模型，系统检查 IBCI 承诺的所有直接/间接 LLM 能力，
   验证“LLM 是语言第一成员”是否名副其实；发现缺陷自主修复（可破坏性重构，按
   AGENTS/HANDOFF 原则），全量 pytest 零回归 + 交接。
+  **当前状态**：T08 第一轮已完成，继续扩展长提示/超时/并发压测/多模态真实文件等。
   **环境**：本机 LM Studio `qwen3.6-35b-a3b` @ `http://127.0.0.1:1234/v1`；
   当前服务可用，思考已禁用（响应约 1-2s）。真实配置见
   `trials/T01_llm_full/api_config.json`；运行入口 `trials/_toolkit/run_batch.py` /
   `run_one.py`（先探测服务再跑 LLM 批）。
-  **已有基线**：全量 pytest 2789 passed / 1 skipped；真实 LLM 扫描 T01 57
+  **已有基线**：全量 pytest 修复后实跑零回归；真实 LLM 扫描 T01 57
   （54 PASS + 2 GUARD + 1 LLM_BEHAVIOR）、T02 3 PASS、T05 cases_D3 8 PASS、
-  T06 7 PASS、T07 7 PASS。
+  T06 7 PASS、T07 7 PASS；T08 第一轮 41 例（见上）。
   **压力维度（下一 session 按此展开）**：
   1. 内联行为表达式：赋值/条件/循环/表达式语句/dispatch-before-use/run_batch 并发。
   2. 输出类型解析：int/float/bool/str/list/dict/enum/跨模块用户类；`__from_prompt__`/
