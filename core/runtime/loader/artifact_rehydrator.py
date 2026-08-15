@@ -313,6 +313,8 @@ class ArtifactRehydrator:
             # 用户类泛型类型参数（class Box[T]）：重建供特化/检查。
             if data.get("type_params"):
                 spec.type_params = list(data["type_params"])
+            if data.get("implements"):
+                spec.implements = list(data["implements"])
             # 用户类泛型特化实参（Box[int]）+ 原始基类名：重建供 from_spec
             # 结构化构造（round-trip 保真）。
             if data.get("type_args"):

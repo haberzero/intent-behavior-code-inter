@@ -329,11 +329,21 @@ class DeclarationComponent(BaseComponent):
                 self.stream.consume(TokenType.RBRACKET, "Expect ']' after parent type arguments.")
             self.stream.consume(TokenType.RPAREN, "Expect ')' after parent class name.")
 
+        implements = []
+        if self.stream.match(TokenType.IMPLEMENTS):
+            while True:
+                implements.append(
+                    self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name after 'implements'.").value
+                )
+                if not self.stream.match(TokenType.COMMA):
+                    break
+
         self.stream.consume(TokenType.COLON, "Expect ':' before class body.")
 
         class_node = self._loc(
             ast.IbClassDef(name=name, parent=parent, parent_args=parent_args,
-                           type_params=type_params, body=[], methods=[], fields=[]),
+                           type_params=type_params, implements=implements,
+                           body=[], methods=[], fields=[]),
             start_token,
         )
         

@@ -43,6 +43,7 @@ class TokenType(Enum):
     RAISE = auto()
     CLASS = auto()
     PROTOCOL = auto()
+    IMPLEMENTS = auto()
     SELF = auto()
 
     # LLM 关键字

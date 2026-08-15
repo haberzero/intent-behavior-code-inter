@@ -239,6 +239,8 @@ class FlatSerializer(BaseFlatSerializer):
             # 用户类泛型类型参数（class Box[T]）：持久化供 rehydrate 重建。
             if getattr(t, "type_params", None):
                 type_data["type_params"] = list(t.type_params)
+            if getattr(t, "implements", None):
+                type_data["implements"] = list(t.implements)
             # 用户类泛型特化实参（Box[int] → ["int"]）+ 原始基类名：
             # 持久化供 from_spec 结构化构造与 rehydrate 重建。
             if getattr(t, "type_args", None):

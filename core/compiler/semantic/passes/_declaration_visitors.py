@@ -19,7 +19,7 @@ from core.base.diagnostics.codes import (
 )
 from core.kernel import ast
 from core.kernel.symbols import SymbolTable, SymbolKind, VariableSymbol
-from core.kernel.spec import IbSpec
+from core.kernel.spec import IbSpec, TypeKind
 from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.member import ParamDescriptor
 from core.kernel.axioms.prompt_protocol import (
@@ -113,7 +113,28 @@ class DeclarationVisitorsMixin:
                 self.in_class_def = old_in_class
                 self.current_class = old_class
 
+            if node.implements:
+                self._check_class_implements(node, sym.spec)
+
         return None
+
+    def _check_class_implements(self, node: ast.IbClassDef, class_spec: IbSpec) -> None:
+        """Verify that a class implementing protocols provides all required methods."""
+        for protocol_name in node.implements:
+            proto_spec = self.registry.resolve(protocol_name)
+            if proto_spec is None or proto_spec.kind != TypeKind.PROTOCOL.value:
+                self.error(
+                    f"Class '{node.name}' implements unknown or non-protocol type '{protocol_name}'.",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+                continue
+            for method_name in (getattr(proto_spec, "members", None) or {}):
+                if not self._class_has_member_method(class_spec, method_name):
+                    self.error(
+                        f"Class '{node.name}' claims to implement protocol "
+                        f"'{protocol_name}' but is missing required method '{method_name}'.",
+                        node, code=SEM_TYPE_MISMATCH,
+                    )
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef) -> Optional[IbSpec]:
         """访问函数定义 — 解析参数类型标注，回填 spec，参数以正确类型注册"""

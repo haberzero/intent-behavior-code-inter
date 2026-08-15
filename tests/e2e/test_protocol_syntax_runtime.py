@@ -27,3 +27,19 @@ protocol Serializable:
 print("ok")
 """
         assert run_ibci(code) == ["ok"]
+
+
+class TestClassImplementsProtocolRuntime:
+    def test_class_implements_protocol_runs(self):
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+
+print(Foo().greet())
+"""
+        assert run_ibci(code) == ["hi"]
