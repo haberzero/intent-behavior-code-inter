@@ -180,6 +180,7 @@ class IbProtocolDef(IbStmt):
     TypeDef and a ProtocolDef in the kernel protocol registry.
     """
     name: str
+    parent: Optional[str] = None
     body: List[IbStmt] = field(default_factory=list)
     methods: List['IbFunctionDef'] = field(default_factory=list)
 

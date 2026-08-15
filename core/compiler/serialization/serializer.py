@@ -218,8 +218,8 @@ class FlatSerializer(BaseFlatSerializer):
                 type_data[f"{key}_uid"] = self._collect_type(val)
         
         # 使用 is_class() 代替 isinstance 检查
-        if t.kind == TypeKind.CLASS.value:
-            # 父类引用：从 parent_type TypeRef 提取扁平名供反序列化使用
+        if t.kind in (TypeKind.CLASS.value, TypeKind.PROTOCOL.value):
+            # 父类/父协议引用：从 parent_type TypeRef 提取扁平名供反序列化使用
             p_ref = t.parent_type
             type_data["parent_name"] = p_ref.head if p_ref is not None else None
             type_data["parent_module"] = p_ref.module if p_ref is not None else None

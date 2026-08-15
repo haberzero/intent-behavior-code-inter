@@ -89,10 +89,13 @@ class ProtocolRegistry:
             return None
         members = getattr(spec, "members", None) or {}
         methods = tuple(sorted(members.keys()))
+        parent_ref = getattr(spec, "parent_type", None)
+        parent = parent_ref.head if parent_ref is not None else None
         protocol = ProtocolDef(
             name=name,
             methods=methods,
             description="User-defined protocol",
+            parent=parent,
         )
         return self.register(protocol)
 

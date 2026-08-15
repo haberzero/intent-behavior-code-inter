@@ -279,10 +279,16 @@ class DeclarationComponent(BaseComponent):
         """
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name.").value
+
+        parent = None
+        if self.stream.match(TokenType.LPAREN):
+            parent = self.stream.consume(TokenType.IDENTIFIER, "Expect parent protocol name.").value
+            self.stream.consume(TokenType.RPAREN, "Expect ')' after parent protocol name.")
+
         self.stream.consume(TokenType.COLON, "Expect ':' before protocol body.")
 
         node = self._loc(
-            ast.IbProtocolDef(name=name, body=[], methods=[]),
+            ast.IbProtocolDef(name=name, parent=parent, body=[], methods=[]),
             start_token,
         )
         body = self.statement.block()

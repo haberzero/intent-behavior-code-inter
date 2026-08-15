@@ -128,13 +128,32 @@ class DeclarationVisitorsMixin:
                     node, code=SEM_TYPE_MISMATCH,
                 )
                 continue
-            for method_name in (getattr(proto_spec, "members", None) or {}):
+            for method_name in self._protocol_required_methods(proto_spec):
                 if not self._class_has_member_method(class_spec, method_name):
                     self.error(
                         f"Class '{node.name}' claims to implement protocol "
                         f"'{protocol_name}' but is missing required method '{method_name}'.",
                         node, code=SEM_TYPE_MISMATCH,
                     )
+
+    def _protocol_required_methods(self, proto_spec: IbSpec) -> set:
+        """Collect all required method names from a protocol and its parents."""
+        required = set()
+        seen = set()
+        stack = [proto_spec]
+        while stack:
+            cur = stack.pop()
+            key = (getattr(cur, "module_path", None), getattr(cur, "name", None))
+            if key in seen:
+                continue
+            seen.add(key)
+            required.update((getattr(cur, "members", None) or {}).keys())
+            parent_ref = getattr(cur, "parent_type", None)
+            if parent_ref is not None:
+                parent = self.registry.resolve_typeref(parent_ref)
+                if parent is not None:
+                    stack.append(parent)
+        return required
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef) -> Optional[IbSpec]:
         """访问函数定义 — 解析参数类型标注，回填 spec，参数以正确类型注册"""

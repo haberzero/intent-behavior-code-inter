@@ -171,6 +171,9 @@ class SymbolCollector:
             provenance=Provenance.USER_DEFINED,
             visibility=Visibility.IMPORT_GATED,
         )
+        if node.parent:
+            proto_spec.parent_type = TypeRef.of(node.parent)
+
         registered = self.registry.register(proto_spec)
 
         sym = Symbol(

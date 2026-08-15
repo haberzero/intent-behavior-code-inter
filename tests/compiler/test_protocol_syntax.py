@@ -54,3 +54,40 @@ class Foo implements Greeter:
     pass
 """
         expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+
+class TestProtocolInheritance:
+    def test_protocol_inheritance_compiles(self):
+        code = """
+protocol Base:
+    func base(self) -> str:
+        pass
+
+protocol Child(Base):
+    func child(self) -> str:
+        pass
+
+class Foo implements Child:
+    func base(self) -> str:
+        return "b"
+    func child(self) -> str:
+        return "c"
+"""
+        assert compile_ibci(code) is not None
+
+    def test_protocol_inheritance_missing_parent_method_fails(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Base:
+    func base(self) -> str:
+        pass
+
+protocol Child(Base):
+    func child(self) -> str:
+        pass
+
+class Foo implements Child:
+    func child(self) -> str:
+        return "c"
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")

@@ -293,7 +293,7 @@ class ArtifactRehydrator:
             v_name = data.get("value_type_name")
             if v_name is not None:
                 spec.value_type = TypeRef.parse(v_name, data.get("value_type_module"))
-        elif spec.kind == TypeKind.CLASS.value:
+        elif spec.kind in (TypeKind.CLASS.value, TypeKind.PROTOCOL.value):
             p_name = data.get("parent_name")
             p_mod = data.get("parent_module")
             p_args = data.get("parent_args") or []

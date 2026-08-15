@@ -43,3 +43,25 @@ class Foo implements Greeter:
 print(Foo().greet())
 """
         assert run_ibci(code) == ["hi"]
+
+
+class TestProtocolInheritanceRuntime:
+    def test_protocol_inheritance_runs(self):
+        code = """
+protocol Base:
+    func base(self) -> str:
+        pass
+
+protocol Child(Base):
+    func child(self) -> str:
+        pass
+
+class Foo implements Child:
+    func base(self) -> str:
+        return "b"
+    func child(self) -> str:
+        return "c"
+
+print(Foo().base() + Foo().child())
+"""
+        assert run_ibci(code) == ["bc"]
