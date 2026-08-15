@@ -169,3 +169,44 @@ func call_greet[T: Greeter](T x) -> str:
 str s = call_greet(42)
 """
         expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+
+class TestProtocolMethodSignatureChecking:
+    def test_protocol_wrong_param_count_fails(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Greeter:
+    func greet(self, str name) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+    def test_protocol_wrong_param_type_fails(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Greeter:
+    func greet(self, str name) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self, int name) -> str:
+        return "hi"
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+    def test_protocol_wrong_return_type_fails(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> int:
+        return 1
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")

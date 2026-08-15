@@ -135,6 +135,92 @@ class DeclarationVisitorsMixin:
                         f"'{protocol_name}' but is missing required method '{method_name}'.",
                         node, code=SEM_TYPE_MISMATCH,
                     )
+                    continue
+                proto_member = self._protocol_method_member(proto_spec, method_name)
+                class_member = (getattr(class_spec, "members", None) or {}).get(method_name)
+                if proto_member is not None and class_member is not None:
+                    self._check_protocol_method_signature(
+                        node, protocol_name, method_name, proto_member, class_member
+                    )
+
+    def _protocol_method_member(self, proto_spec: IbSpec, method_name: str):
+        """Find a method member on a protocol or one of its parents."""
+        seen = set()
+        stack = [proto_spec]
+        while stack:
+            cur = stack.pop()
+            key = (getattr(cur, "module_path", None), getattr(cur, "name", None))
+            if key in seen:
+                continue
+            seen.add(key)
+            members = getattr(cur, "members", None) or {}
+            if method_name in members:
+                return members[method_name]
+            parent_ref = getattr(cur, "parent_type", None)
+            if parent_ref is not None:
+                parent = self.registry.resolve_typeref(parent_ref)
+                if parent is not None:
+                    stack.append(parent)
+        return None
+
+    def _check_protocol_method_signature(
+        self,
+        node: ast.IbClassDef,
+        protocol_name: str,
+        method_name: str,
+        proto_member,
+        class_member,
+    ) -> None:
+        """Check that a class method is signature-compatible with a protocol method.
+
+        The check is intentionally conservative:
+        - parameter count must match;
+        - each protocol parameter type must be assignable to the class parameter
+          type (the class may accept a wider type);
+        - the class return type must be assignable to the protocol return type
+          (covariant return).
+        """
+        proto_params = list(getattr(proto_member, "param_types", None) or [])
+        class_params = list(getattr(class_member, "param_types", None) or [])
+        if len(proto_params) != len(class_params):
+            self.error(
+                f"Method '{method_name}' in class '{node.name}' has "
+                f"{len(class_params)} parameter(s), but protocol '{protocol_name}' "
+                f"requires {len(proto_params)}.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return
+
+        for i, (proto_ref, class_ref) in enumerate(zip(proto_params, class_params)):
+            proto_spec = self.registry.resolve_typeref(proto_ref)
+            class_spec = self.registry.resolve_typeref(class_ref)
+            if proto_spec is None or class_spec is None:
+                continue
+            if (not self.registry.is_dynamic(proto_spec)
+                    and not self.registry.is_dynamic(class_spec)
+                    and not self.registry.is_assignable(proto_spec, class_spec)):
+                self.error(
+                    f"Method '{method_name}' parameter {i + 1} type '{class_spec.name}' "
+                    f"is not compatible with protocol '{protocol_name}' parameter "
+                    f"type '{proto_spec.name}'.",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+
+        proto_ret_ref = getattr(proto_member, "return_type", None)
+        class_ret_ref = getattr(class_member, "return_type", None)
+        if proto_ret_ref is not None and class_ret_ref is not None:
+            proto_ret = self.registry.resolve_typeref(proto_ret_ref)
+            class_ret = self.registry.resolve_typeref(class_ret_ref)
+            if (proto_ret is not None and class_ret is not None
+                    and not self.registry.is_dynamic(proto_ret)
+                    and not self.registry.is_dynamic(class_ret)
+                    and not self.registry.is_assignable(class_ret, proto_ret)):
+                self.error(
+                    f"Method '{method_name}' return type '{class_ret.name}' "
+                    f"is not compatible with protocol '{protocol_name}' return "
+                    f"type '{proto_ret.name}'.",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
 
     def _protocol_required_methods(self, proto_spec: IbSpec) -> set:
         """Collect all required method names from a protocol and its parents."""
