@@ -69,7 +69,7 @@
   - behavior 期望类型注入（str 无 provider prompt → 通用类型声明；int → provider prompt）
   - llmexcept retry 自动回喂上次响应 + 解析错误
   - LLM 函数返回 enum 时也注入 output hint
-- [x] 全量 pytest 零回归 + commit + WORKLOG 同步（NEXT_STEPS 待合并后更新）
+- [x] 全量 pytest 零回归 + commit + WORKLOG/NEXT_STEPS/HANDOFF/PENDING_TASKS 同步（已合并 unsafe-vibe-dev）
 
 ## 三、测试与验证
 
