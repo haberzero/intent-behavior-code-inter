@@ -147,6 +147,8 @@ class IbFunctionDef(IbStmt):
     args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
     body: List[IbStmt]
     returns: Optional[IbExpr] = None
+    type_params: List[str] = field(default_factory=list)  # generic function type params
+    type_param_bounds: Dict[str, str] = field(default_factory=dict)  # T -> ProtocolName
     free_vars: List = field(default_factory=list)  # [[name, sym_uid], ...] nonlocal captures
     is_generator: bool = False  # 含 yield → 惰性生成器（D-08 自标记函数种类）
     type_param_uids: List = field(default_factory=list)  # [[name, sym_uid], ...] 泛型方法体内引用的类型参数

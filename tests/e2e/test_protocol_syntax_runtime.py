@@ -87,3 +87,34 @@ Box[Foo] b = Box[Foo](Foo())
 print(b.get().greet())
 """
         assert run_ibci(code) == ["hi"]
+
+
+class TestGenericFunctionsRuntime:
+    def test_generic_identity_runs(self):
+        code = """
+func identity[T](T x) -> T:
+    return x
+
+int a = identity(42)
+str b = identity("hi")
+print(a)
+print(b)
+"""
+        assert run_ibci(code) == ["42", "hi"]
+
+    def test_bounded_generic_function_runs(self):
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+
+func call_greet[T: Greeter](T x) -> str:
+    return x.greet()
+
+print(call_greet(Foo()))
+"""
+        assert run_ibci(code) == ["hi"]

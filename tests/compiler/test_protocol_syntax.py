@@ -122,3 +122,50 @@ class Box[T: Greeter]:
 Box[int] b = Box[int](1)
 """
         expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+
+class TestGenericFunctions:
+    def test_generic_identity_compiles(self):
+        code = """
+func identity[T](T x) -> T:
+    return x
+
+int a = identity(42)
+str b = identity("hi")
+"""
+        assert compile_ibci(code) is not None
+
+    def test_bounded_generic_function_compiles(self):
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+
+func call_greet[T: Greeter](T x) -> str:
+    return x.greet()
+
+str s = call_greet(Foo())
+"""
+        assert compile_ibci(code) is not None
+
+    def test_bounded_generic_function_rejects_non_conforming_arg(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo implements Greeter:
+    func greet(self) -> str:
+        return "hi"
+
+func call_greet[T: Greeter](T x) -> str:
+    return x.greet()
+
+str s = call_greet(42)
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")

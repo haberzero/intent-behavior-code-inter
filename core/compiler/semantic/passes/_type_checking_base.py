@@ -318,12 +318,11 @@ class TypeCheckBase:
                     annotation, code=SEM_UNRESOLVED_TYPE,
                 )
                 return self._any_desc
-            # 用户类泛型类型参数：类体内 T 解析为占位 spec（非实体类型），
-            # 供特化时替换。在类作用域符号表链查找（含嵌套方法作用域）。
-            if self.current_class is not None:
-                type_param_spec = self._lookup_type_param(annotation.id)
-                if type_param_spec is not None:
-                    return type_param_spec
+            # 用户类/泛型函数类型参数：T 解析为占位 spec（非实体类型），
+            # 供特化/调用点推断时替换。
+            type_param_spec = self._lookup_type_param(annotation.id)
+            if type_param_spec is not None:
+                return type_param_spec
             resolved = self.registry.resolve(annotation.id)
             if not resolved:
                 self.error(
@@ -488,20 +487,25 @@ class TypeCheckBase:
             return self._any_desc
 
     def _lookup_type_param(self, name: str) -> Optional[IbSpec]:
-        """在类作用域内查找用户类泛型类型参数（class Box[T] 的 T）。
+        """在类/泛型函数作用域内查找类型参数（class Box[T] / func f[T] 的 T）。
 
-        权威源 = ``current_class.type_params``（symbol_collection 已落 TypeDef）。
-        命中返回占位 spec（TYPE_PARAM kind）；未命中返回 None。
+        权威源 = ``current_class.type_params`` 或
+        ``current_function_type_params``。命中返回占位 spec（TYPE_PARAM kind）。
         """
+        from core.kernel.spec.base import TypeKind
         cls_spec = self.current_class
-        if cls_spec is None:
-            return None
-        if getattr(cls_spec, "type_params", None) and name in cls_spec.type_params:
-            from core.kernel.spec.base import TypeKind
+        if cls_spec is not None and getattr(cls_spec, "type_params", None) and name in cls_spec.type_params:
             return TypeDef(
                 name=name,
                 kind=TypeKind.TYPE_PARAM.value,
                 provenance=cls_spec.provenance,
                 visibility=cls_spec.visibility,
+            )
+        if self.current_function_type_params and name in self.current_function_type_params:
+            return TypeDef(
+                name=name,
+                kind=TypeKind.TYPE_PARAM.value,
+                provenance=Provenance.USER_DEFINED,
+                visibility=Visibility.IMPORT_GATED,
             )
         return None

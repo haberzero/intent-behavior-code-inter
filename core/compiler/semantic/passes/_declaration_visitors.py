@@ -160,6 +160,12 @@ class DeclarationVisitorsMixin:
         # 查找函数符号
         sym = self.lookup_symbol(node.name)
 
+        # 泛型函数类型参数必须在解析参数/返回类型之前生效，否则 T 会被当作未知类型。
+        old_func_type_params = self.current_function_type_params
+        old_func_type_param_bounds = self.current_function_type_param_bounds
+        self.current_function_type_params = list(node.type_params)
+        self.current_function_type_param_bounds = dict(node.type_param_bounds)
+
         # 静态名义强类型：函数必须声明返回类型（显式 TYPE / auto 推断 / any 逃生）。
         # 缺标注不再静默回填 any（曾击穿类型推断与泛型体系）。
         if node.returns is None:
@@ -201,6 +207,8 @@ class DeclarationVisitorsMixin:
                 visibility=Visibility.IMPORT_GATED,
             )
             updated_spec.param_descriptors = param_descriptors
+            updated_spec.type_params = list(node.type_params)
+            updated_spec.type_param_bounds = dict(node.type_param_bounds)
             sym.spec = updated_spec
 
         # 同步精化后的签名到类成员表（运行期契约校验消费）
@@ -280,6 +288,8 @@ class DeclarationVisitorsMixin:
             self.pop_scope()
             self.in_function_def = old_in_function
             self.auto_return_types = old_auto_returns
+            self.current_function_type_params = old_func_type_params
+            self.current_function_type_param_bounds = old_func_type_param_bounds
             if func_returns:
                 func_returns.pop()
 

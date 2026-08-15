@@ -224,6 +224,24 @@ class DeclarationComponent(BaseComponent):
     def function_declaration(self) -> ast.IbFunctionDef:
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect function name.").value
+
+        type_params = []
+        type_param_bounds = {}
+        if self.stream.match(TokenType.LBRACKET):
+            # 泛型函数：func identity[T](T x) -> T / func first[T: Proto](...)
+            while True:
+                tp_name = self.stream.consume(TokenType.IDENTIFIER, "Expect type parameter name.").value
+                type_params.append(tp_name)
+                if self.stream.match(TokenType.COLON):
+                    bound = self.stream.consume(
+                        TokenType.IDENTIFIER,
+                        "Expect protocol name after ':' in type parameter bound.",
+                    ).value
+                    type_param_bounds[tp_name] = bound
+                if not self.stream.match(TokenType.COMMA):
+                    break
+            self.stream.consume(TokenType.RBRACKET, "Expect ']' after type parameters.")
+
         self.stream.consume(TokenType.LPAREN, "Expect '(' after function name.")
         args = self.parameters()
         self.stream.consume(TokenType.RPAREN, "Expect ')' after parameters.")
@@ -234,7 +252,13 @@ class DeclarationComponent(BaseComponent):
             
         self.stream.consume(TokenType.COLON, "Expect ':' before function body.")
         
-        func_node = self._loc(ast.IbFunctionDef(name=name, args=args, body=[], returns=returns), start_token)
+        func_node = self._loc(
+            ast.IbFunctionDef(
+                name=name, args=args, body=[], returns=returns,
+                type_params=type_params, type_param_bounds=type_param_bounds,
+            ),
+            start_token,
+        )
         
         body = self.statement.block()
         func_node.body = body

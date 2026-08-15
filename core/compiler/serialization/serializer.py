@@ -207,6 +207,10 @@ class FlatSerializer(BaseFlatSerializer):
             type_data["param_type_names"] = [p.canonical_name for p in t.param_types]
             ret_ref = t.return_type
             type_data["return_type_name"] = ret_ref.canonical_name if ret_ref is not None else "auto"
+            if getattr(t, "type_params", None):
+                type_data["type_params"] = list(t.type_params)
+            if getattr(t, "type_param_bounds", None):
+                type_data["type_param_bounds"] = dict(t.type_param_bounds)
 
         # 多态收集类型引用，消除 isinstance 硬编码检查
         refs = t.get_references()

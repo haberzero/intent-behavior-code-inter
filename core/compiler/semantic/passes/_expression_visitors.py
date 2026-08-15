@@ -438,6 +438,43 @@ class ExpressionVisitorsMixin:
         "push", "pop", "fork", "merge", "combine", "clear",
     })
 
+    def _infer_generic_function_type_params(
+        self,
+        func_type: IbSpec,
+        arg_specs: list,
+        node: ast.IbCall,
+    ) -> Optional[dict]:
+        """Infer type parameters for a generic function call.
+
+        Returns a mapping ``{type_param_name: TypeRef}`` when every type
+        parameter can be inferred from positional argument types, or None.
+        """
+        type_params = list(getattr(func_type, "type_params", None) or [])
+        if not type_params:
+            return None
+        param_types = list(getattr(func_type, "param_types", None) or [])
+        mapping = {}
+        for param_ref, actual in zip(param_types, arg_specs):
+            if actual is None:
+                continue
+            name = getattr(param_ref, "head", None)
+            if name in type_params and name not in mapping:
+                mapping[name] = TypeRef.from_spec(actual)
+        if len(mapping) != len(type_params):
+            return None
+        # 检查协议约束。
+        ordered_args = [mapping[p] for p in type_params]
+        arg_specs_for_check = [
+            self.registry.resolve_typeref(ref) or self.registry.resolve("any")
+            for ref in ordered_args
+        ]
+        bound_errors = self.registry.type_param_bound_errors(func_type, arg_specs_for_check)
+        if bound_errors:
+            for msg in bound_errors:
+                self.error(msg, node, code=SEM_TYPE_MISMATCH)
+            return None
+        return mapping
+
     def visit_IbCall(self, node: ast.IbCall) -> Optional[IbSpec]:
         """访问函数调用 — 统一实参解析 + 使用 registry.resolve_call_return() 推断返回类型"""
         # 处理被调用对象
@@ -518,6 +555,18 @@ class ExpressionVisitorsMixin:
         arg_specs = self._resolve_call_arguments(
             node, func_type, positional_specs, starred_specs, keyword_specs,
         )
+
+        # --- Generic function call inference ---
+        # If the callee is a generic function, infer type parameters from
+        # positional argument types and substitute them into the return type.
+        generic_mapping = self._infer_generic_function_type_params(func_type, arg_specs or [], node)
+        if generic_mapping is not None:
+            ret_ref = getattr(func_type, "return_type", None)
+            if ret_ref is not None:
+                substituted = ret_ref.substitute(generic_mapping)
+                res = self.registry.resolve_typeref(substituted) or self._any_desc
+                self.bind_type(node, res)
+                return res
 
         # --- Unified return type resolution ---
         # 单一入口：resolve_call_return 已覆盖直读 return_type 的兜底（Layer 6）；
@@ -699,6 +748,9 @@ class ExpressionVisitorsMixin:
         if not descriptor.type_ref:
             return
         exp_spec = self.registry.resolve_typeref(descriptor.type_ref)
+        # 泛型函数形如 T：类型参数占位在调用点由实参推断，这里不做静态拒绝。
+        if exp_spec is not None and exp_spec.kind == TypeKind.TYPE_PARAM.value:
+            return
         if arg_node is not None and exp_spec is not None:
             self._bind_literal_with_type(arg_node, exp_spec)
         # bare fn 参数（动态哨兵，name=="fn" 且非 CALLABLE_SIG）＝"任意可调用"抽象：

@@ -365,6 +365,9 @@ class SymbolCollector:
         if node.returns:
             func_meta.return_type = self._annotation_to_typeref(node.returns)
 
+        func_meta.type_params = list(node.type_params)
+        func_meta.type_param_bounds = dict(node.type_param_bounds)
+
         self.registry.register(func_meta)
 
         # 创建函数符号

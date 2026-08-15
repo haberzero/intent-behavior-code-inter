@@ -90,6 +90,8 @@ class TypeCheckingVisitor(
         self.in_function_def = False
         self.in_class_def = False
         self.current_class: Optional[IbSpec] = None
+        self.current_function_type_params: Optional[List[str]] = None
+        self.current_function_type_param_bounds: Dict[str, str] = {}
 
         # 常用类型描述符
         self._any_desc = self.registry.resolve("any")

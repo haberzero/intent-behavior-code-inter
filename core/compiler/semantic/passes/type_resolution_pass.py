@@ -166,19 +166,27 @@ class TypeAnnotationResolver:
 
     def resolve_IbFunctionDef(self, node: ast.IbFunctionDef):
         """解析函数定义的类型标注"""
-        # 解析参数类型
-        for arg in node.args:
-            self.resolve(arg)
+        # 类方法需要同时继承类类型参数与函数自身类型参数，不能用一个空列表
+        # 遮蔽外层类作用域。
+        inherited = list(self._type_param_stack[-1]) if self._type_param_stack else []
+        combined = list(dict.fromkeys(inherited + list(node.type_params)))
+        self._type_param_stack.append(combined)
+        try:
+            # 解析参数类型
+            for arg in node.args:
+                self.resolve(arg)
 
-        # 解析返回类型
-        if node.returns:
-            ret_spec = self.resolve_type_annotation(node.returns)
-            if ret_spec:
-                self.resolved_types[node.returns] = ret_spec
+            # 解析返回类型
+            if node.returns:
+                ret_spec = self.resolve_type_annotation(node.returns)
+                if ret_spec:
+                    self.resolved_types[node.returns] = ret_spec
 
-        # 递归处理函数体
-        for stmt in node.body:
-            self.resolve(stmt)
+            # 递归处理函数体
+            for stmt in node.body:
+                self.resolve(stmt)
+        finally:
+            self._type_param_stack.pop()
 
     def resolve_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
         """解析 LLM 函数定义的类型标注"""

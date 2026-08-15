@@ -276,6 +276,10 @@ class ArtifactRehydrator:
             ]
             ret_name = data.get("return_type_name")
             spec.return_type = TypeRef.parse(ret_name) if ret_name else TypeRef.of("void")
+            if data.get("type_params"):
+                spec.type_params = list(data["type_params"])
+            if data.get("type_param_bounds"):
+                spec.type_param_bounds = dict(data["type_param_bounds"])
         elif spec.kind == TypeKind.CALLABLE_INSTANCE.value:
             # Restore the value type for callable-instance specs (fn_callable[T] / behavior[T]).
             # ``capture_mode`` is intentionally NOT restored at the type level: it

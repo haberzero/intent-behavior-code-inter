@@ -64,6 +64,8 @@ class SymbolResolver(ScopedVisitor):
 
         # 当前所在类的符号（用于注入 self）
         self.current_class_symbol: Optional[Symbol] = None
+        # 当前泛型函数的类型参数（func f[T]）
+        self.current_function_type_params: Optional[List[str]] = None
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""
@@ -206,6 +208,8 @@ class SymbolResolver(ScopedVisitor):
                 func_sym.owned_scope = func_scope
 
         # 进入函数作用域
+        old_func_type_params = self.current_function_type_params
+        self.current_function_type_params = list(node.type_params)
         self.push_scope(func_scope)
         try:
             # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
@@ -237,6 +241,17 @@ class SymbolResolver(ScopedVisitor):
             elif func_sym:
                 self.bind_symbol(node, func_sym)
 
+            # 泛型函数类型参数：T / T: Proto 在函数作用域内注册为 TYPE_PARAM 符号。
+            for tp_name in node.type_params:
+                tp_spec = self.registry.factory.create_type_param(tp_name)
+                tp_sym = Symbol(
+                    name=tp_name,
+                    kind=SymbolKind.TYPE_PARAM,
+                    def_node=node,
+                    spec=tp_spec,
+                )
+                func_scope.define(tp_sym)
+
             self._register_params(node.args, func_scope)
 
             # 收集 nonlocal/global 声明的名称，这些不应被 prescan 注册为局部变量
@@ -247,6 +262,7 @@ class SymbolResolver(ScopedVisitor):
             for stmt in node.body:
                 self.visit(stmt)
         finally:
+            self.current_function_type_params = old_func_type_params
             self.pop_scope()
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
@@ -374,6 +390,11 @@ class SymbolResolver(ScopedVisitor):
                     annotation, code=SEM_UNRESOLVED_TYPE,
                 )
                 return self.registry.resolve("any")
+            if self.current_function_type_params and annotation.id in self.current_function_type_params:
+                return self.registry.factory.create_type_param(annotation.id)
+            # 类泛型参数在符号收集/解析阶段保持 TypeRef 形态，由既有的特化
+            # 替换机制处理；这里不提前落成 TYPE_PARAM，避免运行期符号池拿到
+            # 未替换的 list[T]。
             return self.registry.resolve(annotation.id) or self.registry.resolve("any")
         if isinstance(annotation, ast.IbCallableType):
             # callable signature 约束 ``fn[(params) -> ret]``：与 type_checking
