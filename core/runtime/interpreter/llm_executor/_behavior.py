@@ -25,6 +25,11 @@ from core.runtime.shared.llm_result import (
     MOCK_AMBIGUOUS_SENTINEL,
 )
 
+from core.runtime.interpreter.llm_executor._prompt_assembly import (
+    build_behavior_system_prompt,
+    build_retry_feedback,
+)
+
 from core.runtime.objects.kernel import IbObject, IbValue
 from core.runtime.objects.intent_context import IbIntentContext
 from core.runtime.objects.primitives.callables import (
@@ -118,6 +123,37 @@ class _RunBatchDrive:
 
 
 class _BehaviorMixin:
+    def _assemble_behavior_sys_prompt(
+        self,
+        *,
+        llmoutput_hint: Optional[str],
+        type_hint: Optional[str],
+        frame: Optional[Any],
+        all_intents: List[Any],
+    ) -> str:
+        """把 behavior 提示词组件组装为完整 system prompt（sync/CPS 共用）。
+
+        单一权威组装在 :func:`build_behavior_system_prompt`；本方法只负责
+        从 live frame / provider 提取组件，不再各自拼接字符串。
+        """
+        provider_type_prompt = None
+        if type_hint and self.llm_callback:
+            provider_type_prompt = self.llm_callback.get_return_type_prompt(type_hint)
+        retry_feedback = None
+        if frame is not None:
+            retry_feedback = build_retry_feedback(
+                user_hint=frame.retry_hint,
+                parse_error=frame.last_llm_error,
+                raw_response=frame.last_llm_response,
+            )
+        return build_behavior_system_prompt(
+            output_hint=llmoutput_hint,
+            type_hint=type_hint,
+            provider_type_prompt=provider_type_prompt,
+            retry_feedback=retry_feedback,
+            intents=all_intents,
+        )
+
     def _prepare_behavior_call(
         self,
         node_uid: str,
@@ -159,23 +195,14 @@ class _BehaviorMixin:
             active_list = context.get_active_intents()
 
         llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
-
-        sys_prompt = "你是一个意图行为代码执行器。"
-
-        if llmoutput_hint:
-            sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
-
-        frame = context.get_current_llm_except_frame()
-        current_retry_hint = frame.retry_hint if frame else None
-
-        if current_retry_hint:
-            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
-
-        if all_intents:
-            intent_block = "\n当前上下文意图（必须严格遵守）：\n" + "\n".join(f"- {i}" for i in all_intents)
-            sys_prompt += intent_block
-
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
+        frame = context.get_current_llm_except_frame()
+        sys_prompt = self._assemble_behavior_sys_prompt(
+            llmoutput_hint=llmoutput_hint,
+            type_hint=type_hint,
+            frame=frame,
+            all_intents=all_intents,
+        )
 
         return BehaviorCallSpec(
             sys_prompt=sys_prompt,
@@ -227,23 +254,14 @@ class _BehaviorMixin:
             active_list = context.get_active_intents()
 
         llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)
-
-        sys_prompt = "你是一个意图行为代码执行器。"
-
-        if llmoutput_hint:
-            sys_prompt += f"\n\n[输出格式要求]\n{llmoutput_hint}"
-
-        frame = context.get_current_llm_except_frame()
-        current_retry_hint = frame.retry_hint if frame else None
-
-        if current_retry_hint:
-            sys_prompt += f"\n\n注意：上一次执行失败，请参考以下提示进行重试：\n{current_retry_hint}"
-
-        if all_intents:
-            intent_block = "\n当前上下文意图（必须严格遵守）：\n" + "\n".join(f"- {i}" for i in all_intents)
-            sys_prompt += intent_block
-
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
+        frame = context.get_current_llm_except_frame()
+        sys_prompt = self._assemble_behavior_sys_prompt(
+            llmoutput_hint=llmoutput_hint,
+            type_hint=type_hint,
+            frame=frame,
+            all_intents=all_intents,
+        )
 
         return BehaviorCallSpec(
             sys_prompt=sys_prompt,

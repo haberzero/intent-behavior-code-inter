@@ -19,16 +19,19 @@ from core.kernel import ast as ib_ast
 
 
 class _PromptMixin:
-    def _try_axiom_output_hint(self, type_name: str) -> Optional[str]:
+    def _try_axiom_output_hint(self, type_name: str, module: Optional[str] = None) -> Optional[str]:
         """Axiom 输出格式约束查找（sync/CPS 两路径共享单一实现）。
 
         经 ``meta_reg.get_llm_output_hint_cap(descriptor)`` 查询内置类型的
         ``__outputhint_prompt__``；用户类 vtable 分支由各路径各自驱动
         （sync ``.call`` / CPS ``UserFunctionCall``），不在本方法内。
+
+        ``module`` 感知与 :meth:`_get_expected_type_hint` 对齐：S2/S5 类身份
+        module 化后，枚举等内置类型按 qualified 名注册，裸名 resolve 会断链。
         """
         meta_reg = self.registry.get_metadata_registry()
         if meta_reg:
-            descriptor = meta_reg.resolve(type_name)
+            descriptor = meta_reg.resolve(type_name, module=module)
             if descriptor:
                 hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
                 if hint_cap:
@@ -281,10 +284,11 @@ class _PromptMixin:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
                 type_name = returns_data.get("id", "str")
-                hint = self._try_axiom_output_hint(type_name)
+                returns_module = getattr(execution_context, "current_module_name", None)
+                hint = self._try_axiom_output_hint(type_name, module=returns_module)
                 if hint is not None:
                     return hint
-                hint = _try_vtable_hint(type_name)
+                hint = _try_vtable_hint(type_name, module=returns_module)
                 if hint is not None:
                     return hint
 
@@ -292,15 +296,13 @@ class _PromptMixin:
         if node_to_type:
             type_name = getattr(node_to_type, 'name', None)
             if type_name:
-                hint = self._try_axiom_output_hint(type_name)
+                node_module = getattr(node_to_type, "module_path", None)
+                # [Module Identity] axiom 与用户类 hint 查找均按 module 限定；
+                # S2/S5 module 化后枚举等类型按 qualified 名注册，裸名会断链。
+                hint = self._try_axiom_output_hint(type_name, module=node_module)
                 if hint is not None:
                     return hint
-                # [Module Identity] 用户类 hint 查找按 module 限定
-                # （node_to_type spec 携带 module_path；跨模块同名类不误选）。
-                hint = _try_vtable_hint(
-                    type_name,
-                    module=getattr(node_to_type, "module_path", None),
-                )
+                hint = _try_vtable_hint(type_name, module=node_module)
                 if hint is not None:
                     return hint
 
@@ -339,10 +341,11 @@ class _PromptMixin:
             returns_data = execution_context.get_node_data(returns_uid)
             if returns_data and returns_data.get("_type") == "IbName":
                 type_name = returns_data.get("id", "str")
-                hint = self._try_axiom_output_hint(type_name)
+                returns_module = getattr(execution_context, "current_module_name", None)
+                hint = self._try_axiom_output_hint(type_name, module=returns_module)
                 if hint is not None:
                     return hint
-                hint = yield from _drive_vtable_hint(type_name)
+                hint = yield from _drive_vtable_hint(type_name, module=returns_module)
                 if hint is not None:
                     return hint
 
@@ -350,13 +353,13 @@ class _PromptMixin:
         if node_to_type:
             type_name = getattr(node_to_type, 'name', None)
             if type_name:
-                hint = self._try_axiom_output_hint(type_name)
+                node_module = getattr(node_to_type, "module_path", None)
+                # [Module Identity] axiom 与用户类 hint 查找均按 module 限定；
+                # S2/S5 module 化后枚举等类型按 qualified 名注册，裸名会断链。
+                hint = self._try_axiom_output_hint(type_name, module=node_module)
                 if hint is not None:
                     return hint
-                hint = yield from _drive_vtable_hint(
-                    type_name,
-                    module=getattr(node_to_type, "module_path", None),
-                )
+                hint = yield from _drive_vtable_hint(type_name, module=node_module)
                 if hint is not None:
                     return hint
 

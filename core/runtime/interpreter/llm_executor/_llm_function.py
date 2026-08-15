@@ -18,6 +18,12 @@ from core.runtime.shared.llm_result import LLMResult, LLMFuture, MOCK_REPAIR_SEN
 
 from core.runtime.objects.kernel import IbObject
 
+from core.runtime.interpreter.llm_executor._prompt_assembly import (
+    build_intent_section,
+    build_retry_feedback_section,
+    build_type_constraint_section,
+)
+
 
 @dataclass
 class LLMFunctionCallSpec:
@@ -78,12 +84,32 @@ class _LLMFunctionMixin:
         )
 
         merged_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
-        if merged_intents:
-            intent_block = "\n当前上下文意图（必须严格遵守）：\n" + "\n".join(f"- {i}" for i in merged_intents)
-            sys_prompt += intent_block
+        intent_section = build_intent_section(merged_intents)
+        if intent_section:
+            sys_prompt += "\n" + intent_section
+
+        type_name = self._get_expected_type_hint(node_uid, node_data, execution_context) or "str"
+        frame = context.get_current_llm_except_frame()
+
+        # 输出约束与 behavior 路径共用单一权威组装：provider 显式注册类型
+        # 提示优先，类型 ``__outputhint_prompt__`` 次之；LLM 函数 __sys__
+        # 是用户自设契约，不追加通用类型声明。
+        llmoutput_hint = yield from self._get_llmoutput_hint_cps(
+            node_uid, node_data, execution_context
+        )
+        provider_type_prompt = None
+        if self.llm_callback:
+            provider_type_prompt = self.llm_callback.get_return_type_prompt(type_name)
+        type_constraint = build_type_constraint_section(
+            output_hint=llmoutput_hint,
+            type_hint=type_name,
+            provider_type_prompt=provider_type_prompt,
+            include_generic_type=False,
+        )
+        if type_constraint:
+            sys_prompt += f"\n\n{type_constraint}"
 
         retry_hint_segments = None
-        frame = context.get_current_llm_except_frame()
         current_retry_hint = frame.retry_hint if frame else None
         if current_retry_hint:
             retry_hint_segments = [current_retry_hint]
@@ -98,12 +124,13 @@ class _LLMFunctionMixin:
                 raise TypeError("retry hint segments must produce text-only content")
             sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
 
-        type_name = self._get_expected_type_hint(node_uid, node_data, execution_context) or "str"
-
-        if self.llm_callback:
-            type_prompt = self.llm_callback.get_return_type_prompt(type_name)
-            if type_prompt:
-                sys_prompt += f"\n\n{type_prompt}"
+        if frame is not None:
+            retry_feedback = build_retry_feedback_section(
+                parse_error=frame.last_llm_error,
+                raw_response=frame.last_llm_response,
+            )
+            if retry_feedback:
+                sys_prompt += f"\n\n{retry_feedback}"
 
         return LLMFunctionCallSpec(
             sys_prompt=sys_prompt,

@@ -2,7 +2,11 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-14（IBCI LLM 调用机制深挖：枚举输出约束注入断链 bug + 三结构性弱点，交接下一 session）
+> 最后更新：2026-08-15（IBCI LLM 调用机制整改落地 exp/llm-prompt-mechanism，全量 2787 passed / 1 skipped）
+
+---
+
+| **IBCI LLM 调用机制整改落地（2026-08-15，exp/llm-prompt-mechanism，全量 2787 passed / 1 skipped）** | **P0 主线（`_HANDOFF_LLM_PROMPT_MECHANISM.md`）A-D 四项落地，未合并 unsafe-vibe-dev（独立分支）。** ① **A 修复**：`_try_axiom_output_hint` 增加 `module` 参数，`_get_llmoutput_hint(_cps)` 的 node_to_type 分支与 returns IbName 分支均 module 感知——枚举 `__outputhint_prompt__` 注入断链修复（真实 LLM 实证 `Status c = @~...~` sys_prompt 含 `[输出格式要求] Reply with exactly one of: ACTIVE, INACTIVE.`，响应 `ACTIVE`）。② **B 修复**：behavior 基础系统提示升级为程序化调用纪律（"被 IBCI 程序调用的函数，只返回数据本身，禁止问候/解释/提问/拒绝/安全声明"）。③ **C 修复**：behavior 路径期望输出类型注入——优先级 provider 显式类型提示 > `__outputhint_prompt__` > 通用类型声明（`str` 无类型级 hint 时注入 `[期望输出类型]`；动态/行为本体类型不注入内部类型名）。LLM 函数路径同样接入 `__outputhint_prompt__` 注入。④ **D 修复**：`LLMExceptFrame` 增 `last_llm_response`/`last_llm_error`，retry 时自动回喂上次响应 + 解析错误，与用户 `retry` hint 分块共存。**架构**：新增 `_prompt_assembly.py` 单一权威组装（behavior sync/CPS 共用 `_assemble_behavior_sys_prompt`，LLM 函数共用 type constraint/intent/retry feedback 构建器）；`_llm_function.py` 意图块改用 `build_intent_section`（消除与 behavior 的标题字面量漂移）。**测试**：新增 `tests/e2e/test_llm_prompt_mechanism.py` 6 项判别性回归（纪律提示/str 通用类型/枚举 hint 注入/provider 优先/retry 自动回喂/LLM 函数枚举 hint）。**文档**：docs/syntax/10_robustness.md、docs/guide/03_handling_errors.md、docs/KNOWN_LIMITS.md §10.2 同步。**真实 LLM**：qwen3.6-35b-a3b localhost 实测 enum 解析成功。**待办**：独立复核 + 评估是否按零风险细则合并 unsafe-vibe-dev。 |
 
 ---
 

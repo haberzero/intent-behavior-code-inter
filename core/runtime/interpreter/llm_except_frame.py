@@ -45,7 +45,7 @@ Status: Active
 
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
-from core.runtime.objects.kernel import IbObject, IbValue, IbNone
+from core.runtime.objects.kernel import IbObject, IbValue, IbNone, IbLLMCallResult
 from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.kernel.ib_class import IbClass
 from core.runtime.objects.deep_clone import try_deep_clone
@@ -119,6 +119,20 @@ class LLMExceptFrame:
     saved_protocol_states: Dict[str, Any] = field(default_factory=dict)
     
     target_result: Optional[Any] = None  # 最近一次不确定调用的 IbLLMCallResult（certainty 信号载体）
+
+    @property
+    def last_llm_response(self) -> Optional[str]:
+        """上一次 LLM 调用的原始响应（用于自动重试回喂）。"""
+        if isinstance(self.target_result, IbLLMCallResult) and self.target_result.is_uncertain:
+            return self.target_result.raw_response or None
+        return None
+
+    @property
+    def last_llm_error(self) -> Optional[str]:
+        """上一次 LLM 解析失败的诊断信息（用于自动重试回喂）。"""
+        if isinstance(self.target_result, IbLLMCallResult) and self.target_result.is_uncertain:
+            return self.target_result.retry_hint or None
+        return None
 
     # 状态标志
     should_retry: bool = True

@@ -1,6 +1,6 @@
 # _code_llm_prompt_mechanism — IBCI LLM 调用机制整改实施记录
 
-> 2026-08-15 编制。对应 P0 主线：IBCI LLM 调用机制改进
+> 2026-08-15 编制并落地（独立分支 exp/llm-prompt-mechanism）。对应 P0 主线：IBCI LLM 调用机制改进
 > （交接 `_HANDOFF_LLM_PROMPT_MECHANISM.md` + PENDING_TASKS §〇 P0 行）。
 > 本文为实施追踪文档，落地后按文档治理收敛/删除。
 
@@ -30,9 +30,9 @@
    问候语、解释、提问、拒绝、安全声明或任何与结果无关的文字。"
    命名 LLM 函数的 `__sys__` 是用户自设角色，不强制替换。
 
-4. **C 修复**：behavior 路径组装 sys_prompt 时注入：
-   - `__outputhint_prompt__`（有则 `[输出格式要求]`）
-   - 否则 provider `get_return_type_prompt(type_hint)`（有则原样）
+4. **C 修复**：behavior 路径组装 sys_prompt 时注入（单一优先级）：
+   - provider `get_return_type_prompt(type_hint)`（显式插件/用户契约，最优先）
+   - 否则 `__outputhint_prompt__`（有则 `[输出格式要求]`）
    - 否则对非动态/非行为本体类型注入 `[期望输出类型]\n必须返回一个 {type_hint} 值。`
    动态/无契约类型（behavior / fn_callable / any / auto / fn）不注入类型声明，
    避免把内部类型名泄漏给模型。
@@ -50,28 +50,28 @@
 
 ## 二、改动清单
 
-- [ ] 新增 `core/runtime/interpreter/llm_executor/_prompt_assembly.py`
-- [ ] 改 `core/runtime/interpreter/llm_executor/_prompt.py`
+- [x] 新增 `core/runtime/interpreter/llm_executor/_prompt_assembly.py`
+- [x] 改 `core/runtime/interpreter/llm_executor/_prompt.py`
   - `_try_axiom_output_hint` module 参数
   - `_get_llmoutput_hint` / `_get_llmoutput_hint_cps` 传 module
-- [ ] 改 `core/runtime/interpreter/llm_executor/_behavior.py`
+- [x] 改 `core/runtime/interpreter/llm_executor/_behavior.py`
   - sync/CPS 共用 `_prompt_assembly.build_behavior_system_prompt`
   - type_hint 提前获取；provider type prompt / 通用类型声明注入
   - 自动重试反馈注入
-- [ ] 改 `core/runtime/interpreter/llm_executor/_llm_function.py`
+- [x] 改 `core/runtime/interpreter/llm_executor/_llm_function.py`
   - LLM 函数同样自动重试反馈注入
   - `__outputhint_prompt__` 注入（`-> enum` 返回类型也吃到 hint）
-- [ ] 改 `core/runtime/interpreter/llm_except_frame.py`
+- [x] 改 `core/runtime/interpreter/llm_except_frame.py`
   - `last_llm_response` / `last_llm_error` property
-- [ ] 新增回归测试：
+- [x] 新增回归测试：
   - enum behavior 的 sys_prompt 含 `[输出格式要求]` + 枚举 hint
   - behavior 基础 prompt 含程序化调用纪律
   - behavior 期望类型注入（str 无 provider prompt → 通用类型声明；int → provider prompt）
   - llmexcept retry 自动回喂上次响应 + 解析错误
   - LLM 函数返回 enum 时也注入 output hint
-- [ ] 全量 pytest 零回归 + commit + WORKLOG/NEXT_STEPS 同步
+- [x] 全量 pytest 零回归 + commit + WORKLOG 同步（NEXT_STEPS 待合并后更新）
 
 ## 三、测试与验证
 
-- 基线：2775 passed, 1 skipped（实跑）。
+- 基线：2775 passed, 1 skipped（实跑）；整改后 **2787 passed, 1 skipped**（新增 6 项判别性回归 + 6 项 meta 测试随新文件/新测试自动纳入）。
 - 判别性回归见上；全量 pytest 唯一命令。
