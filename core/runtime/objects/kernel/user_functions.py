@@ -52,7 +52,10 @@ class IbUserFunction(IbFunction):
         ``_drive_loop_gen`` 驱动体时 GeneratorYield 泄漏（用户类 ``__iter__`` 等
         协议方法经 receive 调用的崩溃根因，PT-DEBT-O1/I1）。
         """
-        from core.runtime.vm.handlers._shared import _vm_call_user_function
+        from core.runtime.vm.handlers._shared import (
+            _vm_call_user_function,
+            _vm_invoke_llm_function,
+        )
         from core.runtime.coordinator import _drive_generator
         from core.runtime.shared.user_call import UserFunctionCall
         from core.runtime.objects.kernel.generator import IbGenerator
@@ -73,7 +76,10 @@ class IbUserFunction(IbFunction):
                 raise RuntimeError("generator class not registered (bootstrap invariant violated)")
             return IbGenerator(gen_class, driver)
 
-        gen = _vm_call_user_function(vm, self, receiver, args)
+        if self.callable_kind == "llm_function":
+            gen = _vm_invoke_llm_function(vm, self, receiver, args)
+        else:
+            gen = _vm_call_user_function(vm, self, receiver, args)
         return _drive_generator(vm, gen)
 
     def __repr__(self):
@@ -81,14 +87,13 @@ class IbUserFunction(IbFunction):
         name = node_data.get("name", "unknown")
         return f"<Function '{name}'>"
 
-class IbLLMFunction(IbFunction):
+class IbLLMFunction(IbUserFunction):
     """
     用户定义的 LLM 函数。
 
-    公理化设计原则
-    --------------
-    IbLLMFunction 与 IbBehavior 同构：不再在构造时持有 llm_executor 引用。
-    call() 通过 ib_class.registry.get_llm_executor().invoke_llm_function() 自主执行。
+    Inherits from IbUserFunction so that ordinary functions and LLM functions
+    share the same runtime object shape. The only difference is callable_kind,
+    which makes the unified call path dispatch to the LLM executor.
     """
 
     @property
@@ -96,38 +101,12 @@ class IbLLMFunction(IbFunction):
         return "llm_function"
 
     def __init__(self, node_uid: str, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
-        super().__init__(context.registry.get_class("callable"))
-        self.node_uid = node_uid
-        self.context = context
-        self._spec = spec
-        self.module_name = module_name or context.current_module_name
-
-    @property
-    def spec(self) -> Optional[IbSpec]:
-        return self._spec if self._spec is not None else self.ib_class.spec
-
-    def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
-        """执行 LLM 函数。
-
-        **收敛**：本方法为宿主侧薄包装——委托 CPS 权威路径
-        ``_vm_invoke_llm_function`` + ``_drive_generator``（TaskScheduler 驱动
-        ``_drive_loop_gen``），不再重复模块切换/意图 fork/作用域/实参绑定逻辑
-        （消双写）。VM 主路径（leaf.py）本就经 CPS 执行本对象；本方法仅作
-        vtable receive('__call__') 后备与宿主/反序列化同步调用。
-        """
-        from core.runtime.vm.handlers._shared import _vm_invoke_llm_function
-        from core.runtime.coordinator import _drive_generator
-
-        vm = self.context.vm_executor
-        if vm is None:
-            raise RuntimeError(
-                "IbLLMFunction.call(): vm_executor not available on ExecutionContext. "
-                "Ensure Interpreter.execute_module() has been called before invoking an LLM function."
-            )
-
-        gen = _vm_invoke_llm_function(vm, self, receiver, args)
-        return _drive_generator(vm, gen)
-
+        super().__init__(
+            node_uid=node_uid,
+            context=context,
+            spec=spec,
+            module_name=module_name,
+        )
 
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)

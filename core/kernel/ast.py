@@ -145,7 +145,7 @@ class IbModule(IbASTNode):
 class IbFunctionDef(IbStmt):
     name: str
     args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
-    body: List[IbStmt]
+    body: List[IbStmt] = field(default_factory=list)
     returns: Optional[IbExpr] = None
     type_params: List[str] = field(default_factory=list)  # generic function type params
     type_param_bounds: Dict[str, str] = field(default_factory=dict)  # T -> ProtocolName
@@ -193,17 +193,16 @@ class IbProtocolDef(IbStmt):
 
 
 @dataclass(kw_only=True, eq=False)
-class IbLLMFunctionDef(IbStmt):
-    name: str
-    args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
-    sys_prompt: Optional[List[Union[str, IbExpr]]]
-    user_prompt: Optional[List[Union[str, IbExpr]]]
+class IbLLMFunctionDef(IbFunctionDef):
+    """LLM function definition.
+
+    Inherits from IbFunctionDef so that ordinary functions and LLM functions
+    share the same function-definition shape. The only additional data is the
+    prompt template (sys/user/retry hint).
+    """
+    sys_prompt: Optional[List[Union[str, IbExpr]]] = None
+    user_prompt: Optional[List[Union[str, IbExpr]]] = None
     retry_hint: Optional[List[Union[str, IbExpr]]] = None
-    returns: Optional[IbExpr] = None
-    
-    @property
-    def creates_scope(self) -> bool:
-        return True
 
 @dataclass(kw_only=True, eq=False)
 class IbGlobalStmt(IbStmt):
