@@ -154,6 +154,8 @@ class IbObject:
         try:
             spec_reg = self.ib_class.registry.get_metadata_registry()
             if spec_reg and self.ib_class.spec:
+                if not spec_reg.satisfies_protocol(self.ib_class.spec, "from_prompt"):
+                    return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
                 cap = spec_reg.get_from_prompt_cap(self.ib_class.spec)
                 if cap:
                     return cap.from_prompt(raw_response, self.ib_class.spec)
