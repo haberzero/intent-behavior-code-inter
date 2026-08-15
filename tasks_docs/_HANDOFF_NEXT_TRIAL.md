@@ -83,7 +83,7 @@
 
 ### 2.2 运行纪律
 
-- 死循环保护：每例 harness 超时 SIGKILL + `--max-inst`；无超时不运行。
+- 死循环保护：每例 harness 超时 SIGKILL；无超时不运行。
 - 先 mock 后 llm（`run_batch.py` 默认）；LLM 服务先探测（`curl /v1/models`）。
 - 只记录登记，不修复；缺陷登记 PENDING_TASKS + INDEX 编号全局唯一。
 - 全程本地 commit、禁 push。

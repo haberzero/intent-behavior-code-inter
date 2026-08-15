@@ -8,7 +8,7 @@
 
 | 约束 | 内容 |
 |------|------|
-| 死循环保护 | 所有用例经 `harness/run_one.py`（OS 进程级 SIGKILL + `--max-inst` + LLM 调用超时）三层兜底；timeout 必需参数，harness 无超时不运行 |
+| 死循环保护 | 所有用例经 `harness/run_one.py`（OS 进程级 SIGKILL + LLM 调用超时）两层兜底；timeout 必需参数，harness 无超时不运行 |
 | 记录优先 | logs/<case>.log + register.jsonl + REGISTER.md；只记录不修复 |
 | 文档为主要来源 | 按 docs/（KNOWN_LIMITS §二 / 05_functions / 11_modules / 09_intent_system 等）撰写用例 |
 | 禁 push | 全程本地 commit；禁 push |

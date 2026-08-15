@@ -213,7 +213,6 @@ def _run_task_body(
         get_side_table_callback=interpreter.get_side_table,
         push_stack_callback=task_logical_stack.push,
         pop_stack_callback=task_logical_stack.pop,
-        get_instruction_count_callback=lambda: 0,
         get_captured_intents_callback=interpreter.get_captured_intents,
         is_truthy_callback=interpreter.is_truthy,
         resolve_type_from_symbol_callback=interpreter._resolve_type_from_symbol,

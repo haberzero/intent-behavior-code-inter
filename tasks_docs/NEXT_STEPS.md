@@ -337,7 +337,7 @@
 > 完整证据：`tasks_docs/_LLM_TRIAL_20260812/`（DESIGN/harness/cases/logs/REGISTER）+ 报告
 > `tasks_docs/_REAL_LLM_TRIAL_REPORT_20260812.md`。
 
-- **试用地基**：三层死循环保护 harness（OS 进程级硬超时 SIGKILL 进程组 + `--max-inst` + LLM 调用
+- **试用地基**：死循环保护 harness（OS 进程级硬超时 SIGKILL 进程组 + LLM 调用
   超时，无超时不运行，零遗漏）+ 确定性文件化记录（logs/ + register.jsonl + REGISTER.md）。
 - **D1 全语法遍历**：docs/syntax/01-15 每章特性真实 LLM 各跑一遍，~110 次运行全经保护。
 - **A1-A5 重验全通过**：意图 @/@! 赋值路径（7339220 实证：r1=收到）、内建遮蔽+LLM 初始化

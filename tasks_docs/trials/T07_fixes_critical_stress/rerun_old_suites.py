@@ -62,10 +62,10 @@ def collect_cases(suite_dir, cases_dir_name):
             out.append((name, main, root, expect_llm(main)))
     return out
 
-def run_one_case(label, script, root, timeout, max_inst):
+def run_one_case(label, script, root, timeout):
     cmd = [PY, RUN_ONE, os.path.relpath(script, root),
            "--label", "B-" + label, "--dim", "RERUN", "--doc", "", "--expected", "",
-           "--timeout", str(timeout), "--max-inst", str(max_inst),
+           "--timeout", str(timeout),
            "--root", root, "--repo-root", REPO_ROOT]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 60)
@@ -80,7 +80,6 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--suites", default="T01_llm_full T02_enum_import T03_user_class_generics T04_generics_fix_regression T05_critical_stress T06_class_identity")
     ap.add_argument("--timeout", type=float, default=60.0)
-    ap.add_argument("--max-inst", type=int, default=5_000_000)
     ap.add_argument("--parallel", type=int, default=4)
     ap.add_argument("--llm-only", action="store_true")
     ap.add_argument("--mock-only", action="store_true")
@@ -114,7 +113,7 @@ def main():
         print(f"=== {suite}: {len(cases)} cases (parallel={args.parallel}) ===", flush=True)
         results = []
         with cf.ThreadPoolExecutor(max_workers=max(1, min(args.parallel, len(cases)))) as ex:
-            futs = {ex.submit(run_one_case, label, script, root, args.timeout, args.max_inst): label
+            futs = {ex.submit(run_one_case, label, script, root, args.timeout): label
                     for label, script, root, _ in cases}
             for fut in cf.as_completed(futs):
                 r = fut.result()

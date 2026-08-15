@@ -35,9 +35,6 @@ class _DummyStateReader:
 
 
 class _DummyStackInspector:
-    def get_instruction_count(self):
-        return 12
-
     def get_call_stack_depth(self):
         return 3
 

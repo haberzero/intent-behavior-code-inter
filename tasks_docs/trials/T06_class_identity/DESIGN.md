@@ -13,7 +13,7 @@
 
 | 约束 | 内容 |
 |------|------|
-| 死循环保护 | 每例经 harness 硬超时 SIGKILL 进程组 + --max-inst 双层兜底；无超时不运行 |
+| 死循环保护 | 每例经 harness 硬超时 SIGKILL 进程组兜底；无超时不运行 |
 | 记录优先 | 只记录登记，不改内核；logs/ + register.jsonl + REGISTER.md 确定性记录 |
 | 分层 | mock 用例（快）+ 真实 LLM 用例（qwen3.6-35b-a3b @ 127.0.0.1:1234，先探测） |
 | 分类 | PASS | KERNEL_ISSUE | BOUNDARY | LIMIT | DOC_ISSUE | LLM_BEHAVIOR | GUARD | HARNESS |

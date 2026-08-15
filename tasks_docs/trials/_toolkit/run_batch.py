@@ -11,7 +11,7 @@ Batch runner — 试用地基批量运行器（单一权威源，与 run_one.py 
     非通用化服务，仅本机）。
 
 用法：
-  python <toolkit>/run_batch.py <试用地基根目录> [--timeout 秒] [--max-inst N]
+  python <toolkit>/run_batch.py <试用地基根目录> [--timeout 秒]
       [--cases "name1 name2 ..."] [--llm-only] [--repo-root 路径]
 
 产出：
@@ -57,14 +57,14 @@ def _collect_cases(trial_dir: str, only_names):
     return [p for p in paths if os.path.exists(p)]
 
 
-def _run_one_case(case, trial_dir, run_one, py, timeout, max_inst, repo_root):
+def _run_one_case(case, trial_dir, run_one, py, timeout, repo_root):
     """在线程中执行单个用例（独立 subprocess + 独立超时，卡死不拖垮整批）。"""
     import subprocess
     name = os.path.splitext(os.path.basename(case))[0]
     label = f"B-{name}"
     cmd = [py, run_one, os.path.relpath(case, trial_dir),
            "--label", label, "--dim", "BATCH", "--doc", "", "--expected", "",
-           "--timeout", str(timeout), "--max-inst", str(max_inst),
+           "--timeout", str(timeout),
            "--root", trial_dir]
     if repo_root:
         cmd += ["--repo-root", repo_root]
@@ -82,7 +82,6 @@ def main():
     ap = argparse.ArgumentParser(description="Batch-run trial cases with per-case hard timeout.")
     ap.add_argument("trial_dir", help="trial root (contains cases/ + api_config.json)")
     ap.add_argument("--timeout", type=float, default=30.0, help="per-case hard timeout (s)")
-    ap.add_argument("--max-inst", type=int, default=5_000_000)
     ap.add_argument("--cases", default=None, help="space-separated case names (omit = all)")
     ap.add_argument("--llm-only", action="store_true", help="only run expect-llm: true cases")
     ap.add_argument("--mock-only", action="store_true", help="only run expect-llm: false cases")
@@ -130,7 +129,7 @@ def main():
                 name = os.path.splitext(os.path.basename(case))[0]
                 done += 1
                 print(f"[{done}/{total}] ({stage_name}) {name} ...", flush=True)
-                r = _run_one_case(case, trial_dir, run_one, py, args.timeout, args.max_inst, args.repo_root)
+                r = _run_one_case(case, trial_dir, run_one, py, args.timeout, args.repo_root)
                 results.append(r)
                 print("   " + r["line"], flush=True)
         else:
@@ -138,7 +137,7 @@ def main():
             print(f"[batch] ({stage_name}) parallel={workers}  cases={len(stage_cases)}", flush=True)
             with cf.ThreadPoolExecutor(max_workers=workers) as ex:
                 futures = {ex.submit(_run_one_case, case, trial_dir, run_one, py,
-                                     args.timeout, args.max_inst, args.repo_root): case
+                                     args.timeout, args.repo_root): case
                            for case in stage_cases}
                 for fut in cf.as_completed(futures):
                     r = fut.result()

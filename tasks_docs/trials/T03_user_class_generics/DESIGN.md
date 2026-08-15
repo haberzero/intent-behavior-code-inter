@@ -14,7 +14,7 @@
 
 | 约束 | 内容 |
 |------|------|
-| 死循环保护 | 每例经 OS 进程级硬超时（SIGKILL 进程组）+ --max-inst 指令上限双层兜底；harness 无超时不运行 |
+| 死循环保护 | 每例经 OS 进程级硬超时（SIGKILL 进程组）兜底；harness 无超时不运行 |
 | 记录优先 | 只记录登记，不改内核代码；文件化确定性记录（logs/ + register.jsonl + REGISTER.md） |
 | 文档为主要来源 | 按 docs/ 手册撰写期望；手册问题记录 DOC-ISSUE |
 | 禁 push | 全程本地 commit |
@@ -23,7 +23,7 @@
 
 ## 三、三层保护
 
-复用 `harness/run_one.py`（进程组 SIGKILL + --max-inst + timeout 必需参数）。mock api_config
+复用 `harness/run_one.py`（进程组 SIGKILL + timeout 必需参数）。mock api_config
 （defaults.mock:true），用例显式 `ai.set_mock_mode()`（F9 显式配置契约）。
 
 ## 四、试用矩阵设计

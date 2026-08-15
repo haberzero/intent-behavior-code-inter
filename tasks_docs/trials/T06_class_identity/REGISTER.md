@@ -2,7 +2,7 @@
 
 > 2026-08-14。基线：unsafe-vibe-dev（Task1 后），全量 2616 passed / 1 skipped。
 > 分类/级别规范见 `_toolkit/CLASSIFICATION.md`。死循环保护：每例经 harness
-> SIGKILL + --max-inst + LLM 调用超时。
+> SIGKILL + LLM 调用超时。
 
 ## 一、总览
 

@@ -9,21 +9,19 @@
 
 | 约束 | 内容 |
 |------|------|
-| 死循环保护 | **所有试用例必须经 OS 进程级硬超时（SIGKILL 进程组）+ IBCI 指令上限（--max-inst）+ LLM 调用级超时（config）三层兜底**；任何试用不得绕过；harness 无超时不运行（强制参数） |
+| 死循环保护 | **所有试用例必须经 OS 进程级硬超时（SIGKILL 进程组）+ LLM 调用级超时（config）两层兜底**；任何试用不得绕过；harness 无超时不运行（强制参数） |
 | 记录优先 | 优先记录问题，通过文件化确定性记录（logs/ + register.jsonl + REGISTER.md）溯源；不优先解决；**原则上禁止修改内核代码** |
 | 文档为主要来源 | 按 docs/ 技术手册撰写用例；**非必要不直接探索内核代码**；手册问题（错误/过时/矛盾/缺失）记录为 DOC-ISSUE；仅当手册有误且某功能必须使用时才读内核代码确认正确用法并记录 |
 | 溯源纪律 | 每例记录 = 用例脚本 + 文档引用 + 期望 vs 实际 + 退出码/时长 + 分类 + 严重级别 + 证据日志 |
 | 禁 push | 全程本地 commit；禁 push（硬原则） |
 
-## 二、三层死循环保护设计（用户强制，最坏情况检测）
+## 二、两层死循环保护设计（用户强制，最坏情况检测）
 
 1. **OS 进程级硬超时（根本手段）**：`harness/run_one.py` 用 `subprocess.Popen(start_new_session=True)`
    建立独立进程组，`communicate(timeout=...)` 超时后 `os.killpg(pid, 9)` SIGKILL 整组——
    无论死循环在 VM、线程体、生成器驱动还是 LLM 客户端 worker，都能被强制终止。
    **timeout 为必需参数**，未显式给出即拒绝运行（零遗漏）。
-2. **IBCI 指令上限**：CLI `--max-inst`（默认 5e6），VM 内部第二种防护；死循环先触指令上限报错，
-   进程级超时兜底。
-3. **LLM 调用级超时**：`api_config.json` `defaults.timeout=30` + `retry=3`——单次 LLM 调用最坏
+2. **LLM 调用级超时**：`api_config.json` `defaults.timeout=30` + `retry=3`——单次 LLM 调用最坏
    120s 收敛；长 LLM 密集用例适当放大 OS 超时但始终有界。
 
 > 冒烟验证：`cases/deadloop_probe.ibci`（`while i>=0` 无限自增）→ 8s 超时被 SIGKILL

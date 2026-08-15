@@ -61,9 +61,6 @@ class VMExecutor:
         self._interpreter = interpreter
         self._cancel_event = cancel_event
         self._dispatch = build_dispatch_table()
-        # 调度计数：所有 yield/StopIteration 步骤的累计；用于诊断与未来限速。
-        self.step_count: int = 0
-        self.max_steps: int = 0  # 0 == unlimited
         # 当前正在执行的帧栈引用；仅在 _drive_loop_gen 驱动活跃时非 None
         # （调度器多任务下为"当前推进任务"的栈，随任务步进切换）。
         self._current_stack: Optional[list] = None
@@ -219,8 +216,8 @@ class VMExecutor:
         本生成器内保存/恢复：多任务下每任务的栈视图随其步进自然切换；嵌套
         ``run`` 重入（如意图消解的 ``vm.run(segment)``）经 finally 恢复外层视图。
 
-        协作取消（``cancel_event``）与步数限制（``max_steps``）在生成器体驱动
-        模式同样生效（覆盖生成器体内深递归）。
+        协作取消（``cancel_event``）在生成器体驱动模式同样生效
+        （覆盖生成器体内深递归）。
         """
         prev_stack = self._current_stack
         self._current_stack = stack
@@ -230,11 +227,6 @@ class VMExecutor:
             pending_exception: Optional[BaseException] = None
 
             while stack:
-                self.step_count += 1
-                if self.max_steps and self.step_count > self.max_steps:
-                    raise RuntimeError(
-                        f"VMExecutor step limit exceeded ({self.max_steps})"
-                    )
                 if self._cancel_event is not None and self._cancel_event.is_set():
                     # 协作取消（线程体）：每个步进边界检查，覆盖全任务体（含用户函数）
                     raise TaskCancelled()

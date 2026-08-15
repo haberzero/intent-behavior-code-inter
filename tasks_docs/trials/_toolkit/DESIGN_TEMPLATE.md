@@ -20,7 +20,7 @@
 
 ## 三、硬约束（用户强制）
 
-1. **死循环保护**：所有用例经 `_toolkit/run_one.py`（进程组 SIGKILL + `--max-inst` +
+1. **死循环保护**：所有用例经 `_toolkit/run_one.py`（进程组 SIGKILL +
    LLM 调用超时），`--timeout` 必填，零遗漏。
 2. 记录优先（record-first）：`logs/<case>.log` + `logs/register.jsonl` 机械字段由
    harness 写入，人工填 classification/severity/note。

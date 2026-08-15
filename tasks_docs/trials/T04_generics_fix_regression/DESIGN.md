@@ -15,7 +15,7 @@ d100ee1（死代码清理 + void 收窄）。全量 2350 passed / 1 skipped（+1
 
 | 约束 | 内容 |
 |------|------|
-| 死循环保护 | 每例经 OS 进程级硬超时（SIGKILL 进程组）+ --max-inst 双层兜底；harness 无超时不运行 |
+| 死循环保护 | 每例经 OS 进程级硬超时（SIGKILL 进程组）兜底；harness 无超时不运行 |
 | 记录优先 | 只记录登记，不改内核代码；文件化确定性记录（logs/ + register.jsonl + REGISTER.md） |
 | 禁 push | 全程本地 commit |
 

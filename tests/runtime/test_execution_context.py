@@ -17,7 +17,6 @@ def _make_ec(node_pool):
         get_side_table_callback=lambda *a: None,
         push_stack_callback=lambda *a: None,
         pop_stack_callback=lambda *a: None,
-        get_instruction_count_callback=lambda: 0,
         get_captured_intents_callback=lambda *a: [],
         is_truthy_callback=lambda *a: False,
         resolve_type_from_symbol_callback=lambda *a: None,

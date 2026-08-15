@@ -68,7 +68,7 @@ trials/T<nn>_<主题>/
 ```bash
 python tasks_docs/trials/_toolkit/run_one.py cases/<case>.ibci \
     --label <case_id> --dim <dim> --doc <章节> --expected <描述> \
-    --timeout <秒，必填> --max-inst <默认 5e6> --root <试用地基根目录>
+    --timeout <秒，必填> --root <试用地基根目录>
 ```
 
 - `--timeout` 必填（无超时不运行，死循环保护硬约束）。

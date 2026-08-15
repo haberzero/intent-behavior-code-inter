@@ -3,7 +3,7 @@
 > 2026-08-12。每例一行：用例 / 文档引用 / 期望 vs 实际 / 分类 / 严重级别 / 证据日志。
 > 分类：PASS | KERNEL_ISSUE | BOUNDARY | GUARD（守卫生效）。
 > 级别：P0（崩溃/死循环）/ P1（明确缺陷，重要语义错误）/ P2（缺陷，较轻）/ P3（文档/体验）。
-> 全部经死循环保护 harness（进程组 SIGKILL + --max-inst + timeout）；30 次运行，唯一
+> 全部经死循环保护 harness（进程组 SIGKILL + timeout）；30 次运行，唯一
 > TIMEOUT-KILLED 为死循环保护冒烟验证本身。
 > **规范（2026-08-13 迁移）**：本套现位于 `trials/T03_user_class_generics/`；分类/级别/编号
 > 规范见 `trials/_toolkit/CLASSIFICATION.md`。缺陷编号已映射为新格式（见文末"编号映射"节）。

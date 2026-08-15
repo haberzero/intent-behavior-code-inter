@@ -84,9 +84,6 @@ class Interpreter:
     def get_active_intents(self) -> List[str]:
         return [i.content for i in self.runtime_context.get_active_intents()]
 
-    def get_instruction_count(self) -> int:
-        return self.instruction_count
-
     def get_captured_intents(self, obj: Any) -> List[str]:
         """ 获取指定对象（如 Behavior）捕获的意图栈内容。
 
@@ -106,7 +103,6 @@ class Interpreter:
     def __init__(self, issue_tracker: IssueTracker,
                  output_callback: Optional[Callable[[str], None]] = None,
                  input_callback: Optional[Callable[[str], str]] = None,
-                 max_instructions: int = 0,
                  max_call_stack: int = 1000,
                  artifact: Optional[Any] = None,
                  host_interface: Optional[HostInterface] = None,
@@ -146,7 +142,6 @@ class Interpreter:
             get_side_table_callback=self.get_side_table,
             push_stack_callback=self.push_stack,
             pop_stack_callback=self.pop_stack,
-            get_instruction_count_callback=lambda: self.instruction_count,
             get_captured_intents_callback=self.get_captured_intents,
             is_truthy_callback=self.is_truthy,
             resolve_type_from_symbol_callback=self._resolve_type_from_symbol,
@@ -280,9 +275,6 @@ class Interpreter:
                 message="Warning: Kernel token missing in Interpreter. STAGE 6 transition skipped.",
             )
 
-        # 运行限制初始化
-        self.max_instructions = max_instructions
-        self.instruction_count = 0
         self.strict_mode = strict_mode
 
         self.max_call_stack = max_call_stack
@@ -403,7 +395,6 @@ class Interpreter:
         """导出当前解释器的运行状态快照 (用于调试或热替换)"""
         return {
             "artifact": self.artifact_dict,
-            "instruction_count": self.instruction_count,
             "current_module_name": self.current_module_name,
         }
 
@@ -417,7 +408,6 @@ class Interpreter:
         self.scope_pool = pools.get("scopes", {})
         self.type_pool = pools.get("types", {})
         
-        self.instruction_count = state["instruction_count"]
         self.current_module_name = state["current_module_name"]
 
     def setup_context(self, context: RuntimeContext, force: bool = False):
@@ -507,7 +497,6 @@ class Interpreter:
              # [BugFix] 修复内置函数（如 print）在模块切换时丢失的问题
              self.setup_context(self.runtime_context)
 
-        self.instruction_count = 0
         result = self.registry.get_none()
         
         # 注入内置路径变量

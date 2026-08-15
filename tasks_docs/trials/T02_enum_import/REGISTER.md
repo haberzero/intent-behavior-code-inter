@@ -15,7 +15,7 @@
 |----|-----|
 | LLM 端点 | `http://localhost:1234/v1`（LM Studio，qwen3.6-35b-a3b 非思考模型） |
 | 配置 | `api_config.json`（providers/models/defaults，reasoning:false，timeout=30，retry=3） |
-| 保护 | 三层死循环保护：OS 进程级 SIGKILL + `--max-inst` + LLM 调用超时 |
+| 保护 | 两层死循环保护：OS 进程级 SIGKILL + LLM 调用超时 |
 | 全量 pytest | **2307 passed / 1 skipped**（试用零回归，未改内核） |
 
 ## 二、结果总表

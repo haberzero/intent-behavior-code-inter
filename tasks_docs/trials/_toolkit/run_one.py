@@ -8,7 +8,6 @@ Trial harness — 单一权威源（IBCI 试用地基统一运行入口）。
 硬性死循环保护（用户强制，不可妥协）：
   - 每次试用运行在独立进程组，超时（--timeout，必填）后 SIGKILL 整个进程组。
     不存在绕过保护的执行路径。
-  - 每用例指令上限（--max-inst）作为 VM 内第二道守卫。
   - LLM 端点调用超时由引擎配置（api_config.json defaults.timeout）承担。
   未显式提供 timeout 时 harness 拒绝运行。
 
@@ -30,7 +29,7 @@ Trial harness — 单一权威源（IBCI 试用地基统一运行入口）。
 用法：
   python <toolkit>/run_one.py cases/<case>.ibci \
       --label <case_id> --dim <dim> --doc <doc_ref> --expected <描述> \
-      --timeout <秒(必填)> --max-inst <指令上限> --root <试用地基根目录>
+      --timeout <秒(必填)> --root <试用地基根目录>
 """
 import argparse
 import json
@@ -158,7 +157,6 @@ def parse_args():
     p.add_argument("--doc", default="", help="doc reference (chapter/section)")
     p.add_argument("--expected", default="", help="expected behavior description")
     p.add_argument("--timeout", required=True, type=float, help="hard wall-clock timeout in seconds (MANDATORY)")
-    p.add_argument("--max-inst", type=int, default=5_000_000, help="VM instruction cap (default 5e6)")
     p.add_argument("--root", required=True, help="trial root dir (must contain api_config.json + cases/ + logs/)")
     p.add_argument("--repo-root", default=None, help="repo root containing main.py (auto-detected if omitted)")
     p.add_argument("--extra", action="append", default=[], help="extra CLI args for main.py run, e.g. --no-sniff")
@@ -193,8 +191,7 @@ def main():
     os.makedirs(logs_dir, exist_ok=True)
 
     cmd = [python, main_py, "run", script,
-           "--root", trial_dir,
-           "--max-inst", str(args.max_inst)] + args.extra
+           "--root", trial_dir] + args.extra
     log_path = os.path.join(logs_dir, args.label + ".log")
 
     start = time.monotonic()
@@ -250,7 +247,7 @@ def main():
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(f"# {args.label}  dim={args.dim}  script={os.path.relpath(script, trial_dir)}\n")
         f.write(f"# doc={args.doc}  expected={args.expected}\n")
-        f.write(f"# timeout={args.timeout}s  max_inst={args.max_inst}  exit={exit_code}  timed_out={timed_out}  duration={duration_s}s\n")
+        f.write(f"# timeout={args.timeout}s  exit={exit_code}  timed_out={timed_out}  duration={duration_s}s\n")
         f.write(f"# auto-classification={classification}  judge={judge_note}\n")
         f.write("# " + " ".join(cmd) + "\n")
         f.write("=" * 72 + "\n")
@@ -264,7 +261,6 @@ def main():
         "doc": args.doc,
         "expected": args.expected,
         "timeout_s": args.timeout,
-        "max_inst": args.max_inst,
         "exit_code": exit_code,
         "timed_out": timed_out,
         "duration_s": duration_s,

@@ -350,7 +350,6 @@ class IDbgPlugin(IbPlugin):
             return {}
 
         return {
-            "instruction_count": si.get_instruction_count(),
             "call_stack_depth": si.get_call_stack_depth(),
             "active_intents": si.get_active_intents()
         }

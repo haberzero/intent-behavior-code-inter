@@ -27,7 +27,6 @@ class ExecutionContextImpl:
                  get_side_table_callback: Any,
                  push_stack_callback: Any,
                  pop_stack_callback: Any,
-                 get_instruction_count_callback: Any,
                  get_captured_intents_callback: Any,
                  is_truthy_callback: Any,
                  resolve_type_from_symbol_callback: Any,
@@ -71,7 +70,6 @@ class ExecutionContextImpl:
         self._get_side_table_callback = get_side_table_callback
         self._push_stack_callback = push_stack_callback
         self._pop_stack_callback = pop_stack_callback
-        self._get_instruction_count_callback = get_instruction_count_callback
         self._get_captured_intents_callback = get_captured_intents_callback
         self._is_truthy_callback = is_truthy_callback
         self._resolve_type_from_symbol_callback = resolve_type_from_symbol_callback
@@ -284,9 +282,6 @@ class ExecutionContextImpl:
 
     def get_active_intents(self) -> List[str]:
         return [i.content for i in self.runtime_context.get_active_intents()] if self.runtime_context else []
-
-    def get_instruction_count(self) -> int:
-        return self._get_instruction_count_callback()
 
     def get_captured_intents(self, obj: Any) -> List[str]:
         return self._get_captured_intents_callback(obj)
