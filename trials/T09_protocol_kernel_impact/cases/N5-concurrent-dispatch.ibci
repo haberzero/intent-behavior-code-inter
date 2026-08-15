@@ -1,0 +1,13 @@
+# T09-N5 并发 dispatch 压测（dispatch-before-use 并行路径，dispatch_eager CPS 化后）
+# doc: docs/syntax/07_behavior_expressions.md 并行 + docs/architecture/04_vm_interpreter.md
+# expect-class: PASS
+# expect-out: concurrent_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+int a = @~ 只返回数字 1 ~
+int b = @~ 只返回数字 2 ~
+int c = @~ 只返回数字 3 ~
+print("concurrent_ok=" + (str)(a + b + c == 6))
+print("DONE")

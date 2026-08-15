@@ -1,0 +1,11 @@
+# T09-N4 长 prompt 压力（真实 LLM）：内联行为表达式注入长填充文本
+# doc: docs/syntax/07_behavior_expressions.md
+# expect-class: PASS
+# expect-out: long_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str r = @~ 请忽略下面的填充文本，只回复两个字母 OK：这是一段用于压力测试的长填充文本，内容本身没有意义，请直接忽略它。这段文本被故意拉长以模拟用户在真实场景中粘贴大段上下文的情形，模型应当专注于任务要求本身，即只输出 OK 两个字母，不要输出任何其它内容，不要解释，不要重复填充文本。填充文本到此结束。 ~
+print("long_ok=" + (str)(r == "OK" or r.len() <= 5))
+print("DONE")

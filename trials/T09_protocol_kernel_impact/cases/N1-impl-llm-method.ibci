@@ -1,0 +1,27 @@
+# T09-N1 impl 块内 LLM 方法真实调用（协议方法由 LLM 实现）
+# doc: docs/syntax/06_oop.md §6.8
+# expect-class: PASS
+# expect-out: has_text=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+protocol Describable:
+    func describe(self) -> str:
+        pass
+
+class Item:
+    str name
+
+impl Describable for Item:
+    llm func describe(self) -> str:
+__sys__
+你是简洁描述器。只输出一句简短中文描述，不超过 20 字，禁止任何其它内容。
+__user__
+请用一句话描述物品：苹果
+llmend
+
+Item it = Item("x")
+str d = it.describe()
+print("has_text=" + (str)(d.len() > 0))
+print("DONE")

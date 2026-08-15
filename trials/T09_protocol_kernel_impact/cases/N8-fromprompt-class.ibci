@@ -1,0 +1,19 @@
+# T09-N8 内联行为表达式输出用户类（impl 补充 __from_prompt__ 后 LLM 解析契约）
+# doc: docs/syntax/06_oop.md §6.8 + docs/syntax/07_behavior_expressions.md
+# expect-class: PASS
+# expect-out: parsed_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class Point:
+    int x
+    int y
+    func __from_prompt__(str raw) -> tuple:
+        return (True, Point(1, 2))
+    func sum(self) -> int:
+        return self.x + self.y
+
+Point p = @~ 请返回一个点的坐标 ~
+print("parsed_ok=" + (str)(p.sum() == 3))
+print("DONE")
