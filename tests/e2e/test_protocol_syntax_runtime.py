@@ -134,3 +134,21 @@ class Box implements Container[int]:
 print(Box().get())
 """
         assert run_ibci(code) == ["42"]
+
+
+class TestRetroactiveImplRuntime:
+    def test_impl_declaration_runs(self):
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo:
+    func greet(self) -> str:
+        return "hi"
+
+impl Greeter for Foo:
+
+print(Foo().greet())
+"""
+        assert run_ibci(code) == ["hi"]

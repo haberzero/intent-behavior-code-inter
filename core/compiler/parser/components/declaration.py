@@ -59,6 +59,9 @@ class DeclarationComponent(BaseComponent):
         elif role == SyntaxRole.PROTOCOL_DEFINITION:
             self.stream.advance() # protocol
             stmt = self.protocol_declaration()
+        elif role == SyntaxRole.IMPL_DEFINITION:
+            self.stream.advance() # impl
+            stmt = self.impl_declaration()
         elif role == SyntaxRole.VARIABLE_DECLARATION:
             explicit_auto = self.stream.match(TokenType.AUTO)
             explicit_fn = (not explicit_auto) and self.stream.match(TokenType.FN)
@@ -288,6 +291,25 @@ class DeclarationComponent(BaseComponent):
         llm_node.retry_hint = retry_hint
         
         return self._extend_loc(llm_node, self.stream.previous())
+
+    def impl_declaration(self) -> ast.IbImplDef:
+        """Parse a retroactive implementation declaration.
+
+        Syntax::
+
+            impl SomeProtocol for SomeType:
+        """
+        start_token = self.stream.previous()
+        protocol_name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name after 'impl'.").value
+        self.stream.consume(TokenType.FOR, "Expect 'for' in impl declaration.")
+        type_name = self.stream.consume(TokenType.IDENTIFIER, "Expect type name after 'for'.").value
+        self.stream.consume(TokenType.COLON, "Expect ':' after impl declaration.")
+        # 空 body：impl 只作声明，不添加方法。
+        self.stream.consume_end_of_statement("Expect newline after impl declaration.")
+        return self._loc(
+            ast.IbImplDef(protocol_name=protocol_name, type_name=type_name),
+            start_token,
+        )
 
     def protocol_declaration(self) -> ast.IbProtocolDef:
         """Parse a protocol declaration.

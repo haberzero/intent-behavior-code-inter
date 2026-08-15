@@ -207,6 +207,26 @@ class IbLLMFunctionDef(IbFunctionDef):
     retry_hint: Optional[List[Union[str, IbExpr]]] = None
 
 @dataclass(kw_only=True, eq=False)
+class IbImplDef(IbStmt):
+    """Retroactive implementation declaration.
+
+    Syntax::
+
+        impl SomeProtocol for SomeType:
+
+    This is a compile-time declaration that an existing type satisfies a
+    protocol.  The type must already provide the required methods; this
+    declaration does not add new methods.
+    """
+    protocol_name: str
+    type_name: str
+
+    @property
+    def creates_scope(self) -> bool:
+        return False
+
+
+@dataclass(kw_only=True, eq=False)
 class IbGlobalStmt(IbStmt):
     names: List[str]
 

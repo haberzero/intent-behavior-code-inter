@@ -237,3 +237,33 @@ class Box implements Container[int]:
         return "x"
 """
         expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+
+class TestRetroactiveImpl:
+    def test_impl_declaration_compiles(self):
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo:
+    func greet(self) -> str:
+        return "hi"
+
+impl Greeter for Foo:
+"""
+        assert compile_ibci(code) is not None
+
+    def test_impl_declaration_missing_method_fails(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Greeter:
+    func greet(self) -> str:
+        pass
+
+class Foo:
+    pass
+
+impl Greeter for Foo:
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")

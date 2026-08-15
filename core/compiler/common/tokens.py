@@ -44,6 +44,7 @@ class TokenType(Enum):
     CLASS = auto()
     PROTOCOL = auto()
     IMPLEMENTS = auto()
+    IMPL = auto()
     SELF = auto()
 
     # LLM 关键字

@@ -48,6 +48,7 @@ from core.runtime.vm.handlers.declarations import (
     vm_handle_IbLLMFunctionDef,
     vm_handle_IbClassDef,
     vm_handle_IbProtocolDef,
+    vm_handle_IbImplDef,
     vm_handle_IbImport,
     vm_handle_IbImportFrom,
 )
@@ -114,6 +115,7 @@ def build_dispatch_table() -> dict:
         "IbLLMFunctionDef": vm_handle_IbLLMFunctionDef,
         "IbClassDef": vm_handle_IbClassDef,
         "IbProtocolDef": vm_handle_IbProtocolDef,
+        "IbImplDef": vm_handle_IbImplDef,
         "IbIntentAnnotation": vm_handle_IbIntentAnnotation,
         "IbIntentStackOperation": vm_handle_IbIntentStackOperation,
         # 剩余节点 handler

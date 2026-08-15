@@ -156,6 +156,11 @@ def vm_handle_IbLLMFunctionDef(executor, node_uid: str, node_data: Mapping[str, 
     return executor.registry.get_none()
 
 
+def vm_handle_IbImplDef(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """Retroactive implementation declarations are compile-time only."""
+    return executor.registry.get_none()
+
+
 def vm_handle_IbProtocolDef(executor, node_uid: str, node_data: Mapping[str, Any]):
     """Protocol declarations are compile-time contracts; runtime is a no-op.
 

@@ -47,7 +47,7 @@ class CoreTokenScanner:
             'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
             'try': TokenType.TRY, 'except': TokenType.EXCEPT,
             'finally': TokenType.FINALLY, 'raise': TokenType.RAISE,
-            'class': TokenType.CLASS, 'protocol': TokenType.PROTOCOL, 'implements': TokenType.IMPLEMENTS, 'self': TokenType.SELF,
+            'class': TokenType.CLASS, 'protocol': TokenType.PROTOCOL, 'implements': TokenType.IMPLEMENTS, 'impl': TokenType.IMPL, 'self': TokenType.SELF,
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
             'None': TokenType.NONE, 'Uncertain': TokenType.UNCERTAIN,

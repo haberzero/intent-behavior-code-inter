@@ -9,6 +9,7 @@ class SyntaxRole(Enum):
     LLM_DEFINITION = auto()        # LLM function
     CLASS_DEFINITION = auto()      # class MyClass
     PROTOCOL_DEFINITION = auto()   # protocol MyProtocol
+    IMPL_DEFINITION = auto()       # impl Proto for Type
     IMPORT_STATEMENT = auto()      # import / from ... import
     CONTROL_FLOW = auto()          # if / for / while / elif / else
     RETURN_STATEMENT = auto()      # return
@@ -48,6 +49,9 @@ class SyntaxRecognizer:
 
         if token.type == TokenType.PROTOCOL:
             return SyntaxRole.PROTOCOL_DEFINITION
+
+        if token.type == TokenType.IMPL:
+            return SyntaxRole.IMPL_DEFINITION
         
         if token.type in (TokenType.IMPORT, TokenType.FROM):
             return SyntaxRole.IMPORT_STATEMENT

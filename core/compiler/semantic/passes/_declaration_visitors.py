@@ -68,6 +68,42 @@ class DeclarationVisitorsMixin:
 
     # ========== 定义 ==========
 
+    def visit_IbImplDef(self, node: ast.IbImplDef) -> Optional[IbSpec]:
+        """Process a retroactive implementation declaration.
+
+        This is a compile-time declaration that an existing type satisfies a
+        protocol.  It does not add new methods; it only records the protocol
+        on the class spec after verifying that all required methods exist.
+        """
+        class_spec = self.registry.resolve(node.type_name)
+        if class_spec is None or class_spec.kind != TypeKind.CLASS.value:
+            self.error(
+                f"impl target '{node.type_name}' is not a known class.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return None
+        proto_spec = self.registry.resolve(node.protocol_name)
+        if proto_spec is None or proto_spec.kind != TypeKind.PROTOCOL.value:
+            self.error(
+                f"impl protocol '{node.protocol_name}' is not a known protocol.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return None
+
+        for method_name in self._protocol_required_methods(proto_spec):
+            if not self._class_has_member_method(class_spec, method_name):
+                self.error(
+                    f"Type '{node.type_name}' cannot implement protocol "
+                    f"'{node.protocol_name}' because it is missing required "
+                    f"method '{method_name}'.",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+                return None
+
+        if node.protocol_name not in class_spec.implements:
+            class_spec.implements.append(node.protocol_name)
+        return None
+
     def visit_IbProtocolDef(self, node: ast.IbProtocolDef) -> Optional[IbSpec]:
         """访问协议定义节点：与类定义类似，进入协议作用域处理方法签名。
 
