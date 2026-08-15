@@ -2,11 +2,20 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-16（用户拍板：**协议化内核大重构为当前主线**，
-> 压力测试/真实试用在其后；exp/protocol-kernel 交接恢复，正式任务控制文档已补齐登记）
+> **最后更新**：2026-08-16（**协议化大重构完成 + T09 影响确认零回归**；
+> 下一步：新压力维度扩展或用户指定方向）
 >
-> **✅ 已完成（2026-08-16，exp/protocol-kernel，全量 2897 passed / 1 skipped 零回归）**：
-> **协议化批次 1-3 + 架构级重构（交接清单全部落地）**。
+> **✅ 已完成（2026-08-16，exp/protocol-kernel）**：
+> **T09 协议化大重构影响确认（真实 LLM）**。Phase 1 既有套件真实 LLM
+> 回归 108 例（T01 57 / T02 3 / T05 D3 8 / T06 7 / T07 7 / T08 37）——
+> **分类与重构前基线逐类一致，零回归**。Phase 2 新能力 8 例全 PASS
+> （impl LLM 方法 / 泛型 bound / LLM 函数第一等值 / 长 prompt / 并发
+> dispatch / llmexcept 真实重试 / 类内 LLM 方法 / __from_prompt__）。
+> 无新增缺陷。详见 `trials/T09_protocol_kernel_impact/DESIGN.md` +
+> WORKLOG。
+>
+> **✅ 已完成（2026-08-16，exp/protocol-kernel，全量 2901 passed / 1 skipped 零回归）**：
+> **协议化批次 1-3 + 架构级重构（交接清单全部落地）+ 独立复核整改**。
 > ① **IbLLMFunctionDef/IbLLMFunction 残留清理**（7839fd70）：VM handler/
 > interpreter 水化/四语义 pass 的 LLM 特殊分支并入统一路径（callable_kind
 > 标记保留）；删 IbLLMFunction 兼容别名、_protocol.py 重复 protocol_methods、
@@ -16,20 +25,18 @@
 > 泵驱动单一 CPS 权威（消 ~150 行双写）。
 > ③ **retroactive implementation 推进到"可为已有类型补充方法"**（5b9fe7b6）：
 > impl 可携带方法定义体（AST+parser+四语义 pass+序列化+封印前水化注册），
-> 协议满足检查后置到并集 + 签名兼容校验；v1 边界 fail-fast；+14 测试。
-> ④ **序列化 payload 字段键历史兼容映射清除**（b3bfc71c）：serializer/
-> rehydrator 双写真相收敛为"payload 字段名即序列化键"。
+> 协议满足检查后置到并集 + 签名兼容校验；含 LLM 方法支持；+18 测试。
+> ④ **序列化 payload 字段键历史兼容映射清除**（b3bfc71c）：双写真相收敛。
 > ⑤ **dispatch_eager 同步重入消除**（e1042108，架构级）：dispatch-before-use
-> 路径 CPS 预求值嵌入当前 VM 帧栈（消 vm.run 嵌套调度器重入），同步版
-> 保留为泵薄包装。
-> ⑥ 文档同步（2ff48bea/8ddde8c2）：LANGUAGE_DESIGN_EVOLUTION/02_metadata_ast
-> §2.7/06_oop §6.8/04_vm_interpreter 过时引用/WORKLOG 登记。
+> 路径 CPS 预求值嵌入当前 VM 帧栈（消 vm.run 嵌套调度器重入）。
+> ⑥ **独立复核整改**（c43f4eda）：P1-1 运算符绑定/P2-2~7（水化顺序/LLM
+> 方法放开/死分支清理/设计文档同步/+4 测试）。
+> ⑦ 文档同步：LANGUAGE_DESIGN_EVOLUTION/02_metadata_ast §2.7/06_oop §6.8/
+> 04_vm_interpreter/NEXT_STEPS/WORKLOG/INDEX。
 > **能力判断核查**：runtime/compiler 能力标志直读归零（全走协议注册表）；
-> 序列化/插件体系无 LLM 类型分支残留；方法对象 spec=类 spec 为文档化已知
-> 行为（消费点已规避，记录不整改）。
-> **待做**：独立复核整改（general agent 复核中）；随后按用户指令在最新
-> 代码上开启全方位真实 LLM + 真实 IBCI 试用（trials 套件）确认重构影响，
-> 再启动新压力测试（原 T08 压力试用主线顺延至此之后）。
+> 方法对象 spec=类 spec 为文档化已知行为（记录不整改）。
+> **待做**：新压力维度扩展（长 prompt>4k/多轮长对话/批量并发上限，延续
+> T08 待扩展项）；或用户指定下一方向。临时交接/设计文档待用户确认后清理。
 >
 > **🔴 当前主线（2026-08-16 用户指定，进行中）**：
 > **协议化内核大重构 + 内核全方位梳理清洁 + 架构级重构**（`exp/protocol-kernel`
@@ -41,9 +48,8 @@
 > 普通函数与 LLM 函数全链路统一（AST+运行时+CPS+trampoline，删独立 IbLLMFunction）/
 > 协议注册表替换硬编码能力（多站点）。中断前未提交的 base.py 改动已验证
 > （全量 2877 passed / 1 skipped 零回归）后提交 0518e1bf。**交接清单已全部
-> 落地**（见上方"已完成"节）。每阶段全量 pytest 零回归门。**完成后**：在最新
-> 代码上开启一轮全方位真实 LLM + 真实 IBCI 试用（利用 trials 套件）确认重构
-> 影响，再启动新压力测试（原 T08 压力试用主线顺延至此之后）。
+> 落地**（见上方"已完成"节），T09 真实试用确认影响零回归。每阶段全量
+> pytest 零回归门。**完成后**：新压力维度扩展（原 T08 压力试用主线顺延）。
 >
 > **✅ 已完成（2026-08-15，T08 第一轮，全量 pytest 零回归）**：
 > **IBCI LLM 全能力真实压力试用（第一轮）**。41 例：32 PASS + 2 GUARD +
