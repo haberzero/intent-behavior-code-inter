@@ -118,3 +118,19 @@ func call_greet[T: Greeter](T x) -> str:
 print(call_greet(Foo()))
 """
         assert run_ibci(code) == ["hi"]
+
+
+class TestGenericProtocolsRuntime:
+    def test_generic_protocol_runs(self):
+        code = """
+protocol Container[T]:
+    func get(self) -> T:
+        pass
+
+class Box implements Container[int]:
+    func get(self) -> int:
+        return 42
+
+print(Box().get())
+"""
+        assert run_ibci(code) == ["42"]

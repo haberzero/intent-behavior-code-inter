@@ -245,6 +245,10 @@ class FlatSerializer(BaseFlatSerializer):
                 type_data["type_params"] = list(t.type_params)
             if getattr(t, "implements", None):
                 type_data["implements"] = list(t.implements)
+            if getattr(t, "implements_args", None):
+                type_data["implements_args"] = {
+                    k: list(v) for k, v in t.implements_args.items()
+                }
             if getattr(t, "type_param_bounds", None):
                 type_data["type_param_bounds"] = dict(t.type_param_bounds)
             # 用户类泛型特化实参（Box[int] → ["int"]）+ 原始基类名：

@@ -66,6 +66,7 @@ class SymbolResolver(ScopedVisitor):
         self.current_class_symbol: Optional[Symbol] = None
         # 当前泛型函数的类型参数（func f[T]）
         self.current_function_type_params: Optional[List[str]] = None
+        self.current_protocol_type_params: Optional[List[str]] = None
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
         """在当前作用域查找符号"""
@@ -108,6 +109,8 @@ class SymbolResolver(ScopedVisitor):
         sym = self.lookup_symbol(node.name)
         if sym:
             self.bind_symbol(node, sym)
+            old_proto_params = self.current_protocol_type_params
+            self.current_protocol_type_params = list(node.type_params)
             if hasattr(sym, 'owned_scope') and sym.owned_scope:
                 self.push_scope(sym.owned_scope)
                 try:
@@ -118,6 +121,7 @@ class SymbolResolver(ScopedVisitor):
             else:
                 for stmt in node.body:
                     self.visit(stmt)
+            self.current_protocol_type_params = old_proto_params
 
     def visit_IbClassDef(self, node: ast.IbClassDef):
         """访问类定义节点"""
@@ -391,6 +395,8 @@ class SymbolResolver(ScopedVisitor):
                 )
                 return self.registry.resolve("any")
             if self.current_function_type_params and annotation.id in self.current_function_type_params:
+                return self.registry.factory.create_type_param(annotation.id)
+            if self.current_protocol_type_params and annotation.id in self.current_protocol_type_params:
                 return self.registry.factory.create_type_param(annotation.id)
             # 类泛型参数在符号收集/解析阶段保持 TypeRef 形态，由既有的特化
             # 替换机制处理；这里不提前落成 TYPE_PARAM，避免运行期符号池拿到

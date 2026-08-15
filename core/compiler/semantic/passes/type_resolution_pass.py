@@ -197,6 +197,15 @@ class TypeAnnotationResolver:
             if ret_spec:
                 self.resolved_types[node.returns] = ret_spec
 
+    def resolve_IbProtocolDef(self, node: ast.IbProtocolDef):
+        """解析协议定义，支持协议类型参数。"""
+        self._type_param_stack.append(list(node.type_params))
+        try:
+            for stmt in node.body:
+                self.resolve(stmt)
+        finally:
+            self._type_param_stack.pop()
+
     def resolve_IbClassDef(self, node: ast.IbClassDef):
         """解析类定义"""
         self._type_param_stack.append(list(node.type_params))

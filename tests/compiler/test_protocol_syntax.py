@@ -210,3 +210,30 @@ class Foo implements Greeter:
         return 1
 """
         expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+
+class TestGenericProtocols:
+    def test_generic_protocol_compiles(self):
+        code = """
+protocol Container[T]:
+    func get(self) -> T:
+        pass
+
+class Box implements Container[int]:
+    func get(self) -> int:
+        return 42
+"""
+        assert compile_ibci(code) is not None
+
+    def test_generic_protocol_wrong_return_fails(self):
+        from tests.conftest import expect_compile_error
+        code = """
+protocol Container[T]:
+    func get(self) -> T:
+        pass
+
+class Box implements Container[int]:
+    func get(self) -> str:
+        return "x"
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")

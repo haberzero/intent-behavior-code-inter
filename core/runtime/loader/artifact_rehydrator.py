@@ -319,6 +319,10 @@ class ArtifactRehydrator:
                 spec.type_params = list(data["type_params"])
             if data.get("implements"):
                 spec.implements = list(data["implements"])
+            if data.get("implements_args"):
+                spec.implements_args = {
+                    k: list(v) for k, v in data["implements_args"].items()
+                }
             if data.get("type_param_bounds"):
                 spec.type_param_bounds = dict(data["type_param_bounds"])
             # 用户类泛型特化实参（Box[int]）+ 原始基类名：重建供 from_spec

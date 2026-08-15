@@ -128,6 +128,7 @@ class DeclarationVisitorsMixin:
                     node, code=SEM_TYPE_MISMATCH,
                 )
                 continue
+            type_mapping = self._protocol_type_mapping(node, proto_spec)
             for method_name in self._protocol_required_methods(proto_spec):
                 if not self._class_has_member_method(class_spec, method_name):
                     self.error(
@@ -140,8 +141,36 @@ class DeclarationVisitorsMixin:
                 class_member = (getattr(class_spec, "members", None) or {}).get(method_name)
                 if proto_member is not None and class_member is not None:
                     self._check_protocol_method_signature(
-                        node, protocol_name, method_name, proto_member, class_member
+                        node, protocol_name, method_name, proto_member, class_member,
+                        type_mapping=type_mapping,
                     )
+
+    def _protocol_type_mapping(self, node: ast.IbClassDef, proto_spec: IbSpec) -> dict:
+        """Build a type-parameter substitution map for a generic protocol.
+
+        ``class Foo implements Container[int]`` maps Container's type
+        parameters to the supplied arguments.  Returns an empty dict for
+        non-generic protocols.
+        """
+        type_params = list(getattr(proto_spec, "type_params", None) or [])
+        if not type_params:
+            return {}
+        raw_args = (getattr(node, "implements_args", None) or {}).get(proto_spec.name, [])
+        if len(raw_args) != len(type_params):
+            self.error(
+                f"Protocol '{proto_spec.name}' expects {len(type_params)} type "
+                f"argument(s), got {len(raw_args)}.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return {}
+        mapping = {}
+        for param, arg_name in zip(type_params, raw_args):
+            arg_spec = self._lookup_type_param(arg_name)
+            if arg_spec is None:
+                arg_spec = self.registry.resolve(arg_name)
+            if arg_spec is not None:
+                mapping[param] = TypeRef.from_spec(arg_spec)
+        return mapping
 
     def _protocol_method_member(self, proto_spec: IbSpec, method_name: str):
         """Find a method member on a protocol or one of its parents."""
@@ -170,6 +199,7 @@ class DeclarationVisitorsMixin:
         method_name: str,
         proto_member,
         class_member,
+        type_mapping: Optional[dict] = None,
     ) -> None:
         """Check that a class method is signature-compatible with a protocol method.
 
@@ -180,7 +210,11 @@ class DeclarationVisitorsMixin:
         - the class return type must be assignable to the protocol return type
           (covariant return).
         """
-        proto_params = list(getattr(proto_member, "param_types", None) or [])
+        type_mapping = type_mapping or {}
+        proto_params = [
+            p.substitute(type_mapping) if type_mapping else p
+            for p in (getattr(proto_member, "param_types", None) or [])
+        ]
         class_params = list(getattr(class_member, "param_types", None) or [])
         if len(proto_params) != len(class_params):
             self.error(
@@ -207,6 +241,8 @@ class DeclarationVisitorsMixin:
                 )
 
         proto_ret_ref = getattr(proto_member, "return_type", None)
+        if proto_ret_ref is not None and type_mapping:
+            proto_ret_ref = proto_ret_ref.substitute(type_mapping)
         class_ret_ref = getattr(class_member, "return_type", None)
         if proto_ret_ref is not None and class_ret_ref is not None:
             proto_ret = self.registry.resolve_typeref(proto_ret_ref)

@@ -166,6 +166,7 @@ class IbClassDef(IbStmt):
     type_params: List[str] = field(default_factory=list) # 泛型类型参数名（class Box[T]）
     type_param_bounds: Dict[str, str] = field(default_factory=dict)  # T -> ProtocolName
     implements: List[str] = field(default_factory=list)  # protocol names
+    implements_args: Dict[str, List[str]] = field(default_factory=dict)  # protocol -> type args
     methods: List[Union['IbFunctionDef', 'IbLLMFunctionDef']] = field(default_factory=list)
     fields: List['IbAssign'] = field(default_factory=list)
     
@@ -184,6 +185,7 @@ class IbProtocolDef(IbStmt):
     """
     name: str
     parent: Optional[str] = None
+    type_params: List[str] = field(default_factory=list)
     body: List[IbStmt] = field(default_factory=list)
     methods: List['IbFunctionDef'] = field(default_factory=list)
 

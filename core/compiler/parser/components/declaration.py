@@ -304,6 +304,16 @@ class DeclarationComponent(BaseComponent):
         start_token = self.stream.previous()
         name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name.").value
 
+        type_params = []
+        if self.stream.match(TokenType.LBRACKET):
+            while True:
+                type_params.append(
+                    self.stream.consume(TokenType.IDENTIFIER, "Expect protocol type parameter name.").value
+                )
+                if not self.stream.match(TokenType.COMMA):
+                    break
+            self.stream.consume(TokenType.RBRACKET, "Expect ']' after protocol type parameters.")
+
         parent = None
         if self.stream.match(TokenType.LPAREN):
             parent = self.stream.consume(TokenType.IDENTIFIER, "Expect parent protocol name.").value
@@ -312,7 +322,7 @@ class DeclarationComponent(BaseComponent):
         self.stream.consume(TokenType.COLON, "Expect ':' before protocol body.")
 
         node = self._loc(
-            ast.IbProtocolDef(name=name, parent=parent, body=[], methods=[]),
+            ast.IbProtocolDef(name=name, parent=parent, type_params=type_params, body=[], methods=[]),
             start_token,
         )
         body = self.statement.block()
@@ -366,11 +376,22 @@ class DeclarationComponent(BaseComponent):
             self.stream.consume(TokenType.RPAREN, "Expect ')' after parent class name.")
 
         implements = []
+        implements_args = {}
         if self.stream.match(TokenType.IMPLEMENTS):
             while True:
-                implements.append(
-                    self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name after 'implements'.").value
-                )
+                proto_name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name after 'implements'.").value
+                args = []
+                if self.stream.match(TokenType.LBRACKET):
+                    while True:
+                        args.append(
+                            self.stream.consume(TokenType.IDENTIFIER, "Expect protocol type argument.").value
+                        )
+                        if not self.stream.match(TokenType.COMMA):
+                            break
+                    self.stream.consume(TokenType.RBRACKET, "Expect ']' after protocol type arguments.")
+                implements.append(proto_name)
+                if args:
+                    implements_args[proto_name] = args
                 if not self.stream.match(TokenType.COMMA):
                     break
 
@@ -379,7 +400,7 @@ class DeclarationComponent(BaseComponent):
         class_node = self._loc(
             ast.IbClassDef(name=name, parent=parent, parent_args=parent_args,
                            type_params=type_params, type_param_bounds=type_param_bounds,
-                           implements=implements,
+                           implements=implements, implements_args=implements_args,
                            body=[], methods=[], fields=[]),
             start_token,
         )

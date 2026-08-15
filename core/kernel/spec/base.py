@@ -269,6 +269,10 @@ class TypeDef(IbSpec):
     # 运行期目前不改变分派，但保留在类型描述中供序列化和未来动态分派使用。
     implements: List[str] = field(default_factory=list)
 
+    # -- 用户类实现协议时的类型实参（CLASS kind）-----------------------
+    # ``class Foo implements Container[int]`` 的 {"Container": ["int"]}。
+    implements_args: Dict[str, List[str]] = field(default_factory=dict)
+
     # -- 用户类泛型特化实参（CLASS kind 特化 spec）---------------------
     # ``Box[int]`` 特化 spec 的实参 TypeRef 列表（["int"]），供结构化构造
     # （TypeRef.from_spec）与序列化 round-trip 保真。基类（模板）为空。

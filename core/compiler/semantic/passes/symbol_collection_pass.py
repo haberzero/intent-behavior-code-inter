@@ -173,6 +173,7 @@ class SymbolCollector:
         )
         if node.parent:
             proto_spec.parent_type = TypeRef.of(node.parent)
+        proto_spec.type_params = list(node.type_params)
 
         registered = self.registry.register(proto_spec)
 
@@ -240,6 +241,9 @@ class SymbolCollector:
         cls_meta.type_params = list(node.type_params)
         cls_meta.type_param_bounds = dict(node.type_param_bounds)
         cls_meta.implements = list(node.implements)
+        cls_meta.implements_args = {
+            k: list(v) for k, v in node.implements_args.items()
+        }
         # 父类泛型实参（class Sub[T](Box[T])）：parent_type 构造为泛型引用
         # TypeRef(Box, (T,))，供特化时递归替换。
         if node.parent_args:
