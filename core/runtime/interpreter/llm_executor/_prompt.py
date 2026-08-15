@@ -30,7 +30,7 @@ class _PromptMixin:
         meta_reg = self.registry.get_metadata_registry()
         if meta_reg:
             descriptor = meta_reg.resolve(type_name, module=module)
-            if descriptor:
+            if descriptor and meta_reg.satisfies_protocol(descriptor, "output_hint"):
                 hint_cap = meta_reg.get_llm_output_hint_cap(descriptor)
                 if hint_cap:
                     return hint_cap.__outputhint_prompt__(descriptor)
