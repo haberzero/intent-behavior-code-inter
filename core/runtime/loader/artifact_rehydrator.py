@@ -132,6 +132,9 @@ class ArtifactRehydrator:
             TypeKind.CLASS.value: lambda: factory.create_class(
                 name, module=data.get("module_path"), parent_name=data.get("parent_name")
             ),
+            TypeKind.PROTOCOL.value: lambda: factory.create_protocol(
+                name, module=data.get("module_path")
+            ),
             TypeKind.TYPE_PARAM.value: lambda: factory.create_type_param(name),
             TypeKind.BOUND_METHOD.value: lambda: TypeDef(
                 name="bound_method",

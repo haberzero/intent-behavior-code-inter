@@ -272,7 +272,7 @@ class FlatSerializer(BaseFlatSerializer):
                       TypeKind.BOUND_METHOD.value, TypeKind.MODULE.value,
                       TypeKind.CALLABLE_SIG.value, TypeKind.TYPE_PARAM.value,
                       TypeKind.PRIMITIVE.value, TypeKind.LAZY.value,
-                      TypeKind.SUBSCRIBER.value):
+                      TypeKind.SUBSCRIBER.value, TypeKind.PROTOCOL.value):
             return
         base_name = t.get_base_name()
         generic_types = self.generic_types
