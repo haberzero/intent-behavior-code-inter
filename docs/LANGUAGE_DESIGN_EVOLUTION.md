@@ -362,6 +362,11 @@ IBCI 已经有一个比大多数脚本语言更认真的类型地基，尤其是
   `func call[T: SomeProtocol](T x) -> R`，调用点从实参推断类型参数并检查协议约束。
 - **普通函数与 LLM 函数执行路径已开始统一**：二者共用同一个 CPS 调用前奏/收尾
   （意图 fork、模块切换、作用域、栈帧、实参绑定），仅核心执行策略不同。
+- **普通函数与 LLM 函数 AST/运行时类层次已统一**：`IbLLMFunctionDef` 继承
+  `IbFunctionDef`，`IbLLMFunction` 继承 `IbUserFunction`。
+- **泛型协议已可用**：`protocol Container[T]:` 与 `class Foo implements Container[int]:`。
+- **retroactive implementation 已可用（声明式）**：`impl SomeProtocol for SomeType:`，
+  编译期检查已有类型满足协议并记录实现关系。
 - `SpecRegistry` 新增 `satisfies_protocol()`，支持内建协议与用户注册协议的结构化满足判断。
 - `TypeKind` 新增 `PROTOCOL`，为未来协议类型实体预留位置。
 - 新增统一 `PromptRenderer`，LLM executor 与 intent 系统均委托到该渲染器。
