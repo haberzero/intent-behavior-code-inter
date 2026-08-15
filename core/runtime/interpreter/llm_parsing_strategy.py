@@ -323,9 +323,9 @@ class DefaultParsingStrategy(ParsingStrategy):
         base = descriptor.get_base_name()
         if base in ("behavior", "fn_callable", "any", "auto"):
             return False
-        if meta_reg.get_from_prompt_cap(descriptor) is not None:
+        if meta_reg.satisfies_protocol(descriptor, "from_prompt"):
             return False
-        if meta_reg.get_parser_cap(descriptor) is not None:
+        if meta_reg.satisfies_protocol(descriptor, "parser"):
             return False
         return True
 
