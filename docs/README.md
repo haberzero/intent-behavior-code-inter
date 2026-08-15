@@ -3,7 +3,8 @@
 > 本文件是 `docs/` 目录的**导航枢纽与治理章程**。
 >
 > **文档分工**：
-> - `docs/` -- 设计文档与用户手册（6 个主手册 + 5 个子目录）
+> - `docs/` -- 设计文档与用户手册
+> - `trials/` -- 试用套件资产（工具链、用例、本地运行记录）
 > - `tasks_docs/` -- 任务控制、决策记录、完成日志
 > - `tests_docs/` -- 测试方法论
 
@@ -32,9 +33,13 @@ docs/
 │
 ├── howto/                           操作指南（按问题查阅）
 │   ├── debug_llm_calls.md
+│   ├── run_trials.md
 │   ├── use_generators.md
 │   ├── write_concurrent_tasks.md
 │   └── write_user_plugin.md
+│
+├── trials/                           试用套件体系（参考）
+│   └── README.md
 │
 ├── syntax/                          语法说明详细章节
 │   ├── 01_types.md
@@ -71,6 +76,10 @@ docs/
 │   ├── 04_plugin_system.md
 │   └── 05_coroutine.md
 
+trials/                             试用套件资产（可执行）
+├── _toolkit/
+└── T<nn>_<主题>/
+
 tasks_docs/                          任务控制
 ├── NEXT_STEPS.md
 └── PENDING_TASKS.md
@@ -90,6 +99,7 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 | **要改类型系统的人** | `architecture/03_type_system.md` -> `architecture/02_metadata_ast.md` |
 | **要改 VM/解释器的人** | `architecture/04_vm_interpreter.md` -> `architecture/05_vm_specification.md` |
 | **要了解当前进度的人** | `tasks_docs/NEXT_STEPS.md` -> `tasks_docs/PENDING_TASKS.md` |
+| **要运行或扩展试用套件的人** | `docs/trials/README.md` -> `docs/howto/run_trials.md` -> `trials/_toolkit/` |
 
 ---
 
@@ -105,6 +115,8 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 | 语法权威 | `docs/SYNTAX_REFERENCE.md` + `docs/syntax/` |
 | 架构设计 | `docs/ARCHITECTURE.md` + `docs/architecture/` |
 | 子系统设计 | `docs/SUBSYSTEM_DESIGN.md` + `docs/subsystems/` |
+| 试用套件体系 | `docs/trials/README.md` |
+| 试用套件运行方式 | `docs/howto/run_trials.md` |
 
 ### 3.2 数字纪律（测试基线）
 

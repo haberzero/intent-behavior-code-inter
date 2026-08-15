@@ -171,6 +171,7 @@ MOCK 模式验证指令解析与控制流逻辑，无法验证意图注入、提
 1. **快速迭代**：MOCK 模式 + `idbg` 调试，验证控制流和错误处理逻辑
 2. **真实验证**：切换到真实 API key，验证 LLM 输出质量
 3. **回归保护**：用 MOCK 指令固化已验证场景的预期行为，纳入测试套件
+4. **真实 LLM 试用**：运行 `trials/` 下的试用地基，见 [如何运行试用套件][run-trials]
 
 ---
 
@@ -185,6 +186,7 @@ MOCK 模式验证指令解析与控制流逻辑，无法验证意图注入、提
 深入查阅：MOCK 指令的完整语法见 [语法参考 / MOCK 测试][syntax-13]，语言级限制见 [已知限制][known-17]。
 
 [06 · 构建多步骤 LLM 工作流]: ./06_multistep.md
+[run-trials]: ../howto/run_trials.md
 [syntax-07]: ../syntax/07_behavior_expressions.md
 [syntax-13]: ../syntax/13_mock_testing.md
 [known-17]: ../KNOWN_LIMITS.md#十六mock-模式下无法验证的-llm-功能

@@ -32,4 +32,9 @@ ref/
 build/
 dist/
 .eggs/
-tasks_docs/trials/T07_fixes_critical_stress/_scratch/
+trials/T07_fixes_critical_stress/_scratch/
+
+# trial run outputs are local reference analysis, not versioned
+trials/**/logs/
+trials/**/batch_result.jsonl
+trials/**/register.jsonl

@@ -124,7 +124,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - **✅ 已完成（2026-08-14，完整 IBCI 真实代码试用核查）**：T01-T07 全量重跑，近期改动
   （断层根治 + fn/callable 方向 A + CALLABLE_SIG 根治）对已知试用代码零回归；更新 4 例
   过期触发用例 expect-class→PASS（核销）；记录 T02 T5 真实 LLM 间歇失败。报告
-  `tasks_docs/trials/VERIFICATION_20260814.md`。
+  `trials/VERIFICATION_20260814.md`。
 
 - **✅ 已完成（2026-08-14，exp/callable-sig-signature → unsafe-vibe-dev 合并，全量 2775 passed / 1 skipped 零回归）**：
   **fn[(...)->...]（CALLABLE_SIG）签名模型根治**。KNOWN_LIMITS §10.4"潜伏边界"深挖
