@@ -39,6 +39,20 @@ class _ProtocolMixin:
         protocol = self.get_protocol(name)
         return protocol.methods if protocol is not None else ()
 
+    def get_protocol_cap(self, spec: Optional[IbSpec], protocol_name: str):
+        """Return the axiom that provides a protocol capability, if any.
+
+        This is a convenience for callers that need the axiom object after
+        confirming protocol satisfaction.  It returns None when the protocol
+        is not satisfied or no axiom is registered for the type.
+        """
+        if not self.satisfies_protocol(spec, protocol_name):
+            return None
+        return self.get_axiom(spec)
+    def protocol_methods(self, name: str) -> Tuple[str, ...]:
+        protocol = self.get_protocol(name)
+        return protocol.methods if protocol is not None else ()
+
     # ---------------------------------------------------------- #
     # Protocol satisfaction                                       #
     # ---------------------------------------------------------- #

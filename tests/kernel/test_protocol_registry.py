@@ -130,3 +130,13 @@ class TestProtocolSpecBridge:
         impl = _make_class("MyImpl", ["do_it"])
         reg.register(impl)
         assert reg.satisfies_protocol(impl, "MyProto") is True
+
+
+class TestGetProtocolCap:
+    def test_get_protocol_cap_for_int_from_prompt(self):
+        reg = create_default_registry()
+        assert reg.get_protocol_cap(reg.resolve("int"), "from_prompt") is not None
+
+    def test_get_protocol_cap_missing(self):
+        reg = create_default_registry()
+        assert reg.get_protocol_cap(reg.resolve("int"), "snapshotable") is None
