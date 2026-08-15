@@ -2,7 +2,7 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-15（LLM 提示词精简 + retry 标准多轮对话改造，exp/llm-retry-multiturn，全量 2788 passed / 1 skipped）
+> 最后更新：2026-08-15（max-inst 死代码清理完成，exp/max-inst-cleanup，全量 2788 passed / 1 skipped）
 
 ---
 
@@ -11,6 +11,10 @@
 ---
 
 | **LLM 提示词精简 + retry 标准多轮对话改造（2026-08-15，exp/llm-retry-multiturn，全量 2788 passed / 1 skipped）** | **用户指出：① "你是一个被 IBCI 程序调用的函数。" 等多处注入对独立 LLM 无信息量，提示词应只描述任务要求；② retry 是否利用 OpenAI 标准多轮对话。** 核查：retry 之前**未**利用多轮——`ILLMProvider.__call__` 只收 sys/user，`AIPlugin` 每次新建 `[system, user]`，重试反馈被拼进 sys_prompt。**改造**：① 删除身份句，behavior 纪律改为"只输出任务要求的结果数据本身。禁止输出任何解释、问候、提问、拒绝、安全声明或其他与结果无关的文字。"；意图标题改"必须遵守以下要求："；通用类型声明去掉多余标题。② `ILLMProvider.__call__` 协议增加 `message_history` 关键字参数；`LLMExceptFrame` 增加 `attempt_history`，`_retry_llm_uncertain` 每轮 handler body 后记录失败尝试；behavior/LLM 函数经 `_call_llm` 把 `assistant → user` 多轮历史传给 `AIPlugin`，由 `AIPlugin` 追加到 OpenAI messages 形成 `system → user(原任务) → assistant(失败输出) → user(纠错)` 标准多轮。③ Mock HTTP 服务 `_extract_user_prompt` 改为取首个 user 消息（原始任务），否则末轮纠错 user 消息会覆盖 MOCK 指令。④ 顺带修复 `__llmretry__` 首次调用即注入 sys_prompt 的缺陷（改为仅重试时注入）。**测试**：更新 `test_llm_prompt_mechanism.py`（断言 sys_prompt 不含 IBCI 身份、retry 断言 message_history 角色与内容、新增 __llmretry__ 首调不注入）；全量 pytest 2788 passed / 1 skipped；真实 LLM T5 复跑 PASS。设计/实施 `tasks_docs/_code_llm_retry_multiturn.md`。**待办**：评估零风险后合并 unsafe-vibe-dev。 |
+
+---
+
+| **max-inst 失效指令上限死代码清理（2026-08-15，exp/max-inst-cleanup，全量 2788 passed / 1 skipped）** | **触发：`_DESIGN_DEADLOOP_GUARD_SCOPE.md`（用户定案：内核不设用户代码死循环上限；死代码须彻底移除）。** 核实并清理三层失效机制：① `main.py` 顶层与 `run` 子命令 `--max-inst` 参数从未接线（`engine.run` 无该形参）——删除；② `Interpreter.max_instructions` / `instruction_count` 定义/重置/序列化但全仓无增量无比较（恒 0）——删除字段、getter、序列化项；`ExecutionContextImpl` 回调参数/方法、`IStackInspector` 协议方法、`coordinator` lambda:0、`idbg.env()` `instruction_count` 字段同步删除（对外可观测契约同步收敛）；③ `VMExecutor.max_steps` / `step_count` 检查存在但 `max_steps` 恒 0（无任何赋值点）——删除步数限制，**保留同循环 `cancel_event` 协作取消检查**。试用套件 `_toolkit/run_one.py`/`run_batch.py`/`T07 rerun_old_suites.py` 不再传 `--max-inst`；`run_one.py` 日志头与 register.jsonl 删除 `max_inst` 字段；`_toolkit` 文档与各试用地基 DESIGN/REGISTER 保护表述同步为“OS 进程组 SIGKILL + LLM 调用超时”。`_DESIGN_DEADLOOP_GUARD_SCOPE.md` 纳入版本控制并追加实施记录。全量 pytest 2788 passed / 1 skipped 零回归。**待办**：合并 unsafe-vibe-dev。 |
 
 ---
 
