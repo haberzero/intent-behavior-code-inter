@@ -11,11 +11,8 @@ from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 from core.base.uid import node_uid, type_uid, anon_symbol_uid
 
-# S4 声明驱动：payload 字段名 → 序列化字段名映射（历史兼容）。
-# positional_element_types 的序列化键为 positional_type_names（rehydrator 历史约定）。
-_PAYLOAD_FIELD_NAMES = {
-    "positional_element_types": "positional_type",
-}
+# S4 声明驱动：payload 字段名即序列化键（与 artifact_rehydrator 读侧一致，
+# 单一权威源——不维护历史兼容键映射）。
 
 class FlatSerializer(BaseFlatSerializer):
     """
@@ -298,8 +295,8 @@ class FlatSerializer(BaseFlatSerializer):
             return
         for field in decl.payload_fields:
             refs = getattr(t, field, None)
-            # 序列化字段名（历史兼容映射：positional_element_types → positional_type）
-            name_key = _PAYLOAD_FIELD_NAMES.get(field, field)
+            # 序列化键 = payload 字段名（S4 声明驱动，无历史键映射）
+            name_key = field
             if isinstance(refs, list):
                 if not refs:
                     continue

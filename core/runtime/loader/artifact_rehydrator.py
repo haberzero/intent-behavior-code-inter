@@ -15,11 +15,7 @@ PRIMITIVE_TYPES = [
     "list", "dict", "behavior", "Optional", "None", "llm_uncertain"
 ]
 
-# S4 声明驱动：payload 字段名 → 序列化字段名映射（与 serializer._PAYLOAD_FIELD_NAMES
-# 同步）。positional_element_types 的序列化键为 positional_type_names。
-_PAYLOAD_FIELD_NAMES = {
-    "positional_element_types": "positional_type",
-}
+# S4 声明驱动：payload 字段名即序列化键（与 serializer 写侧一致，单一权威源）。
 
 
 def _base_name_from_name(name: str) -> str:
@@ -219,7 +215,7 @@ class ArtifactRehydrator:
         arg_refs = []
         arg_modules = []
         for field in decl.payload_fields:
-            name_key = _PAYLOAD_FIELD_NAMES.get(field, field)
+            name_key = field  # payload 字段名即序列化键（S4 声明驱动）
             # 先试复数（列表字段 positional_type_names），再试单数
             list_val = data.get(f"{name_key}_names")
             if list_val is not None:

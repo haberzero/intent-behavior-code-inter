@@ -425,8 +425,9 @@ class TestGenericAnnotationDeclaredType:
     def test_positional_tuple_preserves_elements(self, engine):
         """tuple[int,str] 位置元素类型经 artifact 序列化→还原不退化。
 
-        serializer 持久化 positional_type_names 与 positional_type_modules
-        （位置顺序与元素类型模块均保真，与 dict key/value 双字段对齐）。
+        serializer 持久化 positional_element_types_names/modules（payload
+        字段名即序列化键，S4 声明驱动；位置顺序与元素类型模块均保真，
+        与 dict key/value 双字段对齐）。
         """
         from core.compiler.serialization.serializer import FlatSerializer
         from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
@@ -436,7 +437,7 @@ class TestGenericAnnotationDeclaredType:
         d = FlatSerializer().serialize_artifact(artifact)
         types = d["modules"][artifact.entry_module]["pools"]["types"]
         target = next(k for k, v in types.items() if v.get("name") == "tuple[int,str]")
-        assert types[target]["positional_type_names"] == ["int", "str"]
+        assert types[target]["positional_element_types_names"] == ["int", "str"]
         reg = create_default_registry()
         reh = ArtifactRehydrator(type_pool=types, registry=reg)
         restored = reh.hydrate(target)
