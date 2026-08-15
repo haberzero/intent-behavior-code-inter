@@ -15,7 +15,7 @@ description: 长期、间歇性的代码质量维护与异味检测工作流。�
 |---|---|---|---|
 | **Tier A · 随主线顺带** | 主线任一次代码改动中 | 每次 | 只对本次改动范围做 code-quality/code-odor 自检（已有 `code-workflow` Phase 4 + `code-quality` §九）；不扩大范围 |
 | **Tier B · 定期窗口** | 每 N 个主线里程碑 / 每 M 天（建议在主线阶段边界） | 低强度、批量 | 跑 `code-quality` 健康诊断十查 + `code-odor` 特征码扫描 + smell 清单复核；只分类 + 只修**低风险、无契约影响**项；其余入记录 |
-| **Tier C · 专项审计** | 主线停滞 / 用户指定 / 重大技术债专项 | 独立分支 | PT-SMELL 类独立审计（见 `tasks_docs/*_AUDIT.md`），可含架构重构，独立分支执行、不混主线 |
+| **Tier C · 专项审计** | 主线停滞 / 用户指定 / 重大技术债专项 | 独立分支 | PT-SMELL 类独立审计（见 `tasks_docs/PENDING_TASKS.md` §六），可含架构重构，独立分支执行、不混主线 |
 
 **分配原则**：
 - 主线（Tier A）永远是主要意图；质量维护（Tier B/C）只在阶段边界或用户指定时介入，不打断主线冲刺。
@@ -24,10 +24,10 @@ description: 长期、间歇性的代码质量维护与异味检测工作流。�
 
 ## 二、Tier B 定期窗口执行流程
 
-1. **扫描**：`code-quality` 十查 + `code-odor` 特征码 grep 全仓；重跑既有 smell 清单（`tasks_docs/*_AUDIT.md`、`tasks_docs/AIMLESS_REVIEW.md`）。
+1. **扫描**：`code-quality` 十查 + `code-odor` 特征码 grep 全仓；重跑既有 smell 清单（历史结论见 `tasks_docs/WORKLOG.md`）。
 2. **分类**：按 `code-quality` 判定基准（A 合法保留 / B 修复根因 / 死代码删除 / 双通道收敛 / 需讨论）。
 3. **只修低风险项**：机械性清理、死代码、可提升 import、测试补齐、明确根因修复（无契约/架构影响）。**架构/契约级改动一律不在此窗口做**，转 Tier C 或上报。
-4. **记录**：`维持现状` 的项（含"能跑但看着别扭"）→ 归入 `tasks_docs/AIMLESS_REVIEW.md`（无目的审视清单）；`待决断` 的项 → 记入对应审计文档。
+4. **记录**：`维持现状` 的项（含"能跑但看着别扭"）→ 记入 `tasks_docs/WORKLOG.md`；`待决断` 的项 → 记入 `tasks_docs/PENDING_TASKS.md`。
 5. **验证**：每批 `python -m pytest tests/` 全量零回归；收尾回写审计文档。
 
 ## 三、Tier C 专项审计执行流程
@@ -41,7 +41,7 @@ description: 长期、间歇性的代码质量维护与异味检测工作流。�
 
 - 质量维护（本 skill）产出**确定性的分类/修复**。
 - 无目的审视（`aimless-review`）产出**非目的性的潜在参考**（含本 skill 的"维持现状"项）。
-- 两者的"维持现状 / 待参考"项都汇入 `tasks_docs/AIMLESS_REVIEW.md`，由 `aimless-review` 负责周期性事实回顾与演进。
+- 两者的"维持现状 / 待参考"项都汇入 `tasks_docs/WORKLOG.md`，由 `aimless-review` 负责周期性事实回顾与演进。
 
 ## 五、配套 skill
 

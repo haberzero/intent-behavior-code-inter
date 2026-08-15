@@ -335,7 +335,7 @@
 
 > **unsafe-vibe-dev，全量 2210 passed / 1 skipped（试用零回归，未改内核）**。
 > 完整证据：`tasks_docs/_LLM_TRIAL_20260812/`（DESIGN/harness/cases/logs/REGISTER）+ 报告
-> `tasks_docs/_REAL_LLM_TRIAL_REPORT_20260812.md`。
+> `（已清理任务文档）`。
 
 - **试用地基**：死循环保护 harness（OS 进程级硬超时 SIGKILL 进程组 + LLM 调用
   超时，无超时不运行，零遗漏）+ 确定性文件化记录（logs/ + register.jsonl + REGISTER.md）。
@@ -371,13 +371,13 @@
 - **PT-AUDIT-3 双路径专项审计执行**（general agent 独立审计）：无 P0；3 确凿 P2 漂移修复
   （run_batch 观测 / active_intents / _drive 装箱）+ generator 兜底 fail-fast + KNOWN_LIMITS 修正；
   5 疑似项待独立窗口（`_PT_AUDIT3_RECORD.md`）。
-- **合并就绪报告**：`tasks_docs/_MERGE_READY_REPORT.md`（四项合并条件全满足；阶段 3 待用户授权）。
+- **合并就绪报告**：`（已清理任务文档）`（四项合并条件全满足；阶段 3 待用户授权）。
 
 ## ✅ 已完成：R 批次 —— 统一执行地基复核与根治修复（R1-R6）
 
 > **2026-08-07 用户裁定**：阶段 1-3 落地暴露的妥协处理**必须彻底修复，不留妥协**；工作成本/难度不参与权衡；
 > IBCI 无用户，已文档化设计可为长远可维护性与架构健康性被推翻。
-> **完整设计/深度分析/决策见 `tasks_docs/EXEC_REFACTOR_BATCH.md`**（无悬而未决问题）。
+> **完整设计/深度分析/决策见 `（已清理任务文档）`**（无悬而未决问题）。
 
 **批次（各独立分支，禁合并，全量零回归后手动 cherry-pick 应用 unsafe-vibe-dev）——全部完成**：
 
@@ -399,7 +399,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 ## ✅ 已完成：阶段 4 PT-FEAT-9 内核结构化诊断机制重建（CORE_DEBUG 替代物）
 
 > **2026-08-07 完成，unsafe-vibe-dev，全量 2021 passed / 1 skipped**。
-> 设计权威：`tasks_docs/DIAGNOSTIC_DESIGN.md`（D1-D7 + 诊断码集 + 实施步骤 A-E）。
+> 设计权威：`（已清理任务文档）`（D1-D7 + 诊断码集 + 实施步骤 A-E）。
 > 完整落地记录见 `WORKLOG` PT-FEAT-9 阶段 B-D 落地。
 
 - **B 机制落地**：`codes.py` 增 `=== 内核诊断 (KDIAG_) ===` 节（10 码）；新建
@@ -420,7 +420,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## ✅ 已完成：阶段 5 yield 惰性生成器（2026-08-08）
 
-> **unsafe-vibe-dev，全量 2043 passed / 1 skipped**（基线 2029，+14）。独立分支 exp/yield-generator 实验 → 手动应用（设计/决策见 `tasks_docs/YIELD_GENERATOR_DESIGN.md`）。
+> **unsafe-vibe-dev，全量 2043 passed / 1 skipped**（基线 2029，+14）。独立分支 exp/yield-generator 实验 → 手动应用（设计/决策见 `（已清理任务文档）`）。
 
 - **yield 惰性生成器落地**（c8b8956）：含 `yield` 的函数自动为惰性生成器（D-08 自标记函数种类，无 async 关键字）。
   - 词法 `yield` 关键字 + 语法 `yield` 表达式（LOWEST 优先级，`yield x+1` 产出 `x+1`）+ AST `IbYieldExpr`/`IbFunctionDef.is_generator`。
@@ -469,7 +469,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 
 ## ✅ 已完成：P0 阶段 5 增量（`next()` 内建 + `yield from` 生成器委托）（2026-08-09）
 
-> **unsafe-vibe-dev，全量 2083 passed / 1 skipped**（基线 2074）。设计记录 `tasks_docs/_code_yield_from.md`。
+> **unsafe-vibe-dev，全量 2083 passed / 1 skipped**（基线 2074）。设计记录 `（已清理任务文档）`。
 
 - **`next()` 内建**（c61a6e0）：`IbGenerator` 经 `generic_next()` 逐次推进，耗尽抛可捕获 `InterpreterError`；其它可迭代对象取首元素。
 - **`yield from` 生成器委托**（本批次）：把子迭代对象（嵌套生成器 / 序列 / 有 `__iter__` 的对象）的每个产出
@@ -533,7 +533,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
 ## ✅ 已完成：异步地基 M1/M2 收尾（.call 双写收敛 + 驱动去重）（2026-08-09）
 
 > **独立分支 exp/async-m1m2 实验，全量 2137 passed / 1 skipped**。统一执行模型闭环全部收尾。
-> 设计记录 `tasks_docs/_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`；落地状态 `_ASYNC_UNIFY.md`。
+> 设计记录 `（已清理任务文档）` / `_code_m2_drive_dedup.md`；落地状态 `_ASYNC_UNIFY.md`。
 
 - **M2 驱动去重**（31884a8）：线程体 `coordinator._drive_generator` 从"手写阻塞泵"改为复用主 VM 单一权威驱动
   ——根生成器包装为 `VMTask`，经 `task_vm._drive_loop_gen` + `TaskScheduler` 驱动到完成；trampoline/GeneratorYield/
@@ -675,7 +675,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   （`_enum_instancing_assessment.md`，维持现状）。独立复核 PASS，全量 2308/1 零回归。
 
 - **✅ 已完成（2026-08-12，unsafe-vibe-dev 35bb2de，全量 2339 passed / 1 skipped）**：**用户类泛型参数（PT-FEAT-3）**——
-  设计冻结 `tasks_docs/PT_FEAT3_DESIGN.md`（6 项开放问题决断）+ 全链路落地（AST/parser/语义/序列化/运行时/
+  设计冻结 `（已清理任务文档）`（6 项开放问题决断）+ 全链路落地（AST/parser/语义/序列化/运行时/
   诊断/文档）。已支持多特化并存/字段·方法参数·返回类型特化/嵌套泛型/多参数/泛型继承；守卫含裸用拦截、
   实参数不匹配、字段-T 冲突、Enum 泛型拒绝、类型参数遮蔽内置拒绝。21 e2e + 2 序列化 round-trip；
   独立复核两轮 PASS（P2-1 父特化恒注册 / P2-2 嵌套实参映射 全整改）。
@@ -735,7 +735,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
   `chan.send` 满阻塞）。**PT-DEBT-12（F1 用户方法 CPS 化）、PT-DEBT-13（B1 chan.send Waitable 化）、
   PT-DEBT-14（F2 slot.update + F3 prompt hint CPS 化）、PT-DEBT-15（M4 LLM 真挂起）已完成（2026-08-08）**；
   **M1（.call 双写收敛）/ M2（驱动去重）已完成（2026-08-09，独立分支 exp/async-m1m2，全量 2137 passed / 1 skipped）**；
-  M3（prompt 单源）已确认收敛。**统一执行模型闭环全部收尾**。实施计划与落地状态见 `tasks_docs/_ASYNC_UNIFY.md`（F1→B1→F2/F3→M1-M4）。
+  M3（prompt 单源）已确认收敛。**统一执行模型闭环全部收尾**。实施计划与落地状态见 `（已清理任务文档）`（F1→B1→F2/F3→M1-M4）。
   登记 PT-DEBT-12/13/14/15。
   > **注意**：地基闭环后仍有 6 处"任务内同步重入/嵌套调度器"**次要路径遗留**（`_HEALTH_AUDIT_PLAN.md` 异步 A1-A6）——
   > 内联 `@~` 表达式、意图消解、`_SlotUpdateWaitable`、LLM 函数同步阻塞、类构造、协议方法。属"彻底统一"的未完项。
@@ -745,10 +745,10 @@ auto-yield 组合 + 值契约 + yield 自标记）。
    剩余 PT-DEBT-4 `file` 重命名（破坏性变更独立窗口）、P3 VISION。
  - **低风险推进已完成（2026-08-09）**：PENDING_REVIEW_ITEMS 状态同步、PT-AUDIT-2 宽 except 核验（A 类保留）、
    docs/ 过时表述修复（yield 已落地）。见 HANDOFF §2.1。
- - **三轴健康盘点（2026-08-09，只读）**：见 `tasks_docs/_HEALTH_AUDIT_PLAN.md`——异步遗留 A1-A6 + 内核健康
+ - **三轴健康盘点（2026-08-09，只读）**：见 `（已清理任务文档）`——异步遗留 A1-A6 + 内核健康
    （深层嵌套/死同步包装/双驱动循环）+ 技术手册健康（P1/P2 待修 + How-to 缺口）。
  - **P0 阶段 5 增量已完成（2026-08-09）**：见上方"已完成"节。`next()` + `yield from` 全落地，设计记录
-   `tasks_docs/_code_yield_from.md`。
+   `（已清理任务文档）`。
  - **PT-FEAT-5 已完成三项（2026-08-09）**：见上方"已完成"节（诊断码目录 + 符号表/类型绑定导出 + 编译基准）。
    剩余：CI/CD（涉远程 push，须用户显式授权后另行执行；见 `PENDING_TASKS.md`）。
  - **P1 PT-FEAT-10 UID 生成统一已完成（2026-08-09）**：见上方"已完成"节。
@@ -802,7 +802,7 @@ auto-yield 组合 + 值契约 + yield 自标记）。
     类角色分工固化 `03_type_system.md` §6.4。
   - PT-DEBT-6：`register_module` 用户插件覆盖 kernel-native 时发 warning（原静默忽略）；修正测试配置 bug。
   - PT-DOC-2：14 篇 syntax 定位段核实完成（DOC_AUDIT F3 已补齐），条目移除。
-- **DOC_AUDIT 文档治理（2026-08-06）**：docs/ 全量治理（42 篇）分四阶段执行——F0 本批引入修复（KNOWN_LIMITS §二十二重复编号→§二十四、14_concurrency E9、E2 历史叙述）；F1 P0 断链/矛盾 ~17+ 处（以代码为最高真相）；F2 P1 红线批量（日期戳/历史叙述/冻结数字/任务代号清除、KNOWN_LIMITS 章节重排为一~二十二并同步跨文档引用、05_coroutine 任务日志迁 tasks_docs/THREAD_DESIGN.md、__prompt__ 待决项迁 tasks_docs/PROMPT_DESIGN_REVIEW.md）；F3 P2 改善（模板统一 13_mock_testing/04_control_flow、A5 去重、侧表/MetadataStore 事实修正、handler 数 43→45）；F4 体系（How-to 层 docs/howto/ 两篇、'深入指引'尾段 23 篇补齐）。**后续清理**：删除自治标注文档 appendix_type_system_rationale.md 与 backup/（未完成规划迁 PENDING_TASKS PT-FEAT-8/PT-DEBT-7/8，media 设计浓缩为 tasks_docs/MEDIA_DESIGN.md）。完整记录见 `tasks_docs/DOC_AUDIT_REPORT.md`。
+- **DOC_AUDIT 文档治理（2026-08-06）**：docs/ 全量治理（42 篇）分四阶段执行——F0 本批引入修复（KNOWN_LIMITS §二十二重复编号→§二十四、14_concurrency E9、E2 历史叙述）；F1 P0 断链/矛盾 ~17+ 处（以代码为最高真相）；F2 P1 红线批量（日期戳/历史叙述/冻结数字/任务代号清除、KNOWN_LIMITS 章节重排为一~二十二并同步跨文档引用、05_coroutine 任务日志迁 （已清理任务文档）、__prompt__ 待决项迁 （已清理任务文档））；F3 P2 改善（模板统一 13_mock_testing/04_control_flow、A5 去重、侧表/MetadataStore 事实修正、handler 数 43→45）；F4 体系（How-to 层 docs/howto/ 两篇、'深入指引'尾段 23 篇补齐）。**后续清理**：删除自治标注文档 appendix_type_system_rationale.md 与 backup/（未完成规划迁 PENDING_TASKS PT-FEAT-8/PT-DEBT-7/8，media 设计浓缩为 （已清理任务文档））。完整记录见 `（已清理任务文档）`。
 - **整合巩固批次（2026-08-06）**：新写 `docs/syntax/14_concurrency.md`（并发语言面，此前缺失）+ KNOWN_LIMITS §二十二（signal 移除）；修复 PT-DEBT-1 文档漂移（`_ibci_registry_id` 残留）；修复 for 循环变量类型恒为 any 缺陷（复合赋值在 for 体内无法定型）；for...if + 复合赋值 e2e 覆盖（PT-TEST-2）。
 - **内建函数群完善（2026-08-06）**：类型转换全局函数 `int()`/`str()`/`float()`/`bool()` +
   序列辅助 `enumerate`/`zip`/`sorted`/`reversed`/`sum`/`all`/`min`/`max`；级联修复 for 循环

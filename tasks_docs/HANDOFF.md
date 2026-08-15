@@ -4,8 +4,7 @@
 > 以及**当前任务状态**。
 >
 > **使用方式**（下一个 session 开始工作时）：
-> 1. 根据当前任务分析：读 `NEXT_STEPS.md`（当前最紧要）+ `PENDING_TASKS.md`（长期规划）+
->    `PENDING_REVIEW_ITEMS.md`（审查清单，如适用）。
+> 1. 根据当前任务分析：读 `NEXT_STEPS.md`（当前最紧要）+ `PENDING_TASKS.md`（长期规划）。
 > 2. 从本文件 §一 获取**固定化内容**（goal 模板 / 工作流程 / 工作原则 / 约束）。
 > 3. 按 §二 **动态状态** 接续当前工作。
 >
@@ -83,8 +82,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 残留扫描。
 
 五、主任务阻塞/暂停时的支线（按优先级，解阻立即回主线）：1) 质量维护/代码健康
-（quality-maintenance Tier A/B + aimless-review，产出 AIMLESS_REVIEW.md）；2) PT-AUDIT-1/2
-代码质量审计（独立分支）；3) PT-FEAT-5 错误用户友好化 / PT-FEAT-2 Enum 非 str 成员；
+（quality-maintenance Tier A/B）；2) PT-AUDIT-1/2 代码质量审计（独立分支）；
+3) PT-FEAT-5 错误用户友好化 / PT-FEAT-2 Enum 非 str 成员；
 4) 测试体系重构（PT-TEST-1）。每条支线仍须全量 pytest 零回归、commit+留痕（仅本地）。
 
 六、停止条件：先穷尽自主手段，仅当确实无法自主决定时（用户意图不明穷尽无解/公理层语义
@@ -98,17 +97,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 | 文档 | 用途 |
 |------|------|
-| `NEXT_STEPS.md` | 当前最紧要项（下一主线待择定）/ 已完成摘要 / 工作模式定论 / 工作规则 |
+| `NEXT_STEPS.md` | 当前最紧要项 / 已完成摘要 / 工作模式定论 / 工作规则 |
+| `PENDING_TASKS.md` | 长期规划与搁置任务（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED） |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
-| `PENDING_TASKS.md` | 长期规划（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED） |
-| `TRIAL_SYSTEM_REDESIGN.md` | 试用体系重构任务控制（Phase A-D 全部完成；缺陷/用例/工具状态单一权威） |
-| `trials/` | 试用地基 4 套（T01_llm_full / T02_enum_import / T03_user_class_generics / T04_generics_fix_regression） |
-| `trials/_toolkit/` | 试用工具链：run_one.py（harness）/ run_batch.py（批量）/ CLASSIFICATION.md（分类编号）/ CONTRACT_FORMAT.md（用例即契约）/ LLM_SERVICE.md（本机真实 LLM）/ gen_register.py（报告生成）/ PHASE_D_AUTOMATION.md（收敛流程） |
-| `PENDING_REVIEW_ITEMS.md` | 代码复核审查循环（PT-AUDIT-3：R1/R2/R3 已执行，R4 覆盖率核对已执行（2026-08-09），R5 doc 聚焦治理已执行（全量待独立窗口）） |
-| `THREAD_DESIGN.md` / `PROMPT_DESIGN_REVIEW.md` / `MEDIA_DESIGN.md` | 设计要点迁入（并发 / `__prompt__` 待决项 / media 封存） |
-| `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md` §十） |
-| `AIMLESS_REVIEW.md` | 无目的审视潜在参考（背景过程） |
-| `CODE_SMELL_AUDIT.md` / `BRANCH_NESTING_AUDIT.md` | PT-AUDIT-1/2 审计（长期周期，独立分支） |
+| `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md`） |
+| `trials/` | 试用地基（T01-T07）与工具链 `trials/_toolkit/`（harness / batch / 用例即契约 / LLM_SERVICE）——测试资产，非任务控制文档 |
 
 ---
 
@@ -153,7 +146,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   无单一权威 / type_checking 字符串回填覆盖结构化 spec / 函数签名序列化缺口）。五项根治
   （from_spec 补三 kind + create_func 结构化升级 + resolve_member BOUND_METHOD +
   返回 Optional 包装 + 序列化签名保真），判别性回归 +29，独立复核（general agent）放行
-  （P1/P2 已整改）。设计/实施 `tasks_docs/_code_func_callable_identity.md`；潜伏边界
+  （P1/P2 已整改）。设计/实施 `（已清理任务文档）`；潜伏边界
   KNOWN_LIMITS §10.4。**下一主线候选**：见 `NEXT_STEPS.md`（当前无未决 P0）。
 
 - **✅ 已完成（2026-08-14 无人值守 session，unsafe-vibe-dev 19920d39，全量 2714 passed / 1 skipped 零回归）**：
@@ -262,7 +255,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   → 10/11 类 `X[int]→X[str]` 编译期拦截；缺陷二（特化 spec 水化为运行时特化类四层）→
   `type(list[int]值)=list[int]`、运行时值层类型安全闭环、深克隆/序列化 round-trip 保真。
   独立复核整改 3 项（dict 协变/boxed 防御/跨家族）。设计冻结
-  `tasks_docs/_code_generic_type_identity.md`；边界增量（函数返回/实参/嵌套内层/切片/
+  `（已清理任务文档）`；边界增量（函数返回/实参/嵌套内层/切片/
   Optional/跨引擎反序列化）记录 §2.6。详见 NEXT_STEPS 已完成节 + WORKLOG。
 
 - **✅ 已完成（2026-08-13，unsafe-vibe-dev e45dbb75，全量 2519 passed / 1 skipped）**：
@@ -408,7 +401,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     return_type=list 契约不变（auto-yield 后仍收 boxed IbList）。宿主/线程体无 VM 走 `_run_batch_sync` 同步兜底。
   - **顺带清理死代码**：`LLMExecutorImpl.resolve()` + `LLMFuture.get()`（VM 全走 `resolve_future_cps`）+ 其 5 个
     死测试 + 死 import + `LLMExecutor` 协议声明同步；统一批量聚合 `_aggregate_batch_results`（消除双路径分叉）。
-  - 设计记录 `tasks_docs/_code_run_batch_cps.md`；general 复核 3 建议级全整改；补判别性回归测试
+  - 设计记录 `（已清理任务文档）`；general 复核 3 建议级全整改；补判别性回归测试
     `TestRunBatchWaitableContract`（旧实现返回 List 必失败）。文档 `05_vm_specification.md` §3.4 公理 LLM-4 同步。
 - **A5 用户类构造帧内 CPS 根治（2026-08-11，独立分支 exp/a5-cps-construct → 直接合并 unsafe-vibe-dev 356b0d8，全量 2137 passed / 1 skipped）**：用户类（不含原生 __init__）构造改返回 `_ClassInstantiateDrive`（Waitable+CPSDrivable）——`cps_drive` 在 VM 帧内 yield 字段默认值 + 用户 __init__（UserFunctionCall），消除 `vm.run` 重入与 `init_method.call` 嵌套 TaskScheduler；leaf.py 兜底细化（CPSDrivable 无论 func 是否 IbClass 均帧内驱动，纯 Waitable 仅非 IbClass auto-yield，thread 原生 __init__ 返回 IbThread 句柄仍不 auto-yield）；宿主/线程体走同步 instantiate 兜底。general 复核 5 检查点 PASS + 全量 2137/1 零回归。**A6 评估维持现状**（niche + 条件触发，登记已知项）。**分支政策细则**：2026-08-11 用户明确"零风险直接合并"，A5 因零风险直接合并到 unsafe-vibe-dev。
 - **当前主线（架构健康性优先，2026-08-08 用户定案）**：**异步地基遗留妥协根治（统一执行模型闭环）——全部收尾（2026-08-09）**。
@@ -481,7 +474,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     非可迭代测试修正、注释卫生）。兜底专项审计结论：全部属职责分离型合法 fallback，无 tricky/兼容妥协。
   - **异步地基收尾（M1/M2）**：见上——统一执行模型闭环完成。独立分支 exp/async-m1m2 实验，复核（general agent）
     A/B/D 放行 + C 记录（IbUserFunction void 返回语义向主路径收敛）。补回归测试 +9（`test_call_drive_convergence.py`）。
-  - 设计记录 `tasks_docs/_code_yield_from.md` / `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`；完整逐项见 `WORKLOG.md` 与 git 历史。
+  - 设计记录 `（已清理任务文档）` / `_code_m1_call_dedup.md` / `_code_m2_drive_dedup.md`；完整逐项见 `WORKLOG.md` 与 git 历史。
 - **下一步候选（按优先级，见 `PENDING_TASKS.md` §〇 + `_HEALTH_AUDIT_PLAN.md`）**：
   1. **技术手册三修**（低风险立即可做）：`01_principles.md:258` P1 过时 `inherit_intents` 字段、`04_vm_interpreter.md:29`
      P2 `.call` 路径表述、`README` 目录树补 `15_diagnostics.md`。
@@ -496,7 +489,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - **阶段 5 `yield` 惰性生成器已完成（2026-08-08，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
   含 `yield` 函数自动为惰性生成器（D-08 自标记，async 关键字已取消），单可恢复驱动
   `_drive_generator_loop` + `GeneratorYield` 标记 + `IbGenerator` 值对象 + `generator[T]` 类型。
-  设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
+  设计权威 `（已清理任务文档）`。
 - **PT-FEAT-9 阶段 4 已完成（2026-08-07，unsafe-vibe-dev，全量 2021 passed / 1 skipped）**：
   `kernel_diagnostic` helper（单一记录双投影：警告不门控 + 事件受 observability 门控，rc best-effort）+
   12 处站点迁移（文案逐字）+ e2e 事件投影测试 + `docs/architecture/09_observability.md`。设计权威
@@ -567,7 +560,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     迭代解析中立归属 `shared/iterable.py`、非可迭代测试修正（`yield from` 无协议对象）、注释卫生（生产代码零任务代号）、
     文档单点真理（catalog↔doc 契约一致）。**兜底专项审计结论**：全部兜底属职责分离型合法 fallback
     （声明面能力查询/显式 None/决策点报错/契约强制完备），无 tricky/兼容妥协。
-  - 设计记录 `tasks_docs/_code_yield_from.md`；完整逐项见 `WORKLOG.md` 尾部。
+  - 设计记录 `（已清理任务文档）`；完整逐项见 `WORKLOG.md` 尾部。
 - **2026-08-08（异步地基遗留妥协审计，unsafe-vibe-dev，全量 2043 passed / 1 skipped）**：
   用户追问"异步是否已完整接入内核" → general subagent 全面只读审计 + 逐项代码核实。结论：**主流已完整**
   （协作调度器唯一执行核心/阻塞即挂起/Waitable 统一/trampoline/通知式唤醒/线程=IO/await+yield），
@@ -580,7 +573,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   yield 仅函数体内（`SEM_YIELD_OUTSIDE_FUNCTION`）+ 返回类型 `generator[T]`；类型 `GENERATOR` TypeKind +
   `generator[T]` 泛型全链路；VM `vm_handle_IbYieldExpr` yield `GeneratorYield` 标记 + `_drive_generator_loop`
   单可恢复驱动（与 `_drive_loop_gen` 同构）；运行时 `IbGenerator` 值对象 + `for`/`to_list` 迭代。
-  独立分支 exp/yield-generator 实验 → 手动应用 c8b8956。设计权威 `tasks_docs/YIELD_GENERATOR_DESIGN.md`。
+  独立分支 exp/yield-generator 实验 → 手动应用 c8b8956。设计权威 `（已清理任务文档）`。
   e2e 9 项（基础迭代/状态保留/嵌套循环/条件内 yield/break/生成器 as 值/LLM 组合/auto 赋值/非函数体报错）。
 - **2026-08-08（PT-DEBT-11/9/10 根治，unsafe-vibe-dev，全量 2029 passed / 1 skipped）**：
   ① **PT-DEBT-11**（4bf2644）——`UserFunctionCall` 下沉 `core/runtime/shared/user_call.py`（与 Signal/Waitable 同类叶子），handler/线程体不再向上依赖 VMExecutor 内部类；② **PT-DEBT-9**（c75541f）——环境限制异常（RecursionError/MemoryError/SystemError）根因保留：`core/runtime/shared/env_limits.py` 判定 + `diagnostics.handle_environment_limit` 发射 `KDIAG_RUNTIME_ENV_LIMIT` 诊断，VM 五处语义错误包装站点不再掩盖根因（+2 测试）；③ **PT-DEBT-10**——`_drive_generator` 改显式生成器栈（trampoline，与 `_drive_loop_gen` 同构），线程体内深递归不再嵌套 Python 栈；顺带根治线程体模块级函数解析（任务全局作用域链到模块作用域）、线程逻辑栈上限对齐主路径、`_vm_call_user_function`/`IbUserFunction.call`/`IbLLMFunction.call` push 后 finally 无条件 pop 的栈不均衡潜在 bug（+1 测试）。详见 WORKLOG 与 git 历史。
