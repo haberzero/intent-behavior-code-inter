@@ -25,7 +25,6 @@ from core.runtime.objects.kernel import (
     IbClass,
     IbLLMCallResult,
     IbUserFunction,
-    IbLLMFunction,
     _is_intent_context_param,
     _should_activate_intent_context_arg,
 )

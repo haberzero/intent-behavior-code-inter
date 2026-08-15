@@ -271,7 +271,7 @@ class _PromptMixin:
             method = ib_class.lookup_method('__outputhint_prompt__')
             if not method:
                 return None
-            from core.runtime.objects.kernel import IbUserFunction, IbLLMFunction
+            from core.runtime.objects.kernel import IbUserFunction
             if isinstance(method, IbUserFunction):
                 result = yield UserFunctionCall(method, [], ib_class)
             else:
