@@ -114,6 +114,10 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
         elif isinstance(node, ast.IbClassDef):
             for stmt in node.body:
                 self._analyze_node(stmt)
+        elif isinstance(node, ast.IbImplDef):
+            # retroactive impl 方法体与类方法同构：递归 llmexcept 绑定分析
+            for stmt in node.body:
+                self._analyze_node(stmt)
         elif isinstance(node, (ast.IbFor, ast.IbWhile, ast.IbIf)):
             # 递归进入控制流容器
             if hasattr(node, 'body') and node.body:
@@ -617,6 +621,9 @@ class IntentContextValidator:
         elif isinstance(node, ast.IbFunctionDef):
             self._validate_body(node.body)
         elif isinstance(node, ast.IbClassDef):
+            for stmt in node.body:
+                self._validate_node(stmt)
+        elif isinstance(node, ast.IbImplDef):
             for stmt in node.body:
                 self._validate_node(stmt)
         elif isinstance(node, (ast.IbFor, ast.IbWhile, ast.IbIf)):

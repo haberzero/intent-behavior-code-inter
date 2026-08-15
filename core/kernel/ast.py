@@ -213,13 +213,18 @@ class IbImplDef(IbStmt):
     Syntax::
 
         impl SomeProtocol for SomeType:
+            func method(self, ...) -> Ret:
+                ...
 
-    This is a compile-time declaration that an existing type satisfies a
-    protocol.  The type must already provide the required methods; this
-    declaration does not add new methods.
+    The declaration records that an existing type satisfies a protocol.
+    A body of function definitions may be provided to supply methods the
+    type is missing (retroactive method addition); an empty body keeps
+    the declaration-only form.  The type must already provide (or be
+    supplied here) all required methods.
     """
     protocol_name: str
     type_name: str
+    body: List[IbStmt] = field(default_factory=list)
 
     @property
     def creates_scope(self) -> bool:

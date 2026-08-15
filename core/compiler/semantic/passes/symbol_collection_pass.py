@@ -343,6 +343,48 @@ class SymbolCollector:
             self.current_class_is_enum = old_is_enum
             self.symbol_table = old_table
 
+    def visit_IbImplDef(self, node: ast.IbImplDef):
+        """访问 retroactive implementation 块：进入目标类成员上下文收集方法。
+
+        方法符号定义进目标类 owned_scope、成员同步进目标类 members
+        （与 visit_IbClassDef 同构）。与类自身成员同名的方法跳过定义
+        （冲突由类型检查阶段报单一明确错误）。
+        """
+        if not node.body:
+            return
+        sym = self.symbol_table.resolve(node.type_name)
+        if sym is None or sym.kind != SymbolKind.CLASS:
+            return  # 目标解析错误由类型检查阶段报
+        target_spec = sym.spec
+        owned_scope = getattr(sym, "owned_scope", None)
+        if target_spec is None or owned_scope is None:
+            return
+
+        old_table = self.symbol_table
+        old_class = self.current_class
+        old_is_enum = self.current_class_is_enum
+        self.symbol_table = owned_scope
+        self.current_class = target_spec
+        self.current_class_is_enum = False
+        try:
+            for stmt in node.body:
+                if not isinstance(stmt, ast.IbFunctionDef):
+                    continue  # 非方法语句由类型检查阶段报
+                if stmt.name in self.symbol_table.symbols:
+                    # 与类自身（或先前 impl）已定义成员冲突：fail-fast，
+                    # 跳过定义（类型检查阶段不再重复报）
+                    self.error(
+                        f"impl method '{stmt.name}' conflicts with an existing "
+                        f"member of class '{node.type_name}'.",
+                        stmt, code=SEM_REDEFINITION,
+                    )
+                    continue
+                self.visit(stmt)
+        finally:
+            self.symbol_table = old_table
+            self.current_class = old_class
+            self.current_class_is_enum = old_is_enum
+
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
         """访问函数定义节点（普通/LLM 统一：IbLLMFunctionDef 为子类）。
 

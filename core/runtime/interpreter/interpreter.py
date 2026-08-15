@@ -262,7 +262,7 @@ class Interpreter:
         self.current_module_name = None
 
         # 2. 注入全局符号与类定义
-        self._hydrate_user_classes(loaded.class_to_node)
+        self._hydrate_user_classes(loaded.class_to_node, loaded.impl_blocks)
         
         # 3.  STAGE 6: 预评估类字段 (Late Evaluation)
         if self._kernel_token:
@@ -613,7 +613,7 @@ class Interpreter:
         
         self.current_module_name = old_module
 
-    def _hydrate_user_classes(self, class_to_node: Dict[Any, Any]):
+    def _hydrate_user_classes(self, class_to_node: Dict[Any, Any], impl_blocks: Optional[list] = None):
         """ STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""
         old_module = self.current_module_name
         # class_to_node 键 = (module_name, name) 元组（跨模块同名类不碰撞）。
@@ -731,6 +731,39 @@ class Interpreter:
                 ],
             )
             ib_cls.register_method('__init__', auto_init_fn)
+
+        # retroactive impl 方法水化（封印前）：impl 块补充的方法注册到目标类。
+        # 与类方法水化同构（node_to_symbol → declared_type → IbUserFunction，
+        # owner_class 绑定）；注册先于封印，lookup_method 走既有继承链。
+        for impl_stmt_uid, impl_module in impl_blocks or []:
+            impl_data = self.get_node_data(impl_stmt_uid)
+            if not impl_data:
+                continue
+            type_name = impl_data.get("type_name")
+            target = self.registry.get_class(type_name, module=impl_module)
+            if target is None:
+                raise RuntimeError(
+                    f"VM: Hydration Leak: impl target class '{type_name}' "
+                    f"(module '{impl_module}') was not hydrated."
+                )
+            self.current_module_name = impl_module
+            for method_uid in impl_data.get("body", []):
+                stmt_data = self.get_node_data(method_uid)
+                if not stmt_data:
+                    continue
+                if stmt_data.get("_type") not in ("IbFunctionDef", "IbLLMFunctionDef"):
+                    continue
+                sym_uid = self.get_side_table("node_to_symbol", method_uid)
+                declared_type = self._resolve_type_from_symbol(sym_uid)
+                is_llm = stmt_data.get("_type") == "IbLLMFunctionDef"
+                user_func = IbUserFunction(
+                    method_uid, self._execution_context, spec=declared_type,
+                    owner_class=target,
+                    callable_kind="llm_function" if is_llm else "user_function",
+                    display_name="LLMFunction" if is_llm else None,
+                )
+                user_func.is_generator = bool(stmt_data.get("is_generator"))
+                target.register_method(stmt_data.get("name"), user_func)
 
         self.current_module_name = old_module
 

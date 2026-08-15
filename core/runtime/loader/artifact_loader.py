@@ -16,7 +16,8 @@ class LoadedArtifact:
                  entry_module: str,
                  artifact_rehydrator: ArtifactRehydrator,
                  artifact_dict: Dict[str, Any],
-                 class_to_node: Dict[Any, Any]):
+                 class_to_node: Dict[Any, Any],
+                 impl_blocks: Optional[list] = None):
         self.node_pool = node_pool
         self.symbol_pool = symbol_pool
         self.scope_pool = scope_pool
@@ -26,6 +27,9 @@ class LoadedArtifact:
         self.artifact_rehydrator = artifact_rehydrator
         self.artifact_dict = artifact_dict
         self.class_to_node = class_to_node
+        # retroactive impl 块（带方法体）：[(impl_stmt_uid, module_name), ...]
+        # 供类水化阶段把补充方法注册到目标类（封印前）。
+        self.impl_blocks = impl_blocks if impl_blocks is not None else []
 
 class ArtifactLoader:
     """
@@ -142,6 +146,18 @@ class ArtifactLoader:
                     # （geo.Box / graph.Box 各自对应自己的 AST 节点）。
                     class_to_node[(module_name, stmt_data.get("name"))] = (stmt_uid, module_name)
 
+        # 1bis. 扫描带方法体的 retroactive impl 块（方法水化在 STAGE 5 封印前注册）
+        impl_blocks = []
+        for module_name, module_data in artifact_dict.get("modules", {}).items():
+            if not isinstance(module_data, dict): continue
+            root_node_uid = module_data.get("root_node_uid")
+            root_node = node_pool.get(root_node_uid)
+            if not root_node: continue
+            for stmt_uid in root_node.get("body", []):
+                stmt_data = node_pool.get(stmt_uid)
+                if stmt_data and stmt_data.get("_type") == "IbImplDef" and stmt_data.get("body"):
+                    impl_blocks.append((stmt_uid, module_name))
+
         # 2. 预注册用户定义的类 (支持继承依赖)
         remaining = [c for c in user_classes if c.provenance == Provenance.USER_DEFINED]
         last_count = -1
@@ -220,5 +236,6 @@ class ArtifactLoader:
             entry_module=entry_module,
             artifact_rehydrator=hydrator,
             artifact_dict=artifact_dict,
-            class_to_node=class_to_node
+            class_to_node=class_to_node,
+            impl_blocks=impl_blocks,
         )

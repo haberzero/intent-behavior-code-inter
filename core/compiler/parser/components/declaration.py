@@ -298,18 +298,50 @@ class DeclarationComponent(BaseComponent):
         Syntax::
 
             impl SomeProtocol for SomeType:
+                func method(self, ...) -> Ret:
+                    ...
+
+        The body is optional: an empty body keeps the declaration-only
+        form (record the protocol on the type), while a body of function
+        definitions supplies missing protocol methods retroactively.
         """
         start_token = self.stream.previous()
         protocol_name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name after 'impl'.").value
         self.stream.consume(TokenType.FOR, "Expect 'for' in impl declaration.")
         type_name = self.stream.consume(TokenType.IDENTIFIER, "Expect type name after 'for'.").value
         self.stream.consume(TokenType.COLON, "Expect ':' after impl declaration.")
-        # 空 body：impl 只作声明，不添加方法。
-        self.stream.consume_end_of_statement("Expect newline after impl declaration.")
-        return self._loc(
+
+        node = self._loc(
             ast.IbImplDef(protocol_name=protocol_name, type_name=type_name),
             start_token,
         )
+
+        # 空 body（仅声明）或方法块：行尾后跟缩进即方法块。
+        if not self.stream.match(TokenType.NEWLINE):
+            raise self.stream.error(
+                self.stream.peek(),
+                "Expect newline after impl declaration.",
+                code=PAR_UNEXPECTED_TOKEN,
+            )
+        if self.stream.match(TokenType.INDENT):
+            # 方法块：v1 仅 func 方法定义（其它语句由语义层拒绝）。
+            body: List[ast.IbStmt] = []
+            while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
+                if self.stream.match(TokenType.NEWLINE):
+                    continue
+                if self.stream.check(TokenType.FUNC):
+                    self.stream.advance()  # 消费 func
+                    body.append(self.function_declaration())
+                else:
+                    raise self.stream.error(
+                        self.stream.peek(),
+                        "Only 'func' method definitions are allowed in an impl block.",
+                        code=PAR_UNEXPECTED_TOKEN,
+                    )
+            self.stream.consume(TokenType.DEDENT, "Expect dedent after impl block.")
+            node.body = body
+            return self._extend_loc(node, self.stream.previous())
+        return node
 
     def protocol_declaration(self) -> ast.IbProtocolDef:
         """Parse a protocol declaration.

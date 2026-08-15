@@ -206,6 +206,14 @@ class TypeAnnotationResolver:
         finally:
             self._type_param_stack.pop()
 
+    def resolve_IbImplDef(self, node: ast.IbImplDef):
+        """解析 retroactive implementation 块的方法体类型标注。
+
+        v1 目标类非泛型（泛型目标由类型检查阶段拒绝），无需类型参数栈。
+        """
+        for stmt in node.body:
+            self.resolve(stmt)
+
     def resolve_IbClassDef(self, node: ast.IbClassDef):
         """解析类定义"""
         self._type_param_stack.append(list(node.type_params))

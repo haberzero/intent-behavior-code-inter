@@ -151,6 +151,31 @@ class SymbolResolver(ScopedVisitor):
         for stmt in node.body:
             self.visit(stmt)
 
+    def visit_IbImplDef(self, node: ast.IbImplDef):
+        """访问 retroactive implementation 块：以目标类上下文解析方法体。
+
+        方法 def 获得与类方法相同的 self/super 注入与 node_to_symbol 绑定
+        （运行时方法体 self 解析依赖此映射），与 visit_IbClassDef 同构。
+        """
+        if not node.body:
+            return
+        sym = self.lookup_symbol(node.type_name)
+        if sym is None or sym.kind != SymbolKind.CLASS:
+            return  # 目标解析错误由类型检查阶段报
+        owned_scope = getattr(sym, "owned_scope", None)
+        if owned_scope is None:
+            return
+
+        saved_class = self.current_class_symbol
+        self.current_class_symbol = sym
+        self.push_scope(owned_scope)
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self.pop_scope()
+            self.current_class_symbol = saved_class
+
     def _register_params(self, args: list, scope: SymbolTable):
         """将函数参数注册为局部符号，并绑定 IbArg 节点到 node_to_symbol。
 

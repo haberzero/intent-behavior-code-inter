@@ -70,14 +70,30 @@ class DeclarationVisitorsMixin:
     def visit_IbImplDef(self, node: ast.IbImplDef) -> Optional[IbSpec]:
         """Process a retroactive implementation declaration.
 
-        This is a compile-time declaration that an existing type satisfies a
-        protocol.  It does not add new methods; it only records the protocol
-        on the class spec after verifying that all required methods exist.
+        The impl block may carry method definitions that are added to the
+        target class's member table (retroactive method addition), so the
+        protocol satisfaction check runs over the union of the type's own
+        methods and the impl-supplied methods.  An empty body keeps the
+        declaration-only form (verify + record the protocol on the type).
         """
         class_spec = self.registry.resolve(node.type_name)
         if class_spec is None or class_spec.kind != TypeKind.CLASS.value:
             self.error(
                 f"impl target '{node.type_name}' is not a known class.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return None
+        if getattr(class_spec, "provenance", None) != Provenance.USER_DEFINED:
+            self.error(
+                f"impl target '{node.type_name}' must be a user-defined class "
+                "(retroactive methods on built-in types are not supported).",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return None
+        if getattr(class_spec, "type_params", None):
+            self.error(
+                f"impl target '{node.type_name}' is generic; retroactive methods "
+                "on generic classes are not supported yet.",
                 node, code=SEM_TYPE_MISMATCH,
             )
             return None
@@ -89,6 +105,36 @@ class DeclarationVisitorsMixin:
             )
             return None
 
+        if node.body:
+            sym = self.lookup_symbol(node.type_name)
+            if sym is None or getattr(sym, "owned_scope", None) is None:
+                self.error(
+                    f"impl target '{node.type_name}' has no class scope.",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+                return None
+            old_class = self.current_class
+            old_in_class = self.in_class_def
+            self.current_class = class_spec
+            self.in_class_def = True
+            self.push_scope(sym.owned_scope)
+            try:
+                for stmt in node.body:
+                    if not isinstance(stmt, ast.IbFunctionDef):
+                        self.error(
+                            f"impl block for '{node.type_name}' may only contain "
+                            "'func' method definitions.",
+                            stmt, code=SEM_TYPE_MISMATCH,
+                        )
+                        continue
+                    # 与类自身成员冲突已在符号收集阶段 fail-fast 并跳过定义
+                    # （此处 members 已含收集阶段注入的 impl 方法，不可再比对）
+                    self.visit(stmt)
+            finally:
+                self.pop_scope()
+                self.in_class_def = old_in_class
+                self.current_class = old_class
+
         for method_name in self._protocol_required_methods(proto_spec):
             if not self._class_has_member_method(class_spec, method_name):
                 self.error(
@@ -98,6 +144,13 @@ class DeclarationVisitorsMixin:
                     node, code=SEM_TYPE_MISMATCH,
                 )
                 return None
+            # 签名兼容校验（与 class implements 检查同构；非泛型目标无类型映射）
+            proto_member = self._protocol_method_member(proto_spec, method_name)
+            class_member = (getattr(class_spec, "members", None) or {}).get(method_name)
+            if proto_member is not None and class_member is not None:
+                self._check_protocol_method_signature(
+                    node, node.protocol_name, method_name, proto_member, class_member,
+                )
 
         if node.protocol_name not in class_spec.implements:
             class_spec.implements.append(node.protocol_name)
@@ -246,6 +299,7 @@ class DeclarationVisitorsMixin:
           (covariant return).
         """
         type_mapping = type_mapping or {}
+        display_name = getattr(node, "name", None) or getattr(node, "type_name", "?")
         proto_params = [
             p.substitute(type_mapping) if type_mapping else p
             for p in (getattr(proto_member, "param_types", None) or [])
@@ -253,7 +307,7 @@ class DeclarationVisitorsMixin:
         class_params = list(getattr(class_member, "param_types", None) or [])
         if len(proto_params) != len(class_params):
             self.error(
-                f"Method '{method_name}' in class '{node.name}' has "
+                f"Method '{method_name}' in class '{display_name}' has "
                 f"{len(class_params)} parameter(s), but protocol '{protocol_name}' "
                 f"requires {len(proto_params)}.",
                 node, code=SEM_TYPE_MISMATCH,
