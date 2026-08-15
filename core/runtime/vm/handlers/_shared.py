@@ -305,28 +305,29 @@ def _vm_call_fn_callable(executor, func, args):
     return result
 
 
-def _vm_call_user_function(executor, func, receiver, args):
-    """CPS 内联执行用户函数（R1：EXEC-1 根治——调用不再嵌套 Python 栈）。
+def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
+    """Unified CPS call path for user functions and LLM functions.
 
-    与 ``_vm_call_fn_callable`` 平行：帧准备（意图 fork / 模块切换 / 作用域 /
-    闭包 cell / self+super / 实参绑定）移入生成器前奏，语句体经
-    ``_vm_execute_stmt_sequence`` **yield 进同一 VMTask 栈**（不再逐语句新建
-    调度器 + ``_drive_loop_gen``）。任一时刻 Python 活跃链仅
-    ``_drive_loop_gen → 栈顶 handler(gen) → _vm_call_user_function(gen)``，
-    与递归深度无关——深递归 Python 深度恒定（trampoline）。
+    This is the first execution-path unification step: both IbUserFunction
+    and IbLLMFunction share the same intent-fork / module-switch / scope /
+    stack / argument-binding preamble and postamble.  The only remaining
+    difference is the core execution strategy:
+    - user function: drive the AST body through the VM CPS loop;
+    - LLM function: invoke the LLM executor with the pre-bound arguments.
     """
     rt_context = executor.runtime_context
-    old_module = executor.ec.current_module_name
+    ec = func.context if is_llm else executor.ec
+    old_module = ec.current_module_name
     old_scope = rt_context.current_scope
 
-    # --- 意图栈作用域隔离（拷贝传递语义，与 IbUserFunction.call 一致）---
+    # --- 意图栈作用域隔离（拷贝传递语义）---
     saved_intent = rt_context.enter_intent_scope()
 
     if func.module_name and func.module_name != old_module:
-        executor.ec.current_module_name = func.module_name
+        ec.current_module_name = func.module_name
         try:
-            mod_inst = executor.ec.module_manager.import_module(
-                func.module_name, executor.ec
+            mod_inst = ec.module_manager.import_module(
+                func.module_name, ec
             )
             rt_context.current_scope = mod_inst.scope
         except Exception as e:
@@ -340,13 +341,13 @@ def _vm_call_user_function(executor, func, receiver, args):
 
     pushed = False
     try:
-        node_data = executor.ec.get_node_data(func.node_uid)
+        node_data = ec.get_node_data(func.node_uid)
         params_uids = node_data.get("args", [])
 
         rt_context.enter_scope()
 
-        # 绑定 nonlocal 闭包变量（Cell 共享引用，与 IbUserFunction.call 一致）
-        if func.closure:
+        # 普通函数：绑定 nonlocal 闭包变量（Cell 共享引用）。
+        if not is_llm and getattr(func, "closure", None):
             from core.runtime.objects.cell import IbCell
             for sym_uid, (var_name, cell) in func.closure.items():
                 if isinstance(cell, IbCell):
@@ -356,14 +357,14 @@ def _vm_call_user_function(executor, func, receiver, args):
                     rt_context.define_variable(
                         var_name, initial_value, uid=sym_uid,
                         declared_type=(
-                            executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+                            ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
                         ),
                     )
                     new_sym = rt_context.current_scope.get_symbol_by_uid(sym_uid)
                     if new_sym is not None:
                         new_sym.cell = cell
 
-        loc_data = executor.ec.get_side_table("node_to_loc", func.node_uid)
+        loc_data = ec.get_side_table("node_to_loc", func.node_uid)
         loc = None
         if loc_data:
             loc = Location(
@@ -371,7 +372,7 @@ def _vm_call_user_function(executor, func, receiver, args):
                 line=loc_data.get("line", 0),
                 column=loc_data.get("column", 0),
             )
-        executor.ec.push_stack(
+        ec.push_stack(
             name=node_data.get("name", "anonymous"),
             location=loc,
             is_user_function=True,
@@ -379,8 +380,8 @@ def _vm_call_user_function(executor, func, receiver, args):
         pushed = True
 
         ib_none = func.ib_class.registry.get_none()
-        if receiver and receiver is not ib_none:
-            self_sym = executor.ec.get_side_table("node_to_symbol", func.node_uid)
+        if not is_llm and receiver and receiver is not ib_none:
+            self_sym = ec.get_side_table("node_to_symbol", func.node_uid)
             self_uid = (
                 self_sym if isinstance(self_sym, str)
                 else (self_sym.uid if self_sym else None)
@@ -390,26 +391,24 @@ def _vm_call_user_function(executor, func, receiver, args):
                 super_proxy = IbSuperProxy(receiver, func.owner_class.parent)
                 rt_context.define_variable("super", super_proxy, uid="intrinsic:super")
 
-        # 泛型方法体内类型参数绑定（Box[T] 表达式位置的 T → 特化实参类型标识）。
-        # 编译期在函数节点收集 [name, sym_uid] 对（binding_analysis），此处把
-        # receiver 特化类（Box[int]）的实参类型对象按符号 UID 注册到方法作用域，
-        # 使方法体内 Box[T] slice 的 T 求值为类型标识（对齐 Box[int] slice int）。
-        _bind_type_params(executor, rt_context, func, receiver)
+        # 普通泛型方法体内类型参数绑定。
+        if not is_llm:
+            _bind_type_params(executor, rt_context, func, receiver)
 
         for i, arg_uid in enumerate(params_uids):
-            arg_data = executor.ec.get_node_data(arg_uid)
-            is_intent_ctx_param = _is_intent_context_param(executor.ec, arg_uid, arg_data)
+            arg_data = ec.get_node_data(arg_uid)
+            is_intent_ctx_param = _is_intent_context_param(ec, arg_uid, arg_data)
             actual_arg_uid = arg_uid
             actual_arg_data = arg_data
             if arg_data.get("_type") == "IbTypeAnnotatedExpr":
                 actual_arg_uid = arg_data.get("target")
-                actual_arg_data = executor.ec.get_node_data(actual_arg_uid)
+                actual_arg_data = ec.get_node_data(actual_arg_uid)
             arg_name = actual_arg_data.get("arg")
             if i < len(args):
                 arg_value = args[i]
-                sym_uid = executor.ec.get_side_table("node_to_symbol", actual_arg_uid)
+                sym_uid = ec.get_side_table("node_to_symbol", actual_arg_uid)
                 param_declared = (
-                    executor.ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+                    ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
                 )
                 rt_context.define_variable(
                     arg_name, arg_value, uid=sym_uid, declared_type=param_declared
@@ -417,11 +416,22 @@ def _vm_call_user_function(executor, func, receiver, args):
                 if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
                     rt_context.use_intent_context(arg_value)
 
-        # 逐语句 CPS 驱动函数体（yield 进同一 VMTask 栈，R1 trampoline 核心）
+        if is_llm:
+            llm_exec = func.ib_class.registry.get_llm_executor()
+            if llm_exec is None:
+                raise RuntimeError(
+                    f"IbLLMFunction '{func.node_uid}': LLM executor not registered in KernelRegistry. "
+                    "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
+                )
+            yield None
+            result = yield from llm_exec.invoke_llm_function_cps(func, ec)
+            return _wrap_function_result(executor, func, result)
+
+        # 普通函数：逐语句 CPS 驱动函数体。
         body = node_data.get("body", [])
         seq_result = yield from _vm_execute_stmt_sequence(executor, body)
 
-        # 控制流信号：RETURN → 提取值；BREAK/CONTINUE/THROW → 透传（与 run_body 语义一致）
+        # 控制流信号：RETURN → 提取值；BREAK/CONTINUE/THROW → 透传。
         if isinstance(seq_result, Signal):
             if seq_result.kind is ControlSignal.RETURN:
                 return _wrap_function_result(executor, func, seq_result.value)
@@ -429,11 +439,21 @@ def _vm_call_user_function(executor, func, receiver, args):
         return seq_result
     finally:
         if pushed:
-            executor.ec.pop_stack()
+            ec.pop_stack()
         rt_context.exit_scope()
         rt_context.exit_intent_scope(saved_intent)
-        executor.ec.current_module_name = old_module
+        ec.current_module_name = old_module
         rt_context.current_scope = old_scope
+
+
+def _vm_call_user_function(executor, func, receiver, args):
+    """CPS 内联执行用户函数（统一路径入口）。"""
+    return (yield from _vm_call_function(executor, func, receiver, args, is_llm=False))
+
+
+def _vm_invoke_llm_function(executor, func, receiver, args):
+    """CPS 执行 LLM 函数（统一路径入口）。"""
+    return (yield from _vm_call_function(executor, func, receiver, args, is_llm=True))
 
 
 def _vm_invoke_behavior(executor, behavior, args):
@@ -491,98 +511,6 @@ def _vm_invoke_behavior(executor, behavior, args):
         return result
     finally:
         rt_context.exit_scope()
-
-
-def _vm_invoke_llm_function(executor, func, receiver, args):
-    """CPS-friendly counterpart of :meth:`IbLLMFunction.call`.
-
-    Performs the same intent-context fork / module switch / scope enter /
-    push_stack / argument auto-binding bookkeeping as ``IbLLMFunction.call``,
-    yields once before the LLM HTTP invocation so the VMTask is on the frame
-    stack at execute time, then delegates to ``executor.invoke_llm_function``.
-    """
-    llm_exec = func.ib_class.registry.get_llm_executor()
-    if llm_exec is None:
-        raise RuntimeError(
-            f"IbLLMFunction '{func.node_uid}': LLM executor not registered in KernelRegistry. "
-            "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
-        )
-
-    rt_context = func.context.runtime_context
-    old_module = func.context.current_module_name
-    old_scope = rt_context.current_scope
-
-    saved_intent = rt_context.enter_intent_scope()
-
-    if func.module_name and func.module_name != old_module:
-        func.context.current_module_name = func.module_name
-        try:
-            mod_inst = func.context.module_manager.import_module(
-                func.module_name, func.context
-            )
-            rt_context.current_scope = mod_inst.scope
-        except Exception as e:
-            # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播
-            if handle_environment_limit(e, rc=rt_context):
-                raise
-            # 导入失败必须 fail-fast：否则模块名已切换而 scope 未切换，
-            # 函数会在错误模块上下文执行（全局符号解析静默错位）。
-            raise InterpreterError(
-                f"Failed to import module '{func.module_name}' for function call: {e}",
-                error_code=RUN_CALL_ERROR,
-            ) from e
-
-    try:
-        node_data = func.context.get_node_data(func.node_uid)
-        rt_context.enter_scope()
-
-        loc_data = func.context.get_side_table("node_to_loc", func.node_uid)
-        loc = None
-        if loc_data:
-            loc = Location(
-                file_path=loc_data.get("file_path"),
-                line=loc_data.get("line", 0),
-                column=loc_data.get("column", 0),
-            )
-
-        func.context.push_stack(
-            name=node_data.get("name", "llm_anonymous"),
-            location=loc,
-            is_user_function=True,
-        )
-
-        params_uids = node_data.get("args", [])
-        for i, arg_uid in enumerate(params_uids):
-            arg_data = func.context.get_node_data(arg_uid)
-            is_intent_ctx_param = _is_intent_context_param(func.context, arg_uid, arg_data)
-            actual_arg_uid = arg_uid
-            actual_arg_data = arg_data
-            if arg_data.get("_type") == "IbTypeAnnotatedExpr":
-                actual_arg_uid = arg_data.get("target")
-                actual_arg_data = func.context.get_node_data(actual_arg_uid)
-
-            arg_name = actual_arg_data.get("arg")
-            if i < len(args):
-                arg_value = args[i]
-                sym_uid = func.context.get_side_table("node_to_symbol", actual_arg_uid)
-                param_declared = (
-                    func.context.resolve_type_from_symbol(sym_uid) if sym_uid else None
-                )
-                rt_context.define_variable(
-                    arg_name, arg_value, uid=sym_uid, declared_type=param_declared
-                )
-                if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
-                    rt_context.use_intent_context(arg_value)
-
-        yield None
-        result = yield from llm_exec.invoke_llm_function_cps(func, func.context)
-        return _wrap_function_result(executor, func, result)
-    finally:
-        func.context.pop_stack()
-        rt_context.exit_scope()
-        rt_context.exit_intent_scope(saved_intent)
-        func.context.current_module_name = old_module
-        rt_context.current_scope = old_scope
 
 
 def build_one_shot_intent_from_annotation(
