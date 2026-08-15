@@ -148,7 +148,10 @@ def vm_handle_IbLLMFunctionDef(executor, node_uid: str, node_data: Mapping[str, 
     """LLM 函数定义：在当前作用域绑定 IbLLMFunction。"""
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
-    func = IbLLMFunction(node_uid, executor.ec, spec=declared_type)
+    func = IbUserFunction(
+        node_uid, executor.ec, spec=declared_type,
+        callable_kind="llm_function", display_name="LLMFunction",
+    )
     name = node_data.get("name")
     executor.runtime_context.define_variable(
         name, func, declared_type=declared_type, uid=sym_uid

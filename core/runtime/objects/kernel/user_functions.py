@@ -14,16 +14,16 @@ class IbUserFunction(IbFunction):
     用户定义的 IBC 函数。
     """
 
-    @property
-    def callable_kind(self) -> str:
-        return "user_function"
-
-    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None, owner_class: Optional['IbClass'] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None, owner_class: Optional['IbClass'] = None, callable_kind: str = "user_function", display_name: Optional[str] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.context = context
         self._spec = spec
         self.module_name = module_name or context.current_module_name
+        self._callable_kind = callable_kind
+        self._display_name = display_name or (
+            "LLMFunction" if callable_kind == "llm_function" else "Function"
+        )
         # 定义该方法的 IbClass（方法归属类）。用于 super() 支持。
         # 对于顶层函数，此字段为 None（不在类内）。
         self.owner_class: Optional['IbClass'] = owner_class
@@ -32,6 +32,10 @@ class IbUserFunction(IbFunction):
         # 惰性生成器（含 yield，D-08 自标记函数种类）。为 True 时 call() 返回
         # IbGenerator（不执行体），迭代驱动函数体、yield 点产出值。
         self.is_generator: bool = False
+
+    @property
+    def callable_kind(self) -> str:
+        return self._callable_kind
 
     @property
     def spec(self) -> Optional[IbSpec]:
@@ -85,30 +89,9 @@ class IbUserFunction(IbFunction):
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)
         name = node_data.get("name", "unknown")
-        return f"<Function '{name}'>"
+        return f"<{self._display_name} '{name}'>"
 
-class IbLLMFunction(IbUserFunction):
-    """
-    用户定义的 LLM 函数。
 
-    Inherits from IbUserFunction so that ordinary functions and LLM functions
-    share the same runtime object shape. The only difference is callable_kind,
-    which makes the unified call path dispatch to the LLM executor.
-    """
-
-    @property
-    def callable_kind(self) -> str:
-        return "llm_function"
-
-    def __init__(self, node_uid: str, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
-        super().__init__(
-            node_uid=node_uid,
-            context=context,
-            spec=spec,
-            module_name=module_name,
-        )
-
-    def __repr__(self):
-        node_data = self.context.get_node_data(self.node_uid)
-        name = node_data.get("name", "unknown")
-        return f"<LLMFunction '{name}'>"
+# Compatibility alias: LLM functions are now ordinary function objects with
+# callable_kind="llm_function".  The alias keeps existing imports working.
+IbLLMFunction = IbUserFunction
