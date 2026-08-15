@@ -2,8 +2,8 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-15（**真实 LLM 调用专项试用 + 三项修复完成**；
-> 🔴 下一主线候选：**PT-FEAT-14 IBCI LLM 调用接口通用化/供应商感知配置**。
+> **最后更新**：2026-08-15（**用户改主线**：PT-FEAT-14 暂缓；
+> 🔴 下一主线：**IBCI LLM 全能力真实压力试用（本地 qwen）**。
 > 全量 pytest 当前 2789 passed / 1 skipped）
 >
 > **✅ 已完成（2026-08-15，真实 LLM 调用专项试用，全量 2789 passed / 1 skipped 零回归）**：
@@ -15,12 +15,11 @@
 > 基名回退。自检结论：修复遵循既有 fork 快照/单一权威组装模式，无兼容层、
 > 无 tricky、无纯快速修复。
 >
-> **🔴 下一主线候选（2026-08-15 真实 LLM 专项暴露，已登记 PT-FEAT-14）**：
-> **IBCI LLM 调用接口通用化 / 供应商感知配置**。`AIPlugin` 仍硬编码 LM Studio
-> 专用 `enable_thinking`/`chat_template_kwargs` extra_body，且 `max_tokens=4096`
-> 未参数化——自定义 OpenAI 兼容 API 的开发者无法干净接入。需将请求参数
-> （extra_body / max_tokens / reasoning / 思考抑制）下沉为 provider/model 级
-> 配置，并补齐供应商感知思考禁用机制。详见 `PENDING_TASKS.md` §〇 PT-FEAT-14 行。
+> **🔴 下一主线（2026-08-15 用户指定）**：
+> **IBCI LLM 全能力真实压力试用（本地 qwen）**。用本地 qwen 模型真实调用，
+> 检查 IBCI 承诺的所有直接/间接 LLM 能力。范围与工作模式详见
+> `PENDING_TASKS.md` §〇 P0 行 + `HANDOFF.md` §2.1 交接块。PT-FEAT-14
+> 已暂缓（见 PENDING_TASKS §〇 暂缓行）。
 >
 > **✅ 已完成（2026-08-15，exp/llm-prompt-mechanism → unsafe-vibe-dev，全量 2789 passed / 1 skipped 零回归）**：
 > **IBCI LLM 调用机制改进（T5 枚举解析失败暴露的机制弱点）A-D 四项落地**。

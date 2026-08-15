@@ -115,6 +115,37 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md` §〇（优先级总表）+ `tasks_docs/WORKLOG.md`（近期工作日志）
 > + git 历史 `80783c8..HEAD`。
 
+- **🔴 当前主线（2026-08-15 用户指定，下一 session 接手执行）：IBCI LLM 全能力真实压力试用（本地 qwen）**。
+  **目标**：真实调用本地 qwen 模型，系统检查 IBCI 承诺的所有直接/间接 LLM 能力，
+  验证“LLM 是语言第一成员”是否名副其实；发现缺陷自主修复（可破坏性重构，按
+  AGENTS/HANDOFF 原则），全量 pytest 零回归 + 交接。
+  **环境**：本机 LM Studio `qwen3.6-35b-a3b` @ `http://127.0.0.1:1234/v1`；
+  当前服务可用，思考已禁用（响应约 1-2s）。真实配置见
+  `trials/T01_llm_full/api_config.json`；运行入口 `trials/_toolkit/run_batch.py` /
+  `run_one.py`（先探测服务再跑 LLM 批）。
+  **已有基线**：全量 pytest 2789 passed / 1 skipped；真实 LLM 扫描 T01 57
+  （54 PASS + 2 GUARD + 1 LLM_BEHAVIOR）、T02 3 PASS、T05 cases_D3 8 PASS、
+  T06 7 PASS、T07 7 PASS。
+  **压力维度（下一 session 按此展开）**：
+  1. 内联行为表达式：赋值/条件/循环/表达式语句/dispatch-before-use/run_batch 并发。
+  2. 输出类型解析：int/float/bool/str/list/dict/enum/跨模块用户类；`__from_prompt__`/
+     `__validate_prompt__`/`__outputhint_prompt__`/`__to_prompt__` 协议全链路。
+  3. 意图系统：`@`/`@!`/`@+`/global intents/`mask`/意图上下文；意图与类型输出约束
+     优先级；run_batch 意图注入。
+  4. 命名 LLM 函数：`__sys__`/`__user__`/`__llmretry__`/参数插值/返回类型/函数值。
+  5. 重试与自愈：llmexcept/llmretry/自动错误回喂（多轮对话形态）/快照隔离/耗尽。
+  6. 批量、流式与模型路由：`ai.run_batch`/`stream_call`/`stream_channel`/
+     `ai.register_model` + `@NAME~`/`ai.probe_model`。
+  7. 配置与观测：`ai.set_config`/`load_project_config`/`get_current_call_info`/
+     类型提示注册；配置错误/服务不可达/provider 失败路径。
+  8. 间接相关：LLM 与 thread/chan/generator/文件容器交互；多模块/插件项目中的
+     LLM 调用；长 prompt/非确定性/超时边界。
+  9. 多模态：media Phase 4 封存，仅核验 `__payload_prompt__` 协议在当前边界内行为。
+  **运行方式**：优先 `trials/` 已有套件，缺口新写用例到 `trials/T08_llm_pressure/`
+  （新增套件需更新 `trials/INDEX.md`）；mock 对照 + 真实 qwen 主跑。
+  **交接纪律**：本地 commit、禁 push；发现与修复写入 WORKLOG；状态同步
+  NEXT_STEPS/PENDING_TASKS/HANDOFF。
+
 - **✅ 已完成（2026-08-15，exp/llm-prompt-mechanism → unsafe-vibe-dev，全量 2787 passed / 1 skipped 零回归）：
   IBCI LLM 调用机制改进（T5 枚举解析失败暴露）A-D 四项落地**。A 枚举输出约束注入
   module 感知修复；B 程序化调用纪律；C 期望输出类型注入；D retry 自动错误回喂。

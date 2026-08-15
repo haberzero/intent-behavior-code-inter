@@ -2,9 +2,11 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-15（真实 LLM 调用专项试用 + 三项修复，全量 2789 passed / 1 skipped）
+> 最后更新：2026-08-15（用户改主线：IBCI LLM 全能力真实压力试用为下一主线，PT-FEAT-14 暂缓）
 
 ---
+
+| **主线变更（2026-08-15 用户指定）** | **PT-FEAT-14 暂缓；下一主线 = IBCI LLM 全能力真实压力试用（本地 qwen）。** 用户要求专注 LLM 一侧，真实调用本地 qwen 模型，检查 IBCI 承诺的所有直接/间接 LLM 能力。压力维度、环境、基线、运行方式已写入 HANDOFF §2.1 交接块；PENDING_TASKS §〇 P0 行同步。本 session 完成交接准备，未启动 T08 压力套件。 |---
 
 | **真实 LLM 调用专项试用 + 三项修复（2026-08-15，unsafe-vibe-dev，全量 2789 passed / 1 skipped）** | **围绕“LLM 作为语言第一成员”的真实试用扫描。** 运行真实 LLM 用例：T01 57 例（54 PASS + 2 GUARD + 1 LLM_BEHAVIOR）、T02 3 PASS、T05 cases_D3 8 PASS、T06 7 PASS、T07 7 PASS。**发现并修复三项**：① **run_batch 语句级 @!/@ 意图只被批内第一条调用消费**——`_run_batch_sync/_run_batch_cps` 每个 item 独立 fork 意图快照，批内每个 LLM 调用都看到一次性意图；补契约测试 `TestRunBatchIntentInjection`。② **排他意图与类型输出格式冲突**——存在 `@!` override 时抑制类型级输出约束（不再出现 bool 要求 true/false 与用户要求 YES/NO 打架）；D1-09-001 三连稳定。③ **bool 输出提示收窄引发冲突**——bool hint 放宽为 true/false、yes/no、1/0 全形态；D1-07-002 三连稳定。另：`get_return_type_prompt` 增加泛型基名回退（list[int] -> list）。**试用卫生**：D1-07-002 断言改 `pi_ok` 稳定判定；D1-07-005 期望 keys 增 `message_history`；D3-40 改 LLM_BEHAVIOR（注入正确性由契约测试保证，模型服从性属 LLM 行为）。**记录待后续设计**：AIPlugin 硬编码 LM Studio `enable_thinking` extra_body 与 `max_tokens=4096` 仍影响自定义 OpenAI 兼容 API 的通用性；供应商感知思考禁用仍为 P2 待设计。 |---
 
