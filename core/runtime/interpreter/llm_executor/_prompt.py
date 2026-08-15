@@ -214,6 +214,10 @@ class _PromptMixin:
             """回退：通过用户类 vtable 查找 __outputhint_prompt__（类方法语义）"""
             ib_class = self.registry.get_class(type_name, module=module)
             if ib_class:
+                meta = self.registry.get_metadata_registry()
+                if (meta is not None and getattr(ib_class, "spec", None) is not None
+                        and not meta.satisfies_protocol(ib_class.spec, "output_hint")):
+                    return None
                 method = ib_class.lookup_method('__outputhint_prompt__')
                 if method:
                     # lookup_method 已预检方法存在——此处无"协议缺失"情形；
@@ -267,6 +271,10 @@ class _PromptMixin:
             """用户类 vtable hint：yield UserFunctionCall 驱动（CPS 主路径）。"""
             ib_class = self.registry.get_class(type_name, module=module)
             if not ib_class:
+                return None
+            meta = self.registry.get_metadata_registry()
+            if (meta is not None and getattr(ib_class, "spec", None) is not None
+                    and not meta.satisfies_protocol(ib_class.spec, "output_hint")):
                 return None
             method = ib_class.lookup_method('__outputhint_prompt__')
             if not method:
