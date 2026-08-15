@@ -236,12 +236,13 @@ class TypeCheckBase:
         # 回退），无独立输出契约，运行期 box 为字符串。
         if spec.kind == TypeKind.CALLABLE_INSTANCE.value and spec.get_base_name() in ("behavior", "fn_callable"):
             return True
-        if self.registry.get_from_prompt_cap(spec) is not None:
+        # Protocol-kernel path: from_prompt/parser are now first-class
+        # protocols. This replaces the previous hard-coded capability and
+        # dunder-member checks.
+        if self.registry.satisfies_protocol(spec, "from_prompt"):
             return True
-        if self.registry.get_parser_cap(spec) is not None:
+        if self.registry.satisfies_protocol(spec, "parser"):
             return True
-        if spec.kind == TypeKind.CLASS.value:
-            return self._class_has_member_method(spec, "__from_prompt__")
         return False
 
     def _check_behavior_output_parseable(self, spec: Optional[IbSpec], node: ast.IbASTNode) -> None:
