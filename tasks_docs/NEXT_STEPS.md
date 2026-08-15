@@ -2,11 +2,27 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-15（**✅ IBCI LLM 调用机制改进已落地 unsafe-vibe-dev**，
-> 全量 2787 passed / 1 skipped。当前无未决 P0 主线候选；下一主线可结合
-> `PENDING_TASKS.md` §〇 与已知残留择定）
+> **最后更新**：2026-08-15（**真实 LLM 调用专项试用 + 三项修复完成**；
+> 🔴 下一主线候选：**PT-FEAT-14 IBCI LLM 调用接口通用化/供应商感知配置**。
+> 全量 pytest 当前 2789 passed / 1 skipped）
 >
-> **✅ 已完成（2026-08-15，exp/llm-prompt-mechanism → unsafe-vibe-dev，全量 2787 passed / 1 skipped 零回归）**：
+> **✅ 已完成（2026-08-15，真实 LLM 调用专项试用，全量 2789 passed / 1 skipped 零回归）**：
+> 真实 LLM 全量扫描：T01 57（54 PASS + 2 预期 GUARD + 1 LLM_BEHAVIOR）、
+> T02 3、T05 cases_D3 8、T06 7、T07 7。修复三项：① run_batch 每条调用独立
+> fork 意图快照（语句级 @!/@ 不再被批内首条调用消费）；② @! 排他意图抑制
+> 类型级输出约束（消除 bool 格式与用户 YES/NO 指令冲突）；③ bool 输出提示
+> 放宽为 true/false、yes/no、1/0 全形态。另 `get_return_type_prompt` 泛型
+> 基名回退。自检结论：修复遵循既有 fork 快照/单一权威组装模式，无兼容层、
+> 无 tricky、无纯快速修复。
+>
+> **🔴 下一主线候选（2026-08-15 真实 LLM 专项暴露，已登记 PT-FEAT-14）**：
+> **IBCI LLM 调用接口通用化 / 供应商感知配置**。`AIPlugin` 仍硬编码 LM Studio
+> 专用 `enable_thinking`/`chat_template_kwargs` extra_body，且 `max_tokens=4096`
+> 未参数化——自定义 OpenAI 兼容 API 的开发者无法干净接入。需将请求参数
+> （extra_body / max_tokens / reasoning / 思考抑制）下沉为 provider/model 级
+> 配置，并补齐供应商感知思考禁用机制。详见 `PENDING_TASKS.md` §〇 PT-FEAT-14 行。
+>
+> **✅ 已完成（2026-08-15，exp/llm-prompt-mechanism → unsafe-vibe-dev，全量 2789 passed / 1 skipped 零回归）**：
 > **IBCI LLM 调用机制改进（T5 枚举解析失败暴露的机制弱点）A-D 四项落地**。
 > ① A 修复：`_try_axiom_output_hint` module 感知，`_get_llmoutput_hint(_cps)`
 > node_to_type 与 returns IbName 分支同 module 解析——枚举 `__outputhint_prompt__`
