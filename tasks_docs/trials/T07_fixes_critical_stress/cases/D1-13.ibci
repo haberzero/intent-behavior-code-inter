@@ -1,6 +1,6 @@
-# 幽灵码观察：未声明属性读取（p.y）→ 实际返回 None（文档称应报 RUN_ATTRIBUTE_ERROR）
+# 幽灵码观察：未声明属性读取（p.y）→ 抛 RUN_ATTRIBUTE_ERROR（ATTR-READ-1 修复后核销）
 # doc: docs/syntax/15_diagnostics.md RUN_ATTRIBUTE_ERROR
-# expect-class: KERNEL_ISSUE
+# expect-class: PASS
 # expect-code: RUN_ATTRIBUTE_ERROR
 # expect-exit: nonzero
 class Point:

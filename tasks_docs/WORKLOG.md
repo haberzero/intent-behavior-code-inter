@@ -2,7 +2,7 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-14（fn[(...)->...]（CALLABLE_SIG）签名模型根治；全量 2775 passed / 1 skipped）
+> 最后更新：2026-08-14（完整 IBCI 真实代码试用核查；近期改动零回归）
 
 ---
 
@@ -15,6 +15,10 @@
 ---
 
 | **fn[(...)->...]（CALLABLE_SIG）签名模型根治（2026-08-14，exp/callable-sig-signature → unsafe-vibe-dev，全量 2775 passed / 1 skipped）** | **KNOWN_LIMITS §10.4"潜伏边界"深挖推翻——真实类型安全漏洞根治**。**深挖实证**：① 匹配双通道——`_matches_callable_sig`（is_assignable 路径）只查参数数量+返回类型，不查逐参数类型，`fn[(Box[int])->int]` 收 `get2(str)->int` 编译期放行、运行期 RUN_TYPE_MISMATCH（漏洞 1）；② 嵌套类型参数不替换——扁平构造 `TypeRef('Box[T]')` substitute 不可穿透，`Host[int]` 特化后 `fn[(Box[T])->int]` 的 `T` 未替换 → 调用点 `resolve("Box[T]")` miss → 检查静默跳过（漏洞 2）。**根因**：CALLABLE_SIG 构造用 `TypeRef.of(p.name)` 扁平化（与 fn/callable 断层同源——泛型结构化地基后签名构造/匹配未跟随升级），且匹配双实现。**根治**：① 结构化构造（`TypeRef.from_spec` 替代扁平化，产出 TypeRef('Box',(T,))，substitute 可穿透）；② 结构化重建（resolve_typeref fn 分支保留嵌套实参）；③ 统一匹配（`_matches_callable_sig` 补逐参数类型检查 + 两 matcher/strategy-2 改 resolve_typeref，收敛双通道）；④ 延后规则（仅裸类型参数占位延后；`spec_has_any_generic_arg` 结构化判定 any 通配/T 降级不误拒模板；带实参不可解析 fail-fast）。**判别性回归 +10**（TestCallableSigSignature：漏洞 1/2 编译期拦截、泛型特化替换匹配、嵌套实参常规消费、协变返回、lambda 返回/参数数量不匹配、序列化 round-trip）+ 模板回归 2。**两轮独立复核（general agent）P1 已整改**（fail-fast 过度误拒模板 → 延后；`spec_has_any_generic_arg` name 子串假阳性 → 结构化逐实参）。KNOWN_LIMITS §10.4 定性更新（潜伏→已根治）。设计/实施 `_DESIGN_CALLABLE_SIG_SIGNATURE.md`。**已知残留**：`list[fn]` 容器元素级强制可调用未接线。 |
+
+---
+
+| **完整 IBCI 真实代码试用核查（2026-08-14，只记录不修复内核）** | **用户指示：确认近期代码改动（断层根治 + fn/callable 方向 A + CALLABLE_SIG 根治）对已知试用代码的影响；试用问题只记录，试用代码过期则更新；试用代码贴近一般编程语言体验、不绕过 IBCI 缺陷、缺陷忠实呈现**。**全量重跑**：T01-T07 试用地基（mock 批 run_batch --mock-only + 真实 LLM 批 run_batch --llm-only + T05/T06 子目录 run_one --root=用例目录，qwen3.6-35b-a3b 在线）。**结果：近期改动对已知试用代码零回归**——T01 mock 37P+6G+4H(支持/探针) / LLM 55P+2G；T02 mock 5P+1L / LLM 2P+1 LLM_BEHAVIOR；T03 23P+6G+1H(故意超时)；T04 26P+8G+1H；T05 平铺 18P+1G + 子目录 13P；T06 子目录 20P（含真实 LLM D3-02 核销）；T07 mock 32P+12G / LLM 7P。**处置**：① 4 例过期触发用例（T05 D1-10 CROSSMOD-THREAD-1 / T07 D1-13 ATTR-READ-1 / D2-09 OPTIONAL-SCOPE-1 / D2-10 OPTIONAL-CONTAINER-1）缺陷已修复、.ibci 仍声明 KERNEL_ISSUE → 更新 expect-class→PASS（核销契约，触发场景保留）；② T02 T5-enum-value-ne-name 真实 LLM 间歇格式偏离（3 次 2 败 1 过，严格解析器 LLMParseError）→ 记录 LLM_BEHAVIOR（模型非确定性，非内核回归；解析器鲁棒性候选 P3，需 raw response 实证后登记）；③ 无新增 KERNEL_ISSUE/BOUNDARY/DOC_ISSUE。试用代码卫生核对：无绕过 IBCI 缺陷的特定代码，触发用例忠实保留场景。报告 `tasks_docs/trials/VERIFICATION_20260814.md`；INDEX.md 同步。 |
 
 ---
 

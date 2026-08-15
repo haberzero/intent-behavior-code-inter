@@ -1,7 +1,6 @@
-# Optional 值模型观察：函数内局部 Optional 先 None 后赋非 None 值，unwrap() 报 RUN_ATTRIBUTE_ERROR
-# （顶层同代码成功；文档 arch/03_type_system §8 声明 unwrap 可用）
+# Optional 值模型：函数内局部 Optional 先 None 后赋非 None 值，unwrap() 正常（OPTIONAL-SCOPE-1 修复后核销）
 # doc: docs/architecture/03_type_system.md §8
-# expect-class: KERNEL_ISSUE
+# expect-class: PASS
 # expect-out: 405
 # expect-exit: 0
 func work() -> int:

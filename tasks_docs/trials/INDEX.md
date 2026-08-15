@@ -10,9 +10,10 @@
 |----|------|------|------|----------|--------------------|
 | `T01_llm_full` | 真实 LLM 全语法/压力/批判试用（原 `_LLM_TRIAL_20260812`） | 2026-08-12 | 104 cases / 113 运行 | D1-D3 全过；A1-A5/C1-C4 验证 | `KERNEL_ISSUE-VM-1`~`CONFIG-1`（已修）、`DOC-ISSUE-001~007`（已处置）、`BOUNDARY-*-*`（已记录） |
 | `T02_enum_import` | enum 补全 + 嵌套包 import 用户试用（原 `_LLM_TRIAL_ENUM_IMPORT_20260812`） | 2026-08-12 | 9 例 | 全 PASS / 1 LIMIT（2026-08-13 重构断言，映射有效性） | 无 |
+| `T02_enum_import`（2026-08-14 全量核查重跑） | — | 2026-08-14 | 9 例（mock 6 + LLM 3） | mock 5 PASS + 1 LIMIT；LLM 2 PASS + **1 LLM_BEHAVIOR**（T5-enum-value-ne-name 间歇格式偏离，非内核缺陷） | 无 |
 | `T03_user_class_generics` | 用户类泛型压力/恶意试用（原 `_GENERICS_TRIAL_20260812`） | 2026-08-12 | 30 运行 | 23 PASS + 6 GUARD + 1 HARNESS（smoke；2026-08-14 重跑 D2-07 chan 迁普适写法转 PASS） | `KERNEL_ISSUE-GEN-1/2/3`、`BOUNDARY-GEN-1`（已修）、`KERNEL_ISSUE-GEN-6`（**已修 2026-08-13**） |
 | `T04_generics_fix_regression` | 泛型修复回归试用（原 `_GENERICS_TRIAL_FIX_20260812`） | 2026-08-12 | 33 例 | 26 PASS + 7 GUARD + 1 HARNESS（smoke；2026-08-14 重跑 R5-03 chan 迁普适写法转 PASS） | `KERNEL_ISSUE-GEN-4`（已修）、`BOUNDARY-GEN-2`（已修，用例重构核销）、`KERNEL_ISSUE-GEN-5`（**已修 2026-08-13**） |
-| `T05_critical_stress` | 批判性压力试用（跨模块类表 module 化后内核 + 真实 LLM + 文档全量核验） | 2026-08-14 | 40 用例 | 37 PASS + 1 GUARD + 2 KERNEL_ISSUE | `KERNEL_ISSUE-CROSSMOD-THREAD-1`（**已核销 2026-08-14，T07 D1-10 转 PASS**）、`KERNEL_ISSUE-OPTIONAL-ISNONE-1`（**已核销 2026-08-14，D2-03 转 PASS True|True|False**）、`DOC_ISSUE-1~23`（代码联动项已修，文档部分已治理） |
+| `T05_critical_stress` | 批判性压力试用（跨模块类表 module 化后内核 + 真实 LLM + 文档全量核验） | 2026-08-14 | 40 用例 | 37 PASS + 1 GUARD + 2 KERNEL_ISSUE | `KERNEL_ISSUE-CROSSMOD-THREAD-1`（**已核销 2026-08-14，D1-10 .ibci expect-class→PASS**）、`KERNEL_ISSUE-OPTIONAL-ISNONE-1`（**已核销 2026-08-14，D2-03 转 PASS True|True|False**）、`DOC_ISSUE-1~23`（代码联动项已修，文档部分已治理） |
 | `T06_class_identity` | 统一类身份模型回归 + 真实试用（Task1 S1-S4 根治验证 + T05 KI-1 核销） | 2026-08-14 | 20 用例 | 18 PASS + 2 KERNEL_ISSUE（同一根因） | `KERNEL_ISSUE-CROSSMOD-LLM-1`（**已核销 2026-08-14，T07 D3 重验**） |
 | `T07_fixes_critical_stress` | 四项修复批判性对抗 + 旧套件 T01-T06 全量重跑（用户强调） + 泛型边界复测 | 2026-08-14 | 43 用例 + 旧套件 238 重跑 | 28 PASS + 12 GUARD + 3 KERNEL_ISSUE；旧套件 202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言) + 9 HARNESS | `KERNEL_ISSUE-OPTIONAL-SCOPE-1`、`KERNEL_ISSUE-OPTIONAL-CONTAINER-1`、`KERNEL_ISSUE-ATTR-READ-1`（均**已修复 2026-08-14，触发用例核销**） |
 | `T07_fixes_critical_stress`（E 批判补充批次，2026-08-14 第二 session 复核） | 三项 P1 修复有效性 + 边界挑刺（T07 后置独立批） | 2026-08-14 | +8 用例（E1-E8） | **5 PASS + 1 BOUNDARY + 2 DOC_ISSUE**（委托链全矩阵 PASS；空值错误码不一致 + 嵌套函数返回类型边界）→ **E1-E8 全 PASS**（2026-08-14 修复后核销） | `DOC-29`（空 Optional 错误码，**已修复 19920d39**）、`BOUNDARY-NESTED-FUNC-1`（返回类型校验，**已修复 19920d39**） |
@@ -41,9 +42,9 @@
 
 | 新 | 主题 | 状态 | 触发用例 |
 |----|------|------|----------|
-| `KERNEL_ISSUE-OPTIONAL-SCOPE-1` | 函数作用域内 Optional 先 None 后赋值，unwrap()/is_some() 报 `Object of type 'None'`（顶层/lambda 正常，文档 §8"任何路径可用"不成立） | **已修复（2026-08-14，D2-09 PASS 核销）** | `T07/.../D2-09.ibci` |
-| `KERNEL_ISSUE-OPTIONAL-CONTAINER-1` | Optional[list[int]] 有值包装后 len()/下标不可用（`no method 'len'`/`'__getitem__'`） | **已修复（2026-08-14，D2-10 PASS 核销）** | `T07/.../D2-10.ibci` |
-| `KERNEL_ISSUE-ATTR-READ-1` | 未声明属性读取静默返回 None（仅调用路径报 RUN_ATTRIBUTE_ERROR，15_diagnostics 触发条件不符） | **已修复（2026-08-14，D1-13 PASS 核销）** | `T07/.../D1-13.ibci` |
+| `KERNEL_ISSUE-OPTIONAL-SCOPE-1` | 函数作用域内 Optional 先 None 后赋值，unwrap()/is_some() 报 `Object of type 'None'`（顶层/lambda 正常，文档 §8"任何路径可用"不成立） | **已修复（2026-08-14，D2-09 PASS 核销，.ibci expect-class→PASS）** | `T07/.../D2-09.ibci` |
+| `KERNEL_ISSUE-OPTIONAL-CONTAINER-1` | Optional[list[int]] 有值包装后 len()/下标不可用（`no method 'len'`/`'__getitem__'`） | **已修复（2026-08-14，D2-10 PASS 核销，.ibci expect-class→PASS）** | `T07/.../D2-10.ibci` |
+| `KERNEL_ISSUE-ATTR-READ-1` | 未声明属性读取静默返回 None（仅调用路径报 RUN_ATTRIBUTE_ERROR，15_diagnostics 触发条件不符） | **已修复（2026-08-14，D1-13 PASS 核销，.ibci expect-class→PASS）** | `T07/.../D1-13.ibci` |
 
 ### 域 CHAN（BOUNDARY，2026-08-14 记录）
 

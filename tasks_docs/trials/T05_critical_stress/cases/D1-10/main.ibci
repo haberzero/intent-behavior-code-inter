@@ -1,6 +1,6 @@
-# 跨模块类作 thread 值类型 + join 结果
+# 跨模块类作 thread 值类型 + join 结果（CROSSMOD-THREAD-1 修复后核销）
 # doc: docs/syntax/14_concurrency.md
-# expect-class: KERNEL_ISSUE
+# expect-class: PASS
 # expect-out: 405 | thread-ok
 # expect-exit: 0
 import geo
