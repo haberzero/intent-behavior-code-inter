@@ -60,7 +60,7 @@ Git 管理。
 单用例运行：
 
 ```bash
-python trials/_toolkit/run_one.py trials/T<nn>_<主题>/cases/<case>.ibci \
+python trials/_toolkit/run_one.py cases/<case>.ibci \
     --label <case_id> --dim <dim> --doc <章节> --expected <描述> \
     --timeout <秒，必填> --root trials/T<nn>_<主题>
 ```

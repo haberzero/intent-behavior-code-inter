@@ -64,7 +64,7 @@ python trials/_toolkit/run_batch.py trials/T01_llm_full --llm-only --timeout 60
 ## 五、运行单个用例
 
 ```bash
-python trials/_toolkit/run_one.py trials/T01_llm_full/cases/D1-01-001-basetypes.ibci \
+python trials/_toolkit/run_one.py cases/D1-01-001-basetypes.ibci \
     --label D1-01-001 --dim D1 --doc "syntax/01_types.md" --expected "基础类型输出" \
     --timeout 60 --root trials/T01_llm_full
 ```
