@@ -13,6 +13,11 @@ class IbUserFunction(IbFunction):
     """
     用户定义的 IBC 函数。
     """
+
+    @property
+    def callable_kind(self) -> str:
+        return "user_function"
+
     def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None, owner_class: Optional['IbClass'] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
@@ -85,6 +90,11 @@ class IbLLMFunction(IbFunction):
     IbLLMFunction 与 IbBehavior 同构：不再在构造时持有 llm_executor 引用。
     call() 通过 ib_class.registry.get_llm_executor().invoke_llm_function() 自主执行。
     """
+
+    @property
+    def callable_kind(self) -> str:
+        return "llm_function"
+
     def __init__(self, node_uid: str, context: 'IExecutionContext', spec: Optional[IbSpec] = None, module_name: Optional[str] = None):
         super().__init__(context.registry.get_class("callable"))
         self.node_uid = node_uid

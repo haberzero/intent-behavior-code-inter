@@ -155,6 +155,13 @@ class Bootstrapper:
         # 为 callable 注册 __call__ 消息实现 (调用 call 方法)
         self.CallableClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.call(self.ib_class.registry.get_none(), list(args)), is_method=True, ib_class=self.CallableClass))
 
+        # 为 callable 注册统一的 prompt 呈现：函数对象（普通函数 / LLM 函数 /
+        # 原生函数 / 绑定方法）在 LLM 上下文中显示为可读描述。
+        self.CallableClass.register_method(
+            '__to_prompt__',
+            IbNativeFunction(lambda self: self.__to_prompt__(), is_method=True, ib_class=self.CallableClass),
+        )
+
         # 为 Type 注册 __call__ 消息实现 (实例化类)
         self.TypeClass.register_method('__call__', IbNativeFunction(lambda self, *args: self.instantiate(list(args)), is_method=True, ib_class=self.TypeClass))
 

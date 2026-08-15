@@ -47,6 +47,20 @@ class IbFunction(IbObject):
     def call(self, receiver: IbObject, args: List[IbObject]) -> IbObject:
         raise NotImplementedError()
 
+    def __to_prompt__(self) -> str:
+        """Render a function object into LLM-visible text.
+
+        This gives both user functions and LLM functions a uniform prompt
+        representation, which is a first step toward treating them as the
+        same kind of callable value in prompt/intent contexts.
+        """
+        return repr(self)
+
+    @property
+    def callable_kind(self) -> str:
+        """The kind of callable: user, llm, native, bound, etc."""
+        return "function"
+
 class IbNativeFunction(IbFunction):
     """
     包装 Python 原生函数的 IBC 函数。
