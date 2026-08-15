@@ -41,28 +41,49 @@ class _SchedulerMixin:
         execution_context: IExecutionContext,
         intent_ctx: Optional[Any] = None,
     ) -> LLMFuture:
-        """立即将 LLM 调用提交到线程池，返回 ``LLMFuture``（非阻塞）。
+        """同步薄包装：经 :meth:`_pump_cps` 驱动 CPS 权威版本。
+
+        供无 CPS 帧上下文的宿主/外部调用使用（VM 主路径直接
+        ``yield from`` :meth:`dispatch_eager_cps`）。
+        """
+        gen = self.dispatch_eager_cps(
+            node_uid, execution_context, intent_ctx=intent_ctx
+        )
+        return self._pump_cps(gen, execution_context)
+
+    def dispatch_eager_cps(
+        self,
+        node_uid: str,
+        execution_context: IExecutionContext,
+        intent_ctx: Optional[Any] = None,
+    ):
+        """CPS 版立即提交 LLM 调用到线程池，返回 ``LLMFuture``（生成器）。
 
         在 ``dispatch_eligible=True`` 且数据依赖已满足时，由 VM 调度器调用。
-
-        拆分执行边界：主线程在此方法内完成 prompt 段预求值
-        （:meth:`_prepare_behavior_call`，含段插值 / 意图消解 / 输出约束 /
-        retry_hint），后台线程仅执行 :meth:`_call_and_parse`（``_call_llm``
-        + 解析），不重入 VM、不访问 live context、不写主线程单写槽。
-
-        参数：
-            node_uid:          对应 ``IbBehaviorExpr`` 节点的 UID
-            execution_context: 当前执行上下文（主线程预求值使用）
-            intent_ctx:        （可选）已 fork 的意图上下文快照；None 表示使用
-                               当前 runtime_context 的活跃意图
-
-        返回：
-            ``LLMFuture``，可经 ``resolve_future_cps``（CPS）或 ``yield`` 挂起等待结果。
+        与同步版同语义，但 prompt 段预求值（段插值 / 意图消解 / 输出约束 /
+        retry_hint，经 :meth:`_prepare_behavior_call_cps`）以 ``yield from``
+        嵌入当前 VM 帧栈——消除 ``vm.run`` 重入的"同步旁路"（段求值含
+        Waitable 时不再阻塞调度线程，frame_stack_depth 正确）。调用方须
+        ``yield from``；返回 :class:`LLMFuture`。
         """
-        spec = self._prepare_behavior_call(
-            node_uid, execution_context, captured_intents=intent_ctx
+        node_data = execution_context.get_node_data(node_uid)
+        spec = yield from self._prepare_behavior_call_cps(
+            node_uid, node_data, execution_context, captured_intents=intent_ctx
         )
+        return self._submit_dispatch(spec, node_uid, execution_context)
 
+    def _submit_dispatch(
+        self,
+        spec: Any,
+        node_uid: str,
+        execution_context: IExecutionContext,
+    ) -> LLMFuture:
+        """提交预求值结果到线程池并记录 dispatch 调用信息（同步部分）。
+
+        拆分执行边界：预求值（CPS 权威 :meth:`dispatch_eager_cps`）完成后，
+        后台线程仅执行 :meth:`_call_and_parse`（``_call_llm`` + 解析），
+        不重入 VM、不访问 live context、不写主线程单写槽。
+        """
         # 记录 dispatch 时刻的调用信息（sys/user prompt + 意图）：调用已提交，
         # idbg.current_llm() 应立即可见"最近一次 LLM 调用"，而非等变量读取
         # 触发 resolve 后才可观测。resolve 点（_record_current_call_info 覆盖）

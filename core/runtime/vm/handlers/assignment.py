@@ -73,12 +73,14 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
             sc = executor.service_context
             llm_executor = sc.llm_executor if sc is not None else None
             if llm_executor is not None:
-                # 在 dispatch 时刻 fork 当前意图栈快照并交由主线程预求值，
+                # 在 dispatch 时刻 fork 当前意图栈快照并交由预求值，
                 # 确保后台线程看到的意图状态与同步执行点一致。快照失败即
                 # fail-fast（禁止静默回退到 lambda 模式，否则后台线程会
                 # 读 live context 并消费 one-shot 意图）。
+                # CPS 预求值（段插值/意图消解/hint）嵌入当前 VM 帧栈
+                # （dispatch_eager_cps，消除 vm.run 同步重入）。
                 intent_snapshot = executor.runtime_context.fork_intent_snapshot()
-                dispatched_future = llm_executor.dispatch_eager(
+                dispatched_future = yield from llm_executor.dispatch_eager_cps(
                     value_uid, executor.ec, intent_ctx=intent_snapshot
                 )
 
