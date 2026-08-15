@@ -42,6 +42,7 @@ class TokenType(Enum):
     FINALLY = auto()
     RAISE = auto()
     CLASS = auto()
+    PROTOCOL = auto()
     SELF = auto()
 
     # LLM 关键字

@@ -101,6 +101,24 @@ class SymbolResolver(ScopedVisitor):
         # 绑定到 metadata
         self.bind_symbol(node, sym)
 
+    def visit_IbProtocolDef(self, node: ast.IbProtocolDef):
+        """访问协议定义节点：绑定符号并进入协议作用域处理方法签名。"""
+        sym = self.lookup_symbol(node.name)
+        if sym:
+            self.bind_symbol(node, sym)
+            if hasattr(sym, 'owned_scope') and sym.owned_scope:
+                self.push_scope(sym.owned_scope)
+                try:
+                    for stmt in node.body:
+                        self.visit(stmt)
+                finally:
+                    self.pop_scope()
+            else:
+                for stmt in node.body:
+                    self.visit(stmt)
+
+    def visit_IbClassDef(self, node: ast.IbClassDef):
+        """访问类定义节点"""
     def visit_IbClassDef(self, node: ast.IbClassDef):
         """访问类定义节点"""
         # 查找类符号

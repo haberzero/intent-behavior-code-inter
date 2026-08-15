@@ -18,6 +18,7 @@ class SymbolKind(Enum):
     FUNCTION = auto()
     LLM_FUNCTION = auto()
     CLASS = auto()
+    PROTOCOL = auto()
     INTENT = auto()
     MODULE = auto()
     TYPE_PARAM = auto()  # 用户类泛型类型参数（class Box[T] 的 T）

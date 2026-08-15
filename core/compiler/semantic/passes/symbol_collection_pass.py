@@ -158,6 +158,43 @@ class SymbolCollector:
         except ValueError as e:
             self.error(str(e), node, code=SEM_REDEFINITION)
 
+    def visit_IbProtocolDef(self, node: ast.IbProtocolDef):
+        """访问协议定义节点。
+
+        协议在编译期注册为 PROTOCOL-kind TypeDef，并将其方法签名收集到
+        members 中。随后通过 ProtocolRegistry.register_from_spec 登记为
+        内核协议，使后续 satisfies_protocol 可以识别它。
+        """
+        proto_spec = self.registry.factory.create_protocol(
+            name=node.name,
+            module=self.context.module_name,
+            provenance=Provenance.USER_DEFINED,
+            visibility=Visibility.IMPORT_GATED,
+        )
+        registered = self.registry.register(proto_spec)
+
+        sym = Symbol(
+            name=node.name,
+            kind=SymbolKind.PROTOCOL,
+            def_node=node,
+            spec=registered,
+        )
+        self._define(sym, node)
+
+        old_table = self.symbol_table
+        self.symbol_table = SymbolTable(parent=old_table, name=node.name)
+        old_class = self.current_class
+        self.current_class = registered
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self.current_class = old_class
+            self.symbol_table = old_table
+
+        # 登记到协议注册表（成员表已由方法访问填充）。
+        self.registry.protocols.register_from_spec(registered)
+
     def visit_IbModule(self, node: ast.IbModule):
         """访问模块节点"""
         for stmt in node.body:

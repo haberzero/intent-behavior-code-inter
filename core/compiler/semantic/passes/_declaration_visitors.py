@@ -68,6 +68,31 @@ class DeclarationVisitorsMixin:
 
     # ========== 定义 ==========
 
+    def visit_IbProtocolDef(self, node: ast.IbProtocolDef) -> Optional[IbSpec]:
+        """访问协议定义节点：与类定义类似，进入协议作用域处理方法签名。
+
+        协议方法体目前只允许占位（如 pass），类型检查仍会解析其参数与返回
+        类型，使协议成员表获得精确签名。
+        """
+        sym = self.lookup_symbol(node.name)
+        if sym and hasattr(sym, 'owned_scope') and sym.owned_scope:
+            old_class = self.current_class
+            old_in_class = self.in_class_def
+
+            self.current_class = sym.spec
+            self.in_class_def = True
+            self.push_scope(sym.owned_scope)
+
+            try:
+                for stmt in node.body:
+                    self.visit(stmt)
+            finally:
+                self.pop_scope()
+                self.in_class_def = old_in_class
+                self.current_class = old_class
+
+        return None
+
     def visit_IbClassDef(self, node: ast.IbClassDef) -> Optional[IbSpec]:
         """访问类定义"""
         sym = self.lookup_symbol(node.name)

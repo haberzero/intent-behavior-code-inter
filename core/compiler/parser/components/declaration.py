@@ -56,6 +56,9 @@ class DeclarationComponent(BaseComponent):
         elif role == SyntaxRole.CLASS_DEFINITION:
             self.stream.advance() # class
             stmt = self.class_declaration()
+        elif role == SyntaxRole.PROTOCOL_DEFINITION:
+            self.stream.advance() # protocol
+            stmt = self.protocol_declaration()
         elif role == SyntaxRole.VARIABLE_DECLARATION:
             explicit_auto = self.stream.match(TokenType.AUTO)
             explicit_fn = (not explicit_auto) and self.stream.match(TokenType.FN)
@@ -261,6 +264,34 @@ class DeclarationComponent(BaseComponent):
         llm_node.retry_hint = retry_hint
         
         return self._extend_loc(llm_node, self.stream.previous())
+
+    def protocol_declaration(self) -> ast.IbProtocolDef:
+        """Parse a protocol declaration.
+
+        Syntax::
+
+            protocol Name:
+                func method(self, ...) -> Ret:
+                    pass
+
+        The method bodies are ignored; only signatures are kept in the
+        protocol's TypeDef members.
+        """
+        start_token = self.stream.previous()
+        name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name.").value
+        self.stream.consume(TokenType.COLON, "Expect ':' before protocol body.")
+
+        node = self._loc(
+            ast.IbProtocolDef(name=name, body=[], methods=[]),
+            start_token,
+        )
+        body = self.statement.block()
+        node.body = body
+        for stmt in body:
+            if isinstance(stmt, ast.IbFunctionDef):
+                node.methods.append(stmt)
+        return self._extend_loc(node, self.stream.previous())
+
 
     def class_declaration(self) -> ast.IbClassDef:
         start_token = self.stream.previous()

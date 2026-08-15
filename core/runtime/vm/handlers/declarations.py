@@ -156,6 +156,16 @@ def vm_handle_IbLLMFunctionDef(executor, node_uid: str, node_data: Mapping[str, 
     return executor.registry.get_none()
 
 
+def vm_handle_IbProtocolDef(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """Protocol declarations are compile-time contracts; runtime is a no-op.
+
+    The semantic layer has already registered the protocol in the kernel
+    protocol registry.  Keeping a handler here makes the VM tolerant of
+    protocol statements in serialized artifacts.
+    """
+    return executor.registry.get_none()
+
+
 def vm_handle_IbClassDef(executor, node_uid: str, node_data: Mapping[str, Any]):
     """类契约校验 + 作用域绑定。
 

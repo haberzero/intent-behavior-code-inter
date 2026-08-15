@@ -170,6 +170,24 @@ class IbClassDef(IbStmt):
         return True
 
 @dataclass(kw_only=True, eq=False)
+class IbProtocolDef(IbStmt):
+    """Protocol declaration node.
+
+    A protocol is a compile-time contract: its body contains method
+    signatures (currently represented as ``IbFunctionDef`` nodes whose
+    bodies are ignored).  The semantic layer registers a PROTOCOL-kind
+    TypeDef and a ProtocolDef in the kernel protocol registry.
+    """
+    name: str
+    body: List[IbStmt] = field(default_factory=list)
+    methods: List['IbFunctionDef'] = field(default_factory=list)
+
+    @property
+    def creates_scope(self) -> bool:
+        return True
+
+
+@dataclass(kw_only=True, eq=False)
 class IbLLMFunctionDef(IbStmt):
     name: str
     args: List[Union['IbArg', 'IbTypeAnnotatedExpr']]
