@@ -19,7 +19,7 @@ from core.runtime.shared.llm_result import LLMResult, LLMFuture, MOCK_REPAIR_SEN
 from core.runtime.objects.kernel import IbObject
 
 from core.runtime.interpreter.llm_executor._prompt_assembly import (
-    build_intent_section,
+    build_llm_function_extra_prompt,
     build_retry_message_history_from_attempts,
     build_type_constraint_section,
 )
@@ -85,9 +85,6 @@ class _LLMFunctionMixin:
         )
 
         merged_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
-        intent_section = build_intent_section(merged_intents)
-        if intent_section:
-            sys_prompt += "\n" + intent_section
 
         type_name = self._get_expected_type_hint(node_uid, node_data, execution_context) or "str"
         frame = context.get_current_llm_except_frame()
@@ -107,8 +104,6 @@ class _LLMFunctionMixin:
             provider_type_prompt=provider_type_prompt,
             include_generic_type=False,
         )
-        if type_constraint:
-            sys_prompt += f"\n\n{type_constraint}"
 
         retry_hint_segments = None
         if frame is not None:
@@ -119,13 +114,19 @@ class _LLMFunctionMixin:
                 retry_hint_segments = node_data.get("retry_hint")
         # 首次调用（无重试帧）不注入 __llmretry__；该块只在重试时生效。
 
+        retry_hint_text = None
         if retry_hint_segments:
             retry_hint_text = yield from self._evaluate_segments_cps(
                 retry_hint_segments, execution_context, param_names
             )
             if not isinstance(retry_hint_text, str):
                 raise TypeError("retry hint segments must produce text-only content")
-            sys_prompt += f"\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n{retry_hint_text}"
+
+        sys_prompt += build_llm_function_extra_prompt(
+            intents=merged_intents,
+            type_constraint=type_constraint,
+            retry_text=retry_hint_text,
+        )
 
         message_history = None
         if frame is not None:

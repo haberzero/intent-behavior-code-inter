@@ -211,6 +211,30 @@ def build_retry_message_history_from_attempts(
     return messages or None
 
 
+def build_llm_function_extra_prompt(
+    *,
+    intents: Optional[Iterable[str]] = None,
+    type_constraint: Optional[str] = None,
+    retry_text: Optional[str] = None,
+) -> str:
+    """Build the extra text appended to an LLM function's user-provided __sys__.
+
+    This preserves the historical formatting of the LLM-function path while
+    moving the formatting knowledge into the single prompt-assembly module:
+    - intent section is appended with a single newline;
+    - type constraint and retry hint are appended with a blank line.
+    """
+    extra = ""
+    intent_section = build_intent_section(intents)
+    if intent_section:
+        extra += "\n" + intent_section
+    if type_constraint:
+        extra += "\n\n" + type_constraint
+    if retry_text:
+        extra += "\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n" + retry_text
+    return extra
+
+
 def build_behavior_system_prompt(
     *,
     output_hint: Optional[str] = None,
