@@ -120,13 +120,7 @@ class DeclarationVisitorsMixin:
             self.push_scope(sym.owned_scope)
             try:
                 for stmt in node.body:
-                    if not isinstance(stmt, ast.IbFunctionDef):
-                        self.error(
-                            f"impl block for '{node.type_name}' may only contain "
-                            "'func' method definitions.",
-                            stmt, code=SEM_TYPE_MISMATCH,
-                        )
-                        continue
+                    # body 语句类型由 parser 保证（func / llm func）；
                     # 与类自身成员冲突已在符号收集阶段 fail-fast 并跳过定义
                     # （此处 members 已含收集阶段注入的 impl 方法，不可再比对）
                     self.visit(stmt)

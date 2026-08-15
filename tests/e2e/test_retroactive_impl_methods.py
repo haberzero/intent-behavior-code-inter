@@ -143,6 +143,70 @@ print(C().m())
 """
         assert run_ibci(code) == ["7"]
 
+    def test_impl_operator_dunder_method_binds(self):
+        """impl 补充运算符 dunder 方法与类方法路径同构：运算符派发生效。"""
+        code = """
+protocol Addable:
+    func __add__(self, any other) -> any:
+        pass
+
+class Pair:
+    int v
+    func value(self) -> int:
+        return self.v
+
+impl Addable for Pair:
+    func __add__(self, Pair other) -> Pair:
+        return Pair(self.v + other.v)
+
+Pair a = Pair(1)
+Pair b = Pair(2)
+print((a + b).value())
+"""
+        assert run_ibci(code) == ["3"]
+
+    def test_impl_init_suppresses_auto_init(self):
+        """impl 补 __init__：auto-init 跳过（与用户显式构造器优先同语义）。"""
+        code = """
+protocol Named:
+    func name(self) -> str:
+        pass
+
+class Box:
+    str tag
+
+impl Named for Box:
+    func name(self) -> str:
+        return self.tag
+    func __init__(self, str prefix, str tag) -> auto:
+        self.tag = prefix + ":" + tag
+
+print(Box("p", "x").name())
+"""
+        assert run_ibci(code) == ["p:x"]
+
+    def test_impl_llm_method_supplies_protocol(self):
+        """impl 内 LLM 方法（llm func）与类方法同构：可补充协议方法。"""
+        code = """
+protocol P:
+    func m(self) -> int:
+        pass
+
+class C:
+    pass
+
+impl P for C:
+    llm func m(self) -> int:
+__sys__
+你是数字解析器。
+__user__
+MOCK:INT:42
+llmend
+
+print(C().m())
+"""
+        assert run_ibci(code, ai=True) == ["42"]
+
 
 class TestImplValidation:
     def test_missing_method_still_errors(self):
@@ -179,6 +243,33 @@ class C:
 impl P for C:
     func m(self) -> int:
         return 2
+"""
+        with pytest.raises(CompilerError):
+            compile_ibci(code)
+
+    def test_conflict_across_two_impl_blocks_errors(self):
+        """两个 impl 块提供同名方法 → fail-fast（跨块冲突）。"""
+        code = """
+protocol A:
+    func m(self) -> int:
+        pass
+
+protocol B:
+    func n(self) -> int:
+        pass
+
+class C:
+    pass
+
+impl A for C:
+    func m(self) -> int:
+        return 1
+
+impl B for C:
+    func m(self) -> int:
+        return 2
+    func n(self) -> int:
+        return 3
 """
         with pytest.raises(CompilerError):
             compile_ibci(code)

@@ -368,8 +368,7 @@ class SymbolCollector:
         self.current_class_is_enum = False
         try:
             for stmt in node.body:
-                if not isinstance(stmt, ast.IbFunctionDef):
-                    continue  # 非方法语句由类型检查阶段报
+                # body 语句类型由 parser 保证（func / llm func）
                 if stmt.name in self.symbol_table.symbols:
                     # 与类自身（或先前 impl）已定义成员冲突：fail-fast，
                     # 跳过定义（类型检查阶段不再重复报）

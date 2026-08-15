@@ -38,14 +38,15 @@ impl SomeProtocol for SomeType:
      `SymbolKind.CLASS` + `spec.kind == CLASS` + `Provenance.USER_DEFINED`（内置/泛型 → error）。
    - 推入目标类 `owned_scope`（类收集阶段已建），设 `current_class = 目标 spec`，visit body
      （方法 → FunctionSymbol + `_define` 成员同步 → 目标类 members 增 MethodMemberSpec）。
+   - **冲突检测（单一权威）**：方法名已在目标类 owned_scope（类自身或先前 impl 定义）
+     → `SEM_REDEFINITION` error 并跳过定义（类型检查阶段不再重复报）。
 2. **symbol_resolution.visit_IbImplDef**：设 `current_class_symbol = 目标类符号`，推入目标
    owned_scope，visit body（方法 def 获得 self/super 注入 + 参数注册 + 函数体解析——
    复用 visit_IbFunctionDef 既有逻辑，node_to_symbol 映射与类方法同构）。
 3. **type_resolution.resolve_IbImplDef**：推目标类 type_params 栈（v1 非泛型目标，恒空），resolve body。
 4. **_declaration_visitors.visit_IbImplDef**（重写）：
-   - 目标类 / 协议校验（沿用现状 resolve + kind 检查）。
-   - **冲突检测**：impl 方法名已在目标类自身 members → `SEM_TYPE_MISMATCH` error
-     （fail-fast，禁止静默覆盖既有方法；继承链上的同名方法不冲突）。
+   - 目标类 / 协议校验（沿用现状 resolve + kind 检查）；body 语句类型由 parser 保证
+     （func / llm func），语义层不再重复检查。
    - 进入类上下文（current_class = 目标 spec、in_class_def=True、push owned_scope）
      → visit body 方法（复用 visit_IbFunctionDef：self 插入、签名精化、_sync_class_member）。
    - **协议校验后置**：required ⊆ 目标类 members（自身 + impl 补充）→ 满足才 append implements。
@@ -57,8 +58,9 @@ impl SomeProtocol for SomeType:
 - `IbImplDef.body` 随模块语句通用序列化（语句 UID 列表）。
 - **artifact_loader**：扫描模块根 body 的 `IbImplDef`（有 body）→ `impl_blocks` 列表
   （`(impl_stmt_uid, module_name)`）加入 `LoadedArtifact`。
-- **interpreter._hydrate_user_classes**：类方法水化后，遍历 impl_blocks——
-  解析目标类（`registry.get_class(type_name, module=impl_module)`，缺失 fail-fast）→
+- **interpreter._hydrate_user_classes**：impl 方法水化置于 **auto-init 第二 pass 之前**
+  （impl 补 `__init__` 时 auto-init 经 `'__init__' in ib_cls.methods` 跳过，与"用户显式
+  构造器优先"同语义）；运算符 dunder 方法与类方法路径同构显式绑定（`_bind_operator_method`）。
   对 body 每个方法 def：`node_to_symbol` → `_resolve_type_from_symbol` →
   `IbUserFunction(..., owner_class=ib_class)` → `ib_class.register_method(...)`。
   封印前注册（与类方法水化同阶段、同构），运行期方法查找走既有 `lookup_method`（含继承链）。
@@ -71,10 +73,11 @@ impl SomeProtocol for SomeType:
 | 目标非类 / 未解析 | error（现状已有） |
 | 目标为内置类型（axiom）或非 USER_DEFINED | error |
 | 目标为泛型类（type_params 非空） | error（方法体 T 解析与特化成员替换未接线，后续增量） |
-| body 含非函数定义语句 | error |
-| impl 方法名与类自身成员冲突 | error |
+| body 含非函数定义语句 | parser 拒绝（PAR_UNEXPECTED_TOKEN） |
+| impl 方法名与类自身（或先前 impl）成员冲突 | error（SEM_REDEFINITION，符号收集阶段单一权威） |
 | 跨模块目标（dotted name） | v1 不支持（单标识符解析；后续增量） |
 | 协议本身缺失 / 非 PROTOCOL | error（现状已有） |
+| LLM 方法（`llm func`） | **已支持**（parser 放开，语义/水化与类方法同构） |
 
 ## 七、测试计划（判别性）
 

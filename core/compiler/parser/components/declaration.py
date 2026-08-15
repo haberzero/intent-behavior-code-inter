@@ -324,7 +324,7 @@ class DeclarationComponent(BaseComponent):
                 code=PAR_UNEXPECTED_TOKEN,
             )
         if self.stream.match(TokenType.INDENT):
-            # 方法块：v1 仅 func 方法定义（其它语句由语义层拒绝）。
+            # 方法块：func / llm func 方法定义（其它语句由 parser 拒绝）
             body: List[ast.IbStmt] = []
             while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
                 if self.stream.match(TokenType.NEWLINE):
@@ -332,6 +332,8 @@ class DeclarationComponent(BaseComponent):
                 if self.stream.check(TokenType.FUNC):
                     self.stream.advance()  # 消费 func
                     body.append(self.function_declaration())
+                elif self.stream.check(TokenType.LLM_DEF):
+                    body.append(self.llm_function_declaration())
                 else:
                     raise self.stream.error(
                         self.stream.peek(),

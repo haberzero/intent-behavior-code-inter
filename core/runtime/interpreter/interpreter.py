@@ -705,36 +705,11 @@ class Interpreter:
                 if field_spec is not None:
                     ib_cls.member_types[m_name] = field_spec
 
-        # 第二 pass：无显式 __init__ 的类自动生成位置参数构造器（chain-aware）——
-        # 构造器参数 = 继承链上全部有效无默认值字段（父类优先、子类同名覆盖）。
-        # 与 instantiate 的字段收集同构（消除"auto-init 只收自身 body"的机制分裂）。
-        # 须在全部类字段 hydrate 完成后执行（父类 default_fields 已填充），
-        # 故独立于主循环之外。
-        for name in resolved:
-            ib_cls = self.registry.get_class(name)
-            if not ib_cls or getattr(ib_cls.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
-                continue
-            if '__init__' in ib_cls.methods:
-                continue  # 用户显式构造器优先
-            field_names = self._collect_chain_decl_only_fields(ib_cls)
-            if not field_names:
-                continue  # 链上无无默认值字段：经 lookup_method 继承父类构造器
-            auto_init_fn = IbNativeFunction(
-                self._make_chain_auto_init(field_names),
-                unbox_args=False,
-                is_method=True,
-                name=f"{name}.__init__",
-                ib_class=ib_cls,
-                param_meta=[
-                    (fname, "POSITIONAL_OR_KEYWORD", None)
-                    for fname in field_names
-                ],
-            )
-            ib_cls.register_method('__init__', auto_init_fn)
-
         # retroactive impl 方法水化（封印前）：impl 块补充的方法注册到目标类。
         # 与类方法水化同构（node_to_symbol → declared_type → IbUserFunction，
-        # owner_class 绑定）；注册先于封印，lookup_method 走既有继承链。
+        # owner_class 绑定；运算符 dunder 同样显式绑定）；注册先于封印与
+        # auto-init 生成（impl 补 __init__ 时 auto-init 跳过，与"用户显式
+        # 构造器优先"同语义），lookup_method 走既有继承链。
         for impl_stmt_uid, impl_module in impl_blocks or []:
             impl_data = self.get_node_data(impl_stmt_uid)
             if not impl_data:
@@ -763,7 +738,37 @@ class Interpreter:
                     display_name="LLMFunction" if is_llm else None,
                 )
                 user_func.is_generator = bool(stmt_data.get("is_generator"))
-                target.register_method(stmt_data.get("name"), user_func)
+                method_name = stmt_data.get("name")
+                target.register_method(method_name, user_func)
+                if not is_llm and self._is_operator_method(method_name):
+                    self._bind_operator_method(target, method_name, user_func)
+
+        # 第二 pass：无显式 __init__ 的类自动生成位置参数构造器（chain-aware）——
+        # 构造器参数 = 继承链上全部有效无默认值字段（父类优先、子类同名覆盖）。
+        # 与 instantiate 的字段收集同构（消除"auto-init 只收自身 body"的机制分裂）。
+        # 须在全部类字段 hydrate 完成后执行（父类 default_fields 已填充），
+        # 故独立于主循环之外。
+        for name in resolved:
+            ib_cls = self.registry.get_class(name)
+            if not ib_cls or getattr(ib_cls.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
+                continue
+            if '__init__' in ib_cls.methods:
+                continue  # 用户显式构造器优先
+            field_names = self._collect_chain_decl_only_fields(ib_cls)
+            if not field_names:
+                continue  # 链上无无默认值字段：经 lookup_method 继承父类构造器
+            auto_init_fn = IbNativeFunction(
+                self._make_chain_auto_init(field_names),
+                unbox_args=False,
+                is_method=True,
+                name=f"{name}.__init__",
+                ib_class=ib_cls,
+                param_meta=[
+                    (fname, "POSITIONAL_OR_KEYWORD", None)
+                    for fname in field_names
+                ],
+            )
+            ib_cls.register_method('__init__', auto_init_fn)
 
         self.current_module_name = old_module
 
