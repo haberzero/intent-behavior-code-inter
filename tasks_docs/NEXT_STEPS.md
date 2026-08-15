@@ -2,9 +2,23 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-14（**🔴 下一 session 主线候选：IBCI LLM 调用机制改进**。
-> T5 枚举解析失败深挖——实证机制 bug（枚举输出约束未注入提示词）+ 三结构性弱点。
-> 交接文档：`tasks_docs/_HANDOFF_LLM_PROMPT_MECHANISM.md` + PENDING_TASKS §〇 行）
+> **最后更新**：2026-08-15（**✅ IBCI LLM 调用机制改进已落地 unsafe-vibe-dev**，
+> 全量 2787 passed / 1 skipped。当前无未决 P0 主线候选；下一主线可结合
+> `PENDING_TASKS.md` §〇 与已知残留择定）
+>
+> **✅ 已完成（2026-08-15，exp/llm-prompt-mechanism → unsafe-vibe-dev，全量 2787 passed / 1 skipped 零回归）**：
+> **IBCI LLM 调用机制改进（T5 枚举解析失败暴露的机制弱点）A-D 四项落地**。
+> ① A 修复：`_try_axiom_output_hint` module 感知，`_get_llmoutput_hint(_cps)`
+> node_to_type 与 returns IbName 分支同 module 解析——枚举 `__outputhint_prompt__`
+> 注入断链修复（真实 LLM 实证 T02 T3/T4/T5 三连 PASS）。② B 修复：behavior 基础
+> system prompt 升级为程序化调用纪律。③ C 修复：期望输出类型注入 prompt（单一
+> 优先级 provider 显式类型提示 > `__outputhint_prompt__` > 通用类型声明）；LLM 函数
+> 路径同样接入 `__outputhint_prompt__`。④ D 修复：llmexcept/retry 自动回喂上次
+> 响应 + 解析错误（`LLMExceptFrame.last_llm_response`/`last_llm_error`）。架构：
+> 新增 `_prompt_assembly.py` 单一权威组装，behavior sync/CPS 共用组装 helper，
+> LLM 函数共用 type constraint/intent/retry feedback 构建器。判别性回归
+> `tests/e2e/test_llm_prompt_mechanism.py` +6；文档同步 KNOWN_LIMITS §10.2 /
+> guide 03 / syntax 10。详见 `_code_llm_prompt_mechanism.md` + WORKLOG。
 >
 > **✅ 已完成（2026-08-14，完整 IBCI 真实代码试用核查）**：T01-T07 全量重跑，近期改动
 > （断层根治 + fn/callable 方向 A + CALLABLE_SIG 根治）对已知试用代码**零回归**；更新
