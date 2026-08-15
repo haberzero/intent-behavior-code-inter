@@ -52,3 +52,25 @@ llmend
 print(g())
 """
         assert run_ibci(code) == ["hello"]
+
+
+class TestCallableAsFirstClassValues:
+    def test_normal_and_llm_functions_assignable_to_fn(self):
+        code = """
+func f() -> int:
+    return 1
+
+llm g() -> str:
+__sys__
+You are helpful.
+__user__
+MOCK:STR:hi
+llmend
+
+fn a = f
+fn b = g
+print(a)
+print(b)
+"""
+        lines = run_ibci(code)
+        assert lines == ["<Function 'f'>", "<LLMFunction 'g'>"]
