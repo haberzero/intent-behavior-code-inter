@@ -130,18 +130,23 @@ class _BehaviorMixin:
         llmoutput_hint: Optional[str],
         type_hint: Optional[str],
         all_intents: List[Any],
+        suppress_type_constraint: bool = False,
     ) -> str:
         """把 behavior 提示词组件组装为完整 system prompt（sync/CPS 共用）。
 
         单一权威组装在 :func:`build_behavior_system_prompt`；本方法只负责
         从 provider 提取显式类型提示，不再各自拼接字符串。
+
+        ``suppress_type_constraint``：存在排他意图（``@!``）时，用户已显式
+        指定输出形态，系统不再注入类型级输出格式/期望类型约束，避免与用户
+        指令冲突（如 bool 输出格式要求与用户要求的 YES/NO 相互打架）。
         """
         provider_type_prompt = None
-        if type_hint and self.llm_callback:
+        if not suppress_type_constraint and type_hint and self.llm_callback:
             provider_type_prompt = self.llm_callback.get_return_type_prompt(type_hint)
         return build_behavior_system_prompt(
-            output_hint=llmoutput_hint,
-            type_hint=type_hint,
+            output_hint=None if suppress_type_constraint else llmoutput_hint,
+            type_hint=None if suppress_type_constraint else type_hint,
             provider_type_prompt=provider_type_prompt,
             intents=all_intents,
         )
@@ -180,6 +185,7 @@ class _BehaviorMixin:
 
         active_list: List[Any] = []
         global_intents: List[Any] = []
+        has_override = False
         if captured_intents is not None:
             if not isinstance(captured_intents, IbIntentContext):
                 raise TypeError(
@@ -188,11 +194,13 @@ class _BehaviorMixin:
                 )
             active_list = captured_intents.get_active_intents()
             global_intents = captured_intents.get_global_intents()
+            has_override = captured_intents.has_override()
             # 快照解析必须含 override/smear（@! / @ 一次性意图）：fork() 已把它们
             # 移入快照的 _inherited_override/_inherited_smear，仅取 active/global
             # 会丢弃它们——此前并行预调度（赋值 dispatch）下 @ 意图从未进 prompt。
             all_intents = captured_intents.resolve_to_prompts(context, execution_context)
         else:
+            has_override = context.intent_context.has_override()
             all_intents = context.get_resolved_prompt_intents(execution_context)
             global_intents = context.get_global_intents()
             active_list = context.get_active_intents()
@@ -204,6 +212,7 @@ class _BehaviorMixin:
             llmoutput_hint=llmoutput_hint,
             type_hint=type_hint,
             all_intents=all_intents,
+            suppress_type_constraint=has_override,
         )
         message_history = self._build_retry_message_history(frame)
 
@@ -242,6 +251,7 @@ class _BehaviorMixin:
         context = execution_context.runtime_context
         active_list: List[Any] = []
         global_intents: List[Any] = []
+        has_override = False
         if captured_intents is not None:
             if not isinstance(captured_intents, IbIntentContext):
                 raise TypeError(
@@ -250,9 +260,11 @@ class _BehaviorMixin:
                 )
             active_list = captured_intents.get_active_intents()
             global_intents = captured_intents.get_global_intents()
+            has_override = captured_intents.has_override()
             # 快照解析必须含 override/smear（@! / @ 一次性意图）：与同步版同因。
             all_intents = yield from captured_intents.resolve_to_prompts_cps(context, execution_context)
         else:
+            has_override = context.intent_context.has_override()
             all_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
             global_intents = context.get_global_intents()
             active_list = context.get_active_intents()
@@ -264,6 +276,7 @@ class _BehaviorMixin:
             llmoutput_hint=llmoutput_hint,
             type_hint=type_hint,
             all_intents=all_intents,
+            suppress_type_constraint=has_override,
         )
         message_history = self._build_retry_message_history(frame)
 
@@ -424,8 +437,13 @@ class _BehaviorMixin:
             try:
                 bind_behavior_closure(behavior, rt)
                 bind_behavior_call_args(behavior, [item], ec, rt)
+                # 每条调用独立 fork 意图快照：语句级 @!/@ 意图对批内
+                # 每个 LLM 调用都可见，而不是被第一条调用消费后丢失。
+                captured_intents = behavior.captured_intents
+                if captured_intents is None:
+                    captured_intents = rt.fork_intent_snapshot()
                 spec = self._prepare_behavior_call(
-                    behavior.node, ec, captured_intents=behavior.captured_intents
+                    behavior.node, ec, captured_intents=captured_intents
                 )
                 specs.append(spec)
             finally:
@@ -462,11 +480,16 @@ class _BehaviorMixin:
             try:
                 bind_behavior_closure(behavior, rt)
                 bind_behavior_call_args(behavior, [item], ec, rt)
+                # 每条调用独立 fork 意图快照：语句级 @!/@ 意图对批内
+                # 每个 LLM 调用都可见，而不是被第一条调用消费后丢失。
+                captured_intents = behavior.captured_intents
+                if captured_intents is None:
+                    captured_intents = rt.fork_intent_snapshot()
                 spec = yield from self._prepare_behavior_call_cps(
                     behavior.node,
                     ec.get_node_data(behavior.node),
                     ec,
-                    captured_intents=behavior.captured_intents,
+                    captured_intents=captured_intents,
                 )
                 specs.append(spec)
             finally:

@@ -3,7 +3,7 @@
 # 期望: run_batch 并发执行保序返回；结果可观测
 
 # expect-class: PASS
-# expect-out: batch_len=3 | info_keys=[sys_prompt, user_prompt, response, raw_response, active_intents, global_intents, merged_intents] | DONE
+# expect-out: batch_len=3 | info_keys=[sys_prompt, user_prompt, response, raw_response, active_intents, global_intents, merged_intents, message_history] | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

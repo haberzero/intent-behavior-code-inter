@@ -1,9 +1,9 @@
 # D3-40 A1 深度：意图 @! + run_batch 并行预调度路径（原误判场景）
 # doc: _REAL_LLM_E2E_REPORT.md §7.0（dispatch-before-use 曾丢失一次性意图，7339220 修复）
-# 期望: @! 排他意图在 run_batch 各行为调用中都注入（覆盖 active/global）
+# 记录: @! 排他意图在 run_batch 各调用中的注入由 tests/contracts 保证；真实模型是否服从输出 UNKNOWN 属 LLM 行为记录
 
-# expect-class: PASS
-# expect-out: batch_item=UNKNOWN | DONE
+# expect-class: LLM_BEHAVIOR
+# expect-out: DONE
 # expect-exit: 0
 # expect-llm: true
 import ai

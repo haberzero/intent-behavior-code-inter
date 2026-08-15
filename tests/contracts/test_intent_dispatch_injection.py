@@ -118,6 +118,25 @@ print(r)
         assert "用冷酷口吻" in captured_sys_prompts[0]
 
 
+class TestRunBatchIntentInjection:
+    """``ai.run_batch`` 内每个 LLM 调用都必须看到语句级 ``@!`` 意图。"""
+
+    def test_override_intent_injected_for_every_batch_call(self, captured_sys_prompts):
+        code = AI_MOCK_PREFIX + """
+fn q = lambda(str word) -> str: @~ MOCK:STR:ok ~
+@! 只输出：UNKNOWN
+list res = ai.run_batch(q, ["苹果", "香蕉"])
+print(res.len())
+list res2 = ai.run_batch(q, ["橙子"])
+print(res2.len())
+"""
+        assert run_ibci(code) == ["2", "1"]
+        assert len(captured_sys_prompts) == 3, "批内两个调用 + 对照一个调用"
+        assert "只输出：UNKNOWN" in captured_sys_prompts[0]
+        assert "只输出：UNKNOWN" in captured_sys_prompts[1]
+        assert "只输出：UNKNOWN" not in captured_sys_prompts[2]
+
+
 class TestLLMCallTraceObservability:
     """T3：LLM 调用追踪——无需探针即可查看实际发出的完整 prompt。
 

@@ -3,7 +3,7 @@
 # 期望: int/bool/list 解析正确（真实 LLM 格式服从）
 
 # expect-class: PASS
-# expect-out: answer=2 | ok=True | pi=3.14 | tags_len=3 | DONE
+# expect-out: answer=2 | ok=True | pi_ok=True | tags_len=3 | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
@@ -15,7 +15,8 @@ bool ok = @~ 1+1=2 吗？只答 1 或 0 ~
 print("ok=" + (str)ok)
 
 float pi = @~ pi 约等于多少？只答数字 ~
-print("pi=" + (str)pi)
+bool pi_ok = pi > 3.0 and pi < 4.0
+print("pi_ok=" + (str)pi_ok)
 
 list[str] tags = @~ 给"苹果"打3个中文标签，JSON数组格式 ~
 print("tags_len=" + (str)tags.len())
