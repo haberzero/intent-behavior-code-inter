@@ -39,6 +39,7 @@ from .specs import (
     VIDEO_SPEC,
 )
 from .registry import SpecRegistry, SpecFactory, create_default_spec_registry
+from core.kernel.protocol import ProtocolDef, ProtocolRegistry, register_builtin_protocols
 
 __all__ = [
     # Base
@@ -84,4 +85,8 @@ __all__ = [
     "SpecRegistry",
     "SpecFactory",
     "create_default_spec_registry",
+    # Protocol kernel
+    "ProtocolDef",
+    "ProtocolRegistry",
+    "register_builtin_protocols",
 ]
