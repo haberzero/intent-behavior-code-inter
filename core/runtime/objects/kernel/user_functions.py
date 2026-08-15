@@ -90,8 +90,3 @@ class IbUserFunction(IbFunction):
         node_data = self.context.get_node_data(self.node_uid)
         name = node_data.get("name", "unknown")
         return f"<{self._display_name} '{name}'>"
-
-
-# Compatibility alias: LLM functions are now ordinary function objects with
-# callable_kind="llm_function".  The alias keeps existing imports working.
-IbLLMFunction = IbUserFunction

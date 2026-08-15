@@ -298,7 +298,7 @@ class VMExecutor:
                 # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
                 # 迭代驱动函数体、yield 点产出值。
                 if isinstance(child_uid, UserFunctionCall):
-                    # func 可为 IbUserFunction/IbNativeFunction/IbLLMFunction；
+                    # func 为 IbUserFunction（普通/LLM 统一）/IbNativeFunction；
                     # is_generator 在 IbFunction 基类声明（缺省 False），
                     # 属性直读分派生成器 vs 普通函数体压栈。
                     if child_uid.func.is_generator:
@@ -371,7 +371,7 @@ class VMExecutor:
 
         gen = _vm_call_function(
             self, call.func, call.receiver, call.args,
-            is_llm=(getattr(call.func, "callable_kind", "user_function") == "llm_function"),
+            is_llm=(call.func.callable_kind == "llm_function"),
         )
         return VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)
 
@@ -388,7 +388,7 @@ class VMExecutor:
 
         gen = _vm_call_function(
             self, call.func, call.receiver, call.args,
-            is_llm=(getattr(call.func, "callable_kind", "user_function") == "llm_function"),
+            is_llm=(call.func.callable_kind == "llm_function"),
         )
         return self._drive_loop_gen(
             [VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)],

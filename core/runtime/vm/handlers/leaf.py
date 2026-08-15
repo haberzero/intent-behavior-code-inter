@@ -356,12 +356,12 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         result = yield from _vm_call_fn_callable(executor, func, args)
         return result
 
-    # IbBehavior / IbLLMFunction: CPS 内联以使 LLM 帧受 VM 调度管理。
+    # IbBehavior：CPS 内联以使 LLM 帧受 VM 调度管理。
     if isinstance(func, IbValue) and func.ib_class.name == "behavior":
         result = yield from _vm_invoke_behavior(executor, func, args)
         return result
 
-    # IbUserFunction / IbLLMFunction：统一走 trampoline 调用（R1，EXEC-1 根治）。
+    # IbUserFunction（普通/LLM 统一）：统一走 trampoline 调用（R1，EXEC-1 根治）。
     # 不 yield from 生成器（会嵌套 Python 栈），而是 yield 函数调用请求，
     # 由 _drive_loop_gen 把函数体作为独立 VMTask 压栈——深递归 Python 深度恒定。
     # 惰性生成器（含 yield，D-08 自标记）：调用产出 IbGenerator（不执行体），

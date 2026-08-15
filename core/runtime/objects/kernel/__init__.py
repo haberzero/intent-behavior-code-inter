@@ -17,7 +17,7 @@ from .functions import IbFunction, IbNativeFunction, IbBoundMethod, IbSuperProxy
 from .native_module import IbNativeObject, IbModule
 from .ib_class import IbClassField, IbClass
 from .sentinels import IbNone, IbLLMUncertain, IbLLMCallResult
-from .user_functions import IbUserFunction, IbLLMFunction
+from .user_functions import IbUserFunction
 from .comm import IbChannel, IbSubscriber, IbSlot
 from .generator import IbGenerator
 
@@ -36,7 +36,6 @@ __all__ = [
     "IbLLMUncertain",
     "IbLLMCallResult",
     "IbUserFunction",
-    "IbLLMFunction",
     "IbChannel",
     "IbSubscriber",
     "IbSlot",

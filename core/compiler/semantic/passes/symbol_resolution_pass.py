@@ -198,7 +198,8 @@ class SymbolResolver(ScopedVisitor):
         return None
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
-        """访问函数定义节点"""
+        """访问函数定义节点（普通/LLM 统一：IbLLMFunctionDef 为子类）。"""
+        is_llm = isinstance(node, ast.IbLLMFunctionDef)
         # 默认值表达式在定义包围作用域求值（Python 语义）
         self._visit_param_defaults(self, node.args)
 
@@ -218,7 +219,9 @@ class SymbolResolver(ScopedVisitor):
         try:
             # 隐式 self 注入：如果是类方法，在局部作用域注入 self 符号
             # node_to_symbol[func_def_node] = self_symbol（runtime 通过此获取 self UID）
-            if self.current_class_symbol:
+            # LLM 方法跳过（运行时 LLM 函数调用不绑定 self/super 作用域，
+            # 保持 node_to_symbol 映射指向函数符号本身）。
+            if self.current_class_symbol and not is_llm:
                 self_sym = VariableSymbol(
                     name="self",
                     kind=SymbolKind.VARIABLE,
@@ -265,38 +268,22 @@ class SymbolResolver(ScopedVisitor):
 
             for stmt in node.body:
                 self.visit(stmt)
+
+            # LLM 函数提示词段落（sys_prompt / user_prompt / retry_hint）
+            # 在函数作用域内解析（$参数 引用可命中已注册的参数符号）。
+            if is_llm:
+                for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
+                    if prompt_list:
+                        for segment in prompt_list:
+                            if isinstance(segment, ast.IbASTNode):
+                                self.visit(segment)
         finally:
             self.current_function_type_params = old_func_type_params
             self.pop_scope()
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
-        """访问 LLM 函数定义节点"""
-        # 默认值表达式在定义包围作用域求值（Python 语义）
-        self._visit_param_defaults(self, node.args)
-
-        # 创建函数作用域
-        func_scope = SymbolTable(parent=self.current_scope, name=node.name)
-
-        # 绑定函数符号到节点
-        func_sym = self.lookup_symbol(node.name)
-        if func_sym:
-            self.bind_symbol(node, func_sym)
-            if hasattr(func_sym, 'owned_scope'):
-                func_sym.owned_scope = func_scope
-
-        # 进入函数作用域
-        self.push_scope(func_scope)
-        try:
-            self._register_params(node.args, func_scope)
-
-            # LLM 函数的提示词段落（sys_prompt / user_prompt / retry_hint）
-            for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
-                if prompt_list:
-                    for segment in prompt_list:
-                        if isinstance(segment, ast.IbASTNode):
-                            self.visit(segment)
-        finally:
-            self.pop_scope()
+        """LLM 函数定义 = IbFunctionDef 子类：共用符号解析（self 注入除外）。"""
+        return self.visit_IbFunctionDef(node)
 
     def visit_IbAssign(self, node: ast.IbAssign):
         """访问赋值节点 — 绑定 IbAssign 和 IbTypeAnnotatedExpr 到目标符号"""

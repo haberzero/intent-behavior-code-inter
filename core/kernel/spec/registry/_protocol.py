@@ -49,9 +49,6 @@ class _ProtocolMixin:
         if not self.satisfies_protocol(spec, protocol_name):
             return None
         return self.get_axiom(spec)
-    def protocol_methods(self, name: str) -> Tuple[str, ...]:
-        protocol = self.get_protocol(name)
-        return protocol.methods if protocol is not None else ()
 
     # ---------------------------------------------------------- #
     # Protocol satisfaction                                       #

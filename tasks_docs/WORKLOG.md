@@ -2,7 +2,11 @@
 
 > 原则：**"只记录，不断决"**——能自主决定的记录决定并推进；只有确实无法决定的才标记待决并上报。
 > 本文件只保留**仍有长期约束力的关键用户裁定**；历史叙述与 commit 明细在 git（`git log` 追溯）。
-> 最后更新：2026-08-15（用户改主线：IBCI LLM 全能力真实压力试用为下一主线，PT-FEAT-14 暂缓）
+> 最后更新：2026-08-16（用户拍板：协议化内核大重构为当前主线，压力测试/真实试用在其后）
+
+---
+
+| **协议化内核大重构（2026-08-16 用户拍板主线，exp/protocol-kernel）** | **用户指定：协议化地基重构 + 内核全方位梳理清洁 + 架构级重构为主，压力测试在其后。** 上一 session 2026-08-16 01:29 因 context 超限中断（恢复交接 `tasks_docs/HANDOFF_PROTOCOL_KERNEL_RECOVERY.md`）；该 session 未及同步正式任务控制文档，属交接割裂，本 session 已补齐登记（NEXT_STEPS 顶部锚点 / PENDING_TASKS §〇 P0 行）。**已完成 39 commits**：协议内核地基（ProtocolDef/Registry/TypeKind.PROTOCOL/统一 PromptRenderer/PromptPart）/ 用户协议语法（protocol/implements/继承/方法签名兼容检查）/ 泛型约束（`Box[T: Proto]`）与泛型函数（调用点推断）/ 泛型协议（`Container[T]`）/ retroactive implementation（声明式 `impl Proto for Type`）/ 普通函数与 LLM 函数全链路统一（AST 层次 IbLLMFunctionDef→IbFunctionDef、运行时删独立 IbLLMFunction 类、CPS/trampoline 执行路径统一、Prompt 渲染统一）/ 协议注册表替换硬编码能力（编译器 LLM parse 检查、output-hint 查询、vtable `__from_prompt__`、unparseable-type 检测）。中断前未提交 base.py 改动（`__from_prompt__` 前置 satisfies_protocol 检查）已实测全量 **2877 passed / 1 skipped** 零回归后提交 **0518e1bf**。**待做**：剩余硬编码能力替换、IbLLMFunctionDef 残留特殊分支清理、Prompt 装配散落逻辑统一、序列化/动态宿主/插件体系类型分支清理、retroactive 从声明式推进到可为已有类型补充方法、LANGUAGE_DESIGN_EVOLUTION 同步。**完成后**：最新代码上开启全方位真实 LLM + 真实 IBCI 试用（trials/_toolkit 套件）确认重构影响 → 启动新压力测试。 |
 
 ---
 

@@ -2,9 +2,24 @@
 
 > 本文件**只**记录当前最紧要、可立即开工的下一步；长期规划见 `tasks_docs/PENDING_TASKS.md`（§〇 优先级总表）。
 >
-> **最后更新**：2026-08-15（**T08 第一轮压力试用完成**；
-> 🔴 当前主线：**IBCI LLM 全能力真实压力试用（本地 qwen）继续扩展**。
-> 全量 pytest 修复后实跑零回归）
+> **最后更新**：2026-08-16（用户拍板：**协议化内核大重构为当前主线**，
+> 压力测试/真实试用在其后；exp/protocol-kernel 交接恢复，正式任务控制文档已补齐登记）
+>
+> **🔴 当前主线（2026-08-16 用户指定，进行中）**：
+> **协议化内核大重构 + 内核全方位梳理清洁 + 架构级重构**（`exp/protocol-kernel`
+> 独立分支）。上一 session 2026-08-16 01:29 因 context 超限中断，恢复交接见
+> `tasks_docs/HANDOFF_PROTOCOL_KERNEL_RECOVERY.md`（该 session 未及同步正式
+> 任务控制文档，属交接割裂，本 session 已补齐登记）。**已完成**（39 commits）：
+> 协议内核地基（ProtocolDef/Registry）/用户协议语法（protocol/implements/继承/
+> 签名兼容）/泛型约束与泛型函数/泛型协议/retroactive implementation（声明式）/
+> 普通函数与 LLM 函数全链路统一（AST+运行时+CPS+trampoline，删独立 IbLLMFunction）/
+> 协议注册表替换硬编码能力（多站点）。中断前未提交的 base.py 改动已验证
+> （全量 2877 passed / 1 skipped 零回归）后提交 0518e1bf。**待做**：剩余硬编码
+> 能力替换、IbLLMFunctionDef 残留清理、Prompt 装配散落统一、序列化/动态宿主/
+> 插件体系类型分支清理、retroactive 推进到可补方法、文档同步。每阶段全量
+> pytest 零回归门。**完成后**：在最新代码上开启一轮全方位真实 LLM + 真实 IBCI
+> 试用（利用 trials 套件）确认重构影响，再启动新压力测试（原 T08 压力试用
+> 主线顺延至此之后）。
 >
 > **✅ 已完成（2026-08-15，T08 第一轮，全量 pytest 零回归）**：
 > **IBCI LLM 全能力真实压力试用（第一轮）**。41 例：32 PASS + 2 GUARD +

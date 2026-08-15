@@ -11,7 +11,6 @@ from core.runtime.shared.signals import (
 from core.runtime.objects.kernel import (
     IbModule,
     IbUserFunction,
-    IbLLMFunction,
 )
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
@@ -113,14 +112,21 @@ def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]
 # === 定义类语句（不下钻 body 内子节点） ===
 
 def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """普通函数定义：在当前作用域绑定 IbUserFunction。
+    """函数定义（普通/LLM 统一）：在当前作用域绑定 IbUserFunction。
 
-    当函数包含 nonlocal 声明时（free_vars 非空），构建 Cell 闭包
-    使得返回后的函数仍能读写外层变量（与 lambda 闭包机制对齐）。
+    普通函数与 LLM 函数（IbLLMFunctionDef）共用同一运行时对象
+    IbUserFunction（AST/运行时类层次统一后无独立 IbLLMFunction 类），
+    仅 callable_kind/display_name 标记差异。LLM 函数 body 恒空，
+    无 nonlocal 自由变量，闭包分支自然不触发。
     """
+    is_llm = node_data.get("_type") == "IbLLMFunctionDef"
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
-    func = IbUserFunction(node_uid, executor.ec, spec=declared_type)
+    func = IbUserFunction(
+        node_uid, executor.ec, spec=declared_type,
+        callable_kind="llm_function" if is_llm else "user_function",
+        display_name="LLMFunction" if is_llm else None,
+    )
     func.is_generator = bool(node_data.get("is_generator"))
     name = node_data.get("name")
 
@@ -138,21 +144,6 @@ def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any
         if closure:
             func.closure = closure
 
-    executor.runtime_context.define_variable(
-        name, func, declared_type=declared_type, uid=sym_uid
-    )
-    return executor.registry.get_none()
-
-
-def vm_handle_IbLLMFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """LLM 函数定义：在当前作用域绑定 IbLLMFunction。"""
-    sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
-    declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
-    func = IbUserFunction(
-        node_uid, executor.ec, spec=declared_type,
-        callable_kind="llm_function", display_name="LLMFunction",
-    )
-    name = node_data.get("name")
     executor.runtime_context.define_variable(
         name, func, declared_type=declared_type, uid=sym_uid
     )

@@ -344,7 +344,13 @@ class SymbolCollector:
             self.symbol_table = old_table
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef):
-        """访问函数定义节点"""
+        """访问函数定义节点（普通/LLM 统一：IbLLMFunctionDef 为子类）。
+
+        LLM 函数与普通函数共用同一收集逻辑（参数/返回注解解析、spec
+        构造、符号定义），仅 SymbolKind 区分（LLM_FUNCTION，类成员表
+        落 kind="llm_method"）。
+        """
+        is_llm = isinstance(node, ast.IbLLMFunctionDef)
         # 创建函数元数据（暂定为 Any -> Any）
         func_meta = self.registry.factory.create_func(
             name=node.name,
@@ -377,32 +383,15 @@ class SymbolCollector:
         # 创建函数符号
         sym = FunctionSymbol(
             name=node.name,
-            kind=SymbolKind.FUNCTION,
+            kind=SymbolKind.LLM_FUNCTION if is_llm else SymbolKind.FUNCTION,
             def_node=node,
             spec=func_meta
         )
         self._define(sym, node)
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
-        """访问 LLM 函数定义节点"""
-        # 创建函数元数据
-        func_meta = self.registry.factory.create_func(
-            name=node.name,
-            param_type_names=[],
-            return_type_name="any",
-            provenance=Provenance.USER_DEFINED,
-            visibility=Visibility.IMPORT_GATED,
-        )
-        self.registry.register(func_meta)
-
-        # 创建 LLM 函数符号
-        sym = FunctionSymbol(
-            name=node.name,
-            kind=SymbolKind.LLM_FUNCTION,
-            def_node=node,
-            spec=func_meta
-        )
-        self._define(sym, node)
+        """LLM 函数定义 = IbFunctionDef 子类：共用收集逻辑（kind 区分）。"""
+        return self.visit_IbFunctionDef(node)
 
     def visit_IbAssign(self, node: ast.IbAssign):
         """访问赋值节点（收集全局/类成员变量）"""

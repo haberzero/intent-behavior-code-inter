@@ -48,7 +48,7 @@ from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
-from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbLLMFunction, IbClassField, IbValue, IbLLMCallResult, IbLLMUncertain
+from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbClassField, IbValue, IbLLMCallResult, IbLLMUncertain
 from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.kernel.registry import KernelRegistry
 from core.kernel.host_interface import HostInterface
@@ -649,29 +649,25 @@ class Interpreter:
                 stmt_data = self.get_node_data(stmt_uid)
                 if not stmt_data: continue
                 
-                if stmt_data["_type"] == "IbFunctionDef":
+                if stmt_data["_type"] in ("IbFunctionDef", "IbLLMFunctionDef"):
+                    is_llm = stmt_data["_type"] == "IbLLMFunctionDef"
                     sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
                     declared_type = self._resolve_type_from_symbol(sym_uid)
                     method_name = stmt_data["name"]
-                    user_func = IbUserFunction(stmt_uid, self._execution_context, spec=declared_type, owner_class=ib_class)
+                    user_func = IbUserFunction(
+                        stmt_uid, self._execution_context, spec=declared_type,
+                        owner_class=ib_class,
+                        callable_kind="llm_function" if is_llm else "user_function",
+                        display_name="LLMFunction" if is_llm else None,
+                    )
                     user_func.is_generator = bool(stmt_data.get("is_generator"))
                     ib_class.register_method(method_name, user_func)
 
-                    # 显式绑定运算符方法（统一初始化路径）
+                    # 显式绑定运算符方法（统一初始化路径；LLM 方法不参与）
                     # 如果方法名是运算符dunder方法（如__add__、__eq__等），
                     # 通过公理系统显式绑定到运算符符号，确保运算符派发正确工作
-                    if self._is_operator_method(method_name):
+                    if not is_llm and self._is_operator_method(method_name):
                         self._bind_operator_method(ib_class, method_name, user_func)
-                elif stmt_data["_type"] == "IbLLMFunctionDef":
-                    sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
-                    declared_type = self._resolve_type_from_symbol(sym_uid)
-                    ib_class.register_method(
-                        stmt_data["name"],
-                        IbUserFunction(
-                            stmt_uid, self._execution_context, spec=declared_type,
-                            callable_kind="llm_function", display_name="LLMFunction",
-                        ),
-                    )
                 elif stmt_data["_type"] == "IbAssign":
                     # 使用 IbClassField 统一管理
                     val_uid = stmt_data.get("value")

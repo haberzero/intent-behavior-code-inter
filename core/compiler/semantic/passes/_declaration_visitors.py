@@ -313,7 +313,14 @@ class DeclarationVisitorsMixin:
         return required
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef) -> Optional[IbSpec]:
-        """访问函数定义 — 解析参数类型标注，回填 spec，参数以正确类型注册"""
+        """访问函数定义（普通/LLM 统一）— 解析参数类型标注，回填 spec。
+
+        IbLLMFunctionDef 为 IbFunctionDef 子类（AST 类层次统一），仅多
+        sys_prompt/user_prompt/retry_hint 提示词字段。LLM 函数共享全部
+        签名精化逻辑；差异点：提示词段在函数作用域内访问、无泛型/auto
+        推断/生成器/覆盖签名检查/提示协议签名校验（保持既有语义）。
+        """
+        is_llm = isinstance(node, ast.IbLLMFunctionDef)
         # 查找函数符号
         sym = self.lookup_symbol(node.name)
 
@@ -422,6 +429,15 @@ class DeclarationVisitorsMixin:
             for stmt in node.body:
                 self.visit(stmt)
 
+            # LLM 函数提示词段落（sys_prompt / user_prompt / retry_hint）
+            # 在函数作用域内访问（$参数 引用命中参数符号，类型绑定生效）。
+            if is_llm:
+                for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
+                    if prompt_list:
+                        for segment in prompt_list:
+                            if isinstance(segment, ast.IbASTNode):
+                                self.visit(segment)
+
             # -> auto 函数返回类型统一
             if is_auto_return and self.auto_return_types:
                 unique = list({s.name: s for s in self.auto_return_types if s}.values())
@@ -472,11 +488,13 @@ class DeclarationVisitorsMixin:
                 sym.spec.return_type = TypeRef.from_spec(gen_spec)
 
         # SEM_DUAL_ASSIGNABLE: Method override signature compatibility check
-        if self.in_class_def and self.current_class and sym and sym.spec:
+        # （LLM 方法保持既有语义：不参与覆盖签名检查）。
+        if self.in_class_def and self.current_class and sym and sym.spec and not is_llm:
             self._check_override_compatibility(node, sym.spec)
 
         # SEM_PROTOCOL_SIGNATURE: Prompt protocol signature validation
-        if self.in_class_def and is_prompt_protocol_method(node.name):
+        # （LLM 方法保持既有语义：不参与提示协议签名校验）。
+        if self.in_class_def and not is_llm and is_prompt_protocol_method(node.name):
             # Count params excluding self
             user_param_count = len(node.args)
             ret_type_name = None
@@ -617,62 +635,8 @@ class DeclarationVisitorsMixin:
                     )
 
     def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef) -> Optional[IbSpec]:
-        """访问 LLM 函数定义 — 与 visit_IbFunctionDef 对称：精化签名并回填 spec。"""
-        sym = self.lookup_symbol(node.name)
-
-        # 同 visit_IbFunctionDef：LLM 函数必须声明返回类型（LLM 输出解析的目标类型）。
-        if node.returns is None:
-            self.error(
-                f"LLM function '{node.name}' must declare a return type. "
-                "Add '-> TYPE', '-> auto', or '-> any'.",
-                node, code=SEM_MISSING_RETURN_ANNOTATION
-            )
-
-        # 参数签名唯一权威（同 visit_IbFunctionDef）
-        param_types, param_descriptors = self._build_function_signature(node.args)
-
-        if self.in_class_def and self.current_class:
-            param_types.insert(0, self.current_class)
-
-        ret_type = self._resolve_type(node.returns) if node.returns else self._any_desc
-
-        if sym and sym.spec and self.registry:
-            updated_spec = self.registry.factory.create_func(
-                name=node.name,
-                param_types=[
-                    TypeRef.from_spec(p) if p is not None else TypeRef.of("any")
-                    for p in param_types
-                ],
-                return_type=(
-                    TypeRef.from_spec(ret_type) if ret_type is not None else TypeRef.of("void")
-                ),
-                provenance=Provenance.USER_DEFINED,
-                visibility=Visibility.IMPORT_GATED,
-            )
-            updated_spec.param_descriptors = param_descriptors
-            sym.spec = updated_spec
-
-        self._sync_class_member(node.name, param_descriptors)
-
-        # 创建函数作用域
-        func_scope = SymbolTable(parent=self.current_scope, name=node.name)
-
-        old_in_function = self.in_function_def
-        self.in_function_def = True
-        self.push_scope(func_scope)
-
-        try:
-            # LLM 函数的提示词段落（sys_prompt / user_prompt / retry_hint）
-            for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
-                if prompt_list:
-                    for segment in prompt_list:
-                        if isinstance(segment, ast.IbASTNode):
-                            self.visit(segment)
-        finally:
-            self.pop_scope()
-            self.in_function_def = old_in_function
-
-        return None
+        """LLM 函数定义 = IbFunctionDef 子类：共用签名精化逻辑（is_llm 分支）。"""
+        return self.visit_IbFunctionDef(node)
 
     def _build_function_signature(self, args):
         """构建函数参数签名（唯一权威，type-check 阶段，解析后精度）。

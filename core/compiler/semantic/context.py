@@ -68,7 +68,6 @@ class FunctionContext:
     """Context for function analysis"""
     function_name: str
     return_type: Any
-    is_llm_function: bool = False
     is_method: bool = False
     auto_return_types: list = field(default_factory=list)
 

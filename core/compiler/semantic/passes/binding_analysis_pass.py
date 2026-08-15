@@ -111,9 +111,6 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
                 LambdaCaptureAnalyzer._register_func_params(node.args, func_scope)
             with self.enter_scope(func_scope):
                 node.body = self._rewrite_body(node.body)
-        elif isinstance(node, ast.IbLLMFunctionDef):
-            # LLM 函数内部不需要 llmexcept（整个函数就是行为）
-            pass
         elif isinstance(node, ast.IbClassDef):
             for stmt in node.body:
                 self._analyze_node(stmt)
@@ -619,8 +616,6 @@ class IntentContextValidator:
             self._validate_body(node.body)
         elif isinstance(node, ast.IbFunctionDef):
             self._validate_body(node.body)
-        elif isinstance(node, ast.IbLLMFunctionDef):
-            pass
         elif isinstance(node, ast.IbClassDef):
             for stmt in node.body:
                 self._validate_node(stmt)

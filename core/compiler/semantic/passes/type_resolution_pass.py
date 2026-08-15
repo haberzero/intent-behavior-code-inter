@@ -189,13 +189,13 @@ class TypeAnnotationResolver:
             self._type_param_stack.pop()
 
     def resolve_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef):
-        """解析 LLM 函数定义的类型标注"""
-        for arg in node.args:
-            self.resolve(arg)
-        if node.returns:
-            ret_spec = self.resolve_type_annotation(node.returns)
-            if ret_spec:
-                self.resolved_types[node.returns] = ret_spec
+        """LLM 函数定义 = IbFunctionDef 子类（AST 类层次统一）。
+
+        LLM 函数 body 恒空（提示词段存放于 sys_prompt/user_prompt/
+        retry_hint 字段）、type_params 恒空，因此 resolve_IbFunctionDef
+        对 LLM 函数与普通函数逐字等价——直接共用基础解析。
+        """
+        return self.resolve_IbFunctionDef(node)
 
     def resolve_IbProtocolDef(self, node: ast.IbProtocolDef):
         """解析协议定义，支持协议类型参数。"""

@@ -187,8 +187,9 @@ def _wrap_function_result(executor, func, value):
       self 参数符号，``func.spec`` 为类 spec（return_type 恒 void）——方法真实
       返回类型经类成员表解析（``owner_class.spec.members[name].return_type``，
       结构化保真）。
-    - IbUserFunction/IbLLMFunction：经 ``spec.return_type``（结构化 TypeRef，
-      经 metadata registry resolve_typeref 恢复）。
+    - IbUserFunction（普通/LLM 统一，``callable_kind`` 区分）：经
+      ``spec.return_type``（结构化 TypeRef，经 metadata registry
+      resolve_typeref 恢复）。
     - IbFnCallable（lambda/snapshot，无 spec）：经 ``return_type`` 字符串
       （运行时捕获的签名，经名称解析）。
     """
@@ -307,9 +308,10 @@ def _vm_call_fn_callable(executor, func, args):
 def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
     """Unified CPS call path for user functions and LLM functions.
 
-    This is the first execution-path unification step: both IbUserFunction
-    and IbLLMFunction share the same intent-fork / module-switch / scope /
-    stack / argument-binding preamble and postamble.  The only remaining
+    This is the execution-path unification result: user functions and LLM
+    functions (both ``IbUserFunction``, distinguished by ``callable_kind``)
+    share the same intent-fork / module-switch / scope / stack /
+    argument-binding preamble and postamble.  The only remaining
     difference is the core execution strategy:
     - user function: drive the AST body through the VM CPS loop;
     - LLM function: invoke the LLM executor with the pre-bound arguments.
@@ -419,7 +421,7 @@ def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
             llm_exec = func.ib_class.registry.get_llm_executor()
             if llm_exec is None:
                 raise RuntimeError(
-                    f"IbLLMFunction '{func.node_uid}': LLM executor not registered in KernelRegistry. "
+                    f"LLM function '{func.node_uid}': LLM executor not registered in KernelRegistry. "
                     "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
                 )
             yield None
