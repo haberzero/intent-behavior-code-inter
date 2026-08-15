@@ -86,6 +86,7 @@ class TypeKind(str, Enum):
     PRIMITIVE = "primitive"
     FUNCTION = "function"
     CLASS = "class"
+    PROTOCOL = "protocol"
     LIST = "list"
     TUPLE = "tuple"
     DICT = "dict"

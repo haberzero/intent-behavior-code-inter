@@ -116,7 +116,10 @@ class _ProtocolMixin:
         if protocol_name == "snapshotable":
             return self._class_has_all_methods(spec, ("__snapshot__", "__restore__"))
 
-        # Unknown/forward protocol: no automatic satisfaction.
+        # Generic user-defined/forward protocol: structural satisfaction by
+        # required method names on the class chain.
+        if protocol.methods:
+            return self._class_has_all_methods(spec, protocol.methods)
         return False
 
     # ---------------------------------------------------------- #

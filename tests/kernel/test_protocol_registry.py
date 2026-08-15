@@ -92,3 +92,21 @@ class TestProtocolMembership:
         spec2 = _make_class("Snap2", ["__snapshot__", "__restore__"])
         reg.register(spec2)
         assert reg.satisfies_protocol(spec2, "snapshotable") is True
+
+
+class TestCustomProtocolStructuralSatisfaction:
+    def test_custom_protocol_satisfied_by_methods(self):
+        from core.kernel.protocol import ProtocolDef
+        reg = create_default_registry()
+        reg.register_protocol(ProtocolDef(name="Serializable", methods=("to_dict",)))
+        spec = _make_class("JsonModel", ["to_dict", "from_dict"])
+        reg.register(spec)
+        assert reg.satisfies_protocol(spec, "Serializable") is True
+
+    def test_custom_protocol_not_satisfied_when_method_missing(self):
+        from core.kernel.protocol import ProtocolDef
+        reg = create_default_registry()
+        reg.register_protocol(ProtocolDef(name="Dumpable", methods=("dump",)))
+        spec = _make_class("NoDump", ["load"])
+        reg.register(spec)
+        assert reg.satisfies_protocol(spec, "Dumpable") is False
