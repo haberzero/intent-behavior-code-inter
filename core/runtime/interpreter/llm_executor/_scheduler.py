@@ -4,7 +4,8 @@
 支持 behavior 表达式的并发 LLM 调用。依赖 :class:`LLMExecutorCore` 初始化的
 LLMScheduler 共享状态 (``self._max_workers`` / ``self._thread_pool`` /
 ``self._pending_futures`` / ``self._pending_futures_lock``)，并调用
-:class:`_BehaviorMixin` 提供的 :meth:`execute_behavior_expression`。
+:class:`_BehaviorMixin` 提供的 :meth:`_prepare_behavior_call`（同步薄包装，
+经 :meth:`_pump_cps` 驱动 CPS 权威版本）。
 """
 
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor

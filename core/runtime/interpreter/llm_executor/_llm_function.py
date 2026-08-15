@@ -67,9 +67,8 @@ class _LLMFunctionMixin:
     ) -> LLMFunctionCallSpec:
         """CPS 版 LLM 函数调用预求值（段求值经 yield from，worker 安全）。
 
-        与 :meth:`execute_llm_function` 前段（sys/user prompt 段求值 + 意图
-        注入 + retry_hint + 返回类型提示）同语义，但段求值经
-        ``_evaluate_segments_cps``（yield 嵌入外层 VM 帧栈）——不重入
+        段求值（sys/user prompt + 意图注入 + retry_hint + 返回类型提示）
+        经 ``_evaluate_segments_cps``（yield 嵌入外层 VM 帧栈）——不重入
         ``vm.run``。返回 :class:`LLMFunctionCallSpec`，供 ``_call_and_parse_llm_function``
         在 worker 线程只读执行（快照 intent 列表，不访问 live context）。
         """

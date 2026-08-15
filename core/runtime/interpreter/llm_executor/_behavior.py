@@ -2,13 +2,14 @@
 
 包含 behavior (即时、匿名 LLM 调用) 的 CPS 执行入口（``execute_behavior_expression_cps``
 / ``execute_behavior_object_cps`` / ``invoke_behavior_cps``），以及供
-``dispatch_eager``（后台线程）与 ``run_batch``（ai.run_batch）使用的同步预求值
-``_prepare_behavior_call``。
+``dispatch_eager``（主线程预求值）与 ``run_batch``（ai.run_batch）使用的同步
+薄包装 :meth:`_prepare_behavior_call`——经 :meth:`_pump_cps` 驱动 CPS 权威版本，
+sync/CPS 无双写。
 
 依赖 :class:`LLMExecutorCore` 的 ``_call_llm`` / ``llm_callback`` /
 ``_current_call_info`` 等共享状态，
-以及 :class:`_PromptMixin` 的 ``_evaluate_segments`` /
-``_evaluate_segments_cps`` / ``_get_llmoutput_hint`` /
+以及 :class:`_PromptMixin` 的 ``_evaluate_segments_cps`` /
+``_get_llmoutput_hint_cps`` /
 ``_get_expected_type_hint`` / ``_parse_result``。
 """
 
@@ -43,8 +44,8 @@ from core.runtime.exceptions import ThrownException
 class BehaviorCallSpec:
     """行为调用预求值结果（主线程完成，worker 仅执行 LLM 调用 + 解析）。
 
-    拆分的边界：主线程预求值 prompt 段（``_evaluate_segments`` / 意图消解 /
-    output hint / retry_hint），把与执行线程无关的输入快照进本对象；
+    拆分的边界：主线程预求值 prompt 段（``_evaluate_segments_cps`` /
+    意图消解 / output hint / retry_hint），把与执行线程无关的输入快照进本对象；
     worker 线程只读本对象执行 ``_call_llm`` + 解析，不访问 live context。
     """
 
@@ -171,60 +172,19 @@ class _BehaviorMixin:
     ) -> BehaviorCallSpec:
         """主线程预求值行为调用的全部输入（prompt 段 + 意图 + 输出约束）。
 
-        在 dispatch 时刻同步调用；``_evaluate_segments`` 经 ``vm.run`` 重入
-        主线程调度循环（同线程嵌套 drive_loop 安全）。worker 线程随后仅读
-        返回的 :class:`BehaviorCallSpec`，不再访问 live context。
+        同步薄包装：经 :meth:`_pump_cps` 驱动 CPS 权威版本
+        :meth:`_prepare_behavior_call_cps`（段求值/意图消解/hint 唯一实现），
+        yield 出的子节点经 ``vm.run`` 重入主线程调度循环（同线程嵌套
+        drive_loop 安全）。供 ``dispatch_eager``（主线程预求值）与
+        ``_run_batch_sync``（宿主/线程体兜底）使用；VM 主路径直接
+        ``yield from`` CPS 版本。
         """
         node_data = execution_context.get_node_data(node_uid)
-        context = execution_context.runtime_context
-
-        if not target_model:
-            target_model = node_data.get("tag", "")
-
-        content = self._evaluate_segments(node_data.get("segments"), execution_context)
-
-        active_list: List[Any] = []
-        global_intents: List[Any] = []
-        has_override = False
-        if captured_intents is not None:
-            if not isinstance(captured_intents, IbIntentContext):
-                raise TypeError(
-                    f"_prepare_behavior_call: captured_intents must be "
-                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
-                )
-            active_list = captured_intents.get_active_intents()
-            global_intents = captured_intents.get_global_intents()
-            has_override = captured_intents.has_override()
-            # 快照解析必须含 override/smear（@! / @ 一次性意图）：fork() 已把它们
-            # 移入快照的 _inherited_override/_inherited_smear，仅取 active/global
-            # 会丢弃它们——此前并行预调度（赋值 dispatch）下 @ 意图从未进 prompt。
-            all_intents = captured_intents.resolve_to_prompts(context, execution_context)
-        else:
-            has_override = context.intent_context.has_override()
-            all_intents = context.get_resolved_prompt_intents(execution_context)
-            global_intents = context.get_global_intents()
-            active_list = context.get_active_intents()
-
-        llmoutput_hint = self._get_llmoutput_hint(node_uid, node_data, execution_context)
-        type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
-        frame = context.get_current_llm_except_frame()
-        sys_prompt = self._assemble_behavior_sys_prompt(
-            llmoutput_hint=llmoutput_hint,
-            type_hint=type_hint,
-            all_intents=all_intents,
-            suppress_type_constraint=has_override,
-        )
-        message_history = self._build_retry_message_history(frame)
-
-        return BehaviorCallSpec(
-            sys_prompt=sys_prompt,
-            user_prompt=content,
-            type_hint=type_hint,
-            target_model=target_model,
-            message_history=message_history,
-            active_intents=[i.content if hasattr(i, "content") else str(i) for i in active_list],
-            global_intents=[i.content if hasattr(i, "content") else str(i) for i in global_intents],
-            merged_intents=all_intents,
+        return self._pump_cps(
+            self._prepare_behavior_call_cps(
+                node_uid, node_data, execution_context, captured_intents, target_model
+            ),
+            execution_context,
         )
 
     def _prepare_behavior_call_cps(
@@ -237,8 +197,9 @@ class _BehaviorMixin:
     ):
         """CPS 版 :meth:`_prepare_behavior_call`（M4：段求值经 yield from，非阻塞）。
 
-        与同步版同语义（prompt 段预求值 + 意图消解 + 输出约束 + retry_hint），
-        但段求值经 ``_evaluate_segments_cps``（yield）、hint 经
+        本方法是预求值逻辑的唯一权威实现（prompt 段预求值 + 意图消解 +
+        输出约束 + retry_hint）；同步薄包装经 :meth:`_pump_cps` 驱动本方法。
+        段求值经 ``_evaluate_segments_cps``（yield）、hint 经
         ``_get_llmoutput_hint_cps``（yield）——调用方须 ``yield from``。
         返回 :class:`BehaviorCallSpec`，供 ``_call_and_parse`` 在 worker 线程
         执行（本方法不调用 LLM，不阻塞调度线程）。
@@ -349,7 +310,7 @@ class _BehaviorMixin:
         return self._finalize_call(result, _call_info(response), record_current=False)
 
     def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
-        """CPS 版 :meth:`execute_behavior_expression`；段求值通过 yield from。
+        """行为表达式 CPS 执行入口；段求值通过 yield from。
 
         **LLM 真挂起**：spec 经 ``_prepare_behavior_call_cps``
         （段求值 yield）构建，随后 ``_call_and_parse`` 提交线程池并 ``yield``

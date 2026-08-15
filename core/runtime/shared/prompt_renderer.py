@@ -3,8 +3,7 @@ core/runtime/shared/prompt_renderer.py — unified prompt rendering.
 
 This module is the single authority for converting an IBCI value into
 LLM-visible text or multi-modal content blocks.  It replaces the scattered
-``_obj_to_prompt_str`` / ``_obj_to_payload`` implementations in the LLM
-executor and the intent system.
+prompt-rendering implementations in the LLM executor and the intent system.
 
 The renderer is protocol-aware: when a SpecRegistry is supplied, it uses
 ``satisfies_protocol`` to decide whether the value participates in the

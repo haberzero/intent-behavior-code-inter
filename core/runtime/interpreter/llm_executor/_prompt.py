@@ -37,17 +37,6 @@ class _PromptMixin:
         return None
 
     @staticmethod
-    def _obj_to_prompt_str(val: Any) -> str:
-        """Unified protocol-aware conversion of an IbObject to prompt string.
-
-        This method is a thin delegate to :class:`PromptRenderer`, the single
-        authority for prompt rendering.  It exists so existing call sites keep
-        working while the renderer is introduced.
-        """
-        from core.runtime.shared.prompt_renderer import PromptRenderer
-        return PromptRenderer.to_prompt_str(val)
-
-    @staticmethod
     def _obj_to_payload(val: Any) -> Union[str, Dict[str, Any], List[Dict[str, Any]]]:
         """Protocol-aware conversion of an IbObject to payload content block.
 
@@ -86,23 +75,20 @@ class _PromptMixin:
                 param_names.add(actual_arg_data.get("arg", ""))
         return param_names
 
-    def _evaluate_segments(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None) -> Union[str, List[Union[str, Dict[str, Any]]]]:
-        """同步版段求值入口。
+    @staticmethod
+    def _pump_cps(gen, execution_context: IExecutionContext):
+        """同步泵：驱动 CPS 生成器到完成（``vm.run`` 重入）。
 
-        实现委托给 ``_evaluate_segments_cps`` 生成器；当 ``vm_executor`` 可用时，
-        通过 ``vm.run(uid)`` 对 yield 出的子节点求值。该路径用于：
-        - ``dispatch_eager`` 在后台线程中的同步求值
-        - 不经 VM 调度的测试路径
+        CPS 权威路径由 VM 调度循环 ``yield from`` 驱动；本泵供无 CPS 上下文
+        的同步路径（``dispatch_eager`` 主线程预求值 / 宿主直调）使用：
+        yield 出的节点 UID 经 ``vm.run`` 求值、``UserFunctionCall`` 经宿主
+        ``.call`` 同步调用（leaf 级兜底——``vm.run`` 只接受节点 UID）。
 
-        CPS 主路径（由 VM handler 触发的 invoke_*）改用 ``_evaluate_segments_cps``
-        + ``yield from``，使段求值作为子任务嵌入到外层 VM 帧栈，而非启动一个
-        独立的 ``_drive_loop``，从而正确反映 ``frame_stack_depth``。
-
-        返回值：
-        - str: 纯文本内容
-        - List[Union[str, dict]]: 含多模态结构化 content blocks
+        与 :meth:`_evaluate_segments_cps` 被替换前的同步实现同语义；
+        唯一区别是子节点求值经本泵（单一实现，sync/CPS 无双写）。
         """
-        gen = self._evaluate_segments_cps(segments, execution_context, param_names)
+        from core.runtime.shared.user_call import UserFunctionCall
+
         vm = execution_context.vm_executor if execution_context is not None else None
         sent = None
         try:
@@ -111,24 +97,22 @@ class _PromptMixin:
                 if child is None:
                     sent = None
                     continue
+                if isinstance(child, UserFunctionCall):
+                    sent = child.func.call(child.receiver, child.args)
+                    continue
                 if vm is None:
-                    raise RuntimeError("LLMExecutor._evaluate_segments: vm_executor not available")
+                    raise RuntimeError("LLMExecutor._pump_cps: vm_executor not available")
                 sent = vm.run(child)
         except StopIteration as si:
-            return si.value if si.value is not None else ""
+            return si.value
 
     def _evaluate_segments_cps(self, segments: Optional[List[Any]], execution_context: IExecutionContext, param_names: Optional[Set[str]] = None):
-        """CPS 版段求值（生成器）。
+        """CPS 版段求值（生成器，唯一实现；同步路径经 :meth:`_pump_cps` 驱动）。
 
         ``yield`` 出待求值的子节点 UID，调用方负责把求值结果通过 ``send`` 注回；
-        最终用 ``return`` 返回拼接后的字符串。语义与 :meth:`_evaluate_segments`
-        完全一致；唯一区别是把"调用 vm.run"替换为"yield 节点 UID"，让外层 VM
-        调度循环把段求值作为子任务接管。
-
-        设计目的：
-        - 消除 `_evaluate_segments` 通过 ``vm.run`` 重入 ``_drive_loop`` 的"同步
-          旁路"，使段求值真正纳入 CPS 帧栈。
-        - 维持 lambda/snapshot/behavior 在段求值期间的栈可观察性与可暂停语义。
+        最终用 ``return`` 返回拼接后的字符串。VM 调度循环把段求值作为子任务
+        接管（消除 ``vm.run`` 重入的"同步旁路"）；同步路径（dispatch_eager
+        预求值）经 :meth:`_pump_cps` 驱动同一生成器。
 
         返回值：
         - 纯文本情况：返回拼接后的 str
@@ -203,67 +187,19 @@ class _PromptMixin:
             merged.append("".join(text_buf))
         return merged
 
-    def _get_llmoutput_hint(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext) -> Optional[str]:
-        """获取 __outputhint_prompt__ 用于注入到提示词
+    def _get_llmoutput_hint_cps(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext):
+        """获取 __outputhint_prompt__ 用于注入到提示词（唯一实现）。
 
         查找顺序：
         1. Axiom 内置类型：经 ``_try_axiom_output_hint``（共享实现）
         2. 用户自定义 IBCI 类：通过类 vtable 查找 __outputhint_prompt__ 方法
-        """
-        def _try_vtable_hint(type_name: str, module: Optional[str] = None) -> Optional[str]:
-            """回退：通过用户类 vtable 查找 __outputhint_prompt__（类方法语义）"""
-            ib_class = self.registry.get_class(type_name, module=module)
-            if ib_class:
-                meta = self.registry.get_metadata_registry()
-                if (meta is not None and getattr(ib_class, "spec", None) is not None
-                        and not meta.satisfies_protocol(ib_class.spec, "output_hint")):
-                    return None
-                method = ib_class.lookup_method('__outputhint_prompt__')
-                if method:
-                    # lookup_method 已预检方法存在——此处无"协议缺失"情形；
-                    # 用户方法实现体的真实 bug 直接 fail-fast，不再静默吞掉后无 hint。
-                    result = method.call(ib_class, [])
-                    hint = result.to_native() if isinstance(result, IbObject) else str(result)
-                    return str(hint) if hint is not None else None
-            return None
+           （用户 hint 方法经 ``UserFunctionCall`` trampoline 驱动，复用统一
+           用户方法 CPS 路径——同步调用在 CPS 行为路径内会嵌套调度器，若
+           hint 方法含 Waitable 则死锁）。
 
-        returns_uid = node_data.get("returns")
-        if returns_uid:
-            returns_data = execution_context.get_node_data(returns_uid)
-            if returns_data and returns_data.get("_type") == "IbName":
-                type_name = returns_data.get("id", "str")
-                returns_module = getattr(execution_context, "current_module_name", None)
-                hint = self._try_axiom_output_hint(type_name, module=returns_module)
-                if hint is not None:
-                    return hint
-                hint = _try_vtable_hint(type_name, module=returns_module)
-                if hint is not None:
-                    return hint
-
-        node_to_type = execution_context.get_side_table("node_to_type", node_uid)
-        if node_to_type:
-            type_name = getattr(node_to_type, 'name', None)
-            if type_name:
-                node_module = getattr(node_to_type, "module_path", None)
-                # [Module Identity] axiom 与用户类 hint 查找均按 module 限定；
-                # S2/S5 module 化后枚举等类型按 qualified 名注册，裸名会断链。
-                hint = self._try_axiom_output_hint(type_name, module=node_module)
-                if hint is not None:
-                    return hint
-                hint = _try_vtable_hint(type_name, module=node_module)
-                if hint is not None:
-                    return hint
-
-        return None
-
-    def _get_llmoutput_hint_cps(self, node_uid: str, node_data: Mapping[str, Any], execution_context: IExecutionContext):
-        """CPS 版 :meth:`_get_llmoutput_hint`（用户 hint vtable 分支 CPS 化）。
-
-        与同步版同语义，但用户 hint 方法（``__outputhint_prompt__``）经
-        ``UserFunctionCall`` trampoline 驱动（复用统一用户方法 CPS 路径），
-        而非同步 ``.call``——后者在 CPS 行为路径内会嵌套调度器，若 hint 方法
-        含 Waitable 则死锁。本方法是生成器，yield ``UserFunctionCall`` 由 VM
-        调度循环压栈驱动；调用方须 ``yield from``。
+        本方法是生成器，yield ``UserFunctionCall`` 由 VM 调度循环压栈驱动；
+        调用方须 ``yield from``。同步路径（dispatch_eager 预求值）经
+        :meth:`_pump_cps` 驱动本生成器。
         """
         from core.runtime.shared.user_call import UserFunctionCall
 

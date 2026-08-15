@@ -33,11 +33,6 @@ class SemanticContext:
     prior_symbol_bindings: Dict[Any, Any] = field(default_factory=dict)
     prior_type_bindings: Dict[Any, Any] = field(default_factory=dict)
 
-    # Nested structure context
-    function_context: Optional['FunctionContext'] = None
-    class_context: Optional['ClassContext'] = None
-    loop_context: Optional['LoopContext'] = None
-
     flags: Dict[str, bool] = field(default_factory=dict)
 
     def with_symbol_table(self, new_table: 'SymbolTableContext') -> 'SemanticContext':
@@ -46,45 +41,12 @@ class SemanticContext:
     def with_type_environment(self, new_env: 'TypeInferenceState') -> 'SemanticContext':
         return replace(self, type_environment=new_env)
 
-    def with_function_context(self, func_ctx: Optional['FunctionContext']) -> 'SemanticContext':
-        return replace(self, function_context=func_ctx)
-
-    def with_class_context(self, class_ctx: Optional['ClassContext']) -> 'SemanticContext':
-        return replace(self, class_context=class_ctx)
-
-    def with_loop_context(self, loop_ctx: Optional['LoopContext']) -> 'SemanticContext':
-        return replace(self, loop_context=loop_ctx)
-
     def with_flag(self, flag_name: str, value: bool) -> 'SemanticContext':
         new_flags = {**self.flags, flag_name: value}
         return replace(self, flags=new_flags)
 
     def get_flag(self, flag_name: str, default: bool = False) -> bool:
         return self.flags.get(flag_name, default)
-
-
-@dataclass(frozen=True)
-class FunctionContext:
-    """Context for function analysis"""
-    function_name: str
-    return_type: Any
-    is_method: bool = False
-    auto_return_types: list = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class ClassContext:
-    """Context for class analysis"""
-    class_name: str
-    class_def: Any
-    parent_class: Optional[Any] = None
-
-
-@dataclass(frozen=True)
-class LoopContext:
-    """Context for loop analysis"""
-    loop_type: str
-    has_llmexcept: bool = False
 
 
 class ContextBuilder:
