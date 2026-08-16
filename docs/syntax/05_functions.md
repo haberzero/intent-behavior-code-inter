@@ -191,9 +191,9 @@ func call_any(fn f) -> auto:
 | `fn`（裸，参数/返回/容器元素） | 类型标注位置 | "任意可调用"抽象——实参/返回必须是可调用（`apply(42)`、`-> fn: return 42` 编译期拦截；动态 any/auto 放行） |
 | `fn[(...)->(...)]` | 类型标注位置（参数 / 返回类型 / `auto`/`fn` 覆盖类型） | 结构签名约束（参数数量 + 各位置类型 + 返回类型） |
 
-> **`callable` 是内部类型名（方向 A，2026-08-14）**：不作为用户可写类型注解
-> （`callable f` / `-> callable` 报 `SEM_UNRESOLVED_TYPE`）。它是运行期函数对象基类名
-> （`type(make)`="callable"）+ 公理族根，用户面统一用 `fn` 表达"可调用"。
+> **`callable` 是内部类型名**：不作为用户可写类型注解（`callable f` / `-> callable`
+> 报 `SEM_UNRESOLVED_TYPE`）。它是运行期函数对象基类名（`type(make)`="callable"），
+> 用户面统一用 `fn` 表达"可调用"。
 
 **匹配规则**：
 - 参数数量必须严格相等

@@ -408,7 +408,7 @@ class IbValue(IbObject):
 - `fn g = lambda(int x) -> int: x+1` ⇒ 推导 g 类型为 `CALLABLE_INSTANCE[int]`
 - `fn h = lambda -> auto: @~ ... ~` ⇒ 行为体 `-> auto` 唯一推断 str ⇒ `CALLABLE_INSTANCE[str]`
 
-**`fn` 参数/返回位置＝"任意可调用（强制）"（方向 A，2026-08-14）**：`fn` 作为参数
+**`fn` 参数/返回位置＝"任意可调用（强制）"**：`fn` 作为参数
 类型或返回类型（裸 `fn` 哨兵，非 `fn[(...)]`）时，实参/返回表达式必须是可调用——
 `apply(42)`、`-> fn: return 42` 编译期 `SEM_TYPE_MISMATCH`；动态实参/返回（`any`/
 `auto`）静态不可判，放行交运行期裁决。`fn` 接受裸函数 / lambda / snapshot /
@@ -439,7 +439,7 @@ class IbValue(IbObject):
   - 非 `Optional` 类型**禁止**接收 `None`；
   - `Optional[T]` 接受 `T` / `None` / `Optional[T]`；
 - 解封 API：`OptionalAxiom` 暴露 `unwrap` / `or_else` / `is_some` / `is_none` / `to_bool` / `cast_to` 方法。
-- **统一 Optional 值模型**（2026-08-14 根治）：`Optional[T]` 空值**恒为**
+- **统一 Optional 值模型**：`Optional[T]` 空值**恒为**
   `IbOptional(is_some=False)` 包装对象，任何值创建路径（模块级与函数作用域
   局部变量定义/赋值、函数参数、返回、类字段默认值与赋值、容器元素、
   闭包捕获与 cell 写）均经单一包装权威 `wrap_optional` 统一包装——不产生
@@ -449,7 +449,7 @@ class IbValue(IbObject):
     （None 语义检测，与 `== None` 对齐）；
   - `is_none()` / `is_some()` / `unwrap()` / `or_else()` 在任何路径可用；
   - `type()` 内省一致（空 Optional 报 `Optional[T]`）。
-- **Optional 容器委托**（2026-08-14 根治）：`Optional[T]` 是 `T` 的透明包装——
+- **Optional 容器委托**：`Optional[T]` 是 `T` 的透明包装——
   持有值时，`T` 的容器操作与成员访问按 `T` 语义可用（`len(o)` / `o[i]` /
   `for x in o` / `o.to_list()` 等经内层值委托）；空 `Optional` 上这些操作
   fail-fast 报 `RUN_ATTRIBUTE_ERROR`（明确"空 Optional 无此操作"，不静默）。

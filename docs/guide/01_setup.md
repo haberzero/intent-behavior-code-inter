@@ -60,7 +60,7 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 字段说明：
 - `providers`：连接层，声明 `base_url` + `api_key`（支持 `{env:VAR}` 环境变量引用）。
 - `models`：命名模型，引用 `provider` + 模型名 + 每模型参数（`timeout`/`reasoning`）。
-- `defaults`：全局默认（`timeout`/`retry`/`mock`）。
+- `defaults`：全局默认（`timeout`/`retry`/`mock`/`auto_intent_injection`）。
 - `default_model`：默认模型引用（字符串指向 `models` 的键，或对象形态直接声明）。
 
 `api_key` 支持 `{env:VAR}` 引用环境变量，避免硬编码密钥。`reasoning:false` 声明非思考模型（跳过 `probe_model`，直接按标准指令模型处理）。`mock:true` 显式进入 MOCK 模式。
