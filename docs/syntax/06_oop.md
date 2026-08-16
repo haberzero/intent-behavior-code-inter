@@ -170,6 +170,14 @@ if s == Status.RUNNING:
 | `__payload_prompt__(self)` | 变量插值到多模态 `@~ ... ~` 时 | 返回结构化 content block（图像/音频等） |
 | `__snapshot__(self)` | llmexcept 快照进入时 | 返回用于恢复状态的快照值 |
 | `__restore__(self, state)` | llmexcept retry 前 | 从快照值恢复对象状态 |
+
+**运算符重载**：用户类可定义运算符 dunder 方法（`__add__` / `__sub__` / `__mul__` /
+`__truediv__` / `__floordiv__` / `__mod__` / `__pow__` / `__and__` / `__or__` /
+`__xor__` / `__lshift__` / `__rshift__` / `__eq__` / `__ne__` / `__lt__` / `__le__` /
+`__gt__` / `__ge__` / `__neg__` / `__pos__` / `__invert__` / `__not__` /
+`__contains__`）并经运算符分派调用；`is` 恒为身份比较，不可覆写。完整清单与
+边界见 `docs/KNOWN_LIMITS.md` §十四。
+
 ---
 
 ### 6.8 用户协议与 retroactive implementation

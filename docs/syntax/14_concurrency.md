@@ -8,7 +8,7 @@
 
 ### 14.2 chan 通道
 
-`chan(T, name, mode=..., buffer=...)` 构造通道；`T` 为消息元素类型，`name` 供注册表内省，`mode` 选择消息语义，`buffer` 为队列容量（0=无界，>0 有界）。
+`chan(T, mode=..., buffer=..., name=...)` 构造通道；`T` 为消息元素类型（首参，`chan(str, "stream")` 的第二位置参数可作 `mode`），`mode` 选择消息语义（`stream`/`message`/`pubsub`），`buffer` 为队列容量（0=无界，>0 有界），`name` 为可选具名（关键字，供注册表寻址）。
 
 > **`T` 实参形态**：`T` 宜传**裸类型类对象**（`chan(str, "stream")` → `chan[str]`）。**特化类对象实参**（`chan(Box[int], "message")`）当前被降级为裸类（`chan[Box]`）——普适写法是**类型在声明处、构造只传运行时参数**：`chan[E] ch = chan()`（含 `await` 均正常）。
 
