@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
 from core.kernel.axioms.primitives.base import BaseAxiom, _m
 from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -135,5 +136,5 @@ class EnumAxiom(BaseAxiom):
         preview = ", ".join(names[:5]) + (" 等" if len(names) > 5 else "")
         return (False, f"无法解析 '{raw_response}'，请回复有效枚举值如: {preview}")
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "enum"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "enum"

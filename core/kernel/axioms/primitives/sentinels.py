@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from core.kernel.axioms.primitives.base import BaseAxiom, _m
 from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 
 
 # ------------------------------------------------------------------ #
@@ -32,8 +33,8 @@ class VoidAxiom(BaseAxiom):
     def name(self) -> str:
         return "void"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "void"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "void"
 
 
 # ------------------------------------------------------------------ #
@@ -74,7 +75,7 @@ class DynamicAxiom(BaseAxiom):
     def parse_value(self, raw_value: str) -> Any:
         return raw_value.strip()
 
-    def is_compatible(self, other_name: str) -> bool:
+    def is_compatible(self, other: TypeRef) -> bool:
         return True
 
 
@@ -98,8 +99,8 @@ class NoneAxiom(BaseAxiom):
     def can_convert_from(self, source_type_name: str) -> bool:
         return source_type_name == "None"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "None"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "None"
 
 
 # ------------------------------------------------------------------ #
@@ -122,8 +123,8 @@ class OptionalAxiom(BaseAxiom):
             "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "Optional" or other_name.startswith("Optional[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "Optional"
 
 
 # ------------------------------------------------------------------ #
@@ -135,8 +136,8 @@ class SliceAxiom(BaseAxiom):
     def name(self) -> str:
         return "slice"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "slice"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "slice"
 
 
 # ------------------------------------------------------------------ #
@@ -191,7 +192,7 @@ class LLMUncertainAxiom(BaseAxiom):
         # 显式类型转换方向：只允许 llm_uncertain → llm_uncertain（同类转换）。
         return source_type_name == "llm_uncertain"
 
-    def is_compatible(self, other_name: str) -> bool:
+    def is_compatible(self, other: TypeRef) -> bool:
         # 赋值方向：llm_uncertain 值可被赋给任何类型的变量（宽松策略）。
         return True
         return True
@@ -216,5 +217,5 @@ class LlmCallResultAxiom(BaseAxiom):
     def name(self) -> str:
         return "llm_call_result"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "llm_call_result"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "llm_call_result"

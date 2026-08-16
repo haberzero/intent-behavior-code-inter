@@ -41,8 +41,8 @@ class ExceptionAxiom(BaseAxiom):
     def can_convert_from(self, source_type_name: str) -> bool:
         return source_type_name in ("str", "Exception")
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "Exception"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "Exception"
 
 
 # ------------------------------------------------------------------ #
@@ -87,8 +87,8 @@ class _LLMErrorAxiomBase(BaseAxiom):
     def can_convert_from(self, source_type_name: str) -> bool:
         return source_type_name in ("str", self._axiom_name)
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name in self._compatible_chain
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head in self._compatible_chain
 
 
 class LLMErrorAxiom(_LLMErrorAxiomBase):

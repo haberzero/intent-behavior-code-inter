@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from core.kernel.axioms.primitives.base import BaseAxiom
+from core.kernel.spec.type_ref import TypeRef
 
 
 # ------------------------------------------------------------------ #
@@ -28,9 +29,9 @@ class BoundMethodAxiom(BaseAxiom):
     def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
         return "any"
 
-    def is_compatible(self, other_name: str) -> bool:
+    def is_compatible(self, other: TypeRef) -> bool:
         # bound_method IS-A callable.
-        return other_name in ("bound_method", "callable")
+        return other.head in ("bound_method", "callable")
 
 
 # ------------------------------------------------------------------ #
@@ -59,8 +60,8 @@ class CallableAxiom(BaseAxiom):
     def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
         return "auto"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "callable"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "callable"
 
 
 # ------------------------------------------------------------------ #
@@ -89,11 +90,8 @@ class FnCallableAxiom(BaseAxiom):
     def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
         return "auto"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return (
-            other_name in ("fn_callable", "callable")
-            or other_name.startswith("fn_callable[")
-        )
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head in ("fn_callable", "callable")
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "callable"
@@ -125,12 +123,8 @@ class BehaviorAxiom(BaseAxiom):
     def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]:
         return "auto"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return (
-            other_name in ("behavior", "fn_callable", "callable")
-            or other_name.startswith("fn_callable[")
-            or other_name.startswith("behavior[")
-        )
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head in ("behavior", "fn_callable", "callable")
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "fn_callable"

@@ -122,8 +122,13 @@ class BaseAxiom:
     def is_module(self) -> bool:
         return False
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == self.name
+    def is_compatible(self, other: TypeRef) -> bool:
+        """源 axiom 是否兼容目标类型（family 判定，结构化——other.head 即家族名）。
+
+        B2 结构化：替代字符串名前缀匹配（``startswith("list[")``）——特化名
+        形态不再进入 axiom 层，family 判定经 TypeRef.head（结构化承载）。
+        """
+        return other.head == self.name
 
     def get_parent_axiom_name(self) -> Optional[str]:
         return "Object"

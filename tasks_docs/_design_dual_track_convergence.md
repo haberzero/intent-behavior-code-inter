@@ -81,18 +81,38 @@
 | `_hydrate_user_classes` 特化类共享 AST 节点 `name.split("[")` | interpreter.py:632-633 |
 | `_impl_cls` 沿 base_name 解析（已结构化 ✅） | ib_class.py:219-235 |
 
-### 2.2 设计方向（待冻结）
+### 2.2 设计方向（预研完成，待冻结）
 
-特化身份结构化 = **基 spec 引用 + 实参 TypeRef 列表**（`SpecializationKey`）：
-- SpecRegistry 特化注册键/解析键支持结构化查询（`resolve_specialized(base, arg_refs)`），
-  字符串 canonical_name 仅作显示/序列化（派生，非权威）；
-- axiom `is_compatible` 从"字符串前缀匹配"改结构化比较（family + 实参）；
-- `_specialize`/`_bind_type_params` 的 boxed 名桥改结构化传递；
-- 序列化 round-trip 保真（type_args/base_name 已结构化，键派生）。
+特化身份结构化 = **身份权威结构化 + 字符串键派生化**（方案 A，保留注册表字符串
+键但单点生成）：
 
-**影响面**：20+ 处。**风险**：注册键/序列化形态属对外契约（artifact 格式）。
-**分支政策评估**：影响面大、边界需实验确认 → 独立分支 exp/dual-track-b2 实验 + 复核后
-手动更新 unsafe-vibe-dev（按 AGENTS.md 分支政策）。
+1. **特化名拼接单点化**：`_assignability.py:315/338`、`ib_class.py:515` 的特化名
+   拼接统一收敛为单一 helper `specialization_key(base_spec, arg_refs)`（经
+   TypeRef.canonical_name 生成——canonical_name 已是结构化→字符串的单一权威，
+   base.py 特化 spec 有 base_name/type_args 结构化字段）；
+2. **axiom is_compatible 结构化**：11 处字符串前缀匹配（sequences/comm/callable/
+   sentinels/generator）改为按 spec 结构化比较（family + 实参）——is_compatible
+   调用方传入 spec/结构化身份（axiom 层边界评估：is_compatible(name: str) 签名
+   变更影响面，可能保留字符串入口 + 内部结构化解析）；
+3. **boxed 名桥结构化**（_specialize ib_class.py:526-529 + _resolve_type_identifier
+   _shared.py:986-997）：嵌套泛型实参类型标识 → 先查已预创建特化类
+   （get_class(canonical_name)，loader 已预创建内置泛型特化）→ 命中返回 IbClass；
+   未命中（运行时首次遇到、sealed 不可建）→ 回落 boxed 字符串（职责分离
+   fallback：类型标识两形态，非掩盖——文档化契约）；
+4. **序列化 round-trip**：type_pool 特化 spec 持久化（type_args/base_name 已结构化）
+   恢复路径经结构化键派生，`"[" in name` 判断（runtime_serializer.py:750/807、
+   artifact_rehydrator.py:23 `_base_name_from_name`）收敛为结构化字段读取。
+
+**影响面**：20+ 处。**风险**：is_compatible 签名变更（axiom 层）+ 序列化契约。
+**分支政策**：影响面大、边界需实验确认 → **独立分支 exp/dual-track-b2 实验** +
+独立复核后手动更新 unsafe-vibe-dev（按 AGENTS.md 分支政策）。
+
+### 2.3 boxed 桥根因（预研实证）
+
+- `_resolve_type_identifier`（_shared.py:986-997）：嵌套泛型实参 → box 字符串标识，
+  因 sealed registry 不可 create_subclass（ib_class.py:534 回落同因）；
+- loader 已预创建内置泛型特化类（_hydrate_builtin_generic_classes）——封印期
+  get_class("list[int]") 可命中已注册特化 → boxed 桥大部分场景可结构化替代。
 
 ## 3. B3 成员单一权威（待预研）
 
@@ -133,9 +153,26 @@
 
 - **B1-D1**：方法函数 spec 恒不含 self（成员表权威同构 + 运行期 self 注入独立
   + 跨模块路径已是不含形态——统一即向既有权威收敛，非新设计）。
+- **B2-D1（步骤 1）**：特化注册键单点生成 `specialization_key`（type_ref.py）——
+  三处手写拼接（_assignability 内置/用户类 + _specialize 运行期）收敛；module
+  限定由调用方拼接（运行期类表键）。
+- **B2-D2（步骤 2）**：axiom `is_compatible` 结构化——签名 `str → TypeRef`，
+  family 判定经 `other.head`（11 处前缀匹配 + media 精确比较全部收敛；
+  TypeRef.head 由结构化承载，特化名形态不再进入 axiom 层）。调用点
+  `_assignability.py:116` 传 `TypeRef.from_spec(target)`。误伤修复记录：
+  `resolve_operation_type_name` 参数名恢复（批量替换纪律教训）。
+- **B2-D3（步骤 3）**：boxed 名桥结构化优先——`_resolve_type_identifier` 嵌套
+  泛型实参先查已注册特化类（loader 预创建）→ IbClass；未注册（sealed 不可建）
+  回落 boxed 特化名（职责分离 fallback，两形态契约，非掩盖）。
+- **B2-D4（步骤 4 决策：序列化检测/解析保留）**：runtime_serializer `"[" in name`
+  检测与 artifact_rehydrator `_base_name_from_name` 解析**保留**——结构化替代
+  需补 `_KIND_BASE_NAMES`（THREAD_RESULT/GENERATOR 缺失）会改变 get_base_name
+  行为面（axiom 查询键漂移风险），收益仅检测形态；且检测/解析与
+  specialization_key 生成同源（无漂移）。登记为后续窗口（阶段 D §十 联动）。
 - 其余子项决策随预研冻结。
 
 ## 8. 非目标（本阶段）
 
 - 不动用户面语法；不改协议注册表结构（阶段 C）；不改 axiom 布尔字段（阶段 C）；
+- 序列化特化检测/解析的 kind 映射补全（B2-D4，后续窗口）；
 - media/并发/泛型 bound 等（goal 非目标）。

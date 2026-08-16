@@ -11,6 +11,7 @@ media 类型是 file_handle 的磁盘型子类；公理层只负责委托。
 
 from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom
 from core.kernel.axioms.primitives.base import BaseAxiom
+from core.kernel.spec.type_ref import TypeRef
 
 
 class _FakeValue:
@@ -50,10 +51,10 @@ class TestAudioAxiom:
 
     def test_compatible_only_with_audio(self):
         ax = AudioAxiom()
-        assert ax.is_compatible("audio")
-        assert not ax.is_compatible("str")
-        assert not ax.is_compatible("image")
-        assert not ax.is_compatible("any")
+        assert ax.is_compatible(TypeRef.of("audio"))
+        assert not ax.is_compatible(TypeRef.of("str"))
+        assert not ax.is_compatible(TypeRef.of("image"))
+        assert not ax.is_compatible(TypeRef.of("any"))
 
     def test_method_specs_include_data_and_format(self):
         specs = AudioAxiom().get_method_specs()
@@ -91,9 +92,9 @@ class TestImageAxiom:
 
     def test_compatible_only_with_image(self):
         ax = ImageAxiom()
-        assert ax.is_compatible("image")
-        assert not ax.is_compatible("audio")
-        assert not ax.is_compatible("str")
+        assert ax.is_compatible(TypeRef.of("image"))
+        assert not ax.is_compatible(TypeRef.of("audio"))
+        assert not ax.is_compatible(TypeRef.of("str"))
 
     def test_payload_prompt_delegates_to_runtime_value(self):
         ax = ImageAxiom()
@@ -116,9 +117,9 @@ class TestVideoAxiom:
 
     def test_compatible_only_with_video(self):
         ax = VideoAxiom()
-        assert ax.is_compatible("video")
-        assert not ax.is_compatible("audio")
-        assert not ax.is_compatible("image")
+        assert ax.is_compatible(TypeRef.of("video"))
+        assert not ax.is_compatible(TypeRef.of("audio"))
+        assert not ax.is_compatible(TypeRef.of("image"))
 
     def test_payload_prompt_delegates_to_runtime_value(self):
         ax = VideoAxiom()

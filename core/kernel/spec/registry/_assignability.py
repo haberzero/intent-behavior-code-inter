@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from ..base import IbSpec, TypeKind
-from ..type_ref import TypeRef
+from ..type_ref import TypeRef, specialization_key
 
 
 class _AssignabilityMixin:
@@ -111,9 +111,10 @@ class _AssignabilityMixin:
                 return True
 
         # Axiom-driven compatibility (e.g. bool isa int)
-        # Pass the full target name so axioms can handle typed variants like "fn_callable[int]".
+        # 结构化 family 判定：axiom is_compatible 接收 TypeRef（B2——不再传特化名
+        # 字符串，head 即家族名）。
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())
-        if src_axiom and src_axiom.is_compatible(target.name):
+        if src_axiom and src_axiom.is_compatible(TypeRef.from_spec(target)):
             return True
 
         # Class inheritance: walk src's parent chain.
@@ -298,8 +299,9 @@ class _AssignabilityMixin:
             # 不经 `a.name` 字符串——扁平化会使 substitute 无法穿透嵌套实参。
             arg_refs = [TypeRef.from_spec(a) for a in arg_specs]
             arg_modules = [a.module_path for a in arg_specs]
-            # 使用完整特化名（含参数）作缓存键，支持嵌套泛型 list[list[int]]。
-            candidate_key = f"{base_name}[{','.join(r.canonical_name for r in arg_refs)}]"
+            # 使用完整特化名（含参数）作缓存键，支持嵌套泛型 list[list[int]]
+            # （specialization_key 单点生成，见 type_ref.py）。
+            candidate_key = specialization_key(base_name, [r.canonical_name for r in arg_refs])
             cached = self.resolve(candidate_key)
             if cached is not None:
                 return cached
@@ -341,7 +343,7 @@ class _AssignabilityMixin:
             for param, a in zip(type_params, arg_specs)
         }
         arg_names = [r.canonical_name for r in arg_refs]
-        specialized_name = f"{spec.name}[{','.join(arg_names)}]"
+        specialized_name = specialization_key(spec.name, arg_names)
         cached = self.resolve(specialized_name, getattr(spec, "module_path", None))
         if cached is not None:
             return cached

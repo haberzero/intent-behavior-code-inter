@@ -39,8 +39,8 @@ class FileHandleAxiom(BaseAxiom):
             "cast_to": _m("cast_to", params=["any"], ret="any"),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "file_handle"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "file_handle"
 
     def __payload_prompt__(self, value: Any, spec: Optional[Any] = None) -> Any:
         """Delegating payload prompt — the actual logic lives on the runtime value."""

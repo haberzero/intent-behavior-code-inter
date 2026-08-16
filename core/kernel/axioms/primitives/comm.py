@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from core.kernel.axioms.primitives.base import BaseAxiom, _m
 from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 
 
 class ThreadAxiom(BaseAxiom):
@@ -50,8 +51,8 @@ class ThreadAxiom(BaseAxiom):
         # thread(...) 构造函数返回 thread 类型（具体泛型由声明上下文确定）。
         return "thread"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "thread" or other_name.startswith("thread[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "thread"
 
 
 class ThreadResultAxiom(BaseAxiom):
@@ -84,8 +85,8 @@ class ThreadResultAxiom(BaseAxiom):
             "status": _m("status", ret="str"),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "thread_result" or other_name.startswith("thread_result[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "thread_result"
 
 
 class ChannelAxiom(BaseAxiom):
@@ -110,8 +111,8 @@ class ChannelAxiom(BaseAxiom):
             "close": _m("close", ret="void", mutating=True),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "chan" or other_name.startswith("chan[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "chan"
 
 
 class SubscriberAxiom(BaseAxiom):
@@ -131,8 +132,8 @@ class SubscriberAxiom(BaseAxiom):
             "close": _m("close", ret="void", mutating=True),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "subscriber"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "subscriber"
 
 
 class SlotAxiom(BaseAxiom):
@@ -152,5 +153,5 @@ class SlotAxiom(BaseAxiom):
             "update": _m("update", params=["any"], ret="void", mutating=True),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "slot" or other_name.startswith("slot[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "slot"

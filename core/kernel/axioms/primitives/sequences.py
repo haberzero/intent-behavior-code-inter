@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from core.base.support.fuzzy_json import FuzzyJsonParser
 from core.kernel.axioms.primitives.base import BaseAxiom, _m
+from core.kernel.spec.type_ref import TypeRef
 from core.kernel.spec.member import MethodMemberSpec
 
 if TYPE_CHECKING:
@@ -97,8 +98,8 @@ class StrAxiom(BaseAxiom):
     def from_prompt(self, raw_response: str, spec: Optional["IbSpec"] = None) -> Tuple[bool, Any]:
         return (True, self.parse_value(raw_response))
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "str"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "str"
 
 
 # ------------------------------------------------------------------ #
@@ -176,8 +177,8 @@ class ListAxiom(BaseAxiom):
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
         return "请返回一个 JSON 数组，如: [1, 2, 3]，不要包含任何其他文字"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name in ("list",) or other_name.startswith("list[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "list"
 
 
 # ------------------------------------------------------------------ #
@@ -245,8 +246,8 @@ class DictAxiom(BaseAxiom):
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
         return "请返回一个 JSON 对象，如: {'key': 'value'}，不要包含任何其他文字"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name in ("dict",) or other_name.startswith("dict[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "dict"
 
 
 # ------------------------------------------------------------------ #
@@ -316,8 +317,8 @@ class TupleAxiom(BaseAxiom):
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
         return "请返回一个 JSON 数组（将作为元组处理），如: [1, 2, 3]，不要包含任何其他文字"
 
-    def is_compatible(self, other_name: str) -> bool:
+    def is_compatible(self, other: TypeRef) -> bool:
         # 基础协变：所有特化 tuple[*] 都可赋值给裸 tuple；同名 spec 兼容。
         # 注意：不同位置元素的 tuple 之间默认不互相兼容（与 list[int]/list[str]
         # 不互兼容的方向一致，由 SpecRegistry 的 covariance 路径细化处理）。
-        return other_name in ("tuple",) or other_name.startswith("tuple[")
+        return other.head == "tuple"

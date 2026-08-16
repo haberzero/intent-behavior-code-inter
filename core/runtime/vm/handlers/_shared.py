@@ -987,11 +987,17 @@ def _resolve_type_identifier(executor, arg_ref) -> Optional[Any]:
     """把特化实参 TypeRef 解析为运行时类型标识对象。
 
     简单实参（``int``）→ ``registry.get_class("int")``（IbClass，对齐
-    ``Box[int]`` slice int 求值）。嵌套泛型实参（``list[int]``）→ boxed
-    特化名（对齐 ``IbClass._specialize`` 对内置泛型返回 boxed 标识的机制），
-    ``_type_ref_name`` 可提取 "list[int]" 使 ``Box[T]`` 命中特化。
+    ``Box[int]`` slice int 求值）。嵌套泛型实参（``list[int]``）→ 查已注册
+    特化类（loader 预创建，get_class 命中即 IbClass——结构化身份，替代
+    boxed 特化名）；未注册（运行时首次遇到、registry 已封印不可
+    create_subclass）→ 回落 boxed 特化名（职责分离 fallback：类型标识的
+    既有两形态契约，``_type_ref_name`` 可提取 "list[int]" 使 ``Box[T]``
+    命中特化——B2 结构化，非掩盖型兜底）。
     """
     registry = executor.registry
     if not arg_ref.args:
         return registry.get_class(arg_ref.head, module=arg_ref.module)
+    specialized = registry.get_class(arg_ref.canonical_name, module=arg_ref.module)
+    if specialized is not None:
+        return specialized
     return registry.box(arg_ref.canonical_name)

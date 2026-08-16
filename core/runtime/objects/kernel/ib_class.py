@@ -3,6 +3,7 @@ from typing import Optional, Dict, Mapping, Any, List, TYPE_CHECKING
 from core.kernel.registry import KernelRegistry
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import IbSpec, TypeKind
+from core.kernel.spec.type_ref import specialization_key
 
 from ..ib_type_mapping import register_ib_type, get_ib_implementation
 from .base import IbObject, IbValue
@@ -513,8 +514,10 @@ class IbClass(IbObject):
                 f"(e.g. {self.name}[int]), got a value."
             )
         # 特化名带 module 限定（geo.Box[int]）：与运行期类表 qualified 键对齐，
-        # 跨模块同名类特化不坍缩（S5 运行期根治）。
-        specialized_name = f"{self.qualified_name}[{','.join(type_names)}]"
+        # 跨模块同名类特化不坍缩（S5 运行期根治）。canonical 形态经
+        # specialization_key 单点生成（type_ref.py），module 前缀拼接在此。
+        canonical = specialization_key(self.name, type_names)
+        specialized_name = f"{self.module_path}.{canonical}" if self.module_path else canonical
         existing = self.registry.get_class(specialized_name)
         if existing is not None:
             return existing

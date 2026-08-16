@@ -14,6 +14,7 @@ from typing import Dict
 
 from core.kernel.axioms.primitives.base import BaseAxiom, _m
 from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 
 
 class GeneratorAxiom(BaseAxiom):
@@ -33,5 +34,5 @@ class GeneratorAxiom(BaseAxiom):
             "generic_next": _m("generic_next", ret="any"),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "generator" or other_name.startswith("generator[")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "generator"

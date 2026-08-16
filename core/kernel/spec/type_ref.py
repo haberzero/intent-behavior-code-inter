@@ -22,10 +22,23 @@ TypeRef 是纯不可变值，代表对一个类型的引用。它只持有类型
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import Optional, Sequence, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .base import IbSpec
+
+
+def specialization_key(base_name: str, arg_names: Sequence[str]) -> str:
+    """特化注册键（canonical 形态，不含 module 前缀）——单点生成。
+
+    收敛此前散落的手写拼接（``f"{base}[{','.join(args)}]"``）：键形态
+    （head[arg1,arg2]）以本函数为单一权威；module 限定由调用方按需加前缀
+    （运行期类表键 ``f"{module}.{key}"``）。arg_names 须为 canonical 形态
+    （TypeRef.canonical_name 产出），嵌套泛型实参保持原样。
+    """
+    if not arg_names:
+        return base_name
+    return f"{base_name}[{','.join(arg_names)}]"
 
 
 # ------------------------------------------------------------------ #

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from core.kernel.axioms.primitives.base import BaseAxiom, _m
 from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
@@ -88,8 +89,8 @@ class IntAxiom(BaseAxiom):
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
         return "请只返回一个整数，如: 42 或 -15，不要包含任何其他文字"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "int"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "int"
 
 
 # ------------------------------------------------------------------ #
@@ -159,8 +160,8 @@ class FloatAxiom(BaseAxiom):
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
         return "请只返回一个数字，如: 3.14 或 -2.5，不要包含任何其他文字"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == "float"
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == "float"
 
 
 # ------------------------------------------------------------------ #
@@ -234,5 +235,5 @@ class BoolAxiom(BaseAxiom):
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
         return "请返回一个布尔值：true/false、yes/no 或 1/0，不要包含任何其他文字"
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name in ("bool", "int")
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head in ("bool", "int")

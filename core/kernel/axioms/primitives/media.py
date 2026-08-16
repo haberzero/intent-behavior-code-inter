@@ -38,8 +38,8 @@ class _MediaAxiomBase(BaseAxiom):
             "cast_to":  _m("cast_to", params=["any"], ret="any"),
         }
 
-    def is_compatible(self, other_name: str) -> bool:
-        return other_name == self.name
+    def is_compatible(self, other: TypeRef) -> bool:
+        return other.head == self.name
 
     def __payload_prompt__(self, value: Any, spec: Optional["IbSpec"] = None) -> Any:
         """Delegating payload prompt — actual content block built by the runtime value."""
