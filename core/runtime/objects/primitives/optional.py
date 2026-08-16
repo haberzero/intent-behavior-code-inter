@@ -147,8 +147,10 @@ class IbOptional(IbValue):
                 result = handler(message, args)
                 if result is not None:
                     return result
-        # 2. 委托内层值（容器协议 len/下标/迭代/成员访问透传）
-        if self._is_some and isinstance(self.payload, IbObject):
+        # 2. 委托内层值（容器协议 len/下标/迭代/成员访问透传）。
+        #    __getattr__ 已在 _dispatch_getattr 内完成内层委托——此处跳过，
+        #    避免双重委托（内层 __getattr__ 副作用/开销重复执行）。
+        if message != "__getattr__" and self._is_some and isinstance(self.payload, IbObject):
             try:
                 return self.payload.receive(message, args)
             except AttributeError:
@@ -183,6 +185,10 @@ class IbOptional(IbValue):
 
     def _dispatch_call(self, message: str, args: List[IbObject]):
         """无 Optional 专属调用语义：委托链处理（显式关闭基类默认 __call__ 处理器）。"""
+        return None
+
+    def _dispatch_cast_to(self, message: str, args: List[IbObject]):
+        """无 Optional 专属转换语义：委托链处理（内层优先，显式关闭基类默认处理器）。"""
         return None
 
     def _dispatch_getattr(self, message: str, args: List[IbObject]):

@@ -146,5 +146,13 @@ class IbModule(IbObject):
                 pass
         return None
 
+    def _dispatch_call(self, message: str, args: List['IbObject']):
+        """模块对象无专属调用语义：scope.receive 转发（关闭基类默认处理器）。"""
+        return None
+
+    def _dispatch_cast_to(self, message: str, args: List['IbObject']):
+        """模块对象无专属转换语义：scope.receive 转发（关闭基类默认处理器）。"""
+        return None
+
     def __repr__(self):
         return f"<Module '{self.name}'>"

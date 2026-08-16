@@ -53,6 +53,12 @@ payload_prompt/snapshotable 等）接入协议注册表（`core/kernel/protocol.
 | + | callables.py:128/356 | `in ("__get_metadata__","__to_prompt__","node_uid")` | 内部元数据消息 |
 | + | runtime_context.py:308 | `'__getattr__'` | 模块 scope 属性 |
 
+> **RuntimeContext 归类说明（复核 P2-5 整改）**：`RuntimeContextImpl` 非 IbObject 子类
+> （interpreter 内部 scope 契约，IModuleScope 实现），其 receive 是"符号名 get 委托"，
+> 无 ib_class/协议注册表访问——**不属 OOP 协议分派面**，本阶段不迁移。其
+> `message == '__getattr__'` 分支是 VM 属性访问的 scope 入口（get 委托契约），
+> 与 receive 协议分派不同构；若未来 scope 层协议化（阶段 E 后评估）再统一。
+
 ### 1.2 已协议化先例（参照）
 
 - `satisfies_protocol`（_protocol.py:57）单一入口；8 个消费点已走注册表（LLM executor/

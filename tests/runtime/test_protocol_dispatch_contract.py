@@ -93,6 +93,65 @@ class TestProtocolDispatchHandlers:
         # 未执行函数值可查询签名元数据（原 __return_type__ 分支语义）
         assert f.receive("__return_type__", []).to_native() is not None
 
+    def test_unexecuted_behavior_to_prompt_preserved(self):
+        """未缓存 IbBehavior 的 __to_prompt__ 返回描述（复核 P1 回归锁定）。"""
+        from core.runtime.objects.primitives.callables import IbBehavior
+
+        engine = _engine()
+        engine.run_string("int x = 1\n", silent=True)  # 引擎初始化（类表就绪）
+        behavior_cls = engine.registry.get_class("behavior")
+        assert behavior_cls is not None
+        # 未执行（无 cache）行为对象：__to_prompt__ 应返回描述而非抛错
+        behavior = IbBehavior("node-x", None, behavior_cls)
+        result = behavior.receive("__to_prompt__", [])
+        assert str(result) != "", "未执行行为 __to_prompt__ 应返回描述（非抛错）"
+
+    def test_cast_to_vtable_first_message_level(self):
+        """cast_to 消息级：vtable 转换实现先行（复核 P2 契约锁定）。"""
+        engine = _engine()
+        engine.run_string(
+            "int i = (int)'123'\n"
+            "bool b = (bool)1\n",
+            silent=True,
+        )
+        assert _symbol(engine, "i").to_native() == 123
+        assert _symbol(engine, "b").to_native() is True
+
+    def test_user_call_cps_drive_message_level(self):
+        """用户类 __call__ 经 _UserCallDrive 消息级分派（CPS 路径保持）。"""
+        from core.runtime.objects.kernel.ib_class import _UserCallDrive
+
+        engine = _engine()
+        engine.run_string(
+            "class Adder:\n"
+            "    int n\n"
+            "    func __init__(self, int v) -> auto:\n"
+            "        self.n = v\n"
+            "    func __call__(self, int x) -> int:\n"
+            "        return self.n + x\n"
+            "Adder a = Adder(10)\n",
+            silent=True,
+        )
+        a = _symbol(engine, "a")
+        result = a.receive("__call__", [engine.registry.box(5)])
+        # 用户 __call__ 返回 CPSDrivable drive（VM 帧内驱动，非同步执行）
+        assert isinstance(result, _UserCallDrive), (
+            f"用户 __call__ 应返回 _UserCallDrive，got {type(result)}"
+        )
+
+    def test_some_optional_delegation_message_level(self):
+        """Some-Optional 容器消息委托内层（消息级契约锁定）。"""
+        engine = _engine()
+        engine.run_string(
+            "Optional[list[int]] ol = [1, 2, 3]\n",
+            silent=True,
+        )
+        ol = _symbol(engine, "ol")
+        # len 消息委托内层 list（有值路径）
+        assert ol.receive("len", []).to_native() == 3
+        # __getitem__ 消息委托内层（有值路径）
+        assert ol.receive("__getitem__", [engine.registry.box(0)]).to_native() == 1
+
 
 class TestImplClsStructuredResolution:
     """特化类 _impl_cls 沿 spec 基名结构化解析（A3 契约）。"""

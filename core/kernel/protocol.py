@@ -54,6 +54,12 @@ class ProtocolRegistry:
 
     def __init__(self) -> None:
         self._protocols: Dict[str, ProtocolDef] = {}
+        self._version = 0
+
+    @property
+    def version(self) -> int:
+        """注册表变更版本号（每次 register 递增）——派生索引失效契约。"""
+        return self._version
 
     def register(self, protocol: ProtocolDef) -> ProtocolDef:
         existing = self._protocols.get(protocol.name)
@@ -63,6 +69,7 @@ class ProtocolRegistry:
                 f"Protocol '{protocol.name}' is already registered with a different definition"
             )
         self._protocols[protocol.name] = protocol
+        self._version += 1
         return protocol
 
     def get(self, name: str) -> Optional[ProtocolDef]:

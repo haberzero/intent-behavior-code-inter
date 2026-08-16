@@ -3,7 +3,8 @@ from core.base.enums import Provenance, Visibility
 from .objects.kernel import IbClass, IbObject, IbNativeFunction, IbNativeObject, IbNone, IbBoundMethod
 from core.kernel.registry import KernelRegistry
 from core.kernel.factory import create_default_registry
-from core.kernel.spec import IbSpec, TypeDef
+from core.kernel.spec import IbSpec, TypeDef, MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.waitable import Waitable
 
@@ -51,6 +52,19 @@ class Bootstrapper:
         module_desc = factory.create_class("IbModule")
         intent_desc = factory.create_class("Intent")
         intent_stack_desc = factory.create_class("IntentStack")
+        # IntentStack 迭代/长度能力声明进 spec.members（与运行期原生方法表对齐，
+        # 单一权威——satisfies_protocol("iterable") 结构判定依赖 spec 声明；
+        # 此前仅运行期注册 __iter__，spec 无声明，协议判定不可达）。
+        for _mname, _mspec in (
+            ("__iter__", ("generator", [])),
+            ("__len__", ("int", [])),
+        ):
+            intent_stack_desc.members[_mname] = MethodMemberSpec(
+                name=_mname,
+                kind="method",
+                return_type=TypeRef.of(_mspec[0]),
+                param_types=[TypeRef.of(p) for p in _mspec[1]],
+            )
 
         # 内核类不属于用户定义类
         for d in [type_desc, obj_desc, callable_desc, module_desc, intent_desc, intent_stack_desc]:

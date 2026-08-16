@@ -30,25 +30,24 @@ class _ProtocolMixin:
 
     def register_protocol(self, protocol: ProtocolDef) -> ProtocolDef:
         """Register a protocol definition in this engine's registry."""
-        result = self.protocols.register(protocol)
-        # 协议方法名索引失效（dunder 分派索引以注册表为权威源）
-        self._dunder_names_cache = None
-        return result
+        return self.protocols.register(protocol)
 
     def dunder_names(self) -> FrozenSet[str]:
         """并集：全部协议 methods 的方法名集合（receive dunder 分派索引权威源）。
 
-        从协议注册表派生（单一权威），惰性缓存；新协议注册时失效重建。
-        供运行时 receive 分派判断"消息名是否协议方法"。
+        从协议注册表派生（单一权威），按注册表版本号惰性缓存——任何注册路径
+        （register_protocol / register_from_spec / 直接 registry.register）均经
+        ProtocolRegistry.register 递增版本，索引随版本失效重建。
         """
+        version = self.protocols.version
         cached = getattr(self, "_dunder_names_cache", None)
-        if cached is None:
+        if cached is None or cached[0] != version:
             names: set = set()
             for protocol in self.protocols.all():
                 names.update(protocol.methods)
-            cached = frozenset(names)
+            cached = (version, frozenset(names))
             self._dunder_names_cache = cached
-        return cached
+        return cached[1]
 
     def protocol_names(self) -> Tuple[str, ...]:
         return tuple(self.protocols.names())

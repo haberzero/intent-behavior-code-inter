@@ -167,6 +167,10 @@ class IbFnCallable(IbValue):
         """``__call__`` 协议：执行捕获的表达式（原 receive __call__ 分支语义）。"""
         return self.call(self.ib_class.registry.get_none(), args)
 
+    def _dispatch_cast_to(self, message: str, args: List[IbObject]):
+        """无 FnCallable 专属转换语义：关闭基类默认处理器（落未求值 fail-fast）。"""
+        return None
+
     def _dispatch_to_prompt(self, message: str, args: List[IbObject]) -> IbObject:
         """``__to_prompt__`` 协议：FnCallable 呈现为可读描述。"""
         return self.ib_class.registry.box(str(self))
@@ -399,3 +403,11 @@ class IbBehavior(IbValue):
     def _dispatch_call(self, message: str, args: List[IbObject]):
         """无行为对象专属调用语义（执行经 call()/缓存路径）：关闭基类默认处理器。"""
         return None
+
+    def _dispatch_cast_to(self, message: str, args: List[IbObject]):
+        """无行为对象专属转换语义：关闭基类默认处理器（落未执行 fail-fast）。"""
+        return None
+
+    def _dispatch_to_prompt(self, message: str, args: List[IbObject]) -> IbObject:
+        """``__to_prompt__`` 协议：未执行行为呈现为可读描述（原元组分支语义）。"""
+        return self.ib_class.registry.box(str(self))

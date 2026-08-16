@@ -198,6 +198,10 @@ class IbSuperProxy(IbObject):
         """``__call__`` 协议：super() 直接调用无意义，返回自身（原语义）。"""
         return self
 
+    def _dispatch_cast_to(self, message: str, args: List['IbObject']):
+        """super() 代理不支持转换：关闭基类默认处理器（落拒绝路径）。"""
+        return None
+
     def __repr__(self):
         parent_name = self._parent_class.name if self._parent_class else "<no parent>"
         return f"<super: <class '{parent_name}'>, <{self._receiver.ib_class.name} object>>"

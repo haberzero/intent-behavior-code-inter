@@ -91,6 +91,39 @@ class TestDunderNamesIndex:
         )
         assert "__zzz_marker__" in reg.dunder_names()
 
+    def test_index_invalidated_via_direct_registry_register(self):
+        """任何注册路径（含 register_from_spec 底层直接 register）均失效索引。
+
+        复核 P2-1 契约：缓存按注册表版本号失效，不依赖 mixin 入口。
+        """
+        reg = create_default_registry()
+        assert "__yyy_marker__" not in reg.dunder_names()
+        # 直接经 ProtocolRegistry.register（register_from_spec 同路径）
+        reg.protocols.register(
+            ProtocolDef(name="yyy_marker", methods=("__yyy_marker__",))
+        )
+        assert "__yyy_marker__" in reg.dunder_names()
+
+    def test_index_invalidated_via_register_from_spec(self):
+        """register_from_spec（用户协议水化路径）后索引失效。"""
+        from core.kernel.spec import TypeDef, TypeKind, MethodMemberSpec
+
+        reg = create_default_registry()
+        assert "__xxx_marker__" not in reg.dunder_names()
+        spec = TypeDef(
+            name="xxx_proto",
+            kind=TypeKind.PROTOCOL.value,
+            provenance="USER_DEFINED",
+        )
+        spec.members["__xxx_marker__"] = MethodMemberSpec(
+            name="__xxx_marker__",
+            kind="method",
+            return_type=None,
+            param_types=[],
+        )
+        reg.protocols.register_from_spec(spec)
+        assert "__xxx_marker__" in reg.dunder_names()
+
     def test_index_is_frozenset(self):
         reg = create_default_registry()
         assert isinstance(reg.dunder_names(), frozenset)
