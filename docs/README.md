@@ -1,4 +1,4 @@
-﻿# IBC-Inter 文档中心
+# IBC-Inter 文档中心
 
 > 本文件是 `docs/` 目录的**导航枢纽与治理章程**。
 >
@@ -20,6 +20,7 @@ docs/
 ├── ARCHITECTURE.md                  架构设计手册（索引）
 ├── SUBSYSTEM_DESIGN.md              子系统设计手册（索引）
 ├── KNOWN_LIMITS.md                  语言级已知限制
+├── LANGUAGE_DESIGN_EVOLUTION.md     语言设计体系化演进评估（规划参考）
 │
 ├── guide/                           入门教程（按序阅读）
 │   ├── 00_environment.md
@@ -99,6 +100,7 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 | **要改类型系统的人** | `architecture/03_type_system.md` -> `architecture/02_metadata_ast.md` |
 | **要改 VM/解释器的人** | `architecture/04_vm_interpreter.md` -> `architecture/05_vm_specification.md` |
 | **要了解当前进度的人** | `tasks_docs/NEXT_STEPS.md` -> `tasks_docs/PENDING_TASKS.md` |
+| **要研究语言演进方向的人** | `docs/LANGUAGE_DESIGN_EVOLUTION.md`（规划参考）-> `docs/architecture/03_type_system.md` §4（现状权威） |
 | **要运行或扩展试用套件的人** | `docs/trials/README.md` -> `docs/howto/run_trials.md` -> `trials/_toolkit/` |
 
 ---
@@ -115,6 +117,7 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 | 语法权威 | `docs/SYNTAX_REFERENCE.md` + `docs/syntax/` |
 | 架构设计 | `docs/ARCHITECTURE.md` + `docs/architecture/` |
 | 子系统设计 | `docs/SUBSYSTEM_DESIGN.md` + `docs/subsystems/` |
+| 语言设计演进评估（规划参考，不替代上表权威） | `docs/LANGUAGE_DESIGN_EVOLUTION.md` |
 | 试用套件体系 | `docs/trials/README.md` |
 | 试用套件运行方式 | `docs/howto/run_trials.md` |
 

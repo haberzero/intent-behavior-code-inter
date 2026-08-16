@@ -32,7 +32,9 @@
   自治豁免/断链）、内容漂移修正（跟随阶段 A-D 代码事实：协议化体系归属 03 §4.0、
   receive 分派/self 形态/特化身份/member_types 派生/satisfies 数据驱动/auto-init
   声明化/预评估诊断码/copy·deepcopy 内建/chan 签名/运算符重载/全局意图/快照警告）、
-  章节排布与编号统一、LANGUAGE_DESIGN_EVOLUTION 孤儿删除；② tasks_docs 正规化
+  章节排布与编号统一、LANGUAGE_DESIGN_EVOLUTION 恢复保留（审计复核：正文为有
+  价值规划内容，降格为演进评估参考、删红线附录与自治豁免定位、重新登记 README
+  目录树与单点真理表）；② tasks_docs 正规化
   （GOVERNANCE 治理章程 + PENDING_TASKS 八股化 + NEXT_STEPS/WORKLOG/HANDOFF 清洗
   + 临时文档删除）；③ KNOWN_LIMITS 体系化（26 节真实性查验 + 类型标注 + 条目
   结构说明）；④ 根目录清洁（auto/example_api.json 删除）。全量 3006/1 零回归。
