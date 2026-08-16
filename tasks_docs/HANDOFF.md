@@ -99,7 +99,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 | 文档 | 用途 |
 |------|------|
-| `NEXT_STEPS.md` | 当前最紧要项 / 已完成摘要 / 工作模式定论 / 工作规则 |
+| `NEXT_STEPS.md` | 当前最紧要项 / 工作模式定论（强制约束）/ 工作规则 / 下一步候选 |
 | `PENDING_TASKS.md` | 长期规划与搁置任务（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED） |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
 | `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md`） |
@@ -109,19 +109,31 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ## 二、动态状态（随任务更新）
 
-### 2.1 当前任务 / 下一阶段
+### 2.1 当前工程状态 / 下一阶段
 
-> **接手起点**：读本节 + `tasks_docs/NEXT_STEPS.md`（当前最紧要）+
+> **接手起点**：读本节 + `tasks_docs/NEXT_STEPS.md`（当前最紧要 + ⛔ 工作模式定论）+
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
-> + git 历史（`git log --oneline -30`）。
+> + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前任务**：**无进行中主线**——内核协议化收尾与双轨收敛（阶段 A-D）与
-  文档体系系统化重构均已完成，理论问题清理完毕，等待用户指示下一步。
-  下一步候选见 `NEXT_STEPS.md`；最近完成与过程记录见 git log。
+- **🔴 当前主线**：**无进行中主线**。内核协议化收尾与双轨收敛（阶段 A-D）与文档体系
+  系统化重构均已收尾，理论问题清理完毕，等待用户指示下一步开发。
+- **当前代码状态**：
+  - 分支 `unsafe-vibe-dev`，本地领先 `origin`（**未 push**；禁 push 硬原则，除非用户显式授权）。
+  - 内核：协议化大重构已含于当前代码——receive dunder 协议注册表化、双轨收敛
+    （self 形态统一/特化身份结构化/成员单一权威/auto-init 声明化/预评估诊断）、
+    判定链双协议化（satisfies 数据驱动）、KNOWN_LIMITS 边界分类处置、
+    copy·deepcopy 内建落地。
+  - 文档：docs/ 系统化重构完成（协议化体系归属 `architecture/03_type_system.md` §4）；
+    KNOWN_LIMITS 27 节 + 尾部书写模板；任务控制体系正规化（GOVERNANCE 章程 +
+    各文档尾部书写模式）；docs/、代码注释与任务控制文档已完成全仓历史记录清洁。
+  - 真实 LLM 试用：最近全量批次（127 例）分类与既有登记一致（零回归），开发试用基线
+    为本地 `qwen3.6-35b-a3b` 非思考模式（见 `trials/_toolkit/LLM_SERVICE.md`）。
+- **⏳ 待用户确认**：下一步开发方向——候选见 `NEXT_STEPS.md` 下一步候选；
+  完整远期规划与状态见 `PENDING_TASKS.md`。
 
 ### 2.2 交接检查单（当前有效）
 
-- [ ] 读 `NEXT_STEPS.md`（当前最紧要 + 下一步候选）
+- [ ] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
 - [ ] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/VISION）
 - [ ] 读 `GOVERNANCE.md`（任务控制治理章程：文档职责/书写模板/生命周期/红线）
 - [ ] 读 `WORKLOG.md`（关键裁定与长期约束）
@@ -148,7 +160,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   1.3 goal objective 模板
   1.4 tasks_docs/ 文档结构指针（表格）
 二、动态状态（随任务更新）
-  2.1 当前任务 / 下一阶段
+  2.1 当前工程状态 / 下一阶段
   2.2 交接检查单（当前有效）
 ```
 
