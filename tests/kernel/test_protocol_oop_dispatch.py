@@ -137,3 +137,64 @@ class TestAttributeProtocol:
         attr = reg.get_protocol("attribute")
         assert attr is not None
         assert attr.methods == ("__getattr__", "__setattr__")
+
+
+class TestSatisfactionDeclaration:
+    """阶段 C：协议条目判定声明（数据驱动 satisfies）契约。"""
+
+    def test_builtin_protocols_carry_declarations(self):
+        reg = create_default_registry()
+        # iterable：kind 特判 + axiom 能力字段 + 结构成员
+        it = reg.get_protocol("iterable")
+        assert "has_iter_cap" in (it.axiom_cap or "")
+        assert it.kinds and it.structural_methods
+        # snapshotable：全部结构判定
+        sn = reg.get_protocol("snapshotable")
+        assert sn.structural_all is True
+        # 用户协议形态（无内置声明）：判定降级为 required methods 全部
+        attr = reg.get_protocol("attribute")
+        assert not (attr.kinds or attr.axiom_cap or attr.structural_methods)
+
+    def test_cap_accessor_uses_protocol_entry(self):
+        """能力获取经协议条目解析字段名（字符串字段名单点化）。"""
+        reg = create_default_registry()
+        conv = reg.get_converter_cap(reg.resolve("int"))
+        parser = reg.get_parser_cap(reg.resolve("int"))
+        # int axiom 声明 converter/parser 能力
+        assert conv is not None
+        assert parser is not None
+        # 未声明能力的协议（如 attribute 无 axiom_cap）→ None
+        assert reg._get_cap(reg.resolve("int"), "attribute") is None
+
+    def test_satisfies_equivalence_spot_checks(self):
+        """数据驱动 satisfies 与既有判定语义等价（抽查关键场景）。"""
+        reg = create_default_registry()
+        # kind 特判：list 可迭代/可下标
+        assert reg.satisfies_protocol(reg.resolve("list"), "iterable")
+        assert reg.satisfies_protocol(reg.resolve("list"), "subscriptable")
+        # axiom 能力：int 运算符
+        assert reg.satisfies_protocol(reg.resolve("int"), "operator")
+        # 结构成员：用户类 __iter__ 声明
+        from core.kernel.spec import TypeDef, TypeKind, MethodMemberSpec
+        from core.kernel.spec.type_ref import TypeRef
+
+        cls = TypeDef(name="It", kind=TypeKind.CLASS.value, provenance="USER_DEFINED")
+        cls.members["__iter__"] = MethodMemberSpec(
+            name="__iter__", kind="method",
+            return_type=TypeRef.of("generator"), param_types=[],
+        )
+        reg.register(cls)
+        assert reg.satisfies_protocol(cls, "iterable")
+        # 无声明协议（attribute）需全部方法
+        cls2 = TypeDef(name="A2", kind=TypeKind.CLASS.value, provenance="USER_DEFINED")
+        cls2.members["__getattr__"] = MethodMemberSpec(
+            name="__getattr__", kind="method",
+            return_type=TypeRef.of("any"), param_types=[],
+        )
+        reg.register(cls2)
+        assert not reg.satisfies_protocol(cls2, "attribute")  # 缺 __setattr__
+        cls2.members["__setattr__"] = MethodMemberSpec(
+            name="__setattr__", kind="method",
+            return_type=TypeRef.of("any"), param_types=[],
+        )
+        assert reg.satisfies_protocol(cls2, "attribute")

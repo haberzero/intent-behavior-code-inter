@@ -215,8 +215,8 @@ class _InferenceMixin:
         other: Optional[IbSpec],
     ) -> Optional[IbSpec]:
         """Infer the result type for a binary operator."""
-        axiom = self.get_axiom(spec)
-        if axiom and axiom.has_operator_cap:
+        axiom = self._get_cap(spec, "operator")
+        if axiom:
             other_name = other.get_base_name() if other else None
             ret_name = axiom.resolve_operation_type_name(op, other_name)
             if ret_name:
@@ -269,8 +269,8 @@ class _InferenceMixin:
         if spec.kind == TypeKind.GENERATOR.value:
             # 惰性生成器 generator[T]：元素类型 = value_type（yield 产出类型）。
             return self.resolve_typeref(spec.value_type) or self.resolve("any")
-        axiom = self.get_axiom(spec)
-        if axiom and axiom.has_iter_cap:
+        axiom = self._get_cap(spec, "iterable")
+        if axiom:
             elem_name = axiom.get_element_type_name()
             if elem_name:
                 return self.resolve(elem_name) or self.resolve("any")
@@ -290,8 +290,8 @@ class _InferenceMixin:
                 return self.resolve_typeref(spec.element_type) or self.resolve("any")
         if spec.kind == TypeKind.DICT.value:
             return self.resolve_typeref(spec.value_type) or self.resolve("any")
-        axiom = self.get_axiom(spec)
-        if axiom and axiom.has_subscript_cap:
+        axiom = self._get_cap(spec, "subscriptable")
+        if axiom:
             item_name = axiom.resolve_item_type_name(key_spec.get_base_name())
             if item_name:
                 return self.resolve(item_name) or self.resolve("any")

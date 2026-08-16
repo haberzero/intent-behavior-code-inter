@@ -31,9 +31,17 @@ class _CapabilityMixin:
     # as a non-None marker; ``resolve_call_return()`` handles the actual
     # return type inference for these structural specs.
 
-    def _get_cap(self, spec: Optional[IbSpec], flag_attr: str) -> Optional["TypeAxiom"]:
-        """Shared helper: return axiom if it has the named capability flag, else None."""
+    def _get_cap(self, spec: Optional[IbSpec], protocol_name: str) -> Optional["TypeAxiom"]:
+        """Shared helper: return the axiom that declares the protocol's capability.
+
+        ``protocol_name`` 经协议条目解析能力字段名（axiom_cap 单一权威——
+        阶段 C：字符串字段名只存在于协议条目声明，消费端不再散落）。
+        """
         if spec is None:
+            return None
+        protocol = self.get_protocol(protocol_name)
+        flag_attr = protocol.axiom_cap if protocol is not None else None
+        if not flag_attr:
             return None
         axiom = self.get_axiom(spec)
         return axiom if (axiom and getattr(axiom, flag_attr)) else None
@@ -69,16 +77,16 @@ class _CapabilityMixin:
         warnings.  Runtime ``IbCastExpr`` still validates via
         ``value.receive("cast_to", [target_class])``.
         """
-        return self._get_cap(spec, "has_converter_cap")
+        return self._get_cap(spec, "converter")
 
     def get_parser_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        return self._get_cap(spec, "has_parser_cap")
+        return self._get_cap(spec, "parser")
 
     def get_from_prompt_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        return self._get_cap(spec, "has_from_prompt_cap")
+        return self._get_cap(spec, "from_prompt")
 
     def get_llm_output_hint_cap(self, spec: IbSpec) -> Optional["TypeAxiom"]:
-        return self._get_cap(spec, "has_output_hint_cap")
+        return self._get_cap(spec, "output_hint")
 
     # ---------------------------------------------------------- #
     # Derived capability helpers                                 #

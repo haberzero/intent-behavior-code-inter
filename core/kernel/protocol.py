@@ -24,6 +24,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, List, Optional, Tuple
 
+from core.kernel.spec.base import TypeKind
+
 
 @dataclass(frozen=True)
 class ProtocolDef:
@@ -32,12 +34,23 @@ class ProtocolDef:
     ``methods`` are the *canonical* method names that implementations must
     provide.  For built-in dunder protocols these are the dunder names.
     For future user protocols these will be ordinary method names.
+
+    ``kinds`` / ``axiom_cap`` / ``structural_methods`` / ``structural_all``
+    are the **satisfaction declaration** (阶段 C): they data-drive
+    ``SpecRegistry.satisfies_protocol``——kind 特判集、axiom 能力字段名、
+    结构成员判定（任意/全部）。内置协议在条目内声明判定（单一权威，替代
+    satisfies 内部 if 链）；用户协议（无内置声明）按 required methods
+    全部结构判定。
     """
 
     name: str
     methods: Tuple[str, ...] = ()
     description: str = ""
     parent: Optional[str] = None
+    kinds: Tuple[str, ...] = ()
+    axiom_cap: Optional[str] = None
+    structural_methods: Tuple[str, ...] = ()
+    structural_all: bool = False
 
     def requires(self, method: str) -> bool:
         return method in self.methods
@@ -120,16 +133,23 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         name="callable",
         methods=("__call__",),
         description="Values that can be invoked as functions.",
+        # 专用路径：SpecRegistry.is_callable（结构化 kind + axiom cap 合成）
     ),
     ProtocolDef(
         name="iterable",
         methods=("__iter__",),
         description="Values that can be iterated with for.",
+        kinds=(TypeKind.LIST.value, TypeKind.TUPLE.value, TypeKind.GENERATOR.value),
+        axiom_cap="has_iter_cap",
+        structural_methods=("__iter__",),
     ),
     ProtocolDef(
         name="subscriptable",
         methods=("__getitem__",),
         description="Values that support obj[key].",
+        kinds=(TypeKind.LIST.value, TypeKind.TUPLE.value, TypeKind.DICT.value),
+        axiom_cap="has_subscript_cap",
+        structural_methods=("__getitem__",),
     ),
     ProtocolDef(
         name="operator",
@@ -141,6 +161,7 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
             "__invert__", "__not__", "__contains__",
         ),
         description="Values that participate in operator dispatch.",
+        axiom_cap="has_operator_cap",
     ),
     ProtocolDef(
         name="attribute",
@@ -151,11 +172,15 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         name="converter",
         methods=("cast_to",),
         description="Values that can participate in explicit casts.",
+        axiom_cap="has_converter_cap",
+        structural_methods=("cast_to",),
     ),
     ProtocolDef(
         name="parser",
         methods=("parse_value",),
         description="Values that can parse raw text into a typed value.",
+        axiom_cap="has_parser_cap",
+        structural_methods=("parse_value",),
     ),
     ProtocolDef(
         name="to_prompt",
@@ -166,6 +191,8 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         name="from_prompt",
         methods=("__from_prompt__",),
         description="Values that can parse LLM output into a typed value.",
+        axiom_cap="has_from_prompt_cap",
+        structural_methods=("__from_prompt__",),
     ),
     ProtocolDef(
         name="validate_prompt",
@@ -176,16 +203,22 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         name="output_hint",
         methods=("__outputhint_prompt__",),
         description="Values that can provide an LLM output format hint.",
+        axiom_cap="has_output_hint_cap",
+        structural_methods=("__outputhint_prompt__",),
     ),
     ProtocolDef(
         name="payload_prompt",
         methods=("__payload_prompt__",),
         description="Values that can provide multi-modal content blocks.",
+        axiom_cap="has_payload_prompt_cap",
+        structural_methods=("__payload_prompt__",),
     ),
     ProtocolDef(
         name="snapshotable",
         methods=("__snapshot__", "__restore__"),
         description="Values that can participate in llmexcept snapshot/restore.",
+        structural_methods=("__snapshot__", "__restore__"),
+        structural_all=True,
     ),
 )
 

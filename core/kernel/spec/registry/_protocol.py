@@ -76,7 +76,10 @@ class _ProtocolMixin:
 
         Dynamic types are considered to satisfy every protocol (existing
         gradual-typing permissiveness).  Built-in protocol satisfaction is
-        derived from axiom capability flags and class member tables.
+        derived from the **protocol entry's satisfaction declaration**
+        (阶段 C——数据驱动：kind 特判集 / axiom 能力字段名 / 结构成员判定，
+        替代此前协议名硬编码 if 链；布尔字段为 axiom 声明值，协议条目为
+        "协议 ↔ 能力"映射的单一权威)。
 
         This is the single entry point that future user-defined protocol
         checks should also use.
@@ -92,65 +95,27 @@ class _ProtocolMixin:
         if protocol is None:
             return False
 
-        # Callable has a dedicated structural path.
+        # Callable has a dedicated structural path (结构化 kind + axiom cap 合成，
+        # 无法以单一字段声明表达——保留专用路径)。
         if protocol_name == "callable":
             return self.is_callable(spec)
 
-        axiom = self.get_axiom(spec)
-
-        # Built-in capability flags (kept as the current source of truth
-        # until the axiom layer is fully protocol-driven).
-        if protocol_name == "iterable":
-            if spec.kind in (TypeKind.LIST.value, TypeKind.TUPLE.value, TypeKind.GENERATOR.value):
+        # 数据驱动判定（协议条目声明，单一权威）：
+        # 1. kind 特判集；2. axiom 能力字段；3. 结构成员。
+        if protocol.kinds and spec.kind in protocol.kinds:
+            return True
+        if protocol.axiom_cap:
+            axiom = self.get_axiom(spec)
+            if axiom is not None and getattr(axiom, protocol.axiom_cap, False):
                 return True
-            if axiom is not None and axiom.has_iter_cap:
-                return True
-            return self._class_has_any_method(spec, ("__iter__",))
-
-        if protocol_name == "subscriptable":
-            if spec.kind in (TypeKind.LIST.value, TypeKind.TUPLE.value, TypeKind.DICT.value):
-                return True
-            if axiom is not None and axiom.has_subscript_cap:
-                return True
-            return self._class_has_any_method(spec, ("__getitem__",))
-
-        if protocol_name == "operator":
-            if axiom is not None and axiom.has_operator_cap:
-                return True
-            return self._class_has_any_method(spec, protocol.methods)
-
-        if protocol_name == "converter":
-            if axiom is not None and axiom.has_converter_cap:
-                return True
-            return self._class_has_any_method(spec, ("cast_to",))
-
-        if protocol_name == "parser":
-            if axiom is not None and axiom.has_parser_cap:
-                return True
-            return self._class_has_any_method(spec, ("parse_value",))
-
-        if protocol_name == "from_prompt":
-            if axiom is not None and axiom.has_from_prompt_cap:
-                return True
-            return self._class_has_any_method(spec, ("__from_prompt__",))
-
-        if protocol_name == "output_hint":
-            if axiom is not None and axiom.has_output_hint_cap:
-                return True
-            return self._class_has_any_method(spec, ("__outputhint_prompt__",))
-
-        if protocol_name == "payload_prompt":
-            if axiom is not None and axiom.has_payload_prompt_cap:
-                return True
-            return self._class_has_any_method(spec, ("__payload_prompt__",))
-
-        if protocol_name == "snapshotable":
-            return self._class_has_all_methods(spec, ("__snapshot__", "__restore__"))
-
-        # Generic user-defined/forward protocol: structural satisfaction by
-        # required method names on the class chain.
-        if protocol.methods:
-            return self._class_has_all_methods(spec, protocol.methods)
+        structural = protocol.structural_methods or protocol.methods
+        if structural:
+            declared = bool(protocol.kinds or protocol.axiom_cap or protocol.structural_methods)
+            if protocol.structural_all or not declared:
+                # 显式 all 判定（snapshotable）或用户/前向协议（无内置判定声明）
+                # → required methods 全部结构判定（与既有通用路径一致）。
+                return self._class_has_all_methods(spec, structural)
+            return self._class_has_any_method(spec, structural)
         return False
 
     def type_param_bound_errors(
