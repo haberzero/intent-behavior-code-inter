@@ -5,7 +5,7 @@ core/kernel/spec/generic.py
 
 背景
 ----
-此前 list/dict/tuple/Optional/fn/behavior 等内置泛型类型的创建、特化、
+list/dict/tuple/Optional/fn/behavior 等内置泛型类型的创建、特化、
 序列化、还原散落在多个 ad-hoc 入口（SpecFactory 的 create_* 方法、
 ``_assignability.resolve_specialization`` 的函数特判、``TypeRef.from_spec``
 的 kind 分派、``artifact_rehydrator`` 的 kind 分派）。这是碎片化。

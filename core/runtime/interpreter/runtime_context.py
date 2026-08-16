@@ -845,7 +845,7 @@ class RuntimeContextImpl(RuntimeContext):
         因 fork 语义不会受到泄漏影响。
 
         非法入参（非 intent_context 对象）fail-fast 抛 InterpreterError——
-        此前静默 return False 会吞掉语言面错误输入，无任何诊断。
+        静默返回会吞掉语言面错误输入，无任何诊断。
         """
         if not isinstance(intent_ctx_obj, IbObject):
             raise InterpreterError(

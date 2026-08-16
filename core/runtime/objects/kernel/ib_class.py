@@ -28,7 +28,7 @@ class IbClassField:
         return f"<ClassField {self.val_uid} (static={self.static_val})>"
 
 class _ClassInstantiateDrive:
-    """用户类构造的帧内 CPS 驱动 Waitable（类构造嵌套调度器根治）。
+    """用户类构造的帧内 CPS 驱动 Waitable（类构造不经嵌套调度器）。
 
     由 :meth:`IbClass.receive` 对不含原生 ``__init__`` 的类返回；VM
     ``vm_handle_IbCall`` 识别其为 ``Waitable`` + ``CPSDrivable`` 后 ``yield from
@@ -306,8 +306,8 @@ class IbClass(IbObject):
                 if val_info.static_val is not None:
                     # 优先使用预评估好的快照，但可变容器（list/dict）必须每次创建新实例，
                     # 避免所有实例共享同一容器对象。用递归深克隆（try_deep_clone）——
-                    # 补全"每实例独立默认值"的既有意图：此前仅 list/dict 首层浅拷贝，
-                    # 内层 list 与用户对象默认值跨实例共享（静默泄漏）。
+                    # "每实例独立默认值"：list/dict 仅首层浅拷贝会使内层 list 与用户对象默认值
+                    # 跨实例共享（静默泄漏），须每实例新建。
                     # 深克隆失败（函数/行为等不可克隆）→ 回退共享引用（值语义等价）。
                     from core.runtime.objects.deep_clone import try_deep_clone
                     cloned = try_deep_clone(val_info.static_val)
@@ -498,8 +498,7 @@ class IbClass(IbObject):
         - 未注册（无编译期特化、运行时首次遇到）→ 从 metadata registry
           解析特化 spec 并 ``create_subclass``。
         - 内置泛型类（list/dict/Optional 等）作下标（``list[int]`` 表达式、
-          ``Box[list[int]]`` 嵌套实参）→ 水化为特化类（缺陷二根治：内置泛型
-          特化 spec 与用户类泛型同构地水化为运行时特化类）。
+          ``Box[list[int]]`` 嵌套实参）→ 水化为特化类（内置泛型特化 spec 与用户类泛型同构地水化为运行时特化类）。
         - 非泛型类下标（Box[42]）→ AttributeError（不是类型特化）。
         """
         if not type_objs:
@@ -514,7 +513,7 @@ class IbClass(IbObject):
                 f"(e.g. {self.name}[int]), got a value."
             )
         # 特化名带 module 限定（geo.Box[int]）：与运行期类表 qualified 键对齐，
-        # 跨模块同名类特化不坍缩（S5 运行期根治）。canonical 形态经
+        # 跨模块同名类特化不坍缩。canonical 形态经
         # specialization_key 单点生成（type_ref.py），module 前缀拼接在此。
         canonical = specialization_key(self.name, type_names)
         specialized_name = f"{self.module_path}.{canonical}" if self.module_path else canonical

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 def specialization_key(base_name: str, arg_names: Sequence[str]) -> str:
     """特化注册键（canonical 形态，不含 module 前缀）——单点生成。
 
-    收敛此前散落的手写拼接（``f"{base}[{','.join(args)}]"``）：键形态
+    键形态
     （head[arg1,arg2]）以本函数为单一权威；module 限定由调用方按需加前缀
     （运行期类表键 ``f"{module}.{key}"``）。arg_names 须为 canonical 形态
     （TypeRef.canonical_name 产出），嵌套泛型实参保持原样。
@@ -213,7 +213,7 @@ class TypeRef:
 
         if spec.kind == TypeKind.TUPLE.value:
             # 位置元素类型优先：tuple[int,str] 是多参 tuple 的位置元素（合法特性），
-            # 必须保真（此前只读 element_type 丢失位置元素 → TypeRef('tuple')）。
+            # 必须保真（只读 element_type 会丢失位置元素 → TypeRef('tuple')）。
             positional = getattr(spec, "positional_element_types", None) or []
             if positional:
                 return cls(
@@ -249,7 +249,7 @@ class TypeRef:
             return cls(head=base, args=(), module=spec.module_path)
 
         # thread / thread_result 是"值承载"泛型（join 结果类型 T 承载于 value_type）。
-        # 旧 TASK kind（task 类型）已删除，THREAD kind 现唯一指 thread。
+        # THREAD kind 是唯一的线程类型。
         if spec.kind == TypeKind.THREAD.value and base == "thread":
             val_ref = spec.value_type
             if val_ref is not None and val_ref.head not in ("auto", "any", "", None):

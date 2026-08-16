@@ -357,13 +357,13 @@ class Interpreter:
         return self._execution_context
 
     def get_side_table(self, table_name: str, node_uid: str, module: Optional[str] = None) -> Any:
-        """从侧表中获取数据（module 感知，KI-1 根治）。
+        """从侧表中获取数据（module 感知）。
 
         ``module`` 参数由调用方 EC 提供（``ExecutionContextImpl.get_side_table``
         透传自身 ``current_module_name``）——线程 worker 内 task_ec 的
         current_module_name 是任务本地值（``_shared._vm_call_user_function``
         已切换），侧表查询以调用方 EC 为准，不再读 interpreter 共享模块状态
-        （此前读 ``self.current_module_name`` 忽略任务本地切换，被 import 模块
+        （读 ``self.current_module_name`` 会忽略任务本地切换，被 import 模块
         方法体在 worker 内查空报 Symbol UID missing）。
         """
         module_name = module or self.current_module_name or self.entry_module
@@ -598,9 +598,9 @@ class Interpreter:
     def _pre_evaluate_user_classes(self):
         """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。
 
-        性质（B5 定性修正，2026-08-16）：预评估是**尽力而为的优化**（静态快照
+        性质：预评估是**尽力而为的优化**（静态快照
         预求值减少实例化期求值）——非任务内同步重入（执行于模块启动前，宿主
-        侧无调度器上下文，A 系列"任务内重入"不适用）；失败属正常预期（复杂
+        侧无调度器上下文，"任务内重入"不适用）；失败属正常预期（复杂
         表达式依赖运行期状态无法预求值），实例化路径（_eval_field_defaults）
         会完整重试且 fail-fast——故此处失败回退是职责分离 fallback，但按
         可观测性纪律记录诊断（不静默）。
@@ -860,7 +860,7 @@ class Interpreter:
 
         从符号池按 ``node_uid == stmt_uid`` 匹配 FUNCTION/LLM_FUNCTION 符号
         并水化其 type_uid——方法对象 spec 为**函数 spec**（参数/返回签名，
-        与顶层函数一致；此前普通方法经 node_to_symbol→self 符号解析成类
+        与顶层函数一致；普通方法经 node_to_symbol→self 符号解析成类
         spec，与 LLM 方法（node→func_sym）不一致，且使 __init__ 签名契约
         校验失效）。匹配失败回退旧路径（node_to_symbol 解析），保持防御。
         """
@@ -888,7 +888,7 @@ class Interpreter:
         """检查方法名是否为运算符 dunder 方法。
 
         运算符集合从 ``op_constants`` 单一权威源派生（R2-D3 收敛：
-        此前此处硬编码一份镜像，与 op_constants 双写真相）。
+        此处硬编码一份镜像会造成与 op_constants 双写真相）。
         ``__not__`` 属 base 协议（非运算符语法绑定），排除。
         """
         if self._OPERATOR_METHODS is None:
@@ -976,7 +976,7 @@ class Interpreter:
             return value
         # 先检查是否为字符串值在 llmexcept 帧内的模糊布尔判定
         if isinstance(value, IbObject) and value.ib_class and value.ib_class.name == "str":
-            # 任务本地 runtime_context（KI-1 同族裂缝根治）：线程 worker 内
+            # 任务本地 runtime_context：线程 worker 内
             # llmexcept 帧检测须读任务本地上下文（coordinator 已 set
             # current execution_context），而非主 interpreter 的共享 runtime
             # context——否则任务内 ``if str_var:`` 的 LLM 模糊布尔判定误读

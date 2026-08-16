@@ -2,7 +2,7 @@
 tests/runtime/test_optional_value_model.py
 ==========================================
 
-统一 Optional 值模型判别性回归（KI-2 根治）。
+统一 Optional 值模型判别性回归。
 
 锁定语义：
 - ``Optional[T]`` 空值恒为 ``IbOptional(is_some=False)`` 包装（任何值创建
@@ -10,7 +10,7 @@ tests/runtime/test_optional_value_model.py
 - ``is None`` / ``is not None`` 对空 ``Optional`` 返回 True/False（与
   ``== None`` 对齐），``is_none()`` 方法可用。
 - 字段 / 容器元素上的 ``is_none()``/``is_some()``/``unwrap()`` 可用
-  （修复前裸存路径抛错）。
+  （空值包装）。
 """
 from tests.conftest import run_ibci
 
@@ -49,7 +49,7 @@ def test_any_none_unaffected():
 
 
 def test_optional_param_is_none():
-    """函数参数 Optional[T] 空值：is None / is_none() 可用（修复前裸存）。"""
+    """函数参数 Optional[T] 空值：is None / is_none() 可用（空值包装）。"""
     code = (
         "func f(Optional[int] p) -> bool:\n"
         "    return p is None\n"
@@ -67,7 +67,7 @@ def test_optional_param_is_none():
 
 
 def test_optional_field_wrapped():
-    """类字段 Optional[T] 空值：is_none()/is_some()/type() 对齐（修复前裸存）。"""
+    """类字段 Optional[T] 空值：is_none()/is_some()/type() 对齐（空值包装）。"""
     code = (
         "class Box:\n"
         "    Optional[int] field\n"
@@ -90,7 +90,7 @@ def test_optional_field_wrapped():
 
 
 def test_optional_field_no_default_value():
-    """无默认值的 Optional 字段（缺省置空）也应包装（修复前裸存）。"""
+    """无默认值的 Optional 字段（缺省置空）也应包装（空值包装）。"""
     code = (
         "class Box:\n"
         "    Optional[int] field\n"
@@ -104,7 +104,7 @@ def test_optional_field_no_default_value():
 
 
 def test_optional_container_element_wrapped():
-    """list[Optional[T]] 元素空值：is None / is_none() 可用（修复前裸存）。"""
+    """list[Optional[T]] 元素空值：is None / is_none() 可用（空值包装）。"""
     code = (
         "list[Optional[int]] items = [None, 5]\n"
         "print(items[0] is None)\n"

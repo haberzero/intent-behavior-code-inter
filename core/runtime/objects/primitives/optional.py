@@ -16,7 +16,7 @@ def wrap_optional(value: Any, declared_type: Any, registry: Any) -> Any:
 
     **单一权威源**：局部变量/函数参数/返回/类字段/容器元素的 Optional 值
     创建一律经本函数，杜绝"同一 Optional 类型在不同路径产生 IbOptional 与
-    裸 IbNone 两种空值表示"的表示分叉（统一 Optional 值模型根治）。
+    裸 IbNone 两种空值表示"的表示分叉（统一 Optional 值模型）。
     """
     from core.kernel.spec.base import TypeKind
 

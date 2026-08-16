@@ -81,15 +81,15 @@ class TestSpecializationCache:
 
 
 # ===========================================================================
-# 内置泛型赋值特化实参校验（缺陷一：X[int] → X[str] 编译期拦截）
+# 内置泛型赋值特化实参校验（X[int] → X[str] 编译期拦截）
 # ===========================================================================
 
 class TestGenericAssignability:
-    """内置泛型同家族特化赋值必须校验实参（axiom 前缀匹配缺陷根治）。
+    """内置泛型同家族特化赋值必须校验实参。
 
-    修复前：axiom ``is_compatible`` 用 ``startswith("list[")`` 前缀匹配无视实参，
-    10/11 类内置泛型 ``X[int]`` 可赋给 ``X[str]``（Optional 与用户类本就正确拦截）。
-    修复后：``is_assignable`` 在 axiom 兼容前先做同家族结构化实参比较。
+    axiom ``is_compatible`` 用 ``startswith("list[")`` 前缀匹配会无视实参，
+    使 ``X[int]`` 可赋给 ``X[str]``（Optional 与用户类本就正确拦截）。
+    ``is_assignable`` 在 axiom 兼容前先做同家族结构化实参比较。
     """
 
     def _specialize(self, reg, base: str, *arg_names: str):
@@ -483,11 +483,11 @@ class TestGenericAnnotationDeclaredType:
 
 
 class TestNestedGenericStructurePreserved:
-    """创建点结构化 TypeRef（S1 根治）：嵌套泛型实参不再扁平化。
+    """创建点结构化 TypeRef：嵌套泛型实参不扁平化。
 
-    修复前 `resolve_specialization` 用 `a.name` 字符串喂 factory，`TypeRef.of`
-    把 `"list[int]"` 塞进 head（args 空）——substitute 无法穿透嵌套、错误实参
-    静默放行。修复后实参结构化，编译期可精确拦截嵌套泛型不匹配。
+    `resolve_specialization` 用 `a.name` 字符串喂 factory、`TypeRef.of`
+    把 `"list[int]"` 塞进 head（args 空）会使 substitute 无法穿透嵌套、
+    错误实参静默放行。实参结构化后编译期可精确拦截嵌套泛型不匹配。
     """
 
     def test_nested_spec_element_type_is_structured(self):
@@ -547,12 +547,12 @@ class TestNestedGenericStructurePreserved:
 
 
 class TestCallableSigParamTypesStructured:
-    """CALLABLE_SIG 参数在 symbol_collection 结构化（S2：descriptor 双真相收敛）。
+    """CALLABLE_SIG 参数在 symbol_collection 结构化（descriptor 单一语义源）。
 
-    修复前 `_annotation_to_typeref` 对 `fn[(int)->int]` 落 `TypeRef.of("any")`
-    退化；修复后产出结构化 `TypeRef('fn', (TypeRef('__args__',(int,)), int))`，
-    与 type-check 阶段 `_param_type_ref` 的 CALLABLE_SIG 分支同构——param_types
-    与 param_descriptors 单一语义源（消除双构造源分裂）。
+    `_annotation_to_typeref` 对 `fn[(int)->int]` 产出结构化
+    `TypeRef('fn', (TypeRef('__args__',(int,)), int))`，与 type-check 阶段
+    `_param_type_ref` 的 CALLABLE_SIG 分支同构——param_types 与
+    param_descriptors 单一语义源（无双构造源分裂）。
     """
 
     def test_callable_sig_param_type_structured(self, engine):
@@ -597,10 +597,10 @@ class TestCallableSigParamTypesStructured:
 
 
 class TestTupleUnpackTypeChecking:
-    """元组解包按位置类型检查（S6）。
+    """元组解包按位置类型检查。
 
-    修复前 IbTuple 解包各元素用 _any_desc 跳过 is_assignable，错误类型静默
-    流入；修复后 RHS 元组字面量元素类型经 is_assignable 校验。
+    IbTuple 解包各元素用 _any_desc 跳过 is_assignable 会使错误类型静默流入；
+    RHS 元组字面量元素类型经 is_assignable 校验。
     """
 
     def test_tuple_unpack_wrong_type_rejected(self):
@@ -624,10 +624,10 @@ class TestTupleUnpackTypeChecking:
         )
 
     def test_tuple_unpack_bare_declaration_stays_bare(self, engine):
-        """tuple 解包显式裸声明值层保持裸（S6 复核修复）。
+        """tuple 解包显式裸声明值层保持裸。
 
-        修复前 `list a, list b = [1,2],["x"]` 的 RHS 推断 list[int] 覆盖声明，
-        type(a)=list[int]；修复后声明类型最后生效，type(a)=list。
+        `list a, list b = [1,2],["x"]` 的 RHS 推断 list[int] 覆盖声明时
+        type(a)=list[int]；声明类型最后生效时 type(a)=list。
         """
         engine.run_string(
             'list a, list b = [1, 2], ["x"]\n',
@@ -641,10 +641,10 @@ class TestTupleUnpackTypeChecking:
 
 
 class TestStarredElementTypeChecking:
-    """*expr 展开实参元素级类型校验（遗留边界修复）。
+    """*expr 展开实参元素级类型校验。
 
-    修复前 `*lst` 只用于跳过必填检查，元素类型不校验——`list[str] *-> f(int)`
-    编译期放行；修复后特化容器的元素类型与首位置形参做可赋值校验。
+    `*lst` 只用于跳过必填检查、元素类型不校验时 `list[str] *-> f(int)` 编译期
+    放行；特化容器的元素类型与首位置形参做可赋值校验。
     """
 
     def test_starred_wrong_element_type_rejected(self):

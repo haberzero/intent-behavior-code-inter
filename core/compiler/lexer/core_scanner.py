@@ -764,7 +764,7 @@ class CoreTokenScanner:
             value += self.scanner.advance()
             while not self.scanner.is_at_end() and (self.scanner.peek().isdigit() or self.scanner.peek() in 'abcdefABCDEF'):
                 value += self.scanner.advance()
-            # 0x 后必须至少一位十六进制数字；否则是残缺字面量（此前
+            # 0x 后必须至少一位十六进制数字；否则是残缺字面量（避免
             # 落入 int('0x') → INT_INTERNAL_ERROR 内部错误）。
             if value == '0x' or value == '0X':
                 self.issue_tracker.error(
@@ -844,7 +844,7 @@ class CoreTokenScanner:
                 while self.scanner.peek().isdigit():
                     value += self.scanner.advance()
                 # e 后无指数数字（1e / 1e+ / 1e-）→ 残缺科学计数，报非法字面量
-                # （此前落入 int('1e+') → INT_INTERNAL_ERROR 内部错误）。
+                # （避免落入 int('1e+') → INT_INTERNAL_ERROR 内部错误）。
                 if len(value) == exp_start:
                     sci_incomplete = True
 

@@ -8,7 +8,7 @@ VMTask
 
 Signal 控制信号语义
 ------------------
-控制流不再依赖 Python 异常跨帧传播，而是用
+控制流不依赖 Python 异常跨帧传播，而是用
 :class:`Signal` 数据对象作为生成器协程的 **返回值**
 （即 ``StopIteration.value``）显式传递。调度循环识别 ``Signal`` 类型
 的任务结果，沿帧栈数据化向上传递（通过 ``gen.send(Signal)``），由

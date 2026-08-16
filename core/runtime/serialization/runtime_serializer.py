@@ -287,7 +287,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         """按类型分派序列化字段（单一类型一个具名 collector）。"""
         cls_name = obj.ib_class.name
         # 特化类名（list[int]/Box[int]）沿 spec 基类名分派值层 kind——
-        # 内置泛型特化类与用户类特化类均复用基类 collector（缺陷二根治：
+        # 内置泛型特化类与用户类特化类均复用基类 collector（
         # 值层身份保真后序列化不落入 object 兜底）。
         base_name = self._value_base_name(obj)
         if isinstance(obj, IbValue) and base_name == "None":
@@ -685,7 +685,7 @@ class RuntimeDeserializer:
 
         跨引擎 round-trip：目标引擎 spec_reg 可能无该特化（未编译），此时从
         序列化携带的 ``type_pool`` 重建 spec（经 ArtifactRehydrator 统一水化），
-        再 create_subclass——特化身份跨引擎保真（缺陷二根治推广：边界 7）。
+        再 create_subclass——特化身份跨引擎保真。
         """
         spec = None
         spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None

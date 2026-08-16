@@ -336,11 +336,11 @@ class TestIbcFileNestedPackageImport:
 
 
 class TestCrossModuleSameNameClass:
-    """跨模块同名类身份隔离（S5 编译期 + 运行期 module 化根治）。
+    """跨模块同名类身份隔离（编译期 + 运行期 module 化）。
 
-    修复前 `geo.Box` 与 `graph.Box` 编译期坍缩为同一 spec、运行期类表 name-only
-    坍缩——方法表按后编译者覆盖（`geo.Box[int](5).get()` 报 int+str 错误）；
-    修复后 module 限定分离：编译期 spec 独立 + 运行期类表 qualified 键独立。
+    `geo.Box` 与 `graph.Box` 编译期坍缩为同一 spec、运行期类表 name-only
+    坍缩会使方法表按后编译者覆盖（`geo.Box[int](5).get()` 报 int+str 错误）。
+    module 限定分离：编译期 spec 独立 + 运行期类表 qualified 键独立。
     """
 
     def test_same_name_class_compile_time_isolation(self, tmp_path):

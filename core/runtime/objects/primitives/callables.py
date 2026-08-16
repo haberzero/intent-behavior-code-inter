@@ -235,9 +235,8 @@ class IbBehavior(IbValue):
     继承链：behavior → fn_callable → callable → Object
 
     * 行为对象在创建时捕获 ``execution_context`` 引用（与 IbUserFunction 同构）。
-    * ``call()`` 通过 ``ib_class.registry.get_llm_executor().invoke_behavior()``
-      完成自主执行，不再依赖外部的 ``_execute_behavior`` 路由。
-    * BaseHandler 中的 ``_execute_behavior`` 方法已删除。
+    * ``call()`` 经 ``ib_class.registry.get_llm_executor().invoke_behavior()``
+      自主执行（行为执行路由在 LLM executor 层）。
     * 与 IbFnCallable 的区别：IbBehavior 执行的是 LLM 调用（需要意图栈），
       IbFnCallable 执行的是普通表达式（纯 AST 重访）。
     """

@@ -173,7 +173,7 @@ class IbSuperProxy(IbObject):
 
         处理器分派（__getattr__ 父类方法查找 / __call__ 返回自身）；未覆盖的
         消息一律 AttributeError——不落宿主 vtable（super 代理借用 callable 类
-        作宿主，vtable 消息如 toString 等非 super 语义，原实现同样拒绝）。
+        作宿主，vtable 消息如 toString 等非 super 语义，一律拒绝）。
         """
         if message in self._protocol_message_names():
             handler = getattr(self, f"_dispatch_{message.strip('_')}", None)

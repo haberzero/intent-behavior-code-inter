@@ -361,7 +361,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         result = yield from _vm_invoke_behavior(executor, func, args)
         return result
 
-    # IbUserFunction（普通/LLM 统一）：统一走 trampoline 调用（R1，EXEC-1 根治）。
+    # IbUserFunction（普通/LLM 统一）：统一走 trampoline 调用。
     # 不 yield from 生成器（会嵌套 Python 栈），而是 yield 函数调用请求，
     # 由 _drive_loop_gen 把函数体作为独立 VMTask 压栈——深递归 Python 深度恒定。
     # 惰性生成器（含 yield，D-08 自标记）：调用产出 IbGenerator（不执行体），
@@ -380,10 +380,9 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         return result
 
     # 用户方法调用 CPS 化：解包 IbBoundMethod（obj.method(x)）。
-    # 此前落回 receive('__call__') → IbBoundMethod.call → method.call(receiver)
-    # → IbUserFunction.call → vm.run_body（嵌套调度器，方法含 Waitable 时死锁、
-    # 深递归方法嵌套 Python 栈）。现在把 .method 提取出来经 CPS trampoline 调用，
-    # 并把 receiver 作为 self 注入（与 _vm_call_user_function 的 receiver 契约一致）。
+    # 把 .method 提取出来经 CPS trampoline 调用，并把 receiver 作为 self 注入
+    # （与 _vm_call_user_function 的 receiver 契约一致）——嵌套调度器路径
+    # （方法含 Waitable 时死锁、深递归方法嵌套 Python 栈）不可达。
     if isinstance(func, IbBoundMethod):
         method = func.method
         receiver = func.receiver
@@ -479,7 +478,7 @@ def vm_handle_IbListExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
 # === 简单表达式扩展 ===
 
 def _bind_container_specialization(executor, node_uid: str, value, container_kind: str):
-    """把容器字面量值绑定到编译期特化类型（缺陷二根治）。
+    """把容器字面量值绑定到编译期特化类型。
 
     编译期 ``list[int] li = [1,2]`` 使字面量节点 ``node_to_type = list[int]``；
     此处查侧表：若节点类型是内置泛型特化（LIST/DICT/TUPLE 等），把值对象
@@ -595,7 +594,7 @@ def _slice_type_objs_for(executor, node_spec):
 
     与 ``IbClass._slice_type_objs`` 同构：把特化实参（element_type /
     positional_element_types / key_type+value_type / value_type）转换为
-    IbClass 标识对象。实参为结构化 TypeRef（S1 根治后：``list[list[int]]``
+    IbClass 标识对象。实参为结构化 TypeRef（``list[list[int]]``
     的 element_type = ``TypeRef('list',(int,))``）时沿 args 递归解析特化类
     （``get_class("list[int]")``），而非按 head 取基类——否则嵌套实参静默
     降级为基类，特化类水化失败。
@@ -629,7 +628,7 @@ def _resolve_specialized_class(executor, ref):
     - 无实参（``int``）：``get_class("int", module=ref.module)``。
     - 有实参（``list[int]`` / ``geo.Box[int]``）：先查特化类
       ``get_class(ref.qualified_name)``（module 限定键）；未水化则经基类
-      ``_specialize`` 按结构化实参创建（S1 根治后嵌套实参结构保真，不再按
+      ``_specialize`` 按结构化实参创建（嵌套实参结构保真，不再按
       head 降级）。跨模块用户类实参经 ``ref.module`` 命中 qualified 键。
     """
     if ref.args:

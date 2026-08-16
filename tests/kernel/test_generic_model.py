@@ -52,7 +52,7 @@ class TestGenericTypeRegistry:
         )
 
     def test_registry_indexed_by_name(self):
-        """注册表按 name 索引（_by_kind 单值索引已删除——kind 不唯一）。"""
+        """注册表按 name 索引（无 _by_kind 单值索引——kind 不唯一）。"""
         reg = create_generic_registry()
         assert reg.get("list").name == "list"
         assert reg.get("fn_callable").name == "fn_callable"

@@ -53,7 +53,7 @@ class IbIntentStack(IbObject):
             IntentStack.pop("language")
 
         ``tag`` 给定则移除最近添加的匹配标签的意图（返回该意图）；
-        否则弹出栈顶意图（R2 修复：此前忽略 tag 参数）。
+        否则弹出栈顶意图（``tag`` 参数参与匹配）。
         """
         if self._runtime_context:
             if tag is not None:

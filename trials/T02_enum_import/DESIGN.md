@@ -1,10 +1,9 @@
-# _LLM_TRIAL_ENUM_IMPORT_20260812 — enum 补全 + 嵌套包 import + 运算符覆写 用户试用
+# T02_enum_import — enum 补全 + 嵌套包 import + 运算符覆写 用户试用
 
-> 2026-08-12 编制（enum 补全 / 嵌套包 import / 运算符覆写批次落地后）。
 > 本任务 = **试用与记录任务**（用户要求"内核代码修改结束后自建新试用任务做用户试用覆盖"）。
 > 覆盖本次新增/变更能力在真实用户用法下的行为；**发现的缺陷只记录、登记，不在本任务修复**。
 
-## 一、约束（沿用 2026-08-12 定案）
+## 一、约束（沿用用户定案）
 
 | 约束 | 内容 |
 |------|------|
@@ -23,8 +22,8 @@
 | 枚举迭代 `for v in Color:` | enum 补全 | KNOWN_LIMITS §二 |
 | 枚举数量 `len(Color)` | enum 补全 | KNOWN_LIMITS §二 |
 | 枚举自定义方法边界（值模型） | enum 补全（文档化） | KNOWN_LIMITS §二 §2.4 |
-| 嵌套包 `import subpkg.util` + 成员访问 | 嵌套包 import 根治 | 11_modules §11.1 |
-| 同包多导入合并 | 嵌套包 import 根治 | 11_modules §11.1 |
+| 嵌套包 `import subpkg.util` + 成员访问 | 嵌套包 import | 11_modules §11.1 |
+| 同包多导入合并 | 嵌套包 import | 11_modules §11.1 |
 | 用户类运算符覆写（比较/算术/一元/成员） | KNOWN_LIMITS §十四 #2 核对 | KNOWN_LIMITS §十四 |
 
 ## 三、用例清单
@@ -50,7 +49,7 @@
 ## 五、执行
 
 ```bash
-cd /home/haber/proj/intent-behavior-code-inter/tasks_docs/_LLM_TRIAL_ENUM_IMPORT_20260812
+cd trials/T02_enum_import
 # 每例：
 ~/miniconda3/envs/ibci/bin/python harness/run_one.py cases/<case>.ibci \
   --label <LABEL> --dim ENUM/IMPORT/OP --doc <doc-ref> \

@@ -347,7 +347,7 @@ class ExpressionVisitorsMixin:
         """``chan(T, ...)`` 的类型 = chan[T]（元素类型经 type_name 保真）。
 
         元素类型 ``T`` 经 ``resolve_specialization`` 构造特化 spec，与注解层
-        ``chan[T]`` 的身份保留一致（此前表达式层保守返回裸 chan）。
+        ``chan[T]`` 的身份保留一致（不返回裸 chan）。
         """
         base_spec = self.registry.resolve("chan")
         if node.type_name and base_spec is not None:
@@ -619,7 +619,7 @@ class ExpressionVisitorsMixin:
                     node, code=SEM_ARG_COUNT_MISMATCH,
                 )
             else:
-                # 结构化 ref 经 resolve_typeref（CALLABLE_SIG 签名模型根治：嵌套泛型
+                # 结构化 ref 经 resolve_typeref（CALLABLE_SIG 签名模型：嵌套泛型
                 # 实参保真，与 is_assignable/_check_callable_sig_match 一致）。
                 for i, (exp_ref, actual_type) in enumerate(zip(param_types, positional_specs)):
                     exp_spec = self.registry.resolve_typeref(exp_ref)
@@ -705,7 +705,7 @@ class ExpressionVisitorsMixin:
         has_dynamic = bool(starred_specs) or any(
             name is None for name, _ in keyword_specs
         )
-        # *expr 元素级类型校验（遗留边界修复）：`*lst` 展开实参静态数量未知，
+        # *expr 元素级类型校验：`*lst` 展开实参静态数量未知，
         # 但元素类型可静态确定（特化容器 list[int]）——元素须可赋给展开首个
         # 实参对应的目标形参（跳过显式位置实参数后的首个位置形参）。
         # 数量不足/超限仍由运行期裁决。
@@ -742,7 +742,7 @@ class ExpressionVisitorsMixin:
 
         ``arg_node`` 为实参节点（可选）：容器字面量实参绑定形参特化类型
         （``consume([1,2])`` 且形参 ``list[int]`` → ``[1,2]`` 节点
-        node_to_type = list[int]），值创建点据此水化特化类（缺陷二根治推广：
+        node_to_type = list[int]），值创建点据此水化特化类（
         调用实参路径值层身份保真）。
         """
         if not descriptor.type_ref:
@@ -754,7 +754,7 @@ class ExpressionVisitorsMixin:
         if arg_node is not None and exp_spec is not None:
             self._bind_literal_with_type(arg_node, exp_spec)
         # bare fn 参数（动态哨兵，name=="fn" 且非 CALLABLE_SIG）＝"任意可调用"抽象：
-        # 实参必须是可调用（方向 A 收紧——此前 is_dynamic 跳过致 `apply(42)` 放行）。
+        # 实参必须是可调用（`apply(42)` 编译期拦截）。
         # 动态实参（any/auto）静态不可判，放行交运行期裁决。
         if (exp_spec is not None
                 and getattr(exp_spec, "name", None) == "fn"
@@ -780,7 +780,7 @@ class ExpressionVisitorsMixin:
             )
 
     def _check_starred_element_type(self, node: ast.IbCall, starred_spec, first_pos_descriptor) -> None:
-        """*expr 元素级类型校验（遗留边界修复）。
+        """*expr 元素级类型校验。
 
         ``*lst`` 展开实参静态数量未知，但若 lst 是特化容器（list[int]），元素
         类型可静态确定。展开后首实参对应首位置形参——元素类型须可赋给形参类型。
@@ -875,7 +875,7 @@ class ExpressionVisitorsMixin:
             member_spec = self.registry.resolve_member(obj_type, node.attr)
             if member_spec:
                 # IbSpec with callable kind: use directly（含零参数函数——param_types
-                # 为空列表时此前真值判定退化到 any，这里按 kind 判定而非参数数量）。
+                # 为空列表时按 kind 判定而非参数数量，真值判定不退化到 any）。
                 if (hasattr(member_spec, 'kind') and member_spec.kind
                         and member_spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value)):
                     self.bind_type(node, member_spec)
@@ -1041,7 +1041,7 @@ class ExpressionVisitorsMixin:
             body_type = self.visit(node.body) if node.body else self._void_desc
             # lambda 返回容器字面量绑定返回特化类型（lambda -> list[int]: [1,2]
             # → [1,2] 节点 node_to_type = list[int]），值创建点据此水化特化类
-            # （缺陷二根治推广：lambda 返回路径值层身份保真）。
+            # （lambda 返回路径值层身份保真）。
             if node.body is not None and returns_type is not None and not is_auto_return:
                 self._bind_literal_with_type(node.body, returns_type)
         finally:

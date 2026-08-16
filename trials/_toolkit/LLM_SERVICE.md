@@ -1,10 +1,10 @@
 # LLM_SERVICE — 本机真实 LLM 服务规范（单一权威源）
 
-> 试用体系以**真实 LLM 为主**（用户裁定，2026-08-13）：本机试用始终利用本机 LLM 服务做
+> 试用体系以**真实 LLM 为主**（用户裁定）：本机试用始终利用本机 LLM 服务做
 > 真实测试，mock 仅用于无 LLM 依赖的用例。**当前服务非通用化，仅本机有效**；
 > 引导其他开发者配置的指导为未来任务（见 §五）。
 >
-> **开发试用基线（2026-08-14 起）**：**所有开发试用均在本地 `qwen3.6-35b-a3b`
+> **开发试用基线**：**所有开发试用均在本地 `qwen3.6-35b-a3b`
 > 非思考模式下进行**——用例断言、结果分类、文档对齐均以此模式的输出形态为准。
 
 ## 一、本机服务（当前唯一权威端点）
@@ -18,24 +18,15 @@
 
 ## 二.1 模型思考模式（当前：非思考模式为唯一基线）
 
-**当前事实（2026-08-14 起，T06 实测确认）**：用户已在 LM Studio 界面应用禁用思考预设
-（替换提示模板，见 §二.3）——本机服务**不输出 think 标签**（`reasoning_content` 为空、
-`content` 直接返回），真实调用响应 **<1-2s**、`reasoning_tokens=0`。`api_config.json`
-统一配置 `"reasoning": false`（见 §三）。**所有开发试用均在此模式下进行**；用例断言
-与结果分类以此输出形态为基准。
-
-**历史背景（2026-08-13 至 2026-08-14，仅追溯用）**：此前本机为纯 GGUF（无 model.yaml），
-即使传 `enable_thinking: false` / `thinking: {"enabled": false}` /
-`chat_template_kwargs: {"enable_thinking": false}`（全部 API 形态已逐一实测），模型仍输出
-`reasoning_content` 思考，`content` 在 `max_tokens` 被思考吃满时为空（`reasoning_tokens`
-计数）——API 参数无法关闭该模型的思考，真实调用有思考 token 开销且响应慢（10-30s），
-`content` 为空时 IBCI 回退用 reasoning 提取答案。该阶段试用记录的分类口径与当前
-非思考模式一致（模型输出形态差异已由断言取稳定可判定部分吸收）。
+**当前事实**：本机服务在 LM Studio 界面应用了禁用思考预设（替换提示模板，见 §二.3）
+——**不输出 think 标签**（`reasoning_content` 为空、`content` 直接返回），真实调用
+响应 **<1-2s**、`reasoning_tokens=0`。`api_config.json` 统一配置 `"reasoning": false`
+（见 §三）。**所有开发试用均在此模式下进行**；用例断言与结果分类以此输出形态为基准。
 
 **死机/超时防护**：批量试用用 `run_batch.py`（每用例 harness 超时 SIGKILL，进程组清理
 彻底）；避免大量用例并发压爆 LM Studio。
 
-## 二.2 LM Studio 禁用思考模式 — 官方机制调查（2026-08-13 专项）
+## 二.2 LM Studio 禁用思考模式 — 机制与方案
 
 **官方机制（modelyaml 文档 `https://lmstudio.ai/docs/app/modelyaml`）**：模型的思考由
 `model.yaml` 的 `customFields.enableThinking` + Jinja 模板 `enable_thinking` 变量控制：
@@ -55,9 +46,8 @@ customFields:
 Jinja 模板须含 `enable_thinking` 变量分支（qwen3-8b 官方示例：`enable_thinking is false`
 → 输出空 `<think> </think>` 标签 = 禁用思考）。
 
-**qwen3.6-35b-a3b**：LM Studio Hub 有官方 model.yaml（含 enableThinking + 上述模板）。
-**本机问题**：本地模型目录用的是**纯 GGUF（无 model.yaml）**，不走官方配置 → API 参数
-`enable_thinking` 无效（实测）。
+**本机限制**：本地模型目录是**纯 GGUF（无 model.yaml）**，不走官方配置 → API 参数
+`enable_thinking` 无效。
 
 **可靠禁用方案**：
 1. **（推荐）LM Studio 界面改本机模型 prompt template**：本机模型（qwen3.6-35b-a3b）→
@@ -71,10 +61,10 @@ Jinja 模板须含 `enable_thinking` 变量分支（qwen3-8b 官方示例：`ena
    （probe/调用检测"请求抑制但仍思考"→ 一次性警告，引导联系开发者/提交 issue，
    不引导用户改配置绕开——见 PENDING_TASKS"供应商感知思考禁用"）。
 
-**实验结论（2026-08-13）**：在模型目录放 model.yaml（base 用 `type: local` 指向本机 GGUF）
+**机制结论**：在模型目录放 model.yaml（base 用 `type: local` 指向本机 GGUF）
 **不被 LM Studio 支持**——model.yaml 规范当前仅 `type: huggingface` source
 （`lmstudio-js VirtualModelDefinition` 实证），`type: local` 导致虚拟模型 base 无法解析、
-模型从 `lms ls` 消失（已删除恢复）。
+模型从 `lms ls` 消失（删除 model.yaml 后恢复）。
 
 ## 二.3 非思考 Qwen 提示模板（LM Studio 界面可粘贴）
 

@@ -1,7 +1,7 @@
 """
 tests/runtime/test_generic_value_identity.py — 内置泛型值层类型身份（白盒）。
 
-缺陷二根治：内置泛型容器特化 spec 水化为运行时特化类，值对象 type_ref 带
+内置泛型容器特化 spec 水化为运行时特化类，值对象 type_ref 带
 实参（type() 内省一致 + 运行时类型安全）。本文件为 runtime/ 白盒层，允许
 import 运行时内部（深克隆 / 序列化 / is_assignable 直调）。
 
@@ -55,7 +55,7 @@ def test_deep_clone_dict_specialized_identity():
 
 
 def test_runtime_assignability_distinguishes_specialized_values():
-    """运行时值层可区分 list[int]/list[str]（缺陷一+二联动）。"""
+    """运行时值层可区分 list[int]/list[str]。"""
     engine = _engine()
     engine.run_string('list[int] li = [1]\nlist[str] ls = ["a"]\n', silent=True)
     rc = engine.interpreter.execution_context.runtime_context
@@ -91,7 +91,7 @@ def test_serialization_roundtrip_specialized_identity():
 
 
 def test_nested_value_type_ref_is_structured():
-    """嵌套泛型值 type_ref 结构保真（S1 根治：创建点不再扁平化）。
+    """嵌套泛型值 type_ref 结构保真（创建点不扁平化）。
 
     修复前 `list[list[int]]` 值的 type_ref = TypeRef('list',(TypeRef('list[int]'),))
     （内层扁平 head 含方括号、args 空）；修复后内层实参结构化递归。

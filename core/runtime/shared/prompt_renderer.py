@@ -85,8 +85,8 @@ class PromptRenderer:
             elif hasattr(val, 'ib_class') and getattr(val, 'ib_class', None) is not None:
                 can_payload = PromptRenderer._has_method(val, '__payload_prompt__')
             else:
-                # No type information: preserve legacy behaviour of attempting
-                # the payload protocol whenever receive() exists.
+                # No type information: attempt the payload protocol whenever
+                # receive() exists.
                 can_payload = True
             if can_payload:
                 try:

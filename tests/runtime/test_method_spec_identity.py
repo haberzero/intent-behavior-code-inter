@@ -2,7 +2,7 @@
 tests/runtime/test_method_spec_identity.py — 运行期方法对象 spec 身份白盒测试。
 
 方法 def 水化的 declared spec 必须是**函数 spec**（FUNCTION kind，参数/返回
-签名保真，与顶层函数一致）——普通方法与 LLM 方法同构（此前普通方法经
+签名保真，与顶层函数一致）——普通方法与 LLM 方法同构（普通方法经
 node_to_symbol→self 符号解析成类 spec，与 LLM 方法不一致，且使 __init__
 签名契约校验失效）。impl 补充方法同路径。
 """

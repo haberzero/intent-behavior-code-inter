@@ -72,7 +72,7 @@ class SpecFactory:
 
         ``param_types`` / ``return_type``（结构化 TypeRef）**优先**——早期
         "字符串级" API（``TypeRef.of`` 扁平化 fn[(签名)]/泛型/Optional 返回）的
-        架构断层根治：结构化注解解析出的 spec 不再被 `.name` 字符串降级。
+        结构化注解解析出的 spec 不被 `.name` 字符串降级。
         缺失时由 ``param_type_names`` / ``return_type_name`` 经 ``TypeRef.parse``
         结构化解析（与 create_list/create_optional 同构，嵌套泛型名保真）。
         """
@@ -406,7 +406,7 @@ class SpecFactory:
         """Create a ``TypeDef`` for a ``chan[T]`` type annotation.
 
         ``value_type_name`` is the channel's element type（消息类型）。
-        ``chan[T]`` 经统一泛型模型承载：此前注解实参丢弃，符号 declared_type
+        ``chan[T]`` 经统一泛型模型承载：注解实参丢弃会使符号 declared_type
         退化为裸 chan；纳入 GenericTypeDeclaration 后身份保留。
         """
         if value_type is None:
@@ -430,7 +430,7 @@ class SpecFactory:
         """Create a ``TypeDef`` for a ``slot[T]`` type annotation.
 
         ``value_type_name`` is the slot's value type（共享状态类型）。
-        ``slot[T]`` 经统一泛型模型承载：此前注解实参丢弃，符号 declared_type
+        ``slot[T]`` 经统一泛型模型承载：注解实参丢弃会使符号 declared_type
         退化为裸 slot。
         """
         if value_type is None:

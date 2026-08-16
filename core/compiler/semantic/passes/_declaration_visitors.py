@@ -379,7 +379,7 @@ class DeclarationVisitorsMixin:
         self.current_function_type_param_bounds = dict(node.type_param_bounds)
 
         # 静态名义强类型：函数必须声明返回类型（显式 TYPE / auto 推断 / any 逃生）。
-        # 缺标注不再静默回填 any（曾击穿类型推断与泛型体系）。
+        # 缺标注静默回填 any 会击穿类型推断与泛型体系，不做回填。
         if node.returns is None:
             self.error(
                 f"Function '{node.name}' must declare a return type. "
@@ -402,8 +402,8 @@ class DeclarationVisitorsMixin:
         # 回填函数 spec（用 factory.create_func 重建 TypeDef 携带签名）。
         # 传结构化 TypeRef（TypeRef.from_spec 单一权威源）——`-> fn[(...)->...]`/
         # `-> list[int]`/`-> Optional[int]` 等结构化返回不再经 `.name` 字符串
-        # 降级为裸名（类型身份架构断层根治：此前的字符串回填把 symbol_collection
-        # 已产出的结构化 spec 覆盖成扁平 spec）。
+        # 降级为裸名（字符串回填会把 symbol_collection 已产出的结构化 spec
+        # 覆盖成扁平 spec）。
         if sym and sym.spec and self.registry:
             updated_spec = self.registry.factory.create_func(
                 name=node.name,
@@ -427,9 +427,9 @@ class DeclarationVisitorsMixin:
 
         # 创建函数作用域：优先复用符号收集阶段（symbol_resolution）已填充的
         # owned_scope——其中已注册参数 / 函数体局部变量 / self / super 符号且
-        # 携带正确声明类型。此前此处新建空作用域只注册参数，函数体局部变量
-        # 符号不可见：重赋值走"首次定义推断"路径（target_type=val_type，类型
-        # 约束丢失）、符号 spec 恒 any（运行时 Optional 值包装失效）。复用后
+        # 携带正确声明类型。新建空作用域只注册参数会使函数体局部变量符号不可见：
+        # 重赋值走"首次定义推断"路径（target_type=val_type，类型约束丢失）、符号
+        # spec 恒 any（运行时 Optional 值包装失效）。复用后
         # 函数体 lookup_symbol 命中预注册符号，_handle_assign_target 以声明
         # 类型检查重赋值。无 owned_scope（异常路径）回退新建作用域。
         func_scope = None
@@ -708,7 +708,7 @@ class DeclarationVisitorsMixin:
                 default_spec = self.visit(arg_node.default)
                 # 默认值容器字面量绑定参数特化类型（func f(list[int] items=[1,2])
                 # → [1,2] 节点 node_to_type = list[int]），运行时默认值创建据此
-                # 水化特化类（缺陷二根治推广：函数默认参数路径值层身份保真）。
+                # 水化特化类（函数默认参数路径值层身份保真）。
                 self._bind_literal_with_type(arg_node.default, arg_type)
                 if (default_spec and arg_type != self._any_desc
                         and not self.registry.is_dynamic(default_spec)

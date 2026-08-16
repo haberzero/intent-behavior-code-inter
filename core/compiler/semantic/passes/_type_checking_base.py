@@ -118,7 +118,7 @@ class TypeCheckBase:
     def _bind_literal_with_type(self, node: Optional[ast.IbASTNode], spec: Optional[IbSpec]) -> None:
         """把目标特化类型绑到容器字面量节点（含递归内层元素）。
 
-        值创建点类型化的统一传递机制（缺陷二根治推广）：编译期建立
+        值创建点类型化的统一传递机制：编译期建立
         ``node_to_type = 特化类型``，运行时 VM 字面量 handler 据此水化特化类。
         与简单变量赋值（``_statement_visitors``）同构，覆盖函数返回 / 调用实参 /
         下标赋值 / 嵌套内层元素等全部容器字面量上下文。
@@ -311,7 +311,7 @@ class TypeCheckBase:
         if isinstance(annotation, ast.IbName):
             # callable 是内部类型名（运行期函数对象基类 + 公理族根），不作为用户
             # 可写类型（方向 A：用户面统一为 fn 族）。`callable f`/`-> callable`
-            # 报清晰错误而非半成品语义（此前只对 lambda/绑定方法生效、误拒裸函数）。
+            # 报清晰错误而非半成品语义（不只对 lambda/绑定方法生效）。
             if annotation.id == "callable":
                 self.error(
                     CALLABLE_INTERNAL_TYPE_MSG,
@@ -343,7 +343,7 @@ class TypeCheckBase:
         elif isinstance(annotation, ast.IbAttribute):
             # 模块限定类型注解：geo.Counter / subpkg.util.Counter。
             # 解析目标 spec（跨模块用户类），使行为表达式 node_to_type 等
-            # 绑定到带 module 的 spec（CROSSMOD-LLM-1 根治：此前退化 any）。
+            # 绑定到带 module 的 spec（不退化 any）。
             module_path, type_name = module_qualified_annotation(annotation)
             if type_name is None:
                 return self._any_desc
@@ -372,7 +372,7 @@ class TypeCheckBase:
                 if annotation.return_type is not None
                 else self._any_desc
             )
-            # 结构化构造（CALLABLE_SIG 签名模型根治）：参数/返回经 TypeRef.from_spec
+            # 结构化构造（CALLABLE_SIG 签名模型）：参数/返回经 TypeRef.from_spec
             # 产结构化 ref（list[int] → TypeRef('list',(int,))；Box[T] 特化 → 
             # TypeRef('Box',(T,))）——替代 TypeRef.of(p.name) 扁平化（head 含方括号、
             # args 空），使 substitute 可穿透嵌套类型参数（Box[T]→Box[int]），
@@ -441,7 +441,7 @@ class TypeCheckBase:
                                 annotation, code=SEM_GENERIC_TYPE_NEEDS_ARGS,
                             )
                             return self._any_desc
-                    # 多类型 list（list[int,str]）已移除：无 union 类型机制，元素读取
+                    # 多类型 list（list[int,str]）不支持：无 union 类型机制，元素读取
                     # 本应显式 any。异构容器必须显式声明 list[any]，不允许隐式异构
                     # 击穿元素类型（tuple 多参为位置元素类型，属合法特性，不受影响）。
                     if base_type.name == "list" and len(generic_args) > 1:

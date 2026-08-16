@@ -178,8 +178,8 @@ def _wrap_function_result(executor, func, value):
 
     函数返回 Optional[T] 时把裸内层值包装为 ``IbOptional``——链式消费
     （``maybe(5).unwrap()`` / ``is_some()`` / ``type()`` / 传参）不再拿到裸值。
-    此前仅"赋值路径"（define_variable 按 declared_type 包装）覆盖，跳过赋值的
-    直接消费路径缺失包装（类型身份架构断层问题 3）。幂等：``wrap_optional``
+    "赋值路径"（define_variable 按 declared_type 包装）之外的直接消费路径同样
+    覆盖。幂等：``wrap_optional``
     对已包装值 no-op（赋值后值再经本函数不重复包装）。
 
     声明返回类型来源：
@@ -236,7 +236,7 @@ def _vm_call_fn_callable(executor, func, args):
     """CPS 内联执行 IbFnCallable（lambda/snapshot）调用。
 
     使 lambda/snapshot 体完全在 VM CPS 循环中执行。
-    控制流信号（RETURN/BREAK/CONTINUE）通过 Signal 数据对象传播，不再依赖
+    控制流信号（RETURN/BREAK/CONTINUE）通过 Signal 数据对象传播，不依赖
     Python 异常。
 
     snapshot 语义（reentrant / stateless）：

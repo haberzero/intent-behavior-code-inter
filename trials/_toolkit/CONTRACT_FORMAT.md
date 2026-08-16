@@ -1,6 +1,6 @@
 # CONTRACT_FORMAT — 用例即契约格式规范（单一权威源）
 
-> 2026-08-13 编制（试用体系重构 Phase B）。**试用用例 = 语言语义契约的断言**，
+> 编制（试用体系重构用例契约阶段）。**试用用例 = 语言语义契约的断言**，
 > 非"跑一遍看结果"。harness 读取用例头部断言 → 运行 → **自动判定分类**并写入
 > register.jsonl（消除人工判定，address classification 0% 缺口）。
 > 本规范是 `CLASSIFICATION.md` 的配套（分类/级别/编号权威仍在 CLASSIFICATION）。

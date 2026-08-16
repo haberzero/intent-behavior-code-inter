@@ -3,11 +3,11 @@ core.runtime.observability.events — 事件流（事件总线 + 统一发射入
 
 ``runtime.subscribe()`` 返回一个 pubsub 订阅端点（``subscriber``），运行时事件
 推入其中。事件总线（``EventBus``）**复用 ``ChannelCore`` pubsub 模式**——机制
-同构（S4/W2 收敛）：``emit`` = ``send`` 扇出到全部订阅者缓冲；``subscribe()``
+同构：``emit`` = ``send`` 扇出到全部订阅者缓冲；``subscribe()``
 返回订阅者端点（``close`` = 干净退订），与用户通道 ``c.subscribe()`` 同一惯用法，
 无自定义 sink 注册表、无 monkeypatch 退订。事件类型是数据，不是分发条件。
 
-事件类型（如实清单，2026-08-07 对账）：llm_dispatched / llm_resolved /
+事件类型清单：llm_dispatched / llm_resolved /
 chan_created / slot_updated / configured / kernel_diagnostic。
 ``kernel_diagnostic`` 为诊断面事件（异常/降级/策略），经
 ``core.runtime.observability.diagnostics.kernel_diagnostic`` 发射。

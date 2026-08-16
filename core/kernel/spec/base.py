@@ -54,7 +54,7 @@ def spec_has_any_generic_arg(spec: Optional["IbSpec"]) -> bool:
 
     模板上下文中类型参数占位经解析可能降级为 ``Box[any]``（T→any），与保留的
     ``Box[T]`` 不对称；``any`` 是动态通配，无法静态拒绝——含 any 的实参比较应
-    延后（CALLABLE_SIG 签名模型根治：不误拒模板字段/参数赋值）。
+    延后（CALLABLE_SIG 签名模型：不误拒模板字段/参数赋值）。
 
     按 spec 的结构化泛型承载字段（type_args / element_type / key+value /
     positional / value_type / wrapped_type）逐实参判定，不依赖 name 子串。
@@ -106,7 +106,7 @@ class TypeKind(str, Enum):
     CALLABLE_INSTANCE = "callable_instance"
     CALLABLE_SIG = "callable_sig"
     LAZY = "lazy"
-    # 并发/通信类型（task/signal 类型已删除）
+    # 并发/通信类型
     THREAD = "thread"       # 线程句柄（thread[T]，join 返回 thread_result）
     CHANNEL = "channel"     # 数据流通道（元素类型泛型）
     SLOT = "slot"           # 共享状态槽（值类型泛型）

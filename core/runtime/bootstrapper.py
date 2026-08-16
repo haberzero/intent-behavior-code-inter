@@ -19,10 +19,8 @@ class Bootstrapper:
     def __init__(self, registry: KernelRegistry):
         self.registry = registry
         self._token = registry.get_kernel_token() # 获取内核特权令牌
-        # [S3 单类表] 不再维护独立 _class_registry——KernelRegistry._classes 是
-        # 运行期类表唯一权威（Bootstrapper 全委托）。此前双表（Bootstrapper
-        # 影子表 + KernelRegistry 权威表）是历史包袱：Enum 仅注册权威表不经
-        # 影子表，两处 [Enum Hook] 兜底即为弥合缺口；单表后自动消除。
+        # KernelRegistry._classes 是运行期类表唯一权威（Bootstrapper 全委托），
+        # 不维护独立影子表。
         self.TypeClass: Optional[IbClass] = None
         self.ObjectClass: Optional[IbClass] = None
         self.CallableClass: Optional[IbClass] = None
@@ -54,7 +52,7 @@ class Bootstrapper:
         intent_stack_desc = factory.create_class("IntentStack")
         # IntentStack 迭代/长度能力声明进 spec.members（与运行期原生方法表对齐，
         # 单一权威——satisfies_protocol("iterable") 结构判定依赖 spec 声明；
-        # 此前仅运行期注册 __iter__，spec 无声明，协议判定不可达）。
+        # 仅运行期注册 __iter__ 而 spec 无声明时协议判定不可达）。
         for _mname, _mspec in (
             ("__iter__", ("generator", [])),
             ("__len__", ("int", [])),
@@ -136,9 +134,9 @@ class Bootstrapper:
             if method:
                 return IbBoundMethod(self, method)
             # 3. 未声明属性：fail-fast（RUN_ATTRIBUTE_ERROR）。
-            #    此前静默返回 None——错误值流入用户程序（读取未声明属性得到
+            #    静默返回 None 会使错误值流入用户程序（读取未声明属性得到
             #    None，随后调用报困惑的 "Object of type 'None' has no method
-            #    '__call__'"）。属性缺失是程序错误，按工作模式定论应显式报错。
+            #    '__call__'"）。属性缺失是程序错误，应显式报错。
             raise InterpreterError(
                 f"AttributeError: '{self.ib_class.name}' object has no attribute '{name}'",
                 error_code="RUN_ATTRIBUTE_ERROR",
@@ -203,7 +201,7 @@ class Bootstrapper:
         """快速创建子类的便捷方法。如果类已存在，则返回现有实例。强制绑定 spec。
 
         [S3 单类表] 存在性检查与父查找均委托 KernelRegistry（唯一权威表，
-        涵盖此前仅注册于权威表的 Enum 等内置类——不再需要 [Enum Hook] 兜底）。
+        涵盖 Enum 等内置类）。
         ``name`` 可为裸类名（``Box[int]``）或 qualified 名（``geo.Box[int]``）；
         注册键 = 描述符 ``qualified_name``（跨模块同名类独立）。裸类名自末段
         提取（module 可含点，类名不可含点）。父类查找 module 感知（spec 的

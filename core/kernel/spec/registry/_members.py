@@ -42,8 +42,8 @@ class _MemberMixin:
                 from ..base import TypeDef
 
                 # 实例方法成员建模为 BOUND_METHOD kind（BoundMethodAxiom：
-                # bound_method IS-A callable 编译期接线——此前无条件 FUNCTION kind
-                # 使 `a.calc` 编译期类型恒为 FUNCTION、BoundMethodAxiom 从不触发，
+                # bound_method IS-A callable 编译期接线——无条件 FUNCTION kind
+                # 会使 `a.calc` 编译期类型恒为 FUNCTION、BoundMethodAxiom 从不触发，
                 # 编译期/运行期类型身份不对称）。MODULE 函数（模块级符号、无
                 # receiver）保持 FUNCTION。容器/类等对象类型的方法均视为绑定
                 # 接收者的实例方法：携带签名（param_types 不含 self——parser 把

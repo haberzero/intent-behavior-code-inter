@@ -178,7 +178,7 @@ class TestTaskScheduler:
 
 
 class TestNotifyWake:
-    """R2 通知式唤醒：waitable 完成时经 register_wake 即时唤醒调度器（根治 poll+park）。"""
+    """通知式唤醒：waitable 完成时经 register_wake 即时唤醒调度器（不轮询 park）。"""
 
     def test_register_wake_called_on_wait(self):
         """任务挂起时调度器对 waitable 注册完成通知。"""

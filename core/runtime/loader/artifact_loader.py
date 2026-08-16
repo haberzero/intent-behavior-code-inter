@@ -55,7 +55,7 @@ class ArtifactLoader:
         return False
 
     def _hydrate_builtin_generic_classes(self, type_pool: Dict[str, Mapping[str, Any]]) -> None:
-        """内置泛型特化类水化（缺陷二根治 + S3 句柄类覆盖，registry 封印前执行）。
+        """内置泛型特化类水化（含句柄类覆盖，registry 封印前执行）。
 
         编译产物 type_pool 中出现的内置泛型特化 spec（``list[int]`` /
         ``dict[str,int]`` / ``tuple[int,str]`` / ``Optional[int]`` /
@@ -123,7 +123,7 @@ class ArtifactLoader:
         hydrator = ArtifactRehydrator(type_pool, self.registry.get_metadata_registry())
         user_classes = hydrator.hydrate_all(self.registry)
 
-        # 内置泛型容器特化类水化（缺陷二根治）：编译产物中出现的内置泛型
+        # 内置泛型容器特化类水化：编译产物中出现的内置泛型
         # 特化 spec（list[int] / dict[str,int] / tuple[int,str] / Optional[int]）
         # 预创建为运行时特化类——与用户类泛型特化类（hydrate_all 产出 CLASS
         # 特化 spec → 下方预注册）同构。registry 未封印（STAGE_5），值创建点

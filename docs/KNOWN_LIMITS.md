@@ -378,18 +378,16 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 容器字面量推断带实参：`[1,2]` → `list[int]`、`{"k":1}` → `dict[str,int]`、`(1,2)` → `tuple[int,int]`；元素类型不一致/含动态/空 → 裸容器。`auto x = [1,2]` 推断 `list[int]`；显式裸声明（`list bare = [1,2]`）值层保持裸 `list`。`-> auto` 函数返回容器也带实参。
 
-`*expr` 展开实参（遗留边界修复）：特化容器（`list[int]`）展开时元素类型与目标形参做可赋值校验（`list[str] *-> f(int)` 编译期拦截）；裸容器/动态/数量不足由运行期裁决（静态数量未知是本质限制）。**仅保证 `*expr` 位于位置实参末尾时的目标形参偏移正确**（`f('x', *l)` 首元素对应第二形参）；中置/前导星（`f(10, *l, 30)`）的计数偏移为既有局限性。
+`*expr` 展开实参：特化容器（`list[int]`）展开时元素类型与目标形参做可赋值校验（`list[str] *-> f(int)` 编译期拦截）；裸容器/动态/数量不足由运行期裁决（静态数量未知是本质限制）。**仅保证 `*expr` 位于位置实参末尾时的目标形参偏移正确**（`f('x', *l)` 首元素对应第二形参）；中置/前导星（`f(10, *l, 30)`）的计数偏移为既有局限性。
 
 ### 10.4 `fn[(...) -> ...]` 签名内嵌套泛型实参
 
 `fn[(list[int]) -> int]` / `fn[(Box[int]) -> int]` 等**签名内部**的嵌套泛型实参
-已**结构化根治**（CALLABLE_SIG 签名模型：构造经 `TypeRef.from_spec` 结构化、
+结构化处理（CALLABLE_SIG 签名模型：构造经 `TypeRef.from_spec` 结构化、
 `resolve_typeref` 重建保真、匹配统一为逐参数类型检查、`TypeRef.substitute` 可穿透
-嵌套类型参数）。此前为"潜伏边界"（扁平 `TypeRef.of(p.name)` 构造，substitute 不可
-穿透嵌套 `T`，且 `is_assignable` 路径只查参数数量+返回类型、解析 miss 静默跳过）——
-实为**类型安全漏洞**：`fn[(Box[int]) -> int]` 收 `get2(str)->int`（参数类型不符）、
-`Host[int]` 特化后 `fn[(Box[T]) -> int]` 收错误签名，均曾编译期放行、运行期
-`RUN_TYPE_MISMATCH`。现均为编译期拦截。
+嵌套类型参数）。扁平构造（`TypeRef.of(p.name)`）无法穿透嵌套 `T`，且仅按参数数量
++返回类型检查会漏掉参数类型不符的签名——`fn[(Box[int]) -> int]` 收 `get2(str)->int`
+（参数类型不符）、`Host[int]` 特化后 `fn[(Box[T]) -> int]` 收错误签名，均编译期拦截。
 
 ---
 

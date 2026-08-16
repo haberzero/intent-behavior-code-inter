@@ -44,7 +44,7 @@ class CPSDrivable(Protocol):
     ``try_result``）的 Waitable 实现本协议。``cps_drive`` 是生成器：
     调用方（``vm_handle_IbCall``）对其 ``yield from``，使内部用户代码
     （如 ``slot.update(fn)`` 的 fn 求值）嵌入外层调度循环统一驱动，
-    消除 ``try_result`` 内新建嵌套 TaskScheduler 的遗留。
+    ``try_result`` 不新建嵌套 TaskScheduler。
 
     结构性协议：实现者提供 ``cps_drive`` 方法即满足；缺失的 Waitable
     走既有调度器轮询路径，非决策分派（与 ``register_wake`` 可选钩子同构）。

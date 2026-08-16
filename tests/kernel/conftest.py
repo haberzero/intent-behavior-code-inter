@@ -1,6 +1,6 @@
 """tests/kernel/conftest.py — kernel 层共享 fixture（统一命名，无别名 shim）。
 
-原 tests/kernel/conftest.py 的 ``axiom_registry`` 别名无消费者（遗留），
+``axiom_registry`` 别名无消费者，
 此处仅保留单一权威命名 ``ax_reg``。
 """
 

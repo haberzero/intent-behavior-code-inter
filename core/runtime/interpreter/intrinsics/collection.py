@@ -61,12 +61,12 @@ def register_collection(manager: Any, execution_context: Any, service_context: A
         clone = try_deep_clone(obj)
         return clone if clone is not None else obj
 
-    # NOTE [INTERNAL — 未来演进路线]:
-    # is_uncertain() 曾作为全局 IBCI 函数对用户暴露，现已从用户 API 移除。
+    # NOTE [INTERNAL — 设计说明]:
+    # is_uncertain() 不对用户 API 暴露（非全局 IBCI 函数）。
     #
     # 设计决策：
-    #   - IbLLMUncertain 哨兵（及 LLMResult.is_uncertain 内部标志位）仍作为内核
-    #     信号路径保留，但不对 IBCI 用户可见。
+    #   - IbLLMUncertain 哨兵（及 LLMResult.is_uncertain 内部标志位）作为内核
+    #     信号路径保留，对 IBCI 用户不可见。
     #   - llmexcept 块内：执行上下文必然处于 uncertain 状态，用户无需显式检查。
     #   - llmexcept 块外：uncertain 状态不可能出现（infra 失败 → LLMCallError，
     #     内容失败 → LLMParseError/LLMRetryExhaustedError），调用 is_uncertain()

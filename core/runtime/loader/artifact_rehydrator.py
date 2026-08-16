@@ -264,9 +264,8 @@ class ArtifactRehydrator:
             # 签名恢复经 canonical_name 字符串通道（嵌套保真，与 serializer 对称——
             # serializer 持久化 param_type_names/return_type_name）。旧的
             # param_types_uids/return_type_uid 引用通道对 FUNCTION 无产出
-            # （get_references 基类默认空），此前回退 void 覆盖 shell 签名——
-            # 运行期函数 spec 恒 void 返回，返回值类型在运行期不可得（类型身份
-            # 架构断层：Optional 链式消费包装失效的直接根因）。
+            # （get_references 基类默认空），回退 void 会覆盖 shell 签名——
+            # 运行期函数 spec 恒 void 返回，返回值类型在运行期不可得。
             spec.param_types = [
                 TypeRef.parse(p) for p in data.get("param_type_names", [])
             ]

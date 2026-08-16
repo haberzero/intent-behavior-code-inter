@@ -2,7 +2,7 @@
 
 > 本文档是 IBCI 的**远期任务正式清单**（单一权威源）。按 `tasks_docs/GOVERNANCE.md`
 > 治理章程维护：已完成条目从本文档移除（历史由 git 承载）；条目状态变更随任务推进更新。
-> 当前主线与最近完成见 `tasks_docs/NEXT_STEPS.md`。
+> 当前主线与下一步候选见 `tasks_docs/NEXT_STEPS.md`。
 >
 > **书写要求**：新增/修改条目必须按本文尾部「书写模式」模板与格式书写，保持一致。
 
@@ -28,7 +28,7 @@
 - **状态**：active（低优先级）｜**域**：FEAT｜**优先级**：P3
 - **动机**：编译产物字段承载冗余信息，精简后利于序列化契约稳定与维护者心智负担。
 - **成因**：管线演进中字段逐步累积，未做过系统性收敛。
-- **前置**：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月（诊断/导出/基准已落地，2026-08-09）。
+- **前置**：PT-FEAT-5 完成 + 管线稳定 ≥ 1 月（诊断/导出/基准就绪）。
 - **当前理解**：无独立设计文档，需先盘点 CompilationResult 消费方再定精简面。
 
 ### PT-FEAT-12 AST 节点 UID 字段（编译期可见）
@@ -45,8 +45,8 @@
 - **状态**：shelved｜**域**：FEAT｜**优先级**：P0（恢复后）
 - **动机**：`AIPlugin` 硬编码 LM Studio 专用参数（`enable_thinking=false`、
   `chat_template_kwargs` extra_body），自定义 OpenAI 兼容 API 开发者无法干净接入。
-- **成因**：真实 LLM 专项试用（2026-08-15）暴露的接口设计问题。
-- **搁置原因**：用户 2026-08-15 裁定先做 LLM 全能力真实压力试用；试用主线其后被
+- **成因**：真实 LLM 专项试用暴露的接口设计问题。
+- **搁置原因**：用户裁定先做 LLM 全能力真实压力试用；试用主线被
   协议化重构主线接替。理论清理完成后回到本项。
 - **当前理解**：请求参数下沉为 provider/model 级配置，单一请求构造权威；与
   PT-DECIDE-2（供应商感知思考禁用）收敛。
@@ -99,7 +99,7 @@
 - **状态**：active（修复候选专项）｜**域**：DEBT｜**优先级**：P1
 - **动机**：循环体多次 dispatch 覆写 `_pending_futures` 条目（behavior_dependency_pass
   注释）——旧 Future 泄漏 + 读点解析错乱候选；运行期有锁保护但消费完整性未核实。
-- **成因**：DDG 静态分析边界（KNOWN_LIMITS §十五 拆分登记，2026-08-16）。
+- **成因**：DDG 静态分析边界（KNOWN_LIMITS §十五）。
 - **当前理解**：需实证泄漏面（读点对齐/条目清理）后根因处置。
 
 ### PT-DEBT-33 KNOWN_LIMITS §十 未闭合子边界（dict 键/中置星/跨引擎封印）
@@ -107,8 +107,8 @@
 - **状态**：active（随类型地基后续窗口）｜**域**：DEBT｜**优先级**：P2
 - **动机**：10.1 `dict` 键类型在下标访问时不校验；10.3 `*expr` 中置/前导星计数偏移；
   跨引擎 round-trip 封印——三处未闭合边界随类型地基收敛。
-- **成因**：KNOWN_LIMITS §十 拆分（2026-08-16 复核终判）：10.2 跨模块（S2/S5）、
-  10.4 签名（已根治）闭合，其余子边界留待类型地基后续。
+- **成因**：KNOWN_LIMITS §十 拆分终判：10.2 跨模块、
+  10.4 签名闭合，其余子边界留待类型地基后续。
 - **当前理解**：与 PT-FEAT-7（类型体系）及句柄类值身份（`_HANDOFF_GENERIC_REMAINING`
   同源遗留）联动。
 
@@ -120,7 +120,7 @@
 
 - **状态**：active（周期）｜**域**：AUDIT｜**优先级**：P2
 - **动机**：按 `CODE_SMELL_AUDIT.md` 单一事实来源周期回顾。
-- **当前理解**：A/B/C/D 全量定案已完成（2026-08-09）；周期复核。
+- **当前理解**：A/B/C/D 全量定案已完成；周期复核。
 
 ### PT-AUDIT-2 条件分支与异常嵌套复杂度审计
 
@@ -128,13 +128,13 @@
 - **动机**：巨型 elif 分派链（`runtime_serializer._collect_instance` 深度 16、
   `_get_instance` 17、`core_scanner` 10、`binding_analysis_pass` 9）——方向：
   分派表/守卫子句。
-- **当前理解**：ibci_ai 窄化、auto_discovery fail-fast 已处置（A 类保留）；
+- **当前理解**：ibci_ai 窄化、auto_discovery fail-fast 生效（A 类保留）；
   深嵌套链待独立窗口。
 
 ### PT-AUDIT-3 代码复核审查循环（R 系列）
 
 - **状态**：active（周期）｜**域**：AUDIT｜**优先级**：P2
-- **动机**：R1-R5 已执行（2026-08-05/09）；复核清单 `PENDING_REVIEW_ITEMS.md`。
+- **动机**：R1-R5 已执行；复核清单 `PENDING_REVIEW_ITEMS.md`。
 - **当前理解**：随主线阶段边界择机启动。
 
 ---
@@ -146,7 +146,7 @@
 - **状态**：active｜**域**：DOC｜**优先级**：P2
 - **动机**：Reference→How-to 读者旅程断裂——生成器/并发/llmexcept/隔离等场景缺
   操作指南（现 howto 5 篇：调试/试用/生成器/并发/插件）。
-- **成因**：2026-08-09 三轴盘点登记（Reference→How-to 读者旅程缺口）。
+- **成因**：三轴盘点登记（Reference→How-to 读者旅程缺口）。
 - **当前理解**：按 WRITING_GUIDE 评估补齐优先级（快速上手/LLM 编排教程优先）。
 
 ---
@@ -157,7 +157,7 @@
 
 - **状态**：active（周期）｜**域**：TEST｜**优先级**：P2
 - **动机**：覆盖缺口由 `tests/COVERAGE_MATRIX.md` 矩阵 `🔶 缺失` 项承接。
-- **当前理解**：`for...if` 过滤、复合赋值运算符 e2e 已补（2026-08-06）；按矩阵缺失项
+- **当前理解**：`for...if` 过滤、复合赋值运算符 e2e 已补；按矩阵缺失项
   择机补齐。
 
 ---
@@ -171,7 +171,7 @@
   （开发试用基线）；但 API 参数 `enable_thinking=false` 在纯 GGUF（无 model.yaml）
   下无效的机制问题仍在——IBCI 侧需按供应商参数形态实现思考禁用/检测失败覆盖，
   对未应用界面预设的部署环境有效。
-- **成因**：真实 LLM 试用（2026-08-13）环境调查实证（LM Studio model.yaml 机制）。
+- **成因**：真实 LLM 试用环境调查实证（LM Studio model.yaml 机制）。
 - **当前理解**：待办①本机启用官方配置验证；②逐供应商参数形态探测
   （LM Studio/llama.cpp `chat_template_kwargs.enable_thinking`、vLLM、Ollama、
   OpenAI Responses `reasoning.effort`、Anthropic `thinking.budget_tokens`、
@@ -183,7 +183,7 @@
 - **动机**：① 用户类 `__from_prompt__` 返回目标类实例的 auto-boxing 二次封装边界；
   ② `__validate_prompt__` 是否扩展至内置类型；③ `SEM_PROTOCOL_SIGNATURE` 强度
   （warning vs error）；④ `__to_prompt__`/`__payload_prompt__` 异常回退可观测性复核。
-- **成因**：2026-08-15 PROMPT_DESIGN_REVIEW 收敛。
+- **成因**：PROMPT_DESIGN_REVIEW 收敛。
 
 ### PT-DECIDE-4 LLM 边界待评估项（BOUNDARY-LLM-2/3）
 
@@ -205,11 +205,11 @@
 
 - **状态**：sealed（无限期搁置）｜**域**：SEALED｜**优先级**：—
 - **动机与成因**：多模态为远期愿景；前置（路径统一/内核原生化/磁盘型存储）已完成，
-  但因语言主线（类型地基/协议化）长期优先而显式封存（2026-08-01）。
+  但因语言主线（类型地基/协议化）长期优先而显式封存。
 - **解封条件**：恢复需显式解封并重估；代码层零启动，设计要点在 git 历史。
   解封需实现：① 多模态模型注册字段（`ai.register_model` 存 modalities/endpoint/
   audio_config）；② 非聊天端点推理绕过；③ 磁盘型响应解析协议。
-- **已落地部分**：`__payload_prompt__` 协议与 `audio`/`image`/`video` 类型
+- **现有基础**：`__payload_prompt__` 协议与 `audio`/`image`/`video` 类型
   （见 `docs/syntax/07_behavior_expressions.md` §7.6、`docs/subsystems/02_file_container.md`）。
 
 ---
@@ -225,7 +225,7 @@
 
 - **动机**：T08 第一轮（41 例）完成后待扩展的压力维度——更长 prompt（>4k token）、
   多轮长对话、批量并发上限、多模态真实媒体文件（media 封存除外）。
-- **成因**：2026-08-15 试用主线；被协议化重构主线接替后顺延。
+- **成因**：试用主线；被协议化重构主线占用而顺延。
 - **当前理解**：真实 LLM 套件与工具链就绪（`trials/_toolkit`）；理论清理完成后
   按用户意愿恢复。
 

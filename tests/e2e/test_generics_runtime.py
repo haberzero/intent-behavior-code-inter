@@ -487,12 +487,11 @@ class TestValueIdentityConverged:
 # ===========================================================================
 
 class TestGeneratorReturnIdentity:
-    """生成器返回类型一致性（预存缺陷根治）。
+    """生成器返回类型一致性。
 
-    - ``-> generator[T]`` 显式标注此前被二次包裹为 generator[generator[T]]
-      （c8b89564 预存），致调用点返回类型退化为 any，错误元素类型赋值未拦截。
-    - generator[T] 特化 spec 序列化此前丢 value_type（serializer 缺分支），
-      rehydrator 恢复为裸 generator。
+    - ``-> generator[T]`` 显式标注不被二次包裹为 generator[generator[T]]
+      （调用点返回类型保持 T，错误元素类型赋值被编译期拦截）。
+    - generator[T] 特化 spec 序列化保留 value_type，rehydrator 正确恢复。
     """
 
     def test_explicit_generator_return_type_rejected(self):

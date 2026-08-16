@@ -431,7 +431,7 @@ class SymbolResolver(ScopedVisitor):
                 if annotation.return_type is not None
                 else None
             )
-            # 结构化构造（CALLABLE_SIG 签名模型根治）：参数/返回经 TypeRef.from_spec
+            # 结构化构造（CALLABLE_SIG 签名模型）：参数/返回经 TypeRef.from_spec
             # 产结构化 ref，substitute 可穿透嵌套类型参数、resolve_typeref 可恢复。
             return TypeDef(
                 name="fn",
@@ -754,10 +754,9 @@ class SymbolResolver(ScopedVisitor):
         """预注册目标符号的类型 spec：带注解解析注解；无注解 auto 占位。
 
         与模块级语义对齐（``symbol_collection_pass``：带注解解析、裸赋值 auto
-        占位由类型检查首赋值锁定）。此前硬编码 ``any`` 使函数局部变量的声明
-        类型丢失（symbol_pool type_uid=any）：运行时 Optional 值包装失效、
-        重赋值类型检查失效。注解解析失败回退 ``any``（prescan 宽容，不因
-        前向引用误报）。
+        占位由类型检查首赋值锁定）。硬编码 ``any`` 会使函数局部变量的声明类型丢失
+        （symbol_pool type_uid=any）：运行时 Optional 值包装失效、重赋值类型
+        检查失效。注解解析失败回退 ``any``（prescan 宽容，不因前向引用误报）。
         """
         if isinstance(target, ast.IbTypeAnnotatedExpr) and target.annotation:
             spec = self._resolve_annotation_spec(target.annotation)

@@ -62,9 +62,9 @@ class _AssignabilityMixin:
         if src.name == target.name and src.module_path == target.module_path:
             return True
 
-        # 内置泛型特化实参比较（缺陷一根治）：同泛型家族（list/dict/tuple/thread/
+        # 内置泛型特化实参比较：同泛型家族（list/dict/tuple/thread/
         # chan/slot/generator/fn_callable/behavior）的赋值必须校验特化实参——axiom
-        # ``is_compatible`` 此前用前缀匹配（``startswith("list[")``）无视实参，导致
+        # ``is_compatible`` 用前缀匹配（``startswith("list[")``）会无视实参，使
         # ``list[int]`` 可赋给 ``list[str]`` 等错误类型静默流入。此处按结构化实参
         # 逐个 ``is_assignable`` 递归（与用户类泛型特化（type_args）路径机制同构）。
         # 用户类（CLASS kind）不走本分支：其无 axiom、经 name 比较 + 继承链已正确拦截。
@@ -137,7 +137,7 @@ class _AssignabilityMixin:
         - 动态源（auto / fn / 裸动态可调用）：推迟到运行时，放行。
         - 参数数量：CALLABLE_INSTANCE（lambda）spec 不携带参数信息，跳过。
         - 逐参数类型：结构化 ref 经 resolve_typeref 解析（CALLABLE_SIG 签名模型
-          根治：补 is_assignable 路径的逐参数检查——此前只查数量+返回，漏洞 1）。
+          补 is_assignable 路径的逐参数检查——只查数量+返回会漏参数类型不符）。
           任一侧不可解析即拒绝（fail-fast，不静默跳过）。
         - 返回类型：FUNCTION/BOUND_METHOD 用 ``return_type``，CALLABLE_INSTANCE 用
           ``value_type``；任一侧为动态（any/auto）即放行，否则必须可赋值。

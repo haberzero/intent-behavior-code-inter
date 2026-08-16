@@ -66,7 +66,7 @@ class SpecRegistryBase:
         self.generic_types = create_generic_registry()
         self.protocols = ProtocolRegistry()
         register_builtin_protocols(self.protocols)
-        # 当前编译模块（S5 跨模块同名类身份根治）：非入口模块编译期间设置，
+        # 当前编译模块：非入口模块编译期间设置，
         # ``resolve`` 裸名解析先查 ``{current_module}.{name}``——被 import 模块内
         # 对自身类的裸名引用解析到带 module 的 spec。入口/单模块为空（裸名直查）。
         self.current_module: Optional[str] = None
@@ -152,7 +152,7 @@ class SpecRegistryBase:
         if ref.head == "fn" and len(ref.args) == 2 and ref.args[0].head == "__args__":
             param_refs = list(ref.args[0].args)
             ret_ref = ref.args[1]
-            # 保留嵌套实参（CALLABLE_SIG 签名模型根治）：参数/返回直接用 ref 原样
+            # 保留嵌套实参（CALLABLE_SIG 签名模型）：参数/返回直接用 ref 原样
             # （TypeRef('Box',(int,)) 等结构化形态），不 TypeRef.of(a.head) 再扁平化
             # ——否则结构化 ref 被降级为 head 含方括号的扁平形态，substitute/解析失效。
             return TypeDef(

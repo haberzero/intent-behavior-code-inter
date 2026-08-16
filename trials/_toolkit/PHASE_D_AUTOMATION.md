@@ -1,6 +1,6 @@
 # PHASE_D_AUTOMATION — 试用→确定性测试收敛 + 报告自动生成设计
 
-> 2026-08-13 编制（试用体系重构 Phase D）。目标：把试用暴露的缺陷**自动收敛为
+> 编制（试用体系重构自动化阶段）。目标：把试用暴露的缺陷**自动收敛为
 > `tests/` 确定性回归**，并**自动生成 REGISTER 报告骨架**。单一权威源：
 > `_toolkit/CONTRACT_FORMAT.md`（用例即契约）与 `_toolkit/CLASSIFICATION.md`（分类/编号）。
 

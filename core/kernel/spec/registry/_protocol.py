@@ -78,7 +78,7 @@ class _ProtocolMixin:
         gradual-typing permissiveness).  Built-in protocol satisfaction is
         derived from the **protocol entry's satisfaction declaration**
         (阶段 C——数据驱动：kind 特判集 / axiom 能力字段名 / 结构成员判定，
-        替代此前协议名硬编码 if 链；布尔字段为 axiom 声明值，协议条目为
+        替代协议名硬编码 if 链；布尔字段为 axiom 声明值，协议条目为
         "协议 ↔ 能力"映射的单一权威)。
 
         This is the single entry point that future user-defined protocol

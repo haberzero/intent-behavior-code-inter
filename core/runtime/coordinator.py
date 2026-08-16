@@ -62,7 +62,7 @@ class SpawnedTask:
 
     线程生命周期经句柄方法管理（``join`` 阻塞等结果 / ``cancel`` 协作式请求 /
     ``is_done`` 非破坏检查）。**不满足 :class:`Waitable`**——async/thread 领域
-    彻底分离，线程句柄不经 VM yield 挂起（清理：``result()`` 死方法已删除）。
+    彻底分离，线程句柄不经 VM yield 挂起。
     """
 
     def __init__(self, interpreter: Any, callable_obj: Any, args: Optional[List[Any]] = None):
@@ -181,7 +181,7 @@ def _run_task_body(
        驱动；``fn_callable``/``behavior`` 经 ``_vm_call_fn_callable`` /
        ``_vm_invoke_behavior`` CPS 驱动；原生（``IbFunction``）走同步 ``.call``。
 
-    ``handle``：任务句柄标识，用于协作式取消错误上报（不再依赖失效的
+    ``handle``：任务句柄标识，用于协作式取消错误上报（不依赖失效的
     ``_task_handle`` 属性读取）。
     """
     from core.runtime.interpreter.runtime_context import RuntimeContextImpl
@@ -308,7 +308,7 @@ def _run_behavior_cps(task_vm: Any, behavior: Any, args: List[Any], cancel_event
 def _drive_generator(task_vm: Any, gen: Any, cancel_event: Optional[threading.Event] = None, handle: str = "") -> Any:
     """线程体驱动：复用主 VM 的 ``_drive_loop_gen`` + ``TaskScheduler``（单一权威驱动）。
 
-    线程体此前独立实现一套阻塞驱动循环（``_drive_generator``），与主 VM
+    线程体独立实现一套阻塞驱动循环（``_drive_generator``），与主 VM
     ``_drive_loop_gen`` 重复（trampoline / GeneratorYield / Signal / None
     规范化 / 协作取消双维护）。本函数改为：把根生成器包装为 ``VMTask`` 压栈，
     经 ``task_vm._drive_loop_gen``（**单一权威驱动循环**）+ ``TaskScheduler``

@@ -240,9 +240,7 @@ class LLMExceptFrame:
         - retry_hint
 
         意图上下文恢复说明：
-            原实现使用 ``intent_context.merge(saved)``，会将 retry body 内
-            对全局/排他/涂抹槽的修改"叠加"到恢复结果上；新实现采用
-            ``_intent_ctx = saved.fork()`` 替换语义，保证 retry 看到的是
+            恢复采用 ``_intent_ctx = saved.fork()`` 替换语义，retry 看到的是
             llmexcept 进入时刻完全一致的意图快照，与 vars/loop_context 的恢复
             语义对齐（均为干净还原）。同时活跃实例指针被重建：若原帧持有
             命名策略，则同步指向新底层；若原帧匿名，则建立新的匿名封装。

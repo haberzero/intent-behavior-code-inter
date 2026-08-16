@@ -352,7 +352,7 @@ class KernelRegistry:
         return self._boxers.get(py_type)
 
     def get_class(self, name: str, module: Optional[str] = None) -> Any:
-        """按 (module, name) 查运行期类；module 感知（跨模块同名类根治）。
+        """按 (module, name) 查运行期类；module 感知。
 
         - ``module`` 提供且 ``name`` 无点（裸名）：先查 ``{module}.{name}``
           （模块内对自身类的引用命中带 module 的键），miss 回落裸名——仅命中

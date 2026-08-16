@@ -402,7 +402,7 @@ class TestConfigFailFastHardening:
         assert plugin._model_capabilities["is_reasoning"] is True
 
     def test_dead_capability_fields_removed(self):
-        """F5：extract_strategy/supports_system 死字段已删除（写而不读的预留策略字段）。"""
+        """extract_strategy/supports_system 死字段不存在（写而不读的预留策略字段）。"""
         plugin = AIPlugin()
         assert "extract_strategy" not in plugin._model_capabilities
         assert "supports_system" not in plugin._model_capabilities

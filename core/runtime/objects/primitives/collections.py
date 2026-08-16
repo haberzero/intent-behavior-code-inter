@@ -121,7 +121,7 @@ class IbList(IbValue):
             if isinstance(idx, slice):
                 # 切片返回 IbObject 列表，重新装箱为 IbList——沿用自身 ib_class
                 # （特化类 list[int] 保留特化身份；裸 list 保持裸），使
-                # ``type(li[0:2]) == type(li)``（缺陷二根治：切片值层身份保真）。
+                # ``type(li[0:2]) == type(li)``（切片值层身份保真）。
                 return IbList(list(res), self.ib_class)
             return res
         except IndexError:
@@ -187,7 +187,7 @@ class IbList(IbValue):
         if not isinstance(other, IbList):
             raise InterpreterError(f"TypeError: can only concatenate list (not '{other.ib_class.name}') to list")
         # 沿用自身 ib_class（特化类 list[int] 保留特化身份），使
-        # ``list[int] a += [2]`` 结果仍为 list[int]（缺陷二根治：复合赋值
+        # ``list[int] a += [2]`` 结果仍为 list[int]（复合赋值
         # 值层身份保真；与切片 __getitem__ slice 分支同构）。
         # 元素统一按自身元素类型包装（list[Optional[int]] 拼接含 None 的
         # 列表时，产物元素保持 IbOptional 表示——统一 Optional 值模型）。
@@ -268,7 +268,7 @@ class IbTuple(IbValue):
             if isinstance(idx, slice):
                 # 切片返回 IbObject 元组，重新装箱为 IbTuple——沿用自身 ib_class
                 # （特化类 tuple[int,str] 保留特化身份），使
-                # ``type(t[0:2]) == type(t)``（缺陷二根治：切片值层身份保真）。
+                # ``type(t[0:2]) == type(t)``（切片值层身份保真）。
                 native = tuple(res) if isinstance(res, (list, tuple)) else res
                 return IbTuple(native, self.ib_class)
             return res

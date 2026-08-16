@@ -1,7 +1,7 @@
 """
 core.runtime.shared.comm — 统一通信内核。
 
-两个正交通信域（不能用一个超抽象覆盖；Signal 控制流域已移除）：
+两个正交通信域（不能用一个超抽象覆盖；Signal 控制流域不存在）：
 - Channel（数据流：stream / message / pubsub）
 - Slot（共享状态：具名原子读写）
 

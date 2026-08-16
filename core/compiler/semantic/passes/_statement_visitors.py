@@ -156,7 +156,7 @@ class StatementVisitorsMixin:
             self.bind_type(target, target_type)
             # 容器字面量 RHS 绑定目标特化类型（list[int] li = [1,2] → [1,2]
             # 节点的 node_to_type = list[int]），运行时值创建据此水化特化类
-            # （缺陷二根治：内置泛型值层类型身份保真）。递归 helper 覆盖
+            # （内置泛型值层类型身份保真）。递归 helper 覆盖
             # 嵌套内层元素（list[list[int]] n = [[1],[2]] 的内层 [1]/[2]）。
             if target_type is not None and rhs_inner is not None and rhs is rhs_inner:
                 self._bind_literal_with_type(rhs_inner, target_type)
@@ -190,13 +190,13 @@ class StatementVisitorsMixin:
 
             # 下标/属性赋值 RHS 容器字面量绑定目标特化类型（m[0] = [9] 且
             # m: list[list[int]] → [9] 节点 node_to_type = list[int]），值创建点
-            # 据此水化特化类（缺陷二根治推广：下标赋值路径值层身份保真）。
+            # 据此水化特化类（下标赋值路径值层身份保真）。
             if target_type is not None and node.value is not None:
                 self._bind_literal_with_type(node.value, target_type)
 
         elif isinstance(target, ast.IbTuple):
             # 元组解包：各元素按位置接收 RHS 元素的实际类型并校验声明类型
-            # （S6 补类型检查：此前各元素用 _any_desc 跳过 is_assignable）。
+            # （元素类型按实际类型校验，不用 _any_desc 跳过 is_assignable）。
             # RHS 是元组字面量时按位置绑定声明类型（含显式裸声明覆盖推断，
             # 与简单赋值 _bind_literal_with_type 同构）。
             rhs_tuple = node.value if isinstance(node.value, ast.IbTuple) else None
@@ -332,7 +332,7 @@ class StatementVisitorsMixin:
         return declared_type
 
     def _check_callable_sig_match(self, sig: IbSpec, actual: IbSpec, node: ast.IbASTNode):
-        """CALLABLE_SIG 签名约束的结构匹配（CALLABLE_SIG 签名模型根治：结构化
+        """CALLABLE_SIG 签名约束的结构匹配（CALLABLE_SIG 签名模型：结构化
         参数 ref 经 resolve_typeref 解析——嵌套泛型实参保真；与 is_assignable 路径
         ``_matches_callable_sig`` 语义对齐，消除双通道）。"""
         expected_params = list(sig.param_types)
@@ -468,7 +468,7 @@ class StatementVisitorsMixin:
             # 由左值类型驱动，return 处没有左值——直接书写无法确定 LLM 输出
             # 的解析目标，运行时将按字符串 box（-> int 等具体类型失效，静默
             # 类型错流入）。用户应先赋值给有类型的局部变量，再 return 该变量。
-            # （v1 曾实现此拦截，v2 语义重构时未随迁——此处补全设计意图。）
+            # （此处补全设计意图：return 处无左值驱动解析目标）。
             rhs = node.value
             rhs_inner = rhs.value if isinstance(rhs, ast.IbAwaitExpr) else rhs
             if isinstance(rhs_inner, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
@@ -481,25 +481,24 @@ class StatementVisitorsMixin:
             ret_type = self.visit(node.value)
             # 返回容器字面量绑定函数返回特化类型（func f() -> list[int]:
             # return [1,2] → [1,2] 节点 node_to_type = list[int]），值创建点
-            # 据此水化特化类（缺陷二根治推广：函数返回路径值层身份保真）。
+            # 据此水化特化类（函数返回路径值层身份保真）。
             func_returns = getattr(self, "func_return_types", None) or []
             if func_returns and func_returns[-1] is not None:
                 self._bind_literal_with_type(rhs_inner, func_returns[-1])
-                # 可调用返回类型兼容校验（BOUNDARY-NESTED-FUNC-1 根因根治）：
+                # 可调用返回类型兼容校验：
                 # 函数声明返回具体可调用类型（fn_callable[T]/callable/behavior[T]/
                 # fn[(...) -> (...)]，非动态）时，返回表达式的类型须可赋值——与
-                # 直接赋值路径（fn_callable[T] g = inner 编译期拦截）语义一致。
-                # 此前 visit_IbReturn 从不比对 ret_type 与声明返回类型，导致
-                # `-> fn_callable[int]: return inner`（函数引用）编译期放行、
+                # 直接赋值路径（fn_callable[T] g = inner 编译期拦截）语义一致——
+                # `-> fn_callable[int]: return inner`（函数引用）编译期拦截，不落
                 # 运行期 RUN_TYPE_MISMATCH。动态声明（`-> fn` 推断哨兵）跳过。
                 # self.is_assignable 与赋值路径同方法（含 None 宽容 + TypeRef
                 # 解析）；CALLABLE_SIG 的逐参数强校验由 `_infer_fn_type_with_sig`
                 # 在赋值路径承担，return 路径复用 is_assignable（对 lambda 的
-                # CALLABLE_SIG spec 因参数丢失 pre-existing bug 两者行为一致）。
+                # CALLABLE_SIG spec 因参数缺失两者行为一致）。
                 declared_ret = func_returns[-1]
                 # bare fn 返回（动态哨兵，name=="fn"）＝"任意可调用"抽象：返回表达式
-                # 必须是可调用（方向 A 收紧——此前 is_dynamic 跳过致 `-> fn: return 42`
-                # 放行）。动态返回表达式（any/auto）静态不可判，放行交运行期裁决。
+                # 必须是可调用（`-> fn: return 42` 编译期拦截）。动态返回表达式
+                # （any/auto）静态不可判，放行交运行期裁决。
                 if (declared_ret is not None
                         and getattr(declared_ret, "name", None) == "fn"
                         and self.registry.is_dynamic(declared_ret)
@@ -597,8 +596,8 @@ class StatementVisitorsMixin:
                     node, code=SEM_TYPE_MISMATCH
                 )
             # 复合赋值 RHS 容器字面量绑定目标特化类型（list[int] a += [2] → [2]
-            # 节点 node_to_type = list[int]），值创建点据此水化特化类（缺陷二
-            # 根治推广：复合赋值路径值层身份保真）。
+            # 节点 node_to_type = list[int]），值创建点据此水化特化类（复合
+            # 赋值路径值层身份保真）。
             self._bind_literal_with_type(node.value, target_type)
         return None
 

@@ -382,7 +382,7 @@ class TestOptionalArtifactRehydrator:
 ################################################################################
 
 class TestTaskThreadArtifactRehydrator:
-    """TASK kind 还原（task 类型已删除）：一律重建 thread，无幽灵 task 回退。"""
+    """TASK kind 还原（无 task 类型）：一律重建 thread。"""
 
     def test_thread_specialization_hydrates(self):
         registry = create_default_registry()

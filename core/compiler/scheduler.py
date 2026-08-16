@@ -218,7 +218,7 @@ class Scheduler(ICompilerService):
         """
         Maintains the LRU cache by removing oldest items if capacity exceeded.
 
-        统一剪枝 ast/token/symbol_table/build 五缓存（R2-E4：此前只剪 ast+token，
+        统一剪枝 ast/token/symbol_table/build 五缓存（只剪 ast+token 时
         symbol_table/build 无界增长；同路径的其它缓存条目一并淘汰）。
         """
         while len(self.ast_cache) > self.MAX_CACHE_SIZE:
@@ -574,7 +574,7 @@ class Scheduler(ICompilerService):
                 # 成员契约统一为 MemberSpec/MethodMemberSpec 纯数据形态（与原生模块
                 # discovery 填充、命名导入 _create_symbol_from_member 消费一致）——
                 # resolve_member 只认该形态；符号表 Symbol 不可直接入 members
-                # （无 type_ref，此前整模块 import + 成员访问触发 INT_INTERNAL_ERROR）。
+                # （无 type_ref，整模块 import + 成员访问会触发 INT_INTERNAL_ERROR）。
                 final_mod_meta.members = {
                     name: self._symbol_to_member(name, sym)
                     for name, sym in result.symbol_table.symbols.items()
@@ -629,7 +629,7 @@ class Scheduler(ICompilerService):
         discovery 填充、resolve_member 消费、命名导入 _create_symbol_from_member
         处理三方一致）。符号表 Symbol（FunctionSymbol/VariableSymbol/TypeSymbol）
         不可直接入 members——resolve_member 只认带 type_ref 的 MemberSpec 形态，
-        此前整模块 import + 成员访问因形态不匹配触发 INT_INTERNAL_ERROR。
+        整模块 import + 成员访问因形态不匹配会触发 INT_INTERNAL_ERROR。
 
         类型经 spec 的结构化字段提取为 TypeRef，零运行时耦合。
         """

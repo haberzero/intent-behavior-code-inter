@@ -81,7 +81,7 @@ class IbObject:
         - 下沉至公理层能力探测：函数家族（IbFunction 子类：用户函数/原生函数/
           绑定方法/LLM 函数）直接走 Python .call。
         - 用户类实例 + 用户定义的 ``__call__`` 协议方法：返回 CPSDrivable drive，
-          VM 经 cps_drive 帧内驱动（UserFunctionCall trampoline，EXEC-1 根治）。
+          VM 经 cps_drive 帧内驱动（UserFunctionCall trampoline）。
         - 其余（原生 __call__ 方法等）返回 None → 落回普通 vtable 路由。
         """
         from .functions import IbFunction

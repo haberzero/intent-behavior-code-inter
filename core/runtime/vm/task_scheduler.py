@@ -219,7 +219,7 @@ class TaskScheduler:
                     # 协作取消：等待中的任务也取消（park 期间唤醒）
                     for t in self._waiting:
                         t.cancelled = True
-                    # 立即唤醒：已取消任务不再依赖 waitable 完成，直接进入下一轮投递
+                    # 立即唤醒：已取消任务不依赖 waitable 完成，直接进入下一轮投递
                     self._wake_event.set()
                 # 等待通知式唤醒：waitable 完成时经 register_wake 设置事件，
                 # 立即唤醒重 poll（无轮询延迟）；park_interval 作安全超时兜底

@@ -248,7 +248,7 @@ class SymbolCollector:
         # TypeRef(Box, (T,))，供特化时递归替换。
         if node.parent_args:
             parent_head = effective_parent or "Object"
-            # [Module Identity] 父引用带 module（S5 运行期根治）：同模块父经
+            # [Module Identity] 父引用带 module：同模块父经
             # SpecRegistry.current_module 上下文解析出 module_path，运行期父链
             # 据此对齐 qualified 键（geo.Sub[int] 的父 = "geo.Box[int]"）。
             # 父类尚未注册（前向引用）时 module 缺省，运行期以子类 module 补全。
@@ -502,8 +502,8 @@ class SymbolCollector:
 
         支持泛型注解：``list[int]`` / ``dict[str,int]`` / ``Optional[int]``
         等经 ``resolve_specialization`` 解析为特化 spec——符号 declared_type 保留
-        泛型身份（此前只处理 ``IbName``，泛型注解退化为 any/基础类型，运行时
-        内省/序列化丢泛型参数）。用户类泛型内层（``list[T]``）经类型参数
+        泛型身份（只处理 ``IbName`` 时泛型注解退化为 any/基础类型，运行时内省/
+        序列化丢泛型参数）。用户类泛型内层（``list[T]``）经类型参数
         符号解析为占位 spec（T），特化时替换。
         """
         if isinstance(annotation, ast.IbName):

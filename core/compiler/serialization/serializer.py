@@ -12,7 +12,7 @@ from core.base.serialization import BaseFlatSerializer
 from core.base.uid import node_uid, type_uid, anon_symbol_uid
 
 # S4 声明驱动：payload 字段名即序列化键（与 artifact_rehydrator 读侧一致，
-# 单一权威源——不维护历史兼容键映射）。
+# 单一权威源——不维护兼容键映射）。
 
 class FlatSerializer(BaseFlatSerializer):
     """
@@ -197,9 +197,8 @@ class FlatSerializer(BaseFlatSerializer):
 
         # Persist TypeDef param/return signature for structural checking.
         # FUNCTION/BOUND_METHOD/CALLABLE_SIG 统一持久化签名（canonical_name
-        # 嵌套保真——类型身份架构断层：FUNCTION 此前不持久化签名，运行期水化出
-        # void 返回的函数 spec，函数返回值类型在运行期不可得（Optional 链式消费
-        # 包装失效的直接根因）。
+        # 嵌套保真——不持久化签名会水化出 void 返回的函数 spec，函数返回值类型
+        # 在运行期不可得）。
         if t.kind in (TypeKind.FUNCTION.value, TypeKind.BOUND_METHOD.value, TypeKind.CALLABLE_SIG.value):
             type_data["param_type_names"] = [p.canonical_name for p in t.param_types]
             ret_ref = t.return_type
@@ -272,8 +271,8 @@ class FlatSerializer(BaseFlatSerializer):
         value_type/element_type/wrapped_type 等 TypeRef 字段写
         ``{field}_name``/``{field}_module``（canonical_name 保真嵌套），
         key_type/value_type 为 dict 双字段。消除 per-kind 手工分支
-        （serializer 曾对 thread/thread_result/chan/slot/generator 各写一份
-        value_type 持久化代码）。非泛型 kind（CLASS/FUNCTION 等）无声明，跳过。
+        （thread/thread_result/chan/slot/generator 各自手写一份
+        value_type 持久化代码的形态不复存在）。非泛型 kind（CLASS/FUNCTION 等）无声明，跳过。
         """
         from core.kernel.spec.base import TypeKind
 
@@ -295,7 +294,7 @@ class FlatSerializer(BaseFlatSerializer):
             return
         for field in decl.payload_fields:
             refs = getattr(t, field, None)
-            # 序列化键 = payload 字段名（S4 声明驱动，无历史键映射）
+            # 序列化键 = payload 字段名（声明驱动，无兼容键映射）
             name_key = field
             if isinstance(refs, list):
                 if not refs:

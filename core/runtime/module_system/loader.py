@@ -358,7 +358,7 @@ class ModuleLoader(IModuleLoader):
                     raise InterpreterError(f"Plugin Critical Error: Failed to load implementation for module '{entry}': {e}") from e
                 finally:
                     # sys.path 用后即还：插件代码已进入 sys.modules，包内相对导入经 __package__ 解析，
-                    # 不再依赖 sys.path 残留；stdlib/core 经各自既定路径解析。
+                    # 不依赖 sys.path；stdlib/core 经各自既定路径解析。
                     for p in added_paths:
                         if p in sys.path:
                             sys.path.remove(p)

@@ -40,9 +40,8 @@ class SemanticAnalyzer:
         self.issue_tracker = issue_tracker
         self.registry = registry
         self.module_name = module_name
-        # 类身份统一（S2）：所有模块（含入口）用户类 spec 均带 module 限定
-        # （module_path=模块名）——"入口=根命名空间裸名"特例已删除。入口/导入
-        # 对称，跨模块同名类彻底隔离。
+        # 类身份统一：所有模块（含入口）用户类 spec 均带 module 限定
+        # （module_path=模块名）——入口与导入对称，跨模块同名类彻底隔离。
 
         # scheduler 通过此属性注入导入符号
         self.symbol_table = SymbolTable(parent=None, name=module_name)
