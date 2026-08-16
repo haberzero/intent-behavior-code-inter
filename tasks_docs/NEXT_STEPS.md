@@ -27,9 +27,16 @@
 
 ## ✅ 最近完成
 
-- **2026-08-16 文档体系系统化重构与正规化**：docs/ 全量审计与重构（跟随阶段 A-D
-  代码事实）、tasks_docs 正规化（GOVERNANCE 治理章程 + PENDING_TASKS 八股化 +
-  临时文档清理）、KNOWN_LIMITS 体系化、根目录清洁。详见 WORKLOG。
+- **2026-08-16 文档体系系统化重构与正规化（四大任务完成）**：① docs/ 全量审计
+  （5 并行 general agent，43 文件）+ 重构——红线清理（日期戳/任务编号/历史叙述/
+  自治豁免/断链）、内容漂移修正（跟随阶段 A-D 代码事实：协议化体系归属 03 §4.0、
+  receive 分派/self 形态/特化身份/member_types 派生/satisfies 数据驱动/auto-init
+  声明化/预评估诊断码/copy·deepcopy 内建/chan 签名/运算符重载/全局意图/快照警告）、
+  章节排布与编号统一、LANGUAGE_DESIGN_EVOLUTION 孤儿删除；② tasks_docs 正规化
+  （GOVERNANCE 治理章程 + PENDING_TASKS 八股化 + NEXT_STEPS/WORKLOG/HANDOFF 清洗
+  + 临时文档删除）；③ KNOWN_LIMITS 体系化（26 节真实性查验 + 类型标注 + 条目
+  结构说明）；④ 根目录清洁（auto/example_api.json 删除）。全量 3006/1 零回归。
+  详见 WORKLOG。
 - **2026-08-16 内核协议化收尾与双轨收敛（阶段 A-D + 独立候选）**：OOP 协议化 /
   双轨收敛 / 判定链协议化 / 边界处置 / copy·deepcopy 内建落地。全量 3006 passed /
   1 skipped 零回归；每阶段独立复核（general agent）放行 + 真实 LLM 复跑
