@@ -20,6 +20,47 @@ def register_collection(manager: Any, execution_context: Any, service_context: A
         native_args = [unbox(a) for a in args]
         return manager.registry.box(list(range(*native_args)))
 
+    def _value_base_name(obj: Any) -> str:
+        """值对象 kind 基类名（特化类沿 spec 基名——与 deep_clone 同构）。"""
+        ib_class = getattr(obj, "ib_class", None)
+        spec = getattr(ib_class, "spec", None)
+        if spec is not None:
+            base = spec.get_base_name()
+            if base:
+                return base
+        return getattr(ib_class, "name", "")
+
+    def _copy(obj: IbObject):
+        """全局 copy() 函数——浅拷贝：容器新建 + 元素引用共享（对齐 Python copy.copy）。
+
+        覆盖 list/tuple/dict；不可变/非容器值（int/str/bool/None/函数/行为等）
+        值语义等价，返回原值。嵌套容器元素仍共享（深拷贝用 deepcopy()）。
+        """
+        base = _value_base_name(obj)
+        from core.runtime.objects.primitives import IbDict, IbList, IbTuple
+
+        if base == "list":
+            elements = list(getattr(obj, "elements", None) or [])
+            return IbList(elements, obj.ib_class)
+        if base == "tuple":
+            elements = tuple(getattr(obj, "elements", None) or ())
+            return IbTuple(elements, obj.ib_class)
+        if base == "dict":
+            fields = dict(getattr(obj, "fields", None) or {})
+            return IbDict(fields, obj.ib_class)
+        return obj
+
+    def _deepcopy(obj: IbObject):
+        """全局 deepcopy() 函数——递归深拷贝（元素/字段独立副本）。
+
+        不可克隆值（函数/行为/原生封装）回退原引用（deep_clone 契约——
+        值语义等价，语义文档化）。
+        """
+        from core.runtime.objects.deep_clone import try_deep_clone
+
+        clone = try_deep_clone(obj)
+        return clone if clone is not None else obj
+
     # NOTE [INTERNAL — 未来演进路线]:
     # is_uncertain() 曾作为全局 IBCI 函数对用户暴露，现已从用户 API 移除。
     #
@@ -40,3 +81,5 @@ def register_collection(manager: Any, execution_context: Any, service_context: A
 
     manager.register('len', _len, unbox=False)
     manager.register('range', _range, unbox=False)
+    manager.register('copy', _copy, unbox=False)
+    manager.register('deepcopy', _deepcopy, unbox=False)

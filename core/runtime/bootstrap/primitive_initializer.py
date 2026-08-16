@@ -266,6 +266,18 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         return_type_name="int"
     ), token)
 
+    registry.register_function("copy", factory.create_func(
+        "copy",
+        param_type_names=["any"],
+        return_type_name="any"
+    ), token)
+
+    registry.register_function("deepcopy", factory.create_func(
+        "deepcopy",
+        param_type_names=["any"],
+        return_type_name="any"
+    ), token)
+
     registry.register_function("range", factory.create_func(
         "range",
         param_type_names=["int"],

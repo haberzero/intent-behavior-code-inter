@@ -15,13 +15,14 @@ All type references in method signatures are plain strings (type names) so
 the axiom layer remains independent of the spec layer (no circular
 imports).
 
-Capability query pattern (kept stable for callers):
+Capability query pattern (阶段 C 后收敛——能力字段名单点化于协议条目):
 
-    axiom = registry.get_axiom(spec)
-    if axiom and axiom.has_operator_cap:
+    axiom = registry.get_cap(spec, "operator")
+    if axiom:
         result_name = axiom.resolve_operation_type_name("+", "float")
 
-调用方经 ``get_axiom(spec)`` 直接查询能力标志（truthy-check 惯用法）。
+消费端经 ``_get_cap(协议名)`` 查询（协议条目解析能力字段名）；axiom 布尔
+字段为声明值，不直读（truthy-check 惯用法保留）。
 """
 
 from __future__ import annotations

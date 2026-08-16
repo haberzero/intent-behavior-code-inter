@@ -110,10 +110,11 @@ class _ProtocolMixin:
                 return True
         structural = protocol.structural_methods or protocol.methods
         if structural:
-            declared = bool(protocol.kinds or protocol.axiom_cap or protocol.structural_methods)
-            if protocol.structural_all or not declared:
-                # 显式 all 判定（snapshotable）或用户/前向协议（无内置判定声明）
-                # → required methods 全部结构判定（与既有通用路径一致）。
+            # has_declaration：条目是否携带内置判定声明（kinds/axiom_cap/
+            # structural_methods 任一）——无声明（用户/前向协议）按 required
+            # methods 全部结构判定（与既有通用路径一致）。
+            has_declaration = bool(protocol.kinds or protocol.axiom_cap or protocol.structural_methods)
+            if protocol.structural_all or not has_declaration:
                 return self._class_has_all_methods(spec, structural)
             return self._class_has_any_method(spec, structural)
         return False

@@ -198,3 +198,74 @@ class TestSatisfactionDeclaration:
             return_type=TypeRef.of("any"), param_types=[],
         )
         assert reg.satisfies_protocol(cls2, "attribute")
+
+    def test_snapshotable_requires_all_methods(self):
+        """snapshotable all 判定：半方法（仅 __snapshot__）不满足。"""
+        from core.kernel.spec import TypeDef, TypeKind, MethodMemberSpec
+        from core.kernel.spec.type_ref import TypeRef
+
+        reg = create_default_registry()
+        cls = TypeDef(name="Sn", kind=TypeKind.CLASS.value, provenance="USER_DEFINED")
+        cls.members["__snapshot__"] = MethodMemberSpec(
+            name="__snapshot__", kind="method",
+            return_type=TypeRef.of("any"), param_types=[],
+        )
+        reg.register(cls)
+        assert not reg.satisfies_protocol(cls, "snapshotable")
+        cls.members["__restore__"] = MethodMemberSpec(
+            name="__restore__", kind="method",
+            return_type=TypeRef.of("any"), param_types=[],
+        )
+        assert reg.satisfies_protocol(cls, "snapshotable")
+
+    def test_operator_structural_fallback_any(self):
+        """operator 结构回退：用户类仅 __add__、无 axiom 仍满足（methods-any）。"""
+        from core.kernel.spec import TypeDef, TypeKind, MethodMemberSpec
+        from core.kernel.spec.type_ref import TypeRef
+
+        reg = create_default_registry()
+        cls = TypeDef(name="Ad", kind=TypeKind.CLASS.value, provenance="USER_DEFINED")
+        cls.members["__add__"] = MethodMemberSpec(
+            name="__add__", kind="method",
+            return_type=TypeRef.of("int"), param_types=[],
+        )
+        reg.register(cls)
+        assert reg.satisfies_protocol(cls, "operator")
+
+    def test_kind_special_cases_explicit(self):
+        """kind 特判显式断言：GENERATOR 可迭代、DICT 可下标。"""
+        from core.kernel.spec import TypeDef, TypeKind
+        from core.kernel.spec.type_ref import TypeRef
+
+        reg = create_default_registry()
+        gen = TypeDef(name="generator[int]", kind=TypeKind.GENERATOR.value,
+                      provenance="KERNEL_NATIVE")
+        gen.value_type = TypeRef.of("int")
+        reg.register(gen)
+        assert reg.satisfies_protocol(gen, "iterable")
+        d = TypeDef(name="dict[str,int]", kind=TypeKind.DICT.value,
+                    provenance="KERNEL_NATIVE")
+        d.key_type, d.value_type = TypeRef.of("str"), TypeRef.of("int")
+        reg.register(d)
+        assert reg.satisfies_protocol(d, "subscriptable")
+
+    def test_forward_protocol_half_methods_not_satisfied(self):
+        """多方法前向协议半方法不满足（无声明协议全部判定）。"""
+        from core.kernel.spec import TypeDef, TypeKind, MethodMemberSpec
+        from core.kernel.spec.type_ref import TypeRef
+
+        reg = create_default_registry()
+        proto = ProtocolDef(name="two_methods", methods=("__m1__", "__m2__"))
+        reg.register_protocol(proto)
+        cls = TypeDef(name="Half", kind=TypeKind.CLASS.value, provenance="USER_DEFINED")
+        cls.members["__m1__"] = MethodMemberSpec(
+            name="__m1__", kind="method",
+            return_type=TypeRef.of("any"), param_types=[],
+        )
+        reg.register(cls)
+        assert not reg.satisfies_protocol(cls, "two_methods")
+        cls.members["__m2__"] = MethodMemberSpec(
+            name="__m2__", kind="method",
+            return_type=TypeRef.of("any"), param_types=[],
+        )
+        assert reg.satisfies_protocol(cls, "two_methods")

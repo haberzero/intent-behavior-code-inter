@@ -162,13 +162,14 @@ b.append(4)
 print((str)a.len()) # 输出 4
 ```
 
-**规避方案**：手动构造副本（IBCI 暂未提供 `copy` / `deepcopy` 内建）：
+**规避方案**：使用 `copy`（浅拷贝：容器新建 + 元素共享）或 `deepcopy`（递归深拷贝）内建：
 
 ```ibci
-list b = []
-for int x in a:
-    b.append(x)
+list b = copy(a)          # 浅拷贝：容器独立，元素共享
+list c = deepcopy(a)      # 深拷贝：嵌套容器/用户对象字段独立
 ```
+
+不可克隆值（函数 / 行为 / 原生封装）deepcopy 回退原引用（值语义等价）。
 
 ### 5.2 类实例字段的默认引用陷阱
 
