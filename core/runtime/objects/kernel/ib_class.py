@@ -12,7 +12,12 @@ if TYPE_CHECKING:
 
 
 class IbClassField:
-    """类字段描述符：存储 AST 节点 UID 及其可能的预评估快照。"""
+    """类字段描述符：存储 AST 节点 UID 及其可能的预评估快照。
+
+    运行期字段值信息（val_uid/static_val/module_name）——声明类型在
+    spec.members（单一权威），运行期 member_types 为其派生缓存（水化时
+    从 spec.members 一次性解析，见 interpreter._hydrate_user_classes）。
+    """
     def __init__(self, val_uid: str, static_val: Optional[IbObject] = None, module_name: Optional[str] = None):
         self.val_uid = val_uid
         self.static_val = static_val
