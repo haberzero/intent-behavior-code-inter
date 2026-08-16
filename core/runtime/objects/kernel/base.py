@@ -154,8 +154,12 @@ class IbObject:
         try:
             spec_reg = self.ib_class.registry.get_metadata_registry()
             if spec_reg and self.ib_class.spec:
-                if not spec_reg.satisfies_protocol(self.ib_class.spec, "from_prompt"):
-                    return (False, f"无法将 '{raw_response}' 解析为 {self.ib_class.name} 类型")
+                # 能力查询单一入口：get_from_prompt_cap 内部完成 axiom 能力
+                # 判定（与 satisfies_protocol 的 from_prompt 分支同源，避免
+                # 判定/获取口径不一致与同源双查）。结构性 __from_prompt__
+                # 用户方法由 llm_parsing_strategy.VTableParsingStrategy
+                # 职责分离处理——本路径只服务 axiom cap，cap 缺失即无
+                # 解析能力（返回 (False, 原因)）。
                 cap = spec_reg.get_from_prompt_cap(self.ib_class.spec)
                 if cap:
                     return cap.from_prompt(raw_response, self.ib_class.spec)
