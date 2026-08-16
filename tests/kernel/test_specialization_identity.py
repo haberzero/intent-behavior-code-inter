@@ -71,3 +71,21 @@ class TestIsCompatibleStructural:
         assert reg.is_assignable(list_int, reg.resolve("list"))
         # list[int] 不可赋 dict
         assert not reg.is_assignable(list_int, reg.resolve("dict"))
+
+    def test_fn_callable_bare_vs_specialized_consistent(self):
+        """fn_callable 裸名与特化名 family 判定一致（B2 复核 P2 锁定）。"""
+        reg = create_default_registry()
+        fn_axiom = reg.get_axiom(reg.resolve("fn_callable"))
+        assert fn_axiom is not None
+        assert fn_axiom.is_compatible(TypeRef.of("fn_callable"))
+        assert fn_axiom.is_compatible(TypeRef.parse("fn_callable[int]"))
+        assert not fn_axiom.is_compatible(TypeRef.of("list"))
+
+    def test_optional_case_sensitive_family(self):
+        """Optional family 判定大小写敏感（与旧前缀匹配语义一致）。"""
+        reg = create_default_registry()
+        opt_spec = reg.resolve("Optional")
+        axiom = reg.get_axiom(opt_spec)
+        assert axiom is not None
+        assert axiom.is_compatible(TypeRef.parse("Optional[int]"))
+        assert not axiom.is_compatible(TypeRef.of("optional"))

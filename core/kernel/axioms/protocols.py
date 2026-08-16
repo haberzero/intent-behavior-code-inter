@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple, Union, TYPE_CHECK
 if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
     from core.kernel.spec.member import MethodMemberSpec
+    from core.kernel.spec.type_ref import TypeRef
 
 
 # ------------------------------------------------------------------ #
