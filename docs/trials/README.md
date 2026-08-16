@@ -76,11 +76,7 @@ python trials/_toolkit/run_batch.py trials/T<nn>_<主题> --llm-only --timeout 6
 
 ## 五、缺陷状态
 
-非 `PASS` 结果由 `trials/INDEX.md` 统一编号与跟踪。缺陷状态机为：
-
-```
-发现 → 登记 → 修复（tests/ 补回归）→ 回归试用（触发用例核销）→ 已修复
-```
+非 `PASS` 结果的编号与跟踪见 `trials/INDEX.md`（状态权威）。
 
 ## 六、深入指引
 

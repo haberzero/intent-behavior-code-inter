@@ -33,9 +33,8 @@ int result = my_fn(5)   # 调用 adder.__call__(5)
 
 没有定义 `__call__` 的类实例不能被 `fn` 承载（SEM_TYPE_MISMATCH 编译错误）。
 
-### 设计决策：不引入统一 callable 基类
-
-`fn` 是类似 `auto` 的**类型推断哨兵**，而非一个内置类型。所有实现了公理层 `__call__` 的类型都可由 `fn` 承载，无需继承任何公共基类。这与 IBCI 的"鸭子类型 + 能力协议"设计哲学一致。
+> 用户面语法与语义（`fn` 三种形态、签名约束、内省）见 `docs/syntax/05_functions.md` §5.5-5.7；
+> 类型系统设计理由见 `docs/architecture/03_type_system.md` §7。本节为实现侧要点。
 
 ### `callable` 内部化：用户面统一 `fn` 族
 

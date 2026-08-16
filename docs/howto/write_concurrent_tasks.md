@@ -40,7 +40,7 @@ thread_result[int] r = await t       # 同 t.join()
 生产-消费（`stream` 模式）：
 
 ```ibci
-chan[str] c = chan()
+chan[str] c = chan("stream")
 
 func producer() -> void:
     c.send("第一")
@@ -61,7 +61,7 @@ str out = cons.join().value()         # "第一 第二"
 发布-订阅（`pubsub` 模式）：`c.subscribe()` 创建独立端点，`send` 广播给全部订阅者：
 
 ```ibci
-chan[int] c = chan()
+chan[int] c = chan("pubsub")
 subscriber a = c.subscribe()
 subscriber b = c.subscribe()
 
