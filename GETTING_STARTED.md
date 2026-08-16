@@ -1,6 +1,9 @@
 ﻿# IBC-Inter 入门指南
 
 > 从零开始学习 IBC-Inter 的完整教程。按顺序阅读，每章 5-10 分钟。
+>
+> **定位**：新用户入门入口（教程旅程起点）。文档体系导航与治理见 `docs/README.md`；
+> 语言边界见 `docs/KNOWN_LIMITS.md`；语法速查见 `docs/SYNTAX_REFERENCE.md`。
 
 ## 教程
 

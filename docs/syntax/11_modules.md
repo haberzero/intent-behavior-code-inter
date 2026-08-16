@@ -47,7 +47,8 @@ import file    # 受限文件系统操作
 import iruntime  # 运行时内省（snapshot / subscribe / configure）
 ```
 
-**随仓库发行插件**（经插件发现机制自动加载，可被用户插件同名覆盖）：
+**随仓库发行插件**（经插件发现机制自动加载；同名冲突按插件发现优先级裁决，
+见 §11.6）：
 
 ```ibci
 import json    # JSON 解析
