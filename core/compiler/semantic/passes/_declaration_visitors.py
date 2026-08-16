@@ -388,11 +388,10 @@ class DeclarationVisitorsMixin:
             )
 
         # 参数签名唯一权威：解析类型 + 描述符 + 定义处默认值校验
+        # 方法 def 的 param_types 恒不含 self（阶段 B1 统一：与类成员表
+        # MethodMemberSpec 同构、与跨模块导入形态一致；self 是运行期按 receiver
+        # 注入的作用域变量，经 node_to_symbol 侧表解析，独立于 spec 签名）。
         param_types, param_descriptors = self._build_function_signature(node.args)
-
-        # 如果在类定义中，插入 self 类型
-        if self.in_class_def and self.current_class:
-            param_types.insert(0, self.current_class)
 
         # 解析返回类型标注
         ret_type = self._resolve_type(node.returns) if node.returns else self._any_desc

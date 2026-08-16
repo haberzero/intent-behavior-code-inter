@@ -29,7 +29,9 @@ print(b.get())
         assert method.spec.kind == "function"
         assert method.spec.name == "get"
         params = [str(p) for p in (method.spec.param_types or [])]
-        assert params == ["Box"], f"方法签名应含 self（类 spec 为首参），got {params}"
+        # 阶段 B1 统一：方法函数 spec 恒不含 self（与类成员表同构、跨模块形态
+        # 一致）；self 是运行期按 receiver 注入的作用域变量，非签名参数。
+        assert params == [], f"方法签名应不含 self（统一形态），got {params}"
         assert str(method.spec.return_type) == "int"
 
     def test_llm_method_spec_is_function(self, engine):
@@ -88,7 +90,8 @@ print(b.get()) if False else None
         assert init.spec is not None
         assert init.spec.kind == "function"
         params = [str(p) for p in (init.spec.param_types or [])]
-        assert params == ["Box", "int"], f"__init__ 签名应含 self 与参数，got {params}"
+        # 阶段 B1 统一：方法函数 spec 恒不含 self（self 非签名参数）。
+        assert params == ["int"], f"__init__ 签名应不含 self、保留参数，got {params}"
 
 
 class TestInitArityContract:

@@ -336,9 +336,8 @@ class IbClass(IbObject):
         """``__init__`` 声明的非 self 参数数量（成员表权威；None=无法判定跳过校验）。
 
         成员表（MethodMemberSpec.param_types）恒不含 self——编译期单一权威。
-        spec 回退仅当成员表缺失（异常/旧产物）：方法函数 spec 的 self 形态
-        不一致（单文件编译路径含 owner 首参，跨模块路径不含），以首参 head
-        与 owner 基名比对判定 self 偏移；CALLABLE_SIG（fn 签名）无 self。
+        方法函数 spec 经阶段 B1 统一为同样不含 self（与成员表同构），spec 回退
+        直接取参数数量，无 self 偏移判定。
         """
         member = (getattr(self.spec, "members", None) or {}).get("__init__")
         if member is not None and getattr(member, "param_types", None) is not None:
@@ -346,14 +345,7 @@ class IbClass(IbObject):
         spec = getattr(init_method, "spec", None)
         if spec is None or spec.kind not in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
             return None
-        n = len(spec.param_types or [])
-        if n > 0 and spec.kind == TypeKind.FUNCTION.value:
-            first_head = getattr(spec.param_types[0], "head", None)
-            if first_head is not None:
-                owner_base = self.name.split("[", 1)[0]
-                if str(first_head).split("[", 1)[0] == owner_base:
-                    n -= 1
-        return n
+        return len(spec.param_types or [])
 
     def _invoke_init(self, instance: 'IbObject', args: List['IbObject']) -> None:
         """调用用户 ``__init__``（宿主侧 ``init_method.call``）。
