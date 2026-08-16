@@ -14,6 +14,7 @@
 
 | **复核 P2-5 整改（2026-08-16，用户质询后重新裁决）** | `base.py` `__from_prompt__` 能力判定（satisfies_protocol，宽口径含结构性成员）与能力获取（get_from_prompt_cap，窄口径仅 axiom）口径不一致 + 同源 get_axiom 双查。此前"记录不整改"理由（既有双路径）不成立——历史不是权威。重新分析实证：解析主链 Axiom/VTable/Default 为职责分离链（正确设计），base.py 对象默认实现只服务 axiom cap 单通道——**整改为 get_from_prompt_cap 单一查询入口**（删除 satisfies 前置门；复核已论证三种情形返回逐字等价），职责分离以注释明示；结构性用户 `__from_prompt__` 由 VTableParsingStrategy 处理不合并（合并反造新双通道）。 |
 
+| **合并前关键试用复跑（2026-08-16，用户授权直接合并）** | 方法 spec 根治 + `__from_prompt__` 收敛（T09 确认后新修改）影响面重跑全部真实 LLM 用例：**116 例分类与上轮基线逐例一致**（T09 8 PASS / T01 54 PASS+2 GUARD+1 LLM_BEHAVIOR / T08 29 PASS+2 BOUNDARY+1 GUARD+1 LIMIT+4 LLM_BEHAVIOR / T02 3 / T07 7 / T05-D3 8 / T06 7 全 PASS）——`__init__` 契约校验生效无任何用例依赖旧静默放行。判定零回归零风险，用户授权**直接合并 exp/protocol-kernel → unsafe-vibe-dev**（fast-forward，免 cherry-pick）。 |
 | **T09 真实试用完成（2026-08-16，exp/protocol-kernel）** | **协议化大重构影响确认（真实 LLM 为主）**。**Phase 1 既有套件真实 LLM 回归 108 例**：T01 57（54 PASS + 2 GUARD + 1 LLM_BEHAVIOR）、T02 3 PASS、T05 cases_D3 8 PASS、T06 7 PASS、T07 7 PASS、T08 37（29 PASS + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 GUARD + 1 LIMIT）——**分类与重构前基线逐类一致，零回归确认**。**Phase 2 新能力 8 例全 PASS**（`trials/T09_protocol_kernel_impact/`）：N1 impl 块内 LLM 方法（协议方法由 LLM 实现）、N2 impl 补方法 + 泛型协议 bound + LLM 输出实参、N3 LLM 函数第一等函数值、N4 长 prompt 压力、N5 并发 dispatch 压测（dispatch_eager CPS 化路径）、N6 llmexcept 真实重试收敛、N7 类内 LLM 方法、N8 用户类 `__from_prompt__` LLM 解析。**发现**：无新增 KERNEL_ISSUE/BOUNDARY/DOC_ISSUE；BOUNDARY-LLM-2/3 与未读赋值 LIMIT 为已登记项复现；用例自身修正 2 处（N7 未初始化变量、N8 `__from_prompt__` 类方法签名契约）。INDEX 同步。 |
 
 ---
