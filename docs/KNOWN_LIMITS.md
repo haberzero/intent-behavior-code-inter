@@ -433,7 +433,7 @@ str r = @~ ... ~
 
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
-1. **用户类泛型参数**：`class Box[T]:` 全链路支持——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器合并继承链的无默认值字段（父类优先，见 §六）；④ 无约束裸类型参数（`T: Bound` 不支持）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
+1. **用户类泛型参数**：`class Box[T]:` 全链路支持——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器合并继承链的无默认值字段（父类优先，见 §六）；④ 协议 bound 约束已支持（`class Box[T: SomeProtocol]`，特化时编译期检查实参满足协议；`func call[T: Proto](...)` 调用点推断）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
 2. **运算符重载覆盖有限**：用户类可定义 dunder 方法并被运算符分派调用：**比较类** `==`(`__eq__`)/`!=`(`__ne__`)/`<`(`__lt__`)/`>`(`__gt__`)/`<=`(`__le__`)/`>=`(`__ge__`)、**算术类** `+`(`__add__`)/`-`(`__sub__`)/`*`(`__mul__`)/`%`(`__mod__`)、**一元类** `-`(`__neg__`)/`~`(`__invert__`)/`not`(`__not__`)、**成员** `in`(`__contains__`) 均可覆写。**`is` 恒为身份比较，不可覆写**（与 Python 一致）。该机制经 `IbClass.receive` 的 vtable 分派实现；与内置 axiom 的能力级分派（Integer/Float/Str 的 `+`/`==`/`<`）是两套路径，未覆写的运算符在用户类上退化为身份比较（`==`）或运行时错误。
 
 ---
@@ -629,3 +629,12 @@ IBC-Inter 对此**没有强制力**：插件若在 `.py` 文件顶层声明可�
 **`yield from <expr>` 的节点静态类型绑定为委托目标的元素类型**（`generator[T]`→`T`、`list[T]`→`T`，经 `resolve_iter_element`）。对**生成器**操作数无错位（IBCI 类型模型把生成器 return 类型与元素类型合一，`StopIteration.value` 即表达式值）。对**序列/`__iter__` 操作数**，运行时表达式值为 `None`（Python 语义一致）——即 `int r = yield from [10,20,30]` 静态通过（`int`=`int`）但运行时 `r=None`。
 
 **含义**：这是类型绑定设计的取舍后果（静态偏乐观），非实现缺陷；生产代码如需序列委托的返回值，应视为 `None` 使用。如需收紧，需引入"委托目标是否为生成器"的编译期区分（超出当前范围）。
+
+## 二十六、用户协议与 retroactive implementation 限制
+
+**用户协议（`protocol` / `implements`）与 retroactive implementation（`impl`）已支持**（语法与示例见 `docs/syntax/06_oop.md` §6.8）。
+
+- **协议**：声明 / 继承 / 泛型协议（`protocol Container[T]:`）/ 泛型 bound（§十四 #1 ④）/ 方法签名兼容校验（参数数量、参数类型可放宽、返回协变）。
+- **`impl` 声明式**（空 body）：校验类型已满足协议并记录，类型必须已提供全部协议方法。
+- **`impl` 方法补充**（带 body）：为既有类型补充缺失的协议方法（可读 `self` 与字段、子类经继承链可见、多 `impl` 块合并、`llm func` 方法同样支持）。
+- **限制（fail-fast）**：① 目标须为**本模块用户类**（跨模块 dotted 目标不支持）；② **泛型类**目标不支持（方法体类型参数与特化成员替换未接线）；③ **内置类型**目标不支持；④ 方法名与类自身（或先前 `impl`）成员同名报编译期错误（`SEM_REDEFINITION`）；⑤ 协议未覆盖全部必需方法、或方法签名不兼容，报编译期错误。
