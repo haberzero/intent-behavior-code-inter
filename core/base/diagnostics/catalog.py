@@ -356,6 +356,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="运行时环境限制异常（栈溢出/内存/系统错误）根因保留。",
         fix="按真实根因处理（如提升宿主递归上限、优化内存使用）。",
     ),
+    "KDIAG_RUNTIME_PRE_EVAL_FALLBACK": CodeInfo(
+        title="运行时降级：类字段默认值预评估失败，留待实例化时求值。",
+        fix="属尽力而为优化的正常回退（实例化路径完整重试 + fail-fast）；仅当实例化时报错才需排查默认值表达式。",
+    ),
     # ==================== 配置 (CFG_) ====================
     "CFG_CONFIG_NOT_FOUND": CodeInfo(
         title="配置加载指定的配置文件不存在（ai.load_config / ai.load_project_config）。",

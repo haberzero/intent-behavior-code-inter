@@ -33,7 +33,7 @@ from core.kernel.issue import (
 from core.base.source_atomic import Location
 from core.base.uid import intrinsic_uid
 from core.base.diagnostics.codes import (
-    RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED, KDIAG_RUNTIME_STAGE_SKIP
+    RUN_GENERIC_ERROR, RUN_LIMIT_EXCEEDED, KDIAG_RUNTIME_STAGE_SKIP, KDIAG_RUNTIME_PRE_EVAL_FALLBACK
 )
 from core.runtime.observability.diagnostics import kernel_diagnostic
 from core.runtime.interfaces import (
@@ -596,13 +596,22 @@ class Interpreter:
         return val
 
     def _pre_evaluate_user_classes(self):
-        """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。"""
+        """预评估：在 STAGE 6 启动前，尝试评估类中定义的复杂默认字段值。
+
+        性质（B5 定性修正，2026-08-16）：预评估是**尽力而为的优化**（静态快照
+        预求值减少实例化期求值）——非任务内同步重入（执行于模块启动前，宿主
+        侧无调度器上下文，A 系列"任务内重入"不适用）；失败属正常预期（复杂
+        表达式依赖运行期状态无法预求值），实例化路径（_eval_field_defaults）
+        会完整重试且 fail-fast——故此处失败回退是职责分离 fallback，但按
+        可观测性纪律记录诊断（不静默）。
+        """
         old_module = self.current_module_name
         # Bug C 修复：预评估失败不应污染 issue_tracker（导致 STAGE 7 契约校验误报错误）。
-        # 保存当前错误计数，预评估完成后恢复。
+        # 保存当前错误计数，预评估完成后恢复（预评估是尽力而为优化，其失败
+        # 诊断不得影响正式编译诊断）。
         saved_error_count = self.issue_tracker._error_count
         saved_diag_count = len(self.issue_tracker._diagnostics)
-        
+
         for name, ib_class in self.registry.get_all_classes().items():
             if getattr(ib_class.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
                 continue
@@ -611,7 +620,7 @@ class Interpreter:
             for field_name, val_info in ib_class.default_fields.items():
                 if not isinstance(val_info, IbClassField) or val_info.static_val is not None:
                     continue
-                
+
                 # 通过 VMExecutor（CPS 主路径）预求值复杂表达式 (如 1+2, "hello".upper())。
                 # 关键修复：设置正确的模块上下文，确保符号查找正确。
                 # 使用 _get_vm_executor().run() 预求值（CPS 主路径）。
@@ -621,12 +630,25 @@ class Interpreter:
                     val_info.static_val = evaluated
                 except Exception as e:
                     # 预评估失败是允许的，留待实例化时 (instantiate) 再次尝试
-                    pass
-        
+                    # （职责分离 fallback——实例化路径完整重试 + fail-fast）。
+                    # 记录诊断（observability 门控，不静默、不刷屏）。
+                    kernel_diagnostic(
+                        code=KDIAG_RUNTIME_PRE_EVAL_FALLBACK,
+                        detail={
+                            "class": name,
+                            "field": field_name,
+                            "error": repr(e),
+                        },
+                        message=(
+                            f"Pre-evaluation of field default '{name}.{field_name}' "
+                            f"failed; will evaluate at instantiation: {e!r}"
+                        ),
+                    )
+
         # 恢复 issue_tracker 状态：预评估期间产生的任何错误都是误报
         self.issue_tracker._error_count = saved_error_count
         self.issue_tracker._diagnostics = self.issue_tracker._diagnostics[:saved_diag_count]
-        
+
         self.current_module_name = old_module
 
     def _hydrate_user_classes(self, class_to_node: Dict[Any, Any], impl_blocks: Optional[list] = None):

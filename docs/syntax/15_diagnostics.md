@@ -537,6 +537,12 @@ LLM 调用失败（网络/密钥/提供者错误）。
 - **严重级别**：WARNING。
 - **修复方式**：按真实根因处理（如提升宿主递归上限、优化内存使用）。
 
+### `KDIAG_RUNTIME_PRE_EVAL_FALLBACK`
+运行时降级：类字段默认值预评估失败，留待实例化时求值。
+- **触发条件**：STAGE 6 前类字段默认值预评估（尽力而为优化）失败（表达式依赖运行期状态等）。
+- **严重级别**：WARNING。
+- **修复方式**：属正常回退（实例化路径完整重试 + fail-fast）；仅当实例化时报错才需排查默认值表达式。
+
 ## 配置（CFG_）
 
 `api_config.json` 加载与校验失败的诊断码（`ai.load_project_config` / `ai.load_config` / `ai.apply_config`）。校验失败 fail-fast raise `InterpreterError`，不静默回退 mock。配置加载为显式动作：`ai.load_project_config()` 对缺失文件为 no-op（合法态），存在但校验失败则 fail-fast。
