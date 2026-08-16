@@ -52,6 +52,8 @@ from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFun
 from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.kernel.registry import KernelRegistry
 from core.kernel.host_interface import HostInterface
+from core.kernel.spec.member import MethodMemberSpec
+from core.kernel.spec.type_ref import TypeRef
 from core.runtime.interfaces import IStackInspector, IExecutionContext
 from core.runtime.objects.intent import IbIntent, IntentMode, IntentRole
 from core.runtime.interpreter.intrinsics import IntrinsicManager
@@ -68,6 +70,20 @@ from core.runtime.interpreter.execution_context import ExecutionContextImpl
 from core.runtime.interpreter.call_stack import LogicalCallStack, StackFrame
 from core.base.enums import Provenance, RegistrationState
 from core.runtime.shared.signals import UnhandledSignal
+
+
+def _auto_init_impl(self_obj, *args):
+    """auto-init 共享实现（B4 声明化——不再生成运行时闭包）。
+
+    字段名清单从 ``ib_cls.auto_init_fields`` 读取（水化期声明注册）；参数
+    数量校验由调用方（``_init_expected_arity``，spec.members['__init__']
+    成员表单一权威）承担——此处仅执行字段写入（zip 按声明字段数消费，
+    多余实参已被调用方拦截）。
+    """
+    field_names = getattr(self_obj.ib_class, "auto_init_fields", None) or []
+    for fname, val in zip(field_names, args):
+        self_obj.fields[fname] = self_obj.ib_class._wrap_field_value(fname, val)
+    return self_obj.ib_class.registry.get_none()
 
 
 class Interpreter:
@@ -746,6 +762,11 @@ class Interpreter:
         # 与 instantiate 的字段收集同构（消除"auto-init 只收自身 body"的机制分裂）。
         # 须在全部类字段 hydrate 完成后执行（父类 default_fields 已填充），
         # 故独立于主循环之外。
+        # B4 声明化：不生成运行时闭包——字段名清单注册到 ib_cls.auto_init_fields
+        # （声明），执行经共享实现 _auto_init_impl（interpreter.py 模块级），
+        # 参数数量校验由 _init_expected_arity（spec.members['__init__'] 声明）
+        # 单一权威承担（消三处并存校验）。
+        spec_reg = self.registry.get_metadata_registry()
         for name in resolved:
             ib_cls = self.registry.get_class(name)
             if not ib_cls or getattr(ib_cls.spec, 'provenance', Provenance.USER_DEFINED) != Provenance.USER_DEFINED:
@@ -755,8 +776,25 @@ class Interpreter:
             field_names = self._collect_chain_decl_only_fields(ib_cls)
             if not field_names:
                 continue  # 链上无无默认值字段：经 lookup_method 继承父类构造器
+            # 声明 1：类属性注册字段名清单（共享实现读取）
+            ib_cls.auto_init_fields = field_names
+            # 声明 2：spec.members['__init__'] 参数签名（成员表权威——
+            # _init_expected_arity 经此判定参数数量；参数类型 = 字段声明类型）
+            if spec_reg is not None and ib_cls.spec is not None:
+                param_refs = []
+                for fname in field_names:
+                    f_member = (ib_cls.spec.members or {}).get(fname)
+                    f_ref = getattr(f_member, "type_ref", None)
+                    param_refs.append(f_ref if f_ref is not None else TypeRef.of("any"))
+                ib_cls.spec.members["__init__"] = MethodMemberSpec(
+                    name="__init__",
+                    kind="method",
+                    return_type=TypeRef.of("void"),
+                    param_types=param_refs,
+                )
+            # 声明 3：运行期函数对象（共享实现，无闭包捕获）
             auto_init_fn = IbNativeFunction(
-                self._make_chain_auto_init(field_names),
+                _auto_init_impl,
                 unbox_args=False,
                 is_method=True,
                 name=f"{name}.__init__",
@@ -794,18 +832,6 @@ class Interpreter:
             and finfo.val_uid is None
             and finfo.static_val is None
         ]
-
-    def _make_chain_auto_init(self, field_names: list):
-        """构造 chain-aware 自动位置参数构造器闭包（设置字段 + 参数数量校验）。"""
-        def _auto_init(self_obj, *args):
-            if len(args) != len(field_names):
-                raise InterpreterError(
-                    f"TypeError: {self_obj.ib_class.name}() expected {len(field_names)} argument(s), but got {len(args)}"
-                )
-            for fname, val in zip(field_names, args):
-                self_obj.fields[fname] = self_obj.ib_class._wrap_field_value(fname, val)
-            return self_obj.ib_class.registry.get_none()
-        return _auto_init
 
     def _method_declared_spec(self, stmt_uid: str) -> Optional[Any]:
         """方法 def 的声明 spec（函数签名 spec，单一权威）。

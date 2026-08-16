@@ -122,3 +122,61 @@ Holder h = Holder()
         assert isinstance(h.fields["opt"], IbOptional), (
             "Optional 字段应经声明类型包装（统一 Optional 值模型）"
         )
+
+
+class TestAutoInitDeclaration:
+    """auto-init 声明化（B4）：类属性声明 + 成员表权威 + 共享实现。"""
+
+    def test_auto_init_fields_registered(self):
+        """auto-init 字段名清单注册到类属性（声明，非闭包捕获）。"""
+        engine = _engine()
+        _run_class(engine, """
+class Dog:
+    str name
+    int age
+Dog d = Dog("Rex", 5)
+""")
+        cls = _get_class(engine, "Dog")
+        assert cls.auto_init_fields == ["name", "age"]
+
+    def test_init_member_declared_in_spec(self):
+        """spec.members['__init__'] 声明（成员表权威——数量校验单一来源）。"""
+        engine = _engine()
+        _run_class(engine, """
+class Dog:
+    str name
+    int age
+Dog d = Dog("Rex", 5)
+""")
+        cls = _get_class(engine, "Dog")
+        init_member = (cls.spec.members or {}).get("__init__")
+        assert init_member is not None, "auto-init 应有 spec.members['__init__'] 声明"
+        assert len(init_member.param_types) == 2
+
+    def test_arity_error_from_single_authority(self):
+        """参数数量错误经 _init_expected_arity（成员表）统一拦截。"""
+        import pytest
+
+        engine = _engine()
+        with pytest.raises(RuntimeError):
+            _run_class(engine, """
+class Dog:
+    str name
+    int age
+Dog d = Dog("Rex")
+""")
+
+    def test_chain_auto_init_inherited_fields(self):
+        """继承链 auto-init：父类无默认值字段并入子类构造器（chain-aware）。"""
+        engine = _engine()
+        _run_class(engine, """
+class Base:
+    int id
+class Sub(Base):
+    str tag
+Sub s = Sub(1, "x")
+""")
+        rc = engine.interpreter.execution_context.runtime_context
+        s = rc.get_symbol("s").value
+        assert s.fields["id"].to_native() == 1
+        assert s.fields["tag"].to_native() == "x"

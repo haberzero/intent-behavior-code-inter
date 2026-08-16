@@ -152,7 +152,7 @@ class IbClass(IbObject):
     Everything is an object — classes themselves are objects.
     Holds the IbSpec (pure-data type description) and the runtime method vtable.
     """
-    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', '_spec')
+    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', '_spec', 'auto_init_fields')
 
     def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[KernelRegistry] = None):
         if not registry:
@@ -165,6 +165,11 @@ class IbClass(IbObject):
         self.default_fields: Mapping[str, Any] = {}
         self.member_types: Dict[str, Any] = {}
         self._spec: Optional[IbSpec] = None
+        # auto-init 声明（B4 声明化）：无显式 __init__ 类的自动位置参数构造器
+        # 字段名清单（水化期注册，interpreter._hydrate_user_classes）；执行经
+        # 共享实现 _auto_init_impl，参数数量校验由 _init_expected_arity（成员表
+        # spec.members['__init__'] 声明）单一权威承担。
+        self.auto_init_fields: Optional[List[str]] = None
 
     @property
     def spec(self) -> Optional[IbSpec]:
