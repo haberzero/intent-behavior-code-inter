@@ -135,7 +135,7 @@ IBCI 提供与传统命令式语言一致的 `try` / `except` / `raise` / `final
 | LLM 重试耗尽后的兜底处理 | `try except LLMRetryExhaustedError` |
 | 在没有 `llmexcept` 保护时的 LLM 失败兜底 | `try except LLMParseError` |
 
-#### 基本语法
+#### 4.7.1 基本语法
 
 ```ibci
 try:
@@ -147,7 +147,7 @@ finally:
     print("总是执行")
 ```
 
-#### 显式 raise
+#### 4.7.2 显式 raise
 
 ```ibci
 func divide(int a, int b) -> int:
@@ -161,7 +161,7 @@ except Exception as e:
     print(e.message)
 ```
 
-#### 内置异常类型层次
+#### 4.7.3 内置异常类型层次
 
 IBCI 内置以下异常类型（详见 §4.7.1）：
 
@@ -198,7 +198,7 @@ except Exception as e:
     print("意外失败：" + e.message)
 ```
 
-#### 4.7.1 内置异常类型字段
+#### 4.7.4 内置异常类型字段
 
 | 类型 | 字段 | 含义 |
 |------|------|------|
@@ -208,7 +208,7 @@ except Exception as e:
 | `LLMRetryExhaustedError` | `message: str`, `raw_response: str`, `max_retry: int` | 内容字段同 `LLMError`；`max_retry` 为重试次数上限；`message` 含 `retry` 关键字 |
 | `LLMCallError` | `message: str`, `raw_response: str`, `provider_error: str` | 比 `LLMError` 多 `provider_error`（HTTP 状态、网络错误等）；VM 在 provider 层失败时自动抛出，直接跳过 llmexcept retry；用户也可手动 `raise LLMCallError(...)` |
 
-#### 4.7.2 用户自定义异常
+#### 4.7.5 用户自定义异常
 
 继承 `Exception` 或任意内置 LLM 异常类型即可定义自定义异常：
 
