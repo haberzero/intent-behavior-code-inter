@@ -183,10 +183,10 @@ def _wrap_function_result(executor, func, value):
     对已包装值 no-op（赋值后值再经本函数不重复包装）。
 
     声明返回类型来源：
-    - **方法**（``func.owner_class`` 非空）：node_to_symbol 对方法 def 绑定
-      self 参数符号，``func.spec`` 为类 spec（return_type 恒 void）——方法真实
-      返回类型经类成员表解析（``owner_class.spec.members[name].return_type``，
-      结构化保真）。
+    - **方法**（``func.owner_class`` 非空）：方法 spec 现为**函数 spec**
+      （签名保真，与顶层函数一致）；返回类型仍优先经类成员表解析
+      （``owner_class.spec.members[name].return_type``，结构化保真——
+      特化类成员签名带实参），成员表缺失时回落 ``spec.return_type``。
     - IbUserFunction（普通/LLM 统一，``callable_kind`` 区分）：经
       ``spec.return_type``（结构化 TypeRef，经 metadata registry
       resolve_typeref 恢复）。
@@ -208,6 +208,12 @@ def _wrap_function_result(executor, func, value):
             member = (getattr(cls_spec, "members", None) or {}).get(m_name)
         if member is not None and getattr(member, "return_type", None) is not None:
             declared = meta_reg.resolve_typeref(member.return_type)
+        elif getattr(func, "spec", None) is not None:
+            # 成员表缺失（异常/旧产物路径）回落函数 spec 返回类型
+            # （方法 spec 现为函数 spec，签名保真）。
+            ret_ref = getattr(func.spec, "return_type", None)
+            if ret_ref is not None:
+                declared = meta_reg.resolve_typeref(ret_ref)
     else:
         spec = getattr(func, "spec", None)
         if spec is not None:

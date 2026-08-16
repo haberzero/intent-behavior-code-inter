@@ -332,6 +332,29 @@ class IbClass(IbObject):
                 # [Active Defense] 仅支持 IbClassField，确保字段初始化的一致性
                 instance.fields[name] = self._wrap_field_value(name, val_info)
 
+    def _init_expected_arity(self, init_method) -> Optional[int]:
+        """``__init__`` 声明的非 self 参数数量（成员表权威；None=无法判定跳过校验）。
+
+        成员表（MethodMemberSpec.param_types）恒不含 self——编译期单一权威。
+        spec 回退仅当成员表缺失（异常/旧产物）：方法函数 spec 的 self 形态
+        不一致（单文件编译路径含 owner 首参，跨模块路径不含），以首参 head
+        与 owner 基名比对判定 self 偏移；CALLABLE_SIG（fn 签名）无 self。
+        """
+        member = (getattr(self.spec, "members", None) or {}).get("__init__")
+        if member is not None and getattr(member, "param_types", None) is not None:
+            return len(member.param_types)
+        spec = getattr(init_method, "spec", None)
+        if spec is None or spec.kind not in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
+            return None
+        n = len(spec.param_types or [])
+        if n > 0 and spec.kind == TypeKind.FUNCTION.value:
+            first_head = getattr(spec.param_types[0], "head", None)
+            if first_head is not None:
+                owner_base = self.name.split("[", 1)[0]
+                if str(first_head).split("[", 1)[0] == owner_base:
+                    n -= 1
+        return n
+
     def _invoke_init(self, instance: 'IbObject', args: List['IbObject']) -> None:
         """调用用户 ``__init__``（宿主侧 ``init_method.call``）。
 
@@ -342,12 +365,11 @@ class IbClass(IbObject):
         """
         init_method = self.lookup_method('__init__')
         if init_method:
-            # 契约一致性校验：校验 __init__ 参数数量
-            # 注意：描述符中的参数列表通常不包含 self (除非是特殊定义的)
-            if init_method.spec and init_method.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                expected_count = len(init_method.spec.param_types)
-                if len(args) != expected_count:
-                    raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
+            # 契约一致性校验：校验 __init__ 参数数量（成员表权威，见
+            # _init_expected_arity——方法 spec 现为函数 spec，签名校验生效）
+            expected_count = self._init_expected_arity(init_method)
+            if expected_count is not None and len(args) != expected_count:
+                raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
 
             init_method.call(instance, args)
         elif args:
@@ -424,10 +446,10 @@ class IbClass(IbObject):
 
         init_method = self.lookup_method('__init__')
         if init_method:
-            if init_method.spec and init_method.spec.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                expected_count = len(init_method.spec.param_types)
-                if len(args) != expected_count:
-                    raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
+            # 契约一致性校验：校验 __init__ 参数数量（同 _invoke_init）
+            expected_count = self._init_expected_arity(init_method)
+            if expected_count is not None and len(args) != expected_count:
+                raise InterpreterError(f"TypeError: {self.name}.__init__() expected {expected_count} arguments, but got {len(args)}")
 
             if isinstance(init_method, IbUserFunction):
                 yield UserFunctionCall(init_method, args, instance)

@@ -651,8 +651,7 @@ class Interpreter:
                 
                 if stmt_data["_type"] in ("IbFunctionDef", "IbLLMFunctionDef"):
                     is_llm = stmt_data["_type"] == "IbLLMFunctionDef"
-                    sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
-                    declared_type = self._resolve_type_from_symbol(sym_uid)
+                    declared_type = self._method_declared_spec(stmt_uid)
                     method_name = stmt_data["name"]
                     user_func = IbUserFunction(
                         stmt_uid, self._execution_context, spec=declared_type,
@@ -728,8 +727,7 @@ class Interpreter:
                     continue
                 if stmt_data.get("_type") not in ("IbFunctionDef", "IbLLMFunctionDef"):
                     continue
-                sym_uid = self.get_side_table("node_to_symbol", method_uid)
-                declared_type = self._resolve_type_from_symbol(sym_uid)
+                declared_type = self._method_declared_spec(method_uid)
                 is_llm = stmt_data.get("_type") == "IbLLMFunctionDef"
                 user_func = IbUserFunction(
                     method_uid, self._execution_context, spec=declared_type,
@@ -808,6 +806,24 @@ class Interpreter:
                 self_obj.fields[fname] = self_obj.ib_class._wrap_field_value(fname, val)
             return self_obj.ib_class.registry.get_none()
         return _auto_init
+
+    def _method_declared_spec(self, stmt_uid: str) -> Optional[Any]:
+        """方法 def 的声明 spec（函数签名 spec，单一权威）。
+
+        从符号池按 ``node_uid == stmt_uid`` 匹配 FUNCTION/LLM_FUNCTION 符号
+        并水化其 type_uid——方法对象 spec 为**函数 spec**（参数/返回签名，
+        与顶层函数一致；此前普通方法经 node_to_symbol→self 符号解析成类
+        spec，与 LLM 方法（node→func_sym）不一致，且使 __init__ 签名契约
+        校验失效）。匹配失败回退旧路径（node_to_symbol 解析），保持防御。
+        """
+        if self.symbol_pool:
+            for sym_data in self.symbol_pool.values():
+                if sym_data.get("node_uid") == stmt_uid and sym_data.get("kind") in ("FUNCTION", "LLM_FUNCTION"):
+                    type_uid = sym_data.get("type_uid")
+                    if type_uid:
+                        return self.type_hydrator.hydrate(type_uid)
+        sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
+        return self._resolve_type_from_symbol(sym_uid)
 
     def _resolve_type_from_symbol(self, sym_uid: str) -> Optional[Any]:
         """从符号池中解析声明的类型描述符"""
