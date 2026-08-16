@@ -1,5 +1,5 @@
 # thread/chan/slot 并发 + 生成器组合
-# doc: docs/syntax/14_coroutine.md
+# doc: docs/syntax/14_concurrency.md
 # expect-class: PASS
 # expect-out: 10 | 20 | 5 | done
 # expect-exit: 0

@@ -1,5 +1,5 @@
 # T4 str 枚举 LLM 集成：成员名→值映射 + 值≠名
-# doc: docs/syntax/06_oop.md §6.5 + KNOWN_LIMITS §二
+# doc: docs/syntax/06_oop.md §6.6 + docs/KNOWN_LIMITS.md §二
 # 期望: LLM 输出成员名（RED/GREEN/BLUE 任一）→ 映射为对应成员值（str 值≠名场景）
 # 注: 具体成员由模型选择（非确定），断言验证映射有效性而非特定成员
 

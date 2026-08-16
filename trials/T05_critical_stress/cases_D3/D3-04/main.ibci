@@ -1,5 +1,5 @@
 # enum LLM 成员名→值解析（批判：非 str 枚举集成）
-# doc: docs/syntax/06_oop.md enum + KNOWN_LIMITS 二
+# doc: docs/syntax/06_oop.md §6.6 + docs/KNOWN_LIMITS.md §二
 # expect-class: PASS
 # expect-out: status_200 | DONE
 # expect-exit: 0

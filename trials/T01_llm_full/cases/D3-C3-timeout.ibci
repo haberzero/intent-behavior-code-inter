@@ -1,5 +1,5 @@
 # D3-C3 超时/断连边界（ai.set_timeout 短路）
-# doc: docs/syntax/11_modules.md §11.3 ai.set_timeout + _REAL_LLM_E2E_RESTART.md C3
+# doc: docs/syntax/11_modules.md §11.3 ai.set_timeout
 # 期望: 极短超时触发 LLMCallError（provider 层硬失败，跳过 llmexcept retry）；可 try/except 捕获
 
 # expect-class: PASS

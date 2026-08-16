@@ -1,5 +1,5 @@
 # 意图 @/@! 真实模型遵循（批判：意图是否稳定到达并被遵循）
-# doc: docs/syntax/09_intents.md
+# doc: docs/syntax/09_intent_system.md
 # expect-class: PASS
 # expect-out: got_reply | DONE
 # expect-exit: 0

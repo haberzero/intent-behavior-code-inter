@@ -1,5 +1,5 @@
 # D1-06-003 Enum + switch + LLM 输出枚举
-# doc: docs/syntax/06_oop.md §6.5 + KNOWN_LIMITS §二（Enum 支持 LLM 输出成员名）
+# doc: docs/syntax/06_oop.md §6.6 + docs/KNOWN_LIMITS.md §二（Enum 支持 LLM 输出成员名）
 # 期望: LLM 输出枚举成员名被解析为对应枚举值
 
 # expect-class: PASS

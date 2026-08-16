@@ -1,5 +1,5 @@
 # D2-21 多文件：用户插件加载（calc/plugin_info）+ 插件函数调用
-# doc: docs/syntax/11_modules.md §11.9 + examples/plugins_demo
+# doc: docs/syntax/11_modules.md §11.9
 # 期望: 插件自动发现加载；calc.add/mul 与 plugin_info.version 可用
 
 # expect-class: PASS

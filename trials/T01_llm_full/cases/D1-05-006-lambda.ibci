@@ -1,5 +1,5 @@
 # D1-05-006 lambda 延迟执行（调用时意图敏感）
-# doc: docs/syntax/07_behavior_expressions.md §7.4 + 05_functions.md §5.5
+# doc: docs/syntax/07_behavior_expressions.md §7.4 + docs/syntax/05_functions.md §5.5
 # 期望: lambda 定义时不调用 LLM；调用时触发；带参数 lambda；-> auto 行为体=str
 
 # expect-class: PASS

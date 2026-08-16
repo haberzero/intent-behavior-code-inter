@@ -1,5 +1,5 @@
 # D2-60 多层次：闭包 + 生成器 + LLM 组合（三层宿主）
-# doc: docs/syntax/05_functions.md §5.4/§5.8 + 07 §7.1
+# doc: docs/syntax/05_functions.md §5.4/§5.8 + docs/syntax/07_behavior_expressions.md §7.1
 # 期望: 闭包工厂返回生成器函数，体内 LLM 组合正常
 
 # expect-class: PASS

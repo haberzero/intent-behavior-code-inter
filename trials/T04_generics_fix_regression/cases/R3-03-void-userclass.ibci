@@ -1,5 +1,5 @@
 # R3-03 Box[void] 用户泛型（预期报错）/ thread[void] 放行
-# doc: docs/syntax/06_oop.md §6.4 + 14_concurrency
+# doc: docs/syntax/06_oop.md §6.4 + docs/syntax/14_concurrency.md
 # 期望: Box[void] 拦截；thread[void] 合法
 # expect-class: GUARD
 # expect-code: SEM_GENERIC_TYPE_NEEDS_ARGS

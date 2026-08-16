@@ -1,5 +1,5 @@
 # llmexcept 收敛 + 重试（MOCK:REPAIR 首次模糊第二次成功）
-# doc: docs/syntax/12_exceptions.md
+# doc: docs/syntax/10_robustness.md
 # expect-class: PASS
 # expect-out: retried | result=1
 # expect-exit: 0

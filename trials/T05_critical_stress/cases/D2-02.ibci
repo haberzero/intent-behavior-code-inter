@@ -1,5 +1,5 @@
 # 遮蔽内建守卫：用户函数重定义内置 len → SEM_REDEFINITION
-# doc: docs/syntax/03_variables.md
+# doc: docs/syntax/02_variables.md
 # expect-class: GUARD
 # expect-exit: nonzero
 # expect-code: SEM_REDEFINITION

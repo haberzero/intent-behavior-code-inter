@@ -1,5 +1,5 @@
 # 嵌套包同名类（a.sub.Box vs b.sub.Box）
-# doc: docs/syntax/02_modules.md 包
+# doc: docs/syntax/11_modules.md 包
 # expect-class: PASS
 # expect-out: from-a | from-b
 # expect-exit: 0

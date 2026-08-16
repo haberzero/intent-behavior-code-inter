@@ -1,5 +1,5 @@
 # D3-C2 非确定性多次差异（bool/int 判断稳定性）
-# doc: _REAL_LLM_E2E_RESTART.md C2
+# doc: docs/syntax/08_llm_functions.md
 # 期望: 同一输入多次结果差异被语言层正确处（bool/int 解析稳定）；记录差异
 
 # expect-class: PASS

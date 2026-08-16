@@ -1,5 +1,5 @@
 # D3-70 协议：用户类 __from_prompt__ + __outputhint_prompt__ 自定义解析
-# doc: docs/syntax/06_oop.md §6.6 + 07 §7.4（TYPE 需 LLM 解析能力）
+# doc: docs/syntax/06_oop.md §6.6 + docs/syntax/07_behavior_expressions.md §7.4（TYPE 需 LLM 解析能力）
 # NOTE(DOC-ISSUE-007): __from_prompt__ 实际契约返回 (bool, instance) 元组，
 #  docs/06_oop.md §6.6 未注明；此处按 tests/e2e/test_prompt_protocol_e2e.py 正确写法
 # 期望: LLM 输出经 __from_prompt__ 解析为用户类实例

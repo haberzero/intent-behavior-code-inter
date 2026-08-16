@@ -15,7 +15,7 @@
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
-| DECIDE（决策） | 2 | 0 | 0 | 待裁定设计问题 |
+| DECIDE（决策） | 3 | 0 | 0 | 待裁定设计问题 |
 | SEALED（封存） | 0 | 0 | 1 | 显式封存（恢复需解封评估） |
 | VISION（愿景） | 2 | 0 | 0 | 远期方向（无排期） |
 
@@ -167,8 +167,10 @@
 ### PT-DECIDE-2 供应商感知的模型思考禁用机制
 
 - **状态**：active（独立设计窗口）｜**域**：DECIDE｜**优先级**：P2
-- **动机**：qwen3.6-35b-a3b 在 LM Studio 强制思考，`enable_thinking=false` 等参数在
-  纯 GGUF（无 model.yaml）下无效——IBCI 侧需按供应商参数形态实现思考禁用/检测失败覆盖。
+- **动机**：本机 qwen3.6-35b-a3b 已通过 LM Studio 界面替换提示模板实现非思考模式
+  （开发试用基线）；但 API 参数 `enable_thinking=false` 在纯 GGUF（无 model.yaml）
+  下无效的机制问题仍在——IBCI 侧需按供应商参数形态实现思考禁用/检测失败覆盖，
+  对未应用界面预设的部署环境有效。
 - **成因**：真实 LLM 试用（2026-08-13）环境调查实证（LM Studio model.yaml 机制）。
 - **当前理解**：待办①本机启用官方配置验证；②逐供应商参数形态探测
   （LM Studio/llama.cpp `chat_template_kwargs.enable_thinking`、vLLM、Ollama、
@@ -182,6 +184,18 @@
   ② `__validate_prompt__` 是否扩展至内置类型；③ `SEM_PROTOCOL_SIGNATURE` 强度
   （warning vs error）；④ `__to_prompt__`/`__payload_prompt__` 异常回退可观测性复核。
 - **成因**：2026-08-15 PROMPT_DESIGN_REVIEW 收敛。
+
+### PT-DECIDE-4 LLM 边界待评估项（BOUNDARY-LLM-2/3）
+
+- **状态**：active（待评估）｜**域**：DECIDE｜**优先级**：P2
+- **动机**：两项真实 LLM 试用登记的未决边界——① LLM 函数 `-> void` 声明编译通过但
+  运行期抛 `LLMParseError`（文档未声明支持与否）；② `stream_call` / `stream_channel`
+  后 `ai.get_current_call_info()` 为空（观测 API 未覆盖流式调用）。
+- **成因**：T08 LLM 全能力压力试用第一轮登记（trials/INDEX.md 域 LLM 表），多轮复跑
+  稳定复现，非内核缺陷（均为"文档未声明/API 覆盖缺口"性质）。
+- **当前理解**：评估方向——① 定案为设计排除（`-> void` 无输出可解析）并写入
+  KNOWN_LIMITS，或编译期拦截；② 定案为设计排除（流式调用无 call_info 语义）或
+  扩展观测 API。评估后按结论落文档或代码。
 
 ---
 

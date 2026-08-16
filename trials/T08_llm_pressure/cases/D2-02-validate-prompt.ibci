@@ -1,5 +1,5 @@
 # T08-D2-02 __validate_prompt__ 拒绝 bad 后经 llmexcept 重试到 good（MOCK:SEQ 控制）
-# doc: core/kernel/axioms/prompt_protocol.py + docs/syntax/10_robustness.md
+# doc: docs/syntax/06_oop.md §6.7 + docs/syntax/10_robustness.md
 # expect-class: PASS
 # expect-out: val=good | DONE
 # expect-exit: 0

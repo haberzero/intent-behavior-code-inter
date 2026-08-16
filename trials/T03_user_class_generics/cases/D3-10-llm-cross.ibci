@@ -1,5 +1,5 @@
 # D3-10 恶意：LLM 交叉（@~ 初始化泛型类字段 / llmexcept 重试泛型字段）
-# doc: docs/syntax/06_oop.md §6.4 + 10_llmexcept
+# doc: docs/syntax/06_oop.md §6.4 + docs/syntax/10_robustness.md
 # 期望: 泛型字段经 LLM 初始化 + llmexcept 保护泛型状态
 # expect-class: PASS
 # expect-out: c1=7 | preserved=orig | DONE

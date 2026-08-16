@@ -166,6 +166,7 @@ if s == Status.RUNNING:
 | `__iter__(self)` | `for x in obj:` 时 | 迭代器协议，返回可遍历列表 |
 | `__to_prompt__(self)` | 变量插值到 `@~ ... ~` 时 | 转为 LLM 提示词文本 |
 | `__from_prompt__(str raw)` | LLM 返回值解析时 | 从文本解析为当前类型实例。**必须返回 `(bool, 实例)` 元组**——首元素为成功标志，次元素为解析出的实例（返回裸实例会被当作不确定失败） |
+| `__validate_prompt__(self, str raw)` | LLM 输出解析校验时 | 校验原始输出。返回 `(bool, str)`——首元素为是否接受，次元素为拒绝原因（拒绝时经 `llmexcept` / retry 走纠错重试路径） |
 | `__outputhint_prompt__(self)` | 类型作为 LLM 输出目标时 | 提示 LLM 期望的输出格式 |
 | `__payload_prompt__(self)` | 变量插值到多模态 `@~ ... ~` 时 | 返回结构化 content block（图像/音频等） |
 | `__snapshot__(self)` | llmexcept 快照进入时 | 返回用于恢复状态的快照值 |

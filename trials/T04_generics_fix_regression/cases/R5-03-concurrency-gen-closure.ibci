@@ -1,5 +1,5 @@
 # R5-03 回归面：泛型 × 并发/生成器/闭包
-# doc: docs/syntax/06_oop.md §6.4 + 14_concurrency + 05_functions
+# doc: docs/syntax/06_oop.md §6.4 + docs/syntax/14_concurrency.md + docs/syntax/05_functions.md
 # 期望: 跨面泛型正常（KERNEL_ISSUE-CHAN-ARGS-1 触发用例：chan(Box[int],...) 显式类型实参被降级为 chan[Box]，编译期 SEM_TYPE_MISMATCH，修复后期望 = 全输出）
 # expect-class: PASS
 # expect-out: chan=5 | gen_sum=3 | closure=15 | DONE

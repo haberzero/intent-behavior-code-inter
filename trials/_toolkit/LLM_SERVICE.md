@@ -3,6 +3,9 @@
 > 试用体系以**真实 LLM 为主**（用户裁定，2026-08-13）：本机试用始终利用本机 LLM 服务做
 > 真实测试，mock 仅用于无 LLM 依赖的用例。**当前服务非通用化，仅本机有效**；
 > 引导其他开发者配置的指导为未来任务（见 §五）。
+>
+> **开发试用基线（2026-08-14 起）**：**所有开发试用均在本地 `qwen3.6-35b-a3b`
+> 非思考模式下进行**——用例断言、结果分类、文档对齐均以此模式的输出形态为准。
 
 ## 一、本机服务（当前唯一权威端点）
 
@@ -10,26 +13,27 @@
 |----|----|
 | 服务类型 | LM Studio 本地推理服务 |
 | 端点 | `http://127.0.0.1:1234/v1` |
-| 模型 | `qwen3.6-35b-a3b`（**实测为强制思考模型**，见 §二.1） |
+| 模型 | `qwen3.6-35b-a3b`（**非思考模式**，见 §二.1） |
 | 备用模型 | `text-embedding-nomic-embed-text-v1.5`（embedding，试用不常用） |
 
-## 二.1 模型思考模式（实测事实，2026-08-13）
+## 二.1 模型思考模式（当前：非思考模式为唯一基线）
 
-- **qwen3.6-35b-a3b 在 LM Studio 上强制思考**：即使传 `enable_thinking: false` /
-  `thinking: {"enabled": false}` / `chat_template_kwargs: {"enable_thinking": false}`
-  （全部 API 形态，已逐一实测），模型仍输出 `reasoning_content` 思考，且 `content`
-  在 `max_tokens` 被思考吃满时为**空**（`reasoning_tokens` 计数）。**API 参数无法关闭**
-  本模型的思考。
-- **影响**：每次真实调用有思考 token 开销 + 响应慢（10-30s）；`content` 为空时
-  IBCI 回退用 reasoning 提取答案（postprocess 剔除思考块，可靠性依赖模型输出形态）。
-- **死机/超时防护**：思考模型响应慢，批量试用用 `run_batch.py`（每用例 harness 超时
-  SIGKILL，进程组清理彻底）；避免大量用例并发压爆 LM Studio。
+**当前事实（2026-08-14 起，T06 实测确认）**：用户已在 LM Studio 界面应用禁用思考预设
+（替换提示模板，见 §二.3）——本机服务**不输出 think 标签**（`reasoning_content` 为空、
+`content` 直接返回），真实调用响应 **<1-2s**、`reasoning_tokens=0`。`api_config.json`
+统一配置 `"reasoning": false`（见 §三）。**所有开发试用均在此模式下进行**；用例断言
+与结果分类以此输出形态为基准。
 
-> **环境更新（2026-08-14，T06 实测）**：用户已应用禁用思考预设（LM Studio 界面替换
-> 提示模板，见 §二.3）——本机服务当前**不输出 think 标签**（`reasoning_content` 为空、
-> `content` 直接返回），真实调用响应 **<1-2s**、`reasoning_tokens=0`。上述"强制思考 +
-> 10-30s"为本机未应用预设时的历史事实；**当前为准：服务已非思考模式**，试用时以
-> 实测为准（每次试用前探测 + 观察首响应耗时）。
+**历史背景（2026-08-13 至 2026-08-14，仅追溯用）**：此前本机为纯 GGUF（无 model.yaml），
+即使传 `enable_thinking: false` / `thinking: {"enabled": false}` /
+`chat_template_kwargs: {"enable_thinking": false}`（全部 API 形态已逐一实测），模型仍输出
+`reasoning_content` 思考，`content` 在 `max_tokens` 被思考吃满时为空（`reasoning_tokens`
+计数）——API 参数无法关闭该模型的思考，真实调用有思考 token 开销且响应慢（10-30s），
+`content` 为空时 IBCI 回退用 reasoning 提取答案。该阶段试用记录的分类口径与当前
+非思考模式一致（模型输出形态差异已由断言取稳定可判定部分吸收）。
+
+**死机/超时防护**：批量试用用 `run_batch.py`（每用例 harness 超时 SIGKILL，进程组清理
+彻底）；避免大量用例并发压爆 LM Studio。
 
 ## 二.2 LM Studio 禁用思考模式 — 官方机制调查（2026-08-13 专项）
 
@@ -115,14 +119,14 @@ mock 模式：`defaults.mock: true`（用例无需真实调用时用；无 LLM �
 | 层 | 标记 | 耗时 | 运行方式 |
 |----|------|------|----------|
 | mock | 无 `# expect-llm: true` | <1s/用例 | `run_batch.py <trial> --mock-only --timeout 10` |
-| llm | `# expect-llm: true` | 5-30s/用例（真实模型推理） | `run_batch.py <trial> --llm-only --timeout 60` |
+| llm | `# expect-llm: true` | 1-5s/用例（qwen3.6-35b-a3b 非思考模式推理） | `run_batch.py <trial> --llm-only --timeout 60` |
 
 - 批量运行**先 mock 后 llm**（`run_batch.py <trial>` 默认顺序），单用例卡住由
   harness 超时 SIGKILL，不影响整批。
 - **并发模式**：`run_batch.py <trial> --parallel N`（N=1 串行，默认）。mock 用例可设
-  4-8（快、独立）；真实 LLM 用例建议 **1-2**（思考模型响应慢，高并发压爆本地服务——
-  曾实测并发压爆导致响应超时/假死）。每用例独立 subprocess + 独立超时，并发下卡死
-  互不影响。
+  4-8（快、独立）；真实 LLM 用例建议 **1-2**（非思考模式单例响应快，但高并发仍可能
+  压爆本地服务——曾实测并发压爆导致响应超时/假死）。每用例独立 subprocess + 独立
+  超时，并发下卡死互不影响。
 - llm 用例断言（`expect-out`）为真实模型期望输出；模型输出非确定，断言取
   稳定可判定的部分（如枚举成员名→值映射、意图注入的关键字），避免整句精确匹配。
 

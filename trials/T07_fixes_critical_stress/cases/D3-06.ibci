@@ -1,5 +1,5 @@
 # 长提示格式约束（T05 D3-08 同类，跨模块类目标保持）
-# doc: docs/syntax/10_behavior.md
+# doc: docs/syntax/07_behavior_expressions.md
 # expect-class: PASS
 # expect-out: DONE
 # expect-exit: 0

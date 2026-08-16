@@ -1,5 +1,5 @@
 # R5-02 回归面：序列化 round-trip（type_args/base_name 保真）
-# doc: docs/howto + docs/architecture/04_vm_interpreter.md
+# doc: docs/syntax/11_modules.md + docs/architecture/04_vm_interpreter.md
 # 期望: 特化实例经状态保存/恢复后值保真
 # expect-class: PASS
 # expect-out: before=11 | DONE

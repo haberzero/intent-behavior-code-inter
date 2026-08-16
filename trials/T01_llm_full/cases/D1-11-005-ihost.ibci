@@ -1,5 +1,5 @@
 # D1-11-005 ihost 隔离运行（B1 补正式记录）
-# doc: docs/syntax/11_modules.md §11.6 + examples/isolation_demo
+# doc: docs/syntax/11_modules.md §11.6
 # 期望: run_isolated 隔离执行子脚本，返回子环境变量字典
 
 # expect-class: PASS

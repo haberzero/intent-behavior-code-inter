@@ -1,5 +1,5 @@
 # 长提示注入保持（批判：模型是否遵循长上下文中的格式约束）
-# doc: docs/syntax/10_behavior.md
+# doc: docs/syntax/07_behavior_expressions.md
 # expect-class: PASS
 # expect-out: DONE
 # expect-exit: 0

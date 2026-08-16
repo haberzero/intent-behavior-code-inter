@@ -1,5 +1,5 @@
 # D2-81 并发压力：两路 run_batch 同时进行（调度器多批并发）
-# doc: _REAL_LLM_E2E_RESTART.md C4
+# doc: docs/syntax/14_concurrency.md
 # 期望: 多批 run_batch 并发无交错/无竞态
 
 # expect-class: PASS

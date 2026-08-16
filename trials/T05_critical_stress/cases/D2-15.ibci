@@ -1,5 +1,5 @@
 # 元组解包类型检查边界
-# doc: docs/syntax/03_variables.md 解包
+# doc: docs/syntax/02_variables.md 解包
 # expect-class: PASS
 # expect-out: 1 | x | 3 | 4
 # expect-exit: 0

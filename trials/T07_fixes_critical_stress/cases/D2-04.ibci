@@ -1,5 +1,5 @@
 # 对抗：诊断码在控制流内（try-except 内除零/嵌套函数越界 可捕获）
-# doc: docs/syntax/12_exceptions.md
+# doc: docs/syntax/10_robustness.md
 # expect-class: PASS
 # expect-out: caught | caught2 | DONE
 # expect-exit: 0

@@ -1,5 +1,5 @@
 # D3-30 意图：@- #tag 标签移除 + 全局意图 set_global_intent
-# doc: docs/syntax/09_intent_system.md §9.1 + 11_modules §11.3 ai.set_global_intent
+# doc: docs/syntax/09_intent_system.md §9.1 + docs/syntax/11_modules.md §11.3
 # 期望: 标签意图移除正确；全局意图注入影响真实 LLM
 
 # expect-class: PASS

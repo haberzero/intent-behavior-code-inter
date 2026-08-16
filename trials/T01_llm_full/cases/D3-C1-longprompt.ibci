@@ -1,5 +1,5 @@
 # D3-C1 长提示/复杂 __to_prompt__（批判缺失场景补测）
-# doc: docs/syntax/06_oop.md §6.6 __to_prompt__ + _REAL_LLM_E2E_RESTART.md C1
+# doc: docs/syntax/06_oop.md §6.7 __to_prompt__
 # 期望: 复杂对象经 __to_prompt__ 序列化进提示词；长文本边界正常
 
 # expect-class: PASS

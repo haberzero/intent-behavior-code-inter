@@ -1,5 +1,5 @@
 # D1-05-008b 生成器 to_list() 用户显式调用（A3 重验，U1 修复）
-# doc: docs/syntax/05_functions.md §5.8 + 12_builtins（generator 方法）
+# doc: docs/syntax/05_functions.md §5.8 + docs/syntax/12_builtins.md
 # 期望: 生成器显式 .to_list()/.generic_next() 协议分发正常
 
 # expect-class: PASS

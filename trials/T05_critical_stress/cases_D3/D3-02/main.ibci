@@ -1,5 +1,5 @@
 # @~ 行为输出解析到类型值（批判：解析稳定性）
-# doc: docs/syntax/10_behavior.md
+# doc: docs/syntax/07_behavior_expressions.md
 # expect-class: PASS
 # expect-out: int-ok | DONE
 # expect-exit: 0

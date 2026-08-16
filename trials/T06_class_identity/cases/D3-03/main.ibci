@@ -1,5 +1,5 @@
 # 意图 @/@! + 入口类组合（真实模型遵循意图，入口类语义不破坏）
-# doc: docs/syntax/09_intents.md
+# doc: docs/syntax/09_intent_system.md
 # expect-class: PASS
 # expect-out: ok | DONE
 # expect-exit: 0

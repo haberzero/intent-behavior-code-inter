@@ -1,5 +1,5 @@
 # llmexcept 真实 LLM 共存（批判：llmexcept 块在真实模型成功路径不误触）
-# doc: docs/syntax/12_exceptions.md
+# doc: docs/syntax/10_robustness.md
 # expect-class: PASS
 # expect-out: n=3 | DONE
 # expect-exit: 0

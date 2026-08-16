@@ -40,6 +40,14 @@ llmend
 ```
 
 `__llmretry__` 块：当 `__from_prompt__` 解析失败触发 llmexcept 重试时，会将此内容附加为额外系统提示词。
+
+### 8.4 返回类型解析
+
+- **标量返回**：`int` / `float` / `str` / `bool` 经内建解析器从模型输出提取（`bool` 识别 `True/False` / `true/false` 等形态）。
+- **容器返回**：`list[T]` / `dict[K,V]` 等容器类型按容器解析——模型输出按元素类型逐个解析进容器（如 `-> list[int]` 解析数字列表、`-> dict[str,int]` 解析键值对）。**`auto` 返回**走旧路径按字符串处理。
+- **用户类返回**：经 `__from_prompt__` 解析（契约见 `docs/syntax/06_oop.md` §6.7），可配合 `__validate_prompt__` 校验。
+- **`-> void` 边界**：返回类型声明为 `void` 时编译通过，但运行期解析无目标类型会抛 `LLMParseError`——当前**未声明支持**（待评估：编译期拦截或正式支持）；生产代码应避免 `llm ... -> void`。
+
 ---
 
 ## 深入指引

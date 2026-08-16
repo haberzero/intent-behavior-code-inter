@@ -1,5 +1,5 @@
 # import 星号/具名 + 同名符号碰撞
-# doc: docs/syntax/02_modules.md
+# doc: docs/syntax/11_modules.md
 # expect-class: PASS
 # expect-out: 1 | 2 | 3
 # expect-exit: 0

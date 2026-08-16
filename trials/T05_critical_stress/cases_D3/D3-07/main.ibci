@@ -1,5 +1,5 @@
 # 真实 LLM → mock 切换（批判：set_mock_mode 单向进入 mock）
-# doc: docs/syntax/11_config.md
+# doc: docs/syntax/13_mock_testing.md
 # expect-class: PASS
 # expect-out: real-ok | mock-ok | DONE
 # expect-exit: 0

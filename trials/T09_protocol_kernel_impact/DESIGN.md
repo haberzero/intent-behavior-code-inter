@@ -8,7 +8,7 @@
 | 约束 | 内容 |
 |------|------|
 | 死循环保护 | 每例经 harness 硬超时 SIGKILL 进程组兜底 |
-| 真实为主 | 真实 LLM（qwen3.6-35b-a3b @ 127.0.0.1:1234），mock 仅对照 |
+| 真实为主 | 真实 LLM（本地 qwen3.6-35b-a3b 非思考模式 @ 127.0.0.1:1234），mock 仅对照 |
 | 记录优先 | logs/ + register.jsonl + batch_result.jsonl 确定性记录 |
 | 修复纪律 | 根因修复 + tests/ 回归；禁 compat shim / 胶水 / tricky |
 | 禁 push | 全程本地 commit |
@@ -76,6 +76,26 @@
 | T01 LLM 组 | 57 | 54 PASS（+2 GUARD +1 LLM_BEHAVIOR） | 与基线逐类一致 |
 
 **结论：阶段 B 后真实 LLM 复跑分类与基线逐例一致——双轨收敛零回归。**
+
+## 四quater、最终批次复跑登记（2026-08-17，文档治理后全量确认）
+
+> 文档体系系统化重构与正规化完成后，对全部真实 LLM 用例做**最终一次全量复跑**
+> （qwen3.6-35b-a3b 非思考模式，run_batch --llm-only + 用例目录级 root）确认
+> 文档治理（含用例 # doc: 引用修正 104 处）后无行为漂移：
+
+| 套件 | 用例数 | 结果 | 基线对照 |
+|------|--------|------|----------|
+| T09 全量（N1-N8） | 8 | **8 PASS** | 与阶段 B 后一致 |
+| T01 LLM 组 | 57 | 54 PASS + 2 GUARD + 1 LLM_BEHAVIOR | 与 2026-08-14/15 基线逐类一致 |
+| T02 LLM 组 | 3 | **3 PASS** | 一致 |
+| T05 cases_D3 | 8 | **8 PASS** | 一致 |
+| T06 LLM 组 | 7 | **7 PASS** | 一致 |
+| T07 LLM 组 | 7 | **7 PASS** | 一致 |
+| T08 LLM 组 | 37 | 29 PASS + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 GUARD + 1 LIMIT | 与第一轮同维度分类一致 |
+| **合计** | **127** | **116 PASS + 5 LLM_BEHAVIOR + 3 GUARD + 2 BOUNDARY + 1 LIMIT** | **零回归** |
+
+**结论：最终批次分类与既有基线逐类一致，无新增缺陷；BOUNDARY-LLM-2/3 与未读赋值
+LIMIT 为已登记项复现（已登记 PENDING_TASKS PT-DECIDE-4 / KNOWN_LIMITS §十五）。**
 
 ## 五、后续压力维度（T08 待扩展项延续）
 

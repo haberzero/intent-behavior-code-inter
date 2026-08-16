@@ -1,5 +1,5 @@
 # LLM 函数 + 意图注入 + auto_intent（批判：注入意图是否进 prompt）
-# doc: docs/syntax/09_intents.md
+# doc: docs/syntax/09_intent_system.md
 # expect-class: PASS
 # expect-out: DONE
 # expect-exit: 0

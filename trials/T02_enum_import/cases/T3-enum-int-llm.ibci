@@ -1,5 +1,5 @@
 # T3 非 str 枚举 LLM 集成：成员名→值映射契约
-# doc: docs/syntax/06_oop.md §6.5 + KNOWN_LIMITS §二
+# doc: docs/syntax/06_oop.md §6.6 + docs/KNOWN_LIMITS.md §二
 # 期望: LLM 输出成员名（OK/ERR 任一）→ 映射为对应成员值；switch 命中对应分支
 # 注: 具体成员由模型选择（非确定），断言验证映射有效性而非特定成员
 

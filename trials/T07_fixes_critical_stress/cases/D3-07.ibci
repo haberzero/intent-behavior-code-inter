@@ -1,5 +1,5 @@
 # 意图 @/@! + 跨模块类组合
-# doc: docs/syntax/09_intents.md
+# doc: docs/syntax/09_intent_system.md
 # expect-class: PASS
 # expect-out: geo-point | DONE
 # expect-exit: 0

@@ -1,5 +1,5 @@
 # T5 枚举值≠名映射：LLM 成员名→底层值（str 值≠名）
-# doc: docs/syntax/06_oop.md §6.5 + KNOWN_LIMITS §二
+# doc: docs/syntax/06_oop.md §6.6 + docs/KNOWN_LIMITS.md §二
 # 期望: LLM 输出成员名（ACTIVE/INACTIVE 任一）→ 映射为底层值（a/i），映射有效性成立
 # 注: 具体成员由模型选择（非确定），断言验证值≠名映射契约而非特定成员
 

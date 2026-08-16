@@ -1,5 +1,5 @@
 # D1-09-004 intent_context 实例 push/pop/use
-# doc: docs/syntax/09_intent_system.md §9.3 + KNOWN_LIMITS §十二
+# doc: docs/syntax/09_intent_system.md §9.3 + docs/KNOWN_LIMITS.md §十二
 # 期望: ctx 实例 push/pop/use 影响当前作用域意图（须 use 生效）
 
 # expect-class: PASS

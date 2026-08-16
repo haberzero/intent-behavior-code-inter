@@ -1,5 +1,5 @@
 # auto 容器推断（混合/嵌套/空）
-# doc: docs/syntax/03_variables.md auto
+# doc: docs/syntax/02_variables.md auto
 # expect-class: PASS
 # expect-out: list[int] | list[list[int]] | list
 # expect-exit: 0

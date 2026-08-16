@@ -1,6 +1,6 @@
 # D2-70 边界：循环体内 LLM + llmexcept（KNOWN_LIMITS §十五：循环体/函数体内行为不可 dispatch，
 # 走同步路径；无 llmexcept 保护则在赋值点抛 LLMParseError）
-# doc: docs/KNOWN_LIMITS.md §十五 + 10_robustness.md §10.1（保护循环体内的行）
+# doc: docs/KNOWN_LIMITS.md §十五 + docs/syntax/10_robustness.md §10.1（保护循环体内的行）
 # 期望: 循环体内 LLM + llmexcept 正常收敛
 
 # expect-class: PASS

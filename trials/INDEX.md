@@ -3,6 +3,10 @@
 > 规范：`_toolkit/CLASSIFICATION.md`（分类/级别/编号/骨架/运行入口单一权威源）。
 > 新增试用地基必须：遵循命名 `T<nn>_<主题>`、引用 `_toolkit/run_one.py`（软链非复制）、
 > 更新本索引、缺陷编号全局唯一。
+>
+> **试用环境基线**：所有开发试用均在**本地 `qwen3.6-35b-a3b` 非思考模式**（LM Studio
+> @ 127.0.0.1:1234，`reasoning: false`）下进行；mock 仅用于无 LLM 依赖用例。
+> 服务细节见 `_toolkit/LLM_SERVICE.md`。
 
 ## 一、试用地基一览
 
@@ -17,7 +21,7 @@
 | `T06_class_identity` | 统一类身份模型回归 + 真实试用（Task1 S1-S4 根治验证 + T05 KI-1 核销） | 2026-08-14 | 20 用例 | 18 PASS + 2 KERNEL_ISSUE（同一根因） | `KERNEL_ISSUE-CROSSMOD-LLM-1`（**已核销 2026-08-14，T07 D3 重验**） |
 | `T07_fixes_critical_stress` | 四项修复批判性对抗 + 旧套件 T01-T06 全量重跑（用户强调） + 泛型边界复测 | 2026-08-14 | 43 用例 + 旧套件 238 重跑 | 28 PASS + 12 GUARD + 3 KERNEL_ISSUE；旧套件 202 PASS + 24 GUARD + 1 LIMIT + 1 KERNEL_ISSUE(陈旧断言) + 9 HARNESS | `KERNEL_ISSUE-OPTIONAL-SCOPE-1`、`KERNEL_ISSUE-OPTIONAL-CONTAINER-1`、`KERNEL_ISSUE-ATTR-READ-1`（均**已修复 2026-08-14，触发用例核销**） |
 | `T07_fixes_critical_stress`（E 批判补充批次，2026-08-14 第二 session 复核） | 三项 P1 修复有效性 + 边界挑刺（T07 后置独立批） | 2026-08-14 | +8 用例（E1-E8） | **5 PASS + 1 BOUNDARY + 2 DOC_ISSUE**（委托链全矩阵 PASS；空值错误码不一致 + 嵌套函数返回类型边界）→ **E1-E8 全 PASS**（2026-08-14 修复后核销） | `DOC-29`（空 Optional 错误码，**已修复 19920d39**）、`BOUNDARY-NESTED-FUNC-1`（返回类型校验，**已修复 19920d39**） |
-| `T08_llm_pressure` | LLM 全能力真实压力试用（第一轮，本地 qwen） | 2026-08-15 | 41 例 | 32 PASS + 2 GUARD + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 LIMIT | `KERNEL_ISSUE-LLM-2`（**已修复**）、`KERNEL_ISSUE-LLM-3`（**已修复**）、`DOC_ISSUE-30`、`BOUNDARY-LLM-2`、`BOUNDARY-LLM-3` |
+| `T08_llm_pressure` | LLM 全能力真实压力试用（第一轮，本地 qwen3.6-35b-a3b 非思考模式） | 2026-08-15 | 41 例 | 32 PASS + 2 GUARD + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 LIMIT | `KERNEL_ISSUE-LLM-2`（**已修复**）、`KERNEL_ISSUE-LLM-3`（**已修复**）、`DOC_ISSUE-30`、`BOUNDARY-LLM-2`、`BOUNDARY-LLM-3` |
 | `T09_protocol_kernel_impact` | 协议化内核大重构影响确认（既有套件真实 LLM 回归 + 新能力试用） | 2026-08-16 | 既有 108 例回归 + 新 8 例 | 回归分类与重构前基线逐类一致（**零回归**）；新能力 N1-N8 全 PASS（impl LLM 方法 / 泛型 bound / LLM 函数第一等值 / 长 prompt / 并发 dispatch / llmexcept 真实重试 / 类内 LLM 方法 / __from_prompt__） | 无新增；BOUNDARY-LLM-2/3 与未读赋值 LIMIT 为已登记项复现 |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
