@@ -210,7 +210,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 | 问题 | 说明 |
 |------|------|
-| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析经 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 校验；内建名防御和推断规则缺失仍保留为允许的职责分离型回退。类型强化现状：未标注可调用（func/llm/lambda）报 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值采用 `auto` 推断锁定（不隐式 any）；多类型 `list[int,str]` 不支持（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
+| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析经 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 校验；内建名防御和推断规则缺失仍保留为允许的职责分离型回退。未标注可调用（func/llm/lambda）报 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值采用 `auto` 推断锁定（不隐式 any）；多类型 `list[int,str]` 不支持（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
 | **跨模块占位符异常情况** | 占位符号解析失败时应抛出错误（类型未注册）而非静默保留占位 |
 
 **关于跨模块占位符的说明**：
@@ -288,12 +288,12 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 - `ibci_modules/ibci_ai/core.py` → `class AIPlugin(ILLMProvider, IbStatefulPlugin): ...`
 - `ibci_modules/ibci_ai/_spec.py` → `__ibcext_vtable__()` 返回函数签名字典
 
-### 7.3 插件架构愿景（零侵入自动嗅探）
+### 7.3 自动嗅探机制（零侵入）
 
-> **设计目标**：插件不再需要 import 任何核心代码，实现真正的零侵入自动注册。
->
-> 本节描述插件系统的**设计目标愿景**，其中的协议与机制以规划为准，不描述当前行为。
-> 当前插件系统的实际架构见 §7.1/§7.2 与 `docs/subsystems/04_plugin_system.md`。
+插件不再需要 import 任何核心代码——经固定命名约定与自动发现实现零侵入注册。
+
+本节描述插件系统的**零侵入自动嗅探机制（当前实现）**。接口规范见 §7.1/§7.2，
+实现细节见 `docs/subsystems/04_plugin_system.md`；自动注册总览见 §九。
 
 #### 7.3.1 核心设计
 
@@ -402,7 +402,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 | 保证 | 说明 |
 |------|------|
 | **静态类型检查保留** | 编译器通过 `core/kernel/spec/` 中的 `TypeDef` / `TypeRef` 体系获取完整类型信息 |
-| **扁平流生成保留** | FlatSerializer 依赖 `IbSpec.get_references()` / `TypeDef` 统一字段，不依赖旧 `TypeDescriptor` 体系 |
+| **扁平流生成保留** | FlatSerializer 依赖 `IbSpec.get_references()` / `TypeDef` 统一字段 |
 | **运行时零侵入** | 插件不需要 import ibcext 就能被发现和加载 |
 | **二进制兼容** | 只要有 Python 解释器，运行时发现正常工作 |
 

@@ -126,6 +126,8 @@ class TypeDef(IbSpec):
 | `MODULE` | 模块命名空间 | `import` 后的模块对象 |
 | `CALLABLE_INSTANCE` | lambda/snapshot/behavior 产生的可调用实例 | `fn_callable` / `behavior` |
 | `CALLABLE_SIG` | 高阶函数签名约束 | `fn[(int)->int]` |
+| `PROTOCOL` | 用户协议声明 | `protocol P:` 产生的类型 |
+| `GENERATOR` | 惰性生成器 | `yield` 函数 / `generator[T]` |
 | `LAZY` | 跨模块未解析占位符 | 编译期 forward ref |
 
 > `TypeKind.CALLABLE_INSTANCE` 统一 fn_callable 与 behavior 两类可调用实例；区分仅由 `name`（`"fn_callable"` / `"behavior"`）或 `_axiom_name` 决定，不再是类型层语义。
@@ -154,6 +156,17 @@ class TypeDef(IbSpec):
 | `resolve_call_return(spec, args)` / `resolve_op` / `resolve_iter_element` / `resolve_subscript` | 编译期类型推断入口（iter/subscript/operator 经 `resolve_*` 推断，非独立能力门） |
 
 注册表持有的 spec 是原型的克隆，保证多引擎实例间状态隔离（`SpecRegistry.register` 内部 `clone()`）。
+
+### 3.4ter 特化身份与运行时派生
+
+- **特化注册键单点生成**：特化 spec 命名（`Box[int]` 等）经 `specialization_key`
+  （`core/kernel/spec/type_ref.py`）统一生成——canonical 形态（head[args]），
+  消费于特化创建（内置/用户类）与运行期类表键（module 前缀由调用方拼接）。
+- **axiom family 判定结构化**：`TypeAxiom.is_compatible` 接收 `TypeRef`
+  （`other.head` 即家族名），特化名形态不进入 axiom 层（§4.3）。
+- **类成员声明单一权威**：`spec.members` 是类成员声明的单一权威；运行期
+  `IbClass.member_types`（字段声明类型缓存）在**水化期**从 `spec.members` 一次性
+  派生（统一 Optional 值模型的字段包装依赖），非独立声明。
 
 ### 3.4bis TypeRef 唯一权威入口
 
@@ -223,11 +236,40 @@ TypeRef 生命周期两端口径必须收敛，避免"结构化 vs 扁平化"两
 
 ---
 
-## §4 TypeAxiom — 行为分派层
+## §4 协议注册表与行为分派层
+
+### 4.0 协议注册表与能力判定（数据驱动单一权威）
+
+`core/kernel/protocol.py:ProtocolDef / ProtocolRegistry` 是**协议身份与能力判定**的
+单一权威。每个协议条目声明其满足判定（`core/kernel/protocol.py:ProtocolDef`）：
+
+| 声明字段 | 含义 |
+|----------|------|
+| `methods` | 协议的规范方法名（实现必须提供） |
+| `kinds` | kind 特判集：spec.kind 命中即满足（如 `iterable` 含 LIST/TUPLE/GENERATOR） |
+| `axiom_cap` | axiom 能力字段名：`get_axiom(spec)` 声明该字段即满足（如 `has_iter_cap`） |
+| `structural_methods` / `structural_all` | 结构成员判定：spec.members 含任意（默认）/全部（`structural_all=True`）方法 |
+
+内置协议（`register_builtin_protocols` 逐引擎注册）：`callable` / `iterable` /
+`subscriptable` / `operator` / `converter` / `parser` / `to_prompt` / `from_prompt` /
+`validate_prompt` / `output_hint` / `payload_prompt` / `snapshotable` / `attribute`。
+
+`SpecRegistry.satisfies_protocol(spec, name)` 是**唯一判定入口**（数据驱动：
+动态类型满足一切协议；PROTOCOL kind 不满足；`callable` 走专用 `is_callable` 路径；
+其余按条目 kinds → axiom_cap → structural 判定；无声明条目的用户协议按
+required methods 全部结构判定）。`TypeAxiom.has_*_cap` 布尔是 axiom 的**声明值**
+（协议条目声明哪个字段对应哪个协议——映射单一权威在协议条目，消费端不直读字段名）。
+
+能力获取（返回 axiom 供调用其方法）：`_capabilities.get_*_cap(spec, 协议名)` 经协议
+条目解析字段名。运行时消息分派（`receive` 的 `_dispatch_<dunder>` 处理器）以协议
+方法名并集（`dunder_names()`，按注册表版本号惰性缓存）为索引——见
+`04_vm_interpreter.md`。
 
 ### 4.1 统一 Protocol
 
-`core/kernel/axioms/protocols.py:TypeAxiom` 是**单一**的能力接口；9 个分散 Capability 协议（`CallCapability` / `IterCapability` / `SubscriptCapability` / `OperatorCapability` / `ConverterCapability` / `ParserCapability` / `FromPromptCapability` / `OutputHintCapability` / `WritableTrait`）的职责归并于此。
+`core/kernel/axioms/protocols.py:TypeAxiom` 是 axiom 层的能力接口（节选）；10 个
+能力布尔为**声明值**（默认 False，子类按需置 True），"协议 ↔ 能力字段"映射在
+协议条目（§4.0），不直读。
 
 ```python
 @runtime_checkable
@@ -235,16 +277,17 @@ class TypeAxiom(Protocol):
     @property
     def name(self) -> str: ...
 
-    # 能力声明（默认 False，子类按需置 True）
-    has_call_cap:        bool
-    has_iter_cap:        bool
-    has_subscript_cap:   bool
-    has_operator_cap:    bool
-    has_converter_cap:   bool
-    has_parser_cap:      bool
-    has_from_prompt_cap: bool
-    has_output_hint_cap: bool
-    has_llm_call_cap:    bool
+    # 能力声明（默认 False，子类按需置 True——经协议条目映射到协议）
+    has_call_cap:          bool
+    has_iter_cap:          bool
+    has_subscript_cap:     bool
+    has_operator_cap:      bool
+    has_converter_cap:     bool
+    has_parser_cap:        bool
+    has_from_prompt_cap:   bool
+    has_output_hint_cap:   bool
+    has_payload_prompt_cap: bool
+    has_llm_call_cap:      bool
 
     # 能力方法（默认 no-op）
     def resolve_return_type_name(args)         -> Optional[str]: ...
@@ -255,13 +298,16 @@ class TypeAxiom(Protocol):
     def parse_value(raw)                       -> Any:           ...
     def from_prompt(raw, spec)                 -> Tuple[bool,Any]: ...
     def __outputhint_prompt__(spec)            -> str:           ...
+    def __payload_prompt__(value, spec)        -> Any:           ...
 
     # 元数据
     def get_method_specs() -> Dict[str, MethodMemberSpec]: ...
     def get_operators()    -> Dict[str, str]:               ...
     def is_dynamic()       -> bool: ...
-    def is_compatible(other_name) -> bool: ...
+    def is_compatible(other: TypeRef) -> bool: ...   # family 判定（B2 结构化）
     def is_class()         -> bool: ...
+    def is_module()        -> bool: ...
+    def get_diff_hint(other) -> Optional[str]: ...
 ```
 
 ### 4.2 BaseAxiom
@@ -274,22 +320,8 @@ class TypeAxiom(Protocol):
 
 边界细则：axiom 层可 import `core.kernel.spec` 的**原子数据结构构造器**（`TypeRef` / `MethodMemberSpec`，用于声明协议方法签名），但不得依赖 spec 层的注册表/解析逻辑（`SpecRegistry` 查询、`resolve_*`）。
 
-### 4.4 内置公理清单
-
-`core/kernel/axioms/registry.py:AxiomRegistry` 注册的公理（节选）：
-
-| Axiom | 类型 | 关键能力 |
-|-------|------|---------|
-| `IntAxiom` / `FloatAxiom` / `StrAxiom` / `BoolAxiom` / `NoneAxiom` | 标量 | `operator` / `converter` / `parser` / `from_prompt` |
-| `ListAxiom` / `TupleAxiom` / `DictAxiom` | 容器 | `iter` / `subscript` / `operator(+,in)` |
-| `OptionalAxiom` | Optional[T] | `is_compatible` / unwrap 方法集 |
-| `EnumAxiom` | 枚举类 | `is_class=True` / `from_prompt`（按字面值解析） |
-| `CallableAxiom` / `BoundMethodAxiom` / `FnCallableAxiom` / `BehaviorAxiom` | 可调用 | `call_cap` |
-| `IntentContextAxiom` | 意图上下文 | `is_class=True` |
-| `LlmCallResultAxiom` | LLM 调用结果 | 内核内部类型（不参与常规运算，不可用户声明） |
-| `ExceptionAxiom` / `LLMErrorAxiom` 系列 | 异常 | 类继承链 |
-
----
+例外：`is_compatible`（family 兼容判定）接收 `TypeRef`（`other.head` 即家族名）——
+特化名形态不进入 axiom 层；调用点 `is_assignable` 传 `TypeRef.from_spec(target)`。
 
 ## §5 编译期 ⇄ 运行期分派路径
 

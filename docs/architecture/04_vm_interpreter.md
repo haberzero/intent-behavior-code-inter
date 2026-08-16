@@ -18,7 +18,7 @@
 │        ├─ ExecutionContextImpl — node 池、侧表、对象工厂、registry 引用 │
 │        ├─ RuntimeContextImpl — 当前执行帧（scope / intent / llm_except_frames）│
 │        └─ VMExecutor ── CPS 调度循环（运行时唯一执行入口）              │
-│             ├─ build_dispatch_table() — 47 个 AST 节点 handler         │
+│             ├─ build_dispatch_table() — 49 个 AST 节点 handler         │
 │             ├─ Frame stack (List[VMTask])                              │
 │             └─ Signal / UnhandledSignal — 控制流数据化                  │
 └──────────────────────────────────────────────────────────────────────┘
@@ -31,6 +31,16 @@
 ---
 
 ## §2 CPS 调度循环
+
+
+**值层消息分派（receive 协议化）**：`IbObject.receive(message, args)` 是属性访问与
+方法调用的统一入口。分派骨架：消息名 ∈ 协议注册表方法名并集（`dunder_names()`，
+按注册表版本号惰性缓存，见 `03_type_system.md` §4.0）→ 命名处理器
+`_dispatch_<dunder>`（可覆写，返回 `None` 继续普通路由）→ vtable
+（`lookup_method`）→ `AttributeError`。内建 dunder 行为（`__call__` 的
+`_UserCallDrive` / `_ClassInstantiateDrive`、`__getattr__` 属性协议、`cast_to`
+转换链、`__eq__`/`__ne__` 恒等、类对象 `__getitem__` 特化等）由各对象类覆写
+处理器承载——`core/runtime/objects/` 无硬编码 `message ==` 字符串分派分支。
 
 ### 2.1 数据对象
 
@@ -79,7 +89,7 @@ step(task) → _drive_loop_gen 单步:
 
 ### 2.4 Handler 表
 
-`core/runtime/vm/handlers/dispatch.py:build_dispatch_table()` 注册 47 个 `vm_handle_IbXxx(executor, node_uid, node_data)` 生成器函数：
+`core/runtime/vm/handlers/dispatch.py:build_dispatch_table()` 注册 49 个 `vm_handle_IbXxx(executor, node_uid, node_data)` 生成器函数（含 `IbProtocolDef`/`IbImplDef` 协议声明节点）：
 
 | 类别 | 节点 |
 |------|------|
@@ -129,6 +139,14 @@ step(task) → _drive_loop_gen 单步:
 - `thread(...)` 等含原生 `__init__` 的类构造返回 `IbThread` **句柄**（纯 `Waitable`，非 `CPSDrivable`），VM 不 auto-yield——等待须经 `t.join()` / `await t` 显式表达。
 
 类构造 CPS 化的意义：`__init__` 含 LLM 行为 / 通道等待时协作挂起（非阻塞主线程），消除 `vm.run` 嵌套驱动循环与 `init_method.call` 新建 TaskScheduler 的嵌套调度器路径。
+
+用户类实例的 `__call__`（协议方法）同样帧内 CPS 驱动：`IbObject.receive('__call__')`
+对含用户 `__call__` 的实例返回 `_UserCallDrive`（`Waitable` + `CPSDrivable`），VM
+`yield from cps_drive` 驱动用户方法体——深递归调用保持 Python 栈深度恒定。
+
+无显式 `__init__` 的类自动获得位置参数构造器（auto-init）：字段名清单在**水化期声明**
+（`ib_cls.auto_init_fields` + `spec.members['__init__']` 参数签名），执行经共享实现
+`_auto_init_impl`——**不生成运行时闭包**；参数数量校验由成员表单一权威承担。
 
 ---
 

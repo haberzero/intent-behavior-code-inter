@@ -49,6 +49,7 @@ scheduler 主循环（TaskScheduler.run）:
 | 表达式 | `IbTypeAnnotatedExpr` `IbIntentInfo` `IbFilteredExpr` | CPS handler |
 | 表达式 | `IbLambdaExpr` `IbBehaviorInstance` `IbCallableType` | CPS handler |
 | 声明 | `IbFunctionDef` `IbLLMFunctionDef` `IbClassDef` `IbImport` `IbImportFrom` | CPS handler |
+| 声明 | `IbProtocolDef` `IbImplDef`（用户协议 / retroactive implementation 声明） | CPS handler |
 
 ---
 

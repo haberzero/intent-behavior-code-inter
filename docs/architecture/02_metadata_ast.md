@@ -162,15 +162,8 @@ class IbImplDef(IbStmt):
 
 ### 3.2 MetadataStore 的设计
 
-编译期侧表由 `core/compiler/semantic/metadata/metadata_store.py:MetadataStore` 承载，存放 Pass 之间传递的分析结果：
-
-```python
-class MetadataStore:
-    node_to_symbol: Dict[Any, Symbol]      # AST节点 → 符号定义
-    node_to_type: Dict[Any, IbSpec]        # AST节点 → 类型信息
-    cell_captured_symbols: Set[str]        # 被 Cell 捕获的符号 UID
-    get_symbol(node) / get_type(node) / is_cell_captured(uid)
-```
+编译期侧表由 `core/compiler/semantic/metadata/metadata_store.py:MetadataStore` 承载，
+存放 Pass 之间传递的分析结果（字段与职责见 §6.1 唯一权威定义）。
 
 ### 3.3 为什么混用 id() 和 UID？
 

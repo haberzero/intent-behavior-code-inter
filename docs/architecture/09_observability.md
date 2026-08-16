@@ -121,6 +121,7 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 | `KDIAG_RUNTIME_COLLECT_SKIP` | 隔离收集 | 变量无法转为原生值，跳过 |
 | `KDIAG_RUNTIME_STAGE_SKIP` | Interpreter STAGE 6 预评估 | kernel 令牌缺失，STAGE 6 跳转跳过 |
 | `KDIAG_RUNTIME_ENV_LIMIT` | 环境限制异常 | `RecursionError`/`MemoryError`/`SystemError` 判定为环境限制，保留根因发射诊断 |
+| `KDIAG_RUNTIME_PRE_EVAL_FALLBACK` | 字段默认值预评估 | 类字段默认值预评估失败（尽力而为优化），留待实例化时求值（实例化路径完整重试 + fail-fast） |
 
 > **码集权威**：完整码集与稳定定义以 `core/base/diagnostics/codes.py` 为机器权威源；人类可读的触发条件与修复指引见 `docs/syntax/15_diagnostics.md`（码集合一致由契约测试强制）。
 

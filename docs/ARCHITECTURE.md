@@ -1,6 +1,6 @@
 # IBC-Inter 架构设计手册
 
-> 本手册是 IBC-Inter 的架构权威参考，覆盖设计理念、编译期数据模型、类型系统、VM/解释器、路径系统、内核原生模块、存储模型。
+> 本手册是 IBC-Inter 的架构权威参考，覆盖设计理念、编译期数据模型、类型系统、VM/解释器、路径系统、内核原生模块、存储模型、观测体系。
 > 语法参考见 `docs/SYNTAX_REFERENCE.md`；子系统设计见 `docs/SUBSYSTEM_DESIGN.md`；已知限制见 `docs/KNOWN_LIMITS.md`。
 
 ## 章节索引
