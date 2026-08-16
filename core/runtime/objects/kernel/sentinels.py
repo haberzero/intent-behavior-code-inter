@@ -25,13 +25,17 @@ class IbNone(IbValue):
         super().__init__(ib_class, payload=None)
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        if message == '__eq__':
-            right = args[0] if args else None
-            return self.ib_class.registry.box(is_none_value(right))
-        if message == '__ne__':
-            right = args[0] if args else None
-            return self.ib_class.registry.box(not is_none_value(right))
         return super().receive(message, args)
+
+    def _dispatch_eq(self, message: str, args: List['IbObject']) -> 'IbObject':
+        """``__eq__`` 协议：None 与任何空值（None/空 Optional）恒等。"""
+        right = args[0] if args else None
+        return self.ib_class.registry.box(is_none_value(right))
+
+    def _dispatch_ne(self, message: str, args: List['IbObject']) -> 'IbObject':
+        """``__ne__`` 协议：None 与任何空值不等为假。"""
+        right = args[0] if args else None
+        return self.ib_class.registry.box(not is_none_value(right))
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return None

@@ -5,6 +5,30 @@ from core.runtime.objects.cell import IbCell
 from core.runtime.objects.deep_clone import try_deep_clone
 from ..ib_type_mapping import register_ib_type
 
+
+# --------------------------------------------------------------------------- #
+# 可调用对象内部元数据消息（非语言级协议——集中声明，消除散落字符串；D2）
+# --------------------------------------------------------------------------- #
+
+def _meta_str(obj: "IbValue") -> IbObject:
+    """内部元数据消息：对象呈现（__get_metadata__ / node_uid）。"""
+    return obj.ib_class.registry.box(str(obj))
+
+
+def _return_type_str(obj: "IbValue") -> IbObject:
+    """内部元数据消息：签名返回类型查询（__return_type__）。"""
+    return obj.ib_class.registry.box(obj.get_return_type())
+
+
+# 类内部消息 → 处理函数映射（可调用对象族共享；若未来有第二个消费者再升级
+# 为注册表协议）
+_INTERNAL_MESSAGES = frozenset(("__get_metadata__", "node_uid", "__return_type__"))
+_INTERNAL_DISPATCH: Dict[str, Any] = {
+    "__get_metadata__": _meta_str,
+    "node_uid": _meta_str,
+    "__return_type__": _return_type_str,
+}
+
 @register_ib_type("fn_callable")
 class IbFnCallable(IbValue):
     """
@@ -125,20 +149,27 @@ class IbFnCallable(IbValue):
         return f"<FnCallable {self.node_uid}>"
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
-        if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
-            return self.ib_class.registry.box(str(self))
+        """FnCallable 消息分派：内部元数据消息 → 协议处理器 → 未求值 fail-fast。"""
+        if message in _INTERNAL_MESSAGES:
+            return _INTERNAL_DISPATCH[message](self)
 
-        if message == "__return_type__":
-            return self.ib_class.registry.box(self.get_return_type())
-
-        if message == "__call__":
-            return self.call(self.ib_class.registry.get_none(), args)
-
-        # 属性访问委派到基类 vtable（__return_type__ 原生方法等）。
-        if message == "__getattr__":
-            return super().receive(message, args)
+        # 协议处理器（__call__ 执行 / __getattr__ 基类三段式等）
+        if message in self._protocol_message_names():
+            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
+            if handler is not None:
+                result = handler(message, args)
+                if result is not None:
+                    return result
 
         raise RuntimeError(f"FnCallable '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
+
+    def _dispatch_call(self, message: str, args: List[IbObject]) -> IbObject:
+        """``__call__`` 协议：执行捕获的表达式（原 receive __call__ 分支语义）。"""
+        return self.call(self.ib_class.registry.get_none(), args)
+
+    def _dispatch_to_prompt(self, message: str, args: List[IbObject]) -> IbObject:
+        """``__to_prompt__`` 协议：FnCallable 呈现为可读描述。"""
+        return self.ib_class.registry.box(str(self))
 
     def __repr__(self):
         mode = self.capture_mode or "immediate"
@@ -348,16 +379,23 @@ class IbBehavior(IbValue):
         允许查询元数据，仅在尝试"执行行为本身"且无上下文时才抛出异常。
         """
         # 签名查询反映行为声明形态，与执行状态无关，先于 _cache 委派处理。
-        if message == "__return_type__":
-            return self.ib_class.registry.box(self.get_return_type())
+        if message in _INTERNAL_MESSAGES:
+            return _INTERNAL_DISPATCH[message](self)
 
-        if self._cache: return self._cache.receive(message, args)
+        # 已执行缓存：委派缓存对象（原 _cache 分支语义）
+        if self._cache:
+            return self._cache.receive(message, args)
 
-        if message in ("__get_metadata__", "__to_prompt__", "node_uid"):
-            return self.ib_class.registry.box(str(self))
-
-        # 属性访问委派到基类 vtable（__return_type__ 原生方法等）。
-        if message == "__getattr__":
-            return super().receive(message, args)
+        # 协议处理器（__getattr__ 基类三段式等；__call__ 显式关闭默认处理器）
+        if message in self._protocol_message_names():
+            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
+            if handler is not None:
+                result = handler(message, args)
+                if result is not None:
+                    return result
 
         raise RuntimeError(f"Behavior '{self.node}' is not executed. Cannot process message '{message}'.")
+
+    def _dispatch_call(self, message: str, args: List[IbObject]):
+        """无行为对象专属调用语义（执行经 call()/缓存路径）：关闭基类默认处理器。"""
+        return None

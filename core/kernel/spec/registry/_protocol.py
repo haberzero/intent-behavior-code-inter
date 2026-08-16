@@ -12,7 +12,7 @@ matching the gradual nature of IBCI's type system.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import FrozenSet, Optional, Tuple
 
 from ..base import IbSpec, TypeKind
 from core.kernel.protocol import ProtocolDef, ProtocolRegistry
@@ -30,7 +30,25 @@ class _ProtocolMixin:
 
     def register_protocol(self, protocol: ProtocolDef) -> ProtocolDef:
         """Register a protocol definition in this engine's registry."""
-        return self.protocols.register(protocol)
+        result = self.protocols.register(protocol)
+        # 协议方法名索引失效（dunder 分派索引以注册表为权威源）
+        self._dunder_names_cache = None
+        return result
+
+    def dunder_names(self) -> FrozenSet[str]:
+        """并集：全部协议 methods 的方法名集合（receive dunder 分派索引权威源）。
+
+        从协议注册表派生（单一权威），惰性缓存；新协议注册时失效重建。
+        供运行时 receive 分派判断"消息名是否协议方法"。
+        """
+        cached = getattr(self, "_dunder_names_cache", None)
+        if cached is None:
+            names: set = set()
+            for protocol in self.protocols.all():
+                names.update(protocol.methods)
+            cached = frozenset(names)
+            self._dunder_names_cache = cached
+        return cached
 
     def protocol_names(self) -> Tuple[str, ...]:
         return tuple(self.protocols.names())

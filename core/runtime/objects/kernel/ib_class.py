@@ -593,37 +593,48 @@ class IbClass(IbObject):
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
         """
-        类对象的特殊消息处理：
+        类对象的特殊消息处理（协议处理器覆写，见 ``_dispatch_*``）：
         1. __call__ -> 实例化 (Instantiate) 或 类级别的 __call__
         2. __getattr__ -> 访问类字段 (default_fields)
         3. __getitem__ -> 泛型类型特化下标（Box[int] → 特化类对象）
         4. 其他 -> 正常消息处理 (查找静态方法等)
         """
-        from .functions import IbBoundMethod, IbNativeFunction
-        if message == "__call__":
-            # 类自身声明的原生 __call__（如 int()/str()/float()/bool() 类型转换
-            # 构造器）优先于 instantiate；用户类的 __call__ 是实例方法（经
-            # IbObject.receive vtable 分发给实例），不覆盖类构造器。
-            own_call = self.methods.get("__call__")
-            if isinstance(own_call, IbNativeFunction):
-                return own_call.call(self, args)
-            # 用户类构造器：instantiate 创建新实例。
-            context = self.registry.get_execution_context()
-            init_method = self.lookup_method('__init__')
-            # 不含原生 __init__（用户 __init__ 或未定义）→ 返回 CPSDrivable drive，
-            # VM 帧内驱动字段默认值 + __init__（类构造接入统一 CPS 执行模型）。
-            # 含原生 __init__（如 thread）→ 同步 instantiate（返回句柄，不 auto-yield）。
-            if not isinstance(init_method, IbNativeFunction):
-                return _ClassInstantiateDrive(self, args, context)
-            return self.instantiate(args, context=context)
+        return super().receive(message, args)
 
-        if message == "__getitem__" and len(args) > 0:
-            # 类型特化下标：``Box[int]``（泛型用户类）表达式求值为特化类对象。
+    def _dispatch_call(self, message: str, args: List['IbObject']):
+        """类对象 ``__call__``：类自身原生 __call__ 优先，否则实例化。"""
+        from .functions import IbNativeFunction
+
+        # 类自身声明的原生 __call__（如 int()/str()/float()/bool() 类型转换
+        # 构造器）优先于 instantiate；用户类的 __call__ 是实例方法（经
+        # IbObject.receive vtable 分发给实例），不覆盖类构造器。
+        own_call = self.methods.get("__call__")
+        if isinstance(own_call, IbNativeFunction):
+            return own_call.call(self, args)
+        # 用户类构造器：instantiate 创建新实例。
+        context = self.registry.get_execution_context()
+        init_method = self.lookup_method('__init__')
+        # 不含原生 __init__（用户 __init__ 或未定义）→ 返回 CPSDrivable drive，
+        # VM 帧内驱动字段默认值 + __init__（类构造接入统一 CPS 执行模型）。
+        # 含原生 __init__（如 thread）→ 同步 instantiate（返回句柄，不 auto-yield）。
+        if not isinstance(init_method, IbNativeFunction):
+            return _ClassInstantiateDrive(self, args, context)
+        return self.instantiate(args, context=context)
+
+    def _dispatch_getitem(self, message: str, args: List['IbObject']):
+        """类对象 ``__getitem__``：类型特化下标（``Box[int]`` 表达式）。"""
+        if len(args) > 0:
             # slice 求值为类型标识（IbClass，如 int 类对象）或类型元组
             # （``Pair[str,int]``）→ 查/建特化类。
             type_objs = self._slice_type_objs(args[0])
             return self._specialize(type_objs)
-        if message == "__getattr__" and len(args) > 0:
+        return None
+
+    def _dispatch_getattr(self, message: str, args: List['IbObject']):
+        """类对象 ``__getattr__``：类字段 (default_fields) → 类方法。"""
+        from .functions import IbBoundMethod
+
+        if len(args) > 0:
             attr_name = args[0].to_native()
             # 优先查找类字段 (default_fields)
             if attr_name in self.default_fields:
@@ -638,8 +649,7 @@ class IbClass(IbObject):
             if method:
                 return IbBoundMethod(self, method)
             raise AttributeError(f"Class '{self.name}' has no attribute '{attr_name}'")
-
-        return super().receive(message, args)
+        return None
 
     def __repr__(self):
         return f"<Class '{self.name}'>"

@@ -169,17 +169,34 @@ class IbSuperProxy(IbObject):
         self._parent_class = parent_class
 
     def receive(self, message: str, args: List['IbObject']) -> 'IbObject':
-        if message == '__getattr__' and args:
+        """super() 代理仅响应 ``__getattr__``/``__call__`` 协议，其余消息拒绝。
+
+        处理器分派（__getattr__ 父类方法查找 / __call__ 返回自身）；未覆盖的
+        消息一律 AttributeError——不落宿主 vtable（super 代理借用 callable 类
+        作宿主，vtable 消息如 toString 等非 super 语义，原实现同样拒绝）。
+        """
+        if message in self._protocol_message_names():
+            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
+            if handler is not None:
+                result = handler(message, args)
+                if result is not None:
+                    return result
+        raise AttributeError(f"super() proxy does not support message '{message}'")
+
+    def _dispatch_getattr(self, message: str, args: List['IbObject']):
+        """``__getattr__`` 协议：父类方法查找（绑定 receiver）。"""
+        if args:
             attr_name = args[0].to_native()
             if self._parent_class:
                 method = self._parent_class.lookup_method(attr_name)
                 if method:
                     return IbBoundMethod(self._receiver, method)
             raise AttributeError(f"super(): parent class has no method '{attr_name}'")
-        if message == '__call__':
-            # super() called directly (not super().method()) — not meaningful; return self
-            return self
-        raise AttributeError(f"super() proxy does not support message '{message}'")
+        return None
+
+    def _dispatch_call(self, message: str, args: List['IbObject']):
+        """``__call__`` 协议：super() 直接调用无意义，返回自身（原语义）。"""
+        return self
 
     def __repr__(self):
         parent_name = self._parent_class.name if self._parent_class else "<no parent>"

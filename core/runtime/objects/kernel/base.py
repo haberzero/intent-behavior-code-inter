@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Mapping, Tuple
+from typing import Dict, Any, List, Optional, Mapping, Tuple, FrozenSet
 
 from core.kernel.issue import InterpreterError
 from core.kernel.spec.type_ref import TypeRef as _TypeRef
@@ -42,33 +42,77 @@ class IbObject:
         """
         统一消息传递接口。
         所有属性访问和方法调用都通过此入口分发。
+
+        分派骨架（协议驱动，无硬编码字符串分支）：
+        1. 消息名 ∈ 协议注册表方法集（dunder 协议索引，单一权威）→ 查命名处理器
+           ``_dispatch_<name>``（类型感知、可覆写）；处理器返回 None 表示无特殊
+           行为，继续普通路由。
+        2. 普通消息路由：vtable（``lookup_method``）。
         """
-        from .functions import IbBoundMethod, IbFunction
-        from .ib_class import IbClass
+        # 1. 协议方法消息 → 命名处理器（索引来自协议注册表，见 _protocol_mixin）
+        if message in self._protocol_message_names():
+            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
+            if handler is not None:
+                result = handler(message, args)
+                if result is not None:
+                    return result
 
-        # 下沉至公理层能力探测
-        # 针对 __call__ 消息，检查类型公理是否声明了调用能力
-        if message == '__call__':
-            spec_reg = self.ib_class.registry.get_metadata_registry()
-            if spec_reg and self.ib_class.spec:
-                call_cap = spec_reg.get_call_cap(self.ib_class.spec)
-                if call_cap:
-                    # 函数家族（IbFunction 子类：用户函数/原生函数/绑定方法/LLM 函数）
-                    # 直接走 Python .call（isinstance 精确判别，替代 hasattr 探测）。
-                    if isinstance(self, IbFunction):
-                        return self.call(self.ib_class.registry.get_none(), args)
-            # 用户类实例 + 用户定义的 __call__ 协议方法：返回 CPSDrivable drive，
-            # VM 经 cps_drive 帧内驱动（UserFunctionCall trampoline，EXEC-1 根治）。
-            # 不再落回 method.call → 嵌套调度器（深递归 Python 栈 + Waitable 死锁）。
-            # receive 保持唯一协议分派入口（返回 drive，非 VM 侧特判）。
-            method = self.ib_class.lookup_method('__call__')
-            if method is not None:
-                from .ib_class import _UserCallDrive
-                from .user_functions import IbUserFunction
-                if isinstance(method, IbUserFunction):
-                    return _UserCallDrive(method, args, self)
+        # 2. 正常消息路由：查找类方法
+        method = self.ib_class.lookup_method(message)
+        if method:
+            return method.call(self, args)
 
-        if message == '__getattr__' and len(args) > 0:
+        raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
+
+    def _protocol_message_names(self) -> 'FrozenSet[str]':
+        """协议注册表方法名并集（dunder 分派索引权威源，惰性缓存于 spec registry）。"""
+        spec_reg = self.ib_class.registry.get_metadata_registry()
+        if spec_reg is not None:
+            return spec_reg.dunder_names()
+        return frozenset()
+
+    # ------------------------------------------------------------------ #
+    # dunder 协议处理器（默认实现 = 原 receive 硬编码分支语义）           #
+    # ------------------------------------------------------------------ #
+
+    def _dispatch_call(self, message: str, args: List['IbObject']) -> Optional['IbObject']:
+        """``__call__`` 协议默认实现（callable 协议方法）。
+
+        - 下沉至公理层能力探测：函数家族（IbFunction 子类：用户函数/原生函数/
+          绑定方法/LLM 函数）直接走 Python .call。
+        - 用户类实例 + 用户定义的 ``__call__`` 协议方法：返回 CPSDrivable drive，
+          VM 经 cps_drive 帧内驱动（UserFunctionCall trampoline，EXEC-1 根治）。
+        - 其余（原生 __call__ 方法等）返回 None → 落回普通 vtable 路由。
+        """
+        from .functions import IbFunction
+
+        spec_reg = self.ib_class.registry.get_metadata_registry()
+        if spec_reg and self.ib_class.spec:
+            call_cap = spec_reg.get_call_cap(self.ib_class.spec)
+            if call_cap:
+                # 函数家族直接走 Python .call（isinstance 精确判别，替代 hasattr 探测）。
+                if isinstance(self, IbFunction):
+                    return self.call(self.ib_class.registry.get_none(), args)
+        # 用户类实例 + 用户定义的 __call__ 协议方法：返回 CPSDrivable drive，
+        # VM 经 cps_drive 帧内驱动。receive 保持唯一协议分派入口。
+        method = self.ib_class.lookup_method('__call__')
+        if method is not None:
+            from .ib_class import _UserCallDrive
+            from .user_functions import IbUserFunction
+            if isinstance(method, IbUserFunction):
+                return _UserCallDrive(method, args, self)
+        return None
+
+    def _dispatch_getattr(self, message: str, args: List['IbObject']) -> Optional['IbObject']:
+        """``__getattr__`` 协议默认实现（attribute 协议方法）。
+
+        三段式（顺序不可变，Python ``__getattr__`` 语义）：
+        1. 实例字段；2. 类方法（绑定方法）；3. ``__getattr__`` 方法本身
+        （用户覆写或 ``ObjectClass`` 默认 ``_default_getattr`` fail-fast）。
+        """
+        from .functions import IbBoundMethod
+
+        if len(args) > 0:
             attr_name = args[0].to_native()
             # 优先查找实例字段
             if attr_name in self.fields:
@@ -77,64 +121,75 @@ class IbObject:
             method = self.ib_class.lookup_method(attr_name)
             if method:
                 return IbBoundMethod(self, method)
+        # 未命中 → __getattr__ 方法（用户覆写或默认 fail-fast）；无则继续普通路由
+        getattr_method = self.ib_class.lookup_method('__getattr__')
+        if getattr_method is not None:
+            return getattr_method.call(self, args)
+        return None
 
-        # 2. 正常消息路由：查找类方法
-        method = self.ib_class.lookup_method(message)
-        if method:
+    def _dispatch_cast_to(self, message: str, args: List['IbObject']) -> Optional['IbObject']:
+        """``cast_to`` 转换链（converter 协议方法）。
+
+        vtable 注册的 ``cast_to`` 方法优先（原普通路由先行语义——str/int 等
+        内建转换实现注册于各自类）；未注册时走通用转换链：同一类型直接返回、
+        向上转型返回自身、``__to_prompt__`` 协议产出 str 且目标类型可接受 str
+        时桥接转换；否则明确错误（fail-fast）。
+        """
+        # 1. vtable 协议实现优先（原 receive 普通路由先于 cast_to 分支）
+        method = self.ib_class.lookup_method('cast_to')
+        if method is not None:
             return method.call(self, args)
 
-        # [cast_to Hook] 处理类型转换消息
-        if message == 'cast_to':
-            if not args:
-                raise InterpreterError("cast_to requires exactly one argument: target class")
+        # 2. 通用转换链
+        if not args:
+            raise InterpreterError("cast_to requires exactly one argument: target class")
 
-            target_class = args[0]
-            target_name = getattr(target_class, 'name', None)
-            if not target_name:
-                raise InterpreterError("cast_to argument must be an IbClass")
+        target_class = args[0]
+        target_name = getattr(target_class, 'name', None)
+        if not target_name:
+            raise InterpreterError("cast_to argument must be an IbClass")
 
-            # 同一类型转换：直接返回自身
-            if self.ib_class.name == target_name:
-                return self
+        # 同一类型转换：直接返回自身
+        if self.ib_class.name == target_name:
+            return self
 
-            # 向上转型（upcast）：目标类型是当前类的祖先，直接返回自身（安全且语义正确）
-            if isinstance(target_class, IbClass) and self.ib_class.is_assignable_to(target_class):
-                return self
+        # 向上转型（upcast）：目标类型是当前类的祖先，直接返回自身（安全且语义正确）
+        from .ib_class import IbClass
+        if isinstance(target_class, IbClass) and self.ib_class.is_assignable_to(target_class):
+            return self
 
-            # __to_prompt__ 协议产出 str；仅当目标类型可接受 str 时此路径有效
-            spec_reg = self.ib_class.registry.get_metadata_registry()
-            target_spec = getattr(target_class, 'spec', None)
-            str_spec = spec_reg.resolve("str") if spec_reg else None
-            if str_spec and target_spec and spec_reg.is_assignable(str_spec, target_spec):
-                to_prompt_method = self.ib_class.lookup_method('__to_prompt__')
-                if to_prompt_method:
-                    try:
-                        prompt_result = to_prompt_method.call(self, [])
-                        # Unwrap if it's an IbObject
-                        prompt_result = unbox(prompt_result)
-                        return self.ib_class.registry.box(prompt_result)
-                    except Exception as e:
-                        kernel_diagnostic(
-                            code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
-                            detail={
-                                "context": "cast",
-                                "type": self.ib_class.name,
-                                "target": target_name,
-                                "error": repr(e),
-                            },
-                            message=(
-                                f"cast via __to_prompt__ failed for "
-                                f"{self.ib_class.name}->{target_name}: {e!r}"
-                            ),
-                        )
+        # __to_prompt__ 协议产出 str；仅当目标类型可接受 str 时此路径有效
+        spec_reg = self.ib_class.registry.get_metadata_registry()
+        target_spec = getattr(target_class, 'spec', None)
+        str_spec = spec_reg.resolve("str") if spec_reg else None
+        if str_spec and target_spec and spec_reg.is_assignable(str_spec, target_spec):
+            to_prompt_method = self.ib_class.lookup_method('__to_prompt__')
+            if to_prompt_method:
+                try:
+                    prompt_result = to_prompt_method.call(self, [])
+                    # Unwrap if it's an IbObject
+                    prompt_result = unbox(prompt_result)
+                    return self.ib_class.registry.box(prompt_result)
+                except Exception as e:
+                    kernel_diagnostic(
+                        code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
+                        detail={
+                            "context": "cast",
+                            "type": self.ib_class.name,
+                            "target": target_name,
+                            "error": repr(e),
+                        },
+                        message=(
+                            f"cast via __to_prompt__ failed for "
+                            f"{self.ib_class.name}->{target_name}: {e!r}"
+                        ),
+                    )
 
-            # 无法执行类型转换，抛出明确错误
-            raise InterpreterError(
-                f"TypeError: Cannot cast '{self.ib_class.name}' to '{target_name}'. "
-                f"Type '{self.ib_class.name}' does not implement type conversion."
-            )
-
-        raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
+        # 无法执行类型转换，抛出明确错误
+        raise InterpreterError(
+            f"TypeError: Cannot cast '{self.ib_class.name}' to '{target_name}'. "
+            f"Type '{self.ib_class.name}' does not implement type conversion."
+        )
 
     def __to_prompt__(self) -> str:
         """

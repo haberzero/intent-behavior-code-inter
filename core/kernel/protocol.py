@@ -130,10 +130,15 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
             "__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__",
             "__mod__", "__pow__", "__and__", "__or__", "__xor__",
             "__lshift__", "__rshift__", "__lt__", "__le__", "__gt__",
-            "__ge__", "__eq__", "__ne__", "__neg__", "__invert__",
-            "__not__", "__contains__",
+            "__ge__", "__eq__", "__ne__", "__neg__", "__pos__",
+            "__invert__", "__not__", "__contains__",
         ),
         description="Values that participate in operator dispatch.",
+    ),
+    ProtocolDef(
+        name="attribute",
+        methods=("__getattr__", "__setattr__"),
+        description="Values that support attribute read/write access.",
     ),
     ProtocolDef(
         name="converter",

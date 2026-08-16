@@ -50,8 +50,12 @@ class IbNativeObject(IbObject):
             # Proxy VTable 由 ModuleLoader 完成自动装箱转换
             return attr(*args)
 
-        # 2. 处理 __getattr__ 协议 (属性/方法获取)
-        if message == '__getattr__' and len(args) > 0:
+        # 2. 其余消息：协议处理器（__getattr__ 契约导出）+ 基类公理兜底
+        return super().receive(message, args)
+
+    def _dispatch_getattr(self, message: str, args: List['IbObject']):
+        """``__getattr__`` 协议：虚表方法导出 / 白名单属性 / 契约外成员 fail-fast。"""
+        if len(args) > 0:
             target_name = args[0].to_native()
 
             # 如果是虚表方法，包装为 IbNativeFunction 导出
@@ -89,9 +93,7 @@ class IbNativeObject(IbObject):
 
             # 未在契约或白名单声明的成员，坚决抛出异常
             raise AttributeError(f"Plugin Error: '{target_name}' is not defined in module contract (_spec.py)")
-
-        # 3. 降级到基类公理 (如 __to_prompt__ 等)
-        return super().receive(message, args)
+        return None
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:
         return self.py_obj
@@ -117,13 +119,13 @@ class IbModule(IbObject):
         """
         scope = self.scope  # IModuleScope
 
-        # 1. 处理 __getattr__ 协议（成员访问统一走 scope.get）
-        if message == '__getattr__' and len(args) > 0:
-            target_name = args[0].to_native()
-            try:
-                return scope.get(target_name)
-            except KeyError:
-                pass
+        # 1. 协议处理器（__getattr__ 成员访问统一走 scope.get）
+        if message in self._protocol_message_names():
+            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
+            if handler is not None:
+                result = handler(message, args)
+                if result is not None:
+                    return result
 
         # 2. 其他消息经 scope.receive 转发（两形态均实现）
         try:
@@ -133,6 +135,16 @@ class IbModule(IbObject):
 
         # 3. 后备：降级到基类公理 (如 __to_prompt__ 等)
         return super().receive(message, args)
+
+    def _dispatch_getattr(self, message: str, args: List['IbObject']):
+        """``__getattr__`` 协议：模块成员访问统一走 scope.get。"""
+        if len(args) > 0:
+            target_name = args[0].to_native()
+            try:
+                return self.scope.get(target_name)
+            except KeyError:
+                pass
+        return None
 
     def __repr__(self):
         return f"<Module '{self.name}'>"

@@ -43,7 +43,18 @@ def resolve_iterable(iterable_obj: Any):
     from core.runtime.objects.kernel.generator import IbGenerator
     if isinstance(iterable_obj, IbGenerator):
         return iterable_obj.to_list()
-    if iterable_obj.ib_class.lookup_method("__iter__") is not None:
+    # 迭代能力判定：协议注册表权威（satisfies_protocol("iterable")，单一入口），
+    # 方法获取仍经 vtable lookup——职责分离（判定走协议 / 获取走方法表）。
+    # AND 条件保持既有能力面：结构判定（spec.members/axiom 能力）与水化方法表
+    # 一致时才走 __iter__ 分支（generator 等仅有 to_list 的类型不受影响）。
+    spec = getattr(iterable_obj.ib_class, "spec", None)
+    spec_reg = iterable_obj.ib_class.registry.get_metadata_registry()
+    if (
+        spec is not None
+        and spec_reg is not None
+        and spec_reg.satisfies_protocol(spec, "iterable")
+        and iterable_obj.ib_class.lookup_method("__iter__") is not None
+    ):
         r = iterable_obj.receive("__iter__", [])
         if is_sequence_value(r):
             return r

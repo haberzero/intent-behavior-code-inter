@@ -130,20 +130,24 @@ class IbOptional(IbValue):
         return self.payload.cast_to(target_class) if isinstance(self.payload, IbObject) else self
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
-        if message == "__eq__":
-            right = args[0] if args else None
-            return self.ib_class.registry.box(self._eq(right))
-        if message == "__ne__":
-            right = args[0] if args else None
-            return self.ib_class.registry.box(not self._eq(right))
+        """统一委托链（Optional[T] 是 T 的透明包装：T 的成员/方法经此透传，
+        Optional 专属方法 unwrap/is_some/is_none/or_else 回退 vtable）。
 
-        # 统一委托链（Optional[T] 是 T 的透明包装：T 的成员/方法经此透传，
-        # Optional 专属方法 unwrap/is_some/is_none/or_else 回退 vtable）。
-        #
-        # 1. 持有值：委托内层值（容器协议 len/下标/迭代/成员访问透传）。
-        #    __getattr__ 委托的"未命中"（内层 _default_getattr fail-fast 抛
-        #    InterpreterError）须回退 Optional 自身方法；其它消息委托抛
-        #    InterpreterError 是内层方法体的真实错误，必须传播不吞。
+        - 协议处理器（__eq__/__ne__/__getattr__/__call__ 等 Optional 专属语义）
+          先于委托；处理器返回 None 表示无专属行为，继续委托链。
+        - 持有值：委托内层值（容器协议 len/下标/迭代/成员访问透传）。
+          __getattr__ 委托的"未命中"（内层 _default_getattr fail-fast 抛
+          InterpreterError）须回退 Optional 自身方法；其它消息委托抛
+          InterpreterError 是内层方法体的真实错误，必须传播不吞。
+        """
+        # 1. Optional 专属协议处理器（返回 None 继续委托链）
+        if message in self._protocol_message_names():
+            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
+            if handler is not None:
+                result = handler(message, args)
+                if result is not None:
+                    return result
+        # 2. 委托内层值（容器协议 len/下标/迭代/成员访问透传）
         if self._is_some and isinstance(self.payload, IbObject):
             try:
                 return self.payload.receive(message, args)
@@ -152,31 +156,62 @@ class IbOptional(IbValue):
             except InterpreterError:
                 if message != "__getattr__":
                     raise
-        # 2. Optional 自身/父链 vtable（unwrap/is_some/is_none/or_else/to_bool/
-        #    cast_to/__to_prompt__）。__getattr__ 消息按 attr_name 查方法并返回
-        #    **绑定方法**（属性访问语义，调用由 vm_handle_IbCall 承接；直接
-        #    method.call 会把 __getattr__ 的 attr 参数误当方法实参）。Object
-        #    基类 __getattr__ 兜底在此属最后防线，不短路委托。
-        if message == "__getattr__":
-            attr_name = args[0].to_native()
-            method = self.ib_class.lookup_method(attr_name)
-            if method is not None:
-                from ..kernel.functions import IbBoundMethod
-
-                return IbBoundMethod(self, method)
-        else:
-            method = self.ib_class.lookup_method(message)
-            if method is not None:
-                return method.call(self, args)
-        # 3. 空值：协议操作 fail-fast（明确诊断，不静默——空 Optional 上
+        # 3. Optional 自身/父链 vtable（unwrap/is_some/is_none/or_else/to_bool/
+        #    cast_to/__to_prompt__）。
+        method = self.ib_class.lookup_method(message)
+        if method is not None:
+            return method.call(self, args)
+        # 4. 空值：协议操作 fail-fast（明确诊断，不静默——空 Optional 上
         #    len/下标/成员访问等操作无意义，报错优于返回错误值）。
         if not self._is_some:
             raise InterpreterError(
                 f"Operation '{message}' is not available on an empty Optional",
                 error_code="RUN_ATTRIBUTE_ERROR",
             )
-        # 4. 非空但内层与自身均无此成员：基类语义（AttributeError → 诊断码）。
+        # 5. 非空但内层与自身均无此成员：基类语义（AttributeError → 诊断码）。
         return super().receive(message, args)
+
+    def _dispatch_eq(self, message: str, args: List[IbObject]) -> IbObject:
+        """``__eq__`` 协议：空 Optional 与 None/空 Optional 相等；有值比较内层。"""
+        right = args[0] if args else None
+        return self.ib_class.registry.box(self._eq(right))
+
+    def _dispatch_ne(self, message: str, args: List[IbObject]) -> IbObject:
+        """``__ne__`` 协议：``__eq__`` 取反。"""
+        right = args[0] if args else None
+        return self.ib_class.registry.box(not self._eq(right))
+
+    def _dispatch_call(self, message: str, args: List[IbObject]):
+        """无 Optional 专属调用语义：委托链处理（显式关闭基类默认 __call__ 处理器）。"""
+        return None
+
+    def _dispatch_getattr(self, message: str, args: List[IbObject]):
+        """``__getattr__``：委托内层（有值）→ Optional 自身绑定方法 → 空值 fail-fast。
+
+        有值且无此成员时返回 None → 骨架继续（vtable ``__getattr__`` → 基类
+        fail-fast，与原语义一致）。
+        """
+        if len(args) == 0:
+            return None
+        if self._is_some and isinstance(self.payload, IbObject):
+            try:
+                return self.payload.receive(message, args)
+            except AttributeError:
+                pass
+            except InterpreterError:
+                pass  # 内层属性未命中 → 回退 Optional 自身（原语义）
+        attr_name = args[0].to_native()
+        method = self.ib_class.lookup_method(attr_name)
+        if method is not None:
+            from ..kernel.functions import IbBoundMethod
+
+            return IbBoundMethod(self, method)
+        if not self._is_some:
+            raise InterpreterError(
+                f"Operation '{message}' is not available on an empty Optional",
+                error_code="RUN_ATTRIBUTE_ERROR",
+            )
+        return None
 
     def _eq(self, other: Any) -> bool:
         if not self._is_some:
