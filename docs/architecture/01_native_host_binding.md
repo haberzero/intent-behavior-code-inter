@@ -95,26 +95,58 @@ Python 包必经 `_spec.py`（即本方向要推翻的）。**
 
 ### 3.1 语法形态（§四裁决点 1）
 
-**倾向**：复用既有 `import` 关键字，新增"宿主绑定"形态（区别于普通模块 import）。
+**决策**：复用既有 `import` 关键字，新增"宿主绑定"形态：`import python "pkg" as lib`
+（`python` 伪模块 + 字符串模块名）。
 
-候选与裁决见 `tasks_docs/_f0_native_binding.md` §五.裁决点 1。核心考量：统一设计
-语言（`import` 已承载"引入外部内容"）vs 语义区分（宿主绑定 = 裸 Python + 用户侧
-声明绑定）。
+理由（对照 design-philosophy / user-principles）：
+1. **统一设计语言**：`import` 已承载"引入外部内容"语义，用户认知连续；独立的
+   `host`/`bind` 语句与现有 import 形态割裂。
+2. **机制同构**：import 已走 parser→scheduler（符号注入）→VM→module_manager 成熟
+   管线，宿主绑定只新增 `python` 伪模块分支，复用静态位置约束/依赖扫描/DAG/符号注入。
+3. **语义区分**：`python` 伪模块显式标识"宿主空间导入"，字符串模块名表达"任意
+   Python 包/模块/对象"，天然支持按需精确导入。
+4. **无外部用户**：宿主绑定是全新语法，不破坏既有 .ibci 代码；即便后续调整形态，
+   迁移成本为零。风险可控，自主决策（记录于 `tasks_docs/_f0_native_binding.md`）。
 
 ### 3.2 宿主导入类型地位（§四裁决点 2）
 
-**倾向**：一等类型（可被 `impl`/协议引用），复用 `Provenance.EXTERNAL_MODULE`。
-F2 详设。
+**一等类型**，复用 `Provenance.EXTERNAL_MODULE` 轴（已存在）。宿主导入的模块/类/函数
+以一等值/类型进入 IBCI 类型系统，可被 `impl`/协议引用（F2）。
 
 ### 3.3 成员绑定机制（§四裁决点 3）
 
 **显式声明式绑定**（非自动穿透）：用户 IBCI 类/方法声明绑定 native 成员，运行时
-经 vtable/whitelist 门控。复用 `loader._validate_and_bind` 的 proxy 机制。
+经 vtable/whitelist 门控（`IbNativeObject.receive` 强制 vtable，契约外成员
+fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box + param_meta）
+机制，仅把绑定源从 `_spec.py` metadata 换为用户 IBCI 侧声明。
 
 ### 3.4 与 _spec.py 的关系（F3）
 
 既有 `_spec.py` 插件按新绑定统一/废弃/内核原生隔离，**不保留双通道**。F0-F2 期间
-既有插件路径保持不动（过渡期并存，F3 收敛为单一）。
+既有插件路径保持不动（过渡期并存），F3 收敛为单一。
+
+### 3.5 关键实现落点（已实证）
+
+| 阶段 | 落点 | 机制 |
+|---|---|---|
+| F1 | parser `core/compiler/parser/components/import_def.py` `parse_import` | 识别 `python` 伪模块 + 字符串模块名 |
+| F1 | `core/compiler/parser/parser.py:188` | import 语句入口分发 |
+| F1 | scheduler `core/compiler/scheduler.py`（import 符号注入 470-549） | 注入宿主模块符号/成员符号 |
+| F1 | `core/runtime/interpreter/module_manager.py` `import_module` | `python` 分支：裸 Python import → 用户侧绑定 |
+| F1 | `core/runtime/vm/handlers/declarations.py` `vm_handle_IbImport` | 运行时导入执行 |
+| F1 | `loader._validate_and_bind` proxy 机制 | 复用为绑定构造 |
+| F2 | `_declaration_visitors.py:86-92` `visit_IbImplDef` | impl 目标 provenance 检查（USER_DEFINED → 允许 EXTERNAL_MODULE） |
+| F2 | 协议满足检查（类自身 + impl 并集） | 加入宿主绑定成员 |
+
+**F2 机制细节（已实证）**：
+- 协议满足判定是编译期静态 spec 判定（`core/kernel/spec/registry/_protocol.py:154-170`
+  `satisfies_protocol` 三级数据驱动）。
+- 成员并集无独立合并器：impl 方法直接注入 `spec.members`（`symbol_collection_pass.py`
+  346-386），运行期水化进同一 vtable（`interpreter.py:745-781`）——F2 扩展点 =
+  `spec.members` 单一汇入点 + 封印前 vtable 注入。
+- 宿主类型最少接入：TypeDef(CLASS, module_path) 注册 + members 声明 + 运行期 IbClass
+  +（带方法体时）作用域合成；TypeRef `(head, args, module)` 三级解析
+  （`core/kernel/spec/type_ref/_base.py:112-134`）。
 
 ---
 

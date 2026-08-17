@@ -114,9 +114,46 @@ Python import → IbNativeObject/类型 + 用户侧绑定声明）。
 
 
 ### 裁决点 2：宿主导入类型地位
-（待 F2 详设，F0 仅记录方向：倾向一等类型，复用 Provenance.EXTERNAL_MODULE 轴）
+
+**倾向：一等类型**，复用 `Provenance.EXTERNAL_MODULE` 轴（core/base/enums.py:28 已存在）。
+F2 详设；关键落点已实证：`_declaration_visitors.py:86-92 visit_IbImplDef` 的 impl 目标
+限制检查（`class_spec.provenance != USER_DEFINED` → error），解除时允许
+`EXTERNAL_MODULE`（宿主类型）并配套成员表/方法体支持。
+
+**F2 机制细节（subagent 研读报告补充，已实证）**：
+- 协议满足判定是**编译期静态 spec 判定**（不看运行期 vtable）：`_protocol.py:154-170`
+  `satisfies_protocol` 三级数据驱动判定（spec 声明）。
+- **成员并集**：无独立合并器——impl 方法直接注入目标类同一张 `spec.members`
+  （`symbol_collection_pass.py:346-386`），运行期水化进同一 vtable
+  （`interpreter.py:745-781`）。F2 宿主绑定的扩展点 = `spec.members` 单一汇入点 +
+  封印前 vtable 注入。
+- impl 目标限制检查点（10 个，管线各阶段）：parser 单标识符
+  `declaration.py:311`；TypePhase 三连拒 `_declaration_visitors.py:79-99`；
+  收集期 SEM_REDEFINITION `symbol_collection_pass.py:372-380`；owned_scope 隐形硬阻塞。
+- 内置类型 fail-fast 根因：provenance 检查 + 无 AST 作用域 + IbNativeFunction/
+  IbUserFunction vtable 契约差异。
+- 宿主类型最少接入点（b）：TypeDef(CLASS, module_path) 注册 + members 声明 +
+  运行期 IbClass + （带方法体时）作用域合成。
+- TypeRef `(head, args, module)` 三级解析（`_base.py:112-134`），宿主表达 =
+  `TypeRef("JSONDecoder", module="json")`。
+- F2 落地配套清单 7 项：解除 provenance 限制、members 注入、owned_scope 合成、
+  水化目标模块键修正、self 语义、llm func 复用、协议检查零改动。
 
 ### 裁决点 3：成员绑定机制
 - 显式声明式绑定（user IBCI 类方法体经 native 句柄调用）——符合安全模型（receive 强制
   vtable 门控）。禁止自动穿透。
+
+### F1 设计问题（待定，随推进补记）
+
+1. **宿主模块对象的 vtable 来源**：裸 Python 模块无 _spec.py 契约。F1 需要"用户侧声明
+   绑定"——`import python "pkg" as lib` 后 `lib.member` 如何获得 vtable 条目？
+   - 候选 (i)：import 后跟绑定声明块（如 `{ bind: member1, member2 }`）
+   - 候选 (ii)：用户 IBCI 类方法内显式调用 `lib.member(...)`，首次访问惰性绑定
+   - 候选 (iii)：复用 impl/协议（F2 方向）
+   - 倾向：需满足"显式声明绑定、非自动穿透"。F1 最小可行 = import 时**显式声明**
+     要暴露的成员（白名单式），而非自动暴露全部。
+2. **语法形态落点**：`import python "pkg" as lib` 中 `lib` 是 IbNativeObject（模块级
+   变量）还是 IbModule？（与现有 `import json` → IbModule 形态对齐 vs 直接 IbNativeObject）
+3. **用户类持有**：`any` 字段/局部变量持 IbNativeObject（KNOWN_LIMITS 已支持），
+   方法内 `lib.member(...)` 经 vtable 调用。
 
