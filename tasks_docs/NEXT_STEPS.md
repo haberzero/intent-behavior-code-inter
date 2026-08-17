@@ -27,14 +27,17 @@
 
 ## 🔴 当前状态
 
-**主线：LLM 调用层插件化（供应商无关中间层）已完成并入 `unsafe-vibe-dev`。当前无进行中主线（等待用户指示）。**
+**主线：IBCI 原生宿主绑定重构（路线 X）——抛弃"Python 侧手写 `_spec.py` 插件"思路，改为
+用户用 IBCI 原生类型/协议/impl 绑定 Python 内容。已进入规划交接阶段，下一步从 P0 接手
+（总路线图见 `tasks_docs/ROADMAP_NATIVE_BINDING.md`；动态交接见 `HANDOFF.md` §2）。**
 
-## 下一步候选（等待用户指示，按序）
+## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. 独立专项窗口（PT-DEBT-29/30/31、PT-DECIDE-2 其它供应商思考抑制参数映射窗口、
-   PT-DECIDE-3、PT-DEBT-4/5）；
-2. 真实 LLM 压力试用扩展（VISION-3）；
-3. 文档体系持续治理（按 `docs/WRITING_GUIDE.md` + `tasks_docs/GOVERNANCE.md`）。
+1. **[主线] 按 `ROADMAP_NATIVE_BINDING.md` §三 P0→P5 推进**——
+   P0 基线/范围底稿 → P1 宿主导入一等语法 + 用户类持有 native → P2 协议/impl 扩展到宿主类型
+   → P3 插件体系重构 → P4 输入面落地（LLM provider 自定义）→ P5 架构统一与文档收敛。
+2. 支线（解阻/候补窗口）：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
+3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 

@@ -46,6 +46,13 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   书写格式全部下沉为可自定义 provider/ConfigSourceAdapter。移除旧 `ILLMProvider`
   标量协议死代码。设计要点固化于 `docs/architecture/01_principles.md` §3.7 与
   提交记录。验证：全量 pytest 3027 pass + T09 真实 LLM 8/8 PASS。
+- **IBCI 原生宿主绑定重构 · 路线 X（2026-08-17，规划交接阶段）**：用户裁定**抛弃
+  "用户在 Python 侧手写 `_spec.py` 暴露库给 IBCI"的插件思路**，改为 **IBCI 用户代码层
+  原生包装 Python 内容**——宿主导入一等语法 + 用户用 IBCI 类型/协议/impl 绑定 Python 成员
+  + `impl`/协议扩展到宿主类型 + 插件体系按新思路重构。总路线图见
+  `tasks_docs/ROADMAP_NATIVE_BINDING.md`（含现状实证/阶段 P0-P5/关键裁决点）。触发背景：
+  深度调研确认 `box()` 已能包装任意 Python 对象/可调用，但 `import X` 与 `impl` 目前仍受
+  `_spec.py`/本模块用户类限制，故需新增"用户层原生绑定"机制。
 
 ---
 

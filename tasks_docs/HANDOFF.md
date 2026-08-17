@@ -115,27 +115,32 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线**：LLM 调用层插件化已完成并入 `unsafe-vibe-dev`。当前**无进行中主线**，
-  等待用户指示下一步开发。
+- **🔴 当前主线**：**【IBCI 原生宿主绑定重构（路线 X）】**——抛弃"用户在 Python 侧手写
+  `_spec.py` 暴露库给 IBCI"的思路，改为 **IBCI 用户代码层原生包装 Python 内容**（宿主导入
+  一等语法 + 用户用 IBCI 类型/协议/impl 绑定 Python 成员 + 协议/impl 扩展到宿主类型 +
+  插件体系重按新思路重构）。此为主干任务，已进入**规划交接**阶段，下一 session 从 P0 接手
+  （详见 `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。
 - **当前代码状态**：
   - 分支 `unsafe-vibe-dev`，本地领先 `origin`（**未 push**；禁 push 硬原则，除非用户显式授权）。
-  - 内核：LLM 调用层供应商无关中间层已含于当前代码——内核只产出结构化
-    `LLMCallRequest` 委托可插拔 `LLMProvider`（`core/base/llm_protocol/`）；系统提示词
-    组装（推荐模板 `recommended.py`）、思考抑制/探测、api_config.json 书写格式（
-    `ConfigSourceAdapter` / `ProjectApiConfigAdapter`）全部下沉为可自定义实现；
-    `get_current_call_info` / idbg 暴露 `LLMCallRequest.as_dict()` 全量。
-  - 协议化大重构（receive dunder 注册表化 / 双轨收敛 / 判定链双协议化 /
-    copy·deepcopy）均已落地。
-  - 文档：docs/ 系统化重构完成；LLM 调用层中间层归属 `architecture/01_principles.md`
-    §3.7；KNOWN_LIMITS 27 节；任务控制体系正规化；全仓历史记录清洁（非记录性文档
-    零时间戳/零历史/零决策记录字眼）。
-  - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式
-    （见 `trials/_toolkit/LLM_SERVICE.md`）；provider 重构后 T09 套件 8/8 PASS。
-- **⏳ 待用户确认**：下一步开发方向——候选见 `NEXT_STEPS.md` 下一步候选；
-  完整远期规划与状态见 `PENDING_TASKS.md`。
+  - 内核：LLM 调用层供应商无关中间层已含于当前代码——`core/base/llm_protocol/`
+    （`LLMCallRequest`/`LLMCallResult`/`LLMProvider`/`ConfigSourceAdapter`/`recommended`）；
+    系统提示词组装/思考抑制/api_config.json 配置源均下沉为可自定义实现。
+  - 协议化大重构 / 双轨收敛 / 判定链双协议化 / copy·deepcopy 均已落地。
+  - 宿主能力基础：`box()` 可包装任意 Python 对象（`IbNativeObject`）/可调用（`IbNativeFunction`）；
+    `import X` 当前仍须走 InterOp 注册包（`_spec.py` 契约）或 IBCI artifact——**无裸 Python 模块
+    绑定的用户路径（这正是本主线要新增的）**。
+  - 协议/`impl` 当前仅对本模块用户类生效（`impl` 目标限本模块用户类，宿主/内置类型不支持）。
+  - 文档：docs/ 系统化重构完成；LLM 中间层归属 `01_principles.md` §3.7；任务控制正规化；
+    全仓历史记录清洁。
+  - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式（`trials/_toolkit/LLM_SERVICE.md`）；
+    provider 重构后 T09 套件 8/8 PASS。
+- **⏳ 待下一 session**：按 `ROADMAP_NATIVE_BINDING.md` §三 P0-P5 推进；关键裁决点见该文档 §四
+  （宿主绑定语法形态 / 宿主类型在类型系统地位 / 旧 `_spec.py` 插件归宿 / 输入面是否必经 P1-P2）。
+  远期规划与状态见 `PENDING_TASKS.md`。
 
 ### 2.2 交接检查单（当前有效）
 
+- [ ] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [ ] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
 - [ ] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/VISION）
 - [ ] 读 `GOVERNANCE.md`（任务控制治理章程：文档职责/书写模板/生命周期/红线）
