@@ -46,14 +46,20 @@ main.py --plugin/ibci_sdk/__ibcext_axiom__ 死协议/spec_builder 死代码/幽�
 isolation plugins/T01 plugins，write_user_plugin → extend_with_host_binding，docs 改 F3
 事实）。F3-4：残留扫描 `_spec.py`/`__ibcext_vtable__`/discovery 引用清零（功能面零残留，
 仅历史注释）。三阶段全量 pytest 零回归。F3-0 bind 默认参数已裁决跳过（默认值放 .ibci
-包装层）。**下一步 = F4**。分支 `exp/plugin-refactor-f3`（达零风险直接合并 unsafe-vibe-dev
-标准，未触发合并前禁 push）。
+包装层）。**F4（Provider 自定义经宿主绑定统一）已完成**：用户经
+`import python "<mod>" as lib: bind provider` 声明实现 `LLMProvider` 契约的自定义
+provider，`ai.set_provider(lib.provider)` 注册为激活 `llm_provider`（HIGH 优先级覆盖
+内置默认 RecommendedProvider）；R 期"改 provider_impl.py"临时形态拆除（provider_impl.py
+降为内置默认实现）；`docs/howto/modify_llm_provider.md` 改写为宿主绑定通道；用户
+2026-08-18 授权推翻 R0-R2"不新增语言级注册 API"裁定。全量 pytest 2956 passed /
+1 skipped 零回归 + 自定义 provider e2e。分支 `exp/provider-bind-f4`。**下一步 = F5
+（架构统一/文档收敛 + 内核自举 + 缓存/JIT 规划）**。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·远期，当前] F4 Provider 自定义经新绑定统一**——用 F1-F3 的宿主绑定 `bind`
-   统一 LLM provider 自定义（替代 provider 文件临时修改分发，指向 ROADMAP_NATIVE_BINDING
-   §三 F4），再 F5 架构统一/自举/缓存 JIT。
+1. **[主线·远期，当前] F5 架构统一/文档收敛**——补齐原生绑定语法/协议/用户 IBCI 库
+   文档；评估并落地档 A（缓存预编译）→ 档 B（真 JIT）；内核自举（内置契约再表达为
+   bind 声明）；隔离/反射能力规划评估（ROADMAP_NATIVE_BINDING.md §三 F5）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 

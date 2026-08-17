@@ -177,10 +177,16 @@
 - 既有 `_spec.py` 插件按新绑定统一 / 废弃 / 内核原生隔离；**不保留双通道**。
 - **验证门**：全量 pytest 零回归 + 既有插件用例按新语义重构。
 
-### F4 — Provider 自定义经新绑定统一（接 R 期留位）
-- `thinking_mode`/`ConfigSourceAdapter`/provider 注册用 F1-F3 新绑定实现（R 期统一位），
-  逆 R 期的"改内核文件"临时态，成为"成熟现代方案"。
-- **验证门**：全量 pytest 零回归 + 自定义 provider e2e + T09 真实 LLM 复跑。
+### F4 — Provider 自定义经新绑定统一（已完成，exp/provider-bind-f4）
+- 用户经宿主绑定提供自定义 provider，`ai.set_provider(lib.provider)` 注册为激活
+  `llm_provider`（HIGH 优先级覆盖内置默认 RecommendedProvider）；provider 能力经
+  capability_registry 惰性 get 使运行期切换生效（内核 LLM 执行器不改架构）。
+- 逆 R 期"改内核 provider_impl.py"临时形态：已拆除该文档指导形态（provider_impl.py
+  降为内置默认实现，不手动改）；`docs/howto/modify_llm_provider.md` 改写为宿主绑定
+  通道。用户面自定义唯一边 = 宿主绑定 + set_provider。
+- **验证门达成**：全量 pytest 零回归（2956 passed / 1 skipped）+ 自定义 provider e2e
+  （tests/e2e/test_provider_host_binding.py，内核实际调用用户 provider）+ T09 真实 LLM
+  复跑（开发环境无真实 LLM 端点，记录留待环境可行时）。
 
 ### F5 — 架构统一 / 文档收敛（含内核自举 + 缓存/JIT / 隔离改造 / 反射能力的规划评估）
 - 补齐原生绑定语法/协议/用户 IBCI 库文档；评估并落地档 A（缓存预编译）→ 档 B（真 JIT）。
@@ -201,7 +207,9 @@
    → 影响破坏面。
 4. **provider 自定义（F4）与 R 期"改内核文件"临时态**：R 期是健康的近期脚手架（Python 源码分发
    下合理），F4 用原生绑定统一后**彻底拆除**该临时态——这两者不是双通道（R 期是近期唯一的用户面，
-   F4 是远期替换），但须保证移交时不并存。
+   F4 是远期替换），但须保证移交时不并存。**→ 已落定（F4，2026-08-18）**：用户授权新增 bind-based
+   provider 注册 API 并统一 F4；`ai.set_provider` 落地，R 期"改 provider_impl.py"文档形态拆除
+   （provider_impl.py 降为内置默认实现，用户面唯一边 = 宿主绑定 + set_provider），不并存。
 
 ---
 
@@ -267,14 +275,23 @@
     落定 = 删除（不保留双通道、降级为新绑定编译目标）。达分支合并"零风险直接合并
     unsafe-vibe-dev"标准（全量 pytest 零回归 + F3-1 结构探针 + F3-2/F3-3 独立 subagent
     复核 + F3-4 残留扫描，无对外契约/架构级风险）——合并仍需用户授权。
-  - **F4 待启动**：Provider 自定义经 F1-F3 新绑定统一，逆 R 期"改内核文件"临时态。
+  - **F4 已完成（`exp/provider-bind-f4`）**：Provider 自定义经宿主绑定统一。用户经
+    `import python "<mod>" as lib: bind provider` 声明实现 `LLMProvider` 契约的 provider，
+    `ai.set_provider(lib.provider)` 注册为激活 `llm_provider`（HIGH 优先级覆盖内置默认
+    `RecommendedProvider`）；内核 LLM 执行器经 capability_registry 惰性 get 使切批生效，
+    不改内核架构。R 期"改 provider_impl.py"临时文档形态拆除（provider_impl.py 降为内置
+    默认实现，不手动改）；`docs/howto/modify_llm_provider.md` 改写为宿主绑定通道。
+    **用户 2026-08-18 授权**推翻 R0-R2"不新增语言级注册 API"裁定（WORKLOG 长期裁定）。
+    验证：全量 pytest 2956 passed / 1 skipped 零回归 + 自定义 provider e2e
+    `tests/e2e/test_provider_host_binding.py`（内核实际调用用户 provider）+ 契约
+    fail-fast + 默认 provider 保持。
 - **近期未开放用户自定义语言级 API**：`register_provider`/`set_config_source` 等 WIP
-  已回退；近期限定"修改/替换 `ibci_modules/ibci_ai/provider_impl.py`"这一条路径
-  （R2 文档指引）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位）。
-- **触发此两段式规划**：用户裁定近期聚焦 provider 分离（Python 源码分发，改内核文件），
-  远期才做原生绑定成熟方案；任何方向都要求彻底、不留脚手架。
-- **交接**：远期 F0-F3 全部完成（宿主导入 + 宿主类型绑定 + 插件体系重构），F4 待启动。
-  下一步候选见 `tasks_docs/NEXT_STEPS.md`。
+  已回退；F4 已由用户授权新增 `ai.set_provider`（bind-based provider 注册出口），
+  统一 provider 自定义。设计要点保留于 git 历史 + 本路线图。
+- **触发此两段式规划**：用户裁定近期聚焦 provider 分离，F4 起原生绑定统一 provider
+  自定义（成熟现代方案）。
+- **交接**：远期 F0-F4 全部完成（宿主导入 + 宿主类型绑定 + 插件体系重构 + provider
+  自定义统一），F5 待启动。下一步候选见 `tasks_docs/NEXT_STEPS.md`。
 
 ---
 

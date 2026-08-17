@@ -182,7 +182,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   附 F3 先例 bind-based 用户库推迟 F5）。**用户选择"现在做 F4（授权推翻不新增注册 API）"**
   ——本次新增 bind-based provider 注册出口/api、统一 F4，推翻 R0-R2"不新增语言级注册
   API"裁定。此为有拍板依据的破坏性/对外契约变更授权。F4 设计底稿
-  `tasks_docs/_f4_provider_bind.md`（用后即删）。
+  `tasks_docs/_f4_provider_bind.md`（F4 完成后删除，决策沉 docs/）。
+- **F4 完成（2026-08-18，exp/provider-bind-f4）**：Provider 自定义经宿主绑定统一。
+  **机制**：内核 LLM 执行器 `llm_callback` 每次从 capability_registry 惰性读
+  `llm_provider` 能力；用户经 `import python "<mod>" as lib: bind provider` 声明实现
+  `LLMProvider` 契约的 provider，`ai.set_provider(lib.provider)` 以 HIGH 优先级注册为
+  激活 provider（覆盖内置默认 `RecommendedProvider`）——运行期切换立即生效，不改内核
+  LLM 执行器架构。SPIKE 发现：`CapabilityRegistry.replace()` 不能同等优先级换 primary
+  （只移除同 plugin_id），须以 `HIGH` 优先级 `register()`（能力表优先级主选，单一
+  primary、非双通道）。**实现**：`ai.set_provider`（契约校验 fail-fast：缺
+  call/stream/get_retry/is_auto_intent_injection_enabled/get_current_call_info 即拒）；
+  内置 spec 加 `set_provider` 成员。**拆除 R 期临时态**：`provider_impl.py` 降为内置
+  默认实现（不手动改）；`docs/howto/modify_llm_provider.md` 由"改 provider_impl.py"
+  改写为宿主绑定通道；01_principles §3.7"自定义分两段/不提前实现用户入口"改为
+  "自定义已统一（F4）"。**验证**：全量 pytest 2956 passed / 1 skipped 零回归 +
+  `tests/e2e/test_provider_host_binding.py`（自定义 provider 被内核实际调用非 stub +
+  契约 fail-fast + 默认 provider 保持）。设计底稿沉 docs/architecture/01_principles.md
+  §3.7 + docs/howto/modify_llm_provider.md。
 
 
 ---

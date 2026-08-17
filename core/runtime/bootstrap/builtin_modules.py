@@ -153,6 +153,11 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
                 ParamDescriptor(name="sys_prompt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
                 ParamDescriptor(name="user_prompt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
             ]),
+        "set_provider": MethodMemberSpec(name="set_provider", kind="method", type_ref=TypeRef.of("void"), param_types=[
+                TypeRef.of("any")
+            ], return_type=TypeRef.of("void"), param_descriptors=[
+                ParamDescriptor(name="provider", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"))
+            ]),
     })
 
 

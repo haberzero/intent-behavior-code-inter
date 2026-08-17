@@ -13,8 +13,10 @@
 - 意图管理：``set_global_intent`` 等（经 capabilities 的 ``intent_manager``）；
 - 内省：``get_current_call_info``（优先内核 LLM 执行器主线程单写槽）。
 
-**自定义 LLM 底层**：近期分发路径为修改/替换 ``provider_impl.py``（推荐 provider，
-kernel-free 单一可替换单元）；本宿主文件不改（改它会破坏 ``ai`` 模块的 IBCI 集成）。
+**自定义 LLM 底层（F4 统一）**：经宿主绑定声明自定义 provider 并 ``ai.set_provider``
+注册为激活的 llm_provider（HIGH 优先级覆盖内置默认 :class:`RecommendedProvider`）；
+``provider_impl.py`` 仅作**内置默认实现**保留（未 set_provider 时生效），不再是用户
+自定义入口。本宿主文件不改（改它会破坏 ``ai`` 模块的 IBCI 集成）。
 """
 
 import os
@@ -24,6 +26,7 @@ from core.extension.ibcext import ExtensionCapabilities, IbStatefulPlugin
 from core.kernel.issue import InterpreterError
 from core.kernel.path import PathValidator
 from core.runtime.capability_registry import CapabilityRegistry
+from core.runtime.objects.kernel.base import unbox
 
 from core.base.llm_protocol import LLMCallRequest, OutputContract
 from core.base.llm_protocol.llm_call import PromptSlot
@@ -44,8 +47,8 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
     - **用户 API**：``set_config`` / ``probe_model`` / ``load_project_config`` /
       ``register_model`` / 意图方法 / ``run_batch`` 等经 spec 元数据供 IBCI 脚本调用
       （继承自推荐 provider 或本文件胶水）。
-    - **可插拔**：用户自定义 LLM 底层 = 修改/替换 ``ibci_modules/ibci_ai/provider_impl.py``
-      （推荐 provider，kernel-free）；本宿主保持 IBCI 集成不变。
+    - **可插拔**：用户自定义 LLM 底层 = 经宿主绑定提供自定义 provider 并
+      ``ai.set_provider`` 注册（`provider_impl.py` 仅为内置默认实现）。
     """
 
     def __init__(self):
@@ -70,8 +73,56 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
 
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
-        # 向能力注册表注册自己为 LLM Provider（.call/.stream 契约）
+        # 向能力注册表注册自己为 LLM Provider（.call/.stream 契约）。
+        # 默认 NORMAL 优先级；F4 `set_provider` 可经宿主绑定的自定义 provider
+        # 以更高优先级覆盖之（见 set_provider）。
         capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
+
+    # ------------------------------------------------------------------ #
+    # 自定义 provider 注册（F4：宿主绑定统一 provider 自定义）
+    # ------------------------------------------------------------------ #
+
+    def set_provider(self, provider: Any) -> None:
+        """注册自定义 LLM provider（宿主绑定对象 → 激活 provider）。
+
+        F4 统一 provider 自定义：用户在项目里写一个 Python 类实现
+        :class:`LLMProvider` 契约（``call`` / ``stream`` / ``get_retry`` /
+        ``is_auto_intent_injection_enabled`` / ``get_current_call_info``），
+        导出为模块级实例（如 ``provider = MyProvider()``），经宿主绑定声明后
+        ``ai.set_provider(lib.provider)`` 把它注册为**激活的** llm_provider
+        （以 HIGH 优先级覆盖默认 :class:`RecommendedProvider`）。
+
+        ``provider`` 是宿主绑定的原生对象（IBCI 侧 `bound` 值，经调用边界拆箱
+        为原生 Python 实例）。契约校验缺失即 fail-fast（不静默降级）；未调用本
+        方法时默认 provider（内置 ``RecommendProvider``）生效。
+        """
+        # 调用边界拆箱：bound 原生对象 → 原生 Python 实例（幂等：原生值原样透传）
+        provider = unbox(provider)
+        required = (
+            "call",
+            "stream",
+            "get_retry",
+            "is_auto_intent_injection_enabled",
+            "get_current_call_info",
+        )
+        missing = [m for m in required if not callable(getattr(provider, m, None))]
+        if missing:
+            raise InterpreterError(
+                f"ai.set_provider: 自定义 provider 缺少 LLMProvider 契约方法: {missing}",
+                None,
+            )
+        if self._capabilities is None:
+            raise InterpreterError(
+                "ai.set_provider: 能力上下文不可用（ai 模块未 setup）",
+                None,
+            )
+        # HIGH 优先级覆盖默认 provider（capability_registry 主选 = 最高优先级，
+        # 惰性 get 使下次 LLM 调用起生效；单一 primary，非双通道）。
+        from core.runtime.capability_registry import CapabilityPriority
+        self._capabilities.expose(
+            CapabilityRegistry.CAP_LLM_PROVIDER, provider,
+            priority=int(CapabilityPriority.HIGH),
+        )
 
     # ------------------------------------------------------------------ #
     # 内省（优先内核 LLM 执行器主线程单写槽，回退 provider 本地槽）

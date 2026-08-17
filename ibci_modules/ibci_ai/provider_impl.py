@@ -1,20 +1,20 @@
-"""``provider_impl`` —— 推荐 LLM provider 实现（纯 provider，kernel-free）。
+"""``provider_impl`` —— 推荐 LLM provider 实现（内置默认，纯 provider，kernel-free）。
 
-:class:`RecommendedProvider` 是 IBCI 的**推荐 provider 实现**：实现供应商无关契约
+:class:`RecommendedProvider` 是 IBCI 的**内置默认 provider 实现**：实现供应商无关契约
 :class:`LLMProvider`（``core.base.llm_protocol``），把一次 :class:`LLMCallRequest`
 组装为 OpenAI 兼容 payload（LM Studio + Qwen 思考抑制适配），并把供应商响应解析
 为 :class:`LLMCallResult`。
 
-定位与替换方式（近期分发 = Python 源码直接分发）：
+定位（F4 统一后）：
 
-- 本文件是 **kernel-free** 的单一可替换单元：只依赖 ``core.base.llm_protocol``
+- 本文件是 **kernel-free** 的单一实现：只依赖 ``core.base.llm_protocol``
   （最底层契约）与同目录 kernel-free 模块（``mock_scenario`` / ``config_normalize``），
   **不导入** ``core.kernel`` / ``core.runtime`` / ``core.extension``。
-- 用户自定义 LLM 底层 / 供应商 / 配置书写格式时，**改这一个文件**（保持
-  :class:`LLMProvider` 契约方法：``call`` / ``stream`` / ``probe`` /
-  ``get_retry`` / ``is_auto_intent_injection_enabled`` / ``get_current_call_info``，
-  以及宿主依赖的配置应用面：``apply_config`` / ``set_config`` / ``set_mock_mode`` /
-  ``register_model`` 等），或整体替换为自写 provider 类。
+- 它作为**内置默认 provider**：未经 ``ai.set_provider`` 注册自定义 provider 时生效。
+- **用户自定义 LLM 底层**的正式通道 = 宿主绑定（F4）：用户自写实现 :class:`LLMProvider`
+  契约的 provider 类，经 ``import python "<mod>" as lib: bind provider`` + 
+  ``ai.set_provider(lib.provider)`` 注册为激活 provider（覆盖本默认实现）。写作参考
+  `docs/howto/custom_provider_host_binding.md`。
 - IBCI 模块胶水（``run_batch`` / ``stream_call`` / ``stream_channel`` / 意图方法 /
   断点状态 / 配置加载入口）在宿主 ``ibci_modules/ibci_ai/core.py`` 的
   ``AIPlugin(RecommendedProvider, IbStatefulPlugin)``——不改本文件。

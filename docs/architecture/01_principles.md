@@ -176,17 +176,18 @@ IBC-Inter 把 LLM 当作一个可调用的"表达式/函数"来对待：内核�
 - 内省/调试（`get_current_call_info` / idbg）暴露 `LLMCallRequest.as_dict()` 全量
   + provider 回填的实际 `sys_prompt` / `response`。
 
-**自定义分两段**：
+**自定义已统一（F4）**：LLM 调用经 `llm_provider` 能力接入——内核 LLM 执行器每次
+调用从能力注册表读当前激活 provider，再调 `call()`/`stream()`。内置默认 provider 为
+`ibci_modules/ibci_ai/provider_impl.py` 的 `RecommendedProvider`（无自定义时生效）。
 
-- **近期（当前分发形态 = Python 源码直接分发）**：自定义 LLM 底层 = 修改/替换
-  内核推荐 provider 文件 `ibci_modules/ibci_ai/provider_impl.py`（`RecommendedProvider`，
-  kernel-free、自包含、可整文件替换），或替换配置源适配器
-  `config_source_adapter.py`；操作指南见 `docs/howto/modify_llm_provider.md`。
-  `core.py` 宿主（IBCI 胶水）保持内置不变。
-- **远期（原生宿主绑定）**：以 IBCI 用户层原生绑定 Python 内容的方式统一
-  provider 自定义（宿主导入 + 类型/协议绑定），取代"改内核文件"的近期形态；
-  当前仅保持接口位（`LLMCallRequest.thinking_mode`、`ConfigSourceAdapter` 抽象），
-  不提前实现用户入口。
+- **用户自定义 LLM 底层**（正式通道，F4）：写实现 `LLMProvider` 契约的 Python 类，
+  经宿主绑定 `import python "my_provider" as lib: bind provider` 声明，并
+  `ai.set_provider(lib.provider)` 注册为激活 provider（HIGH 优先级覆盖默认）。
+  无需修改任何内核/内置文件。操作指南见 `docs/howto/modify_llm_provider.md`。
+- **`provider_impl.py` 不手动改**：它仅是内置默认实现；用户面自定义走宿主绑定 +
+  `set_provider`（能力表优先级单选 primary，不并存双通道）。
+- 配置源适配器 `config_source_adapter.py` 仍可整文件替换（用户自写 `ConfigSourceAdapter`）。
+- `core.py` 宿主（IBCI 胶水）保持内置不变。
 
 ---
 
