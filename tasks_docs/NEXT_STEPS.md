@@ -35,8 +35,12 @@ lexer/parser/依赖扫描/scheduler/语义/运行时/VM），显式声明式绑�
 CLASS + per-instance vtable + impl 补充/协议满足）。F2 独立复核整改闭环已合并
 （65414738），全量 pytest 3053 passed / 1 skipped。设计底稿
 `docs/architecture/01_native_host_binding.md` §五 + 语法文档
-`docs/syntax/11_modules.md` §11.10。**F3（插件体系重构）是当前下一步**：废弃 _spec.py、
-不保留双通道（研读报告已完成，见 `tasks_docs/_f3_plugin_refactor.md`）。
+`docs/syntax/11_modules.md` §11.10。**F3（插件体系重构）进行中，当前为交接暂停点**：
+废弃 _spec.py、不保留双通道（方案已定稿于 `tasks_docs/_f3_plugin_refactor.md`）——
+F3-1 内置 10 模块内联 TypeDef spec（集中 kernel_native_modules.py，含 file 挪出 engine）
+为当前步骤；F3-0 bind 默认参数已裁决跳过（默认值放 .ibci 包装层）；F3-2 拆发现/加载
+通道；F3-3 测试/examples/trials/docs 迁移；F3-4 残留扫描。分支
+`exp/plugin-refactor-f3`，探针 A1 已印证 loader 类实例路径可行。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
