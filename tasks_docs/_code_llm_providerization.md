@@ -44,9 +44,18 @@
 
 ## 验证
 
-- 全量 pytest 零回归（`~/miniconda3/envs/ibci/bin/python -m pytest tests/`）。
-- 真实 LLM 复跑（本地 qwen3.6-35b-a3b 非思考模式，127 例基线）分类一致性。
-- 复核：无旧 `ILLMProvider`/旧拼串残留（`grep` 双通道扫描）。
+- 全量 pytest 零回归：**3027 passed / 1 skipped**（基线 3007 collected 全部通过；
+  含新契约测试 + 既有 provider 测试同义迁移）。
+- 真实 LLM 复跑：本地 qwen3.6-35b-a3b 非思考模式，T09 协议化影响套件 8/8 PASS
+  （N1-N8 含并发 dispatch / llmexcept 真实重试 / from_prompt 类解析 / 类内 LLM 方法）。
+- 复核：无旧 `ILLMProvider`/旧拼串残留（`grep` 双通道扫描零命中）；移除 `ILLMProvider`
+  死代码。
+
+## 完成状态
+
+- 批 1（契约层）`efd3c6f4` 已合入 unsafe-vibe-dev。
+- 批 2+3（内核收口 + provider 插件化）`9891e7e3` 在独立分支。
+- 批 4（内省对齐 + 文档 + PT 登记）待复核放行后随分支更新。
 
 ## 分支政策
 

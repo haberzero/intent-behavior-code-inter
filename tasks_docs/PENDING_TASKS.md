@@ -10,7 +10,7 @@
 
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
-| FEAT（功能） | 3 | 1 | 0 | 语言/工具链功能愿景 |
+| FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景 |
 | DEBT（技术债） | 5 | 1 | 0 | 架构缺陷与清理项 |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
@@ -42,14 +42,15 @@
 
 ### PT-FEAT-14 LLM 调用接口通用化 / 供应商感知配置
 
-- **状态**：shelved｜**域**：FEAT｜**优先级**：P0（恢复后）
+- **状态**：done｜**域**：FEAT｜**优先级**：P0（恢复后）
 - **动机**：`AIPlugin` 硬编码 LM Studio 专用参数（`enable_thinking=false`、
   `chat_template_kwargs` extra_body），自定义 OpenAI 兼容 API 开发者无法干净接入。
 - **成因**：真实 LLM 专项试用暴露的接口设计问题。
-- **搁置原因**：用户裁定先做 LLM 全能力真实压力试用；试用主线被
-  协议化重构主线接替。理论清理完成后回到本项。
-- **当前理解**：请求参数下沉为 provider/model 级配置，单一请求构造权威；与
-  PT-DECIDE-2（供应商感知思考禁用）收敛。
+- **搁置原因**：（已解封）由 LLM 调用层插件化主线吸收。
+- **当前理解**：已完成——新 `LLMProvider` / `LLMCallRequest` 供应商无关契约把
+  请求组装/响应解析/思考字段映射全部下沉到可插拔 provider 实现（推荐 provider
+  保留 LM Studio + Qwen 思考抑制适配）；api_config.json 书写格式经
+  `ConfigSourceAdapter` 可插拔。与 PT-DECIDE-2 收敛。
 
 ### PT-FEAT-7 二层 IR 路线评估
 
@@ -172,10 +173,12 @@
   下无效的机制问题仍在——IBCI 侧需按供应商参数形态实现思考禁用/检测失败覆盖，
   对未应用界面预设的部署环境有效。
 - **成因**：真实 LLM 试用环境调查实证（LM Studio model.yaml 机制）。
-- **当前理解**：待办①本机启用官方配置验证；②逐供应商参数形态探测
-  （LM Studio/llama.cpp `chat_template_kwargs.enable_thinking`、vLLM、Ollama、
-  OpenAI Responses `reasoning.effort`、Anthropic `thinking.budget_tokens`、
-  Gemini `thinkingConfig`）+ 失败警告；与 PT-FEAT-14 收敛。
+- **当前理解**：机制边界已由 LLM 调用层插件化定案——思考禁用/探测是**provider 侧
+  能力**，`LLMCallRequest.thinking_mode` 是供应商无关声明，各供应商字段映射
+  （LM Studio/llama.cpp `enable_thinking`、vLLM、Ollama、OpenAI `reasoning.effort`、
+  Anthropic `thinking.budget_tokens`、Gemini `thinkingConfig`）在各自 provider 实现
+  内完成。推荐 provider 已含 LM Studio + Qwen 思考抑制适配；其它供应商参数映射
+  为按需求的后续实现窗口（默认 provider 覆盖缺口依旧）。与 PT-FEAT-14 收敛。
 
 ### PT-DECIDE-3 LLM prompt 协议家族待决项
 

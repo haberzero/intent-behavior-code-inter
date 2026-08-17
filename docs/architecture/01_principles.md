@@ -1,4 +1,4 @@
-﻿# IBC-Inter 架构原则与设计理念
+# IBC-Inter 架构原则与设计理念
 
 > 本文档是 IBC-Inter 项目的核心架构参考文档，包含设计理念、层级架构、设计原则等关键内容。
 > 供未来参与 IBC-Inter 项目的开发者进行架构对齐使用。
@@ -76,7 +76,7 @@ runtime/ (只下不上，通过artifact_rehydrator还原)
 
 | 层级 | 职责 | 关键文件 |
 |------|------|----------|
-| **base** | 原子概念：位置信息、严重级别、调试基础设施 | source_atomic.py, debugger.py |
+| **base** | 原子概念：位置信息、严重级别、调试基础设施、LLM 供应商无关契约 | source_atomic.py, llm_protocol/ |
 | **kernel** | 核心语言概念：AST、符号、统一类型描述系统、公理、异常 | symbols.py, spec/, axioms/ |
 | **compiler** | 编译：词法分析、语法分析、语义分析、序列化 | lexer/, parser/, semantic/, serialization/ |
 | **runtime** | 解释执行：解释器、宿主服务、插件执行 | interpreter/, host/, objects/ |
@@ -147,7 +147,36 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 
 ---
 
-## 四、依赖规则
+### 3.7 LLM 调用层插件化（供应商无关中间层）
+
+IBC-Inter 把 LLM 当作一个可调用的"表达式/函数"来对待：内核只关心**调用 LLM
+这个抽象动作**，不关心任何具体供应商（OpenAI / Anthropic / Ollama / LM Studio /
+本地自定义格式）的请求格式、配置书写方式或思考模式字段。
+
+为实现这一边界，内核与外部 LLM 调用服务（AI 插件）之间有一个**供应商无关的
+中间层** `core/base/llm_protocol/`（base 层，只出不进）：
+
+| 契约 | 内容 | 方向 |
+|------|------|------|
+| `LLMCallRequest` | 一次完整 LLM 调用的结构化请求：意图栈（active/global/merged 原始三层）、输出契约（期望类型 / `__outputhint_prompt__` 产物）、提示词语义槽、user 内容、目标模型、重试历史 | 内核 → provider |
+| `LLMCallResult` | 供应商无关的响应：`content` / 结构化 `reasoning` / `thinking_detected` / `provider_meta`（含实际发送的 `sys_prompt`） | provider → 内核 |
+| `LLMProvider` | 抽象调用协议：`call(request)` / `stream(request)` / `get_retry` / `probe` | 内核调 provider |
+| `ModelSpec` / `LLMConnectionConfig` / `ConfigSourceAdapter` | 供应商无关逻辑配置 + 可插拔配置源适配器（api_config.json 书写格式） | 配置层 |
+| `recommended` 模块 | **推荐**系统提示词组装模板（把语义槽拼为提示词） | provider 可选用/覆盖 |
+
+**设计立场**：
+
+- 内核不拼装系统提示词、不触碰供应商 SDK/字段、不规定 api_config.json 的书写
+  格式——只产出结构化 `LLMCallRequest` 委托给 provider。
+- provider（AI 插件）负责：把 `LLMCallRequest` 组装成所属供应商 payload、把
+  供应商响应解析为 `LLMCallResult`、思考模式/探测的供应商字段映射。
+- 系统提供"推荐 provider"（OpenAI/LM Studio + Qwen 思考抑制适配）与"推荐
+  api_config.json 适配器"；用户可自写 `LLMProvider` / `ConfigSourceAdapter`
+  实现自定义请求格式、提示词组装与配置书写方式（**推荐格式可被覆盖，非定死**）。
+- 内省/调试（`get_current_call_info` / idbg）暴露 `LLMCallRequest.as_dict()` 全量
+  + provider 回填的实际 `sys_prompt` / `response`。
+
+---
 
 ### 4.1 核心依赖原则
 

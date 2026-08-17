@@ -27,13 +27,18 @@
 
 ## 🔴 当前状态
 
-**主线：内核协议化收尾与双轨收敛（阶段 A-D）已完成，理论问题清理完毕。当前无进行中主线（等待用户指示）。**
+**主线：LLM 调用层插件化（供应商无关中间层）已执行完成**——内核收口产 `LLMCallRequest`
+委托可插拔 provider，系统提示词组装/思考抑制/api_config.json 格式下沉为推荐实现可覆盖。
+当前在独立分支 `exp/llm-providerization`（全量 pytest 3027 pass + T09 真实 LLM 8/8 PASS），
+待复核放行后手动合入 `unsafe-vibe-dev`。
 
 ## 下一步候选（等待用户指示，按序）
 
-1. 独立专项窗口（PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5）；
-2. 真实 LLM 压力试用扩展（VISION-3）；
-3. 文档体系持续治理（按 `docs/WRITING_GUIDE.md` + `tasks_docs/GOVERNANCE.md`）。
+1. 复核放行并合入 LLM 调用层插件化（本主线收尾）；
+2. 独立专项窗口（PT-DEBT-29/30/31、PT-DECIDE-2 供应商思考抑制实现窗口、PT-DECIDE-3、
+   PT-DEBT-4/5）；
+3. 真实 LLM 压力试用扩展（VISION-3）；
+4. 文档体系持续治理（按 `docs/WRITING_GUIDE.md` + `tasks_docs/GOVERNANCE.md`）。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 
