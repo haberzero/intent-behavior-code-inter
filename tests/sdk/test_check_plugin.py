@@ -5,11 +5,11 @@ Unit tests for ibci_sdk.check module.
 
 Coverage:
   - CheckResult data structure
-  - check_plugin on valid plugins (ibci_math, ibci_json, etc.)
   - check_plugin on invalid/missing directories
   - check_plugin detects missing _spec.py
   - check_plugin detects missing methods
   - check_plugin detects IbStatefulPlugin incomplete implementations
+  - F3-1: ibci_modules install dirs are builtin modules, not user plugins
 """
 
 import os
@@ -58,26 +58,32 @@ class TestCheckResult:
 
 
 # ---------------------------------------------------------------------------
-# 2. Valid plugin checks (existing ibci_modules)
+# 2. ibci_modules 安装目录不再是用户插件（F3-1 语义）
 # ---------------------------------------------------------------------------
 
-class TestCheckValidPlugins:
+class TestBuiltinDirsNotUserPlugins:
+    """F3-1 起 ibci_modules 安装包是内核内置模块（spec 内联于 kernel），不再携带 _spec.py，
+    因此也不是用户插件目录；SDK 用户插件检查（check_plugin）现正确报告其缺 _spec.py。
+    SDK 的 _spec 相关面整体删除排入 F3-2。"""
+
     @pytest.mark.parametrize("plugin_name", [
         "ibci_math", "ibci_json", "ibci_time", "ibci_schema",
     ])
-    def test_non_invasive_plugins_pass(self, plugin_name):
+    def test_builtin_dir_not_a_user_plugin(self, plugin_name):
         plugin_dir = os.path.join(MODULES_DIR, plugin_name)
         if not os.path.isdir(plugin_dir):
             pytest.skip(f"Plugin {plugin_name} not found")
         result = check_plugin(plugin_dir)
-        assert result.ok, f"{plugin_name} failed: {result.errors}"
+        assert not result.ok
+        assert any("_spec.py not found" in e for e in result.errors)
 
-    def test_ibci_net_passes(self):
+    def test_ibci_net_not_a_user_plugin(self):
         plugin_dir = os.path.join(MODULES_DIR, "ibci_net")
         if not os.path.isdir(plugin_dir):
             pytest.skip("ibci_net not found")
         result = check_plugin(plugin_dir)
-        assert result.ok, f"ibci_net failed: {result.errors}"
+        assert not result.ok
+        assert any("_spec.py not found" in e for e in result.errors)
 
 
 # ---------------------------------------------------------------------------

@@ -43,7 +43,7 @@ from core.kernel.blueprint import CompilationArtifact
 from core.kernel.issue import CompilerError
 from core.kernel.issue import InterpreterError
 from core.kernel.symbols import VariableSymbol, SymbolKind
-from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC, TypeDef, MethodMemberSpec, TypeRef, TypeKind, ParamDescriptor
+from core.kernel.spec import INT_SPEC, STR_SPEC, FLOAT_SPEC, BOOL_SPEC, ANY_SPEC
 from core.runtime.interfaces import IInterpreterFactory, ServiceContext, IKernelOrchestrator
 from core.runtime.interfaces import IExecutionContext
 from core.runtime.host.isolation_policy import IsolationPolicy
@@ -56,7 +56,7 @@ from core.base.diagnostics.codes import KDIAG_RUNTIME_COLLECT_SKIP
 from core.extension.auto_discovery import AutoDiscoveryService
 
 
-from core.base.enums import RegistrationState, Provenance, Visibility
+from core.base.enums import RegistrationState
 
 # collect() 时跳过的 IBCI 类型名集合（函数/行为/可调用实例等不可序列化为原生 Python 值）
 _COLLECT_SKIP_TYPES: frozenset = frozenset({
@@ -148,54 +148,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 注入诊断发射器（kernel 层不依赖 runtime；经注入的 kernel_diagnostic
         # 发射覆盖站点的警告+事件双投影）。
         self.host_interface.set_diagnostic_emitter(kernel_diagnostic)
-        # 预注册 ai/ihost/idbg/isys 为 kernel-native 模块
-        from core.runtime.bootstrap.kernel_native_modules import register_kernel_native_modules
-        register_kernel_native_modules(self.host_interface)
-
-        # 注册 file 为 kernel-native 模块。
-        from core.runtime.modules.file_impl import FileLib
-        _FILE_MODULE_SPEC = TypeDef(
-            name="file",
-            kind=TypeKind.MODULE.value,
-            provenance=Provenance.KERNEL_NATIVE,
-            visibility=Visibility.IMPORT_GATED,
-            # `import file` also gates the disk-backed types into scope.
-            exported_types=["file_handle", "audio", "image", "video"],
-            members={
-                "open": MethodMemberSpec(
-                    name="open", kind="method", type_ref=TypeRef.of("file_handle"),
-                    param_types=[TypeRef.of("str")], return_type=TypeRef.of("file_handle"),
-                ),
-                "read": MethodMemberSpec(
-                    name="read", kind="method", type_ref=TypeRef.of("str"),
-                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("str"),
-                ),
-                "read_bytes": MethodMemberSpec(
-                    name="read_bytes", kind="method", type_ref=TypeRef.generic("list", TypeRef.of("int")),
-                    param_types=[TypeRef.of("any")], return_type=TypeRef.generic("list", TypeRef.of("int")),
-                ),
-                "write": MethodMemberSpec(
-                    name="write", kind="method", type_ref=TypeRef.of("file_handle"), mutating=True,
-                    param_types=[TypeRef.of("any"), TypeRef.of("any"), TypeRef.of("str")],
-                    return_type=TypeRef.of("file_handle"),
-                    param_descriptors=[
-                        ParamDescriptor(name="target", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
-                        ParamDescriptor(name="data", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
-                        ParamDescriptor(name="overwrite_flag", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"), has_default=True, default_value="new"),
-                    ],
-                ),
-                "exists": MethodMemberSpec(
-                    name="exists", kind="method", type_ref=TypeRef.of("bool"),
-                    param_types=[TypeRef.of("str")], return_type=TypeRef.of("bool"),
-                ),
-                "remove": MethodMemberSpec(
-                    name="remove", kind="method", type_ref=TypeRef.of("void"), mutating=True,
-                    param_types=[TypeRef.of("any")], return_type=TypeRef.of("void"),
-                ),
-            },
-        )
-        self.host_interface.register_module("file", FileLib(), metadata=_FILE_MODULE_SPEC)
-        self.host_interface.reserve_kernel_native_name("file")
+        # 预注册全部内置模块（内核原生 5 + 工具 5 + file）
+        from core.runtime.bootstrap.builtin_modules import register_builtin_modules
+        register_builtin_modules(self.host_interface)
 
         self._plugins_discovered = False
 

@@ -113,6 +113,28 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   L5（POSITIONAL_OR_KEYWORD 散落记录为已知限制，随 F3 统一绑定面收敛）。
   验证：全量 pytest 3053 passed / 1 skipped 零回归。测试
   `tests/runtime/test_host_binding.py`（F1 10 + F2 18）。
+- **远期主线 F3 定稿 + F3-1 完成（2026-08-18，exp/plugin-refactor-f3）**：
+  **F3 目标** = 废弃 Python 侧 `_spec.py` 磁盘发现/加载通道、不保留双通道，用户侧扩展
+  唯一边 = 宿主绑定 bind。**F3 定稿决策**：内置模块全部内联 TypeDef 字面量集中
+  `core/runtime/bootstrap/builtin_modules.py`（`BUILTIN_MODULE_SPECS`，内核原生 5 +
+  工具 5 + file，file 自 engine.py 挪入），Engine 构造期一次注册全部含实现；工具插件
+  实现不改（探针 A1：类实例路径可行，仅 bind 模块成员路径需模块级函数）；
+  F3-0（bind 默认参数语法）**裁定跳过**——默认值放 .ibci 包装层（IBCI 用户函数本支持
+  默认参数），bind 语法零改动；工具库归宿收敛为第三态「内联 spec 的内置模块」
+  （保 `import math` 全兼容，bind-based IBCI 标准库推迟 F5 内核自举评估）。
+  **F3-1 落地决策**：文件/函数重命名（`kernel_native_modules.py` → `builtin_modules.py`、
+  `register_kernel_native_modules` → `register_builtin_modules`——职责从"内核原生 5"扩展
+  为"全部内置模块"，命名同步，design-philosophy §八）；loader 环 2 跳过构造期已注册
+  实现模块（消除"环 1 绑定 + 环 2 再建实例重绑"双绑定，即 F3-2 删除环 2 的终点语义
+  提前落地）；去除冗余显式 `reserve_kernel_native_name`（`register_module` 对 KERNEL_NATIVE
+  provenance 元数据已内建自动 reserve，机制同构）；测试迁移（`test_kernel_native_modules.py`
+  → `test_builtin_modules.py` 含结构契约断言；`test_idbg.py` 改断言内联 spec；
+  SDK `test_check_plugin.py` 迁移至 F3 语义——ibci_modules 安装包不再算用户插件目录）。
+  验证：结构等价探针（9 模块字面量 vs 旧 discovery 路径逐字段比对等价，_spec.py 删除前
+  运行）+ 全量 pytest 3056 passed / 1 skipped 零回归。设计要点固化于
+  `tasks_docs/_f3_plugin_refactor.md`（F3 完成后沉入 docs/architecture）。
+  遗留：discovery/auto_discovery/main.py --plugin/SDK _spec 面删除 = F3-2；测试/
+  examples/trials/docs 迁移 = F3-3。
 
 
 ---

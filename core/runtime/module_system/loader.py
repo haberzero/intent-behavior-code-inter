@@ -237,6 +237,12 @@ class ModuleLoader(IModuleLoader):
                     loaded_modules.add(entry)
                     continue
 
+                # [F3-1] 构造期已注册实现的内置模块（含工具 5）由环 1 统一绑定，
+                # 环 2 不重复加载实现（消除双绑定；F3-2 删除环 2 后的终点语义）。
+                if interop.get_package(module_name) is not None:
+                    loaded_modules.add(entry)
+                    continue
+
                 module_dir = os.path.join(path, entry)
                 if not os.path.isdir(module_dir):
                     continue

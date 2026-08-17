@@ -96,3 +96,43 @@
 F3 是 F1/F2 收敛（插件体系统一到新绑定）；F4 用新绑定统一 provider 自定义
 （逆 R 期改内核文件临时态）；F5 架构统一/文档收敛 + 内核自举（内置契约再表达为 bind
 声明）+ 缓存/JIT + 隔离 + 反射。F3-1 完成后即在 unsafe-vibe-dev 同步 NEXT_STEPS/WORKLOG。
+
+## 六、F3-1 落地记录（2026-08-18，exp/plugin-refactor-f3）
+
+**完成态**：10 个 `_spec.py`（内核原生 5 + 工具 5）已删除；全部内置模块 TypeDef 字面量
+集中 `core/runtime/bootstrap/builtin_modules.py`（`BUILTIN_MODULE_SPECS`，含 file 自
+engine.py 挪入）；Engine 构造期一次注册全部 11 模块（含实现）。
+
+**相对定稿方案的偏离（均自主决策，理由见下）**：
+1. **文件/函数重命名**：`kernel_native_modules.py` → `builtin_modules.py`；
+   `register_kernel_native_modules` → `register_builtin_modules`。理由：文件职责从
+   "内核原生 5"扩展为"全部内置模块"，旧名不再反映真实内容（design-philosophy §八
+   命名统一）。波及：engine.py + 测试 import（均已同步）。
+2. **loader 环 2 跳过"构造期已注册实现"的模块**。理由：工具 5 构造期注册实现后，环 1
+   已统一 validate/bind/setup；若环 2 仍按物理目录重复加载会创建第二个实现实例并重新
+   绑定（双通道绑定）。新增 `interop.get_package(module_name) is not None → skip`——
+   即 F3-2 删除环 2 后的终点语义，现在落地消除中间态双绑定。
+3. **删除冗余显式 `reserve_kernel_native_name` 调用**。理由：`HostInterface.register_module`
+   对 KERNEL_NATIVE provenance 元数据已内建自动 reserve（机制同构，不重复声明）。
+4. **测试文件重命名**：`test_kernel_native_modules.py` → `test_builtin_modules.py`
+   （覆盖范围已扩展为全部内置模块）；`tests/plugins/test_idbg.py` 由 import
+   `ibci_modules.ibci_idbg._spec` 改为断言 `BUILTIN_MODULE_SPECS["idbg"]`（F3 语义：
+   spec 只存在于内核字面量）。
+
+**验证**：
+- 结构等价探针（一次性，_spec.py 删除前运行）：9 个模块字面量 vs 旧 discovery 路径
+  产出 TypeDef 逐字段比对等价（name/module_path/kind/provenance/visibility/
+  storage_model/exported_types/members 全字段，含 param_descriptors 默认值）。
+- `test_builtin_modules.py` 固化契约断言：ai.set_mock_mode 默认 True、
+  iruntime.configure VAR_KEYWORD、json.__to_prompt__ 为 method、math 变量 field、
+  net headers 默认 None、工具 5 = USER_DEFINED + IMPORT_GATED、file exported_types、
+  register_builtin_modules 幂等。
+- 冒烟：`import math/json/time/schema/file` 全链路（sqrt/pi/stringify/now/validate/exists）。
+- 全量 pytest 零回归（实跑计数不冻结）。
+
+**F3-1 遗留（排入 F3-2/F3-3）**：
+- discovery.py / auto_discovery.py / loader 环 2 的 _spec.py 相关代码与文案（用户插件
+  通道）——F3-2 一并删除。
+- `load_and_register_all` 环 2 收敛为仅内置模块注册——F3-2 落地。
+- 文档迁移（docs/subsystems/04_plugin_system.md、07_kernel_native_modules.md 注册描述、
+  KNOWN_LIMITS §十九、write_user_plugin.md、示例/trials）——F3-3。

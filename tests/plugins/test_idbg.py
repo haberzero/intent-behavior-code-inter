@@ -1,5 +1,9 @@
-"""tests/runtime/test_idbg.py — idbg 插件单元测试（pure Python，不需要 IBCI 引擎）。"""
-from ibci_modules.ibci_idbg._spec import __ibcext_vtable__
+"""tests/runtime/test_idbg.py — idbg 插件单元测试（pure Python，不需要 IBCI 引擎）。
+
+F3-1 起 idbg 的 spec 内联于 builtin_modules.BUILTIN_MODULE_SPECS（不再有 ibci_modules/.../_spec.py
+磁盘文件），此处直接断言内联 spec 成员契约。
+"""
+from core.runtime.bootstrap.builtin_modules import BUILTIN_MODULE_SPECS
 from ibci_modules.ibci_idbg.core import IDbgPlugin
 
 
@@ -81,12 +85,12 @@ def _make_plugin(protection_map):
 
 class TestIdbgSpec:
     def test_vtable_exports_new_print_methods(self):
-        funcs = __ibcext_vtable__()["functions"]
-        assert "print_vars" in funcs
-        assert "protection_map" in funcs
-        assert "show_retry_stack" in funcs
-        assert "show_protection_map" in funcs
-        assert "show_env" in funcs
+        members = BUILTIN_MODULE_SPECS["idbg"].members
+        assert "print_vars" in members
+        assert "protection_map" in members
+        assert "show_retry_stack" in members
+        assert "show_protection_map" in members
+        assert "show_env" in members
 
 
 class TestIdbgProtectionMap:

@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-tests/kernel/test_kernel_native_modules.py
-==========================================
+tests/runtime/test_builtin_modules.py
+======================================
 
-ai/ihost/idbg/isys 内核原生化验证。
+内置模块（内核原生 5 + 工具 5 + file）构造期预注册验证。
+内核原生 5：ai/ihost/idbg/isys/iruntime（F3 前即 kernel-native）。
+工具 5：math/json/time/net/schema（F3-1 起内联 spec 构造期预注册，USER_DEFINED）。
 """
 import json
 import os
@@ -12,18 +14,20 @@ import pytest
 from core.engine import IBCIEngine
 from core.base.enums import Provenance, Visibility
 from core.kernel.host_interface import HostInterface
-from core.runtime.bootstrap.kernel_native_modules import (
+from core.kernel.spec import MethodMemberSpec, TypeRef
+from core.runtime.bootstrap.builtin_modules import (
     KERNEL_NATIVE_MODULES,
-    register_kernel_native_modules,
+    BUILTIN_MODULES,
+    register_builtin_modules,
 )
 from tests.conftest import REPO_ROOT
 
 
-class TestKernelNativeRegistration:
+class TestBuiltinRegistration:
     """构造期预注册与元数据标记。"""
 
     def test_modules_pre_registered_at_init(self):
-        """Engine 构造后，四个 kernel-native 模块已实现+元数据就绪。"""
+        """Engine 构造后，内核原生 5 模块已实现+元数据就绪。"""
         eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
         for name in KERNEL_NATIVE_MODULES:
             impl = eng.host_interface.get_module_implementation(name)
@@ -34,6 +38,29 @@ class TestKernelNativeRegistration:
             assert spec.provenance == Provenance.KERNEL_NATIVE
             assert spec.visibility == Visibility.IMPORT_GATED
 
+    def test_tool_modules_pre_registered_at_init(self):
+        """F3-1：工具 5 模块构造期预注册（USER_DEFINED + IMPORT_GATED + 实现就绪）。"""
+        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        for name in ("math", "json", "time", "net", "schema"):
+            impl = eng.host_interface.get_module_implementation(name)
+            assert impl is not None, f"{name} should be pre-registered"
+
+            spec = eng.host_interface.metadata.resolve(name)
+            assert spec is not None, f"{name} spec should be registered"
+            assert spec.provenance == Provenance.USER_DEFINED
+            assert spec.visibility == Visibility.IMPORT_GATED
+
+    def test_file_pre_registered_kernel_native(self):
+        """F3-1：file 自 engine.py 挪入集中注册（KERNEL_NATIVE + exported_types 保留）。"""
+        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        impl = eng.host_interface.get_module_implementation("file")
+        assert impl is not None
+        assert eng.host_interface.is_kernel_native("file")
+        spec = eng.host_interface.metadata.resolve("file")
+        assert spec.provenance == Provenance.KERNEL_NATIVE
+        assert spec.visibility == Visibility.IMPORT_GATED
+        assert spec.exported_types == ["file_handle", "audio", "image", "video"]
+
     def test_is_kernel_native_query(self):
         """`is_kernel_native` 正确识别 kernel-native 模块。"""
         eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
@@ -42,13 +69,47 @@ class TestKernelNativeRegistration:
         assert not eng.host_interface.is_kernel_native("math")
         assert not eng.host_interface.is_kernel_native("time")
 
-    def test_register_kernel_native_modules_idempotent(self):
-        """`register_kernel_native_modules` 可重复调用不报错。"""
+    def test_register_builtin_modules_idempotent(self):
+        """`register_builtin_modules` 可重复调用不报错。"""
         host = HostInterface()
-        register_kernel_native_modules(host)
-        register_kernel_native_modules(host)
+        register_builtin_modules(host)
+        register_builtin_modules(host)
         for name in KERNEL_NATIVE_MODULES:
             assert host.is_kernel_native(name)
+
+    def test_builtin_spec_contract_details(self):
+        """F3-1 结构等价关键点（生成探针一次性验证，此处固化为契约测试防回归）。"""
+        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+
+        # ai.set_mock_mode：enable 具名默认 True
+        ai = eng.host_interface.metadata.resolve("ai")
+        d0 = ai.members["set_mock_mode"].param_descriptors[0]
+        assert (d0.name, d0.kind, d0.has_default, d0.default_value) == (
+            "enable", "POSITIONAL_OR_KEYWORD", True, True,
+        )
+
+        # iruntime.configure：VAR_KEYWORD 参数
+        ir = eng.host_interface.metadata.resolve("iruntime")
+        d1 = ir.members["configure"].param_descriptors[0]
+        assert (d1.name, d1.kind) == ("kwargs", "VAR_KEYWORD")
+        assert d1.type_ref == TypeRef.of("any")
+
+        # json.__to_prompt__：functions 成员（method），须为 MethodMemberSpec
+        json_mod = eng.host_interface.metadata.resolve("json")
+        tp = json_mod.members["__to_prompt__"]
+        assert isinstance(tp, MethodMemberSpec)
+
+        # math 变量：field + float
+        math_mod = eng.host_interface.metadata.resolve("math")
+        for v in ("pi", "e", "inf"):
+            member = math_mod.members[v]
+            assert member.kind == "field"
+            assert member.type_ref == TypeRef.of("float")
+
+        # net.get：headers 具名默认 None
+        net = eng.host_interface.metadata.resolve("net")
+        h = net.members["get"].param_descriptors[1]
+        assert (h.name, h.has_default, h.default_value) == ("headers", True, None)
 
 
 class TestKernelNativeOverrideProtection:
