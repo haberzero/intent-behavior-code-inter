@@ -207,20 +207,28 @@
 
 ## 五、当前进度与交接状态
 
-- **已合入 `unsafe-vibe-dev`**：LLM provider 中间层批 1-4（契约 + 内核收口 + provider 插件化 +
-  内省/文档），全量 pytest 实跑零回归（基线以实跑为准）。当前 provider 分离的内部结构已干净。
-- **R0 已完成（本 session 复核实证）**：全量 pytest 基线绿（实跑）；内核 `_core.py` 仅
-  `llm_callback.call(request)`；`_prompt_assembly.py` 收敛为仅 retry 消息结构；`probe_model()`
-  → `probe()` 单入口；无 `ILLMProvider` 残留 / 无旧装配 API / vtable 无漂移；两处 R1 前置
-  关注点已登记于 §三.R1（`thinking_mode` 半接通、`load_project_config` 硬编码默认适配器）。
-- **近期未开放用户自定义**：`register_provider`/`set_config_source` 等 WIP 已回退；
-  近期限定"修改 `ibci_modules/ibci_ai/` 内核 provider 文件"这一条路径（R1 拆分后为纯
-  `provider_impl.py`）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位，不近期
-  造用户入口）。
+- **近期主线（R0-R2）已全部完成并合入 `unsafe-vibe-dev`**：
+  - R0 审计：全量 pytest 实跑零回归（基线以实跑为准）；内核仅 `llm_callback.call(request)`；
+    `_prompt_assembly.py` 收敛为仅 retry 消息结构；`probe_model()` → `probe()` 单入口；
+    无 `ILLMProvider` 残留 / 无旧装配 API / vtable 无漂移。
+  - R1 拆分（`exp/provider-decouple-r1` → 零风险直接合并）：`provider_impl.py`
+    （`RecommendedProvider`，纯 provider，kernel-free，可整文件替换）+ `core.py` 宿主
+    （`AIPlugin(RecommendedProvider, IbStatefulPlugin)`，仅 IBCI 胶水）；MOCK 哨兵下沉
+    `core.base.llm_protocol.llm_call`（单一权威源）；kernel-free `config_normalize.py`
+    （默认常量 + `to_llm_config` 归一）；provider 失败契约统一 RuntimeError。
+  - R2 文档：`docs/howto/modify_llm_provider.md`（改内核 provider 文件指南）；
+    `docs/architecture/01_principles.md` §3.7 两段式定位（近期=改内核文件；
+    远期=原生绑定）。
+  - 验证：全量 pytest 3027 passed / 1 skipped（分支与合并后均实跑）；独立复核放行
+    （probe 启发式 P1 修复 + 字节级二次验证）。
+- **近期未开放用户自定义语言级 API**：`register_provider`/`set_config_source` 等 WIP
+  已回退；近期限定"修改/替换 `ibci_modules/ibci_ai/provider_impl.py`"这一条路径
+  （R2 文档指引）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位）。
 - **触发此两段式规划**：用户裁定近期聚焦 provider 分离（Python 源码分发，改内核文件），
   远期才做原生绑定成熟方案；任何方向都要求彻底、不留脚手架。
-- **交接**：R0 审计已完成，当前推进 §三.近期主线 R1（核心裁决 = 是否拆分 `core.py`，
-  倾向拆）；详细交接见 `tasks_docs/HANDOFF.md` §2。
+- **交接**：近期主线收尾——Provider 层分离"彻底、干净、分叉口就绪"；接口位已留
+  （`LLMCallRequest.thinking_mode`、`ConfigSourceAdapter` 抽象），远期 F0-F5 无返工
+  债务。下一步候选见 `tasks_docs/NEXT_STEPS.md`。
 
 ---
 

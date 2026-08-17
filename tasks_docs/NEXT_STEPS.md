@@ -27,18 +27,19 @@
 
 ## 🔴 当前状态
 
-**主线（近期）：LLM provider 层分离彻底完成**——当前短期分发为 Python 源码直接分发，近期几乎
-不向用户开放语言级自定义 API，需自定义的用户被指引修改内核特定文件 `ibci_modules/ibci_ai/core.py`。
-近期核心是把 provider/内核/配置解耦做彻底、为远期统一留接口位。已进入规划交接阶段，下一步从
-**近期主线 R0** 接手（总路线图 `tasks_docs/ROADMAP_NATIVE_BINDING.md`；动态交接 `HANDOFF.md` §2）。
+**近期主线（Provider 层分离 R0-R2）已完成**——核心：`ibci_modules/ibci_ai/` 拆分为
+`provider_impl.py`（推荐 provider，kernel-free 可整文件替换）+ `core.py`（IBCI 胶水宿主）；
+近期自定义 LLM 底层的用户被指引修改 `provider_impl.py`（指导文档
+`docs/howto/modify_llm_provider.md`）；为远期原生绑定留好接口位。总路线图见
+`tasks_docs/ROADMAP_NATIVE_BINDING.md`（近期 R0-R2 已收尾；远期 F0-F5 不在近期推进）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·近期] 按 `ROADMAP_NATIVE_BINDING.md` §三【近期主线】R0→R2 推进**——
-   R0 现状固化与 Provider 解耦审计 → R1 接口位清理（为远期留位，不造近期用户入口）→
-   R2 近期分发指导文档（修改内核 provider 文件指南）。
-2. **[主线·远期，post-近期不做] 原生绑定成熟方案（F0-F5）**——近期不提前复杂设计，只留接口位。
-3. 支线（解阻/候补窗口）：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
+1. **[主线·远期，post-近期] 原生绑定成熟方案（F0-F5）**——改走
+   `ROADMAP_NATIVE_BINDING.md` §三【远期愿景】时启动；关键裁决点见该文档 §四。
+2. **[主线·下一阶段] 阶段 5 主线（`yield` 惰性生成器，PT-FEAT-1）**——非"非目标"的
+   下一主线候选，是否启动待主线调度。
+3. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5、PT-AUDIT-1/2；
 4. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）

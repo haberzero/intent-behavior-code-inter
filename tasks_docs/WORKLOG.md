@@ -48,11 +48,24 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   提交记录。验证：全量 pytest 3027 pass + T09 真实 LLM 8/8 PASS。
 - **Provider 层分离（近期主线）+ IBCI 原生宿主绑定（远期愿景）· 两段式（2026-08-17，规划交接阶段）**：
   近期聚焦 LLM provider 层分离彻底完成（当前 Python 源码分发，近期不开放语言级自定义 API，
-  需自定义的用户改内核文件 `ibci_modules/ibci_ai/core.py`）；远期才推进"抛弃 Python `_spec.py`
-  插件思路、用户 IBCI 层原生绑定 Python 内容"（宿主导入 + 类型/协议/impl 绑定 + 插件体系重构
-  + 内核自举 + 缓存/JIT）。总路线图见 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（近期 R0-R2 / 远期
-  F0-F5 / 关键裁决点）。触发背景：深度调研确认 `box()` 已能包装任意 Python 对象/可调用，但
-  `import X` 与 `impl` 目前受 `_spec.py`/本模块用户类限制；近期先做对 provider 解耦、为远期留位。
+  需自定义的用户改内核 provider 文件 `ibci_modules/ibci_ai/provider_impl.py`）；远期才推进
+  "抛弃 Python `_spec.py` 插件思路、用户 IBCI 层原生绑定 Python 内容"（宿主导入 + 类型/协议/impl
+  绑定 + 插件体系重构 + 内核自举 + 缓存/JIT）。总路线图见 `tasks_docs/ROADMAP_NATIVE_BINDING.md`
+  （近期 R0-R2 / 远期 F0-F5 / 关键裁决点）。触发背景：深度调研确认 `box()` 已能包装任意
+  Python 对象/可调用，但 `import X` 与 `impl` 目前受 `_spec.py`/本模块用户类限制；近期先做对
+  provider 解耦、为远期留位。
+- **近期主线 R0-R2 完成（2026-08-17，exp/provider-decouple-r1 → unsafe-vibe-dev 零风险直接合并）**：
+  近期分发形态确立 = 自定义 LLM 底层 = 修改/替换 `ibci_modules/ibci_ai/provider_impl.py`
+  （`RecommendedProvider`，纯 provider，kernel-free 可整文件替换；宿主 `core.py` 仅 IBCI 胶水，
+  内外结构 `AIPlugin(RecommendedProvider, IbStatefulPlugin)`）；MOCK 哨兵下沉
+  `core/base/llm_protocol.llm_call`（单一权威源，kernel 消费者改从 base 导入）；kernel-free
+  `config_normalize.py` 收拢默认常量与 to_llm_config 归一；provider 失败契约统一 RuntimeError
+  （唯一行为差异：`_init_client` 配置缺失错误类 InterpreterError→RuntimeError，已记录）。
+  接口位收敛口径：`LLMCallRequest.thinking_mode` 保持"契约字段存在、推荐实现不读"，推为远期
+  F4 供应商字段映射位；`ConfigSourceAdapter` 不加注册入口（推荐默认适配器整文件替换路径）；
+  不新增语言级注册 API。设计要点固化于 `docs/howto/modify_llm_provider.md` +
+  `docs/architecture/01_principles.md` §3.7 + 路线图 §五。验证：全量 pytest 3027 pass +
+  独立复核放行（probe 启发式 P1 修复 + 字节级二次验证）。远期 F0-F5 接口位已留、无返工债务。
 
 ---
 

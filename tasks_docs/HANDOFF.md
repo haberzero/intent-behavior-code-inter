@@ -115,34 +115,31 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线**：**【近期】LLM provider 层分离彻底完成**（两段式规划，见
-  `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。当前短期分发为 **Python 源码直接分发**，故近期
-  **几乎不向用户开放语言级自定义 API**；需自定义的用户被指引**修改内核特定文件
-  `ibci_modules/ibci_ai/core.py`**（推荐 provider，经 `LLMProvider` 契约解耦、可整文件替换）。
-  近期核心是把 provider/内核/配置解耦做彻底、为远期留接口位、不返工。
+- **🔴 当前主线**：**近期主线（Provider 层分离 R0-R2）已完成收尾**（路线图
+  `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。当前短期分发为 Python 源码直接分发：
+  自定义 LLM 底层的用户被指引**修改/替换内核 provider 文件
+  `ibci_modules/ibci_ai/provider_impl.py`**（`RecommendedProvider`，经 `LLMProvider`
+  契约解耦、kernel-free、可整文件替换；指导文档 `docs/howto/modify_llm_provider.md`）。
+  核心成果：provider/内核/配置解耦彻底、为远期统一留好接口位（`thinking_mode` 契约
+  字段、`ConfigSourceAdapter` 抽象），无返工债务。
 - **远期愿景（post-近期，近期不做）**：IBCI 用户层原生绑定 Python 内容（宿主导入语法 +
-  协议/impl 到宿主类型 + 插件体系重构 + 内核自举 + 缓存/JIT + 隔离改造 + 反射能力）——成熟现代
-  方案，近期不提前复杂设计。
+  协议/impl 到宿主类型 + 插件体系重构 + 内核自举 + 缓存/JIT + 隔离改造 + 反射能力）——
+  成熟现代方案，近期不提前复杂设计（路线图 §三 F0-F5）。
 - **当前代码状态**：
   - 分支 `unsafe-vibe-dev`，本地领先 `origin`（**未 push**；禁 push 硬原则，除非用户显式授权）。
-  - 内核：LLM 调用层供应商无关中间层已含于当前代码——`core/base/llm_protocol/`
-    （`LLMCallRequest`/`LLMCallResult`/`LLMProvider`/`ConfigSourceAdapter`/`recommended`）；
-    系统提示词组装/思考抑制/api_config.json 配置源均下沉为可自定义实现。
+  - `ibci_modules/ibci_ai/`：`provider_impl.py`（推荐 provider，kernel-free）+
+    `core.py`（`AIPlugin(RecommendedProvider, IbStatefulPlugin)` 胶水宿主）+
+    `config_normalize.py`（kernel-free 归一基元）+ `config_source_adapter.py`（默认适配器）。
+  - 内核：LLM 调用层供应商无关中间层 `core/base/llm_protocol/`（`LLMCallRequest`/
+    `LLMCallResult`/`LLMProvider`/`ConfigSourceAdapter`/`recommended`）；MOCK 哨兵
+    下沉该层 `llm_call.py`。
   - 协议化大重构 / 双轨收敛 / 判定链双协议化 / copy·deepcopy 均已落地。
-  - 宿主能力基础：`box()` 可包装任意 Python 对象（`IbNativeObject`）/可调用（`IbNativeFunction`）；
-    `import X` 当前仍须走 InterOp 注册包（`_spec.py` 契约）或 IBCI artifact——**无裸 Python 模块
-    绑定的用户路径（这正是本主线要新增的）**。
-  - 协议/`impl` 当前仅对本模块用户类生效（`impl` 目标限本模块用户类，宿主/内置类型不支持）。
-  - 文档：docs/ 系统化重构完成；LLM 中间层归属 `01_principles.md` §3.7；任务控制正规化；
-    全仓历史记录清洁。
-  - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式（`trials/_toolkit/LLM_SERVICE.md`）；
-    provider 重构后 T09 套件 8/8 PASS。
-- **⏳ 待下一 session**：按 `ROADMAP_NATIVE_BINDING.md` §三【近期主线】推进（**R0 已完成**：
-  审计实证全绿、两处 R1 前置关注点已登记于路线图 §三.R1；当前最紧要：**R1 接口位清理**——
-  `core.py` 拆分 `provider_impl.py`（纯 `LLMProvider`，kernel-free）+ `module.py`（胶水宿主），
-  独立分支 `exp/provider-decouple-r1`，含 MOCK sentinel 归属裁决；随后 R2 改内核文件指导文档
-  `docs/howto/modify_llm_provider.md`）。远期愿景（F0-F5）不在近期推进，但其关键裁决点见该
-  文档 §四。远期规划与状态见 `PENDING_TASKS.md`。
+  - 文档：docs/ 系统化重构完成；provider 修改指南 `docs/howto/modify_llm_provider.md`；
+    任务控制正规化；全仓历史记录清洁。
+  - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式
+    （`trials/_toolkit/LLM_SERVICE.md`）；provider 重构后 T09 套件 8/8 PASS。
+- **⏳ 下一步**：按 `NEXT_STEPS.md` 下一步候选调度（远期 F0-F5 或阶段 5 `yield` 主线
+  或支线窗口）；近期主线已收尾、接口位已留，远期启动前无需返工。
 
 ### 2.2 交接检查单（当前有效）
 
