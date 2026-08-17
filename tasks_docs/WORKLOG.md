@@ -132,7 +132,7 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   SDK `test_check_plugin.py` 迁移至 F3 语义——ibci_modules 安装包不再算用户插件目录）。
   验证：结构等价探针（9 模块字面量 vs 旧 discovery 路径逐字段比对等价，_spec.py 删除前
   运行）+ 全量 pytest 3056 passed / 1 skipped 零回归。设计要点固化于
-  `tasks_docs/_f3_plugin_refactor.md`（F3 完成后沉入 docs/architecture）。
+  `docs/architecture/01_native_host_binding.md` §3.4 与 07_kernel_native_modules.md（F3 落地决策）。
   遗留：discovery/auto_discovery/main.py --plugin/SDK _spec 面删除 = F3-2；测试/
   examples/trials/docs 迁移 = F3-3。
 - **F3-2 完成（2026-08-18，exp/plugin-refactor-f3）**：磁盘插件发现/加载双通道彻底铲除。

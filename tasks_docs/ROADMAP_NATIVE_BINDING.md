@@ -261,8 +261,9 @@
     D2-21 改写为宿主绑定演示；write_user_plugin → extend_with_host_binding；subsystems/04
     重写；20+ docs 更新到 F3 事实）。F3-4：残留扫描 `_spec.py`/`__ibcext_vtable__`/
     discovery 引用清零（功能面零残留）。三阶段全量 pytest 零回归（最终 2946 passed /
-    1 skipped）。决策定稿见 `tasks_docs/_f3_plugin_refactor.md`（F3 完成后收敛沉入
-    docs/architecture/01_native_host_binding.md）。裁决点 3（旧 _spec.py 用户插件归宿）
+    1 skipped）。决策定稿已沉入
+    `docs/architecture/01_native_host_binding.md` §3.4 与 07_kernel_native_modules.md。
+    裁决点 3（旧 _spec.py 用户插件归宿）
     落定 = 删除（不保留双通道、降级为新绑定编译目标）。达分支合并"零风险直接合并
     unsafe-vibe-dev"标准（全量 pytest 零回归 + F3-1 结构探针 + F3-2/F3-3 独立 subagent
     复核 + F3-4 残留扫描，无对外契约/架构级风险）——合并仍需用户授权。
