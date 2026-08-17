@@ -115,11 +115,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线**：**【IBCI 原生宿主绑定重构（路线 X）】**——抛弃"用户在 Python 侧手写
-  `_spec.py` 暴露库给 IBCI"的思路，改为 **IBCI 用户代码层原生包装 Python 内容**（宿主导入
-  一等语法 + 用户用 IBCI 类型/协议/impl 绑定 Python 成员 + 协议/impl 扩展到宿主类型 +
-  插件体系重按新思路重构）。此为主干任务，已进入**规划交接**阶段，下一 session 从 P0 接手
-  （详见 `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。
+- **🔴 当前主线**：**【近期】LLM provider 层分离彻底完成**（两段式规划，见
+  `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。当前短期分发为 **Python 源码直接分发**，故近期
+  **几乎不向用户开放语言级自定义 API**；需自定义的用户被指引**修改内核特定文件
+  `ibci_modules/ibci_ai/core.py`**（推荐 provider，经 `LLMProvider` 契约解耦、可整文件替换）。
+  近期核心是把 provider/内核/配置解耦做彻底、为远期留接口位、不返工。
+- **远期愿景（post-近期，近期不做）**：IBCI 用户层原生绑定 Python 内容（宿主导入语法 +
+  协议/impl 到宿主类型 + 插件体系重构 + 内核自举 + 缓存/JIT + 隔离改造 + 反射能力）——成熟现代
+  方案，近期不提前复杂设计。
 - **当前代码状态**：
   - 分支 `unsafe-vibe-dev`，本地领先 `origin`（**未 push**；禁 push 硬原则，除非用户显式授权）。
   - 内核：LLM 调用层供应商无关中间层已含于当前代码——`core/base/llm_protocol/`
@@ -134,15 +137,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     全仓历史记录清洁。
   - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式（`trials/_toolkit/LLM_SERVICE.md`）；
     provider 重构后 T09 套件 8/8 PASS。
-- **⏳ 待下一 session**：按 `ROADMAP_NATIVE_BINDING.md` §三 P0-P5 推进；关键裁决点见该文档 §四
-  （宿主绑定语法形态 / 宿主类型在类型系统地位 / 旧 `_spec.py` 插件归宿 / 输入面是否必经 P1-P2）。
-  远期规划与状态见 `PENDING_TASKS.md`。
+- **⏳ 待下一 session**：按 `ROADMAP_NATIVE_BINDING.md` §三【近期主线】R0→R2 推进（当前最紧要：
+  provider 层分离收尾 + 接口位清理 + 改内核文件指导文档）；远期愿景（F0-F5）不在近期推进，
+  但其关键裁决点见该文档 §四。远期规划与状态见 `PENDING_TASKS.md`。
 
 ### 2.2 交接检查单（当前有效）
 
 - [ ] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [ ] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
-- [ ] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/VISION）
+- [ ] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/愿景）
 - [ ] 读 `GOVERNANCE.md`（任务控制治理章程：文档职责/书写模板/生命周期/红线）
 - [ ] 读 `WORKLOG.md`（关键裁定与长期约束）
 - [ ] 试用体系：`trials/_toolkit/`（run_batch/run_one/CLASSIFICATION/LLM_SERVICE）+ `trials/INDEX.md`

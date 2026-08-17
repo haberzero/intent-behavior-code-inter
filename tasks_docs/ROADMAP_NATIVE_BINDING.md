@@ -1,24 +1,27 @@
-# ROADMAP — IBCI 原生宿主绑定重构（路线 X：IBCI 用户层原生包装 Python 内容）
+# ROADMAP — Provider 层分离（近期主线）+ IBCI 原生宿主绑定（远期愿景）
 
-> **定位**：本文件是「IBCI 用户代码层 ↔ Python 代码层」原生绑定重构的**总路线图与交接主线**——
-> 面向下一个干净 session 接手此大任务的**单一权威源**。
-> 与 `tasks_docs/HANDOFF.md` §2（持久交接动态状态）、`NEXT_STEPS.md`（当前最紧要）配合阅读。
-> 本文件描述**方向、目标、阶段切分、验证门、决策记录与现状实证**；具体阶段实现细节按
-> `code-workflow` 在独立分支展开（临时 `_code_*.md` 细化为阶段内再写）。
+> **定位**：本文件是「LLM provider 层分离收尾（近期、当前最紧要）」与「IBCI 用户层原生绑定
+> Python 内容（远期愿景）」的**总路线图与交接主线**——面向下一个干净 session 接手此大任务的
+> **单一权威源**。与 `tasks_docs/HANDOFF.md` §2（持久交接动态状态）、`NEXT_STEPS.md`（当前最紧要）
+> 配合阅读。本文件描述**方向、两段式目标、阶段切分、验证门、关键裁决点、当前状态与交接**；
+> 具体阶段实现细节按 `code-workflow` 在独立分支展开。
 
 ---
 
 ## 〇、重大方向裁定（用户拍板，2026 主线）
 
-**抛弃"用户在 Python 侧手写 `_spec.py` 来暴露库给 IBCI"的思路。**
-改为 **IBCI 用户代码层原生包装 Python 原生内容**——用户用 IBCI 原生类型/协议/`impl`/
-宿主绑定语法来表达能力契约，把 Python 对象绑定到 IBCI 声明的成员背后；
-宿主导入（取到 Python 模块/类/对象与 callable）成为 IBCI 一等语法，而非插件 `_spec.py`。
+**两段式**：
+1. **近期（当前最紧要）**：把 **LLM provider 层分离彻底完成**。当前短期分发为 Python 源码直接
+   分发，故**近期几乎不向用户开放语言级自定义 API**；需自定义的少量用户被指引**直接修改内核
+   特定文件 `ibci_modules/ibci_ai/core.py`**（推荐 provider 实现，经 `LLMProvider` 契约解耦、
+   自包含、可整文件替换），并配修改指导。解耦本身必须做彻底，为远期留位、不返工。
+2. **远期（post-近期）**：抛开"用户 Python 侧手写 `_spec.py` 暴露库给 IBCI"的思路，改为
+   **IBCI 用户层原生绑定 Python 内容**（宿主导入语法 + 协议/impl 到宿主类型 + 插件体系重构），
+   并延伸至内核 IBCI 自举 + 缓存/JIT + 隔离改造 + 反射执行能力。近期不做超前的复杂设计。
 
 **约束**：
-- 是**彻底重构**，不是局部补丁；审查既有插件体系后按新思路**重构或废弃**，不留双通道。
-- 遵循工作模式定论（禁止 compat shim / 胶水 / tricky）；原则优先于行为维持；可推翻 IBCI
-  自身设计缺陷。
+- 凡推进的方向必须推进到底，不留妥协/历史包袱/兼容层/tricky；健康中间态仅作脚手架、最终拆除。
+- 遵循工作模式定论；原则优先于行为维持；可推翻 IBCI 自身设计缺陷。
 - 破坏性重构默认已授权（独立分支实验 + 复核后合入 `unsafe-vibe-dev`；永不触碰 `main`；不 push）。
 - 全程本地 commit。
 
@@ -57,113 +60,129 @@
 ### 1.5 LLM provider 中间层（已落地，半接通）
 - 批 1-4 已合入 `unsafe-vibe-dev`：`core/base/llm_protocol/`（`LLMCallRequest`/`LLMCallResult`/
   `LLMProvider`/`ConfigSourceAdapter`/`recommended`）。
-- **未接线**：`register_provider`/`set_config_source` 用户入口；`thinking_mode` 内核不填、provider
-  不读；`ConfigSourceAdapter` 硬编码默认。→ 这些是"输入面自定义"子目标（见 §三.P1）。
+- **近期不开放的接口位**：`register_provider`/`set_config_source` 用户入口、`thinking_mode`
+  provider 消费、`ConfigSourceAdapter` 替换——这些是**为远期统一的接口位**（近期不造用户入口，
+  见 §三.R1），近期只保证契约字段与推荐实现干净正确。
 
 ---
 
-## 二、目标（路线 X 的完整愿景）
+## 二、两段式总目标（近期主线 + 远期愿景）
 
-1. **宿主导入一等语法**：IBCI 用户代码能直接在 `.ibci` 里取到一个 Python 模块 / 类 / 对象 /
-   callable，作为一等值。
-2. **IBCI 声明绑定 native 成员**：用户用 IBCI 类型/协议/`impl` 定义能力接口，把 Python 对象的
-   成员绑定到这些 IBCI 声明之后（而非在 Python 里写 `_spec.py`）。
-3. **协议/impl 扩展到宿主类型**：让 `protocol implements` / retroactive `impl` 能作用于"宿主导入
-   类型"，从而用户能对 Python-backed 值声明协议满足与补方法。
-4. **插件体系按新思路重构**：审查既有 `_spec.py` 插件机制，决定重构为"用户 IBCI 库 + 可选宿主
-   绑定"或废弃；不留双通道。
-5. **输入面（LLM provider 等）自定义落地**：`ai.register_provider` / `set_config_source` /
-   `thinking_mode` 全部接通，成为新绑定机制的首个真实用例与验证场。
-6. **架构统一**：整个"用户代码层 ↔ 底层代码层"交互只有一套设计语言、一个配合模式、
-   单一权威源；宿主绑定与协议/类型理论机制同构。
+> **总纪律**：凡推进的方向必须推进到底，不留妥协/历史包袱/兼容层/tricky。健康的中间态只作
+> 脚手架，最终必须拆除、不留隐患。分析/实现冲突时以"架构正确性 + 设计统一 + 长期收益"裁决。
+
+### 2.A 近期主线（当前，最紧要）—— Provider 层分离彻底完成
+
+当前短期分发形态为 **Python 源码直接分发**，因此：
+- **近期几乎不向用户开放"自定义底层"的语言级 API**——不为一个尚无真实用户的新颖能力提前
+  透支设计（避免过早抽象）。
+- 需要自定义 LLM 底层/供应商/配置格式的用户，被指引**直接修改内核内一个特定文件**
+  `ibci_modules/ibci_ai/core.py`（推荐 provider 实现，经 `LLMProvider` 契约解耦、自包含、
+  `create_implementation()` 工厂），并配修改指导与注意事项（见 `docs/howto/modify_llm_provider.md`）。
+- 近期的核心任务是**把 provider/内核/配置解耦本身做彻底**：
+  - 内核只认 `LLMCallRequest`/`LLMCallResult`/`LLMProvider` 契约，不触碰供应商细节；
+  - 推荐 provider / 默认配置适配器是干净、可替换的实现，无脏代码、无隐藏耦合；
+  - **为远期方案留好接口位**（`ConfigSourceAdapter` 抽象、`thinking_mode` 契约字段等），
+    近期只接通用位、不单独造用户入口，避免为未来留额外重构或需拆除的脚手架。
+
+### 2.B 远期愿景（post-近期，不在近期推进）—— 成熟现代方案
+
+- **宿主导入一等语法 + 协议/impl 扩展到宿主类型**：用户用 IBCI 原生类型/协议包装 Python 内容
+  （取代"Python `_spec.py` 插件"思路）。
+- **内核自举 + 缓存/JIT**：内核引入 IBCI 级别启动包装层 + 三层分解（L0 Python 保底 / L1 内核
+  IBCI 层预编译缓存 / L2 用户入口）；`serializer↔rehydrator` 落盘为持久缓存（指纹失效），
+  档 A（预编译缓存）优先、档 B（真 JIT）另行评估。
+- **隔离改造**：缓存产物只读共享 + 隔离可变状态，提高健康性与可维护性。
+- **反射/实时执行 Python**：随宿主绑定能力的成熟而获得（非默认 `exec(python)`）。
+- 这些是远期候选，**近期不做**；但近期进行的解耦会为其预留接口位，确保远期不返工。
 
 ---
 
-## 三、阶段切分（依赖驱动；每阶段独立分支 + 全量 pytest 零回归 + 复核放行）
+## 三、阶段切分（近期主线 + 远期愿景；每阶段独立分支 + 全量 pytest 零回归 + 复核放行）
 
-> 原则：先做"地基验证"（证明 box/callable→用户 IBCI 类导出可行），再做"语言机制"，
-> 再"协议/impl 扩展"，再"插件重构"，最后"输入面用例 + 文档统一"。
+### 【近期主线 · 当前】R0 — 现状固化与 Provider 解耦审计
+- 确认 `unsafe-vibe-dev` 全量 pytest 基线（以实跑为准，不冻结数字）。
+- 审计 provider 层当前解耦面：内核 `_call_llm` 是否已完全不碰供应商细节；`_prompt_assembly`
+  是否已收敛（仅 retry 消息）；`thinking_mode`/`probe` 是否半接通；`ConfigSourceAdapter` 是否
+  硬编码默认、但**抽象与推荐实现分离干净**（可为远期替换留位）。
+- **验证门**：全量 pytest 绿；无半接通/无脏耦合（grep + 残留扫描）。
 
-### P0 — 基线固化与研究底稿
-- **确认**当前 `unsafe-vibe-dev` 全量 pytest 基线（以实跑为准，不冻结数字）。
-- 清点需触动的内核面：`box/unbox`、`IbNativeObject`、`IbNativeFunction`、`IbImport` 解析、
-  `impl` 语义/编译期检查、`Object`/`any` 字段、协议满足检查。
-- 产出 `docs/architecture/01_native_host_binding.md`（宿主绑定机制设计起点）。
-- **验证门**：全量 pytest 绿；范围分析文档与实际代码一致（grep 交叉核验）。
+### R1 — Provider 层接口位清理（为远期留位，但不造近期用户入口）
+- 把 `thinking_mode`、`probe()`、`ConfigSourceAdapter` 等**面向远期替换但当前尚未完全接电**的
+  契约点，收敛为"契约字段存在 + 推荐实现干净 + 当前默认行为正确"，**不新增语言级注册 API**。
+- 确保推荐 provider（`core.py`）+ 默认配置适配器（`config_source_adapter.py`）是**自包含、可整文件替换**
+  的干净实现，替换路径清晰（改 `core.py` / 换 adapter 注入点集中）。
+- **验证门**：全量 pytest 零回归；无新增未用接口（code-quality 半接通红线）。
+- **独立分支**：`exp/provider-decouple-r1`。
 
-### P1 — 宿主导入一等语法 + 用户类持有 native（最小可用闭环）
-- 新增语言机制：宿主导入（如 `host lib = python.import("pkg")`），把裸 Python 模块/对象绑定
-  （按用户 IBCI 声明导出成员），返回可持有一等值。
-- 让用户 IBCI 类 `Object`/`any` 字段能干净持有 `IbNativeObject`，并通过用户 IBCI 声明的方法把
-  调用转发到 `.py_obj`（显式绑定，非自动穿透）。
-- 目标：**一个最小示例**——用户 `.ibci` 里取 Python callable/对象，用 IBCI 类包它、调用它，
-  不经 `_spec.py`。
-- **验证门**：新增 e2e（从 `.ibci` 绑定一个宿主 callable 并成功调用返回）；全量 pytest 零回归。
-- **独立分支**：`exp/native-binding-p1`。
+### R2 — 近期分发指导文档（Python 源码分发形态）
+- 新增 `docs/howto/modify_llm_provider.md`：指引"修改 `ibci_modules/ibci_ai/core.py` 自定义
+  LLM 底层/供应商/配置"，含：文件职责、`LLMProvider` 契约方法（`call`/`stream`/`probe`/`get_retry`）、
+  修改点与注意事项（思考抑制字段、返回类型提示、如何换配置适配器）、改动后全量回归。
+- 更新 `docs/architecture/01_principles.md` §3.7：明确"近期=改内核文件；远期=原生绑定"两段式定位。
+- **验证门**：文档与代码一致（governance 自检）；全量 pytest 零回归。
 
-### P2 — 协议/impl 扩展到宿主类型
-- 扩展 `impl` / `implements` 语义：允许目标为"宿主导入类型"（系统引入的一等宿主类型），
-  用户可对 Python-backed 值声明协议满足、`impl` 补方法（读 `self` 与宿主绑定的成员）。
-- 编译器/语义层改动：类型满足检查、成员并集（类自身 + impl + 宿主绑定声明）。
-- **验证门**：新增用例（`impl SomeProto for HostValue:` 内调用宿主绑定成员）；全量 pytest 零回归。
-- **独立分支**：`exp/native-binding-p2-protoimpl`。
+### 【近期主线收尾】：R0-R2 完成后，Provider 层分离即"彻底、干净、分叉口就绪"——
+远期愿景不在此开展，但接口位已留、无返工债务。
 
-### P3 — 插件体系重构（废弃 Python `_spec.py` 思路，按新绑定统一）
-- 审查既有 `_spec.py` 插件（ibci_json/math/time/schema/net + ai/file/ihost/idbg/isys）在新机制下的
-  归宿：或改写成"用户 IBCI 库 + 宿主绑定"，或废弃，或保留为内核原生（不通用户手写）。
-- **不保留双通道**：新绑定是唯一"用户扩展底层"途径；旧 `_spec.py` 用户插件路径按裁决删除或降级。
-- **验证门**：全量 pytest 零回归 + 既有插件用例在新机制下行为不变（或按新语义重构用例）。
-- **独立分支**：`exp/native-binding-p3-plugin`。
+---
 
-### P4 — 输入面落地（LLM provider / 配置源自定义，作为新机制的真实用例）
-- 接通 `ai.register_provider`（经宿主绑定/模块路径）、`set_config_source`、`thinking_mode`
-  （内核填 + provider 消费）——用 P1-P2 的新绑定机制作为"用户自定义 provider"的规范写法。
-- 补 `docs/howto/custom_llm_provider.md`。
-- **保留的设计要点（源自已回退的 WIP，供 P4 复用）**：
-  - 委托容器：`AIPlugin` 仍为 `CAP_LLM_PROVIDER` 唯一注册对象，内部设 `_delegate_provider`，
-    `call/stream` 委托；内核侧零改动。
-  - `register_provider(provider_or_path)`：接受宿主对象或模块路径（`importlib` +
-    `create_implementation()` 工厂约定 + `invalidate_caches()`）。
-  - `thinking_mode`：provider 读 `request.thinking_mode`（on/off/auto；auto fallback 模型能力）
-    决定 `enable_thinking`，不硬编码。
-  - `set_config_source(adapter_or_path)`：`AIPlugin._config_source` 可注入，`load_project_config`
-    经它（默认 `ProjectApiConfigAdapter`；`load_raw_dict` 缺省时按 mock=False）。
-  - vtable 增 `register_provider`/`set_config_source`。
-  - 测试：注册委托/thinking 消费/适配器替换 单元 + e2e（模块路径注册真实调用自定义 provider）。
-- **验证门**：全量 pytest 零回归 + T09 真实 LLM 复跑（内置 provider 行为不变）+ 自定义 provider
-  e2e。
-- **独立分支**：`exp/llm-user-customable`（承接，先前 WIP 已回退，按新机制重做）。
+### 【远期愿景 · post-近期】F0 — Native Binding 地基验证
+- 证明 `box`/callable→用户 IBCI 类导出可行，产出宿主绑定机制设计底稿
+  （`docs/architecture/01_native_host_binding.md`）。
+- **验证门**：全量 pytest 绿；设计文档与代码一致。
 
-### P5 — 架构统一与文档收敛
-- `docs/architecture/01_principles.md` 更新宿主绑定机制章节（替换"插件=Python `_spec.py`"叙述）。
-- `docs/syntax/` 补宿主绑定语法、协议/impl 宿主类型、用户 IBCI 库（非 Python 插件）编写指南。
-- `docs/howto/write_user_lib.md`（替代/补充 write_user_plugin.md，改为"用 IBCI 写扩展"）。
-- **验证门**：全量 pytest 零回归；文档与代码一致（governance 自检）；无 stub/半接通。
-- **独立分支**：`exp/native-binding-p5-doc`。
+### F1 — 宿主导入一等语法 + 用户类持有 native
+- 宿主导入（`host lib = python.import("pkg")`）+ 用户 IBCI 类/`any` 字段持 `IbNativeObject`，
+  显式绑定到 IBCI 声明方法（非自动穿透）。
+- **验证门**：e2e（`.ibci` 绑定宿主 callable 并调用成功）；全量 pytest 零回归。
+
+### F2 — 协议/impl 扩展到宿主类型
+- `impl`/`implements` 目标扩展到"宿主导入类型"；编译期成员并集（类自身 + impl + 宿主绑定）。
+- **验证门**：`impl SomeProto for HostValue:` 用例；全量 pytest 零回归。
+
+### F3 — 插件体系重构（废弃 Python `_spec.py` 思路）
+- 既有 `_spec.py` 插件按新绑定统一 / 废弃 / 内核原生隔离；**不保留双通道**。
+- **验证门**：全量 pytest 零回归 + 既有插件用例按新语义重构。
+
+### F4 — Provider 自定义经新绑定统一（接 R 期留位）
+- `thinking_mode`/`ConfigSourceAdapter`/provider 注册用 F1-F3 新绑定实现（R 期统一位），
+  逆 R 期的"改内核文件"临时态，成为"成熟现代方案"。
+- **验证门**：全量 pytest 零回归 + 自定义 provider e2e + T09 真实 LLM 复跑。
+
+### F5 — 架构统一 / 文档收敛（含内核自举 + 缓存/JIT / 隔离改造 / 反射能力的规划评估）
+- 补齐原生绑定语法/协议/用户 IBCI 库文档；评估并落地档 A（缓存预编译）→ 档 B（真 JIT）。
+- **验证门**：全量 pytest 零回归；无 stub/半接通；脚手架全部拆除。
 
 ---
 
 ## 四、关键裁决点（触及对外契约/语言机制，需用户拍板）
 
+> 近期（R0-R2）无待拍板的语言级契约变化。以下为**远期愿景（F 段）**推进时需定的裁决点，
+> 近期不留存。
+
 1. **宿主绑定语法形态**：一等关键字 `host`/`native`（如 `host lib = python.import("pkg")`）
-   vs 借助既有 `import` 扩展 vs 独立 `bind` 语句。→ 影响 P1，需定。
-2. **"宿主导入类型"在类型系统的地位**：作为一等 IOC 类型（可被 `impl`/协议引用）还是受限的
-   `any` 子类？→ 影响 P2 与类型理论。
-3. **旧 `_spec.py` 用户插件的归宿**（P3）：删除 / 降级为"内核开发者专用" / 保留为新绑定的编译目标。→
-   影响破坏面。
-4. **输入面（P4）是否必经 P1-P2**：若先做"模块路径 + 宿主注入"的临时路径（低风险）再在 P2 后统一到
-   原生绑定，是否接受"临时宿主注入"这一中间态？（工作模式定论禁 compat shim，故倾向直接走 P1-P2。）
+   vs 借助既有 `import` 扩展 vs 独立 `bind` 语句。→ 影响 F1，届时定。
+2. **"宿主导入类型"在类型系统的地位**：作为一等类型（可被 `impl`/协议引用）还是受限的
+   `any` 子类？→ 影响 F2 与类型理论。
+3. **旧 `_spec.py` 用户插件的归宿**（F3）：删除 / 降级为"内核开发者专用" / 保留为新绑定的编译目标。
+   → 影响破坏面。
+4. **provider 自定义（F4）与 R 期"改内核文件"临时态**：R 期是健康的近期脚手架（Python 源码分发
+   下合理），F4 用原生绑定统一后**彻底拆除**该临时态——这两者不是双通道（R 期是近期唯一的用户面，
+   F4 是远期替换），但须保证移交时不并存。
 
 ---
 
 ## 五、当前进度与交接状态
 
 - **已合入 `unsafe-vibe-dev`**：LLM provider 中间层批 1-4（契约 + 内核收口 + provider 插件化 +
-  内省/文档），全量 pytest 3027 pass。
-- **已回退**：`exp/llm-user-customable` 上的 provider WIP（含 `register_provider`/thinking_mode 半成品），
-  待 P4 按新机制重做。设计要点保留于 git 历史 + 本路线图 §三.P4。
-- **触发此路线**：用户裁定抛弃"Python `_spec.py` 插件"思路，转向"用户 IBCI 层原生绑定 Python 内容"。
-- **交接**：下一 session 从 §二/§三 开始，按 P0 → P5 推进；详细交接见 `tasks_docs/HANDOFF.md` §2。
+  内省/文档），全量 pytest 3027 pass。当前 provider 分离的内部结构已干净。
+- **近期未开放用户自定义**：`register_provider`/`set_config_source` 等 WIP 已回退；
+  近期限定"修改 `ibci_modules/ibci_ai/core.py`"这一条路径。设计要点保留于 git 历史 +
+  本路线图 §三.R1（为远期统一留位，不近期造用户入口）。
+- **触发此两段式规划**：用户裁定近期聚焦 provider 分离（Python 源码分发，改内核文件），
+  远期才做原生绑定成熟方案；任何方向都要求彻底、不留脚手架。
+- **交接**：下一 session 从 §三.近期主线 R0 开始；详细交接见 `tasks_docs/HANDOFF.md` §2。
 
 ---
 
