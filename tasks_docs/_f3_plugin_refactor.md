@@ -169,6 +169,60 @@ loader 环 2）从其 codes.py/catalog/docs 删除。Engine 构造还原为 `IBC
 清除经 test_diagnostic_catalog CAT-7 佐证；`spec_builder` 死代码清零经零消费者扫描。
 冒烟：`import math/json/time/schema/file` 全链路正常（同 F3-1）。
 
+## 八、F3-3 落地记录（2026-08-18，exp/plugin-refactor-f3）
+
+**完成态**：examples/trials/docs 全部迁移到 F3 新语义（用户侧扩展唯一边 = 宿主绑定 bind）。
+
+- **examples**：`03_advanced_features/plugins_demo/` 整目录删除（演示已删除的用户插件
+  `_spec.py` 系统）；`isolation_demo/sub_project/plugins/` 删除（用户插件路已删，
+  parent/child.ibci 隔离演示保留）；`03_advanced_features/README.md` 重写（移除插件
+  系统/插件开发章节，目录树更新，指明用户扩展唯一通道 = 宿主绑定）。
+- **trials/T01**：`plugins/`（calc/plugin_info 用户插件 _spec.py）删除；
+  `cases/D2-21-plugin.ibci` 改写为宿主绑定演示（`import python "math" as m: bind
+  sqrt/pow`，expect-out 改为 `sqrt=4.0 | pow=1024.0 | DONE`，经 main.py 实跑验证通过）；
+  `REGISTER.md` D2-21 行与 `D1_MATRIX.md` D1-11-008 条目同步为新语义（历史 REV 行与
+  缺陷证据段保留原状——它们是历史运行记录）。
+- **docs**：
+  - `howto/write_user_plugin.md` **删除**，替换为新 howto `howto/extend_with_host_binding.md`
+    （宿主绑定 bind 操作指南）。决策理由：旧主题（写 _spec.py 插件）整体不存在，且与
+    重写后的 subsystems/04 不同层（howto=操作指南 vs subsystems=内部设计），不重复；
+    文件名改写避免误导性文件名。引用方（modify_llm_provider.md ×2、docs/README.md
+    目录树）已同步。
+  - `subsystems/04_plugin_system.md` **重写**为"内置模块系统与宿主绑定"：内置 11 模块
+    构造期注册（builtin_modules.py）+ 无插件搜索路径 + 宿主绑定为用户扩展唯一通道 +
+    HostInterface 覆盖保护；_spec.py/plugin_paths/AutoDiscovery/用户插件描述全删
+    （文件名保留，避免大范围断链，主题由标题与内容承载）。
+  - `architecture/07_kernel_native_modules.md`：更新为"内置 11 模块（内核原生 5 +
+    工具 5 + file）构造期一次注册 builtin_modules.py"；覆盖保护描述改为注册路径
+    （register_module 内建 reserve + KDIAG_POLICY_MODULE_OVERRIDE）；保留两轴模型 /
+    exported_types / 单一 setup / provenance 门控。
+  - `architecture/01_principles.md` §七重写（模块系统与宿主绑定；删 §7.3 嗅探全节）、
+    §九自动注册表（删 ModuleDiscoveryService/SpecBuilder 行）、附录关键文件索引
+    （discovery.py 行 → builtin_modules.py 行）、HOST 双路暴露附录措辞。
+  - `architecture/06_path_system.md`：五概念 → 四概念（删 plugin_paths）；§3 插件发现
+    优先级整节改写为"模块加载（无插件搜索路径）"；§4 删继承插件路径条目。
+  - `architecture/01_native_host_binding.md`：状态头更新为 F0-F3 已合入；§一/§2.3/§2.4
+    的"当前 _spec.py"表述改为历史/已完成叙述；§3.4 标记 F3 已完成。
+  - 定点修正：`03_type_system.md`（描述符来源 → builtin_modules.py param_descriptors）、
+    `05_functions.md`（原生模块具名调用声明来源）、`09_observability.md` 与
+    `15_diagnostics.md`（KDIAG_POLICY_MODULE_OVERRIDE 触发描述去"用户插件"）、
+    `05_vm_specification.md` ISO-10（插件可见性隔离 → 模块可见性隔离）、
+    `KNOWN_LIMITS` §十九（改题"模块可见性隔离与无状态约定"，内容覆盖内置模块 +
+    宿主绑定 sys.modules 边界，删跨 project_root 用户插件条目）、
+    `guide/00_environment.md`（删 ibci_sdk import 验证）、`ARCHITECTURE.md` 索引
+    （06 四概念、07 标题）、`SUBSYSTEM_DESIGN.md` 04 行、`LANGUAGE_DESIGN_EVOLUTION.md`
+    §3.8（_spec.py 现状描述 → TypeDef 字面量 + bind）、`syntax/11_modules.md`
+    （§11.2 内置模块注册语义、§11.9 改为用户扩展=宿主绑定指针、§11.10 去
+    "F1 成果/推翻 _spec.py"叙述、章题改"模块与宿主绑定"）。
+  - 根 `README.md`：特性条"插件化扩展（自动嗅探）"→"宿主绑定扩展"；文档链接区
+    "编写用户插件"→"宿主绑定扩展"。
+- **保守保留**（有意不改）：`guide/01_setup.md` 项目标志列表中的 `plugins/`——
+  `core/project_detector.py` 仍把 `plugins/` 列为 project_root 探测标志（代码事实，
+  文档以代码为准）；`01_principles.md` §3.3/§3.7 等"插件"措辞——指内部扩展层
+  （IbPlugin/IbStatefulPlugin 仍在 `core/extension/ibcext.py`），非已删用户插件通道；
+  trials REGISTER.md/REVERIFY.md 历史运行记录行。
+- **验证**：全量 pytest 零回归（实跑计数不冻结）；D2-21 改写后经 main.py 实跑通过。
+
 **F3-2 遗留（排入 F3-3/F3-4）**：examples/plugins_demo、isolation_demo、trials/T01 等
 含 _spec.py 的示例/trials 目录迁移或删除；docs/subsystems/04_plugin_system.md、
 docs/howto/write_user_plugin.md、docs/architecture/07_kernel_native_modules.md 插件发现

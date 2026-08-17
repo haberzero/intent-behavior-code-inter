@@ -257,14 +257,14 @@ func max[T: Comparable](T a, T b) -> T:
 - 访问控制可以作为独立但正交的机制加入，不与协议耦合；
 - 枚举可以升级为真正的代数数据类型，成员是实例，可携带方法。
 
-### 3.8 模块 / 插件协议化
+### 3.8 模块协议化
 
-当前插件用 `_spec.py` + vtable 声明接口，这套机制可以纳入统一协议体系：
+当前内置模块用集中的 TypeDef 字面量（`core/runtime/bootstrap/builtin_modules.py`）声明接口，用户扩展经宿主绑定 `bind` 声明，这套机制可以纳入统一协议体系：
 
-- 插件模块的公开接口可以声明为协议；
-- 插件实现类可以声明 `implements SomeProtocol`；
+- 模块的公开接口可以声明为协议；
+- 模块实现类可以声明 `implements SomeProtocol`；
 - `HostInterface` / `ModuleLoader` 通过协议注册表查询能力，而不是靠 `hasattr` / 固定方法名；
-- 这会让“语言内用户协议”和“插件扩展协议”使用同一套机制。
+- 这会让“语言内用户协议”和“模块扩展协议”使用同一套机制。
 
 ---
 

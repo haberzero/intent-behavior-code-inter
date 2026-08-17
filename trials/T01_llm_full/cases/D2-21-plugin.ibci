@@ -1,18 +1,17 @@
-# D2-21 多文件：用户插件加载（calc/plugin_info）+ 插件函数调用
-# doc: docs/syntax/11_modules.md §11.9
-# 期望: 插件自动发现加载；calc.add/mul 与 plugin_info.version 可用
+# D2-21 宿主绑定：import python "math" as m: bind sqrt/pow（用户扩展唯一通道）
+# doc: docs/architecture/01_native_host_binding.md
+# 期望: 绑定 Python 标准库 math；m.sqrt/m.pow 调用成功
 
 # expect-class: PASS
-# expect-out: add=30 | mul=25 | version=2.0.0 | DONE
+# expect-out: sqrt=4.0 | pow=1024.0 | DONE
 # expect-exit: 0
 # expect-llm: false
-import calc
-import plugin_info
+import python "math" as m:
+    bind sqrt(x: float) -> float
+    bind pow(x: float, y: float) -> float
 
-int result1 = calc.add(10, 20)
-print("add=" + (str)result1)
-int result2 = calc.mul(5, 5)
-print("mul=" + (str)result2)
-str version = plugin_info.version
-print("version=" + version)
+float result1 = m.sqrt(16.0)
+print("sqrt=" + (str)result1)
+float result2 = m.pow(2.0, 10.0)
+print("pow=" + (str)result2)
 print("DONE")

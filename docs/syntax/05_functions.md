@@ -103,7 +103,7 @@ print((str)add(**kw))    # 展开为 add(a=1, b=2) → 3
 - 默认值类型与参数标注不匹配（`SEM_DEFAULT_TYPE_MISMATCH`，定义处校验）
 - 参数顺序：`*args` 前不能有默认值后接无默认值普通参数；`**kwargs` 必须居末（`PAR_UNEXPECTED_TOKEN`）
 
-**原生模块函数**：`_spec.py` 中声明 `params: [{"name", "type", "default", "kind"}]` 后，模块函数同样支持具名调用与默认值填充（如 `file.write(target="a.txt", data="x")`）。
+**原生模块函数**：内置模块函数经 `param_descriptors` 声明参数名与默认值后，同样支持具名调用与默认值填充（如 `file.write(target="a.txt", data="x")`）。
 
 ### 5.2 行为表达式与 return 的约束
 > **Known Limit (docs/KNOWN_LIMITS.md §四)**：`return @~ ... ~` 是**禁止写法**，会产生 `SEM_TYPE_MISMATCH` 编译错误。

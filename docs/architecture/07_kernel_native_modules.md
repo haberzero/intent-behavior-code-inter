@@ -1,6 +1,6 @@
-# 内核原生模块与插件边界
+# 内核原生模块边界
 
-> 本文档描述 IBCI 内核原生模块的架构边界，包括模块分类、provenance/visibility 模型与插件发现机制。面向需要理解模块系统内部设计的开发者。
+> 本文档描述 IBCI 内核原生模块的架构边界，包括模块分类、provenance/visibility 模型与覆盖保护机制。面向需要理解模块系统内部设计的开发者。
 >
 > 路径系统架构见 `docs/architecture/06_path_system.md`。
 
@@ -12,14 +12,17 @@
 
 | 轴 | `IbSpec` 字段 | 语义 |
 |---|---|---|
-| 可用性 | `provenance` | `KERNEL_NATIVE` = 随内核发行、构造期预注册、不可被用户插件覆盖 |
+| 可用性 | `provenance` | `KERNEL_NATIVE` = 随内核发行、构造期注册、不可被非 kernel-native 注册覆盖 |
 | 可见性 | `visibility` | `IMPORT_GATED` = 名字须经 `import` 语句进入当前文件作用域 |
 
 禁止用单一 bool（如 `is_user_defined`）将两轴焊死，否则会经 prelude 过滤器意外解除 import-gating。
 
 ### 内核原生模块清单
 
-六个模块在 `Engine.__init__` 构造期预注册：其中 `ai`/`ihost`/`idbg`/`isys`/`iruntime` 经 `register_kernel_native_modules` 批量注册，`file` 由 engine 单独注册。
+内置 11 个模块（内核原生 5 + 工具 5 + `file`）的 TypeDef 字面量集中于
+`core/runtime/bootstrap/builtin_modules.py`，在 Engine 构造期经
+`register_builtin_modules` 一次注册。其中内核原生 6 个模块（`KERNEL_NATIVE`
+provenance）为：
 
 | 模块 | 功能 | 安全语义 |
 |---|---|---|
@@ -32,7 +35,9 @@
 
 ### HostInterface 覆盖保护
 
-`reserve_kernel_native_name(name)` 在 bootstrap 预注册时调用；`is_kernel_native(name)` 在插件发现路径调用，命中则拒绝用户实现接入。用户插件目录下的同名模块不会覆盖内核原生实现。
+`register_module` 在注册路径检查：`KERNEL_NATIVE` provenance 的元数据注册时把模块名加入
+`_kernel_native_names`；此后同名非 kernel-native 注册被忽略并发射
+`KDIAG_POLICY_MODULE_OVERRIDE` 诊断（可观测，不静默）。宿主绑定 / 外部注册无法覆盖内核原生实现。
 
 ### exported_types：import 时的类型注入
 
@@ -44,7 +49,7 @@
 
 ### 模块初始化：单一 setup 入口
 
-内核原生模块与用户插件统一经 `setup(capabilities)` 完成初始化。加载器遍历已注册模块调用 `setup`，`capabilities` 在构造时已装配能力注册表，模块据此向 `CapabilityRegistry` 注册自身能力（如 `ai` 注册 `llm_provider`）。不存在独立的二次水化钩子——生命周期收敛为单一初始化入口。
+全部内置模块统一经 `setup(capabilities)` 完成初始化。加载器遍历已注册模块调用 `setup`，`capabilities` 在构造时已装配能力注册表，模块据此向 `CapabilityRegistry` 注册自身能力（如 `ai` 注册 `llm_provider`）。不存在独立的二次水化钩子——生命周期收敛为单一初始化入口。
 
 ### 模块导出过滤（provenance 门控）
 
@@ -62,5 +67,5 @@ final_mod_meta.members = {
 
 ## 深入指引
 
-- 插件子系统实现：docs/subsystems/04_plugin_system.md
+- 内置模块系统与宿主绑定：docs/subsystems/04_plugin_system.md
 - 模块 API 语法层：docs/syntax/11_modules.md

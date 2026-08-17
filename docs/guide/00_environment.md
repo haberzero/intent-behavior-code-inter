@@ -39,7 +39,7 @@ conda activate ibci
 
 ```bash
 python --version          # 3.12.x
-python -c "import core; import ibci_modules; import ibci_sdk"
+python -c "import core; import ibci_modules"
 python -m pytest tests/   # 全量测试套件
 ```
 

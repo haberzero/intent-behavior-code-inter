@@ -1,4 +1,4 @@
-﻿# IBCI VM 规范
+# IBCI VM 规范
 
 > **文档性质**：本文档是 IBCI 虚拟机的**正式规范层定义**，与 Python 宿主实现隔离。
 > 规范目标：使本文档连同 `tests/compliance/` 合规测试套件成为跨宿主实现（Python/Rust/Go/C++ 等）的合规标准。
@@ -248,7 +248,7 @@ python -m pytest tests/compliance/ -v
 | **ISO-7** | collect 类型过滤 | §4.2 |
 | **ISO-8** | 错误传播 | §4.2 |
 | **ISO-9** | collect 超时（默认无界） | §4.2 |
-| **ISO-10** | 插件可见性隔离（不碰 Python import） | §4.2 |
+| **ISO-10** | 模块可见性隔离（不碰 Python import） | §4.2 |
 | **IC-1** | fork 隔离 | §5.1 |
 | **IC-2** | restore 还原 | §5.1 |
 | **IC-3** | llmexcept snapshot | §5.1 |

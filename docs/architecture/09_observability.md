@@ -116,7 +116,7 @@ kernel_diagnostic(code, detail=None, message=None, *, rc=None)
 | `KDIAG_PROTOCOL_VALIDATE_FALLBACK` | `__validate_prompt__` | 校验协议失败（非致命） |
 | `KDIAG_PROTOCOL_SNAPSHOT_FALLBACK` | `__snapshot__` | 快照协议失败，回退深克隆 |
 | `KDIAG_PROTOCOL_RESTORE_FALLBACK` | `__restore__` | 恢复协议失败，保持现状（best-effort） |
-| `KDIAG_POLICY_MODULE_OVERRIDE` | kernel-native 模块保护 | 用户插件尝试覆盖 kernel-native 模块被忽略 |
+| `KDIAG_POLICY_MODULE_OVERRIDE` | kernel-native 模块保护 | 非 kernel-native 注册尝试覆盖 kernel-native 保留名被忽略 |
 | `KDIAG_RUNTIME_COLLECT_SKIP` | 隔离收集 | 变量无法转为原生值，跳过 |
 | `KDIAG_RUNTIME_STAGE_SKIP` | Interpreter STAGE 6 预评估 | kernel 令牌缺失，STAGE 6 跳转跳过 |
 | `KDIAG_RUNTIME_ENV_LIMIT` | 环境限制异常 | `RecursionError`/`MemoryError`/`SystemError` 判定为环境限制，保留根因发射诊断 |

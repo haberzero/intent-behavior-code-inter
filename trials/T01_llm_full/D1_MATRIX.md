@@ -87,7 +87,7 @@
 - D1-11-005 ihost 隔离（B1 补记）
 - D1-11-006 file 模块读写/沙箱（B3 组合）
 - D1-11-007 json 模块 parse/stringify/merge/keys/nested
-- D1-11-008 用户插件 plugins（多文件）
+- D1-11-008 宿主绑定 bind（import python ...: bind，多文件）
 
 ## 12. 内建（12_builtins）
 - D1-12-001 类型转换内建 int()/str()/float()/bool()

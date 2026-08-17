@@ -1,6 +1,6 @@
-## 11. 模块与插件
+## 11. 模块与宿主绑定
 
-> 本章描述 IBCI 的模块系统与 import 机制。面向已阅读健壮性章节的开发者。覆盖 import 约束、内置模块（ai/isys/idbg/ihost/file/json）的 API 与插件使用。
+> 本章描述 IBCI 的模块系统与 import 机制。面向已阅读健壮性章节的开发者。覆盖 import 约束、内置模块（ai/isys/idbg/ihost/file/json 等）的 API 与宿主绑定。
 
 ### 11.1 import 位置约束
 
@@ -36,7 +36,7 @@ func main():
 
 ### 11.2 内置模块
 
-**内核原生模块**（随内核发行，构造期预注册，不可被用户插件覆盖）：
+**内核原生模块**（随内核发行，构造期注册，受 HostInterface 覆盖保护）：
 
 ```ibci
 import ai      # LLM provider 配置（API key、model、retry 等）
@@ -47,8 +47,8 @@ import file    # 受限文件系统操作
 import iruntime  # 运行时内省（snapshot / subscribe / configure）
 ```
 
-**随仓库发行插件**（经插件发现机制自动加载；同名冲突按插件发现优先级裁决，
-见 §11.6）：
+**内置工具模块**（随内核发行，与内核原生模块同在 Engine 构造期一次注册，
+见 `docs/architecture/07_kernel_native_modules.md`）：
 
 ```ibci
 import json    # JSON 解析
@@ -163,11 +163,11 @@ ihost.load_state(path)                # 加载状态
 str src = ihost.get_source()          # 获取当前入口源码
 ```
 
-子环境完全独立（独立 Engine 实例、独立插件发现、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境经 `ai.load_project_config()` 按自身 `project_root` 显式加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json` 并调用 `ai.load_project_config()`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
+子环境完全独立（独立 Engine 实例、构造期自行注册同一组内置模块、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境经 `ai.load_project_config()` 按自身 `project_root` 显式加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json` 并调用 `ai.load_project_config()`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
 
 ### 11.7 file 模块
 
-`file` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其受限子类型（仅可经 `file` 模块访问，不可由用户插件覆盖）。
+`file` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其受限子类型（仅可经 `file` 模块访问，受 kernel-native 覆盖保护）。
 
 ```ibci
 import file
@@ -221,15 +221,16 @@ any val = json.get_nested(obj, path) # 按路径取嵌套值
 json.set_nested(obj, path, value)    # 按路径设置嵌套值
 ```
 
-### 11.9 用户插件
+### 11.9 用户扩展：宿主绑定
 
-插件文件须放置于工程的 `./plugins` 目录，以 Python 编写，通过 `_spec.py` 声明元数据。内核原生模块（`ai`/`file`/`ihost`/`idbg`/`isys`/`iruntime`）不位于插件目录，不可被用户插件覆盖。
+用户扩展 IBCI 的唯一通道是**宿主绑定**（见 §11.10）：在 `.ibci` 文件内用
+`import python "..." as lib: bind ...` 显式声明要绑定的宿主成员。内核原生模块
+（`ai`/`file`/`ihost`/`idbg`/`isys`/`iruntime`）受覆盖保护，绑定名不可与之重名。
 
 ### 11.10 宿主绑定（import python）
 
-宿主绑定允许 IBCI 直接导入**裸 Python 模块/包**并显式声明绑定成员，无需 Python 侧
-`_spec.py` 契约。这是 F 段远期主线的 F1 成果，走向"用户在 IBCI 侧声明式绑定宿主
-内容"（详见 `docs/architecture/01_native_host_binding.md`）。
+宿主绑定允许 IBCI 直接导入**裸 Python 模块/包**并显式声明绑定成员，绑定声明即
+契约（详见 `docs/architecture/01_native_host_binding.md`）。
 
 ```ibci
 import python "math" as m:
@@ -248,7 +249,7 @@ func test() -> auto:
 - **显式声明式绑定（非自动穿透）**：只有 `bind` 声明的成员可访问；契约外成员
   fail-fast（运行时 AttributeError）。bind 声明但宿主模块缺失该成员 → 绑定期报错。
 - `lib` 是一等值（模块级变量），用户 IBCI 类/`any` 字段可持有并在方法内调用。
-- 安全模型与既有插件一致：成员访问强制经 vtable/whitelist 门控，无隐式反射。
+- 安全模型与内置模块一致：成员访问强制经 vtable/whitelist 门控，无隐式反射。
 
 #### 11.10.1 宿主类型绑定（bind class）
 
@@ -281,6 +282,6 @@ func test() -> auto:
 
 ## 深入指引
 
-- 插件系统内部实现：docs/subsystems/04_plugin_system.md
+- 内置模块系统与宿主绑定内部实现：docs/subsystems/04_plugin_system.md
 - 循环导入限制：docs/KNOWN_LIMITS.md §十八
-- 插件可见性隔离：docs/KNOWN_LIMITS.md §十九
+- 模块可见性隔离：docs/KNOWN_LIMITS.md §十九

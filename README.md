@@ -1,4 +1,4 @@
-﻿# IBC-Inter (Intent Behavior Code - Interactive)
+# IBC-Inter (Intent Behavior Code - Interactive)
 
 **请注意！！当前项目仍然处在实验性示例阶段，请谨慎参考并且不要直接用于生产环境！！**
 
@@ -12,7 +12,7 @@ IBC-Inter 是一种实验性的**意图驱动型混合编程语言**。它旨在
 - **LLM函数定义**: 用设计函数的思路设计LLM调用，把LLM的提示词书写为类似函数的形式，允许参数传递
 - **提示词协议`__to_prompt__`**: 允许类对象定义自身在LLM调用过程中的表现形式，实现 AI 视角、数据结构与代码逻辑的解耦
 - **AI 容错控制流 (LLM-Except)**: 专为解决 AI 逻辑判断模糊性设计的 `llmexcept` 与 `retry` 机制，实现逻辑的自我修复
-- **插件化扩展**: 零配置的 Python 插件自动嗅探机制，轻松扩展语言能力。
+- **宿主绑定扩展**: 在 .ibci 内用 `import python "..." as lib: bind ...` 显式绑定任意 Python 模块/类/函数，声明式扩展语言能力。
 - **动态宿主**: 允许一段IBC-Inter代码主动开启一个新脚本的独立编译执行且完全不干扰主环境，允许IBC-Inter脚本生成新的IBC-Inter脚本并实时动态地切换至全新的编译-解释运行的环境。
 
 ## 项目亮点
@@ -215,8 +215,8 @@ python main.py run test_target_proj/01_hello_world.ibci
 - [文档中心导航与治理](docs/README.md)（**新加入者先读**：目录结构、阅读路径、治理纪律）
 - [IBC-Inter 语法手册](docs/SYNTAX_REFERENCE.md) (语法与类型系统的完整参考，含诊断码参考 `docs/syntax/15_diagnostics.md`)
 - [架构原则](docs/ARCHITECTURE.md) (核心设计思路，含观测体系 `docs/architecture/09_observability.md`)
-- [子系统设计](docs/SUBSYSTEM_DESIGN.md)（意图 / 文件容器 / 可调用 / 插件 / 协程内部设计）
-- [操作指南](docs/howto/)（按问题查阅：调试 LLM 调用、编写用户插件）
+- [子系统设计](docs/SUBSYSTEM_DESIGN.md)（意图 / 文件容器 / 可调用 / 模块系统 / 协程内部设计）
+- [操作指南](docs/howto/)（按问题查阅：调试 LLM 调用、宿主绑定扩展）
 - [已知限制](docs/KNOWN_LIMITS.md) (当前版本的语言级约束)
 
 ### 运行测试

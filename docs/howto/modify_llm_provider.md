@@ -2,7 +2,7 @@
 
 > 面向需要自定义 IBCI 的 LLM 底层（供应商、请求/响应格式、api_config.json 书写
 > 格式、思考参数映射）的开发者。解决"在不改语言内核的前提下换掉 LLM 调用实现"的
-> 具体问题。前置知识：`docs/howto/write_user_plugin.md`（插件机制）、
+> 具体问题。前置知识：`docs/subsystems/04_plugin_system.md`（内置模块机制）、
 > `docs/architecture/01_principles.md` §3.7（供应商无关中间层）、Python 基础。
 
 ## 修改哪个文件
@@ -100,5 +100,5 @@ IBCI 的内置 `ai` 模块由两个文件组成，职责不同、修改权限不
 ## 深入指引
 
 - 供应商无关契约全文：`docs/architecture/01_principles.md` §3.7
-- 插件编写基础：`docs/howto/write_user_plugin.md`
+- 内置模块系统：`docs/subsystems/04_plugin_system.md`
 - 调试 LLM 调用：`docs/howto/debug_llm_calls.md`

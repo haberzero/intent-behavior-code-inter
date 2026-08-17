@@ -157,7 +157,7 @@ pytest 2252 passed / 1 skipped。**无本次修复引入的回归**。
 | D2-11-shadow-type | 12 §12.1 | 类型名遮蔽拒绝 | 编译错误 | PASS | - | logs/D2-11.log | |
 | D2-12-shadow-builtin | 12 §12.1 | 内建直接赋值拒绝 | SEM_TYPE_MISMATCH | PASS | - | logs/D2-12.log | |
 | D2-20-circular-a | KNOWN_LIMITS 18 | 循环导入 | DEP_CIRCULAR_IMPORT | PASS | - | logs/D2-20.log | |
-| D2-21-plugin | 11 §11.9 | 插件加载调用 | add=30 mul=25 version=2.0.0 | PASS | - | logs/D2-21.log | |
+| D2-21-plugin | 宿主绑定 | 绑定 math sqrt/pow | sqrt=4.0 pow=1024.0 | PASS | - | logs/D2-21.log | 用户插件系统已废弃，case 改为宿主绑定演示 |
 | D2-30-subclass-init | KNOWN_LIMITS 6 | auto-init 不含父字段 | breed=Husky name_null=True | PASS | - | logs/D2-30.log | |
 | D2-31-ref-generator-break | KNOWN_LIMITS 5 + 05 §5.8 | 引用共享/break | a_len=4 GEN_FINISHED consumed=3 | PASS | P3注 | logs/D2-31.log | BOUNDARY-001 |
 | D2-32/32b-gen-await | KNOWN_LIMITS 24 | await chan 预期异常 | x=42 正常（未复现文档错误） | BOUNDARY | P3 | logs/D2-32.log | BOUNDARY-002 |

@@ -232,7 +232,7 @@ TypeRef 生命周期两端口径必须收敛，避免"结构化 vs 扁平化"两
 **与其他机制的交互**：
 - 语义层 `visit_IbCall` 以描述符为权威做结构/类型校验（见 §5.1 编译期调用）。
 - 语义层与运行期共用同一绑定算法核心（`core/kernel/arg_binding.py`），见 `docs/architecture/04_vm_interpreter.md` §2.6。
-- 原生模块函数的描述符由 discovery 从 vtable `params` 声明构建（格式见 `docs/subsystems/04_plugin_system.md` §4）。
+- 原生模块函数的描述符来自 `core/runtime/bootstrap/builtin_modules.py` 的 `param_descriptors` 字面量声明（构造期注册，见 `docs/subsystems/04_plugin_system.md` §2）。
 
 ---
 

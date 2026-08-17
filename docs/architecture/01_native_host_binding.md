@@ -7,15 +7,16 @@
 >
 > 本文档是 `tasks_docs/ROADMAP_NATIVE_BINDING.md` §三【远期愿景】F0-F5 的**设计
 > 底稿**（F0 产物）。当前代码状态：F0（地基验证）、F1（宿主导入一等语法 + 用户类
-> 持有 native）已完成并合入；F2-F5 未开始。
+> 持有 native）、F2（bind class 宿主类型绑定）、F3（插件体系重构：废弃 `_spec.py`
+> 磁盘发现通道，宿主绑定成为用户扩展唯一边）已完成并合入；F4-F5 未开始。
 
 ---
 
 ## 一、为什么需要原生宿主绑定
 
-当前 IBCI 暴露 Python 内容给用户的方式是 **Python 侧手写 `_spec.py` 插件**：
+IBCI 曾以 **Python 侧手写 `_spec.py` 插件** 的方式暴露 Python 内容给用户：
 用户在 Python 侧定义实现 + `__ibcext_vtable__()` 契约，IBCI 侧经 `import` 包装为
-模块。这带来几个结构性限制：
+模块（该通道已由 F3 废弃删除）。它带来几个结构性限制：
 
 1. **双语言契约割裂**：契约（`_spec.py`）与实现（`.py`）分居两个文件、两种形态，
    用户在 Python 侧维护"给 IBCI 看的接口"，而非在 IBCI 侧声明"我要绑定什么"。
@@ -57,7 +58,7 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 **结论：成员访问强制经声明，无隐式穿透。缺"让用户 IBCI 代码按声明导出 native
 成员"的干净机制（正是本方向要新增的）。**
 
-### 2.3 import 解析路径（当前）
+### 2.3 import 解析路径（F1 前）
 
 `core/runtime/interpreter/module_manager.py`：
 
@@ -69,18 +70,20 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
   scheduler 注入符号（`VariableSymbol(MODULE)` / 成员符号）；VM handler
   `vm_handle_IbImport`/`vm_handle_IbImportFrom` → `module_manager`。
 
-**结论：没有"直接导入裸 Python 模块并自动按 IBCI 声明绑定成员"的路径；当前取
-Python 包必经 `_spec.py`（即本方向要推翻的）。**
+**结论（F1 前）**：没有"直接导入裸 Python 模块并自动按 IBCI 声明绑定成员"的路径；
+取 Python 包必经 `_spec.py`。F1 起新增 `import python "..." : bind ...` 宿主绑定路径；
+F3 起 `_spec.py` 通道删除，宿主绑定成为唯一用户扩展通道。
 
 ### 2.4 成员绑定机制（可复用的既有实现）
 
 `core/runtime/module_system/loader.py` `_validate_and_bind`：spec 声明成员 →
 校验实现对象含该成员 → 构建 proxy（`unbox → 调 Python → box`，含 `param_meta`
 与 `**kwargs` 契约）→ 白名单。这个"按声明绑定 native 成员"的机制**完整存在**，
-只是当前绑定源是 `_spec.py` metadata（discovery 从 `__ibcext_vtable__()` 构建）。
+历史上绑定源是 `_spec.py` metadata（discovery 从 `__ibcext_vtable__()` 构建），
+F1/F3 后绑定源是用户 IBCI 侧 `bind` 声明。
 
-**结论：F1 的"用户侧声明绑定"可复用该 proxy/param_meta 机制，仅需把绑定源从
-`_spec.py` 换为用户 IBCI 侧声明。**
+**结论：F1 的"用户侧声明绑定"复用该 proxy/param_meta 机制，绑定源为
+用户 IBCI 侧声明。**
 
 ### 2.5 协议/impl 限制
 
@@ -121,10 +124,11 @@ Python 包必经 `_spec.py`（即本方向要推翻的）。**
 fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box + param_meta）
 机制，仅把绑定源从 `_spec.py` metadata 换为用户 IBCI 侧声明。
 
-### 3.4 与 _spec.py 的关系（F3）
+### 3.4 与 _spec.py 的关系（F3，已完成）
 
-既有 `_spec.py` 插件按新绑定统一/废弃/内核原生隔离，**不保留双通道**。F0-F2 期间
-既有插件路径保持不动（过渡期并存），F3 收敛为单一。
+`_spec.py` 插件通道已按本方向废弃删除，**不保留双通道**：内置模块契约集中为
+`core/runtime/bootstrap/builtin_modules.py` 的 TypeDef 字面量（构造期注册），
+用户扩展统一为宿主绑定 `bind`。
 
 ### 3.5 关键实现落点（已实证）
 

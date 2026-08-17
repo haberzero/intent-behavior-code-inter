@@ -332,7 +332,7 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 导入的模块找不到。
 - **触发条件**：模块路径不存在或不在搜索路径。
 - **严重级别**：ERROR。
-- **修复方式**：确认模块路径正确、模块文件存在且在项目根/插件搜索路径内。
+- **修复方式**：确认模块路径正确、模块文件存在且在项目根搜索路径内。
 
 ### `DEP_FILE_NOT_FOUND`
 引用/入口文件不存在。
@@ -508,10 +508,10 @@ LLM 调用失败（网络/密钥/提供者错误）。
 - **修复方式**：需定制恢复语义时实现协议方法。
 
 ### `KDIAG_POLICY_MODULE_OVERRIDE`
-策略：用户插件覆盖了 kernel-native 模块。
-- **触发条件**：用户插件注册了与 kernel-native 同名的模块。
+策略：非 kernel-native 注册尝试覆盖 kernel-native 保留名被忽略。
+- **触发条件**：以非 kernel-native 元数据注册了与 kernel-native 保留名同名的模块。
 - **严重级别**：WARNING。
-- **修复方式**：若覆盖为有意为之可忽略；否则移除插件避免覆盖。
+- **修复方式**：换用不与内核原生模块重名的注册名。
 
 ### `KDIAG_RUNTIME_COLLECT_SKIP`
 运行时降级：`collect` 目标被跳过。

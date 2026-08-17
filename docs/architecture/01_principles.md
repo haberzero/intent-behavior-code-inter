@@ -300,144 +300,49 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 ---
 
-## 七、插件系统
+## 七、模块系统与宿主绑定
 
-### 7.1 模块发现机制
+### 7.1 构造期注册（无插件搜索路径）
 
-- `ModuleDiscoveryService` 扫描 `ibc_modules/` 和 `plugins/` 目录
-- 通过 `_spec.py` 约定自动发现
-- SpecBuilder 提供声明式接口构建
+全部内置模块（内核原生 5 + 工具 5 + `file`）的 TypeDef 字面量集中于
+`core/runtime/bootstrap/builtin_modules.py`，Engine 构造期经
+`register_builtin_modules(host_interface)` 一次注册。不存在磁盘发现/嗅探通道：
+无 `_spec.py` 契约文件、无 `plugin_paths`/`global_plugin` 配置、无
+AutoDiscovery。用户侧扩展唯一通道是宿主绑定
+（`import python "..." as lib: bind ...`，见
+`docs/architecture/01_native_host_binding.md`）。
 
-### 7.2 插件接口规范
+### 7.2 内置模块接口规范
 
-| 文件 | 职责 | 说明 |
+| 位置 | 职责 | 说明 |
 |------|------|------|
-| `_spec.py` | 元数据注入 | 声明函数签名、类型信息（`__ibcext_vtable__()` 格式或 SpecBuilder） |
-| `core.py` | 具体逻辑实现 | 插件的具体 Python 类实现 |
-| `__init__.py` | 工厂模式入口 | 只负责导入和 `create_implementation()` 工厂函数 |
+| `builtin_modules.py` | 元数据 | 模块的 TypeDef 字面量（成员签名、`param_descriptors`、provenance/visibility） |
+| `ibci_modules/<pkg>/core.py` | 具体逻辑实现 | 模块的 Python 实现类 |
+| `ibci_modules/<pkg>/__init__.py` | 工厂模式入口 | 只负责导入和 `create_implementation()` 工厂函数 |
 
-**两级插件架构**：
+**两级模块架构**：
 
-| 级别 | 说明 | 包含模块/插件 |
+| 级别 | 说明 | 包含模块 |
 |------|------|---------------|
-| 内核原生（kernel-native）| 随内核发行，构造期经 bootstrap 预注册，IMPORT_GATED；物理位于 `ibci_modules/` 但不可被用户插件覆盖 | `ai` / `file` / `ihost` / `idbg` / `isys` / `iruntime` |
-| 非侵入式 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*` | `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema` |
-| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态插件实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg` |
+| 内核原生（kernel-native）| 随内核发行，构造期注册，`KERNEL_NATIVE` + IMPORT_GATED；物理位于 `ibci_modules/`（`file` 为内核模块 `core/runtime/modules/file_impl.py`），受 HostInterface 覆盖保护 | `ai` / `file` / `ihost` / `idbg` / `isys` / `iruntime` |
+| 内置工具 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*`；`USER_DEFINED` provenance | `math` / `json` / `time` / `net` / `schema`（实现包 `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema`） |
+| 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态模块实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg` |
 
-**示例（AI 插件）**：
+**示例（AI 模块）**：
 - `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
 - `ibci_modules/ibci_ai/provider_impl.py` → `class RecommendedProvider(LLMProvider): ...`（纯 provider，kernel-free，可整文件替换）
 - `ibci_modules/ibci_ai/core.py` → `class AIPlugin(RecommendedProvider, IbStatefulPlugin): ...`（IBCI 胶水宿主）
-- `ibci_modules/ibci_ai/_spec.py` → `__ibcext_vtable__()` 返回函数签名字典
+- `core/runtime/bootstrap/builtin_modules.py` `_SPEC_AI` → 成员签名与 `param_descriptors` 字面量
 
-### 7.3 自动嗅探机制（零侵入）
-
-插件不再需要 import 任何核心代码——经固定命名约定与自动发现实现零侵入注册。
-
-本节描述插件系统的**零侵入自动嗅探机制（当前实现）**。接口规范见 §7.1/§7.2，
-实现细节见 `docs/subsystems/04_plugin_system.md`；自动注册总览见 §九。
-
-#### 7.3.1 核心设计
-
-| 特性 | 说明 |
-|------|------|
-| **零侵入** | 插件不继承任何核心代码（甚至不 import ibcext） |
-| **协议固定命名** | 插件必须实现固定命名方法（如 `__ibcext_vtable__()`） |
-| **全自动嗅探** | AutoDiscoveryService 自动扫描 _spec.py，发现并加载插件 |
-| **元数据自注册** | 通过固定命名函数完成元数据注册，无需运行时依赖 |
-| **二进制兼容** | 只要保留 Python 解释器，反射机制正常工作 |
-
-#### 7.3.2 固定命名方法约定
-
-| 方法名 | 职责 | 返回值 |
-|--------|------|--------|
-| `__ibcext_vtable__()` | 提供虚表（方法名映射） | Dict[str, Callable] |
-| `__ibcext_metadata__()` | 提供插件元数据 | Dict[str, Any] |
-| `create_implementation()` | 实现创建函数 | 插件实现实例 |
-
-**示例（插件）**：
-```python
-# ibc_modules/ai/_spec.py - 插件元数据不 import ibcext
-def __ibcext_metadata__():
-    return {
-        "name": "ai",
-        "version": "1.0.0",
-        "description": "LLM provider plugin",
-    }
-
-def __ibcext_vtable__():
-    return {
-        "complete": lambda self, prompt, context: self._llm.complete(prompt, context),
-        "embed": lambda self, text: self._llm.embed(text),
-    }
-
-def create_implementation():
-    return _AIPluginCore()  # 返回无基类依赖的实现类
-```
-
-#### 7.3.3 AutoDiscoveryService 嗅探机制
-
-`AutoDiscoveryService` 负责全自动插件发现：遍历插件搜索路径下的 `*/_spec.py` 文件，
-经 `importlib` 加载并调用固定命名的 `__ibcext_metadata__()` / `__ibcext_vtable__()`
-方法提取插件元数据与虚表，校验有效后封装为 `PluginSpec`。实现细节见
-`core/runtime/module_system/discovery.py`。
-
-#### 7.3.4 函数名映射机制
-
-插件编写者可以在 `__ibcext_vtable__()` 内部自定义函数名映射：
-
-```python
-def __ibcext_vtable__():
-    return {
-        # IBCI脚本看到的名字 → 实际实现函数
-        "complete": _real_llm_complete,
-        "embed": _real_embedding,
-        # 自定义特殊映射，利用 Python 特性实现高级用法
-        "__custom_meta__": _register_special_metadata,
-    }
-```
-
-这允许插件编写者：
-- 使用与实现函数不同的对外名称
-- 利用 Python 特性实现特殊的元数据注册机制
-- 极大提高插件编写者的自由度
-
-#### 7.3.5 二进制打包兼容性
-
-只要保留完整的 Python 解释器，`importlib`、插件实现 proxy 包装与 `__getattr__` 白名单访问等均能正常工作。
-
-#### 7.3.6 向后兼容策略
-
-| 场景 | 处理方式 |
-|------|----------|
-| **插件声明** | 统一经 `_spec.py` 的 `__ibcext_metadata__()` + `__ibcext_vtable__()` 协议声明 |
-
-#### 7.3.7 编译构建流程（静态类型检查保留）
-
-> **核心洞察**：编译器在 STAGE_3 (PLUGIN_METADATA) 之后进行静态类型检查。只要在编译前完成 `discover_all()` 并将元数据注册到 `MetadataRegistry`，静态类型检查完全保留。
+### 7.3 编译构建流程（静态类型检查保留）
 
 **当前架构流程**：
 ```
 Engine.__init__()
     ↓
-discovery_service.discover_all() → HostInterface.metadata
+register_builtin_modules() → HostInterface.metadata
     ↓
 compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
-```
-
-**架构流程**：
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ 运行时阶段（ibci 命令）                                              │
-│                                                                      │
-│ 1. AutoDiscoveryService.discover_all()                              │
-│    ↓                                                                │
-│ 2. 发现 __ibcext_vtable__() 和 create_implementation()              │
-│    ↓                                                                │
-│ 3. 运行时加载插件实现                                                │
-│    ↓                                                                │
-│ 4. 通过 setup() 注入 service_context（IssueTracker等）              │
-└─────────────────────────────────────────────────────────────────────┘
 ```
 
 **关键保证**：
@@ -445,8 +350,6 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 |------|------|
 | **静态类型检查保留** | 编译器通过 `core/kernel/spec/` 中的 `TypeDef` / `TypeRef` 体系获取完整类型信息 |
 | **扁平流生成保留** | FlatSerializer 依赖 `IbSpec.get_references()` / `TypeDef` 统一字段 |
-| **运行时零侵入** | 插件不需要 import ibcext 就能被发现和加载 |
-| **二进制兼容** | 只要有 Python 解释器，运行时发现正常工作 |
 
 ---
 
@@ -458,14 +361,13 @@ IBCI 采用显式的文件读写作为子环境与主环境之间的信息交互
 
 ---
 
-## 九、自动注册/自动嗅探机制
+## 九、自动注册机制
 
-IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置关键字、语法糖以及外部插件均通过自动注册机制完成，且享有同等地位。
+IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置关键字、语法糖以及内置模块均通过自动注册机制完成，且享有同等地位。
 
 | 机制 | 位置 | 说明 |
 |------|------|------|
-| **ModuleDiscoveryService** | `module_system/discovery.py` | 扫描 ibci_modules/，通过 _spec.py 自动发现 |
-| **SpecBuilder / vtable** | `extension/spec_builder.py` 或 `_spec.py` | 声明式自动构建插件接口 |
+| **内置模块构造期注册** | `runtime/bootstrap/builtin_modules.py` | 内置 11 模块 TypeDef 字面量集中定义，Engine 构造期一次注册 |
 | **两阶段注册** | `kernel/spec/registry/`（包） | 占位阶段 + 填充阶段 + 公理注入 |
 
 ---
@@ -517,7 +419,7 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 | `core/runtime/bootstrap/primitive_initializer.py` | 高 | 内置类型注册与装箱器 |
 | `core/compiler/serialization/serializer.py` | 高 | FlatSerializer |
 | `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
-| `core/runtime/module_system/discovery.py` | 高 | ModuleDiscoveryService，插件发现服务 |
+| `core/runtime/bootstrap/builtin_modules.py` | 高 | 内置 11 模块 TypeDef 字面量与构造期注册（register_builtin_modules） |
 | `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin |
 | `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（IBCI 胶水宿主） |
 | `ibci_modules/ibci_ai/provider_impl.py` | 高 | 推荐 LLM provider（纯 provider，kernel-free） |
@@ -527,16 +429,16 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 
 ---
 
-## 附录：HOST 插件双路暴露
+## 附录：HOST 模块双路暴露
 
-`HostService`（核心层）和 `ibci_ihost`（用户级插件）对同一宿主能力有双路暴露：
+`HostService`（核心层）和 `ibci_ihost`（内置模块）对同一宿主能力有双路暴露：
 
 ```
 IBCI脚本 ──→ host_run() 内置函数 ──→ HostService
                 (primitive_initializer) (实际执行)
 
 IBCI脚本 ──→ import ihost ──→ ibci_ihost/core.py ──→ HostService
-               (ModuleDiscovery)   (插件实现)
+               (构造期注册)   (模块实现)
 ```
 ---
 
