@@ -664,6 +664,19 @@ class SymbolResolver(ScopedVisitor):
             else:
                 self.error(f"Cannot import name '{alias.name}' from '{node.module}'", node, code=SEM_UNDEFINED_SYMBOL)
 
+    def visit_IbHostImport(self, node: ast.IbHostImport):
+        """访问宿主绑定 import 语句节点
+
+        将 IbHostImport 节点绑定到 scheduler 预注入的 lib 符号，
+        使 vm_handle_IbHostImport 经 node_to_symbol 拿到正确的 UID。
+        """
+        lib_name = node.asname or node.module_name
+        sym = self.lookup_symbol(lib_name)
+        if sym:
+            self.bind_symbol(node, sym)
+        else:
+            self.error(f"Host module '{node.module_name}' failed to bind", node, code=SEM_UNDEFINED_SYMBOL)
+
     # 字面量节点不需要符号解析
     def visit_IbConstant(self, node: ast.IbConstant):
         """访问常量字面量（int, float, str, bool, None）"""

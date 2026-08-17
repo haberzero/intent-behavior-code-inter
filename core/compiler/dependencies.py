@@ -6,6 +6,7 @@ from enum import Enum, auto
 class ImportType(Enum):
     IMPORT = auto()      # import module
     FROM_IMPORT = auto() # from module import name
+    HOST_IMPORT = auto() # import python "pkg" as lib: bind ...（宿主绑定）
 
 class ModuleStatus(Enum):
     PENDING = auto()
@@ -22,6 +23,8 @@ class ImportInfo:
     import_type: ImportType = ImportType.IMPORT
     level: int = 0 # Level for relative imports (0 = absolute)
     names: List[Any] = field(default_factory=list) # List of IbAlias nodes
+    host_asname: Optional[str] = None # Host import binding name (as lib)
+    host_bindings: List[Any] = field(default_factory=list) # Host bind declarations (IbHostBinding)
 
 @dataclass
 class ModuleInfo:

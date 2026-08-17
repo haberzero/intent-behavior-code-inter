@@ -26,23 +26,7 @@ from core.runtime.objects.kernel.base import unbox
 from core.base.interfaces import IStateReader, IIntentManager
 from core.runtime.observability.diagnostics import kernel_diagnostic
 from core.base.diagnostics.codes import KDIAG_POLICY_MODULE_NO_EXPORT
-
-
-def _is_callable_object(obj: Any) -> bool:
-    """判断对象是否为可调用实例（behavior / fn_callable / callable）。
-
-    可调用实例不是数据值：应原样透传给插件实现层，而非拆箱成 native
-    （未执行的可调用对象 ``to_native()`` 会显式抛错）。
-    """
-    cls = getattr(obj, "ib_class", None)
-    if cls is None:
-        return False
-    name = getattr(cls, "name", "") or ""
-    return (
-        name in ("behavior", "fn_callable", "callable")
-        or name.startswith("fn_callable[")
-        or name.startswith("behavior[")
-    )
+from core.runtime.module_system.proxy import create_proxy
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import MethodMemberSpec, IbSpec, TypeKind
@@ -146,47 +130,6 @@ class ModuleLoader(IModuleLoader):
                             f"Plugin Error: Module '{module_name}.{spec_name}' declares a "
                             f"VAR_KEYWORD param but implementation does not accept **kwargs."
                         )
-
-                def create_proxy(target_func, reg, meta, has_declared_varkw):
-                    def _unbox(value):
-                        # UTS: 自动拆箱 (IbObject -> Native)
-                        # 可调用实例（behavior/fn_callable/callable）不是数据值，
-                        # 原样透传，避免误拆箱触发未执行 callable 的 to_native() 抛错。
-                        if _is_callable_object(value):
-                            return value
-                        return unbox(value)
-
-                    def proxy_wrapper(*args, **kwargs):
-                        # 绑定器把 **kwargs 归集的 dict 装箱为声明序末位的位置实参；
-                        # 声明了 VAR_KEYWORD 时把它分传为 **kwargs 交给原生实现。
-                        if has_declared_varkw and args:
-                            positional, varkw_arg = args[:-1], args[-1]
-                        else:
-                            positional, varkw_arg = args, None
-
-                        native_args = [_unbox(a) for a in positional]
-                        native_kwargs = {k: _unbox(v) for k, v in kwargs.items()}
-                        if varkw_arg is not None:
-                            varkw_fields = getattr(varkw_arg, "fields", None)
-                            if isinstance(varkw_fields, dict):
-                                varkw_items = varkw_fields.items()
-                            elif isinstance(varkw_arg, dict):
-                                varkw_items = varkw_arg.items()
-                            else:
-                                raise InterpreterError(
-                                    f"Plugin Error: Module function expected **kwargs dict, "
-                                    f"got {type(varkw_arg).__name__}."
-                                )
-                            for k, v in varkw_items:
-                                native_kwargs[k] = _unbox(v)
-
-                        # 执行 Python 函数
-                        result = target_func(*native_args, **native_kwargs)
-
-                        # UTS: 自动装箱 (Native -> IbObject)
-                        return reg.box(result)
-                    # 返回 (proxy_wrapper, param_meta)：param_meta 显式携带，供 IbNativeObject 包装时使用
-                    return proxy_wrapper, param_meta
 
                 proxy_vtable[spec_name] = create_proxy(py_func, registry, param_meta, has_declared_varkw)
             # 2. 处理变量 (Variable / plain MemberSpec)

@@ -46,6 +46,7 @@ class TokenType(Enum):
     IMPLEMENTS = auto()
     IMPL = auto()
     SELF = auto()
+    BIND = auto()
 
     # LLM 关键字
     LLM_DEF = auto()

@@ -50,6 +50,7 @@ from core.runtime.vm.handlers.declarations import (
     vm_handle_IbImplDef,
     vm_handle_IbImport,
     vm_handle_IbImportFrom,
+    vm_handle_IbHostImport,
 )
 from core.runtime.vm.handlers.llm_behavior import (
     vm_handle_IbBehaviorExpr,
@@ -109,6 +110,7 @@ def build_dispatch_table() -> dict:
         "IbRaise": vm_handle_IbRaise,
         "IbImport": vm_handle_IbImport,
         "IbImportFrom": vm_handle_IbImportFrom,
+        "IbHostImport": vm_handle_IbHostImport,
         "IbSwitch": vm_handle_IbSwitch,
         "IbFunctionDef": vm_handle_IbFunctionDef,
         "IbLLMFunctionDef": vm_handle_IbFunctionDef,

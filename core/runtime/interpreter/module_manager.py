@@ -2,6 +2,7 @@ from core.runtime.objects.kernel import IbModule
 from core.runtime.objects.intent import IbIntent
 from core.runtime.module_system.loader import ModuleLoader
 from core.runtime.module_system.discovery import ModuleDiscoveryService
+from core.runtime.module_system.proxy import create_proxy
 from core.runtime.interfaces import RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory, ServiceContext, IIbModule
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 from core.kernel import ast as ast
@@ -10,6 +11,7 @@ from core.kernel.issue import InterpreterError
 from core.base.diagnostics.codes import DEP_MODULE_NOT_FOUND
 from core.runtime.interfaces import IExecutionContext
 from core.kernel.registry import KernelRegistry
+import importlib
 
 if TYPE_CHECKING:
     from core.kernel.blueprint import CompilationArtifact
@@ -123,6 +125,56 @@ class ModuleManagerImpl:
         if not isinstance(members_map, dict):
             return []
         return list(members_map.get(module_name, []))
+
+    def import_host_module(self, module_name: str, bindings: List[Dict], execution_context: IExecutionContext) -> Any:
+        """宿主绑定 import 运行时：``import python "pkg" as lib: bind ...``。
+
+        裸 Python 模块经 importlib 导入后，按用户 IBCI bind 声明构建 vtable/白名单
+        （显式声明式绑定，非自动穿透），包装为 IbNativeObject 并作为模块实例返回。
+        - bind 方法成员 → vtable（create_proxy：unbox→调→box + param_meta）
+        - bind 属性成员 → whitelist
+        - 契约外成员不暴露（IbNativeObject.receive 强制 vtable / whitelist 门控）
+        - 声明成员必须存在于裸 Python 模块（对齐 loader._validate_and_bind 的
+          绑定期校验，fail-fast）
+        """
+        try:
+            py_module = importlib.import_module(module_name)
+        except ImportError as e:
+            raise InterpreterError(
+                f"Host binding: cannot import Python module '{module_name}': {e}"
+            )
+
+        vtable = {}
+        whitelist = []
+        for binding in bindings:
+            name = binding.get("name")
+            if not hasattr(py_module, name):
+                raise InterpreterError(
+                    f"Host binding: Python module '{module_name}' has no member '{name}' "
+                    f"declared in bind."
+                )
+            if binding.get("is_method", True):
+                py_func = getattr(py_module, name)
+                if not callable(py_func):
+                    raise InterpreterError(
+                        f"Host binding: member '{module_name}.{name}' is not callable "
+                        f"but declared as method."
+                    )
+                # 参数元数据来自用户 bind 签名（编译期已校验签名类型）
+                param_meta = [
+                    (p.get("name"), "POSITIONAL_OR_KEYWORD", None)
+                    for p in binding.get("params", [])
+                ]
+                vtable[name] = create_proxy(py_func, self.registry, param_meta)
+            else:
+                whitelist.append(name)
+
+        native_obj = self.object_factory.create_native_object(
+            py_module, self.registry.get_class("Object"),
+            vtable=vtable, whitelist=whitelist,
+        )
+        # 与 InterOp 包导入同构：包装为 IbModule（lib.member 经 receive → scope/vtable）
+        return self.object_factory.create_module(module_name, native_obj)
 
     def import_from(self, module_name: str, names: List[tuple], execution_context: IExecutionContext) -> None:
         """

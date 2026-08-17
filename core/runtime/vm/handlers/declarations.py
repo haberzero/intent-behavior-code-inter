@@ -109,6 +109,43 @@ def vm_handle_IbImportFrom(executor, node_uid: str, node_data: Mapping[str, Any]
     return executor.registry.get_none()
 
 
+def vm_handle_IbHostImport(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``import python "pkg" as lib: bind ...`` の完整 CPS 实现。
+
+    编译期已合成宿主模块 spec 并注入 lib 符号；运行期经 module_manager
+    ``import_host_module`` 真正 import 裸 Python 模块 + 按 bind 声明构建
+    vtable/白名单（显式声明式绑定，非自动穿透），包装为模块实例绑定到当前
+    作用域。纯 return handler。
+    """
+    sc = executor.service_context
+    module_name = node_data.get("module_name")
+    asname = node_data.get("asname")
+
+    bindings = []
+    for binding_uid in node_data.get("bindings", []):
+        bdata = executor.ec.get_node_data(binding_uid)
+        if not bdata:
+            continue
+        params = []
+        for param_uid in bdata.get("params", []):
+            pdata = executor.ec.get_node_data(param_uid)
+            if pdata:
+                params.append({"name": pdata.get("name")})
+        bindings.append({
+            "name": bdata.get("name"),
+            "is_method": bdata.get("is_method", True),
+            "params": params,
+        })
+
+    mod_inst = sc.module_manager.import_host_module(module_name, bindings, executor.ec)
+    sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
+    target_name = asname or module_name
+    executor.runtime_context.define_variable(
+        target_name, mod_inst, is_const=True, uid=sym_uid
+    )
+    return executor.registry.get_none()
+
+
 # === 定义类语句（不下钻 body 内子节点） ===
 
 def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):

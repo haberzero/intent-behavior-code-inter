@@ -31,7 +31,10 @@ from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
 from core.kernel.spec import TypeDef as ModuleMetadata, IbSpec, TypeKind
-from core.kernel.spec.member import MemberSpec, MethodMemberSpec
+from core.kernel.spec.member import MemberSpec, MethodMemberSpec, ParamDescriptor
+from core.kernel.spec.type_ref import TypeRef
+from core.compiler.semantic.passes._annotation_utils import annotation_to_typeref
+from core.kernel import ast as ast
 class Scheduler(ICompilerService):
     """
     Top-level scheduler for multi-file compilation.
@@ -296,6 +299,12 @@ class Scheduler(ICompilerService):
 
             # 3. Resolve and Enqueue Imports
             for imp in imports:
+                # 宿主绑定 import（import python "pkg" as lib: bind ...）：
+                # 裸 Python 模块无 IBCI 源文件，跳过依赖解析（编译期符号注入见
+                # _inject_host_import；运行时真正 import 在 module_manager）。
+                if imp.import_type == ImportType.HOST_IMPORT:
+                    continue
+
                 # Skip external modules - they don't have source files
                 # 直接通过元数据注册表查询外部模块，消除 HostInterface 兼容性依赖
                 module_name = imp.module_name
@@ -392,6 +401,14 @@ class Scheduler(ICompilerService):
             # 集合只在编译期存在，序列化进 artifact 供运行时精确枚举。
             import_star_members: Dict[str, List[str]] = {}
             for imp in module_info.imports:
+                # 宿主绑定 import（import python "pkg" as lib: bind ...）：
+                # 裸 Python 模块不参与 IBCI 模块依赖图，不解析 s_mod_type；
+                # 编译期从 bind 声明合成宿主模块 spec 并注入 lib 符号（编译期
+                # 类型检查用），运行时再由 module_manager 真正 import + 构建 vtable。
+                if imp.import_type == ImportType.HOST_IMPORT:
+                    self._inject_host_import(analyzer, file_path, imp, file_tracker)
+                    continue
+
                 # 查找已编译的结果或外部元数据
                 s_mod_type = None
                 
@@ -621,6 +638,70 @@ class Scheduler(ICompilerService):
         if spec is None:
             return TypeRef.of("any")
         return TypeRef.from_spec(spec)
+
+    def _inject_host_import(self, analyzer, file_path: str, imp: ImportInfo, file_tracker):
+        """宿主绑定 import 符号注入。
+
+        ``import python "pkg" as lib: bind ...``：
+        - 编译期不解析裸 Python 模块（不在 IBCI 依赖图 / registry）。
+        - 从 bind 声明合成宿主模块 spec（kind=MODULE，provenance=EXTERNAL_MODULE，
+          members=MethodMemberSpec/MemberSpec），注入 ``lib`` 符号，使
+          ``lib.member`` 编译期类型检查可用（resolve_member 消费 members）。
+        - 运行时的真正 import + vtable 构建由 module_manager（VM handler）执行。
+        """
+        lib_name = imp.host_asname or imp.module_name
+        existing = analyzer.symbol_table.resolve(lib_name)
+        if existing is not None:
+            # 与普通 import 冲突处理同构：本地定义优先（警告），宿主绑定忽略。
+            if existing.kind != SymbolKind.MODULE:
+                file_tracker.warning(
+                    f"Host import '{lib_name}' conflicts with an already-defined "
+                    f"{existing.kind.name.lower()} symbol of the same name. "
+                    f"The import is ignored; the locally-defined symbol takes precedence.",
+                    location=Location(file_path=file_path, line=imp.lineno, column=1),
+                    code=SEM_IMPORT_CONFLICT,
+                )
+            return
+
+        # 合成宿主模块 spec（成员来自用户 IBCI bind 声明）
+        host_spec = ModuleMetadata(
+            name=lib_name,
+            kind=TypeKind.MODULE.value,
+            provenance=Provenance.EXTERNAL_MODULE,
+        )
+        for binding in imp.host_bindings:
+            member_name = binding.name
+            if binding.is_method:
+                param_refs = [
+                    annotation_to_typeref(p.annotation)
+                    for p in binding.params
+                ]
+                return_ref = annotation_to_typeref(binding.return_type) if binding.return_type is not None else TypeRef.of("void")
+                descriptors = [
+                    ParamDescriptor(name=p.name, kind="POSITIONAL_OR_KEYWORD")
+                    for p in binding.params
+                ]
+                host_spec.members[member_name] = MethodMemberSpec(
+                    name=member_name,
+                    kind="method",
+                    param_types=param_refs,
+                    return_type=return_ref,
+                    param_descriptors=descriptors,
+                )
+            else:
+                host_spec.members[member_name] = MemberSpec(
+                    name=member_name,
+                    kind="field",
+                    type_ref=annotation_to_typeref(binding.return_type) if binding.return_type is not None else TypeRef.of("any"),
+                )
+
+        mod_sym = VariableSymbol(
+            name=lib_name,
+            kind=SymbolKind.MODULE,
+            spec=host_spec,
+            provenance=Provenance.EXTERNAL_MODULE,
+        )
+        analyzer.symbol_table.define(mod_sym)
 
     def _symbol_to_member(self, name: str, sym: Symbol) -> Any:
         """把已编译 IBCI 模块的符号表 Symbol 转换为纯数据 MemberSpec 形态。
