@@ -40,7 +40,7 @@ class ImportComponent(BaseComponent):
         ``python`` 伪模块标识符已被消费（parse_import 已 match）。
         """
         self.stream.consume(TokenType.IDENTIFIER, "Expect 'python' pseudo-module.")  # 'python'
-        module_name = self.stream.consume(TokenType.STRING, "Expect string module name after 'python'.", code=None).value
+        module_name = self.stream.consume(TokenType.STRING, "Expect string module name after 'python'.").value
         module_name = module_name.strip('"').strip("'")
 
         asname = None

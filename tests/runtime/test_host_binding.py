@@ -120,6 +120,34 @@ test()
         )
         assert _run(tmp_path) == ["4.0"]
 
+    def test_cross_module_host_binding(self, tmp_path):
+        """含宿主绑定的 .ibci 文件被其他文件导入（宿主 spec 序列化进 artifact）。"""
+        _write(
+            tmp_path,
+            "helper.ibci",
+            """
+import python "math" as m:
+    bind sqrt(x: float) -> float
+
+func hsqrt(float x) -> float:
+    return m.sqrt(x)
+""",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+from helper import hsqrt
+
+func test() -> auto:
+    float r = hsqrt(49.0)
+    print((str)r)
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["7.0"]
+
 
 class TestHostBindingExplicitOnly:
     """显式声明式绑定（非自动穿透）。"""
