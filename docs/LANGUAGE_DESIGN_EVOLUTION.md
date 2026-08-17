@@ -62,7 +62,7 @@ has_llm_call_cap
 - `core/compiler/semantic/passes/_declaration_visitors.py` 中有 `PROMPT_PROTOCOL_SIGNATURE_FREE` / `_OVERRIDE_SIGNATURE_FREE` 硬编码集合；
 - `core/runtime/interpreter/llm_executor/_prompt.py` 中 `_obj_to_prompt_str()` / `_obj_to_payload()` 通过 `receive('__to_prompt__')` / `receive('__payload_prompt__')` 分派；
 - `core/runtime/objects/intent.py` 中 `_intent_segment_to_prompt()` 又单独实现了一遍 `__to_prompt__` 回退；
-- `core/runtime/interpreter/llm_executor/_prompt_assembly.py` 用固定顺序拼接“输出纪律 → 输出格式 → 意图”。
+- `core/base/llm_protocol/recommended.py` 把语义槽按"输出纪律 → 输出格式 → 意图"顺序组装系统提示词（推荐模板，供应商无关，可被自定义 provider 覆盖）。
 
 结论：**同一个“协议”概念，在编译期、运行期、意图系统、LLM 装配里被多次手工实现。** 这不是“接口化”，而是“魔法方法 + 多处复制”。
 
@@ -180,7 +180,7 @@ class Point implements Serializable:
 当前 prompt 相关逻辑分散在：
 
 - `_prompt.py`（对象到文本/多模态）；
-- `_prompt_assembly.py`（系统提示词段落）；
+- `core/base/llm_protocol/recommended.py`（推荐系统提示词段落，供应商无关）；
 - `_llm_function.py`（LLM 函数）；
 - `_behavior.py`（行为表达式）；
 - `intent.py`（意图渲染）。
@@ -275,7 +275,7 @@ func max[T: Comparable](T a, T b) -> T:
 - 把现有 dunder 协议在内部建模为“内建协议声明”；
 - 建立 `ProtocolRegistry` 作为唯一权威源；
 - 让编译器、运行时的协议查询都走 `ProtocolRegistry`；
-- 消除 `_obj_to_prompt_str`、`_intent_segment_to_prompt`、`_prompt_assembly` 中的重复魔法字符串。
+- 消除 `_obj_to_prompt_str`、`_intent_segment_to_prompt`、`core.base.llm_protocol.recommended` 中的重复魔法字符串。
 
 目标：不引入新语法，先统一内核机制，验证协议抽象能承载现有功能。
 

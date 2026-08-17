@@ -314,7 +314,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 **示例（AI 插件）**：
 - `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
-- `ibci_modules/ibci_ai/core.py` → `class AIPlugin(ILLMProvider, IbStatefulPlugin): ...`
+- `ibci_modules/ibci_ai/core.py` → `class AIPlugin(IbStatefulPlugin, LLMProvider): ...`（`LLMProvider` 来自 `core.base.llm_protocol`）
 - `ibci_modules/ibci_ai/_spec.py` → `__ibcext_vtable__()` 返回函数签名字典
 
 ### 7.3 自动嗅探机制（零侵入）

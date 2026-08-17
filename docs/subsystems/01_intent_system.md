@@ -1,4 +1,4 @@
-﻿# 意图注释系统设计说明
+# 意图注释系统设计说明
 
 > 本文档描述 IBC-Inter 意图注释系统的架构设计和实现细节。
 > 读者对象：需要理解或修改意图栈机制的开发者。
@@ -615,7 +615,7 @@ func make_translator():
 | `core/runtime/interpreter/runtime_context.py` | 运行时上下文（持有 `_intent_ctx: IbIntentContext`） |
 | `core/runtime/vm/handlers/`（包） | CPS 语句/表达式处理（含意图注释与栈操作节点，如 `control_flow.py`） |
 | `core/runtime/vm/handlers/`（包） | `snapshot` 捕获 `fork_intent_snapshot()` 值快照（延迟行为处理） |
-| `core/runtime/interpreter/llm_executor/`（包） | LLM 执行器（调用 `get_resolved_prompt_intents()` 组装提示词） |
+| `core/runtime/interpreter/llm_executor/`（包） | LLM 执行器（把 `get_resolved_prompt_intents()` 的合并意图快照进 `LLMCallRequest.intents`，交 provider 组装提示词） |
 | `core/runtime/interpreter/llm_except_frame.py` | LLM 异常帧（`save_context` 使用 `fork()` 保存意图快照） |
 | `core/runtime/objects/kernel/`（包） | `IbUserFunction`/`IbLLMFunction` fork/restore 意图上下文（拷贝传递语义）；lambda 参数约束 |
 | `core/compiler/semantic/analyzer.py` | `@` 和 `@!` 语义校验：两者必须绑定下一条可执行语句（禁止连续 one-shot） |

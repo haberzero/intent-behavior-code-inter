@@ -65,6 +65,12 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 
 `api_key` 支持 `{env:VAR}` 引用环境变量，避免硬编码密钥。`reasoning:false` 声明非思考模型（跳过 `probe_model`，直接按标准指令模型处理）。`mock:true` 显式进入 MOCK 模式。
 
+> **格式可插拔**：上述 schema 是 IBCI 默认配置源适配器（`ProjectApiConfigAdapter`，
+> 供应商无关逻辑映射到 `core.base.llm_protocol`）识别的推荐写法。需要自定义
+> `api_config.json` 书写格式（字段名 / 组织结构 / 环境变量解析规则）时，可实现
+> `ConfigSourceAdapter`（`core.base.llm_protocol.config`）并替换默认适配器；嵌套在
+> `ai.load_project_config()` 内的默认行为与文件格式本身都可被自定义实现覆盖。
+
 ## 获取 API 密钥
 
 以阿里云百炼为例：

@@ -1,4 +1,4 @@
-﻿# IBCI VM 与解释器架构
+# IBCI VM 与解释器架构
 
 > 本文档是 IBCI 运行时（VM + 解释器）的架构设计文档，覆盖 CPS 调度循环、执行帧、LLM 流水线、llmexcept 机制、意图上下文、多 Interpreter 隔离、内存模型。
 > 公理化可验证规范见 `docs/architecture/05_vm_specification.md`。
@@ -472,7 +472,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 4. **LLM 服务通道唯一**：所有 LLM 调用必须经 `KernelRegistry.get_llm_executor()` 走 `IILLMExecutor`。
 5. **公理层无运行时依赖**：`core/kernel/axioms/` 不导入 `core/runtime/`；运行时通过 `SpecRegistry.get_axiom()` 桥接。
 6. **isinstance(IbXxx) 禁用**：分派一律 `isinstance(obj, IbValue) and obj.ib_class.name == "..."`；仅 `IbNone` 哨兵比较例外。
-7. **快照隔离不变量**：`behavior` 表达式只读外部变量、不写外部状态；提示词组装在 dispatch 时刻完成。
+7. **快照隔离不变量**：`behavior` 表达式只读外部变量、不写外部状态；`LLMCallRequest` 快照（意图/输出契约）在 dispatch 时刻完成，provider 据此组装实际请求。
 8. **阻塞即挂起**：语言级阻塞操作（chan recv / await / LLM 读点 / 订阅 recv）返回 Waitable，经调度器协作挂起，不阻塞当前线程。
 9. **调度器永不阻塞**：调度器经 `try_result()` 非阻塞消费 Waitable；阻塞等待（`result()`）仅宿主/线程体专用。
 

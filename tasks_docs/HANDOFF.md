@@ -115,19 +115,22 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线**：**无进行中主线**。内核协议化收尾与双轨收敛（阶段 A-D）与文档体系
-  系统化重构均已收尾，理论问题清理完毕，等待用户指示下一步开发。
+- **🔴 当前主线**：LLM 调用层插件化已完成并入 `unsafe-vibe-dev`。当前**无进行中主线**，
+  等待用户指示下一步开发。
 - **当前代码状态**：
   - 分支 `unsafe-vibe-dev`，本地领先 `origin`（**未 push**；禁 push 硬原则，除非用户显式授权）。
-  - 内核：协议化大重构已含于当前代码——receive dunder 协议注册表化、双轨收敛
-    （self 形态统一/特化身份结构化/成员单一权威/auto-init 声明化/预评估诊断）、
-    判定链双协议化（satisfies 数据驱动）、KNOWN_LIMITS 边界分类处置、
-    copy·deepcopy 内建落地。
-  - 文档：docs/ 系统化重构完成（协议化体系归属 `architecture/03_type_system.md` §4）；
-    KNOWN_LIMITS 27 节 + 尾部书写模板；任务控制体系正规化（GOVERNANCE 章程 +
-    各文档尾部书写模式）；docs/、代码注释与任务控制文档已完成全仓历史记录清洁。
-  - 真实 LLM 试用：最近全量批次（127 例）分类与既有登记一致（零回归），开发试用基线
-    为本地 `qwen3.6-35b-a3b` 非思考模式（见 `trials/_toolkit/LLM_SERVICE.md`）。
+  - 内核：LLM 调用层供应商无关中间层已含于当前代码——内核只产出结构化
+    `LLMCallRequest` 委托可插拔 `LLMProvider`（`core/base/llm_protocol/`）；系统提示词
+    组装（推荐模板 `recommended.py`）、思考抑制/探测、api_config.json 书写格式（
+    `ConfigSourceAdapter` / `ProjectApiConfigAdapter`）全部下沉为可自定义实现；
+    `get_current_call_info` / idbg 暴露 `LLMCallRequest.as_dict()` 全量。
+  - 协议化大重构（receive dunder 注册表化 / 双轨收敛 / 判定链双协议化 /
+    copy·deepcopy）均已落地。
+  - 文档：docs/ 系统化重构完成；LLM 调用层中间层归属 `architecture/01_principles.md`
+    §3.7；KNOWN_LIMITS 27 节；任务控制体系正规化；全仓历史记录清洁（非记录性文档
+    零时间戳/零历史/零决策记录字眼）。
+  - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式
+    （见 `trials/_toolkit/LLM_SERVICE.md`）；provider 重构后 T09 套件 8/8 PASS。
 - **⏳ 待用户确认**：下一步开发方向——候选见 `NEXT_STEPS.md` 下一步候选；
   完整远期规划与状态见 `PENDING_TASKS.md`。
 
