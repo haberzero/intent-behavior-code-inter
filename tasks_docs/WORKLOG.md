@@ -66,6 +66,15 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   不新增语言级注册 API。设计要点固化于 `docs/howto/modify_llm_provider.md` +
   `docs/architecture/01_principles.md` §3.7 + 路线图 §五。验证：全量 pytest 3027 pass +
   独立复核放行（probe 启发式 P1 修复 + 字节级二次验证）。远期 F0-F5 接口位已留、无返工债务。
+- **远期主线 F0 完成（2026-08-17，exp/native-binding-f0 → unsafe-vibe-dev 零风险直接合并）**：
+  Native Binding 地基验证——实证 `box` 裸 Python 模块 + 手动 vtable 绑定成员 + receive 调用
+  可行（内核 API）；设计底稿 `docs/architecture/01_native_host_binding.md`。**裁决点 1（宿主
+  绑定语法形态）定稿 = `import python "pkg" as lib`**（复用既有 import 形态 + `python` 伪模块
+  + 字符串模块名），理由：统一设计语言（import 已承载"引入外部内容"）/ 机制同构（复用
+  parser→scheduler→VM→module_manager 管线）/ 语义区分（python 伪模块标识宿主空间）/
+  无外部用户（全新语法零迁移成本，风险可控自主决策）。裁决点 2（宿主导入类型 = 一等类型，
+  复用 Provenance.EXTERNAL_MODULE）、3（成员绑定 = 显式声明式、非自动穿透）定方向。F1 进行中
+  （parser/scheduler/module_manager 落点已定）。
 
 ---
 

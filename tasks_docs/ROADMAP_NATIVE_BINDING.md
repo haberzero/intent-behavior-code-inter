@@ -221,14 +221,21 @@
     远期=原生绑定）。
   - 验证：全量 pytest 3027 passed / 1 skipped（分支与合并后均实跑）；独立复核放行
     （probe 启发式 P1 修复 + 字节级二次验证）。
+- **远期主线（F 段）已启动**：
+  - **F0 已完成（`exp/native-binding-f0` → 零风险直接合并）**：Native Binding 地基验证——
+    实证 box 裸 Python 模块 + 手动 vtable 绑定成员 + receive 调用可行（内核 API）；
+    设计底稿 `docs/architecture/01_native_host_binding.md`（现状实证 + 设计框架 +
+    关键落点 + F2 机制细节）；裁决点 1（宿主绑定语法形态）定稿 `import python "pkg" as lib`；
+    裁决点 2/3 定方向（一等类型 EXTERNAL_MODULE / 显式声明式绑定）。临时设计文档
+    `tasks_docs/_f0_native_binding.md` 保留至 F1 复用（含 F1 设计问题清单）。
+  - **F1 当前进行中**：宿主导入一等语法 + 用户类持有 native（独立分支）。
 - **近期未开放用户自定义语言级 API**：`register_provider`/`set_config_source` 等 WIP
   已回退；近期限定"修改/替换 `ibci_modules/ibci_ai/provider_impl.py`"这一条路径
   （R2 文档指引）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位）。
 - **触发此两段式规划**：用户裁定近期聚焦 provider 分离（Python 源码分发，改内核文件），
   远期才做原生绑定成熟方案；任何方向都要求彻底、不留脚手架。
-- **交接**：近期主线收尾——Provider 层分离"彻底、干净、分叉口就绪"；接口位已留
-  （`LLMCallRequest.thinking_mode`、`ConfigSourceAdapter` 抽象），远期 F0-F5 无返工
-  债务。下一步候选见 `tasks_docs/NEXT_STEPS.md`。
+- **交接**：近期主线收尾——Provider 层分离"彻底、干净、分叉口就绪"；远期 F0 完成、
+  F1 进行中。下一步候选见 `tasks_docs/NEXT_STEPS.md`。
 
 ---
 
