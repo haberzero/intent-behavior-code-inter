@@ -15,6 +15,7 @@ from core.runtime.objects.kernel import (
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
 )
+from core.base.uid import scope_uid, symbol_uid
 
 
 def vm_handle_IbModule(executor, node_uid: str, node_data: Mapping[str, Any]):
@@ -143,7 +144,9 @@ def vm_handle_IbHostImport(executor, node_uid: str, node_data: Mapping[str, Any]
                     f"VM: Hydration Leak: host class '{cls_name}' was not "
                     f"registered in STAGE 5."
                 )
-            sym_uid = f"scope_{executor.ec.current_module_name}:{cls_name}"
+            sym_uid = symbol_uid(
+                scope_uid(executor.ec.current_module_name), cls_name
+            )
             executor.runtime_context.define_variable(cls_name, host_cls, uid=sym_uid)
             continue
         params = []

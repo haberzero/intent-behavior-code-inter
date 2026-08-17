@@ -370,9 +370,15 @@ class SymbolCollector:
         try:
             for stmt in node.body:
                 # body 语句类型由 parser 保证（func / llm func）
-                if stmt.name in self.symbol_table.symbols:
-                    # 与类自身（或先前 impl）已定义成员冲突：fail-fast，
-                    # 跳过定义（类型检查阶段不再重复报）
+                # 冲突判定以目标类权威成员面 target_spec.members 为准，而非仅
+                # owned_scope 符号表：宿主类（bind class）的成员只进 members
+                # （scheduler._inject_host_class），owned_scope 是空合成表——
+                # 若只查符号表，同名 impl 会静默遮蔽 bind 成员并覆写其签名
+                # （双写真相漂移）。members 已含类体成员 + 先前 impl 补充，
+                # 对普通类与宿主类一致收敛。
+                if stmt.name in self.symbol_table.symbols or stmt.name in target_spec.members:
+                    # 与类自身（或先前 impl / 宿主 bind 声明）已定义成员冲突：
+                    # fail-fast，跳过定义（类型检查阶段不再重复报）
                     self.error(
                         f"impl method '{stmt.name}' conflicts with an existing "
                         f"member of class '{node.type_name}'.",

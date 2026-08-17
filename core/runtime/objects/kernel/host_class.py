@@ -18,7 +18,9 @@ F2 机制（与 F1 模块成员绑定同构）：
 
 from typing import Dict, List, Optional, Any
 
+from core.runtime.objects.kernel.base import unbox_for_native_call
 from core.runtime.objects.kernel.ib_class import IbClass
+from core.runtime.objects.kernel.native_module import IbNativeObject
 from core.runtime.module_system.proxy import create_proxy
 
 
@@ -70,10 +72,7 @@ class HostClassBinding(IbClass):
         - vtable：bind 方法成员 = 该实例的绑定方法 proxy（per-instance）。
         - bind 属性成员 → whitelist。
         """
-        py_args = []
-        for a in args:
-            to_native = getattr(a, "to_native", None)
-            py_args.append(to_native() if to_native else a)
+        py_args = [unbox_for_native_call(a) for a in args]
         py_instance = self.py_class(*py_args)
         return self._wrap_instance(py_instance)
 
@@ -103,9 +102,10 @@ class HostClassBinding(IbClass):
 
         def host_proxy_wrapper(*args: Any, **kwargs: Any):
             boxed = proxy(*args, **kwargs)
-            native = getattr(boxed, "py_obj", None)
-            if isinstance(native, self.py_class):
-                return self._wrap_instance(native)
+            # 协议化判别：仅当返回值为 IbNativeObject 且其原生承载是宿主类实例时
+            # 重包装（避免 getattr 能力探测 + 任意原生值误判）。
+            if isinstance(boxed, IbNativeObject) and isinstance(boxed.py_obj, self.py_class):
+                return self._wrap_instance(boxed.py_obj)
             return boxed
 
         return host_proxy_wrapper, meta

@@ -763,6 +763,20 @@ class Scheduler(ICompilerService):
         # 成员来自嵌套 bind 声明（与模块成员绑定同构：方法 → MethodMemberSpec，
         # 属性 → MemberSpec；协议满足判定在"宿主声明成员 + impl 补充"并集上进行）。
         for m in binding.members:
+            # 重复 bind 同名成员 fail-fast（与模块成员重复 bind 检查同构，
+            # SEM_REDEFINITION）
+            if m.name in cls_meta.members:
+                file_tracker.error(
+                    f"Host class binding: member '{m.name}' is bound more than once "
+                    f"in class '{class_name}'.",
+                    location=Location(
+                        file_path=file_path,
+                        line=getattr(m, "lineno", getattr(binding, "lineno", 0)),
+                        column=getattr(m, "col_offset", 1),
+                    ),
+                    code=SEM_REDEFINITION,
+                )
+                continue
             if m.is_method:
                 param_refs = [
                     annotation_to_typeref(p.annotation)

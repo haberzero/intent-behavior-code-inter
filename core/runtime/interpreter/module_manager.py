@@ -16,6 +16,23 @@ import importlib
 if TYPE_CHECKING:
     from core.kernel.blueprint import CompilationArtifact
 
+
+def import_host_py_module(module_name: str) -> Any:
+    """导入宿主绑定裸 Python 模块的单一入口（importlib）。
+
+    STAGE 5 宿主类水化（_hydrate_host_classes）与 VM 宿主模块 import
+    （import_host_module）共用同一导入路径并统一错误类型（InterpreterError），
+    避免同义失败在两个阶段以 RuntimeError / InterpreterError 双轨抛出
+    （与插件 loader 绑定校验的错误类型同构）。
+    """
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as e:
+        raise InterpreterError(
+            f"Host binding: cannot import Python module '{module_name}': {e}"
+        ) from e
+
+
 class ModuleManagerImpl:
     """
     模块管理器实现。
@@ -137,12 +154,7 @@ class ModuleManagerImpl:
         - 声明成员必须存在于裸 Python 模块（对齐 loader._validate_and_bind 的
           绑定期校验，fail-fast）
         """
-        try:
-            py_module = importlib.import_module(module_name)
-        except ImportError as e:
-            raise InterpreterError(
-                f"Host binding: cannot import Python module '{module_name}': {e}"
-            )
+        py_module = import_host_py_module(module_name)
 
         vtable = {}
         whitelist = []

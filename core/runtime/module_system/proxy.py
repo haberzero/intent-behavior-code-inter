@@ -12,24 +12,7 @@ import inspect
 from typing import Any, Callable, Optional, Tuple
 
 from core.kernel.issue import InterpreterError
-from core.runtime.objects.kernel.base import unbox
-
-
-def _is_callable_object(obj: Any) -> bool:
-    """判断对象是否为可调用实例（behavior / fn_callable / callable）。
-
-    可调用实例不是数据值：应原样透传给插件实现层，而非拆箱成 native
-    （未执行的可调用对象 ``to_native()`` 会显式抛错）。
-    """
-    cls = getattr(obj, "ib_class", None)
-    if cls is None:
-        return False
-    name = getattr(cls, "name", "") or ""
-    return (
-        name in ("behavior", "fn_callable", "callable")
-        or name.startswith("fn_callable[")
-        or name.startswith("behavior[")
-    )
+from core.runtime.objects.kernel.base import unbox_for_native_call
 
 
 def create_proxy(
@@ -46,12 +29,10 @@ def create_proxy(
     - 调用原生函数后把结果 ``reg.box`` 回装箱。
     """
     def _unbox(value):
-        # UTS: 自动拆箱 (IbObject -> Native)
-        # 可调用实例（behavior/fn_callable/callable）不是数据值，
-        # 原样透传，避免误拆箱触发未执行 callable 的 to_native() 抛错。
-        if _is_callable_object(value):
-            return value
-        return unbox(value)
+        # 调用边界拆箱单一入口（base.unbox_for_native_call）：可调用实例
+        # （behavior/fn_callable/callable）不是数据值，原样透传，避免误拆箱
+        # 触发未执行 callable 的 to_native() 抛错；其余 IbObject 经 unbox 拆箱。
+        return unbox_for_native_call(value)
 
     def proxy_wrapper(*args, **kwargs):
         if has_declared_varkw and args:

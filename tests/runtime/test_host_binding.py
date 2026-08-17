@@ -16,6 +16,7 @@ tests/runtime/test_host_binding.py
 import os
 
 from core.engine import IBCIEngine
+from tests.conftest import expect_compile_error
 
 
 def _write(tmp_path, name, content):
@@ -423,6 +424,38 @@ test()
         )
         assert _run(tmp_path) == ["10"]
 
+    def test_instance_attribute_member(self, tmp_path):
+        """bind 实例属性成员（__init__ 中 self.x，类上不可见）→ 白名单访问期契约。
+
+        实例属性（如 queue.Queue.maxsize）类上 hasattr 为 False，绑定期不做类级
+        存在性校验；白名单访问时经 getattr(实例, name) 强制契约（缺失 → fail-fast）。
+        """
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "queue" as q:
+    bind class Queue:
+        bind maxsize -> any
+        bind put(x: any) -> any
+        bind get() -> any
+
+func test() -> auto:
+    Queue qq = Queue()
+    qq.put(10)
+    qq.put(20)
+    any first = qq.get()
+    any second = qq.get()
+    any ms = qq.maxsize
+    print((str)first)
+    print((str)second)
+    print((str)ms)
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["10", "20", "0"]
+
 
 class TestHostClassBindingFailFast:
     """F2 显式声明式绑定：契约外成员 / 缺失宿主类 / 缺失成员 fail-fast。"""
@@ -491,4 +524,81 @@ func test() -> auto:
 test()
 """,
             "not_a_method",
+        )
+
+
+class TestHostClassBindingCompileTimeConflict:
+    """F2 显式声明式绑定：bind 成员与 impl 方法 / 重复绑定的编译期冲突 fail-fast。
+
+    冲突判定以目标类权威成员面 spec.members 为准（宿主类 bind 成员只进 members、
+    不进合成 owned_scope 符号表）——同名 impl 若未被拦截会静默遮蔽 bind 成员并
+    覆写其签名（双写真相漂移），故必须 SEM_REDEFINITION fail-fast。
+    """
+
+    def test_bind_impl_same_name_fails(self):
+        """bind 方法与 impl 方法同名 → 编译期 SEM_REDEFINITION。"""
+        expect_compile_error(
+            """
+import python "json" as j:
+    bind class JSONDecoder:
+        bind decode(s: str) -> any
+
+protocol P:
+    func decode(self, str s) -> any:
+        pass
+
+impl P for JSONDecoder:
+    func decode(self, str s) -> any:
+        return "impl-decode"
+
+func test() -> auto:
+    JSONDecoder d = JSONDecoder()
+    print(d.decode("{}"))
+
+test()
+""",
+            "SEM_REDEFINITION",
+        )
+
+    def test_bind_attr_impl_same_name_fails(self):
+        """bind 属性成员与 impl 方法同名 → 编译期 SEM_REDEFINITION。"""
+        expect_compile_error(
+            """
+import python "queue" as q:
+    bind class Queue:
+        bind maxsize -> any
+
+protocol P:
+    func maxsize(self) -> int:
+        pass
+
+impl P for Queue:
+    func maxsize(self) -> int:
+        return 99
+
+func test() -> auto:
+    Queue qu = Queue()
+    print(qu.maxsize)
+
+test()
+""",
+            "SEM_REDEFINITION",
+        )
+
+    def test_bind_class_duplicate_member_fails(self):
+        """同一 bind class 块内重复绑定同名成员 → 编译期 SEM_REDEFINITION。"""
+        expect_compile_error(
+            """
+import python "json" as j:
+    bind class JSONDecoder:
+        bind decode(s: str) -> any
+        bind decode(s: str) -> any
+
+func test() -> auto:
+    JSONDecoder d = JSONDecoder()
+    print(d.decode("{}"))
+
+test()
+""",
+            "SEM_REDEFINITION",
         )

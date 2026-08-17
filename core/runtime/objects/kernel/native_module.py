@@ -96,10 +96,15 @@ class IbNativeObject(IbObject):
             # 水化进 IbClass.methods）——宿主类实例的 impl 方法须经类方法回落导出
             # 为 IbBoundMethod（注入 receiver，与用户对象方法同构），否则原生路径
             # 丢失 self 绑定。
-            method = self.ib_class.lookup_method(target_name)
-            if method is not None:
-                from .functions import IbBoundMethod
-                return IbBoundMethod(self, method)
+            # 回落仅限宿主类实例（isinstance 门控）：F1 宿主模块/插件包的
+            # ib_class 为 Object（含 toString/to_bool 等），无门控回落会把
+            # Object 方法静默导出，击穿 F1 "未声明成员 fail-fast" 契约门禁。
+            from .host_class import HostClassBinding
+            if isinstance(self.ib_class, HostClassBinding):
+                method = self.ib_class.lookup_method(target_name)
+                if method is not None:
+                    from .functions import IbBoundMethod
+                    return IbBoundMethod(self, method)
             raise AttributeError(f"Plugin Error: '{target_name}' is not declared in the module contract (bind/_spec.py)")
         return None
 

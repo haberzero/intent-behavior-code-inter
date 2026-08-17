@@ -46,7 +46,7 @@ from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.shared.op_constants import OP_MAPPING, UNARY_OP_MAPPING
 from core.runtime.factory import RuntimeObjectFactory
 from core.runtime.interpreter.interop import InterOpImpl
-from core.runtime.interpreter.module_manager import ModuleManagerImpl
+from core.runtime.interpreter.module_manager import ModuleManagerImpl, import_host_py_module
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbClassField, IbValue, IbLLMCallResult, IbLLMUncertain
 from core.runtime.objects.kernel.host_class import HostClassBinding
@@ -679,15 +679,9 @@ class Interpreter:
 
     def _register_host_classes_from_node(self, stmt_data: Mapping[str, Any], module_name: str):
         """从一个 IbHostImport 节点注册其全部 ``bind class`` 宿主类型。"""
-        import importlib
-
         py_module_name = stmt_data.get("module_name")
-        try:
-            py_module = importlib.import_module(py_module_name)
-        except ImportError as e:
-            raise RuntimeError(
-                f"Host binding: cannot import Python module '{py_module_name}': {e}"
-            )
+        # 与 VM 宿主模块 import 共用单一导入入口（统一错误类型 InterpreterError）
+        py_module = import_host_py_module(py_module_name)
         for b_uid in stmt_data.get("bindings", []):
             bdata = self.get_node_data(b_uid)
             if not bdata or not bdata.get("is_class"):
@@ -714,12 +708,16 @@ class Interpreter:
                 if not mdata:
                     continue
                 mname = mdata.get("name")
-                if not hasattr(py_cls, mname):
-                    raise RuntimeError(
-                        f"Host binding: '{py_module_name}.{cls_name}' has no member "
-                        f"'{mname}' declared in bind class."
-                    )
+                # 方法成员：宿主类上必须真实存在且可调用（绑定期 fail-fast）。
+                # 属性成员：实例属性（__init__ 中 self.x = ...）类上不可见，无法
+                # 在类级校验——白名单访问时经 getattr(实例, name) 强制契约
+                # （缺失 → 访问期 fail-fast），故此处仅方法做类级存在性校验。
                 if mdata.get("is_method"):
+                    if not hasattr(py_cls, mname):
+                        raise RuntimeError(
+                            f"Host binding: '{py_module_name}.{cls_name}' has no member "
+                            f"'{mname}' declared in bind class."
+                        )
                     if not callable(getattr(py_cls, mname)):
                         raise RuntimeError(
                             f"Host binding: '{py_module_name}.{cls_name}.{mname}' "

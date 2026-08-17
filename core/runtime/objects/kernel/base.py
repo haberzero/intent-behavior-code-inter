@@ -376,6 +376,35 @@ def unbox(value: Any) -> Any:
     return value
 
 
+def is_callable_object(obj: Any) -> bool:
+    """判断对象是否为可调用实例（behavior / fn_callable / callable）。
+
+    可调用实例不是数据值：调用边界应原样透传给原生实现层，而非拆箱成
+    native（未执行的可调用对象 ``to_native()`` 会显式抛错）。
+    """
+    cls = getattr(obj, "ib_class", None)
+    if cls is None:
+        return False
+    name = getattr(cls, "name", "") or ""
+    return (
+        name in ("behavior", "fn_callable", "callable")
+        or name.startswith("fn_callable[")
+        or name.startswith("behavior[")
+    )
+
+
+def unbox_for_native_call(value: Any) -> Any:
+    """调用边界拆箱单一入口：可调用实例原样透传，其余经 ``unbox`` 拆为原生。
+
+    收敛全仓"构造/调用原生成员前逐个参数拆箱"的散落写法（插件代理参数、
+    宿主类型实例化实参等）：统一可调用透传 + 数据值拆箱双分支，避免站点各自
+    内联 ``getattr(a, "to_native", None)`` 双轨写法。
+    """
+    if is_callable_object(value):
+        return value
+    return unbox(value)
+
+
 def is_sequence_value(value: Any) -> bool:
     """判断值是否为原生序列容器（list/tuple）。
 

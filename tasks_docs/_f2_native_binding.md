@@ -76,21 +76,83 @@ import python "json" as j:
 4. 协议满足判定：编译期静态 spec 判定（`satisfies_protocol` 三级数据驱动），
    在"类自身 members + impl 补充"并集上进行，宿主类型无需特殊处理。
 
-## 四、运行期设计（研究 subagent 报告后确认）
+## 四、运行期设计（研究 subagent 报告后确认并已落地）
 
-- impl 方法水化（interpreter.py:745-781）经 `registry.get_class(type_name, module=impl_module)`
-  找目标类 → 宿主类型需在运行期预注册为可水化目标（IbClass 或宿主类容器），否则
-  Hydration Leak。
-- 宿主类型实例化 `Name(...)`：`TypeClass.__call__` → instantiate。宿主 Python 类实例
-  经 `create_native_object` 包装为 IbNativeObject（持 vtable/whitelist）。
-- impl 补充方法运行期需 register 进宿主类型实例的 vtable（供方法调用）。
-- 详见研究 subagent（ae5e4471）报告。
+- **宿主类运行期形态**：`HostClassBinding(IbClass)`（core/runtime/objects/kernel/
+  host_class.py）——包装裸 Python 类为一等 IBCI 类型。`_dispatch_call` 恒走
+  `instantiate`（覆写默认 _ClassInstantiateDrive CPS 驱动——宿主类型无 IBCI
+  字段/__init__）。实例 = IbNativeObject + per-instance vtable（bind 方法 =
+  F1 create_proxy 绑定方法）+ whitelist（bind 属性）。
+- **impl 方法可达**：不并入 vtable；经 `IbNativeObject._dispatch_getattr` 类方法
+  回落（lookup_method → IbBoundMethod 注入 receiver，与用户对象方法同构）。
+- **返回宿主实例重包装**：bind 方法返回 py_class 实例时重新包装为宿主实例
+  （一等类型语义：Python datetime 就是 IBCI datetime，契约随返回对象延续）。
+- **STAGE 5 预注册**（interpreter._hydrate_host_classes）：扫描模块根 body 的
+  IbHostImport，导入裸 Python 模块，校验宿主类/成员存在性（fail-fast），创建
+  HostClassBinding + `registry.register_class`（须先于 impl 水化，供其
+  `get_class(type_name, module=impl_module)` 命中）。封印（STAGE 7 seal）前完成。
+- **类名作用域绑定**：vm_handle_IbHostImport 对 bind class 绑定类对象到模块作用域
+  （类型符号 UID = `scope_{module}:{name}`，与 vm_handle_IbClassDef 同构），
+  使 `Name(...)` 可解析；不重复注册（运行期注册职责在 STAGE 5）。
+- 协议满足判定纯编译期静态 spec 判定（bind 声明 + impl 补充并集），运行期零改动。
 
-## 五、待定
+## 五、决策记录（全部已落地，无待定）
 
-- 运行期宿主类水化目标形态（IbClass vs 宿主类容器 + vtable）。
-- 宿主类型运行期预注册路径（impl hydration 目标查找）。
-- 协议满足判定的宿主类型成员来源（bind 声明 + impl 补充并集）已定。
+- 宿主类水化目标形态：HostClassBinding(IbClass)（非"类容器 + 每实例 vtable"分离式）。
+- 宿主类型运行期预注册路径：interpreter STAGE 5 扫描 IbHostImport（复用 ArtifactLoader
+  枚举 impl 块同构模式）。
+- impl 补充方法经 IbNativeObject 类方法回落（IbBoundMethod），非并入实例 vtable。
+- 已知边界：bind 方法返回 py_class 实例经重包装保持一等类型；跨模块宿主类型、
+  宿主类型继承（bind class 嵌套继承）为后续 F 段扩展点。
+
+## 五之二、F2 独立复核整改决策记录（b228d4fd 报告，已全部处理）
+
+**B1（阻塞，实证为误诊但仍保留机制隔离）**：复核称类方法回落击穿 F1 契约门禁
+（F1 模块对象 `j.toString` 契约外成员静默通过）。实证：在 pre-F2 父提交 56cf2ead 上
+`j.toString` 同样返回 `["<Module 'json'>"]`（经 IbModule._dispatch_getattr →
+scope 失败 → base Object 公理路径，与 F2 回落无关）——Object 公理
+（toString/to_bool/to_native 等）是对象模型固有表面，非模块契约成员；真实 F1
+契约（非公理名如 m.cos）由 test_unbound_member_fails 保证且通过。**裁决**：
+"F2 引入回归"不成立，无需新增 F1 回归测试；但回落已加
+`isinstance(self.ib_class, HostClassBinding)` 门控作为机制隔离（impl 回落仅
+宿主类实例，按构造收敛），保留。
+
+**M1（中，已修）**：bind 方法与 impl 方法同名编译期未拦截（宿主类合成
+owned_scope 为空表，冲突检查只查符号表；impl 静默遮蔽 bind 成员且 _define 覆写
+spec.members 签名——双写真相漂移）。修复：
+1. symbol_collection_pass.visit_IbImplDef 冲突判定改为以权威成员面
+   `target_spec.members` 为准（`stmt.name in symbols or stmt.name in members`），
+   普通类与宿主类一致收敛，SEM_REDEFINITION fail-fast，并阻止 _define 覆写。
+2. scheduler._inject_host_class bind 块内重复绑定同名成员 → SEM_REDEFINITION
+   （与 F1 模块成员重复 bind 检查同构）。
+新增 3 个回归测试（test_host_binding.py TestHostClassBindingCompileTimeConflict：
+bind方法vs-impl方法 / bind属性vs-impl方法 / 块内重复绑定）。
+
+**M2（中，已修）**：HostClassBinding.instantiate 内联
+`getattr(a,"to_native",None)` 拆箱（绕开 unbox 单一权威）且缺可调用实例透传。
+修复：base.py 新增 `is_callable_object` + `unbox_for_native_call`（可调用实例
+原样透传 + unbox 拆箱单一入口），proxy.py `_unbox` 与 host_class.instantiate 共用
+——消除双轨拆箱写法。
+
+**L1（已修）**：declarations.py 宿主类符号 UID 内联拼接 → 复用 uid.py
+`symbol_uid(scope_uid(module), name)`（值不变，遵守"禁止调用方内联字符串"）。
+
+**L2（已修）**：STAGE 5 水化与 VM 宿主 import 的 import+ImportError 包装重复且
+错误类型漂移（RuntimeError vs InterpreterError）。修复：module_manager 抽
+`import_host_py_module` 单一导入入口（统一 InterpreterError，与插件 loader
+错误类型同构），两阶段共用。STAGE 5 的类成员存在性校验仍留 RuntimeError
+（该文件 STAGE 5 惯用类型）。
+
+**L3（已修）**：host_class 返回重包装用 `getattr(boxed,"py_obj",None)` 能力探测 →
+改 `isinstance(boxed, IbNativeObject)` 协议化判别（native_module 顶层不 import
+host_class，无循环）。
+
+**L4（复核时已修，保留）**：属性成员类级 hasattr 误拒实例属性（__init__ 中
+self.x=... 类上不可见）→ 仅方法做类级校验，属性走访问期契约（getattr(实例,name)
+缺失 fail-fast），新增 queue.Queue 实例属性回归测试。
+
+**L5（记录已知限制）**："POSITIONAL_OR_KEYWORD" 魔法字符串第三处散落
+（interpreter.py 水化 param_meta），沿 F1 既有模式，随 F3 统一绑定面时收敛。
 
 ## 六、与主线衔接
 
