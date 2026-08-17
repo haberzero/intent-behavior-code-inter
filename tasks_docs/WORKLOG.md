@@ -175,6 +175,14 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   指向 3261200e。合并后全量 pytest 2946 passed / 1 skipped 零回归。F3 插件体系重构即
   此合入主开发分支（未 push；禁 push 硬原则不解除。合并是用户授权的单次动作，不改变
   "合并/推送皆须用户授权"原则——用户本次仅授权 F3 低风险合并，未授权后续自动合并或 push）。
+- **F4 授权推翻"不新增语言级注册 API"（2026-08-18，exp/provider-bind-f4，用户拍板）**：
+  F4（Provider 自定义经宿主绑定统一）推进时发现其与 R0-R2 已固化裁定冲突——R0-R2 明确
+  "不新增语言级注册 API / 不提前实现用户入口"、01_principles §3.7 把 bind-based provider
+  统一定为"远期、不提前实现"。向用户呈报该设计分叉（F4 推迟到 F5 vs 现在做 F4 授权推翻；
+  附 F3 先例 bind-based 用户库推迟 F5）。**用户选择"现在做 F4（授权推翻不新增注册 API）"**
+  ——本次新增 bind-based provider 注册出口/api、统一 F4，推翻 R0-R2"不新增语言级注册
+  API"裁定。此为有拍板依据的破坏性/对外契约变更授权。F4 设计底稿
+  `tasks_docs/_f4_provider_bind.md`（用后即删）。
 
 
 ---
