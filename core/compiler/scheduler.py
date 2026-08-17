@@ -406,7 +406,7 @@ class Scheduler(ICompilerService):
                 # 编译期从 bind 声明合成宿主模块 spec 并注入 lib 符号（编译期
                 # 类型检查用），运行时再由 module_manager 真正 import + 构建 vtable。
                 if imp.import_type == ImportType.HOST_IMPORT:
-                    self._inject_host_import(analyzer, file_path, imp, file_tracker)
+                    self._inject_host_import(analyzer, file_path, imp, file_tracker, module_name)
                     continue
 
                 # 查找已编译的结果或外部元数据
@@ -639,7 +639,7 @@ class Scheduler(ICompilerService):
             return TypeRef.of("any")
         return TypeRef.from_spec(spec)
 
-    def _inject_host_import(self, analyzer, file_path: str, imp: ImportInfo, file_tracker):
+    def _inject_host_import(self, analyzer, file_path: str, imp: ImportInfo, file_tracker, module_name: str):
         """宿主绑定 import 符号注入。
 
         ``import python "pkg" as lib: bind ...``：
@@ -647,6 +647,8 @@ class Scheduler(ICompilerService):
         - 从 bind 声明合成宿主模块 spec（kind=MODULE，provenance=EXTERNAL_MODULE，
           members=MethodMemberSpec/MemberSpec），注入 ``lib`` 符号，使
           ``lib.member`` 编译期类型检查可用（resolve_member 消费 members）。
+        - ``bind class Name`` 注册宿主类型（一等类型，EXTERNAL_MODULE CLASS，模块
+          限定注册——current_module 时序在此不成立，须显式传 module_name）。
         - 运行时的真正 import + vtable 构建由 module_manager（VM handler）执行。
         """
         lib_name = imp.host_asname or imp.module_name
@@ -670,6 +672,12 @@ class Scheduler(ICompilerService):
             provenance=Provenance.EXTERNAL_MODULE,
         )
         for binding in imp.host_bindings:
+            # 宿主类型绑定（bind class Name: ...）→ 注册一等类型（非模块成员）。
+            if getattr(binding, "is_class", False):
+                self._inject_host_class(
+                    analyzer, file_path, lib_name, binding, module_name, file_tracker
+                )
+                continue
             member_name = binding.name
             # 重复 bind 同名成员 fail-fast（与 impl 方法冲突检查同构，SEM_REDEFINITION）
             if member_name in host_spec.members:
@@ -717,6 +725,85 @@ class Scheduler(ICompilerService):
             provenance=Provenance.EXTERNAL_MODULE,
         )
         analyzer.symbol_table.define(mod_sym)
+
+    def _inject_host_class(self, analyzer, file_path: str, lib_name: str,
+                           binding, module_name: str, file_tracker):
+        """宿主类型绑定注入：把裸 Python 类注册为一等 IBCI 类型。
+
+        ``bind class Name: <嵌套 bind 成员>`` / ``bind class Name -> any``：
+        - 编译期注册 TypeDef(CLASS, provenance=EXTERNAL_MODULE, module=module_name)
+          到 registry（impl target / 类型注解 / 协议引用可解析）；嵌套 bind 成员进
+          ``cls_meta.members``（协议满足判定用）。
+        - 模块限定注册（current_module 时序在此不成立——_inject_host_import 先于
+          analyze() 的 set_current_module 运行，须显式传 module_name）。
+        - 定义 TypeSymbol(CLASS) 进模块符号表（用户代码 ``Name(...)`` / 类型注解
+          可解析），并合成 owned_scope（宿主类无 AST 作用域，impl 方法注入需要）。
+        """
+        class_name = binding.name
+        existing = analyzer.symbol_table.resolve(class_name)
+        if existing is not None:
+            file_tracker.warning(
+                f"Host class binding '{class_name}' conflicts with an already-defined "
+                f"{existing.kind.name.lower()} symbol of the same name. "
+                f"The binding is ignored; the locally-defined symbol takes precedence.",
+                location=Location(
+                    file_path=file_path,
+                    line=getattr(binding, "lineno", 0),
+                    column=getattr(binding, "col_offset", 1),
+                ),
+                code=SEM_IMPORT_CONFLICT,
+            )
+            return
+
+        cls_meta = self.registry.factory.create_class(
+            name=class_name,
+            module=module_name,
+            provenance=Provenance.EXTERNAL_MODULE,
+        )
+        # 成员来自嵌套 bind 声明（与模块成员绑定同构：方法 → MethodMemberSpec，
+        # 属性 → MemberSpec；协议满足判定在"宿主声明成员 + impl 补充"并集上进行）。
+        for m in binding.members:
+            if m.is_method:
+                param_refs = [
+                    annotation_to_typeref(p.annotation)
+                    for p in m.params
+                ]
+                return_ref = (
+                    annotation_to_typeref(m.return_type)
+                    if m.return_type is not None else TypeRef.of("void")
+                )
+                descriptors = [
+                    ParamDescriptor(name=p.name, kind="POSITIONAL_OR_KEYWORD", type_ref=pref)
+                    for p, pref in zip(m.params, param_refs)
+                ]
+                cls_meta.members[m.name] = MethodMemberSpec(
+                    name=m.name,
+                    kind="method",
+                    param_types=param_refs,
+                    return_type=return_ref,
+                    param_descriptors=descriptors,
+                )
+            else:
+                cls_meta.members[m.name] = MemberSpec(
+                    name=m.name,
+                    kind="field",
+                    type_ref=(
+                        annotation_to_typeref(m.return_type)
+                        if m.return_type is not None else TypeRef.of("any")
+                    ),
+                )
+
+        registered = self.registry.register(cls_meta)
+        type_sym = TypeSymbol(
+            name=class_name,
+            kind=SymbolKind.CLASS,
+            spec=registered,
+            provenance=Provenance.EXTERNAL_MODULE,
+        )
+        # 合成 owned_scope：宿主类无 AST 类作用域，impl 方法注入（symbol_collection_pass
+        # visit_IbImplDef 经 sym.owned_scope 收集方法）需要它。
+        type_sym.owned_scope = SymbolTable(parent=analyzer.symbol_table, name=class_name)
+        analyzer.symbol_table.define(type_sym)
 
     def _symbol_to_member(self, name: str, sym: Symbol) -> Any:
         """把已编译 IBCI 模块的符号表 Symbol 转换为纯数据 MemberSpec 形态。

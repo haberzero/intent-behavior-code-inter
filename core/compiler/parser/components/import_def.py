@@ -79,9 +79,14 @@ class ImportComponent(BaseComponent):
     def parse_bind_declaration(self) -> ast.IbHostBinding:
         """Parses one ``bind`` declaration.
 
+        - 宿主类：``bind class Name: <嵌套 bind 成员>`` / ``bind class Name -> any``
         - 方法：``bind name(x: T, y: U) -> R``
         - 属性：``bind name -> T``
         """
+        # 宿主类绑定（bind class Name ...）：嵌套成员经 parse_bind_declaration 递归复用。
+        if self.stream.match(TokenType.CLASS):
+            return self._parse_host_class_binding()
+
         name_tok = self.stream.consume(TokenType.IDENTIFIER, "Expect binding member name after 'bind'.")
 
         # 方法签名（bind name(params) -> ret）
@@ -115,6 +120,46 @@ class ImportComponent(BaseComponent):
             name=name_tok.value,
             is_method=False,
             return_type=attr_type,
+        )
+
+    def _parse_host_class_binding(self) -> ast.IbHostBinding:
+        """Parses ``bind class Name: <嵌套 bind 成员>`` / ``bind class Name -> any``。
+
+        绑定裸 Python 类为一等 IBCI 类型。嵌套成员声明与顶层 bind 块同构
+        （parse_bind_declaration 递归复用）；简写 ``-> any`` 仅建立类型身份。
+        """
+        name_tok = self.stream.consume(TokenType.IDENTIFIER, "Expect host class name after 'bind class'.")
+
+        # 简写：bind class Name -> any（仅类型身份，成员由 impl 补充）
+        if self.stream.match(TokenType.ARROW):
+            class_type = self.context.type_parser.parse_type_annotation()
+            self.stream.consume_end_of_statement("Expect newline after bind class declaration.")
+            return ast.IbHostBinding(
+                name=name_tok.value,
+                is_class=True,
+                is_method=False,
+                return_type=class_type,
+            )
+
+        # 块形式：bind class Name: \n INDENT bind ... DEDENT
+        self.stream.consume(TokenType.COLON, "Expect ':' after host class name.")
+        self.stream.consume(TokenType.NEWLINE, "Expect newline after 'bind class Name:'.")
+        self.stream.consume(TokenType.INDENT, "Expect indent after 'bind class Name:'.")
+        members: List[ast.IbHostBinding] = []
+        while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
+            if self.stream.match(TokenType.NEWLINE):
+                continue
+            start = self.stream.peek()
+            self.stream.consume(TokenType.BIND, "Expect 'bind' in host class bind block.")
+            member = self.parse_bind_declaration()
+            if member is not None:
+                members.append(self._loc(member, start))
+        self.stream.consume(TokenType.DEDENT, "Expect dedent after host class bind block.")
+        return ast.IbHostBinding(
+            name=name_tok.value,
+            is_class=True,
+            is_method=False,
+            members=members,
         )
 
     def parse_from_import(self) -> ast.IbImportFrom:

@@ -83,10 +83,12 @@ class DeclarationVisitorsMixin:
                 node, code=SEM_TYPE_MISMATCH,
             )
             return None
-        if getattr(class_spec, "provenance", None) != Provenance.USER_DEFINED:
+        impl_provenance = getattr(class_spec, "provenance", None)
+        if impl_provenance not in (Provenance.USER_DEFINED, Provenance.EXTERNAL_MODULE):
             self.error(
-                f"impl target '{node.type_name}' must be a user-defined class "
-                "(retroactive methods on built-in types are not supported).",
+                f"impl target '{node.type_name}' must be a user-defined or "
+                "host-bound class (retroactive methods on built-in types are "
+                "not supported).",
                 node, code=SEM_TYPE_MISMATCH,
             )
             return None

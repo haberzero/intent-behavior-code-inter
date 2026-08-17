@@ -334,11 +334,16 @@ class IbHostBinding(IbASTNode):
 
     - 方法成员：``bind sqrt(x: float) -> float``（``is_method=True``，params/return_type）。
     - 属性成员：``bind pi -> float``（``is_method=False``，type 承载属性类型）。
+    - 宿主类：``bind class Name: <嵌套 bind 成员>`` 或 ``bind class Name -> any``
+      （``is_class=True``，``members`` 承载嵌套成员声明；``return_type`` 承载简写的
+      ``-> any``）。
     """
     name: str
     is_method: bool = True
+    is_class: bool = False
     params: List['IbHostBindingParam'] = field(default_factory=list)
     return_type: Optional[IbExpr] = None
+    members: List['IbHostBinding'] = field(default_factory=list)
 
 @dataclass(kw_only=True, eq=False)
 class IbHostImport(IbStmt):
