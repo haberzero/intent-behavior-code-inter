@@ -176,6 +176,13 @@ import python "math" as m:
   契约外成员 fail-fast（AttributeError）；bind 声明但宿主缺失成员 → 绑定期报错。
 - 用户 IBCI 类 / `any` 字段可持 `lib`（IbNativeObject），方法内 `lib.member(...)` 调用。
 
+**为何 bind 块而非 from-import 简化**（设计取舍，对照 design-philosophy）：
+- 满足"显式绑定到 IBCI 声明方法"——bind 声明方法签名，编译期可做成员类型检查
+  （调用 `m.sqrt(16.0)` 校验实参类型，宿主类型检查一致）。
+- from-import 简化（`from python "math" import sqrt`）丢失签名信息，成员类型退化为
+  any/动态——不符合"绑定到声明方法"的类型安全意图。
+- bind 块与 `protocol`/`impl` 方法签名形态一致（统一设计语言）。
+
 **实现落点（已落地）**：
 
 | 环节 | 文件 | 落地内容 |
@@ -190,10 +197,11 @@ import python "math" as m:
 | VM | `declarations.py` / `dispatch.py` | `vm_handle_IbHostImport` + 注册 |
 | 单一权威源 | `_annotation_utils.py` / `proxy.py` | `annotation_to_typeref`（AST→TypeRef）、`create_proxy`（unbox→调→box）从既有实现提取共用 |
 
-**验证门**：e2e（`m.sqrt(16.0)=4.0`、`m.pi`、用户类 `Calculator` 持 native 调 `sqrt=5.0`、
-磁盘文件路径 rehydrate 后执行）；负样本（未声明成员 fail-fast、绑定缺失成员报错、
-编译期类型检查 `SEM_TYPE_MISMATCH`）；全量 pytest 3037 passed / 1 skipped（含新增
-`tests/runtime/test_host_binding.py` 6 项）零回归。
+**验证门**：e2e（`m.sqrt(16.0)=4.0`、`m.pi`、`m.pow(2,10)=1024.0`、用户类 `Calculator`
+持 native 调 `sqrt=5.0`、无 asname `math.sqrt=4.0`、磁盘文件 rehydrate 后执行、
+跨模块导入 `hsqrt(49.0)=7.0`）；负样本（未声明成员 fail-fast、绑定缺失成员报错、
+编译期类型检查 `SEM_TYPE_MISMATCH`）；全量 pytest 3039 passed / 1 skipped（含新增
+`tests/runtime/test_host_binding.py` 8 项）零回归。
 
 ---
 
