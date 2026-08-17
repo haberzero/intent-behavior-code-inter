@@ -249,13 +249,31 @@
     同名编译期 SEM_REDEFINITION）/ M2（unbox_for_native_call 单一权威）/
     L1-L3 已修 / L4 已修 / L5 记录。验证：全量 pytest 3053 passed / 1 skipped，
     零回归。临时设计 `tasks_docs/_f2_native_binding.md`（并入本路线图后删除）。
+  - **F3 已完成（`exp/plugin-refactor-f3`）**：插件体系重构——废弃 Python 侧 `_spec.py`
+    磁盘发现/加载通道，用户侧扩展唯一边 = 宿主绑定 `bind`，不保留双通道。F3-1：10 个
+    `_spec.py` 删除，内置 11 模块（内核原生 5 + 工具 5 + file）TypeDef 字面量集中
+    `core/runtime/bootstrap/builtin_modules.py` 构造期一次注册全部含实现（结构等价
+    探针 + 契约测试 + loader 环 2 去双绑定）。F3-2：磁盘插件发现/加载双通道彻底铲除
+    （discovery/auto_discovery/loader 环 2/插件搜索路径配置面 plugin_paths/global_plugin/
+    嗅探/继承透传/main.py --plugin/ibci_sdk/__ibcext_axiom__ 死协议/spec_builder 死代码/
+    幽灵码 KDIAG_POLICY_MODULE_NO_EXPORT）；Engine 签名简化 `IBCIEngine(root_dir=...)`。
+    F3-3：examples/trials/docs 全迁移（删 plugins_demo/isolation plugins/T01 plugins；
+    D2-21 改写为宿主绑定演示；write_user_plugin → extend_with_host_binding；subsystems/04
+    重写；20+ docs 更新到 F3 事实）。F3-4：残留扫描 `_spec.py`/`__ibcext_vtable__`/
+    discovery 引用清零（功能面零残留）。三阶段全量 pytest 零回归（最终 2946 passed /
+    1 skipped）。决策定稿见 `tasks_docs/_f3_plugin_refactor.md`（F3 完成后收敛沉入
+    docs/architecture/01_native_host_binding.md）。裁决点 3（旧 _spec.py 用户插件归宿）
+    落定 = 删除（不保留双通道、降级为新绑定编译目标）。达分支合并"零风险直接合并
+    unsafe-vibe-dev"标准（全量 pytest 零回归 + F3-1 结构探针 + F3-2/F3-3 独立 subagent
+    复核 + F3-4 残留扫描，无对外契约/架构级风险）——合并仍需用户授权。
+  - **F4 待启动**：Provider 自定义经 F1-F3 新绑定统一，逆 R 期"改内核文件"临时态。
 - **近期未开放用户自定义语言级 API**：`register_provider`/`set_config_source` 等 WIP
   已回退；近期限定"修改/替换 `ibci_modules/ibci_ai/provider_impl.py`"这一条路径
   （R2 文档指引）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位）。
 - **触发此两段式规划**：用户裁定近期聚焦 provider 分离（Python 源码分发，改内核文件），
   远期才做原生绑定成熟方案；任何方向都要求彻底、不留脚手架。
-- **交接**：近期主线收尾——Provider 层分离"彻底、干净、分叉口就绪"；远期 F0 完成、
-  F1 进行中。下一步候选见 `tasks_docs/NEXT_STEPS.md`。
+- **交接**：远期 F0-F3 全部完成（宿主导入 + 宿主类型绑定 + 插件体系重构），F4 待启动。
+  下一步候选见 `tasks_docs/NEXT_STEPS.md`。
 
 ---
 
