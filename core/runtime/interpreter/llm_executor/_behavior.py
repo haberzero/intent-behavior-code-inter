@@ -18,12 +18,14 @@ from typing import Any, Dict, List, Optional, Mapping
 
 from core.runtime.interfaces import IExecutionContext
 
+from core.base.llm_protocol.llm_call import (
+    MOCK_REPAIR_SENTINEL,
+    MOCK_AMBIGUOUS_SENTINEL,
+)
 from core.runtime.shared.llm_result import (
     LLMResult,
     LLMFuture,
     LLMBatchFuture,
-    MOCK_REPAIR_SENTINEL,
-    MOCK_AMBIGUOUS_SENTINEL,
 )
 
 from core.runtime.interpreter.llm_executor._prompt_assembly import (

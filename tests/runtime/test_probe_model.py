@@ -119,7 +119,7 @@ class TestProbeMockPath:
         assert plugin._model_capabilities["is_reasoning"] is False
 
     def test_mock_path_never_builds_network_client(self):
-        from ibci_modules.ibci_ai.core import MOCK_CLIENT_SENTINEL
+        from ibci_modules.ibci_ai.provider_impl import MOCK_CLIENT_SENTINEL
 
         plugin = _plugin_mock()
         plugin.probe_model()

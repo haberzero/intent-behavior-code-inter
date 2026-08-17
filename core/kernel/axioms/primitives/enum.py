@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     from core.kernel.spec.base import IbSpec
 
 
-# Mock 哨兵 pass-through：与 core.runtime.shared.llm_result.MOCK_AMBIGUOUS_SENTINEL
-# 保持同步（kernel 层禁止依赖 runtime，故此处局部定义大写形式，供 from_prompt 比对）
+# Mock 哨兵 pass-through：与 core.base.llm_protocol.llm_call.MOCK_AMBIGUOUS_SENTINEL
+# 保持同步（kernel 层禁止依赖 base/runtime，故此处局部定义大写形式，供 from_prompt 比对）
 _MOCK_AMBIGUOUS_SENTINEL_UPPER = "MAYBE_YES_MAYBE_NO_THIS_IS_AMBIGUOUS"
 
 

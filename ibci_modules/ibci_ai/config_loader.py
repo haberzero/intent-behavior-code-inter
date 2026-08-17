@@ -51,11 +51,14 @@ from core.base.diagnostics.codes import (
 )
 from core.kernel.issue import InterpreterError
 
+from ibci_modules.ibci_ai.config_normalize import (
+    _DEFAULT_TIMEOUT,
+    _DEFAULT_RETRY,
+    _DEFAULT_AUTO_INTENT,
+)
+
 _ENV_PATTERN = re.compile(r"\{env:([A-Z_][A-Z0-9_]*)\}")
 
-_DEFAULT_TIMEOUT = 30.0
-_DEFAULT_RETRY = 3
-_DEFAULT_AUTO_INTENT = True
 _DEFAULT_MOCK = False
 _DEFAULT_REASONING = False
 

@@ -14,7 +14,12 @@ from typing import Any, List, Mapping, Optional
 
 from core.runtime.interfaces import IExecutionContext
 
-from core.runtime.shared.llm_result import LLMResult, LLMFuture, MOCK_REPAIR_SENTINEL, MOCK_AMBIGUOUS_SENTINEL
+from core.runtime.shared.llm_result import LLMResult, LLMFuture
+
+from core.base.llm_protocol.llm_call import (
+    MOCK_REPAIR_SENTINEL,
+    MOCK_AMBIGUOUS_SENTINEL,
+)
 
 from core.runtime.objects.kernel import IbObject
 

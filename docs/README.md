@@ -34,6 +34,7 @@ docs/
 │
 ├── howto/                           操作指南（按问题查阅）
 │   ├── debug_llm_calls.md
+│   ├── modify_llm_provider.md
 │   ├── run_trials.md
 │   ├── use_generators.md
 │   ├── write_concurrent_tasks.md
