@@ -102,6 +102,24 @@ test()
         )
         assert _run(tmp_path) == ["5.0"]
 
+    def test_host_import_without_asname(self, tmp_path):
+        """无 asname 时绑定名 = 真实 Python 模块名（与 import json 无别名同构）。"""
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "math":
+    bind sqrt(x: float) -> float
+
+func test() -> auto:
+    float r = math.sqrt(16.0)
+    print((str)r)
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["4.0"]
+
 
 class TestHostBindingExplicitOnly:
     """显式声明式绑定（非自动穿透）。"""

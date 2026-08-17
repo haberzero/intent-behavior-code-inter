@@ -9,6 +9,18 @@
   字段持 `IbNativeObject`，显式绑定到 IBCI 声明方法（非自动穿透）。
 - **验证门**：e2e（`.ibci` 绑定宿主 callable 并调用成功）；全量 pytest 零回归。
 
+## 状态（2026-08-17 实现完成）
+
+- **已实现**：语法 + 全链路（AST/lexer/parser/依赖扫描/scheduler/语义/运行时/VM）。
+  共享函数提取（_annotation_utils.annotation_to_typeref、proxy.create_proxy）消除双真相。
+- **已验证**：e2e（sqrt=4.0/pi/pow=1024.0/用户类持 native=5.0/磁盘文件 rehydrate）；
+  负样本（未声明成员 fail-fast、绑定缺失成员报错、编译期类型检查 SEM_TYPE_MISMATCH）；
+  全量 pytest 3037 passed / 1 skipped（新增 tests/runtime/test_host_binding.py 6 项）。
+- **文档**：docs/architecture/01_native_host_binding.md §五 + docs/syntax/11_modules.md §11.10。
+- **待办**：独立复核放行 → 合入 unsafe-vibe-dev（零风险：纯新增语法/机制，不触碰既有
+  import 语义；全量 pytest 绿；测试+文档齐全）。
+- **后续**：F2（协议/impl 扩展到宿主类型）基于 F1 稳定后新分支推进。
+
 ## 一、语法设计（裁决点 1 落地，定稿：bind 块方案）
 
 ### 1.1 宿主绑定 import

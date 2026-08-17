@@ -68,7 +68,7 @@ class ImportComponent(BaseComponent):
         while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
             if self.stream.match(TokenType.NEWLINE):
                 continue
-            start = self.stream.previous() if not self.stream.check(TokenType.BIND) else self.stream.peek()
+            start = self.stream.peek()
             self.stream.consume(TokenType.BIND, "Expect 'bind' in host import block.")
             binding = self.parse_bind_declaration()
             if binding is not None:

@@ -120,10 +120,11 @@ class Parser:
 
                         # 宿主绑定 import（import python "pkg" as lib: bind ...）：
                         # 裸 Python 模块不参与 IBCI 模块依赖图，单独记录供 scheduler
-                        # 识别（module_name = python 伪模块 + 字符串模块名）。
+                        # 识别（import_type=HOST_IMPORT 已标记，依赖解析/符号注入按
+                        # 此分派；module_name 存真实 Python 模块名）。
                         if isinstance(node, ast.IbHostImport):
                             imports.append(ImportInfo(
-                                module_name=f"python:{node.module_name}",
+                                module_name=node.module_name,
                                 lineno=node.lineno,
                                 import_type=ImportType.HOST_IMPORT,
                                 names=[],
