@@ -117,7 +117,22 @@ class Parser:
                         
                     try:
                         node = self.import_component.parse_import()
-                        
+
+                        # 宿主绑定 import（import python "pkg" as lib: bind ...）：
+                        # 裸 Python 模块不参与 IBCI 模块依赖图，单独记录供 scheduler
+                        # 识别（import_type=HOST_IMPORT 已标记，依赖解析/符号注入按
+                        # 此分派；module_name 存真实 Python 模块名）。
+                        if isinstance(node, ast.IbHostImport):
+                            imports.append(ImportInfo(
+                                module_name=node.module_name,
+                                lineno=node.lineno,
+                                import_type=ImportType.HOST_IMPORT,
+                                names=[],
+                                host_asname=node.asname,
+                                host_bindings=node.bindings,
+                            ))
+                            continue
+
                         for alias in node.names:
                             info = ImportInfo(
                                 module_name=alias.name,

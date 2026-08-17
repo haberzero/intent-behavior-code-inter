@@ -73,8 +73,18 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   + 字符串模块名），理由：统一设计语言（import 已承载"引入外部内容"）/ 机制同构（复用
   parser→scheduler→VM→module_manager 管线）/ 语义区分（python 伪模块标识宿主空间）/
   无外部用户（全新语法零迁移成本，风险可控自主决策）。裁决点 2（宿主导入类型 = 一等类型，
-  复用 Provenance.EXTERNAL_MODULE）、3（成员绑定 = 显式声明式、非自动穿透）定方向。F1 进行中
-  （parser/scheduler/module_manager 落点已定）。
+  复用 Provenance.EXTERNAL_MODULE）、3（成员绑定 = 显式声明式、非自动穿透）定方向。
+- **远期主线 F1 完成（2026-08-17，exp/native-binding-f1 → unsafe-vibe-dev 零风险直接合并）**：
+  宿主导入一等语法 `import python "pkg" as lib: bind ...` + 用户类持有 native。全链路实现
+  （AST IbHostImport/IbHostBinding + bind 关键字 + parser 宿主 import/bind 块 + 依赖扫描跳过
+  + scheduler 合成宿主模块 spec/注入 lib 符号 + 语义符号绑定 + module_manager import_host_module
+  + vm_handle_IbHostImport）。**显式声明式绑定**：成员访问强制经 vtable/whitelist 门控，契约外
+  fail-fast；bind 签名编译期类型检查；用户 IBCI 类 `any` 字段持 native。**单一权威源提取**：
+  `_annotation_utils.annotation_to_typeref`（AST→TypeRef，自 symbol_collection_pass）与
+  `proxy.create_proxy`（unbox→调→box，自 loader._validate_and_bind）供插件/宿主共用，消除双真相。
+  验证：e2e（sqrt=4.0/pi/pow=1024.0/用户类=5.0/磁盘文件 rehydrate/跨模块=7.0/无 asname=4.0）；
+  负样本（未声明成员 fail-fast、绑定缺失成员报错、编译期类型检查 SEM_TYPE_MISMATCH）；全量
+  pytest 3039 passed / 1 skipped（新增 tests/runtime/test_host_binding.py 8 项）。
 
 ---
 

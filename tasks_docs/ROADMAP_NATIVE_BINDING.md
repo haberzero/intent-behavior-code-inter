@@ -228,7 +228,17 @@
     关键落点 + F2 机制细节）；裁决点 1（宿主绑定语法形态）定稿 `import python "pkg" as lib`；
     裁决点 2/3 定方向（一等类型 EXTERNAL_MODULE / 显式声明式绑定）。临时设计文档
     `tasks_docs/_f0_native_binding.md` 保留至 F1 复用（含 F1 设计问题清单）。
-  - **F1 当前进行中**：宿主导入一等语法 + 用户类持有 native（独立分支）。
+  - **F1 已完成（`exp/native-binding-f1` → 零风险直接合并）**：宿主导入一等语法
+    `import python "pkg" as lib: bind ...` + 用户类持有 native。全链路实现（AST/
+    lexer/parser/依赖扫描/scheduler/语义/运行时/VM）；显式声明式绑定（非自动穿透，
+    契约外成员 fail-fast）+ 编译期类型检查（bind 签名约束调用实参）+ 用户 IBCI 类
+    `any` 字段持 native；共享函数提取（annotation_to_typeref / create_proxy）消除
+    双真相。验证：e2e（sqrt=4.0/pi/pow/用户类=5.0/磁盘文件 rehydrate/跨模块），
+    负样本 3 项，全量 pytest 3039 passed / 1 skipped。测试
+    `tests/runtime/test_host_binding.py`；语法文档 `docs/syntax/11_modules.md` §11.10；
+    设计底稿 §五。
+  - **F2 进行中**：协议/impl 扩展到宿主类型（bind class 宿主类型绑定 + impl 目标
+    限制解除；临时设计 `tasks_docs/_f2_native_binding.md`）。
 - **近期未开放用户自定义语言级 API**：`register_provider`/`set_config_source` 等 WIP
   已回退；近期限定"修改/替换 `ibci_modules/ibci_ai/provider_impl.py`"这一条路径
   （R2 文档指引）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位）。

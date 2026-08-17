@@ -224,6 +224,31 @@ json.set_nested(obj, path, value)    # 按路径设置嵌套值
 ### 11.9 用户插件
 
 插件文件须放置于工程的 `./plugins` 目录，以 Python 编写，通过 `_spec.py` 声明元数据。内核原生模块（`ai`/`file`/`ihost`/`idbg`/`isys`/`iruntime`）不位于插件目录，不可被用户插件覆盖。
+
+### 11.10 宿主绑定（import python）
+
+宿主绑定允许 IBCI 直接导入**裸 Python 模块/包**并显式声明绑定成员，无需 Python 侧
+`_spec.py` 契约。这是 F 段远期主线的 F1 成果，走向"用户在 IBCI 侧声明式绑定宿主
+内容"（详见 `docs/architecture/01_native_host_binding.md`）。
+
+```ibci
+import python "math" as m:
+    bind sqrt(x: float) -> float
+    bind pow(x: float, y: float) -> float
+    bind pi -> float
+
+func test() -> auto:
+    float r = m.sqrt(16.0)   # 4.0
+    print((str)m.pi)         # 3.141592653589793
+```
+
+- `python` 伪模块关键字标记"宿主空间导入"，后跟字符串模块名（任意 Python 模块/包）。
+- `bind name(params) -> type`：方法成员（IBCI 签名声明，编译期类型检查 + 运行时
+  unbox→调→box 代理）。`bind name -> type`：属性/常量成员（白名单）。
+- **显式声明式绑定（非自动穿透）**：只有 `bind` 声明的成员可访问；契约外成员
+  fail-fast（运行时 AttributeError）。bind 声明但宿主模块缺失该成员 → 绑定期报错。
+- `lib` 是一等值（模块级变量），用户 IBCI 类/`any` 字段可持有并在方法内调用。
+- 安全模型与既有插件一致：成员访问强制经 vtable/whitelist 门控，无隐式反射。
 ---
 
 ## 深入指引

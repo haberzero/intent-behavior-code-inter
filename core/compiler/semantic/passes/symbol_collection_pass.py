@@ -21,6 +21,7 @@ from ..result import PassResult, Diagnostic, DiagnosticLevel
 from ..context import SemanticContext
 from .base_pass import BasePass
 from ._type_checking_base import module_qualified_annotation
+from ._annotation_utils import annotation_to_typeref
 
 
 class SymbolExtractor:
@@ -548,59 +549,8 @@ class SymbolCollector:
         return None
 
     def _annotation_to_typeref(self, annotation: ast.IbASTNode) -> TypeRef:
-        """Convert an AST annotation node to a TypeRef (结构化递归).
-
-        ``fn[(args) -> ret]``（CALLABLE_SIG）保留结构化签名形态
-        ``TypeRef('fn', (TypeRef('__args__', <params>), <ret>))``，与
-        type-check 阶段 ``_param_type_ref`` 的 CALLABLE_SIG 分支同构——消除
-        "param_types 与 param_descriptors 双真相"（S2：descriptor 双构造源收敛）。
-        """
-        if isinstance(annotation, ast.IbName):
-            # callable 内部类型名守卫（方向 A：用户面统一为 fn 族）。
-            if annotation.id == "callable":
-                self.error(
-                    CALLABLE_INTERNAL_TYPE_MSG,
-                    annotation, code=SEM_UNRESOLVED_TYPE,
-                )
-                return TypeRef.of("any")
-            return TypeRef.of(annotation.id)
-        if isinstance(annotation, ast.IbAttribute):
-            # 模块限定类型注解：geo.Counter → TypeRef("Counter", module="geo")。
-            # 与 _resolve_annotation 同构，结构化保 module 限定。
-            module_path, type_name = module_qualified_annotation(annotation)
-            if type_name is None:
-                return TypeRef.of("any")
-            return TypeRef.of(type_name, module=module_path)
-        if isinstance(annotation, ast.IbCallableType):
-            params = tuple(
-                self._annotation_to_typeref(pt) for pt in annotation.param_types
-            )
-            ret = annotation.return_type
-            ret_ref = self._annotation_to_typeref(ret) if ret is not None else TypeRef.of("auto")
-            return TypeRef(
-                "fn",
-                (TypeRef("__args__", params), ret_ref),
-            )
-        if isinstance(annotation, ast.IbSubscript) and isinstance(annotation.value, (ast.IbName, ast.IbAttribute)):
-            if isinstance(annotation.value, ast.IbName):
-                # callable 内部类型名守卫（list[callable] 等基类形态）。
-                if annotation.value.id == "callable":
-                    self.error(
-                        CALLABLE_INTERNAL_TYPE_MSG,
-                        annotation, code=SEM_UNRESOLVED_TYPE,
-                    )
-                    return TypeRef.of("any")
-                args = [self._annotation_to_typeref(elt) for elt in annotation.slice.elts] if isinstance(annotation.slice, ast.IbTuple) else [self._annotation_to_typeref(annotation.slice)]
-                return TypeRef(annotation.value.id, tuple(args))
-            module_path, type_name = module_qualified_annotation(annotation.value)
-            if type_name is None:
-                return TypeRef.of("any")
-            if isinstance(annotation.slice, ast.IbTuple):
-                args = [self._annotation_to_typeref(elt) for elt in annotation.slice.elts]
-            else:
-                args = [self._annotation_to_typeref(annotation.slice)]
-            return TypeRef(type_name, tuple(args), module=module_path)
-        return TypeRef.of("any")
+        """委托至模块级单一权威转换（_annotation_utils.annotation_to_typeref）。"""
+        return annotation_to_typeref(annotation, self.error)
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr):
         """访问带类型标注的表达式"""

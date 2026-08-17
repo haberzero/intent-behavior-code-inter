@@ -323,6 +323,35 @@ class IbImportFrom(IbStmt):
     level: int = 0
 
 @dataclass(kw_only=True, eq=False)
+class IbHostBindingParam(IbASTNode):
+    """宿主绑定方法参数声明（bind 签名）。"""
+    name: str
+    annotation: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
+class IbHostBinding(IbASTNode):
+    """宿主绑定声明（bind 块内一条）。
+
+    - 方法成员：``bind sqrt(x: float) -> float``（``is_method=True``，params/return_type）。
+    - 属性成员：``bind pi -> float``（``is_method=False``，type 承载属性类型）。
+    """
+    name: str
+    is_method: bool = True
+    params: List['IbHostBindingParam'] = field(default_factory=list)
+    return_type: Optional[IbExpr] = None
+
+@dataclass(kw_only=True, eq=False)
+class IbHostImport(IbStmt):
+    """宿主绑定 import：``import python "pkg" as lib: bind ...``。
+
+    ``module_name`` = 字符串模块名（裸 Python 模块/包）；``asname`` = 绑定名；
+    ``bindings`` = 显式绑定声明（方法签名 / 属性类型），运行时经 vtable 门控。
+    """
+    module_name: str
+    asname: Optional[str] = None
+    bindings: List['IbHostBinding'] = field(default_factory=list)
+
+@dataclass(kw_only=True, eq=False)
 class IbExprStmt(IbStmt):
     value: IbExpr
     llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
