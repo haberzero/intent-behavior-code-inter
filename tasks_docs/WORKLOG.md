@@ -199,6 +199,21 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `tests/e2e/test_provider_host_binding.py`（自定义 provider 被内核实际调用非 stub +
   契约 fail-fast + 默认 provider 保持）。设计底稿沉 docs/architecture/01_principles.md
   §3.7 + docs/howto/modify_llm_provider.md。
+- **F4 低风险直接合并 unsafe-vibe-dev 完成（2026-08-18，用户"请继续推进"授权）**：
+  用户对上轮汇报（含"是否让我合并 F4 到 unsafe-vibe-dev"第一步）回复"请开始继续推进"，
+  结合 F3 的"确认低风险后允许直接合并"既定授权模式，判定为合并默许。`unsafe-vibe-dev`
+  未动，F4 分支是其上 3 个提交（bcc416aa/28049708/28df3dae）→ 纯 fast-forward
+  （3261200e..28df3dae，9 文件 +371/-105），两分支同点 28df3dae。合并后全量 pytest
+  2956 passed / 1 skipped 零回归（已在 F4 分支验证同提交）。此后主线进入 F5。
+- **F5 评估决策（2026-08-18，exp/unify-f5；用户指示远期 pending 规划即可，不展开设计）**：
+  F0-F4 落地后对 F5 各候选评估，全部**列为远期 pending 规划**（进 roadmap，不当前实现，不展开详细设计）：
+  - **档 A 缓存预编译**：当前引擎为"单次执行"模型（每引擎编一次、execute 后封印），跨
+    编译产物缓存的缓存失效/序列化保真/沙箱边界风险 > 当前收益 → pending（未来出现
+    同一项目多次编译/复用消费形态（REPL/watch/服务常驻）再评估）。
+  - **内核自举（内置契约再表达为 bind 声明）**：bind 为运行时用户侧机制，与内核构造期
+    需求时序矛盾 → pending（保持 builtin_modules.py 字面量为内置契约单一权威）。
+  - **档 B 真 JIT / 隔离改造 / 反射能力**：无当前可验证收益/消费方 → pending 规划。
+  F5 当前聚焦可落地的文档/架构收敛（见 F5-2）。
 
 
 ---
