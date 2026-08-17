@@ -49,6 +49,7 @@ from core.runtime.interpreter.interop import InterOpImpl
 from core.runtime.interpreter.module_manager import ModuleManagerImpl
 from core.runtime.interpreter.permissions import PermissionManager as PermissionManagerImpl
 from core.runtime.objects.kernel import IbObject, IbClass, IbUserFunction, IbFunction, IbNativeFunction, IbClassField, IbValue, IbLLMCallResult, IbLLMUncertain
+from core.runtime.objects.kernel.host_class import HostClassBinding
 from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
 from core.kernel.registry import KernelRegistry
 from core.kernel.host_interface import HostInterface
@@ -278,6 +279,9 @@ class Interpreter:
         self.current_module_name = None
 
         # 2. 注入全局符号与类定义
+        # 宿主类型绑定（bind class）先注册：impl 方法水化（_hydrate_user_classes
+        # 内）经 registry.get_class 查宿主类目标，宿主类须先于 impl 水化存在。
+        self._hydrate_host_classes()
         self._hydrate_user_classes(loaded.class_to_node, loaded.impl_blocks)
         
         # 3.  STAGE 6: 预评估类字段 (Late Evaluation)
@@ -650,6 +654,105 @@ class Interpreter:
         self.issue_tracker._diagnostics = self.issue_tracker._diagnostics[:saved_diag_count]
 
         self.current_module_name = old_module
+
+    def _hydrate_host_classes(self):
+        """STAGE 5：注册宿主类型绑定（bind class）为运行期类。
+
+        扫描 artifact 各模块根 body 中的 ``IbHostImport`` 节点，按其
+        ``bind class`` 声明导入裸 Python 模块并创建 ``HostClassBinding`` 注册
+        （机制与 ArtifactLoader 枚举 impl 块同构）。须先于 ``_hydrate_user_classes``
+        的 impl 方法水化执行——impl 水化经 ``registry.get_class`` 查宿主类目标。
+        """
+        modules = self.artifact_dict.get("modules", {})
+        for module_name, module_data in modules.items():
+            if not isinstance(module_data, dict):
+                continue
+            root_node_uid = module_data.get("root_node_uid")
+            root_node = self.node_pool.get(root_node_uid) if root_node_uid else None
+            if not root_node:
+                continue
+            for stmt_uid in root_node.get("body", []):
+                stmt_data = self.node_pool.get(stmt_uid)
+                if not stmt_data or stmt_data.get("_type") != "IbHostImport":
+                    continue
+                self._register_host_classes_from_node(stmt_data, module_name)
+
+    def _register_host_classes_from_node(self, stmt_data: Mapping[str, Any], module_name: str):
+        """从一个 IbHostImport 节点注册其全部 ``bind class`` 宿主类型。"""
+        import importlib
+
+        py_module_name = stmt_data.get("module_name")
+        try:
+            py_module = importlib.import_module(py_module_name)
+        except ImportError as e:
+            raise RuntimeError(
+                f"Host binding: cannot import Python module '{py_module_name}': {e}"
+            )
+        for b_uid in stmt_data.get("bindings", []):
+            bdata = self.get_node_data(b_uid)
+            if not bdata or not bdata.get("is_class"):
+                continue
+            cls_name = bdata.get("name")
+            py_cls = getattr(py_module, cls_name, None)
+            if py_cls is None:
+                raise RuntimeError(
+                    f"Host binding: Python module '{py_module_name}' has no class "
+                    f"'{cls_name}' declared in bind class."
+                )
+            if not callable(py_cls):
+                raise RuntimeError(
+                    f"Host binding: '{py_module_name}.{cls_name}' is not callable "
+                    f"but declared as class."
+                )
+            # bind 成员声明（编译期已校验签名；运行期构建 per-instance vtable 并
+            # 校验成员在宿主类上真实存在——显式声明式绑定，契约外 fail-fast）
+            bind_methods = []
+            bind_whitelist = []
+            param_meta_map = {}
+            for m_uid in bdata.get("members", []):
+                mdata = self.get_node_data(m_uid)
+                if not mdata:
+                    continue
+                mname = mdata.get("name")
+                if not hasattr(py_cls, mname):
+                    raise RuntimeError(
+                        f"Host binding: '{py_module_name}.{cls_name}' has no member "
+                        f"'{mname}' declared in bind class."
+                    )
+                if mdata.get("is_method"):
+                    if not callable(getattr(py_cls, mname)):
+                        raise RuntimeError(
+                            f"Host binding: '{py_module_name}.{cls_name}.{mname}' "
+                            f"is not callable but declared as method."
+                        )
+                    bind_methods.append(mname)
+                    param_meta = []
+                    for p_uid in mdata.get("params", []):
+                        pdata = self.get_node_data(p_uid)
+                        if not pdata:
+                            continue
+                        param_meta.append((pdata.get("name"), "POSITIONAL_OR_KEYWORD", None))
+                    param_meta_map[mname] = param_meta
+                else:
+                    bind_whitelist.append(mname)
+
+            spec = self.registry.get_metadata_registry().resolve(cls_name, module=module_name)
+            if spec is None:
+                raise RuntimeError(
+                    f"VM: Hydration Leak: host class spec '{cls_name}' (module "
+                    f"'{module_name}') was not rehydrated from the artifact."
+                )
+            object_factory = self.service_context.object_factory
+            host_cls = HostClassBinding(
+                name=cls_name,
+                registry=self.registry,
+                object_factory=object_factory,
+                py_class=py_cls,
+                bind_method_names=bind_methods,
+                bind_whitelist=bind_whitelist,
+                param_meta_map=param_meta_map,
+            )
+            self.registry.register_class(cls_name, host_cls, self._kernel_token, spec=spec)
 
     def _hydrate_user_classes(self, class_to_node: Dict[Any, Any], impl_blocks: Optional[list] = None):
         """ STAGE 5 后期：为预水合的类实体填充方法与初始字段定义"""

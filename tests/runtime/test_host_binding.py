@@ -288,3 +288,207 @@ import python "math" as m:
         except CompilerError as e:
             codes = {d.code for d in e.diagnostics}
             assert "SEM_REDEFINITION" in codes, f"Expected SEM_REDEFINITION, got: {codes}"
+
+
+class TestHostClassBindingE2E:
+    """F2 e2e：宿主类型绑定（bind class）一等类型全链路。"""
+
+    def test_impl_method_and_protocol(self, tmp_path):
+        """宿主类型 + impl 方法 + 协议满足（JSONDecoder + Describable）。"""
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "json" as j:
+    bind class JSONDecoder:
+        bind decode(s: str) -> any
+
+protocol Describable:
+    func describe(self) -> str:
+        pass
+
+impl Describable for JSONDecoder:
+    func describe(self) -> str:
+        return "json-decoder"
+
+func test() -> auto:
+    JSONDecoder d = JSONDecoder()
+    str s = d.describe()
+    print(s)
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["json-decoder"]
+
+    def test_native_bind_method_and_impl(self, tmp_path):
+        """bind 方法（原生 decode）+ impl 方法（describe）同实例调用。"""
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "json" as j:
+    bind class JSONDecoder:
+        bind decode(s: str) -> any
+
+protocol Describable:
+    func describe(self) -> str:
+        pass
+
+impl Describable for JSONDecoder:
+    func describe(self) -> str:
+        return "json-decoder"
+
+func test() -> auto:
+    JSONDecoder d = JSONDecoder()
+    any r = d.decode("{\\"a\\": 1}")
+    print(d.describe())
+    print((str)r)
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["json-decoder", "{a: 1}"]
+
+    def test_attributes_and_return_rebox(self, tmp_path):
+        """bind 属性成员（whitelist）+ 返回宿主实例重包装（datetime.replace）。"""
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "datetime" as dt:
+    bind class datetime:
+        bind year -> int
+        bind month -> int
+        bind replace(year: int) -> any
+
+func test() -> auto:
+    datetime d = datetime(2026, 8, 17)
+    print((str)d.year)
+    print((str)d.month)
+    datetime d2 = d.replace(2027)
+    print((str)d2.year)
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["2026", "8", "2027"]
+
+    def test_shorthand_bind_class(self, tmp_path):
+        """bind class Name -> any 简写（仅类型身份，impl 补方法）。"""
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "json" as j:
+    bind class JSONEncoder -> any
+
+protocol Describable:
+    func describe(self) -> str:
+        pass
+
+impl Describable for JSONEncoder:
+    func describe(self) -> str:
+        return "encoder"
+
+func test() -> auto:
+    JSONEncoder e = JSONEncoder()
+    print(e.describe())
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["encoder"]
+
+    def test_host_class_as_type_annotation(self, tmp_path):
+        """宿主类型作类型注解 + 构造器实参（host 类型推断/调用）。"""
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "collections" as c:
+    bind class deque:
+        bind append(x: any) -> any
+        bind popleft() -> any
+
+func test() -> auto:
+    deque q = deque()
+    q.append(10)
+    q.append(20)
+    any first = q.popleft()
+    print((str)first)
+
+test()
+""",
+        )
+        assert _run(tmp_path) == ["10"]
+
+
+class TestHostClassBindingFailFast:
+    """F2 显式声明式绑定：契约外成员 / 缺失宿主类 / 缺失成员 fail-fast。"""
+
+    def _run_expect_fail(self, tmp_path, content, needle):
+        _write(tmp_path, "main.ibci", content)
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        try:
+            lines = []
+            engine.run(
+                str(tmp_path / "main.ibci"),
+                output_callback=lambda s: lines.append(str(s)),
+                silent=True,
+            )
+            raise AssertionError("Expected runtime error, but execution succeeded")
+        except Exception as e:
+            assert needle in str(e), f"Expected '{needle}' in error, got: {e}"
+
+    def test_unbound_attribute_fails(self, tmp_path):
+        """契约外属性访问宿主实例 → fail-fast（不自动穿透）。"""
+        self._run_expect_fail(
+            tmp_path,
+            """
+import python "json" as j:
+    bind class JSONDecoder:
+        bind decode(s: str) -> any
+
+func test() -> auto:
+    JSONDecoder d = JSONDecoder()
+    any x = d.raw_decode("x")
+
+test()
+""",
+            "raw_decode",
+        )
+
+    def test_bind_missing_class_fails(self, tmp_path):
+        """bind class 绑定模块中不存在的宿主类 → STAGE 5 fail-fast。"""
+        self._run_expect_fail(
+            tmp_path,
+            """
+import python "json" as j:
+    bind class DoesNotExist:
+        bind foo() -> any
+
+func test() -> auto:
+    DoesNotExist d = DoesNotExist()
+
+test()
+""",
+            "DoesNotExist",
+        )
+
+    def test_bind_missing_member_fails(self, tmp_path):
+        """bind class 内声明宿主类不存在的成员 → STAGE 5 fail-fast。"""
+        self._run_expect_fail(
+            tmp_path,
+            """
+import python "json" as j:
+    bind class JSONDecoder:
+        bind not_a_method() -> any
+
+func test() -> auto:
+    pass
+
+test()
+""",
+            "not_a_method",
+        )

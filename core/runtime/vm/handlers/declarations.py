@@ -130,6 +130,22 @@ def vm_handle_IbHostImport(executor, node_uid: str, node_data: Mapping[str, Any]
                 f"VM: Host import '{module_name}' binding node missing from "
                 f"artifact (uid '{binding_uid}')."
             )
+        # bind class 宿主类型已由 STAGE 5 水化注册（_hydrate_host_classes）：
+        # 此处绑定类对象到当前模块作用域（与 vm_handle_IbClassDef 同构——
+        # 类型符号 UID = scope_{module}:{name}），使 ``Name(...)`` 可解析。
+        if bdata.get("is_class"):
+            cls_name = bdata.get("name")
+            host_cls = executor.registry.get_class(
+                cls_name, module=executor.ec.current_module_name
+            )
+            if host_cls is None:
+                raise RuntimeError(
+                    f"VM: Hydration Leak: host class '{cls_name}' was not "
+                    f"registered in STAGE 5."
+                )
+            sym_uid = f"scope_{executor.ec.current_module_name}:{cls_name}"
+            executor.runtime_context.define_variable(cls_name, host_cls, uid=sym_uid)
+            continue
         params = []
         for param_uid in bdata.get("params", []):
             pdata = executor.ec.get_node_data(param_uid)

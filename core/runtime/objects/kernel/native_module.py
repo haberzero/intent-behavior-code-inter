@@ -92,6 +92,14 @@ class IbNativeObject(IbObject):
                     ) from e
 
             # 未在契约或白名单声明的成员，坚决抛出异常
+            # [宿主类型绑定] 先查宿主类方法表（impl 方法经 STAGE 5 register_method
+            # 水化进 IbClass.methods）——宿主类实例的 impl 方法须经类方法回落导出
+            # 为 IbBoundMethod（注入 receiver，与用户对象方法同构），否则原生路径
+            # 丢失 self 绑定。
+            method = self.ib_class.lookup_method(target_name)
+            if method is not None:
+                from .functions import IbBoundMethod
+                return IbBoundMethod(self, method)
             raise AttributeError(f"Plugin Error: '{target_name}' is not declared in the module contract (bind/_spec.py)")
         return None
 
