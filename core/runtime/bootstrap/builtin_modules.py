@@ -6,8 +6,8 @@
 用户侧扩展唯一边 = 宿主绑定 bind（不保留 Python 侧 _spec.py 磁盘发现通道）。
 
 说明：
-- 内核原生 5 + 工具 5 的字面量由生成脚本经旧 discovery 路径产出（结构等价，防手写漂移）；
-  生成脚本为一次性工具（tasks_docs/_f3_gen_specs.py，用后即删，决策记录于 WORKLOG）。
+- 内核原生 5 + 工具 5 的字面量原由一次性生成脚本经旧 discovery 路径产出（结构等价，
+  防手写漂移）；该脚本 F3-1 后已删除（用后即删，决策沉入 WORKLOG/架构文档）。
 - file 的 spec 自 core/engine.py 挪入（保留 mutating/param_descriptors/exported_types 语义字段）。
 - 工具 5 模块显式 provenance=USER_DEFINED（非 KERNEL_NATIVE，host_interface 覆盖保护不适用）；
   全部内置模块 visibility=IMPORT_GATED（须显式 import 才可用）。
