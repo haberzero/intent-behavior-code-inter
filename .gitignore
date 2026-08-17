@@ -38,3 +38,4 @@ trials/T07_fixes_critical_stress/_scratch/
 trials/**/logs/
 trials/**/batch_result.jsonl
 trials/**/register.jsonl
+.tmp_review/

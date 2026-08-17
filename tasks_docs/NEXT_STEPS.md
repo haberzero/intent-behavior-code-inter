@@ -28,21 +28,22 @@
 ## 🔴 当前状态
 
 **主线：远期原生宿主绑定（F0-F5）**——`ROADMAP_NATIVE_BINDING.md` §三【远期愿景】。
-**F0（地基验证）已完成**：实证 box 裸 Python 模块 + vtable 绑定可行；设计底稿
-`docs/architecture/01_native_host_binding.md`；裁决点 1 定稿（`import python "pkg" as lib`）。
-**F1（宿主导入一等语法 + 用户类持有 native）进行中**：parser/scheduler/module_manager
-落点已定，即将独立分支实现。近期主线（R0-R2 Provider 层分离）已完成。
+**F0（地基验证）+ F1（宿主导入一等语法 + 用户类持有 native）已完成**：宿主导入
+`import python "pkg" as lib: bind ...` 全链路实现（AST/lexer/parser/依赖扫描/
+scheduler/语义/运行时/VM），显式声明式绑定（非自动穿透）+ 编译期类型检查 + 用户类
+持 native；设计底稿 `docs/architecture/01_native_host_binding.md` §五 + 语法文档
+`docs/syntax/11_modules.md` §11.10。**F2（协议/impl 扩展到宿主类型）进行中**：bind
+class 宿主类型绑定 + impl 目标限制解除（独立分支）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·远期，当前] F1 宿主导入一等语法 + 用户类持有 native**——
-   `import python "pkg" as lib`；显式声明绑定（非自动穿透）；e2e 验证。
-2. **[主线·远期] F2 协议/impl 扩展到宿主类型**——impl 目标解除"本模块用户类"限制，
-   允许 EXTERNAL_MODULE；spec.members 并集 + 封印前 vtable 注入。
-3. [主线·远期] F3 插件体系重构（废弃 _spec.py，不保留双通道）→ F4 Provider 统一 →
+1. **[主线·远期，当前] F2 协议/impl 扩展到宿主类型**——`bind class Name -> type`
+   宿主类型绑定 + `visit_IbImplDef` provenance 检查解除（EXTERNAL_MODULE 允许）+
+   宿主类型成员表/运行期 IbClass/impl 水化。
+2. [主线·远期] F3 插件体系重构（废弃 _spec.py，不保留双通道）→ F4 Provider 统一 →
    F5 架构统一/自举/缓存 JIT。
-4. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
-5. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
+3. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
+4. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 
