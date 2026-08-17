@@ -149,10 +149,10 @@ class TestSentinelConsistency:
     def test_enum_mirror_matches_canonical(self):
         """``enum.py`` 局部大写镜像必须等于规范常量的大写形式。
 
-        镜像的存在源于 kernel 层禁止依赖 runtime 的层约束，但其值必须
-        与 ``llm_result.MOCK_AMBIGUOUS_SENTINEL`` 保持同步。
+        镜像的存在源于 kernel 层禁止依赖 base/runtime 的层约束，但其值必须
+        与规范常量（``core.base.llm_protocol.llm_call``）保持同步。
         """
         from core.kernel.axioms.primitives.enum import _MOCK_AMBIGUOUS_SENTINEL_UPPER
-        from core.runtime.shared.llm_result import MOCK_AMBIGUOUS_SENTINEL
+        from core.base.llm_protocol.llm_call import MOCK_AMBIGUOUS_SENTINEL
 
         assert _MOCK_AMBIGUOUS_SENTINEL_UPPER == MOCK_AMBIGUOUS_SENTINEL.upper()

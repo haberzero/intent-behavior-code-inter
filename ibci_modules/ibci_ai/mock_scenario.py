@@ -17,7 +17,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from core.runtime.shared.llm_result import (
+from core.base.llm_protocol.llm_call import (
     MOCK_REPAIR_SENTINEL,
     MOCK_AMBIGUOUS_SENTINEL,
 )
