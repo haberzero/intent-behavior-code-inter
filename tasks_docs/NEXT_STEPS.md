@@ -28,20 +28,23 @@
 ## 🔴 当前状态
 
 **主线：远期原生宿主绑定（F0-F5）**——`ROADMAP_NATIVE_BINDING.md` §三【远期愿景】。
-**F0（地基验证）+ F1（宿主导入一等语法 + 用户类持有 native）已完成**：宿主导入
-`import python "pkg" as lib: bind ...` 全链路实现（AST/lexer/parser/依赖扫描/
-scheduler/语义/运行时/VM），显式声明式绑定（非自动穿透）+ 编译期类型检查 + 用户类
-持 native；设计底稿 `docs/architecture/01_native_host_binding.md` §五 + 语法文档
-`docs/syntax/11_modules.md` §11.10。**F2（协议/impl 扩展到宿主类型）进行中**：bind
-class 宿主类型绑定 + impl 目标限制解除（独立分支）。
+**F0（地基验证）+ F1（宿主导入一等语法 + 用户类持有 native）+ F2（协议/impl 扩展到
+宿主类型）已完成**：宿主导入 `import python "pkg" as lib: bind ...` 全链路实现（AST/
+lexer/parser/依赖扫描/scheduler/语义/运行时/VM），显式声明式绑定（非自动穿透）+
+编译期类型检查 + 用户类持 native；bind class 宿主类型绑定（一等类型 EXTERNAL_MODULE
+CLASS + per-instance vtable + impl 补充/协议满足）。F2 独立复核整改闭环已合并
+（65414738），全量 pytest 3053 passed / 1 skipped。设计底稿
+`docs/architecture/01_native_host_binding.md` §五 + 语法文档
+`docs/syntax/11_modules.md` §11.10。**F3（插件体系重构）是当前下一步**：废弃 _spec.py、
+不保留双通道（研读报告已完成，见 `tasks_docs/_f3_plugin_refactor.md`）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·远期，当前] F2 协议/impl 扩展到宿主类型**——`bind class Name -> type`
-   宿主类型绑定 + `visit_IbImplDef` provenance 检查解除（EXTERNAL_MODULE 允许）+
-   宿主类型成员表/运行期 IbClass/impl 水化。
-2. [主线·远期] F3 插件体系重构（废弃 _spec.py，不保留双通道）→ F4 Provider 统一 →
-   F5 架构统一/自举/缓存 JIT。
+1. **[主线·远期，当前] F3 插件体系重构**——废弃 _spec.py 磁盘发现/加载通道，宿主
+   绑定（bind）为唯一绑定通道：F3-0 补 bind 默认参数 → F3-1 内核原生 spec 内联 →
+   F3-2 纯工具五插件改造 → F3-3 拆发现/加载通道 → F3-4 测试/examples/trials/docs
+   清扫（研读结论与顺序见 `tasks_docs/_f3_plugin_refactor.md`）。
+2. [主线·远期] F4 Provider 自定义经新绑定统一 → F5 架构统一/自举/缓存 JIT。
 3. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 4. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 

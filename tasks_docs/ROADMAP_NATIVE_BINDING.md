@@ -237,8 +237,18 @@
     负样本 3 项，全量 pytest 3039 passed / 1 skipped。测试
     `tests/runtime/test_host_binding.py`；语法文档 `docs/syntax/11_modules.md` §11.10；
     设计底稿 §五。
-  - **F2 进行中**：协议/impl 扩展到宿主类型（bind class 宿主类型绑定 + impl 目标
-    限制解除；临时设计 `tasks_docs/_f2_native_binding.md`）。
+  - **F2 已完成（`exp/native-binding-f2` → 零风险直接合并，65414738）**：协议/impl
+    扩展到宿主类型——bind class 宿主类型绑定（`bind class Name: ...` 块形式 +
+    `bind class Name -> any` 简写）+ impl 目标限制解除（EXTERNAL_MODULE 放行、
+    KERNEL_NATIVE 仍拒绝）。编译期：scheduler `_inject_host_class` 注册一等类型
+    EXTERNAL_MODULE CLASS + 合成 owned_scope；运行期：HostClassBinding(IbClass)
+    恒走 instantiate + per-instance vtable（bind 方法）+ whitelist（bind 属性），
+    impl 方法经 IbNativeObject 类方法回落 → IbBoundMethod；协议满足纯编译期静态
+    spec 判定（bind 声明 + impl 补充并集）。独立复核（b228d4fd）整改闭环：
+    B1（回落加 HostClassBinding 门控，实证误诊但保留机制隔离）/ M1（bind vs impl
+    同名编译期 SEM_REDEFINITION）/ M2（unbox_for_native_call 单一权威）/
+    L1-L3 已修 / L4 已修 / L5 记录。验证：全量 pytest 3053 passed / 1 skipped，
+    零回归。临时设计 `tasks_docs/_f2_native_binding.md`（并入本路线图后删除）。
 - **近期未开放用户自定义语言级 API**：`register_provider`/`set_config_source` 等 WIP
   已回退；近期限定"修改/替换 `ibci_modules/ibci_ai/provider_impl.py`"这一条路径
   （R2 文档指引）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位）。

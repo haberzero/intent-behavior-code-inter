@@ -249,6 +249,34 @@ func test() -> auto:
   fail-fast（运行时 AttributeError）。bind 声明但宿主模块缺失该成员 → 绑定期报错。
 - `lib` 是一等值（模块级变量），用户 IBCI 类/`any` 字段可持有并在方法内调用。
 - 安全模型与既有插件一致：成员访问强制经 vtable/whitelist 门控，无隐式反射。
+
+#### 11.10.1 宿主类型绑定（bind class）
+
+`bind class` 把裸 Python **类**绑定为一等 IBCI 类型（F2 成果），可作类型注解、构造、
+`impl` 目标与协议满足判定：
+
+```ibci
+import python "datetime" as dt:
+    bind class datetime:
+        bind year -> int
+        bind replace(year: int) -> datetime
+
+func test() -> auto:
+    datetime d = dt.datetime(2026, 8, 17)
+    datetime y = d.replace(year=2027)
+    print((str)y.year)   # 2027
+```
+
+- `bind class Name:` 块内嵌套成员声明（方法/属性，规则与模块成员绑定一致）。
+- `bind class Name -> any` 简写：仅建立类型身份，能力由 `impl` 补充。
+- **impl 目标**：宿主类型可作为 `impl` 目标（`impl P for Name`），补充宿主没有的方法；
+  协议满足在"bind 声明 + impl 补充"并集上静态判定。
+- **编译期冲突 fail-fast（SEM_REDEFINITION）**：impl 方法不得与 bind 声明成员同名；
+  同一 bind class 块内不得重复绑定同名成员。
+- 实例 = 宿主原生实例（一等值）：bind 方法返回裸宿主实例时自动重包装，契约随返回
+  对象延续（如 `datetime.replace` 返回新 datetime 仍是 IBCI `datetime`）。
+- 契约外成员 / 缺失宿主类 / 缺失成员 → fail-fast（与 F1 一致）。
+
 ---
 
 ## 深入指引

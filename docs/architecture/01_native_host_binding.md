@@ -206,6 +206,55 @@ import python "math" as m:
 
 ---
 
+## 六、F2 落地（bind class 宿主类型绑定 + impl 目标解除）
+
+**语法（已实现）**——两种形态：
+
+```ibci
+import python "json" as j:
+    bind class JSONDecoder:
+        bind decode(s: str) -> any
+
+import python "json" as j2:
+    bind class JSONEncoder -> any   # 简写：仅类型身份，成员由 impl 补充
+```
+
+- `bind class Name: <嵌套 bind 成员>`：把裸 Python 类绑定为一等 IBCI 类型。嵌套成员
+  声明规则与 F1 模块成员一致（方法 `bind f(params) -> ret` / 属性 `bind x -> type`）。
+- `bind class Name -> any` 简写：仅建立类型身份，能力由 `impl` 补充（纯 impl 场景）。
+- **成员表 = 宿主声明 + impl 补充并集**：bind 声明是宿主类自身能力契约；`impl` 只补充
+  IBCI 协议所需而宿主没有的方法（`visit_IbImplDef` provenance 放行 EXTERNAL_MODULE，
+  仍拒绝 KERNEL_NATIVE 内置类型）。
+- **编译期冲突 fail-fast（SEM_REDEFINITION）**：impl 方法不得与 bind 声明成员同名
+  （冲突判定以权威成员面 spec.members 为准）；同一 bind class 块内不得重复绑定同名成员。
+- **协议满足 = 编译期静态 spec 判定**：在"bind 声明 + impl 补充"并集上判定，运行期零改动。
+
+**运行期机制**：
+
+- 宿主类 = `HostClassBinding(IbClass)`：`__call__` 恒走 `instantiate`（调用裸 Python 类
+  构造实例）。实例 = `IbNativeObject` + per-instance vtable（bind 方法 = `create_proxy`
+  绑定方法）+ whitelist（bind 属性）。
+- impl 方法不并入 vtable——经 `IbNativeObject._dispatch_getattr` 类方法回落导出为
+  `IbBoundMethod`（注入 receiver，与用户对象方法同构）。回落仅限宿主类实例
+  （`isinstance(ib_class, HostClassBinding)` 门控，避免击穿 F1 契约门禁）。
+- bind 方法返回裸 `py_class` 实例时重新包装为宿主实例（一等类型语义：Python
+  `datetime` 就是 IBCI `datetime`，契约随返回对象延续）。
+- STAGE 5 预注册：`_hydrate_host_classes` 扫描模块根 IbHostImport，导入裸 Python 模块、
+  校验宿主类/成员存在性（方法类级校验；实例属性走访问期契约）、注册 HostClassBinding
+  （须先于 impl 水化）。类名绑定到模块作用域（`Name(...)` 可解析）。
+
+**单一权威源**：`base.unbox_for_native_call`（可调用实例透传 + IbObject 拆箱，proxy 与
+宿主类实例化共用）；`module_manager.import_host_py_module`（STAGE 5 与 VM 宿主 import
+共用导入入口，统一错误类型）。
+
+**验证门**：F2 e2e（bind+impl 共存、decode 原生、datetime 属性+replace 返回重包装、
+简写 encoder、deque 类型注解、queue.Queue 实例属性、跨模块宿主类、用户类持宿主实例、
+F1+F2 同 bind 块共存、MathLib 类绑定）；负样本（契约外成员/缺失类/缺失成员 fail-fast、
+bind vs impl 同名 SEM_REDEFINITION、块内重复绑定 SEM_REDEFINITION）；全量 pytest
+3053 passed / 1 skipped（`tests/runtime/test_host_binding.py` F1 10 + F2 18 项）零回归。
+
+---
+
 ## 深入指引
 
 - 主线路线图与阶段切分：`tasks_docs/ROADMAP_NATIVE_BINDING.md`

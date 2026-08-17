@@ -91,6 +91,29 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   _spec.py 硬编码消息、重复 bind SEM_REDEFINITION、param _loc、类型检查 pass visit_IbHostImport）。
   设计取舍记录：#2（未声明成员编译期静默降级 any，与既有 import 一致，F2 再评估）、#6（宿主
   import 不传 registry_id，裸模块进程级单例低风险）。
+- **远期主线 F2 完成（2026-08-17，exp/native-binding-f2 → unsafe-vibe-dev 零风险直接合并，65414738）**：
+  协议/impl 扩展到宿主类型——bind class 宿主类型绑定 + impl 目标限制解除。**语法定稿**：
+  `bind class Name: <嵌套 bind 成员>` 块形式 + `bind class Name -> any` 简写；成员表 =
+  宿主声明 + impl 补充并集；impl provenance 放行 EXTERNAL_MODULE、拒绝 KERNEL_NATIVE。
+  **编译期**：scheduler `_inject_host_class` 注册一等类型 EXTERNAL_MODULE CLASS（模块限定）+
+  合成 owned_scope（宿主类无 AST 作用域，impl 注入需要）；协议满足 = 编译期静态 spec 判定
+  （bind 声明 + impl 补充并集），零运行期改动。**运行期**：HostClassBinding(IbClass) 恒走
+  instantiate（裸 Python 类构造）+ per-instance vtable（bind 方法 = create_proxy 绑定方法）+
+  whitelist（bind 属性）；impl 方法经 IbNativeObject._dispatch_getattr 类方法回落 →
+  IbBoundMethod（注入 receiver）；bind 方法返回 py_class 实例时重包装保持一等类型。
+  **F2 独立复核（subagent b228d4fd）整改闭环**：B1（回落加 isinstance(HostClassBinding) 门控——
+  实证为误诊，pre-F2 父提交 j.toString 经 Object 公理路径同样泄露；gate 保留为机制隔离）；
+  M1（bind vs impl 同名编译期未拦截——宿主类合成 owned_scope 为空表，冲突检查只查符号表；
+  修复：visit_IbImplDef 冲突判定改以权威成员面 spec.members 为准 SEM_REDEFINITION +
+  bind 块内重复绑定同样 fail-fast，新增 3 回归测试）；M2（instantiate 内联拆箱 →
+  base.unbox_for_native_call 单一权威含可调用透传，proxy/host_class 共用）；
+  L1（UID 内联拼接 → uid.py helper）、L2（STAGE5/VM import 重复+错误类型漂移 →
+  module_manager.import_host_py_module 单一入口）、L3（getattr 能力探测 →
+  isinstance(IbNativeObject) 协议化判别）、L4（属性实例属性类级误拒已修，queue.Queue 回归）、
+  L5（POSITIONAL_OR_KEYWORD 散落记录为已知限制，随 F3 统一绑定面收敛）。
+  验证：全量 pytest 3053 passed / 1 skipped 零回归。测试
+  `tests/runtime/test_host_binding.py`（F1 10 + F2 18）。
+
 
 ---
 
