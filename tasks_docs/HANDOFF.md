@@ -137,9 +137,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     全仓历史记录清洁。
   - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式（`trials/_toolkit/LLM_SERVICE.md`）；
     provider 重构后 T09 套件 8/8 PASS。
-- **⏳ 待下一 session**：按 `ROADMAP_NATIVE_BINDING.md` §三【近期主线】R0→R2 推进（当前最紧要：
-  provider 层分离收尾 + 接口位清理 + 改内核文件指导文档）；远期愿景（F0-F5）不在近期推进，
-  但其关键裁决点见该文档 §四。远期规划与状态见 `PENDING_TASKS.md`。
+- **⏳ 待下一 session**：按 `ROADMAP_NATIVE_BINDING.md` §三【近期主线】推进（**R0 已完成**：
+  审计实证全绿、两处 R1 前置关注点已登记于路线图 §三.R1；当前最紧要：**R1 接口位清理**——
+  `core.py` 拆分 `provider_impl.py`（纯 `LLMProvider`，kernel-free）+ `module.py`（胶水宿主），
+  独立分支 `exp/provider-decouple-r1`，含 MOCK sentinel 归属裁决；随后 R2 改内核文件指导文档
+  `docs/howto/modify_llm_provider.md`）。远期愿景（F0-F5）不在近期推进，但其关键裁决点见该
+  文档 §四。远期规划与状态见 `PENDING_TASKS.md`。
 
 ### 2.2 交接检查单（当前有效）
 

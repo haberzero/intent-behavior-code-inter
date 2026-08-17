@@ -131,7 +131,14 @@
   - **拆的耦合注意点（审计发现）**：纯 provider 若要支持 MOCK 指令/sentinel，`mock_scenario.py` 目前
     依赖 `core.runtime.shared.llm_result`（MOCK sentinel）；分拆时须决定 MOCK 归属（留在模块胶水侧 /
     sentinel 下沉 `core.base`，使纯 provider 保持 kernel-free）——这是拆分设计的关键取舍，不与
-    `_model_capabilities`/`_mock_engine` 状态耦合。<br>
+    `_model_capabilities`/`_mock_engine` 状态耦合。
+  - **R0 审计确认的另两个 R1 前置关注点**：① `load_project_config` 直接实例化
+    `ProjectApiConfigAdapter()`——默认适配器"整文件替换"路径 = 替换 `config_source_adapter.py`
+    （保持类名）；拆分时该实例化随纯 provider 走还是随模块胶水走，一并定夺。② `thinking_mode`
+    半接通实证：`LLMCallRequest.thinking_mode` 字段在内核构造 request 时未填（auto）、provider
+    不读 request 字段（payload 硬编码 `enable_thinking=False`，仅经 `ModelSpec.thinking_mode`
+    定 `is_reasoning`）——R1 收敛为"契约字段存在 + 推荐实现干净 + 当前默认行为正确"，
+    不新增语言级注册 API。<br>
 - 确保推荐 provider + 默认配置适配器是**自包含、可整文件替换**的干净实现，替换路径清晰。
 - **验证门**：全量 pytest 零回归；无新增未用接口（code-quality 半接通红线）；若拆则确认 kernel import
   边界干净。
@@ -201,13 +208,19 @@
 ## 五、当前进度与交接状态
 
 - **已合入 `unsafe-vibe-dev`**：LLM provider 中间层批 1-4（契约 + 内核收口 + provider 插件化 +
-  内省/文档），全量 pytest 3027 pass。当前 provider 分离的内部结构已干净。
+  内省/文档），全量 pytest 实跑零回归（基线以实跑为准）。当前 provider 分离的内部结构已干净。
+- **R0 已完成（本 session 复核实证）**：全量 pytest 基线绿（实跑）；内核 `_core.py` 仅
+  `llm_callback.call(request)`；`_prompt_assembly.py` 收敛为仅 retry 消息结构；`probe_model()`
+  → `probe()` 单入口；无 `ILLMProvider` 残留 / 无旧装配 API / vtable 无漂移；两处 R1 前置
+  关注点已登记于 §三.R1（`thinking_mode` 半接通、`load_project_config` 硬编码默认适配器）。
 - **近期未开放用户自定义**：`register_provider`/`set_config_source` 等 WIP 已回退；
-  近期限定"修改 `ibci_modules/ibci_ai/core.py`"这一条路径。设计要点保留于 git 历史 +
-  本路线图 §三.R1（为远期统一留位，不近期造用户入口）。
+  近期限定"修改 `ibci_modules/ibci_ai/` 内核 provider 文件"这一条路径（R1 拆分后为纯
+  `provider_impl.py`）。设计要点保留于 git 历史 + 本路线图 §三.R1（为远期统一留位，不近期
+  造用户入口）。
 - **触发此两段式规划**：用户裁定近期聚焦 provider 分离（Python 源码分发，改内核文件），
   远期才做原生绑定成熟方案；任何方向都要求彻底、不留脚手架。
-- **交接**：下一 session 从 §三.近期主线 R0 开始；详细交接见 `tasks_docs/HANDOFF.md` §2。
+- **交接**：R0 审计已完成，当前推进 §三.近期主线 R1（核心裁决 = 是否拆分 `core.py`，
+  倾向拆）；详细交接见 `tasks_docs/HANDOFF.md` §2。
 
 ---
 
