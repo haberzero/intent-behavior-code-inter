@@ -27,9 +27,13 @@
 - 结论：`ibci_modules/ibci_ai/core.py` = `AIPlugin`（宿主 + 胶水）；`provider_impl.py`
   = `RecommendedProvider`（纯 provider，kernel-free）。
 
-### D2 宿主关系：继承（`class AIPlugin(IbStatefulPlugin, RecommendedProvider)`），非组合委托
+### D2 宿主关系：继承（`class AIPlugin(RecommendedProvider, IbStatefulPlugin)`），非组合委托
 
 - 路线图 R1 表述"持胶水、委托 provider_impl"（暗示组合）。**决策：继承**。
+- **基类顺序是 load-bearing**：`RecommendedProvider` 在前（`AIPlugin(RecommendedProvider,
+  IbStatefulPlugin)`）才能让 `super().save_plugin_state()` 解析到 provider 实现而非
+  ABC 占位（ACMeta 只从被创建类自身命名空间扣除抽象方法，故 AIPlugin 须在自身
+  `__dict__` 显式定义 `save_plugin_state` / `restore_plugin_state` 委托）。
 - 理由（证据驱动）：
   1. 测试体系把 `AIPlugin` 当作 provider 本体：`test_probe_model.py` 白盒注入/断言
      `plugin._client` / `plugin._model_capabilities`（探测只读消费不变式）；`test_mock_directives.py`
@@ -92,8 +96,10 @@
   （e2e `test_ai_batch` 依赖批内立即可见），回退 provider 本地 `_last_call_info`。
 - 决策：方法留在 AIPlugin（需要 capabilities）；`_record_call_info` 与 `_last_call_info`
   留在 RecommendedProvider（`__init__` 初始化 `_last_call_info = {}`），AIPlugin 回退分支
-  改读 `self._provider_last_call_info()`——即 `last_call_info()` 读取方法（新增，行为等同
-  原 `getattr(self, "_last_call_info", None)` 兜底语义）。
+  经 `super().get_current_call_info()` 读取 provider 本地实现（等价于原
+  `dict(self._last_call_info) if getattr(self, "_last_call_info", None) else {}` 兜底语义）。
+  RecommendedProvider 自身实现协议方法 `get_current_call_info`（返回本地槽），宿主覆盖
+  之：优先内核执行器单写槽，回退 `super()`。
 
 ### D7 接口位收敛口径（R0 关注点①/②，不新增语言级 API）
 
@@ -121,7 +127,7 @@
 | 7 | `ibci_modules/ibci_ai/config_loader.py` | 删除本地默认常量定义，改 import（D4） |
 | 8 | `ibci_modules/ibci_ai/config_source_adapter.py` | 删除静态 to_llm_config，load() 改调 config_normalize（D4） |
 | 9 | `ibci_modules/ibci_ai/provider_impl.py` | 新建：`RecommendedProvider(LLMProvider)`（D2/D5/D6） |
-| 10 | `ibci_modules/ibci_ai/core.py` | 瘦身为 `AIPlugin(IbStatefulPlugin, RecommendedProvider)` 宿主（D1/D2/D6） |
+| 10 | `ibci_modules/ibci_ai/core.py` | 瘦身为 `AIPlugin(RecommendedProvider, IbStatefulPlugin)` 宿主（D1/D2/D6） |
 | 11 | `tests/runtime/test_probe_model.py` | `MOCK_CLIENT_SENTINEL` 导入改 provider_impl（1 处） |
 | 12 | 执行 | 全量 pytest 零回归 + grep 实证 + 复核 |
 

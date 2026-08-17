@@ -17,7 +17,7 @@
   ``register_model`` 等），或整体替换为自写 provider 类。
 - IBCI 模块胶水（``run_batch`` / ``stream_call`` / ``stream_channel`` / 意图方法 /
   断点状态 / 配置加载入口）在宿主 ``ibci_modules/ibci_ai/core.py`` 的
-  ``AIPlugin(IbStatefulPlugin, RecommendedProvider)``——不改本文件。
+  ``AIPlugin(RecommendedProvider, IbStatefulPlugin)``——不改本文件。
 
 思考抑制说明：本推荐实现面向开发试用基线（LM Studio + Qwen 非思考模式）硬编码
 payload 思考抑制（``enable_thinking=false``）；模型声明（``api_config.json`` 的
@@ -329,7 +329,7 @@ class RecommendedProvider(LLMProvider):
                 is_reasoning = True
                 print("  => 探测到专用 reasoning 字段，判定为 [强制推理模型]。")
                 self._warn_thinking_suppress_failed()
-            elif "Thinking Process:" in raw_content or " thinking" in raw_content:
+            elif "Thinking Process:" in raw_content or "<think>" in raw_content:
                 is_reasoning = True
                 print("  => 探测到 Thinking 特征字符串，判定为 [强制推理模型]。")
             elif len(raw_content.split()) > 10:

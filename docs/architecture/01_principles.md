@@ -176,6 +176,18 @@ IBC-Inter 把 LLM 当作一个可调用的"表达式/函数"来对待：内核�
 - 内省/调试（`get_current_call_info` / idbg）暴露 `LLMCallRequest.as_dict()` 全量
   + provider 回填的实际 `sys_prompt` / `response`。
 
+**自定义分两段**：
+
+- **近期（当前分发形态 = Python 源码直接分发）**：自定义 LLM 底层 = 修改/替换
+  内核推荐 provider 文件 `ibci_modules/ibci_ai/provider_impl.py`（`RecommendedProvider`，
+  kernel-free、自包含、可整文件替换），或替换配置源适配器
+  `config_source_adapter.py`；操作指南见 `docs/howto/modify_llm_provider.md`。
+  `core.py` 宿主（IBCI 胶水）保持内置不变。
+- **远期（原生宿主绑定）**：以 IBCI 用户层原生绑定 Python 内容的方式统一
+  provider 自定义（宿主导入 + 类型/协议绑定），取代"改内核文件"的近期形态；
+  当前仅保持接口位（`LLMCallRequest.thinking_mode`、`ConfigSourceAdapter` 抽象），
+  不提前实现用户入口。
+
 ---
 
 ### 4.1 核心依赖原则
@@ -314,7 +326,8 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 **示例（AI 插件）**：
 - `ibci_modules/ibci_ai/__init__.py` → `from .core import AIPlugin; def create_implementation(): return AIPlugin()`
-- `ibci_modules/ibci_ai/core.py` → `class AIPlugin(IbStatefulPlugin, LLMProvider): ...`（`LLMProvider` 来自 `core.base.llm_protocol`）
+- `ibci_modules/ibci_ai/provider_impl.py` → `class RecommendedProvider(LLMProvider): ...`（纯 provider，kernel-free，可整文件替换）
+- `ibci_modules/ibci_ai/core.py` → `class AIPlugin(RecommendedProvider, IbStatefulPlugin): ...`（IBCI 胶水宿主）
 - `ibci_modules/ibci_ai/_spec.py` → `__ibcext_vtable__()` 返回函数签名字典
 
 ### 7.3 自动嗅探机制（零侵入）
@@ -506,7 +519,8 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 | `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
 | `core/runtime/module_system/discovery.py` | 高 | ModuleDiscoveryService，插件发现服务 |
 | `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin |
-| `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（LLM Provider 核心实现） |
+| `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（IBCI 胶水宿主） |
+| `ibci_modules/ibci_ai/provider_impl.py` | 高 | 推荐 LLM provider（纯 provider，kernel-free） |
 | `ibci_modules/ibci_ihost/core.py` | 中 | HOST 插件实现（核心级） |
 | `ibci_modules/ibci_idbg/core.py` | 中 | IDBG 调试插件实现 |
 | `core/runtime/observability/`（包） | 中 | 观测体系（snapshot / events / diagnostics / config），详见 `09_observability.md` |
