@@ -42,8 +42,8 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
       ``is_auto_intent_injection_enabled`` / ``get_current_call_info``）继承自
       推荐 provider（:class:`RecommendedProvider`）。
     - **用户 API**：``set_config`` / ``probe_model`` / ``load_project_config`` /
-      ``register_model`` / 意图方法 / ``run_batch`` 等经 ``_spec.py`` vtable 供
-      IBCI 脚本调用（继承自推荐 provider 或本文件胶水）。
+      ``register_model`` / 意图方法 / ``run_batch`` 等经 spec 元数据供 IBCI 脚本调用
+      （继承自推荐 provider 或本文件胶水）。
     - **可插拔**：用户自定义 LLM 底层 = 修改/替换 ``ibci_modules/ibci_ai/provider_impl.py``
       （推荐 provider，kernel-free）；本宿主保持 IBCI 集成不变。
     """
