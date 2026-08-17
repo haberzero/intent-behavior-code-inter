@@ -228,3 +228,28 @@ loader 环 2）从其 codes.py/catalog/docs 删除。Engine 构造还原为 `IBC
 docs/howto/write_user_plugin.md、docs/architecture/07_kernel_native_modules.md 插件发现
 描述、KNOWN_LIMITS §十九；`_spec.py`/`__ibcext_vtable__`/`discovery` 主题残留扫描
 （F3-4）。
+
+## 九、F3-4 落地记录 + F3 完成态（2026-08-18，exp/plugin-refactor-f3）
+
+**残留扫描结果（F3-4）**：
+- `_spec.py` 物理文件：全部清零（含 examples/trials；仅 `.tmp_pytest/` 测试运行产物）。
+- 功能性引用清零：`ModuleDiscoveryService`/`AutoDiscoveryService`/`discover_all`/
+  `resolve_plugin_search_paths`/`auto_sniff`/`inherited_plugin*`/`get_plugin_paths`/
+  `register_native_module`/`load_external_plugins`/`ibci_sdk`/`SpecBuilder` 在
+  `core`/`main.py`/测试中**零引用**。
+- 剩余 `_spec.py` 字符串均为**注释**（描述"已废弃 _spec.py"或历史语义），非功能性
+  残留；其中 `ibci_ai/core.py:45` 与 `builtin_modules.py` docstring 的过时引用已随手清除。
+
+**验证**：全量 pytest 2946 passed / 1 skipped 零回归（F3 三阶段放行门全部通过）。
+
+**F3 完成态总览**：废弃 Python 侧 `_spec.py` 磁盘发现/加载通道完成；用户侧扩展唯一边 =
+宿主绑定 `bind`；内置 11 模块（内核原生 5 + 工具 5 + file）TypeDef 字面量集中
+`core/runtime/bootstrap/builtin_modules.py` 构造期一次注册（含实现）；插件发现/加载
+双通道、插件搜索路径配置面、SDK、`__ibcext_axiom__` 死协议、幽灵码、spec_builder 死
+代码全部铲除；examples/trials/docs 迁移到 F3 事实；Engine 签名简化为
+`IBCIEngine(root_dir=...)`。
+
+**F3 完整度核对（对照 F3 目标 "无 _spec.py 残留路径 / 用户侧扩展仅经 bind / 全量 pytest
+零回归"）**：全部达成。F3 落地合并按分支合并细则评估：三阶段均全量 pytest 零回归 +
+独立复核（F3-1 结构探针 + F3-2/F3-3 独立 subagent 复核 + F3-4 残留扫描），无对外契约/
+架构级风险 → 达"零风险直接合并 unsafe-vibe-dev"标准，可手动单独更新（仍禁 push）。

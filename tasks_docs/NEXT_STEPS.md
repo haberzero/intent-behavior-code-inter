@@ -35,33 +35,27 @@ lexer/parser/依赖扫描/scheduler/语义/运行时/VM），显式声明式绑�
 CLASS + per-instance vtable + impl 补充/协议满足）。F2 独立复核整改闭环已合并
 （65414738），全量 pytest 3053 passed / 1 skipped。设计底稿
 `docs/architecture/01_native_host_binding.md` §五 + 语法文档
-`docs/syntax/11_modules.md` §11.10。**F3（插件体系重构）进行中，当前为 F3-3 起点**：
-废弃 _spec.py、不保留双通道（方案已定稿于 `tasks_docs/_f3_plugin_refactor.md`）。
-**F3-1 已完成**：10 个 `_spec.py` 删除，内置 11 模块（内核原生 5 + 工具 5 + file）
-TypeDef 字面量集中 `core/runtime/bootstrap/builtin_modules.py`
-（BUILTIN_MODULE_SPECS，file 自 engine 挪入），Engine 构造期一次注册全部含实现；
-结构等价探针 + 契约测试 + loader 环 2 去双绑定，全量 pytest 零回归。
-**F3-2 已完成**：磁盘插件发现/加载双通道彻底铲除——删除 discovery.py/auto_discovery.py/
-loader 环 2/插件搜索路径配置面（plugin_paths/global_plugin/嗅探/继承透传）/
-main.py --plugin/load_external_plugins/register_native_module/ibci_sdk/
-__ibcext_axiom__ 死协议/spec_builder 死代码/幽灵码 KDIAG_POLICY_MODULE_NO_EXPORT；
-Engine 签名简化 `IBCIEngine(root_dir=...)`；隔离超时测试稳定化，全量 pytest 零回归。
-F3-0 bind 默认参数已裁决跳过（默认值放 .ibci 包装层）。下一步 = **F3-3 测试/
-examples/trials/docs 迁移**。分支 `exp/plugin-refactor-f3`。
+`docs/syntax/11_modules.md` §11.10。**F3（插件体系重构）已完成**：废弃 Python 侧
+`_spec.py` 磁盘发现/加载通道，用户侧扩展唯一边 = 宿主绑定 `bind`。F3-1：10 个
+`_spec.py` 删除，内置 11 模块（内核原生 5 + 工具 5 + file）TypeDef 字面量集中
+`core/runtime/bootstrap/builtin_modules.py`（BUILTIN_MODULE_SPECS，file 自 engine 挪入）
+构造期一次注册全部含实现；结构等价探针 + 契约测试 + loader 环 2 去双绑定。F3-2：磁盘
+插件发现/加载双通道彻底铲除（discovery/auto_discovery/loader 环 2/插件搜索路径配置面/
+main.py --plugin/ibci_sdk/__ibcext_axiom__ 死协议/spec_builder 死代码/幽灵码），Engine
+签名简化 `IBCIEngine(root_dir=...)`。F3-3：examples/trials/docs 全迁移（清 plugins_demo/
+isolation plugins/T01 plugins，write_user_plugin → extend_with_host_binding，docs 改 F3
+事实）。F3-4：残留扫描 `_spec.py`/`__ibcext_vtable__`/discovery 引用清零（功能面零残留，
+仅历史注释）。三阶段全量 pytest 零回归。F3-0 bind 默认参数已裁决跳过（默认值放 .ibci
+包装层）。**下一步 = F4**。分支 `exp/plugin-refactor-f3`（达零风险直接合并 unsafe-vibe-dev
+标准，未触发合并前禁 push）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·远期，当前] F3 插件体系重构**——废弃 _spec.py 磁盘发现/加载通道，宿主
-   绑定（bind）为唯一绑定通道。**F3-1（内置 11 模块内联 spec）+ F3-2（拆发现/加载
-   通道全删除）已完成**；下一步 **F3-3 测试/examples/trials/docs 迁移**（122 直接 +
-   44 隐式走插件加载的文件按新语义改；examples/plugins_demo、isolation_demo、
-   trials/T01 含 _spec.py 的目录迁移或删除；docs/subsystems/04_plugin_system.md、
-   docs/howto/write_user_plugin.md、docs/architecture/07_kernel_native_modules.md 插件
-   发现描述、KNOWN_LIMITS §十九）→ F3-4 残留扫描（研读结论与顺序见
-   `tasks_docs/_f3_plugin_refactor.md`）。
-2. [主线·远期] F4 Provider 自定义经新绑定统一 → F5 架构统一/自举/缓存 JIT。
-3. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
-4. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
+1. **[主线·远期，当前] F4 Provider 自定义经新绑定统一**——用 F1-F3 的宿主绑定 `bind`
+   统一 LLM provider 自定义（替代 provider 文件临时修改分发，指向 ROADMAP_NATIVE_BINDING
+   §三 F4），再 F5 架构统一/自举/缓存 JIT。
+2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
+3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 

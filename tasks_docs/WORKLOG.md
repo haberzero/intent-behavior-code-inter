@@ -152,6 +152,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   子任务先 sleep 再返回——F3 移除插件发现使子引擎启动更快使原假设偶发失效，追踪根因
   修正而非 flaky 搪塞。验证：全量 pytest 零回归；幽灵码清除经 test_diagnostic_catalog
   CAT-7 佐证。遗留：examples/trials/docs 迁移 = F3-3；_spec 主题残留扫描 = F3-4。
+- **F3-3 + F3-4 完成，F3 全部落地（2026-08-18，exp/plugin-refactor-f3）**：
+  **F3-3（examples/trials/docs 迁移，subagent 1ba1f995 执行 + 本 session 复核）**：
+  删除 `examples/plugins_demo/`、`isolation_demo/sub_project/plugins/`、
+  `trials/T01_llm_full/plugins/`（演示/试用已删除的用户插件 `_spec.py` 系统）；
+  `trials/cases/D2-21-plugin.ibci` 改写为宿主绑定演示（`import python "math" as m:
+  bind sqrt/pow`，经 main.py 实跑通过）；`docs/howto/write_user_plugin.md` 删除 →
+  新建 `docs/howto/extend_with_host_binding.md`（用户扩展 howto 换宿主绑定语义）；
+  `docs/subsystems/04_plugin_system.md` 重写为"内置模块系统与宿主绑定"；01_principles/
+  06_path_system（删插件发现优先级章节）/07_kernel_native_modules/11_modules
+  （§11.9 改宿主绑定指针）/KNOWN_LIMITS §十九/README 等 20+ 文档更新到 F3 事实。
+  **F3-4（残留扫描 + 全量验证）**：`_spec.py` 物理文件清零；discovery/auto_sniff/
+  plugin_paths/ibci_sdk/SpecBuilder 等功能性引用全零；剩余 `_spec.py` 均为历史说明
+  注释（顺手清除 ibci_ai/core.py 与 builtin_modules.py docstring 过时引用）。全量
+  pytest 2946 passed / 1 skipped 零回归。**F3 完整度**：三阶段放行门全过，达分支合并
+  细则"零风险直接合并 unsafe-vibe-dev"标准（全量 pytest 零回归 + F3-1 结构探针 +
+  F3-2/F3-3 独立 subagent 复核 + F3-4 残留扫描，无对外契约/架构级风险）——仍禁
+  push，合并须用户授权。
 
 
 ---
