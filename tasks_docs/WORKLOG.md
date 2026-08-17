@@ -40,6 +40,12 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   设计决策 D1-D7/B1-D1/B2-D1~D4 记录于临时设计文档（已随临时文档清理，git 承载）。
 - **文档体系重构（2026-08-16，本任务）**：见 `tasks_docs/GOVERNANCE.md` 治理章程与
   `docs/` 重构记录（git）。
+- **LLM 调用层插件化 / 供应商无关中间层（2026-08-17，exp/llm-providerization →
+  unsafe-vibe-dev 手动 cherry-pick）**：内核只产出结构化 `LLMCallRequest` 委托给可
+  插拔 `LLMProvider`；系统提示词组装（推荐模板）、思考抑制/探测、api_config.json
+  书写格式全部下沉为可自定义 provider/ConfigSourceAdapter。移除旧 `ILLMProvider`
+  标量协议死代码。设计要点固化于 `docs/architecture/01_principles.md` §3.7 与
+  提交记录。验证：全量 pytest 3027 pass + T09 真实 LLM 8/8 PASS。
 
 ---
 
