@@ -6,7 +6,8 @@
 > 架构演进的设计者。
 >
 > 本文档是 `tasks_docs/ROADMAP_NATIVE_BINDING.md` §三【远期愿景】F0-F5 的**设计
-> 底稿**（F0 产物）。当前代码状态对应 R 期（近期主线）已完成、F 段尚未开始。
+> 底稿**（F0 产物）。当前代码状态：F0（地基验证）、F1（宿主导入一等语法 + 用户类
+> 持有 native）已完成并合入；F2-F5 未开始。
 
 ---
 
@@ -155,6 +156,44 @@ fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box 
 - **内核 API 层实证通过**：`box(json)` → IbNativeObject；手动 vtable（dumps/loads）
   后 `receive` 调用成功（unbox→调→box）。证明"绑定裸 Python 模块成员"内核层可行。
 - **验证门**：全量 pytest 绿（未改代码）；本设计文档与代码一致。
+
+---
+
+## 五、F1 落地（宿主导入一等语法 + 用户类持有 native）
+
+**语法（已实现）**：
+
+```ibci
+import python "math" as m:
+    bind sqrt(x: float) -> float
+    bind pi -> float
+```
+
+- `python` 伪模块关键字（非保留字）+ 字符串模块名；`bind` 声明成员。
+- `bind name(params) -> ret`：方法成员（IBCI 签名 → 编译期类型检查 + 运行时 proxy
+  vtable）；`bind name -> type`：属性成员（白名单）。
+- **显式声明式绑定**：成员访问强制经 vtable/whitelist 门控（`IbNativeObject.receive`），
+  契约外成员 fail-fast（AttributeError）；bind 声明但宿主缺失成员 → 绑定期报错。
+- 用户 IBCI 类 / `any` 字段可持 `lib`（IbNativeObject），方法内 `lib.member(...)` 调用。
+
+**实现落点（已落地）**：
+
+| 环节 | 文件 | 落地内容 |
+|---|---|---|
+| AST | `core/kernel/ast.py` | `IbHostImport` / `IbHostBinding` / `IbHostBindingParam` |
+| Lexer/Token | `core/compiler/common/tokens.py` + `core_scanner.py` | `bind` 关键字（TokenType.BIND） |
+| Parser | `core/compiler/parser/components/import_def.py` | `parse_host_import` + bind 块解析 |
+| 依赖扫描 | `core/compiler/parser/parser.py` + `dependencies.py` | `ImportType.HOST_IMPORT`；宿主 import 跳过 IBCI 依赖图 |
+| Scheduler | `core/compiler/scheduler.py` | `_inject_host_import`：从 bind 声明合成宿主模块 spec（EXTERNAL_MODULE MODULE）+ 注入 lib 符号 |
+| 语义 | `symbol_resolution_pass.py` | `visit_IbHostImport` 绑定符号到节点 |
+| 运行时 | `core/runtime/interpreter/module_manager.py` | `import_host_module`：importlib + 按 bind 构建 vtable/whitelist + create_native_object + create_module |
+| VM | `declarations.py` / `dispatch.py` | `vm_handle_IbHostImport` + 注册 |
+| 单一权威源 | `_annotation_utils.py` / `proxy.py` | `annotation_to_typeref`（AST→TypeRef）、`create_proxy`（unbox→调→box）从既有实现提取共用 |
+
+**验证门**：e2e（`m.sqrt(16.0)=4.0`、`m.pi`、用户类 `Calculator` 持 native 调 `sqrt=5.0`、
+磁盘文件路径 rehydrate 后执行）；负样本（未声明成员 fail-fast、绑定缺失成员报错、
+编译期类型检查 `SEM_TYPE_MISMATCH`）；全量 pytest 3037 passed / 1 skipped（含新增
+`tests/runtime/test_host_binding.py` 6 项）零回归。
 
 ---
 
