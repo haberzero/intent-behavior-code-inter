@@ -102,23 +102,48 @@
 
 ### 【近期主线 · 当前】R0 — 现状固化与 Provider 解耦审计
 - 确认 `unsafe-vibe-dev` 全量 pytest 基线（以实跑为准，不冻结数字）。
-- 审计 provider 层当前解耦面：内核 `_call_llm` 是否已完全不碰供应商细节；`_prompt_assembly`
-  是否已收敛（仅 retry 消息）；`thinking_mode`/`probe` 是否半接通；`ConfigSourceAdapter` 是否
-  硬编码默认、但**抽象与推荐实现分离干净**（可为远期替换留位）。
-- **验证门**：全量 pytest 绿；无半接通/无脏耦合（grep + 残留扫描）。
+- 审计 provider 层当前解耦面（精确核对项）：
+  1. 内核 `_call_llm` 是否已完全不碰供应商细节（应只调 `llm_callback.call(request)`）；
+  2. `_prompt_assembly.py` 是否已收敛为仅 retry 消息结构（系统提示词组装已下沉 `recommended`）；
+  3. `thinking_mode` / `probe()` 是否半接通：`thinking_mode` 契约字段存在、内核不填、provider 不读
+     （硬编码 `enable_thinking`）；`probe_model` 已委托 `probe()`（单入口，非假重复）；
+  4. `ConfigSourceAdapter` 抽象与推荐实现 `ProjectApiConfigAdapter` 分离是否干净（推荐实现可整文件替换，
+     `load_project_config` 是否硬编码默认适配器）；
+  5. **`core.py` 职责混杂面（关键）**：802 行文件把「纯 provider 逻辑」（`call`/`stream`/`probe`/
+     `_assemble_provider_sys_prompt`/`_build_messages`/`_post_process_answer`/配置）与「IBCI 模块胶水」
+     （`setup`/`run_batch`/`stream_call`/`stream_channel`/意图方法/`save_plugin_state`/经 execution_context
+     加载配置）混杂；纯 provider 部分无 kernel import，胶水部分 lazily import
+     `core.runtime.frame`/`objects.stream`/`objects.kernel`。这决定"用户改内核文件"的干净度与远期
+     "用户 IBCI 类型包装纯 host provider"的前置分裂（→ R1 决策）。
+- **验证门**：全量 pytest 绿；无半接通/无脏耦合（grep + 残留扫描：无 `ILLMProvider`、无旧 `_prompt_assembly`
+  装配 API、无 vtable 漂移——已初步核验全绿）。
 
 ### R1 — Provider 层接口位清理（为远期留位，但不造近期用户入口）
 - 把 `thinking_mode`、`probe()`、`ConfigSourceAdapter` 等**面向远期替换但当前尚未完全接电**的
   契约点，收敛为"契约字段存在 + 推荐实现干净 + 当前默认行为正确"，**不新增语言级注册 API**。
-- 确保推荐 provider（`core.py`）+ 默认配置适配器（`config_source_adapter.py`）是**自包含、可整文件替换**
-  的干净实现，替换路径清晰（改 `core.py` / 换 adapter 注入点集中）。
-- **验证门**：全量 pytest 零回归；无新增未用接口（code-quality 半接通红线）。
+- **R1 关键裁决（本次审计新发现，需定）**：是否将 `core.py` 的「纯 provider 逻辑」与「IBCI 模块胶水」
+  拆分为两文件——
+  - 拆：`provider_impl.py`（纯 `LLMProvider`，无 kernel import —— 用户改这个，真正的"干净可替换单元"）+ 
+    `module.py`（`AIPlugin` 作为 ibci `ai` 模块宿主，持胶水、委托 provider_impl）。
+  - 不拆：保持单文件，把"改 `core.py` 整个文件"作为近期引导路径（但远期原生绑定仍要拆，届时返工）。
+  - **倾向**：拆（让"改内核文件"真正干净、且为远期 native-binding "用户 IBCI 类型包纯 host provider"
+    铺路）；但拆会动 `core.py` 内部结构，属重构，须独立分支 + 全量回归 + 复核。
+  - **拆的耦合注意点（审计发现）**：纯 provider 若要支持 MOCK 指令/sentinel，`mock_scenario.py` 目前
+    依赖 `core.runtime.shared.llm_result`（MOCK sentinel）；分拆时须决定 MOCK 归属（留在模块胶水侧 /
+    sentinel 下沉 `core.base`，使纯 provider 保持 kernel-free）——这是拆分设计的关键取舍，不与
+    `_model_capabilities`/`_mock_engine` 状态耦合。<br>
+- 确保推荐 provider + 默认配置适配器是**自包含、可整文件替换**的干净实现，替换路径清晰。
+- **验证门**：全量 pytest 零回归；无新增未用接口（code-quality 半接通红线）；若拆则确认 kernel import
+  边界干净。
 - **独立分支**：`exp/provider-decouple-r1`。
 
 ### R2 — 近期分发指导文档（Python 源码分发形态）
-- 新增 `docs/howto/modify_llm_provider.md`：指引"修改 `ibci_modules/ibci_ai/core.py` 自定义
-  LLM 底层/供应商/配置"，含：文件职责、`LLMProvider` 契约方法（`call`/`stream`/`probe`/`get_retry`）、
-  修改点与注意事项（思考抑制字段、返回类型提示、如何换配置适配器）、改动后全量回归。
+- 新增 `docs/howto/modify_llm_provider.md`：指引"修改 `ibci_modules/ibci_ai/`（近期单文件 `core.py`，
+  若 R1 拆分为 `provider_impl.py` 则是该纯 provider 文件）自定义 LLM 底层/供应商/配置"，含：
+  文件职责、`LLMProvider` 契约方法（`call`/`stream`/`probe`/`get_retry`）、修改点与注意事项
+  （思考抑制字段、返回类型提示、如何换配置适配器）、改动后全量回归。
+- 明确**两类关注点**：纯 provider 逻辑（请求组装/响应解析/思考抑制，用户改这）vs IBCI 模块胶水
+  （run_batch/stream_channel/意图/断点状态——不改、随模块宿主走），避免用户误改胶水破坏 `ai` 模块。
 - 更新 `docs/architecture/01_principles.md` §3.7：明确"近期=改内核文件；远期=原生绑定"两段式定位。
 - **验证门**：文档与代码一致（governance 自检）；全量 pytest 零回归。
 
