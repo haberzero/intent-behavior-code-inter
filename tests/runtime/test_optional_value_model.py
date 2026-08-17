@@ -194,7 +194,7 @@ def test_deep_clone_preserves_optional_is_some():
     from core.engine import IBCIEngine
     from core.runtime.objects.deep_clone import try_deep_clone
 
-    engine = IBCIEngine(root_dir="/tmp/opencode", auto_sniff=False)
+    engine = IBCIEngine(root_dir="/tmp/opencode")
     engine.run_string("Optional[int] a = None\nOptional[int] b = 5\n", silent=True)
     ec = engine.interpreter.execution_context
     rc = ec.runtime_context

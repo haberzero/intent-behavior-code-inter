@@ -105,7 +105,7 @@ class IbNativeObject(IbObject):
                 if method is not None:
                     from .functions import IbBoundMethod
                     return IbBoundMethod(self, method)
-            raise AttributeError(f"Plugin Error: '{target_name}' is not declared in the module contract (bind/_spec.py)")
+            raise AttributeError(f"Plugin Error: '{target_name}' is not declared in the module contract (bind)")
         return None
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:

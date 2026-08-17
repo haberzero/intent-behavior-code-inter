@@ -38,7 +38,7 @@ def _write_tmp(tmp_path, filename: str, data: bytes) -> IbPath:
 def _media_engine(tmp_path):
     """构造以 tmp_path 为 root 且已注入 ExecutionContext/PermissionManager 的引擎。"""
     from core.engine import IBCIEngine
-    engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+    engine = IBCIEngine(root_dir=str(tmp_path))
     engine.run_string("import file\n", silent=True)
     return engine
 

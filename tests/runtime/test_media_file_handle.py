@@ -49,7 +49,7 @@ def _make_media(tmp_path, registry, type_name: str, filename: str, data: bytes):
 def file_engine(tmp_path):
     """以 tmp_path 为 project_root 的引擎，供需要 FS I/O 的 media 测试使用。"""
     from core.engine import IBCIEngine
-    return IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+    return IBCIEngine(root_dir=str(tmp_path))
 
 
 class TestMediaFileHandle:

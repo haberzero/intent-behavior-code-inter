@@ -66,7 +66,7 @@ class TestEngineLayerAPI:
     def test_spawn_returns_handle_string(self):
         child = _write_child('str result = "hello"\n')
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             handle = eng.request_spawn_isolated(child, {})
             assert isinstance(handle, str)
             assert handle.startswith("spawn_")
@@ -81,7 +81,7 @@ class TestEngineLayerAPI:
             'int count = 42\n'
         )
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             handle = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(handle)
             assert result.get("greeting") == "world"
@@ -93,7 +93,7 @@ class TestEngineLayerAPI:
         """内核原生符号（print、len 等）不应出现在 collect 结果中。"""
         child = _write_child('str x = "value"\n')
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             handle = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(handle)
             assert "print" not in result
@@ -108,7 +108,7 @@ class TestEngineLayerAPI:
             'dict info = {"key": "val"}\n'
         )
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             handle = eng.request_spawn_isolated(child, {})
             result = eng.request_collect(handle)
             assert result.get("nums") == [1, 2, 3]
@@ -120,7 +120,7 @@ class TestEngineLayerAPI:
         """同一 handle 不能被 collect 两次。"""
         child = _write_child('str x = "once"\n')
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             handle = eng.request_spawn_isolated(child, {})
             eng.request_collect(handle)
             with pytest.raises(RuntimeError, match="Unknown spawn handle"):
@@ -132,7 +132,7 @@ class TestEngineLayerAPI:
         """子引擎编译错误应在 collect 时以 RuntimeError 形式传播。"""
         child = _write_child("INVALID IBCI CODE @@@@\n")
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             handle = eng.request_spawn_isolated(child, {})
             with pytest.raises(RuntimeError):
                 eng.request_collect(handle)
@@ -140,7 +140,7 @@ class TestEngineLayerAPI:
             os.unlink(child)
 
     def test_unknown_handle_raises(self):
-        eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+        eng = IBCIEngine(root_dir=ROOT_DIR)
         with pytest.raises(RuntimeError, match="Unknown spawn handle"):
             eng.request_collect("spawn_deadbeef")
 
@@ -149,7 +149,7 @@ class TestEngineLayerAPI:
         child_a = _write_child('str label = "alpha"\n')
         child_b = _write_child('str label = "beta"\n')
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             ha = eng.request_spawn_isolated(child_a, {})
             hb = eng.request_spawn_isolated(child_b, {})
             ra = eng.request_collect(ha)
@@ -179,7 +179,7 @@ class TestConcurrency:
         child_a = _write_child(child_code)
         child_b = _write_child(child_code)
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
 
             # 串行基准：两次顺序 spawn/collect
             t0 = time.monotonic()
@@ -217,7 +217,7 @@ class TestConcurrency:
         """
         child = _write_child('str result = "nonblock"\n')
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             t0 = time.monotonic()
             handle = eng.request_spawn_isolated(child, {})
             t_spawn = time.monotonic() - t0
@@ -322,7 +322,7 @@ class TestRunIsolatedCompatibility:
                 'print(result["x"])\n'
             )
             out: list = []
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
             eng.run_string(code, output_callback=lambda s: out.append(str(s)), silent=True)
             assert any("sync" in line for line in out)
         finally:
@@ -361,7 +361,7 @@ class TestRunIsolatedPathRelativeToEntryDir:
         monkeypatch.chdir(other_dir)
 
         parent_out: list = []
-        eng = IBCIEngine(root_dir=str(parent_dir), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(parent_dir))
         eng.run(str(parent_path), output_callback=lambda s: parent_out.append(str(s)), silent=True)
         captured = capsys.readouterr()
         assert "child_ran" in captured.out, (
@@ -396,7 +396,7 @@ class TestRunIsolatedPathRelativeToEntryDir:
         other_dir.mkdir()
         monkeypatch.chdir(other_dir)
 
-        eng = IBCIEngine(root_dir=str(parent_dir), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(parent_dir))
         # 子在父 root 外 → run_isolated 应使 parent 执行失败（隔离拒绝传播）
         with pytest.raises(Exception):
             eng.run(str(parent_path), silent=True)

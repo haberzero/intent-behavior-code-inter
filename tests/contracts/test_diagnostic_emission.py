@@ -31,7 +31,7 @@ def _run_err_code(code: str) -> str:
     from tests.conftest import _default_root
 
     lines = []
-    engine = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+    engine = IBCIEngine(root_dir=_default_root())
     try:
         with contextlib.redirect_stderr(io.StringIO()) as err:
             engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
@@ -49,7 +49,7 @@ def _compile_err_codes(code: str) -> list:
     """编译并返回诊断码列表（编译期码）。"""
     from tests.conftest import _default_root
 
-    engine = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+    engine = IBCIEngine(root_dir=_default_root())
     try:
         engine.compile_string(code, silent=True)
     except CompilerError as e:
@@ -86,7 +86,7 @@ class TestRuntimeEmission:
     def test_permission_error_emits_specific_code(self):
         from tests.conftest import _default_root
 
-        engine = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+        engine = IBCIEngine(root_dir=_default_root())
         code = 'import file\nfile.read(file.open("../outside.txt"))\n'
         import re
         try:
@@ -116,7 +116,7 @@ class TestLexerParserEmission:
         """合法数字字面量不误报（0x/0b/0o/小数/科学计数）。"""
         from tests.conftest import _default_root
 
-        engine = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+        engine = IBCIEngine(root_dir=_default_root())
         code = (
             "int h = 0x1f\n"
             "int b = 0b101\n"
@@ -155,7 +155,7 @@ class TestSnapshotViolationEmission:
 
         from tests.conftest import AI_MOCK_PREFIX, REPO_ROOT
 
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         code = AI_MOCK_PREFIX + """
 class Box:
     int v

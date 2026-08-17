@@ -29,7 +29,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def _run_pipeline(code: str):
     out: list = []
-    eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+    eng = IBCIEngine(root_dir=ROOT_DIR)
     eng.run_string(code, output_callback=lambda s: out.append(s), silent=True)
     return eng, out
 

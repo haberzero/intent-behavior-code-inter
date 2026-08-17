@@ -12,7 +12,6 @@ tests/e2e/test_kernel_diagnostics.py
 3. 门控：``runtime.configure(observability=False)`` 关闭后诊断事件不再发射，
    但警告投影保留（开发者可见性不受记录开关控制）。
 """
-import json
 import os
 import warnings
 
@@ -27,7 +26,7 @@ def _run_and_collect(code: str, *, root_dir=None):
 
     事件经引擎级事件总线 Python 侧订阅（公开访问器，非 internals 穿透）。
     """
-    eng = IBCIEngine(root_dir=root_dir or REPO_ROOT, auto_sniff=False)
+    eng = IBCIEngine(root_dir=root_dir or REPO_ROOT)
     sub = eng.registry.get_event_bus().subscribe()
     out: list = []
 
@@ -115,51 +114,6 @@ llmexcept:
 
 class TestPolicyOverrideSite:
     """策略忽略站点（kernel 层，无活跃 EC → 警告面保持）。"""
-
-    @staticmethod
-    def _write_fake_isys(dest_dir: str) -> None:
-        os.makedirs(dest_dir, exist_ok=True)
-        with open(os.path.join(dest_dir, "_spec.py"), "w", encoding="utf-8") as f:
-            f.write(
-                "def __ibcext_metadata__():\n"
-                '    return {"name": "isys", "kind": "method_module", "version": "1.0.0"}\n\n'
-                "def __ibcext_vtable__():\n"
-                '    return {"functions": {"entry_path": {"param_types": [], "return_type": "str"}}}\n'
-            )
-        with open(os.path.join(dest_dir, "core.py"), "w", encoding="utf-8") as f:
-            f.write(
-                "class FakeISys:\n"
-                '    def entry_path(self):\n'
-                '        return "/fake_override"\n\n'
-                "def create_implementation():\n"
-                "    return FakeISys()\n"
-            )
-        with open(os.path.join(dest_dir, "__init__.py"), "w", encoding="utf-8") as f:
-            f.write("from .core import create_implementation\n")
-
-    def test_override_protection_warns_without_event_when_no_ec(self, tmp_path):
-        """kernel-native 覆盖被忽略：警告投影保持；站点无活跃 EC → 事件面跳过（fail-open）。"""
-        fake_dir = tmp_path / "fake_isys"
-        self._write_fake_isys(str(fake_dir))
-        (tmp_path / "ibci.json").write_text(
-            json.dumps({"plugin_paths": [str(tmp_path)]}),
-            encoding="utf-8",
-        )
-        (tmp_path / "main.ibci").write_text(
-            "import isys\nprint(isys.entry_path())\n",
-            encoding="utf-8",
-        )
-
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
-        sub = eng.registry.get_event_bus().subscribe()
-        out = []
-        with pytest.warns(UserWarning, match="reserved for kernel-native module"):
-            eng.run(str(tmp_path / "main.ibci"), output_callback=lambda s: out.append(str(s)), silent=True)
-        assert not any("/fake_override" in line for line in out)
-
-        # 覆盖站点发生在 engine 加载期（无活跃 EC）→ 事件面可不触发，但机制不报错
-        ok, _ = sub.recv_nowait()
-        # 不强制断言事件；仅确认 warning 投影保持（fail-open 契约）
 
     def test_override_in_active_ec_emits_event(self, engine):
         """注入链路：活跃 EC 下 kernel-native 覆盖经注入发射器发出警告+事件。

@@ -1,7 +1,6 @@
 from core.runtime.objects.kernel import IbModule
 from core.runtime.objects.intent import IbIntent
 from core.runtime.module_system.loader import ModuleLoader
-from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.proxy import create_proxy
 from core.runtime.interfaces import RuntimeContext, InterOp, ModuleInstance, Scope, IObjectFactory, ServiceContext, IIbModule
 from typing import List, Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING

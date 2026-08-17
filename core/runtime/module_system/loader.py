@@ -1,60 +1,44 @@
-# Python plugin loading boundary — native paths intentional.
-#
-# 本模块位于 IBCI 运行时与 Python importlib 的交界：扫描到的目录最终喂给
-# os.listdir / os.path.isdir / os.path.exists、sys.path.insert 以及
-# importlib.import_module。这些 API 必须使用原生字符串，因此保留 os.path
-# 进行 FS 查询与 importlib 路径构造，不在每个边界点强行 IbPath 化。
-#
-# 路径规范化责任上移：IBCIEngine._resolve_plugin_search_paths 已通过
-# PathValidator.canonicalize_for_security / InstallPaths.modules_dir().to_native()
-# 提供绝对原生路径，此处不再重复 os.path.abspath。
-import os
-import importlib.util
+# F3：插件体系重构后，IBCI 运行时不扫描磁盘查找用户插件（用户侧扩展唯一边 =
+# 宿主绑定 bind）。本 loader 仅负责对构造期已注册的内置模块做契约绑定与
+# setup(capabilities) 注入（load_and_register_all 单一入口）。
 import inspect
-import sys
 import weakref
-from typing import List, Any, Optional
+from typing import Any, Optional
 
-from core.base.path import IbPath
 from core.runtime.exceptions import RegistryIsolationError
 from core.base.enums import RegistrationState
-from core.runtime.path import InstallPaths
 
 from core.runtime.interfaces import IModuleLoader, ServiceContext
 from core.runtime.interfaces import IExecutionContext
 from core.runtime.objects.kernel.base import unbox
 from core.base.interfaces import IStateReader, IIntentManager
-from core.runtime.observability.diagnostics import kernel_diagnostic
-from core.base.diagnostics.codes import KDIAG_POLICY_MODULE_NO_EXPORT
 from core.runtime.module_system.proxy import create_proxy
 from core.extension.capabilities import ExtensionCapabilities
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import MethodMemberSpec, IbSpec, TypeKind
-from core.runtime.interpreter.interop import BoundPlugin
 
 
 # 跨引擎单例守卫：process 级 weak map（实现对象 -> 首次绑定 registry 身份）。
-# 保留"同一实现对象不得绑定到两个活跃引擎"的加载期隔离语义（如插件导出
+# 保留"同一实现对象不得绑定到两个活跃引擎"的加载期隔离语义（如模块导出
 # 模块级 ``implementation`` 单例时），同时避免向实现对象注入私有属性。
 _BOUND_IMPLEMENTATIONS: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 
 class ModuleLoader(IModuleLoader):
     """
     IBC-Inter 运行时模块加载器。
-    负责在执行阶段动态加载模块实现，并注入所需的依赖。
+    负责对已注册模块实现做严格契约绑定，并注入所需的依赖（setup）。
     """
-    def __init__(self, search_paths: List[str], capability_registry: Optional[Any] = None):
-        # 仅做分隔符规范化；调用方保证路径为绝对路径。
-        self.search_paths = [IbPath.from_native(p).to_native() for p in search_paths]
+    def __init__(self, capability_registry: Optional[Any] = None):
         self.capability_registry = capability_registry
 
     def _validate_and_bind(self, module_name: str, implementation: Any, context: ServiceContext, capabilities: ExtensionCapabilities, registry: Any):
         """
         严格契约绑定。
-        
-        1. 元数据必须已通过 Discovery 阶段从 _spec.py 加载并注册到 HostInterface。
+
+        1. 元数据必须已在 HostInterface 注册（内置模块 = 构造期内联 spec；
+           宿主绑定 = bind 声明）。
         2. 实现对象必须包含元数据中声明的所有成员。
-        3. 严禁隐式反射，所有暴露给 IBC-Inter 的成员必须在 _spec.py 中显式声明。
+        3. 严禁隐式反射，所有暴露给 IBC-Inter 的成员必须在 spec 中显式声明。
         """
         # [Registry Isolation] 跨引擎单例守卫：同一实现对象已绑定其他引擎
         # registry → 拒绝（隔离身份经 BoundPlugin 容器 / weak map 承载，不注入属性）。
@@ -63,26 +47,25 @@ class ModuleLoader(IModuleLoader):
             raise RegistryIsolationError(f"Security Violation: Plugin '{module_name}' is already bound to another engine instance.")
         _BOUND_IMPLEMENTATIONS[implementation] = id(context.registry)
 
-        # 从元数据注册表解析 (元数据来源于 _spec.py)
+        # 从元数据注册表解析（内置模块 = 构造期内联 spec；宿主绑定 = bind 声明）
         metadata = context.interop.metadata.resolve(module_name)
         if not isinstance(metadata, IbSpec) or metadata.kind != TypeKind.MODULE.value:
             raise InterpreterError(f"Plugin Protocol Error: Module '{module_name}' metadata not found. "
-                                   f"Ensure _spec.py exists and declares __ibcext_vtable__.")
+                                   f"Ensure the module spec is registered (builtin inline spec / host binding).")
 
         proxy_vtable = {}
         whitelist = []
 
-        # 遍历元数据中声明的所有成员 (源自 _spec.py)
+        # 遍历元数据中声明的所有成员
         for spec_name, spec_member in metadata.members.items():
             is_callable_member = isinstance(spec_member, MethodMemberSpec)
-
 
             # 1. 处理函数/方法
             if is_callable_member:
                 # 强制要求实现对象具有同名属性
                 if not hasattr(implementation, spec_name):
                     raise InterpreterError(f"Plugin implementation error: Module '{module_name}' is missing required method '{spec_name}' "
-                                           f"declared in _spec.py")
+                                           f"declared in the module spec")
                 
                 py_func = getattr(implementation, spec_name)
                 
@@ -137,7 +120,7 @@ class ModuleLoader(IModuleLoader):
                 # 只要在元数据中声明了，就加入白名单允许通过 __getattr__ 访问
                 if not hasattr(implementation, spec_name):
                      raise InterpreterError(f"Plugin implementation error: Module '{module_name}' is missing required variable '{spec_name}' "
-                                           f"declared in _spec.py")
+                                           f"declared in the module spec")
                 whitelist.append(spec_name)
 
         # 显式返回 vtable 与白名单（由调用方经 InterOp.bind_native_contract 承载）
@@ -162,7 +145,11 @@ class ModuleLoader(IModuleLoader):
 
     def load_and_register_all(self, context: ServiceContext, execution_context: IExecutionContext):
         """
-        扫描搜索路径，加载所有模块实现并绑定到 InterOp。
+        对已注册模块实现做契约绑定与 setup 注入（F3：无磁盘发现/扫描）。
+
+        遍历元数据注册表中所有模块：存在实现（构造期内置模块 / host 绑定 /
+        测试手动注册）则严格绑定；无实现（纯元数据）跳过——用户侧扩展不留
+        磁盘加载路径（唯一边 = 宿主绑定 bind）。
         """
         registry = execution_context.registry
         if registry:
@@ -192,11 +179,6 @@ class ModuleLoader(IModuleLoader):
 
         capabilities.llm_executor = context.llm_executor
         
-        loaded_modules = set()
-        
-        # 优先处理 HostInterface 中已手动注册的实现 (用于测试和热插拔)
-        # 这确保了手动注册的 Mock 对象能被正确初始化并同步到 capabilities
-        # 直接遍历元数据注册表，消除兼容性接口
         interop = context.interop
         for entry in interop.metadata.get_all_modules().keys():
             implementation = interop.get_package(entry)
@@ -206,108 +188,3 @@ class ModuleLoader(IModuleLoader):
             interop.bind_native_contract(entry, vtable, whitelist)
             
             self._setup_implementation(implementation, entry, context, capabilities)
-                
-            loaded_modules.add(entry)
-
-        # 安装路径（ibci_modules/）与其他插件路径的 import 命名空间区分：
-        # ibci_modules 下子目录须作为 ibci_modules.<name> 导入，避免 namespace
-        # package 造成 ibci_ai 与 ibci_modules.ibci_ai 两个模块对象。
-        install_path = InstallPaths.modules_dir().to_native()
-
-        # 扫描搜索路径，加载所有物理存在的模块
-        for path in self.search_paths:
-            if not os.path.isdir(path):
-                continue
-
-            # 当前搜索路径是否为 ibci_modules 安装目录
-            is_install_path = os.path.normcase(path) == os.path.normcase(install_path)
-
-            for entry in os.listdir(path):
-                if entry in loaded_modules:
-                    continue
-
-                # [SECURITY] 仅加载 HostInterface 中已注册元数据的模块 (已发现的模块)
-                # 通过 discovery_map 映射物理目录名到逻辑模块名
-                module_name = interop.get_module_name_by_discovery(entry)
-                if not module_name:
-                    continue
-
-                # kernel-native 模块已在构造期预注册，不再从磁盘加载覆盖
-                if interop.host_interface.is_kernel_native(module_name):
-                    loaded_modules.add(entry)
-                    continue
-
-                # [F3-1] 构造期已注册实现的内置模块（含工具 5）由环 1 统一绑定，
-                # 环 2 不重复加载实现（消除双绑定；F3-2 删除环 2 后的终点语义）。
-                if interop.get_package(module_name) is not None:
-                    loaded_modules.add(entry)
-                    continue
-
-                module_dir = os.path.join(path, entry)
-                if not os.path.isdir(module_dir):
-                    continue
-
-                # 实现层通常在 __init__.py 中
-                impl_path = os.path.join(module_dir, "__init__.py")
-                if not os.path.exists(impl_path):
-                    continue
-
-                try:
-                    # 动态加载实现层
-                    # 必须支持跨项目根目录加载（如 examples_temp/plugins/calc）
-                    added_paths = []
-                    pkg_dir = os.path.dirname(module_dir)
-                    if pkg_dir not in sys.path:
-                        sys.path.insert(0, pkg_dir)
-                        added_paths.append(pkg_dir)
-
-                    # 安装路径下的包使用完整命名空间 ibci_modules.<name>，
-                    # 用户插件路径仍使用目录名作为顶层包名。
-                    import_name = f"ibci_modules.{entry}" if is_install_path else entry
-                    if import_name in sys.modules:
-                        # 插件已加载，按同名 identity 契约复用进程级缓存模块
-                        pass
-                    mod = importlib.import_module(import_name)
-                    
-                    # 实例化：优先寻找 create_implementation 工厂
-                    if hasattr(mod, 'create_implementation'):
-                        implementation = mod.create_implementation()
-                    elif hasattr(mod, 'implementation'):
-                        # 其次寻找导出名为 implementation 的对象
-                        implementation = mod.implementation
-                    else:
-                        # 支持直接导出的类或函数（如有必要可扩展）
-                        kernel_diagnostic(
-                            code=KDIAG_POLICY_MODULE_NO_EXPORT,
-                            detail={"module": module_name},
-                            message=(
-                                f"Module '{module_name}' skipped: no create_implementation() "
-                                f"or implementation export found"
-                            ),
-                        )
-                        continue
-
-                    # 1. 自动依赖注入 (基于 setup 方法签名)
-                    # 必须在校验前注入，因为插件可能根据注入的能力动态决定其虚表 (vtable)
-                    self._setup_implementation(implementation, module_name, context, capabilities)
-                    
-                    # 2. 校验与绑定 (Proxy VTable)
-                    vtable, whitelist = self._validate_and_bind(module_name, implementation, context, capabilities, registry)
-                    interop.bind_native_contract(module_name, vtable, whitelist)
-                    
-                    # 绑定到运行时宿主（BoundPlugin 容器承载实现 + 引擎 registry 身份）
-                    interop.register_package(
-                        module_name,
-                        BoundPlugin(implementation, id(context.registry)),
-                    )
-                    loaded_modules.add(entry)
-                    
-                except Exception as e:
-                    # 插件加载失败必须导致初始化中断，严禁静默失败
-                    raise InterpreterError(f"Plugin Critical Error: Failed to load implementation for module '{entry}': {e}") from e
-                finally:
-                    # sys.path 用后即还：插件代码已进入 sys.modules，包内相对导入经 __package__ 解析，
-                    # 不依赖 sys.path；stdlib/core 经各自既定路径解析。
-                    for p in added_paths:
-                        if p in sys.path:
-                            sys.path.remove(p)

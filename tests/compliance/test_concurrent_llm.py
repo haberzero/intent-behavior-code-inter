@@ -25,7 +25,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def _run_code(code: str):
     lines: list = []
-    eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+    eng = IBCIEngine(root_dir=ROOT_DIR)
     eng.run_string(code, output_callback=lambda s: lines.append(str(s)), silent=True)
     return eng, lines
 

@@ -150,7 +150,7 @@ print(r)
 """
         from core.engine import IBCIEngine
 
-        engine = IBCIEngine(root_dir=".", auto_sniff=False)
+        engine = IBCIEngine(root_dir=".")
         lines = []
         engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
         trace = engine.get_llm_call_trace()
@@ -168,7 +168,7 @@ print(a, b)
 """
         from core.engine import IBCIEngine
 
-        engine = IBCIEngine(root_dir=".", auto_sniff=False)
+        engine = IBCIEngine(root_dir=".")
         lines = []
         engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
         trace = engine.get_llm_call_trace()

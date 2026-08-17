@@ -46,7 +46,7 @@ def _behavior_expr_uids(eng):
 
 class TestRunMany:
     def test_run_many_executes_independent_llm_roots(self, mock_server):
-        eng = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=TESTS_ROOT)
         eng.run_string(_code(mock_server), silent=True)  # 准备 interpreter
         bexprs = _behavior_expr_uids(eng)
         assert len(bexprs) == 2, f"expect 2 independent LLM behavior exprs, got {bexprs}"

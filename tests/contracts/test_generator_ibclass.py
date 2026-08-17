@@ -25,7 +25,7 @@ class TestGeneratorIbClassRegistry:
     def test_generator_class_registered_with_vtable(self):
         from core.engine import IBCIEngine
 
-        engine = IBCIEngine(root_dir=None, auto_sniff=False)
+        engine = IBCIEngine(root_dir=None)
         gen_cls = engine.registry.get_class("generator")
         assert gen_cls is not None, "dedicated 'generator' IbClass must exist"
         assert gen_cls.lookup_method("to_list") is not None

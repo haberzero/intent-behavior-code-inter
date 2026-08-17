@@ -136,3 +136,41 @@ engine.py 挪入）；Engine 构造期一次注册全部 11 模块（含实现�
 - `load_and_register_all` 环 2 收敛为仅内置模块注册——F3-2 落地。
 - 文档迁移（docs/subsystems/04_plugin_system.md、07_kernel_native_modules.md 注册描述、
   KNOWN_LIMITS §十九、write_user_plugin.md、示例/trials）——F3-3。
+
+## 七、F3-2 落地记录（2026-08-18，exp/plugin-refactor-f3）
+
+**完成态**：磁盘插件发现/加载双通道完全铲除——`core/runtime/module_system/discovery.py`
+与 `core/extension/auto_discovery.py` 删除；loader 环 2（磁盘扫描 + create_implementation
+实例化 + 二次绑定）删除，`load_and_register_all` 收敛为仅对已注册实现做环 1 契约绑定；
+`resolve_plugin_search_paths`/插件搜索路径配置面（`IbciConfig` plugin_paths/global_plugin、
+`ProjectDetector.get_plugin_paths` 嗅探、继承透传 inherited_plugin_paths/
+inherited_global_plugin）全部删除；main.py `--plugin`/`--no-sniff`/`load_external_plugins`
+删除；`register_native_module` 引擎 API 删除（唯一消费者即 main.py）；SDK
+`ibci_sdk/`（gen_spec/check）整包删除；`__ibcext_axiom__` 死协议（engine 公理加载面）
+删除；`core/extension/spec_builder.py`（`SpecBuilder`/`ClassSpecBuilder`，为旧 _spec.py
+书写的零消费者工具类）删除；幽灵诊断码 `KDIAG_POLICY_MODULE_NO_EXPORT`（唯一发射点为
+loader 环 2）从其 codes.py/catalog/docs 删除。Engine 构造还原为 `IBCIEngine(root_dir=...)`
+单一签名（无 auto_sniff/继承参数）。
+
+**相对 F3-1 定稿方案 / 研读的偏离（均自主决策）**：
+1. **`IBCIEngine` 签名简化为 `root_dir` 单一参数**——移除 auto_sniff/inherited_*
+   三个参数。理由：插件搜索路径概念整体删除后参数无所承载；F3-2 终点语义。
+   41 处测试 `auto_sniff=False` 机械迁移为无参构造。
+2. **`ibci_sdk` 整包删除**——gen_spec/check 是"写/查 _spec.py 插件"工具，F3 后无用户
+   插件撰写场景，死代码（质量红线）；其测试 test_check_plugin 上一轮已迁移 F3 语义，
+   此次连 SDK 一并移除。
+3. **`register_native_module` 引擎 API 删除**——唯一消费者 main.py `load_external_plugins`
+   （同 F2 R 期遗留的动态注册面，F3-2 目标之一"load_and_register_all 收敛"延伸）。
+4. **隔离超时测试稳定化**：`test_timeout_raises_when_child_exceeds_deadline` 由
+   "启动耗时 > 1ms"脆弱墙钟假设改为子任务先 sleep 再返回（F3 移除插件发现后子引擎
+   启动更快使原假设偶发失效）。追踪根因修正，非环境 flaky 搪塞。
+
+**验证**：全量 pytest 零回归（实跑计数不冻结）；`KDIAG_POLICY_MODULE_NO_EXPORT` 幽灵码
+清除经 test_diagnostic_catalog CAT-7 佐证；`spec_builder` 死代码清零经零消费者扫描。
+冒烟：`import math/json/time/schema/file` 全链路正常（同 F3-1）。
+
+**F3-2 遗留（排入 F3-3/F3-4）**：examples/plugins_demo、isolation_demo、trials/T01 等
+含 _spec.py 的示例/trials 目录迁移或删除；docs/subsystems/04_plugin_system.md、
+docs/howto/write_user_plugin.md、docs/architecture/07_kernel_native_modules.md 插件发现
+描述、KNOWN_LIMITS §十九；`_spec.py`/`__ibcext_vtable__`/`discovery` 主题残留扫描
+（F3-4）。

@@ -25,7 +25,7 @@ def make_compliance_engine(compliance_root):
     """工厂 fixture：在合规目录根下构造一个 ``IBCIEngine`` 实例。"""
 
     def _factory() -> IBCIEngine:
-        return IBCIEngine(root_dir=compliance_root, auto_sniff=False)
+        return IBCIEngine(root_dir=compliance_root)
 
     return _factory
 

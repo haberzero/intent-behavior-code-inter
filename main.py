@@ -2,7 +2,6 @@ import argparse
 import os
 import sys
 import json
-import importlib.util
 from typing import Dict, Any, Optional
 
 # 确保项目根目录在路径中
@@ -16,27 +15,6 @@ from core.kernel.issue import CompilerError
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.lexer.lexer import Lexer
 
-def load_external_plugins(engine: IBCIEngine, plugin_paths: list):
-    """从本地 Python 文件动态加载插件"""
-    for path in plugin_paths:
-        if not os.path.exists(path):
-            print(f"Warning: Plugin path not found: {path}")
-            continue
-            
-        try:
-            # 自动提取模块名（文件名）
-            module_name = os.path.splitext(os.path.basename(path))[0]
-            
-            # 动态加载 Python 模块
-            spec = importlib.util.spec_from_file_location(module_name, path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            
-            # 注册到引擎
-            engine.register_native_module(module_name, mod)
-            print(f"Loaded plugin: {module_name} from {path}")
-        except Exception as e:
-            print(f"Failed to load plugin {path}: {str(e)}")
 
 def main():
     parser = argparse.ArgumentParser(description="IBC-Inter CLI")
@@ -47,15 +25,11 @@ def main():
     run_parser.add_argument("file", help="Path to the .ibci entry file")
     run_parser.add_argument("--root", help="Project root directory", default=None)
     run_parser.add_argument("--auto", action="append", help="Set variable (key=value)")
-    run_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
-    run_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
     check_parser.add_argument("file", help="Path to the .ibci entry file")
     check_parser.add_argument("--root", help="Project root directory", default=None)
-    check_parser.add_argument("--plugin", action="append", help="Path to external Python plugin (.py)")
-    check_parser.add_argument("--no-sniff", action="store_true", help="Disable auto-sniffing plugins/ folder")
 
     # Compile command
     compile_parser = subparsers.add_parser("compile", help="Compile only (no interpret)")
@@ -119,14 +93,8 @@ def main():
             if hasattr(args, 'verbose') and args.verbose:
                 print(f"[Auto-detect] No project root detected, using entry directory: {root_dir}")
 
-    # 初始化引擎，决定是否自动嗅探
-    auto_sniff = not getattr(args, 'no_sniff', False)
-
-    engine = IBCIEngine(root_dir=root_dir, auto_sniff=auto_sniff)
-
-    # 1. 加载插件
-    if getattr(args, 'plugin', None):
-        load_external_plugins(engine, args.plugin)
+    # 初始化引擎（F3：无插件发现/嗅探开关）
+    engine = IBCIEngine(root_dir=root_dir)
 
     if args.command == "run":
         # 加载命令行变量

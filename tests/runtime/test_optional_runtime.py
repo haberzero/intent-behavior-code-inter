@@ -197,7 +197,7 @@ class TestOptionalSerialization:
         )
         from core.engine import IBCIEngine
 
-        engine = IBCIEngine(root_dir=os.path.dirname(os.path.dirname(os.path.abspath(__file__))), auto_sniff=False)
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         engine.run_string("Optional[int] x = 1\n", silent=True)
         ec = engine.interpreter.execution_context
         orig_ctx = ec.runtime_context
@@ -214,7 +214,7 @@ class TestOptionalSerialization:
         )
         from core.engine import IBCIEngine
 
-        engine = IBCIEngine(root_dir=os.path.dirname(os.path.dirname(os.path.abspath(__file__))), auto_sniff=False)
+        engine = IBCIEngine(root_dir=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         engine.run_string("Optional[int] x = None\n", silent=True)
         ec = engine.interpreter.execution_context
         orig_ctx = ec.runtime_context

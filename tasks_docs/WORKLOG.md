@@ -135,6 +135,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `tasks_docs/_f3_plugin_refactor.md`（F3 完成后沉入 docs/architecture）。
   遗留：discovery/auto_discovery/main.py --plugin/SDK _spec 面删除 = F3-2；测试/
   examples/trials/docs 迁移 = F3-3。
+- **F3-2 完成（2026-08-18，exp/plugin-refactor-f3）**：磁盘插件发现/加载双通道彻底铲除。
+  **删除面**：`core/runtime/module_system/discovery.py` + `core/extension/auto_discovery.py`
+  （ModuleDiscoveryService/AutoDiscoveryService）；loader 环 2（磁盘扫描 + create_implementation
+  实例化 + 二次绑定），`load_and_register_all` 收敛为仅对已注册实现做环 1 契约绑定；
+  插件搜索路径配置面（`IbciConfig` plugin_paths/global_plugin 整模块 `core/kernel/config.py`
+  删除、`ProjectDetector.get_plugin_paths` 嗅探、`inherited_plugin_paths`/
+  `inherited_global_plugin` 继承透传）；main.py `--plugin`/`--no-sniff`/`load_external_plugins`；
+  `engine.register_native_module` API（唯一消费者即 main.py）；SDK `ibci_sdk/` 整包
+  （gen_spec/check 为写/查 _spec.py 插件工具，F3 后无场景）；`__ibcext_axiom__` 死协议
+  （engine 公理加载面）；`core/extension/spec_builder.py`（SpecBuilder/ClassSpecBuilder
+  零消费者死代码）；幽灵诊断码 `KDIAG_POLICY_MODULE_NO_EXPORT`（唯一发射点为 loader 环 2，
+  从 codes.py/catalog/docs 一并删除）。**Engine 签名简化**为 `IBCIEngine(root_dir=...)`
+  单一参数（auto_sniff/inherited_* 移除；41 处测试机械迁移）。**隔离超时测试稳定化**：
+  `test_timeout_raises_when_child_exceeds_deadline` 由"启动耗时 > 1ms"脆弱墙钟假设改为
+  子任务先 sleep 再返回——F3 移除插件发现使子引擎启动更快使原假设偶发失效，追踪根因
+  修正而非 flaky 搪塞。验证：全量 pytest 零回归；幽灵码清除经 test_diagnostic_catalog
+  CAT-7 佐证。遗留：examples/trials/docs 迁移 = F3-3；_spec 主题残留扫描 = F3-4。
 
 
 ---

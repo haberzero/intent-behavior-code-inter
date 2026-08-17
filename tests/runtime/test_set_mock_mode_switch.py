@@ -18,7 +18,7 @@ from tests.conftest import REPO_ROOT
 
 
 def _run(code: str, root_dir=REPO_ROOT):
-    engine = IBCIEngine(root_dir=root_dir, auto_sniff=False)
+    engine = IBCIEngine(root_dir=root_dir)
     lines = []
     engine.run_string(code, output_callback=lambda t: lines.append(str(t)), silent=True)
     return lines

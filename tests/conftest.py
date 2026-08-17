@@ -95,7 +95,7 @@ def run_ibci(
 
     full = (AI_MOCK_PREFIX if ai else "") + prefix + code
     lines: List[str] = []
-    engine = IBCIEngine(root_dir=root_dir or _default_root(), auto_sniff=False)
+    engine = IBCIEngine(root_dir=root_dir or _default_root())
     engine.run_string(full, output_callback=lambda t: lines.append(str(t)), silent=True)
     return lines
 
@@ -104,7 +104,7 @@ def compile_ibci(code: str, *, root_dir: Optional[str] = None):
     """仅编译；失败抛 ``CompilerError``。返回 CompilationArtifact。"""
     from core.engine import IBCIEngine
 
-    engine = IBCIEngine(root_dir=root_dir or _default_root(), auto_sniff=False)
+    engine = IBCIEngine(root_dir=root_dir or _default_root())
     return engine.compile_string(code, silent=True)
 
 
@@ -113,7 +113,7 @@ def compile_or_errors(code: str, *, root_dir: Optional[str] = None) -> Tuple[Any
     from core.engine import IBCIEngine
     from core.kernel.issue import CompilerError
 
-    engine = IBCIEngine(root_dir=root_dir or _default_root(), auto_sniff=False)
+    engine = IBCIEngine(root_dir=root_dir or _default_root())
     try:
         return engine.compile_string(code, silent=True), set()
     except CompilerError as e:
@@ -140,7 +140,7 @@ def expect_runtime_error(
     import re
 
     full = (AI_MOCK_PREFIX if ai else "") + prefix + code
-    engine = IBCIEngine(root_dir=root_dir or _default_root(), auto_sniff=False)
+    engine = IBCIEngine(root_dir=root_dir or _default_root())
 
     try:
         lines: List[str] = []
@@ -177,7 +177,7 @@ def engine():
     """全新 IBCIEngine（每个 test function 隔离）。"""
     from core.engine import IBCIEngine
 
-    return IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+    return IBCIEngine(root_dir=TESTS_ROOT)
 
 
 @pytest.fixture(scope="session")
@@ -185,7 +185,7 @@ def engine_session():
     """长寿命 IBCIEngine：仅用于只读查询 registry / kernel 元数据。"""
     from core.engine import IBCIEngine
 
-    return IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+    return IBCIEngine(root_dir=TESTS_ROOT)
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ import copy
 import threading
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List, Tuple, Union
+from typing import Optional, Dict, Any, List, Tuple
 
 # =============================================================================
 # 架构边界说明：Engine = 组装者，不参与执行
@@ -20,18 +20,13 @@ from typing import Optional, Dict, Any, List, Tuple, Union
 # DynamicHost（HostService）负责调度，而非 Engine。
 # =============================================================================
 
-from core.project_detector import ProjectDetector
-
 from core.kernel.path import IbPath, PathContext, PathValidator
-from core.kernel.config import IbciConfig
 from core.runtime.path import InstallPaths
 from core.kernel.registry import KernelRegistry
 from core.compiler.scheduler import Scheduler
 from core.runtime.interpreter.interpreter import Interpreter
-from core.runtime.interpreter.runtime_context import RuntimeContextImpl
 from core.runtime.objects.kernel import IbObject
 from core.runtime.factory import RuntimeObjectFactory
-from core.runtime.module_system.discovery import ModuleDiscoveryService
 from core.runtime.module_system.loader import ModuleLoader
 from core.kernel.host_interface import HostInterface
 from core.runtime.bootstrap.primitive_initializer import initialize_primitive_classes
@@ -53,7 +48,6 @@ from core.runtime.capability_registry import CapabilityRegistry
 from core.runtime.observability.events import EventBus
 from core.runtime.observability.diagnostics import kernel_diagnostic
 from core.base.diagnostics.codes import KDIAG_RUNTIME_COLLECT_SKIP
-from core.extension.auto_discovery import AutoDiscoveryService
 
 
 from core.base.enums import RegistrationState
@@ -74,8 +68,7 @@ class EngineTestSnapshot:
     - ``entry_file``       —— 当前 entry 锚点（run/compile_string 确立后非 None）
     - ``entry_dir``        —— PathContext.entry_dir 原生字符串（未确立为 None）
     - ``project_root``     —— PathContext.project_root 原生字符串（未确立为 None）
-    - ``plugin_search_paths`` —— 当前插件搜索路径（root 确立后有效）
-    - ``install_path``     —— kernel-native 模块目录
+    - ``install_path``     —— 内核原生模块目录
     - ``root_initialized`` —— root-dependent 初始化是否完成
     - ``spawned_handles``  —— 在途隔离 spawn 任务句柄（锁内快照）
     """
@@ -85,7 +78,6 @@ class EngineTestSnapshot:
     entry_file: Optional[str] = None
     entry_dir: Optional[str] = None
     project_root: Optional[str] = None
-    plugin_search_paths: List[str] = field(default_factory=list)
     install_path: str = ""
     root_initialized: bool = False
     spawned_handles: List[str] = field(default_factory=list)
@@ -95,18 +87,20 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     """
     IBC-Inter 标准化引擎，整合了调度、编译和执行流程。
     """
-    def __init__(self, root_dir: Optional[str] = None, auto_sniff: bool = True, inherited_plugin_paths: Optional[List[str]] = None, inherited_global_plugin: Optional[List[str]] = None):
+    def __init__(self, root_dir: Optional[str] = None):
         """
         参数:
             root_dir: **可选**。项目根目录（沙箱边界）。
                 引擎级默认——未提供时，project_root 在 run()/compile() 时
                 确立为 entry_file 所在目录（entry_dir）。run_string 无真实 entry，须显式提供。
                 提供时经 canonicalize_for_security 规范化。
-            auto_sniff: 是否自动嗅探项目插件路径（plugin 发现优先级见 resolve_plugin_search_paths）。
 
         多阶段启动：__init__ 仅做 root-independent 设置（KernelRegistry/CWD/install 路径等）；
-        root-dependent 设置（plugin 发现路径、Scheduler）延迟到 ``_ensure_root_initialized``，
+        root-dependent 设置（Scheduler）延迟到 ``_ensure_root_initialized``，
         在 run/compile/check 时经 ``_establish_project_root`` 确立 project_root 后触发。
+
+        F3：用户侧扩展唯一边 = 宿主绑定 bind；不再有插件搜索路径/嗅探/继承透传
+        （_spec.py 磁盘发现通道已废弃，内置模块全部构造期预注册）。
         """
         # --- root-independent ---
         self.registry = KernelRegistry()
@@ -152,8 +146,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         from core.runtime.bootstrap.builtin_modules import register_builtin_modules
         register_builtin_modules(self.host_interface)
 
-        self._plugins_discovered = False
-
         # 运行时调度器
         self.rt_scheduler = RuntimeSchedulerImpl(None)  # ServiceContext 尚未就绪，后续注入
         self.interpreter: Optional[Interpreter] = None
@@ -163,17 +155,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         self._spawned_tasks_lock = threading.Lock()
 
         # --- root-dependent（延迟）：在 _ensure_root_initialized 中确立 ---
-        self.auto_sniff = auto_sniff
         self.root_dir: Optional[str] = None
-        self._plugin_search_paths: List[str] = []
-        # 继承的父 plugin search_paths（隔离子引擎透传）。
-        # 分两路透传以保持优先级：inherited_global_plugin（保持在优先级 2，不被普通 plugin 覆盖）；
-        # inherited_plugin_paths（作为兜底来源，优先级 6）。
-        self._inherited_plugin_paths: List[str] = list(inherited_plugin_paths) if inherited_plugin_paths else []
-        self._inherited_global_plugin: List[str] = list(inherited_global_plugin) if inherited_global_plugin else []
-        self._global_plugin_paths: List[str] = []  # 自身解析出的 global_plugin（含继承），传给子引擎
         self.scheduler = None  # type: ignore[assignment]
-        self.discovery_service = None  # type: ignore[assignment]
         self.module_loader = None  # type: ignore[assignment]
         self._root_initialized = False
 
@@ -204,69 +187,22 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         return entry_dir if entry_dir else entry_ib.to_native()
 
     def _ensure_root_initialized(self, project_root: str) -> None:
-        """root-dependent 延迟初始化（多阶段启动）：plugin 发现路径 + Scheduler。
+        """root-dependent 延迟初始化（多阶段启动）：Scheduler + module_loader。
 
         幂等：engine 单次执行，project_root 一旦确立不再变。
-        plugin 发现优先级见 ``resolve_plugin_search_paths``。
+        内置模块已构造期预注册；loader 仅负责已注册模块的契约绑定与 setup
+        （F3：无磁盘插件发现/搜索路径）。
         """
         if self._root_initialized:
             return
         self.root_dir = project_root
-        self._plugin_search_paths = self.resolve_plugin_search_paths(project_root)
-        self.discovery_service = ModuleDiscoveryService(self._plugin_search_paths)
-        self.module_loader = ModuleLoader(self._plugin_search_paths, capability_registry=self.capability_registry)
+        self.module_loader = ModuleLoader(capability_registry=self.capability_registry)
         self.scheduler = Scheduler(
             project_root, host_interface=self.host_interface,
             issue_tracker=self.issue_tracker,
             registry=self.registry.get_metadata_registry(),
         )
         self._root_initialized = True
-
-    def resolve_plugin_search_paths(self, project_root: str) -> List[str]:
-        """plugin 发现优先级（高 → 低，先命中者胜）：
-
-        1. **kernel-native**（install 路径，恒在，最高优先级，不可覆盖）
-        2. **global_plugin**（ibci.json 的 global_plugin 字段；全局 ibci.json 查找本轮预留）
-        3. **plugin_paths**（ibci.json 显式）；配置后嗅探**不触发**（explicit > implicit）
-        4. **嗅探 project_root**（ProjectDetector，仅 plugin_paths 未配置时）
-        5. 全局 config（**预留，本轮不实现**）
-        6. **继承的父 plugin_paths**（隔离子引擎透传；附加于自身之后，作为兜底来源）
-
-        继承的 **global_plugin** 单独透传，并入优先级 2（与自身 global_plugin 合并），
-        而非混入兜底的 inherited_plugin_paths（优先级 6）——保持
-        "global_plugin 不被普通优先级覆盖" 在隔离子引擎中也成立。
-
-        plugin_path 只读特权：可在 project_root 之外（模块加载为 loader 级特权操作，
-        越界读取；脚本写入仍由 proj_root 沙箱约束——file.* 走 PermissionManager）。
-        """
-        config = IbciConfig.load(project_root)
-        own_global_plugin = IbciConfig.global_plugin(config, project_root)
-        explicit_plugin_paths = IbciConfig.plugin_paths(config, project_root)
-
-        # global_plugin = 自身 + 继承（去重保序，保持在优先级 2）
-        global_plugin_merged: List[str] = []
-        for g in own_global_plugin + self._inherited_global_plugin:
-            if g not in global_plugin_merged:
-                global_plugin_merged.append(g)
-        self._global_plugin_paths = global_plugin_merged  # 供子引擎继承
-
-        ordered: List[str] = [self._install_path]              # 1. 内核原生（install）最高
-        ordered.extend(global_plugin_merged)                 # 2. global_plugin（自身+继承）
-        if explicit_plugin_paths:
-            ordered.extend(explicit_plugin_paths)            # 3. 显式 plugin_paths（嗅探不触发）
-        elif self.auto_sniff:
-            ordered.extend(ProjectDetector.get_plugin_paths(project_root))  # 4. 嗅探兜底
-        # 5. 全局 config：预留
-        ordered.extend(self._inherited_plugin_paths)         # 6. 继承的普通 plugin_paths（兜底）
-
-        # 去重保序
-        seen = set()
-        result = []
-        for p in ordered:
-            if p not in seen:
-                seen.add(p)
-                result.append(p)
-        return result
 
     def spawn_interpreter(self, artifact: Any, registry: Any, host_interface: Any, root_dir: str, parent_context: Any, entry_file: str = None, entry_dir: str = None, project_root: str = None) -> Interpreter:
         """[IInterpreterFactory] 实现工厂方法产生子解释器"""
@@ -360,60 +296,17 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
 
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
-        """ 驱动插件加载生命周期 (STAGE 4 -> STAGE 5)
+        """驱动模块加载生命周期 (STAGE 4 -> STAGE 5)。
 
-         在插件实现加载前，先加载插件公理（如果提供了 __ibcext_axiom__）。
-        这确保自定义公理能在封印前注册到 AxiomRegistry。
+        F3：无插件公理加载（__ibcext_axiom__ 死协议已废弃）；内置模块经
+        module_loader 契约绑定与 setup（构造期已注册实现）。
         """
 
         self.registry.set_state_level(RegistrationState.STAGE_4_PLUGIN_IMPL.value, self._kernel_token)
 
-        # plugin 发现走统一解析的 search_paths（install/global_plugin/plugin_paths/嗅探）。
-        discovery = AutoDiscoveryService(self._plugin_search_paths)
-
-        axiom_registry = self.registry.get_metadata_registry().get_axiom_registry()
-        if axiom_registry:
-            for spec in discovery.discover_plugins().values():
-                if spec.has_axioms():
-                    for axiom in spec.axioms.values():
-                        axiom_registry.register(axiom)
-
         self.module_loader.load_and_register_all(service_context, execution_context)
 
         self.registry.set_state_level(RegistrationState.STAGE_5_HYDRATION.value, self._kernel_token)
-
-    def register_native_module(self, name: str, implementation: Any, type_metadata: Optional[Any] = None):
-        """
-         显式注册一个原生 Python 模块实现及其元数据。
-
-         可能在 run() 前调用（如 main.py load_external_plugins），
-         此时需构造期已提供 explicit root，否则报错（无 entry_file 可确立 project_root）。
-        """
-        if not self._root_initialized:
-            if self._explicit_root is None:
-                raise InterpreterError(
-                    "register_native_module 需在构造期显式提供 root_dir（或在 run/compile 之后调用）。",
-                    None,
-                )
-            self._ensure_root_initialized(self._explicit_root)
-        self.host_interface.register_module(name, implementation, type_metadata)
-        self.scheduler.host_interface = self.host_interface
-
-    def _ensure_plugins_discovered(self) -> None:
-        """
-        确保插件元数据已加载到 host_interface（懒加载，只在首次编译/检查时触发）。
-
-        显式引入原则：discover_all() 不在 Engine.__init__() 中无条件调用，
-        而是延迟到首次编译时才执行。这确保：
-        1. 仅创建 Engine 实例而不编译时，不触发任何插件发现。
-        2. Scheduler 在编译开始前获得完整的 host_interface（含所有插件元数据）。
-        3. 插件符号仍须通过 import 语句显式引入才能在代码中使用（Prelude 过滤保证）。
-        """
-        if not self._plugins_discovered:
-            # 传入已有的 host_interface，保留构造期预注册的 kernel-native 模块
-            self.host_interface = self.discovery_service.discover_all(self.registry, host=self.host_interface)
-            self.scheduler.host_interface = self.host_interface
-            self._plugins_discovered = True
 
     def compile_string(self, code: str, variables: Optional[Dict[str, Any]] = None, silent: bool = False) -> CompilationArtifact:
         """
@@ -529,8 +422,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 确立 project_root + root-dependent 初始化（幂等）
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
-        # 懒加载插件元数据（显式引入原则）
-        self._ensure_plugins_discovered()
 
         # entry_file 直接用作编译输入（源码位置）；canonicalize（解 symlink、绝对化）。
         abs_entry = PathValidator.canonicalize_for_security(entry_file).to_native()
@@ -629,7 +520,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             entry_file=self._entry_file,
             entry_dir=entry_dir,
             project_root=project_root,
-            plugin_search_paths=list(self._plugin_search_paths),
             install_path=self._install_path,
             root_initialized=self._root_initialized,
             spawned_handles=handles,
@@ -664,8 +554,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 确立 project_root + root-dependent 初始化
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
-        # 懒加载插件元数据（显式引入原则）
-        self._ensure_plugins_discovered()
 
         abs_entry = PathValidator.canonicalize_for_security(entry_file).to_native()
         try:
@@ -703,18 +591,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             )
         return abs_path, sub_root_dir
 
-    def _resolve_inherited_plugin_paths(self, policy: Union[Dict[str, Any], IsolationPolicy]) -> List[str]:
-        """根据 IsolationPolicy.inherit_plugins 解析子引擎应继承的插件搜索路径。
-
-        True  = 全部继承（默认）
-        False = 不继承
-        """
-        policy_obj = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
-
-        if policy_obj.inherit_plugins:
-            return self._plugin_search_paths
-        return []
-
     def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], silent: bool = True) -> str:
         """
         [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用。
@@ -731,9 +607,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         sub_engine = IBCIEngine(
             root_dir=sub_root_dir,
-            auto_sniff=self.auto_sniff,
-            inherited_plugin_paths=self._resolve_inherited_plugin_paths(policy_obj),
-            inherited_global_plugin=self._global_plugin_paths,   # global_plugin 单独透传保持优先级
         )
 
         # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出

@@ -38,7 +38,7 @@ class _FailingProvider:
 
 
 def _run_with_failing_provider(code: str):
-    eng = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+    eng = IBCIEngine(root_dir=_default_root())
     eng.capability_registry.register(
         CapabilityRegistry.CAP_LLM_PROVIDER, _FailingProvider(), plugin_id="test"
     )

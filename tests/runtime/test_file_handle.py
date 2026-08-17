@@ -37,7 +37,7 @@ def _make_file_handle(registry, tmp_path, filename="test.txt"):
 def file_engine(tmp_path):
     """以 tmp_path 为 project_root 的引擎，供文件 I/O 测试使用。"""
     from core.engine import IBCIEngine
-    return IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+    return IBCIEngine(root_dir=str(tmp_path))
 
 
 def _file_module(engine):

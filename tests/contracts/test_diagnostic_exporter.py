@@ -35,7 +35,7 @@ HELLO = os.path.join(REPO_ROOT, "examples/01_getting_started/01_hello_world.ibci
 
 @pytest.fixture(scope="module")
 def hello_result():
-    engine = IBCIEngine(root_dir="examples/01_getting_started", auto_sniff=False)
+    engine = IBCIEngine(root_dir="examples/01_getting_started")
     artifact = engine.compile("examples/01_getting_started/01_hello_world.ibci")
     assert artifact is not None, "compile of hello_world failed"
     return artifact.modules[artifact.entry_module]

@@ -32,7 +32,7 @@ class _RecordingHooks:
 
 def _run_with_hooks(code):
     """执行代码并返回 (输出行, 捕获的 sys_prompt 列表)。"""
-    engine = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+    engine = IBCIEngine(root_dir=TESTS_ROOT)
     hooks = _RecordingHooks()
     engine.test_hooks = hooks
     lines = []

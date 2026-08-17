@@ -19,7 +19,7 @@ def _run_err_code(code: str) -> str:
     """运行代码并提取第一个诊断码（格式 [ERROR][CODE]: ...）。"""
     import re
 
-    engine = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+    engine = IBCIEngine(root_dir=_default_root())
     try:
         engine.run_string(code, silent=True)
     except Exception as e:

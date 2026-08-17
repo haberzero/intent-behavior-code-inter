@@ -61,7 +61,7 @@ class TestHostAsyncConcurrency:
         child_a = _write_child(child_code)
         child_b = _write_child(child_code)
         try:
-            eng = IBCIEngine(root_dir=ROOT_DIR, auto_sniff=False)
+            eng = IBCIEngine(root_dir=ROOT_DIR)
 
             # 串行基准：两次顺序 spawn/collect（引擎层，作为耗时参照）
             t0 = time.monotonic()

@@ -34,7 +34,7 @@ class TestOnLLMCallHook:
         from core.engine import IBCIEngine
 
         hooks = _RecordingHooks()
-        eng = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=TESTS_ROOT)
         eng.test_hooks = hooks
         eng.run_string(
             AI_MOCK_PREFIX + 'str x = @~ MOCK:STR:hello ~\nprint(x)\n',
@@ -50,7 +50,7 @@ class TestOnLLMCallHook:
         from core.engine import IBCIEngine
 
         hooks = _RecordingHooks()
-        eng = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=TESTS_ROOT)
         eng.test_hooks = hooks
         eng.run_string(
             AI_MOCK_PREFIX
@@ -67,7 +67,7 @@ class TestOnLLMCallHook:
     def test_no_hooks_means_no_callbacks(self):
         from core.engine import IBCIEngine
 
-        eng = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=TESTS_ROOT)
         eng.run_string(AI_MOCK_PREFIX + 'str x = @~ MOCK:STR:hi ~\nprint(x)\n', silent=True)
         assert eng.test_hooks is None
         assert eng.interpreter.service_context.test_hooks is None
@@ -95,7 +95,7 @@ class TestOnLLMCallErrorHook:
                 return True
 
         hooks = _RecordingHooks()
-        eng = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=TESTS_ROOT)
         eng.test_hooks = hooks
         eng.capability_registry.register(
             CapabilityRegistry.CAP_LLM_PROVIDER, _FailingProvider(), plugin_id="test"

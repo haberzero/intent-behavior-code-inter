@@ -17,7 +17,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _engine():
-    return IBCIEngine(root_dir=_ROOT, auto_sniff=False)
+    return IBCIEngine(root_dir=_ROOT)
 
 
 def _get_class(engine, name, module="__string_exec__"):

@@ -15,7 +15,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _engine():
-    return IBCIEngine(root_dir=_ROOT, auto_sniff=False)
+    return IBCIEngine(root_dir=_ROOT)
 
 
 def _symbol(engine, name):
@@ -38,7 +38,7 @@ class TestModuleQualifiedSpecializationKey:
                 "        self.value = v\n",
                 encoding="utf-8",
             )
-            engine = IBCIEngine(root_dir=str(root), auto_sniff=False)
+            engine = IBCIEngine(root_dir=str(root))
             engine.run_string(
                 "import geo\n"
                 "class Box[T]:\n"

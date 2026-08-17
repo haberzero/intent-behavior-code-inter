@@ -28,7 +28,7 @@ _SIMPLE_CODE = 'str x = "hello"\nprint(x)\n'
 
 
 def _new_engine():
-    return IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+    return IBCIEngine(root_dir=TESTS_ROOT)
 
 
 class TestEngineLifecycle:
@@ -97,25 +97,25 @@ class TestEngineRootDirContract:
     """IBCIEngine 的 project_root 契约（引擎级默认 + 延迟确立）。
 
     root_dir 可选；未提供时 project_root 在 run/compile 时确立为 entry_dir。
-    root-dependent 初始化（Scheduler/plugin 发现）延迟到 _ensure_root_initialized。
+    root-dependent 初始化（Scheduler）延迟到 _ensure_root_initialized。
     root 经 canonicalize_for_security 规范化（解 symlink）。
     """
 
     def test_construct_without_root_dir_succeeds_root_deferred(self):
         """无 root_dir 构造成功（引擎级默认）；root_dir 延迟（构造期为 None）。"""
-        eng = IBCIEngine(auto_sniff=False)
+        eng = IBCIEngine()
         assert eng.root_dir is None  # 延迟，未确立
         assert eng.test_snapshot().explicit_root is None
 
     def test_reset_test_state_clears_spawned_tasks(self):
         """reset_test_state 清空在途隔离任务表（快照可观测；无任务时为幂等 no-op）。"""
-        eng = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=TESTS_ROOT)
         eng.reset_test_state()
         assert eng.test_snapshot().spawned_handles == []
 
     def test_explicit_root_canonicalized_at_construction(self, tmp_path):
         """显式 root_dir 在构造期即 canonicalize（_explicit_root 立即可用）。"""
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(tmp_path))
         expected = PathValidator.canonicalize_for_security(str(tmp_path)).to_native()
         assert eng.test_snapshot().explicit_root == expected
 
@@ -123,7 +123,7 @@ class TestEngineRootDirContract:
         """无显式 root + run(entry_file) → project_root 默认 = entry_dir（canonicalize）。"""
         entry = tmp_path / "main.ibci"
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
-        eng = IBCIEngine(auto_sniff=False)  # 无 root
+        eng = IBCIEngine()  # 无 root
         eng.run(str(entry), silent=True)
         # project_root 应 = entry 所在目录（canonicalize）
         assert eng.root_dir == PathValidator.canonicalize_for_security(str(tmp_path)).to_native()
@@ -134,13 +134,13 @@ class TestEngineRootDirContract:
         explicit_root.mkdir()
         entry = explicit_root / "main.ibci"  # entry 必须在 root 内（沙箱可及）
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
-        eng = IBCIEngine(root_dir=str(explicit_root), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(explicit_root))
         eng.run(str(entry), silent=True)
         assert eng.root_dir == PathValidator.canonicalize_for_security(str(explicit_root)).to_native()
 
     def test_run_string_without_explicit_root_raises(self, tmp_path):
         """run_string 无真实 entry_file；无显式 root 时必须报错（无可默认的 entry_dir）。"""
-        eng = IBCIEngine(auto_sniff=False)  # 无 root
+        eng = IBCIEngine()  # 无 root
         from core.kernel.issue import InterpreterError
         with pytest.raises(InterpreterError):
             eng.run_string('str x = "hi"\n', silent=True)
@@ -161,13 +161,13 @@ class TestEngineRootDirContract:
             os.symlink(str(target), str(link))
         except (OSError, NotImplementedError):
             pytest.skip("无法创建符号链接（权限不足）")
-        eng = IBCIEngine(root_dir=str(link), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(link))
         assert eng.test_snapshot().explicit_root == os.path.realpath(str(target))
 
     def test_cwd_saved_at_construction(self):
         """CWD 在构造期单独保存（无上界校验）。"""
         import os
-        eng = IBCIEngine(auto_sniff=False)
+        eng = IBCIEngine()
         assert eng.test_snapshot().cwd == os.getcwd()
 
     def test_run_relative_entry_canonicalizes_to_absolute(self, tmp_path, monkeypatch):
@@ -176,7 +176,7 @@ class TestEngineRootDirContract:
         entry = tmp_path / "main.ibci"
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
         monkeypatch.chdir(str(tmp_path))  # chdir 后用相对路径调用
-        eng = IBCIEngine(auto_sniff=False)
+        eng = IBCIEngine()
         eng.run("main.ibci", silent=True)
         # entry_dir 必须是绝对的（canonicalize 后），非相对 "main.ibci" 的父目录 "."
         assert os.path.isabs(eng.test_snapshot().entry_dir)
@@ -184,148 +184,19 @@ class TestEngineRootDirContract:
     def test_execute_without_prior_compile_raises(self, tmp_path):
         """execute() 未经 run/compile 触发 root 初始化 → 明确 InterpreterError（非 AttributeError）。"""
         from core.kernel.issue import InterpreterError
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(tmp_path))
         with pytest.raises(InterpreterError):
             eng.execute(None)
 
 
-class TestPluginSearchPathResolution:
-    """plugin 发现优先级：install > global_plugin > plugin_paths > 嗅探 > 全局(预留)。"""
-
-    @staticmethod
-    def _resolve(project_root, auto_sniff=True):
-        eng = IBCIEngine(root_dir=project_root, auto_sniff=auto_sniff)
-        return eng.resolve_plugin_search_paths(project_root), eng.test_snapshot().install_path
-
-    def test_install_always_first_and_highest(self, tmp_path):
-        """install 恒在且最高优先级（search_paths[0]）。"""
-        paths, install = self._resolve(str(tmp_path))
-        assert paths[0] == install
-
-    def test_no_config_with_sniff_includes_project_plugin_dirs(self, tmp_path):
-        """无 ibci.json + auto_sniff：嗅探 project_root 下的 plugins/ibci_modules。"""
-        (tmp_path / "plugins").mkdir()
-        (tmp_path / "ibci_modules").mkdir()
-        paths, install = self._resolve(str(tmp_path))
-        # install + 两个嗅探目录
-        assert any("plugins" in p for p in paths)
-        assert any("ibci_modules" in p for p in paths)
-
-    def test_no_config_no_sniff_flag_only_install(self, tmp_path):
-        """无 ibci.json + auto_sniff=False：仅 install（不嗅探）。"""
-        (tmp_path / "plugins").mkdir()
-        paths, install = self._resolve(str(tmp_path), auto_sniff=False)
-        assert paths == [install]
-
-    def test_explicit_plugin_paths_disables_sniff(self, tmp_path):
-        """ibci.json 配置 plugin_paths 后，嗅探不触发（explicit > implicit）。"""
-        (tmp_path / "plugins").mkdir()  # 嗅探本会命中它
-        ext = tmp_path / "explicit_only"
-        ext.mkdir()
-        (tmp_path / "ibci.json").write_text(
-            json.dumps({"plugin_paths": ["explicit_only"]}), encoding="utf-8"
-        )
-        paths, install = self._resolve(str(tmp_path))
-        assert any("explicit_only" in p for p in paths)
-        # 嗅探的 plugins/ 不应出现（被显式配置抑制）
-        assert not any(p.endswith("plugins") and "explicit_only" not in p for p in paths)
-
-    def test_global_plugin_precedence_over_plugin_paths(self, tmp_path):
-        """global_plugin 排在 plugin_paths 之前（更高优先级）。"""
-        gp = tmp_path / "glob"
-        gp.mkdir()
-        pp = tmp_path / "proj"
-        pp.mkdir()
-        (tmp_path / "ibci.json").write_text(
-            json.dumps({"global_plugin": ["glob"], "plugin_paths": ["proj"]}), encoding="utf-8"
-        )
-        paths, install = self._resolve(str(tmp_path))
-        gp_idx = next(i for i, p in enumerate(paths) if "glob" in p)
-        pp_idx = next(i for i, p in enumerate(paths) if p.endswith("proj"))
-        assert gp_idx < pp_idx  # global_plugin 在 plugin_paths 前
-
-    def test_install_highest_over_all(self, tmp_path):
-        """install 排在 global_plugin 与 plugin_paths 之前。"""
-        gp = tmp_path / "glob"
-        gp.mkdir()
-        pp = tmp_path / "proj"
-        pp.mkdir()
-        (tmp_path / "ibci.json").write_text(
-            json.dumps({"global_plugin": ["glob"], "plugin_paths": ["proj"]}), encoding="utf-8"
-        )
-        paths, install = self._resolve(str(tmp_path))
-        assert paths[0] == install
-
-    def test_dedup_preserves_order(self, tmp_path):
-        """重复路径去重，保序。"""
-        (tmp_path / "ibci.json").write_text(
-            json.dumps({"global_plugin": ["x"], "plugin_paths": ["x"]}), encoding="utf-8"
-        )
-        (tmp_path / "x").mkdir()
-        paths, install = self._resolve(str(tmp_path))
-        # "x" 只出现一次
-        x_count = sum(1 for p in paths if p.endswith("x"))
-        assert x_count == 1
-
-    def test_plugin_path_outside_project_root_allowed(self, tmp_path, tmp_path_factory):
-        """plugin_path 可在 project_root 之外（特权只读越界）——resolver 不拒绝。"""
-        import os
-        # 独立临时目录（project_root 之外）
-        external = tmp_path_factory.mktemp("external_plugins") / "ext"
-        external.mkdir()
-        (tmp_path / "ibci.json").write_text(
-            json.dumps({"plugin_paths": [str(external)]}), encoding="utf-8"
-        )
-        paths, install = self._resolve(str(tmp_path))
-        # 外部路径被纳入（特权越界读取；写入仍由 proj_root 沙箱约束——见 PermissionManager）
-        assert os.path.realpath(str(external)) in paths
-
-    def test_inherited_parent_plugins_appended(self, tmp_path):
-        """子引擎继承父 plugin search_paths（附加于自身之后，兜底来源）。"""
-        parent_extra = tmp_path / "parent_plugins"
-        parent_extra.mkdir()
-        child_root = tmp_path / "child_area"
-        child_root.mkdir()
-        # 子引擎直接接收 inherited_plugin_paths（模拟隔离透传）
-        child = IBCIEngine(root_dir=str(child_root), auto_sniff=False,
-                           inherited_plugin_paths=[str(parent_extra)])
-        resolved = child.resolve_plugin_search_paths(str(child_root))
-        # 父的 parent_extra 应出现在子的 search_paths（继承，兜底来源）
-        assert os.path.realpath(str(parent_extra)) in resolved
-
-    def test_inherited_global_plugin_keeps_priority(self, tmp_path):
-        """修复：继承的 global_plugin 保持在优先级 2（排在子自身 plugin_paths 之前）。
-
-        """
-        inh_gp = tmp_path / "inh_global"
-        inh_gp.mkdir()
-        own_pp = tmp_path / "own_pp"
-        own_pp.mkdir()
-        child_root = tmp_path / "child"
-        child_root.mkdir()
-        (child_root / "ibci.json").write_text(
-            json.dumps({"plugin_paths": [str(own_pp)]}), encoding="utf-8"
-        )
-        child = IBCIEngine(root_dir=str(child_root), auto_sniff=False,
-                           inherited_global_plugin=[str(inh_gp)])
-        resolved = child.resolve_plugin_search_paths(str(child_root))
-        inh_idx = next(i for i, p in enumerate(resolved) if "inh_global" in p)
-        own_idx = next(i for i, p in enumerate(resolved) if "own_pp" in p)
-        assert inh_idx < own_idx, "继承的 global_plugin 必须排在子自身 plugin_paths 之前"
-
-
-# ibci.json 测试需要 json
-import json  # noqa: E402
-
-
 class TestPluginLoadingPathHygiene:
-    """插件加载不得污染进程级 sys.path（用后即还）。"""
+    """引擎初始化/隔离 spawn 不得污染进程级 sys.path（用后即还）。"""
 
     def test_sys_path_unchanged_after_engine_run(self, tmp_path):
         """引擎初始化 + 插件加载后，sys.path 应与启动前一致（无残留插入）。"""
         import sys
         before = list(sys.path)
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(tmp_path))
         eng.run_string('str x = "ok"\n', silent=True)
         assert sys.path == before, (
             f"sys.path polluted by engine init: "
@@ -338,7 +209,7 @@ class TestPluginLoadingPathHygiene:
         child = tmp_path / "child.ibci"
         child.write_text('str x = "ok"\n', encoding="utf-8")
         before = list(sys.path)
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(tmp_path))
         h = eng.request_spawn_isolated(str(child), {})
         eng.request_collect(h)
         assert sys.path == before, (
@@ -360,7 +231,7 @@ class TestEnginePathContextContract:
         """run(entry_file) 后，PathContext.entry_dir = 入口文件所在目录。"""
         entry = tmp_path / "main.ibci"
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(tmp_path))
         eng.run(str(entry), silent=True)
         import os
         expected_entry_dir = PathValidator.canonicalize_for_security(str(tmp_path)).to_native()
@@ -404,6 +275,6 @@ class TestEnginePathContextContract:
         """无论 run 还是 run_string，PathContext.project_root 始终 = engine.root_dir。"""
         entry = tmp_path / "main.ibci"
         entry.write_text('str x = "hi"\nprint(x)\n', encoding="utf-8")
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(tmp_path))
         eng.run(str(entry), silent=True)
         assert eng.test_snapshot().project_root == eng.root_dir

@@ -28,4 +28,4 @@ dev = ["pytest>=7"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "ibci_modules*", "ibci_sdk*"]
+include = ["core*", "ibci_modules*"]

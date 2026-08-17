@@ -24,7 +24,7 @@ def _write(tmp_path, name, content):
 
 
 def _run(tmp_path, main_name="main.ibci"):
-    engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+    engine = IBCIEngine(root_dir=str(tmp_path))
     lines = []
     engine.run(
         str(tmp_path / main_name),
@@ -59,7 +59,7 @@ class TestIbcFileNamedImport:
     def test_named_import_missing_symbol(self, tmp_path):
         _write(tmp_path, "helper.ibci", "int answer = 42\n")
         _write(tmp_path, "main.ibci", "from helper import missing\n")
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.compile(str(tmp_path / "main.ibci"), silent=True)
             raise AssertionError("导入不存在的符号应编译失败")
@@ -122,7 +122,7 @@ class TestIbcFileMultiModule:
         )
         main = str(tmp_path / "main.ibci")
         _write(tmp_path, "main.ibci", "from helper import *\n")
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         artifact = engine.compile(main, silent=True)
         from core.compiler.serialization.serializer import FlatSerializer
         d = FlatSerializer().serialize_artifact(artifact)
@@ -183,7 +183,7 @@ class TestIbcFileWholeImport:
             "main_whole.ibci",
             "import helper\nint x = helper.greet()\n",
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.compile(str(tmp_path / "main_whole.ibci"), silent=True)
             raise AssertionError("整模块导入的零参数函数类型错应编译期报错")
@@ -197,7 +197,7 @@ class TestIbcFileWholeImport:
             "main_named.ibci",
             "from helper import greet\nint x = greet()\n",
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.compile(str(tmp_path / "main_named.ibci"), silent=True)
             raise AssertionError("命名导入的零参数函数类型错应编译期报错")
@@ -379,7 +379,7 @@ class TestCrossModuleSameNameClass:
 
     def test_same_name_class_spec_isolated(self, tmp_path):
         """编译期注册表：geo.Box 与 graph.Box 是独立 spec（module 区分）。"""
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         _write(
             tmp_path,
             "geo.ibci",
@@ -429,7 +429,7 @@ class TestCrossModuleSameNameClass:
             "import geo\n"
             "import graph\n",
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         engine.run(str(tmp_path / "main.ibci"), silent=True)
         geo_box = engine.registry.get_class("geo.Box")
         graph_box = engine.registry.get_class("graph.Box")
@@ -525,7 +525,7 @@ class TestCrossModuleSameNameClass:
             "geo.MyList[int] a = geo.MyList[int]([1,2])\n"
             "print(a.size())\n",
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.run(str(tmp_path / "main.ibci"), silent=True)
         except Exception:
@@ -573,14 +573,14 @@ class TestCrossModuleSameNameClass:
             "geo.Box[int] a = geo.Box[int](5)\n"
             "graph.Box[int] b = graph.Box[int](\"hi\")\n",
         )
-        engine_a = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_a = IBCIEngine(root_dir=str(tmp_path))
         engine_a.run(str(tmp_path / "main.ibci"), silent=True)
         ec = engine_a.interpreter.execution_context
         data = RuntimeSerializer(engine_a.registry).serialize_context(
             ec.runtime_context, include_static=True, execution_context=ec
         )
 
-        engine_b = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_b = IBCIEngine(root_dir=str(tmp_path))
         engine_b.run(str(tmp_path / "main.ibci"), silent=True)
         deser = RuntimeDeserializer(engine_b.registry, factory=engine_b.object_factory)
         restored = deser.deserialize_context(data)
@@ -626,14 +626,14 @@ class TestCrossModuleSameNameClass:
             "geo.Box[int] a = geo.Box[int](5)\n"
             "graph.Box[int] b = graph.Box[int](\"hi\")\n",
         )
-        engine_a = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_a = IBCIEngine(root_dir=str(tmp_path))
         engine_a.run(str(tmp_path / "main.ibci"), silent=True)
         ec = engine_a.interpreter.execution_context
         data = RuntimeSerializer(engine_a.registry).serialize_context(
             ec.runtime_context, include_static=True, execution_context=ec
         )
 
-        engine_b = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine_b = IBCIEngine(root_dir=str(tmp_path))
         engine_b.run(str(tmp_path / "main.ibci"), silent=True)
         deser = RuntimeDeserializer(engine_b.registry, factory=engine_b.object_factory)
         deser.deserialize_context(data)
@@ -742,7 +742,7 @@ class TestCrossModuleSameNameClass:
             "geo.Counter c = @~ 给一个数字 ~\n"
             "print(c)\n",
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         artifact = engine.compile(str(tmp_path / "main.ibci"))
         main_mod = artifact.modules.get("main")
         assert main_mod is not None
@@ -797,7 +797,7 @@ class TestCrossModuleSameNameClass:
             "import geo\n"
             "geo.Point p = @~ 给我一个点 ~\n",
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.compile(str(tmp_path / "main.ibci"))
         except Exception as exc:

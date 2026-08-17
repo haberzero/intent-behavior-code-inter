@@ -221,7 +221,7 @@ print(result)
     def test_use_with_non_intent_context_fails_fast(self):
         """intent_context.use(非法对象) 必须可读报错。"""
         code = "intent_context.use(42)\n"
-        engine = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
         try:
             engine.run_string(code, silent=True)
             raise AssertionError("intent_context.use(42) 应抛运行时错误")
@@ -237,7 +237,7 @@ class Box:
 Box b = Box(1)
 intent_context.use(b)
 """
-        engine = IBCIEngine(root_dir=TESTS_ROOT, auto_sniff=False)
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
         try:
             engine.run_string(code, silent=True)
             raise AssertionError("intent_context.use(Box) 应抛运行时错误")

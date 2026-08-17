@@ -155,7 +155,7 @@ class TestFunctionSignatureFidelity:
         import tempfile
 
         root = tempfile.mkdtemp()
-        engine = IBCIEngine(root_dir=root, auto_sniff=False)
+        engine = IBCIEngine(root_dir=root)
         engine.compile_string(
             "func make() -> fn[(int, str) -> int]:\n"
             "    return lambda(int x, str s) -> int: x + 5\n",
@@ -612,7 +612,7 @@ class TestCallableSigSignature:
         import tempfile
 
         root = tempfile.mkdtemp()
-        engine = IBCIEngine(root_dir=root, auto_sniff=False)
+        engine = IBCIEngine(root_dir=root)
         artifact = engine.compile_string(
             "func apply(fn[(list[int]) -> int] f, list[int] xs) -> int:\n"
             "    return f(xs)\n",

@@ -28,7 +28,7 @@ from core.kernel.issue import CompilerError
 
 @pytest.fixture
 def engine():
-    return IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)), auto_sniff=False)
+    return IBCIEngine(root_dir=os.path.dirname(os.path.abspath(__file__)))
 
 
 # ---------------------------------------------------------------------------

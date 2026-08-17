@@ -47,7 +47,7 @@ class TestIHostNative:
         monkeypatch.chdir(other_dir)
 
         parent_out = []
-        eng = IBCIEngine(root_dir=str(parent_dir), auto_sniff=False)
+        eng = IBCIEngine(root_dir=str(parent_dir))
         eng.run(str(parent_path), output_callback=lambda s: parent_out.append(str(s)), silent=True)
         captured = capsys.readouterr()
         assert "child_ran" in captured.out

@@ -26,7 +26,7 @@ def _write(tmp_path, name, content):
 
 
 def _run(tmp_path, main_name="main.ibci"):
-    engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+    engine = IBCIEngine(root_dir=str(tmp_path))
     lines = []
     engine.run(
         str(tmp_path / main_name),
@@ -168,7 +168,7 @@ func test() -> auto:
 test()
 """,
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             lines = []
             engine.run(
@@ -195,7 +195,7 @@ func test() -> auto:
 test()
 """,
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             lines = []
             engine.run(
@@ -227,7 +227,7 @@ func test() -> auto:
 test()
 """,
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.compile(str(tmp_path / "main.ibci"), silent=True)
             raise AssertionError("Expected compilation to fail, but succeeded")
@@ -255,7 +255,7 @@ func test() -> auto:
 test()
 """,
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.compile(str(tmp_path / "main.ibci"), silent=True)
             raise AssertionError("Expected compilation to fail, but succeeded")
@@ -282,7 +282,7 @@ import python "math" as m:
     bind sqrt(y: float) -> float
 """,
         )
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             engine.compile(str(tmp_path / "main.ibci"), silent=True)
             raise AssertionError("Expected compilation to fail, but succeeded")
@@ -462,7 +462,7 @@ class TestHostClassBindingFailFast:
 
     def _run_expect_fail(self, tmp_path, content, needle):
         _write(tmp_path, "main.ibci", content)
-        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        engine = IBCIEngine(root_dir=str(tmp_path))
         try:
             lines = []
             engine.run(

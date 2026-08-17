@@ -107,42 +107,6 @@ class ProjectDetector:
         return None
 
     @classmethod
-    def get_plugin_paths(cls, project_root: str) -> list:
-        """
-        获取项目中的插件搜索路径
-
-        参数:
-            project_root: 项目根目录
-
-        返回:
-            list: 插件搜索路径列表
-        """
-        if not project_root:
-            return []
-
-        root = IbPath.from_native(os.path.abspath(project_root))
-        plugin_paths = []
-
-        # 主插件目录
-        main_plugins = (root / "plugins").to_native()
-        if os.path.isdir(main_plugins):
-            plugin_paths.append(main_plugins)
-
-        # IBCI 模块目录
-        ibci_modules = (root / "ibci_modules").to_native()
-        if os.path.isdir(ibci_modules):
-            plugin_paths.append(ibci_modules)
-
-        # .ibci 目录下的插件
-        dot_ibci = (root / ".ibci").to_native()
-        if os.path.isdir(dot_ibci):
-            dot_plugins = (root / ".ibci" / "plugins").to_native()
-            if os.path.isdir(dot_plugins):
-                plugin_paths.append(dot_plugins)
-
-        return plugin_paths
-
-    @classmethod
     def describe_detection(cls, entry_file: str) -> str:
         """
         描述项目检测结果的详细信息

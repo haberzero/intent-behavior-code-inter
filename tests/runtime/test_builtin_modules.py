@@ -7,14 +7,13 @@ tests/runtime/test_builtin_modules.py
 内核原生 5：ai/ihost/idbg/isys/iruntime（F3 前即 kernel-native）。
 工具 5：math/json/time/net/schema（F3-1 起内联 spec 构造期预注册，USER_DEFINED）。
 """
-import json
 import os
 import pytest
 
 from core.engine import IBCIEngine
 from core.base.enums import Provenance, Visibility
 from core.kernel.host_interface import HostInterface
-from core.kernel.spec import MethodMemberSpec, TypeRef
+from core.kernel.spec import MethodMemberSpec, TypeRef, TypeDef, TypeKind
 from core.runtime.bootstrap.builtin_modules import (
     KERNEL_NATIVE_MODULES,
     BUILTIN_MODULES,
@@ -28,7 +27,7 @@ class TestBuiltinRegistration:
 
     def test_modules_pre_registered_at_init(self):
         """Engine 构造后，内核原生 5 模块已实现+元数据就绪。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         for name in KERNEL_NATIVE_MODULES:
             impl = eng.host_interface.get_module_implementation(name)
             assert impl is not None, f"{name} should be pre-registered"
@@ -40,7 +39,7 @@ class TestBuiltinRegistration:
 
     def test_tool_modules_pre_registered_at_init(self):
         """F3-1：工具 5 模块构造期预注册（USER_DEFINED + IMPORT_GATED + 实现就绪）。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         for name in ("math", "json", "time", "net", "schema"):
             impl = eng.host_interface.get_module_implementation(name)
             assert impl is not None, f"{name} should be pre-registered"
@@ -52,7 +51,7 @@ class TestBuiltinRegistration:
 
     def test_file_pre_registered_kernel_native(self):
         """F3-1：file 自 engine.py 挪入集中注册（KERNEL_NATIVE + exported_types 保留）。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         impl = eng.host_interface.get_module_implementation("file")
         assert impl is not None
         assert eng.host_interface.is_kernel_native("file")
@@ -63,7 +62,7 @@ class TestBuiltinRegistration:
 
     def test_is_kernel_native_query(self):
         """`is_kernel_native` 正确识别 kernel-native 模块。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         for name in KERNEL_NATIVE_MODULES:
             assert eng.host_interface.is_kernel_native(name)
         assert not eng.host_interface.is_kernel_native("math")
@@ -79,7 +78,7 @@ class TestBuiltinRegistration:
 
     def test_builtin_spec_contract_details(self):
         """F3-1 结构等价关键点（生成探针一次性验证，此处固化为契约测试防回归）。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
 
         # ai.set_mock_mode：enable 具名默认 True
         ai = eng.host_interface.metadata.resolve("ai")
@@ -113,56 +112,31 @@ class TestBuiltinRegistration:
 
 
 class TestKernelNativeOverrideProtection:
-    """用户插件不可覆盖 kernel-native 模块。"""
+    """KERNEL_NATIVE 模块名不可被覆盖（HostInterface 层守卫）。
 
-    @staticmethod
-    def _write_fake_isys_plugin(dest_dir: str) -> None:
-        os.makedirs(dest_dir, exist_ok=True)
-        spec_path = os.path.join(dest_dir, "_spec.py")
-        with open(spec_path, "w", encoding="utf-8") as f:
-            f.write(
-                "def __ibcext_metadata__():\n"
-                '    return {"name": "isys", "kind": "method_module", "version": "1.0.0"}\n\n'
-                "def __ibcext_vtable__():\n"
-                '    return {"functions": {"entry_path": {"param_types": [], "return_type": "str"}}}\n'
+    F3：用户插件磁盘发现已删，覆盖保护全在 HostInterface.register_module
+    对 KERNEL_NATIVE provenance 元数据的守卫（注册即 auto-reserve）；
+    用户侧扩展走宿主绑定 bind，不会产生同名内核模块名。
+    """
+
+    def test_registering_plain_module_over_kernel_native_is_rejected(self):
+        """在已注册 isys（KERNEL_NATIVE）的 host 上注册同名 USER_DEFINED 模块被忽略并警告。"""
+        import warnings
+        eng = IBCIEngine(root_dir=REPO_ROOT)
+        fake_spec = TypeDef(
+            name="isys", kind=TypeKind.MODULE.value,
+            provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED,
+        )
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            eng.host_interface.register_module(
+                "isys", object(), metadata=fake_spec, discovery_name="fake_isys"
             )
-        core_path = os.path.join(dest_dir, "core.py")
-        with open(core_path, "w", encoding="utf-8") as f:
-            f.write(
-                "class FakeISys:\n"
-                '    def entry_path(self):\n'
-                '        return "/fake_override"\n\n'
-                "def create_implementation():\n"
-                "    return FakeISys()\n"
-            )
-        init_path = os.path.join(dest_dir, "__init__.py")
-        with open(init_path, "w", encoding="utf-8") as f:
-            f.write("from .core import create_implementation\n")
-
-    def test_user_plugin_cannot_override_kernel_native(self, tmp_path):
-        """逻辑名同为 isys 的用户插件不应覆盖 kernel-native 实现，并发出 warning。"""
-        fake_dir = tmp_path / "fake_isys"
-        self._write_fake_isys_plugin(str(fake_dir))
-
-        (tmp_path / "ibci.json").write_text(
-            json.dumps({"plugin_paths": [str(tmp_path)]}),
-            encoding="utf-8",
-        )
-        (tmp_path / "main.ibci").write_text(
-            "import isys\n"
-            "print(isys.entry_path())\n",
-            encoding="utf-8",
-        )
-
-        out = []
-        eng = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
-        with pytest.warns(UserWarning, match="reserved for kernel-native module"):
-            eng.run(str(tmp_path / "main.ibci"), output_callback=lambda s: out.append(str(s)), silent=True)
-
-        # kernel-native isys.entry_path() 返回真实入口路径，不应被 /fake_override 覆盖
-        assert not any("/fake_override" in line for line in out), (
-            f"kernel-native isys was overridden: {out}"
-        )
+        assert any(
+            "reserved for kernel-native module" in str(x.message) for x in w
+        ), [str(x.message) for x in w]
+        # 真实 isys 实现保持
+        assert eng.host_interface.is_kernel_native("isys")
 
 
 class TestKernelNativeImportGating:
@@ -171,7 +145,7 @@ class TestKernelNativeImportGating:
     def test_ai_remains_import_gated(self):
         """未 import ai 而直接使用 ai.set_config 应编译/运行失败。"""
         with pytest.raises(Exception) as exc_info:
-            IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False).run_string(
+            IBCIEngine(root_dir=REPO_ROOT).run_string(
                 'ai.set_config("X", "Y", "Z")\n',
                 silent=True,
             )
@@ -187,7 +161,7 @@ class TestImportStarContract:
 
     def test_import_star_binds_with_uid(self):
         """import * 注入的成员带编译器 uid，使用点可解析（修复 RUN_UNDEFINED_VARIABLE）。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         out = []
         eng.run_string(
             'from idbg import *\ndict d = vars()\nprint((str)d)\n',
@@ -199,7 +173,7 @@ class TestImportStarContract:
 
     def test_import_star_does_not_leak_protocol_methods(self):
         """import * 只导出 spec 成员，不泄漏 setup/expose/plugin_id 等协议方法。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         eng.run_string('from idbg import *\n', silent=True)
         rt = eng.interpreter.runtime_context
         sym_names = set(rt.get_vars().keys())
@@ -208,7 +182,7 @@ class TestImportStarContract:
 
     def test_import_star_spec_members_present(self):
         """spec 声明的成员经 import * 全部注入。"""
-        eng = IBCIEngine(root_dir=REPO_ROOT, auto_sniff=False)
+        eng = IBCIEngine(root_dir=REPO_ROOT)
         eng.run_string('from idbg import *\n', silent=True)
         rt = eng.interpreter.runtime_context
         sym_names = set(rt.get_vars().keys())

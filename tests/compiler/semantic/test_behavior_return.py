@@ -63,7 +63,7 @@ class TestBooleanLiteralGuidance:
         from core.kernel.issue import CompilerError
         from tests.conftest import _default_root
 
-        engine = IBCIEngine(root_dir=_default_root(), auto_sniff=False)
+        engine = IBCIEngine(root_dir=_default_root())
         try:
             engine.compile_string(code, silent=True)
             return []

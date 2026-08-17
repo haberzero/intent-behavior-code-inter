@@ -340,10 +340,6 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="策略：用户插件覆盖了 kernel-native 模块。",
         fix="若覆盖为有意为之可忽略；否则移除插件避免覆盖。",
     ),
-    "KDIAG_POLICY_MODULE_NO_EXPORT": CodeInfo(
-        title="策略：模块没有可导出的成员（导出表为空）。",
-        fix="确认模块确实需要导出内容；否则属正常策略信息。",
-    ),
     "KDIAG_RUNTIME_COLLECT_SKIP": CodeInfo(
         title="运行时降级：collect 目标被跳过。",
         fix="检查 collect 目标的可收集性；降级为尽力而为。",

@@ -3,12 +3,10 @@ IBC-Inter Extension SDK
 
 推荐导入方式：
     from core.extension import ibcext
-    from core.extension import SpecBuilder
 
-或直接导入：
+直接导入：
     from core.extension.ibcext import IbPlugin
     from core.base.llm_protocol import LLMProvider
-    from core.extension.spec_builder import SpecBuilder
 """
 
 from core.extension.ibcext import (
@@ -22,12 +20,6 @@ from core.extension.capabilities import (
     ExtensionCapabilities,
 )
 from core.kernel.issue import InterpreterError
-from core.extension.spec_builder import SpecBuilder, ClassSpecBuilder
-from core.extension.auto_discovery import (
-    AutoDiscoveryService,
-    PluginSpec,
-    create_auto_discovery_service,
-)
 
 __all__ = [
     "IbPlugin",
@@ -36,9 +28,4 @@ __all__ = [
     "CompilerError",
     "ExtensionCapabilities",
     "PluginCapabilities",
-    "SpecBuilder",
-    "ClassSpecBuilder",
-    "AutoDiscoveryService",
-    "PluginSpec",
-    "create_auto_discovery_service",
 ]
