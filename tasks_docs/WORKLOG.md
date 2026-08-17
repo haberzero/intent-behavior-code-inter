@@ -169,6 +169,12 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   细则"零风险直接合并 unsafe-vibe-dev"标准（全量 pytest 零回归 + F3-1 结构探针 +
   F3-2/F3-3 独立 subagent 复核 + F3-4 残留扫描，无对外契约/架构级风险）——仍禁
   push，合并须用户授权。
+- **F3 低风险直接合并 unsafe-vibe-dev 完成（2026-08-18，用户授权）**：用户确认低风险后
+  授权直接合并。`unsafe-vibe-dev` 与 `exp/plugin-refactor-f3` 分叉点为 3ce67993，二者
+  无分歧 → 纯 fast-forward 合并（3ce67993..3261200e，115 文件 +1529/-4278），两分支同
+  指向 3261200e。合并后全量 pytest 2946 passed / 1 skipped 零回归。F3 插件体系重构即
+  此合入主开发分支（未 push；禁 push 硬原则不解除。合并是用户授权的单次动作，不改变
+  "合并/推送皆须用户授权"原则——用户本次仅授权 F3 低风险合并，未授权后续自动合并或 push）。
 
 
 ---
