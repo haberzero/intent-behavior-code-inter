@@ -33,8 +33,8 @@ class TestDispatchCallObservability:
             '    str BLUE = "BLUE"\n'
             'Color c = @~ MOCK:STR:BLUE ~\n'
             'dict info = ai.get_current_call_info()\n'
-            'print("sys_prompt" in info)\n'
-            'print(len(info["sys_prompt"]) > 0)\n',
+            'print("user_prompt" in info)\n'
+            'print("MOCK:STR:BLUE" in (str)info["user_prompt"])\n',
             ai=True,
         )
         assert out == ["True", "True"]

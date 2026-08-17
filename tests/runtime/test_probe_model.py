@@ -88,6 +88,18 @@ def _plugin_mock():
     return plugin
 
 
+def _mcreq(sys_prompt="sys", user_prompt="user", *, expected_type=None):
+    """把 scalar (sys, user) 转为一次 ``LLMCallRequest``（provider.call 消费）。"""
+    from core.base.llm_protocol import LLMCallRequest, OutputContract
+    from core.base.llm_protocol.llm_call import PromptSlot
+    return LLMCallRequest(
+        node_uid="",
+        user_prompt=user_prompt,
+        prompt_slots=[PromptSlot(kind="user_sys", text=sys_prompt)] if sys_prompt else [],
+        output_contract=OutputContract(expected_type=expected_type),
+    )
+
+
 REASONING_LONG = (
     "this is a deliberately verbose response containing many more than ten words "
     "that plainly ignores the one word instruction and rambles on at length yes indeed"
@@ -184,7 +196,7 @@ class TestConsumerDecision:
 
         plugin = _plugin_with_fake(responder=responder)
         plugin.probe_model()
-        plugin("sys", "user")
+        plugin.call(_mcreq("sys", "user"))
         assert len(sys_prompts) == 2
         assert "ANSWER:" in sys_prompts[1]
 
@@ -197,7 +209,7 @@ class TestConsumerDecision:
 
         plugin = _plugin_with_fake(responder=responder)
         plugin.probe_model()
-        plugin("sys", "user")
+        plugin.call(_mcreq("sys", "user"))
         assert len(sys_prompts) == 2
         assert "ANSWER:" not in sys_prompts[1]
 
@@ -210,25 +222,25 @@ class TestConsumerDecision:
 
         plugin = _plugin_with_fake(responder=responder)
         # 未 probe 直接调用：不触发懒探测，保守回退为推理策略 → 注入 ANSWER:
-        plugin("sys", "user")
+        plugin.call(_mcreq("sys", "user"))
         assert "ANSWER:" in sys_prompts[0]
 
     def test_unprobed_emits_warning_once(self, capsys):
         plugin = _plugin_with_fake(responder=lambda *a, **k: _completion(content="ANSWER: hi"))
-        plugin("sys", "user")
-        plugin("sys", "user")
+        plugin.call(_mcreq("sys", "user"))
+        plugin.call(_mcreq("sys", "user"))
         captured = capsys.readouterr()
         # 未探测告警仅首次触发一次（去重，避免热路径刷屏）
         assert captured.out.count("未调用 ai.probe_model()") == 1
 
     def test_warning_resets_after_set_config(self, capsys):
         plugin = _plugin_with_fake(responder=lambda *a, **k: _completion(content="ANSWER: hi"))
-        plugin("sys", "user")
+        plugin.call(_mcreq("sys", "user"))
         capsys.readouterr()  # 清空第一个告警窗口
         # 切换模型触发 set_config → 重置探测状态与告警去重 → 再次告警
         plugin.set_config("https://llm.invalid/v2", "sk-fake-2", "fake-model-2")
         plugin._client = FakeClient(lambda *a, **k: _completion(content="ANSWER: hi"))
-        plugin("sys", "user")
+        plugin.call(_mcreq("sys", "user"))
         captured = capsys.readouterr()
         assert captured.out.count("未调用 ai.probe_model()") == 1
 
@@ -244,9 +256,9 @@ class TestCapabilitiesReadOnly:
         plugin.probe_model()
         before = dict(plugin._model_capabilities)
 
-        plugin("sys one", "user one")
-        plugin("sys two", "user two")
-        plugin("sys three", "user three")
+        plugin.call(_mcreq("sys one", "user one"))
+        plugin.call(_mcreq("sys two", "user two"))
+        plugin.call(_mcreq("sys three", "user three"))
 
         assert plugin._model_capabilities == before
 

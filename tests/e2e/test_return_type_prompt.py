@@ -4,9 +4,8 @@ tests/e2e/test_return_type_prompt.py
 
 命名 LLM 函数的返回类型提示注入验证。
 
-LLM 函数执行前，执行器经 ``ILLMProvider.get_return_type_prompt``（协议声明
-能力，直接调用）读取该类型的提示词并注入系统提示词；注入结果经
-``ai.get_current_call_info()["sys_prompt"]`` 可观测。
+provider 依据请求输出契约中的期望类型，把自身注册的返回类型提示注入最终
+系统提示词；注入结果经 ``ai.get_current_call_info()["sys_prompt"]`` 可观测。
 """
 
 from tests.conftest import run_ibci

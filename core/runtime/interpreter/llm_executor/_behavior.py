@@ -13,8 +13,8 @@ sync/CPS 无双写。
 ``_get_expected_type_hint`` / ``_parse_result``。
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union, Mapping
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Mapping
 
 from core.runtime.interfaces import IExecutionContext
 
@@ -27,9 +27,15 @@ from core.runtime.shared.llm_result import (
 )
 
 from core.runtime.interpreter.llm_executor._prompt_assembly import (
-    build_behavior_system_prompt,
     build_retry_message_history_from_attempts,
 )
+
+from core.base.llm_protocol import (
+    LLMCallRequest,
+    OutputContract,
+    IntentBlock,
+)
+from core.base.llm_protocol.llm_call import ContentValue
 
 from core.runtime.objects.kernel import IbObject, IbValue
 from core.runtime.objects.intent_context import IbIntentContext
@@ -44,19 +50,14 @@ from core.runtime.exceptions import ThrownException
 class BehaviorCallSpec:
     """行为调用预求值结果（主线程完成，worker 仅执行 LLM 调用 + 解析）。
 
-    拆分的边界：主线程预求值 prompt 段（``_evaluate_segments_cps`` /
-    意图消解 / output hint / retry_hint），把与执行线程无关的输入快照进本对象；
-    worker 线程只读本对象执行 ``_call_llm`` + 解析，不访问 live context。
+    拆分的边界：主线程预求值 behavior 语义（段 ``_evaluate_segments_cps`` /
+    意图消解 / output hint / retry_hint），装配为一次结构化
+    :class:`LLMCallRequest`；worker 线程只读本对象执行 ``_call_llm`` + 解析，
+    不访问 live context。
     """
 
-    sys_prompt: str
-    user_prompt: Union[str, List[Union[str, Dict[str, Any]]]]
+    request: LLMCallRequest
     type_hint: Optional[str]
-    target_model: str
-    message_history: Optional[List[Dict[str, Any]]] = None
-    active_intents: List[Any] = field(default_factory=list)
-    global_intents: List[Any] = field(default_factory=list)
-    merged_intents: List[Any] = field(default_factory=list)
 
 
 class _RunBatchDrive:
@@ -125,31 +126,44 @@ class _RunBatchDrive:
 
 
 class _BehaviorMixin:
-    def _assemble_behavior_sys_prompt(
+    def _build_behavior_call_request(
         self,
         *,
+        node_uid: str,
+        user_prompt: ContentValue,
         llmoutput_hint: Optional[str],
         type_hint: Optional[str],
-        all_intents: List[Any],
-        suppress_type_constraint: bool = False,
-    ) -> str:
-        """把 behavior 提示词组件组装为完整 system prompt（sync/CPS 共用）。
+        active_intents: List[Any],
+        global_intents: List[Any],
+        merged_intents: List[Any],
+        target_model: str,
+        message_history: Optional[List[Dict[str, Any]]],
+        suppress_type_constraint: bool,
+    ) -> LLMCallRequest:
+        """把 behavior 语义装配为一次结构化 :class:`LLMCallRequest`（sync/CPS 共用）。
 
-        单一权威组装在 :func:`build_behavior_system_prompt`；本方法只负责
-        从 provider 提取显式类型提示，不再各自拼接字符串。
+        内核只收集**结构化物**（意图栈原始三层 / 输出契约原始值 / user 内容），
+        **不**拼装系统提示词字符串——提示词形态由 provider（推荐模板）决定，
+        可自定义 provider 改写"面对某左值/类型的默认行为"。
 
-        ``suppress_type_constraint``：存在排他意图（``@!``）时，用户已显式
-        指定输出形态，系统不再注入类型级输出格式/期望类型约束，避免与用户
-        指令冲突（如 bool 输出格式要求与用户要求的 YES/NO 相互打架）。
+        ``suppress_type_constraint``：存在排他意图（``@!``）时，用户已显式指定
+        输出形态，不注入类型级输出格式/期望类型约束，避免与用户指令冲突。
         """
-        provider_type_prompt = None
-        if not suppress_type_constraint and type_hint and self.llm_callback:
-            provider_type_prompt = self.llm_callback.get_return_type_prompt(type_hint)
-        return build_behavior_system_prompt(
-            output_hint=None if suppress_type_constraint else llmoutput_hint,
-            type_hint=None if suppress_type_constraint else type_hint,
-            provider_type_prompt=provider_type_prompt,
-            intents=all_intents,
+        return LLMCallRequest(
+            node_uid=node_uid,
+            user_prompt=user_prompt,
+            intents=IntentBlock(
+                active=[str(x) for x in active_intents],
+                global_=[str(x) for x in global_intents],
+                merged=[str(x) for x in merged_intents],
+            ),
+            output_contract=OutputContract(
+                expected_type=None if suppress_type_constraint else type_hint,
+                output_hint=None if suppress_type_constraint else llmoutput_hint,
+                suppress_type_constraint=suppress_type_constraint,
+            ),
+            target_model=target_model,
+            message_history=message_history,
         )
 
     def _build_retry_message_history(self, frame: Optional[Any]) -> Optional[List[Dict[str, Any]]]:
@@ -210,8 +224,10 @@ class _BehaviorMixin:
         content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
 
         context = execution_context.runtime_context
-        active_list: List[Any] = []
-        global_intents: List[Any] = []
+        # 原始意图各层 content（未拼串）；merged 为进入本次调用的合并消解提示列表
+        active_contents: List[str] = []
+        global_contents: List[str] = []
+        all_intents: List[str] = []
         has_override = False
         if captured_intents is not None:
             if not isinstance(captured_intents, IbIntentContext):
@@ -222,34 +238,37 @@ class _BehaviorMixin:
             active_list = captured_intents.get_active_intents()
             global_intents = captured_intents.get_global_intents()
             has_override = captured_intents.has_override()
-            # 快照解析必须含 override/smear（@! / @ 一次性意图）：与同步版同因。
             all_intents = yield from captured_intents.resolve_to_prompts_cps(context, execution_context)
         else:
             has_override = context.intent_context.has_override()
             all_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
             global_intents = context.get_global_intents()
             active_list = context.get_active_intents()
+        active_contents = [i.content if hasattr(i, "content") else str(i) for i in active_list]
+        global_contents = [i.content if hasattr(i, "content") else str(i) for i in global_intents]
+        merged_contents = [str(i) for i in all_intents]
 
         llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
         frame = context.get_current_llm_except_frame()
-        sys_prompt = self._assemble_behavior_sys_prompt(
-            llmoutput_hint=llmoutput_hint,
-            type_hint=type_hint,
-            all_intents=all_intents,
-            suppress_type_constraint=has_override,
-        )
         message_history = self._build_retry_message_history(frame)
 
-        return BehaviorCallSpec(
-            sys_prompt=sys_prompt,
+        request = self._build_behavior_call_request(
+            node_uid=node_uid,
             user_prompt=content,
+            llmoutput_hint=llmoutput_hint,
             type_hint=type_hint,
+            active_intents=active_contents,
+            global_intents=global_contents,
+            merged_intents=merged_contents,
             target_model=target_model,
             message_history=message_history,
-            active_intents=[i.content if hasattr(i, "content") else str(i) for i in active_list],
-            global_intents=[i.content if hasattr(i, "content") else str(i) for i in global_intents],
-            merged_intents=all_intents,
+            suppress_type_constraint=has_override,
+        )
+
+        return BehaviorCallSpec(
+            request=request,
+            type_hint=type_hint,
         )
 
     def _call_and_parse(
@@ -260,25 +279,17 @@ class _BehaviorMixin:
         只读 :class:`BehaviorCallSpec`，不写主线程单写槽（``_current_call_info``
         由调用方在 sync 尾部或 resolve 点记录）；不访问 live context。
         """
-        response = self._call_llm(
-            spec.sys_prompt,
-            spec.user_prompt,
-            node_uid,
-            target_model=spec.target_model,
-            message_history=spec.message_history,
-        )
+        req = spec.request
+        call_result = self._call_llm(req)
+        response = call_result.content
 
         def _call_info(resp: str) -> dict:
-            return {
-                "sys_prompt": spec.sys_prompt,
-                "user_prompt": spec.user_prompt,
-                "response": resp,
-                "raw_response": resp,
-                "active_intents": list(spec.active_intents),
-                "global_intents": list(spec.global_intents),
-                "merged_intents": list(spec.merged_intents),
-                "message_history": spec.message_history,
-            }
+            d = req.as_dict()
+            # provider 回填其实际组装/发送的信息（如最终 sys_prompt）
+            d.update(call_result.provider_meta or {})
+            d["response"] = resp
+            d["raw_response"] = call_result.raw_response if call_result.raw_response else resp
+            return d
 
         if response == MOCK_REPAIR_SENTINEL:
             return self._finalize_call(

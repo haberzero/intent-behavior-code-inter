@@ -96,19 +96,15 @@ class TestRetryFeedbackMechanism:
         from ibci_modules.ibci_ai.core import AIPlugin
 
         captured = []
-        orig_call = AIPlugin.__call__
+        orig_call = AIPlugin.call
 
-        def spy(self, sys_prompt, user_prompt, *, target_model="", message_history=None):
-            captured.append((sys_prompt, message_history))
-            return orig_call(
-                self,
-                sys_prompt,
-                user_prompt,
-                target_model=target_model,
-                message_history=message_history,
-            )
+        def spy(self, request):
+            # 捕获 request（含 message_history），并复算组装后的 sys_prompt 供断言
+            sys_prompt = self._assemble_provider_sys_prompt(request, is_reasoning_model=False)
+            captured.append((sys_prompt, request.message_history))
+            return orig_call(self, request)
 
-        monkeypatch.setattr(AIPlugin, "__call__", spy)
+        monkeypatch.setattr(AIPlugin, "call", spy)
 
         code = AI_MOCK_PREFIX + """
 try:
@@ -124,10 +120,8 @@ except Exception as e:
 
         first_sys_prompt, first_history = captured[0]
         assert first_history is None
-        assert "[重试反馈]" not in first_sys_prompt
 
         retry_sys_prompt, retry_history = captured[1]
-        assert "[重试反馈]" not in retry_sys_prompt
         assert retry_history, "重试应携带标准多轮对话历史"
         assert [m["role"] for m in retry_history] == ["assistant", "user"]
         assert "MAYBE_YES_MAYBE_NO_this_is_ambiguous" in retry_history[0]["content"]

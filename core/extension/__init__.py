@@ -7,7 +7,7 @@ IBC-Inter Extension SDK
 
 或直接导入：
     from core.extension.ibcext import IbPlugin
-    from core.base.interfaces import ILLMProvider
+    from core.base.llm_protocol import LLMProvider
     from core.extension.spec_builder import SpecBuilder
 """
 
@@ -22,7 +22,6 @@ from core.extension.capabilities import (
     ExtensionCapabilities,
 )
 from core.kernel.issue import InterpreterError
-from core.base.interfaces import ILLMProvider
 from core.extension.spec_builder import SpecBuilder, ClassSpecBuilder
 from core.extension.auto_discovery import (
     AutoDiscoveryService,
@@ -37,7 +36,6 @@ __all__ = [
     "CompilerError",
     "ExtensionCapabilities",
     "PluginCapabilities",
-    "ILLMProvider",
     "SpecBuilder",
     "ClassSpecBuilder",
     "AutoDiscoveryService",

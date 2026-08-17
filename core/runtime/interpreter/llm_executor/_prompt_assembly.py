@@ -1,151 +1,20 @@
-"""``_prompt_assembly`` — LLM 提示词组装单一权威源。
+"""``_prompt_assembly`` —— LLM 重试多轮对话消息结构（内核侧单一权威源）。
 
-行为表达式与命名 LLM 函数的 system prompt 追加规则、retry 多轮对话消息
-构造规则集中于此，供 ``_BehaviorMixin``（sync/CPS）与 ``_LLMFunctionMixin``
-（CPS）共用，避免同一段拼装逻辑在两条执行路径/两个调用形态中重复漂移。
+命名 LLM 函数 / 行为表达式的 **retry 多轮对话消息**（assistant/user 序列）
+构造规则集中于此，供 ``_BehaviorMixin`` 与 ``_LLMFunctionMixin`` 共用，避免
+同一段消息结构在两条执行路径/两个调用形态中重复漂移。
 
-本模块只做纯文本/消息结构组装，不访问 live context / provider / registry。
+**职责边界**（LLM 调用层插件化主线）：
+- 内核**不**负责把细节拼进单一系统提示词——系统提示词的形态由 provider
+  （推荐模板，见 ``core.base.llm_protocol.recommended``）组装；
+- 本模块只保留**重试多轮对话消息结构**（消息历史），这是 retry 语义的结构化
+  数据，由内核产给 provider 追加在首轮之后。
+本模块只做纯消息结构构造，不访问 live context / provider / registry。
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
+
 from typing import Any, Dict, Iterable, List, Optional
-
-# ---------------------------------------------------------------------------
-# 基础输出纪律（behavior 专用）
-#
-# 不向模型介绍 IBCI 是什么；只描述本次调用必须遵守的规则。
-# ---------------------------------------------------------------------------
-
-BEHAVIOR_SYSTEM_PROMPT = (
-    "只输出任务要求的结果数据本身。"
-    "禁止输出任何解释、问候、提问、拒绝、安全声明或其他与结果无关的文字。"
-)
-
-# ---------------------------------------------------------------------------
-# 段落标题（全系统统一）
-# ---------------------------------------------------------------------------
-
-OUTPUT_FORMAT_HEADING = "[输出格式要求]"
-INTENT_HEADING = "必须遵守以下要求："
-
-# 无真实输出契约的类型：不应把内部类型名作为"期望输出类型"注入给模型。
-_NO_CONTRACT_TYPE_BASES = frozenset({
-    "behavior",
-    "fn_callable",
-    "any",
-    "auto",
-    "fn",
-    "void",
-    "none",
-})
-
-
-@dataclass(frozen=True)
-class PromptPart:
-    """A single named section of a system prompt.
-
-    ``kind`` identifies the source of the part (e.g. ``discipline``,
-    ``type_constraint``, ``intent``) so that future protocol-driven prompt
-    contributors can add new kinds without changing the assembly core.
-    """
-
-    kind: str
-    text: str
-
-
-def assemble_prompt_parts(parts: Iterable[PromptPart]) -> str:
-    """Join non-empty prompt parts with the standard blank-line separator."""
-    return "\n\n".join(p.text for p in parts if p.text)
-
-
-def build_prompt_parts(
-    *,
-    behavior_discipline: bool = False,
-    output_hint: Optional[str] = None,
-    type_hint: Optional[str] = None,
-    provider_type_prompt: Optional[str] = None,
-    include_generic_type: bool = True,
-    intents: Optional[Iterable[str]] = None,
-) -> List[PromptPart]:
-    """Build the standard ordered prompt-part list.
-
-    This is the single authority for prompt section ordering.  Both behavior
-    and LLM-function paths can use it; behavior enables the discipline part,
-    while LLM functions use their own user-provided system prompt.
-    """
-    parts: List[PromptPart] = []
-    if behavior_discipline:
-        parts.append(PromptPart(kind="discipline", text=BEHAVIOR_SYSTEM_PROMPT))
-
-    type_constraint = build_type_constraint_section(
-        output_hint=output_hint,
-        type_hint=type_hint,
-        provider_type_prompt=provider_type_prompt,
-        include_generic_type=include_generic_type,
-    )
-    if type_constraint:
-        parts.append(PromptPart(kind="type_constraint", text=type_constraint))
-
-    intent_section = build_intent_section(intents)
-    if intent_section:
-        parts.append(PromptPart(kind="intent", text=intent_section))
-
-    return parts
-
-
-def _base_type_name(type_hint: str) -> str:
-    """取泛型声明的基名（``list[int]`` → ``list``）。"""
-    return type_hint.split("[", 1)[0].strip()
-
-
-def _display_type_name(type_hint: str) -> str:
-    """把内部模块前缀从提示词中剥离（``__string_exec__.Status`` → ``Status``）。
-
-    真实用户模块名（如 ``geo.Point``）保留，避免同名类误指。
-    """
-    prefix = "__string_exec__."
-    if type_hint.startswith(prefix):
-        return type_hint[len(prefix):]
-    return type_hint
-
-
-def _is_contract_type_hint(type_hint: str) -> bool:
-    """该 type_hint 是否代表一个有真实输出契约的期望类型。"""
-    return _base_type_name(type_hint) not in _NO_CONTRACT_TYPE_BASES
-
-
-def build_type_constraint_section(
-    *,
-    output_hint: Optional[str] = None,
-    type_hint: Optional[str] = None,
-    provider_type_prompt: Optional[str] = None,
-    include_generic_type: bool = True,
-) -> Optional[str]:
-    """构造"输出格式/期望类型"约束段落（按优先级取一个权威来源）。
-
-    优先级：provider 显式注册的类型提示 > 类型 ``__outputhint_prompt__`` >
-    通用类型声明。provider 提示是插件/用户可覆盖的显式契约，应优先于类型
-    内建默认；类型 hint 在无显式 provider 提示时生效；通用类型声明仅作
-    兜底。后两项按调用形态决定是否启用。
-    """
-    if provider_type_prompt:
-        return provider_type_prompt
-    if output_hint:
-        return f"{OUTPUT_FORMAT_HEADING}\n{output_hint}"
-    if (
-        include_generic_type
-        and type_hint
-        and _is_contract_type_hint(type_hint)
-    ):
-        return f"必须返回一个 {_display_type_name(type_hint)} 值。"
-    return None
-
-
-def build_intent_section(intents: Optional[Iterable[str]]) -> Optional[str]:
-    """构造意图注入段落（只描述必须遵守的要求，不介绍系统身份）。"""
-    if not intents:
-        return None
-    return INTENT_HEADING + "\n" + "\n".join(f"- {i}" for i in intents)
 
 
 def build_retry_user_message(
@@ -209,49 +78,3 @@ def build_retry_message_history_from_attempts(
             )
         )
     return messages or None
-
-
-def build_llm_function_extra_prompt(
-    *,
-    intents: Optional[Iterable[str]] = None,
-    type_constraint: Optional[str] = None,
-    retry_text: Optional[str] = None,
-) -> str:
-    """Build the extra text appended to an LLM function's user-provided __sys__.
-
-    This preserves the historical formatting of the LLM-function path while
-    moving the formatting knowledge into the single prompt-assembly module:
-    - intent section is appended with a single newline;
-    - type constraint and retry hint are appended with a blank line.
-    """
-    extra = ""
-    intent_section = build_intent_section(intents)
-    if intent_section:
-        extra += "\n" + intent_section
-    if type_constraint:
-        extra += "\n\n" + type_constraint
-    if retry_text:
-        extra += "\n\n[重试提示] 上一次执行失败，请参考以下提示进行重试：\n" + retry_text
-    return extra
-
-
-def build_behavior_system_prompt(
-    *,
-    output_hint: Optional[str] = None,
-    type_hint: Optional[str] = None,
-    provider_type_prompt: Optional[str] = None,
-    intents: Optional[Iterable[str]] = None,
-) -> str:
-    """组装 behavior 表达式的完整 system prompt（单一权威）。
-
-    顺序：输出纪律 → 输出格式/期望类型 → 意图要求。
-    """
-    parts = build_prompt_parts(
-        behavior_discipline=True,
-        output_hint=output_hint,
-        type_hint=type_hint,
-        provider_type_prompt=provider_type_prompt,
-        include_generic_type=True,
-        intents=intents,
-    )
-    return assemble_prompt_parts(parts)

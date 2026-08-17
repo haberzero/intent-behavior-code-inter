@@ -32,13 +32,14 @@ LLMScheduler 状态 (由 ``_SchedulerMixin`` 使用):
 import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
-from typing import Any, List, Optional, Dict, Union, Mapping
+from typing import Any, List, Optional, Dict, Mapping
 
 from core.runtime.interfaces import ServiceContext, Registry, InterOp, IExecutionContext
-from core.base.interfaces import ILLMProvider, IssueTracker
+from core.base.interfaces import IssueTracker
 from core.runtime.observability.events import emit_runtime_event
 from core.runtime.capability_registry import CapabilityRegistry
 
+from core.base.llm_protocol import LLMCallRequest, LLMCallResult, LLMProvider
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.llm_result import LLMFuture
 from core.runtime.objects.kernel import IbLLMCallResult
@@ -108,7 +109,7 @@ class LLMExecutorCore:
     @property
     def issue_tracker(self) -> IssueTracker: return self.service_context.issue_tracker
     @property
-    def llm_callback(self) -> Optional[ILLMProvider]:
+    def llm_callback(self) -> Optional[LLMProvider]:
         # 唯一来源：通过能力注册中心获取 Provider (能力名: llm_provider)
         # ibci_ai.setup() 在加载时调用 capabilities.expose(CAP_LLM_PROVIDER, self) 完成注册。
         if self.service_context.capability_registry:
@@ -208,63 +209,48 @@ class LLMExecutorCore:
             return result.value
         return self.registry.get_none()
 
-    def _call_llm(
-        self,
-        sys_prompt: str,
-        user_prompt: Union[str, List[Union[str, Dict[str, Any]]]],
-        node_uid: str,
-        execution_context: Optional[IExecutionContext] = None,
-        target_model: str = "",
-        message_history: Optional[List[Dict[str, Any]]] = None,
-    ) -> str:
-        """底层 LLM 调用。成功时返回 response 字符串。
-        失败時（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。
+    def _call_llm(self, request: LLMCallRequest) -> LLMCallResult:
+        """底层 LLM 调用。成功时返回供应商无关的 :class:`LLMCallResult`。
 
-        ``user_prompt``：
-            - str: 纯文本用户提示词
-            - List[Union[str, dict]]: 含多模态结构化 content blocks（多模态路径）
-              列表中 str 元素为纯文本片段，dict 元素为结构化 content block
-              (e.g. {"type":"image_url","image_url":{"url":"data:..."}})
+        失败时（provider 层异常）直接 raise ThrownException(LLMCallError)，不返回 error 值。
 
-        ``target_model``：命名模型标识符，传递给 LLM provider 用于路由到特定模型配置。
-        空字符串表示使用默认模型。
-
-        ``message_history``：标准多轮对话历史（``assistant``/``user`` 消息序列），
-        由 provider 追加在 ``system``/``user`` 首轮消息之后；重试场景用于回喂
-        上次失败输出与纠错指令，而不是把历史文本拼进 system prompt。
+        内核在此只执行"调用 LLM 这个抽象动作"——把一次结构化
+        :class:`LLMCallRequest` 委托给 provider（``llm_callback.call``），
+        不触碰任何供应商 SDK/字段（供应商组装/解析/思考抑制全在 provider 实现）。
         """
         if self.llm_callback:
             self._emit_llm_event(
-                "llm_dispatched", {"node_uid": node_uid, "target_model": target_model}
+                "llm_dispatched", {"node_uid": request.node_uid, "target_model": request.target_model}
             )
             try:
-                response = self.llm_callback(
-                    sys_prompt,
-                    user_prompt,
-                    target_model=target_model,
-                    message_history=message_history,
-                )
+                result = self.llm_callback.call(request)
                 hooks = self._test_hooks()
                 if hooks is not None:
+                    # provider 负责组装系统提示词；其实际发送/回填的 sys_prompt
+                    # 经 provider_meta 暴露给 hooks（诊断/测试观测）。
                     hooks.on_llm_call(
-                        node_uid=node_uid, sys_prompt=sys_prompt,
-                        user_prompt=user_prompt, target_model=target_model, response=response,
+                        node_uid=request.node_uid,
+                        sys_prompt=(result.provider_meta or {}).get("sys_prompt", ""),
+                        user_prompt=request.user_prompt,
+                        target_model=request.target_model,
+                        response=result.content,
                     )
-                self._emit_llm_event("llm_resolved", {"node_uid": node_uid, "response": response})
-                return response
+                self._emit_llm_event(
+                    "llm_resolved", {"node_uid": request.node_uid, "response": result.content}
+                )
+                return result
             except Exception as e:
                 # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
-                # 此类错误与 LLM 输出内容无关，llmexcept retry 对其无效，因此
-                # 直接抛出 ThrownException，跳过 llmexcept 重试循环，
-                # 让外层 try/except LLMCallError（或 LLMError/Exception）捕获。
-                # 注意：此处是 provider 协议的安全网（任意 provider 异常都转
-                # LLMCallError）。provider 插件（ibci_ai 等）应在自身边界收窄
-                # 捕获面（仅 provider 失败契约），使内部代码缺陷以真实类型
-                # 到达此处再经 `from e` 保留原始 traceback，便于定位。
+                # 此错误与 LLM 输出内容无关，llmexcept retry 对其无效，因此直接抛出
+                # ThrownException，跳过 llmexcept 重试循环，让外层捕获。
+                # provider 插件应在自身边界收窄捕获面（仅 provider 失败契约），使内部
+                # 代码缺陷以真实类型到达此处再经 `from e` 保留原始 traceback。
                 hooks = self._test_hooks()
                 if hooks is not None:
-                    hooks.on_llm_call_error(node_uid=node_uid, error=str(e))
-                self._emit_llm_event("llm_resolved", {"node_uid": node_uid, "error": str(e)})
+                    hooks.on_llm_call_error(node_uid=request.node_uid, error=str(e))
+                self._emit_llm_event(
+                    "llm_resolved", {"node_uid": request.node_uid, "error": str(e)}
+                )
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),
                     provider_error=str(e),
@@ -276,6 +262,6 @@ class LLMExecutorCore:
             "LLM 运行配置缺失：未配置有效的 LLM 调用接口。\n"
             "请先调用 'ai.load_project_config()' 加载项目 api_config.json，\n"
             "或显式 'ai.set_config(url, key, model)' / 'ai.set_mock_mode()'。",
-            node_uid,
+            request.node_uid,
             error_code=RUN_LLM_ERROR
         )

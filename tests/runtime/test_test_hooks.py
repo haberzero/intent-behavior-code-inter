@@ -79,14 +79,14 @@ class TestOnLLMCallErrorHook:
         from core.runtime.capability_registry import CapabilityRegistry
 
         class _FailingProvider:
-            def __call__(self, sys_prompt, user_prompt, target_model="", message_history=None):
+            def call(self, request):
+                raise RuntimeError("provider boom")
+
+            def stream(self, request):
                 raise RuntimeError("provider boom")
 
             def get_current_call_info(self):
                 return {}
-
-            def get_return_type_prompt(self, type_name):
-                return None
 
             def get_retry(self):
                 return 3

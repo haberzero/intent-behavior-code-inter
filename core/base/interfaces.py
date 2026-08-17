@@ -6,7 +6,6 @@ __all__ = [
     "IssueTracker",
     "IStateReader",
     "ISymbolView",
-    "ILLMProvider",
     "ILLMExecutor",
     "IILLMExecutor",
     "IIntentManager",
@@ -58,25 +57,6 @@ class ISymbolView(Protocol):
     def get(self, name: str) -> Any: ...
     def get_symbol(self, name: str) -> Optional[Any]: ...
     def has(self, name: str) -> bool: ...
-
-@runtime_checkable
-class ILLMProvider(Protocol):
-    """LLM 服务提供者标准接口"""
-    def __call__(
-        self,
-        sys_prompt: str,
-        user_prompt: str,
-        *,
-        target_model: str = "",
-        message_history: Optional[List[Dict[str, Any]]] = None,
-    ) -> str: ...
-    def get_current_call_info(self) -> Dict[str, Any]: ...
-    # 返回类型提示：注入并约束模型输出格式（无对应注册时返回 None）
-    def get_return_type_prompt(self, type_name: str) -> Optional[str]: ...
-    # 最大 LLM 重试次数：llmexcept 重试循环读取（默认 3）
-    def get_retry(self) -> int: ...
-    # 自动意图注入开关：prompt 拼装前读取 provider 配置（默认 True）
-    def is_auto_intent_injection_enabled(self) -> bool: ...
 
 @runtime_checkable
 class ILLMExecutor(Protocol):

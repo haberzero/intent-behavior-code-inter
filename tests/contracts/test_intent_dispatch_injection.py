@@ -58,23 +58,21 @@ class TestIntentContextResolveToPrompts:
 
 @pytest.fixture()
 def captured_sys_prompts(monkeypatch):
-    """捕获发送给 LLM provider 的 system prompt（MOCK 模式下 provider 仍收到完整 prompt）。"""
+    """捕获发送给 LLM provider 的 system prompt（MOCK 模式下 provider 仍收到完整 prompt）。
+
+    provider 内部组装最终系统提示词（推荐模板），经 ``LLMCallResult.provider_meta`` 暴露。
+    """
     box = []
     from ibci_modules.ibci_ai.core import AIPlugin
 
-    orig_call = AIPlugin.__call__
+    orig_call = AIPlugin.call
 
-    def spy(self, sys_prompt, user_prompt, *, target_model="", message_history=None):
-        box.append(sys_prompt)
-        return orig_call(
-            self,
-            sys_prompt,
-            user_prompt,
-            target_model=target_model,
-            message_history=message_history,
-        )
+    def spy(self, request):
+        result = orig_call(self, request)
+        box.append((result.provider_meta or {}).get("sys_prompt", ""))
+        return result
 
-    monkeypatch.setattr(AIPlugin, "__call__", spy)
+    monkeypatch.setattr(AIPlugin, "call", spy)
     return box
 
 
@@ -160,7 +158,7 @@ print(r)
         assert "用冷酷无感情且极简的口吻回复" in trace[0]["sys_prompt"]
         assert "MOCK:STR:hi" in trace[0]["user_prompt"]
         assert trace[0]["response"] == "hi"
-        assert "用冷酷无感情且极简的口吻回复" in trace[0]["merged_intents"]
+        assert "用冷酷无感情且极简的口吻回复" in trace[0]["intents"]["merged"]
 
     def test_engine_trace_preserves_history(self):
         code = AI_MOCK_PREFIX + """

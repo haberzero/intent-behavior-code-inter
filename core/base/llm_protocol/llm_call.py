@@ -146,6 +146,7 @@ class LLMCallRequest:
                 "provider_type_prompt": self.output_contract.provider_type_prompt,
                 "suppress_type_constraint": self.output_contract.suppress_type_constraint,
             },
+            "user_prompt": self.user_prompt,
             "prompt_slots": [
                 {"kind": s.kind, "text": s.text} for s in self.prompt_slots
             ],

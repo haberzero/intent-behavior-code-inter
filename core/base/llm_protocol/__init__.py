@@ -31,6 +31,13 @@ from core.base.llm_protocol.config import (
     THINKING_OFF,
 )
 from core.base.llm_protocol.provider import LLMProvider
+from core.base.llm_protocol.recommended import (
+    assemble_system_prompt,
+    type_constraint_section,
+    intent_section,
+    retry_message_history,
+    behavior_discipline,
+)
 
 __all__ = [
     # llm_call
@@ -50,4 +57,10 @@ __all__ = [
     "THINKING_OFF",
     # provider
     "LLMProvider",
+    # recommended
+    "assemble_system_prompt",
+    "type_constraint_section",
+    "intent_section",
+    "retry_message_history",
+    "behavior_discipline",
 ]

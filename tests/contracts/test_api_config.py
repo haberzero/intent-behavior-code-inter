@@ -23,6 +23,18 @@ from ibci_modules.ibci_ai.config_loader import ApiConfig
 from ibci_modules.ibci_ai.core import AIPlugin
 
 
+def _mcreq(sys_prompt="sys", user_prompt="user"):
+    """把 scalar (sys, user) 转为一次 ``LLMCallRequest``（provider.call 消费）。"""
+    from core.base.llm_protocol import LLMCallRequest, OutputContract
+    from core.base.llm_protocol.llm_call import PromptSlot
+    return LLMCallRequest(
+        node_uid="",
+        user_prompt=user_prompt,
+        prompt_slots=[PromptSlot(kind="user_sys", text=sys_prompt)] if sys_prompt else [],
+        output_contract=OutputContract(),
+    )
+
+
 class TestApiConfigValidate:
     def test_legacy_default_model_object(self):
         data = {"default_model": {"base_url": "http://x/v1", "api_key": "k", "model": "m"}}
@@ -177,11 +189,11 @@ class TestAIPluginConfig:
         assert plugin._config.get("mock") is False
 
     def test_mock_mode_llm_call(self):
-        """MOCK 模式下 __call__ 走 MockScenarioEngine（不发起网络请求）。"""
+        """MOCK 模式下 call() 走 MockScenarioEngine（不发起网络请求）。"""
         plugin = AIPlugin()
         plugin.set_mock_mode()
-        result = plugin("sys", "MOCK:STR:hello")
-        assert result == "hello"
+        result = plugin.call(_mcreq("sys", "MOCK:STR:hello"))
+        assert result.content == "hello"
 
 
 class TestEngineExplicitConfigLoad:
