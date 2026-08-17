@@ -19,7 +19,7 @@ from core.base.uid import intrinsic_uid
 from core.kernel.host_interface import HostInterface
 from core.base.diagnostics.codes import (
     DEP_GRAPH_ERROR, DEP_FAILED_DEPENDENCY, DEP_SECURITY_ERROR, DEP_FILE_NOT_FOUND, INT_INTERNAL_ERROR,
-    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT, SEM_UNDEFINED_SYMBOL, DEP_CIRCULAR_IMPORT
+    DEP_MODULE_NOT_FOUND, SEM_IMPORT_CONFLICT, SEM_UNDEFINED_SYMBOL, DEP_CIRCULAR_IMPORT, SEM_REDEFINITION
 )
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 
@@ -671,15 +671,30 @@ class Scheduler(ICompilerService):
         )
         for binding in imp.host_bindings:
             member_name = binding.name
+            # 重复 bind 同名成员 fail-fast（与 impl 方法冲突检查同构，SEM_REDEFINITION）
+            if member_name in host_spec.members:
+                file_tracker.error(
+                    f"Host binding: member '{member_name}' is bound more than once "
+                    f"in '{lib_name}'.",
+                    location=Location(
+                        file_path=file_path,
+                        line=getattr(binding, "lineno", imp.lineno),
+                        column=getattr(binding, "col_offset", 1),
+                    ),
+                    code=SEM_REDEFINITION,
+                )
+                continue
             if binding.is_method:
                 param_refs = [
                     annotation_to_typeref(p.annotation)
                     for p in binding.params
                 ]
                 return_ref = annotation_to_typeref(binding.return_type) if binding.return_type is not None else TypeRef.of("void")
+                # 描述符 type_ref 与 param_types 同源同步（discovery 路径两轴一致；
+                # 宿主绑定同样填——避免未来读 descriptor.type_ref 的消费方被静默降级 any）。
                 descriptors = [
-                    ParamDescriptor(name=p.name, kind="POSITIONAL_OR_KEYWORD")
-                    for p in binding.params
+                    ParamDescriptor(name=p.name, kind="POSITIONAL_OR_KEYWORD", type_ref=pref)
+                    for p, pref in zip(binding.params, param_refs)
                 ]
                 host_spec.members[member_name] = MethodMemberSpec(
                     name=member_name,

@@ -609,6 +609,16 @@ class StatementVisitorsMixin:
         """访问 from ... import 语句"""
         return None
 
+    def visit_IbHostImport(self, node: ast.IbHostImport) -> Optional[IbSpec]:
+        """访问宿主绑定 import 语句。
+
+        bind 声明中的注解是类型注解（编译期由 scheduler 合成宿主模块 spec 时
+        经 annotation_to_typeref 解析），不是值表达式——不下钻子节点（与
+        visit_IbImport/visit_IbImportFrom 同构），避免模块限定注解（``other.T``）
+        被当作属性访问表达式解析。
+        """
+        return None
+
     def visit_IbIntentStackOperation(self, node: ast.IbIntentStackOperation) -> Optional[IbSpec]:
         """访问意图栈操作 (@+ / @-)"""
         return None

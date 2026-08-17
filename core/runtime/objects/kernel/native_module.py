@@ -92,7 +92,7 @@ class IbNativeObject(IbObject):
                     ) from e
 
             # 未在契约或白名单声明的成员，坚决抛出异常
-            raise AttributeError(f"Plugin Error: '{target_name}' is not defined in module contract (_spec.py)")
+            raise AttributeError(f"Plugin Error: '{target_name}' is not declared in the module contract (bind/_spec.py)")
         return None
 
     def to_native(self, memo: Optional[Dict[int, Any]] = None) -> Any:

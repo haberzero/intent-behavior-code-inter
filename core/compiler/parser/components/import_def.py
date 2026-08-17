@@ -22,10 +22,11 @@ class ImportComponent(BaseComponent):
         """Parses 'import a.b, c as d'."""
         start_token = self.stream.previous()
 
-        # 宿主绑定形态：``import python "pkg" as lib [bind 块]``
+        # 宿主绑定形态：``import python "pkg" as lib [bind 块]``。
+        # 仅当 ``python`` 标识符后紧跟字符串模块名才走宿主绑定——避免误伤
+        # 真实名为 ``python`` 的普通模块导入（``import python`` / ``import python as p``）。
         if self.stream.check(TokenType.IDENTIFIER):
-            peek_tok = self.stream.peek()
-            if peek_tok.value == HOST_MODULE_NAME:
+            if self.stream.peek().value == HOST_MODULE_NAME and self.stream.peek(1).type == TokenType.STRING:
                 return self.parse_host_import(start_token)
 
         names = self.parse_aliases()
@@ -41,7 +42,6 @@ class ImportComponent(BaseComponent):
         """
         self.stream.consume(TokenType.IDENTIFIER, "Expect 'python' pseudo-module.")  # 'python'
         module_name = self.stream.consume(TokenType.STRING, "Expect string module name after 'python'.").value
-        module_name = module_name.strip('"').strip("'")
 
         asname = None
         if self.stream.match(TokenType.AS):
@@ -93,7 +93,7 @@ class ImportComponent(BaseComponent):
                     annotation = None
                     if self.stream.match(TokenType.COLON):
                         annotation = self.context.type_parser.parse_type_annotation()
-                    params.append(ast.IbHostBindingParam(name=pname.value, annotation=annotation))
+                    params.append(self._loc(ast.IbHostBindingParam(name=pname.value, annotation=annotation), pname))
                     if not self.stream.match(TokenType.COMMA):
                         break
             self.stream.consume(TokenType.RPAREN, "Expect ')' after bind parameters.")

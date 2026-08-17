@@ -233,3 +233,58 @@ test()
         except CompilerError as e:
             codes = {d.code for d in e.diagnostics}
             assert "SEM_TYPE_MISMATCH" in codes, f"Expected SEM_TYPE_MISMATCH, got: {codes}"
+
+
+class TestHostBindingParserGuard:
+    """复核回归：宿主绑定解析守卫（不误伤真实名为 python 的普通模块导入）。"""
+
+    def test_import_python_without_string_uses_regular_path(self, tmp_path):
+        """``import python as p`` 不被劫持为宿主绑定（走普通 import → 模块未找到）。"""
+        from core.kernel.issue import CompilerError
+
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python as p
+
+func test() -> auto:
+    print("x")
+
+test()
+""",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        try:
+            engine.compile(str(tmp_path / "main.ibci"), silent=True)
+            raise AssertionError("Expected compilation to fail, but succeeded")
+        except CompilerError as e:
+            codes = {d.code for d in e.diagnostics}
+            # 普通 import 路径：DEP_MODULE_NOT_FOUND；不得是宿主绑定的 PAR_EXPECTED_TOKEN
+            assert "DEP_MODULE_NOT_FOUND" in codes, (
+                f"Expected regular import path (DEP_MODULE_NOT_FOUND), got: {codes}"
+            )
+            assert "PAR_EXPECTED_TOKEN" not in codes, (
+                f"Should not be hijacked as host import: {codes}"
+            )
+
+    def test_duplicate_bind_rejected(self, tmp_path):
+        """重复 bind 同名成员 → 编译期 SEM_REDEFINITION。"""
+        from core.kernel.issue import CompilerError
+
+        _write(
+            tmp_path,
+            "main.ibci",
+            """
+import python "math" as m:
+    bind sqrt(x: float) -> float
+    bind sqrt(y: float) -> float
+""",
+        )
+        engine = IBCIEngine(root_dir=str(tmp_path), auto_sniff=False)
+        try:
+            engine.compile(str(tmp_path / "main.ibci"), silent=True)
+            raise AssertionError("Expected compilation to fail, but succeeded")
+        except CompilerError as e:
+            codes = {d.code for d in e.diagnostics}
+            assert "SEM_REDEFINITION" in codes, f"Expected SEM_REDEFINITION, got: {codes}"

@@ -125,12 +125,20 @@ def vm_handle_IbHostImport(executor, node_uid: str, node_data: Mapping[str, Any]
     for binding_uid in node_data.get("bindings", []):
         bdata = executor.ec.get_node_data(binding_uid)
         if not bdata:
-            continue
+            # 序列化缺 bind 成员数据属编译产物损坏，fail-fast（不静默丢契约成员）。
+            raise RuntimeError(
+                f"VM: Host import '{module_name}' binding node missing from "
+                f"artifact (uid '{binding_uid}')."
+            )
         params = []
         for param_uid in bdata.get("params", []):
             pdata = executor.ec.get_node_data(param_uid)
-            if pdata:
-                params.append({"name": pdata.get("name")})
+            if not pdata:
+                raise RuntimeError(
+                    f"VM: Host import '{module_name}' bind parameter node missing "
+                    f"from artifact (uid '{param_uid}')."
+                )
+            params.append({"name": pdata.get("name")})
         bindings.append({
             "name": bdata.get("name"),
             "is_method": bdata.get("is_method", True),
