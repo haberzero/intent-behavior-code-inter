@@ -52,8 +52,11 @@ provider，`ai.set_provider(lib.provider)` 注册为激活 `llm_provider`（HIGH
 内置默认 RecommendedProvider）；R 期"改 provider_impl.py"临时形态拆除（provider_impl.py
 降为内置默认实现）；`docs/howto/modify_llm_provider.md` 改写为宿主绑定通道；用户
 2026-08-18 授权推翻 R0-R2"不新增语言级注册 API"裁定。全量 pytest 2956 passed /
-1 skipped 零回归 + 自定义 provider e2e。分支 `exp/provider-bind-f4`。**下一步 = F5
-（架构统一/文档收敛 + 内核自举 + 缓存/JIT 规划）**。
+1 skipped 零回归 + 自定义 provider e2e。**F5（架构统一/文档收敛）评估完成**：档 A
+缓存 / 内核自举 / 档 B 真 JIT / 隔离改造 / 反射能力评估后**列为远期 pending 规划**
+（当前"引擎单次执行"模型下收益有限或为规划项，见 WORKLOG）；F5-2 文档/架构收敛
+进行中（docs/README 目录树已校验一致；修正 09_observability 的 auto_sniff 残留；
+`IsolationPolicy.inherit_plugins` 记录为 F3 后孤儿字段留待清理）。分支 `exp/unify-f5`。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 

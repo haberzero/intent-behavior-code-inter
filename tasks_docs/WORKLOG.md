@@ -214,6 +214,11 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     需求时序矛盾 → pending（保持 builtin_modules.py 字面量为内置契约单一权威）。
   - **档 B 真 JIT / 隔离改造 / 反射能力**：无当前可验证收益/消费方 → pending 规划。
   F5 当前聚焦可落地的文档/架构收敛（见 F5-2）。
+  **F5-2 文档/架构收敛**：docs/README 目录树与 docs/ 实际文件一致（校验无悬空/遗漏）；
+  修正 `09_observability.md` 示例残留的 `auto_sniff` 参数。发现 **`IsolationPolicy.inherit_plugins`
+  为 F3 后的孤儿字段**（engine 已删 inherited_plugin_paths 传播机制，core/tests 零消费者）——
+  因属公开策略字段（to_dict/from_dict/工厂 + 序列化契约），按其 public 面与用户 F5 pending 指示，
+  记录为本阶段收敛项、留待单独清理（不仓促动契约）。
 
 
 ---

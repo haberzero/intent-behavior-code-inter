@@ -195,7 +195,7 @@ with pytest.warns(UserWarning, match="__from_prompt__ parse failed"):
 
 ```python
 from core.engine import IBCIEngine
-eng = IBCIEngine(root_dir=..., auto_sniff=False)
+eng = IBCIEngine(root_dir=...)
 sub = eng.registry.get_event_bus().subscribe()
 # 触发诊断站点...
 ok, ev = sub.recv_nowait()
