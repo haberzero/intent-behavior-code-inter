@@ -200,8 +200,9 @@ import python "math" as m:
 **验证门**：e2e（`m.sqrt(16.0)=4.0`、`m.pi`、`m.pow(2,10)=1024.0`、用户类 `Calculator`
 持 native 调 `sqrt=5.0`、无 asname `math.sqrt=4.0`、磁盘文件 rehydrate 后执行、
 跨模块导入 `hsqrt(49.0)=7.0`）；负样本（未声明成员 fail-fast、绑定缺失成员报错、
-编译期类型检查 `SEM_TYPE_MISMATCH`）；全量 pytest 3039 passed / 1 skipped（含新增
-`tests/runtime/test_host_binding.py` 8 项）零回归。
+编译期类型检查 `SEM_TYPE_MISMATCH`、重复 bind `SEM_REDEFINITION`、`import python` 无字符串
+回落普通路径）；全量 pytest 3041 passed / 1 skipped（含新增 `tests/runtime/test_host_binding.py`
+10 项）零回归。
 
 ---
 

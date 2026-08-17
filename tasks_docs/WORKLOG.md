@@ -84,7 +84,13 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `proxy.create_proxy`（unbox→调→box，自 loader._validate_and_bind）供插件/宿主共用，消除双真相。
   验证：e2e（sqrt=4.0/pi/pow=1024.0/用户类=5.0/磁盘文件 rehydrate/跨模块=7.0/无 asname=4.0）；
   负样本（未声明成员 fail-fast、绑定缺失成员报错、编译期类型检查 SEM_TYPE_MISMATCH）；全量
-  pytest 3039 passed / 1 skipped（新增 tests/runtime/test_host_binding.py 8 项）。
+  pytest 3041 passed / 1 skipped（新增 tests/runtime/test_host_binding.py 10 项）。
+  **F1 独立复核（subagent a8fc712b）**：核心红线（禁双通道/兜底/历史包袱）干净，无阻塞性放行
+  障碍。修复中 severity #1（import python 误伤真实模块——加 peek(1)==STRING 守卫）+ 低 severity
+  #3/#4/#5/#7/#8/#9/#10（strip 死代码删、descriptor type_ref 同步、序列化缺节点 fail-fast、
+  _spec.py 硬编码消息、重复 bind SEM_REDEFINITION、param _loc、类型检查 pass visit_IbHostImport）。
+  设计取舍记录：#2（未声明成员编译期静默降级 any，与既有 import 一致，F2 再评估）、#6（宿主
+  import 不传 registry_id，裸模块进程级单例低风险）。
 
 ---
 
