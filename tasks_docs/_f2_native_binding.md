@@ -7,107 +7,90 @@
 
 - **F2 目标**：宿主导入的**类型**（裸 Python 类）成为 IBCI 一等类型，可作 `impl`
   目标、可被协议引用（语言级能力契约扩展到宿主内容）。
-- **验证门**：e2e（`impl SomeProtocol for HostType` 满足协议 + 运行期实例化/方法调用）；
-  全量 pytest 零回归。
+- **验证门**：e2e（`bind class Name` 宿主类型绑定 + `impl Proto for Name` 满足协议 +
+  运行期实例化/方法调用）；全量 pytest 零回归。
 
 ## 一、现状（F1 已实现 + 机制研究）
 
 - F1：`import python "pkg" as lib: bind ...` 绑定**模块成员**（方法 vtable / 属性
   白名单），`lib` 是 IbNativeObject 模块值。
 - F2 要绑定**类型**（裸 Python 类），使其可作 `impl` 目标。
-- **impl 目标限制检查点**（已实证，`_declaration_visitors.py:86-92` `visit_IbImplDef`）：
+- **impl 目标限制检查点**（`_declaration_visitors.py:86-92` `visit_IbImplDef`）：
   `class_spec.provenance != USER_DEFINED` → error。解除时允许 `EXTERNAL_MODULE`。
-- **宿主类型最少接入点**（研读报告）：TypeDef(CLASS, module_path) 注册 + members
-  声明 + 运行期 IbClass +（带方法体时）作用域合成。
-- **协议满足**：编译期静态 spec 判定（`satisfies_protocol` 三级数据驱动），不依赖
-  运行期 vtable。impl 方法直接注入 `spec.members`（单一汇入点）。
+- **impl target 是裸名**（`IbImplDef.type_name: str`，parser 只 consume 单个
+  IDENTIFIER，declaration.py:311）→ 宿主类型必须可**顶层裸名解析**（不能要求
+  `j.JSONDecoder` 模块限定形态出现在 impl target）。
+- **类型注册路径**（symbol_collection_pass `visit_IbClassDef`）：`factory.create_class`
+  → `registry.register(cls_meta)`（键 = `{module}.{name}` 或裸名）→ `TypeSymbol(CLASS)`
+  define 进符号表 → 进入类作用域收集成员（owned_scope）。
+- **registry.resolve(name)**（`_base.py:112`）：module 限定优先，回落裸名。
+  `visit_IbImplDef` 用 `self.registry.resolve(node.type_name)`（语义分析器与 scheduler
+  共用同一 registry）。
+- **current_module 时序**：`set_current_module` 只在 `analyze()` 开头设置（analyzer.py:57），
+  而 scheduler 的 import 注入循环（含 `_inject_host_import`）在 `analyze()` **之前**运行
+  → 宿主类型注册时 `current_module` 为 None。故宿主类注册需**显式传入 module_name**
+  （S2 类身份统一：所有用户类 module 限定，键 = `{module}.{name}`；裸名注册可回落
+  resolve 但运行期键不一致风险高，不采用）。
 
-## 二、设计问题（self-grill 后收敛）
+## 二、F2 语法设计（自裁定稿）
 
-### 2.1 宿主类型语法形态
+```ibci
+import python "json" as j:
+    bind class JSONDecoder:
+        bind decode(s: str) -> any
+        bind raw_decode(s: str) -> any
+```
 
-候选：
-- (a) 扩展 bind 块：`bind class JSONDecoder -> any` 绑定一个宿主类为类型。
-- (b) 独立类型绑定语句：`host type JSONDecoder = python.class("json.JSONDecoder")`。
-- (c) 复用 import 形态：`import python "json" as j: bind type JSONDecoder`。
+- `bind class Name:` 绑定裸 Python 类为 IBCI 类型 `Name`（顶层类型名，可用作
+  `impl X for Name` 目标 / `Name(...)` 构造 / 类型注解）。
+- 嵌套 `bind member` 声明原生成员（方法/属性）→ 该类型实例 vtable/whitelist +
+  编译期成员表（协议满足判定用）。成员表 = MethodMemberSpec/MemberSpec，复用
+  `annotation_to_typeref`。
+- `bind class Name -> any` 简写：仅类型身份，无声明成员（成员由 impl 补充）。
+- 成员访问经 vtable/whitelist 门控（与 F1 同构，IbNativeObject.receive）。
 
-倾向 (a)：与 F1 bind 语法连续（统一设计语言），`bind class X` 把宿主类绑定为
-IBCI 类型值 + 类型名。
+**为何内嵌 bind 成员（非"仅 impl 补充"）**（对照 design-philosophy）：
+- 宿主类自身能力（decode/raw_decode）是类型契约的一部分，应先声明（F1 bind 同构），
+  impl 只补充 IBCI 协议所需而宿主没有的方法——职责分离清晰。
+- 协议满足判定在"宿主声明成员 + impl 补充"并集上进行，静态可判定。
+- 简写 `bind class Name -> any` 覆盖"纯 impl 补充"场景（并集 = impl 成员）。
 
-**问题**：宿主类绑定后，成员如何声明？（决定 impl 协议满足检查能否静态判定）
-- F2 最小：宿主类型绑定只声明"类型身份"（类名 + 构造），成员经用户 `impl` 块补充。
-  即 `bind class JSONDecoder -> any` 建立类型名，用户随后 `impl MyProto for JSONDecoder:`
-  定义/补充成员。
-- 或：bind class 内嵌 bind 成员（如 `bind class JSONDecoder: bind decode(...)`）。
+## 三、编译期设计（已确认）
 
-倾向 F2 最小：`bind class Name -> any` 只建类型身份；成员由 impl/用户类补充。
-（F2 核心是"impl 目标扩展到宿主类型"，成员声明是 impl 的职责。）
+1. scheduler `_inject_host_import` 扩展（需把 module_name 传入）：
+   - 对每个 `bind class`：
+     - `cls_meta = registry.factory.create_class(name=Name, module=模块名,
+       provenance=EXTERNAL_MODULE)`。
+     - `cls_meta.members` = 嵌套 bind 声明成员（MethodMemberSpec/MemberSpec，
+       复用 annotation_to_typeref + ParamDescriptor type_ref 同步）。
+     - `registry.register(cls_meta)` → `registry.resolve("Name")` 可用。
+     - `TypeSymbol(name=Name, CLASS, spec=cls_meta, provenance=EXTERNAL_MODULE)`
+       define 进模块符号表（用户代码 `Name(...)` / 类型注解可解析）。
+     - 合成 `owned_scope`（SymbolTable，parent=模块表）供 impl 方法注入。
+   - `bind class` 与 F1 `bind member` 共存于同一 bind 块（语法上 class 绑定与
+     成员绑定并列）。
+2. `visit_IbImplDef` 限制解除：`provenance != USER_DEFINED` → 允许 `EXTERNAL_MODULE`
+   （宿主类型）；仍拒绝 `KERNEL_NATIVE`（内置类型保持 fail-fast）。
+3. impl 方法注入复用现有机制（symbol_collection_pass `visit_IbImplDef` 用
+   `sym.owned_scope` + `spec.members`）——宿主类有 owned_scope + members 即可复用。
+4. 协议满足判定：编译期静态 spec 判定（`satisfies_protocol` 三级数据驱动），
+   在"类自身 members + impl 补充"并集上进行，宿主类型无需特殊处理。
 
-### 2.2 impl 目标限制解除
+## 四、运行期设计（研究 subagent 报告后确认）
 
-`visit_IbImplDef`：`provenance != USER_DEFINED` → 改为允许 `EXTERNAL_MODULE`
-（宿主类型）。需配套：
-- 宿主类型必须有 `spec.members`（impl 方法注入点）——从哪来？
-  - 方案 A：宿主类型绑定时成员表为空，impl 方法直接注入（与用户类同构）。
-  - 方案 B：宿主类型成员表来自 bind class 内嵌成员声明。
-- 宿主类型无 AST 作用域（非用户代码定义）——带方法体的 impl 需要 owned_scope 合成。
-
-### 2.3 宿主类型 vs 内置类型
-
-内置类型（int/str/list 等，provenance=KERNEL_NATIVE）**不解除**限制（保持 fail-fast）——
-F2 只对 EXTERNAL_MODULE（宿主类型）解除。区分轴：provenance。
-
-### 2.4 运行期宿主类实例化
-
-宿主类绑定后 `JSONDecoder(...)` 调用 → 实例化裸 Python 类 → box 为 IbNativeObject。
-成员调用经 vtable/whitelist（impl 补充的成员需进入 vtable——水化扩展点）。
-
-## 三、self-grill 质询
-
-Q1: F2 是否真的需要"宿主类型绑定"语法？还是 impl 直接以模块成员名做目标？
-A: impl 目标须是**类型**（`impl X for T` 的 T 是类型名，resolve 到 TypeDef(CLASS)）。
-   模块成员是值，不是类型。故需要类型绑定语法。
-
-Q2: 宿主类型成员表为空时，impl 协议满足检查如何工作？
-A: 协议满足检查在"类自身 members + impl 补充"并集上进行。宿主类型 members 空 +
-   impl 补充成员 → 并集 = impl 成员。协议要求的方法若全部由 impl 提供，则满足。
-
-Q3: 带方法体的 impl（`impl X for HostType: func foo...`）需要 owned_scope 合成，
-   "宿主类型无 AST 作用域"如何解决？
-A: 研读报告确认：带方法体时需作用域合成。即 impl 块进入一个合成的类作用域，
-   其成员注入宿主类型 spec.members（与用户类 impl 同构）。
-
-Q4: 运行期宿主类实例的 vtable 从哪来（impl 补充的方法如何在运行期可调）？
-A: 与用户类 impl 同构：impl 方法编译期注入 spec.members → 运行期水化进 IbClass
-   vtable（interpreter.py:745-781 现有机制）。宿主类实例需是 IbClass 或持有 vtable
-   的 IbNativeObject。
-
-Q5: 边界：宿主类型是否必须是"类"？函数/模块类型呢？
-A: F2 最小聚焦"类"（impl 目标）。函数/模块类型不展开（F1 已覆盖模块值绑定）。
-
-## 四、实现落点（预计）
-
-| 环节 | 文件 | 改动 |
-|---|---|---|
-| 语法 | `import_def.py` | bind 块支持 `bind class Name -> type`（宿主类绑定） |
-| AST | `ast.py` | IbHostBinding 扩展 is_class 标记 / 或新节点 |
-| Scheduler | `scheduler.py` | `_inject_host_import` 宿主类绑定 → 注册 TypeDef(CLASS, EXTERNAL_MODULE) |
-| 语义 | `_declaration_visitors.py` | `visit_IbImplDef` provenance 检查解除（EXTERNAL_MODULE 允许） |
-| 语义 | impl 方法注入 | 宿主类型 spec.members 注入（复用现有） |
-| 运行时 | `module_manager.py` / factory | 宿主类实例化 + vtable 水化 |
-
-**运行时 hydration 关键**（已实证，interpreter.py:745-781）：impl 方法水化经
-`registry.get_class(type_name, module=impl_module)` 找目标类 → 无则 Hydration Leak。
-宿主类型需在 STAGE 5 预注册为运行期类（或水化时识别 EXTERNAL_MODULE 类型走宿主类
-对象构造），否则 impl 水化找不到目标。F2 需决策宿主类的运行期对象形态（IbClass vs
-独立宿主类容器），并接入 `_hydrate` 的"封印前 vtable 注入"扩展点。
+- impl 方法水化（interpreter.py:745-781）经 `registry.get_class(type_name, module=impl_module)`
+  找目标类 → 宿主类型需在运行期预注册为可水化目标（IbClass 或宿主类容器），否则
+  Hydration Leak。
+- 宿主类型实例化 `Name(...)`：`TypeClass.__call__` → instantiate。宿主 Python 类实例
+  经 `create_native_object` 包装为 IbNativeObject（持 vtable/whitelist）。
+- impl 补充方法运行期需 register 进宿主类型实例的 vtable（供方法调用）。
+- 详见研究 subagent（ae5e4471）报告。
 
 ## 五、待定
 
-- bind class 语法最终形态（F2 详设后定）。
-- 宿主类型实例的运行期对象形态（IbClass vs IbNativeObject + vtable）。
-- 宿主类型 STAGE 5 预注册路径（impl hydration 目标查找）。
-- 与 F3（废弃 _spec.py）的衔接：宿主类型绑定为 F3 提供"类型级"替代。
+- 运行期宿主类水化目标形态（IbClass vs 宿主类容器 + vtable）。
+- 宿主类型运行期预注册路径（impl hydration 目标查找）。
+- 协议满足判定的宿主类型成员来源（bind 声明 + impl 补充并集）已定。
 
 ## 六、与主线衔接
 
