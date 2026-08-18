@@ -47,7 +47,7 @@
 > | 参数 | 值 | 说明 |
 > |------|----|------|
 > | `max_duration_seconds` | **14400（4 小时）** | 最晚结束时间 = 当前时刻 + 4h |
-> | `max_auto_turns` | **10** | 允许 goal 自动续跑次数 |
+> | `max_auto_turns` | **7** | 允许 goal 自动续跑次数 |
 > | `token_budget` | **null（无限制）** | 不设 token 预算上限（预算无限制；720K 为模型上下文窗口系统层硬限制，非 goal budget） |
 >
 > `objective` 正文仍按下方 §1.3 模板套用（无人值守 + 主线 + 交付纪律 + 工作流 + 停止条件 + 非目标）。
@@ -203,7 +203,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   可选 item 参（method.spec.param_types 检测）→ assemble/invoke 按需传项；`_RunLLMCallableDrive`
   批量化（每 item 一次 LLM 调用）；run_batch 语义收敛为每 item 一次调用。全量 pytest
   **3030 passed / 1 skipped** 零回归。
-  **下一 session 开工 = P4b-3 LLMCallable 可选协议方法运行时发现**（`__intent__`（意图改写）/
+  **✅ 交接核验与接手完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支
+  unsafe-vibe-dev / 提交序列对齐 / 契约文件 + 判别测试齐备 / 全量 pytest 实跑 3030 passed /
+  1 skipped）；交接要点已收敛入本节并删除临时交接文件（git 承载）。
+  **当前推进 = P4b-3 LLMCallable 可选协议方法运行时发现**（`__intent__`（意图改写）/
   `__retry__`（重试策略声明）可选能力经 receive 发现，P1 §2.2；装配上下文按需引入；剩余消费面
   stream 统一 + 行为经统一入口，按 `_code_p4b_assembly.md` §四），详见
   `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4c（llm 语法+旧机制删除+
@@ -211,6 +214,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ 交接核验接收完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 契约文件 + 判别测试齐备 / 全量 pytest 实跑 3030 passed / 1 skipped）；要点已收敛入 §二，临时交接文件已删除（git 承载）
 - [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
