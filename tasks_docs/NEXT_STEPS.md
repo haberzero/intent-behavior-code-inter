@@ -33,19 +33,22 @@
 注册）、Provider 自定义经宿主绑定统一（F4, `ai.set_provider`）、架构统一/文档收敛
 （F5, 档 A/内核自举/档 B/隔离/反射=远期 pending）。全量 pytest 2956 passed / 1 skipped。
 
-**🔴 新主线：「重构 llm 机制为可调用的 llm 类」**（用户 2026-08-18 定方向）：用户决定
-**彻底抛弃"llm 函数"概念**，重新设计为**可调用的 llm 类**（面向对象形态承载 LLM 调用/
-意图/llmexcept 等语义）。**本轮仅确立方向并写入任务控制文档；具体调研与需求确定交给
-下一 session 承接**——当前 `@~ ... ~`/`func` llm 函数形态、意图注入、llmexcept、ai.*/
-provider 链路、MOCK/真实调用、衍生方言（PT-DECIDE-3 LLM prompt 协议家族）均需在重设计
-范围内评估破坏面与迁移。详情见下一步候选 #1。
+**🔴 新主线：「llm 机制重构为可调用 llm 类 + LLM 相关体系彻底协议化（总统一性）」**（用户
+2026-08-18 定方向，两时点补充）：用户决定**彻底抛弃"llm 函数"概念**，重构为**可调用的 llm 类**
+（面向对象形态承载 LLM 调用/意图/llmexcept 等语义）。**第二轮补充**（同 session）：提出**总统一性
+主线**——行为描述/意图注释/retry/prompt 协议族/lambda/snapshot/llm 函数全部收敛为"可调用实例 +
+协议（类型类）"机制：lambda/snapshot 统一为 llm 匿名可调用类的两种捕获模式语法糖；`impl` 目标
+扩展至内置类型（可改写 `int` 等的 `__prompt__` 系列）；retry 高阶化（行为实例也可经 impl 包装
+retry）。**本轮已产出调研报告 + 可行性 + 规划（`tasks_docs/_llm_callable_redesign.md`，临时）；
+具体设计定稿交给下一 session 承接**——详见下一步候选 #1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] llm 机制重构为可调用 llm 类（调研 + 需求确定，下一 session 承接）**：
-   盘点现 llm 函数语义面（`@~ ... ~`、`func` llm 函数、意图注入、llmexcept、provider 链路、
-   MOCK/真实调用、LLM prompt 协议家族），设计"可调用的 llm 类"形态（类实例承载 LLM 调用
-   意图，替代 llm 函数），评估破坏面与迁移路径；产出设计/需求文档后进入实现。
+1. **[主线·当前] 总统一性设计定稿（P1，下一 session 承接）**：以 `tasks_docs/_llm_callable_redesign.md`
+   为调研基准，定稿 llm 可调用类（协议方法族/意图改写/retry 高阶化/与 LLMCallRequest 承载）+
+   装饰壳体系（impl 目标扩展到可调用实例/内置类型 + 函数实例 prompt 呈现协议化）+ lambda/snapshot
+   捕获策略参数化 + prompt 协议族类型类化；评估破坏面与迁移路径；产出设计定稿后进入实现
+   （P2-P5 分阶段，见临时文档 §五）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 

@@ -26,6 +26,7 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
 | 显式配置方向（2026-08-12） | LLM 配置显式优于隐式：`setup()` 去自动加载，新增 `ai.load_project_config()`（命名用户拍板）；fail-fast 保留且失败点更清晰。 |
 | 用户类泛型升主线（2026-08-12） | PT-FEAT-3（`class Box[T]:`）升主线完整落地；其"泛型类必须特化使用"等守卫为语言约束（KNOWN_LIMITS §十四 #1）。 |
 | 能力判定协议化口径（2026-08-16） | `__from_prompt__` 能力判定与获取口径不一致时——历史不是权威；"记录不整改"理由不成立，须整改收敛（get_from_prompt_cap 单一查询入口；结构性用户方法由 VTableParsingStrategy 职责分离，不合并）。 |
+| LLM 总统一性主线（2026-08-18） | 用户定方向并两时点补充：① llm 机制重构为可调用的 llm 类（抛弃 llm 函数）；② **总统一性**——行为描述/意图注释/retry/prompt 协议族/lambda/snapshot/llm 函数全部收敛为"可调用实例 + 协议（类型类）"机制；lambda/snapshot 统一为 llm 匿名可调用类的两种捕获模式语法糖；`impl` 目标扩展至内置类型（可改写 `int` 等 `__prompt__` 系列）；retry 高阶化（行为实例也可经 impl 包装 retry）。调研/可行性/规划已产出（临时文档 `tasks_docs/_llm_callable_redesign.md`），设计定稿交下一 session。 |
 
 ## 三、重大方向决策记录（防止未来误解）
 

@@ -134,10 +134,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   - 用户侧扩展唯一边 = 宿主绑定 `bind`（`docs/howto/extend_with_host_binding.md`）；
     自定义 LLM provider = 宿主绑定 + `ai.set_provider`（`docs/howto/modify_llm_provider.md`）。
   - LLM 供应商无关中间层 `core/base/llm_protocol/`；MOCK 哨兵在该层 `llm_call.py`。
-- **⏳ 下一步（新主线）**：**llm 机制重构为可调用的 llm 类**（用户 2026-08-18 定方向）——
-  彻底抛弃"llm 函数"概念，改为面向对象的可调用 llm 类（承载 LLM 调用/意图/llmexcept）。
-  调研与需求确定由下一 session 承接（盘点现 llm 函数语义面 + 设计 llm 类形态 + 评估破坏面/
-  迁移），详见 `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线（PT-DEBT / VISION-3 / 文档）。
+- **⏳ 下一步（新主线）**：**llm 机制重构为可调用的 llm 类 + LLM 相关体系彻底协议化
+  （总统一性）**（用户 2026-08-18 定方向，两时点补充）——彻底抛弃"llm 函数"概念，改为
+  面向对象的可调用 llm 类；并把行为描述/意图注释/retry/prompt 协议族/lambda/snapshot 全部
+  收敛为"可调用实例 + 协议（类型类）"机制（lambda/snapshot 统一为 llm 匿名可调用类两种捕获
+  模式语法糖；`impl` 目标扩展至内置类型；retry 高阶化）。**调研报告 + 可行性 + 规划已产出**
+  （临时文档 `tasks_docs/_llm_callable_redesign.md`）；设计定稿（P1）与实现（P2-P5）交后续
+  session 承接，详见 `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
