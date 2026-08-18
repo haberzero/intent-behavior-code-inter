@@ -10,7 +10,9 @@
 
 以下裁定已在 `AGENTS.md` 与 `tasks_docs/HANDOFF.md` §1.2 固化，WORKLOG 不复制：
 禁 push / 破坏性重构授权 / 大范围破坏性重构分支政策（含 2026-08-11"零风险直接合并"
-细则）/ 自主推进偏好与上报阈值 / 工作日志纪律 / 碎片化判断基准 / "不删也不修"两档 /
+细则；2026-08-18 取消手动 cherry-pick，改为"确认低风险直接 merge 到 unsafe-vibe-dev +
+merge 无误即删分支"，main 不更新不触碰）/ 自主推进偏好与上报阈值 / 工作日志纪律 /
+碎片化判断基准 / "不删也不修"两档 /
 subagent 仅 general agent / 决策纪律 / goal 配置习惯。
 
 ## 二、主线与方向裁定（保留追溯价值）
@@ -30,6 +32,13 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
 
 ## 三、重大方向决策记录（防止未来误解）
 
+- **分支政策更新（2026-08-18，用户明确）**：**取消"独立分支禁止直接合并 + 手动 cherry-pick
+  单独更新 unsafe-vibe-dev"流程**，改为：**确认低风险（全量 pytest 零回归 + 复核放行，无
+  对外契约/架构级风险）后可直接 merge 到 unsafe-vibe-dev；merge 无误后直接删除无用分支**
+  （除 main 与 unsafe-vibe-dev 外不长期保留分支，短期工作分支合并即删）；main 不更新不触碰。
+  同日完成分支清理：`exp/unify-f5` 的两个调研/决策文档提交（0cb9264f/c6bfdc45）fast-forward
+  并入 unsafe-vibe-dev，全部 31 个 `exp/*` 分支删除，本地仅剩 main + unsafe-vibe-dev。
+  已同步 AGENTS.md / HANDOFF.md / code-workflow / user-principles / WORKLOG §一。
 - **协议化重构（2026-08-16，exp/protocol-kernel → unsafe-vibe-dev 直接合并）**：
   协议注册表（ProtocolDef/Registry）为能力判定单一权威；普通函数与 LLM 函数全链路
   统一；retroactive implementation（impl 可携带方法体）。合并前 116 例真实 LLM 复跑
