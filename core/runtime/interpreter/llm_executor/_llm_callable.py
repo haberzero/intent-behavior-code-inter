@@ -93,6 +93,15 @@ class _LLMCallableMixin:
             ec, captured_intents
         )
 
+        # P4b-3a：`__intent__` 可选协议方法运行时发现（receive 同源虚表查找）——
+        # 未声明 → 意图原样透传（行为默认透传）；存在 → 用户方法改写进入本次调用
+        # 的意图三层（消解/增删/重排），结果合并回装配。
+        intent_method = self._discover_optional_protocol_method(callable_inst, "__intent__")
+        if intent_method is not None:
+            active, globals_, merged = yield from self._apply_intent_rewrite_cps(
+                intent_method, callable_inst, active, globals_, merged
+            )
+
         user_prompt = config.get("user_prompt")
         if user_prompt is None:
             raise TypeError(
@@ -118,8 +127,79 @@ class _LLMCallableMixin:
         )
         return request, type_hint
 
+    def _discover_optional_protocol_method(self, callable_inst: IbObject, name: str):
+        """可选协议方法运行时发现（receive 分派同源虚表查找，非 getattr 能力探测）。
+
+        ``ib_class.lookup_method`` 与 ``receive`` 普通消息路由同源（虚表 + 继承链），
+        是"经 receive 分派发现"的运行期形态。未声明 → 返回 None（装配方取缺省默认
+        行为：意图原样透传、retry 用帧默认策略）；声明了却非用户函数方法 → fail-fast
+        （契约违约显式暴露，不静默忽略）。
+        """
+        ib_class = callable_inst.ib_class
+        method = ib_class.lookup_method(name)
+        if method is None:
+            return None
+        from core.runtime.objects.kernel import IbUserFunction
+
+        if not isinstance(method, IbUserFunction):
+            raise TypeError(
+                f"invoke_llm_callable: {name} must be a user method "
+                f"(got {type(method).__name__})."
+            )
+        return method
+
+    def _apply_intent_rewrite_cps(
+        self,
+        intent_method: "IbUserFunction",
+        callable_inst: IbObject,
+        active: list,
+        globals_: list,
+        merged: list,
+    ):
+        """`__intent__` 可选协议方法装配改写（P4b-3a）：用户方法改写进入本次调用的意图。
+
+        契约（用户语言层）：``func __intent__(self, dict intents) -> dict``——入参
+        ``{"active": [str], "global": [str], "merged": [str]}``（装配时消解的意图三层，
+        与 ``LLMCallRequest.intents`` 对齐）；返回 dict 键为三层**任意子集**，存在的键
+        替换对应层（消解/增删/重排），缺失的键保持原层（合并语义）。返回非 dict、
+        层值非 str 列表、参数数非 1 → fail-fast（``TypeError``，契约违约显式暴露）。
+        """
+        spec = getattr(intent_method, "spec", None)
+        param_count = len(getattr(spec, "param_types", None) or [])
+        if param_count != 1:
+            raise TypeError(
+                "invoke_llm_callable: __intent__ must take exactly one argument "
+                "'func __intent__(self, dict intents) -> dict' "
+                f"(got {param_count})."
+            )
+
+        intent_obj = self.registry.box(
+            {"active": active, "global": globals_, "merged": merged}
+        )
+        result = yield UserFunctionCall(intent_method, [intent_obj], callable_inst)
+        config = self._llm_callable_config_to_dict(result, method_name="__intent__")
+
+        def _layer(key: str) -> Optional[list]:
+            if key not in config:
+                return None
+            value = config[key]
+            if not isinstance(value, list) or not all(isinstance(s, str) for s in value):
+                raise TypeError(
+                    f"invoke_llm_callable: __intent__ dict key '{key}' must be a "
+                    f"list of str (got {type(value).__name__})."
+                )
+            return value
+
+        # 键存在即替换对应层（含显式空列表 = 清空该层）；键缺失保持原层（合并语义）。
+        new_active = _layer("active") if "active" in config else list(active)
+        new_global = _layer("global") if "global" in config else list(globals_)
+        new_merged = _layer("merged") if "merged" in config else list(merged)
+        return new_active, new_global, new_merged
+
     @staticmethod
-    def _llm_callable_config_to_dict(result: IbObject) -> Dict[str, Any]:
+    def _llm_callable_config_to_dict(
+        result: IbObject, method_name: str = "__llm_call__"
+    ) -> Dict[str, Any]:
         """把用户返回的装配 dict（IbDict）解析为普通配置映射（值 unbox）。"""
         if result.ib_class is not None and result.ib_class.name == "dict":
             fields = getattr(result, "fields", None)
@@ -132,7 +212,7 @@ class _LLMCallableMixin:
         if isinstance(native, dict):
             return dict(native)
         raise TypeError(
-            "invoke_llm_callable: __llm_call__ must return a config dict "
+            f"invoke_llm_callable: {method_name} must return a config dict "
             f"(got {type(result).__name__})."
         )
 

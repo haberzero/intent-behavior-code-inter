@@ -149,25 +149,35 @@ retry）。
 > **每 item 一次调用**。判别：无参→单次固定装配；声明 item 参→逐项装配（"欢迎1"/"欢迎2"）。
 > 全量 pytest **3030 passed / 1 skipped** 零回归。
 
+> **✅ P4b-3a `__intent__` 可选协议方法运行时发现已落地（本 session，unsafe-vibe-dev）**：
+> 装配入口 `assemble_llm_callable_request_cps` 经 `lookup_method`（receive 同源虚表）
+> 发现 `__intent__`，存在则经 `UserFunctionCall` CPS 调用用户 `func __intent__(self, dict
+> intents) -> dict`——入参三层（active/global/merged，与 `LLMCallRequest.intents` 对齐）；
+> 返回 dict 键为三层任意子集：存在键替换对应层（消解/增删/重排）、缺失键透传、显式空列表
+> 清空层；结果合并回装配（单调用与 run_batch 共用装配入口自动继承）。契约违约（参数数≠1 /
+> 返回非 dict / 层值非 str 列表）fail-fast。判别测试 +5（改写 merged + 读入 global 层 /
+> 透传 active+global / 空列表清空层 / 批量继承 / 违约 fail-fast）；行为值路径零变化。
+> **`__retry__` 装配消费归 P4d**（避免零消费者半接通；发现机制与 `__intent__` 同一通道）；
+> **装配上下文按需引入（当前无消费者，不引入）**。全量 pytest **3035 passed / 1 skipped** 零回归。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b-3 LLMCallable 可选协议方法运行时发现（下一 session 开工）**：
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b-3b：`stream_call`/`stream_channel` 统一消费 LLMCallable**：
    **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 + P4a +
-   P4b 设计定稿 + P4b-2a 统一装配路径 + **P4b-2b run_batch 统一消费**（全量 3029 零回归）已合入）。
+   P4b 设计定稿 + P4b-2a/2b/2c 统一装配 + **P4b-3a `__intent__` 可选协议方法运行时发现**
+   （全量 3035 零回归）已合入）。
    设计权威 `tasks_docs/_five_foundation_P1_design.md` §一-§三 + `_code_p4b_assembly.md`（临时，
    实现后删除），决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P4b-3（P1 §2.2 可选能力运行时发现）**：
-   - `__intent__` 可选协议方法：行为/llm 类在装配时改写进入本次调用的意图（消解/增删/重排）；
-     经 `receive` 协议分派发现，存在则调（P4b-2a 装配 dict 基础上扩展 `__intent__` 结果合并）；
-   - `__retry__` 可选协议方法：声明重试策略/hint（决策 5 高阶化输入，P4d 落地装配）。
-   - 装配上下文 `IbLLMCallAssemblyCtx`（只读意图入参）按需引入（用户 `__llm_call__` 需读输入时）；
-   - 剩余消费面：`stream_call`/`stream_channel` 统一消费 LLMCallable（当前仍吃字符串，需设计
-     llm 类流式装配语义，P1 §2.4）+ 行为值经统一装配入口路由（sync/CPS 张力见
-     `_code_p4b_assembly.md` §2.3 已定 CPS 装配入口承载）。
+   **本步 = P4b-3 剩余部分（P1 §2.4 消费路径统一收尾）**：
+   - `stream_call`/`stream_channel` 统一消费 LLMCallable（当前仍吃字符串，需设计 llm 类
+     流式装配语义，P1 §2.4；字符串形态消费方迁移面评估后处理）
+   - 行为值经统一装配入口路由（sync/CPS 张力见 `_code_p4b_assembly.md` §2.3 已定 CPS
+     装配入口承载）
+   - 装配上下文 `IbLLMCallAssemblyCtx`（只读意图入参）按需引入（用户 `__llm_call__` 需读
+     输入时；当前无消费者）
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
-   **后续子增量**：P4b-3（`__intent__`/`__retry__` 可选协议方法运行时发现）→ P4c `llm/llmend`
-   语法+旧机制全链路删除（决策 4 + 用户追加裁定）+ 全量迁移（36 测试 + 66 示例/试用文件）→
-   P4d retry 高阶化（决策 5）。
+   **后续子增量**：P4c `llm/llmend` 语法+旧机制全链路删除（决策 4 + 用户追加裁定）+ 全量迁移
+   （36 测试 + 66 示例/试用文件）→ P4d retry 高阶化（决策 5，含 `__retry__` 装配消费）。
    **待 P4 对齐项**：G5 意图值栈全量重构 + has_llm_call_cap → LLMCallable 协议。
    **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾）。
    后续 P5 → P6 落地。

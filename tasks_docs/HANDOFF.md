@@ -206,15 +206,20 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **✅ 交接核验与接手完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支
   unsafe-vibe-dev / 提交序列对齐 / 契约文件 + 判别测试齐备 / 全量 pytest 实跑 3030 passed /
   1 skipped）；交接要点已收敛入本节并删除临时交接文件（git 承载）。
-  **当前推进 = P4b-3 LLMCallable 可选协议方法运行时发现**（`__intent__`（意图改写）/
-  `__retry__`（重试策略声明）可选能力经 receive 发现，P1 §2.2；装配上下文按需引入；剩余消费面
-  stream 统一 + 行为经统一入口，按 `_code_p4b_assembly.md` §四），详见
+  **✅ P4b-3a `__intent__` 可选协议方法运行时发现已落地**：装配入口经 receive 同源虚表
+  发现 `__intent__` → CPS 调用用户方法改写意图三层（存在键替换/缺失键透传/空列表清空层）
+  → 合并回 `LLMCallRequest.intents`；契约违约 fail-fast；run_batch 共用装配入口自动继承；
+  `__retry__` 装配消费归 P4d（免半接通）、装配上下文按需引入（当前无消费者）。全量
+  pytest 3035 passed / 1 skipped 零回归。
+  **当前推进 = P4b-3b：`stream_call`/`stream_channel` 统一消费 LLMCallable**（llm 类流式
+  装配语义设计 + 行为经统一装配入口；字符串形态消费方迁移面评估后处理），详见
   `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4c（llm 语法+旧机制删除+
   全量迁移 36/66 面）→ P4d（retry 高阶化）→ P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
 - [x] **✅ 交接核验接收完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 契约文件 + 判别测试齐备 / 全量 pytest 实跑 3030 passed / 1 skipped）；要点已收敛入 §二，临时交接文件已删除（git 承载）
+- [x] **✅ P4b-3a `__intent__` 可选协议方法运行时发现落地**：装配入口发现 + CPS 调用 + 三层合并（存在键替换/缺失键透传/空列表清空）+ 契约 fail-fast + run_batch 继承；判别测试 +5；行为零变化；全量 3035 零回归
 - [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）

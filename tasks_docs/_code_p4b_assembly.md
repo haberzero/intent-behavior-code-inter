@@ -89,7 +89,34 @@ P1 §2.4 消费路径统一：
 - **P4b-2b**：`run_batch`/`stream` 接受"任何 LLMCallable 实例"（移除 `isinstance(behavior,
   name=="behavior")` 窄校验）；行为经统一装配入口路由（机制同构收敛）；装配上下文
   `IbLLMCallAssemblyCtx`（只读意图入参）按需引入。
-- **P4b-3**：`__intent__` / `__retry__` 可选协议方法运行时发现 + 装配上下文承载。
+- **P4b-3（拆分两个子增量，勿半接通）**：
+  - **P4b-3a**：`__intent__` 可选协议方法运行时发现 + 装配改写合并闭环。
+  - **P4b-3b**：`stream_call`/`stream_channel` 统一消费 LLMCallable（llm 类流式装配语义
+    设计 + 行为经统一装配入口；字符串形态消费方迁移面评估后处理）。
+- **P4d 预留（不在 P4b-3 落地）**：`__retry__` 可选协议方法——P1 §2.2 契约已定（重试
+  策略声明 / 快照策略 / hint，决策 5 输入）；装配消费与 P4d retry 高阶化一并落地，避免
+  零消费者死代码（半接通）。发现机制与 `__intent__` 同一 `lookup_method` 通道，P4d 复用。
+- **`IbLLMCallAssemblyCtx` 按需引入**：`__intent__` 直接收意图 dict、`__llm_call__` 返回
+  配置 dict——当前无消费者需要读"只读上下文"，**不引入**（避免无消费者空壳对象）；
+  P4d `__retry__` 若需上下文再引入（§2.2 已定形态）。
+
+### P4b-3a 设计定稿：`__intent__` 可选协议方法
+
+- **契约（用户语言层）**：`func __intent__(self, dict intents) -> dict`。
+  - 入参：`{"active": [str], "global": [str], "merged": [str]}`——装配时消解的意图三层
+    （与 `LLMCallRequest.intents` 对齐；active=活跃一次性意图、global=全局意图、
+    merged=合并消解结果）。
+  - 返回：dict，键为三层任意子集；存在的键**替换**对应层（消解/增删/重排），缺失的键
+    **保持**原层（合并语义，镜像"装配 dict 基础上扩展 `__intent__` 结果合并"）。
+  - 返回非 dict / 层值非 str 列表 / 参数数非 1 → fail-fast TypeError（契约违约显式暴露）。
+- **发现机制**：`assemble_llm_callable_request_cps` 内 `ib_class.lookup_method("__intent__")`
+  ——receive 分派同源虚表查找（非 getattr 能力探测）；未声明 → 意图原样透传（行为默认
+  透传，P1 §2.2）；声明了非用户函数方法 → fail-fast。
+- **调用机制**：经 `UserFunctionCall` CPS 调用（与 `__llm_call__` 同机制——避免同步
+  receive 的 CPS 分裂，§2.3）。
+- **合并点**：`_resolve_llm_callable_intents_cps` 之后、构造 `LLMCallRequest` 之前。
+- **影响面**：单调用 `invoke_llm_callable_cps` 与 `run_batch` 逐项（共用统一装配入口）
+  自动继承；行为值路径零变化（行为不走统一装配入口）。
 
 ## 五、验证门
 

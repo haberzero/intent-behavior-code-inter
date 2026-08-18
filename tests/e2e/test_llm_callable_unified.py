@@ -26,6 +26,8 @@ class RecProvider:
             "user_prompt": request.user_prompt,
             "output_hint": request.output_contract.output_hint,
             "merged": list(request.intents.merged),
+            "active": list(request.intents.active),
+            "global": list(request.intents.global_),
         })
         return LLMCallResult(content="TRANSLATED_OK")
     def stream(self, request):
@@ -159,3 +161,126 @@ class TestLLMCallableUnifiedInvoke:
         assert len(prov.calls) == 2, f"应逐项 2 次调用: {len(prov.calls)}"
         prompts = [c["user_prompt"] for c in prov.calls]
         assert "欢迎1" in prompts and "欢迎2" in prompts, f"items 未逐项参数化: {prompts}"
+
+
+class TestLLMCallableIntentRewrite:
+    """P4b-3a：``__intent__`` 可选协议方法运行时发现 + 装配改写合并。
+
+    判别：用户 llm 类声明 ``func __intent__(self, dict intents) -> dict`` 时，装配入口
+    发现并调用——返回 dict 中存在的键替换对应意图层（消解/增删/重排），缺失的键保持
+    原层（合并语义透传）；未声明时意图原样透传。provider 记录请求的意图三层供断言。
+    """
+
+    def test_intent_rewrites_merged_and_maps_three_layers(self, tmp_path, monkeypatch):
+        """__intent__ 读入三层 dict（验证 global 层映射），改写 merged；active/global 透传。"""
+        body = (
+            'ai.set_global_intent("钱是身外之物")\n'
+            "class Rewriter:\n"
+            "    func __intent__(self, dict intents) -> dict:\n"
+            "        return {\"merged\": [\"改写自:\" + intents[\"global\"][0]]}\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\"}\n"
+            "Rewriter r = Rewriter()\n"
+            "@+ 优雅论述\n"
+            "lib2.invoke(r)\n"
+            "print(\"done\")\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        assert out and out[0] == "done", out
+        prov = eng.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        assert prov is not None and prov.calls, "provider 未被调用"
+        last = prov.calls[-1]
+        # __intent__ 改写了 merged（读入 global 层并前置"改写自:"）
+        assert last["merged"] == ["改写自:钱是身外之物"], f"merged={last['merged']}"
+        # 缺失的键保持原层：global / active 透传
+        assert last["global"] == ["钱是身外之物"], f"global={last['global']}"
+        assert "优雅论述" in last["active"], f"active={last['active']}"
+
+    def test_intent_explicit_empty_list_clears_layer(self, tmp_path, monkeypatch):
+        """显式空列表 = 清空该层（消解 merged）；其余层保持。"""
+        body = (
+            'ai.set_global_intent("钱是身外之物")\n'
+            "class Rewriter:\n"
+            "    func __intent__(self, dict intents) -> dict:\n"
+            "        return {\"merged\": []}\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\"}\n"
+            "Rewriter r = Rewriter()\n"
+            "lib2.invoke(r)\n"
+            "print(\"done\")\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        prov = eng.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        assert prov is not None and prov.calls, "provider 未被调用"
+        last = prov.calls[-1]
+        assert last["merged"] == [], f"merged 应按显式空列表清空: {last['merged']}"
+        assert last["global"] == ["钱是身外之物"], f"global 应透传: {last['global']}"
+
+    def test_intent_without_declaration_passes_intents_through(self, tmp_path, monkeypatch):
+        """未声明 __intent__ 的 llm 类：意图原样透传（行为默认透传语义）。"""
+        body = (
+            'ai.set_global_intent("钱是身外之物")\n'
+            "class Plain:\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\"}\n"
+            "Plain p = Plain()\n"
+            "@+ 优雅论述\n"
+            "lib2.invoke(p)\n"
+            "print(\"done\")\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        prov = eng.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        assert prov is not None and prov.calls, "provider 未被调用"
+        last = prov.calls[-1]
+        # 未改写：merged = 原始合并消解结果（至少包含 global 意图项）
+        assert "钱是身外之物" in last["merged"], f"merged={last['merged']}"
+        assert "优雅论述" in last["active"], f"active={last['active']}"
+
+    def test_intent_run_batch_inherits_rewrite(self, tmp_path, monkeypatch):
+        """run_batch（共用统一装配入口）自动继承 __intent__ 改写，逐项均生效。"""
+        body = (
+            "class Rewriter:\n"
+            "    func __intent__(self, dict intents) -> dict:\n"
+            "        return {\"merged\": [\"批量改写\"]}\n"
+            "    func __llm_call__(self, any item) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\"}\n"
+            "Rewriter r = Rewriter()\n"
+            "list results = ai.run_batch(r, [1, 2])\n"
+            "print(results)\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        prov = eng.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        assert prov is not None and prov.calls, "run_batch 未触发装配"
+        assert len(prov.calls) == 2, f"应逐项 2 次调用: {len(prov.calls)}"
+        for call in prov.calls:
+            assert call["merged"] == ["批量改写"], f"merged={call['merged']}"
+
+    def test_intent_contract_violations_fail_fast(self, tmp_path, monkeypatch):
+        """契约违约 fail-fast：参数数非 1 / 返回非 dict → TypeError 显式暴露。"""
+        import pytest
+
+        bad_param_count = (
+            "class Bad:\n"
+            "    func __intent__(self) -> dict:\n"
+            "        return {\"merged\": []}\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\"}\n"
+            "Bad b = Bad()\n"
+            "lib2.invoke(b)\n"
+        )
+        with pytest.raises(Exception) as exc_param:
+            _run(bad_param_count, tmp_path, monkeypatch)
+        assert "exactly one argument" in str(exc_param.value), str(exc_param.value)
+
+        bad_return = (
+            "class Bad:\n"
+            "    func __intent__(self, dict intents) -> str:\n"
+            "        return \"x\"\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\"}\n"
+            "Bad b = Bad()\n"
+            "lib2.invoke(b)\n"
+        )
+        with pytest.raises(Exception) as exc_ret:
+            _run(bad_return, tmp_path, monkeypatch)
+        assert "__intent__ must return a config dict" in str(exc_ret.value), str(exc_ret.value)
