@@ -53,7 +53,9 @@ class TestBehaviorPromptMechanism:
         assert "禁止输出任何解释" in prompts[0]
         assert "IBCI" not in prompts[0]
 
-    def test_str_behavior_gets_generic_expected_type_declaration(self):
+    def test_str_behavior_gets_axiom_output_hint(self):
+        """str 现在与 int/list/dict/tuple 一致（D4）：提供 output_hint 能力，
+        行为值经 axiom `__outputhint_prompt__` 注入输出格式约束。"""
         lines, prompts = _run_with_hooks(
             AI_MOCK_PREFIX
             + "str x = @~ MOCK:STR:hi ~\n"
@@ -61,7 +63,7 @@ class TestBehaviorPromptMechanism:
         )
         assert lines == ["hi"]
         assert prompts
-        assert "必须返回一个 str 值" in prompts[0]
+        assert "请直接返回字符串内容" in prompts[0]
 
     def test_enum_outputhint_injected_for_behavior(self):
         code = AI_MOCK_PREFIX + """
