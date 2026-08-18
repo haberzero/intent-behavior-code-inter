@@ -27,42 +27,25 @@
 
 ## 🔴 当前状态
 
-**主线：远期原生宿主绑定（F0-F5）**——`ROADMAP_NATIVE_BINDING.md` §三【远期愿景】。
-**F0（地基验证）+ F1（宿主导入一等语法 + 用户类持有 native）+ F2（协议/impl 扩展到
-宿主类型）已完成**：宿主导入 `import python "pkg" as lib: bind ...` 全链路实现（AST/
-lexer/parser/依赖扫描/scheduler/语义/运行时/VM），显式声明式绑定（非自动穿透）+
-编译期类型检查 + 用户类持 native；bind class 宿主类型绑定（一等类型 EXTERNAL_MODULE
-CLASS + per-instance vtable + impl 补充/协议满足）。F2 独立复核整改闭环已合并
-（65414738），全量 pytest 3053 passed / 1 skipped。设计底稿
-`docs/architecture/01_native_host_binding.md` §五 + 语法文档
-`docs/syntax/11_modules.md` §11.10。**F3（插件体系重构）已完成**：废弃 Python 侧
-`_spec.py` 磁盘发现/加载通道，用户侧扩展唯一边 = 宿主绑定 `bind`。F3-1：10 个
-`_spec.py` 删除，内置 11 模块（内核原生 5 + 工具 5 + file）TypeDef 字面量集中
-`core/runtime/bootstrap/builtin_modules.py`（BUILTIN_MODULE_SPECS，file 自 engine 挪入）
-构造期一次注册全部含实现；结构等价探针 + 契约测试 + loader 环 2 去双绑定。F3-2：磁盘
-插件发现/加载双通道彻底铲除（discovery/auto_discovery/loader 环 2/插件搜索路径配置面/
-main.py --plugin/ibci_sdk/__ibcext_axiom__ 死协议/spec_builder 死代码/幽灵码），Engine
-签名简化 `IBCIEngine(root_dir=...)`。F3-3：examples/trials/docs 全迁移（清 plugins_demo/
-isolation plugins/T01 plugins，write_user_plugin → extend_with_host_binding，docs 改 F3
-事实）。F3-4：残留扫描 `_spec.py`/`__ibcext_vtable__`/discovery 引用清零（功能面零残留，
-仅历史注释）。三阶段全量 pytest 零回归。F3-0 bind 默认参数已裁决跳过（默认值放 .ibci
-包装层）。**F4（Provider 自定义经宿主绑定统一）已完成**：用户经
-`import python "<mod>" as lib: bind provider` 声明实现 `LLMProvider` 契约的自定义
-provider，`ai.set_provider(lib.provider)` 注册为激活 `llm_provider`（HIGH 优先级覆盖
-内置默认 RecommendedProvider）；R 期"改 provider_impl.py"临时形态拆除（provider_impl.py
-降为内置默认实现）；`docs/howto/modify_llm_provider.md` 改写为宿主绑定通道；用户
-2026-08-18 授权推翻 R0-R2"不新增语言级注册 API"裁定。全量 pytest 2956 passed /
-1 skipped 零回归 + 自定义 provider e2e。**F5（架构统一/文档收敛）评估完成**：档 A
-缓存 / 内核自举 / 档 B 真 JIT / 隔离改造 / 反射能力评估后**列为远期 pending 规划**
-（当前"引擎单次执行"模型下收益有限或为规划项，见 WORKLOG）；F5-2 文档/架构收敛
-进行中（docs/README 目录树已校验一致；修正 09_observability 的 auto_sniff 残留；
-`IsolationPolicy.inherit_plugins` 记录为 F3 后孤儿字段留待清理）。分支 `exp/unify-f5`。
+**主线：远期原生宿主绑定（F0-F5）已全部完成并合入 `unsafe-vibe-dev`**（路线图
+`tasks_docs/ROADMAP_NATIVE_BINDING.md` §三 F0-F5）：宿主导入一等语法 + 宿主类型绑定
+（F1-F2）、插件体系重构（F3, 废弃 _spec.py、内置 11 模块 `builtin_modules.py` 构造期
+注册）、Provider 自定义经宿主绑定统一（F4, `ai.set_provider`）、架构统一/文档收敛
+（F5, 档 A/内核自举/档 B/隔离/反射=远期 pending）。全量 pytest 2956 passed / 1 skipped。
+
+**🔴 新主线：「重构 llm 机制为可调用的 llm 类」**（用户 2026-08-18 定方向）：用户决定
+**彻底抛弃"llm 函数"概念**，重新设计为**可调用的 llm 类**（面向对象形态承载 LLM 调用/
+意图/llmexcept 等语义）。**本轮仅确立方向并写入任务控制文档；具体调研与需求确定交给
+下一 session 承接**——当前 `@~ ... ~`/`func` llm 函数形态、意图注入、llmexcept、ai.*/
+provider 链路、MOCK/真实调用、衍生方言（PT-DECIDE-3 LLM prompt 协议家族）均需在重设计
+范围内评估破坏面与迁移。详情见下一步候选 #1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·远期，当前] F5 架构统一/文档收敛**——补齐原生绑定语法/协议/用户 IBCI 库
-   文档；评估并落地档 A（缓存预编译）→ 档 B（真 JIT）；内核自举（内置契约再表达为
-   bind 声明）；隔离/反射能力规划评估（ROADMAP_NATIVE_BINDING.md §三 F5）。
+1. **[主线·当前] llm 机制重构为可调用 llm 类（调研 + 需求确定，下一 session 承接）**：
+   盘点现 llm 函数语义面（`@~ ... ~`、`func` llm 函数、意图注入、llmexcept、provider 链路、
+   MOCK/真实调用、LLM prompt 协议家族），设计"可调用的 llm 类"形态（类实例承载 LLM 调用
+   意图，替代 llm 函数），评估破坏面与迁移路径；产出设计/需求文档后进入实现。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 

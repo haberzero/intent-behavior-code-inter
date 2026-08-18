@@ -218,7 +218,15 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   为 F3 后的孤儿字段**（engine 已删 inherited_plugin_paths 传播机制，core/tests 零消费者）——
   因属公开策略字段（to_dict/from_dict/工厂 + 序列化契约），按其 public 面与用户 F5 pending 指示，
   记录为本阶段收敛项、留待单独清理（不仓促动契约）。
-
+- **F5 低风险直接合并 unsafe-vibe-dev 完成（2026-08-18，用户"一并合入"授权）**：
+  用户确认把 `exp/unify-f5`（F5 评估 + 文档规整）一并合入。dev 未动（在 F4 合并点
+  28df3dae），F5 分支是其上 4 个提交（7231461e/bb45a6b7/7857cc51/d1af8390）→ 纯
+  fast-forward（28df3dae..d1af8390，8 文件 +72/-232），两分支同点。合并后全量 pytest
+  2956 passed / 1 skipped（该提交已在 F5 分支验证）。
+- **主线下一条：彻底大改 llm 函数机制（2026-08-18，用户定方向；调研/需求确定留给下一 session）**：
+  用户决定**抛弃"llm 函数"概念**，重新设计为**可调用的 llm 类**（面向对象形态承载
+  LLM 调用/意图/llmexcept 等语义）。本轮仅确立方向并写入任务控制文档，不做调研/实现；
+  具体调研与需求确定由下一 session 承接（见 NEXT_STEPS/ROADMAP 新主线条目）。
 
 ---
 

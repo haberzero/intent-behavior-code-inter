@@ -134,9 +134,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   - 用户侧扩展唯一边 = 宿主绑定 `bind`（`docs/howto/extend_with_host_binding.md`）；
     自定义 LLM provider = 宿主绑定 + `ai.set_provider`（`docs/howto/modify_llm_provider.md`）。
   - LLM 供应商无关中间层 `core/base/llm_protocol/`；MOCK 哨兵在该层 `llm_call.py`。
-- **⏳ 下一步**：按 `NEXT_STEPS.md` 下一步候选调度（支线：PT-DEBT 质量审计、真实 LLM
-  压力试用 VISION-3、文档持续治理；或 F5 pending 项（档 A 缓存/内核自举等）在出现触发
-  条件时评估）。
+- **⏳ 下一步（新主线）**：**llm 机制重构为可调用的 llm 类**（用户 2026-08-18 定方向）——
+  彻底抛弃"llm 函数"概念，改为面向对象的可调用 llm 类（承载 LLM 调用/意图/llmexcept）。
+  调研与需求确定由下一 session 承接（盘点现 llm 函数语义面 + 设计 llm 类形态 + 评估破坏面/
+  迁移），详见 `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
