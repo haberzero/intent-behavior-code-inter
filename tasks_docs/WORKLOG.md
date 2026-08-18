@@ -329,7 +329,7 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   父链冗余），覆层影子条目挂声明类自身（父链查找会误挂到 Object 祖先导致覆层全局泄漏，P2-②
   若需继承在其机制内显式设计）。判别性测试：协议消息名键建槽/非协议落 vtable、callable 多态
   native 解析、覆层默认不参与分派、消息级协议语义保持（super proxy/类特化/Optional 委托/
-  用户 __call__ CPS）。临时文档 `tasks_docs/_code_protocol_vtable.md`（落地后删除）。
+  用户 __call__ CPS）。临时任务文档 `_code_protocol_vtable.md` 已随本增量收尾删除（git 承载）。
 
 - **五大地基改造 · 会话交接点最终状态（2026-08-18，exp/protocol-vtable）**：
   **当前分支 = `exp/protocol-vtable`**（从 `unsafe-vibe-dev` 的 `e8c7944b` 分叉的独立实验分支；
