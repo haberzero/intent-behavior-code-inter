@@ -228,6 +228,25 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   用户决定**抛弃"llm 函数"概念**，重新设计为**可调用的 llm 类**（面向对象形态承载
   LLM 调用/意图/llmexcept 等语义）。本轮仅确立方向并写入任务控制文档，不做调研/实现；
   具体调研与需求确定由下一 session 承接（见 NEXT_STEPS/ROADMAP 新主线条目）。
+- **五大地基改造调研 + 总路线（2026-08-18，本 session，只读调研无代码改动）**：完成交接清单
+  `_llm_callable_redesign.md` §6bis.3 六项补充调研全部点（内置类型协议方法表机制形态/
+  lambda-snapshot 捕获策略参数化落点/retry 协议化边界/行为语句 vs llm 可调用类统一点/
+  能力公理→协议满足收敛/prompt 协议族类型类化），扩展为五大地基（函数式/类型类/类型理论/
+  高阶函数/协议化）现状评估（评分 3-3.5/5）与总路线 P1-P9。**关键调研结论（设计定稿输入）**：
+  ① 内置类型协议方法表三选一落点（spec 注入+vtable 覆写 / per-IbClass 协议方法表 /
+  `_dispatch_<dunder>` 钩子），核心障碍 = satisfies_protocol 读 spec.members vs receive 读
+  vtable 双表不同步（D3）；② capture_mode 值层已参数化、类型层隐形，改造面 = 运行时闭包
+  机制三处（vm_handle_IbLambdaExpr/_vm_call_fn_callable/bind_behavior_closure）+ snapshot
+  意图快照文档漂移（D8，纯 snapshot lambda 不冻结意图与文档不符）；③ retry 收敛边界 = 保留
+  LLMExceptFrame 帧机制作执行基质，retry/llmretry 语法与策略高阶化（语法糖 + 协议方法）；
+  ④ 行为语句与 llm 函数两条路径已收敛到 LLMCallRequest，统一点 = 引入 LLMCallable 协议统一
+  消费路径（修复 D9 裸 `@~` 非可调用值/D11 双装配/D12 可调用类无 LLM 语义）；⑤ 能力公理
+  收敛三层划分 = 类型元属性（is_*/kind）保留 axiom、行为层收敛协议满足、编译期推断专用
+  （resolve_*）保留 axiom 方法；⑥ prompt 协议族双注册表（PROMPT_PROTOCOL_SPECS vs
+  BUILTIN_PROTOCOLS）收敛 + to_prompt 死条目激活 + str 缺 output_hint（D4）。**产出**：
+  `tasks_docs/_five_foundation_redesign.md`（临时，路线 P1-P9 与待决项 §五）；NEXT_STEPS/
+  HANDOFF 同步。设计定稿（P1）交下一 session。调研方法：代码实证 + 运行探针
+  （create_default_registry）+ 同步 subagent（本环境后台 subagent 不稳定已弃用）。
 
 ---
 

@@ -39,16 +39,29 @@
 主线**——行为描述/意图注释/retry/prompt 协议族/lambda/snapshot/llm 函数全部收敛为"可调用实例 +
 协议（类型类）"机制：lambda/snapshot 统一为 llm 匿名可调用类的两种捕获模式语法糖；`impl` 目标
 扩展至内置类型（可改写 `int` 等的 `__prompt__` 系列）；retry 高阶化（行为实例也可经 impl 包装
-retry）。**本轮已产出调研报告 + 可行性 + 规划（`tasks_docs/_llm_callable_redesign.md`，临时）；
-具体设计定稿交给下一 session 承接**——详见下一步候选 #1。
+retry）。
+
+**本轮已产出**：
+- 调研基准 `tasks_docs/_llm_callable_redesign.md`（可行性 + 规划，P0）；
+- **交接清单 6 项补充调研全部完成 + 五大地基现状评估 + 总路线设计**
+  （`tasks_docs/_five_foundation_redesign.md`，临时）：内置类型协议方法表机制形态（三选一落点）、
+  lambda/snapshot 捕获策略参数化落点（值层已参数化，运行时闭包机制是主改造面）、retry 协议化
+  边界（帧机制保留 + 语法/策略高阶化）、行为语句 vs llm 可调用类统一点（统一 LLMCallable
+  消费路径）、能力公理 → 协议满足关系收敛（三层划分）、prompt 协议族类型类化（双注册表收敛 +
+  to_prompt 死条目激活）；五大地基评分（函数式 3 / 类型类 3 / 类型理论 3 / 高阶函数 3.5 / 协议化
+  3.5）；总路线 P1-P9。
+
+**具体设计定稿（P1）交给下一 session 承接**——详见下一步候选 #1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 总统一性设计定稿（P1，下一 session 承接）**：以 `tasks_docs/_llm_callable_redesign.md`
-   为调研基准，定稿 llm 可调用类（协议方法族/意图改写/retry 高阶化/与 LLMCallRequest 承载）+
-   装饰壳体系（impl 目标扩展到可调用实例/内置类型 + 函数实例 prompt 呈现协议化）+ lambda/snapshot
-   捕获策略参数化 + prompt 协议族类型类化；评估破坏面与迁移路径；产出设计定稿后进入实现
-   （P2-P5 分阶段，见临时文档 §五）。
+1. **[主线·当前] 五大地基改造 · P1 设计定稿（下一 session 承接）**：以 `tasks_docs/_five_foundation_redesign.md`
+   为调研基准（其 §四 总路线 P1-P9），先定稿 llm 可调用类（协议方法族/意图改写/retry 高阶化/
+   与 LLMCallRequest 承载；llm 函数迁移策略，真设计废除 `__sys__/__user__` 段）+ 装饰壳体系
+   （impl 目标扩展到可调用实例/内置类型 + 函数实例 prompt 呈现协议化）+ lambda/snapshot 捕获
+   策略参数化 + prompt 协议族类型类化；对 §五 待决项逐项收敛（内置类型协议方法表三选一/snapshot
+   意图快照文档漂移修复/llm 函数语法去留/retry 收敛边界/P7-P8 排期）；产出设计定稿后进入实现
+   （P2-P9 分阶段，见 `_five_foundation_redesign.md` §四）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
