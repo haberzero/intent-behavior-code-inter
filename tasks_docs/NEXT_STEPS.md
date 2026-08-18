@@ -65,8 +65,8 @@ retry）。
 > 不兼容、不包袱）。P1 定稿已产出 `tasks_docs/_five_foundation_P1_design.md`（§一-§九，
 > 7 项开工输入全部定稿）。
 
-> **P2 已在独立分支 `exp/protocol-vtable` 取得进展（本 session，未合入）**：当前**当前分支 =
-> `exp/protocol-vtable`**（从 `unsafe-vibe-dev` 的 `e8c7944b` 分叉）。已完成的零回归增量：
+> **P2/P6 地基已完成并合入 `unsafe-vibe-dev`（本 session，用户确认零风险后纯 fast-forward 合并）**：
+> 当前分支 = `unsafe-vibe-dev`（`exp/protocol-vtable` 实验分支已按"合并即删"政策删除）。已完成的零回归增量：
 > - P2-① retroactive impl 目标扩展到内置类型（`impl P for int` 编译/运行/协议满足三环闭环，
 >   合成 owned_scope 复用 F2 机制；commit `6c3f6c94`）；
 > - D4 str 补齐 output_hint（`has_output_hint_cap` + `__outputhint_prompt__`，与 int/list/dict
@@ -95,12 +95,12 @@ retry）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 接续 `exp/protocol-vtable` 分支 · P2③ D2 to_prompt 激活 + P5 prompt 类型类化（下一 session 开工）**：
-   **当前分支 = `exp/protocol-vtable`**（独立分支，P6 改动面大走独立分支原型验证的政策；未合入
-   `unsafe-vibe-dev`）。已提交增量：protocol_vtable 数据结构（`cd60ea6d`）+ 地基（receive 骨架
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P2③ D2 to_prompt 激活 + P5 prompt 类型类化（下一 session 开工）**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已 fast-forward 合入并删除实验分支，本 session 用户
+   确认零风险后授权合并）。已合入增量：protocol_vtable 数据结构（`cd60ea6d`）+ 地基（receive 骨架
    收敛 `6d933080`）+ P2-①（impl 内置目标 `6c3f6c94`）+ D4（str output_hint `eb8ecd30`）+ D9
-   （is_callable_instance 清理 `6fd2cefc`）+ **P2-② 临时覆层机制（本 session 提交，全量 2997
-   零回归）**；设计权威 `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
+   （is_callable_instance 清理 `6fd2cefc`）+ P2-② 临时覆层机制（`1d3fc74a`；全量 2997 零回归）；
+   设计权威 `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
    **本步 = P2③ D2 to_prompt 激活 + P5 prompt 类型类化（D1 双注册表收敛/补 __payload_prompt__）**：
    D2 to_prompt 协议现**零消费者**（核心无 satisfies_protocol(...,'to_prompt') 调用；内置类型
    satisfies=F 但运行期均经 vtable `__to_prompt__` 渲染）——真激活须接 PromptRenderer 协议前置，

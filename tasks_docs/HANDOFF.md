@@ -130,9 +130,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   - **F5**：架构统一/文档收敛——档 A 缓存/内核自举/档 B 真 JIT/隔离/反射评估为**远期
     pending 规划**（当前"引擎单次执行"模型下收益有限）；文档与代码一致。
 - **当前代码状态**：
-  - **当前分支 = `exp/protocol-vtable`**（从 `unsafe-vibe-dev` 的 `e8c7944b` 分叉的**独立实验
-    分支**，五大地基 P6 协议方法表原型验证用）。`unsafe-vibe-dev` 未更新（P1 设计定稿
-    `e8c7944b` 在上）。本地领先 `origin`（**未 push**；禁 push 硬原则）。**main 不触碰**。
+  - **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已并入：用户确认零风险后把 `exp/protocol-vtable`
+    实验分支纯 fast-forward 合并，合并即删，仅剩 `main` + `unsafe-vibe-dev`）。本地领先 `origin`
+    （**未 push**；禁 push 硬原则）。**main 不触碰**。
   - 用户侧扩展唯一边 = 宿主绑定 `bind`（`docs/howto/extend_with_host_binding.md`）；
     自定义 LLM provider = 宿主绑定 + `ai.set_provider`（`docs/howto/modify_llm_provider.md`）。
   - LLM 供应商无关中间层 `core/base/llm_protocol/`；MOCK 哨兵在该层 `llm_call.py`。
@@ -147,12 +147,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   总路线 P1-P9 + 决策 §五 + P1 开工输入 §六）；
   **P1 设计定稿已完成**（`tasks_docs/_five_foundation_P1_design.md` §一-§九，7 项开工输入全部
   定稿；含用户追加裁定：`llm ... llmend` 语法**彻底删除**且关联旧机制一并删除、不兼容不包袱）；
-  **P2 已在独立分支 `exp/protocol-vtable` 取得进展**（未合入）。**已提交增量**：protocol_vtable
-  数据结构（`ProtocolSlot` + `IbClass.protocol_vtable` 消息名键 + `_dispatch_protocol_message` 查表
-  分派，`cd60ea6d`）+ 地基（receive 6 份骨架收敛 `6d933080`）+ P2-①（impl 内置目标 `6c3f6c94`）+
-  D4（str output_hint `eb8ecd30`）+ D9（is_callable_instance 清理 `6fd2cefc`）+
-  **P2-② 临时覆层机制（本 session 提交）**。
-  当前分支已提交基线以实跑为准：**2997 passed / 1 skipped**（零回归）。
+  **P2/P6 地基已完成并合入 `unsafe-vibe-dev`**（本 session 用户确认零风险后 fast-forward 合并）。
+  **已合入增量**：protocol_vtable 数据结构（`ProtocolSlot` + `IbClass.protocol_vtable` 消息名键 +
+  `_dispatch_protocol_message` 查表分派，`cd60ea6d`）+ 地基（receive 6 份骨架收敛 `6d933080`）+
+  P2-①（impl 内置目标 `6c3f6c94`）+ D4（str output_hint `eb8ecd30`）+ D9（is_callable_instance
+  清理 `6fd2cefc`）+ **P2-② 临时覆层机制（`1d3fc74a`）**。
+  当前分支（`unsafe-vibe-dev`）全量基线以实跑为准：**2997 passed / 1 skipped**（零回归）。
   **✅ P2-② 临时覆层机制已提交（本 session）**：`overlay`/`with` 新关键字 + `impl overlay for <T>:`
   声明 + `with overlay(<T>.<协议方法>):` 作用域块 + 语义校验 + `_overlay_registry` + 未启用告警
   SEM_OVERLAY_UNUSED + 诊断目录/文档同步 + 水化影子条目 + `vm_handle_IbWithOverlay` save/restore +
@@ -175,9 +175,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] 试用体系：`trials/_toolkit/`（run_batch/run_one/CLASSIFICATION/LLM_SERVICE）+ `trials/INDEX.md`
 - [x] 测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，不冻结数字）
 - [x] 全程本地 commit、禁 push（除非用户显式授权）
-- [x] **当前分支 = `exp/protocol-vtable`**（接续前先 `git checkout exp/protocol-vtable`；核实
-  `unsafe-vibe-dev`/`main` 未触碰）
-- [x] **查 `git log --oneline e8c7944b..HEAD`**（exp 分支独有提交：5 个代码基本增量 + WORKLOG 记录）
+- [x] **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已合并并删除实验分支；`main` 不触碰；本地领先 origin 未 push）
+- [x] **P2/P6 地基低风险合并 unsafe-vibe-dev 完成**（用户确认零风险 → 纯 fast-forward `e8c7944b..b7479497` → exp 分支合并即删；全量 pytest 2997 零回归）
 - [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：2997 passed / 1 skipped）
 - [x] **✅ 复核并提交工作树内 P2-② 覆层机制未提交增量完成**：`git diff` 复核（含端到端实证）→ 全量 pytest 实跑 2997 零回归 → 描述性 commit → 删除临时文档 `tasks_docs/_code_overlay.md` 与 `tasks_docs/_code_protocol_vtable.md`（git 承载）→ 同步 WORKLOG/NEXT_STEPS/HANDOFF/检查单
 
