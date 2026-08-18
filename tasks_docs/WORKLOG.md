@@ -384,6 +384,25 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **提交**：e2e 6 项全过；全量 pytest **2997 passed / 1 skipped** 零回归；临时文档
   `_code_overlay.md`/`_code_protocol_vtable.md` 已删除（git 承载）；NEXT_STEPS/HANDOFF 已同步到
   已提交状态。**禁 push**；低风险增量可 merge `unsafe-vibe-dev`（须用户授权）。
+- **五大地基改造 · P2③/P5 prompt 协议族类型类化 D1+D2 落地（本 session，unsafe-vibe-dev，commits 见 git log）**：
+  **D1 双注册表收敛 + 补 __payload_prompt__**：`PROMPT_PROTOCOL_SPECS` 补第 5 成员
+  `__payload_prompt__`（is_instance_method=True / param_count=0 / return_type=any）——
+  **用户向契约 = `(self) -> dict|list|str`**：runtime 经 `receive('__payload_prompt__', [])`
+  **零参数**分派（PromptRenderer.to_payload / `_prompt.py` 段插值），公理层 `(self,value,spec=None)`
+  是内置 media 委托的内部 Python 签名（不经用户 IbFunctionDef 校验）；故 param_count=0，
+  与 trial D2-05 声明一致——伪警告核验：`(self)->dict` 零 SEM_PROTOCOL_SIGNATURE、2 参声明出码。
+  **D2 to_prompt 死条目激活**：to_prompt 是**通用渲染路径**（探针：34 内置类型 vtable 均持
+  `__to_prompt__` 而 satisfies 全 False，仅 7 个动态/结构类型满足）——与 from/outputhint/payload
+  的可选能力本质不同 → `BaseAxiom.has_to_prompt_cap` 默认 **True**（单一真理，免逐公理重复声明）
+  + `BUILTIN_PROTOCOLS.to_prompt` 接 `axiom_cap="has_to_prompt_cap"` + `PromptRenderer.to_prompt_str`
+  增 `satisfies_protocol` 前置门（镜像 to_payload；无 registry 时回退 `_has_method`/receive 存在性）。
+  **行为保持实证**：门不改变渲染内容（内置经 receive 一致；无 __to_prompt__ 用户类落
+  to_native/str 与既有一致；覆层端到端测试经门仍走覆层——satisfies 静态 True、receive 动态走
+  overlay，二者解耦正确）。**G7 三层划分衔接**：has_llm_call_cap → LLMCallable 协议属 P4；
+  **validate_prompt 死条目激活 = P5 剩余项**（本步只做 to_prompt 激活，不扩面、不半接通）。
+  **P1 设计 §五 形状修正同步**：protocol_vtable 数据形态按爆破面实证订正为**消息名 → ProtocolSlot**
+  （native 按 value 类惰性解析 / overlay / overlay_enabled），非协议名键（落地 WORKLOG 前文
+  "回归 unsafe-vibe-dev 后订正"项）。验证：全量 pytest **3003 passed / 1 skipped** 零回归（+6）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

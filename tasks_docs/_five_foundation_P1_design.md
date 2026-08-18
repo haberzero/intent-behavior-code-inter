@@ -221,31 +221,50 @@ impl Overlay for int:
 
 ```text
 # IbClass 新增（__slots__ 增加）：
-protocol_vtable: Dict[str, IbFunction]   # 协议名 → 该协议的可调用方法载体的映射
-                                            # （per-class 协议分派表；received 协议分支前置查表）
+protocol_vtable: Dict[str, ProtocolSlot]   # 消息名（dunder 方法名）→ ProtocolSlot
+                                            # （per-class 协议分派表；惰性建槽，仅协议注册表方法集）
+ProtocolSlot:
+    message: str                            # 消息名
+    _native_by_class: Dict[Type, Callable|None]  # 按值 Python 实现类惰性解析 _dispatch_<name> 并记忆化
+    overlay: Optional[Callable]             # 覆层影子条目（决策 2，默认 None、默认不参与分派）
+    overlay_enabled: bool                   # 作用域块（with overlay）内启用状态
 ```
 
-**命名注意（design-philosophy §八）**：新增字段名 `protocol_vtable`，与既有 `methods`
-（vtable）区分。`methods` 保持为**原始方法名 → IbFunction** 的传统 vtable；
-`protocol_vtable` 为**协议名 → 方法**的协议分派表（决策 1 B 的"per-IbClass 协议方法表"）。
+**形状修正（爆破面实证，P2-②/P6 回归 unsafe-vibe-dev 后订正 P1 初稿 §5.1/§5.2）**：
+`receive` 分派按**消息名**查 `_dispatch_<name>`——这些是**值 Python 实现类上的实例方法**
+（非 `IbClass.methods` 里的 IbFunction）；`dunder_names()` 是扁平并集、丢"方法 → 协议"归属；
+协议名与 handler 名**非 1:1**（cast_to→converter、__eq__→operator）；多协议共方法
+（__getattr__→attribute 等）须按**方法名索引**。故 `protocol_vtable` 为**消息名 → ProtocolSlot**
+（非协议名键），`ProtocolSlot` 承载 per-class 分派（native 按值类多态 + 覆层影子条目）。
+
+**命名注意（design-philosophy §八）**：字段名 `protocol_vtable` 与既有 `methods`（vtable）
+区分。`methods` 保持**方法名 → IbFunction** 的传统 vtable；`protocol_vtable` 为**消息名 →
+ProtocolSlot** 的协议分派表（决策 1 B "per-IbClass 协议方法表"，P2-②/P6 已落地实现）。
 
 ### 5.2 `receive` 协议分支前置查表
 
-`IbObject.receive`（`base.py` L41-65 附近）当前协议分支用 `_dispatch_<dunder>`（getattr
-能力探测，D5）。决策 1 B：**协议分派前置查询 `protocol_vtable`**：
+`IbObject.receive`（`base.py`）协议分支统一经 `_dispatch_protocol_message`（D5 集中落点，
+消除逐次 getattr 能力探测）：
 
 ```text
-receive(message, args):
-    if message 是协议方法名:
-        proto = 由 message 反查所属协议
-        handler = protocol_vtable.get(proto)   # per-class 协议方法表（含继承/影子条目）
-        if handler: return 分派
-    # 否则走既有 vtable / _dispatch_* 路径
+_dispatch_protocol_message(message, args):
+    if message 不在 _protocol_message_names():       # 协议注册表方法集（单一权威）
+        return None
+    slot = self.ib_class.protocol_slot(message)       # 消息名键（惰性建槽）
+    if slot is None: return None
+    handler = slot.active_handler(self)               # overlay_enabled → overlay；否则按值类 native
+    if handler is None: return None
+    # overlay 为语言函数（IbFunction，经 .call(self, args) 执行）；native 为 Python
+    # 实例方法（经 (self, message, args) 执行）
 ```
 
-- **一举解决 D3**（`spec.members` vs `IbClass.methods` 双表不同步）与 **D5**（能力探测式
-  getattr 分派）。与"协议一等公民"方向一致。
-- 继承：`protocol_vtable` 沿 `parent` 链查找（与 `lookup_method` 同样式，机制同构）。
+- **规避 D3/D5**：协议消息面经协议注册表派生（`_protocol_message_names` 单一权威）；
+  值级分派由 `ProtocolSlot.native_for` 按 `type(value)` 惰性解析——**多态安全**（callable →
+  IbFunction 族落 `IbObject._dispatch_call` 且 IbSuperProxy 自有；Type → IbClass 且
+  HostClassBinding；类对象与其实例共用 ib_class 但分派语义不同；按值类静态烘焙单一处理器会
+  破坏 super proxy / HostClassBinding 分派）。
+- 继承：native 由值 Python 类 MRO 承担（per-IbClass 父链冗余）；覆层影子条目挂**声明类自身**
+  （`protocol_slot` **不做父链查找**——父链会误挂 Object 祖先致覆层全局泄漏）。
 
 ### 5.3 影子条目（覆层机制挂载点，见 §四）
 

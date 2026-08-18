@@ -59,6 +59,10 @@ class BaseAxiom:
     has_from_prompt_cap: bool = False
     has_output_hint_cap: bool = False
     has_payload_prompt_cap: bool = False
+    # to_prompt 是**通用渲染路径**（所有公理类型均可经 __to_prompt__ 渲染为提示词
+    # 文本），与 from/outputhint/payload 的可选能力不同——默认 True（单一权威，
+    # 免逐公理重复声明；具体公理仅在不具备渲染时覆写为 False）。
+    has_to_prompt_cap: bool = True
     has_llm_call_cap: bool = False
 
     # ---- Method / operator specs ----------------------------------- #

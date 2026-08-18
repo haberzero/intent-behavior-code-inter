@@ -32,20 +32,42 @@ class PromptRenderer:
         """Convert a value to plain prompt text.
 
         Resolution order:
-        1. ``__to_prompt__`` via the unified object receive() protocol.
+        1. ``__to_prompt__`` via the unified object receive() protocol — when
+           the type satisfies the ``to_prompt`` protocol (or the method exists).
         2. ``to_native()`` fallback for primitive IbObjects.
         3. ``str()`` last resort.
+
+        The protocol check is advisory; the actual dispatch still goes through
+        ``receive()`` to preserve existing vtable behaviour.
         """
         # Try __to_prompt__ through receive() (unified protocol dispatch)
         if hasattr(val, 'receive'):
-            try:
-                result = val.receive('__to_prompt__', [])
-                if hasattr(result, 'to_native'):
-                    return str(result.to_native())
-                return str(result)
-            except AttributeError:
-                # Protocol missing -> fallback; user method bugs fail-fast.
-                pass
+            spec = None
+            ib_class = getattr(val, 'ib_class', None)
+            if ib_class is not None:
+                spec = getattr(ib_class, 'spec', None)
+            can_to_prompt = False
+            if registry is not None and spec is not None:
+                if not hasattr(registry, 'satisfies_protocol'):
+                    get_meta = getattr(registry, 'get_metadata_registry', None)
+                    if get_meta is not None:
+                        registry = get_meta()
+                can_to_prompt = registry.satisfies_protocol(spec, 'to_prompt')
+            elif ib_class is not None:
+                can_to_prompt = PromptRenderer._has_method(val, '__to_prompt__')
+            else:
+                # No type information: attempt the protocol whenever receive()
+                # exists.
+                can_to_prompt = True
+            if can_to_prompt:
+                try:
+                    result = val.receive('__to_prompt__', [])
+                    if hasattr(result, 'to_native'):
+                        return str(result.to_native())
+                    return str(result)
+                except AttributeError:
+                    # Protocol missing -> fallback; user method bugs fail-fast.
+                    pass
 
         if hasattr(val, 'to_native'):
             try:

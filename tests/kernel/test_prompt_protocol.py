@@ -30,12 +30,25 @@ from core.kernel.axioms.prompt_protocol import (
 class TestPromptProtocolRegistry:
     """Tests for the protocol spec registry itself."""
 
-    def test_all_four_protocols_registered(self):
-        """All four prompt protocols are defined."""
+    def test_prompt_protocol_family_registered(self):
+        """The full __prompt__ family (incl. __payload_prompt__) is defined.
+
+        ``__payload_prompt__`` was the missing 5th member (D1 双注册表收敛)——
+        与 ``core/kernel/protocol.py::BUILTIN_PROTOCOLS`` 的 ``payload_prompt``
+        条目共享同一方法名权威。
+        """
         assert "__to_prompt__" in PROMPT_PROTOCOL_SPECS
         assert "__from_prompt__" in PROMPT_PROTOCOL_SPECS
         assert "__outputhint_prompt__" in PROMPT_PROTOCOL_SPECS
         assert "__validate_prompt__" in PROMPT_PROTOCOL_SPECS
+        assert "__payload_prompt__" in PROMPT_PROTOCOL_SPECS
+
+    def test_builtin_protocol_payload_consistent(self):
+        """D1：方法名权威共享——BUILTIN_PROTOCOLS 的 payload_prompt 与该 SPECS 一致。"""
+        from core.kernel.protocol import BUILTIN_PROTOCOLS
+        payload = next(p for p in BUILTIN_PROTOCOLS if p.name == "payload_prompt")
+        assert payload.methods == ("__payload_prompt__",)
+        assert "__payload_prompt__" in PROMPT_PROTOCOL_SPECS
 
     def test_frozen_dataclass(self):
         """Specs are immutable."""
@@ -49,6 +62,17 @@ class TestPromptProtocolRegistry:
         assert spec.is_instance_method is True
         assert spec.param_count == 0
         assert spec.return_type == "str"
+
+    def test_payload_prompt_spec(self):
+        """__payload_prompt__ is an instance method with 0 params returning any.
+
+        Runtime dispatch is zero-argument (``receive('__payload_prompt__', [])``),
+        so the user-facing contract excludes value/spec parameters.
+        """
+        spec = PROMPT_PROTOCOL_SPECS["__payload_prompt__"]
+        assert spec.is_instance_method is True
+        assert spec.param_count == 0
+        assert spec.return_type == "any"
 
     def test_from_prompt_spec(self):
         """__from_prompt__ is class-level with 1 str param returning tuple."""
@@ -77,6 +101,7 @@ class TestPromptProtocolRegistry:
         assert is_prompt_protocol_method("__to_prompt__") is True
         assert is_prompt_protocol_method("__from_prompt__") is True
         assert is_prompt_protocol_method("__validate_prompt__") is True
+        assert is_prompt_protocol_method("__payload_prompt__") is True
         assert is_prompt_protocol_method("__init__") is False
         assert is_prompt_protocol_method("foo") is False
 
@@ -147,6 +172,18 @@ class TestValidatePromptProtocolSignature:
     def test_outputhint_prompt_extra_params(self):
         """__outputhint_prompt__ with extra params warns."""
         diags = validate_prompt_protocol_signature("__outputhint_prompt__", 1, "str")
+        assert len(diags) == 1
+        assert "expects 0 parameter" in diags[0]
+
+    def test_payload_prompt_correct_no_diagnostics(self):
+        """__payload_prompt__(self) -> dict is correct (0 params excl self)."""
+        assert validate_prompt_protocol_signature("__payload_prompt__", 0, "dict") == []
+        assert validate_prompt_protocol_signature("__payload_prompt__", 0, "any") == []
+
+    def test_payload_prompt_extra_params_warns(self):
+        """__payload_prompt__ with extra params (beyond self) warns — runtime
+        dispatch is zero-argument."""
+        diags = validate_prompt_protocol_signature("__payload_prompt__", 2, "dict")
         assert len(diags) == 1
         assert "expects 0 parameter" in diags[0]
 

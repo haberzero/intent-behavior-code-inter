@@ -67,6 +67,7 @@ class TypeAxiom(Protocol):
     has_operator_cap: bool
     has_converter_cap: bool
     has_parser_cap: bool
+    has_to_prompt_cap: bool
     has_from_prompt_cap: bool
     has_output_hint_cap: bool
     has_payload_prompt_cap: bool

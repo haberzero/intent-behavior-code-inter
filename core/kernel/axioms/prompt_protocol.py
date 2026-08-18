@@ -28,12 +28,22 @@ The __prompt__ protocol family governs how IBCI types interact with LLMs:
    is skipped (no-op). Allows user types to reject malformed LLM output with
    descriptive errors before attempting full parsing.
 
+5. ``__payload_prompt__() -> dict|list|str``  [optional]
+   Multimodal enhancement of __to_prompt__: return a structured content block
+   (dict / list of dicts, or plain text str) for LLM payload rendering.  The
+   runtime dispatch is zero-argument (``receive('__payload_prompt__', [])``),
+   so the user-facing instance method takes no parameters beyond self.
+   `core/kernel/protocol.py::BUILTIN_PROTOCOLS` ``payload_prompt`` entry is the
+   satisfaction declaration counterpart (single method-name authority = both
+   registries share ``__payload_prompt__``).
+
 Protocol Contracts
 ------------------
 - ``__to_prompt__``: instance method, 0 params (besides self), returns str
 - ``__from_prompt__``: class method semantics, 1 param (raw: str), returns tuple[bool, any]
 - ``__outputhint_prompt__``: class method semantics, 0 params, returns str
 - ``__validate_prompt__``: class method semantics, 1 param (raw: str), returns tuple[bool, str]
+- ``__payload_prompt__``: instance method, 0 params (besides self), returns dict|list|str
 
 This module provides:
 - ``PromptProtocolSpec``: Frozen dataclass describing a single protocol method's contract
@@ -109,6 +119,15 @@ PROMPT_PROTOCOL_SPECS: Dict[str, PromptProtocolSpec] = {
         return_type="tuple",
         is_required=False,
         description="Pre-flight validation of raw LLM output before parsing",
+    ),
+    "__payload_prompt__": PromptProtocolSpec(
+        name="__payload_prompt__",
+        is_instance_method=True,
+        param_count=0,
+        param_types=(),
+        return_type="any",
+        is_required=False,
+        description="Multimodal content block for LLM payload rendering",
     ),
 }
 

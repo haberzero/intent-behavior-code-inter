@@ -92,24 +92,32 @@ retry）。
 > 块外恢复原生，mock 回显判别）；② `_OverlayRegistry.declared_items()` 公开遍历 API（收敛私有
 > 字段跨模块访问）。e2e 6 项；全量 pytest **2997 passed / 1 skipped** 零回归；临时文档
 > `_code_overlay.md`/`_code_protocol_vtable.md` 已随收尾删除（git 承载）。
+>
+> **✅ P2③/P5 prompt 协议族类型类化 D1+D2 已落地（本 session，unsafe-vibe-dev）**：D1 双注册表
+> 收敛——`PROMPT_PROTOCOL_SPECS` 补第 5 成员 `__payload_prompt__`（用户契约 `(self)->dict|list|str`，
+> runtime 零参数分派；trial D2-05 声明零伪警告、2 参声明出 SEM_PROTOCOL_SIGNATURE）；
+> D2 to_prompt 死条目激活——`BaseAxiom.has_to_prompt_cap` 默认 True（通用渲染路径，单一真理）+
+> to_prompt 协议条目接 `axiom_cap` + `PromptRenderer.to_prompt_str` 前置门（镜像 to_payload）+ 判别
+> 测试；行为保持实证（内置/用户类/覆层端到端一致）；P1 §五 protocol_vtable 形状已订正为消息名键。
+> 全量 pytest **3003 passed / 1 skipped** 零回归。G7 三层划分定位：has_llm_call_cap → LLMCallable
+> 协议属 P4；**validate_prompt 死条目激活 = P5 剩余项**。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P2③ D2 to_prompt 激活 + P5 prompt 类型类化（下一 session 开工）**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已 fast-forward 合入并删除实验分支，本 session 用户
-   确认零风险后授权合并）。已合入增量：protocol_vtable 数据结构（`cd60ea6d`）+ 地基（receive 骨架
-   收敛 `6d933080`）+ P2-①（impl 内置目标 `6c3f6c94`）+ D4（str output_hint `eb8ecd30`）+ D9
-   （is_callable_instance 清理 `6fd2cefc`）+ P2-② 临时覆层机制（`1d3fc74a`；全量 2997 零回归）；
-   设计权威 `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P2③ D2 to_prompt 激活 + P5 prompt 类型类化（D1 双注册表收敛/补 __payload_prompt__）**：
-   D2 to_prompt 协议现**零消费者**（核心无 satisfies_protocol(...,'to_prompt') 调用；内置类型
-   satisfies=F 但运行期均经 vtable `__to_prompt__` 渲染）——真激活须接 PromptRenderer 协议前置，
-   与本步 P5 纠缠，勿在 P2 半接通；D1 `PROMPT_PROTOCOL_SPECS` 与 `BUILTIN_PROTOCOLS` 的
-   `payload_prompt` 双注册表收敛——补 `__payload_prompt__` 会激活 `validate_prompt_protocol_signature`
-   对用户声明的校验，契约须按 axiom 签名 `(self,value,spec=None)` 定、核验不产生伪警告。
-   后续 P3（意图一等值 G5 + snapshot 冻结补齐 D8）→ P4（llm 可调用类内核 + retry 高阶化 +
-   llm/llmend 彻底删除）→ P5 → P6 落地。
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P3 意图一等值（G5）+ snapshot 意图冻结补齐（D8）（下一 session 开工）**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + P2-② 覆层 + P2③/P5 D1+D2 prompt 类型类化已合入，
+   全量 3003 零回归）。已合入增量见 git log；设计权威 `tasks_docs/_five_foundation_P1_design.md`，
+   决策权威 `_five_foundation_redesign.md` §一-§五。
+   **本步 = P3**（P1 设计 §六 决策 3 snapshot 语义 + 意图一等值 G5）：
+   - **snapshot 意图冻结补齐（D8）**：按决策 3 原初语义——lambda = 引用捕获（不保证时不变/无状态）；
+     snapshot = 冻结保证（时不变/无状态/可重入）。意图冻结并入 capture_mode，移除
+     body_is_behavior 特判（纯 snapshot lambda 也冻结意图）。
+   - **意图一等值（G5）**：意图作为一等值类型化（审查意图注解/栈操作/上下文的运行时形态，
+     收敛为一等机制）。
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
+   **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾；has_llm_call_cap →
+   LLMCallable 协议属 P4）。
+   后续 P4（llm 可调用类内核 + retry 高阶化 + llm/llmend 语法及旧机制彻底删除）→ P5 → P6 落地。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 

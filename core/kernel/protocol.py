@@ -186,6 +186,9 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         name="to_prompt",
         methods=("__to_prompt__",),
         description="Values that can render themselves into LLM prompt text.",
+        # 通用渲染路径：axiom 能力统一声明（BaseAxiom 默认 True）——所有公理类型
+        # 的 __to_prompt__ 均可用；用户类经结构成员判定（spec.members）。
+        axiom_cap="has_to_prompt_cap",
     ),
     ProtocolDef(
         name="from_prompt",

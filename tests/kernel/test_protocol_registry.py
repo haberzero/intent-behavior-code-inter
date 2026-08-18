@@ -65,6 +65,23 @@ class TestProtocolMembership:
         assert reg.satisfies_protocol(reg.resolve("int"), "output_hint")
         assert reg.satisfies_protocol(reg.resolve("int"), "operator")
 
+    def test_to_prompt_satisfaction_matches_render_capability(self):
+        """D2 to_prompt 激活：内置类型（经 axiom 通用渲染能力）与含
+        __to_prompt__ 的用户类满足 to_prompt；无 __to_prompt__ 的用户类不满足。
+        """
+        reg = create_default_registry()
+        # 内置经 axiom_cap has_to_prompt_cap（BaseAxiom 通用渲染路径默认 True）
+        assert reg.satisfies_protocol(reg.resolve("int"), "to_prompt")
+        assert reg.satisfies_protocol(reg.resolve("str"), "to_prompt")
+        assert reg.satisfies_protocol(reg.resolve("list"), "to_prompt")
+        # 用户类：结构判定
+        with_p = _make_class("Point", ["__from_prompt__", "__to_prompt__"])
+        reg.register(with_p)
+        assert reg.satisfies_protocol(with_p, "to_prompt") is True
+        without = _make_class("NoPrompt", ["foo"])
+        reg.register(without)
+        assert reg.satisfies_protocol(without, "to_prompt") is False
+
     def test_list_iterable_subscriptable(self):
         reg = create_default_registry()
         list_spec = reg.resolve_specialization(reg.resolve("list"), [reg.resolve("int")])
@@ -136,6 +153,7 @@ class TestGetProtocolCap:
     def test_get_protocol_cap_for_int_from_prompt(self):
         reg = create_default_registry()
         assert reg.get_protocol_cap(reg.resolve("int"), "from_prompt") is not None
+        assert reg.get_protocol_cap(reg.resolve("int"), "to_prompt") is not None
 
     def test_get_protocol_cap_missing(self):
         reg = create_default_registry()

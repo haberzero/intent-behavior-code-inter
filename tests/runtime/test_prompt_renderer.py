@@ -50,6 +50,13 @@ class TestPromptRenderer:
     def test_to_prompt_str_fallback_str(self):
         assert PromptRenderer.to_prompt_str(42) == "42"
 
+    def test_to_prompt_str_builtin_renders_through_protocol_gate(self, engine_session):
+        """D2 激活：内置类型经 satisfies/方法存在 前置门后仍经 receive 渲染
+        为 __to_prompt__ 文本（gate 不改返回内容，仅激活 to_prompt 协议判定）。"""
+        from core.runtime.shared.prompt_renderer import PromptRenderer
+        v = engine_session.registry.box(5)
+        assert PromptRenderer.to_prompt_str(v) == "5"
+
     def test_to_payload_returns_dict(self):
         result = PromptRenderer.to_payload(MockPromptObj())
         assert isinstance(result, dict)

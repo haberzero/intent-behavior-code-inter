@@ -161,9 +161,17 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   经 PromptRenderer receive 走覆层、mock 回显判别）、未启用告警、全量 2997 零回归。复核补充：
   `_OverlayRegistry.declared_items()` 公开遍历 API（收敛私有字段跨模块访问）。临时文档
   `_code_overlay.md`/`_code_protocol_vtable.md` 已删除（git 承载），决策要点沉 WORKLOG。
-  **下一 session 开工 = P2③ D2 to_prompt 激活 + P5 prompt 类型类化**（D1 双注册表收敛/补
-  __payload_prompt__；D2 to_prompt 零消费者实证，真激活须接 PromptRenderer 协议前置，勿半接通），
-  详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：P3 → P4 → P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
+  **✅ P2③/P5 prompt 协议族类型类化 D1+D2 已落地（本 session，unsafe-vibe-dev）**：D1 双注册表
+  收敛——`PROMPT_PROTOCOL_SPECS` 补第 5 成员 `__payload_prompt__`（用户契约 `(self)->dict|list|str`，
+  runtime 零参数分派；trial D2-05 零伪警告、2 参声明出 SEM_PROTOCOL_SIGNATURE）；D2 to_prompt
+  死条目激活——`BaseAxiom.has_to_prompt_cap` 默认 True（通用渲染路径）+ to_prompt 协议条目接
+  `axiom_cap` + `PromptRenderer.to_prompt_str` 前置门（镜像 to_payload）+ 判别测试；行为保持实证
+  （内置/用户类/覆层端到端一致）；P1 §五 protocol_vtable 形状订正为消息名键；G7 定位
+  （has_llm_call_cap→P4；validate_prompt 激活 = P5 剩余项）。全量 pytest **3003 passed / 1 skipped** 零回归。
+  **下一 session 开工 = P3 意图一等值（G5）+ snapshot 意图冻结补齐（D8）**（决策 3 snapshot
+  语义：lambda=引用捕获不保证时不变；snapshot=冻结保证时不变/无状态/可重入；意图冻结并入
+  capture_mode、移除 body_is_behavior 特判），详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：
+  P4 → P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -177,8 +185,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] 全程本地 commit、禁 push（除非用户显式授权）
 - [x] **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已合并并删除实验分支；`main` 不触碰；本地领先 origin 未 push）
 - [x] **P2/P6 地基低风险合并 unsafe-vibe-dev 完成**（用户确认零风险 → 纯 fast-forward `e8c7944b..b7479497` → exp 分支合并即删；全量 pytest 2997 零回归）
-- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：2997 passed / 1 skipped）
+- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：3003 passed / 1 skipped）
 - [x] **✅ 复核并提交工作树内 P2-② 覆层机制未提交增量完成**：`git diff` 复核（含端到端实证）→ 全量 pytest 实跑 2997 零回归 → 描述性 commit → 删除临时文档 `tasks_docs/_code_overlay.md` 与 `tasks_docs/_code_protocol_vtable.md`（git 承载）→ 同步 WORKLOG/NEXT_STEPS/HANDOFF/检查单
+- [x] **✅ P2③/P5 prompt 协议族类型类化 D1+D2 落地**：D1 双注册表收敛补 `__payload_prompt__` + D2 to_prompt 激活（BaseAxiom cap + PromptRenderer 前置门）+ P1 §五形状订正；全量 3003 零回归；下一步 = P3（意图一等值 G5 + snapshot 冻结 D8）
 
 ---
 
