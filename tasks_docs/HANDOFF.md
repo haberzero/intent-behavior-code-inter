@@ -134,14 +134,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   - 用户侧扩展唯一边 = 宿主绑定 `bind`（`docs/howto/extend_with_host_binding.md`）；
     自定义 LLM provider = 宿主绑定 + `ai.set_provider`（`docs/howto/modify_llm_provider.md`）。
   - LLM 供应商无关中间层 `core/base/llm_protocol/`；MOCK 哨兵在该层 `llm_call.py`。
-- **⏳ 下一步（新主线）**：**llm 机制重构为可调用的 llm 类 + LLM 相关体系彻底协议化
-  （总统一性）+ 五大地基完整改造**（用户 2026-08-18 定方向，两时点补充 + 延续）——彻底抛弃
-  "llm 函数"概念，改为面向对象的可调用 llm 类；把行为描述/意图注释/retry/prompt 协议族/
-  lambda/snapshot 全部收敛为"可调用实例 + 协议（类型类）"机制；最终目标是把 IBCI 完成
-  函数式编程 / 类型类体系 / 类型理论 / 高阶函数 / 协议化五大地基的完整改造。
-  **调研/可行性/规划已产出**（临时文档 `tasks_docs/_llm_callable_redesign.md` +
-  `tasks_docs/_five_foundation_redesign.md`：交接清单 6 项补充调研全部完成 + 五大地基现状
-  评估 + 总路线 P1-P9）；设计定稿（P1）与实现（P2-P9）交后续 session 承接，详见
+- **⏳ 下一步（新主线）**：**五大地基完整改造**（llm 可调用类 + LLM 体系彻底协议化（总统一性）
+  + 函数式 / 类型类 / 类型理论 / 高阶函数 / 协议化）——用户 2026-08-18 定方向 + 6 项关键决策
+  已拍板：① 内置类型协议方法表选 B（per-IbClass 协议方法表，系统化重构）；② 内置类型行为改写
+  = **临时覆层机制**（默认不生效、flag 启用、作用域化，最关键新设计约束）；③ snapshot 意图冻结
+  按文档补齐；④ `llm ... llmend` 语法**彻底删除**（非语法糖）；⑤ retry 帧机制保留 + 语法/策略
+  高阶化；⑥ P1-P6 本主线、P7/P8 远期。
+  **调研/可行性/规划/决策已全部产出**（临时文档 `tasks_docs/_llm_callable_redesign.md` +
+  `tasks_docs/_five_foundation_redesign.md`：交接清单 6 项补充调研全部完成 + 五大地基现状评估 +
+  总路线 P1-P9 + 决策 §五 + P1 开工输入 §六）；**下一 session 开工 = P1 设计定稿**，详见
   `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）

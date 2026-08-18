@@ -247,6 +247,18 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `tasks_docs/_five_foundation_redesign.md`（临时，路线 P1-P9 与待决项 §五）；NEXT_STEPS/
   HANDOFF 同步。设计定稿（P1）交下一 session。调研方法：代码实证 + 运行探针
   （create_default_registry）+ 同步 subagent（本环境后台 subagent 不稳定已弃用）。
+- **五大地基改造 6 项关键决策（2026-08-18，用户逐项拍板，落 `_five_foundation_redesign.md` §五）**：
+  ① **内置类型协议方法表选 B**——per-IbClass 协议方法表，以彻底完整系统化重构为目标
+  （非最小 A/non-能力探测 C）；② **内置类型行为改写 = 临时覆层机制**（新设计约束，最关键）：
+  无覆层→按默认；声明不启用（flag 未启、不在相关作用域）→常规程序段仍按默认；仅用户明确
+  启用作用域才生效用户自定义 impl；告警基于覆层存在/启用状态设计。与 per-IbClass 协议方法表
+  （B）结合 = 覆层作影子条目、默认不参与分派；与 D6（内置 spec 不可持久化）天然互补（覆层
+  运行期按需注册）。③ **snapshot 意图冻结按文档补齐**（用户确认原初意图：lambda=引用捕获不
+  保证时不变/无状态；snapshot=冻结保证时不变/无状态/可重入）；④ **`llm ... llmend` 语法彻底
+  删除**（推翻语法糖映射推荐，彻底转向统一 llm 可调用类，全量迁移示例/试用/测试）；⑤ **retry
+  帧机制保留 + 语法/策略高阶化**；⑥ **P1-P6 本主线，P7/P8 远期**（类型理论加固/函数式组合子
+  登记 PENDING_TASKS 远期，P1-P6 稳定后重估）。**交接**：下一 session 开工 = P1 设计定稿，
+  决策输入清单见 `_five_foundation_redesign.md` §六。
 
 ---
 

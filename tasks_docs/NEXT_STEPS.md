@@ -50,18 +50,26 @@ retry）。
   消费路径）、能力公理 → 协议满足关系收敛（三层划分）、prompt 协议族类型类化（双注册表收敛 +
   to_prompt 死条目激活）；五大地基评分（函数式 3 / 类型类 3 / 类型理论 3 / 高阶函数 3.5 / 协议化
   3.5）；总路线 P1-P9。
+- **6 项关键决策已用户拍板**（2026-08-18，落 `_five_foundation_redesign.md` §五）：
+  ① 内置类型协议方法表选 B（per-IbClass 协议方法表，系统化重构）；② 内置类型行为改写 = 临时
+  覆层机制（默认不生效、flag 启用、作用域化，最关键新设计约束）；③ snapshot 意图冻结按文档
+  补齐（纯 snapshot lambda 也冻结意图）；④ `llm ... llmend` 语法**彻底删除**（非语法糖，全量
+  迁移）；⑤ retry 帧机制保留 + 语法/策略高阶化；⑥ P1-P6 本主线，P7/P8 远期。
 
-**具体设计定稿（P1）交给下一 session 承接**——详见下一步候选 #1。
+**下一 session 开工 = 五大地基改造 · P1 设计定稿**（决策输入已收敛，见
+`_five_foundation_redesign.md` §六 交接清单）——详见下一步候选 #1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 五大地基改造 · P1 设计定稿（下一 session 承接）**：以 `tasks_docs/_five_foundation_redesign.md`
-   为调研基准（其 §四 总路线 P1-P9），先定稿 llm 可调用类（协议方法族/意图改写/retry 高阶化/
-   与 LLMCallRequest 承载；llm 函数迁移策略，真设计废除 `__sys__/__user__` 段）+ 装饰壳体系
-   （impl 目标扩展到可调用实例/内置类型 + 函数实例 prompt 呈现协议化）+ lambda/snapshot 捕获
-   策略参数化 + prompt 协议族类型类化；对 §五 待决项逐项收敛（内置类型协议方法表三选一/snapshot
-   意图快照文档漂移修复/llm 函数语法去留/retry 收敛边界/P7-P8 排期）；产出设计定稿后进入实现
-   （P2-P9 分阶段，见 `_five_foundation_redesign.md` §四）。
+1. **[主线·当前] 五大地基改造 · P1 设计定稿（下一 session 开工）**：以 `tasks_docs/_five_foundation_redesign.md`
+   为唯一调研与决策权威（§一-§五），按 §六 交接清单逐项定稿：① `LLMCallable` 协议方法族（方法名/
+   签名/与 LLMCallRequest 承载/意图改写 `__intent__`/retry `__retry__`）；② llm 函数语法
+   （`llm ... llmend`）彻底删除的迁移映射表（`__sys__/__user__/__llmretry__` → LLMCallable 方法）
+   + 全量迁移清单（examples/trials/tests）；③ **内置类型临时覆层机制形态定稿（决策 2）**：声明
+   语法、启用 flag 作用域语义、与 per-IbClass 协议方法表（决策 1 B）的数据形态、告警设计；
+   ④ per-IbClass 协议方法表全局数据形态（决策 1 B，P2/P5/P6 共享地基）；⑤ snapshot 意图冻结
+   补齐语义（决策 3）并入捕获策略参数化；⑥ retry 高阶化边界（决策 5）；⑦ 破坏面评估 + P2-P6
+   分阶段迁移路径。产出设计定稿后进入实现（P2-P6 分阶段，P7/P8 远期，见 §四）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
