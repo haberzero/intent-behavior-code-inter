@@ -285,6 +285,31 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   保留 + 语法/策略高阶化）；⑦ 破坏面评估 + P2-P6 分阶段迁移路径与验证门。P2-P6 实现以
   `_five_foundation_P1_design.md` 为设计规格、`_five_foundation_redesign.md` 为决策/调研
   权威。已同步 `_five_foundation_redesign.md` §六 指针。
+- **五大地基改造 · P2/P6 地基自主重排序（2026-08-18，本 session，独立分支 exp/protocol-vtable）**：
+  按 P1 设计定稿 §五/§八，决策 1 B（per-IbClass 协议方法表）改动面大（IbClass.__slots__ +
+  receive + 水化 + 序列化契约）→ 按分支政策走**独立分支 exp/protocol-vtable** 原型验证。
+  subagent 只读爆破面报告确认：① `receive` 协议分派骨架被 **6 份同构复制**（base/functions/
+  native_module/optional/callables×2），均用 getattr 探测 `_dispatch_<name>`（D5 机制同构破坏）；
+  ② 内置类型全部方法（含 __to_prompt__/cast_to/__call__）走 IbClass.methods vtable，仅
+  __from_prompt__ 走 axiom cap（唯一现存活双通道）；③ 序列化契约不受影响（class_ref 只存名）；
+  ④ `dunder_names()` 是扁平并集、丢方法→协议归属；⑤ register_method 是 methods 唯一写闸门。
+  **自主重排序**：P2 的 impl 目标放宽（放行内置）与 to_prompt 死条目激活、P5 prompt 类型类化、
+  P6 protocol_vtable 全部依赖"协议方法表地基"；为免半接通/双通道（质量红线），先建地基：
+  **增量 1** = 收敛 6 份 receive 分派骨架为单一 `_dispatch_protocol_message` 助手（D5 集中落点，
+  behavior 不变，全量 2956 零回归，commit 6d933080）。后续增量沿"协议方法表数据结构 + impl
+  放行 + 覆层机制 + to_prompt 激活"推进。
+- **五大地基改造 · protocol_vtable 数据结构形状修正（2026-08-18，exp/protocol-vtable）**：
+  爆破面报告实证冲正 P1 设计 §五的键映射假设——`receive` 分派按**消息名（dunder 方法名）**
+  查 `_dispatch_<name>`（这些是值 Python 实现类上的**实例方法**，非 IbClass.methods 里的
+  IbFunction）；`dunder_names()` 是扁平并集、丢"方法→协议"归属；协议名与 handler 名非 1:1
+  （cast_to→converter、__eq__→operator）；"返回 None = 继续路由 / 显式关闭"是隐式协议。
+  **设计含义**：per-IbClass 协议方法表应承载**消息名→处理器**（对应 `_dispatch_*` 实例方法）
+  的分派，而非我 P1 初稿的"协议名→方法"；多协议共方法（__getattr__→attribute 等）须按
+  方法名索引。D3（satisfies_protocol 读 spec.members vs receive 读运行期）的桥接 = 运行期
+  协议成员查询，非简单的协议名表。**P6 实现须按此修正后的形状落地**；P1 设计 §五 数据形态
+  需在回归 unsafe-vibe-dev 后按此修正（现处于实验分支，不污染已定稿权威文档）。
+
+
 
 ---
 
