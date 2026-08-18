@@ -13,16 +13,16 @@ IBC-Inter 是实验性意图驱动混合编程语言（Python-style 确定性代
 3. `docs/WRITING_GUIDE.md`--技术文档书写准则，修改/新增 `docs/` 下技术文档前必读
 4. `docs/KNOWN_LIMITS.md`--语言级限制，改公理层或语义错误集前必查
 5. `docs/architecture/02_metadata_ast.md`--新增 AST 字段或侧表前必查
-6. `.opencode/skills/doc-governance/SKILL.md`--执行文档治理/检查/体系建设前必读，按 Phase 0-8 流程操作
-7. `.opencode/skills/code-workflow/SKILL.md`--执行代码任务（实现/修复/重构）前必读，按 Phase 0-5 流程操作，遵守工作模式定论
-8. `.opencode/skills/code-review/SKILL.md`--执行缺陷复核/分类决策/实施后核验前必读，按 Phase 0-5 流程操作，遵守验证与分组纪律
-9. `.opencode/skills/code-quality/SKILL.md`--执行代码子系统健康/清洁诊断（体检/残留扫描/历史痕迹排查）与质量红线判定前必读，按"健康诊断十查"与分类速查操作（`code-health` 已并入）
-10. `.opencode/skills/code-odor/SKILL.md`--执行工作过程自查/异味特征扫描前必读，命中兼容/兜底/快速实现等字样时按自我质询协议审问
-11. `.opencode/skills/self-grill/SKILL.md`--交付前对计划/设计/已完成工作自我质询，仅将无法自主决断项反馈用户
-12. `.opencode/skills/quality-maintenance/SKILL.md`--执行长期/间歇性代码质量维护与异味检测（Tier A/B/C 分层节奏）前必读
-13. `.opencode/skills/aimless-review/SKILL.md`--执行非目的性审视/设计沉思（低密度潜在参考 + 周期性事实回顾）前必读
-14. `.opencode/skills/design-philosophy/SKILL.md`--执行设计审查/机制设计/模块配合/方案取舍前必读（系统级统一性：单一权威源、设计语言统一、设计思路统一、机制同构、配合模式统一、一致性先于便利、宏观反思、命名粒度统一——从用户工作习惯提炼的通用设计取舍基准）
-15. `.opencode/skills/user-principles/SKILL.md`--涉及"是否遵循历史文档/是否允许破坏性重构/是否保持已有行为/是否冻结历史资产"的判断与决策前必读（历史不是权威；破坏性重构默认已授权，仅尽"分析 + 详尽记录 + 验证"义务；裁决基准四问）
+6. `.dsh/skills/doc-governance/SKILL.md`--执行文档治理/检查/体系建设前必读，按 Phase 0-8 流程操作
+7. `.dsh/skills/code-workflow/SKILL.md`--执行代码任务（实现/修复/重构）前必读，按 Phase 0-5 流程操作，遵守工作模式定论
+8. `.dsh/skills/code-review/SKILL.md`--执行缺陷复核/分类决策/实施后核验前必读，按 Phase 0-5 流程操作，遵守验证与分组纪律
+9. `.dsh/skills/code-quality/SKILL.md`--执行代码子系统健康/清洁诊断（体检/残留扫描/历史痕迹排查）与质量红线判定前必读，按"健康诊断十查"与分类速查操作（`code-health` 已并入）
+10. `.dsh/skills/code-odor/SKILL.md`--执行工作过程自查/异味特征扫描前必读，命中兼容/兜底/快速实现等字样时按自我质询协议审问
+11. `.dsh/skills/self-grill/SKILL.md`--交付前对计划/设计/已完成工作自我质询，仅将无法自主决断项反馈用户
+12. `.dsh/skills/quality-maintenance/SKILL.md`--执行长期/间歇性代码质量维护与异味检测（Tier A/B/C 分层节奏）前必读
+13. `.dsh/skills/aimless-review/SKILL.md`--执行非目的性审视/设计沉思（低密度潜在参考 + 周期性事实回顾）前必读
+14. `.dsh/skills/design-philosophy/SKILL.md`--执行设计审查/机制设计/模块配合/方案取舍前必读（系统级统一性：单一权威源、设计语言统一、设计思路统一、机制同构、配合模式统一、一致性先于便利、宏观反思、命名粒度统一——从用户工作习惯提炼的通用设计取舍基准）
+15. `.dsh/skills/user-principles/SKILL.md`--涉及"是否遵循历史文档/是否允许破坏性重构/是否保持已有行为/是否冻结历史资产"的判断与决策前必读（历史不是权威；破坏性重构默认已授权，仅尽"分析 + 详尽记录 + 验证"义务；裁决基准四问）
 
 ## skill 加载模式（任务类型 → 必读 skill，硬规则；**分析类任务不豁免**）
 
@@ -86,7 +86,7 @@ IBC-Inter 是实验性意图驱动混合编程语言（Python-style 确定性代
 
 ## 文档读者定位（docs/ 只面向人类）
 
-> `docs/` 定位为**人类手册**（指导手册 / 技术手册 / 参考手册），**绝对不允许存在任何关于本工作智能体相关的元信息**（工作流 / 过程 / agent 指令 / skill 引用 / opencode 配置）。智能体信息只存在于 `AGENTS.md` 与 `.opencode/skills/` 工作流层。智能体可参考 docs/ 并实时更新，但更新内容不得引入任何"提供智能体而人类不需要"的信息；发现即**移除**（不改写）。治理 docs/ 时按其自检（见 `doc-governance`）。若确需给智能体额外的参考文档体系，应单独设计，绝不污染人类阅读的文档。
+> `docs/` 定位为**人类手册**（指导手册 / 技术手册 / 参考手册），**绝对不允许存在任何关于本工作智能体相关的元信息**（工作流 / 过程 / agent 指令 / skill 引用 / DSH 配置）。智能体信息只存在于 `AGENTS.md` 与 `.dsh/skills/` 工作流层。智能体可参考 docs/ 并实时更新，但更新内容不得引入任何"提供智能体而人类不需要"的信息；发现即**移除**（不改写）。治理 docs/ 时按其自检（见 `doc-governance`）。若确需给智能体额外的参考文档体系，应单独设计，绝不污染人类阅读的文档。
 >
 > **设计阶段文档放置（用户 2026-08-03 明确）**：任何**设计/决策/用户裁定**（如架构、接口、AST 变更、并发正确性等）在**设计阶段先写临时任务控制文档 `tasks_docs/_<task>.md`**（完成后删除，最终仅保留四个常驻文档），**不写进技术手册 `docs/`**；待实现落地后，按 `docs/` 治理纪律择机收敛写入技术手册。此规则是"重大架构决策写入 `docs/architecture/`"（见 §不要做的事）的**设计阶段前置**，二者不冲突（先 tasks_docs/ 设计，落地后 docs/ 记录）。
 
@@ -119,5 +119,5 @@ python -m pytest tests/
 - 不在代码注释中使用任务代号/ADR 编号/PT 编号/文档章节指针/历史叙述--注释只注明功能设计与已知问题（详见 `docs/README.md` §三.6）。
 - 重大架构决策直接写入 `docs/architecture/` 对应章节，不再使用独立 ADR 文件。
 - media Phase 4（多模态）**已彻底封存，短期不考虑实现**；恢复需显式解封并重估（见 `tasks_docs/PENDING_TASKS.md` §六）。
-- 执行文档治理前必读 `.opencode/skills/doc-governance/SKILL.md`，按 Phase 0-8 流程操作——禁止凭经验直接修改，必须先审计、做任务规划、交叉核验。
-- 执行代码任务前必读 `.opencode/skills/code-workflow/SKILL.md`，按 Phase 0-5 流程操作——禁止未理解代码上下文前动手修改，必须对照工作模式定论检验方案。
+- 执行文档治理前必读 `.dsh/skills/doc-governance/SKILL.md`，按 Phase 0-8 流程操作——禁止凭经验直接修改，必须先审计、做任务规划、交叉核验。
+- 执行代码任务前必读 `.dsh/skills/code-workflow/SKILL.md`，按 Phase 0-5 流程操作——禁止未理解代码上下文前动手修改，必须对照工作模式定论检验方案。

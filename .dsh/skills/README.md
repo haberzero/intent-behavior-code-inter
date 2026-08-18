@@ -1,11 +1,18 @@
-# .opencode/skills 编写公约
+---
+name: skill-authoring-convention
+description: '本仓库 DSH skill 的编写公约（写作规范）。面向新增或修改 `.dsh/skills/<name>/SKILL.md` 的写作者。非任务型 skill，双面隐藏（disable-model-invocation + user-invocable false），不进 skill 目录与命令行，仅作为编写参考文档存在。定义 skill 定位、四条设计原则、禁止写入 body 的内容、格式规范与当前 skill 清单。'
+disable-model-invocation: true
+user-invocable: false
+---
 
-> 本文件是本仓库 skill 的编写规范。**非 `SKILL.md`，不会被 opencode 自动加载。**
-> 面向新增或修改 `.opencode/skills/<name>/SKILL.md` 的写作者。
+# .dsh/skills 编写公约
+
+> 本文件是本仓库 skill 的编写规范。**非任务型 `SKILL.md`，双面隐藏（`disable-model-invocation` + `user-invocable: false`），不会被自动加载进 skill 目录/命令行。**
+> 面向新增或修改 `.dsh/skills/<name>/SKILL.md` 的写作者。
 
 ## skill 的定位
 
-skill 是 opencode **按需加载**的操作流程指南。agent 平时仅看到每个 skill 的 `name` + `description`（路由键），仅在需要时才加载完整 body。因此：
+skill 是 DSH **按需加载**的操作流程指南。agent 平时仅看到每个 skill 的 `name` + `description`（路由键），仅在需要时才通过 `skill` 工具加载完整 body。因此：
 
 - **description 决定是否被加载**：须覆盖"做什么 + 何时触发"，前置触发关键词，必要时用 `Use ONLY when...` 收窄。它是路由键，写具体路径/关键词是对的。
 - **body 决定加载后的效果**：应是聚焦的操作流程，不是百科全书。body 越长，越挤占 agent 注意力、越容易与项目文档漂移。
@@ -29,10 +36,11 @@ skill 是 opencode **按需加载**的操作流程指南。agent 平时仅看到
 
 > 例外：`description` 中可含项目路径/关键词（路由需要）。原则约束的是 **body**。
 
-## 格式规范（opencode 强制）
+## 格式规范（DSH 强制）
 
-- 路径：`.opencode/skills/<name>/SKILL.md`，目录名须与 `name` 一致。
-- frontmatter 只认：`name`（必填，1-64 字符，小写连字符，匹配目录名）、`description`（必填，1-1024 字符）、`license`/`compatibility`/`metadata`（可选）。其余字段被忽略。
+- 路径：`.dsh/skills/<name>/SKILL.md`，目录名须与 frontmatter `name` 一致，均须 kebab-case 小写连字符。
+- frontmatter 必填：`name`（kebab-case，匹配目录名）、`description`（1-500 字符内为宜，会被 catalog 截断展示）。可选：`whenToUse` / `metadata` / `disable-model-invocation` / `user-invocable`。
+- **description 必须是合法 YAML 标量**：值内不得出现 `: `（冒号+空格）或 ` #` 等会破坏 plain scalar 的序列；含此类字符时用单引号/双引号包裹（DSH 的 yaml v2 解析器对非法 frontmatter 直接丢弃该 skill 并告警）。
 - body 为 markdown。
 
 ## 当前 skill 清单
@@ -48,6 +56,8 @@ skill 是 opencode **按需加载**的操作流程指南。agent 平时仅看到
 | `grilling` | 对用户的持续质询 | 用户要求被拷问计划/设计 |
 | `design-philosophy` | 系统级设计哲学（单一权威源/设计语言统一/设计思路统一/机制同构/配合模式统一/一致性先于便利/宏观反思/命名粒度统一） | 设计审查/碎片化/系统一致性/机制统一/模块配合/设计取舍/宏观反思 |
 | `user-principles` | 用户顶层工作原则（历史文档/已有代码/行为维持/破坏性修改的裁决基准与授权边界 + 义务） | 是否该遵循历史文档、是否允许破坏性重构、是否保持已有行为、是否冻结历史资产、原则优先 |
+| `aimless-review` | 非目的性审视/设计沉思 | 无目的分析/设计沉思/审视 |
+| `quality-maintenance` | 长期质量维护（Tier A/B/C 分层节奏） | 质量巡检/异味检测/质量维护 |
 
 > `code-health` 已并入 `code-quality`（2026-07-31）：健康诊断十查与分类速查并入质量纪律，二者本质同属代码质量判定，避免重复维护。
 

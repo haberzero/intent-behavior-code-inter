@@ -1,6 +1,6 @@
 ---
 name: code-workflow
-description: Use ONLY when the user asks to implement, fix, refactor, or modify IBCI source code. Covers a 6-phase workflow: understand task context, read affected code and check architecture boundaries, design against hard constraints, implement with hygiene rules, test and verify, then clean up. Triggers on "implement X", "fix bug", "refactor", "add feature", "修改代码", "实现", "修复", "重构".
+description: 'Use ONLY when the user asks to implement, fix, refactor, or modify IBCI source code. Covers a 6-phase workflow: understand task context, read affected code and check architecture boundaries, design against hard constraints, implement with hygiene rules, test and verify, then clean up. Triggers on "implement X", "fix bug", "refactor", "add feature", "修改代码", "实现", "修复", "重构".'
 ---
 
 # 代码任务控制工作流
