@@ -25,7 +25,6 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
 | 批判性试用原则（2026-08-14） | 批判性试用应充分利用既有试用地基；以前的试用体系也要经历重跑；试用发现先记录、不查内核成因、不直接修改（非内核修改任务时）。唯一底线：不为规避缺陷改套件（缺陷触发用例保留）。 |
 | 显式配置方向（2026-08-12） | LLM 配置显式优于隐式：`setup()` 去自动加载，新增 `ai.load_project_config()`（命名用户拍板）；fail-fast 保留且失败点更清晰。 |
 | 用户类泛型升主线（2026-08-12） | PT-FEAT-3（`class Box[T]:`）升主线完整落地；其"泛型类必须特化使用"等守卫为语言约束（KNOWN_LIMITS §十四 #1）。 |
-| LLM 主线轮替（2026-08-15/16） | 2026-08-15：PT-FEAT-14 暂缓，主线 = LLM 全能力真实压力试用；2026-08-16：主线 = 协议化内核大重构（压力试用顺延）；理论清理后按用户意愿恢复试用扩展。 |
 | 能力判定协议化口径（2026-08-16） | `__from_prompt__` 能力判定与获取口径不一致时——历史不是权威；"记录不整改"理由不成立，须整改收敛（get_from_prompt_cap 单一查询入口；结构性用户方法由 VTableParsingStrategy 职责分离，不合并）。 |
 
 ## 三、重大方向决策记录（防止未来误解）
@@ -157,7 +156,7 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   删除 `examples/plugins_demo/`、`isolation_demo/sub_project/plugins/`、
   `trials/T01_llm_full/plugins/`（演示/试用已删除的用户插件 `_spec.py` 系统）；
   `trials/cases/D2-21-plugin.ibci` 改写为宿主绑定演示（`import python "math" as m:
-  bind sqrt/pow`，经 main.py 实跑通过）；`docs/howto/write_user_plugin.md` 删除 →
+  bind sqrt/pow`，经 main.py 实跑通过）；旧 write_user_plugin howto 删除 →
   新建 `docs/howto/extend_with_host_binding.md`（用户扩展 howto 换宿主绑定语义）；
   `docs/subsystems/04_plugin_system.md` 重写为"内置模块系统与宿主绑定"；01_principles/
   06_path_system（删插件发现优先级章节）/07_kernel_native_modules/11_modules
@@ -181,8 +180,8 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   统一定为"远期、不提前实现"。向用户呈报该设计分叉（F4 推迟到 F5 vs 现在做 F4 授权推翻；
   附 F3 先例 bind-based 用户库推迟 F5）。**用户选择"现在做 F4（授权推翻不新增注册 API）"**
   ——本次新增 bind-based provider 注册出口/api、统一 F4，推翻 R0-R2"不新增语言级注册
-  API"裁定。此为有拍板依据的破坏性/对外契约变更授权。F4 设计底稿
-  `tasks_docs/_f4_provider_bind.md`（F4 完成后删除，决策沉 docs/）。
+  API"裁定。此为有拍板依据的破坏性/对外契约变更授权。F4 临时设计底稿（已随 F4
+  完成删除，决策沉 docs/architecture/01_principles.md §3.7 + howto）。
 - **F4 完成（2026-08-18，exp/provider-bind-f4）**：Provider 自定义经宿主绑定统一。
   **机制**：内核 LLM 执行器 `llm_callback` 每次从 capability_registry 惰性读
   `llm_provider` 能力；用户经 `import python "<mod>" as lib: bind provider` 声明实现

@@ -115,42 +115,39 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线**：**近期主线（Provider 层分离 R0-R2）已完成收尾**（路线图
-  `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。当前短期分发为 Python 源码直接分发：
-  自定义 LLM 底层的用户被指引**修改/替换内核 provider 文件
-  `ibci_modules/ibci_ai/provider_impl.py`**（`RecommendedProvider`，经 `LLMProvider`
-  契约解耦、kernel-free、可整文件替换；指导文档 `docs/howto/modify_llm_provider.md`）。
-  核心成果：provider/内核/配置解耦彻底、为远期统一留好接口位（`thinking_mode` 契约
-  字段、`ConfigSourceAdapter` 抽象），无返工债务。
-- **远期愿景（post-近期，近期不做）**：IBCI 用户层原生绑定 Python 内容（宿主导入语法 +
-  协议/impl 到宿主类型 + 插件体系重构 + 内核自举 + 缓存/JIT + 隔离改造 + 反射能力）——
-  成熟现代方案，近期不提前复杂设计（路线图 §三 F0-F5）。
+- **🔴 当前主线**：**远期原生宿主绑定（F0-F5）已全部完成**（路线图
+  `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。宿主导入一等语法 `import python "pkg" as lib:
+  bind ...` + 宿主类型绑定 + 插件体系重构 + Provider 自定义经宿主绑定统一均已落地：
+  - **F0-F2**：宿主导入/宿主类型一等绑定（EXTERNAL_MODULE CLASS + per-instance vtable）。
+  - **F3**：废弃 Python `_spec.py` 磁盘发现/加载通道，用户侧扩展唯一边 = 宿主绑定
+    `bind`；内置 11 模块（内核原生 5 + 工具 5 + file）TypeDef 字面量集中
+    `core/runtime/bootstrap/builtin_modules.py` 构造期一次注册；插件搜索路径配置面/
+    ibci_sdk/__ibcext_axiom__ 死协议等全铲除；Engine 签名简化 `IBCIEngine(root_dir=...)`。
+  - **F4**：Provider 自定义经宿主绑定统一——用户写实现 `LLMProvider` 契约的 Python 类，
+    经 `import python "my_provider" as lib: bind provider` + `ai.set_provider(lib.provider)`
+    注册为激活 `llm_provider`（HIGH 优先级覆盖内置默认 RecommendedProvider）；R 期"改
+    provider_impl.py"临时形态已拆除（provider_impl.py 降为内置默认实现）。
+  - **F5**：架构统一/文档收敛——档 A 缓存/内核自举/档 B 真 JIT/隔离/反射评估为**远期
+    pending 规划**（当前"引擎单次执行"模型下收益有限）；文档与代码一致。
 - **当前代码状态**：
-  - 分支 `unsafe-vibe-dev`，本地领先 `origin`（**未 push**；禁 push 硬原则，除非用户显式授权）。
-  - `ibci_modules/ibci_ai/`：`provider_impl.py`（推荐 provider，kernel-free）+
-    `core.py`（`AIPlugin(RecommendedProvider, IbStatefulPlugin)` 胶水宿主）+
-    `config_normalize.py`（kernel-free 归一基元）+ `config_source_adapter.py`（默认适配器）。
-  - 内核：LLM 调用层供应商无关中间层 `core/base/llm_protocol/`（`LLMCallRequest`/
-    `LLMCallResult`/`LLMProvider`/`ConfigSourceAdapter`/`recommended`）；MOCK 哨兵
-    下沉该层 `llm_call.py`。
-  - 协议化大重构 / 双轨收敛 / 判定链双协议化 / copy·deepcopy 均已落地。
-  - 文档：docs/ 系统化重构完成；provider 修改指南 `docs/howto/modify_llm_provider.md`；
-    任务控制正规化；全仓历史记录清洁。
-  - 真实 LLM 试用：开发试用基线为本地 `qwen3.6-35b-a3b` 非思考模式
-    （`trials/_toolkit/LLM_SERVICE.md`）；provider 重构后 T09 套件 8/8 PASS。
-- **⏳ 下一步**：按 `NEXT_STEPS.md` 下一步候选调度（远期 F0-F5 或阶段 5 `yield` 主线
-  或支线窗口）；近期主线已收尾、接口位已留，远期启动前无需返工。
+  - 分支 `unsafe-vibe-dev`，本地领先 `origin`（**未 push**；禁 push 硬原则）。
+  - 用户侧扩展唯一边 = 宿主绑定 `bind`（`docs/howto/extend_with_host_binding.md`）；
+    自定义 LLM provider = 宿主绑定 + `ai.set_provider`（`docs/howto/modify_llm_provider.md`）。
+  - LLM 供应商无关中间层 `core/base/llm_protocol/`；MOCK 哨兵在该层 `llm_call.py`。
+- **⏳ 下一步**：按 `NEXT_STEPS.md` 下一步候选调度（支线：PT-DEBT 质量审计、真实 LLM
+  压力试用 VISION-3、文档持续治理；或 F5 pending 项（档 A 缓存/内核自举等）在出现触发
+  条件时评估）。
 
 ### 2.2 交接检查单（当前有效）
 
-- [ ] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
-- [ ] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
-- [ ] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/愿景）
-- [ ] 读 `GOVERNANCE.md`（任务控制治理章程：文档职责/书写模板/生命周期/红线）
-- [ ] 读 `WORKLOG.md`（关键裁定与长期约束）
-- [ ] 试用体系：`trials/_toolkit/`（run_batch/run_one/CLASSIFICATION/LLM_SERVICE）+ `trials/INDEX.md`
-- [ ] 测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，不冻结数字）
-- [ ] 全程本地 commit、禁 push（除非用户显式授权）
+- [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
+- [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
+- [x] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/愿景）
+- [x] 读 `GOVERNANCE.md`（任务控制治理章程：文档职责/书写模板/生命周期/红线）
+- [x] 读 `WORKLOG.md`（关键裁定与长期约束）
+- [x] 试用体系：`trials/_toolkit/`（run_batch/run_one/CLASSIFICATION/LLM_SERVICE）+ `trials/INDEX.md`
+- [x] 测试基线：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，不冻结数字）
+- [x] 全程本地 commit、禁 push（除非用户显式授权）
 
 ---
 

@@ -239,8 +239,8 @@
     实证 box 裸 Python 模块 + 手动 vtable 绑定成员 + receive 调用可行（内核 API）；
     设计底稿 `docs/architecture/01_native_host_binding.md`（现状实证 + 设计框架 +
     关键落点 + F2 机制细节）；裁决点 1（宿主绑定语法形态）定稿 `import python "pkg" as lib`；
-    裁决点 2/3 定方向（一等类型 EXTERNAL_MODULE / 显式声明式绑定）。临时设计文档
-    `tasks_docs/_f0_native_binding.md` 保留至 F1 复用（含 F1 设计问题清单）。
+    裁决点 2/3 定方向（一等类型 EXTERNAL_MODULE / 显式声明式绑定）。F0 临时设计文档
+    已完成使命删除，设计决策沉入 `docs/architecture/01_native_host_binding.md`。
   - **F1 已完成（`exp/native-binding-f1` → 零风险直接合并）**：宿主导入一等语法
     `import python "pkg" as lib: bind ...` + 用户类持有 native。全链路实现（AST/
     lexer/parser/依赖扫描/scheduler/语义/运行时/VM）；显式声明式绑定（非自动穿透，
@@ -261,7 +261,7 @@
     B1（回落加 HostClassBinding 门控，实证误诊但保留机制隔离）/ M1（bind vs impl
     同名编译期 SEM_REDEFINITION）/ M2（unbox_for_native_call 单一权威）/
     L1-L3 已修 / L4 已修 / L5 记录。验证：全量 pytest 3053 passed / 1 skipped，
-    零回归。临时设计 `tasks_docs/_f2_native_binding.md`（并入本路线图后删除）。
+    零回归。F2 临时设计文档已并入本路线图后删除。
   - **F3 已完成（`exp/plugin-refactor-f3`）**：插件体系重构——废弃 Python 侧 `_spec.py`
     磁盘发现/加载通道，用户侧扩展唯一边 = 宿主绑定 `bind`，不保留双通道。F3-1：10 个
     `_spec.py` 删除，内置 11 模块（内核原生 5 + 工具 5 + file）TypeDef 字面量集中

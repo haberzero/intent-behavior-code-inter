@@ -10,7 +10,7 @@
 
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
-| FEAT（功能） | 4 | 0 | 0 | 语言/工具链功能愿景（含 PT-FEAT-15 provider 分离/原生绑定两段式主干） |
+| FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
 | DEBT（技术债） | 5 | 1 | 0 | 架构缺陷与清理项 |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
@@ -40,38 +40,12 @@
 - **当前理解**：涉及 AST 结构变更（新增可选字段），实施前须查 `02_metadata_ast.md`
   元数据规约；低优先级，无阻塞。
 
-### PT-FEAT-14 LLM 调用接口通用化 / 供应商感知配置
-
-- **状态**：done｜**域**：FEAT｜**优先级**：P0（恢复后）
-- **动机**：`AIPlugin` 硬编码 LM Studio 专用参数（`enable_thinking=false`、
-  `chat_template_kwargs` extra_body），自定义 OpenAI 兼容 API 开发者无法干净接入。
-- **成因**：真实 LLM 专项试用暴露的接口设计问题。
-- **搁置原因**：（已解封）由 LLM 调用层插件化主线吸收。
-- **当前理解**：已完成——新 `LLMProvider` / `LLMCallRequest` 供应商无关契约把
-  请求组装/响应解析/思考字段映射全部下沉到可插拔 provider 实现（推荐 provider
-  保留 LM Studio + Qwen 思考抑制适配）；api_config.json 书写格式经
-  `ConfigSourceAdapter` 可插拔。与 PT-DECIDE-2 收敛。
-
 ### PT-FEAT-7 二层 IR 路线评估
 
 - **状态**：active（VISION）｜**域**：FEAT｜**优先级**：P3
 - **动机**：评估引入二层 IR（中间表示）的长期收益——诊断、优化、跨后端的前置。
 - **成因**：VISION 规划项（无排期）。
 - **当前理解**：概念验证阶段；前置条件多（编译器管线稳定 + 性能基准就绪）。
-
-### PT-FEAT-15 Provider 层分离（近期主线）+ IBCI 原生宿主绑定（远期愿景）
-
-- **状态**：active（当前主干，规划交接阶段）｜**域**：FEAT｜**优先级**：P0
-- **动机**（两段式）：
-  - **近期**：把 LLM provider 层分离彻底完成（当前 Python 源码分发，近期不开放语言级自定义 API，
-    需自定义的用户改内核文件 `ibci_modules/ibci_ai/core.py`）。
-  - **远期**：抛弃"Python 侧手写 `_spec.py` 插件"思路，改 IBCI 用户层原生绑定 Python 内容
-    （宿主导入 + 类型/协议/impl 绑定 + 插件体系重构 + 内核自举 + 缓存/JIT）。
-- **成因**：用户裁定（2026-08-17）；深度调研确认 `box()` 已能包装任意 Python 对象/可调用，
-  但 `import X` 与 `impl` 目前受 `_spec.py` / 本模块用户类限制。
-- **当前理解**：总路线图见 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（近期 R0-R2 / 远期 F0-F5 /
-  关键裁决点 §四）。近期从 R0 开始，远期当前不推进、只留接口位。
-- **关联**：`tasks_docs/HANDOFF.md` §2；`tasks_docs/WORKLOG.md` §三。
 
 ---
 
@@ -192,7 +166,8 @@
   （LM Studio/llama.cpp `enable_thinking`、vLLM、Ollama、OpenAI `reasoning.effort`、
   Anthropic `thinking.budget_tokens`、Gemini `thinkingConfig`）在各自 provider 实现
   内完成。推荐 provider 已含 LM Studio + Qwen 思考抑制适配；其它供应商参数映射
-  为按需求的后续实现窗口（默认 provider 覆盖缺口依旧）。与 PT-FEAT-14 收敛。
+  为按需求的后续实现窗口（默认 provider 覆盖缺口依旧）。与 LLM 调用层插件化主线
+  （F4 provider 自定义经宿主绑定统一）收敛。
 
 ### PT-DECIDE-3 LLM prompt 协议家族待决项
 
