@@ -212,6 +212,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 ### 2.2 交接检查单（当前有效）
 
 - [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
+- [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
 - [x] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/愿景）
 - [x] 读 `GOVERNANCE.md`（任务控制治理章程：文档职责/书写模板/生命周期/红线）
