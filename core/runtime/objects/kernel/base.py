@@ -44,25 +44,40 @@ class IbObject:
         所有属性访问和方法调用都通过此入口分发。
 
         分派骨架（协议驱动，无硬编码字符串分支）：
-        1. 消息名 ∈ 协议注册表方法集（dunder 协议索引，单一权威）→ 查命名处理器
-           ``_dispatch_<name>``（类型感知、可覆写）；处理器返回 None 表示无特殊
-           行为，继续普通路由。
+        1. 协议方法消息（索引来自协议注册表，单一权威）→ 统一分派助手
+           ``_dispatch_protocol_message``（查 ``_dispatch_<name>`` 命名处理器）；
+           处理器返回 None 表示无特殊行为，继续普通路由。
         2. 普通消息路由：vtable（``lookup_method``）。
         """
-        # 1. 协议方法消息 → 命名处理器（索引来自协议注册表，见 _protocol_mixin）
+        result = self._dispatch_protocol_message(message, args)
+        if result is not None:
+            return result
+
+        # 普通消息路由：查找类方法
+        method = self.ib_class.lookup_method(message)
+        if method:
+            return method.call(self, args)
+
+        raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
+
+    def _dispatch_protocol_message(self, message: str, args: List['IbObject']) -> Optional['IbObject']:
+        """统一协议消息分派骨架（单一权威，替代各子类重复的 getattr 探测拷贝）。
+
+        协议方法消息（``message ∈ 协议注册表方法集``）→ 查命名处理器
+        ``_dispatch_<name>``（类型感知、可覆写）；处理器返回 None 表示无特殊
+        行为，继续普通路由。返回 None 表示无协议处理器命中或处理器放行继续路由。
+
+        本方法是 D5（能力探测式 getattr 分派）的**集中点**：全部子类（模块/
+        代理/可调用/Optional 等）共用此骨架，消除 6 份同构复制（机制同构，
+        design-philosophy §四）。后续 protocol_vtable 落地时替换为查表。
+        """
         if message in self._protocol_message_names():
             handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
             if handler is not None:
                 result = handler(message, args)
                 if result is not None:
                     return result
-
-        # 2. 正常消息路由：查找类方法
-        method = self.ib_class.lookup_method(message)
-        if method:
-            return method.call(self, args)
-
-        raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
+        return None
 
     def _protocol_message_names(self) -> 'FrozenSet[str]':
         """协议注册表方法名并集（dunder 分派索引权威源，惰性缓存于 spec registry）。"""

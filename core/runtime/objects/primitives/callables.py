@@ -153,13 +153,10 @@ class IbFnCallable(IbValue):
         if message in _INTERNAL_MESSAGES:
             return _INTERNAL_DISPATCH[message](self)
 
-        # 协议处理器（__call__ 执行 / __getattr__ 基类三段式等）
-        if message in self._protocol_message_names():
-            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
-            if handler is not None:
-                result = handler(message, args)
-                if result is not None:
-                    return result
+        # 协议处理器（统一骨架：__call__ 执行 / __getattr__ 基类三段式等）
+        handled = self._dispatch_protocol_message(message, args)
+        if handled is not None:
+            return handled
 
         raise RuntimeError(f"FnCallable '{self.node_uid}' is not yet evaluated. Cannot process message '{message}'.")
 
@@ -389,13 +386,10 @@ class IbBehavior(IbValue):
         if self._cache:
             return self._cache.receive(message, args)
 
-        # 协议处理器（__getattr__ 基类三段式等；__call__ 显式关闭默认处理器）
-        if message in self._protocol_message_names():
-            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
-            if handler is not None:
-                result = handler(message, args)
-                if result is not None:
-                    return result
+        # 协议处理器（统一骨架：__call__ 显式关闭默认处理器等）
+        handled = self._dispatch_protocol_message(message, args)
+        if handled is not None:
+            return handled
 
         raise RuntimeError(f"Behavior '{self.node}' is not executed. Cannot process message '{message}'.")
 

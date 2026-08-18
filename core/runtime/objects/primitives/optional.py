@@ -140,13 +140,10 @@ class IbOptional(IbValue):
           InterpreterError）须回退 Optional 自身方法；其它消息委托抛
           InterpreterError 是内层方法体的真实错误，必须传播不吞。
         """
-        # 1. Optional 专属协议处理器（返回 None 继续委托链）
-        if message in self._protocol_message_names():
-            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
-            if handler is not None:
-                result = handler(message, args)
-                if result is not None:
-                    return result
+        # 1. Optional 专属协议处理器（返回 None 继续委托链）——统一骨架
+        handled = self._dispatch_protocol_message(message, args)
+        if handled is not None:
+            return handled
         # 2. 委托内层值（容器协议 len/下标/迭代/成员访问透传）。
         #    __getattr__ 已在 _dispatch_getattr 内完成内层委托——此处跳过，
         #    避免双重委托（内层 __getattr__ 副作用/开销重复执行）。

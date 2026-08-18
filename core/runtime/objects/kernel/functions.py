@@ -175,12 +175,9 @@ class IbSuperProxy(IbObject):
         消息一律 AttributeError——不落宿主 vtable（super 代理借用 callable 类
         作宿主，vtable 消息如 toString 等非 super 语义，一律拒绝）。
         """
-        if message in self._protocol_message_names():
-            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
-            if handler is not None:
-                result = handler(message, args)
-                if result is not None:
-                    return result
+        handled = self._dispatch_protocol_message(message, args)
+        if handled is not None:
+            return handled
         raise AttributeError(f"super() proxy does not support message '{message}'")
 
     def _dispatch_getattr(self, message: str, args: List['IbObject']):

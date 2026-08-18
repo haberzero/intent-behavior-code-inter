@@ -132,13 +132,10 @@ class IbModule(IbObject):
         """
         scope = self.scope  # IModuleScope
 
-        # 1. 协议处理器（__getattr__ 成员访问统一走 scope.get）
-        if message in self._protocol_message_names():
-            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
-            if handler is not None:
-                result = handler(message, args)
-                if result is not None:
-                    return result
+        # 1. 协议处理器（__getattr__ 成员访问统一走 scope.get）——统一骨架
+        handled = self._dispatch_protocol_message(message, args)
+        if handled is not None:
+            return handled
 
         # 2. 其他消息经 scope.receive 转发（两形态均实现）
         try:
