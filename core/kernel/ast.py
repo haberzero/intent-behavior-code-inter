@@ -578,7 +578,6 @@ class IbBehaviorInstance(IbExpr):
     """
     segments: List[Union[str, IbExpr]]  # 原始行为描述片段
     target_type_name: str = ""           # 目标类型名称（如 "Mood"）
-    is_callable_instance: bool = False           # 是否延迟执行
 
 
 @dataclass(kw_only=True, eq=False)

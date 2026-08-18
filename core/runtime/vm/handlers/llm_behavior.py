@@ -104,40 +104,15 @@ def vm_handle_IbIntentStackOperation(executor, node_uid: str, node_data: Mapping
 def vm_handle_IbBehaviorExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     """LLM 行为描述行（``@~ ... ~``）。
 
-    与 ExprHandler.visit_IbBehaviorExpr 同语义：
-    * 若被标记为 fn_callable，根据 ``capture_mode`` 创建 ``IbBehavior`` 包装
-      （snapshot 捕获意图栈快照，lambda 不捕获）。
-    * 否则直接同步执行 LLM 调用，确定时返回 ``result.value``；不确定时返回
-      ``IbLLMCallResult(is_certain=False)`` 容器，由语句层消费者处理
-      （llmexcept 重试或 LLMParseError）。
+    直接同步执行 LLM 调用，确定时返回 ``result.value``；不确定时返回
+    ``IbLLMCallResult(is_certain=False)`` 容器，由语句层消费者处理
+    （llmexcept 重试或 LLMParseError）。
 
     注意：dispatch-before-use 路径**不**在这里触发——dispatch_eager
     由 ``vm_handle_IbAssign`` 在识别到 RHS 为本节点且 ``dispatch_eligible=True``
     时调用，避免 LLMFuture 占位符泄漏到非赋值上下文。
     """
-    is_callable_instance = node_data.get("is_callable_instance")
-
     sc = executor.service_context
-
-    if is_callable_instance:
-        capture_mode = node_data.get("capture_mode")
-        captured_intents = (
-            None if capture_mode == "lambda"
-            else executor.runtime_context.fork_intent_snapshot()
-        )
-        expected_type = executor.ec.get_side_table("node_to_type", node_uid)
-        param_types, return_type = _capture_signature(
-            executor, node_uid, [], expected_type
-        )
-        return sc.object_factory.create_behavior(
-            node_uid,
-            captured_intents,
-            expected_type=expected_type,
-            capture_mode=capture_mode,
-            execution_context=executor.ec,
-            param_types=param_types,
-            return_type=return_type,
-        )
 
     # 提取命名模型 tag（@NAME~ 语法）用于模型路由
     target_model = node_data.get("tag", "")

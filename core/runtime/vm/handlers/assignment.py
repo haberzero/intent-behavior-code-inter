@@ -34,20 +34,12 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
     所有赋值目标（IbName / IbTypeAnnotatedExpr / IbAttribute / IbSubscript /
     IbTuple 解包）均通过 CPS ``_vm_assign_to_target`` 处理。
 
-    is_callable_instance 路径：``yield value_uid``，``vm_handle_IbBehaviorExpr``
-    已完整实现 fn_callable 模式的 IbBehavior 包装。
-
     llmexcept 保护：RHS 返回 ``IbLLMCallResult(is_certain=False)`` 时，若有
     ``llmexcept_handler`` 则创建帧并完整多轮重试（重试轮内目标变量临时标记为
     ``IbLLMUncertain``，作为快照/重试通信令牌）；无 handler 则抛 ``LLMParseError``。
     """
     value_uid = node_data.get("value")
     targets = node_data.get("targets", [])
-
-    is_callable_instance = False
-    if value_uid:
-        value_node_data = executor.ec.get_node_data(value_uid)
-        is_callable_instance = bool(value_node_data.get("is_callable_instance")) if value_node_data else False
 
     # 仅简单目标（IbName / IbTypeAnnotatedExpr(IbName)）走 dispatch-before-use。
     # 复杂目标（attribute/subscript/tuple unpack）直接走同步路径，保证 llmexcept
@@ -58,7 +50,7 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
 
     # 识别 dispatch-before-use 路径
     dispatched_future: Optional[LLMFuture] = None
-    if value_uid and not is_callable_instance and future_assignable:
+    if value_uid and future_assignable:
         value_node_data = executor.ec.get_node_data(value_uid)
         if (
             value_node_data
@@ -94,8 +86,6 @@ def vm_handle_IbAssign(executor, node_uid: str, node_data: Mapping[str, Any]):
             _assign_future_to_name_target(executor, target_uid, dispatched_future)
         return executor.registry.get_none()
 
-    # is_callable_instance 路径：vm_handle_IbBehaviorExpr 已完整实现 fn_callable 模式
-    # 的 IbBehavior 包装，直接 yield 走 CPS 调度。
     value = yield value_uid
 
     if _is_llm_uncertain_value(value):
