@@ -7,6 +7,7 @@
 - :class:`_SchedulerMixin` (``_scheduler``)    —— ``dispatch_eager_cps``（CPS 权威）/ ``resolve`` / 线程池
 - :class:`_LLMFunctionMixin` (``_llm_function``) —— 命名 LLM 函数执行 (CPS)
 - :class:`_BehaviorMixin` (``_behavior``)       —— behavior 表达式执行 (CPS + 同步薄包装)
+- :class:`_LLMCallableMixin` (``_llm_callable``) —— LLMCallable 统一装配与执行（P1 §2.4）
 
 ``LLMExecutorImpl`` 继承顺序 (MRO) 保证 :class:`LLMExecutorCore` 的 ``__init__``
 成为唯一构造器，各 mixin 仅贡献方法。对外保持 ``from core.runtime.interpreter.llm_executor
@@ -18,9 +19,10 @@ from ._prompt import _PromptMixin
 from ._scheduler import _SchedulerMixin
 from ._llm_function import _LLMFunctionMixin
 from ._behavior import _BehaviorMixin
+from ._llm_callable import _LLMCallableMixin
 
 
-class LLMExecutorImpl(_BehaviorMixin, _LLMFunctionMixin, _SchedulerMixin, _PromptMixin, LLMExecutorCore):
+class LLMExecutorImpl(_BehaviorMixin, _LLMCallableMixin, _LLMFunctionMixin, _SchedulerMixin, _PromptMixin, LLMExecutorCore):
     pass
 
 

@@ -38,14 +38,19 @@ P1 §2.4 消费路径统一：
 - **为何对象化而非 dataclass**：用户 `__llm_call__` 在语言层互操作（方法调用/字段），
   须为一等对象；LLMCallRequest 保持底层 dataclass（base 层契约，不 DbObject 化，P1 §2.3）。
 
-### 2.2 用户 `__llm_call__` 契约（self-grill 钉死）
+### 2.2 用户 `__llm_call__` 契约（self-grill 钉死 → P4b-2a 修订：返回 dict 形态）
 
-- 形态：`func __llm_call__(self, llm_call_ctx ctx) -> void`（**ctx 变异式**，非返回式）。
-  用户方法设置 ctx 的 user_prompt / prompt_slots / output_hint / model；
-  返回 None。内核装配入口在调用后把 ctx 变异结果映射为 LLMCallRequest。
-- 理由：LLMCallRequest 非语言类型，用户无法/不应直接构造；ctx 变异 = IBCI 既有
-  "配置对象变异"模式（`ai.load_project_config` 同构），且不引入语言类型构造底层
-  契约的耦合。**机制同构**（design-philosophy §四）。
+- **P4b-2a 契约（修订，记录理由）**：`func __llm_call__(self) -> dict`——用户方法**返回
+  装配配置 dict**（`user_prompt` / `output_hint` / `expected_type` / `model` 键），
+  内核装配入口把返回 dict 映射为 `LLMCallRequest`。
+  - **为何修订**：避免为新装配上下文引入内核对象类型注册（bootstrap 类 + 公理 + 注册，
+    成本高、风险大）；"函数返回配置数据"较"变异上下文对象"更 IBCI 惯用（返回值传递），
+    且 P4b-2a 不需要用户读取输入意图。
+  - **装配上下文 `IbLLMCallAssemblyCtx`（IBCI 一等对象）降级为 P4b-2b 扩展**：当用户
+    `__llm_call__` 需**读取**输入（意图三层/输出契约/目标模型）时，引入 ctx 对象作为
+    **额外只读入参**（`__llm_call__(self, any ctx)` 读 + 返回 dict 写）；本阶段不引入。
+- 仅当后续发现"返回 dict"不足以表达自定义槽等多种装配时，才按 §2.1 设计方案
+  实现 `IbLLMCallAssemblyCtx`（可写槽 + 只读信息）。
 
 ### 2.3 CPS 段求值 vs 同步 receive 分派（关键张力）
 
@@ -77,12 +82,13 @@ P1 §2.4 消费路径统一：
 
 ## 四、落地顺序（勿半接通）
 
-- **P4b-1（本轮）**：装配上下文 `IbLLMCallAssemblyCtx` + 统一入口
-  `assemble_llm_callable_request_cps` + 执行入口 `invoke_llm_callable_cps`；
-  用户 llm 类（`__llm_call__(ctx)` ctx 变异）经统一 worker mock 调用判别；
-  行为路径**零行为变化**地经统一入口路由（回归证明）。
-- **P4b-2**：`run_batch`/`stream` 接受"任何 LLMCallable 实例"（移除 `isinstance(behavior,
-  name=="behavior")` 窄校验）；行为值满足 llm_callable 的显式化（内核注册）。
+- **P4b-1（已完成）**：设计定稿。
+- **P4b-2a（本轮）**：统一装配入口 `assemble_llm_callable_request_cps` + 执行入口
+  `invoke_llm_callable_cps`；用户 llm 类 `__llm_call__(self) -> dict`（返回配置 dict）经统一
+  worker mock 调用判别；行为路径零变化（行为经各自路径，纳入统一入口在 P4b-2b 收敛）。
+- **P4b-2b**：`run_batch`/`stream` 接受"任何 LLMCallable 实例"（移除 `isinstance(behavior,
+  name=="behavior")` 窄校验）；行为经统一装配入口路由（机制同构收敛）；装配上下文
+  `IbLLMCallAssemblyCtx`（只读意图入参）按需引入。
 - **P4b-3**：`__intent__` / `__retry__` 可选协议方法运行时发现 + 装配上下文承载。
 
 ## 五、验证门
@@ -91,23 +97,24 @@ P1 §2.4 消费路径统一：
   行为经统一入口 == 直接路径（LLMCallRequest 等价）。
 - 全量 pytest 零回归 + 本地 commit；低风险可 merge unsafe-vibe-dev（用户授权）。
 
-## 六、用户侧蓝图（P4b-2 示例，llm 可调用类用户写法）
+## 六、用户侧蓝图（P4b-2a 示例，llm 可调用类用户写法）
 
 ```ibci
 # 用户定义具名 llm 可调用类（替代 llm 函数）
 class Translator:
-    # 装配上下文 ctx（llm_call_ctx 类型，any 槽位接收）：
-    # 用户方法变异 ctx → 内核装配入口映射为 LLMCallRequest
-    func __llm_call__(self, any ctx):
+    # 用户 `__llm_call__` 返回装配配置 dict → 内核映射为 LLMCallRequest
+    func __llm_call__(self) -> dict:
         str prompt = "将「" + $self.text + "」翻译为" + self.target_lang
-        ctx.set_user_prompt(prompt)
-        ctx.set_output_hint("只输出译文，不要解释")
+        return {
+            "user_prompt": prompt,
+            "output_hint": "只输出译文，不要解释",
+        }
 
     str text = ""
     str target_lang = "英语"
 
 Translator tr = Translator()
 tr.text = "hello"
-# 经 run_batch / stream（P4b-2）或统一执行入口消费 tr（LLMCallable 实例）
+# 经 run_batch / stream（P4b-2b）或统一执行入口消费 tr（LLMCallable 实例）
 ```
 

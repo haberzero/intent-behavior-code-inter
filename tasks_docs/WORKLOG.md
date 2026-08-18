@@ -464,6 +464,21 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **落地顺序（勿半接通）**：P4b-1（设计，本轮）→ P4b-2（ctx 对象 + 统一入口 + 用户 llm 类
   支持 + run_batch 统一）→ P4b-3（__intent__/__retry__ 运行时发现）。验证门与用户侧蓝图
   （Translator 示例）见设计文档。
+- **五大地基改造 · P4b-2a LLMCallable 统一装配路径实现（本 session，unsafe-vibe-dev）**：
+  新增 `_LLMCallableMixin`（`llm_executor/_llm_callable.py`，组合进 `LLMExecutorImpl`）：
+  - `assemble_llm_callable_request_cps`：协议门（`satisfies_protocol(..., 'llm_callable')` 为
+    唯一入口判定）→ CPS 调用用户 `__llm_call__(self) -> dict`（`UserFunctionCall` yield）→
+    装配 dict 映射为 `LLMCallRequest`（user_prompt/output_hint/expected_type/model + 意图三层
+    消解，与行为路径共用 `_resolve_llm_callable_intents_cps`）；
+  - `invoke_llm_callable_cps`：装配 → 统一 worker `_call_and_parse`（`_call_llm`+`_parse_result`，
+    与行为路径同构）。
+  **契约定稿（修订 `_code_p4b_assembly.md`，理由记录）**：P4b-2a 用户 `__llm_call__` =
+  **返回装配配置 dict**（避免新内核 ctx 类型注册成本、函数返回配置数据更 IBCI 惯用）；装配
+  上下文 `IbLLMCallAssemblyCtx`（可写槽/只读意图入参）降级为 P4b-2b 扩展。
+  判别测试 `tests/e2e/test_llm_callable_unified.py`：用户 llm 类（Translator）经 host 桥接触发
+  统一入口 → mock provider 收到 `user_prompt="将「hello」翻译为英语"` + output_hint（端到端
+  装配生效）；非 llm 可调用值 fail-fast。验证：全量 pytest **3028 passed / 1 skipped** 零回归。
+  后续：P4b-2b（run_batch 统一消费 LLMCallable 实例 + 行为经统一入口收敛 + 装配上下文扩展）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

@@ -126,28 +126,29 @@ retry）。
 > 零回归。
 >
 > **✅ P4b LLMCallable 装配路径设计定稿（本 session，设计轮）**：装配上下文 `IbLLMCallAssemblyCtx`
-> （IBCI 一等对象，可写槽 + 只读意图/输出契约）+ 用户 `__llm_call__(ctx)` ctx 变异契约 + 统一装配
-> 入口 `assemble_llm_callable_request_cps`（CPS 生成器，差异经协议方法承载）+ 落地顺序
-> （P4b-2 ctx+统一入口+用户 llm 类+run_batch → P4b-3 可选协议方法发现）。设计文档
-> `tasks_docs/_code_p4b_assembly.md`（临时，实现后删除）。
+> （IBCI 一等对象，可写槽 + 只读意图/输出契约）+ 用户 `__llm_call__` 契约 + 统一装配入口
+> `assemble_llm_callable_request_cps`（CPS 生成器，差异经协议方法承载）+ 落地顺序。
+> 设计文档 `tasks_docs/_code_p4b_assembly.md`（临时，实现后删除）。
+>
+> **✅ P4b-2a LLMCallable 统一装配路径实现已落地（本 session）**：`_LLMCallableMixin`
+> （`_llm_callable.py`，组合进 LLMExecutorImpl）——`assemble_llm_callable_request_cps`（协议门 →
+> CPS 调用户 `__llm_call__` → 装配 dict→LLMCallRequest）+ `invoke_llm_callable_cps`（装配 →
+> 统一 worker）。契约定稿：用户 `__llm_call__(self) -> dict` 返回装配配置 dict（ctx 对象降级
+> P4b-2b 扩展）。判别测试 `tests/e2e/test_llm_callable_unified.py`（用户 llm 类端到端 mock +
+> fail-fast）。全量 pytest **3028 passed / 1 skipped** 零回归。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b-2 LLMCallable 装配实现（下一 session 开工）**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 + P4a
-   LLMCallable 协议地基 + **P4b 装配设计定稿**（`tasks_docs/_code_p4b_assembly.md`，临时，实现后
-   删除）已合入，全量 3020 零回归）。设计权威 `tasks_docs/_five_foundation_P1_design.md` §一-§三 +
-   `_code_p4b_assembly.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P4b-2 实现**（按 `_code_p4b_assembly.md` §四）：
-   - `IbLLMCallAssemblyCtx` 内核对象（`llm_call_ctx` 类型，用户 `__llm_call__` 装配上下文；
-     可写槽 set_user_prompt/add_prompt_slot/set_output_hint/set_model + 只读意图三层/输出契约/
-     目标模型）；
-   - 统一装配入口 `assemble_llm_callable_request_cps`（CPS 生成器：用户类经 UserFunctionCall
-     yield 驱动、行为值内核原生装配）+ 执行入口 `invoke_llm_callable_cps`（装配 → 统一 worker
-     `_call_and_parse`）；
-   - 行为值路由经统一入口（零行为变化）+ 用户 llm 类（`__llm_call__(ctx)` ctx 变异）判别测试；
-   - `run_batch` 接受任何 LLMCallable 实例（移除 `isinstance(behavior) and name=="behavior"`
-     窄校验）。
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b-2b LLMCallable 消费面收敛（下一 session 开工）**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 + P4a +
+   P4b 设计定稿 + **P4b-2a 统一装配路径**（`_llm_callable.py`，全量 3028 零回归）已合入）。
+   设计权威 `tasks_docs/_five_foundation_P1_design.md` §一-§三 + `_code_p4b_assembly.md`（临时，
+   实现后删除），决策权威 `_five_foundation_redesign.md` §一-§五。
+   **本步 = P4b-2b 消费面收敛**（按 `_code_p4b_assembly.md` §四）：
+   - `run_batch`/`stream` 统一消费 "任何 LLMCallable 实例"（移除 `isinstance(behavior) and
+     name=="behavior"` 窄校验；llm 类实例经 `assemble_llm_callable_request_cps` 装配）；
+   - 行为值经统一装配入口路由（机制同构收敛，零行为变化）；
+   - 装配上下文 `IbLLMCallAssemblyCtx`（只读意图入参）按需引入（用户 `__llm_call__` 需读输入时）。
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
    **后续子增量**：P4b-3（`__intent__`/`__retry__` 可选协议方法运行时发现）→ P4c `llm/llmend`
    语法+旧机制全链路删除（决策 4 + 用户追加裁定）+ 全量迁移（36 测试 + 66 示例/试用文件）→
