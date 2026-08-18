@@ -489,6 +489,16 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   provider 收到装配 prompt + 单元素结果；行为 run_batch 7 项 d-test 零破坏。
   验证：全量 pytest **3029 passed / 1 skipped** 零回归。后续：P4b-2c（stream 统一 + llm 类
   per-item 契约）→ P4b-3（__intent__/__retry__ 可选协议方法发现）。
+- **五大地基改造 · P4b-2c llm 类 run_batch 逐项参数化契约（本 session，unsafe-vibe-dev）**：
+  `__llm_call__(self, any item)` **可选 item 参**（经 `method.spec.param_types` 长度检测
+  非 self 参数——声明 item 参则逐项传入）：`assemble_llm_callable_request_cps` / 
+  `invoke_llm_callable_cps` 增 `item` 参数，`UserFunctionCall` 按需传项；`_RunLLMCallableDrive`
+  批量化（`_invoke_llm_callable_batch_cps` 逐项 CPS 执行 + `_invoke_llm_callable_batch_sync`
+  同步兜底，返回 boxed 结果列表；并发优化留待后续）。run_batch 语义收敛为**每 item 一次 LLM
+  调用**（llm 类；item 仅在声明时参数化）。判别测试：`run_batch(tr,[0])` 无 item 参 → 单次固定
+  装配；`run_batch(g,[1,2])` 声明 item 参 → 逐项装配（"欢迎1"/"欢迎2"）。修正测试间 provider
+  模块 Python 缓存导致的跨测试累积（每测试唯一模块名）。验证：全量 pytest **3030 passed / 1
+  skipped** 零回归。后续：P4b-3（__intent__/__retry__ 可选协议方法运行时发现）→ P4c。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

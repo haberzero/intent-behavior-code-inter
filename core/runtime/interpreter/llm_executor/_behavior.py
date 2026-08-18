@@ -130,15 +130,17 @@ class _RunBatchDrive:
 class _RunLLMCallableDrive:
     """``ai.run_batch`` 对用户 LLMCallable 实例的 CPS 驱动 Waitable（单次调用）。
 
-    P4b-2b：与 :class:`_RunBatchDrive` 同范式——VM 主路径经 ``cps_drive`` 帧内
-    CPS 驱动统一装配（``invoke_llm_callable_cps``：协议门 → 用户 ``__llm_call__``
-    → 统一 worker）；宿主/线程体走 ``_drive`` 同步兜底。返回 boxed 单元素 IbList
-    （本次调用运行该 llm 类的 LLM 调用一次；llm 类的 per-item 参数化归 P4b-2c）。
+    P4b-2b/2c：与 :class:`_RunBatchDrive` 同范式——VM 主路径经 ``cps_drive`` 帧内
+    CPS 驱动统一装配（``invoke_llm_callable_cps``：协议门 → 用户 ``__llm_call__`` →
+    统一 worker）；宿主/线程体走 ``_drive`` 同步兜底。``items`` 逐项作为
+    ``__llm_call__(self, any item)`` 的入参（用户声明 item 参时）执行一次 LLM 调用，
+    返回 boxed 结果列表（llm 类 run_batch 的逐项参数化契约，P4b-2c）。
     """
 
-    def __init__(self, executor, callable_inst: "IbObject", ec):
+    def __init__(self, executor, callable_inst: "IbObject", items, ec):
         self._executor = executor
         self._callable = callable_inst
+        self._items = list(items)
         self._ec = ec
         self._done = False
         self._results = None
@@ -149,14 +151,16 @@ class _RunLLMCallableDrive:
 
     def _drive(self):
         """宿主/线程体同步驱动（非权威路径）。"""
-        self._results = self._executor._invoke_llm_callable_sync(self._callable, self._ec)
+        self._results = self._executor._invoke_llm_callable_batch_sync(
+            self._callable, self._items, self._ec
+        )
         self._done = True
         return self._results
 
     def cps_drive(self, executor):
         """帧内 CPS 驱动（VM 权威路径）。"""
-        self._results = yield from self._executor._invoke_llm_callable_cps_boxed(
-            self._callable, self._ec
+        self._results = yield from self._executor._invoke_llm_callable_batch_cps(
+            self._callable, self._items, self._ec
         )
         self._done = True
         return self._results
@@ -441,7 +445,7 @@ class _BehaviorMixin:
         if isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior":
             return _RunBatchDrive(self, behavior, list(items), execution_context)
         if self._is_llm_callable_value(behavior, execution_context):
-            return _RunLLMCallableDrive(self, behavior, execution_context)
+            return _RunLLMCallableDrive(self, behavior, list(items), execution_context)
         raise TypeError(
             f"run_batch: expected a behavior or LLMCallable instance, got {type(behavior).__name__}"
         )

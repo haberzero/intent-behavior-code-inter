@@ -199,10 +199,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   Waitable 经统一装配入口单次执行）+ fail-fast；`builtin_modules.py` run_batch 首参型宽化为 any。
   判别新增 run_batch-llm-callable + 行为 run_batch 7 项零破坏。全量 pytest **3029 passed / 1
   skipped** 零回归。
-  **下一 session 开工 = P4b-2c 剩余消费面**（`stream_call`/`stream_channel` 统一消费 LLMCallable
-  实例（当前仍吃字符串，需设计 llm 类流式装配语义）+ llm 类 run_batch 的 items 逐项参数化契约 +
-  装配上下文按需引入 + 行为经统一装配入口路由，按 `_code_p4b_assembly.md` §四），详见
-  `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4b-3（可选协议方法发现）→ P4c（llm 语法+旧机制删除+
+  **✅ P4b-2c llm 类 run_batch 逐项参数化契约已落地（本 session）**：`__llm_call__(self, any item)`
+  可选 item 参（method.spec.param_types 检测）→ assemble/invoke 按需传项；`_RunLLMCallableDrive`
+  批量化（每 item 一次 LLM 调用）；run_batch 语义收敛为每 item 一次调用。全量 pytest
+  **3030 passed / 1 skipped** 零回归。
+  **下一 session 开工 = P4b-3 LLMCallable 可选协议方法运行时发现**（`__intent__`（意图改写）/
+  `__retry__`（重试策略声明）可选能力经 receive 发现，P1 §2.2；装配上下文按需引入；剩余消费面
+  stream 统一 + 行为经统一入口，按 `_code_p4b_assembly.md` §四），详见
+  `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4c（llm 语法+旧机制删除+
   全量迁移 36/66 面）→ P4d（retry 高阶化）→ P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
@@ -217,14 +221,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] 全程本地 commit、禁 push（除非用户显式授权）
 - [x] **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已合并并删除实验分支；`main` 不触碰；本地领先 origin 未 push）
 - [x] **P2/P6 地基低风险合并 unsafe-vibe-dev 完成**（用户确认零风险 → 纯 fast-forward `e8c7944b..b7479497` → exp 分支合并即删；全量 pytest 2997 零回归）
-- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：3029 passed / 1 skipped）
+- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：3030 passed / 1 skipped）
 - [x] **✅ 复核并提交工作树内 P2-② 覆层机制未提交增量完成**：`git diff` 复核（含端到端实证）→ 全量 pytest 实跑 2997 零回归 → 描述性 commit → 删除临时文档 `tasks_docs/_code_overlay.md` 与 `tasks_docs/_code_protocol_vtable.md`（git 承载）→ 同步 WORKLOG/NEXT_STEPS/HANDOFF/检查单
 - [x] **✅ P3 D8 snapshot 意图冻结补齐落地**：意图 fork 按 capture_mode 统一 + IbFnCallable.captured_intents + _vm_call_fn_callable 意图生命周期（IT-2/IT-3/IT-4）+ 判别测试 + 死字段清理；全量 3011 零回归
 - [x] **✅ P3 G5/G2 意图一等值切片·可调用值有意契约嵌入落地**：函数/可调用/行为值渲染契约（func <name>(<params>)-><ret> / signature_name），去 Python repr；判别测试 + 既有断言语义演进；全量 3019 零回归
 - [x] **✅ P4a LLMCallable 协议地基落地**：llm_callable 协议注册（__llm_call__ 必需方法 = 能否被 LLM 消费唯一判定）+ 判别测试；全量 3020 零回归
 - [x] **✅ P4b 装配路径设计定稿**：装配上下文 IbLLMCallAssemblyCtx（IBCI 一等对象）+ __llm_call__ 契约 + 统一装配入口（CPS）+ 落地顺序，设计文档 _code_p4b_assembly.md（临时）
 - [x] **✅ P4b-2a LLMCallable 统一装配路径实现落地**：_LLMCallableMixin（协议门 → __llm_call__ 装配 dict→LLMCallRequest → 统一 worker）+ 用户 llm 类端到端判别 + fail-fast；全量 3028 零回归
-- [x] **✅ P4b-2b run_batch 统一消费 LLMCallable 实例落地**：run_batch 接受 llm 实例（_RunLLMCallableDrive 经统一装配，行为保留）+ 首参型宽化 any；全量 3029 零回归；下一步 = P4b-2c（stream 统一 + llm 类 per-item 契约）
+- [x] **✅ P4b-2b run_batch 统一消费 LLMCallable 实例落地**：run_batch 接受 llm 实例（_RunLLMCallableDrive 经统一装配，行为保留）+ 首参型宽化 any；全量 3029 零回归
+- [x] **✅ P4b-2c llm 类 run_batch 逐项参数化落地**：__llm_call__(self, any item) 可选 item 参 + run_batch 批量化（每 item 一次调用）；全量 3030 零回归；下一步 = P4b-3（__intent__/__retry__ 可选协议方法发现）
 
 ---
 

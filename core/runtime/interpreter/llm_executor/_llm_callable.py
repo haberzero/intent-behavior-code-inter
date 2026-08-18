@@ -46,11 +46,14 @@ class _LLMCallableMixin:
         *,
         target_model: str = "",
         captured_intents: Optional[Any] = None,
+        item: Optional[IbObject] = None,
     ):
         """统一装配：协议门 → 用户 ``__llm_call__``（返回装配 dict）→ LLMCallRequest。
 
         返回 ``(LLMCallRequest, type_hint)``。调用方（``invoke_llm_callable_cps`` /
-        未来 run_batch）须 ``yield from``。
+        run_batch）须 ``yield from``。``item``（P4b-2c）：run_batch 逐项调用时传入；
+        用户 ``__llm_call__`` 声明非 self 参数（``__llm_call__(self, any item)``）
+        时作为该参数传入，用于逐项装配。
         """
         ib_class = callable_inst.ib_class
         reg = getattr(ib_class, "registry", None)
@@ -72,8 +75,13 @@ class _LLMCallableMixin:
                 f"(got {type(method).__name__})."
             )
 
-        # CPS 调用用户 __llm_call__(self) -> dict（含 Waitable 则调度器挂起）。
-        result = yield UserFunctionCall(method, [], callable_inst)
+        # item 参检测：用户 'func __llm_call__(self, any item)' 声明非 self 参数时，逐项调用传 item。
+        method_spec = getattr(method, "spec", None)
+        takes_item = bool(method_spec is not None and getattr(method_spec, "param_types", None))
+        call_args = [item] if (item is not None and takes_item) else []
+
+        # CPS 调用用户 __llm_call__(self[, item]) -> dict（含 Waitable 则调度器挂起）。
+        result = yield UserFunctionCall(method, call_args, callable_inst)
         if not isinstance(result, IbObject):
             raise TypeError(
                 "invoke_llm_callable: __llm_call__ must return a config dict, "
@@ -129,11 +137,11 @@ class _LLMCallableMixin:
         )
 
     def invoke_llm_callable_cps(
-        self, callable_inst: IbObject, ec: IExecutionContext, *, target_model: str = ""
+        self, callable_inst: IbObject, ec: IExecutionContext, *, target_model: str = "", item: Optional[IbObject] = None
     ):
         """执行入口：统一装配 → 统一 worker（_call_llm + _parse_result）。"""
         request, type_hint = yield from self.assemble_llm_callable_request_cps(
-            callable_inst, ec, target_model=target_model
+            callable_inst, ec, target_model=target_model, item=item
         )
         from core.runtime.interpreter.llm_executor._behavior import BehaviorCallSpec
         from core.runtime.shared.llm_result import LLMFuture
@@ -175,3 +183,23 @@ class _LLMCallableMixin:
         result = _drive_generator(ec.vm_executor, gen)
         value = result.value if result is not None else self.registry.get_none()
         return [value]
+
+    # ------------------------------------------------------------------ #
+    # P4b-2c：run_batch 逐项批量（items 逐项作为 __llm_call__ 的 item 参）  #
+    # ------------------------------------------------------------------ #
+
+    def _invoke_llm_callable_batch_cps(self, callable_inst: IbObject, items, ec: IExecutionContext):
+        """CPS 逐项执行：每 item 一次 LLM 调用（经统一装配 + 统一 worker），
+        返回 boxed 结果列表。当前逐项顺序执行（并发优化留待后续）。"""
+        values = []
+        for item in items:
+            result = yield from self.invoke_llm_callable_cps(callable_inst, ec, item=item)
+            values.append(result.value if result is not None else self.registry.get_none())
+        return self.registry.box(values)
+
+    def _invoke_llm_callable_batch_sync(self, callable_inst: IbObject, items, ec: IExecutionContext):
+        """宿主/线程体同步兜底：经 _drive_generator 驱动 CPS 批量版。"""
+        from core.runtime.coordinator import _drive_generator
+
+        gen = self._invoke_llm_callable_batch_cps(callable_inst, items, ec)
+        return _drive_generator(ec.vm_executor, gen)

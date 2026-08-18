@@ -51,22 +51,28 @@ def invoke(inst):
     return _drive_generator(ec.vm_executor, gen)
 '''
 
-_BIND = (
-    'import python "llc_rec_mod" as lib:\n'
+_BIND_TEMPLATE = (
+    'import python "{rec}" as lib:\n'
     "    bind provider -> any\n"
-    'import python "llc_invoke_mod" as lib2:\n'
+    'import python "{inv}" as lib2:\n'
     "    bind invoke -> any\n"
 )
 
+_import_counter = [0]
+
 
 def _run(body: str, tmp_path, monkeypatch):
-    (tmp_path / "llc_rec_mod.py").write_text(_REC_PROVIDER_SRC, encoding="utf-8")
-    (tmp_path / "llc_invoke_mod.py").write_text(_INVOKE_SRC, encoding="utf-8")
+    # 每测试唯一模块名：避免 Python sys.modules 缓存导致 provider 实例/统计跨测试累积。
+    _import_counter[0] += 1
+    rec = f"llcmod_{_import_counter[0]}_rec"
+    inv = f"llcmod_{_import_counter[0]}_inv"
+    (tmp_path / f"{rec}.py").write_text(_REC_PROVIDER_SRC, encoding="utf-8")
+    (tmp_path / f"{inv}.py").write_text(_INVOKE_SRC, encoding="utf-8")
     monkeypatch.syspath_prepend(str(tmp_path))
     out = []
     eng = IBCIEngine(root_dir=os.getcwd())
     code = (
-        _BIND +
+        _BIND_TEMPLATE.format(rec=rec, inv=inv) +
         "import ai\nai.set_provider(lib.provider)\n" +
         body
     )
@@ -117,8 +123,8 @@ class TestLLMCallableUnifiedInvoke:
         assert "LLMCallable" in str(exc.value) or "llm_callable" in str(exc.value)
 
     def test_run_batch_accepts_llm_callable_instance(self, tmp_path, monkeypatch):
-        """P4b-2b：run_batch 统一接受用户 llm 可调用实例（行为语义保留；
-        llm 类经统一装配执行一次，返回单元素结果）。"""
+        """P4b-2b/2c：run_batch 统一接受用户 llm 可调用实例（行为语义保留；
+        llm 类逐项一次调用，item 仅在 __llm_call__ 声明 item 参时参数化）。"""
         body = (
             "class Translator:\n"
             "    func __llm_call__(self) -> dict:\n"
@@ -127,7 +133,7 @@ class TestLLMCallableUnifiedInvoke:
             "    str text = \"\"\n"
             "Translator tr = Translator()\n"
             "tr.text = \"x\"\n"
-            "list results = ai.run_batch(tr, [])\n"
+            "list results = ai.run_batch(tr, [0])\n"
             "print(results)\n"
         )
         out, eng = _run(body, tmp_path, monkeypatch)
@@ -135,3 +141,21 @@ class TestLLMCallableUnifiedInvoke:
         assert prov is not None and prov.calls, "run_batch 未触发统一装配路径"
         assert prov.calls[-1]["user_prompt"] == "批量「x」", f"prompt={prov.calls[-1]['user_prompt']}"
         assert any("TRANSLATED_OK" in line for line in out), f"结果未返回: {out}"
+
+    def test_run_batch_items_parameterize_llm_callable(self, tmp_path, monkeypatch):
+        """P4b-2c：run_batch 逐项以 item 参装配（__llm_call__(self, any item) →
+        每 item 一次 LLM 调用，装配随 item 变化）。"""
+        body = (
+            "class Greeter:\n"
+            "    func __llm_call__(self, any item) -> dict:\n"
+            "        return {\"user_prompt\": \"欢迎\" + str(item)}\n"
+            "Greeter g = Greeter()\n"
+            "list results = ai.run_batch(g, [1, 2])\n"
+            "print(results)\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        prov = eng.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        assert prov is not None and prov.calls, "run_batch 未逐项装配"
+        assert len(prov.calls) == 2, f"应逐项 2 次调用: {len(prov.calls)}"
+        prompts = [c["user_prompt"] for c in prov.calls]
+        assert "欢迎1" in prompts and "欢迎2" in prompts, f"items 未逐项参数化: {prompts}"
