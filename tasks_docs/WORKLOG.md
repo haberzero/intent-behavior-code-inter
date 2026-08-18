@@ -298,6 +298,7 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **增量 1** = 收敛 6 份 receive 分派骨架为单一 `_dispatch_protocol_message` 助手（D5 集中落点，
   behavior 不变，全量 2956 零回归，commit 6d933080）。后续增量沿"协议方法表数据结构 + impl
   放行 + 覆层机制 + to_prompt 激活"推进。
+- **五大地基改造 · D4 补齐（2026-08-18，exp/protocol-vtable，commit eb8ecd30）**：str 缺 output_hint 能力（satisfies_protocol(str,'output_hint')=False，与 int/list/dict/tuple 不一致，D4）。StrAxiom（core/kernel/axioms/primitives/sequences.py）增 has_output_hint_cap + __outputhint_prompt__（镜像 ListAxiom 模式），satisfies_protocol(str,'output_hint')=True，无半接通。test_str_behavior_gets_generic_expected_type_declaration 随语义演进重构为 test_str_behavior_gets_axiom_output_hint（旧断言即 D4 前的非一致特例，非缺陷规避）。全量 2980 零回归。
 - **五大地基改造 · protocol_vtable 数据结构形状修正（2026-08-18，exp/protocol-vtable）**：
   爆破面报告实证冲正 P1 设计 §五的键映射假设——`receive` 分派按**消息名（dunder 方法名）**
   查 `_dispatch_<name>`（这些是值 Python 实现类上的**实例方法**，非 IbClass.methods 里的
