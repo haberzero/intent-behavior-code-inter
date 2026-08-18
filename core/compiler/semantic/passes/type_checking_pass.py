@@ -25,6 +25,7 @@ from ._type_checking_base import TypeCheckBase
 from ._declaration_visitors import DeclarationVisitorsMixin
 from ._statement_visitors import StatementVisitorsMixin
 from ._expression_visitors import ExpressionVisitorsMixin
+from ._overlay_registry import _OverlayRegistry
 
 
 class TypeCheckingPass(BasePass):
@@ -78,6 +79,11 @@ class TypeCheckingVisitor(
 
         # 类型绑定：node object -> IbSpec（使用对象身份作为键）
         self.type_bindings: Dict[Any, IbSpec] = {}
+
+        # 覆层声明登记（决策 2 覆层机制）：type_name -> 已声明覆层方法名集合。
+        # 供 with overlay 目标校验（须存在对应覆层声明）与"存在未启用"告警
+        # （模块内声明了覆层但从未被 with overlay 引用）。
+        self._overlay_registry = _OverlayRegistry()
 
         # auto 返回类型累积（用于 -> auto 函数）
         self.auto_return_types: Optional[List[IbSpec]] = None

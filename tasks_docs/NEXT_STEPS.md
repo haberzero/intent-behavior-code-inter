@@ -31,7 +31,7 @@
 `tasks_docs/ROADMAP_NATIVE_BINDING.md` §三 F0-F5）：宿主导入一等语法 + 宿主类型绑定
 （F1-F2）、插件体系重构（F3, 废弃 _spec.py、内置 11 模块 `builtin_modules.py` 构造期
 注册）、Provider 自定义经宿主绑定统一（F4, `ai.set_provider`）、架构统一/文档收敛
-（F5, 档 A/内核自举/档 B/隔离/反射=远期 pending）。全量 pytest 2956 passed / 1 skipped。
+（F5, 档 A/内核自举/档 B/隔离/反射=远期 pending）。测试基线以实跑为准（不冻结数字，见下）。
 
 **🔴 新主线：「llm 机制重构为可调用 llm 类 + LLM 相关体系彻底协议化（总统一性）」**（用户
 2026-08-18 定方向，两时点补充）：用户决定**彻底抛弃"llm 函数"概念**，重构为**可调用的 llm 类**
@@ -73,37 +73,42 @@ retry）。
 >   一致；commit `eb8ecd30`）；
 > - D9 死字段 `is_callable_instance` 清理（实证编译期不赋 True，删死分支；commit `6fd2cefc`）。
 > 另有地基增量：收敛 receive 6 份重复分派骨架为单一 `_dispatch_protocol_message`（D5 机制
-> 同构；commit `6d933080`）。当前 exp 分支全量基线 **2985 passed / 1 skipped**。
+> 同构；commit `6d933080`）。当前 exp 分支全量基线以实跑为准：**2997 passed / 1 skipped**（含下述
+> P2-② 覆层增量与复核补充的判别性测试）。
 > **自主重排序（用户认可自主决定，2026-08-18）**：P2 剩余的②覆层机制/③to_prompt 激活/④
 > `_dispatch` 查表与 P5 prompt 类型类化、P6 protocol_vtable 数据结构**深度纠缠**（D2 to_prompt
 > 零消费者、D1 payload_prompt 双注册表均实证属 P5；协议方法表是共享地基）——为免半接通/
 > 双通道（质量红线），**protocol_vtable 数据结构（P6 核心）优先**，作为 P2-②/P2③/P5 的落点。
-> **下一 session 开工 = 接续 exp/protocol-vtable 分支的 protocol_vtable 数据结构**，见下一步
-> 候选 #1。
+> **protocol_vtable 数据结构已落地并提交（本 session）**：`ProtocolSlot`（消息名槽，native 按值
+> Python 类解析 + 覆层影子条目默认不参与分派）+ `IbClass.protocol_vtable`（消息名键，惰性
+> 建槽）+ `_dispatch_protocol_message` 查表分派（D5 消除）；全量 2985 零回归 + 判别性测试；
+> commit `cd60ea6d`。
 >
-> > **protocol_vtable 数据结构已落地（本 session）**：`ProtocolSlot`（消息名槽，native 按值
-> > Python 类解析 + 覆层影子条目默认不参与分派）+ `IbClass.protocol_vtable`（消息名键，惰性
-> > 建槽）+ `_dispatch_protocol_message` 查表分派（D5 消除）；全量 2985 零回归 + 判别性测试。
-> > **下一步 = P2-② 临时覆层机制**（决策 2：覆层声明语法/AST/语义落点，影子条目启用接线、
-> > 作用域 flag、告警）——见候选 #1。
+> **✅ P2-② 临时覆层机制已提交（本 session，commit 见 git log）**：`overlay`/`with` 新关键字 +
+> `impl overlay for <T>:` 声明 + `with overlay(<T>.<协议方法>):` 作用域块全链路闭环（AST/parser/
+> 语义/`_overlay_registry`/SEM_OVERLAY_UNUSED/水化影子条目/`vm_handle_IbWithOverlay` save-restore/
+> `_dispatch_protocol_message` 覆层 IbFunction `.call()` 执行）。复核补充两处：① 新增端到端判别
+> 测试（真实 `with overlay` 语句驱动 + 行为 `$x` prompt 渲染经 PromptRenderer receive 走覆层 /
+> 块外恢复原生，mock 回显判别）；② `_OverlayRegistry.declared_items()` 公开遍历 API（收敛私有
+> 字段跨模块访问）。e2e 6 项；全量 pytest **2997 passed / 1 skipped** 零回归；临时文档
+> `_code_overlay.md`/`_code_protocol_vtable.md` 已随收尾删除（git 承载）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 接续 `exp/protocol-vtable` 分支 · P2-② 临时覆层机制（决策 2，下一 session 开工）**：
+1. **[主线·当前] 接续 `exp/protocol-vtable` 分支 · P2③ D2 to_prompt 激活 + P5 prompt 类型类化（下一 session 开工）**：
    **当前分支 = `exp/protocol-vtable`**（独立分支，P6 改动面大走独立分支原型验证的政策；未合入
-   `unsafe-vibe-dev`）。已完成零回归增量：protocol_vtable 数据结构（`ProtocolSlot` + `IbClass.
-   protocol_vtable` 消息名键 + `_dispatch_protocol_message` 查表分派，2985）、P2-①（impl 内置
-   目标）、D4（str output_hint）、D9（is_callable_instance 清理）、地基（receive 骨架收敛）。
-   设计规格 `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
-   下一步（按序）：
-   - **P2-② 临时覆层机制（决策 2，protocol_vtable 影子条目已就绪）**：覆层声明语法/AST/语义
-     落点（`impl Overlay for int` 记影子表而非原生 vtable）；作用域化启用 flag（P1 推荐作用域块
-     `with overlay(...)`）；影子条目默认不参与分派（`ProtocolSlot.overlay`/`overlay_enabled` 已
-     留位，本步启用接线）；告警设计（存在未启用提示 / 启用生效行为告警）。
-   - **P2③ D2 to_prompt 激活 + P5 prompt 类型类化（D1 双注册表收敛/补 __payload_prompt__）**：实证
-     与 protocol_vtable/prompt 协议前置纠缠，归 P5；勿在 P2 半接通。
-   - 后续 P3（意图一等值 G5 + snapshot 冻结补齐 D8）→ P4（llm 可调用类内核 + retry 高阶化 +
-     llm/llmend 彻底删除）→ P5 → P6 落地。
+   `unsafe-vibe-dev`）。已提交增量：protocol_vtable 数据结构（`cd60ea6d`）+ 地基（receive 骨架
+   收敛 `6d933080`）+ P2-①（impl 内置目标 `6c3f6c94`）+ D4（str output_hint `eb8ecd30`）+ D9
+   （is_callable_instance 清理 `6fd2cefc`）+ **P2-② 临时覆层机制（本 session 提交，全量 2997
+   零回归）**；设计权威 `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
+   **本步 = P2③ D2 to_prompt 激活 + P5 prompt 类型类化（D1 双注册表收敛/补 __payload_prompt__）**：
+   D2 to_prompt 协议现**零消费者**（核心无 satisfies_protocol(...,'to_prompt') 调用；内置类型
+   satisfies=F 但运行期均经 vtable `__to_prompt__` 渲染）——真激活须接 PromptRenderer 协议前置，
+   与本步 P5 纠缠，勿在 P2 半接通；D1 `PROMPT_PROTOCOL_SPECS` 与 `BUILTIN_PROTOCOLS` 的
+   `payload_prompt` 双注册表收敛——补 `__payload_prompt__` 会激活 `validate_prompt_protocol_signature`
+   对用户声明的校验，契约须按 axiom 签名 `(self,value,spec=None)` 定、核验不产生伪警告。
+   后续 P3（意图一等值 G5 + snapshot 冻结补齐 D8）→ P4（llm 可调用类内核 + retry 高阶化 +
+   llm/llmend 彻底删除）→ P5 → P6 落地。
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。

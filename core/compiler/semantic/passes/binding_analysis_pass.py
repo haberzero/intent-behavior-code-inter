@@ -141,6 +141,10 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
             # 递归处理 llmexcept body
             if node.body:
                 node.body = self._rewrite_body(node.body)
+        elif isinstance(node, ast.IbWithOverlayStmt):
+            # with overlay 作用域块：递归进入 body
+            if node.body:
+                node.body = self._rewrite_body(node.body)
 
     def _rewrite_body(self, body: List[ast.IbASTNode]) -> List[ast.IbASTNode]:
         """重写语句块 — 执行 llmexcept body 重写逻辑"""

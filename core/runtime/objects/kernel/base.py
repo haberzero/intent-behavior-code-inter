@@ -118,7 +118,16 @@ class IbObject:
         handler = slot.active_handler(self)
         if handler is None:
             return None
-        result = handler(self, message, args)
+        # 覆层影子条目为语言函数（IbUserFunction）：以其 .call(receiver, args)
+        # 执行（宿主侧 _drive_generator 同步驱动），返回真实值（供 receive 的
+        # 同步消费者如 PromptRenderer 使用）；原生 _dispatch_* 处理器则是
+        # Python 实例方法，以 (self, message, args) 调用。
+        from .functions import IbFunction
+
+        if isinstance(handler, IbFunction):
+            result = handler.call(self, args)
+        else:
+            result = handler(self, message, args)
         if result is not None:
             return result
         return None

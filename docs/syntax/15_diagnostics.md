@@ -178,6 +178,12 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 - **严重级别**：WARNING。
 - **修复方式**：按协议约定的参数个数/返回类型修正签名。
 
+### `SEM_OVERLAY_UNUSED`
+声明了覆层（`impl overlay`）但从未被 `with overlay` 作用域启用。
+- **触发条件**：`impl overlay for <类型>` 声明的覆层方法从未被 `with overlay(<类型>.<协议方法>)` 引用。
+- **严重级别**：WARNING。
+- **修复方式**：为该覆层添加 `with overlay(<类型>.<协议方法>):` 作用域块启用，或删除未用的覆层声明。
+
 ### `SEM_SUPER_OUTSIDE_METHOD`
 `super` 只在类方法体内可用。
 - **触发条件**：在非类方法上下文使用 `super`。

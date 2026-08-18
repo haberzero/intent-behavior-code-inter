@@ -428,3 +428,42 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
     if pending_signal is not None:
         return pending_signal
     return executor.registry.get_none()
+
+
+def vm_handle_IbWithOverlay(executor, node_uid: str, node_data: Mapping[str, Any]):
+    """``with overlay(<类型>.<协议方法>):`` 作用域块（决策 2 覆层启用）。
+
+    块执行窗口内，目标协议的覆层影子条目参与分派（优先级高于原生 vtable
+    方法）；块外恢复默认行为。语义 = 作用域化启用：save 原 ``overlay_enabled``
+    → 设 True → try/finally 执行 body（含 scope enter/exit）→ 恢复。嵌套块
+    save/restore 依次配对，天然正确。
+    """
+    type_name = node_data.get("target_type")
+    method_name = node_data.get("target_method")
+    target = executor.registry.get_class(type_name)
+    if target is None:
+        raise RuntimeError(
+            f"VM: with overlay target class '{type_name}' not found."
+        )
+    slot = target.protocol_slot(method_name)
+    if slot is None:
+        raise RuntimeError(
+            f"VM: with overlay target '{type_name}.{method_name}' is not a protocol message."
+        )
+    if slot.overlay is None:
+        raise RuntimeError(
+            f"VM: with overlay target '{type_name}.{method_name}' has no overlay "
+            "declaration (impl overlay for <type>)."
+        )
+
+    prev_enabled = slot.overlay_enabled
+    slot.overlay_enabled = True
+    rt_context = executor.runtime_context
+    rt_context.enter_scope()
+    try:
+        body = node_data.get("body", [])
+        result = yield from _vm_execute_stmt_sequence(executor, body)
+        return result
+    finally:
+        rt_context.exit_scope()
+        slot.overlay_enabled = prev_enabled

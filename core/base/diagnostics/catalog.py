@@ -125,6 +125,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="提示协议方法的签名与协议约定不符。",
         fix="按协议约定的参数个数/返回类型修正签名。",
     ),
+    "SEM_OVERLAY_UNUSED": CodeInfo(
+        title="声明了覆层（impl overlay）但从未被 with overlay 作用域启用。",
+        fix="为该覆层添加 with overlay(<类型>.<协议方法>): 作用域块启用，或删除未用的覆层声明。",
+    ),
     "SEM_SUPER_OUTSIDE_METHOD": CodeInfo(
         title="super 只在类方法体内可用。",
         fix="把 super 调用移入类方法，或检查是否在错误的作用域使用。",

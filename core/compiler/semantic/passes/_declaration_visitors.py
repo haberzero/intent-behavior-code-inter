@@ -75,6 +75,12 @@ class DeclarationVisitorsMixin:
         protocol satisfaction check runs over the union of the type's own
         methods and the impl-supplied methods.  An empty body keeps the
         declaration-only form (verify + record the protocol on the type).
+
+        Overlay variant (``node.is_overlay``): declares **temporary shadow
+        entries** for a builtin type's protocol methods (decision 2 覆层机制).
+        Overlay does NOT claim protocol satisfaction / does NOT touch
+        spec.members/implements/native vtable; it only records shadow entries
+        to be wired at runtime (``protocol_vtable`` 影子条目, default inactive).
         """
         class_spec = self.registry.resolve(node.type_name)
         if class_spec is None:
@@ -118,6 +124,44 @@ class DeclarationVisitorsMixin:
                 node, code=SEM_TYPE_MISMATCH,
             )
             return None
+
+        # ---------- 覆层声明分支（decision 2 is_overlay） ----------
+        if node.is_overlay:
+            # 覆层仅对内置具体值类型有意义（临时改写内置类型协议方法分派）。
+            if impl_provenance != Provenance.KERNEL_NATIVE:
+                self.error(
+                    f"overlay target '{node.type_name}' must be a built-in type "
+                    "(overlay temporarily rewrites builtin protocol method dispatch).",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+                return None
+            # 覆层方法体：方法名须为协议消息（dunder 方法集），否则覆层无从挂载。
+            if node.body:
+                sym = self.lookup_symbol(node.type_name)
+                if sym is None or getattr(sym, "owned_scope", None) is None:
+                    self.error(
+                        f"overlay target '{node.type_name}' has no class scope.",
+                        node, code=SEM_TYPE_MISMATCH,
+                    )
+                    return None
+                old_class = self.current_class
+                old_in_class = self.in_class_def
+                self.current_class = class_spec
+                self.in_class_def = True
+                self.push_scope(sym.owned_scope)
+                try:
+                    for stmt in node.body:
+                        self.visit(stmt)
+                finally:
+                    self.pop_scope()
+                    self.in_class_def = old_in_class
+                    self.current_class = old_class
+                # 登记覆层声明（供 with overlay 校验 + 存在未启用告警）
+                self._overlay_registry.add(
+                    node.type_name, {m.name for m in node.body if getattr(m, "name", None)}
+                )
+            return None
+
         proto_spec = self.registry.resolve(node.protocol_name)
         if proto_spec is None or proto_spec.kind != TypeKind.PROTOCOL.value:
             self.error(

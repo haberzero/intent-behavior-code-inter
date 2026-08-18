@@ -350,6 +350,11 @@ class SymbolCollector:
         方法符号定义进目标类 owned_scope、成员同步进目标类 members
         （与 visit_IbClassDef 同构）。与类自身成员同名的方法跳过定义
         （冲突由类型检查阶段报单一明确错误）。
+
+        覆层变体（node.is_overlay，决策 2）：方法符号仍进目标类 owned_scope
+        （供类型检查访问方法体），但**不**同步进 target spec.members / 不登记
+        implements——覆层不改写类型协议满足判定，仅登记运行时影子条目
+        （协议方法表），语义由声明访客 + 运行时水化承接。
         """
         if not node.body:
             return
@@ -370,18 +375,18 @@ class SymbolCollector:
             owned_scope = SymbolTable(parent=self.symbol_table, name=node.type_name)
             sym.owned_scope = owned_scope
 
-        # 冲突面（目标类型既有方法，单一判定集）：
+        # 冲突面（目标类型既有方法，单一判定集）——**仅普通 impl**：
         # - target_spec.members：类体成员 + 先前 impl 补充 + 公理方法声明
-        #   （内置类型的公理方法在水化后进 members）——宿主类（bind class）的
-        #   成员也只进 members（owned_scope 是空合成表），故判定以 members 为准，
-        #   防止同名 impl 静默遮蔽宿主成员（双写真相漂移）；
-        # - 内置类型另有公理声明的运算符（__add__ 等）：运行期自动绑定进目标类
-        #   自有 vtable，不进 members——同名 impl 会静默覆写内置行为，须并入判定。
-        conflict_names = set(target_spec.members)
-        if is_kernel_native:
-            axiom = self.registry.get_axiom(target_spec)
-            if axiom is not None:
-                conflict_names.update(axiom.get_operators().values())
+        # - 内置类型另有公理声明的运算符（__add__ 等）：运行期自动绑定
+        # 覆层不参与冲突判定（覆层是影子条目，专为改写内置协议方法分派，
+        # 覆写原生方法是其语义本意）。
+        conflict_names: set = set()
+        if not node.is_overlay:
+            conflict_names.update(target_spec.members)
+            if is_kernel_native:
+                axiom = self.registry.get_axiom(target_spec)
+                if axiom is not None:
+                    conflict_names.update(axiom.get_operators().values())
 
         old_table = self.symbol_table
         old_class = self.current_class
@@ -392,7 +397,7 @@ class SymbolCollector:
         try:
             for stmt in node.body:
                 # body 语句类型由 parser 保证（func / llm func）
-                if is_kernel_native and stmt.name == "__init__":
+                if not node.is_overlay and is_kernel_native and stmt.name == "__init__":
                     # 内置类型构造走 boxer/__call__ 原生路径，永不分派 impl
                     # 补充的构造器——收集即半接通（注册了从不执行），fail-fast。
                     self.error(
@@ -402,7 +407,7 @@ class SymbolCollector:
                         stmt, code=SEM_TYPE_MISMATCH,
                     )
                     continue
-                if stmt.name in self.symbol_table.symbols or stmt.name in conflict_names:
+                if not node.is_overlay and (stmt.name in self.symbol_table.symbols or stmt.name in conflict_names):
                     # 与类自身（或先前 impl / 宿主 bind 声明 / 内置公理方法面）
                     # 已定义成员冲突：fail-fast，跳过定义（类型检查阶段不再重复报）
                     self.error(

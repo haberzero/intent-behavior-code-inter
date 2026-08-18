@@ -860,6 +860,7 @@ class Interpreter:
                     f"(module '{impl_module}') was not hydrated."
                 )
             self.current_module_name = impl_module
+            is_overlay = bool(impl_data.get("is_overlay"))
             for method_uid in impl_data.get("body", []):
                 stmt_data = self.get_node_data(method_uid)
                 if not stmt_data:
@@ -876,6 +877,24 @@ class Interpreter:
                 )
                 user_func.is_generator = bool(stmt_data.get("is_generator"))
                 method_name = stmt_data.get("name")
+
+                # 覆层分支（决策 2 is_overlay）：登记为 per-IbClass 协议方法表的
+                # **影子条目**（ProtocolSlot.overlay，默认 overlay_enabled=False，
+                # 不参与分派），供 scoped ``with overlay`` 启用后改写协议方法分派。
+                # 不注册进 target.methods / 不 bind 运算符 / 不冲突原生方法——
+                # 覆写内置协议方法分派正是覆层语义本意（区别于普通 impl 的
+                # 立即生效 + vtable 冲突 fail-fast）。
+                if is_overlay:
+                    slot = target.protocol_slot(method_name)
+                    if slot is None:
+                        raise RuntimeError(
+                            f"VM: Hydration: overlay method '{method_name}' on class "
+                            f"'{type_name}' is not a protocol message; "
+                            "overlay can only shadow builtin protocol methods."
+                        )
+                    slot.overlay = user_func
+                    continue
+
                 # 目标类自有 vtable 冲突 fail-fast：内置类型的部分原生方法
                 # （__to_prompt__/__call__ 等，primitive_initializer 直接注册）
                 # 不进 spec.members / 公理声明面，编译期冲突检查不可见——此处

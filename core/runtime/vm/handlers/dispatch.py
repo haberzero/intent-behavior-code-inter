@@ -35,6 +35,7 @@ from core.runtime.vm.handlers.control_flow import (
     vm_handle_IbSwitch,
     vm_handle_IbFor,
     vm_handle_IbTry,
+    vm_handle_IbWithOverlay,
 )
 from core.runtime.vm.handlers.assignment import (
     vm_handle_IbAssign,
@@ -125,6 +126,7 @@ def build_dispatch_table() -> dict:
         "IbFor": vm_handle_IbFor,
         "IbTry": vm_handle_IbTry,
         "IbRetry": vm_handle_IbRetry,
+        "IbWithOverlayStmt": vm_handle_IbWithOverlay,
         # 并发/通信
         "IbChannelExpr": vm_handle_IbChannelExpr,
         "IbSlotExpr": vm_handle_IbSlotExpr,

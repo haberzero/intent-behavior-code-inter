@@ -76,6 +76,9 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.LLM_EXCEPT):
             return self.llm_except_statement()
         
+        if self.stream.match(TokenType.WITH):
+            return self.with_overlay_statement()
+        
         if self.stream.match(TokenType.INTENT):
             return self.at_intent_shorthand()
         
@@ -550,6 +553,31 @@ class StatementComponent(BaseComponent):
                 
         self.stream.consume(TokenType.DEDENT, "Expect dedent after block.")
         return stmts
+
+    def with_overlay_statement(self) -> ast.IbWithOverlayStmt:
+        """解析 ``with overlay(<类型>.<协议方法>):`` 作用域块（决策 2 覆层启用）。
+
+        覆层启用是编译期声明引用：目标为 ``<类型>`` DOT ``<协议方法>`` 点分名
+        （不求值为运行期表达式——避免 ``int.__to_prompt__`` 触发 getattr 分派
+        的反身性问题），语义期解析/校验目标类型与覆层存在性。
+        """
+        start_token = self.stream.previous()
+        self.stream.consume(TokenType.OVERLAY, "Expect 'overlay' after 'with'.")
+        self.stream.consume(TokenType.LPAREN, "Expect '(' after 'with overlay'.")
+        target_type = self.stream.consume(TokenType.IDENTIFIER, "Expect target type in with overlay.").value
+        self.stream.consume(TokenType.DOT, "Expect '.' in with overlay target.")
+        target_method = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol method in with overlay.").value
+        self.stream.consume(TokenType.RPAREN, "Expect ')' after with overlay target.")
+        self.stream.consume(TokenType.COLON, "Expect ':' after with overlay.")
+        body = self.block()
+        return self._loc(
+            ast.IbWithOverlayStmt(
+                target_type=target_type,
+                target_method=target_method,
+                body=body,
+            ),
+            start_token,
+        )
 
     def try_statement(self) -> ast.IbTry:
         start_token = self.stream.previous()

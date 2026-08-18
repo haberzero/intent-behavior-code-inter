@@ -147,18 +147,23 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   总路线 P1-P9 + 决策 §五 + P1 开工输入 §六）；
   **P1 设计定稿已完成**（`tasks_docs/_five_foundation_P1_design.md` §一-§九，7 项开工输入全部
   定稿；含用户追加裁定：`llm ... llmend` 语法**彻底删除**且关联旧机制一并删除、不兼容不包袱）；
-  **P2 已在独立分支 `exp/protocol-vtable` 取得进展**（未合入）：已完成零回归增量 =
-  **protocol_vtable 数据结构**（`ProtocolSlot` + `IbClass.protocol_vtable` 消息名键 +
-  `_dispatch_protocol_message` 查表分派；2985 + 判别性测试）+ 地基（receive 6 份骨架收敛为
-  `_dispatch_protocol_message`，`6d933080`）+ P2-①（impl 目标扩展到内置类型，`6c3f6c94`）+
-  D4（str output_hint 补齐，`eb8ecd30`）+ D9（is_callable_instance 死字段清理，`6fd2cefc`）。
-  当前分支全量基线 **2985 passed / 1 skipped**。
-  **自主重排序（用户认可自主决定，2026-08-18）**：P2 剩余②覆层机制/③to_prompt 激活与 P5 prompt
-  类型类化、P6 protocol_vtable 数据结构深度纠缠（D2/D1 实证属 P5，协议方法表是共享地基）——
-  为免半接通/双通道，**protocol_vtable 数据结构（P6 核心）优先**已落地。
-  **下一 session 开工 = P2-② 临时覆层机制**（决策 2：覆层声明语法/AST/语义落点 + 作用域 flag +
-  影子条目启用接线 + 告警；`ProtocolSlot.overlay`/`overlay_enabled` 已留位），详见
-  `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线（PT-DEBT / VISION-3 / 文档）。
+  **P2 已在独立分支 `exp/protocol-vtable` 取得进展**（未合入）。**已提交增量**：protocol_vtable
+  数据结构（`ProtocolSlot` + `IbClass.protocol_vtable` 消息名键 + `_dispatch_protocol_message` 查表
+  分派，`cd60ea6d`）+ 地基（receive 6 份骨架收敛 `6d933080`）+ P2-①（impl 内置目标 `6c3f6c94`）+
+  D4（str output_hint `eb8ecd30`）+ D9（is_callable_instance 清理 `6fd2cefc`）+
+  **P2-② 临时覆层机制（本 session 提交）**。
+  当前分支已提交基线以实跑为准：**2997 passed / 1 skipped**（零回归）。
+  **✅ P2-② 临时覆层机制已提交（本 session）**：`overlay`/`with` 新关键字 + `impl overlay for <T>:`
+  声明 + `with overlay(<T>.<协议方法>):` 作用域块 + 语义校验 + `_overlay_registry` + 未启用告警
+  SEM_OVERLAY_UNUSED + 诊断目录/文档同步 + 水化影子条目 + `vm_handle_IbWithOverlay` save/restore +
+  `_dispatch_protocol_message` 覆层 IbFunction `.call()` 执行 + e2e 判别性测试 6 项。复核实证：
+  receive 分派块内覆层生效/块外恢复原生（端到端：真实 `with overlay` 语句 + 行为 `$x` prompt 渲染
+  经 PromptRenderer receive 走覆层、mock 回显判别）、未启用告警、全量 2997 零回归。复核补充：
+  `_OverlayRegistry.declared_items()` 公开遍历 API（收敛私有字段跨模块访问）。临时文档
+  `_code_overlay.md`/`_code_protocol_vtable.md` 已删除（git 承载），决策要点沉 WORKLOG。
+  **下一 session 开工 = P2③ D2 to_prompt 激活 + P5 prompt 类型类化**（D1 双注册表收敛/补
+  __payload_prompt__；D2 to_prompt 零消费者实证，真激活须接 PromptRenderer 协议前置，勿半接通），
+  详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：P3 → P4 → P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -172,8 +177,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] 全程本地 commit、禁 push（除非用户显式授权）
 - [x] **当前分支 = `exp/protocol-vtable`**（接续前先 `git checkout exp/protocol-vtable`；核实
   `unsafe-vibe-dev`/`main` 未触碰）
-- [x] **查 `git log --oneline e8c7944b..HEAD`**（exp 分支独有提交：4 个代码基本增量 + WORKLOG 记录）
-- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，约 2985 passed）
+- [x] **查 `git log --oneline e8c7944b..HEAD`**（exp 分支独有提交：5 个代码基本增量 + WORKLOG 记录）
+- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：2997 passed / 1 skipped）
+- [x] **✅ 复核并提交工作树内 P2-② 覆层机制未提交增量完成**：`git diff` 复核（含端到端实证）→ 全量 pytest 实跑 2997 零回归 → 描述性 commit → 删除临时文档 `tasks_docs/_code_overlay.md` 与 `tasks_docs/_code_protocol_vtable.md`（git 承载）→ 同步 WORKLOG/NEXT_STEPS/HANDOFF/检查单
 
 ---
 

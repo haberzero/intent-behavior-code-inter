@@ -348,6 +348,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **工作过程自查**：本会话我在目标轮次多次出现思维链退化（长叙述、迟迟不真正发工具调用），
   消耗大量上下文产出骤降——下个 session 接手时应**短促化工具调用、主动及时暴露此类退化**，
   避免空转到上下文耗尽。
+
+- **五大地基改造 · P2-② 覆层机制实现完毕但未提交（2026-08-18，exp/protocol-vtable，工作树）**：
+  **🔴 交接关键**：P2-② 临时覆层机制（决策 2）**已完整实现并实证，但留在工作树未 commit**——
+  16 个修改文件 + 3 个新文件（含 `tests/e2e/test_overlay_mechanism.py` 5 项判别性测试）。
+  **实现面**：`overlay`/`with` 新关键字（tokens/core_scanner）；AST `IbImplDef.is_overlay` +
+  新 `IbWithOverlayStmt`；parser（`impl overlay for <T>:` 变体 + `with overlay(<T>.<协议方法>):`
+  语句）；语义（`_declaration_visitors`/`_statement_visitors` 校验 + `_overlay_registry` 新模块 +
+  未启用告警 `SEM_OVERLAY_UNUSED`（codes/catalog/`docs/syntax/15_diagnostics.md` 同步）+ symbol
+  collection overlay 分支 + binding_analysis 递归）；水化（overlay impl → `target.protocol_slot(m).
+  overlay` 影子条目，**不**进 vtable/members/implements）；VM `vm_handle_IbWithOverlay`（scope
+  enter/exit + `overlay_enabled` save/restore）；分派 `_dispatch_protocol_message` 对 IbFunction
+  覆层经 `.call(receiver, args)` 执行。
+  **实证**：receive('__to_prompt__') 块内覆层生效/块外恢复原生；未启用告警 warning_count=1
+  发射；e2e 5 项全过；全量 pytest 2985 passed / 1 skipped 零回归。
+  **设计决策**（详见 `tasks_docs/_code_overlay.md` §四，提交后删除该临时文档）：覆层走 impl
+  变体声明（真设计非 compat）；作用域块 save/restore 天然作用域化；目标为编译期声明引用
+  （`<类型>.<协议方法>`）不求值为表达式（避免 getattr 反身性）；覆层方法不进 spec.members/
+  implements（不改变编译期 satisfies_protocol 判定，仅运行时改写分派——职责分离）。
+  **下一步（下一 session 第一步）**：`git diff` 复核 → 全量 pytest 实跑 → 描述性 commit →
+  删临时文档 → 同步 NEXT_STEPS/WORKLOG/交接检查单；随后 P2③/P5 prompt 类型类化 → P3 → P4
+  → P5 → P6。**禁 push**；低风险增量可 merge `unsafe-vibe-dev`。
+- **五大地基改造 · P2-② 覆层机制复核并提交完成（本 session，exp/protocol-vtable）**：
+  **复核结论**：机制正确——`git diff` + 未跟踪文件逐文件对照红线/边界/契约；handler 实证命中、
+  块内 `overlay_enabled` 生效/块外恢复；端到端实证（真实 `with overlay(int.__to_prompt__)` 语句 +
+  行为 `@~ report: $x ~` prompt 渲染经 PromptRenderer `receive('__to_prompt__')` → 块内
+  "overlayed-int"/块外 "5"，mock 回显判别）。`x.__to_prompt__()` 直走 vtable 方法查找、不经
+  flag 敏感分派——覆层生效面是协议分派（receive/PromptRenderer），非普通成员方法调用，此为
+  机制设计面而非缺陷。
+  **复核补充两处**：① 新增端到端判别测试
+  `test_with_overlay_block_end_to_end_via_prompt_rendering`（真实 `with overlay` 语句驱动 +
+  LLM 渲染 + mock 回显）——原有"块内生效/块外恢复"测试为手动翻转 `slot.overlay_enabled` 模拟、
+  未走语句路径，覆盖声明与实测有差距，已补齐；② `_OverlayRegistry` 增 `declared_items()`
+  公开遍历 API（收敛 `_declared` 私有字段跨模块访问，封装纪律）。
+  **提交**：e2e 6 项全过；全量 pytest **2997 passed / 1 skipped** 零回归；临时文档
+  `_code_overlay.md`/`_code_protocol_vtable.md` 已删除（git 承载）；NEXT_STEPS/HANDOFF 已同步到
+  已提交状态。**禁 push**；低风险增量可 merge `unsafe-vibe-dev`（须用户授权）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

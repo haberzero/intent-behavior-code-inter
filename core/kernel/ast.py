@@ -221,9 +221,35 @@ class IbImplDef(IbStmt):
     type is missing (retroactive method addition); an empty body keeps
     the declaration-only form.  The type must already provide (or be
     supplied here) all required methods.
+
+    Overlay variant (``impl overlay for SomeType``, ``is_overlay=True``):
+    declares **temporary shadow entries** for the builtin type's protocol
+    methods (decision 2 覆层机制).  Overlay methods are NOT registered to
+    the native vtable / spec.members / implements; they are recorded on the
+    per-IbClass protocol method table as shadow entries, default **not**
+    participating in dispatch until enabled by a scoped ``with overlay``
+    block.
     """
     protocol_name: str
     type_name: str
+    body: List[IbStmt] = field(default_factory=list)
+    is_overlay: bool = False
+
+    @property
+    def creates_scope(self) -> bool:
+        return False
+
+
+@dataclass(kw_only=True, eq=False)
+class IbWithOverlayStmt(IbStmt):
+    """作用域化启用覆层：``with overlay(<类型>.<协议方法>):`` 块。
+
+    decision 2 覆层机制的作用域块形态（P1 §四.3 推荐）：块执行窗口内，目标
+    覆层影子条目参与分派（优先级高于原生 vtable 方法）；块外恢复默认行为。
+    目标为编译期声明引用（类型名 + 协议消息名），不求值为运行期表达式。
+    """
+    target_type: str
+    target_method: str
     body: List[IbStmt] = field(default_factory=list)
 
     @property

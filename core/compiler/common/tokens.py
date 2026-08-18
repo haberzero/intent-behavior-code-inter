@@ -66,6 +66,10 @@ class TokenType(Enum):
     CHAN = auto()
     SLOT = auto()
 
+    # 覆层机制关键字（五大地基 P2-②，决策 2）
+    OVERLAY = auto()   # impl overlay for T：临时覆层声明
+    WITH = auto()      # with overlay(T.m): 作用域化启用
+
     # 标识符与字面量
     IDENTIFIER = auto()
     NUMBER = auto()

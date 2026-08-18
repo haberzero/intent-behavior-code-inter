@@ -301,18 +301,32 @@ class DeclarationComponent(BaseComponent):
                 func method(self, ...) -> Ret:
                     ...
 
+            impl overlay for SomeType:
+                func method(self, ...) -> Ret:
+                    ...
+
         The body is optional: an empty body keeps the declaration-only
         form (record the protocol on the type), while a body of function
         definitions supplies missing protocol methods retroactively.
+        The ``overlay`` variant (``is_overlay=True``) declares **temporary
+        shadow entries** for a builtin type's protocol methods (decision 2
+        覆层机制): methods are NOT added to the native vtable, only recorded
+        on the per-IbClass protocol method table as shadow entries.
         """
         start_token = self.stream.previous()
-        protocol_name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name after 'impl'.").value
-        self.stream.consume(TokenType.FOR, "Expect 'for' in impl declaration.")
+        is_overlay = self.stream.match(TokenType.OVERLAY)
+        if is_overlay:
+            # 覆层声明：impl overlay for <内置类型>:
+            protocol_name = ""
+            self.stream.consume(TokenType.FOR, "Expect 'for' in overlay declaration.")
+        else:
+            protocol_name = self.stream.consume(TokenType.IDENTIFIER, "Expect protocol name after 'impl'.").value
+            self.stream.consume(TokenType.FOR, "Expect 'for' in impl declaration.")
         type_name = self.stream.consume(TokenType.IDENTIFIER, "Expect type name after 'for'.").value
         self.stream.consume(TokenType.COLON, "Expect ':' after impl declaration.")
 
         node = self._loc(
-            ast.IbImplDef(protocol_name=protocol_name, type_name=type_name),
+            ast.IbImplDef(protocol_name=protocol_name, type_name=type_name, is_overlay=is_overlay),
             start_token,
         )
 

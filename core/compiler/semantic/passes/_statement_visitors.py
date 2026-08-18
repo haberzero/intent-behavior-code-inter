@@ -9,7 +9,8 @@ pure mechanical refactoring — no logic changes.
 
 from typing import Optional
 
-from core.base.diagnostics.codes import SEM_TYPE_MISMATCH, SEM_UNRESOLVED_TYPE, ICE_TYPE_LEAK
+from core.base.enums import Provenance
+from core.base.diagnostics.codes import SEM_TYPE_MISMATCH, SEM_UNRESOLVED_TYPE, ICE_TYPE_LEAK, SEM_OVERLAY_UNUSED
 from core.kernel import ast
 from core.kernel.symbols import SymbolKind
 from core.kernel.spec import IbSpec
@@ -28,6 +29,21 @@ class StatementVisitorsMixin:
         """访问模块节点"""
         for stmt in node.body:
             self.visit(stmt)
+        # 覆层"存在未启用"告警（decision 2 §4.4）：声明了覆层但从未被
+        # with overlay 作用域启用 → 提示性告警，不阻断（可观测性信息）。
+        # 外层模块访问时发射一次。
+        if not getattr(self, "_overlay_warned", False):
+            registry = getattr(self, "_overlay_registry", None)
+            if registry is not None:
+                for type_name, m in sorted(registry.declared_items()):
+                    if (type_name, m) not in registry.enabled_targets():
+                        self.warn(
+                            f"overlay '{type_name}.{m}' is declared but never "
+                            "enabled by a 'with overlay' scope block; it stays "
+                            "inactive.",
+                            node, code=SEM_OVERLAY_UNUSED,
+                        )
+            self._overlay_warned = True
         return None
 
     def visit_IbAssign(self, node: ast.IbAssign) -> Optional[IbSpec]:
@@ -643,6 +659,41 @@ class StatementVisitorsMixin:
         """访问 llmexcept 语句"""
         if node.target:
             self.visit(node.target)
+        for stmt in node.body:
+            self.visit(stmt)
+        return None
+
+    def visit_IbWithOverlayStmt(self, node: ast.IbWithOverlayStmt) -> Optional[IbSpec]:
+        """访问 ``with overlay(<类型>.<协议方法>):`` 作用域块（决策 2 覆层启用）。
+
+        校验：目标类型存在且为内置具体值类型；目标协议方法已声明覆层；
+        然后访问块体，并登记"已启用"（供存在未启用告警）。
+        """
+        class_spec = self.registry.resolve(node.target_type)
+        if class_spec is None:
+            self.error(
+                f"with overlay target type '{node.target_type}' is not a known type.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return None
+        provenance = getattr(class_spec, "provenance", None)
+        if provenance != Provenance.KERNEL_NATIVE:
+            self.error(
+                f"with overlay target '{node.target_type}' must be a built-in type "
+                "(overlay only temporarily rewrites builtin protocol method dispatch).",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return None
+        if not getattr(self, "_overlay_registry", None) or \
+                not self._overlay_registry.has(node.target_type, node.target_method):
+            self.error(
+                f"with overlay references '{node.target_type}.{node.target_method}' "
+                "which has no overlay declaration; declare it with "
+                "'impl overlay for <type>:' first.",
+                node, code=SEM_TYPE_MISMATCH,
+            )
+            return None
+        self._overlay_registry.mark_enabled(node.target_type, node.target_method)
         for stmt in node.body:
             self.visit(stmt)
         return None
