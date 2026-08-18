@@ -168,10 +168,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   `axiom_cap` + `PromptRenderer.to_prompt_str` 前置门（镜像 to_payload）+ 判别测试；行为保持实证
   （内置/用户类/覆层端到端一致）；P1 §五 protocol_vtable 形状订正为消息名键；G7 定位
   （has_llm_call_cap→P4；validate_prompt 激活 = P5 剩余项）。全量 pytest **3003 passed / 1 skipped** 零回归。
-  **下一 session 开工 = P3 意图一等值（G5）+ snapshot 意图冻结补齐（D8）**（决策 3 snapshot
-  语义：lambda=引用捕获不保证时不变；snapshot=冻结保证时不变/无状态/可重入；意图冻结并入
-  capture_mode、移除 body_is_behavior 特判），详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：
-  P4 → P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
+  **✅ P3 D8 snapshot 意图冻结补齐已落地（本 session，unsafe-vibe-dev）**：意图 fork 移出
+  body_is_behavior 特判 → 按 capture_mode 统一（snapshot 恒 fork / lambda 恒 None）；`IbFnCallable`
+  增 `captured_intents`（与 IbBehavior 同构）+ 工厂/序列化补齐；`_vm_call_fn_callable` 增意图
+  生命周期（lambda 得 IT-3 调用点 fork + snapshot 安装冻结快照，IT-4 隔离）；判别测试
+  `tests/e2e/test_snapshot_intent_freeze.py`；清理死字段 `IbAssign.capture_mode`。全量 pytest
+  **3011 passed / 1 skipped** 零回归。
+  **下一 session 开工 = P3 剩余项 · G5 意图一等值化**（`IbIntent.content: str` → 可渲染值栈
+  `IntentValue` 协议，修复 G2/G5/G9；意图段求值渲染 + prompt 消解 + 序列化全链路闭环，勿半接通），
+  详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4 → P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -185,9 +190,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] 全程本地 commit、禁 push（除非用户显式授权）
 - [x] **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已合并并删除实验分支；`main` 不触碰；本地领先 origin 未 push）
 - [x] **P2/P6 地基低风险合并 unsafe-vibe-dev 完成**（用户确认零风险 → 纯 fast-forward `e8c7944b..b7479497` → exp 分支合并即删；全量 pytest 2997 零回归）
-- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：3003 passed / 1 skipped）
+- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：3011 passed / 1 skipped）
 - [x] **✅ 复核并提交工作树内 P2-② 覆层机制未提交增量完成**：`git diff` 复核（含端到端实证）→ 全量 pytest 实跑 2997 零回归 → 描述性 commit → 删除临时文档 `tasks_docs/_code_overlay.md` 与 `tasks_docs/_code_protocol_vtable.md`（git 承载）→ 同步 WORKLOG/NEXT_STEPS/HANDOFF/检查单
-- [x] **✅ P2③/P5 prompt 协议族类型类化 D1+D2 落地**：D1 双注册表收敛补 `__payload_prompt__` + D2 to_prompt 激活（BaseAxiom cap + PromptRenderer 前置门）+ P1 §五形状订正；全量 3003 零回归；下一步 = P3（意图一等值 G5 + snapshot 冻结 D8）
+- [x] **✅ P3 D8 snapshot 意图冻结补齐落地**：意图 fork 按 capture_mode 统一 + IbFnCallable.captured_intents + _vm_call_fn_callable 意图生命周期（IT-2/IT-3/IT-4）+ 判别测试 + 死字段清理；全量 3011 零回归；下一步 = P3 剩余 G5 意图一等值化
 
 ---
 

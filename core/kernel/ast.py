@@ -273,7 +273,6 @@ class IbReturn(IbStmt):
 class IbAssign(IbStmt):
     targets: List[IbExpr]
     value: Optional[IbExpr]
-    capture_mode: Optional[str] = None  # 'lambda' | 'snapshot' | None (immediate)
     llmexcept_handler: Optional['IbLLMExceptionalStmt'] = field(default=None)
 
 @dataclass(kw_only=True, eq=False)

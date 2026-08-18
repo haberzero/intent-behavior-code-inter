@@ -101,19 +101,27 @@ retry）。
 > 测试；行为保持实证（内置/用户类/覆层端到端一致）；P1 §五 protocol_vtable 形状已订正为消息名键。
 > 全量 pytest **3003 passed / 1 skipped** 零回归。G7 三层划分定位：has_llm_call_cap → LLMCallable
 > 协议属 P4；**validate_prompt 死条目激活 = P5 剩余项**。
+>
+> **✅ P3 D8 snapshot 意图冻结补齐已落地（本 session，unsafe-vibe-dev）**：意图 fork 移出
+> body_is_behavior 特判 → 按 capture_mode 统一（snapshot 恒 fork / lambda 恒 None）；`IbFnCallable`
+> 增 `captured_intents`（与 IbBehavior 同构）+ 工厂/序列化补齐；`_vm_call_fn_callable` 增意图
+> 生命周期（enter_intent_scope：lambda 得 IT-3 调用点 fork + snapshot 安装冻结快照，
+> replace_intent_context(fork)，IT-4 隔离）。判别测试 `tests/e2e/test_snapshot_intent_freeze.py`
+> （自定义 provider 记录 intents.merged）：快照=定义意图忽略调用处 smear、lambda=调用处 smear。
+> 顺带清理死字段 `IbAssign.capture_mode`。全量 pytest **3011 passed / 1 skipped** 零回归。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P3 意图一等值（G5）+ snapshot 意图冻结补齐（D8）（下一 session 开工）**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + P2-② 覆层 + P2③/P5 D1+D2 prompt 类型类化已合入，
-   全量 3003 零回归）。已合入增量见 git log；设计权威 `tasks_docs/_five_foundation_P1_design.md`，
-   决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P3**（P1 设计 §六 决策 3 snapshot 语义 + 意图一等值 G5）：
-   - **snapshot 意图冻结补齐（D8）**：按决策 3 原初语义——lambda = 引用捕获（不保证时不变/无状态）；
-     snapshot = 冻结保证（时不变/无状态/可重入）。意图冻结并入 capture_mode，移除
-     body_is_behavior 特判（纯 snapshot lambda 也冻结意图）。
-   - **意图一等值（G5）**：意图作为一等值类型化（审查意图注解/栈操作/上下文的运行时形态，
-     收敛为一等机制）。
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P3 剩余项 G5 意图一等值化（下一 session 开工）**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + P2-② 覆层 + P2③/P5 D1+D2 prompt 类型类化 +
+   P3 D8 snapshot 意图冻结已合入，全量 3011 零回归）。已合入增量见 git log；设计权威
+   `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
+   **本步 = P3 剩余项 · G5 意图一等值化**：
+   - 意图值栈升级：`IbIntent.content: str`（字符串栈，G5 非一等值）→ 可渲染值栈 `IntentValue`
+     协议（意图段求值渲染，修复 G2/G5/G9）；意图作为一等值类型化（审查意图注解/栈操作/上下文的
+     运行时形态，收敛为一等机制）。调研起点：
+     `_five_foundation_redesign.md` 交接点（G2/G5/G9 登记）+ `docs/subsystems/01_intent_system.md`。
+   - 勿半接通：意图值栈升级须全链路（段求值渲染 + prompt 消解 + 序列化）闭环。
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
    **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾；has_llm_call_cap →
    LLMCallable 协议属 P4）。

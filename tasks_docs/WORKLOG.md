@@ -403,6 +403,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **P1 设计 §五 形状修正同步**：protocol_vtable 数据形态按爆破面实证订正为**消息名 → ProtocolSlot**
   （native 按 value 类惰性解析 / overlay / overlay_enabled），非协议名键（落地 WORKLOG 前文
   "回归 unsafe-vibe-dev 后订正"项）。验证：全量 pytest **3003 passed / 1 skipped** 零回归（+6）。
+- **五大地基改造 · P3 D8 snapshot 意图冻结补齐 + lambda IT-3 意图 fork（本 session，unsafe-vibe-dev）**：
+  **定稿实现（决策 3 / IT-2/IT-3/IT-4）**：纯 snapshot lambda（非行为体，fn_callable 路径）同样在
+  **定义时刻**冻结意图——`vm_handle_IbLambdaExpr` 的意图 fork 从 `body_is_behavior` 特判中移出，
+  改为**按 capture_mode 统一**（snapshot 恒 `fork_intent_snapshot()`、lambda 恒 None）；`IbFnCallable`
+  增 `captured_intents` 字段（与 IbBehavior 同构，消 D10 双类字段设计重复）+ 工厂透传 + 序列化
+  `_collect_fn_callable`/反序列化补齐；`_vm_call_fn_callable` 增意图生命周期——进入
+  `enter_intent_scope()`（lambda 在执行窗口看到调用点意图的 fork 副本，IT-3 高阶函数透明，修复
+  lambda 此前不 fork、与函数调用（`_vm_call_function` 恒 fork）不一致）+ snapshot 安装冻结快照
+  （`replace_intent_context(captured_intents.fork())`，fork 一份保 IT-4 冻结不可修改——调用期
+  @+/@-/@! 只落在调用副本）。
+  **判别性证据（自定义宿主绑定 provider 记录 `LLMCallRequest.intents.merged`，`tests/
+  e2e/test_snapshot_intent_freeze.py`）**：快照调用 merged=定义时刻意图、调用处 `@` smear 被忽略；
+  lambda 调用 merged=调用处 smear（IT-3 对照）。**顺带清理 P1 §六.4 死字段** `IbAssign.capture_mode`
+  （从未构造传递、从未读取，恒 None）。
+  验证：全量 pytest **3011 passed / 1 skipped** 零回归。**G5 意图一等值**（`IbIntent.content: str` →
+  可渲染值栈 `IntentValue`，修复 G2/G5/G9）为 P3 剩余大项，下轮开工（设计见
+  `_five_foundation_redesign.md` 交接点/P3 行）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

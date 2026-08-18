@@ -248,9 +248,21 @@ def _vm_call_fn_callable(executor, func, args):
 
     rt_context = executor.runtime_context
     needs_subscope = bool(func.params_uids) or bool(func.closure)
-    if needs_subscope:
-        rt_context.enter_scope()
+    # 意图上下文生命周期（IT-1/IT-2/IT-3，与 _vm_call_function 同构）：
+    # - 进入：fork 当前（调用点）意图上下文——lambda 在调用点 fork 副本内执行
+    #   （高阶函数透明 IT-3：lambda 看到调用点的意图 fork 副本）；
+    # - snapshot：再**安装定义时刻冻结快照**（IT-2 意图冻结）——纯 snapshot lambda
+    #   同样冻结（D8 修复），调用处的持久/@/@! 意图完全忽略；
+    # - 退出：恢复调用者的意图上下文与活跃指针。
+    saved_intent = rt_context.enter_intent_scope()
+    if func.capture_mode == "snapshot" and getattr(func, "captured_intents", None) is not None:
+        # 安装冻结上下文时 fork 一份（IT-4 冻结不可修改）：调用期内 @+/@-/@! 的
+        # 修改只落在本次调用的副本上，不污染共享冻结快照。
+        rt_context.replace_intent_context(func.captured_intents.fork())
     try:
+        if needs_subscope:
+            rt_context.enter_scope()
+
         # 绑定闭包：lambda 走共享 IbCell，snapshot 走每次调用的独立深克隆。
         # declared_type 与参数绑定同构解析（统一 Optional 值模型：捕获的
         # Optional 变量在闭包内保持包装语义，nonlocal/lambda 读写一致）。
@@ -300,13 +312,14 @@ def _vm_call_fn_callable(executor, func, args):
             if result.kind is ControlSignal.RETURN:
                 result = _wrap_function_result(executor, func, result.value)
             else:
-                return result  # finally 会负责 exit_scope
+                return result  # finally 会负责 exit_scope / exit_intent_scope
         else:
             # 表达式体（lambda body 直接求值，非 Signal）：按声明返回类型包装
             result = _wrap_function_result(executor, func, result)
     finally:
         if needs_subscope:
             rt_context.exit_scope()
+        rt_context.exit_intent_scope(saved_intent)
 
     return result
 

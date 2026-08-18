@@ -184,11 +184,17 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
                 if cell is not None:
                     closure[sym_uid] = (name, cell)
 
+    # 意图冻结并入 capture_mode（决策 3 / IT-2）：snapshot 恒在定义时刻 fork 意图
+    # 快照；lambda 恒不 fork（引用捕获，调用点读 live 意图——原初设计）。
+    # 不再按 body_is_behavior 特判——纯 snapshot lambda（非行为体）同样冻结意图
+    # （修复 D8：fn_callable 一路的意图栈不再"调用点 live"）。
+    captured_intents = (
+        executor.runtime_context.fork_intent_snapshot()
+        if capture_mode == "snapshot"
+        else None
+    )
+
     if body_is_behavior:
-        captured_intents = (
-            None if capture_mode == "lambda"
-            else executor.runtime_context.fork_intent_snapshot()
-        )
         expected_type = executor.ec.get_side_table("node_to_type", body_uid)
         param_types, return_type = _capture_signature(
             executor, node_uid, params_uids, expected_type
@@ -215,6 +221,7 @@ def vm_handle_IbLambdaExpr(executor, node_uid: str, node_data: Mapping[str, Any]
         closure=closure,
         param_types=param_types,
         return_type=return_type,
+        captured_intents=captured_intents,
     )
 
 

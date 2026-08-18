@@ -70,6 +70,7 @@ class IbFnCallable(IbValue):
         closure: Optional[Dict[str, Any]] = None,
         param_types: Optional[List[str]] = None,
         return_type: Optional[str] = None,
+        captured_intents: Optional[Any] = None,  # Optional[IbIntentContext]
     ):
         super().__init__(
             ib_class,
@@ -79,6 +80,7 @@ class IbFnCallable(IbValue):
                 "params_uids": list(params_uids) if params_uids else [],
                 "body_uid": body_uid,
                 "closure": dict(closure) if closure else {},
+                "captured_intents": captured_intents,
             },
         )
         self.node_uid = node_uid
@@ -91,6 +93,10 @@ class IbFnCallable(IbValue):
         # 内省签名：编译期 node_to_type 捕获，JSON 安全纯字符串。
         self.param_types: List[str] = list(param_types) if param_types else []
         self.return_type: Optional[str] = return_type
+        # 意图冻结（决策 3 / IT-2）：None（lambda）或定义时刻 IbIntentContext 冻结
+        # 快照（snapshot）。纯 snapshot lambda（非行为体）同样冻结——调用时经
+        # _vm_call_fn_callable 安装为当前意图上下文。
+        self.captured_intents = captured_intents
 
     def get_return_type(self) -> str:
         """返回类型查询：规范类型名；未捕获具体类型时回退 'auto'。"""

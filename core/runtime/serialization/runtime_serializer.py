@@ -440,6 +440,18 @@ class RuntimeSerializer(BaseFlatSerializer):
         data["_type"] = "fn_callable"
         data["node_uid"] = obj.node_uid
         data["capture_mode"] = obj.capture_mode
+        # captured_intents 协议（与 _collect_behavior 同构）：None 或 IbIntentContext。
+        # 纯 snapshot lambda 亦可能携带定义时刻意图冻结快照（D8）。
+        ci = getattr(obj, "captured_intents", None)
+        if ci is None:
+            data["captured_intents"] = None
+        elif isinstance(ci, IbIntentContext):
+            data["captured_intents"] = self._collect_intent_context(ci)
+        else:
+            raise TypeError(
+                "Unexpected captured_intents type "
+                f"{type(ci).__name__} (contract requires None or IbIntentContext)"
+            )
         if obj.params_uids:
             data["params_uids"] = list(obj.params_uids)
         if obj.body_uid:
@@ -951,6 +963,16 @@ class RuntimeDeserializer:
         elif _type == "fn_callable":
             # 重建完整 fn_callable（node/closure/params/body 保真）并登记闭包
             # cell 重链——不得落入 else 展开为空 IbObject。
+            ci_raw = data.get("captured_intents")
+            if ci_raw is None:
+                captured = None
+            elif isinstance(ci_raw, str):
+                captured = self._get_intent_context(ci_raw)
+            else:
+                raise TypeError(
+                    "Unexpected captured_intents payload "
+                    f"{type(ci_raw).__name__} (contract requires None or intent_context uid)"
+                )
             closure, pending_uids = self._deserialize_closure(data)
             obj = self.factory.create_fn_callable(
                 data["node_uid"],
@@ -960,6 +982,7 @@ class RuntimeDeserializer:
                 closure=closure,
                 param_types=data.get("param_types"),
                 return_type=data.get("return_type"),
+                captured_intents=captured,
             )
             self.instance_cache[uid] = obj
             for suid in pending_uids:
