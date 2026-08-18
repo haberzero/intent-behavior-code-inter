@@ -152,7 +152,7 @@ class IbFnCallable(IbValue):
         )
 
     def __to_prompt__(self) -> str:
-        return f"<FnCallable {self.node_uid}>"
+        return self.signature_name()
 
     def receive(self, message: str, args: List[IbObject]) -> IbObject:
         """FnCallable 消息分派：内部元数据消息 → 协议处理器 → 未求值 fail-fast。"""
@@ -175,8 +175,9 @@ class IbFnCallable(IbValue):
         return None
 
     def _dispatch_to_prompt(self, message: str, args: List[IbObject]) -> IbObject:
-        """``__to_prompt__`` 协议：FnCallable 呈现为可读描述。"""
-        return self.ib_class.registry.box(str(self))
+        """``__to_prompt__`` 协议：FnCallable 呈现为可读契约（＝signature_name）。
+        与 ``__to_prompt__`` 一致（机制同构，无双写）。"""
+        return self.ib_class.registry.box(self.signature_name())
 
     def __repr__(self):
         mode = self.capture_mode or "immediate"
@@ -327,7 +328,7 @@ class IbBehavior(IbValue):
 
     def __to_prompt__(self) -> str:
         if self._cache: return self._cache.__to_prompt__()
-        return f"<Behavior {self.node}>"
+        return self.signature_name()
 
     def __repr__(self):
         return f"<Behavior {self.node}>"
@@ -408,5 +409,6 @@ class IbBehavior(IbValue):
         return None
 
     def _dispatch_to_prompt(self, message: str, args: List[IbObject]) -> IbObject:
-        """``__to_prompt__`` 协议：未执行行为呈现为可读描述（原元组分支语义）。"""
-        return self.ib_class.registry.box(str(self))
+        """``__to_prompt__`` 协议：未执行行为呈现为可读契约（＝signature_name）。
+        与 ``__to_prompt__`` 一致（机制同构，无双写）。"""
+        return self.ib_class.registry.box(self.signature_name())

@@ -420,6 +420,22 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   验证：全量 pytest **3011 passed / 1 skipped** 零回归。**G5 意图一等值**（`IbIntent.content: str` →
   可渲染值栈 `IntentValue`，修复 G2/G5/G9）为 P3 剩余大项，下轮开工（设计见
   `_five_foundation_redesign.md` 交接点/P3 行）。
+- **五大地基改造 · P3 G5/G2 意图一等值切片：可调用值有意契约嵌入（本 session，unsafe-vibe-dev）**：
+  **实证定位**：意图段求值渲染大面已工作（int/str 值经 segments→PromptRenderer 正确渲染）；**G2
+  具体缺口** = 函数/可调用/行为值渲染为 Python repr（`<Function 'helper'>`/`<FnCallable ...>`/
+  `<Behavior ...>`），意图嵌入无意义。
+  **实现**：`IbUserFunction.__to_prompt__` → `func <name>(<参数类型…>) -> <返回>`（取值自持 spec 的
+  `param_types`/`return_type`，与 capture_mode/expected_type 同层值层属性）；`IbFnCallable` 与
+  `IbBehavior` 的 `__to_prompt__`（未执行形态）+ `_dispatch_to_prompt` 统一为 `signature_name()`
+  （机制同构，无双写）。普通 vs llm 函数仍可区分（不同名/签名）。
+  **判别测试 `tests/e2e/test_intent_callable_embedding.py`**（自定义 provider 记录
+  `intents.merged`）：函数值→`func helper(int, str) -> str`、snapshot 可调用→`fn_callable` 契约。
+  **语义演进重构**：`tests/e2e/test_callable_unification.py` 2 用例断言从 `<Function 'f'>` 更新为
+  `func f() -> int`/`func g() -> str`（核心"普通/llm 可区分 + fn 可赋值"保留，非规避缺陷）。
+  **架构定位**：G5 深交 P4（LLMCallable 将重塑可调用/意图交互）；"意图值栈 content:str → 原始值
+  栈全量重构"的剩余面（栈存原始值/按值匹配语义）与 P4 对齐评估再推进——本切片在"勿半接通"
+  红线内闭合交付"意图段有意义嵌入"。
+  验证：全量 pytest **3019 passed / 1 skipped** 零回归。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

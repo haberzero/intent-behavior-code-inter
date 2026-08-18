@@ -26,7 +26,9 @@ print(f)
 print(g)
 """
         lines = run_ibci(code)
-        assert lines == ["<Function 'f'>", "<LLMFunction 'g'>"]
+        # G5/G2（意图一等值）：函数值渲染为有意义可调用契约（非 repr）；
+        # 普通 vs llm 函数仍可区分（不同名/签名）。
+        assert lines == ["func f() -> int", "func g() -> str"]
 
     def test_normal_function_still_callable(self):
         code = """
@@ -73,4 +75,5 @@ print(a)
 print(b)
 """
         lines = run_ibci(code)
-        assert lines == ["<Function 'f'>", "<LLMFunction 'g'>"]
+        # G5/G2：函数值渲染为有意义可调用契约（非 repr），普通/llm 仍可区分。
+        assert lines == ["func f() -> int", "func g() -> str"]

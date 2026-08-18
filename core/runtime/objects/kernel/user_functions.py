@@ -86,6 +86,34 @@ class IbUserFunction(IbFunction):
             gen = _vm_call_user_function(vm, self, receiver, args)
         return _drive_generator(vm, gen)
 
+    def __to_prompt__(self) -> str:
+        """把函数值呈现为**可读可调用契约**（意图/LLM 上下文中的有意义嵌入，G2）。
+
+        形式 ``func <name>(<参数类型...>) -> <返回类型>``，取自值自持的 spec
+        （``param_types``/``return_type``，与 capture_mode/expected_type 同层的值层
+        属性）。不再用 Python repr（``<Function 'name'>``）——函数作为一等值放入
+        意图注释时经此协议嵌入，与 PromptRenderer 统一渲染路径接轨。
+        """
+        spec = self.spec
+        name = spec.name if spec is not None and getattr(spec, "name", None) else "anonymous"
+        params = ""
+        if spec is not None and getattr(spec, "param_types", None):
+            names = []
+            for rt in spec.param_types:
+                head = getattr(rt, "head", None)
+                names.append(str(head) if head is not None else str(rt))
+            params = ", ".join(names)
+        ret = ""
+        if spec is not None:
+            rt = getattr(spec, "return_type", None)
+            if rt is not None:
+                ret_name = getattr(rt, "head", None)
+                if ret_name is None:
+                    ret_name = str(rt)
+                if ret_name and ret_name not in ("auto", "void"):
+                    ret = f" -> {ret_name}"
+        return f"func {name}({params}){ret}"
+
     def __repr__(self):
         node_data = self.context.get_node_data(self.node_uid)
         name = node_data.get("name", "unknown")

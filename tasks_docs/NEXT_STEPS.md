@@ -109,23 +109,32 @@ retry）。
 > replace_intent_context(fork)，IT-4 隔离）。判别测试 `tests/e2e/test_snapshot_intent_freeze.py`
 > （自定义 provider 记录 intents.merged）：快照=定义意图忽略调用处 smear、lambda=调用处 smear。
 > 顺带清理死字段 `IbAssign.capture_mode`。全量 pytest **3011 passed / 1 skipped** 零回归。
+>
+> **✅ P3 G5/G2 意图一等值切片·可调用值有意契约嵌入已落地（本 session，unsafe-vibe-dev）**：意图段
+> 求值渲染大面已工作（int/str 值经 segments→PromptRenderer 正确）；G2 缺口 = 函数/可调用/行为值
+> 渲染为 Python repr → `IbUserFunction.__to_prompt__` 改 `func <name>(<参数>) -> <ret>`（取 spec
+> 值层自持签名）+ `IbFnCallable`/`IbBehavior` 的 `__to_prompt__`/`_dispatch_to_prompt` 统一
+> `signature_name()`；判别测试 `tests/e2e/test_intent_callable_embedding.py`；既有断言 `<Function>`
+> 语义演进为契约形式。全量 pytest **3019 passed / 1 skipped** 零回归。G5"值栈全量重构"剩余面
+> （栈存原始值/按值匹配）与 P4 (LLMCallable) 对齐评估。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P3 剩余项 G5 意图一等值化（下一 session 开工）**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + P2-② 覆层 + P2③/P5 D1+D2 prompt 类型类化 +
-   P3 D8 snapshot 意图冻结已合入，全量 3011 零回归）。已合入增量见 git log；设计权威
-   `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P3 剩余项 · G5 意图一等值化**：
-   - 意图值栈升级：`IbIntent.content: str`（字符串栈，G5 非一等值）→ 可渲染值栈 `IntentValue`
-     协议（意图段求值渲染，修复 G2/G5/G9）；意图作为一等值类型化（审查意图注解/栈操作/上下文的
-     运行时形态，收敛为一等机制）。调研起点：
-     `_five_foundation_redesign.md` 交接点（G2/G5/G9 登记）+ `docs/subsystems/01_intent_system.md`。
-   - 勿半接通：意图值栈升级须全链路（段求值渲染 + prompt 消解 + 序列化）闭环。
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4 llm 可调用类内核（下一 session 开工）**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8 + P3 G2
+   已合入，全量 3019 零回归）。设计权威 `tasks_docs/_five_foundation_P1_design.md` §一-§三，
+   决策权威 `_five_foundation_redesign.md` §一-§五。
+   **本步 = P4**（P1 设计 §二/§三 定稿的实质内核）：llm 可调用类内核（`LLMCallable` 协议方法族
+   `__llm_call__`/`__intent__`/`__retry__` + LLMCallRequest 承载）；**`llm ... llmend` 语法及旧机制
+   彻底删除**（`__sys__`/`__user__`/`__llmretry__` 段、顶层 llmretry 语法糖、`IbLLMFunctionDef`、
+   `callable_kind="llm_function"`、`_LLMFunctionMixin`、provider `user_sys` 槽——不保留、不兼容、
+   不包袱，决策 4 + 用户追加裁定）；retry 高阶化（帧机制保留 + 语法/策略高阶化，决策 5）；
+   全量迁移示例/试用/测试。
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
-   **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾；has_llm_call_cap →
-   LLMCallable 协议属 P4）。
-   后续 P4（llm 可调用类内核 + retry 高阶化 + llm/llmend 语法及旧机制彻底删除）→ P5 → P6 落地。
+   **待 P4 对齐项**：G5 意图值栈全量重构（栈存原始值/按值匹配）+ has_llm_call_cap → LLMCallable
+   协议。
+   **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾）。
+   后续 P5 → P6 落地。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
