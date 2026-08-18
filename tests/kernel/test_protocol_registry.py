@@ -37,6 +37,7 @@ class TestBuiltinProtocolRegistry:
         assert "output_hint" in reg.protocols
         assert "payload_prompt" in reg.protocols
         assert "snapshotable" in reg.protocols
+        assert "llm_callable" in reg.protocols
 
     def test_protocol_names_sorted(self):
         reg = create_default_registry()
@@ -81,6 +82,17 @@ class TestProtocolMembership:
         without = _make_class("NoPrompt", ["foo"])
         reg.register(without)
         assert reg.satisfies_protocol(without, "to_prompt") is False
+
+    def test_llm_callable_satisfaction_requires_llm_call(self):
+        """LLMCallable（P4a 地基）：__llm_call__ 是必需方法——用户类实现则满足，
+        不实现则不满足（satisfies 成为"能否被 LLM 消费"的唯一判定）。"""
+        reg = create_default_registry()
+        with_llm_call = _make_class("Llama", ["__llm_call__"])
+        reg.register(with_llm_call)
+        assert reg.satisfies_protocol(with_llm_call, "llm_callable") is True
+        without = _make_class("Plain", ["__call__"])
+        reg.register(without)
+        assert reg.satisfies_protocol(without, "llm_callable") is False
 
     def test_list_iterable_subscriptable(self):
         reg = create_default_registry()

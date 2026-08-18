@@ -180,11 +180,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   统一 `signature_name()`；判别测试 `tests/e2e/test_intent_callable_embedding.py`；既有 `<Function>`
   断言语义演进为契约形式。全量 pytest **3019 passed / 1 skipped** 零回归。G5"值栈全量重构"剩余面
   与 P4 (LLMCallable) 对齐评估。
-  **下一 session 开工 = P4 llm 可调用类内核**（`LLMCallable` 协议方法族 + `llm ... llmend` 语法及
-  旧机制彻底删除（决策 4 + 用户追加裁定：__sys__/__user__/__llmretry__/IbLLMFunctionDef/
-  callable_kind/_LLMFunctionMixin/provider user_sys 槽，不保留不兼容不包袱）+ retry 高阶化
-  （决策 5）+ 全量迁移），详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：P5 → P6；按需推进支线
-  （PT-DEBT / VISION-3 / 文档）。
+  **✅ P4a LLMCallable 协议地基已落地（本 session，unsafe-vibe-dev）**：`BUILTIN_PROTOCOLS` 增
+  `llm_callable`（`__llm_call__` 必需方法 = 能否被 LLM 消费唯一判定）+ 判别测试；纯增量零破坏。
+  P4 为巨型阶段，拆子增量轮次推进（P4a→P4b 装配→P4c 语法删除+迁移→P4d retry 高阶化）。
+  全量 pytest **3020 passed / 1 skipped** 零回归。
+  **下一 session 开工 = P4b LLMCallable 装配路径**（`assemble_llm_callable_request_cps` 统一装配 +
+  行为值 `__llm_call__` 内核原生实现 + `run_batch`/`stream` 统一消费 LLMCallable 实例），详见
+  `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4c（llm 语法+旧机制删除+全量迁移 36/66 面）→ P4d
+  （retry 高阶化）→ P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -198,10 +201,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] 全程本地 commit、禁 push（除非用户显式授权）
 - [x] **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基已合并并删除实验分支；`main` 不触碰；本地领先 origin 未 push）
 - [x] **P2/P6 地基低风险合并 unsafe-vibe-dev 完成**（用户确认零风险 → 纯 fast-forward `e8c7944b..b7479497` → exp 分支合并即删；全量 pytest 2997 零回归）
-- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：3019 passed / 1 skipped）
+- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，本 session：3020 passed / 1 skipped）
 - [x] **✅ 复核并提交工作树内 P2-② 覆层机制未提交增量完成**：`git diff` 复核（含端到端实证）→ 全量 pytest 实跑 2997 零回归 → 描述性 commit → 删除临时文档 `tasks_docs/_code_overlay.md` 与 `tasks_docs/_code_protocol_vtable.md`（git 承载）→ 同步 WORKLOG/NEXT_STEPS/HANDOFF/检查单
 - [x] **✅ P3 D8 snapshot 意图冻结补齐落地**：意图 fork 按 capture_mode 统一 + IbFnCallable.captured_intents + _vm_call_fn_callable 意图生命周期（IT-2/IT-3/IT-4）+ 判别测试 + 死字段清理；全量 3011 零回归
-- [x] **✅ P3 G5/G2 意图一等值切片·可调用值有意契约嵌入落地**：函数/可调用/行为值渲染契约（func <name>(<params>)-><ret> / signature_name），去 Python repr；判别测试 + 既有断言语义演进；全量 3019 零回归；下一步 = P4 llm 可调用类内核
+- [x] **✅ P3 G5/G2 意图一等值切片·可调用值有意契约嵌入落地**：函数/可调用/行为值渲染契约（func <name>(<params>)-><ret> / signature_name），去 Python repr；判别测试 + 既有断言语义演进；全量 3019 零回归
+- [x] **✅ P4a LLMCallable 协议地基落地**：llm_callable 协议注册（__llm_call__ 必需方法 = 能否被 LLM 消费唯一判定）+ 判别测试；全量 3020 零回归；P4 拆子增量（P4b 装配 → P4c 语法删除+迁移 → P4d retry 高阶化），下一步 = P4b
 
 ---
 

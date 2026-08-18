@@ -117,22 +117,29 @@ retry）。
 > `signature_name()`；判别测试 `tests/e2e/test_intent_callable_embedding.py`；既有断言 `<Function>`
 > 语义演进为契约形式。全量 pytest **3019 passed / 1 skipped** 零回归。G5"值栈全量重构"剩余面
 > （栈存原始值/按值匹配）与 P4 (LLMCallable) 对齐评估。
+>
+> **✅ P4a LLMCallable 协议地基已落地（本 session，unsafe-vibe-dev）**：`BUILTIN_PROTOCOLS` 增
+> `llm_callable`（`__llm_call__` 必需方法 = "能否被 LLM 消费"唯一判定，P1 §2.1；required/optional
+> 形式化归 P5/P6）；判别测试（用户类实现→满足/不实现→不满足）。P4 为巨型阶段，拆子增量轮次推进
+> （勿半接通）：P4a（本轮，纯增量零破坏）→ P4b 装配路径 → P4c llm 语法+旧机制删除+全量迁移
+> （摸底 36 测试 + 66 示例/试用文件面）→ P4d retry 高阶化。全量 pytest **3020 passed / 1 skipped**
+> 零回归。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4 llm 可调用类内核（下一 session 开工）**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8 + P3 G2
-   已合入，全量 3019 零回归）。设计权威 `tasks_docs/_five_foundation_P1_design.md` §一-§三，
-   决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P4**（P1 设计 §二/§三 定稿的实质内核）：llm 可调用类内核（`LLMCallable` 协议方法族
-   `__llm_call__`/`__intent__`/`__retry__` + LLMCallRequest 承载）；**`llm ... llmend` 语法及旧机制
-   彻底删除**（`__sys__`/`__user__`/`__llmretry__` 段、顶层 llmretry 语法糖、`IbLLMFunctionDef`、
-   `callable_kind="llm_function"`、`_LLMFunctionMixin`、provider `user_sys` 槽——不保留、不兼容、
-   不包袱，决策 4 + 用户追加裁定）；retry 高阶化（帧机制保留 + 语法/策略高阶化，决策 5）；
-   全量迁移示例/试用/测试。
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b LLMCallable 装配路径（下一 session 开工）**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 + P4a
+   LLMCallable 协议地基已合入，全量 3020 零回归）。设计权威 `tasks_docs/_five_foundation_P1_design.md`
+   §一-§三，决策权威 `_five_foundation_redesign.md` §一-§五。
+   **本步 = P4b（P1 §2.4 消费路径统一）**：`assemble_llm_callable_request_cps` 统一装配路径
+   （协议查询 → 调 `__llm_call__` 取 LLMCallRequest → 统一 worker `_call_and_parse`）；行为值
+   （IbBehavior）的 `__llm_call__` 内核原生实现（cps 装配，语义槽模型）；`run_batch`/`stream`
+   签名统一为"接受任何 LLMCallable 实例"（当前 `isinstance(behavior, IbValue) and name=="behavior"`
+   校验收窄）。
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
-   **待 P4 对齐项**：G5 意图值栈全量重构（栈存原始值/按值匹配）+ has_llm_call_cap → LLMCallable
-   协议。
+   **后续子增量**：P4c `llm/llmend` 语法+旧机制全链路删除（决策 4 + 用户追加裁定）+ 全量迁移
+   （36 测试 + 66 示例/试用文件，语义随演进重构不规避缺陷）→ P4d retry 高阶化（决策 5）。
+   **待 P4 对齐项**：G5 意图值栈全量重构 + has_llm_call_cap → LLMCallable 协议。
    **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾）。
    后续 P5 → P6 落地。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；

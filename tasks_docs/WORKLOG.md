@@ -436,6 +436,21 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   栈全量重构"的剩余面（栈存原始值/按值匹配语义）与 P4 对齐评估再推进——本切片在"勿半接通"
   红线内闭合交付"意图段有意义嵌入"。
   验证：全量 pytest **3019 passed / 1 skipped** 零回归。
+- **五大地基改造 · P4a LLMCallable 协议地基（本 session，unsafe-vibe-dev）**：
+  P4 为巨型阶段（llm 可调用类内核 + `llm ... llmend` 语法及旧机制彻底删除 + retry 高阶化 +
+  全量迁移——摸底：36 个测试文件 + 66 个示例/试用文件用 llm 函数面）。拆**子增量轮次推进**
+  （勿半接通）：
+  **P4a（本轮）= LLMCallable 内置协议注册 + satisfies 判定**：`BUILTIN_PROTOCOLS` 增
+  `llm_callable`（`__llm_call__` 为**必需方法** = "能否被 LLM 消费"的唯一判定，P1 §2.1；
+  `__intent__`/`__retry__` 为可选能力、运行时经 receive 发现，required/optional 形式化归
+  P5/P6）——判别测试：用户类实现 `__llm_call__` → satisfies True / 不实现 → False。纯增量、
+  零语法破坏。验证：全量 pytest **3020 passed / 1 skipped** 零回归。
+  **后续子增量（登记 NEXT_STEPS）**：P4b LLMCallable 装配路径（`assemble_llm_callable_request_cps`
+  + 行为值 `__llm_call__` 内核原生实现 + run_batch/stream 统一消费 LLMCallable 实例）
+  → P4c `llm/llmend` 语法+旧机制全链路删除（lexer token/llm_scanner 整块/parser/AST/
+  semantic is_llm 分支/`callable_kind="llm_function"`/`_LLMFunctionMixin`/provider `user_sys`
+  槽，决策 4 + 用户追加裁定）+ 全量迁移（36+66 面，语义随演进重构测试，不规避缺陷）
+  → P4d retry 高阶化（决策 5 帧机制保留 + 语法/策略高阶化）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

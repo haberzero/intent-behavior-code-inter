@@ -223,6 +223,19 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         structural_methods=("__snapshot__", "__restore__"),
         structural_all=True,
     ),
+    ProtocolDef(
+        name="llm_callable",
+        methods=("__llm_call__",),
+        description=(
+            "Values that can be consumed as unified LLM calls (behavior values, "
+            "llm callable-class instances, anonymous callable instances).  "
+            "``__llm_call__`` is the required method for ``satisfies_protocol("
+            "... , 'llm_callable')``（能否被 LLM 消费的唯一判定）;  ``__intent__`` / "
+            "``__retry__`` are optional capabilities discovered at runtime via "
+            "receive (the required/optional split is formalized later)."
+        ),
+        structural_methods=("__llm_call__",),
+    ),
 )
 
 
