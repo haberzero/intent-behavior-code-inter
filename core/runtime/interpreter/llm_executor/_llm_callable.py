@@ -20,6 +20,74 @@ from core.runtime.shared.user_call import UserFunctionCall
 from core.runtime.objects.kernel import IbObject
 
 
+class _StreamCallableDrive:
+    """``ai.stream_call`` / ``ai.stream_channel`` 的帧内 CPS 驱动 Waitable（P4b-3b）。
+
+    与 :class:`_RunLLMCallableDrive` 同范式：VM 主路径经 ``cps_drive`` 帧内 CPS 统一装配
+    （行为值 → 语义槽装配 / 用户 llm 可调用类 → 统一装配入口，含 ``__intent__`` 可选
+    改写），随后构造 :class:`IbStreamHandle`（producer = provider 流式执行装配好的
+    request；后台线程即刻流式生产）。
+
+    - ``channel_mode=False``（stream_call）：**yield 句柄交调度器等待流耗尽**，恢复后
+      返回完整文本——与旧字符串形态"调用点 auto-yield 返回完整文本"语义一致
+      （``await`` 幂等：``await ai.stream_call(...)`` 与赋值都得到完整文本）；
+    - ``channel_mode=True``（stream_channel）：返回包裹 stream Channel 的
+      ``IbChannel``，逐块 ``recv`` 增量消费。
+    """
+
+    def __init__(self, executor, target, ec, provider_stream, channel_mode: bool):
+        self._executor = executor
+        self._target = target
+        self._ec = ec
+        self._provider_stream = provider_stream
+        self._channel_mode = channel_mode
+        self._done = False
+        self._result = None
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+    def register_wake(self, event) -> None:
+        if self._done:
+            event.set()
+
+    def cps_drive(self, executor):
+        """帧内 CPS 驱动（并入当前调度器；VM 权威路径）。"""
+        request = yield from self._executor.assemble_stream_request_cps(self._target, self._ec)
+        from core.runtime.objects.stream import IbStreamHandle
+
+        handle = IbStreamHandle(producer=lambda: self._provider_stream(request))
+        if self._channel_mode:
+            from core.runtime.objects.kernel import IbChannel
+
+            chan_cls = self._executor.registry.get_class("chan")
+            self._result = IbChannel(ib_class=chan_cls, core=handle.channel)
+        else:
+            self._result = yield handle
+        self._done = True
+        return self._result
+
+    def _drive(self):
+        """宿主/线程体同步驱动（无 VM CPS 上下文时；非权威路径）。"""
+        from core.runtime.coordinator import _drive_generator
+
+        gen = self.cps_drive(self._ec.vm_executor)
+        self._result = _drive_generator(self._ec.vm_executor, gen)
+        self._done = True
+        return self._result
+
+    def try_result(self):
+        if self._done:
+            return (True, self._result)
+        self._drive()
+        return (True, self._result)
+
+    def result(self):
+        self._drive()
+        return self._result
+
+
 class _LLMCallableMixin:
     def _resolve_llm_callable_intents_cps(self, ec: IExecutionContext, captured_intents: Optional[Any]):
         """消解进入本次 LLM 调用的意图三层（active/global/merged），行为/llm 类共用。"""
@@ -248,6 +316,54 @@ class _LLMCallableMixin:
             return bool(meta is not None and spec is not None and meta.satisfies_protocol(spec, "llm_callable"))
         except Exception:
             return False
+
+    def assemble_stream_request_cps(self, target: IbObject, ec: IExecutionContext):
+        """统一流式装配：行为值 / 用户 llm 可调用类 → ``LLMCallRequest``（CPS，P4b-3b）。
+
+        分派与 ``run_batch``（P4b-2b）同构——差异经值自身承载：行为值走语义槽装配
+        （既有 ``_prepare_behavior_call_cps``，零行为变化）；用户 llm 类经统一装配入口
+        （``assemble_llm_callable_request_cps``，含 ``__intent__`` 可选改写）。两者皆非
+        → fail-fast（与 ``run_batch`` 拒绝消息一致）。
+        """
+        from core.runtime.objects.kernel import IbValue
+
+        if isinstance(target, IbValue) and target.ib_class.name == "behavior":
+            node = getattr(target, "node", None)
+            if node is None:
+                raise TypeError("stream_call: behavior value has no node data.")
+            node_data = ec.get_node_data(node)
+            if node_data is None:
+                raise TypeError(f"stream_call: behavior node data not found for '{node}'.")
+            spec = yield from self._prepare_behavior_call_cps(
+                node,
+                node_data,
+                ec,
+                captured_intents=getattr(target, "captured_intents", None),
+            )
+            return spec.request
+        if self._is_llm_callable_value(target, ec):
+            request, _ = yield from self.assemble_llm_callable_request_cps(target, ec)
+            return request
+        raise TypeError(
+            "stream_call: expected a behavior or LLMCallable instance, "
+            f"got {type(target).__name__}"
+        )
+
+    def make_stream_callable_drive(
+        self,
+        target: IbObject,
+        ec: IExecutionContext,
+        *,
+        provider_stream,
+        channel_mode: bool = False,
+    ):
+        """构造流式消费的帧内 CPS 驱动 Waitable（供 ``ai.stream_call``/``stream_channel`` 使用）。
+
+        ``provider_stream`` = provider 的流式执行可调用（``(LLMCallRequest) -> iter[str]``），
+        由调用方（ai 模块宿主）注入；``channel_mode`` 为 True 时驱动完成后返回包裹
+        stream Channel 的 ``IbChannel``。
+        """
+        return _StreamCallableDrive(self, target, ec, provider_stream, channel_mode)
 
     def _invoke_llm_callable_cps_boxed(self, callable_inst: IbObject, ec: IExecutionContext):
         """CPS 驱动统一装配 + 执行，返回 boxed 单元素 IbList（run_batch 消费面）。"""

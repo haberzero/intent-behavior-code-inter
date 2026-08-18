@@ -28,9 +28,6 @@ from core.kernel.path import PathValidator
 from core.runtime.capability_registry import CapabilityRegistry
 from core.runtime.objects.kernel.base import unbox
 
-from core.base.llm_protocol import LLMCallRequest, OutputContract
-from core.base.llm_protocol.llm_call import PromptSlot
-
 from ibci_modules.ibci_ai.config_loader import ApiConfig
 from ibci_modules.ibci_ai.config_source_adapter import ProjectApiConfigAdapter
 from ibci_modules.ibci_ai.provider_impl import RecommendedProvider
@@ -180,53 +177,50 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
     # ------------------------------------------------------------------ #
 
     def run_batch(self, behavior: Any, items: List[Any]) -> List[Any]:
-        """并发批量执行行为对象（`ai.run_batch`）。"""
-        kr = self._capabilities.kernel_registry if self._capabilities else None
-        if kr is None:
-            raise RuntimeError("run_batch: LLM executor not available")
-        executor = kr.get_llm_executor()
-        if executor is None:
-            raise RuntimeError("run_batch: LLM executor does not support batch execution")
+        """并发批量执行行为 / LLMCallable 实例（`ai.run_batch`）。"""
+        executor = self._require_llm_executor("run_batch")
         from core.runtime.frame import get_current_execution_context
         ec = get_current_execution_context()
         if ec is None:
             raise RuntimeError("run_batch: no execution context available")
         return executor.run_batch(behavior, list(items), ec)
 
-    def stream_call(self, sys_prompt: str, user_prompt: str) -> Any:
-        """流式 LLM 调用：返回 ``IbStreamHandle``（Waitable）。
+    def stream_call(self, target: Any) -> Any:
+        """流式 LLM 调用：接受任何 LLMCallable 实例（行为值或用户 llm 可调用类）。
 
-        把用户给定的 ``sys_prompt`` 作为 ``user_sys`` 槽、``user_prompt`` 作为
-        用户内容，构造一次 :class:`LLMCallRequest` 交给 :meth:`stream`。
+        经统一装配入口（帧内 CPS，含 ``__intent__`` 可选改写）装配请求后流式执行，
+        返回帧内 CPS 驱动的 Waitable——VM 主路径装配 → ``IbStreamHandle``；
+        ``await`` / 赋值自动等待返回完整文本（与既有流式范式一致）。
         """
-        from core.runtime.objects.stream import IbStreamHandle
-        req = LLMCallRequest(
-            node_uid="",
-            user_prompt=user_prompt,
-            prompt_slots=[PromptSlot(kind="user_sys", text=sys_prompt)] if sys_prompt else [],
-            output_contract=OutputContract(),
-        )
-        return IbStreamHandle(producer=lambda: self.stream(req))
-
-    def stream_channel(self, sys_prompt: str, user_prompt: str) -> Any:
-        """流式 LLM 调用：返回承载增量块的 stream Channel。"""
-        from core.runtime.objects.stream import IbStreamHandle
-        from core.runtime.objects.kernel import IbChannel
+        executor = self._require_llm_executor("stream_call")
         from core.runtime.frame import get_current_execution_context
-
-        req = LLMCallRequest(
-            node_uid="",
-            user_prompt=user_prompt,
-            prompt_slots=[PromptSlot(kind="user_sys", text=sys_prompt)] if sys_prompt else [],
-            output_contract=OutputContract(),
-        )
-        handle = IbStreamHandle(producer=lambda: self.stream(req))
         ec = get_current_execution_context()
-        registry = getattr(ec, "registry", None) if ec is not None else None
-        if registry is None:
-            raise RuntimeError("ai.stream_channel: no registry available")
-        chan_cls = registry.get_class("chan")
-        return IbChannel(ib_class=chan_cls, core=handle.channel)
+        if ec is None:
+            raise RuntimeError("stream_call: no execution context available")
+        return executor.make_stream_callable_drive(
+            target, ec, provider_stream=self.stream, channel_mode=False
+        )
+
+    def stream_channel(self, target: Any) -> Any:
+        """流式 LLM 调用：返回承载增量块的 stream Channel（LLMCallable 消费面）。"""
+        executor = self._require_llm_executor("stream_channel")
+        from core.runtime.frame import get_current_execution_context
+        ec = get_current_execution_context()
+        if ec is None:
+            raise RuntimeError("stream_channel: no execution context available")
+        return executor.make_stream_callable_drive(
+            target, ec, provider_stream=self.stream, channel_mode=True
+        )
+
+    def _require_llm_executor(self, api: str):
+        """解析内核 LLM 执行器（fail-fast；run_batch/stream 共用）。"""
+        kr = self._capabilities.kernel_registry if self._capabilities else None
+        if kr is None:
+            raise RuntimeError(f"{api}: LLM executor not available")
+        executor = kr.get_llm_executor()
+        if executor is None:
+            raise RuntimeError(f"{api}: LLM executor does not support {api}")
+        return executor
 
     # ------------------------------------------------------------------ #
     # 意图管理（经 capabilities 的 intent_manager）

@@ -97,13 +97,21 @@ ai.set_mock_mode(False)       # 退出 MOCK 模式，重建真实客户端
 流式调用（增量渲染）：
 
 ```ibci
-str full = await ai.stream_call("sys", "MOCK:STREAM:Hello| World|!")
-# stream_call(sys_prompt: str, user_prompt: str) -> Waitable，await 后返回完整文本
-any h = ai.stream_call("sys", "MOCK:STREAM:Hi| there")   # 赋值自动等待（auto-yield）
+class Steamer:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STREAM:Hello| World|!"}
 
-chan c = ai.stream_channel("sys", "MOCK:STREAM:Hello| World|!")
-# stream_channel(sys_prompt: str, user_prompt: str) -> chan，逐块消费
+Steamer s = Steamer()
+str full = await ai.stream_call(s)   # stream_call(target: LLMCallable) -> Waitable，await 后返回完整文本
+any h = ai.stream_call(s)            # 赋值自动等待（auto-yield）
+
+chan c = ai.stream_channel(s)        # stream_channel(target: LLMCallable) -> chan，逐块消费
 ```
+
+> `stream_call` / `stream_channel` 接受任何 **LLMCallable 实例**（行为值或实现
+> `__llm_call__` 的用户 llm 可调用类，见 `docs/syntax/09_llm.md`），经统一装配入口
+> 装配请求后流式执行；字符串形态（`stream_call(sys_prompt, user_prompt)`）已随旧
+> llm 函数机制删除。
 
 ### 11.4 isys 模块
 

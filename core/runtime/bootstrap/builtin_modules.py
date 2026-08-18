@@ -140,18 +140,14 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
         "get_global_intents": MethodMemberSpec(name="get_global_intents", kind="method", type_ref=TypeRef.of("list"), return_type=TypeRef.of("list")),
         "get_current_intent_stack": MethodMemberSpec(name="get_current_intent_stack", kind="method", type_ref=TypeRef.of("list"), return_type=TypeRef.of("list")),
         "stream_call": MethodMemberSpec(name="stream_call", kind="method", type_ref=TypeRef.of("any"), param_types=[
-                TypeRef.of("str"),
-                TypeRef.of("str")
+                TypeRef.of("any")
             ], return_type=TypeRef.of("any"), param_descriptors=[
-                ParamDescriptor(name="sys_prompt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
-                ParamDescriptor(name="user_prompt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+                ParamDescriptor(name="target", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"))
             ]),
         "stream_channel": MethodMemberSpec(name="stream_channel", kind="method", type_ref=TypeRef.of("chan"), param_types=[
-                TypeRef.of("str"),
-                TypeRef.of("str")
+                TypeRef.of("any")
             ], return_type=TypeRef.of("chan"), param_descriptors=[
-                ParamDescriptor(name="sys_prompt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
-                ParamDescriptor(name="user_prompt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+                ParamDescriptor(name="target", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"))
             ]),
         "set_provider": MethodMemberSpec(name="set_provider", kind="method", type_ref=TypeRef.of("void"), param_types=[
                 TypeRef.of("any")

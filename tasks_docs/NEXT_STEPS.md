@@ -160,25 +160,37 @@ retry）。
 > **`__retry__` 装配消费归 P4d**（避免零消费者半接通；发现机制与 `__intent__` 同一通道）；
 > **装配上下文按需引入（当前无消费者，不引入）**。全量 pytest **3035 passed / 1 skipped** 零回归。
 
+> **✅ P4b-3b 流式消费面统一已落地（本 session，unsafe-vibe-dev）**：
+> `stream_call`/`stream_channel` 统一消费 LLMCallable——`assemble_stream_request_cps`
+> （统一流式装配：行为值 → 语义槽装配 / 用户 llm 类 → 统一装配入口含 `__intent__`
+> 改写）+ `_StreamCallableDrive`（帧内 CPS：装配 → IbStreamHandle；stream_call yield
+> 句柄取完整文本（与旧调用点 auto-yield 语义一致），stream_channel 返回 IbChannel
+> 逐块消费）；字符串形态（sys_prompt, user_prompt）**真删除**（3 语言测试迁移 + 行为值
+> 判别测试 + `docs/syntax/11_modules.md` 同步）；ai 模块 `_require_llm_executor` 收敛
+> run_batch/stream 共用。试用 T01/T08 4 个 case 字符串形态残留 = **P4c 66 文件迁移面
+> 登记**。全量 pytest **3036 passed / 1 skipped** 零回归。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b-3b：`stream_call`/`stream_channel` 统一消费 LLMCallable**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 + P4a +
-   P4b 设计定稿 + P4b-2a/2b/2c 统一装配 + **P4b-3a `__intent__` 可选协议方法运行时发现**
-   （全量 3035 零回归）已合入）。
-   设计权威 `tasks_docs/_five_foundation_P1_design.md` §一-§三 + `_code_p4b_assembly.md`（临时，
-   实现后删除），决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P4b-3 剩余部分（P1 §2.4 消费路径统一收尾）**：
-   - `stream_call`/`stream_channel` 统一消费 LLMCallable（当前仍吃字符串，需设计 llm 类
-     流式装配语义，P1 §2.4；字符串形态消费方迁移面评估后处理）
-   - 行为值经统一装配入口路由（sync/CPS 张力见 `_code_p4b_assembly.md` §2.3 已定 CPS
-     装配入口承载）
-   - 装配上下文 `IbLLMCallAssemblyCtx`（只读意图入参）按需引入（用户 `__llm_call__` 需读
-     输入时；当前无消费者）
-   验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
-   **后续子增量**：P4c `llm/llmend` 语法+旧机制全链路删除（决策 4 + 用户追加裁定）+ 全量迁移
-   （36 测试 + 66 示例/试用文件）→ P4d retry 高阶化（决策 5，含 `__retry__` 装配消费）。
-   **待 P4 对齐项**：G5 意图值栈全量重构 + has_llm_call_cap → LLMCallable 协议。
+1. **[主线·当前] P4c：`llm ... llmend` 语法与旧机制全链路删除 + 全量迁移**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 +
+   P4a + P4b 全量 3036 零回归——含 P4b-3a `__intent__` 与 P4b-3b 流式消费面统一，已合入）。
+   设计权威 `tasks_docs/_five_foundation_P1_design.md` §三（删除面与语义迁移映射），决策
+   权威 `_five_foundation_redesign.md` §五（决策 4 + 用户追加裁定：**彻底删除、不兼容、
+   不包袱**）。
+   **本步 = P4c（最大破坏性阶段）**：`llm ... llmend` 语法及旧机制整体删除——
+   载体清单：lexer token（`LLM_DEF/LLM_END/LLM_SYS/LLM_USER/LLM_RETRY/LLM_RETRY_HINT`）、
+   `core/compiler/lexer/llm_scanner.py` 整块、parser `llm_function_declaration` + 顶层
+   `llmretry` 语法糖、AST `IbLLMFunctionDef`、semantic 各 pass `is_llm` 分支、
+   `callable_kind="llm_function"`、`_LLMFunctionMixin`（`llm_executor/_llm_function.py`
+   整文件）、provider `user_sys` 槽。迁移面摸底：**36 个测试文件 + 66 个示例/试用文件**
+   使用 llm 函数机制（含 P4b-3b 遗留的 T01/T08 4 个 stream case）。测试迁移原则：语义随
+   修复演进重构为新语义（非规避缺陷；缺陷复现用例保留）。
+   验证门：全量 pytest 零回归 + 本地 commit（摧毁面大，按子增量推进 + 描述性 commit）。
+   **后续子增量**：P4c（语法+旧机制删除+全量迁移）→ P4d retry 高阶化（决策 5，含
+   `__retry__` 装配消费）→ P5 → P6。
+   **待 P4 对齐项**：G5 意图值栈全量重构 + has_llm_call_cap → LLMCallable 协议 +
+   行为值深程统一装配入口收敛（run_batch/invoke 行为路径，当前经各自入口）。
    **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾）。
    后续 P5 → P6 落地。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；

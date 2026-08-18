@@ -1,9 +1,11 @@
 # 临时任务文档：P4b LLMCallable 装配路径设计定稿
 
-> **性质**：临时任务控制文档（code-workflow §二 设计交付物）。P4b 落地后删除（git 承载）。
+> **性质**：临时任务控制文档（code-workflow §二 设计交付物）。
 > **承接**：`NEXT_STEPS.md` 候选 #1 P4b；设计权威 `_five_foundation_P1_design.md` §2.2/§2.4，
 > 决策权威 `_five_foundation_redesign.md` §五。
-> **状态**：Phase 0-2 调研 + 设计定稿；实现按 §四 落地顺序推进（P4b-1 本轮）。
+> **状态**：**P4b 全部落地（P4b-1 定稿 / P4b-2a 统一装配 / P4b-2b run_batch / P4b-2c 逐项
+> 参数化 / P4b-3a `__intent__` / P4b-3b 流式消费面统一）**；本临时文档待汇报后经用户确认
+> 删除（git 承载历史）。
 
 ## 一、目标与范围
 
