@@ -451,6 +451,19 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   semantic is_llm 分支/`callable_kind="llm_function"`/`_LLMFunctionMixin`/provider `user_sys`
   槽，决策 4 + 用户追加裁定）+ 全量迁移（36+66 面，语义随演进重构测试，不规避缺陷）
   → P4d retry 高阶化（决策 5 帧机制保留 + 语法/策略高阶化）。
+- **五大地基改造 · P4b LLMCallable 装配路径设计定稿（本 session，unsafe-vibe-dev，设计轮）**：
+  P4b 为设计最密集阶段（装配上下文形态/用户 `__llm_call__` 契约/CPS 段求值 vs 同步 receive
+  分派均未钉死）。**设计定稿**落 `tasks_docs/_code_p4b_assembly.md`（临时，实现后删除）：
+  ① 装配上下文 = IBCI 一等对象 `IbLLMCallAssemblyCtx`（`llm_call_ctx` 类型，封装意图三层/
+  输出契约输入/目标模型 + 可写槽 set_user_prompt/add_prompt_slot/set_output_hint/set_model）；
+  ② 用户 `__llm_call__(self, any ctx) -> void` **ctx 变异契约**（LLMCallRequest 非语言类型，
+  用户变异 ctx、内核映射——与 `ai.load_project_config` 配置对象变异同构，机制同构）；
+  ③ 统一装配入口 `assemble_llm_callable_request_cps` = CPS 生成器（用户类经 UserFunctionCall
+  yield 驱动、行为值内核原生装配，差异经协议方法自身承载，禁 if 标志位）；
+  ④ 行为值满足 llm_callable 由内核注册承载（P4b-2）。
+  **落地顺序（勿半接通）**：P4b-1（设计，本轮）→ P4b-2（ctx 对象 + 统一入口 + 用户 llm 类
+  支持 + run_batch 统一）→ P4b-3（__intent__/__retry__ 运行时发现）。验证门与用户侧蓝图
+  （Translator 示例）见设计文档。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

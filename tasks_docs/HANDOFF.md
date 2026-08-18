@@ -184,10 +184,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   `llm_callable`（`__llm_call__` 必需方法 = 能否被 LLM 消费唯一判定）+ 判别测试；纯增量零破坏。
   P4 为巨型阶段，拆子增量轮次推进（P4a→P4b 装配→P4c 语法删除+迁移→P4d retry 高阶化）。
   全量 pytest **3020 passed / 1 skipped** 零回归。
-  **下一 session 开工 = P4b LLMCallable 装配路径**（`assemble_llm_callable_request_cps` 统一装配 +
-  行为值 `__llm_call__` 内核原生实现 + `run_batch`/`stream` 统一消费 LLMCallable 实例），详见
-  `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4c（llm 语法+旧机制删除+全量迁移 36/66 面）→ P4d
-  （retry 高阶化）→ P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
+  **✅ P4b LLMCallable 装配路径设计定稿（本 session，设计轮）**：装配上下文 `IbLLMCallAssemblyCtx`
+  （IBCI 一等对象）+ 用户 `__llm_call__(ctx)` ctx 变异契约 + 统一装配入口
+  `assemble_llm_callable_request_cps`（CPS 生成器）+ 落地顺序；设计文档
+  `tasks_docs/_code_p4b_assembly.md`（临时，实现后删除）。避免半接通——装配契约未钉死不强行实现。
+  **下一 session 开工 = P4b-2 LLMCallable 装配实现**（`IbLLMCallAssemblyCtx` + 统一装配入口 +
+  用户 llm 类支持 + `run_batch` 统一消费 LLMCallable 实例，按 `_code_p4b_assembly.md` §四），详见
+  `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4b-3（可选协议方法发现）→ P4c（llm 语法+旧机制删除+
+  全量迁移 36/66 面）→ P4d（retry 高阶化）→ P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -205,7 +209,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] **✅ 复核并提交工作树内 P2-② 覆层机制未提交增量完成**：`git diff` 复核（含端到端实证）→ 全量 pytest 实跑 2997 零回归 → 描述性 commit → 删除临时文档 `tasks_docs/_code_overlay.md` 与 `tasks_docs/_code_protocol_vtable.md`（git 承载）→ 同步 WORKLOG/NEXT_STEPS/HANDOFF/检查单
 - [x] **✅ P3 D8 snapshot 意图冻结补齐落地**：意图 fork 按 capture_mode 统一 + IbFnCallable.captured_intents + _vm_call_fn_callable 意图生命周期（IT-2/IT-3/IT-4）+ 判别测试 + 死字段清理；全量 3011 零回归
 - [x] **✅ P3 G5/G2 意图一等值切片·可调用值有意契约嵌入落地**：函数/可调用/行为值渲染契约（func <name>(<params>)-><ret> / signature_name），去 Python repr；判别测试 + 既有断言语义演进；全量 3019 零回归
-- [x] **✅ P4a LLMCallable 协议地基落地**：llm_callable 协议注册（__llm_call__ 必需方法 = 能否被 LLM 消费唯一判定）+ 判别测试；全量 3020 零回归；P4 拆子增量（P4b 装配 → P4c 语法删除+迁移 → P4d retry 高阶化），下一步 = P4b
+- [x] **✅ P4a LLMCallable 协议地基落地**：llm_callable 协议注册（__llm_call__ 必需方法 = 能否被 LLM 消费唯一判定）+ 判别测试；全量 3020 零回归
+- [x] **✅ P4b 装配路径设计定稿**：装配上下文 IbLLMCallAssemblyCtx（IBCI 一等对象）+ __llm_call__(ctx) ctx 变异契约 + 统一装配入口（CPS）+ 落地顺序，设计文档 _code_p4b_assembly.md（临时）；下一步 = P4b-2 实现（ctx + 统一入口 + 用户 llm 类 + run_batch 统一）
 
 ---
 
