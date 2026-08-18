@@ -176,6 +176,14 @@
   ② `__validate_prompt__` 是否扩展至内置类型；③ `SEM_PROTOCOL_SIGNATURE` 强度
   （warning vs error）；④ `__to_prompt__`/`__payload_prompt__` 异常回退可观测性复核。
 - **成因**：PROMPT_DESIGN_REVIEW 收敛。
+- **实证补充（2026-08-18，exp/protocol-vtable）**：D2 `to_prompt` 协议**零消费者**
+  （核心无 `satisfies_protocol(...,'to_prompt')` 调用；所有内置类型 satisfies=F 但运行期均经
+  vtable `__to_prompt__` 渲染）——真激活须接 PromptRenderer 协议前置，**归 P5**；
+  D1 `PROMPT_PROTOCOL_SPECS`（4 方法，无 `__payload_prompt__`）与 `BUILTIN_PROTOCOLS` 的
+  `payload_prompt` 双注册表——补 `__payload_prompt__` 会激活 `validate_prompt_protocol_signature`
+  （L565 警告级）对用户声明的校验；`trials/T08/D2-05-payload.ibci` 与 test_multimodal_* mock
+  类有此声明，契约须按 axiom 签名 `(self,value,spec=None)` 定，需核验不产生伪警告——**归 P5**。
+  另：str 已补齐 output_hint（D4，exp 分支 `eb8ecd30`）——PT-DECIDE-3 项②若涉 str 现有基础确认。
 
 ### PT-DECIDE-4 LLM 边界待评估项（BOUNDARY-LLM-2/3）
 

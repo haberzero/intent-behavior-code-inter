@@ -314,6 +314,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
 
 
 
+- **五大地基改造 · 会话交接点最终状态（2026-08-18，exp/protocol-vtable）**：
+  **当前分支 = `exp/protocol-vtable`**（从 `unsafe-vibe-dev` 的 `e8c7944b` 分叉的独立实验分支；
+  P6 协议方法表原型验证用；`unsafe-vibe-dev`/`main` 未触碰；未 push）。本会话完成零回归增量：
+  ① 地基 receive 6 份骨架收敛（`6d933080`，2956）；② P2-① impl 目标扩展到内置类型（`6c3f6c94`，
+  2980，含合成 owned_scope）；③ D4 str output_hint 补齐（`eb8ecd30`，2980）；④ D9 is_callable_instance
+  死字段清理（`6fd2cefc`，2980）。**当前 exp 分支全量基线 2980 passed / 1 skipped**。
+  **自主重排序（用户认可自主）**：P2 剩余②覆层机制/③to_prompt 激活/④_dispatch 查表与 P5 prompt
+  类型类化、P6 protocol_vtable 数据结构深度纠缠（D2/D1 实证归 P5）——protocol_vtable 数据结构
+  （P6 核心）优先，作为后续落点；不含半接通/双通道。
+  **剩余任务接管**：protocol_vtable 数据结构（决策 1 B，按形状修正：receive 按消息名查 _dispatch_*）
+  → P2-② 临时覆层机制（决策 2，影子条目默认不生效/flag 启用/作用域化）→ D2 to_prompt 激活 + P5
+  prompt 类型类化（D1 双注册表收敛/补 __payload_prompt__）→ P3（意图一等值 G5 + snapshot 冻结 D8）
+  → P4（llm 可调用类内核 + retry 高阶化 + llm/llmend 彻底删除）→ P6 落地。每步全量 pytest 零回归
+  + 复核 + 本地 commit；确认低风险可 merge `unsafe-vibe-dev`。见 `NEXT_STEPS.md` 下一步候选 #1。
+  **工作过程自查**：本会话我在目标轮次多次出现思维链退化（长叙述、迟迟不真正发工具调用），
+  消耗大量上下文产出骤降——下个 session 接手时应**短促化工具调用、主动及时暴露此类退化**，
+  避免空转到上下文耗尽。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

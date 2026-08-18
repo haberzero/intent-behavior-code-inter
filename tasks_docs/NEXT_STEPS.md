@@ -59,25 +59,45 @@ retry）。
 **下一 session 开工 = P1 设计定稿**（决策输入已收敛，见
 `_five_foundation_redesign.md` §六 交接清单）——详见下一步候选 #1。
 
-> **P1 设计定稿已完成（本 session 追加）**：用户明确 `llm ... llmend` 语法**彻底删除**且
+> **P1 设计定稿已完成（上一 session）**：用户明确 `llm ... llmend` 语法**彻底删除**且
 > **关联旧机制一并彻底删除**（`__sys__/__user__/__llmretry__` 段、`IbLLMFunctionDef`、
 > `callable_kind="llm_function"`、`_LLMFunctionMixin`、provider `user_sys` 槽等；不保留、
 > 不兼容、不包袱）。P1 定稿已产出 `tasks_docs/_five_foundation_P1_design.md`（§一-§九，
-> 7 项开工输入全部定稿）。**下一 session 开工 = P2 实现**（装饰壳体系地基：impl 目标放宽 +
-> 临时覆层机制 + 函数实例 prompt 协议化 + `_dispatch_<dunder>` 收敛）。
+> 7 项开工输入全部定稿）。
+
+> **P2 已在独立分支 `exp/protocol-vtable` 取得进展（本 session，未合入）**：当前**当前分支 =
+> `exp/protocol-vtable`**（从 `unsafe-vibe-dev` 的 `e8c7944b` 分叉）。已完成的零回归增量：
+> - P2-① retroactive impl 目标扩展到内置类型（`impl P for int` 编译/运行/协议满足三环闭环，
+>   合成 owned_scope 复用 F2 机制；commit `6c3f6c94`）；
+> - D4 str 补齐 output_hint（`has_output_hint_cap` + `__outputhint_prompt__`，与 int/list/dict
+>   一致；commit `eb8ecd30`）；
+> - D9 死字段 `is_callable_instance` 清理（实证编译期不赋 True，删死分支；commit `6fd2cefc`）。
+> 另有地基增量：收敛 receive 6 份重复分派骨架为单一 `_dispatch_protocol_message`（D5 机制
+> 同构；commit `6d933080`）。当前 exp 分支全量基线 **2980 passed / 1 skipped**。
+> **自主重排序（用户认可自主决定，2026-08-18）**：P2 剩余的②覆层机制/③to_prompt 激活/④
+> `_dispatch` 查表与 P5 prompt 类型类化、P6 protocol_vtable 数据结构**深度纠缠**（D2 to_prompt
+> 零消费者、D1 payload_prompt 双注册表均实证属 P5；协议方法表是共享地基）——为免半接通/
+> 双通道（质量红线），**protocol_vtable 数据结构（P6 核心）优先**，作为 P2-②/P2③/P5 的落点。
+> **下一 session 开工 = 接续 exp/protocol-vtable 分支的 protocol_vtable 数据结构**，见下一步
+> 候选 #1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 五大地基改造 · P2 实现（下一 session 开工）**：以 `tasks_docs/_five_foundation_P1_design.md`
-   为设计规格（§一-§九 已定稿）、`tasks_docs/_five_foundation_redesign.md` 为决策/调研权威
-   （§一-§五）。
-   装饰壳体系地基（P2 主题）：① `visit_IbImplDef` 目标放宽（内置类型放行评估 + 跨模块）；
-   ② **内置类型临时覆层机制语法/AST/语义落点**（决策 2，P1 §四：声明语法/作用域 flag/影子
-   条目/告警）；③ 函数实例默认 prompt 呈现协议化（`to_prompt` 死条目激活）；④ `_dispatch_<dunder>`
-   收敛（决策 1 B 方向，P1 §五 `protocol_vtable` 数据形态为 P2/P5/P6 共享地基）。
-   验证门：全量 pytest 零回归 + 本地 commit。后续 P3（意图一等值 + snapshot 冻结补齐）→
-   P4（llm 可调用类内核 + retry 高阶化 + llm/llmend 语法与旧机制彻底删除）→ P5（prompt 协议族
-   类型类化 + 能力公理收尾）→ P6（per-IbClass 协议方法表落地），见 P1 定稿 §八。
+1. **[主线·当前] 接续 `exp/protocol-vtable` 分支 · protocol_vtable 数据结构（P6 核心，下一 session 开工）**：
+   **当前分支 = `exp/protocol-vtable`**（独立分支，P6 改动面大走独立分支原型验证的政策；未合入
+   `unsafe-vibe-dev`）。已完成 P2-①（impl 内置目标）、D4（str output_hint）、D9（is_callable_instance
+   清理）、地基（receive 骨架收敛）——均 2980 零回归。设计规格 `tasks_docs/_five_foundation_P1_design.md`，
+   决策权威 `_five_foundation_redesign.md` §一-§五。
+   下一步（按序）：
+   - **protocol_vtable 数据结构（P6 核心，决策 1 B）**：per-IbClass 协议方法表/分派表；P1 §五
+     数据形态 + **形状修正**（WORKLOG：receive 按消息名查 `_dispatch_*` 实例方法，非协议名键；
+     `dunder_names()` 是扁平并集、丢方法→协议归属）；接入已收敛的 `_dispatch_protocol_message`。
+   - **P2-② 临时覆层机制（决策 2）**：影子条目（默认不生效/flag 启用/作用域化）挂在 protocol_vtable 上。
+   - **P2③ D2 to_prompt 激活 + P5 prompt 类型类化（D1 双注册表收敛/补 __payload_prompt__）**：实证
+     与 protocol_vtable/prompt 协议前置纠缠，归 P5；勿在 P2 半接通。
+   - 后续 P3（意图一等值 G5 + snapshot 冻结补齐 D8）→ P4（llm 可调用类内核 + retry 高阶化 +
+     llm/llmend 彻底删除）→ P5 → P6 落地。
+   验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
