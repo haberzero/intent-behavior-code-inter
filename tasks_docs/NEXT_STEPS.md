@@ -73,26 +73,33 @@ retry）。
 >   一致；commit `eb8ecd30`）；
 > - D9 死字段 `is_callable_instance` 清理（实证编译期不赋 True，删死分支；commit `6fd2cefc`）。
 > 另有地基增量：收敛 receive 6 份重复分派骨架为单一 `_dispatch_protocol_message`（D5 机制
-> 同构；commit `6d933080`）。当前 exp 分支全量基线 **2980 passed / 1 skipped**。
+> 同构；commit `6d933080`）。当前 exp 分支全量基线 **2985 passed / 1 skipped**。
 > **自主重排序（用户认可自主决定，2026-08-18）**：P2 剩余的②覆层机制/③to_prompt 激活/④
 > `_dispatch` 查表与 P5 prompt 类型类化、P6 protocol_vtable 数据结构**深度纠缠**（D2 to_prompt
 > 零消费者、D1 payload_prompt 双注册表均实证属 P5；协议方法表是共享地基）——为免半接通/
 > 双通道（质量红线），**protocol_vtable 数据结构（P6 核心）优先**，作为 P2-②/P2③/P5 的落点。
 > **下一 session 开工 = 接续 exp/protocol-vtable 分支的 protocol_vtable 数据结构**，见下一步
 > 候选 #1。
+>
+> > **protocol_vtable 数据结构已落地（本 session）**：`ProtocolSlot`（消息名槽，native 按值
+> > Python 类解析 + 覆层影子条目默认不参与分派）+ `IbClass.protocol_vtable`（消息名键，惰性
+> > 建槽）+ `_dispatch_protocol_message` 查表分派（D5 消除）；全量 2985 零回归 + 判别性测试。
+> > **下一步 = P2-② 临时覆层机制**（决策 2：覆层声明语法/AST/语义落点，影子条目启用接线、
+> > 作用域 flag、告警）——见候选 #1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 接续 `exp/protocol-vtable` 分支 · protocol_vtable 数据结构（P6 核心，下一 session 开工）**：
+1. **[主线·当前] 接续 `exp/protocol-vtable` 分支 · P2-② 临时覆层机制（决策 2，下一 session 开工）**：
    **当前分支 = `exp/protocol-vtable`**（独立分支，P6 改动面大走独立分支原型验证的政策；未合入
-   `unsafe-vibe-dev`）。已完成 P2-①（impl 内置目标）、D4（str output_hint）、D9（is_callable_instance
-   清理）、地基（receive 骨架收敛）——均 2980 零回归。设计规格 `tasks_docs/_five_foundation_P1_design.md`，
-   决策权威 `_five_foundation_redesign.md` §一-§五。
+   `unsafe-vibe-dev`）。已完成零回归增量：protocol_vtable 数据结构（`ProtocolSlot` + `IbClass.
+   protocol_vtable` 消息名键 + `_dispatch_protocol_message` 查表分派，2985）、P2-①（impl 内置
+   目标）、D4（str output_hint）、D9（is_callable_instance 清理）、地基（receive 骨架收敛）。
+   设计规格 `tasks_docs/_five_foundation_P1_design.md`，决策权威 `_five_foundation_redesign.md` §一-§五。
    下一步（按序）：
-   - **protocol_vtable 数据结构（P6 核心，决策 1 B）**：per-IbClass 协议方法表/分派表；P1 §五
-     数据形态 + **形状修正**（WORKLOG：receive 按消息名查 `_dispatch_*` 实例方法，非协议名键；
-     `dunder_names()` 是扁平并集、丢方法→协议归属）；接入已收敛的 `_dispatch_protocol_message`。
-   - **P2-② 临时覆层机制（决策 2）**：影子条目（默认不生效/flag 启用/作用域化）挂在 protocol_vtable 上。
+   - **P2-② 临时覆层机制（决策 2，protocol_vtable 影子条目已就绪）**：覆层声明语法/AST/语义
+     落点（`impl Overlay for int` 记影子表而非原生 vtable）；作用域化启用 flag（P1 推荐作用域块
+     `with overlay(...)`）；影子条目默认不参与分派（`ProtocolSlot.overlay`/`overlay_enabled` 已
+     留位，本步启用接线）；告警设计（存在未启用提示 / 启用生效行为告警）。
    - **P2③ D2 to_prompt 激活 + P5 prompt 类型类化（D1 双注册表收敛/补 __payload_prompt__）**：实证
      与 protocol_vtable/prompt 协议前置纠缠，归 P5；勿在 P2 半接通。
    - 后续 P3（意图一等值 G5 + snapshot 冻结补齐 D8）→ P4（llm 可调用类内核 + retry 高阶化 +

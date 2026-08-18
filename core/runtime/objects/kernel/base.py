@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Mapping, Tuple, FrozenSet
+from typing import Dict, Any, List, Optional, Mapping, Tuple, FrozenSet, Callable, Type
 
 from core.kernel.issue import InterpreterError
 from core.kernel.spec.type_ref import TypeRef as _TypeRef
@@ -9,6 +9,43 @@ from core.base.diagnostics.codes import (
 )
 
 from ..ib_type_mapping import register_ib_type
+
+
+class ProtocolSlot:
+    """per-IbClass 协议方法槽：消息名 → 原生处理器 + 覆层影子条目（决策 1 B）。
+
+    - ``native``：按**值 Python 实现类**惰性解析并记忆化的 ``_dispatch_<name>``
+      处理器（形状修正关键约束——多态安全）。同一 IbClass 可宿主多个值 Python
+      类且各自覆写 ``_dispatch_*``（``callable`` → ``IbFunction`` 族落
+      ``IbObject._dispatch_call`` 且 ``IbSuperProxy`` 自有；``Type`` → ``IbClass``
+      且 ``HostClassBinding``；类对象与其实例共用 ib_class 但分派语义不同），
+      故处理器必须按 ``type(value)`` 解析而非按 IbClass 静态烘焙单一处理器。
+    - ``overlay`` / ``overlay_enabled``：覆层影子条目（决策 2，默认**不参与**
+      分派；P2-② 启用接线）。启用后优先级高于原生处理器。
+    """
+
+    __slots__ = ("message", "_native_by_class", "overlay", "overlay_enabled")
+
+    def __init__(self, message: str):
+        self.message = message
+        self._native_by_class: Dict[Type, Optional[Callable]] = {}
+        self.overlay: Optional[Callable] = None
+        self.overlay_enabled: bool = False
+
+    def native_for(self, value: 'IbObject') -> Optional[Callable]:
+        """按值 Python 类解析原生处理器（惰性记忆化；无处理器返回 None）。"""
+        value_cls = type(value)
+        if value_cls not in self._native_by_class:
+            self._native_by_class[value_cls] = getattr(
+                value_cls, f"_dispatch_{self.message.strip('_')}", None
+            )
+        return self._native_by_class[value_cls]
+
+    def active_handler(self, value: 'IbObject') -> Optional[Callable]:
+        """当前生效处理器：覆层已启用 → overlay；否则按值类解析 native。"""
+        if self.overlay_enabled and self.overlay is not None:
+            return self.overlay
+        return self.native_for(value)
 
 
 @register_ib_type("any")
@@ -61,22 +98,29 @@ class IbObject:
         raise AttributeError(f"Object of type '{self.ib_class.name}' has no method '{message}'")
 
     def _dispatch_protocol_message(self, message: str, args: List['IbObject']) -> Optional['IbObject']:
-        """统一协议消息分派骨架（单一权威，替代各子类重复的 getattr 探测拷贝）。
+        """统一协议消息分派骨架（单一权威，per-IbClass 协议方法表驱动）。
 
-        协议方法消息（``message ∈ 协议注册表方法集``）→ 查命名处理器
-        ``_dispatch_<name>``（类型感知、可覆写）；处理器返回 None 表示无特殊
-        行为，继续普通路由。返回 None 表示无协议处理器命中或处理器放行继续路由。
+        协议方法消息（``message ∈ 协议注册表方法集``）→ 查 per-IbClass 协议方法表
+        ``protocol_vtable``（消息名键；决策 1 B）；槽内按值 Python 实现类解析原生
+        ``_dispatch_<name>`` 处理器（多态安全，记忆化消除逐次 getattr 能力探测——
+        D5）。处理器返回 None 表示无特殊行为，继续普通路由。非协议消息 / 表未
+        命中 → None。
 
-        本方法是 D5（能力探测式 getattr 分派）的**集中点**：全部子类（模块/
-        代理/可调用/Optional 等）共用此骨架，消除 6 份同构复制（机制同构，
-        design-philosophy §四）。后续 protocol_vtable 落地时替换为查表。
+        本方法是 D5（能力探测式 getattr 分派）与 6 份同构拷贝的**集中落点**
+        （机制同构，design-philosophy §四）：全部子类（模块/代理/可调用/
+        Optional 等）共用此骨架，行为由协议方法表数据驱动。
         """
-        if message in self._protocol_message_names():
-            handler = getattr(self, f"_dispatch_{message.strip('_')}", None)
-            if handler is not None:
-                result = handler(message, args)
-                if result is not None:
-                    return result
+        if message not in self._protocol_message_names():
+            return None
+        slot = self.ib_class.protocol_slot(message)
+        if slot is None:
+            return None
+        handler = slot.active_handler(self)
+        if handler is None:
+            return None
+        result = handler(self, message, args)
+        if result is not None:
+            return result
         return None
 
     def _protocol_message_names(self) -> 'FrozenSet[str]':

@@ -148,13 +148,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **P1 设计定稿已完成**（`tasks_docs/_five_foundation_P1_design.md` §一-§九，7 项开工输入全部
   定稿；含用户追加裁定：`llm ... llmend` 语法**彻底删除**且关联旧机制一并删除、不兼容不包袱）；
   **P2 已在独立分支 `exp/protocol-vtable` 取得进展**（未合入）：已完成零回归增量 =
-  地基（receive 6 份骨架收敛为 `_dispatch_protocol_message`，`6d933080`）+ P2-①（impl 目标扩展
-  到内置类型，`6c3f6c94`）+ D4（str output_hint 补齐，`eb8ecd30`）+ D9（is_callable_instance
-  死字段清理，`6fd2cefc`）。当前分支全量基线 **2980 passed / 1 skipped**。
+  **protocol_vtable 数据结构**（`ProtocolSlot` + `IbClass.protocol_vtable` 消息名键 +
+  `_dispatch_protocol_message` 查表分派；2985 + 判别性测试）+ 地基（receive 6 份骨架收敛为
+  `_dispatch_protocol_message`，`6d933080`）+ P2-①（impl 目标扩展到内置类型，`6c3f6c94`）+
+  D4（str output_hint 补齐，`eb8ecd30`）+ D9（is_callable_instance 死字段清理，`6fd2cefc`）。
+  当前分支全量基线 **2985 passed / 1 skipped**。
   **自主重排序（用户认可自主决定，2026-08-18）**：P2 剩余②覆层机制/③to_prompt 激活与 P5 prompt
   类型类化、P6 protocol_vtable 数据结构深度纠缠（D2/D1 实证属 P5，协议方法表是共享地基）——
-  为免半接通/双通道，**protocol_vtable 数据结构（P6 核心）优先**，作为后续落点。
-  **下一 session 开工 = 接续 `exp/protocol-vtable` 分支的 protocol_vtable 数据结构**，详见
+  为免半接通/双通道，**protocol_vtable 数据结构（P6 核心）优先**已落地。
+  **下一 session 开工 = P2-② 临时覆层机制**（决策 2：覆层声明语法/AST/语义落点 + 作用域 flag +
+  影子条目启用接线 + 告警；`ProtocolSlot.overlay`/`overlay_enabled` 已留位），详见
   `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
@@ -169,8 +172,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] 全程本地 commit、禁 push（除非用户显式授权）
 - [x] **当前分支 = `exp/protocol-vtable`**（接续前先 `git checkout exp/protocol-vtable`；核实
   `unsafe-vibe-dev`/`main` 未触碰）
-- [x] **查 `git log --oneline e8c7944b..HEAD`**（exp 分支独有提交：3 个代码基本增量 + WORKLOG 记录）
-- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，约 2980 passed）
+- [x] **查 `git log --oneline e8c7944b..HEAD`**（exp 分支独有提交：4 个代码基本增量 + WORKLOG 记录）
+- [x] 当前基线实跑：`~/miniconda3/envs/ibci/bin/python -m pytest tests/`（以实跑为准，约 2985 passed）
 
 ---
 

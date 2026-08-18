@@ -314,6 +314,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
 
 
 
+- **五大地基改造 · protocol_vtable 数据结构落地（2026-08-18，exp/protocol-vtable）**：
+  决策 1 B（per-IbClass 协议方法表）核心数据结构落地，全量 2985（+5 判别性测试）零回归。
+  **实现**：① `ProtocolSlot`（base.py）：消息名槽（native 原生处理器 + overlay/overlay_enabled
+  覆层影子条目，默认不参与分派）；native 按**值 Python 实现类**（`type(value)`）惰性解析并记忆化
+  `_dispatch_<name>`——**多态安全实证约束**：`callable` 类宿主 `IbFunction` 族（MRO 落
+  `IbObject._dispatch_call`）且 `IbSuperProxy`（自有）、`Type` 类宿主 `IbClass` 且
+  `HostClassBinding`、类对象与其实例共用 ib_class（自指）——按 IbClass 静态烘焙单一处理器会破坏
+  super proxy / HostClassBinding / 类对象分派；② `IbClass.__slots__` 增 `protocol_vtable`
+  （消息名键，惰性建槽：仅协议注册表方法集建槽）+ `protocol_slot(message)` 查表；③
+  `_dispatch_protocol_message` 改为查表分派（`active_handler`：覆层启用→overlay，否则按值类
+  native；返回 None 继续普通 vtable 路由），消除逐次 getattr 能力探测（D5）。
+  **设计决策**：protocol_slot **不做父链查找**——native 继承由值 Python 类 MRO 承担（per-IbClass
+  父链冗余），覆层影子条目挂声明类自身（父链查找会误挂到 Object 祖先导致覆层全局泄漏，P2-②
+  若需继承在其机制内显式设计）。判别性测试：协议消息名键建槽/非协议落 vtable、callable 多态
+  native 解析、覆层默认不参与分派、消息级协议语义保持（super proxy/类特化/Optional 委托/
+  用户 __call__ CPS）。临时文档 `tasks_docs/_code_protocol_vtable.md`（落地后删除）。
+
 - **五大地基改造 · 会话交接点最终状态（2026-08-18，exp/protocol-vtable）**：
   **当前分支 = `exp/protocol-vtable`**（从 `unsafe-vibe-dev` 的 `e8c7944b` 分叉的独立实验分支；
   P6 协议方法表原型验证用；`unsafe-vibe-dev`/`main` 未触碰；未 push）。本会话完成零回归增量：

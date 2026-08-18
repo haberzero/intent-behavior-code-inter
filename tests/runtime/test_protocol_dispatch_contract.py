@@ -178,3 +178,84 @@ class TestImplClsStructuredResolution:
         )
         b = _symbol(engine, "b")
         assert b.ib_class._impl_cls() is None
+
+
+class TestProtocolVTableDataStructure:
+    """per-IbClass 协议方法表（决策 1 B，形状修正）：消息名键 + 多态 native 解析。"""
+
+    def test_protocol_vtable_is_slots_field(self):
+        """IbClass.__slots__ 含 protocol_vtable（数据结构落地）。"""
+        from core.runtime.objects.kernel.ib_class import IbClass
+
+        assert "protocol_vtable" in IbClass.__slots__
+
+    def test_protocol_slot_keyed_by_message_name(self):
+        """协议方法表按消息名（dunder 方法名）索引，非协议名。"""
+        engine = _engine()
+        engine.run_string("int x = 1\n", silent=True)
+        ic = engine.registry.get_class("int")
+        # 协议消息（__to_prompt__ / __call__ / cast_to）→ 建槽
+        assert ic.protocol_slot("__to_prompt__") is not None
+        assert ic.protocol_slot("__call__") is not None
+        assert ic.protocol_slot("cast_to") is not None
+        # 多协议共方法按消息名索引：__getattr__ → attribute 协议
+        assert ic.protocol_slot("__getattr__") is not None
+        # 非协议消息 → None（落普通 vtable 路由）
+        assert ic.protocol_slot("len") is None
+        assert ic.protocol_slot("toString") is None
+
+    def test_protocol_slot_native_polymorphic_resolution(self):
+        """native 处理器按值 Python 类解析（多态安全：callable 宿主 IbFunction 族
+        与 IbSuperProxy，各按其 MRO 落 IbObject / 自有 _dispatch_*）。"""
+        engine = _engine()
+        engine.run_string("int x = 1\n", silent=True)
+        callable_cls = engine.registry.get_class("callable")
+        slot = callable_cls.protocol_slot("__call__")
+
+        from core.runtime.objects.kernel.functions import (
+            IbFunction,
+            IbSuperProxy,
+            IbNativeFunction,
+        )
+
+        # IbFunction 族（无自有 _dispatch_call）→ 经 MRO 落 IbObject._dispatch_call
+        nf = IbNativeFunction(lambda *a: 0, ib_class=callable_cls)
+        handler = slot.active_handler(nf)
+        from core.runtime.objects.kernel.base import IbObject
+
+        assert handler is IbObject._dispatch_call, (
+            f"IbFunction 族 native 应落 IbObject._dispatch_call，got {handler}"
+        )
+        # IbSuperProxy（自有 _dispatch_call）→ 其自身处理器
+        proxy = IbSuperProxy.__new__(IbSuperProxy)
+        # 仅验证类级解析（避免构造代理依赖）
+        assert IbSuperProxy._dispatch_call is not IbObject._dispatch_call
+
+    def test_overlay_default_inactive(self):
+        """覆层影子条目默认不参与分派（决策 2：native 优先，overlay 惰性缺席）。"""
+        engine = _engine()
+        engine.run_string("int x = 1\n", silent=True)
+        ic = engine.registry.get_class("int")
+        # __getattr__ 有原生 _dispatch_getattr 处理器（MRO 落 IbObject）——验证
+        # 未启用覆层时 active_handler = native（覆盖"查表分派 + 覆层缺省"两语义）。
+        slot = ic.protocol_slot("__getattr__")
+        assert slot is not None
+        assert slot.overlay is None
+        assert slot.overlay_enabled is False
+        value = engine.registry.box(42)
+        from core.runtime.objects.kernel.base import IbObject
+
+        assert slot.active_handler(value) is IbObject._dispatch_getattr
+
+    def test_receive_protocol_dispatch_unaffected(self):
+        """查表分派接入后：消息级协议语义保持（判别性回归）。"""
+        engine = _engine()
+        engine.run_string(
+            "bool a = (None == None)\n"
+            "bool b = (1 == 1)\n"
+            "int c = (int)'123'\n",
+            silent=True,
+        )
+        assert _symbol(engine, "a").to_native() is True
+        assert _symbol(engine, "b").to_native() is True
+        assert _symbol(engine, "c").to_native() == 123

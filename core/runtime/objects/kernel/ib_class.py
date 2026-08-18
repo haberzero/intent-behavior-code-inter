@@ -6,7 +6,7 @@ from core.kernel.spec import IbSpec, TypeKind
 from core.kernel.spec.type_ref import specialization_key
 
 from ..ib_type_mapping import register_ib_type, get_ib_implementation
-from .base import IbObject, IbValue
+from .base import IbObject, IbValue, ProtocolSlot
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import IExecutionContext
@@ -153,7 +153,7 @@ class IbClass(IbObject):
     Everything is an object — classes themselves are objects.
     Holds the IbSpec (pure-data type description) and the runtime method vtable.
     """
-    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', '_spec', 'auto_init_fields')
+    __slots__ = ('name', 'methods', 'parent', 'default_fields', 'member_types', 'registry', '_spec', 'auto_init_fields', 'protocol_vtable')
 
     def __init__(self, name: str, parent: Optional['IbClass'] = None, registry: Optional[KernelRegistry] = None):
         if not registry:
@@ -171,6 +171,10 @@ class IbClass(IbObject):
         # 共享实现 _auto_init_impl，参数数量校验由 _init_expected_arity（成员表
         # spec.members['__init__'] 声明）单一权威承担。
         self.auto_init_fields: Optional[List[str]] = None
+        # per-IbClass 协议方法表（决策 1 B）：消息名 → ProtocolSlot（消息名键，
+        # 见 WORKLOG 形状修正——receive 按消息名查 _dispatch_* 实例方法，非协议名键）。
+        # 惰性建槽：仅协议消息在首次分派时登记，避免全量预填。
+        self.protocol_vtable: Dict[str, ProtocolSlot] = {}
 
     @property
     def spec(self) -> Optional[IbSpec]:
@@ -202,6 +206,28 @@ class IbClass(IbObject):
             return self.methods[name]
         if self.parent:
             return self.parent.lookup_method(name)
+        return None
+
+    def protocol_slot(self, message: str) -> Optional[ProtocolSlot]:
+        """查 per-IbClass 协议方法表（消息名键；惰性建槽）。
+
+        仅协议消息（协议注册表方法集）在本类建槽并返回；非协议消息返回 None
+        （落普通 vtable 路由）。**不做父链查找**：
+        - native 处理器继承由值 Python 类 MRO 承担（``_dispatch_<name>`` 沿
+          ``type(value)`` 解析，见 ``ProtocolSlot.native_for``），per-IbClass
+          父链对 native 是冗余。
+        - 覆层（P2-②）影子条目挂在**声明类自身**的槽上（per-IbClass 归属），
+          父链继承若需要将在覆层机制内显式设计，避免槽被父链查找误挂到
+          ``Object`` 等祖先导致覆层全局泄漏（本单元实证约束）。
+        """
+        slot = self.protocol_vtable.get(message)
+        if slot is not None:
+            return slot
+        spec_reg = self.registry.get_metadata_registry()
+        if spec_reg is not None and message in spec_reg.dunder_names():
+            slot = ProtocolSlot(message)
+            self.protocol_vtable[message] = slot
+            return slot
         return None
 
     def is_assignable_to(self, other: 'IbClass') -> bool:
