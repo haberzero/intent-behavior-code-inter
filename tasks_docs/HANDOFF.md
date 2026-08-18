@@ -142,8 +142,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   高阶化；⑥ P1-P6 本主线、P7/P8 远期。
   **调研/可行性/规划/决策已全部产出**（临时文档 `tasks_docs/_llm_callable_redesign.md` +
   `tasks_docs/_five_foundation_redesign.md`：交接清单 6 项补充调研全部完成 + 五大地基现状评估 +
-  总路线 P1-P9 + 决策 §五 + P1 开工输入 §六）；**下一 session 开工 = P1 设计定稿**，详见
-  `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线（PT-DEBT / VISION-3 / 文档）。
+  总路线 P1-P9 + 决策 §五 + P1 开工输入 §六）；
+  **P1 设计定稿已完成**（`tasks_docs/_five_foundation_P1_design.md` §一-§九，7 项开工输入全部
+  定稿；含用户追加裁定：`llm ... llmend` 语法**彻底删除**且关联旧机制一并删除、不兼容不包袱）；
+  **下一 session 开工 = P2 实现**，详见 `NEXT_STEPS.md` 下一步候选 #1。次后按需推进支线
+  （PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 

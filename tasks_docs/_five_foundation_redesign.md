@@ -420,6 +420,11 @@ llm 可调用类实例的语法糖。llm 函数（`llm ... llmend`）迁移为�
 **开工起点**：`NEXT_STEPS.md` 下一步候选 #1（P1 设计定稿）。**本文件 §一-§五 为唯一调研与
 决策权威**；`_llm_callable_redesign.md` 为方法族草案（§三.1 LLMCallable 协议方法族）承接。
 
+> **P1 设计定稿已完成**：`tasks_docs/_five_foundation_P1_design.md`（§一-§九 定稿全部 7 项
+> 开工输入 + 用户追加裁定：llm 函数语法/旧机制彻底删除、不兼容不包袱）。本文件 §一-§五
+> 决策正文**不修改**（用户拍板权威）；P1 定稿在其基础上深化落地。后续 P2-P6 实现以
+> `_five_foundation_P1_design.md` 为设计规格、本文件为决策/调研权威。
+
 **P1 设计定稿必须覆盖的决策输入**（缺一不可）：
 1. `LLMCallable` 协议方法族定稿（方法名/签名/与 LLMCallRequest 承载/意图改写 `__intent__`/
    retry `__retry__`）；

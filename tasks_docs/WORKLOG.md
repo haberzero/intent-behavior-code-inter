@@ -268,6 +268,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   帧机制保留 + 语法/策略高阶化**；⑥ **P1-P6 本主线，P7/P8 远期**（类型理论加固/函数式组合子
   登记 PENDING_TASKS 远期，P1-P6 稳定后重估）。**交接**：下一 session 开工 = P1 设计定稿，
   决策输入清单见 `_five_foundation_redesign.md` §六。
+- **llm 函数语法/旧机制彻底删除（2026-08-18，本 session，用户追加裁定）**：用户再次明确——
+  `llm ... llmend` 语法**彻底删除**，且**与 llm 函数语法相关的旧机制一并彻底删除**
+  （`__sys__`/`__user__`/`__llmretry__` 段、顶层 `llmretry` 语法糖、`IbLLMFunctionDef`、
+  `callable_kind="llm_function"`、`_LLMFunctionMixin`、provider `user_sys` 槽等）。
+  **不保留、不考虑历史兼容、不考虑历史包袱**——非语法糖映射、非过渡双轨。语义由统一
+  LLMCallable 协议覆盖。此裁定细化决策 4，为 P1 设计定稿的最高约束。
+- **五大地基改造 · P1 设计定稿完成（2026-08-18，本 session，只写设计文档无代码改动）**：
+  产出 `tasks_docs/_five_foundation_P1_design.md`（§一-§九），逐项定稿 P1 开工输入 7 项：
+  ① `LLMCallable` 协议方法族（`__llm_call__` 必需 / `__intent__`/`__retry__` 可选，required
+  vs optional 分组）+ LLMCallRequest 承载；② llm 函数语法彻底删除范围（lexer/parser/AST/
+  semantic/runtime/mixin/provider 全链路）+ 语义迁移映射表 + 全量迁移清单；③ 临时覆层机制
+  形态（声明语法/作用域 flag/影子条目/告警）；④ per-IbClass 协议方法表全局数据形态
+  （`protocol_vtable` + `ProtocolSlot` + receive 前置查表）；⑤ snapshot 意图冻结补齐
+  （意图冻结并入 capture_mode，移除 body_is_behavior 特判）；⑥ retry 高阶化边界（帧机制
+  保留 + 语法/策略高阶化）；⑦ 破坏面评估 + P2-P6 分阶段迁移路径与验证门。P2-P6 实现以
+  `_five_foundation_P1_design.md` 为设计规格、`_five_foundation_redesign.md` 为决策/调研
+  权威。已同步 `_five_foundation_redesign.md` §六 指针。
 
 ---
 

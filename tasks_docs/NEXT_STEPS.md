@@ -56,20 +56,28 @@ retry）。
   补齐（纯 snapshot lambda 也冻结意图）；④ `llm ... llmend` 语法**彻底删除**（非语法糖，全量
   迁移）；⑤ retry 帧机制保留 + 语法/策略高阶化；⑥ P1-P6 本主线，P7/P8 远期。
 
-**下一 session 开工 = 五大地基改造 · P1 设计定稿**（决策输入已收敛，见
+**下一 session 开工 = P1 设计定稿**（决策输入已收敛，见
 `_five_foundation_redesign.md` §六 交接清单）——详见下一步候选 #1。
+
+> **P1 设计定稿已完成（本 session 追加）**：用户明确 `llm ... llmend` 语法**彻底删除**且
+> **关联旧机制一并彻底删除**（`__sys__/__user__/__llmretry__` 段、`IbLLMFunctionDef`、
+> `callable_kind="llm_function"`、`_LLMFunctionMixin`、provider `user_sys` 槽等；不保留、
+> 不兼容、不包袱）。P1 定稿已产出 `tasks_docs/_five_foundation_P1_design.md`（§一-§九，
+> 7 项开工输入全部定稿）。**下一 session 开工 = P2 实现**（装饰壳体系地基：impl 目标放宽 +
+> 临时覆层机制 + 函数实例 prompt 协议化 + `_dispatch_<dunder>` 收敛）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 五大地基改造 · P1 设计定稿（下一 session 开工）**：以 `tasks_docs/_five_foundation_redesign.md`
-   为唯一调研与决策权威（§一-§五），按 §六 交接清单逐项定稿：① `LLMCallable` 协议方法族（方法名/
-   签名/与 LLMCallRequest 承载/意图改写 `__intent__`/retry `__retry__`）；② llm 函数语法
-   （`llm ... llmend`）彻底删除的迁移映射表（`__sys__/__user__/__llmretry__` → LLMCallable 方法）
-   + 全量迁移清单（examples/trials/tests）；③ **内置类型临时覆层机制形态定稿（决策 2）**：声明
-   语法、启用 flag 作用域语义、与 per-IbClass 协议方法表（决策 1 B）的数据形态、告警设计；
-   ④ per-IbClass 协议方法表全局数据形态（决策 1 B，P2/P5/P6 共享地基）；⑤ snapshot 意图冻结
-   补齐语义（决策 3）并入捕获策略参数化；⑥ retry 高阶化边界（决策 5）；⑦ 破坏面评估 + P2-P6
-   分阶段迁移路径。产出设计定稿后进入实现（P2-P6 分阶段，P7/P8 远期，见 §四）。
+1. **[主线·当前] 五大地基改造 · P2 实现（下一 session 开工）**：以 `tasks_docs/_five_foundation_P1_design.md`
+   为设计规格（§一-§九 已定稿）、`tasks_docs/_five_foundation_redesign.md` 为决策/调研权威
+   （§一-§五）。
+   装饰壳体系地基（P2 主题）：① `visit_IbImplDef` 目标放宽（内置类型放行评估 + 跨模块）；
+   ② **内置类型临时覆层机制语法/AST/语义落点**（决策 2，P1 §四：声明语法/作用域 flag/影子
+   条目/告警）；③ 函数实例默认 prompt 呈现协议化（`to_prompt` 死条目激活）；④ `_dispatch_<dunder>`
+   收敛（决策 1 B 方向，P1 §五 `protocol_vtable` 数据形态为 P2/P5/P6 共享地基）。
+   验证门：全量 pytest 零回归 + 本地 commit。后续 P3（意图一等值 + snapshot 冻结补齐）→
+   P4（llm 可调用类内核 + retry 高阶化 + llm/llmend 语法与旧机制彻底删除）→ P5（prompt 协议族
+   类型类化 + 能力公理收尾）→ P6（per-IbClass 协议方法表落地），见 P1 定稿 §八。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
