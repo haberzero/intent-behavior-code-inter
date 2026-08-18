@@ -290,13 +290,15 @@ impl P for Box:
         with pytest.raises(CompilerError):
             compile_ibci(code)
 
-    def test_builtin_target_errors(self):
+    def test_dynamic_builtin_target_errors(self):
+        """内置类型可作 impl 目标（见 test_retroactive_impl_builtin.py），
+        但动态逃生类型 any/auto 仍不可（对一切协议恒满足，impl 无意义）。"""
         code = """
 protocol P:
     func m(self) -> int:
         pass
 
-impl P for int:
+impl P for any:
     func m(self) -> int:
         return 1
 """

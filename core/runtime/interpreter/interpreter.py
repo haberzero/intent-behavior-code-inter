@@ -876,6 +876,17 @@ class Interpreter:
                 )
                 user_func.is_generator = bool(stmt_data.get("is_generator"))
                 method_name = stmt_data.get("name")
+                # 目标类自有 vtable 冲突 fail-fast：内置类型的部分原生方法
+                # （__to_prompt__/__call__ 等，primitive_initializer 直接注册）
+                # 不进 spec.members / 公理声明面，编译期冲突检查不可见——此处
+                # 以运行期 vtable（运行期方法的唯一权威）兜底，防止 impl 静默
+                # 覆写内核方法。仅查自有表（继承链方法允许遮蔽，与用户类覆写
+                # 同语义）；用户类目标经编译期冲突检查保证不会命中此守卫。
+                if method_name in target.methods:
+                    raise RuntimeError(
+                        f"VM: Hydration: impl method '{method_name}' on class "
+                        f"'{type_name}' conflicts with an existing vtable method."
+                    )
                 target.register_method(method_name, user_func)
                 if not is_llm and self._is_operator_method(method_name):
                     self._bind_operator_method(target, method_name, user_func)

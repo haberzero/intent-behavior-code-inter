@@ -8,7 +8,7 @@ Symbol Collection Pass (SymbolPhase sub-step 1)
 
 from typing import Optional, List, Tuple
 
-from core.base.diagnostics.codes import SEM_REDEFINITION, SEM_UNCATEGORIZED, SEM_UNRESOLVED_TYPE
+from core.base.diagnostics.codes import SEM_REDEFINITION, SEM_TYPE_MISMATCH, SEM_UNCATEGORIZED, SEM_UNRESOLVED_TYPE
 from ._fn_callable import CALLABLE_INTERNAL_TYPE_MSG
 from core.base.enums import Provenance, Visibility
 from core.kernel import ast
@@ -357,9 +357,31 @@ class SymbolCollector:
         if sym is None or sym.kind != SymbolKind.CLASS:
             return  # 目标解析错误由类型检查阶段报
         target_spec = sym.spec
-        owned_scope = getattr(sym, "owned_scope", None)
-        if target_spec is None or owned_scope is None:
+        if target_spec is None:
             return
+        is_kernel_native = getattr(target_spec, "provenance", None) == Provenance.KERNEL_NATIVE
+        owned_scope = getattr(sym, "owned_scope", None)
+        if owned_scope is None:
+            if not is_kernel_native:
+                return
+            # 内置类型无 AST 类作用域：合成 owned_scope（与宿主类注入同构——
+            # 无 AST 作用域的类在符号定义处合成，scheduler._inject_host_class
+            # 模式），impl 方法符号据此收集。
+            owned_scope = SymbolTable(parent=self.symbol_table, name=node.type_name)
+            sym.owned_scope = owned_scope
+
+        # 冲突面（目标类型既有方法，单一判定集）：
+        # - target_spec.members：类体成员 + 先前 impl 补充 + 公理方法声明
+        #   （内置类型的公理方法在水化后进 members）——宿主类（bind class）的
+        #   成员也只进 members（owned_scope 是空合成表），故判定以 members 为准，
+        #   防止同名 impl 静默遮蔽宿主成员（双写真相漂移）；
+        # - 内置类型另有公理声明的运算符（__add__ 等）：运行期自动绑定进目标类
+        #   自有 vtable，不进 members——同名 impl 会静默覆写内置行为，须并入判定。
+        conflict_names = set(target_spec.members)
+        if is_kernel_native:
+            axiom = self.registry.get_axiom(target_spec)
+            if axiom is not None:
+                conflict_names.update(axiom.get_operators().values())
 
         old_table = self.symbol_table
         old_class = self.current_class
@@ -370,15 +392,19 @@ class SymbolCollector:
         try:
             for stmt in node.body:
                 # body 语句类型由 parser 保证（func / llm func）
-                # 冲突判定以目标类权威成员面 target_spec.members 为准，而非仅
-                # owned_scope 符号表：宿主类（bind class）的成员只进 members
-                # （scheduler._inject_host_class），owned_scope 是空合成表——
-                # 若只查符号表，同名 impl 会静默遮蔽 bind 成员并覆写其签名
-                # （双写真相漂移）。members 已含类体成员 + 先前 impl 补充，
-                # 对普通类与宿主类一致收敛。
-                if stmt.name in self.symbol_table.symbols or stmt.name in target_spec.members:
-                    # 与类自身（或先前 impl / 宿主 bind 声明）已定义成员冲突：
-                    # fail-fast，跳过定义（类型检查阶段不再重复报）
+                if is_kernel_native and stmt.name == "__init__":
+                    # 内置类型构造走 boxer/__call__ 原生路径，永不分派 impl
+                    # 补充的构造器——收集即半接通（注册了从不执行），fail-fast。
+                    self.error(
+                        f"impl on built-in type '{node.type_name}' cannot define "
+                        "'__init__': built-in construction never dispatches to "
+                        "impl-supplied constructors.",
+                        stmt, code=SEM_TYPE_MISMATCH,
+                    )
+                    continue
+                if stmt.name in self.symbol_table.symbols or stmt.name in conflict_names:
+                    # 与类自身（或先前 impl / 宿主 bind 声明 / 内置公理方法面）
+                    # 已定义成员冲突：fail-fast，跳过定义（类型检查阶段不再重复报）
                     self.error(
                         f"impl method '{stmt.name}' conflicts with an existing "
                         f"member of class '{node.type_name}'.",

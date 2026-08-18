@@ -77,18 +77,37 @@ class DeclarationVisitorsMixin:
         declaration-only form (verify + record the protocol on the type).
         """
         class_spec = self.registry.resolve(node.type_name)
-        if class_spec is None or class_spec.kind != TypeKind.CLASS.value:
+        if class_spec is None:
             self.error(
                 f"impl target '{node.type_name}' is not a known class.",
                 node, code=SEM_TYPE_MISMATCH,
             )
             return None
         impl_provenance = getattr(class_spec, "provenance", None)
-        if impl_provenance not in (Provenance.USER_DEFINED, Provenance.EXTERNAL_MODULE):
+        if impl_provenance in (Provenance.USER_DEFINED, Provenance.EXTERNAL_MODULE):
+            if class_spec.kind != TypeKind.CLASS.value:
+                self.error(
+                    f"impl target '{node.type_name}' is not a known class.",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+                return None
+        elif impl_provenance == Provenance.KERNEL_NATIVE:
+            # 内置类型可作 impl 目标（retroactive impl 扩展到内置）。目标须为
+            # 具体值类型：动态逃生类型（any/auto）对一切协议恒满足，impl 无判定
+            # 意义；void 无实例；module 是命名空间而非值类型（无对应运行期类）。
+            if (self.registry.is_dynamic(class_spec)
+                    or class_spec.get_base_name() == "void"
+                    or class_spec.kind == TypeKind.MODULE.value):
+                self.error(
+                    f"impl target '{node.type_name}' is not a concrete value type "
+                    "(dynamic, void, and module targets cannot be impl targets).",
+                    node, code=SEM_TYPE_MISMATCH,
+                )
+                return None
+        else:
             self.error(
-                f"impl target '{node.type_name}' must be a user-defined or "
-                "host-bound class (retroactive methods on built-in types are "
-                "not supported).",
+                f"impl target '{node.type_name}' must be a user-defined, "
+                "host-bound, or built-in type.",
                 node, code=SEM_TYPE_MISMATCH,
             )
             return None

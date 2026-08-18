@@ -227,8 +227,8 @@ import python "json" as j2:
   声明规则与 F1 模块成员一致（方法 `bind f(params) -> ret` / 属性 `bind x -> type`）。
 - `bind class Name -> any` 简写：仅建立类型身份，能力由 `impl` 补充（纯 impl 场景）。
 - **成员表 = 宿主声明 + impl 补充并集**：bind 声明是宿主类自身能力契约；`impl` 只补充
-  IBCI 协议所需而宿主没有的方法（`visit_IbImplDef` provenance 放行 EXTERNAL_MODULE，
-  仍拒绝 KERNEL_NATIVE 内置类型）。
+  IBCI 协议所需而宿主没有的方法（`visit_IbImplDef` provenance 放行 EXTERNAL_MODULE 与
+  KERNEL_NATIVE 内置具体值类型——内置 impl 的完整语义见 `docs/KNOWN_LIMITS.md` §二十六）。
 - **编译期冲突 fail-fast（SEM_REDEFINITION）**：impl 方法不得与 bind 声明成员同名
   （冲突判定以权威成员面 spec.members 为准）；同一 bind class 块内不得重复绑定同名成员。
 - **协议满足 = 编译期静态 spec 判定**：在"bind 声明 + impl 补充"并集上判定，运行期零改动。
