@@ -147,3 +147,31 @@ class _LLMCallableMixin:
         if result is not None and result.call_info is not None:
             self._record_current_call_info(result.call_info)
         return result
+
+    def _is_llm_callable_value(self, value: IbObject, ec: IExecutionContext) -> bool:
+        """LLMCallable 值判定（satisfies 唯一入口，供 run_batch/stream 校验）。"""
+        ib_class = getattr(value, "ib_class", None)
+        if ib_class is None:
+            return False
+        reg = getattr(ib_class, "registry", None)
+        meta = reg.get_metadata_registry() if reg is not None else None
+        spec = getattr(ib_class, "spec", None)
+        try:
+            return bool(meta is not None and spec is not None and meta.satisfies_protocol(spec, "llm_callable"))
+        except Exception:
+            return False
+
+    def _invoke_llm_callable_cps_boxed(self, callable_inst: IbObject, ec: IExecutionContext):
+        """CPS 驱动统一装配 + 执行，返回 boxed 单元素 IbList（run_batch 消费面）。"""
+        result = yield from self.invoke_llm_callable_cps(callable_inst, ec)
+        value = result.value if result is not None else self.registry.get_none()
+        return self.registry.box([value])
+
+    def _invoke_llm_callable_sync(self, callable_inst: IbObject, ec: IExecutionContext):
+        """宿主/线程体同步兜底（非 VM CPS 上下文）：经 _drive_generator 驱动。"""
+        from core.runtime.coordinator import _drive_generator
+
+        gen = self.invoke_llm_callable_cps(callable_inst, ec)
+        result = _drive_generator(ec.vm_executor, gen)
+        value = result.value if result is not None else self.registry.get_none()
+        return [value]

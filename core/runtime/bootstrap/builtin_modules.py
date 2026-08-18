@@ -115,10 +115,10 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
             ]),
         "get_current_call_info": MethodMemberSpec(name="get_current_call_info", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
         "run_batch": MethodMemberSpec(name="run_batch", kind="method", type_ref=TypeRef.of("list"), param_types=[
-                TypeRef.of("behavior"),
+                TypeRef.of("any"),
                 TypeRef.of("list")
             ], return_type=TypeRef.of("list"), param_descriptors=[
-                ParamDescriptor(name="behavior", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("behavior")),
+                ParamDescriptor(name="behavior", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
                 ParamDescriptor(name="items", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("list"))
             ]),
         "set_global_intent": MethodMemberSpec(name="set_global_intent", kind="method", type_ref=TypeRef.of("void"), param_types=[

@@ -127,7 +127,57 @@ class _RunBatchDrive:
         event.set()
 
 
+class _RunLLMCallableDrive:
+    """``ai.run_batch`` 对用户 LLMCallable 实例的 CPS 驱动 Waitable（单次调用）。
+
+    P4b-2b：与 :class:`_RunBatchDrive` 同范式——VM 主路径经 ``cps_drive`` 帧内
+    CPS 驱动统一装配（``invoke_llm_callable_cps``：协议门 → 用户 ``__llm_call__``
+    → 统一 worker）；宿主/线程体走 ``_drive`` 同步兜底。返回 boxed 单元素 IbList
+    （本次调用运行该 llm 类的 LLM 调用一次；llm 类的 per-item 参数化归 P4b-2c）。
+    """
+
+    def __init__(self, executor, callable_inst: "IbObject", ec):
+        self._executor = executor
+        self._callable = callable_inst
+        self._ec = ec
+        self._done = False
+        self._results = None
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+    def _drive(self):
+        """宿主/线程体同步驱动（非权威路径）。"""
+        self._results = self._executor._invoke_llm_callable_sync(self._callable, self._ec)
+        self._done = True
+        return self._results
+
+    def cps_drive(self, executor):
+        """帧内 CPS 驱动（VM 权威路径）。"""
+        self._results = yield from self._executor._invoke_llm_callable_cps_boxed(
+            self._callable, self._ec
+        )
+        self._done = True
+        return self._results
+
+    def try_result(self):
+        if self._done:
+            return (True, self._results)
+        self._drive()
+        return (True, self._results)
+
+    def result(self):
+        self._drive()
+        return self._results
+
+    def register_wake(self, event) -> None:
+        event.set()
+
+
 class _BehaviorMixin:
+    """``_BehaviorMixin`` —— behavior 表达式 / 对象执行（CPS + 同步薄包装）。"""
+
     def _build_behavior_call_request(
         self,
         *,
@@ -382,12 +432,19 @@ class _BehaviorMixin:
         :class:`LLMBatchFuture` 由调度器非阻塞等待（消除主线程 ``fut.result()``
         硬阻塞），与 ``stream_call`` 的 Waitable 范式一致。宿主/线程体直接调用
         走 ``try_result``/``result`` 的同步 ``_drive``（旧路径）。
+
+        **P4b-2b（统一消费 LLMCallable）**：用户 llm 可调用类实例（实现
+        ``__llm_call__``）同样接受——经统一装配入口 :meth:`invoke_llm_callable_cps`
+        执行一次 LLM 调用。llm 类的 ``items`` 参数化（逐项作为调用输入）由 P4b-2c
+        定义；本步语义 = 每调用 ``run_batch`` 执行一次该 llm 类的 LLM 调用。
         """
-        if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
-            raise TypeError(
-                f"run_batch: expected a behavior, got {type(behavior).__name__}"
-            )
-        return _RunBatchDrive(self, behavior, list(items), execution_context)
+        if isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior":
+            return _RunBatchDrive(self, behavior, list(items), execution_context)
+        if self._is_llm_callable_value(behavior, execution_context):
+            return _RunLLMCallableDrive(self, behavior, execution_context)
+        raise TypeError(
+            f"run_batch: expected a behavior or LLMCallable instance, got {type(behavior).__name__}"
+        )
 
     def _run_batch_sync(
         self,

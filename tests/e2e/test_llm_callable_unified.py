@@ -115,3 +115,23 @@ class TestLLMCallableUnifiedInvoke:
         with pytest.raises(Exception) as exc:
             engout, eng = _run(body, tmp_path, monkeypatch)
         assert "LLMCallable" in str(exc.value) or "llm_callable" in str(exc.value)
+
+    def test_run_batch_accepts_llm_callable_instance(self, tmp_path, monkeypatch):
+        """P4b-2b：run_batch 统一接受用户 llm 可调用实例（行为语义保留；
+        llm 类经统一装配执行一次，返回单元素结果）。"""
+        body = (
+            "class Translator:\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        str prompt = \"批量「\" + self.text + \"」\"\n"
+            "        return {\"user_prompt\": prompt}\n"
+            "    str text = \"\"\n"
+            "Translator tr = Translator()\n"
+            "tr.text = \"x\"\n"
+            "list results = ai.run_batch(tr, [])\n"
+            "print(results)\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        prov = eng.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        assert prov is not None and prov.calls, "run_batch 未触发统一装配路径"
+        assert prov.calls[-1]["user_prompt"] == "批量「x」", f"prompt={prov.calls[-1]['user_prompt']}"
+        assert any("TRANSLATED_OK" in line for line in out), f"结果未返回: {out}"

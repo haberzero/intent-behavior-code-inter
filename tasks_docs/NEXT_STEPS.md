@@ -136,19 +136,27 @@ retry）。
 > 统一 worker）。契约定稿：用户 `__llm_call__(self) -> dict` 返回装配配置 dict（ctx 对象降级
 > P4b-2b 扩展）。判别测试 `tests/e2e/test_llm_callable_unified.py`（用户 llm 类端到端 mock +
 > fail-fast）。全量 pytest **3028 passed / 1 skipped** 零回归。
+>
+> **✅ P4b-2b run_batch 统一消费 LLMCallable 实例已落地（本 session）**：`run_batch` 移除"仅
+> behavior"窄拒——行为（items 逐项绑参保留）+ 用户 llm 可调用实例（`_RunLLMCallableDrive`
+> Waitable 经统一装配入口单次执行；items 参数化归 P4b-2c）+ fail-fast；`builtin_modules.py`
+> run_batch 首参型宽化为 any。判别（新增 run_batch-llm-callable）+ 行为 run_batch 零破坏。全量
+> pytest **3029 passed / 1 skipped** 零回归。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b-2b LLMCallable 消费面收敛（下一 session 开工）**：
+1. **[主线·当前] 在 `unsafe-vibe-dev` 上推进 P4b-2c stream 统一 + llm 类 per-item 契约（下一 session 开工）**：
    **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 + P4a +
-   P4b 设计定稿 + **P4b-2a 统一装配路径**（`_llm_callable.py`，全量 3028 零回归）已合入）。
+   P4b 设计定稿 + P4b-2a 统一装配路径 + **P4b-2b run_batch 统一消费**（全量 3029 零回归）已合入）。
    设计权威 `tasks_docs/_five_foundation_P1_design.md` §一-§三 + `_code_p4b_assembly.md`（临时，
    实现后删除），决策权威 `_five_foundation_redesign.md` §一-§五。
-   **本步 = P4b-2b 消费面收敛**（按 `_code_p4b_assembly.md` §四）：
-   - `run_batch`/`stream` 统一消费 "任何 LLMCallable 实例"（移除 `isinstance(behavior) and
-     name=="behavior"` 窄校验；llm 类实例经 `assemble_llm_callable_request_cps` 装配）；
-   - 行为值经统一装配入口路由（机制同构收敛，零行为变化）；
-   - 装配上下文 `IbLLMCallAssemblyCtx`（只读意图入参）按需引入（用户 `__llm_call__` 需读输入时）。
+   **本步 = P4b-2c 剩余消费面**（按 `_code_p4b_assembly.md` §四）：
+   - `stream_call`/`stream_channel` 统一消费 LLMCallable 实例（当前仍吃字符串 sys_prompt/
+     user_prompt，需设计 llm 类流式装配语义，P1 §2.4）；
+   - llm 类 `run_batch` 的 items 逐项参数化契约（每 item 作为一次调用的输入语义，P4b-2b 留白）；
+   - 装配上下文 `IbLLMCallAssemblyCtx`（只读意图入参）按需引入（用户 `__llm_call__` 需读输入时）；
+   - 行为值经统一装配入口路由（机制同构收敛，零行为变化；sync/CPS 张力见 `_code_p4b_assembly.md`
+     §2.3 已定 CPS 装配入口承载）。
    验证门：全量 pytest 零回归 + 本地 commit；确认低风险增量复核放行后可 merge `unsafe-vibe-dev`。
    **后续子增量**：P4b-3（`__intent__`/`__retry__` 可选协议方法运行时发现）→ P4c `llm/llmend`
    语法+旧机制全链路删除（决策 4 + 用户追加裁定）+ 全量迁移（36 测试 + 66 示例/试用文件）→

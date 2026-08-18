@@ -479,6 +479,16 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   统一入口 → mock provider 收到 `user_prompt="将「hello」翻译为英语"` + output_hint（端到端
   装配生效）；非 llm 可调用值 fail-fast。验证：全量 pytest **3028 passed / 1 skipped** 零回归。
   后续：P4b-2b（run_batch 统一消费 LLMCallable 实例 + 行为经统一入口收敛 + 装配上下文扩展）。
+- **五大地基改造 · P4b-2b run_batch 统一消费 LLMCallable 实例（本 session，unsafe-vibe-dev）**：
+  `_BehaviorMixin.run_batch` 移除"仅 behavior"窄拒——接受行为值（既有 items 逐项绑参语义
+  保留）+ 用户 llm 可调用实例（新增 `_RunLLMCallableDrive` Waitable，经统一装配入口
+  `invoke_llm_callable_cps` 执行一次；llm 类 items 逐项参数化归 P4b-2c 定义）；非 llm 可调用
+  fail-fast。`builtin_modules.py` `run_batch` 首参型由 `behavior` 宽化为 `any`（编译期放行
+  behavior 与 llm 类，运行期由 executor 协议门 fail-fast）。判别测试（新增
+  `test_run_batch_accepts_llm_callable_instance`）：`ai.run_batch(tr, [])` llm 类经统一装配 →
+  provider 收到装配 prompt + 单元素结果；行为 run_batch 7 项 d-test 零破坏。
+  验证：全量 pytest **3029 passed / 1 skipped** 零回归。后续：P4b-2c（stream 统一 + llm 类
+  per-item 契约）→ P4b-3（__intent__/__retry__ 可选协议方法发现）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
