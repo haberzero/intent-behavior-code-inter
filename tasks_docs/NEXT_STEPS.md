@@ -223,6 +223,10 @@ retry）。
    验证门：全量 pytest 零回归 + 本地 commit + 描述性提交。
    **待 P4 对齐项（债务）**：G5 意图值栈全量重构（栈存原始值/按值匹配）+ has_llm_call_cap →
    LLMCallable 协议 + 行为值深程统一装配入口收敛（run_batch/invoke 行为路径，当前经各自入口）。
+   **output_hint 自动推导：评估定论 = 保持显式声明，不落地**（P4b 记录项；显式优于隐式——
+   用户 2026-08-12 "显式配置方向"裁定：llm 类 `__llm_call__` 装配 dict 由用户全权构造，
+   expected_type 已注入类型约束，output_hint 为额外格式说明；行为路径的自动取 hint 是行为值
+   节点语义，不扩及 llm 类）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 

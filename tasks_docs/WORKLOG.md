@@ -517,6 +517,11 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   docs/syntax/08_llm_callable.md §8.4 + 10_robustness.md §10.5 同步。验证：全量 pytest
   **3047 passed / 1 skipped** 零回归。后续：P5（validate_prompt 激活 + prompt 类型类化剩余 +
   required/optional 协议条目形式化）。
+- **五大地基 · P4d/P5 承接评估：output_hint 自动推导 = 不落地（保持显式）**：P4b 记录的
+  "output_hint 自动推导评估"结论——llm 类装配 dict 的 `output_hint` 保持**显式声明**，不自动
+  从 expected_type 类型推导。理由：用户 2026-08-12 "显式配置方向"裁定（显式优于隐式 + fail-fast）；
+  llm 类 `__llm_call__` 装配由用户全权构造，expected_type 已注入类型约束，output_hint 是额外
+  格式说明；行为路径自动取 hint 是行为值节点语义（`_get_llmoutput_hint_cps`），不扩及 llm 类。
 - **五大地基改造 · P5 prompt 类型类化收尾 + validate_prompt 激活 + required/optional 形式化（本 session，unsafe-vibe-dev）**：
   **P5a validate_prompt 死条目激活**（G7 能力公理收尾，D2 to_prompt 同构）：`BaseAxiom` 增
   `has_validate_prompt_cap: bool = False`（内置预校验由内建解析器承担，非通用路径——与 to_prompt
