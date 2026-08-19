@@ -217,16 +217,25 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   yield 句柄取完整文本、stream_channel 返回 IbChannel）；字符串形态真删除（3 语言测试
   迁移 + 行为值判别 + 文档同步）；试用 T01/T08 4 case 残留 = P4c 迁移面登记。全量 pytest
   **3036 passed / 1 skipped** 零回归。
-  **当前推进 = P4c：`llm ... llmend` 语法与旧机制全链路删除 + 全量迁移**（用户定裁：
-  彻底删除、不兼容不包袱；删除面见 `_five_foundation_P1_design.md` §三；迁移面 36 测试 +
-  66 示例/试用文件），详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：P4d（retry 高阶化，
-  含 `__retry__` 装配消费）→ P5 → P6；按需推进支线（PT-DEBT / VISION-3 / 文档）。
+  **✅ P4c `llm ... llmend` 语法与旧机制全链路删除 + 全量迁移已落地**：P4c-1 特性地基
+  （LLMCallable 实例直接调用 `f(args)` + 静态类型动态 any + `prompt_slots` 键 + `call_args`
+  参数化）→ P4c-2a 测试迁移 10 文件（→ llm 可调用类；语义演进：实例渲染 <Instance of T>、
+  fn 只收 lambda、`__llmretry__` 迁 `__retry__`/P4d、output_hint 显式声明）→ P4c-2b 内核
+  删除（lexer/parser/AST/semantic/runtime/`_LLMFunctionMixin`/provider `user_sys` 槽，净删
+  656 行；**保留 `llmexcept`/`retry` 帧机制**）→ P4c-2c 迁移收尾（examples + trials 12 case
+  + docs 全面同步：08/05 重写为 llm 可调用类）。全仓 core 残留清零；全量 pytest **3035
+  passed / 1 skipped** 零回归。
+  **当前推进 = P4d：retry 高阶化**（决策 5：帧机制保留 + 语法/策略高阶化；`__retry__`
+  可选协议方法落地 + 装配消费；承接 `__llmretry__` 旧语义与 output_hint 自动推导评估），
+  详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：P5（validate_prompt 激活 + prompt 类型类化
+  剩余）→ P6（协议方法表收尾）；按需推进支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
 - [x] **✅ 交接核验接收完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 契约文件 + 判别测试齐备 / 全量 pytest 实跑 3030 passed / 1 skipped）；要点已收敛入 §二，临时交接文件已删除（git 承载）
 - [x] **✅ P4b-3a `__intent__` 可选协议方法运行时发现落地**：装配入口发现 + CPS 调用 + 三层合并（存在键替换/缺失键透传/空列表清空）+ 契约 fail-fast + run_batch 继承；判别测试 +5；行为零变化；全量 3035 零回归
 - [x] **✅ P4b-3b 流式消费面统一落地**：stream_call/stream_channel 统一消费 LLMCallable（_StreamCallableDrive 帧内 CPS + assemble_stream_request_cps 两路装配）；字符串形态真删除 + 3 语言测试迁移 + 行为值判别 + docs 同步；全量 3036 零回归
+- [x] **✅ P4c 语法/旧机制全链路删除 + 全量迁移落地**：P4c-1 特性地基（实例直接调用 + prompt_slots + call_args）/ P4c-2a 测试迁移 10 文件 / P4c-2b 内核删除（净删 656 行，保留 llmexcept/retry 帧机制）/ P4c-2c examples + trials 12 + docs 全面同步；全仓 core 残留清零；全量 3035 零回归；下一步 = P4d retry 高阶化
 - [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）

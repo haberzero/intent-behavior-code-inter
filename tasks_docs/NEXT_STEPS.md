@@ -170,29 +170,42 @@ retry）。
 > run_batch/stream 共用。试用 T01/T08 4 个 case 字符串形态残留 = **P4c 66 文件迁移面
 > 登记**。全量 pytest **3036 passed / 1 skipped** 零回归。
 
+> **✅ P4c `llm ... llmend` 语法与旧机制全链路删除 + 全量迁移已落地（本 session，unsafe-vibe-dev）**：
+> ① **P4c-1 特性地基**（f5527e88）：LLMCallable 实例**直接调用** `f(args)`（`_dispatch_call` 路由 +
+> `_LLMCallableCallDrive`，参数按位绑定含默认值惰性填充、`_finalize_invoke_result` 语义对齐）+ 调用
+> 表达式静态类型 = 动态 any + 装配 dict 扩展 `prompt_slots` 键（`__sys__` 迁移载体）+ `call_args`
+> 参数化；② **P4c-2a 测试迁移**（61486deb）：e2e/contracts/runtime 10 文件 llm 函数/llm 方法 →
+> llm 可调用类（语义演进：实例渲染 `<Instance of T>`、fn 只收 lambda、`__llmretry__` 迁
+> `__retry__`/P4d、output_hint 显式声明）；③ **P4c-2b 内核删除**（5657dcee，净删 656 行）：
+> lexer token + `llm_scanner.py` + `LexerMode.LLM_BLOCK`/parser `llm_function_declaration` +
+> 顶层 `llmretry` 语法糖 + AST `IbLLMFunctionDef` + semantic 4 pass `is_llm` 分支 +
+> `SymbolKind.LLM_FUNCTION`/`llm_method` kind + `_vm_invoke_llm_function`/`callable_kind` 字段 +
+> `_LLMFunctionMixin` 整文件 + provider `user_sys` 槽特殊处理（自定义槽统一呈现）；**保留
+> `llmexcept`/`retry` 帧机制**；④ **P4c-2c 迁移收尾**（9cf15e9f）：examples + trials 12 case +
+> docs 全面同步（`08_llm_functions`→`08_llm_callable` 参考重写、`guide/05_llm_functions`→
+> `05_llm_callable` 教程重写、llmretry 文档合并删除、KNOWN_LIMITS/SYNTAX_REFERENCE 等更新）。
+> 全仓 core 残留清零；全量 pytest **3035 passed / 1 skipped** 零回归。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] P4c：`llm ... llmend` 语法与旧机制全链路删除 + 全量迁移**：
+1. **[主线·当前] P4d：retry 高阶化（决策 5）**：
    **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 +
-   P4a + P4b 全量 3036 零回归——含 P4b-3a `__intent__` 与 P4b-3b 流式消费面统一，已合入）。
-   设计权威 `tasks_docs/_five_foundation_P1_design.md` §三（删除面与语义迁移映射），决策
-   权威 `_five_foundation_redesign.md` §五（决策 4 + 用户追加裁定：**彻底删除、不兼容、
-   不包袱**）。
-   **本步 = P4c（最大破坏性阶段）**：`llm ... llmend` 语法及旧机制整体删除——
-   载体清单：lexer token（`LLM_DEF/LLM_END/LLM_SYS/LLM_USER/LLM_RETRY/LLM_RETRY_HINT`）、
-   `core/compiler/lexer/llm_scanner.py` 整块、parser `llm_function_declaration` + 顶层
-   `llmretry` 语法糖、AST `IbLLMFunctionDef`、semantic 各 pass `is_llm` 分支、
-   `callable_kind="llm_function"`、`_LLMFunctionMixin`（`llm_executor/_llm_function.py`
-   整文件）、provider `user_sys` 槽。迁移面摸底：**36 个测试文件 + 66 个示例/试用文件**
-   使用 llm 函数机制（含 P4b-3b 遗留的 T01/T08 4 个 stream case）。测试迁移原则：语义随
-   修复演进重构为新语义（非规避缺陷；缺陷复现用例保留）。
-   验证门：全量 pytest 零回归 + 本地 commit（摧毁面大，按子增量推进 + 描述性 commit）。
-   **后续子增量**：P4c（语法+旧机制删除+全量迁移）→ P4d retry 高阶化（决策 5，含
-   `__retry__` 装配消费）→ P5 → P6。
+   P4a + P4b 全量 + **P4c 语法/旧机制删除 + 全量迁移**（3035 零回归）已合入）。
+   设计权威 `tasks_docs/_five_foundation_P1_design.md` §七（retry 高阶化）+ §2.2（`__retry__`
+   可选协议方法契约），决策权威 `_five_foundation_redesign.md` §五（决策 5：帧机制保留 +
+   语法/策略高阶化）。
+   **本步 = P4d retry 高阶化**：
+   - `__retry__` 可选协议方法落地（P1 §2.2：声明快照策略 + 重试策略 + hint；`satisfies`
+     非强制，存在则经 `lookup_method` 发现——P4b-3a 同通道）+ 装配消费（决策 5）；
+   - llm 可调用类自定 retry：实现 `__retry__` 覆盖默认帧策略；行为语句默认 retry 由帧机制
+     提供（用户不写 `__retry__` 时行为实例走默认）；
+   - 承接 P4c 记录项：`__llmretry__` 旧段语义（重试 hint 注入）在此落地；output_hint 自动
+     推导评估（P4b 记录）。
+   验证门：全量 pytest 零回归 + 本地 commit + 描述性提交。
+   **后续子增量**：P5（validate_prompt 死条目激活 G7 收尾 + prompt 类型类化剩余 +
+   required/optional 协议条目形式化）→ P6（per-IbClass 协议方法表最终收尾）。
    **待 P4 对齐项**：G5 意图值栈全量重构 + has_llm_call_cap → LLMCallable 协议 +
    行为值深程统一装配入口收敛（run_batch/invoke 行为路径，当前经各自入口）。
-   **P5 剩余项（P5 阶段收尾）**：validate_prompt 死条目激活（G7 能力公理收尾）。
-   后续 P5 → P6 落地。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 
