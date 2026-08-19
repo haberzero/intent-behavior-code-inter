@@ -86,8 +86,8 @@
 | `KERNEL_ISSUE-LLM-2` | LLM 函数返回 `list[int]` / `dict[str,int]` 未按容器解析，默认退化为 str | **已修复（2026-08-15）**：`_get_expected_type_hint` 读取 returns `node_to_type` 覆盖 IbSubscript；Optional 保持旧路径。回归 `test_llm_basic.py::TestE2ELLMFunctionContainerReturn` | `T08/.../D4-01-llmfunc-typed.ibci`（已转 PASS） |
 | `KERNEL_ISSUE-LLM-3` | `ai.set_retry(0)` + `llmexcept` 不抛 `LLMRetryExhaustedError`，把不确定容器赋给目标导致 `RUN_TYPE_MISMATCH` | **已修复（2026-08-15）**：`_retry_llm_uncertain` 在 `max_retry<=0` 时立即抛耗尽。回归 `test_llmexcept.py::TestE2ELLMExceptZeroRetry` | `T08/.../D6-04-retry-edge.ibci`（已转 PASS） |
 | `DOC_ISSUE-30` | `docs/syntax/09_intent_system.md` 称 `@!` + run_batch 仅首调用生效；实现（28540336）对批内每个调用注入 one-shot 意图 | **已同步（2026-08-15）**：文档改为“当前实现为批内每个调用独立 fork 意图快照” | `T08/.../D3-08-runbatch-oneshot-obs.ibci` |
-| `BOUNDARY-LLM-2` | LLM 函数 `-> void` 编译通过但运行期 `LLMParseError`，文档未声明支持 | 记录，待评估 | `T08/.../D4-04-llmfunc-void.ibci` |
-| `BOUNDARY-LLM-3` | `stream_call` / `stream_channel` 后 `ai.get_current_call_info()` 为空，观测 API 未覆盖流式调用 | 记录，待评估 | `T08/.../D5-08-stream-call-info.ibci` |
+| `BOUNDARY-LLM-2` | LLM 函数 `-> void` 编译通过但运行期 `LLMParseError`，文档未声明支持 | **已解决（2026-08-19，P4c 机制演进）**：`-> void` 是旧 `llm func` 语法特性，随 P4c llm 函数机制删除而消失；新 llm 可调用类以 `expected_type` 声明输出目标（无声明按 str 解析、副作用调用用行为表达式），边界已文档化于 `docs/syntax/08_llm_callable.md` | `T08/.../D4-04-llmfunc-void.ibci`（已迁 llm 可调用类形态） |
+| `BOUNDARY-LLM-3` | `stream_call` / `stream_channel` 后 `ai.get_current_call_info()` 为空，观测 API 未覆盖流式调用 | **已登记（KNOWN_LIMITS §十五）**：流式调用不入观测为已知边界，观测 API 对流式覆盖属待评估 | `T08/.../D5-08-stream-call-info.ibci` |
 
 ## 三、登记前分诊闸门（强制，见 CLASSIFICATION §四）
 
