@@ -72,7 +72,6 @@ class TypeAxiom(Protocol):
     has_validate_prompt_cap: bool
     has_output_hint_cap: bool
     has_payload_prompt_cap: bool
-    has_llm_call_cap: bool
 
     # ---- Capability methods (default no-op in BaseAxiom) ------------ #
     def resolve_return_type_name(self, arg_type_names: List[str]) -> Optional[str]: ...

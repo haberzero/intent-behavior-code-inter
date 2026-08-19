@@ -63,7 +63,6 @@ class BaseAxiom:
     # 文本），与 from/outputhint/payload 的可选能力不同——默认 True（单一权威，
     # 免逐公理重复声明；具体公理仅在不具备渲染时覆写为 False）。
     has_to_prompt_cap: bool = True
-    has_llm_call_cap: bool = False
 
     # ---- Method / operator specs ----------------------------------- #
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:

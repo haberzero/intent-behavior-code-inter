@@ -292,7 +292,6 @@ class TypeAxiom(Protocol):
     has_validate_prompt_cap: bool
     has_output_hint_cap:   bool
     has_payload_prompt_cap: bool
-    has_llm_call_cap:      bool
 
     # to_prompt 是**通用渲染路径**（所有公理类型均可渲染为提示词文本）：BaseAxiom
     # 默认 True（免逐公理声明），具体公理仅在不具备渲染时覆写为 False。

@@ -223,14 +223,20 @@ retry）。
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 1. **[主线·收尾评估] 五大地基剩余对齐债务（按序评估是否推进）**：
-   **当前分支 = `unsafe-vibe-dev`**（P1-P6 全链路完成，3059 零回归）。
+   **当前分支 = `unsafe-vibe-dev`**（P1-P6 全链路完成，3066 零回归）。
    - **G5 意图值栈全量重构**（意图栈从"字符串/对象栈"升级为"可渲染一等值栈"，按值匹配；
-     P3 仅落地意图一等值切片 `IbIntent.content` → 可渲染值 + snapshot 冻结补齐，全量重构
-     剩余面与 run_batch/invoke 意图消费对齐）；
-   - **has_llm_call_cap → llm_callable 协议**（BaseAxiom 封闭 flag 集合最后一个公理能力
-     迁移到协议注册表——G7 三层划分收尾）；
+     P3 已落地意图一等值切片 `IbIntent.content` → 可渲染值 + snapshot 冻结补齐；剩余
+     "content:str → 原始值栈按值匹配"为大面重构（intent_context/栈模型/全消费点），
+     评估维持**登记不推进**——P3 核心切片已落地、当前意图消费经 content 渲染工作正常、
+     与 run_batch/invoke 意图消费对齐需更大设计（勿半接通）；
+   - **has_llm_call_cap → llm_callable 协议**：✅ 已实证为**死字段**（无协议映射、无访问器、
+     无任何消费者；非上 session 记录的"编译期 DDG 层"——DDG 实际经 AST 节点类型识别），
+     已删除（BaseAxiom/BehaviorAxiom/TypeAxiom 接口 + 03_type_system.md 能力表），
+     P4 协议化真收尾；
    - **行为值深程统一装配入口收敛**（run_batch/invoke 行为路径当前经各自入口，
-     `assemble_stream_request_cps` 已有桥接先例——收敛到统一装配入口，消双通道）。
+     `assemble_stream_request_cps` 已有桥接先例——收敛到统一装配入口，消双通道）：
+     评估为**值自身差异承载**（提示词来源协议 / retry 策略来源本质差异；统一 worker
+     `_call_and_parse` 与意图消解已单点共享），非双通道；收窄为登记项（中大型设计）。
    验证门：全量 pytest 零回归 + 本地 commit + 描述性提交。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理（P9 收尾）。

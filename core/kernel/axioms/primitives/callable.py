@@ -108,13 +108,11 @@ class BehaviorAxiom(BaseAxiom):
     behavior 是 fn_callable 的特化子类型——它执行的不是普通表达式，而是 LLM 行为描述。
     * 不是 DynamicAxiom —— behavior 是一个具体的一等公民类型。
     * has_call_cap —— behavior 对象可被调用（触发 LLM 执行）。
-    * has_llm_call_cap —— 编译期 DDG 通过此能力识别 behavior 节点（无需 isinstance）。
     * 编译期返回类型为 "auto"；运行期由 IbBehavior.call() 根据 expected_type 解析真实类型。
     * 继承链：behavior → fn_callable → callable → Object
     """
 
     has_call_cap = True
-    has_llm_call_cap = True
 
     @property
     def name(self) -> str:

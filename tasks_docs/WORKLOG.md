@@ -566,6 +566,14 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   统一装配入口收敛**——run_batch/invoke 行为路径经各自入口（`_prepare_behavior_call_cps`
   vs 统一装配），中大型重构（行为执行路径），`assemble_stream_request_cps` 桥接为先例。
   均记录于 NEXT_STEPS 候选 #1（收尾评估），不阻塞主线。
+- **五大地基 · 剩余对齐债务评估修正（本 session，候选 #1 收尾定论）**：② **has_llm_call_cap
+  实证为死字段**——穷尽 grep：无任何协议映射（axiom_cap 无该项）、`get_call_cap` 只读
+  `has_call_cap`、DDG 实际经 `IbBehaviorExpr` AST 节点类型识别（非该 flag）、无任何直接/
+  动态消费者（`getattr(axiom, protocol.axiom_cap)` 无 has_llm_call_cap 键）。上 session
+  "编译期 DDG 层实证"记录与代码不符——纠正并**删除**该字段（BaseAxiom 默认/BehaviorAxiom
+  覆写/TypeAxiom 接口 + 03_type_system.md 能力表）；P4 llm_callable 协议化已取代其设计
+  意图，删除为真收尾。① G5 意图值栈全量重构维持登记不推进（P3 已落地核心切片，勿半接通）；
+  ③ 行为统一装配评估为值自身差异承载（非双通道），收窄为登记项。
 - **五大地基超大型重构专项审计发现（2026-08-19，本 session 末，只检测未修）**：基线
   `e8c7944b`..HEAD（130 文件 +4592/-1627）审计产出技术债清单 A-G（定位/详情见会话交接
   HANDOFF_SESSION.md §七，常驻摘要 HANDOFF.md §2.1）：A **注释/文档任务代号污染**（core
