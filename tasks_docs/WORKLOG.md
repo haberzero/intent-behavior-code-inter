@@ -517,6 +517,22 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   docs/syntax/08_llm_callable.md §8.4 + 10_robustness.md §10.5 同步。验证：全量 pytest
   **3047 passed / 1 skipped** 零回归。后续：P5（validate_prompt 激活 + prompt 类型类化剩余 +
   required/optional 协议条目形式化）。
+- **五大地基改造 · P5 prompt 类型类化收尾 + validate_prompt 激活 + required/optional 形式化（本 session，unsafe-vibe-dev）**：
+  **P5a validate_prompt 死条目激活**（G7 能力公理收尾，D2 to_prompt 同构）：`BaseAxiom` 增
+  `has_validate_prompt_cap: bool = False`（内置预校验由内建解析器承担，非通用路径——与 to_prompt
+  通用渲染默认 True 相对）+ `BUILTIN_PROTOCOLS validate_prompt` 接 `axiom_cap` +
+  `structural_methods`（用户类经 spec.members 结构判定）+ `llm_parsing_strategy` 消费前置门
+  （satisfies_protocol 统一判定，advisory：实际分派仍走虚表 lookup + call）。**P5b required/optional
+  协议条目形式化**（P1 §2.2）：`ProtocolDef` 增 `optional_methods` 字段 + `all_methods()` 全量
+  方法集（必需+可选保序去重）；`methods` 保持必需单一权威、判定不变（optional 不参与
+  satisfies 强制判定）；`llm_callable` 条目正式登记 `optional_methods=("__intent__", "__retry__")`
+  （description 移除"formalized later"）。**P5c 评估即收尾**：prompt 协议族五成员
+  （to_prompt/from_prompt/output_hint/payload_prompt/validate_prompt）消费面前置门全部
+  satisfies_protocol 协议化（D1 双注册表单一方法名权威 P2③ 已收敛），无剩余代码缺口。
+  判别测试 +8（kernel：validate 条目声明/axiom flag 默认 False/内置不满足/用户类满足；llm_callable
+  optional 登记/all_methods 并集/requires 仅必需/仅 optional 不满足）；全量 pytest **3055
+  passed / 1 skipped** 零回归。后续：P6（per-IbClass 协议方法表最终收尾：spec.members 与
+  protocol_vtable 双表同步 D3/D6）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

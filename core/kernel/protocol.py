@@ -51,9 +51,26 @@ class ProtocolDef:
     axiom_cap: Optional[str] = None
     structural_methods: Tuple[str, ...] = ()
     structural_all: bool = False
+    #: 可选能力方法（P5，P1 §2.2 required/optional 形式化）：不参与
+    #: satisfies_protocol 的强制判定（缺失仍满足协议），仅声明协议族中存在、
+    #: 由实现方运行时按需发现/调用（如 LLMCallable 的 ``__intent__`` /
+    #: ``__retry__``）。``methods`` 仍是必需方法的单一权威。
+    optional_methods: Tuple[str, ...] = ()
 
     def requires(self, method: str) -> bool:
         return method in self.methods
+
+    def all_methods(self) -> Tuple[str, ...]:
+        """协议族全量方法集（必需 + 可选，保序去重）。
+
+        供协议族遍历/未来 protocol_vtable 建槽使用；判定仍只看 ``methods``
+        （required 权威）。
+        """
+        seen: list = []
+        for name in (self.methods + self.optional_methods):
+            if name not in seen:
+                seen.append(name)
+        return tuple(seen)
 
 
 class ProtocolRegistry:
@@ -201,6 +218,11 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         name="validate_prompt",
         methods=("__validate_prompt__",),
         description="Values that can pre-validate raw LLM output.",
+        # P5 激活（G7 能力公理收尾，D2 to_prompt 同构）：axiom 能力统一声明
+        # （BaseAxiom 默认 False——内置类型预校验由内建解析器承担，不经
+        # __validate_prompt__）；用户类经结构成员判定（spec.members）。
+        axiom_cap="has_validate_prompt_cap",
+        structural_methods=("__validate_prompt__",),
     ),
     ProtocolDef(
         name="output_hint",
@@ -226,13 +248,16 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
     ProtocolDef(
         name="llm_callable",
         methods=("__llm_call__",),
+        optional_methods=("__intent__", "__retry__"),
         description=(
             "Values that can be consumed as unified LLM calls (behavior values, "
             "llm callable-class instances, anonymous callable instances).  "
-            "``__llm_call__`` is the required method for ``satisfies_protocol("
-            "... , 'llm_callable')``（能否被 LLM 消费的唯一判定）;  ``__intent__`` / "
-            "``__retry__`` are optional capabilities discovered at runtime via "
-            "receive (the required/optional split is formalized later)."
+            "``__llm_call__`` is the **required** method: it is the only method "
+            "in the ``satisfies_protocol(..., 'llm_callable')`` 强制判定（能否被 "
+            "LLM 消费的唯一判定）.  ``__intent__`` / ``__retry__`` are declared "
+            "**optional** capabilities (``optional_methods``): they do not "
+            "participate in satisfaction, and are discovered at runtime via "
+            "receive 同源虚表（lookup_method）when declared."
         ),
         structural_methods=("__llm_call__",),
     ),

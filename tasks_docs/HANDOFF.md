@@ -235,9 +235,18 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   不进协议）；`__llmretry__` 旧语义由 `hint` 承接；行为默认 retry 帧机制提供（零改动）。
   判别测试 6 项 + docs（08 §8.4 / 10 §10.5）同步；全量 pytest **3047 passed / 1 skipped**
   零回归。
-  **当前推进 = P5：prompt 类型类化剩余 + validate_prompt 死条目激活（G7 收尾）+
-  required/optional 协议条目形式化**，详见 `NEXT_STEPS.md` 下一步候选 #1。次后按序：P6
-  （协议方法表收尾）；按需推进支线（PT-DEBT / VISION-3 / 文档）。
+  **✅ P5 prompt 类型类化收尾 + validate_prompt 激活 + required/optional 形式化已落地（G7
+  收尾）**：P5a validate_prompt 死条目激活（D2 to_prompt 同构）——`BaseAxiom.has_validate_prompt_cap`
+  （默认 False，内置预校验由内建解析器承担）+ validate_prompt 协议条目接 axiom_cap/structural_methods
+  + llm_parsing_strategy 消费前置门（satisfies 统一判定，实际分派仍走虚表）。P5b required/optional
+  形式化（P1 §2.2）——ProtocolDef 增 optional_methods + all_methods()；methods 保持必需权威
+  （判定不变）；llm_callable 正式登记 optional_methods=("__intent__","__retry__")。P5c 评估即收尾
+  （prompt 协议族五成员消费面前置门全部协议化）。判别测试 +8；全量 pytest **3055 passed /
+  1 skipped** 零回归。
+  **当前推进 = P6：per-IbClass 协议方法表最终收尾**（protocol_vtable 数据结构 + receive 前置
+  查表 + 覆层影子条目已在 P2-② 落地；剩余 = spec.members 与 protocol_vtable 双表同步 D3/D6 +
+  required/optional 按 P5b 对齐 vtable 建槽），详见 `NEXT_STEPS.md` 下一步候选 #1。按需推进
+  支线（PT-DEBT / VISION-3 / 文档）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -246,7 +255,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] **✅ P4b-3a `__intent__` 可选协议方法运行时发现落地**：装配入口发现 + CPS 调用 + 三层合并（存在键替换/缺失键透传/空列表清空）+ 契约 fail-fast + run_batch 继承；判别测试 +5；行为零变化；全量 3035 零回归
 - [x] **✅ P4b-3b 流式消费面统一落地**：stream_call/stream_channel 统一消费 LLMCallable（_StreamCallableDrive 帧内 CPS + assemble_stream_request_cps 两路装配）；字符串形态真删除 + 3 语言测试迁移 + 行为值判别 + docs 同步；全量 3036 零回归
 - [x] **✅ P4c 语法/旧机制全链路删除 + 全量迁移落地**：P4c-1 特性地基（实例直接调用 + prompt_slots + call_args）/ P4c-2a 测试迁移 10 文件 / P4c-2b 内核删除（净删 656 行，保留 llmexcept/retry 帧机制）/ P4c-2c examples + trials 12 + docs 全面同步；全仓 core 残留清零；全量 3035 零回归；下一步 = P4d retry 高阶化
-- [x] **✅ P4d retry 高阶化落地**：`__retry__` 协议（`func __retry__(self) -> dict`：max_retry/hint；发现走 `_discover_optional_protocol_method` 同 `__intent__` 通道 + 违约 fail-fast）+ 装配三元组 + invoke 调用级重试循环（_prompt_assembly 单一消息构造累积 message_history 回喂，耗尽交语句层）+ 直接调用/run_batch 继承；边界裁定（帧机制=CPS 窗口重求值 ⊕ 信息装配，高阶化只作用于后者）；判别测试 6 项 + docs 同步；全量 3047 零回归；下一步 = P5（validate_prompt 激活 + required/optional 条目形式化）
+- [x] **✅ P4d retry 高阶化落地**：`__retry__` 协议（`func __retry__(self) -> dict`：max_retry/hint；发现走 `_discover_optional_protocol_method` 同 `__intent__` 通道 + 违约 fail-fast）+ 装配三元组 + invoke 调用级重试循环（_prompt_assembly 单一消息构造累积 message_history 回喂，耗尽交语句层）+ 直接调用/run_batch 继承；边界裁定（帧机制=CPS 窗口重求值 ⊕ 信息装配，高阶化只作用于后者）；判别测试 6 项 + docs 同步；全量 3047 零回归
+- [x] **✅ P5 prompt 类型类化收尾落地**：P5a validate_prompt 激活（BaseAxiom.has_validate_prompt_cap + 协议条目 axiom_cap/structural_methods + 消费前置门，D2 to_prompt 同构）/ P5b required/optional 形式化（ProtocolDef.optional_methods + all_methods()，llm_callable 登记 __intent__/__retry__）/ P5c 评估即收尾（prompt 协议族五成员消费面全协议化）；判别测试 +8；全量 3055 零回归；下一步 = P6（spec.members 与 protocol_vtable 双表同步 D3/D6）
 - [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）

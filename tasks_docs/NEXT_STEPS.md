@@ -198,23 +198,29 @@ retry）。
 > 判别测试 `tests/e2e/test_llm_retry_callable.py`（6 项）；docs/syntax/08_llm_callable.md §8.4 +
 > 10_robustness.md §10.5 同步。全量 pytest **3047 passed / 1 skipped** 零回归。
 
+> **✅ P5 prompt 类型类化收尾 + validate_prompt 激活 + required/optional 形式化已落地（本 session，
+> unsafe-vibe-dev；G7 收尾）**：P5a validate_prompt 死条目激活（D2 to_prompt 同构）——
+> `BaseAxiom.has_validate_prompt_cap`（默认 False，内置预校验由内建解析器承担）+ `validate_prompt`
+> 协议条目接 `axiom_cap`/`structural_methods` + `llm_parsing_strategy` 消费前置门（satisfies
+> 统一判定，actual 分派仍走虚表）。P5b required/optional 协议条目形式化（P1 §2.2）——
+> `ProtocolDef` 增 `optional_methods` + `all_methods()`；`methods` 保持必需权威（判定不变）；
+> `llm_callable` 正式登记 `optional_methods=("__intent__", "__retry__")`。P5c 评估即收尾——
+> prompt 协议族五成员消费面前置门全部协议化，无剩余缺口。判别测试 +8；全量 pytest
+> **3055 passed / 1 skipped** 零回归。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] P5：prompt 类型类化剩余 + validate_prompt 死条目激活（G7 收尾）+ required/optional 协议条目形式化**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 +
-   P4a + P4b 全量 + **P4c 语法/旧机制删除 + 全量迁移** + **P4d retry 高阶化**（3047 零回归）
-   已合入）。
-   设计权威 `tasks_docs/_five_foundation_P1_design.md` §2.2（协议方法族 + required/optional 语义），
+1. **[主线·当前] P6：per-IbClass 协议方法表最终收尾**：
+   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基（protocol_vtable 数据结构 `cd60ea6d` + 覆层
+   `1d3fc74a`）+ P3 + P4 全量（P4c 删除/迁移 + P4d retry 高阶化）+ P5（validate_prompt 激活 +
+   required/optional 形式化）（3055 零回归）已合入）。
+   设计权威 `tasks_docs/_five_foundation_P1_design.md` §五（per-IbClass 协议方法表，决策 1 B），
    决策权威 `_five_foundation_redesign.md` §五。
-   **本步 = P5**：
-   - **validate_prompt 死条目激活**（G7 能力公理收尾）：`validate_prompt` 协议条目接 `axiom_cap`
-     （to_prompt 激活 D2 同构）——`__validate_prompt__(self, str raw) -> (bool, str)` 经协议注册表
-     判定/分派（`docs/syntax/06_oop.md` §6.7 已有用户契约）；
-   - **required/optional 协议条目形式化**（P1 §2.2 必需/可选语义落 `ProtocolDef`）：methods 分两组，
-     `__intent__`/`__retry__` 正式登记为 llm_callable 可选条目（不参与 satisfies 强制判定）；
-   - prompt 类型类化剩余（D1 双注册表收敛 + `PromptRenderer` 协议前置收尾）。
+   **本步 = P6 剩余面**（protocol_vtable 数据结构 + receive 前置查表 + 覆层影子条目已在 P2-②
+   落地）：**spec.members 与 protocol_vtable 双表同步（D3/D6）**——协议方法表与既有 spec 成员
+   表的权威归属收敛，避免双写真相；协议条目 required/optional 按 P5b 形式化结果对齐 vtable
+   建槽。
    验证门：全量 pytest 零回归 + 本地 commit + 描述性提交。
-   **后续子增量**：P6（per-IbClass 协议方法表最终收尾）。
    **待 P4 对齐项（债务）**：G5 意图值栈全量重构（栈存原始值/按值匹配）+ has_llm_call_cap →
    LLMCallable 协议 + 行为值深程统一装配入口收敛（run_batch/invoke 行为路径，当前经各自入口）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；

@@ -56,6 +56,7 @@ class BaseAxiom:
     has_converter_cap: bool = False
     has_parser_cap: bool = False
     has_from_prompt_cap: bool = False
+    has_validate_prompt_cap: bool = False
     has_output_hint_cap: bool = False
     has_payload_prompt_cap: bool = False
     # to_prompt 是**通用渲染路径**（所有公理类型均可经 __to_prompt__ 渲染为提示词
