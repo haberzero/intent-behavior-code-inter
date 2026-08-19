@@ -9,6 +9,8 @@ tests/runtime/test_protocol_dispatch_contract.py — receive 协议化分派契�
 
 import os
 
+import pytest
+
 from core.engine import IBCIEngine
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -259,3 +261,103 @@ class TestProtocolVTableDataStructure:
         assert _symbol(engine, "a").to_native() is True
         assert _symbol(engine, "b").to_native() is True
         assert _symbol(engine, "c").to_native() == 123
+
+
+class TestSatisfactionDispatchConvergence:
+    """判定（``satisfies_protocol``，协议条目数据驱动）与分派（``receive``，per-IbClass
+   协议方法表 + vtable）以**协议条目为单一权威**的一致性契约——编译期类型判定与
+   运行期消息分派无双表漂移。
+
+    - 用户类声明协议方法 → satisfies True 且 receive 可分派（一致）；
+    - 未声明 → satisfies False（协议消费前置门拒绝协议路径）且 receive 对无默认
+      实现的协议消息不误分派（AttributeError 显式暴露）；
+    - protocol_vtable 惰性建槽（运行期按需注册，不依赖内置 spec 持久化）；
+    - 协议条目的 optional 方法（``__intent__``/``__retry__``）不建协议槽，经
+      lookup_method 虚表发现（运行时 optional 通道）。
+    """
+
+    def _meta(self, engine):
+        return engine.registry.get_metadata_registry()
+
+    def test_user_protocol_method_satisfies_and_dispatches(self):
+        """用户类声明协议方法（__to_prompt__）：satisfies True 且 receive 可分派。"""
+        engine = _engine()
+        engine.run_string(
+            "class Item:\n"
+            "    str name\n"
+            "    func __init__(self, str n) -> auto:\n"
+            "        self.name = n\n"
+            "    func __to_prompt__(self) -> str:\n"
+            '        return "item:" + self.name\n'
+            "Item it = Item(\"x\")\n",
+            silent=True,
+        )
+        it = _symbol(engine, "it")
+        assert self._meta(engine).satisfies_protocol(it.ib_class.spec, "to_prompt") is True
+        # 用户类无原生 _dispatch_to_prompt__ 处理器：协议表槽 miss → 落 vtable（lookup_method）
+        result = it.receive("__to_prompt__", [])
+        assert result.to_native() == "item:x", f"receive 分派结果: {result!r}"
+
+    def test_missing_protocol_method_no_misdispatch(self):
+        """未声明协议方法的类：satisfies False（协议消费前置门据此拒绝协议路径）；
+        receive 对**无默认实现**的协议消息（__payload_prompt__）不误分派（AttributeError
+        显式暴露）。to_prompt 例外说明：Object 根类提供默认实例渲染（vtable 继承）——
+        satisfies 仍 False，消费门（PromptRenderer）以 satisfies 为准（协议前置门语义）。"""
+        engine = _engine()
+        engine.run_string(
+            "class Plain:\n"
+            "    int v\n"
+            "Plain p = Plain(0)\n",
+            silent=True,
+        )
+        p = _symbol(engine, "p")
+        spec = p.ib_class.spec
+        assert self._meta(engine).satisfies_protocol(spec, "payload_prompt") is False
+        with pytest.raises(AttributeError):
+            p.receive("__payload_prompt__", [])
+        # to_prompt：Object 默认渲染存在但 satisfies 仍 False（门语义契约点）
+        assert self._meta(engine).satisfies_protocol(spec, "to_prompt") is False
+
+    def test_protocol_vtable_lazy_slot_creation(self):
+        """protocol_vtable 惰性建槽（运行期按需注册）：未分派不建槽，分派后建槽；
+        非协议消息（len 普通路由）不建槽。"""
+        engine = _engine()
+        engine.run_string("list[int] li = [1]\n", silent=True)
+        li = _symbol(engine, "li")
+        ic = li.ib_class
+        assert ic.protocol_vtable == {}, "未分派前不应建槽"
+        # len 是普通消息（非协议 dunder）→ 不建协议槽
+        _ = li.receive("len", [])
+        assert ic.protocol_vtable == {}, "普通消息不应触发协议槽建槽"
+        # 协议消息分派 → 惰性建槽
+        _ = li.receive("__to_prompt__", [])
+        assert "__to_prompt__" in ic.protocol_vtable, "协议消息分派后应建槽"
+
+    def test_llm_callable_optional_methods_not_in_dispatch_table(self):
+        """llm_callable 的 optional 方法（__intent__/__retry__）不建协议槽
+        （dunder_names 仅 required），经 lookup_method 虚表发现（运行时 optional 通道）；
+        required（__llm_call__）建立槽。"""
+        engine = _engine()
+        engine.run_string(
+            "class Agent:\n"
+            "    func __intent__(self, dict d) -> dict:\n"
+            "        return {}\n"
+            "    func __retry__(self) -> dict:\n"
+            "        return {}\n"
+            "    func __llm_call__(self) -> dict:\n"
+            '        return {"user_prompt": "hi"}\n'
+            "Agent a = Agent()\n",
+            silent=True,
+        )
+        a = _symbol(engine, "a")
+        spec = a.ib_class.spec
+        assert self._meta(engine).satisfies_protocol(spec, "llm_callable") is True
+        ic = a.ib_class
+        # required 方法建立协议槽（dunder_names 含 __llm_call__）
+        assert ic.protocol_slot("__llm_call__") is not None
+        # optional 方法不建协议槽（不参与 _dispatch_* 协议分派索引）
+        assert ic.protocol_slot("__intent__") is None
+        assert ic.protocol_slot("__retry__") is None
+        # 但经 lookup_method 虚表可发现（运行时 optional 通道）
+        assert ic.lookup_method("__intent__") is not None
+        assert ic.lookup_method("__retry__") is not None

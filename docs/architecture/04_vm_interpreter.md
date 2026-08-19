@@ -42,6 +42,16 @@
 转换链、`__eq__`/`__ne__` 恒等、类对象 `__getitem__` 特化等）由各对象类覆写
 处理器承载——`core/runtime/objects/` 无硬编码 `message ==` 字符串分派分支。
 
+**per-IbClass 协议方法表（决策 1 B，P2-②/P6 落地）**：协议消息分派经
+`IbClass.protocol_vtable`（消息名 → `ProtocolSlot`）查表——惰性建槽（仅协议注册表
+方法集，未分派不建槽）；`ProtocolSlot` 按值 Python 实现类惰性解析 native
+`_dispatch_<name>` 处理器（多态安全，记忆化消除逐次 getattr 能力探测）+ 可选覆层
+影子条目（`overlay`，默认不参与分派；`with overlay` 作用域块内启用后优先级高于
+native——见 `docs/syntax/06_oop.md` 覆层章节）。集中落点
+`IbObject._dispatch_protocol_message`（子类共用，机制同构）；协议条目的
+`optional_methods`（如 `llm_callable` 的 `__intent__`/`__retry__`）不建协议槽，经
+`lookup_method` 虚表发现。
+
 ### 2.1 数据对象
 
 `core/runtime/vm/task.py`：

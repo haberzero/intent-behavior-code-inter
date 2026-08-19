@@ -538,6 +538,24 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   optional 登记/all_methods 并集/requires 仅必需/仅 optional 不满足）；全量 pytest **3055
   passed / 1 skipped** 零回归。后续：P6（per-IbClass 协议方法表最终收尾：spec.members 与
   protocol_vtable 双表同步 D3/D6）。
+- **五大地基改造 · P6 per-IbClass 协议方法表最终收尾（本 session，unsafe-vibe-dev）**：
+  **据实评估（分支决策）**：P6 主体（protocol_vtable 数据结构 + receive 前置查表 + 覆层影子
+  条目 + `_dispatch_protocol_message` 集中落点）已在 P2-② 落地并回归（cd60ea6d + 覆层）——
+  决策 1"一举解决 D3+D5"已达成（D5 能力探测 getattr 消除；D3 判定与分派均以**协议条目为单一
+  权威**：satisfies 数据驱动 + dunder_names 派生协议消息面 + 惰性建槽）。剩余面 = 双表收敛
+  实证锁定 + 接口补齐 + 文档漂移修正——**边界清晰、非架构级破坏，不独立分支**（P1 §8.3 分支
+  政策基于"改动面大"的原始评估，当前剩余面已脱离该前提，直推 unsafe-vibe-dev）。
+  **落地**：① D3 收敛契约测试 +4（用户类协议方法 satisfies↔receive 一致；未声明 satisfies
+  False + 无默认实现消息不误分派——to_prompt 例外为 Object 根类默认渲染，消费前置门以
+  satisfies 为准；protocol_vtable 惰性建槽；llm_callable optional 不建协议槽）——
+  `test_protocol_dispatch_contract.py::TestSatisfactionDispatchConvergence`；② `TypeAxiom`
+  接口补齐 `has_validate_prompt_cap` 声明（P5a 只改了 BaseAxiom，接口 Protocol 缺失）；
+  ③ docs 漂移修正：03_type_system §4.0 内置协议列表补 llm_callable + optional_methods 说
+  明、§4.1 TypeAxiom 能力布尔补 has_to_prompt_cap/has_validate_prompt_cap；04_vm_interpreter
+  §2 receive 分派补 protocol_vtable/ProtocolSlot/覆层查表形态。
+  验证：全量 pytest **3059 passed / 1 skipped** 零回归（判别 +4）。后续：五大地基 P1-P6
+  全链路收尾评估（剩余对齐债务：意图值栈全量重构 / has_llm_call_cap → llm_callable /
+  行为值深程统一装配入口收敛）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

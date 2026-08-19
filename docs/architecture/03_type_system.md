@@ -252,7 +252,11 @@ TypeRef 生命周期两端口径必须收敛，避免"结构化 vs 扁平化"两
 
 内置协议（`register_builtin_protocols` 逐引擎注册）：`callable` / `iterable` /
 `subscriptable` / `operator` / `converter` / `parser` / `to_prompt` / `from_prompt` /
-`validate_prompt` / `output_hint` / `payload_prompt` / `snapshotable` / `attribute`。
+`validate_prompt` / `output_hint` / `payload_prompt` / `snapshotable` / `attribute` /
+`llm_callable`（required `__llm_call__` = satisfies 唯一判据；optional `__intent__` /
+`__retry__` 不参与强制判定、经运行时虚表发现）。`optional_methods` 字段（P5）声明
+协议族的可选能力方法：不参与 `satisfies_protocol` 强制判定，仅声明方法族存在
+（`all_methods()` 返回必需 + 可选并集）。
 
 `SpecRegistry.satisfies_protocol(spec, name)` 是**唯一判定入口**（数据驱动：
 动态类型满足一切协议；PROTOCOL kind 不满足；`callable` 走专用 `is_callable` 路径；
@@ -285,9 +289,14 @@ class TypeAxiom(Protocol):
     has_converter_cap:     bool
     has_parser_cap:        bool
     has_from_prompt_cap:   bool
+    has_validate_prompt_cap: bool
     has_output_hint_cap:   bool
     has_payload_prompt_cap: bool
     has_llm_call_cap:      bool
+
+    # to_prompt 是**通用渲染路径**（所有公理类型均可渲染为提示词文本）：BaseAxiom
+    # 默认 True（免逐公理声明），具体公理仅在不具备渲染时覆写为 False。
+    has_to_prompt_cap:     bool
 
     # 能力方法（默认 no-op）
     def resolve_return_type_name(args)         -> Optional[str]: ...

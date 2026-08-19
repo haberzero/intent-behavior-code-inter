@@ -208,27 +208,32 @@ retry）。
 > prompt 协议族五成员消费面前置门全部协议化，无剩余缺口。判别测试 +8；全量 pytest
 > **3055 passed / 1 skipped** 零回归。
 
+> **✅ P6 per-IbClass 协议方法表最终收尾已落地（本 session，unsafe-vibe-dev；决策 1 B）**：
+> 据实评估——P6 主体（protocol_vtable + receive 前置查表 + 覆层影子条目 + `_dispatch_protocol_message`
+> 集中落点）已在 P2-② 落地（cd60ea6d + 覆层），决策 1"一举解决 D3（双表不同步）+ D5（能力探测
+> getattr）"已达成（satisfies 判定与 receive 分派均以**协议条目为单一权威**）。本步剩余面 =
+> 双表收敛实证锁定 + 接口补齐 + 文档漂移修正（边界清晰、非架构级，不独立分支）：① 判别测试 +4
+> （用户类协议方法 satisfies↔receive 一致 / 未声明不误分派（消费前置门以 satisfies 为准）/
+> protocol_vtable 惰性建槽 / llm_callable optional 不建协议槽）；② `TypeAxiom` 接口补
+> `has_validate_prompt_cap` 声明；③ docs 修正（03 §4.0 补 llm_callable + optional_methods、
+> §4.1 补 has_to_prompt_cap/has_validate_prompt_cap、04 §2 补 protocol_vtable/ProtocolSlot/
+> 覆层查表形态）。全量 pytest **3059 passed / 1 skipped** 零回归。**五大地基主线 P1-P6 全链路
+> 完成**。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] P6：per-IbClass 协议方法表最终收尾**：
-   **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基（protocol_vtable 数据结构 `cd60ea6d` + 覆层
-   `1d3fc74a`）+ P3 + P4 全量（P4c 删除/迁移 + P4d retry 高阶化）+ P5（validate_prompt 激活 +
-   required/optional 形式化）（3055 零回归）已合入）。
-   设计权威 `tasks_docs/_five_foundation_P1_design.md` §五（per-IbClass 协议方法表，决策 1 B），
-   决策权威 `_five_foundation_redesign.md` §五。
-   **本步 = P6 剩余面**（protocol_vtable 数据结构 + receive 前置查表 + 覆层影子条目已在 P2-②
-   落地）：**spec.members 与 protocol_vtable 双表同步（D3/D6）**——协议方法表与既有 spec 成员
-   表的权威归属收敛，避免双写真相；协议条目 required/optional 按 P5b 形式化结果对齐 vtable
-   建槽。
+1. **[主线·收尾评估] 五大地基剩余对齐债务（按序评估是否推进）**：
+   **当前分支 = `unsafe-vibe-dev`**（P1-P6 全链路完成，3059 零回归）。
+   - **G5 意图值栈全量重构**（意图栈从"字符串/对象栈"升级为"可渲染一等值栈"，按值匹配；
+     P3 仅落地意图一等值切片 `IbIntent.content` → 可渲染值 + snapshot 冻结补齐，全量重构
+     剩余面与 run_batch/invoke 意图消费对齐）；
+   - **has_llm_call_cap → llm_callable 协议**（BaseAxiom 封闭 flag 集合最后一个公理能力
+     迁移到协议注册表——G7 三层划分收尾）；
+   - **行为值深程统一装配入口收敛**（run_batch/invoke 行为路径当前经各自入口，
+     `assemble_stream_request_cps` 已有桥接先例——收敛到统一装配入口，消双通道）。
    验证门：全量 pytest 零回归 + 本地 commit + 描述性提交。
-   **待 P4 对齐项（债务）**：G5 意图值栈全量重构（栈存原始值/按值匹配）+ has_llm_call_cap →
-   LLMCallable 协议 + 行为值深程统一装配入口收敛（run_batch/invoke 行为路径，当前经各自入口）。
-   **output_hint 自动推导：评估定论 = 保持显式声明，不落地**（P4b 记录项；显式优于隐式——
-   用户 2026-08-12 "显式配置方向"裁定：llm 类 `__llm_call__` 装配 dict 由用户全权构造，
-   expected_type 已注入类型约束，output_hint 为额外格式说明；行为路径的自动取 hint 是行为值
-   节点语义，不扩及 llm 类）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
-3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
+3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理（P9 收尾）。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 

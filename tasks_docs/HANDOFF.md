@@ -243,10 +243,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   （判定不变）；llm_callable 正式登记 optional_methods=("__intent__","__retry__")。P5c 评估即收尾
   （prompt 协议族五成员消费面前置门全部协议化）。判别测试 +8；全量 pytest **3055 passed /
   1 skipped** 零回归。
-  **当前推进 = P6：per-IbClass 协议方法表最终收尾**（protocol_vtable 数据结构 + receive 前置
-  查表 + 覆层影子条目已在 P2-② 落地；剩余 = spec.members 与 protocol_vtable 双表同步 D3/D6 +
-  required/optional 按 P5b 对齐 vtable 建槽），详见 `NEXT_STEPS.md` 下一步候选 #1。按需推进
-  支线（PT-DEBT / VISION-3 / 文档）。
+  **✅ P6 per-IbClass 协议方法表最终收尾已落地（决策 1 B）**：据实评估——P6 主体（protocol_vtable
+  + receive 前置查表 + 覆层影子条目 + _dispatch_protocol_message 集中落点）已在 P2-② 落地，
+  决策 1"一举解决 D3+D5"已达成（satisfies 判定与 receive 分派均以协议条目为单一权威）。剩余面
+  = 双表收敛实证锁定 + 接口补齐 + 文档漂移修正（边界清晰、非架构级，不独立分支）：判别测试 +4
+  （satisfies↔receive 一致 / 未声明不误分派（消费前置门以 satisfies 为准）/惰性建槽/optional
+  不建协议槽）+ TypeAxiom 接口补 has_validate_prompt_cap + docs 三处修正。全量 pytest **3059
+  passed / 1 skipped** 零回归。**五大地基主线 P1-P6 全链路完成**。
+  **当前推进 = 五大地基剩余对齐债务评估**（G5 意图值栈全量重构 / has_llm_call_cap → llm_callable
+  / 行为值深程统一装配入口收敛），详见 `NEXT_STEPS.md` 下一步候选 #1。按需推进支线（PT-DEBT /
+  VISION-3 / 文档 P9 收尾）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -256,7 +262,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] **✅ P4b-3b 流式消费面统一落地**：stream_call/stream_channel 统一消费 LLMCallable（_StreamCallableDrive 帧内 CPS + assemble_stream_request_cps 两路装配）；字符串形态真删除 + 3 语言测试迁移 + 行为值判别 + docs 同步；全量 3036 零回归
 - [x] **✅ P4c 语法/旧机制全链路删除 + 全量迁移落地**：P4c-1 特性地基（实例直接调用 + prompt_slots + call_args）/ P4c-2a 测试迁移 10 文件 / P4c-2b 内核删除（净删 656 行，保留 llmexcept/retry 帧机制）/ P4c-2c examples + trials 12 + docs 全面同步；全仓 core 残留清零；全量 3035 零回归；下一步 = P4d retry 高阶化
 - [x] **✅ P4d retry 高阶化落地**：`__retry__` 协议（`func __retry__(self) -> dict`：max_retry/hint；发现走 `_discover_optional_protocol_method` 同 `__intent__` 通道 + 违约 fail-fast）+ 装配三元组 + invoke 调用级重试循环（_prompt_assembly 单一消息构造累积 message_history 回喂，耗尽交语句层）+ 直接调用/run_batch 继承；边界裁定（帧机制=CPS 窗口重求值 ⊕ 信息装配，高阶化只作用于后者）；判别测试 6 项 + docs 同步；全量 3047 零回归
-- [x] **✅ P5 prompt 类型类化收尾落地**：P5a validate_prompt 激活（BaseAxiom.has_validate_prompt_cap + 协议条目 axiom_cap/structural_methods + 消费前置门，D2 to_prompt 同构）/ P5b required/optional 形式化（ProtocolDef.optional_methods + all_methods()，llm_callable 登记 __intent__/__retry__）/ P5c 评估即收尾（prompt 协议族五成员消费面全协议化）；判别测试 +8；全量 3055 零回归；下一步 = P6（spec.members 与 protocol_vtable 双表同步 D3/D6）
+- [x] **✅ P5 prompt 类型类化收尾落地**：P5a validate_prompt 激活（BaseAxiom.has_validate_prompt_cap + 协议条目 axiom_cap/structural_methods + 消费前置门，D2 to_prompt 同构）/ P5b required/optional 形式化（ProtocolDef.optional_methods + all_methods()，llm_callable 登记 __intent__/__retry__）/ P5c 评估即收尾（prompt 协议族五成员消费面全协议化）；判别测试 +8；全量 3055 零回归
+- [x] **✅ P6 per-IbClass 协议方法表最终收尾落地**：据实评估（P6 主体 P2-② 已落地，D3+D5 已达成——判定/分派以协议条目单一权威；剩余面边界清晰不独立分支）+ 判别测试 +4（satisfies↔receive 一致/未声明不误分派/惰性建槽/optional 不建协议槽）+ TypeAxiom 接口补 has_validate_prompt_cap + docs 三处修正（03 §4.0/§4.1 + 04 §2）；全量 3059 零回归；**五大地基 P1-P6 全链路完成**；下一步 = 剩余对齐债务评估（G5 意图值栈/has_llm_call_cap/行为统一装配）
 - [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
