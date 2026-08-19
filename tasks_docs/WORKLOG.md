@@ -556,6 +556,16 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   验证：全量 pytest **3059 passed / 1 skipped** 零回归（判别 +4）。后续：五大地基 P1-P6
   全链路收尾评估（剩余对齐债务：意图值栈全量重构 / has_llm_call_cap → llm_callable /
   行为值深程统一装配入口收敛）。
+- **五大地基 · 剩余对齐债务评估（本 session，记录交接）**：三项债务均**不属小而清晰**，
+  记录评估依据供后续：① **G5 意图值栈全量重构**（值栈存原始值/按值匹配）——大面重构
+  （intent_context/栈模型/消费点），与 run_batch/invoke 意图消费对齐后再评估；②
+  **has_llm_call_cap → llm_callable**——实证其消费者为**编译期 DDG**（callable 公理经
+  此能力识别 behavior 节点，`core/kernel/axioms/primitives/callable.py`），与运行期
+  llm_callable 协议（`__llm_call__` 用户方法结构判定）**不同层**——不可简单接 axiom_cap
+  （axiom flag 语义 ≠ 结构方法判定），迁移须先做编译期/运行期分层设计；③ **行为值深程
+  统一装配入口收敛**——run_batch/invoke 行为路径经各自入口（`_prepare_behavior_call_cps`
+  vs 统一装配），中大型重构（行为执行路径），`assemble_stream_request_cps` 桥接为先例。
+  均记录于 NEXT_STEPS 候选 #1（收尾评估），不阻塞主线。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
