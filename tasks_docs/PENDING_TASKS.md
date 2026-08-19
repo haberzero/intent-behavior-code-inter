@@ -122,8 +122,11 @@
 - **动机**：巨型 elif 分派链（`runtime_serializer._collect_instance` 深度 16、
   `_get_instance` 17、`core_scanner` 10、`binding_analysis_pass` 9）——方向：
   分派表/守卫子句。
-- **当前理解**：ibci_ai 窄化、auto_discovery fail-fast 生效（A 类保留）；
-  深嵌套链待独立窗口。
+- **当前理解**：ibci_ai 窄化、auto_discovery fail-fast 生效（A 类保留）。**前提复核（本 session）**：
+  实测核心模块最大 if/elif 平铺链长 2、最大缩进 24 空格（6 层，多来自 for+if 组合嵌套）——
+  未发现 >5 层纯 if/elif 分派链；`_collect_instance`/`_get_instance`/`core_scanner` 的"深度
+  16/17/10"主张与现状不符（历史代码已重构摊平）。条目收窄为对 for+if 组合嵌套的可读性抽查
+  （低优先级，随主线顺带）。
 
 ### PT-AUDIT-3 代码复核审查循环（R 系列）
 

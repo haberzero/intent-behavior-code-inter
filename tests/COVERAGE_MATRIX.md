@@ -243,8 +243,9 @@
 |-----|---------|---------|------|
 | INV-LLMEXCEPT-CATCH-1 | llmexcept 捕获 LLM 错误 | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_llmexcept_catches_llm_error` | |
 | INV-LLMEXCEPT-CATCH-2 | retry 块执行 | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_retry_executes_on_error` | |
-| INV-LLMEXCEPT-CATCH-3 | 嵌套 llmexcept | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_nested_llmexcept_independent` | |
-| INV-LLMEXCEPT-CATCH-4 | llmexcept 不捕获普通异常 | 🔶 缺失 | TRUE_GAP：无活测试（历史核对存档见 git） |
+| INV-LLMEXCEPT-CATCH-3 | 无错误时跳过 retry | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_no_error_skips_retry` | |
+| INV-LLMEXCEPT-CATCH-4 | 嵌套 llmexcept 独立 | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_nested_llmexcept_independent` | |
+| INV-LLMEXCEPT-CATCH-5 | llmexcept 不捕获普通异常 | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_llmexcept_does_not_catch_normal_error` | |
 
 ### 6.2 错误历史
 

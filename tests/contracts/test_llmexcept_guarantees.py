@@ -19,7 +19,7 @@ directives drive deterministic outcomes:
 """
 
 import pytest
-from tests.conftest import run_ibci, AI_MOCK_PREFIX
+from tests.conftest import run_ibci, expect_runtime_error, AI_MOCK_PREFIX
 
 
 # ===========================================================================
@@ -75,6 +75,17 @@ print(inner)
 print(outer)
 """
         assert run_ibci(code) == ["inner_fallback", "outer_ok"]
+
+    def test_llmexcept_does_not_catch_normal_error(self):
+        """INV-LLMEXCEPT-CATCH-5: llmexcept 不捕获普通异常（非 LLM 错误原样上抛）。"""
+        code = AI_MOCK_PREFIX + """
+any none_val = None
+str ok = @~ MOCK:STR:done ~
+llmexcept:
+    retry "unused"
+print(none_val.missing)
+"""
+        expect_runtime_error(code, "missing")
 
 
 # ===========================================================================
