@@ -69,13 +69,20 @@
 
 ## 六、下一步候选（下 session）
 
-1. **[主线后续] 审计 E 半接通边界 / F 登记债务核对复核**（本 session 未动，登记项核对）。
-2. **[主线后续] 候选 #1 收尾后主线推进**：G5 意图值栈（如需）、行为统一装配（如需）——
+1. **[主线后续] 审计 E 半接通边界 / F 登记债务核对复核**（本 session 已复核：E = llm 类
+   run_batch 逐项串行为已知登记边界（并发优化留待后续）；F = 无新增，has_llm_call_cap
+   已删）。
+2. **[支线·已评估] 债务评估定论（本 session 已完成）**：PT-DEBT-31 实证核实 done（循环
+   覆写被编译期 DDG 预防、未读残留为已登记有界边界）；PT-DECIDE-4 定案 done（项①被 P4c
+   机制演进解决、项②已登记 KNOWN_LIMITS §十五）；PT-DEBT-29/30 维持登记（需设计/超出
+   当前范围）。PT-DECIDE-2（供应商思考禁用 provider 侧插件化已定案）无需推进；PT-DECIDE-3
+   项①③（__from_prompt__ auto-boxing / SEM_PROTOCOL_SIGNATURE 强度）为语义裁定待用户。
+3. **[主线后续] 候选 #1 收尾后主线推进**：G5 意图值栈（如需）、行为统一装配（如需）——
    均为中大型设计项，需先设计再评估。
-3. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3/4、PT-DEBT-4/5；VISION-3；文档 P9 收尾
-   （docs 代号污染已在 A 清理，P9 剩余为体系治理）；三份 `_five_foundation_*` 设计文档
-   （P1-P6 竣工后评估收敛入 docs 或删除）。
-4. 质量维护（quality-maintenance Tier A/B）随主线顺带。
+4. 支线：PT-FEAT-5（错误用户友好化）/ PT-FEAT-2（Enum 非 str 成员）/ PT-TEST-1（测试体系
+   重构）；VISION-3（真实 LLM 压力试用扩展）；文档 P9 收尾（doc-governance 全流程）；
+   三份 `_five_foundation_*` 设计文档（P1-P6 竣工后评估收敛入 docs 或删除）。
+5. 质量维护（quality-maintenance Tier A/B）随主线顺带。
 
 ## 七、环境与纪律（勿忘）
 
