@@ -3,7 +3,7 @@ core/compiler/semantic/passes/_annotation_utils.py
 
 AST 类型注解 → TypeRef 的单一权威转换（跨 pass 复用）。
 
-``_annotation_to_typeref`` 原先内嵌于 ``SymbolCollector``（符号收集期），F1 宿主绑定
+``_annotation_to_typeref`` 原先内嵌于 ``SymbolCollector``（符号收集期），宿主绑定
 （scheduler 构建宿主模块 spec）也需要同一转换，故提取为模块级函数，原调用方委托至此，
 消除双真相。
 """

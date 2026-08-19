@@ -13,7 +13,7 @@
 - 意图管理：``set_global_intent`` 等（经 capabilities 的 ``intent_manager``）；
 - 内省：``get_current_call_info``（优先内核 LLM 执行器主线程单写槽）。
 
-**自定义 LLM 底层（F4 统一）**：经宿主绑定声明自定义 provider 并 ``ai.set_provider``
+**自定义 LLM 底层**：经宿主绑定声明自定义 provider 并 ``ai.set_provider``
 注册为激活的 llm_provider（HIGH 优先级覆盖内置默认 :class:`RecommendedProvider`）；
 ``provider_impl.py`` 仅作**内置默认实现**保留（未 set_provider 时生效），不再是用户
 自定义入口。本宿主文件不改（改它会破坏 ``ai`` 模块的 IBCI 集成）。
@@ -71,18 +71,18 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
     def setup(self, capabilities: ExtensionCapabilities):
         self._capabilities = capabilities
         # 向能力注册表注册自己为 LLM Provider（.call/.stream 契约）。
-        # 默认 NORMAL 优先级；F4 `set_provider` 可经宿主绑定的自定义 provider
+        # 默认 NORMAL 优先级；`set_provider` 可经宿主绑定的自定义 provider
         # 以更高优先级覆盖之（见 set_provider）。
         capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
 
     # ------------------------------------------------------------------ #
-    # 自定义 provider 注册（F4：宿主绑定统一 provider 自定义）
+    # 自定义 provider 注册（宿主绑定统一 provider 自定义）
     # ------------------------------------------------------------------ #
 
     def set_provider(self, provider: Any) -> None:
         """注册自定义 LLM provider（宿主绑定对象 → 激活 provider）。
 
-        F4 统一 provider 自定义：用户在项目里写一个 Python 类实现
+        统一 provider 自定义：用户在项目里写一个 Python 类实现
         :class:`LLMProvider` 契约（``call`` / ``stream`` / ``get_retry`` /
         ``is_auto_intent_injection_enabled`` / ``get_current_call_info``），
         导出为模块级实例（如 ``provider = MyProvider()``），经宿主绑定声明后

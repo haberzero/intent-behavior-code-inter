@@ -3,7 +3,7 @@ core/runtime/objects/kernel/host_class.py
 
 宿主类型绑定（bind class）运行期类：把裸 Python 类包装为一等 IBCI 类型。
 
-F2 机制（与 F1 模块成员绑定同构）：
+与模块成员绑定同构的机制：
 - 编译期注册 EXTERNAL_MODULE CLASS spec（member 表来自 bind class 嵌套声明 +
   impl 补充）；运行期经 STAGE 5 水化创建本类，包装裸 Python 类（``py_class``）。
 - ``instantiate(args)``：调用裸 Python 类构造实例 → 包装为 IbNativeObject，
@@ -92,7 +92,7 @@ class HostClassBinding(IbClass):
         )
 
     def _make_bound_proxy(self, py_bound: Any, param_meta: list):
-        """构建 per-instance 绑定方法 proxy（F1 create_proxy + 宿主返回重包装）。
+        """构建 per-instance 绑定方法 proxy（create_proxy + 宿主返回重包装）。
 
         原生方法返回值若为宿主 ``py_class`` 实例（如 ``datetime.replace`` 返回
         新 datetime），重新包装为宿主实例——否则 vtable/whitelist 契约随对象丢失

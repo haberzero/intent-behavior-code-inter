@@ -104,7 +104,7 @@ class MockScenarioEngine:
             if "MOCK:" in prompt:
                 warnings.warn(
                     "A MOCK: directive was found in the LLM prompt but is not at the start. "
-                    "LLM function MOCK must be the sole content of the __user__ block "
+                    "A MOCK directive must be the sole content of the prompt "
                     "(a single 'MOCK:<directive>' line with no other text). "
                     "The directive will be ignored and a generic mock response will be used instead.",
                     UserWarning,

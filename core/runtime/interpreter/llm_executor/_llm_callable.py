@@ -144,8 +144,8 @@ class _LLMCallableMixin:
         - ``call_args``：llm 可调用类实例直接调用 ``f(...)`` 时按位绑定到
           ``__llm_call__`` 非 self 参数；缺省（None）时回落 ``item`` 路径。
         - 装配 dict 契约：``user_prompt``（必需）/ ``output_hint`` /
-          ``expected_type`` / ``model`` / ``prompt_slots``（可选，__sys__ 等自定义槽
-          迁移载体，``[{kind, text}]``）。
+          ``expected_type`` / ``model`` / ``prompt_slots``（可选，自定义语义槽，
+          ``[{kind, text}]``）。
         """
         ib_class = callable_inst.ib_class
         reg = getattr(ib_class, "registry", None)
@@ -204,8 +204,7 @@ class _LLMCallableMixin:
         if retry_method is not None:
             retry_policy = yield from self._resolve_retry_policy_cps(retry_method, callable_inst)
 
-        # 装配 dict 的 `prompt_slots` 键（__sys__ 等自定义语义槽迁移载体，
-        # 经 __llm_call__ 自定义槽装配；缺省为空列表）。
+        # 装配 dict 的 `prompt_slots` 键（自定义语义槽，经 __llm_call__ 装配；缺省为空列表）。
         prompt_slots = self._llm_callable_config_prompt_slots(config)
 
         user_prompt = config.get("user_prompt")
@@ -314,7 +313,7 @@ class _LLMCallableMixin:
         返回策略声明 dict：``{"max_retry": int(>=1, 可选), "hint": str(可选)}``。
         空 dict 合法（启用默认 max_retry=3 的策略重试）。返回非 dict、参数数非 0、
         max_retry 非 int 或 <1、hint 非 str → fail-fast（契约违约显式暴露）。
-        策略语义：hint 承接旧 ``__llmretry__`` 段（重试提示经 retry 轮 user 消息
+        策略语义：hint 为每轮失败后注入的补充要求（重试提示经 retry 轮 user 消息
         回喂，不重复注入 sys_prompt）；耗尽后结果交语句层（llmexcept / LLMParseError）。
         """
         spec = getattr(retry_method, "spec", None)
@@ -350,7 +349,7 @@ class _LLMCallableMixin:
 
     @staticmethod
     def _llm_callable_config_prompt_slots(config: Dict[str, Any]) -> list:
-        """解析装配 dict 的 ``prompt_slots`` 键（``__sys__`` 等自定义槽迁移载体）。
+        """解析装配 dict 的 ``prompt_slots`` 键（自定义语义槽）。
 
         ``[{kind: str, text: str}, ...]`` → :class:`PromptSlot` 列表；缺省（无该键）
         → 空列表。形态违约（非 list / 元素非 {kind,text} / 值非 str）→ fail-fast
@@ -446,7 +445,7 @@ class _LLMCallableMixin:
         单一消息构造（``build_retry_message_history_from_attempts``）累积多轮
         对话历史（``message_history``，provider 追加在首轮之后），再执行下一轮——
         与行为路径的 llmexcept 帧回喂语义一致（hint 经 retry 轮 user 消息回喂，
-        不重复注入 sys_prompt，承接旧 ``__llmretry__`` 段）。
+        不重复注入 sys_prompt）。
 
         达到 ``max_retry``（声明缺省 3）仍不确定 → 返回最后一次不确定结果，
         交语句层（llmexcept 帧接管 / 无帧则 LLMParseError），与无策略路径一致。

@@ -261,7 +261,7 @@ func test() -> auto:
 
 #### 11.10.1 宿主类型绑定（bind class）
 
-`bind class` 把裸 Python **类**绑定为一等 IBCI 类型（F2 成果），可作类型注解、构造、
+`bind class` 把裸 Python **类**绑定为一等 IBCI 类型，可作类型注解、构造、
 `impl` 目标与协议满足判定：
 
 ```ibci
@@ -284,7 +284,7 @@ func test() -> auto:
   同一 bind class 块内不得重复绑定同名成员。
 - 实例 = 宿主原生实例（一等值）：bind 方法返回裸宿主实例时自动重包装，契约随返回
   对象延续（如 `datetime.replace` 返回新 datetime 仍是 IBCI `datetime`）。
-- 契约外成员 / 缺失宿主类 / 缺失成员 → fail-fast（与 F1 一致）。
+- 契约外成员 / 缺失宿主类 / 缺失成员 → fail-fast。
 
 ---
 

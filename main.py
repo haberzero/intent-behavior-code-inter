@@ -93,7 +93,7 @@ def main():
             if hasattr(args, 'verbose') and args.verbose:
                 print(f"[Auto-detect] No project root detected, using entry directory: {root_dir}")
 
-    # 初始化引擎（F3：无插件发现/嗅探开关）
+    # 初始化引擎（无插件发现/嗅探开关）
     engine = IBCIEngine(root_dir=root_dir)
 
     if args.command == "run":

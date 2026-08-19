@@ -3,9 +3,9 @@ core/runtime/module_system/proxy.py
 
 Native 成员代理（unbox → 调 Python → box）的单一权威构造。
 
-原内嵌于 ``ModuleLoader._validate_and_bind``（_spec.py 插件路径）；F1 宿主绑定
+原内嵌于 ``ModuleLoader._validate_and_bind``；宿主绑定
 （``import python "pkg" as lib: bind ...``）也需要同一代理机制，故提取为模块级
-工厂，两个绑定源（插件 metadata / 用户 IBCI bind 声明）共用——消除双通道。
+工厂，两个绑定源共用——消除双通道。
 """
 
 import inspect

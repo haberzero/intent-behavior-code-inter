@@ -61,4 +61,6 @@ print(result)
 
 ## 深入指引
 
-- LLM 可调用类装配与统一消费：`docs/architecture/` LLM 执行章节
+- LLM 调用层与 provider 契约（供应商无关中间层、MOCK 哨兵）：`docs/architecture/01_principles.md` §3.7
+- 协议注册表（`llm_callable` required `__llm_call__` / optional `__intent__`/`__retry__`）：`docs/architecture/03_type_system.md` §4.0
+- VM 协议分派（`protocol_vtable` / `ProtocolSlot` / receive 前置查表）：`docs/architecture/04_vm_interpreter.md` §2

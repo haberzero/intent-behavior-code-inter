@@ -260,7 +260,7 @@ class IbSlot(IbObject):
 
 
 class _SlotUpdateWaitable:
-    """``slot.update(fn)`` 的 CAS 读改写 Waitable（F2：当前帧 CPS 驱动 fn）。
+    """``slot.update(fn)`` 的 CAS 读改写 Waitable（当前帧 CPS 驱动 fn）。
 
     当 ``update`` 的可调用分支返回本对象时，VM 经既有 Waitable 挂起路径驱动它：
     ``try_result()`` 在挂起恢复后读取当前值，经 ``_vm_call_fn_callable``

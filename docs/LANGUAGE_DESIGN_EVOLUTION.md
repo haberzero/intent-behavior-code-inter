@@ -45,9 +45,11 @@ has_subscript_cap
 has_operator_cap
 has_converter_cap
 has_parser_cap
+has_to_prompt_cap
 has_from_prompt_cap
+has_validate_prompt_cap
 has_output_hint_cap
-has_llm_call_cap
+has_payload_prompt_cap
 ```
 
 这意味着：语言能识别哪些“能力”，在写内核时就已经被枚举死了。用户不能声明一种新能力，也不能说“这个类型满足某个用户定义的协议”。
@@ -75,24 +77,26 @@ has_llm_call_cap
 当前意图可以包含 `$var` / 表达式段，但这仍然是在“求值后转成字符串”的层面。它没有：
 
 - 把“一个用户定义对象”作为意图值；
-- 把“一个函数实例 / behavior / llm function”作为意图值；
+- 把“一个函数实例 / behavior / LLM 可调用值”作为意图值（P3 已部分落地）；
 - 让意图渲染与普通 prompt 渲染共用同一套协议；
 - 让用户自定义类型通过接口控制自己在意图中的呈现。
 
 另外，`core/runtime/objects/kernel/_helpers.py` 中通过“参数类型名是不是 `intent_context`”以及“对象有没有 `_ctx` 字段”来触发意图上下文激活，这是一种典型的魔法字段判断，而不是协议/接口判断。
 
-### 1.4 LLM 函数与普通函数：两条平行执行路径
+### 1.4 可调用值：LLM 调用与确定性函数（曾为两条平行路径，现已协议化统一）
 
-- `IbUserFunction` 与 `IbLLMFunction` 都是 `IbFunction` 子类；
-- 但执行路径分别是 `_vm_call_user_function` 与 `_vm_invoke_llm_function`；
-- 编译期也有 `IbFunctionDef` 与 `IbLLMFunctionDef` 两个 AST 节点；
-- 类型层面都通过 `fn` 可调用，但缺少一个统一的“Callable 协议”来描述：
-  - 普通函数：确定性执行；
-  - LLM 函数：有 prompt 模板、返回类型解析、retry hint；
-  - behavior：即时或延迟 LLM 调用；
-  - snapshot/lambda：捕获策略不同。
+- 早期存在 `IbUserFunction` 与 `IbLLMFunction`（`llm ... llmend` 语法）两条平行执行路径
+  （`_vm_call_user_function` / `_vm_invoke_llm_function`），编译期也有 `IbFunctionDef` 与
+  `IbLLMFunctionDef` 两个 AST 节点；
+- **该平行结构已随协议化重构消除**：`llm ... llmend` 语法与旧机制全量删除，统一为
+  **LLMCallable 协议**（`__llm_call__` 必需方法）——行为描述语句与 LLM 可调用类经统一装配
+  入口 `assemble_llm_callable_request_cps` 消费；普通 `fn`/lambda/snapshot 等可调用值由
+  Callable 协议描述；
+- 普通函数：确定性执行；LLM 可调用类/行为：有 prompt 装配、返回类型解析、`__retry__` 重试
+  策略；snapshot/lambda：捕获策略不同（snapshot 冻结意图、lambda 引用捕获）。
 
-这种平行结构在短期内清晰，但长期会阻碍“把函数作为一等值放入意图、放入数据结构、被协议约束”等需求。
+统一后，「把可调用值作为一等值放入意图、放入数据结构、被协议约束」的能力已落地（`__intent__`
+可选协议方法改写意图三层；行为/可调用值经 `__to_prompt__` 嵌入意图）。
 
 ### 1.5 OOP：有类、继承、dunder，但没有接口/抽象/封装
 

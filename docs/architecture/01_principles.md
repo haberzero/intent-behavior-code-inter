@@ -176,11 +176,11 @@ IBC-Inter 把 LLM 当作一个可调用的"表达式/函数"来对待：内核�
 - 内省/调试（`get_current_call_info` / idbg）暴露 `LLMCallRequest.as_dict()` 全量
   + provider 回填的实际 `sys_prompt` / `response`。
 
-**自定义已统一（F4）**：LLM 调用经 `llm_provider` 能力接入——内核 LLM 执行器每次
+**自定义已统一**：LLM 调用经 `llm_provider` 能力接入——内核 LLM 执行器每次
 调用从能力注册表读当前激活 provider，再调 `call()`/`stream()`。内置默认 provider 为
 `ibci_modules/ibci_ai/provider_impl.py` 的 `RecommendedProvider`（无自定义时生效）。
 
-- **用户自定义 LLM 底层**（正式通道，F4）：写实现 `LLMProvider` 契约的 Python 类，
+- **用户自定义 LLM 底层**（正式通道）：写实现 `LLMProvider` 契约的 Python 类，
   经宿主绑定 `import python "my_provider" as lib: bind provider` 声明，并
   `ai.set_provider(lib.provider)` 注册为激活 provider（HIGH 优先级覆盖默认）。
   无需修改任何内核/内置文件。操作指南见 `docs/howto/modify_llm_provider.md`。

@@ -6,7 +6,7 @@
 > `docs/architecture/01_principles.md` §3.7（供应商无关中间层）、Python 基础、
 > `docs/howto/extend_with_host_binding.md`（宿主绑定）。
 
-## 总览：provider 自定义经宿主绑定统一（F4）
+## 总览：provider 自定义经宿主绑定统一
 
 IBCI 的 LLM 调用经 **`llm_provider` 能力** 接入：内核 LLM 执行器每次调用都从能力
 注册表读取当前激活的 provider，再调 `provider.call(request)` / `provider.stream(request)`。
@@ -104,7 +104,7 @@ ai.set_provider(lib.provider)
 配置读取经 `ConfigSourceAdapter` 抽象（`core.base.llm_protocol.config`）。默认适配器
 `ProjectApiConfigAdapter`（`ibci_modules/ibci_ai/config_source_adapter.py`）识别推荐
 schema。想用自己的格式：自写 `ConfigSourceAdapter` 实现并替换默认适配器（整文件替换
-`config_source_adapter.py`，保持类名 `ProjectApiConfigAdapter`），或经 F4 provider
+`config_source_adapter.py`，保持类名 `ProjectApiConfigAdapter`），或经 provider 宿主绑定
 接入自定义配置读取。
 
 ## 注意事项

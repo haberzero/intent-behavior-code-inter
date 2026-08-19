@@ -1,14 +1,13 @@
 # 原生宿主绑定（Native Host Binding）
 
-> 本文档描述 IBCI 用户层原生绑定 Python 内容的**远期架构**：宿主导入语法、用户 IBCI
-> 类型/协议对裸 Python 内容的绑定、插件体系的重构走向，以及内核 IBCI 自举与
-> 缓存/JIT 的规划。面向需要理解"抛弃 Python 侧 `_spec.py` 插件思路"这一方向的
-> 架构演进的设计者。
+> 本文档描述 IBCI 用户层原生绑定 Python 内容的架构：宿主导入语法、用户 IBCI
+> 类型/协议对裸 Python 内容的绑定，以及插件体系重构后的扩展唯一边。面向需要
+> 理解"宿主绑定 = 用户扩展唯一边"这一架构形态的设计者。
 >
-> 本文档是 `tasks_docs/ROADMAP_NATIVE_BINDING.md` §三【远期愿景】F0-F5 的**设计
-> 底稿**（F0 产物）。当前代码状态：F0（地基验证）、F1（宿主导入一等语法 + 用户类
-> 持有 native）、F2（bind class 宿主类型绑定）、F3（插件体系重构：废弃 `_spec.py`
-> 磁盘发现通道，宿主绑定成为用户扩展唯一边）已完成并合入；F4-F5 未开始。
+> 当前状态：宿主导入一等语法 + 用户类持有 native、`bind class` 宿主类型绑定、
+> 插件体系重构（废弃 `_spec.py` 磁盘发现通道，宿主绑定成为用户扩展唯一边）均已
+> 实现并合入。内核 IBCI 自举与缓存/JIT 属远期规划（见 `docs/LANGUAGE_DESIGN_EVOLUTION.md`
+> 演进评估）。
 
 ---
 
@@ -16,7 +15,7 @@
 
 IBCI 曾以 **Python 侧手写 `_spec.py` 插件** 的方式暴露 Python 内容给用户：
 用户在 Python 侧定义实现 + `__ibcext_vtable__()` 契约，IBCI 侧经 `import` 包装为
-模块（该通道已由 F3 废弃删除）。它带来几个结构性限制：
+模块（该通道已废弃删除）。它带来几个结构性限制：
 
 1. **双语言契约割裂**：契约（`_spec.py`）与实现（`.py`）分居两个文件、两种形态，
    用户在 Python 侧维护"给 IBCI 看的接口"，而非在 IBCI 侧声明"我要绑定什么"。
@@ -55,10 +54,9 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
   `box(getattr(py_obj, name))`；**契约外成员 → AttributeError（fail-fast）**。
 - Registry 隔离：`registry_id` 身份校验拒绝跨引擎穿透。
 
-**结论：成员访问强制经声明，无隐式穿透。缺"让用户 IBCI 代码按声明导出 native
-成员"的干净机制（正是本方向要新增的）。**
+**结论：成员访问强制经声明，无隐式穿透。**
 
-### 2.3 import 解析路径（F1 前）
+### 2.3 import 解析路径
 
 `core/runtime/interpreter/module_manager.py`：
 
@@ -70,20 +68,15 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
   scheduler 注入符号（`VariableSymbol(MODULE)` / 成员符号）；VM handler
   `vm_handle_IbImport`/`vm_handle_IbImportFrom` → `module_manager`。
 
-**结论（F1 前）**：没有"直接导入裸 Python 模块并自动按 IBCI 声明绑定成员"的路径；
-取 Python 包必经 `_spec.py`。F1 起新增 `import python "..." : bind ...` 宿主绑定路径；
-F3 起 `_spec.py` 通道删除，宿主绑定成为唯一用户扩展通道。
+**现状**：`_spec.py` 通道已删除；取 Python 包的唯一通道 = 宿主绑定
+`import python "..." : bind ...`（见 §四/§五）。
 
 ### 2.4 成员绑定机制（可复用的既有实现）
 
 `core/runtime/module_system/loader.py` `_validate_and_bind`：spec 声明成员 →
 校验实现对象含该成员 → 构建 proxy（`unbox → 调 Python → box`，含 `param_meta`
 与 `**kwargs` 契约）→ 白名单。这个"按声明绑定 native 成员"的机制**完整存在**，
-历史上绑定源是 `_spec.py` metadata（discovery 从 `__ibcext_vtable__()` 构建），
-F1/F3 后绑定源是用户 IBCI 侧 `bind` 声明。
-
-**结论：F1 的"用户侧声明绑定"复用该 proxy/param_meta 机制，绑定源为
-用户 IBCI 侧声明。**
+绑定源是用户 IBCI 侧 `bind` 声明（`import python ... : bind ...`）。
 
 ### 2.5 协议/impl 限制
 
@@ -95,9 +88,9 @@ F1/F3 后绑定源是用户 IBCI 侧 `bind` 声明。
 
 ---
 
-## 三、设计框架（F0 定稿方向）
+## 三、设计框架
 
-### 3.1 语法形态（§四裁决点 1）
+### 3.1 语法形态
 
 **决策**：复用既有 `import` 关键字，新增"宿主绑定"形态：`import python "pkg" as lib`
 （`python` 伪模块 + 字符串模块名）。
@@ -110,21 +103,21 @@ F1/F3 后绑定源是用户 IBCI 侧 `bind` 声明。
 3. **语义区分**：`python` 伪模块显式标识"宿主空间导入"，字符串模块名表达"任意
    Python 包/模块/对象"，天然支持按需精确导入。
 4. **无外部用户**：宿主绑定是全新语法，不破坏既有 .ibci 代码；即便后续调整形态，
-   迁移成本为零。风险可控，自主决策（该裁决已沉入本设计底稿）。
+   迁移成本为零。
 
-### 3.2 宿主导入类型地位（§四裁决点 2）
+### 3.2 宿主导入类型地位
 
 **一等类型**，复用 `Provenance.EXTERNAL_MODULE` 轴（已存在）。宿主导入的模块/类/函数
-以一等值/类型进入 IBCI 类型系统，可被 `impl`/协议引用（F2）。
+以一等值/类型进入 IBCI 类型系统，可被 `impl`/协议引用（见 §五）。
 
-### 3.3 成员绑定机制（§四裁决点 3）
+### 3.3 成员绑定机制
 
 **显式声明式绑定**（非自动穿透）：用户 IBCI 类/方法声明绑定 native 成员，运行时
 经 vtable/whitelist 门控（`IbNativeObject.receive` 强制 vtable，契约外成员
 fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box + param_meta）
-机制，仅把绑定源从 `_spec.py` metadata 换为用户 IBCI 侧声明。
+机制，绑定源为用户 IBCI 侧声明。
 
-### 3.4 与 _spec.py 的关系（F3，已完成）
+### 3.4 与 _spec.py 的关系
 
 `_spec.py` 插件通道已按本方向废弃删除，**不保留双通道**：内置模块契约集中为
 `core/runtime/bootstrap/builtin_modules.py` 的 TypeDef 字面量（构造期注册），
@@ -132,22 +125,23 @@ fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box 
 
 ### 3.5 关键实现落点（已实证）
 
-| 阶段 | 落点 | 机制 |
+| 环节 | 落点 | 机制 |
 |---|---|---|
-| F1 | parser `core/compiler/parser/components/import_def.py` `parse_import` | 识别 `python` 伪模块 + 字符串模块名 |
-| F1 | `core/compiler/parser/parser.py:188` | import 语句入口分发 |
-| F1 | scheduler `core/compiler/scheduler.py`（import 符号注入 470-549） | 注入宿主模块符号/成员符号 |
-| F1 | `core/runtime/interpreter/module_manager.py` `import_module` | `python` 分支：裸 Python import → 用户侧绑定 |
-| F1 | `core/runtime/vm/handlers/declarations.py` `vm_handle_IbImport` | 运行时导入执行 |
-| F1 | `loader._validate_and_bind` proxy 机制 | 复用为绑定构造 |
-| F2 | `_declaration_visitors.py:86-92` `visit_IbImplDef` | impl 目标 provenance 检查（USER_DEFINED → 允许 EXTERNAL_MODULE） |
-| F2 | 协议满足检查（类自身 + impl 并集） | 加入宿主绑定成员 |
+| 语法解析 | `core/compiler/parser/components/import_def.py` `parse_host_import` | 识别 `python` 伪模块 + 字符串模块名 + bind 块 |
+| Import 分发 | `core/compiler/parser/parser.py` | import 语句入口分发（宿主 import 跳过 IBCI 依赖图） |
+| 符号注入 | `core/compiler/scheduler.py` | 从 bind 声明合成宿主模块 spec（EXTERNAL_MODULE MODULE）+ 注入 lib 符号 |
+| 语义绑定 | `symbol_resolution_pass.py` | `visit_IbHostImport` 绑定符号到节点 |
+| 运行时导入 | `core/runtime/interpreter/module_manager.py` `import_host_module` | importlib + 按 bind 构建 vtable/whitelist + create_native_object + create_module |
+| VM | `declarations.py` / `dispatch.py` | `vm_handle_IbHostImport` + 注册 |
+| 成员绑定 | `loader._validate_and_bind` proxy 机制 | 复用为绑定构造 |
+| impl 目标放行 | `_declaration_visitors.py` `visit_IbImplDef` | impl 目标 provenance 检查（USER_DEFINED → 允许 EXTERNAL_MODULE） |
+| 协议满足 | `core/kernel/spec/registry/_protocol.py` `satisfies_protocol` | 三级数据驱动；在"bind 声明 + impl 补充"并集上判定 |
+| 单一权威源 | `_annotation_utils.py` / `proxy.py` / `base.unbox_for_native_call` | `annotation_to_typeref`（AST→TypeRef）、`create_proxy`（unbox→调→box）、`unbox_for_native_call`（可调用透传 + 拆箱） |
 
-**F2 机制细节（已实证）**：
-- 协议满足判定是编译期静态 spec 判定（`core/kernel/spec/registry/_protocol.py:154-170`
-  `satisfies_protocol` 三级数据驱动）。
+**成员并集机制（已实证）**：
+- 协议满足判定是编译期静态 spec 判定（`satisfies_protocol` 三级数据驱动）。
 - 成员并集无独立合并器：impl 方法直接注入 `spec.members`（`symbol_collection_pass.py`
-  346-386），运行期水化进同一 vtable（`interpreter.py:745-781`）——F2 扩展点 =
+  346-386），运行期水化进同一 vtable（`interpreter.py:745-781`）——扩展点 =
   `spec.members` 单一汇入点 + 封印前 vtable 注入。
 - 宿主类型最少接入：TypeDef(CLASS, module_path) 注册 + members 声明 + 运行期 IbClass
   +（带方法体时）作用域合成；TypeRef `(head, args, module)` 三级解析
@@ -155,15 +149,7 @@ fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box 
 
 ---
 
-## 四、F0 验证结论
-
-- **内核 API 层实证通过**：`box(json)` → IbNativeObject；手动 vtable（dumps/loads）
-  后 `receive` 调用成功（unbox→调→box）。证明"绑定裸 Python 模块成员"内核层可行。
-- **验证门**：全量 pytest 绿（未改代码）；本设计文档与代码一致。
-
----
-
-## 五、F1 落地（宿主导入一等语法 + 用户类持有 native）
+## 四、宿主导入一等语法（bind 模块成员）
 
 **语法（已实现）**：
 
@@ -201,16 +187,15 @@ import python "math" as m:
 | VM | `declarations.py` / `dispatch.py` | `vm_handle_IbHostImport` + 注册 |
 | 单一权威源 | `_annotation_utils.py` / `proxy.py` | `annotation_to_typeref`（AST→TypeRef）、`create_proxy`（unbox→调→box）从既有实现提取共用 |
 
-**验证门**：e2e（`m.sqrt(16.0)=4.0`、`m.pi`、`m.pow(2,10)=1024.0`、用户类 `Calculator`
+**验证面**：e2e（`m.sqrt(16.0)=4.0`、`m.pi`、`m.pow(2,10)=1024.0`、用户类 `Calculator`
 持 native 调 `sqrt=5.0`、无 asname `math.sqrt=4.0`、磁盘文件 rehydrate 后执行、
 跨模块导入 `hsqrt(49.0)=7.0`）；负样本（未声明成员 fail-fast、绑定缺失成员报错、
 编译期类型检查 `SEM_TYPE_MISMATCH`、重复 bind `SEM_REDEFINITION`、`import python` 无字符串
-回落普通路径）；全量 pytest 3041 passed / 1 skipped（含新增 `tests/runtime/test_host_binding.py`
-10 项）零回归。
+回落普通路径）；全量 pytest 零回归（`tests/runtime/test_host_binding.py`）。
 
 ---
 
-## 六、F2 落地（bind class 宿主类型绑定 + impl 目标解除）
+## 五、宿主类型绑定（bind class）
 
 **语法（已实现）**——两种形态：
 
@@ -224,7 +209,7 @@ import python "json" as j2:
 ```
 
 - `bind class Name: <嵌套 bind 成员>`：把裸 Python 类绑定为一等 IBCI 类型。嵌套成员
-  声明规则与 F1 模块成员一致（方法 `bind f(params) -> ret` / 属性 `bind x -> type`）。
+  声明规则与模块成员一致（方法 `bind f(params) -> ret` / 属性 `bind x -> type`）。
 - `bind class Name -> any` 简写：仅建立类型身份，能力由 `impl` 补充（纯 impl 场景）。
 - **成员表 = 宿主声明 + impl 补充并集**：bind 声明是宿主类自身能力契约；`impl` 只补充
   IBCI 协议所需而宿主没有的方法（`visit_IbImplDef` provenance 放行 EXTERNAL_MODULE 与
@@ -240,7 +225,7 @@ import python "json" as j2:
   绑定方法）+ whitelist（bind 属性）。
 - impl 方法不并入 vtable——经 `IbNativeObject._dispatch_getattr` 类方法回落导出为
   `IbBoundMethod`（注入 receiver，与用户对象方法同构）。回落仅限宿主类实例
-  （`isinstance(ib_class, HostClassBinding)` 门控，避免击穿 F1 契约门禁）。
+  （`isinstance(ib_class, HostClassBinding)` 门控，避免击穿契约门禁）。
 - bind 方法返回裸 `py_class` 实例时重新包装为宿主实例（一等类型语义：Python
   `datetime` 就是 IBCI `datetime`，契约随返回对象延续）。
 - STAGE 5 预注册：`_hydrate_host_classes` 扫描模块根 IbHostImport，导入裸 Python 模块、
@@ -251,17 +236,17 @@ import python "json" as j2:
 宿主类实例化共用）；`module_manager.import_host_py_module`（STAGE 5 与 VM 宿主 import
 共用导入入口，统一错误类型）。
 
-**验证门**：F2 e2e（bind+impl 共存、decode 原生、datetime 属性+replace 返回重包装、
+**验证面**：e2e（bind+impl 共存、decode 原生、datetime 属性+replace 返回重包装、
 简写 encoder、deque 类型注解、queue.Queue 实例属性、跨模块宿主类、用户类持宿主实例、
-F1+F2 同 bind 块共存、MathLib 类绑定）；负样本（契约外成员/缺失类/缺失成员 fail-fast、
-bind vs impl 同名 SEM_REDEFINITION、块内重复绑定 SEM_REDEFINITION）；全量 pytest
-3053 passed / 1 skipped（`tests/runtime/test_host_binding.py` F1 10 + F2 18 项）零回归。
+bind 模块与 bind class 同块共存、MathLib 类绑定）；负样本（契约外成员/缺失类/缺失成员
+fail-fast、bind vs impl 同名 SEM_REDEFINITION、块内重复绑定 SEM_REDEFINITION）；全量
+pytest 零回归（`tests/runtime/test_host_binding.py`）。
 
 ---
 
 ## 深入指引
 
-- 主线路线图与阶段切分：`tasks_docs/ROADMAP_NATIVE_BINDING.md`
-- 近期 provider 分离（已完成的近期主线）：`docs/architecture/01_principles.md` §3.7
-- 内核原生模块边界：`docs/architecture/07_kernel_native_modules.md`
+- 宿主绑定用户 howto：`docs/howto/extend_with_host_binding.md`
+- 内置模块系统与宿主绑定：`docs/subsystems/04_plugin_system.md`
 - 模块系统语法：`docs/syntax/11_modules.md`
+- LLM provider 自定义（宿主绑定通道）：`docs/howto/modify_llm_provider.md` + `docs/architecture/01_principles.md` §3.7

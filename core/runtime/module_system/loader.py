@@ -1,4 +1,4 @@
-# F3：插件体系重构后，IBCI 运行时不扫描磁盘查找用户插件（用户侧扩展唯一边 =
+# IBCI 运行时不扫描磁盘查找用户插件（用户侧扩展唯一边 =
 # 宿主绑定 bind）。本 loader 仅负责对构造期已注册的内置模块做契约绑定与
 # setup(capabilities) 注入（load_and_register_all 单一入口）。
 import inspect
@@ -145,7 +145,7 @@ class ModuleLoader(IModuleLoader):
 
     def load_and_register_all(self, context: ServiceContext, execution_context: IExecutionContext):
         """
-        对已注册模块实现做契约绑定与 setup 注入（F3：无磁盘发现/扫描）。
+        对已注册模块实现做契约绑定与 setup 注入（无磁盘发现/扫描）。
 
         遍历元数据注册表中所有模块：存在实现（构造期内置模块 / host 绑定 /
         测试手动注册）则严格绑定；无实现（纯元数据）跳过——用户侧扩展不留

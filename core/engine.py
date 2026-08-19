@@ -99,7 +99,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         root-dependent 设置（Scheduler）延迟到 ``_ensure_root_initialized``，
         在 run/compile/check 时经 ``_establish_project_root`` 确立 project_root 后触发。
 
-        F3：用户侧扩展唯一边 = 宿主绑定 bind；不再有插件搜索路径/嗅探/继承透传
+        用户侧扩展唯一边 = 宿主绑定 bind；不再有插件搜索路径/嗅探/继承透传
         （_spec.py 磁盘发现通道已废弃，内置模块全部构造期预注册）。
         """
         # --- root-independent ---
@@ -191,7 +191,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         幂等：engine 单次执行，project_root 一旦确立不再变。
         内置模块已构造期预注册；loader 仅负责已注册模块的契约绑定与 setup
-        （F3：无磁盘插件发现/搜索路径）。
+        （无磁盘插件发现/搜索路径）。
         """
         if self._root_initialized:
             return
@@ -298,7 +298,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
     def _load_plugins(self, service_context: ServiceContext, execution_context: IExecutionContext, intrinsic_manager: Any):
         """驱动模块加载生命周期 (STAGE 4 -> STAGE 5)。
 
-        F3：无插件公理加载（__ibcext_axiom__ 死协议已废弃）；内置模块经
+        无插件公理加载（__ibcext_axiom__ 死协议已废弃）；内置模块经
         module_loader 契约绑定与 setup（构造期已注册实现）。
         """
 
