@@ -579,21 +579,6 @@ class IbBehaviorExpr(IbExpr):
     dispatch_eligible: bool = False
 
 @dataclass(kw_only=True, eq=False)
-class IbBehaviorInstance(IbExpr):
-    """
-    隐式实例化的行为描述。
-    
-    当强制类型转换与行为描述语句结合时（如 (Mood) @~...~），
-    编译器会创建此节点，指示解释器：
-    1. 执行 LLM 调用获取结果
-    2. 根据 target_type 调用 from_prompt 解析
-    3. 返回目标类型的实例
-    """
-    segments: List[Union[str, IbExpr]]  # 原始行为描述片段
-    target_type_name: str = ""           # 目标类型名称（如 "Mood"）
-
-
-@dataclass(kw_only=True, eq=False)
 class IbLambdaExpr(IbExpr):
     """
     参数化 lambda/snapshot 表达式。

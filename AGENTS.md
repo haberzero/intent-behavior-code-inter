@@ -107,7 +107,6 @@ python -m pytest tests/
 
 - **文档多为 CRLF**，部分历史文件含非 UTF-8 字节；Edit 工具多行匹配可能失败，改用单行锚点或 PowerShell。
 - **Windows 路径大小写不敏感**；`tests/conftest.py` 强制 basetemp 为 `.tmp_pytest/`（跨盘 relpath 兼容）。
-- **临时目录导入**需 `importlib.invalidate_caches()`，否则 `FileFinder` 缓存陈旧导致 `import_module` 失败（见 `ibci_sdk/check.py` `_load_module`）。
 - 文档引用代码路径时以 `docs/README.md` §四"代码路径约定"为准（多个模块已重构为包）。
 
 ## 不要做的事

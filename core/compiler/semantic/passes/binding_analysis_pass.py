@@ -236,7 +236,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
 
     def _collect_vars_from_node(self, node: ast.IbASTNode, names: Set[str]):
         """递归收集节点中的变量引用名。"""
-        if isinstance(node, ast.IbBehaviorExpr) or isinstance(node, getattr(ast, 'IbBehaviorInstance', type(None))):
+        if isinstance(node, ast.IbBehaviorExpr):
             for seg in getattr(node, 'segments', []):
                 if isinstance(seg, ast.IbASTNode):
                     self._collect_root_names(seg, names)

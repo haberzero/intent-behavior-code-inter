@@ -125,7 +125,7 @@ class StatementVisitorsMixin:
             # (支持 await <behavior> 的显式等待形式：解包 IbAwaitExpr 处理内层行为)
             rhs = node.value
             rhs_inner = rhs.value if isinstance(rhs, ast.IbAwaitExpr) else rhs
-            if isinstance(rhs_inner, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
+            if isinstance(rhs_inner, ast.IbBehaviorExpr):
                 if target_type and not self.registry.is_dynamic(target_type):
                     # 行为表达式结果适配目标类型；具体目标类型必须可被 LLM 解析
                     self._check_behavior_output_parseable(target_type, node)
@@ -487,7 +487,7 @@ class StatementVisitorsMixin:
             # （此处补全设计意图：return 处无左值驱动解析目标）。
             rhs = node.value
             rhs_inner = rhs.value if isinstance(rhs, ast.IbAwaitExpr) else rhs
-            if isinstance(rhs_inner, (ast.IbBehaviorExpr, ast.IbBehaviorInstance)):
+            if isinstance(rhs_inner, ast.IbBehaviorExpr):
                 self.error(
                     "Cannot use a behavior expression directly in a return statement. "
                     "Assign it to a typed local variable first, then return that variable.",

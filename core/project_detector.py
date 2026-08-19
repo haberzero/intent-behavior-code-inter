@@ -22,14 +22,12 @@ class ProjectDetector:
     IBCI 项目根目录检测器
 
     自动检测项目根目录的标志性目录：
-    - plugins/ - 插件目录
     - ibci_modules/ - IBCI 模块目录
     - .ibci/ - IBCI 配置目录
     - ibci.lock - IBCI 锁定文件
     """
 
     SIGNATURE_DIRS = [
-        "plugins",
         "ibci_modules",
         ".ibci",
     ]

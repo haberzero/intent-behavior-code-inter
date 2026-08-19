@@ -748,7 +748,7 @@ class TestCrossModuleSameNameClass:
         assert main_mod is not None
         behavior_nodes = [
             n for n in main_mod.node_to_type
-            if isinstance(n, (ast.IbBehaviorExpr, ast.IbBehaviorInstance))
+            if isinstance(n, ast.IbBehaviorExpr)
         ]
         assert behavior_nodes, "main 模块应有行为表达式节点"
         for node in behavior_nodes:

@@ -297,7 +297,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 ### 6.3 意图栈继承策略
 
 - 意图栈的"继承"由 `IbIntentContext.fork()` 承担：每次函数调用创建子 context，从父 context 继承意图栈快照，后续修改互不影响（公理 IC-1，见 `05_vm_specification.md` §5.1）。
-- 跨隔离边界（spawn）不继承意图：隔离子环境拥有独立 `RuntimeContextImpl`（公理 ISO-1），`IsolationPolicy` 不设意图继承字段（实际字段为 `inherit_plugins` / `collect_timeout`，见 `core/runtime/host/isolation_policy.py`）。
+- 跨隔离边界（spawn）不继承意图：隔离子环境拥有独立 `RuntimeContextImpl`（公理 ISO-1），`IsolationPolicy` 仅设 `collect_timeout` 字段（见 `core/runtime/host/isolation_policy.py`）。
 
 ---
 

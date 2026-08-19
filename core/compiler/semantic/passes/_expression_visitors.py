@@ -1129,19 +1129,6 @@ class ExpressionVisitorsMixin:
         self.bind_type(node, self._behavior_desc)
         return self._behavior_desc
 
-    def visit_IbBehaviorInstance(self, node: ast.IbBehaviorInstance) -> Optional[IbSpec]:
-        """访问行为实例化表达式"""
-        for segment in node.segments:
-            if isinstance(segment, ast.IbASTNode):
-                self.visit(segment)
-        # 返回目标类型
-        if node.target_type_name:
-            target_type = self.registry.resolve(node.target_type_name)
-            if target_type:
-                self.bind_type(node, target_type)
-                return target_type
-        self.bind_type(node, self._any_desc)
-        return self._any_desc
 
     def visit_IbTypeAnnotatedExpr(self, node: ast.IbTypeAnnotatedExpr) -> Optional[IbSpec]:
         """访问带类型标注的表达式"""
