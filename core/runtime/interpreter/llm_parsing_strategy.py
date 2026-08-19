@@ -242,15 +242,27 @@ class VTableParsingStrategy(ParsingStrategy):
             success_native = success_val.to_native() if isinstance(success_val, IbObject) else bool(success_val)
 
             if success_native:
-                # Design 2: Auto-box basic values into class instances
+                # 单向契约：__from_prompt__ 返回值必须是目标类型实例。
+                # 非目标实例（裸值/错误类型）为契约违约——显式呈现（诊断 +
+                # uncertain retry_hint），不隐式自动装箱。
                 is_instance_of_target = (
                     isinstance(parsed_val, IbObject) and
                     parsed_val.ib_class is ib_class
                 )
-
                 if not is_instance_of_target:
-                    # Try to auto-box the value into a class instance
-                    parsed_val = self._auto_box_value(parsed_val, ib_class, execution_context)
+                    kernel_diagnostic(
+                        code=KDIAG_PROTOCOL_FROM_PROMPT_FALLBACK,
+                        detail={"context": "vtable", "type": type_name},
+                        message=(
+                            f"__from_prompt__ for '{type_name}' returned a non-{type_name} "
+                            f"instance: {parsed_val!r}. Contract: return an instance of the "
+                            f"target type, or (False, hint) to reject."
+                        ),
+                    )
+                    return LLMResult.uncertain_result(
+                        raw_response=raw_res,
+                        retry_hint=f"__from_prompt__ 返回值必须是 {type_name} 类型实例",
+                    )
 
                 return LLMResult.success_result(
                     value=parsed_val,
@@ -270,35 +282,6 @@ class VTableParsingStrategy(ParsingStrategy):
                 message=f"vtable __from_prompt__ failed for '{type_name}': {e}",
             )
             return None
-
-    def _auto_box_value(self, parsed_val: Any, ib_class: Any,
-                        execution_context: Optional['IExecutionContext']) -> Any:
-        """
-        Auto-box a basic value into a class instance.
-
-        Tries two strategies:
-        1. Call __init__ with the parsed value as argument
-        2. Create empty instance and set parsed value as first field
-        """
-        try:
-            # Try calling __init__ with the parsed value
-            auto_instance = ib_class.instantiate([parsed_val], context=execution_context)
-            return auto_instance
-        except Exception as e:
-            # 首策略失败是设计内路径，尝试第二策略（空实例 + 首字段注入）
-            try:
-                auto_instance = ib_class.instantiate([], context=execution_context)
-                if ib_class.default_fields:
-                    first_field = next(iter(ib_class.default_fields))
-                    # 统一 Optional 值模型：首字段声明为 Optional 时经字段
-                    # 包装权威写入（避免 LLM 自动装箱路径裸存 None）。
-                    auto_instance.fields[first_field] = (
-                        ib_class._wrap_field_value(first_field, parsed_val)
-                    )
-                return auto_instance
-            except Exception as e2:
-                # 两策略均失败，返回原始值（下游类型校验承接）
-                return parsed_val
 
 
 class DefaultParsingStrategy(ParsingStrategy):

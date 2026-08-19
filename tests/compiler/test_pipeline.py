@@ -264,7 +264,7 @@ class TestBehaviorOutputParseability:
     )
     _POINT_WITH_FROM = _POINT_NO_FROM + (
         "    func __from_prompt__(self, str raw) -> auto:\n"
-        "        return (True, 1)\n"
+        "        return (True, Point(1))\n"
     )
 
     def _error_codes(self, engine, code):

@@ -70,3 +70,50 @@ class TestDefaultParsingStrategy:
         engine.run_string("int seed = 1\n", silent=True)
         strategy = self._strategy(engine)
         assert strategy._is_declared_unparseable("str") is False
+
+
+class TestVTableFromPromptContract:
+    """__from_prompt__ 单向契约（B）：返回值必须是目标类型实例，不做自动装箱。"""
+
+    _CLASS_TEMPLATE = (
+        "class Point:\n"
+        "    int x\n"
+        "    func __init__(self, int x) -> auto:\n"
+        "        self.x = x\n"
+    )
+
+    def _vtable_strategy(self, engine):
+        from core.runtime.interpreter.llm_parsing_strategy import VTableParsingStrategy
+        return VTableParsingStrategy(engine.registry)
+
+    def _resolve_point(self, engine):
+        meta_reg = engine.registry.get_metadata_registry()
+        entry = engine.interpreter.entry_module
+        point = meta_reg.resolve("Point", entry)
+        assert point is not None and point.module_path == entry
+        return point.qualified_name
+
+    def test_from_prompt_target_instance_succeeds(self, engine):
+        """返回值即目标类型实例 → success（不触发契约违约）。"""
+        engine.run_string(
+            self._CLASS_TEMPLATE +
+            "    func __from_prompt__(str raw) -> tuple:\n"
+            "        return (True, Point(42))\n",
+            silent=True,
+        )
+        res = self._vtable_strategy(engine).parse("raw", self._resolve_point(engine), "n1", None)
+        assert res is not None and not res.is_uncertain
+        assert res.value.ib_class.name == "Point"
+        assert res.value.fields["x"].to_native() == 42
+
+    def test_from_prompt_non_instance_returns_uncertain(self, engine):
+        """返回非目标实例（裸值）→ uncertain（契约违约，不再自动装箱）。"""
+        engine.run_string(
+            self._CLASS_TEMPLATE +
+            "    func __from_prompt__(str raw) -> tuple:\n"
+            "        return (True, 42)\n",
+            silent=True,
+        )
+        res = self._vtable_strategy(engine).parse("raw", self._resolve_point(engine), "n1", None)
+        assert res is not None and res.is_uncertain
+        assert "Point" in res.retry_hint
