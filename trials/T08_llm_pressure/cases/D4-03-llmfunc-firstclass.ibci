@@ -1,19 +1,16 @@
-# T08-D4-03 LLM 函数作为函数值传递并调用
-# doc: docs/syntax/08_llm_functions.md + docs/syntax/05_functions.md
+# T08-D4-03 llm 可调用类实例直接调用（P4c 迁移：llm 函数 → llm 可调用类；实例调用即 LLM 调用）
+# doc: docs/syntax/09_llm.md
 # expect-class: PASS
 # expect-out: DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
 ai.load_project_config()
-llm 问候(str name) -> str:
-__sys__
-你是一个友好的助手。
-__user__
-向 $name 问好，只回答你好。
-llmend
+class 问候:
+    func __llm_call__(self, any name) -> dict:
+        return {"user_prompt": "向 " + str(name) + " 问好，只回答你好。", "prompt_slots": [{"kind": "user_sys", "text": "你是一个友好的助手。"}]}
 
-fn f = 问候
-str r = f("张三")
+问候 greet = 问候()
+str r = greet("张三")
 print("r_len=" + (str)(r.len() > 0))
 print("DONE")

@@ -36,14 +36,17 @@ for str item in items:
     print("分数: " + (str)score)
 ```
 
-### 10.2 llmretry 语法糖
+### 10.2 纯重试写法：llmexcept + retry
+
+仅需注入重试提示词、不需要额外副作用（如打印日志）时：
 
 ```ibci
 str res = @~ 判断当前状态，只回答正常或异常 ~
-llmretry "如果无法判断，请回复 0 并说明原因"
+llmexcept:
+    retry "如果无法判断，请回复 0 并说明原因"
 ```
 
-`llmretry` 等价于只有 `retry` 语句的 `llmexcept`，是其精简写法。
+（`llmretry` 顶层语法糖已随 llm 函数机制删除——P4c；统一使用 `llmexcept` + `retry`。）
 
 ### 10.3 快照隔离模型
 

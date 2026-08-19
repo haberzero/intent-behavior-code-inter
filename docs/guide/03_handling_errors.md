@@ -1,6 +1,6 @@
 # 03 · 处理 LLM 调用失败
 
-> 本章是 IBCI 入门教程的第三章。面向已能发起 LLM 调用的开发者。覆盖三种 LLM 异常类型、`llmexcept` 重试机制、`llmretry` 快捷写法与快照隔离模型。
+> 本章是 IBCI 入门教程的第三章。面向已能发起 LLM 调用的开发者。覆盖三种 LLM 异常类型、`llmexcept` 重试机制与快照隔离模型。
 >
 > 前置阅读：`docs/guide/02_first_call.md`。完整健壮性机制参考见 `docs/syntax/10_robustness.md`。
 
@@ -8,7 +8,6 @@
 
 - 识别三种 LLM 异常类型及其触发场景
 - 使用 `llmexcept` + `retry` 保护行为表达式赋值
-- 使用 `llmretry` 简化单重试场景
 - 理解快照隔离保证重试一致性
 - 使用 `try/except` 作为最终兜底
 
@@ -22,7 +21,7 @@ LLM 调用的失败分为三个层次：
 | `LLMParseError` | LLM 回应内容无法按左值类型解析（例如 `int` 变量收到一段散文） |
 | `LLMRetryExhaustedError` | `llmexcept` 保护块中所有重试次数耗尽，最后一次尝试仍然失败 |
 
-`LLMCallError` 和 `LLMParseError` 由 IBCI 运行时在调用失败时自动抛出。`LLMRetryExhaustedError` 仅在 `llmexcept` 或 `llmretry` 保护下重试耗尽时抛出。
+`LLMCallError` 和 `LLMParseError` 由 IBCI 运行时在调用失败时自动抛出。`LLMRetryExhaustedError` 仅在 `llmexcept` 保护下重试耗尽时抛出。
 
 ## llmexcept：保护赋值语句
 
@@ -59,16 +58,17 @@ llmexcept:
 
 条件中的行为表达式被隐式转换为 `bool` 类型。若 LLM 返回的内容既不是 `0` 也不是 `1`，解析失败触发 `llmexcept`，重试后再次求值 `if` 条件。
 
-## llmretry：纯重试快捷写法
+## 纯重试写法：llmexcept + retry
 
-当重试逻辑仅需要注入提示词、不需要额外副作用（如打印日志）时，`llmretry` 是更简洁的写法：
+当重试逻辑仅需要注入提示词、不需要额外副作用（如打印日志）时，直接写空体 + `retry`：
 
 ```ibci
 str res = @~ 判断当前状态，只回答正常或异常 ~
-llmretry "如果无法判断，请回复 0 并说明原因"
+llmexcept:
+    retry "如果无法判断，请回复 0 并说明原因"
 ```
 
-`llmretry` 等价于一个只包含 `retry` 语句的 `llmexcept` 块。两者语义完全相同，仅是语法糖。
+（`llmretry` 顶层语法糖已随 llm 函数机制删除——P4c；统一使用 `llmexcept` + `retry`。）
 
 ## 快照隔离：重试不会污染其他变量
 

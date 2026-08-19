@@ -192,7 +192,7 @@ class Point implements Serializable:
 3. 提示词装配不再是“固定字符串拼接”，而是“按协议收集有序 PromptPart 列表”；
 4. 新增一种上下文来源时，不需要修改核心装配代码，只需要注册新的 `PromptContributor`。
 
-这样 `__to_prompt__`、`__payload_prompt__`、意图、`__llmretry__`、`__outputhint_prompt__` 就不再是魔法，而是统一协议的不同实现。
+这样 `__to_prompt__`、`__payload_prompt__`、意图、retry hint、`__outputhint_prompt__` 就不再是魔法，而是统一协议的不同实现。
 
 ### 3.4 泛型约束与泛型函数
 

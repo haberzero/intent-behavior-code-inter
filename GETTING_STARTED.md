@@ -1,4 +1,4 @@
-﻿# IBC-Inter 入门指南
+# IBC-Inter 入门指南
 
 > 从零开始学习 IBC-Inter 的完整教程。按顺序阅读，每章 5-10 分钟。
 >
@@ -12,7 +12,7 @@
 2. [第一个 @~ 调用](docs/guide/02_first_call.md) — 行为表达式基础、变量插值和类型约束
 3. [处理 LLM 调用失败](docs/guide/03_handling_errors.md) — llmexcept、retry 和异常体系
 4. [用意图控制 LLM 行为](docs/guide/04_intents.md) — @/@+/@-/@! 实战与意图栈管理
-5. [定义和使用 LLM 函数](docs/guide/05_llm_functions.md) — llm...llmend 提示词工程
+5. [定义和使用 LLM 可调用类](docs/guide/05_llm_callable.md) — __llm_call__ 协议与提示词工程
 6. [构建多步骤 LLM 工作流](docs/guide/06_multistep.md) — file 模块 + fn + for @~ 串联调用
 7. [MOCK 测试与调试](docs/guide/07_testing.md) — 不连 API 也能测试，idbg 调试
 

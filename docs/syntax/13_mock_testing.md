@@ -17,7 +17,7 @@ ai.set_mock_mode()
 
 ### 13.2 MOCK 指令格式
 
-MOCK 指令写在行为表达式（`@~...~`）或 LLM 函数的 `__user__` 块中。
+MOCK 指令写在行为表达式（`@~...~`）或 LLM 可调用类的用户提示（`user_prompt`）中。
 
 #### 13.2.1 基本类型指令
 
@@ -148,22 +148,20 @@ else:
     print("条件为假")
 ```
 
-#### 13.3.6 LLM 函数 MOCK
+#### 13.3.6 LLM 可调用类 MOCK
 
-LLM 函数 MOCK 时，`__user__` 块必须**只包含** MOCK 指令：
+LLM 可调用类 MOCK 时，装配配置字典的 `user_prompt` 中放 MOCK 指令：
 
 ```ibci
 import ai
 ai.set_mock_mode()
 
-llm 测试函数(str input) -> str:
-__sys__
-任何系统提示词
-__user__
-MOCK:STR:mock_result
-llmend
+class 测试函数:
+    func __llm_call__(self, any input) -> dict:
+        return {"user_prompt": "MOCK:STR:mock_result", "prompt_slots": [{"kind": "user_sys", "text": "任何系统提示词"}]}
 
-str r = 测试函数("anything")
+测试函数 t = 测试函数()
+str r = t("anything")
 print(r)   # mock_result
 ```
 

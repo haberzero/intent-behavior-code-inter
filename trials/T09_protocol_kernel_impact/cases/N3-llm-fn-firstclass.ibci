@@ -1,19 +1,16 @@
-# T09-N3 LLM 函数第一等函数值（统一路径：fn 变量持有并调用）
-# doc: docs/syntax/08_llm_functions.md + docs/syntax/05_functions.md
+# T09-N3 llm 可调用类实例直接调用（P4c 迁移：llm 函数 → llm 可调用类，实例调用即 LLM 调用）
+# doc: docs/syntax/09_llm.md
 # expect-class: PASS
 # expect-out: firstclass_ok=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
 ai.load_project_config()
-llm 问数() -> int:
-__sys__
-你只返回一个整数，禁止任何其它内容。
-__user__
-返回 42
-llmend
+class 问数:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "返回 42", "prompt_slots": [{"kind": "user_sys", "text": "你只返回一个整数，禁止任何其它内容。"}], "expected_type": "int"}
 
-fn f = 问数
-int v = f()
+问数 inst = 问数()
+int v = inst()
 print("firstclass_ok=" + (str)(v == 42))
 print("DONE")

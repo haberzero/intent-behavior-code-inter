@@ -141,7 +141,7 @@ print(status)   # STANDARD_MODEL / REASONING_MODEL / PROBE_FAILED_FALLBACK_REASO
 }
 ```
 
-也可在代码中经 `ai.set_timeout(seconds)` / `ai.set_retry(count)` 动态调整。`ai.set_timeout()` 控制单次 HTTP 请求超时上限；`ai.set_retry()` 控制 `llmexcept`/`llmretry` 保护块的最大重试次数。
+也可在代码中经 `ai.set_timeout(seconds)` / `ai.set_retry(count)` 动态调整。`ai.set_timeout()` 控制单次 HTTP 请求超时上限；`ai.set_retry()` 控制 `llmexcept` 保护块的最大重试次数。
 
 ## 你现在能做什么
 

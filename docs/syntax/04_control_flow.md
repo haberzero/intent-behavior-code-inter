@@ -130,7 +130,7 @@ IBCI 提供与传统命令式语言一致的 `try` / `except` / `raise` / `final
 
 | 场景 | 推荐机制 |
 |------|----------|
-| LLM 输出无法解析、需要重试调整提示词 | `llmexcept` / `llmretry` |
+| LLM 输出无法解析、需要重试调整提示词 | `llmexcept` / `retry` |
 | 业务逻辑显式 `raise` 出来的错误 | `try` / `except` |
 | LLM 重试耗尽后的兜底处理 | `try except LLMRetryExhaustedError` |
 | 在没有 `llmexcept` 保护时的 LLM 失败兜底 | `try except LLMParseError` |

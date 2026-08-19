@@ -10,7 +10,7 @@ Coverage:
   - Intent annotation tokens (@, @+, @-, @!)
   - Behavior expression tokens (@~ ... ~)
   - Indentation handling
-  - LLM function block scanning (llm ... llmend)
+  - llm 旧关键字作普通标识符（P4c：llm 函数语法删除）
 """
 
 import pytest
@@ -189,11 +189,12 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# 8. LLM function blocks
+# 8. llm 关键字不再特殊处理（P4c：llm 函数语法删除，作普通标识符 tokenize）
 # ---------------------------------------------------------------------------
 
-class TestLexerLLMBlocks:
-    def test_llm_function_block(self):
+class TestLexerLLMKeywordsAsIdentifiers:
+    def test_llm_old_keywords_tokenize_as_identifiers(self):
+        """`llm`/`llmend`/`__sys__`/`__user__` 不再是关键字，作普通标识符 tokenize。"""
         code = """llm translate(str text) -> str:
 __sys__
 You are a translator.

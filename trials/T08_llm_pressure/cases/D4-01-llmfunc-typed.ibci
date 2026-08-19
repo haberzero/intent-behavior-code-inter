@@ -1,27 +1,23 @@
-# T08-D4-01 LLM 函数返回 list[int] / dict[str,int] 应解析，实际按 str 返回
-# doc: docs/syntax/08_llm_functions.md §8.1-8.2 + docs/syntax/07_behavior_expressions.md §7.4
+# T08-D4-01 llm 可调用类返回 list[int] / dict[str,int] 解析（P4c 迁移：llm 函数 → llm 可调用类）
+# doc: docs/syntax/09_llm.md
 # expect-class: PASS
 # expect-out: list_ok=True | dict_ok=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
 ai.load_project_config()
-llm 取数字列表() -> list[int]:
-__sys__
-你只返回 JSON 数组，不要其它内容。
-__user__
-返回 [1,2,3]
-llmend
+class 取数字列表:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "返回 [1,2,3]", "prompt_slots": [{"kind": "user_sys", "text": "你只返回 JSON 数组，不要其它内容。"}], "expected_type": "list[int]"}
 
-llm 取分数() -> dict[str,int]:
-__sys__
-你只返回 JSON 对象，不要其它内容。
-__user__
-返回 {"math":90,"english":85}
-llmend
+class 取分数:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "返回 {\\"math\\":90,\\"english\\":85}", "prompt_slots": [{"kind": "user_sys", "text": "你只返回 JSON 对象，不要其它内容。"}], "expected_type": "dict[str,int]"}
 
-list[int] nums = 取数字列表()
+取数字列表 l = 取数字列表()
+list[int] nums = l()
 print("list_ok=" + (str)(nums.len() == 3 and nums[0] == 1 and nums[2] == 3))
-dict[str,int] scores = 取分数()
+取分数 s = 取分数()
+dict[str,int] scores = s()
 print("dict_ok=" + (str)(scores.len() == 2 and scores["math"] == 90))
 print("DONE")

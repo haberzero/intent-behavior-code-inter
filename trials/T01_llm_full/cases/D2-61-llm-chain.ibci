@@ -1,6 +1,6 @@
-# D2-61 多层次：LLM 函数链（A→B→C 三级调用）+ 参数传递
-# doc: docs/syntax/08_llm_functions.md §8.1-8.2
-# 期望: 三级 LLM 函数串联正常
+# D2-61 多层次：llm 可调用类链（A→B→C 三级调用）+ 参数传递（P4c 迁移：llm 函数 → llm 可调用类）
+# doc: docs/syntax/09_llm.md
+# 期望: 三级 llm 可调用类串联正常
 
 # expect-class: PASS
 # expect-out: DONE
@@ -8,31 +8,25 @@
 # expect-llm: true
 import ai
 ai.load_project_config()
-llm 提炼(str text) -> str:
-__sys__
-你是摘要专家。
-__user__
-把 "$text" 提炼成一句话。
-llmend
+class 提炼:
+    func __llm_call__(self, any text) -> dict:
+        return {"user_prompt": "把 \"" + str(text) + "\" 提炼成一句话。", "prompt_slots": [{"kind": "user_sys", "text": "你是摘要专家。"}]}
 
-llm 扩写(str text) -> str:
-__sys__
-你是润色专家。
-__user__
-把 "$text" 扩写成三句话。
-llmend
+class 扩写:
+    func __llm_call__(self, any text) -> dict:
+        return {"user_prompt": "把 \"" + str(text) + "\" 扩写成三句话。", "prompt_slots": [{"kind": "user_sys", "text": "你是润色专家。"}]}
 
-llm 翻译2(str text) -> str:
-__sys__
-你是翻译。
-__user__
-把 "$text" 翻译成英文。
-llmend
+class 翻译2:
+    func __llm_call__(self, any text) -> dict:
+        return {"user_prompt": "把 \"" + str(text) + "\" 翻译成英文。", "prompt_slots": [{"kind": "user_sys", "text": "你是翻译。"}]}
 
-str s1 = 提炼("量子计算和人工智能正在改变世界")
+提炼 a1 = 提炼()
+str s1 = a1("量子计算和人工智能正在改变世界")
 print("s1=" + s1)
-str s2 = 扩写(s1)
+扩写 a2 = 扩写()
+str s2 = a2(s1)
 print("s2=" + s2)
-str s3 = 翻译2(s2)
+翻译2 a3 = 翻译2()
+str s3 = a3(s2)
 print("s3=" + s3)
 print("DONE")

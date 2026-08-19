@@ -60,10 +60,10 @@
 - D1-07-007 长提示/复杂 __to_prompt__（C1）
 - D1-07-008 行为体 -> tuple[int,str] / 泛型返回解析
 
-## 8. LLM 函数（08_llm_functions）
-- D1-08-001 llm...llmend 定义/调用/__sys__/__user__/$插值
-- D1-08-002 -> int 返回解析 + __llmretry__ 重试块
-- D1-08-003 -> auto/str/自定义类型
+## 8. LLM 可调用类（09_llm；P4c 迁移：llm 函数语法删除 → llm 可调用类）
+- D1-08-001 llm 可调用类定义/调用/prompt_slots 自定义槽/参数插值
+- D1-08-002 expected_type 返回解析（原 __llmretry__ 段语义迁 __retry__/P4d）
+- D1-08-003 expected_type auto/str/自定义类型
 
 ## 9. 意图系统（09_intent_system）
 - D1-09-001 @ 一次性 smear（A1 赋值路径重验）
@@ -74,7 +74,7 @@
 
 ## 10. 健壮性（10_robustness）
 - D1-10-001 llmexcept + retry 收敛
-- D1-10-002 llmretry 语法糖
+- D1-10-002（P4c 迁移：llmretry 语法糖删除，合并入 D1-10-001）
 - D1-10-003 重试耗尽 LLMRetryExhaustedError + try/except
 - D1-10-004 快照隔离：retry body 修变量编译期拦截
 - D1-10-005 无保护裸 LLM 解析失败 LLMParseError

@@ -1,16 +1,14 @@
-# T08-D4-04 LLM 函数返回 void：当前编译通过但运行期 LLMParseError（未定义支持）
-# doc: docs/syntax/08_llm_functions.md
+# T08-D4-04 llm 可调用类返回 void 边界（P4c 迁移：llm 函数 → llm 可调用类；无 expected_type 解析为 str）
+# doc: docs/syntax/09_llm.md
 # expect-class: BOUNDARY
 # expect-exit: nonzero
 # expect-llm: true
 import ai
 ai.load_project_config()
-llm 报告() -> void:
-__sys__
-你是一个简洁的助手。
-__user__
-只回答：OK
-llmend
+class 报告:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "只回答：OK", "prompt_slots": [{"kind": "user_sys", "text": "你是一个简洁的助手。"}]}
 
-报告()
+报告 r = 报告()
+r()
 print("DONE")

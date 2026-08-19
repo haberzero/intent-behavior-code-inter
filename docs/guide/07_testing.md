@@ -25,7 +25,7 @@ import ai
 ai.set_mock_mode()
 ```
 
-配置后，所有 `@~ ... ~` 行为表达式和 LLM 函数调用都不会连接真实 API，而是**在表达式或 `__user__` 块中查找 MOCK 指令，直接返回预设值**。
+配置后，所有 `@~ ... ~` 行为表达式和 LLM 可调用类调用都不会连接真实 API，而是**在表达式或装配的用户提示中查找 MOCK 指令，直接返回预设值**。
 
 ---
 
@@ -51,24 +51,20 @@ print((str)yes)       # True
 
 ---
 
-## LLM 函数 MOCK
+## LLM 可调用类 MOCK
 
-测试 LLM 函数时，在 `__user__` 块中放置 MOCK 指令——该块**只能包含** MOCK 指令本身：
+测试 LLM 可调用类时，在装配配置字典的 `user_prompt` 中放置 MOCK 指令：
 
 ```ibci
 import ai
 ai.set_mock_mode()
 
-llm 翻译(str 文本, str 目标语言) -> str:
-__sys__
-你是一个专业翻译。
-__user__
-MOCK:STR:翻译结果
-__llmretry__
-请输出翻译。
-llmend
+class 翻译:
+    func __llm_call__(self, any 文本, any 目标语言) -> dict:
+        return {"user_prompt": "MOCK:STR:翻译结果", "prompt_slots": [{"kind": "user_sys", "text": "你是一个专业翻译。"}]}
 
-str r = 翻译("hello", "中文")
+翻译 t = 翻译()
+str r = t("hello", "中文")
 print(r)                     # 翻译结果
 ```
 

@@ -1,4 +1,4 @@
-# D3-C3e LLM 函数 + provider 超时 + try/except 捕获（确认路径通用性）
+# D3-C3e llm 可调用类 + provider 超时 + try/except 捕获（确认路径通用性；P4c 迁移：llm 函数 → llm 可调用类）
 # expect-class: PASS
 # expect-out: caught_llmcall=LLM 调用失败: Request timed out. | DONE
 # expect-exit: 0
@@ -9,15 +9,13 @@ ai.load_project_config()
 ai.set_timeout(0.01)
 ai.set_retry(1)
 
-llm 写作文(str topic) -> str:
-__sys__
-你是作家。
-__user__
-写一篇关于 $topic 的500字作文。
-llmend
+class 写作文:
+    func __llm_call__(self, any topic) -> dict:
+        return {"user_prompt": "写一篇关于 " + str(topic) + " 的500字作文。", "prompt_slots": [{"kind": "user_sys", "text": "你是作家。"}]}
 
+写作文 w = 写作文()
 try:
-    str r = 写作文("秋天")
+    str r = w("秋天")
     print("inner_len=" + (str)r.len())
 except LLMCallError as e:
     print("caught_llmcall=" + e.message)

@@ -1,5 +1,5 @@
-# T08-D4-05 LLM 函数返回用户类（__from_prompt__）
-# doc: docs/syntax/08_llm_functions.md + docs/syntax/06_oop.md §6.7
+# T08-D4-05 llm 可调用类返回用户类（__from_prompt__；P4c 迁移：llm 函数 → llm 可调用类）
+# doc: docs/syntax/09_llm.md + docs/syntax/06_oop.md §6.7
 # expect-class: PASS
 # expect-out: got=OK | DONE
 # expect-exit: 0
@@ -15,13 +15,11 @@ class Resp:
     func __outputhint_prompt__(self) -> str:
         return "只输出 OK"
 
-llm 取响应() -> Resp:
-__sys__
-你是一个简洁的助手。
-__user__
-只回答：OK
-llmend
+class 取响应:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "只回答：OK", "prompt_slots": [{"kind": "user_sys", "text": "你是一个简洁的助手。"}], "expected_type": "Resp"}
 
-Resp r = 取响应()
+取响应 inst = 取响应()
+Resp r = inst()
 print("got=" + r.text)
 print("DONE")

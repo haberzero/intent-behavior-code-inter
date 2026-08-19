@@ -1,18 +1,16 @@
-# T08-D4-02 LLM 函数返回 auto（应等价 str）
-# doc: docs/syntax/08_llm_functions.md §8.1
+# T08-D4-02 llm 可调用类返回 auto 语义（P4c 迁移：llm 函数 → llm 可调用类；无 expected_type 时按 str 解析）
+# doc: docs/syntax/09_llm.md
 # expect-class: PASS
 # expect-out: is_str=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
 ai.load_project_config()
-llm 说() -> auto:
-__sys__
-你是一个简洁的助手。
-__user__
-只回答：HI
-llmend
+class 说:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "只回答：HI", "prompt_slots": [{"kind": "user_sys", "text": "你是一个简洁的助手。"}]}
 
-auto r = 说()
+说 inst = 说()
+auto r = inst()
 print("is_str=" + (str)(type(r) == "str"))
 print("DONE")

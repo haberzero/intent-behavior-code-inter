@@ -1,4 +1,4 @@
-# D1-10-001 llmexcept + retry 收敛 + llmretry 语法糖
+# D1-10-001 llmexcept + retry 收敛（P4c 迁移：llmretry 顶层语法糖删除，统一用 llmexcept + retry）
 # doc: docs/syntax/10_robustness.md §10.1-10.2
 # 期望: retry 引导 LLM 正确格式；重试收敛
 
@@ -16,7 +16,8 @@ llmexcept:
 print("result=" + (str)result)
 
 str res = @~ 判断当前状态，只回答正常或异常 ~
-llmretry "如果无法判断，请回复 0 并说明原因"
+llmexcept:
+    retry "如果无法判断，请回复 0 并说明原因"
 
 print("res_len=" + (str)res.len())
 print("DONE")

@@ -172,5 +172,5 @@ int result = strict_number("1+5 等于多少")   # 只输出 "6"，忽略"详细
 **下一步**：[05 · 定义和使用 LLM 函数][]——当你需要把提示词逻辑封装为可复用的命名函数时。
 
 [03 · 处理 LLM 调用失败]: ./03_handling_errors.md
-[05 · 定义和使用 LLM 函数]: ./05_llm_functions.md
+[05 · 定义和使用 LLM 函数]: ./05_llm_callable.md
 [syntax-09]: ../syntax/09_intent_system.md

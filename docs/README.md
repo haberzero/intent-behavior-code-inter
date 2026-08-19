@@ -28,7 +28,7 @@ docs/
 │   ├── 02_first_call.md
 │   ├── 03_handling_errors.md
 │   ├── 04_intents.md
-│   ├── 05_llm_functions.md
+│   ├── 05_llm_callable.md
 │   ├── 06_multistep.md
 │   └── 07_testing.md
 │
@@ -51,7 +51,7 @@ docs/
 │   ├── 05_functions.md
 │   ├── 06_oop.md
 │   ├── 07_behavior_expressions.md
-│   ├── 08_llm_functions.md
+│   ├── 08_llm_callable.md
 │   ├── 09_intent_system.md
 │   ├── 10_robustness.md
 │   ├── 11_modules.md

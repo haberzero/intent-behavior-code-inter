@@ -1,9 +1,8 @@
-# T09-N2 impl 补方法 + 泛型协议 bound + 真实 LLM 输出作实参
+# T09-N2 impl 补方法 + 泛型协议 bound（P4c 迁移：impl 内 LLM 方法机制删除，方法恒普通 func）
 # doc: docs/syntax/06_oop.md §6.8 + docs/syntax/01_types.md 泛型
 # expect-class: PASS
 # expect-out: bound_ok=True | DONE
 # expect-exit: 0
-# expect-llm: true
 import ai
 ai.load_project_config()
 protocol Greeter:
@@ -14,12 +13,8 @@ class Widget:
     str label
 
 impl Greeter for Widget:
-    llm func greet(self) -> str:
-__sys__
-你只输出给定单词的英文翻译，禁止任何其它内容。
-__user__
-标签：苹果
-llmend
+    func greet(self) -> str:
+        return "apple"
 
 class Box[T: Greeter]:
     T value

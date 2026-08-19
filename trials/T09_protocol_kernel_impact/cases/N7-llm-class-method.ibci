@@ -1,5 +1,5 @@
-# T09-N7 类内 LLM 方法真实调用（类方法统一路径）
-# doc: docs/syntax/08_llm_functions.md
+# T09-N7 类内 llm 可调用方法真实调用（P4c 迁移：llm func 方法 → llm 可调用类 __llm_call__）
+# doc: docs/syntax/09_llm.md
 # expect-class: PASS
 # expect-out: classmethod_ok=True | DONE
 # expect-exit: 0
@@ -7,14 +7,10 @@
 import ai
 ai.load_project_config()
 class Parser:
-    llm func parse(self) -> int:
-__sys__
-你只返回一个整数，禁止任何其它内容。
-__user__
-提取数字：42
-llmend
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "提取数字：42", "prompt_slots": [{"kind": "user_sys", "text": "你只返回一个整数，禁止任何其它内容。"}], "expected_type": "int"}
 
 Parser p = Parser()
-int v = p.parse()
+int v = p()
 print("classmethod_ok=" + (str)(v == 42))
 print("DONE")

@@ -8,7 +8,7 @@
 
 IBCI 是实验性意图驱动混合编程语言：Python 风格的确定性代码 + LLM 非确定性推理融合。
 - **确定性半部**：强类型变量、运算符、控制流、函数、OOP -- 与 Python 高度同构。
-- **意图半部**：行为表达式 `@~ ... ~`、LLM 函数 `llm ... llmend`、意图操作符 `@/@+/@-/@!`、`llmexcept` 自愈机制。
+- **意图半部**：行为表达式 `@~ ... ~`、LLM 可调用类 `__llm_call__`、意图操作符 `@/@+/@-/@!`、`llmexcept` 自愈机制。
 - 两半共享同一类型系统与异常体系（`LLMError` 是 `Exception` 的子树）。
 
 ## 目录
@@ -29,9 +29,9 @@ IBCI 是实验性意图驱动混合编程语言：Python 风格的确定性代�
 | 章 | 文件 | 标题 | 说明 |
 |----|------|------|------|
 | 07 | [07_behavior_expressions](syntax/07_behavior_expressions.md) | 行为描述语句 | `@~ ... ~`、lambda/snapshot、命名模型路由、多模态 |
-| 08 | [08_llm_functions](syntax/08_llm_functions.md) | LLM 函数 | `llm ... llmend`、`__sys__`/`__user__`/`__llmretry__` |
+| 08 | [08_llm_callable](syntax/08_llm_callable.md) | LLM 可调用类 | `__llm_call__`、装配 dict（`user_prompt`/`prompt_slots`/`expected_type`）、直接调用/`run_batch`/`stream` |
 | 09 | [09_intent_system](syntax/09_intent_system.md) | 意图系统 | `@`/`@+`/`@-`/`@!`、意图栈、`intent_context` |
-| 10 | [10_robustness](syntax/10_robustness.md) | 健壮性与自愈 | `llmexcept`/`llmretry`、快照隔离、LLM 异常体系 |
+| 10 | [10_robustness](syntax/10_robustness.md) | 健壮性与自愈 | `llmexcept`/`retry`、快照隔离、LLM 异常体系 |
 
 ### 第三部分：模块与标准库
 

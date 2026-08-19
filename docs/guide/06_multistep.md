@@ -132,7 +132,7 @@ print("迭代次数: " + (str)迭代次数)
 
 **下一步**：[07 · MOCK 测试与调试][]——在不连接真实 API 的情况下测试你的 LLM 工作流。
 
-[05 · 定义和使用 LLM 函数]: ./05_llm_functions.md
+[05 · 定义和使用 LLM 函数]: ./05_llm_callable.md
 [07 · MOCK 测试与调试]: ./07_testing.md
 [syntax-07]: ../syntax/07_behavior_expressions.md
 [syntax-10]: ../syntax/10_robustness.md

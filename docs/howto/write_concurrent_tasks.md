@@ -105,6 +105,6 @@ any v = c.recv_nowait()      # 空缓冲 → None，不阻塞
 ## 深入指引
 
 - 并发原语完整参考：`docs/syntax/14_concurrency.md`
-- 批量并发 LLM 调用（`ai.run_batch`）：`docs/syntax/08_llm_functions.md`
+- 批量并发 LLM 调用（`ai.run_batch`）：`docs/syntax/08_llm_callable.md`
 - 通信原语限制：`docs/KNOWN_LIMITS.md` §二十二
 - 后台调试：`docs/howto/debug_llm_calls.md`

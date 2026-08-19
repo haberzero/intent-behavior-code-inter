@@ -1,6 +1,6 @@
-# D1-08-001 llm 函数定义/调用/__sys__/__user__/$插值 + __llmretry__
-# doc: docs/syntax/08_llm_functions.md §8.1-8.3
-# 期望: 翻译调用返回真实翻译；retry 块存在
+# D1-08-001 llm 可调用类定义/调用/prompt_slots 自定义槽/参数插值（P4c 迁移：llm 函数 → llm 可调用类；__llmretry__ 段语义迁 __retry__/P4d）
+# doc: docs/syntax/09_llm.md
+# 期望: 翻译调用返回真实翻译
 
 # expect-class: PASS
 # expect-out: parsed=12 | DONE
@@ -8,25 +8,19 @@
 # expect-llm: true
 import ai
 ai.load_project_config()
-llm 翻译(str 文本, str 目标语言) -> str:
-__sys__
-你是一个专业翻译，直接输出翻译结果，不加任何解释。
-__user__
-请将 "$文本" 翻译为 $目标语言。
-llmend
+class 翻译:
+    func __llm_call__(self, any 文本, any 目标语言) -> dict:
+        return {"user_prompt": "请将 \"" + str(文本) + "\" 翻译为 " + str(目标语言) + "。", "prompt_slots": [{"kind": "user_sys", "text": "你是一个专业翻译，直接输出翻译结果，不加任何解释。"}]}
 
-str result = 翻译("Hello World", "中文")
+翻译 t = 翻译()
+str result = t("Hello World", "中文")
 print("translated=" + result)
 
-llm 解析数字(str 文本) -> int:
-__sys__
-你是一个数字提取专家。
-__user__
-从 "$文本" 中提取一个整数，只返回数字本身。
-__llmretry__
-请务必只返回一个纯整数，不要有任何其他文字或标点。
-llmend
+class 解析数字:
+    func __llm_call__(self, any 文本) -> dict:
+        return {"user_prompt": "从 \"" + str(文本) + "\" 中提取一个整数，只返回数字本身。", "prompt_slots": [{"kind": "user_sys", "text": "你是一个数字提取专家。"}], "expected_type": "int"}
 
-int n = 解析数字("今年有12个月")
+解析数字 p = 解析数字()
+int n = p("今年有12个月")
 print("parsed=" + (str)n)
 print("DONE")
