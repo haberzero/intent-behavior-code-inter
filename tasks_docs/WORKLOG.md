@@ -585,6 +585,10 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   并发下不成立，需隔离设计）；E 半接通边界（stream 不消费 retry 循环，登记为设计边界）；
   F 登记债务核对（无新增）；G 工作过程遗留（临时文档待删）。处置建议：A+B 零风险机械批 →
   C 并入主线债务评估 → D 独立窗口设计。
+- **五大地基临时设计文档删除（2026-08-19，技术债收敛阶段 1）**：P1-P6 全部竣工后，
+  `_llm_callable_redesign.md` / `_five_foundation_redesign.md` / `_five_foundation_P1_design.md`
+  三份设计阶段临时文档删除（git 承载历史）；6 项关键决策与完成记录已在本文件 §二/§三 内联保留，
+  架构事实已收敛入 docs/（03_type_system / 04_vm_interpreter / 08_llm_callable 等）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

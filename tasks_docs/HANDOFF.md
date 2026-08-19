@@ -85,8 +85,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 五、主任务阻塞/暂停时的支线（按优先级，解阻立即回主线）：1) 质量维护/代码健康
 （quality-maintenance Tier A/B）；2) PT-AUDIT-1/2 代码质量审计（独立分支）；
-3) PT-FEAT-5 错误用户友好化 / PT-FEAT-2 Enum 非 str 成员；
-4) 测试体系重构（PT-TEST-1）。每条支线仍须全量 pytest 零回归、commit+留痕（仅本地）。
+3) PT-FEAT-5 错误用户友好化（剩余 CI/CD 可靠化设计；PT-FEAT-2 已完成、已移除）；
+4) 测试体系补测（PT-TEST-2 覆盖矩阵缺口；PT-TEST-1 已完成、已移除）。每条支线仍须全量 pytest 零回归、commit+留痕（仅本地）。
 
 六、停止条件：先穷尽自主手段，仅当确实无法自主决定时（用户意图不明穷尽无解/公理层语义
 错误集确需用户裁决/与工作模式定论冲突/破坏性重构无法确认边界且独立隔离分支也无法确定
@@ -142,11 +142,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   = **临时覆层机制**（默认不生效、flag 启用、作用域化，最关键新设计约束）；③ snapshot 意图冻结
   按文档补齐；④ `llm ... llmend` 语法**彻底删除**（非语法糖）；⑤ retry 帧机制保留 + 语法/策略
   高阶化；⑥ P1-P6 本主线、P7/P8 远期。
-  **调研/可行性/规划/决策已全部产出**（临时文档 `tasks_docs/_llm_callable_redesign.md` +
-  `tasks_docs/_five_foundation_redesign.md`：交接清单 6 项补充调研全部完成 + 五大地基现状评估 +
-  总路线 P1-P9 + 决策 §五 + P1 开工输入 §六）；
-  **P1 设计定稿已完成**（`tasks_docs/_five_foundation_P1_design.md` §一-§九，7 项开工输入全部
-  定稿；含用户追加裁定：`llm ... llmend` 语法**彻底删除**且关联旧机制一并删除、不兼容不包袱）；
+  **调研/可行性/规划/决策已全部产出**（临时文档 `_llm_callable_redesign.md` +
+  `_five_foundation_redesign.md` + `_five_foundation_P1_design.md`——**已随 P1-P6 竣工删除，
+  git 承载历史**；含交接清单 6 项补充调研 + 五大地基现状评估 + 总路线 P1-P9 + 决策 §五 +
+  P1 开工输入 §六 + 用户追加裁定「`llm ... llmend` 语法彻底删除且旧机制一并删除、不兼容不包袱」）；
   **P2/P6 地基已完成并合入 `unsafe-vibe-dev`**（本 session 用户确认零风险后 fast-forward 合并）。
   **已合入增量**：protocol_vtable 数据结构（`ProtocolSlot` + `IbClass.protocol_vtable` 消息名键 +
   `_dispatch_protocol_message` 查表分派，`cd60ea6d`）+ 地基（receive 6 份骨架收敛 `6d933080`）+

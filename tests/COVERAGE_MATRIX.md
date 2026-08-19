@@ -8,7 +8,7 @@
 >
 > 结构沿用 `tests_docs/SEMANTIC_COVERAGE_MATRIX.md` 的 13 个语义域与 INV-* 编号；
 > 旧矩阵"测试位置"列的虚构/过时测试名已替换为真实测试引用；找不到语义吻合测试的行标
-> `🔶 缺失`（不硬凑）。迁移依据存档见 `tasks_docs/TEST_MATRIX_FINDINGS.md`。
+> `🔶 缺失`（不硬凑）。迁移依据与核对发现存档见 git 历史（原 tasks_docs/TEST_MATRIX_FINDINGS.md 已随文档清理删除）。
 
 ## §1 类型系统语义 (Type System Semantics)
 
@@ -52,7 +52,7 @@
 | INV | 语义特性 | 覆盖测试 | 备注 |
 |-----|---------|---------|------|
 | INV-CAST-1 | 显式 cast 安全性 | `tests/contracts/test_type_invariants.py::TestTypeCastInvariants::test_cast_valid_conversions[42-str-42]` | 参数化覆盖 int→str/str→int/float→int |
-| INV-CAST-2 | 隐式类型转换规则 | 🔶 缺失 | TRUE_GAP：无隐式转换专门测试（见 TEST_MATRIX_FINDINGS §四） |
+| INV-CAST-2 | 隐式类型转换规则 | 🔶 缺失 | TRUE_GAP：无隐式转换专门测试（历史核对存档见 git） |
 | INV-INFER-1 | 类型推断规则（字面量） | `tests/contracts/test_type_invariants.py::TestTypeInferenceInvariants::test_auto_infers_literal_type[42-42]` | |
 | INV-INFER-2 | 类型推断规则（函数返回） | `tests/contracts/test_type_invariants.py::TestTypeInferenceInvariants::test_function_return_type_inference` | |
 
@@ -179,7 +179,7 @@
 |-----|---------|---------|------|
 | INV-INTENT-SCOPE-1 | 函数调用 intent 隔离 | `tests/contracts/test_intent_propagation.py::TestIntentScopeIsolation::test_function_intent_isolated` | |
 | INV-INTENT-SCOPE-2 | lambda 继承调用方 intent | `tests/e2e/test_intent.py::TestE2EIntents::test_lambda_behavior_uses_call_time_intents` | 调用时意图栈而非定义时空栈 |
-| INV-INTENT-SCOPE-3 | snapshot 捕获定义时 intent | 🔶 缺失 | TRUE_GAP：无测试（见 TEST_MATRIX_FINDINGS §四） |
+| INV-INTENT-SCOPE-3 | snapshot 捕获定义时 intent | 🔶 缺失 | TRUE_GAP：无测试（历史核对存档见 git） |
 
 ### 4.5 Intent 与控制流
 
@@ -244,7 +244,7 @@
 | INV-LLMEXCEPT-CATCH-1 | llmexcept 捕获 LLM 错误 | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_llmexcept_catches_llm_error` | |
 | INV-LLMEXCEPT-CATCH-2 | retry 块执行 | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_retry_executes_on_error` | |
 | INV-LLMEXCEPT-CATCH-3 | 嵌套 llmexcept | `tests/contracts/test_llmexcept_guarantees.py::TestLLMExceptCatch::test_nested_llmexcept_independent` | |
-| INV-LLMEXCEPT-CATCH-4 | llmexcept 不捕获普通异常 | 🔶 缺失 | TRUE_GAP：无活测试（见 TEST_MATRIX_FINDINGS §四） |
+| INV-LLMEXCEPT-CATCH-4 | llmexcept 不捕获普通异常 | 🔶 缺失 | TRUE_GAP：无活测试（历史核对存档见 git） |
 
 ### 6.2 错误历史
 
@@ -466,7 +466,7 @@
 
 > 以下为本次迁移确认的**真覆盖缺口**（`🔶 缺失`，不硬凑）。均已核对真实测试集合无语义吻合项。
 
-### 契约层缺口（TRUE_GAP，见 `tasks_docs/TEST_MATRIX_FINDINGS.md` §四）
+### 契约层缺口（TRUE_GAP，历史核对存档见 git）
 
 | 契约 | 语义 | 说明 |
 |------|------|------|
