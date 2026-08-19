@@ -28,14 +28,12 @@ class TestIntentPropagation:
     """
 
     def test_intent_propagates_to_nested_llm_call(self):
-        """INV-INTENT-PROP-1: Intent annotations propagate to nested LLM calls."""
+        """INV-INTENT-PROP-1: Intent annotations propagate to nested llm callable calls."""
         code = AI_MOCK_PREFIX + """
-llm inner() -> str:
-    __sys__
-    Inner LLM call.
-    __user__
-    MOCK:STR:result
-    llmend
+class Inner:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STR:result", "prompt_slots": [{"kind": "user_sys", "text": "Inner LLM call."}], "expected_type": "str"}
+Inner inner = Inner()
 
 @ "outer context"
 print(inner())

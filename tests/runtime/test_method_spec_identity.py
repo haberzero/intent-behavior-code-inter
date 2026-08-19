@@ -34,26 +34,23 @@ print(b.get())
         assert params == [], f"方法签名应不含 self（统一形态），got {params}"
         assert str(method.spec.return_type) == "int"
 
-    def test_llm_method_spec_is_function(self, engine):
+    def test_llm_callable_method_spec_is_function(self, engine):
+        """llm 可调用类的装配方法（__llm_call__）也水化为函数 spec（P4c 迁移：
+        `llm func` 方法机制删除；方法水化恒函数 spec 与普通方法同构）。"""
         engine.run_string(
             "import ai\nai.set_mock_mode()\n" + """
 class Parser:
-    llm func parse(self) -> int:
-__sys__
-你只返回一个整数。
-__user__
-返回 42
-llmend
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:INT:42", "expected_type": "int"}
 
 Parser p = Parser()
-int v = p.parse()
+int v = p()
 print(v)
 """, silent=True)
-        method = _get_class(engine, "Parser").lookup_method("parse")
+        method = _get_class(engine, "Parser").lookup_method("__llm_call__")
         assert method.spec is not None
         assert method.spec.kind == "function"
-        assert method.spec.name == "parse"
-        assert method.callable_kind == "llm_function"
+        assert method.spec.name == "__llm_call__"
 
     def test_impl_method_spec_is_function(self, engine):
         engine.run_string("""

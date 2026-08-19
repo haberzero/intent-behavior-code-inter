@@ -46,7 +46,7 @@ class TestOnLLMCallHook:
         assert isinstance(node_uid, str) and node_uid
         assert "MOCK:STR:hello" in user_prompt
 
-    def test_llm_function_fires_on_llm_call(self):
+    def test_llm_callable_fires_on_llm_call(self):
         from core.engine import IBCIEngine
 
         hooks = _RecordingHooks()
@@ -54,8 +54,10 @@ class TestOnLLMCallHook:
         eng.test_hooks = hooks
         eng.run_string(
             AI_MOCK_PREFIX
-            + "llm greet(str name) -> str:\n"
-            + "    __sys__\n    Greet the user.\n    __user__\n    MOCK:STR:hello $name\n    llmend\n"
+            + "class Greet:\n"
+            + "    func __llm_call__(self, any name) -> dict:\n"
+            + '        return {"user_prompt": "MOCK:STR:hello " + str(name), "expected_type": "str"}\n'
+            + "Greet greet = Greet()\n"
             + 'str r = greet("ibci")\nprint(r)\n',
             silent=True,
         )

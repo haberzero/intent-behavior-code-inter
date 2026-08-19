@@ -1,34 +1,34 @@
 """
-tests/e2e/test_callable_unification.py — ordinary and LLM functions as unified callable values.
+tests/e2e/test_callable_unification.py — 普通函数与 llm 可调用类实例：可调用值与渲染。
 
-This is the first user-visible step toward unifying normal functions and
-LLM functions: both are callable values and both render through the same
-PromptRenderer with distinct, readable descriptions.
+P4c 迁移（llm 函数 → llm 可调用类实例，语义演进）：
+- 旧 `llm g() -> str` 函数值是 "可调用函数值"（可 fn 化、渲染 `func g() -> str`）。
+- 新形态 = 实现 ``LLMCallable``（``__llm_call__``）的 llm 可调用**类实例**：一等对象
+  （类变量持有 + 直接调用 ``g()``），非 fn 值（fn 只收 lambda/函数，语义演进记录于
+  WORKLOG/NEXT_STEPS）。实例经统一 PromptRenderer 渲染为有意义描述（非 repr）。
 """
 
 from tests.conftest import run_ibci
 
 
 class TestCallableUnification:
-    def test_normal_and_llm_functions_render_distinctly(self):
+    def test_function_and_llm_callable_instance_render_distinctly(self):
         code = """
 func f() -> int:
     return 1
 
-llm g() -> str:
-__sys__
-You are helpful.
-__user__
-Say hi.
-llmend
+class Greet:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "Say hi"}
+
+Greet g = Greet()
 
 print(f)
 print(g)
 """
         lines = run_ibci(code)
-        # G5/G2（意图一等值）：函数值渲染为有意义可调用契约（非 repr）；
-        # 普通 vs llm 函数仍可区分（不同名/签名）。
-        assert lines == ["func f() -> int", "func g() -> str"]
+        # 普通函数渲染为有意义可调用契约；llm 可调用类实例渲染为一等对象描述。
+        assert lines == ["func f() -> int", "<Instance of Greet>"]
 
     def test_normal_function_still_callable(self):
         code = """
@@ -39,41 +39,41 @@ print(f())
 """
         assert run_ibci(code) == ["42"]
 
-    def test_llm_function_still_callable(self):
+    def test_llm_callable_instance_still_callable(self):
         code = """
 import ai
 ai.set_mock_mode()
 
-llm g() -> str:
-__sys__
-You are helpful.
-__user__
-MOCK:STR:hello
-llmend
+class Greet:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STR:hello"}
 
+Greet g = Greet()
 print(g())
 """
         assert run_ibci(code) == ["hello"]
 
 
 class TestCallableAsFirstClassValues:
-    def test_normal_and_llm_functions_assignable_to_fn(self):
+    def test_function_assignable_to_fn_and_callable_instance_first_class(self):
         code = """
+import ai
+ai.set_mock_mode()
+
 func f() -> int:
     return 1
 
-llm g() -> str:
-__sys__
-You are helpful.
-__user__
-MOCK:STR:hi
-llmend
+class Greet:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STR:hi"}
+
+Greet g = Greet()
 
 fn a = f
-fn b = g
 print(a)
-print(b)
+
+print(g())
 """
         lines = run_ibci(code)
-        # G5/G2：函数值渲染为有意义可调用契约（非 repr），普通/llm 仍可区分。
-        assert lines == ["func f() -> int", "func g() -> str"]
+        # 普通函数是一等 fn 值；llm 可调用类实例是一等对象（类变量持有 + 直接调用）。
+        assert lines == ["func f() -> int", "hi"]

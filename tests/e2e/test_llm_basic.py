@@ -72,35 +72,32 @@ else:
 
 class TestE2ELLMFunctions:
     def test_llm_function_call(self):
+        """llm 可调用类实例直接调用（P4c 迁移）：参数按位绑定 + prompt_slots 自定义槽。"""
         code = AI_MOCK_PREFIX + """
-llm greet(str name) -> str:
-__sys__
-You are a greeter.
-__user__
-Greet $name
-llmend
+class Greet:
+    func __llm_call__(self, any name) -> dict:
+        return {"user_prompt": "Greet " + str(name), "prompt_slots": [{"kind": "user_sys", "text": "You are a greeter."}], "expected_type": "str"}
 
+Greet greet = Greet()
 str result = greet("Alice")
 print(result)
 """
         lines = run_ibci(code)
-        # MOCK 模式：验证参数插值实际发生（$name → Alice），而非仅"有输出"
+        # MOCK 模式：验证参数插值实际发生（name → Alice），而非仅"有输出"
         assert len(lines) == 1
         assert "Greet Alice" in lines[0]
 
 
 class TestE2ELLMFunctionContainerReturn:
     def test_llm_function_returns_list_int(self):
-        """LLM 函数返回 list[int] 应按容器类型解析，而不是退化为 str。"""
+        """llm 可调用类返回 list[int] 应按容器类型解析，而不是退化为 str。"""
         code = AI_MOCK_PREFIX + """
-llm 取列表() -> list[int]:
-__sys__
-你只返回 JSON 数组。
-__user__
-MOCK:LIST:[1,2,3]
-llmend
+class 取列表:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:LIST:[1,2,3]", "prompt_slots": [{"kind": "user_sys", "text": "你只返回 JSON 数组。"}], "expected_type": "list[int]"}
 
-list[int] nums = 取列表()
+取列表 inst = 取列表()
+list[int] nums = inst()
 print((str)nums.len())
 print((str)nums[0])
 print((str)nums[2])
@@ -109,16 +106,14 @@ print((str)nums[2])
         assert lines == ["3", "1", "3"]
 
     def test_llm_function_returns_dict_str_int(self):
-        """LLM 函数返回 dict[str,int] 应按容器类型解析。"""
+        """llm 可调用类返回 dict[str,int] 应按容器类型解析。"""
         code = AI_MOCK_PREFIX + """
-llm 取分数() -> dict[str,int]:
-__sys__
-你只返回 JSON 对象。
-__user__
-MOCK:DICT:{"math":90,"english":85}
-llmend
+class 取分数:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:DICT:{\\"math\\":90,\\"english\\":85}", "prompt_slots": [{"kind": "user_sys", "text": "你只返回 JSON 对象。"}], "expected_type": "dict[str,int]"}
 
-dict[str,int] scores = 取分数()
+取分数 inst = 取分数()
+dict[str,int] scores = inst()
 print((str)scores.len())
 print((str)scores["math"])
 """

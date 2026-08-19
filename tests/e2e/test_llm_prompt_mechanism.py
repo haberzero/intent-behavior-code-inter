@@ -132,16 +132,17 @@ except Exception as e:
 
 
 class TestLLMFunctionPromptMechanism:
-    def test_llm_function_llmretry_not_injected_on_first_call(self):
+    def test_llm_callable_first_call_has_no_retry_hint(self):
+        """llm 可调用类（P4c 迁移）：首调 sys_prompt 无重试提示注入。
+
+        ``__llmretry__`` 段语义迁往 ``__retry__`` 协议高阶化（P4d）；本用例保留
+        "首调不注入重试提示"断言（重试机制经帧机制提供，首调无帧）。
+        """
         code = AI_MOCK_PREFIX + """
-llm f() -> int:
-__sys__
-你是数字解析器。
-__user__
-MOCK:INT:3
-__llmretry__
-请只返回整数
-llmend
+class F:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:INT:3", "prompt_slots": [{"kind": "user_sys", "text": "你是数字解析器。"}], "expected_type": "int"}
+F f = F()
 int x = f()
 print(x)
 """
@@ -149,24 +150,26 @@ print(x)
         assert lines == ["3"]
         assert prompts
         assert "[重试提示]" not in prompts[0]
-        assert "请只返回整数" not in prompts[0]
 
-    def test_llm_function_returning_enum_gets_outputhint(self):
+    def test_llm_callable_returning_enum_gets_outputhint(self):
+        """llm 可调用类（P4c 迁移）：装配 dict 显式 output_hint 注入 provider sys prompt。
+
+        旧 llm 函数的枚举 output hint 由声明返回类型自动推导；新形态 output hint 由
+        用户在 ``__llm_call__`` 装配 dict 显式声明（P4b-2a 契约），语义演进记录于
+        NEXT_STEPS/WORKLOG（自动推导评估归 P4d/P5）。
+        """
         code = AI_MOCK_PREFIX + """
 class Status(Enum):
     str ACTIVE = "ACTIVE"
     str INACTIVE = "INACTIVE"
-llm parse_status() -> Status:
-__sys__
-你是状态解析器。
-__user__
-MOCK:STR:ACTIVE
-llmend
-Status s = parse_status()
-print(s)
+class ParseStatus:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STR:ACTIVE", "prompt_slots": [{"kind": "user_sys", "text": "你是状态解析器。"}], "expected_type": "Status", "output_hint": "只输出状态枚举值 ACTIVE 或 INACTIVE"}
+ParseStatus ps = ParseStatus()
+Status c = ps()
+print(c)
 """
         lines, prompts = _run_with_hooks(code)
         assert lines == ["ACTIVE"]
         assert prompts
-        assert "[输出格式要求]" in prompts[0]
-        assert "ACTIVE, INACTIVE" in prompts[0]
+        assert "只输出状态枚举值 ACTIVE 或 INACTIVE" in prompts[0]

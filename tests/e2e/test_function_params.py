@@ -149,13 +149,13 @@ print(json.stringify(obj={"a": 1}))
 
 
 class TestLLMFunctionRuntime:
-    """LLM 函数：默认参数（mock provider）。"""
+    """LLM 可调用类：默认参数（mock provider，P4c 迁移）。"""
 
     def test_llm_default(self):
-        out = run_ibci("""llm greet(str who = "world") -> str:
-__user__
-hi $who
-llmend
+        out = run_ibci("""class Greet:
+    func __llm_call__(self, any who = "world") -> dict:
+        return {"user_prompt": "hi " + str(who)}
+Greet greet = Greet()
 str g = greet()
 str g2 = greet("ibci")
 print(g)

@@ -109,48 +109,38 @@ else:
 
 
 class TestLLMFunction:
-    """Validate LLM function semantics.
-    """
+    """Validate LLM callable class semantics（P4c 迁移：llm 函数 → llm 可调用类实例）。"""
 
     def test_llm_function_definition_and_call(self):
-        """INV-LLMFN-1: LLM functions can be defined and called."""
+        """INV-LLMFN-1: LLM callable classes can be defined and called directly."""
         code = AI_MOCK_PREFIX + """
-llm double(int x) -> int:
-    __sys__
-    Double the input.
-    __user__
-    MOCK:INT:84
-    llmend
-
+class Double:
+    func __llm_call__(self, any x) -> dict:
+        return {"user_prompt": "MOCK:INT:84", "prompt_slots": [{"kind": "user_sys", "text": "Double the input."}], "expected_type": "int"}
+Double double = Double()
 print(double(42))
 """
         assert run_ibci(code) == ["84"]
 
     def test_llm_function_parameter_binding(self):
-        """INV-LLMFN-2: LLM function parameters are bound correctly."""
+        """INV-LLMFN-2: LLM callable class args are bound to __llm_call__ params."""
         code = AI_MOCK_PREFIX + """
-llm greet(str name) -> str:
-    __sys__
-    Greet the user.
-    __user__
-    MOCK:STR:Hello
-    llmend
-
+class Greet:
+    func __llm_call__(self, any name) -> dict:
+        return {"user_prompt": "MOCK:STR:Hello", "prompt_slots": [{"kind": "user_sys", "text": "Greet the user."}], "expected_type": "str"}
+Greet greet = Greet()
 print(greet("World"))
 """
         result = run_ibci(code)
         assert "Hello" in result[0]
 
     def test_llm_function_return_type(self):
-        """INV-LLMFN-3: LLM function enforces return type."""
+        """INV-LLMFN-3: expected_type enforces return parsing."""
         code = AI_MOCK_PREFIX + """
-llm compute() -> int:
-    __sys__
-    Compute.
-    __user__
-    MOCK:INT:123
-    llmend
-
+class Compute:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:INT:123", "prompt_slots": [{"kind": "user_sys", "text": "Compute."}], "expected_type": "int"}
+Compute compute = Compute()
 int result = compute()
 print(result)
 """
@@ -176,14 +166,12 @@ print(result)
         assert run_ibci(code) == ["output"]
 
     def test_intent_in_llm_function(self):
-        """INV-INTENT-LLM-2: Intent works around LLM function calls."""
+        """INV-INTENT-LLM-2: Intent works around LLM callable class calls."""
         code = AI_MOCK_PREFIX + """
-llm process(str data) -> str:
-    __sys__
-    Process data.
-    __user__
-    MOCK:STR:processed
-    llmend
+class Process:
+    func __llm_call__(self, any data) -> dict:
+        return {"user_prompt": "MOCK:STR:processed", "prompt_slots": [{"kind": "user_sys", "text": "Process data."}], "expected_type": "str"}
+Process process = Process()
 
 @ "processing mode"
 str out = process("input")

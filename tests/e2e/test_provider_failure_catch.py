@@ -86,15 +86,13 @@ print("after_catch")
 
     def test_llm_function_caught_by_llm_error(self):
         code = """
-llm 写作文(str topic) -> str:
-__sys__
-你是作家。
-__user__
-写一篇关于 $topic 的作文。
-llmend
+class 写作文:
+    func __llm_call__(self, any topic) -> dict:
+        return {"user_prompt": "写一篇关于 " + str(topic) + " 的作文。", "prompt_slots": [{"kind": "user_sys", "text": "你是作家。"}], "expected_type": "str"}
 
+写作文 inst = 写作文()
 try:
-    str r = 写作文("秋天")
+    str r = inst("秋天")
     print("unexpected_success")
 except LLMError as e:
     print("caught_llm")
