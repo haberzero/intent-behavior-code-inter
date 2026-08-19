@@ -266,7 +266,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   任务代号全仓清理——core 40+ 文件（P#/D#/G#/R#-D#/IT-#/决策 N/阶段 N/EXEC-FOUNDATION/
   DIAGNOSTIC_DESIGN 等去代号留功能说明）+ tests 45 文件 docstring + docs 7 文件 + examples 1
   + trials 18 文件 .ibci 头注释；保留 INV-*/LT-*/IT-* 规范/公理编号（正式引用标识）与
-  trials 用例编号（试用地基身份）。B 死代码删除 `_invoke_llm_callable_cps_boxed` /
+  trials 用例编号（试用地基身份）。**保留标准警示**：不变量编号 `INV-EXCEPT-\*` 等曾被
+  subagent 误删过、已回退——遇到同类编号先判性质（任务代号 vs 规范标识）再动。B 死代码删除 `_invoke_llm_callable_cps_boxed` /
   `_invoke_llm_callable_sync`（零消费者）。全量 pytest 3059 passed / 1 skipped 零回归。
   **✅ 审计 C+D 已落地（本 session，unsafe-vibe-dev `ed4502ef`）**：C 意图三层解析双写真相
   收敛——行为路径 `_prepare_behavior_call_cps` 内联副本改为调用共享
@@ -282,15 +283,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   BehaviorAxiom/TypeAxiom + 03_type_system.md），P4 协议化真收尾；G5 意图值栈全量重构
   维持登记不推进（P3 核心切片已落地、勿半接通）；行为统一装配评估为值自身差异承载。
   全量 pytest 3066 passed / 1 skipped 零回归。
-  **当前分支 = `unsafe-vibe-dev`**，HEAD=`033c9900`，全量基线 3066 passed / 1 skipped
-  （以实跑为准），未 push、main 未动；worktree 仅未跟踪 `tasks_docs/_code_p4d_retry.md`
-  （P4d 临时设计文档，G 项待删）。
+  **当前分支 = `unsafe-vibe-dev`**，HEAD=`446e1e13`（领先 origin 235 提交，未 push）、main 未动、worktree 干净；全量基线 3066 passed / 1 skipped
+  （以实跑为准）。**会话交接核验接手完成（本 session）**：HANDOFF_SESSION.md 待验证清单全通过，
+  契约要点并入本节（含 INV-EXCEPT-* 保留标准警示），临时交接文件已删除（git 承载）。
   ② 主线剩余对齐债务评估（G5 意图值栈 / has_llm_call_cap / 行为统一装配，NEXT_STEPS
   候选 #1）；③ 支线（PT-DEBT / VISION-3 / 文档 P9 收尾——P9 含 docs 代号污染清）。
 
 ### 2.2 交接检查单（当前有效）
 
-- [ ] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，下 session 接手核验后并入本节并删除）**
+- [x] **✅ 会话交接核验接手完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3066 passed / 1 skipped）；契约要点已并入 §2.1（含 INV-EXCEPT-* 保留标准警示），临时交接文件已删除（git 承载）
 - [x] **✅ 审计 A+B 处置落地（`90e66a90`）**：注释/文档任务代号全仓清理（core+tests+docs+examples+trials）+ 死代码删除 `_invoke_llm_callable_cps_boxed`/`_sync`；保留 INV/LT/IT 规范编号与 trials 用例编号；全量 3059 零回归
 - [x] **✅ 审计 C+D 处置落地（`ed4502ef`）**：C 意图三层解析双写收敛（行为路径调共享 `_resolve_llm_callable_intents_cps`）+ 双装配入口评估（值差异承载收窄登记）；D overlay 覆层启用状态迁 RuntimeContext（跨根并发隔离）+ 判别 +3；全量 3066 零回归
 - [x] **✅ 候选 #1 剩余债务评估定论（`033c9900`）**：has_llm_call_cap 实证死字段删除（P4 真收尾）；G5 意图值栈维持登记不推进；行为装配评估值差异承载；全量 3066 零回归
