@@ -566,6 +566,17 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   统一装配入口收敛**——run_batch/invoke 行为路径经各自入口（`_prepare_behavior_call_cps`
   vs 统一装配），中大型重构（行为执行路径），`assemble_stream_request_cps` 桥接为先例。
   均记录于 NEXT_STEPS 候选 #1（收尾评估），不阻塞主线。
+- **五大地基超大型重构专项审计发现（2026-08-19，本 session 末，只检测未修）**：基线
+  `e8c7944b`..HEAD（130 文件 +4592/-1627）审计产出技术债清单 A-G（定位/详情见会话交接
+  HANDOFF_SESSION.md §七，常驻摘要 HANDOFF.md §2.1）：A **注释/文档任务代号污染**（core
+  12 + tests 19 + docs 6 文件——违"代码注释禁任务代号"与 docs 治理红线，含 P4x/D8/G5/G7/
+  "决策 1 B"字样，下 session 建议机械批清理）；B **死代码**（`_invoke_llm_callable_cps_boxed`
+  / `_invoke_llm_callable_sync` 零消费者）；C **意图三层解析双写真相**（`_resolve_llm_callable_intents_cps`
+  与 `_prepare_behavior_call_cps` 内联块同构重复）与行为/llm 类双装配入口（与候选 #1 同源）；
+  D **overlay_enabled 跨根并发污染风险**（IbClass 级共享态，`with overlay` 作用域化在多根
+  并发下不成立，需隔离设计）；E 半接通边界（stream 不消费 retry 循环，登记为设计边界）；
+  F 登记债务核对（无新增）；G 工作过程遗留（临时文档待删）。处置建议：A+B 零风险机械批 →
+  C 并入主线债务评估 → D 独立窗口设计。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

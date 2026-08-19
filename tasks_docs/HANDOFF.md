@@ -250,9 +250,18 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   （satisfies↔receive 一致 / 未声明不误分派（消费前置门以 satisfies 为准）/惰性建槽/optional
   不建协议槽）+ TypeAxiom 接口补 has_validate_prompt_cap + docs 三处修正。全量 pytest **3059
   passed / 1 skipped** 零回归。**五大地基主线 P1-P6 全链路完成**。
-  **当前推进 = 五大地基剩余对齐债务评估**（G5 意图值栈全量重构 / has_llm_call_cap → llm_callable
-  / 行为值深程统一装配入口收敛），详见 `NEXT_STEPS.md` 下一步候选 #1。按需推进支线（PT-DEBT /
-  VISION-3 / 文档 P9 收尾）。
+  **✅ 超大型重构专项审计完成（本 session 末，只检测未修）**：基线 `e8c7944b`..HEAD
+  （130 文件 +4592/-1627）。发现技术债清单 A-G（详见会话交接 HANDOFF_SESSION.md §七）：
+  **A 注释/文档任务代号污染**（core 12 + tests 19 + docs 6 文件，违注释纪律/docs 治理，
+  含本 session P6 新引入的 04_vm_interpreter "P2-②/P6"）；**B 死代码 2 处**
+  （`_invoke_llm_callable_cps_boxed` / `_invoke_llm_callable_sync` 零消费者）；
+  **C 双实现**（意图三层解析双写真相 `_resolve_llm_callable_intents_cps` vs
+  `_prepare_behavior_call_cps` 内联块 + 行为/llm 类双装配入口，与候选 #1 行为统一装配同源）；
+  **D overlay_enabled 跨根并发污染风险**（IbClass 级共享态，需设计）；E 半接通边界（登记）；
+  F 登记债务核对（无新增）；G 工作过程遗留（临时文档待删）。处置建议顺序 A+B → C → D。
+  **当前推进 = 下 session 启动自主推进的处置候选**：① 审计清单 A+B（机械零风险批）；
+  ② 主线剩余对齐债务评估（G5 意图值栈 / has_llm_call_cap / 行为统一装配，NEXT_STEPS
+  候选 #1）；③ 支线（PT-DEBT / VISION-3 / 文档 P9 收尾——P9 含 docs 代号污染清）。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -263,7 +272,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] **✅ P4c 语法/旧机制全链路删除 + 全量迁移落地**：P4c-1 特性地基（实例直接调用 + prompt_slots + call_args）/ P4c-2a 测试迁移 10 文件 / P4c-2b 内核删除（净删 656 行，保留 llmexcept/retry 帧机制）/ P4c-2c examples + trials 12 + docs 全面同步；全仓 core 残留清零；全量 3035 零回归；下一步 = P4d retry 高阶化
 - [x] **✅ P4d retry 高阶化落地**：`__retry__` 协议（`func __retry__(self) -> dict`：max_retry/hint；发现走 `_discover_optional_protocol_method` 同 `__intent__` 通道 + 违约 fail-fast）+ 装配三元组 + invoke 调用级重试循环（_prompt_assembly 单一消息构造累积 message_history 回喂，耗尽交语句层）+ 直接调用/run_batch 继承；边界裁定（帧机制=CPS 窗口重求值 ⊕ 信息装配，高阶化只作用于后者）；判别测试 6 项 + docs 同步；全量 3047 零回归
 - [x] **✅ P5 prompt 类型类化收尾落地**：P5a validate_prompt 激活（BaseAxiom.has_validate_prompt_cap + 协议条目 axiom_cap/structural_methods + 消费前置门，D2 to_prompt 同构）/ P5b required/optional 形式化（ProtocolDef.optional_methods + all_methods()，llm_callable 登记 __intent__/__retry__）/ P5c 评估即收尾（prompt 协议族五成员消费面全协议化）；判别测试 +8；全量 3055 零回归
-- [x] **✅ P6 per-IbClass 协议方法表最终收尾落地**：据实评估（P6 主体 P2-② 已落地，D3+D5 已达成——判定/分派以协议条目单一权威；剩余面边界清晰不独立分支）+ 判别测试 +4（satisfies↔receive 一致/未声明不误分派/惰性建槽/optional 不建协议槽）+ TypeAxiom 接口补 has_validate_prompt_cap + docs 三处修正（03 §4.0/§4.1 + 04 §2）；全量 3059 零回归；**五大地基 P1-P6 全链路完成**；下一步 = 剩余对齐债务评估（G5 意图值栈/has_llm_call_cap/行为统一装配）
+- [x] **✅ P6 per-IbClass 协议方法表最终收尾落地**：据实评估（P6 主体 P2-② 已落地，D3+D5 已达成——判定/分派以协议条目单一权威；剩余面边界清晰不独立分支）+ 判别测试 +4（satisfies↔receive 一致/未声明不误分派/惰性建槽/optional 不建协议槽）+ TypeAxiom 接口补 has_validate_prompt_cap + docs 三处修正（03 §4.0/§4.1 + 04 §2）；全量 3059 零回归；**五大地基 P1-P6 全链路完成**
+- [x] **✅ 超大型重构专项审计完成（只检测未修）**：技术债清单 A-G——A 注释/文档代号污染（core 12 + tests 19 + docs 6，违注释纪律/docs 治理）/ B 死代码 2 处（_invoke_llm_callable_cps_boxed/_sync 零消费者）/ C 双实现（意图三层解析双写真相 + 行为双装配入口，与候选 #1 同源）/ D overlay_enabled 跨根并发污染 / E 半接通边界（登记）/ F 登记债务核对 / G 临时文档待删；处置建议 A+B 机械批 → C 评估 → D 独立窗口；详见 HANDOFF_SESSION.md §七
 - [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
 - [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
