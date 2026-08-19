@@ -500,6 +500,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   装配；`run_batch(g,[1,2])` 声明 item 参 → 逐项装配（"欢迎1"/"欢迎2"）。修正测试间 provider
   模块 Python 缓存导致的跨测试累积（每测试唯一模块名）。验证：全量 pytest **3030 passed / 1
   skipped** 零回归。后续：P4b-3（__intent__/__retry__ 可选协议方法运行时发现）→ P4c。
+- **五大地基改造 · P4d retry 高阶化（本 session，unsafe-vibe-dev；决策 5 落实）**：
+  `__retry__` 可选协议方法落地（P1 §2.2 契约 + §七 边界）：`func __retry__(self) -> dict`
+  （无参）返回策略声明 `{"max_retry": int>=1(缺省 3), "hint": str}`；发现走
+  `_discover_optional_protocol_method`（与 `__intent__` P4b-3a 同一虚表通道）；契约违约
+  fail-fast（带参/非 dict/max_retry 非法/hint 非 str）。装配入口返回三元组
+  `(request, type_hint, retry_policy)`；invoke 路径有策略时驱动**调用级重试循环**
+  （`_invoke_llm_callable_retry_cps`：失败轮经 _prompt_assembly 单一消息构造累积
+  `message_history` 回喂、达到 max_retry 仍不确定交语句层 llmexcept/LLMParseError）；
+  直接调用 `f(args)` 与 run_batch 逐项自动继承。**边界裁定（帧机制与 CPS 栈耦合的合理处置）**：
+  帧机制 = ①执行窗口重求值（re_eval + 快照恢复 + 写保护，纯 VM 语句语义，不可也不应高阶化）
+  ⊕ ②LLM 重试信息装配（已模块化 _prompt_assembly）；高阶化只作用于②——协议层产出策略数据、
+  执行层（帧机制/调用循环）消费数据，CPS 状态机不进协议。`__llmretry__` 旧语义（重试提示回喂）
+  由 `hint` 承接；快照策略复用 `__snapshot__`/`__restore__`（不重复声明，无双写真相）。
+  行为语句默认 retry 由帧机制提供（零改动）。判别测试 6 项 `tests/e2e/test_llm_retry_callable.py`；
+  docs/syntax/08_llm_callable.md §8.4 + 10_robustness.md §10.5 同步。验证：全量 pytest
+  **3047 passed / 1 skipped** 零回归。后续：P5（validate_prompt 激活 + prompt 类型类化剩余 +
+  required/optional 协议条目形式化）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

@@ -186,26 +186,37 @@ retry）。
 > `05_llm_callable` 教程重写、llmretry 文档合并删除、KNOWN_LIMITS/SYNTAX_REFERENCE 等更新）。
 > 全仓 core 残留清零；全量 pytest **3035 passed / 1 skipped** 零回归。
 
+> **✅ P4d retry 高阶化已落地（本 session，unsafe-vibe-dev；决策 5）**：`__retry__` 可选协议
+> 方法（`func __retry__(self) -> dict`，无参返回 `{"max_retry": int>=1(缺省 3), "hint": str}`）
+> ——发现走 `_discover_optional_protocol_method`（与 `__intent__` P4b-3a 同一虚表通道）+ 契约
+> 违约 fail-fast；装配入口返回三元组 `(request, type_hint, retry_policy)`；invoke 路径有策略时
+> 驱动**调用级重试循环**（每轮经 _prompt_assembly 单一消息构造累积 `message_history` 回喂，
+> 达到 max_retry 仍不确定交语句层 llmexcept/LLMParseError）；直接调用 `f(args)` 与 run_batch
+> 逐项自动继承。**边界裁定**（帧机制与 CPS 栈耦合的合理处置）：帧机制 = 执行窗口重求值 ⊕ LLM
+> 重试信息装配两正交职责，高阶化只作用于后者（协议层产出策略数据、执行层消费数据，CPS 状态机
+> 不进协议）；`__llmretry__` 旧语义由 `hint` 承接；行为语句默认 retry 由帧机制提供（零改动）。
+> 判别测试 `tests/e2e/test_llm_retry_callable.py`（6 项）；docs/syntax/08_llm_callable.md §8.4 +
+> 10_robustness.md §10.5 同步。全量 pytest **3047 passed / 1 skipped** 零回归。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·当前] P4d：retry 高阶化（决策 5）**：
+1. **[主线·当前] P5：prompt 类型类化剩余 + validate_prompt 死条目激活（G7 收尾）+ required/optional 协议条目形式化**：
    **当前分支 = `unsafe-vibe-dev`**（P2/P6 地基 + 覆层 + prompt 类型类化 D1+D2 + P3 D8/G2 +
-   P4a + P4b 全量 + **P4c 语法/旧机制删除 + 全量迁移**（3035 零回归）已合入）。
-   设计权威 `tasks_docs/_five_foundation_P1_design.md` §七（retry 高阶化）+ §2.2（`__retry__`
-   可选协议方法契约），决策权威 `_five_foundation_redesign.md` §五（决策 5：帧机制保留 +
-   语法/策略高阶化）。
-   **本步 = P4d retry 高阶化**：
-   - `__retry__` 可选协议方法落地（P1 §2.2：声明快照策略 + 重试策略 + hint；`satisfies`
-     非强制，存在则经 `lookup_method` 发现——P4b-3a 同通道）+ 装配消费（决策 5）；
-   - llm 可调用类自定 retry：实现 `__retry__` 覆盖默认帧策略；行为语句默认 retry 由帧机制
-     提供（用户不写 `__retry__` 时行为实例走默认）；
-   - 承接 P4c 记录项：`__llmretry__` 旧段语义（重试 hint 注入）在此落地；output_hint 自动
-     推导评估（P4b 记录）。
+   P4a + P4b 全量 + **P4c 语法/旧机制删除 + 全量迁移** + **P4d retry 高阶化**（3047 零回归）
+   已合入）。
+   设计权威 `tasks_docs/_five_foundation_P1_design.md` §2.2（协议方法族 + required/optional 语义），
+   决策权威 `_five_foundation_redesign.md` §五。
+   **本步 = P5**：
+   - **validate_prompt 死条目激活**（G7 能力公理收尾）：`validate_prompt` 协议条目接 `axiom_cap`
+     （to_prompt 激活 D2 同构）——`__validate_prompt__(self, str raw) -> (bool, str)` 经协议注册表
+     判定/分派（`docs/syntax/06_oop.md` §6.7 已有用户契约）；
+   - **required/optional 协议条目形式化**（P1 §2.2 必需/可选语义落 `ProtocolDef`）：methods 分两组，
+     `__intent__`/`__retry__` 正式登记为 llm_callable 可选条目（不参与 satisfies 强制判定）；
+   - prompt 类型类化剩余（D1 双注册表收敛 + `PromptRenderer` 协议前置收尾）。
    验证门：全量 pytest 零回归 + 本地 commit + 描述性提交。
-   **后续子增量**：P5（validate_prompt 死条目激活 G7 收尾 + prompt 类型类化剩余 +
-   required/optional 协议条目形式化）→ P6（per-IbClass 协议方法表最终收尾）。
-   **待 P4 对齐项**：G5 意图值栈全量重构 + has_llm_call_cap → LLMCallable 协议 +
-   行为值深程统一装配入口收敛（run_batch/invoke 行为路径，当前经各自入口）。
+   **后续子增量**：P6（per-IbClass 协议方法表最终收尾）。
+   **待 P4 对齐项（债务）**：G5 意图值栈全量重构（栈存原始值/按值匹配）+ has_llm_call_cap →
+   LLMCallable 协议 + 行为值深程统一装配入口收敛（run_batch/invoke 行为路径，当前经各自入口）。
 2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
 3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理。
 

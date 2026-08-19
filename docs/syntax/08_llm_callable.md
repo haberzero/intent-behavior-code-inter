@@ -44,7 +44,11 @@ print(result)
 ### 8.4 可选协议方法
 
 - **`__intent__`**（可选）：`func __intent__(self, dict intents) -> dict` —— 装配时改写进入本次调用的意图三层（`active` / `global` / `merged`）。入参为三层 dict；返回 dict 的键为三层任意子集——存在的键替换对应层（消解/增删/重排），缺失的键保持原层；显式空列表清空该层。未声明时意图原样透传。
-- **`__retry__`**（可选，规划中）：重试策略声明（高阶化 retry，见健壮性章节）。
+- **`__retry__`**（可选）：`func __retry__(self) -> dict` —— 声明**调用级默认重试策略**（高阶化 retry）。返回策略字典：
+  - `max_retry`（`int` ≥ 1，缺省 3）：本次调用最多执行的轮数；
+  - `hint`（`str`）：每轮失败后注入下一轮调用的补充要求（经标准多轮对话的 `message_history` 回喂，不拼入系统提示词——承接旧 `__llmretry__` 段语义）。
+  
+  调用失败（LLM 结果不确定）时按策略自动重试：失败响应与解析错误随 `hint` 自动回喂；达到 `max_retry` 仍不确定，结果交语句层（`llmexcept` 接管 / 无保护时抛解析错误）。未声明该方法时不自动重试（一次调用即交语句层）。声明空字典（`return {}`）启用默认 `max_retry=3`。该策略与语句级 `llmexcept` 的 `retry` 指令互补（见 `docs/syntax/10_robustness.md` §10.5）。
 
 ### 8.5 返回类型解析
 

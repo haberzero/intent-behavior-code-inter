@@ -3,9 +3,12 @@
 对用户自定义 llm 可调用类实例（实现 ``LLMCallable`` 协议 = 含 ``__llm_call__`` 方法）：
 - :meth:`assemble_llm_callable_request_cps`：协议门（``satisfies_protocol(..., 'llm_callable'``
   为唯一入口判定）→ CPS 调用用户 ``__llm_call__(self) -> dict``（经 ``UserFunctionCall``
-  yield 驱动）→ 把返回装配 dict 映射为一次结构化 :class:`LLMCallRequest`；
+  yield 驱动）→ 把返回装配 dict 映射为一次结构化 :class:`LLMCallRequest`；返回
+  ``(request, type_hint, retry_policy)`` 三元组（``retry_policy`` 为 ``__retry__``
+  声明的策略或 None，P4d）；
 - :meth:`invoke_llm_callable_cps`：装配 → 统一 worker ``_call_and_parse``（``_call_llm`` +
-  ``_parse_result``），与行为路径同构。
+  ``_parse_result``），与行为路径同构；声明 ``__retry__`` 时经策略驱动重试循环
+  多轮执行（:meth:`_invoke_llm_callable_retry_cps`）。
 
 装配差异经**协议方法自身**承载（机制同构，禁 ``if 标志位`` 过程分派）：用户 llm 类的
 ``__llm_call__`` 返回装配配置 dict；行为值的装配走既有语义槽路径（后续 P4b-2b 收敛到统一入口）。
@@ -120,8 +123,10 @@ class _LLMCallableMixin:
     ):
         """统一装配：协议门 → 用户 ``__llm_call__``（返回装配 dict）→ LLMCallRequest。
 
-        返回 ``(LLMCallRequest, type_hint)``。调用方（``invoke_llm_callable_cps`` /
-        run_batch）须 ``yield from``。
+        返回 ``(LLMCallRequest, type_hint, retry_policy)``——``retry_policy`` 为
+        ``__retry__`` 可选协议方法声明的策略 dict（``{"max_retry", "hint"}``）或
+        None（未声明，P4d）。调用方（``invoke_llm_callable_cps`` /
+        run_batch / stream）须 ``yield from``。
 
         - ``item``（P4b-2c）：run_batch 逐项调用时传入；用户 ``__llm_call__`` 声明
           非 self 参数时作为该参数传入，用于逐项装配；
@@ -180,6 +185,14 @@ class _LLMCallableMixin:
                 intent_method, callable_inst, active, globals_, merged
             )
 
+        # P4d：`__retry__` 可选协议方法运行时发现（同 `__intent__` 通道）——
+        # 未声明 → 不自动重试（结果交语句层 llmexcept / LLMParseError，与现状一致）；
+        # 存在 → 解析策略声明（max_retry/hint），invoke 路径据此驱动重试循环。
+        retry_policy = None
+        retry_method = self._discover_optional_protocol_method(callable_inst, "__retry__")
+        if retry_method is not None:
+            retry_policy = yield from self._resolve_retry_policy_cps(retry_method, callable_inst)
+
         # P4c：装配 dict 的 `prompt_slots` 键（__sys__ 等自定义语义槽迁移载体，
         # 经 __llm_call__ 自定义槽装配；缺省为空列表）。
         prompt_slots = self._llm_callable_config_prompt_slots(config)
@@ -208,7 +221,7 @@ class _LLMCallableMixin:
             target_model=model,
             message_history=None,
         )
-        return request, type_hint
+        return request, type_hint, retry_policy
 
     def _discover_optional_protocol_method(self, callable_inst: IbObject, name: str):
         """可选协议方法运行时发现（receive 分派同源虚表查找，非 getattr 能力探测）。
@@ -279,6 +292,51 @@ class _LLMCallableMixin:
         new_merged = _layer("merged") if "merged" in config else list(merged)
         return new_active, new_global, new_merged
 
+    def _resolve_retry_policy_cps(
+        self,
+        retry_method: "IbUserFunction",
+        callable_inst: IbObject,
+    ):
+        """`__retry__` 可选协议方法策略解析（P4d）。
+
+        契约（用户语言层）：``func __retry__(self) -> dict``——无参（self 除外），
+        返回策略声明 dict：``{"max_retry": int(>=1, 可选), "hint": str(可选)}``。
+        空 dict 合法（启用默认 max_retry=3 的策略重试）。返回非 dict、参数数非 0、
+        max_retry 非 int 或 <1、hint 非 str → fail-fast（契约违约显式暴露）。
+        策略语义：hint 承接旧 ``__llmretry__`` 段（重试提示经 retry 轮 user 消息
+        回喂，不重复注入 sys_prompt）；耗尽后结果交语句层（llmexcept / LLMParseError）。
+        """
+        spec = getattr(retry_method, "spec", None)
+        param_count = len(getattr(spec, "param_types", None) or [])
+        if param_count != 0:
+            raise TypeError(
+                "invoke_llm_callable: __retry__ must take no arguments "
+                "'func __retry__(self) -> dict' "
+                f"(got {param_count})."
+            )
+
+        result = yield UserFunctionCall(retry_method, [], callable_inst)
+        config = self._llm_callable_config_to_dict(result, method_name="__retry__")
+
+        policy: Dict[str, Any] = {}
+        if "max_retry" in config:
+            max_retry = config["max_retry"]
+            if not isinstance(max_retry, int) or max_retry < 1:
+                raise TypeError(
+                    "invoke_llm_callable: __retry__ dict key 'max_retry' must be "
+                    f"an int >= 1 (got {max_retry!r})."
+                )
+            policy["max_retry"] = max_retry
+        if "hint" in config:
+            hint = config["hint"]
+            if not isinstance(hint, str):
+                raise TypeError(
+                    "invoke_llm_callable: __retry__ dict key 'hint' must be a str "
+                    f"(got {type(hint).__name__})."
+                )
+            policy["hint"] = hint
+        return policy
+
     @staticmethod
     def _llm_callable_config_prompt_slots(config: Dict[str, Any]) -> list:
         """解析装配 dict 的 ``prompt_slots`` 键（P4c，``__sys__`` 等自定义槽迁移载体）。
@@ -338,22 +396,82 @@ class _LLMCallableMixin:
 
         ``call_args``（P4c）：llm 可调用类实例直接调用 ``f(args)`` 时按位绑定到
         ``__llm_call__`` 非 self 参数；缺省回落 ``item`` 路径（run_batch 逐项）。
+
+        **P4d**：装配发现 ``__retry__`` 策略时走策略驱动重试循环
+        （:meth:`_invoke_llm_callable_retry_cps`）；未声明则单次调用（现状路径）。
         """
-        request, type_hint = yield from self.assemble_llm_callable_request_cps(
+        request, type_hint, retry_policy = yield from self.assemble_llm_callable_request_cps(
             callable_inst, ec, target_model=target_model, item=item, call_args=call_args
         )
-        from core.runtime.interpreter.llm_executor._behavior import BehaviorCallSpec
-        from core.runtime.shared.llm_result import LLMFuture
+        if retry_policy is not None:
+            result = yield from self._invoke_llm_callable_retry_cps(
+                request, type_hint, retry_policy, ec
+            )
+        else:
+            from core.runtime.interpreter.llm_executor._behavior import BehaviorCallSpec
+            from core.runtime.shared.llm_result import LLMFuture
 
-        spec = BehaviorCallSpec(request=request, type_hint=type_hint)
-        future = self._get_thread_pool().submit(
-            self._call_and_parse, spec, request.node_uid, ec
-        )
-        llm_future = LLMFuture(node_uid=request.node_uid, future=future)
-        result = yield llm_future
+            spec = BehaviorCallSpec(request=request, type_hint=type_hint)
+            future = self._get_thread_pool().submit(
+                self._call_and_parse, spec, request.node_uid, ec
+            )
+            llm_future = LLMFuture(node_uid=request.node_uid, future=future)
+            result = yield llm_future
         if result is not None and result.call_info is not None:
             self._record_current_call_info(result.call_info)
         return result
+
+    def _invoke_llm_callable_retry_cps(
+        self,
+        request: "LLMCallRequest",
+        type_hint: Optional[str],
+        retry_policy: dict,
+        ec: IExecutionContext,
+    ):
+        """`__retry__` 策略驱动重试循环（P4d）。
+
+        语义：每轮经统一 worker（``_call_and_parse``）执行；结果不确定时记入
+        失败尝试（raw_response/parse_error/hint），用 :mod:`_prompt_assembly`
+        单一消息构造（``build_retry_message_history_from_attempts``）累积多轮
+        对话历史（``message_history``，provider 追加在首轮之后），再执行下一轮——
+        与行为路径的 llmexcept 帧回喂语义一致（hint 经 retry 轮 user 消息回喂，
+        不重复注入 sys_prompt，承接旧 ``__llmretry__`` 段）。
+
+        达到 ``max_retry``（声明缺省 3）仍不确定 → 返回最后一次不确定结果，
+        交语句层（llmexcept 帧接管 / 无帧则 LLMParseError），与无策略路径一致。
+        """
+        from dataclasses import replace
+
+        from core.runtime.interpreter.llm_executor._behavior import BehaviorCallSpec
+        from core.runtime.interpreter.llm_executor._prompt_assembly import (
+            build_retry_message_history_from_attempts,
+        )
+        from core.runtime.shared.llm_result import LLMFuture
+
+        max_retry = retry_policy.get("max_retry") or 3
+        hint = retry_policy.get("hint")
+        attempts: list = []
+        while True:
+            spec = BehaviorCallSpec(request=request, type_hint=type_hint)
+            future = self._get_thread_pool().submit(
+                self._call_and_parse, spec, request.node_uid, ec
+            )
+            llm_future = LLMFuture(node_uid=request.node_uid, future=future)
+            result = yield llm_future
+            if result is None or not result.is_uncertain:
+                return result
+            attempts.append(
+                {
+                    "raw_response": result.raw_response or "",
+                    "parse_error": result.retry_hint or None,
+                    "user_hint": hint,
+                }
+            )
+            if len(attempts) >= max_retry:
+                # 耗尽：把最后一次不确定结果交语句层（llmexcept 接管 / LLMParseError）
+                return result
+            history = build_retry_message_history_from_attempts(attempts)
+            request = replace(request, message_history=history)
 
     def _is_llm_callable_value(self, value: IbObject, ec: IExecutionContext) -> bool:
         """LLMCallable 值判定（satisfies 唯一入口，供 run_batch/stream 校验）。"""
@@ -393,7 +511,7 @@ class _LLMCallableMixin:
             )
             return spec.request
         if self._is_llm_callable_value(target, ec):
-            request, _ = yield from self.assemble_llm_callable_request_cps(target, ec)
+            request, _, _ = yield from self.assemble_llm_callable_request_cps(target, ec)
             return request
         raise TypeError(
             "stream_call: expected a behavior or LLMCallable instance, "
