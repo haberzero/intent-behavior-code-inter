@@ -521,21 +521,29 @@ class ExpressionVisitorsMixin:
                 )
                 self.bind_type(node, self._any_desc)
                 return self._any_desc
-            if sym and not sym.is_type and '__call__' in func_type.members:
-                def scope_lookup(class_name: str, method_name: str) -> Optional[IbSpec]:
-                    class_sym = self.lookup_symbol(class_name)
-                    if class_sym and hasattr(class_sym, 'owned_scope') and class_sym.owned_scope:
-                        method_sym = class_sym.owned_scope.resolve(method_name)
-                        if method_sym and method_sym.spec:
-                            return method_sym.spec
-                    return None
+            if sym and not sym.is_type:
+                if '__call__' in func_type.members:
+                    def scope_lookup(class_name: str, method_name: str) -> Optional[IbSpec]:
+                        class_sym = self.lookup_symbol(class_name)
+                        if class_sym and hasattr(class_sym, 'owned_scope') and class_sym.owned_scope:
+                            method_sym = class_sym.owned_scope.resolve(method_name)
+                            if method_sym and method_sym.spec:
+                                return method_sym.spec
+                        return None
 
-                ret = self.registry.resolve_callable_instance_return(
-                    func_type, positional_specs, class_scope_lookup=scope_lookup
-                )
-                if ret:
-                    self.bind_type(node, ret)
-                    return ret
+                    ret = self.registry.resolve_callable_instance_return(
+                        func_type, positional_specs, class_scope_lookup=scope_lookup
+                    )
+                    if ret:
+                        self.bind_type(node, ret)
+                        return ret
+                # P4c：LLMCallable 类实例调用 f(args) 的静态类型 = 动态 any——
+                # LLM 结果类型由运行时装配的 ``expected_type`` 决定（渐进类型语义；
+                # 与类含确定性 ``__call__`` 时的静态签名推断区分）。判据 =
+                # satisfies_protocol('llm_callable') 唯一判定（协议分派，非能力探测）。
+                if self.registry.satisfies_protocol(func_type, "llm_callable"):
+                    self.bind_type(node, self._any_desc)
+                    return self._any_desc
 
         # --- Callability check ---
         # 基本类型转换构造器（int()/str()/float()/bool()）在调用位置视为可调用：

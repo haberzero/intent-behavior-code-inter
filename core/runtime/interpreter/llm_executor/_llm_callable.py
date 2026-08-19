@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 from core.runtime.interfaces import IExecutionContext
 
 from core.base.llm_protocol import LLMCallRequest, OutputContract, IntentBlock
+from core.base.llm_protocol.llm_call import PromptSlot
 
 from core.runtime.shared.user_call import UserFunctionCall
 from core.runtime.objects.kernel import IbObject
@@ -115,13 +116,20 @@ class _LLMCallableMixin:
         target_model: str = "",
         captured_intents: Optional[Any] = None,
         item: Optional[IbObject] = None,
+        call_args: Optional[list] = None,
     ):
         """统一装配：协议门 → 用户 ``__llm_call__``（返回装配 dict）→ LLMCallRequest。
 
         返回 ``(LLMCallRequest, type_hint)``。调用方（``invoke_llm_callable_cps`` /
-        run_batch）须 ``yield from``。``item``（P4b-2c）：run_batch 逐项调用时传入；
-        用户 ``__llm_call__`` 声明非 self 参数（``__llm_call__(self, any item)``）
-        时作为该参数传入，用于逐项装配。
+        run_batch）须 ``yield from``。
+
+        - ``item``（P4b-2c）：run_batch 逐项调用时传入；用户 ``__llm_call__`` 声明
+          非 self 参数时作为该参数传入，用于逐项装配；
+        - ``call_args``（P4c）：llm 可调用类实例直接调用 ``f(...)`` 时按位绑定到
+          ``__llm_call__`` 非 self 参数；缺省（None）时回落 ``item`` 路径。
+        - 装配 dict 契约（P4b-2a + P4c 扩展）：``user_prompt``（必需）/ ``output_hint`` /
+          ``expected_type`` / ``model`` / ``prompt_slots``（可选，__sys__ 等自定义槽
+          迁移载体，``[{kind, text}]``）。
         """
         ib_class = callable_inst.ib_class
         reg = getattr(ib_class, "registry", None)
@@ -143,12 +151,14 @@ class _LLMCallableMixin:
                 f"(got {type(method).__name__})."
             )
 
-        # item 参检测：用户 'func __llm_call__(self, any item)' 声明非 self 参数时，逐项调用传 item。
+        # 非 self 参数检测：`func __llm_call__(self[, any item ...])`。显式 call_args
+        # （直接调用 f(args)）按位绑定；否则 run_batch 逐项以 item 作为唯一实参。
         method_spec = getattr(method, "spec", None)
-        takes_item = bool(method_spec is not None and getattr(method_spec, "param_types", None))
-        call_args = [item] if (item is not None and takes_item) else []
+        takes_params = bool(method_spec is not None and getattr(method_spec, "param_types", None))
+        if call_args is None:
+            call_args = [item] if (item is not None and takes_params) else []
 
-        # CPS 调用用户 __llm_call__(self[, item]) -> dict（含 Waitable 则调度器挂起）。
+        # CPS 调用用户 __llm_call__(self[, ...]) -> dict（含 Waitable 则调度器挂起）。
         result = yield UserFunctionCall(method, call_args, callable_inst)
         if not isinstance(result, IbObject):
             raise TypeError(
@@ -170,6 +180,10 @@ class _LLMCallableMixin:
                 intent_method, callable_inst, active, globals_, merged
             )
 
+        # P4c：装配 dict 的 `prompt_slots` 键（__sys__ 等自定义语义槽迁移载体，
+        # 经 __llm_call__ 自定义槽装配；缺省为空列表）。
+        prompt_slots = self._llm_callable_config_prompt_slots(config)
+
         user_prompt = config.get("user_prompt")
         if user_prompt is None:
             raise TypeError(
@@ -184,6 +198,7 @@ class _LLMCallableMixin:
         request = LLMCallRequest(
             node_uid=node_uid,
             user_prompt=user_prompt,
+            prompt_slots=prompt_slots,
             intents=IntentBlock(active=active, global_=globals_, merged=merged),
             output_contract=OutputContract(
                 expected_type=None if suppress_type_constraint else type_hint,
@@ -265,6 +280,38 @@ class _LLMCallableMixin:
         return new_active, new_global, new_merged
 
     @staticmethod
+    def _llm_callable_config_prompt_slots(config: Dict[str, Any]) -> list:
+        """解析装配 dict 的 ``prompt_slots`` 键（P4c，``__sys__`` 等自定义槽迁移载体）。
+
+        ``[{kind: str, text: str}, ...]`` → :class:`PromptSlot` 列表；缺省（无该键）
+        → 空列表。形态违约（非 list / 元素非 {kind,text} / 值非 str）→ fail-fast
+        （契约违约显式暴露）。
+        """
+        raw = config.get("prompt_slots")
+        if raw is None:
+            return []
+        if not isinstance(raw, list):
+            raise TypeError(
+                "invoke_llm_callable: 'prompt_slots' must be a list of "
+                f"{{'kind': str, 'text': str}} dicts (got {type(raw).__name__})."
+            )
+        slots = []
+        for entry in raw:
+            if not isinstance(entry, dict) or "kind" not in entry or "text" not in entry:
+                raise TypeError(
+                    "invoke_llm_callable: each 'prompt_slots' entry must be "
+                    f"{{'kind': str, 'text': str}} (got {entry!r})."
+                )
+            kind, text = entry["kind"], entry["text"]
+            if not isinstance(kind, str) or not isinstance(text, str):
+                raise TypeError(
+                    "invoke_llm_callable: 'prompt_slots' entry kind/text must be str "
+                    f"(got kind={type(kind).__name__}, text={type(text).__name__})."
+                )
+            slots.append(PromptSlot(kind=kind, text=text))
+        return slots
+
+    @staticmethod
     def _llm_callable_config_to_dict(
         result: IbObject, method_name: str = "__llm_call__"
     ) -> Dict[str, Any]:
@@ -285,11 +332,15 @@ class _LLMCallableMixin:
         )
 
     def invoke_llm_callable_cps(
-        self, callable_inst: IbObject, ec: IExecutionContext, *, target_model: str = "", item: Optional[IbObject] = None
+        self, callable_inst: IbObject, ec: IExecutionContext, *, target_model: str = "", item: Optional[IbObject] = None, call_args: Optional[list] = None
     ):
-        """执行入口：统一装配 → 统一 worker（_call_llm + _parse_result）。"""
+        """执行入口：统一装配 → 统一 worker（_call_llm + _parse_result）。
+
+        ``call_args``（P4c）：llm 可调用类实例直接调用 ``f(args)`` 时按位绑定到
+        ``__llm_call__`` 非 self 参数；缺省回落 ``item`` 路径（run_batch 逐项）。
+        """
         request, type_hint = yield from self.assemble_llm_callable_request_cps(
-            callable_inst, ec, target_model=target_model, item=item
+            callable_inst, ec, target_model=target_model, item=item, call_args=call_args
         )
         from core.runtime.interpreter.llm_executor._behavior import BehaviorCallSpec
         from core.runtime.shared.llm_result import LLMFuture

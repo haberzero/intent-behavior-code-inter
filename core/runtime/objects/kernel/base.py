@@ -169,6 +169,14 @@ class IbObject:
             from .user_functions import IbUserFunction
             if isinstance(method, IbUserFunction):
                 return _UserCallDrive(method, args, self)
+        # P4c：LLMCallable 可调用类实例直接调用 f(args) → 统一装配入口执行一次
+        # LLM 调用。判据 = satisfies_protocol('llm_callable') 唯一判定（协议分派，
+        # 非能力探测）：类未覆写确定性 __call__ 且满足 LLMCallable 协议时，实例
+        # 调用即 LLM 调用（llm 函数机制删除后的具名可调用类调用形态）。
+        if spec_reg and self.ib_class.spec:
+            if spec_reg.satisfies_protocol(self.ib_class.spec, "llm_callable"):
+                from .ib_class import _LLMCallableCallDrive
+                return _LLMCallableCallDrive(self, args)
         return None
 
     def _dispatch_getattr(self, message: str, args: List['IbObject']) -> Optional['IbObject']:

@@ -78,6 +78,85 @@ class _ClassInstantiateDrive:
         event.set()
 
 
+class _LLMCallableCallDrive:
+    """LLMCallable 可调用类实例直接调用（``f(args)``）的帧内 CPS 驱动 Waitable（P4c）。
+
+    由 :meth:`IbObject._dispatch_call` 对"满足 LLMCallable 协议、未覆写确定性
+    ``__call__`` 的类实例"返回；VM ``vm_handle_IbCall`` 识别其为 ``Waitable`` +
+    ``CPSDrivable`` 后 ``yield from cps_drive``——经统一装配入口
+    ``invoke_llm_callable_cps`` 执行一次 LLM 调用（参数按位绑定到 ``__llm_call__``
+    非 self 参数；装配含 ``__intent__`` 可选改写与 ``prompt_slots`` 自定义槽）。
+    不确定性结果经 ``_finalize_invoke_result`` 转译为 ``IbLLMCallResult`` 容器，
+    由语句层消费者（赋值 / 控制流 / llmexcept）处理——与 llm 函数 / 行为调用
+    语义一致。宿主/线程体无活跃 VM 时 ``try_result``/``result`` 走同步
+    ``_drive_generator`` 兜底。
+
+    ``receive`` 保持唯一协议分派入口（返回本 drive，而非 VM 侧加特判分支）。
+    """
+
+    def __init__(self, receiver, args):
+        self._receiver = receiver
+        self._args = list(args)
+        self._done = False
+        self._result = None
+
+    @property
+    def is_done(self) -> bool:
+        return self._done
+
+    def cps_drive(self, executor):
+        from core.runtime.vm.handlers._shared import (
+            _get_callee_param_specs,
+            _resolve_call_arguments_runtime,
+        )
+
+        # 参数解析（含默认值惰性填充）与 vm_handle_IbCall 调用路径同构：
+        # 缺省实参按 __llm_call__ 声明的默认表达式求值（yield 嵌入同一驱动循环）。
+        method = self._receiver.ib_class.lookup_method("__llm_call__")
+        if method is None:
+            raise TypeError("llm callable call: class does not declare __llm_call__.")
+        specs = _get_callee_param_specs(executor, method)
+        call_args = self._args
+        if specs is not None:
+            call_args = yield from _resolve_call_arguments_runtime(executor, specs, call_args, {})
+
+        llm_exec = self._receiver.ib_class.registry.get_llm_executor()
+        if llm_exec is None:
+            raise RuntimeError("llm callable call: LLM executor not available")
+        result = yield from llm_exec.invoke_llm_callable_cps(
+            self._receiver, executor.ec, call_args=call_args
+        )
+        self._result = llm_exec._finalize_invoke_result(result)
+        self._done = True
+        return self._result
+
+    def _drive(self):
+        from core.runtime.coordinator import _drive_generator
+        from core.runtime.frame import get_current_execution_context
+
+        ec = get_current_execution_context()
+        if ec is None or ec.vm_executor is None:
+            raise RuntimeError("llm callable call: no active execution context")
+        gen = self.cps_drive(ec.vm_executor)
+        self._result = _drive_generator(ec.vm_executor, gen)
+        self._done = True
+        return self._result
+
+    def try_result(self):
+        if self._done:
+            return (True, self._result)
+        self._drive()
+        return (True, self._result)
+
+    def result(self):
+        self._drive()
+        return self._result
+
+    def register_wake(self, event) -> None:
+        if self._done:
+            event.set()
+
+
 class _UserCallDrive:
     """用户类实例协议方法（``__call__`` 等）的帧内 CPS 驱动 Waitable。
 
