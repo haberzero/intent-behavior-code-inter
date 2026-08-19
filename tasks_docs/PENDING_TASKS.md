@@ -11,7 +11,7 @@
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
 | FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
-| DEBT（技术债） | 4 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-31 已实证核实 done） |
+| DEBT（技术债） | 3 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-4/31 已实证核实 done） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
@@ -54,10 +54,10 @@
 
 ### PT-DEBT-4 `file` 模块重命名
 
-- **状态**：active（独立窗口）｜**域**：DEBT｜**优先级**：P1
+- **状态**：done（已完成，2026-08-19 收敛阶段 5）｜**域**：DEBT｜**优先级**：P1
 - **动机**：`file` 影子化 Python 内建名，长期隐患（用户代码与插件代码中名称冲突）。
 - **成因**：早期命名选择，未预见与 Python 内建冲突。
-- **当前理解**：破坏性变更（对外模块名），独立窗口审慎执行；候选名 `fs`/`io`。
+- **当前理解**：已重命名为 `fs`（用户侧模块名 file→fs，内部实现 file_impl.py→fs_impl.py，全仓 47 文件迁移：builtin_modules 注册/examples/tests/trials/docs；file_handle 类型名不变；编译与运行时 SEM_LLMEXCEPT_FILE_WRITE 消息同步）；全量 pytest 零回归。
 
 ### PT-DEBT-5 全项目文件命名清理
 
@@ -179,10 +179,16 @@
 
 ### PT-DECIDE-3 LLM prompt 协议家族待决项
 
-- **状态**：active（独立设计窗口）｜**域**：DECIDE｜**优先级**：P2
+- **状态**：active（剩余 ②④；①③ 已定案落地 2026-08-19 收敛阶段 6-7）｜**域**：DECIDE｜**优先级**：P2
 - **动机**：① 用户类 `__from_prompt__` 返回目标类实例的 auto-boxing 二次封装边界；
   ② `__validate_prompt__` 是否扩展至内置类型；③ `SEM_PROTOCOL_SIGNATURE` 强度
   （warning vs error）；④ `__to_prompt__`/`__payload_prompt__` 异常回退可观测性复核。
+- **定案记录（2026-08-19）**：① 选 B 单向契约——`__from_prompt__` 返回值必须是目标类型
+  实例，非实例=契约违约（诊断+uncertain），删除 `_auto_box_value` 三级启发式兜底（对齐
+  06_oop §6.7 既有文档契约）；③ 选 B——required 协议成员签名违约升编译错误（fail-fast），
+  optional 成员（`__intent__`/`__retry__`）运行期 fail-fast 不经此路径。
+- **剩余待决**：② `__validate_prompt__` 扩展至内置类型（需评估内置解析器是否统一走该协议）；
+  ④ prompt 协议异常回退可观测性复核。
 - **成因**：PROMPT_DESIGN_REVIEW 收敛。
 - **实证补充（2026-08-18，exp/protocol-vtable）**：D2 `to_prompt` 协议**零消费者**
   （核心无 `satisfies_protocol(...,'to_prompt')` 调用；所有内置类型 satisfies=F 但运行期均经

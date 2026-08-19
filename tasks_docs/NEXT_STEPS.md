@@ -45,15 +45,14 @@ retry）。
 prompt 协议族类型类化 / retry 高阶化 / per-IbClass 协议方法表 / `llm ... llmend` 语法与旧机制全量删除；
 6 项关键决策与完成详情见 `tasks_docs/HANDOFF.md` §2.1 与 git 历史——本文件不登记完成记录）。
 
-**🔴 当前工作：技术债收敛（用户批准，阶段 0-7 推进中）**：
-- 阶段 0 交接收手（HANDOFF_SESSION 核验并入 HANDOFF §二，已完成）；
-- 阶段 1 任务控制文档收敛（悬空引用修复 / PT-FEAT-5 补登记 / NEXT_STEPS 治理 / 临时设计文档删除）；
-- 阶段 2 注释与代号清理（F# 残留 35 处 / 根 README llmend / 01_native_host_binding 去任务底稿化）；
-- 阶段 3 死代码孤儿清理（inherit_plugins / IbBehaviorInstance / plugins/ 根标志）；
-- 阶段 4 质量红线修复（双通道收敛 / 静默兜底 root-cause / 私有穿透 / ibci_ai 旧 schema）；
-- 阶段 5 独立窗口（PT-DEBT-4 file→fs 迁移 / PT-AUDIT-2 复核 / COVERAGE_MATRIX 补测）；
-- 阶段 6-7 PT-DECIDE-3 两项语义裁定落地（__from_prompt__ 单向契约 / SEM_PROTOCOL_SIGNATURE 强度）。
-每步全量 pytest 零回归 + 描述性 commit + 同步 WORKLOG/NEXT_STEPS/HANDOFF。
+**✅ 技术债收敛 8 阶段全部完成（2026-08-19）**：阶段 0 交接收手；阶段 1 任务控制文档收敛
+（悬空引用修复 / PT-FEAT-5 补登记 / NEXT_STEPS 治理 / 三份临时设计文档删除）；阶段 2 注释与代号
+清理（F# 残留清零含测试层 / 根 README llmend 重写 / 01_native_host_binding 去任务底稿化 / LDE 漂移）；
+阶段 3 死代码孤儿清理（inherit_plugins / IbBehaviorInstance / plugins/ 根标志）；阶段 4 质量红线修复
+（interpreter 双通道收敛 / 私有穿透 / 能力判定掩错）；阶段 5 独立窗口（PT-DEBT-4 file→fs 全量迁移 /
+PT-AUDIT-2 复核 / COVERAGE_MATRIX 补测）；阶段 6-7 PT-DECIDE-3 项①③ 语义裁定落地（__from_prompt__
+单向契约 / SEM_PROTOCOL_SIGNATURE required=error）。每步全量 pytest 零回归 + 描述性 commit；详见
+git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 

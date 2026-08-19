@@ -589,6 +589,16 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `_llm_callable_redesign.md` / `_five_foundation_redesign.md` / `_five_foundation_P1_design.md`
   三份设计阶段临时文档删除（git 承载历史）；6 项关键决策与完成记录已在本文件 §二/§三 内联保留，
   架构事实已收敛入 docs/（03_type_system / 04_vm_interpreter / 08_llm_callable 等）。
+- **技术债收敛 8 阶段全部完成（2026-08-19，unsafe-vibe-dev）**：用户批准后按 12 项定案决策
+  （D1-D12）执行收敛——D1-D2 用户拍板（__from_prompt__ 单向契约 B / SEM_PROTOCOL_SIGNATURE
+  required=error B）；D3 自主定案 file→fs（破坏性重构授权 + 无外部用户）；D4 docs/README
+  治理章程 tasks_docs 指针保留 + AGENTS.md 红线消歧；D5 补登记 PT-FEAT-5（PT-FEAT-2/PT-TEST-1
+  已完成删过期引用）；D6-D7 删 inherit_plugins 孤儿字段与 IbBehaviorInstance 死类型；D8-D9 质量
+  红线（interpreter.py:989 双通道收敛=删错误 node_to_symbol fallback、_llm_callable 能力判定掩错
+  fail-fast）；D10 NEXT_STEPS 治理；D11 三份 _five_foundation_* 临时文档删除；D12 G5/行为装配
+  维持登记。全程 8 阶段每步全量 pytest 零回归 + 描述性 commit（9 笔：69952657/a1b66755/
+  0093527d/d08f42c4/855ae13e/ce297e88/704c4f3e/f9f47324/9b5c5fd8），终基线 3069 passed /
+  1 skipped（+3 判别测试）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
