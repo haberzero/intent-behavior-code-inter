@@ -232,6 +232,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.2 交接检查单（当前有效）
 
+- [ ] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，下 session 接手核验后并入本节并删除）**
 - [x] **✅ 交接核验接收完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 契约文件 + 判别测试齐备 / 全量 pytest 实跑 3030 passed / 1 skipped）；要点已收敛入 §二，临时交接文件已删除（git 承载）
 - [x] **✅ P4b-3a `__intent__` 可选协议方法运行时发现落地**：装配入口发现 + CPS 调用 + 三层合并（存在键替换/缺失键透传/空列表清空）+ 契约 fail-fast + run_batch 继承；判别测试 +5；行为零变化；全量 3035 零回归
 - [x] **✅ P4b-3b 流式消费面统一落地**：stream_call/stream_channel 统一消费 LLMCallable（_StreamCallableDrive 帧内 CPS + assemble_stream_request_cps 两路装配）；字符串形态真删除 + 3 语言测试迁移 + 行为值判别 + docs 同步；全量 3036 零回归
