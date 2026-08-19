@@ -140,7 +140,7 @@ class SpecRegistryBase:
         For non-generic TypeRefs this delegates to ``resolve(head, module)``.
         For generic TypeRefs (e.g. list[int]) it first attempts to look up
         the fully-encoded canonical name, then falls back to building the
-        specialization from the structured args (R2-D1：结构化 ref 懒构建，
+        specialization from the structured args（结构化 ref 懒构建，
         不再依赖调用方预注册特化 spec）。
 
         This method is the **唯一权威解析入口**（GEN-FIX 第 4 层规则）：TypeRef → spec

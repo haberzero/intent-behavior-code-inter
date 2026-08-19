@@ -2,13 +2,13 @@
 tests/runtime/test_closure_serialization.py
 =============================================
 
-behavior / fn_callable 闭包序列化 round-trip（PT-ARCH-31 档位 A + B）。
+behavior / fn_callable 闭包序列化 round-trip。
 
 覆盖：
 * fn_callable round-trip 不再落入空 IbObject——node/params_uids/body_uid/closure 保真。
 * snapshot 种子值保真（定义时刻深克隆，外层突变不影响）。
 * lambda 自包含 cell（闭包持有者作用域已退出）round-trip 后可调用。
-* 档位 B：恢复作用域树内的 cell 重链（外层重赋值可见 / 多闭包共享同步）。
+* 恢复作用域树内的 cell 重链（外层重赋值可见 / 多闭包共享同步）。
 * behavior closure 序列化（snapshot 种子）round-trip + MOCK 调用一致。
 """
 from core.runtime.serialization.runtime_serializer import (
@@ -152,7 +152,7 @@ class TestLambdaSelfContained:
 
 
 class TestScopeCellRelink:
-    """档位 B：恢复作用域树内的 cell 重链（外层重赋值可见 / 多闭包共享同步）。
+    """恢复作用域树内的 cell 重链（外层重赋值可见 / 多闭包共享同步）。
 
     直接构造运行时作用域 + 共享闭包 cell（等价于 VM 中函数局部变量被内层
     lambda 捕获的中间态），验证反序列化 post-pass 按 sym_uid 重链共享。
@@ -193,7 +193,7 @@ class TestScopeCellRelink:
         assert f2.closure["sym_n"][1] is shared
 
     def test_outer_reassign_visible_to_restored_closures(self, engine):
-        """重链后外层赋值对恢复的闭包可见（档位 B 退化一修复）。"""
+        """重链后外层赋值对恢复的闭包可见。"""
         engine.run_string("int seed = 1\n", silent=True)
         ec, ctx = self._build(engine)
         data = _serialize(engine, ctx)

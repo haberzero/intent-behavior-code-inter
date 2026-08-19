@@ -1,7 +1,7 @@
 """
-tests/runtime/test_specialization_identity_runtime.py — 特化身份运行时契约（阶段 B2 复核 P2）。
+tests/runtime/test_specialization_identity_runtime.py — 特化身份运行时契约。
 
-B2 复核 P2 判别性测试：
+判别性测试：
 - 跨 module 特化键不坍缩（geo.Box[int] vs main.Box[int] 独立注册）；
 - _resolve_type_identifier 两形态（命中已注册特化类 → IbClass；未注册 → boxed 串）
   及 _type_ref_name 消费一致性。
@@ -94,7 +94,7 @@ class TestResolveTypeIdentifierDualPath:
         assert native == "list[float]"
 
     def test_type_ref_name_consumes_both_forms(self):
-        """_type_ref_name 对 IbClass 与 boxed 串两形态消费一致（B2 复核 P2）。"""
+        """_type_ref_name 对 IbClass 与 boxed 串两形态消费一致。"""
         from core.kernel.spec.type_ref import TypeRef
 
         engine = _engine()

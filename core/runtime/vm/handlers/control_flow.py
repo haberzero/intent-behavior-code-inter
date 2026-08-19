@@ -431,7 +431,7 @@ def vm_handle_IbTry(executor, node_uid: str, node_data: Mapping[str, Any]):
 
 
 def vm_handle_IbWithOverlay(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``with overlay(<类型>.<协议方法>):`` 作用域块（决策 2 覆层启用）。
+    """``with overlay(<类型>.<协议方法>):`` 作用域块（覆层启用）。
 
     块执行窗口内，目标协议的覆层影子条目参与分派（优先级高于原生 vtable
     方法）；块外恢复默认行为。语义 = 作用域化启用：save 原 ``overlay_enabled``

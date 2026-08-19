@@ -85,7 +85,7 @@ class TestEnumAxiomFromPrompt:
 
 
 class TestEnumAxiomMemberValueMapping:
-    """非 str 枚举 LLM 集成：成员名 → 成员值映射（PT-FEAT-2 修复）。"""
+    """非 str 枚举 LLM 集成：成员名 → 成员值映射。"""
 
     def test_int_member_maps_to_value(self, axiom, int_enum_spec):
         ok, val = axiom.from_prompt("OK", int_enum_spec)

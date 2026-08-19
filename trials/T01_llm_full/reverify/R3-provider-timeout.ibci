@@ -1,4 +1,4 @@
-# R3-001 PT-DEBT-27 异常逃逸修复：真实超时 + try/except 捕获
+# R3-001 异常逃逸修复：真实超时 + try/except 捕获
 # 期望: 超时抛 LLMCallError 被捕获（修复前逃逸崩溃）
 import ai
 ai.set_timeout(0.01)

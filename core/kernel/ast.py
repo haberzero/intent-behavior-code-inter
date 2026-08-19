@@ -150,7 +150,7 @@ class IbFunctionDef(IbStmt):
     type_params: List[str] = field(default_factory=list)  # generic function type params
     type_param_bounds: Dict[str, str] = field(default_factory=dict)  # T -> ProtocolName
     free_vars: List = field(default_factory=list)  # [[name, sym_uid], ...] nonlocal captures
-    is_generator: bool = False  # 含 yield → 惰性生成器（D-08 自标记函数种类）
+    is_generator: bool = False  # 含 yield → 惰性生成器（自标记）
     type_param_uids: List = field(default_factory=list)  # [[name, sym_uid], ...] 泛型方法体内引用的类型参数
     
     @property
@@ -212,7 +212,7 @@ class IbImplDef(IbStmt):
 
     Overlay variant (``impl overlay for SomeType``, ``is_overlay=True``):
     declares **temporary shadow entries** for the builtin type's protocol
-    methods (decision 2 覆层机制).  Overlay methods are NOT registered to
+    methods (覆层机制).  Overlay methods are NOT registered to
     the native vtable / spec.members / implements; they are recorded on the
     per-IbClass protocol method table as shadow entries, default **not**
     participating in dispatch until enabled by a scoped ``with overlay``
@@ -232,7 +232,7 @@ class IbImplDef(IbStmt):
 class IbWithOverlayStmt(IbStmt):
     """作用域化启用覆层：``with overlay(<类型>.<协议方法>):`` 块。
 
-    decision 2 覆层机制的作用域块形态（P1 §四.3 推荐）：块执行窗口内，目标
+    覆层机制的作用域块形态：块执行窗口内，目标
     覆层影子条目参与分派（优先级高于原生 vtable 方法）；块外恢复默认行为。
     目标为编译期声明引用（类型名 + 协议消息名），不求值为运行期表达式。
     """
@@ -440,15 +440,15 @@ class IbAwaitExpr(IbExpr):
 class IbYieldExpr(IbExpr):
     """``yield <expr>``：惰性生成器产出值。
 
-    含 ``yield`` 的函数为惰性生成器（D-08 自标记函数种类）。``yield x`` 挂起
+    含 ``yield`` 的函数为惰性生成器（自标记函数种类）。``yield x`` 挂起
     产出值 ``x``；迭代（``next`` / ``for``）恢复继续执行。生成器体须由单一
-    可恢复驱动承载（EXEC_FOUNDATION §5.2），在 yield 点暂停交付值、迭代恢复。
+    可恢复驱动承载，在 yield 点暂停交付值、迭代恢复。
     """
     value: Optional[IbExpr] = None
 
 @dataclass(kw_only=True, eq=False)
 class IbYieldFromExpr(IbExpr):
-    """``yield from <expr>``：惰性生成器委托（阶段 5 增量）。
+    """``yield from <expr>``：惰性生成器委托。
 
     把子迭代对象（嵌套生成器 / 序列 / 有 ``__iter__`` 的对象）的每个产出
     逐值透传为当前生成器的产出；子生成器为 ``IbGenerator`` 时表达式值为其

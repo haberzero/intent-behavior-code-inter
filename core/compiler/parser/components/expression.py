@@ -303,7 +303,7 @@ class ExpressionComponent(BaseComponent):
 
         含 ``yield`` 的函数为惰性生成器：``yield x`` 挂起产出值 ``x``，迭代
         恢复。``yield from <expr>`` 把子迭代对象的每个产出逐值透传为当前
-        生成器的产出（子生成器委托，阶段 5 增量）。两者均以 LOWEST 优先级
+        生成器的产出（子生成器委托）。两者均以 LOWEST 优先级
         解析操作数——``yield x + 1`` 产出 ``x + 1``（与 Python 一致，yield 是
         低优先级语句级关键字）。无操作数（``yield``）产出 ``None``。
         """

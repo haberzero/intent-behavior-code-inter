@@ -2,7 +2,7 @@
 
 > 本章描述 LLM 可调用类的定义与使用。面向已阅读行为描述语句章节的开发者。覆盖 `__llm_call__` 协议方法、装配配置字典（`user_prompt` / `prompt_slots` / `expected_type`）、实例直接调用与统一消费入口（`run_batch` / `stream`）。
 >
-> `llm ... llmend` 函数语法已废除（P4c）：命名 LLM 调用统一由 **LLMCallable 可调用类实例** 承载——定义一次、任意调用，经统一装配入口消费。
+> `llm ... llmend` 函数语法已废除：命名 LLM 调用统一由 **LLMCallable 可调用类实例** 承载——定义一次、任意调用，经统一装配入口消费。
 
 ### 8.1 定义
 

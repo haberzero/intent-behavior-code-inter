@@ -33,7 +33,7 @@ class TestPromptProtocolRegistry:
     def test_prompt_protocol_family_registered(self):
         """The full __prompt__ family (incl. __payload_prompt__) is defined.
 
-        ``__payload_prompt__`` was the missing 5th member (D1 双注册表收敛)——
+        ``__payload_prompt__`` was the missing 5th member——
         与 ``core/kernel/protocol.py::BUILTIN_PROTOCOLS`` 的 ``payload_prompt``
         条目共享同一方法名权威。
         """
@@ -44,7 +44,7 @@ class TestPromptProtocolRegistry:
         assert "__payload_prompt__" in PROMPT_PROTOCOL_SPECS
 
     def test_builtin_protocol_payload_consistent(self):
-        """D1：方法名权威共享——BUILTIN_PROTOCOLS 的 payload_prompt 与该 SPECS 一致。"""
+        """方法名权威共享——BUILTIN_PROTOCOLS 的 payload_prompt 与该 SPECS 一致。"""
         from core.kernel.protocol import BUILTIN_PROTOCOLS
         payload = next(p for p in BUILTIN_PROTOCOLS if p.name == "payload_prompt")
         assert payload.methods == ("__payload_prompt__",)
@@ -189,12 +189,12 @@ class TestValidatePromptProtocolSignature:
 
 
 # ===========================================================================
-# P5：validate_prompt 死条目激活（G7 能力公理收尾）+ required/optional 形式化
+# validate_prompt 死条目激活 + required/optional 形式化
 # ===========================================================================
 
 
 class TestValidatePromptActivation:
-    """P5a：validate_prompt 协议条目激活（D2 to_prompt 同构）——axiom_cap 统一
+    """validate_prompt 协议条目激活（to_prompt 同构）——axiom_cap 统一
     声明（内置默认 False）+ 结构成员判定（用户类）+ satisfies 行为。"""
 
     def _entry(self):
@@ -240,7 +240,7 @@ class TestValidatePromptActivation:
 
 
 class TestLLMCallableRequiredOptional:
-    """P5b：required/optional 协议条目形式化（P1 §2.2）——methods 保持必需权威，
+    """required/optional 协议条目形式化——methods 保持必需权威，
     optional_methods 声明可选能力（__intent__/__retry__），不参与强制判定。"""
 
     def _entry(self):

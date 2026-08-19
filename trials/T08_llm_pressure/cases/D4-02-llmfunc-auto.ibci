@@ -1,4 +1,4 @@
-# T08-D4-02 llm 可调用类返回 auto 语义（P4c 迁移：llm 函数 → llm 可调用类；无 expected_type 时按 str 解析）
+# T08-D4-02 llm 可调用类返回 auto 语义（llm 函数 → llm 可调用类；无 expected_type 时按 str 解析）
 # doc: docs/syntax/09_llm.md
 # expect-class: PASS
 # expect-out: is_str=True | DONE

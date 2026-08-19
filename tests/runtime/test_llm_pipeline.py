@@ -2,7 +2,7 @@
 tests/runtime/test_llm_pipeline.py
 ==================================
 
-LLM dispatch-before-use 白盒流水线测试（R2-E5：从 e2e 下沉——白盒断言
+LLM dispatch-before-use 白盒流水线测试（从 e2e 下沉——白盒断言
 ``_pending_futures`` 属运行时内部契约，不属黑盒 e2e 层）。
 
 覆盖：

@@ -79,7 +79,7 @@ class TestAwaitExpr:
         assert any("plain" in line for line in out)
 
 class TestAwaitAnywhere:
-    """D-08：普通函数内 await 可用（无需 async 关键字）——CPS VM 所有函数体天然可挂起。"""
+    """普通函数内 await 可用（无需 async 关键字）——CPS VM 所有函数体天然可挂起。"""
 
     def test_await_channel_recv_inside_user_function(self):
         """用户函数体内 await 通道 recv（Waitable），挂起/恢复正确。"""

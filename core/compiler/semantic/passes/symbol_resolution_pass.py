@@ -711,7 +711,7 @@ class SymbolResolver(ScopedVisitor):
                 self.current_scope.symbols[name] = outer_sym
 
     def visit_IbGlobalStmt(self, node: ast.IbGlobalStmt):
-        """访问 global 声明节点（docs/syntax/02_variables.md §2.6）。
+        """访问 global 声明节点。
 
         global 使函数内对声明的读写作用于模块级作用域（与 Python 语义一致）。
         把每个 global 名称解析/占位到模块根作用域，使函数内引用与赋值绑定到

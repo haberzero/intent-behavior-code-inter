@@ -12,7 +12,7 @@ from ..ib_type_mapping import register_ib_type
 
 
 class ProtocolSlot:
-    """per-IbClass 协议方法槽：消息名 → 原生处理器 + 覆层影子条目（决策 1 B）。
+    """per-IbClass 协议方法槽：消息名 → 原生处理器 + 覆层影子条目。
 
     - ``native``：按**值 Python 实现类**惰性解析并记忆化的 ``_dispatch_<name>``
       处理器（形状修正关键约束——多态安全）。同一 IbClass 可宿主多个值 Python
@@ -20,8 +20,8 @@ class ProtocolSlot:
       ``IbObject._dispatch_call`` 且 ``IbSuperProxy`` 自有；``Type`` → ``IbClass``
       且 ``HostClassBinding``；类对象与其实例共用 ib_class 但分派语义不同），
       故处理器必须按 ``type(value)`` 解析而非按 IbClass 静态烘焙单一处理器。
-    - ``overlay`` / ``overlay_enabled``：覆层影子条目（决策 2，默认**不参与**
-      分派；P2-② 启用接线）。启用后优先级高于原生处理器。
+    - ``overlay`` / ``overlay_enabled``：覆层影子条目（默认**不参与**
+      分派；启用接线）。启用后优先级高于原生处理器。
     """
 
     __slots__ = ("message", "_native_by_class", "overlay", "overlay_enabled")
@@ -101,13 +101,13 @@ class IbObject:
         """统一协议消息分派骨架（单一权威，per-IbClass 协议方法表驱动）。
 
         协议方法消息（``message ∈ 协议注册表方法集``）→ 查 per-IbClass 协议方法表
-        ``protocol_vtable``（消息名键；决策 1 B）；槽内按值 Python 实现类解析原生
-        ``_dispatch_<name>`` 处理器（多态安全，记忆化消除逐次 getattr 能力探测——
-        D5）。处理器返回 None 表示无特殊行为，继续普通路由。非协议消息 / 表未
+        ``protocol_vtable``（消息名键）；槽内按值 Python 实现类解析原生
+        ``_dispatch_<name>`` 处理器（多态安全，记忆化消除逐次 getattr 能力探测）。
+        处理器返回 None 表示无特殊行为，继续普通路由。非协议消息 / 表未
         命中 → None。
 
-        本方法是 D5（能力探测式 getattr 分派）与 6 份同构拷贝的**集中落点**
-        （机制同构，design-philosophy §四）：全部子类（模块/代理/可调用/
+        本方法是能力探测式 getattr 分派与 6 份同构拷贝的**集中落点**
+        （机制同构）：全部子类（模块/代理/可调用/
         Optional 等）共用此骨架，行为由协议方法表数据驱动。
         """
         if message not in self._protocol_message_names():
@@ -169,10 +169,10 @@ class IbObject:
             from .user_functions import IbUserFunction
             if isinstance(method, IbUserFunction):
                 return _UserCallDrive(method, args, self)
-        # P4c：LLMCallable 可调用类实例直接调用 f(args) → 统一装配入口执行一次
+        # LLMCallable 可调用类实例直接调用 f(args) → 统一装配入口执行一次
         # LLM 调用。判据 = satisfies_protocol('llm_callable') 唯一判定（协议分派，
         # 非能力探测）：类未覆写确定性 __call__ 且满足 LLMCallable 协议时，实例
-        # 调用即 LLM 调用（llm 函数机制删除后的具名可调用类调用形态）。
+        # 调用即 LLM 调用（具名 LLM 可调用类的调用形态）。
         if spec_reg and self.ib_class.spec:
             if spec_reg.satisfies_protocol(self.ib_class.spec, "llm_callable"):
                 from .ib_class import _LLMCallableCallDrive

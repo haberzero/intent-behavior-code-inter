@@ -35,7 +35,7 @@ class _CapabilityMixin:
         """Shared helper: return the axiom that declares the protocol's capability.
 
         ``protocol_name`` 经协议条目解析能力字段名（axiom_cap 单一权威——
-        阶段 C：字符串字段名只存在于协议条目声明，消费端不再散落）。
+        字符串字段名只存在于协议条目声明，消费端不再散落）。
         """
         if spec is None:
             return None

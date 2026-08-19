@@ -543,7 +543,7 @@ class StatementComponent(BaseComponent):
         return stmts
 
     def with_overlay_statement(self) -> ast.IbWithOverlayStmt:
-        """解析 ``with overlay(<类型>.<协议方法>):`` 作用域块（决策 2 覆层启用）。
+        """解析 ``with overlay(<类型>.<协议方法>):`` 作用域块（覆层启用）。
 
         覆层启用是编译期声明引用：目标为 ``<类型>`` DOT ``<协议方法>`` 点分名
         （不求值为运行期表达式——避免 ``int.__to_prompt__`` 触发 getattr 分派

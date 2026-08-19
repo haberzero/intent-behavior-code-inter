@@ -1,7 +1,7 @@
 # 01_file_operations.ibci
 # 文件操作（kernel-native file 模块）
 #
-# 设计要点（ADR-020 G6）：
+# 设计要点：
 # - file_handle 实例是只读路径引用，不持有 OS fd。
 # - 所有写入必须通过 file 模块的显式函数完成。
 # - write(overwrite) 是副作用写入：影响所有共享同一 backing 路径的 handle。

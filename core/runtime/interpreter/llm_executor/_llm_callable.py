@@ -1,17 +1,17 @@
-"""``_LLMCallableMixin`` —— LLMCallable 统一装配与执行（P1 §2.4 消费路径统一）。
+"""``_LLMCallableMixin`` —— LLMCallable 统一装配与执行。
 
 对用户自定义 llm 可调用类实例（实现 ``LLMCallable`` 协议 = 含 ``__llm_call__`` 方法）：
 - :meth:`assemble_llm_callable_request_cps`：协议门（``satisfies_protocol(..., 'llm_callable'``
   为唯一入口判定）→ CPS 调用用户 ``__llm_call__(self) -> dict``（经 ``UserFunctionCall``
   yield 驱动）→ 把返回装配 dict 映射为一次结构化 :class:`LLMCallRequest`；返回
   ``(request, type_hint, retry_policy)`` 三元组（``retry_policy`` 为 ``__retry__``
-  声明的策略或 None，P4d）；
+  声明的策略或 None）；
 - :meth:`invoke_llm_callable_cps`：装配 → 统一 worker ``_call_and_parse``（``_call_llm`` +
   ``_parse_result``），与行为路径同构；声明 ``__retry__`` 时经策略驱动重试循环
   多轮执行（:meth:`_invoke_llm_callable_retry_cps`）。
 
 装配差异经**协议方法自身**承载（机制同构，禁 ``if 标志位`` 过程分派）：用户 llm 类的
-``__llm_call__`` 返回装配配置 dict；行为值的装配走既有语义槽路径（后续 P4b-2b 收敛到统一入口）。
+``__llm_call__`` 返回装配配置 dict；行为值的装配走既有语义槽路径（后续收敛到统一入口）。
 """
 from typing import Any, Dict, Optional
 
@@ -25,7 +25,7 @@ from core.runtime.objects.kernel import IbObject
 
 
 class _StreamCallableDrive:
-    """``ai.stream_call`` / ``ai.stream_channel`` 的帧内 CPS 驱动 Waitable（P4b-3b）。
+    """``ai.stream_call`` / ``ai.stream_channel`` 的帧内 CPS 驱动 Waitable。
 
     与 :class:`_RunLLMCallableDrive` 同范式：VM 主路径经 ``cps_drive`` 帧内 CPS 统一装配
     （行为值 → 语义槽装配 / 用户 llm 可调用类 → 统一装配入口，含 ``__intent__`` 可选
@@ -125,14 +125,14 @@ class _LLMCallableMixin:
 
         返回 ``(LLMCallRequest, type_hint, retry_policy)``——``retry_policy`` 为
         ``__retry__`` 可选协议方法声明的策略 dict（``{"max_retry", "hint"}``）或
-        None（未声明，P4d）。调用方（``invoke_llm_callable_cps`` /
+        None（未声明）。调用方（``invoke_llm_callable_cps`` /
         run_batch / stream）须 ``yield from``。
 
-        - ``item``（P4b-2c）：run_batch 逐项调用时传入；用户 ``__llm_call__`` 声明
+        - ``item``：run_batch 逐项调用时传入；用户 ``__llm_call__`` 声明
           非 self 参数时作为该参数传入，用于逐项装配；
-        - ``call_args``（P4c）：llm 可调用类实例直接调用 ``f(...)`` 时按位绑定到
+        - ``call_args``：llm 可调用类实例直接调用 ``f(...)`` 时按位绑定到
           ``__llm_call__`` 非 self 参数；缺省（None）时回落 ``item`` 路径。
-        - 装配 dict 契约（P4b-2a + P4c 扩展）：``user_prompt``（必需）/ ``output_hint`` /
+        - 装配 dict 契约：``user_prompt``（必需）/ ``output_hint`` /
           ``expected_type`` / ``model`` / ``prompt_slots``（可选，__sys__ 等自定义槽
           迁移载体，``[{kind, text}]``）。
         """
@@ -176,7 +176,7 @@ class _LLMCallableMixin:
             ec, captured_intents
         )
 
-        # P4b-3a：`__intent__` 可选协议方法运行时发现（receive 同源虚表查找）——
+        # `__intent__` 可选协议方法运行时发现（receive 同源虚表查找）——
         # 未声明 → 意图原样透传（行为默认透传）；存在 → 用户方法改写进入本次调用
         # 的意图三层（消解/增删/重排），结果合并回装配。
         intent_method = self._discover_optional_protocol_method(callable_inst, "__intent__")
@@ -185,7 +185,7 @@ class _LLMCallableMixin:
                 intent_method, callable_inst, active, globals_, merged
             )
 
-        # P4d：`__retry__` 可选协议方法运行时发现（同 `__intent__` 通道）——
+        # `__retry__` 可选协议方法运行时发现（同 `__intent__` 通道）——
         # 未声明 → 不自动重试（结果交语句层 llmexcept / LLMParseError，与现状一致）；
         # 存在 → 解析策略声明（max_retry/hint），invoke 路径据此驱动重试循环。
         retry_policy = None
@@ -193,7 +193,7 @@ class _LLMCallableMixin:
         if retry_method is not None:
             retry_policy = yield from self._resolve_retry_policy_cps(retry_method, callable_inst)
 
-        # P4c：装配 dict 的 `prompt_slots` 键（__sys__ 等自定义语义槽迁移载体，
+        # 装配 dict 的 `prompt_slots` 键（__sys__ 等自定义语义槽迁移载体，
         # 经 __llm_call__ 自定义槽装配；缺省为空列表）。
         prompt_slots = self._llm_callable_config_prompt_slots(config)
 
@@ -252,7 +252,7 @@ class _LLMCallableMixin:
         globals_: list,
         merged: list,
     ):
-        """`__intent__` 可选协议方法装配改写（P4b-3a）：用户方法改写进入本次调用的意图。
+        """`__intent__` 可选协议方法装配改写：用户方法改写进入本次调用的意图。
 
         契约（用户语言层）：``func __intent__(self, dict intents) -> dict``——入参
         ``{"active": [str], "global": [str], "merged": [str]}``（装配时消解的意图三层，
@@ -297,7 +297,7 @@ class _LLMCallableMixin:
         retry_method: "IbUserFunction",
         callable_inst: IbObject,
     ):
-        """`__retry__` 可选协议方法策略解析（P4d）。
+        """`__retry__` 可选协议方法策略解析。
 
         契约（用户语言层）：``func __retry__(self) -> dict``——无参（self 除外），
         返回策略声明 dict：``{"max_retry": int(>=1, 可选), "hint": str(可选)}``。
@@ -339,7 +339,7 @@ class _LLMCallableMixin:
 
     @staticmethod
     def _llm_callable_config_prompt_slots(config: Dict[str, Any]) -> list:
-        """解析装配 dict 的 ``prompt_slots`` 键（P4c，``__sys__`` 等自定义槽迁移载体）。
+        """解析装配 dict 的 ``prompt_slots`` 键（``__sys__`` 等自定义槽迁移载体）。
 
         ``[{kind: str, text: str}, ...]`` → :class:`PromptSlot` 列表；缺省（无该键）
         → 空列表。形态违约（非 list / 元素非 {kind,text} / 值非 str）→ fail-fast
@@ -394,10 +394,10 @@ class _LLMCallableMixin:
     ):
         """执行入口：统一装配 → 统一 worker（_call_llm + _parse_result）。
 
-        ``call_args``（P4c）：llm 可调用类实例直接调用 ``f(args)`` 时按位绑定到
+        ``call_args``：llm 可调用类实例直接调用 ``f(args)`` 时按位绑定到
         ``__llm_call__`` 非 self 参数；缺省回落 ``item`` 路径（run_batch 逐项）。
 
-        **P4d**：装配发现 ``__retry__`` 策略时走策略驱动重试循环
+        装配发现 ``__retry__`` 策略时走策略驱动重试循环
         （:meth:`_invoke_llm_callable_retry_cps`）；未声明则单次调用（现状路径）。
         """
         request, type_hint, retry_policy = yield from self.assemble_llm_callable_request_cps(
@@ -428,7 +428,7 @@ class _LLMCallableMixin:
         retry_policy: dict,
         ec: IExecutionContext,
     ):
-        """`__retry__` 策略驱动重试循环（P4d）。
+        """`__retry__` 策略驱动重试循环。
 
         语义：每轮经统一 worker（``_call_and_parse``）执行；结果不确定时记入
         失败尝试（raw_response/parse_error/hint），用 :mod:`_prompt_assembly`
@@ -487,9 +487,9 @@ class _LLMCallableMixin:
             return False
 
     def assemble_stream_request_cps(self, target: IbObject, ec: IExecutionContext):
-        """统一流式装配：行为值 / 用户 llm 可调用类 → ``LLMCallRequest``（CPS，P4b-3b）。
+        """统一流式装配：行为值 / 用户 llm 可调用类 → ``LLMCallRequest``（CPS）。
 
-        分派与 ``run_batch``（P4b-2b）同构——差异经值自身承载：行为值走语义槽装配
+        分派与 ``run_batch`` 同构——差异经值自身承载：行为值走语义槽装配
         （既有 ``_prepare_behavior_call_cps``，零行为变化）；用户 llm 类经统一装配入口
         （``assemble_llm_callable_request_cps``，含 ``__intent__`` 可选改写）。两者皆非
         → fail-fast（与 ``run_batch`` 拒绝消息一致）。
@@ -534,28 +534,13 @@ class _LLMCallableMixin:
         """
         return _StreamCallableDrive(self, target, ec, provider_stream, channel_mode)
 
-    def _invoke_llm_callable_cps_boxed(self, callable_inst: IbObject, ec: IExecutionContext):
-        """CPS 驱动统一装配 + 执行，返回 boxed 单元素 IbList（run_batch 消费面）。"""
-        result = yield from self.invoke_llm_callable_cps(callable_inst, ec)
-        value = result.value if result is not None else self.registry.get_none()
-        return self.registry.box([value])
-
-    def _invoke_llm_callable_sync(self, callable_inst: IbObject, ec: IExecutionContext):
-        """宿主/线程体同步兜底（非 VM CPS 上下文）：经 _drive_generator 驱动。"""
-        from core.runtime.coordinator import _drive_generator
-
-        gen = self.invoke_llm_callable_cps(callable_inst, ec)
-        result = _drive_generator(ec.vm_executor, gen)
-        value = result.value if result is not None else self.registry.get_none()
-        return [value]
-
     # ------------------------------------------------------------------ #
-    # P4b-2c：run_batch 逐项批量（items 逐项作为 __llm_call__ 的 item 参）  #
+    # run_batch 逐项批量（items 逐项作为 __llm_call__ 的 item 参）          #
     # ------------------------------------------------------------------ #
 
     def _invoke_llm_callable_batch_cps(self, callable_inst: IbObject, items, ec: IExecutionContext):
-        """CPS 逐项执行：每 item 一次 LLM 调用（经统一装配 + 统一 worker），
-        返回 boxed 结果列表。当前逐项顺序执行（并发优化留待后续）。"""
+        """CPS 逐项执行：每 item 一次 LLM 调用（经统一装配 + 统一 worker，
+        返回 boxed 结果列表）。当前逐项顺序执行（并发优化留待后续）。"""
         values = []
         for item in items:
             result = yield from self.invoke_llm_callable_cps(callable_inst, ec, item=item)

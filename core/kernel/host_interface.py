@@ -44,7 +44,7 @@ class HostInterface:
         self._kernel_native_names: Set[str] = set()  # kernel-native 逻辑名集合
 
         # 诊断发射器（kernel 层抽象槽，runtime 层注入实现；未注入时回退 warnings.warn）。
-        # 依赖注入模式（见架构原则 §4.2）：kernel 层不依赖 runtime 具体实现，
+        # 依赖注入模式：kernel 层不依赖 runtime 具体实现，
         # 仅经注入的回调发射诊断，消除 kernel → runtime 穿透。
         self._diagnostic_emitter: Optional[Callable[[str, dict, str], None]] = None
 

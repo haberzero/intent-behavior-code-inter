@@ -1,5 +1,5 @@
 """
-core/compiler/semantic/passes/_overlay_registry.py — 覆层声明登记（决策 2 覆层机制）。
+core/compiler/semantic/passes/_overlay_registry.py — 覆层声明登记。
 
 类型检查访客（TypeCheckingVisitor）跨模块共享的覆层状态：
 - 声明端（DeclarationVisitorsMixin.visit_IbImplDef is_overlay 分支）登记

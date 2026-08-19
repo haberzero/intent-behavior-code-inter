@@ -109,7 +109,7 @@ else:
 
 
 class TestLLMFunction:
-    """Validate LLM callable class semantics（P4c 迁移：llm 函数 → llm 可调用类实例）。"""
+    """Validate LLM callable class semantics（llm 函数 → llm 可调用类实例）。"""
 
     def test_llm_function_definition_and_call(self):
         """INV-LLMFN-1: LLM callable classes can be defined and called directly."""

@@ -28,7 +28,7 @@ class StrAxiom(BaseAxiom):
     has_subscript_cap = True
     has_parser_cap = True
     has_from_prompt_cap = True
-    has_output_hint_cap = True  # D4：与 int/list/dict/tuple 一致（str 缺失 output_hint 能力）
+    has_output_hint_cap = True  # 与 int/list/dict/tuple 一致（str 缺失 output_hint 能力）
 
     @property
     def name(self) -> str:
@@ -100,7 +100,7 @@ class StrAxiom(BaseAxiom):
         return (True, self.parse_value(raw_response))
 
     def __outputhint_prompt__(self, spec: Optional["IbSpec"] = None) -> str:
-        # D4：str 与 int/list/dict/tuple 一致——提供 output_hint 能力。
+        # str 与 int/list/dict/tuple 一致——提供 output_hint 能力。
         # 返回 str 的 LLM 输出格式约束（镜像 ListAxiom.__outputhint_prompt__ 模式）。
         return "请直接返回字符串内容，不要包含任何 Markdown 代码块或额外解释"
 

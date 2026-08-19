@@ -276,7 +276,7 @@ class KernelRegistry:
         """引擎级共享事件总线（由 runtime 组装层注入，线程安全）。
 
         观测全局：所有 RuntimeContextImpl（主/线程任务）共享同一 EventBus，
-        线程任务内事件可达主订阅者（计算隔离、观测全局，D3 闭合）。
+        线程任务内事件可达主订阅者（计算隔离、观测全局）。
 
         事件总线是 runtime 层观测设施，经 ``set_event_bus`` 注入（与
         ``register_llm_executor`` 等同模式）。未注入即调用属装配错误，

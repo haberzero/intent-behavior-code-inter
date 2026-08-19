@@ -1,8 +1,8 @@
 """
-core.runtime.objects.kernel.generator — 惰性生成器对象（阶段 5 yield）。
+core.runtime.objects.kernel.generator — 惰性生成器对象。
 
-``IbGenerator`` 是含 ``yield`` 函数（D-08 自标记）调用产出的可迭代值对象：
-持有单可恢复驱动（EXEC_FOUNDATION_DESIGN §5.2），迭代推进函数体、在
+``IbGenerator`` 是含 ``yield`` 函数的调用产出的可迭代值对象：
+持有单可恢复驱动，迭代推进函数体、在
 ``yield`` 点暂停交付值、迭代恢复。驱动循环与 VM 主执行（``_drive_loop_gen``）
 同构，但识别 ``GeneratorYield`` 语言级产出标记。
 """
@@ -50,7 +50,7 @@ class IbGenerator(IbValue):
         等待）。本方法作为迭代方：遇 ``GeneratorYield`` 直接取值返回；遇
         ``Waitable``（如生成器体内 ``@~`` 行为的 LLMFuture）阻塞等待其完成并把
         结果 ``send`` 注回驱动循环后继续推进——维持生成器体内 LLM 调用的同步
-        解析语义（KNOWN_LIMITS §二十四），驱动契约两侧完备。
+        解析语义，驱动契约两侧完备。
         """
         if self._exhausted:
             raise StopIteration

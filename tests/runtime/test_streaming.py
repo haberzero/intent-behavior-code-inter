@@ -81,7 +81,7 @@ class TestMockServerStreaming:
 # 语言面：stream_call（await / 自动等待完整文本）                    #
 # ------------------------------------------------------------------ #
 #
-# P4b-3b：stream_call / stream_channel 统一消费 LLMCallable 实例（行为值或用户
+# stream_call / stream_channel 统一消费 LLMCallable 实例（行为值或用户
 # llm 可调用类）——经统一装配入口（帧内 CPS）装配请求后流式执行；字符串形态
 # （sys_prompt, user_prompt）已随旧机制删除（真删除，无双通道）。
 

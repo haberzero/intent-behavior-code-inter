@@ -6,5 +6,5 @@ core.runtime.observability — 内省层。
 协议把状态变更推入订阅者的 Channel。
 
 定位：对标 Python ``sys.settrace``/``inspect``、``asyncio.all_tasks()``、
-OpenTelemetry spans——通用、可复用、不过时，非 LLM 专有伪设计（设计 §四.3）。
+OpenTelemetry spans——通用、可复用、不过时，非 LLM 专有伪设计。
 """

@@ -1,4 +1,4 @@
-# D1-08-001 llm 可调用类定义/调用/prompt_slots 自定义槽/参数插值（P4c 迁移：llm 函数 → llm 可调用类；__llmretry__ 段语义迁 __retry__/P4d）
+# D1-08-001 llm 可调用类定义/调用/prompt_slots 自定义槽/参数插值（llm 函数 → llm 可调用类；__llmretry__ 段语义迁 __retry__ 协议）
 # doc: docs/syntax/09_llm.md
 # 期望: 翻译调用返回真实翻译
 

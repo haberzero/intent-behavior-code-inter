@@ -74,7 +74,7 @@ def register_seq(manager: Any, execution_context: Any, service_context: Any):
         对惰性生成器（``IbGenerator``）经 ``generic_next`` 惰性推进；耗尽抛
         ``InterpreterError``。对其它可迭代对象（序列 / __iter__）取**首个元素**
         ——语言设计决策：与 Python ``next(list)`` 抛 ``TypeError`` 不同，IBCI 的
-        序列是随机可访问容器，取首元素更贴合语言直觉（阶段 5 增量）。
+        序列是随机可访问容器，取首元素更贴合语言直觉。
         """
         from core.runtime.objects.kernel.generator import IbGenerator
 

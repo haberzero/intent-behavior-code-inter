@@ -1,4 +1,4 @@
-# R1-001 global 修复复验（PT-DEBT-25）
+# R1-001 global 修复复验
 # 期望: counter=1 counter2=99（修复前 RUN_UNDEFINED_VARIABLE 崩溃）
 int counter = 0
 func bump() -> void:

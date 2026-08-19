@@ -1,7 +1,7 @@
 """
-tests/kernel/test_protocol_oop_dispatch.py — OOP 协议化契约（阶段 A）。
+tests/kernel/test_protocol_oop_dispatch.py — OOP 协议化契约。
 
-阶段 A（dunder 协议注册表化）契约：
+（dunder 协议注册表化）契约：
 - op_constants（VM 运算符映射）与协议注册表 operator 元组一致性（层约束镜像
   以契约测试锁定，code-quality §八处置）；
 - dunder 分派索引（协议方法名并集）正确派生且注册新协议后失效重建；
@@ -94,7 +94,7 @@ class TestDunderNamesIndex:
     def test_index_invalidated_via_direct_registry_register(self):
         """任何注册路径（含 register_from_spec 底层直接 register）均失效索引。
 
-        复核 P2-1 契约：缓存按注册表版本号失效，不依赖 mixin 入口。
+        缓存按注册表版本号失效，不依赖 mixin 入口。
         """
         reg = create_default_registry()
         assert "__yyy_marker__" not in reg.dunder_names()
@@ -140,7 +140,7 @@ class TestAttributeProtocol:
 
 
 class TestSatisfactionDeclaration:
-    """阶段 C：协议条目判定声明（数据驱动 satisfies）契约。"""
+    """协议条目判定声明（数据驱动 satisfies）契约。"""
 
     def test_builtin_protocols_carry_declarations(self):
         reg = create_default_registry()

@@ -583,7 +583,7 @@ class TestNestedGenerics:
     def test_nested_list_subscript_returns_inner_list_spec(self):
         """list[list[int]] subscript by int returns list[int] spec.
 
-        element_type 结构化保真（S1 根治：创建点不再扁平化嵌套实参）——
+        element_type 结构化保真（创建点不再扁平化嵌套实参）——
         canonical_name 为 "list[int]"（head 为 "list" 是结构化形态）。
         """
         from core.kernel.spec.type_ref import TypeRef

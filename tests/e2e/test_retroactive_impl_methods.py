@@ -186,7 +186,7 @@ print(Box("p", "x").name())
         assert run_ibci(code) == ["p:x"]
 
     def test_impl_supplies_protocol_method(self):
-        """impl 方法补充协议方法（P4c 迁移：llm func 方法机制删除，
+        """impl 方法补充协议方法（llm func 方法机制已删除，
         方法恒为普通 func——本用例验证 impl 补充机制本身）。"""
         code = """
 protocol P:

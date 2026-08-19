@@ -62,7 +62,7 @@ class TestVariableIsolation:
     def test_parent_variable_not_inherited_by_child(self):
         """子 Interpreter 不继承主 Interpreter 的变量（隔离策略）。
 
-        R2-E7：用公开 Engine API ``set_variable`` 注入主变量（激活该 API）。
+        用公开 Engine API ``set_variable`` 注入主变量（激活该 API）。
         """
         # 子脚本尝试读取一个在主环境中存在的变量（会触发 undefined variable）
         child_code = 'str result = "ok_without_parent"\n'

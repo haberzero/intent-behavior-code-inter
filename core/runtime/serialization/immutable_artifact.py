@@ -85,7 +85,7 @@ class ImmutableArtifact(Mapping):
 
         对规范化不可变表示取哈希：嵌套 dict 递归为冻结键值对、
         list 转 tuple——原始 dict/list 不可哈希，直接 hash(self._data)
-        会抛 TypeError（R2 修复）。
+        会抛 TypeError（修复）。
         """
         return hash(self._to_frozen(self._data))
 

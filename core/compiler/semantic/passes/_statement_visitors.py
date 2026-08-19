@@ -29,7 +29,7 @@ class StatementVisitorsMixin:
         """访问模块节点"""
         for stmt in node.body:
             self.visit(stmt)
-        # 覆层"存在未启用"告警（decision 2 §4.4）：声明了覆层但从未被
+        # 覆层"存在未启用"告警：声明了覆层但从未被
         # with overlay 作用域启用 → 提示性告警，不阻断（可观测性信息）。
         # 外层模块访问时发射一次。
         if not getattr(self, "_overlay_warned", False):
@@ -664,7 +664,7 @@ class StatementVisitorsMixin:
         return None
 
     def visit_IbWithOverlayStmt(self, node: ast.IbWithOverlayStmt) -> Optional[IbSpec]:
-        """访问 ``with overlay(<类型>.<协议方法>):`` 作用域块（决策 2 覆层启用）。
+        """访问 ``with overlay(<类型>.<协议方法>):`` 作用域块（覆层启用）。
 
         校验：目标类型存在且为内置具体值类型；目标协议方法已声明覆层；
         然后访问块体，并登记"已启用"（供存在未启用告警）。

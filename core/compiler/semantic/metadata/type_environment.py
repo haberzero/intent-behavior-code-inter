@@ -9,7 +9,7 @@ Design principles:
 - TypeSlot: single-write-once binding point for deferred resolution
 - Core IBCI philosophy: "single lock + axiom dispatch" — TypeSlot locks once
 
-状态（R2-18）：预留增强方向。当前生产类型检查经
+状态：预留增强方向。当前生产类型检查经
 ``TypeCheckingVisitor.type_bindings`` / ``auto_return_types`` 完成，
 本模块的 ``TypeInferenceState`` / ``TypeSlot`` 暂未在生产接线（仅测试
 锁定契约）；作为未来类型推断统一入口的设计载体保留。

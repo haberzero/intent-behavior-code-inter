@@ -79,7 +79,7 @@ class _ClassInstantiateDrive:
 
 
 class _LLMCallableCallDrive:
-    """LLMCallable 可调用类实例直接调用（``f(args)``）的帧内 CPS 驱动 Waitable（P4c）。
+    """LLMCallable 可调用类实例直接调用（``f(args)``）的帧内 CPS 驱动 Waitable。
 
     由 :meth:`IbObject._dispatch_call` 对"满足 LLMCallable 协议、未覆写确定性
     ``__call__`` 的类实例"返回；VM ``vm_handle_IbCall`` 识别其为 ``Waitable`` +
@@ -163,7 +163,7 @@ class _UserCallDrive:
     由 :meth:`IbObject.receive` 对"含用户定义协议方法的类实例"返回；VM
     ``vm_handle_IbCall`` 识别其为 ``Waitable`` + ``CPSDrivable`` 后 ``yield from
     cps_drive``——用户方法经 ``UserFunctionCall`` trampoline 压栈帧内驱动
-    （替代 ``method.call`` 新建嵌套 TaskScheduler：EXEC-1 深递归 Python 深度
+    （替代 ``method.call`` 新建嵌套 TaskScheduler：深递归 Python 深度
     恒定的保证恢复、方法含 Waitable 时由调度器协作挂起而非阻塞主线程）。
     宿主/线程体无活跃 VM 时 ``try_result``/``result`` 走同步 ``_drive_generator``
     兜底（与 :class:`_ClassInstantiateDrive` 同构）。
@@ -250,7 +250,7 @@ class IbClass(IbObject):
         # 共享实现 _auto_init_impl，参数数量校验由 _init_expected_arity（成员表
         # spec.members['__init__'] 声明）单一权威承担。
         self.auto_init_fields: Optional[List[str]] = None
-        # per-IbClass 协议方法表（决策 1 B）：消息名 → ProtocolSlot（消息名键，
+        # per-IbClass 协议方法表：消息名 → ProtocolSlot（消息名键，
         # 见 WORKLOG 形状修正——receive 按消息名查 _dispatch_* 实例方法，非协议名键）。
         # 惰性建槽：仅协议消息在首次分派时登记，避免全量预填。
         self.protocol_vtable: Dict[str, ProtocolSlot] = {}
@@ -295,7 +295,7 @@ class IbClass(IbObject):
         - native 处理器继承由值 Python 类 MRO 承担（``_dispatch_<name>`` 沿
           ``type(value)`` 解析，见 ``ProtocolSlot.native_for``），per-IbClass
           父链对 native 是冗余。
-        - 覆层（P2-②）影子条目挂在**声明类自身**的槽上（per-IbClass 归属），
+        - 覆层影子条目挂在**声明类自身**的槽上（per-IbClass 归属），
           父链继承若需要将在覆层机制内显式设计，避免槽被父链查找误挂到
           ``Object`` 等祖先导致覆层全局泄漏（本单元实证约束）。
         """
@@ -452,7 +452,7 @@ class IbClass(IbObject):
         """``__init__`` 声明的非 self 参数数量（成员表权威；None=无法判定跳过校验）。
 
         成员表（MethodMemberSpec.param_types）恒不含 self——编译期单一权威。
-        方法函数 spec 经阶段 B1 统一为同样不含 self（与成员表同构），spec 回退
+        方法函数 spec 统一为同样不含 self（与成员表同构），spec 回退
         直接取参数数量，无 self 偏移判定。
         """
         member = (getattr(self.spec, "members", None) or {}).get("__init__")

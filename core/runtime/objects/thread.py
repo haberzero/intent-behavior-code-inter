@@ -15,7 +15,7 @@ core.runtime.objects.thread — IBCI 线程对象模型值对象（IbThread）�
 - ``cancelled``：协作式取消
 - ``failed``   ：任务内异常
 
-方法与 Waitable 统一：``IbThread`` 本体满足 :class:`Waitable`（D-04，R3）——
+方法与 Waitable 统一：``IbThread`` 本体满足 :class:`Waitable`——
 ``is_done`` 为 property（Python bool，协议属性），``try_result``（调度器非阻塞取）
 与 ``result``（宿主/线程体阻塞取）返回 ``thread_result`` 容器；``join()`` 返回自身。
 语言方法 ``t.is_done()`` 由 axiom auto-bind 对 property 的包装保留（读 property + 装箱）。
@@ -109,7 +109,7 @@ class IbThread(IbObject):
         )
 
     # ------------------------------------------------------------------ #
-    # Waitable 协议（D-04：线程完成 = Waitable，R3 本体直接满足）           #
+    # Waitable 协议（线程完成 = Waitable，本体直接满足）           #
     # ------------------------------------------------------------------ #
 
     def try_result(self):
@@ -130,12 +130,12 @@ class IbThread(IbObject):
         return self._make_result()
 
     def register_wake(self, event) -> None:
-        """完成通知钩子（R2）：委托底层 ``SpawnedTask``（后台 Future 完成即设置）。"""
+        """完成通知钩子：委托底层 ``SpawnedTask``（后台 Future 完成即设置）。"""
         if self._spawned is not None:
             self._spawned.register_wake(event)
 
     def join(self) -> "IbThread":
-        """返回自身作为 join Waitable（统一执行地基 · 阻塞即挂起，D-04）。
+        """返回自身作为 join Waitable（统一执行地基 · 阻塞即挂起）。
 
         IBCI 代码 ``thread_result r = t.join()`` 语义不变（VM 经 auto-yield 透明
         等待，恢复后得 ``thread_result`` 容器）；Python 宿主经 ``t.join().result()``

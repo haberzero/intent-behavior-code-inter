@@ -2,7 +2,7 @@
 tests/contracts/test_uid_generator.py
 =======================================
 
-Contract tests for the unified UID generator (PT-FEAT-10).
+Contract tests for the unified UID generator.
 
 Validates:
 - UID-1: scope / symbol / node / type / intrinsic / asset formats are byte-identical

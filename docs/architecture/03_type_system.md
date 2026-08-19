@@ -254,7 +254,7 @@ TypeRef 生命周期两端口径必须收敛，避免"结构化 vs 扁平化"两
 `subscriptable` / `operator` / `converter` / `parser` / `to_prompt` / `from_prompt` /
 `validate_prompt` / `output_hint` / `payload_prompt` / `snapshotable` / `attribute` /
 `llm_callable`（required `__llm_call__` = satisfies 唯一判据；optional `__intent__` /
-`__retry__` 不参与强制判定、经运行时虚表发现）。`optional_methods` 字段（P5）声明
+`__retry__` 不参与强制判定、经运行时虚表发现）。`optional_methods` 字段声明
 协议族的可选能力方法：不参与 `satisfies_protocol` 强制判定，仅声明方法族存在
 （`all_methods()` 返回必需 + 可选并集）。
 

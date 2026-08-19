@@ -68,7 +68,7 @@ llmexcept:
     retry "如果无法判断，请回复 0 并说明原因"
 ```
 
-（`llmretry` 顶层语法糖已随 llm 函数机制删除——P4c；统一使用 `llmexcept` + `retry`。）
+（`llmretry` 顶层语法糖已随 llm 函数机制删除；统一使用 `llmexcept` + `retry`。）
 
 ## 快照隔离：重试不会污染其他变量
 

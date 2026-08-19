@@ -7,7 +7,7 @@ from ..ib_type_mapping import register_ib_type
 
 
 # --------------------------------------------------------------------------- #
-# 可调用对象内部元数据消息（非语言级协议——集中声明，消除散落字符串；D2）
+# 可调用对象内部元数据消息（非语言级协议——集中声明，消除散落字符串）
 # --------------------------------------------------------------------------- #
 
 def _meta_str(obj: "IbValue") -> IbObject:
@@ -93,7 +93,7 @@ class IbFnCallable(IbValue):
         # 内省签名：编译期 node_to_type 捕获，JSON 安全纯字符串。
         self.param_types: List[str] = list(param_types) if param_types else []
         self.return_type: Optional[str] = return_type
-        # 意图冻结（决策 3 / IT-2）：None（lambda）或定义时刻 IbIntentContext 冻结
+        # 意图冻结：None（lambda）或定义时刻 IbIntentContext 冻结
         # 快照（snapshot）。纯 snapshot lambda（非行为体）同样冻结——调用时经
         # _vm_call_fn_callable 安装为当前意图上下文。
         self.captured_intents = captured_intents

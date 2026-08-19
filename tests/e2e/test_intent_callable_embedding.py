@@ -3,7 +3,7 @@
 tests/e2e/test_intent_callable_embedding.py
 ============================================
 
-G5/G2（意图一等值）：函数/可调用/行为实例放入意图注释时应渲染为**有意义的
+（意图一等值）：函数/可调用/行为实例放入意图注释时应渲染为**有意义的
 可调用契约**（bogus ``func helper() -> str`` / ``fn_callable[...]`` /
 ``behavior[...]``），而非 Python repr（``<Function 'helper'>`` / ``<FnCallable ...>``）。
 

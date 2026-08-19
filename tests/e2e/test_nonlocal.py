@@ -211,7 +211,7 @@ print(outer())
 
 
 class TestFunctionAutoReadCapture:
-    """R6：嵌套函数自动只读捕获（与 lambda 同构，nonlocal 仅用于写）。
+    """嵌套函数自动只读捕获（与 lambda 同构，nonlocal 仅用于写）。
 
     原"引用外层局部未声明 nonlocal → 运行时 not defined"现变为自动捕获可用
     （对齐 Python 心智模型：读捕获自动、写需 nonlocal）。
@@ -307,7 +307,7 @@ print(counter())
         assert run_ibci(code) == ["1", "2"]
 
     def test_p3_write_shared_cell_still_isolated(self):
-        """P3：任务写共享 cell（经 nonlocal）仍被隔离拦截。"""
+        """任务写共享 cell（经 nonlocal）仍被隔离拦截。"""
         code = """
 func make_counter() -> fn:
     int total = 0

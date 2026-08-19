@@ -441,7 +441,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         data["node_uid"] = obj.node_uid
         data["capture_mode"] = obj.capture_mode
         # captured_intents 协议（与 _collect_behavior 同构）：None 或 IbIntentContext。
-        # 纯 snapshot lambda 亦可能携带定义时刻意图冻结快照（D8）。
+        # 纯 snapshot lambda 亦可能携带定义时刻意图冻结快照。
         ci = getattr(obj, "captured_intents", None)
         if ci is None:
             data["captured_intents"] = None
@@ -662,7 +662,7 @@ class RuntimeDeserializer:
     def _relink_cells(self) -> None:
         """闭包 cell 重链 post-pass：按 sym_uid 共享恢复作用域树中的 IbCell。
 
-        修复档位 A 的两个退化：
+        修复两个退化：
         - 外层重赋值不可见：闭包自建 cell 与作用域符号 cell 分家；
         - 多闭包共享分叉：同一 sym_uid 的多个闭包各自持有独立 cell。
         仅当作用域树中存在持有该 sym_uid 的作用域时才重链；闭包捕获的 cell

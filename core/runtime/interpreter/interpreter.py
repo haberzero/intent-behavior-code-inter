@@ -872,7 +872,7 @@ class Interpreter:
                 user_func.is_generator = bool(stmt_data.get("is_generator"))
                 method_name = stmt_data.get("name")
 
-                # 覆层分支（决策 2 is_overlay）：登记为 per-IbClass 协议方法表的
+                # 覆层分支（is_overlay）：登记为 per-IbClass 协议方法表的
                 # **影子条目**（ProtocolSlot.overlay，默认 overlay_enabled=False，
                 # 不参与分派），供 scoped ``with overlay`` 启用后改写协议方法分派。
                 # 不注册进 target.methods / 不 bind 运算符 / 不冲突原生方法——
@@ -1010,8 +1010,7 @@ class Interpreter:
     def _is_operator_method(self, method_name: str) -> bool:
         """检查方法名是否为运算符 dunder 方法。
 
-        运算符集合从 ``op_constants`` 单一权威源派生（R2-D3 收敛：
-        此处硬编码一份镜像会造成与 op_constants 双写真相）。
+        运算符集合从 ``op_constants`` 单一权威源派生（此处硬编码一份镜像会造成与 op_constants 双写真相）。
         ``__not__`` 属 base 协议（非运算符语法绑定），排除。
         """
         if self._OPERATOR_METHODS is None:

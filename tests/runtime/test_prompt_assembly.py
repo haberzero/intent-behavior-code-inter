@@ -56,8 +56,7 @@ class TestRecommendedAssembly:
         assert "be nice" in prompt
 
     def test_custom_slot_rendered_in_order(self):
-        """自定义附加槽（P4c 迁移：user_sys 前置特殊处理删除，任意 kind 自定义槽
-        统一走通用呈现路径，机制同构）。"""
+        """自定义附加槽（任意 kind 自定义槽统一走通用呈现路径，机制同构）。"""
         prompt = assemble_system_prompt(
             intents=IntentBlock(),
             output_contract=OutputContract(),

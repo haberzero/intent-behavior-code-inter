@@ -3,7 +3,7 @@
 tests/e2e/test_llm_callable_unified.py
 ========================================
 
-P4b-2a：用户 llm 可调用类（实现 ``LLMCallable`` 协议的 ``__llm_call__`` 方法）
+用户 llm 可调用类（实现 ``LLMCallable`` 协议的 ``__llm_call__`` 方法）
 经**统一装配入口** ``invoke_llm_callable_cps`` 消费——协议门
 （``satisfies_protocol(..., 'llm_callable')``）→ 用户 ``__llm_call__`` 返回装配
 配置 dict → 内核映射为 ``LLMCallRequest`` → 统一 worker（``_call_and_parse``）。
@@ -125,7 +125,7 @@ class TestLLMCallableUnifiedInvoke:
         assert "LLMCallable" in str(exc.value) or "llm_callable" in str(exc.value)
 
     def test_run_batch_accepts_llm_callable_instance(self, tmp_path, monkeypatch):
-        """P4b-2b/2c：run_batch 统一接受用户 llm 可调用实例（行为语义保留；
+        """run_batch 统一接受用户 llm 可调用实例（行为语义保留；
         llm 类逐项一次调用，item 仅在 __llm_call__ 声明 item 参时参数化）。"""
         body = (
             "class Translator:\n"
@@ -145,7 +145,7 @@ class TestLLMCallableUnifiedInvoke:
         assert any("TRANSLATED_OK" in line for line in out), f"结果未返回: {out}"
 
     def test_run_batch_items_parameterize_llm_callable(self, tmp_path, monkeypatch):
-        """P4b-2c：run_batch 逐项以 item 参装配（__llm_call__(self, any item) →
+        """run_batch 逐项以 item 参装配（__llm_call__(self, any item) →
         每 item 一次 LLM 调用，装配随 item 变化）。"""
         body = (
             "class Greeter:\n"
@@ -164,7 +164,7 @@ class TestLLMCallableUnifiedInvoke:
 
 
 class TestLLMCallableIntentRewrite:
-    """P4b-3a：``__intent__`` 可选协议方法运行时发现 + 装配改写合并。
+    """``__intent__`` 可选协议方法运行时发现 + 装配改写合并。
 
     判别：用户 llm 类声明 ``func __intent__(self, dict intents) -> dict`` 时，装配入口
     发现并调用——返回 dict 中存在的键替换对应意图层（消解/增删/重排），缺失的键保持

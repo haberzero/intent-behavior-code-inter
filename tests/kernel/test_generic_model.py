@@ -30,9 +30,9 @@ class TestGenericTypeRegistry:
             assert name in reg, f"generic '{name}' not declared"
 
     def test_generator_generic_identity(self):
-        """generator[T] 经 registry 特化且类型名/kind 正确（R4 补强：yield 生成器泛型）。
+        """generator[T] 经 registry 特化且类型名/kind 正确（yield 生成器泛型）。
 
-        build 契约接受结构化 TypeRef 实参（S1 根治：创建点不再扁平化嵌套）。
+        build 契约接受结构化 TypeRef 实参（创建点不再扁平化嵌套）。
         """
         from core.kernel.spec.registry.factory import SpecFactory
         from core.kernel.spec.type_ref import TypeRef

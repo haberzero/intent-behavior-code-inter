@@ -149,7 +149,7 @@ print(json.stringify(obj={"a": 1}))
 
 
 class TestLLMFunctionRuntime:
-    """LLM 可调用类：默认参数（mock provider，P4c 迁移）。"""
+    """LLM 可调用类：默认参数（mock provider）。"""
 
     def test_llm_default(self):
         out = run_ibci("""class Greet:

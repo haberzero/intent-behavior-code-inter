@@ -1,7 +1,6 @@
 """
-tests/kernel/test_specialization_identity.py — 特化身份结构化契约（阶段 B2）。
+tests/kernel/test_specialization_identity.py — 特化身份结构化契约。
 
-B2 契约：
 - specialization_key 单点生成特化注册键（canonical 形态，嵌套保真）；
 - axiom is_compatible 结构化（TypeRef.head family 判定，替代特化名前缀匹配）；
 - 特化注册键形态与 TypeRef.canonical_name 一致（生成/解析同源）。
@@ -73,7 +72,7 @@ class TestIsCompatibleStructural:
         assert not reg.is_assignable(list_int, reg.resolve("dict"))
 
     def test_fn_callable_bare_vs_specialized_consistent(self):
-        """fn_callable 裸名与特化名 family 判定一致（B2 复核 P2 锁定）。"""
+        """fn_callable 裸名与特化名 family 判定一致。"""
         reg = create_default_registry()
         fn_axiom = reg.get_axiom(reg.resolve("fn_callable"))
         assert fn_axiom is not None

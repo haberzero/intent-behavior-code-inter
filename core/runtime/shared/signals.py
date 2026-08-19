@@ -68,7 +68,7 @@ class UnhandledSignal(Exception):
 
 
 class GeneratorYield:
-    """惰性生成器产出值标记（阶段 5 yield）。
+    """惰性生成器产出值标记。
 
     ``vm_handle_IbYieldExpr`` 对 ``yield x`` 求值后 ``yield`` 本对象（而非
     child uid），生成器驱动循环识别后：暂停生成器体、交付值 ``value`` 给迭代方；

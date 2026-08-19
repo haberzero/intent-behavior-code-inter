@@ -1,4 +1,4 @@
-# T09-N7 类内 llm 可调用方法真实调用（P4c 迁移：llm func 方法 → llm 可调用类 __llm_call__）
+# T09-N7 类内 llm 可调用方法真实调用（llm func 方法 → llm 可调用类 __llm_call__）
 # doc: docs/syntax/09_llm.md
 # expect-class: PASS
 # expect-out: classmethod_ok=True | DONE

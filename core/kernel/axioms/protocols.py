@@ -15,7 +15,7 @@ All type references in method signatures are plain strings (type names) so
 the axiom layer remains independent of the spec layer (no circular
 imports).
 
-Capability query pattern (阶段 C 后收敛——能力字段名单点化于协议条目):
+Capability query pattern (能力字段名单点化于协议条目):
 
     axiom = registry.get_cap(spec, "operator")
     if axiom:

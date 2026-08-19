@@ -38,7 +38,7 @@ def _typeref_has_any_arg(ref) -> bool:
     """TypeRef 或其泛型实参中是否含 ``any``（head=="any" 或递归嵌套）。
 
     结构化逐实参判定，避免 name 字符串子串误命中（``Company`` 等类型名含
-    "any" 子串的假阳性——`spec_has_any_generic_arg` 的 P1 整改）。
+    "any" 子串的假阳性——`spec_has_any_generic_arg` 的整改）。
     """
     if ref is None:
         return False

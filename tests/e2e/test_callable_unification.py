@@ -1,11 +1,11 @@
 """
 tests/e2e/test_callable_unification.py — 普通函数与 llm 可调用类实例：可调用值与渲染。
 
-P4c 迁移（llm 函数 → llm 可调用类实例，语义演进）：
+（llm 函数 → llm 可调用类实例）：
 - 旧 `llm g() -> str` 函数值是 "可调用函数值"（可 fn 化、渲染 `func g() -> str`）。
 - 新形态 = 实现 ``LLMCallable``（``__llm_call__``）的 llm 可调用**类实例**：一等对象
-  （类变量持有 + 直接调用 ``g()``），非 fn 值（fn 只收 lambda/函数，语义演进记录于
-  WORKLOG/NEXT_STEPS）。实例经统一 PromptRenderer 渲染为有意义描述（非 repr）。
+  （类变量持有 + 直接调用 ``g()``），非 fn 值（fn 只收 lambda/函数）。
+  实例经统一 PromptRenderer 渲染为有意义描述（非 repr）。
 """
 
 from tests.conftest import run_ibci

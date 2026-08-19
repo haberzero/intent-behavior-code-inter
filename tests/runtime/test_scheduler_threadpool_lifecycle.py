@@ -2,7 +2,7 @@
 tests/runtime/test_scheduler_threadpool_lifecycle.py
 =====================================================
 
-PT-SYNC-3：LLMExecutor 线程池资源生命周期（fail-fast）测试。
+LLMExecutor 线程池资源生命周期（fail-fast）测试。
 
 锁定关闭后禁止复用线程池的不变量：
 - 首次 ``_get_thread_pool()`` 惰性建池且复用同一实例

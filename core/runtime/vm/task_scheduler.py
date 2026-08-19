@@ -1,4 +1,4 @@
-"""多任务协作调度器（统一执行地基 · 阶段 1a：等待策略接入）。
+"""多任务协作调度器（统一执行地基 · 等待策略接入）。
 
 本模块是 VM 多任务化的**执行核心**：管理多个可挂起任务（每个是可挂起生成器），
 在单线程内轮转推进，当一个任务等待 IO（waitable）时挂起、让出给其它任务。
@@ -7,7 +7,7 @@
 - ``yield waitable`` —— 挂起，等待 ``waitable`` 就绪（调度器就绪后 ``send(result)`` 恢复）
 - ``return value``    —— 完成（``StopIteration.value``）
 
-    等待策略（阶段 1a + R2 通知式唤醒）：
+    等待策略（等待 + 通知式唤醒）：
     - 每轮推进：先恢复就绪的等待任务（poll ``is_done``），再推进就绪任务；
     - 无就绪但有待决任务时 **park**（等待 ``_wake_event``；waitable 完成时经
       ``register_wake`` 即时设置，无轮询延迟）后重新轮询；安全超时仅兜底
@@ -16,12 +16,12 @@
 帧数控制（深递归友好）：
 - ``run`` 循环**内联**推进与恢复逻辑（不拆 ``_advance``/``_step`` 方法）——用户函数递归
   调用每层经 ``run_body → run → scheduler.run`` 嵌套，方法帧会推高 Python 递归栈；
-  内联使每层帧数低于旧 ``_drive_loop`` 路径（EXEC-1 无 Python 递归是目标，函数调用
-  路径的 trampoline 化列为阶段 1 后续工作项，本阶段先保证不劣于基线）。
+  内联使每层帧数低于旧 ``_drive_loop`` 路径（无 Python 递归是目标，函数调用
+  路径的 trampoline 化列为后续工作项，本阶段先保证不劣于基线）。
 
 设计原则：
 - 生成器本身就是可挂起状态（yield=挂起、send=恢复），无需额外帧快照协议。
-- 单线程协作式，无锁；是 VM 主路径（``run``/``run_many``）与线程体（阶段 1e）的公共地基。
+- 单线程协作式，无锁；是 VM 主路径（``run``/``run_many``）与线程体的公共地基。
 - 目的：**服务 LLM 调用**（IO 密集，等待释放 GIL）。受 Python GIL 限制，不追求
   CPU 并行或通用并发框架——本调度器只做多路 LLM IO 的协作式推进。
 
@@ -61,7 +61,7 @@ class Task:
     ``index`` 为提交序号（自 0 起），用于把完成值按提交序收集到结果槽位，
     保证 ``run()`` 返回序与提交序一致（而非完成序——完成序不可预测）。
 
-    ``cancelled``：协作取消标志（调度器在步进边界检查，阶段 1c 接线）。
+    ``cancelled``：协作取消标志（调度器在步进边界检查）。
 
     resume 状态（waitable 就绪后投递给任务）：
     - ``resumed``：是否有待投递的 resume payload（值或异常）。
@@ -86,7 +86,7 @@ class TaskScheduler:
     结果序契约：``run()`` 返回的列表**按提交序**（与 ``submit`` 调用顺序一致），
     而非完成序——完成序不可预测，按提交序才使调用方能按索引取回对应任务结果。
 
-    等待策略：poll ``is_done`` + 通知式唤醒（R2）——任务转等待时对 waitable
+    等待策略：poll ``is_done`` + 通知式唤醒——任务转等待时对 waitable
     注册 ``register_wake(self._wake_event)``；全等待时 ``_wake_event.wait``
     （完成即被唤醒，无轮询延迟）；未注册通知的 waitable 退回首轮询 + 安全
     超时兜底。
@@ -193,7 +193,7 @@ class TaskScheduler:
                     continue
 
                 # 任务 yield 了一个 waitable → 挂起（下一轮 step 1 经 try_result 恢复）。
-                # R2：注册完成通知，waitable 完成时即时唤醒调度器（无 ~1ms 轮询延迟）。
+                # 注册完成通知，waitable 完成时即时唤醒调度器（无 ~1ms 轮询延迟）。
                 if isinstance(yielded, Waitable):
                     t.waiting_on = yielded
                     self._waiting.append(t)

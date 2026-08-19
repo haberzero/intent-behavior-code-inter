@@ -26,7 +26,7 @@ class IbUserFunction(IbFunction):
         self.owner_class: Optional['IbClass'] = owner_class
         # nonlocal 闭包：{sym_uid: (name, IbCell)} — 由 vm_handle_IbFunctionDef 设置
         self.closure: Optional[Dict[str, Any]] = None
-        # 惰性生成器（含 yield，D-08 自标记函数种类）。为 True 时 call() 返回
+        # 惰性生成器（含 yield 自标记函数）。为 True 时 call() 返回
         # IbGenerator（不执行体），迭代驱动函数体、yield 点产出值。
         self.is_generator: bool = False
 
@@ -76,7 +76,7 @@ class IbUserFunction(IbFunction):
         return _drive_generator(vm, gen)
 
     def __to_prompt__(self) -> str:
-        """把函数值呈现为**可读可调用契约**（意图/LLM 上下文中的有意义嵌入，G2）。
+        """把函数值呈现为**可读可调用契约**（意图/LLM 上下文中的有意义嵌入）。
 
         形式 ``func <name>(<参数类型...>) -> <返回类型>``，取自值自持的 spec
         （``param_types``/``return_type``，与 capture_mode/expected_type 同层的值层

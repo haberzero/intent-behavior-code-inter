@@ -170,7 +170,7 @@ thread[int] t = thread(callable=add, args=[3, 4])
 
 
 class TestThreadCancelCoversUserFunction:
-    """协作取消覆盖用户函数任务体（1e 闭合，D5）：步进边界 + 等待中任务。"""
+    """协作取消覆盖用户函数任务体：步进边界 + 等待中任务。"""
 
     def test_cancel_stops_while_loop_body(self):
         """用户函数 while 循环体在步进边界协作退出。"""
@@ -194,7 +194,7 @@ print((str)t.join().status())
         assert lines[2] == "cancelled"      # thread_result status = cancelled
 
     def test_cancel_stops_body_blocked_on_recv(self):
-        """用户函数阻塞在通道 recv 的任务也被协作取消（等待中任务，D5 闭合）。"""
+        """用户函数阻塞在通道 recv 的任务也被协作取消（等待中任务）。"""
         code = """
 chan c = chan(str, "message")
 func work(chan x) -> int:
@@ -215,7 +215,7 @@ print((str)t.join().status())
 
 
 class TestThreadCellIsolation:
-    """P3 隔离：任务内禁写"已共享给主线程"的闭包 cell（D2 闭合）。"""
+    """任务内禁写"已共享给主线程"的闭包 cell。"""
 
     def test_write_shared_closure_cell_is_isolated(self):
         """任务写共享闭包 cell → 隔离违规 → thread_result failed。"""

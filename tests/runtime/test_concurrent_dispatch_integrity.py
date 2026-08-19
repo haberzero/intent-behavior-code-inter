@@ -2,7 +2,7 @@
 tests/runtime/test_concurrent_dispatch_integrity.py
 ====================================================
 
-PT-SYNC-1 并发正确性验证：executor 并行 dispatch（`dispatch_eager`/`resolve`）
+并发正确性验证：executor 并行 dispatch（`dispatch_eager`/`resolve`）
 在真实并发下的完整性。
 
 与 MOCK（同步路径、忽略 SLEEP）不同，本文件经 ``mock_server`` 真实 HTTP +

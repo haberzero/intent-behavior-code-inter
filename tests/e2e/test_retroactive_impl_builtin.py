@@ -124,7 +124,7 @@ print(1.to_bool())
         assert run_ibci(code) == ["True"]
 
     def test_impl_supplies_protocol_method_on_builtin(self):
-        """impl 方法补充内置类型协议方法（P4c 迁移：llm func 方法机制删除，
+        """impl 方法补充内置类型协议方法（llm func 方法机制已删除，
         方法恒为普通 func——本用例验证 impl 补充机制本身）。"""
         code = """
 protocol P:

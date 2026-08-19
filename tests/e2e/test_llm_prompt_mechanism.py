@@ -1,9 +1,8 @@
 """tests/e2e/test_llm_prompt_mechanism.py
 
-IBCI LLM 调用机制整改（P0）判别性回归：
+IBCI LLM 调用机制判别性回归：
 
-- 枚举 ``__outputhint_prompt__`` 必须注入 behavior 与命名 LLM 函数的 system prompt
-  （S2/S5 module 化后注入端 module 感知修复）。
+- 枚举 ``__outputhint_prompt__`` 必须注入 behavior 与命名 LLM 函数的 system prompt。
 - behavior 基础 system prompt 必须建立程序化调用纪律。
 - 期望输出类型必须注入 behavior system prompt（无类型级 hint 时兜底声明）。
 - llmexcept/retry 必须自动回喂上一次原始响应与解析错误。
@@ -54,7 +53,7 @@ class TestBehaviorPromptMechanism:
         assert "IBCI" not in prompts[0]
 
     def test_str_behavior_gets_axiom_output_hint(self):
-        """str 现在与 int/list/dict/tuple 一致（D4）：提供 output_hint 能力，
+        """str 现在与 int/list/dict/tuple 一致：提供 output_hint 能力，
         行为值经 axiom `__outputhint_prompt__` 注入输出格式约束。"""
         lines, prompts = _run_with_hooks(
             AI_MOCK_PREFIX
@@ -133,9 +132,9 @@ except Exception as e:
 
 class TestLLMFunctionPromptMechanism:
     def test_llm_callable_first_call_has_no_retry_hint(self):
-        """llm 可调用类（P4c 迁移）：首调 sys_prompt 无重试提示注入。
+        """llm 可调用类：首调 sys_prompt 无重试提示注入。
 
-        ``__llmretry__`` 段语义迁往 ``__retry__`` 协议高阶化（P4d）；本用例保留
+        ``__llmretry__`` 段语义迁往 ``__retry__`` 协议高阶化；本用例保留
         "首调不注入重试提示"断言（重试机制经帧机制提供，首调无帧）。
         """
         code = AI_MOCK_PREFIX + """
@@ -152,11 +151,10 @@ print(x)
         assert "[重试提示]" not in prompts[0]
 
     def test_llm_callable_returning_enum_gets_outputhint(self):
-        """llm 可调用类（P4c 迁移）：装配 dict 显式 output_hint 注入 provider sys prompt。
+        """llm 可调用类：装配 dict 显式 output_hint 注入 provider sys prompt。
 
         旧 llm 函数的枚举 output hint 由声明返回类型自动推导；新形态 output hint 由
-        用户在 ``__llm_call__`` 装配 dict 显式声明（P4b-2a 契约），语义演进记录于
-        NEXT_STEPS/WORKLOG（自动推导评估归 P4d/P5）。
+        用户在 ``__llm_call__`` 装配 dict 显式声明。
         """
         code = AI_MOCK_PREFIX + """
 class Status(Enum):

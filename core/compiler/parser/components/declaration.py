@@ -282,8 +282,8 @@ class DeclarationComponent(BaseComponent):
         form (record the protocol on the type), while a body of function
         definitions supplies missing protocol methods retroactively.
         The ``overlay`` variant (``is_overlay=True``) declares **temporary
-        shadow entries** for a builtin type's protocol methods (decision 2
-        覆层机制): methods are NOT added to the native vtable, only recorded
+        shadow entries** for a builtin type's protocol methods (覆层机制):
+        methods are NOT added to the native vtable, only recorded
         on the per-IbClass protocol method table as shadow entries.
         """
         start_token = self.stream.previous()

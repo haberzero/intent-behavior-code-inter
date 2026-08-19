@@ -198,7 +198,7 @@ class VMExecutor:
     # ------------------------------------------------------------------
 
     def _drive_loop_gen(self, stack: list, *, yield_generator_values: bool = False) -> Any:
-        """可挂起的调度循环生成器（单一权威驱动，阶段 1a）。
+        """可挂起的调度循环生成器（单一权威驱动）。
 
         逐帧推进栈；当某 handler yield 一个 Waitable（如 ``LLMFuture``）时挂起
         （``yield waitable``），把控制权交还调用方；调用方（调度器 / 线程体）
@@ -207,8 +207,7 @@ class VMExecutor:
         ``yield_generator_values=True``：惰性生成器体驱动模式——识别
         ``GeneratorYield`` 语言级产出标记（``vm_handle_IbYieldExpr`` 求值后
         yield），把它**挂起向外交付**（``yield`` 给迭代方），迭代恢复（``send``）
-        后继续推进，保持生成器体循环位置 / 局部变量（EXEC-FOUNDATION §5.2
-        单可恢复驱动）。主路径（False）下 GeneratorYield 不产生；若出现则走
+        后继续推进，保持生成器体循环位置 / 局部变量（单可恢复驱动）。主路径（False）下 GeneratorYield 不产生；若出现则走
         通用 child 处理（报未知 handler）。
 
         ``_current_stack`` 绑定（供 ``frame_stack_depth`` 观察 CPS 栈深度）在
@@ -290,9 +289,9 @@ class VMExecutor:
                         pending_exception = e
                     continue
 
-                # R1 trampoline：用户函数调用请求（vm_handle_IbCall 对
+                # trampoline：用户函数调用请求（vm_handle_IbCall 对
                 # IbUserFunction yield）——把函数体作为独立 VMTask 压栈，
-                # 函数体生成器挂起时不在 Python 栈上（EXEC-1：深递归
+                # 函数体生成器挂起时不在 Python 栈上（深递归
                 # Python 深度恒定）。函数完成 return 后调度器 send 回调用点。
                 # 惰性生成器（含 yield）：产出可恢复驱动（IbGenerator 承载），
                 # 迭代驱动函数体、yield 点产出值。
@@ -351,7 +350,7 @@ class VMExecutor:
             )
         if not inspect.isgeneratorfunction(handler):
             # 非生成器 handler（纯 return 值）：中央化包装为生成器，
-            # 消除各 handler 内的 ``if False: yield`` 身份 hack（R2-D5）。
+            # 消除各 handler 内的 ``if False: yield`` 身份 hack。
             def _gen(h=handler):
                 return h(self, node_uid, node_data)
                 yield  # pragma: no cover
@@ -360,7 +359,7 @@ class VMExecutor:
         return VMTask(node_uid=node_uid, generator=gen)
 
     def _make_user_function_task(self, call: "UserFunctionCall") -> VMTask:
-        """为 R1 用户函数调用请求创建函数体 VMTask（trampoline 压栈）。
+        """为用户函数调用请求创建函数体 VMTask（trampoline 压栈）。
 
         函数体生成器为 ``_vm_call_user_function``（CPS 内联驱动，帧准备 +
         逐语句 yield），作为独立 VMTask 压入同一帧栈。函数完成后其返回值
@@ -374,7 +373,7 @@ class VMExecutor:
         return VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)
 
     def make_generator_driver(self, call: "UserFunctionCall"):
-        """为惰性生成器函数调用创建单可恢复体驱动（阶段 5 yield）。
+        """为惰性生成器函数调用创建单可恢复体驱动。
 
         生成器函数体经 ``_vm_call_user_function``（CPS 帧准备 + 逐语句 yield）
         作为**单一** VMTask 压栈，由 ``_drive_loop_gen``（可恢复驱动，

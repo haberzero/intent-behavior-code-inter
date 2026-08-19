@@ -2,7 +2,7 @@
 tests/runtime/test_kernel_diagnostic.py
 =======================================
 
-诊断面（PT-FEAT-9）发射 helper 单测：``kernel_diagnostic``。
+诊断面发射 helper 单测：``kernel_diagnostic``。
 
 锁定：
 - 投影A（开发者可见，不门控）：总是产生 ``UserWarning``，文案逐字保留，

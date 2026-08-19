@@ -72,7 +72,7 @@ else:
 
 class TestE2ELLMFunctions:
     def test_llm_function_call(self):
-        """llm 可调用类实例直接调用（P4c 迁移）：参数按位绑定 + prompt_slots 自定义槽。"""
+        """llm 可调用类实例直接调用：参数按位绑定 + prompt_slots 自定义槽。"""
         code = AI_MOCK_PREFIX + """
 class Greet:
     func __llm_call__(self, any name) -> dict:

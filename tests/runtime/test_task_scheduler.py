@@ -240,7 +240,7 @@ class TestNotifyWake:
 
 
 class TestTaskCancellation:
-    """调度器级协作取消（阶段 1c）：步进边界 gen.throw(TaskCancelled)，finally 执行，结果槽标记取消。"""
+    """调度器级协作取消：步进边界 gen.throw(TaskCancelled)，finally 执行，结果槽标记取消。"""
 
     def test_cancel_delivers_and_unwinds(self):
         import threading as _threading

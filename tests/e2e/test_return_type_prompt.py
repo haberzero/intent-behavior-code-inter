@@ -2,7 +2,7 @@
 tests/e2e/test_return_type_prompt.py
 =========================================
 
-llm 可调用类的返回类型提示注入验证（P4c 迁移：命名 LLM 函数 → llm 可调用类）。
+llm 可调用类的返回类型提示注入验证（命名 LLM 函数 → llm 可调用类）。
 
 provider 依据请求输出契约中的期望类型（``expected_type``），把自身注册的返回
 类型提示注入最终系统提示词；注入结果经 ``ai.get_current_call_info()["sys_prompt"]``

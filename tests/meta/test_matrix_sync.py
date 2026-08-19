@@ -3,7 +3,7 @@ tests/meta/test_matrix_sync.py — 覆盖矩阵机器校验（三段式引用对
 
 解析 ``tests/COVERAGE_MATRIX.md`` 中 ``file::class::method`` 三段式引用，
 与 ``pytest --collect-only`` 的 nodeid 集合对账；引用不存在即失败。
-当前矩阵为骨架（0 条目）；随逐域移植逐步填充（Phase 4 与 PT-TEST-3 收敛）。
+当前矩阵为骨架（0 条目）；随逐域移植逐步填充。
 """
 
 import re

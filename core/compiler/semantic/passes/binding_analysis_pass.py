@@ -907,7 +907,7 @@ class LambdaCaptureAnalyzer(ScopedVisitor):
                 scope.define(sym)
 
     def _analyze_function_captures(self, node: ast.IbFunctionDef):
-        """分析函数外层引用，自动捕获只读自由变量（R6）。
+        """分析函数外层引用，自动捕获只读自由变量。
 
         函数体引用的外层名称（非本函数参数/局部、非 intrinsic、非全局）自动
         纳入 ``free_vars``，使运行时 ``vm_handle_IbFunctionDef`` 为其建立 Cell

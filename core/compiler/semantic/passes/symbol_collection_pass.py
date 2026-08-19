@@ -350,7 +350,7 @@ class SymbolCollector:
         （与 visit_IbClassDef 同构）。与类自身成员同名的方法跳过定义
         （冲突由类型检查阶段报单一明确错误）。
 
-        覆层变体（node.is_overlay，决策 2）：方法符号仍进目标类 owned_scope
+        覆层变体（node.is_overlay）：方法符号仍进目标类 owned_scope
         （供类型检查访问方法体），但**不**同步进 target spec.members / 不登记
         implements——覆层不改写类型协议满足判定，仅登记运行时影子条目
         （协议方法表），语义由声明访客 + 运行时水化承接。

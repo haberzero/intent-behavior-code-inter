@@ -17,7 +17,7 @@ core.runtime.observability.diagnostics — 内核结构化诊断发射（诊断�
     - rc 解析 best-effort（显式 ``rc=`` > 当前 EC > 无）；rc 不可达
       （无活跃 EC）→ 仅投影A，事件面跳过（fail-open，开发者可见性不丢）。
 
-事件形态（schema 冻结，见 DIAGNOSTIC_DESIGN §三）::
+事件形态（schema 冻结）::
 
     {"type": "kernel_diagnostic",
      "data": {"code": KDIAG_*, "detail": {...}, "message": "..."}}

@@ -134,7 +134,7 @@ class SpawnedTask:
         return self._future.result()
 
     def register_wake(self, event) -> None:
-        """完成通知钩子（R2）：后台 Future 完成时设置 ``event``（可跨线程）。"""
+        """完成通知钩子：后台 Future 完成时设置 ``event``（可跨线程）。"""
         self._future.add_done_callback(lambda _future: event.set())
 
     def join(self) -> Any:
@@ -234,7 +234,7 @@ def _run_task_body(
     task_ec.current_module_name = interpreter.current_module_name
 
     # 3. 任务本地 VMExecutor（cancel_event 经驱动循环步进边界检查——协作取消覆盖
-    #    用户函数任务体，D5 闭合）
+    #    用户函数任务体）
     task_vm = VMExecutor(task_ec, interpreter=interpreter, cancel_event=cancel_event)
     task_ec.vm_executor = task_vm
 
@@ -243,7 +243,7 @@ def _run_task_body(
     ec_token = set_current_execution_context(task_ec)
     task_token = set_in_thread_task(True)
     try:
-        # P3 隔离：把与主线程共享的闭包 cell 标记为"任务内禁写"——任务内对捕获
+        # 隔离：把与主线程共享的闭包 cell 标记为"任务内禁写"——任务内对捕获
         # 变量赋值会写共享 cell（主线程可见），违反隔离承诺。覆盖用户函数/lambda/
         # behavior 全部任务体（其 closure 均为主线程共享的闭包 cell）。
         for _sym_uid, (_var_name, _cell) in (getattr(callable_obj, "closure", None) or {}).items():
@@ -252,7 +252,7 @@ def _run_task_body(
 
         if isinstance(callable_obj, IbUserFunction):
             # 用户函数：构建任务本地函数包装（绑定 task EC），函数体经
-            # CPS 生成器驱动（与 lambda 分支同构，R1）——避免同步 call()
+            # CPS 生成器驱动（与 lambda 分支同构）——避免同步 call()
             # 嵌套（线程内深递归同样受 Python 栈限制，CPS 驱动消除之）。
             from core.runtime.objects.kernel import IbUserFunction as _UF
 
@@ -316,7 +316,7 @@ def _drive_generator(task_vm: Any, gen: Any, cancel_event: Optional[threading.Ev
 
     ``TaskScheduler`` 提供统一协作调度：Waitable 经 ``try_result`` 非阻塞消费 +
     ``register_wake`` 通知式唤醒 + park；**协作取消（``cancel_event``）在 park 期
-    取消等待任务**（D5 闭合）——这是旧代码嵌套 ``task_vm.run`` 的取消中断来源，
+    取消等待任务**——这是旧代码嵌套 ``task_vm.run`` 的取消中断来源，
     此处由 TaskScheduler 承担，不再手写泵（消除手写泵对 Waitable ``.result()``
     永久阻塞、cancel 无法中断的死锁）。
 

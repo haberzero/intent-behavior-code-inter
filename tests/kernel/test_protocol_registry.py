@@ -67,7 +67,7 @@ class TestProtocolMembership:
         assert reg.satisfies_protocol(reg.resolve("int"), "operator")
 
     def test_to_prompt_satisfaction_matches_render_capability(self):
-        """D2 to_prompt 激活：内置类型（经 axiom 通用渲染能力）与含
+        """to_prompt 激活：内置类型（经 axiom 通用渲染能力）与含
         __to_prompt__ 的用户类满足 to_prompt；无 __to_prompt__ 的用户类不满足。
         """
         reg = create_default_registry()
@@ -84,7 +84,7 @@ class TestProtocolMembership:
         assert reg.satisfies_protocol(without, "to_prompt") is False
 
     def test_llm_callable_satisfaction_requires_llm_call(self):
-        """LLMCallable（P4a 地基）：__llm_call__ 是必需方法——用户类实现则满足，
+        """LLMCallable：__llm_call__ 是必需方法——用户类实现则满足，
         不实现则不满足（satisfies 成为"能否被 LLM 消费"的唯一判定）。"""
         reg = create_default_registry()
         with_llm_call = _make_class("Llama", ["__llm_call__"])

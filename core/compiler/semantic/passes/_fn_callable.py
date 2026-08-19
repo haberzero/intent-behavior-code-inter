@@ -4,7 +4,7 @@ core/compiler/semantic/passes/_fn_callable.py
 fn 可调用性判定共享 helper（方向 A：fn 是用户面唯一的"可调用"抽象）。
 
 ``registry.is_callable(CLASS)`` 恒真（get_call_cap 对 CLASS 返回 truthy 标记、
-不查 __call__）——直接用它会把"无 __call__ 的类实例"漏检为可调用（P1 整改）。
+不查 __call__）——直接用它会把"无 __call__ 的类实例"漏检为可调用（整改）。
 fn 参数/返回的"强制可调用"检查须与 fn 声明（``_infer_fn_type``）语义对齐：
 CLASS 须定义 ``__call__`` 或是类名构造器引用（``fn f = Dog``）。
 """

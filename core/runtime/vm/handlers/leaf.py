@@ -147,7 +147,7 @@ def vm_handle_IbAwaitExpr(executor, node_uid: str, node_data: Mapping[str, Any])
 
 
 def vm_handle_IbYieldExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``yield <expr>``：惰性生成器产出值（阶段 5）。
+    """``yield <expr>``：惰性生成器产出值。
 
     求值操作数后 yield ``GeneratorYield(value)`` 标记（而非 child uid）。
     生成器驱动循环识别该标记：暂停生成器体、把 ``value`` 交付给迭代方；
@@ -164,7 +164,7 @@ def vm_handle_IbYieldExpr(executor, node_uid: str, node_data: Mapping[str, Any])
 
 
 def vm_handle_IbYieldFromExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``yield from <expr>``：惰性生成器委托（阶段 5 增量）。
+    """``yield from <expr>``：惰性生成器委托。
 
     求值操作数（子迭代对象）后，把其每个产出逐值 ``yield GeneratorYield(v)``
     透传给外层生成器消费者。子迭代对象为 ``IbGenerator`` 时表达式值 = 其
@@ -363,7 +363,7 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
     # IbUserFunction（普通/LLM 统一）：统一走 trampoline 调用。
     # 不 yield from 生成器（会嵌套 Python 栈），而是 yield 函数调用请求，
     # 由 _drive_loop_gen 把函数体作为独立 VMTask 压栈——深递归 Python 深度恒定。
-    # 惰性生成器（含 yield，D-08 自标记）：调用产出 IbGenerator（不执行体），
+    # 惰性生成器（含 yield 自标记）：调用产出 IbGenerator（不执行体），
     # 迭代驱动函数体、yield 点产出值。
     if isinstance(func, IbUserFunction):
         if func.is_generator:

@@ -2,7 +2,7 @@
 tests/contracts/test_diagnostic_catalog.py
 ===========================================
 
-Contract tests for the diagnostic code catalog (PT-FEAT-5).
+Contract tests for the diagnostic code catalog.
 
 Validates:
 - CAT-1: Every code registered in codes.py has a catalog entry (no drift)

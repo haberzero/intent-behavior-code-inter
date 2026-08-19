@@ -1,4 +1,4 @@
-# D3-C3e llm 可调用类 + provider 超时 + try/except 捕获（确认路径通用性；P4c 迁移：llm 函数 → llm 可调用类）
+# D3-C3e llm 可调用类 + provider 超时 + try/except 捕获（确认路径通用性；llm 函数 → llm 可调用类）
 # expect-class: PASS
 # expect-out: caught_llmcall=LLM 调用失败: Request timed out. | DONE
 # expect-exit: 0

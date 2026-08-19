@@ -32,7 +32,7 @@ from core.kernel.axioms.prompt_protocol import (
 def _contains_yield(stmts) -> bool:
     """扫描语句列表是否含 ``IbYieldExpr`` / ``IbYieldFromExpr``。
 
-    用于标记函数为惰性生成器（D-08 自标记函数种类）。不进入嵌套函数定义
+    用于标记函数为惰性生成器（含 yield 自标记）。不进入嵌套函数定义
     （``IbFunctionDef``/``IbClassDef``）与 ``IbLambdaExpr``
     ——内层 yield 归属其自身（lambda 内 yield 本就非法，报 SEM_YIELD_OUTSIDE_FUNCTION，
     不应误标外层函数为生成器）。
@@ -77,7 +77,7 @@ class DeclarationVisitorsMixin:
         declaration-only form (verify + record the protocol on the type).
 
         Overlay variant (``node.is_overlay``): declares **temporary shadow
-        entries** for a builtin type's protocol methods (decision 2 覆层机制).
+        entries** for a builtin type's protocol methods (覆层机制).
         Overlay does NOT claim protocol satisfaction / does NOT touch
         spec.members/implements/native vtable; it only records shadow entries
         to be wired at runtime (``protocol_vtable`` 影子条目, default inactive).
@@ -125,7 +125,7 @@ class DeclarationVisitorsMixin:
             )
             return None
 
-        # ---------- 覆层声明分支（decision 2 is_overlay） ----------
+        # ---------- 覆层声明分支（is_overlay） ----------
         if node.is_overlay:
             # 覆层仅对内置具体值类型有意义（临时改写内置类型协议方法分派）。
             if impl_provenance != Provenance.KERNEL_NATIVE:
@@ -450,7 +450,7 @@ class DeclarationVisitorsMixin:
             )
 
         # 参数签名唯一权威：解析类型 + 描述符 + 定义处默认值校验
-        # 方法 def 的 param_types 恒不含 self（阶段 B1 统一：与类成员表
+        # 方法 def 的 param_types 恒不含 self（与类成员表
         # MethodMemberSpec 同构、与跨模块导入形态一致；self 是运行期按 receiver
         # 注入的作用域变量，经 node_to_symbol 侧表解析，独立于 spec 签名）。
         param_types, param_descriptors = self._build_function_signature(node.args)
@@ -566,7 +566,7 @@ class DeclarationVisitorsMixin:
             if func_returns:
                 func_returns.pop()
 
-        # 含 yield → 惰性生成器（D-08 自标记函数种类）。扫描函数体（含嵌套
+        # 含 yield → 惰性生成器（自标记）。扫描函数体（含嵌套
         # lambda，但排除嵌套函数定义——嵌套函数的 yield 归属其自身）。
         node.is_generator = _contains_yield(node.body)
 

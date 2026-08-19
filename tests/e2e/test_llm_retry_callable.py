@@ -3,9 +3,9 @@
 tests/e2e/test_llm_retry_callable.py
 =====================================
 
-P4d：``__retry__`` 可选协议方法（retry 高阶化，决策 5）——llm 可调用类声明
+``__retry__`` 可选协议方法（retry 高阶化）——llm 可调用类声明
 重试策略（``{"max_retry": int, "hint": str}``），统一装配入口发现并解析
-（``_discover_optional_protocol_method``，与 ``__intent__`` P4b-3a 同通道），
+（``_discover_optional_protocol_method``，与 ``__intent__`` 同通道），
 ``invoke`` 路径据此驱动重试循环：不确定轮次经 _prompt_assembly 单一消息构造
 累积多轮对话（``message_history`` 回喂 provider），达到 ``max_retry`` 仍不确定
 则返回最后一次不确定结果交语句层（llmexcept 接管 / 无帧则 LLMParseError）。

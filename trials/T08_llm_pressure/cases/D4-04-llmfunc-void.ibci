@@ -1,4 +1,4 @@
-# T08-D4-04 llm 可调用类返回 void 边界（P4c 迁移：llm 函数 → llm 可调用类；无 expected_type 解析为 str）
+# T08-D4-04 llm 可调用类返回 void 边界（llm 函数 → llm 可调用类；无 expected_type 解析为 str）
 # doc: docs/syntax/09_llm.md
 # expect-class: BOUNDARY
 # expect-exit: nonzero

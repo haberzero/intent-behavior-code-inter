@@ -24,7 +24,7 @@
 调度器**不得**调用 ``result()``——部分 waitable（HostAwaitable）的 ``result()``
 是消耗性的，二次消费会报错。
 
-``register_wake(event)`` 语义（R2 通知式唤醒，**可选优化钩子**）：
+``register_wake(event)`` 语义（通知式唤醒，**可选优化钩子**）：
 - 把完成通知注册到 ``event``（``threading.Event``）；本 waitable 完成时设置
   该事件，使调度器能被**即时唤醒**（而非 ~1ms 轮询）。
 - 结构性协议允许缺失：实现者可不提供（此时调度器退回首轮询 + 安全超时兜底）。

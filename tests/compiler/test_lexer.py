@@ -10,7 +10,7 @@ Coverage:
   - Intent annotation tokens (@, @+, @-, @!)
   - Behavior expression tokens (@~ ... ~)
   - Indentation handling
-  - llm 旧关键字作普通标识符（P4c：llm 函数语法删除）
+  - llm 旧关键字作普通标识符（llm 函数语法已删除）
 """
 
 import pytest
@@ -189,7 +189,7 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# 8. llm 关键字不再特殊处理（P4c：llm 函数语法删除，作普通标识符 tokenize）
+# 8. llm 关键字不再特殊处理（llm 函数语法已删除，作普通标识符 tokenize）
 # ---------------------------------------------------------------------------
 
 class TestLexerLLMKeywordsAsIdentifiers:

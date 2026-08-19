@@ -1,7 +1,7 @@
 """
-tests/runtime/test_pre_eval_fallback.py — 字段默认值预评估回退契约（阶段 B5）。
+tests/runtime/test_pre_eval_fallback.py — 字段默认值预评估回退契约。
 
-B5 契约：
+契约：
 - 预评估失败（尽力而为优化）记录诊断（KDIAG_RUNTIME_PRE_EVAL_FALLBACK），
   不静默、不污染 issue_tracker（STAGE 7 契约校验不误报）；
 - 实例化路径完整重试（动态求值），失败才 fail-fast。

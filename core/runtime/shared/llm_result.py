@@ -114,7 +114,7 @@ class LLMFuture:
         return self.future.result()
 
     def register_wake(self, event) -> None:
-        """完成通知钩子（R2）：后台 Future 完成时设置 ``event``（可跨线程）。"""
+        """完成通知钩子：后台 Future 完成时设置 ``event``（可跨线程）。"""
         self.future.add_done_callback(lambda _future: event.set())
 
 

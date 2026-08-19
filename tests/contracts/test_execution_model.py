@@ -254,9 +254,9 @@ print(countdown(100, 0))
         assert result  # Should compute sum without overflow
 
     def test_deep_recursion_500(self):
-        """R1 trampoline：500 层递归成功。
+        """trampoline：500 层递归成功。
 
-        EXEC-1：函数调用不嵌套 Python 栈，深递归时 Python 栈深度恒定。
+        函数调用不嵌套 Python 栈，深递归时 Python 栈深度恒定。
         """
         code = """
 func f(int n) -> int:
@@ -269,7 +269,7 @@ print(f(500))
         assert run_ibci(code) == ["500"]
 
     def test_deep_recursion_800(self):
-        """R1 trampoline：800 层递归成功（逼近 Python 默认 recursionlimit 边界）。"""
+        """trampoline：800 层递归成功（逼近 Python 默认 recursionlimit 边界）。"""
         code = """
 func f(int n) -> int:
     if n <= 1:
@@ -281,7 +281,7 @@ print(f(800))
         assert run_ibci(code) == ["800"]
 
     def test_deep_mutual_recursion(self):
-        """R1 trampoline：深互递归（各 200 层，共 400 层调用链）。"""
+        """trampoline：深互递归（各 200 层，共 400 层调用链）。"""
         code = """
 func is_even(int n) -> int:
     if n == 0:

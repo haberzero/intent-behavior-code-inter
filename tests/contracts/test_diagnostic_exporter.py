@@ -2,7 +2,7 @@
 tests/contracts/test_diagnostic_exporter.py
 ============================================
 
-Contract tests for the symbol table / type binding exporter (PT-FEAT-5).
+Contract tests for the symbol table / type binding exporter.
 
 Validates:
 - EXP-1: export_symbols_json returns every root symbol with required fields

@@ -3,9 +3,9 @@
 tests/e2e/test_snapshot_intent_freeze.py
 ==========================================
 
-D8（决策 3 / IT-2/IT-3）：snapshot 意图冻结补齐——纯 snapshot lambda（非行为体，
-fn_callable 路径）同样在**定义时刻**冻结意图栈，调用时忽略调用处意图（IT-2）；
-lambda 保持调用点 live（IT-3 高阶函数透明：lambda 看到调用点的意图 fork 副本）。
+snapshot 意图冻结补齐——纯 snapshot lambda（非行为体，
+fn_callable 路径）同样在**定义时刻**冻结意图栈，调用时忽略调用处意图；
+lambda 保持调用点 live（高阶函数透明：lambda 看到调用点的意图 fork 副本）。
 
 判别方式：自定义宿主绑定 provider 记录每次 LLM 调用的意图层
 （``LLMCallRequest.intents.active``），断言冻结 vs live。
@@ -61,7 +61,7 @@ def _active_provider(eng):
 class TestSnapshotIntentFreeze:
     def test_pure_snapshot_lambda_freezes_definition_intent(self, tmp_path, monkeypatch):
         """纯 snapshot lambda（body 非行为体 → fn_callable 路径）调用时使用定义
-        时刻意图，忽略调用处意图（D8 修复点）。"""
+        时刻意图，忽略调用处意图。"""
         code = (
             "import ai\n"
             "ai.set_provider(lib.provider)\n"
@@ -85,12 +85,12 @@ class TestSnapshotIntentFreeze:
         prov = _active_provider(eng)
         assert prov is not None and prov.calls, "provider 未被内核调用"
         last = prov.calls[-1]
-        # 冻结（经 @ smear 消解进 merged）：定义时刻意图在，调用处意图被忽略（IT-2）
+        # 冻结（经 @ smear 消解进 merged）：定义时刻意图在，调用处意图被忽略
         assert "DEF_INTENT_DEF" in last["merged"], f"定义意图未冻结: {last['merged']}"
         assert "CALL_INTENT_IGNORED" not in last["merged"], f"调用处意图泄漏入冻结: {last['merged']}"
 
     def test_lambda_keeps_call_site_intent(self, tmp_path, monkeypatch):
-        """lambda（非 snapshot）不冻结：调用处意图生效（IT-3 lambda 分支对照）。"""
+        """lambda（非 snapshot）不冻结：调用处意图生效（lambda 分支对照）。"""
         code = (
             "import ai\n"
             "ai.set_provider(lib.provider)\n"
@@ -113,5 +113,5 @@ class TestSnapshotIntentFreeze:
         assert out == ["OK"], out
         prov = _active_provider(eng)
         last = prov.calls[-1]
-        # lambda：调用处意图 live（IT-3），经 @ smear 消解进 merged
+        # lambda：调用处意图 live，经 @ smear 消解进 merged
         assert "CALL_INTENT_ACTIVE" in last["merged"], f"调用处意图缺失: {last['merged']}"

@@ -67,7 +67,7 @@ class HostAwaitable:
         return (True, self.result())
 
     def register_wake(self, event) -> None:
-        """完成通知钩子（R2）：子线程完成时设置 ``event``。
+        """完成通知钩子：子线程完成时设置 ``event``。
 
         经 orchestrator 的 spawn 完成钩子注册；handle 已不存在/已完成时
         立即设置（竞态下注册晚于完成）。

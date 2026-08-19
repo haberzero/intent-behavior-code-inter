@@ -87,7 +87,7 @@ class IbCell:
             本类不主动 box，以保持 "纯容器" 语义、避免对 registry 的依赖。
         """
         self._value = value
-        # 隔离标记：该 cell 是否已共享给线程任务（任务内写入报错，P3）。
+        # 隔离标记：该 cell 是否已共享给线程任务（任务内写入报错）。
         self._shared_with_main = False
 
     # ------------------------------------------------------------------
@@ -118,7 +118,7 @@ class IbCell:
         self._value = new_value
 
     # ------------------------------------------------------------------
-    # 隔离标记（P3：任务内禁止写共享 cell）
+    # 隔离标记（任务内禁止写共享 cell）
     # ------------------------------------------------------------------
 
     @property
@@ -127,7 +127,7 @@ class IbCell:
         return self._shared_with_main
 
     def mark_shared_with_main(self) -> None:
-        """标记该 cell 已共享给线程任务（任务内写入应报隔离错误，P3）。
+        """标记该 cell 已共享给线程任务（任务内写入应报隔离错误）。
 
         由线程任务启动路径（``coordinator._run_task_body``）调用：把与主线程
         共享的闭包 cell 标记为"任务内禁写"，使 ``runtime_context._check_cell_isolation``

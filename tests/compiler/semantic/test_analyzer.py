@@ -356,7 +356,7 @@ class TestFullFileCompilation:
             assert artifact is not None
 
     def test_llm_callable_class_compiles(self, source_mgr, full_registry):
-        """P4c 迁移：llm 函数语法删除；llm 可调用类（实现 __llm_call__）编译注册。"""
+        """llm 函数语法已删除；llm 可调用类（实现 __llm_call__）编译注册。"""
         tracker = IssueTracker(source_provider=source_mgr)
         code = 'class Translate:\n    func __llm_call__(self, any text) -> dict:\n        return {"user_prompt": str(text)}\n'
         ast_node = parse_code(code, tracker)

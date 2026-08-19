@@ -1,7 +1,7 @@
 """
-tests/e2e/test_overlay_mechanism.py — 临时覆层机制判别性契约（五大地基 P2-②，决策 2）。
+tests/e2e/test_overlay_mechanism.py — 临时覆层机制判别性契约。
 
-覆层机制核心语义（decision 2）：
+覆层机制核心语义：
 - 覆层声明（``impl overlay for <内置类型>:``）：登记 per-IbClass 协议方法表的
   **影子条目**（ProtocolSlot.overlay），**默认不参与分派**（内置按原生行为）；
 - 作用域化启用（``with overlay(<类型>.<协议方法>):``）：块执行窗口内，覆层影子

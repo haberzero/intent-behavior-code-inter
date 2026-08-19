@@ -271,7 +271,7 @@ class ExpressionVisitorsMixin:
         操作数的静态类型即其等待后的结果类型（LLMFuture 变量声明类型 / 容器
         元素类型 / 宿主结果类型）。``await`` 不改变类型，仅等待。
         例外：``await thread[T]`` 等待线程完成，结果为 ``thread_result[T]``
-        容器（与 ``t.join()`` 返回值一致，D-04）。
+        容器（与 ``t.join()`` 返回值一致）。
         """
         operand_type = self.visit(node.value)
         if operand_type is not None and getattr(operand_type, "kind", None) == TypeKind.THREAD.value:
@@ -287,7 +287,7 @@ class ExpressionVisitorsMixin:
     def visit_IbYieldExpr(self, node: ast.IbYieldExpr) -> Optional[IbSpec]:
         """访问 ``yield <expr>``：惰性生成器产出值。
 
-        ``yield`` 只能在函数体内（D-08 自标记函数种类）；模块顶层无函数上下文
+        ``yield`` 只能在函数体内（含 yield 的函数即自标记为惰性生成器）；模块顶层无函数上下文
         时是语义错误。产出表达式类型即 yield 值类型（生成器元素类型）。
         """
         if not self.in_function_def:
@@ -318,9 +318,9 @@ class ExpressionVisitorsMixin:
         return final_type
 
     def visit_IbYieldFromExpr(self, node: ast.IbYieldFromExpr) -> Optional[IbSpec]:
-        """访问 ``yield from <expr>``：惰性生成器委托（阶段 5 增量）。
+        """访问 ``yield from <expr>``：惰性生成器委托。
 
-        ``yield from`` 只能在函数体内（与 ``yield`` 同，D-08 自标记函数种类）；
+        ``yield from`` 只能在函数体内（与 ``yield`` 同，含 yield 的函数即自标记为惰性生成器）；
         模块顶层无函数上下文时是语义错误。委托目标须可迭代（嵌套生成器 /
         序列 / 有 ``__iter__`` 的对象）；节点类型 = 目标元素类型（可解析时）。
         """
@@ -537,7 +537,7 @@ class ExpressionVisitorsMixin:
                     if ret:
                         self.bind_type(node, ret)
                         return ret
-                # P4c：LLMCallable 类实例调用 f(args) 的静态类型 = 动态 any——
+                # LLMCallable 类实例调用 f(args) 的静态类型 = 动态 any——
                 # LLM 结果类型由运行时装配的 ``expected_type`` 决定（渐进类型语义；
                 # 与类含确定性 ``__call__`` 时的静态签名推断区分）。判据 =
                 # satisfies_protocol('llm_callable') 唯一判定（协议分派，非能力探测）。

@@ -40,7 +40,7 @@ class IbStreamHandle:
         self._error: Optional[BaseException] = None
         self._full_text: str = ""
         self._lock = threading.Lock()
-        # R2 通知式唤醒：注册的完成事件（消费线程 finally 时 set）
+        # 通知式唤醒：注册的完成事件（消费线程 finally 时 set）
         self._wake_events: list = []
         self._thread = threading.Thread(target=self._consume, daemon=True, name="ibci-stream")
         self._thread.start()
@@ -74,7 +74,7 @@ class IbStreamHandle:
             return self._done
 
     def register_wake(self, event) -> None:
-        """完成通知钩子（R2）：流耗尽（``_done`` 置位）时设置 ``event``。"""
+        """完成通知钩子：流耗尽（``_done`` 置位）时设置 ``event``。"""
         with self._lock:
             if self._done:
                 event.set()

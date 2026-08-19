@@ -195,7 +195,7 @@ class VTableParsingStrategy(ParsingStrategy):
             return None
 
         # --- __validate_prompt__ pre-flight (optional protocol) ---
-        # 前置门（P5，D2 to_prompt 同构）：经协议注册表统一判定（advisory——
+        # 前置门（与 to_prompt 同构）：经协议注册表统一判定（advisory——
         # 实际分派仍走虚表 lookup + call，保持既有 vtable 行为；无元数据
         # 上下文时回退方法存在性）。
         validate_method = ib_class.lookup_method('__validate_prompt__')

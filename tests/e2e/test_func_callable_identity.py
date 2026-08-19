@@ -2,7 +2,7 @@
 tests/e2e/test_func_callable_identity.py
 =========================================
 
-函数/可调用类型身份架构断层根治的判别性回归（P0，`_HANDOFF_TYPE_IDENTITY_FAULT_LINE.md`）。
+函数/可调用类型身份架构断层根治的判别性回归。
 
 根因：``fn``/``callable`` 函数签名建模基于早期"字符串级 TypeRef"设计，泛型地基
 （TypeRef 结构化 + CALLABLE_SIG + CALLABLE_INSTANCE）落地后核心回填 API
@@ -276,11 +276,11 @@ class TestFunctionReturnOptionalWrap:
         assert run_ibci(code) == ["Optional[int]", "9"]
 
     def test_llm_function_return_wrap(self):
-        """llm 可调用类返回类型解析（P4c 迁移：llm 函数 → llm 可调用类）。
+        """llm 可调用类返回类型解析（llm 函数 → llm 可调用类）。
 
         旧 ``-> Optional[int]`` 的 Optional 声明由返回类型包装层处理；新形态
         ``expected_type`` 即实际解析类型（Optional 由用户在装配 dict 表达或经
-        字段/调用点声明）。语义演进记录于 NEXT_STEPS/WORKLOG。"""
+        字段/调用点声明）。"""
         from tests.conftest import AI_MOCK_PREFIX
 
         code = AI_MOCK_PREFIX + (
@@ -450,7 +450,7 @@ class TestFnCallabilityEnforcement:
 
     def test_fn_param_rejects_non_callable_instance(self):
         """`fn` 参数拒"无 __call__ 的类实例"（与声明路径一致；is_callable(CLASS)
-        恒真须按 __call__ 成员判定——P1 整改）。"""
+        恒真须按 __call__ 成员判定）。"""
         code = (
             "class Plain:\n"
             "    func f(self) -> int:\n"
@@ -463,7 +463,7 @@ class TestFnCallabilityEnforcement:
         assert SEM in _errs(code)
 
     def test_fn_return_rejects_non_callable_instance(self):
-        """`-> fn` 返回拒"无 __call__ 的类实例"（P1 整改）。"""
+        """`-> fn` 返回拒"无 __call__ 的类实例"。"""
         code = (
             "class Plain:\n"
             "    func f(self) -> int:\n"
@@ -475,7 +475,7 @@ class TestFnCallabilityEnforcement:
         assert SEM in _errs(code)
 
     def test_fn_param_accepts_callable_class_instance(self):
-        """`fn` 参数收"有 __call__ 的类实例"（P1 判定不误伤）。"""
+        """`fn` 参数收"有 __call__ 的类实例"（判定不误伤）。"""
         code = (
             "class Adder:\n"
             "    func __call__(self, int x) -> int:\n"
@@ -488,7 +488,7 @@ class TestFnCallabilityEnforcement:
         assert run_ibci(code) == ["2"]
 
     def test_class_callable_base_rejected(self):
-        """`class X(callable)` 基类继承位置亦不可用内部类型名（P2 整改）。"""
+        """`class X(callable)` 基类继承位置亦不可用内部类型名。"""
         code = (
             "class X(callable):\n"
             "    int a\n"
@@ -642,7 +642,7 @@ class TestCallableSigSignature:
 
     def test_fn_sig_template_field_assignment(self):
         """泛型模板内 `self.cb = c`（字段与参数同为 fn[(Box[T])->int]）放行——
-        类型参数占位两侧一致（P1 整改：prescan 解析类型参数，消除 Box[any]/Box[T]
+        类型参数占位两侧一致（prescan 解析类型参数，消除 Box[any]/Box[T]
         不对称）。"""
         code = (
             "class Box[T]:\n"
@@ -662,7 +662,7 @@ class TestCallableSigSignature:
 
     def test_fn_sig_template_body_placeholder(self):
         """模板方法体内 `fn[(T) -> int] x = c`（T 未特化占位）放行——延至特化后
-        校验（P1 整改：占位不可解析不误拒）。"""
+        校验（占位不可解析不误拒）。"""
         code = (
             "class Host[T]:\n"
             "    func store(self, fn[(T) -> int] c) -> fn[(T) -> int]:\n"

@@ -1,10 +1,10 @@
 """
-tests/runtime/test_protocol_dispatch_contract.py — receive 协议化分派契约（阶段 A）。
+tests/runtime/test_protocol_dispatch_contract.py — receive 协议化分派契约。
 
-阶段 A 判别性契约（白盒）：
+判别性契约（白盒）：
 - receive 对协议消息经命名处理器分派（_dispatch_<dunder> 存在性）；
 - 处理器覆写保持类型特定语义（None 恒等 / Optional 委托 / 类特化下标）；
-- 特化类 _impl_cls 沿 spec 基名结构化解析（A3 契约锁定）。
+- 特化类 _impl_cls 沿 spec 基名结构化解析。
 """
 
 import os
@@ -96,7 +96,7 @@ class TestProtocolDispatchHandlers:
         assert f.receive("__return_type__", []).to_native() is not None
 
     def test_unexecuted_behavior_to_prompt_preserved(self):
-        """未缓存 IbBehavior 的 __to_prompt__ 返回描述（复核 P1 回归锁定）。"""
+        """未缓存 IbBehavior 的 __to_prompt__ 返回描述。"""
         from core.runtime.objects.primitives.callables import IbBehavior
 
         engine = _engine()
@@ -109,7 +109,7 @@ class TestProtocolDispatchHandlers:
         assert str(result) != "", "未执行行为 __to_prompt__ 应返回描述（非抛错）"
 
     def test_cast_to_vtable_first_message_level(self):
-        """cast_to 消息级：vtable 转换实现先行（复核 P2 契约锁定）。"""
+        """cast_to 消息级：vtable 转换实现先行。"""
         engine = _engine()
         engine.run_string(
             "int i = (int)'123'\n"
@@ -156,7 +156,7 @@ class TestProtocolDispatchHandlers:
 
 
 class TestImplClsStructuredResolution:
-    """特化类 _impl_cls 沿 spec 基名结构化解析（A3 契约）。"""
+    """特化类 _impl_cls 沿 spec 基名结构化解析。"""
 
     def test_specialized_list_impl_cls_resolves_to_base(self):
         from core.runtime.objects.primitives.collections import IbList
@@ -183,7 +183,7 @@ class TestImplClsStructuredResolution:
 
 
 class TestProtocolVTableDataStructure:
-    """per-IbClass 协议方法表（决策 1 B，形状修正）：消息名键 + 多态 native 解析。"""
+    """per-IbClass 协议方法表：消息名键 + 多态 native 解析。"""
 
     def test_protocol_vtable_is_slots_field(self):
         """IbClass.__slots__ 含 protocol_vtable（数据结构落地）。"""
@@ -234,7 +234,7 @@ class TestProtocolVTableDataStructure:
         assert IbSuperProxy._dispatch_call is not IbObject._dispatch_call
 
     def test_overlay_default_inactive(self):
-        """覆层影子条目默认不参与分派（决策 2：native 优先，overlay 惰性缺席）。"""
+        """覆层影子条目默认不参与分派（native 优先，overlay 惰性缺席）。"""
         engine = _engine()
         engine.run_string("int x = 1\n", silent=True)
         ic = engine.registry.get_class("int")

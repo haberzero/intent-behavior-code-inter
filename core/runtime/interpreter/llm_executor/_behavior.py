@@ -130,11 +130,11 @@ class _RunBatchDrive:
 class _RunLLMCallableDrive:
     """``ai.run_batch`` 对用户 LLMCallable 实例的 CPS 驱动 Waitable（单次调用）。
 
-    P4b-2b/2c：与 :class:`_RunBatchDrive` 同范式——VM 主路径经 ``cps_drive`` 帧内
+    与 :class:`_RunBatchDrive` 同范式——VM 主路径经 ``cps_drive`` 帧内
     CPS 驱动统一装配（``invoke_llm_callable_cps``：协议门 → 用户 ``__llm_call__`` →
     统一 worker）；宿主/线程体走 ``_drive`` 同步兜底。``items`` 逐项作为
     ``__llm_call__(self, any item)`` 的入参（用户声明 item 参时）执行一次 LLM 调用，
-    返回 boxed 结果列表（llm 类 run_batch 的逐项参数化契约，P4b-2c）。
+    返回 boxed 结果列表（llm 类 run_batch 的逐项参数化契约）。
     """
 
     def __init__(self, executor, callable_inst: "IbObject", items, ec):
@@ -437,10 +437,10 @@ class _BehaviorMixin:
         硬阻塞），与 ``stream_call`` 的 Waitable 范式一致。宿主/线程体直接调用
         走 ``try_result``/``result`` 的同步 ``_drive``（旧路径）。
 
-        **P4b-2b（统一消费 LLMCallable）**：用户 llm 可调用类实例（实现
-        ``__llm_call__``）同样接受——经统一装配入口 :meth:`invoke_llm_callable_cps`
-        执行一次 LLM 调用。llm 类的 ``items`` 参数化（逐项作为调用输入）由 P4b-2c
-        定义；本步语义 = 每调用 ``run_batch`` 执行一次该 llm 类的 LLM 调用。
+        用户 llm 可调用类实例（实现 ``__llm_call__``）同样接受——经统一装配入口
+        :meth:`invoke_llm_callable_cps` 执行一次 LLM 调用。llm 类的 ``items``
+        参数化（逐项作为调用输入）由调用方声明；本步语义 = 每调用 ``run_batch``
+        执行一次该 llm 类的 LLM 调用。
         """
         if isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior":
             return _RunBatchDrive(self, behavior, list(items), execution_context)

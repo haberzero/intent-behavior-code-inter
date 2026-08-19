@@ -611,7 +611,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出
         exc_holder: list = [None]
-        # R2：子任务完成的唤醒回调表（HostAwaitable.register_wake 注册的 event）
+        # 子任务完成的唤醒回调表（HostAwaitable.register_wake 注册的 event）
         wake_callbacks: list = []
 
         def _run_child():
@@ -637,7 +637,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         return handle
 
     def register_spawn_wake(self, handle: str, event) -> bool:
-        """[IKernelOrchestrator] 为 spawn handle 注册完成通知（R2）。
+        """[IKernelOrchestrator] 为 spawn handle 注册完成通知。
 
         子线程完成时设置 ``event``（调度器即时唤醒）。返回 False 表示 handle
         已不存在/已完成（调用方退回首轮询）。

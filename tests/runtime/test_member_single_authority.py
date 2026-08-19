@@ -1,7 +1,7 @@
 """
-tests/runtime/test_member_single_authority.py — 类成员单一权威契约（阶段 B3）。
+tests/runtime/test_member_single_authority.py — 类成员单一权威契约。
 
-B3 契约（spec↔运行期对象身份同构）：
+契约（spec↔运行期对象身份同构）：
 - 成员声明单一权威 = spec.members（编译期）；
 - 运行期 member_types 是 spec.members 字段声明的派生缓存（水化时一次性解析），
   与声明一致（键 ⊆ + 解析类型一致）；
@@ -125,7 +125,7 @@ Holder h = Holder()
 
 
 class TestAutoInitDeclaration:
-    """auto-init 声明化（B4）：类属性声明 + 成员表权威 + 共享实现。"""
+    """auto-init 声明化：类属性声明 + 成员表权威 + 共享实现。"""
 
     def test_auto_init_fields_registered(self):
         """auto-init 字段名清单注册到类属性（声明，非闭包捕获）。"""

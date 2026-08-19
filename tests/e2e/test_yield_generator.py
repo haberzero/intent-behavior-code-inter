@@ -2,7 +2,7 @@
 tests/e2e/test_yield_generator.py
 ==================================
 
-阶段 5 ``yield`` 惰性生成器端到端测试（D-08 自标记函数种类）。
+``yield`` 惰性生成器端到端测试（含 yield 即自标记为生成器函数）。
 
 覆盖：
 - 基础生成器：for 迭代产出、局部状态跨 yield 保留
@@ -158,7 +158,7 @@ for int x in g:
 
 
 class TestNextBuiltin:
-    """阶段 5 增量：``next()`` 内建推进惰性生成器。"""
+    """``next()`` 内建推进惰性生成器。"""
 
     def test_next_advances_generator(self):
         """next(gen) 逐次推进生成器到产出值。"""
@@ -215,7 +215,7 @@ class TestGeneratorSemantics:
     """编译期语义。"""
 
     def test_yield_only_in_function_body(self):
-        """yield 只能在函数体内（D-08 自标记函数种类）。"""
+        """yield 只能在函数体内（含 yield 即自标记为生成器函数）。"""
         code = """
 yield 1
 """
@@ -224,7 +224,7 @@ yield 1
         assert errors, "expected yield outside function to be a semantic error"
 
     def test_yield_from_only_in_function_body(self):
-        """yield from 只能在函数体内（与 yield 同，D-08 自标记）。"""
+        """yield from 只能在函数体内（与 yield 同，自标记）。"""
         code = """
 yield from g
 """
@@ -233,7 +233,7 @@ yield from g
 
 
 class TestYieldFrom:
-    """阶段 5 增量：``yield from`` 惰性生成器委托。"""
+    """``yield from`` 惰性生成器委托。"""
 
     def test_basic_delegation(self):
         """yield from 把子生成器产出逐值透传给消费者。"""

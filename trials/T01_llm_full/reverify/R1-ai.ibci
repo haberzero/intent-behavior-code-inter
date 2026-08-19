@@ -1,4 +1,4 @@
-# R1-004 ai API 修复复验（PT-DEBT-28）
+# R1-004 ai API 修复复验
 # 期望: get_retry/is_auto_intent_injection_enabled 可调用（修复前 None）
 import ai
 ai.set_retry(7)

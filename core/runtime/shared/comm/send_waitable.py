@@ -46,5 +46,5 @@ class ChannelSendWaitable:
         return self._buffer.send(self._item)
 
     def register_wake(self, event) -> None:
-        """完成通知钩子（R2）：委托 ``CommBuffer``——recv/close 腾出空间时设置 ``event``。"""
+        """完成通知钩子：委托 ``CommBuffer``——recv/close 腾出空间时设置 ``event``。"""
         self._buffer.register_send_wake(event)

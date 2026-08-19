@@ -10,8 +10,7 @@ core.runtime.observability.snapshot — 运行时快照聚合。
 - vars:     模块级变量（经 state_reader）
 - llm:      pending futures / call_info
 
-快照为"尽力一致"（每子快照持锁取一致切片，整体不强求跨对象一致性快照——
-设计 §四.1 注明）。
+快照为"尽力一致"（每子快照持锁取一致切片，整体不强求跨对象一致性快照）。
 """
 
 from __future__ import annotations

@@ -36,7 +36,7 @@ class ProtocolDef:
     For future user protocols these will be ordinary method names.
 
     ``kinds`` / ``axiom_cap`` / ``structural_methods`` / ``structural_all``
-    are the **satisfaction declaration** (阶段 C): they data-drive
+    are the **satisfaction declaration**: they data-drive
     ``SpecRegistry.satisfies_protocol``——kind 特判集、axiom 能力字段名、
     结构成员判定（任意/全部）。内置协议在条目内声明判定（单一权威，替代
     satisfies 内部 if 链）；用户协议（无内置声明）按 required methods
@@ -51,7 +51,7 @@ class ProtocolDef:
     axiom_cap: Optional[str] = None
     structural_methods: Tuple[str, ...] = ()
     structural_all: bool = False
-    #: 可选能力方法（P5，P1 §2.2 required/optional 形式化）：不参与
+    #: 可选能力方法（required/optional 形式化）：不参与
     #: satisfies_protocol 的强制判定（缺失仍满足协议），仅声明协议族中存在、
     #: 由实现方运行时按需发现/调用（如 LLMCallable 的 ``__intent__`` /
     #: ``__retry__``）。``methods`` 仍是必需方法的单一权威。
@@ -218,7 +218,7 @@ BUILTIN_PROTOCOLS: Tuple[ProtocolDef, ...] = (
         name="validate_prompt",
         methods=("__validate_prompt__",),
         description="Values that can pre-validate raw LLM output.",
-        # P5 激活（G7 能力公理收尾，D2 to_prompt 同构）：axiom 能力统一声明
+        # validate_prompt 激活（能力公理收尾，与 to_prompt 同构）：axiom 能力统一声明
         # （BaseAxiom 默认 False——内置类型预校验由内建解析器承担，不经
         # __validate_prompt__）；用户类经结构成员判定（spec.members）。
         axiom_cap="has_validate_prompt_cap",
