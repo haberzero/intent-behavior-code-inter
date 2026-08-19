@@ -259,13 +259,41 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   `_prepare_behavior_call_cps` 内联块 + 行为/llm 类双装配入口，与候选 #1 行为统一装配同源）；
   **D overlay_enabled 跨根并发污染风险**（IbClass 级共享态，需设计）；E 半接通边界（登记）；
   F 登记债务核对（无新增）；G 工作过程遗留（临时文档待删）。处置建议顺序 A+B → C → D。
-  **当前推进 = 下 session 启动自主推进的处置候选**：① 审计清单 A+B（机械零风险批）；
+  **当前推进 = 处置已完成，下一 session 开启主线后续**：① 审计清单 A+B ✅ / C ✅ / D ✅
+  （本 session 落地，见下）；② 候选 #1 剩余债务评估定论 ✅（has_llm_call_cap 死字段删除 /
+  G5 维持登记 / 行为装配评估）；③ 支线（PT-DEBT / VISION-3 / 文档 P9 收尾）。
+  **✅ 审计处置 A+B 已落地（本 session，unsafe-vibe-dev `90e66a90`）**：A 注释/文档
+  任务代号全仓清理——core 40+ 文件（P#/D#/G#/R#-D#/IT-#/决策 N/阶段 N/EXEC-FOUNDATION/
+  DIAGNOSTIC_DESIGN 等去代号留功能说明）+ tests 45 文件 docstring + docs 7 文件 + examples 1
+  + trials 18 文件 .ibci 头注释；保留 INV-*/LT-*/IT-* 规范/公理编号（正式引用标识）与
+  trials 用例编号（试用地基身份）。B 死代码删除 `_invoke_llm_callable_cps_boxed` /
+  `_invoke_llm_callable_sync`（零消费者）。全量 pytest 3059 passed / 1 skipped 零回归。
+  **✅ 审计 C+D 已落地（本 session，unsafe-vibe-dev `ed4502ef`）**：C 意图三层解析双写真相
+  收敛——行为路径 `_prepare_behavior_call_cps` 内联副本改为调用共享
+  `_resolve_llm_callable_intents_cps`（补 IbIntentContext 校验 fail-fast），双写消除；
+  双装配入口评估为值自身差异承载（非双通道）收窄登记。D overlay_enabled 跨根并发污染
+  修复——覆层启用状态迁至 RuntimeContext 计数集合（enter_overlay/exit_overlay/
+  is_overlay_enabled，嵌套计数成对），分派点经当前执行上下文查询（ContextVar 天然多根
+  隔离）；探针实证修复前块外根误命中覆层、修复后隔离；判别测试 +3（tests/runtime/
+  test_overlay_concurrency.py）。全量 pytest 3066 passed / 1 skipped（含 +7 判别）零回归。
+  **✅ 候选 #1 剩余债务评估定论（本 session，unsafe-vibe-dev `033c9900`）**：
+  has_llm_call_cap **实证为死字段**（无协议映射/无访问器/无任何消费者——上 session"编译期
+  DDG 层"记录与代码不符，DDG 实际经 IbBehaviorExpr AST 类型识别），已删除（BaseAxiom/
+  BehaviorAxiom/TypeAxiom + 03_type_system.md），P4 协议化真收尾；G5 意图值栈全量重构
+  维持登记不推进（P3 核心切片已落地、勿半接通）；行为统一装配评估为值自身差异承载。
+  全量 pytest 3066 passed / 1 skipped 零回归。
+  **当前分支 = `unsafe-vibe-dev`**，HEAD=`033c9900`，全量基线 3066 passed / 1 skipped
+  （以实跑为准），未 push、main 未动；worktree 仅未跟踪 `tasks_docs/_code_p4d_retry.md`
+  （P4d 临时设计文档，G 项待删）。
   ② 主线剩余对齐债务评估（G5 意图值栈 / has_llm_call_cap / 行为统一装配，NEXT_STEPS
   候选 #1）；③ 支线（PT-DEBT / VISION-3 / 文档 P9 收尾——P9 含 docs 代号污染清）。
 
 ### 2.2 交接检查单（当前有效）
 
 - [ ] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，下 session 接手核验后并入本节并删除）**
+- [x] **✅ 审计 A+B 处置落地（`90e66a90`）**：注释/文档任务代号全仓清理（core+tests+docs+examples+trials）+ 死代码删除 `_invoke_llm_callable_cps_boxed`/`_sync`；保留 INV/LT/IT 规范编号与 trials 用例编号；全量 3059 零回归
+- [x] **✅ 审计 C+D 处置落地（`ed4502ef`）**：C 意图三层解析双写收敛（行为路径调共享 `_resolve_llm_callable_intents_cps`）+ 双装配入口评估（值差异承载收窄登记）；D overlay 覆层启用状态迁 RuntimeContext（跨根并发隔离）+ 判别 +3；全量 3066 零回归
+- [x] **✅ 候选 #1 剩余债务评估定论（`033c9900`）**：has_llm_call_cap 实证死字段删除（P4 真收尾）；G5 意图值栈维持登记不推进；行为装配评估值差异承载；全量 3066 零回归
 - [x] **✅ 交接核验接收完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 契约文件 + 判别测试齐备 / 全量 pytest 实跑 3030 passed / 1 skipped）；要点已收敛入 §二，临时交接文件已删除（git 承载）
 - [x] **✅ P4b-3a `__intent__` 可选协议方法运行时发现落地**：装配入口发现 + CPS 调用 + 三层合并（存在键替换/缺失键透传/空列表清空）+ 契约 fail-fast + run_batch 继承；判别测试 +5；行为零变化；全量 3035 零回归
 - [x] **✅ P4b-3b 流式消费面统一落地**：stream_call/stream_channel 统一消费 LLMCallable（_StreamCallableDrive 帧内 CPS + assemble_stream_request_cps 两路装配）；字符串形态真删除 + 3 语言测试迁移 + 行为值判别 + docs 同步；全量 3036 零回归
