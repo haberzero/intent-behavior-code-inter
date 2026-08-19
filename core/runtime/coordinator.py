@@ -53,7 +53,7 @@ def get_runtime_coordinator(executor: Any) -> "RuntimeCoordinator":
     与 CommRegistry 同级。interpreter 仅在首次创建时传入。
     """
     rc = executor.runtime_context
-    interpreter = getattr(executor, "_interpreter", None)
+    interpreter = getattr(executor, "interpreter", None)
     return rc.get_runtime_coordinator(interpreter)
 
 

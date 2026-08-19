@@ -51,7 +51,7 @@ def snapshot(executor: Any) -> Dict[str, Any]:
 
     # ---- vms：当前解释器实例 ----
     vms = []
-    interpreter = getattr(executor, "_interpreter", None)
+    interpreter = getattr(executor, "interpreter", None)
     if interpreter is not None:
         vms.append({
             "instance_id": getattr(interpreter, "instance_id", None),

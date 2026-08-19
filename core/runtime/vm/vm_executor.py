@@ -101,6 +101,11 @@ class VMExecutor:
             return self._interpreter.service_context
         return None
 
+    @property
+    def interpreter(self) -> Optional[Any]:
+        """Interpreter 引用（宿主直调场景可能为 None）。"""
+        return self._interpreter
+
     # ------------------------------------------------------------------
     # 节点求值入口
     # ------------------------------------------------------------------

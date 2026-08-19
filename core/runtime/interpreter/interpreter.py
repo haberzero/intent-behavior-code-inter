@@ -984,9 +984,9 @@ class Interpreter:
     def _method_declared_spec(self, stmt_uid: str) -> Optional[Any]:
         """方法 def 的声明 spec（函数签名 spec，单一权威）。
 
-        从符号池按 ``node_uid == stmt_uid`` 匹配 FUNCTION 符号并水化其
-        type_uid——方法对象 spec 为**函数 spec**（参数/返回签名，与顶层函数
-        一致）。匹配失败回退旧路径（node_to_symbol 解析），保持防御。
+        从符号池按 def 节点 UID 匹配 FUNCTION 符号并水化其 type_uid——方法对象
+        spec 为函数 spec（参数/返回签名）。单一索引（def_node → FUNCTION 符号），
+        不依赖 node_to_symbol（其对方法 def 绑定 self 符号，非本用途）。
         """
         if self.symbol_pool:
             for sym_data in self.symbol_pool.values():
@@ -994,8 +994,7 @@ class Interpreter:
                     type_uid = sym_data.get("type_uid")
                     if type_uid:
                         return self.type_hydrator.hydrate(type_uid)
-        sym_uid = self.get_side_table("node_to_symbol", stmt_uid)
-        return self._resolve_type_from_symbol(sym_uid)
+        return None
 
     def _resolve_type_from_symbol(self, sym_uid: str) -> Optional[Any]:
         """从符号池中解析声明的类型描述符"""

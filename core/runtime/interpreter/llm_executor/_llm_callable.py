@@ -484,17 +484,20 @@ class _LLMCallableMixin:
             request = replace(request, message_history=history)
 
     def _is_llm_callable_value(self, value: IbObject, ec: IExecutionContext) -> bool:
-        """LLMCallable 值判定（satisfies 唯一入口，供 run_batch/stream 校验）。"""
+        """LLMCallable 值判定（satisfies 唯一入口，供 run_batch/stream 校验）。
+
+        satisfies_protocol 异常向上暴露（fail-fast）：元数据与 spec 齐备时判定失败
+        是真实错误，不得静默判否为"不可调用"。
+        """
         ib_class = getattr(value, "ib_class", None)
         if ib_class is None:
             return False
         reg = getattr(ib_class, "registry", None)
         meta = reg.get_metadata_registry() if reg is not None else None
         spec = getattr(ib_class, "spec", None)
-        try:
-            return bool(meta is not None and spec is not None and meta.satisfies_protocol(spec, "llm_callable"))
-        except Exception:
+        if meta is None or spec is None:
             return False
+        return bool(meta.satisfies_protocol(spec, "llm_callable"))
 
     def assemble_stream_request_cps(self, target: IbObject, ec: IExecutionContext):
         """统一流式装配：行为值 / 用户 llm 可调用类 → ``LLMCallRequest``（CPS）。
