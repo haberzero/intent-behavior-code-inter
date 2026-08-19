@@ -26,7 +26,7 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 - **触发条件**：该诊断在何种输入下产生（精确判断）。
 - **修复指引**：如何消除该诊断。
-- 严重级别：编译期诊断（LEX/PAR/SEM/DEP/INT）为 `ERROR`（编译中止），除标注 `WARNING` 者外（`SEM_IMPORT_CONFLICT` / `SEM_INTENT_STATIC_CALL` / `SEM_PROTOCOL_SIGNATURE`）；运行时（RUN）在执行时抛出；内核诊断（KDIAG）为运行时告警/事件（不阻断执行）。
+- 严重级别：编译期诊断（LEX/PAR/SEM/DEP/INT）为 `ERROR`（编译中止），除标注 `WARNING` 者外（`SEM_IMPORT_CONFLICT` / `SEM_INTENT_STATIC_CALL`）；运行时（RUN）在执行时抛出；内核诊断（KDIAG）为运行时告警/事件（不阻断执行）。
 
 ---
 
@@ -174,9 +174,10 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 
 ### `SEM_PROTOCOL_SIGNATURE`
 提示协议方法的签名与协议约定不符。
-- **触发条件**：协议方法（如提示协议）签名与约定不符。
-- **严重级别**：WARNING。
+- **触发条件**：required 协议方法（提示协议族 5 成员）签名与约定不符。
+- **严重级别**：ERROR（编译中止，fail-fast；required 协议成员契约破坏）。
 - **修复方式**：按协议约定的参数个数/返回类型修正签名。
+- 注：optional 协议成员（`__intent__`/`__retry__`）不经此路径，运行期 fail-fast 校验。
 
 ### `SEM_OVERLAY_UNUSED`
 声明了覆层（`impl overlay`）但从未被 `with overlay` 作用域启用。

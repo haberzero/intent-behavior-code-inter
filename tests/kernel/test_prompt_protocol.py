@@ -7,7 +7,7 @@ Unit tests for the unified __prompt__ protocol infrastructure.
 Validates:
 - PromptProtocolSpec definitions
 - validate_prompt_protocol_signature() contract checking
-- SEM_PROTOCOL_SIGNATURE compile-time warnings for incorrect protocol signatures
+- SEM_PROTOCOL_SIGNATURE compile-time errors for incorrect protocol signatures (D2: required → error)
 - __validate_prompt__ pre-flight validation in VTableParsingStrategy
 """
 
