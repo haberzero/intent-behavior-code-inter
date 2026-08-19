@@ -128,7 +128,7 @@ retry）。
 > **✅ P4b LLMCallable 装配路径设计定稿（本 session，设计轮）**：装配上下文 `IbLLMCallAssemblyCtx`
 > （IBCI 一等对象，可写槽 + 只读意图/输出契约）+ 用户 `__llm_call__` 契约 + 统一装配入口
 > `assemble_llm_callable_request_cps`（CPS 生成器，差异经协议方法承载）+ 落地顺序。
-> 设计文档 `tasks_docs/_code_p4b_assembly.md`（临时，实现后删除）。
+> 设计文档 `tasks_docs/_code_p4b_assembly.md`（临时，P4b 完成后已删除；git 承载历史）。
 >
 > **✅ P4b-2a LLMCallable 统一装配路径实现已落地（本 session）**：`_LLMCallableMixin`
 > （`_llm_callable.py`，组合进 LLMExecutorImpl）——`assemble_llm_callable_request_cps`（协议门 →
