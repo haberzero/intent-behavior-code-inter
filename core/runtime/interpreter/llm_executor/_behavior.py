@@ -279,34 +279,13 @@ class _BehaviorMixin:
 
         content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
 
-        context = execution_context.runtime_context
-        # 原始意图各层 content（未拼串）；merged 为进入本次调用的合并消解提示列表
-        active_contents: List[str] = []
-        global_contents: List[str] = []
-        all_intents: List[str] = []
-        has_override = False
-        if captured_intents is not None:
-            if not isinstance(captured_intents, IbIntentContext):
-                raise TypeError(
-                    f"_prepare_behavior_call_cps: captured_intents must be "
-                    f"None or IbIntentContext, got {type(captured_intents).__name__}"
-                )
-            active_list = captured_intents.get_active_intents()
-            global_intents = captured_intents.get_global_intents()
-            has_override = captured_intents.has_override()
-            all_intents = yield from captured_intents.resolve_to_prompts_cps(context, execution_context)
-        else:
-            has_override = context.intent_context.has_override()
-            all_intents = yield from context.get_resolved_prompt_intents_cps(execution_context)
-            global_intents = context.get_global_intents()
-            active_list = context.get_active_intents()
-        active_contents = [i.content if hasattr(i, "content") else str(i) for i in active_list]
-        global_contents = [i.content if hasattr(i, "content") else str(i) for i in global_intents]
-        merged_contents = [str(i) for i in all_intents]
+        active_contents, global_contents, merged_contents, has_override = (
+            yield from self._resolve_llm_callable_intents_cps(execution_context, captured_intents)
+        )
 
         llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)
         type_hint = self._get_expected_type_hint(node_uid, node_data, execution_context)
-        frame = context.get_current_llm_except_frame()
+        frame = execution_context.runtime_context.get_current_llm_except_frame()
         message_history = self._build_retry_message_history(frame)
 
         request = self._build_behavior_call_request(

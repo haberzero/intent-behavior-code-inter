@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Any, Dict, List, Union, TYPE_CHECKING
+from typing import Optional, Any, Dict, List, Union, Tuple, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeSymbol, Scope, RuntimeContext, SymbolView
 from core.base.enums import Provenance
 from core.base.source_atomic import Location
@@ -487,6 +487,10 @@ class RuntimeContextImpl(RuntimeContext):
         self._llm_except_frames: List['LLMExceptFrame'] = []
         # 最大 llmexcept 嵌套深度限制
         self._llm_except_max_depth: int = 128
+        # 覆层启用计数集合（(type_name, message) -> 嵌套深度）。
+        # 执行窗口级状态（经 ``with overlay`` 作用域化启用），挂在执行上下
+        # 文而非类型共享槽上——多根/多线程并发执行不同覆层块时彼此隔离。
+        self._overlay_enabled: Dict[Tuple[str, str], int] = {}
         # 运行时共享设施槽（由访问器惰性创建；未挂载时默认 None）：
         # 通信注册表 / 线程协调器（通信域）+ 控制配置存储（观测控制域）。
         # 事件总线为引擎级共享实例（registry 承载），非本 rc 私有。
@@ -609,6 +613,31 @@ class RuntimeContextImpl(RuntimeContext):
         if self._llm_except_frames:
             return self._llm_except_frames[-1]
         return None
+
+    def enter_overlay(self, type_name: str, message: str) -> None:
+        """进入覆层启用窗口（``with overlay(<类型>.<协议方法>):`` 块体）。
+
+        计数式启用：嵌套同名覆层块逐层累积，逐层退出递减——嵌套窗口各自
+        独立成对（save/enter 与 exit/restore 天然配对）。
+        """
+        key = (type_name, message)
+        self._overlay_enabled[key] = self._overlay_enabled.get(key, 0) + 1
+
+    def exit_overlay(self, type_name: str, message: str) -> None:
+        """退出覆层启用窗口（``with overlay`` 块退出）。
+
+        对应一次 :meth:`enter_overlay`；深度归零移除条目（恢复默认行为）。
+        """
+        key = (type_name, message)
+        current = self._overlay_enabled.get(key, 0)
+        if current <= 1:
+            self._overlay_enabled.pop(key, None)
+        else:
+            self._overlay_enabled[key] = current - 1
+
+    def is_overlay_enabled(self, type_name: str, message: str) -> bool:
+        """当前执行上下文中该 (类型, 协议消息) 的覆层是否处于启用窗口。"""
+        return self._overlay_enabled.get((type_name, message), 0) > 0
 
     def get_llm_except_frames(self) -> List['LLMExceptFrame']:
         """

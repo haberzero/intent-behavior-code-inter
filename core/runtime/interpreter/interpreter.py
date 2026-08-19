@@ -873,8 +873,9 @@ class Interpreter:
                 method_name = stmt_data.get("name")
 
                 # 覆层分支（is_overlay）：登记为 per-IbClass 协议方法表的
-                # **影子条目**（ProtocolSlot.overlay，默认 overlay_enabled=False，
-                # 不参与分派），供 scoped ``with overlay`` 启用后改写协议方法分派。
+                # **影子条目**（ProtocolSlot.overlay，默认不参与分派），供
+                # scoped ``with overlay`` 启用后改写协议方法分派（启用状态
+                # 挂执行上下文，见 RuntimeContext.enter_overlay）。
                 # 不注册进 target.methods / 不 bind 运算符 / 不冲突原生方法——
                 # 覆写内置协议方法分派正是覆层语义本意（区别于普通 impl 的
                 # 立即生效 + vtable 冲突 fail-fast）。

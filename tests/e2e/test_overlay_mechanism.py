@@ -34,7 +34,17 @@ class TestOverlayDispatch:
 
     def test_overlay_receive_dispatch_inside_and_outside(self):
         """``with overlay(int.__to_prompt__)`` 块内 receive('__to_prompt__')
-        返回覆层结果，块外恢复原生——作用域化启用语义。"""
+        返回覆层结果，块外恢复原生——作用域化启用语义。
+
+        覆层启用状态挂执行上下文（作用域化；多根并发隔离）：块内经
+        ``enter_overlay`` 启用、块外默认不启用。宿主侧无活跃执行上下文时
+        视为块外（覆层仅经执行窗口生效）。
+        """
+        from core.runtime.frame import (
+            set_current_execution_context,
+            reset_current_execution_context,
+        )
+
         eng = _run(
             "impl overlay for int:\n"
             "    func __to_prompt__(self) -> str:\n"
@@ -47,14 +57,17 @@ class TestOverlayDispatch:
         assert slot.overlay is not None  # 影子条目已登记
 
         v = eng.registry.box(5)
-        # 块外（默认）：原生 int.__to_prompt__ → "5"
+        # 块外（默认 / 无活跃执行上下文）：原生 int.__to_prompt__ → "5"
         assert v.receive("__to_prompt__", []).to_native() == "5"
-        # 块内（启用覆层）
-        slot.overlay_enabled = True
+        # 块内：进入执行窗口（enter_overlay + 活跃 EC）
+        token = set_current_execution_context(eng.interpreter.execution_context)
+        rc = eng.interpreter.runtime_context
+        rc.enter_overlay("int", "__to_prompt__")
         try:
             assert v.receive("__to_prompt__", []).to_native() == "overlayed-int"
         finally:
-            slot.overlay_enabled = False
+            rc.exit_overlay("int", "__to_prompt__")
+            reset_current_execution_context(token)
         # 恢复后：原生
         assert v.receive("__to_prompt__", []).to_native() == "5"
 
@@ -68,11 +81,11 @@ class TestOverlayDispatch:
         )
         v = eng.registry.box(5)
         assert v.receive("__to_prompt__", []).to_native() == "5"
-        # 影子条目已登记但未启用
+        # 影子条目已登记但未启用（默认不参与分派）
         int_cls = eng.registry.get_class("int")
         slot = int_cls.protocol_slot("__to_prompt__")
         assert slot.overlay is not None
-        assert slot.overlay_enabled is False
+        assert not eng.interpreter.execution_context.runtime_context.is_overlay_enabled("int", "__to_prompt__")
 
     def test_with_overlay_block_end_to_end_via_prompt_rendering(self):
         """``with overlay`` 语句驱动的端到端判别（真实消费路径，非手动翻转 flag）。
@@ -80,7 +93,7 @@ class TestOverlayDispatch:
         块内行为 prompt 渲染 ``$x``（int）走覆层影子条目 → "overlayed-int"、
         块外恢复原生 → "5"：经行为插值 → PromptRenderer ``receive('__to_prompt__')``
         → 覆层生效面；mock LLM 回显 prompt 以观测渲染结果。同时覆盖
-        ``vm_handle_IbWithOverlay`` 的 overlay_enabled save/restore 生命周期。
+        ``vm_handle_IbWithOverlay`` 的执行上下文启用/退出生命周期。
         """
         lines: list = []
         eng = _engine()

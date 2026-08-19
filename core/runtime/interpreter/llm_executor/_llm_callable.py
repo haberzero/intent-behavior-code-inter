@@ -22,6 +22,7 @@ from core.base.llm_protocol.llm_call import PromptSlot
 
 from core.runtime.shared.user_call import UserFunctionCall
 from core.runtime.objects.kernel import IbObject
+from core.runtime.objects.intent_context import IbIntentContext
 
 
 class _StreamCallableDrive:
@@ -94,7 +95,17 @@ class _StreamCallableDrive:
 
 class _LLMCallableMixin:
     def _resolve_llm_callable_intents_cps(self, ec: IExecutionContext, captured_intents: Optional[Any]):
-        """消解进入本次 LLM 调用的意图三层（active/global/merged），行为/llm 类共用。"""
+        """消解进入本次 LLM 调用的意图三层（active/global/merged）。
+
+        行为与 llm 可调用类两条消费路径的**单一权威实现**：``captured_intents``
+        为 None 时从实时上下文解析（调用点意图）；非 None 时从冻结快照解析
+        （定义时刻意图）。返回 ``(active, globals_, merged, has_override)``。
+        """
+        if captured_intents is not None and not isinstance(captured_intents, IbIntentContext):
+            raise TypeError(
+                f"_resolve_llm_callable_intents_cps: captured_intents must be "
+                f"None or IbIntentContext, got {type(captured_intents).__name__}"
+            )
         context = ec.runtime_context
         if captured_intents is not None:
             active_list = captured_intents.get_active_intents()

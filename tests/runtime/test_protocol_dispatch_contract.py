@@ -243,7 +243,6 @@ class TestProtocolVTableDataStructure:
         slot = ic.protocol_slot("__getattr__")
         assert slot is not None
         assert slot.overlay is None
-        assert slot.overlay_enabled is False
         value = engine.registry.box(42)
         from core.runtime.objects.kernel.base import IbObject
 

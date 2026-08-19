@@ -20,17 +20,16 @@ class ProtocolSlot:
       ``IbObject._dispatch_call`` 且 ``IbSuperProxy`` 自有；``Type`` → ``IbClass``
       且 ``HostClassBinding``；类对象与其实例共用 ib_class 但分派语义不同），
       故处理器必须按 ``type(value)`` 解析而非按 IbClass 静态烘焙单一处理器。
-    - ``overlay`` / ``overlay_enabled``：覆层影子条目（默认**不参与**
-      分派；启用接线）。启用后优先级高于原生处理器。
+    - ``overlay``：覆层影子条目（默认**不参与分派**；经当前执行上下文
+      ``runtime_context`` 作用域化启用）。启用后优先级高于原生处理器。
     """
 
-    __slots__ = ("message", "_native_by_class", "overlay", "overlay_enabled")
+    __slots__ = ("message", "_native_by_class", "overlay")
 
     def __init__(self, message: str):
         self.message = message
         self._native_by_class: Dict[Type, Optional[Callable]] = {}
         self.overlay: Optional[Callable] = None
-        self.overlay_enabled: bool = False
 
     def native_for(self, value: 'IbObject') -> Optional[Callable]:
         """按值 Python 类解析原生处理器（惰性记忆化；无处理器返回 None）。"""
@@ -41,9 +40,11 @@ class ProtocolSlot:
             )
         return self._native_by_class[value_cls]
 
-    def active_handler(self, value: 'IbObject') -> Optional[Callable]:
-        """当前生效处理器：覆层已启用 → overlay；否则按值类解析 native。"""
-        if self.overlay_enabled and self.overlay is not None:
+    def active_handler(self, value: 'IbObject', overlay_enabled: bool = False) -> Optional[Callable]:
+        """当前生效处理器：``overlay_enabled``（执行上下文判定）→ overlay；
+        否则按值类解析 native。覆层启用状态由调用方从当前``runtime_context``
+        查询（作用域化语义；不经共享槽，多根/多线程彼此隔离）。"""
+        if overlay_enabled and self.overlay is not None:
             return self.overlay
         return self.native_for(value)
 
@@ -115,7 +116,7 @@ class IbObject:
         slot = self.ib_class.protocol_slot(message)
         if slot is None:
             return None
-        handler = slot.active_handler(self)
+        handler = slot.active_handler(self, self._overlay_enabled_in_current_context(message))
         if handler is None:
             return None
         # 覆层影子条目为语言函数（IbUserFunction）：以其 .call(receiver, args)
@@ -131,6 +132,20 @@ class IbObject:
         if result is not None:
             return result
         return None
+
+    def _overlay_enabled_in_current_context(self, message: str) -> bool:
+        """当前执行上下文中该协议槽的覆层是否处于启用窗口。
+
+        ``with overlay`` 块的启用状态挂在执行上下文（runtime_context）的
+        计数集合上——作用域化语义且多根并发彼此隔离。无活跃执行上下文
+        （宿主侧直调）时按未启用处理（覆层仅经执行窗口生效）。
+        """
+        from core.runtime.frame import get_current_execution_context
+
+        ec = get_current_execution_context()
+        if ec is None:
+            return False
+        return ec.runtime_context.is_overlay_enabled(self.ib_class.name, message)
 
     def _protocol_message_names(self) -> 'FrozenSet[str]':
         """协议注册表方法名并集（dunder 分派索引权威源，惰性缓存于 spec registry）。"""
