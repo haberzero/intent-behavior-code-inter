@@ -164,7 +164,7 @@ pytest 2252 passed / 1 skipped。**无本次修复引入的回归**。
 | D2-33-llmexcept-write | 10 §10.3 | retry 写参与变量拦截 | SEM_LLMEXCEPT_BODY_WRITE | PASS | - | logs/D2-33.log | |
 | D2-34-llmparse | 04 §4.7 | 裸 LLM 解析失败 | n=大数（可解析） | PASS | - | logs/D2-34.log | |
 | D2-35-stream | 11 §11.3 | stream_call 流式 | stream=Python 是... | PASS | P3注 | logs/D2-35.log | DOC-ISSUE-004 |
-| D2-36-filewrite-llmexcept | 10 §10.3 + KNOWN_LIMITS 20 | retry 内 file.write 拦截 | SEM_LLMEXCEPT_FILE_WRITE | PASS | - | logs/D2-36.log | |
+| D2-36-filewrite-llmexcept | 10 §10.3 + KNOWN_LIMITS 20 | retry 内 fs.write 拦截 | SEM_LLMEXCEPT_FILE_WRITE | PASS | - | logs/D2-36.log | |
 | D2-40-snap-vs-lambda | 07 §7.4 | 意图冻结 vs 敏感 | snap_len=4 lam_len=64 | PASS | - | logs/D2-40.log | |
 | D2-41-higher-order-lambda | 05 §5.6 + 07 §7.4 | 高阶 lambda 调用点意图 | r=你好 | PASS | - | logs/D2-41.log | |
 | D2-42/42b/42c-threadresult | 14 §14.7 vs howto | 成员形态 | .value=bound_method .value()=42 | PASS | P3注 | logs/D2-42*.log | DOC-ISSUE-005 |

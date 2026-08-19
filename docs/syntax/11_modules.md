@@ -43,7 +43,7 @@ import ai      # LLM provider 配置（API key、model、retry 等）
 import isys    # 运行时路径查询（entry_path / entry_dir / project_root）
 import idbg    # 调试探查工具
 import ihost   # 动态宿主（隔离子环境运行）
-import file    # 受限文件系统操作
+import fs    # 受限文件系统操作
 import iruntime  # 运行时内省（snapshot / subscribe / configure）
 ```
 
@@ -173,34 +173,34 @@ str src = ihost.get_source()          # 获取当前入口源码
 
 子环境完全独立（独立 Engine 实例、构造期自行注册同一组内置模块、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境经 `ai.load_project_config()` 按自身 `project_root` 显式加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json` 并调用 `ai.load_project_config()`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
 
-### 11.7 file 模块
+### 11.7 fs 模块
 
-`file` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其受限子类型（仅可经 `file` 模块访问，受 kernel-native 覆盖保护）。
+`fs` 模块提供受限文件系统操作；`file_handle` 是只读容器类型，`audio`/`image`/`video` 为其受限子类型（仅可经 `fs` 模块访问，受 kernel-native 覆盖保护）。
 
 ```ibci
-import file
+import fs
 
 # 创建只读 file_handle
-file_handle fh = file.open("data.txt")
+file_handle fh = fs.open("data.txt")
 str p = fh.path              # field，无 I/O
 str content = fh.read()      # method，经沙箱校验后读取文本
 list[int] bytes = fh.read_bytes()
 
 # 直接按路径读取
-str content2 = file.read("data.txt")
+str content2 = fs.read("data.txt")
 
-# 统一写入：file.write(target, data, overwrite_flag)
+# 统一写入：fs.write(target, data, overwrite_flag)
 #   overwrite_flag="new"：target 为路径，创建/覆盖，返回 file_handle
 #   overwrite_flag="overwrite"：target 为路径或 file_handle，就地覆盖
-file_handle copy = file.write("data_v2.txt", "new content")
-file.write(fh, "mutated content", overwrite_flag="overwrite")
+file_handle copy = fs.write("data_v2.txt", "new content")
+fs.write(fh, "mutated content", overwrite_flag="overwrite")
 
 # 存在检查与删除
-bool exists = file.exists("data.txt")
-file.remove("data.txt")
+bool exists = fs.exists("data.txt")
+fs.remove("data.txt")
 ```
 
-**只读语义**：`file_handle` 实例没有 `write()` 方法。所有写入必须通过 `file` 模块的自由函数显式完成。
+**只读语义**：`file_handle` 实例没有 `write()` 方法。所有写入必须通过 `fs` 模块的自由函数显式完成。
 
 **写入模式的语义区分**（`overwrite_flag`）：
 - `"new"`（默认）：`target` 为路径，创建新文件并返回 handle；若目标已存在则覆盖（等价于 Python `open(path, "w")`）。不依赖任何 source handle。
@@ -209,7 +209,7 @@ file.remove("data.txt")
 **安全限制**：
 1. 所有 FS I/O 均受沙箱约束（默认禁止越出 `project_root`）。
 2. `save_state` 遇到活跃 `file_handle`/`audio`/`image`/`video` 变量时直接报错。
-3. `llmexcept` retry body 中禁用 `file.write`（避免污染 gold snapshot；磁盘型快照是浅路径引用，无法静态判别目标是否已入快照）。涉及可能失败的 LLM 调用时，先完成文件写入再进入可能重试的调用。
+3. `llmexcept` retry body 中禁用 `fs.write`（避免污染 gold snapshot；磁盘型快照是浅路径引用，无法静态判别目标是否已入快照）。涉及可能失败的 LLM 调用时，先完成文件写入再进入可能重试的调用。
 
 ### 11.8 json 模块
 

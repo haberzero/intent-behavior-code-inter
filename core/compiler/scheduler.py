@@ -504,7 +504,7 @@ class Scheduler(ICompilerService):
                         else:
                             mod_sym = VariableSymbol(name=local_name, kind=SymbolKind.MODULE, spec=s_mod_type, provenance=Provenance.EXTERNAL_MODULE)
                             analyzer.symbol_table.define(mod_sym)
-                            # `import file` also gates the disk-backed types
+                            # `import fs` also gates the disk-backed types
                             # (file_handle / audio / image / video) into the importing scope.
                             for exported_name in getattr(s_mod_type, "exported_types", []):
                                 existing_exported = analyzer.symbol_table.resolve(exported_name)

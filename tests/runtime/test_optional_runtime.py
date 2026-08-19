@@ -271,7 +271,7 @@ class TestOptionalEmptyErrorCode:
 
 
 class TestOptionalEmptyErrorCodeNext:
-    """空 Optional next() 亦报 RUN_ATTRIBUTE_ERROR（F4 复核补齐，DOC-29 三处
+    """空 Optional next() 亦报 RUN_ATTRIBUTE_ERROR（复核补齐，DOC-29 三处
     发射点统一后 next 经 resolve_iterable 共享权威）。"""
 
     def test_next_empty_optional_raises_run_attribute_error(self):

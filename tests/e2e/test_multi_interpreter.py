@@ -335,7 +335,7 @@ class TestRunIsolatedCompatibility:
 
 class TestRunIsolatedPathRelativeToEntryDir:
     """``ihost.run_isolated`` / ``spawn_isolated`` 的相对路径应基于
-    **调用脚本的入口目录**（与 ``file.read("./...")`` / ``isys.entry_dir()`` 一致），
+    **调用脚本的入口目录**（与 ``fs.read("./...")`` / ``isys.entry_dir()`` 一致），
     而不是基于 cwd。"""
 
     def test_run_isolated_relative_path_resolves_from_entry_dir(self, tmp_path, monkeypatch, capsys):

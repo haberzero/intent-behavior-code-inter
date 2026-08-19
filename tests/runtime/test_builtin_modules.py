@@ -4,8 +4,8 @@ tests/runtime/test_builtin_modules.py
 ======================================
 
 内置模块（内核原生 5 + 工具 5 + file）构造期预注册验证。
-内核原生 5：ai/ihost/idbg/isys/iruntime（F3 前即 kernel-native）。
-工具 5：math/json/time/net/schema（F3-1 起内联 spec 构造期预注册，USER_DEFINED）。
+内核原生 5：ai/ihost/idbg/isys/iruntime（kernel-native）。
+工具 5：math/json/time/net/schema（内联 spec 构造期预注册，USER_DEFINED）。
 """
 import os
 import pytest
@@ -38,7 +38,7 @@ class TestBuiltinRegistration:
             assert spec.visibility == Visibility.IMPORT_GATED
 
     def test_tool_modules_pre_registered_at_init(self):
-        """F3-1：工具 5 模块构造期预注册（USER_DEFINED + IMPORT_GATED + 实现就绪）。"""
+        """工具 5 模块构造期预注册（USER_DEFINED + IMPORT_GATED + 实现就绪）。"""
         eng = IBCIEngine(root_dir=REPO_ROOT)
         for name in ("math", "json", "time", "net", "schema"):
             impl = eng.host_interface.get_module_implementation(name)
@@ -50,12 +50,12 @@ class TestBuiltinRegistration:
             assert spec.visibility == Visibility.IMPORT_GATED
 
     def test_file_pre_registered_kernel_native(self):
-        """F3-1：file 自 engine.py 挪入集中注册（KERNEL_NATIVE + exported_types 保留）。"""
+        """file 模块自 engine.py 挪入集中注册（fs 模块，KERNEL_NATIVE + exported_types 保留）。"""
         eng = IBCIEngine(root_dir=REPO_ROOT)
-        impl = eng.host_interface.get_module_implementation("file")
+        impl = eng.host_interface.get_module_implementation("fs")
         assert impl is not None
-        assert eng.host_interface.is_kernel_native("file")
-        spec = eng.host_interface.metadata.resolve("file")
+        assert eng.host_interface.is_kernel_native("fs")
+        spec = eng.host_interface.metadata.resolve("fs")
         assert spec.provenance == Provenance.KERNEL_NATIVE
         assert spec.visibility == Visibility.IMPORT_GATED
         assert spec.exported_types == ["file_handle", "audio", "image", "video"]
@@ -77,7 +77,7 @@ class TestBuiltinRegistration:
             assert host.is_kernel_native(name)
 
     def test_builtin_spec_contract_details(self):
-        """F3-1 结构等价关键点（生成探针一次性验证，此处固化为契约测试防回归）。"""
+        """结构等价关键点（生成探针一次性验证，此处固化为契约测试防回归）。"""
         eng = IBCIEngine(root_dir=REPO_ROOT)
 
         # ai.set_mock_mode：enable 具名默认 True
@@ -114,7 +114,7 @@ class TestBuiltinRegistration:
 class TestKernelNativeOverrideProtection:
     """KERNEL_NATIVE 模块名不可被覆盖（HostInterface 层守卫）。
 
-    F3：用户插件磁盘发现已删，覆盖保护全在 HostInterface.register_module
+    用户插件磁盘发现已删，覆盖保护全在 HostInterface.register_module
     对 KERNEL_NATIVE provenance 元数据的守卫（注册即 auto-reserve）；
     用户侧扩展走宿主绑定 bind，不会产生同名内核模块名。
     """

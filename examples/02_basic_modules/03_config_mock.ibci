@@ -1,7 +1,7 @@
 # 03_config_mock.ibci
 # 配置与模拟
 
-import file
+import fs
 import json
 
 print("=== 配置与模拟模式 ===")
@@ -36,11 +36,11 @@ print("  数据库: " + (str)db["name"])
 print("\n[2] 保存配置到文件")
 str config_file = "./config_demo.json"
 # write（new 模式）：从无到有创建新文件，返回 handle（此处忽略）。
-file.write(config_file, (str)config)
+fs.write(config_file, (str)config)
 print("✓ 配置已保存: " + config_file)
 
 print("\n[3] 读取配置文件")
-str saved_config = file.read(config_file)
+str saved_config = fs.read(config_file)
 print("读取的内容:")
 print(saved_config)
 
@@ -92,8 +92,8 @@ while j < keys.len():
     j = j + 1
 
 print("\n=== 清理 ===")
-file.remove(config_file)
-if file.exists(config_file):
+fs.remove(config_file)
+if fs.exists(config_file):
     print("✗ 清理失败")
 else:
     print("✓ 临时文件已清理")

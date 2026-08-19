@@ -87,7 +87,7 @@ class TestRuntimeEmission:
         from tests.conftest import _default_root
 
         engine = IBCIEngine(root_dir=_default_root())
-        code = 'import file\nfile.read(file.open("../outside.txt"))\n'
+        code = 'import fs\nfs.read(fs.open("../outside.txt"))\n'
         import re
         try:
             engine.run_string(code, silent=True)

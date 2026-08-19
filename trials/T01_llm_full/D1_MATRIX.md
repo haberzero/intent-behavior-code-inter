@@ -85,7 +85,7 @@
 - D1-11-003 isys 路径查询
 - D1-11-004 idbg vars/current_llm/current_result/show_*（A4 重验：dispatch 赋值后立即可观测）
 - D1-11-005 ihost 隔离（B1 补记）
-- D1-11-006 file 模块读写/沙箱（B3 组合）
+- D1-11-006 fs 模块读写/沙箱（B3 组合）
 - D1-11-007 json 模块 parse/stringify/merge/keys/nested
 - D1-11-008 宿主绑定 bind（import python ...: bind，多文件）
 

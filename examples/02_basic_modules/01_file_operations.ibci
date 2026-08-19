@@ -1,43 +1,43 @@
 # 01_file_operations.ibci
-# 文件操作（kernel-native file 模块）
+# 文件操作（kernel-native fs 模块）
 #
 # 设计要点：
 # - file_handle 实例是只读路径引用，不持有 OS fd。
-# - 所有写入必须通过 file 模块的显式函数完成。
+# - 所有写入必须通过 fs 模块的显式函数完成。
 # - write(overwrite) 是副作用写入：影响所有共享同一 backing 路径的 handle。
 # - write(new) 创建新文件，不影响原 handle。
 
-import file
+import fs
 import isys
 
-print("=== file module demo ===")
+print("=== fs module demo ===")
 
 str demo = "./demo.txt"
 
 print("\n[1] overwrite write")
-file.write(demo, "line1\nline2\nline3", overwrite_flag="overwrite")
+fs.write(demo, "line1\nline2\nline3", overwrite_flag="overwrite")
 print("wrote: " + demo)
 
 print("\n[2] open as read-only handle and read")
-file_handle fh = file.open(demo)
-str content = file.read(fh)
+file_handle fh = fs.open(demo)
+str content = fs.read(fh)
 print("content:\n" + content)
 
 print("\n[3] copy-on-write: new file, original untouched")
-file_handle copy = file.write("./demo_copy.txt", "copied content")
-print("copy content: " + file.read(copy))
-print("original still: " + file.read(fh))
+file_handle copy = fs.write("./demo_copy.txt", "copied content")
+print("copy content: " + fs.read(copy))
+print("original still: " + fs.read(fh))
 
 print("\n[4] overwrite mutates the shared backing")
-file.write(fh, "mutated content", overwrite_flag="overwrite")
-print("original now: " + file.read(fh))
-print("copy still: " + file.read(copy))
+fs.write(fh, "mutated content", overwrite_flag="overwrite")
+print("original now: " + fs.read(fh))
+print("copy still: " + fs.read(copy))
 
 print("\n[5] exists / remove")
-print("demo exists: " + (str)file.exists(demo))
-file.remove(fh)
-file.remove(copy)
-print("after remove, demo exists: " + (str)file.exists(demo))
+print("demo exists: " + (str)fs.exists(demo))
+fs.remove(fh)
+fs.remove(copy)
+print("after remove, demo exists: " + (str)fs.exists(demo))
 
 print("\n[6] path introspection")
 print("project_root: " + isys.project_root())

@@ -41,7 +41,7 @@ provenance）为：
 
 ### exported_types：import 时的类型注入
 
-`file` 模块声明 `exported_types=["file_handle", "audio", "image", "video"]`。`import file` 时 scheduler 把这四个类型名注入当前作用域。仅 `KERNEL_NATIVE + IMPORT_GATED` 模块生效。
+`fs` 模块声明 `exported_types=["file_handle", "audio", "image", "video"]`。`import fs` 时 scheduler 把这四个类型名注入当前作用域。仅 `KERNEL_NATIVE + IMPORT_GATED` 模块生效。
 
 ### 多媒体类型为普通类名
 
@@ -62,7 +62,7 @@ final_mod_meta.members = {
 }
 ```
 
-`KERNEL_NATIVE` provenance 的符号（prelude 注入的 `int`/`str`/`print` 等语言内建、`import file` 门控注入的 `file_handle`/`audio` 等类型）不进入模块导出面。每个模块通过自身的 prelude 注入获得这些符号，无需跨模块重导出。`USER_DEFINED` 和 `EXTERNAL_MODULE` provenance 的符号正常导出。
+`KERNEL_NATIVE` provenance 的符号（prelude 注入的 `int`/`str`/`print` 等语言内建、`import fs` 门控注入的 `file_handle`/`audio` 等类型）不进入模块导出面。每个模块通过自身的 prelude 注入获得这些符号，无需跨模块重导出。`USER_DEFINED` 和 `EXTERNAL_MODULE` provenance 的符号正常导出。
 ---
 
 ## 深入指引

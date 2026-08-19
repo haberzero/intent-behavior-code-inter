@@ -221,7 +221,7 @@ str greeting = @~ 打个招呼 ~
 `__payload_prompt__` 是 `__to_prompt__` 的多模态增强版本，允许类返回结构化 content block 而非纯文本。IBCI 内置的 `audio`/`image`/`video` 类型支持该协议，可直接插值到 `@~ ... ~` 中：
 
 ```ibci
-import file
+import fs
 
 image photo = image.from_file("cat.png")
 str caption = @~ 请描述这张图片：$photo ~
@@ -236,14 +236,14 @@ str caption = @~ 请描述这张图片：$photo ~
 | `video` | `video.from_file(path)` | `format` | `data()` |
 
 ```ibci
-import file
+import fs
 
 audio rec = audio.from_file("interview.wav")
 str fmt = rec.format     # field，只内省，无 I/O
 str b64 = rec.data()     # method，惰性读取字节并按需 base64 物化
 ```
 
-用户自定义类型如需实现 `__payload_prompt__`，需自己负责字节物化与格式化；`file` 模块不提供 `read_base64`，可用 `file.read_bytes(path)` 读取原始字节后自行编码。
+用户自定义类型如需实现 `__payload_prompt__`，需自己负责字节物化与格式化；`fs` 模块不提供 `read_base64`，可用 `fs.read_bytes(path)` 读取原始字节后自行编码。
 
 **协议优先级**：当变量插值到行为表达式时，运行时优先调用 `__payload_prompt__`；若未定义则回退到 `__to_prompt__`。仅实现 `__to_prompt__` 的类型行为不变；`__payload_prompt__` 是可选扩展。纯文本路径完全不受影响——只有当 content 中包含结构化 block 时才会切换为多模态 payload 模式。
 ---

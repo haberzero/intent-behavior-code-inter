@@ -606,10 +606,10 @@ IBC-Inter 对此**没有强制力**：模块实现若在 `.py` 文件顶层声�
 
 `llmexcept` 快照对磁盘型对象（`file_handle`/`audio`/`image`/`video`）保存的是**浅路径引用**（`__clone_ref__` 仅复制路径，不物化字节）。retry body 内任何文件写/删都会污染黄金快照：原地覆写改变 backing 内容、删除令 handle 悬空、即便是"创建新文件"模式（`overwrite_flag="new"`）若路径撞上已有 backing 同样污染。
 
-因此 retry body 内**禁止全部 `file` 模块写/删函数**：`file.write` / `remove`。只读操作（`open` / `read` / `read_bytes` / `exists`）允许。
+因此 retry body 内**禁止全部 `fs` 模块写/删函数**：`fs.write` / `remove`。只读操作（`open` / `read` / `read_bytes` / `exists`）允许。
 
 防护为编译期 + 运行时双层（公理 IC-5）：
-- **编译期** `SEM_LLMEXCEPT_FILE_WRITE`：spec 驱动判定，拦截 retry body 内直接调用与经用户函数递归传导的间接调用（含 `import file as f` 别名）。
+- **编译期** `SEM_LLMEXCEPT_FILE_WRITE`：spec 驱动判定，拦截 retry body 内直接调用与经用户函数递归传导的间接调用（含 `import fs as f` 别名）。
 - **运行时** `llmexcept_body_depth` 守卫：兜底编译期无法静态追踪的情形（如经 `fn` 动态分派）。
 
 **固有边界（不可由 IBCI 拦截）**

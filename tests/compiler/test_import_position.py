@@ -83,7 +83,7 @@ class TestImportPositionEnforcement:
             'print("a")\n'
             "import idbg\n"
             'print("b")\n'
-            "import file\n"
+            "import fs\n"
         )
         artifact, errors = compile_or_errors(code)
         assert artifact is None

@@ -12,8 +12,8 @@ core/runtime/modules/
 ------------
 - 本目录下的 Python 文件名**不要**与 IBCI 模块名完全同名，以避免 Python import
   shadowing 与概念混淆。
-- 例如：IBCI 模块名为 ``file``，实现文件必须**不是** ``file.py``，因此当前使用
-  ``file_impl.py``。
+- 例如：IBCI 模块名为 ``fs``，实现文件必须**不是** ``fs.py``，因此当前使用
+  ``fs_impl.py``（沿原 ``file_impl.py`` 约定迁移）。
 - 如需新增内核原生模块，请在 ``core/engine.py`` 中注册，并选择一个不与 Python
   标准库/内建冲突的实现文件名。
 """

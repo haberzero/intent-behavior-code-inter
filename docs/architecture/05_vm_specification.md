@@ -175,7 +175,7 @@ scheduler 主循环（TaskScheduler.run）:
 
 **公理 IC-4（llmexcept body 只读约束）**：llmexcept handler body 对参与 LLM 调用的变量（`$` 插值、意图引用、赋值目标）实施只读保护。编译期通过 `SEM_LLMEXCEPT_BODY_WRITE`（赋值/属性/下标变异）和 `SEM_LLMEXCEPT_MUTATING_CALL`（mutating 方法调用）拦截；运行期通过 `verify_snapshot_integrity()` 比对黄金快照作为安全网，违规时静默恢复快照。非 LLM 参与变量的修改不受限制。
 
-**公理 IC-5（llmexcept body 文件写/删禁令）**：磁盘型快照是浅路径引用，retry body 内任何文件写/删都会污染黄金快照。retry body 内禁止全部 `file` 模块写/删函数（`file.write` + `remove`）。编译期以 `SEM_LLMEXCEPT_FILE_WRITE` spec 驱动拦截直接与间接（经用户函数递归传导）调用，运行时以 `llmexcept_body_depth` 守卫兜底动态分派等漏检情形。只读操作（`open`/`read`/`read_bytes`/`exists`）放行。外部进程触碰 backing 文件为固有边界，不在拦截范围（详见 `docs/KNOWN_LIMITS.md`）。
+**公理 IC-5（llmexcept body 文件写/删禁令）**：磁盘型快照是浅路径引用，retry body 内任何文件写/删都会污染黄金快照。retry body 内禁止全部 `fs` 模块写/删函数（`fs.write` + `remove`）。编译期以 `SEM_LLMEXCEPT_FILE_WRITE` spec 驱动拦截直接与间接（经用户函数递归传导）调用，运行时以 `llmexcept_body_depth` 守卫兜底动态分派等漏检情形。只读操作（`open`/`read`/`read_bytes`/`exists`）放行。外部进程触碰 backing 文件为固有边界，不在拦截范围（详见 `docs/KNOWN_LIMITS.md`）。
 
 ---
 

@@ -3,7 +3,7 @@
 tests/e2e/test_provider_host_binding.py
 =========================================
 
-F4：自定义 LLM provider 经宿主绑定统一（`ai.set_provider`）。
+自定义 LLM provider 经宿主绑定统一（`ai.set_provider`）。
 
 验证用户经 `import python "<mod>" as lib: bind provider` 声明自定义 provider
 （实现 LLMProvider 契约），并经 `ai.set_provider(lib.provider)` 注册为激活的

@@ -1,6 +1,6 @@
 """tests/runtime/test_idbg.py — idbg 插件单元测试（pure Python，不需要 IBCI 引擎）。
 
-F3-1 起 idbg 的 spec 内联于 builtin_modules.BUILTIN_MODULE_SPECS（不再有 ibci_modules/.../_spec.py
+idbg 的 spec 内联于 builtin_modules.BUILTIN_MODULE_SPECS（不再有 ibci_modules/.../_spec.py
 磁盘文件），此处直接断言内联 spec 成员契约。
 """
 from core.runtime.bootstrap.builtin_modules import BUILTIN_MODULE_SPECS

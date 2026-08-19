@@ -7,7 +7,7 @@
 # 3. retry - 在 llmexcept 中显式触发重试
 
 import ai
-import file
+import fs
 import json
 import idbg
 

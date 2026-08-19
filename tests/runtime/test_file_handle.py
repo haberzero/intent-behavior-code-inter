@@ -1,7 +1,7 @@
 """
 测试 ``IbFileHandle`` / ``MediaBacking`` 的磁盘协议族与用户可见方法。
 
-file_handle 实例只读，写入通过 file 模块自由函数完成。
+file_handle 实例只读，写入通过 fs 模块自由函数完成。
 """
 
 from __future__ import annotations
@@ -41,9 +41,9 @@ def file_engine(tmp_path):
 
 
 def _file_module(engine):
-    """通过执行 import file 触发模块加载，使 FileLib 获得 capabilities。"""
-    engine.run_string("import file\n", silent=True)
-    return engine.host_interface.get_module_implementation("file")
+    """通过执行 import fs 触发模块加载，使 FileLib 获得 capabilities。"""
+    engine.run_string("import fs\n", silent=True)
+    return engine.host_interface.get_module_implementation("fs")
 
 
 def test_file_handle_read_and_write(file_engine, tmp_path):

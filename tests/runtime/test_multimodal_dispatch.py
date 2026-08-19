@@ -39,7 +39,7 @@ def _media_engine(tmp_path):
     """构造以 tmp_path 为 root 且已注入 ExecutionContext/PermissionManager 的引擎。"""
     from core.engine import IBCIEngine
     engine = IBCIEngine(root_dir=str(tmp_path))
-    engine.run_string("import file\n", silent=True)
+    engine.run_string("import fs\n", silent=True)
     return engine
 
 

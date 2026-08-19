@@ -2,9 +2,9 @@
 tests/runtime/test_host_binding.py
 ==================================
 
-宿主绑定（F1）：``import python "pkg" as lib: bind ...``。
+宿主绑定：``import python "pkg" as lib: bind ...``。
 
-验证门（ROADMAP F1）：
+验证门：
 1. e2e：``.ibci`` 绑定宿主 callable 并调用成功（方法 + 属性成员）。
 2. 显式声明式绑定（非自动穿透）：未声明成员访问 fail-fast。
 3. 绑定声明但宿主缺失成员 → 报错。
@@ -292,7 +292,7 @@ import python "math" as m:
 
 
 class TestHostClassBindingE2E:
-    """F2 e2e：宿主类型绑定（bind class）一等类型全链路。"""
+    """e2e：宿主类型绑定（bind class）一等类型全链路。"""
 
     def test_impl_method_and_protocol(self, tmp_path):
         """宿主类型 + impl 方法 + 协议满足（JSONDecoder + Describable）。"""
@@ -458,7 +458,7 @@ test()
 
 
 class TestHostClassBindingFailFast:
-    """F2 显式声明式绑定：契约外成员 / 缺失宿主类 / 缺失成员 fail-fast。"""
+    """显式声明式绑定：契约外成员 / 缺失宿主类 / 缺失成员 fail-fast。"""
 
     def _run_expect_fail(self, tmp_path, content, needle):
         _write(tmp_path, "main.ibci", content)
@@ -528,7 +528,7 @@ test()
 
 
 class TestHostClassBindingCompileTimeConflict:
-    """F2 显式声明式绑定：bind 成员与 impl 方法 / 重复绑定的编译期冲突 fail-fast。
+    """显式声明式绑定：bind 成员与 impl 方法 / 重复绑定的编译期冲突 fail-fast。
 
     冲突判定以目标类权威成员面 spec.members 为准（宿主类 bind 成员只进 members、
     不进合成 owned_scope 符号表）——同名 impl 若未被拦截会静默遮蔽 bind 成员并

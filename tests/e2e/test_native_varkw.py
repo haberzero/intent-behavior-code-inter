@@ -9,7 +9,7 @@ tests/e2e/test_native_varkw.py
 混合 / 空 kwargs 三种调用形态，以及"声明 VAR_KEYWORD 但实现不接受 **kwargs"
 的契约失败路径（加载即失败）。
 
-F3：用户侧扩展唯一边 = 宿主绑定 bind；但 VAR_KEYWORD 契约绑定的 loader 语义
+用户侧扩展唯一边 = 宿主绑定 bind；但 VAR_KEYWORD 契约绑定的 loader 语义
 属内核契约，此处经 HostInterface 手动注册实现 + TypeDef spec（构造期注册 =
 内置模块同路径/环 1 绑定），避免依赖已废弃的用户插件磁盘发现。
 """
@@ -77,7 +77,7 @@ def _run(project: str, main: str, name: str, impl):
 
 
 class TestNativeVarkwDispatch:
-    """原生模块函数 **kwargs 分传（VAR_KEYWORD 契约绑定；F3 经 HostInterface 手动注册）。"""
+    """原生模块函数 **kwargs 分传（VAR_KEYWORD 契约绑定；经 HostInterface 手动注册）。"""
 
     def test_varkw_named_call(self, tmp_path):
         with open(os.path.join(str(tmp_path), "main.ibci"), "w", encoding="utf-8") as f:

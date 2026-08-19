@@ -39,7 +39,7 @@ KERNEL_NATIVE_MODULES: Dict[str, str] = {
     "iruntime": "ibci_iruntime",
 }
 
-# 全部内置模块（内核原生 5 + 工具 5）；file 无物理包（实现为 core.runtime.modules.file_impl.FileLib）。
+# 全部内置模块（内核原生 5 + 工具 5）；file 无物理包（实现为 core.runtime.modules.fs_impl.FileLib）。
 BUILTIN_MODULES: Dict[str, str] = dict(KERNEL_NATIVE_MODULES)
 BUILTIN_MODULES.update({
     "math": "ibci_math",
@@ -687,22 +687,22 @@ def register_builtin_modules(host_interface: "HostInterface") -> None:
         )
 
     # file：实现为内核模块（无物理包），spec 移动自 engine.py（保留语义字段）。
-    from core.runtime.modules.file_impl import FileLib
+    from core.runtime.modules.fs_impl import FileLib
     host_interface.register_module(
-        "file",
+        "fs",
         FileLib(),
-        metadata=BUILTIN_MODULE_SPECS["file"],
+        metadata=BUILTIN_MODULE_SPECS["fs"],
     )
 
 
 
 def _spec_file() -> TypeDef:
     return TypeDef(
-        name="file",
+        name="fs",
         kind=TypeKind.MODULE.value,
         provenance=Provenance.KERNEL_NATIVE,
         visibility=Visibility.IMPORT_GATED,
-        # `import file` also gates the disk-backed types into scope.
+        # `import fs` also gates the disk-backed types into scope.
         exported_types=["file_handle", "audio", "image", "video"],
         members={
             "open": MethodMemberSpec(
@@ -739,7 +739,7 @@ def _spec_file() -> TypeDef:
     )
 
 
-BUILTIN_MODULE_SPECS["file"] = _spec_file()
+BUILTIN_MODULE_SPECS["fs"] = _spec_file()
 
 
 __all__ = [

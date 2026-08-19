@@ -493,8 +493,8 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
         # 直接：file.<写/删>(...)
         if isinstance(func, ast.IbAttribute) and self._is_file_write_call(call_node):
             self.error(
-                f"Cannot call file.{func.attr} inside a llmexcept handler body: "
-                f"file writes/removes corrupt the shallow path-reference snapshot. "
+                f"Cannot call fs.{func.attr} inside a llmexcept handler body: "
+                f"fs writes/removes corrupt the shallow path-reference snapshot. "
                 f"Use 'retry \"hint\"' for correction guidance, or perform file I/O outside the handler.",
                 call_node, code=SEM_LLMEXCEPT_FILE_WRITE
             )
@@ -514,7 +514,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
         """纯 spec 驱动判定：调用是否为某模块的 mutating 写/删成员调用。
 
         解析 receiver 符号 -> 若为 module spec 且其 members[attr] 标记 mutating=True 则命中。
-        正确处理 ``import file as f`` 别名（resolve 别名符号读到同一 module spec），
+        正确处理 ``import fs as f`` 别名（resolve 别名符号读到同一 module spec），
         且不误报局部变量同名 shadowing（非 module spec 直接返回 False）。无名称兜底。
         """
         func = call_node.func

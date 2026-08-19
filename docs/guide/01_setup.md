@@ -11,7 +11,7 @@
 
 ## api_config.json 的结构
 
-IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project_config()`，引擎即加载项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `file.read/json.parse`。引擎启动不自动加载配置，须显式调用 `ai.load_project_config()`。
+IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project_config()`，引擎即加载项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `fs.read/json.parse`。引擎启动不自动加载配置，须显式调用 `ai.load_project_config()`。
 
 **project_root 的确定**：`main.py run` 时，未显式 `--root` 则引擎自动从入口文件
 所在目录**向上**查找项目标志（`ibci_modules/`、`plugins/`、`.ibci/`、`ibci.json`

@@ -1,13 +1,13 @@
 # 06 · 构建多步骤 LLM 工作流
 
-> 本章是 IBCI 多步骤 LLM 工作流的入门教程。面向已掌握 LLM 函数定义和意图系统的 IBCI 用户。覆盖如何串联多个 LLM 调用、用 `for @~` 实现 AI 驱动循环、以及结合 `file` 模块和 `llmexcept` 构建健壮的处理管道。
+> 本章是 IBCI 多步骤 LLM 工作流的入门教程。面向已掌握 LLM 函数定义和意图系统的 IBCI 用户。覆盖如何串联多个 LLM 调用、用 `for @~` 实现 AI 驱动循环、以及结合 `fs` 模块和 `llmexcept` 构建健壮的处理管道。
 
 ---
 
 ## 你将会学到
 
 - 将 LLM 调用串联为分步骤的处理管道
-- 用 `file` 模块持久化中间结果
+- 用 `fs` 模块持久化中间结果
 - 用 `fn` + `lambda` 创建可复用的延迟行为表达式
 - 用 `for @~ ... ~` 让 AI 决定循环终止条件
 - 用 `llmexcept` 为每个步骤加上容错保护
@@ -59,24 +59,24 @@ func 处理文本(str 输入) -> str:
 
 ## 步骤二：持久化中间结果
 
-`file` 模块可以将每个阶段的输出写入文件，方便调试和复查：
+`fs` 模块可以将每个阶段的输出写入文件，方便调试和复查：
 
 ```ibci
-import file
+import fs
 
 str 原始 = "这个产品的功能其实还可以，但是价格实在太贵了"
 str 情感 = @~ 判断 $原始 的情感，只返回 正面、负面 或 中性 ~
 llmexcept:
     retry "请只返回 正面、负面 或 中性"
 
-file_handle fh = file.write("pipeline_output.txt",
+file_handle fh = fs.write("pipeline_output.txt",
     "原始文本: " + 原始 + "\n情感判断: " + 情感)
 
 str 原文内容 = fh.read()
 print(原文内容)
 ```
 
-`file.write`（默认 `overwrite_flag="new"`）创建新文件，返回 `file_handle`。`llmexcept` retry body 中禁止文件写/删——文件 I/O 应在可能重试的调用之前完成（详见 [语法参考 / 模块][syntax-11] §11.7）。
+`fs.write`（默认 `overwrite_flag="new"`）创建新文件，返回 `file_handle`。`llmexcept` retry body 中禁止文件写/删——文件 I/O 应在可能重试的调用之前完成（详见 [语法参考 / 模块][syntax-11] §11.7）。
 
 ---
 
@@ -125,7 +125,7 @@ print("迭代次数: " + (str)迭代次数)
 ## 你现在能做什么
 
 - 设计并实现包含多个 LLM 调用的分步骤管道
-- 用 `file` 模块在步骤间持久化中间结果
+- 用 `fs` 模块在步骤间持久化中间结果
 - 用 `fn` + `lambda` 创建可复用的延迟行为表达式
 - 用 `for @~` 让 AI 决定循环终止，搭配 `break` 做硬上限保护
 - 用 `llmexcept` 为每个 LLM 调用添加容错兜底

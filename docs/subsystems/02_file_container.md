@@ -21,7 +21,7 @@
 
 ### 只读容器语义
 
-`file_handle` 实例没有 `write()` 方法。所有写入必须通过 `file` 模块的自由函数显式完成。这保证了容器身份的不可变性——持有同一 handle 的多处引用始终指向同一路径。
+`file_handle` 实例没有 `write()` 方法。所有写入必须通过 `fs` 模块的自由函数显式完成。这保证了容器身份的不可变性——持有同一 handle 的多处引用始终指向同一路径。
 
 ### 零 I/O 公理层
 
@@ -48,7 +48,7 @@ IbValue (core/runtime/objects/kernel/)
 
 ### 类型注册与门控
 
-`file_handle` / `audio` / `image` / `video` 为普通类名（非 lexer 关键字），通过 `file` 模块的 `exported_types` 机制注入：`import file` 时 scheduler 把这四个类型名作为符号同时注入当前作用域。
+`file_handle` / `audio` / `image` / `video` 为普通类名（非 lexer 关键字），通过 `fs` 模块的 `exported_types` 机制注入：`import fs` 时 scheduler 把这四个类型名作为符号同时注入当前作用域。
 
 ---
 
@@ -58,7 +58,7 @@ IbValue (core/runtime/objects/kernel/)
 
 | Backing 类型 | 语义 | 来源 |
 |---|---|---|
-| `FileBacking(path, sandboxed)` | 指向已存在的源文件 | `file.open()`、`audio.from_file()` 等 |
+| `FileBacking(path, sandboxed)` | 指向已存在的源文件 | `fs.open()`、`audio.from_file()` 等 |
 | `GeneratedBacking(path)` | 指向 LLM 生成时溢写的工件，恒在 project_root 内 | LLM 响应解析溢写 |
 
 不存在 `MemoryBacking`——所有媒体类型一律磁盘型。
@@ -105,10 +105,10 @@ IbValue (core/runtime/objects/kernel/)
 
 `llmexcept` 快照保存的是路径引用的浅拷贝。retry body 中调用任何文件写/删都会污染黄金快照（写新文件若路径撞上已有 backing 同样污染；删除则令 handle 悬空）。因此 retry body 内**禁止全部写/删函数**，采用编译期 + 运行时双层防护：
 
-- **编译期**（`SEM_LLMEXCEPT_FILE_WRITE`）：spec 驱动判定--retry body 内直接或经用户函数间接调用 `file.<写/删>` 即报错。判定读 module spec 成员的 `mutating` 标记，正确处理 `import file as f` 别名与局部变量 shadowing。间接调用经 `func_sym.owned_scope` 作用域感知递归传导（含调用图环路保护）。
+- **编译期**（`SEM_LLMEXCEPT_FILE_WRITE`）：spec 驱动判定--retry body 内直接或经用户函数间接调用 `file.<写/删>` 即报错。判定读 module spec 成员的 `mutating` 标记，正确处理 `import fs as f` 别名与局部变量 shadowing。间接调用经 `func_sym.owned_scope` 作用域感知递归传导（含调用图环路保护）。
 - **运行时**（`_guard_no_file_write_in_retry`）：`llmexcept_body_depth > 0` 时执行任何写/删函数抛 `InterpreterError`。兜底编译期无法静态追踪的情形（如经 `fn` 动态分派）。
 
-禁用集：`file.write` / `remove`。放行：`open` / `read` / `read_bytes` / `exists`（只读，不污染快照）。
+禁用集：`fs.write` / `remove`。放行：`open` / `read` / `read_bytes` / `exists`（只读，不污染快照）。
 
 **固有边界**：外部进程（非 IBCI 代码）触碰 backing 文件不受 IBCI 控制，无法在编译期或运行时拦截--磁盘态快照的零拷贝设计与进程外 I/O 的根本不可控性所致。详见 `docs/KNOWN_LIMITS.md`。
 
@@ -127,9 +127,9 @@ IbValue (core/runtime/objects/kernel/)
 
 ---
 
-## 七、file 模块门控与 API
+## 七、fs 模块门控与 API
 
-`file` 模块为内核原生模块（`KERNEL_NATIVE` + `IMPORT_GATED`），需显式 `import file` 方可使用。
+`fs` 模块为内核原生模块（`KERNEL_NATIVE` + `IMPORT_GATED`），需显式 `import fs` 方可使用。
 
 ### 函数清单
 
@@ -171,4 +171,4 @@ IbValue (core/runtime/objects/kernel/)
 ## 深入指引
 
 - 存储模型架构摘要：docs/architecture/08_storage_model.md
-- file 模块语法层：docs/syntax/11_modules.md §11.7
+- fs 模块语法层：docs/syntax/11_modules.md §11.7

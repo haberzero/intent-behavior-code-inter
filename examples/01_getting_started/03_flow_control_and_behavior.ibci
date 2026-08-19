@@ -11,7 +11,7 @@
 # 由 LLM 返回 bool 结果。
 
 import ai
-import file
+import fs
 import json
 import idbg
 

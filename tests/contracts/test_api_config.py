@@ -372,10 +372,10 @@ class TestLoadProjectConfigContract:
 
 
 class TestConfigFailFastHardening:
-    """F1/F2/F4/F6：配置机制 fail-fast 硬化。"""
+    """配置机制 fail-fast 硬化。"""
 
     def test_env_ref_malformed_fails_fast(self):
-        """F1：`{env:lower}` 格式非法（非大写下划线）不得静默透传为字面量。"""
+        """`{env:lower}` 格式非法（非大写下划线）不得静默透传为字面量。"""
         with pytest.raises(InterpreterError) as ei:
             ApiConfig.validate({
                 "default_model": {"base_url": "{env:lower_url}", "api_key": "k", "model": "m"}
@@ -393,7 +393,7 @@ class TestConfigFailFastHardening:
                 ApiConfig.validate({"default_model": dm})
 
     def test_env_test_mode_does_not_override_explicit_config(self, monkeypatch):
-        """F2：环境变量 IBC_TEST_MODE 不得静默压过显式 set_config（mock 显式化）。"""
+        """环境变量 IBC_TEST_MODE 不得静默压过显式 set_config（mock 显式化）。"""
         monkeypatch.setenv("IBC_TEST_MODE", "1")
         plugin = AIPlugin()
         try:
@@ -404,7 +404,7 @@ class TestConfigFailFastHardening:
         assert plugin._config.get("mock") is False
 
     def test_reasoning_true_declared_symmetrically(self):
-        """F4：reasoning:true 声明与 false 对称落 probed/is_reasoning（无误导告警）。"""
+        """reasoning:true 声明与 false 对称落 probed/is_reasoning（无误导告警）。"""
         plugin = AIPlugin()
         plugin.apply_config({
             "defaults": {},

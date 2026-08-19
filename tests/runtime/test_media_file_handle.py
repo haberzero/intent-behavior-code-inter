@@ -56,22 +56,22 @@ class TestMediaFileHandle:
     """media 类型作为 FileHandle 子类的核心契约。"""
 
     def test_audio_is_file_handle_subclass(self, file_engine, tmp_path):
-        # 先运行 import file 以注入 ExecutionContext / PermissionManager。
-        file_engine.run_string("import file\n", silent=True)
+        # 先运行 import fs 以注入 ExecutionContext / PermissionManager。
+        file_engine.run_string("import fs\n", silent=True)
         obj = _make_media(tmp_path, file_engine.registry, "audio", "a.wav", b"x")
         assert isinstance(obj, IbFileHandle)
         # format 是 field；IBCI 层通过 fields 字典访问。
         assert obj.fields["format"].to_native() == "wav"
 
     def test_image_payload_returns_image_url_block(self, file_engine, tmp_path):
-        file_engine.run_string("import file\n", silent=True)
+        file_engine.run_string("import fs\n", silent=True)
         obj = _make_media(tmp_path, file_engine.registry, "image", "i.png", b"pngdata")
         payload = LLMExecutorImpl._obj_to_payload(obj)
         assert payload["type"] == "image_url"
         assert "data:image/png;base64," in payload["image_url"]["url"]
 
     def test_video_payload_returns_video_block(self, file_engine, tmp_path):
-        file_engine.run_string("import file\n", silent=True)
+        file_engine.run_string("import fs\n", silent=True)
         obj = _make_media(tmp_path, file_engine.registry, "video", "v.mp4", b"mp4data")
         payload = LLMExecutorImpl._obj_to_payload(obj)
         assert payload["type"] == "video"
@@ -98,8 +98,8 @@ class TestMediaFromFile:
 
     @pytest.fixture
     def file_module(self, file_engine):
-        file_engine.run_string("import file\n", silent=True)
-        return file_engine.host_interface.get_module_implementation("file")
+        file_engine.run_string("import fs\n", silent=True)
+        return file_engine.host_interface.get_module_implementation("fs")
 
     def test_audio_from_file_returns_file_handle(self, file_module, tmp_path):
         path = tmp_path / "sample.wav"

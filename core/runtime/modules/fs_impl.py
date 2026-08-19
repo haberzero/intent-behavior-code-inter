@@ -1,12 +1,11 @@
 """
-core/runtime/modules/file_impl.py
+core/runtime/modules/fs_impl.py
 
-Kernel-native IBCI ``file`` 模块实现。
+Kernel-native IBCI ``fs`` 模块实现。
 
-⚠️ 命名红线：本文件实现的是 **IBCI 语言层**的 ``file`` 内核模块，不是 Python 的 ``file``
-内建对象（Python 2 内建）。为避免 Python import shadowing，**本文件必须保持
-``file_impl.py``，绝对不可重命名为 ``file.py``**。相关守护测试见
-``tests/meta/test_layering.py::TestRuntimeModulesNamingRedLine``。
+⚠️ 命名约定：本文件实现的是 **IBCI 语言层**的 ``fs`` 内核模块。实现文件名采用
+``fs_impl.py``（不与 IBCI 模块名 ``fs`` 完全同名），避免 Python import shadowing
+与概念混淆——沿既有命名纪律（原 ``file`` 模块的 ``file_impl.py`` 约定迁移）。
 
 - 提供 IBCI 脚本可见的自由函数：``open/read/read_bytes/write/exists/remove``。
 - 所有 FS I/O 都经过 ``ExecutionContext.resolve_path()`` + ``PermissionManager`` 沙箱校验。
@@ -48,8 +47,8 @@ class FileLib:
         """
         if self.capabilities.execution_context.llmexcept_body_depth > 0:
             raise InterpreterError(
-                f"file.{op_name} is disabled inside an llmexcept retry body: "
-                f"file writes/removes mutate the shared backing and corrupt the retry snapshot. "
+                f"fs.{op_name} is disabled inside an llmexcept retry body: "
+                f"fs writes/removes mutate the shared backing and corrupt the retry snapshot. "
                 f"Use 'retry \"hint\"' for correction guidance, or perform file I/O outside the handler."
             )
 

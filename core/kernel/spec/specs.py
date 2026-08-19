@@ -119,7 +119,7 @@ INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=TypeKind.CLASS.value, 
 # 继承 file_handle，使用磁盘型存储模型。
 AUDIO_SPEC = TypeDef(
     name="audio", kind=TypeKind.CLASS.value,
-    # audio/image/video 与 file_handle 同为 import-gated，需 import file。
+    # audio/image/video 与 file_handle 同为 import-gated，需 import fs。
     provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED,
     parent_type=TypeRef.of("file_handle"),
     storage_model=StorageModel.DISK_BACKED,

@@ -304,7 +304,7 @@ class TypeDef(IbSpec):
     required_capabilities: List[str] = field(default_factory=list)
 
     # -- Module-only: names of types that an `import mod` statement also
-    # brings into the importing module's scope (e.g. `import file` exposes
+    # brings into the importing module's scope (e.g. `import fs` exposes
     # file_handle / audio / image / video).  Empty for non-module specs.
     exported_types: List[str] = field(default_factory=list)
 

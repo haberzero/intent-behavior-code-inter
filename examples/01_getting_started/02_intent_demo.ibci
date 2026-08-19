@@ -12,7 +12,7 @@
 # - @-#tagname → 通过标签移除特定意图（@和-之间不能有空格）
 
 import ai
-import file
+import fs
 import json
 import idbg
 

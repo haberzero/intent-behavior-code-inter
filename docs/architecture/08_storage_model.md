@@ -1,6 +1,6 @@
 # 变量存储模型
 
-> 本文档是存储模型的架构层摘要。完整的子系统设计（协议族实现、类型继承、Backing 模型、file 模块 API）见 `docs/subsystems/02_file_container.md`。
+> 本文档是存储模型的架构层摘要。完整的子系统设计（协议族实现、类型继承、Backing 模型、fs 模块 API）见 `docs/subsystems/02_file_container.md`。
 
 ---
 
