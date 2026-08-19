@@ -14,16 +14,13 @@ class IbUserFunction(IbFunction):
     用户定义的 IBC 函数。
     """
 
-    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None, owner_class: Optional['IbClass'] = None, callable_kind: str = "user_function", display_name: Optional[str] = None):
+    def __init__(self, node_uid: str, context: 'IExecutionContext', ib_class: Optional['IbClass'] = None, spec: Optional[IbSpec] = None, module_name: Optional[str] = None, owner_class: Optional['IbClass'] = None, display_name: Optional[str] = None):
         super().__init__(ib_class or context.registry.get_class("callable"))
         self.node_uid = node_uid
         self.context = context
         self._spec = spec
         self.module_name = module_name or context.current_module_name
-        self._callable_kind = callable_kind
-        self._display_name = display_name or (
-            "LLMFunction" if callable_kind == "llm_function" else "Function"
-        )
+        self._display_name = display_name or "Function"
         # 定义该方法的 IbClass（方法归属类）。用于 super() 支持。
         # 对于顶层函数，此字段为 None（不在类内）。
         self.owner_class: Optional['IbClass'] = owner_class
@@ -32,10 +29,6 @@ class IbUserFunction(IbFunction):
         # 惰性生成器（含 yield，D-08 自标记函数种类）。为 True 时 call() 返回
         # IbGenerator（不执行体），迭代驱动函数体、yield 点产出值。
         self.is_generator: bool = False
-
-    @property
-    def callable_kind(self) -> str:
-        return self._callable_kind
 
     @property
     def spec(self) -> Optional[IbSpec]:
@@ -58,7 +51,6 @@ class IbUserFunction(IbFunction):
         """
         from core.runtime.vm.handlers._shared import (
             _vm_call_user_function,
-            _vm_invoke_llm_function,
         )
         from core.runtime.coordinator import _drive_generator
         from core.runtime.shared.user_call import UserFunctionCall
@@ -80,10 +72,7 @@ class IbUserFunction(IbFunction):
                 raise RuntimeError("generator class not registered (bootstrap invariant violated)")
             return IbGenerator(gen_class, driver)
 
-        if self.callable_kind == "llm_function":
-            gen = _vm_invoke_llm_function(vm, self, receiver, args)
-        else:
-            gen = _vm_call_user_function(vm, self, receiver, args)
+        gen = _vm_call_user_function(vm, self, receiver, args)
         return _drive_generator(vm, gen)
 
     def __to_prompt__(self) -> str:

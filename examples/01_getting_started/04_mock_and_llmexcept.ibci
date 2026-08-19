@@ -136,24 +136,25 @@ except LLMRetryExhaustedError as e:
     print("错误信息: " + e.message)
 
 # ============================================================
-# 6. llmretry 语法糖
+# 6. llmexcept + retry 显式重试（llmretry 顶层语法糖已随 llm 函数机制删除）
 # ============================================================
 
-print("\n=== 6. llmretry 语法糖 ===\n")
+print("\n=== 6. llmexcept + retry 显式重试 ===\n")
 
-# llmretry 是 llmexcept + 单条 retry 的语法糖；与 §2 同理，MOCK:FAIL 必定耗尽，
-# 需要 try/except LLMRetryExhaustedError 兜底（早期版本会把 result 置为 None，
-# 现统一改为抛异常——详见 docs/IBCI_SYNTAX_REFERENCE.md §10.3 "历史说明"）。
+# llmexcept + retry 是重试的显式形态；MOCK:FAIL 必定耗尽，
+# 需要 try/except LLMRetryExhaustedError 兜底。
 try:
     str result8 = @~ MOCK:FAIL 请回答问题 ~
-    llmretry "请只回复一个中文词语"
+    llmexcept:
+        retry "请只回复一个中文词语"
     print("结果: " + (str)result8)
 except LLMRetryExhaustedError as e:
-    print("llmretry 重试耗尽，被外层 try/except 捕获: " + e.message)
+    print("重试耗尽，被外层 try/except 捕获: " + e.message)
 
-# 对比：使用 MOCK:REPAIR 演示 llmretry 成功的情况（首次失败、重试成功）
+# 对比：使用 MOCK:REPAIR 演示重试成功的情况（首次失败、重试成功）
 str result9 = @~ MOCK:REPAIR 修复演示 ~
-llmretry "重试提示"
+llmexcept:
+    retry "重试提示"
 print("REPAIR 后结果（应为 1）: " + (str)result9)
 
 # ============================================================

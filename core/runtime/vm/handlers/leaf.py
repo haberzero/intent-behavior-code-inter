@@ -34,7 +34,6 @@ from core.runtime.observability.diagnostics import handle_environment_limit
 from core.runtime.vm.handlers._shared import (
     _vm_call_fn_callable,
     _vm_invoke_behavior,
-    _vm_invoke_llm_function,
     _resolve_iterable,
     _is_llm_uncertain_value,
     _make_uncertain_call_result,

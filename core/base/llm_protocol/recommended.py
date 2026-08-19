@@ -113,10 +113,6 @@ def _parts_of(*, intents: "IntentBlock", output_contract: OutputContract,
     只使用 request 已携带的结构化信息；本函数只是**推荐**呈现方式。
     """
     ordered: List[str] = []
-    # 0) 用户自设 __sys__（LLM 函数）——放在最前
-    for slot in extra_slots:
-        if slot.kind == "user_sys" and slot.text:
-            ordered.append(slot.text)
     # 1) 输出纪律（behavior 默认）
     ordered.append(behavior_discipline())
     # 2) 输出格式/期望类型（由 output_contract 派生）
@@ -127,9 +123,9 @@ def _parts_of(*, intents: "IntentBlock", output_contract: OutputContract,
     merged = list(intents.merged)
     if merged:
         ordered.append(_INTENT_HEADING + "\n" + "\n".join(f"- {i}" for i in merged))
-    # 4) 其余附加语义槽（用户/provider 补充，kind != user_sys）按其文本呈现
+    # 4) 其余附加语义槽（用户/provider 补充）按其文本呈现
     for slot in extra_slots:
-        if slot.kind in ("discipline", "type_constraint", "intent", "user_sys"):
+        if slot.kind in ("discipline", "type_constraint", "intent"):
             continue  # 已由权威来源处理，避免重复
         if slot.text:
             ordered.append(slot.text)

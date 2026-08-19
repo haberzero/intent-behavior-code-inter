@@ -23,14 +23,13 @@ def _m(
     name: str,
     params: Optional[List[str]] = None,
     ret: str = "void",
-    is_llm: bool = False,
     mutating: bool = False,
     llmexcept_safe: bool = False,
 ) -> MethodMemberSpec:
     """Convenience constructor for MethodMemberSpec constants."""
     return MethodMemberSpec(
         name=name,
-        kind="llm_method" if is_llm else "method",
+        kind="method",
         return_type=TypeRef.of(ret), param_types=[TypeRef.of(p) for p in params or []],
         mutating=mutating, llmexcept_safe=llmexcept_safe)
 

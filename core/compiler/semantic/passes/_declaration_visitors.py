@@ -33,7 +33,7 @@ def _contains_yield(stmts) -> bool:
     """扫描语句列表是否含 ``IbYieldExpr`` / ``IbYieldFromExpr``。
 
     用于标记函数为惰性生成器（D-08 自标记函数种类）。不进入嵌套函数定义
-    （``IbFunctionDef``/``IbLLMFunctionDef``/``IbClassDef``）与 ``IbLambdaExpr``
+    （``IbFunctionDef``/``IbClassDef``）与 ``IbLambdaExpr``
     ——内层 yield 归属其自身（lambda 内 yield 本就非法，报 SEM_YIELD_OUTSIDE_FUNCTION，
     不应误标外层函数为生成器）。
     """
@@ -426,14 +426,11 @@ class DeclarationVisitorsMixin:
         return required
 
     def visit_IbFunctionDef(self, node: ast.IbFunctionDef) -> Optional[IbSpec]:
-        """访问函数定义（普通/LLM 统一）— 解析参数类型标注，回填 spec。
+        """访问函数定义 — 解析参数类型标注，回填 spec。
 
-        IbLLMFunctionDef 为 IbFunctionDef 子类（AST 类层次统一），仅多
-        sys_prompt/user_prompt/retry_hint 提示词字段。LLM 函数共享全部
-        签名精化逻辑；差异点：提示词段在函数作用域内访问、无泛型/auto
-        推断/生成器/覆盖签名检查/提示协议签名校验（保持既有语义）。
+        签名精化逻辑：参数/返回类型解析、泛型/auto 推断、生成器、
+        覆盖签名检查、提示协议签名校验。
         """
-        is_llm = isinstance(node, ast.IbLLMFunctionDef)
         # 查找函数符号
         sym = self.lookup_symbol(node.name)
 
@@ -541,15 +538,6 @@ class DeclarationVisitorsMixin:
             for stmt in node.body:
                 self.visit(stmt)
 
-            # LLM 函数提示词段落（sys_prompt / user_prompt / retry_hint）
-            # 在函数作用域内访问（$参数 引用命中参数符号，类型绑定生效）。
-            if is_llm:
-                for prompt_list in (node.sys_prompt, node.user_prompt, node.retry_hint):
-                    if prompt_list:
-                        for segment in prompt_list:
-                            if isinstance(segment, ast.IbASTNode):
-                                self.visit(segment)
-
             # -> auto 函数返回类型统一
             if is_auto_return and self.auto_return_types:
                 unique = list({s.name: s for s in self.auto_return_types if s}.values())
@@ -600,13 +588,11 @@ class DeclarationVisitorsMixin:
                 sym.spec.return_type = TypeRef.from_spec(gen_spec)
 
         # SEM_DUAL_ASSIGNABLE: Method override signature compatibility check
-        # （LLM 方法保持既有语义：不参与覆盖签名检查）。
-        if self.in_class_def and self.current_class and sym and sym.spec and not is_llm:
+        if self.in_class_def and self.current_class and sym and sym.spec:
             self._check_override_compatibility(node, sym.spec)
 
         # SEM_PROTOCOL_SIGNATURE: Prompt protocol signature validation
-        # （LLM 方法保持既有语义：不参与提示协议签名校验）。
-        if self.in_class_def and not is_llm and is_prompt_protocol_method(node.name):
+        if self.in_class_def and is_prompt_protocol_method(node.name):
             # Count params excluding self
             user_param_count = len(node.args)
             ret_type_name = None
@@ -745,10 +731,6 @@ class DeclarationVisitorsMixin:
                         node, code=SEM_DUAL_ASSIGNABLE,
                         hint=f"Override return type should be assignable to parent's return type."
                     )
-
-    def visit_IbLLMFunctionDef(self, node: ast.IbLLMFunctionDef) -> Optional[IbSpec]:
-        """LLM 函数定义 = IbFunctionDef 子类：共用签名精化逻辑（is_llm 分支）。"""
-        return self.visit_IbFunctionDef(node)
 
     def _build_function_signature(self, args):
         """构建函数参数签名（唯一权威，type-check 阶段，解析后精度）。

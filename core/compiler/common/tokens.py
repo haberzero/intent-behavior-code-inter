@@ -48,15 +48,9 @@ class TokenType(Enum):
     SELF = auto()
     BIND = auto()
 
-    # LLM 关键字
-    LLM_DEF = auto()
-    LLM_END = auto()
-    LLM_SYS = auto()
-    LLM_USER = auto()
-    LLM_RETRY_HINT = auto()
+    # LLM 异常处理关键字（llmexcept 帧机制载体；llm 函数语法已随 P4c 删除）
     LLM_EXCEPT = auto()
     RETRY = auto()
-    LLM_RETRY = auto()
 
     # 异步关键字
     AWAIT = auto()
@@ -137,7 +131,6 @@ class TokenType(Enum):
 
 class LexerMode(Enum):
     NORMAL = auto()
-    LLM_BLOCK = auto()
 
 class SubState(Enum):
     NORMAL = auto()

@@ -355,20 +355,20 @@ class TestFullFileCompilation:
             artifact = scheduler.compile_file(test_file)
             assert artifact is not None
 
-    def test_llm_function_compiles(self, source_mgr, full_registry):
-        """Correctly handles LLM function definitions."""
+    def test_llm_callable_class_compiles(self, source_mgr, full_registry):
+        """P4c 迁移：llm 函数语法删除；llm 可调用类（实现 __llm_call__）编译注册。"""
         tracker = IssueTracker(source_provider=source_mgr)
-        code = 'llm translate(str text, str target) -> auto:\n__user__\ntranslate $text to $target\nllmend'
+        code = 'class Translate:\n    func __llm_call__(self, any text) -> dict:\n        return {"user_prompt": str(text)}\n'
         ast_node = parse_code(code, tracker)
 
         analyzer = SemanticAnalyzer(tracker, registry=full_registry, module_name='test')
         result = analyzer.analyze(ast_node, raise_on_error=False)
 
         assert isinstance(result, CompilationResult)
-        # LLM function should be registered as a symbol
-        sym = result.symbol_table.resolve('translate')
+        # llm 可调用类应注册为 CLASS 符号
+        sym = result.symbol_table.resolve('Translate')
         assert sym is not None
-        assert sym.kind == SymbolKind.LLM_FUNCTION
+        assert sym.kind == SymbolKind.CLASS
 
     def test_behavior_expr_adapts_to_target_type(self, source_mgr, full_registry):
         """BehaviorExpr assigned to typed variable adapts to that type (IBCI core semantics)."""

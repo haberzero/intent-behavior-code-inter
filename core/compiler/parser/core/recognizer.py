@@ -6,7 +6,6 @@ from core.compiler.parser.core.token_stream import TokenStream
 class SyntaxRole(Enum):
     VARIABLE_DECLARATION = auto()  # Explicit/Implicit type declaration
     FUNCTION_DEFINITION = auto()   # Traditional function
-    LLM_DEFINITION = auto()        # LLM function
     CLASS_DEFINITION = auto()      # class MyClass
     PROTOCOL_DEFINITION = auto()   # protocol MyProtocol
     IMPL_DEFINITION = auto()       # impl Proto for Type
@@ -40,9 +39,6 @@ class SyntaxRecognizer:
         
         if token.type == TokenType.FUNC:
             return SyntaxRole.FUNCTION_DEFINITION
-        
-        if token.type == TokenType.LLM_DEF:
-            return SyntaxRole.LLM_DEFINITION
         
         if token.type == TokenType.CLASS:
             return SyntaxRole.CLASS_DEFINITION

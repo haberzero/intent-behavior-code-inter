@@ -51,8 +51,6 @@ class DeclarationComponent(BaseComponent):
         elif role == SyntaxRole.FUNCTION_DEFINITION:
             self.stream.advance() # func
             stmt = self.function_declaration()
-        elif role == SyntaxRole.LLM_DEFINITION:
-            stmt = self.llm_function_declaration()
         elif role == SyntaxRole.CLASS_DEFINITION:
             self.stream.advance() # class
             stmt = self.class_declaration()
@@ -267,31 +265,6 @@ class DeclarationComponent(BaseComponent):
         func_node.body = body
         return self._extend_loc(func_node, self.stream.previous())
 
-    def llm_function_declaration(self) -> ast.IbLLMFunctionDef:
-        start_token = self.stream.previous()
-        self.stream.advance()
-        if self.stream.check(TokenType.FUNC):
-            self.stream.advance()
-        name = self.stream.consume(TokenType.IDENTIFIER, "Expect LLM function name.").value
-        self.stream.consume(TokenType.LPAREN, "Expect '(' after function name.")
-        args = self.parameters()
-        self.stream.consume(TokenType.RPAREN, "Expect ')' after parameters.")
-        
-        returns = None
-        if self.stream.match(TokenType.ARROW):
-            returns = self.type_def.parse_type_annotation()
-            
-        self.stream.consume(TokenType.COLON, "Expect ':' before function body.")
-        
-        llm_node = self._loc(ast.IbLLMFunctionDef(name=name, args=args, sys_prompt=None, user_prompt=None, retry_hint=None, returns=returns), start_token)
-        
-        sys_prompt, user_prompt, retry_hint = self.llm_body()
-        llm_node.sys_prompt = sys_prompt
-        llm_node.user_prompt = user_prompt
-        llm_node.retry_hint = retry_hint
-        
-        return self._extend_loc(llm_node, self.stream.previous())
-
     def impl_declaration(self) -> ast.IbImplDef:
         """Parse a retroactive implementation declaration.
 
@@ -338,7 +311,7 @@ class DeclarationComponent(BaseComponent):
                 code=PAR_UNEXPECTED_TOKEN,
             )
         if self.stream.match(TokenType.INDENT):
-            # 方法块：func / llm func 方法定义（其它语句由 parser 拒绝）
+            # 方法块：func 方法定义（其它语句由 parser 拒绝）
             body: List[ast.IbStmt] = []
             while not self.stream.check(TokenType.DEDENT) and not self.stream.is_at_end():
                 if self.stream.match(TokenType.NEWLINE):
@@ -346,8 +319,6 @@ class DeclarationComponent(BaseComponent):
                 if self.stream.check(TokenType.FUNC):
                     self.stream.advance()  # 消费 func
                     body.append(self.function_declaration())
-                elif self.stream.check(TokenType.LLM_DEF):
-                    body.append(self.llm_function_declaration())
                 else:
                     raise self.stream.error(
                         self.stream.peek(),
@@ -554,47 +525,3 @@ class DeclarationComponent(BaseComponent):
                 if not self.stream.match(TokenType.COMMA):
                     break
         return params
-
-    def llm_body(self) -> tuple[Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]], Optional[List[Union[str, ast.IbExpr]]]]:
-        self.stream.consume(TokenType.NEWLINE, "Expect newline before LLM block.")
-        
-        sys_prompt = None
-        user_prompt = None
-        retry_hint = None
-        
-        while not self.stream.check(TokenType.LLM_END) and not self.stream.is_at_end():
-            if self.stream.match(TokenType.LLM_SYS):
-                sys_prompt = self.parse_llm_section_content()
-            elif self.stream.match(TokenType.LLM_USER):
-                user_prompt = self.parse_llm_section_content()
-            elif self.stream.match(TokenType.LLM_RETRY_HINT):
-                retry_hint = self.parse_llm_section_content()
-            elif self.stream.match(TokenType.NEWLINE):
-                continue
-            else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM block. Expect '__sys__', '__user__', '__llmretry__', or 'llmend'.", code=PAR_UNEXPECTED_TOKEN)
-
-        self.stream.consume(TokenType.LLM_END, "Expect 'llmend' to close LLM block.")
-        return sys_prompt, user_prompt, retry_hint
-
-    def parse_llm_section_content(self) -> List[Union[str, ast.IbExpr]]:
-        segments = []
-        while not self.stream.is_at_end():
-            if self.stream.check(TokenType.LLM_SYS) or self.stream.check(TokenType.LLM_USER) or self.stream.check(TokenType.LLM_RETRY_HINT) or self.stream.check(TokenType.LLM_END):
-                break
-
-            if self.stream.match(TokenType.RAW_TEXT):
-                segments.append(self.stream.previous().value)
-            elif self.stream.match(TokenType.NEWLINE):
-                segments.append("\n")
-            elif self.stream.match(TokenType.VAR_REF):
-                # 支持 $变量名 格式
-                # 注意：只有当变量名是 llm 函数参数时才会被替换，否则作为普通文本
-                token = self.stream.previous()
-                var_name = token.value
-                var_ref = self._loc(ast.IbName(id=var_name, ctx='Load'), token)
-                segments.append(var_ref)
-            else:
-                raise self.stream.error(self.stream.peek(), "Unexpected token in LLM section content.", code=PAR_UNEXPECTED_TOKEN)
-
-        return segments

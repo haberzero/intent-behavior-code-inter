@@ -185,8 +185,9 @@ print(Box("p", "x").name())
 """
         assert run_ibci(code) == ["p:x"]
 
-    def test_impl_llm_method_supplies_protocol(self):
-        """impl 内 LLM 方法（llm func）与类方法同构：可补充协议方法。"""
+    def test_impl_supplies_protocol_method(self):
+        """impl 方法补充协议方法（P4c 迁移：llm func 方法机制删除，
+        方法恒为普通 func——本用例验证 impl 补充机制本身）。"""
         code = """
 protocol P:
     func m(self) -> int:
@@ -196,16 +197,12 @@ class C:
     pass
 
 impl P for C:
-    llm func m(self) -> int:
-__sys__
-你是数字解析器。
-__user__
-MOCK:INT:42
-llmend
+    func m(self) -> int:
+        return 42
 
 print(C().m())
 """
-        assert run_ibci(code, ai=True) == ["42"]
+        assert run_ibci(code) == ["42"]
 
 
 class TestImplValidation:

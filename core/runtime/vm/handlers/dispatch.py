@@ -114,7 +114,6 @@ def build_dispatch_table() -> dict:
         "IbHostImport": vm_handle_IbHostImport,
         "IbSwitch": vm_handle_IbSwitch,
         "IbFunctionDef": vm_handle_IbFunctionDef,
-        "IbLLMFunctionDef": vm_handle_IbFunctionDef,
         "IbClassDef": vm_handle_IbClassDef,
         "IbProtocolDef": vm_handle_IbProtocolDef,
         "IbImplDef": vm_handle_IbImplDef,

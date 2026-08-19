@@ -50,19 +50,16 @@ print((str)sum)
 
 print("\n--- LLM 函数 ---\n")
 
-# 定义一个翻译函数
-# llm 函数利用 llmend 关键字标记结束定义。
-# llm函数书写不需要缩进，这是为了阅读以及提示词管理的非歧义/便利性。
-# 非缩进的内容确保所有非顶格书写的空格都可以正常被作为提示词的一部分被送入ai调用过程。
-llm 翻译(str 文本, str 目标语言) -> auto:
-__sys__
-你是一个翻译助手，只返回翻译结果。不输出任何额外内容
-__user__
-请将以下内容翻译成 $目标语言： $文本
-llmend
+# 定义一个 llm 可调用类（LLMCallable 协议：实现 __llm_call__）
+# llm 可调用类实例是"可调用实例 + 协议（类型类）"统一机制的一员：
+# 实例可直接调用（参数按位绑定 __llm_call__ 非 self 参数）。
+class 翻译:
+    func __llm_call__(self, any 文本, any 目标语言) -> dict:
+        return {"user_prompt": "请将以下内容翻译成 " + str(目标语言) + "：" + str(文本), "prompt_slots": [{"kind": "user_sys", "text": "你是一个翻译助手，只返回翻译结果。不输出任何额外内容"}]}
 
+翻译 t = 翻译()
 str chinese_text = "编程让世界更美好"
-str english_text = 翻译(chinese_text, "English")
+str english_text = t(chinese_text, "English")
 print("原文: " + chinese_text)
 print("翻译: " + english_text)
 
@@ -80,8 +77,8 @@ print(result_of_intent_control)
 
 print("\n")
 
-# llm 函数自身的定义不变，利用意图注释注入额外约束
+# llm 可调用类自身保持不变，利用意图注释注入额外约束
 @ 所有英文回复信息都采用大写字母
-english_text = 翻译(chinese_text, "English")
+english_text = t(chinese_text, "English")
 print("增加了额外的大写字母约束的回复结果")
 print("翻译: " + english_text)

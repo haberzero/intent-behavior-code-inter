@@ -16,7 +16,6 @@ from .spec.base import TypeKind, TypeDef
 class SymbolKind(Enum):
     VARIABLE = auto()
     FUNCTION = auto()
-    LLM_FUNCTION = auto()
     CLASS = auto()
     PROTOCOL = auto()
     INTENT = auto()
@@ -54,7 +53,7 @@ class Symbol:
 
     @property
     def is_function(self) -> bool:
-        return self.kind in (SymbolKind.FUNCTION, SymbolKind.LLM_FUNCTION)
+        return self.kind == SymbolKind.FUNCTION
 
     @property
     def is_variable(self) -> bool:

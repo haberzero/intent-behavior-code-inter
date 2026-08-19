@@ -167,7 +167,7 @@ class IbClassDef(IbStmt):
     type_param_bounds: Dict[str, str] = field(default_factory=dict)  # T -> ProtocolName
     implements: List[str] = field(default_factory=list)  # protocol names
     implements_args: Dict[str, List[str]] = field(default_factory=dict)  # protocol -> type args
-    methods: List[Union['IbFunctionDef', 'IbLLMFunctionDef']] = field(default_factory=list)
+    methods: List['IbFunctionDef'] = field(default_factory=list)
     fields: List['IbAssign'] = field(default_factory=list)
     
     @property
@@ -193,18 +193,6 @@ class IbProtocolDef(IbStmt):
     def creates_scope(self) -> bool:
         return True
 
-
-@dataclass(kw_only=True, eq=False)
-class IbLLMFunctionDef(IbFunctionDef):
-    """LLM function definition.
-
-    Inherits from IbFunctionDef so that ordinary functions and LLM functions
-    share the same function-definition shape. The only additional data is the
-    prompt template (sys/user/retry hint).
-    """
-    sys_prompt: Optional[List[Union[str, IbExpr]]] = None
-    user_prompt: Optional[List[Union[str, IbExpr]]] = None
-    retry_hint: Optional[List[Union[str, IbExpr]]] = None
 
 @dataclass(kw_only=True, eq=False)
 class IbImplDef(IbStmt):

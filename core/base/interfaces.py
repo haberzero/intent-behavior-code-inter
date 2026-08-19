@@ -76,10 +76,10 @@ class IILLMExecutor(Protocol):
     * ``run_batch``                  —— 并发批量执行行为对象
     * ``get_current_call_info``      —— 内省最近 resolve 的 LLM 调用诊断信息
 
-    行为/LLM 函数的 CPS 执行入口（``execute_behavior_expression_cps`` /
-    ``execute_llm_function_cps`` / ``invoke_*_cps``）为运行时内部协作路径，
-    由 VM handler（``_vm_invoke_behavior`` / ``_vm_invoke_llm_function``）经
-    ``yield from`` 驱动，不在此公开协议面。
+    行为/LLM 可调用类的 CPS 执行入口（``execute_behavior_expression_cps`` /
+    ``invoke_*_cps``）为运行时内部协作路径，由 VM handler
+    （``_vm_invoke_behavior`` / 统一装配入口）经 ``yield from`` 驱动，
+    不在此公开协议面。
 
     设计原则：此接口驻留于 core.base，不依赖任何 runtime 具体类型；
     所有参数/返回类型均使用 Any，由实现层负责具体类型约束。

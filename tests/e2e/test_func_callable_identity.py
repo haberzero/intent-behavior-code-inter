@@ -276,20 +276,22 @@ class TestFunctionReturnOptionalWrap:
         assert run_ibci(code) == ["Optional[int]", "9"]
 
     def test_llm_function_return_wrap(self):
-        """LLM 函数返回 Optional 包装（invoke_llm_function 路径）。"""
+        """llm 可调用类返回类型解析（P4c 迁移：llm 函数 → llm 可调用类）。
+
+        旧 ``-> Optional[int]`` 的 Optional 声明由返回类型包装层处理；新形态
+        ``expected_type`` 即实际解析类型（Optional 由用户在装配 dict 表达或经
+        字段/调用点声明）。语义演进记录于 NEXT_STEPS/WORKLOG。"""
         from tests.conftest import AI_MOCK_PREFIX
 
         code = AI_MOCK_PREFIX + (
-            "llm maybe() -> Optional[int]:\n"
-            "__sys__\n"
-            "你是一个简单函数。\n"
-            "__user__\n"
-            "MOCK:INT:5\n"
-            "llmend\n"
+            "class Maybe:\n"
+            "    func __llm_call__(self) -> dict:\n"
+            '        return {"user_prompt": "MOCK:INT:5", "expected_type": "int"}\n'
+            "Maybe maybe = Maybe()\n"
             "print(type(maybe()))\n"
-            "print(maybe().unwrap())\n"
+            "print((str)maybe())\n"
         )
-        assert run_ibci(code) == ["Optional[int]", "5"]
+        assert run_ibci(code) == ["int", "5"]
 
 
 ################################################################################

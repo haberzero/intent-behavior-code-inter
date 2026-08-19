@@ -40,15 +40,12 @@ class MemberSpec:
     """
 
     name: str
-    kind: str  # "field" | "method" | "llm_method"
+    kind: str  # "field" | "method"
     type_ref: TypeRef = field(default_factory=lambda: _ANY_REF)
     metadata: dict = field(default_factory=dict)
 
     def is_method(self) -> bool:
-        return self.kind in ("method", "llm_method")
-
-    def is_llm(self) -> bool:
-        return self.kind == "llm_method"
+        return self.kind == "method"
 
 
 @dataclass
@@ -58,8 +55,7 @@ class MethodMemberSpec(MemberSpec):
 
     Parameter types and return type are stored as TypeRef values.
 
-    The ``kind`` field defaults to ``"method"``; pass ``kind="llm_method"`` for
-    LLM functions.
+    The ``kind`` field defaults to ``"method"``.
 
     ``mutating`` declares that this method modifies the receiver's state.
     Used by llmexcept body protection to block mutation of LLM-participating

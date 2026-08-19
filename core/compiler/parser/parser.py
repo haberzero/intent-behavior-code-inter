@@ -218,7 +218,7 @@ class Parser:
             
             if self.stream.peek().type in (TokenType.FUNC, TokenType.AUTO, TokenType.FOR,
                                     TokenType.IF, TokenType.WHILE, TokenType.RETURN,
-                                    TokenType.LLM_DEF, TokenType.IMPORT, TokenType.FROM,
+                                    TokenType.IMPORT, TokenType.FROM,
                                     TokenType.BREAK, TokenType.CONTINUE):
                 return
                 

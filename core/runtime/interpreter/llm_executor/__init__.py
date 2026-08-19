@@ -5,7 +5,6 @@
 - :class:`LLMExecutorCore` (``_core``)         —— 共享状态、属性、类型栈、``_call_llm``
 - :class:`_PromptMixin` (``_prompt``)          —— 提示词构建与结果解析（CPS 唯一实现 + 同步泵）
 - :class:`_SchedulerMixin` (``_scheduler``)    —— ``dispatch_eager_cps``（CPS 权威）/ ``resolve`` / 线程池
-- :class:`_LLMFunctionMixin` (``_llm_function``) —— 命名 LLM 函数执行 (CPS)
 - :class:`_BehaviorMixin` (``_behavior``)       —— behavior 表达式执行 (CPS + 同步薄包装)
 - :class:`_LLMCallableMixin` (``_llm_callable``) —— LLMCallable 统一装配与执行（P1 §2.4）
 
@@ -17,12 +16,11 @@ import LLMExecutorImpl`` 不变。
 from ._core import LLMExecutorCore
 from ._prompt import _PromptMixin
 from ._scheduler import _SchedulerMixin
-from ._llm_function import _LLMFunctionMixin
 from ._behavior import _BehaviorMixin
 from ._llm_callable import _LLMCallableMixin
 
 
-class LLMExecutorImpl(_BehaviorMixin, _LLMCallableMixin, _LLMFunctionMixin, _SchedulerMixin, _PromptMixin, LLMExecutorCore):
+class LLMExecutorImpl(_BehaviorMixin, _LLMCallableMixin, _SchedulerMixin, _PromptMixin, LLMExecutorCore):
     pass
 
 

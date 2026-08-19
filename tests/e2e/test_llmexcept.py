@@ -35,20 +35,6 @@ except LLMRetryExhaustedError as e:
         # after exhaustion, LLMRetryExhaustedError is raised and caught
         assert "retry_exhausted_caught" in lines
 
-    def test_llmretry_syntax_sugar(self):
-        """llmretry 语法糖同样在重试耗尽后抛出 LLMRetryExhaustedError。"""
-        code = AI_MOCK_PREFIX + """
-try:
-    str result = @~ MOCK:FAIL test ~
-    llmretry "please try again"
-except LLMRetryExhaustedError as e:
-    print("retry_exhausted_caught")
-print("after_catch")
-"""
-        lines = run_ibci(code)
-        assert "retry_exhausted_caught" in lines
-        assert "after_catch" in lines
-
 
 class TestE2ELLMExceptZeroRetry:
     def test_set_retry_zero_raises_exhausted(self):

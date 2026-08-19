@@ -7,17 +7,15 @@ from core.compiler.diagnostics.issue_tracker import IssueTracker
 # Components
 from .indent_processor import IndentProcessor
 from .core_scanner import CoreTokenScanner
-from .llm_scanner import LLMScanner
 
 class Lexer:
     """
     IBC-Inter Lexer.
-    Responsible for converting source code into Token stream, handling indentation, line continuation, and LLM block boundaries.
+    Responsible for converting source code into Token stream, handling indentation and line continuation.
     
     Refactored to use modular components:
     - IndentProcessor: Handles indentation logic.
     - CoreTokenScanner: Handles standard code tokenization.
-    - LLMScanner: Handles LLM block tokenization.
     """
     def __init__(self, source_code: str, issue_tracker: Optional[DiagnosticReporter] = None):
         self.scanner = StrStream(source_code)
@@ -32,7 +30,6 @@ class Lexer:
         # Initialize Components
         self.indent_processor = IndentProcessor(self.scanner, self.issue_tracker)
         self.core_scanner = CoreTokenScanner(self.scanner, self.issue_tracker)
-        self.llm_scanner = LLMScanner(self.scanner)
 
     def tokenize(self) -> List[Token]:
         while not self.scanner.is_at_end():
@@ -87,24 +84,13 @@ class Lexer:
                 if self.core_scanner.continuation_mode:
                     self.core_scanner.continuation_mode = False
             
-            new_tokens, is_newline_done, enter_llm = self.core_scanner.scan_line()
+            new_tokens, is_newline_done = self.core_scanner.scan_line()
             self.tokens.extend(new_tokens)
             
             if is_newline_done:
                 self.is_new_line = True
             else:
                 self.is_new_line = False
-                
-            if enter_llm:
-                self.mode_stack.append(LexerMode.LLM_BLOCK)
-                
-        elif current_mode == LexerMode.LLM_BLOCK:
-            new_tokens, should_exit = self.llm_scanner.scan_chunk()
-            self.tokens.extend(new_tokens)
-            
-            if should_exit:
-                self.mode_stack.pop()
-                # LLM block ends with 'llmend', usually followed by newline which will be picked up by next scan
 
     def _skip_whitespace(self):
         """Skip spaces and tabs, but not newlines."""

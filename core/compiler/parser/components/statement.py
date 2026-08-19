@@ -82,18 +82,6 @@ class StatementComponent(BaseComponent):
         if self.stream.match(TokenType.INTENT):
             return self.at_intent_shorthand()
         
-        if self.stream.match(TokenType.LLM_RETRY):
-            # 支持顶层的 llmretry "hint" 语法糖
-            hint = None
-            if self.stream.check(TokenType.STRING):
-                hint = self.expression.parse_expression()
-            
-            retry_stmt = self._loc(ast.IbRetry(hint=hint), self.stream.previous())
-            self.stream.consume_end_of_statement("Expect newline after llmretry sugar.")
-            
-            # 将 llmretry 包装为 IbLLMExceptionalStmt，以便 SemanticAnalyzer 识别并绑定
-            return self._loc(ast.IbLLMExceptionalStmt(target=None, body=[retry_stmt]), self.stream.previous())
-        
         # 严禁在非顶层（如代码块、函数、类内部）使用 import。
         # 这一限制保证了调度器（Scheduler）可以高效地进行“无副作用”的依赖扫描。
         if self.stream.check(TokenType.IMPORT) or self.stream.check(TokenType.FROM):

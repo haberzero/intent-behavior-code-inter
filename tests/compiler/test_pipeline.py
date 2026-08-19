@@ -314,14 +314,13 @@ class TestBehaviorOutputParseability:
             "auto x = @~ MOCK:STR:hi ~\n", silent=True)
         assert artifact is not None
 
-    def test_llm_function_def(self, engine):
+    def test_llm_callable_class_def(self, engine):
         code = """import ai
-llm translate(str text, str lang) -> str:
-__sys__
-You are a translator.
-__user__
-Translate $text to $lang
-llmend
+class Translate:
+    func __llm_call__(self, any text, any lang) -> dict:
+        return {"user_prompt": "Translate " + str(text) + " to " + str(lang)}
+
+Translate t = Translate()
 """
         artifact = engine.compile_string(code, silent=True)
         assert artifact is not None

@@ -788,23 +788,20 @@ class Interpreter:
                 stmt_data = self.get_node_data(stmt_uid)
                 if not stmt_data: continue
                 
-                if stmt_data["_type"] in ("IbFunctionDef", "IbLLMFunctionDef"):
-                    is_llm = stmt_data["_type"] == "IbLLMFunctionDef"
+                if stmt_data["_type"] == "IbFunctionDef":
                     declared_type = self._method_declared_spec(stmt_uid)
                     method_name = stmt_data["name"]
                     user_func = IbUserFunction(
                         stmt_uid, self._execution_context, spec=declared_type,
                         owner_class=ib_class,
-                        callable_kind="llm_function" if is_llm else "user_function",
-                        display_name="LLMFunction" if is_llm else None,
                     )
                     user_func.is_generator = bool(stmt_data.get("is_generator"))
                     ib_class.register_method(method_name, user_func)
 
-                    # 显式绑定运算符方法（统一初始化路径；LLM 方法不参与）
+                    # 显式绑定运算符方法（统一初始化路径）
                     # 如果方法名是运算符dunder方法（如__add__、__eq__等），
                     # 通过公理系统显式绑定到运算符符号，确保运算符派发正确工作
-                    if not is_llm and self._is_operator_method(method_name):
+                    if self._is_operator_method(method_name):
                         self._bind_operator_method(ib_class, method_name, user_func)
                 elif stmt_data["_type"] == "IbAssign":
                     # 使用 IbClassField 统一管理
@@ -865,15 +862,12 @@ class Interpreter:
                 stmt_data = self.get_node_data(method_uid)
                 if not stmt_data:
                     continue
-                if stmt_data.get("_type") not in ("IbFunctionDef", "IbLLMFunctionDef"):
+                if stmt_data.get("_type") != "IbFunctionDef":
                     continue
                 declared_type = self._method_declared_spec(method_uid)
-                is_llm = stmt_data.get("_type") == "IbLLMFunctionDef"
                 user_func = IbUserFunction(
                     method_uid, self._execution_context, spec=declared_type,
                     owner_class=target,
-                    callable_kind="llm_function" if is_llm else "user_function",
-                    display_name="LLMFunction" if is_llm else None,
                 )
                 user_func.is_generator = bool(stmt_data.get("is_generator"))
                 method_name = stmt_data.get("name")
@@ -907,7 +901,7 @@ class Interpreter:
                         f"'{type_name}' conflicts with an existing vtable method."
                     )
                 target.register_method(method_name, user_func)
-                if not is_llm and self._is_operator_method(method_name):
+                if self._is_operator_method(method_name):
                     self._bind_operator_method(target, method_name, user_func)
 
         # 第二 pass：无显式 __init__ 的类自动生成位置参数构造器（chain-aware）——
@@ -989,15 +983,13 @@ class Interpreter:
     def _method_declared_spec(self, stmt_uid: str) -> Optional[Any]:
         """方法 def 的声明 spec（函数签名 spec，单一权威）。
 
-        从符号池按 ``node_uid == stmt_uid`` 匹配 FUNCTION/LLM_FUNCTION 符号
-        并水化其 type_uid——方法对象 spec 为**函数 spec**（参数/返回签名，
-        与顶层函数一致；普通方法经 node_to_symbol→self 符号解析成类
-        spec，与 LLM 方法（node→func_sym）不一致，且使 __init__ 签名契约
-        校验失效）。匹配失败回退旧路径（node_to_symbol 解析），保持防御。
+        从符号池按 ``node_uid == stmt_uid`` 匹配 FUNCTION 符号并水化其
+        type_uid——方法对象 spec 为**函数 spec**（参数/返回签名，与顶层函数
+        一致）。匹配失败回退旧路径（node_to_symbol 解析），保持防御。
         """
         if self.symbol_pool:
             for sym_data in self.symbol_pool.values():
-                if sym_data.get("node_uid") == stmt_uid and sym_data.get("kind") in ("FUNCTION", "LLM_FUNCTION"):
+                if sym_data.get("node_uid") == stmt_uid and sym_data.get("kind") == "FUNCTION":
                     type_uid = sym_data.get("type_uid")
                     if type_uid:
                         return self.type_hydrator.hydrate(type_uid)

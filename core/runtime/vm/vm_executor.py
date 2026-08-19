@@ -87,8 +87,7 @@ class VMExecutor:
         """当前 CPS 帧栈深度。
 
         仅在调度循环（``_drive_loop_gen``）驱动期间非零。供调试器 / 测试观察
-        正在执行的 VMTask 帧层级（``_vm_invoke_behavior`` /
-        ``_vm_invoke_llm_function`` yield 后，本属性应 ≥ 2）。
+        正在执行的 VMTask 帧层级（``_vm_invoke_behavior`` yield 后，本属性应 ≥ 2）。
         """
         return len(self._current_stack) if self._current_stack is not None else 0
 
@@ -371,7 +370,6 @@ class VMExecutor:
 
         gen = _vm_call_function(
             self, call.func, call.receiver, call.args,
-            is_llm=(call.func.callable_kind == "llm_function"),
         )
         return VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)
 
@@ -388,7 +386,6 @@ class VMExecutor:
 
         gen = _vm_call_function(
             self, call.func, call.receiver, call.args,
-            is_llm=(call.func.callable_kind == "llm_function"),
         )
         return self._drive_loop_gen(
             [VMTask(node_uid=getattr(call.func, "node_uid", ""), generator=gen)],

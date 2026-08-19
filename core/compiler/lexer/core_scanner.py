@@ -17,7 +17,6 @@ class CoreTokenScanner:
         self.state_stack: List[SubState] = [SubState.NORMAL]
         self.paren_level = 0
         self.continuation_mode = False
-        self.current_line_has_llm_def = False
         
         # IN_INTENT state: track whether any content token has been emitted yet.
         # Used to decide whether '#tag' at the current position is a tag annotation
@@ -52,12 +51,8 @@ class CoreTokenScanner:
             'as': TokenType.AS,
             'and': TokenType.AND, 'or': TokenType.OR, 'not': TokenType.NOT, 'is': TokenType.IS,
             'None': TokenType.NONE, 'Uncertain': TokenType.UNCERTAIN,
-            'llm': TokenType.LLM_DEF, 'llmend': TokenType.LLM_END,
-            'llmexcept': TokenType.LLM_EXCEPT, 
-            'llmretry': TokenType.LLM_RETRY,
+            'llmexcept': TokenType.LLM_EXCEPT,
             'retry': TokenType.RETRY,
-            '__sys__': TokenType.LLM_SYS, '__user__': TokenType.LLM_USER,
-            '__llmretry__': TokenType.LLM_RETRY_HINT,
             'overlay': TokenType.OVERLAY,
             'with': TokenType.WITH,
             'True': TokenType.TRUE, 'False': TokenType.FALSE
@@ -124,19 +119,16 @@ class CoreTokenScanner:
             return False
 
 
-    def scan_line(self) -> Tuple[List[Token], bool, bool]:
+    def scan_line(self) -> Tuple[List[Token], bool]:
         """
         Scan tokens until the end of the current line (or logical line).
         
         Returns:
-            Tuple[List[Token], bool, bool]:
+            Tuple[List[Token], bool]:
             - List of generated tokens.
             - Boolean: True if a newline was fully processed (resetting indent check).
-            - Boolean: True if LLM mode should be entered (LLM_DEF + COLON found).
         """
         tokens: List[Token] = []
-        self.current_line_has_llm_def = False # Reset for new line scan
-        enter_llm_mode = False
         
         # If we were in continuation mode, we are not at a "new line" for indentation purposes
         # But this is handled by Lexer before calling scan_line usually.
@@ -149,12 +141,12 @@ class CoreTokenScanner:
             if char == '\n':
                 should_return = self._handle_newline(tokens)
                 if should_return:
-                    return tokens, True, enter_llm_mode
+                    return tokens, True
                 continue
 
             # 2. Dispatch based on sub-state
             if self.sub_state == SubState.NORMAL:
-                enter_llm_mode = self._scan_normal_char(tokens) or enter_llm_mode
+                self._scan_normal_char(tokens)
             elif self.sub_state == SubState.IN_STRING:
                 self._scan_string_char(tokens)
             elif self.sub_state == SubState.IN_BEHAVIOR:
@@ -162,7 +154,7 @@ class CoreTokenScanner:
             elif self.sub_state == SubState.IN_INTENT:
                 self._scan_intent_char(tokens)
                 
-        return tokens, False, enter_llm_mode
+        return tokens, False
 
     def check_eof_state(self):
         """Check for unclosed states at EOF."""
@@ -340,8 +332,6 @@ class CoreTokenScanner:
             return False
         if char == ':':
             tokens.append(self.scanner.create_token(TokenType.COLON))
-            if self.current_line_has_llm_def:
-                return True # Enter LLM Mode
             return False
         
         if char == '?':
@@ -741,10 +731,7 @@ class CoreTokenScanner:
             type = self.KEYWORDS[value]
             tokens.append(self.scanner.create_token(type, value, self.is_new_line_flag))
             
-            if type == TokenType.LLM_DEF:
-                self.current_line_has_llm_def = True
-                
-            elif type == TokenType.AND or type == TokenType.OR:
+            if type == TokenType.AND or type == TokenType.OR:
                 # Logical operators implicitly continue at EOL
                 offset = 0
                 while self.scanner.peek(offset) in ' \t':

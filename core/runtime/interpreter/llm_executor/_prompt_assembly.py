@@ -1,8 +1,7 @@
 """``_prompt_assembly`` —— LLM 重试多轮对话消息结构（内核侧单一权威源）。
 
-命名 LLM 函数 / 行为表达式的 **retry 多轮对话消息**（assistant/user 序列）
-构造规则集中于此，供 ``_BehaviorMixin`` 与 ``_LLMFunctionMixin`` 共用，避免
-同一段消息结构在两条执行路径/两个调用形态中重复漂移。
+行为表达式的 **retry 多轮对话消息**（assistant/user 序列）构造规则集中
+于此，供 ``_BehaviorMixin`` 使用，避免消息结构在多条执行路径中重复漂移。
 
 **职责边界**（LLM 调用层插件化主线）：
 - 内核**不**负责把细节拼进单一系统提示词——系统提示词的形态由 provider

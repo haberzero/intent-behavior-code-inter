@@ -324,19 +324,14 @@ def _vm_call_fn_callable(executor, func, args):
     return result
 
 
-def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
-    """Unified CPS call path for user functions and LLM functions.
+def _vm_call_function(executor, func, receiver, args):
+    """Unified CPS call path for user functions.
 
-    This is the execution-path unification result: user functions and LLM
-    functions (both ``IbUserFunction``, distinguished by ``callable_kind``)
-    share the same intent-fork / module-switch / scope / stack /
-    argument-binding preamble and postamble.  The only remaining
-    difference is the core execution strategy:
-    - user function: drive the AST body through the VM CPS loop;
-    - LLM function: invoke the LLM executor with the pre-bound arguments.
+    Shared intent-fork / module-switch / scope / stack / argument-binding
+    preamble and postamble, then drive the AST body through the VM CPS loop.
     """
     rt_context = executor.runtime_context
-    ec = func.context if is_llm else executor.ec
+    ec = executor.ec
     old_module = ec.current_module_name
     old_scope = rt_context.current_scope
 
@@ -366,8 +361,8 @@ def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
 
         rt_context.enter_scope()
 
-        # 普通函数：绑定 nonlocal 闭包变量（Cell 共享引用）。
-        if not is_llm and getattr(func, "closure", None):
+        # 绑定 nonlocal 闭包变量（Cell 共享引用）。
+        if getattr(func, "closure", None):
             from core.runtime.objects.cell import IbCell
             for sym_uid, (var_name, cell) in func.closure.items():
                 if isinstance(cell, IbCell):
@@ -400,7 +395,7 @@ def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
         pushed = True
 
         ib_none = func.ib_class.registry.get_none()
-        if not is_llm and receiver and receiver is not ib_none:
+        if receiver and receiver is not ib_none:
             self_sym = ec.get_side_table("node_to_symbol", func.node_uid)
             self_uid = (
                 self_sym if isinstance(self_sym, str)
@@ -411,9 +406,8 @@ def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
                 super_proxy = IbSuperProxy(receiver, func.owner_class.parent)
                 rt_context.define_variable("super", super_proxy, uid="intrinsic:super")
 
-        # 普通泛型方法体内类型参数绑定。
-        if not is_llm:
-            _bind_type_params(executor, rt_context, func, receiver)
+        # 泛型方法体内类型参数绑定。
+        _bind_type_params(executor, rt_context, func, receiver)
 
         for i, arg_uid in enumerate(params_uids):
             arg_data = ec.get_node_data(arg_uid)
@@ -436,17 +430,6 @@ def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
                 if _should_activate_intent_context_arg(arg_value, is_intent_ctx_param):
                     rt_context.use_intent_context(arg_value)
 
-        if is_llm:
-            llm_exec = func.ib_class.registry.get_llm_executor()
-            if llm_exec is None:
-                raise RuntimeError(
-                    f"LLM function '{func.node_uid}': LLM executor not registered in KernelRegistry. "
-                    "Ensure engine._prepare_interpreter() has completed before invoking an LLM function."
-                )
-            yield None
-            result = yield from llm_exec.invoke_llm_function_cps(func, ec)
-            return _wrap_function_result(executor, func, result)
-
         # 普通函数：逐语句 CPS 驱动函数体。
         body = node_data.get("body", [])
         seq_result = yield from _vm_execute_stmt_sequence(executor, body)
@@ -468,12 +451,7 @@ def _vm_call_function(executor, func, receiver, args, *, is_llm: bool):
 
 def _vm_call_user_function(executor, func, receiver, args):
     """CPS 内联执行用户函数（统一路径入口）。"""
-    return (yield from _vm_call_function(executor, func, receiver, args, is_llm=False))
-
-
-def _vm_invoke_llm_function(executor, func, receiver, args):
-    """CPS 执行 LLM 函数（统一路径入口）。"""
-    return (yield from _vm_call_function(executor, func, receiver, args, is_llm=True))
+    return (yield from _vm_call_function(executor, func, receiver, args))
 
 
 def _vm_invoke_behavior(executor, behavior, args):

@@ -176,20 +176,11 @@ def vm_handle_IbHostImport(executor, node_uid: str, node_data: Mapping[str, Any]
 # === 定义类语句（不下钻 body 内子节点） ===
 
 def vm_handle_IbFunctionDef(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """函数定义（普通/LLM 统一）：在当前作用域绑定 IbUserFunction。
-
-    普通函数与 LLM 函数（IbLLMFunctionDef）共用同一运行时对象
-    IbUserFunction（AST/运行时类层次统一后无独立 IbLLMFunction 类），
-    仅 callable_kind/display_name 标记差异。LLM 函数 body 恒空，
-    无 nonlocal 自由变量，闭包分支自然不触发。
-    """
-    is_llm = node_data.get("_type") == "IbLLMFunctionDef"
+    """函数定义：在当前作用域绑定 IbUserFunction。"""
     sym_uid = executor.ec.get_side_table("node_to_symbol", node_uid)
     declared_type = executor.ec.resolve_type_from_symbol(sym_uid)
     func = IbUserFunction(
         node_uid, executor.ec, spec=declared_type,
-        callable_kind="llm_function" if is_llm else "user_function",
-        display_name="LLMFunction" if is_llm else None,
     )
     func.is_generator = bool(node_data.get("is_generator"))
     name = node_data.get("name")
@@ -255,7 +246,7 @@ def vm_handle_IbClassDef(executor, node_uid: str, node_data: Mapping[str, Any]):
         stmt_data = executor.ec.get_node_data(stmt_uid)
         if not stmt_data:
             continue
-        if stmt_data.get("_type") in ("IbFunctionDef", "IbLLMFunctionDef"):
+        if stmt_data.get("_type") == "IbFunctionDef":
             method_name = stmt_data.get("name")
             if method_name not in existing_class.methods:
                 raise RuntimeError(

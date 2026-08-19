@@ -55,13 +55,15 @@ class TestRecommendedAssembly:
         assert "bool" not in prompt
         assert "be nice" in prompt
 
-    def test_user_sys_slot_prepended(self):
+    def test_custom_slot_rendered_in_order(self):
+        """自定义附加槽（P4c 迁移：user_sys 前置特殊处理删除，任意 kind 自定义槽
+        统一走通用呈现路径，机制同构）。"""
         prompt = assemble_system_prompt(
             intents=IntentBlock(),
             output_contract=OutputContract(),
             extra_slots=[PromptSlot(kind="user_sys", text="你是解析器。")],
         )
-        assert prompt.startswith("你是解析器。")
+        assert "你是解析器。" in prompt
         assert "只输出任务要求的结果数据本身" in prompt
 
     def test_intent_section_helper(self):
