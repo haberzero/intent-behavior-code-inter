@@ -125,8 +125,6 @@ class SymbolResolver(ScopedVisitor):
 
     def visit_IbClassDef(self, node: ast.IbClassDef):
         """访问类定义节点"""
-    def visit_IbClassDef(self, node: ast.IbClassDef):
-        """访问类定义节点"""
         # 查找类符号
         sym = self.lookup_symbol(node.name)
         if sym:
@@ -248,7 +246,7 @@ class SymbolResolver(ScopedVisitor):
                     name="self",
                     kind=SymbolKind.VARIABLE,
                     def_node=node,
-                    spec=self.current_class_symbol.spec if hasattr(self.current_class_symbol, 'spec') else self.registry.resolve("any"),
+                    spec=self.current_class_symbol.spec,
                 )
                 func_scope.define(self_sym)
                 # IbFunctionDef 节点绑定到 self 符号（runtime kernel.py:965 依赖此映射）

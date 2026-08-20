@@ -29,9 +29,8 @@ class BaseComponent:
         """
         node.lineno = start_obj.line
         node.col_offset = start_obj.column
-        if hasattr(start_obj, 'end_line'):
-            node.end_lineno = start_obj.end_line
-            node.end_col_offset = start_obj.end_column
+        node.end_lineno = start_obj.end_line
+        node.end_col_offset = start_obj.end_column
 
         if end_obj:
             node.end_lineno = end_obj.end_line
@@ -41,10 +40,6 @@ class BaseComponent:
 
     def _extend_loc(self, node: T, end_obj: Any) -> T:
         """Extends the end location of a node using another object's end position."""
-        if hasattr(end_obj, 'end_line'):
-            node.end_lineno = end_obj.end_line
-            node.end_col_offset = end_obj.end_column
-        elif hasattr(end_obj, 'end_lineno'):
-            node.end_lineno = end_obj.end_lineno
-            node.end_col_offset = end_obj.end_col_offset
+        node.end_lineno = end_obj.end_line
+        node.end_col_offset = end_obj.end_column
         return node

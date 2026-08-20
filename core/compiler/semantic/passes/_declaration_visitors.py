@@ -554,7 +554,7 @@ class DeclarationVisitorsMixin:
                     inferred_return = self._any_desc
                 # 更新符号的返回类型（from_spec 结构化——`-> auto` 推断出
                 # list[int]/Optional[int] 时不再经 `.name` 字符串扁平化）。
-                if sym and sym.spec and hasattr(sym.spec, 'return_type'):
+                if sym and sym.spec:
                     sym.spec.return_type = TypeRef.from_spec(inferred_return)
 
         finally:
@@ -575,7 +575,7 @@ class DeclarationVisitorsMixin:
         # generator[T]，使 ``auto g = gen()`` / ``for`` 消费正确定型。
         # 显式 ``-> generator[T]`` 标注时 ret_type 已是 generator 特化 spec，
         # 直接用（不二次包裹——否则 generator[generator[T]] 双包致调用点退化 any）。
-        if node.is_generator and sym and sym.spec and hasattr(sym.spec, 'return_type'):
+        if node.is_generator and sym and sym.spec:
             ret_base = ret_type.get_base_name() if ret_type is not None else None
             if ret_base == "generator":
                 sym.spec.return_type = TypeRef.from_spec(ret_type)
@@ -827,7 +827,7 @@ class DeclarationVisitorsMixin:
             if len(type_args) != len(base_type_params):
                 continue
             m = spec.members.get(method_name)
-            if m is None or not hasattr(m, "param_descriptors"):
+            if m is None or not m.is_method():
                 continue
             mapping = {
                 param: arg for param, arg in zip(base_type_params, type_args)

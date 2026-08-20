@@ -43,9 +43,9 @@ def snapshot(executor: Any) -> Dict[str, Any]:
     slots = []
     if reg is not None:
         for obj in reg.all("chan"):
-            channels.append(obj.core.snapshot() if hasattr(obj, "core") else obj.snapshot())
+            channels.append(obj.core.snapshot())
         for obj in reg.all("slot"):
-            slots.append(obj.core.snapshot() if hasattr(obj, "core") else obj.snapshot())
+            slots.append(obj.core.snapshot())
     out["channels"] = channels
     out["slots"] = slots
 

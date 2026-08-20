@@ -8,10 +8,12 @@ def register_collection(manager: Any, execution_context: Any, service_context: A
     
     def _len(obj: IbObject):
         """全局 len() 函数"""
-        if hasattr(obj, 'value') and isinstance(getattr(obj, 'value'), (str, list, dict)):
-            return manager.registry.box(len(getattr(obj, 'value')))
-        if hasattr(obj, 'elements'):
-            return manager.registry.box(len(obj.elements))
+        value = getattr(obj, "value", None)
+        if isinstance(value, (str, list, dict)):
+            return manager.registry.box(len(value))
+        elements = getattr(obj, "elements", None)
+        if elements is not None:
+            return manager.registry.box(len(elements))
         # 尝试消息发送 (UTS 协议)
         return obj.receive('len', [])
 

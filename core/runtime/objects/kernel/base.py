@@ -288,7 +288,7 @@ class IbObject:
         """
         try:
             res = self.receive('__to_prompt__', [])
-            return str(res.value) if hasattr(res, 'value') else str(res)
+            return str(unbox(res))
         except (AttributeError, InterpreterError):
             return f"<Instance of {self.ib_class.name}>"
 
@@ -417,7 +417,7 @@ class IbValue(IbObject):
         self.payload = new_value
 
     def get_type_name(self) -> str:
-        if self.type_ref is not None and hasattr(self.type_ref, "head"):
+        if self.type_ref is not None:
             return self.type_ref.head
         return self.ib_class.name
 

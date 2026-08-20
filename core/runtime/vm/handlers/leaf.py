@@ -724,7 +724,7 @@ def vm_handle_IbCastExpr(executor, node_uid: str, node_data: Mapping[str, Any]):
     except Exception as e:
         rc = executor.runtime_context
         if rc is not None and rc.get_current_llm_except_frame() is not None:
-            raw_val = getattr(value, 'value', '') if hasattr(value, 'value') else str(value)
+            raw_val = str(unbox(value))
             return _make_uncertain_call_result(
                 executor.registry,
                 raw_response=raw_val,

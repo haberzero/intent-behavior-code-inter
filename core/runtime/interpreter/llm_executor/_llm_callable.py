@@ -17,6 +17,8 @@ from typing import Any, Dict, Optional
 
 from core.runtime.interfaces import IExecutionContext
 
+from core.runtime.objects.kernel.base import unbox
+
 from core.base.llm_protocol import LLMCallRequest, OutputContract, IntentBlock
 from core.base.llm_protocol.llm_call import PromptSlot
 
@@ -393,9 +395,9 @@ class _LLMCallableMixin:
             if fields:
                 out: Dict[str, Any] = {}
                 for k, v in fields.items():
-                    out[k] = v.to_native() if hasattr(v, "to_native") else v
+                    out[k] = unbox(v)
                 return out
-        native = result.to_native() if hasattr(result, "to_native") else result
+        native = unbox(result)
         if isinstance(native, dict):
             return dict(native)
         raise TypeError(

@@ -338,10 +338,8 @@ class IbBehavior(IbValue):
         ci = self.captured_intents
         if ci is None:
             ci_repr: List[str] = []
-        elif hasattr(ci, "get_active_intents"):
-            ci_repr = [str(i) for i in ci.get_active_intents()]
         else:
-            ci_repr = [str(ci)]
+            ci_repr = [str(i) for i in ci.get_active_intents()]
         return {
             "type": self.ib_class.name,
             "node_uid": self.node,

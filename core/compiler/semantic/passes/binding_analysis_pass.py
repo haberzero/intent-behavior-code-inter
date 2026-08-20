@@ -376,7 +376,7 @@ class LLMExceptBindingAnalyzer(ScopedVisitor):
         receiver_sym = self.current_scope.resolve(receiver_name) if self.current_scope else None
         if not receiver_sym or not receiver_sym.spec:
             return
-        axiom = spec_reg.get_axiom(receiver_sym.spec) if hasattr(spec_reg, 'get_axiom') else None
+        axiom = spec_reg.get_axiom(receiver_sym.spec)
         if not axiom:
             return
         method_specs = axiom.get_method_specs()

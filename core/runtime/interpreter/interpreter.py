@@ -305,7 +305,7 @@ class Interpreter:
 
         # IntentStack 与 runtime_context 关联
         intent_stack = self.registry.get_intrinsic_instance("IntentStack")
-        if intent_stack and hasattr(intent_stack, 'set_runtime_context'):
+        if intent_stack:
             intent_stack.set_runtime_context(self.runtime_context)
 
         # VMExecutor 主路径——延迟初始化
@@ -591,7 +591,7 @@ class Interpreter:
     def _resolve_value(self, val: Any) -> Any:
         """处理外部资产引用的解析"""
         # 支持 dict 和 ReadOnlyNodePool (Mapping)
-        if hasattr(val, "get") and val.get("_type") == "ext_ref":
+        if isinstance(val, Mapping) and val.get("_type") == "ext_ref":
             uid = val.get("uid")
             if uid in self.asset_pool:
                 return self.asset_pool[uid]

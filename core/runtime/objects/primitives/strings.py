@@ -28,13 +28,13 @@ class IbString(IbValue):
         return self.ib_class.registry.box(bool(self.value))
 
     def cast_to(self, target_class: Any) -> IbObject:
-        target_desc = target_class.spec if hasattr(target_class, 'spec') else None
+        target_desc = target_class.spec
         try:
             res_val = _cast_string_to_native(self.value, target_desc)
             return self.ib_class.registry.box(res_val)
         except (ValueError, TypeError) as e:
             raise InterpreterError(
-                f"TypeError: Cannot convert '{self.value}' to {target_desc.get_base_name() if target_desc and hasattr(target_desc, 'get_base_name') else 'target type'}: {str(e)}"
+                f"TypeError: Cannot convert '{self.value}' to {target_desc.get_base_name() if target_desc else 'target type'}: {str(e)}"
             ) from e
 
     def upper(self) -> IbObject:

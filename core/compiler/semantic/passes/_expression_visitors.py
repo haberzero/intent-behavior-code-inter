@@ -306,7 +306,7 @@ class ExpressionVisitorsMixin:
             func_returns = getattr(self, "func_return_types", None) or []
             if func_returns and func_returns[-1] is not None and node.value is not None:
                 gen_ret = func_returns[-1]
-                gen_base = gen_ret.get_base_name() if hasattr(gen_ret, "get_base_name") else None
+                gen_base = gen_ret.get_base_name()
                 if gen_base == "generator":
                     elem = self.registry.resolve_typeref(gen_ret.value_type) or self._any_desc
                 else:
@@ -910,14 +910,6 @@ class ExpressionVisitorsMixin:
                         and member_spec.kind not in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value, TypeKind.BOUND_METHOD.value)):
                     self.bind_type(node, member_spec)
                     return member_spec
-                # Fallback: type_ref resolution
-                if hasattr(member_spec, 'type_ref') and member_spec.type_ref:
-                    type_ref = member_spec.type_ref
-                    ref_name = type_ref.name if hasattr(type_ref, 'name') else (type_ref.head if hasattr(type_ref, 'head') else str(type_ref))
-                    member_type = self.registry.resolve(ref_name)
-                    if member_type:
-                        self.bind_type(node, member_type)
-                        return member_type
 
         # 默认返回 any
         self.bind_type(node, self._any_desc)
@@ -1016,14 +1008,13 @@ class ExpressionVisitorsMixin:
 
         # 使用 registry.resolve_subscript 推断下标结果类型
         res = None
-        if hasattr(self.registry, 'resolve_subscript') and key_type:
+        if key_type:
             res = self.registry.resolve_subscript(value_type, key_type)
         if not res:
             # Fallback: 尝试从 iter_element 获取（list[int] → int）
-            if hasattr(self.registry, 'resolve_iter_element'):
-                iter_elem = self.registry.resolve_iter_element(value_type)
-                if iter_elem:
-                    res = iter_elem
+            iter_elem = self.registry.resolve_iter_element(value_type)
+            if iter_elem:
+                res = iter_elem
 
         result = res or self._any_desc
         self.bind_type(node, result)

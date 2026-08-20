@@ -8,7 +8,7 @@ def _cast_string_to_native(val: str, target_desc: Any) -> Any:
     if not target_desc:
         return val
 
-    axiom_name = target_desc.get_base_name() if hasattr(target_desc, "get_base_name") else None
+    axiom_name = target_desc.get_base_name()
     if axiom_name == "int":
         return int(val)
     if axiom_name == "float":

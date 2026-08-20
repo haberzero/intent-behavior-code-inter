@@ -397,7 +397,10 @@ class ExpressionComponent(BaseComponent):
                         if kw_token.value == "mode":
                             mode = self._expr_name(kw_val)
                         elif kw_token.value == "buffer":
-                            buffer = int(kw_val.value) if hasattr(kw_val, "value") else int(kw_val)
+                            if isinstance(kw_val, ast.IbConstant) and isinstance(kw_val.value, int) and not isinstance(kw_val.value, bool):
+                                buffer = kw_val.value
+                            else:
+                                raise self.stream.error(kw_token, "chan 'buffer=' expects an integer literal.", code=PAR_UNEXPECTED_TOKEN)
                         elif kw_token.value == "name":
                             name = self._expr_name(kw_val)
                 self.stream.consume(TokenType.RPAREN, "Expect ')' after chan declaration.")
@@ -430,7 +433,10 @@ class ExpressionComponent(BaseComponent):
             if kw_token.value == "mode":
                 mode = self._expr_name(kw_val)
             elif kw_token.value == "buffer":
-                buffer = int(kw_val.value) if hasattr(kw_val, "value") else int(kw_val)
+                if isinstance(kw_val, ast.IbConstant) and isinstance(kw_val.value, int) and not isinstance(kw_val.value, bool):
+                    buffer = kw_val.value
+                else:
+                    raise self.stream.error(kw_token, "chan 'buffer=' expects an integer literal.", code=PAR_UNEXPECTED_TOKEN)
             elif kw_token.value == "name":
                 name = self._expr_name(kw_val)
             matched_any = True

@@ -80,5 +80,5 @@ class SymbolTableContext:
             'module_name': self.module_name,
             'scope_depth': self.get_scope_depth(),
             'scope_path': self.get_scope_path(),
-            'symbols_in_scope': len(self.current.symbols) if hasattr(self.current, 'symbols') else 0
+            'symbols_in_scope': len(self.current.symbols)
         }
