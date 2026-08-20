@@ -724,6 +724,17 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     登记 PT-DEBT-36 独立窗口**；⑥ 反序列化宽异常收窄 except PermissionError + kernel_diagnostic 补观测。
   - 执行：分 6 阶段（规划记录→机械清理→真缺陷→contract_validator→深层次→反序列化），每步全量
     pytest 零回归；执行顺序允许自主微调，但所有发现问题必须彻底解决（用户明示）。
+  - **✅ 6 阶段全部落地完成（2026-08-20）**：Phase 1 机械清理（恒真/恒假死守卫 ~24 + 双轨残留 unbox
+    收敛 4 + 附带死代码 3：symbol_table/_expression_visitors 死 type_ref 块/registry 守卫/binding_analysis/
+    declaration_visitors is_method/component 双形状/strings·numbers·converters·base/collection._len/
+    expression buffer fail-fast/snapshot 死 else/symbol_resolution 重复空 def 等）；Phase 2 真缺陷 fail-fast
+    （merge/combine 对齐 use()、__from_prompt__ 形状违约、binding_analysis 死兜底删除、mode.value 直接）；
+    Phase 3 contract_validator:63 彻底根因修复（get_methods→get_method_specs + 移除死 kind 门——get_method_specs
+    恒返回 MethodMemberSpec，原 kind 门会使校验仍死；恢复后实跑验证 ListAxiom 等真实内置类零违约零误报）；
+    Phase 4 深层次（_helpers 补 isinstance(IbIntentContext) 惰性 import、deep_clone 三方法鸭子类型→惰性
+    isinstance，均 align base.py:176 先例）；Phase 6 反序列化（_hydrate_specialized_class except Exception→
+    except PermissionError、_rehydrate_type_pool_spec 去宽 except fail-fast、新增 KDIAG_RUNTIME_SPECIALIZATION_
+    FALLBACK 观测特化身份丢失）。判别测试 +9；全量 pytest **3133 passed / 1 skipped 零回归**（基线 3123）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

@@ -96,16 +96,14 @@ pytest 3123 passed / 1 skipped 零回归（+11）。**阶段 A 当前 P0 前移�
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
 **阶段 A · 代码/架构健康（当前 P0，用户指定最高优先）**：
-1. **Tier C 专项审计（🔄 执行中，2026-08-20）**：hasattr 全量分类已完成（113 处：58 合法保留 /
-   50 简单异味 / 4 真缺陷 / 4 深层次）；静默降级补诊断复核完成（leaf/runtime_serializer/artifact_loader
-   全部「返回未知上层决策」合法）；for+if 深嵌套复核完成（PT-AUDIT-2 收窄：真实控制流最深 8-10 层
-   但纯 if/elif 链最长 4 段，可读性问题非架构）。**用户 6 决策**：① contract_validator:63 公理契约
-   校验彻底根因修复（get_methods→get_method_specs 恢复 + 实跑评估）；② 全部简单异味彻底清理
-   （死守卫/双轨残留/真缺陷/附带死代码）；③ _helpers 最小收紧（补 isinstance）+ _ctx 完整形式化
-   登记 PT-DEBT-35 独立窗口；④ deep_clone 切惰性 isinstance；⑤ intent_context 方法族死守卫本次清、
-   结构重构 + axiom 能力契约校验登记 PT-DEBT-36 独立窗口；⑥ 反序列化宽异常收窄 except PermissionError
-   + kernel_diagnostic。执行分 6 阶段（机械清理→真缺陷→contract_validator→深层次→反序列化），
-   每步全量 pytest 零回归。
+1. **✅ Tier C 专项审计完成（2026-08-20）**：hasattr 全量分类（113 处：58 合法保留 / 50 简单异味 /
+   4 真缺陷 / 4 深层次）；6 阶段全部落地零回归——Phase 1 机械清理（恒真/恒假死守卫 + 双轨残留
+   unbox 收敛 + 附带死代码）/ Phase 2 真缺陷 fail-fast 统一（intent_context merge/combine、__from_prompt__
+   形状违约、binding_analysis 兜底、serializer mode.value）/ Phase 3 contract_validator:63 公理契约校验
+   彻底根因修复（get_methods→get_method_specs + 移除死 kind 门）/ Phase 4 深层次（_helpers 补 isinstance、
+   deep_clone 惰性 isinstance）/ Phase 6 反序列化宽异常收窄 except PermissionError + KDIAG 诊断。
+   判别测试 +9；全量 pytest 3133 passed / 1 skipped 零回归（基线 3123）。**阶段 A 当前 P0 前移至
+   PT-AUDIT-1/3 周期复核 + Tier B**。
 2. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
 
 **阶段 B · 功能稳健与对外能力**：

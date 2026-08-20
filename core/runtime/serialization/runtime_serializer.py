@@ -702,7 +702,7 @@ class RuntimeDeserializer:
         保真须目标引擎已编译该类）。
         """
         spec = None
-        spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None
+        spec_reg = self.registry.get_metadata_registry()
         if spec_reg is not None:
             spec = spec_reg.resolve(cls_name)
         if spec is None:
@@ -760,7 +760,7 @@ class RuntimeDeserializer:
         type_pool = getattr(self, "type_pool", None)
         if not type_pool:
             return None
-        spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None
+        spec_reg = self.registry.get_metadata_registry()
         if spec_reg is None:
             return None
 
