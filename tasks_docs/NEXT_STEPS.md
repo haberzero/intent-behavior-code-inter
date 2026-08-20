@@ -80,16 +80,25 @@ zip·sorted·reversed·min·max）改为**协作让出**（yield 给 VM 调度�
 pytest 3112 passed / 1 skipped 零回归（+12 = 6 新判别 + 6 meta 参数化）。**阶段 A 当前 P0 前移至
 PT-DEBT-30 + PT-DEBT-33 类型边界闭合**。
 
+**✅ PT-DEBT-30 + PT-DEBT-33 类型边界闭合完成（本 session）**：① **PT-DEBT-30** `yield from`
+序列委托编译期生成器/序列区分（`visit_IbYieldFromExpr` 按委托目标收紧静态类型：生成器=元素类型
+不变，序列/`__iter__`=None——`int r = yield from [seq]` 编译期 SEM_TYPE_MISMATCH 拦截）；②
+**PT-DEBT-33** 三子边界——10.1 dict 键编译期校验（静态错位 SEM_TYPE_MISMATCH，动态键放行）/
+10.3 中置·前导星偏移修正（逐 *expr 按星前位置实参数映射目标形参，与运行期顺序展开一致）/
+跨引擎封印优雅回落基类（`_hydrate_specialized_class` 特化重建失败回落基类，与内置 list[int]→list
+密封场景同构，杜绝 ib_class=None 坏对象）。判别测试 +11（yield from 3 + dict 键 3 + 星偏移 4 +
+跨引擎回退 1）；KNOWN_LIMITS §二十四（序列委托）移除重编号 24-25 + §十.2/§十.3 更新。全量
+pytest 3123 passed / 1 skipped 零回归（+11）。**阶段 A 当前 P0 前移至 Tier C 专项审计**。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
 **阶段 A · 代码/架构健康（当前 P0，用户指定最高优先）**：
-1. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
-2. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
+1. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
    runtime_serializer/artifact_loader）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项）；
-3. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
+2. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
 
 **阶段 B · 功能稳健与对外能力**：
 6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；

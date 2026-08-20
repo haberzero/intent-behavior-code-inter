@@ -593,6 +593,67 @@ class TestCrossModuleSameNameClass:
         )
         assert b.ib_class.qualified_name == "graph.Box[int]"
 
+    def test_cross_engine_sealed_base_fallback(self, tmp_path):
+        """跨引擎密封+异产物：用户类特化重建受封印限制时回落基类（与内置同构）。
+
+        引擎 A 编译含 ``geo.Box[int]`` 的产物并序列化；引擎 B 只编译含基类
+        ``geo.Box`` 的产物（无特化）并已运行（密封）。反序列化 A 的状态：特化类
+        重建受注册表封印限制（``create_subclass`` sealed 后禁用），值回落基类
+        ``geo.Box``——字段保留、基类方法可经 ``receive`` 分派；特化身份丢失
+        （KNOWN_LIMITS §十 契约：特化跨引擎保真须目标引擎已编译该类；与内置
+        泛型 ``list[int]``→``list`` 密封场景回落同构）。修复前：生成
+        ``ib_class=None`` 的坏对象（方法访问崩溃）。
+        """
+        from core.runtime.serialization.runtime_serializer import (
+            RuntimeSerializer,
+            RuntimeDeserializer,
+        )
+
+        _write(
+            tmp_path,
+            "geo.ibci",
+            "class Box[T]:\n"
+            "    int v\n"
+            "    func get(self) -> int:\n"
+            "        return self.v + 100\n",
+        )
+        _write(
+            tmp_path,
+            "main_spec.ibci",
+            "import geo\n"
+            "geo.Box[int] a = geo.Box[int](5)\n",
+        )
+        _write(
+            tmp_path,
+            "main_base.ibci",
+            "import geo\n"
+            "print(\"loaded\")\n",
+        )
+        engine_a = IBCIEngine(root_dir=str(tmp_path))
+        engine_a.run(str(tmp_path / "main_spec.ibci"), silent=True)
+        ec = engine_a.interpreter.execution_context
+        data = RuntimeSerializer(engine_a.registry).serialize_context(
+            ec.runtime_context, include_static=True, execution_context=ec
+        )
+
+        engine_b = IBCIEngine(root_dir=str(tmp_path))
+        engine_b.run(str(tmp_path / "main_base.ibci"), silent=True)
+        # 前置：引擎 B 已封印、有基类、无该特化。
+        assert engine_b.registry.is_sealed
+        assert engine_b.registry.get_class("geo.Box") is not None
+        assert engine_b.registry.get_class("geo.Box[int]") is None
+
+        deser = RuntimeDeserializer(engine_b.registry, factory=engine_b.object_factory)
+        restored = deser.deserialize_context(data)
+        a = restored.get_variable("a")
+        # 值回落基类（非 None 坏对象），字段保留，基类方法可经 receive 分派。
+        assert a.ib_class is not None
+        assert a.ib_class.qualified_name == "geo.Box", (
+            f"sealed 特化重建失败应回落基类，got {a.ib_class.qualified_name}"
+        )
+        assert a.fields.get("v") is not None, "字段应保留"
+        assert a.receive("get", []).to_native() == 105
+
     def test_rehydrate_type_pool_spec_module_matching(self, tmp_path):
         """_rehydrate_type_pool_spec 按 (module_path, name) 联合匹配（修 #2）。
 

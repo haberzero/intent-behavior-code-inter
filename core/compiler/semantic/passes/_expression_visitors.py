@@ -723,19 +723,26 @@ class ExpressionVisitorsMixin:
         has_dynamic = bool(starred_specs) or any(
             name is None for name, _ in keyword_specs
         )
-        # *expr 元素级类型校验：`*lst` 展开实参静态数量未知，
-        # 但元素类型可静态确定（特化容器 list[int]）——元素须可赋给展开首个
-        # 实参对应的目标形参（跳过显式位置实参数后的首个位置形参）。
-        # 数量不足/超限仍由运行期裁决。
+        # *expr 元素级类型校验：`*lst` 展开实参静态数量未知，但元素类型可静态
+        # 确定（特化容器 list[int]）。每个 *expr 的目标形参偏移 = 其**之前**显式
+        # 位置实参数量（中置/前导星正确；KNOWN_LIMITS 10.3 原仅保证末尾星）。
+        # 元素须可赋给偏移处目标形参；数量不足/超限仍由运行期裁决。
         if starred_specs and descriptors:
-            target = _first_pos_descriptor_after(
-                descriptors, len(positional_specs)
-            )
-            if target is not None:
-                for starred_spec in starred_specs:
-                    self._check_starred_element_type(
-                        node, starred_spec, target
-                    )
+            star_idx = 0
+            pos_count_before = 0
+            for arg in node.args:
+                if isinstance(arg, ast.IbStarred):
+                    if star_idx < len(starred_specs):
+                        target = _first_pos_descriptor_after(
+                            descriptors, pos_count_before
+                        )
+                        if target is not None:
+                            self._check_starred_element_type(
+                                node, starred_specs[star_idx], target
+                            )
+                    star_idx += 1
+                else:
+                    pos_count_before += 1
         for issue in binding.issues:
             if issue.code == TOO_MANY_POSITIONAL:
                 if not has_dynamic:
@@ -990,6 +997,22 @@ class ExpressionVisitorsMixin:
                 if resolved is not None:
                     self.bind_type(node, resolved)
                     return resolved
+
+        # dict 键类型编译期校验（KNOWN_LIMITS 10.1 闭合）：dict[K,V] 下标键类型
+        # 须可赋值给 K——静态错位（`d[42]` on dict[str,int]）编译期 SEM_TYPE_MISMATCH
+        # 拦截，不再静默返回 value 类型。键/目标任一侧动态（any/auto）放行（运行期裁决）。
+        if (value_type.kind == TypeKind.DICT.value and key_type is not None):
+            key_target = self.registry.resolve_typeref(value_type.key_type)
+            if (key_target is not None
+                    and not self.registry.is_dynamic(key_target)
+                    and not self.registry.is_dynamic(key_type)
+                    and not self.registry.is_assignable(key_type, key_target)):
+                self.error(
+                    f"dict key type mismatch: expected '{key_target.name}', "
+                    f"but got '{key_type.name}'.",
+                    node, code=SEM_TYPE_MISMATCH,
+                    hint=self.registry.get_diff_hint(key_type, key_target),
+                )
 
         # 使用 registry.resolve_subscript 推断下标结果类型
         res = None

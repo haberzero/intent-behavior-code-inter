@@ -280,6 +280,34 @@ class TestDictGet:
         errors = _sem_errors(diagnostics)
         assert len(errors) == 0, f"Unexpected errors: {errors}"
 
+    def test_dict_subscript_key_type_mismatch_rejected(self):
+        """dict[str,int] 用 int 键下标 → SEM_TYPE_MISMATCH（PT-DEBT-33 10.1 闭合）。
+
+        修复前键类型不校验，静默返回 value 类型；静态错位编译期拦截。
+        """
+        expect_compile_error(
+            'dict[str,int] scores = {"a": 1}\n'
+            "int v = scores[42]\n",
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_dict_subscript_matching_key_type_passes(self):
+        """键类型匹配的下标通过：dict[str,int] 用 str 键 / dict[int,str] 用 int 键。"""
+        _compile_code(
+            'dict[str,int] s = {"a": 1}\n'
+            'int v = s["a"]\n'
+            'dict[int,str] d = {1: "x"}\n'
+            'str w = d[1]\n'
+        )
+
+    def test_dict_subscript_dynamic_key_passes(self):
+        """dict[str,int] 用动态（any）键下标放行（运行期裁决）。"""
+        _compile_code(
+            'dict[str,int] s = {"a": 1}\n'
+            'any k = "a"\n'
+            "int v = s[k]\n"
+        )
+
 
 # ===========================================================================
 # dict[K,V].values() and .keys() return specialization
@@ -673,4 +701,46 @@ class TestStarredElementTypeChecking:
             "    return a + b\n"
             "list l = [1, 2]\n"
             "int r = f(*l)\n"
+        )
+
+    def test_starred_mid_element_type_rejected(self):
+        """中置星 f(10, *l, 30)：元素映射其**前**位置形参（b:int）——list[str] 拦截。
+
+        修复前偏移按全部显式位置实参计数（错误映射到 c），错放；PT-DEBT-33 10.3
+        闭合后按星前实参数映射。
+        """
+        expect_compile_error(
+            "func f(int a, int b, int c) -> int:\n"
+            "    return a + b + c\n"
+            'list[str] l = ["x"]\n'
+            "int r = f(10, *l, 30)\n",
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_starred_mid_correct_element_type_passes(self):
+        """中置星：list[int] 元素映射 b:int，通过。"""
+        _compile_code(
+            "func f(int a, int b, int c) -> int:\n"
+            "    return a + b + c\n"
+            "list[int] l = [1]\n"
+            "int r = f(10, *l, 30)\n"
+        )
+
+    def test_starred_leading_element_type_rejected(self):
+        """前导星 f(*l, 30)：元素映射首位置形参（a:int）——list[str] 拦截。"""
+        expect_compile_error(
+            "func f(int a, int b) -> int:\n"
+            "    return a + b\n"
+            'list[str] l = ["x"]\n'
+            "int r = f(*l, 30)\n",
+            "SEM_TYPE_MISMATCH",
+        )
+
+    def test_starred_leading_correct_element_type_passes(self):
+        """前导星：list[int] 元素映射 a:int，通过。"""
+        _compile_code(
+            "func f(int a, int b) -> int:\n"
+            "    return a + b\n"
+            "list[int] l = [1]\n"
+            "int r = f(*l, 30)\n"
         )

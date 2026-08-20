@@ -691,6 +691,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   - **文档**：KNOWN_LIMITS §二十四（同步阻塞边界）**移除**（限制已消除），§二十五-§二十七 重编号为
     二十四-二十六，全仓引用同步（04_vm_interpreter L3/05_functions §5.9/01_native_host_binding ×2）。
   - 全量 pytest **3112 passed / 1 skipped 零回归**（3100 + 12 = 6 新判别 + 6 meta 参数化）。
+- **PT-DEBT-30 + PT-DEBT-33 类型边界闭合完成（2026-08-20）**：
+  - **PT-DEBT-30 `yield from` 序列委托收紧**：`visit_IbYieldFromExpr` 按委托目标区分节点静态类型——
+    生成器操作数保持元素类型（表达式值 = return 值）；序列/`__iter__` 操作数收紧为 `None`（运行时
+    表达式值恒 None，`int r = yield from [seq]` 编译期 SEM_TYPE_MISMATCH 拦截，须 Optional[T] 兼容）。
+    原 KNOWN_LIMITS §二十四（序列委托静态类型偏乐观）移除，25-26 重编号 24-25。
+  - **PT-DEBT-33 三子边界**：① **10.1 dict 键编译期校验**（`visit_IbSubscript`：dict[K,V] 静态错位键
+    SEM_TYPE_MISMATCH，动态键放行）；② **10.3 中置/前导星偏移修正**（逐 *expr 以其前显式位置实参数为
+    目标形参偏移，与运行期顺序展开一致——原仅保证末尾星）；③ **跨引擎封印优雅回退**（见下）。
+  - **跨引擎封印处置定论（防未来误解）**：密封+异产物场景下用户类特化重建受注册表封印限制（seal 在
+    `create_subclass` 与 `register_class` 双层强制 + token 校验）。**不放松封印**——选择与内置泛型
+    （list[int]→list）同构的**优雅回落基类**（`_hydrate_specialized_class` 重建失败返回基类，字段保留、
+    方法可经 receive 分派），杜绝 ib_class=None 坏对象；特化跨引擎身份保真仍须目标引擎已编译该类
+    （KNOWN_LIMITS §十.2 契约不变）。理由：① 内置密封场景本就回落基类，用户类收敛至同构行为即"随类型
+    地基收敛"；② 放松双层封印属安全敏感架构变更，且破坏"类表冻结"不变量，收益（仅跨异产物恢复特化
+    身份）不足以抵偿风险；③ 判别测试锁定回退正确性。
+  - 判别测试 +11（yield from 3 + dict 键 3 + 星偏移 4 + 跨引擎回退 1）；全量 pytest **3123 passed /
+    1 skipped 零回归**。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

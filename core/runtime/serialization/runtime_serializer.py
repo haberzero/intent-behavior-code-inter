@@ -696,7 +696,10 @@ class RuntimeDeserializer:
 
         跨引擎 round-trip：目标引擎 spec_reg 可能无该特化（未编译），此时从
         序列化携带的 ``type_pool`` 重建 spec（经 ArtifactRehydrator 统一水化），
-        再 create_subclass——特化身份跨引擎保真。
+        再 create_subclass——特化身份跨引擎保真。**特化类重建失败（注册表封印
+        等）时回落基类**（与内置泛型容器 ``list[int]``→``list`` 同构的优雅降级）：
+        值字段与基类方法可用，仅特化身份丢失（KNOWN_LIMITS §十：特化跨引擎
+        保真须目标引擎已编译该类）。
         """
         spec = None
         spec_reg = self.registry.get_metadata_registry() if hasattr(self.registry, "get_metadata_registry") else None
@@ -720,7 +723,8 @@ class RuntimeDeserializer:
         try:
             return self.registry.create_subclass(cls_name, spec, parent_name=parent_name)
         except Exception:
-            return None
+            # 特化类重建失败（注册表封印 / 描述符失配等）——值回落基类。
+            return parent_class
 
     def _rehydrate_type_pool_spec(self, cls_name: str):
         """从序列化 type_pool 重建特化 spec（跨引擎反序列化用）。

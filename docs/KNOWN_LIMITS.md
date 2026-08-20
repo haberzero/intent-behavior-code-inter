@@ -371,7 +371,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 **已知边界**：
 - LLM 输出解析到跨模块用户类（`__from_prompt__`/`__outputhint_prompt__`）：**parse 链与输出约束注入均 module 感知**（type_name 为 qualified 名，`_get_expected_type_hint` 优先 node_to_type spec；`returns` IbName 裸名按当前模块上下文解析；`_get_llmoutput_hint` 的 axiom/vtable 查找同模块解析）。**qualified 注解路径已验证可用**（`geo.Counter c = @~...~` 跨模块类型注解解析；枚举输出约束注入经 module 感知修复）。
-- 跨引擎 round-trip 的**未编译目标引擎**用户类重建受注册表封印限制（`create_subclass` sealed 后禁用）——用户类特化跨引擎重建须目标引擎已编译该类（内置泛型特化不受限，加载期预创建）。
+- 跨引擎 round-trip 的**未编译目标引擎**用户类特化重建受注册表封印限制（`create_subclass` sealed 后禁用）——用户类特化跨引擎**身份保真**须目标引擎已编译该类（内置泛型特化同构：加载期预创建；密封+异产物场景内置亦回落基类）。重建失败时值**优雅回落基类**（`geo.Box[int]`→`geo.Box`）：字段保留、基类方法可经 `receive` 分派，仅特化身份丢失（判别测试 `test_cross_engine_sealed_base_fallback`）；不生成 `ib_class=None` 坏对象。
 
 ### 10.3 容器字面量类型推断 + *expr 元素级校验
 

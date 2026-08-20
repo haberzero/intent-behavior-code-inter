@@ -112,11 +112,18 @@
 
 ### PT-DEBT-33 KNOWN_LIMITS §十 未闭合子边界（dict 键/中置星/跨引擎封印）
 
-- **状态**：active（随类型地基后续窗口）｜**域**：DEBT｜**优先级**：P2
+- **状态**：done（已完成，2026-08-20）｜**域**：DEBT｜**优先级**：P2
 - **动机**：10.1 `dict` 键类型在下标访问时不校验；10.3 `*expr` 中置/前导星计数偏移；
   跨引擎 round-trip 封印——三处未闭合边界随类型地基收敛。
 - **成因**：KNOWN_LIMITS §十 拆分终判：10.2 跨模块、
   10.4 签名闭合，其余子边界留待类型地基后续。
+- **完成记录**：三处全落地——① **10.1 dict 键编译期校验**（`visit_IbSubscript`：dict[K,V]
+  下标键类型须可赋值给 K，静态错位编译期 SEM_TYPE_MISMATCH，动态键放行）；② **10.3 中置/
+  前导星偏移修正**（`_bind_call_arguments` 逐 *expr 以其之前显式位置实参数为目标形参偏移，
+  与运行期顺序展开一致——原仅保证末尾星）；③ **跨引擎封印优雅回退**（`_hydrate_specialized_class`
+  特化重建失败回落基类，与内置 list[int]→list 密封场景同构，杜绝 ib_class=None 坏对象）。
+  判别测试 +8（test_generics：dict 键 3 组 + 星偏移 4 组；test_ibc_file_imports：跨引擎密封
+  回退 1）。KNOWN_LIMITS §十.2/§十.3 更新。全量 pytest 零回归。
 - **当前理解**：与 PT-FEAT-7（类型体系）及句柄类值身份（`_HANDOFF_GENERIC_REMAINING`
   同源遗留）联动。
 

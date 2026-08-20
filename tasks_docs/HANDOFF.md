@@ -338,10 +338,21 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   文件已删除（git 承载）。**push 授权不延续**：上一 session 已 push（用户显式授权，含上一 session 7
   个未 push 提交一并推送），后续 push 需再获显式授权。**KNOWN_LIMITS 编号已变**：原 §二十四（生成器
   同步阻塞）与 §二十四（`yield from` 序列委托，PT-DEBT-30 已收紧解决）均移除，现 §二十四=用户协议/
-  impl、§二十五=LLM 可调用类返回类型。下一 session 起点 = **阶段 A P0（PT-DEBT-30 + PT-DEBT-33 类型边界闭合）**。
+  impl、§二十五=LLM 可调用类返回类型。见下完成记录。
+  **✅ PT-DEBT-30 + PT-DEBT-33 类型边界闭合完成（2026-08-20，unsafe-vibe-dev）**：① **PT-DEBT-30**
+  `yield from` 序列委托编译期生成器/序列区分（`visit_IbYieldFromExpr` 按委托目标收紧：生成器=元素类型
+  不变，序列/`__iter__`=None——`int r = yield from [seq]` 编译期 SEM_TYPE_MISMATCH）；② **PT-DEBT-33**
+  三子边界——10.1 dict 键编译期校验 / 10.3 中置·前导星偏移修正 / 跨引擎封印优雅回落基类（与内置
+  list[int]→list 同构，杜绝 ib_class=None 坏对象；封印不放松，决策见 WORKLOG）。判别测试 +11；
+  KNOWN_LIMITS §二十四（序列委托）移除重编号 24-25 + §十.2/§十.3 更新。全量 pytest **3123 passed /
+  1 skipped 零回归**。下一 session 起点 = **阶段 A P0（Tier C 专项审计）**。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ PT-DEBT-30 + PT-DEBT-33 类型边界闭合完成（本 session，unsafe-vibe-dev）**：yield from
+  序列委托编译期收紧 + dict 键校验 + 中置·前导星偏移修正 + 跨引擎封印优雅回落基类；判别测试 +11；
+  全量 pytest 3123 passed / 1 skipped 零回归；KNOWN_LIMITS 编号更新（二十四=用户协议/impl、
+  二十五=LLM 可调用类）。下一 session 起点 = 阶段 A P0（Tier C 专项审计）
 - [x] **✅ 会话交接核验接手完成（HEAD=`b2322214`，unsafe-vibe-dev 与 origin 同步（已 push））**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3112 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 PT-DEBT-34/29 完成、push 授权不延续、KNOWN_LIMITS 编号变更），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（PT-DEBT-30 + PT-DEBT-33 类型边界闭合）
 - [x] **✅ 会话交接核验接手完成（HEAD=dcb7c4f2，unsafe-vibe-dev 领先 origin 7 未 push）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3083 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 A1 完成、PT-DEBT-34 登记与迅速评估、push 授权不延续契约），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（PT-DEBT-34 变量语义建模显式化）
 - [x] **✅ 会话交接核验接手完成（HEAD=a97773a6）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / unsafe-vibe-dev 与 origin 同步（已 push）/ main 未动 / 提交序列对齐 / 全量 pytest 实跑 3069 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 push 授权不延续契约与四阶段排布），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（A1）
