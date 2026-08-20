@@ -355,6 +355,21 @@ class _BehaviorMixin:
             )
         return self._finalize_call(result, _call_info(response), record_current=False)
 
+    def _execute_behavior_spec_cps(self, node_uid: str, spec: "BehaviorCallSpec", execution_context: IExecutionContext):
+        """统一执行已装配行为 spec：提交线程池 + ``yield LLMFuture`` 挂起 + 记录调用信息。
+
+        供行为表达式路径（:meth:`execute_behavior_expression_cps`）与行为值路径
+        （:meth:`execute_behavior_object_cps`）共用（机制同构，无双写提交逻辑）。
+        """
+        future = self._get_thread_pool().submit(
+            self._call_and_parse, spec, node_uid, execution_context
+        )
+        llm_future = LLMFuture(node_uid=node_uid, future=future)
+        result = yield llm_future
+        if result is not None and result.call_info is not None:
+            self._record_current_call_info(result.call_info)
+        return result
+
     def execute_behavior_expression_cps(self, node_uid: str, execution_context: IExecutionContext, captured_intents: Optional['IbIntentContext'] = None, target_model: str = ""):
         """行为表达式 CPS 执行入口；段求值通过 yield from。
 
@@ -368,18 +383,14 @@ class _BehaviorMixin:
         spec = yield from self._prepare_behavior_call_cps(
             node_uid, node_data, execution_context, captured_intents, target_model
         )
-
-        future = self._get_thread_pool().submit(
-            self._call_and_parse, spec, node_uid, execution_context
-        )
-        llm_future = LLMFuture(node_uid=node_uid, future=future)
-        result = yield llm_future
-        if result is not None and result.call_info is not None:
-            self._record_current_call_info(result.call_info)
-        return result
+        return (yield from self._execute_behavior_spec_cps(node_uid, spec, execution_context))
 
     def execute_behavior_object_cps(self, behavior: IbObject, execution_context: IExecutionContext):
-        """CPS 版 :meth:`execute_behavior_object`；委托给 execute_behavior_expression_cps。"""
+        """CPS 版 :meth:`execute_behavior_object`；行为值装配经统一装配入口。
+
+        行为值路径（含 run_batch/invoke）与用户 llm 可调用类收敛到统一装配入口
+        :meth:`assemble_llm_call_request_cps`（值自身差异承载装配策略）。
+        """
         if not (isinstance(behavior, IbValue) and behavior.ib_class.name == "behavior"):
             return LLMResult.success_result(value=behavior)
 
@@ -387,9 +398,11 @@ class _BehaviorMixin:
         if cache_enabled and behavior._cache is not None:
             return LLMResult.success_result(value=behavior._cache)
 
-        result = yield from self.execute_behavior_expression_cps(
-            behavior.node, execution_context, captured_intents=behavior.captured_intents
+        request, type_hint, _ = yield from self.assemble_llm_call_request_cps(
+            behavior, execution_context
         )
+        spec = BehaviorCallSpec(request=request, type_hint=type_hint)
+        result = yield from self._execute_behavior_spec_cps(behavior.node, spec, execution_context)
         if cache_enabled:
             behavior._cache = result.value if result else None
         return result
@@ -437,8 +450,9 @@ class _BehaviorMixin:
     ) -> List[IbObject]:
         """同步版批量执行（宿主/线程体 ``_RunBatchDrive._drive`` 兜底）。
 
-        用同步 ``_prepare_behavior_call``（``vm.run`` 段求值重入）预求值 + 提交
-        Future + ``fut.result()`` 阻塞取回。与 ``_SlotUpdateWaitable._drive``
+        用同步泵（``_pump_cps``）驱动统一装配入口
+        （:meth:`assemble_llm_call_request_cps`，行为值经语义槽装配）预求值 +
+        提交 Future + ``fut.result()`` 阻塞取回。与 ``_SlotUpdateWaitable._drive``
         同构——仅非 VM 上下文（无活跃 VM 可 CPS 驱动）时触发；VM 主路径走
         :meth:`_run_batch_cps` 为权威路径。
         """
@@ -456,10 +470,13 @@ class _BehaviorMixin:
                 captured_intents = behavior.captured_intents
                 if captured_intents is None:
                     captured_intents = rt.fork_intent_snapshot()
-                spec = self._prepare_behavior_call(
-                    behavior.node, ec, captured_intents=captured_intents
+                request, type_hint, _ = self._pump_cps(
+                    self.assemble_llm_call_request_cps(
+                        behavior, ec, captured_intents=captured_intents
+                    ),
+                    ec,
                 )
-                specs.append(spec)
+                specs.append(BehaviorCallSpec(request=request, type_hint=type_hint))
             finally:
                 rt.exit_scope()
 
@@ -479,8 +496,9 @@ class _BehaviorMixin:
     ):
         """CPS 版批量执行（VM 权威路径，生成器）。
 
-        与 :meth:`_run_batch_sync` 同语义，但：预求值用 ``_prepare_behavior_call_cps``
-        （段求值/意图消解/hint ``yield from`` 嵌入当前 VM 帧栈，消除 ``vm.run``
+        与 :meth:`_run_batch_sync` 同语义，但：预求值用统一装配入口
+        :meth:`assemble_llm_call_request_cps`（行为值经语义槽装配，
+        段求值/意图消解/hint ``yield from`` 嵌入当前 VM 帧栈，消除 ``vm.run``
         重入）；多 LLM Future 聚合为 :class:`LLMBatchFuture` ``yield`` 由调度器
         非阻塞等待（让出调度线程）。调用方（``_RunBatchDrive.cps_drive``）须
         ``yield from``。
@@ -499,13 +517,10 @@ class _BehaviorMixin:
                 captured_intents = behavior.captured_intents
                 if captured_intents is None:
                     captured_intents = rt.fork_intent_snapshot()
-                spec = yield from self._prepare_behavior_call_cps(
-                    behavior.node,
-                    ec.get_node_data(behavior.node),
-                    ec,
-                    captured_intents=captured_intents,
+                request, type_hint, _ = yield from self.assemble_llm_call_request_cps(
+                    behavior, ec, captured_intents=captured_intents
                 )
-                specs.append(spec)
+                specs.append(BehaviorCallSpec(request=request, type_hint=type_hint))
             finally:
                 rt.exit_scope()
 

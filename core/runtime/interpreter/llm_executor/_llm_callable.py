@@ -414,7 +414,7 @@ class _LLMCallableMixin:
         装配发现 ``__retry__`` 策略时走策略驱动重试循环
         （:meth:`_invoke_llm_callable_retry_cps`）；未声明则单次调用（现状路径）。
         """
-        request, type_hint, retry_policy = yield from self.assemble_llm_callable_request_cps(
+        request, type_hint, retry_policy = yield from self.assemble_llm_call_request_cps(
             callable_inst, ec, target_model=target_model, item=item, call_args=call_args
         )
         if retry_policy is not None:
@@ -503,37 +503,66 @@ class _LLMCallableMixin:
             return False
         return bool(meta.satisfies_protocol(spec, "llm_callable"))
 
-    def assemble_stream_request_cps(self, target: IbObject, ec: IExecutionContext):
-        """统一流式装配：行为值 / 用户 llm 可调用类 → ``LLMCallRequest``（CPS）。
+    def assemble_llm_call_request_cps(
+        self,
+        target: IbObject,
+        ec: IExecutionContext,
+        *,
+        target_model: str = "",
+        captured_intents: Optional[Any] = None,
+        item: Optional[IbObject] = None,
+        call_args: Optional[list] = None,
+    ):
+        """统一装配入口：按值类型选装配策略，返回 ``(request, type_hint, retry_policy)``。
 
-        分派与 ``run_batch`` 同构——差异经值自身承载：行为值走语义槽装配
-        （既有 ``_prepare_behavior_call_cps``，零行为变化）；用户 llm 类经统一装配入口
-        （``assemble_llm_callable_request_cps``，含 ``__intent__`` 可选改写）。两者皆非
-        → fail-fast（与 ``run_batch`` 拒绝消息一致）。
+        - behavior 值 → 语义槽装配（:meth:`_prepare_behavior_call_cps`，``retry_policy=None``）；
+        - 用户 llm 可调用类 → 用户装配 dict（:meth:`assemble_llm_callable_request_cps`，
+          含 ``__intent__``/``__retry__`` 可选协议）；
+        - 其它值 → fail-fast ``TypeError``。
+
+        装配差异经值自身承载（行为→语义槽、llm 类→用户 dict 是本质差异），
+        但分派入口单一——``run_batch``/``invoke``/``stream`` 等值路径消费方不再各自
+        重复 ``if behavior/elif llm_callable`` 判断（行为表达式路径按 node_uid 装配，
+        不经本入口，见 :meth:`_prepare_behavior_call_cps`）。
         """
         from core.runtime.objects.kernel import IbValue
 
         if isinstance(target, IbValue) and target.ib_class.name == "behavior":
             node = getattr(target, "node", None)
             if node is None:
-                raise TypeError("stream_call: behavior value has no node data.")
+                raise TypeError("assemble_llm_call_request: behavior value has no node data.")
             node_data = ec.get_node_data(node)
             if node_data is None:
-                raise TypeError(f"stream_call: behavior node data not found for '{node}'.")
-            spec = yield from self._prepare_behavior_call_cps(
-                node,
-                node_data,
-                ec,
-                captured_intents=getattr(target, "captured_intents", None),
+                raise TypeError(f"assemble_llm_call_request: behavior node data not found for '{node}'.")
+            captured = (
+                captured_intents
+                if captured_intents is not None
+                else getattr(target, "captured_intents", None)
             )
-            return spec.request
+            spec = yield from self._prepare_behavior_call_cps(
+                node, node_data, ec, captured_intents=captured, target_model=target_model
+            )
+            return spec.request, spec.type_hint, None
         if self._is_llm_callable_value(target, ec):
-            request, _, _ = yield from self.assemble_llm_callable_request_cps(target, ec)
-            return request
+            request, type_hint, retry_policy = yield from self.assemble_llm_callable_request_cps(
+                target, ec, target_model=target_model, captured_intents=captured_intents,
+                item=item, call_args=call_args,
+            )
+            return request, type_hint, retry_policy
         raise TypeError(
-            "stream_call: expected a behavior or LLMCallable instance, "
+            "assemble_llm_call_request: expected a behavior or LLMCallable instance, "
             f"got {type(target).__name__}"
         )
+
+    def assemble_stream_request_cps(self, target: IbObject, ec: IExecutionContext):
+        """统一流式装配：行为值 / 用户 llm 可调用类 → ``LLMCallRequest``（CPS）。
+
+        委托统一装配入口 :meth:`assemble_llm_call_request_cps`（单一分派源）——
+        行为值走语义槽装配（零行为变化）；用户 llm 类经用户装配 dict
+        （含 ``__intent__`` 可选改写）。其它值 → fail-fast（同一拒绝消息）。
+        """
+        request, _, _ = yield from self.assemble_llm_call_request_cps(target, ec)
+        return request
 
     def make_stream_callable_drive(
         self,
