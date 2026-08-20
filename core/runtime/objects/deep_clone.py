@@ -112,9 +112,12 @@ def try_deep_clone(
     # 参与 llmexcept 快照/恢复时获得正确的"独立副本"语义--retry body 内对
     # ctx 的修改不会污染保存的快照。
     #
-    # 用鸭子类型（``hasattr(val, "fork")`` + ``hasattr(val, "get_active_intents")``）
-    # 而非 ``isinstance(IbIntentContext)`` 以避免循环依赖。
-    if hasattr(val, "fork") and hasattr(val, "get_active_intents") and hasattr(val, "set_intent_top"):
+    # 惰性 import + isinstance 精确判别（base.py:176 先例）：函数内局部导入
+    # 既避免顶层循环依赖，又比三方法鸭子类型（hasattr fork/get_active_intents/
+    # set_intent_top）精确——任何恰好含这三方法的对象不再被误判为意图上下文。
+    from core.runtime.objects.intent_context import IbIntentContext
+
+    if isinstance(val, IbIntentContext):
         forked = val.fork()
         memo[val_id] = forked
         return forked

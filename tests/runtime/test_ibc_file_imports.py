@@ -13,6 +13,7 @@ IBC 文件跨模块导入（具名 / import-*）行为契约。
 运行时据此枚举，不依赖 dir(package) ∩ 整张模块表）。
 """
 import os
+import warnings
 
 from core.engine import IBCIEngine
 
@@ -644,15 +645,22 @@ class TestCrossModuleSameNameClass:
         assert engine_b.registry.get_class("geo.Box[int]") is None
 
         deser = RuntimeDeserializer(engine_b.registry, factory=engine_b.object_factory)
-        restored = deser.deserialize_context(data)
-        a = restored.get_variable("a")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            restored = deser.deserialize_context(data)
         # 值回落基类（非 None 坏对象），字段保留，基类方法可经 receive 分派。
+        a = restored.get_variable("a")
         assert a.ib_class is not None
         assert a.ib_class.qualified_name == "geo.Box", (
             f"sealed 特化重建失败应回落基类，got {a.ib_class.qualified_name}"
         )
         assert a.fields.get("v") is not None, "字段应保留"
         assert a.receive("get", []).to_native() == 105
+        # 观测：特化身份丢失应发射 KDIAG_RUNTIME_SPECIALIZATION_FALLBACK 诊断。
+        diag_codes = [w.message.args[0] for w in caught if isinstance(w.message, UserWarning)]
+        assert any(
+            "KDIAG_RUNTIME_SPECIALIZATION_FALLBACK" in code for code in diag_codes
+        ), f"应发射特化回落诊断，got warnings: {diag_codes}"
 
     def test_rehydrate_type_pool_spec_module_matching(self, tmp_path):
         """_rehydrate_type_pool_spec 按 (module_path, name) 联合匹配（修 #2）。

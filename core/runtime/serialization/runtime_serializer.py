@@ -722,9 +722,32 @@ class RuntimeDeserializer:
         parent_name = parent_class.qualified_name
         try:
             return self.registry.create_subclass(cls_name, spec, parent_name=parent_name)
-        except Exception:
-            # 特化类重建失败（注册表封印 / 描述符失配等）——值回落基类。
+        except PermissionError:
+            # 注册表封印是特化类重建失败的**唯一预期**原因（跨引擎 round-trip：
+            # 目标引擎已编译基类但封印后不可建特化）——值回落基类（KNOWN_LIMITS
+            # §十 契约）。emit 诊断补观测：特化身份丢失可追溯。
+            self._emit_specialization_fallback(cls_name, spec.module_path, base_name)
             return parent_class
+
+    def _emit_specialization_fallback(self, cls_name: str, module_path: Optional[str], base_name: str) -> None:
+        """发射特化类回落基类诊断（KDIAG_RUNTIME_SPECIALIZATION_FALLBACK）。
+
+        跨引擎 round-trip 时目标引擎封印导致特化类无法重建、值回落基类——
+        特化身份丢失可观测（KNOWN_LIMITS §十 契约的优雅降级，非错误）。
+        """
+        from core.runtime.observability.diagnostics import kernel_diagnostic
+        from core.base.diagnostics.codes import KDIAG_RUNTIME_SPECIALIZATION_FALLBACK
+
+        kernel_diagnostic(
+            code=KDIAG_RUNTIME_SPECIALIZATION_FALLBACK,
+            detail={"specialized": cls_name, "module": module_path, "base": base_name},
+            message=(
+                f"KDIAG_RUNTIME_SPECIALIZATION_FALLBACK: specialized class '{cls_name}' "
+                f"could not be recreated (registry sealed); value falls back to base "
+                f"class '{base_name}' — specialized identity lost on cross-engine "
+                f"round-trip."
+            ),
+        )
 
     def _rehydrate_type_pool_spec(self, cls_name: str):
         """从序列化 type_pool 重建特化 spec（跨引擎反序列化用）。
@@ -749,12 +772,11 @@ class RuntimeDeserializer:
         uid = next((u for u, d in type_pool.items() if _qualified(d) == cls_name), None)
         if uid is None:
             return None
-        try:
-            from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
-            reh = ArtifactRehydrator(type_pool, spec_reg)
-            return reh.hydrate(uid)
-        except Exception:
-            return None
+        from core.runtime.loader.artifact_rehydrator import ArtifactRehydrator
+        reh = ArtifactRehydrator(type_pool, spec_reg)
+        # 重水化异常 = type_pool 数据损坏（非"目标 spec 不在池中"的合法缺失）——
+        # fail-fast 暴露，不静默 return None（否则上层得到 IbObject(None) 坏对象）。
+        return reh.hydrate(uid)
 
     def _create_container_obj(self, ib_class, kind: str, seed):
         """按特化类构造容器值对象（round-trip 特化保真）。

@@ -544,6 +544,12 @@ LLM 调用失败（网络/密钥/提供者错误）。
 - **严重级别**：WARNING。
 - **修复方式**：属正常回退（实例化路径完整重试 + fail-fast）；仅当实例化时报错才需排查默认值表达式。
 
+### `KDIAG_RUNTIME_SPECIALIZATION_FALLBACK`
+运行时降级：跨引擎 round-trip 特化类重建失败（注册表封印），值回落基类。
+- **触发条件**：目标引擎已编译基类但封印后不可 `create_subclass` 重建特化类（`KNOWN_LIMITS.md §十` 契约：特化跨引擎身份保真须目标引擎已编译该类）。
+- **严重级别**：WARNING。
+- **修复方式**：回退后值字段与基类方法可用，仅特化身份丢失；如需身份保真须目标引擎先编译该类。
+
 ## 配置（CFG_）
 
 `api_config.json` 加载与校验失败的诊断码（`ai.load_project_config` / `ai.load_config` / `ai.apply_config`）。校验失败 fail-fast raise `InterpreterError`，不静默回退 mock。配置加载为显式动作：`ai.load_project_config()` 对缺失文件为 no-op（合法态），存在但校验失败则 fail-fast。

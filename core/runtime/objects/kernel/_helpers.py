@@ -27,8 +27,11 @@ def _is_intent_context_param(ec: 'IExecutionContext', param_uid: str, param_data
 def _should_activate_intent_context_arg(arg_value: Any, is_intent_ctx_param: bool) -> bool:
     if is_intent_ctx_param:
         return True
-    return (
-        isinstance(arg_value, IbObject)
-        and hasattr(arg_value, "fields")
-        and arg_value.fields.get("_ctx") is not None
-    )
+    if not isinstance(arg_value, IbObject):
+        return False
+    # 惰性 import + isinstance 精确判别（base.py:176 先例，替代 hasattr 探测）——
+    # 仅当 _ctx 槽持有真实 IbIntentContext 才激活意图上下文路径，任何恰有
+    # 非 None _ctx 字段的普通对象不再误激活（与 use() 校验对齐）。
+    from core.runtime.objects.intent_context import IbIntentContext
+    other_ctx = arg_value.fields.get("_ctx")
+    return isinstance(other_ctx, IbIntentContext)

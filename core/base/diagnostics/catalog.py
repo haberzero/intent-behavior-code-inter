@@ -360,6 +360,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="运行时降级：类字段默认值预评估失败，留待实例化时求值。",
         fix="属尽力而为优化的正常回退（实例化路径完整重试 + fail-fast）；仅当实例化时报错才需排查默认值表达式。",
     ),
+    "KDIAG_RUNTIME_SPECIALIZATION_FALLBACK": CodeInfo(
+        title="运行时降级：跨引擎 round-trip 特化类重建失败（注册表封印），值回落基类。",
+        fix="KNOWN_LIMITS §十 契约：特化跨引擎身份保真须目标引擎已编译该类；回退后值字段与基类方法可用，仅特化身份丢失。如需保真须目标引擎先编译该类。",
+    ),
     # ==================== 配置 (CFG_) ====================
     "CFG_CONFIG_NOT_FOUND": CodeInfo(
         title="配置加载指定的配置文件不存在（ai.load_config / ai.load_project_config）。",
