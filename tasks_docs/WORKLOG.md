@@ -724,6 +724,13 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     登记 PT-DEBT-36 独立窗口**；⑥ 反序列化宽异常收窄 except PermissionError + kernel_diagnostic 补观测。
   - 执行：分 6 阶段（规划记录→机械清理→真缺陷→contract_validator→深层次→反序列化），每步全量
     pytest 零回归；执行顺序允许自主微调，但所有发现问题必须彻底解决（用户明示）。
+  - **周期质量维护推迟裁定（2026-08-20，用户）**：近期为相对深层次重构期，**周期性质量维护任务
+    （PT-AUDIT-1/3 周期复核 + quality-maintenance Tier A/B + aimless-review）推迟到真实试用（阶段 C）
+    之后**；不占用近期主线。阶段 A 一次性攻坚（A1-A5）全部完成，当前 P0 前移阶段 B。
+  - **PT-DEBT-35/36 状态确认（2026-08-20）**：决策 3/5 的"完整任务登记为后续独立窗口"——**已完整记录
+    （PENDING §二 DEBT 活跃 2）但未完成**（本 session 仅完成最小收紧/死守卫清除部分）；PT-DEBT-35（_ctx
+    契约形式化）与 PT-DEBT-36（intent_context 方法族结构重构 + axiom 能力契约校验）为独立窗口任务，
+    不属本次完成范围。
   - **✅ 6 阶段全部落地完成（2026-08-20）**：Phase 1 机械清理（恒真/恒假死守卫 ~24 + 双轨残留 unbox
     收敛 4 + 附带死代码 3：symbol_table/_expression_visitors 死 type_ref 块/registry 守卫/binding_analysis/
     declaration_visitors is_method/component 双形状/strings·numbers·converters·base/collection._len/

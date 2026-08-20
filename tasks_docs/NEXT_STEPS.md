@@ -97,25 +97,25 @@ pytest 3123 passed / 1 skipped 零回归（+11）。**阶段 A 当前 P0 前移�
 （get_methods→get_method_specs + 移除死 kind 门，校验恢复生效）/ 深层次（_helpers 补 isinstance、
 deep_clone 惰性 isinstance）/ 反序列化宽异常收窄 except PermissionError + KDIAG_RUNTIME_SPECIALIZATION_
 FALLBACK 诊断。判别测试 +10；PT-DEBT-35/36 登记独立窗口（PENDING）。全量 pytest 3133 passed /
-1 skipped 零回归（基线 3123，+10 判别）。**阶段 A 当前 P0 前移至 PT-AUDIT-1/3 周期复核 + Tier B**。
+1 skipped 零回归（基线 3123，+10 判别）。**阶段 A 一次性攻坚全部完成（A1-A5），周期质量维护按用户裁定推迟到真实试用（阶段 C）后；当前 P0 前移至 PT-AUDIT-1/3 周期复核 + Tier B**。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
-**阶段 A · 代码/架构健康（当前 P0，用户指定最高优先）**：
+**阶段 A · 代码/架构健康（✅ 一次性攻坚全部完成，2026-08-20）**：
 1. **✅ Tier C 专项审计完成（2026-08-20）**：hasattr 全量分类（113 处：58 合法保留 / 50 简单异味 /
    4 真缺陷 / 4 深层次）；6 阶段全部落地零回归——Phase 1 机械清理（恒真/恒假死守卫 + 双轨残留
    unbox 收敛 + 附带死代码）/ Phase 2 真缺陷 fail-fast 统一（intent_context merge/combine、__from_prompt__
    形状违约、binding_analysis 兜底、serializer mode.value）/ Phase 3 contract_validator:63 公理契约校验
    彻底根因修复（get_methods→get_method_specs + 移除死 kind 门）/ Phase 4 深层次（_helpers 补 isinstance、
    deep_clone 惰性 isinstance）/ Phase 6 反序列化宽异常收窄 except PermissionError + KDIAG 诊断。
-   判别测试 +9；全量 pytest 3133 passed / 1 skipped 零回归（基线 3123）。**阶段 A 当前 P0 前移至
-   PT-AUDIT-1/3 周期复核 + Tier B**。
-2. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
+   判别测试 +9；全量 pytest 3133 passed / 1 skipped 零回归（基线 3123）。**阶段 A 一次性攻坚全部完成（A1-A5）**。
+   （周期质量维护按用户裁定推迟到真实试用后，见下 ⏸）。
+2. ⏸ **PT-AUDIT-1/3 周期复核 + quality-maintenance Tier B（用户 2026-08-20 裁定：推迟到真实试用后）**——近期深层次重构期间不占用主线。
 
-**阶段 B · 功能稳健与对外能力**：
+**阶段 B · 功能稳健与对外能力（当前 P0）**：
 6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；
 7. PT-DECIDE-3 项②④（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）；
 8. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B3）；
