@@ -310,10 +310,19 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   单一分派源，run_batch/invoke/stream 值路径收敛 + `_execute_behavior_spec_cps` 共享提交。判别
   +8；全量 pytest **3082 passed / 1 skipped 零回归**（基线 3069）。文档同步（09_intent_system /
   01_intent_system / LDE §1.3/§3.5）。详见 NEXT_STEPS/WORKLOG/git 历史。
-  下一 session 起点 = **阶段 A P0（PT-DEBT-29 生成器消费协作化）**。
+  **🔴 PT-DEBT-34 变量语义建模技术债已登记 + 迅速评估定论（2026-08-20，用户裁定）**：用户判定变量
+  **引用/拷贝/赋值/传递**值语义建模不显式不合理，为**巨大隐患**（语义地基级），排布置顶阶段 A
+  （真实 LLM 全面试用之前）。迅速评估结论：**运行时值语义模型一致完整、非大重构**——复合对象共享
+  引用（同 Python）/赋值=引用复制/传参共享引用/copy·deepcopy 内建正确/snapshot·llmexcept 深克隆/
+  类静态字段每实例深克隆。"混乱不清晰"集中在**文档契约缺失**（02_variables 无赋值语义、05_functions
+  无传参语义、共享引用只在 KNOWN_LIMITS §五、is vs == 无用户文档）+ **文档漂移**（KNOWN_LIMITS §五.2
+  建议构造器初始化 vs 代码已每实例深克隆 ib_class.py:413）+ **判别测试缺口**。工作量中等（约 4-6 窗口）；
+  修复四步：调研对照 → 文档权威契约 → 判别测试 → 运行时审计+小修（详见 PENDING PT-DEBT-34 / WORKLOG）。
+  下一 session 起点 = **阶段 A P0（PT-DEBT-34 变量语义建模显式化）**。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ 会话交接核验接手完成（HEAD=dcb7c4f2，unsafe-vibe-dev 领先 origin 7 未 push）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3083 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 A1 完成、PT-DEBT-34 登记与迅速评估、push 授权不延续契约），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（PT-DEBT-34 变量语义建模显式化）
 - [x] **✅ 会话交接核验接手完成（HEAD=a97773a6）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / unsafe-vibe-dev 与 origin 同步（已 push）/ main 未动 / 提交序列对齐 / 全量 pytest 实跑 3069 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 push 授权不延续契约与四阶段排布），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（A1）
 - [x] **✅ 会话交接核验接手完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3066 passed / 1 skipped）；契约要点已并入 §2.1（含 INV-EXCEPT-* 保留标准警示），临时交接文件已删除（git 承载）
 - [x] **✅ 技术债收敛 8 阶段全部完成**：任务控制文档收敛 / 注释代号清理（F# 清零含测试层）/ 死代码孤儿清理（inherit_plugins、IbBehaviorInstance）/ 质量红线修复（interpreter 双通道、私有穿透）/ PT-DEBT-4 file→fs / PT-DECIDE-3 项①③ 语义裁定落地；全量 pytest 3069 零回归（+3 判别）；详见 git 历史
