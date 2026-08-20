@@ -38,10 +38,11 @@
 | # | 任务 | 内容 | 依据 | 验证门 |
 |---|---|---|---|---|
 | A1 | ~~主线架构债务落地~~ ✅（2026-08-20 完成） | ~~G5 意图值栈全量重构（意图栈 content:str → 可渲染一等值栈、按值匹配）+ 行为值深程统一装配入口收敛（run_batch/invoke 行为路径收敛到统一装配入口）~~ | 2 项登记架构债；架构统一 | 完成：eager 一等值栈 + `@-` 按值匹配 + `assemble_llm_call_request_cps` 单一装配入口；全量 3082 零回归（见 WORKLOG） |
-| A2 | **PT-DEBT-29 生成器消费协作化** | `IbGenerator.generic_next` 对 Waitable 阻塞等待 → Waitable 感知挂起（让出型消费，与 CPS 执行模型同构） | KNOWN_LIMITS §二十四；消除同步阻塞死锁风险 | 全量 pytest 零回归 + 并发/生成器判别测试 |
-| A3 | **PT-DEBT-30 + PT-DEBT-33 类型边界闭合** | `yield from` 序列委托编译期生成器/序列区分（§二十五）；KNOWN_LIMITS §十 dict 键下标校验 / 中置星计数偏移 / 跨引擎封印 | 类型地基边界 | 全量 pytest 零回归 + 边界判别测试 |
-| A4 | **Tier C 专项审计** | C 类异味 ~25 处需人工判定 + 静默降级补诊断复核（leaf/runtime_serializer/artifact_loader 尽力而为回退）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项） | 收敛期审计 C 类清单；PT-AUDIT-2 前提复核 | 独立分支或同分支分批；分类定案 + 只修低风险；零回归 |
-| A5 | **PT-AUDIT-1/3 周期复核 + quality-maintenance Tier B** | 代码异味核对周期回顾；R 系列复核清单；Tier B 阶段边界批量巡检 | 周期审计；长期质量维护 | 分类 + 只修低风险 + 记录 |
+| A2 | **PT-DEBT-34 变量语义建模显式化**（用户 2026-08-20 新增，置顶） | 变量**引用/拷贝/赋值/传递**值语义建模未显式且合理区分——评估现状语义面→调研主流语言对照→修复语义混乱 + 补齐语法与说明书；用户判定巨大隐患，**排在真实试用前** | 用户裁定；语义地基级隐患 | 评估/调研产出对照结论 + 修复全量 pytest 零回归 + 语义判别测试 + docs 权威契约 |
+| A3 | **PT-DEBT-29 生成器消费协作化** | `IbGenerator.generic_next` 对 Waitable 阻塞等待 → Waitable 感知挂起（让出型消费，与 CPS 执行模型同构） | KNOWN_LIMITS §二十四；消除同步阻塞死锁风险 | 全量 pytest 零回归 + 并发/生成器判别测试 |
+| A4 | **PT-DEBT-30 + PT-DEBT-33 类型边界闭合** | `yield from` 序列委托编译期生成器/序列区分（§二十五）；KNOWN_LIMITS §十 dict 键下标校验 / 中置星计数偏移 / 跨引擎封印 | 类型地基边界 | 全量 pytest 零回归 + 边界判别测试 |
+| A5 | **Tier C 专项审计** | C 类异味 ~25 处需人工判定 + 静默降级补诊断复核（leaf/runtime_serializer/artifact_loader 尽力而为回退）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项） | 收敛期审计 C 类清单；PT-AUDIT-2 前提复核 | 独立分支或同分支分批；分类定案 + 只修低风险；零回归 |
+| A6 | **PT-AUDIT-1/3 周期复核 + quality-maintenance Tier B** | 代码异味核对周期回顾；R 系列复核清单；Tier B 阶段边界批量巡检 | 周期审计；长期质量维护 | 分类 + 只修低风险 + 记录 |
 
 ## 三、阶段 B · 功能稳健与对外能力
 
@@ -60,7 +61,8 @@
 
 ## 四、阶段 C · 真实 LLM 全面试用重启（VISION-3）
 
-- **触发阈值**：阶段 A 健康攻坚 + 阶段 B 稳健巩固完成后，健康度/稳定性达标。
+- **触发阈值**：阶段 A 健康攻坚（含 **PT-DEBT-34 变量语义建模显式化**完成）+ 阶段 B 稳健巩固
+  完成后，健康度/稳定性达标。
 - **目标**：对**五大地基重构后全部新特性重试用**（一次全面覆盖，非渐进追加）：
   - llm 可调用类（直接调用 `f(args)` / 装配 dict / `__intent__` 三层改写 / `__retry__` 高阶化）
   - stream 流式（`stream_call` / `stream_channel`）、run_batch 批量（逐项参数化）

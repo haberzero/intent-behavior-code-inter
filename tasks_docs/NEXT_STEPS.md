@@ -59,7 +59,7 @@ git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 意图消解链同步化收敛去死 CPS 包装；`@- "text"`/`@- $x` 解析修复）+ 行为值深程统一装配入口收敛
 （`assemble_llm_call_request_cps` 单一分派源，run_batch/invoke/stream 值路径收敛）。判别测试
 +8（test_intent_value_stack +7 / run_batch 拒绝非法值 +1）；全量 pytest 3082 passed / 1 skipped
-零回归。阶段 A 当前 P0 前移至 **PT-DEBT-29**。
+零回归。阶段 A 当前 P0 前移至 **PT-DEBT-34 变量语义建模显式化**（用户 2026-08-20 新增置顶，见 WORKLOG）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
@@ -67,11 +67,13 @@ git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
 **阶段 A · 代码/架构健康（当前 P0，用户指定最高优先）**：
-1. **PT-DEBT-29 生成器消费协作化**（Waitable 让出型消费，消除同步阻塞死锁风险——架构级）；
-2. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
-3. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
+1. **PT-DEBT-34 变量语义建模显式化**（引用/拷贝/赋值/传递——评估→调研→修复；用户
+   2026-08-20 判定巨大隐患，**排在真实 LLM 全面试用之前**；先评估现状语义面再定修复面）；
+2. **PT-DEBT-29 生成器消费协作化**（Waitable 让出型消费，消除同步阻塞死锁风险——架构级）；
+3. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
+4. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
    runtime_serializer/artifact_loader）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项）；
-4. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
+5. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
 
 **阶段 B · 功能稳健与对外能力**：
 6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；
@@ -82,7 +84,7 @@ git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 **已封存**：PT-DECIDE-2（供应商思考禁用）——用户裁定短期不再考虑启动。
 **划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。
 
-**阶段 C · 真实 LLM 全面试用重启（阈值：A/B 健康稳定达标后；非最高优先但必做）**：
+**阶段 C · 真实 LLM 全面试用重启（阈值：A/B 健康稳定达标 + PT-DEBT-34 变量语义建模显式化完成后；非最高优先但必做）**：
 10. **VISION-3 重启**：对五大地基重构后全部新特性重试用——llm 可调用类（直接调用/装配/
     __intent__ 三层改写/__retry__ 高阶化）、stream 流式、run_batch 批量、覆层机制、prompt
     协议族五成员、意图一等值嵌入、fs 模块、Optional/容器解析等；真实 qwen3.6 非思考模式全量
