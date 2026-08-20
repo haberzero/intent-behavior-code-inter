@@ -288,6 +288,59 @@ impl P for int:
 """
         expect_compile_error(code, SEM_TYPE_MISMATCH)
 
+    def test_validate_prompt_on_builtin_errors(self):
+        """impl 为内置类型定义 __validate_prompt__ → 编译期错误。
+
+        内置 LLM 输出解析走 AxiomParsingStrategy（from_prompt_cap / 内建解析器，
+        单一权威），永不分派 impl 补充的解析协议方法——收集即半接通
+        （声明即"满足协议"但从不执行），与 __init__ 先例同构 fail-fast。
+        """
+        code = """
+protocol V:
+    func __validate_prompt__(self, str raw) -> tuple:
+        pass
+
+impl V for int:
+    func __validate_prompt__(self, str raw) -> tuple:
+        return (False, "custom rejection")
+"""
+        expect_compile_error(code, SEM_TYPE_MISMATCH)
+
+    def test_from_prompt_on_builtin_errors(self):
+        """impl 为内置类型定义 __from_prompt__ → 编译期错误（同上：内置解析
+        走 Axiom 单一路径，impl 补充永不分派，收集即半接通）。"""
+        code = """
+protocol F:
+    func __from_prompt__(self, str raw) -> tuple:
+        pass
+
+impl F for int:
+    func __from_prompt__(self, str raw) -> tuple:
+        return (True, 7)
+"""
+        expect_compile_error(code, SEM_TYPE_MISMATCH)
+
+    def test_user_class_impl_from_prompt_still_allowed(self):
+        """用户类 impl 补充 __from_prompt__ 仍合法（内置类型专有拒绝，
+        不波及其它 impl 目标）。"""
+        code = """
+class User:
+    int v
+    func __init__(self) -> auto:
+        self.v = 1
+
+protocol F:
+    func __from_prompt__(self, str raw) -> tuple:
+        pass
+
+impl F for User:
+    func __from_prompt__(self, str raw) -> tuple:
+        return (True, User())
+"""
+        from tests.conftest import compile_ibci
+
+        compile_ibci(code)  # 不抛即通过
+
     def test_dynamic_target_errors(self):
         """any/auto 是动态逃生类型（对一切协议恒满足），不可作 impl 目标。"""
         code = """

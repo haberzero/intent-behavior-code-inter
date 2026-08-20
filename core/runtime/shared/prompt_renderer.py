@@ -17,7 +17,10 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Union
 
 from core.runtime.observability.diagnostics import kernel_diagnostic
-from core.base.diagnostics.codes import KDIAG_PROTOCOL_PAYLOAD_PROMPT_FALLBACK
+from core.base.diagnostics.codes import (
+    KDIAG_PROTOCOL_PAYLOAD_PROMPT_FALLBACK,
+    KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
+)
 
 
 class PromptRenderer:
@@ -66,8 +69,20 @@ class PromptRenderer:
                         return str(result.to_native())
                     return str(result)
                 except AttributeError:
-                    # Protocol missing -> fallback; user method bugs fail-fast.
-                    pass
+                    # 协议分派失败回退：此处捕获的 AttributeError 既可能是"协议
+                    # 声明但 vtable 缺失"（合法回退），也可能是用户 __to_prompt__
+                    # 方法体内真实 bug（自身抛 AttributeError）。为可观测性，统一
+                    # 发射 KDIAG 诊断（fail-fast 不静默吞用户方法 bug，与
+                    # to_payload/base.py 回退路径同构）。
+                    type_name = getattr(getattr(val, "ib_class", None), "name", None) or type(val).__name__
+                    kernel_diagnostic(
+                        code=KDIAG_PROTOCOL_TO_PROMPT_FALLBACK,
+                        detail={"context": "to_prompt_str", "type": type_name},
+                        message=(
+                            f"__to_prompt__ dispatch failed for '{type_name}', "
+                            f"falling back to to_native() (AttributeError)"
+                        ),
+                    )
 
         if hasattr(val, 'to_native'):
             try:

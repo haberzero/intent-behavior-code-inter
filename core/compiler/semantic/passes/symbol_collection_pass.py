@@ -406,6 +406,22 @@ class SymbolCollector:
                         stmt, code=SEM_TYPE_MISMATCH,
                     )
                     continue
+                if (
+                    not node.is_overlay
+                    and is_kernel_native
+                    and stmt.name in ("__from_prompt__", "__validate_prompt__")
+                ):
+                    # 内置类型 LLM 输出解析走 AxiomParsingStrategy（from_prompt_cap/
+                    # 内建解析器，单一权威），永不分派 impl 补充的解析协议方法——
+                    # 收集即半接通（声明即"满足协议"但从不执行），fail-fast。
+                    # （同 __init__ 先例；P5 已定内置预校验由内建解析器承担）
+                    self.error(
+                        f"impl on built-in type '{node.type_name}' cannot define "
+                        f"'{stmt.name}': built-in LLM output parsing never dispatches "
+                        "impl-supplied prompt-protocol methods.",
+                        stmt, code=SEM_TYPE_MISMATCH,
+                    )
+                    continue
                 if not node.is_overlay and (stmt.name in self.symbol_table.symbols or stmt.name in conflict_names):
                     # 与类自身（或先前 impl / 宿主 bind 声明 / 内置公理方法面）
                     # 已定义成员冲突：fail-fast，跳过定义（类型检查阶段不再重复报）

@@ -197,3 +197,37 @@ llmexcept:
         assert not any(d["code"] == "KDIAG_PROTOCOL_SNAPSHOT_FALLBACK" for d in kd), (
             f"expected no kernel_diagnostic events with observability off, got {kd}"
         )
+
+
+class TestToPromptFallbackObservability:
+    """__to_prompt__ 协议分派失败回退可观测性（PT-DECIDE-3 项④）。
+
+    用户 __to_prompt__ 方法体抛异常（含 AttributeError）时，PromptRenderer
+    不再静默吞掉——发射 KDIAG_PROTOCOL_TO_PROMPT_FALLBACK（警告 + 事件双投影），
+    与 to_payload / cast 回退路径同构，fail-fast 不隐藏用户方法 bug。
+    """
+
+    def test_to_prompt_user_bug_emits_warning_and_event(self):
+        code = AI_MOCK_PREFIX + """
+class BrokenPrompt:
+    func __to_prompt__(self) -> str:
+        return self.missing_attr
+BrokenPrompt b = BrokenPrompt()
+@ $b
+str r = @~ MOCK:STR:ok ~
+print(r)
+"""
+        # 经意图渲染路径触发 to_prompt_str（PromptRenderer 统一入口）
+        out, warns, kd, exc = _run_and_collect(code)
+        assert exc is None
+        assert out == ["ok"], out
+        # 警告投影：to_prompt_str 回退（含 AttributeError 用户 bug）不再静默
+        assert any(
+            "__to_prompt__ dispatch failed" in wmsg
+            or "__to_prompt__ failed" in wmsg
+            for wmsg in warns
+        ), f"no to_prompt fallback warning, got {warns}"
+        # 事件投影：KDIAG_PROTOCOL_TO_PROMPT_FALLBACK（任一发射站点）
+        assert any(
+            d["code"] == "KDIAG_PROTOCOL_TO_PROMPT_FALLBACK" for d in kd
+        ), f"expected KDIAG_PROTOCOL_TO_PROMPT_FALLBACK, got {kd}"
