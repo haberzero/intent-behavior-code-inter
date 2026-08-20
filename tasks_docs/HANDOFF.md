@@ -303,7 +303,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **✅ 会话交接核验接手完成（本 session）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 /
   分支 unsafe-vibe-dev 与 origin 同步 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3069 passed /
   1 skipped** / 契约与下一步已读）；本文件 §2.1/§2.2 收敛更新，临时交接文件已删除（git 承载）。
-  下一 session 起点 = **阶段 A P0（A1 主线架构债务落地，先设计→评估→落地）**。
+  **✅ 阶段 A1 主线架构债务落地完成（2026-08-20，unsafe-vibe-dev）**：① **G5 意图值栈全量重构**
+  （`08c4b787`）——意图段 eager 求值为一等值列表（`IbIntent.values`，content/segments 双表示收敛
+  为协议计算属性；`@-` 按值派生渲染文本匹配；意图消解链同步化收敛去死 CPS 包装；`@- "text"`/
+  `@- $x` 解析修复）；② **行为值深程统一装配入口收敛**（`202c6ff3`）——`assemble_llm_call_request_cps`
+  单一分派源，run_batch/invoke/stream 值路径收敛 + `_execute_behavior_spec_cps` 共享提交。判别
+  +8；全量 pytest **3082 passed / 1 skipped 零回归**（基线 3069）。文档同步（09_intent_system /
+  01_intent_system / LDE §1.3/§3.5）。详见 NEXT_STEPS/WORKLOG/git 历史。
+  下一 session 起点 = **阶段 A P0（PT-DEBT-29 生成器消费协作化）**。
 
 ### 2.2 交接检查单（当前有效）
 

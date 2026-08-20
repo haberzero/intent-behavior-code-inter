@@ -259,8 +259,10 @@ if intent_info.pop_top:
     runtime_context.pop_intent()                       # @-（无参数）：弹出栈顶
 elif intent_info.tag:
     runtime_context.remove_intent(tag=intent_info.tag) # @-#tag：按标签移除
-elif intent_info.content:
-    runtime_context.remove_intent(content=intent_info.content)  # @- 内容：按内容移除
+else:
+    # @- 内容/值：操作数 eager 求值 → 渲染文本 → 按值匹配移除
+    operand = _build_intent_from_data(...)
+    runtime_context.remove_intent(content=operand.render_text())
 ```
 
 ### 4.5 意图消解（IntentResolver）
@@ -328,15 +330,24 @@ captured_intents = None if capture_mode == "lambda" else self.runtime_context.fo
 
 ```
 IbIntent (IbObject)
-├── content: str            # 意图内容文本
+├── values: List[IbObject]   # 一等值列表（意图段在注释/栈操作执行点 eager 求值）
 ├── mode: IntentMode        # APPEND(叠加) / OVERRIDE(排他) / REMOVE(移除)
 ├── role: IntentRole        # BLOCK / SMEAR / CALL / GLOBAL / DYNAMIC / STACK
 ├── tag: Optional[str]      # 可选标签（用于 @-#tag 精确移除）
-└── resolve_content(...)    # 解析插值变量（$var 引用）后返回最终文本
+├── content: str            # 协议计算属性 = render_text()（从 values 渲染）
+└── render_text()           # 单一权威渲染：各值经 __to_prompt__ 拼接去空白
 ```
 
+> **一等值栈（G5）**：意图段不再保存退化字符串 `content` 或延迟段引用 `segments`——
+> 在 `@`/`@+`/`@!`/`@-` 执行点 **eager 求值为一等值列表**（`values`）。渲染
+> （`render_text`）从值经 `__to_prompt__` 拼接（可调用/行为值渲染为契约形态）；
+> `@-` 匹配（`remove(tag, content)`）把操作数求值后渲染为文本，与栈内意图的
+> 渲染文本比较（**按值匹配**，修复动态意图按退化字符串匹配失效）。
+> `content` 为协议属性（渲染文本），`IntentProtocol` 契约不破坏。
+> 求值时序语义：`@+ $x` 压入**当时** x 的值，之后重赋值 x 不影响已压入意图。
+
 `IntentAxiom`（`core/kernel/axioms/intent.py`）：`is_class=True`，公开方法：
-- `get_content()`：获取意图文本
+- `get_content()`：获取意图文本（渲染）
 - `get_tag()`：获取意图标签
 - `get_mode()`：获取意图模式
 
@@ -416,7 +427,7 @@ _active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork
 
 - **唯一 6 槽位表示**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top_uid` / `smear_queue` / `override` / `global_intents` / `inherited_smear` / `inherited_override`，是意图上下文的唯一序列化表示。
 - **共享身份**：通过 `id(ic) → uid` 备忘表保留多处引用同一 `IbIntentContext` 的身份；反序列化端的 `_get_intent_context` 也用 cache 还原"wrapper.fields['_ctx'] is rt_ctx._intent_ctx"不变量。
-- **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 content/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性。
+- **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 values/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性——一等值列表经 `_process_value`/`_deserialize_value` 保真往返（G5 值栈）。
 - **`serialize_context`**：写入 `intent_ctx_uid` 与 `active_intent_ibobj_uid`，调试器断点场景可还原完整意图上下文（含活跃指针身份）。
 
 ---

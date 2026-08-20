@@ -613,6 +613,25 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **PT-DECIDE-2（供应商思考禁用）封存**——短期不再考虑启动（PENDING 标 sealed，解封条件=
   多供应商思考模式部署需求）；**PT-DOC-3P2 提前至 B3**（how-to 读者旅程，对外可用性优先）；
   **PT-FEAT-6/12 划更远期**（近期不处理）。完整排布见 `tasks_docs/_planning_health_first.md`。
+- **阶段 A1 主线架构债务落地完成（2026-08-20，unsafe-vibe-dev）**：按 `_a1_architecture_debt.md`
+  设计执行（临时设计文档，完成后删除）——两块登记架构债解除：
+  - **① G5 意图值栈全量重构**（`08c4b787`）：意图段在注释/栈操作执行点 **eager 求值为一等值
+    列表**（`IbIntent.values`），删除运行时 `content`/`segments` 双表示（`content` 变协议计算
+    属性 = `render_text()`，`IntentProtocol` 不破）；`@-` 按**值派生渲染文本**匹配（操作数求值
+    → `__to_prompt__` → 与栈内意图渲染文本比较，修复动态意图按退化字符串匹配失效）；
+    **求值时序语义**：`@+ $x` 压入当时值，重赋值不影响已压入意图（值栈语义，替代原 resolve
+    时惰性重求值——无测试依赖旧语义，判别测试锁定）；**意图消解链同步化收敛**——渲染已同步，
+    删除死 CPS 包装（`resolve_content_cps`/`resolve_to_prompts_cps`/`get_resolved_prompt_intents_cps`/
+    `IntentResolver.resolve_cps`，`_resolve_llm_callable_intents` 同步化）；**`@-` 解析修复**——
+    pop_top 误判（`@- "text"`/`@- $x` 带空格时被当 pop_top），修复为"纯空白后须换行/EOF 才是
+    pop_top"；序列化改值列表往返。判别测试 `tests/e2e/test_intent_value_stack.py` +7。
+  - **② 行为值深程统一装配入口收敛**（`202c6ff3`）：新增 `assemble_llm_call_request_cps` 统一
+    装配入口（行为值→语义槽装配 / llm 可调用类→用户装配 dict，单一分派源）；`assemble_stream_request_cps`
+    委托统一入口；`run_batch` 行为路径（`_run_batch_sync`/`_run_batch_cps`）与 `execute_behavior_object_cps`
+    收敛到统一入口；提取 `_execute_behavior_spec_cps` 共享提交（机制同构）；行为表达式路径保持
+    `_prepare_behavior_call_cps`（无值对象，非双通道）。判别测试 run_batch 拒绝非法值 +1。
+  全量 pytest **3082 passed / 1 skipped 零回归**（基线 3069）；阶段 A P0 前移至 PT-DEBT-29。
+  文档同步：09_intent_system（一等值/按值匹配）、01_intent_system（值栈模型）、LDE（§1.3/§3.5 收敛注记）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

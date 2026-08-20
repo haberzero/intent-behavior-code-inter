@@ -54,19 +54,24 @@ PT-AUDIT-2 复核 / COVERAGE_MATRIX 补测）；阶段 6-7 PT-DECIDE-3 项①③
 单向契约 / SEM_PROTOCOL_SIGNATURE required=error）。每步全量 pytest 零回归 + 描述性 commit；详见
 git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 
+**✅ 阶段 A 主线架构债务落地完成（2026-08-20，A1）**：G5 意图值栈全量重构（意图段 eager 求值为
+一等值列表 `IbIntent.values`，content/segments 双表示收敛为协议计算属性；`@-` 按值派生渲染文本匹配；
+意图消解链同步化收敛去死 CPS 包装；`@- "text"`/`@- $x` 解析修复）+ 行为值深程统一装配入口收敛
+（`assemble_llm_call_request_cps` 单一分派源，run_batch/invoke/stream 值路径收敛）。判别测试
++8（test_intent_value_stack +7 / run_batch 拒绝非法值 +1）；全量 pytest 3082 passed / 1 skipped
+零回归。阶段 A 当前 P0 前移至 **PT-DEBT-29**。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
 **阶段 A · 代码/架构健康（当前 P0，用户指定最高优先）**：
-1. **主线架构债务落地**：G5 意图值栈全量重构 + 行为值深程统一装配入口收敛（解除 2 项登记
-   架构债；先设计→评估→落地，勿半接通）；
-2. **PT-DEBT-29 生成器消费协作化**（Waitable 让出型消费，消除同步阻塞死锁风险——架构级）；
-3. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
-4. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
+1. **PT-DEBT-29 生成器消费协作化**（Waitable 让出型消费，消除同步阻塞死锁风险——架构级）；
+2. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
+3. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
    runtime_serializer/artifact_loader）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项）；
-5. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
+4. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
 
 **阶段 B · 功能稳健与对外能力**：
 6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；

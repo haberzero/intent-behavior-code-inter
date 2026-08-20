@@ -86,6 +86,23 @@ class TestAiRunBatch:
         assert lines and "doc-a" in lines[0] and "doc-b" in lines[0]
 
 
+    def test_run_batch_rejects_invalid_target(self, mock_server):
+        """统一装配入口 fail-fast：非 behavior / 非 llm 可调用类值 → TypeError。"""
+        lines = run_ibci(
+            _code(
+                mock_server,
+                "int x = 123\n"
+                "try:\n"
+                "    list results = ai.run_batch(x, [1])\n"
+                "    print('no')\n"
+                "except:\n"
+                "    print('caught')\n",
+            )
+        )
+        assert "caught" in lines
+        assert "no" not in lines
+
+
 class TestRunBatchWaitableContract:
     """run_batch 返回 CPSDrivable Waitable，不同步阻塞主线程。"""
 

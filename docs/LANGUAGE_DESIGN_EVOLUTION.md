@@ -74,6 +74,12 @@ has_payload_prompt_cap
 - `IbIntentContext` 维护持久栈、smear、override、global；
 - `IntentResolver` 最终把意图解析成 `List[str]`。
 
+> **已收敛（阶段 A1 · G5，2026-08）**：意图系统已升级为**一等值栈**——意图段在注释/
+> 栈操作执行点 eager 求值为值列表（`IbIntent.values`，取代 `content`/`segments` 双表示），
+> 渲染经 `__to_prompt__` 统一协议（可调用/行为值渲染契约形态），`@-` 按值派生渲染文本
+> 匹配。`_helpers.py` 的意图上下文参数激活仍为参数类型名判定（另见 KNOWN_LIMITS §十二，
+> 不在本债务内）。
+
 当前意图可以包含 `$var` / 表达式段，但这仍然是在“求值后转成字符串”的层面。它没有：
 
 - 把“一个用户定义对象”作为意图值；
@@ -216,6 +222,10 @@ func max[T: Comparable](T a, T b) -> T:
 - 类型推断可以先用“轻量约束检查”，不必一开始就上完整 Hindley-Milner。
 
 ### 3.5 意图系统正交化：从字符串栈到 Promptable 值栈
+
+> **已基本落地（阶段 A1 · G5，2026-08）**：意图值栈已实现——`IbIntent.values` 持有一等值
+> （eager 求值）、`__to_prompt__` 统一渲染协议、`IntentResolver` 最终渲染、函数/behavior/
+> llm 可调用值可作为意图值由 `__to_prompt__` 决定呈现。本段保留为原始设计建议（历史承载）。
 
 建议把意图从“字符串栈”升级为“可渲染值栈”：
 

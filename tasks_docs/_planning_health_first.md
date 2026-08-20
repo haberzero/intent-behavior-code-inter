@@ -14,10 +14,10 @@
 
 ## 〇、当前状态基线（交接锚点）
 
-- 分支 `unsafe-vibe-dev`，已推送 origin（含收敛 10 笔 + 排布 1 笔，246 提交）；main 未触碰。
-- 测试基线：**3069 passed / 1 skipped**（以实跑为准）。
-- 技术债收敛 8 阶段已全部完成（F# 代号清零/死代码孤儿清理/质量红线修复/PT-DEBT-4 file→fs/
-  PT-DECIDE-3 项①③ 语义裁定落地）；`tasks_docs/HANDOFF.md` §2.1 有完成登记。
+- 分支 `unsafe-vibe-dev`（本地领先 origin，未 push——push 需再获显式授权）；main 未触碰。
+- 测试基线：**3082 passed / 1 skipped**（以实跑为准）。
+- 技术债收敛 8 阶段已全部完成 + **阶段 A1 主线架构债务落地完成**（G5 意图值栈 + 行为统一装配
+  入口收敛，2026-08-20，见 WORKLOG）；`tasks_docs/HANDOFF.md` §2.1 有完成登记。
 
 ---
 
@@ -37,7 +37,7 @@
 
 | # | 任务 | 内容 | 依据 | 验证门 |
 |---|---|---|---|---|
-| A1 | **主线架构债务落地** | G5 意图值栈全量重构（意图栈 content:str → 可渲染一等值栈、按值匹配）+ 行为值深程统一装配入口收敛（run_batch/invoke 行为路径收敛到统一装配入口） | 2 项登记架构债；架构统一 | 先设计→评估→落地；勿半接通；全量 pytest 零回归 |
+| A1 | ~~主线架构债务落地~~ ✅（2026-08-20 完成） | ~~G5 意图值栈全量重构（意图栈 content:str → 可渲染一等值栈、按值匹配）+ 行为值深程统一装配入口收敛（run_batch/invoke 行为路径收敛到统一装配入口）~~ | 2 项登记架构债；架构统一 | 完成：eager 一等值栈 + `@-` 按值匹配 + `assemble_llm_call_request_cps` 单一装配入口；全量 3082 零回归（见 WORKLOG） |
 | A2 | **PT-DEBT-29 生成器消费协作化** | `IbGenerator.generic_next` 对 Waitable 阻塞等待 → Waitable 感知挂起（让出型消费，与 CPS 执行模型同构） | KNOWN_LIMITS §二十四；消除同步阻塞死锁风险 | 全量 pytest 零回归 + 并发/生成器判别测试 |
 | A3 | **PT-DEBT-30 + PT-DEBT-33 类型边界闭合** | `yield from` 序列委托编译期生成器/序列区分（§二十五）；KNOWN_LIMITS §十 dict 键下标校验 / 中置星计数偏移 / 跨引擎封印 | 类型地基边界 | 全量 pytest 零回归 + 边界判别测试 |
 | A4 | **Tier C 专项审计** | C 类异味 ~25 处需人工判定 + 静默降级补诊断复核（leaf/runtime_serializer/artifact_loader 尽力而为回退）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项） | 收敛期审计 C 类清单；PT-AUDIT-2 前提复核 | 独立分支或同分支分批；分类定案 + 只修低风险；零回归 |
