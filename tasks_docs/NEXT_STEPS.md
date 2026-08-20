@@ -90,6 +90,15 @@ PT-DEBT-30 + PT-DEBT-33 类型边界闭合**。
 跨引擎回退 1）；KNOWN_LIMITS §二十四（序列委托）移除重编号 24-25 + §十.2/§十.3 更新。全量
 pytest 3123 passed / 1 skipped 零回归（+11）。**阶段 A 当前 P0 前移至 Tier C 专项审计**。
 
+**✅ Tier C 专项审计完成（本 session，2026-08-20）**：hasattr 全量分类（113 处：58 合法保留 /
+50 简单异味 / 4 真缺陷 / 4 深层次）+ 用户 6 决策 + 6 阶段全部落地零回归——机械清理（恒真/恒假
+死守卫 + 双轨残留 unbox + 附带死代码）/ 真缺陷 fail-fast（merge/combine 对齐 use()、__from_prompt__
+形状违约、binding_analysis 死兜底、mode.value）/ contract_validator:63 公理契约校验彻底根因修复
+（get_methods→get_method_specs + 移除死 kind 门，校验恢复生效）/ 深层次（_helpers 补 isinstance、
+deep_clone 惰性 isinstance）/ 反序列化宽异常收窄 except PermissionError + KDIAG_RUNTIME_SPECIALIZATION_
+FALLBACK 诊断。判别测试 +10；PT-DEBT-35/36 登记独立窗口（PENDING）。全量 pytest 3133 passed /
+1 skipped 零回归（基线 3123，+10 判别）。**阶段 A 当前 P0 前移至 PT-AUDIT-1/3 周期复核 + Tier B**。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用

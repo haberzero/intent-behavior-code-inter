@@ -345,10 +345,25 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   三子边界——10.1 dict 键编译期校验 / 10.3 中置·前导星偏移修正 / 跨引擎封印优雅回落基类（与内置
   list[int]→list 同构，杜绝 ib_class=None 坏对象；封印不放松，决策见 WORKLOG）。判别测试 +11；
   KNOWN_LIMITS §二十四（序列委托）移除重编号 24-25 + §十.2/§十.3 更新。全量 pytest **3123 passed /
-  1 skipped 零回归**。下一 session 起点 = **阶段 A P0（Tier C 专项审计）**。
+  1 skipped 零回归**。见下 Tier C 完成记录。
+  **✅ Tier C 专项审计完成（2026-08-20，unsafe-vibe-dev）**：hasattr 全量分类（113 处：58 合法保留 /
+  50 简单异味 / 4 真缺陷 / 4 深层次）+ 用户 6 决策 + 6 阶段全部落地零回归——Phase 1 机械清理
+  （恒真/恒假死守卫 ~24 + 双轨残留 unbox 收敛 + 附带死代码）/ Phase 2 真缺陷 fail-fast（intent_context
+  merge/combine 对齐 use()、__from_prompt__ 形状违约、binding_analysis 死兜底、serializer mode.value）/
+  Phase 3 contract_validator:63 公理契约校验彻底根因修复（get_methods→get_method_specs + 移除死 kind 门，
+  校验恢复生效零违约零误报）/ Phase 4 深层次（_helpers 补 isinstance、deep_clone 惰性 isinstance）/
+  Phase 6 反序列化宽异常收窄 except PermissionError + KDIAG_RUNTIME_SPECIALIZATION_FALLBACK 诊断。
+  判别测试 +10；KNOWN_LIMITS §十 契约不变；**PT-DEBT-35（_ctx 契约形式化）/ PT-DEBT-36（intent_context
+  方法族结构重构 + axiom 能力契约校验）登记 PENDING 独立窗口**。全量 pytest **3133 passed /
+  1 skipped 零回归**（基线 3123，+10 判别）。下一 session 起点 = **阶段 A P0（PT-AUDIT-1/3 周期复核 + Tier B）**。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ Tier C 专项审计完成（本 session，unsafe-vibe-dev）**：hasattr 全量分类
+  （113 处：58 合法/50 简单异味/4 真缺陷/4 深层次）+ 6 决策 + 6 阶段零回归（机械清理/
+  真缺陷 fail-fast/contract_validator 恢复校验/深层次 isinstance/反序列化宽异常+KDIAG）；
+  判别 +10；全量 pytest 3133 passed / 1 skipped 零回归；PT-DEBT-35/36 登记独立窗口。
+  下一 session 起点 = 阶段 A P0（PT-AUDIT-1/3 周期复核 + Tier B）
 - [x] **✅ PT-DEBT-30 + PT-DEBT-33 类型边界闭合完成（本 session，unsafe-vibe-dev）**：yield from
   序列委托编译期收紧 + dict 键校验 + 中置·前导星偏移修正 + 跨引擎封印优雅回落基类；判别测试 +11；
   全量 pytest 3123 passed / 1 skipped 零回归；KNOWN_LIMITS 编号更新（二十四=用户协议/impl、
