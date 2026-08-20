@@ -356,9 +356,22 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   判别测试 +10；KNOWN_LIMITS §十 契约不变；**PT-DEBT-35（_ctx 契约形式化）/ PT-DEBT-36（intent_context
   方法族结构重构 + axiom 能力契约校验）登记 PENDING 独立窗口**。全量 pytest **3133 passed /
   1 skipped 零回归**（基线 3123，+10 判别）。下一 session 起点 = **阶段 B（功能稳健/对外能力，当前 P0）**——B1 PT-TEST-2 / B2 PT-DECIDE-3 项②④ / **B3 PT-DEBT-36** / **B4 PT-DEBT-35**（2026-08-20 从推迟移入 B，不再推迟）/ B5 PT-DOC-3P2 / B6 PT-FEAT-5；周期质量维护（PT-AUDIT-1/3 + Tier B）按用户裁定推迟到真实试用（阶段 C）后。
+  **✅ B1 PT-TEST-2 覆盖缺口补测完成（本 session，unsafe-vibe-dev `1eaefb12`）**：COVERAGE_MATRIX
+  缺口全收敛——新增判别测试 17 项（INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 /
+  INV-MOCK-3 / 模块缓存 / 循环 import / switch 内 return）+ 矩阵卫生（3 处陈旧 TRUE_GAP 收敛：
+  INV-INTENT-SCOPE-3 已有 snapshot 冻结测试、INV-LLMEXCEPT-CATCH-4→5 重号、switch break/continue
+  已有测试）+ §7 模块重载=设计排除（无热重载机制）。**B6 交付边界（用户 2026-08-20 裁定）**：
+  CI/CD = 可靠化设计 + 本地配置（不 push、不启用 GitHub 侧），B6 完成标准=设计+配置就绪，远程
+  启用待用户授权。全量 pytest **3156 passed / 1 skipped 零回归**（基线 3133）。下一项 = **B2
+  PT-DECIDE-3 项②④**（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ B1 PT-TEST-2 覆盖缺口补测完成（unsafe-vibe-dev `1eaefb12`）**：COVERAGE_MATRIX 缺口全收敛
+  （新增判别测试 17 项：INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 / INV-MOCK-3 /
+  模块缓存 / 循环 import / switch 内 return + 矩阵卫生 3 处陈旧 TRUE_GAP + §7 模块重载=设计排除）；
+  全量 pytest 3156 passed / 1 skipped 零回归；下一项 = B2 PT-DECIDE-3 项②④；**B6 交付边界已定
+  （可靠化设计+本地配置，不 push，远程启用待授权）**
 - [x] **✅ Tier C 专项审计完成（本 session，unsafe-vibe-dev）**：hasattr 全量分类
   （113 处：58 合法/50 简单异味/4 真缺陷/4 深层次）+ 6 决策 + 6 阶段零回归（机械清理/
   真缺陷 fail-fast/contract_validator 恢复校验/深层次 isinstance/反序列化宽异常+KDIAG）；

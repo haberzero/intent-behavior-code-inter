@@ -130,10 +130,14 @@
 
 ### PT-TEST-2 e2e 测试覆盖率提升
 
-- **状态**：active（周期）｜**域**：TEST｜**优先级**：P2
+- **状态**：active（阶段 B 主体已补齐，剩余随主线顺带）｜**域**：TEST｜**优先级**：P2
 - **动机**：覆盖缺口由 `tests/COVERAGE_MATRIX.md` 矩阵 `🔶 缺失` 项承接。
-- **当前理解**：`for...if` 过滤、复合赋值运算符 e2e 已补；按矩阵缺失项
-  择机补齐。
+- **当前理解**：`for...if` 过滤、复合赋值运算符 e2e 已补；**阶段 B 缺口全收敛（B1，2026-08-20）**
+  ——新增判别测试 17 项（INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 /
+  INV-MOCK-3 / 模块缓存 / 循环 import / switch 内 return）+ 矩阵卫生（INV-INTENT-SCOPE-3 已有
+  snapshot 冻结测试、INV-LLMEXCEPT-CATCH-4→5 重号、switch 已有 break+continue）+ §7 模块重载
+  =设计排除（无热重载机制，违反解释器不修改代码原则，见 `docs/architecture/01_principles.md`）；
+  剩余缺口随主线顺带补齐。
 
 ---
 

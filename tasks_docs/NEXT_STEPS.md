@@ -57,7 +57,10 @@ git 历史（本文件不登记完成记录）。
 2. ⏸ **PT-AUDIT-1/3 周期复核 + quality-maintenance Tier B（用户 2026-08-20 裁定：推迟到真实试用后）**——近期深层次重构期间不占用主线。
 
 **阶段 B · 功能稳健与对外能力（当前 P0）**：
-1. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；
+1. **✅ PT-TEST-2 覆盖缺口补测完成（B1）**：COVERAGE_MATRIX 缺口全收敛——新增判别测试 17 项
+   （INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 / INV-MOCK-3 / 模块缓存 /
+   循环 import / switch 内 return）+ 矩阵卫生 3 处陈旧 TRUE_GAP（已存在测试重指）+ §7 模块重载
+   =设计排除记录；全量 pytest 3156 passed / 1 skipped 零回归。
 2. PT-DECIDE-3 项②④（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）；
 3. **PT-DEBT-36 intent_context 方法族结构重构 + axiom 能力契约校验**（2026-08-20 从推迟移入 B，与 B2 协议主题衔接）；
 4. **PT-DEBT-35 `_ctx` 内部契约完整形式化**（2026-08-20 从推迟移入 B，与 B3 同族）；

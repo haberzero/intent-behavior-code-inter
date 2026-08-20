@@ -748,6 +748,16 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     isinstance，均 align base.py:176 先例）；Phase 6 反序列化（_hydrate_specialized_class except Exception→
     except PermissionError、_rehydrate_type_pool_spec 去宽 except fail-fast、新增 KDIAG_RUNTIME_SPECIALIZATION_
     FALLBACK 观测特化身份丢失）。判别测试 +9；全量 pytest **3133 passed / 1 skipped 零回归**（基线 3123）。
+- **阶段 B 起点（2026-08-20）**：当前 P0 = 阶段 B（功能稳健/对外能力），按序 B1（PT-TEST-2）→ B2
+  （PT-DECIDE-3 项②④）→ B3（PT-DEBT-36）→ B4（PT-DEBT-35）→ B5（PT-DOC-3P2）→ B6（PT-FEAT-5）。
+  **B6 交付边界（用户 2026-08-20 裁定）**：CI/CD = 可靠化设计 + 本地配置（不 push、不启用 GitHub 侧），
+  B6 完成标准 = 设计 + 配置就绪，远程启用待用户授权（延续"禁 push"硬原则与 CI"必要性不足"裁定）。
+  **B1 完成（2026-08-20）**：COVERAGE_MATRIX 缺口全收敛——新增判别测试 17 项 + 矩阵卫生 3 处陈旧
+  TRUE_GAP 收敛（INV-INTENT-SCOPE-3 实际已有 `tests/e2e/test_snapshot_intent_freeze.py` 覆盖、
+  INV-LLMEXCEPT-CATCH-4 与 §6.1 CATCH-5 重号重复描述已收敛、switch break/continue 已有
+  `test_switch_usability.py` 覆盖）+ **模块重新加载 = 设计排除定论**（IBCI 无热重载机制——模块体仅
+  首次导入执行、后续复用缓存实例；`hot_reload_pools` 违反"解释器不修改代码"原则
+  `docs/architecture/01_principles.md`）。全量 pytest **3156 passed / 1 skipped 零回归**（基线 3133）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
