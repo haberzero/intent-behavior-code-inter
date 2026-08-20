@@ -708,6 +708,22 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     身份）不足以抵偿风险；③ 判别测试锁定回退正确性。
   - 判别测试 +11（yield from 3 + dict 键 3 + 星偏移 4 + 跨引擎回退 1）；全量 pytest **3123 passed /
     1 skipped 零回归**。
+- **Tier C 专项审计定案 + 用户 6 决策（2026-08-20）**：
+  - **审计结论**：hasattr 全量分类（113 处，4 并行 subagent + 独立复核）：58 合法保留（协议/分层
+    边界 + 可选字段）/ 50 简单异味（恒真/恒假死守卫 ~22 + 双轨残留 4 + 探测分派 + 附带死代码）/
+    4 真缺陷（intent_context merge/combine 静默 no-op、__from_prompt__ 形状违约静默、binding_analysis
+    兜底、serializer mode.value 死守卫+错误兜底）/ 4 深层次（contract_validator:63 公理契约校验静默
+    死亡最严重、_helpers:32 层穿透、deep_clone:117 鸭子类型、intent_context 方法族+axiom 能力契约）。
+    静默降级补诊断复核：leaf/runtime_serializer/artifact_loader 全部「返回未知上层决策」合法（主缺陷
+    已由 PT-DEBT-33 修复）。for+if 深嵌套：真实控制流最深 8-10 层但纯 if/elif 链最长 4 段——可读性
+    问题非架构。
+  - **用户 6 决策（2026-08-20）**：① contract_validator:63 **彻底根因修复**（恢复 get_method_specs
+    校验 + 实跑评估揭露面 + 根因修复）；② **全量彻底清理**（全部简单异味 + 真缺陷，全部记录）；
+    ③ _helpers 本次最小收紧（补 isinstance）+ **_ctx 完整形式化登记 PT-DEBT-35 独立窗口**；④ deep_clone
+    **彻底切换惰性 isinstance**；⑤ intent_context 方法族死守卫本次清、**结构重构 + axiom 能力契约校验
+    登记 PT-DEBT-36 独立窗口**；⑥ 反序列化宽异常收窄 except PermissionError + kernel_diagnostic 补观测。
+  - 执行：分 6 阶段（规划记录→机械清理→真缺陷→contract_validator→深层次→反序列化），每步全量
+    pytest 零回归；执行顺序允许自主微调，但所有发现问题必须彻底解决（用户明示）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

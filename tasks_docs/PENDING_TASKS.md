@@ -11,7 +11,7 @@
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
 | FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
-| DEBT（技术债） | 2 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-4/29/31/34 已实证核实 done） |
+| DEBT（技术债） | 2 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-4/29/30/31/33/34 已 done；新增 PT-DEBT-35/36 登记） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
@@ -160,6 +160,29 @@
   泛型身份）、`IbCell`/snapshot/`try_deep_clone` 机制、`09_intent_system.md`（fork 值快照）、
   docs/ 值语义相关章节（`03_type_system.md`、`KNOWN_LIMITS.md §五`）。
 
+### PT-DEBT-35 `_ctx` 内部契约完整形式化（intent_context 判别单一权威）
+
+- **状态**：active（独立窗口）｜**域**：DEBT｜**优先级**：P2
+- **动机**：`intent_context` 封装对象的 `fields["_ctx"]` 槽是全仓 ~20 处共享的半文档化内部契约；
+  `_helpers.py:32` 用字段探测判别意图上下文实参（缺 `isinstance(IbIntentContext)` 校验，任何
+  `fields["_ctx"]` 非 None 的普通对象误激活）——判别机制"侧表注解 + 字段探测"双轨并存。
+- **成因**：Tier C 审计（2026-08-20，_helpers:32 层穿透项）；用户决策：本次仅最小收紧
+  （补 isinstance 校验），**完整形式化登记为独立任务**。
+- **当前理解**：完整形式化 = 定义 `_ctx` 契约单一权威（类型/协议判别），收敛 ~20 处访问，
+  消除字段探测双轨；触及架构边界，独立窗口执行（暂不排期，随阶段 A 收尾后评估）。
+
+### PT-DEBT-36 intent_context 方法族结构重构 + axiom 声明能力契约校验
+
+- **状态**：active（独立窗口）｜**域**：DEBT｜**优先级**：P2
+- **动机**：primitive_initializer 中 intent_context OOP 方法族（L546-728）+ 帧探测簇聚集
+  10 处恒真死守卫；bootstrap 建议"axiom 声明能力静默未绑定 → 加契约校验"（L44/L128 宿主实现
+  类魔法方法检查无绑定验证）。
+- **成因**：Tier C 审计（2026-08-20，bootstrap 组深层次 A/C）；用户决策：死守卫本次清除，
+  **方法族结构重构 + axiom 能力契约校验登记为独立任务**（与 contract_validator:63 公理契约
+  校验主题相关，可合并评估）。
+- **当前理解**：涉及 axiom 声明面与 bootstrap 绑定面的契约（与 PT-DEBT-35 `_ctx` 契约相关），
+  独立窗口执行（暂不排期）。
+
 ---
 
 ## 三、周期审计（AUDIT）
@@ -168,7 +191,9 @@
 
 - **状态**：active（周期）｜**域**：AUDIT｜**优先级**：P2
 - **动机**：按 code-quality/code-odor 技能周期回顾；历史 CODE_SMELL_AUDIT 结论（A/B/C/D 全量定案）已并入 WORKLOG 与 git。
-- **当前理解**：A/B/C/D 全量定案已完成；周期复核。
+- **当前理解**：A/B/C/D 全量定案已完成；**D2「hasattr 全量逐点分类」已由 Tier C 专项审计完成**
+  （2026-08-20，113 处位点分类：58 合法保留 / 50 简单异味 / 4 真缺陷 / 4 深层次，处置见
+  NEXT_STEPS Tier C + WORKLOG 审计记录）；周期复核。
 
 ### PT-AUDIT-2 条件分支与异常嵌套复杂度审计
 
