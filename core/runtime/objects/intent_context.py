@@ -26,6 +26,34 @@ if TYPE_CHECKING:
     from core.runtime.objects.intent import IbIntent, IntentMode
 
 
+def get_intent_ctx(obj: Any) -> Optional["IbIntentContext"]:
+    """读取 ``intent_context`` 封装对象的 ``fields['_ctx']`` 槽（单一权威访问）。
+
+    ``_ctx`` 槽是全仓共享的半文档化内部契约：intent_context IBCI 封装对象
+    持有其底层 :class:`IbIntentContext`。本函数是读取该槽的**单一入口**——
+    统一做类型判别（``isinstance(IbIntentContext)``），消除各调用点散落的
+    ``fields.get("_ctx")`` 字段探测（双轨判别）。
+
+    返回值：持有合法 ``IbIntentContext`` 时返回之；否则返回 ``None``
+    （非 intent_context 对象 / ``_ctx`` 缺失 / ``_ctx`` 类型不符）。
+    """
+    from core.runtime.objects.kernel import IbObject  # 惰性导入避免环
+
+    if not isinstance(obj, IbObject):
+        return None
+    ctx = obj.fields.get("_ctx")
+    return ctx if isinstance(ctx, IbIntentContext) else None
+
+
+def set_intent_ctx(obj: "IbObject", ctx: Optional["IbIntentContext"]) -> None:
+    """写入 ``intent_context`` 封装对象的 ``fields['_ctx']`` 槽（单一权威访问）。
+
+    与 :func:`get_intent_ctx` 对称：本函数是写入该槽的单一入口（序列化恢复 /
+    构造路径共用）。调用方保证 ``ctx`` 为合法 ``IbIntentContext`` 或 ``None``。
+    """
+    obj.fields["_ctx"] = ctx
+
+
 class IbIntentContext:
     """
     意图上下文运行时对象。

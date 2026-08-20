@@ -465,7 +465,10 @@ class RuntimeSerializer(BaseFlatSerializer):
     def _collect_intent_context_wrapper(self, obj, data):
         # ``intent_context`` IBCI 封装实例序列化
         data["_type"] = "intent_context"
-        ctx = obj.fields.get("_ctx")
+        # 单一权威访问：_ctx 槽读取统一走 get_intent_ctx（isinstance 精确判别）。
+        from core.runtime.objects.intent_context import get_intent_ctx
+
+        ctx = get_intent_ctx(obj)
         data["ctx_uid"] = self._collect_intent_context(ctx) if ctx is not None else None
         extra_fields = {
             k: self._process_value(v)
@@ -543,8 +546,11 @@ class RuntimeDeserializer:
                 active_obj = self._get_instance(active_uid)
                 # 确保共享引用不变量
                 if active_obj is not None:
-                    if active_obj.fields.get("_ctx") is not context.intent_context:
-                        active_obj.fields["_ctx"] = context.intent_context
+                    # 单一权威访问：_ctx 槽读写统一走 get_intent_ctx/set_intent_ctx。
+                    from core.runtime.objects.intent_context import get_intent_ctx, set_intent_ctx
+
+                    if get_intent_ctx(active_obj) is not context.intent_context:
+                        set_intent_ctx(active_obj, context.intent_context)
                 context.set_active_intent_ibobj(active_obj)
 
         # 闭包 cell 重链 post-pass：作用域树与全部可达实例恢复完成后执行。
@@ -1020,7 +1026,10 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
             ctx_uid = data.get("ctx_uid")
             if ctx_uid:
-                obj.fields["_ctx"] = self._get_intent_context(ctx_uid)
+                # 单一权威访问：_ctx 槽写入统一走 set_intent_ctx。
+                from core.runtime.objects.intent_context import set_intent_ctx
+
+                set_intent_ctx(obj, self._get_intent_context(ctx_uid))
             for k, v in (data.get("fields") or {}).items():
                 obj.fields[k] = self._deserialize_value(v)
 

@@ -881,7 +881,11 @@ class RuntimeContextImpl(RuntimeContext):
                 "intent_context.use(): expected an intent_context instance, "
                 f"got {type(intent_ctx_obj).__name__}"
             )
-        other_ctx = intent_ctx_obj.fields.get("_ctx")
+        # 单一权威访问：_ctx 槽读取统一走 intent_context.get_intent_ctx
+        # （isinstance(IbIntentContext) 精确判别，与 _helpers 判别同源）。
+        from core.runtime.objects.intent_context import get_intent_ctx
+
+        other_ctx = get_intent_ctx(intent_ctx_obj)
         if not isinstance(other_ctx, IbIntentContext):
             raise InterpreterError(
                 "intent_context.use(): the given object is not an intent_context "

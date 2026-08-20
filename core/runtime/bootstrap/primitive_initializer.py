@@ -611,10 +611,13 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             """intent_context 实例的 ``_ctx`` 槽位访问（单一权威，无字段探测）。
 
             ``_ic_init`` 构造恒设置 ``_ctx``，缺失即内部不变量破坏（fail-fast，
-            不静默 no-op）。
+            不静默 no-op）。读取统一委托 ``intent_context.get_intent_ctx``
+            （isinstance 精确判别，与 _helpers/use/序列化同源）。
             """
-            ctx = receiver.fields.get("_ctx")
-            if not isinstance(ctx, IbIntentContext):
+            from core.runtime.objects.intent_context import get_intent_ctx
+
+            ctx = get_intent_ctx(receiver)
+            if ctx is None:
                 raise InterpreterError(
                     "intent_context instance is missing its '_ctx' state "
                     "(invariant violated: __init__ must set it)."
@@ -623,7 +626,9 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
         def _ic_init(receiver, *args):
             """intent_context() 构造函数：创建空意图上下文。"""
-            receiver.fields['_ctx'] = IbIntentContext()
+            from core.runtime.objects.intent_context import set_intent_ctx
+
+            set_intent_ctx(receiver, IbIntentContext())
             return registry.get_none()
 
         def _ic_push(receiver, *args):
@@ -654,9 +659,11 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
         def _ic_fork(receiver, *args):
             """ctx.fork()：返回新的 intent_context 实例（拷贝当前状态）。"""
+            from core.runtime.objects.intent_context import set_intent_ctx
+
             ctx = _ic_get_ctx(receiver)
             new_instance = IbObject(intent_context_class)
-            new_instance.fields['_ctx'] = ctx.fork()
+            set_intent_ctx(new_instance, ctx.fork())
             return new_instance
 
         def _ic_resolve(receiver, *args):
@@ -674,7 +681,10 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 )
             ctx = _ic_get_ctx(receiver)
             other = args[0]
-            other_ctx = other.fields.get('_ctx') if isinstance(other, IbObject) else None
+            # 单一权威访问：_ctx 槽读取统一走 get_intent_ctx（isinstance 精确判别）。
+            from core.runtime.objects.intent_context import get_intent_ctx
+
+            other_ctx = get_intent_ctx(other)
             if not isinstance(other_ctx, IbIntentContext):
                 raise InterpreterError(
                     "intent_context.merge(): expected an intent_context instance, "
@@ -702,7 +712,10 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
                 )
             ctx = _ic_get_ctx(receiver)
             other = args[0]
-            other_ctx = other.fields.get('_ctx') if isinstance(other, IbObject) else None
+            # 单一权威访问：_ctx 槽读取统一走 get_intent_ctx（isinstance 精确判别）。
+            from core.runtime.objects.intent_context import get_intent_ctx
+
+            other_ctx = get_intent_ctx(other)
             if not isinstance(other_ctx, IbIntentContext):
                 raise InterpreterError(
                     "intent_context.combine(): expected an intent_context instance, "
@@ -801,13 +814,16 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             """
             frame = _ic_frame()
             new_instance = IbObject(intent_context_class)
+            from core.runtime.objects.intent_context import get_intent_ctx, set_intent_ctx
+
             active = frame.get_active_intent_ibobj()
             if active is not None:
-                active_ctx = active.fields.get('_ctx')
+                # 单一权威访问：_ctx 槽读取统一走 get_intent_ctx（isinstance 精确判别）。
+                active_ctx = get_intent_ctx(active)
                 if active_ctx is not None:
-                    new_instance.fields['_ctx'] = active_ctx.fork()
+                    set_intent_ctx(new_instance, active_ctx.fork())
                     return new_instance
-            new_instance.fields['_ctx'] = frame.fork_intent_snapshot()
+            set_intent_ctx(new_instance, frame.fork_intent_snapshot())
             return new_instance
 
         _reg_native(intent_context_class, 'clear_inherited', _ic_clear_inherited, unbox=False)

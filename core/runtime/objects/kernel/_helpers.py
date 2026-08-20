@@ -29,9 +29,10 @@ def _should_activate_intent_context_arg(arg_value: Any, is_intent_ctx_param: boo
         return True
     if not isinstance(arg_value, IbObject):
         return False
-    # 惰性 import + isinstance 精确判别（base.py:176 先例，替代 hasattr 探测）——
+    # 单一权威判别：_ctx 槽访问统一走 intent_context.get_intent_ctx
+    # （isinstance(IbIntentContext) 精确判别，替代散落的字段探测）——
     # 仅当 _ctx 槽持有真实 IbIntentContext 才激活意图上下文路径，任何恰有
     # 非 None _ctx 字段的普通对象不再误激活（与 use() 校验对齐）。
-    from core.runtime.objects.intent_context import IbIntentContext
-    other_ctx = arg_value.fields.get("_ctx")
-    return isinstance(other_ctx, IbIntentContext)
+    from core.runtime.objects.intent_context import get_intent_ctx
+
+    return get_intent_ctx(arg_value) is not None
