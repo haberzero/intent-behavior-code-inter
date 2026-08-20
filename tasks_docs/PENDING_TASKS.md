@@ -11,11 +11,11 @@
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
 | FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
-| DEBT（技术债） | 2 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-4/29/30/31/33/34 已 done；新增 PT-DEBT-35/36 登记） |
+| DEBT（技术债） | 2 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-35/36 已排入阶段 B；PT-DEBT-5 搁置） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
-| DECIDE（决策） | 1 | 0 | 1 | 待裁定设计问题（PT-DECIDE-4 已定案 done；PT-DECIDE-2 已封存） |
+| DECIDE（决策） | 1 | 0 | 1 | 待裁定设计问题（PT-DECIDE-3 项②④ 剩余；PT-DECIDE-2 已封存） |
 | SEALED（封存） | 0 | 0 | 2 | 显式封存（恢复需解封评估） |
 | VISION（愿景） | 4 | 0 | 0 | 远期方向（无排期） |
 
@@ -52,13 +52,6 @@
 
 ## 二、技术债（DEBT）
 
-### PT-DEBT-4 `file` 模块重命名
-
-- **状态**：done（已完成，2026-08-19 收敛阶段 5）｜**域**：DEBT｜**优先级**：P1
-- **动机**：`file` 影子化 Python 内建名，长期隐患（用户代码与插件代码中名称冲突）。
-- **成因**：早期命名选择，未预见与 Python 内建冲突。
-- **当前理解**：已重命名为 `fs`（用户侧模块名 file→fs，内部实现 file_impl.py→fs_impl.py，全仓 47 文件迁移：builtin_modules 注册/examples/tests/trials/docs；file_handle 类型名不变；编译与运行时 SEM_LLMEXCEPT_FILE_WRITE 消息同步）；全量 pytest 零回归。
-
 ### PT-DEBT-5 全项目文件命名清理
 
 - **状态**：shelved｜**域**：DEBT｜**优先级**：P3
@@ -66,114 +59,20 @@
 - **搁置原因**：破坏面大纯机械，独立窗口执行。
 - **当前理解**：无明确清单，启动时先做命名扫描。
 
-### PT-DEBT-29 生成器消费协作化（原 KNOWN_LIMITS §二十四）
-
-- **状态**：done（已完成）｜**域**：DEBT｜**优先级**：P2
-- **动机**：`IbGenerator.generic_next` 对 Waitable 阻塞等待（`event.result()`）——
-  需让出型消费（Waitable 依赖 VM 推进）会死锁；消除生成器消费的同步阻塞模型。
-- **成因**：原 KNOWN_LIMITS §二十四 登记（设计边界）；方向明确（generic_next 层引入
-  Waitable 感知挂起，与 CPS 执行模型同构）。
-- **完成记录**：全消费面（for / yield from / next() / to_list / generic_next / seq 内建 sum·all·
-  enumerate·zip·sorted·reversed·min·max）改为协作让出——CPS 方法（`generic_next_cps`/`to_list_cps`）+
-  `_GeneratorConsumeDrive`/`_IterableComputeDrive`（Waitable+CPSDrivable 复用）+ `_GeneratorExhausted`
-  哨兵（规避 PEP 479）。判别测试 test_generator_coop_consume +6；KNOWN_LIMITS §二十四（同步阻塞边界）
-  移除、25-27 重编号 24-26、引用同步（04_vm_interpreter/05_functions/01_native_host_binding）。全量
-  3112 passed / 1 skipped 零回归（+12 = 6 新判别 + 6 meta）。
-- **当前理解**：同调度器跨任务投递死锁在用户代码模型下不可构造（thread 独立调度器），
-  判别测试锁定协作路径正确性与可恢复性。
-
-### PT-DEBT-30 `yield from` 序列委托编译期区分
-
-- **状态**：done（已完成，2026-08-20）｜**域**：DEBT｜**优先级**：P2
-- **动机**：`yield from <序列>` 静态偏乐观（类型绑定为元素类型但运行期值为 None，
-  Python 语义一致）——收紧为编译期生成器/序列委托目标区分。
-- **成因**：原 KNOWN_LIMITS §二十四（序列委托静态类型与运行时值，前身 §二十五）登记
-  （类型绑定设计的取舍后果）。
-- **完成记录**：`visit_IbYieldFromExpr` 按委托目标区分节点静态类型——**生成器**操作数 =
-  元素类型（表达式值 = 子生成器 return 值，与元素类型合一）；**序列/`__iter__`**操作数 =
-  `None`（运行时表达式值恒 None，`int r = yield from [seq]` 编译期 SEM_TYPE_MISMATCH 拦截，
-  须 Optional[T] 等兼容类型接收）；不可迭代/动态维持 any（运行时裁决）。判别测试 +3
-  （test_yield_generator：序列赋 int 负样本 / 序列赋 Optional 正样本 / 生成器赋 str 负样本）；
-  原 KNOWN_LIMITS §二十四 移除、25-26 重编号 24-25、引用同步（01_native_host_binding ×2 /
-  05_functions §5.9 / HANDOFF / trials D2-32* 陈旧引用修复）。全量 pytest 零回归。
-- **当前理解**：低风险专项，与类型地基后续对齐。
-
-### PT-DEBT-31 `_pending_futures` 残留泄漏核实（KNOWN_LIMITS §十五）
-
-- **状态**：done（实证核实，无新增缺陷）｜**域**：DEBT｜**优先级**：P1
-- **动机**：循环体多次 dispatch 覆写 `_pending_futures` 条目（behavior_dependency_pass
-  注释）——旧 Future 泄漏 + 读点解析错乱候选；运行期有锁保护但消费完整性未核实。
-- **成因**：DDG 静态分析边界（KNOWN_LIMITS §十五）。
-- **当前理解**：实证结论（2026-08-19 后续）：① 循环覆写场景**已被编译期预防**——
-  `_is_dispatch_eligible` 对循环体/函数体内行为恒返回 False（不可 dispatch，走同步
-  路径），不会覆写条目；② 真正剩余 = "未读取的 dispatched 变量残留"（dispatch 于
-  赋值、resolve 于读取，无读则无清）——属 KNOWN_LIMITS §十五 已登记的**有界边界**
-  （引擎生命周期内释放，非无界增长）。无新增缺陷，维持登记。
-
-### PT-DEBT-33 KNOWN_LIMITS §十 未闭合子边界（dict 键/中置星/跨引擎封印）
-
-- **状态**：done（已完成，2026-08-20）｜**域**：DEBT｜**优先级**：P2
-- **动机**：10.1 `dict` 键类型在下标访问时不校验；10.3 `*expr` 中置/前导星计数偏移；
-  跨引擎 round-trip 封印——三处未闭合边界随类型地基收敛。
-- **成因**：KNOWN_LIMITS §十 拆分终判：10.2 跨模块、
-  10.4 签名闭合，其余子边界留待类型地基后续。
-- **完成记录**：三处全落地——① **10.1 dict 键编译期校验**（`visit_IbSubscript`：dict[K,V]
-  下标键类型须可赋值给 K，静态错位编译期 SEM_TYPE_MISMATCH，动态键放行）；② **10.3 中置/
-  前导星偏移修正**（`_bind_call_arguments` 逐 *expr 以其之前显式位置实参数为目标形参偏移，
-  与运行期顺序展开一致——原仅保证末尾星）；③ **跨引擎封印优雅回退**（`_hydrate_specialized_class`
-  特化重建失败回落基类，与内置 list[int]→list 密封场景同构，杜绝 ib_class=None 坏对象）。
-  判别测试 +8（test_generics：dict 键 3 组 + 星偏移 4 组；test_ibc_file_imports：跨引擎密封
-  回退 1）。KNOWN_LIMITS §十.2/§十.3 更新。全量 pytest 零回归。
-- **当前理解**：与 PT-FEAT-7（类型体系）及句柄类值身份（`_HANDOFF_GENERIC_REMAINING`
-  同源遗留）联动。
-
-### PT-DEBT-34 变量语义建模（引用/拷贝/赋值/传递）显式化与文档化
-
-- **状态**：done（已完成，2026-08-20）｜**域**：DEBT｜**优先级**：P1
-- **动机**：变量**引用 / 拷贝 / 赋值 / 传递**等值语义建模未显式且合理地区分——语义存在
-  混乱与不清晰，提供的语法与说明书亦不够清晰；用户判定为**巨大隐患**（语义地基级）。
-- **成因**：值语义（可变 list/dict 的引用 vs 拷贝）、绑定语义（赋值 = 重绑定 vs 就地突变）、
-  传递语义（传值 vs 传引用）未成体系；历史演进中按需引入 `IbCell`（lambda 引用捕获）、
-  `try_deep_clone`（snapshot 深克隆）、`fork` 值快照（意图上下文/函数调用）等局部机制，
-  缺统一建模与文档契约。
-- **评估结论（2026-08-20 迅速评估）**：**运行时模型一致完整，非大重构**——复合对象共享引用
-  （同 Python）、赋值=引用复制、参数传递=共享引用、`copy`/`deepcopy` 内建（实现正确）、
-  snapshot/llmexcept 深克隆、类静态字段每实例深克隆。**"混乱不清晰"集中在**：① 用户面文档
-  契约缺失（`02_variables` 无赋值语义、`05_functions` 无参数传递语义、共享引用只在
-  `KNOWN_LIMITS §五`、`is` vs `==` 无用户文档）；② 文档漂移（`KNOWN_LIMITS §五.2` 建议
-  构造器初始化字段，代码已每实例深克隆静态默认值）；③ 判别测试缺口。**工作量：中等**
-  （约 4-6 个专注窗口）。
-- **当前理解**（修复四步）：① **调研对照**——主流语言值语义（Python/C++/Rust/Java）对照产出
-  结论；② **文档权威契约**——新增"值语义"章节（引用/拷贝/赋值/传递/突变/`is` vs `==`/闭包捕获/
-  snapshot/序列化交互）+ `02_variables`/`05_functions` 教学段 + 修 `KNOWN_LIMITS §五.2` 漂移；
-  ③ **判别测试锁定**——赋值别名/传引用/copy vs deepcopy/snapshot 冻结/llmexcept 快照/静态字段
-  独立性；④ **运行时审计**——找与文档契约发散点 + 小修。该隐患在修复前约束着真实试用（阶段 C）
-  的评估可信度，故排在试用之前。
-- **完成记录（2026-08-20）**：四步全落地——① 调研对照结论（与 Python 完全对齐、运行时一致非大重构）；
-  ② 文档权威契约（02_variables §2.8 值语义权威章节 + 05_functions §5.10 参数传递语义 + KNOWN_LIMITS
-  §五.2 漂移修复 + 03_operators/12_builtins is/== 精确化与互引闭环）；③ 判别测试 test_value_semantics.py
-  +11（赋值别名/传引用/不可变原语/is vs ==）；④ 运行时审计唯一发现 = 容器 `==` 默认身份比较（list/dict
-  未定义 `__eq__`，内部一致非缺陷，与用户类未覆写原则一致——文档精确化、不改行为，若用户后续要逐元素
-  `==` 属独立设计项）；无代码小修。全量 3100 passed / 1 skipped 零回归（+17 = 11 新测试 + 6 meta
-  按文件参数化）。真实试用（阶段 C）的 PT-DEBT-34 阈值已解锁。
-- **关联**：PENDING §九 设计决策（运行时值 `type_ref` 保持基础 spec——可变 list/dict 不固有
-  泛型身份）、`IbCell`/snapshot/`try_deep_clone` 机制、`09_intent_system.md`（fork 值快照）、
-  docs/ 值语义相关章节（`03_type_system.md`、`KNOWN_LIMITS.md §五`）。
-
 ### PT-DEBT-35 `_ctx` 内部契约完整形式化（intent_context 判别单一权威）
 
-- **状态**：active（独立窗口）｜**域**：DEBT｜**优先级**：P2
+- **状态**：active（阶段 B 排布，2026-08-20 不再推迟）｜**域**：DEBT｜**优先级**：P2
 - **动机**：`intent_context` 封装对象的 `fields["_ctx"]` 槽是全仓 ~20 处共享的半文档化内部契约；
   `_helpers.py:32` 用字段探测判别意图上下文实参（缺 `isinstance(IbIntentContext)` 校验，任何
   `fields["_ctx"]` 非 None 的普通对象误激活）——判别机制"侧表注解 + 字段探测"双轨并存。
 - **成因**：Tier C 审计（2026-08-20，_helpers:32 层穿透项）；用户决策：本次仅最小收紧
   （补 isinstance 校验），**完整形式化登记为独立任务**。
 - **当前理解**：完整形式化 = 定义 `_ctx` 契约单一权威（类型/协议判别），收敛 ~20 处访问，
-  消除字段探测双轨；触及架构边界，独立窗口执行（暂不排期，随阶段 A 收尾后评估）。
+  消除字段探测双轨；触及架构边界。**已排入阶段 B（B 序列位），不再推迟**（用户 2026-08-20 裁定）。
 
 ### PT-DEBT-36 intent_context 方法族结构重构 + axiom 声明能力契约校验
 
-- **状态**：active（独立窗口）｜**域**：DEBT｜**优先级**：P2
+- **状态**：active（阶段 B 排布，2026-08-20 不再推迟）｜**域**：DEBT｜**优先级**：P2
 - **动机**：primitive_initializer 中 intent_context OOP 方法族（L546-728）+ 帧探测簇聚集
   10 处恒真死守卫；bootstrap 建议"axiom 声明能力静默未绑定 → 加契约校验"（L44/L128 宿主实现
   类魔法方法检查无绑定验证）。
@@ -181,7 +80,7 @@
   **方法族结构重构 + axiom 能力契约校验登记为独立任务**（与 contract_validator:63 公理契约
   校验主题相关，可合并评估）。
 - **当前理解**：涉及 axiom 声明面与 bootstrap 绑定面的契约（与 PT-DEBT-35 `_ctx` 契约相关），
-  独立窗口执行（暂不排期）。
+  **已排入阶段 B（B 序列位），不再推迟**（用户 2026-08-20 裁定；与 PT-DEBT-35 `_ctx` 契约相关，可合并评估）。
 
 ---
 
@@ -278,22 +177,6 @@
   （L565 警告级）对用户声明的校验；`trials/T08/D2-05-payload.ibci` 与 test_multimodal_* mock
   类有此声明，契约须按 axiom 签名 `(self,value,spec=None)` 定，需核验不产生伪警告——**归 P5**。
   另：str 已补齐 output_hint（D4，exp 分支 `eb8ecd30`）——PT-DECIDE-3 项②若涉 str 现有基础确认。
-
-### PT-DECIDE-4 LLM 边界待评估项（BOUNDARY-LLM-2/3）
-
-- **状态**：done（已定案：项①被 P4c 机制演进解决；项②已登记）｜**域**：DECIDE｜**优先级**：P2
-- **动机**：两项真实 LLM 试用登记的未决边界——① LLM 函数 `-> void` 声明编译通过但
-  运行期抛 `LLMParseError`（文档未声明支持与否）；② `stream_call` / `stream_channel`
-  后 `ai.get_current_call_info()` 为空（观测 API 未覆盖流式调用）。
-- **成因**：T08 LLM 全能力压力试用第一轮登记（trials/INDEX.md 域 LLM 表），多轮复跑
-  稳定复现，非内核缺陷（均为"文档未声明/API 覆盖缺口"性质）。
-- **当前理解**：评估结论（2026-08-19 后续）——① BOUNDARY-LLM-2 **被 P4c 机制演进
-  解决**：`-> void` 是旧 `llm func` 语法特性，随 P4c llm 函数机制删除而消失；新 llm
-  可调用类以 `expected_type` 声明输出目标（无声明按 str 解析、副作用调用用行为表达式），
-  边界已文档化于 `docs/syntax/08_llm_callable.md`。② BOUNDARY-LLM-3 **已登记**
-  KNOWN_LIMITS §十五（"流式调用不入观测"，观测 API 对流式覆盖属待评估）。无新增缺陷。
-
----
 
 ## 七、封存（SEALED）
 

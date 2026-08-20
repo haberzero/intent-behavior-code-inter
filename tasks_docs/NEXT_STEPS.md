@@ -27,77 +27,18 @@
 
 ## 🔴 当前状态
 
-**主线：远期原生宿主绑定（F0-F5）已全部完成并合入 `unsafe-vibe-dev`**（路线图
-`tasks_docs/ROADMAP_NATIVE_BINDING.md` §三 F0-F5）：宿主导入一等语法 + 宿主类型绑定
-（F1-F2）、插件体系重构（F3, 废弃 _spec.py、内置 11 模块 `builtin_modules.py` 构造期
-注册）、Provider 自定义经宿主绑定统一（F4, `ai.set_provider`）、架构统一/文档收敛
-（F5, 档 A/内核自举/档 B/隔离/反射=远期 pending）。测试基线以实跑为准（不冻结数字，见下）。
+**主线已完成**：远期原生宿主绑定（F0-F5）、五大地基（llm 可调用类 + LLM 体系彻底协议化 P1-P6）、
+技术债收敛 8 阶段、**阶段 A 代码/架构健康一次性攻坚全部完成（A1-A5，2026-08-20）**——架构债务
+（G5 意图值栈 + 行为统一装配）/ 变量语义建模显式化（PT-DEBT-34）/ 生成器消费协作化（PT-DEBT-29）/
+类型边界闭合（PT-DEBT-30+33）/ Tier C 专项审计（hasattr 全量分类 + 6 阶段零回归 + contract_validator
+公理契约校验恢复 + 反序列化宽异常收窄 + KDIAG 诊断）。完成详情见 `tasks_docs/HANDOFF.md` §2.1 与
+git 历史（本文件不登记完成记录）。
 
-**🔴 新主线：「llm 机制重构为可调用 llm 类 + LLM 相关体系彻底协议化（总统一性）」**（用户
-2026-08-18 定方向，两时点补充）：用户决定**彻底抛弃"llm 函数"概念**，重构为**可调用的 llm 类**
-（面向对象形态承载 LLM 调用/意图/llmexcept 等语义）。**第二轮补充**（同 session）：提出**总统一性
-主线**——行为描述/意图注释/retry/prompt 协议族/lambda/snapshot/llm 函数全部收敛为"可调用实例 +
-协议（类型类）"机制：lambda/snapshot 统一为 llm 匿名可调用类的两种捕获模式语法糖；`impl` 目标
-扩展至内置类型（可改写 `int` 等的 `__prompt__` 系列）；retry 高阶化（行为实例也可经 impl 包装
-retry）。
+**当前 P0 = 阶段 B · 功能稳健与对外能力**（含 2026-08-20 从推迟移入的 PT-DEBT-35/36，见下）。
+**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）按用户裁定**推迟到真实试用（阶段 C）
+之后**，近期不占用主线。
 
-**主线状态：五大地基 P1-P6 已全链路完成**（llm 可调用类 + LLM 体系彻底协议化：覆层机制 /
-prompt 协议族类型类化 / retry 高阶化 / per-IbClass 协议方法表 / `llm ... llmend` 语法与旧机制全量删除；
-6 项关键决策与完成详情见 `tasks_docs/HANDOFF.md` §2.1 与 git 历史——本文件不登记完成记录）。
-
-**✅ 技术债收敛 8 阶段全部完成（2026-08-19）**：阶段 0 交接收手；阶段 1 任务控制文档收敛
-（悬空引用修复 / PT-FEAT-5 补登记 / NEXT_STEPS 治理 / 三份临时设计文档删除）；阶段 2 注释与代号
-清理（F# 残留清零含测试层 / 根 README llmend 重写 / 01_native_host_binding 去任务底稿化 / LDE 漂移）；
-阶段 3 死代码孤儿清理（inherit_plugins / IbBehaviorInstance / plugins/ 根标志）；阶段 4 质量红线修复
-（interpreter 双通道收敛 / 私有穿透 / 能力判定掩错）；阶段 5 独立窗口（PT-DEBT-4 file→fs 全量迁移 /
-PT-AUDIT-2 复核 / COVERAGE_MATRIX 补测）；阶段 6-7 PT-DECIDE-3 项①③ 语义裁定落地（__from_prompt__
-单向契约 / SEM_PROTOCOL_SIGNATURE required=error）。每步全量 pytest 零回归 + 描述性 commit；详见
-git 历史与 `tasks_docs/HANDOFF.md` §2.1。
-
-**✅ 阶段 A 主线架构债务落地完成（2026-08-20，A1）**：G5 意图值栈全量重构（意图段 eager 求值为
-一等值列表 `IbIntent.values`，content/segments 双表示收敛为协议计算属性；`@-` 按值派生渲染文本匹配；
-意图消解链同步化收敛去死 CPS 包装；`@- "text"`/`@- $x` 解析修复）+ 行为值深程统一装配入口收敛
-（`assemble_llm_call_request_cps` 单一分派源，run_batch/invoke/stream 值路径收敛）。判别测试
-+8（test_intent_value_stack +7 / run_batch 拒绝非法值 +1）；全量 pytest 3082 passed / 1 skipped
-零回归。阶段 A 当前 P0 前移至 **PT-DEBT-34 变量语义建模显式化**（用户 2026-08-20 新增置顶，见 WORKLOG）。
-
-**✅ PT-DEBT-34 变量语义建模显式化完成（2026-08-20）**：四步全落地——① 调研对照（主流语言
-值语义 Python/C++/Rust/Java 对照，结论：与 Python 完全对齐、运行时一致非大重构）；② 文档权威契约
-（02_variables 新增 §2.8 值语义权威章节：两类值/赋值别名/不可变原语/is vs ==/传参共享引用/闭包捕获/
-快照序列化交互；05_functions 新增 §5.10 参数传递语义；KNOWN_LIMITS §五.2 漂移修复 + 契约指针；
-03_operators/12_builtins 精确化与互引闭环）；③ 判别测试 test_value_semantics.py +11（赋值别名/传引用/
-不可变原语/is vs ==，含容器 `==` 默认身份比较判别）；④ 运行时审计（唯一发现：容器 `==` 默认身份比较，
-内部一致非缺陷，文档精确化不改行为；无代码小修）。全量 pytest 3100 passed / 1 skipped 零回归
-（+17 = 11 新测试 + 6 meta 按文件参数化）。**阶段 A 当前 P0 回 **PT-DEBT-29 生成器消费协作化****。
-
-**✅ PT-DEBT-29 生成器消费协作化完成（本 session）**：消除 `IbGenerator.generic_next` 对 Waitable 的
-同步阻塞消费——全消费面（for / yield from / next() / to_list / generic_next / seq 内建 sum·all·enumerate·
-zip·sorted·reversed·min·max）改为**协作让出**（yield 给 VM 调度器推进，不阻塞 VM 线程）。机制：CPS 方法
-（`generic_next_cps`/`to_list_cps`）+ `_GeneratorConsumeDrive`/`_IterableComputeDrive`（Waitable+CPSDrivable，
-复用既有协议免原生改动）+ `_GeneratorExhausted` 哨兵（规避 PEP 479）。判别测试 test_generator_coop_consume
-+6（chan.recv 经 for/next/to_list/yield from + 跨线程投递 + LLM 经 for）；KNOWN_LIMITS §二十四（同步阻塞
-边界）移除、25-27 重编号 24-26、引用同步（04_vm_interpreter/05_functions/01_native_host_binding）。全量
-pytest 3112 passed / 1 skipped 零回归（+12 = 6 新判别 + 6 meta 参数化）。**阶段 A 当前 P0 前移至
-PT-DEBT-30 + PT-DEBT-33 类型边界闭合**。
-
-**✅ PT-DEBT-30 + PT-DEBT-33 类型边界闭合完成（本 session）**：① **PT-DEBT-30** `yield from`
-序列委托编译期生成器/序列区分（`visit_IbYieldFromExpr` 按委托目标收紧静态类型：生成器=元素类型
-不变，序列/`__iter__`=None——`int r = yield from [seq]` 编译期 SEM_TYPE_MISMATCH 拦截）；②
-**PT-DEBT-33** 三子边界——10.1 dict 键编译期校验（静态错位 SEM_TYPE_MISMATCH，动态键放行）/
-10.3 中置·前导星偏移修正（逐 *expr 按星前位置实参数映射目标形参，与运行期顺序展开一致）/
-跨引擎封印优雅回落基类（`_hydrate_specialized_class` 特化重建失败回落基类，与内置 list[int]→list
-密封场景同构，杜绝 ib_class=None 坏对象）。判别测试 +11（yield from 3 + dict 键 3 + 星偏移 4 +
-跨引擎回退 1）；KNOWN_LIMITS §二十四（序列委托）移除重编号 24-25 + §十.2/§十.3 更新。全量
-pytest 3123 passed / 1 skipped 零回归（+11）。**阶段 A 当前 P0 前移至 Tier C 专项审计**。
-
-**✅ Tier C 专项审计完成（本 session，2026-08-20）**：hasattr 全量分类（113 处：58 合法保留 /
-50 简单异味 / 4 真缺陷 / 4 深层次）+ 用户 6 决策 + 6 阶段全部落地零回归——机械清理（恒真/恒假
-死守卫 + 双轨残留 unbox + 附带死代码）/ 真缺陷 fail-fast（merge/combine 对齐 use()、__from_prompt__
-形状违约、binding_analysis 死兜底、mode.value）/ contract_validator:63 公理契约校验彻底根因修复
-（get_methods→get_method_specs + 移除死 kind 门，校验恢复生效）/ 深层次（_helpers 补 isinstance、
-deep_clone 惰性 isinstance）/ 反序列化宽异常收窄 except PermissionError + KDIAG_RUNTIME_SPECIALIZATION_
-FALLBACK 诊断。判别测试 +10；PT-DEBT-35/36 登记独立窗口（PENDING）。全量 pytest 3133 passed /
-1 skipped 零回归（基线 3123，+10 判别）。**阶段 A 一次性攻坚全部完成（A1-A5），周期质量维护按用户裁定推迟到真实试用（阶段 C）后；当前 P0 前移至 PT-AUDIT-1/3 周期复核 + Tier B**。
+测试基线以实跑为准（不冻结数字；唯一命令 `python -m pytest tests/`）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
@@ -116,11 +57,12 @@ FALLBACK 诊断。判别测试 +10；PT-DEBT-35/36 登记独立窗口（PENDING�
 2. ⏸ **PT-AUDIT-1/3 周期复核 + quality-maintenance Tier B（用户 2026-08-20 裁定：推迟到真实试用后）**——近期深层次重构期间不占用主线。
 
 **阶段 B · 功能稳健与对外能力（当前 P0）**：
-6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；
-7. PT-DECIDE-3 项②④（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）；
-8. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B3）；
-9. PT-FEAT-5 CI/CD 可靠化。
-
+1. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；
+2. PT-DECIDE-3 项②④（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）；
+3. **PT-DEBT-36 intent_context 方法族结构重构 + axiom 能力契约校验**（2026-08-20 从推迟移入 B，与 B2 协议主题衔接）；
+4. **PT-DEBT-35 `_ctx` 内部契约完整形式化**（2026-08-20 从推迟移入 B，与 B3 同族）；
+5. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B5）；
+6. PT-FEAT-5 CI/CD 可靠化。
 **已封存**：PT-DECIDE-2（供应商思考禁用）——用户裁定短期不再考虑启动。
 **划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。
 

@@ -355,7 +355,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   Phase 6 反序列化宽异常收窄 except PermissionError + KDIAG_RUNTIME_SPECIALIZATION_FALLBACK 诊断。
   判别测试 +10；KNOWN_LIMITS §十 契约不变；**PT-DEBT-35（_ctx 契约形式化）/ PT-DEBT-36（intent_context
   方法族结构重构 + axiom 能力契约校验）登记 PENDING 独立窗口**。全量 pytest **3133 passed /
-  1 skipped 零回归**（基线 3123，+10 判别）。下一 session 起点 = **阶段 B（功能稳健/对外能力，当前 P0）**；周期质量维护（PT-AUDIT-1/3 + Tier B）按用户裁定推迟到真实试用（阶段 C）后。
+  1 skipped 零回归**（基线 3123，+10 判别）。下一 session 起点 = **阶段 B（功能稳健/对外能力，当前 P0）**——B1 PT-TEST-2 / B2 PT-DECIDE-3 项②④ / **B3 PT-DEBT-36** / **B4 PT-DEBT-35**（2026-08-20 从推迟移入 B，不再推迟）/ B5 PT-DOC-3P2 / B6 PT-FEAT-5；周期质量维护（PT-AUDIT-1/3 + Tier B）按用户裁定推迟到真实试用（阶段 C）后。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -363,7 +363,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   （113 处：58 合法/50 简单异味/4 真缺陷/4 深层次）+ 6 决策 + 6 阶段零回归（机械清理/
   真缺陷 fail-fast/contract_validator 恢复校验/深层次 isinstance/反序列化宽异常+KDIAG）；
   判别 +10；全量 pytest 3133 passed / 1 skipped 零回归；PT-DEBT-35/36 登记独立窗口。
-  下一 session 起点 = 阶段 B（功能稳健/对外能力，当前 P0）；周期质量维护推迟到真实试用后
+  下一 session 起点 = 阶段 B（B1-B6 含 PT-DEBT-36/35 移入）；周期质量维护推迟到真实试用后
 - [x] **✅ PT-DEBT-30 + PT-DEBT-33 类型边界闭合完成（本 session，unsafe-vibe-dev）**：yield from
   序列委托编译期收紧 + dict 键校验 + 中置·前导星偏移修正 + 跨引擎封印优雅回落基类；判别测试 +11；
   全量 pytest 3123 passed / 1 skipped 零回归；KNOWN_LIMITS 编号更新（二十四=用户协议/impl、
