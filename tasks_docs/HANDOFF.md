@@ -382,11 +382,24 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **✅ B5 PT-DOC-3P2 how-to 读者旅程补齐（本 session，unsafe-vibe-dev `00eaf873`）**：新增
   `use_isolation.md`（ihost 隔离）+ `orchestrate_llm_calls.md`（LLM 编排）2 篇操作指南 +
   交叉引用接线（debug→orchestrate、guide 03→orchestrate、syntax 11→use_isolation、README
-  目录树）；纯文档变更。下一项 = **B6 PT-FEAT-5**（CI/CD 可靠化设计 + 本地配置，不 push、
-  不启用 GitHub 侧，完成标准=设计+配置就绪）。
+  目录树）；纯文档变更。
+  **✅ B6 PT-FEAT-5 CI/CD 可靠化设计 + 本地配置（本 session，unsafe-vibe-dev `46c5a18e`）**：
+  四层可靠性设计（L1 fast/L2 全量跨平台/L3 真实 LLM 手动/L4 发布产物）+ ci.yml 分层就绪
+  （保持 workflow_dispatch）+ `scripts/ci_local.sh` 本地分层复现；**远程启用待用户显式授权**
+  （恢复 push/PR 触发并 push）。设计文档 `tasks_docs/_code_cicd.md`。本地全量 pytest **3182
+  passed / 1 skipped 零回归** + L1 909/1 + wheel 构建验证。
+  **✅ 阶段 B（B1-B6）全部完成（2026-08-20）**：测试补测（PT-TEST-2）/ 协议定案（PT-DECIDE-3
+  项②④）/ 技术债收敛（PT-DEBT-36/35）/ 文档补齐（PT-DOC-3P2）/ CI 设计（PT-FEAT-5，远程启用
+  待授权）全部落地。当前 P0 前移 **阶段 C · 真实 LLM 全面试用重启（VISION-3）**——对五大地基
+  重构后全部新特性重试用（llm 可调用类/stream/run_batch/覆层/prompt 协议族五成员/意图一等值/
+  fs/Optional 等），真实 qwen3.6 非思考模式全量回归 + 压力维度扩展。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ B6 PT-FEAT-5 CI/CD 可靠化设计 + 本地配置（unsafe-vibe-dev `46c5a18e`）**：四层可靠性
+  设计 + ci.yml 分层就绪（保持 workflow_dispatch）+ scripts/ci_local.sh 本地分层复现；远程启用
+  待用户显式授权；本地全量 3182 零回归 + L1 909/1 + wheel 构建验证。**阶段 B（B1-B6）全部完成，
+  当前 P0 前移阶段 C（VISION-3 真实 LLM 全面试用重启）**
 - [x] **✅ B5 PT-DOC-3P2 how-to 读者旅程补齐（unsafe-vibe-dev `00eaf873`）**：新增 use_isolation
   + orchestrate_llm_calls 2 篇操作指南 + 交叉引用接线；纯文档变更；下一项 = B6 PT-FEAT-5
 - [x] **✅ B4 PT-DEBT-35 `_ctx` 契约单一权威形式化（unsafe-vibe-dev `a482dcb6`）**：get_intent_ctx/

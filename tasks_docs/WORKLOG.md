@@ -783,6 +783,13 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   隔离、`orchestrate_llm_calls.md` = LLM 调用链编排），交叉引用接线（debug→orchestrate、
   guide 03→orchestrate、syntax 11→use_isolation、README 目录树）；代码示例实跑验证。
   纯文档变更。
+  **B6 完成（2026-08-20）**：PT-FEAT-5 CI/CD 可靠化设计 + 本地配置——四层可靠性（L1 fast
+  单元/契约 ~6s / L2 全量跨平台矩阵 / L3 真实 LLM e2e 手动可选（自托管 runner + api_config）/
+  L4 发布产物 build+smoke）+ `.github/workflows/ci.yml` 保持 `workflow_dispatch`（远程启用待
+  用户显式授权后恢复 push/PR 并 push）+ `scripts/ci_local.sh` 本地分层复现（无需 push 获得 CI
+  分层价值）。设计文档 `tasks_docs/_code_cicd.md`。本地全量 pytest **3182 passed / 1 skipped
+  零回归** + L1 909/1 + wheel 构建验证。**阶段 B（B1-B6）全部完成（2026-08-20）**——当前 P0
+  前移阶段 C（真实 LLM 全面试用重启，VISION-3）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
