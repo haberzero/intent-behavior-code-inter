@@ -68,7 +68,8 @@ git 历史（本文件不登记完成记录）。
    （_ic_get_ctx/_ic_frame 单一权威，消除 10 处恒真死守卫/帧探测簇，缺参 fail-fast）+
    _is_impl_method 排除元类伪影（修复 bool|bool 误绑 type.__or__）+ _verify_axiom_bindings
    契约校验；判别 +13；全量 3173 零回归。
-4. **PT-DEBT-35 `_ctx` 内部契约完整形式化**（2026-08-20 从推迟移入 B，与 B3 同族）；
+4. **✅ PT-DEBT-35 `_ctx` 内部契约完整形式化完成（B4）**：intent_context.get_intent_ctx/set_intent_ctx
+   单一权威访问（isinstance 精确判别），全仓 _ctx 字段探测双轨收敛；判别 +9；全量 3182 零回归。
 5. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B5）；
 6. PT-FEAT-5 CI/CD 可靠化。
 **已封存**：PT-DECIDE-2（供应商思考禁用）——用户裁定短期不再考虑启动。

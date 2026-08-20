@@ -373,10 +373,19 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   恒真死守卫/帧探测簇，缺参 fail-fast）；② `_is_impl_method` 排除元类伪影（修复 `bool | bool`
   误绑 `type.__or__` PEP 604 运算符）；③ `_verify_axiom_bindings` bootstrap 末契约校验（公理
   声明方法必须 vtable/协议分派/字段承载）。判别测试 +13；全量 pytest **3173 passed / 1 skipped
-  零回归**（基线 3160）。下一项 = **B4 PT-DEBT-35**（`_ctx` 契约单一权威形式化 + 收敛访问点）。
+  零回归**（基线 3160）。
+  **✅ B4 PT-DEBT-35 `_ctx` 契约单一权威形式化（本 session，unsafe-vibe-dev `a482dcb6`）**：
+  `intent_context.get_intent_ctx`/`set_intent_ctx` 单一权威访问（isinstance 精确判别），全仓
+  ~10 处 `_ctx` 字段探测双轨收敛（`_helpers`/use/merge/combine/get_current/序列化 collect+
+  rehydrate）；判别测试 +9（fake `_ctx` 不误激活/round-trip/非对象 None/clear）；全量 pytest
+  **3182 passed / 1 skipped 零回归**（基线 3173）。下一项 = **B5 PT-DOC-3P2**（how-to 读者旅程
+  补齐，doc-governance）。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ B4 PT-DEBT-35 `_ctx` 契约单一权威形式化（unsafe-vibe-dev `a482dcb6`）**：get_intent_ctx/
+  set_intent_ctx 单一权威（isinstance 精确判别），全仓 _ctx 字段探测双轨收敛；判别 +9；全量
+  pytest 3182 passed / 1 skipped 零回归；下一项 = B5 PT-DOC-3P2
 - [x] **✅ B3 PT-DEBT-36 intent_context 方法族重构 + axiom 能力契约校验（unsafe-vibe-dev `6882f5b8`）**：
   方法族收敛（_ic_get_ctx/_ic_frame 单一权威，消除 10 处恒真死守卫/帧探测簇，缺参 fail-fast）+
   _is_impl_method 排除元类伪影（修复 bool|bool 误绑 type.__or__）+ _verify_axiom_bindings 契约校验；

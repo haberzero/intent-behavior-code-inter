@@ -11,7 +11,7 @@
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
 | FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
-| DEBT（技术债） | 1 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-35 阶段 B 排布；PT-DEBT-36 已完成；PT-DEBT-5 搁置） |
+| DEBT（技术债） | 0 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-35/36 已完成；PT-DEBT-5 搁置） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
@@ -61,14 +61,17 @@
 
 ### PT-DEBT-35 `_ctx` 内部契约完整形式化（intent_context 判别单一权威）
 
-- **状态**：active（阶段 B 排布，2026-08-20 不再推迟）｜**域**：DEBT｜**优先级**：P2
+- **状态**：done（2026-08-20 阶段 B 落地）｜**域**：DEBT｜**优先级**：P2
 - **动机**：`intent_context` 封装对象的 `fields["_ctx"]` 槽是全仓 ~20 处共享的半文档化内部契约；
   `_helpers.py:32` 用字段探测判别意图上下文实参（缺 `isinstance(IbIntentContext)` 校验，任何
   `fields["_ctx"]` 非 None 的普通对象误激活）——判别机制"侧表注解 + 字段探测"双轨并存。
 - **成因**：Tier C 审计（2026-08-20，_helpers:32 层穿透项）；用户决策：本次仅最小收紧
   （补 isinstance 校验），**完整形式化登记为独立任务**。
-- **当前理解**：完整形式化 = 定义 `_ctx` 契约单一权威（类型/协议判别），收敛 ~20 处访问，
-  消除字段探测双轨；触及架构边界。**已排入阶段 B（B 序列位），不再推迟**（用户 2026-08-20 裁定）。
+- **完成记录（2026-08-20）**：`_ctx` 契约单一权威 = `intent_context.get_intent_ctx`/
+  `set_intent_ctx`（isinstance(IbIntentContext) 精确判别，全仓唯一读写入口）；全仓 ~10 处
+  `_ctx` 字段探测双轨收敛（`_helpers` 判别 / `use` / `merge` / `combine` / `get_current` /
+  序列化 collect + rehydrate）；判别测试 +9（fake `_ctx` 不误激活 / round-trip / 非对象 None /
+  clear）。全量 pytest **3182 passed / 1 skipped 零回归**（基线 3173）。
 
 ### PT-DEBT-36 intent_context 方法族结构重构 + axiom 声明能力契约校验
 

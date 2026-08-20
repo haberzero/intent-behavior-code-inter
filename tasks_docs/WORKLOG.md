@@ -774,6 +774,11 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **`_verify_axiom_bindings` bootstrap 末契约校验**：公理声明方法必须 vtable/协议分派/字段承载，
   否则 fail-fast（杜绝"声明即满足但运行期 AttributeError"静默缺口）。判别测试 +13。全量 pytest
   **3173 passed / 1 skipped 零回归**（基线 3160）。
+  **B4 完成（2026-08-20）**：PT-DEBT-35 落地——`_ctx` 契约单一权威 = `intent_context.
+  get_intent_ctx`/`set_intent_ctx`（isinstance(IbIntentContext) 精确判别，全仓唯一读写入口），
+  全仓 ~10 处 `_ctx` 字段探测双轨收敛（`_helpers` 判别 / `use` / `merge` / `combine` /
+  `get_current` / 序列化 collect + rehydrate）。判别测试 +9（fake `_ctx` 不误激活 / round-trip /
+  非对象 None / clear）。全量 pytest **3182 passed / 1 skipped 零回归**（基线 3173）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
