@@ -63,16 +63,19 @@ git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 1. **主线架构债务落地**：G5 意图值栈全量重构 + 行为值深程统一装配入口收敛（解除 2 项登记
    架构债；先设计→评估→落地，勿半接通）；
 2. **PT-DEBT-29 生成器消费协作化**（Waitable 让出型消费，消除同步阻塞死锁风险——架构级）；
-3. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
+3. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
+4. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
    runtime_serializer/artifact_loader）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项）；
-4. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
 5. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
 
 **阶段 B · 功能稳健与对外能力**：
 6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；
 7. PT-DECIDE-3 项②④（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）；
-8. PT-DECIDE-2 供应商思考禁用（对外能力）；
-9. PT-FEAT-5 CI/CD 可靠化 / PT-DOC-3P2 how-to 读者旅程补齐 / PT-FEAT-6/12 工具链项。
+8. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B3）；
+9. PT-FEAT-5 CI/CD 可靠化。
+
+**已封存**：PT-DECIDE-2（供应商思考禁用）——用户裁定短期不再考虑启动。
+**划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。
 
 **阶段 C · 真实 LLM 全面试用重启（阈值：A/B 健康稳定达标后；非最高优先但必做）**：
 10. **VISION-3 重启**：对五大地基重构后全部新特性重试用——llm 可调用类（直接调用/装配/
