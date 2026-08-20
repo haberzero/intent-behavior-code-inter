@@ -368,10 +368,19 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   （impl 内置类型定义 `__from_prompt__`/`__validate_prompt__` 编译期 SEM_TYPE_MISMATCH 拒绝）；
   ④ `PromptRenderer.to_prompt_str` AttributeError 静默吞并改 KDIAG_PROTOCOL_TO_PROMPT_FALLBACK
   可观测发射。判别测试 +4；全量 pytest **3160 passed / 1 skipped 零回归**（基线 3156）。
-  下一项 = **B3 PT-DEBT-36**（intent_context 方法族结构重构 + axiom 能力契约校验）。
+  **✅ B3 PT-DEBT-36 intent_context 方法族重构 + axiom 能力契约校验（本 session，unsafe-vibe-dev
+  `6882f5b8`）**：① intent_context 方法族收敛（`_ic_get_ctx`/`_ic_frame` 单一权威，消除 10 处
+  恒真死守卫/帧探测簇，缺参 fail-fast）；② `_is_impl_method` 排除元类伪影（修复 `bool | bool`
+  误绑 `type.__or__` PEP 604 运算符）；③ `_verify_axiom_bindings` bootstrap 末契约校验（公理
+  声明方法必须 vtable/协议分派/字段承载）。判别测试 +13；全量 pytest **3173 passed / 1 skipped
+  零回归**（基线 3160）。下一项 = **B4 PT-DEBT-35**（`_ctx` 契约单一权威形式化 + 收敛访问点）。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ B3 PT-DEBT-36 intent_context 方法族重构 + axiom 能力契约校验（unsafe-vibe-dev `6882f5b8`）**：
+  方法族收敛（_ic_get_ctx/_ic_frame 单一权威，消除 10 处恒真死守卫/帧探测簇，缺参 fail-fast）+
+  _is_impl_method 排除元类伪影（修复 bool|bool 误绑 type.__or__）+ _verify_axiom_bindings 契约校验；
+  判别 +13；全量 pytest 3173 passed / 1 skipped 零回归；下一项 = B4 PT-DEBT-35
 - [x] **✅ B2 PT-DECIDE-3 项②④ 定案落地（unsafe-vibe-dev `9e326471`）**：② 不扩展 validate_prompt
   至内置（内建解析器单一权威）+ impl 内置类型定义 __from_prompt__/__validate_prompt__ 编译期拒绝
   （闭合半接通）；④ to_prompt_str AttributeError 静默吞并改 KDIAG 可观测发射；判别 +4；全量

@@ -11,7 +11,7 @@
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
 | FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
-| DEBT（技术债） | 2 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-35/36 已排入阶段 B；PT-DEBT-5 搁置） |
+| DEBT（技术债） | 1 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-35 阶段 B 排布；PT-DEBT-36 已完成；PT-DEBT-5 搁置） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
@@ -72,15 +72,19 @@
 
 ### PT-DEBT-36 intent_context 方法族结构重构 + axiom 声明能力契约校验
 
-- **状态**：active（阶段 B 排布，2026-08-20 不再推迟）｜**域**：DEBT｜**优先级**：P2
+- **状态**：done（2026-08-20 阶段 B 落地）｜**域**：DEBT｜**优先级**：P2
 - **动机**：primitive_initializer 中 intent_context OOP 方法族（L546-728）+ 帧探测簇聚集
   10 处恒真死守卫；bootstrap 建议"axiom 声明能力静默未绑定 → 加契约校验"（L44/L128 宿主实现
   类魔法方法检查无绑定验证）。
 - **成因**：Tier C 审计（2026-08-20，bootstrap 组深层次 A/C）；用户决策：死守卫本次清除，
   **方法族结构重构 + axiom 能力契约校验登记为独立任务**（与 contract_validator:63 公理契约
   校验主题相关，可合并评估）。
-- **当前理解**：涉及 axiom 声明面与 bootstrap 绑定面的契约（与 PT-DEBT-35 `_ctx` 契约相关），
-  **已排入阶段 B（B 序列位），不再推迟**（用户 2026-08-20 裁定；与 PT-DEBT-35 `_ctx` 契约相关，可合并评估）。
+- **完成记录（2026-08-20）**：① intent_context 方法族收敛——`_ic_get_ctx`/`_ic_frame` 单一
+  权威访问，消除 10 处恒真死守卫/帧探测簇/hasattr 字段探测，缺参 fail-fast（push/merge/combine/use
+  不再静默 no-op）；② `_is_impl_method` 用 `getattr_static` 排除元类伪影——修复 `bool | bool`
+  误绑 `type.__or__`（PEP 604 运算符，运行期 expected 1 argument 缺陷）；③ `_verify_axiom_bindings`
+  bootstrap 末契约校验（公理声明方法必须 vtable/协议分派/字段承载，否则 fail-fast）。判别测试 +13；
+  全量 pytest **3173 passed / 1 skipped 零回归**（基线 3160）。
 
 ---
 

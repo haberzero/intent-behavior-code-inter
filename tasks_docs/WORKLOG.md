@@ -766,6 +766,14 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   to_prompt_str` 的 AttributeError 静默吞并 → 改 `KDIAG_PROTOCOL_TO_PROMPT_FALLBACK` 可观测发射**
   （与 to_payload/base.py 回退路径同构，不再隐藏用户 `__to_prompt__` 方法 bug）。判别测试 +4。
   全量 pytest **3160 passed / 1 skipped 零回归**（基线 3156）。
+  **B3 完成（2026-08-20）**：PT-DEBT-36 落地——① intent_context 方法族收敛（`_ic_get_ctx`/
+  `_ic_frame` 单一权威，消除 10 处恒真死守卫/帧探测簇/hasattr 字段探测，push/merge/combine/use
+  缺参 fail-fast 不再静默 no-op）；② **`_is_impl_method` 排除元类伪影**：`bool | bool` 曾经
+  `hasattr(IbBool, '__or__')` 命中 Python `type.__or__`（PEP 604 类型联合运算符），绑定成类对象
+  运算符 → 运行期 "expected 1 argument, got 2"；改 `getattr_static` 校验实例级方法修复；③
+  **`_verify_axiom_bindings` bootstrap 末契约校验**：公理声明方法必须 vtable/协议分派/字段承载，
+  否则 fail-fast（杜绝"声明即满足但运行期 AttributeError"静默缺口）。判别测试 +13。全量 pytest
+  **3173 passed / 1 skipped 零回归**（基线 3160）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

@@ -64,7 +64,10 @@ git 历史（本文件不登记完成记录）。
 2. **✅ PT-DECIDE-3 项②④ 定案落地（B2）**：② 不扩展 validate_prompt 至内置（内建解析器单一权威）
    + impl 内置类型定义 __from_prompt__/__validate_prompt__ 编译期拒绝（闭合半接通）；
    ④ to_prompt_str AttributeError 静默吞并改 KDIAG 可观测发射；判别 +4；全量 3160 零回归。
-3. **PT-DEBT-36 intent_context 方法族结构重构 + axiom 能力契约校验**（2026-08-20 从推迟移入 B，与 B2 协议主题衔接）；
+3. **✅ PT-DEBT-36 intent_context 方法族重构 + axiom 能力契约校验完成（B3）**：方法族收敛
+   （_ic_get_ctx/_ic_frame 单一权威，消除 10 处恒真死守卫/帧探测簇，缺参 fail-fast）+
+   _is_impl_method 排除元类伪影（修复 bool|bool 误绑 type.__or__）+ _verify_axiom_bindings
+   契约校验；判别 +13；全量 3173 零回归。
 4. **PT-DEBT-35 `_ctx` 内部契约完整形式化**（2026-08-20 从推迟移入 B，与 B3 同族）；
 5. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B5）；
 6. PT-FEAT-5 CI/CD 可靠化。
