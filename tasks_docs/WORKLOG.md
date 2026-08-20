@@ -779,6 +779,10 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   全仓 ~10 处 `_ctx` 字段探测双轨收敛（`_helpers` 判别 / `use` / `merge` / `combine` /
   `get_current` / 序列化 collect + rehydrate）。判别测试 +9（fake `_ctx` 不误激活 / round-trip /
   非对象 None / clear）。全量 pytest **3182 passed / 1 skipped 零回归**（基线 3173）。
+  **B5 完成（2026-08-20）**：PT-DOC-3P2 落地——补齐 2 篇 howto（`use_isolation.md` = ihost
+  隔离、`orchestrate_llm_calls.md` = LLM 调用链编排），交叉引用接线（debug→orchestrate、
+  guide 03→orchestrate、syntax 11→use_isolation、README 目录树）；代码示例实跑验证。
+  纯文档变更。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

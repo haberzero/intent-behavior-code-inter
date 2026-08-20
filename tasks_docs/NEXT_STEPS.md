@@ -70,7 +70,8 @@ git 历史（本文件不登记完成记录）。
    契约校验；判别 +13；全量 3173 零回归。
 4. **✅ PT-DEBT-35 `_ctx` 内部契约完整形式化完成（B4）**：intent_context.get_intent_ctx/set_intent_ctx
    单一权威访问（isinstance 精确判别），全仓 _ctx 字段探测双轨收敛；判别 +9；全量 3182 零回归。
-5. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B5）；
+5. **✅ PT-DOC-3P2 how-to 读者旅程补齐完成（B5）**：新增 use_isolation（ihost 隔离）+
+   orchestrate_llm_calls（LLM 编排）2 篇操作指南 + 交叉引用接线；纯文档变更。
 6. PT-FEAT-5 CI/CD 可靠化。
 **已封存**：PT-DECIDE-2（供应商思考禁用）——用户裁定短期不再考虑启动。
 **划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。

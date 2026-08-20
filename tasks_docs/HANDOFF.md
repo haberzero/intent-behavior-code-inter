@@ -378,11 +378,17 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   `intent_context.get_intent_ctx`/`set_intent_ctx` 单一权威访问（isinstance 精确判别），全仓
   ~10 处 `_ctx` 字段探测双轨收敛（`_helpers`/use/merge/combine/get_current/序列化 collect+
   rehydrate）；判别测试 +9（fake `_ctx` 不误激活/round-trip/非对象 None/clear）；全量 pytest
-  **3182 passed / 1 skipped 零回归**（基线 3173）。下一项 = **B5 PT-DOC-3P2**（how-to 读者旅程
-  补齐，doc-governance）。
+  **3182 passed / 1 skipped 零回归**（基线 3173）。
+  **✅ B5 PT-DOC-3P2 how-to 读者旅程补齐（本 session，unsafe-vibe-dev `00eaf873`）**：新增
+  `use_isolation.md`（ihost 隔离）+ `orchestrate_llm_calls.md`（LLM 编排）2 篇操作指南 +
+  交叉引用接线（debug→orchestrate、guide 03→orchestrate、syntax 11→use_isolation、README
+  目录树）；纯文档变更。下一项 = **B6 PT-FEAT-5**（CI/CD 可靠化设计 + 本地配置，不 push、
+  不启用 GitHub 侧，完成标准=设计+配置就绪）。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ B5 PT-DOC-3P2 how-to 读者旅程补齐（unsafe-vibe-dev `00eaf873`）**：新增 use_isolation
+  + orchestrate_llm_calls 2 篇操作指南 + 交叉引用接线；纯文档变更；下一项 = B6 PT-FEAT-5
 - [x] **✅ B4 PT-DEBT-35 `_ctx` 契约单一权威形式化（unsafe-vibe-dev `a482dcb6`）**：get_intent_ctx/
   set_intent_ctx 单一权威（isinstance 精确判别），全仓 _ctx 字段探测双轨收敛；判别 +9；全量
   pytest 3182 passed / 1 skipped 零回归；下一项 = B5 PT-DOC-3P2

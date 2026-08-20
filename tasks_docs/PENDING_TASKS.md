@@ -13,7 +13,7 @@
 | FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
 | DEBT（技术债） | 0 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-35/36 已完成；PT-DEBT-5 搁置） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
-| DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
+| DOC（文档） | 0 | 0 | 0 | 文档体系缺口（PT-DOC-3P2 已完成） |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
 | DECIDE（决策） | 0 | 0 | 1 | 待裁定设计问题（PT-DECIDE-3 项②④ 已定案落地 2026-08-20，全部清零；PT-DECIDE-2 已封存） |
 | SEALED（封存） | 0 | 0 | 2 | 显式封存（恢复需解封评估） |
@@ -125,11 +125,15 @@
 
 ### PT-DOC-3P2 How-to 层补齐（读者旅程）
 
-- **状态**：active｜**域**：DOC｜**优先级**：P2
+- **状态**：done（2026-08-20 阶段 B 落地）｜**域**：DOC｜**优先级**：P2
 - **动机**：Reference→How-to 读者旅程断裂——生成器/并发/llmexcept/隔离等场景缺
   操作指南（现 howto 5 篇：调试/试用/生成器/并发/插件）。
 - **成因**：三轴盘点登记（Reference→How-to 读者旅程缺口）。
-- **当前理解**：按 WRITING_GUIDE 评估补齐优先级（快速上手/LLM 编排教程优先）。
+- **完成记录（2026-08-20）**：生成器/并发已有 howto；补齐 **`use_isolation.md`**（ihost
+  动态宿主隔离：run_isolated/spawn_isolated+collect/超时/状态保存/并发多子环境/陷阱）与
+  **`orchestrate_llm_calls.md`**（三层失败防线/修正型重试/长链独立设防/循环/__retry__
+  调用级/最终降级/编排决策速查）；交叉引用接线（debug_llm_calls→orchestrate、guide 03→
+  orchestrate、syntax 11→use_isolation、README 目录树）；代码示例实跑验证。纯文档变更。
 
 ---
 
