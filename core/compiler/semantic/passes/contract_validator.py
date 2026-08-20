@@ -59,14 +59,15 @@ class ContractValidator:
                 self._check_method_compatibility_by_name(cls_desc, name, member, parent_member_spec)
 
         # 2. 检查公理契约 (Axiom Contract)
+        # 类名命中公理（内置类型等）时，校验类成员与公理声明方法签名一致。
+        # get_method_specs 恒返回 MethodMemberSpec（kind="method"），无需 kind 门。
         axiom = self.registry.get_axiom(cls_desc)
-        if axiom and hasattr(axiom, 'get_methods'):
-            axiom_methods = axiom.get_methods()
+        if axiom is not None:
+            axiom_methods = axiom.get_method_specs()
             for name, axiom_sig in axiom_methods.items():
                 member = cls_desc.members.get(name)
                 if member and isinstance(member, MemberSpec) and member.is_method():
-                    if axiom_sig.kind in (TypeKind.FUNCTION.value, TypeKind.CALLABLE_SIG.value):
-                        self._check_method_compatibility_by_name(cls_desc, name, member, axiom_sig)
+                    self._check_method_compatibility_by_name(cls_desc, name, member, axiom_sig)
 
     def _validate_function(self, func_desc: IbSpec):
         """审计全局函数的合法性 (水合完整性校验)"""
