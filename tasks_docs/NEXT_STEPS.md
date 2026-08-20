@@ -61,7 +61,9 @@ git 历史（本文件不登记完成记录）。
    （INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 / INV-MOCK-3 / 模块缓存 /
    循环 import / switch 内 return）+ 矩阵卫生 3 处陈旧 TRUE_GAP（已存在测试重指）+ §7 模块重载
    =设计排除记录；全量 pytest 3156 passed / 1 skipped 零回归。
-2. PT-DECIDE-3 项②④（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）；
+2. **✅ PT-DECIDE-3 项②④ 定案落地（B2）**：② 不扩展 validate_prompt 至内置（内建解析器单一权威）
+   + impl 内置类型定义 __from_prompt__/__validate_prompt__ 编译期拒绝（闭合半接通）；
+   ④ to_prompt_str AttributeError 静默吞并改 KDIAG 可观测发射；判别 +4；全量 3160 零回归。
 3. **PT-DEBT-36 intent_context 方法族结构重构 + axiom 能力契约校验**（2026-08-20 从推迟移入 B，与 B2 协议主题衔接）；
 4. **PT-DEBT-35 `_ctx` 内部契约完整形式化**（2026-08-20 从推迟移入 B，与 B3 同族）；
 5. **PT-DOC-3P2 how-to 读者旅程补齐**（提前至 B5）；

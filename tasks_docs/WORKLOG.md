@@ -758,6 +758,14 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `test_switch_usability.py` 覆盖）+ **模块重新加载 = 设计排除定论**（IBCI 无热重载机制——模块体仅
   首次导入执行、后续复用缓存实例；`hot_reload_pools` 违反"解释器不修改代码"原则
   `docs/architecture/01_principles.md`）。全量 pytest **3156 passed / 1 skipped 零回归**（基线 3133）。
+  **B2 完成（2026-08-20）**：PT-DECIDE-3 项②④ 定案落地——② **评估定论：不扩展 `__validate_prompt__`
+  至内置类型**（内置 LLM 输出预校验由内建解析器承担 = from_prompt_cap/内建 parser，单一权威；
+  扩展即与 parser 构成双通道）+ **闭合半接通边缘**：`impl` 在内置类型上定义 `__from_prompt__`/
+  `__validate_prompt__` 编译期 SEM_TYPE_MISMATCH 拒绝（同 `__init__` 先例——AxiomParsingStrategy
+  永不分派 impl 补充的解析协议方法，声明即"满足协议"但从不执行）；④ **复核结论：`PromptRenderer.
+  to_prompt_str` 的 AttributeError 静默吞并 → 改 `KDIAG_PROTOCOL_TO_PROMPT_FALLBACK` 可观测发射**
+  （与 to_payload/base.py 回退路径同构，不再隐藏用户 `__to_prompt__` 方法 bug）。判别测试 +4。
+  全量 pytest **3160 passed / 1 skipped 零回归**（基线 3156）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

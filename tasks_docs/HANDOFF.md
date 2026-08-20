@@ -362,11 +362,20 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   INV-INTENT-SCOPE-3 已有 snapshot 冻结测试、INV-LLMEXCEPT-CATCH-4→5 重号、switch break/continue
   已有测试）+ §7 模块重载=设计排除（无热重载机制）。**B6 交付边界（用户 2026-08-20 裁定）**：
   CI/CD = 可靠化设计 + 本地配置（不 push、不启用 GitHub 侧），B6 完成标准=设计+配置就绪，远程
-  启用待用户授权。全量 pytest **3156 passed / 1 skipped 零回归**（基线 3133）。下一项 = **B2
-  PT-DECIDE-3 项②④**（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）。
+  启用待用户授权。全量 pytest **3156 passed / 1 skipped 零回归**（基线 3133）。
+  **✅ B2 PT-DECIDE-3 项②④ 定案落地（本 session，unsafe-vibe-dev `9e326471`）**：② 评估定论 =
+  不扩展 `__validate_prompt__` 至内置类型（内建解析器单一权威，扩展即双通道）+ 闭合半接通边缘
+  （impl 内置类型定义 `__from_prompt__`/`__validate_prompt__` 编译期 SEM_TYPE_MISMATCH 拒绝）；
+  ④ `PromptRenderer.to_prompt_str` AttributeError 静默吞并改 KDIAG_PROTOCOL_TO_PROMPT_FALLBACK
+  可观测发射。判别测试 +4；全量 pytest **3160 passed / 1 skipped 零回归**（基线 3156）。
+  下一项 = **B3 PT-DEBT-36**（intent_context 方法族结构重构 + axiom 能力契约校验）。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ B2 PT-DECIDE-3 项②④ 定案落地（unsafe-vibe-dev `9e326471`）**：② 不扩展 validate_prompt
+  至内置（内建解析器单一权威）+ impl 内置类型定义 __from_prompt__/__validate_prompt__ 编译期拒绝
+  （闭合半接通）；④ to_prompt_str AttributeError 静默吞并改 KDIAG 可观测发射；判别 +4；全量
+  pytest 3160 passed / 1 skipped 零回归；下一项 = B3 PT-DEBT-36
 - [x] **✅ B1 PT-TEST-2 覆盖缺口补测完成（unsafe-vibe-dev `1eaefb12`）**：COVERAGE_MATRIX 缺口全收敛
   （新增判别测试 17 项：INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 / INV-MOCK-3 /
   模块缓存 / 循环 import / switch 内 return + 矩阵卫生 3 处陈旧 TRUE_GAP + §7 模块重载=设计排除）；

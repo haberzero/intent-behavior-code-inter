@@ -15,7 +15,7 @@
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
-| DECIDE（决策） | 1 | 0 | 1 | 待裁定设计问题（PT-DECIDE-3 项②④ 剩余；PT-DECIDE-2 已封存） |
+| DECIDE（决策） | 0 | 0 | 1 | 待裁定设计问题（PT-DECIDE-3 项②④ 已定案落地 2026-08-20，全部清零；PT-DECIDE-2 已封存） |
 | SEALED（封存） | 0 | 0 | 2 | 显式封存（恢复需解封评估） |
 | VISION（愿景） | 4 | 0 | 0 | 远期方向（无排期） |
 
@@ -162,7 +162,7 @@
 
 ### PT-DECIDE-3 LLM prompt 协议家族待决项
 
-- **状态**：active（剩余 ②④；①③ 已定案落地 2026-08-19 收敛阶段 6-7）｜**域**：DECIDE｜**优先级**：P2
+- **状态**：active（项②④ 已定案落地 2026-08-20；全部待决项清零）｜**域**：DECIDE｜**优先级**：P2
 - **动机**：① 用户类 `__from_prompt__` 返回目标类实例的 auto-boxing 二次封装边界；
   ② `__validate_prompt__` 是否扩展至内置类型；③ `SEM_PROTOCOL_SIGNATURE` 强度
   （warning vs error）；④ `__to_prompt__`/`__payload_prompt__` 异常回退可观测性复核。
@@ -170,8 +170,13 @@
   实例，非实例=契约违约（诊断+uncertain），删除 `_auto_box_value` 三级启发式兜底（对齐
   06_oop §6.7 既有文档契约）；③ 选 B——required 协议成员签名违约升编译错误（fail-fast），
   optional 成员（`__intent__`/`__retry__`）运行期 fail-fast 不经此路径。
-- **剩余待决**：② `__validate_prompt__` 扩展至内置类型（需评估内置解析器是否统一走该协议）；
-  ④ prompt 协议异常回退可观测性复核。
+- **定案记录（2026-08-20）**：② 评估定论 = **不扩展至内置类型**——内置 LLM 输出预校验由
+  内建解析器承担（from_prompt_cap/内建 parser，单一权威），扩展即与 parser 构成双通道；
+  同时闭合半接通边缘：`impl` 在内置类型上定义 `__from_prompt__`/`__validate_prompt__` 编译期
+  SEM_TYPE_MISMATCH 拒绝（同 `__init__` 先例——AxiomParsingStrategy 永不分派 impl 补充的解析
+  协议方法）；④ 复核结论 = `PromptRenderer.to_prompt_str` 的 AttributeError 静默吞并改为
+  `KDIAG_PROTOCOL_TO_PROMPT_FALLBACK` 可观测发射（与 to_payload/base.py 回退路径同构），
+  不再隐藏用户 `__to_prompt__` 方法 bug。
 - **成因**：PROMPT_DESIGN_REVIEW 收敛。
 - **实证补充（2026-08-18，exp/protocol-vtable）**：D2 `to_prompt` 协议**零消费者**
   （核心无 `satisfies_protocol(...,'to_prompt')` 调用；所有内置类型 satisfies=F 但运行期均经
