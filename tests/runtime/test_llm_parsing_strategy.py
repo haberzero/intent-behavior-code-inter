@@ -117,3 +117,15 @@ class TestVTableFromPromptContract:
         res = self._vtable_strategy(engine).parse("raw", self._resolve_point(engine), "n1", None)
         assert res is not None and res.is_uncertain
         assert "Point" in res.retry_hint
+
+    def test_from_prompt_malformed_shape_returns_uncertain(self, engine):
+        """返回非 (bool, value) 二元组 → uncertain（修静默降级，不再落到 Default box 成 str）。"""
+        engine.run_string(
+            self._CLASS_TEMPLATE +
+            "    func __from_prompt__(str raw) -> tuple:\n"
+            "        return Point(7)\n",  # 形状违约：非二元组
+            silent=True,
+        )
+        res = self._vtable_strategy(engine).parse("raw", self._resolve_point(engine), "n1", None)
+        assert res is not None and res.is_uncertain
+        assert "二元组" in res.retry_hint or "2-element" in res.retry_hint

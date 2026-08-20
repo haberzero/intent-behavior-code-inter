@@ -244,6 +244,45 @@ intent_context.use(b)
         except Exception as e:
             assert "intent_context" in str(e), f"错误信息应指明意图上下文：{e}"
 
+    def test_merge_with_non_intent_context_fails_fast(self):
+        """ctx.merge(非法对象) 必须可读报错（与 use() fail-fast 对齐，修静默 no-op）。"""
+        code = """\
+intent_context my_ctx = intent_context()
+my_ctx.merge(42)
+"""
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("my_ctx.merge(42) 应抛运行时错误")
+        except Exception as e:
+            assert "intent_context.merge" in str(e), f"错误信息应指明 merge：{e}"
+
+    def test_combine_with_non_intent_context_fails_fast(self):
+        """ctx.combine(非法对象) 必须可读报错（与 use() fail-fast 对齐，修静默 no-op）。"""
+        code = """\
+intent_context my_ctx = intent_context()
+my_ctx.combine(42)
+"""
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("my_ctx.combine(42) 应抛运行时错误")
+        except Exception as e:
+            assert "intent_context.combine" in str(e), f"错误信息应指明 combine：{e}"
+
+    def test_merge_valid_intent_context_succeeds(self):
+        """ctx.merge(合法 intent_context) 正常执行（不破坏有效路径）。"""
+        code = """\
+intent_context a = intent_context()
+intent_context b = intent_context()
+a.merge(b)
+print("merged")
+"""
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
+        lines = []
+        engine.run_string(code, silent=True, output_callback=lambda t: lines.append(str(t)))
+        assert lines == ["merged"]
+
     def test_get_current_captures_scope_snapshot(self):
         """
         intent_context.get_current() returns a snapshot of the current scope's

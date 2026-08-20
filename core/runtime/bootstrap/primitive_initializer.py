@@ -598,9 +598,13 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             if not ctx or not args:
                 return registry.get_none()
             other = args[0]
-            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
-            if other_ctx:
-                ctx.merge(other_ctx)
+            other_ctx = other.fields.get('_ctx') if isinstance(other, IbObject) else None
+            if not isinstance(other_ctx, IbIntentContext):
+                raise InterpreterError(
+                    "intent_context.merge(): expected an intent_context instance, "
+                    f"got {type(other).__name__}"
+                )
+            ctx.merge(other_ctx)
             return registry.get_none()
 
         def _ic_clear(receiver, *args):
@@ -621,9 +625,13 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             if not ctx or not args:
                 return registry.get_none()
             other = args[0]
-            other_ctx = other.fields.get('_ctx') if hasattr(other, 'fields') else None
-            if other_ctx is not None and hasattr(ctx, 'combine'):
-                ctx.combine(other_ctx)
+            other_ctx = other.fields.get('_ctx') if isinstance(other, IbObject) else None
+            if not isinstance(other_ctx, IbIntentContext):
+                raise InterpreterError(
+                    "intent_context.combine(): expected an intent_context instance, "
+                    f"got {type(other).__name__}"
+                )
+            ctx.combine(other_ctx)
             return registry.get_none()
 
         def _ic_to_prompt(receiver, *args):

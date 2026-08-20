@@ -235,7 +235,18 @@ class VTableParsingStrategy(ParsingStrategy):
 
             # Expected return: tuple (bool, any)
             if not (hasattr(result_obj, 'elements') and len(result_obj.elements) >= 2):
-                return None
+                kernel_diagnostic(
+                    code=KDIAG_PROTOCOL_FROM_PROMPT_FALLBACK,
+                    detail={"context": "vtable", "type": type_name, "return": repr(result_obj)},
+                    message=(
+                        f"__from_prompt__ for '{type_name}' returned a non-2-element tuple "
+                        f"(contract requires (bool, value)): {result_obj!r}"
+                    ),
+                )
+                return LLMResult.uncertain_result(
+                    raw_response=raw_res,
+                    retry_hint=f"__from_prompt__ 返回值必须是 (bool, {type_name}) 二元组",
+                )
 
             success_val = result_obj.elements[0]
             parsed_val = result_obj.elements[1]

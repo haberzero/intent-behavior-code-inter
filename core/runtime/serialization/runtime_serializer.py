@@ -478,9 +478,9 @@ class RuntimeSerializer(BaseFlatSerializer):
     def _collect_intent(self, obj, data):
         # ``IbIntent`` 使用 ``__slots__`` 存放状态
         data["_type"] = "intent"
-        data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
+        data["mode"] = obj.mode.value
         data["tag"] = obj.tag
-        data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
+        data["role"] = obj.role.value
         data["source_uid"] = obj.source_uid
         data["pop_top"] = obj.pop_top
         if obj.values:
