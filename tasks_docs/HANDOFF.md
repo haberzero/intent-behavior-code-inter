@@ -282,19 +282,32 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   BehaviorAxiom/TypeAxiom + 03_type_system.md），P4 协议化真收尾；G5 意图值栈全量重构
   维持登记不推进（P3 核心切片已落地、勿半接通）；行为统一装配评估为值自身差异承载。
   全量 pytest 3066 passed / 1 skipped 零回归。
-  **当前分支 = `unsafe-vibe-dev`**，HEAD=`446e1e13`（领先 origin 235 提交，未 push）、main 未动、worktree 干净；全量基线 3066 passed / 1 skipped
-  （以实跑为准）。**会话交接核验接手完成（本 session）**：HANDOFF_SESSION.md 待验证清单全通过，
-  契约要点并入本节（含 INV-EXCEPT-* 保留标准警示），临时交接文件已删除（git 承载）。
-  **✅ 技术债收敛 8 阶段全部完成（本 session）**：任务控制文档收敛 / 注释代号清理（F# 残留清零
-  含测试层）/ 死代码孤儿清理（inherit_plugins、IbBehaviorInstance）/ 质量红线修复（interpreter
-  双通道、私有穿透）/ PT-DEBT-4 file→fs 全量迁移 / PT-DECIDE-3 项①③ 语义裁定落地（__from_prompt__
-  单向契约、SEM_PROTOCOL_SIGNATURE required=error）。全量 pytest **3069 passed / 1 skipped** 零回归
+  **当前分支 = `unsafe-vibe-dev`**，HEAD=`a97773a6`（**已 push origin，与 origin 同步**——用户
+  显式授权 push 并已执行，含收敛+排布提交；**后续 push 需再获显式授权，授权不自动延续**）、
+  main 未动、worktree 干净；全量基线 **3069 passed / 1 skipped**（以实跑为准，接手复跑确认）。
+  **✅ 技术债收敛 8 阶段全部完成**：任务控制文档收敛 / 注释代号清理（F# 残留清零含测试层）/
+  死代码孤儿清理（inherit_plugins、IbBehaviorInstance）/ 质量红线修复（interpreter 双通道、私有
+  穿透）/ PT-DEBT-4 file→fs 全量迁移 / PT-DECIDE-3 项①③ 语义裁定落地（__from_prompt__ 单向契约、
+  SEM_PROTOCOL_SIGNATURE required=error）。全量 pytest **3069 passed / 1 skipped** 零回归
   （+3 判别测试）。详见 git 历史与 WORKLOG。
-  ② 主线剩余对齐债务评估（G5 意图值栈 / 行为统一装配，NEXT_STEPS
-  候选 #1）；③ 支线（PT-DEBT / VISION-3 / 文档 P9 收尾）。
+  **✅ 后续任务排布（用户 2026-08-19 指定健康度优先 + 真实 LLM 全面试用纳入）**：四阶段——
+  **阶段 A · 代码/架构健康（当前 P0）**：A1 主线架构债务落地（G5 意图值栈全量重构 + 行为值深程
+  统一装配入口收敛，先设计→评估→落地勿半接通）/ A2 PT-DEBT-29 生成器让出型消费 / A3 PT-DEBT-30+33
+  类型边界闭合 / A4 Tier C 专项审计 / A5 PT-AUDIT-1/3 周期 + Tier B。**阶段 B · 功能稳健/对外能力**
+  （PT-TEST-2 覆盖缺口、PT-DECIDE-3 项②④、PT-DOC-3P2 提前 B3、PT-FEAT-5 CI/CD）。**阶段 C ·
+  真实 LLM 全面试用重启（VISION-3，阈值=A/B 稳定后；非最高优先但必做）**。**阶段 D · 远期演进**
+  （P7 类型理论 / P8 函数式 / 二层 IR）。**排布微调（用户裁定）**：A3/A4 交换；**PT-DECIDE-2 封存**
+  （短期不启动，解封条件=多供应商思考模式部署需求）；PT-DOC-3P2 提前至 B3；PT-FEAT-6/12 划远期。
+  完整执行依据 = `tasks_docs/_planning_health_first.md`（临时规划文档，执行中逐项收敛进
+  NEXT_STEPS/PENDING_TASKS，完成或吸收后按 GOVERNANCE.md 删除）。
+  **✅ 会话交接核验接手完成（本 session）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 /
+  分支 unsafe-vibe-dev 与 origin 同步 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3069 passed /
+  1 skipped** / 契约与下一步已读）；本文件 §2.1/§2.2 收敛更新，临时交接文件已删除（git 承载）。
+  下一 session 起点 = **阶段 A P0（A1 主线架构债务落地，先设计→评估→落地）**。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ 会话交接核验接手完成（HEAD=a97773a6）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / unsafe-vibe-dev 与 origin 同步（已 push）/ main 未动 / 提交序列对齐 / 全量 pytest 实跑 3069 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 push 授权不延续契约与四阶段排布），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（A1）
 - [x] **✅ 会话交接核验接手完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3066 passed / 1 skipped）；契约要点已并入 §2.1（含 INV-EXCEPT-* 保留标准警示），临时交接文件已删除（git 承载）
 - [x] **✅ 技术债收敛 8 阶段全部完成**：任务控制文档收敛 / 注释代号清理（F# 清零含测试层）/ 死代码孤儿清理（inherit_plugins、IbBehaviorInstance）/ 质量红线修复（interpreter 双通道、私有穿透）/ PT-DEBT-4 file→fs / PT-DECIDE-3 项①③ 语义裁定落地；全量 pytest 3069 零回归（+3 判别）；详见 git 历史
 - [x] **✅ 审计 A+B 处置落地（`90e66a90`）**：注释/文档任务代号全仓清理（core+tests+docs+examples+trials）+ 死代码删除 `_invoke_llm_callable_cps_boxed`/`_sync`；保留 INV/LT/IT 规范编号与 trials 用例编号；全量 3059 零回归
