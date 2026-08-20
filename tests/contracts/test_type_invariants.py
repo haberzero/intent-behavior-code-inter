@@ -259,6 +259,26 @@ print(l)
 """
         expect_compile_error(code, "SEM_TYPE_MISMATCH")
 
+    def test_bool_bitwise_operators_use_instance_impl(self):
+        """bool 位运算（&/|/^）必须走实例实现，不得绑定元类伪影。
+
+        回归：bootstrap 曾用 ``hasattr(py_impl_cls, magic_name)`` 探测运算符，
+        ``bool.__or__`` 经 Python 元类命中 ``type.__or__``（PEP 604 类型联合），
+        绑定成类对象运算符 → ``bool | bool`` 运行期 "expected 1 argument, got 2"。
+        修复后走 IbBool 实例方法（布尔位运算）。
+        """
+        code = """
+bool a = True
+bool b = False
+bool o = a | b
+bool n = a & b
+bool x = a ^ b
+print(o)
+print(n)
+print(x)
+"""
+        assert run_ibci(code) == ["True", "False", "True"]
+
 
 # ===========================================================================
 # Tuple Positional Types (INV-TUPLE-*)

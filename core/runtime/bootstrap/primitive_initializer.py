@@ -33,6 +33,67 @@ def _reg_native(ib_class: IbClass, name: str, py_func: Callable, unbox: bool = T
     """统一注册原生方法的辅助函数"""
     ib_class.register_method(name, IbNativeFunction(py_func, unbox_args=unbox, is_method=True, name=f"{ib_class.name}.{name}", ib_class=ib_class))
 
+def _is_impl_method(cls: Any, name: str) -> bool:
+    """判断 ``name`` 是否为 ``cls`` 的实例级方法（函数/静态/类/属性描述符）。
+
+    排除 Python 元类伪影：如 ``type.__or__``（PEP 604 类型联合运算符）——
+    ``hasattr(IbBool, '__or__')`` 经元类为真，但那是类对象运算符而非 bool
+    实例方法。用 ``getattr_static`` 取原始描述符并校验类型，避免把元类
+    运算符绑定成实例方法（``bool | bool`` 运行期 "expected 1 argument" 缺陷根因）。
+    """
+    import inspect
+    import types
+
+    try:
+        attr = inspect.getattr_static(cls, name)
+    except AttributeError:
+        return False
+    return isinstance(attr, (types.FunctionType, staticmethod, classmethod, property))
+
+
+def _verify_axiom_bindings(ib_classes: Dict[str, Any], metadata_registry: Any) -> None:
+    """契约校验：公理声明的方法必须实际可绑定（vtable / 协议分派 / 字段承载）。
+
+    公理声明即对运行期类的能力契约。若声明的方法既无 vtable 绑定、又非协议
+    分派（如 converter 协议的 cast_to）、也非字段，运行期调用将神秘
+    AttributeError。此处 fail-fast（bootstrap 期暴露，而非运行期）。
+
+    - 字段（MemberSpec kind=field）：经实例字段访问承载，不要求 vtable。
+    - 协议分派方法（名在 dunder 注册表）：经 receive 协议路径承载。
+    - 其余声明方法：必须存在 vtable 绑定（lookup_method 可解析）。
+    """
+    from core.kernel.spec.member import MemberSpec
+
+    dunder_names = (
+        metadata_registry.dunder_names()
+        if hasattr(metadata_registry, "dunder_names")
+        else frozenset()
+    )
+    for name, ib_cls in ib_classes.items():
+        spec = getattr(ib_cls, "spec", None)
+        axiom = metadata_registry.get_axiom(spec) if spec else None
+        if axiom is None:
+            continue
+        methods = axiom.get_method_specs()
+        if not methods:
+            continue
+        missing = []
+        for method_name, member in methods.items():
+            if isinstance(member, MemberSpec) and member.kind == "field":
+                continue
+            if method_name in dunder_names:
+                continue
+            if ib_cls.lookup_method(method_name) is not None:
+                continue
+            missing.append(method_name)
+        if missing:
+            raise InterpreterError(
+                f"Axiom '{name}' declares methods {sorted(missing)} that are not "
+                f"bound on the runtime class and are neither protocol-dispatched "
+                f"nor fields. Declared axiom capabilities must have a runtime binding."
+            )
+
+
 def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
     """ 基于公理声明自动化绑定二元运算符"""
     spec_reg = ib_cls.registry.get_metadata_registry() if ib_cls.registry else None
@@ -41,7 +102,7 @@ def _auto_bind_operators(ib_cls: IbClass, py_impl_cls: Any):
     
     operators = axiom.get_operators()
     for op_symbol, magic_name in operators.items():
-        if hasattr(py_impl_cls, magic_name):
+        if _is_impl_method(py_impl_cls, magic_name):
             # 获取 Python 原生实现 (如 IbInteger.__add__)
             py_method = getattr(py_impl_cls, magic_name)
             # 绑定为原生方法，运算符通常处理 IbObject 所以 unbox=False
@@ -125,7 +186,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             py_impl_cls = get_ib_implementation(name)
             if py_impl_cls:
                 for method_name in methods:
-                    if hasattr(py_impl_cls, method_name):
+                    if _is_impl_method(py_impl_cls, method_name):
                         # 获取 Python 实现的方法
                         py_method = getattr(py_impl_cls, method_name)
                         if isinstance(py_method, property):
@@ -546,6 +607,20 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     intent_context_class = ib_classes.get("intent_context")
     if intent_context_class:
 
+        def _ic_get_ctx(receiver):
+            """intent_context 实例的 ``_ctx`` 槽位访问（单一权威，无字段探测）。
+
+            ``_ic_init`` 构造恒设置 ``_ctx``，缺失即内部不变量破坏（fail-fast，
+            不静默 no-op）。
+            """
+            ctx = receiver.fields.get("_ctx")
+            if not isinstance(ctx, IbIntentContext):
+                raise InterpreterError(
+                    "intent_context instance is missing its '_ctx' state "
+                    "(invariant violated: __init__ must set it)."
+                )
+            return ctx
+
         def _ic_init(receiver, *args):
             """intent_context() 构造函数：创建空意图上下文。"""
             receiver.fields['_ctx'] = IbIntentContext()
@@ -553,9 +628,11 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
         def _ic_push(receiver, *args):
             """ctx.push(content) 或 ctx.push(content, tag)：压入持久意图。"""
-            ctx = receiver.fields.get('_ctx')
-            if not ctx or not args:
-                return registry.get_none()
+            if not args:
+                raise InterpreterError(
+                    "intent_context.push() requires a content argument."
+                )
+            ctx = _ic_get_ctx(receiver)
             content_obj = args[0]
             tag_str = None
             if len(args) >= 2:
@@ -569,34 +646,33 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
         def _ic_pop(receiver, *args):
             """ctx.pop()：弹出并返回栈顶意图内容（渲染文本）。"""
-            ctx = receiver.fields.get('_ctx')
-            if ctx:
-                intent = ctx.pop()
-                if intent is not None and hasattr(intent, 'content'):
-                    return registry.box(intent.render_text())
+            ctx = _ic_get_ctx(receiver)
+            intent = ctx.pop()
+            if intent is not None:
+                return registry.box(intent.render_text())
             return registry.get_none()
 
         def _ic_fork(receiver, *args):
             """ctx.fork()：返回新的 intent_context 实例（拷贝当前状态）。"""
-            ctx = receiver.fields.get('_ctx')
+            ctx = _ic_get_ctx(receiver)
             new_instance = IbObject(intent_context_class)
-            new_instance.fields['_ctx'] = ctx.fork() if ctx else IbIntentContext()
+            new_instance.fields['_ctx'] = ctx.fork()
             return new_instance
 
         def _ic_resolve(receiver, *args):
             """ctx.resolve()：返回当前意图上下文消解后的提示词字符串列表。"""
-            ctx = receiver.fields.get('_ctx')
-            if not ctx:
-                return registry.box([])
+            ctx = _ic_get_ctx(receiver)
             intents = ctx.get_active_intents()
             strings = [i.render_text() for i in intents if i.render_text()]
             return registry.box(strings)
 
         def _ic_merge(receiver, *args):
             """ctx.merge(other)：将另一个意图上下文的状态合并到 self。"""
-            ctx = receiver.fields.get('_ctx')
-            if not ctx or not args:
-                return registry.get_none()
+            if not args:
+                raise InterpreterError(
+                    "intent_context.merge() requires an intent_context argument."
+                )
+            ctx = _ic_get_ctx(receiver)
             other = args[0]
             other_ctx = other.fields.get('_ctx') if isinstance(other, IbObject) else None
             if not isinstance(other_ctx, IbIntentContext):
@@ -609,9 +685,8 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
         def _ic_clear(receiver, *args):
             """ctx.clear()：清空持久意图栈。"""
-            ctx = receiver.fields.get('_ctx')
-            if ctx:
-                ctx.set_intent_top(None)
+            ctx = _ic_get_ctx(receiver)
+            ctx.set_intent_top(None)
             return registry.get_none()
 
         def _ic_combine(receiver, *args):
@@ -621,9 +696,11 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             的持久意图栈追加压入栈顶，smear_queue 追加，override 取 other 的。
             参见 :meth:`IbIntentContext.combine`。
             """
-            ctx = receiver.fields.get('_ctx')
-            if not ctx or not args:
-                return registry.get_none()
+            if not args:
+                raise InterpreterError(
+                    "intent_context.combine() requires an intent_context argument."
+                )
+            ctx = _ic_get_ctx(receiver)
             other = args[0]
             other_ctx = other.fields.get('_ctx') if isinstance(other, IbObject) else None
             if not isinstance(other_ctx, IbIntentContext):
@@ -636,9 +713,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
 
         def _ic_to_prompt(receiver, *args):
             """ctx.__to_prompt__()：渲染为 LLM 提示词友好文本（供 `$ctx` 段插值）。"""
-            ctx = receiver.fields.get('_ctx')
-            if ctx is None or not hasattr(ctx, 'to_prompt'):
-                return registry.box("")
+            ctx = _ic_get_ctx(receiver)
             return registry.box(ctx.to_prompt())
 
         _reg_native(intent_context_class, '__init__', _ic_init, unbox=False)
@@ -671,6 +746,17 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         #
         # ContextVar 路径：通过 get_current_frame() 获取当前 RuntimeContextImpl，
         # 与 IbUserFunction.call() 使用相同的机制，安全且协程/线程隔离。
+        # 帧探针为恒真死守卫（get_current_frame 恒返回 RuntimeContextImpl，含全部
+        # 帧方法）——直接调用，fail-fast（无帧 = 内部不变量破坏）。
+
+        def _ic_frame():
+            """当前执行帧（作用域控制方法共享；无帧即不变量破坏，fail-fast）。"""
+            frame = get_current_frame()
+            if frame is None:
+                raise InterpreterError(
+                    "intent_context scope method requires an active execution frame."
+                )
+            return frame
 
         def _ic_clear_inherited(receiver, *args):
             """
@@ -682,9 +768,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             复用 ``RuntimeContextImpl.clear_inherited_intents()``，
             同时重建活跃实例指针（共享 _ctx 引用），使 OOP 路径与语法路径保持同源。
             """
-            frame = get_current_frame()
-            if frame is not None and hasattr(frame, 'clear_inherited_intents'):
-                frame.clear_inherited_intents()
+            _ic_frame().clear_inherited_intents()
             return registry.get_none()
 
         def _ic_use(receiver, *args):
@@ -697,12 +781,11 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             ``use_intent_context`` 会同步更新帧级活跃实例指针，
             使后续 ``@+``/``@-`` 与 OOP 操作落在同一底层 IbIntentContext 上。
             """
-            frame = get_current_frame()
-            if frame is None or not hasattr(frame, 'use_intent_context'):
-                return registry.get_none()
             if not args:
-                return registry.get_none()
-            frame.use_intent_context(args[0])
+                raise InterpreterError(
+                    "intent_context.use() requires an intent_context argument."
+                )
+            _ic_frame().use_intent_context(args[0])
             return registry.get_none()
 
         def _ic_get_current(receiver, *args):
@@ -716,19 +799,15 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             等价于 ``_intent_ctx.fork()``，但保留了"用户命名身份"的可观察性
             （调试器可由此追踪当前帧正在使用的策略对象身份）。
             """
-            frame = get_current_frame()
+            frame = _ic_frame()
             new_instance = IbObject(intent_context_class)
-            if frame is not None and hasattr(frame, 'get_active_intent_ibobj'):
-                active = frame.get_active_intent_ibobj()
-                if active is not None and hasattr(active, 'fields'):
-                    active_ctx = active.fields.get('_ctx')
-                    if active_ctx is not None and hasattr(active_ctx, 'fork'):
-                        new_instance.fields['_ctx'] = active_ctx.fork()
-                        return new_instance
-            if frame is not None and hasattr(frame, 'fork_intent_snapshot'):
-                new_instance.fields['_ctx'] = frame.fork_intent_snapshot()
-            else:
-                new_instance.fields['_ctx'] = IbIntentContext()
+            active = frame.get_active_intent_ibobj()
+            if active is not None:
+                active_ctx = active.fields.get('_ctx')
+                if active_ctx is not None:
+                    new_instance.fields['_ctx'] = active_ctx.fork()
+                    return new_instance
+            new_instance.fields['_ctx'] = frame.fork_intent_snapshot()
             return new_instance
 
         _reg_native(intent_context_class, 'clear_inherited', _ic_clear_inherited, unbox=False)
@@ -851,6 +930,14 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         _reg_native(_file_handle_class, '__from_descriptor__', IbFileHandle.__from_descriptor__, unbox=False)
         _reg_native(_file_handle_class, '__payload_prompt__',
                     lambda self: self.receive('__path_payload_prompt__', []), unbox=False)
+
+    # [Axiom-Driven Automation] 契约校验（在所有手动绑定之后执行）
+    # 公理声明的方法/运算符必须实际绑定（或经协议分派/字段承载），杜绝"声明即
+    # 满足但运行期无实现"的静默缺口。字段（MemberSpec kind=field）经实例字段
+    # 访问承载，不要求 vtable 绑定；协议分派方法（cast_to 等 converter 协议）
+    # 经 receive 协议路径承载，不要求 vtable 绑定。其余声明的方法若运行期类上
+    # 找不到 vtable 绑定，即为契约违约（fail-fast，避免运行期神秘 AttributeError）。
+    _verify_axiom_bindings(ib_classes, metadata_registry)
 
     # 6. 封印注册表结构 (Active Defense)
     registry.seal_structure(token)

@@ -449,6 +449,61 @@ print("ok")
         lines = run_ibci(code)
         assert "ok" in lines
 
+    def test_push_without_argument_fails_fast(self):
+        """ctx.push() 缺参 → fail-fast（不静默 no-op）。"""
+        code = """
+intent_context ctx = intent_context()
+ctx.push()
+print("unreachable")
+"""
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("ctx.push() 缺参应抛运行时错误")
+        except Exception as e:
+            assert "push() requires a content argument" in str(e), f"错误信息应指明缺参：{e}"
+
+    def test_merge_without_argument_fails_fast(self):
+        """ctx.merge() 缺参 → fail-fast（与 merge(非法对象) fail-fast 对齐）。"""
+        code = """
+intent_context ctx = intent_context()
+ctx.merge()
+print("unreachable")
+"""
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("ctx.merge() 缺参应抛运行时错误")
+        except Exception as e:
+            assert "merge() requires an intent_context argument" in str(e), f"错误信息应指明缺参：{e}"
+
+    def test_combine_without_argument_fails_fast(self):
+        """ctx.combine() 缺参 → fail-fast（与 combine(非法对象) fail-fast 对齐）。"""
+        code = """
+intent_context ctx = intent_context()
+ctx.combine()
+print("unreachable")
+"""
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("ctx.combine() 缺参应抛运行时错误")
+        except Exception as e:
+            assert "combine() requires an intent_context argument" in str(e), f"错误信息应指明缺参：{e}"
+
+    def test_use_without_argument_fails_fast(self):
+        """intent_context.use() 缺参 → fail-fast（与 use(非法对象) fail-fast 对齐）。"""
+        code = """
+intent_context.use()
+print("unreachable")
+"""
+        engine = IBCIEngine(root_dir=TESTS_ROOT)
+        try:
+            engine.run_string(code, silent=True)
+            raise AssertionError("intent_context.use() 缺参应抛运行时错误")
+        except Exception as e:
+            assert "use() requires an intent_context argument" in str(e), f"错误信息应指明缺参：{e}"
+
 
 class TestE2EIntentUnifiedPath:
     """
