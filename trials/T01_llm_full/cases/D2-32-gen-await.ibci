@@ -1,7 +1,8 @@
-# D2-32 边界：生成器体内 await 真异步 Waitable（KNOWN_LIMITS §二十四）
-# doc: docs/KNOWN_LIMITS.md §二十四（生成器消费路径不承载显式 await 真异步 Waitable，
-#   generic_next 报 RuntimeError: generator driver yielded unexpected event）
-# 期望: 记录实际行为——按文档为预存限制（异常），确认异常形态
+# D2-32 边界：生成器体内 await 真异步 Waitable（原 KNOWN_LIMITS §二十四 同步阻塞边界）
+# doc: 原 KNOWN_LIMITS §二十四（生成器消费路径不承载显式 await 真异步 Waitable，generic_next
+#   报 RuntimeError）已随 PT-DEBT-29 生成器消费协作化移除——消费改为协作让出（见
+#   docs/subsystems/05_coroutine.md + tests/e2e/test_generator_coop_consume.py）
+# 期望: 生成器体内 await 真异步 Waitable 正常协作完成（边界已解决，非异常）
 
 # expect-class: PASS
 # expect-out: x=42 | DONE

@@ -247,13 +247,14 @@ pytest 2252 passed / 1 skipped。**无本次修复引入的回归**。
 - **级别**：P3（文档张力/行为边界，非明确缺陷）。
 - **证据**：cases/D2-31-ref-generator-break.ibci + logs/D2-31-ref-generator-break.log。
 
-### BOUNDARY-002 — 生成器体内 `await chan.recv()` 未触发 KNOWN_LIMITS §二十四 所述错误
+### BOUNDARY-002 — 生成器体内 `await chan.recv()` 正常协作完成（边界已随 PT-DEBT-29 解决）
 - **复现**：D2-32/32b 生成器 `take()` 内 `int v = await c.recv()`（数据未就绪 + 生产者线程）
   → 正常输出 x=42，未报 "generator driver yielded unexpected event"。
-- **文档**：KNOWN_LIMITS §二十四 声称生成器消费路径不承载显式 await 真异步 Waitable。
-- **实际**：两种形状（数据已就绪/未就绪含生产者线程）均正常完成，未复现文档描述的 RuntimeError。
-- **级别**：P3（文档可能过时，或该测试形状未触达缺陷路径——须内核层复核，不在本任务）。
-- **证据**：cases/D2-32/b-gen-await*.ibci + logs/D2-32/b-gen-await*.log。
+- **文档**：原 KNOWN_LIMITS §二十四 声称生成器消费路径不承载显式 await 真异步 Waitable；
+  该边界已随 **PT-DEBT-29 生成器消费协作化**移除（消费改为协作让出，判别测试
+  `tests/e2e/test_generator_coop_consume.py` 锁定 for/next/to_list/yield from 协作路径）。
+- **实际**：两种形状（数据已就绪/未就绪含生产者线程）均正常完成，与"边界已解决"一致。
+- **级别**：已解决（原 P3 边界闭合，非缺陷）。
 
 ### DOC-ISSUE-004 — `11_modules.md §11.3` stream_call/stream_channel 仅列名未列签名
 - **复现**：文档只写 "`stream_call()`、`stream_channel()` 等"，无签名/用法示例；

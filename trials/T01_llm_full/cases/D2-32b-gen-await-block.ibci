@@ -1,6 +1,7 @@
 # D2-32b 边界：生成器体内 await 真挂起（数据未就绪时才透出 Waitable）
-# doc: docs/KNOWN_LIMITS.md §二十四
-# 期望: 数据未就绪时 recv 挂起 → 记录是否触发 "unexpected event" 或正常
+# doc: 原 KNOWN_LIMITS §二十四（同步阻塞边界）已随 PT-DEBT-29 移除（协作让出）；本用例
+#   验证生成器体内 await 数据未就绪时协作挂起、数据到达后恢复
+# 期望: 数据未就绪时 recv 协作挂起完成，不触发 "unexpected event"
 
 # expect-class: PASS
 # expect-out: PRODUCER_ABOUT_TO_SEND | PRODUCER_SENT | x=42 | DONE

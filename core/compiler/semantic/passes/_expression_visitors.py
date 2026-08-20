@@ -322,7 +322,11 @@ class ExpressionVisitorsMixin:
 
         ``yield from`` 只能在函数体内（与 ``yield`` 同，含 yield 的函数即自标记为惰性生成器）；
         模块顶层无函数上下文时是语义错误。委托目标须可迭代（嵌套生成器 /
-        序列 / 有 ``__iter__`` 的对象）；节点类型 = 目标元素类型（可解析时）。
+        序列 / 有 ``__iter__`` 的对象）。节点类型按委托目标区分：**生成器**操作数 =
+        元素类型（表达式值 = 子生成器 return 值，与元素类型合一）；**序列/``__iter__``**
+        操作数 = ``None``（运行时表达式值恒为 ``None``，Python 语义一致——收紧静态类型，
+        避免 ``int r = yield from [seq]`` 静默 ``None`` 赋值）；不可迭代/动态 = any
+        （运行时裁决，非编译期错误）。
         """
         if not self.in_function_def:
             self.error(
@@ -334,11 +338,17 @@ class ExpressionVisitorsMixin:
             result_type = self._any_desc
         else:
             operand_type = self.visit(node.value) if node.value is not None else self._any_desc
-            # 元素类型解析（generator[T] → T / list[T] → T），不可解析落 any。
-            elem = None
+            # 元素类型解析（generator[T] → T / list[T] → T / __iter__ 协议 → 元素）。
+            result_type = self._any_desc
             if operand_type is not None and self.registry is not None:
                 elem = self.registry.resolve_iter_element(operand_type)
-            result_type = elem or self._any_desc
+                if elem is not None:
+                    if operand_type.kind == TypeKind.GENERATOR.value:
+                        # 生成器委托：表达式值 = 子生成器 return 值（与元素类型合一）。
+                        result_type = elem
+                    else:
+                        # 序列/__iter__ 委托：运行时表达式值恒 None，节点类型收紧为 None。
+                        result_type = self.registry.resolve("None") or self._any_desc
         final_type = result_type or self._any_desc
         self.bind_type(node, final_type)
         return final_type

@@ -674,15 +674,7 @@ IBC-Inter 对此**没有强制力**：模块实现若在 `.py` 文件顶层声�
 
 **含义**：超出宿主递归深度时，用户看到的是 `RecursionError: maximum recursion depth exceeded`（可提升 `sys.setrecursionlimit` 后重试），而非误导性的符号未定义/调用失败信息。递归深度上限本质是宿主栈限制，非语言可配置上限。
 
-## 二十四、`yield from` 序列委托的静态类型与运行时值
-
-> **类型**：已知边界（当前实现的限制，可能随演进改变）。
-
-**`yield from <expr>` 的节点静态类型绑定为委托目标的元素类型**（`generator[T]`→`T`、`list[T]`→`T`，经 `resolve_iter_element`）。对**生成器**操作数无错位（IBCI 类型模型把生成器 return 类型与元素类型合一，`StopIteration.value` 即表达式值）。对**序列/`__iter__` 操作数**，运行时表达式值为 `None`（Python 语义一致）——即 `int r = yield from [10,20,30]` 静态通过（`int`=`int`）但运行时 `r=None`。
-
-**含义**：这是类型绑定设计的取舍后果（静态偏乐观），非实现缺陷；生产代码如需序列委托的返回值，应视为 `None` 使用。如需收紧，需引入"委托目标是否为生成器"的编译期区分（超出当前范围）。
-
-## 二十五、用户协议与 retroactive implementation 限制
+## 二十四、用户协议与 retroactive implementation 限制
 
 > **类型**：设计排除（语言级决定，不随版本演进改变）。
 
@@ -696,7 +688,7 @@ IBC-Inter 对此**没有强制力**：模块实现若在 `.py` 文件顶层声�
 
 ---
 
-## 二十六、LLM 可调用类返回类型解析边界
+## 二十五、LLM 可调用类返回类型解析边界
 
 > **类型**：已知边界（当前实现的限制，可能随演进改变）。
 

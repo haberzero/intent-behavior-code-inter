@@ -15,7 +15,7 @@ tests/e2e/test_yield_generator.py
 
 import pytest
 
-from tests.conftest import run_ibci, compile_or_errors, AI_MOCK_PREFIX
+from tests.conftest import run_ibci, compile_or_errors, expect_compile_error, AI_MOCK_PREFIX
 
 
 class TestBasicGenerator:
@@ -281,6 +281,47 @@ for int x in outer(1):
     print(x)
 """
         assert run_ibci(code) == ["10", "20", "30"]
+
+    def test_sequence_delegation_type_tightened(self):
+        """序列委托表达式值恒 None：赋 int 编译期 SEM_TYPE_MISMATCH（收紧）。
+
+        修复前静态类型 = 元素类型（int），``int r = yield from [seq]`` 静默通过
+        但运行期 r=None；收紧为 None 后在编译期拦截错位。
+        """
+        code = """
+func outer(int n) -> int:
+    int r = yield from [10, 20, 30]
+    return 0
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+    def test_sequence_delegation_optional_typed(self):
+        """序列委托结果可赋 Optional[int]（None 兼容）；逐值透传不变。"""
+        code = """
+func outer(int n) -> int:
+    Optional[int] r = yield from [10, 20, 30]
+    if r.is_none():
+        yield 99
+    return 0
+
+for int x in outer(1):
+    print(x)
+"""
+        assert run_ibci(code) == ["10", "20", "30", "99"]
+
+    def test_generator_delegation_type_kept(self):
+        """生成器委托表达式值 = return 值：静态类型保持元素类型（不误伤收紧）。"""
+        code = """
+func inner(int n) -> int:
+    yield 1
+    return 9
+
+func outer(int n) -> int:
+    str r = yield from inner(n)
+    yield r
+    return 0
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
 
     def test_nested_delegation(self):
         """嵌套委托：yield from 可链式委托（生成器 → 生成器 → ...）。"""

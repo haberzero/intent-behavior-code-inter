@@ -82,12 +82,20 @@
 - **当前理解**：同调度器跨任务投递死锁在用户代码模型下不可构造（thread 独立调度器），
   判别测试锁定协作路径正确性与可恢复性。
 
-### PT-DEBT-30 `yield from` 序列委托编译期区分（KNOWN_LIMITS §二十五）
+### PT-DEBT-30 `yield from` 序列委托编译期区分
 
-- **状态**：active（独立专项）｜**域**：DEBT｜**优先级**：P2
+- **状态**：done（已完成，2026-08-20）｜**域**：DEBT｜**优先级**：P2
 - **动机**：`yield from <序列>` 静态偏乐观（类型绑定为元素类型但运行期值为 None，
   Python 语义一致）——收紧为编译期生成器/序列委托目标区分。
-- **成因**：KNOWN_LIMITS §二十五 登记（类型绑定设计的取舍后果）。
+- **成因**：原 KNOWN_LIMITS §二十四（序列委托静态类型与运行时值，前身 §二十五）登记
+  （类型绑定设计的取舍后果）。
+- **完成记录**：`visit_IbYieldFromExpr` 按委托目标区分节点静态类型——**生成器**操作数 =
+  元素类型（表达式值 = 子生成器 return 值，与元素类型合一）；**序列/`__iter__`**操作数 =
+  `None`（运行时表达式值恒 None，`int r = yield from [seq]` 编译期 SEM_TYPE_MISMATCH 拦截，
+  须 Optional[T] 等兼容类型接收）；不可迭代/动态维持 any（运行时裁决）。判别测试 +3
+  （test_yield_generator：序列赋 int 负样本 / 序列赋 Optional 正样本 / 生成器赋 str 负样本）；
+  原 KNOWN_LIMITS §二十四 移除、25-26 重编号 24-25、引用同步（01_native_host_binding ×2 /
+  05_functions §5.9 / HANDOFF / trials D2-32* 陈旧引用修复）。全量 pytest 零回归。
 - **当前理解**：低风险专项，与类型地基后续对齐。
 
 ### PT-DEBT-31 `_pending_futures` 残留泄漏核实（KNOWN_LIMITS §十五）

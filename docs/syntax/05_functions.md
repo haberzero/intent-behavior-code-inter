@@ -275,6 +275,10 @@ for int x in outer(1):
 **语义要点**：
 
 - `yield from <expr>` 表达式值 = 子生成器的 `return` 值（对序列/其它可迭代为 `None`）。
+- 节点静态类型按委托目标区分：**生成器**操作数 = 元素类型（表达式值 = `return` 值，与元素类型
+  合一，`int r = yield from gen()` 通过）；**序列/其它可迭代**操作数 = `None`（表达式值恒 `None`，
+  静态收紧——`int r = yield from [seq]` 编译期报 `SEM_TYPE_MISMATCH`，须用 `Optional[T]` 等兼容类型
+  接收）。
 - 嵌套委托：`yield from` 可链式委托（生成器 → 生成器 → ...）。
 - `yield from` 只能在函数体内（模块顶层报 `SEM_YIELD_OUTSIDE_FUNCTION`）。
 - 生成器体内可直接调用生成器函数（`auto g = inner(n)`）并委托/迭代。
