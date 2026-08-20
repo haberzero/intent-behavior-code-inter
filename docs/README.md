@@ -36,8 +36,10 @@ docs/
 │   ├── debug_llm_calls.md
 │   ├── extend_with_host_binding.md
 │   ├── modify_llm_provider.md
+│   ├── orchestrate_llm_calls.md
 │   ├── run_trials.md
 │   ├── use_generators.md
+│   ├── use_isolation.md
 │   └── write_concurrent_tasks.md
 │
 ├── trials/                           试用套件体系（参考）

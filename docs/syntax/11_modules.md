@@ -291,5 +291,6 @@ func test() -> auto:
 ## 深入指引
 
 - 内置模块系统与宿主绑定内部实现：docs/subsystems/04_plugin_system.md
+- 隔离子环境的实际操作指南：docs/howto/use_isolation.md
 - 循环导入限制：docs/KNOWN_LIMITS.md §十八
 - 模块可见性隔离：docs/KNOWN_LIMITS.md §十九

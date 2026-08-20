@@ -74,5 +74,6 @@ MOCK 指令语法见 `docs/syntax/13_mock_testing.md`。需要验证传输层行
 ## 深入指引
 
 - 异常体系与重试：`docs/syntax/10_robustness.md`
+- 编排稳健的多步 LLM 调用链：`docs/howto/orchestrate_llm_calls.md`
 - MOCK 测试：`docs/syntax/13_mock_testing.md`
 - 行为输出解析限制：`docs/KNOWN_LIMITS.md` §四（行为表达式不可直接用于 `return`）

@@ -117,5 +117,7 @@ except LLMRetryExhaustedError:
 你已掌握 IBCI 的三层异常处理：解析失败时的带提示重试、网络/鉴权失败时的自动捕获、以及重试耗尽后的最终降级。这套机制允许你在 LLM 不确定性与工程可靠性之间取得平衡。
 
 **下一步**：[04 · 用意图控制 LLM 行为][]——用意图注释精准控制 LLM 的输出风格和格式。
+想进一步掌握多步 LLM 调用链的编排模式，见 [如何编排稳健的 LLM 调用链][howto-orchestrate]。
 
 [04 · 用意图控制 LLM 行为]: ./04_intents.md
+[howto-orchestrate]: ../howto/orchestrate_llm_calls.md
