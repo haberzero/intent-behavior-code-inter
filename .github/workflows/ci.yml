@@ -1,25 +1,46 @@
-# CI（暂时停用，2026-08-11 用户裁定）
+# CI（保持停用自动触发，2026-08-11 用户裁定 + 2026-08-20 可靠化设计）
 #
-# 当前 GitHub 侧 CI 本质上与本机 `python -m pytest tests/` 区别不大，必要性不充足，
-# 故暂时停用自动触发（仅保留手动 workflow_dispatch）。待后续单独设计 CI/CD 的
-# 可靠化与实用化（真实 LLM e2e / 跨平台 / 发布产物等）后再重新启用并补充。
+# 状态：仅 `workflow_dispatch` 手动触发。设计已就绪，远程启用待用户显式授权后，
+# 将下方 `on:` 恢复为 push/pull_request 并 push。
 #
-# 启用方法：把 `on:` 恢复为 push/PR 触发（见 git 历史）。
+# 分层设计（增量价值 = 本机单次 pytest 之外的验证）：
+#   L1 单元/契约/内核（fast，~6s）     → 快速定位回归
+#   L2 全量（含 e2e/compliance/runtime） → 与本地基线一致 + 跨平台矩阵
+#   L3 真实 LLM e2e（选做，手动 + 本地 api_config.json）→ 阶段 C 真实试用前置回归门
+#   L4 发布产物（build + 安装 smoke）    → 打包可用性
+#
+# 本地分层复现：`./scripts/ci_local.sh`（无需 push）。
 
 name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      run_llm:
+        description: '运行真实 LLM e2e 层（需 runner 上配置 api_config.json）'
+        required: false
+        default: 'false'
+        type: boolean
+      run_publish:
+        description: '运行发布产物层（python -m build）'
+        required: false
+        default: 'false'
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
+  # ------------------------------------------------------------------ #
+  # L1 + L2：跨平台矩阵测试                                            #
+  # ------------------------------------------------------------------ #
   test:
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }} / py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.12"]
 
     steps:
@@ -29,12 +50,60 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[test]"
 
-      - name: Run tests
+      - name: L1 单元/契约/内核（fast）
+        run: |
+          python -m pytest tests/contracts tests/compiler tests/kernel -q --tb=short --strict-markers
+
+      - name: L2 全量（含 e2e/compliance/runtime/meta）
         run: |
           python -m pytest tests/ -q --tb=short --strict-markers
+
+  # ------------------------------------------------------------------ #
+  # L3：真实 LLM e2e（选做，需 runner 本地 LLM 服务 + api_config.json） #
+  # ------------------------------------------------------------------ #
+  llm-e2e:
+    name: LLM e2e (manual)
+    runs-on: [self-hosted, linux, llm]
+    if: github.event.inputs.run_llm == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+      - name: L3 真实 LLM 批
+        run: |
+          python trials/_toolkit/run_batch.py trials/T01_llm_full --timeout 30
+
+  # ------------------------------------------------------------------ #
+  # L4：发布产物（选做，build + 安装 smoke）                            #
+  # ------------------------------------------------------------------ #
+  publish:
+    name: Publish smoke (manual)
+    runs-on: ubuntu-latest
+    if: github.event.inputs.run_publish == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      - name: Install smoke
+        run: |
+          python -m pip install dist/*.whl
+          python -c "import core; print('core importable')"
