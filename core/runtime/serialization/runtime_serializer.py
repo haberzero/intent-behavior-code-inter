@@ -478,14 +478,13 @@ class RuntimeSerializer(BaseFlatSerializer):
     def _collect_intent(self, obj, data):
         # ``IbIntent`` 使用 ``__slots__`` 存放状态
         data["_type"] = "intent"
-        data["content"] = obj.content
         data["mode"] = obj.mode.value if hasattr(obj.mode, "value") else str(obj.mode)
         data["tag"] = obj.tag
         data["role"] = obj.role.value if hasattr(obj.role, "value") else str(obj.role)
         data["source_uid"] = obj.source_uid
         data["pop_top"] = obj.pop_top
-        if obj.segments:
-            data["segments"] = [self._process_value(s) for s in obj.segments]
+        if obj.values:
+            data["values"] = [self._process_value(v) for v in obj.values]
 
     def _collect_object(self, obj, data):
         data["_type"] = "object"
@@ -1011,12 +1010,11 @@ class RuntimeDeserializer:
                 role = IntentRole(data.get("role", "block"))
             except Exception as e:
                 raise ValueError(f"deserialize intent role {data.get('role')!r} invalid: {e!r}") from e
-            segments_raw = data.get("segments") or []
-            segments = [self._deserialize_value(s) for s in segments_raw]
+            values_raw = data.get("values") or []
+            values = [self._deserialize_value(v) for v in values_raw]
             obj = IbIntent(
                 ib_class=ib_class,
-                content=data.get("content", ""),
-                segments=segments,
+                values=values,
                 mode=mode,
                 tag=data.get("tag"),
                 source_uid=data.get("source_uid"),

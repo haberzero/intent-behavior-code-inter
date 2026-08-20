@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, List, Tuple, Sequence, Mapping, Callable, Union
+from typing import Any, Dict, Optional, List, Tuple, Sequence, Callable, Union
 from core.kernel.interfaces import IModuleScope
 from core.runtime.interfaces import (
     IObjectFactory, Scope, IIbClass, IIbModule, IIbObject, IIbList, IIbIntent, RuntimeContext, RuntimeSymbol
@@ -58,21 +58,15 @@ class RuntimeObjectFactory(IObjectFactory):
         """Create an IbDict from a dict of IbObject values."""
         return IbDict(dict(fields), ib_class=self._registry.get_class("dict"))
 
-    def create_intent(self, content: str = "", mode: Any = None, tag: Optional[str] = None, role: Any = None) -> IIbIntent:
+    def create_intent(self, values: Optional[List[IIbObject]] = None, mode: Any = None, tag: Optional[str] = None, role: Any = None, source_uid: Optional[str] = None, pop_top: bool = False) -> IIbIntent:
         return IbIntent(
             ib_class=self._registry.get_class("Intent"),
-            content=content,
+            values=values,
             mode=mode or IntentMode.APPEND,
             tag=tag,
-            role=role or IntentRole.BLOCK
-        )
-
-    def create_intent_from_node(self, node_uid: str, node_data: Mapping[str, Any], role: Any = None) -> IIbIntent:
-        return IbIntent.from_node_data(
-            node_uid,
-            node_data,
-            ib_class=self._registry.get_class("Intent"),
-            role=role or IntentRole.BLOCK
+            role=role or IntentRole.BLOCK,
+            source_uid=source_uid,
+            pop_top=pop_top,
         )
 
     def create_context(self, initial_scope: Optional[Scope] = None) -> RuntimeContext:

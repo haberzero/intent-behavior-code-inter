@@ -557,24 +557,23 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             if not ctx or not args:
                 return registry.get_none()
             content_obj = args[0]
-            content_str = content_obj.to_native() if isinstance(content_obj, IbObject) else str(content_obj)
             tag_str = None
             if len(args) >= 2:
                 tag_obj = args[1]
                 tag_str = tag_obj.to_native() if isinstance(tag_obj, IbObject) else None
             intent_cls = registry.get_class("Intent")
-            intent = IbIntent(ib_class=intent_cls, content=content_str,
+            intent = IbIntent(ib_class=intent_cls, values=[content_obj],
                               mode=IntentMode.APPEND, tag=tag_str, role=IntentRole.DYNAMIC)
             ctx.push(intent)
             return registry.get_none()
 
         def _ic_pop(receiver, *args):
-            """ctx.pop()：弹出并返回栈顶意图内容。"""
+            """ctx.pop()：弹出并返回栈顶意图内容（渲染文本）。"""
             ctx = receiver.fields.get('_ctx')
             if ctx:
                 intent = ctx.pop()
                 if intent is not None and hasattr(intent, 'content'):
-                    return registry.box(intent.content)
+                    return registry.box(intent.render_text())
             return registry.get_none()
 
         def _ic_fork(receiver, *args):
@@ -590,7 +589,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
             if not ctx:
                 return registry.box([])
             intents = ctx.get_active_intents()
-            strings = [i.content for i in intents if hasattr(i, 'content') and i.content]
+            strings = [i.render_text() for i in intents if i.render_text()]
             return registry.box(strings)
 
         def _ic_merge(receiver, *args):

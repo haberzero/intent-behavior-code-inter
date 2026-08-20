@@ -280,7 +280,7 @@ class _BehaviorMixin:
         content = yield from self._evaluate_segments_cps(node_data.get("segments"), execution_context)
 
         active_contents, global_contents, merged_contents, has_override = (
-            yield from self._resolve_llm_callable_intents_cps(execution_context, captured_intents)
+            self._resolve_llm_callable_intents(execution_context, captured_intents)
         )
 
         llmoutput_hint = yield from self._get_llmoutput_hint_cps(node_uid, node_data, execution_context)

@@ -94,16 +94,20 @@ class _StreamCallableDrive:
 
 
 class _LLMCallableMixin:
-    def _resolve_llm_callable_intents_cps(self, ec: IExecutionContext, captured_intents: Optional[Any]):
+    def _resolve_llm_callable_intents(self, ec: IExecutionContext, captured_intents: Optional[Any]):
         """消解进入本次 LLM 调用的意图三层（active/global/merged）。
 
         行为与 llm 可调用类两条消费路径的**单一权威实现**：``captured_intents``
         为 None 时从实时上下文解析（调用点意图）；非 None 时从冻结快照解析
         （定义时刻意图）。返回 ``(active, globals_, merged, has_override)``。
+
+        意图值已 eager 求值（一等值模型），渲染为同步操作（``resolve_to_prompts``
+        直返渲染文本）——本方法为同步函数（历史 CPS 版已随渲染同步化收敛），
+        调用方直接调用即可。
         """
         if captured_intents is not None and not isinstance(captured_intents, IbIntentContext):
             raise TypeError(
-                f"_resolve_llm_callable_intents_cps: captured_intents must be "
+                f"_resolve_llm_callable_intents: captured_intents must be "
                 f"None or IbIntentContext, got {type(captured_intents).__name__}"
             )
         context = ec.runtime_context
@@ -111,14 +115,14 @@ class _LLMCallableMixin:
             active_list = captured_intents.get_active_intents()
             global_intents = captured_intents.get_global_intents()
             has_override = captured_intents.has_override()
-            all_intents = yield from captured_intents.resolve_to_prompts_cps(context, ec)
+            all_intents = captured_intents.resolve_to_prompts(context, ec)
         else:
             has_override = context.intent_context.has_override()
-            all_intents = yield from context.get_resolved_prompt_intents_cps(ec)
+            all_intents = context.get_resolved_prompt_intents(ec)
             global_intents = context.get_global_intents()
             active_list = context.get_active_intents()
-        active = [i.content if hasattr(i, "content") else str(i) for i in active_list]
-        globals_ = [i.content if hasattr(i, "content") else str(i) for i in global_intents]
+        active = [i.content for i in active_list]
+        globals_ = [i.content for i in global_intents]
         merged = [str(i) for i in all_intents]
         return active, globals_, merged, has_override
 
@@ -183,7 +187,7 @@ class _LLMCallableMixin:
             )
         config = self._llm_callable_config_to_dict(result)
 
-        active, globals_, merged, has_override = yield from self._resolve_llm_callable_intents_cps(
+        active, globals_, merged, has_override = self._resolve_llm_callable_intents(
             ec, captured_intents
         )
 

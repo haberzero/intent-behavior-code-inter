@@ -23,6 +23,9 @@ class IntentResolver:
         """
         合并并解析意图列表，返回最终的 Prompt 字符串列表。
         active_intents: 栈内活跃意图（按从底到顶的顺序）
+
+        意图值已 eager 求值（一等值模型），渲染为同步操作（``resolve_content``
+        直返渲染文本），无需 VM 帧栈。
         """
         resolved = []
 
@@ -36,33 +39,6 @@ class IntentResolver:
         if global_intents:
             for i in global_intents:
                 content = i.resolve_content(context, execution_context)
-                if content and content not in resolved:
-                    resolved.append(content)
-
-        return IntentResolver._unique_keep_order(resolved)
-
-    @staticmethod
-    def resolve_cps(
-        active_intents: List[IntentProtocol],
-        global_intents: List[IntentProtocol] = None,
-        context: Any = None,
-        execution_context: Any = None
-    ):
-        """CPS 版 :meth:`resolve`；意图内容解析经 ``yield from resolve_content_cps``。
-
-        与同步版同语义（合并去重保持顺序），但意图段求值嵌入外层 VM 帧栈，
-        消除 ``resolve_content`` 内 ``vm.run`` 同步重入调度循环。
-        """
-        resolved = []
-
-        for i in active_intents:
-            content = yield from i.resolve_content_cps(context, execution_context)
-            if content:
-                resolved.append(content)
-
-        if global_intents:
-            for i in global_intents:
-                content = yield from i.resolve_content_cps(context, execution_context)
                 if content and content not in resolved:
                     resolved.append(content)
 

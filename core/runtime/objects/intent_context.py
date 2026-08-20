@@ -175,6 +175,9 @@ class IbIntentContext:
         消费操作（``consume_override``/``consume_smear``）在值快照上安全：
         dispatch 每次 fork 新快照（调用方私有）；``_inherited_*`` 槽位本就
         参与解析但不被消费（跨调用语义与持久意图一致）。
+
+        意图值已 eager 求值（一等值模型），渲染为同步操作（``resolve_content``
+        直返渲染文本）——本方法与历史 CPS 版同语义，无需 VM 帧栈。
         """
         if self.has_override():
             pending_override = self.consume_override()
@@ -190,26 +193,6 @@ class IbIntentContext:
             context=context,
             execution_context=execution_context,
         )
-
-    def resolve_to_prompts_cps(self, context: Any, execution_context: Any = None):
-        """CPS 版 :meth:`resolve_to_prompts`；意图段求值经 ``yield from`` 嵌入外层 VM 帧栈。
-
-        与同步版同语义（override > smear+active > global）。调用方须 ``yield from``。
-        """
-        if self.has_override():
-            pending_override = self.consume_override()
-            self.consume_smear()
-            content = yield from pending_override.resolve_content_cps(context, execution_context)
-            return [content] if content else []
-        smear_intents = self.consume_smear()
-        active_intents = self.get_active_intents()
-        global_intents = self.get_global_intents()
-        return (yield from IntentResolver.resolve_cps(
-            active_intents=active_intents + smear_intents,
-            global_intents=global_intents,
-            context=context,
-            execution_context=execution_context,
-        ))
 
     def merge(self, snapshot: "IbIntentContext") -> None:
         """
@@ -314,15 +297,18 @@ class IbIntentContext:
         return True
 
     def _remove_by_content(self, content: str) -> bool:
-        """按内容移除意图（栈顶优先）。
+        """按渲染文本移除意图（栈顶优先，按值匹配）。
 
+        匹配键 = 意图一等值经 ``__to_prompt__`` 渲染的文本（``render_text``），
+        与 ``@-`` 操作数求值后的渲染文本比较——修复动态意图按退化字符串
+        ``content`` 匹配失效（G5 按值匹配）。
         通过重建不含目标节点的新链表来实现移除，保证结构共享安全。
         """
         intents: List[Any] = []
         found = False
         current = self._intent_top
         while current:
-            if not found and hasattr(current.intent, 'content') and getattr(current.intent, 'content', None) == content:
+            if not found and current.intent.render_text() == content:
                 found = True  # 跳过该节点
             else:
                 intents.append(current.intent)
@@ -353,24 +339,19 @@ class IbIntentContext:
         lines: List[str] = []
         # 全局意图（Engine 级注入）— 优先级最低，先列
         for intent in self._global_intents:
-            content = getattr(intent, "content", None) or str(intent)
-            lines.append(content)
+            lines.append(intent.render_text())
         # 持久意图栈：``get_active_intents()`` 返回栈底→栈顶顺序；
         # 直接拼接即按"先压入先列出"的稳定顺序输出。
         for intent in self.get_active_intents():
-            content = getattr(intent, "content", None) or str(intent)
-            lines.append(content)
+            lines.append(intent.render_text())
         # 涂抹与排他独立列出（一次性效果）
         for intent in self._inherited_smear:
-            content = getattr(intent, "content", None) or str(intent)
-            lines.append(content)
+            lines.append(intent.render_text())
         for intent in self._smear_queue:
-            content = getattr(intent, "content", None) or str(intent)
-            lines.append(content)
+            lines.append(intent.render_text())
         effective_override = self._override if self._override is not None else self._inherited_override
         if effective_override is not None:
-            content = getattr(effective_override, "content", None) or str(effective_override)
-            lines.append(content)
+            lines.append(effective_override.render_text())
 
         if not lines:
             return ""

@@ -87,7 +87,7 @@ def make_intent(
 
     return IbIntent(
         ib_class=registry.get_class("Intent"),
-        content=content,
+        values=[registry.box(content)],
         mode=mode if mode is not None else IntentMode.APPEND,
         role=role if role is not None else IntentRole.SMEAR,
         tag=tag,

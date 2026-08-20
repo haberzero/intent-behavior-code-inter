@@ -35,7 +35,7 @@ from core.base.source_atomic import Location
 from core.runtime.exceptions import (
     ThrownException,
 )
-from core.runtime.objects.intent import IbIntent, IntentRole
+from core.runtime.objects.intent import IbIntent, IntentRole, IntentMode
 from core.runtime.objects.cell import IbCell
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.objects.primitives.callables import (
@@ -511,18 +511,64 @@ def _vm_invoke_behavior(executor, behavior, args):
         rt_context.exit_scope()
 
 
+def _evaluate_intent_segments_sync(executor, ec, segments: Optional[List[Any]]) -> List[IbObject]:
+    """同步 eager 求值意图段为一等值列表（``vm.run`` 重入）。
+
+    供无 CPS 上下文的语句循环（``run_body`` / 一次性意图构造）使用；
+    与既有 ``IbIntent.resolve_content`` 同步路径同构（node_ 段重入求值，
+    字符串段 box 为 IbString）。
+    """
+    values: List[IbObject] = []
+    for segment in segments or []:
+        if isinstance(segment, str) and segment.startswith("node_"):
+            vm = ec.vm_executor
+            if vm is None:
+                raise RuntimeError("intent segment evaluation: vm_executor not available")
+            values.append(vm.run(segment))
+        elif isinstance(segment, str):
+            values.append(ec.registry.box(segment))
+        else:
+            values.append(segment)
+    return values
+
+
+def _evaluate_intent_segments_cps(ec, segments: Optional[List[Any]]):
+    """CPS eager 求值意图段为一等值列表（node_ 段 ``yield`` 交外层 VM 帧栈）。
+
+    CPS 权威实现；同步版 :func:`_evaluate_intent_segments_sync` 重入求值。
+    调用方须 ``yield from``。
+    """
+    values: List[IbObject] = []
+    for segment in segments or []:
+        if isinstance(segment, str) and segment.startswith("node_"):
+            values.append((yield segment))
+        elif isinstance(segment, str):
+            values.append(ec.registry.box(segment))
+        else:
+            values.append(segment)
+    return values
+
+
 def build_one_shot_intent_from_annotation(
     executor, stmt_data: Mapping[str, Any]
 ) -> Optional[IbIntent]:
-    """从 ``IbIntentAnnotation`` 节点数据构建一次性意图对象。"""
+    """从 ``IbIntentAnnotation`` 节点数据构建一次性意图对象（eager 值求值）。"""
     intent_info_uid = stmt_data.get("intent")
     if not intent_info_uid:
         return None
     intent_data = executor.ec.get_node_data(intent_info_uid)
     if not intent_data:
         return None
-    return executor.ec.factory.create_intent_from_node(
-        intent_info_uid, intent_data, role=IntentRole.SMEAR
+    values = _evaluate_intent_segments_sync(
+        executor, executor.ec, intent_data.get("segments") or []
+    )
+    return executor.ec.factory.create_intent(
+        values=values,
+        mode=IntentMode.from_str(intent_data.get("mode", "+")),
+        tag=intent_data.get("tag"),
+        role=IntentRole.SMEAR,
+        source_uid=intent_info_uid,
+        pop_top=intent_data.get("pop_top", False),
     )
 
 

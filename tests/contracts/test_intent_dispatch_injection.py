@@ -15,13 +15,13 @@ from tests.conftest import run_ibci, AI_MOCK_PREFIX
 
 
 def _intent(content):
-    """构造一个纯文本内容的一次性意图（无 node_ 段，resolve_content 直返内容）。"""
+    """构造一个纯文本内容的一次性意图（一等值模型：values=[str]，渲染直返文本）。"""
     from core.kernel.intent_logic import IntentMode, IntentRole
     from core.runtime.objects.intent import IbIntent
 
     cls = type("Intent", (), {"name": "Intent"})()
     return IbIntent(
-        ib_class=cls, content=content, mode=IntentMode.APPEND, role=IntentRole.SMEAR
+        ib_class=cls, values=[content], mode=IntentMode.APPEND, role=IntentRole.SMEAR
     )
 
 

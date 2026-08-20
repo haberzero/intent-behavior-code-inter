@@ -1,4 +1,4 @@
-from typing import List, Optional, Any, Union, Dict, TYPE_CHECKING, Mapping
+from typing import List, Optional, Any, TYPE_CHECKING
 from core.runtime.interfaces import RuntimeContext
 from core.runtime.objects.kernel import IbObject, IbClass
 from core.runtime.objects.ib_type_mapping import register_ib_type
@@ -11,10 +11,10 @@ if TYPE_CHECKING:
 
 
 def _intent_segment_to_prompt(val: Any) -> str:
-    """把意图段求值结果转提示词文本（``__to_prompt__`` 协议，回退 ``to_native``）。
+    """把意图段值转提示词文本（``__to_prompt__`` 协议，回退 ``to_native``）。
 
-    供 :meth:`IbIntent.resolve_content` 与 :meth:`IbIntent.resolve_content_cps`
-    共用（单一权威，无双写）。实现委托给统一的 :class:`PromptRenderer`；
+    供 :meth:`IbIntent.render_text` 使用（单一权威渲染，无双写）。
+    实现委托给统一的 :class:`PromptRenderer`；
     协议实现异常经 ``kernel_diagnostic`` 告警，不静默降级。
     """
     from core.runtime.shared.prompt_renderer import PromptRenderer
@@ -36,77 +36,45 @@ def _intent_segment_to_prompt(val: Any) -> str:
 @register_ib_type("Intent")
 class IbIntent(IbObject):
     """
-    表示运行时的意图对象。
-    封装了意图的内容、模式以及来源信息。
-    现在是真正的 IbObject 子类 (Everything is an Object)。
+    表示运行时的意图对象（一等值模型）。
+
+    意图段在注释/栈操作执行点被求值为**一等值列表**（``values``），不再保存
+    退化字符串 ``content`` 或延迟段引用 ``segments``（G5 意图值栈）：
+    - 渲染：``content``（协议属性）/ :meth:`render_text` 从各值经 ``__to_prompt__``
+      拼接（可调用/行为值渲染为契约形态，复用 :func:`_intent_segment_to_prompt`）；
+    - 匹配（``@-``）：操作数求值为值后经 :meth:`render_text` 与栈内意图渲染文本比较。
+    封装了意图的值、模式以及来源信息。现在是真正的 IbObject 子类 (Everything is an Object)。
     """
-    __slots__ = ('content', 'segments', 'mode', 'tag', 'source_uid', 'role', 'pop_top')
+    __slots__ = ('values', 'mode', 'tag', 'source_uid', 'role', 'pop_top')
     
-    def __init__(self, ib_class: IbClass, content: str = "", segments: List[Any] = None, 
+    def __init__(self, ib_class: IbClass, values: List[Any] = None,
                  mode: IntentMode = IntentMode.APPEND, tag: Optional[str] = None,
                  source_uid: Optional[str] = None, role: IntentRole = IntentRole.BLOCK,
                  pop_top: bool = False):
         super().__init__(ib_class)
-        self.content = content
-        self.segments = segments if segments is not None else []
+        self.values = values if values is not None else []
         self.mode = mode
         self.tag = tag
         self.source_uid = source_uid
         self.role = role
         self.pop_top = pop_top
 
-    @staticmethod
-    def from_node_data(node_uid: str, node_data: Mapping[str, Any], ib_class: IbClass, role: IntentRole = IntentRole.BLOCK) -> 'IbIntent':
+    @property
+    def content(self) -> str:
+        """意图内容（协议属性）：从一等值列表渲染的文本。"""
+        return self.render_text()
+
+    def render_text(self) -> str:
+        """把意图的一等值列表渲染为提示词文本（单一权威渲染）。
+
+        每个值经 :func:`_intent_segment_to_prompt`（``__to_prompt__`` 协议 +
+        兜底 ``to_native``）渲染后拼接去空白。
         """
-        从 AST 节点数据构造运行时意图对象。
-        """
-        return IbIntent(
-            ib_class=ib_class,
-            content=node_data.get('content', ''),
-            segments=node_data.get('segments', []),
-            mode=IntentMode.from_str(node_data.get('mode', '+')),
-            tag=node_data.get('tag'),
-            role=role,
-            source_uid=node_uid,
-            pop_top=node_data.get('pop_top', False)
-        )
+        return "".join(_intent_segment_to_prompt(v) for v in self.values).strip()
 
     def resolve_content(self, context: RuntimeContext, execution_context: Any = None) -> str:
-        """解析意图内容，对 node_ UID 片段通过 VMExecutor CPS 路径求值。"""
-        if self.segments and execution_context:
-            content_parts = []
-            for segment in self.segments:
-                if isinstance(segment, str) and segment.startswith("node_"):
-                    vm = execution_context.vm_executor
-                    if vm is None:
-                        raise RuntimeError("IbIntent.resolve_content: vm_executor not available")
-                    val = vm.run(segment)
-                    content_parts.append(_intent_segment_to_prompt(val))
-                else:
-                    content_parts.append(str(segment))
-            return "".join(content_parts).strip()
-        
-        return str(self.content).strip()
-
-    def resolve_content_cps(self, context: RuntimeContext, execution_context: Any = None):
-        """CPS 版 :meth:`resolve_content`；node_ UID 片段经 ``yield`` 交外层 VM 帧栈。
-
-        ``resolve_content`` 在段含 node_ 时 ``vm.run(segment)`` 同步重入调度循环
-        （任务内同步重入）；本版本 ``yield segment`` 由外层 ``_drive_loop_gen``
-        作为子任务接管求值，消除重入。非 node_ 段与 ``__to_prompt__`` 解析共用
-        ``_intent_segment_to_prompt``，无双写。返回消解后字符串。
-        """
-        if self.segments and execution_context:
-            content_parts = []
-            for segment in self.segments:
-                if isinstance(segment, str) and segment.startswith("node_"):
-                    val = yield segment
-                    content_parts.append(_intent_segment_to_prompt(val))
-                else:
-                    content_parts.append(str(segment))
-            return "".join(content_parts).strip()
-
-        return str(self.content).strip()
+        """解析意图内容：值已 eager 求值，直接渲染（无 VM 求值需求）。"""
+        return self.render_text()
 
     @property
     def is_override(self) -> bool:
@@ -126,8 +94,8 @@ class IbIntent(IbObject):
     # ------------------------------------------------------------------ #
 
     def get_content(self) -> str:
-        """返回意图内容字符串。"""
-        return self.content or ""
+        """返回意图内容字符串（渲染文本）。"""
+        return self.render_text()
 
     def get_tag(self) -> str:
         """返回意图标签；无标签时返回空字符串。"""

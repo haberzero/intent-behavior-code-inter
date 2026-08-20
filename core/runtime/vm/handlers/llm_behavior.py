@@ -7,13 +7,14 @@ from typing import Any, Mapping, Optional, Dict, List
 from core.runtime.shared.signals import (
     Signal,
 )
-from core.runtime.objects.intent import IntentRole
+from core.runtime.objects.intent import IntentRole, IntentMode
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
     _is_llm_uncertain_value,
     _make_uncertain_call_result,
+    _evaluate_intent_segments_cps,
 )
 
 
@@ -54,6 +55,21 @@ def _capture_signature(
     return param_types, return_type
 
 
+def _build_intent_from_data(executor, intent_info_uid: str, intent_data: Mapping[str, Any], role) -> Any:
+    """eager 求值意图段为一等值列表并构造意图对象（CPS，调用方须 ``yield from``）。"""
+    values = yield from _evaluate_intent_segments_cps(
+        executor.ec, intent_data.get("segments") or []
+    )
+    return executor.ec.factory.create_intent(
+        values=values,
+        mode=IntentMode.from_str(intent_data.get("mode", "+")),
+        tag=intent_data.get("tag"),
+        role=role,
+        source_uid=intent_info_uid,
+        pop_top=intent_data.get("pop_top", False),
+    )
+
+
 def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str, Any]):
     """``@`` / ``@!`` 单次意图注释节点的执行路径。"""
     intent_info_uid = node_data.get("intent")
@@ -62,32 +78,44 @@ def vm_handle_IbIntentAnnotation(executor, node_uid: str, node_data: Mapping[str
     intent_data = executor.ec.get_node_data(intent_info_uid)
     if not intent_data:
         return executor.registry.get_none()
-    intent = executor.ec.factory.create_intent_from_node(
-        intent_info_uid, intent_data, role=IntentRole.SMEAR
+    intent = yield from _build_intent_from_data(
+        executor, intent_info_uid, intent_data, role=IntentRole.SMEAR
     )
     executor.runtime_context.activate_statement_one_shot_intent(intent)
     return executor.registry.get_none()
 
 
 def vm_handle_IbIntentStackOperation(executor, node_uid: str, node_data: Mapping[str, Any]):
-    """``@+`` / ``@-`` 意图栈操作：与 StmtHandler.visit_IbIntentStackOperation 同。"""
+    """``@+`` / ``@-`` 意图栈操作：与 StmtHandler.visit_IbIntentStackOperation 同。
+
+    ``@-`` 按值匹配：操作数 eager 求值后经意图渲染文本（``__to_prompt__``）
+    与栈内意图渲染文本比较（修复动态意图按退化字符串匹配失效）。
+    """
     intent_info_uid = node_data.get("intent")
     if not intent_info_uid:
         return executor.registry.get_none()
     intent_data = executor.ec.get_node_data(intent_info_uid)
     if not intent_data:
         return executor.registry.get_none()
-    intent = executor.ec.factory.create_intent_from_node(
-        intent_info_uid, intent_data, role=IntentRole.STACK
-    )
-    if intent.is_pop_top:
-        executor.runtime_context.pop_intent()
-    elif intent.is_remove:
-        if intent.tag:
-            executor.runtime_context.remove_intent(tag=intent.tag)
-        elif intent.content:
-            executor.runtime_context.remove_intent(content=intent.content)
+    mode = IntentMode.from_str(intent_data.get("mode", "+"))
+    pop_top = intent_data.get("pop_top", False)
+    tag = intent_data.get("tag")
+
+    if mode == IntentMode.REMOVE:
+        if pop_top:
+            executor.runtime_context.pop_intent()
+        elif tag:
+            executor.runtime_context.remove_intent(tag=tag)
+        else:
+            # 按值匹配：操作数 eager 求值为值列表 → 渲染文本 → 移除匹配意图。
+            operand = yield from _build_intent_from_data(
+                executor, intent_info_uid, intent_data, role=IntentRole.STACK
+            )
+            executor.runtime_context.remove_intent(content=operand.render_text())
     else:
+        intent = yield from _build_intent_from_data(
+            executor, intent_info_uid, intent_data, role=IntentRole.STACK
+        )
         executor.runtime_context.push_intent(intent)
     return executor.registry.get_none()
 

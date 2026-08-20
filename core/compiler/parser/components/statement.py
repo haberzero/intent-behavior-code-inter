@@ -260,20 +260,18 @@ class StatementComponent(BaseComponent):
         tag = None
         
         # 检查 @- 无参数的特殊情况（移除栈顶意图）
-        # 如果 @- 后面直接是换行符或文件结束，则认为是 pop_top 模式
+        # 只有 `@-` 后直接换行/EOF，或 `@- <纯空白>` 后接换行/EOF 才算 pop_top；
+        # 空白后仍是非空 token（如 `@- $x` / `@- "text"`）→ 按内容/值移除，不误判。
         is_pop_top = False
         if mode == IntentMode.REMOVE:
             if (self.stream.check(TokenType.NEWLINE) or 
                 self.stream.check(TokenType.EOF) or 
                 self.stream.is_at_end()):
                 is_pop_top = True
-            else:
-                # 检查是否是纯粹的 @- 后跟空格然后换行（可能有空白字符）
-                # 这种情况下 peek() 可能返回 RAW_TEXT 包含空白
-                if self.stream.check(TokenType.RAW_TEXT):
-                    next_text = self.stream.peek().value.strip()
-                    if not next_text:
-                        is_pop_top = True
+            elif self.stream.check(TokenType.RAW_TEXT) and not self.stream.peek().value.strip():
+                if (self.stream.peek(1).type == TokenType.NEWLINE or
+                        self.stream.peek(1).type == TokenType.EOF):
+                    is_pop_top = True
         
         if is_pop_top:
             return ast.IbIntentInfo(mode=mode, content="", segments=[], tag=None, pop_top=True)
