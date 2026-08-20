@@ -191,12 +191,14 @@ def vm_handle_IbYieldFromExpr(executor, node_uid: str, node_data: Mapping[str, A
     from core.runtime.objects.kernel.generator import IbGenerator
 
     if isinstance(value, IbGenerator):
-        # 嵌套生成器委托：逐值惰性透传；StopIteration.value = 子生成器 return。
+        # 嵌套生成器委托：逐值惰性透传（协作让出 Waitable）；耗尽哨兵携带
+        # 子生成器 return 值。
+        from core.runtime.objects.kernel.generator import _GeneratorExhausted
+
         while True:
-            try:
-                item = value.generic_next()
-            except StopIteration as si:
-                ret = si.value
+            item = yield from value.generic_next_cps()
+            if isinstance(item, _GeneratorExhausted):
+                ret = item.return_value
                 return ret if ret is not None else executor.registry.get_none()
             yield GeneratorYield(item)
 

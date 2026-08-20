@@ -11,7 +11,7 @@
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
 | FEAT（功能） | 3 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除） |
-| DEBT（技术债） | 3 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-4/31/34 已实证核实 done） |
+| DEBT（技术债） | 2 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-4/29/31/34 已实证核实 done） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
 | DOC（文档） | 1 | 0 | 0 | 文档体系缺口 |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
@@ -66,15 +66,21 @@
 - **搁置原因**：破坏面大纯机械，独立窗口执行。
 - **当前理解**：无明确清单，启动时先做命名扫描。
 
-### PT-DEBT-29 生成器消费协作化（KNOWN_LIMITS §二十四）
+### PT-DEBT-29 生成器消费协作化（原 KNOWN_LIMITS §二十四）
 
-- **状态**：active（独立专项）｜**域**：DEBT｜**优先级**：P2
+- **状态**：done（已完成）｜**域**：DEBT｜**优先级**：P2
 - **动机**：`IbGenerator.generic_next` 对 Waitable 阻塞等待（`event.result()`）——
   需让出型消费（Waitable 依赖 VM 推进）会死锁；消除生成器消费的同步阻塞模型。
-- **成因**：KNOWN_LIMITS §二十四 登记（设计边界）；方向明确（generic_next 层引入
+- **成因**：原 KNOWN_LIMITS §二十四 登记（设计边界）；方向明确（generic_next 层引入
   Waitable 感知挂起，与 CPS 执行模型同构）。
-- **当前理解**：无生产触发（LLM 行为由独立 worker 完成，`LLMFuture.result()` 不依赖
-  VM 推进）；独立专项，不阻塞主线。
+- **完成记录**：全消费面（for / yield from / next() / to_list / generic_next / seq 内建 sum·all·
+  enumerate·zip·sorted·reversed·min·max）改为协作让出——CPS 方法（`generic_next_cps`/`to_list_cps`）+
+  `_GeneratorConsumeDrive`/`_IterableComputeDrive`（Waitable+CPSDrivable 复用）+ `_GeneratorExhausted`
+  哨兵（规避 PEP 479）。判别测试 test_generator_coop_consume +6；KNOWN_LIMITS §二十四（同步阻塞边界）
+  移除、25-27 重编号 24-26、引用同步（04_vm_interpreter/05_functions/01_native_host_binding）。全量
+  3112 passed / 1 skipped 零回归（+12 = 6 新判别 + 6 meta）。
+- **当前理解**：同调度器跨任务投递死锁在用户代码模型下不可构造（thread 独立调度器），
+  判别测试锁定协作路径正确性与可恢复性。
 
 ### PT-DEBT-30 `yield from` 序列委托编译期区分（KNOWN_LIMITS §二十五）
 

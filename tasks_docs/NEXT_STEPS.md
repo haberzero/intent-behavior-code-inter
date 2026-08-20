@@ -70,17 +70,26 @@ git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 内部一致非缺陷，文档精确化不改行为；无代码小修）。全量 pytest 3100 passed / 1 skipped 零回归
 （+17 = 11 新测试 + 6 meta 按文件参数化）。**阶段 A 当前 P0 回 **PT-DEBT-29 生成器消费协作化****。
 
+**✅ PT-DEBT-29 生成器消费协作化完成（本 session）**：消除 `IbGenerator.generic_next` 对 Waitable 的
+同步阻塞消费——全消费面（for / yield from / next() / to_list / generic_next / seq 内建 sum·all·enumerate·
+zip·sorted·reversed·min·max）改为**协作让出**（yield 给 VM 调度器推进，不阻塞 VM 线程）。机制：CPS 方法
+（`generic_next_cps`/`to_list_cps`）+ `_GeneratorConsumeDrive`/`_IterableComputeDrive`（Waitable+CPSDrivable，
+复用既有协议免原生改动）+ `_GeneratorExhausted` 哨兵（规避 PEP 479）。判别测试 test_generator_coop_consume
++6（chan.recv 经 for/next/to_list/yield from + 跨线程投递 + LLM 经 for）；KNOWN_LIMITS §二十四（同步阻塞
+边界）移除、25-27 重编号 24-26、引用同步（04_vm_interpreter/05_functions/01_native_host_binding）。全量
+pytest 3112 passed / 1 skipped 零回归（+12 = 6 新判别 + 6 meta 参数化）。**阶段 A 当前 P0 前移至
+PT-DEBT-30 + PT-DEBT-33 类型边界闭合**。
+
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
 **阶段 A · 代码/架构健康（当前 P0，用户指定最高优先）**：
-1. **PT-DEBT-29 生成器消费协作化**（Waitable 让出型消费，消除同步阻塞死锁风险——架构级）；
-2. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
-3. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
+1. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
+2. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
    runtime_serializer/artifact_loader）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项）；
-4. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
+3. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
 
 **阶段 B · 功能稳健与对外能力**：
 6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；

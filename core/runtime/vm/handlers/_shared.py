@@ -66,6 +66,16 @@ def _resolve_iterable(iterable_obj: Any):
     return resolve_iterable(iterable_obj)
 
 
+def _resolve_iterable_cps(iterable_obj: Any):
+    """CPS 版可迭代解析（生成器分支 ``yield from to_list_cps`` 协作让出）。
+
+    委托到 ``core.runtime.shared.iterable.resolve_iterable_cps``（单一权威源
+    的 CPS 适配）；供 VM ``for`` / ``yield from`` 等可让出消费方使用。
+    """
+    from core.runtime.shared.iterable import resolve_iterable_cps
+    return (yield from resolve_iterable_cps(iterable_obj))
+
+
 def _merge_dstar(executor, keyword_map, value):
     """把 **expr 求值得到的字典合并进具名实参表。"""
     native = unbox(value)

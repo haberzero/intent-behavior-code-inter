@@ -279,9 +279,9 @@ for int x in outer(1):
 - `yield from` 只能在函数体内（模块顶层报 `SEM_YIELD_OUTSIDE_FUNCTION`）。
 - 生成器体内可直接调用生成器函数（`auto g = inner(n)`）并委托/迭代。
 - 惰性属性由消费方决定：`next()` 逐值惰性推进；`for` 消费经 `to_list` 一次性物化（与 `yield` 生成器一致）。
-- 子生成器体内可挂起 LLM 行为（`@~...~`，同步解析）——与 `yield from` 正交组合；生成器体内显式
-  `await` 真异步 Waitable（如 `await chan.recv()`）由 `generic_next` 阻塞等待其完成并注回驱动循环
-  （同步阻塞消费，见 `docs/KNOWN_LIMITS.md §二十四`）。
+- 子生成器体内可挂起 LLM 行为（`@~...~`，协作解析）——与 `yield from` 正交组合；生成器体内显式
+  `await` 真异步 Waitable（如 `await chan.recv()`）由消费方协作让出（yield 给 VM 调度器推进，
+  不阻塞 VM 线程）。
 
 ### 5.10 参数传递语义（共享引用）
 

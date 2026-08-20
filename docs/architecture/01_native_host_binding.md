@@ -83,7 +83,7 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 - 协议/泛型协议/`impl`（带方法体）已支持；协议满足检查在"类自身 + impl 补充"
   并集上进行。
 - **限制**：`impl` 目标须为本模块用户类；泛型类/内置/宿主类型不支持（fail-fast，
-  `KNOWN_LIMITS` §二十六）。
+  `KNOWN_LIMITS` §二十五）。
 - `IbSpec` 有 `provenance` 轴（`EXTERNAL_MODULE` 已存在）——宿主类型可复用。
 
 ---
@@ -213,7 +213,7 @@ import python "json" as j2:
 - `bind class Name -> any` 简写：仅建立类型身份，能力由 `impl` 补充（纯 impl 场景）。
 - **成员表 = 宿主声明 + impl 补充并集**：bind 声明是宿主类自身能力契约；`impl` 只补充
   IBCI 协议所需而宿主没有的方法（`visit_IbImplDef` provenance 放行 EXTERNAL_MODULE 与
-  KERNEL_NATIVE 内置具体值类型——内置 impl 的完整语义见 `docs/KNOWN_LIMITS.md` §二十六）。
+  KERNEL_NATIVE 内置具体值类型——内置 impl 的完整语义见 `docs/KNOWN_LIMITS.md` §二十五）。
 - **编译期冲突 fail-fast（SEM_REDEFINITION）**：impl 方法不得与 bind 声明成员同名
   （冲突判定以权威成员面 spec.members 为准）；同一 bind class 块内不得重复绑定同名成员。
 - **协议满足 = 编译期静态 spec 判定**：在"bind 声明 + impl 补充"并集上判定，运行期零改动。

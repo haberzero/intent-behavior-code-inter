@@ -23,6 +23,7 @@ from core.runtime.vm.handlers._shared import (
     _vm_invoke_behavior,
     _vm_assign_to_target,
     _resolve_iterable,
+    _resolve_iterable_cps,
     _is_llm_uncertain_value,
     _resolve_condition,
     _retry_llm_uncertain,
@@ -273,7 +274,8 @@ def vm_handle_IbFor(executor, node_uid: str, node_data: Mapping[str, Any]):
             return iterable_obj
 
     # 解析迭代序列（与 StmtHandler.visit_IbFor 同协议；单一权威源 _resolve_iterable）
-    elements_obj = _resolve_iterable(iterable_obj)
+    # CPS 版：IbGenerator 分支协作物化（生成器体内 Waitable 让出给调度器，不阻塞）。
+    elements_obj = yield from _resolve_iterable_cps(iterable_obj)
     if elements_obj is None:
         raise RuntimeError(f"VM: Object is not iterable (uid={node_uid})")
 

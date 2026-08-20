@@ -326,7 +326,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   逐元素 `==` 若用户后续要属独立设计项），无代码小修。全量 3100 passed / 1 skipped 零回归（+17 =
   11 新测试 + 6 meta 按文件参数化）。真实试用（阶段 C）的 PT-DEBT-34 阈值解锁。详见
   PENDING/NEXT_STEPS/WORKLOG。
-  下一 session 起点 = **阶段 A P0（PT-DEBT-29 生成器消费协作化）**。
+  **✅ PT-DEBT-29 生成器消费协作化已完成（2026-08-20）**：消除 `IbGenerator.generic_next` 对 Waitable
+  的同步阻塞消费——全消费面（for / yield from / next() / to_list / generic_next / seq 内建）改为协作让出。
+  机制：CPS 方法（`generic_next_cps`/`to_list_cps`）+ `_GeneratorConsumeDrive`/`_IterableComputeDrive`
+  （Waitable+CPSDrivable 复用）+ `_GeneratorExhausted` 哨兵（规避 PEP 479）；判别测试 +6；KNOWN_LIMITS
+  §二十四（同步阻塞边界）移除、25-27 重编号 24-26、引用同步。全量 pytest 3112 passed / 1 skipped
+  零回归（+12 = 6 新判别 + 6 meta 参数化）。详见 PENDING/NEXT_STEPS/WORKLOG。
+  下一 session 起点 = **阶段 A P0（PT-DEBT-30 + PT-DEBT-33 类型边界闭合）**。
 
 ### 2.2 交接检查单（当前有效）
 

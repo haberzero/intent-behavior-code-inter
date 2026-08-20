@@ -42,7 +42,8 @@ def resolve_iterable(iterable_obj: Any):
         return resolve_iterable(iterable_obj.payload)
     from core.runtime.objects.kernel.generator import IbGenerator
     if isinstance(iterable_obj, IbGenerator):
-        return iterable_obj.to_list()
+        # 同步物化（宿主/seq 内建等非 CPS 调用方）：经阻塞兜底，非 drive。
+        return iterable_obj._to_list_blocking()
     # 迭代能力判定：协议注册表权威（satisfies_protocol("iterable")，单一入口），
     # 方法获取仍经 vtable lookup——职责分离（判定走协议 / 获取走方法表）。
     # AND 条件保持既有能力面：结构判定（spec.members/axiom 能力）与水化方法表
@@ -63,9 +64,36 @@ def resolve_iterable(iterable_obj: Any):
         # to_list 物化——消除 `for x in obj` 的 GeneratorYield 泄漏崩溃。
         from core.runtime.objects.kernel.generator import IbGenerator
         if isinstance(r, IbGenerator):
-            return r.to_list()
+            return r._to_list_blocking()
     if iterable_obj.ib_class.lookup_method("to_list") is not None:
         r = iterable_obj.receive("to_list", [])
         if is_sequence_value(r):
             return r
     return None
+
+
+def resolve_iterable_cps(iterable_obj: Any):
+    """CPS 版可迭代解析：与 :func:`resolve_iterable` 同协议，但 ``IbGenerator``
+    分支 ``yield from`` 协作物化（``to_list_cps``——生成器体内 Waitable 让出给
+    调度器推进，不阻塞 VM 线程）。供 VM ``for`` / ``yield from`` 等可让出消费方
+    使用；宿主/seq 内建等非 CPS 调用方仍走同步 :func:`resolve_iterable`。
+    非生成器分支（序列 / ``__iter__`` / ``to_list``）无 Waitable 面，同步直取。
+    """
+    if is_sequence_value(iterable_obj):
+        return iterable_obj
+    from core.runtime.objects.primitives.optional import IbOptional
+
+    if isinstance(iterable_obj, IbOptional):
+        if not iterable_obj._is_some:
+            from core.kernel.issue import InterpreterError
+
+            raise InterpreterError(
+                "Cannot iterate an empty Optional",
+                error_code="RUN_ATTRIBUTE_ERROR",
+            )
+        return (yield from resolve_iterable_cps(iterable_obj.payload))
+    from core.runtime.objects.kernel.generator import IbGenerator
+
+    if isinstance(iterable_obj, IbGenerator):
+        return (yield from iterable_obj.to_list_cps())
+    return resolve_iterable(iterable_obj)

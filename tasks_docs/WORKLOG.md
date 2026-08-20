@@ -674,6 +674,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     仅同一对象为真，与 Python 逐元素不同；与用户类未覆写 `__eq__` 原则一致 KNOWN_LIMITS §十四 #2）。
     定性内部一致非缺陷，文档精确化、不改行为；若用户后续要逐元素 `==` 属独立设计项。**无代码小修**。
   - 全量 pytest **3100 passed / 1 skipped 零回归**（基线 3083，+17 = 11 新测试 + 6 meta 按文件参数化）。
+- **PT-DEBT-29 生成器消费协作化完成（2026-08-20，消除同步阻塞模型）**：
+  - **设计**：复用 `CPSDrivable`（Waitable+`cps_drive`）——用户面 `to_list`/`generic_next`/seq 内建返回
+    drive，`vm_handle_IbCall` 自动 `yield from cps_drive`（**免原生调用机制改动**）；内部 for/yield-from
+    直接用 CPS 方法。单一机制，无双通道；宿主/线程体同步兜底为 CPSDrivable 既有契约（非双通道）。
+  - **实现修正（关键）**：① **PEP 479**——生成器帧内显式抛 StopIteration 被转 RuntimeError，`generic_next_cps`
+    改用 `_GeneratorExhausted` 哨兵（携带子生成器 return 值）；② **Waitable 解析值形态**——`LLMFuture.
+    try_result` 返回原始 `LLMResult`，须 `send` 回生成器驱动（路由回 yield Waitable 的 handler 解析），
+    非直接当事件。
+  - **消费面**：`generic_next_cps`/`to_list_cps`（generator.py）+ `_GeneratorConsumeDrive`（用户面）+
+    `_IterableComputeDrive`（seq 内建 sum/all/enumerate/zip/sorted/reversed/min/max）+ `resolve_iterable_cps`
+    （for/yield-from）。
+  - **判别测试**：`test_generator_coop_consume.py` +6（chan.recv 经 for/next/to_list/yield from +
+    跨线程投递 + LLM 经 for）；同调度器跨任务死锁在用户代码模型下不可构造（thread 独立调度器），
+    测试锁定协作路径正确性与可恢复性。
+  - **文档**：KNOWN_LIMITS §二十四（同步阻塞边界）**移除**（限制已消除），§二十五-§二十七 重编号为
+    二十四-二十六，全仓引用同步（04_vm_interpreter L3/05_functions §5.9/01_native_host_binding ×2）。
+  - 全量 pytest **3112 passed / 1 skipped 零回归**（3100 + 12 = 6 新判别 + 6 meta 参数化）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
