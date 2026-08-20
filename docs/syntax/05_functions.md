@@ -283,6 +283,32 @@ for int x in outer(1):
   `await` 真异步 Waitable（如 `await chan.recv()`）由 `generic_next` 阻塞等待其完成并注回驱动循环
   （同步阻塞消费，见 `docs/KNOWN_LIMITS.md §二十四`）。
 
+### 5.10 参数传递语义（共享引用）
+
+实参按**共享引用**传入（与 Python 一致；值语义权威契约见 `docs/syntax/02_variables.md` §2.8）。函数内**就地修改**可变参数（list / dict / 用户对象）会影响调用方的对象；**重绑定**参数名不影响调用方。
+
+```ibci
+func push_one(list b) -> int:
+    b.append(1)          # 就地修改共享对象
+    return b.len()
+
+list buf = []
+push_one(buf)
+print((str)buf.len())    # 1 —— 调用方看到修改
+```
+
+```ibci
+func rebind(list b) -> int:
+    b = [9]              # 重绑定参数名，不修改原对象
+    return b.len()
+
+list buf = [1, 2]
+rebind(buf)
+print((str)buf.len())    # 2 —— 原对象不变
+```
+
+需要独立副本时在函数内使用 `copy` / `deepcopy`。默认值、具名调用与 `*args`/`**kwargs` 只决定实参如何绑定到形参，不改变共享引用语义。
+
 ---
 
 ## 深入指引

@@ -318,7 +318,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   无传参语义、共享引用只在 KNOWN_LIMITS §五、is vs == 无用户文档）+ **文档漂移**（KNOWN_LIMITS §五.2
   建议构造器初始化 vs 代码已每实例深克隆 ib_class.py:413）+ **判别测试缺口**。工作量中等（约 4-6 窗口）；
   修复四步：调研对照 → 文档权威契约 → 判别测试 → 运行时审计+小修（详见 PENDING PT-DEBT-34 / WORKLOG）。
-  下一 session 起点 = **阶段 A P0（PT-DEBT-34 变量语义建模显式化）**。
+  **✅ PT-DEBT-34 变量语义建模显式化已完成（2026-08-20）**：四步全落地——① 调研对照（与 Python
+  完全对齐、运行时一致非大重构）；② 文档权威契约（02_variables §2.8 值语义权威章节 + 05_functions
+  §5.10 传参语义 + KNOWN_LIMITS §五.2 漂移修复 + 03_operators/12_builtins is/== 精确化与互引闭环）；
+  ③ 判别测试 test_value_semantics.py +11（赋值别名/传引用/不可变原语/is vs ==）；④ 运行时审计唯一
+  发现 = 容器 `==` 默认身份比较（list/dict 未定义 `__eq__`，内部一致非缺陷，文档精确化不改行为；
+  逐元素 `==` 若用户后续要属独立设计项），无代码小修。全量 3100 passed / 1 skipped 零回归（+17 =
+  11 新测试 + 6 meta 按文件参数化）。真实试用（阶段 C）的 PT-DEBT-34 阈值解锁。详见
+  PENDING/NEXT_STEPS/WORKLOG。
+  下一 session 起点 = **阶段 A P0（PT-DEBT-29 生成器消费协作化）**。
 
 ### 2.2 交接检查单（当前有效）
 

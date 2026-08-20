@@ -71,7 +71,9 @@ bool b1 = x is None          # x 是否为真正的 None 值
 bool b2 = x is not None      # x 是否不为真正的 None 值
 ```
 
-与 `==` 的区别：`==` 比较值是否相等；`is` 比较是否是同一个运行时对象实例。对于 `None` 字面量，`is` 使用 None 语义检测而非实例身份——裸 `None` 值（`any` / 无类型变量）与**空 `Optional[T]`**（`is_some == False` 的包装对象）均判为 `True`。`Optional[T]` 的空值统一由 `Optional` 包装对象持有，`a is None` / `a == None` / `a.is_none()` 三者等价（统一 Optional 值模型：局部变量/参数/返回/类字段/容器元素均一致）。
+与 `==` 的区别：`==` 对不可变原语（`int`/`float`/`bool`/`str`/`None`）按值比较；对容器（`list`/`dict`）与未覆写 `__eq__` 的用户类默认按**身份比较**（仅同一对象为真，与 Python 的逐元素比较不同）。`is` 恒为身份比较。对于 `None` 字面量，`is` 使用 None 语义检测而非实例身份——裸 `None` 值（`any` / 无类型变量）与**空 `Optional[T]`**（`is_some == False` 的包装对象）均判为 `True`。`Optional[T]` 的空值统一由 `Optional` 包装对象持有，`a is None` / `a == None` / `a.is_none()` 三者等价（统一 Optional 值模型：局部变量/参数/返回/类字段/容器元素均一致）。
+
+> 引用/拷贝赋值模型下的身份 vs 值语义契约见 `docs/syntax/02_variables.md` §2.8。
 ---
 
 ## 深入指引
