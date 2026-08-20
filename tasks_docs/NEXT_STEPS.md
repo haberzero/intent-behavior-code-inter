@@ -56,24 +56,35 @@ git 历史与 `tasks_docs/HANDOFF.md` §2.1。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
-1. **[主线·收尾评估] 五大地基剩余对齐债务（按序评估是否推进）**：
-   **当前分支 = `unsafe-vibe-dev`**（P1-P6 全链路完成，3066 零回归）。
-   - **G5 意图值栈全量重构**（意图栈从"字符串/对象栈"升级为"可渲染一等值栈"，按值匹配；
-     P3 已落地意图一等值切片 `IbIntent.content` → 可渲染值 + snapshot 冻结补齐；剩余
-     "content:str → 原始值栈按值匹配"为大面重构（intent_context/栈模型/全消费点），
-     评估维持**登记不推进**——P3 核心切片已落地、当前意图消费经 content 渲染工作正常、
-     与 run_batch/invoke 意图消费对齐需更大设计（勿半接通）；
-   - **has_llm_call_cap → llm_callable 协议**：✅ 已实证为**死字段**（无协议映射、无访问器、
-     无任何消费者；非上 session 记录的"编译期 DDG 层"——DDG 实际经 AST 节点类型识别），
-     已删除（BaseAxiom/BehaviorAxiom/TypeAxiom 接口 + 03_type_system.md 能力表），
-     P4 协议化真收尾；
-   - **行为值深程统一装配入口收敛**（run_batch/invoke 行为路径当前经各自入口，
-     `assemble_stream_request_cps` 已有桥接先例——收敛到统一装配入口，消双通道）：
-     评估为**值自身差异承载**（提示词来源协议 / retry 策略来源本质差异；统一 worker
-     `_call_and_parse` 与意图消解已单点共享），非双通道；收窄为登记项（中大型设计）。
-   验证门：全量 pytest 零回归 + 本地 commit + 描述性提交。
-2. 支线：PT-DEBT-29/30/31、PT-DECIDE-2/3、PT-DEBT-4/5；
-3. 支线：真实 LLM 压力试用扩展（VISION-3）；文档体系持续治理（P9 收尾）。
+**排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
+（健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
+
+**阶段 A · 代码/架构健康（当前 P0，用户指定最高优先）**：
+1. **主线架构债务落地**：G5 意图值栈全量重构 + 行为值深程统一装配入口收敛（解除 2 项登记
+   架构债；先设计→评估→落地，勿半接通）；
+2. **PT-DEBT-29 生成器消费协作化**（Waitable 让出型消费，消除同步阻塞死锁风险——架构级）；
+3. **Tier C 专项审计**：C 类异味（~25 处需人工判定）+ 静默降级补诊断复核（leaf/
+   runtime_serializer/artifact_loader）+ for+if 深嵌套可读性（PT-AUDIT-2 收窄项）；
+4. **PT-DEBT-30 + PT-DEBT-33** 类型边界闭合（yield from 序列委托编译期区分 / KNOWN_LIMITS §十）；
+5. **PT-AUDIT-1/3** 周期复核 + quality-maintenance Tier B（阶段边界）。
+
+**阶段 B · 功能稳健与对外能力**：
+6. PT-TEST-2 覆盖矩阵剩余缺口补测（功能稳健）；
+7. PT-DECIDE-3 项②④（validate_prompt 内置扩展评估 / prompt 异常回退可观测性复核）；
+8. PT-DECIDE-2 供应商思考禁用（对外能力）；
+9. PT-FEAT-5 CI/CD 可靠化 / PT-DOC-3P2 how-to 读者旅程补齐 / PT-FEAT-6/12 工具链项。
+
+**阶段 C · 真实 LLM 全面试用重启（阈值：A/B 健康稳定达标后；非最高优先但必做）**：
+10. **VISION-3 重启**：对五大地基重构后全部新特性重试用——llm 可调用类（直接调用/装配/
+    __intent__ 三层改写/__retry__ 高阶化）、stream 流式、run_batch 批量、覆层机制、prompt
+    协议族五成员、意图一等值嵌入、fs 模块、Optional/容器解析等；真实 qwen3.6 非思考模式全量
+    回归 + 压力维度扩展（>4k token / 多轮长对话 / 批量并发上限 / 多模块交叉）；缺陷→根因修复→
+    回归核销循环。
+
+**阶段 D · 主线远期演进（试用稳定后）**：
+11. VISION-4 P7 类型理论加固（ADT/模式匹配/联合类型/枚举实例化评估）；
+12. VISION-5 P8 函数式地基（协议化组合子/柯拉化）；
+13. VISION-1 二层 IR（概念验证）；PT-SEALED-1 保持封存。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 
