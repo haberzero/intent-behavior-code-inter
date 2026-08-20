@@ -332,10 +332,17 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   （Waitable+CPSDrivable 复用）+ `_GeneratorExhausted` 哨兵（规避 PEP 479）；判别测试 +6；KNOWN_LIMITS
   §二十四（同步阻塞边界）移除、25-27 重编号 24-26、引用同步。全量 pytest 3112 passed / 1 skipped
   零回归（+12 = 6 新判别 + 6 meta 参数化）。详见 PENDING/NEXT_STEPS/WORKLOG。
-  下一 session 起点 = **阶段 A P0（PT-DEBT-30 + PT-DEBT-33 类型边界闭合）**。
+  **✅ 会话交接核验接手完成（2026-08-20，unsafe-vibe-dev HEAD=`b2322214` 已 push origin 与同步）**：
+  HANDOFF_SESSION.md 待验证清单全通过（git 干净 / main 未动 / 提交序列对齐 / 全量 pytest 实跑
+  **3112 passed / 1 skipped** / 契约 §五-§六 + 规划文档已读）；本文件 §2.1/§2.2 收敛更新，临时交接
+  文件已删除（git 承载）。**push 授权不延续**：上一 session 已 push（用户显式授权，含上一 session 7
+  个未 push 提交一并推送），后续 push 需再获显式授权。**KNOWN_LIMITS 编号已变**：原 §二十四（生成器
+  同步阻塞）已移除，现 §二十四=`yield from` 序列委托、§二十五=用户协议/impl、§二十六=LLM 可调用类
+  返回类型。下一 session 起点 = **阶段 A P0（PT-DEBT-30 + PT-DEBT-33 类型边界闭合）**。
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ 会话交接核验接手完成（HEAD=`b2322214`，unsafe-vibe-dev 与 origin 同步（已 push））**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3112 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 PT-DEBT-34/29 完成、push 授权不延续、KNOWN_LIMITS 编号变更），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（PT-DEBT-30 + PT-DEBT-33 类型边界闭合）
 - [x] **✅ 会话交接核验接手完成（HEAD=dcb7c4f2，unsafe-vibe-dev 领先 origin 7 未 push）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3083 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 A1 完成、PT-DEBT-34 登记与迅速评估、push 授权不延续契约），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（PT-DEBT-34 变量语义建模显式化）
 - [x] **✅ 会话交接核验接手完成（HEAD=a97773a6）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / unsafe-vibe-dev 与 origin 同步（已 push）/ main 未动 / 提交序列对齐 / 全量 pytest 实跑 3069 passed / 1 skipped / 契约 §五-§六 + 规划文档已读）；要点已收敛入 §2.1（含 push 授权不延续契约与四阶段排布），临时交接文件已删除（git 承载）；下一 session 起点 = 阶段 A P0（A1）
 - [x] **✅ 会话交接核验接手完成**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 / 分支 unsafe-vibe-dev / main 未动 / 提交序列对齐 / 全量 pytest 实跑 3066 passed / 1 skipped）；契约要点已并入 §2.1（含 INV-EXCEPT-* 保留标准警示），临时交接文件已删除（git 承载）
