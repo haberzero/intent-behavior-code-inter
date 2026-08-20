@@ -162,6 +162,104 @@ print(y)
         assert run_ibci(code) == ["42"]
 
 
+class TestImplicitConversionRules:
+    """Validate implicit type conversion rules (INV-CAST-2 TRUE_GAP 补齐).
+
+    判别维度：
+    - bool → int 赋值合法（bool isa int，axiom 子类型兼容）；
+    - int → float 赋值**不**隐式加宽（SEM_TYPE_MISMATCH，需显式 (float) 转换）；
+    - int + float 算术提升为 float（运算符层数值提升）；
+    - Optional[int] 接受 int 与 None（Optional 装箱）；
+    - list[float] 混合字面量 [1.0, 2] 提升（int 元素被提升为 float）；
+    - list[float] 纯 int 字面量 [1, 2] 拒绝（list[int] 不协变到 list[float]）。
+    """
+
+    def test_bool_to_int_assignment_allowed(self):
+        """bool 可隐式赋给 int（bool isa int 子类型兼容）。"""
+        code = """
+bool b = True
+int x = b
+print(x)
+"""
+        assert run_ibci(code) == ["True"]
+
+    def test_bool_to_int_arithmetic(self):
+        """bool 参与整数算术按 0/1 数值参与。"""
+        code = """
+bool b = True
+int x = b + 1
+print(x)
+"""
+        assert run_ibci(code) == ["2"]
+
+    def test_int_to_float_assignment_rejected(self):
+        """int → float 赋值不隐式加宽，编译期 SEM_TYPE_MISMATCH。"""
+        code = """
+int a = 1
+float b = a
+print(b)
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+    def test_int_literal_to_float_var_rejected(self):
+        """int 字面量赋给 float 变量不隐式转换。"""
+        code = """
+float x = 1
+print(x)
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+    def test_int_plus_float_promotes(self):
+        """int + float 算术结果提升为 float。"""
+        code = """
+int a = 1
+float b = 2.5
+auto c = a + b
+print(c)
+"""
+        assert run_ibci(code) == ["3.5"]
+
+    def test_optional_int_accepts_int(self):
+        """Optional[int] 接受 int 值。"""
+        code = """
+Optional[int] o = 5
+print(o.is_some())
+"""
+        assert run_ibci(code) == ["True"]
+
+    def test_optional_int_accepts_none(self):
+        """Optional[int] 接受 None。"""
+        code = """
+Optional[int] o = None
+print(o.is_none())
+"""
+        assert run_ibci(code) == ["True"]
+
+    def test_list_float_mixed_literal_promotes(self):
+        """list[float] 混合字面量 [1.0, 2]：int 元素提升为 float。"""
+        code = """
+list[float] l = [1.0, 2]
+print(l)
+"""
+        assert run_ibci(code) == ["[1.0, 2]"]
+
+    def test_list_float_int_literal_rejected(self):
+        """list[float] 纯 int 字面量 [1, 2] 拒绝（list[int] 不协变到 list[float]）。"""
+        code = """
+list[float] l = [1, 2]
+print(l)
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+    def test_list_int_float_element_rejected(self):
+        """list[int] 不接受 float 元素。"""
+        code = """
+list[int] l = [1.0]
+print(l)
+"""
+        expect_compile_error(code, "SEM_TYPE_MISMATCH")
+
+
 # ===========================================================================
 # Tuple Positional Types (INV-TUPLE-*)
 # ===========================================================================

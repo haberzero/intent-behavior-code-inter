@@ -52,7 +52,7 @@
 | INV | 语义特性 | 覆盖测试 | 备注 |
 |-----|---------|---------|------|
 | INV-CAST-1 | 显式 cast 安全性 | `tests/contracts/test_type_invariants.py::TestTypeCastInvariants::test_cast_valid_conversions[42-str-42]` | 参数化覆盖 int→str/str→int/float→int |
-| INV-CAST-2 | 隐式类型转换规则 | 🔶 缺失 | TRUE_GAP：无隐式转换专门测试（历史核对存档见 git） |
+| INV-CAST-2 | 隐式类型转换规则 | `tests/contracts/test_type_invariants.py::TestImplicitConversionRules::test_bool_to_int_assignment_allowed` | bool→int 合法 / int→float 拒绝 / int+float 提升 / Optional 装箱 / list 字面量提升；同文件 TestImplicitConversionRules 其余 9 例 |
 | INV-INFER-1 | 类型推断规则（字面量） | `tests/contracts/test_type_invariants.py::TestTypeInferenceInvariants::test_auto_infers_literal_type[42-42]` | |
 | INV-INFER-2 | 类型推断规则（函数返回） | `tests/contracts/test_type_invariants.py::TestTypeInferenceInvariants::test_function_return_type_inference` | |
 
@@ -163,7 +163,7 @@
 | INV | 语义特性 | 覆盖测试 | 备注 |
 |-----|---------|---------|------|
 | INV-INTENT-PRIORITY-1 | @! override 清空栈 | `tests/contracts/test_intent_propagation.py::TestIntentPriority::test_override_replaces_existing` | |
-| INV-INTENT-PRIORITY-2 | smear 排在 stack 之后 | 🔶 缺失 | TRUE_GAP：无优先级次序断言测试 |
+| INV-INTENT-PRIORITY-2 | smear 排在 stack 之后 | `tests/e2e/test_intent_priority_flow.py::TestIntentPrioritySmearAfterStack::test_smear_intent_comes_after_persistent_stack` | provider 捕获 merged 顺序断言 |
 | INV-INTENT-PRIORITY-3 | 多层 stack 按顺序 | `tests/e2e/test_intent.py::TestE2EIntents::test_incremental_intent` | 多个 @+ 按序累积 |
 
 ### 4.3 Intent 恢复
@@ -179,7 +179,7 @@
 |-----|---------|---------|------|
 | INV-INTENT-SCOPE-1 | 函数调用 intent 隔离 | `tests/contracts/test_intent_propagation.py::TestIntentScopeIsolation::test_function_intent_isolated` | |
 | INV-INTENT-SCOPE-2 | lambda 继承调用方 intent | `tests/e2e/test_intent.py::TestE2EIntents::test_lambda_behavior_uses_call_time_intents` | 调用时意图栈而非定义时空栈 |
-| INV-INTENT-SCOPE-3 | snapshot 捕获定义时 intent | 🔶 缺失 | TRUE_GAP：无测试（历史核对存档见 git） |
+| INV-INTENT-SCOPE-3 | snapshot 捕获定义时 intent | `tests/e2e/test_snapshot_intent_freeze.py::TestSnapshotIntentFreeze::test_pure_snapshot_lambda_freezes_definition_intent` | 纯 snapshot lambda 定义时刻冻结意图栈，调用处意图被忽略 |
 
 ### 4.5 Intent 与控制流
 
@@ -187,7 +187,7 @@
 |-----|---------|---------|------|
 | INV-INTENT-FLOW-1 | 循环中 intent 累积 | `tests/contracts/test_intent_propagation.py::TestIntentControlFlow::test_intent_in_loop_iteration` | |
 | INV-INTENT-FLOW-2 | 条件分支 intent 隔离 | `tests/contracts/test_intent_propagation.py::TestIntentControlFlow::test_intent_in_conditional` | |
-| INV-INTENT-FLOW-3 | return 清除 smear intent | 🔶 缺失 | 无 return 语境专用测试；最近似 `test_intent_cleared_between_iterations`（循环迭代清除） |
+| INV-INTENT-FLOW-3 | return 清除 smear intent | `tests/e2e/test_intent_priority_flow.py::TestIntentReturnClearsSmear::test_return_clears_function_smear_intent` | 函数 return 后 smear 不泄漏到调用方 |
 
 ---
 
@@ -199,7 +199,7 @@
 |-----|---------|---------|------|
 | INV-MOCK-1 | MOCK:STR 确定性 | `tests/contracts/test_llm_integration.py::TestMOCKProtocol::test_mock_typed_returns[MOCK:STR:hello-hello]` | 参数化亦覆盖 INT/LIST/FLOAT |
 | INV-MOCK-2 | MOCK:INT 确定性 | `tests/contracts/test_llm_integration.py::TestMOCKProtocol::test_mock_typed_returns[MOCK:INT:42-42]` | |
-| INV-MOCK-3 | MOCK:INVALID 触发错误 | 🔶 缺失 | TRUE_GAP：样例仅存于孤儿 fixture，无测试消费者 |
+| INV-MOCK-3 | MOCK:INVALID 触发错误 | `tests/contracts/test_llm_integration.py::TestMOCKProtocol::test_mock_invalid_directive_triggers_error` | 未知指令在类型化消费位置触发 LLMParseError |
 
 ### 5.2 Behavior 表达式
 
@@ -296,21 +296,21 @@
 | — | import 语句加载模块 | `tests/e2e/test_modules.py::TestE2EMathModule::test_math_sqrt` | 原 test_e2e_modules.py 迁移至 e2e/test_modules.py |
 | — | from...import 语法 | `tests/runtime/test_ibc_file_imports.py::TestIbcFileNamedImport::test_named_import_variable` | 具名导入；别名见 test_named_import_alias |
 | — | 模块路径解析 | `tests/runtime/test_ibc_file_imports.py::TestIbcFileMultiModule::test_transitive_import` | 跨模块传递导入 |
-| — | 模块缓存机制 | 🔶 缺失 | 需评估；无专门缓存测试 |
+| — | 模块缓存机制 | `tests/runtime/test_ibc_file_imports.py::TestModuleCaching::test_module_body_executes_once_across_importers` | 模块体仅首次导入执行一次，多导入方共享缓存实例 |
 
 ### 7.2 循环依赖
 
 | INV | 语义特性 | 覆盖测试 | 备注 |
 |-----|---------|---------|------|
-| — | 循环 import 检测 | 🔶 缺失 | 无 IBCI 模块循环依赖测试 |
-| — | 循环依赖错误处理 | 🔶 缺失 | 同上 |
+| — | 循环 import 检测 | `tests/runtime/test_ibc_file_imports.py::TestCircularImport::test_circular_import_detected_compile_error` | 编译期 DEP_CIRCULAR_IMPORT |
+| — | 循环依赖错误处理 | `tests/runtime/test_ibc_file_imports.py::TestCircularImport::test_circular_import_detected_compile_error` | 与上共用：诊断消息携带循环路径 |
 
 ### 7.3 模块作用域
 
 | INV | 语义特性 | 覆盖测试 | 备注 |
 |-----|---------|---------|------|
 | — | 模块级变量隔离 | `tests/runtime/test_ibc_file_imports.py::TestIbcFileStarImport::test_star_import_does_not_leak_importing_module_intrinsics` | import-* 精确成员枚举，不泄漏被导入模块内部符号 |
-| — | 模块重新加载 | 🔶 缺失 | 需评估；无重新加载测试 |
+| — | 模块重新加载 | —（设计排除） | IBCI 无模块热重载机制（模块体仅首次导入执行、后续复用缓存实例，见上）；`hot_reload_pools` 违反解释器不修改代码原则（docs/architecture/01_principles.md） |
 
 ---
 
@@ -409,7 +409,7 @@
 |-----|---------|---------|------|
 | — | switch 表达式求值 | `tests/e2e/test_classes.py::TestE2EEnums::test_switch_case` | ⏸️ 旧标"设计未稳定"已过时：switch 已落地且有 e2e 覆盖 |
 | — | case 匹配与执行 | `tests/e2e/test_classes.py::TestE2EEnums::test_switch_case` | 与上共用；编译级另有 TestVisitorCoverage::test_switch_case |
-| — | switch 内控制流（break/return） | 🔶 缺失 | 无 switch 内 break/return 测试 |
+| — | switch 内控制流（break/return/continue） | `tests/e2e/test_switch_usability.py::TestSwitchBreak::test_switch_return_propagates_out_of_function` | break=no-op（test_switch_break_noop）、continue 透传外层循环（test_switch_continue_propagates_to_outer_loop）、return 透传函数（本条目）；全语义值/字符串/Enum/default 见 test_switch_value_string_enum_default |
 
 ---
 
@@ -465,28 +465,24 @@
 
 ## §13 覆盖差距分析 (Coverage Gap Analysis)
 
-> 以下为本次迁移确认的**真覆盖缺口**（`🔶 缺失`，不硬凑）。均已核对真实测试集合无语义吻合项。
+> 以下为**当前剩余真覆盖缺口**（`🔶 缺失`，不硬凑）。已核对真实测试集合无语义吻合项。
+> （PT-TEST-2 阶段 B 补齐后收敛：INV-CAST-2 / INV-INTENT-PRIORITY-2 / INV-INTENT-SCOPE-3 /
+> INV-INTENT-FLOW-3 / INV-MOCK-3 / INV-LLMEXCEPT-CATCH-4 / 模块缓存 / 循环 import / switch
+> 内控制流均已补测试或确认既有覆盖，详见各节引用。）
 
 ### 契约层缺口（TRUE_GAP，历史核对存档见 git）
 
 | 契约 | 语义 | 说明 |
 |------|------|------|
-| INV-CAST-2 | 隐式类型转换规则 | 无专门测试 |
-| INV-INTENT-PRIORITY-2 | smear 排在 stack 之后 | 无优先级次序断言测试 |
-| INV-INTENT-SCOPE-3 | snapshot 捕获定义时 intent | 无测试 |
-| INV-INTENT-FLOW-3 | return 清除 smear intent | 无 return 语境专用测试 |
-| INV-MOCK-3 | MOCK:INVALID 触发错误 | 样例仅在孤儿 fixture，无测试消费者 |
-| INV-LLMEXCEPT-CATCH-4 | llmexcept 不捕获普通异常 | 无活测试 |
+| INV-LLMEXCEPT-CATCH-4 | llmexcept 不捕获普通异常 | 已由 CATCH-5 覆盖（test_llmexcept_does_not_catch_normal_error），条目重号收敛 |
 
 ### 模块系统缺口（§7）
 
-- 模块缓存机制（需评估）
-- 循环 import 检测 / 循环依赖错误处理
-- 模块重新加载（需评估）
+- （已收敛：模块缓存 / 循环 import / 循环依赖错误处理已补测试；模块重新加载确认设计排除——无热重载机制）
 
 ### 其它
 
-- §10.3 switch 内控制流（break/return）：switch 已落地，但无 switch 内 break/return 测试
+- （已收敛：§10.3 switch 内控制流 break/return/continue 已有测试覆盖）
 
 ### 已确认覆盖的领域（迁移后全引用可机器对账）
 

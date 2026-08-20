@@ -52,6 +52,25 @@ for int i in range(3):
         assert "hit_2" in lines
         assert not any("hit_0" in l for l in lines)
 
+    def test_switch_return_propagates_out_of_function(self):
+        """case 内 return 从函数返回（switch 内控制流透传）。"""
+        code = """
+func f(int x) -> str:
+    switch x:
+        case 1:
+            return "one"
+        case 2:
+            return "two"
+        default:
+            return "other"
+
+print(f(1))
+print(f(2))
+print(f(9))
+"""
+        lines = run_ibci(code)
+        assert lines == ["one", "two", "other"]
+
     def test_switch_value_string_enum_default(self):
         """switch 全语义：值/字符串/Enum/default/匹配后自动跳过。"""
         code = """

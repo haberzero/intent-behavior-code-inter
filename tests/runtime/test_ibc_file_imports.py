@@ -876,3 +876,69 @@ class TestCrossModuleSameNameClass:
             assert "SEM_BEHAVIOR_OUTPUT_NOT_PARSEABLE" in codes, codes
             return
         raise AssertionError("无 __from_prompt__ 的跨模块类应被编译期拦截")
+
+
+class TestModuleCaching:
+    """模块缓存机制（§7 模块系统缺口补齐）。
+
+    模块体只在首次导入时执行一次，后续导入复用缓存实例——
+    多次 from-import 同一模块不重复执行模块体（副作用只发生一次）。
+    """
+
+    def test_module_body_executes_once_across_importers(self, tmp_path):
+        """同一模块被多个模块 from-import，模块体只执行一次（缓存命中）。"""
+        _write(tmp_path, "m.ibci", 'print("MODULE_RAN")\nint counter = 5\n')
+        _write(
+            tmp_path,
+            "a.ibci",
+            "from m import counter\nfunc get_a() -> int:\n    return counter\n",
+        )
+        _write(
+            tmp_path,
+            "b.ibci",
+            "from m import counter\nfunc get_b() -> int:\n    return counter\n",
+        )
+        _write(
+            tmp_path,
+            "main.ibci",
+            "from a import get_a\nfrom b import get_b\nprint(get_a())\nprint(get_b())\n",
+        )
+        lines = _run(tmp_path)
+        # 模块体只执行一次（MODULE_RAN 出现一次），两处导入均拿到缓存实例
+        assert lines.count("MODULE_RAN") == 1, f"模块体被重复执行: {lines}"
+        assert lines.count("5") == 2
+
+    def test_repeated_from_import_does_not_re_execute(self, tmp_path):
+        """同一模块在同模块内被两次 from-import，不重复执行模块体。"""
+        _write(tmp_path, "m.ibci", 'print("MODULE_RAN")\nint counter = 5\n')
+        _write(
+            tmp_path,
+            "main.ibci",
+            "from m import counter\nfrom m import counter\nprint(counter)\nprint(counter)\n",
+        )
+        lines = _run(tmp_path)
+        assert lines.count("MODULE_RAN") == 1, f"模块体被重复执行: {lines}"
+        assert lines.count("5") == 2
+
+
+class TestCircularImport:
+    """循环 import 检测 / 循环依赖错误处理（§7 模块系统缺口补齐）。
+
+    a → b → a 循环依赖在编译期被 DependencyGraph 检出，报 DEP_CIRCULAR_IMPORT
+    （fail-fast，不静默进入运行时无限递归）。
+    """
+
+    def test_circular_import_detected_compile_error(self, tmp_path):
+        _write(tmp_path, "a.ibci", "from b import get_b\nfunc get_a() -> int:\n    return 1\n")
+        _write(tmp_path, "b.ibci", "from a import get_a\nfunc get_b() -> int:\n    return 2\n")
+        engine = IBCIEngine(root_dir=str(tmp_path))
+        try:
+            engine.compile(str(tmp_path / "a.ibci"))
+        except Exception as exc:
+            codes = [getattr(d, "code", "") for d in getattr(exc, "diagnostics", [])]
+            assert "DEP_CIRCULAR_IMPORT" in codes, codes
+            # 诊断消息携带循环路径（a -> b -> a）
+            msgs = [str(getattr(d, "message", "")) for d in getattr(exc, "diagnostics", [])]
+            assert any("Circular dependency detected" in m for m in msgs), msgs
+            return
+        raise AssertionError("循环 import 应被编译期拦截")

@@ -12,7 +12,7 @@ Validates:
 """
 
 import pytest
-from tests.conftest import run_ibci, AI_MOCK_PREFIX
+from tests.conftest import run_ibci, AI_MOCK_PREFIX, expect_runtime_error
 
 
 # ===========================================================================
@@ -56,6 +56,18 @@ auto result = @~ {mock_directive} ~
 print(result)
 """
         assert run_ibci(code) == [expected_value]
+
+    def test_mock_invalid_directive_triggers_error(self):
+        """INV-MOCK-3: 未知 MOCK 指令（MOCK:INVALID）在类型化消费位置触发 LLMParseError。
+
+        MOCK 引擎对未知类型指令返回字面文本 ``[MOCK] MOCK:INVALID``，无法解析为
+        目标类型（int）→ 运行期 LLMParseError（fail-fast，不静默给默认值）。
+        """
+        code = AI_MOCK_PREFIX + """
+int x = @~ MOCK:INVALID ~
+print(x)
+"""
+        expect_runtime_error(code, "LLMParseError")
 
 
 # ===========================================================================
