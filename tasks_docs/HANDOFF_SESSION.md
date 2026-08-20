@@ -24,7 +24,7 @@ PT-DECIDE-2 封存、PT-DOC-3P2 提前至 B3、PT-FEAT-6/12 划远期）。基�
 
 | 项 | 值 |
 |----|----|
-| 当前分支 | `unsafe-vibe-dev`（HEAD=`<HEAD>`，**已 push origin，与 origin 同步**；用户本次显式授权 push） |
+| 当前分支 | `unsafe-vibe-dev`（HEAD=`ad0cd000`，**已 push origin，与 origin 同步**；用户本次显式授权 push） |
 | 其它分支 | `main`（未触碰）；无其它本地分支 |
 | 测试基线 | `~/miniconda3/envs/ibci/bin/python -m pytest tests/` → **3069 passed / 1 skipped**（以实跑为准） |
 | 工作树 | 干净 |
@@ -47,7 +47,7 @@ PT-DECIDE-2 封存、PT-DOC-3P2 提前至 B3、PT-FEAT-6/12 划远期）。基�
 | `9b5c5fd8` | 阶段 7 SEM_PROTOCOL_SIGNATURE required=error | 3069 |
 | `fa2333c1` | 收尾文档同步 | 3069 |
 | `42cf4e6d` | 后续任务排布（四阶段写入 NEXT_STEPS + WORKLOG） | 3069 |
-| `<HEAD>` | 排布微调 + 规划文档 `_planning_health_first.md` + 本交接文档 | 3069 |
+| `ad0cd000` | 排布微调 + 规划文档 + 本交接文档 | 3069 |
 
 ## 四、待验证清单（下一 session 首步，按序）
 

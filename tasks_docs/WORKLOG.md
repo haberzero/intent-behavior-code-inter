@@ -609,6 +609,10 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   类/意图三层改写/retry 高阶化/流式/覆层/prompt 协议族/fs 等），真实 qwen3.6 全量回归 + 压力扩展，
   缺陷→修复→核销循环；阈值 = A/B 健康稳定达标后。**阶段 D（远期演进）**：P7 类型理论、P8 函数式、
   二层 IR；PT-SEALED-1 保持封存。完整排布见 NEXT_STEPS 下一步候选。
+- **排布微调（2026-08-19，用户裁定）**：A4（Tier C 审计）与 A3（PT-DEBT-30/33）交换；
+  **PT-DECIDE-2（供应商思考禁用）封存**——短期不再考虑启动（PENDING 标 sealed，解封条件=
+  多供应商思考模式部署需求）；**PT-DOC-3P2 提前至 B3**（how-to 读者旅程，对外可用性优先）；
+  **PT-FEAT-6/12 划更远期**（近期不处理）。完整排布见 `tasks_docs/_planning_health_first.md`。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
