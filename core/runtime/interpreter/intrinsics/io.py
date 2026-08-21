@@ -25,7 +25,10 @@ def register_io(manager: Any, execution_context: Any, service_context: Any):
                 if hasattr(sys.stdout, 'reconfigure'):
                     try:
                         sys.stdout.reconfigure(encoding='utf-8')
-                    except Exception: pass
+                    except (OSError, ValueError):
+                        # reconfigure 失败（编码不受支持等）不影响打印主路径：
+                        # 回落既有编码，真正的编码失败由外层 UnicodeEncodeError 处理。
+                        pass
                 print(msg)
             except UnicodeEncodeError:
                 # 最后的兜底：转义非 GBK 字符
