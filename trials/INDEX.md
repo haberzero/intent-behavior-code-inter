@@ -29,7 +29,7 @@
 | `T13_intent_ctx` | 五大地基新特性：意图一等值嵌入（@+ $x eager/按值移除）+ snapshot 冻结 vs lambda live + intent_context OOP 方法族（文档工作流 + 缺参 fail-fast） | 2026-08-21 | 5 例（mock 层） | 4 PASS + 1 GUARD（mock 层全绿）；语义确认 use= fork 拷贝 | `BOUNDARY-LLM-5`（新登记：进程内 mock call_info 无 sys_prompt 键） |
 | `KERNEL_ISSUE-LLM-4` | llm-callable `expected_type`=裸用户类名不解析：装配直接传裸名 → VTableParsingStrategy `get_class` miss 运行时类键（module 限定）→ `__from_prompt__` 不生效、退化返回 str（docs §8.5 宣称用户类经 __from_prompt__ 解析） | **已修复（2026-08-21）**：装配时按 callable 类 module 限定裸 expected_type（对齐行为路径 node_to_type 语义）；回归测试 +2（test_llm_callable_unified.py）；T08 D4-05 真实 LLM 转 PASS；另修 D4-01 `\\"` 转义用例 bug | `T08/.../D4-05-llmfunc-userclass.ibci` + `T10/.../probe`（已删，回归测试承载） |
 | `T14_fs_optional` | 五大地基新特性：fs 模块全接口（open/read/read_bytes/write new+overwrite/exists/remove + 只读/沙箱守卫）+ Optional 值模型/容器元素 + 值语义 | 2026-08-21 | 9 例（mock） | 7 PASS + 2 GUARD（全绿）；沙箱越界写被 RUN_PERMISSION_ERROR 拒（无漏洞）；file_handle 只读守卫 | 无新缺陷 |
-| `T15_edge_malicious` | 恶意边界测试（`_trial_edge_catalog.md` 起点：容器==/意图 one-shot 窗口/装配键/参数数量/协议异常/retry 策略/泛型嵌套/递归限制等 16 项） | 2026-08-21 | 16 例（mock） | 9 PASS + 6 GUARD + 1 LIMIT（**无内核缺陷**；fail-fast 防御面全生效） | 无；登记待文档复核项（装配 dict 未知键静默忽略） |
+| `T15_edge_malicious` | 恶意边界测试（`_trial_edge_catalog.md` 起点 17 项 + 压力 3 项：容器==/意图窗口/装配键/参数/协议异常/retry/泛型/递归/retry 体内文件写禁等） | 2026-08-21 | 20 例 | 12 PASS + 7 GUARD + 1 LIMIT（无内核缺陷；fail-fast + 编译期守卫全生效；>4k token/多轮/批量并发真实 LLM 全 PASS） | 无；待文档复核项（装配 dict 未知键静默忽略） |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 

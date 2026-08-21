@@ -5,9 +5,9 @@
 
 ## 一、总览
 
-- **用例总数**：16 个（mock 层），全部经死循环保护（run_batch 默认 60s OS 级超时）。
-- **PASS**：9 例；**GUARD**：6 例；**LIMIT**：1 例。
-- **KERNEL_ISSUE**：0 项。**BOUNDARY**：0 项。**DOC_ISSUE**：0 项。**LLM_BEHAVIOR / HARNESS**：0 项。
+- **用例总数**：20 个（mock 层 17 + 真实 LLM 压力 3），全部经死循环保护。
+- **PASS**：12 例；**GUARD**：7 例；**LIMIT**：1 例。
+- **KERNEL_ISSUE**：0 项（本套件；KERNEL_ISSUE-LLM-4 为 T08 回归发现并已修，见 T10/T08 REGISTER）。**BOUNDARY**：0 项。**DOC_ISSUE**：0 项。**LLM_BEHAVIOR / HARNESS**：0 项。
 
 ## 二、缺陷登记
 
@@ -50,6 +50,10 @@ LIMIT（文档化限制）。关键确认：
 | M14 | 少参 fail-fast | fail-fast | 同 | GUARD | P2 | logs/B-T15-E-M14.log |
 | M15 | 泛型嵌套特化 | nested_ok=True | 同 | PASS | — | logs/B-T15-E-M15.log |
 | M16 | 声明参数不传参 fail-fast | fail-fast | 同 | GUARD | P2 | logs/B-T15-E-M16.log |
+| M17 | retry 体内 fs.write 编译期禁（SEM_LLMEXCEPT_FILE_WRITE） | 诊断码 | 同 | GUARD | P2 | logs/B-T15-E-M17.log |
+| PR1 | >4k token 长 prompt 真实 LLM | done=True | 同 | PASS | — | logs/B-T15-PR1.log |
+| PR2 | __retry__ 多轮 message_history 回喂 | got=3 | 同 | PASS | — | logs/B-T15-PR2.log |
+| PR3 | run_batch 批量并发 10 项 | len=10 | 同 | PASS | — | logs/B-T15-PR3.log |
 
 ## 五、结论
 

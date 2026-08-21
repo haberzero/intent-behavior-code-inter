@@ -1,0 +1,19 @@
+# T15-E-M17 [边界清单 #28] llmexcept retry 体内 fs.write 禁用（文档化安全限制：污染 gold snapshot）
+# doc: docs/syntax/10_robustness.md §10.3 + docs/syntax/11_modules.md §11.7
+# expect-class: GUARD
+# expect-code: SEM_LLMEXCEPT_FILE_WRITE
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+import fs
+ai.set_mock_mode()
+str r = ""
+try:
+    str x = @~ MOCK:FAIL 提取 ~
+    llmexcept:
+        fs.write("./T15_M17.txt", "x")
+        retry "请只返回数字"
+    print("done=" + x)
+except Exception as e:
+    print("caught=" + (str)e)
+print("DONE")

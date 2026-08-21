@@ -25,6 +25,8 @@
 | E-M14 | #13 | 实参少于声明 → fail-fast | M14 | ✅ GUARD |
 | E-M15 | #26 | 泛型特化嵌套 Box[Box[int]] | M15 | ✅ PASS |
 | E-M16 | #13 | 声明参数但调用不传参 → fail-fast | M16 | ✅ GUARD |
+| E-M17 | #28 | llmexcept retry 体内 fs.write 编译期禁（SEM_LLMEXCEPT_FILE_WRITE） | M17 | ✅ GUARD |
+| PR1-3 | 压力 | >4k token / 多轮 message_history / 批量并发（真实 LLM） | PR1-3 | ✅ PASS |
 
 > 结论：16 项恶意边界**无内核缺陷**——fail-fast 防御面（参数数量/装配键值/协议异常/
 > retry 策略/__intent__ 层值）全部守卫生效；文档化限制（递归深度/容器身份比较/意图
