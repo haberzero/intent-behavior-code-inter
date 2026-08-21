@@ -1,0 +1,15 @@
+# T11-M2 ai.stream_call 赋值自动等待（auto-yield）
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: got=Hello World! | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 分块:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STREAM:Hello| World|!"}
+分块 s = 分块()
+any h = ai.stream_call(s)
+print("got=" + (str)h)
+print("DONE")

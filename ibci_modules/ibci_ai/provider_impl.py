@@ -239,7 +239,9 @@ class RecommendedProvider(LLMProvider):
             result = self._mock_engine.handle(user_prompt_text)
             if result.error_status is not None:
                 raise RuntimeError(f"MOCK:ERROR injected ({result.error_status})")
-            return iter([result.content])
+            # MOCK:STREAM 指令分块模拟增量流式（与 mock_service HTTP 路径同构）；
+            # 无分块时按整块文本迭代（保持 stream_call 语义不变）。
+            return iter(result.chunks if result.chunks else [result.content])
 
         client, model = self._resolve_client(request.target_model, require=True)
         sys_prompt = self._assemble_provider_sys_prompt(request, is_reasoning_model=False)

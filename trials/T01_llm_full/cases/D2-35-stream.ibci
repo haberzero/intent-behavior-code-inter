@@ -1,5 +1,5 @@
-# D2-35 正交：ai.stream_call(sys, user) 流式调用（真实 LLM）
-# doc: docs/syntax/11_modules.md §11.3（stream_call 仅列名未列签名 → DOC-ISSUE-004）
+# D2-35 正交：ai.stream_call 流式调用（真实 LLM）
+# doc: docs/syntax/11_modules.md §11.3
 # 期望: 流式调用返回完整文本（真实 LLM）
 
 # expect-class: PASS
@@ -9,7 +9,11 @@
 import ai
 ai.load_project_config()
 
-any h = ai.stream_call("你是助手", "用一句话介绍Python")
+class 介绍:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "用一句话介绍Python", "prompt_slots": [{"kind": "user_sys", "text": "你是助手"}]}
+介绍 x = 介绍()
+any h = ai.stream_call(x)
 str full = await h
 print("stream=" + full)
 print("DONE")

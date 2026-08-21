@@ -6,6 +6,10 @@
 # expect-llm: true
 import ai
 ai.load_project_config()
-str full = await ai.stream_call("你是一个简洁的助手。", "只回答：OK")
+class 简洁回答:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "只回答：OK", "prompt_slots": [{"kind": "user_sys", "text": "你是一个简洁的助手。"}]}
+简洁回答 s = 简洁回答()
+str full = await ai.stream_call(s)
 print("len_gt0=" + (str)(full.len() > 0))
 print("DONE")

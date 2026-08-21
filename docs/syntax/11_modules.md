@@ -109,7 +109,7 @@ chan c = ai.stream_channel(s)        # stream_channel(target: LLMCallable) -> ch
 ```
 
 > `stream_call` / `stream_channel` 接受任何 **LLMCallable 实例**（行为值或实现
-> `__llm_call__` 的用户 llm 可调用类，见 `docs/syntax/09_llm.md`），经统一装配入口
+> `__llm_call__` 的用户 llm 可调用类，见 `docs/syntax/08_llm_callable.md`），经统一装配入口
 > 装配请求后流式执行；字符串形态（`stream_call(sys_prompt, user_prompt)`）已随旧
 > llm 函数机制删除。
 

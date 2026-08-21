@@ -147,3 +147,24 @@ class TestStreamChannelLanguage:
         )
         lines = run_ibci(code)
         assert lines == ["Hello", " World", "!"]
+
+    def test_stream_channel_incremental_recv_inprocess_mock(self):
+        """进程内 mock（ai.set_mock_mode）路径：provider.stream 的 test_mode 分支
+        尊重 MOCK:STREAM 分块，stream_channel 逐块 recv 与 HTTP mock 路径一致。"""
+        code = (
+            "import ai\n"
+            "ai.set_mock_mode()\n"
+            "class Steamer:\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"MOCK:STREAM:Hello| World|!\"}\n"
+            "Steamer s = Steamer()\n"
+            "chan chunks = ai.stream_channel(s)\n"
+            "str c1 = chunks.recv()\n"
+            "str c2 = chunks.recv()\n"
+            "str c3 = chunks.recv()\n"
+            "print(c1)\n"
+            "print(c2)\n"
+            "print(c3)\n"
+        )
+        lines = run_ibci(code)
+        assert lines == ["Hello", " World", "!"]

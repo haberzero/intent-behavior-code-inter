@@ -1,0 +1,18 @@
+# T11-M3 ai.stream_channel 流式通道：逐块 recv 增量消费
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: a=Hello b= World c=! | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 分块:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STREAM:Hello| World|!"}
+分块 s = 分块()
+chan chunks = ai.stream_channel(s)
+str a = chunks.recv()
+str b = chunks.recv()
+str c = chunks.recv()
+print("a=" + a + " b=" + b + " c=" + c)
+print("DONE")

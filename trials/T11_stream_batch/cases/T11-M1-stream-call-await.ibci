@@ -1,0 +1,15 @@
+# T11-M1 ai.stream_call 流式调用：await 取完整文本（MOCK:STREAM 分块）
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: full=Hello World! | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 分块:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STREAM:Hello| World|!"}
+分块 s = 分块()
+str full = await ai.stream_call(s)
+print("full=" + full)
+print("DONE")

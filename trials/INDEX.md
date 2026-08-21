@@ -24,6 +24,7 @@
 | `T08_llm_pressure` | LLM 全能力真实压力试用（第一轮，本地 qwen3.6-35b-a3b 非思考模式） | 2026-08-15 | 41 例 | 32 PASS + 2 GUARD + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 LIMIT | `KERNEL_ISSUE-LLM-2`（**已修复**）、`KERNEL_ISSUE-LLM-3`（**已修复**）、`DOC_ISSUE-30`、`BOUNDARY-LLM-2`、`BOUNDARY-LLM-3` |
 | `T09_protocol_kernel_impact` | 协议化内核大重构影响确认（既有套件真实 LLM 回归 + 新能力试用） | 2026-08-16 | 既有 108 例回归 + 新 8 例 | 回归分类与重构前基线逐类一致（**零回归**）；新能力 N1-N8 全 PASS（impl LLM 方法 / 泛型 bound / LLM 函数第一等值 / 长 prompt / 并发 dispatch / llmexcept 真实重试 / 类内 LLM 方法 / __from_prompt__） | 无新增；BOUNDARY-LLM-2/3 与未读赋值 LIMIT 为已登记项复现 |
 | `T10_llm_callable` | 五大地基新特性：llm 可调用类全面（直接调用/装配/解析/`__intent__` 三层改写/`__retry__` 高阶化/run_batch 逐项参数化） | 2026-08-21 | 13 例（mock 层） | 9 PASS + 4 GUARD（mock 层确定性全绿） | `BOUNDARY-LLM-4`（新登记）；LLM 层回归待运行 |
+| `T11_stream_batch` | 五大地基新特性：stream 流式消费面（stream_call/stream_channel 逐块）+ run_batch 批量（行为逐项绑参/llm 实例逐项参数化） | 2026-08-21 | 5 例（mock 层）+ 迁移 4 例 | 5 PASS（mock 层全绿）；**修复**进程内 mock 流式分块保真缺口（provider test_mode 丢 chunks，回归测试 +1）；迁移 4 个旧字符串形态 stream 用例 | 无新缺陷；D5-01/D5-02/D5-08/D2-35 迁移 |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 

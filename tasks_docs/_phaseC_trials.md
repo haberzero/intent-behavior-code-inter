@@ -15,11 +15,24 @@ trials 迁移（12 case + docs 全面同步）。本 session 全量扫描证实�
   `08_llm_callable.md`）。
 - **已修复**（本 session，9 文件）：`# doc:` 指针 `09_llm.md → 08_llm_callable.md` +
   清理注释中的旧语法迁移叙述（CONTRACT_FORMAT §一：注释只保留功能说明 + `# doc:` 引用）。
+- **追加发现（2026-08-21 修正）**：**4 个 stream 用例（T08 D5-01/D5-02/D5-08 + T01 D2-35）
+  用已删的字符串形态 `stream_call(sys,user)` / `stream_channel(sys,user)`**——已迁移到新
+  llm 可调用实例形态（与内核判别测试同形态）；`docs/syntax/11_modules.md:112` 陈旧指针
+  `09_llm.md → 08_llm_callable.md` 一并修正。
 - 全 trials 其余用例引用文档（01-15 章 / KNOWN_LIMITS / architecture / howto）均存在，
   章节级漂移留待阶段 C 结束统一文档复核时核对。
 
-**迁移面结论**：旧语法依赖≈0（已由 P4c 迁移），**阶段 C 主要工作量 = 新特性覆盖补全**
-（五大地基重构后新特性在既有 T01-T09 中覆盖不足）+ 恶意边界测试。
+**迁移面结论**：旧语法依赖≈0（P4c 已迁移 + 本 session 补清 4 个 stream API 残留），
+**阶段 C 主要工作量 = 新特性覆盖补全**（五大地基重构后新特性在既有 T01-T09 中覆盖不足）
++ 恶意边界测试。
+
+## 〇.1 本 session 工具修复（HARNESS 处置）
+
+- **进程内 mock 流式分块保真缺口已修复**：`provider_impl.py::RecommendedProvider.stream()`
+  test_mode 分支丢弃 `MOCK:STREAM` 的 `chunks`（只回整块文本）→ stream_channel 逐块 recv
+  报 `communication object is closed`。改为 `iter(chunks if chunks else [content])`（与
+  HTTP mock 路径同构）。回归测试 +1（`tests/runtime/test_streaming.py`）。全量 pytest
+  **3183 passed / 1 skipped 零回归**（+1）。
 
 ## 一、新套件规划（覆盖 HANDOFF_SESSION §6.1 九大评估面）
 
@@ -57,9 +70,9 @@ trials 迁移（12 case + docs 全面同步）。本 session 全量扫描证实�
 
 ## 四、进度记录
 
-- [x] 迁移面审计 + 9 文件注释/指针修复（2026-08-21）
-- [ ] T10_llm_callable（mock 层）
-- [ ] T11_stream_batch（mock 层）
+- [x] 迁移面审计 + 9 文件注释/指针修复 + 4 个 stream API 迁移 + docs 指针修正（2026-08-21）
+- [x] T10_llm_callable（mock 层 9 PASS + 4 GUARD，BOUNDARY-LLM-4 登记）
+- [x] T11_stream_batch（mock 层 5 PASS）+ 进程内 mock 流式分块缺口修复（回归 +1）
 - [ ] T12_overlay_protocol（mock 层）
 - [ ] T13_intent_ctx（mock 层）
 - [ ] T14_fs_optional（mock 层）

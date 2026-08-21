@@ -1,0 +1,12 @@
+# T11-M4 ai.run_batch 行为值批量（lambda 逐项绑参，MOCK:INT 回显）
+# doc: docs/syntax/07_behavior_expressions.md §7.4
+# expect-class: PASS
+# expect-out: r0=1 r1=2 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+fn f = lambda(any x) -> str: @~ MOCK:INT:$x ~
+list res = ai.run_batch(f, [1, 2])
+print("r0=" + (str)res[0] + " r1=" + (str)res[1])
+print("DONE")
