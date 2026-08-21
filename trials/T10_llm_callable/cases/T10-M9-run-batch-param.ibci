@@ -1,0 +1,15 @@
+# T10-M9 ai.run_batch 统一消费 llm 可调用实例（__llm_call__(self, any item) 逐项参数化，每 item 一次调用）
+# doc: docs/syntax/08_llm_callable.md §8.3
+# expect-class: PASS
+# expect-out: r0=1 r1=2 r2=3 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 编号:
+    func __llm_call__(self, any item) -> dict:
+        return {"user_prompt": "MOCK:INT:" + str(item), "expected_type": "int"}
+编号 n = 编号()
+list results = ai.run_batch(n, [1, 2, 3])
+print("r0=" + (str)results[0] + " r1=" + (str)results[1] + " r2=" + (str)results[2])
+print("DONE")

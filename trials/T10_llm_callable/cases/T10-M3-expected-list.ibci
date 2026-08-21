@@ -1,0 +1,15 @@
+# T10-M3 expected_type list[int] 容器解析（MOCK:LIST）
+# doc: docs/syntax/08_llm_callable.md §8.5
+# expect-class: PASS
+# expect-out: len=3 sum=6 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 取表:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:LIST:[1,2,3]", "expected_type": "list[int]"}
+取表 p = 取表()
+list[int] lst = p()
+print("len=" + (str)len(lst) + " sum=" + (str)(lst[0] + lst[1] + lst[2]))
+print("DONE")

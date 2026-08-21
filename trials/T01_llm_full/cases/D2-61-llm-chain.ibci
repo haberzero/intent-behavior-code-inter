@@ -1,5 +1,5 @@
-# D2-61 多层次：llm 可调用类链（A→B→C 三级调用）+ 参数传递（llm 函数 → llm 可调用类）
-# doc: docs/syntax/09_llm.md
+# D2-61 多层次：llm 可调用类链（A→B→C 三级调用）+ 参数传递
+# doc: docs/syntax/08_llm_callable.md
 # 期望: 三级 llm 可调用类串联正常
 
 # expect-class: PASS

@@ -1,5 +1,5 @@
-# T08-D4-05 llm 可调用类返回用户类（__from_prompt__；llm 函数 → llm 可调用类）
-# doc: docs/syntax/09_llm.md + docs/syntax/06_oop.md §6.7
+# T08-D4-05 llm 可调用类返回用户类（__from_prompt__）
+# doc: docs/syntax/08_llm_callable.md + docs/syntax/06_oop.md §6.7
 # expect-class: PASS
 # expect-out: got=OK | DONE
 # expect-exit: 0

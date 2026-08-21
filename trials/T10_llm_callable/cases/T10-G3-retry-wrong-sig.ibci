@@ -1,0 +1,16 @@
+# T10-G3 __retry__ 参数数非 0（契约违约 fail-fast）
+# doc: docs/syntax/08_llm_callable.md §8.4
+# expect-class: GUARD
+# expect-out: RuntimeError: VM: Call failed: invoke_llm_callable: __retry__ must take no arguments 'func __retry__(self) -> dict' (got 1).
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 坏:
+    func __retry__(self, int x) -> dict:
+        return {}
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STR:\"x\""}
+坏 b = 坏()
+str v = b()
+print("DONE")

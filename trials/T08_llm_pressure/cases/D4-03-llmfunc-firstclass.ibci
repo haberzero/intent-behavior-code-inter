@@ -1,5 +1,5 @@
-# T08-D4-03 llm 可调用类实例直接调用（llm 函数 → llm 可调用类；实例调用即 LLM 调用）
-# doc: docs/syntax/09_llm.md
+# T08-D4-03 llm 可调用类实例直接调用（实例调用即 LLM 调用）
+# doc: docs/syntax/08_llm_callable.md
 # expect-class: PASS
 # expect-out: DONE
 # expect-exit: 0

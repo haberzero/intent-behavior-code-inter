@@ -23,6 +23,7 @@
 | `T07_fixes_critical_stress`（E 批判补充批次，2026-08-14 第二 session 复核） | 三项 P1 修复有效性 + 边界挑刺（T07 后置独立批） | 2026-08-14 | +8 用例（E1-E8） | **5 PASS + 1 BOUNDARY + 2 DOC_ISSUE**（委托链全矩阵 PASS；空值错误码不一致 + 嵌套函数返回类型边界）→ **E1-E8 全 PASS**（2026-08-14 修复后核销） | `DOC-29`（空 Optional 错误码，**已修复 19920d39**）、`BOUNDARY-NESTED-FUNC-1`（返回类型校验，**已修复 19920d39**） |
 | `T08_llm_pressure` | LLM 全能力真实压力试用（第一轮，本地 qwen3.6-35b-a3b 非思考模式） | 2026-08-15 | 41 例 | 32 PASS + 2 GUARD + 4 LLM_BEHAVIOR + 2 BOUNDARY + 1 LIMIT | `KERNEL_ISSUE-LLM-2`（**已修复**）、`KERNEL_ISSUE-LLM-3`（**已修复**）、`DOC_ISSUE-30`、`BOUNDARY-LLM-2`、`BOUNDARY-LLM-3` |
 | `T09_protocol_kernel_impact` | 协议化内核大重构影响确认（既有套件真实 LLM 回归 + 新能力试用） | 2026-08-16 | 既有 108 例回归 + 新 8 例 | 回归分类与重构前基线逐类一致（**零回归**）；新能力 N1-N8 全 PASS（impl LLM 方法 / 泛型 bound / LLM 函数第一等值 / 长 prompt / 并发 dispatch / llmexcept 真实重试 / 类内 LLM 方法 / __from_prompt__） | 无新增；BOUNDARY-LLM-2/3 与未读赋值 LIMIT 为已登记项复现 |
+| `T10_llm_callable` | 五大地基新特性：llm 可调用类全面（直接调用/装配/解析/`__intent__` 三层改写/`__retry__` 高阶化/run_batch 逐项参数化） | 2026-08-21 | 13 例（mock 层） | 9 PASS + 4 GUARD（mock 层确定性全绿） | `BOUNDARY-LLM-4`（新登记）；LLM 层回归待运行 |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 
@@ -88,6 +89,7 @@
 | `DOC_ISSUE-30` | `docs/syntax/09_intent_system.md` 称 `@!` + run_batch 仅首调用生效；实现（28540336）对批内每个调用注入 one-shot 意图 | **已同步（2026-08-15）**：文档改为“当前实现为批内每个调用独立 fork 意图快照” | `T08/.../D3-08-runbatch-oneshot-obs.ibci` |
 | `BOUNDARY-LLM-2` | LLM 函数 `-> void` 编译通过但运行期 `LLMParseError`，文档未声明支持 | **已解决（2026-08-19，P4c 机制演进）**：`-> void` 是旧 `llm func` 语法特性，随 P4c llm 函数机制删除而消失；新 llm 可调用类以 `expected_type` 声明输出目标（无声明按 str 解析、副作用调用用行为表达式），边界已文档化于 `docs/syntax/08_llm_callable.md` | `T08/.../D4-04-llmfunc-void.ibci`（已迁 llm 可调用类形态） |
 | `BOUNDARY-LLM-3` | `stream_call` / `stream_channel` 后 `ai.get_current_call_info()` 为空，观测 API 未覆盖流式调用 | **已登记（KNOWN_LIMITS §十五）**：流式调用不入观测为已知边界，观测 API 对流式覆盖属待评估 | `T08/.../D5-08-stream-call-info.ibci` |
+| `BOUNDARY-LLM-4` | llm_callable 契约违约（返回非 dict / 签名不符）以原始 Python traceback 直漏、无 SEM_/RUN_/KDIAG 诊断码 | **已登记（2026-08-21，T10）**：fail-fast 语义正确（契约未静默忽略），错误呈现为 Python 层；登记供阶段 C 文档复核/诊断体系评估（PT-FEAT-5 语义错误用户友好化相关） | `T10/.../T10-G1~G4-*.ibci` |
 
 ## 三、登记前分诊闸门（强制，见 CLASSIFICATION §四）
 

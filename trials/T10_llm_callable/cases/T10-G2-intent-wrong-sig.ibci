@@ -1,0 +1,16 @@
+# T10-G2 __intent__ 参数数非 1（契约违约 fail-fast）
+# doc: docs/syntax/08_llm_callable.md §8.4
+# expect-class: GUARD
+# expect-out: RuntimeError: VM: Call failed: invoke_llm_callable: __intent__ must take exactly one argument 'func __intent__(self, dict intents) -> dict' (got 0).
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 坏:
+    func __intent__(self) -> dict:
+        return {}
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STR:\"x\""}
+坏 b = 坏()
+str v = b()
+print("DONE")

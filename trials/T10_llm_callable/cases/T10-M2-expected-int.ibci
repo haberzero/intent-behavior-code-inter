@@ -1,0 +1,15 @@
+# T10-M2 expected_type int 标量解析（MOCK:INT）
+# doc: docs/syntax/08_llm_callable.md §8.5
+# expect-class: PASS
+# expect-out: val=42 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 取数:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:INT:42", "expected_type": "int"}
+取数 g = 取数()
+int v = g()
+print("val=" + (str)v)
+print("DONE")

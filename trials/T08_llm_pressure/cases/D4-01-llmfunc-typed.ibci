@@ -1,5 +1,5 @@
-# T08-D4-01 llm 可调用类返回 list[int] / dict[str,int] 解析（llm 函数 → llm 可调用类）
-# doc: docs/syntax/09_llm.md
+# T08-D4-01 llm 可调用类返回 list[int] / dict[str,int] 解析
+# doc: docs/syntax/08_llm_callable.md
 # expect-class: PASS
 # expect-out: list_ok=True | dict_ok=True | DONE
 # expect-exit: 0
