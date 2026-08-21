@@ -86,8 +86,8 @@ trials 迁移（12 case + docs 全面同步）。本 session 全量扫描证实�
 - [x] T12_overlay_protocol（mock 层 6 PASS + 3 GUARD）
 - [x] T13_intent_ctx（mock 层 4 PASS + 1 GUARD，BOUNDARY-LLM-5 登记）
 - [x] T14_fs_optional（mock 层 7 PASS + 2 GUARD，沙箱守卫确认无漏洞）
-- [x] T15_edge_malicious（mock 层 16 例：9 PASS + 6 GUARD + 1 LIMIT，无内核缺陷）
-- [ ] 真实 LLM 层全量回归（qwen3.6-35b-a3b）
-- [ ] 压力维度扩展（>4k token / 多轮 / 批量并发 / 多模块交叉）
-- [ ] 缺陷登记 + 根因修复 + 核销
-- [ ] trials/INDEX.md 更新 + 阶段 C 末文档复核
+- [x] T15_edge_malicious（22 例：14 PASS + 7 GUARD + 1 LIMIT，含批 3/4 + 压力 PR1-4 多模块交叉）
+- [x] 真实 LLM 层全量回归（T01 57/T02 3/T06 7/T07 7/T08 37/T09 6；T03-T05 遗留无 expect-* 断言，延迟迁移）
+- [x] 压力维度扩展（PR1 >4k token / PR2 多轮 retry / PR3 批量并发 / PR4 多模块交叉）
+- [x] 缺陷闭环：KERNEL_ISSUE-LLM-4（expected_type 用户类，已修+回归+2）+ D4-01 转义 + 3 陈旧用例修复 + DOC_ISSUE-31 登记
+- [ ] 阶段 C 末：技术文档全方位复核（doc-governance Phase 0-8）——含 KNOWN_LIMITS §十二/§十五、call_info 键结构、装配未知键、T03-T05 断言迁移等登记项
