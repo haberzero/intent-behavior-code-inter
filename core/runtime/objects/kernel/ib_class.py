@@ -7,6 +7,7 @@ from core.kernel.spec.type_ref import specialization_key
 
 from ..ib_type_mapping import register_ib_type, get_ib_implementation
 from .base import IbObject, IbValue, ProtocolSlot
+from core.runtime.shared.cps_drive import BaseCPSDrive
 
 if TYPE_CHECKING:
     from core.runtime.interfaces import IExecutionContext
@@ -27,7 +28,7 @@ class IbClassField:
     def __repr__(self):
         return f"<ClassField {self.val_uid} (static={self.static_val})>"
 
-class _ClassInstantiateDrive:
+class _ClassInstantiateDrive(BaseCPSDrive):
     """用户类构造的帧内 CPS 驱动 Waitable（类构造不经嵌套调度器）。
 
     由 :meth:`IbClass.receive` 对不含原生 ``__init__`` 的类返回；VM
@@ -45,12 +46,7 @@ class _ClassInstantiateDrive:
         self._cls = cls
         self._args = args
         self._context = context
-        self._done = False
-        self._result = None
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
+        super().__init__()
 
     def _drive(self):
         self._result = self._cls.instantiate(self._args, context=self._context)
@@ -64,21 +60,8 @@ class _ClassInstantiateDrive:
         self._done = True
         return self._result
 
-    def try_result(self):
-        if self._done:
-            return (True, self._result)
-        self._drive()
-        return (True, self._result)
 
-    def result(self):
-        self._drive()
-        return self._result
-
-    def register_wake(self, event) -> None:
-        event.set()
-
-
-class _LLMCallableCallDrive:
+class _LLMCallableCallDrive(BaseCPSDrive):
     """LLMCallable 可调用类实例直接调用（``f(args)``）的帧内 CPS 驱动 Waitable。
 
     由 :meth:`IbObject._dispatch_call` 对"满足 LLMCallable 协议、未覆写确定性
@@ -97,12 +80,7 @@ class _LLMCallableCallDrive:
     def __init__(self, receiver, args):
         self._receiver = receiver
         self._args = list(args)
-        self._done = False
-        self._result = None
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
+        super().__init__()
 
     def cps_drive(self, executor):
         from core.runtime.vm.handlers._shared import (
@@ -142,22 +120,8 @@ class _LLMCallableCallDrive:
         self._done = True
         return self._result
 
-    def try_result(self):
-        if self._done:
-            return (True, self._result)
-        self._drive()
-        return (True, self._result)
 
-    def result(self):
-        self._drive()
-        return self._result
-
-    def register_wake(self, event) -> None:
-        if self._done:
-            event.set()
-
-
-class _UserCallDrive:
+class _UserCallDrive(BaseCPSDrive):
     """用户类实例协议方法（``__call__`` 等）的帧内 CPS 驱动 Waitable。
 
     由 :meth:`IbObject.receive` 对"含用户定义协议方法的类实例"返回；VM
@@ -175,12 +139,7 @@ class _UserCallDrive:
         self._method = method
         self._args = args
         self._receiver = receiver
-        self._done = False
-        self._result = None
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
+        super().__init__()
 
     def _drive(self):
         # 宿主同步兜底：委托 IbUserFunction.call（现对生成器方法返回 IbGenerator、
@@ -209,19 +168,6 @@ class _UserCallDrive:
         self._result = yield call
         self._done = True
         return self._result
-
-    def try_result(self):
-        if self._done:
-            return (True, self._result)
-        self._drive()
-        return (True, self._result)
-
-    def result(self):
-        self._drive()
-        return self._result
-
-    def register_wake(self, event) -> None:
-        event.set()
 
 
 @register_ib_type("Type")

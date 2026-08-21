@@ -46,6 +46,7 @@ from core.runtime.objects.primitives.callables import (
     bind_behavior_call_args,
 )
 from core.runtime.exceptions import ThrownException
+from core.runtime.shared.cps_drive import BaseCPSDrive
 
 
 @dataclass
@@ -62,7 +63,7 @@ class BehaviorCallSpec:
     type_hint: Optional[str]
 
 
-class _RunBatchDrive:
+class _RunBatchDrive(BaseCPSDrive):
     """``ai.run_batch`` 的帧内 CPS 驱动 Waitable。
 
     由 :meth:`_BehaviorMixin.run_batch` 返回；VM ``vm_handle_IbCall`` 识别其为
@@ -82,12 +83,7 @@ class _RunBatchDrive:
         self._behavior = behavior
         self._items = items
         self._ec = ec
-        self._done = False
-        self._results = None
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
+        super().__init__()
 
     def _drive(self):
         """宿主/线程体同步驱动（无 VM CPS 上下文时；非权威路径）。
@@ -95,11 +91,11 @@ class _RunBatchDrive:
         与 :meth:`cps_drive` 同返回形态（boxed IbList），保证同一 Waitable
         对象经任一驱动路径产出语言层一致的 boxed 结果。
         """
-        self._results = self._executor.registry.box(
+        self._result = self._executor.registry.box(
             self._executor._run_batch_sync(self._behavior, self._items, self._ec)
         )
         self._done = True
-        return self._results
+        return self._result
     def cps_drive(self, executor):
         """帧内 CPS 驱动（并入当前调度器；VM 权威路径）。
 
@@ -107,27 +103,14 @@ class _RunBatchDrive:
         ``_drive_loop_gen`` 统一驱动，不新建调度器），聚合 LLM Future 由调度器
         非阻塞等待，完成后返回 boxed IbList。
         """
-        self._results = yield from self._executor._run_batch_cps(
+        self._result = yield from self._executor._run_batch_cps(
             self._behavior, self._items, executor.ec
         )
         self._done = True
-        return self._results
-
-    def try_result(self):
-        if self._done:
-            return (True, self._results)
-        self._drive()
-        return (True, self._results)
-
-    def result(self):
-        self._drive()
-        return self._results
-
-    def register_wake(self, event) -> None:
-        event.set()
+        return self._result
 
 
-class _RunLLMCallableDrive:
+class _RunLLMCallableDrive(BaseCPSDrive):
     """``ai.run_batch`` 对用户 LLMCallable 实例的 CPS 驱动 Waitable（单次调用）。
 
     与 :class:`_RunBatchDrive` 同范式——VM 主路径经 ``cps_drive`` 帧内
@@ -142,41 +125,23 @@ class _RunLLMCallableDrive:
         self._callable = callable_inst
         self._items = list(items)
         self._ec = ec
-        self._done = False
-        self._results = None
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
+        super().__init__()
 
     def _drive(self):
         """宿主/线程体同步驱动（非权威路径）。"""
-        self._results = self._executor._invoke_llm_callable_batch_sync(
+        self._result = self._executor._invoke_llm_callable_batch_sync(
             self._callable, self._items, self._ec
         )
         self._done = True
-        return self._results
+        return self._result
 
     def cps_drive(self, executor):
         """帧内 CPS 驱动（VM 权威路径）。"""
-        self._results = yield from self._executor._invoke_llm_callable_batch_cps(
+        self._result = yield from self._executor._invoke_llm_callable_batch_cps(
             self._callable, self._items, self._ec
         )
         self._done = True
-        return self._results
-
-    def try_result(self):
-        if self._done:
-            return (True, self._results)
-        self._drive()
-        return (True, self._results)
-
-    def result(self):
-        self._drive()
-        return self._results
-
-    def register_wake(self, event) -> None:
-        event.set()
+        return self._result
 
 
 class _BehaviorMixin:

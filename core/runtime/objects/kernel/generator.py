@@ -23,6 +23,7 @@ from ...shared.signals import GeneratorYield
 from ...shared.waitable import Waitable
 from .base import IbValue
 from ..ib_type_mapping import register_ib_type
+from core.runtime.shared.cps_drive import BaseCPSDrive
 
 
 class _GeneratorExhausted:
@@ -147,7 +148,7 @@ class IbGenerator(IbValue):
         return _GeneratorConsumeDrive(self, "to_list")
 
 
-class _GeneratorConsumeDrive:
+class _GeneratorConsumeDrive(BaseCPSDrive):
     """生成器消费的帧内 CPS 驱动 Waitable（Waitable + CPSDrivable）。
 
     由 :meth:`IbGenerator.generic_next` / ``to_list`` 返回（vtable 用户面方法）；
@@ -164,8 +165,7 @@ class _GeneratorConsumeDrive:
     def __init__(self, gen: "IbGenerator", mode: str):
         self._gen = gen
         self._mode = mode  # "to_list" | "next"
-        self._done = False
-        self._result = None
+        super().__init__()
 
     def cps_drive(self, executor):
         gen = self._gen
@@ -181,7 +181,7 @@ class _GeneratorConsumeDrive:
         self._done = True
         return self._result
 
-    def _drive_blocking(self):
+    def _drive(self):
         gen = self._gen
         if self._mode == "to_list":
             self._result = gen._to_list_blocking()
@@ -194,20 +194,3 @@ class _GeneratorConsumeDrive:
                 raise InterpreterError("next(): generator is exhausted")
         self._done = True
         return self._result
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
-
-    def try_result(self):
-        if self._done:
-            return (True, self._result)
-        self._drive_blocking()
-        return (True, self._result)
-
-    def result(self):
-        self._drive_blocking()
-        return self._result
-
-    def register_wake(self, event) -> None:
-        event.set()

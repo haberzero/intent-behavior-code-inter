@@ -28,6 +28,7 @@ from core.runtime.objects.intent_context import IbIntentContext
 
 from core.base.diagnostics.codes import RUN_LLM_CALLABLE
 from core.kernel.issue import InterpreterError
+from core.runtime.shared.cps_drive import BaseCPSDrive
 
 
 def _raise_llm_callable_error(message: str) -> None:
@@ -35,7 +36,7 @@ def _raise_llm_callable_error(message: str) -> None:
     raise InterpreterError(message, error_code=RUN_LLM_CALLABLE)
 
 
-class _StreamCallableDrive:
+class _StreamCallableDrive(BaseCPSDrive):
     """``ai.stream_call`` / ``ai.stream_channel`` 的帧内 CPS 驱动 Waitable。
 
     与 :class:`_RunLLMCallableDrive` 同范式：VM 主路径经 ``cps_drive`` 帧内 CPS 统一装配
@@ -56,16 +57,7 @@ class _StreamCallableDrive:
         self._ec = ec
         self._provider_stream = provider_stream
         self._channel_mode = channel_mode
-        self._done = False
-        self._result = None
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
-
-    def register_wake(self, event) -> None:
-        if self._done:
-            event.set()
+        super().__init__()
 
     def cps_drive(self, executor):
         """帧内 CPS 驱动（并入当前调度器；VM 权威路径）。"""
@@ -90,16 +82,6 @@ class _StreamCallableDrive:
         gen = self.cps_drive(self._ec.vm_executor)
         self._result = _drive_generator(self._ec.vm_executor, gen)
         self._done = True
-        return self._result
-
-    def try_result(self):
-        if self._done:
-            return (True, self._result)
-        self._drive()
-        return (True, self._result)
-
-    def result(self):
-        self._drive()
         return self._result
 
 

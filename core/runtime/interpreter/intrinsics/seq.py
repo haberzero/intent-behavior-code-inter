@@ -5,6 +5,7 @@ from core.runtime.objects.kernel.base import unbox
 from core.kernel.issue import InterpreterError
 from core.runtime.shared.iterable import resolve_iterable, resolve_iterable_cps
 from core.runtime.shared.waitable import Waitable
+from core.runtime.shared.cps_drive import BaseCPSDrive
 
 
 def _iter_elements(obj: IbObject) -> List[IbObject]:
@@ -23,7 +24,7 @@ def _iter_elements(obj: IbObject) -> List[IbObject]:
     return list(seq.elements)
 
 
-class _IterableComputeDrive:
+class _IterableComputeDrive(BaseCPSDrive):
     """迭代元素计算 drive（Waitable + CPSDrivable）。
 
     生成器迭代元素（可能含 Waitable）经**协作物化**（``resolve_iterable_cps``，
@@ -37,8 +38,7 @@ class _IterableComputeDrive:
     def __init__(self, iterables: List[Any], compute):
         self._iterables = list(iterables)
         self._compute = compute
-        self._done = False
-        self._result = None
+        super().__init__()
 
     def _materialize_cps(self, executor):
         lists: List[List[IbObject]] = []
@@ -68,28 +68,11 @@ class _IterableComputeDrive:
         self._done = True
         return self._result
 
-    def _drive_blocking(self):
+    def _drive(self):
         lists = self._materialize_blocking()
         self._result = self._compute(lists)
         self._done = True
         return self._result
-
-    @property
-    def is_done(self) -> bool:
-        return self._done
-
-    def try_result(self):
-        if self._done:
-            return (True, self._result)
-        self._drive_blocking()
-        return (True, self._result)
-
-    def result(self):
-        self._drive_blocking()
-        return self._result
-
-    def register_wake(self, event) -> None:
-        event.set()
 
 
 def _sort_key(elem: IbObject) -> Any:
