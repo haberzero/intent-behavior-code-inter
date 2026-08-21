@@ -1,0 +1,61 @@
+# REGISTER — T15 恶意边界测试（阶段 C 恶意试用）
+
+> 分类/级别/编号规范：`_toolkit/CLASSIFICATION.md`。mock 层先行（确定性）。
+> 参考规范版本：_toolkit 当前 HEAD。起点清单：`tasks_docs/_trial_edge_catalog.md`。
+
+## 一、总览
+
+- **用例总数**：16 个（mock 层），全部经死循环保护（run_batch 默认 60s OS 级超时）。
+- **PASS**：9 例；**GUARD**：6 例；**LIMIT**：1 例。
+- **KERNEL_ISSUE**：0 项。**BOUNDARY**：0 项。**DOC_ISSUE**：0 项。**LLM_BEHAVIOR / HARNESS**：0 项。
+
+## 二、缺陷登记
+
+**无内核缺陷**。16 项恶意边界全部落为 PASS（文档化行为确认）/ GUARD（防御守卫生效）/
+LIMIT（文档化限制）。关键确认：
+
+- **fail-fast 防御面**（全部守卫生效）：实参多于/少于声明、声明参数不传参（M6/M14/M16）、
+  `__intent__` 层值非列表（M12）、`__retry__` max_retry=0（M13）、协议方法异常传播不吞
+  （M7 `__to_prompt__` 抛 → Runtime Error）。
+- **文档化限制确认**：深递归 → `RecursionError`（KNOWN_LIMITS §二十三）；容器 `==` 身份比较
+  （PT-DEBT-34 文档化）；意图 one-shot `@ 内容` 为**下一条语句窗口**语义（`@` 后接无 LLM
+  语句则窗口结束清理，文档 §9.1 约束——M11 初版因此未见 smear，改测 resolve 只读视图）。
+- **设计事实**：`ctx.resolve()` 只读持久栈视图（不含 one-shot/smear）且不消费持久意图
+  （M11，与 §9.3 只读契约一致）；`__llm_call__` 装配 dict 未知键静默忽略（M5，非 fail-fast，
+  登记供文档复核评估是否应告警）；`@!` override 丢弃 smear = 后者覆盖前者（M4，文档 §十三 #2）。
+
+## 三、LIMIT / 待修候选池
+
+| 用例 | 命中文档 | 是否值得修 | 评估 |
+|------|----------|-----------|------|
+| M8（深递归 RecursionError） | KNOWN_LIMITS §二十三 | 否（设计：trampoline 调用链 + 作用域链 Python 递归） | 维持，文档已列 |
+
+## 四、逐例明细
+
+| case_id | 目标 | 期望 | 实际 | 分类 | 级别 | 证据日志 |
+|---------|------|------|------|------|------|----------|
+| M1 | 容器 == 身份比较 | same_ref=False | 同 | PASS | — | logs/B-T15-E-M1.log |
+| M2 | 意图值空格 | has_stripped=True | 同 | PASS | — | logs/B-T15-E-M2.log |
+| M3 | @- 按值移除 | top_removed=True | 同 | PASS | — | logs/B-T15-E-M3.log |
+| M4 | override 丢弃 smear | has_smear=False has_override=True | 同 | PASS | — | logs/B-T15-E-M4.log |
+| M5 | 未知装配键忽略 | val=ok | 同 | PASS | — | logs/B-T15-E-M5.log |
+| M6 | 多参 fail-fast | too many positional arguments | 同 | GUARD | P2 | logs/B-T15-E-M6.log |
+| M7 | 协议异常传播 | Runtime Error: String('boom') | 同 | GUARD | P2 | logs/B-T15-E-M7.log |
+| M8 | 深递归（文档化限制） | RecursionError | 同 | LIMIT | P3 | logs/B-T15-E-M8.log |
+| M9 | ctx 静态调用静默无效 | has_intent=False | 同 | PASS | — | logs/B-T15-E-M9.log |
+| M10 | switch 重复 case | got=1 | 同 | PASS | — | logs/B-T15-E-M10.log |
+| M11 | resolve 只读视图 | resolved_has_persistent=True still_persistent=True | 同 | PASS | — | logs/B-T15-E-M11.log |
+| M12 | __intent__ 层值非列表 | fail-fast | 同 | GUARD | P2 | logs/B-T15-E-M12.log |
+| M13 | __retry__ max_retry=0 | fail-fast | 同 | GUARD | P2 | logs/B-T15-E-M13.log |
+| M14 | 少参 fail-fast | fail-fast | 同 | GUARD | P2 | logs/B-T15-E-M14.log |
+| M15 | 泛型嵌套特化 | nested_ok=True | 同 | PASS | — | logs/B-T15-E-M15.log |
+| M16 | 声明参数不传参 fail-fast | fail-fast | 同 | GUARD | P2 | logs/B-T15-E-M16.log |
+
+## 五、结论
+
+- **恶意边界试用（批 1+2，16 项）**：无内核缺陷。fail-fast 防御面扎实（参数数量/装配键值/
+  协议异常/retry 策略/__intent__ 层值全部守卫生效）；文档化限制与设计事实被确认/记录。
+- **登记待文档复核项**：`__llm_call__` 装配 dict 未知键静默忽略（是否应告警，供阶段 C 末
+  文档/诊断评估）。
+- **下一步**：恶意试用继续扩展（清单其余项：序列化 round-trip/跨引擎/并发/动态宿主/多模块，
+  mock 不可确定项留待 LLM 层或专项）；真实 LLM 层全量回归。

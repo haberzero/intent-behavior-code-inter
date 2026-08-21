@@ -1,0 +1,13 @@
+# T15-E-M8 [边界清单 #29] 深递归：命中 KNOWN_LIMITS §二十三 递归深度上限（文档化限制）
+# doc: docs/KNOWN_LIMITS.md §二十三
+# expect-class: LIMIT
+# expect-out: RecursionError: maximum recursion depth exceeded
+# expect-exit: nonzero
+# expect-llm: false
+func rec(int n) -> int:
+    if n <= 0:
+        return 0
+    return rec(n - 1)
+int r = rec(2000)
+print("r=" + (str)r)
+print("DONE")

@@ -1,0 +1,15 @@
+# T15-E-M10 [边界清单 #30] switch/case 边界：case 值重复 + 嵌套（观测编译/运行行为）
+# doc: docs/syntax/04_control_flow.md
+# expect-class: PASS
+# expect-out: got=1 | DONE
+# expect-exit: 0
+# expect-llm: false
+int x = 1
+switch x:
+    case 1:
+        print("got=1")
+    case 1:
+        print("dup")
+    case 2:
+        print("got=2")
+print("DONE")

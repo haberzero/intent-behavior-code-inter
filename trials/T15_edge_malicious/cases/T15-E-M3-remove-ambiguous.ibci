@@ -1,0 +1,14 @@
+# T15-E-M3 [边界清单 #3] @- 无参弹栈 vs @- 按值移除：栈顶与字面量同值时两条路径差异
+# doc: docs/syntax/09_intent_system.md §9.2
+# expect-class: PASS
+# expect-out: top_removed=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+@+ "A"
+@- "A"
+str r = @~ 输出: x ~
+dict info = ai.get_current_call_info()
+print("top_removed=" + (str)("A" not in (str)info["intents"]["merged"]))
+print("DONE")

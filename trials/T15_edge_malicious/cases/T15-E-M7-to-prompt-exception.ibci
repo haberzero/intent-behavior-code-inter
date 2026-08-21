@@ -1,0 +1,14 @@
+# T15-E-M7 [边界清单 #11] 用户 __to_prompt__ 抛异常 → 传播（fail-fast，非静默吞并）
+# doc: docs/syntax/08_llm_callable.md + docs/syntax/15_diagnostics.md
+# expect-class: GUARD
+# expect-out: Runtime Error: String('boom')
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 坏:
+    func __to_prompt__(self) -> str:
+        raise "boom"
+坏 b = 坏()
+str r = @~ 输出: $b ~
+print("DONE")

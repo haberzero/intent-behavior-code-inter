@@ -1,0 +1,13 @@
+# T15-E-M2 [边界清单 #2] 意图值前后空格：@+ 带空格意图，merged 是否保留空格（strip 观测）
+# doc: docs/syntax/09_intent_system.md §9.2
+# expect-class: PASS
+# expect-out: has_stripped=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+@+ " 带空格的意图 "
+str r = @~ 输出: x ~
+dict info = ai.get_current_call_info()
+print("has_stripped=" + (str)("带空格的意图" in (str)info["intents"]["merged"]))
+print("DONE")

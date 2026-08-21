@@ -1,0 +1,15 @@
+# T15-E-M12 [边界清单 #9] __intent__ 返回层值非 str 列表 → fail-fast？（观测）
+# doc: docs/syntax/08_llm_callable.md §8.4
+# expect-class: GUARD
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 坏:
+    func __intent__(self, dict intents) -> dict:
+        return {"merged": "not-a-list"}
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STR:\"ok\""}
+坏 b = 坏()
+str v = b()
+print("DONE")

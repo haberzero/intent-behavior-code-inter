@@ -1,0 +1,17 @@
+# T15-E-M11 [边界清单 #1] ctx.resolve() 只读持久栈视图（不含 one-shot）且不消费持久意图（LLM 调用仍见）
+# doc: docs/syntax/09_intent_system.md §9.2/§9.3（resolve 只读视图契约核对）
+# expect-class: PASS
+# expect-out: resolved_has_persistent=True | still_persistent=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+@+ 持久意图A
+intent_context ctx = intent_context.get_current()
+list resolved = ctx.resolve()
+print("resolved_has_persistent=" + (str)("持久意图A" in (str)resolved))
+str r = @~ 输出: x ~
+dict info = ai.get_current_call_info()
+print("still_persistent=" + (str)("持久意图A" in (str)info["intents"]["merged"]))
+@- 持久意图A
+print("DONE")

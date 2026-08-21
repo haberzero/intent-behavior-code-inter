@@ -1,0 +1,10 @@
+# T15-E-M1 [边界清单 #25] 容器 == 默认身份比较（不同对象内容相同 → False）
+# doc: docs/KNOWN_LIMITS.md（PT-DEBT-34 审计：list/dict 未定义 __eq__）
+# expect-class: PASS
+# expect-out: same_ref=False | DONE
+# expect-exit: 0
+# expect-llm: false
+list[int] a = [1, 2, 3]
+list[int] b = [1, 2, 3]
+print("same_ref=" + (str)(a == b))
+print("DONE")

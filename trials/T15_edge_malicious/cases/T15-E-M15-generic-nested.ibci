@@ -1,0 +1,15 @@
+# T15-E-M15 [边界清单 #26] 泛型特化：Box[T] 嵌套 + 元素特化身份（观测）
+# doc: docs/syntax/01_types.md + KNOWN_LIMITS §十四
+# expect-class: PASS
+# expect-out: nested_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
+class Box[T]:
+    T value
+    func __init__(self, T v) -> auto:
+        self.value = v
+Box[int] bi = Box[int](1)
+Box[Box[int]] bbi = Box[Box[int]](bi)
+Box[int] inner = bbi.value
+print("nested_ok=" + (str)(inner.value == 1))
+print("DONE")

@@ -28,6 +28,7 @@
 | `T12_overlay_protocol` | 五大地基新特性：覆层机制（overlay 端到端/嵌套/守卫，既有套件零覆盖→基本覆盖）+ prompt 协议族（to_prompt/from_prompt/outputhint 确定性 + 形状违约守卫） | 2026-08-21 | 9 例（mock 层） | 6 PASS + 3 GUARD（mock 层全绿）；契约确认：__from_prompt__ 形状违约→LLMParseError（PT-DECIDE-3 ① 一致） | 无新缺陷 |
 | `T13_intent_ctx` | 五大地基新特性：意图一等值嵌入（@+ $x eager/按值移除）+ snapshot 冻结 vs lambda live + intent_context OOP 方法族（文档工作流 + 缺参 fail-fast） | 2026-08-21 | 5 例（mock 层） | 4 PASS + 1 GUARD（mock 层全绿）；语义确认 use= fork 拷贝 | `BOUNDARY-LLM-5`（新登记：进程内 mock call_info 无 sys_prompt 键） |
 | `T14_fs_optional` | 五大地基新特性：fs 模块全接口（open/read/read_bytes/write new+overwrite/exists/remove + 只读/沙箱守卫）+ Optional 值模型/容器元素 + 值语义 | 2026-08-21 | 9 例（mock） | 7 PASS + 2 GUARD（全绿）；沙箱越界写被 RUN_PERMISSION_ERROR 拒（无漏洞）；file_handle 只读守卫 | 无新缺陷 |
+| `T15_edge_malicious` | 恶意边界测试（`_trial_edge_catalog.md` 起点：容器==/意图 one-shot 窗口/装配键/参数数量/协议异常/retry 策略/泛型嵌套/递归限制等 16 项） | 2026-08-21 | 16 例（mock） | 9 PASS + 6 GUARD + 1 LIMIT（**无内核缺陷**；fail-fast 防御面全生效） | 无；登记待文档复核项（装配 dict 未知键静默忽略） |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 

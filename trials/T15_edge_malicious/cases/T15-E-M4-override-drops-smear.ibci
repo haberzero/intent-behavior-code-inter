@@ -1,0 +1,15 @@
+# T15-E-M4 [边界清单 #4] @ 涂抹 后 @! 排他：override 激活时丢弃 smear（后者覆盖前者）
+# doc: docs/syntax/09_intent_system.md §9.1 + KNOWN_LIMITS §十三 #2
+# expect-class: PASS
+# expect-out: has_smear=False | has_override=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+@ "涂抹意图"
+@! "排他意图"
+str r = @~ 输出: x ~
+dict info = ai.get_current_call_info()
+print("has_smear=" + (str)("涂抹意图" in (str)info["intents"]["merged"]))
+print("has_override=" + (str)("排他意图" in (str)info["intents"]["merged"]))
+print("DONE")

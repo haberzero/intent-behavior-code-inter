@@ -1,0 +1,14 @@
+# T15-E-M9 [边界清单 #7] intent_context 类静态调用静默无效（get_current 后直接 push 不经 use）
+# doc: docs/KNOWN_LIMITS.md §十二
+# expect-class: PASS
+# expect-out: has_intent=False | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+intent_context ctx = intent_context.get_current()
+ctx.push("静态意图")
+str r = @~ 输出: x ~
+dict info = ai.get_current_call_info()
+print("has_intent=" + (str)("静态意图" in (str)info["intents"]["merged"]))
+print("DONE")
