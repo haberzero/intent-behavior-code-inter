@@ -43,17 +43,18 @@
 | M7 | __retry__ 耗尽交语句层 | caught=True | 同 | PASS | — | logs/B-T10-M7.log |
 | M8 | __intent__ 改写 merged（idbg 观测） | - 改写自:全局意图 | 同 | PASS | — | logs/B-T10-M8.log |
 | M9 | run_batch 逐项参数化 | r0=1 r1=2 r2=3 | 同 | PASS | — | logs/B-T10-M9.log |
-| G1 | __llm_call__ 非 dict fail-fast | RuntimeError...config dict | 同 | GUARD | P2 | logs/B-T10-G1.log |
-| G2 | __intent__ 参数数非 1 fail-fast | RuntimeError...exactly one argument | 同 | GUARD | P2 | logs/B-T10-G2.log |
-| G3 | __retry__ 参数数非 0 fail-fast | RuntimeError...no arguments | 同 | GUARD | P2 | logs/B-T10-G3.log |
-| G4 | __intent__ 非 dict fail-fast | RuntimeError...config dict | 同 | GUARD | P2 | logs/B-T10-G4.log |
+| G1 | __llm_call__ 非 dict fail-fast | RUN_LLM_CALLABLE | 同 | GUARD | P2 | logs/B-T10-G1.log |
+| G2 | __intent__ 参数数非 1 fail-fast | RUN_LLM_CALLABLE | 同 | GUARD | P2 | logs/B-T10-G2.log |
+| G3 | __retry__ 参数数非 0 fail-fast | RUN_LLM_CALLABLE | 同 | GUARD | P2 | logs/B-T10-G3.log |
+| G4 | __intent__ 非 dict fail-fast | RUN_LLM_CALLABLE | 同 | GUARD | P2 | logs/B-T10-G4.log |
 
 ## 五、结论
 
 - **验证达成**：llm 可调用类五大契约面（装配/解析/意图改写/重试高阶/批量消费）在 mock 层
   全部确定性通过；四个契约违约守卫全部 fail-fast 生效。
-- **发现**：BOUNDARY-LLM-4（契约违约错误原始 traceback 呈现、无诊断码）——登记供阶段 C
-  文档复核与诊断体系评估。
+- **发现**：BOUNDARY-LLM-4（契约违约错误原始 traceback 呈现、无诊断码）——**已处置
+  （2026-08-21）**：引入 RUN_LLM_CALLABLE 语言级诊断码（G1-G4 改 expect-code，呈现为
+  `Runtime Error: [ERROR][RUN_LLM_CALLABLE]: ...`）。
 - **下一步**：T10 LLM 层真实回归（真实翻译/意图改写服从/retry hint 回喂/run_batch）；
   其余新特性套件（stream/batch、覆层、协议族、意图一等值、fs、Optional）按
   `tasks_docs/_phaseC_trials.md` 排布推进。
