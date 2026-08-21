@@ -5,8 +5,8 @@
 
 ## 一、总览
 
-- **用例总数**：20 个（mock 层 17 + 真实 LLM 压力 3），全部经死循环保护。
-- **PASS**：12 例；**GUARD**：7 例；**LIMIT**：1 例。
+- **用例总数**：22 个（mock 17 + 真实 LLM 5），全部经死循环保护。
+- **PASS**：14 例；**GUARD**：7 例；**LIMIT**：1 例。
 - **KERNEL_ISSUE**：0 项（本套件；KERNEL_ISSUE-LLM-4 为 T08 回归发现并已修，见 T10/T08 REGISTER）。**BOUNDARY**：0 项。**DOC_ISSUE**：0 项。**LLM_BEHAVIOR / HARNESS**：0 项。
 
 ## 二、缺陷登记
@@ -54,6 +54,8 @@ LIMIT（文档化限制）。关键确认：
 | PR1 | >4k token 长 prompt 真实 LLM | done=True | 同 | PASS | — | logs/B-T15-PR1.log |
 | PR2 | __retry__ 多轮 message_history 回喂 | got=3 | 同 | PASS | — | logs/B-T15-PR2.log |
 | PR3 | run_batch 批量并发 10 项 | len=10 | 同 | PASS | — | logs/B-T15-PR3.log |
+| PR4 | 多模块交叉：跨模块 llm 可调用类直接调用（真实 LLM） | len_gt0=True | 同 | PASS | — | cases/PR4_multimodule/logs/T15-PR4.log |
+| PR4b | 跨模块 expected_type=用户类（限定名，__from_prompt__ 生效） | parsed_len_gt0=True | 同 | PASS | — | cases/PR4_multimodule/logs/T15-PR4b.log |
 
 ## 五、结论
 
@@ -61,5 +63,8 @@ LIMIT（文档化限制）。关键确认：
   协议异常/retry 策略/__intent__ 层值全部守卫生效）；文档化限制与设计事实被确认/记录。
 - **登记待文档复核项**：`__llm_call__` 装配 dict 未知键静默忽略（是否应告警，供阶段 C 末
   文档/诊断评估）。
+- **LLM_BEHAVIOR 观察（PR4b）**：限定 expected_type 名（mod_resp.Resp）会注入 provider
+  类型约束提示词，模型可能误echo类型名（本用例输出 mod_resp:ok）——解析契约正确（Resp
+  实例），属模型服从度观察，非内核缺陷。
 - **下一步**：恶意试用继续扩展（清单其余项：序列化 round-trip/跨引擎/并发/动态宿主/多模块，
   mock 不可确定项留待 LLM 层或专项）；真实 LLM 层全量回归。

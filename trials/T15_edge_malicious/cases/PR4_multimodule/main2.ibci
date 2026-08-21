@@ -1,0 +1,16 @@
+# T15-PR4b 跨模块 expected_type=用户类（限定名解析，KERNEL_ISSUE-LLM-4 跨模块路径）
+# doc: docs/syntax/08_llm_callable.md §8.5
+# expect-class: PASS
+# expect-out: parsed_len_gt0=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+import mod_resp
+ai.load_project_config()
+class 取:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "只回答：OK", "prompt_slots": [{"kind": "user_sys", "text": "你只输出 OK。"}], "expected_type": "mod_resp.Resp"}
+取 inst = 取()
+mod_resp.Resp r = inst()
+print("parsed_len_gt0=" + (str)(r.text.len() > 0))
+print("DONE")

@@ -1,0 +1,13 @@
+# T15-PR4 多模块交叉压力：跨模块 llm 可调用类实例直接调用（真实 LLM）
+# doc: docs/syntax/11_modules.md + docs/syntax/08_llm_callable.md §8.2
+# expect-class: PASS
+# expect-out: len_gt0=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+import mod_llm
+ai.load_project_config()
+mod_llm.翻译器 t = mod_llm.翻译器()
+str r = t("你好")
+print("len_gt0=" + (str)(r.len() > 0))
+print("DONE")

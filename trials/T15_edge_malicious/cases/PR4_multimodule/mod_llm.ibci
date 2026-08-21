@@ -1,0 +1,3 @@
+class 翻译器:
+    func __llm_call__(self, any 文本) -> dict:
+        return {"user_prompt": "将 \"" + str(文本) + "\" 翻译为英文", "prompt_slots": [{"kind": "user_sys", "text": "你是专业翻译，只输出翻译结果。"}]}

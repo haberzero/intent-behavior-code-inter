@@ -1,0 +1,6 @@
+class Resp:
+    str text
+    func __init__(self, str text) -> auto:
+        self.text = text
+    func __from_prompt__(str raw) -> tuple:
+        return (True, Resp(raw.strip()))
