@@ -413,13 +413,13 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 ---
 
-## 十二、`intent_context` 类静态调用的"静默无效"陷阱
+## 十二、`intent_context` 类静态调用的 fail-fast 拒绝（非静默无效）
 
 > **类型**：设计排除（语言级决定，不随版本演进改变）。
 
 **限制说明**
 
-`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/primitive_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，对该占位 `_ctx` 的修改无人引用，对外**完全无效**。
+`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/primitive_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，该占位没有 `_ctx` 状态——**运行期 fail-fast 拒绝**（`intent_context instance is missing its '_ctx' state (invariant violated: __init__ must set it)`），而非静默无效（B3 方法族重构强化：缺 `_ctx` = 不变量破坏，显式暴露）。
 
 **有效路径**：
 
@@ -437,7 +437,7 @@ str r = @~ ... ~
 
 **作用域控制方法（在类上调用也生效）**：仅 `intent_context.clear_inherited()` / `intent_context.use(ctx)` / `intent_context.get_current()` 这三个方法被特别实现为"直接操作当前执行帧的 `_intent_ctx`"——它们对类静态调用和实例调用语义等价（见 `core/runtime/bootstrap/primitive_initializer.py` 中对应方法注册段的注释）。
 
-**编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL **编译期警告**（记录于编译器 issue tracker，可经 `compile` API / 诊断工具读取）。该警告是编译期诊断，**不在运行时输出打印**（`run` 成功路径不展示非致命编译警告）。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
+**编译期防护（SEM_INTENT_STATIC_CALL）**：TypeCheckingPass 对 `intent_context.push(...)` / `pop()` / `fork()` / `merge(...)` / `combine(...)` / `clear()` 在类对象上的调用发出 SEM_INTENT_STATIC_CALL **编译期警告**（记录于编译器 issue tracker，可经 `compile` API / 诊断工具读取）。该警告是编译期诊断，**不在运行时输出打印**（`run` 成功路径不展示非致命编译警告）；但若该调用实际执行，运行期以 fail-fast 错误终止（见上）。`use()`/`get_current()`/`clear_inherited()` 不触发警告（这些在类上调用也生效）。
 
 ---
 

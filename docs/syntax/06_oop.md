@@ -236,9 +236,47 @@ print(Box("a").render())   # [a]
   `func` 方法；与目标既有成员（含内置类型的公理声明方法与运算符）同名的方法报编译期错误；
   内置 `impl` 不得定义 `__init__`；内置类型的 `impl` 引擎全局生效。
 
+### 6.9 覆层（overlay）
+
+覆层是**临时、作用域化**的协议方法改写机制：不改原类型定义，在 `with overlay` 作用域块内
+临时覆写内置具体值类型的协议方法（如 `int.__to_prompt__`），块外恢复原生行为。
+
+**声明**（`impl overlay for <内置类型>:`）：
+
+```ibci
+impl overlay for int:
+    func __to_prompt__(self) -> str:
+        return "overlayed-int"
+```
+
+**启用**（`with overlay(<类型>.<协议方法>):`）：
+
+```ibci
+int x = 5
+with overlay(int.__to_prompt__):
+    str inside = @~ 我提供给你的数字是 $x ~   # $x 渲染经覆层 → "overlayed-int"
+str outside = @~ 我提供给你的数字是 $x ~      # 块外恢复原生 → "5"
+```
+
+**语义**：
+
+- **默认不参与分派**：仅声明 `impl overlay`（无 `with overlay` 引用）时，覆层影子条目不生效，
+  类型保持原生行为；同时触发 `SEM_OVERLAY_UNUSED` 编译期告警（见 `docs/syntax/15_diagnostics.md`）。
+- **作用域内生效**：`with overlay(<类型>.<协议方法>):` 块执行窗口内，该协议消息分派优先走覆层
+  影子条目；块外（含嵌套 `with` 内层退出后）恢复原生。嵌套同名覆层按进入/退出计数成对恢复。
+- **跨执行上下文隔离**：覆层启用状态随执行上下文（ContextVar）隔离，多根/并发各自独立。
+
+**约束**：
+
+- 覆层目标须为**内置具体值类型**（`int`/`str`/`list` 等），不支持用户类/泛型/dotted 名。
+- 覆层方法须为**协议消息**（dunder 方法集，如 `__to_prompt__`/`__from_prompt__`）；非协议
+  方法在声明水化期 fail-fast。
+- `with overlay` 须引用已声明覆层；引用未声明覆层 → 编译期 `SEM_TYPE_MISMATCH`。
+
 ---
 
 ## 深入指引
 
 - 用户类能力差距：docs/KNOWN_LIMITS.md §十四
+- 覆层与协议分派机制（`protocol_vtable` / 影子条目 / 作用域生命周期）：docs/architecture/04_vm_interpreter.md §2
 - Enum 语法限制：docs/KNOWN_LIMITS.md §二
