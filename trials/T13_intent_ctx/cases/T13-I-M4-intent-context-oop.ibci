@@ -1,0 +1,22 @@
+# T13-I-M4 intent_context OOP 文档工作流：push→use→call→pop→push→re-use→call（call_info intents 观测上下文切换）
+# doc: docs/syntax/09_intent_system.md §9.3
+# expect-class: PASS
+# expect-out: r1_has_简洁=True | r2_has_详细=True | r2_no_简洁=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+intent_context ctx = intent_context.get_current()
+ctx.push("用简洁语言")
+intent_context.use(ctx)
+str r1 = @~ 描述天空 ~
+dict info1 = ai.get_current_call_info()
+ctx.pop()
+ctx.push("用详细语言")
+intent_context.use(ctx)
+str r2 = @~ 描述天空 ~
+dict info2 = ai.get_current_call_info()
+print("r1_has_简洁=" + (str)("用简洁语言" in (str)info1["intents"]["merged"]))
+print("r2_has_详细=" + (str)("用详细语言" in (str)info2["intents"]["merged"]))
+print("r2_no_简洁=" + (str)("用简洁语言" not in (str)info2["intents"]["merged"]))
+print("DONE")

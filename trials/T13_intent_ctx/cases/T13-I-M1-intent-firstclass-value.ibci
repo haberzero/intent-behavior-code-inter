@@ -1,0 +1,16 @@
+# T13-I-M1 意图一等值：@+ $x eager 压入当时值，重赋值不影响已压入意图（call_info intents 观测）
+# doc: docs/syntax/09_intent_system.md §9.2
+# expect-class: PASS
+# expect-out: has_A=True | has_B=False | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+str x = "意图A"
+@+ $x
+x = "意图B"
+str r = @~ 输出: 内容 ~
+dict info = ai.get_current_call_info()
+print("has_A=" + (str)("意图A" in (str)info["intents"]["merged"]))
+print("has_B=" + (str)("意图B" in (str)info["intents"]["merged"]))
+print("DONE")

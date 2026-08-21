@@ -26,6 +26,7 @@
 | `T10_llm_callable` | 五大地基新特性：llm 可调用类全面（直接调用/装配/解析/`__intent__` 三层改写/`__retry__` 高阶化/run_batch 逐项参数化） | 2026-08-21 | 13 例（mock 层） | 9 PASS + 4 GUARD（mock 层确定性全绿） | `BOUNDARY-LLM-4`（新登记）；LLM 层回归待运行 |
 | `T11_stream_batch` | 五大地基新特性：stream 流式消费面（stream_call/stream_channel 逐块）+ run_batch 批量（行为逐项绑参/llm 实例逐项参数化） | 2026-08-21 | 5 例（mock 层）+ 迁移 4 例 | 5 PASS（mock 层全绿）；**修复**进程内 mock 流式分块保真缺口（provider test_mode 丢 chunks，回归测试 +1）；迁移 4 个旧字符串形态 stream 用例 | 无新缺陷；D5-01/D5-02/D5-08/D2-35 迁移 |
 | `T12_overlay_protocol` | 五大地基新特性：覆层机制（overlay 端到端/嵌套/守卫，既有套件零覆盖→基本覆盖）+ prompt 协议族（to_prompt/from_prompt/outputhint 确定性 + 形状违约守卫） | 2026-08-21 | 9 例（mock 层） | 6 PASS + 3 GUARD（mock 层全绿）；契约确认：__from_prompt__ 形状违约→LLMParseError（PT-DECIDE-3 ① 一致） | 无新缺陷 |
+| `T13_intent_ctx` | 五大地基新特性：意图一等值嵌入（@+ $x eager/按值移除）+ snapshot 冻结 vs lambda live + intent_context OOP 方法族（文档工作流 + 缺参 fail-fast） | 2026-08-21 | 5 例（mock 层） | 4 PASS + 1 GUARD（mock 层全绿）；语义确认 use= fork 拷贝 | `BOUNDARY-LLM-5`（新登记：进程内 mock call_info 无 sys_prompt 键） |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 
@@ -92,6 +93,7 @@
 | `BOUNDARY-LLM-2` | LLM 函数 `-> void` 编译通过但运行期 `LLMParseError`，文档未声明支持 | **已解决（2026-08-19，P4c 机制演进）**：`-> void` 是旧 `llm func` 语法特性，随 P4c llm 函数机制删除而消失；新 llm 可调用类以 `expected_type` 声明输出目标（无声明按 str 解析、副作用调用用行为表达式），边界已文档化于 `docs/syntax/08_llm_callable.md` | `T08/.../D4-04-llmfunc-void.ibci`（已迁 llm 可调用类形态） |
 | `BOUNDARY-LLM-3` | `stream_call` / `stream_channel` 后 `ai.get_current_call_info()` 为空，观测 API 未覆盖流式调用 | **已登记（KNOWN_LIMITS §十五）**：流式调用不入观测为已知边界，观测 API 对流式覆盖属待评估 | `T08/.../D5-08-stream-call-info.ibci` |
 | `BOUNDARY-LLM-4` | llm_callable 契约违约（返回非 dict / 签名不符）以原始 Python traceback 直漏、无 SEM_/RUN_/KDIAG 诊断码 | **已登记（2026-08-21，T10）**：fail-fast 语义正确（契约未静默忽略），错误呈现为 Python 层；登记供阶段 C 文档复核/诊断体系评估（PT-FEAT-5 语义错误用户友好化相关） | `T10/.../T10-G1~G4-*.ibci` |
+| `BOUNDARY-LLM-5` | 进程内 mock（ai.set_mock_mode）下 `get_current_call_info()` 无 `sys_prompt` 键（真实模式有） | **已登记（2026-08-21，T13）**：观测设施缺口（意图三层 intents 始终可用，T13 已改用其断言）；供阶段 C 文档复核评估观测 API 对 mock 的覆盖 | `T13/.../T13-I-M1-*.ibci`（初版 KeyError 证据） |
 
 ## 三、登记前分诊闸门（强制，见 CLASSIFICATION §四）
 

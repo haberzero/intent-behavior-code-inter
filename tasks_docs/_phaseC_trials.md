@@ -74,7 +74,7 @@ trials 迁移（12 case + docs 全面同步）。本 session 全量扫描证实�
 - [x] T10_llm_callable（mock 层 9 PASS + 4 GUARD，BOUNDARY-LLM-4 登记）
 - [x] T11_stream_batch（mock 层 5 PASS）+ 进程内 mock 流式分块缺口修复（回归 +1）
 - [x] T12_overlay_protocol（mock 层 6 PASS + 3 GUARD）
-- [ ] T13_intent_ctx（mock 层）
+- [x] T13_intent_ctx（mock 层 4 PASS + 1 GUARD，BOUNDARY-LLM-5 登记）
 - [ ] T14_fs_optional（mock 层）
 - [ ] T15_edge_malicious（mock 层）
 - [ ] 真实 LLM 层全量回归（qwen3.6-35b-a3b）

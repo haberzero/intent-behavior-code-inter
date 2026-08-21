@@ -1,0 +1,14 @@
+# T13-I-M2 意图按值移除：@+ 后 @- 同值字面量移除（call_info intents 观测）
+# doc: docs/syntax/09_intent_system.md §9.2
+# expect-class: PASS
+# expect-out: has_intent=False | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+@+ 目标意图
+@- 目标意图
+str r = @~ 输出: 内容 ~
+dict info = ai.get_current_call_info()
+print("has_intent=" + (str)("目标意图" in (str)info["intents"]["merged"]))
+print("DONE")

@@ -1,0 +1,9 @@
+# T13-I-G1 intent_context.push 缺参 fail-fast（不再静默 no-op，B3 定案）
+# doc: docs/syntax/09_intent_system.md §9.3
+# expect-class: GUARD
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+intent_context.push()
+print("DONE")

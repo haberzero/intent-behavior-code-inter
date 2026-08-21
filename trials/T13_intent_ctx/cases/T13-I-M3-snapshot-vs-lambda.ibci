@@ -1,0 +1,19 @@
+# T13-I-M3 snapshot 冻结定义时意图 vs lambda 调用点 live（call_info intents 观测）
+# doc: docs/syntax/09_intent_system.md §9.2 + docs/syntax/07_behavior_expressions.md §7.4
+# expect-class: PASS
+# expect-out: snap_frozen=True | lam_live=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+fn snap = snapshot -> str: @~ 回显: 内容 ~
+fn lam = lambda -> str: @~ 回显: 内容 ~
+str s1 = snap()
+dict info1 = ai.get_current_call_info()
+@+ 调用处意图
+str l1 = lam()
+dict info2 = ai.get_current_call_info()
+print("snap_frozen=" + (str)("调用处意图" not in (str)info1["intents"]["merged"]))
+print("lam_live=" + (str)("调用处意图" in (str)info2["intents"]["merged"]))
+@- 调用处意图
+print("DONE")
