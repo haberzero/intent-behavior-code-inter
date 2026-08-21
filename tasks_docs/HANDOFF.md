@@ -115,6 +115,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
+- **🔴 当前主线 = 阶段 C · 真实 LLM 全面试用重启（VISION-3）——试用地基 + 文档复核完成，
+  进入阶段 C 收官**（2026-08-21）：六套件 T10-T15（llm 可调用类/stream/run_batch/overlay/
+  协议族/意图一等值/fs/Optional/值语义，mock + 真实 LLM 全过）+ 全量 LLM 回归
+  （T01/T02/T06/T07/T08/T09）+ 恶意边界 22 例（无内核缺陷，fail-fast 防御面全生效）+
+  压力维度（>4k token/多轮/批量并发/多模块交叉）+ 缺陷闭环（**KERNEL_ISSUE-LLM-4** expected_type
+  用户类解析修复，基线 3185）+ 技术文档全方位复核（KNOWN_LIMITS §十二漂移修正/06_oop §6.9
+  overlay 章节补建/装配未知键明确）。**当前 = 阶段 C 收尾**：周期质量维护恢复
+  （PT-AUDIT-1/3 + Tier B，用户裁定试用后恢复）+ 临时文档收敛清理（`_code_cicd`/`_planning_health_first`/
+  `_trial_edge_catalog`/`_phaseC_trials`，经用户确认后删）+ PENDING/NEXT_STEPS 同步。
+  详见 trials/INDEX.md、tasks_docs/_phaseC_trials.md。
 - **🔴 当前主线 = 阶段 C · 真实 LLM 全面试用重启（VISION-3，2026-08-21 启动）**：对五大地基
   重构后全部新特性重试用——llm 可调用类（直接调用/装配/`__intent__` 三层改写/`__retry__`
   高阶化）、stream 流式、run_batch 批量、覆层机制、prompt 协议族五成员、意图一等值嵌入、
