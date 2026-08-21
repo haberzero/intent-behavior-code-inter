@@ -423,6 +423,10 @@ def vm_handle_IbCall(executor, node_uid: str, node_data: Mapping[str, Any]):
         # 否则会丢失 IBCI 异常类型。
         raise
     except Exception as e:
+        # 已带语言级诊断码的 InterpreterError（如 llm 可调用类契约违约 RUN_LLM_CALLABLE）
+        # 直接穿透保留码，不包装成裸 `VM: Call failed`（可分类可 grep 的呈现）。
+        if isinstance(e, InterpreterError) and getattr(e, "error_code", None):
+            raise
         # 环境限制异常（栈溢出/内存/系统）非语义错误：保留根因传播，不包装
         if handle_environment_limit(e, rc=executor.runtime_context):
             raise

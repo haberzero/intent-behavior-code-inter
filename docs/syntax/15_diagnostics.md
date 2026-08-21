@@ -460,6 +460,12 @@ LLM 调用失败（网络/密钥/提供者错误）。
 - **严重级别**：ERROR。
 - **修复方式**：检查 LLM 配置（endpoint/key/model）、网络连通性与额度。
 
+### `RUN_LLM_CALLABLE`
+llm 可调用类契约违约。
+- **触发条件**：`__llm_call__`/`__intent__`/`__retry__` 返回或签名不符（装配 dict 非 dict / 缺 `user_prompt` / 参数数不符 / 层值或策略值类型错）、值不满足 LLMCallable 协议（缺 `__llm_call__`）、`__llm_call__` 非用户方法。
+- **严重级别**：ERROR。
+- **修复方式**：按 `docs/syntax/08_llm_callable.md` §8.1/§8.4 核对——`__llm_call__(self, ...) -> dict` 返回装配 dict 且含必需 `user_prompt`；`__intent__(self, dict) -> dict`；`__retry__(self) -> dict`（`max_retry` ≥ 1 int / `hint` str）。
+
 ### `RUN_PERMISSION_ERROR`
 运行时操作被权限策略拒绝。
 - **触发条件**：操作超出权限策略允许范围。

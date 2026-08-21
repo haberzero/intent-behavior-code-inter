@@ -1,7 +1,7 @@
 # T10-G1 __llm_call__ 返回非 dict（契约违约 fail-fast）
 # doc: docs/syntax/08_llm_callable.md §8.1
 # expect-class: GUARD
-# expect-out: RuntimeError: VM: Call failed: invoke_llm_callable: __llm_call__ must return a config dict (got IbString).
+# expect-code: RUN_LLM_CALLABLE
 # expect-exit: nonzero
 # expect-llm: false
 import ai

@@ -96,7 +96,7 @@
 | `DOC_ISSUE-30` | `docs/syntax/09_intent_system.md` 称 `@!` + run_batch 仅首调用生效；实现（28540336）对批内每个调用注入 one-shot 意图 | **已同步（2026-08-15）**：文档改为“当前实现为批内每个调用独立 fork 意图快照” | `T08/.../D3-08-runbatch-oneshot-obs.ibci` |
 | `BOUNDARY-LLM-2` | LLM 函数 `-> void` 编译通过但运行期 `LLMParseError`，文档未声明支持 | **已解决（2026-08-19，P4c 机制演进）**：`-> void` 是旧 `llm func` 语法特性，随 P4c llm 函数机制删除而消失；新 llm 可调用类以 `expected_type` 声明输出目标（无声明按 str 解析、副作用调用用行为表达式），边界已文档化于 `docs/syntax/08_llm_callable.md` | `T08/.../D4-04-llmfunc-void.ibci`（已迁 llm 可调用类形态） |
 | `BOUNDARY-LLM-3` | `stream_call` / `stream_channel` 后 `ai.get_current_call_info()` 为空，观测 API 未覆盖流式调用 | **已登记（KNOWN_LIMITS §十五）**：流式调用不入观测为已知边界，观测 API 对流式覆盖属待评估 | `T08/.../D5-08-stream-call-info.ibci` |
-| `BOUNDARY-LLM-4` | llm_callable 契约违约（返回非 dict / 签名不符）以原始 Python traceback 直漏、无 SEM_/RUN_/KDIAG 诊断码 | **已登记（2026-08-21，T10）**：fail-fast 语义正确（契约未静默忽略），错误呈现为 Python 层；登记供阶段 C 文档复核/诊断体系评估（PT-FEAT-5 语义错误用户友好化相关） | `T10/.../T10-G1~G4-*.ibci` |
+| `BOUNDARY-LLM-4` | llm_callable 契约违约（返回非 dict / 签名不符）以原始 Python traceback 直漏、无语言级诊断码 | **已处置（2026-08-21）**：引入 `RUN_LLM_CALLABLE` 诊断码，违约点改抛带码 InterpreterError（`Runtime Error: [ERROR][RUN_LLM_CALLABLE]: ...`），VM 调用处理器透传带码错误不包装；15_diagnostics/catalog 登记；T10 守卫改 expect-code | `T10/.../T10-G1~G4-*.ibci`（expect-code RUN_LLM_CALLABLE） |
 | `BOUNDARY-LLM-5` | 进程内 mock（ai.set_mock_mode）下 `get_current_call_info()` 无 `sys_prompt` 键（真实模式有） | **已登记（2026-08-21，T13）**：观测设施缺口（意图三层 intents 始终可用，T13 已改用其断言）；供阶段 C 文档复核评估观测 API 对 mock 的覆盖 | `T13/.../T13-I-M1-*.ibci`（初版 KeyError 证据） |
 
 ## 三、登记前分诊闸门（强制，见 CLASSIFICATION §四）

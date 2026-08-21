@@ -307,6 +307,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="LLM 调用失败（网络/密钥/提供者错误）。",
         fix="检查 LLM 配置（endpoint/key/model）、网络连通性与额度。",
     ),
+    "RUN_LLM_CALLABLE": CodeInfo(
+        title="llm 可调用类契约违约（__llm_call__/__intent__/__retry__ 返回或签名不符、值不满足 LLMCallable 协议）。",
+        fix="按 docs/syntax/08_llm_callable.md §8.1/§8.4 核对：__llm_call__ 返回装配 dict 且含必需 user_prompt；__intent__(self, dict) -> dict；__retry__(self) -> dict（max_retry≥1 / hint str）。",
+    ),
     "RUN_PERMISSION_ERROR": CodeInfo(
         title="运行时操作被权限策略拒绝。",
         fix="调整权限策略或避开被禁止的操作。",

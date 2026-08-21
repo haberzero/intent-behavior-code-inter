@@ -26,6 +26,14 @@ from core.runtime.shared.user_call import UserFunctionCall
 from core.runtime.objects.kernel import IbObject
 from core.runtime.objects.intent_context import IbIntentContext
 
+from core.base.diagnostics.codes import RUN_LLM_CALLABLE
+from core.kernel.issue import InterpreterError
+
+
+def _raise_llm_callable_error(message: str) -> None:
+    """llm 可调用类契约违约 fail-fast（带语言级诊断码，替代裸 TypeError traceback）。"""
+    raise InterpreterError(message, error_code=RUN_LLM_CALLABLE)
+
 
 class _StreamCallableDrive:
     """``ai.stream_call`` / ``ai.stream_channel`` 的帧内 CPS 驱动 Waitable。
@@ -158,17 +166,17 @@ class _LLMCallableMixin:
         meta = reg.get_metadata_registry() if reg is not None else None
         spec = getattr(ib_class, "spec", None)
         if meta is None or spec is None or not meta.satisfies_protocol(spec, "llm_callable"):
-            raise TypeError(
+            _raise_llm_callable_error(
                 "invoke_llm_callable: value does not satisfy the LLMCallable protocol "
                 "(requires '__llm_call__')."
             )
 
         method = ib_class.lookup_method("__llm_call__")
         if method is None:
-            raise TypeError("invoke_llm_callable: __llm_call__ method not found on class.")
+            _raise_llm_callable_error("invoke_llm_callable: __llm_call__ method not found on class.")
         from core.runtime.objects.kernel import IbUserFunction
         if not isinstance(method, IbUserFunction):
-            raise TypeError(
+            _raise_llm_callable_error(
                 "invoke_llm_callable: __llm_call__ must be a user method "
                 f"(got {type(method).__name__})."
             )
@@ -183,7 +191,7 @@ class _LLMCallableMixin:
         # CPS 调用用户 __llm_call__(self[, ...]) -> dict（含 Waitable 则调度器挂起）。
         result = yield UserFunctionCall(method, call_args, callable_inst)
         if not isinstance(result, IbObject):
-            raise TypeError(
+            _raise_llm_callable_error(
                 "invoke_llm_callable: __llm_call__ must return a config dict, "
                 f"got {type(result).__name__}."
             )
@@ -215,7 +223,7 @@ class _LLMCallableMixin:
 
         user_prompt = config.get("user_prompt")
         if user_prompt is None:
-            raise TypeError(
+            _raise_llm_callable_error(
                 "invoke_llm_callable: __llm_call__ config dict missing 'user_prompt'."
             )
         llmoutput_hint = config.get("output_hint")
@@ -279,7 +287,7 @@ class _LLMCallableMixin:
         from core.runtime.objects.kernel import IbUserFunction
 
         if not isinstance(method, IbUserFunction):
-            raise TypeError(
+            _raise_llm_callable_error(
                 f"invoke_llm_callable: {name} must be a user method "
                 f"(got {type(method).__name__})."
             )
@@ -304,7 +312,7 @@ class _LLMCallableMixin:
         spec = getattr(intent_method, "spec", None)
         param_count = len(getattr(spec, "param_types", None) or [])
         if param_count != 1:
-            raise TypeError(
+            _raise_llm_callable_error(
                 "invoke_llm_callable: __intent__ must take exactly one argument "
                 "'func __intent__(self, dict intents) -> dict' "
                 f"(got {param_count})."
@@ -321,7 +329,7 @@ class _LLMCallableMixin:
                 return None
             value = config[key]
             if not isinstance(value, list) or not all(isinstance(s, str) for s in value):
-                raise TypeError(
+                _raise_llm_callable_error(
                     f"invoke_llm_callable: __intent__ dict key '{key}' must be a "
                     f"list of str (got {type(value).__name__})."
                 )
@@ -350,7 +358,7 @@ class _LLMCallableMixin:
         spec = getattr(retry_method, "spec", None)
         param_count = len(getattr(spec, "param_types", None) or [])
         if param_count != 0:
-            raise TypeError(
+            _raise_llm_callable_error(
                 "invoke_llm_callable: __retry__ must take no arguments "
                 "'func __retry__(self) -> dict' "
                 f"(got {param_count})."
@@ -363,7 +371,7 @@ class _LLMCallableMixin:
         if "max_retry" in config:
             max_retry = config["max_retry"]
             if not isinstance(max_retry, int) or max_retry < 1:
-                raise TypeError(
+                _raise_llm_callable_error(
                     "invoke_llm_callable: __retry__ dict key 'max_retry' must be "
                     f"an int >= 1 (got {max_retry!r})."
                 )
@@ -371,7 +379,7 @@ class _LLMCallableMixin:
         if "hint" in config:
             hint = config["hint"]
             if not isinstance(hint, str):
-                raise TypeError(
+                _raise_llm_callable_error(
                     "invoke_llm_callable: __retry__ dict key 'hint' must be a str "
                     f"(got {type(hint).__name__})."
                 )
@@ -390,20 +398,20 @@ class _LLMCallableMixin:
         if raw is None:
             return []
         if not isinstance(raw, list):
-            raise TypeError(
+            _raise_llm_callable_error(
                 "invoke_llm_callable: 'prompt_slots' must be a list of "
                 f"{{'kind': str, 'text': str}} dicts (got {type(raw).__name__})."
             )
         slots = []
         for entry in raw:
             if not isinstance(entry, dict) or "kind" not in entry or "text" not in entry:
-                raise TypeError(
+                _raise_llm_callable_error(
                     "invoke_llm_callable: each 'prompt_slots' entry must be "
                     f"{{'kind': str, 'text': str}} (got {entry!r})."
                 )
             kind, text = entry["kind"], entry["text"]
             if not isinstance(kind, str) or not isinstance(text, str):
-                raise TypeError(
+                _raise_llm_callable_error(
                     "invoke_llm_callable: 'prompt_slots' entry kind/text must be str "
                     f"(got kind={type(kind).__name__}, text={type(text).__name__})."
                 )
@@ -425,7 +433,7 @@ class _LLMCallableMixin:
         native = unbox(result)
         if isinstance(native, dict):
             return dict(native)
-        raise TypeError(
+        _raise_llm_callable_error(
             f"invoke_llm_callable: {method_name} must return a config dict "
             f"(got {type(result).__name__})."
         )
@@ -557,10 +565,10 @@ class _LLMCallableMixin:
         if isinstance(target, IbValue) and target.ib_class.name == "behavior":
             node = getattr(target, "node", None)
             if node is None:
-                raise TypeError("assemble_llm_call_request: behavior value has no node data.")
+                _raise_llm_callable_error("assemble_llm_call_request: behavior value has no node data.")
             node_data = ec.get_node_data(node)
             if node_data is None:
-                raise TypeError(f"assemble_llm_call_request: behavior node data not found for '{node}'.")
+                _raise_llm_callable_error(f"assemble_llm_call_request: behavior node data not found for '{node}'.")
             captured = (
                 captured_intents
                 if captured_intents is not None
@@ -576,7 +584,7 @@ class _LLMCallableMixin:
                 item=item, call_args=call_args,
             )
             return request, type_hint, retry_policy
-        raise TypeError(
+        _raise_llm_callable_error(
             "assemble_llm_call_request: expected a behavior or LLMCallable instance, "
             f"got {type(target).__name__}"
         )
