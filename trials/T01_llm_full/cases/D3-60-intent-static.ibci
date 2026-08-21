@@ -1,10 +1,9 @@
-# D3-60 KNOWN_LIMITS §十二：intent_context 类静态调用 push 静默无效 + SEM_INTENT_STATIC_CALL warning
+# D3-60 intent_context 类静态调用：编译期 SEM_INTENT_STATIC_CALL 告警 + 运行期 fail-fast
+#   （B3 强化：缺 _ctx 状态即不变量破坏，不再"静默无效"——KNOWN_LIMITS §十二 已漂移，DOC_ISSUE-31）
 # doc: docs/KNOWN_LIMITS.md §十二
-# 期望: 静态调用不生效（记录实际 + warning 是否发出）
-
-# expect-class: PASS
-# expect-out: DONE
-# expect-exit: 0
+# expect-class: GUARD
+# expect-out: RuntimeError: VM: Call failed: [ERROR][RUN_GENERIC_ERROR]: intent_context instance is missing its '_ctx' state (invariant violated: __init__ must set it).
+# expect-exit: nonzero
 # expect-llm: true
 import ai
 ai.load_project_config()

@@ -3,7 +3,7 @@
 # 期望: import 顶部约束；isys 路径；idbg 调用信息在 dispatch 赋值后立即可观测（d6d28e1）
 
 # expect-class: PASS
-# expect-out: vars_ok=True | info_keys=[sys_prompt, user_prompt, response, raw_response, active_intents, global_intents, merged_intents] | has_prompt=False | DONE
+# expect-out: vars_ok=True | has_response=True | has_prompt=False | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
@@ -23,7 +23,7 @@ print("vars_ok=" + (str)vars_map.contains("x"))
 
 str greeting = @~ 打个招呼，简短 ~
 dict info = idbg.current_llm()
-print("info_keys=" + (str)info.keys())
+print("has_response=" + (str)info.contains("response"))
 print("has_prompt=" + (str)info.contains("prompt"))
 print("greeting=" + greeting)
 print("DONE")

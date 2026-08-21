@@ -87,6 +87,7 @@
 | DOC-ISSUE-001~007 | `DOC-ISSUE-001~007` | 文档批次 | 已处置 6f8506d |
 
 ### 域 LLM（T08，2026-08-15 第一轮压力试用）
+| `DOC_ISSUE-31` | KNOWN_LIMITS §十二 漂移：intent_context 类静态调用文档称"静默无效"，B3 强化后实为编译期 SEM_INTENT_STATIC_CALL 告警 + 运行期 fail-fast（缺 _ctx 不变量） | **已登记（2026-08-21，T01 D3-60）**：fail-fast 优于静默无效（工作模式原则），文档阶段 C 末复核修正 | `T01/.../D3-60-intent-static.ibci`（已转 GUARD） |
 
 | 编号 | 主题 | 状态 | 触发用例 |
 |------|------|------|----------|

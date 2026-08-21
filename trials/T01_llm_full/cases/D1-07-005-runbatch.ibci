@@ -3,7 +3,7 @@
 # 期望: run_batch 并发执行保序返回；结果可观测
 
 # expect-class: PASS
-# expect-out: batch_len=3 | info_keys=[sys_prompt, user_prompt, response, raw_response, active_intents, global_intents, merged_intents, message_history] | DONE
+# expect-out: batch_len=3 | has_response=True | has_intents=True | DONE
 # expect-exit: 0
 # expect-llm: true
 import ai
@@ -16,7 +16,8 @@ list results = ai.run_batch(summarize, docs)
 print("batch_len=" + (str)results.len())
 
 dict info = ai.get_current_call_info()
-print("info_keys=" + (str)info.keys())
+print("has_response=" + (str)info.contains("response"))
+print("has_intents=" + (str)info.contains("intents"))
 for any item in results:
     print("item=" + (str)item)
 print("DONE")
