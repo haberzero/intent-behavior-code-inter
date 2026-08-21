@@ -1,0 +1,14 @@
+# T14-FS-M4 file_handle.read_bytes 字节读取
+# doc: docs/syntax/11_modules.md §11.7
+# expect-class: PASS
+# expect-out: len=3 | DONE
+# expect-exit: 0
+# expect-llm: false
+import fs
+str demo = "./T14_M4.txt"
+fs.write(demo, "abc")
+file_handle fh = fs.open(demo)
+list[int] bytes = fh.read_bytes()
+print("len=" + (str)len(bytes))
+fs.remove(fh)
+print("DONE")

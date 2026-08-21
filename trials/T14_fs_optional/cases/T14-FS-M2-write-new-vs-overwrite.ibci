@@ -1,0 +1,17 @@
+# T14-FS-M2 写入模式：write(new) 创建副本不影响原 handle；write(overwrite) 就地覆盖共享 backing
+# doc: docs/syntax/11_modules.md §11.7
+# expect-class: PASS
+# expect-out: orig=mutated | copy=copied | DONE
+# expect-exit: 0
+# expect-llm: false
+import fs
+str demo = "./T14_M2.txt"
+fs.write(demo, "original", overwrite_flag="overwrite")
+file_handle fh = fs.open(demo)
+file_handle copy = fs.write("./T14_M2_copy.txt", "copied")
+fs.write(fh, "mutated", overwrite_flag="overwrite")
+print("orig=" + fs.read(fh))
+print("copy=" + fs.read(copy))
+fs.remove(fh)
+fs.remove(copy)
+print("DONE")

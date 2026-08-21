@@ -1,0 +1,16 @@
+# T14-FS-M1 fs 模块：write(overwrite) + open + read（handle 与 path 双入口）+ remove
+# doc: docs/syntax/11_modules.md §11.7
+# expect-class: PASS
+# expect-out: h=hello-fs | p=hello-fs | DONE
+# expect-exit: 0
+# expect-llm: false
+import fs
+str demo = "./T14_M1.txt"
+fs.write(demo, "hello-fs", overwrite_flag="overwrite")
+file_handle fh = fs.open(demo)
+str by_handle = fs.read(fh)
+str by_path = fs.read(demo)
+print("h=" + by_handle)
+print("p=" + by_path)
+fs.remove(fh)
+print("DONE")

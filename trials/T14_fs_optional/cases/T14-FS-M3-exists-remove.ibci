@@ -1,0 +1,14 @@
+# T14-FS-M3 fs.exists / fs.remove 生命周期
+# doc: docs/syntax/11_modules.md §11.7
+# expect-class: PASS
+# expect-out: pre=False | post=True | removed=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import fs
+str demo = "./T14_M3.txt"
+print("pre=" + (str)fs.exists(demo))
+fs.write(demo, "x")
+print("post=" + (str)fs.exists(demo))
+fs.remove(demo)
+print("removed=" + (str)(not fs.exists(demo)))
+print("DONE")

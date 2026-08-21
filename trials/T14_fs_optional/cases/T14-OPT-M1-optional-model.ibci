@@ -1,0 +1,12 @@
+# T14-OPT-M1 Optional[T] 值模型：is_some/unwrap/or_else + None 接受
+# doc: docs/syntax/01_types.md §1.3.1
+# expect-class: PASS
+# expect-out: a=0 b=1 some=True | DONE
+# expect-exit: 0
+# expect-llm: false
+Optional[int] maybe_a = None
+Optional[int] maybe_b = 1
+int a = maybe_a.or_else(0)
+int b = maybe_b.unwrap()
+print("a=" + (str)a + " b=" + (str)b + " some=" + (str)maybe_b.is_some())
+print("DONE")

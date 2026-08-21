@@ -75,7 +75,7 @@ trials 迁移（12 case + docs 全面同步）。本 session 全量扫描证实�
 - [x] T11_stream_batch（mock 层 5 PASS）+ 进程内 mock 流式分块缺口修复（回归 +1）
 - [x] T12_overlay_protocol（mock 层 6 PASS + 3 GUARD）
 - [x] T13_intent_ctx（mock 层 4 PASS + 1 GUARD，BOUNDARY-LLM-5 登记）
-- [ ] T14_fs_optional（mock 层）
+- [x] T14_fs_optional（mock 层 7 PASS + 2 GUARD，沙箱守卫确认无漏洞）
 - [ ] T15_edge_malicious（mock 层）
 - [ ] 真实 LLM 层全量回归（qwen3.6-35b-a3b）
 - [ ] 压力维度扩展（>4k token / 多轮 / 批量并发 / 多模块交叉）

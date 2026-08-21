@@ -1,0 +1,8 @@
+# T14-FS-M5 沙箱限制：越出 project_root 的写入被拒绝（守卫生效）
+# doc: docs/syntax/11_modules.md §11.7 + docs/KNOWN_LIMITS.md §11.7
+# expect-class: GUARD
+# expect-exit: nonzero
+# expect-llm: false
+import fs
+fs.write("../../T14_escape.txt", "x")
+print("DONE")

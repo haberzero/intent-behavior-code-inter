@@ -1,0 +1,15 @@
+# T14-VS-M1 值语义：复合对象赋值别名（共享引用）vs 不可变原语赋值复制
+# doc: docs/syntax/02_variables.md §2.8
+# expect-class: PASS
+# expect-out: aliased=True | copied=True | DONE
+# expect-exit: 0
+# expect-llm: false
+list[int] a = [1, 2, 3]
+list[int] b = a
+a[0] = 99
+print("aliased=" + (str)(b[0] == 99))
+int x = 5
+int y = x
+x = 7
+print("copied=" + (str)(y == 5))
+print("DONE")
