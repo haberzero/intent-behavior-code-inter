@@ -18,17 +18,17 @@
 axiom 能力契约校验（判别 +13，**修复 bool|bool 误绑元类 type.__or__ 真实缺陷**）、B4 PT-DEBT-35
 `_ctx` 契约单一权威形式化（判别 +9）、B5 PT-DOC-3P2 how-to 读者旅程补齐（+2 篇）、B6 PT-FEAT-5
 CI/CD 可靠化设计 + 本地配置（**远程启用待用户授权**）。基线 **3182 passed / 1 skipped**（以实跑
-为准），worktree 干净，**未 push**（本地领先 origin 25 提交）。
+为准），worktree 干净，**未 push**（本地领先 origin 27 提交）。
 
 ## 二、仓库状态（权威）
 
 | 项 | 值 |
 |----|----|
-| 当前分支 | `unsafe-vibe-dev`（HEAD=`2f6b1cd2`，**本地领先 origin 25 提交未 push**——禁 push 硬原则，等待用户显式授权） |
+| 当前分支 | `unsafe-vibe-dev`（HEAD=`4ba8010c`，**本地领先 origin 27 提交未 push**——禁 push 硬原则，等待用户显式授权） |
 | 其它分支 | `main`（未触碰）；无其它本地分支 |
 | 测试基线 | `~/miniconda3/envs/ibci/bin/python -m pytest tests/` → **3182 passed / 1 skipped**（以实跑为准） |
 | 工作树 | 干净 |
-| push | **本 session 未 push**（25 提交本地领先）；后续 push 需用户显式授权 |
+| push | **本 session 未 push**（27 提交本地领先）；后续 push 需用户显式授权 |
 | Goal | 阶段 B goal（`goal-e5811877`）已 complete；下一任务（阶段 C VISION-3）按排布新建 |
 | 排布 | `tasks_docs/_planning_health_first.md`（四阶段规划；阶段 A/B 全部完成，当前 P0 = 阶段 C） |
 
@@ -51,17 +51,17 @@ CI/CD 可靠化设计 + 本地配置（**远程启用待用户授权**）。基�
 | `fa3b81a8` | 会话交接文档 HANDOFF_SESSION.md（阶段 C 主任务 + 恶意测试要求） | 纯文档 |
 | `_TBD_` | 恶意试用起点边界清单 `_trial_edge_catalog.md`（33 项已知+推测边界 + 使用方式） | 纯文档 |
 
-> 全部 15 个提交未 push。阶段 B 累计新增判别测试 43 项（17+4+13+9），基线 3133 → 3182。
+> 全部 14 个提交未 push。阶段 B 累计新增判别测试 43 项（17+4+13+9），基线 3133 → 3182。
 
 ## 四、待验证清单（下一 session 首步，按序）
 
-- [ ] `git status` → 干净；`git branch -vv` → unsafe-vibe-dev 本地领先 origin 25 提交（未 push）、main 未动。
+- [ ] `git status` → 干净；`git branch -vv` → unsafe-vibe-dev 本地领先 origin 27 提交（未 push）、main 未动。
 - [ ] `git log --oneline -15` 对齐 §三 提交序列。
 - [ ] 全量 pytest 实跑 → 记录 passed/skipped（预期 3182 量级，**以实跑为准**）。
 - [ ] 读 `tasks_docs/NEXT_STEPS.md`（当前 P0 = 阶段 C）+ `tasks_docs/_planning_health_first.md`（阶段 C 详案）。
 - [ ] 读 `trials/INDEX.md` + `trials/_toolkit/LLM_SERVICE.md`（真实 LLM 服务基线 + 探测方法）。
 - [ ] 读本文件 §五-§七（契约 + 下一 session 主任务 + 恶意测试要求）。
-- [ ] 确认 push 授权状态：**本 session 未 push，25 提交等待授权**。
+- [ ] 确认 push 授权状态：**本 session 未 push，27 提交等待授权**。
 
 ## 五、关键处置定论与契约（下一 session 必须知道）
 
@@ -79,7 +79,7 @@ CI/CD 可靠化设计 + 本地配置（**远程启用待用户授权**）。基�
    L1 fast/L2 全量跨平台/L3 真实 LLM 手动/L4 发布产物 + `scripts/ci_local.sh` 本地复现）；
    **远程启用待用户授权**——授权后恢复 `.github/workflows/ci.yml` 的 `on:` 为 push/PR 并 push。
    设计文档 `tasks_docs/_code_cicd.md`（临时，收敛后删除）。
-5. **push 契约**：本 session 未 push，25 提交本地领先；push 一律需用户显式授权（禁 push 硬原则，
+5. **push 契约**：本 session 未 push，27 提交本地领先；push 一律需用户显式授权（禁 push 硬原则，
    不因历史授权而默许）。
 6. **goal 契约**：阶段 B goal 已 complete；阶段 C 新建 goal 用 HANDOFF §1.2.1 配置习惯
    （`max_auto_turns`=7、objective 按 §1.3 模板）。
@@ -179,7 +179,7 @@ CI/CD 可靠化设计 + 本地配置（**远程启用待用户授权**）。基�
 ## 八、执行纪律（勿忘）
 
 - 测试唯一命令 `~/miniconda3/envs/ibci/bin/python -m pytest tests/`；基线以实跑为准。
-- 全程本地 commit；**禁 push**（除非用户显式授权——本 session 25 提交等待授权）。
+- 全程本地 commit；**禁 push**（除非用户显式授权——本 session 27 提交等待授权）。
 - 工作模式定论（NEXT_STEPS ⛔）全程适用；注释纪律（禁任务代号/历史叙述，规范编号保留）。
 - 试用体系：`trials/INDEX.md` 生命周期状态机 + `_toolkit/LLM_SERVICE.md` 服务规范为单一权威。
 - goal 配置习惯：`max_auto_turns` = 7；objective 按 HANDOFF §1.3 模板。
