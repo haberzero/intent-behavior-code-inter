@@ -5,7 +5,7 @@
 
 ## 一、总览
 
-- **用例总数**：22 个（mock 17 + 真实 LLM 5），全部经死循环保护。
+- **用例总数**：22 个（mock 19 + 真实 LLM 5 含 PR4 子目录），全部经死循环保护。
 - **PASS**：14 例；**GUARD**：7 例；**LIMIT**：1 例。
 - **KERNEL_ISSUE**：0 项（本套件；KERNEL_ISSUE-LLM-4 为 T08 回归发现并已修，见 T10/T08 REGISTER）。**BOUNDARY**：0 项。**DOC_ISSUE**：0 项。**LLM_BEHAVIOR / HARNESS**：0 项。
 
@@ -56,6 +56,8 @@ LIMIT（文档化限制）。关键确认：
 | PR3 | run_batch 批量并发 10 项 | len=10 | 同 | PASS | — | logs/B-T15-PR3.log |
 | PR4 | 多模块交叉：跨模块 llm 可调用类直接调用（真实 LLM） | len_gt0=True | 同 | PASS | — | cases/PR4_multimodule/logs/T15-PR4.log |
 | PR4b | 跨模块 expected_type=用户类（限定名，__from_prompt__ 生效） | parsed_len_gt0=True | 同 | PASS | — | cases/PR4_multimodule/logs/T15-PR4b.log |
+| E18 | [清单 #31] 线程内 LLM 调用 + try/except（并发交叉） | got=7 | 同 | PASS | — | logs/B-T15-E-M18.log |
+| E19 | [清单 #28] llmexcept 快照隔离：retry 体内改受保护变量 → 告警 + 黄金快照恢复 | inner_val=0 | 同 | PASS | — | logs/B-T15-E-M19.log |
 
 ## 五、结论
 
@@ -63,6 +65,7 @@ LIMIT（文档化限制）。关键确认：
   协议异常/retry 策略/__intent__ 层值全部守卫生效）；文档化限制与设计事实被确认/记录。
 - **登记待文档复核项**：`__llm_call__` 装配 dict 未知键静默忽略（是否应告警，供阶段 C 末
   文档/诊断评估）。
+- **快照隔离确认（E19）**：retry 体内修改 LLM 参与变量（out）→ `RUN_LLMEXCEPT_SNAPSHOT_VIOLATION` 告警（UserWarning）+ 黄金快照恢复（KNOWN_LIMITS §十/§二十 一致，实测）。
 - **LLM_BEHAVIOR 观察（PR4b）**：限定 expected_type 名（mod_resp.Resp）会注入 provider
   类型约束提示词，模型可能误echo类型名（本用例输出 mod_resp:ok）——解析契约正确（Resp
   实例），属模型服从度观察，非内核缺陷。

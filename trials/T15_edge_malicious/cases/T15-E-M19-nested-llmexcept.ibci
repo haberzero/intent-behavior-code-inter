@@ -1,0 +1,29 @@
+# T15-E-M19 [边界清单 #28] llmexcept 快照隔离：retry 体内改受保护变量 → RUN_LLMEXCEPT_SNAPSHOT_VIOLATION 告警 + 黄金快照恢复
+# doc: docs/syntax/10_robustness.md §10.3 + KNOWN_LIMITS §十/§二十
+# expect-class: PASS
+# expect-out: /home/haber/proj/intent-behavior-code-inter/core/runtime/vm/handlers/assignment.py:103: UserWarning: llmexcept 快照隔离违规：检测到受保护变量被篡改 ['out']；已恢复黄金快照并继续重试。 | inner_val=0 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+func inner() -> int:
+    int v = 0
+    try:
+        int x = @~ MOCK:SEQ:[FAIL,5] k1 ~
+        llmexcept:
+            retry "请只返回数字"
+        v = x
+    except Exception:
+        v = -1
+    return v
+int out = 0
+try:
+    int y = @~ MOCK:FAIL outer ~
+    llmexcept:
+        out = inner()
+        retry "请只返回数字"
+    print("outer=" + (str)y)
+except Exception as e:
+    print("caught=" + (str)e)
+print("inner_val=" + (str)out)
+print("DONE")
