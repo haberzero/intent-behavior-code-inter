@@ -177,7 +177,7 @@
 
 ### PT-DECIDE-3 LLM prompt 协议家族待决项
 
-- **状态**：active（项②④ 已定案落地 2026-08-20；全部待决项清零）｜**域**：DECIDE｜**优先级**：P2
+- **状态**：done（2026-08-21，项①-④ 全部定案落地，DECIDE 活跃清零）｜**域**：DECIDE｜**优先级**：P2
 - **动机**：① 用户类 `__from_prompt__` 返回目标类实例的 auto-boxing 二次封装边界；
   ② `__validate_prompt__` 是否扩展至内置类型；③ `SEM_PROTOCOL_SIGNATURE` 强度
   （warning vs error）；④ `__to_prompt__`/`__payload_prompt__` 异常回退可观测性复核。
@@ -226,11 +226,15 @@
 
 ### VISION-3 真实 LLM 压力试用扩展（T08 延续）
 
+- **状态**：done（2026-08-21 阶段 C 完成——六套件 T10-T15 + 全量回归 + 恶意边界 22 例 + 压力 PR1-4）
 - **动机**：T08 第一轮（41 例）完成后待扩展的压力维度——更长 prompt（>4k token）、
   多轮长对话、批量并发上限、多模态真实媒体文件（media 封存除外）。
 - **成因**：试用主线；被协议化重构主线占用而顺延。
-- **当前理解**：真实 LLM 套件与工具链就绪（`trials/_toolkit`）；理论清理完成后
-  按用户意愿恢复。
+- **完成记录（2026-08-21）**：六套件 T10-T15（llm 可调用类/stream/run_batch/overlay/协议族/
+  意图一等值/fs/Optional/值语义，mock + 真实 LLM 全过）+ 全量 LLM 回归（T01/T02/T06/T07/T08/T09）+
+  恶意边界 22 例（无内核缺陷）+ 压力维度（>4k token/多轮 retry/批量并发/多模块交叉）+
+  缺陷闭环（KERNEL_ISSUE-LLM-4 修复，基线 3185）+ 技术文档全方位复核（KNOWN_LIMITS §十二/
+  overlay §6.9/装配键）。详见 trials/INDEX.md 与 tasks_docs/_phaseC_trials.md。
 
 ### VISION-4 类型理论加固（五大地基改造 · P7）
 
