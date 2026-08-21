@@ -1,0 +1,18 @@
+# T12-O-L1 真实 LLM：overlay 覆层 __to_prompt__ 影响真实行为插值渲染（块内 overlayed / 块外原生）
+# doc: docs/syntax/06_oop.md 覆层章节
+# expect-class: PASS
+# expect-out: inside_overlayed=True | outside_native=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+impl overlay for int:
+    func __to_prompt__(self) -> str:
+        return "42"
+int x = 5
+with overlay(int.__to_prompt__):
+    str inside = @~ 我提供给你的数字是 $x，只原样输出这个数字 ~
+    print("inside_overlayed=" + (str)("42" in inside))
+str outside = @~ 我提供给你的数字是 $x，只原样输出这个数字 ~
+print("outside_native=" + (str)("5" in outside))
+print("DONE")

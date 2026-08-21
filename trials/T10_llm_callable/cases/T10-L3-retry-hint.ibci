@@ -1,0 +1,17 @@
+# T10-L3 真实 LLM：__retry__ 调用级重试（max_retry + hint 回喂，首轮诱导失败次轮修复）
+# doc: docs/syntax/08_llm_callable.md §8.4
+# expect-class: PASS
+# expect-out: got_int=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class 取数:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "说出数字7，但故意写成汉字。", "expected_type": "int"}
+    func __retry__(self) -> dict:
+        return {"max_retry": 3, "hint": "必须只返回阿拉伯数字本身，例如 7"}
+取数 g = 取数()
+int v = g()
+print("got_int=" + (str)(v == 7))
+print("DONE")

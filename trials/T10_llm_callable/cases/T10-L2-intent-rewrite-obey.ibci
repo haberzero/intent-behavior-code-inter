@@ -1,0 +1,17 @@
+# T10-L2 真实 LLM：__intent__ 改写意图影响模型输出（改写 merged 为"只输出OK" → 模型输出 OK）
+# doc: docs/syntax/08_llm_callable.md §8.4
+# expect-class: PASS
+# expect-out: obey=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class 改写:
+    func __intent__(self, dict intents) -> dict:
+        return {"merged": ["只输出两个字：OK"]}
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "随便说点什么"}
+改写 w = 改写()
+str v = w()
+print("obey=" + (str)("OK" in v))
+print("DONE")

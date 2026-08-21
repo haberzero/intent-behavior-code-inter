@@ -1,0 +1,15 @@
+# T13-I-L1 真实 LLM：意图一等值 @+ $x eager 值约束模型输出（重赋值后仍按旧值）
+# doc: docs/syntax/09_intent_system.md §9.2
+# expect-class: PASS
+# expect-out: obey_old=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str x = "只输出：BANANA"
+@+ $x
+x = "只输出：APPLE"
+str r = @~ 输出一个水果名 ~
+print("obey_old=" + (str)("BANANA" in r))
+@- 只输出：BANANA
+print("DONE")

@@ -1,0 +1,16 @@
+# T11-L2 真实 LLM：stream_channel 逐块 recv 增量消费
+# doc: docs/syntax/11_modules.md §11.3
+# expect-class: PASS
+# expect-out: got_gt0=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class 简洁:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "用一句话介绍你自己", "prompt_slots": [{"kind": "user_sys", "text": "你是一个简洁的助手。"}]}
+简洁 s = 简洁()
+chan chunks = ai.stream_channel(s)
+str first = chunks.recv()
+print("got_gt0=" + (str)(first.len() > 0))
+print("DONE")
