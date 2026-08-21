@@ -34,11 +34,15 @@
 公理契约校验恢复 + 反序列化宽异常收窄 + KDIAG 诊断）。完成详情见 `tasks_docs/HANDOFF.md` §2.1 与
 git 历史（本文件不登记完成记录）。
 
-**当前 P0 = 阶段 C · 真实 LLM 全面试用重启（VISION-3）**。**阶段 B · 功能稳健与对外能力（B1-B6）
-已全部完成（2026-08-20）**：测试补测（PT-TEST-2）/ 协议定案（PT-DECIDE-3 项②④）/ 技术债收敛
-（PT-DEBT-36/35）/ 文档补齐（PT-DOC-3P2）/ CI 设计（PT-FEAT-5，远程启用待授权）。
+**当前 P0 = 阶段 C · 真实 LLM 全面试用重启（VISION-3）——试用地基已完成，进入文档复核尾段**。
+六套件 T10-T15 建成（llm 可调用类/stream/run_batch/overlay/prompt 协议族/意图一等值/fs/Optional/
+值语义，mock 层 + 真实 LLM 全过）+ 恶意边界 22 例（无内核缺陷，fail-fast 防御面全生效）+
+全量 LLM 回归（T01/T02/T06/T07/T08/T09）+ 压力维度（>4k token/多轮/批量并发/多模块交叉）+
+缺陷闭环（**KERNEL_ISSUE-LLM-4** expected_type 用户类解析已修，基线 3185）。**当前进行 =
+阶段 C 末技术文档全方位复核**（doc-governance Phase 0-8：KNOWN_LIMITS §十二已修 / 06_oop §6.9
+overlay 章节已补 / 装配未知键已明；批 2 交叉核验 + 批 3 单点真理/读者旅程进行中）。
 **周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）按用户裁定**推迟到真实试用（阶段 C）
-之后**，近期不占用主线。
+之后**，文档复核完成后恢复。
 
 测试基线以实跑为准（不冻结数字；唯一命令 `python -m pytest tests/`）。
 
