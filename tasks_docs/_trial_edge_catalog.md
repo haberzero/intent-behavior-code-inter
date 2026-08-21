@@ -142,6 +142,50 @@
 
 ---
 
+## 九bis、验证状态核对（2026-08-21，阶段 C 恶意试用后）
+
+> 逐条核对起点清单的验证结果。已测项给出套件/用例引用与结论；未测项标注原因
+> （LLM 层依赖 / 需专项 / mock 不可确定观测）。**阶段 C 结束时**：确认项吸收进
+> `docs/KNOWN_LIMITS.md`，缺陷项吸收进 `trials/INDEX.md`，然后删除本清单。
+
+| # | 状态 | 验证结论（套件/用例） |
+|---|------|------------------------|
+| 1 | ✅ 已测 | T15-E-M11：ctx.resolve() 只读持久栈视图，不消费（PASS，文档 §9.3 一致） |
+| 2 | ✅ 已测 | T15-E-M2：意图值空格 strip/子串（PASS） |
+| 3 | ✅ 已测 | T15-E-M3：@- 无参 vs 按值移除（PASS） |
+| 4 | ✅ 已测 | T15-E-M4：@! override 丢弃 smear = 后者覆盖前者（PASS，KNOWN_LIMITS §十三 #2 一致） |
+| 5 | ✅ 已测 | T08 D3-03/04/06/07：run_batch 批内每个调用注入 one-shot（LLM_BEHAVIOR/已文档化） |
+| 6 | ⏸ 部分 | T13-I-M3 覆盖 snapshot 冻结 vs lambda live；snapshot 内嵌 LLM 调用交叉未穷尽（LLM 层） |
+| 7 | ✅ 已测 | T15-E-M9：intent_context 类静态调用静默无效（现为 fail-fast，KNOWN_LIMITS §十二 已修正） |
+| 8 | ✅ 已测 | T15-E-M5：装配 dict 未知键静默忽略（08 §8.1 已补文档） |
+| 9 | ✅ 已测 | T15-E-M12 + T10-G4：__intent__ 返回契约违约 fail-fast（PASS/GUARD） |
+| 10 | ✅ 已测 | T15-E-M13 + T10-G3：__retry__ max_retry=0/签名违约 fail-fast（GUARD） |
+| 11 | ✅ 已测 | T15-E-M7 + T12-P-G1：协议族异常路径传播/形状违约（GUARD） |
+| 12 | ✅ 已测 | T12-P-G1：__from_prompt__ 单向契约（LLMParseError，PT-DECIDE-3 ① 一致） |
+| 13 | ✅ 已测 | T15-E-M6/M14/M16 + T10：直接调用参数数量违约 fail-fast（GUARD） |
+| 14 | ⏸ 部分 | T11 流式正常路径；流式中断/llmexcept 组合 LLM 层待补 |
+| 15 | ⏸ 未测 | intent_context 类字段 deep_clone 路径（专项） |
+| 16 | ⏸ 未测 | 序列化 round-trip inherited 槽（专项，snapshot 序列化） |
+| 17 | ⏸ 未测 | 跨引擎序列化/水化（专项，多引擎） |
+| 18 | ✅ 已测 | T12-O-M1/M2/M3 + O-G1/G2：overlay 作用域/默认不生效/嵌套/守卫（PASS+GUARD） |
+| 19 | ⏸ 未测 | overlay 与序列化/snapshot/retry 交互（专项） |
+| 20 | ✅ 已测 | T12 跨根并发隔离（内核判别测试 test_overlay_concurrency 承载） |
+| 21 | ✅ 已测 | T05 D2-17 + T15-PR4：模块可见性隔离/跨模块（PASS） |
+| 22 | ⏸ 未测 | 动态宿主 collect 错误/超时（专项，ihost） |
+| 23 | ⏸ 未测 | bind 白名单/vtable 强制（专项，宿主绑定） |
+| 24 | ✅ 已测 | T14-FS-M5：沙箱越界写拒绝 RUN_PERMISSION_ERROR（无漏洞） |
+| 25 | ✅ 已测 | T15-E-M1：容器 == 身份比较（KNOWN_LIMITS/PT-DEBT-34 一致） |
+| 26 | ✅ 已测 | T15-E-M15：泛型嵌套特化 Box[Box[int]]（PASS） |
+| 27 | ✅ 已测 | T14-OPT-M1/M2：Optional 值模型/容器元素（PASS） |
+| 28 | ✅ 已测 | T15-E-M17/M19：retry 体内文件写编译期禁 + 快照隔离告警/恢复（GUARD/PASS） |
+| 29 | ✅ 已测 | T15-E-M8：深递归 RecursionError（KNOWN_LIMITS §二十三 一致，LIMIT） |
+| 30 | ✅ 已测 | T15-E-M10 + T01：switch 边界（重复 case/嵌套/return，PASS） |
+| 31 | ✅ 已测 | T15-E-M18：线程内 LLM + try/except（PASS） |
+| 32 | 🔄 处理中 | 文档/行为一致性：doc-review 进行中（KNOWN_LIMITS §十二已修/overlay 章节已补/装配未知键已明） |
+| 33 | ⏸ 未测 | _pending_futures 长会话累积（内存面，专项） |
+
+**未测项汇总**（专项/LLM 层）：#6 交叉、#14 流式错误、#15 deep_clone、#16/#17 序列化/跨引擎、#19 overlay 序列化交互、#22 动态宿主、#23 bind 强制、#33 内存累积。
+
 ## 九、使用方式（对下一 session 的明确说明）
 
 1. **本清单是起点，不是穷尽**：以上 33 项为接手者基于代码工作的观察，**标记 `[推测]` 的未逐个
