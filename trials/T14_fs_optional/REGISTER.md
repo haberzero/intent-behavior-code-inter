@@ -6,7 +6,7 @@
 ## 一、总览
 
 - **用例总数**：9 个，全部经死循环保护（run_batch 默认 60s OS 级超时）。
-- **PASS**：7 例；**GUARD**：2 例。
+- **PASS**：8 例；**GUARD**：1 例。
 - **KERNEL_ISSUE**：0 项。**BOUNDARY**：0 项。**DOC_ISSUE**：0 项。
 - **LIMIT**：0 项。**LLM_BEHAVIOR / HARNESS**：0 项。
 
@@ -14,8 +14,8 @@
 
 无缺陷。关键确认：
 
-- **FS-G1**：`file_handle` 只读语义——`fh.write(...)` → `RUN_ATTRIBUTE_ERROR: AttributeError:
-  'file_handle' object has no attribute 'write'`（守卫生效，实测）。
+- **FS-G1**：`file_handle` 只读语义——`fh.write(...)` → `RUN_ATTRIBUTE_ERROR`（捕获确认
+  read_only=True，PASS；初版守卫用例泄漏临时文件，改为捕获式 + 清理，无泄漏）。
 - **FS-M5（沙箱）**：越出 project_root 的写入 → `RUN_PERMISSION_ERROR: Security Error:
   Permission denied for write on path outside workspace ... IBC-Inter is currently restricted
   to its root directory.`（守卫生效，实测）。**沙箱无漏洞**——初版 `../` 用例仅回到套件根
@@ -35,7 +35,7 @@
 | FS-M2 | new 副本 vs overwrite 就地覆盖 | orig=mutated copy=copied | 同 | PASS | — | logs/B-T14-FS-M2.log |
 | FS-M3 | exists/remove 生命周期 | pre=False post=True removed=True | 同 | PASS | — | logs/B-T14-FS-M3.log |
 | FS-M4 | read_bytes | len=3 | 同 | PASS | — | logs/B-T14-FS-M4.log |
-| FS-G1 | file_handle 只读 | RUN_ATTRIBUTE_ERROR | 同 | GUARD | P2 | logs/B-T14-FS-G1.log |
+| FS-G1 | file_handle 只读（捕获确认） | read_only=True | 同 | PASS | — | logs/B-T14-FS-G1.log |
 | FS-M5 | 沙箱越界写入拒绝 | RUN_PERMISSION_ERROR | 同 | GUARD | P2 | logs/B-T14-FS-M5.log |
 | OPT-M1 | Optional 值模型 | a=0 b=1 some=True | 同 | PASS | — | logs/B-T14-OPT-M1.log |
 | OPT-M2 | Optional 容器元素 | some=True first=1 | 同 | PASS | — | logs/B-T14-OPT-M2.log |

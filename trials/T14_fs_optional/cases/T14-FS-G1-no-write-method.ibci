@@ -1,11 +1,17 @@
-# T14-FS-G1 file_handle 只读语义：无 write() 方法（调用即错误）
+# T14-FS-G1 file_handle 只读语义：无 write() 方法（调用即 AttributeError，捕获确认 + 清理）
 # doc: docs/syntax/11_modules.md §11.7
-# expect-class: GUARD
-# expect-exit: nonzero
+# expect-class: PASS
+# expect-out: read_only=True | DONE
+# expect-exit: 0
 # expect-llm: false
 import fs
 str demo = "./T14_G1.txt"
 fs.write(demo, "x")
 file_handle fh = fs.open(demo)
-fh.write("y")
+try:
+    fh.write("y")
+    print("has_write=True")
+except Exception:
+    print("read_only=True")
+fs.remove(fh)
 print("DONE")

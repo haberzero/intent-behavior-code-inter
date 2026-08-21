@@ -12,7 +12,7 @@
 | FS-M2 | write(new) 副本 vs write(overwrite) 就地覆盖共享 backing | 11 §11.7 | FS-M2 | ✅ PASS |
 | FS-M3 | fs.exists / fs.remove 生命周期 | 11 §11.7 | FS-M3 | ✅ PASS |
 | FS-M4 | file_handle.read_bytes 字节读取 | 11 §11.7 | FS-M4 | ✅ PASS |
-| FS-G1 | file_handle 只读语义（无 write 方法） | 11 §11.7 | FS-G1 | ✅ GUARD |
+| FS-G1 | file_handle 只读语义（无 write 方法，捕获确认） | 11 §11.7 | FS-G1 | ✅ PASS |
 | FS-M5 | 沙箱限制：越出 project_root 的写入被拒（RUN_PERMISSION_ERROR） | 11 §11.7 + KNOWN_LIMITS §11.7 | FS-M5 | ✅ GUARD |
 | OPT-M1 | Optional[T] 值模型（is_some/unwrap/or_else/None 接受） | 01 §1.3.1 | OPT-M1 | ✅ PASS |
 | OPT-M2 | Optional 容器元素（Optional[list[int]]） | 01 §1.3.1 | OPT-M2 | ✅ PASS |
