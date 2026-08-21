@@ -1,0 +1,11 @@
+# T12-O-G1 with overlay 引用未声明覆层 → 编译期 SEM_TYPE_MISMATCH（守卫生效）
+# doc: docs/syntax/06_oop.md 覆层章节
+# expect-class: GUARD
+# expect-code: SEM_TYPE_MISMATCH
+# expect-exit: nonzero
+# expect-llm: false
+func f() -> str:
+    with overlay(str.__to_prompt__):
+        str s = "a"
+        return s.__to_prompt__()
+    return ""

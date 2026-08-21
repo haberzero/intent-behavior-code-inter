@@ -1,0 +1,23 @@
+# T12-O-M3 覆层嵌套作用域：内层 with overlay 退出后外层仍生效，外层退出恢复原生
+# doc: docs/syntax/06_oop.md 覆层章节
+# expect-class: PASS
+# expect-out: [MOCK] report: overlayed-int | [MOCK] report: overlayed-int | [MOCK] report: overlayed-int | [MOCK] report: 5 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+impl overlay for int:
+    func __to_prompt__(self) -> str:
+        return "overlayed-int"
+int x = 5
+with overlay(int.__to_prompt__):
+    str a = @~ report: $x ~
+    print(a)
+    with overlay(int.__to_prompt__):
+        str b = @~ report: $x ~
+        print(b)
+    str c = @~ report: $x ~
+    print(c)
+str d = @~ report: $x ~
+print(d)
+print("DONE")

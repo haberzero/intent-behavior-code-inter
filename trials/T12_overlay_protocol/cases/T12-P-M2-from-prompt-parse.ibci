@@ -1,0 +1,17 @@
+# T12-P-M2 __from_prompt__ 解析：mock 返回文本 → 解析为用户类实例
+# doc: docs/syntax/06_oop.md §6.7
+# expect-class: PASS
+# expect-out: got=开心 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class Mood:
+    str label
+    func __init__(self, str label) -> auto:
+        self.label = label
+    func __from_prompt__(self, str raw) -> tuple:
+        return (True, Mood(raw.strip()))
+Mood m = @~ MOCK:STR:"开心" ~
+print("got=" + m.label)
+print("DONE")

@@ -1,0 +1,15 @@
+# T12-O-M2 覆层默认不生效：声明但无 with overlay 引用 → 原生行为（同时触发 SEM_OVERLAY_UNUSED 告警）
+# doc: docs/syntax/06_oop.md 覆层章节 + docs/syntax/15_diagnostics.md SEM_OVERLAY_UNUSED
+# expect-class: PASS
+# expect-out: [MOCK] report: 5 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+impl overlay for int:
+    func __to_prompt__(self) -> str:
+        return "overlayed-int"
+int x = 5
+str r = @~ report: $x ~
+print(r)
+print("DONE")

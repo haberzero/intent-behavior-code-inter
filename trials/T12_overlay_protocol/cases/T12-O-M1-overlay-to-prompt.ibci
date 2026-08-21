@@ -1,0 +1,18 @@
+# T12-O-M1 覆层端到端：impl overlay for int 覆层 __to_prompt__，with overlay 块内生效、块外恢复原生（经行为插值渲染观测）
+# doc: docs/syntax/06_oop.md 覆层章节 + docs/architecture/04_vm_interpreter.md §2
+# expect-class: PASS
+# expect-out: [MOCK] report: overlayed-int | [MOCK] report: 5 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+impl overlay for int:
+    func __to_prompt__(self) -> str:
+        return "overlayed-int"
+int x = 5
+with overlay(int.__to_prompt__):
+    str inside = @~ report: $x ~
+    print(inside)
+str outside = @~ report: $x ~
+print(outside)
+print("DONE")

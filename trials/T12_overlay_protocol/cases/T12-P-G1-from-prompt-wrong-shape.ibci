@@ -1,0 +1,17 @@
+# T12-P-G1 __from_prompt__ 返回非 (bool, instance) 元组（契约违约）——观测行为（fail-fast 或 诊断+uncertain）
+# doc: docs/syntax/06_oop.md §6.7
+# expect-class: GUARD
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 坏:
+    str value
+    func __init__(self, str value) -> auto:
+        self.value = value
+    func __from_prompt__(self, str raw) -> tuple:
+        坏 b = 坏(raw)
+        return b
+坏 w = @~ MOCK:STR:"x" ~
+print("val=" + w.value)
+print("DONE")

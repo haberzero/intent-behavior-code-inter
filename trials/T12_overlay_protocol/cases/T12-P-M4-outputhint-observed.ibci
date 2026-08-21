@@ -1,0 +1,21 @@
+# T12-P-M4 __outputhint_prompt__ 注入系统提示词（经 idbg.show_target_prompt 观测）+ __from_prompt__ 解析
+# doc: docs/syntax/06_oop.md §6.7
+# expect-class: PASS
+# expect-out: val=你好 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+import idbg
+ai.set_mock_mode()
+class 词:
+    str value
+    func __init__(self, str value) -> auto:
+        self.value = value
+    func __from_prompt__(self, str raw) -> tuple:
+        return (True, 词(raw.strip()))
+    func __outputhint_prompt__(self) -> str:
+        return "HINT_ONLY_WORD"
+词 w = @~ MOCK:STR:"你好" ~
+idbg.show_target_prompt()
+print("val=" + w.value)
+print("DONE")

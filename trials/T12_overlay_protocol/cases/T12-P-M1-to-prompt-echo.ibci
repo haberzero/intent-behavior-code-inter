@@ -1,0 +1,15 @@
+# T12-P-M1 __to_prompt__ 自定义渲染：用户类插值到行为 → mock 回显观测
+# doc: docs/syntax/06_oop.md §6.7
+# expect-class: PASS
+# expect-out: [MOCK] 输出: TOKEN_XYZ | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 代号:
+    func __to_prompt__(self) -> str:
+        return "TOKEN_XYZ"
+代号 c = 代号()
+str r = @~ 输出: $c ~
+print(r)
+print("DONE")
