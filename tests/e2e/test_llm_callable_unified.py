@@ -284,3 +284,51 @@ class TestLLMCallableIntentRewrite:
         with pytest.raises(Exception) as exc_ret:
             _run(bad_return, tmp_path, monkeypatch)
         assert "__intent__ must return a config dict" in str(exc_ret.value), str(exc_ret.value)
+
+
+class TestLLMCallableExpectedTypeUserClass:
+    """llm-callable ``expected_type`` 裸用户类名解析（KERNEL_ISSUE-LLM-4 回归）。
+
+    expected_type 是运行时字符串（裸名如 ``"Resp"``），直接传给解析器会因注册表键
+    为 module 限定名而 miss，退化为默认 str 解析（__from_prompt__ 不生效）。
+    修复：装配时按 callable 类 module 限定裸名，VTableParsingStrategy 命中运行时
+    类键后经 __from_prompt__ 解析用户类。
+    """
+
+    def test_expected_type_bare_user_class_parses_via_from_prompt(self, tmp_path, monkeypatch):
+        """静态形态 __from_prompt__：expected_type=裸 "Resp" → 返回 Resp 实例（非 str）。"""
+        body = (
+            "class Resp:\n"
+            "    str text\n"
+            "    func __init__(self, str text) -> auto:\n"
+            "        self.text = text\n"
+            "    func __from_prompt__(str raw) -> tuple:\n"
+            "        return (True, Resp(raw.strip()))\n"
+            "class 取:\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\", \"expected_type\": \"Resp\"}\n"
+            "取 inst = 取()\n"
+            "Resp r = inst()\n"
+            "print(\"text=\" + r.text)\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        assert any("text=TRANSLATED_OK" in line for line in out), f"未经 __from_prompt__ 解析为用户类: {out}"
+
+    def test_expected_type_bare_user_class_instance_form(self, tmp_path, monkeypatch):
+        """实例形态 __from_prompt__(self, raw)：同样解析为用户类实例。"""
+        body = (
+            "class Resp:\n"
+            "    str text\n"
+            "    func __init__(self, str text) -> auto:\n"
+            "        self.text = text\n"
+            "    func __from_prompt__(self, str raw) -> tuple:\n"
+            "        return (True, Resp(raw.strip()))\n"
+            "class 取:\n"
+            "    func __llm_call__(self) -> dict:\n"
+            "        return {\"user_prompt\": \"hi\", \"expected_type\": \"Resp\"}\n"
+            "取 inst = 取()\n"
+            "Resp r = inst()\n"
+            "print(\"text=\" + r.text)\n"
+        )
+        out, eng = _run(body, tmp_path, monkeypatch)
+        assert any("text=TRANSLATED_OK" in line for line in out), f"实例形态未解析为用户类: {out}"

@@ -219,7 +219,7 @@ class _LLMCallableMixin:
                 "invoke_llm_callable: __llm_call__ config dict missing 'user_prompt'."
             )
         llmoutput_hint = config.get("output_hint")
-        type_hint = config.get("expected_type")
+        type_hint = self._resolve_callable_expected_type(config.get("expected_type"), callable_inst)
         model = config.get("model") or target_model
         suppress_type_constraint = has_override
 
@@ -238,6 +238,31 @@ class _LLMCallableMixin:
             message_history=None,
         )
         return request, type_hint, retry_policy
+
+    def _resolve_callable_expected_type(
+        self, type_hint: Optional[str], callable_inst: IbObject
+    ) -> Optional[str]:
+        """裸 ``expected_type`` 用户类名按 callable 类 module 限定（运行时类键解析）。
+
+        行为路径经 ``node_to_type`` 侧表返回 module 限定名（``main.Point``），
+        VTableParsingStrategy 的 ``get_class`` 精确命中运行时类键后经
+        ``__from_prompt__`` 解析用户类。llm-callable 的 ``expected_type`` 是运行时
+        字符串（裸名如 ``"Resp"``），直接传给解析器会因注册表键为 module 限定名而
+        miss，退化为默认 str 解析。此处按定义 ``__llm_call__`` 的类所在 module
+        限定裸名（同模块结果类型约定），内置/容器/已限定名保持原样。
+        """
+        if not type_hint or "." in type_hint or "[" in type_hint:
+            return type_hint
+        ib_class = getattr(callable_inst, "ib_class", None)
+        module = getattr(ib_class, "module_path", None)
+        if not module:
+            return type_hint
+        cls = self.registry.get_class(type_hint, module=module)
+        if cls is not None:
+            qualified = getattr(cls, "qualified_name", None)
+            if qualified and qualified != type_hint:
+                return qualified
+        return type_hint
 
     def _discover_optional_protocol_method(self, callable_inst: IbObject, name: str):
         """可选协议方法运行时发现（receive 分派同源虚表查找，非 getattr 能力探测）。

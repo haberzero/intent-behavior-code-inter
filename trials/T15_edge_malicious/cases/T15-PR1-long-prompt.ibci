@@ -1,0 +1,20 @@
+# T15-PR1 压力：>4k token 超长 user_prompt（构建 ~20k 字符长文）真实 LLM 调用
+# doc: docs/syntax/08_llm_callable.md §8.1 + trials/_toolkit/LLM_SERVICE.md
+# expect-class: PASS
+# expect-out: done=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class 长文:
+    func __llm_call__(self) -> dict:
+        str big = ""
+        int i = 0
+        while i < 1000:
+            big = big + "这是一段用于填充超长提示词以测试长上下文处理能力的文字。"
+            i = i + 1
+        return {"user_prompt": big + " 上述文字是否包含\"长上下文\"这几个字？只回答 1 或 0。", "expected_type": "int"}
+长文 l = 长文()
+int v = l()
+print("done=" + (str)(v >= 0))
+print("DONE")

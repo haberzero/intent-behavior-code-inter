@@ -34,6 +34,16 @@ trials 迁移（12 case + docs 全面同步）。本 session 全量扫描证实�
   HTTP mock 路径同构）。回归测试 +1（`tests/runtime/test_streaming.py`）。全量 pytest
   **3183 passed / 1 skipped 零回归**（+1）。
 
+## 〇.2 本 session 真实缺陷修复（KERNEL_ISSUE-LLM-4）
+
+- **llm-callable `expected_type`=裸用户类名不解析**：装配直接把裸名（"Resp"）传给解析器，
+  VTableParsingStrategy `get_class` 因注册表键为 module 限定名（cases.<入口>.Resp）而 miss →
+  `__from_prompt__` 不生效、退化返回 str（docs §8.5 宣称用户类经 __from_prompt__ 解析）。
+  修复：装配时按 callable 类 module 限定裸 expected_type（对齐行为路径 node_to_type 限定
+  语义），内置/容器/已限定名保持原样。回归测试 +2（test_llm_callable_unified.py），T08 D4-05
+  真实 LLM 转 PASS。全量 pytest 3185 passed / 1 skipped 零回归（+2）。
+- **T08 D4-01 转义用例 bug**（`\\"` → `\"`，P4c 迁移遗留）：修复后 list/dict 容器解析真实 LLM 转 PASS。
+
 ## 一、新套件规划（覆盖 HANDOFF_SESSION §6.1 九大评估面）
 
 | 套件 | 主题 | 覆盖评估面 | mock/LLM |

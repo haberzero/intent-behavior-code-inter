@@ -1,0 +1,16 @@
+# T15-PR3 压力：run_batch 批量并发（10 项逐项调用）
+# doc: docs/syntax/08_llm_callable.md §8.3 + docs/syntax/07_behavior_expressions.md §7.4
+# expect-class: PASS
+# expect-out: len=10 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+class 取数:
+    func __llm_call__(self, any item) -> dict:
+        return {"user_prompt": "只返回数字 " + str(item), "prompt_slots": [{"kind": "user_sys", "text": "你只返回数字本身，不要任何其它内容。"}], "expected_type": "int"}
+取数 g = 取数()
+list[int] items = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+list res = ai.run_batch(g, items)
+print("len=" + (str)len(res))
+print("DONE")

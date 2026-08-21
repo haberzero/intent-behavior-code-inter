@@ -12,7 +12,7 @@ class 取数字列表:
 
 class 取分数:
     func __llm_call__(self) -> dict:
-        return {"user_prompt": "返回 {\\"math\\":90,\\"english\\":85}", "prompt_slots": [{"kind": "user_sys", "text": "你只返回 JSON 对象，不要其它内容。"}], "expected_type": "dict[str,int]"}
+        return {"user_prompt": "返回 {\"math\":90,\"english\":85}", "prompt_slots": [{"kind": "user_sys", "text": "你只返回 JSON 对象，不要其它内容。"}], "expected_type": "dict[str,int]"}
 
 取数字列表 l = 取数字列表()
 list[int] nums = l()
