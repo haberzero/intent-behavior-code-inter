@@ -57,4 +57,4 @@
   `Runtime Error: [ERROR][RUN_LLM_CALLABLE]: ...`）。
 - **下一步**：T10 LLM 层真实回归（真实翻译/意图改写服从/retry hint 回喂/run_batch）；
   其余新特性套件（stream/batch、覆层、协议族、意图一等值、fs、Optional）按
-  `tasks_docs/_phaseC_trials.md` 排布推进。
+  `trials/INDEX.md` 排布推进。

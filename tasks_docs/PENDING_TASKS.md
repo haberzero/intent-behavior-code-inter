@@ -32,7 +32,8 @@
   可靠化/实用化设计已落地（2026-08-20，阶段 B6）**：四层可靠性（L1 fast 单元/契约、L2 全量
   跨平台矩阵、L3 真实 LLM e2e 手动可选、L4 发布产物 build+smoke）+ `scripts/ci_local.sh` 本地
   分层复现；`.github/workflows/ci.yml` 保持 `workflow_dispatch`（远程启用待用户显式授权后恢复
-  push/PR 触发并 push）。设计文档 `tasks_docs/_code_cicd.md`（临时，收敛后删除）。
+  push/PR 触发并 push）。落地物：`scripts/ci_local.sh` + `.github/workflows/ci.yml`（分层模板，
+  保持 workflow_dispatch；设计临时文档 `_code_cicd.md` 已按治理删除，git 承载历史）。
 - **关联**：PT-FEAT-6（前置条件引用）。
 
 ### PT-FEAT-6 CompilationResult 字段精简
@@ -234,7 +235,7 @@
   意图一等值/fs/Optional/值语义，mock + 真实 LLM 全过）+ 全量 LLM 回归（T01/T02/T06/T07/T08/T09）+
   恶意边界 22 例（无内核缺陷）+ 压力维度（>4k token/多轮 retry/批量并发/多模块交叉）+
   缺陷闭环（KERNEL_ISSUE-LLM-4 修复，基线 3185）+ 技术文档全方位复核（KNOWN_LIMITS §十二/
-  overlay §6.9/装配键）。详见 trials/INDEX.md 与 tasks_docs/_phaseC_trials.md。
+  overlay §6.9/装配键）。详见 trials/INDEX.md。
 
 ### VISION-4 类型理论加固（五大地基改造 · P7）
 
@@ -242,7 +243,8 @@
   远期，P1-P6 稳定后重估）。
 - **当前理解**：ADT（enum 升级为实例化成员）/联合类型可选；模式匹配 `match`（建立在协议+
   泛型上，`docs/LANGUAGE_DESIGN_EVOLUTION.md` §3.7/Phase 4）；轻量约束收集推断扩展（非完整
-  HM，HM 仍非目标）；fn[...] 变体规则形式化。调研与总路线见 `tasks_docs/_five_foundation_redesign.md` §四 P7。
+  HM，HM 仍非目标）；fn[...] 变体规则形式化。调研与总路线见 git 历史
+  （`_five_foundation_redesign.md` 已随 P1-P6 竣工删除，git 承载）§四 P7。
 
 ### VISION-5 函数式地基补齐（五大地基改造 · P8）
 
@@ -250,7 +252,7 @@
   远期，P1-P6 稳定后重估）。
 - **当前理解**：协议化高阶组合子（map/filter/reduce/fold 经协议/impl）；部分应用/柯里化
   （可选）；不可变/纯函数标注（可选，评估价值）。依赖 P2/P4 协议化地基（组合子经协议）。
-  调研与总路线见 `tasks_docs/_five_foundation_redesign.md` §四 P8。
+  调研与总路线见 git 历史（`_five_foundation_redesign.md` 已随 P1-P6 竣工删除，git 承载）§四 P8。
 
 ---
 

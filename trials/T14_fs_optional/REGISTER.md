@@ -46,5 +46,5 @@
 - **验证达成**：fs 模块全接口（open/read/read_bytes/write new+overwrite/exists/remove）+
   只读守卫 + 沙箱守卫生效；Optional 值模型 + 容器元素；值语义与权威契约一致。全部确定性通过。
 - **确认**：沙箱无漏洞（越界写入被 RUN_PERMISSION_ERROR 拒绝）。
-- **下一步**：T15_edge_malicious（恶意边界：`_trial_edge_catalog.md` 33 项起点 + 自行扩展）；
-  其余 LLM 层回归按 `tasks_docs/_phaseC_trials.md` 排布。
+- **下一步**：T15_edge_malicious（恶意边界：`trials/INDEX.md` 33 项起点 + 自行扩展）；
+  其余 LLM 层回归按 `trials/INDEX.md` 排布。

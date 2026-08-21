@@ -55,4 +55,4 @@
   已修复 + 回归测试 +1，两 mock 路径（进程内 / HTTP）对齐。
 - **迁移**：4 个旧字符串形态 stream 用例迁移到新实例形态（D5-* / D2-35）。
 - **下一步**：T11 LLM 层真实回归（含流式错误/llmexcept 恶意边界）；其余新特性套件
-  （覆层/协议族、意图一等值、fs、Optional、恶意边界）按 `tasks_docs/_phaseC_trials.md` 排布。
+  （覆层/协议族、意图一等值、fs、Optional、恶意边界）按 `trials/INDEX.md` 排布。

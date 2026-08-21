@@ -48,4 +48,4 @@
   `__from_prompt__`/`__outputhint_prompt__` 确定性全过 + `__from_prompt__` 形状违约守卫
   （LLMParseError）与单向契约定案一致。**overlay 完成从零覆盖到基本覆盖**。
 - **下一步**：T12 LLM 层真实回归（overlay 影响真实渲染 + 协议族全链路复用 T08 精神）；
-  其余新特性套件（意图一等值/fs/Optional、恶意边界）按 `tasks_docs/_phaseC_trials.md` 排布。
+  其余新特性套件（意图一等值/fs/Optional、恶意边界）按 `trials/INDEX.md` 排布。

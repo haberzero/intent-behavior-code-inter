@@ -122,9 +122,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   压力维度（>4k token/多轮/批量并发/多模块交叉）+ 缺陷闭环（**KERNEL_ISSUE-LLM-4** expected_type
   用户类解析修复，基线 3185）+ 技术文档全方位复核（KNOWN_LIMITS §十二漂移修正/06_oop §6.9
   overlay 章节补建/装配未知键明确）。**当前 = 阶段 C 收尾**：周期质量维护恢复
-  （PT-AUDIT-1/3 + Tier B，用户裁定试用后恢复）+ 临时文档收敛清理（`_code_cicd`/`_planning_health_first`/
-  `_trial_edge_catalog`/`_phaseC_trials`，经用户确认后删）+ PENDING/NEXT_STEPS 同步。
-  详见 trials/INDEX.md、tasks_docs/_phaseC_trials.md。
+  （PT-AUDIT-1/3 + Tier B，用户裁定试用后恢复）+ **临时文档收敛清理完成（2026-08-21 用户确认；
+  `_code_cicd`/`_planning_health_first`/`_trial_edge_catalog`/`_phaseC_trials` 已删，git 承载；
+  未完成项并入 NEXT_STEPS（文档复核登记项）+ trials/INDEX（恶意边界后续未测项 9 项））** +
+  PENDING/NEXT_STEPS 同步。详见 trials/INDEX.md。
 - **🔴 当前主线 = 阶段 C · 真实 LLM 全面试用重启（VISION-3，2026-08-21 启动）**：对五大地基
   重构后全部新特性重试用——llm 可调用类（直接调用/装配/`__intent__` 三层改写/`__retry__`
   高阶化）、stream 流式、run_batch 批量、覆层机制、prompt 协议族五成员、意图一等值嵌入、
@@ -132,9 +133,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   `llm...llmend`/`__sys__`/`__user__`/`__llmretry__`/`_spec.py` 等已删语法，需系统性迁移 +
   为五大地基新特性新建用例）+ 真实 qwen3.6-35b-a3b 非思考模式全量回归 + 压力维度扩展
   （>4k token/多轮长对话/批量并发上限/多模块交叉）+ **恶意边界测试**
-  （`tasks_docs/_trial_edge_catalog.md` 33 项起点清单，须自行扩展）+ 缺陷→根因修复→回归核销
+  （恶意边界起点清单 33 项，须自行扩展）+ 缺陷→根因修复→回归核销
   闭环；试用结束后技术文档全方位复核更新 + 周期质量维护恢复（PT-AUDIT-1/3 + Tier B）。
-  详案见 `tasks_docs/NEXT_STEPS.md` 阶段 C 与 `_planning_health_first.md` §四。
+  详案见 `tasks_docs/NEXT_STEPS.md` 阶段 C。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
   规划已读）；**push 已获用户显式授权并执行**（本地 28 提交 `b2322214..e1a9b3d9` 推送
@@ -325,7 +326,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   （P7 类型理论 / P8 函数式 / 二层 IR）。**排布微调（用户裁定）**：A3/A4 交换；**PT-DECIDE-2 封存**
   （短期不启动，解封条件=多供应商思考模式部署需求）；PT-DOC-3P2 提前至 B3；PT-FEAT-6/12 划远期。
   完整执行依据 = `tasks_docs/_planning_health_first.md`（临时规划文档，执行中逐项收敛进
-  NEXT_STEPS/PENDING_TASKS，完成或吸收后按 GOVERNANCE.md 删除）。
+  NEXT_STEPS/PENDING_TASKS，**已吸收并按治理删除，git 承载历史**）。
   **✅ 会话交接核验接手完成（本 session）**：HANDOFF_SESSION.md 待验证清单全通过（git 干净 /
   分支 unsafe-vibe-dev 与 origin 同步 / main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3069 passed /
   1 skipped** / 契约与下一步已读）；本文件 §2.1/§2.2 收敛更新，临时交接文件已删除（git 承载）。
@@ -412,7 +413,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **✅ B6 PT-FEAT-5 CI/CD 可靠化设计 + 本地配置（本 session，unsafe-vibe-dev `46c5a18e`）**：
   四层可靠性设计（L1 fast/L2 全量跨平台/L3 真实 LLM 手动/L4 发布产物）+ ci.yml 分层就绪
   （保持 workflow_dispatch）+ `scripts/ci_local.sh` 本地分层复现；**远程启用待用户显式授权**
-  （恢复 push/PR 触发并 push）。设计文档 `tasks_docs/_code_cicd.md`。本地全量 pytest **3182
+  （恢复 push/PR 触发并 push）。设计文档 `tasks_docs/_code_cicd.md`（已按治理删除，git 承载）。
+  本地全量 pytest **3182
   passed / 1 skipped 零回归** + L1 909/1 + wheel 构建验证。
   **✅ 阶段 B（B1-B6）全部完成（2026-08-20）**：测试补测（PT-TEST-2）/ 协议定案（PT-DECIDE-3
   项②④）/ 技术债收敛（PT-DEBT-36/35）/ 文档补齐（PT-DOC-3P2）/ CI 设计（PT-FEAT-5，远程启用
@@ -422,6 +424,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ 阶段 C 收尾·临时文档收敛清理 + unsafe-vibe-dev→main 合并重建（2026-08-21 用户指示）**：
+  临时文档 `_code_cicd`/`_planning_health_first`/`_trial_edge_catalog`/`_phaseC_trials` 已删
+  （git 承载）；未完成项并入 NEXT_STEPS（文档复核登记项）+ trials/INDEX（恶意边界后续未测项 9 项）
+  + PENDING_TASKS（PT-FEAT-5 远程启用待授权）；全量 pytest 实跑零回归确认安全；unsafe-vibe-dev
+  快进合并入 main、分支删除重建，本地 + GitHub（origin/main 更新、远端 unsafe-vibe-dev 删除重建）
+  同步完成
 - [x] **✅ 会话交接核验接手完成（2026-08-21）**：git 干净 / 提交序列对齐 / 全量 pytest 实跑
   3182 passed / 1 skipped / push 获用户显式授权并执行（28 提交推送 origin 同步）；阶段 B
   （B1-B6）全部完成；当前 P0 = **阶段 C（VISION-3 真实 LLM 全面试用重启）**

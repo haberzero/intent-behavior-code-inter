@@ -1,6 +1,7 @@
-# DESIGN — T15 恶意边界测试（阶段 C 恶意试用 · `_trial_edge_catalog.md` 起点清单）
+# DESIGN — T15 恶意边界测试（阶段 C 恶意试用 · `trials/INDEX.md` 起点清单）
 
-> **目标**：按 `tasks_docs/_trial_edge_catalog.md` 33 项起点清单设计对抗性用例，带着
+> **目标**：按 `trials/INDEX.md` 起点清单 + 自行扩展设计对抗性用例（原 33 项起点清单
+> `_trial_edge_catalog.md` 已删，git 承载），带着
 > "可能存在缺陷/可能有问题/开发者没考虑到" 的姿态攻击 IBCI 边界。mock 层确定性先行；
 > 发现 → 分类（KERNEL_ISSUE/BOUNDARY/DOC_ISSUE/LIMIT/GUARD）→ 只记录不修复优先。
 > 参考规范：`_toolkit/CLASSIFICATION.md` / `_toolkit/CONTRACT_FORMAT.md`。

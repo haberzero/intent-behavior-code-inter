@@ -40,7 +40,11 @@ git 历史（本文件不登记完成记录）。
 全量 LLM 回归（T01/T02/T06/T07/T08/T09）+ 压力维度（>4k token/多轮/批量并发/多模块交叉）+
 缺陷闭环（**KERNEL_ISSUE-LLM-4** expected_type 用户类解析已修，基线 3185）。**当前进行 =
 阶段 C 末技术文档全方位复核**（doc-governance Phase 0-8：KNOWN_LIMITS §十二已修 / 06_oop §6.9
-overlay 章节已补 / 装配未知键已明；批 2 交叉核验 + 批 3 单点真理/读者旅程进行中）。
+overlay 章节已补 / 装配未知键已明；**复核登记项**：KNOWN_LIMITS §十五 漂移、call_info 键结构、
+装配未知键（是否应告警）、T03-T05 断言迁移核验、BOUNDARY-LLM-5（mock 下 call_info 无 sys_prompt
+键）；批 2 交叉核验 + 批 3 单点真理/读者旅程进行中）。**恶意边界后续未测项**（专项/LLM 层 9 项：
+snapshot 内嵌 LLM 交叉 / 流式错误 / deep_clone / 序列化 round-trip / 跨引擎水化 / overlay 序列化
+交互 / 动态宿主 / bind 强制 / _pending_futures 内存面）见 trials/INDEX.md 后续清单，随主线顺带补齐。
 **周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）按用户裁定**推迟到真实试用（阶段 C）
 之后**，文档复核完成后恢复。
 

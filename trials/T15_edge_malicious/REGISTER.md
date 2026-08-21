@@ -1,7 +1,7 @@
 # REGISTER — T15 恶意边界测试（阶段 C 恶意试用）
 
 > 分类/级别/编号规范：`_toolkit/CLASSIFICATION.md`。mock 层先行（确定性）。
-> 参考规范版本：_toolkit 当前 HEAD。起点清单：`tasks_docs/_trial_edge_catalog.md`。
+> 参考规范版本：_toolkit 当前 HEAD。起点清单：`trials/INDEX.md`（原 `_trial_edge_catalog.md` 已删，git 承载）。
 
 ## 一、总览
 

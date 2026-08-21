@@ -29,7 +29,25 @@
 | `T13_intent_ctx` | 五大地基新特性：意图一等值嵌入（@+ $x eager/按值移除）+ snapshot 冻结 vs lambda live + intent_context OOP 方法族（文档工作流 + 缺参 fail-fast） | 2026-08-21 | 5 例（mock 层） | 4 PASS + 1 GUARD（mock 层全绿）；语义确认 use= fork 拷贝 | `BOUNDARY-LLM-5`（新登记：进程内 mock call_info 无 sys_prompt 键） |
 | `KERNEL_ISSUE-LLM-4` | llm-callable `expected_type`=裸用户类名不解析：装配直接传裸名 → VTableParsingStrategy `get_class` miss 运行时类键（module 限定）→ `__from_prompt__` 不生效、退化返回 str（docs §8.5 宣称用户类经 __from_prompt__ 解析） | **已修复（2026-08-21）**：装配时按 callable 类 module 限定裸 expected_type（对齐行为路径 node_to_type 语义）；回归测试 +2（test_llm_callable_unified.py）；T08 D4-05 真实 LLM 转 PASS；另修 D4-01 `\\"` 转义用例 bug | `T08/.../D4-05-llmfunc-userclass.ibci` + `T10/.../probe`（已删，回归测试承载） |
 | `T14_fs_optional` | 五大地基新特性：fs 模块全接口（open/read/read_bytes/write new+overwrite/exists/remove + 只读/沙箱守卫）+ Optional 值模型/容器元素 + 值语义 | 2026-08-21 | 9 例（mock） | 7 PASS + 2 GUARD（全绿）；沙箱越界写被 RUN_PERMISSION_ERROR 拒（无漏洞）；file_handle 只读守卫 | 无新缺陷 |
-| `T15_edge_malicious` | 恶意边界测试（`_trial_edge_catalog.md` 起点 17 项 + 压力 3 项：容器==/意图窗口/装配键/参数/协议异常/retry/泛型/递归/retry 体内文件写禁等） | 2026-08-21 | 20 例 | 12 PASS + 7 GUARD + 1 LIMIT（无内核缺陷；fail-fast + 编译期守卫全生效；>4k token/多轮/批量并发真实 LLM 全 PASS） | 无；待文档复核项（装配 dict 未知键静默忽略） |
+| `T15_edge_malicious` | 恶意边界测试（起点清单 33 项逐条核对 + 自行扩展：容器==/意图窗口/装配键/参数/协议异常/retry/泛型/递归/retry 体内文件写禁/线程 LLM 等；未测项见下「恶意边界后续未测项」） | 2026-08-21 | 22 例 | 14 PASS + 7 GUARD + 1 LIMIT（无内核缺陷；fail-fast + 编译期守卫全生效；>4k token/多轮/批量并发真实 LLM 全 PASS） | 无；待文档复核项（装配 dict 未知键静默忽略） |
+
+### 恶意边界后续未测项（专项/LLM 层，承接已删起点清单）
+
+> 阶段 C 恶意试用逐条核对 33 项起点清单后遗留的未测/部分项（mock 不可确定观测或需专项），
+> 随主线顺带补齐；补测时按本表逐项设计对抗性用例，发现即按 INDEX 生命周期登记分类。
+> （起点清单 `_trial_edge_catalog.md` 已按治理删除，git 承载历史。）
+
+| # | 主题 | 状态 | 目标窗口 |
+|---|------|------|----------|
+| 6 | snapshot 内嵌 LLM 调用交叉（冻结 vs 调用点 live） | ⏸ 部分 | 后续试用轮（LLM 层） |
+| 14 | 流式中断 / llmexcept 组合错误传播 | ⏸ 部分 | 后续试用轮（LLM 层） |
+| 15 | intent_context 类字段 deep_clone 路径 | ⏸ 未测 | 后续专项 |
+| 16 | 序列化 round-trip inherited_smear/override 槽 | ⏸ 未测 | 后续专项 |
+| 17 | 跨引擎序列化/水化（特化类/枚举/意图上下文） | ⏸ 未测 | 后续专项 |
+| 19 | overlay 与序列化/snapshot/retry 交互 | ⏸ 未测 | 后续专项 |
+| 22 | 动态宿主 collect 错误传播/超时（ihost） | ⏸ 未测 | 后续专项 |
+| 23 | bind 白名单/vtable 强制/registry 隔离 | ⏸ 未测 | 后续专项 |
+| 33 | `_pending_futures` 长会话累积（内存面） | ⏸ 未测 | 后续专项 |
 
 ## 二、缺陷编号映射表（旧 → 新）与生命周期状态机
 

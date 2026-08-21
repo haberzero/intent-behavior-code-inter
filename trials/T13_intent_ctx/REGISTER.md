@@ -51,4 +51,4 @@
   intent_context OOP 文档工作流（上下文切换）、push 缺参 fail-fast 全部 mock 层确定性通过。
 - **发现**：BOUNDARY-LLM-5（进程内 mock 观测无 sys_prompt 键）登记；use= fork 拷贝语义确认。
 - **下一步**：T13 LLM 层真实回归（真实意图约束服从 + snapshot 隔离）；其余新特性套件
-  （fs/Optional、恶意边界）按 `tasks_docs/_phaseC_trials.md` 排布。
+  （fs/Optional、恶意边界）按 `trials/INDEX.md` 排布。
