@@ -91,4 +91,4 @@ trials 迁移（12 case + docs 全面同步）。本 session 全量扫描证实�
 - [x] 压力维度扩展（PR1 >4k token / PR2 多轮 retry / PR3 批量并发 / PR4 多模块交叉）
 - [x] 缺陷闭环：KERNEL_ISSUE-LLM-4（expected_type 用户类，已修+回归+2）+ D4-01 转义 + 3 陈旧用例修复 + DOC_ISSUE-31 登记
 - [ ] 阶段 C 末：技术文档全方位复核（doc-governance Phase 0-8）——含 KNOWN_LIMITS §十二/§十五、call_info 键结构、装配未知键、T03-T05 断言迁移等登记项
-- [ ] T05 断言迁移评估：29 例缺 expect-class（pre-contract-format 残留），独立窗口机械迁移（T03/T04 已断言，mock 设计无需 expect-llm 标记）
+- [x] T05 断言迁移评估（2026-08-21 修正）：29 个无 expect-class 文件全部为模块支撑文件（geo/graph/m1-3/__init__/liba 等，非用例入口，无需断言）；T05 全部 13 个 main.ibci + 19 个顶层用例均有断言——**试用断言迁移 100% 完成，无遗留**
