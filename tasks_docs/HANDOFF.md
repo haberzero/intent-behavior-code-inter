@@ -115,6 +115,22 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
+- **🔴 当前主线 = 阶段 C · 真实 LLM 全面试用重启（VISION-3，2026-08-21 启动）**：对五大地基
+  重构后全部新特性重试用——llm 可调用类（直接调用/装配/`__intent__` 三层改写/`__retry__`
+  高阶化）、stream 流式、run_batch 批量、覆层机制、prompt 协议族五成员、意图一等值嵌入、
+  fs 模块、Optional/容器解析。方式 = **大规模更新补全试用项目**（既有 T01-T09 大量依赖
+  `llm...llmend`/`__sys__`/`__user__`/`__llmretry__`/`_spec.py` 等已删语法，需系统性迁移 +
+  为五大地基新特性新建用例）+ 真实 qwen3.6-35b-a3b 非思考模式全量回归 + 压力维度扩展
+  （>4k token/多轮长对话/批量并发上限/多模块交叉）+ **恶意边界测试**
+  （`tasks_docs/_trial_edge_catalog.md` 33 项起点清单，须自行扩展）+ 缺陷→根因修复→回归核销
+  闭环；试用结束后技术文档全方位复核更新 + 周期质量维护恢复（PT-AUDIT-1/3 + Tier B）。
+  详案见 `tasks_docs/NEXT_STEPS.md` 阶段 C 与 `_planning_health_first.md` §四。
+- **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
+  main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
+  规划已读）；**push 已获用户显式授权并执行**（本地 28 提交 `b2322214..e1a9b3d9` 推送
+  origin/unsafe-vibe-dev，当前与 origin 同步；**push 授权不延续**，后续 push 需再获显式授权）；
+  HANDOFF_SESSION.md 要点已收敛入本节并删除（git 承载）。阶段 B（B1-B6）全部完成，当前 P0 =
+  阶段 C。
 - **🔴 当前主线**：**远期原生宿主绑定（F0-F5）已全部完成**（路线图
   `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。宿主导入一等语法 `import python "pkg" as lib:
   bind ...` + 宿主类型绑定 + 插件体系重构 + Provider 自定义经宿主绑定统一均已落地：
@@ -396,6 +412,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ 会话交接核验接手完成（2026-08-21）**：git 干净 / 提交序列对齐 / 全量 pytest 实跑
+  3182 passed / 1 skipped / push 获用户显式授权并执行（28 提交推送 origin 同步）；阶段 B
+  （B1-B6）全部完成；当前 P0 = **阶段 C（VISION-3 真实 LLM 全面试用重启）**
 - [x] **✅ B6 PT-FEAT-5 CI/CD 可靠化设计 + 本地配置（unsafe-vibe-dev `46c5a18e`）**：四层可靠性
   设计 + ci.yml 分层就绪（保持 workflow_dispatch）+ scripts/ci_local.sh 本地分层复现；远程启用
   待用户显式授权；本地全量 3182 零回归 + L1 909/1 + wheel 构建验证。**阶段 B（B1-B6）全部完成，
