@@ -110,7 +110,7 @@ python trials/T07_fixes_critical_stress/rerun_old_suites.py --timeout 60 --paral
 
 ## 四、产出
 
-- `logs/` + `register.jsonl` + `REGISTER.md` + `REPORT.md`
+- `logs/` + `register.jsonl` + `REGISTER.md`
 - 旧套件重跑对照（T01-T06 各套 register 增量 B- 记录 vs 原记录）
 - 缺陷登记（PENDING_TASKS + INDEX.md 状态更新，只登记不修复）
 - D5 文档核验 DOC_ISSUE 清单（正文修改待用户确认）
