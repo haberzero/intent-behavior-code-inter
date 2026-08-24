@@ -98,7 +98,7 @@ class TestDocParity:
     def test_doc_code_set_matches_catalog(self):
         with open(self.DOC_PATH, encoding="utf-8") as f:
             src = f.read()
-        doc_codes = set(re.findall(r"^### `([A-Z][A-Z0-9_]*)`", src, re.M))
+        doc_codes = set(re.findall(r"^#{1,6} `([A-Z][A-Z0-9_]*)`", src, re.M))
         catalog_codes = set(CODE_CATALOG)
         # 新增码登记目录后必须同步文档节；文档孤儿码必须从文档移除。
         assert doc_codes == catalog_codes, (
