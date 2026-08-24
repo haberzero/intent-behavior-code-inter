@@ -96,7 +96,6 @@ print(counter())    # 3
 - `nonlocal` 只能在嵌套函数内部使用，在模块级使用会产生 SEM_INTENT_PLACEMENT 编译错误。
 - 声明的变量必须在外层作用域中已存在，否则产生 SEM_NONLOCAL_NOT_FOUND 编译错误。
 - `nonlocal a, b` 支持一次声明多个外部变量。
-- nonlocal 变量通过闭包共享机制实现：多个闭包可以共享同一个外部变量，实现状态共享。
 
 **只读捕获（自动）**：嵌套函数体内**读取**外层变量无需 `nonlocal`——引用自动捕获为共享 cell（读捕获自动、写需 `nonlocal`）。
 

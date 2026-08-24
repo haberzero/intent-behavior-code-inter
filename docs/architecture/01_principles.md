@@ -1,7 +1,9 @@
 # IBC-Inter 架构原则与设计理念
 
-> 本文档是 IBC-Inter 项目的核心架构参考文档，包含设计理念、层级架构、设计原则等关键内容。
-> 供未来参与 IBC-Inter 项目的开发者进行架构对齐使用。
+> 本文档是 IBC-Inter 项目的核心架构参考文档，覆盖设计理念与愿景、层级架构定义、核心设计原则、
+> 层间依赖约束、公理体系设计、Intent/Behavior 系统、模块系统与宿主绑定、信息交互原则、
+> 自动注册机制与命名前缀规范。
+> 供参与 IBC-Inter 项目架构对齐的开发者使用。
 
 ---
 
@@ -20,7 +22,7 @@ IBC-Inter (Intent Behavior Code - Interactive) 是一种**混合编程语言**�
 | **高效** | 直接从编程语言层级切入 |
 | **可控** | 提供充分可靠的调试工具和监控工具 |
 | **可复用** | 不依赖于具体大模型 |
-| **易用** | 让普通人也能无痛构建属于自己的最简 Agent |
+| **易用** | 让普通人也能构建属于自己的最简 Agent |
 | **普惠** | 小尺寸开源模型也能参与严肃工作 |
 
 ### 1.3 核心理念
@@ -28,7 +30,7 @@ IBC-Inter (Intent Behavior Code - Interactive) 是一种**混合编程语言**�
 | 概念 | 作用 |
 |------|------|
 | **Code** | 确定性的骨架。负责数据结构定义、状态维护、文件交互、流程控制 |
-| **Behavior** | 交互的桥梁。由 LLM 在运行时动态推理执行，并无缝接入代码逻辑 |
+| **Behavior** | 交互的桥梁。由 LLM 在运行时动态推理执行，接入代码逻辑 |
 | **Intent** | 非确定性的上下文。作为环境的"背景信息栈"动态注入至提示词 |
 | **Interactive** | 解释运行。LLM 调用开销使解释器专注于高级交互功能而非运行效率 |
 
@@ -125,7 +127,7 @@ DynamicHost 是**插件接口层**，不是解释器管理层。
 IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → Interpreter
 ```
 
-**重要**：子解释器和主解释器**地位平等**，都是 Interpreter 实例，区别仅在于创建方式。
+子解释器和主解释器**地位平等**，都是 Interpreter 实例，区别仅在于创建方式。
 
 ### 3.5 DynamicHost "断点" ≠ GDB断点
 
@@ -143,7 +145,7 @@ IBCI脚本 → DynamicHost → HostService → Engine.spawn_interpreter() → In
 4. **运行之后不会干扰主解释器的任何内容**
 5. **可以让主解释器正确返回到跳出点的位置**
 
-**信息交互方式**：通过显式的 file 读写进行，不做隐式内存交互。
+**信息交互方式**：经显式 file 读写（见 §八）。
 
 ---
 
@@ -176,7 +178,7 @@ IBC-Inter 把 LLM 当作一个可调用的"表达式/函数"来对待：内核�
 - 内省/调试（`get_current_call_info` / idbg）暴露 `LLMCallRequest.as_dict()` 全量
   + provider 回填的实际 `sys_prompt` / `response`。
 
-**自定义已统一**：LLM 调用经 `llm_provider` 能力接入——内核 LLM 执行器每次
+**自定义统一**：LLM 调用经 `llm_provider` 能力接入——内核 LLM 执行器每次
 调用从能力注册表读当前激活 provider，再调 `call()`/`stream()`。内置默认 provider 为
 `ibci_modules/ibci_ai/provider_impl.py` 的 `RecommendedProvider`（无自定义时生效）。
 
@@ -190,6 +192,8 @@ IBC-Inter 把 LLM 当作一个可调用的"表达式/函数"来对待：内核�
 - `core.py` 宿主（IBCI 胶水）保持内置不变。
 
 ---
+
+## 四、层间依赖约束
 
 ### 4.1 核心依赖原则
 
@@ -232,7 +236,7 @@ IBC-Inter 把 LLM 当作一个可调用的"表达式/函数"来对待：内核�
 - 所有类型引用在公理层能力方法均以**纯字符串类型名**传递，消除公理层对 spec 层查询/解析逻辑的依赖（axiom 可 import spec 的原子数据结构构造器 `TypeRef`/`MethodMemberSpec`，不得依赖注册表解析）
 - `SpecRegistry` 负责将公理返回的类型名字符串解析为对应的 `IbSpec` 对象
 
-### 5.3 Fallback 策略原则（重要）
+### 5.3 Fallback 策略原则
 
 IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
@@ -252,16 +256,10 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 | 问题 | 说明 |
 |------|------|
-| **TypeCheckingPass 中残留的 `or self._any_desc`**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析经 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 校验；内建名防御和推断规则缺失仍保留为允许的职责分离型回退。未标注可调用（func/llm/lambda）报 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值采用 `auto` 推断锁定（不隐式 any）；多类型 `list[int,str]` 不支持（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
+| **TypeCheckingPass 的 `or self._any_desc` 回退**（`_expression_visitors.py`、`_statement_visitors.py`、`_type_checking_base.py`） | 静默掩盖类型推断缺口。用户类型名解析经 TypeRefResolutionPass + SEM_UNRESOLVED_TYPE / ICE_TYPE_LEAK 校验；内建名缺失防御与推断规则时回退到 `any`。未标注可调用（func/llm/lambda）报 `SEM_MISSING_RETURN_ANNOTATION` 编译错误；裸赋值采用 `auto` 推断锁定（不隐式 any）；多类型 `list[int,str]` 不支持（强制 `list[any]`）。`any` 仅保留为显式逃生阀，其值用于类型化上下文时运行时强制校验。 |
 | **跨模块占位符异常情况** | 占位符号解析失败时应抛出错误（类型未注册）而非静默保留占位 |
 
-**关于跨模块占位符的说明**：
-
-跨模块未解析符号在编译期以 `scheduler` 预注册的空 `ModuleMetadata`（`create_module`）占位，解决编译期循环依赖：
-- **正常情况**：解析成功后替换为真实 spec
-- **异常情况**：`resolve()` 失败时理想应抛出错误（类型未注册），而非静默占位
-
-**违反后果**：妥协性 fallback 会导致类型信息丢失、错误掩盖、难以调试等问题，必须在后续迭代中修复。
+**违反后果**：妥协性 fallback 会导致类型信息丢失、错误掩盖、难以调试等问题。
 
 ---
 
@@ -305,7 +303,7 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 ### 7.1 构造期注册（无插件搜索路径）
 
-全部内置模块（内核原生 5 + 工具 5 + `file`）的 TypeDef 字面量集中于
+全部内置模块（内核原生 6 + 工具 5）的 TypeDef 字面量集中于
 `core/runtime/bootstrap/builtin_modules.py`，Engine 构造期经
 `register_builtin_modules(host_interface)` 一次注册。不存在磁盘发现/嗅探通道：
 无 `_spec.py` 契约文件、无 `plugin_paths`/`global_plugin` 配置、无
@@ -325,7 +323,7 @@ AutoDiscovery。用户侧扩展唯一通道是宿主绑定
 
 | 级别 | 说明 | 包含模块 |
 |------|------|---------------|
-| 内核原生（kernel-native）| 随内核发行，构造期注册，`KERNEL_NATIVE` + IMPORT_GATED；物理位于 `ibci_modules/`（`file` 为内核模块 `core/runtime/modules/file_impl.py`），受 HostInterface 覆盖保护 | `ai` / `file` / `ihost` / `idbg` / `isys` / `iruntime` |
+| 内核原生（kernel-native）| 随内核发行，构造期注册，`KERNEL_NATIVE` + IMPORT_GATED；物理位于 `ibci_modules/`（`file` 为内核模块 `core/runtime/modules/fs_impl.py`），受 HostInterface 覆盖保护 | `ai` / `file` / `ihost` / `idbg` / `isys` / `iruntime` |
 | 内置工具 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*`；`USER_DEFINED` provenance | `math` / `json` / `time` / `net` / `schema`（实现包 `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema`） |
 | 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态模块实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg` |
 
@@ -356,9 +354,7 @@ compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 
 ## 八、信息交互原则
 
-IBCI 采用显式的文件读写作为子环境与主环境之间的信息交互方式，子环境的 LLM 输出也直接通过硬盘保存。相比于隐式内存交互，这种方式使开发者可以绝对控制可被交互的信息，降低系统复杂度和维护成本。
-
-**核心原则**：信息交互应通过显式的 file 读写进行，不做隐式内存交互。
+IBCI 采用显式的文件读写作为子环境与主环境之间的信息交互方式。子环境的 LLM 输出也直接通过硬盘保存。相比隐式内存交互，显式读写使开发者能绝对控制可被交互的信息。同时降低系统复杂度和维护成本。
 
 ---
 

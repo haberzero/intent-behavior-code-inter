@@ -61,7 +61,7 @@ import net     # 网络
 
 ### 11.3 ai 模块
 
-配置加载为**显式动作**（F9：引擎启动不再自动加载）。入口调用
+配置加载为**显式动作**：引擎启动时不会自动加载配置。入口调用
 `ai.load_project_config()` 加载项目根目录 `api_config.json`；也可显式加载或配置：
 
 ```ibci
@@ -110,8 +110,7 @@ chan c = ai.stream_channel(s)        # stream_channel(target: LLMCallable) -> ch
 
 > `stream_call` / `stream_channel` 接受任何 **LLMCallable 实例**（行为值或实现
 > `__llm_call__` 的用户 llm 可调用类，见 `docs/syntax/08_llm_callable.md`），经统一装配入口
-> 装配请求后流式执行；字符串形态（`stream_call(sys_prompt, user_prompt)`）已随旧
-> llm 函数机制删除。
+> 装配请求后流式执行；不接受字符串形态（`stream_call(sys_prompt, user_prompt)`）的调用。
 
 ### 11.4 isys 模块
 
@@ -151,7 +150,7 @@ idbg.show_env()          # 打印当前运行环境信息
 idbg.fields(obj)         # 返回对象所有字段
 ```
 
-> **已知限制**：`idbg.inspect(x)` 和 `idbg.dump_intent_stack()` 在当前版本中**未实现**，调用会产生运行时错误。
+> **已知限制**：`idbg.inspect(x)` 和 `idbg.dump_intent_stack()` **未实现**，调用会产生运行时错误。
 > 请使用 `idbg.vars()` 代替 `idbg.inspect()`，使用 `idbg.show_intents()` 代替 `idbg.dump_intent_stack()`。
 
 ### 11.6 ihost 动态宿主

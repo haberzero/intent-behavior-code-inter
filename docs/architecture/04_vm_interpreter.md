@@ -26,7 +26,7 @@
 
 执行任意 IBCI 代码的唯一路径（收敛到 `VMExecutor._drive_loop_gen` 的 CPS 调度循环）：
 - **模块/顶层入口**：`Interpreter.execute_module()` → `VMExecutor.run_body(body)` → 逐语句 `VMExecutor.run(uid)`；
-- **函数/可调用对象宿主入口**：`IbUserFunction.call()`（普通/LLM 函数统一，`callable_kind` 区分）/ `IbBehavior.call()` 为宿主侧薄包装，委托 `_vm_call_*` 助手 + `_drive_generator`（`TaskScheduler` 驱动 `_drive_loop_gen`）。
+- **函数/可调用对象宿主入口**：`IbUserFunction.call()` / `IbBehavior.call()` 为宿主侧薄包装，委托 `_vm_call_*` 助手 + `_drive_generator`（`TaskScheduler` 驱动 `_drive_loop_gen`）。
 
 ---
 
@@ -124,7 +124,7 @@ step(task) → _drive_loop_gen 单步:
 
 ### 2.6 调用实参绑定（统一绑定器）
 
-`vm_handle_IbCall` 是所有可调用形式（用户函数、类方法、fn-lambda、behavior、LLM 函数、原生模块函数）的统一调用点。它先 CPS 求值函数对象与实参，再经统一绑定器解析：位置实参（`*expr` 序列解包展开）与具名实参（`**expr` 字典解包合并）收集后，按**声明序**执行「位置 → 具名 → 默认填充 → varargs/varkw」绑定，产出最终实参列表。
+`vm_handle_IbCall` 是所有可调用形式（用户函数、类方法、fn-lambda、behavior、LLM 可调用类实例、原生模块函数）的统一调用点。它先 CPS 求值函数对象与实参，再经统一绑定器解析：位置实参（`*expr` 序列解包展开）与具名实参（`**expr` 字典解包合并）收集后，按**声明序**执行「位置 → 具名 → 默认填充 → varargs/varkw」绑定，产出最终实参列表。
 
 | 输入 | 处理 |
 |------|------|
@@ -267,7 +267,7 @@ VM 行为：
 | **LLM-2** | 读点经 `resolve_future_cps` 挂起等待（协作，不阻塞当前线程），O(1) 命中后续读取 |
 | **LLM-3** | 并发 dispatch 不改变输出顺序，按语句语义顺序提交 |
 
-### 5.5 LLM 调用路径（当前实现）
+### 5.5 LLM 调用路径
 
 ```text
 表达式：x = @~ ... ~
@@ -284,7 +284,7 @@ VM 行为：
            → 确定：返回 result.value；不确定：返回 IbLLMCallResult(is_certain=False) 容器
 ```
 
-> LLM 调用路径：`IbBehavior.call()` / `IbUserFunction.call()`（LLM 函数，`callable_kind="llm_function"`）在 VM CPS 主路径下由 `core/runtime/vm/handlers/` 包中的 `_vm_invoke_behavior` / `_vm_invoke_llm_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
+> LLM 调用路径：`IbBehavior.call()` / `IbUserFunction.call()` 在 VM CPS 主路径下由 `core/runtime/vm/handlers/` 包中的 `_vm_invoke_behavior` / `_vm_call_user_function` 助手通过 `yield from` 接管，调用时 VMTask 留在帧栈上；两者保留为 Python 可调用后备（host/直接调用场景），外部契约不变。
 
 ---
 
@@ -431,7 +431,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 | 插件 Python 实现代码 | `importlib` 进程级常规加载，`sys.modules` 全局缓存，同名"先加载者胜" | Python 层（共享） |
 | 插件实例 | `create_implementation()` 每引擎新建实例，经 `BoundPlugin` 容器绑定引擎 registry 身份 | IBCI 层（隔离） |
 
-设计立场：IBC-Inter **不插手 Python import 机制**（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离--无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §十九。
+设计立场：IBC-Inter **不插手 Python import 机制**（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离——无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §十九。
 
 ---
 
@@ -460,7 +460,7 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ### 10.1 IILLMExecutor
 
-`core/base/interfaces.py:IILLMExecutor`（Protocol） + `KernelRegistry.register_llm_executor(executor, token)` 在 `Engine._prepare_interpreter()` 末尾注入。`IbBehavior.call()` / `IbUserFunction.call()`（LLM 函数）通过 `registry.get_llm_executor()` 合法取得 LLM 服务，无架构穿透。
+`core/base/interfaces.py:IILLMExecutor`（Protocol） + `KernelRegistry.register_llm_executor(executor, token)` 在 `Engine._prepare_interpreter()` 末尾注入。`IbBehavior.call()` / `IbUserFunction.call()` 通过 `registry.get_llm_executor()` 合法取得 LLM 服务，无架构穿透。
 
 ### 10.2 HostService 与插件
 

@@ -153,9 +153,9 @@ scheduler 主循环（TaskScheduler.run）:
 
 **公理 ISO-8（错误传播）**：子 Interpreter 运行期或编译期抛出的异常，在 `collect()` 时传播为 `RuntimeError`。
 
-**公理 ISO-9（collect 超时，默认无界）**：`IsolationPolicy.collect_timeout` 控制 `collect()` 的墙钟等待上限。`None`（默认）= 无界等待，严格遵循 ISO-5；正数（秒）= 等待上限，超时则 `collect()` 抛 `RuntimeError`。Python 宿主无法强杀线程，超时后子 Interpreter 线程作为 daemon 孤儿继续运行直至自身结束或进程退出--超时的语义是"放弃等待"而非"停止子任务"。该超时为可选安全网，不改变 ISO-5 的默认阻塞契约。
+**公理 ISO-9（collect 超时，默认无界）**：`IsolationPolicy.collect_timeout` 控制 `collect()` 的墙钟等待上限。`None`（默认）= 无界等待，严格遵循 ISO-5；正数（秒）= 等待上限，超时则 `collect()` 抛 `RuntimeError`。Python 宿主无法强杀线程，超时后子 Interpreter 线程作为 daemon 孤儿继续运行直至自身结束或进程退出——超时的语义是"放弃等待"而非"停止子任务"。该超时为可选安全网，不改变 ISO-5 的默认阻塞契约。
 
-**公理 ISO-10（插件可见性隔离）**：插件层的隔离落在 IBCI 可见性层，不落在 Python 模块代码层。每个 Engine 拥有独立 `HostInterface`/`InterOp` 注册表，IBCI 脚本只能 `import` 本引擎注册表登记的插件（可见性每引擎隔离）；插件的 Python 实现代码由 `importlib` 按进程级常规机制加载，`sys.modules` 全局缓存、按名命中，同名插件"先加载者胜"作为进程级身份唯一性；插件实例每引擎独立（`create_implementation()` 经 `BoundPlugin` 容器绑定引擎 registry 身份）。IBC-Inter 不插手 Python import 机制（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离--无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §十九。
+**公理 ISO-10（插件可见性隔离）**：插件层的隔离落在 IBCI 可见性层，不落在 Python 模块代码层。每个 Engine 拥有独立 `HostInterface`/`InterOp` 注册表，IBCI 脚本只能 `import` 本引擎注册表登记的插件（可见性每引擎隔离）；插件的 Python 实现代码由 `importlib` 按进程级常规机制加载，`sys.modules` 全局缓存、按名命中，同名插件"先加载者胜"作为进程级身份唯一性；插件实例每引擎独立（`create_implementation()` 经 `BoundPlugin` 容器绑定引擎 registry 身份）。IBC-Inter 不插手 Python import 机制（不装自定义 finder、不篡改 `sys.modules`）。插件模块级 Python 可变状态不被隔离——无状态是插件约定（服务于行为隔离/数据不污染/可重入），IBC-Inter 无强制力。详见 `docs/KNOWN_LIMITS.md` §十九。
 
 ### §4.3 合规测试
 
@@ -260,3 +260,10 @@ python -m pytest tests/compliance/ -v
 ---
 
 *本文档与 `tests/compliance/` 构成 IBCI VM 的可验证规范。每次合规测试套件全部通过即代表当前 Python 宿主实现符合本规范。*
+
+## 深入指引
+
+- 解释器执行架构：docs/architecture/04_vm_interpreter.md
+- 类型系统设计：docs/architecture/03_type_system.md
+- 架构原则与设计理念：docs/architecture/01_principles.md
+- 已知语言限制：docs/KNOWN_LIMITS.md

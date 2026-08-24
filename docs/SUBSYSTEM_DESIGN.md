@@ -11,5 +11,5 @@
 | 02 | [02_file_container](subsystems/02_file_container.md) | 文件容器与磁盘型存储 | 协议族、Backing 模型、类型继承、fs 模块、LLM 交互 |
 | 03 | [03_callable_fn](subsystems/03_callable_fn.md) | fn / 可调用类型设计 | 无 callable 基类、duck-type + capability 协议 |
 | 04 | [04_plugin_system](subsystems/04_plugin_system.md) | 内置模块系统与宿主绑定 | 模块分类、构造期注册、宿主绑定扩展、from import |
-| 05 | [05_coroutine](subsystems/05_coroutine.md) | 协程层设计 | 并发架构、调度器多任务化、await/generator 执行模型说明 |
+| 05 | [05_coroutine](subsystems/05_coroutine.md) | 协程层设计 | 调度器多任务化与 await/生成器执行模型概述 |
 

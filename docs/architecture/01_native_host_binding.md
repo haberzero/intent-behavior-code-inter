@@ -1,26 +1,20 @@
 # 原生宿主绑定（Native Host Binding）
 
 > 本文档描述 IBCI 用户层原生绑定 Python 内容的架构：宿主导入语法、用户 IBCI
-> 类型/协议对裸 Python 内容的绑定，以及插件体系重构后的扩展唯一边。面向需要
+> 类型/协议对裸 Python 内容的绑定，以及插件体系的扩展唯一边界。面向需要
 > 理解"宿主绑定 = 用户扩展唯一边"这一架构形态的设计者。
->
-> 当前状态：宿主导入一等语法 + 用户类持有 native、`bind class` 宿主类型绑定、
-> 插件体系重构（废弃 `_spec.py` 磁盘发现通道，宿主绑定成为用户扩展唯一边）均已
-> 实现并合入。内核 IBCI 自举与缓存/JIT 属远期规划（见 `docs/LANGUAGE_DESIGN_EVOLUTION.md`
-> 演进评估）。
 
 ---
 
-## 一、为什么需要原生宿主绑定
+## 一、原生宿主绑定的动机
 
-IBCI 曾以 **Python 侧手写 `_spec.py` 插件** 的方式暴露 Python 内容给用户：
-用户在 Python 侧定义实现 + `__ibcext_vtable__()` 契约，IBCI 侧经 `import` 包装为
-模块（该通道已废弃删除）。它带来几个结构性限制：
+以 **Python 侧契约插件** 暴露 Python 内容（Python 侧定义实现 + `__ibcext_vtable__()`
+契约，IBCI 侧经 `import` 包装为模块）会带来几个结构性限制：
 
-1. **双语言契约割裂**：契约（`_spec.py`）与实现（`.py`）分居两个文件、两种形态，
+1. **双语言契约割裂**：契约与实现分居两个文件、两种形态，
    用户在 Python 侧维护"给 IBCI 看的接口"，而非在 IBCI 侧声明"我要绑定什么"。
 2. **`import` 受限于已注册包**：裸 Python 模块/类/函数无法直接导入并绑定——
-   `import X` 只认 InterOp 注册包（需 `_spec.py`）或 IBCI artifact 模块。
+   `import X` 只认 InterOp 注册包或 IBCI artifact 模块。
 3. **`impl`/协议目标受限**：协议与 retroactive implementation 目标须为本模块
    用户类；宿主导入类型（如 `python.import("pkg")` 得到的类型）无法作为协议/
    `impl` 目标，语言级能力契约无法扩展到宿主内容。
@@ -30,9 +24,9 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 
 ---
 
-## 二、现状实证（已核实的架构事实）
+## 二、架构事实
 
-### 2.1 值/宿主边界：`box` 已能包装任意 Python 对象
+### 2.1 值/宿主边界：`box` 能包装任意 Python 对象
 
 `core/runtime/bootstrapper.py` `box()`（经 `KernelRegistry.box` 委托）：
 
@@ -41,7 +35,7 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 - `callable(val)` → `IbNativeFunction(val, unbox_args=True, ib_class=callable)`。
 - 其它 → `IbNativeObject(val, ib_class=Object)`（vtable 空，成员对 IBCI 不可见）。
 
-**结论：IBCI 已能将任意 Python 对象/可调用对象作为一等值持有与传递。**
+**结论：IBCI 能将任意 Python 对象/可调用对象作为一等值持有与传递。**
 
 ### 2.2 成员门控：`IbNativeObject` 强制 vtable/白名单
 
@@ -60,15 +54,15 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 
 `core/runtime/interpreter/module_manager.py`：
 
-- `import X`：(a) InterOp 注册包（需 `_spec.py` 契约，经 `get_native_contract` 取
-  (vtable, whitelist) → `create_native_object` → `create_module`）；或 (b) IBCI
-  artifact 模块。
+- `import X`：(a) InterOp 注册包（vtable/whitelist 经 `get_native_contract` 取，
+  由 `bind_native_contract` 显式绑定 → `create_native_object` → `create_module`）；
+  或 (b) IBCI artifact 模块。
 - `from X import y`：InterOp 包 → `getattr`；IBCI 模块 → `scope.get`。
 - 编译器：`IbImport`/`IbImportFrom`/`IbAlias`（AST）；parser `import_def.py`；
   scheduler 注入符号（`VariableSymbol(MODULE)` / 成员符号）；VM handler
   `vm_handle_IbImport`/`vm_handle_IbImportFrom` → `module_manager`。
 
-**现状**：`_spec.py` 通道已删除；取 Python 包的唯一通道 = 宿主绑定
+取 Python 包的用户侧唯一通道是宿主绑定
 `import python "..." : bind ...`（见 §四/§五）。
 
 ### 2.4 成员绑定机制（可复用的既有实现）
@@ -80,11 +74,11 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 
 ### 2.5 协议/impl 限制
 
-- 协议/泛型协议/`impl`（带方法体）已支持；协议满足检查在"类自身 + impl 补充"
+- 协议/泛型协议/`impl`（带方法体）受支持；协议满足检查在"类自身 + impl 补充"
   并集上进行。
 - **限制**：`impl` 目标须为本模块用户类；泛型类/内置/宿主类型不支持（fail-fast，
   `KNOWN_LIMITS` §二十四）。
-- `IbSpec` 有 `provenance` 轴（`EXTERNAL_MODULE` 已存在）——宿主类型可复用。
+- `IbSpec` 有 `provenance` 轴（含 `EXTERNAL_MODULE`）——宿主类型可复用。
 
 ---
 
@@ -95,7 +89,7 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 **决策**：复用既有 `import` 关键字，新增"宿主绑定"形态：`import python "pkg" as lib`
 （`python` 伪模块 + 字符串模块名）。
 
-理由（对照 design-philosophy / user-principles）：
+理由：
 1. **统一设计语言**：`import` 已承载"引入外部内容"语义，用户认知连续；独立的
    `host`/`bind` 语句与现有 import 形态割裂。
 2. **机制同构**：import 已走 parser→scheduler（符号注入）→VM→module_manager 成熟
@@ -107,7 +101,7 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 
 ### 3.2 宿主导入类型地位
 
-**一等类型**，复用 `Provenance.EXTERNAL_MODULE` 轴（已存在）。宿主导入的模块/类/函数
+**一等类型**，复用 `Provenance.EXTERNAL_MODULE` 轴。宿主导入的模块/类/函数
 以一等值/类型进入 IBCI 类型系统，可被 `impl`/协议引用（见 §五）。
 
 ### 3.3 成员绑定机制
@@ -117,13 +111,13 @@ IBCI 类型/协议/方法**——把"暴露 Python 给 IBCI"从 Python 侧契约
 fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box + param_meta）
 机制，绑定源为用户 IBCI 侧声明。
 
-### 3.4 与 _spec.py 的关系
+### 3.4 扩展通道收敛（单通道）
 
-`_spec.py` 插件通道已按本方向废弃删除，**不保留双通道**：内置模块契约集中为
+扩展通道收敛为单通道，不保留双通道：内置模块契约集中于
 `core/runtime/bootstrap/builtin_modules.py` 的 TypeDef 字面量（构造期注册），
-用户扩展统一为宿主绑定 `bind`。
+用户扩展统一经宿主绑定 `bind`。
 
-### 3.5 关键实现落点（已实证）
+### 3.5 关键实现落点
 
 | 环节 | 落点 | 机制 |
 |---|---|---|
@@ -138,7 +132,7 @@ fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box 
 | 协议满足 | `core/kernel/spec/registry/_protocol.py` `satisfies_protocol` | 三级数据驱动；在"bind 声明 + impl 补充"并集上判定 |
 | 单一权威源 | `_annotation_utils.py` / `proxy.py` / `base.unbox_for_native_call` | `annotation_to_typeref`（AST→TypeRef）、`create_proxy`（unbox→调→box）、`unbox_for_native_call`（可调用透传 + 拆箱） |
 
-**成员并集机制（已实证）**：
+**成员并集机制**：
 - 协议满足判定是编译期静态 spec 判定（`satisfies_protocol` 三级数据驱动）。
 - 成员并集无独立合并器：impl 方法直接注入 `spec.members`（`symbol_collection_pass.py`
   346-386），运行期水化进同一 vtable（`interpreter.py:745-781`）——扩展点 =
@@ -151,7 +145,7 @@ fail-fast）。复用 `loader._validate_and_bind` 的 proxy（unbox→调→box 
 
 ## 四、宿主导入一等语法（bind 模块成员）
 
-**语法（已实现）**：
+**语法**：
 
 ```ibci
 import python "math" as m:
@@ -166,14 +160,14 @@ import python "math" as m:
   契约外成员 fail-fast（AttributeError）；bind 声明但宿主缺失成员 → 绑定期报错。
 - 用户 IBCI 类 / `any` 字段可持 `lib`（IbNativeObject），方法内 `lib.member(...)` 调用。
 
-**为何 bind 块而非 from-import 简化**（设计取舍，对照 design-philosophy）：
+**为何 bind 块而非 from-import 简化**（设计取舍）：
 - 满足"显式绑定到 IBCI 声明方法"——bind 声明方法签名，编译期可做成员类型检查
   （调用 `m.sqrt(16.0)` 校验实参类型，宿主类型检查一致）。
 - from-import 简化（`from python "math" import sqrt`）丢失签名信息，成员类型退化为
   any/动态——不符合"绑定到声明方法"的类型安全意图。
 - bind 块与 `protocol`/`impl` 方法签名形态一致（统一设计语言）。
 
-**实现落点（已落地）**：
+**实现落点**：
 
 | 环节 | 文件 | 落地内容 |
 |---|---|---|
@@ -187,17 +181,11 @@ import python "math" as m:
 | VM | `declarations.py` / `dispatch.py` | `vm_handle_IbHostImport` + 注册 |
 | 单一权威源 | `_annotation_utils.py` / `proxy.py` | `annotation_to_typeref`（AST→TypeRef）、`create_proxy`（unbox→调→box）从既有实现提取共用 |
 
-**验证面**：e2e（`m.sqrt(16.0)=4.0`、`m.pi`、`m.pow(2,10)=1024.0`、用户类 `Calculator`
-持 native 调 `sqrt=5.0`、无 asname `math.sqrt=4.0`、磁盘文件 rehydrate 后执行、
-跨模块导入 `hsqrt(49.0)=7.0`）；负样本（未声明成员 fail-fast、绑定缺失成员报错、
-编译期类型检查 `SEM_TYPE_MISMATCH`、重复 bind `SEM_REDEFINITION`、`import python` 无字符串
-回落普通路径）；全量 pytest 零回归（`tests/runtime/test_host_binding.py`）。
-
 ---
 
 ## 五、宿主类型绑定（bind class）
 
-**语法（已实现）**——两种形态：
+**语法**——两种形态：
 
 ```ibci
 import python "json" as j:
@@ -235,12 +223,6 @@ import python "json" as j2:
 **单一权威源**：`base.unbox_for_native_call`（可调用实例透传 + IbObject 拆箱，proxy 与
 宿主类实例化共用）；`module_manager.import_host_py_module`（STAGE 5 与 VM 宿主 import
 共用导入入口，统一错误类型）。
-
-**验证面**：e2e（bind+impl 共存、decode 原生、datetime 属性+replace 返回重包装、
-简写 encoder、deque 类型注解、queue.Queue 实例属性、跨模块宿主类、用户类持宿主实例、
-bind 模块与 bind class 同块共存、MathLib 类绑定）；负样本（契约外成员/缺失类/缺失成员
-fail-fast、bind vs impl 同名 SEM_REDEFINITION、块内重复绑定 SEM_REDEFINITION）；全量
-pytest 零回归（`tests/runtime/test_host_binding.py`）。
 
 ---
 

@@ -89,7 +89,7 @@ else:
 
 ## 不依赖 api_config.json 的纯代码配置
 
-如果尚未创建 `api_config.json`，也可以在代码中直接调用 `ai.set_config()` 配置默认模型。两种方式的效果相同——若已经 `ai.load_project_config()` 加载了文件配置，后续 `set_config()` 调用会覆盖之。
+如果尚未创建 `api_config.json`，也可以在代码中直接调用 `ai.set_config()` 配置默认模型。两种方式的效果相同。若已通过 `ai.load_project_config()` 加载文件配置，后续 `set_config()` 调用会覆盖之。
 
 ## 你现在能做什么
 

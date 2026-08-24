@@ -169,7 +169,7 @@ str fn f = lambda(PARAMS): EXPR    # PAR_INVALID_SYNTAX
 
 #### 批量并发执行（`ai.run_batch`）
 
-对参数化 fn 行为逐项**并发**执行，保序返回结果列表。适合"对一批输入各自做一次独立 LLM 推理"的场景——同一行为反复独立调用时，不再需要手写循环串行等待：
+对参数化 fn 行为逐项**并发**执行，保序返回结果列表。适用于"对一批输入各自做一次独立 LLM 推理"的场景：同一行为反复独立调用时，把全部输入作为 `items` 一次性传入。
 
 ```ibci
 import ai
@@ -214,7 +214,7 @@ str greeting = @~ 打个招呼 ~
 
 - 模型名称**区分大小写**（`@GPT4o~` 与 `@gpt4o~` 是不同的模型）
 - 模型名称支持字母+数字（如 `@GPT4o~`、`@WHISPER~`）
-- MOCK 模式下，未注册的模型名称不会报错（MOCK 拦截行为见 `13_mock_testing.md` §13.4）
+- MOCK 模式下，未注册的模型名称不会报错（MOCK 拦截行为见 `docs/syntax/13_mock_testing.md` §13.4）
 
 ### 7.6 多模态 payload 协议（`__payload_prompt__`）
 

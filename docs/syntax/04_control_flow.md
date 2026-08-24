@@ -163,7 +163,7 @@ except Exception as e:
 
 #### 4.7.3 内置异常类型层次
 
-IBCI 内置以下异常类型（详见 §4.7.1）：
+IBCI 内置以下异常类型（字段明细见 §4.7.4）：
 
 ```
 Exception

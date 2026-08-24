@@ -11,7 +11,7 @@
 
 ## api_config.json 的结构
 
-IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project_config()`，引擎即加载项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `fs.read/json.parse`。引擎启动不自动加载配置，须显式调用 `ai.load_project_config()`。
+IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project_config()`，引擎即加载项目根目录（`project_root`）下的 `api_config.json`。配置是原生一等机制，无需脚本手动 `fs.read/json.parse`。
 
 **project_root 的确定**：`main.py run` 时，未显式 `--root` 则引擎自动从入口文件
 所在目录**向上**查找项目标志（`ibci_modules/`、`plugins/`、`.ibci/`、`ibci.json`
@@ -23,7 +23,7 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
   探测为仓库根，`api_config.json` 须放仓库根，或用 `--root <example_dir>` 显式
   指定为示例目录。
 
-最简配置--仅声明默认模型：
+最简配置——仅声明默认模型：
 
 ```json
 {
@@ -35,7 +35,7 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 }
 ```
 
-完备配置--`providers`（连接层）+ `models`（命名模型）+ `defaults`（全局默认）+ `default_model`（默认引用）：
+完备配置——`providers`（连接层）+ `models`（命名模型）+ `defaults`（全局默认）+ `default_model`（默认引用）：
 
 ```json
 {
@@ -80,7 +80,7 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 3. 在 **"API-KEY"** 菜单中创建新密钥并复制。
 4. 阿里云百炼的 `base_url` 通常为 `https://dashscope.aliyuncs.com/compatible-mode/v1`。
 
-其他 LLM 提供者的配置方式相同--只需替换 `base_url`、`api_key` 和 `model` 三个字段即可。IBCI 兼容 OpenAI 兼容 API 协议。
+其他 LLM 提供者的配置方式相同——只需替换 `base_url`、`api_key` 和 `model` 三个字段即可。IBCI 兼容 OpenAI 协议的接口。
 
 ## 命名模型路由
 
@@ -100,7 +100,7 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 }
 ```
 
-每个命名模型引用一个 `provider`（继承连接信息）+ 声明 `model` 名。模型名区分大小写--`local` 和 `Local` 是不同的路由。
+每个命名模型引用一个 `provider`（继承连接信息）+ 声明 `model` 名。模型名区分大小写——`local` 和 `Local` 是不同的路由。
 
 有关行为表达式中使用命名模型的语法，见 `docs/syntax/07_behavior_expressions.md §7.5`。
 
@@ -147,6 +147,6 @@ print(status)   # STANDARD_MODEL / REASONING_MODEL / PROBE_FAILED_FALLBACK_REASO
 
 你已完成 LLM 提供者的配置，模型连接就绪。接下来可以编写第一个行为表达式调用，让 LLM 真正工作起来。
 
-**下一步**：[02 · 第一个 @~ 调用][]--开始编写第一个行为表达式调用。
+**下一步**：[02 · 第一个 @~ 调用][]——开始编写第一个行为表达式调用。
 
 [02 · 第一个 @~ 调用]: ./02_first_call.md

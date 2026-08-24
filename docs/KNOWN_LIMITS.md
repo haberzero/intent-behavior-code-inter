@@ -419,7 +419,7 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 
 **限制说明**
 
-`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**——这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/primitive_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，该占位没有 `_ctx` 状态——**运行期 fail-fast 拒绝**（`intent_context instance is missing its '_ctx' state (invariant violated: __init__ must set it)`），而非静默无效（B3 方法族重构强化：缺 `_ctx` = 不变量破坏，显式暴露）。
+`intent_context.push("X")` / `intent_context.pop()` / `intent_context.fork()` / `intent_context.merge()` / `intent_context.combine()` / `intent_context.clear()` 在"未持有具体 `intent_context` 实例"时直接当作类静态调用使用，**不会影响当前作用域生效的意图栈**。这些方法操作的是 receiver 实例字段 `_ctx`（见 `core/runtime/bootstrap/primitive_initializer.py` 中 `intent_context` 方法注册段）。当 receiver 是临时的"类对象"占位时，该占位没有 `_ctx` 状态——**运行期 fail-fast 拒绝**（`intent_context instance is missing its '_ctx' state (invariant violated: __init__ must set it)`），而非静默无效——缺 `_ctx` 即不变量破坏，显式暴露。
 
 **有效路径**：
 
@@ -447,18 +447,17 @@ str r = @~ ... ~
 
 `@`（smear）与 `@!`（override）是**语句级 one-shot**，行为由 VM 语句调度保证：
 
-1. `@` / `@!` 绑定到紧随其后的**一条语句执行窗口**。该语句执行期间若触发 LLM 调用会
-   消费它；若该语句路径没有任何 LLM 调用，窗口结束后也会被清理，不会泄漏到后续语句。
+1. `@` / `@!` 绑定到紧随其后的一条语句执行窗口：窗口内触发 LLM 调用则被消费，无调用
+   则自动清理、不泄漏到后续语句（语义见 `docs/syntax/09_intent_system.md` §9.1）。
 2. 连续两个 `@` / `@!`（one-shot）：**后者覆盖前者**，编译期不拦截。
 3. 块末尾悬空的 one-shot（下一条语句不存在）：**静默丢弃**，编译期不拦截。
 4. `@+` / `@-` 作为栈操作可独立存在并与 one-shot 组合。`@-` 支持无参弹栈、按内容移除、
    按标签移除（`@- #tag`）。
 5. `SEM_INTENT_PLACEMENT` 仅对 `nonlocal`/`global` 关键字的误用位置发射，与 one-shot
    放置无关。
-6. **`run_batch` 内的 one-shot**：`run_batch` 是单条语句但含多个 LLM 调用——当前实现
-   为批内每个调用独立 fork 意图快照，语句级 `@` / `@!` 会注入批内**每一个**调用
-   （不是只作用于首个调用）。约束批内部分调用需拆分语句或用 `@+` / `@-` 控制
-   （文档：`docs/syntax/09_intent_system.md`）。
+6. **`run_batch` 内的 one-shot**：语句级 `@` / `@!` 会注入 `run_batch` 批内**每一个**
+   LLM 调用，不是只作用于首个调用——只约束批内部分调用时，需拆分语句或用 `@+` / `@-`
+   控制（语法细节见 `docs/syntax/09_intent_system.md` §9.1）。
 
 **根源**：意图注释设计为对"下一条语句执行窗口"的修饰；运行时在无 LLM 路径上保持无
 泄漏的一致语义，但不做编译期放置约束（悬空/连续由语言语义自然处理）。
@@ -471,7 +470,17 @@ str r = @~ ... ~
 
 以下是面向"用户自定义类"的能力差距。这些差距并非 bug，而是设计未覆盖。
 
-1. **用户类泛型参数**：`class Box[T]:` 全链路支持——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。**支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。**边界**：① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；③ 自动生成构造器合并继承链的无默认值字段（父类优先，见 §六）；④ 协议 bound 约束已支持（`class Box[T: SomeProtocol]`，特化时编译期检查实参满足协议；`func call[T: Proto](...)` 调用点推断）；⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；⑥ Enum 不支持类型参数；⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
+1. **用户类泛型参数**：`class Box[T]:` 全链路支持——语法（`[T]`）/ AST（`IbClassDef.type_params`）/ 语义（`TypeKind.TYPE_PARAM` 占位 + 特化 spec 构造）/ 序列化（`type_params` 落 artifact + rehydrate）/ 运行时（`Box[int]` 特化类 + `IbClass.__getitem__` 类型特化）。
+   **支持**：多特化并存、字段/方法参数/返回类型特化（含嵌套实参 `Box[list[int]]` 的参数类型检查）、嵌套泛型（`list[Box[int]]`）、多类型参数（`Pair[K,V]`）、泛型继承（`class Sub[T](Box[T])`，父特化恒注册）。
+   **边界**：
+   ① 泛型类必须特化使用（裸 `Box b` 注解或 `x = Box(1)` 实例化均报 `SEM_GENERIC_TYPE_NEEDS_ARGS`）；
+   ② 实参数须与声明一致（`SEM_GENERIC_TYPE_ARG_COUNT`）；
+   ③ 自动生成构造器合并继承链的无默认值字段（父类优先，见 §六）；
+   ④ 协议 bound 约束已支持（`class Box[T: SomeProtocol]`，特化时编译期检查实参满足协议；`func call[T: Proto](...)` 调用点推断）；
+   ⑤ `class Sub(Box[int])`（非泛型子类继承具体特化）fail-fast 报错；
+   ⑥ Enum 不支持类型参数；
+   ⑦ 类型参数名不得遮蔽内置类型（`class Box[int]` 报错）；
+   ⑧ 父引用嵌套实参（`class Sub[T](Box[list[T]])`）语法不支持（parser fail-fast）。
 2. **运算符重载覆盖有限**：用户类可定义 dunder 方法并被运算符分派调用：**比较类** `==`(`__eq__`)/`!=`(`__ne__`)/`<`(`__lt__`)/`>`(`__gt__`)/`<=`(`__le__`)/`>=`(`__ge__`)、**算术类** `+`(`__add__`)/`-`(`__sub__`)/`*`(`__mul__`)/`/`(`__truediv__`)/`//`(`__floordiv__`)/`%`(`__mod__`)/`**`(`__pow__`)、**位运算类** `&`(`__and__`)/`|`(`__or__`)/`^`(`__xor__`)/`<<`(`__lshift__`)/`>>`(`__rshift__`)、**一元类** `-`(`__neg__`)/`+`(`__pos__`)/`~`(`__invert__`)/`not`(`__not__`)、**成员** `in`(`__contains__`) 均可覆写。**`is` 恒为身份比较，不可覆写**（与 Python 一致）。该机制经 `IbClass.receive` 的 vtable 分派实现；与内置 axiom 的能力级分派（Integer/Float/Str 的 `+`/`==`/`<`）是两套路径，未覆写的运算符在用户类上退化为身份比较（`==`）或运行时错误。
 
 ---
@@ -504,7 +513,7 @@ str r = @~ ... ~
 4. `__payload_prompt__` 多模态协议（图片/音频/视频提交给 LLM）
 5. 意图系统（`@`/`@+`/`@!`）对真实 LLM 行为的影响
 6. `llmexcept` retry hint 注入到真实 LLM 系统提示词的效果
-7. `__retry__` 协议（重试策略声明，P4d 已实现）与 llmexcept retry 注入真实 LLM 提示词的效果
+7. `__retry__` 协议（重试策略声明）与 llmexcept retry 注入真实 LLM 提示词的效果
 8. 命名模型路由（`@NAME~`）连接真实 LLM provider
 9. `ai.probe_model()` / `ai.has_api_key()` 探测真实 API
 10. `ai.set_timeout()` 超时行为
@@ -572,7 +581,7 @@ IBCI 编译器按拓扑序编译模块（依赖先编译）。循环依赖使得
 
 IBC-Inter 的多 Interpreter 隔离（动态宿主）在**模块层**采用**可见性隔离**，而非 Python 代码/内存层的强隔离：
 
-- 每个 Engine 拥有独立的 `HostInterface` / `InterOp` 注册表；IBCI 脚本只能 `import` 到**本引擎注册表**中登记的模块。引擎 A 的 IBCI 代码无法看到引擎 B 的模块--可见性是每引擎隔离的。
+- 每个 Engine 拥有独立的 `HostInterface` / `InterOp` 注册表；IBCI 脚本只能 `import` 到**本引擎注册表**中登记的模块。引擎 A 的 IBCI 代码无法看到引擎 B 的模块——可见性是每引擎隔离的。
 - 模块的 **Python 实现代码**仍由 Python 的 `importlib` 按进程级常规机制加载：`sys.modules` 全局缓存、按模块名命中。同一进程内，**同名模块按"先加载者胜"作为身份唯一性**--后启动的引擎拿到的是进程已缓存的那个模块对象。宿主绑定（`import python "..."`）同样经 `sys.modules` 加载，适用同一边界。
 - 模块的**实例**是每引擎独立的：`create_implementation()` 每次调用产出新实例，绑定引擎 registry 身份（经 `BoundPlugin` 容器承载，跨引擎误用实例会抛 `RegistryIsolationError`）。
 
@@ -684,7 +693,7 @@ IBC-Inter 对此**没有强制力**：模块实现若在 `.py` 文件顶层声�
 
 - **协议**：声明 / 继承 / 泛型协议（`protocol Container[T]:`）/ 泛型 bound（§十四 #1 ④）/ 方法签名兼容校验（参数数量、参数类型可放宽、返回协变）。
 - **`impl` 声明式**（空 body）：校验类型已满足协议并记录，类型必须已提供全部协议方法。
-- **`impl` 方法补充**（带 body）：为既有类型补充缺失的协议方法（可读 `self` 与字段、子类经继承链可见、多 `impl` 块合并；`llm func` 方法是旧机制，已删除，方法恒普通 `func`）。
+- **`impl` 方法补充**（带 body）：为既有类型补充缺失的协议方法（可读 `self` 与字段、子类经继承链可见、多 `impl` 块合并；方法恒普通 `func`）。
 - **限制（fail-fast）**：① 目标须为**本模块用户类 / 宿主绑定类 / 内置具体值类型**（跨模块 dotted 目标不支持）；② **泛型类**目标不支持（方法体类型参数与特化成员替换未接线）；③ 内置目标中动态逃生类型（`any`/`auto`）、`void`、`module` 不支持；内置 `impl` 不得定义 `__init__`（内置构造走原生路径，永不分派 impl 构造器）；④ 方法名与目标既有成员（含内置类型的公理声明方法与公理运算符）同名报编译期错误（`SEM_REDEFINITION`）；仅运行期注册的内置原生方法（如 `__to_prompt__`/`__call__`，不进 spec.members/公理声明面）同名在水化期 fail-fast；⑤ 协议未覆盖全部必需方法、或方法签名不兼容，报编译期错误。
 - **内置 `impl` 的作用域语义**：内置类型属内核根命名空间（无 module 限定），其 `impl` **引擎全局**生效——同一编译的全部模块共享（成员写入共享内置 spec，方法注册进引擎级运行期 vtable）。改写内置既有协议方法（覆层机制）是独立设计项，落地前同名一律按冲突拒绝。
 

@@ -24,8 +24,8 @@ python trials/_toolkit/run_batch.py trials/T01_llm_full --mock-only --timeout 10
 
 ## 三、接入自己的 API 服务
 
-> **开发试用基线**：所有开发试用均在**本地 `qwen3.6-35b-a3b` 非思考模式**下进行
-> （`reasoning: false`）；下方示例配置即此基线，服务细节见 `trials/_toolkit/LLM_SERVICE.md`。
+> 试用环境基线见 `docs/trials/README.md`；下方示例配置即此基线，服务细节见
+> `trials/_toolkit/LLM_SERVICE.md`。
 
 真实 LLM 层使用 OpenAI 兼容 API。在试用地基根目录放置 `api_config.json`：
 
@@ -90,5 +90,12 @@ python trials/_toolkit/run_one.py cases/D1-01-001-basetypes.ibci \
 |------|------|
 | 真实 LLM 服务不可达 | 只运行 mock 用例，真实用例标为环境缺失 |
 | 用例超时 | 调大 `--timeout`，或检查是否进入死循环 |
-| 思考模型响应慢 | 本机开发试用基线为非思考模式（qwen3.6-35b-a3b，`reasoning: false`）；换用思考模型时接受慢响应并降低 `--parallel` |
+| 思考模型响应慢 | 本机开发试用基线为非思考模式（见 `docs/trials/README.md`）；换用思考模型时接受慢响应并降低 `--parallel` |
 | 自定义模型输出不稳定 | 断言只匹配稳定可判定的部分，如枚举值、关键字 |
+
+## 深入指引
+
+- 试用套件体系与用例契约：`docs/trials/README.md`
+- 本机与自定义 API 服务规范：`trials/_toolkit/LLM_SERVICE.md`
+- 调试 LLM 调用失败：`docs/howto/debug_llm_calls.md`
+- 自定义 LLM provider 与配置格式：`docs/howto/modify_llm_provider.md`

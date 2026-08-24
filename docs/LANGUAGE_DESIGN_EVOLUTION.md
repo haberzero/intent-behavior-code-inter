@@ -54,7 +54,7 @@ has_payload_prompt_cap
 
 这意味着：语言能识别哪些“能力”，在写内核时就已经被枚举死了。用户不能声明一种新能力，也不能说“这个类型满足某个用户定义的协议”。
 
-### 1.2 Prompt 协议：典型的“写死了逻辑的魔法操作”
+### 1.2 Prompt 协议：逻辑硬编码在多处
 
 当前 prompt 相关协议分散在多个位置，彼此靠**方法名字符串**耦合：
 
@@ -66,42 +66,37 @@ has_payload_prompt_cap
 - `core/runtime/objects/intent.py` 中 `_intent_segment_to_prompt()` 又单独实现了一遍 `__to_prompt__` 回退；
 - `core/base/llm_protocol/recommended.py` 把语义槽按"输出纪律 → 输出格式 → 意图"顺序组装系统提示词（推荐模板，供应商无关，可被自定义 provider 覆盖）。
 
-结论：**同一个“协议”概念，在编译期、运行期、意图系统、LLM 装配里被多次手工实现。** 这不是“接口化”，而是“魔法方法 + 多处复制”。
+结论：**同一个“协议”概念，在编译期、运行期、意图系统、LLM 装配里被多次手工实现，逻辑硬编码在多处。**
 
-### 1.3 意图系统：字符串栈，而不是一等值栈
+### 1.3 意图系统：一等值栈与残余激活判定
 
-- `IbIntent` 本质是 `content: str` + 可选的 segments；
+- `IbIntent` 持有一等值列表 `values`——意图段在注释/栈操作执行点 eager 求值；
+- 渲染经 `__to_prompt__` 统一协议（可调用/行为值渲染契约形态，回退 `to_native`）；
 - `IbIntentContext` 维护持久栈、smear、override、global；
-- `IntentResolver` 最终把意图解析成 `List[str]`。
+- `IntentResolver` 最终把意图解析成注入文本（`List[str]`）。
 
-> **已收敛（阶段 A1 · G5，2026-08）**：意图系统已升级为**一等值栈**——意图段在注释/
-> 栈操作执行点 eager 求值为值列表（`IbIntent.values`，取代 `content`/`segments` 双表示），
-> 渲染经 `__to_prompt__` 统一协议（可调用/行为值渲染契约形态），`@-` 按值派生渲染文本
-> 匹配。`_helpers.py` 的意图上下文参数激活仍为参数类型名判定（另见 KNOWN_LIMITS §十二，
-> 不在本债务内）。
+意图已支持：
 
-当前意图可以包含 `$var` / 表达式段，但这仍然是在“求值后转成字符串”的层面。它没有：
-
-- 把“一个用户定义对象”作为意图值；
-- 把“一个函数实例 / behavior / LLM 可调用值”作为意图值（P3 已部分落地）；
+- 把用户定义对象、函数实例 / behavior / LLM 可调用值作为意图值，由 `__to_prompt__`
+  决定呈现；
 - 让意图渲染与普通 prompt 渲染共用同一套协议；
-- 让用户自定义类型通过接口控制自己在意图中的呈现。
+- 让用户自定义类型通过 `__to_prompt__` 控制自己在意图中的呈现。
 
-另外，`core/runtime/objects/kernel/_helpers.py` 中通过“参数类型名是不是 `intent_context`”以及“对象有没有 `_ctx` 字段”来触发意图上下文激活，这是一种典型的魔法字段判断，而不是协议/接口判断。
+残余限制：`core/runtime/objects/kernel/_helpers.py` 仍通过“参数类型名是不是
+`intent_context`”以及“对象有没有 `_ctx` 字段”来触发意图上下文激活——这是基于参数
+类型名字符串与字段存在性的判断，而非协议判断（另见 KNOWN_LIMITS §十二）。
 
-### 1.4 可调用值：LLM 调用与确定性函数（曾为两条平行路径，现已协议化统一）
+### 1.4 可调用值：LLM 调用与确定性函数统一协议
 
-- 早期存在 `IbUserFunction` 与 `IbLLMFunction`（`llm ... llmend` 语法）两条平行执行路径
-  （`_vm_call_user_function` / `_vm_invoke_llm_function`），编译期也有 `IbFunctionDef` 与
-  `IbLLMFunctionDef` 两个 AST 节点；
-- **该平行结构已随协议化重构消除**：`llm ... llmend` 语法与旧机制全量删除，统一为
-  **LLMCallable 协议**（`__llm_call__` 必需方法）——行为描述语句与 LLM 可调用类经统一装配
-  入口 `assemble_llm_callable_request_cps` 消费；普通 `fn`/lambda/snapshot 等可调用值由
-  Callable 协议描述；
+可调用值统一经协议描述，无两套平行执行路径：
+
+- 确定性函数与 LLM 调用统一为**可调用值**：行为描述语句与 LLM 可调用类经统一装配
+  入口 `assemble_llm_callable_request_cps` 消费（LLMCallable 协议，`__llm_call__`
+  必需方法）；普通 `fn`/lambda/snapshot 等可调用值由 Callable 协议描述；
 - 普通函数：确定性执行；LLM 可调用类/行为：有 prompt 装配、返回类型解析、`__retry__` 重试
   策略；snapshot/lambda：捕获策略不同（snapshot 冻结意图、lambda 引用捕获）。
 
-统一后，「把可调用值作为一等值放入意图、放入数据结构、被协议约束」的能力已落地（`__intent__`
+可调用值可作为一等值放入意图、放入数据结构、被协议约束（`__intent__`
 可选协议方法改写意图三层；行为/可调用值经 `__to_prompt__` 嵌入意图）。
 
 ### 1.5 OOP：有类、继承、dunder，但没有接口/抽象/封装
@@ -171,7 +166,7 @@ class Point implements Serializable:
     ...
 ```
 
-这不是简单加一个关键字，而是让“协议”成为编译期和运行期都能查询、约束、序列化的一等实体。
+这要求“协议”成为编译期和运行期都能查询、约束、序列化的一等实体，而新增一个关键字不足以达成此目标。
 
 ### 3.2 把能力公理从固定 flag 改为协议满足关系
 
@@ -191,7 +186,7 @@ class Point implements Serializable:
 
 - `_prompt.py`（对象到文本/多模态）；
 - `core/base/llm_protocol/recommended.py`（推荐系统提示词段落，供应商无关）；
-- `_llm_function.py`（LLM 函数）；
+- `_llm_callable.py`（LLM 可调用类）；
 - `_behavior.py`（行为表达式）；
 - `intent.py`（意图渲染）。
 
@@ -202,7 +197,7 @@ class Point implements Serializable:
 3. 提示词装配不再是“固定字符串拼接”，而是“按协议收集有序 PromptPart 列表”；
 4. 新增一种上下文来源时，不需要修改核心装配代码，只需要注册新的 `PromptContributor`。
 
-这样 `__to_prompt__`、`__payload_prompt__`、意图、retry hint、`__outputhint_prompt__` 就不再是魔法，而是统一协议的不同实现。
+这样 `__to_prompt__`、`__payload_prompt__`、意图、retry hint、`__outputhint_prompt__` 就统一为同一协议族的不同实现。
 
 ### 3.4 泛型约束与泛型函数
 
@@ -221,19 +216,18 @@ func max[T: Comparable](T a, T b) -> T:
 - 支持泛型函数（不限于泛型类）；
 - 类型推断可以先用“轻量约束检查”，不必一开始就上完整 Hindley-Milner。
 
-### 3.5 意图系统正交化：从字符串栈到 Promptable 值栈
+### 3.5 意图系统正交化：Promptable 值栈
 
-> **已基本落地（阶段 A1 · G5，2026-08）**：意图值栈已实现——`IbIntent.values` 持有一等值
-> （eager 求值）、`__to_prompt__` 统一渲染协议、`IntentResolver` 最终渲染、函数/behavior/
-> llm 可调用值可作为意图值由 `__to_prompt__` 决定呈现。本段保留为原始设计建议（历史承载）。
+意图值栈——`IbIntent.values` 持有一等值（eager 求值）、`__to_prompt__` 统一渲染
+协议、`IntentResolver` 最终渲染，函数 / behavior / LLM 可调用值可作为意图值由
+`__to_prompt__` 决定呈现。
 
-建议把意图从“字符串栈”升级为“可渲染值栈”：
+当前机制：
 
-- `IbIntent` 的 `content` 不再只是 `str`，而可以是任意实现了 `Promptable` 的值；
-- 意图栈保存的是“意图对象”，而不是已经渲染好的字符串；
+- `IbIntent` 保存意图对象值列表，而非已渲染好的字符串；
 - `IntentResolver` 在最终渲染时调用统一协议；
 - 用户自定义类可以作为意图值；
-- 函数实例、behavior、LLM function 也可以作为意图值，由它们自己决定如何呈现。
+- 函数实例、behavior、LLM 可调用值可以作为意图值，由它们自己决定如何呈现。
 
 例如：
 
@@ -242,13 +236,13 @@ func max[T: Comparable](T a, T b) -> T:
 @+ my_llm_function           # 函数实例作为意图
 ```
 
-语义上可以定义为：
+渲染语义：
 
 - 普通对象：调用 `__to_prompt__` 渲染；
-- 函数 / behavior：默认渲染其名称与签名，或者由用户通过协议自定义；
-- 未来甚至可以定义“调用式意图”：在渲染时调用函数得到动态上下文。
+- 函数 / behavior：默认渲染其名称与签名，或者由用户通过协议自定义。
 
-但要注意：**调用式意图会引入副作用和执行时机问题**，必须与现有 CPS、snapshot、llmexcept、并发调度统一设计，不能作为孤立语法加入。
+后续方向：调用式意图（在渲染时调用函数得到动态上下文）会引入副作用和执行时机问题，
+必须与现有 CPS、snapshot、llmexcept、并发调度统一设计，不能作为孤立语法加入。
 
 ### 3.6 函数实例与意图 / LLM 上下文的一等交互
 
@@ -259,7 +253,7 @@ func max[T: Comparable](T a, T b) -> T:
 - 允许函数作为意图值、作为 prompt 段、作为数据结构字段；
 - 在类型层面把“可调用”和“可提示”组合起来，例如 `fn[(...) -> T] & Promptable`。
 
-这会让“把函数放进意图”不是魔法，而是协议组合的自然结果。
+这让“把函数放进意图”成为协议组合的自然结果。
 
 ### 3.7 OOP 抽象补全
 
@@ -349,13 +343,13 @@ IBCI 已经有一个比大多数脚本语言更认真的类型地基，尤其是
 - 可调用签名；
 - 类型驱动的 LLM 合约。
 
-但从“体系化演进”角度看，它目前最大的瓶颈不是缺少某个语法糖，而是**缺少一个贯穿内核的协议/接口/类型类抽象**。
+但从“体系化演进”角度看，它目前最大的瓶颈是**缺少一个贯穿内核的协议/接口/类型类抽象**。
 
 如果 IBCI 的目标继续是“实验性 LLM 胶水语言”，当前架构可以继续演进；但如果目标是“实用、工程化、现代化”，那么最值得投入的方向是：
 
 > 把协议作为内核一等公民，让 Prompt 协议、意图、LLM 函数、泛型约束、插件扩展全部收敛到同一套协议机制上。
 
-这不是一次语法更新，而是一次从 `TypeRef / TypeDef / TypeAxiom / SpecRegistry` 到编译器、运行时、插件、意图、LLM 装配的体系化重构。
+这需要一次从 `TypeRef / TypeDef / TypeAxiom / SpecRegistry` 到编译器、运行时、插件、意图、LLM 装配的体系化重构。
 
 ---
 

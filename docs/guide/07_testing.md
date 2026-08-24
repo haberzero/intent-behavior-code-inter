@@ -18,14 +18,14 @@
 
 ## 启用 MOCK 模式
 
-IBCI 的 MOCK 模式让你无需 API key、无需网络即可测试 LLM 逻辑。只需一行配置：
+IBCI 的 MOCK 模式无需 API key、无需网络即可测试 LLM 逻辑。只需一行配置：
 
 ```ibci
 import ai
 ai.set_mock_mode()
 ```
 
-配置后，所有 `@~ ... ~` 行为表达式和 LLM 可调用类调用都不会连接真实 API，而是**在表达式或装配的用户提示中查找 MOCK 指令，直接返回预设值**。
+配置后，`@~ ... ~` 行为表达式和 LLM 可调用类调用不再连接真实 API。MOCK 模式在表达式或装配的用户提示中**查找 MOCK 指令并直接返回预设值**。
 
 ---
 
@@ -136,7 +136,7 @@ print(s3)   # 不合格
 
 ## 用 idbg 调试
 
-`idbg` 模块让你探查每次 LLM 调用的内部状态：
+`idbg` 模块可探查每次 LLM 调用的内部状态：
 
 ```ibci
 import ai
@@ -158,7 +158,7 @@ idbg.print_vars()           # 打印当前作用域所有变量
 
 ## MOCK 模式的边界
 
-MOCK 模式验证指令解析与控制流逻辑，无法验证意图注入、提示词协议、多模态与 `llmexcept` retry hint 对真实 LLM 的行为影响——这些需要连接真实 API。完整列表见 [已知限制 / MOCK 模式下无法验证的 LLM 功能][known-17]。
+MOCK 模式只验证指令解析与控制流逻辑。意图注入、提示词协议、多模态与 `llmexcept` retry hint 对真实 LLM 的行为影响，需连接真实 API 才能验证。完整列表见 [已知限制 / MOCK 模式下无法验证的 LLM 功能][known-17]。
 
 ---
 
@@ -173,7 +173,7 @@ MOCK 模式验证指令解析与控制流逻辑，无法验证意图注入、提
 
 ## 你现在能做什么
 
-- 在 MOCK 模式下用 MOCK 指令为 `@~` 和 LLM 函数提供预设返回值
+- 在 MOCK 模式下用 MOCK 指令为 `@~` 和 LLM 可调用类提供预设返回值
 - 用 `MOCK:FAIL` / `MOCK:REPAIR` 验证容错逻辑
 - 用 `MOCK:SEQ` 模拟多次调用的不同返回序列
 - 用 `idbg.show_intents()` 和 `idbg.show_target_prompt()` 调试 LLM 交互

@@ -65,7 +65,7 @@ class IbBehaviorExpr:
     dispatch_eligible: bool               # 是否可并行调度
 ```
 
-**为什么正确**：
+**正确性依据**：
 1. **本质属性**：依赖关系是程序结构的一部分，不是"附加元数据"
 2. **运行时需要**：VM 调度器直接读取 `dispatch_eligible`
 3. **序列化友好**：序列化器自动处理对象引用 → UID 转换
@@ -165,7 +165,7 @@ class IbImplDef(IbStmt):
 编译期侧表由 `core/compiler/semantic/metadata/metadata_store.py:MetadataStore` 承载，
 存放 Pass 之间传递的分析结果（字段与职责见 §6.1 唯一权威定义）。
 
-### 3.3 为什么混用 id() 和 UID？
+### 3.3 id() 与 UID 的取舍
 
 **性能 vs 持久化的权衡**：
 
@@ -436,24 +436,6 @@ Phase 间通过 `PassOutput`（symbol_bindings / type_bindings / diagnostics）�
 
 `Symbol.provenance: Provenance` 是符号来源的唯一标志。`SymbolTable.define` 使用 `existing.provenance.compatible_with(sym.provenance)` 做冲突检测，分发通过协议方法完成。
 
----
-
-## 附录：常见问题解答
-
-### Q1：为什么不在编译期就使用 UID？
-性能考虑。编译期频繁查询（Pass 之间传递），使用 Python id() 比字符串 UID 快得多。序列化时才转换为 UID，是性能和持久化的最佳平衡点。
-
-### Q2：为什么行为依赖要写在 AST 上？
-三个原因：
-1. 运行时需要（VM 调度器直接读取）
-2. 是程序结构的一部分（不是临时元数据）
-3. 序列化器已经处理对象引用转换（无需手动管理）
-
-### Q3：MetadataStore 的定位
-`MetadataStore` 是语义分析产物的聚合容器，作为序列化中介向序列化器提供符号/类型绑定。核心判断：运行时需要 → AST，仅编译期查询 → 侧表，跨 Pass 传递的聚合产物 → MetadataStore。
-
-### Q4：如何判断新的分析结果应该存在哪里？
-参考第八章的决策流程图。核心判断：运行时需要 → AST，仅编译期查询 → 侧表。
 ---
 
 ## 深入指引

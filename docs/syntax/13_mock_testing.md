@@ -11,7 +11,7 @@ import ai
 ai.set_mock_mode()
 ```
 
-在 MOCK 模式下，所有 LLM 调用不会连接真实 API，而是解析行为表达式或 LLM 函数中的 MOCK 指令返回预设值。
+在 MOCK 模式下，所有 LLM 调用不会连接真实 API，而是解析行为表达式或 LLM 可调用类中的 MOCK 指令返回预设值。
 
 ---
 
@@ -195,7 +195,7 @@ MOCK 拦截发生在模型路由之前，因此 MOCK 模式下未注册的模型
 
 内联 MOCK（`set_mock_mode` 模式）在进程内即时返回，零延迟、零基础设施失败，无法验证 LLM 调用的传输层行为（超时、并发时序、HTTP 错误）。
 
-MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/completions` 端点（含 SSE 流式），由测试代码启动于 `127.0.0.1` 随机端口。将 `ai.set_config` 指向服务地址后，IBCI 走**真实的 `OpenAI` 客户端路径**发起 HTTP 调用。这作为机制测试的完整传输彩排。
+MOCK HTTP 服务（`MockServer`）提供 OpenAI 兼容的 `POST /v1/chat/completions` 端点（含 SSE 流式），由测试代码启动于 `127.0.0.1` 随机端口。将 `ai.set_config` 指向服务地址后，IBCI 走**真实的 `OpenAI` 客户端路径**发起 HTTP 调用。这为机制测试提供完整的真实 HTTP 传输路径。
 
 #### 13.6.1 启动与接入
 

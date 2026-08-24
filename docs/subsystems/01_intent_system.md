@@ -25,24 +25,24 @@
 
 | 语法形式 | 类别 | 说明 |
 |----------|------|------|
-| `@ 内容` | 一次性涂抹意图 | 绑定到**紧跟其后的一条语句执行窗口**；该语句执行期间的首个相关 LLM 调用会消费它，语句结束后自动清理残留 |
-| `@! 内容` | 排他意图（单次覆盖） | 绑定到**紧跟其后的一条语句执行窗口**；窗口内屏蔽其它意图并优先使用该排他意图，语句结束后自动清理残留 |
+| `@ 内容` | 一次性涂抹意图 | 绑定到紧跟其后的一条语句执行窗口；该语句执行期间的首个相关 LLM 调用会消费它，语句结束后自动清理残留 |
+| `@! 内容` | 排他意图（单次覆盖） | 绑定到紧跟其后的一条语句执行窗口；窗口内屏蔽其它意图并优先使用该排他意图，语句结束后自动清理残留 |
 | `@+ 内容` | 压入持久意图栈 | 持续有效，直到被显式移除；可独立存在，不需要紧跟 LLM 调用 |
 | `@-` | 弹出栈顶 | 无参数，移除持久栈中最近压入的意图；可独立存在 |
 | `@- 内容` | 按内容物理移除 | 从持久栈中移除第一条匹配指定内容的意图；可独立存在 |
 | `@- #tag` | 按标签物理移除 | 从持久栈中移除第一条匹配指定标签的意图；可独立存在 |
 
-**重要约束**（细则见语法权威）：
-- `@` 符号与修饰符（`+` / `-` / `!`）之间**不能有空格**（如 `@-#tag` 正确，`@ - #tag` 错误）
+**约束**（细则见语法权威）：
+- `@` 符号与修饰符（`+` / `-` / `!`）之间不能有空格（如 `@-#tag` 正确，`@ - #tag` 错误）
 - 连续两个 one-shot（`@` / `@!`）不允许；`@+` / `@-` 可独立使用
 
 ### 2.2 意图系统的启用位置
 
-意图注释系统**在入口文件（entry file）层级启用**。
+意图注释系统在入口文件（entry file）层级启用。
 
 - 进入程序时，运行时为入口文件的执行上下文初始化一个空的全局意图上下文实例（`IbIntentContext`），作为整个程序生命周期内的**根意图上下文**
 - 在入口文件顶层使用 `@+` / `@-` 直接操作该根意图上下文
-- 每次**函数调用**进入时，运行时会对当前活跃的意图上下文执行 `fork()`（克隆），被调用函数在该克隆副本上操作，**函数内对意图系统的所有操作不会泄漏到调用者**
+- 每次函数调用进入时，运行时会对当前活跃的意图上下文执行 `fork()`（克隆），被调用函数在该克隆副本上操作，函数内对意图系统的所有操作不会泄漏到调用者
 - 函数返回后，克隆副本被丢弃，调用者的意图上下文保持不变
 
 ```
@@ -69,13 +69,13 @@
 
 ### 2.4 函数调用意图传递语义（拷贝传递）
 
-每次函数调用（普通函数 `IbUserFunction.call()` 和 LLM 函数 `IbLLMFunction.call()`）的意图上下文行为：
+每次函数调用（普通函数 `IbUserFunction.call()` 与 LLM 可调用类实例调用）的意图上下文行为：
 
 | 调用方式 | 函数收到的意图上下文 |
 |----------|---------------------|
-| `my_func()` | 调用时**当前活跃意图上下文**的 **fork 快照**（拷贝传递）；函数内 `@+`/`@-` 不影响调用者 |
+| `my_func()` | 调用时当前活跃意图上下文的 **fork 快照**（拷贝传递）；函数内 `@+`/`@-` 不影响调用者 |
 
-函数内部若需屏蔽/替换继承自调用者的意图，需要在函数体内**显式调用**作用域控制 API：
+函数内部若需屏蔽/替换继承自调用者的意图，需要在函数体内显式调用作用域控制 API：
 
 | API | 语义 |
 |-----|------|
@@ -83,16 +83,16 @@
 | `intent_context.use(ctx)` | 用指定 `intent_context` 实例的内容替换当前作用域的意图上下文（fork 拷贝，不共享引用） |
 | `intent_context.get_current()` | 返回当前作用域正在生效的意图上下文的快照（fork 副本，可检查、可保存） |
 
-**重要原则**：`@!` 是 one-shot 语义，不是长期作用域策略。即便其可绑定普通语句窗口，函数级长期意图管理仍应优先使用显式 API（`clear_inherited/use/get_current`）。
+**原则**：`@!` 是 one-shot 语义，不是长期作用域策略。即便其可绑定普通语句窗口，函数级长期意图管理仍应优先使用显式 API（`clear_inherited/use/get_current`）。
 
 ### 2.5 用户自定义意图对象与作用域替换
 
-用户可以创建自定义 `intent_context` 实例，并用它**完全替换当前作用域的默认意图上下文**。
+用户可以创建自定义 `intent_context` 实例，并用它完全替换当前作用域的默认意图上下文。
 
 **替换后的语义**：
-- 替换后，当前作用域内的所有意图注释操作（`@+`、`@-`、`@~...~`等）均以**最新活跃的意图上下文对象**为基础进行作用
-- 替换操作会在**当前作用域内直接取代原有的意图上下文**（即当前活跃的意图对象被新对象替代）
-- 新意图对象同样作为**被克隆的实例**：当前作用域内后续发生的函数调用，会以当前活跃的新意图对象（而不是原先的根上下文）为源头 `fork()` 一个克隆副本传递给被调用函数
+- 替换后，当前作用域内的所有意图注释操作（`@+`、`@-`、`@~...~`等）均以最新活跃的意图上下文对象为基础进行作用
+- 替换操作会在当前作用域内直接取代原有的意图上下文（即当前活跃的意图对象被新对象替代）
+- 新意图对象同样作为被克隆的实例：当前作用域内后续发生的函数调用，会以当前活跃的新意图对象（而不是原先的根上下文）为源头 `fork()` 一个克隆副本传递给被调用函数
 
 ```ibci
 func my_func():
@@ -116,7 +116,7 @@ func my_func():
 
 **关键不变量**：
 - `intent_context.use(ctx)` 执行 `fork(ctx)` 而非直接共享引用，保证两个作用域的意图状态互不干扰
-- 替换操作只在**当前作用域**生效；函数返回后，调用者的活跃意图上下文不受影响（拷贝传递语义保证）
+- 替换操作只在当前作用域生效；函数返回后，调用者的活跃意图上下文不受影响（拷贝传递语义保证）
 - 多次调用 `intent_context.use(ctx)` 以最后一次为准
 
 ---
@@ -174,9 +174,9 @@ IntentNode
 └── _cached_list  # 展平列表缓存（懒加载，`to_list()` 时生成）
 ```
 
-**重要**：`@-` 移除操作通过**重建链表**（而非原地修改 `previous.parent`）来保证结构共享安全。在存在 `fork()` 快照的情况下，原地修改会破坏快照的不可变性。
+`@-` 移除操作通过重建链表（而非原地修改 `previous.parent`）来保证结构共享安全。在存在 `fork()` 快照的情况下，原地修改会破坏快照的不可变性。
 
-### 3.3 运行时上下文（当前实际结构）
+### 3.3 运行时上下文
 
 ```
 core/runtime/interpreter/runtime_context.py
@@ -289,7 +289,7 @@ class IntentResolver:
 
 ### 4.6 LLMExceptFrame 中的意图快照
 
-`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照；每次 retry 前以 fork 副本**直接替换** `_intent_ctx`：
+`llmexcept` 进入时通过 `intent_context.fork()` 保存意图状态的值快照；每次 retry 前以 fork 副本直接替换 `_intent_ctx`：
 
 ```python
 # LLMExceptFrame.save_context()
@@ -306,7 +306,7 @@ runtime_context.replace_intent_context(frame.saved_intent_ctx.fork())
 
 **为何采用 fork-and-replace 而非 merge**：
 
-- merge 会保留 retry body 在快照之后对意图状态（持久栈/smear 队列/override 槽）的修改，造成"叠加恢复"——与 vars / loop_context 的"干净还原"语义不一致。
+- merge 会保留 retry body 在快照之后对意图状态（持久栈/smear 队列/override 槽）的修改，造成"叠加恢复"。这与 vars / loop_context 的"干净还原"语义不一致。
 - fork-and-replace 保证 retry 看到的意图状态与 llmexcept 进入时刻完全一致。
 - 活跃实例指针被重建：若原帧持有命名策略，则同步指向新底层 `IbIntentContext`；若原帧匿名，则建立新的匿名封装。底层共享引用不变量（`_active_intent_ibobj.fields['_ctx'] is _intent_ctx`）始终维持。
 
@@ -338,13 +338,13 @@ IbIntent (IbObject)
 └── render_text()           # 单一权威渲染：各值经 __to_prompt__ 拼接去空白
 ```
 
-> **一等值栈（G5）**：意图段不再保存退化字符串 `content` 或延迟段引用 `segments`——
+> **一等值栈**：意图段不保存退化字符串 `content` 或延迟段引用 `segments`——
 > 在 `@`/`@+`/`@!`/`@-` 执行点 **eager 求值为一等值列表**（`values`）。渲染
 > （`render_text`）从值经 `__to_prompt__` 拼接（可调用/行为值渲染为契约形态）；
 > `@-` 匹配（`remove(tag, content)`）把操作数求值后渲染为文本，与栈内意图的
-> 渲染文本比较（**按值匹配**，修复动态意图按退化字符串匹配失效）。
+> 渲染文本比较（**按值匹配**，动态意图与静态意图统一按渲染文本比较）。
 > `content` 为协议属性（渲染文本），`IntentProtocol` 契约不破坏。
-> 求值时序语义：`@+ $x` 压入**当时** x 的值，之后重赋值 x 不影响已压入意图。
+> 求值时序语义：`@+ $x` 压入当时 x 的值，之后重赋值 x 不影响已压入意图。
 
 `IntentAxiom`（`core/kernel/axioms/intent.py`）：`is_class=True`，公开方法：
 - `get_content()`：获取意图文本（渲染）
@@ -427,7 +427,7 @@ _active_intent_ibobj.fields['_ctx'] is _intent_ctx     # 共享引用，非 fork
 
 - **唯一 6 槽位表示**：`RuntimeSerializer._collect_intent_context` 写入 `intent_top_uid` / `smear_queue` / `override` / `global_intents` / `inherited_smear` / `inherited_override`，是意图上下文的唯一序列化表示。
 - **共享身份**：通过 `id(ic) → uid` 备忘表保留多处引用同一 `IbIntentContext` 的身份；反序列化端的 `_get_intent_context` 也用 cache 还原"wrapper.fields['_ctx'] is rt_ctx._intent_ctx"不变量。
-- **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 values/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性——一等值列表经 `_process_value`/`_deserialize_value` 保真往返（G5 值栈）。
+- **`IbIntent` 专用编解码**：通用 object 分支会丢失 `__slots__` 中的 values/mode/tag/role；新增 `_type: "intent"` 分支落盘核心属性——一等值列表经 `_process_value`/`_deserialize_value` 保真往返。
 - **`serialize_context`**：写入 `intent_ctx_uid` 与 `active_intent_ibobj_uid`，调试器断点场景可还原完整意图上下文（含活跃指针身份）。
 
 ---
@@ -508,7 +508,7 @@ func func_with_custom_ctx():
 
 ## 九、延迟执行对象与意图栈的交互规则
 
-> 本节是 `lambda`/`snapshot` 与意图栈交互的**正式语义定义**。
+> 本节是 `lambda`/`snapshot` 与意图栈交互的正式语义定义。
 > 规则编号（IT-1 等）是本规范的正式引用标识。
 
 ---
@@ -527,7 +527,7 @@ func func_with_custom_ctx():
 
 **Rule IT-1（意图传播规则）**：普通函数调用时总是 `fork()` 调用处的意图上下文，形成独立副本，无论函数是在哪里定义的。
 
-**Rule IT-2（意图冻结规则）**：`snapshot` 对象在创建时记录意图快照（`fork_intent_snapshot()`），调用时**绕过 IT-1**，使用冻结快照。调用处的持久意图栈、`@` smear 意图、`@!` 排他意图**完全忽略**。
+**Rule IT-2（意图冻结规则）**：`snapshot` 对象在创建时记录意图快照（`fork_intent_snapshot()`），调用时绕过 IT-1，使用冻结快照。调用处的持久意图栈、`@` smear 意图、`@!` 排他意图完全忽略。
 
 **Rule IT-3（高阶函数透明规则）**：当函数 F 调用传入参数 `g`（类型为 `fn`），`g` 所看到的意图上下文取决于 `g` 的模式：
 - 若 `g` 是 `lambda`（或嵌套 `func`）：看到 F 调用 `g` 时 F 的意图 fork 副本（调用处意图敏感）
@@ -541,10 +541,10 @@ func func_with_custom_ctx():
 
 `snapshot` 的设计目标是成为 IBCI 中唯一一种**行为纯函数**：相同的调用参数在任何位置、任何意图上下文下都产生相同的 LLM 行为。
 
-**实现要求（当前实现）**：
+**实现要求**：
 - `IbBehavior.call()` 在 `capture_mode == 'snapshot'` 时，executor 使用 `captured_intents`（冻结快照）而非调用处的 `runtime_context._intent_ctx`
-- 执行器必须**主动跳过**消费 `runtime_context._intent_ctx` 中的 smear 队列和 override 槽（不应消费调用处的 `@` 意图）
-- 当前实现：`vm_handle_IbBehaviorExpr` 对 `capture_mode == 'snapshot'` 经 `fork_intent_snapshot()` 冻结快照注入 `IbBehavior.__init__` 的 `captured_intents`；对调用处 smear/override 的跳过由该快照机制统一承担
+- 执行器必须主动跳过消费 `runtime_context._intent_ctx` 中的 smear 队列和 override 槽（不应消费调用处的 `@` 意图）
+- `vm_handle_IbBehaviorExpr` 对 `capture_mode == 'snapshot'` 经 `fork_intent_snapshot()` 冻结快照注入 `IbBehavior.__init__` 的 `captured_intents`；对调用处 smear/override 的跳过由该快照机制统一承担
 
 ---
 
@@ -554,11 +554,11 @@ func func_with_custom_ctx():
 
 **行为契约**：
 - 使用调用处的完整活跃意图上下文（持久栈 + 全局意图）
-- 调用处的 `@` smear → **被消费**（正常流程）
-- 调用处的 `@!` 排他意图 → **被消费**（正常流程）
-- 定义处的意图栈 → **完全丢弃**（`lambda` 的 `captured_intents` 应为空或 None）
+- 调用处的 `@` smear → 被消费（正常流程）
+- 调用处的 `@!` 排他意图 → 被消费（正常流程）
+- 定义处的意图栈 → 完全丢弃（`lambda` 的 `captured_intents` 应为空或 None）
 
-**实现要求（当前实现）**：
+**实现要求**：
 - `IbBehavior(capture_mode='lambda')` 在 `captured_intents` 字段存储 `None`
 - 每次调用时从 `runtime_context._intent_ctx` 现读
 
@@ -572,7 +572,7 @@ func func_with_custom_ctx():
 - 调用时 `fork()` 调用处的意图上下文
 - 嵌套函数内的 `@+`/`@-` 操作在函数的 fork 副本上生效，不泄漏给调用者
 
-**嵌套函数被传出后的意图行为**：当嵌套函数被传出并在另一个意图上下文中调用时，它看到的是**调用处的意图栈**（IT-1），而不是定义处的意图栈。这是预期行为。
+**嵌套函数被传出后的意图行为**：当嵌套函数被传出并在另一个意图上下文中调用时，它看到的是调用处的意图栈（IT-1），而不是定义处的意图栈。
 
 如果用户想要"捕获定义处意图的嵌套行为"，应在函数体内显式使用 `snapshot`：
 

@@ -42,9 +42,9 @@ func main() -> auto:
     print((str)y.year)   # 2027
 ```
 
-`bind class` 绑定的类型可作类型注解、构造、`impl` 目标与协议满足判定
-（`impl` 只补充宿主没有的方法，不得与 bind 成员同名，冲突为编译期
-`SEM_REDEFINITION`）。详见 `docs/syntax/11_modules.md` §11.10。
+`bind class` 绑定的类型可作类型注解、构造、`impl` 目标与协议满足判定。
+`impl` 只补充宿主没有的方法，不得与 bind 成员同名；同名冲突为编译期
+`SEM_REDEFINITION`。详见 `docs/syntax/11_modules.md` §11.10。
 
 ## 约定与边界
 

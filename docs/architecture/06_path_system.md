@@ -31,7 +31,7 @@
 
 ### 3. 模块加载（无插件搜索路径）
 
-模块加载不经过任何插件搜索路径：全部内置模块（内核原生 5 + 工具 5 + `file`）的
+模块加载不经过任何插件搜索路径：全部内置模块（内核原生 6 + 工具 5）的
 TypeDef 字面量集中于 `core/runtime/bootstrap/builtin_modules.py`，在 Engine 构造期
 一次注册（详见 `docs/architecture/07_kernel_native_modules.md`）。用户扩展走宿主
 绑定（`import python "..." as lib: bind ...`），不经路径发现。

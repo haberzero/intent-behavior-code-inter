@@ -19,10 +19,10 @@
 
 ### 内核原生模块清单
 
-内置 11 个模块（内核原生 5 + 工具 5 + `file`）的 TypeDef 字面量集中于
+内置 11 个模块（内核原生 6 + 工具 5）的 TypeDef 字面量集中于
 `core/runtime/bootstrap/builtin_modules.py`，在 Engine 构造期经
 `register_builtin_modules` 一次注册。其中内核原生 6 个模块（`KERNEL_NATIVE`
-provenance）为：
+provenance，含 `file`）为：
 
 | 模块 | 功能 | 安全语义 |
 |---|---|---|

@@ -37,14 +37,14 @@ kernel-native 注册被忽略并告警）。
 
 ## 2. 构造期注册（无插件搜索路径）
 
-全部 11 个内置模块（内核原生 5 + 工具 5 + `file`）的 TypeDef 字面量集中于
+全部 11 个内置模块（内核原生 6 + 工具 5）的 TypeDef 字面量集中于
 `core/runtime/bootstrap/builtin_modules.py`，在 Engine 构造期由
 `register_builtin_modules(host_interface)` 一次注册。**不存在插件搜索路径**：
 无 `plugin_paths` / `global_plugin` 配置，无目录嗅探，无继承父环境插件路径——
 每个 Engine 构造期即获得同一组内置模块。
 
-- 内核原生 5 + 工具 5 的实现包位于 `ibci_modules/` 目录（`create_implementation()`
-  工厂）；`file` 无物理包，实现为内核模块 `core/runtime/modules/file_impl.py`。
+- 内核原生 6 + 工具 5 中，除 `file` 外均有物理包，位于 `ibci_modules/` 目录（`create_implementation()`
+  工厂）；`file` 无物理包，实现为内核模块 `core/runtime/modules/fs_impl.py`。
 - 内核原生模块为 `KERNEL_NATIVE` provenance；工具 5 为 `USER_DEFINED` provenance
   （不参与覆盖保护）。全部内置模块 `visibility=IMPORT_GATED`（须显式 import）。
 - 模块函数的描述符（参数名 / 种类 / 默认值存在性）来自 `builtin_modules.py` 中

@@ -46,7 +46,7 @@ llmexcept:
     retry "如果无法判断，请回复 0 并说明原因"
 ```
 
-（`llmretry` 顶层语法糖已随 llm 函数机制删除；统一使用 `llmexcept` + `retry`。）
+（重试的统一写法为 `llmexcept` + `retry`。）
 
 ### 10.3 快照隔离模型
 

@@ -43,7 +43,7 @@ python -c "import core; import ibci_modules"
 python -m pytest tests/   # 全量测试套件
 ```
 
-`import` 三条命令均无输出即表示包可正常导入。测试套件的通过数量以实跑为准。
+`python -c "import core; import ibci_modules"` 无输出即表示包可正常导入；`python --version` 会打印版本号，pytest 会打印测试结果。测试套件的通过数量以实跑为准。
 
 ## 依赖分组
 

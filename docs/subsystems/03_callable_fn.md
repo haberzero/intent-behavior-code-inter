@@ -1,4 +1,4 @@
-﻿# IBCI 高阶函数 / 可调用类型设计
+# IBCI 高阶函数 / 可调用类型设计
 
 > 本文档描述 IBCI 高阶函数与可调用类型的设计决策与当前实现。面向需要理解 `fn` 关键字和 `__call__` 协议机制的开发者。
 
@@ -49,7 +49,7 @@ int result = my_fn(5)   # 调用 adder.__call__(5)
   - 签名约束：`fn[(args)->ret]` 结构匹配。
 ### 已知 `fn` 限制
 
-详见 `docs/KNOWN_LIMITS.md` §一（`__call__` 协议）与 §七（`auto` / `fn` / `any`）——`fn` 在跨场景调用、OOP `__call__` 协议解析、闭包捕获、与 lambda/snapshot 互通的路径上仍存在一致性不足，待整体重设计。
+详见 `docs/KNOWN_LIMITS.md` §一（`__call__` 协议）与 §七（`auto` / `fn` / `any`）。
 ---
 
 ## 深入指引

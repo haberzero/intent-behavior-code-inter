@@ -6,16 +6,11 @@
 > `docs/architecture/01_principles.md` §3.7（供应商无关中间层）、Python 基础、
 > `docs/howto/extend_with_host_binding.md`（宿主绑定）。
 
-## 总览：provider 自定义经宿主绑定统一
+## 自定义 provider 的核心思路
 
-IBCI 的 LLM 调用经 **`llm_provider` 能力** 接入：内核 LLM 执行器每次调用都从能力
-注册表读取当前激活的 provider，再调 `provider.call(request)` / `provider.stream(request)`。
-内置默认 provider 是 `ibci_modules/ibci_ai/provider_impl.py` 的
-`RecommendedProvider`（无自定义时生效）。
-
-**自定义 LLM 底层（正式通道）** = 写一个实现 `LLMProvider` 契约的 Python 类，经
-**宿主绑定**声明，并 `ai.set_provider(...)` 注册为激活 provider。无需修改任何内核/内置
-文件。
+IBCI 的 LLM 调用统一经 `llm_provider` 能力接入（机制见 `docs/architecture/01_principles.md`
+§3.7）。自定义底层：写一个实现 `LLMProvider` 契约的 Python 类，经宿主绑定声明，
+再 `ai.set_provider(...)` 注册为激活 provider。全程无需修改内核/内置文件。
 
 ## 三步自定义 provider
 
@@ -74,7 +69,7 @@ ai.set_provider(lib.provider)
 ```
 
 `ai.set_provider` 校验 provider 具备全部契约方法（缺失即报错，不静默降级），然后
-以 HIGH 优先级把它注册为激活的 `llm_provider`——此后内核 LLM 调用走您的实现。
+以 HIGH 优先级注册为激活的 `llm_provider`。此后内核 LLM 调用由您的实现接管。
 
 ### 3. 验证
 
@@ -103,9 +98,9 @@ ai.set_provider(lib.provider)
 
 配置读取经 `ConfigSourceAdapter` 抽象（`core.base.llm_protocol.config`）。默认适配器
 `ProjectApiConfigAdapter`（`ibci_modules/ibci_ai/config_source_adapter.py`）识别推荐
-schema。想用自己的格式：自写 `ConfigSourceAdapter` 实现并替换默认适配器（整文件替换
-`config_source_adapter.py`，保持类名 `ProjectApiConfigAdapter`），或经 provider 宿主绑定
-接入自定义配置读取。
+schema。想用自己的格式：自写 `ConfigSourceAdapter` 实现并整文件替换
+`config_source_adapter.py`（保持类名 `ProjectApiConfigAdapter`）。也可经 provider 宿主
+绑定接入自定义配置读取。
 
 ## 注意事项
 
