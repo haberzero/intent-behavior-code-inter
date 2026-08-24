@@ -39,3 +39,15 @@ trials/**/logs/
 trials/**/batch_result.jsonl
 trials/**/register.jsonl
 .tmp_review/
+
+# editor / merge / coverage / misc artifacts (2026-08-24 补漏)
+*.swp
+*.orig
+*.rej
+nohup.out
+.coverage
+htmlcov/
+*.iml
+*.tmp
+__pypackages__/
+.venv/
