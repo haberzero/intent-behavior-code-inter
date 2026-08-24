@@ -2,7 +2,7 @@
 """
 REGISTER 骨架生成器 — 从 register.jsonl 自动生成 REGISTER 报告骨架（单一权威源）。
 
-试用体系 Phase D 自动化衔接。数据源：`<trial>/logs/register.jsonl`（run_one.py 机械记录，
+试用体系自动化机制（规范见 `_toolkit/AUTOMATION.md`）。数据源：`<trial>/logs/register.jsonl`（run_one.py 机械记录，
 classification 由 harness 自动判定）。产出：stdout 打印 REGISTER 骨架（总览 + 逐例明细 +
 缺陷清单骨架），人工补根因/结论/级别/commit 后覆盖 REGISTER.md。
 
@@ -96,7 +96,7 @@ def main():
     print("## 二、缺陷登记（骨架）")
     print()
     print("> 每条：编号 / 现象 / 证据（用例+日志）/ 根因 / 修复状态 / commit。")
-    print("> 缺陷收敛义务：修复必须落 `tests/` 回归（Phase D 收敛流程），触发用例经回归试用核销。")
+    print("> 缺陷收敛义务：修复必须落 `tests/` 回归（收敛流程见 `_toolkit/AUTOMATION.md`），触发用例经回归试用核销。")
     for cid, script, exp_cls, cls, exit_code, note in rows:
         if cls == "KERNEL_ISSUE":
             print(f"### KERNEL_ISSUE-<域>-<n>（待编号）— {cid}")
