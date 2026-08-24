@@ -143,7 +143,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   HANDOFF_SESSION.md 要点已收敛入本节并删除（git 承载）。阶段 B（B1-B6）全部完成，当前 P0 =
   阶段 C。
 - **🔴 当前主线**：**远期原生宿主绑定（F0-F5）已全部完成**（路线图
-  `tasks_docs/ROADMAP_NATIVE_BINDING.md`）。宿主导入一等语法 `import python "pkg" as lib:
+  `tasks_docs/ROADMAP_NATIVE_BINDING.md` 已随完成删除，git 承载；远期工程项见
+  `tasks_docs/PENDING_TASKS.md` VISION-6）。宿主导入一等语法 `import python "pkg" as lib:
   bind ...` + 宿主类型绑定 + 插件体系重构 + Provider 自定义经宿主绑定统一均已落地：
   - **F0-F2**：宿主导入/宿主类型一等绑定（EXTERNAL_MODULE CLASS + per-instance vtable）。
   - **F3**：废弃 Python `_spec.py` 磁盘发现/加载通道，用户侧扩展唯一边 = 宿主绑定
@@ -480,7 +481,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 - [x] **✅ P5 prompt 类型类化收尾落地**：P5a validate_prompt 激活（BaseAxiom.has_validate_prompt_cap + 协议条目 axiom_cap/structural_methods + 消费前置门，D2 to_prompt 同构）/ P5b required/optional 形式化（ProtocolDef.optional_methods + all_methods()，llm_callable 登记 __intent__/__retry__）/ P5c 评估即收尾（prompt 协议族五成员消费面全协议化）；判别测试 +8；全量 3055 零回归
 - [x] **✅ P6 per-IbClass 协议方法表最终收尾落地**：据实评估（P6 主体 P2-② 已落地，D3+D5 已达成——判定/分派以协议条目单一权威；剩余面边界清晰不独立分支）+ 判别测试 +4（satisfies↔receive 一致/未声明不误分派/惰性建槽/optional 不建协议槽）+ TypeAxiom 接口补 has_validate_prompt_cap + docs 三处修正（03 §4.0/§4.1 + 04 §2）；全量 3059 零回归；**五大地基 P1-P6 全链路完成**
 - [x] **✅ 超大型重构专项审计完成（只检测未修）**：技术债清单 A-G——A 注释/文档代号污染（core 12 + tests 19 + docs 6，违注释纪律/docs 治理）/ B 死代码 2 处（_invoke_llm_callable_cps_boxed/_sync 零消费者）/ C 双实现（意图三层解析双写真相 + 行为双装配入口，与候选 #1 同源）/ D overlay_enabled 跨根并发污染 / E 半接通边界（登记）/ F 登记债务核对 / G 临时文档待删；处置建议 A+B 机械批 → C 评估 → D 独立窗口；详见 HANDOFF_SESSION.md §七
-- [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（本主干任务总路线图与事实基石 — 首位必读）**
+- [x] **读 `tasks_docs/ROADMAP_NATIVE_BINDING.md`（已完成主干任务总路线图，已随 F0-F5 完成删除，git 承载）**
 - [x] **读 `tasks_docs/HANDOFF_SESSION.md`（本 session 会话交接：提交序列/待验证清单/继续路线/契约，接手后并入 §二 并删除）**
 - [x] 读 `NEXT_STEPS.md`（当前状态 + ⛔ 工作模式定论 + 下一步候选）
 - [x] 读 `PENDING_TASKS.md`（远期任务正式清单：FEAT/DEBT/AUDIT/DOC/TEST/DECIDE/SEALED/愿景）

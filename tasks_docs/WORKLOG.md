@@ -61,7 +61,7 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   需自定义的用户改内核 provider 文件 `ibci_modules/ibci_ai/provider_impl.py`）；远期才推进
   "抛弃 Python `_spec.py` 插件思路、用户 IBCI 层原生绑定 Python 内容"（宿主导入 + 类型/协议/impl
   绑定 + 插件体系重构 + 内核自举 + 缓存/JIT）。总路线图见 `tasks_docs/ROADMAP_NATIVE_BINDING.md`
-  （近期 R0-R2 / 远期 F0-F5 / 关键裁决点）。触发背景：深度调研确认 `box()` 已能包装任意
+  （近期 R0-R2 / 远期 F0-F5 / 关键裁决点；**已随 R0-R2 + F0-F5 完成删除，git 承载**）。触发背景：深度调研确认 `box()` 已能包装任意
   Python 对象/可调用，但 `import X` 与 `impl` 目前受 `_spec.py`/本模块用户类限制；近期先做对
   provider 解耦、为远期留位。
 - **近期主线 R0-R2 完成（2026-08-17，exp/provider-decouple-r1 → unsafe-vibe-dev 零风险直接合并）**：
