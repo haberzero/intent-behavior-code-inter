@@ -117,7 +117,7 @@ def main():
     if total == 0:
         sys.exit("no cases match the filter")
 
-    py = os.environ.get("IBCI_PYTHON", os.path.join(os.path.expanduser("~"), "miniconda3", "envs", "ibci", "bin", "python"))
+    py = os.environ.get("IBCI_PYTHON", sys.executable)
     results = []
     done = 0
     for stage_name, stage_cases, workers in stages:

@@ -12,7 +12,7 @@ tests/runtime/test_optional_value_model.py
 - 字段 / 容器元素上的 ``is_none()``/``is_some()``/``unwrap()`` 可用
   （空值包装）。
 """
-from tests.conftest import run_ibci
+from tests.conftest import run_ibci, TESTS_ROOT
 
 
 def test_optional_empty_is_none_local():
@@ -194,7 +194,7 @@ def test_deep_clone_preserves_optional_is_some():
     from core.engine import IBCIEngine
     from core.runtime.objects.deep_clone import try_deep_clone
 
-    engine = IBCIEngine(root_dir="/tmp/opencode")
+    engine = IBCIEngine(root_dir=TESTS_ROOT)
     engine.run_string("Optional[int] a = None\nOptional[int] b = 5\n", silent=True)
     ec = engine.interpreter.execution_context
     rc = ec.runtime_context

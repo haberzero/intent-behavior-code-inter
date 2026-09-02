@@ -80,8 +80,18 @@ def _extract_codes(text: str):
     return list(dict.fromkeys(_CODE_RE.findall(text)))
 
 
-def _judge(exps: dict, stdout_text: str, exit_code: int):
-    """依断言判定分类。无断言或断言失败均判 HARNESS（彻底，无人工判定双轨）。"""
+def _judge(exps: dict, stdout_text: str, exit_code: int, repo_root=None):
+    """依断言判定分类。无断言或断言失败均判 HARNESS（彻底，无人工判定双轨）。
+
+    repo_root: 给定后，实际输出中以仓库根为前缀的行先剥前缀（归一为仓库相对路径）
+    再匹配，使 expect-out 断言不绑定特定机器的 checkout 路径。
+    """
+    if repo_root:
+        prefix = repo_root.rstrip(os.sep) + os.sep
+        stdout_text = "\n".join(
+            line[len(prefix):] if line.startswith(prefix) else line
+            for line in stdout_text.splitlines()
+        )
     if not exps:
         return "HARNESS", "<无断言：用例必须声明 expect-class + 至少一个断言条件>"
     expect_class = exps.get("class", "")
@@ -181,7 +191,7 @@ def main():
     logs_dir = os.path.join(trial_dir, "logs")
     register = os.path.join(logs_dir, "register.jsonl")
     main_py = os.path.join(repo_root, "main.py")
-    python = os.environ.get("IBCI_PYTHON", os.path.join(os.path.expanduser("~"), "miniconda3", "envs", "ibci", "bin", "python"))
+    python = os.environ.get("IBCI_PYTHON", sys.executable)
 
     # script 路径：绝对路径或相对 trial_dir
     script = args.script if os.path.isabs(args.script) else os.path.abspath(os.path.join(trial_dir, args.script))
@@ -242,7 +252,7 @@ def main():
             pass
     duration_s = round(time.monotonic() - start, 2)
 
-    classification, judge_note = _judge(_parse_expectations(script), out or "", exit_code)
+    classification, judge_note = _judge(_parse_expectations(script), out or "", exit_code, repo_root)
 
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(f"# {args.label}  dim={args.dim}  script={os.path.relpath(script, trial_dir)}\n")

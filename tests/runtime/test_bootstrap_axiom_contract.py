@@ -15,11 +15,15 @@ Bootstrap axiom 声明能力契约校验（PT-DEBT-36）白盒判别测试。
 - ``_verify_axiom_bindings``：bootstrap 末尾校验公理声明的方法实际可绑定
   （vtable / 协议分派 / 字段承载），契约违约 fail-fast。
 """
+import os
+
 from core.engine import IBCIEngine
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _new_engine():
-    return IBCIEngine(root_dir="/home/haber/proj/intent-behavior-code-inter")
+    return IBCIEngine(root_dir=_ROOT)
 
 
 def test_bool_bitwise_operators_bind_instance_impl():

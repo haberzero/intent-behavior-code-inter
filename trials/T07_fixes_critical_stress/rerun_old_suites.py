@@ -23,8 +23,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))          # T07 目录
 TRIALS = os.path.dirname(ROOT)                              # trials/
 TOOLKIT = os.path.join(TRIALS, "_toolkit")
 RUN_ONE = os.path.join(TOOLKIT, "run_one.py")
-PY = os.environ.get("IBCI_PYTHON",
-                    os.path.join(os.path.expanduser("~"), "miniconda3", "envs", "ibci", "bin", "python"))
+PY = os.environ.get("IBCI_PYTHON", sys.executable)
 REPO_ROOT = os.path.abspath(os.path.join(ROOT, "..", "..", ".."))  # 上溯到仓库根（含 main.py）
 
 _LLM_RE = re.compile(r"^#\s*expect-llm\s*:\s*(\S+)")

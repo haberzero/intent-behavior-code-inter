@@ -15,12 +15,16 @@ tests/runtime/test_intent_ctx_contract.py
   伪造 _ctx 字段）返回 None（类型判别，不误激活）；
 - set_intent_ctx：写入后 get_intent_ctx 可读回（round-trip）。
 """
+import os
+
 from core.engine import IBCIEngine
 from core.runtime.objects.intent_context import get_intent_ctx, set_intent_ctx, IbIntentContext
 
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def _new_engine():
-    return IBCIEngine(root_dir="/home/haber/proj/intent-behavior-code-inter")
+    return IBCIEngine(root_dir=_ROOT)
 
 
 class TestGetIntentCtxContract:

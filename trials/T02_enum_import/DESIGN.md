@@ -51,7 +51,7 @@
 ```bash
 cd trials/T02_enum_import
 # 每例：
-~/miniconda3/envs/ibci/bin/python harness/run_one.py cases/<case>.ibci \
+python harness/run_one.py cases/<case>.ibci \
   --label <LABEL> --dim ENUM/IMPORT/OP --doc <doc-ref> \
   --expected "<期望>" --timeout 90
 ```

@@ -12,6 +12,7 @@ ContractValidator 公理契约校验（Tier C 修复后）白盒判别测试。
 
 本文件锁定：① 校验对真实内置类（list 等）零误报；② 签名违约能被捕获。
 """
+import os
 import pytest
 
 from core.kernel.spec import TypeDef
@@ -23,7 +24,7 @@ from core.base.diagnostics.codes import SEM_REDEFINITION
 from core.compiler.diagnostics.issue_tracker import IssueTracker
 from core.engine import IBCIEngine
 
-_REPO = "/home/haber/proj/intent-behavior-code-inter"
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def test_validate_all_no_false_positive_on_builtins():

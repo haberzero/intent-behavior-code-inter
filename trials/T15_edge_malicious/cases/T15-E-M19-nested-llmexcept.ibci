@@ -1,7 +1,7 @@
 # T15-E-M19 [边界清单 #28] llmexcept 快照隔离：retry 体内改受保护变量 → RUN_LLMEXCEPT_SNAPSHOT_VIOLATION 告警 + 黄金快照恢复
 # doc: docs/syntax/10_robustness.md §10.3 + KNOWN_LIMITS §十/§二十
 # expect-class: PASS
-# expect-out: /home/haber/proj/intent-behavior-code-inter/core/runtime/vm/handlers/assignment.py:103: UserWarning: llmexcept 快照隔离违规：检测到受保护变量被篡改 ['out']；已恢复黄金快照并继续重试。 | inner_val=0 | DONE
+# expect-out: core/runtime/vm/handlers/assignment.py:103: UserWarning: llmexcept 快照隔离违规：检测到受保护变量被篡改 ['out']；已恢复黄金快照并继续重试。 | inner_val=0 | DONE
 # expect-exit: 0
 # expect-llm: false
 import ai

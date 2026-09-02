@@ -15,18 +15,20 @@
 # ============================================================================
 set -uo pipefail
 
-# ---- 解析 Python 解释器（conda env ibci 优先，其次系统 python）---------------
-if command -v /home/haber/miniconda3/envs/ibci/bin/python >/dev/null 2>&1; then
-  PY=/home/haber/miniconda3/envs/ibci/bin/python
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+# ---- 解析 Python 解释器（项目虚拟环境优先，其次系统 python）-------------------
+if [ -x "$ROOT/.venv/bin/python" ]; then
+  PY="$ROOT/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PY=python3
 elif command -v python >/dev/null 2>&1; then
   PY=python
 else
   echo "ERROR: no Python interpreter found" >&2
   exit 1
 fi
-
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
 
 RUN_L1=1
 RUN_L2=1
