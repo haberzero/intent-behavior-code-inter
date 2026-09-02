@@ -37,6 +37,6 @@ IBC-Inter 测试套件，单一分层模型（以实际目录为准）。
 ## 运行
 
 ```bash
-conda activate ibci
+source .venv/bin/activate
 python -m pytest tests/
 ```

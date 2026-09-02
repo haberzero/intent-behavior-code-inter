@@ -23,7 +23,7 @@
 - **上报阈值**：穷尽自主手段仍无法决定才上报；破坏性重构默认已授权；分支政策见 AGENTS.md。
 - **交付纪律**：全程本地 commit；**禁止 push**（硬原则，除非用户显式授权）。
 - **工作日志**：自主决策/方案取舍/变化前后记录于 `WORKLOG.md`（"只记录，不断决"）。
-- **测试**：`conda activate ibci && python -m pytest tests/`（唯一命令）。
+- **测试**：`python -m pytest tests/`（唯一命令；环境规格权威源 = `pyproject.toml` + `docs/guide/00_environment.md` 规范 recipe；本机事实见 `AGENTS.local.md`）。
 - **Skill 工作流**：code-workflow（实现）/ code-review（缺陷复核）/ code-quality（健康诊断）/
   code-odor（异味扫描）/ quality-maintenance（分层质量维护）/ doc-governance（文档治理）/
   self-grill（自我质询）/ design-philosophy（设计哲学）。

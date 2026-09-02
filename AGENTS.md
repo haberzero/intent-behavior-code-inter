@@ -86,28 +86,24 @@ IBC-Inter 是实验性意图驱动混合编程语言（Python-style 确定性代
 
 ## 文档读者定位（docs/ 只面向人类）
 
-> `docs/` 定位为**人类手册**（指导手册 / 技术手册 / 参考手册），**绝对不允许存在任何关于本工作智能体相关的元信息**（工作流 / 过程 / agent 指令 / skill 引用 / DSH 配置）。智能体信息只存在于 `AGENTS.md` 与 `.dsh/skills/` 工作流层。智能体可参考 docs/ 并实时更新，但更新内容不得引入任何"提供智能体而人类不需要"的信息；发现即**移除**（不改写）。治理 docs/ 时按其自检（见 `doc-governance`）。若确需给智能体额外的参考文档体系，应单独设计，绝不污染人类阅读的文档。**治理章程自述例外**：`docs/README.md` 作为文档体系治理章程，其对 `tasks_docs/`/`trials/` 的体系性指针（文档分工、目录树、阅读路径、单点真理归属）属章程自述，允许保留，不视为需移除的智能体元信息。
+> `docs/` 定位为**人类手册**（指导手册 / 技术手册 / 参考手册），**绝对不允许存在任何关于本工作智能体相关的元信息**（工作流 / 过程 / agent 指令 / skill 引用 / DSH 配置）。智能体信息只存在于 `AGENTS.md` 与 `.dsh/skills/` 工作流层（本地层例外：`AGENTS.local.md` 为每机器生成的环境事实文件，已 gitignore，仅存本机环境事实、不含工作规则）。智能体可参考 docs/ 并实时更新，但更新内容不得引入任何"提供智能体而人类不需要"的信息；发现即**移除**（不改写）。治理 docs/ 时按其自检（见 `doc-governance`）。若确需给智能体额外的参考文档体系，应单独设计，绝不污染人类阅读的文档。**治理章程自述例外**：`docs/README.md` 作为文档体系治理章程，其对 `tasks_docs/`/`trials/` 的体系性指针（文档分工、目录树、阅读路径、单点真理归属）属章程自述，允许保留，不视为需移除的智能体元信息。
 >
 > **设计阶段文档放置（用户 2026-08-03 明确）**：任何**设计/决策/用户裁定**（如架构、接口、AST 变更、并发正确性等）在**设计阶段先写临时任务控制文档 `tasks_docs/_<task>.md`**（完成后删除，最终仅保留四个常驻文档），**不写进技术手册 `docs/`**；待实现落地后，按 `docs/` 治理纪律择机收敛写入技术手册。此规则是"重大架构决策写入 `docs/architecture/`"（见 §不要做的事）的**设计阶段前置**，二者不冲突（先 tasks_docs/ 设计，落地后 docs/ 记录）。
+>
+> **文档引用约定**：文档引用代码路径时以 `docs/README.md` §四"代码路径约定"为准（多个模块已重构为包）。
 
 ## 测试
 
 ```bash
-conda activate ibci
 python -m pytest tests/
 ```
 
 - 这是**唯一命令**。`pytest.ini` 已配 `-q --tb=short --strict-markers`，无需附加 flag。
-- **运行环境为 conda env `ibci`**（本机位于 `~/miniconda3/envs/ibci`）。先 `conda activate ibci` 再执行；非交互 shell / 脚本内直接用 `~/miniconda3/envs/ibci/bin/python -m pytest tests/`。系统默认 `python`/`python3` 未安装依赖（如 `openai`），不可用于运行与测试。
+- 环境规格权威源 = `pyproject.toml`（`requires-python` / `dependencies` / `optional-dependencies`）；创建运行环境的规范 recipe（venv + 可编辑安装）见 `docs/guide/00_environment.md`。本机解释器路径与激活方式见 `AGENTS.local.md`（本地层，不入版本控制；缺失时自行探测环境并记录到该文件）。
+- `tests/conftest.py` 强制 pytest basetemp 为 `.tmp_pytest/`（仓库不变量，跨平台兼容）。
 - **结果查看建议**：通常跑全量 pytest 时用 `... 2>&1 | tail -3` 只留结果摘要（pass/fail/skipped 计数行），避免警告挤掉计数；若仍被 warning 挤掉可再加 `| tail -3`。是否加 flag、是否重定向、分组/子集用法等其余情形由智能体自行判断。
 - 开新分支前必复跑，把 pass/fail 计数写进 PR 描述。
 - 当前基线以实跑为准，不冻结数字（见 `tasks_docs/NEXT_STEPS.md` 顶部锚点）。
-
-## 编码与平台注意
-
-- **文档多为 CRLF**，部分历史文件含非 UTF-8 字节；Edit 工具多行匹配可能失败，改用单行锚点或 PowerShell。
-- **Windows 路径大小写不敏感**；`tests/conftest.py` 强制 basetemp 为 `.tmp_pytest/`（跨盘 relpath 兼容）。
-- 文档引用代码路径时以 `docs/README.md` §四"代码路径约定"为准（多个模块已重构为包）。
 
 ## 不要做的事
 

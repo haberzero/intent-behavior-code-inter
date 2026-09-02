@@ -5,10 +5,10 @@
 
 ## 一、准备环境
 
-试用套件使用项目 conda 环境：
+试用套件使用项目虚拟环境（未建环境时按 `docs/guide/00_environment.md` 创建）：
 
 ```bash
-conda activate ibci
+source .venv/bin/activate
 ```
 
 ## 二、运行 mock 批

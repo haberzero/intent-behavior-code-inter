@@ -7,7 +7,7 @@
 
 ## 教程
 
-0. [环境准备](docs/guide/00_environment.md) — 安装 Python 环境、conda、运行依赖
+0. [环境准备](docs/guide/00_environment.md) — 安装 Python 环境（≥3.10）与运行依赖
 1. [配置 LLM 提供者](docs/guide/01_setup.md) — 配置 API key、模型路由和连接验证
 2. [第一个 @~ 调用](docs/guide/02_first_call.md) — 行为表达式基础、变量插值和类型约束
 3. [处理 LLM 调用失败](docs/guide/03_handling_errors.md) — llmexcept、retry 和异常体系

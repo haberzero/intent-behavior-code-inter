@@ -73,7 +73,7 @@ ai.set_provider(lib.provider)
 
 ### 3. 验证
 
-1. 全量回归：`conda activate ibci && python -m pytest tests/`——零回归后再提交。
+1. 全量回归：`python -m pytest tests/`（项目虚拟环境内）——零回归后再提交。
 2. 真实 LLM 试用：按 `docs/howto/run_trials.md` 跑一套真实调用，确认新 provider
    的响应解析与探测路径符合预期。
 3. 契约自检：provider 类具备全部五个契约方法（缺任一则 `set_provider` 拒绝）。

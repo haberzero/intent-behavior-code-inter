@@ -51,3 +51,6 @@ htmlcov/
 *.tmp
 __pypackages__/
 .venv/
+
+# per-machine local environment facts (see AGENTS.md)
+AGENTS.local.md

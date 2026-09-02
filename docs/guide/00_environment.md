@@ -4,41 +4,42 @@
 
 ## 你将会学到
 
-- 用 conda 创建独立的 Python 环境
+- 用标准库 `venv` 创建独立的 Python 环境
 - 用 pip 安装项目依赖
 - 验证环境可用
 - 理解运行时 / 测试依赖的分组结构
 
 ## 前置要求
 
-安装 [Miniconda](https://docs.anaconda.com/miniconda/) 或 Anaconda，并确保 `conda` 命令可用：
+Python ≥3.10（版本下界见 `pyproject.toml` 的 `requires-python`；开发基线建议 3.12），并确保 `python3` 命令可用：
 
 ```bash
-conda --version
+python3 --version
 ```
 
 ## 第一步：创建环境
 
-项目根目录下的 `environment.yml` 声明了完整的 conda 环境定义——Python 版本、pip、以及项目的可编辑安装（`-e ".[dev]"`）。运行：
+在项目根目录创建虚拟环境 `.venv`，并以**可编辑模式**安装本项目及开发依赖：
 
 ```bash
-conda env create -f environment.yml
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 ```
 
-命令会创建名为 `ibci` 的环境，并自动通过 pip 以**可编辑模式**安装本项目及其依赖。可编辑模式使源码改动即时生效，无需重复安装。
+可编辑模式使源码改动即时生效，无需重复安装；`.venv/` 已列入 `.gitignore`。依赖规格的单点真理在 `pyproject.toml`（运行时依赖 `openai`，开发分组含 `pytest`）。
 
 ## 第二步：激活环境
 
 ```bash
-conda activate ibci
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 ```
 
-激活后，后续所有 `python` 与 `pytest` 命令都应在此环境下运行。
+激活后，后续所有 `python` 与 `pytest` 命令都在此环境下运行。脚本与非交互 shell 可免激活，直接以绝对路径调用（如 `.venv/bin/python -m pytest tests/`）。
 
 ## 第三步：验证环境
 
 ```bash
-python --version          # 3.12.x
+python --version          # ≥3.10
 python -c "import core; import ibci_modules"
 python -m pytest tests/   # 全量测试套件
 ```
@@ -55,14 +56,14 @@ python -m pytest tests/   # 全量测试套件
 | 测试 | `pip install -e ".[test]"` | 运行时 + `pytest` |
 | 开发 | `pip install -e ".[dev]"` | 测试 + 开发工具 |
 
-日常开发与测试统一使用 `dev` 分组（即 `environment.yml` 默认安装的形态）。
+日常开发与测试统一使用 `dev` 分组（即第一步安装的形态）。
 
 ## 更新环境
 
-`environment.yml` 或 `pyproject.toml` 的依赖声明变化后，重新同步环境：
+`pyproject.toml` 的依赖声明变化后，重新安装同步环境：
 
 ```bash
-conda env update -f environment.yml
+.venv/bin/pip install -e ".[dev]"
 ```
 
 ## 你现在能做什么
