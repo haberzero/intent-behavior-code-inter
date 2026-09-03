@@ -50,8 +50,8 @@ L3 真实 LLM 层与真实 LLM 残留项（恶意边界后续未测 9 项，见 
    doc-governance Phase 0-8。
 2. **周期质量维护恢复裁定**（PT-AUDIT-1/3 + Tier B + quality-maintenance）——原阈值"真实试用后
    恢复"与"本机暂不跑真实 LLM"冲突，待用户裁定（mock 侧/静态侧维护可先行或整体顺延）。
-3. **发布线远程启用（待用户显式授权）**：CI 远程触发（`ci.yml` 恢复 push/PR 触发并 push）+
-   本地未 push 提交推送（push 为硬原则，授权不延续）。
+3. **远程 CI 启用（暂不启动，用户裁定）**：`ci.yml` 恢复 push/PR 触发（本地分层验证经
+   `scripts/ci_local.sh`，不依赖远程；启用需用户显式授权）。
 4. **真实 LLM 环境就位**（`api_config.json` 配置到本机或指定 LLM 宿主）——解锁后 L3 层 +
    阶段 C 真实 LLM 残留项（恶意边界未测 9 项 + 全量 LLM 回归复跑）。
 5. **阶段 D · 主线远期演进（试用稳定后）**：VISION-4 P7 类型理论加固 / VISION-5 P8 函数式地基 /

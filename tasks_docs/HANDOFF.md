@@ -119,7 +119,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   定性并彻底删除（`core/lib/prelude.ibc` / `core/builtin/primitives.ibci` 两遗留 IBCI 源文件
   全仓零消费者，git 承载）+ `scripts/ci_local.sh` L4 发布产物层补齐（build + 安装 smoke，镜像
   ci.yml）+ 分支基准裁定 = **`unsafe-vibe-dev`**（本轮非核心去机器化工作临时置于 main 的 2 提交
-  已 fast-forward 并入；main 后续不更新；push 待用户显式授权）+ **本机暂不跑真实 LLM**（无
+  已 fast-forward 并入；main 后续不更新；push 已获用户显式授权并执行，本地 main 复位
+  origin/main）+ **本机暂不跑真实 LLM**（无
   `api_config.json`；L3 层与阶段 C 真实 LLM 残留项——恶意边界后续未测 9 项，见
   `trials/INDEX.md`——待 LLM 环境就位后恢复）。下一候选见 `tasks_docs/NEXT_STEPS.md`
   （文档复核登记项收敛 / 周期质量维护恢复裁定 / 发布线远程启用（待授权）/ 真实 LLM 环境就位）。
@@ -414,7 +415,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 - [x] **✅ 发布准备线收官（本 session，2026-09-02，用户裁定）**：R4 重新定性并彻底删除
   （两遗留 IBCI 源文件全仓零消费者）+ `ci_local.sh` L4 发布产物层补齐 + 分支基准 =
-  unsafe-vibe-dev（main 上 2 笔非核心提交 fast-forward 并入，push 待显式授权）+ 本机暂不跑
+  unsafe-vibe-dev（main 上 2 笔非核心提交 fast-forward 并入，push 已执行）+ 本机暂不跑
   真实 LLM（L3 / 阶段 C 真实 LLM 线搁置待 LLM 环境）+ NEXT_STEPS/WORKLOG/HANDOFF 同步；
   全量 pytest 实跑零回归确认安全
 - [x] **✅ 阶段 C 收尾·临时文档收敛清理 + unsafe-vibe-dev→main 合并重建（2026-08-21 用户指示）**：
