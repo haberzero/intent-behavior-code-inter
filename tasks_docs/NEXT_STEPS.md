@@ -27,26 +27,16 @@
 
 ## 🔴 当前状态
 
-**主线已完成**：远期原生宿主绑定（F0-F5）、五大地基（llm 可调用类 + LLM 体系彻底协议化 P1-P6）、
-技术债收敛 8 阶段、**阶段 A 代码/架构健康一次性攻坚全部完成（A1-A5，2026-08-20）**——架构债务
-（G5 意图值栈 + 行为统一装配）/ 变量语义建模显式化（PT-DEBT-34）/ 生成器消费协作化（PT-DEBT-29）/
-类型边界闭合（PT-DEBT-30+33）/ Tier C 专项审计（hasattr 全量分类 + 6 阶段零回归 + contract_validator
-公理契约校验恢复 + 反序列化宽异常收窄 + KDIAG 诊断）。完成详情见 `tasks_docs/HANDOFF.md` §2.1 与
-git 历史（本文件不登记完成记录）。
-
-**当前 P0 = 阶段 C · 真实 LLM 全面试用重启（VISION-3）——试用地基已完成，进入文档复核尾段**。
-六套件 T10-T15 建成（llm 可调用类/stream/run_batch/overlay/prompt 协议族/意图一等值/fs/Optional/
-值语义，mock 层 + 真实 LLM 全过）+ 恶意边界 22 例（无内核缺陷，fail-fast 防御面全生效）+
-全量 LLM 回归（T01/T02/T06/T07/T08/T09）+ 压力维度（>4k token/多轮/批量并发/多模块交叉）+
-缺陷闭环（**KERNEL_ISSUE-LLM-4** expected_type 用户类解析已修，基线 3185）。**当前进行 =
-阶段 C 末技术文档全方位复核**（doc-governance Phase 0-8：KNOWN_LIMITS §十二已修 / 06_oop §6.9
-overlay 章节已补 / 装配未知键已明；**复核登记项**：KNOWN_LIMITS §十五 漂移、call_info 键结构、
-装配未知键（是否应告警）、T03-T05 断言迁移核验、BOUNDARY-LLM-5（mock 下 call_info 无 sys_prompt
-键）；批 2 交叉核验 + 批 3 单点真理/读者旅程进行中）。**恶意边界后续未测项**（专项/LLM 层 9 项：
-snapshot 内嵌 LLM 交叉 / 流式错误 / deep_clone / 序列化 round-trip / 跨引擎水化 / overlay 序列化
-交互 / 动态宿主 / bind 强制 / _pending_futures 内存面）见 trials/INDEX.md 后续清单，随主线顺带补齐。
-**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）按用户裁定**推迟到真实试用（阶段 C）
-之后**，文档复核完成后恢复。
+**发布准备线已收官，待主线裁定**。环境部署与对外发布准备完成：环境规格单源与去机器化
+（规范 recipe = venv + editable 安装，本地层 `AGENTS.local.md`，docs 级联同步）；R4 重新定性并
+彻底删除（`core/lib/prelude.ibc`、`core/builtin/primitives.ibci` 两遗留 IBCI 源文件全仓零消费者，
+wheel 发布面实证齐备，裁定依据见 `tasks_docs/WORKLOG.md`）；`scripts/ci_local.sh` L4 发布产物层补齐
+（build + 安装 smoke，镜像 `.github/workflows/ci.yml`）。**阶段 C · 真实 LLM 全面试用（VISION-3）**：
+试用地基（六套件 T10-T15 / 恶意边界 22 例 / 全量回归 / 压力维度 / 缺陷闭环）+ 技术文档全方位复核
+（文风治理）已完成；**真实 LLM 线本机搁置**（用户裁定本机暂不跑真实 LLM，无 `api_config.json`）——
+L3 真实 LLM 层与真实 LLM 残留项（恶意边界后续未测 9 项，见 `trials/INDEX.md` 后续清单）待 LLM
+环境就位后恢复。**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）原按用户裁定
+"真实试用后恢复"，与当前搁置态冲突，恢复时机待裁定。
 
 测试基线以实跑为准（不冻结数字；唯一命令 `python -m pytest tests/`）。
 
@@ -55,52 +45,19 @@ snapshot 内嵌 LLM 交叉 / 流式错误 / deep_clone / 序列化 round-trip / 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
-**阶段 A · 代码/架构健康（✅ 一次性攻坚全部完成，2026-08-20）**：
-1. **✅ Tier C 专项审计完成（2026-08-20）**：hasattr 全量分类（113 处：58 合法保留 / 50 简单异味 /
-   4 真缺陷 / 4 深层次）；6 阶段全部落地零回归——Phase 1 机械清理（恒真/恒假死守卫 + 双轨残留
-   unbox 收敛 + 附带死代码）/ Phase 2 真缺陷 fail-fast 统一（intent_context merge/combine、__from_prompt__
-   形状违约、binding_analysis 兜底、serializer mode.value）/ Phase 3 contract_validator:63 公理契约校验
-   彻底根因修复（get_methods→get_method_specs + 移除死 kind 门）/ Phase 4 深层次（_helpers 补 isinstance、
-   deep_clone 惰性 isinstance）/ Phase 6 反序列化宽异常收窄 except PermissionError + KDIAG 诊断。
-   判别测试 +9；全量 pytest 3133 passed / 1 skipped 零回归（基线 3123）。**阶段 A 一次性攻坚全部完成（A1-A5）**。
-   （周期质量维护按用户裁定推迟到真实试用后，见下 ⏸）。
-2. ⏸ **PT-AUDIT-1/3 周期复核 + quality-maintenance Tier B（用户 2026-08-20 裁定：推迟到真实试用后）**——近期深层次重构期间不占用主线。
+1. **阶段 C 文档复核登记项收敛**：复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
+   call_info 键结构 / 装配未知键是否应告警 / BOUNDARY-LLM-5 mock 下 call_info 无 sys_prompt 键），
+   doc-governance Phase 0-8。
+2. **周期质量维护恢复裁定**（PT-AUDIT-1/3 + Tier B + quality-maintenance）——原阈值"真实试用后
+   恢复"与"本机暂不跑真实 LLM"冲突，待用户裁定（mock 侧/静态侧维护可先行或整体顺延）。
+3. **发布线远程启用（待用户显式授权）**：CI 远程触发（`ci.yml` 恢复 push/PR 触发并 push）+
+   本地未 push 提交推送（push 为硬原则，授权不延续）。
+4. **真实 LLM 环境就位**（`api_config.json` 配置到本机或指定 LLM 宿主）——解锁后 L3 层 +
+   阶段 C 真实 LLM 残留项（恶意边界未测 9 项 + 全量 LLM 回归复跑）。
+5. **阶段 D · 主线远期演进（试用稳定后）**：VISION-4 P7 类型理论加固 / VISION-5 P8 函数式地基 /
+   VISION-1 二层 IR（见 `tasks_docs/PENDING_TASKS.md` §八）；PT-SEALED-1 保持封存。
 
-**阶段 B · 功能稳健与对外能力（当前 P0）**：
-1. **✅ PT-TEST-2 覆盖缺口补测完成（B1）**：COVERAGE_MATRIX 缺口全收敛——新增判别测试 17 项
-   （INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 / INV-MOCK-3 / 模块缓存 /
-   循环 import / switch 内 return）+ 矩阵卫生 3 处陈旧 TRUE_GAP（已存在测试重指）+ §7 模块重载
-   =设计排除记录；全量 pytest 3156 passed / 1 skipped 零回归。
-2. **✅ PT-DECIDE-3 项②④ 定案落地（B2）**：② 不扩展 validate_prompt 至内置（内建解析器单一权威）
-   + impl 内置类型定义 __from_prompt__/__validate_prompt__ 编译期拒绝（闭合半接通）；
-   ④ to_prompt_str AttributeError 静默吞并改 KDIAG 可观测发射；判别 +4；全量 3160 零回归。
-3. **✅ PT-DEBT-36 intent_context 方法族重构 + axiom 能力契约校验完成（B3）**：方法族收敛
-   （_ic_get_ctx/_ic_frame 单一权威，消除 10 处恒真死守卫/帧探测簇，缺参 fail-fast）+
-   _is_impl_method 排除元类伪影（修复 bool|bool 误绑 type.__or__）+ _verify_axiom_bindings
-   契约校验；判别 +13；全量 3173 零回归。
-4. **✅ PT-DEBT-35 `_ctx` 内部契约完整形式化完成（B4）**：intent_context.get_intent_ctx/set_intent_ctx
-   单一权威访问（isinstance 精确判别），全仓 _ctx 字段探测双轨收敛；判别 +9；全量 3182 零回归。
-5. **✅ PT-DOC-3P2 how-to 读者旅程补齐完成（B5）**：新增 use_isolation（ihost 隔离）+
-   orchestrate_llm_calls（LLM 编排）2 篇操作指南 + 交叉引用接线；纯文档变更。
-6. **✅ PT-FEAT-5 CI/CD 可靠化设计 + 本地配置完成（B6，远程启用待用户授权）**：四层可靠性
-   设计（L1 fast/L2 全量跨平台/L3 真实 LLM 手动/L4 发布产物）+ ci.yml 分层就绪（保持
-   workflow_dispatch）+ scripts/ci_local.sh 本地分层复现；本地全量 3182 零回归。
-**阶段 B 全部完成（2026-08-20，B1-B6）**：测试补测/协议定案/两项技术债/文档补齐/CI 设计
-全部落地；当前 P0 前移阶段 C（真实 LLM 全面试用重启，VISION-3）。
-**已封存**：PT-DECIDE-2（供应商思考禁用）——用户裁定短期不再考虑启动。
-**划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。
-
-**阶段 C · 真实 LLM 全面试用重启（阈值：A/B 健康稳定达标后；非最高优先但必做）**：
-10. **VISION-3 重启**：对五大地基重构后全部新特性重试用——llm 可调用类（直接调用/装配/
-    __intent__ 三层改写/__retry__ 高阶化）、stream 流式、run_batch 批量、覆层机制、prompt
-    协议族五成员、意图一等值嵌入、fs 模块、Optional/容器解析等；真实 qwen3.6 非思考模式全量
-    回归 + 压力维度扩展（>4k token / 多轮长对话 / 批量并发上限 / 多模块交叉）；缺陷→根因修复→
-    回归核销循环。
-
-**阶段 D · 主线远期演进（试用稳定后）**：
-11. VISION-4 P7 类型理论加固（ADT/模式匹配/联合类型/枚举实例化评估）；
-12. VISION-5 P8 函数式地基（协议化组合子/柯拉化）；
-13. VISION-1 二层 IR（概念验证）；PT-SEALED-1 保持封存。
+**已封存**：PT-DECIDE-2（供应商思考禁用）。**划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 

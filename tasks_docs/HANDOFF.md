@@ -115,27 +115,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线 = 阶段 C · 真实 LLM 全面试用重启（VISION-3）——试用地基 + 文档复核完成，
-  进入阶段 C 收官**（2026-08-21）：六套件 T10-T15（llm 可调用类/stream/run_batch/overlay/
-  协议族/意图一等值/fs/Optional/值语义，mock + 真实 LLM 全过）+ 全量 LLM 回归
-  （T01/T02/T06/T07/T08/T09）+ 恶意边界 22 例（无内核缺陷，fail-fast 防御面全生效）+
-  压力维度（>4k token/多轮/批量并发/多模块交叉）+ 缺陷闭环（**KERNEL_ISSUE-LLM-4** expected_type
-  用户类解析修复，基线 3185）+ 技术文档全方位复核（KNOWN_LIMITS §十二漂移修正/06_oop §6.9
-  overlay 章节补建/装配未知键明确）。**当前 = 阶段 C 收尾**：周期质量维护恢复
-  （PT-AUDIT-1/3 + Tier B，用户裁定试用后恢复）+ **临时文档收敛清理完成（2026-08-21 用户确认；
-  `_code_cicd`/`_planning_health_first`/`_trial_edge_catalog`/`_phaseC_trials` 已删，git 承载；
-  未完成项并入 NEXT_STEPS（文档复核登记项）+ trials/INDEX（恶意边界后续未测项 9 项））** +
-  PENDING/NEXT_STEPS 同步。详见 trials/INDEX.md。
-- **🔴 当前主线 = 阶段 C · 真实 LLM 全面试用重启（VISION-3，2026-08-21 启动）**：对五大地基
-  重构后全部新特性重试用——llm 可调用类（直接调用/装配/`__intent__` 三层改写/`__retry__`
-  高阶化）、stream 流式、run_batch 批量、覆层机制、prompt 协议族五成员、意图一等值嵌入、
-  fs 模块、Optional/容器解析。方式 = **大规模更新补全试用项目**（既有 T01-T09 大量依赖
-  `llm...llmend`/`__sys__`/`__user__`/`__llmretry__`/`_spec.py` 等已删语法，需系统性迁移 +
-  为五大地基新特性新建用例）+ 真实 qwen3.6-35b-a3b 非思考模式全量回归 + 压力维度扩展
-  （>4k token/多轮长对话/批量并发上限/多模块交叉）+ **恶意边界测试**
-  （恶意边界起点清单 33 项，须自行扩展）+ 缺陷→根因修复→回归核销
-  闭环；试用结束后技术文档全方位复核更新 + 周期质量维护恢复（PT-AUDIT-1/3 + Tier B）。
-  详案见 `tasks_docs/NEXT_STEPS.md` 阶段 C。
+- **🔴 当前主线 = 发布准备线收官后，待主线裁定（2026-09-02）**：本 session 完成——R4 重新
+  定性并彻底删除（`core/lib/prelude.ibc` / `core/builtin/primitives.ibci` 两遗留 IBCI 源文件
+  全仓零消费者，git 承载）+ `scripts/ci_local.sh` L4 发布产物层补齐（build + 安装 smoke，镜像
+  ci.yml）+ 分支基准裁定 = **`unsafe-vibe-dev`**（本轮非核心去机器化工作临时置于 main 的 2 提交
+  已 fast-forward 并入；main 后续不更新；push 待用户显式授权）+ **本机暂不跑真实 LLM**（无
+  `api_config.json`；L3 层与阶段 C 真实 LLM 残留项——恶意边界后续未测 9 项，见
+  `trials/INDEX.md`——待 LLM 环境就位后恢复）。下一候选见 `tasks_docs/NEXT_STEPS.md`
+  （文档复核登记项收敛 / 周期质量维护恢复裁定 / 发布线远程启用（待授权）/ 真实 LLM 环境就位）。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
   规划已读）；**push 已获用户显式授权并执行**（本地 28 提交 `b2322214..e1a9b3d9` 推送
@@ -425,6 +412,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.2 交接检查单（当前有效）
 
+- [x] **✅ 发布准备线收官（本 session，2026-09-02，用户裁定）**：R4 重新定性并彻底删除
+  （两遗留 IBCI 源文件全仓零消费者）+ `ci_local.sh` L4 发布产物层补齐 + 分支基准 =
+  unsafe-vibe-dev（main 上 2 笔非核心提交 fast-forward 并入，push 待显式授权）+ 本机暂不跑
+  真实 LLM（L3 / 阶段 C 真实 LLM 线搁置待 LLM 环境）+ NEXT_STEPS/WORKLOG/HANDOFF 同步；
+  全量 pytest 实跑零回归确认安全
 - [x] **✅ 阶段 C 收尾·临时文档收敛清理 + unsafe-vibe-dev→main 合并重建（2026-08-21 用户指示）**：
   临时文档 `_code_cicd`/`_planning_health_first`/`_trial_edge_catalog`/`_phaseC_trials` 已删
   （git 承载）；未完成项并入 NEXT_STEPS（文档复核登记项）+ trials/INDEX（恶意边界后续未测项 9 项）
