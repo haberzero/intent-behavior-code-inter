@@ -10,6 +10,7 @@ intent_context ctx = intent_context.get_current()
 ctx.push("只输出：CTX_OK")
 intent_context.use(ctx)
 str r = @~ 请回应我 ~
+bool r_ready = r.len() > 0
 dict info = ai.get_current_call_info()
 print("sys_has=" + (str)("CTX_OK" in (str)info["sys_prompt"]))
 ctx.pop()

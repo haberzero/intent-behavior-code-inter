@@ -10,6 +10,7 @@ ai.set_global_intent("只输出：GLOBAL_OK")
 list g = ai.get_global_intents()
 print("global_len=" + (str)g.len())
 str r = @~ 请回应我 ~
+bool r_ready = r.len() > 0
 dict info = ai.get_current_call_info()
 print("sys_has=" + (str)("GLOBAL_OK" in (str)info["sys_prompt"]))
 ai.clear_global_intents()

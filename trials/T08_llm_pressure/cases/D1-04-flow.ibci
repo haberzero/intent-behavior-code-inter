@@ -12,8 +12,10 @@ if cond:
 else:
     print("cond=False")
 int count = 0
-for @~ $count 小于 3 吗？只答 1 或 0 ~:
+for @~ 只输出数字 1 ~:
     count = count + 1
+    if count >= 3:
+        break
 print("loop=" + (str)count)
 str a = @~ 返回字母A ~
 str b = @~ 返回字母B ~

@@ -24,7 +24,10 @@ TRIALS = os.path.dirname(ROOT)                              # trials/
 TOOLKIT = os.path.join(TRIALS, "_toolkit")
 RUN_ONE = os.path.join(TOOLKIT, "run_one.py")
 PY = os.environ.get("IBCI_PYTHON", sys.executable)
-REPO_ROOT = os.path.abspath(os.path.join(ROOT, "..", "..", ".."))  # 上溯到仓库根（含 main.py）
+sys.path.insert(0, TOOLKIT)
+from _common import find_repo_root  # noqa: E402
+
+REPO_ROOT = find_repo_root(ROOT)  # 仓库根（含 main.py）；上溯层级不靠硬编码
 
 _LLM_RE = re.compile(r"^#\s*expect-llm\s*:\s*(\S+)")
 
@@ -56,9 +59,10 @@ def collect_cases(suite_dir, cases_dir_name):
             main = os.path.join(p, "main.ibci")
             if not os.path.exists(main):
                 continue
-            # 目录自带 api_config.json → root 指向该目录（各套自有配置）
-            root = p if os.path.exists(os.path.join(p, "api_config.json")) else suite_dir
-            out.append((name, main, root, expect_llm(main)))
+            # 目录型用例 = 自包含多文件工程（main.ibci + 同目录模块）：
+            # project_root 指向用例目录（模块解析锚定 project_root）；
+            # api_config.json 经向上发现解析，不依赖 root 位置。
+            out.append((name, main, p, expect_llm(main)))
     return out
 
 def run_one_case(label, script, root, timeout):

@@ -1,6 +1,6 @@
-# D2-42b 多可能性：thread_result `.value` 属性形态（howto 写法）
+# D2-42b thread_result `.value()` 调用形态（howto 写法，docs/howto/write_concurrent_tasks.md）
 # expect-class: PASS
-# expect-out: value_attr=<Instance of bound_method> | DONE
+# expect-out: value=42 | DONE
 # expect-exit: 0
 # expect-llm: false
 func fetch(int x) -> int:
@@ -8,5 +8,6 @@ func fetch(int x) -> int:
 
 thread[int] t = thread(callable=fetch, args=[21])
 thread_result[int] r = t.join()
-print("value_attr=" + (str)r.value)
+int v = r.value()
+print("value=" + (str)v)
 print("DONE")

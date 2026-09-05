@@ -1,14 +1,16 @@
-# T08-D4-04 llm 可调用类返回 void 边界（无 expected_type 解析为 str）
+# T08-D4-04 llm 可调用类无 expected_type：结果按原始 str 返回（08_llm_callable.md）
 # doc: docs/syntax/08_llm_callable.md
-# expect-class: BOUNDARY
-# expect-exit: nonzero
+# expect-class: PASS
+# expect-out: s=OK | DONE
+# expect-exit: 0
 # expect-llm: true
 import ai
 ai.load_project_config()
 class 报告:
     func __llm_call__(self) -> dict:
-        return {"user_prompt": "只回答：OK", "prompt_slots": [{"kind": "user_sys", "text": "你是一个简洁的助手。"}]}
+        return {"user_prompt": "只回答：OK"}
 
 报告 r = 报告()
-r()
+str s = r()
+print("s=" + s)
 print("DONE")

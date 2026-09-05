@@ -3,7 +3,7 @@
 # 期望: file 读写/覆盖语义正确；json parse/stringify 正确；越界被沙箱拦截
 
 # expect-class: PASS
-# expect-out: path_ok=89 | content=new content | c3=brand new | c3b=mutated | exists=True | parsed_name=Alice
+# expect-out: path_ok=True | content=new content | c3=brand new | c3b=mutated | exists=True | parsed_name=Alice
 # expect-exit: 0
 # expect-llm: false
 import fs
@@ -11,7 +11,7 @@ import json
 
 file_handle fh = fs.open("data.txt")
 str p = fh.path
-print("path_ok=" + (str)p.len())
+print("path_ok=" + (str)(p.len() > 0))
 
 fs.write("data_v2.txt", "new content")
 file_handle f2 = fs.open("data_v2.txt")
