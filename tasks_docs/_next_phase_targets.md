@@ -47,7 +47,11 @@ LLM/mock 双冒烟 PASS。见 git log。）
 - **分类**：语言小缺口（机器事实/密钥读取的一等通道，含沙箱边界考量）+ 命名统一问题。
   与 ref C3（模块工程化）、D1（idbg 增强）关联。
 
-### T3 trial harness 可用性（工具链）
+### T3 trial harness 可用性（工具链）✅ 已落地
+
+（✅ run_one 路径解析修复随 T1 落地；probe.py 端点探测（读发现配置/鉴权/模型校验/诊断
+退出码）+ run_batch --probe 预检（失败 llm 组跳过记 HARNESS）+ _common.find_repo_root
+工具链单源化。见 git log。）
 
 - `run_one.py` 脚本路径 = root 相对拼接：绝对路径 / 仓库相对路径被错误拼接（本 session
   两次冒烟失败实证）；快跑单用例需 6 个必填参数（`--label/--dim/--doc/--expected/--timeout/--root`）。

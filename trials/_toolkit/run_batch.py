@@ -89,6 +89,8 @@ def main():
     ap.add_argument("--parallel", type=int, default=1,
                     help="并发度（1=串行）。mock 用例可设 4-8（快）；真实 LLM 用例建议 1-2"
                          "（本机 Qwen3.6-35B-A3B 非思考模式单例快，高并发仍可能压爆本地服务）")
+    ap.add_argument("--probe", action="store_true",
+                    help="llm 组运行前探测端点（失败则 llm 用例跳过记 HARNESS，不误判缺陷）")
     args = ap.parse_args()
 
     trial_dir = os.path.abspath(args.trial_dir)
@@ -117,9 +119,28 @@ def main():
     if total == 0:
         sys.exit("no cases match the filter")
 
+    # llm 组预检（--probe）：端点探测未通过时 llm 用例整体跳过记 HARNESS（环境缺失），
+    # 不误判为内核缺陷；mock 组不受影响。
+    skipped = []
+    if args.probe and any(name == "llm" and cases for name, cases, _ in stages):
+        from probe import probe_connection, format_probe
+        pd = probe_connection(trial_dir)
+        print(f"[probe] {format_probe(pd)}", flush=True)
+        if not pd["ok"]:
+            for name, cases, workers in stages:
+                if name == "llm":
+                    for c in cases:
+                        cname = os.path.splitext(os.path.basename(c))[0]
+                        skipped.append({"case": cname,
+                                        "line": f"[{cname}] cls=HARNESS note=LLM 服务探测未通过（{pd['reason']}）"})
+                    stages = [(n, [], w) if n == "llm" else (n, cs, w) for n, cs, w in stages]
+
     py = os.environ.get("IBCI_PYTHON", sys.executable)
     results = []
     done = 0
+    for r in skipped:
+        results.append(r)
+        print("   " + r["line"], flush=True)
     for stage_name, stage_cases, workers in stages:
         if not stage_cases:
             continue

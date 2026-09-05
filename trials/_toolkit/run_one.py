@@ -39,6 +39,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import find_repo_root  # noqa: E402
+
 # 诊断码前缀（对齐 core/base/diagnostics/codes.py 命名制：LEX/PAR/SEM/DEP/INT/RUN/KDIAG/CFG）
 # 非捕获组：findall 返回整匹配而非捕获组
 _CODE_RE = re.compile(r"\b(?:SEM|PAR|LEX|DEP|INT|RUN|KDIAG|CFG)_[A-Z0-9_]+\b")
@@ -146,19 +149,6 @@ def _judge(exps: dict, stdout_text: str, exit_code: int, repo_root=None):
     return expect_class, "auto-judged"
 
 
-def _find_repo_root(start: str):
-    """从起始目录逐级上溯查找含 ``main.py`` 的仓库根；找不到返回 None。"""
-    d = os.path.abspath(start)
-    while True:
-        if os.path.exists(os.path.join(d, "main.py")):
-            return d
-        parent = os.path.dirname(d)
-        if parent == d:
-            return None
-        d = parent
-    return None
-
-
 def parse_args():
     p = argparse.ArgumentParser(description="Run one IBCI trial case under hard dead-loop protection.")
     p.add_argument("script", help="path to the .ibci case file (absolute, CWD-relative, or trial-root-relative)")
@@ -190,7 +180,7 @@ def _resolve_script_path(script_arg: str, trial_dir: str) -> str:
 def main():
     args = parse_args()
     trial_dir = os.path.abspath(args.root)
-    repo_root = args.repo_root or _find_repo_root(trial_dir)
+    repo_root = args.repo_root or find_repo_root(trial_dir)
     if repo_root is None:
         sys.exit("repo root (containing main.py) not found from --root; pass --repo-root explicitly")
     logs_dir = os.path.join(trial_dir, "logs")

@@ -40,12 +40,12 @@
 ## 三、可用性探测（每次试用前必做）
 
 ```bash
-curl -s -m 5 -H "Authorization: Bearer $IBCI_TRIAL_LLM_KEY" http://localhost:8001/v1/models
-# 期望 JSON 含 "id": "Qwen3.6-35B-A3B"；失败则服务未启动，LLM 用例不可跑
+python trials/_toolkit/probe.py          # 读发现的 api_config.json，校验端点/鉴权/模型
+# 或批量运行时内置预检：run_batch.py <trial> --probe
 ```
 
-试用前未通过探测 → 只跑 mock 用例（`expect-llm: false`），LLM 用例标
-`HARNESS`（环境缺失），不误判为缺陷。
+探测未通过（服务未启动/鉴权失败/模型缺失）→ 只跑 mock 用例（`expect-llm: false`），
+LLM 用例标 `HARNESS`（环境缺失），不误判为缺陷。
 
 ## 四、api_config.json 单源（真实 LLM 模式）
 
@@ -98,6 +98,5 @@ ai.register_model("NAME", "http://localhost:8001/v1", key, "Qwen3.6-35B-A3B")
 
 > 记录为 PENDING_TASKS 待办，不阻塞本机试用。方向：
 > 1. 端点/模型参数化（`--provider-url`/`--model` 覆盖，或环境变量）；
-> 2. 服务可用性自动探测并生成诊断（`probe` 子命令）；
-> 3. 跨平台安装指导（LM Studio / ollama 等）与 api_config 模板分发；
-> 4. CI/CD 中 LLM 用例的降级策略（无服务时跳过而非失败）。
+> 2. 跨平台安装指导（LM Studio / ollama 等）与 api_config 模板分发；
+> 3. CI/CD 中 LLM 用例的降级策略（无服务时跳过而非失败；`--probe` 预检已覆盖本机侧）。
