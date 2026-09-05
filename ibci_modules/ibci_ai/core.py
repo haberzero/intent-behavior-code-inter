@@ -152,10 +152,11 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
         self.apply_config(config)
 
     def load_project_config(self) -> None:
-        """显式加载 ``project_root/api_config.json`` 并应用（一等入口）。
+        """显式加载 ``api_config.json`` 并应用（一等入口）。
 
         经可插拔的 :class:`ConfigSourceAdapter`（本插件使用
-        :class:`ProjectApiConfigAdapter` 识别默认文件 schema；具体读取/校验/env
+        :class:`ProjectApiConfigAdapter` 识别默认文件 schema：自 project_root
+        向上发现最近配置，仓库根单源即可服务全部子目录；具体读取/校验/env
         展开委托 :class:`ApiConfig`，并把 ``defaults.mock`` 等 provider 测试模式
         一并应用）。用户可自写适配器改写 api_config.json 书写格式。
         """

@@ -27,7 +27,9 @@ python trials/_toolkit/run_batch.py trials/T01_llm_full --mock-only --timeout 10
 > 试用环境基线见 `docs/trials/README.md`；下方示例配置即此基线，服务细节见
 > `trials/_toolkit/LLM_SERVICE.md`。
 
-真实 LLM 层使用 OpenAI 兼容 API。在试用地基根目录放置 `api_config.json`：
+真实 LLM 层使用 OpenAI 兼容 API。配置单源 = 仓库根 `api_config.json`（gitignored；
+加载时自 project_root **向上发现**最近配置——子目录可放置覆盖配置做差异化，
+搜索上界 = 仓库根）：
 
 ```json
 {

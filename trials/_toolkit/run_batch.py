@@ -80,7 +80,7 @@ def _run_one_case(case, trial_dir, run_one, py, timeout, repo_root):
 
 def main():
     ap = argparse.ArgumentParser(description="Batch-run trial cases with per-case hard timeout.")
-    ap.add_argument("trial_dir", help="trial root (contains cases/ + api_config.json)")
+    ap.add_argument("trial_dir", help="trial root (contains cases/; api_config.json discovered upward)")
     ap.add_argument("--timeout", type=float, default=30.0, help="per-case hard timeout (s)")
     ap.add_argument("--cases", default=None, help="space-separated case names (omit = all)")
     ap.add_argument("--llm-only", action="store_true", help="only run expect-llm: true cases")

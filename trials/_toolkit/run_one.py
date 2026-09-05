@@ -161,25 +161,30 @@ def _find_repo_root(start: str):
 
 def parse_args():
     p = argparse.ArgumentParser(description="Run one IBCI trial case under hard dead-loop protection.")
-    p.add_argument("script", help="path to the .ibci case file (relative to trial root)")
+    p.add_argument("script", help="path to the .ibci case file (absolute, CWD-relative, or trial-root-relative)")
     p.add_argument("--label", required=True, help="case id, e.g. D1-01-001")
     p.add_argument("--dim", required=True, help="dimension, e.g. D1/D2/D3")
     p.add_argument("--doc", default="", help="doc reference (chapter/section)")
     p.add_argument("--expected", default="", help="expected behavior description")
     p.add_argument("--timeout", required=True, type=float, help="hard wall-clock timeout in seconds (MANDATORY)")
-    p.add_argument("--root", required=True, help="trial root dir (must contain api_config.json + cases/ + logs/)")
+    p.add_argument("--root", required=True, help="trial root dir (contains cases/ + logs/; api_config.json discovered upward)")
     p.add_argument("--repo-root", default=None, help="repo root containing main.py (auto-detected if omitted)")
     p.add_argument("--extra", action="append", default=[], help="extra CLI args for main.py run, e.g. --no-sniff")
     p.add_argument("--expected-exit", type=int, default=None, help="expected exit code (0=ok, nonzero=error expected)")
     args = p.parse_args()
 
-    if not os.path.exists(args.script) and not os.path.exists(os.path.join(args.root, args.script)):
-        sys.exit(f"case script not found: {args.script}")
-    if not os.path.exists(os.path.join(args.root, "api_config.json")):
-        sys.exit(f"api_config.json missing in root: {args.root}")
     if args.timeout <= 0:
         sys.exit("timeout must be positive")
     return args
+
+
+def _resolve_script_path(script_arg: str, trial_dir: str) -> str:
+    """解析用例脚本路径：绝对 → 原样；CWD 相对存在 → 原样；否则相对 trial 根。"""
+    if os.path.isabs(script_arg):
+        return script_arg
+    if os.path.exists(script_arg):
+        return os.path.abspath(script_arg)
+    return os.path.abspath(os.path.join(trial_dir, script_arg))
 
 
 def main():
@@ -193,10 +198,16 @@ def main():
     main_py = os.path.join(repo_root, "main.py")
     python = os.environ.get("IBCI_PYTHON", sys.executable)
 
-    # script 路径：绝对路径或相对 trial_dir
-    script = args.script if os.path.isabs(args.script) else os.path.abspath(os.path.join(trial_dir, args.script))
+    script = _resolve_script_path(args.script, trial_dir)
     if not os.path.exists(script):
         sys.exit(f"case script not found: {script}")
+
+    # 配置前置检查复用引擎侧同源发现逻辑（单点真理：config_source_adapter），
+    # 不在 harness 复刻向上查找规则。
+    sys.path.insert(0, repo_root)
+    from ibci_modules.ibci_ai.config_source_adapter import ProjectApiConfigAdapter
+    if not ProjectApiConfigAdapter().can_load(trial_dir):
+        sys.exit(f"api_config.json not discoverable (upward, repo-bounded) from trial root: {trial_dir}")
 
     os.makedirs(logs_dir, exist_ok=True)
 

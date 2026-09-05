@@ -292,7 +292,11 @@ class TestDocumentedAiApiReachable:
         assert "VM: Call failed" not in out
 
     def test_load_project_config_language_level(self, tmp_path):
-        """语言级 ai.load_project_config() 可调用（无配置 no-op 合法态）。"""
+        """语言级 ai.load_project_config() 可调用（无配置 no-op 合法态）。
+
+        tmp 内立 ``.git`` 边界，向上发现止步于此（不触及仓库真实根配置）。
+        """
+        (tmp_path / ".git").mkdir()
         out = self._run(tmp_path, "ai.load_project_config()\nprint(\"ok\")\n")
         assert "ok" in out
 
@@ -333,7 +337,11 @@ class TestLoadProjectConfigContract:
             plugin.load_project_config()
 
     def test_skips_silently_when_config_absent(self, tmp_path):
-        """api_config.json 不存在 = 合法状态（用户无配置）→ no-op 静默跳过。"""
+        """搜索界内无 api_config.json = 合法状态（用户无配置）→ no-op 静默跳过。
+
+        tmp 内立 ``.git`` 边界：向上发现止步于此，不触及仓库真实根配置。
+        """
+        (tmp_path / ".git").mkdir()
         plugin = AIPlugin()
         plugin.setup(self._caps(self._ec(str(tmp_path))))
         plugin.load_project_config()
@@ -418,3 +426,91 @@ class TestConfigFailFastHardening:
         plugin = AIPlugin()
         assert "extract_strategy" not in plugin._model_capabilities
         assert "supports_system" not in plugin._model_capabilities
+
+
+class TestConfigDiscovery:
+    """api_config.json 向上发现契约（ProjectApiConfigAdapter.discover_config_path）。
+
+    仓库根单源 + 子目录就近覆盖：自 project_root 向上找最近配置，搜索上界 =
+    含 ``.git`` 的仓库根（不拾取仓库外配置）。
+    """
+
+    @staticmethod
+    def _write_config(directory, **overrides):
+        base = {
+            "defaults": {"mock": True},
+            "default_model": {"base_url": "http://x/v1", "api_key": "k", "model": "m"},
+        }
+        base.update(overrides)
+        (directory / "api_config.json").write_text(json.dumps(base), encoding="utf-8")
+
+    def test_finds_config_at_project_root_itself(self, tmp_path):
+        from ibci_modules.ibci_ai.config_source_adapter import discover_config_path
+        self._write_config(tmp_path)
+        assert discover_config_path(str(tmp_path)) == str(tmp_path / "api_config.json")
+
+    def test_finds_nearest_config_from_nested_dir(self, tmp_path):
+        """两层配置时最近者胜（就近覆盖）。"""
+        from ibci_modules.ibci_ai.config_source_adapter import discover_config_path
+        inner = tmp_path / "inner" / "deeper"
+        inner.mkdir(parents=True)
+        self._write_config(tmp_path, defaults={"mock": False})
+        self._write_config(tmp_path / "inner", defaults={"mock": True})
+        assert discover_config_path(str(inner)) == str(tmp_path / "inner" / "api_config.json")
+
+    def test_ancestor_config_serves_nested_project(self, tmp_path):
+        """仓库根单源配置服务嵌套子目录（trial 体系收敛基础）。"""
+        from ibci_modules.ibci_ai.config_source_adapter import discover_config_path
+        nested = tmp_path / "repo" / "trials" / "T01"
+        nested.mkdir(parents=True)
+        self._write_config(tmp_path / "repo")
+        assert discover_config_path(str(nested)) == str(tmp_path / "repo" / "api_config.json")
+
+    def test_git_boundary_stops_walk(self, tmp_path):
+        """搜索上界 = 含 .git 的目录：其上层的配置不可达。"""
+        from ibci_modules.ibci_ai.config_source_adapter import discover_config_path
+        repo = tmp_path / "outer" / "repo"
+        inner = repo / "inner"
+        inner.mkdir(parents=True)
+        (repo / ".git").mkdir()
+        self._write_config(tmp_path / "outer")
+        assert discover_config_path(str(inner)) is None
+
+    def test_repo_root_config_found_before_boundary_stop(self, tmp_path):
+        """含 .git 的目录自身仍参与匹配（仓库根配置可达）。"""
+        from ibci_modules.ibci_ai.config_source_adapter import discover_config_path
+        repo = tmp_path / "repo"
+        inner = repo / "trials" / "T01"
+        inner.mkdir(parents=True)
+        (repo / ".git").mkdir()
+        self._write_config(repo)
+        assert discover_config_path(str(inner)) == str(repo / "api_config.json")
+
+    def test_no_config_within_boundary_returns_none(self, tmp_path):
+        from ibci_modules.ibci_ai.config_source_adapter import discover_config_path
+        (tmp_path / ".git").mkdir()
+        assert discover_config_path(str(tmp_path / "sub")) is None
+
+    def test_load_project_config_resolves_ancestor_config(self, tmp_path):
+        """引擎级集成：嵌套 project_root 显式加载命中祖先配置。"""
+        from core.engine import IBCIEngine
+        repo = tmp_path / "repo"
+        nested = repo / "trials" / "T01"
+        nested.mkdir(parents=True)
+        (repo / ".git").mkdir()
+        self._write_config(repo, defaults={"mock": True})
+
+        script = nested / "probe.ibci"
+        script.write_text(
+            "import ai\n"
+            "ai.load_project_config()\n"
+            "if ai.has_api_key():\n"
+            "    print(\"loaded\")\n"
+            "else:\n"
+            "    print(\"not-loaded\")\n",
+            encoding="utf-8",
+        )
+        outputs = []
+        engine = IBCIEngine(root_dir=str(nested))
+        engine.run(str(script), output_callback=lambda s: outputs.append(s))
+        assert "loaded" in "".join(outputs)

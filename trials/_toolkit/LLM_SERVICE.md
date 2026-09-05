@@ -47,7 +47,11 @@ curl -s -m 5 -H "Authorization: Bearer $IBCI_TRIAL_LLM_KEY" http://localhost:800
 试用前未通过探测 → 只跑 mock 用例（`expect-llm: false`），LLM 用例标
 `HARNESS`（环境缺失），不误判为缺陷。
 
-## 四、api_config.json 模板（真实 LLM 模式）
+## 四、api_config.json 单源（真实 LLM 模式）
+
+**配置单源 = 仓库根 `api_config.json`**（gitignored）：加载时自 project_root 向上
+发现**最近**配置（子目录可放置覆盖配置做差异化），搜索上界 = 含 `.git` 的仓库根
+（不拾取仓库外配置）。trial 体系零本地副本；端点/密钥/模型变更只改根配置一份。
 
 ```json
 {
@@ -57,7 +61,8 @@ curl -s -m 5 -H "Authorization: Bearer $IBCI_TRIAL_LLM_KEY" http://localhost:800
 }
 ```
 
-mock 模式：`defaults.mock: true`（用例无需真实调用时用；无 LLM 依赖用例始终 mock）。
+mock 模式：`defaults.mock: true`（用例无需真实调用时用；无 LLM 依赖用例始终 mock，
+现有 mock 用例经 `ai.set_mock_mode()` 显式进入，不依赖配置）。
 
 ## 五、命名路由用例的密钥通道
 

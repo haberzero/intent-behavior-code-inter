@@ -18,7 +18,12 @@
 
 ## 二、本次工作实证发现（含证据）
 
-### T1 配置体系碎片化（架构级；单一权威源违反）
+### T1 配置体系碎片化（架构级；单一权威源违反）✅ 已落地
+
+（✅ 实现：`config_source_adapter.discover_config_path` 向上发现（`.git` 仓库边界 +
+就近覆盖）+ 仓库根单源 `api_config.json` + 59 份 trial 本地副本全删（内容等价或零消费
+实证）+ run_one 路径解析修复与配置检查发现感知 + 7 项发现契约测试；全量 pytest 零回归，
+LLM/mock 双冒烟 PASS。见 git log。）
 
 - **事实**：trial 运行时配置 `api_config.json` 共 61 份本地副本（gitignored）：43 份含
   provider 块（迁移前 base_url/model 多种值并存：`localhost:1234` / `127.0.0.1:1234` ×
