@@ -35,7 +35,9 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
    至 origin，本地 main 复位 origin/main（该 2 提交由 `unsafe-vibe-dev` 承载）。**远程 CI 暂不
    启动**（保持 `workflow_dispatch`，用户裁定；本地分层验证经 `scripts/ci_local.sh`）。**本机暂不
    跑真实 LLM**（无 api_config.json）：L3 真实 LLM 层与阶段 C 真实 LLM 残留项（恶意边界未测 9 项
-   等，见 trials/INDEX.md）在本机搁置，待 LLM 环境就位后恢复。 |
+   等，见 trials/INDEX.md）在本机搁置，待 LLM 环境就位后恢复。**（后段已被 2026-09-05 裁定取代：
+   真实 LLM 环境已就位，见下行）** |
+| LLM 试用端点迁移 + 阶段 E 目标整合（2026-09-05，用户） | ① **端点迁移**：本机 LLM 试用端点切至 vLLM `localhost:8001/v1`（强制 Bearer 鉴权；**只允许 `Qwen3.6-35B-A3B`，禁止 `Qwen3.8-27B-NVFP4`**），接下来及未来所有试用均用此端点。落地：43 个 gitignored `api_config.json` 批量迁移；tracked 用例经 `IBCI_TRIAL_LLM_KEY` 环境变量 + 宿主绑定 `os.getenv` 取密钥（tracked 文件不落密钥）；`trials/_toolkit/LLM_SERVICE.md` 单一权威源重写（关键实证：顶层 `enable_thinking` 被 vLLM 静默忽略，思考抑制须走 `chat_template_kwargs` 通道，内置默认 provider 双形态发送已兼容）；命名路由双用例真实 LLM 亚秒 PASS + 全量 pytest 零回归。② **阶段 E 定向**：本 session 实证暴露项（配置体系碎片化 61 份副本/语言层无环境变量通道 + idbg.env 命名冲突/harness 路径解析脆弱/provider max_tokens 硬编码/文档示例无验证闭环——详见临时文档 `tasks_docs/_next_phase_targets.md`）+ `ref/IBCI_REQUIREMENTS.md` 灰盒愿景需求单（"全部 ibci 内、不寄生 Python"；P0 = C1 embedding/C2 结构化输出/C3 模块解析/C4 ibci 内测试/B1 源码行号/A3 容器尾逗号）整合为下一阶段主攻目标；正式总条目 = `PENDING_TASKS.md` VISION-7。待用户裁定：C1 与 PT-SEALED-1 media 封存边界、PT-DECIDE-2 解封重估、ref 来源项目协同方式。 |
 
 ## 三、重大方向决策记录（防止未来误解）
 

@@ -33,10 +33,10 @@
 wheel 发布面实证齐备，裁定依据见 `tasks_docs/WORKLOG.md`）；`scripts/ci_local.sh` L4 发布产物层补齐
 （build + 安装 smoke，镜像 `.github/workflows/ci.yml`）。**阶段 C · 真实 LLM 全面试用（VISION-3）**：
 试用地基（六套件 T10-T15 / 恶意边界 22 例 / 全量回归 / 压力维度 / 缺陷闭环）+ 技术文档全方位复核
-（文风治理）已完成；**真实 LLM 线本机搁置**（用户裁定本机暂不跑真实 LLM，无 `api_config.json`）——
-L3 真实 LLM 层与真实 LLM 残留项（恶意边界后续未测 9 项，见 `trials/INDEX.md` 后续清单）待 LLM
-环境就位后恢复。**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）原按用户裁定
-"真实试用后恢复"，与当前搁置态冲突，恢复时机待裁定。
+（文风治理）已完成；**真实 LLM 环境已就位**（本机试用端点已迁移至 vLLM `localhost:8001` 并
+真实用例实跑验证；模型红线与试用规范见 `trials/_toolkit/LLM_SERVICE.md`）——L3 真实 LLM 层与
+真实 LLM 残留项（恶意边界后续未测 9 项 + 全量 LLM 回归复跑，见 `trials/INDEX.md` 后续清单）
+已解锁待跑。**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）恢复时机随阶段排布待裁定。
 
 测试基线以实跑为准（不冻结数字；唯一命令 `python -m pytest tests/`）。
 
@@ -45,19 +45,25 @@ L3 真实 LLM 层与真实 LLM 残留项（恶意边界后续未测 9 项，见 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
-1. **阶段 C 文档复核登记项收敛**：复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
+1. **阶段 E · 真实使用整改与灰盒愿景整合（用户裁定：下一阶段主攻目标）**：真实 LLM 试用
+   暴露的易用性/缺陷项（配置体系单源收敛、语言层环境变量通道、trial harness 可用性等）+
+   外部灰盒自动机需求单（`ref/IBCI_REQUIREMENTS.md`，本地未入库资产）整合推进；汇总映射、
+   批次建议与待裁定项见 `tasks_docs/_next_phase_targets.md`（正式总条目 = PENDING_TASKS
+   VISION-7）。
+2. **阶段 C 真实 LLM 残留项清场**（环境已就位）：恶意边界未测 9 项 + 全量 LLM 回归复跑
+   （见 `trials/INDEX.md` 后续清单）——建议作为阶段 E 批 0 先行。
+3. **阶段 C 文档复核登记项收敛**：复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
    call_info 键结构 / 装配未知键是否应告警 / BOUNDARY-LLM-5 mock 下 call_info 无 sys_prompt 键），
    doc-governance Phase 0-8。
-2. **周期质量维护恢复裁定**（PT-AUDIT-1/3 + Tier B + quality-maintenance）——原阈值"真实试用后
+4. **周期质量维护恢复裁定**（PT-AUDIT-1/3 + Tier B + quality-maintenance）——原阈值"真实试用后
    恢复"与"本机暂不跑真实 LLM"冲突，待用户裁定（mock 侧/静态侧维护可先行或整体顺延）。
-3. **远程 CI 启用（暂不启动，用户裁定）**：`ci.yml` 恢复 push/PR 触发（本地分层验证经
+5. **远程 CI 启用（暂不启动，用户裁定）**：`ci.yml` 恢复 push/PR 触发（本地分层验证经
    `scripts/ci_local.sh`，不依赖远程；启用需用户显式授权）。
-4. **真实 LLM 环境就位**（`api_config.json` 配置到本机或指定 LLM 宿主）——解锁后 L3 层 +
-   阶段 C 真实 LLM 残留项（恶意边界未测 9 项 + 全量 LLM 回归复跑）。
-5. **阶段 D · 主线远期演进（试用稳定后）**：VISION-4 P7 类型理论加固 / VISION-5 P8 函数式地基 /
+6. **阶段 D · 主线远期演进（试用稳定后）**：VISION-4 P7 类型理论加固 / VISION-5 P8 函数式地基 /
    VISION-1 二层 IR（见 `tasks_docs/PENDING_TASKS.md` §八）；PT-SEALED-1 保持封存。
 
-**已封存**：PT-DECIDE-2（供应商思考禁用）。**划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。
+**已封存**：PT-DECIDE-2（供应商思考禁用；解封重估待裁定——新端点实证已收窄缺口）。
+**划远期（近期不处理）**：PT-FEAT-6/12（工具链项）。
 
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 
