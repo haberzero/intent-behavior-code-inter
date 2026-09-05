@@ -1,0 +1,19 @@
+# T15-E-M24 [边界清单 #6] snapshot 内嵌 LLM 调用交叉：定义时深克隆捕获容器自由变量，
+#   定义后变异原容器不得泄漏进快照调用（冻结语义 + LLM body 交叉）
+# doc: docs/syntax/07_behavior_expressions.md §7.4 + docs/architecture/04_vm_interpreter.md §snapshot
+# expect-class: PASS
+# expect-out: frozen1=True | frozen2=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+list items = ["A"]
+fn snap = snapshot -> str: @~ 回显: $items ~
+str r1 = snap()
+dict i1 = ai.get_current_call_info()
+items.append("B")
+str r2 = snap()
+dict i2 = ai.get_current_call_info()
+print("frozen1=" + (str)("A" in (str)i1["user_prompt"]))
+print("frozen2=" + (str)(("A" in (str)i2["user_prompt"]) and ("B" not in (str)i2["user_prompt"])))
+print("DONE")

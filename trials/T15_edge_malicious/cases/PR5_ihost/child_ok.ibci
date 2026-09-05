@@ -1,0 +1,2 @@
+str greeting = "hi-from-child"
+int n = 42

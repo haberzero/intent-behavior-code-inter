@@ -1,0 +1,20 @@
+# T15-E-M26 [边界清单 #14] llmexcept 附着边界：llmexcept 语义上仅附着含行为表达式的语句，
+#   对流式 await 语句附着 → 编译期 SEM_LLMEXCEPT_BINDING fail-fast（流式 provider 层失败
+#   属非解析不确定域，不经 llmexcept retry——与 KERNEL_ISSUE-LLM-1 处置语义一致）
+# doc: docs/syntax/10_robustness.md + docs/syntax/11_modules.md §11.3
+# expect-class: GUARD
+# expect-code: SEM_LLMEXCEPT_BINDING
+# expect-exit: nonzero
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 流错误:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STREAM:a|b|MOCK:ERROR:500"}
+try:
+    str full = await ai.stream_call(流错误())
+    llmexcept:
+        retry "再试"
+except Exception:
+    print("no")
+print("DONE")

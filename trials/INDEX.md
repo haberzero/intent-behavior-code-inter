@@ -39,13 +39,13 @@
 
 | # | 主题 | 状态 | 目标窗口 |
 |---|------|------|----------|
-| 6 | snapshot 内嵌 LLM 调用交叉（冻结 vs 调用点 live） | ⏸ 部分 | 后续试用轮（LLM 层） |
-| 14 | 流式中断 / llmexcept 组合错误传播 | ⏸ 部分 | 后续试用轮（LLM 层） |
+| 6 | snapshot 内嵌 LLM 调用交叉（冻结 vs 调用点 live） | ✅ **已测（2026-09-05）**：T15-E-M24 snapshot 捕获容器自由变量（定义时深克隆），定义后变异原容器不泄漏进快照调用（frozen1/frozen2 双断言）——冻结语义零缺陷 | `T15/.../T15-E-M24-snapshot-frozen-capture.ibci` |
+| 14 | 流式中断 / llmexcept 组合错误传播 | ✅ **已测（2026-09-05）**：T15-E-M25 流式 provider 层失败经 except Exception 干净传播（不吞、无部分结果）；T15-E-M26 llmexcept 附着流式 await → 编译期 `SEM_LLMEXCEPT_BINDING` fail-fast（流式失败属非解析不确定域，不经 retry——与 KERNEL_ISSUE-LLM-1 处置一致） | `T15/.../T15-E-M25/M26-*.ibci` |
 | 15 | intent_context 类字段 deep_clone 路径 | ⏸ 未测 | 后续专项（需先确认 snapshot 多语句体/类字段捕获观测面） |
 | 16 | 序列化 round-trip inherited_smear/override 槽 | ⏸ 未测 | 后续专项 |
 | 17 | 跨引擎序列化/水化（特化类/枚举/意图上下文） | ⏸ 未测 | 后续专项 |
 | 19 | overlay 与序列化/snapshot/retry 交互 | ⏸ 未测 | 后续专项 |
-| 22 | 动态宿主 collect 错误传播/超时（ihost） | ⏸ 未测 | 后续专项 |
+| 22 | 动态宿主 collect 错误传播/超时（ihost） | ✅ **已测（2026-09-05）**：T15-E-M27（PR5_ihost 目录用例）四断言——正常子环境变量字典承载子变量 / 子环境运行期失败 collect 点 RuntimeError fail-fast / 子环境编译失败同传播 / 未知句柄 Unknown spawn handle fail-fast——全 GUARD 生效零缺陷 | `T15/.../PR5_ihost/` |
 | 23 | bind 白名单/vtable 强制/registry 隔离 | ✅ **已测（2026-09-05）**：T15-E-M20（绑定期缺失成员报错）/ M21（成员门控 + 别名隔离，RUN_ATTRIBUTE_ERROR）/ M22（非可调用成员声明为方法绑定期拒绝）——三守卫全 GUARD 生效，零缺陷 | `T15/.../T15-E-M20~M22-*.ibci` |
 | 33 | `_pending_futures` 长会话累积（内存面） | ⏸ 未测 | 后续专项（与 KERNEL_ISSUE-LLM-5 同子系统，随其修复后观测） |
 

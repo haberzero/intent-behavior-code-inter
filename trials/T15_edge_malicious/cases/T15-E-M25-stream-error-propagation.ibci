@@ -1,0 +1,18 @@
+# T15-E-M25 [边界清单 #14] 流式 provider 层失败传播：MOCK:STREAM + MOCK:ERROR 组合下
+#   stream_call 失败经 except Exception 干净传播（不被吞、不产生部分结果）
+# doc: docs/syntax/11_modules.md §11.3 + docs/syntax/10_robustness.md
+# expect-class: GUARD
+# expect-out: caught_stream_error=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 流错误:
+    func __llm_call__(self) -> dict:
+        return {"user_prompt": "MOCK:STREAM:a|b|c|MOCK:ERROR:500"}
+try:
+    str full = await ai.stream_call(流错误())
+    print("full=" + full)
+except Exception as e:
+    print("caught_stream_error=True")
+print("DONE")

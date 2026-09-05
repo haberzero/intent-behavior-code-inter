@@ -1,0 +1,32 @@
+# T15-E-M27 [边界清单 #22] ihost 隔离子环境 collect 错误传播/句柄强制：
+#   ① 正常子环境变量字典承载子变量；② 子环境运行期失败 → collect 点 RuntimeError fail-fast；
+#   ③ 子环境编译失败 → 同样传播；④ 未知/已消费句柄 → Unknown spawn handle fail-fast
+# doc: docs/syntax/11_modules.md §11.6 + docs/syntax/15_diagnostics.md KDIAG_RUNTIME_COLLECT_SKIP
+# expect-class: GUARD
+# expect-out: has_greeting=True | caught_runtime_fail=True | caught_compile_fail=True | caught_bogus=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ihost
+dict r1 = ihost.run_isolated("child_ok.ibci", {"isolated": True})
+print("has_greeting=" + (str)("greeting" in (str)r1.keys()))
+bool caught_runtime = False
+try:
+    str h1 = ihost.spawn_isolated("child_runtime_fail.ibci", {"isolated": True})
+    dict r2 = ihost.collect(h1)
+except Exception:
+    caught_runtime = True
+print("caught_runtime_fail=" + (str)caught_runtime)
+bool caught_compile = False
+try:
+    str h2 = ihost.spawn_isolated("child_fail.ibci", {"isolated": True})
+    dict r4 = ihost.collect(h2)
+except Exception:
+    caught_compile = True
+print("caught_compile_fail=" + (str)caught_compile)
+bool caught_bogus = False
+try:
+    dict r3 = ihost.collect("bogus-handle")
+except Exception:
+    caught_bogus = True
+print("caught_bogus=" + (str)caught_bogus)
+print("DONE")

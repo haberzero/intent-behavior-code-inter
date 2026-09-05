@@ -1,0 +1,3 @@
+str a = "before"
+print(undefined_var_name)
+str b = "after"
