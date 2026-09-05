@@ -67,6 +67,7 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
             auth=m.get("api_key"),
             timeout=m.get("timeout"),
             thinking_mode=_thinking(m.get("reasoning")),
+            max_tokens=m.get("max_tokens"),
         )
     dm = dm_raw
     return LLMConnectionConfig(
@@ -77,6 +78,7 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
             auth=dm.get("api_key"),
             timeout=dm.get("timeout", default_timeout),
             thinking_mode=_thinking(dm.get("reasoning")),
+            max_tokens=dm.get("max_tokens"),
         ),
         models=models,
         defaults=CallDefaults(

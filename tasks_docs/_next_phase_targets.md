@@ -58,7 +58,11 @@ LLM/mock 双冒烟 PASS。见 git log。）
 - 端点可用性探测 = 手工 curl（`LLM_SERVICE.md` §七已列 probe 子命令为未来任务，本实证维持其有效性）。
 - **分类**：易用性；低风险，可先行。
 
-### T4 provider 配置面缺口
+### T4 provider 配置面缺口 ✅ 已落地
+
+（✅ api_config 模型条目 `max_tokens`（可选，正整数 fail-fast 校验）→ ModelSpec.max_tokens →
+provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4096）全链路；6 项契约测试。
+见 git log。）
 
 - `max_tokens=4096` 硬编码（`ibci_modules/ibci_ai/provider_impl.py`）；api_config 无
   per-model 参数面（现有 timeout/retry/reasoning，无生成上限/温度类声明位）。

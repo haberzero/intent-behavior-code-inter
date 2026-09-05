@@ -18,7 +18,8 @@ schema（完备形态）::
       },
       "models": {                         # 可选；命名模型（引用 provider + 模型名 + 每模型参数）
         "default": { "provider": "ollama", "model": "qwen3-8b", "reasoning": false },
-        "local":   { "provider": "ollama", "model": "qwen3-8b", "timeout": 60.0 }
+        "local":   { "provider": "ollama", "model": "qwen3-8b", "timeout": 60.0,
+                     "max_tokens": 2048 }
       },
       "default_model": "default"          # 必需；字符串引用 models，或对象形态（直接含连接信息）
     }
@@ -307,6 +308,16 @@ class ApiConfig:
                 error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
             )
         result["reasoning"] = reasoning
+
+        # max_tokens（可选；单次生成上限，正整数）
+        if "max_tokens" in model:
+            mt = model["max_tokens"]
+            if not isinstance(mt, int) or isinstance(mt, bool) or mt <= 0:
+                raise InterpreterError(
+                    f"{context}.max_tokens 必须是正整数",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            result["max_tokens"] = mt
 
         return result
 

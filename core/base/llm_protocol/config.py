@@ -35,6 +35,7 @@ class ModelSpec:
     - ``auth``：认证凭据（可选，如 API key；敏感信息）。
     - ``timeout``：超时秒数（可选）。
     - ``thinking_mode``：该模型的思考模式偏好（自动跟随负载默认或显式指定）。
+    - ``max_tokens``：单次生成上限（可选；provider 内置默认兜底）。
     """
 
     provider: str
@@ -43,6 +44,7 @@ class ModelSpec:
     auth: Optional[str] = None
     timeout: Optional[float] = None
     thinking_mode: str = THINKING_AUTO
+    max_tokens: Optional[int] = None
 
 
 @dataclass(frozen=True)

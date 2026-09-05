@@ -514,3 +514,60 @@ class TestConfigDiscovery:
         engine = IBCIEngine(root_dir=str(nested))
         engine.run(str(script), output_callback=lambda s: outputs.append(s))
         assert "loaded" in "".join(outputs)
+
+
+class TestMaxTokensConfig:
+    """per-model max_tokens 配置面（api_config 模型条目 → ModelSpec → provider 消费）。"""
+
+    _BASE = {"base_url": "http://x/v1", "api_key": "k", "model": "m"}
+
+    def test_validate_carries_max_tokens(self):
+        """模型条目 max_tokens 经校验透传（正整数）。"""
+        cfg = ApiConfig.validate({
+            "default_model": {**self._BASE, "max_tokens": 2048},
+        })
+        assert cfg["default_model"]["max_tokens"] == 2048
+
+    def test_validate_rejects_bad_max_tokens(self):
+        """max_tokens 非正整数 fail-fast（CFG_CONFIG_INVALID_FIELD_TYPE）。"""
+        for bad in (0, -1, "x", 1.5, True):
+            with pytest.raises(InterpreterError):
+                ApiConfig.validate({
+                    "default_model": {**self._BASE, "max_tokens": bad},
+                })
+
+    def test_absent_max_tokens_not_in_validated(self):
+        """未声明 max_tokens → 校验结果不含该键（provider 走内置默认）。"""
+        cfg = ApiConfig.validate({"default_model": dict(self._BASE)})
+        assert "max_tokens" not in cfg["default_model"]
+
+    def test_apply_config_sets_max_tokens(self):
+        """apply_config 落 max_tokens 到默认配置；_resolve_max_tokens 消费。"""
+        from ibci_modules.ibci_ai.provider_impl import _MAX_TOKENS_DEFAULT
+        plugin = AIPlugin()
+        plugin.apply_config({
+            "defaults": {},
+            "default_model": {**self._BASE, "max_tokens": 2048},
+        })
+        assert plugin._config["max_tokens"] == 2048
+        assert plugin._resolve_max_tokens("") == 2048
+
+    def test_default_max_tokens_fallback(self):
+        """未配置 max_tokens → 内置默认 4096。"""
+        from ibci_modules.ibci_ai.provider_impl import _MAX_TOKENS_DEFAULT
+        plugin = AIPlugin()
+        plugin.apply_config({"defaults": {}, "default_model": dict(self._BASE)})
+        assert "max_tokens" not in plugin._config or plugin._config["max_tokens"] is None
+        assert plugin._resolve_max_tokens("") == _MAX_TOKENS_DEFAULT
+
+    def test_named_model_max_tokens_override(self):
+        """命名模型条目 max_tokens 覆盖默认（@NAME~ 路由消费注册项）。"""
+        from ibci_modules.ibci_ai.provider_impl import _MAX_TOKENS_DEFAULT
+        plugin = AIPlugin()
+        plugin.apply_config({
+            "defaults": {},
+            "default_model": dict(self._BASE),
+            "models": {"big": {**self._BASE, "model": "m2", "max_tokens": 8192}},
+        })
+        assert plugin._resolve_max_tokens("big") == 8192
+        assert plugin._resolve_max_tokens("") == _MAX_TOKENS_DEFAULT

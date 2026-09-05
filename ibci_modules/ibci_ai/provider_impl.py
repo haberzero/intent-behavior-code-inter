@@ -48,6 +48,9 @@ from ibci_modules.ibci_ai.config_normalize import (
     to_llm_config,
 )
 
+# 单次生成 token 上限的内置默认（可被 api_config 模型条目 max_tokens 覆盖）
+_MAX_TOKENS_DEFAULT = 4096
+
 # MOCK 模式哨兵（仅显式声明进入：_config["mock"]=True，经 set_mock_mode/apply_config
 # defaults.mock；不嗅探 url/key，不读隐式环境变量——避免环境开关静默压过显式配置）
 MOCK_CLIENT_SENTINEL = "MOCK_CLIENT"
@@ -194,7 +197,7 @@ class RecommendedProvider(LLMProvider):
             completion = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=4096,
+                max_tokens=self._resolve_max_tokens(request.target_model),
                 extra_body={
                     "enable_thinking": False,
                     "chat_template_kwargs": {"enable_thinking": False}
@@ -258,7 +261,7 @@ class RecommendedProvider(LLMProvider):
                         {"role": "user", "content": user_content},
                     ],
                     stream=True,
-                    max_tokens=4096,
+                    max_tokens=self._resolve_max_tokens(request.target_model),
                 )
                 for chunk in stream_resp:
                     if not chunk or not chunk.choices:
@@ -351,6 +354,12 @@ class RecommendedProvider(LLMProvider):
     # ------------------------------------------------------------------ #
     # Provider 内部：请求→payload 组装 + 响应→result 解析
     # ------------------------------------------------------------------ #
+
+    def _resolve_max_tokens(self, target_model: str) -> int:
+        """活动模型单次生成上限：命名模型注册项 > 默认配置 > 内置默认。"""
+        if target_model and target_model in self._model_registry:
+            return self._model_registry[target_model].get("max_tokens") or _MAX_TOKENS_DEFAULT
+        return self._config.get("max_tokens") or _MAX_TOKENS_DEFAULT
 
     def _resolve_client(self, target_model: str, require: bool = True):
         """按 target_model 路由客户端；无路由时用默认客户端。
@@ -557,11 +566,13 @@ class RecommendedProvider(LLMProvider):
             self.register_model(
                 name, model.endpoint, model.auth, model.model_id,
                 timeout=model.timeout or _DEFAULT_TIMEOUT,
+                max_tokens=model.max_tokens,
             )
 
         dm = config.default_model
         self._config["timeout"] = dm.timeout if dm.timeout is not None else _DEFAULT_TIMEOUT
         self._config["model"] = dm.model_id
+        self._config["max_tokens"] = dm.max_tokens
 
         if mock:
             self.set_mock_mode()
@@ -579,6 +590,7 @@ class RecommendedProvider(LLMProvider):
             "key": key,
             "model": model,
             "timeout": kwargs.get("timeout", _DEFAULT_TIMEOUT),
+            "max_tokens": kwargs.get("max_tokens"),
         }
         self._model_registry[name] = config
         self._named_clients.pop(name, None)
