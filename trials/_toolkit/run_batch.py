@@ -7,7 +7,7 @@ Batch runner — 试用地基批量运行器（单一权威源，与 run_one.py 
     被强制终止，不影响后续用例（不串行堵死整批）。
   - 用例按是否依赖真实 LLM 分层：头部 `# expect-llm: true` 判为 llm 组，否则 mock 组。
     先跑 mock 组（快），再跑 llm 组（真实服务，耗时大）——`--llm-only` 可只跑 llm 组。
-  - 本机 LLM 服务见 _toolkit/LLM_SERVICE.md（qwen3.6-35b-a3b @ 127.0.0.1:1234，
+  - 本机 LLM 服务见 _toolkit/LLM_SERVICE.md（Qwen3.6-35B-A3B @ localhost:8001，
     非思考模式，非通用化服务，仅本机）。
 
 用法：
@@ -88,7 +88,7 @@ def main():
     ap.add_argument("--repo-root", default=None)
     ap.add_argument("--parallel", type=int, default=1,
                     help="并发度（1=串行）。mock 用例可设 4-8（快）；真实 LLM 用例建议 1-2"
-                         "（本机 qwen3.6-35b-a3b 非思考模式单例快，高并发仍可能压爆本地服务）")
+                         "（本机 Qwen3.6-35B-A3B 非思考模式单例快，高并发仍可能压爆本地服务）")
     args = ap.parse_args()
 
     trial_dir = os.path.abspath(args.trial_dir)

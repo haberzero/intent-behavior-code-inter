@@ -188,7 +188,7 @@ python main.py run test_target_proj/01_hello_world.ibci
         "local": { "base_url": "http://localhost:1234/v1", "api_key": "lm-studio" }
     },
     "models": {
-        "default": { "provider": "local", "model": "qwen3.6-35b-a3b", "reasoning": false }
+        "default": { "provider": "local", "model": "Qwen3.6-35B-A3B", "reasoning": false }
     },
     "default_model": "default"
 }

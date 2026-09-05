@@ -32,8 +32,8 @@ python trials/_toolkit/run_batch.py trials/T01_llm_full --mock-only --timeout 10
 ```json
 {
     "defaults": { "timeout": 30.0, "retry": 3, "auto_intent_injection": true, "mock": false },
-    "providers": { "local": { "base_url": "http://127.0.0.1:1234/v1", "api_key": "lm-studio" } },
-    "models": { "default": { "provider": "local", "model": "qwen3.6-35b-a3b", "reasoning": false } }
+    "providers": { "local": { "base_url": "http://localhost:8001/v1", "api_key": "<your-api-key>" } },
+    "models": { "default": { "provider": "local", "model": "Qwen3.6-35B-A3B", "reasoning": false } }
 }
 ```
 
@@ -49,7 +49,7 @@ python trials/_toolkit/run_batch.py trials/T01_llm_full --mock-only --timeout 10
 运行前先探测服务可用性：
 
 ```bash
-curl -s -m 5 http://127.0.0.1:1234/v1/models
+curl -s -m 5 -H "Authorization: Bearer $IBCI_TRIAL_LLM_KEY" http://localhost:8001/v1/models
 ```
 
 服务不可达时只运行 mock 用例；真实 LLM 用例会被记为环境缺失，而不是误判为内核缺陷。

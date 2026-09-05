@@ -193,9 +193,12 @@ list results = ai.run_batch(summarize, docs)
 
 ```ibci
 import ai
+import python "os" as oslib:
+    bind getenv(key: str) -> str
 
-# 注册命名模型
-ai.register_model("WHISPER", "https://api.openai.com/v1", env("KEY"), "whisper-1")
+# 注册命名模型（密钥经环境变量读取，不硬编码在脚本里）
+str key = oslib.getenv("WHISPER_API_KEY")
+ai.register_model("WHISPER", "https://api.openai.com/v1", key, "whisper-1")
 
 # 路由到命名模型
 str transcript = @WHISPER~ 识别这段音频的内容 ~

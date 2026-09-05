@@ -13,9 +13,9 @@
 | mock 层 | 无需外部服务 | 快速回归语言语义、诊断码、控制流与容器行为 |
 | 真实 LLM 层 | OpenAI 兼容 API 服务 | 验证 LLM 调用机制、解析契约与真实模型行为 |
 
-> **试用环境基线**：所有开发试用均在**本地 `qwen3.6-35b-a3b` 非思考模式**下进行
-> （LM Studio @ 127.0.0.1:1234，`reasoning: false`）；用例断言与结果分类均以此
-> 模式的输出形态为基准。服务细节见 `trials/_toolkit/LLM_SERVICE.md`。
+> **试用环境基线**：所有开发试用均在**本地 `Qwen3.6-35B-A3B` 非思考模式**下进行
+> （vLLM OpenAI 兼容端点 @ `localhost:8001`，`reasoning: false`）；用例断言与结果分类
+> 均以此模式的输出形态为基准。服务细节见 `trials/_toolkit/LLM_SERVICE.md`。
 
 ## 二、目录结构
 

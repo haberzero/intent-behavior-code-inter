@@ -4,9 +4,9 @@
 > 新增试用地基必须：遵循命名 `T<nn>_<主题>`、引用 `_toolkit/run_one.py`（软链非复制）、
 > 更新本索引、缺陷编号全局唯一。
 >
-> **试用环境基线**：所有开发试用均在**本地 `qwen3.6-35b-a3b` 非思考模式**（LM Studio
-> @ 127.0.0.1:1234，`reasoning: false`）下进行；mock 仅用于无 LLM 依赖用例。
-> 服务细节见 `_toolkit/LLM_SERVICE.md`。
+> **试用环境基线**：所有开发试用均在**本地 `Qwen3.6-35B-A3B` 非思考模式**（vLLM
+> OpenAI 兼容端点 @ `localhost:8001`，`reasoning: false`）下进行；mock 仅用于无
+> LLM 依赖用例。服务细节见 `_toolkit/LLM_SERVICE.md`。
 
 ## 一、试用地基一览
 

@@ -19,11 +19,12 @@
   断点状态 / 配置加载入口）在宿主 ``ibci_modules/ibci_ai/core.py`` 的
   ``AIPlugin(RecommendedProvider, IbStatefulPlugin)``——不改本文件。
 
-思考抑制说明：本推荐实现面向开发试用基线（LM Studio + Qwen 非思考模式）硬编码
-payload 思考抑制（``enable_thinking=false``）；模型声明（``api_config.json`` 的
-``reasoning`` 字段 → ``ModelSpec.thinking_mode``）驱动能力判定（``is_reasoning``）；
-``LLMCallRequest.thinking_mode`` 是供应商无关的**远期接口位**（各供应商字段映射
-在各自 provider 实现内完成，见 PT-DECIDE-2）。
+思考抑制说明：本推荐实现面向开发试用基线（OpenAI 兼容端点 + Qwen 非思考模式）
+固定发送 payload 思考抑制字段（顶层 ``enable_thinking=false`` 与
+``chat_template_kwargs.enable_thinking=false`` 双形态，多后端兼容）；模型声明
+（``api_config.json`` 的 ``reasoning`` 字段 → ``ModelSpec.thinking_mode``）驱动能力判定
+（``is_reasoning``）；``LLMCallRequest.thinking_mode`` 是供应商无关的**远期接口位**
+（各供应商字段映射在各自 provider 实现内完成，见 PT-DECIDE-2）。
 """
 
 from __future__ import annotations
@@ -142,16 +143,16 @@ class RecommendedProvider(LLMProvider):
         if config_declared_non_reasoning:
             print(
                 f"[警告] 模型 '{model}' 输出思考内容，但配置声明 reasoning:false（非思考）。\n"
-                "        尝试的思考抑制参数（enable_thinking=false / thinking.enabled=false）"
-                "对该模型无效（后端强制思考）。\n"
+                "        尝试的思考抑制参数（enable_thinking=false /"
+                " chat_template_kwargs.enable_thinking=false）对该模型无效（后端强制思考）。\n"
                 "        这是 IBCI 待完善的覆盖缺口（供应商感知的思考禁用），请联系开发者或\n"
-                "        提交 issue，并附供应商（LM Studio）文档说明："
-                "https://lmstudio.ai/docs（模型思考由提示模板决定，API 参数对部分模型无效）。"
+                "        提交 issue，并附供应商文档说明。"
             )
         else:
             print(
                 f"[警告] 探测到模型 '{model}' 输出思考内容（reasoning），尽管已请求启用思考抑制\n"
-                "        （enable_thinking=false）——API 参数对该模型无效（后端强制思考）。\n"
+                "        （enable_thinking=false / chat_template_kwargs.enable_thinking=false）\n"
+                "        ——API 参数对该模型无效（后端强制思考）。\n"
                 "        这是 IBCI 待完善的覆盖缺口（供应商感知的思考禁用），请联系开发者或\n"
                 "        提交 issue，并附供应商文档说明。"
             )

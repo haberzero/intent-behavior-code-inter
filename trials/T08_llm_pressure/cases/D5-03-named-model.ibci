@@ -5,8 +5,11 @@
 # expect-exit: 0
 # expect-llm: true
 import ai
+import python "os" as oslib:
+    bind getenv(key: str) -> str
 ai.load_project_config()
-ai.register_model("ALT", "http://127.0.0.1:1234/v1", "lm-studio", "qwen3.6-35b-a3b")
+str key = oslib.getenv("IBCI_TRIAL_LLM_KEY")
+ai.register_model("ALT", "http://localhost:8001/v1", key, "Qwen3.6-35B-A3B")
 str s = @ALT~ 只回答：NAMED_OK ~
 print("named_len=" + (str)(s.len() > 0))
 print("DONE")
