@@ -1,0 +1,24 @@
+# T15-E-M28 [边界清单 #16] 序列化 round-trip 意图槽保真（KERNEL_ISSUE-SER-1 复现用例）：
+#   @ 涂抹意图 + save_state + 意图变更 + load_state → 恢复后 ai 模块成员访问与意图栈/槽
+#   应完整保真（当前缺陷：load_state 恢复的模块变量死壳覆盖活绑定，ai 成员访问 AttributeError）
+# doc: docs/howto/use_isolation.md + docs/subsystems/01_intent_system.md §6 槽位序列化
+# expect-class: KERNEL_ISSUE
+# expect-out: after_load_stack=1 | has_s1=True | no_s2=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+import ihost
+ai.set_mock_mode()
+@ "S1"
+ihost.save_state("./logs/m28_state.json")
+@ "S2"
+ai.set_return_type_prompt("int", "AFTER_PROMPT")
+ihost.load_state("./logs/m28_state.json")
+list st = ai.get_current_intent_stack()
+print("after_load_stack=" + (str)st.len())
+str r = @~ 输出: x ~
+dict info = ai.get_current_call_info()
+print("has_s1=" + (str)("S1" in (str)info["intents"]["merged"]))
+print("no_s2=" + (str)("S2" not in (str)info["intents"]["merged"]))
+print("rt=" + (str)ai.get_return_type_prompt("int"))
+print("DONE")
