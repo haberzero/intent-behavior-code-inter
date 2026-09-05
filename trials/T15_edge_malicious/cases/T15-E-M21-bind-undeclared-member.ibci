@@ -1,0 +1,16 @@
+# T15-E-M21 [边界清单 #23] 成员访问声明门控 + 别名隔离：未声明成员 fail-fast（无隐式反射），
+#   同一宿主模块两次绑定各自别名成员互不可见（o2 只绑 getcwd，访问 getenv 须被拒）
+# doc: docs/howto/extend_with_host_binding.md §成员门控
+# expect-class: GUARD
+# expect-out: bound_ok=True | Runtime Error: [ERROR][RUN_ATTRIBUTE_ERROR]: AttributeError: 'module' object has no attribute 'getenv'
+# expect-exit: nonzero
+# expect-llm: false
+import python "os" as oslib:
+    bind getenv(key: str) -> str
+import python "os" as o2:
+    bind getcwd() -> str
+str v = oslib.getenv("PATH")
+print("bound_ok=" + (str)(v.len() > 0))
+str s = o2.getenv("PATH")
+print("SHOULD_NOT_REACH")
+print("DONE")

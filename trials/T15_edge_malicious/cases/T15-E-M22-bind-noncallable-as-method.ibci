@@ -1,0 +1,10 @@
+# T15-E-M22 [边界清单 #23] bind 签名种类强制：非可调用宿主成员（os.sep 为 str）声明为
+#   方法 → 绑定期拒绝（不静默包装）
+# doc: docs/howto/extend_with_host_binding.md + docs/architecture/01_native_host_binding.md
+# expect-class: GUARD
+# expect-out: Runtime Error: [ERROR][RUN_GENERIC_ERROR]: Host binding: member 'os.sep' is not callable but declared as method.
+# expect-exit: nonzero
+# expect-llm: false
+import python "os" as oslib:
+    bind sep() -> str
+print("DONE")

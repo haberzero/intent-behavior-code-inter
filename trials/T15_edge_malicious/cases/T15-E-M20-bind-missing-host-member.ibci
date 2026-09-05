@@ -1,0 +1,9 @@
+# T15-E-M20 [边界清单 #23] bind 声明了宿主缺失的成员 → 绑定期报错（fail-fast，不静默建桩）
+# doc: docs/howto/extend_with_host_binding.md + docs/architecture/01_native_host_binding.md
+# expect-class: GUARD
+# expect-out: Runtime Error: [ERROR][RUN_GENERIC_ERROR]: Host binding: Python module 'os' has no member 'totally_missing_fn' declared in bind.
+# expect-exit: nonzero
+# expect-llm: false
+import python "os" as oslib:
+    bind totally_missing_fn(key: str) -> str
+print("DONE")
