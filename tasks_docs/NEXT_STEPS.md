@@ -50,9 +50,10 @@ wheel 发布面实证齐备，裁定依据见 `tasks_docs/WORKLOG.md`）；`scri
    外部灰盒自动机需求单（`ref/IBCI_REQUIREMENTS.md`，本地未入库资产）整合推进；汇总映射、
    批次建议与待裁定项见 `tasks_docs/_next_phase_targets.md`（正式总条目 = PENDING_TASKS
    VISION-7）。
-2. **阶段 C 真实 LLM 残留项清场（LLM 回归复跑已完成，剩余恶意边界 9 项）**：恶意边界未测
-   9 项对抗性用例设计与执行（见 `trials/INDEX.md` 后续清单）——随批 1 推进；新增
-   KERNEL_ISSUE-LLM-5 竞态根因定位随批 1。
+2. **阶段 C 真实 LLM 残留项清场（LLM 回归复跑 + 恶意边界 #6/#14/#22/#23 已核销）**：剩余
+   #15/16/17/19/33 专项（#16/#17 依赖 KERNEL_ISSUE-SER-1 修复、#33 依赖 LLM-5 同子系统）；
+   缺陷追修随批 1：KERNEL_ISSUE-SER-1（load_state 模块绑定死壳，M28 复现用例就位）/
+   KERNEL_ISSUE-LLM-5（事件驱动监视复发）。
 3. **阶段 C 文档复核登记项收敛**：复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
    call_info 键结构 / 装配未知键是否应告警 / BOUNDARY-LLM-5 mock 下 call_info 无 sys_prompt 键），
    doc-governance Phase 0-8。
