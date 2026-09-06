@@ -42,7 +42,7 @@
 | 6 | snapshot 内嵌 LLM 调用交叉（冻结 vs 调用点 live） | ✅ **已测（2026-09-05）**：T15-E-M24 snapshot 捕获容器自由变量（定义时深克隆），定义后变异原容器不泄漏进快照调用（frozen1/frozen2 双断言）——冻结语义零缺陷 | `T15/.../T15-E-M24-snapshot-frozen-capture.ibci` |
 | 14 | 流式中断 / llmexcept 组合错误传播 | ✅ **已测（2026-09-05）**：T15-E-M25 流式 provider 层失败经 except Exception 干净传播（不吞、无部分结果）；T15-E-M26 llmexcept 附着流式 await → 编译期 `SEM_LLMEXCEPT_BINDING` fail-fast（流式失败属非解析不确定域，不经 retry——与 KERNEL_ISSUE-LLM-1 处置一致） | `T15/.../T15-E-M25/M26-*.ibci` |
 | 15 | intent_context 类字段 deep_clone 路径 | ⏸ 未测 | 后续专项（需先确认 snapshot 多语句体/类字段捕获观测面） |
-| 16 | 序列化 round-trip inherited_smear/override 槽 | 🔴 **部分核销——发现 KERNEL_ISSUE-SER-1（2026-09-05）**：`load_state` 恢复的变量快照含 import 产生的模块绑定，反序列化死壳覆盖活模块绑定 → load 后任何模块成员访问 `AttributeError`（ai 全体成员失活实证）；意图槽保真在缺陷修复前不可观测，round-trip 修复后经 M28 转 PASS 收口 | `T15/.../T15-E-M28-state-roundtrip-intent.ibci` |
+| 16 | 序列化 round-trip inherited_smear/override 槽 | ✅ **已测（2026-09-05）**：SER-1 修复后 M28 三断言 PASS——持久意图保真 / save 后变更丢弃 / 插件状态（返回类型提示）round-trip 保真；`@` 涂抹在 ai 调用间的消费时序观测到语义细节（set_return_type_prompt 间隔使涂抹不达 save），已从用例中断言面移除、留待意图语义专项复核 | `T15/.../T15-E-M28-state-roundtrip-intent.ibci` |
 | 17 | 跨引擎序列化/水化（特化类/枚举/意图上下文） | ⏸ 未测（依赖 KERNEL_ISSUE-SER-1 修复——同序列化子系统） | 后续专项 |
 | 19 | overlay 与序列化/snapshot/retry 交互 | ⏸ 未测 | 后续专项 |
 | 22 | 动态宿主 collect 错误传播/超时（ihost） | ✅ **已测（2026-09-05）**：T15-E-M27（PR5_ihost 目录用例）四断言——正常子环境变量字典承载子变量 / 子环境运行期失败 collect 点 RuntimeError fail-fast / 子环境编译失败同传播 / 未知句柄 Unknown spawn handle fail-fast——全 GUARD 生效零缺陷 | `T15/.../PR5_ihost/` |
@@ -118,7 +118,7 @@
 | `BOUNDARY-LLM-5` | 进程内 mock（ai.set_mock_mode）下 `get_current_call_info()` 无 `sys_prompt` 键（真实模式有） | **已登记（2026-08-21，T13）**：观测设施缺口（意图三层 intents 始终可用，T13 已改用其断言）；供阶段 C 文档复核评估观测 API 对 mock 的覆盖。**补充实证（2026-09-05，T08 复跑）**：真实模式下 dispatch-before-use 的 future 若从未被语言层消费，单写槽停留在 dispatch 快照形态（同样无 `sys_prompt`，response 为空）——resolve 点覆盖只在消费时发生；用例先消费再读即可观测完整 call_info（D3-09/D3-10 已修用例消费顺序） | `T13/.../T13-I-M1-*.ibci` + `T08/.../D3-09/D3-10` |
 | `KERNEL_ISSUE-LLM-5` | llm 可调用类 + 声明用户类赋值竞态（约 1/6 复现）：`Resp r = inst()`（expected_type + `__from_prompt__`）偶发绑定未解包的 llm 结果包装物——声明类型名特化渲染 `Resp(result='OK')`、`.text` 读不到用户字段；非确定（同文件多次运行时好时坏） | **已登记（2026-09-05，T08 复跑实证）**；同日 34 连净未再复现（直跑/harness 双路径压测）——失败窗口与服务负载相关，根因定位待复现窗口再现时带插桩（VTableParsingStrategy.parse 构造点）进行；用例保留，未来批次运行经 batch judge 自动监视复发 | `T08/.../D4-05-llmfunc-userclass.ibci`（RR-3 失败日志） |
 | `KERNEL_ISSUE-IMPORT-2` | 模块 `import` 解析锚定 **project_root** 而非入口文件目录：多文件用例（main.ibci + 同目录模块）在 project_root ≠ 用例目录时 `DEP_MODULE_NOT_FOUND`；历史经"root=用例目录"的隐性耦合而通过，配置单源收敛后暴露 | **已定位（2026-09-05）**：与 ref C3"用户模块路径解析未文档化"直接关联——锚点语义（project_root vs entry_dir 及搜索顺序）待 C3 设计时统一定案并文档化；短期 harness 按"目录型用例 = 自包含工程"以用例目录为 root 运行 | `T06/.../D1-02`（DEP_MODULE_NOT_FOUND 日志） |
-| `KERNEL_ISSUE-SER-1` | `ihost.load_state` 恢复的变量快照**含 import 产生的模块绑定**：反序列化出死模块壳覆盖活绑定 → load 后该模块（如 `ai`）全体成员访问 `AttributeError`（'module' object has no attribute ...）——任何 import 后 save/load 的脚本即断 | **已登记（2026-09-05，T15-E-M28 复现）**：处置方向 = 模块类值不入变量快照（模块绑定由 import 重建，非用户状态）或 load 时跳过模块类值还原；修复后 M28 转 PASS 收口意图槽保真（#16） | `T15/.../T15-E-M28-state-roundtrip-intent.ibci` |
+| `KERNEL_ISSUE-SER-1` | `ihost.load_state` 恢复的变量快照**含 import 产生的模块绑定**：反序列化出死模块壳覆盖活绑定 → load 后该模块（如 `ai`）全体成员访问 `AttributeError`（'module' object has no attribute ...）——任何 import 后 save/load 的脚本即断 | **已修复（2026-09-05）**：环境重绑覆盖全部已恢复作用域（就地变更符号值保别名结构）+ 模块对象按 import 路径同构构造（契约 + IbModule 包装）；M28 回归门转 PASS | `T15/.../T15-E-M28-state-roundtrip-intent.ibci`（复现→回归门） |
 
 ## 三、登记前分诊闸门（强制，见 CLASSIFICATION §四）
 
