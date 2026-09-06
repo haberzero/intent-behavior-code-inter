@@ -4,9 +4,9 @@
 > 新增试用地基必须：遵循命名 `T<nn>_<主题>`、引用 `_toolkit/run_one.py`（软链非复制）、
 > 更新本索引、缺陷编号全局唯一。
 >
-> **试用环境基线**：所有开发试用均在**本地 `Qwen3.6-35B-A3B` 非思考模式**（vLLM
-> OpenAI 兼容端点 @ `localhost:8001`，`reasoning: false`）下进行；mock 仅用于无
-> LLM 依赖用例。服务细节见 `_toolkit/LLM_SERVICE.md`。
+> **试用环境基线**：所有开发试用均在**本地非思考模式**基线模型（OpenAI 兼容端点，
+> `reasoning: false`）下进行；mock 仅用于无 LLM 依赖用例。端点/模型等本机事实见
+> 本机环境事实记录（不入库）。服务细节见 `_toolkit/LLM_SERVICE.md`。
 
 ## 一、试用地基一览
 
@@ -42,7 +42,7 @@
 | 6 | snapshot 内嵌 LLM 调用交叉（冻结 vs 调用点 live） | ✅ **已测（2026-09-05）**：T15-E-M24 snapshot 捕获容器自由变量（定义时深克隆），定义后变异原容器不泄漏进快照调用（frozen1/frozen2 双断言）——冻结语义零缺陷 | `T15/.../T15-E-M24-snapshot-frozen-capture.ibci` |
 | 14 | 流式中断 / llmexcept 组合错误传播 | ✅ **已测（2026-09-05）**：T15-E-M25 流式 provider 层失败经 except Exception 干净传播（不吞、无部分结果）；T15-E-M26 llmexcept 附着流式 await → 编译期 `SEM_LLMEXCEPT_BINDING` fail-fast（流式失败属非解析不确定域，不经 retry——与 KERNEL_ISSUE-LLM-1 处置一致） | `T15/.../T15-E-M25/M26-*.ibci` |
 | 15 | intent_context 类字段 deep_clone 路径 | ⏸ 未测 | 后续专项（需先确认 snapshot 多语句体/类字段捕获观测面） |
-| 16 | 序列化 round-trip inherited_smear/override 槽 | ✅ **已测（2026-09-05）**：SER-1 修复后 M28 三断言 PASS——持久意图保真 / save 后变更丢弃 / 插件状态（返回类型提示）round-trip 保真；`@` 涂抹在 ai 调用间的消费时序观测到语义细节（set_return_type_prompt 间隔使涂抹不达 save），已从用例中断言面移除、留待意图语义专项复核 | `T15/.../T15-E-M28-state-roundtrip-intent.ibci` |
+| 16 | 序列化 round-trip inherited_smear/override 槽 | ✅ **已测（2026-09-05）**：SER-1 修复后 M28 三断言 PASS——持久意图保真 / save 后变更丢弃 / 插件状态（返回类型提示）round-trip 保真。`@` 涂抹消费时序观测经用户裁定确认与既有文档语义一致（任何语句消费窗口），非缺陷、无专项 | `T15/.../T15-E-M28-state-roundtrip-intent.ibci` |
 | 17 | 跨引擎序列化/水化（特化类/枚举/意图上下文） | ⏸ 未测（依赖 KERNEL_ISSUE-SER-1 修复——同序列化子系统） | 后续专项 |
 | 19 | overlay 与序列化/snapshot/retry 交互 | ⏸ 未测 | 后续专项 |
 | 22 | 动态宿主 collect 错误传播/超时（ihost） | ✅ **已测（2026-09-05）**：T15-E-M27（PR5_ihost 目录用例）四断言——正常子环境变量字典承载子变量 / 子环境运行期失败 collect 点 RuntimeError fail-fast / 子环境编译失败同传播 / 未知句柄 Unknown spawn handle fail-fast——全 GUARD 生效零缺陷 | `T15/.../PR5_ihost/` |

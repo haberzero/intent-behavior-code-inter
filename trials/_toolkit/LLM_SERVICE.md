@@ -1,32 +1,27 @@
-# LLM_SERVICE — 本机真实 LLM 服务规范（单一权威源）
+# LLM_SERVICE — 试用 LLM 服务规范（单一权威源）
 
-> 试用体系以**真实 LLM 为主**（用户裁定）：本机试用始终利用本机 LLM 服务做
-> 真实测试，mock 仅用于无 LLM 依赖的用例。**当前服务非通用化，仅本机有效**；
-> 引导其他开发者配置的指导为未来任务（见 §七）。
+> 试用体系以**真实 LLM 为主**（用户裁定）：试用利用 LLM 服务做真实测试，mock 仅用于
+> 无 LLM 依赖的用例。本文件是**服务无关的规范**（端点/模型/密钥等本机事实不入库，
+> 见本机 `AGENTS.local.md` 本地层）；引导其他开发者配置的指导为未来任务（见 §七）。
 >
-> **开发试用基线**：**所有开发试用均在本地 `Qwen3.6-35B-A3B`
-> 非思考模式下进行**——用例断言、结果分类、文档对齐均以此模式的输出形态为准。
->
-> **模型红线（用户裁定）**：本机 LLM 试用只允许 `Qwen3.6-35B-A3B`；
-> **禁止使用 `Qwen3.8-27B-NVFP4`**。
+> **开发试用基线原则**：所有开发试用在**非思考模式**下进行（用例断言、结果分类、
+> 文档对齐以该输出形态为准）；所用模型由本机配置声明。
 
-## 一、本机服务（当前唯一权威端点）
+## 一、服务要求（对任意 OpenAI 兼容端点）
 
-| 项 | 值 |
-|----|----|
-| 服务类型 | vLLM OpenAI 兼容服务（强制 Bearer 鉴权，无凭证/错凭证返回 401） |
-| 端点 | `http://localhost:8001/v1` |
-| API key | **不入版本控制**：trial 各 `api_config.json`（gitignored）承载；命名路由用例经环境变量 `IBCI_TRIAL_LLM_KEY` 读取（见 §五） |
-| 允许模型 | `Qwen3.6-35B-A3B`（**非思考模式**，见 §二；模型 ID 以服务端 `/v1/models` 精确大小写为准） |
-| 禁止模型 | `Qwen3.8-27B-NVFP4`（本机试用一律不得使用） |
+| 项 | 要求 |
+|----|------|
+| 协议 | OpenAI 兼容 `/v1`（chat/completions + embeddings 未来扩展） |
+| 鉴权 | Bearer token（无凭证/错凭证必须 401，不得静默放行） |
+| 模型 | 非思考基线模型一个（本机模型与红线见 `AGENTS.local.md`） |
+| 配置 | 仓库根 `api_config.json`（gitignored，单源向上发现，见 §四） |
 
 ## 二、思考模式（非思考 = 唯一基线）
 
-**当前事实**：服务端为 Qwen3.6 启用了 reasoning parser——思考内容隔离在响应的
-`message.reasoning` 字段，`content` 为最终答案。非思考实现 = 请求携带
-`chat_template_kwargs: {"enable_thinking": false}`（vLLM 模板变量通道）：实测非思考
-响应亚秒级、`reasoning_tokens=0`。顶层 `enable_thinking` 字段会被 vLLM **静默忽略**
-（实测仍思考），不能作为关闭手段。
+**机制事实（实证）**：非思考实现 = 请求携带
+`chat_template_kwargs: {"enable_thinking": false}`（vLLM 模板变量通道）。
+**顶层 `enable_thinking` 字段会被 vLLM 静默忽略**（实测仍思考），不能作为关闭手段；
+不同后端的字段映射属 provider 实现职责（见 `docs/howto/modify_llm_provider.md`）。
 
 内置默认 provider 同时发送顶层 `enable_thinking=false` 与
 `chat_template_kwargs.enable_thinking=false` 两种抑制字段（多后端兼容）；
@@ -52,12 +47,13 @@ LLM 用例标 `HARNESS`（环境缺失），不误判为缺陷。
 **配置单源 = 仓库根 `api_config.json`**（gitignored）：加载时自 project_root 向上
 发现**最近**配置（子目录可放置覆盖配置做差异化），搜索上界 = 含 `.git` 的仓库根
 （不拾取仓库外配置）。trial 体系零本地副本；端点/密钥/模型变更只改根配置一份。
+本机实际值见 `AGENTS.local.md`；字段单位：**`timeout` 为秒**。
 
 ```json
 {
     "defaults": { "timeout": 30.0, "retry": 3, "auto_intent_injection": true, "mock": false },
-    "providers": { "local": { "base_url": "http://localhost:8001/v1", "api_key": "<本机密钥，不入库>" } },
-    "models": { "default": { "provider": "local", "model": "Qwen3.6-35B-A3B", "reasoning": false } }
+    "providers": { "local": { "base_url": "<OpenAI 兼容端点>", "api_key": "<本机密钥，不入库>" } },
+    "models": { "default": { "provider": "local", "model": "<基线模型 ID，以服务端 /v1/models 精确大小写为准>", "reasoning": false } }
 }
 ```
 
@@ -67,23 +63,23 @@ mock 模式：`defaults.mock: true`（用例无需真实调用时用；无 LLM �
 ## 五、命名路由用例的密钥通道
 
 - 硬编码端点凭据的用例（如 T01 `D1-07-006`、T08 `D5-03`）经宿主绑定读取环境变量
-  `IBCI_TRIAL_LLM_KEY` 作为密钥——**tracked 用例文件不得包含真实密钥**：
+  （变量名本机事实见 `AGENTS.local.md`）作为密钥——**tracked 用例文件不得包含真实密钥**：
 
 ```ibci
 import python "os" as oslib:
     bind getenv(key: str) -> str
-str key = oslib.getenv("IBCI_TRIAL_LLM_KEY")
-ai.register_model("NAME", "http://localhost:8001/v1", key, "Qwen3.6-35B-A3B")
+str key = oslib.getenv("<本机环境变量名>")
+ai.register_model("NAME", "<端点>", key, "<模型>")
 ```
 
-- 运行此类用例前导出该变量（本机导出行与本机密钥明文见 `AGENTS.local.md`）。
+- 运行此类用例前导出该变量（本机导出行见 `AGENTS.local.md`）。
 
 ## 六、用例分层与耗时预算
 
 | 层 | 标记 | 耗时 | 运行方式 |
 |----|------|------|----------|
 | mock | 无 `# expect-llm: true` | <1s/用例 | `run_batch.py <trial> --mock-only --timeout 10` |
-| llm | `# expect-llm: true` | 1-5s/用例（Qwen3.6-35B-A3B 非思考模式推理） | `run_batch.py <trial> --llm-only --timeout 60` |
+| llm | `# expect-llm: true` | 1-5s/用例（非思考模式推理） | `run_batch.py <trial> --llm-only --timeout 60` |
 
 - 批量运行**先 mock 后 llm**（`run_batch.py <trial>` 默认顺序），单用例卡住由
   harness 超时 SIGKILL，不影响整批。
@@ -92,9 +88,10 @@ ai.register_model("NAME", "http://localhost:8001/v1", key, "Qwen3.6-35B-A3B")
   压爆本地服务——曾实测并发压爆导致响应超时/假死）。每用例独立 subprocess + 独立
   超时，并发下卡死互不影响。
 - llm 用例断言（`expect-out`）为真实模型期望输出；模型输出非确定，断言取
-  稳定可判定的部分（如枚举成员名→值映射、意图注入的关键字），避免整句精确匹配。
+  稳定可判定的部分（如枚举成员名→值映射、意图注入的关键字），避免整句精确匹配
+  与机器特定值（路径长度/绝对路径等）。
 
-## 七、未来任务：引导其他开发者配置（当前只本机）
+## 七、未来任务：引导其他开发者配置
 
 > 记录为 PENDING_TASKS 待办，不阻塞本机试用。方向：
 > 1. 端点/模型参数化（`--provider-url`/`--model` 覆盖，或环境变量）；

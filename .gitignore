@@ -54,3 +54,6 @@ __pypackages__/
 
 # per-machine local environment facts (see AGENTS.md)
 AGENTS.local.md
+
+# repo-root runtime artifacts (state-file experiments)
+logs/
