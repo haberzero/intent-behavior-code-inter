@@ -558,6 +558,14 @@ class RuntimeDeserializer:
 
         return context
 
+    def restored_scopes(self) -> List[Scope]:
+        """物化并返回全部恢复的运行时作用域（环境重绑消费；uid 缓存去重）。
+
+        快照的作用域按需惰性重建；环境重绑需要完整作用域树以覆盖全部模块绑定，
+        故提供一次性物化入口（uid 去重，重复调用幂等）。
+        """
+        return [self._get_scope(uid) for uid in list(self.runtime_scope_pool.keys())]
+
     def _get_intent_context(self, uid: str) -> Any:
         """从池中重建 IbIntentContext Python 对象（共享身份）。"""
         if uid in self.intent_ctx_cache:

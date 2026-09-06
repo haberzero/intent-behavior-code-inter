@@ -191,21 +191,49 @@ class HostService(IHostService):
         self.setup_context_callback(context, force=True)
         
         # 2. 重新注入原生插件 (Native Plugins)
-        # 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖
+        # 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖。
+        # 模块对象按 import 路径同构构造（vtable/白名单契约 + IbModule 包装）——
+        # 缺契约的裸 NativeObject 会在成员访问时被模块契约门拒绝。
+        live_modules: Dict[str, Any] = {}
         for name in self.interop.get_all_package_names():
             pkg = self.interop.get_package(name)
             if pkg:
                 if not isinstance(pkg, IbObject):
                     # 使用工厂创建 Native 对象，消除对 kernel.IbNativeObject 的直接依赖
-                    pkg_obj = self.execution_context.factory.create_native_object(
+                    contract = self.interop.get_native_contract(name)
+                    native_obj = self.execution_context.factory.create_native_object(
                         pkg,
                         self.registry.get_class("Object"),
+                        vtable=contract[0] if contract else None,
+                        whitelist=contract[1] if contract else None,
                         registry_id=self.interop.get_registry_id(name),
                     )
+                    pkg_obj = self.execution_context.factory.create_module(name, native_obj)
                 else:
                     pkg_obj = pkg
+                live_modules[name] = pkg_obj
                 # 强制覆盖常量符号
                 context.global_scope.define(name, pkg_obj, is_const=True, force=True)
+
+        # 2.5 恢复作用域树中的内核原生模块绑定（KERNEL_ISSUE-SER-1）：import 产生的
+        # 模块变量位于模块作用域（非 global），其值经快照反序列化为 scope_native 空
+        # scope 占位（见 runtime_serializer._collect_module 契约：实现由本方法重绑）。
+        # 重绑必须覆盖全部已恢复作用域——仅修 global 时，模块作用域的死占位会遮蔽
+        # 活绑定，load 后模块成员访问 AttributeError。
+        # 就地变更符号值（不重建符号）：编译期符号 UID 与运行期 uid 键是同一符号的
+        # 多别名，重建会触发别名清理丢失编译期键。
+        if deserializer is not None and live_modules:
+            for scope in deserializer.restored_scopes():
+                for sym in scope.get_all_symbols_by_uid().values():
+                    live_obj = live_modules.get(sym.name)
+                    if live_obj is not None:
+                        sym.value = live_obj
+                        sym.current_type = type(live_obj)
+                for sym in scope.get_all_symbols().values():
+                    live_obj = live_modules.get(sym.name)
+                    if live_obj is not None:
+                        sym.value = live_obj
+                        sym.current_type = type(live_obj)
 
         # 3. 恢复有状态插件的内部状态（fail-fast：恢复失败必须暴露，不静默跳过）
         if plugin_states:
