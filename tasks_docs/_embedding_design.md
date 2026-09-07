@@ -161,3 +161,65 @@ OpenAI 兼容默认实现：`POST /v1/embeddings {model, input: [..]}` → `data
 - 全量 pytest 零回归（基线 3289）；
 - EMB_ 6 码 catalog 1:1 覆盖（test_diagnostic_catalog 强制）；
 - 合入处理项 ② 实证：零范数输入 → `EMB_ZERO_NORM` fail-fast（非静默 e_0）。
+
+### 9.6 批 ② 裁决项确认（2026-09-07）
+
+- **Q4 诊断域**（已裁定 = `EMB_` 域）：批 ② vector 方法面 dim 不一致 fail-fast
+  错误码 = `EMB_DIMENSION_MISMATCH`（C4/T3）；NaN/Inf 构造违约 = `EMB_INVALID_INPUT`
+  （C7）——复用批 ① 码面，不新设码。
+- **Q3 `expected_type: vector`**（已裁定 = 否）：批 ② 不触 LLM 协议面
+  （C13 负面检查 = diff 范围核对）。
+- **JSON 表征**（pre-study 阻塞项 4 裁决）：vector 的 JSON 类型标签 =
+  `{"_vector": [...elements...]}`（与 `ibci_json` 既有 `{"_list"}`/`{"_value"}`
+  包装纪律同型——类型标签化保证 round-trip 保真）；**实现接线属批 ③**
+  （json 模块面），批 ② 只锁表征语义。
+- **字面量语法**（暂缓）：起步 = 内置 `vec(list) -> vector` 构造函数
+  （C15）；list 不得隐式转 vector（显式 vec() 调用）。
+- **PT-DEBT-30/33 先例核对**：类型边界闭合全链路（序列化/深克隆/快照/克隆）
+  按既有 checklist 逐项核销（C8-C10）。
+
+### 9.7 批 ② 交叉核验裁定（2026-09-07，侦察蓝图 × 实测对照）
+
+批 ② 实施经 fork subagent 机制面侦察蓝图 + 逐项实测对照，7 个决策项裁定：
+
+- **D1 vec 静态签名（实测推翻侦察推荐）**：侦察结论"vec 静态 = any（无编译期
+  函数签名先例）"**不成立**——`register_function` 元数据经 metadata registry
+  同步 + `resolve_call_return` Layer 6 return_type 直读生效。实证：
+  `list xs = vec([1.0])` → `SEM_TYPE_MISMATCH: Cannot assign 'vector' to 'list'`；
+  `vector v = vec([...])` 编译通过。**裁定：保留元数据注册（强静态返回类型
+  = vector，优于 any）**。
+- **D2 JSON 表征（拒绝侦察推荐，维持 9.6 裁定）**：侦察推荐"现状直接数组
+  （to_native）"——**拒绝**：to_native 降格 vector → list = 类型身份静默丢失
+  （P11 类型漂移教训的内核侧对应物）+ JSON round-trip 类型回退 list。
+  **裁定：`IbVector.to_native()` = 显式违约（EMB_INVALID_INPUT）**——vector
+  类型身份永不降格；JSON 面正式通道 = 9.6 裁定的 `{"_vector": [...]}` 类型
+  标签包装（批 ③ json 模块接线，json 模块自持 vector 分支，不经 to_native）。
+- **D3 dict 键排除显式度**：to_native 显式违约（D2）使 dict 键/set/原生
+  边界经 unbox 单一边界统一 fail-fast（消息含 vector 类型名）+
+  `__hash__ = None` 双保险——**优于侦察"现状 + 文档化"推荐**（消息 =
+  "vector 是值语义一等类型，不可拆箱为原生值"，非 Python 原生
+  "unhashable type: 'list'" 的无类型名形态）。
+- **D4 __to_prompt__ 截断（采纳）**：`__to_prompt__` = dim + 前 8 维摘要
+  （与 idbg serialize_for_debug 同风格；1024 维全量进提示词 = 污染风险）。
+- **D5 空 vector（采纳）**：dim=0 构造合法（维度固定含 0）；方法面
+  cosine 零范数 fail-fast（EMB_ZERO_NORM）；norm() = 0.0（范数定义域含
+  零向量，不违约）；to_bool = dim > 0（与 list/str/dict `len > 0` 先例同型，
+  primitive_initializer 手动绑定——`bool b = v` 直接赋值不开（任何值型均
+  不开，bool 化面 = if/while 条件协议 to_bool，实证对齐））。
+- **D6 错误码域（拒绝侦察推荐，维持 EMB_）**：侦察推荐"RUN_ 域（值层通用）"
+  ——**拒绝**：与 9.3 已落文裁定矛盾（"语言层接线时同码复用，不另设 RUN_
+  面"）；值层 vector 契约违约（dim 失配/零范数/非法输入）与服务面维度契约
+  违约**同一失败语义**（维度一致性），同码合理。C4 错误码 =
+  EMB_DIMENSION_MISMATCH；构造违约 = EMB_INVALID_INPUT。
+- **D7 对象文件位置（采纳）**：`core/runtime/objects/primitives/vector.py`
+  （IbValue 子类统一目录；侦察指出的检查单"与 stream.py 同位"表述修正——
+  值类全在 primitives/）。
+
+**额外修正项（交叉核验识别）**：`==`/`!=` 运算符经 vtable receive 派发
+（OP_MAPPING），非 Python __eq__ 魔法路径——VectorAxiom 声明
+`get_operators() = {"==": "__eq__", "!=": "__ne__"}` 触发 `_auto_bind_operators`
+自动绑定 + IbVector 显式 `__ne__`（object 继承的自动推导非实例方法，
+`_is_impl_method` 不识别）；`__to_prompt__` 方法 spec 声明（协议豁免但
+契约可见，ExceptionAxiom 先例）；cast_to 无法转换 fail-fast（批 ③ 纪律，
+非静默 return self）；deep_clone 不可变原语分支（vector 与 int/str 同纪律
+引用复用——不可变 = 克隆语义等价，C9"修改 clone 不影响原"空真成立）。

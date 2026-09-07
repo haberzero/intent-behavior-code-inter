@@ -218,6 +218,7 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     string_class = ib_classes.get("str")
     list_class = ib_classes.get("list")
     dict_class = ib_classes.get("dict")
+    vector_class = ib_classes.get("vector")
     slice_class = ib_classes.get("slice")
     none_class = ib_classes.get("None")
     bool_class = ib_classes.get("bool")
@@ -325,6 +326,12 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         "len",
         param_type_names=["any"],
         return_type_name="int"
+    ), token)
+
+    registry.register_function("vec", factory.create_func(
+        "vec",
+        param_type_names=["list"],
+        return_type_name="vector"
     ), token)
 
     registry.register_function("copy", factory.create_func(
@@ -482,6 +489,11 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     _reg_native(string_class, '__to_prompt__', lambda self: self.to_native())
     _reg_native(string_class, 'to_bool', lambda self: len(self.value) > 0)
     _reg_native(string_class, '__getitem__', lambda self, key: self.__getitem__(key), unbox=False)
+
+    # Vector（值语义：to_bool = 非空；__to_prompt__ = 截断摘要，提示词面不污染）
+    if vector_class is not None:
+        _reg_native(vector_class, '__to_prompt__', lambda self: self.__to_prompt__())
+        _reg_native(vector_class, 'to_bool', lambda self: len(self.payload) > 0)
 
     # range(start, stop, step) 构造函数
     def _range_impl(reg, *args):

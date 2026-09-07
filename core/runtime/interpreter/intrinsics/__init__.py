@@ -6,6 +6,7 @@ from core.runtime.interpreter.intrinsics.io import register_io
 from core.runtime.interpreter.intrinsics.collection import register_collection
 from core.runtime.interpreter.intrinsics.seq import register_seq
 from core.runtime.interpreter.intrinsics.meta import register_meta
+from core.runtime.interpreter.intrinsics.vector import register_vector
 
 class IntrinsicManager:
     """
@@ -63,3 +64,4 @@ class IntrinsicManager:
         register_collection(self, execution_context, service_context)
         register_seq(self, execution_context, service_context)
         register_meta(self, execution_context, service_context)
+        register_vector(self, execution_context, service_context)

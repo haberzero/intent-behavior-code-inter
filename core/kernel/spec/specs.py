@@ -81,6 +81,9 @@ LIST_SPEC         = TypeDef(name="list",   kind=TypeKind.LIST.value,  provenance
 TUPLE_SPEC        = TypeDef(name="tuple",  kind=TypeKind.TUPLE.value,  provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 DICT_SPEC         = TypeDef(name="dict",   kind=TypeKind.DICT.value,  provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 MODULE_SPEC       = TypeDef(name="module", kind=TypeKind.MODULE.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
+# 词嵌入向量 —— 一等值类型（固定维度不可变、值语义、不可拆箱）。
+# 分派面统一按 base_name 路由（与 PRIMITIVE 原语同纪律），kind 无分派影响。
+VECTOR_SPEC       = TypeDef(name="vector", kind=TypeKind.PRIMITIVE.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
 # 并发/通信类型规格
 CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)

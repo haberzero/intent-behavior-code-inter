@@ -304,6 +304,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             self._collect_tuple(obj, data)
         elif isinstance(obj, IbValue) and base_name == "dict":
             self._collect_dict(obj, data)
+        elif isinstance(obj, IbValue) and base_name == "vector":
+            self._collect_vector(obj, data)
         elif isinstance(obj, IbValue) and base_name == "Optional":
             self._collect_optional(obj, data)
         elif base_name == "thread_result" and not isinstance(obj, IbClass):
@@ -370,6 +372,11 @@ class RuntimeSerializer(BaseFlatSerializer):
     def _collect_list(self, obj, data):
         data["_type"] = "list"
         data["elements"] = [self._process_value(e) for e in obj.elements]
+
+    def _collect_vector(self, obj, data):
+        # 不可变值类型：元素为原生 float 元组（无嵌套 IbObject，直接序列化）
+        data["_type"] = "vector"
+        data["elements"] = list(obj.payload)
 
     def _collect_tuple(self, obj, data):
         data["_type"] = "tuple"
@@ -914,6 +921,13 @@ class RuntimeDeserializer:
             obj = self._create_container_obj(ib_class, "dict", {})
             self.instance_cache[uid] = obj
             obj.fields = {k: self._deserialize_value(v) for k, v in data.get("fields", {}).items()}
+
+        elif _type == "vector":
+            # 不可变值类型：直接构造（元素为原生 float，无嵌套 IbObject，
+            # 无环形引用问题——不需要 cache-before-recurse 模式）
+            from core.runtime.objects.primitives.vector import IbVector
+            obj = IbVector(list(data.get("elements", [])), ib_class)
+            self.instance_cache[uid] = obj
 
         elif _type == "optional":
             is_some = data.get("is_some", False)

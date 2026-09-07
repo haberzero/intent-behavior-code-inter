@@ -62,9 +62,10 @@ def try_deep_clone(
     if isinstance(val, IbValue) and spec is not None and getattr(spec, "storage_model", None) is StorageModel.DISK_BACKED:
         return val.receive("__clone_ref__", [])
 
-    # 不可变原语：引用复用即可
+    # 不可变原语：引用复用即可（vector = 不可变值类型：固定维度 + 无修改
+    # 面，克隆语义 = 原对象本身，与 int/str 同纪律）
     if isinstance(val, IbNone) or (
-        isinstance(val, IbValue) and _value_base_name(val) in ("int", "float", "str", "bool")
+        isinstance(val, IbValue) and _value_base_name(val) in ("int", "float", "str", "bool", "vector")
     ):
         return val
 
