@@ -1,0 +1,36 @@
+# T15-E-M31 [边界清单 #19] overlay 与 snapshot/序列化 交互（retry 交互经机制同构
+#   确立：retry 复用首轮已渲染字符串不重新渲染——overlay 仅作用于首轮 dispatch
+#   渲染，无附加对抗面）：
+#   ① overlay × snapshot——作用域内调用经覆层渲染，作用域外（定义于作用域内、
+#      调用于作用域外）原渲染：overlay 是作用域化运行时状态，不被 snapshot
+#      捕获（与 snapshot 值深克隆捕获语义正交）；
+#   ② overlay × 序列化——overlay 状态不跨序列化边界：with 块内 save/load 后
+#      渲染回落原形态（overlay 是临时作用域状态，非持久值；序列化只承载
+#      值层，运行时渲染上下文不持久化）。
+# doc: docs/syntax/06_oop.md §6.9
+# expect-class: PASS
+# expect-out: in-scope= 数字: OVERLAY-INT | out-scope= 数字: 42 | after-load= 数字: 42 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+import ihost
+ai.set_mock_mode()
+impl overlay for int:
+    func __to_prompt__(self) -> str:
+        return "OVERLAY-INT"
+int x = 42
+fn snap = snapshot -> str: @~ 数字: $x ~
+with overlay(int.__to_prompt__):
+    str r1 = snap()
+    dict i1 = ai.get_current_call_info()
+    print("in-scope=" + (str)i1["user_prompt"])
+str r2 = snap()
+dict i2 = ai.get_current_call_info()
+print("out-scope=" + (str)i2["user_prompt"])
+with overlay(int.__to_prompt__):
+    ihost.save_state("./logs/t15_m31_state.json")
+    ihost.load_state("./logs/t15_m31_state.json")
+    str r3 = @~ 数字: $x ~
+    dict i3 = ai.get_current_call_info()
+    print("after-load=" + (str)i3["user_prompt"])
+print("DONE")

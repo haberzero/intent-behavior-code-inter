@@ -111,12 +111,17 @@ def _judge(exps: dict, stdout_text: str, exit_code: int, repo_root=None):
         expected_lines = exps["out"]
         remaining = list(lines)
         for want in expected_lines:
-            if want in remaining:
-                idx = remaining.index(want)
-                remaining = remaining[idx + 1:]
-            else:
+            # 尾部空白不敏感（期望段经 strip——输出行尾随空白无语义断言价值，
+            # 内容语义匹配；行首空白仍敏感（缩进语义））
+            match_idx = None
+            for i, line in enumerate(remaining):
+                if line.rstrip() == want:
+                    match_idx = i
+                    break
+            if match_idx is None:
                 fails.append(f"expect-out 缺行 {want!r}")
                 break
+            remaining = remaining[match_idx + 1:]
 
     if "exit" in exps:
         want_exit = exps["exit"]
