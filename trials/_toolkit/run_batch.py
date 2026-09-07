@@ -50,22 +50,42 @@ def _collect_cases(trial_dir: str, only_names):
         names = [n if n.endswith(".ibci") else n + ".ibci" for n in only_names.split()]
         paths = [os.path.join(cases_dir, n) for n in names]
     else:
-        paths = sorted(
-            os.path.join(cases_dir, n) for n in os.listdir(cases_dir)
-            if n.endswith(".ibci")
-        )
+        paths = []
+        for n in os.listdir(cases_dir):
+            p = os.path.join(cases_dir, n)
+            if n.endswith(".ibci"):
+                paths.append(p)
+            elif os.path.isdir(p):
+                # 用例目录布局（多文件用例：入口 = main.ibci，同目录辅助
+                # 模块文件如 geo.ibci 非入口，按入口相对路径解析）
+                main = os.path.join(p, "main.ibci")
+                if os.path.exists(main):
+                    paths.append(main)
+        paths = sorted(paths)
     return [p for p in paths if os.path.exists(p)]
 
 
 def _run_one_case(case, trial_dir, run_one, py, timeout, repo_root):
     """在线程中执行单个用例（独立 subprocess + 独立超时，卡死不拖垮整批）。"""
     import subprocess
-    name = os.path.splitext(os.path.basename(case))[0]
-    label = f"B-{name}"
-    cmd = [py, run_one, os.path.relpath(case, trial_dir),
+    # 用例名 = 相对 cases/ 的路径（顶层 = 文件名，子目录布局 = 目录/入口名，
+    # 避免多目录 main.ibci 同名混淆）
+    cases_dir = os.path.join(trial_dir, "cases")
+    name = os.path.splitext(os.path.relpath(case, cases_dir))[0]
+    label = f"B-{name.replace('/', '-')}"
+    # 目录型用例（子目录布局，多文件自包含工程——KERNEL_ISSUE-IMPORT-2 短期
+    # harness 解）：以用例目录为 root，入口 = 目录内 main.ibci；
+    # 顶层用例：root = trial_dir（既有形态）。
+    if "/" in name or (os.sep in name):
+        root_arg = os.path.dirname(case)
+        entry_rel = os.path.basename(case)
+    else:
+        root_arg = trial_dir
+        entry_rel = os.path.relpath(case, trial_dir)
+    cmd = [py, run_one, entry_rel,
            "--label", label, "--dim", "BATCH", "--doc", "", "--expected", "",
            "--timeout", str(timeout),
-           "--root", trial_dir]
+           "--root", root_arg]
     if repo_root:
         cmd += ["--repo-root", repo_root]
     try:
