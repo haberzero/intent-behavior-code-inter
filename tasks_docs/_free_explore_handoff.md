@@ -11,11 +11,11 @@
 
 | 项 | 值 |
 |----|-----|
-| 分支 | `free-explore` @ `7bbeb354`（领先 `origin/unsafe-vibe-dev` 尖端 b89fdc39 共 3 提交） |
-| 提交链 | `751ddb5d`（STREAM-1 修复）→ `1205a530`（P9a/P9b 修复 +10 测试）→ `7bbeb354`（回接记录） |
-| 测试基线 | **3219 passed / 1 skipped**（2026-09-06 实跑；以实跑为准不冻结） |
-| 硬约束 | **禁 push**（任何远程）；`main` / `unsafe-vibe-dev` 永不触碰；merge 待用户显式决定 |
-| goal | `goal-0756d638-e10e-4ca4-b9fd-cdd25dfe355d`（宽主线版 rev 3，max 200 轮）——**pause/disarmed**；用户请求继续时 `update_goal action resume` 重新武装 |
+| 分支 | `free-explore`（领先基线 b89fdc39 共 14 提交（2026-09-07 点；`git rev-list --count b89fdc39..HEAD` 复核）） |
+| 提交链 | 全链见 `git log --oneline b89fdc39..HEAD`（STREAM-1 → P9a/P9b → 回接记录 → 交接重写+裁定 → 卫生 → overlay 评估 → 生成参数面评估 → 配置格式对齐评估 → 主线终版+goal 配置 → NEXT_STEPS 同步 → N2 重新定位 → N2 K1-K9 确认+主线微调） |
+| 测试基线 | **3219 passed / 1 skipped**（2026-09-06/07 实跑；以实跑为准不冻结） |
+| 硬约束 | **禁 push**（任何远程）；`main` / `unsafe-vibe-dev` 永不触碰；工作**维持 free-explore 分支**（合并与否/如何合并 = 用户未来决定，当前不处理，下一 agent 不做 merge 动作）；`/home/dsh/proj/ibci-trial/` 只读 |
+| goal | 旧 goal（`goal-0756d638…`，自由探索版）**已退役——不要 resume**；下一 agent 按 §十 创建新 goal（主线大任务版，max 200 轮，无明确停止线，不申请审批） |
 | 环境 | `.venv`（规范 recipe）/ `api_config.json`（仓库根单源，gitignored，现 SiliconFlow）/ `AGENTS.local.md`（本机事实层） |
 | 未跟踪文件 | `.tmp_verify/`（P9a/P9b/P9c/P11/SEM-1 复现脚本，SEM-1 修复时复用作回归资产）/ `TEMP-35B-LLM-GUIDE.md`（旧端点指南，头部已加作废注记） |
 | skills | 固定组合（code-workflow / code-quality / user-principles / design-philosophy）+ 按需（doc-governance / code-review / self-grill / code-odor） |
@@ -130,8 +130,8 @@ max_tokens（T4）已处理完毕**；**环境变量通道（T2）/ 文档示例
 | 编号 | 需求 | 状态 |
 |------|------|------|
 | **N1** | 思考模型支持（extra_body 透传 + 空 content 确定性处理 + max_tokens 预算） | ⏳ **P1-1**（已重定性为根因项：provider 现硬编码双字段抑制 dict 进每请求且无条件发送——vendor 机器事实滞留代码层 + `reasoning: true` 请求层不可表达；并入"生成参数面批"六项——temperature/top_p/top_k/seed 命名字段 + extra_body + 硬编码归位 + `**kwargs` fail-fast + call_info 审计闭环 + 未知字段严格性，详见 `_trial_intake_analysis.md` §五 5.4/5.5） |
-| **N2** | 已验证答案注册表（试用方原名"结晶注册表"为黑话，用户 2026-09-07 裁定废除；机制 = 验证过的 LLM 答案登记：确定性验证门 + 查表命中 0 调用 + append-only 更正 + 事件审计） | ✅ **方向已裁定认可；2026-09-07 用户裁定重新定位**（不以 ai 为载体 = 一等内置值类型/语言级知识子系统，`@~...~` 保持纯 LLM 语义无隐式路由）；设计文档已产出 `tasks_docs/_knowledge_registry_design.md`（取代已删的 `_n2_answer_registry.md`；**待用户确认 K1-K9**） |
-| **N3** | measure_freq（logprob 测量通道） | ⏸ **挂起，方向保留**（试用方自我质疑后建议挂起；e26-e28 为现成验收基线；待 embedding/答案注册表面落地后重估） |
+| **N2** | 已验证知识注册表（试用方原名"结晶注册表"为黑话，用户 2026-09-07 裁定废除；机制 = 验证过的 LLM 答案登记：确定性验证门 + 查表命中 0 调用 + append-only 更正 + 事件审计） | ✅ **方向已裁定认可；2026-09-07 用户裁定重新定位**（不以 ai 为载体 = 一等内置值类型/语言级知识子系统，`@~...~` 保持纯 LLM 语义无隐式路由）；设计文档已产出 `tasks_docs/_knowledge_registry_design.md`（取代已删的 `_n2_answer_registry.md`；**K1-K9 已按推荐确认（2026-09-07），实施就绪**） |
+| **N3** | measure_freq（logprob 测量通道） | ⏸ **挂起，方向保留**（试用方自我质疑后建议挂起；e26-e28 为现成验收基线；待 embedding/知识注册表面落地后重估） |
 | **N4** | finish_reason 暴露 + max_tokens 键 | ⏳ **P1 队列**（max_tokens 键 = T4 ✅ 已落地；finish_reason 暴露未做 = call_info 观测面补充，截断检测是批量管线运行细节） |
 
 ### 4.3 需求表 A1-E2（ref 需求单 + 试用方 A1-E2 表）
@@ -179,7 +179,7 @@ P7/P8（既有 DDG 设计，走文档面）。
 |----|----|------|------|
 | **P0-1** | **线 1 · 诊断面打包** | 一个设计文档 `tasks_docs/_diagnostic_design.md` 覆盖"错误定位链"三段：① 编译期类型检查覆盖审计（`KERNEL_ISSUE-SEM-1` 比较运算符起点，同类漏检面一次审完：二元运算/调用参数等）；② 运行期错误对象携带 ibci 源行列（B1；`node_to_loc` 侧表已有位置信息，断点在运行期错误路径；含 LLMParseError repr 直漏渲染）；③ 解析错误位置漂移修正（P2）。复现资产 `.tmp_verify/p11*.ibci`、`p9*.ibci` | SEM 面变更 = 语义错误集 → 全量 pytest 评估门；三形态复现脚本全转回归测试 |
 | **P0-2** | **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定） | ① 契约包+provider+配置（底本 = ibci-trial `kernel_overlay/` K1-K3 33/33，3 处合入处理项见 `_trial_intake_analysis.md` §4.2）→ ② `vector` 值类型（公理层：值语义 C5/克隆/序列化，全量评估；pre-study 检查单 C1-C15/T1-T10）→ ③ `ai` 模块面+MOCK:VEC+检索最小闭包（cosine=vector 方法面；top-k=模块面）→ ④ SiliconFlow 真实试用 | 设计文档 `_embedding_design.md`（Q1-Q4 已落裁定）+ 四批各全量零回归 + ④ 真实端点实证存档 |
-| **P0-3** | **线 3 · N2 已验证答案注册表**（用户 2026-09-07 裁定废除"结晶注册表"黑话名 + 重新定位：**不以 ai 为载体、一等内置值类型/语言级子系统**） | 设计文档已产出：`tasks_docs/_knowledge_registry_design.md`（取代已删的 `_n2_answer_registry.md`；重新定位后展开——**一等内置值类型**（同 dict/vector 地位，可构造/多实例/可 save_state）而非 ai 的 4 个 API + 方法面 store/get/amend/history/keys/len + **语义不变量**（`@~...~` 永远纯 LLM、无查表隐式路由）+ 验证门机器强制（check 不纯/不透明 = 编译期 SEM，fail-fast）+ 交互矩阵 + 批次 ①公理层→②方法面+诊断域→③save_state+文档→④T 试用，**待用户确认 K1-K9**）。确认后实施；check 函数的编译期 SEM 错误依赖 P0-1 诊断面 | K1-K9 确认 → 实施（一等值类型 + 验证门 + 深克隆冻结快照 + append-only 更正 + 事件序号审计 + save_state 值语义自动持久） |
+| **P0-3** | **线 3 · N2 已验证知识注册表**（用户 2026-09-07 裁定废除"结晶注册表"黑话名 + 重新定位：**不以 ai 为载体、一等内置值类型/语言级子系统**） | 设计文档已产出：`tasks_docs/_knowledge_registry_design.md`（取代已删的 `_n2_answer_registry.md`；重新定位后展开——**一等内置值类型**（同 dict/vector 地位，可构造/多实例/可 save_state）而非 ai 的 4 个 API + 方法面 store/get/amend/history/keys/len + **语义不变量**（`@~...~` 永远纯 LLM、无查表隐式路由）+ 验证门机器强制（check 不纯/不透明 = 编译期 SEM，fail-fast）+ 交互矩阵 + 批次 ①公理层→②方法面+诊断域→③save_state+文档→④T 试用，**K1-K9 已按推荐确认定案，实施就绪**）。实施四批 ①公理层→②方法面+验证门+KNW_ 诊断域→③save_state+文档→④T 试用；check 函数的编译期 SEM 错误依赖 P0-1 诊断面 | 四批各全量零回归 + T 试用验收（试用方 e25 机制改写 + fail-fast 判别 + save/load 保真 + 并发读） |
 
 ### 5.2 P1（运行面；P0 三线推进间隙或其后按 agent 判断排入）
 
@@ -217,7 +217,7 @@ P7/P8（既有 DDG 设计，走文档面）。
   **用户 2026-09-07 裁定解封**——解封节点 = **本次主线任务之后**（§5.1-5.4 全部项处于
   完成/挂起/裁定不做终态，即 §5.6 收敛判据成立时）→ **自主启动**（无需再等用户指令）；
 - **N3 measure_freq**（logprob 通道）：挂起，方向保留（e26-e28 为验收基线；待 embedding/
-  答案注册表面落地后重估）；
+  知识注册表面落地后重估）；
 - **ref E1 ihost 子环境配置隔离**：scoping 设计（overlay 评估 §5.4 形态 C 的真实需求归宿）；
 - PT-FEAT-6/12（工具链项）：远期；**远程 CI**：用户裁定暂不启动；**PT-SEALED-1 media**：封存；
 - **PT-DECIDE-2**（供应商思考禁用）：已解封，缺口收窄为"后端强制思考"场景——P1-1 批
@@ -332,7 +332,7 @@ traceback 实证 + P2 漂移案例），对照 design-philosophy §一/§二（�
 ```
 主线推进：完成外部试用工程（ibci-trial）需求与已知近期主线——按
 tasks_docs/_free_explore_handoff.md §五 终版队列（P0-1 诊断面打包 → P0-2
-PT-FEAT-16 四批 → P0-3 N2 已验证答案注册表设计；P1 生成参数面批/finish_reason；P2 易用性项；
+PT-FEAT-16 四批 → P0-3 N2 已验证知识注册表实施[K1-K9 已确认]；P1 生成参数面批/finish_reason；P2 易用性项；
 支线 mock 层项）在 free-explore 分支自主推进 设计→实现→全量 pytest 零回归验证→落账
 （WORKLOG/INDEX/handoff）闭环。每轮自主评估现状、自主决定推进哪一项并**有权微调任务
 优先级与批次顺序**（§五 为基线队列非固定脚本；微调理由记入工作日志）。队列有活持续
@@ -350,9 +350,14 @@ main/unsafe-vibe-dev、不写 /home/dsh/proj/ibci-trial/（只读）。
    **大任务**，不是"做完 X 即止"的短目标；队列内各批次的完成不构成 goal 完成
    （收敛判据 §五 6 是 agent 每轮的自检软判断，不是写进 goal 的硬条件）。
 3. **尽可能自主执行**：自主工作循环全闭环（理解→设计质询→自主决策→实现→自反馈验证
-   →自主纠错→交付自查→收尾）；能自主决断的一律自主决断并详记（只记录，不断决）；
-   设计/裁定类项（如 N2 四开放问题二次裁决）产出设计文档与推荐方案即可继续推进
-   队列其他项，不空等。
+   →自主纠错→交付自查→收尾）；能自主决断的一律自主决断并详记（只记录，不断决）。
+   **设计/裁定类项**（产出设计文档 + 推荐方案）即可继续推进队列其他项，不空等——
+   注意：主线 P0 三线的设计裁定**均已定案**（P0-1 范围已列 / P0-2 Q1-Q4 已裁定 /
+   P0-3 K1-K9 已确认），执行中如再触及**新的**语义取舍（如公理层值语义细节、
+   语义错误集扩展的边界）：按 AGENTS.md 上报阈值的"自主评估并推进"精神处理——
+   能自主决断的决断 + 详记；**确实无法决断的 → 记入工作文档（含选项/推荐/影响）
+   标记"待决"，转做队列其他项，交付汇报时一并陈述**；不调用 ask_user_question
+   （用户不在场，调用必失败阻塞），不因此停摆。
 4. **不允许申请审批/提权**（用户不在场）：不调用 ask_user_question 请求拍板、不申请
    沙箱提权；遇权限/审批壁垒 → 记录壁垒点到工作文档（含所需动作与影响），转做队列
    内其他任务，下轮再评估。

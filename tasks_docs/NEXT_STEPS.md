@@ -65,9 +65,9 @@ PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，
    ② `vector` 值类型（公理层，全量 pytest 评估）→ ③ `ai` 模块面 + MOCK:VEC + 检索最小
    闭包 → ④ SiliconFlow 真实试用；参考实现 = ibci-trial/kernel_overlay K1-K3 33/33
    （批①③底本，3 处合入处理项）+ 批② pre-study 检查单，详见
-   `tasks_docs/_trial_intake_analysis.md` §四）→ **线 3 · N2 已验证答案注册表设计**（2026-09-07 用户裁定重新定位：不以 ai 为
+   `tasks_docs/_trial_intake_analysis.md` §四）→ **线 3 · N2 已验证知识注册表实施**（2026-09-07 用户裁定重新定位：不以 ai 为
    载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；
-   设计文档 `tasks_docs/_knowledge_registry_design.md` 已产出，待用户确认 K1-K9）。
+   设计文档 `tasks_docs/_knowledge_registry_design.md` 已产出，**K1-K9 已按推荐确认定案（2026-09-07 用户），实施就绪**）。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
    ① named-model 端点泄漏
    2 用例（T01 D1-07-006 / T08 D5-03 在 tracked 文件硬编码旧本机端点 → 端点 URL 走
