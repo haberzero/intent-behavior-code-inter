@@ -52,16 +52,21 @@ response_format/停止符/系统提示面扩展）→ N4 finish_reason 结构化
    **~~线 3 · N2 已验证知识注册表实施~~ 已完成（2026-09-07，git 承载：①+② knowledge 一等值类型 + 验证门 + SEM 纯度检查 + KNW_/SEM_KNW_ 码域 ③ 状态保真 + docs 16 ④ T17 7/7；附 host save_state 单层相对路径缺陷修复）**（2026-09-07 用户裁定重新定位：不以 ai 为载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；K1-K9 已定案；设计文档 `tasks_docs/_knowledge_registry_design.md`）。
    **P0 三线全部收官 → 主线前移 P1（N1 生成参数面 / N4 finish_reason）**。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
-   ① named-model 端点泄漏
-   2 用例（T01 D1-07-006 / T08 D5-03 在 tracked 文件硬编码旧本机端点 → 端点 URL 走
-   `IBCI_TRIAL_LLM_URL` 环境变量通道，与 `IBCI_TRIAL_LLM_KEY` 同构；`LLM_SERVICE.md` §五 同步）；
-   ② T06 子目录布局用例（7 llm）run_batch 不收集——手工 harness 复跑或 run_batch 收集
-   策略扩展（涉 harness 变更需评估）；③ 恶意边界未测 #15/#17/#19/#33（`trials/INDEX.md`
-   清单，mock 层；#33 依赖 LLM-5 同子系统）；缺陷追修随批 1：KERNEL_ISSUE-LLM-5
-   （事件驱动监视复发）。
-3. **阶段 C 文档复核登记项收敛**：复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
-   call_info 键结构 / 装配未知键是否应告警 / BOUNDARY-LLM-5 mock 下 call_info 无 sys_prompt 键），
-   doc-governance Phase 0-8。
+   ~~① named-model 端点泄漏 2 用例（T01 D1-07-006 / T08 D5-03 硬编码旧本机端点 →
+   `IBCI_TRIAL_LLM_URL`/`IBCI_TRIAL_LLM_MODEL`/`IBCI_TRIAL_LLM_KEY` env 通道）~~ **已完成
+   （2026-09-07，真实端点验证通过；AGENTS.local 机器事实同步）**；
+   ~~② T06 子目录布局用例（7 llm）run_batch 不收集——收集策略扩展~~ **已完成（2026-09-07：
+   子目录布局收集 + 目录型用例 root=用例目录[KERNEL_ISSUE-IMPORT-2 短期 harness 解]；
+   T06 全量复跑 20/20 PASS）**；
+   ③ 恶意边界未测 #15/#17/#19/#33（`trials/INDEX.md` 清单，mock 层；#33 依赖 LLM-5 同
+   子系统）——**#17 已核销（2026-09-07 T15-E-M29）；剩余 #15（snapshot 类字段捕获观测面）/
+   #19（overlay × 序列化/snapshot/retry 交互）/ #33（LLM-5 依赖）**；缺陷追修随批 1：
+   KERNEL_ISSUE-LLM-5（事件驱动监视复发）。
+3. **阶段 C 文档复核登记项收敛**：~~复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
+   call_info 键结构 / 装配未知键是否应告警 / BOUNDARY-LLM-5），doc-governance Phase 0-8~~
+   **已完成（2026-09-07：call_info 键结构 = 11_modules 单点[观测契约新增]；装配未知键 =
+   LLM_ASSEMBLY_UNKNOWN_KEY 警告实施[T10 M5]；KNOWN_LIMITS 漂移 = 零[dict 可迭代/尾逗号
+   无相关陈旧描述]；BOUNDARY-LLM-5 = 机制澄清文档化[观测契约] + mock 路径观测面机制同构）**。
 4. **周期质量维护（PT-AUDIT-1/3 + Tier B + quality-maintenance 等全部非主线质量工作）
    已解封（用户 2026-09-07 裁定）**——触发节点 = **主线任务完成后**（handoff §5.6 收敛
    判据成立：主线队列全部项处于完成/挂起/裁定不做终态）→ **自主启动**，无需再等用户

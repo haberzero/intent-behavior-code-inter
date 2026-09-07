@@ -917,6 +917,17 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     注释纪律零命中 / 无双通道 / fail-fast 全生效。
   - 全量 pytest 基线 3400 → **3447 passed / 1 skipped**（+47 判别/回归/试用/
     基础设施测试），全程零回归；git 承载（本段 8 commit）。
+- **阶段 C 文档复核登记项收敛 + 装配未知键裁定（2026-09-07，free-explore）**：
+  ① call_info 键结构——11_modules 单点（08_llm_callable 无 call_info 键描述，无双写漂移；
+  本段新增观测契约注记：两形态快照 + 变量读点触发 resolve + generation/finish_reason 面）；
+  ② 装配 dict 未知键——**裁定 = 警告级诊断（LLM_ASSEMBLY_UNKNOWN_KEY）**（静默忽略不再
+  允许——拼写错误须可见；警告不阻断——扩展字段属调用方约定）：契约字段清单提炼单一
+  权威源 `_ASSEMBLY_CONFIG_KEYS` + 缺失 user_prompt 错误消息增强（含契约字段清单）；
+  T10-M5 判别用例 +1（警告不阻断 + 输出正确）；INDEX T15"待文档复核项"核销 + T10 行刷新；
+  ③ KNOWN_LIMITS 漂移 = 零（dict 可迭代 P9c / 尾逗号 A3 无相关陈旧描述）；
+  ④ BOUNDARY-LLM-5 = 机制澄清文档化（观测契约入 11_modules）+ mock 路径观测面机制同构
+  （provider_meta 补 generation——字段结构与真实路径一致）。
+  全量 pytest 3447 passed / 1 skipped 零回归；git 承载（本段 2 commit）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
