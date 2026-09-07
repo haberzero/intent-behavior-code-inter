@@ -115,15 +115,18 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线 = 发布准备线收官后，待主线裁定（2026-09-02）**：本 session 完成——R4 重新
-  定性并彻底删除（`core/lib/prelude.ibc` / `core/builtin/primitives.ibci` 两遗留 IBCI 源文件
-  全仓零消费者，git 承载）+ `scripts/ci_local.sh` L4 发布产物层补齐（build + 安装 smoke，镜像
-  ci.yml）+ 分支基准裁定 = **`unsafe-vibe-dev`**（本轮非核心去机器化工作临时置于 main 的 2 提交
-  已 fast-forward 并入；main 后续不更新；push 已获用户显式授权并执行，本地 main 复位
-  origin/main）+ **本机暂不跑真实 LLM**（无
-  `api_config.json`；L3 层与阶段 C 真实 LLM 残留项——恶意边界后续未测 9 项，见
-  `trials/INDEX.md`——待 LLM 环境就位后恢复）。下一候选见 `tasks_docs/NEXT_STEPS.md`
-  （文档复核登记项收敛 / 周期质量维护恢复裁定 / 发布线远程启用（待授权）/ 真实 LLM 环境就位）。
+- **🔴 当前主线 = P0 三线推进（2026-09-07，free-explore 分支）**：**线 1 · 诊断面打包
+  已完成**（批次 0-5：SEM-1 编译期运算符类型检查 + B1 错误定位链（编译侧 0:0→实际行列、
+  node_to_loc file_path 真实化、VM 首次捕获点位置补位、值层/幽灵码补 RUN_TYPE_MISMATCH、
+  CLI 结构化渲染）+ LLMParseError 渲染修复（`__to_prompt__` + cast_to fail-fast）+
+  P2 解析位置归位（跨行续行态归位构造起点）；全量 3289/1 零回归；落账
+  INDEX/WORKLOG/判别测试 +70；设计文档 `tasks_docs/_diagnostic_design.md` 待治理收敛进
+  `docs/`）。**当前阶段 = 线 2 · PT-FEAT-16 四批**（批① 契约包 + provider + 配置，底本
+  ibci-trial K1-K3 33/33 + 3 处合入处理项；批② vector 值类型 = 公理层全量评估门；批③
+  ai.embed + MOCK:VEC + 检索最小闭包；批④ SiliconFlow 真实试用）；线 3（N2 已验证知识
+  注册表，K1-K9 已定案）按序候位。详见 `tasks_docs/NEXT_STEPS.md` +
+  `tasks_docs/_trial_intake_analysis.md` §四 + `tasks_docs/_embedding_design.md` +
+  `tasks_docs/_knowledge_registry_design.md`。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
   规划已读）；**push 已获用户显式授权并执行**（本地 28 提交 `b2322214..e1a9b3d9` 推送

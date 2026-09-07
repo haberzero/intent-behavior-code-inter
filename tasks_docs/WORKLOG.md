@@ -806,6 +806,30 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   分层价值）。设计文档 `tasks_docs/_code_cicd.md`。本地全量 pytest **3182 passed / 1 skipped
   零回归** + L1 909/1 + wheel 构建验证。**阶段 B（B1-B6）全部完成（2026-08-20）**——当前 P0
   前移阶段 C（真实 LLM 全面试用重启，VISION-3）。
+- **P0-1 诊断面打包（错误定位链）完成（2026-09-07，free-explore）**：P0 三线之线 1 全链路
+  落地（设计文档 `tasks_docs/_diagnostic_design.md`，批次 0-5 每批独立 commit + 全量零回归）：
+  ① **SEM-1 编译期运算符类型检查**（唯一语义错误集变更批）——公理层比较分支条件化
+  （单一权威源 = `resolve_op → resolve_operation_type_name`，不新建兼容矩阵；排序比较
+  `< <= > >=` 仅数值族/str↔str，`== !=` 维持无条件——运行期跨型合法）+ `visit_IbCompare`
+  逐对检查 + `visit_IbBinOp` 兜底收紧（删"str 操作数→str"无条件推断，公理声明完备后
+  与兜底并存 = 双写真相）；防误报纪律 = 编译期检查是运行期行为的静态近似（实测矩阵为
+  准：`int*str`/`bool*str` 重复合法须声明放行，`float*str` 非法）。**长期约束裁定**：
+  `in` 运算符编译期检查分组挂起（KERNEL_ISSUE-SEM-2 登记，误报面大于价值）；一元运算符
+  收紧同挂起（`not` 属 to_bool 通用能力，误报面大）；if/while/for 非 bool 条件**非缺陷**
+  （一切值可 bool 化）。② **B1 错误定位链**——编译侧：语义 error()/warn() 5 处填
+  line/col（原全 SEM_ 报 0:0）+ node_to_loc 侧表 file_path 从模块名标识改为模块源文件
+  真实路径（idbg script path 失真一并修复）；运行侧：VM CPS 首次捕获点位置补位
+  （内层帧 task.node_uid = 出错现场，单一权威源；ThrownException/环境限制异常天然
+  排除）+ 码权威源 = throw 点（值层/幽灵码补 `RUN_TYPE_MISMATCH`，翻译点不猜码）；
+  CLI 侧：main.py run 为唯一渲染点（DiagnosticFormatter 与编译错误同形态，Python 默认
+  traceback 不再出现）。③ **错误对象渲染**——异常公理声明 + IbException 实现
+  `__to_prompt__`（`<类型名>: <message>`，str(e) 不再直漏 `<Instance of T>`）+ cast_to
+  无法转换 fail-fast（静默 `return self` = 类型谎言修复）。④ **P2 解析位置归位**——
+  跨行续行态（词法器 paren 位置栈单一权威源）错误归位到最内层未闭合构造起点；同行
+  错误维持卡住点（列号精确不劣化）；废弃 cast 位置 = cast 起点 `(`。已知局限登记
+  （EOF 卡住点不归位，KNOWN_LIMIT-PARSE-EOF）。全量 pytest 3289 passed / 1 skipped
+  零回归（3219 基线 + 70 判别/回归测试）；验收基线（设计文档 §五）逐项达成。
+  **P0 主线前移线 2（PT-FEAT-16 四批）**。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

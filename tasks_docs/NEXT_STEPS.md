@@ -27,29 +27,23 @@
 
 ## 🔴 当前状态
 
-**发布准备线已收官，待主线裁定**。环境部署与对外发布准备完成：环境规格单源与去机器化
-（规范 recipe = venv + editable 安装，本地层 `AGENTS.local.md`，docs 级联同步）；R4 重新定性并
-彻底删除（`core/lib/prelude.ibc`、`core/builtin/primitives.ibci` 两遗留 IBCI 源文件全仓零消费者，
-wheel 发布面实证齐备，裁定依据见 `tasks_docs/WORKLOG.md`）；`scripts/ci_local.sh` L4 发布产物层补齐
-（build + 安装 smoke，镜像 `.github/workflows/ci.yml`）。**阶段 C · 真实 LLM 全面试用（VISION-3）**：
-试用地基（六套件 T10-T15 / 恶意边界 22 例 / 压力维度 / 缺陷闭环）+ 技术文档全方位复核
-（文风治理）已完成；**全量 LLM 回归复跑已完成**（35B 共享端点 10 套件 122 llm 用例；
-分类全达预期——LLM_BEHAVIOR 项为端点输出非确定非内核缺陷；复跑中新发现并修复
-**KERNEL_ISSUE-STREAM-1**（stream_channel 放弃流退出段错误，`trials/INDEX.md` 登记；
-修复 = 流句柄生命周期闭环：cancel 协作式截断 + producer 契约 = 生成器 + 退出 drain）；
-**残留清场项**（见下第 2 条）：named-model 端点泄漏 2 用例 / T06 子目录用例复跑缺口 /
-恶意边界未测 #15/#17/#19/#33（`trials/INDEX.md` 清单）/ BOUNDARY-LLM-5 裁定收敛。
-**外部试用工程（ibci-trial）回接完成（2026-09-06）**：试用方 172 轮灰盒语言自动机探索
-全量读取 + 需求/缺陷逐条实测核验——试用方 P9a（len(dict) 函数形态恒 0）/P9b（括号比较
-误并入链式比较，求值语义反转）根因定位并修复（commit `1205a530`，+10 判别测试，
-全量 3219/1 零回归）；P9c 定性 = dict 不可迭代（keys/items 可用）、P11 微测试实为
-比较运算符编译期类型检查缺失（新登记 `KERNEL_ISSUE-SEM-1`，诊断面打包设计候选）；
-PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，批①可平移）；
-适配点与发展方向（P0×3/P1×2/P2×4/挂起×1）与端点切换记录（SiliconFlow）见
-`tasks_docs/_trial_intake_analysis.md`。
-**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）恢复时机随阶段排布待裁定。
-
-测试基线以实跑为准（不冻结数字；唯一命令 `python -m pytest tests/`）。
+**P0 主线推进中：线 1 完成，线 2 开工**。线 1 · 诊断面打包（错误定位链）全链路落地
+（2026-09-07，批次 0-5 独立 commit + 全量零回归）：SEM-1 三形态转编译期
+`SEM_TYPE_MISMATCH` @ ibci 源行列（公理层比较分支条件化 + visit_IbCompare 逐对检查 +
+BinOp 兜底收紧，防误报矩阵实测对齐运行期行为）；B1 错误定位链（语义诊断 0:0→实际行列、
+node_to_loc file_path 真实化、VM 首次捕获点位置补位、值层/幽灵码补
+`RUN_TYPE_MISMATCH`、CLI 结构化渲染——运行错误与编译错误同形态：码+说明/修复+源行+
+caret，Python traceback 不再直漏）；LLMParseError 渲染修复（`str(e)` =
+`<类型名>: <message>`，cast_to 静默回落 fail-fast）；P2 解析位置归位（跨行续行态错误
+归位到最内层未闭合构造起点，同行维持卡住点）。落账：INDEX（SEM-1 转已修复 + SEM-2
+`in` 运算符挂起 + EOF 局限登记）/ WORKLOG / 判别测试 +70。
+**下一阶段 = 线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定，批① 解锁）：
+① 契约包 `core.base.embedding_protocol` + provider + 配置（底本 = ibci-trial
+K1-K3 参考实现 33/33，3 处合入处理项）→ ② `vector` 值类型（**公理层**，值语义 C5
+判别，全量 pytest 评估）→ ③ `ai.embed` 模块面 + MOCK:VEC + 检索最小闭包 → ④ SiliconFlow
+真实试用。详见 `tasks_docs/_trial_intake_analysis.md` §四 + `tasks_docs/_embedding_design.md`。
+**线 3（N2 已验证知识注册表，K1-K9 已定案实施就绪）按序候位**（设计文档
+`tasks_docs/_knowledge_registry_design.md`；批② 验证门 SEM 消费 P0-1 诊断面）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
@@ -57,19 +51,14 @@ PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
 1. **主线（2026-09-06 用户裁定：全部建议认可）= P0 三线，同一时刻只推一线**：
-   **线 1 · 诊断面打包**（`KERNEL_ISSUE-SEM-1` 编译期比较类型检查缺失 + B1 运行时错误
-   ibci 源行号 + P2 解析位置漂移，一个设计文档 `tasks_docs/_diagnostic_design.md` 覆盖
-   "错误定位链"：编译期类型检查覆盖审计 → 运行期错误对象携带 loc → CLI 渲染；
-   含 LLMParseError repr 直漏渲染项）——**设计已定稿（2026-09-07，双 subagent 审计 +
-   交叉核验实跑）：四段现状审计 + 设计裁定 + 批次 0-5（死代码清理 → 编译侧位置 →
-   运行侧翻译点 → CLI/对象渲染 → SEM-1 公理条件化[唯一语义错误集变更] → P2 位置归位）+
-   影响面评估 + 验收基线，实施就绪**（批 4 防误报前置 = int/bool 公理补 `* str` 声明；
-   `in` 运算符检查/if 条件 bool 检查分组不扩））→ **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定：
+   ~~线 1 · 诊断面打包~~ **已完成（2026-09-07，git 承载）** →
+   **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定：
    协议层独立 `embedding_protocol` 包 + 用户面并入 `ai`；批次 ① 契约包/provider/配置 →
    ② `vector` 值类型（公理层，全量 pytest 评估）→ ③ `ai` 模块面 + MOCK:VEC + 检索最小
    闭包 → ④ SiliconFlow 真实试用；参考实现 = ibci-trial/kernel_overlay K1-K3 33/33
    （批①③底本，3 处合入处理项）+ 批② pre-study 检查单，详见
-   `tasks_docs/_trial_intake_analysis.md` §四）→ **线 3 · N2 已验证知识注册表实施**（2026-09-07 用户裁定重新定位：不以 ai 为
+   `tasks_docs/_trial_intake_analysis.md` §四 + `tasks_docs/_embedding_design.md`）→
+   **线 3 · N2 已验证知识注册表实施**（2026-09-07 用户裁定重新定位：不以 ai 为
    载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；
    设计文档 `tasks_docs/_knowledge_registry_design.md` 已产出，**K1-K9 已按推荐确认定案（2026-09-07 用户），实施就绪**）。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
