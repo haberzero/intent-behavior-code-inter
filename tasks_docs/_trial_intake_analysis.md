@@ -262,7 +262,10 @@ raw="}"→n≥2 提案约定）。**诊断面（B1 源行号 + 编译期类型�
 4. **N1 思考模型支持**（**2026-09-06 重定性为根因项**：per-model `extra_body` 配置字段
    + 代码默认不发送 + 本机硬编码抑制 dict 迁入 api_config.json 归位 + 空 content
    确定性处理同批——详见 §五 5.4 形态 A）：落地后 `reasoning: true` 思考模型模式
-   请求层可表达；max_tokens 预算键已随 T4 落地。
+   请求层可表达；max_tokens 预算键已随 T4 落地。**2026-09-06 追加合并**：生成参数面
+   （temperature/top_p/top_k/seed 命名字段 + register_model 变体参数面 + `**kwargs`
+   静默吞参改 fail-fast + call_info 采样姿态审计闭环 + model 条目未知字段严格性）
+   并入本批（同一机制链，单设计 pass 覆盖六项——§五 5.5）。
 5. **N4 finish_reason 暴露**：call_info 观测面补 `finish_reason`（截断检测是
    批量管线的运行细节：截断 ≠ 解析失败）。
 
@@ -335,6 +338,41 @@ raw="}"→n≥2 提案约定）。**诊断面（B1 源行号 + 编译期类型�
 - **背后的真实需求 ≠ 覆写，= 作用域**：唯一真实场景是 ihost 子环境需要不同 LLM 配置
   （ref E1：子环境 LLM 配置继承/隔离）。正确形态 = **scoping**（spawn API 接受配置引用，
   子环境独立配置作用域，父环境不受影响），非全局面覆写 → 归 ref E1 设计（批次表 P1-P2）。
+
+### 5.5 生成参数面（temperature/top_p/top_k/seed）"脚本内实时临时修改"评估（2026-09-06 用户质询）
+
+> 来源：更早试用者提出模型温度、top_k 等参数是否可在 ibci 脚本中"实时临时修改"。
+
+**现状实证（本轮核查，五点事实链）**：
+
+1. temperature/top_p/top_k/seed **全仓零存在**（ai 模块 / llm_protocol / provider 均无）；
+   请求组装只发 model/messages/max_tokens/extra_body → **采样姿态 = 不透明的 vendor 默认**
+   （"这个模型用什么采样"无法从任何单点回答 = 可审计性缺口）；
+2. 配置校验器 model 条目**静默丢弃未知字段**（写 `temperature` 进 api_config 今天 =
+   静默 no-op，无报错无记录——fail-fast 违反）；
+3. `ai.register_model(name, url, key, model, **kwargs)` **`**kwargs` 静默吞未知参数**
+   （语言面同型红旗：试用者今天若试图按此做参数变体，会被静默忽略）；
+4. call_info 观测面不记录生成参数（采样姿态不可审计）；
+5. 硬编码 extra_body 抑制 dict（§5.4 形态 A 已述，同域）。
+
+**"实时临时修改"的四种形态逐评**：
+
+| 形态 | 可行性 | 合理性 | 裁决 |
+|------|--------|--------|------|
+| **F1 配置 schema 一等化**（per-model 命名字段：temperature/top_p/top_k/seed，fail-fast 类型+范围校验，CFG_ 码族） | 高（与 T4 max_tokens / 形态 A extra_body 同链：schema→校验→ModelSpec→provider 解析→请求组装→call_info） | **合理且是补审计缺口**：采样姿态从"不透明 vendor 默认"变为"声明式单点"；字段集按使命取——temperature（铁律三操作的确定性旋钮：提案通道可多样性、测量通道要确定）/ seed（A/B 双轮一致纪律的原则性可复现旋钮）/ top_p·top_k（标准完备，防被挤进 extra_body 的范畴错误——标准参数走命名类型化面，extra_body 只走 vendor 特定）；缺省 = 不发送（文档化 vendor 默认）+ **call_info 记录有效值**（"未指定(vendor 默认)"也是可记录的答案） | ✅ 做（并入 N1 批） |
+| **F2 命名模型按变体改参**（register_model 参数面扩展同套参数；注册即声明变体，@NAME~ 逐调用路由） | 高（命名路由本就是"按调用变化"的既有通道——endpoint/model/timeout/max_tokens 已按变体不同；纯参数变体甚至无需不同 model_id，同模型注册两个名字即可） | **这就是"实时临时修改"的合理形态**：变化 = 声明的数据（注册点可见、单源、不可变），非隐藏状态；无全局态、无实验泄漏；机制同构（同一通道补参数面，不新开面） | ✅ 做（并入 N1 批）；**前置必改**：`**kwargs` 静默吞参 → 显式参数 + 未知参数 fail-fast |
+| **F3 逐调用内联语法**（`@~...~` 带参数后缀 / llm 调用函数带 kwargs 等语言语法） | 可行但代价大（全 LLM 表达式形态承载：内联行为/llm 可调用类/run_batch/流式/snapshot 捕获语义） | **不合理**：需求已被 F2 同构覆盖——同一决策（这次调用用什么采样姿态）两条表达 = 双通道；使命无"逐调用内联调参"的真实场景（172 轮实证：变化以"实验/通道"为单位，非以调用为单位） | ❌ 不做 |
+| **F4 会话级全局 setter**（`ai.set_temperature(...)`） | 可行 | **不合理（仅生成参数；既有 set_retry/set_timeout 运行参数维持不动）**：① 可变全局态 + 每次调用须记录当前值（审计负担）；② **实验泄漏危害**——试用方 172 轮测量纪律依赖"姿态按实验声明"，全局温度槽跨实验泄漏正是破坏 A/B 一致的状态类；③ 同参数在不同模型上合法性不同（思考模型可能拒绝 temperature——o1 类先例），per-model 声明天然处理，全局 setter 无法表达 | ❌ 不做（F2 严格优于：声明数据 > 隐藏状态） |
+
+**思考模型特殊注记**：采样参数支持随模型而异（OpenAI o1 类不接受 temperature；部分思考
+模型受限）——per-model 命名声明天然适配（模型条目只声明该模型接受的参数；vendor 400 =
+fail-fast 诊断，不静默丢弃）。这也是 F1/F2 正确而 F4 错误的技术注脚。
+
+**批次归置**：F1+F2 与 N1（extra_body 形态 A）+ T4（max_tokens 先例）= **同一"生成参数面"
+机制**（一条链：配置 schema → 校验 → 解析 → 请求组装 → call_info 审计闭环），并入 N1 批
+（P1，P0 三线之后开工），单设计 pass 覆盖：① 标准参数命名字段 ② extra_body 逃生口
+③ 硬编码抑制 dict 迁出归位 ④ `**kwargs` 静默吞参 → fail-fast ⑤ call_info 采样姿态审计
+闭环 ⑥ 配置 model 条目未知字段严格性检查（静默丢弃 → fail-fast）。
 
 ---
 
