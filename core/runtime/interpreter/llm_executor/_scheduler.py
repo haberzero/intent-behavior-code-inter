@@ -15,6 +15,26 @@ from core.runtime.interfaces import IExecutionContext
 
 from core.runtime.shared.llm_result import LLMResult, LLMFuture
 
+import atexit
+import weakref
+
+# 进程级线程池登记（弱引用——已释放的池自动出列）：ThreadPoolExecutor
+# worker 为非 daemon 线程，未被显式 close 的池在进程退出时会让
+# threading._shutdown 阻塞于 worker join。atexit 兜底确定性释放
+# （测试/脚本场景引擎不经 close 生命周期）。
+_POOL_REGISTRY: "weakref.WeakSet[_ThreadPoolExecutor]" = weakref.WeakSet()
+
+
+def _shutdown_all_pools() -> None:
+    for pool in list(_POOL_REGISTRY):
+        try:
+            pool.shutdown(wait=False)
+        except Exception:
+            pass
+
+
+atexit.register(_shutdown_all_pools)
+
 
 class _SchedulerMixin:
     # ---------------------------------------------------------------------------
@@ -33,6 +53,7 @@ class _SchedulerMixin:
             )
         if self._thread_pool is None:
             self._thread_pool = _ThreadPoolExecutor(max_workers=self._max_workers)
+            _POOL_REGISTRY.add(self._thread_pool)
         return self._thread_pool
 
     def dispatch_eager(

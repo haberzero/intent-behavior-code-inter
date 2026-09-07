@@ -94,6 +94,18 @@ ai.set_mock_mode(False)       # 退出 MOCK 模式，重建真实客户端
 
 > **`probe_model()` 与推理模型判定**：若在 `api_config.json` 的 `default_model` 声明了 `reasoning: false`（非思考模型）或 `reasoning: true`（强制推理模型），引擎**跳过实际探测**，直接按声明分类（两侧都落能力缓存）。`probe_model()` 是手动探测工具，用启发式判定（专用 reasoning 字段 / "Thinking Process" 特征串 / 输出冗长程度），存在**保守误判**可能——模型无视"只回一词"指令输出冗长内容时会被保守判为强制推理模型。本地非思考模型建议直接声明 `reasoning: false`，而非依赖自动探测。
 
+> **`get_current_call_info()` 观测契约（两形态快照）**：最近一次 LLM 调用的
+> 诊断信息分两阶段补全——**dispatch 时刻**（调用提交）写入请求面快照
+> （`user_prompt`/`intents`/`output_contract` 等，`response` 为空）；
+> **resolve 时刻**（结果就绪）补全 `response`/`raw_response`/`sys_prompt`/
+> `finish_reason`/`generation`（采样姿态审计：已声明的生成参数有效值 +
+> `max_tokens` 有效值）。行为表达式（`@~...~`）经 eager dispatch 提交——
+> **变量读点（消费该变量）触发 resolve**。因此观测完整调用信息须在
+> **读取/消费 LLM 结果变量之后**再调用 `get_current_call_info()`；
+> 未消费的调用停留在 dispatch 快照形态（这是观测时序，非缺陷）。
+> `finish_reason` = 供应商结束原因原值（`stop`/`length`/…）——**截断检测**：
+> `length` = 达到生成预算被截断（截断 ≠ 解析失败）。
+
 流式调用（增量渲染）：
 
 ```ibci

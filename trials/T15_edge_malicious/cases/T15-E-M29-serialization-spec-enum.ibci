@@ -1,0 +1,31 @@
+# T15-E-M29 [边界清单 #17] 跨引擎序列化/水化（特化类/枚举）——SER-1 修复后
+# 解封核验：泛型特化类实例类型身份（Box[int]）round-trip 保真；enum 成员
+# 值模型（成员值 = 底层值，静态类型经声明层承载）round-trip 一致；
+# 意图上下文 round-trip 见 T15-E-M28（同机制）。
+# doc: docs/syntax/15_diagnostics.md + trials/INDEX.md #17
+# expect-class: PASS
+# expect-out: spec_ok=True | enum_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ihost
+class Box[T]:
+    T value
+    func get(self) -> T:
+        return self.value
+
+class Color(Enum):
+    str RED = "RED"
+    str GREEN = "GREEN"
+
+Box[int] b = Box[int](42)
+Color c = Color.GREEN
+int bv = b.get()
+ihost.save_state("./logs/t15_m29_state.json")
+ihost.load_state("./logs/t15_m29_state.json")
+int b2 = b.get()
+bool spec_ok = (b2 == 42)
+str cv = (str)c
+bool enum_ok = (cv == "GREEN")
+print("spec_ok=" + (str)spec_ok)
+print("enum_ok=" + (str)enum_ok)
+print("DONE")

@@ -531,12 +531,21 @@ class RecommendedProvider(LLMProvider):
 
     def _handle_mock_call(self, request: LLMCallRequest, user_prompt_text: str,
                           provider_meta: Optional[Dict[str, Any]] = None) -> LLMCallResult:
-        """进程内 MOCK：经 :meth:`_handle_mock_response` 处理，返回供应商无关结果。"""
+        """进程内 MOCK：经 :meth:`_handle_mock_response` 处理，返回供应商无关结果。
+
+        观测面机制同构：provider_meta 补 generation（max_tokens 有效值——
+        mock 无真实采样姿态，字段结构与真实路径一致，仅值面差异）。
+        """
         content = self._handle_mock_response(user_prompt_text)
+        meta = dict(provider_meta or {})
+        meta.setdefault(
+            "generation",
+            {"max_tokens": self._resolve_max_tokens(request.target_model)},
+        )
         return LLMCallResult(
             content=content,
             raw_response=content,
-            provider_meta=dict(provider_meta or {}),
+            provider_meta=meta,
         )
 
     def _record_call_info(
