@@ -1,0 +1,9 @@
+# T18-G-M2 运行时参数范围 fail-fast（temperature 越界——不静默降级）
+# doc: docs/syntax/15_diagnostics.md
+# expect-class: FAIL
+# expect-code: RUN_TYPE_MISMATCH
+# expect-exit: 1
+# expect-llm: false
+import ai
+ai.register_model("v", "http://127.0.0.1:1/v1", "k", "m-id", temperature=99.0)
+print("unreachable")

@@ -56,6 +56,23 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
     def _thinking(v):
         return "on" if v is True else ("off" if v is False else "auto")
 
+    def _spec_from_model(m, fallback_name, default_timeout=None):
+        """ModelSpec 构造单点（models 条目 / default_model 条目同链）。"""
+        return ModelSpec(
+            provider="openai",
+            model_id=m.get("model", fallback_name),
+            endpoint=m.get("base_url"),
+            auth=m.get("api_key"),
+            timeout=m.get("timeout", default_timeout),
+            thinking_mode=_thinking(m.get("reasoning")),
+            max_tokens=m.get("max_tokens"),
+            temperature=m.get("temperature"),
+            top_p=m.get("top_p"),
+            top_k=m.get("top_k"),
+            seed=m.get("seed"),
+            extra_body=dict(m.get("extra_body") or {}),
+        )
+
     models: Dict[str, ModelSpec] = {}
     embedding_models: Dict[str, ModelSpec] = {}
     for name, m in (validated.get("models", {}) or {}).items():
@@ -65,26 +82,10 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
         # 缺省/显式 chat 入 models（向后兼容）
         kind = m.get("kind", "chat")
         target = embedding_models if kind == "embedding" else models
-        target[name] = ModelSpec(
-            provider="openai",
-            model_id=m.get("model", name),
-            endpoint=m.get("base_url"),
-            auth=m.get("api_key"),
-            timeout=m.get("timeout"),
-            thinking_mode=_thinking(m.get("reasoning")),
-            max_tokens=m.get("max_tokens"),
-        )
+        target[name] = _spec_from_model(m, name)
     dm = dm_raw
     return LLMConnectionConfig(
-        default_model=ModelSpec(
-            provider="openai",
-            model_id=dm.get("model", "default"),
-            endpoint=dm.get("base_url"),
-            auth=dm.get("api_key"),
-            timeout=dm.get("timeout", default_timeout),
-            thinking_mode=_thinking(dm.get("reasoning")),
-            max_tokens=dm.get("max_tokens"),
-        ),
+        default_model=_spec_from_model(dm, "default", default_timeout=default_timeout),
         models=models,
         embedding_models=embedding_models,
         defaults=CallDefaults(

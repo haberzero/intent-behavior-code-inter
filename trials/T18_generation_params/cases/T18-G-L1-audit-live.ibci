@@ -1,0 +1,17 @@
+# T18-G-L1 真实 call_info 采样姿态审计闭环（finish_reason + generation）
+# doc: docs/syntax/15_diagnostics.md RUN_LLM_* + 生成参数面
+# expect-class: PASS
+# expect-out: answered=True | has_fr=True | gen_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+str answer = @~ 用一个词回答: 太阳是什么 ~
+print("answered=" + (str)(answer != None))
+dict info = ai.get_current_call_info()
+bool has_fr = (info.get("finish_reason") != None)
+dict gen = (dict)info["generation"]
+bool gen_ok = (gen.get("max_tokens") != None)
+print("has_fr=" + (str)has_fr)
+print("gen_ok=" + (str)gen_ok)
+print("DONE")

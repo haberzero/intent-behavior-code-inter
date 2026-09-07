@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 #: 思考模式：与 :mod:`core.base.llm_protocol.llm_call` 一致，供应商无关。
@@ -36,6 +36,13 @@ class ModelSpec:
     - ``timeout``：超时秒数（可选）。
     - ``thinking_mode``：该模型的思考模式偏好（自动跟随负载默认或显式指定）。
     - ``max_tokens``：单次生成上限（可选；provider 内置默认兜底）。
+    - ``temperature`` / ``top_p`` / ``top_k`` / ``seed``：标准生成参数
+      （可选；缺省 = 不发送——采样姿态由 vendor 默认，可审计：call_info
+      记录有效值）。字段集按使命取：temperature（提案/测量通道姿态旋钮）、
+      seed（可复现旋钮）、top_p/top_k（标准完备，防被挤进 extra_body 的
+      范畴错误——标准参数走命名类型化面，extra_body 只走 vendor 特定）。
+    - ``extra_body``：vendor 特定参数的显式透传口子（dict，原样合并进
+      请求体；缺省 = 不发送——代码对 vendor 零意见）。
     """
 
     provider: str
@@ -45,6 +52,11 @@ class ModelSpec:
     timeout: Optional[float] = None
     thinking_mode: str = THINKING_AUTO
     max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    top_k: Optional[int] = None
+    seed: Optional[int] = None
+    extra_body: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

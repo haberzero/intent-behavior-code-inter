@@ -456,6 +456,14 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="配置中 {env:VAR} 引用的环境变量未设置。",
         fix="设置对应环境变量，或移除该 {env:VAR} 引用改为直接写值。",
     ),
+    "CFG_CONFIG_UNKNOWN_FIELD": CodeInfo(
+        title="api_config model 条目含未知字段（拼写错误/废弃字段）。",
+        fix="按报错消息列出的允许字段修正；未知字段不再静默丢弃（配置面可审计性纪律）。",
+    ),
+    "RUN_LLM_EMPTY_CONTENT": CodeInfo(
+        title="LLM 返回空内容（仅有思考内容、无最终答案）。",
+        fix="思考抑制对模型无效或模型行为形态异常——显式声明 reasoning 模式（api_config model 条目 reasoning: true）或使用非思考模型端点；该错误不再静默以思考内容替代答案（可审计性纪律）。",
+    ),
 }
 
 

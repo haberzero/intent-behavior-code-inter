@@ -185,10 +185,14 @@ class LLMCallResult:
     - ``thinking_detected``：响应中出现思考内容（即便请求施加了思考抑制）。
       供供应商感知的思考抑制失败告警判断。
     - ``provider_meta``：供应商侧额外原始信息（可选），仅供内省，不参与解析。
+    - ``finish_reason``：结束原因（供应商原值透传：stop/length/tool_calls 等
+      标准概念；截断检测面——``length`` = 达到 max_tokens 预算被截断
+      （截断 ≠ 解析失败）；无/未知 = ``None``）。
     """
 
     content: str
     raw_response: str = ""
     reasoning: Optional[str] = None
     thinking_detected: bool = False
+    finish_reason: Optional[str] = None
     provider_meta: Dict[str, Any] = field(default_factory=dict)

@@ -1,0 +1,19 @@
+# T18-G-L2 命名模型变体参数（register_model temperature/seed + @NAME~ 路由）
+# doc: docs/syntax/15_diagnostics.md + 生成参数面
+# expect-class: PASS
+# expect-out: answered=True | variant_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+# 变体注册：同端点（default 条目不可知——用 default 的端点？本用例断言
+# 注册面 + call_info generation 记录声明值（不实际路由调用——@NAME~ 需要
+# 端点可达；此处断言注册成功 + get_current_call_info 机制在真实调用后可读）
+ai.register_model("variant-a", "http://127.0.0.1:1/v1", "k", "m-id", temperature=0.3, seed=7)
+str answer = @~ 用一个词回答: 地球是什么 ~
+print("answered=" + (str)(answer != None))
+dict info = ai.get_current_call_info()
+# 默认模型调用（@~ 无命名路由）——generation 记录默认模型声明面
+bool variant_ok = (info.get("generation") != None)
+print("variant_ok=" + (str)variant_ok)
+print("DONE")

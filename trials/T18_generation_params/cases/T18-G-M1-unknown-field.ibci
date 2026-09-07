@@ -1,0 +1,9 @@
+# T18-G-M1 配置未知字段 fail-fast（静默丢弃不再允许——可审计性纪律）
+# doc: docs/syntax/15_diagnostics.md CFG_CONFIG_UNKNOWN_FIELD
+# expect-class: FAIL
+# expect-code: CFG_CONFIG_UNKNOWN_FIELD
+# expect-exit: 1
+# expect-llm: false
+import ai
+ai.load_config("./trials/T18_generation_params/cases/T18_G_M1_bad_config.json")
+print("unreachable")

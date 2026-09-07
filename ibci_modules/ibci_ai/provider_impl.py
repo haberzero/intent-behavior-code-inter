@@ -51,6 +51,22 @@ from ibci_modules.ibci_ai.config_normalize import (
 # 单次生成 token 上限的内置默认（可被 api_config 模型条目 max_tokens 覆盖）
 _MAX_TOKENS_DEFAULT = 4096
 
+# 标准生成参数的发送通道路由（provider 职责：vendor 适配层把标准字段集
+# 解释进请求面——与 thinking_mode → probe 语义映射同形）。
+# SDK 直传 kwarg（OpenAI 标准协议参数）：
+_SDK_KWARG_PARAMS = ("temperature", "top_p", "seed")
+# vendor 扩展参数（OpenAI 标准协议无此参数，经 extra_body 通道透传）：
+_VENDOR_EXTRA_BODY_PARAMS = ("top_k",)
+
+
+class LLMProviderError(RuntimeError):
+    """provider 层契约违约（携带诊断码——失败语义 → 码单点权威源；
+    原生函数边界经 code 属性原码透传，不落 RUN_GENERIC_ERROR）。"""
+
+    def __init__(self, message: str, code: str = "RUN_LLM_ERROR"):
+        super().__init__(message)
+        self.code = code
+
 # MOCK 模式哨兵（仅显式声明进入：_config["mock"]=True，经 set_mock_mode/apply_config
 # defaults.mock；不嗅探 url/key，不读隐式环境变量——避免环境开关静默压过显式配置）
 MOCK_CLIENT_SENTINEL = "MOCK_CLIENT"
@@ -194,14 +210,14 @@ class RecommendedProvider(LLMProvider):
         try:
             client, model = self._resolve_client(request.target_model, require=True)
             messages = self._build_messages(request, sys_prompt, user_prompt_text)
+            gen_params = self._resolve_generation_params(request.target_model)
+            extra_body = self._resolve_extra_body(request.target_model)
             completion = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=self._resolve_max_tokens(request.target_model),
-                extra_body={
-                    "enable_thinking": False,
-                    "chat_template_kwargs": {"enable_thinking": False}
-                }
+                **gen_params,
+                **({"extra_body": extra_body} if extra_body else {}),
             )
             if not completion or not hasattr(completion, 'choices') or not completion.choices:
                 raise RuntimeError(f"LLM 返回异常响应: {completion}")
@@ -209,28 +225,53 @@ class RecommendedProvider(LLMProvider):
             raw_content = completion.choices[0].message.content
             reasoning = self._extract_reasoning(completion.choices[0].message)
             thinking_detected = reasoning is not None
+            finish_reason = getattr(completion.choices[0], "finish_reason", None)
 
             if reasoning:
                 self._warn_thinking_suppress_failed(
                     config_declared_non_reasoning=not is_reasoning_model
                 )
 
-            # 强制推理模型把结果放进 reasoning 里时，取 reasoning 作为内容
+            # 空内容确定性处理：content 空且 reasoning 非空 = 模型只思考未作答
+            #（思考抑制失效或行为形态异常）——显式诊断，不再静默以 reasoning
+            # 替代 content（可审计性纪律："模型只想了没答"是确定运行状态）。
             if (raw_content is None or raw_content.strip() == "") and reasoning:
-                raw_content = reasoning
+                raise LLMProviderError(
+                    "LLM 返回空内容（仅有思考内容、无最终答案——思考抑制对该模型"
+                    "无效或模型行为形态异常）。请显式声明 reasoning 模式"
+                    "（api_config model 条目 reasoning: true）或改用非思考模型端点。",
+                    code="RUN_LLM_EMPTY_CONTENT",
+                )
 
             raw_str = raw_content if raw_content is not None else ""
             content = self._post_process_answer(raw_str)
 
-            self._record_call_info(request, content, raw_str)
+            # 观测面（采样姿态审计闭环）：finish_reason（截断检测面）+
+            # generation（有效值——call_info 记录；未声明字段缺省 =
+            # "未指定(vendor 默认)"本身即可记录的答案）经 provider_meta
+            # 单通道回填（内核 _call_info merge 面），provider 本地槽同步。
+            meta = {"sys_prompt": sys_prompt}
+            if finish_reason is not None:
+                meta["finish_reason"] = finish_reason
+            meta["generation"] = {**gen_params,
+                                  "max_tokens": self._resolve_max_tokens(request.target_model)}
+            self._record_call_info(
+                request, content, raw_str,
+                finish_reason=finish_reason, gen_params=gen_params,
+            )
             return LLMCallResult(
                 content=content,
                 raw_response=raw_str,
                 reasoning=reasoning,
                 thinking_detected=thinking_detected,
-                provider_meta={"sys_prompt": sys_prompt},
+                finish_reason=finish_reason,
+                provider_meta=meta,
             )
         except _PROVIDER_ERRORS as e:
+            # 携带诊断码的契约违约（code 属性 = 失败语义单点权威源）原样
+            # 上抛（码透传机制）；其余失败包装为泛化调用失败。
+            if isinstance(e, LLMProviderError):
+                raise
             raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
     def stream(self, request: LLMCallRequest):
@@ -257,6 +298,8 @@ class RecommendedProvider(LLMProvider):
         def _gen():
             stream_resp = None
             try:
+                gen_params = self._resolve_generation_params(request.target_model)
+                extra_body = self._resolve_extra_body(request.target_model)
                 stream_resp = client.chat.completions.create(
                     model=model,
                     messages=[
@@ -265,6 +308,8 @@ class RecommendedProvider(LLMProvider):
                     ],
                     stream=True,
                     max_tokens=self._resolve_max_tokens(request.target_model),
+                    **gen_params,
+                    **({"extra_body": extra_body} if extra_body else {}),
                 )
                 for chunk in stream_resp:
                     if not chunk or not chunk.choices:
@@ -274,6 +319,8 @@ class RecommendedProvider(LLMProvider):
                     if piece:
                         yield piece
             except _PROVIDER_ERRORS as e:
+                if isinstance(e, LLMProviderError):
+                    raise
                 raise RuntimeError(f"LLM 流式调用失败: {str(e)}")
             finally:
                 # 资源闭环：生成器无论被耗尽 / 放弃 / 协作式关闭（gen.close()），
@@ -325,10 +372,6 @@ class RecommendedProvider(LLMProvider):
                 ],
                 max_tokens=50,
                 timeout=15.0,
-                extra_body={
-                    "enable_thinking": False,
-                    "chat_template_kwargs": {"enable_thinking": False}
-                }
             )
             print("    -> [System] Called llm once (Probe).")
 
@@ -368,6 +411,47 @@ class RecommendedProvider(LLMProvider):
         if target_model and target_model in self._model_registry:
             return self._model_registry[target_model].get("max_tokens") or _MAX_TOKENS_DEFAULT
         return self._config.get("max_tokens") or _MAX_TOKENS_DEFAULT
+
+    def _resolve_generation_field(self, target_model: str, field: str):
+        """活动模型的单个生成参数有效值：命名模型注册项 > 默认配置 > None。
+
+        None = 未声明（采样姿态 = vendor 默认——可审计的缺省语义）。
+        """
+        reg = self._model_registry.get(target_model)
+        if reg is not None:
+            v = reg.get(field)
+            if v is not None:
+                return v
+        return self._config.get(field)
+
+    def _resolve_generation_params(self, target_model: str) -> Dict[str, Any]:
+        """标准生成参数（SDK 直传 kwarg 通道）：仅含已声明字段。
+
+        缺省 = 不发送（采样姿态由 vendor 默认；call_info 记录有效值）。
+        """
+        return {
+            k: self._resolve_generation_field(target_model, k)
+            for k in _SDK_KWARG_PARAMS
+            if self._resolve_generation_field(target_model, k) is not None
+        }
+
+    def _resolve_extra_body(self, target_model: str) -> Dict[str, Any]:
+        """vendor 特定参数透传口子（extra_body 通道）：配置声明原样合并
+        + vendor 扩展标准参数（top_k 路由——OpenAI 标准协议无此参数）。
+
+        空 = 不发送（代码对 vendor 零意见）。
+        """
+        reg = self._model_registry.get(target_model)
+        eb: Dict[str, Any] = {}
+        if reg is not None:
+            eb.update(reg.get("extra_body") or {})
+        else:
+            eb.update(self._config.get("extra_body") or {})
+        for k in _VENDOR_EXTRA_BODY_PARAMS:
+            v = self._resolve_generation_field(target_model, k)
+            if v is not None:
+                eb[k] = v
+        return eb
 
     def _resolve_client(self, target_model: str, require: bool = True):
         """按 target_model 路由客户端；无路由时用默认客户端。
@@ -455,11 +539,24 @@ class RecommendedProvider(LLMProvider):
             provider_meta=dict(provider_meta or {}),
         )
 
-    def _record_call_info(self, request: LLMCallRequest, content: str, raw: str) -> None:
-        """记录最近一次调用信息到 provider 本地槽（供 get_current_call_info 兜底）。"""
+    def _record_call_info(
+        self, request: LLMCallRequest, content: str, raw: str,
+        finish_reason: Optional[str] = None, gen_params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """记录最近一次调用信息到 provider 本地槽（供 get_current_call_info 兜底）。
+
+        采样姿态审计闭环：生成参数记录**有效值**（已声明字段；未声明 =
+        字段缺省——"未指定(vendor 默认)"本身即可记录的答案），finish_reason
+        透传（截断检测面：length ≠ 解析失败）。
+        """
         d = request.as_dict()
         d["response"] = content
         d["raw_response"] = raw
+        if finish_reason is not None:
+            d["finish_reason"] = finish_reason
+        generation = dict(gen_params or {})
+        generation["max_tokens"] = self._resolve_max_tokens(request.target_model)
+        d["generation"] = generation
         self._last_call_info = d
 
     @staticmethod
@@ -520,19 +617,86 @@ class RecommendedProvider(LLMProvider):
         except _PROVIDER_ERRORS as e:
             raise RuntimeError(f"OpenAI 客户端初始化失败: {str(e)}")
 
-    def set_config(self, url: str, key: str, model: str, **kwargs) -> None:
+    def set_config(
+        self, url: str, key: str, model: str,
+        timeout: Optional[float] = None, retry: Optional[int] = None,
+        max_tokens: Optional[int] = None, temperature: Optional[float] = None,
+        top_p: Optional[float] = None, top_k: Optional[int] = None,
+        seed: Optional[int] = None, extra_body: Optional[Dict[str, Any]] = None,
+        auto_intent_injection: Optional[bool] = None,
+    ) -> None:
+        """显式配置默认模型（参数面显式声明；未知参数 fail-fast——不静默吞参）。
+
+        生成参数缺省 None = 不发送（采样姿态 vendor 默认，可审计）；
+        参数类型/范围违约 = TypeError（运行时 fail-fast，消息指明参数名）。
+        """
         self._config["url"] = url
         self._config["key"] = key
         self._config["model"] = model
         self._config["mock"] = False  # 显式 set_config 退出 mock 模式
-
-        if "auto_intent_injection" in kwargs:
-            self._config["auto_intent_injection"] = bool(kwargs["auto_intent_injection"])
+        self._validate_generation_kwargs(
+            "set_config", timeout=timeout, retry=retry, max_tokens=max_tokens,
+            temperature=temperature, top_p=top_p, top_k=top_k, seed=seed,
+            extra_body=extra_body, auto_intent_injection=auto_intent_injection,
+        )
 
         # 如果切换了模型，重置探测状态
         self._model_capabilities["probed"] = False
         self._unprobed_warned = False
         self._init_client()
+
+    def _validate_generation_kwargs(
+        self, context: str, *,
+        timeout: Optional[float] = None, retry: Optional[int] = None,
+        max_tokens: Optional[int] = None, temperature: Optional[float] = None,
+        top_p: Optional[float] = None, top_k: Optional[int] = None,
+        seed: Optional[int] = None, extra_body: Optional[Dict[str, Any]] = None,
+        auto_intent_injection: Optional[bool] = None,
+        target: Optional[str] = None,
+    ) -> None:
+        """生成参数面 fail-fast 校验 + 落地（set_config/register_model 同链）。
+
+        缺省 None = 不发送（不落地——采样姿态 vendor 默认）；
+        非 None 须通过类型/范围校验（违约 = TypeError 指明参数名）。
+        落地目标：``target`` 给定 → 命名模型注册项，否则默认配置。
+        """
+        dest = self._model_registry[target] if target else self._config
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+                raise TypeError(f"{context} timeout 须为正数（收到 {timeout!r}）")
+            dest["timeout"] = float(timeout)
+        if retry is not None:
+            if not isinstance(retry, int) or isinstance(retry, bool) or retry < 0:
+                raise TypeError(f"{context} retry 须为非负整数（收到 {retry!r}）")
+            dest["retry"] = retry
+        if max_tokens is not None:
+            if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens <= 0:
+                raise TypeError(f"{context} max_tokens 须为正整数（收到 {max_tokens!r}）")
+            dest["max_tokens"] = max_tokens
+        if temperature is not None:
+            if not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not (0.0 <= temperature <= 2.0):
+                raise TypeError(f"{context} temperature 须为 [0, 2] 内数字（收到 {temperature!r}）")
+            dest["temperature"] = float(temperature)
+        if top_p is not None:
+            if not isinstance(top_p, (int, float)) or isinstance(top_p, bool) or not (0.0 <= top_p <= 1.0):
+                raise TypeError(f"{context} top_p 须为 [0, 1] 内数字（收到 {top_p!r}）")
+            dest["top_p"] = float(top_p)
+        if top_k is not None:
+            if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
+                raise TypeError(f"{context} top_k 须为正整数（收到 {top_k!r}）")
+            dest["top_k"] = top_k
+        if seed is not None:
+            if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+                raise TypeError(f"{context} seed 须为非负整数（收到 {seed!r}）")
+            dest["seed"] = seed
+        if extra_body is not None:
+            if not isinstance(extra_body, dict):
+                raise TypeError(f"{context} extra_body 须为 dict（收到 {type(extra_body).__name__}）")
+            dest["extra_body"] = dict(extra_body)
+        if auto_intent_injection is not None:
+            if not isinstance(auto_intent_injection, bool):
+                raise TypeError(f"{context} auto_intent_injection 须为 bool（收到 {auto_intent_injection!r}）")
+            dest["auto_intent_injection"] = auto_intent_injection
 
     def set_mock_mode(self, enable: bool = True) -> None:
         """显式进入/退出 MOCK 测试模式（对称开关）。"""
@@ -575,12 +739,24 @@ class RecommendedProvider(LLMProvider):
                 name, model.endpoint, model.auth, model.model_id,
                 timeout=model.timeout or _DEFAULT_TIMEOUT,
                 max_tokens=model.max_tokens,
+                temperature=model.temperature,
+                top_p=model.top_p,
+                top_k=model.top_k,
+                seed=model.seed,
+                extra_body=dict(model.extra_body or {}),
             )
 
         dm = config.default_model
         self._config["timeout"] = dm.timeout if dm.timeout is not None else _DEFAULT_TIMEOUT
         self._config["model"] = dm.model_id
         self._config["max_tokens"] = dm.max_tokens
+        # 默认模型生成参数面落地（None = 不发送，不落地——vendor 默认）
+        for _f in ("temperature", "top_p", "top_k", "seed"):
+            _v = getattr(dm, _f, None)
+            if _v is not None:
+                self._config[_f] = _v
+        if getattr(dm, "extra_body", None):
+            self._config["extra_body"] = dict(dm.extra_body)
 
         if mock:
             self.set_mock_mode()
@@ -591,16 +767,31 @@ class RecommendedProvider(LLMProvider):
         self._model_capabilities["is_reasoning"] = (dm.thinking_mode == "on")
         self._unprobed_warned = False
 
-    def register_model(self, name: str, url: str, key: str, model: str, **kwargs) -> None:
-        """注册命名模型配置，用于 @NAME~ 语法的模型路由。"""
+    def register_model(
+        self, name: str, url: str, key: str, model: str,
+        timeout: Optional[float] = None, max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None, top_p: Optional[float] = None,
+        top_k: Optional[int] = None, seed: Optional[int] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """注册命名模型配置（@NAME~ 语法模型路由；参数面显式声明）。
+
+        注册即声明变体（endpoint/model/超时/生成参数按变体不同）——
+        变化 = 声明的数据（注册点可见、单源、不可变），非隐藏状态；
+        未知参数 fail-fast（不静默吞参）。
+        """
         config = {
             "url": url,
             "key": key,
             "model": model,
-            "timeout": kwargs.get("timeout", _DEFAULT_TIMEOUT),
-            "max_tokens": kwargs.get("max_tokens"),
+            "timeout": _DEFAULT_TIMEOUT,
         }
         self._model_registry[name] = config
+        self._validate_generation_kwargs(
+            f"register_model({name!r})", timeout=timeout, max_tokens=max_tokens,
+            temperature=temperature, top_p=top_p, top_k=top_k, seed=seed,
+            extra_body=extra_body, target=name,
+        )
         self._named_clients.pop(name, None)
 
     def _get_named_client(self, name: str):

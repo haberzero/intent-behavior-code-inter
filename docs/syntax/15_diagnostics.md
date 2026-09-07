@@ -476,6 +476,12 @@ llm 可调用类契约违约。
 - **严重级别**：ERROR。
 - **修复方式**：按 `docs/syntax/08_llm_callable.md` §8.1/§8.4 核对——`__llm_call__(self, ...) -> dict` 返回装配 dict 且含必需 `user_prompt`；`__intent__(self, dict) -> dict`；`__retry__(self) -> dict`（`max_retry` ≥ 1 int / `hint` str）。
 
+#### `RUN_LLM_EMPTY_CONTENT`
+LLM 返回空内容（仅有思考内容、无最终答案）。
+- **触发条件**：调用响应 content 为空且 reasoning 非空（思考抑制失效或模型行为形态异常）。
+- **严重级别**：ERROR。
+- **修复方式**：显式声明 reasoning 模式（api_config model 条目 `reasoning: true`）或使用非思考模型端点。该错误不再静默以思考内容替代答案——"模型只想了没答"是确定的运行状态，须显式诊断。
+
 #### `RUN_PERMISSION_ERROR`
 运行时操作被权限策略拒绝。
 - **触发条件**：操作超出权限策略允许范围。
@@ -691,6 +697,12 @@ default_model 引用的命名模型在 models 中不存在。
 - **触发条件**：providers/models 的 base_url/api_key 含 `{env:VAR}` 但 VAR 未设置。
 - **严重级别**：ERROR。
 - **修复方式**：设置对应环境变量，或移除 `{env:VAR}` 引用改为直接写值。
+
+#### `CFG_CONFIG_UNKNOWN_FIELD`
+api_config model 条目含未知字段。
+- **触发条件**：model 条目出现允许集之外的字段（拼写错误/废弃字段）。
+- **严重级别**：ERROR。
+- **修复方式**：按报错消息列出的允许字段修正（model 条目允许：model/provider/base_url/api_key/timeout/reasoning/max_tokens/temperature/top_p/top_k/seed/extra_body/kind）。未知字段不再静默丢弃——配置面的拼写错误须显式暴露（可审计性纪律）。
 
 ---
 

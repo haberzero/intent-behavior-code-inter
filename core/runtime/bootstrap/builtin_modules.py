@@ -58,7 +58,15 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
             ], return_type=TypeRef.of("void"), param_descriptors=[
                 ParamDescriptor(name="url", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
                 ParamDescriptor(name="key", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
-                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="timeout", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="retry", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="max_tokens", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="temperature", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="top_p", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="top_k", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="seed", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="extra_body", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None)
             ]),
         "load_config": MethodMemberSpec(name="load_config", kind="method", type_ref=TypeRef.of("void"), param_types=[
                 TypeRef.of("str")
@@ -85,7 +93,14 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
                 ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
                 ParamDescriptor(name="url", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
                 ParamDescriptor(name="key", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
-                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="timeout", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="max_tokens", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="temperature", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="top_p", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="top_k", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="seed", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="extra_body", kind="KEYWORD_ONLY", type_ref=TypeRef.of("any"), has_default=True, default_value=None)
             ]),
         "has_api_key": MethodMemberSpec(name="has_api_key", kind="method", type_ref=TypeRef.of("bool"), return_type=TypeRef.of("bool")),
         "probe_model": MethodMemberSpec(name="probe_model", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),

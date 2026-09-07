@@ -41,6 +41,7 @@ from typing import Any, Dict
 from core.base.diagnostics.codes import (
     CFG_CONFIG_ENV_VAR_MISSING,
     CFG_CONFIG_INVALID_FIELD_TYPE,
+    CFG_CONFIG_UNKNOWN_FIELD,
     CFG_CONFIG_INVALID_JSON,
     CFG_CONFIG_MISSING_DEFAULT,
     CFG_CONFIG_MISSING_FIELD,
@@ -62,6 +63,12 @@ _ENV_PATTERN = re.compile(r"\{env:([A-Z_][A-Z0-9_]*)\}")
 
 _DEFAULT_MOCK = False
 _DEFAULT_REASONING = False
+
+# model 条目允许字段（未知字段 fail-fast 的 allowlist——配置面可审计性纪律）
+_ALLOWED_MODEL_FIELDS = frozenset({
+    "model", "provider", "base_url", "api_key", "timeout", "reasoning",
+    "max_tokens", "temperature", "top_p", "top_k", "seed", "extra_body", "kind",
+})
 
 
 def _resolve_env(value: Any, context: str) -> str:
@@ -325,6 +332,49 @@ class ApiConfig:
                 )
             result["max_tokens"] = mt
 
+        # 标准生成参数（可选；缺省 = 不发送——采样姿态由 vendor 默认，
+        # call_info 记录有效值；标准参数走命名类型化面，不进 extra_body）
+        if "temperature" in model:
+            t = model["temperature"]
+            if not isinstance(t, (int, float)) or isinstance(t, bool) or not (0.0 <= t <= 2.0):
+                raise InterpreterError(
+                    f"{context}.temperature 必须是 [0, 2] 内的数字",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            result["temperature"] = float(t)
+        if "top_p" in model:
+            tp = model["top_p"]
+            if not isinstance(tp, (int, float)) or isinstance(tp, bool) or not (0.0 <= tp <= 1.0):
+                raise InterpreterError(
+                    f"{context}.top_p 必须是 [0, 1] 内的数字",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            result["top_p"] = float(tp)
+        if "top_k" in model:
+            tk = model["top_k"]
+            if not isinstance(tk, int) or isinstance(tk, bool) or tk <= 0:
+                raise InterpreterError(
+                    f"{context}.top_k 必须是正整数",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            result["top_k"] = tk
+        if "seed" in model:
+            sd = model["seed"]
+            if not isinstance(sd, int) or isinstance(sd, bool) or sd < 0:
+                raise InterpreterError(
+                    f"{context}.seed 必须是非负整数",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            result["seed"] = sd
+        if "extra_body" in model:
+            eb = model["extra_body"]
+            if not isinstance(eb, dict):
+                raise InterpreterError(
+                    f"{context}.extra_body 必须是 JSON 对象（vendor 特定参数透传口子）",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
+            result["extra_body"] = eb
+
         # kind（可选；模型面判别："chat"（缺省）/ "embedding"）
         kind = model.get("kind", "chat")
         if kind not in ("chat", "embedding"):
@@ -333,6 +383,15 @@ class ApiConfig:
                 error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
             )
         result["kind"] = kind
+
+        # 未知字段严格性（静默丢弃 → fail-fast：配置面拼写错误/废弃字段
+        # 不得无声无息——采样姿态/凭据面的可审计性纪律）
+        unknown = sorted(set(model.keys()) - _ALLOWED_MODEL_FIELDS)
+        if unknown:
+            raise InterpreterError(
+                f"{context} 含未知字段 {unknown}（model 条目允许字段：{sorted(_ALLOWED_MODEL_FIELDS)}）",
+                error_code=CFG_CONFIG_UNKNOWN_FIELD,
+            )
 
         return result
 
