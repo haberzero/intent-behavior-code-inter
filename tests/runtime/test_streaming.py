@@ -12,6 +12,7 @@ tests/runtime/test_streaming.py
 - IbStreamHandle 单元（后台线程 → Channel → 完整文本）
 """
 import time
+import threading
 
 import pytest
 
@@ -21,6 +22,7 @@ from ibci_modules.ibci_ai.mock_service import MockServer
 from openai import OpenAI
 
 from core.runtime.objects.stream import IbStreamHandle
+from core.runtime.objects import stream as stream_mod
 
 
 # ------------------------------------------------------------------ #
@@ -29,19 +31,116 @@ from core.runtime.objects.stream import IbStreamHandle
 
 class TestIbStreamHandle:
     def test_producer_to_full_text(self):
-        h = IbStreamHandle(producer=lambda: iter(["a", "b", "c"]))
+        h = IbStreamHandle(producer=lambda: (x for x in ["a", "b", "c"]))
         assert h.result() == "abc"
 
     def test_channel_receives_chunks(self):
-        h = IbStreamHandle(producer=lambda: iter(["x", "y"]))
+        h = IbStreamHandle(producer=lambda: (x for x in ["x", "y"]))
         ok1, c1 = h.recv_nowait()
         ok2, c2 = h.recv_nowait()
         assert (ok1 and c1 == "x") and (ok2 and c2 == "y")
 
     def test_is_done_after_consumption(self):
-        h = IbStreamHandle(producer=lambda: iter(["z"]))
+        h = IbStreamHandle(producer=lambda: (x for x in ["z"]))
         h.result()
         assert h.is_done
+
+
+# ------------------------------------------------------------------ #
+# IbStreamHandle.cancel（协作式截断）+ 退出兜底                       #
+# ------------------------------------------------------------------ #
+
+class TestIbStreamHandleCancel:
+    """cancel 协作式截断与进程退出 drain（流句柄放弃 → 消费线程干净退出）。"""
+
+    def _slow_producer(self, finally_ran, first_chunk_delay=0.2, hang_after_first=2.0):
+        def producer():
+            time.sleep(first_chunk_delay)  # 首块前延迟：cancel 时生成器在运行而非挂起
+            try:
+                yield "a"
+                time.sleep(hang_after_first)  # 挂起点：cancel 的 gen.close() 在此投 GeneratorExit
+                yield "b"
+            finally:
+                finally_ran.append(1)
+        return producer
+
+    def test_cancel_after_first_chunk_truncates(self):
+        finally_ran = []
+        h = IbStreamHandle(producer=self._slow_producer(finally_ran))
+        # 等到首块到达（消费线程已越过 producer() 进入迭代）
+        ok, chunk = (False, None)
+        for _ in range(100):
+            ok, chunk = h.recv_nowait()
+            if ok:
+                break
+            time.sleep(0.01)
+        assert ok and chunk == "a"
+        h.cancel()
+        h._thread.join(timeout=5)
+        assert not h._thread.is_alive()
+        assert h.is_done
+        # 截断语义：无 error，result 为截断前缀（"a"），不含挂起后的 "b"
+        assert h.result() == "a"
+        # 生成器 finally 必须执行（资源闭环经 gen.close() 触发）
+        assert finally_ran == [1]
+        # live 注册表已移除
+        assert h not in stream_mod._LIVE_HANDLES
+
+    def test_cancel_before_first_chunk(self):
+        finally_ran = []
+        h = IbStreamHandle(producer=self._slow_producer(finally_ran, first_chunk_delay=0.2))
+        time.sleep(0.05)  # 消费线程已进入 producer()（生成器运行中、未挂起）
+        h.cancel()
+        h._thread.join(timeout=5)
+        assert not h._thread.is_alive()
+        assert h.is_done
+        assert h.result() == ""  # 零块产出 → 空前缀
+        assert finally_ran == [1]
+
+    def test_cancel_idempotent(self):
+        finally_ran = []
+        h = IbStreamHandle(producer=self._slow_producer(finally_ran))
+        time.sleep(0.05)
+        h.cancel()
+        h.cancel()  # 幂等：二次调用无副作用
+        h._thread.join(timeout=5)
+        assert not h._thread.is_alive()
+        assert h.is_done
+        assert h.result() == ""
+
+    def test_cancel_after_natural_completion_is_noop(self):
+        h = IbStreamHandle(producer=lambda: (x for x in ["x", "y"]))
+        assert h.result() == "xy"
+        h.cancel()  # 已终结：无副作用
+        assert h.is_done
+        assert h.result() == "xy"
+
+    def test_atexit_drain_abandoned_stream(self):
+        """放弃的流（不 recv 不 cancel）经 atexit 路径被 drain：线程干净退出。"""
+        finally_ran = []
+        h = IbStreamHandle(producer=self._slow_producer(finally_ran, first_chunk_delay=0.05))
+        time.sleep(0.05)  # 消费线程启动
+        assert h in stream_mod._LIVE_HANDLES
+        stream_mod._drain_live_streams()  # 直接执行 atexit 钩子路径
+        h._thread.join(timeout=5)
+        assert not h._thread.is_alive()
+        assert h.is_done
+        assert finally_ran == [1]
+        assert h not in stream_mod._LIVE_HANDLES
+
+    def test_producer_contract_non_generator_fail_fast(self):
+        """producer 契约：返回非生成器 → 生产异常路径 fail-fast（result 重抛 TypeError）。"""
+        h = IbStreamHandle(producer=lambda: iter(["a"]))
+        with pytest.raises(TypeError):
+            h.result()
+
+    def test_live_registry_no_residue_after_fast_streams(self):
+        """快速流（即时生成器）完全消费后 live 注册表零残留（登记先于线程启动）。"""
+        baseline = len(stream_mod._LIVE_HANDLES)
+        for _ in range(5):
+            h = IbStreamHandle(producer=lambda: (x for x in ["a", "b"]))
+            h.result()
+        assert len(stream_mod._LIVE_HANDLES) == baseline
 
 
 # ------------------------------------------------------------------ #

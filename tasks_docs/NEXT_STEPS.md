@@ -32,11 +32,14 @@
 彻底删除（`core/lib/prelude.ibc`、`core/builtin/primitives.ibci` 两遗留 IBCI 源文件全仓零消费者，
 wheel 发布面实证齐备，裁定依据见 `tasks_docs/WORKLOG.md`）；`scripts/ci_local.sh` L4 发布产物层补齐
 （build + 安装 smoke，镜像 `.github/workflows/ci.yml`）。**阶段 C · 真实 LLM 全面试用（VISION-3）**：
-试用地基（六套件 T10-T15 / 恶意边界 22 例 / 全量回归 / 压力维度 / 缺陷闭环）+ 技术文档全方位复核
-（文风治理）已完成；**真实 LLM 环境已就位**（本机试用端点已迁移至 vLLM `localhost:8001` 并
-真实用例实跑验证；模型红线与试用规范见 `trials/_toolkit/LLM_SERVICE.md`）——L3 真实 LLM 层与
-真实 LLM 残留项（恶意边界后续未测 9 项 + 全量 LLM 回归复跑，见 `trials/INDEX.md` 后续清单）
-已解锁待跑。**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）恢复时机随阶段排布待裁定。
+试用地基（六套件 T10-T15 / 恶意边界 22 例 / 压力维度 / 缺陷闭环）+ 技术文档全方位复核
+（文风治理）已完成；**全量 LLM 回归复跑已完成**（35B 共享端点 10 套件 122 llm 用例；
+分类全达预期——LLM_BEHAVIOR 项为端点输出非确定非内核缺陷；复跑中新发现并修复
+**KERNEL_ISSUE-STREAM-1**（stream_channel 放弃流退出段错误，`trials/INDEX.md` 登记；
+修复 = 流句柄生命周期闭环：cancel 协作式截断 + producer 契约 = 生成器 + 退出 drain）；
+**残留清场项**（见下第 2 条）：named-model 端点泄漏 2 用例 / T06 子目录用例复跑缺口 /
+恶意边界未测 #15/#17/#19/#33（`trials/INDEX.md` 清单）/ BOUNDARY-LLM-5 裁定收敛。
+**周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）恢复时机随阶段排布待裁定。
 
 测试基线以实跑为准（不冻结数字；唯一命令 `python -m pytest tests/`）。
 
@@ -50,10 +53,13 @@ wheel 发布面实证齐备，裁定依据见 `tasks_docs/WORKLOG.md`）；`scri
    外部灰盒自动机需求单（`ref/IBCI_REQUIREMENTS.md`，本地未入库资产）整合推进；汇总映射、
    批次建议与待裁定项见 `tasks_docs/_next_phase_targets.md`（正式总条目 = PENDING_TASKS
    VISION-7）。
-2. **阶段 C 真实 LLM 残留项清场（LLM 回归复跑 + 恶意边界 #6/#14/#22/#23 已核销）**：剩余
-   #15/16/17/19/33 专项（#16/#17 依赖 KERNEL_ISSUE-SER-1 修复、#33 依赖 LLM-5 同子系统）；
-   缺陷追修随批 1：KERNEL_ISSUE-SER-1（load_state 模块绑定死壳，M28 复现用例就位）/
-   KERNEL_ISSUE-LLM-5（事件驱动监视复发）。
+2. **阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：① named-model 端点泄漏
+   2 用例（T01 D1-07-006 / T08 D5-03 在 tracked 文件硬编码旧本机端点 → 端点 URL 走
+   `IBCI_TRIAL_LLM_URL` 环境变量通道，与 `IBCI_TRIAL_LLM_KEY` 同构；`LLM_SERVICE.md` §五 同步）；
+   ② T06 子目录布局用例（7 llm）run_batch 不收集——手工 harness 复跑或 run_batch 收集
+   策略扩展（涉 harness 变更需评估）；③ 恶意边界未测 #15/#17/#19/#33（`trials/INDEX.md`
+   清单，mock 层；#33 依赖 LLM-5 同子系统）；缺陷追修随批 1：KERNEL_ISSUE-LLM-5
+   （事件驱动监视复发）。
 3. **阶段 C 文档复核登记项收敛**：复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
    call_info 键结构 / 装配未知键是否应告警 / BOUNDARY-LLM-5 mock 下 call_info 无 sys_prompt 键），
    doc-governance Phase 0-8。

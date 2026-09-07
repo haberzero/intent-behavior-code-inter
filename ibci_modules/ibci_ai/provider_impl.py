@@ -245,7 +245,9 @@ class RecommendedProvider(LLMProvider):
                 raise RuntimeError(f"MOCK:ERROR injected ({result.error_status})")
             # MOCK:STREAM 指令分块模拟增量流式（与 mock_service HTTP 路径同构）；
             # 无分块时按整块文本迭代（保持 stream_call 语义不变）。
-            return iter(result.chunks if result.chunks else [result.content])
+            # 生成器形态（IbStreamHandle producer 契约：协作式取消经 gen.close()）。
+            chunks = result.chunks if result.chunks else [result.content]
+            return (c for c in chunks)
 
         client, model = self._resolve_client(request.target_model, require=True)
         sys_prompt = self._assemble_provider_sys_prompt(request, is_reasoning_model=False)
@@ -253,6 +255,7 @@ class RecommendedProvider(LLMProvider):
         user_content = self._build_user_content(request.user_prompt, user_prompt_text)
 
         def _gen():
+            stream_resp = None
             try:
                 stream_resp = client.chat.completions.create(
                     model=model,
@@ -272,6 +275,11 @@ class RecommendedProvider(LLMProvider):
                         yield piece
             except _PROVIDER_ERRORS as e:
                 raise RuntimeError(f"LLM 流式调用失败: {str(e)}")
+            finally:
+                # 资源闭环：生成器无论被耗尽 / 放弃 / 协作式关闭（gen.close()），
+                # HTTP 流都必须释放——连接悬挂会在共享端点积压并扩大退出竞态窗口。
+                if stream_resp is not None:
+                    stream_resp.close()
 
         return _gen()
 
