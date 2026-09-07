@@ -36,6 +36,7 @@ class ExceptionAxiom(BaseAxiom):
         return {
             "message": MemberSpec(name="message", kind="field", type_ref=TypeRef.of("str")),
             "cast_to": _m("cast_to", params=["any"], ret="any"),
+            "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
 
     def can_convert_from(self, source_type_name: str) -> bool:
@@ -78,6 +79,7 @@ class _LLMErrorAxiomBase(BaseAxiom):
             "message":      MemberSpec(name="message",      kind="field", type_ref=TypeRef.of("str")),
             "raw_response": MemberSpec(name="raw_response", kind="field", type_ref=TypeRef.of("str")),
             "cast_to":      _m("cast_to", params=["any"], ret="any"),
+            "__to_prompt__": _m("__to_prompt__", ret="str"),
         }
         if self._extra_field is not None:
             fname, ftype = self._extra_field

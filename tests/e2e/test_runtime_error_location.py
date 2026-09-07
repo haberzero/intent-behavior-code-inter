@@ -76,3 +76,14 @@ class TestRuntimeErrorLocation:
         loc = exc.value.location
         assert loc is not None
         assert loc.line == 2
+
+    def test_location_carries_module_file_path(self, engine):
+        # file_path = 模块源文件真实路径（node_to_loc 侧表绑定 file_path，
+        # 非模块名标识）——CLI 源行渲染的数据前提
+        with pytest.raises(InterpreterError) as exc:
+            engine.run_string('any a = "x" >= 1\n')
+        loc = exc.value.location
+        assert loc is not None
+        assert loc.file_path
+        # run_string 载体为 tempfile 路径——断言其为真实文件路径形态（.ibci 扩展名）
+        assert loc.file_path.endswith(".ibci")

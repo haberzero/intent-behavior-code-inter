@@ -383,7 +383,7 @@ class Scheduler(ICompilerService):
             pre_mod_meta = self.registry.factory.create_module(module_name)
             self.registry.register(pre_mod_meta)
             
-            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name)
+            analyzer = SemanticAnalyzer(file_tracker, registry=self.registry, module_name=module_name, module_file_path=file_path)
             
             # Inject predefined symbols
             for name, val in self.predefined_symbols.items():

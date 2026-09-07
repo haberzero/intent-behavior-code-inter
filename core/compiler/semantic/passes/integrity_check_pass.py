@@ -21,7 +21,13 @@ class LocationBinder:
     def __init__(self, context: SemanticContext):
         self.context = context
         self.bindings: Dict[Any, Dict[str, Any]] = {}
-        self._file_path = getattr(context, 'module_name', '<unknown>')
+        # 位置绑定的 file_path = 模块源文件真实路径（诊断渲染/源行上下文
+        # 的单一权威源）；无文件载体（临时编译/直接构造 context）回落
+        # 模块名标识。
+        self._file_path = (
+            getattr(context, 'module_file_path', "") or
+            getattr(context, 'module_name', '<unknown>')
+        )
 
     def bind_all(self, node: ast.IbASTNode):
         """Recursively bind location for all nodes."""

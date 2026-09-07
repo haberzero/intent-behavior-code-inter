@@ -36,10 +36,12 @@ class SemanticAnalyzer:
         issue_tracker: Any,
         registry: Optional[Any] = None,
         module_name: str = "<main>",
+        module_file_path: str = "",
     ):
         self.issue_tracker = issue_tracker
         self.registry = registry
         self.module_name = module_name
+        self.module_file_path = module_file_path
         # 类身份统一：所有模块（含入口）用户类 spec 均带 module 限定
         # （module_path=模块名）——入口与导入对称，跨模块同名类彻底隔离。
 
@@ -83,6 +85,7 @@ class SemanticAnalyzer:
             .with_ast(node)
             .with_registry(self.registry)
             .with_module_name(self.module_name)
+            .with_module_file_path(self.module_file_path)
             .build()
         )
 

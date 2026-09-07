@@ -28,6 +28,8 @@ class SemanticContext:
     module_name: str
     symbol_table: 'SymbolTableContext'
     type_environment: 'TypeInferenceState'
+    # 模块源文件路径（位置信息绑定与诊断渲染用；"<temp>" 载体编译为空）
+    module_file_path: str = ""
 
     # Accumulated bindings from prior phases (read-only for current phase)
     prior_symbol_bindings: Dict[Any, Any] = field(default_factory=dict)
@@ -56,6 +58,7 @@ class ContextBuilder:
         self.ast: Optional[ibci_ast.IbASTNode] = None
         self.registry: Optional[Any] = None
         self.module_name: str = "<unknown>"
+        self.module_file_path: str = ""
 
     def with_ast(self, ast: ibci_ast.IbASTNode) -> 'ContextBuilder':
         self.ast = ast
@@ -67,6 +70,10 @@ class ContextBuilder:
 
     def with_module_name(self, module_name: str) -> 'ContextBuilder':
         self.module_name = module_name
+        return self
+
+    def with_module_file_path(self, module_file_path: str) -> 'ContextBuilder':
+        self.module_file_path = module_file_path
         return self
 
     def build(self) -> SemanticContext:
@@ -103,6 +110,7 @@ class ContextBuilder:
             ast=self.ast,
             registry=self.registry,
             module_name=self.module_name,
+            module_file_path=self.module_file_path,
             symbol_table=symbol_table,
             type_environment=type_environment,
             flags={},

@@ -11,9 +11,33 @@ if project_root not in sys.path:
 
 from core.engine import IBCIEngine
 from core.project_detector import ProjectDetector
-from core.kernel.issue import CompilerError
+from core.kernel.issue import CompilerError, IBCBaseException, Diagnostic
+from core.base.diagnostics.codes import RUN_GENERIC_ERROR
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.lexer.lexer import Lexer
+
+
+def _render_runtime_error(engine: IBCIEngine, exc: IBCBaseException) -> str:
+    """运行期错误的结构化渲染（与编译错误同形态，DiagnosticFormatter 单一权威源）。
+
+    优先取 tracker 中最近一条同码诊断（VM 翻译点 / handler 主动上报已附
+    location[真实文件路径 + 行列] 与 context_line）；无则回落异常对象自身
+    （location 可能为 None，渲染器省略位置段）。
+    """
+    tracker = engine.scheduler.issue_tracker
+    diag = None
+    for d in reversed(tracker.diagnostics):
+        if d.code == exc.error_code:
+            diag = d
+            break
+    if diag is None:
+        diag = Diagnostic(
+            severity=exc.severity,
+            code=exc.error_code or RUN_GENERIC_ERROR,
+            message=exc.message,
+            location=exc.location,
+        )
+    return DiagnosticFormatter.format(diag, source_manager=engine.scheduler.source_manager)
 
 
 def main():
@@ -105,11 +129,22 @@ def main():
                     k, v = auto_var.split("=", 1)
                     cli_variables[k] = v
 
-        # 运行引擎
+        # 运行引擎（silent=True：CLI 为唯一渲染点，engine 层不重复打印）
         try:
-            engine.run(args.file, variables=cli_variables)
+            engine.run(args.file, variables=cli_variables, silent=True)
         except FileNotFoundError as e:
             print(f"Error: {e}")
+            sys.exit(1)
+        except CompilerError as e:
+            # 编译错误：与其余 CLI 命令同形态（DiagnosticFormatter 渲染）
+            print("\n--- Compilation Errors ---")
+            print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=engine.scheduler.source_manager))
+            tracker = engine.scheduler.issue_tracker
+            print(f"\nCompilation failed: {tracker.error_count} errors, {tracker.warning_count} warnings.")
+            sys.exit(1)
+        except IBCBaseException as e:
+            # 运行期错误：同编译错误形态（码 + 说明/修复 + --> file:line:col + 源行 + caret）
+            print(_render_runtime_error(engine, e))
             sys.exit(1)
         sys.exit(0)
 
@@ -164,8 +199,6 @@ def main():
 
     elif args.command in ("inspect", "semantic"):
         # 符号表 / 类型绑定诊断导出——json / dot
-        from core.kernel.issue import CompilerError
-        from core.compiler.diagnostics.formatter import DiagnosticFormatter
         from core.compiler.diagnostics.exporter import export_artifact
         try:
             artifact = engine.compile(args.file)
@@ -190,8 +223,6 @@ def main():
 
     elif args.command == "bench":
         # 编译时间基准：warmup + N 次计时，报告 min/avg/max。
-        from core.kernel.issue import CompilerError
-        from core.compiler.diagnostics.formatter import DiagnosticFormatter
         import statistics
         import time
 
