@@ -52,14 +52,6 @@ class IBCBaseException(Exception):
         
         return f"{prefix}{loc_str}: {self.message}"
 
-class LexerError(IBCBaseException):
-    def __init__(self, message: str, location: Optional[Location] = None):
-        super().__init__(message, location, severity=Severity.ERROR, error_code="LEXER_ERROR")
-
-class ParserError(IBCBaseException):
-    def __init__(self, message: str, location: Optional[Location] = None):
-        super().__init__(message, location, severity=Severity.ERROR, error_code="PARSER_ERROR")
-
 class InterpreterError(IBCBaseException):
     def __init__(self, message: str, location: Optional[Location] = None, error_code: Optional[str] = None):
         super().__init__(message, location, severity=Severity.ERROR, error_code=error_code or "RUN_GENERIC_ERROR")
@@ -78,10 +70,6 @@ class PluginError(IBCBaseException):
         if self.plugin_name:
             return base.replace("[PLUGIN_ERROR]", f"[PLUGIN_ERROR:{self.plugin_name}]")
         return base
-
-class SemanticError(IBCBaseException):
-    def __init__(self, message: str, location: Optional[Location] = None):
-        super().__init__(message, location, severity=Severity.ERROR, error_code="SEMANTIC_ERROR")
 
 class CompilerError(Exception):
     """

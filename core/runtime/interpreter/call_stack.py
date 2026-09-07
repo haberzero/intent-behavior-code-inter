@@ -53,7 +53,3 @@ class LogicalCallStack:
     @property
     def depth(self) -> int:
         return len(self.frames)
-
-    def get_backtrace(self) -> List[StackFrame]:
-        """返回当前调用栈的副本（从顶到底）"""
-        return list(reversed(self.frames))
