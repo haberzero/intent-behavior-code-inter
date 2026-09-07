@@ -5,6 +5,7 @@ from core.base.diagnostics.codes import (
     RUN_DIVISION_BY_ZERO,
     RUN_INDEX_ERROR,
     RUN_PERMISSION_ERROR,
+    RUN_TYPE_MISMATCH,
 )
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
@@ -15,12 +16,14 @@ from .base import IbObject, unbox
 
 
 def _runtime_error_code_for(exc: Exception) -> Optional[str]:
-    """原生函数边界异常 → 运行时诊断码（幽灵码发射：除零/越界/属性/权限）。
+    """原生函数边界异常 → 运行时诊断码（幽灵码发射：类型/除零/越界/属性/权限）。
 
-    原生 Python 异常（ZeroDivisionError / IndexError / KeyError /
+    原生 Python 异常（TypeError / ZeroDivisionError / IndexError / KeyError /
     AttributeError / PermissionError）经此映射为具体诊断码，替代裸
     ``RUN_GENERIC_ERROR``。无法归类的异常返回 None（回落默认 RUN_GENERIC_ERROR）。
     """
+    if isinstance(exc, TypeError):
+        return RUN_TYPE_MISMATCH
     if isinstance(exc, ZeroDivisionError):
         return RUN_DIVISION_BY_ZERO
     if isinstance(exc, (IndexError, KeyError)):

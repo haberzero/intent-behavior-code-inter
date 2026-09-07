@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 from ..kernel import IbObject, IbValue, IbClass
 from ..kernel.base import unbox
 from core.kernel.issue import InterpreterError
-from core.base.diagnostics.codes import RUN_INDEX_ERROR
+from core.base.diagnostics.codes import RUN_INDEX_ERROR, RUN_TYPE_MISMATCH
 from ..ib_type_mapping import register_ib_type
 
 
@@ -185,7 +185,7 @@ class IbList(IbValue):
     def __add__(self, other: IbObject) -> Any:
         """列表拼接。对齐 Python list + list"""
         if not isinstance(other, IbList):
-            raise InterpreterError(f"TypeError: can only concatenate list (not '{other.ib_class.name}') to list")
+            raise InterpreterError(f"TypeError: can only concatenate list (not '{other.ib_class.name}') to list", error_code=RUN_TYPE_MISMATCH)
         # 沿用自身 ib_class（特化类 list[int] 保留特化身份），使
         # ``list[int] a += [2]`` 结果仍为 list[int]（复合赋值
         # 值层身份保真；与切片 __getitem__ slice 分支同构）。
@@ -200,7 +200,7 @@ class IbList(IbValue):
         """列表重复: list * int"""
         n = unbox(other)
         if not isinstance(n, int):
-            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
+            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'", error_code=RUN_TYPE_MISMATCH)
         return IbList(
             [_wrap_element_value(self, e) for e in list(self.elements) * n],
             self.ib_class,

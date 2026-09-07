@@ -3,6 +3,7 @@ from ..kernel import IbObject, IbValue, IbClass
 from ..kernel.base import unbox
 from core.runtime.support.converters import _cast_string_to_native
 from core.kernel.issue import InterpreterError
+from core.base.diagnostics.codes import RUN_TYPE_MISMATCH
 from core.runtime.exceptions import ThrownException
 from ..ib_type_mapping import register_ib_type
 
@@ -139,19 +140,19 @@ class IbString(IbValue):
             )
             raise ThrownException(error)
         if other.ib_class.name != "str":
-             raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'")
+             raise InterpreterError(f"TypeError: Cannot concatenate 'str' and '{other.ib_class.name}'", error_code=RUN_TYPE_MISMATCH)
         return self.value + other.to_native()
 
     def __mul__(self, other: IbObject) -> Any:
         """字符串重复: str * int"""
         n = unbox(other)
         if not isinstance(n, int):
-            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'")
+            raise InterpreterError(f"TypeError: can't multiply sequence by non-int of type '{other.ib_class.name}'", error_code=RUN_TYPE_MISMATCH)
         return self.value * n
 
     def _require_str_other(self, op: str, other: IbObject) -> None:
         if other.ib_class.name != "str":
-            raise InterpreterError(f"TypeError: Cannot compare 'str' and '{other.ib_class.name}' with '{op}'")
+            raise InterpreterError(f"TypeError: Cannot compare 'str' and '{other.ib_class.name}' with '{op}'", error_code=RUN_TYPE_MISMATCH)
 
     def __lt__(self, other: IbObject) -> bool:
         self._require_str_other("<", other); return self.value < other.to_native()

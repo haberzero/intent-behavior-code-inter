@@ -28,6 +28,9 @@ from __future__ import annotations
 import inspect
 from typing import Any, Optional
 
+from core.base.diagnostics.codes import RUN_GENERIC_ERROR
+from core.base.source_atomic import Location, Severity
+from core.kernel.issue import IBCBaseException
 from core.runtime.vm.task import (
     VMTask,
     ControlSignal,
@@ -263,7 +266,11 @@ class VMExecutor:
                     pending_exception = use
                     continue
                 except Exception as e:
-                    # 其他运行时异常：弹栈并向上传递
+                    # 其他运行时异常：弹栈并向上传递。
+                    # 首次捕获点补位：内层帧 = 出错现场（值层异常只知道值
+                    # 不知道 AST 节点，位置由本帧 node_uid 经 node_to_loc 侧表
+                    # 附着；同一异常对象后续沿栈传递时不再改）。
+                    self._annotate_exception_location(e, task)
                     stack.pop()
                     pending_exception = e
                     continue
@@ -332,6 +339,48 @@ class VMExecutor:
             return pending_value if pending_value is not None else self.registry.get_none()
         finally:
             self._current_stack = prev_stack
+
+    # ------------------------------------------------------------------
+    # 内部：异常位置补位（运行期错误定位链的单一权威源）
+    # ------------------------------------------------------------------
+
+    def _annotate_exception_location(self, exc: BaseException, task: VMTask) -> None:
+        """运行期异常位置补位（CPS 首次捕获点）。
+
+        值层异常（如 IbStr 比较类型不匹配）抛出时只知道值、不知道 AST 节点——
+        location 由本处附着：内层帧（被弹栈的 task）的 node_uid 即出错现场，
+        经 node_to_loc 侧表查位置。同一异常对象经 gen.throw 沿栈上传时
+        location 已非 None，不再重复补位/上报（外层帧若重新抛出**新**异常，
+        则按新现场补位——语义正确：再抛点 = 新错误位置）。
+
+        不触碰：ThrownException（用户语言级异常值，非 IBCBaseException，
+        isinstance 天然排除）、环境限制异常（原生 BaseException 子类，同上）。
+        诊断码权威源 = throw 点（值层/幽灵码），本处只补位置并按既有码上报
+        （与 Interpreter._report_error 同协议），不猜码。
+        """
+        if not isinstance(exc, IBCBaseException) or exc.location is not None:
+            return
+        node_uid = task.node_uid
+        if not node_uid:
+            return
+        loc_data = self._ec.get_side_table("node_to_loc", node_uid)
+        if not loc_data:
+            return
+        exc.location = Location(
+            file_path=loc_data.get("file_path"),
+            line=loc_data.get("line", 0),
+            column=loc_data.get("column", 0),
+            end_line=loc_data.get("end_line"),
+            end_column=loc_data.get("end_column"),
+        )
+        interpreter = self._interpreter
+        if interpreter is not None and getattr(interpreter, "issue_tracker", None) is not None:
+            interpreter.issue_tracker.report(
+                severity=exc.severity,
+                code=exc.error_code or RUN_GENERIC_ERROR,
+                message=exc.message,
+                location=exc.location,
+            )
 
     # ------------------------------------------------------------------
     # 内部：任务构造
