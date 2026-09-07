@@ -116,16 +116,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > + `git log --oneline -30`（近期提交与工作动线）。
 
 - **🔴 当前主线 = P0 三线推进（2026-09-07，free-explore 分支）**：**线 1 · 诊断面打包
-  已完成**（批次 0-5：SEM-1 编译期运算符类型检查 + B1 错误定位链（编译侧 0:0→实际行列、
-  node_to_loc file_path 真实化、VM 首次捕获点位置补位、值层/幽灵码补 RUN_TYPE_MISMATCH、
-  CLI 结构化渲染）+ LLMParseError 渲染修复（`__to_prompt__` + cast_to fail-fast）+
-  P2 解析位置归位（跨行续行态归位构造起点）；全量 3289/1 零回归；落账
-  INDEX/WORKLOG/判别测试 +70；设计文档 `tasks_docs/_diagnostic_design.md` 待治理收敛进
-  `docs/`）。**当前阶段 = 线 2 · PT-FEAT-16 四批**（批① 契约包 + provider + 配置，底本
-  ibci-trial K1-K3 33/33 + 3 处合入处理项；批② vector 值类型 = 公理层全量评估门；批③
-  ai.embed + MOCK:VEC + 检索最小闭包；批④ SiliconFlow 真实试用）；线 3（N2 已验证知识
-  注册表，K1-K9 已定案）按序候位。详见 `tasks_docs/NEXT_STEPS.md` +
-  `tasks_docs/_trial_intake_analysis.md` §四 + `tasks_docs/_embedding_design.md` +
+  已完成**（SEM-1 编译期运算符类型检查 + B1 错误定位链 + LLMParseError 渲染修复 +
+  P2 解析位置归位；判别测试 +70）；**线 2 · PT-FEAT-16 词嵌入一等能力四批已完成**
+  （① 契约包 `core.base.embedding_protocol` + EMB_ 码域；② `vector` 一等值类型
+  （公理层全链路：值语义/方法面/序列化/克隆/`vec()` 静态返回 vector）；③ `ai` 模块面
+  （embed 动态重载/retrieve 检索/api_config `kind: "embedding"`/MOCK:VEC）；④ T16
+  真实试用 8/8（SiliconFlow dim=1024）；判别/回归测试 +87）。全量 3376/1 零回归。
+  **当前阶段 = 线 3 · N2 已验证知识注册表实施**（K1-K9 已定案：类型 `knowledge` /
+  方法面 store 族 / 一等内置值类型 / 诊断域 `KNW_`；不以 ai 为载体、`@~...~` 保持
+  纯 LLM 语义；设计文档 `tasks_docs/_knowledge_registry_design.md`，实施就绪）。
+  详见 `tasks_docs/NEXT_STEPS.md` + `tasks_docs/_embedding_design.md` §九/§9.6/§9.7 +
   `tasks_docs/_knowledge_registry_design.md`。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +

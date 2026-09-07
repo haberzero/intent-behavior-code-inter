@@ -27,23 +27,18 @@
 
 ## 🔴 当前状态
 
-**P0 主线推进中：线 1 完成，线 2 开工**。线 1 · 诊断面打包（错误定位链）全链路落地
-（2026-09-07，批次 0-5 独立 commit + 全量零回归）：SEM-1 三形态转编译期
-`SEM_TYPE_MISMATCH` @ ibci 源行列（公理层比较分支条件化 + visit_IbCompare 逐对检查 +
-BinOp 兜底收紧，防误报矩阵实测对齐运行期行为）；B1 错误定位链（语义诊断 0:0→实际行列、
-node_to_loc file_path 真实化、VM 首次捕获点位置补位、值层/幽灵码补
-`RUN_TYPE_MISMATCH`、CLI 结构化渲染——运行错误与编译错误同形态：码+说明/修复+源行+
-caret，Python traceback 不再直漏）；LLMParseError 渲染修复（`str(e)` =
-`<类型名>: <message>`，cast_to 静默回落 fail-fast）；P2 解析位置归位（跨行续行态错误
-归位到最内层未闭合构造起点，同行维持卡住点）。落账：INDEX（SEM-1 转已修复 + SEM-2
-`in` 运算符挂起 + EOF 局限登记）/ WORKLOG / 判别测试 +70。
-**下一阶段 = 线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定，批① 解锁）：
-① 契约包 `core.base.embedding_protocol` + provider + 配置（底本 = ibci-trial
-K1-K3 参考实现 33/33，3 处合入处理项）→ ② `vector` 值类型（**公理层**，值语义 C5
-判别，全量 pytest 评估）→ ③ `ai.embed` 模块面 + MOCK:VEC + 检索最小闭包 → ④ SiliconFlow
-真实试用。详见 `tasks_docs/_trial_intake_analysis.md` §四 + `tasks_docs/_embedding_design.md`。
-**线 3（N2 已验证知识注册表，K1-K9 已定案实施就绪）按序候位**（设计文档
-`tasks_docs/_knowledge_registry_design.md`；批② 验证门 SEM 消费 P0-1 诊断面）。
+**P0 主线推进中：线 2 完成，线 3 开工**。线 1 · 诊断面打包完成（2026-09-07，批次 0-5）；
+**线 2 · PT-FEAT-16 词嵌入一等能力四批全部完成（2026-09-07）**：① 契约包
+`core.base.embedding_protocol`（K1-K3 平移 + EMB_ 码域 6 码）→ ② `vector` 一等值类型
+（公理层：固定维度不可变/值语义/方法面/序列化/克隆全链路；`vec()` 静态返回类型 =
+vector 实测）→ ③ `ai` 模块面（embed 动态重载 / retrieve 检索最小闭包 / api_config
+`kind: "embedding"` 路由 / MOCK:VEC mock / 内省；unbox_args 机制泛化 + 幽灵码原码
+透传）→ ④ SiliconFlow 真实试用（T16 套件 8/8：mock 6 + 真实 2，dim=1024）。全量
+pytest 3376/1 零回归（+87 判别/回归）。
+**下一阶段 = 线 3 · N2 已验证知识注册表实施**（K1-K9 已定案：类型 `knowledge` /
+方法面 store 族 / 一等内置值类型[公理层] / 诊断域 `KNW_`；不以 ai 为载体、
+`@~...~` 保持纯 LLM 语义无隐式路由；设计文档 `tasks_docs/_knowledge_registry_design.md`，
+实施就绪；批② 验证门 SEM 消费 P0-1 诊断面已就位）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
@@ -52,12 +47,8 @@ K1-K3 参考实现 33/33，3 处合入处理项）→ ② `vector` 值类型（*
 
 1. **主线（2026-09-06 用户裁定：全部建议认可）= P0 三线，同一时刻只推一线**：
    ~~线 1 · 诊断面打包~~ **已完成（2026-09-07，git 承载）** →
-   **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定：
-   协议层独立 `embedding_protocol` 包 + 用户面并入 `ai`；批次 ① 契约包/provider/配置 →
-   ② `vector` 值类型（公理层，全量 pytest 评估）→ ③ `ai` 模块面 + MOCK:VEC + 检索最小
-   闭包 → ④ SiliconFlow 真实试用；参考实现 = ibci-trial/kernel_overlay K1-K3 33/33
-   （批①③底本，3 处合入处理项）+ 批② pre-study 检查单，详见
-   `tasks_docs/_trial_intake_analysis.md` §四 + `tasks_docs/_embedding_design.md`）→
+   ~~线 2 · PT-FEAT-16 四批~~ **已完成（2026-09-07，git 承载：① 契约包 ② vector 值类型
+   ③ ai 模块面 ④ T16 真实试用 8/8）** →
    **线 3 · N2 已验证知识注册表实施**（2026-09-07 用户裁定重新定位：不以 ai 为
    载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；
    设计文档 `tasks_docs/_knowledge_registry_design.md` 已产出，**K1-K9 已按推荐确认定案（2026-09-07 用户），实施就绪**）。

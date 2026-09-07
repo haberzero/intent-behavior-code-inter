@@ -830,6 +830,26 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   （EOF 卡住点不归位，KNOWN_LIMIT-PARSE-EOF）。全量 pytest 3289 passed / 1 skipped
   零回归（3219 基线 + 70 判别/回归测试）；验收基线（设计文档 §五）逐项达成。
   **P0 主线前移线 2（PT-FEAT-16 四批）**。
+- **P0-2 词嵌入一等能力（PT-FEAT-16 四批）完成（2026-09-07，free-explore）**：P0 三线之
+  线 2 全链路落地（每批独立 commit + 全量零回归；设计文档 `tasks_docs/_embedding_design.md`
+  §九/§9.6/§9.7 定案 + 交叉核验裁定）：① **契约包** `core.base.embedding_protocol`
+  （K1-K3 参考实现平移 + 3 处合入处理：零范数兜底改 fail-fast / mock 派生键文档对齐 /
+  测试 runner→pytest 33 项；机制同构基准 = llm_protocol 五层）+ `EMB_` 诊断码域
+  （6 码，provider 层异常携带 code——失败语义 → 码单点权威源）；② **vector 一等值类型**
+  （公理层：固定维度不可变/值语义/NaN 构造封死/to_native 显式违约[类型身份红线——
+  与 int/str 原语同纪律的不可变引用复用克隆]；方法面 dim/dot/norm/cosine/scale/add/sub
+  + `==`/`!=` 经 get_operators 自动绑定 + `__to_prompt__` 截断摘要；序列化 2 分支 +
+  deep_clone 不可变分支；`vec()` 内置函数——**实测静态返回类型 = vector**
+  [register_function 元数据经 resolve_call_return 生效，推翻"builtin 无静态签名"初判]）；
+  ③ **ai 模块面**（EmbeddingService 组合接线：embed 动态重载 str→vector / list→list[vector]、
+  retrieve 检索最小闭包、api_config `kind: "embedding"` 条目路由[default_model 引用 embedding
+  拒绝]、MOCK:VEC mock 面、内省面；**unbox_args 机制泛化**——MethodMemberSpec 声明面，
+  值身份敏感方法（retrieve）参数保留 IbObject 原形，非 vector 特判；**幽灵码原码透传**
+  ——_runtime_error_code_for 首查异常 code 属性，显式码优先于类型猜测）；④ **真实试用**
+  （T16 套件 8/8：mock 6 + SiliconFlow 真实 2，dim=1024 探针、自参考相似度 1.0、top-k
+  召回；断言纪律 = mock 确定性 + 真实面相对测量）。全量 pytest 3376 passed / 1 skipped
+  零回归（3289 → 3376 = +87 判别/回归测试）。**P0 主线前移线 3（N2 已验证知识注册表，
+  K1-K9 已定案实施就绪）**。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
