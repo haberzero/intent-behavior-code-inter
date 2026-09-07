@@ -81,6 +81,9 @@ class MockServer:
         self.stats = MockServerStats()
         handler = _make_handler(self._engine, self.stats)
         self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        # handler 线程 daemon 化：keep-alive 客户端连接（httpx 连接池）在
+        # 服务停止后可能仍阻塞于读——非 daemon handler 线程会阻塞进程退出。
+        self._httpd.daemon_threads = True
         self._port = int(self._httpd.server_address[1])
         self._thread: Optional[threading.Thread] = None
 

@@ -273,6 +273,9 @@ class ExpressionComponent(BaseComponent):
                 elts.append(self.parse_expression(IbPrecedence.TUPLE))
                 if not self.stream.match(TokenType.COMMA):
                     break
+                # 尾逗号接受（多行容器字面量惯例——A3）
+                if self.stream.check(TokenType.RBRACKET):
+                    break
         end_token = self.stream.consume(TokenType.RBRACKET, "Expect ']' after list elements.")
         return self._loc(ast.IbListExpr(elts=elts, ctx='Load'), start_token, end_token)
 
@@ -286,6 +289,9 @@ class ExpressionComponent(BaseComponent):
                 self.stream.consume(TokenType.COLON, "Expect ':' after dict key.")
                 values.append(self.parse_expression(IbPrecedence.TUPLE))
                 if not self.stream.match(TokenType.COMMA):
+                    break
+                # 尾逗号接受（多行容器字面量惯例——A3）
+                if self.stream.check(TokenType.RBRACE):
                     break
         end_token = self.stream.consume(TokenType.RBRACE, "Expect '}' after dict entries.")
         return self._loc(ast.IbDict(keys=keys, values=values), start_token, end_token)
