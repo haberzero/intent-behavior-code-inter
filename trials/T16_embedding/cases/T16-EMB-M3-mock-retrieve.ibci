@@ -1,0 +1,16 @@
+# T16-EMB-M3 ai.retrieve mock 检索（top-k 命中数 + 自参考相似度 1.0）
+# doc: tasks_docs/_embedding_design.md §九
+# expect-class: PASS
+# expect-out: self_sim_ok=True | hits=2 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_embedding_mock(True)
+list[vector] vs = ai.embed(["苹果", "修炼", "老师"])
+vector q = ai.embed("苹果")
+float self_sim = q.cosine(vs[0])
+bool ok = (1.0 - self_sim) < 0.001
+list hits = ai.retrieve(q, vs, 2)
+print("self_sim_ok=" + (str)ok)
+print("hits=" + (str)len(hits))
+print("DONE")

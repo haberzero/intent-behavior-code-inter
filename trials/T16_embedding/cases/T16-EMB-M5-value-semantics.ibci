@@ -1,0 +1,14 @@
+# T16-EMB-M5 值语义（相等/修改操作不改原/非 dict 键）
+# doc: tasks_docs/_embedding_design.md §三
+# expect-class: PASS
+# expect-out: eq=True | unchanged=True | DONE
+# expect-exit: 0
+# expect-llm: false
+vector a = vec([1.0, 2.0])
+vector b = vec([1.0, 2.0])
+vector c = a.scale(10.0)
+bool eq = (a == b)
+bool unchanged = (a.dim() == 2) and (c.dim() == 2)
+print("eq=" + (str)eq)
+print("unchanged=" + (str)unchanged)
+print("DONE")

@@ -1,0 +1,16 @@
+# T16-EMB-M4 vector 方法面 + 返回类型锁定（scale/add/sub → vector 非漂移）
+# doc: tasks_docs/_embedding_design.md §三
+# expect-class: PASS
+# expect-out: dim=3 | scale_type=vector | dot_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
+vector v = vec([1.0, 2.0, 3.0])
+vector w = vec([4.0, 5.0, 6.0])
+vector s = v.scale(2.0)
+vector a = v.add(w)
+float dot = v.dot(w)
+bool dot_ok = dot > 30.0
+print("dim=" + (str)a.dim())
+print("scale_type=" + (str)type(s))
+print("dot_ok=" + (str)dot_ok)
+print("DONE")

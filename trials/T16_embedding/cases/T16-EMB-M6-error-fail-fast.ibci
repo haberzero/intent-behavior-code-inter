@@ -1,0 +1,10 @@
+# T16-EMB-M6 错误面 fail-fast（dim 失配可定位——EMB_DIMENSION_MISMATCH）
+# doc: tasks_docs/_embedding_design.md §九
+# expect-class: FAIL
+# expect-code: EMB_DIMENSION_MISMATCH
+# expect-exit: 1
+# expect-llm: false
+vector v = vec([1.0, 2.0])
+vector w = vec([1.0, 2.0, 3.0])
+float bad = v.dot(w)
+print("unreachable")

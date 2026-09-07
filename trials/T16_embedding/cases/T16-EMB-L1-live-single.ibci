@@ -1,0 +1,16 @@
+# T16-EMB-L1 真实单文本 embed（SiliconFlow embedding 端点；断言语义性质
+# 不断言具体向量值——相对测量纪律）
+# doc: tasks_docs/_embedding_design.md §九
+# expect-class: PASS
+# expect-out: dim_ok=True | norm_ok=True | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+ai.set_embedding_model("emb-qwen")
+vector v = ai.embed("词嵌入是一等数学对象")
+bool dim_ok = v.dim() > 256
+bool norm_ok = v.norm() > 0.0
+print("dim_ok=" + (str)dim_ok)
+print("norm_ok=" + (str)norm_ok)
+print("DONE")

@@ -1,0 +1,14 @@
+# T16-EMB-M1 ai.embed mock 单文本 → vector（维度/范数/摘要）
+# doc: tasks_docs/_embedding_design.md §九
+# expect-class: PASS
+# expect-out: dim=128 | norm_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_embedding_mock(True)
+vector v = ai.embed("hello")
+int d = v.dim()
+bool ok = v.norm() > 0.0
+print("dim=" + (str)d)
+print("norm_ok=" + (str)ok)
+print("DONE")

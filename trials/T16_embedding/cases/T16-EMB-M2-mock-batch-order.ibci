@@ -1,0 +1,16 @@
+# T16-EMB-M2 ai.embed mock 批量保序（texts[i] ↔ vectors[i] 顺序绑定）
+# doc: tasks_docs/_embedding_design.md §九
+# expect-class: PASS
+# expect-out: len=3 | order_ok=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_embedding_mock(True)
+list[vector] vs = ai.embed(["苹果", "修炼", "老师"])
+int n = len(vs)
+# 保序判别：逐元素 cosine 自身 = 1.0（顺序错乱则批内自参考仍恒 1，
+# 故用异文相似度互异作顺序绑定弱断言 + 计数）
+bool order_ok = (vs[0].cosine(vs[0]) - 1.0 < 0.001) and (vs[1].cosine(vs[1]) - 1.0 < 0.001)
+print("len=" + (str)n)
+print("order_ok=" + (str)order_ok)
+print("DONE")

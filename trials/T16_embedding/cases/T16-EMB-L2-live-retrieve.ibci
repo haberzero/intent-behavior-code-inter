@@ -1,0 +1,17 @@
+# T16-EMB-L2 真实语料召回（自参考 top-1——语料级候选召回语义性质断言）
+# doc: tasks_docs/_embedding_design.md §九
+# expect-class: PASS
+# expect-out: top1_sim_ok=True | hits=3 | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+ai.load_project_config()
+ai.set_embedding_model("emb-qwen")
+list[vector] vs = ai.embed(["苹果是一种水果", "修炼需要坚持", "老师站在讲台上", "语义相似度召回候选"])
+vector q = ai.embed("苹果是一种水果")
+float top1 = q.cosine(vs[0])
+bool ok = top1 > 0.99
+list hits = ai.retrieve(q, vs, 3)
+print("top1_sim_ok=" + (str)ok)
+print("hits=" + (str)len(hits))
+print("DONE")
