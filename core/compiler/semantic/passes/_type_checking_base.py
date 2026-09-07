@@ -100,14 +100,16 @@ class TypeCheckBase:
         return self._any_desc
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED, hint: str = None):
-        """记录错误诊断"""
+        """记录错误诊断（位置取节点解析期附着的 loc，单一权威源）"""
         full_message = message
         if hint:
             full_message = f"{message}\nHint: {hint}"
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.ERROR,
             message=full_message,
-            code=code
+            code=code,
+            line=node.lineno or None,
+            column=node.col_offset or None,
         ))
 
     def bind_type(self, node: ast.IbASTNode, type_spec: IbSpec):
@@ -294,14 +296,16 @@ class TypeCheckBase:
         return self.registry.is_assignable(source, target)
 
     def warn(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED, hint: str = None):
-        """记录警告诊断"""
+        """记录警告诊断（位置取节点解析期附着的 loc，单一权威源）"""
         full_message = message
         if hint:
             full_message = f"{message}\nHint: {hint}"
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.WARNING,
             message=full_message,
-            code=code
+            code=code,
+            line=node.lineno or None,
+            column=node.col_offset or None,
         ))
 
     def _resolve_type(self, annotation: ast.IbASTNode) -> Optional[IbSpec]:

@@ -607,11 +607,13 @@ class IntentContextValidator:
         self.intent_annotations: Dict[Any, Any] = {}
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
-        """记录错误诊断"""
+        """记录错误诊断（位置取节点解析期附着的 loc，单一权威源）"""
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.ERROR,
             message=message,
-            code=code
+            code=code,
+            line=node.lineno or None,
+            column=node.col_offset or None,
         ))
 
     def validate(self):

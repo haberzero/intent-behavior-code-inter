@@ -97,17 +97,21 @@ class ScopedVisitor:
     # ---- Diagnostic helpers ----
 
     def error(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
-        """Record an error diagnostic."""
+        """Record an error diagnostic (位置取节点解析期附着的 loc)."""
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.ERROR,
             message=message,
-            code=code
+            code=code,
+            line=node.lineno or None,
+            column=node.col_offset or None,
         ))
 
     def warning(self, message: str, node: ast.IbASTNode, code: str = SEM_UNCATEGORIZED):
-        """Record a warning diagnostic."""
+        """Record a warning diagnostic (位置取节点解析期附着的 loc)."""
         self.diagnostics.append(Diagnostic(
             level=DiagnosticLevel.WARNING,
             message=message,
-            code=code
+            code=code,
+            line=node.lineno or None,
+            column=node.col_offset or None,
         ))
