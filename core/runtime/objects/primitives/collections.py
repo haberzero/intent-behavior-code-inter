@@ -320,6 +320,12 @@ class IbDict(IbValue):
         native_keys = list(self.fields.keys())
         return self.ib_class.registry.box(native_keys)
 
+    def to_list(self) -> IbObject:
+        """迭代协议面（resolve_iterable 的 to_list 分支）：dict 迭代 =
+        键序列（for k in d——与 Python dict 迭代约定同形；值/对迭代走
+        values()/items() 显式方法）。"""
+        return self.keys()
+
     def values(self) -> IbObject:
         return self.ib_class.registry.box(list(self.fields.values()))
 

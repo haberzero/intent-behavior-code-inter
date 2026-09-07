@@ -559,6 +559,8 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
     _reg_native(dict_class, '__to_prompt__', lambda self: "{" + ", ".join(f'"{k}": {v.receive("__to_prompt__", []).to_native()}' for k, v in self.fields.items()) + "}")
     _reg_native(dict_class, 'to_bool', lambda self: len(self.fields) > 0)
     _reg_native(dict_class, 'len', lambda self: self.len())
+    # dict 迭代协议面（for k in d——键序列；值/对迭代走 values()/items()）
+    _reg_native(dict_class, 'to_list', lambda self: self.to_list())
 
     # dict.__contains__: 用于 'in' 运算符（右侧为 dict 时）
     def _dict_contains(self, key):
