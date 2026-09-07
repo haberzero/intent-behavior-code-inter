@@ -20,10 +20,14 @@ def create_proxy(
     reg: Any,
     param_meta: Optional[list],
     has_declared_varkw: bool = False,
+    unbox_args: bool = True,
 ) -> Tuple[Callable, Optional[list]]:
     """构造 (proxy_wrapper, param_meta)：把 Python callable 包装为 IBCI 成员代理。
 
-    - unbox：IbObject → native（可调用实例原样透传）。
+    - unbox：IbObject → native（可调用实例原样透传）。``unbox_args=False``
+      时参数保留 IbObject 原形（值身份敏感的方法——如以不可拆箱值类型
+      （vector）为参数的检索面）；返回面始终经 ``reg.box`` 回装箱
+      （IbObject 原样透传）。
     - 绑定器把 ``**kwargs`` 归集的 dict 装箱为声明序末位的位置实参；声明了
       VAR_KEYWORD 时把它分传为 ``**kwargs`` 交给原生实现。
     - 调用原生函数后把结果 ``reg.box`` 回装箱。
@@ -40,8 +44,12 @@ def create_proxy(
         else:
             positional, varkw_arg = args, None
 
-        native_args = [_unbox(a) for a in positional]
-        native_kwargs = {k: _unbox(v) for k, v in kwargs.items()}
+        if unbox_args:
+            native_args = [_unbox(a) for a in positional]
+            native_kwargs = {k: _unbox(v) for k, v in kwargs.items()}
+        else:
+            native_args = list(positional)
+            native_kwargs = dict(kwargs)
         if varkw_arg is not None:
             varkw_fields = getattr(varkw_arg, "fields", None)
             if isinstance(varkw_fields, dict):

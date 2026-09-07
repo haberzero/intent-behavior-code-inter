@@ -30,6 +30,7 @@ from core.runtime.objects.kernel.base import unbox
 
 from ibci_modules.ibci_ai.config_loader import ApiConfig
 from ibci_modules.ibci_ai.config_source_adapter import ProjectApiConfigAdapter
+from ibci_modules.ibci_ai.embedding_impl import EmbeddingService
 from ibci_modules.ibci_ai.provider_impl import RecommendedProvider
 
 
@@ -51,6 +52,20 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
     def __init__(self):
         super().__init__()
         self._capabilities: Optional[ExtensionCapabilities] = None
+        # embedding 服务面（组合——批 ① 契约包推荐实现 + 配置/mock/检索胶水；
+        # 与 LLM 面同模块单入口（ai = 模型 I/O 面），配置单源 = api_config）
+        self._embedding: Optional[EmbeddingService] = None
+
+    def _require_embedding(self) -> EmbeddingService:
+        """解析 embedding 服务面（setup 后惰性构造；fail-fast）。"""
+        if self._embedding is None:
+            if self._capabilities is None or self._capabilities.kernel_registry is None:
+                raise InterpreterError(
+                    "embedding 服务面不可用（ai 模块未 setup）",
+                    None,
+                )
+            self._embedding = EmbeddingService(self._capabilities.kernel_registry)
+        return self._embedding
 
     # ------------------------------------------------------------------ #
     # IbStatefulPlugin 断点状态（状态本体在推荐 provider 侧，此处显式确认契约）
@@ -261,6 +276,64 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
                     seen.add(i)
             return res
         return []
+
+    # ------------------------------------------------------------------ #
+    # embedding 服务面（用户 API；委托 EmbeddingService——批 ① 契约包）
+    # ------------------------------------------------------------------ #
+
+    def apply_config(self, config, mock: bool = False) -> None:
+        """应用逻辑配置（LLM 面 + embedding 面——embedding_models 条目落地）。
+
+        embedding 面仅在有 embedding 条目且模块已 setup（能力上下文可用）
+        时应用——直构场景（未 setup）与无 embedding 条目零副作用。
+        """
+        super().apply_config(config, mock=mock)
+        if (
+            self._capabilities is not None
+            and hasattr(config, "embedding_models")
+            and config.embedding_models
+        ):
+            self._require_embedding().apply_config(config)
+
+    def embed(self, texts: Any, model: Any = None, dimensions: Any = None) -> Any:
+        """embedding 调用：str → vector（单文本）/ list[str] → list[vector]。"""
+        svc = self._require_embedding()
+        return svc.embed(
+            texts,
+            model=model.to_native() if hasattr(model, "to_native") else model,
+            dimensions=dimensions.to_native() if hasattr(dimensions, "to_native") else dimensions,
+        )
+
+    def set_embedding_config(self, url: str, key: str, model: str, timeout: float = 30.0) -> None:
+        """显式配置 embedding 连接（对称 LLM set_config）。"""
+        self._require_embedding().set_config(url, key, model, timeout=timeout)
+
+    def register_embedding_model(
+        self, name: str, url: str, key: str, model: str, timeout: float = 30.0
+    ) -> None:
+        """注册命名 embedding 模型（与 LLM register_model 同型）。"""
+        self._require_embedding().register_model(name, url, key, model, timeout=timeout)
+
+    def set_embedding_model(self, name: str) -> None:
+        """选择当前激活的命名 embedding 模型。"""
+        self._require_embedding().set_model(name)
+
+    def set_embedding_mock(self, enable: bool = True, dim: int = 128, seed: int = 0) -> None:
+        """显式进入/退出 embedding MOCK 模式（MOCK:VEC 确定性向量）。"""
+        self._require_embedding().set_mock_mode(enable, dim=dim, seed=seed)
+
+    def retrieve(self, query: Any, corpus: Any, k: Any) -> List[Any]:
+        """线性 top-k 检索：vector × list[vector] → list[dict]（index/score）。"""
+        k_native = k.to_native() if hasattr(k, "to_native") else k
+        return self._require_embedding().retrieve(query, corpus, k_native)
+
+    def get_embedding_call_info(self) -> Dict[str, Any]:
+        """最近一次 embedding 调用的诊断信息（内省/观测面）。"""
+        return self._require_embedding().get_call_info()
+
+    def probe_embedding(self) -> str:
+        """探测 embedding 服务/模型能力（含实际维度）。"""
+        return self._require_embedding().probe()
 
 
 def create_implementation():

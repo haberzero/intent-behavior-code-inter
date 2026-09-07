@@ -154,6 +154,55 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
             ], return_type=TypeRef.of("void"), param_descriptors=[
                 ParamDescriptor(name="provider", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"))
             ]),
+        # embedding 服务面（词嵌入一等能力；配置单源 = api_config kind: "embedding"）
+        "embed": MethodMemberSpec(name="embed", kind="method", type_ref=TypeRef.of("any"), param_types=[
+                TypeRef.of("any")
+            ], return_type=TypeRef.of("any"), param_descriptors=[
+                ParamDescriptor(name="texts", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
+                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="dimensions", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None)
+            ]),
+        "set_embedding_config": MethodMemberSpec(name="set_embedding_config", kind="method", type_ref=TypeRef.of("void"), param_types=[
+                TypeRef.of("str"),
+                TypeRef.of("str"),
+                TypeRef.of("str")
+            ], return_type=TypeRef.of("void"), param_descriptors=[
+                ParamDescriptor(name="url", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="key", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+        "register_embedding_model": MethodMemberSpec(name="register_embedding_model", kind="method", type_ref=TypeRef.of("void"), param_types=[
+                TypeRef.of("str"),
+                TypeRef.of("str"),
+                TypeRef.of("str"),
+                TypeRef.of("str")
+            ], return_type=TypeRef.of("void"), param_descriptors=[
+                ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="url", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="key", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+        "set_embedding_model": MethodMemberSpec(name="set_embedding_model", kind="method", type_ref=TypeRef.of("void"), param_types=[
+                TypeRef.of("str")
+            ], return_type=TypeRef.of("void"), param_descriptors=[
+                ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+        "set_embedding_mock": MethodMemberSpec(name="set_embedding_mock", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void"), param_descriptors=[
+            ParamDescriptor(name="enable", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("bool"), has_default=True, default_value=True),
+            ParamDescriptor(name="dim", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"), has_default=True, default_value=128),
+            ParamDescriptor(name="seed", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"), has_default=True, default_value=0)
+        ]),
+        "retrieve": MethodMemberSpec(name="retrieve", kind="method", type_ref=TypeRef.of("list"), param_types=[
+                TypeRef.of("vector"),
+                TypeRef.of("list"),
+                TypeRef.of("int")
+            ], return_type=TypeRef.of("list"), param_descriptors=[
+                ParamDescriptor(name="query", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("vector")),
+                ParamDescriptor(name="corpus", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("list")),
+                ParamDescriptor(name="k", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"))
+            ], unbox_args=False),
+        "get_embedding_call_info": MethodMemberSpec(name="get_embedding_call_info", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
+        "probe_embedding": MethodMemberSpec(name="probe_embedding", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),
     })
 
 

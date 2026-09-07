@@ -22,6 +22,11 @@ def _runtime_error_code_for(exc: Exception) -> Optional[str]:
     AttributeError / PermissionError）经此映射为具体诊断码，替代裸
     ``RUN_GENERIC_ERROR``。无法归类的异常返回 None（回落默认 RUN_GENERIC_ERROR）。
     """
+    # 显式携带诊断码的异常（code 属性 = 失败语义单点权威源，如 embedding
+    # 契约/检索异常携带 EMB_ 域码）原码透传——显式码优先于类型猜测
+    code = getattr(exc, "code", None)
+    if isinstance(code, str):
+        return code
     if isinstance(exc, TypeError):
         return RUN_TYPE_MISMATCH
     if isinstance(exc, ZeroDivisionError):

@@ -57,10 +57,15 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
         return "on" if v is True else ("off" if v is False else "auto")
 
     models: Dict[str, ModelSpec] = {}
+    embedding_models: Dict[str, ModelSpec] = {}
     for name, m in (validated.get("models", {}) or {}).items():
         if isinstance(m, str):
             m = {"model": m}
-        models[name] = ModelSpec(
+        # kind 判别（单一路由点）：embedding 条目入 embedding_models，
+        # 缺省/显式 chat 入 models（向后兼容）
+        kind = m.get("kind", "chat")
+        target = embedding_models if kind == "embedding" else models
+        target[name] = ModelSpec(
             provider="openai",
             model_id=m.get("model", name),
             endpoint=m.get("base_url"),
@@ -81,6 +86,7 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
             max_tokens=dm.get("max_tokens"),
         ),
         models=models,
+        embedding_models=embedding_models,
         defaults=CallDefaults(
             retry=default_retry,
             timeout=default_timeout,

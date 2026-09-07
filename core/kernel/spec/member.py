@@ -64,6 +64,10 @@ class MethodMemberSpec(MemberSpec):
 
     ``llmexcept_safe`` marks methods that are sanctioned for use inside
     llmexcept handler bodies (e.g. ai.set_retry_hint, print).
+
+    ``unbox_args`` 控制原生代理参数面（True = 调用边界拆箱 IbObject →
+    native，缺省行为；False = 参数保留 IbObject 原形——值身份敏感的方法，
+    如以不可拆箱值类型（vector）为参数的检索面）。
     """
 
     kind: str = "method"
@@ -71,6 +75,7 @@ class MethodMemberSpec(MemberSpec):
     return_type: TypeRef = field(default_factory=lambda: _VOID_REF)
     mutating: bool = False
     llmexcept_safe: bool = False
+    unbox_args: bool = True
     # 参数描述符（与 TypeDef.param_descriptors 对齐）。供方法覆写契约校验
     # 判断"子类多出的参数是否带默认值 / 是否为 varargs"。
     param_descriptors: List[ParamDescriptor] = field(default_factory=list)

@@ -65,6 +65,9 @@ class LLMConnectionConfig:
     default_model: ModelSpec
     #: 命名模型注册表（@NAME~ 路由）。
     models: Dict[str, ModelSpec] = field(default_factory=dict)
+    #: embedding 命名模型注册表（api_config ``kind: "embedding"`` 条目；
+    #: 无默认模型概念——embedding 调用显式选模型）。
+    embedding_models: Dict[str, ModelSpec] = field(default_factory=dict)
     #: 全局默认值。
     defaults: CallDefaults = field(default_factory=CallDefaults)
 

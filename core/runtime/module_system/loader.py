@@ -114,7 +114,10 @@ class ModuleLoader(IModuleLoader):
                             f"VAR_KEYWORD param but implementation does not accept **kwargs."
                         )
 
-                proxy_vtable[spec_name] = create_proxy(py_func, registry, param_meta, has_declared_varkw)
+                proxy_vtable[spec_name] = create_proxy(
+                    py_func, registry, param_meta, has_declared_varkw,
+                    unbox_args=getattr(spec_member, "unbox_args", True),
+                )
             # 2. 处理变量 (Variable / plain MemberSpec)
             else:
                 # 只要在元数据中声明了，就加入白名单允许通过 __getattr__ 访问

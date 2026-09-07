@@ -150,6 +150,12 @@ class ApiConfig:
                     f"default_model 引用的命名模型 '{dm}' 不存在",
                     error_code=CFG_CONFIG_UNKNOWN_MODEL_REF,
                 )
+            if models[dm].get("kind") == "embedding":
+                raise InterpreterError(
+                    f"default_model 不得引用 embedding 模型 '{dm}'"
+                    "（embedding 面无默认模型概念，调用侧显式选模型）",
+                    error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+                )
             default_model = models[dm]
         elif isinstance(dm, dict):
             default_model = cls._validate_model_entry(dm, "default_model", providers, defaults)
@@ -318,6 +324,15 @@ class ApiConfig:
                     error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
                 )
             result["max_tokens"] = mt
+
+        # kind（可选；模型面判别："chat"（缺省）/ "embedding"）
+        kind = model.get("kind", "chat")
+        if kind not in ("chat", "embedding"):
+            raise InterpreterError(
+                f"{context}.kind 必须是 'chat' 或 'embedding'",
+                error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
+            )
+        result["kind"] = kind
 
         return result
 
