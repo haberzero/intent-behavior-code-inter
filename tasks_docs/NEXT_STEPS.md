@@ -65,7 +65,7 @@ PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，
    ② `vector` 值类型（公理层，全量 pytest 评估）→ ③ `ai` 模块面 + MOCK:VEC + 检索最小
    闭包 → ④ SiliconFlow 真实试用；参考实现 = ibci-trial/kernel_overlay K1-K3 33/33
    （批①③底本，3 处合入处理项）+ 批② pre-study 检查单，详见
-   `tasks_docs/_trial_intake_analysis.md` §四）→ **线 3 · N2 结晶注册表设计**
+   `tasks_docs/_trial_intake_analysis.md` §四）→ **线 3 · N2 已验证答案注册表设计**
    （`tasks_docs/_crystallize_design.md` 先行：API 形态四方法为审查输入，检索键/
    生命周期/存储/铁律强制点四开放问题在文档内二次裁决）。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
@@ -79,8 +79,10 @@ PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，
 3. **阶段 C 文档复核登记项收敛**：复核登记项关闭状态交叉核验（KNOWN_LIMITS §十五 漂移 /
    call_info 键结构 / 装配未知键是否应告警 / BOUNDARY-LLM-5 mock 下 call_info 无 sys_prompt 键），
    doc-governance Phase 0-8。
-4. **周期质量维护恢复裁定**（PT-AUDIT-1/3 + Tier B + quality-maintenance）——原阈值"真实试用后
-   恢复"与"本机暂不跑真实 LLM"冲突，待用户裁定（mock 侧/静态侧维护可先行或整体顺延）。
+4. **周期质量维护（PT-AUDIT-1/3 + Tier B + quality-maintenance 等全部非主线质量工作）
+   已解封（用户 2026-09-07 裁定）**——触发节点 = **主线任务完成后**（handoff §5.6 收敛
+   判据成立：主线队列全部项处于完成/挂起/裁定不做终态）→ **自主启动**，无需再等用户
+   指令。（原"真实试用后恢复"阈值已过期：真实 LLM 环境已就位。）
 5. **远程 CI 启用（暂不启动，用户裁定）**：`ci.yml` 恢复 push/PR 触发（本地分层验证经
    `scripts/ci_local.sh`，不依赖远程；启用需用户显式授权）。
 6. **阶段 D · 主线远期演进（试用稳定后）**：VISION-4 P7 类型理论加固 / VISION-5 P8 函数式地基 /

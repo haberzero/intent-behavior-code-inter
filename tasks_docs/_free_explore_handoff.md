@@ -130,8 +130,8 @@ max_tokens（T4）已处理完毕**；**环境变量通道（T2）/ 文档示例
 | 编号 | 需求 | 状态 |
 |------|------|------|
 | **N1** | 思考模型支持（extra_body 透传 + 空 content 确定性处理 + max_tokens 预算） | ⏳ **P1-1**（已重定性为根因项：provider 现硬编码双字段抑制 dict 进每请求且无条件发送——vendor 机器事实滞留代码层 + `reasoning: true` 请求层不可表达；并入"生成参数面批"六项——temperature/top_p/top_k/seed 命名字段 + extra_body + 硬编码归位 + `**kwargs` fail-fast + call_info 审计闭环 + 未知字段严格性，详见 `_trial_intake_analysis.md` §五 5.4/5.5） |
-| **N2** | 结晶注册表（`ai.crystallize/lookup/correct/crystal_log`；引擎内路由命中跳过 LLM；铁律：原始 LLM 输出须过确定性谓词才结晶；append-only 事件流） | ✅ **方向已裁定认可**；**设计文档先行**（线 3，P0）：`tasks_docs/_crystallize_design.md`，四个开放问题（检索键 = 结构签名形态 / 生命周期 = 引擎级状态随 save_state 持久不进 intent snapshot / 存储 = 平铺池 + UID 同构 / 铁律强制点 = 谓词含 LLM 调用 → 编译期 SEM）在文档内二次裁决 |
-| **N3** | measure_freq（logprob 测量通道） | ⏸ **挂起，方向保留**（试用方自我质疑后建议挂起；e26-e28 为现成验收基线；待 embedding/结晶面落地后重估） |
+| **N2** | 已验证答案注册表（试用方原名“结晶注册表”为黑话，用户 2026-09-07 裁定废除；机制 = 验证过的 LLM 答案登记：确定性验证门 + 查表命中 0 调用 + append-only 更正 + 事件审计） | ✅ **方向已裁定认可；设计文档已产出** `tasks_docs/_n2_answer_registry.md`（平实展开 + 11 项设计问题逐问推荐，**待用户确认**） |
+| **N3** | measure_freq（logprob 测量通道） | ⏸ **挂起，方向保留**（试用方自我质疑后建议挂起；e26-e28 为现成验收基线；待 embedding/答案注册表面落地后重估） |
 | **N4** | finish_reason 暴露 + max_tokens 键 | ⏳ **P1 队列**（max_tokens 键 = T4 ✅ 已落地；finish_reason 暴露未做 = call_info 观测面补充，截断检测是批量管线运行细节） |
 
 ### 4.3 需求表 A1-E2（ref 需求单 + 试用方 A1-E2 表）
@@ -179,7 +179,7 @@ P7/P8（既有 DDG 设计，走文档面）。
 |----|----|------|------|
 | **P0-1** | **线 1 · 诊断面打包** | 一个设计文档 `tasks_docs/_diagnostic_design.md` 覆盖"错误定位链"三段：① 编译期类型检查覆盖审计（`KERNEL_ISSUE-SEM-1` 比较运算符起点，同类漏检面一次审完：二元运算/调用参数等）；② 运行期错误对象携带 ibci 源行列（B1；`node_to_loc` 侧表已有位置信息，断点在运行期错误路径；含 LLMParseError repr 直漏渲染）；③ 解析错误位置漂移修正（P2）。复现资产 `.tmp_verify/p11*.ibci`、`p9*.ibci` | SEM 面变更 = 语义错误集 → 全量 pytest 评估门；三形态复现脚本全转回归测试 |
 | **P0-2** | **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定） | ① 契约包+provider+配置（底本 = ibci-trial `kernel_overlay/` K1-K3 33/33，3 处合入处理项见 `_trial_intake_analysis.md` §4.2）→ ② `vector` 值类型（公理层：值语义 C5/克隆/序列化，全量评估；pre-study 检查单 C1-C15/T1-T10）→ ③ `ai` 模块面+MOCK:VEC+检索最小闭包（cosine=vector 方法面；top-k=模块面）→ ④ SiliconFlow 真实试用 | 设计文档 `_embedding_design.md`（Q1-Q4 已落裁定）+ 四批各全量零回归 + ④ 真实端点实证存档 |
-| **P0-3** | **线 3 · N2 结晶注册表** | 设计文档 `tasks_docs/_crystallize_design.md` 先行（API 四方法为审查输入；四开放问题——检索键/生命周期/存储/铁律强制点——文档内给推荐供用户二次裁决；**实施等二次裁决后**）。机制语义+收益路径证据：ibci-trial `AUTONOMOUS_NOTES_2.md` F7-F10 + e25/e31/e31b | 设计文档交付（实施另启） |
+| **P0-3** | **线 3 · N2 已验证答案注册表**（用户 2026-09-07 裁定废除"结晶注册表"黑话名） | 设计文档已产出：`tasks_docs/_n2_answer_registry.md`（需求平实展开 + 11 项设计问题逐问推荐，**待用户确认**——重点：§一 API 命名 / Q3 路由形态[用户显式组合 vs 引擎层路由，与试用方原始强调存在分歧] / Q5-Q8 v1 边界）。确认后实施；check 函数的编译期 SEM 错误依赖 P0-1 诊断面 | 设计文档四问确认 → 实施（4 API + 验证门 + 深克隆快照 + append-only 更正 + 事件序号审计 + save_state 纳入） |
 
 ### 5.2 P1（运行面；P0 三线推进间隙或其后按 agent 判断排入）
 
@@ -213,8 +213,11 @@ P7/P8（既有 DDG 设计，走文档面）。
 
 ### 5.5 挂起 / 封存 / 远期（不入主线，记录备查）
 
+- **周期质量维护（PT-AUDIT-1/3 + Tier B + quality-maintenance 等全部非主线质量工作）**：
+  **用户 2026-09-07 裁定解封**——解封节点 = **本次主线任务之后**（§5.1-5.4 全部项处于
+  完成/挂起/裁定不做终态，即 §5.6 收敛判据成立时）→ **自主启动**（无需再等用户指令）；
 - **N3 measure_freq**（logprob 通道）：挂起，方向保留（e26-e28 为验收基线；待 embedding/
-  结晶面落地后重估）；
+  答案注册表面落地后重估）；
 - **ref E1 ihost 子环境配置隔离**：scoping 设计（overlay 评估 §5.4 形态 C 的真实需求归宿）；
 - PT-FEAT-6/12（工具链项）：远期；**远程 CI**：用户裁定暂不启动；**PT-SEALED-1 media**：封存；
 - **PT-DECIDE-2**（供应商思考禁用）：已解封，缺口收窄为"后端强制思考"场景——P1-1 批
@@ -287,9 +290,9 @@ P7/P8（既有 DDG 设计，走文档面）。
    （jiter/pydantic-core）终结竞态。
 2. **端点可用性**：SiliconFlow 为云端共享服务，可能限流/下线。开工先 `probe.py`；失败则
    mock 组照跑（`--mock-only`），LLM 用例记 HARNESS（环境缺失）不误判缺陷。
-3. **分支合并**：free-explore 领先基线 8 提交（2026-09-07 点；`git rev-list --count
-   b89fdc39..HEAD` 复核）；**merge 待用户显式决定**（即使满足"确认低风险可直接 merge"
-   细则，也以用户"所有工作只在独立分支"指令为准）。
+3. **分支合并（用户 2026-09-07 裁定）**：工作**维持在 free-explore 分支**；具体合并
+   与如何合并由用户未来决定，**当前不处理**（下一 agent 不做任何 merge 动作）。
+   free-explore 现领先基线 9 提交（`git rev-list --count b89fdc39..HEAD` 复核）。
 4. **KEY 卫生**：api_config.json / TEMP-35B-LLM-GUIDE.md 均 gitignored；tracked 文件
    不落密钥（named-model 用例走 env 通道）。
 5. **既有 flaky**：`tests/runtime/test_mock_service.py::TestMockServiceHTTP::test_stats_recorded`
@@ -329,7 +332,7 @@ traceback 实证 + P2 漂移案例），对照 design-philosophy §一/§二（�
 ```
 主线推进：完成外部试用工程（ibci-trial）需求与已知近期主线——按
 tasks_docs/_free_explore_handoff.md §五 终版队列（P0-1 诊断面打包 → P0-2
-PT-FEAT-16 四批 → P0-3 N2 结晶注册表设计；P1 生成参数面批/finish_reason；P2 易用性项；
+PT-FEAT-16 四批 → P0-3 N2 已验证答案注册表设计；P1 生成参数面批/finish_reason；P2 易用性项；
 支线 mock 层项）在 free-explore 分支自主推进 设计→实现→全量 pytest 零回归验证→落账
 （WORKLOG/INDEX/handoff）闭环。每轮自主评估现状、自主决定推进哪一项并**有权微调任务
 优先级与批次顺序**（§五 为基线队列非固定脚本；微调理由记入工作日志）。队列有活持续
