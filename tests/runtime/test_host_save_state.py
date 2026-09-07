@@ -53,6 +53,24 @@ def _make_service():
     )
 
 
+class TestSaveStateRootRelativePath:
+    """单层相对路径（无目录组件）：save_state 不得在空目录名上失败。"""
+
+    def test_save_to_current_dir(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        service = _make_service()
+        monkeypatch.setattr(service, "snapshot", lambda: {"pools": {}})
+        service.save_state("./state.json")
+        assert (tmp_path / "state.json").exists()
+
+    def test_save_bare_filename(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        service = _make_service()
+        monkeypatch.setattr(service, "snapshot", lambda: {"pools": {}})
+        service.save_state("state2.json")
+        assert (tmp_path / "state2.json").exists()
+
+
 class TestSaveStateAssetsExternalization:
     """save_state 的资产外化文件布局契约。"""
 

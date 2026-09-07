@@ -1,0 +1,12 @@
+# T17-K-M5 重复键（KNW_KEY_EXISTS——登记与更正机器强制区分，更正走 amend）
+# doc: docs/syntax/16_knowledge_system.md
+# expect-class: FAIL
+# expect-code: KNW_KEY_EXISTS
+# expect-exit: 1
+# expect-llm: false
+func c(any x) -> bool:
+    return x.len() > 0
+knowledge kb = knowledge()
+kb.store("k", "a", c)
+kb.store("k", "b", c)
+print("unreachable")

@@ -1,0 +1,16 @@
+# T17-K-M3 amend + history append-only（事件流 2 事件 + 当前值切换）
+# doc: docs/syntax/16_knowledge_system.md
+# expect-class: PASS
+# expect-out: events=2 | cur=v2 | DONE
+# expect-exit: 0
+# expect-llm: false
+func c(any x) -> bool:
+    return x.len() > 0
+knowledge kb = knowledge()
+kb.store("k", "v1", c)
+kb.amend("k", "v2", "reason: 更正")
+list h = kb.history("k")
+str cur = (str)kb.get("k")
+print("events=" + (str)len(h))
+print("cur=" + cur)
+print("DONE")

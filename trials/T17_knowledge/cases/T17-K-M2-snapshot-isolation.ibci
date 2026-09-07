@@ -1,0 +1,16 @@
+# T17-K-M2 快照隔离：修改取回值不污染知识库（双克隆纪律）
+# doc: docs/syntax/16_knowledge_system.md
+# expect-class: PASS
+# expect-out: kb_len=1 | DONE
+# expect-exit: 0
+# expect-llm: false
+func c(any x) -> bool:
+    return x.len() > 0
+knowledge kb = knowledge()
+list L = [1]
+kb.store("k", L, c)
+list L2 = (list)kb.get("k")
+L2.append(99)
+int n = (int)kb.get("k").len()
+print("kb_len=" + (str)n)
+print("DONE")

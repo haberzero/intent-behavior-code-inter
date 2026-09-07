@@ -1,0 +1,22 @@
+# T17-K-M6 save/load 保真（同入口程序：save 后变更丢弃/值保真/事件保真）
+# doc: docs/syntax/16_knowledge_system.md
+# expect-class: PASS
+# expect-out: n=1 | v1=value-one-amended | events=2 | DONE
+# expect-exit: 0
+# expect-llm: false
+import ihost
+func c(any x) -> bool:
+    return x.len() > 0
+knowledge kb = knowledge()
+kb.store("k1", "value-one", c)
+kb.amend("k1", "value-one-amended", "reason: amend before save")
+ihost.save_state("./T17_M6_state.json")
+kb.store("k2", "value-two", c)
+ihost.load_state("./T17_M6_state.json")
+int n = kb.len()
+str v1 = (str)kb.get("k1")
+list h = kb.history("k1")
+print("n=" + (str)n)
+print("v1=" + v1)
+print("events=" + (str)len(h))
+print("DONE")

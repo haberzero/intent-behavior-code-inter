@@ -115,7 +115,8 @@ class HostService(IHostService):
         save_path = IbPath.from_native(path).resolve_dot_segments()
         abs_path = save_path.to_native()
         base_dir = (save_path.parent.to_native() if save_path.parent else "")
-        os.makedirs(base_dir, exist_ok=True)
+        if base_dir:
+            os.makedirs(base_dir, exist_ok=True)
 
         # 文本资产外部化持久化（布局走 SnapshotLayout）
         assets = data["pools"].get("assets", {})

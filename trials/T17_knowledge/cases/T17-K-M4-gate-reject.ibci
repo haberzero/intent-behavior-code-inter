@@ -1,0 +1,11 @@
+# T17-K-M4 验证门拒绝（check 假 → KNW_CHECK_REJECTED fail-fast）
+# doc: docs/syntax/16_knowledge_system.md
+# expect-class: FAIL
+# expect-code: KNW_CHECK_REJECTED
+# expect-exit: 1
+# expect-llm: false
+func c(any x) -> bool:
+    return x.len() > 5
+knowledge kb = knowledge()
+kb.store("k", "short", c)
+print("unreachable")

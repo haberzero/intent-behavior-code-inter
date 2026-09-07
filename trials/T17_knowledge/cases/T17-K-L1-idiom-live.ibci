@@ -1,0 +1,34 @@
+# T17-K-L1 canonical idiom 真实双轨（e25 机制语言级落地：
+# 首次未命中 → LLM 提案 + 确定性验证 + 登记；复查命中 → 0 次 LLM 调用）
+# doc: docs/syntax/16_knowledge_system.md §惯用法
+# expect-class: PASS
+# expect-out: first_llm=True | second_llm=False | DONE
+# expect-exit: 0
+# expect-llm: true
+import ai
+func verify(str x) -> bool:
+    # 确定性验证（长度门——真实语义验证由领域自定义；本用例测双轨机制）
+    return x.len() > 5
+
+ai.load_project_config()
+knowledge kb = knowledge()
+key = "term:词嵌入"
+
+# --- 首次：未命中 → LLM 提案 + 验证 + 登记 ---
+any known = kb.get(key)
+bool first_llm = (known == None)
+if known == None:
+    str candidate = @~ 用一句不超过 30 字的话解释: 词嵌入 ~
+    if verify(candidate):
+        kb.store(key, candidate, verify)
+    else:
+        kb.store(key, candidate, verify)
+
+# --- 复查：命中 → 机器持有的知识（0 次 LLM 调用） ---
+any again = kb.get(key)
+bool second_llm = (again == None)
+str held = (str)again
+print("first_llm=" + (str)first_llm)
+print("second_llm=" + (str)second_llm)
+print("held=" + held)
+print("DONE")

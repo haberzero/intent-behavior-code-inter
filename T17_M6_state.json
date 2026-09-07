@@ -1,0 +1,5055 @@
+{
+  "version": "2.1",
+  "root_scope_uid": "rt_scope_f610013552ad431a",
+  "global_intents": [],
+  "intent_ctx_uid": "intentctx_78e387436f1e4b4c",
+  "active_intent_ibobj_uid": null,
+  "pools": {
+    "instances": {
+      "inst_e39b0f723e4b4a07": {
+        "uid": "inst_e39b0f723e4b4a07",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.print",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:print"
+      },
+      "inst_c50cd74c85f6475a": {
+        "uid": "inst_c50cd74c85f6475a",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.input",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:input"
+      },
+      "inst_26c4cee88bfb46ca": {
+        "uid": "inst_26c4cee88bfb46ca",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.len",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:len"
+      },
+      "inst_bce089858f574f7b": {
+        "uid": "inst_bce089858f574f7b",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.range",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:range"
+      },
+      "inst_d9f38a1d2ba743ab": {
+        "uid": "inst_d9f38a1d2ba743ab",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.copy",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:copy"
+      },
+      "inst_d68adb3038cd4d06": {
+        "uid": "inst_d68adb3038cd4d06",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.deepcopy",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:deepcopy"
+      },
+      "inst_9dd98c2bd8394741": {
+        "uid": "inst_9dd98c2bd8394741",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.enumerate",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:enumerate"
+      },
+      "inst_6e5e9e9dfbba48be": {
+        "uid": "inst_6e5e9e9dfbba48be",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.zip",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:zip"
+      },
+      "inst_9f0d977deb2943bc": {
+        "uid": "inst_9f0d977deb2943bc",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.sorted",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:sorted"
+      },
+      "inst_58934b2c28914f2c": {
+        "uid": "inst_58934b2c28914f2c",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.reversed",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:reversed"
+      },
+      "inst_db2fae0248a34fc1": {
+        "uid": "inst_db2fae0248a34fc1",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.sum",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:sum"
+      },
+      "inst_86cf9da0d2d140e1": {
+        "uid": "inst_86cf9da0d2d140e1",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.next",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:next"
+      },
+      "inst_8dac7207acae4483": {
+        "uid": "inst_8dac7207acae4483",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.all",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:all"
+      },
+      "inst_747f1e6f99744df6": {
+        "uid": "inst_747f1e6f99744df6",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.min",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:min"
+      },
+      "inst_935aeef1f9774f8e": {
+        "uid": "inst_935aeef1f9774f8e",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.max",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:max"
+      },
+      "inst_c9e6a06dfb5b43b4": {
+        "uid": "inst_c9e6a06dfb5b43b4",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.get_self_source",
+        "unbox": true,
+        "is_method": false,
+        "logic_id": "intrinsic:get_self_source"
+      },
+      "inst_709190c5eee44bad": {
+        "uid": "inst_709190c5eee44bad",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.type",
+        "unbox": false,
+        "is_method": false,
+        "logic_id": "intrinsic:type"
+      },
+      "inst_7e8df12aa69e463b": {
+        "uid": "inst_7e8df12aa69e463b",
+        "class_name": "callable",
+        "_type": "native_func",
+        "name": "intrinsic.vec",
+        "unbox": true,
+        "is_method": false,
+        "logic_id": "intrinsic:vec"
+      },
+      "inst_473c1c6016db4d53": {
+        "uid": "inst_473c1c6016db4d53",
+        "class_name": "Type",
+        "_type": "class_ref",
+        "name": "Type"
+      },
+      "inst_3d33f09841a34131": {
+        "uid": "inst_3d33f09841a34131",
+        "class_name": "Type",
+        "_type": "class_ref",
+        "name": "Object"
+      },
+      "inst_88c796fc952f43a0": {
+        "uid": "inst_88c796fc952f43a0",
+        "class_name": "Type",
+        "_type": "class_ref",
+        "name": "callable"
+      },
+      "inst_6e72b2be406c44f1": {
+        "uid": "inst_6e72b2be406c44f1",
+        "class_name": "Type",
+        "_type": "class_ref",
+        "name": "IbModule"
+      },
+      "inst_6e8d489cb9df4ca4": {
+        "uid": "inst_6e8d489cb9df4ca4",
+        "class_name": "Type",
+        "_type": "class_ref",
+        "name": "Intent"
+      },
+      "inst_76eb8b9305d04dfd": {
+        "uid": "inst_76eb8b9305d04dfd",
+        "class_name": "Type",
+        "_type": "class_ref",
+        "name": "IntentStack"
+      },
+      "inst_30227366299244d3": {
+        "uid": "inst_30227366299244d3",
+        "class_name": "int",
+        "_type": "class_ref",
+        "name": "int"
+      },
+      "inst_cf2ba01cd6644320": {
+        "uid": "inst_cf2ba01cd6644320",
+        "class_name": "float",
+        "_type": "class_ref",
+        "name": "float"
+      },
+      "inst_29df3ed7eb0a43ff": {
+        "uid": "inst_29df3ed7eb0a43ff",
+        "class_name": "bool",
+        "_type": "class_ref",
+        "name": "bool"
+      },
+      "inst_36c6ceddba934d71": {
+        "uid": "inst_36c6ceddba934d71",
+        "class_name": "str",
+        "_type": "class_ref",
+        "name": "str"
+      },
+      "inst_07896d09e4d94ccd": {
+        "uid": "inst_07896d09e4d94ccd",
+        "class_name": "list",
+        "_type": "class_ref",
+        "name": "list"
+      },
+      "inst_dde321a66fe14afd": {
+        "uid": "inst_dde321a66fe14afd",
+        "class_name": "tuple",
+        "_type": "class_ref",
+        "name": "tuple"
+      },
+      "inst_5ee199fad4f24750": {
+        "uid": "inst_5ee199fad4f24750",
+        "class_name": "dict",
+        "_type": "class_ref",
+        "name": "dict"
+      },
+      "inst_bbb082e6e0264666": {
+        "uid": "inst_bbb082e6e0264666",
+        "class_name": "Exception",
+        "_type": "class_ref",
+        "name": "Exception"
+      },
+      "inst_249782ce8b914bf6": {
+        "uid": "inst_249782ce8b914bf6",
+        "class_name": "LLMError",
+        "_type": "class_ref",
+        "name": "LLMError"
+      },
+      "inst_fe1f5b1b1daa438e": {
+        "uid": "inst_fe1f5b1b1daa438e",
+        "class_name": "LLMParseError",
+        "_type": "class_ref",
+        "name": "LLMParseError"
+      },
+      "inst_51297d46850c4cab": {
+        "uid": "inst_51297d46850c4cab",
+        "class_name": "LLMRetryExhaustedError",
+        "_type": "class_ref",
+        "name": "LLMRetryExhaustedError"
+      },
+      "inst_197c30923f61447a": {
+        "uid": "inst_197c30923f61447a",
+        "class_name": "LLMCallError",
+        "_type": "class_ref",
+        "name": "LLMCallError"
+      },
+      "inst_1f1b57a16eb44c5d": {
+        "uid": "inst_1f1b57a16eb44c5d",
+        "class_name": "ThreadError",
+        "_type": "class_ref",
+        "name": "ThreadError"
+      },
+      "inst_41e509fc442c4ec1": {
+        "uid": "inst_41e509fc442c4ec1",
+        "class_name": "ThreadCancelled",
+        "_type": "class_ref",
+        "name": "ThreadCancelled"
+      },
+      "inst_df3d0e7a8d6a41d0": {
+        "uid": "inst_df3d0e7a8d6a41d0",
+        "class_name": "ThreadFailed",
+        "_type": "class_ref",
+        "name": "ThreadFailed"
+      },
+      "inst_6dfddbc9920d4727": {
+        "uid": "inst_6dfddbc9920d4727",
+        "class_name": "bound_method",
+        "_type": "class_ref",
+        "name": "bound_method"
+      },
+      "inst_aecd2a28990d47ee": {
+        "uid": "inst_aecd2a28990d47ee",
+        "class_name": "None",
+        "_type": "class_ref",
+        "name": "None"
+      },
+      "inst_92d97d4252dc4262": {
+        "uid": "inst_92d97d4252dc4262",
+        "class_name": "Optional",
+        "_type": "class_ref",
+        "name": "Optional"
+      },
+      "inst_91e3bef7898c46a1": {
+        "uid": "inst_91e3bef7898c46a1",
+        "class_name": "slice",
+        "_type": "class_ref",
+        "name": "slice"
+      },
+      "inst_f391faf406d24a9d": {
+        "uid": "inst_f391faf406d24a9d",
+        "class_name": "vector",
+        "_type": "class_ref",
+        "name": "vector"
+      },
+      "inst_a2738170c05b4c86": {
+        "uid": "inst_a2738170c05b4c86",
+        "class_name": "knowledge",
+        "_type": "class_ref",
+        "name": "knowledge"
+      },
+      "inst_f6250d8e92b04a52": {
+        "uid": "inst_f6250d8e92b04a52",
+        "class_name": "file_handle",
+        "_type": "class_ref",
+        "name": "file_handle"
+      },
+      "inst_5568eb517db245d0": {
+        "uid": "inst_5568eb517db245d0",
+        "class_name": "audio",
+        "_type": "class_ref",
+        "name": "audio"
+      },
+      "inst_08f727938fc84258": {
+        "uid": "inst_08f727938fc84258",
+        "class_name": "image",
+        "_type": "class_ref",
+        "name": "image"
+      },
+      "inst_937aae7e865b4a0d": {
+        "uid": "inst_937aae7e865b4a0d",
+        "class_name": "video",
+        "_type": "class_ref",
+        "name": "video"
+      },
+      "inst_43ad5a79460f4c15": {
+        "uid": "inst_43ad5a79460f4c15",
+        "class_name": "any",
+        "_type": "class_ref",
+        "name": "any"
+      },
+      "inst_d231994388fb444e": {
+        "uid": "inst_d231994388fb444e",
+        "class_name": "auto",
+        "_type": "class_ref",
+        "name": "auto"
+      },
+      "inst_7b33389bf4b9428b": {
+        "uid": "inst_7b33389bf4b9428b",
+        "class_name": "fn",
+        "_type": "class_ref",
+        "name": "fn"
+      },
+      "inst_8cc699c028c34902": {
+        "uid": "inst_8cc699c028c34902",
+        "class_name": "void",
+        "_type": "class_ref",
+        "name": "void"
+      },
+      "inst_7d7c4c2b4fbc45f2": {
+        "uid": "inst_7d7c4c2b4fbc45f2",
+        "class_name": "fn_callable",
+        "_type": "class_ref",
+        "name": "fn_callable"
+      },
+      "inst_b5ed07cec78c4e49": {
+        "uid": "inst_b5ed07cec78c4e49",
+        "class_name": "behavior",
+        "_type": "class_ref",
+        "name": "behavior"
+      },
+      "inst_f1bcc86a4ed54e24": {
+        "uid": "inst_f1bcc86a4ed54e24",
+        "class_name": "intent_context",
+        "_type": "class_ref",
+        "name": "intent_context"
+      },
+      "inst_a9d7d7cee0ec43c3": {
+        "uid": "inst_a9d7d7cee0ec43c3",
+        "class_name": "llm_call_result",
+        "_type": "class_ref",
+        "name": "llm_call_result"
+      },
+      "inst_648f56445a9948a8": {
+        "uid": "inst_648f56445a9948a8",
+        "class_name": "llm_uncertain",
+        "_type": "class_ref",
+        "name": "llm_uncertain"
+      },
+      "inst_368f6ac4779948f6": {
+        "uid": "inst_368f6ac4779948f6",
+        "class_name": "thread",
+        "_type": "class_ref",
+        "name": "thread"
+      },
+      "inst_43aacb4414814378": {
+        "uid": "inst_43aacb4414814378",
+        "class_name": "thread_result",
+        "_type": "class_ref",
+        "name": "thread_result"
+      },
+      "inst_c1338b38a7964298": {
+        "uid": "inst_c1338b38a7964298",
+        "class_name": "generator",
+        "_type": "class_ref",
+        "name": "generator"
+      },
+      "inst_7adfa8bf39be42dc": {
+        "uid": "inst_7adfa8bf39be42dc",
+        "class_name": "chan",
+        "_type": "class_ref",
+        "name": "chan"
+      },
+      "inst_52388f108d754ceb": {
+        "uid": "inst_52388f108d754ceb",
+        "class_name": "subscriber",
+        "_type": "class_ref",
+        "name": "subscriber"
+      },
+      "inst_af1b5ab96c134d18": {
+        "uid": "inst_af1b5ab96c134d18",
+        "class_name": "slot",
+        "_type": "class_ref",
+        "name": "slot"
+      },
+      "inst_95af67a7ad3d490f": {
+        "uid": "inst_95af67a7ad3d490f",
+        "class_name": "module",
+        "_type": "class_ref",
+        "name": "module"
+      },
+      "inst_707f3404d7f247f5": {
+        "uid": "inst_707f3404d7f247f5",
+        "class_name": "Enum",
+        "_type": "class_ref",
+        "name": "Enum"
+      },
+      "inst_5528584c76b54039": {
+        "uid": "inst_5528584c76b54039",
+        "class_name": "module",
+        "_type": "module",
+        "name": "ihost",
+        "scope_native": true
+      },
+      "inst_7990c72616c14f66": {
+        "uid": "inst_7990c72616c14f66",
+        "class_name": "callable",
+        "_type": "object",
+        "fields": {}
+      },
+      "inst_ec4d1ef7bdfc4d91": {
+        "uid": "inst_ec4d1ef7bdfc4d91",
+        "class_name": "str",
+        "type_ref": "str",
+        "_type": "primitive",
+        "value": "value-one-amended"
+      },
+      "inst_cd865bb712b24845": {
+        "uid": "inst_cd865bb712b24845",
+        "class_name": "str",
+        "type_ref": "str",
+        "_type": "primitive",
+        "value": "value-one"
+      },
+      "inst_552fc2f4f2ad4ebe": {
+        "uid": "inst_552fc2f4f2ad4ebe",
+        "class_name": "knowledge",
+        "type_ref": "knowledge",
+        "_type": "knowledge",
+        "seq": 2,
+        "entries": {
+          "k1": {
+            "value": "inst_ec4d1ef7bdfc4d91",
+            "check_name": "callable",
+            "events": [
+              {
+                "seq": 1,
+                "kind": "store",
+                "value": "inst_cd865bb712b24845",
+                "reason": ""
+              },
+              {
+                "seq": 2,
+                "kind": "amend",
+                "value": "inst_ec4d1ef7bdfc4d91",
+                "reason": "reason: amend before save"
+              }
+            ]
+          }
+        }
+      },
+      "intentctx_78e387436f1e4b4c": {
+        "uid": "intentctx_78e387436f1e4b4c",
+        "intent_top_uid": null,
+        "smear_queue": [],
+        "override": null,
+        "global_intents": [],
+        "inherited_smear": [],
+        "inherited_override": null,
+        "_type": "intent_context_native"
+      }
+    },
+    "runtime_scopes": {
+      "rt_scope_f610013552ad431a": {
+        "uid": "rt_scope_f610013552ad431a",
+        "parent_uid": null,
+        "symbols": {
+          "print": {
+            "name": "print",
+            "value": "inst_e39b0f723e4b4a07",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "input": {
+            "name": "input",
+            "value": "inst_c50cd74c85f6475a",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "len": {
+            "name": "len",
+            "value": "inst_26c4cee88bfb46ca",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "range": {
+            "name": "range",
+            "value": "inst_bce089858f574f7b",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "copy": {
+            "name": "copy",
+            "value": "inst_d9f38a1d2ba743ab",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "deepcopy": {
+            "name": "deepcopy",
+            "value": "inst_d68adb3038cd4d06",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "enumerate": {
+            "name": "enumerate",
+            "value": "inst_9dd98c2bd8394741",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "zip": {
+            "name": "zip",
+            "value": "inst_6e5e9e9dfbba48be",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "sorted": {
+            "name": "sorted",
+            "value": "inst_9f0d977deb2943bc",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "reversed": {
+            "name": "reversed",
+            "value": "inst_58934b2c28914f2c",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "sum": {
+            "name": "sum",
+            "value": "inst_db2fae0248a34fc1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "next": {
+            "name": "next",
+            "value": "inst_86cf9da0d2d140e1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "all": {
+            "name": "all",
+            "value": "inst_8dac7207acae4483",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "min": {
+            "name": "min",
+            "value": "inst_747f1e6f99744df6",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "max": {
+            "name": "max",
+            "value": "inst_935aeef1f9774f8e",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "get_self_source": {
+            "name": "get_self_source",
+            "value": "inst_c9e6a06dfb5b43b4",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "type": {
+            "name": "type",
+            "value": "inst_709190c5eee44bad",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "vec": {
+            "name": "vec",
+            "value": "inst_7e8df12aa69e463b",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "Type": {
+            "name": "Type",
+            "value": "inst_473c1c6016db4d53",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "Object": {
+            "name": "Object",
+            "value": "inst_3d33f09841a34131",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "callable": {
+            "name": "callable",
+            "value": "inst_88c796fc952f43a0",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "IbModule": {
+            "name": "IbModule",
+            "value": "inst_6e72b2be406c44f1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "Intent": {
+            "name": "Intent",
+            "value": "inst_6e8d489cb9df4ca4",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "IntentStack": {
+            "name": "IntentStack",
+            "value": "inst_76eb8b9305d04dfd",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "int": {
+            "name": "int",
+            "value": "inst_30227366299244d3",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "float": {
+            "name": "float",
+            "value": "inst_cf2ba01cd6644320",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "bool": {
+            "name": "bool",
+            "value": "inst_29df3ed7eb0a43ff",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "str": {
+            "name": "str",
+            "value": "inst_36c6ceddba934d71",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "list": {
+            "name": "list",
+            "value": "inst_07896d09e4d94ccd",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "tuple": {
+            "name": "tuple",
+            "value": "inst_dde321a66fe14afd",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "dict": {
+            "name": "dict",
+            "value": "inst_5ee199fad4f24750",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "Exception": {
+            "name": "Exception",
+            "value": "inst_bbb082e6e0264666",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "LLMError": {
+            "name": "LLMError",
+            "value": "inst_249782ce8b914bf6",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "LLMParseError": {
+            "name": "LLMParseError",
+            "value": "inst_fe1f5b1b1daa438e",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "LLMRetryExhaustedError": {
+            "name": "LLMRetryExhaustedError",
+            "value": "inst_51297d46850c4cab",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "LLMCallError": {
+            "name": "LLMCallError",
+            "value": "inst_197c30923f61447a",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "ThreadError": {
+            "name": "ThreadError",
+            "value": "inst_1f1b57a16eb44c5d",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "ThreadCancelled": {
+            "name": "ThreadCancelled",
+            "value": "inst_41e509fc442c4ec1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "ThreadFailed": {
+            "name": "ThreadFailed",
+            "value": "inst_df3d0e7a8d6a41d0",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "bound_method": {
+            "name": "bound_method",
+            "value": "inst_6dfddbc9920d4727",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "None": {
+            "name": "None",
+            "value": "inst_aecd2a28990d47ee",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "Optional": {
+            "name": "Optional",
+            "value": "inst_92d97d4252dc4262",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "slice": {
+            "name": "slice",
+            "value": "inst_91e3bef7898c46a1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "vector": {
+            "name": "vector",
+            "value": "inst_f391faf406d24a9d",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "knowledge": {
+            "name": "knowledge",
+            "value": "inst_a2738170c05b4c86",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "file_handle": {
+            "name": "file_handle",
+            "value": "inst_f6250d8e92b04a52",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "audio": {
+            "name": "audio",
+            "value": "inst_5568eb517db245d0",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "image": {
+            "name": "image",
+            "value": "inst_08f727938fc84258",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "video": {
+            "name": "video",
+            "value": "inst_937aae7e865b4a0d",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "any": {
+            "name": "any",
+            "value": "inst_43ad5a79460f4c15",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "auto": {
+            "name": "auto",
+            "value": "inst_d231994388fb444e",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "fn": {
+            "name": "fn",
+            "value": "inst_7b33389bf4b9428b",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "void": {
+            "name": "void",
+            "value": "inst_8cc699c028c34902",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "fn_callable": {
+            "name": "fn_callable",
+            "value": "inst_7d7c4c2b4fbc45f2",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "behavior": {
+            "name": "behavior",
+            "value": "inst_b5ed07cec78c4e49",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intent_context": {
+            "name": "intent_context",
+            "value": "inst_f1bcc86a4ed54e24",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "llm_call_result": {
+            "name": "llm_call_result",
+            "value": "inst_a9d7d7cee0ec43c3",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "llm_uncertain": {
+            "name": "llm_uncertain",
+            "value": "inst_648f56445a9948a8",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "thread": {
+            "name": "thread",
+            "value": "inst_368f6ac4779948f6",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "thread_result": {
+            "name": "thread_result",
+            "value": "inst_43aacb4414814378",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "generator": {
+            "name": "generator",
+            "value": "inst_c1338b38a7964298",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "chan": {
+            "name": "chan",
+            "value": "inst_7adfa8bf39be42dc",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "subscriber": {
+            "name": "subscriber",
+            "value": "inst_52388f108d754ceb",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "slot": {
+            "name": "slot",
+            "value": "inst_af1b5ab96c134d18",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "module": {
+            "name": "module",
+            "value": "inst_95af67a7ad3d490f",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "Enum": {
+            "name": "Enum",
+            "value": "inst_707f3404d7f247f5",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "ihost": {
+            "name": "ihost",
+            "value": "inst_5528584c76b54039",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "c": {
+            "name": "c",
+            "value": "inst_7990c72616c14f66",
+            "is_const": false,
+            "declared_type": "c",
+            "is_cell": false
+          },
+          "kb": {
+            "name": "kb",
+            "value": "inst_552fc2f4f2ad4ebe",
+            "is_const": false,
+            "declared_type": "knowledge",
+            "is_cell": false
+          }
+        },
+        "uid_to_symbol": {
+          "intrinsic:print": {
+            "name": "print",
+            "value": "inst_e39b0f723e4b4a07",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:input": {
+            "name": "input",
+            "value": "inst_c50cd74c85f6475a",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:len": {
+            "name": "len",
+            "value": "inst_26c4cee88bfb46ca",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:range": {
+            "name": "range",
+            "value": "inst_bce089858f574f7b",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:copy": {
+            "name": "copy",
+            "value": "inst_d9f38a1d2ba743ab",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:deepcopy": {
+            "name": "deepcopy",
+            "value": "inst_d68adb3038cd4d06",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:enumerate": {
+            "name": "enumerate",
+            "value": "inst_9dd98c2bd8394741",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:zip": {
+            "name": "zip",
+            "value": "inst_6e5e9e9dfbba48be",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:sorted": {
+            "name": "sorted",
+            "value": "inst_9f0d977deb2943bc",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:reversed": {
+            "name": "reversed",
+            "value": "inst_58934b2c28914f2c",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:sum": {
+            "name": "sum",
+            "value": "inst_db2fae0248a34fc1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:next": {
+            "name": "next",
+            "value": "inst_86cf9da0d2d140e1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:all": {
+            "name": "all",
+            "value": "inst_8dac7207acae4483",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:min": {
+            "name": "min",
+            "value": "inst_747f1e6f99744df6",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:max": {
+            "name": "max",
+            "value": "inst_935aeef1f9774f8e",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:get_self_source": {
+            "name": "get_self_source",
+            "value": "inst_c9e6a06dfb5b43b4",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:type": {
+            "name": "type",
+            "value": "inst_709190c5eee44bad",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:vec": {
+            "name": "vec",
+            "value": "inst_7e8df12aa69e463b",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:Type": {
+            "name": "Type",
+            "value": "inst_473c1c6016db4d53",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:Object": {
+            "name": "Object",
+            "value": "inst_3d33f09841a34131",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:callable": {
+            "name": "callable",
+            "value": "inst_88c796fc952f43a0",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:IbModule": {
+            "name": "IbModule",
+            "value": "inst_6e72b2be406c44f1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:Intent": {
+            "name": "Intent",
+            "value": "inst_6e8d489cb9df4ca4",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:IntentStack": {
+            "name": "IntentStack",
+            "value": "inst_76eb8b9305d04dfd",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:int": {
+            "name": "int",
+            "value": "inst_30227366299244d3",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:float": {
+            "name": "float",
+            "value": "inst_cf2ba01cd6644320",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:bool": {
+            "name": "bool",
+            "value": "inst_29df3ed7eb0a43ff",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:str": {
+            "name": "str",
+            "value": "inst_36c6ceddba934d71",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:list": {
+            "name": "list",
+            "value": "inst_07896d09e4d94ccd",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:tuple": {
+            "name": "tuple",
+            "value": "inst_dde321a66fe14afd",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:dict": {
+            "name": "dict",
+            "value": "inst_5ee199fad4f24750",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:Exception": {
+            "name": "Exception",
+            "value": "inst_bbb082e6e0264666",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:LLMError": {
+            "name": "LLMError",
+            "value": "inst_249782ce8b914bf6",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:LLMParseError": {
+            "name": "LLMParseError",
+            "value": "inst_fe1f5b1b1daa438e",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:LLMRetryExhaustedError": {
+            "name": "LLMRetryExhaustedError",
+            "value": "inst_51297d46850c4cab",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:LLMCallError": {
+            "name": "LLMCallError",
+            "value": "inst_197c30923f61447a",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:ThreadError": {
+            "name": "ThreadError",
+            "value": "inst_1f1b57a16eb44c5d",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:ThreadCancelled": {
+            "name": "ThreadCancelled",
+            "value": "inst_41e509fc442c4ec1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:ThreadFailed": {
+            "name": "ThreadFailed",
+            "value": "inst_df3d0e7a8d6a41d0",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:bound_method": {
+            "name": "bound_method",
+            "value": "inst_6dfddbc9920d4727",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:None": {
+            "name": "None",
+            "value": "inst_aecd2a28990d47ee",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:Optional": {
+            "name": "Optional",
+            "value": "inst_92d97d4252dc4262",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:slice": {
+            "name": "slice",
+            "value": "inst_91e3bef7898c46a1",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:vector": {
+            "name": "vector",
+            "value": "inst_f391faf406d24a9d",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:knowledge": {
+            "name": "knowledge",
+            "value": "inst_a2738170c05b4c86",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:file_handle": {
+            "name": "file_handle",
+            "value": "inst_f6250d8e92b04a52",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:audio": {
+            "name": "audio",
+            "value": "inst_5568eb517db245d0",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:image": {
+            "name": "image",
+            "value": "inst_08f727938fc84258",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:video": {
+            "name": "video",
+            "value": "inst_937aae7e865b4a0d",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:any": {
+            "name": "any",
+            "value": "inst_43ad5a79460f4c15",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:auto": {
+            "name": "auto",
+            "value": "inst_d231994388fb444e",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:fn": {
+            "name": "fn",
+            "value": "inst_7b33389bf4b9428b",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:void": {
+            "name": "void",
+            "value": "inst_8cc699c028c34902",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:fn_callable": {
+            "name": "fn_callable",
+            "value": "inst_7d7c4c2b4fbc45f2",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:behavior": {
+            "name": "behavior",
+            "value": "inst_b5ed07cec78c4e49",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:intent_context": {
+            "name": "intent_context",
+            "value": "inst_f1bcc86a4ed54e24",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:llm_call_result": {
+            "name": "llm_call_result",
+            "value": "inst_a9d7d7cee0ec43c3",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:llm_uncertain": {
+            "name": "llm_uncertain",
+            "value": "inst_648f56445a9948a8",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:thread": {
+            "name": "thread",
+            "value": "inst_368f6ac4779948f6",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:thread_result": {
+            "name": "thread_result",
+            "value": "inst_43aacb4414814378",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:generator": {
+            "name": "generator",
+            "value": "inst_c1338b38a7964298",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:chan": {
+            "name": "chan",
+            "value": "inst_7adfa8bf39be42dc",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:subscriber": {
+            "name": "subscriber",
+            "value": "inst_52388f108d754ceb",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:slot": {
+            "name": "slot",
+            "value": "inst_af1b5ab96c134d18",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:module": {
+            "name": "module",
+            "value": "inst_95af67a7ad3d490f",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "intrinsic:Enum": {
+            "name": "Enum",
+            "value": "inst_707f3404d7f247f5",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:ihost": {
+            "name": "ihost",
+            "value": "inst_5528584c76b54039",
+            "is_const": true,
+            "declared_type": null,
+            "is_cell": false
+          },
+          "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:c": {
+            "name": "c",
+            "value": "inst_7990c72616c14f66",
+            "is_const": false,
+            "declared_type": "c",
+            "is_cell": false
+          },
+          "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:kb": {
+            "name": "kb",
+            "value": "inst_552fc2f4f2ad4ebe",
+            "is_const": false,
+            "declared_type": "knowledge",
+            "is_cell": false
+          }
+        }
+      }
+    },
+    "intents": {},
+    "types": {
+      "type_root.int": {
+        "uid": "type_root.int",
+        "kind": "primitive",
+        "name": "int",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "to_bool": "sym_anon_cf7d308646807f79",
+          "to_list": "sym_anon_352c0850b12396d8",
+          "cast_to": "sym_anon_034d3e55a45dfb29"
+        }
+      },
+      "type_root.float": {
+        "uid": "type_root.float",
+        "kind": "primitive",
+        "name": "float",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "to_bool": "sym_anon_cf7d308646807f79",
+          "cast_to": "sym_anon_034d3e55a45dfb29"
+        }
+      },
+      "type_root.str": {
+        "uid": "type_root.str",
+        "kind": "primitive",
+        "name": "str",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "len": "sym_anon_8752e051b7a33057",
+          "upper": "sym_anon_155f3c64f6fecd1a",
+          "lower": "sym_anon_841498f075dfc7a3",
+          "strip": "sym_anon_4c275f661be71e37",
+          "split": "sym_anon_2560f4ae5e7dc443",
+          "join": "sym_anon_8e9dd5bbccef0ad3",
+          "replace": "sym_anon_253cd5ca7a80b86b",
+          "startswith": "sym_anon_cabf22816c0c8c98",
+          "endswith": "sym_anon_d831e564517d9240",
+          "contains": "sym_anon_d4195ce4bca0702f",
+          "find": "sym_anon_7ac9e54513ea4662",
+          "find_last": "sym_anon_83d242d6f553b026",
+          "is_empty": "sym_anon_944c61944ed54280",
+          "format": "sym_anon_871af2d3b8011b1e",
+          "to_bool": "sym_anon_cf7d308646807f79",
+          "cast_to": "sym_anon_034d3e55a45dfb29"
+        }
+      },
+      "type_root.bool": {
+        "uid": "type_root.bool",
+        "kind": "primitive",
+        "name": "bool",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "to_bool": "sym_anon_cf7d308646807f79",
+          "cast_to": "sym_anon_034d3e55a45dfb29"
+        }
+      },
+      "type_root.void": {
+        "uid": "type_root.void",
+        "kind": "primitive",
+        "name": "void",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": []
+      },
+      "type_root.any": {
+        "uid": "type_root.any",
+        "kind": "primitive",
+        "name": "any",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": []
+      },
+      "type_root.auto": {
+        "uid": "type_root.auto",
+        "kind": "primitive",
+        "name": "auto",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": []
+      },
+      "type_root.None": {
+        "uid": "type_root.None",
+        "kind": "primitive",
+        "name": "None",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "to_bool": "sym_anon_cf7d308646807f79"
+        }
+      },
+      "type_root.slice": {
+        "uid": "type_root.slice",
+        "kind": "primitive",
+        "name": "slice",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": []
+      },
+      "type_root.behavior": {
+        "uid": "type_root.behavior",
+        "kind": "callable_instance",
+        "name": "behavior",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "axiom_name": "behavior",
+        "value_type_name": "auto",
+        "value_type_module": null
+      },
+      "type_root.fn_callable": {
+        "uid": "type_root.fn_callable",
+        "kind": "callable_instance",
+        "name": "fn_callable",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "axiom_name": "fn_callable",
+        "value_type_name": "auto",
+        "value_type_module": null
+      },
+      "type_root.Exception": {
+        "uid": "type_root.Exception",
+        "kind": "class",
+        "name": "Exception",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": null,
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.Optional": {
+        "uid": "type_root.Optional",
+        "kind": "optional",
+        "name": "Optional",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "wrapped_type_name": "any",
+        "wrapped_type_module": null,
+        "members_uids": {
+          "unwrap": "sym_anon_e964eecb43d55b99",
+          "or_else": "sym_anon_4b51ba5d08ec6bdf",
+          "is_some": "sym_anon_34cd69765a0af0eb",
+          "is_none": "sym_anon_18541ecba2a3c620",
+          "to_bool": "sym_anon_cf7d308646807f79",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.bound_method": {
+        "uid": "type_root.bound_method",
+        "kind": "bound_method",
+        "name": "bound_method",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "str"
+        ],
+        "return_type_name": "list"
+      },
+      "type_root.list": {
+        "uid": "type_root.list",
+        "kind": "list",
+        "name": "list",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "element_type_name": "any",
+        "element_type_module": null,
+        "members_uids": {
+          "append": "sym_anon_3b417e1155cbfd1c",
+          "insert": "sym_anon_86349d3d7fae550b",
+          "remove": "sym_anon_3fffef40e300bc3a",
+          "pop": "sym_anon_35e3d351863be224",
+          "index": "sym_anon_64aac6ecdda3db29",
+          "count": "sym_anon_b464ccd0a9917e86",
+          "contains": "sym_anon_17c6b0a06b975cdb",
+          "len": "sym_anon_8752e051b7a33057",
+          "sort": "sym_anon_919e8f80a17294f0",
+          "reverse": "sym_anon_0481932db7e4e748",
+          "clear": "sym_anon_3b419c3ce34266ca",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__getitem__": "sym_anon_7bebc2649c156268",
+          "__setitem__": "sym_anon_f79a310744e3bcb6"
+        }
+      },
+      "type_root.tuple": {
+        "uid": "type_root.tuple",
+        "kind": "tuple",
+        "name": "tuple",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "element_type_name": "any",
+        "element_type_module": null,
+        "members_uids": {
+          "len": "sym_anon_8752e051b7a33057",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__getitem__": "sym_anon_7bebc2649c156268"
+        }
+      },
+      "type_root.dict": {
+        "uid": "type_root.dict",
+        "kind": "dict",
+        "name": "dict",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "key_type_name": "any",
+        "key_type_module": null,
+        "value_type_name": "any",
+        "value_type_module": null,
+        "members_uids": {
+          "get": "sym_anon_1724805ee2e765f1",
+          "pop": "sym_anon_f900cef84a1e5532",
+          "keys": "sym_anon_bcfe93375b7534a1",
+          "values": "sym_anon_3c42abaebacceec5",
+          "items": "sym_anon_61da6e08620d82c3",
+          "update": "sym_anon_ea0bc7f72e540350",
+          "len": "sym_anon_8752e051b7a33057",
+          "contains": "sym_anon_17c6b0a06b975cdb",
+          "remove": "sym_anon_3fffef40e300bc3a",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__getitem__": "sym_anon_ddbbd6176a7a4397",
+          "__setitem__": "sym_anon_4bad61689c5ed5c2"
+        }
+      },
+      "type_root.Enum": {
+        "uid": "type_root.Enum",
+        "kind": "class",
+        "name": "Enum",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "Object",
+        "parent_module": null,
+        "members_uids": {
+          "to_list": "sym_anon_352c0850b12396d8",
+          "len": "sym_anon_8752e051b7a33057"
+        }
+      },
+      "type_root.llm_call_result": {
+        "uid": "type_root.llm_call_result",
+        "kind": "class",
+        "name": "llm_call_result",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": null,
+        "parent_module": null
+      },
+      "type_root.llm_uncertain": {
+        "uid": "type_root.llm_uncertain",
+        "kind": "class",
+        "name": "llm_uncertain",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": null,
+        "parent_module": null,
+        "members_uids": {
+          "__to_prompt__": "sym_anon_daf9938a090f0e45",
+          "to_bool": "sym_anon_cf7d308646807f79",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__eq__": "sym_anon_1b5621a79e5eafc4",
+          "__ne__": "sym_anon_2811d4a3df074371"
+        }
+      },
+      "type_root.Intent": {
+        "uid": "type_root.Intent",
+        "kind": "class",
+        "name": "Intent",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "Object",
+        "parent_module": null,
+        "members_uids": {
+          "get_content": "sym_anon_af24b339b0504875",
+          "get_tag": "sym_anon_5e1b54662505121f",
+          "get_mode": "sym_anon_4d73254f36898cfd"
+        }
+      },
+      "type_root.intent_context": {
+        "uid": "type_root.intent_context",
+        "kind": "class",
+        "name": "intent_context",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "Object",
+        "parent_module": null,
+        "members_uids": {
+          "fork": "sym_anon_9938e52605faba46",
+          "resolve": "sym_anon_861f5ad1b2a9a8a5",
+          "push": "sym_anon_da6d55c0ab9ffcaf",
+          "pop": "sym_anon_35e3d351863be224",
+          "merge": "sym_anon_1b0d3942dead93c8",
+          "combine": "sym_anon_7138e779eb1a30a2",
+          "clear": "sym_anon_3b419c3ce34266ca",
+          "clear_inherited": "sym_anon_c5376921ee9550e7",
+          "use": "sym_anon_dd34800ca6353f88",
+          "get_current": "sym_anon_96790b4d21cb2f46",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.vector": {
+        "uid": "type_root.vector",
+        "kind": "primitive",
+        "name": "vector",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "dim": "sym_anon_fa05767c6149b5db",
+          "dot": "sym_anon_b3380d56f951fdbc",
+          "norm": "sym_anon_79f41be73602f42d",
+          "cosine": "sym_anon_c77d7dcb51ce98f7",
+          "scale": "sym_anon_4168746ac557a1aa",
+          "add": "sym_anon_8860807c801033b7",
+          "sub": "sym_anon_edb03e26e13993ac",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__getitem__": "sym_anon_f5267237bd280981",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.knowledge": {
+        "uid": "type_root.knowledge",
+        "kind": "class",
+        "name": "knowledge",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "Object",
+        "parent_module": null,
+        "members_uids": {
+          "store": "sym_anon_196b62bb3673e06d",
+          "get": "sym_anon_3be5bb60aa9d8c74",
+          "amend": "sym_anon_33a1b64b0d55ebf9",
+          "history": "sym_anon_c4e54cc9feb1fbaa",
+          "keys": "sym_anon_bcfe93375b7534a1",
+          "len": "sym_anon_8752e051b7a33057",
+          "cast_to": "sym_anon_034d3e55a45dfb29"
+        }
+      },
+      "type_root.LLMError": {
+        "uid": "type_root.LLMError",
+        "kind": "class",
+        "name": "LLMError",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "Exception",
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "raw_response": "sym_anon_c31835c222b819e5",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.LLMParseError": {
+        "uid": "type_root.LLMParseError",
+        "kind": "class",
+        "name": "LLMParseError",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "LLMError",
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "raw_response": "sym_anon_c31835c222b819e5",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45",
+          "type_name": "sym_anon_2e5ec2533c088389"
+        }
+      },
+      "type_root.LLMRetryExhaustedError": {
+        "uid": "type_root.LLMRetryExhaustedError",
+        "kind": "class",
+        "name": "LLMRetryExhaustedError",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "LLMError",
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "raw_response": "sym_anon_c31835c222b819e5",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45",
+          "max_retry": "sym_anon_b838feb02c7cc513"
+        }
+      },
+      "type_root.LLMCallError": {
+        "uid": "type_root.LLMCallError",
+        "kind": "class",
+        "name": "LLMCallError",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "LLMError",
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "raw_response": "sym_anon_c31835c222b819e5",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45",
+          "provider_error": "sym_anon_d3ed6d0ef439a8ca"
+        }
+      },
+      "type_root.ThreadError": {
+        "uid": "type_root.ThreadError",
+        "kind": "class",
+        "name": "ThreadError",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "Exception",
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "raw_response": "sym_anon_c31835c222b819e5",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.ThreadCancelled": {
+        "uid": "type_root.ThreadCancelled",
+        "kind": "class",
+        "name": "ThreadCancelled",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "ThreadError",
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "raw_response": "sym_anon_c31835c222b819e5",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.ThreadFailed": {
+        "uid": "type_root.ThreadFailed",
+        "kind": "class",
+        "name": "ThreadFailed",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "parent_name": "ThreadError",
+        "parent_module": null,
+        "members_uids": {
+          "message": "sym_anon_698c6c1c8b7d4569",
+          "raw_response": "sym_anon_c31835c222b819e5",
+          "cast_to": "sym_anon_034d3e55a45dfb29",
+          "__to_prompt__": "sym_anon_daf9938a090f0e45"
+        }
+      },
+      "type_root.chan": {
+        "uid": "type_root.chan",
+        "kind": "channel",
+        "name": "chan",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "value_type_name": "any",
+        "value_type_module": null,
+        "members_uids": {
+          "send": "sym_anon_d7a3343c204cb4c8",
+          "send_nowait": "sym_anon_f3f40cd6cbcb4ac6",
+          "recv": "sym_anon_b30485f86e076383",
+          "recv_nowait": "sym_anon_6c59e34124dcaca2",
+          "subscribe": "sym_anon_e26771194237070e",
+          "close": "sym_anon_5c0ff81520bd000b"
+        }
+      },
+      "type_root.slot": {
+        "uid": "type_root.slot",
+        "kind": "slot",
+        "name": "slot",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "value_type_name": "any",
+        "value_type_module": null,
+        "members_uids": {
+          "get": "sym_anon_d4ca70209be27c2c",
+          "set": "sym_anon_9cd72666977305b7",
+          "update": "sym_anon_ea0bc7f72e540350"
+        }
+      },
+      "type_root.subscriber": {
+        "uid": "type_root.subscriber",
+        "kind": "subscriber",
+        "name": "subscriber",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "recv": "sym_anon_b30485f86e076383",
+          "recv_nowait": "sym_anon_6c59e34124dcaca2",
+          "close": "sym_anon_5c0ff81520bd000b"
+        }
+      },
+      "type_root.thread": {
+        "uid": "type_root.thread",
+        "kind": "thread",
+        "name": "thread",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "value_type_name": "any",
+        "value_type_module": null,
+        "members_uids": {
+          "start": "sym_anon_afb490d39fb4cb74",
+          "join": "sym_anon_9eded42f449fc3e7",
+          "cancel": "sym_anon_4d65b1c5e0e9e425",
+          "is_done": "sym_anon_1803a9375ba43cee"
+        }
+      },
+      "type_root.thread_result": {
+        "uid": "type_root.thread_result",
+        "kind": "thread_result",
+        "name": "thread_result",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "value_type_name": "any",
+        "value_type_module": null,
+        "members_uids": {
+          "unwrap": "sym_anon_e964eecb43d55b99",
+          "unwrap_or": "sym_anon_86137393ccdfdf12",
+          "expect": "sym_anon_e917feaad0d9bd72",
+          "is_error": "sym_anon_b69bff2933f1d5e3",
+          "is_success": "sym_anon_74442d3e929e600c",
+          "value": "sym_anon_b2fb6235ee04f1c4",
+          "error": "sym_anon_12e58090426b3e85",
+          "status": "sym_anon_6f172dca0c6fceb9"
+        }
+      },
+      "type_root.generator": {
+        "uid": "type_root.generator",
+        "kind": "generator",
+        "name": "generator",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "value_type_name": "any",
+        "value_type_module": null,
+        "members_uids": {
+          "to_list": "sym_anon_352c0850b12396d8",
+          "generic_next": "sym_anon_7b1306a0ee18d431"
+        }
+      },
+      "type_root.fn": {
+        "uid": "type_root.fn",
+        "kind": "function",
+        "name": "fn",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [],
+        "return_type_name": "auto"
+      },
+      "type_root.callable": {
+        "uid": "type_root.callable",
+        "kind": "function",
+        "name": "callable",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [],
+        "return_type_name": "auto"
+      },
+      "type_root.print": {
+        "uid": "type_root.print",
+        "kind": "function",
+        "name": "print",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "void"
+      },
+      "type_root.len": {
+        "uid": "type_root.len",
+        "kind": "function",
+        "name": "len",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "int"
+      },
+      "type_root.vec": {
+        "uid": "type_root.vec",
+        "kind": "function",
+        "name": "vec",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "list"
+        ],
+        "return_type_name": "vector"
+      },
+      "type_root.copy": {
+        "uid": "type_root.copy",
+        "kind": "function",
+        "name": "copy",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "any"
+      },
+      "type_root.deepcopy": {
+        "uid": "type_root.deepcopy",
+        "kind": "function",
+        "name": "deepcopy",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "any"
+      },
+      "type_root.range": {
+        "uid": "type_root.range",
+        "kind": "function",
+        "name": "range",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "int"
+        ],
+        "return_type_name": "list"
+      },
+      "type_root.get_self_source": {
+        "uid": "type_root.get_self_source",
+        "kind": "function",
+        "name": "get_self_source",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [],
+        "return_type_name": "str"
+      },
+      "type_root.type": {
+        "uid": "type_root.type",
+        "kind": "function",
+        "name": "type",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "str"
+      },
+      "type_root.enumerate": {
+        "uid": "type_root.enumerate",
+        "kind": "function",
+        "name": "enumerate",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "list"
+      },
+      "type_root.next": {
+        "uid": "type_root.next",
+        "kind": "function",
+        "name": "next",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "any"
+      },
+      "type_root.zip": {
+        "uid": "type_root.zip",
+        "kind": "function",
+        "name": "zip",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "list"
+      },
+      "type_root.sorted": {
+        "uid": "type_root.sorted",
+        "kind": "function",
+        "name": "sorted",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "list"
+      },
+      "type_root.reversed": {
+        "uid": "type_root.reversed",
+        "kind": "function",
+        "name": "reversed",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "list"
+      },
+      "type_root.sum": {
+        "uid": "type_root.sum",
+        "kind": "function",
+        "name": "sum",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "any"
+      },
+      "type_root.all": {
+        "uid": "type_root.all",
+        "kind": "function",
+        "name": "all",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "bool"
+      },
+      "type_root.min": {
+        "uid": "type_root.min",
+        "kind": "function",
+        "name": "min",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "any"
+      },
+      "type_root.max": {
+        "uid": "type_root.max",
+        "kind": "function",
+        "name": "max",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "any"
+      },
+      "type_root.module": {
+        "uid": "type_root.module",
+        "kind": "module",
+        "name": "module",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "PRELUDE_VISIBLE",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": []
+      },
+      "type_root.ihost": {
+        "uid": "type_root.ihost",
+        "kind": "module",
+        "name": "ihost",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "IMPORT_GATED",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "members_uids": {
+          "save_state": "sym_anon_865d6b0178c131e4",
+          "load_state": "sym_anon_c7eed7f3928e915a",
+          "run_isolated": "sym_anon_f5473650e8b2909f",
+          "spawn_isolated": "sym_anon_e2e96bcbb3efe2f6",
+          "collect": "sym_anon_339eac06cbf44c9e",
+          "get_source": "sym_anon_b719bae01c057716"
+        }
+      },
+      "type_root.c": {
+        "uid": "type_root.c",
+        "kind": "function",
+        "name": "c",
+        "module_path": null,
+        "provenance": "USER_DEFINED",
+        "visibility": "IMPORT_GATED",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "any"
+        ],
+        "return_type_name": "bool"
+      },
+      "type_root.save_state": {
+        "uid": "type_root.save_state",
+        "kind": "function",
+        "name": "save_state",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "IMPORT_GATED",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "str"
+        ],
+        "return_type_name": "void"
+      },
+      "type_root.load_state": {
+        "uid": "type_root.load_state",
+        "kind": "function",
+        "name": "load_state",
+        "module_path": null,
+        "provenance": "KERNEL_NATIVE",
+        "visibility": "IMPORT_GATED",
+        "storage_model": "MEMORY_BACKED",
+        "exported_types": [],
+        "param_type_names": [
+          "str"
+        ],
+        "return_type_name": "void"
+      }
+    },
+    "assets": {},
+    "nodes": {
+      "node_6db82a9b4a9a4148": {
+        "_type": "IbName",
+        "lineno": 8,
+        "col_offset": 8,
+        "end_lineno": 8,
+        "end_col_offset": 11,
+        "id": "any",
+        "ctx": "Load"
+      },
+      "node_844ee02446e17b48": {
+        "_type": "IbArg",
+        "lineno": 8,
+        "col_offset": 12,
+        "end_lineno": 8,
+        "end_col_offset": 13,
+        "arg": "x",
+        "annotation": "node_6db82a9b4a9a4148",
+        "default": null,
+        "kind": "POSITIONAL_OR_KEYWORD"
+      },
+      "node_f344bf36e469361a": {
+        "_type": "IbName",
+        "lineno": 9,
+        "col_offset": 12,
+        "end_lineno": 9,
+        "end_col_offset": 13,
+        "id": "x",
+        "ctx": "Load"
+      },
+      "node_c6a3f71f9db7ff30": {
+        "_type": "IbAttribute",
+        "lineno": 9,
+        "col_offset": 12,
+        "end_lineno": 9,
+        "end_col_offset": 13,
+        "value": "node_f344bf36e469361a",
+        "attr": "len",
+        "ctx": "Load"
+      },
+      "node_cc16eee78681166e": {
+        "_type": "IbCall",
+        "lineno": 9,
+        "col_offset": 12,
+        "end_lineno": 9,
+        "end_col_offset": 19,
+        "func": "node_c6a3f71f9db7ff30",
+        "args": [],
+        "keywords": []
+      },
+      "node_6b68134b542b8a58": {
+        "_type": "IbConstant",
+        "lineno": 9,
+        "col_offset": 22,
+        "end_lineno": 9,
+        "end_col_offset": 23,
+        "value": 0
+      },
+      "node_9381fa734e1bfccb": {
+        "_type": "IbCompare",
+        "lineno": 9,
+        "col_offset": 12,
+        "end_lineno": 9,
+        "end_col_offset": 23,
+        "left": "node_cc16eee78681166e",
+        "ops": [
+          ">"
+        ],
+        "comparators": [
+          "node_6b68134b542b8a58"
+        ]
+      },
+      "node_44ed100cb0946fb7": {
+        "_type": "IbReturn",
+        "lineno": 9,
+        "col_offset": 5,
+        "end_lineno": 9,
+        "end_col_offset": 11,
+        "value": "node_9381fa734e1bfccb"
+      },
+      "node_065c7e64c05aee08": {
+        "_type": "IbName",
+        "lineno": 8,
+        "col_offset": 18,
+        "end_lineno": 8,
+        "end_col_offset": 22,
+        "id": "bool",
+        "ctx": "Load"
+      },
+      "node_47838e48c996cb78": {
+        "_type": "IbFunctionDef",
+        "lineno": 8,
+        "col_offset": 1,
+        "end_lineno": 0,
+        "end_col_offset": 0,
+        "name": "c",
+        "args": [
+          "node_844ee02446e17b48"
+        ],
+        "body": [
+          "node_44ed100cb0946fb7"
+        ],
+        "returns": "node_065c7e64c05aee08",
+        "type_params": [],
+        "type_param_bounds": {},
+        "free_vars": [],
+        "is_generator": false,
+        "type_param_uids": []
+      },
+      "node_baec68b2ac824071": {
+        "_type": "IbName",
+        "lineno": 10,
+        "col_offset": 11,
+        "end_lineno": 10,
+        "end_col_offset": 13,
+        "id": "kb",
+        "ctx": "Store"
+      },
+      "node_7d759c493df435c2": {
+        "_type": "IbName",
+        "lineno": 10,
+        "col_offset": 1,
+        "end_lineno": 10,
+        "end_col_offset": 10,
+        "id": "knowledge",
+        "ctx": "Load"
+      },
+      "node_f7e39073bbc024a0": {
+        "_type": "IbTypeAnnotatedExpr",
+        "lineno": 10,
+        "col_offset": 1,
+        "end_lineno": 10,
+        "end_col_offset": 10,
+        "target": "node_baec68b2ac824071",
+        "annotation": "node_7d759c493df435c2"
+      },
+      "node_2fd1d3680516143f": {
+        "_type": "IbName",
+        "lineno": 10,
+        "col_offset": 16,
+        "end_lineno": 10,
+        "end_col_offset": 25,
+        "id": "knowledge",
+        "ctx": "Load"
+      },
+      "node_0e61ec74ac413c30": {
+        "_type": "IbCall",
+        "lineno": 10,
+        "col_offset": 16,
+        "end_lineno": 10,
+        "end_col_offset": 27,
+        "func": "node_2fd1d3680516143f",
+        "args": [],
+        "keywords": []
+      },
+      "node_e1b11d98363db611": {
+        "_type": "IbAssign",
+        "lineno": 10,
+        "col_offset": 1,
+        "end_lineno": 0,
+        "end_col_offset": 0,
+        "targets": [
+          "node_f7e39073bbc024a0"
+        ],
+        "value": "node_0e61ec74ac413c30",
+        "llmexcept_handler": null
+      },
+      "node_c08c27cd6e30f2c5": {
+        "_type": "IbName",
+        "lineno": 16,
+        "col_offset": 5,
+        "end_lineno": 16,
+        "end_col_offset": 6,
+        "id": "n",
+        "ctx": "Store"
+      },
+      "node_ee22b16d7db77fac": {
+        "_type": "IbName",
+        "lineno": 16,
+        "col_offset": 1,
+        "end_lineno": 16,
+        "end_col_offset": 4,
+        "id": "int",
+        "ctx": "Load"
+      },
+      "node_7395baa3acde32ea": {
+        "_type": "IbTypeAnnotatedExpr",
+        "lineno": 16,
+        "col_offset": 1,
+        "end_lineno": 16,
+        "end_col_offset": 4,
+        "target": "node_c08c27cd6e30f2c5",
+        "annotation": "node_ee22b16d7db77fac"
+      },
+      "node_828f9ac58d8fd373": {
+        "_type": "IbName",
+        "lineno": 16,
+        "col_offset": 9,
+        "end_lineno": 16,
+        "end_col_offset": 11,
+        "id": "kb",
+        "ctx": "Load"
+      },
+      "node_7b98015062f277af": {
+        "_type": "IbAttribute",
+        "lineno": 16,
+        "col_offset": 9,
+        "end_lineno": 16,
+        "end_col_offset": 11,
+        "value": "node_828f9ac58d8fd373",
+        "attr": "len",
+        "ctx": "Load"
+      },
+      "node_cd34e1dd22096daa": {
+        "_type": "IbCall",
+        "lineno": 16,
+        "col_offset": 9,
+        "end_lineno": 16,
+        "end_col_offset": 17,
+        "func": "node_7b98015062f277af",
+        "args": [],
+        "keywords": []
+      },
+      "node_778bdea592ff23d0": {
+        "_type": "IbAssign",
+        "lineno": 16,
+        "col_offset": 1,
+        "end_lineno": 0,
+        "end_col_offset": 0,
+        "targets": [
+          "node_7395baa3acde32ea"
+        ],
+        "value": "node_cd34e1dd22096daa",
+        "llmexcept_handler": null
+      },
+      "node_75391da137e4350c": {
+        "_type": "IbName",
+        "lineno": 17,
+        "col_offset": 5,
+        "end_lineno": 17,
+        "end_col_offset": 7,
+        "id": "v1",
+        "ctx": "Store"
+      },
+      "node_3bf5448e9acbc3dd": {
+        "_type": "IbName",
+        "lineno": 17,
+        "col_offset": 1,
+        "end_lineno": 17,
+        "end_col_offset": 4,
+        "id": "str",
+        "ctx": "Load"
+      },
+      "node_7da2fcac904da26e": {
+        "_type": "IbTypeAnnotatedExpr",
+        "lineno": 17,
+        "col_offset": 1,
+        "end_lineno": 17,
+        "end_col_offset": 4,
+        "target": "node_75391da137e4350c",
+        "annotation": "node_3bf5448e9acbc3dd"
+      },
+      "node_29fefbb44f840696": {
+        "_type": "IbName",
+        "lineno": 17,
+        "col_offset": 11,
+        "end_lineno": 17,
+        "end_col_offset": 14,
+        "id": "str",
+        "ctx": "Load"
+      },
+      "node_868d5ab4c7e653db": {
+        "_type": "IbName",
+        "lineno": 17,
+        "col_offset": 15,
+        "end_lineno": 17,
+        "end_col_offset": 17,
+        "id": "kb",
+        "ctx": "Load"
+      },
+      "node_2f8eefd62a8f0c09": {
+        "_type": "IbAttribute",
+        "lineno": 17,
+        "col_offset": 15,
+        "end_lineno": 17,
+        "end_col_offset": 17,
+        "value": "node_868d5ab4c7e653db",
+        "attr": "get",
+        "ctx": "Load"
+      },
+      "node_bfa672ba0787254a": {
+        "_type": "IbConstant",
+        "lineno": 17,
+        "col_offset": 22,
+        "end_lineno": 17,
+        "end_col_offset": 26,
+        "value": "k1"
+      },
+      "node_ebf6dfed296d2345": {
+        "_type": "IbCall",
+        "lineno": 17,
+        "col_offset": 15,
+        "end_lineno": 17,
+        "end_col_offset": 27,
+        "func": "node_2f8eefd62a8f0c09",
+        "args": [
+          "node_bfa672ba0787254a"
+        ],
+        "keywords": []
+      },
+      "node_72949008f2654799": {
+        "_type": "IbCastExpr",
+        "lineno": 17,
+        "col_offset": 11,
+        "end_lineno": 17,
+        "end_col_offset": 14,
+        "type_annotation": "node_29fefbb44f840696",
+        "value": "node_ebf6dfed296d2345"
+      },
+      "node_bd8233d465ff0895": {
+        "_type": "IbAssign",
+        "lineno": 17,
+        "col_offset": 1,
+        "end_lineno": 0,
+        "end_col_offset": 0,
+        "targets": [
+          "node_7da2fcac904da26e"
+        ],
+        "value": "node_72949008f2654799",
+        "llmexcept_handler": null
+      },
+      "node_29c84d0f22fe7f5b": {
+        "_type": "IbName",
+        "lineno": 18,
+        "col_offset": 6,
+        "end_lineno": 18,
+        "end_col_offset": 7,
+        "id": "h",
+        "ctx": "Store"
+      },
+      "node_5599d27aa19f4f81": {
+        "_type": "IbName",
+        "lineno": 18,
+        "col_offset": 1,
+        "end_lineno": 18,
+        "end_col_offset": 5,
+        "id": "list",
+        "ctx": "Load"
+      },
+      "node_0ff9446bcd846b8f": {
+        "_type": "IbTypeAnnotatedExpr",
+        "lineno": 18,
+        "col_offset": 1,
+        "end_lineno": 18,
+        "end_col_offset": 5,
+        "target": "node_29c84d0f22fe7f5b",
+        "annotation": "node_5599d27aa19f4f81"
+      },
+      "node_16c4fafc2797d2b0": {
+        "_type": "IbName",
+        "lineno": 18,
+        "col_offset": 10,
+        "end_lineno": 18,
+        "end_col_offset": 12,
+        "id": "kb",
+        "ctx": "Load"
+      },
+      "node_a11ea90a32601ea0": {
+        "_type": "IbAttribute",
+        "lineno": 18,
+        "col_offset": 10,
+        "end_lineno": 18,
+        "end_col_offset": 12,
+        "value": "node_16c4fafc2797d2b0",
+        "attr": "history",
+        "ctx": "Load"
+      },
+      "node_39986eafdc4dd484": {
+        "_type": "IbConstant",
+        "lineno": 18,
+        "col_offset": 21,
+        "end_lineno": 18,
+        "end_col_offset": 25,
+        "value": "k1"
+      },
+      "node_c001a9dbe3edf0a8": {
+        "_type": "IbCall",
+        "lineno": 18,
+        "col_offset": 10,
+        "end_lineno": 18,
+        "end_col_offset": 26,
+        "func": "node_a11ea90a32601ea0",
+        "args": [
+          "node_39986eafdc4dd484"
+        ],
+        "keywords": []
+      },
+      "node_f0942e31cd1e1393": {
+        "_type": "IbAssign",
+        "lineno": 18,
+        "col_offset": 1,
+        "end_lineno": 0,
+        "end_col_offset": 0,
+        "targets": [
+          "node_0ff9446bcd846b8f"
+        ],
+        "value": "node_c001a9dbe3edf0a8",
+        "llmexcept_handler": null
+      },
+      "node_2cf8461fe69a9418": {
+        "_type": "IbAlias",
+        "lineno": 7,
+        "col_offset": 8,
+        "end_lineno": 7,
+        "end_col_offset": 13,
+        "name": "ihost",
+        "asname": null
+      },
+      "node_36db97d67532d3a5": {
+        "_type": "IbImport",
+        "lineno": 7,
+        "col_offset": 1,
+        "end_lineno": 7,
+        "end_col_offset": 7,
+        "names": [
+          "node_2cf8461fe69a9418"
+        ]
+      },
+      "node_79476659bf854771": {
+        "_type": "IbName",
+        "lineno": 11,
+        "col_offset": 1,
+        "end_lineno": 11,
+        "end_col_offset": 3,
+        "id": "kb",
+        "ctx": "Load"
+      },
+      "node_76fc795a561b306a": {
+        "_type": "IbAttribute",
+        "lineno": 11,
+        "col_offset": 1,
+        "end_lineno": 11,
+        "end_col_offset": 3,
+        "value": "node_79476659bf854771",
+        "attr": "store",
+        "ctx": "Load"
+      },
+      "node_138aef8d2846f916": {
+        "_type": "IbConstant",
+        "lineno": 11,
+        "col_offset": 10,
+        "end_lineno": 11,
+        "end_col_offset": 14,
+        "value": "k1"
+      },
+      "node_c9fa5c2f054176e2": {
+        "_type": "IbConstant",
+        "lineno": 11,
+        "col_offset": 16,
+        "end_lineno": 11,
+        "end_col_offset": 27,
+        "value": "value-one"
+      },
+      "node_f24fd91e01f4863d": {
+        "_type": "IbName",
+        "lineno": 11,
+        "col_offset": 29,
+        "end_lineno": 11,
+        "end_col_offset": 30,
+        "id": "c",
+        "ctx": "Load"
+      },
+      "node_9908163022bf2f19": {
+        "_type": "IbCall",
+        "lineno": 11,
+        "col_offset": 1,
+        "end_lineno": 11,
+        "end_col_offset": 31,
+        "func": "node_76fc795a561b306a",
+        "args": [
+          "node_138aef8d2846f916",
+          "node_c9fa5c2f054176e2",
+          "node_f24fd91e01f4863d"
+        ],
+        "keywords": []
+      },
+      "node_367810c44ba8983a": {
+        "_type": "IbExprStmt",
+        "lineno": 11,
+        "col_offset": 1,
+        "end_lineno": 11,
+        "end_col_offset": 31,
+        "value": "node_9908163022bf2f19",
+        "llmexcept_handler": null
+      },
+      "node_041c123ff8de4982": {
+        "_type": "IbName",
+        "lineno": 12,
+        "col_offset": 1,
+        "end_lineno": 12,
+        "end_col_offset": 3,
+        "id": "kb",
+        "ctx": "Load"
+      },
+      "node_c6a86e6c242728c0": {
+        "_type": "IbAttribute",
+        "lineno": 12,
+        "col_offset": 1,
+        "end_lineno": 12,
+        "end_col_offset": 3,
+        "value": "node_041c123ff8de4982",
+        "attr": "amend",
+        "ctx": "Load"
+      },
+      "node_be21e61434c9c760": {
+        "_type": "IbConstant",
+        "lineno": 12,
+        "col_offset": 10,
+        "end_lineno": 12,
+        "end_col_offset": 14,
+        "value": "k1"
+      },
+      "node_50b499b48da76568": {
+        "_type": "IbConstant",
+        "lineno": 12,
+        "col_offset": 16,
+        "end_lineno": 12,
+        "end_col_offset": 35,
+        "value": "value-one-amended"
+      },
+      "node_fc086787e0648a3e": {
+        "_type": "IbConstant",
+        "lineno": 12,
+        "col_offset": 37,
+        "end_lineno": 12,
+        "end_col_offset": 64,
+        "value": "reason: amend before save"
+      },
+      "node_24b7aba78604095e": {
+        "_type": "IbCall",
+        "lineno": 12,
+        "col_offset": 1,
+        "end_lineno": 12,
+        "end_col_offset": 65,
+        "func": "node_c6a86e6c242728c0",
+        "args": [
+          "node_be21e61434c9c760",
+          "node_50b499b48da76568",
+          "node_fc086787e0648a3e"
+        ],
+        "keywords": []
+      },
+      "node_282919fa60ea32c3": {
+        "_type": "IbExprStmt",
+        "lineno": 12,
+        "col_offset": 1,
+        "end_lineno": 12,
+        "end_col_offset": 65,
+        "value": "node_24b7aba78604095e",
+        "llmexcept_handler": null
+      },
+      "node_cbe7850bbd0c3357": {
+        "_type": "IbName",
+        "lineno": 13,
+        "col_offset": 1,
+        "end_lineno": 13,
+        "end_col_offset": 6,
+        "id": "ihost",
+        "ctx": "Load"
+      },
+      "node_fdcae63d88b6cc51": {
+        "_type": "IbAttribute",
+        "lineno": 13,
+        "col_offset": 1,
+        "end_lineno": 13,
+        "end_col_offset": 6,
+        "value": "node_cbe7850bbd0c3357",
+        "attr": "save_state",
+        "ctx": "Load"
+      },
+      "node_0eb2f11128d62b7d": {
+        "_type": "IbConstant",
+        "lineno": 13,
+        "col_offset": 18,
+        "end_lineno": 13,
+        "end_col_offset": 39,
+        "value": "./T17_M6_state.json"
+      },
+      "node_05567bfc9815ad63": {
+        "_type": "IbCall",
+        "lineno": 13,
+        "col_offset": 1,
+        "end_lineno": 13,
+        "end_col_offset": 40,
+        "func": "node_fdcae63d88b6cc51",
+        "args": [
+          "node_0eb2f11128d62b7d"
+        ],
+        "keywords": []
+      },
+      "node_355dc8034c0f649a": {
+        "_type": "IbExprStmt",
+        "lineno": 13,
+        "col_offset": 1,
+        "end_lineno": 13,
+        "end_col_offset": 40,
+        "value": "node_05567bfc9815ad63",
+        "llmexcept_handler": null
+      },
+      "node_f81e1fb9111fe0b7": {
+        "_type": "IbName",
+        "lineno": 14,
+        "col_offset": 1,
+        "end_lineno": 14,
+        "end_col_offset": 3,
+        "id": "kb",
+        "ctx": "Load"
+      },
+      "node_7c9b7a6b5ca4e7fd": {
+        "_type": "IbAttribute",
+        "lineno": 14,
+        "col_offset": 1,
+        "end_lineno": 14,
+        "end_col_offset": 3,
+        "value": "node_f81e1fb9111fe0b7",
+        "attr": "store",
+        "ctx": "Load"
+      },
+      "node_ea18542c3e60b5a7": {
+        "_type": "IbConstant",
+        "lineno": 14,
+        "col_offset": 10,
+        "end_lineno": 14,
+        "end_col_offset": 14,
+        "value": "k2"
+      },
+      "node_7bb61ca146131270": {
+        "_type": "IbConstant",
+        "lineno": 14,
+        "col_offset": 16,
+        "end_lineno": 14,
+        "end_col_offset": 27,
+        "value": "value-two"
+      },
+      "node_c0596a53768e2f0c": {
+        "_type": "IbName",
+        "lineno": 14,
+        "col_offset": 29,
+        "end_lineno": 14,
+        "end_col_offset": 30,
+        "id": "c",
+        "ctx": "Load"
+      },
+      "node_765bad8288ae5b01": {
+        "_type": "IbCall",
+        "lineno": 14,
+        "col_offset": 1,
+        "end_lineno": 14,
+        "end_col_offset": 31,
+        "func": "node_7c9b7a6b5ca4e7fd",
+        "args": [
+          "node_ea18542c3e60b5a7",
+          "node_7bb61ca146131270",
+          "node_c0596a53768e2f0c"
+        ],
+        "keywords": []
+      },
+      "node_7119949616237403": {
+        "_type": "IbExprStmt",
+        "lineno": 14,
+        "col_offset": 1,
+        "end_lineno": 14,
+        "end_col_offset": 31,
+        "value": "node_765bad8288ae5b01",
+        "llmexcept_handler": null
+      },
+      "node_ab7bfe79126ad4c5": {
+        "_type": "IbName",
+        "lineno": 15,
+        "col_offset": 1,
+        "end_lineno": 15,
+        "end_col_offset": 6,
+        "id": "ihost",
+        "ctx": "Load"
+      },
+      "node_29938413ec45ad7f": {
+        "_type": "IbAttribute",
+        "lineno": 15,
+        "col_offset": 1,
+        "end_lineno": 15,
+        "end_col_offset": 6,
+        "value": "node_ab7bfe79126ad4c5",
+        "attr": "load_state",
+        "ctx": "Load"
+      },
+      "node_684341cee68aeafa": {
+        "_type": "IbConstant",
+        "lineno": 15,
+        "col_offset": 18,
+        "end_lineno": 15,
+        "end_col_offset": 39,
+        "value": "./T17_M6_state.json"
+      },
+      "node_1228f9b1a20e77f4": {
+        "_type": "IbCall",
+        "lineno": 15,
+        "col_offset": 1,
+        "end_lineno": 15,
+        "end_col_offset": 40,
+        "func": "node_29938413ec45ad7f",
+        "args": [
+          "node_684341cee68aeafa"
+        ],
+        "keywords": []
+      },
+      "node_7f667f61c03f126e": {
+        "_type": "IbExprStmt",
+        "lineno": 15,
+        "col_offset": 1,
+        "end_lineno": 15,
+        "end_col_offset": 40,
+        "value": "node_1228f9b1a20e77f4",
+        "llmexcept_handler": null
+      },
+      "node_1e551a819413182a": {
+        "_type": "IbName",
+        "lineno": 19,
+        "col_offset": 1,
+        "end_lineno": 19,
+        "end_col_offset": 6,
+        "id": "print",
+        "ctx": "Load"
+      },
+      "node_31c1469a678fa0d0": {
+        "_type": "IbConstant",
+        "lineno": 19,
+        "col_offset": 7,
+        "end_lineno": 19,
+        "end_col_offset": 11,
+        "value": "n="
+      },
+      "node_b6272221d5e99d87": {
+        "_type": "IbName",
+        "lineno": 19,
+        "col_offset": 15,
+        "end_lineno": 19,
+        "end_col_offset": 18,
+        "id": "str",
+        "ctx": "Load"
+      },
+      "node_f71c330726e92d04": {
+        "_type": "IbName",
+        "lineno": 19,
+        "col_offset": 19,
+        "end_lineno": 19,
+        "end_col_offset": 20,
+        "id": "n",
+        "ctx": "Load"
+      },
+      "node_208eb2b59b19b310": {
+        "_type": "IbCastExpr",
+        "lineno": 19,
+        "col_offset": 15,
+        "end_lineno": 19,
+        "end_col_offset": 18,
+        "type_annotation": "node_b6272221d5e99d87",
+        "value": "node_f71c330726e92d04"
+      },
+      "node_fb1bcf2457d9aaa1": {
+        "_type": "IbBinOp",
+        "lineno": 19,
+        "col_offset": 7,
+        "end_lineno": 19,
+        "end_col_offset": 18,
+        "left": "node_31c1469a678fa0d0",
+        "op": "+",
+        "right": "node_208eb2b59b19b310"
+      },
+      "node_81e753344c325a91": {
+        "_type": "IbCall",
+        "lineno": 19,
+        "col_offset": 1,
+        "end_lineno": 19,
+        "end_col_offset": 21,
+        "func": "node_1e551a819413182a",
+        "args": [
+          "node_fb1bcf2457d9aaa1"
+        ],
+        "keywords": []
+      },
+      "node_d5f44f11a658aa5f": {
+        "_type": "IbExprStmt",
+        "lineno": 19,
+        "col_offset": 1,
+        "end_lineno": 19,
+        "end_col_offset": 21,
+        "value": "node_81e753344c325a91",
+        "llmexcept_handler": null
+      },
+      "node_300b32a858246103": {
+        "_type": "IbName",
+        "lineno": 20,
+        "col_offset": 1,
+        "end_lineno": 20,
+        "end_col_offset": 6,
+        "id": "print",
+        "ctx": "Load"
+      },
+      "node_f315c36cf1daf036": {
+        "_type": "IbConstant",
+        "lineno": 20,
+        "col_offset": 7,
+        "end_lineno": 20,
+        "end_col_offset": 12,
+        "value": "v1="
+      },
+      "node_2f56c5ee80c9dc10": {
+        "_type": "IbName",
+        "lineno": 20,
+        "col_offset": 15,
+        "end_lineno": 20,
+        "end_col_offset": 17,
+        "id": "v1",
+        "ctx": "Load"
+      },
+      "node_4c700c4403874673": {
+        "_type": "IbBinOp",
+        "lineno": 20,
+        "col_offset": 7,
+        "end_lineno": 20,
+        "end_col_offset": 17,
+        "left": "node_f315c36cf1daf036",
+        "op": "+",
+        "right": "node_2f56c5ee80c9dc10"
+      },
+      "node_4e7a4d592b254f48": {
+        "_type": "IbCall",
+        "lineno": 20,
+        "col_offset": 1,
+        "end_lineno": 20,
+        "end_col_offset": 18,
+        "func": "node_300b32a858246103",
+        "args": [
+          "node_4c700c4403874673"
+        ],
+        "keywords": []
+      },
+      "node_efb6bdb9fe1f9543": {
+        "_type": "IbExprStmt",
+        "lineno": 20,
+        "col_offset": 1,
+        "end_lineno": 20,
+        "end_col_offset": 18,
+        "value": "node_4e7a4d592b254f48",
+        "llmexcept_handler": null
+      },
+      "node_e606e24795e780bf": {
+        "_type": "IbName",
+        "lineno": 21,
+        "col_offset": 1,
+        "end_lineno": 21,
+        "end_col_offset": 6,
+        "id": "print",
+        "ctx": "Load"
+      },
+      "node_5569908d49202f1b": {
+        "_type": "IbConstant",
+        "lineno": 21,
+        "col_offset": 7,
+        "end_lineno": 21,
+        "end_col_offset": 16,
+        "value": "events="
+      },
+      "node_dc21c8a138c46067": {
+        "_type": "IbName",
+        "lineno": 21,
+        "col_offset": 20,
+        "end_lineno": 21,
+        "end_col_offset": 23,
+        "id": "str",
+        "ctx": "Load"
+      },
+      "node_f0c22806b2be39b4": {
+        "_type": "IbName",
+        "lineno": 21,
+        "col_offset": 24,
+        "end_lineno": 21,
+        "end_col_offset": 27,
+        "id": "len",
+        "ctx": "Load"
+      },
+      "node_6ef652656adccc92": {
+        "_type": "IbName",
+        "lineno": 21,
+        "col_offset": 28,
+        "end_lineno": 21,
+        "end_col_offset": 29,
+        "id": "h",
+        "ctx": "Load"
+      },
+      "node_38494f160b1c9016": {
+        "_type": "IbCall",
+        "lineno": 21,
+        "col_offset": 24,
+        "end_lineno": 21,
+        "end_col_offset": 30,
+        "func": "node_f0c22806b2be39b4",
+        "args": [
+          "node_6ef652656adccc92"
+        ],
+        "keywords": []
+      },
+      "node_112a042cc5c59c72": {
+        "_type": "IbCastExpr",
+        "lineno": 21,
+        "col_offset": 20,
+        "end_lineno": 21,
+        "end_col_offset": 23,
+        "type_annotation": "node_dc21c8a138c46067",
+        "value": "node_38494f160b1c9016"
+      },
+      "node_f25166fdab799772": {
+        "_type": "IbBinOp",
+        "lineno": 21,
+        "col_offset": 7,
+        "end_lineno": 21,
+        "end_col_offset": 23,
+        "left": "node_5569908d49202f1b",
+        "op": "+",
+        "right": "node_112a042cc5c59c72"
+      },
+      "node_9cdcacd63b6cdd1b": {
+        "_type": "IbCall",
+        "lineno": 21,
+        "col_offset": 1,
+        "end_lineno": 21,
+        "end_col_offset": 31,
+        "func": "node_e606e24795e780bf",
+        "args": [
+          "node_f25166fdab799772"
+        ],
+        "keywords": []
+      },
+      "node_67c24cec573d45b8": {
+        "_type": "IbExprStmt",
+        "lineno": 21,
+        "col_offset": 1,
+        "end_lineno": 21,
+        "end_col_offset": 31,
+        "value": "node_9cdcacd63b6cdd1b",
+        "llmexcept_handler": null
+      },
+      "node_6f887c7998632a2b": {
+        "_type": "IbName",
+        "lineno": 22,
+        "col_offset": 1,
+        "end_lineno": 22,
+        "end_col_offset": 6,
+        "id": "print",
+        "ctx": "Load"
+      },
+      "node_2dfb7930ae40d0ae": {
+        "_type": "IbConstant",
+        "lineno": 22,
+        "col_offset": 7,
+        "end_lineno": 22,
+        "end_col_offset": 13,
+        "value": "DONE"
+      },
+      "node_0a33e3483b93dd18": {
+        "_type": "IbCall",
+        "lineno": 22,
+        "col_offset": 1,
+        "end_lineno": 22,
+        "end_col_offset": 14,
+        "func": "node_6f887c7998632a2b",
+        "args": [
+          "node_2dfb7930ae40d0ae"
+        ],
+        "keywords": []
+      },
+      "node_9a62eab30a498a33": {
+        "_type": "IbExprStmt",
+        "lineno": 22,
+        "col_offset": 1,
+        "end_lineno": 22,
+        "end_col_offset": 14,
+        "value": "node_0a33e3483b93dd18",
+        "llmexcept_handler": null
+      },
+      "node_3a29ab681c984a2d": {
+        "_type": "IbModule",
+        "lineno": 0,
+        "col_offset": 0,
+        "end_lineno": null,
+        "end_col_offset": null,
+        "body": [
+          "node_36db97d67532d3a5",
+          "node_47838e48c996cb78",
+          "node_e1b11d98363db611",
+          "node_367810c44ba8983a",
+          "node_282919fa60ea32c3",
+          "node_355dc8034c0f649a",
+          "node_7119949616237403",
+          "node_7f667f61c03f126e",
+          "node_778bdea592ff23d0",
+          "node_bd8233d465ff0895",
+          "node_f0942e31cd1e1393",
+          "node_d5f44f11a658aa5f",
+          "node_efb6bdb9fe1f9543",
+          "node_67c24cec573d45b8",
+          "node_9a62eab30a498a33"
+        ],
+        "file_path": null
+      }
+    },
+    "symbols": {
+      "sym_anon_cf7d308646807f79": {
+        "uid": "sym_anon_cf7d308646807f79",
+        "name": "to_bool",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_352c0850b12396d8": {
+        "uid": "sym_anon_352c0850b12396d8",
+        "name": "to_list",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_034d3e55a45dfb29": {
+        "uid": "sym_anon_034d3e55a45dfb29",
+        "name": "cast_to",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:int": {
+        "uid": "intrinsic:int",
+        "name": "int",
+        "kind": "CLASS",
+        "type_uid": "type_root.int",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:float": {
+        "uid": "intrinsic:float",
+        "name": "float",
+        "kind": "CLASS",
+        "type_uid": "type_root.float",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_8752e051b7a33057": {
+        "uid": "sym_anon_8752e051b7a33057",
+        "name": "len",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_155f3c64f6fecd1a": {
+        "uid": "sym_anon_155f3c64f6fecd1a",
+        "name": "upper",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_841498f075dfc7a3": {
+        "uid": "sym_anon_841498f075dfc7a3",
+        "name": "lower",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_4c275f661be71e37": {
+        "uid": "sym_anon_4c275f661be71e37",
+        "name": "strip",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_2560f4ae5e7dc443": {
+        "uid": "sym_anon_2560f4ae5e7dc443",
+        "name": "split",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_8e9dd5bbccef0ad3": {
+        "uid": "sym_anon_8e9dd5bbccef0ad3",
+        "name": "join",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_253cd5ca7a80b86b": {
+        "uid": "sym_anon_253cd5ca7a80b86b",
+        "name": "replace",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_cabf22816c0c8c98": {
+        "uid": "sym_anon_cabf22816c0c8c98",
+        "name": "startswith",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_d831e564517d9240": {
+        "uid": "sym_anon_d831e564517d9240",
+        "name": "endswith",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_d4195ce4bca0702f": {
+        "uid": "sym_anon_d4195ce4bca0702f",
+        "name": "contains",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_7ac9e54513ea4662": {
+        "uid": "sym_anon_7ac9e54513ea4662",
+        "name": "find",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_83d242d6f553b026": {
+        "uid": "sym_anon_83d242d6f553b026",
+        "name": "find_last",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_944c61944ed54280": {
+        "uid": "sym_anon_944c61944ed54280",
+        "name": "is_empty",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_871af2d3b8011b1e": {
+        "uid": "sym_anon_871af2d3b8011b1e",
+        "name": "format",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:str": {
+        "uid": "intrinsic:str",
+        "name": "str",
+        "kind": "CLASS",
+        "type_uid": "type_root.str",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:bool": {
+        "uid": "intrinsic:bool",
+        "name": "bool",
+        "kind": "CLASS",
+        "type_uid": "type_root.bool",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:void": {
+        "uid": "intrinsic:void",
+        "name": "void",
+        "kind": "CLASS",
+        "type_uid": "type_root.void",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:any": {
+        "uid": "intrinsic:any",
+        "name": "any",
+        "kind": "CLASS",
+        "type_uid": "type_root.any",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:auto": {
+        "uid": "intrinsic:auto",
+        "name": "auto",
+        "kind": "CLASS",
+        "type_uid": "type_root.auto",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:None": {
+        "uid": "intrinsic:None",
+        "name": "None",
+        "kind": "CLASS",
+        "type_uid": "type_root.None",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:slice": {
+        "uid": "intrinsic:slice",
+        "name": "slice",
+        "kind": "CLASS",
+        "type_uid": "type_root.slice",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:behavior": {
+        "uid": "intrinsic:behavior",
+        "name": "behavior",
+        "kind": "CLASS",
+        "type_uid": "type_root.behavior",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:fn_callable": {
+        "uid": "intrinsic:fn_callable",
+        "name": "fn_callable",
+        "kind": "CLASS",
+        "type_uid": "type_root.fn_callable",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_698c6c1c8b7d4569": {
+        "uid": "sym_anon_698c6c1c8b7d4569",
+        "name": "message",
+        "kind": "field",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_daf9938a090f0e45": {
+        "uid": "sym_anon_daf9938a090f0e45",
+        "name": "__to_prompt__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:Exception": {
+        "uid": "intrinsic:Exception",
+        "name": "Exception",
+        "kind": "CLASS",
+        "type_uid": "type_root.Exception",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_e964eecb43d55b99": {
+        "uid": "sym_anon_e964eecb43d55b99",
+        "name": "unwrap",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_4b51ba5d08ec6bdf": {
+        "uid": "sym_anon_4b51ba5d08ec6bdf",
+        "name": "or_else",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_34cd69765a0af0eb": {
+        "uid": "sym_anon_34cd69765a0af0eb",
+        "name": "is_some",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_18541ecba2a3c620": {
+        "uid": "sym_anon_18541ecba2a3c620",
+        "name": "is_none",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:Optional": {
+        "uid": "intrinsic:Optional",
+        "name": "Optional",
+        "kind": "CLASS",
+        "type_uid": "type_root.Optional",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:bound_method": {
+        "uid": "intrinsic:bound_method",
+        "name": "bound_method",
+        "kind": "CLASS",
+        "type_uid": "type_root.bound_method",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_3b417e1155cbfd1c": {
+        "uid": "sym_anon_3b417e1155cbfd1c",
+        "name": "append",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_86349d3d7fae550b": {
+        "uid": "sym_anon_86349d3d7fae550b",
+        "name": "insert",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_3fffef40e300bc3a": {
+        "uid": "sym_anon_3fffef40e300bc3a",
+        "name": "remove",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_35e3d351863be224": {
+        "uid": "sym_anon_35e3d351863be224",
+        "name": "pop",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_64aac6ecdda3db29": {
+        "uid": "sym_anon_64aac6ecdda3db29",
+        "name": "index",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_b464ccd0a9917e86": {
+        "uid": "sym_anon_b464ccd0a9917e86",
+        "name": "count",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_17c6b0a06b975cdb": {
+        "uid": "sym_anon_17c6b0a06b975cdb",
+        "name": "contains",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_919e8f80a17294f0": {
+        "uid": "sym_anon_919e8f80a17294f0",
+        "name": "sort",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_0481932db7e4e748": {
+        "uid": "sym_anon_0481932db7e4e748",
+        "name": "reverse",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_3b419c3ce34266ca": {
+        "uid": "sym_anon_3b419c3ce34266ca",
+        "name": "clear",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_7bebc2649c156268": {
+        "uid": "sym_anon_7bebc2649c156268",
+        "name": "__getitem__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_f79a310744e3bcb6": {
+        "uid": "sym_anon_f79a310744e3bcb6",
+        "name": "__setitem__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:list": {
+        "uid": "intrinsic:list",
+        "name": "list",
+        "kind": "CLASS",
+        "type_uid": "type_root.list",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:tuple": {
+        "uid": "intrinsic:tuple",
+        "name": "tuple",
+        "kind": "CLASS",
+        "type_uid": "type_root.tuple",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_1724805ee2e765f1": {
+        "uid": "sym_anon_1724805ee2e765f1",
+        "name": "get",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_f900cef84a1e5532": {
+        "uid": "sym_anon_f900cef84a1e5532",
+        "name": "pop",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_bcfe93375b7534a1": {
+        "uid": "sym_anon_bcfe93375b7534a1",
+        "name": "keys",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_3c42abaebacceec5": {
+        "uid": "sym_anon_3c42abaebacceec5",
+        "name": "values",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_61da6e08620d82c3": {
+        "uid": "sym_anon_61da6e08620d82c3",
+        "name": "items",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_ea0bc7f72e540350": {
+        "uid": "sym_anon_ea0bc7f72e540350",
+        "name": "update",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_ddbbd6176a7a4397": {
+        "uid": "sym_anon_ddbbd6176a7a4397",
+        "name": "__getitem__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_4bad61689c5ed5c2": {
+        "uid": "sym_anon_4bad61689c5ed5c2",
+        "name": "__setitem__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:dict": {
+        "uid": "intrinsic:dict",
+        "name": "dict",
+        "kind": "CLASS",
+        "type_uid": "type_root.dict",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:Enum": {
+        "uid": "intrinsic:Enum",
+        "name": "Enum",
+        "kind": "CLASS",
+        "type_uid": "type_root.Enum",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:llm_call_result": {
+        "uid": "intrinsic:llm_call_result",
+        "name": "llm_call_result",
+        "kind": "CLASS",
+        "type_uid": "type_root.llm_call_result",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_1b5621a79e5eafc4": {
+        "uid": "sym_anon_1b5621a79e5eafc4",
+        "name": "__eq__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_2811d4a3df074371": {
+        "uid": "sym_anon_2811d4a3df074371",
+        "name": "__ne__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:llm_uncertain": {
+        "uid": "intrinsic:llm_uncertain",
+        "name": "llm_uncertain",
+        "kind": "CLASS",
+        "type_uid": "type_root.llm_uncertain",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_af24b339b0504875": {
+        "uid": "sym_anon_af24b339b0504875",
+        "name": "get_content",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_5e1b54662505121f": {
+        "uid": "sym_anon_5e1b54662505121f",
+        "name": "get_tag",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_4d73254f36898cfd": {
+        "uid": "sym_anon_4d73254f36898cfd",
+        "name": "get_mode",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:Intent": {
+        "uid": "intrinsic:Intent",
+        "name": "Intent",
+        "kind": "CLASS",
+        "type_uid": "type_root.Intent",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_9938e52605faba46": {
+        "uid": "sym_anon_9938e52605faba46",
+        "name": "fork",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_861f5ad1b2a9a8a5": {
+        "uid": "sym_anon_861f5ad1b2a9a8a5",
+        "name": "resolve",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_da6d55c0ab9ffcaf": {
+        "uid": "sym_anon_da6d55c0ab9ffcaf",
+        "name": "push",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_1b0d3942dead93c8": {
+        "uid": "sym_anon_1b0d3942dead93c8",
+        "name": "merge",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_7138e779eb1a30a2": {
+        "uid": "sym_anon_7138e779eb1a30a2",
+        "name": "combine",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_c5376921ee9550e7": {
+        "uid": "sym_anon_c5376921ee9550e7",
+        "name": "clear_inherited",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_dd34800ca6353f88": {
+        "uid": "sym_anon_dd34800ca6353f88",
+        "name": "use",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_96790b4d21cb2f46": {
+        "uid": "sym_anon_96790b4d21cb2f46",
+        "name": "get_current",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:intent_context": {
+        "uid": "intrinsic:intent_context",
+        "name": "intent_context",
+        "kind": "CLASS",
+        "type_uid": "type_root.intent_context",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_fa05767c6149b5db": {
+        "uid": "sym_anon_fa05767c6149b5db",
+        "name": "dim",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_b3380d56f951fdbc": {
+        "uid": "sym_anon_b3380d56f951fdbc",
+        "name": "dot",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_79f41be73602f42d": {
+        "uid": "sym_anon_79f41be73602f42d",
+        "name": "norm",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_c77d7dcb51ce98f7": {
+        "uid": "sym_anon_c77d7dcb51ce98f7",
+        "name": "cosine",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_4168746ac557a1aa": {
+        "uid": "sym_anon_4168746ac557a1aa",
+        "name": "scale",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_8860807c801033b7": {
+        "uid": "sym_anon_8860807c801033b7",
+        "name": "add",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_edb03e26e13993ac": {
+        "uid": "sym_anon_edb03e26e13993ac",
+        "name": "sub",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_f5267237bd280981": {
+        "uid": "sym_anon_f5267237bd280981",
+        "name": "__getitem__",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:vector": {
+        "uid": "intrinsic:vector",
+        "name": "vector",
+        "kind": "CLASS",
+        "type_uid": "type_root.vector",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_196b62bb3673e06d": {
+        "uid": "sym_anon_196b62bb3673e06d",
+        "name": "store",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_3be5bb60aa9d8c74": {
+        "uid": "sym_anon_3be5bb60aa9d8c74",
+        "name": "get",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_33a1b64b0d55ebf9": {
+        "uid": "sym_anon_33a1b64b0d55ebf9",
+        "name": "amend",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_c4e54cc9feb1fbaa": {
+        "uid": "sym_anon_c4e54cc9feb1fbaa",
+        "name": "history",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:knowledge": {
+        "uid": "intrinsic:knowledge",
+        "name": "knowledge",
+        "kind": "CLASS",
+        "type_uid": "type_root.knowledge",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_c31835c222b819e5": {
+        "uid": "sym_anon_c31835c222b819e5",
+        "name": "raw_response",
+        "kind": "field",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:LLMError": {
+        "uid": "intrinsic:LLMError",
+        "name": "LLMError",
+        "kind": "CLASS",
+        "type_uid": "type_root.LLMError",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_2e5ec2533c088389": {
+        "uid": "sym_anon_2e5ec2533c088389",
+        "name": "type_name",
+        "kind": "field",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:LLMParseError": {
+        "uid": "intrinsic:LLMParseError",
+        "name": "LLMParseError",
+        "kind": "CLASS",
+        "type_uid": "type_root.LLMParseError",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_b838feb02c7cc513": {
+        "uid": "sym_anon_b838feb02c7cc513",
+        "name": "max_retry",
+        "kind": "field",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:LLMRetryExhaustedError": {
+        "uid": "intrinsic:LLMRetryExhaustedError",
+        "name": "LLMRetryExhaustedError",
+        "kind": "CLASS",
+        "type_uid": "type_root.LLMRetryExhaustedError",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_d3ed6d0ef439a8ca": {
+        "uid": "sym_anon_d3ed6d0ef439a8ca",
+        "name": "provider_error",
+        "kind": "field",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:LLMCallError": {
+        "uid": "intrinsic:LLMCallError",
+        "name": "LLMCallError",
+        "kind": "CLASS",
+        "type_uid": "type_root.LLMCallError",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:ThreadError": {
+        "uid": "intrinsic:ThreadError",
+        "name": "ThreadError",
+        "kind": "CLASS",
+        "type_uid": "type_root.ThreadError",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:ThreadCancelled": {
+        "uid": "intrinsic:ThreadCancelled",
+        "name": "ThreadCancelled",
+        "kind": "CLASS",
+        "type_uid": "type_root.ThreadCancelled",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:ThreadFailed": {
+        "uid": "intrinsic:ThreadFailed",
+        "name": "ThreadFailed",
+        "kind": "CLASS",
+        "type_uid": "type_root.ThreadFailed",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_d7a3343c204cb4c8": {
+        "uid": "sym_anon_d7a3343c204cb4c8",
+        "name": "send",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_f3f40cd6cbcb4ac6": {
+        "uid": "sym_anon_f3f40cd6cbcb4ac6",
+        "name": "send_nowait",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_b30485f86e076383": {
+        "uid": "sym_anon_b30485f86e076383",
+        "name": "recv",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_6c59e34124dcaca2": {
+        "uid": "sym_anon_6c59e34124dcaca2",
+        "name": "recv_nowait",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_e26771194237070e": {
+        "uid": "sym_anon_e26771194237070e",
+        "name": "subscribe",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_5c0ff81520bd000b": {
+        "uid": "sym_anon_5c0ff81520bd000b",
+        "name": "close",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:chan": {
+        "uid": "intrinsic:chan",
+        "name": "chan",
+        "kind": "CLASS",
+        "type_uid": "type_root.chan",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_d4ca70209be27c2c": {
+        "uid": "sym_anon_d4ca70209be27c2c",
+        "name": "get",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_9cd72666977305b7": {
+        "uid": "sym_anon_9cd72666977305b7",
+        "name": "set",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:slot": {
+        "uid": "intrinsic:slot",
+        "name": "slot",
+        "kind": "CLASS",
+        "type_uid": "type_root.slot",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:subscriber": {
+        "uid": "intrinsic:subscriber",
+        "name": "subscriber",
+        "kind": "CLASS",
+        "type_uid": "type_root.subscriber",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_afb490d39fb4cb74": {
+        "uid": "sym_anon_afb490d39fb4cb74",
+        "name": "start",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_9eded42f449fc3e7": {
+        "uid": "sym_anon_9eded42f449fc3e7",
+        "name": "join",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_4d65b1c5e0e9e425": {
+        "uid": "sym_anon_4d65b1c5e0e9e425",
+        "name": "cancel",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_1803a9375ba43cee": {
+        "uid": "sym_anon_1803a9375ba43cee",
+        "name": "is_done",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:thread": {
+        "uid": "intrinsic:thread",
+        "name": "thread",
+        "kind": "CLASS",
+        "type_uid": "type_root.thread",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_86137393ccdfdf12": {
+        "uid": "sym_anon_86137393ccdfdf12",
+        "name": "unwrap_or",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_e917feaad0d9bd72": {
+        "uid": "sym_anon_e917feaad0d9bd72",
+        "name": "expect",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_b69bff2933f1d5e3": {
+        "uid": "sym_anon_b69bff2933f1d5e3",
+        "name": "is_error",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_74442d3e929e600c": {
+        "uid": "sym_anon_74442d3e929e600c",
+        "name": "is_success",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_b2fb6235ee04f1c4": {
+        "uid": "sym_anon_b2fb6235ee04f1c4",
+        "name": "value",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_12e58090426b3e85": {
+        "uid": "sym_anon_12e58090426b3e85",
+        "name": "error",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_6f172dca0c6fceb9": {
+        "uid": "sym_anon_6f172dca0c6fceb9",
+        "name": "status",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:thread_result": {
+        "uid": "intrinsic:thread_result",
+        "name": "thread_result",
+        "kind": "CLASS",
+        "type_uid": "type_root.thread_result",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_7b1306a0ee18d431": {
+        "uid": "sym_anon_7b1306a0ee18d431",
+        "name": "generic_next",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:generator": {
+        "uid": "intrinsic:generator",
+        "name": "generator",
+        "kind": "CLASS",
+        "type_uid": "type_root.generator",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:fn": {
+        "uid": "intrinsic:fn",
+        "name": "fn",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.fn",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:callable": {
+        "uid": "intrinsic:callable",
+        "name": "callable",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.callable",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:print": {
+        "uid": "intrinsic:print",
+        "name": "print",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.print",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:len": {
+        "uid": "intrinsic:len",
+        "name": "len",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.len",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:vec": {
+        "uid": "intrinsic:vec",
+        "name": "vec",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.vec",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:copy": {
+        "uid": "intrinsic:copy",
+        "name": "copy",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.copy",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:deepcopy": {
+        "uid": "intrinsic:deepcopy",
+        "name": "deepcopy",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.deepcopy",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:range": {
+        "uid": "intrinsic:range",
+        "name": "range",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.range",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:get_self_source": {
+        "uid": "intrinsic:get_self_source",
+        "name": "get_self_source",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.get_self_source",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:type": {
+        "uid": "intrinsic:type",
+        "name": "type",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.type",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:enumerate": {
+        "uid": "intrinsic:enumerate",
+        "name": "enumerate",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.enumerate",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:next": {
+        "uid": "intrinsic:next",
+        "name": "next",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.next",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:zip": {
+        "uid": "intrinsic:zip",
+        "name": "zip",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.zip",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:sorted": {
+        "uid": "intrinsic:sorted",
+        "name": "sorted",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.sorted",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:reversed": {
+        "uid": "intrinsic:reversed",
+        "name": "reversed",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.reversed",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:sum": {
+        "uid": "intrinsic:sum",
+        "name": "sum",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.sum",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:all": {
+        "uid": "intrinsic:all",
+        "name": "all",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.all",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:min": {
+        "uid": "intrinsic:min",
+        "name": "min",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.min",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:max": {
+        "uid": "intrinsic:max",
+        "name": "max",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.max",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "intrinsic:module": {
+        "uid": "intrinsic:module",
+        "name": "module",
+        "kind": "MODULE",
+        "type_uid": "type_root.module",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_865d6b0178c131e4": {
+        "uid": "sym_anon_865d6b0178c131e4",
+        "name": "save_state",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_c7eed7f3928e915a": {
+        "uid": "sym_anon_c7eed7f3928e915a",
+        "name": "load_state",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_f5473650e8b2909f": {
+        "uid": "sym_anon_f5473650e8b2909f",
+        "name": "run_isolated",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_e2e96bcbb3efe2f6": {
+        "uid": "sym_anon_e2e96bcbb3efe2f6",
+        "name": "spawn_isolated",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_339eac06cbf44c9e": {
+        "uid": "sym_anon_339eac06cbf44c9e",
+        "name": "collect",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "sym_anon_b719bae01c057716": {
+        "uid": "sym_anon_b719bae01c057716",
+        "name": "get_source",
+        "kind": "method",
+        "type_uid": null,
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:ihost": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:ihost",
+        "name": "ihost",
+        "kind": "MODULE",
+        "type_uid": "type_root.ihost",
+        "node_uid": null,
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip/c:x": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip/c:x",
+        "name": "x",
+        "kind": "VARIABLE",
+        "type_uid": "type_root.any",
+        "node_uid": "node_844ee02446e17b48",
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:c": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:c",
+        "name": "c",
+        "kind": "FUNCTION",
+        "type_uid": "type_root.c",
+        "node_uid": "node_47838e48c996cb78",
+        "owned_scope_uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip/c",
+        "metadata": {}
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:kb": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:kb",
+        "name": "kb",
+        "kind": "VARIABLE",
+        "type_uid": "type_root.knowledge",
+        "node_uid": "node_e1b11d98363db611",
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:n": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:n",
+        "name": "n",
+        "kind": "VARIABLE",
+        "type_uid": "type_root.int",
+        "node_uid": "node_778bdea592ff23d0",
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:v1": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:v1",
+        "name": "v1",
+        "kind": "VARIABLE",
+        "type_uid": "type_root.str",
+        "node_uid": "node_bd8233d465ff0895",
+        "owned_scope_uid": null,
+        "metadata": {}
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:h": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:h",
+        "name": "h",
+        "kind": "VARIABLE",
+        "type_uid": "type_root.list",
+        "node_uid": "node_f0942e31cd1e1393",
+        "owned_scope_uid": null,
+        "metadata": {}
+      }
+    },
+    "scopes": {
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip/c": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip/c",
+        "parent_uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip",
+        "symbols": {
+          "x": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip/c:x"
+        },
+        "global_refs": []
+      },
+      "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip": {
+        "uid": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip",
+        "parent_uid": null,
+        "symbols": {
+          "int": "intrinsic:int",
+          "float": "intrinsic:float",
+          "str": "intrinsic:str",
+          "bool": "intrinsic:bool",
+          "void": "intrinsic:void",
+          "any": "intrinsic:any",
+          "auto": "intrinsic:auto",
+          "None": "intrinsic:None",
+          "slice": "intrinsic:slice",
+          "behavior": "intrinsic:behavior",
+          "fn_callable": "intrinsic:fn_callable",
+          "Exception": "intrinsic:Exception",
+          "Optional": "intrinsic:Optional",
+          "bound_method": "intrinsic:bound_method",
+          "list": "intrinsic:list",
+          "tuple": "intrinsic:tuple",
+          "dict": "intrinsic:dict",
+          "Enum": "intrinsic:Enum",
+          "llm_call_result": "intrinsic:llm_call_result",
+          "llm_uncertain": "intrinsic:llm_uncertain",
+          "Intent": "intrinsic:Intent",
+          "intent_context": "intrinsic:intent_context",
+          "vector": "intrinsic:vector",
+          "knowledge": "intrinsic:knowledge",
+          "LLMError": "intrinsic:LLMError",
+          "LLMParseError": "intrinsic:LLMParseError",
+          "LLMRetryExhaustedError": "intrinsic:LLMRetryExhaustedError",
+          "LLMCallError": "intrinsic:LLMCallError",
+          "ThreadError": "intrinsic:ThreadError",
+          "ThreadCancelled": "intrinsic:ThreadCancelled",
+          "ThreadFailed": "intrinsic:ThreadFailed",
+          "chan": "intrinsic:chan",
+          "slot": "intrinsic:slot",
+          "subscriber": "intrinsic:subscriber",
+          "thread": "intrinsic:thread",
+          "thread_result": "intrinsic:thread_result",
+          "generator": "intrinsic:generator",
+          "fn": "intrinsic:fn",
+          "callable": "intrinsic:callable",
+          "print": "intrinsic:print",
+          "len": "intrinsic:len",
+          "vec": "intrinsic:vec",
+          "copy": "intrinsic:copy",
+          "deepcopy": "intrinsic:deepcopy",
+          "range": "intrinsic:range",
+          "get_self_source": "intrinsic:get_self_source",
+          "type": "intrinsic:type",
+          "enumerate": "intrinsic:enumerate",
+          "next": "intrinsic:next",
+          "zip": "intrinsic:zip",
+          "sorted": "intrinsic:sorted",
+          "reversed": "intrinsic:reversed",
+          "sum": "intrinsic:sum",
+          "all": "intrinsic:all",
+          "min": "intrinsic:min",
+          "max": "intrinsic:max",
+          "module": "intrinsic:module",
+          "ihost": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:ihost",
+          "c": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:c",
+          "kb": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:kb",
+          "n": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:n",
+          "v1": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:v1",
+          "h": "scope_trials.T17_knowledge.cases.T17-K-M6-save-load-roundtrip:h"
+        },
+        "global_refs": []
+      }
+    }
+  },
+  "plugin_states": {
+    "ai": {
+      "config": {
+        "url": null,
+        "key": null,
+        "model": null,
+        "retry": 3,
+        "timeout": 30.0,
+        "auto_intent_injection": true,
+        "mock": false
+      },
+      "return_type_prompts": {
+        "int": "请仅返回一个整数作为回答，禁止包含任何其他解释文字。",
+        "float": "请仅返回一个浮点数作为回答，禁止包含任何其他解释文字。",
+        "list": "请仅返回一个合法的 JSON 数组（List）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。",
+        "dict": "请仅返回一个合法的 JSON 对象（Dict）作为回答，禁止包含 Markdown 代码块标记（如 ```json）或任何其他解释文字。"
+      }
+    }
+  }
+}
