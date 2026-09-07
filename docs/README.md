@@ -60,7 +60,8 @@ docs/
 │   ├── 12_builtins.md
 │   ├── 13_mock_testing.md
 │   ├── 14_concurrency.md
-│   └── 15_diagnostics.md
+│   ├── 15_diagnostics.md
+│   └── 16_knowledge_system.md
 │
 ├── architecture/                    架构设计详细章节
 │   ├── 01_principles.md
