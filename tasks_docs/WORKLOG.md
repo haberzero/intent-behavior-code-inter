@@ -876,6 +876,47 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   判别/回归/保真测试）。**P0 三线全部收官（线 1 诊断面 3289 → 线 2 词嵌入
   3376 → 线 3 知识注册表 3400）；主线前移 P1（N1 生成参数面 6 项 / N4
   finish_reason 结构化）**。
+- **P1/P2/支线推进 + Tier B 质量巡检（2026-09-07，free-explore）**：P0 三线收官后
+  主线前移，本日完成：
+  - **P1 · N1 思考模型支持 + N4 finish_reason（生成参数面，单设计 pass 六项）**：
+    配置 schema 标准生成参数命名字段（temperature/top_p/top_k/seed——fail-fast
+    类型+范围校验）+ extra_body vendor 透传口子（本机硬编码思考抑制 dict 迁入
+    api_config——机器事实收敛配置单源）+ 配置未知字段严格性
+    （CFG_CONFIG_UNKNOWN_FIELD——静默丢弃不再允许）；provider 层参数通道路由
+    单点（temperature/top_p/seed = SDK 直传 kwarg，top_k = vendor 扩展经
+    extra_body）+ 三调用点硬编码抑制 dict 移除（reasoning: true 思考模型模式
+    请求层可表达）+ **finish_reason 契约面暴露**（LLMCallResult 字段 +
+    call_info 观测面——截断检测 length ≠ 解析失败）+ **空内容确定性处理**
+    （content 空 + reasoning 非空 = RUN_LLM_EMPTY_CONTENT fail-fast——新增
+    LLMProviderError 携带诊断码，替代原静默以 reasoning 替代 content 的可审计性
+    违约；异常面原样上抛经码透传机制）+ call_info 采样姿态审计闭环
+    （generation 有效值 + finish_reason 经 provider_meta 单通道回填——内核
+    _call_info merge 面）；语言面 register_model/set_config 参数面显式化
+    （**kwargs 静默吞参移除——未知参数编译期 SEM_UNKNOWN_KEYWORD + 运行时范围
+    违约 RUN_TYPE_MISMATCH）；T18 套件 5/5 + 单元测试 +19。
+  - **P2 四项**：dict 可迭代 P9c（for k in d 键序列——resolve_iterable 的 to_list
+    协议面覆盖 dict + vtable 注册；判别 +6）/ 尾逗号 A3（list/dict 字面量尾逗号
+    接受——单行/多行；判别 +9）/ named-model 端点泄漏修复（T01 D1-07-006 /
+    T08 D5-03 硬编码旧端点改走 IBCI_TRIAL_LLM_URL/MODEL/KEY env 通道——机器事实
+    不入 tracked 文件；真实端点验证通过）/ T06 子目录复跑缺口关闭（run_batch
+    收集支持子目录布局[0→20 用例] + 命名可辨识 + 目录型用例 root=用例目录
+    [KERNEL_ISSUE-IMPORT-2 短期 harness 解]；T06 全量复跑 20/20 PASS）。
+  - **支线**：恶意边界 #17 解封核验（T15-E-M29——SER-1 修复后：特化类类型身份
+    Box[int] round-trip 保真 + enum 成员值模型一致——序列化子系统零缺陷；INDEX
+    核销）；BOUNDARY-LLM-5 机制澄清文档化（call_info 观测契约——两形态快照：
+    dispatch 请求面 → resolve 补全 response/sys_prompt/finish_reason/generation；
+    变量读点触发 resolve——观测完整信息须在消费 LLM 结果变量之后；入
+    docs/syntax/11_modules.md；mock 路径观测面机制同构化[provider_meta 补
+    generation]）；剩余 #15/#19/#33 为专项（观测面设计/overlay 交互/LLM-5 依赖）。
+  - **基础设施修复**：全量 pytest 间歇性 120s 超时根因——ThreadPoolExecutor
+    worker 非 daemon + 无哨兵唤醒（未显式 close 的 LLM 线程池让进程退出挂起）：
+    进程级 weakref 池登记 + atexit shutdown + None 终止哨兵显式投递；
+    MockServer daemon_threads=True（keep-alive handler 不阻塞进程退出）。
+  - **Tier B 质量巡检**（主线阶段边界触发——P0/P1/P2 全完成）：残留扫描
+    （临时目录清理）/ 范围常量双写提炼单点（_TEMPERATURE_RANGE/_TOP_P_RANGE）/
+    注释纪律零命中 / 无双通道 / fail-fast 全生效。
+  - 全量 pytest 基线 3400 → **3447 passed / 1 skipped**（+47 判别/回归/试用/
+    基础设施测试），全程零回归；git 承载（本段 8 commit）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
