@@ -949,6 +949,33 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     竞态——事件驱动监视复发，近期运行无复发）。
   - harness 附修：expect-out 断言尾部空白不敏感（内容语义匹配；行首敏感保持）。
   git 承载（本段 commit：M29/M30/M31 + harness 修正）。
+- **无目的审视（2026-09-07，free-explore——本 session 变更子系统，首次新起清单；
+  均为潜在参考，非缺陷判定，待周期事实复审）**：
+  1. **引擎资源生命周期契约**（`core/runtime/interpreter/llm_executor/_scheduler.py`
+     进程级 atexit 兜底）：LLM 线程池经 atexit + 哨兵兜底确定性释放，但 IBCIEngine
+     无显式 close()——executor.close() 存在却无调用方（引擎创建→使用→隐式 GC
+     路径由 atexit 代偿）。当下收益 = 进程退出确定性（测试/脚本场景）；潜在问题 =
+     长期进程（host 常驻场景）线程池随引擎实例累积（每引擎一池，GC 回收前 worker
+     滞留）；形态参考 = 未来可补 IBCIEngine.close() 显式生命周期（atexit 降级为纯
+     保险）。另：哨兵投递依赖 CPython 内部属性（_threads/_work_queue，try/except
+     防御性降级）——CPython 版本漂移时静默失效（退出挂起风险回归但不报错）。
+  2. **运行期诊断的用户端呈现面**（`_llm_callable.py` LLM_ASSEMBLY_UNKNOWN_KEY
+     警告）：运行期 warning 经 issue_tracker 记录（severity WARNING + 码）但
+     未呈现到用户终端（silent=False 亦不可见，引擎无 diagnostics 输出面——
+     编译期诊断有呈现，运行期诊断只有记录）。"可见性"目标半达成（仅测试/检视
+     侧可见）。潜在参考 = 运行期警告的用户端呈现设计（console 呈现面 vs 仅
+     检视面）——若裁定"运行期 warning 须用户可见"则为缺陷项（转 code-review）。
+  3. **dict.to_list 语义清晰度**（`collections.py`/`primitive_initializer.py`
+     dict 可迭代 P9c）：to_list = 键序列（对齐 Python dict 迭代约定），但
+     "to_list"命名对 dict 的直觉语义可能是"值列表"（list-ification 的常见
+     心智）。形态参考 = 命名-语义对齐度（to_keys? 或 to_list 文档强化）；
+     当前文档（集合章节）已注明键序列语义，风险低（文档面兜住命名歧义）。
+  4. **call_info 单写槽的并发语义**（provider `_record_call_info` + 内核
+     `_call_info`）：单写槽 = 最近一次调用（顺序/单线程语义明确；多根并发
+     run_many / 线程内并发 LLM 调用时槽被覆盖——观测非确定（哪个调用最后
+     resolve 取决于调度）。当下 = 顺序场景契约清晰（T18 观测契约已文档化）；
+     潜在参考 = 并发场景 call_info 的观测语义（per-future 观测面 vs 全局
+     最近——run_many 批量调用场景的观测需求未现，暂不设计）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
