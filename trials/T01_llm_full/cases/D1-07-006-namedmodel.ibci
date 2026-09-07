@@ -1,6 +1,8 @@
 # D1-07-006 命名模型路由 @NAME~
 # doc: docs/syntax/07_behavior_expressions.md §7.5
-# 期望: 注册命名模型路由到本地端点；未注册名报错（文档：运行时错误）
+# 期望: 注册命名模型路由到环境声明端点（机器事实走 env 通道：
+# IBCI_TRIAL_LLM_URL / IBCI_TRIAL_LLM_MODEL / IBCI_TRIAL_LLM_KEY）；
+# 未注册名报错（文档：运行时错误）
 
 # expect-class: PASS
 # expect-out: DONE
@@ -12,7 +14,9 @@ import python "os" as oslib:
 ai.load_project_config()
 
 str key = oslib.getenv("IBCI_TRIAL_LLM_KEY")
-ai.register_model("LOCAL1", "http://localhost:8001/v1", key, "Qwen3.6-35B-A3B")
+str url = oslib.getenv("IBCI_TRIAL_LLM_URL")
+str model_id = oslib.getenv("IBCI_TRIAL_LLM_MODEL")
+ai.register_model("LOCAL1", url, key, model_id)
 str t = @LOCAL1~ 用一个词形容太阳 ~
 print("t=" + t)
 
