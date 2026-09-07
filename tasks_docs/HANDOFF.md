@@ -115,22 +115,32 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线 = P0 三线全部收官 → P1 开工（2026-09-07，free-explore 分支）**：
-  **线 1 · 诊断面打包已完成**（SEM-1 编译期运算符类型检查 + B1 错误定位链 +
-  LLMParseError 渲染修复 + P2 解析位置归位；判别测试 +70）；**线 2 · PT-FEAT-16
-  词嵌入一等能力四批已完成**（① 契约包 + EMB_ 码域；② `vector` 一等值类型
-  （公理层全链路）；③ `ai` 模块面（embed 动态重载/retrieve/api_config
-  `kind: "embedding"`/MOCK:VEC；unbox_args 机制泛化 + 幽灵码原码透传）；④ T16
-  真实试用 8/8（SiliconFlow dim=1024）；判别/回归测试 +87）；**线 3 · N2 已验证
-  知识注册表四批已完成**（①+② `knowledge` 一等值类型 + 验证门铁律编译期检查
-  （SEM_KNW_CHECK_LLM/OPAQUE）+ KNW_ 码域；③ 状态保真 + docs 子系统页
-  `docs/syntax/16_knowledge_system.md`；④ T17 试用套件 7/7（L1 canonical idiom
-  双轨实证 e25 机制"用得越久越确定"语言级落地）；附 host 层 save_state 单层
-  相对路径缺陷修复；判别/回归测试 +24）。全量 pytest 3400/1 零回归
-  （P0 期间 3219 → 3400 = +181）。**当前阶段 = P1（N1 生成参数面 6 项 /
-  N4 finish_reason 结构化）**。详见 `tasks_docs/NEXT_STEPS.md` +
-  `tasks_docs/_embedding_design.md` §九/§9.6/§9.7 +
-  `tasks_docs/_knowledge_registry_design.md`。
+- **🔴 当前主线 = P0/P1/P2 主线队列全部完成 + 支线收敛（2026-09-07，free-explore 分支）**：
+  **P0 三线**（诊断面打包 / PT-FEAT-16 词嵌入 / N2 知识注册表）四批各完成
+  （3219 → 3400 = +181）；**P1 · N1+N4 生成参数面**完成（配置 schema 标准生成参数
+  命名字段 + extra_body vendor 透传口子[硬编码思考抑制迁入 api_config] + 配置未知字段
+  严格性[CFG_CONFIG_UNKNOWN_FIELD]；provider 参数通道路由单点[SDK kwarg vs
+  extra_body] + finish_reason 契约面暴露 + 空内容确定性处理[RUN_LLM_EMPTY_CONTENT +
+  LLMProviderError 码透传] + call_info 采样姿态审计闭环[generation/finish_reason 经
+  provider_meta 单通道]；register_model/set_config 参数面显式化；T18 5/5 + 测试 +19，
+  3400 → 3423）；**P2 四项**完成（dict 可迭代 P9c[to_list 协议面 + vtable] /
+  尾逗号 A3[list/dict 字面量尾逗号接受] / named-model 端点泄漏修复[T01/T08 两用例
+  机器事实收敛 IBCI_TRIAL_LLM_URL/MODEL/KEY env 通道] / T06 子目录复跑缺口关闭
+  [run_batch 收集支持子目录布局 + 目录型用例 root=用例目录；T06 复跑 20/20 PASS]）；
+  **支线**（阶段 C 真实 LLM 残留项）：恶意边界 #15/#17/#19 全部核销（T15-E-M29/M30/M31
+  零缺陷实证——序列化特化/enum、intent_context 类字段 deep_clone 双路径、overlay 三交互
+  面）；阶段 C 文档复核登记项收敛（call_info 键结构 11_modules 单点 + 观测契约文档化；
+  装配 dict 未知键 LLM_ASSEMBLY_UNKNOWN_KEY 警告实施[T10 M5]；KNOWN_LIMITS 零漂移；
+  BOUNDARY-LLM-5 机制澄清 + mock 路径观测面机制同构）；**基础设施修复**（全量 pytest
+  间歇性 120s 超时根因 = ThreadPoolExecutor worker 非 daemon 无哨兵唤醒——进程级 weakref
+  池登记 + atexit shutdown + None 终止哨兵；MockServer daemon_threads=True）；
+  **Tier B 质量巡检**（范围常量单点化 + 残留扫描 + 注释纪律）；**无目的审视清单新起**
+  （4 条潜在参考）。全量 pytest 基线 **3447 passed / 1 skipped**（本段 +47，全程零
+  回归）。**剩余被动项**：#33（_pending_futures 长会话累积——依赖 KERNEL_ISSUE-LLM-5
+  同子系统）+ KERNEL_ISSUE-LLM-5（llm 可调用类赋值约 1/6 竞态——事件驱动监视复发，
+  近期运行无复发）；远程 CI 启用（用户裁定暂不启动，需显式授权）；阶段 D 远期演进
+  （VISION-4/5/1——试用稳定后）。详见 `tasks_docs/NEXT_STEPS.md` + `tasks_docs/WORKLOG.md`
+  （本段完整记录）+ git log（本段 15+ commit）。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
   规划已读）；**push 已获用户显式授权并执行**（本地 28 提交 `b2322214..e1a9b3d9` 推送
