@@ -56,12 +56,20 @@ PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进 → 真实 LLM 全面试用
 （健康阈值后重启，非最高优先但必做）；同一时刻只推一个 P0。
 
-1. **阶段 E · 真实使用整改与灰盒愿景整合（用户裁定：下一阶段主攻目标）**：真实 LLM 试用
-   暴露的易用性/缺陷项（配置体系单源收敛、语言层环境变量通道、trial harness 可用性等）+
-   外部灰盒自动机需求单（`ref/IBCI_REQUIREMENTS.md`，本地未入库资产）整合推进；汇总映射、
-   批次建议与待裁定项见 `tasks_docs/_next_phase_targets.md`（正式总条目 = PENDING_TASKS
-   VISION-7）。
-2. **阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：① named-model 端点泄漏
+1. **主线（2026-09-06 用户裁定：全部建议认可）= P0 三线，同一时刻只推一线**：
+   **线 1 · 诊断面打包**（`KERNEL_ISSUE-SEM-1` 编译期比较类型检查缺失 + B1 运行时错误
+   ibci 源行号 + P2 解析位置漂移，一个设计文档 `tasks_docs/_diagnostic_design.md` 覆盖
+   "错误定位链"：编译期类型检查覆盖审计 → 运行期错误对象携带 loc → CLI 渲染；
+   含 LLMParseError repr 直漏渲染项）→ **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定：
+   协议层独立 `embedding_protocol` 包 + 用户面并入 `ai`；批次 ① 契约包/provider/配置 →
+   ② `vector` 值类型（公理层，全量 pytest 评估）→ ③ `ai` 模块面 + MOCK:VEC + 检索最小
+   闭包 → ④ SiliconFlow 真实试用；参考实现 = ibci-trial/kernel_overlay K1-K3 33/33
+   （批①③底本，3 处合入处理项）+ 批② pre-study 检查单，详见
+   `tasks_docs/_trial_intake_analysis.md` §四）→ **线 3 · N2 结晶注册表设计**
+   （`tasks_docs/_crystallize_design.md` 先行：API 形态四方法为审查输入，检索键/
+   生命周期/存储/铁律强制点四开放问题在文档内二次裁决）。
+2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
+   ① named-model 端点泄漏
    2 用例（T01 D1-07-006 / T08 D5-03 在 tracked 文件硬编码旧本机端点 → 端点 URL 走
    `IBCI_TRIAL_LLM_URL` 环境变量通道，与 `IBCI_TRIAL_LLM_KEY` 同构；`LLM_SERVICE.md` §五 同步）；
    ② T06 子目录布局用例（7 llm）run_batch 不收集——手工 harness 复跑或 run_batch 收集
