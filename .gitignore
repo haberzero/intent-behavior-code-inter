@@ -57,3 +57,9 @@ AGENTS.local.md
 
 # repo-root runtime artifacts (state-file experiments)
 logs/
+
+# 本机复现脚本工作目录（KERNEL_ISSUE-SEM-1/P9* 复现资产，trials/INDEX 引用；临时，不入库）
+.tmp_verify/
+
+# 旧端点试用指南（含真实 API key，已作废；本地保留备查，永不入库）
+TEMP-35B-LLM-GUIDE.md
