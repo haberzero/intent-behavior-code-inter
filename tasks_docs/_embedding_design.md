@@ -100,3 +100,64 @@ OpenAI 兼容默认实现：`POST /v1/embeddings {model, input: [..]}` → `data
   `EmbeddingRequest` 字段面（texts/dimensions/user 归属）；内核执行器路径
   （llm_executor 同构 vs 独立轻路径——embedding 无意图/重试语义，或最小重试）；
   trial2 e18"短词坍缩"教训在默认实现层的体现（文档提示而非内核补偿）。
+
+---
+
+## 九、批 ① 实施定案（2026-09-07，free-explore）
+
+> Q1-Q4 已裁定（`_trial_intake_analysis.md` §4.1）；K1-K3 参考实现审查
+> （§4.2）= 批 ①/批 ③ 实施底本。本节记录批 ① 落地定案。
+
+### 9.1 范围
+
+- **做**：契约包 `core/base/embedding_protocol/`（EmbeddingRequest/Result +
+  EmbeddingProvider 协议 + RecommendedEmbeddingProvider（OpenAI 兼容
+  /v1/embeddings + MOCK:VEC 确定性 mock）+ retrieval 最小闭包（cosine + 线性
+  top-k）+ MOCK:VEC 指令引擎）+ `EMB_` 诊断码域（Q4 裁定，6 码）+ 契约测试
+  （K1-K3 33 用例改写为 pytest 判别测试）。
+- **不做（属后续批次）**：`vector` 值类型（批 ② 公理层）；`ai.embed` 模块面 +
+  用户面 MOCK:VEC 接线 + api_config embedding 条目 schema 形态（批 ③）；
+  SiliconFlow 真实试用（批 ④）。
+
+### 9.2 合入处理项（K1-K3 已知瑕疵处置，`_trial_intake_analysis.md` §4.2）
+
+1. **mock 向量派生文档漂移**：docstring 与实现对齐——派生键 = `{seed}|{text}`
+   （`mock_vector` 对传入 text 派生）；场景引擎按批对齐时自行前缀
+   （`default:{i}` / `vec:{i}`）——两层职责分离是设计而非漂移，修正表述。
+2. **零范数兜底改 fail-fast**：`norm == 0.0` 的 e_0 兜底（防御性边界，
+   sha256 派生实际不可能触发）违反 fail-fast 纪律——改为显式契约违约
+   （`EMB_ZERO_NORM`）。与 retrieval `cosine` 零范数 fail-fast 同纪律。
+3. **测试 runner → pytest**：33 用例改写为 pytest 断言（判别性保留，
+   自包含 runner 面删除——上游 pytest 基建完备，C4 裁决）。
+
+### 9.3 EMB_ 码面（Q4 裁定：embedding 是一等 I/O 面，错误面独立可定位）
+
+| 码 | 语义 | 发射点（批 ①） |
+|----|------|---------------|
+| `EMB_CONFIG_MISSING` | embedding 配置缺失（base_url/api_key/model 必填空） | `set_config` / live 路径未配置 |
+| `EMB_BATCH_ORDER` | 批量保序契约违约（响应长度 ≠ 请求长度 / 项缺序且乱序不可恢复） | `RecommendedEmbeddingProvider._embed_live` |
+| `EMB_DIMENSION_MISMATCH` | 维度失配（批内不一致 / 查询×语料 / mock SEQ 向量维度） | provider / retrieval / mock 引擎 |
+| `EMB_SERVICE_ERROR` | embedding 服务调用失败（网络/供应商错误） | `_embed_live` |
+| `EMB_ZERO_NORM` | 零范数向量（余弦未定义 / 派生退化） | retrieval / mock 派生 |
+| `EMB_INVALID_INPUT` | 检索/契约非法输入（空批 / 空语料 / k≤0 / 非有限值 / 序列长度不符） | provider / retrieval / mock 引擎 |
+
+**码 × 异常映射**：`EmbeddingProviderError` / `RetrievalError` 携带 `code`
+属性（失败语义 → 码 单点权威源）——批 ③ 语言层接线时同码复用
+（用户可见错误 = EMB_*，不另设 RUN_ 面）。
+
+### 9.4 配置面定案（批 ① 边界）
+
+- 批 ① 配置经**显式 `set_config`** 承载（K1-K3 形态，"配置单源由调用方
+  保证"）；**api_config.json schema 形态不定案**（`models.<name>.kind` vs
+  独立段）——属批 ③ 模块面接线点（`ai.load_project_config` 消费处），
+  批 ① 不动 api_config schema（避免 CFG_ 码面扩大）。
+- 机制同构基准（§一）五层：契约包（本批）/ provider 实现（本批）/
+  模块面（批 ③）/ 配置单源（批 ③ 接线）/ 执行路径（批 ③——embedding
+  无意图/重试语义，最小重试 DEFAULT_RETRY=2 保留）。
+
+### 9.5 验收基线
+
+- K1-K3 33 用例全绿（pytest 形态，判别性保留）；
+- 全量 pytest 零回归（基线 3289）；
+- EMB_ 6 码 catalog 1:1 覆盖（test_diagnostic_catalog 强制）；
+- 合入处理项 ② 实证：零范数输入 → `EMB_ZERO_NORM` fail-fast（非静默 e_0）。

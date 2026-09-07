@@ -368,6 +368,31 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="运行时降级：跨引擎 round-trip 特化类重建失败（注册表封印），值回落基类。",
         fix="KNOWN_LIMITS §十 契约：特化跨引擎身份保真须目标引擎已编译该类；回退后值字段与基类方法可用，仅特化身份丢失。如需保真须目标引擎先编译该类。",
     ),
+    # ==================== 词嵌入 (EMB_) ====================
+    "EMB_CONFIG_MISSING": CodeInfo(
+        title="embedding 配置缺失（base_url/api_key/model 未提供且未进入 mock 模式）。",
+        fix="调用 set_config(base_url, api_key, model) 提供端点凭据，或 set_mock_mode() 进入 MOCK:VEC 确定性 mock 模式。",
+    ),
+    "EMB_SERVICE_ERROR": CodeInfo(
+        title="embedding 服务调用失败（网络/客户端初始化/供应商错误）。",
+        fix="检查 embedding 端点连通性、密钥有效性与供应商侧错误信息。",
+    ),
+    "EMB_BATCH_ORDER": CodeInfo(
+        title="embedding 批量保序契约违约（响应数量与请求文本数不一致、mock SEQ 缓冲余量不足）。",
+        fix="供应商响应须与请求文本按序一一对应；mock SEQ 序列长度须覆盖全部消费批次的请求数。",
+    ),
+    "EMB_DIMENSION_MISMATCH": CodeInfo(
+        title="embedding 维度失配（批内向量维度不一致、查询与语料维度不同、mock SEQ 向量维度与目标不符）。",
+        fix="同一批/同一检索面的向量须同维度；dimensions 请求位与供应商实际输出保持一致。",
+    ),
+    "EMB_ZERO_NORM": CodeInfo(
+        title="零范数向量（余弦相似度未定义；mock 派生退化）。",
+        fix="避免全零向量输入检索/相似度计算；mock 派生零范数为契约违约（实际不可达）。",
+    ),
+    "EMB_INVALID_INPUT": CodeInfo(
+        title="embedding/检索非法输入（空批、空语料、k 非正整数、向量含非有限值 NaN/Inf、mock 指令非法）。",
+        fix="检查输入面：texts 非空、k 为正整数、向量元素为有限浮点数、mock 指令载荷合法。",
+    ),
     # ==================== 配置 (CFG_) ====================
     "CFG_CONFIG_NOT_FOUND": CodeInfo(
         title="配置加载指定的配置文件不存在（ai.load_config / ai.load_project_config）。",
