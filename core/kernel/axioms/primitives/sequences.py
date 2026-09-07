@@ -77,8 +77,14 @@ class StrAxiom(BaseAxiom):
         if op == "*":
             if other_name in ("int", "any"):
                 return "str"
-        if op in ("==", "!=", ">", ">=", "<", "<="):
+        if op in ("==", "!="):
+            # 相等/不等跨类型合法（运行期返回 False/True，Python 语义）
             return "bool"
+        if op in (">", ">=", "<", "<="):
+            # 排序比较仅 str 之间合法（运行期 _require_str_other 跨型报错）
+            if other_name == "str":
+                return "bool"
+            return None
         return None
 
     def get_element_type_name(self) -> str:

@@ -62,13 +62,23 @@ class IntAxiom(BaseAxiom):
                 return "int"
             if other_name == "float":
                 return "float"
+            if op == "*" and other_name == "str":
+                # 字符串重复（int * str，运行期合法——Python 同语义）
+                return "str"
         if op == "**":
             if other_name == "int":
                 return "int"
             if other_name == "float":
                 return "float"
-        if op in (">", ">=", "<", "<=", "==", "!="):
+        if op in ("==", "!="):
+            # 相等/不等跨类型合法（运行期返回 False/True，Python 语义）
             return "bool"
+        if op in (">", ">=", "<", "<="):
+            # 排序比较仅数值族内合法（运行期跨型 TypeError）；
+            # bool 静态类型为独立基名（运行期 int 语义，可相互排序）
+            if other_name in ("int", "float", "bool"):
+                return "bool"
+            return None
         return None
 
     def can_convert_from(self, source_type_name: str) -> bool:
@@ -138,8 +148,14 @@ class FloatAxiom(BaseAxiom):
         if op == "**":
             if other_name in ("int", "float"):
                 return "float"
-        if op in (">", ">=", "<", "<=", "==", "!="):
+        if op in ("==", "!="):
+            # 相等/不等跨类型合法（运行期返回 False/True，Python 语义）
             return "bool"
+        if op in (">", ">=", "<", "<="):
+            # 排序比较仅数值族内合法（float * str 无重复语义——不声明）
+            if other_name in ("int", "float", "bool"):
+                return "bool"
+            return None
         return None
 
     def can_convert_from(self, source_type_name: str) -> bool:
@@ -211,6 +227,14 @@ class BoolAxiom(BaseAxiom):
                 return "int"
             if other_name == "float":
                 return "float"
+            if op == "*" and other_name == "str":
+                # 字符串重复（bool * str，运行期 int 语义合法）
+                return "str"
+        if op in (">", ">=", "<", "<="):
+            # 排序比较仅数值族内合法（bool 运行期 int 语义）
+            if other_name in ("bool", "int", "float"):
+                return "bool"
+            return None
         return None
 
     def can_convert_from(self, source_type_name: str) -> bool:

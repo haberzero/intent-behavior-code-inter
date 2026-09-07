@@ -232,22 +232,20 @@ class ExpressionVisitorsMixin:
             self.bind_type(node, result_type)
             return result_type
 
-        # 贯彻"一切皆对象"：调用左操作数的公理自决议方法
+        # 贯彻"一切皆对象"：调用左操作数的公理自决议方法。
+        # 公理层运算符声明（resolve_op → resolve_operation_type_name）=
+        # 运算符×类型兼容性的单一权威源；resolve 失败（None）即不兼容——
+        # 无兜底推断（数值提升/str 操作数规则已并入各公理声明，兜底推断
+        # 与公理声明并存即双写真相）。
         result_type = self.registry.resolve_op(left_type, node.op, right_type) if left_type else None
         if not result_type:
-            # Fallback: 基础数值推断
-            if left_type in (self._int_desc, self._float_desc) and right_type in (self._int_desc, self._float_desc):
-                result_type = self._float_desc if (left_type == self._float_desc or right_type == self._float_desc) else self._int_desc
-            elif left_type == self._str_desc or right_type == self._str_desc:
-                result_type = self._str_desc
-            else:
-                self.error(
-                    f"Binary operator '{node.op}' not supported for types "
-                    f"'{left_type.name if left_type else 'unknown'}' and "
-                    f"'{right_type.name if right_type else 'unknown'}'",
-                    node, code=SEM_TYPE_MISMATCH
-                )
-                result_type = self._any_desc
+            self.error(
+                f"Binary operator '{node.op}' not supported for types "
+                f"'{left_type.name if left_type else 'unknown'}' and "
+                f"'{right_type.name if right_type else 'unknown'}'",
+                node, code=SEM_TYPE_MISMATCH
+            )
+            result_type = self._any_desc
 
         self.bind_type(node, result_type)
         return result_type
@@ -386,7 +384,14 @@ class ExpressionVisitorsMixin:
         return slot_spec
 
     def visit_IbCompare(self, node: ast.IbCompare) -> Optional[IbSpec]:
-        """访问比较运算"""
+        """访问比较运算
+
+        排序比较（< <= > >=）逐对编译期类型检查：链上每对相邻操作数经
+        ``resolve_op`` 判定可比性（公理层运算符声明 = 单一权威源，与运行期
+        值层行为对齐）；不可比且双侧非动态 → SEM_TYPE_MISMATCH。
+        相等/不等（== !=）跨类型合法（运行期返回 False/True，Python 语义）
+        与 is（身份恒合法）/in（成员检查）维持无条件 bool。
+        """
         left_type = self.visit(node.left)
         for comparator in node.comparators:
             self.visit(comparator)
@@ -406,6 +411,20 @@ class ExpressionVisitorsMixin:
                     comp_type = self.type_bindings.get(comparator)
                     if comp_type == self._behavior_desc:
                         self.bind_type(comparator, left_type)
+
+        # 排序比较逐对检查（链式 a<b<c：第 i 对 = (comparators[i-1], ops[i], comparators[i])）
+        prev_type = left_type
+        for i, op in enumerate(node.ops):
+            comp_type = self.type_bindings.get(node.comparators[i])
+            if op in (">", ">=", "<", "<=") and prev_type is not None and comp_type is not None:
+                if not (self.registry.is_dynamic(prev_type) or self.registry.is_dynamic(comp_type)):
+                    if self.registry.resolve_op(prev_type, op, comp_type) is None:
+                        self.error(
+                            f"Operands of type '{prev_type.name}' and '{comp_type.name}' "
+                            f"are not comparable with '{op}'",
+                            node, code=SEM_TYPE_MISMATCH,
+                        )
+            prev_type = comp_type
 
         # 比较运算通过 resolve_op 确认合法性（大部分返回 bool）
         if left_type and node.ops:
