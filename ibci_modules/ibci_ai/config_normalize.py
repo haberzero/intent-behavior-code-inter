@@ -31,6 +31,12 @@ _DEFAULT_TIMEOUT = 30.0
 _DEFAULT_RETRY = 3
 _DEFAULT_AUTO_INTENT = True
 
+# 标准生成参数校验范围（单一权威源；配置层 fail-fast 校验与 provider
+# 运行时参数校验共用，避免范围双写）。OpenAI 标准协议语义：
+# temperature ∈ [0, 2]，top_p ∈ [0, 1]。
+_TEMPERATURE_RANGE = (0.0, 2.0)
+_TOP_P_RANGE = (0.0, 1.0)
+
 
 def to_llm_config(validated: dict) -> LLMConnectionConfig:
     """把 api_config.json 结构 (``defaults`` / ``default_model`` / ``models``)

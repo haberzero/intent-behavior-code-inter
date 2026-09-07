@@ -29,6 +29,15 @@ def _shutdown_all_pools() -> None:
     for pool in list(_POOL_REGISTRY):
         try:
             pool.shutdown(wait=False)
+            # 显式唤醒阻塞于 get 的 worker：CPython ThreadPoolExecutor 的
+            # shutdown(wait=False) 只置标志不投哨兵——worker 阻塞于无超时
+            # queue.get 会滞留（非 daemon），让 threading._shutdown 在进程
+            # 退出时挂起。每个 worker 队列投一个 None 终止哨兵。
+            threads = getattr(pool, "_threads", None)
+            queue = getattr(pool, "_work_queue", None)
+            if threads and queue is not None:
+                for _ in threads:
+                    queue.put(None)
         except Exception:
             pass
 

@@ -57,6 +57,8 @@ from ibci_modules.ibci_ai.config_normalize import (
     _DEFAULT_TIMEOUT,
     _DEFAULT_RETRY,
     _DEFAULT_AUTO_INTENT,
+    _TEMPERATURE_RANGE,
+    _TOP_P_RANGE,
 )
 
 _ENV_PATTERN = re.compile(r"\{env:([A-Z_][A-Z0-9_]*)\}")
@@ -336,7 +338,7 @@ class ApiConfig:
         # call_info 记录有效值；标准参数走命名类型化面，不进 extra_body）
         if "temperature" in model:
             t = model["temperature"]
-            if not isinstance(t, (int, float)) or isinstance(t, bool) or not (0.0 <= t <= 2.0):
+            if not isinstance(t, (int, float)) or isinstance(t, bool) or not (_TEMPERATURE_RANGE[0] <= t <= _TEMPERATURE_RANGE[1]):
                 raise InterpreterError(
                     f"{context}.temperature 必须是 [0, 2] 内的数字",
                     error_code=CFG_CONFIG_INVALID_FIELD_TYPE,
@@ -344,7 +346,7 @@ class ApiConfig:
             result["temperature"] = float(t)
         if "top_p" in model:
             tp = model["top_p"]
-            if not isinstance(tp, (int, float)) or isinstance(tp, bool) or not (0.0 <= tp <= 1.0):
+            if not isinstance(tp, (int, float)) or isinstance(tp, bool) or not (_TOP_P_RANGE[0] <= tp <= _TOP_P_RANGE[1]):
                 raise InterpreterError(
                     f"{context}.top_p 必须是 [0, 1] 内的数字",
                     error_code=CFG_CONFIG_INVALID_FIELD_TYPE,

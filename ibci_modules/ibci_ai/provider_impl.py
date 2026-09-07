@@ -46,6 +46,8 @@ from ibci_modules.ibci_ai.config_normalize import (
     _DEFAULT_RETRY,
     _DEFAULT_AUTO_INTENT,
     to_llm_config,
+    _TEMPERATURE_RANGE,
+    _TOP_P_RANGE,
 )
 
 # 单次生成 token 上限的内置默认（可被 api_config 模型条目 max_tokens 覆盖）
@@ -683,11 +685,11 @@ class RecommendedProvider(LLMProvider):
                 raise TypeError(f"{context} max_tokens 须为正整数（收到 {max_tokens!r}）")
             dest["max_tokens"] = max_tokens
         if temperature is not None:
-            if not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not (0.0 <= temperature <= 2.0):
+            if not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not (_TEMPERATURE_RANGE[0] <= temperature <= _TEMPERATURE_RANGE[1]):
                 raise TypeError(f"{context} temperature 须为 [0, 2] 内数字（收到 {temperature!r}）")
             dest["temperature"] = float(temperature)
         if top_p is not None:
-            if not isinstance(top_p, (int, float)) or isinstance(top_p, bool) or not (0.0 <= top_p <= 1.0):
+            if not isinstance(top_p, (int, float)) or isinstance(top_p, bool) or not (_TOP_P_RANGE[0] <= top_p <= _TOP_P_RANGE[1]):
                 raise TypeError(f"{context} top_p 须为 [0, 1] 内数字（收到 {top_p!r}）")
             dest["top_p"] = float(top_p)
         if top_k is not None:
