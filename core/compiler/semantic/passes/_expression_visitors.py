@@ -17,6 +17,8 @@ from core.base.diagnostics.codes import (
     SEM_DUPLICATE_KEYWORD,
     SEM_GENERIC_TYPE_NEEDS_ARGS,
     SEM_INTENT_STATIC_CALL,
+    SEM_KNW_CHECK_LLM,
+    SEM_KNW_CHECK_OPAQUE,
     SEM_MISSING_RETURN_ANNOTATION,
     SEM_MISSING_REQUIRED_ARG,
     SEM_SUPER_OUTSIDE_METHOD,
@@ -533,6 +535,9 @@ class ExpressionVisitorsMixin:
         # --- SEM_SUPER_OUTSIDE_METHOD: super() called outside class method ---
         self._check_super_call_legality(node)
 
+        # --- SEM_KNW_*: knowledge.store 验证谓词纯度检查（登记门须确定性） ---
+        self._check_knowledge_store_legality(node)
+
         # --- Callable class instance detection ---
         # If func_type is CLASS but the name refers to an *instance* variable
         # (not a type reference), route through __call__ protocol.
@@ -907,6 +912,73 @@ class ExpressionVisitorsMixin:
                 hint="super() must be called within a method body (func), not at class level."
             )
             return
+
+    def _check_knowledge_store_legality(self, node: ast.IbCall):
+        """SEM_KNW_*: knowledge.store 验证谓词（check）纯度检查。
+
+        铁律（登记门须确定性验证）：check 参数必须是**本模块显式函数引用**
+        （编译器可遍历其函数体证明纯度）：
+        - 函数体含 LLM 调用面（行为表达式 / ai 模块调用）→ SEM_KNW_CHECK_LLM；
+        - 不透明值（变量/非函数引用/跨模块）→ SEM_KNW_CHECK_OPAQUE
+          （fail-fast：不纯度不可证明即拒绝，不做运行期探测兜底）。
+        """
+        func = node.func
+        if not isinstance(func, ast.IbAttribute) or func.attr != "store":
+            return
+        if len(node.args) != 3 or node.keywords:
+            return
+        receiver_type = self.type_bindings.get(func.value)
+        if receiver_type is None or getattr(receiver_type, "name", None) != "knowledge":
+            return
+        check_arg = node.args[2]
+        if not isinstance(check_arg, ast.IbName):
+            self.error(
+                "knowledge.store 的验证谓词（check）须为本模块显式函数引用；"
+                "不透明值无法静态证明确定性（不纯度不可证明即拒绝）。",
+                check_arg, code=SEM_KNW_CHECK_OPAQUE,
+            )
+            return
+        sym = self.lookup_symbol(check_arg.id)
+        if sym is None or not sym.is_function or sym.def_node is None:
+            self.error(
+                f"knowledge.store 的 check '{check_arg.id}' 非当前模块函数引用"
+                f"（不透明值，无法证明其确定性）。",
+                check_arg, code=SEM_KNW_CHECK_OPAQUE,
+            )
+            return
+        if self._node_contains_llm_call(sym.def_node):
+            self.error(
+                f"knowledge.store 的验证谓词 '{check_arg.id}' 函数体含 LLM 调用——"
+                f"登记门须为确定性验证；把 LLM 调用移出 check 函数体"
+                f"（放在调用方的显式控制流中）。",
+                check_arg, code=SEM_KNW_CHECK_LLM,
+            )
+
+    def _node_contains_llm_call(self, node) -> bool:
+        """AST 遍历：判定节点树是否含 LLM 调用面（行为表达式 / ai 模块调用）。
+
+        直接遍历（不解析跨函数间接调用——间接不纯度归用户领域纪律，
+        与 K5 裁定面"函数体含 LLM 调用"对齐）。IBCI AST 为 dataclass
+        （非 CPython ast 节点）——子节点遍历经 __dataclass_fields__。
+        """
+        if node is None:
+            return False
+        if isinstance(node, ast.IbBehaviorExpr):
+            return True
+        if isinstance(node, ast.IbCall) and isinstance(node.func, ast.IbAttribute) \
+                and isinstance(node.func.value, ast.IbName) \
+                and node.func.value.id == "ai":
+            return True  # ai 模块调用面 = 模型 I/O（非纯）
+        for field_name in getattr(node, "__dataclass_fields__", {}):
+            child = getattr(node, field_name, None)
+            if isinstance(child, (list, tuple)):
+                for item in child:
+                    if isinstance(item, ast.IbASTNode) and self._node_contains_llm_call(item):
+                        return True
+            elif isinstance(child, ast.IbASTNode):
+                if self._node_contains_llm_call(child):
+                    return True
+        return False
 
     # ========== 属性与下标访问 ==========
 

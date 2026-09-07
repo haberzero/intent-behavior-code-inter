@@ -306,6 +306,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             self._collect_dict(obj, data)
         elif isinstance(obj, IbValue) and base_name == "vector":
             self._collect_vector(obj, data)
+        elif isinstance(obj, IbValue) and base_name == "knowledge":
+            self._collect_knowledge(obj, data)
         elif isinstance(obj, IbValue) and base_name == "Optional":
             self._collect_optional(obj, data)
         elif base_name == "thread_result" and not isinstance(obj, IbClass):
@@ -377,6 +379,28 @@ class RuntimeSerializer(BaseFlatSerializer):
         # 不可变值类型：元素为原生 float 元组（无嵌套 IbObject，直接序列化）
         data["_type"] = "vector"
         data["elements"] = list(obj.payload)
+
+    def _collect_knowledge(self, obj, data):
+        # 知识库（可变容器）：条目值/事件值经实例池引用（拓扑序列化），
+        # 谓词引用不入值快照（函数非值快照——恢复后 amend 边界 fail-fast）
+        data["_type"] = "knowledge"
+        data["seq"] = obj.payload["seq"]
+        data["entries"] = {
+            k: {
+                "value": self._process_value(v["value"]),
+                "check_name": v["check_name"],
+                "events": [
+                    {
+                        "seq": ev["seq"],
+                        "kind": ev["kind"],
+                        "value": self._process_value(ev["value"]),
+                        "reason": ev["reason"],
+                    }
+                    for ev in v["events"]
+                ],
+            }
+            for k, v in obj.payload["entries"].items()
+        }
 
     def _collect_tuple(self, obj, data):
         data["_type"] = "tuple"
@@ -927,6 +951,30 @@ class RuntimeDeserializer:
             # 无环形引用问题——不需要 cache-before-recurse 模式）
             from core.runtime.objects.primitives.vector import IbVector
             obj = IbVector(list(data.get("elements", [])), ib_class)
+            self.instance_cache[uid] = obj
+
+        elif _type == "knowledge":
+            # 知识库：条目值/事件值经实例池还原（_deserialize_value 拓扑），
+            # 谓词引用不入快照（check = None——amend 边界 fail-fast）
+            from core.runtime.objects.primitives.knowledge import IbKnowledge
+            entries = {}
+            for k, ev in (data.get("entries") or {}).items():
+                events = [
+                    {
+                        "seq": e["seq"],
+                        "kind": e["kind"],
+                        "value": self._deserialize_value(e["value"]),
+                        "reason": e["reason"],
+                    }
+                    for e in ev.get("events", [])
+                ]
+                entries[k] = {
+                    "value": self._deserialize_value(ev["value"]),
+                    "check": None,
+                    "check_name": ev.get("check_name", ""),
+                    "events": events,
+                }
+            obj = IbKnowledge(ib_class, payload={"entries": entries, "seq": data.get("seq", 0)})
             self.instance_cache[uid] = obj
 
         elif _type == "optional":

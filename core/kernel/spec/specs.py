@@ -85,6 +85,11 @@ MODULE_SPEC       = TypeDef(name="module", kind=TypeKind.MODULE.value, provenanc
 # 分派面统一按 base_name 路由（与 PRIMITIVE 原语同纪律），kind 无分派影响。
 VECTOR_SPEC       = TypeDef(name="vector", kind=TypeKind.PRIMITIVE.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 
+# 已验证知识注册表 —— 一等内置值类型（语言自动机的知识层；可变容器 +
+# 冻结条目快照的混合语义，dict 容器约定同构）。
+KNOWLEDGE_SPEC    = TypeDef(name="knowledge", kind=TypeKind.CLASS.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+                            parent_type=TypeRef.of("Object"))
+
 # 并发/通信类型规格
 CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)

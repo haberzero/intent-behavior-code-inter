@@ -141,6 +141,15 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="类型注解中的类型名称无法解析。",
         fix="确认该类型已定义/导入，且名称拼写正确。",
     ),
+    # -- 知识注册表（check 纯度铁律，编译期） --
+    "SEM_KNW_CHECK_LLM": CodeInfo(
+        title="knowledge.store/amend 的验证谓词（check）体内含 LLM 调用——不纯度不可接受，登记门须为确定性验证。",
+        fix="把 LLM 调用移出 check 函数体（check 只做确定性判定，如文本包含/格式/长度检查）；LLM 调用放在调用方的显式控制流中。",
+    ),
+    "SEM_KNW_CHECK_OPAQUE": CodeInfo(
+        title="knowledge.store/amend 的验证谓词（check）为不透明值（变量/跨模块引用）——静态无法证明其确定性，fail-fast 拒绝。",
+        fix="把 check 改为本模块内显式定义且不含 LLM 调用的函数引用（编译器可遍历其函数体证明纯度）。",
+    ),
     # -- 函数参数绑定 --
     "SEM_DUPLICATE_KEYWORD": CodeInfo(
         title="调用中同一具名参数被重复提供。",
@@ -392,6 +401,19 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
     "EMB_INVALID_INPUT": CodeInfo(
         title="embedding/检索非法输入（空批、空语料、k 非正整数、向量含非有限值 NaN/Inf、mock 指令非法）。",
         fix="检查输入面：texts 非空、k 为正整数、向量元素为有限浮点数、mock 指令载荷合法。",
+    ),
+    # ==================== 知识注册表 (KNW_) ====================
+    "KNW_CHECK_REJECTED": CodeInfo(
+        title="知识登记/更正未过验证门（check(value) 为假），或跨 save/load 恢复后验证谓词引用丢失。",
+        fix="先让值通过确定性验证再 store；amend 同样须过原验证门；跨快照恢复后条目须重新 store 登记（谓词引用不入值快照）。",
+    ),
+    "KNW_KEY_EXISTS": CodeInfo(
+        title="knowledge.store 键已登记（登记与更正机器强制区分），或键非法（非空 str）。",
+        fix="已登记条目的更新走 amend（附 reason 审计）；检查键为非空字符串。",
+    ),
+    "KNW_REASON_EMPTY": CodeInfo(
+        title="knowledge.amend 理由（reason）为空，或键未登记。",
+        fix="amend 必须附非空理由（审计链完整性要求）；更正仅适用于已登记条目。",
     ),
     # ==================== 配置 (CFG_) ====================
     "CFG_CONFIG_NOT_FOUND": CodeInfo(

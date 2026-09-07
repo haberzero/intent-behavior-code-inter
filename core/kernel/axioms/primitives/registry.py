@@ -41,6 +41,7 @@ from core.kernel.axioms.primitives.generator import GeneratorAxiom
 from core.kernel.axioms.primitives.media import AudioAxiom, ImageAxiom, VideoAxiom
 from core.kernel.axioms.primitives.file_handle import FileHandleAxiom
 from core.kernel.axioms.primitives.vector import VectorAxiom
+from core.kernel.axioms.primitives.knowledge import KnowledgeAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.intent import IntentAxiom
 from core.kernel.axioms.primitives.comm import (
@@ -78,6 +79,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(SliceAxiom())
     registry.register(EnumAxiom())
     registry.register(VectorAxiom())
+    registry.register(KnowledgeAxiom())
     # file_handle 必须在 media 之前注册，因为 audio/image/video 继承自它。
     registry.register(FileHandleAxiom())
     registry.register(AudioAxiom())

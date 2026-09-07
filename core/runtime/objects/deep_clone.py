@@ -95,6 +95,33 @@ def try_deep_clone(
             new_fields[k] = cloned_v
         return placeholder_dict
 
+    # knowledge：可变容器（引用语义）——条目快照递归深克隆（store 入时 +
+    # get 出时双克隆纪律的克隆面）；验证谓词引用共享（函数非值快照——
+    # 水化/克隆后 amend 边界 fail-fast，属已知边界）
+    if isinstance(val, IbValue) and _value_base_name(val) == "knowledge":
+        new_entries: dict = {}
+        placeholder_k = type(val)(val.ib_class, payload={"entries": new_entries, "seq": val.payload["seq"]})
+        memo[val_id] = placeholder_k
+        for k, entry in val.payload["entries"].items():
+            cloned_value = try_deep_clone(entry["value"], memo)
+            if cloned_value is None:
+                return None
+            cloned_events = []
+            for ev in entry["events"]:
+                cloned_ev = try_deep_clone(ev["value"], memo)
+                if cloned_ev is None:
+                    return None
+                cloned_events.append(
+                    {"seq": ev["seq"], "kind": ev["kind"], "value": cloned_ev, "reason": ev["reason"]}
+                )
+            new_entries[k] = {
+                "value": cloned_value,
+                "check": entry.get("check"),
+                "check_name": entry["check_name"],
+                "events": cloned_events,
+            }
+        return placeholder_k
+
     # Optional：专分支克隆，保留 ``_is_some`` 槽（通用 IbValue 分支不复制
     # slot，克隆产物 ``_is_some`` 未初始化——统一 Optional 值模型下，Optional
     # 参与 llmexcept 快照/深克隆时须保真 is_some/is_none 语义）。payload 递归
