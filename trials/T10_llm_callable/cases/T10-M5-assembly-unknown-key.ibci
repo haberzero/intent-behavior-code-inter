@@ -1,0 +1,17 @@
+# T10-M5 装配 dict 未知键可见性（警告不阻断 + 缺失 user_prompt 增强错误）
+# doc: docs/syntax/15_diagnostics.md LLM_ASSEMBLY_UNKNOWN_KEY
+# 期望: 契约外字段（疑似拼写错误）经警告可见（不静默忽略），调用不阻断；
+#       缺失 user_prompt 错误消息含装配契约字段清单。
+# expect-class: PASS
+# expect-out: got=hi | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+ai.set_mock_mode()
+class 回显:
+    func __llm_call__(self, any 前) -> dict:
+        return {"user_prompt": "MOCK:STR:hi", "user_promt_typo": "extra"}
+回显 e = 回显()
+str v = e("a")
+print("got=" + v)
+print("DONE")

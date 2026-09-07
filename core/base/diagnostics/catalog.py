@@ -464,6 +464,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="LLM 返回空内容（仅有思考内容、无最终答案）。",
         fix="思考抑制对模型无效或模型行为形态异常——显式声明 reasoning 模式（api_config model 条目 reasoning: true）或使用非思考模型端点；该错误不再静默以思考内容替代答案（可审计性纪律）。",
     ),
+    "LLM_ASSEMBLY_UNKNOWN_KEY": CodeInfo(
+        title="llm 可调用类装配 dict 含契约外字段（疑似拼写错误/废弃字段）。",
+        fix="按装配契约修正字段名（user_prompt[必需] / output_hint / expected_type / model / prompt_slots）；未知字段不再静默忽略（可见性纪律——警告级，不阻断调用）。",
+    ),
 }
 
 

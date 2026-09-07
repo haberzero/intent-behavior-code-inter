@@ -482,6 +482,12 @@ LLM 返回空内容（仅有思考内容、无最终答案）。
 - **严重级别**：ERROR。
 - **修复方式**：显式声明 reasoning 模式（api_config model 条目 `reasoning: true`）或使用非思考模型端点。该错误不再静默以思考内容替代答案——"模型只想了没答"是确定的运行状态，须显式诊断。
 
+#### `LLM_ASSEMBLY_UNKNOWN_KEY`
+llm 可调用类装配 dict 含契约外字段。
+- **触发条件**：llm 可调用类调用时的装配 dict 含契约字段之外的键（疑似拼写错误/废弃字段）。
+- **严重级别**：WARNING（不阻断调用）。
+- **修复方式**：按装配契约修正字段名（`user_prompt`[必需] / `output_hint` / `expected_type` / `model` / `prompt_slots`）。未知字段不再静默忽略——拼写错误须可见（可见性纪律）；扩展字段属调用方约定，警告仅作提示。
+
 #### `RUN_PERMISSION_ERROR`
 运行时操作被权限策略拒绝。
 - **触发条件**：操作超出权限策略允许范围。

@@ -36,6 +36,13 @@ def _raise_llm_callable_error(message: str) -> None:
     raise InterpreterError(message, error_code=RUN_LLM_CALLABLE)
 
 
+# llm 可调用类装配 dict 契约字段（单一权威源——未知键警告与错误消息提示
+# 共用；新增契约字段须同步此处）
+_ASSEMBLY_CONFIG_KEYS = frozenset({
+    "user_prompt", "output_hint", "expected_type", "model", "prompt_slots",
+})
+
+
 class _StreamCallableDrive(BaseCPSDrive):
     """``ai.stream_call`` / ``ai.stream_channel`` 的帧内 CPS 驱动 Waitable。
 
@@ -206,7 +213,18 @@ class _LLMCallableMixin:
         user_prompt = config.get("user_prompt")
         if user_prompt is None:
             _raise_llm_callable_error(
-                "invoke_llm_callable: __llm_call__ config dict missing 'user_prompt'."
+                "invoke_llm_callable: __llm_call__ config dict missing 'user_prompt' "
+                "(装配契约字段：user_prompt[必需] / output_hint / expected_type / "
+                "model / prompt_slots)。"
+            )
+        # 未知键可见性（静默忽略不再允许——拼写错误须可见；警告级不阻断调用）
+        unknown_keys = sorted(set(config.keys()) - _ASSEMBLY_CONFIG_KEYS)
+        if unknown_keys:
+            self.issue_tracker.warning(
+                f"llm 可调用类装配 dict 含契约外字段 {unknown_keys}"
+                "（装配契约字段：user_prompt[必需] / output_hint / "
+                "expected_type / model / prompt_slots）",
+                code="LLM_ASSEMBLY_UNKNOWN_KEY",
             )
         llmoutput_hint = config.get("output_hint")
         type_hint = self._resolve_callable_expected_type(config.get("expected_type"), callable_inst)
