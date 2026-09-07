@@ -60,7 +60,11 @@ PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，
    **线 1 · 诊断面打包**（`KERNEL_ISSUE-SEM-1` 编译期比较类型检查缺失 + B1 运行时错误
    ibci 源行号 + P2 解析位置漂移，一个设计文档 `tasks_docs/_diagnostic_design.md` 覆盖
    "错误定位链"：编译期类型检查覆盖审计 → 运行期错误对象携带 loc → CLI 渲染；
-   含 LLMParseError repr 直漏渲染项）→ **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定：
+   含 LLMParseError repr 直漏渲染项）——**设计已定稿（2026-09-07，双 subagent 审计 +
+   交叉核验实跑）：四段现状审计 + 设计裁定 + 批次 0-5（死代码清理 → 编译侧位置 →
+   运行侧翻译点 → CLI/对象渲染 → SEM-1 公理条件化[唯一语义错误集变更] → P2 位置归位）+
+   影响面评估 + 验收基线，实施就绪**（批 4 防误报前置 = int/bool 公理补 `* str` 声明；
+   `in` 运算符检查/if 条件 bool 检查分组不扩））→ **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定：
    协议层独立 `embedding_protocol` 包 + 用户面并入 `ai`；批次 ① 契约包/provider/配置 →
    ② `vector` 值类型（公理层，全量 pytest 评估）→ ③ `ai` 模块面 + MOCK:VEC + 检索最小
    闭包 → ④ SiliconFlow 真实试用；参考实现 = ibci-trial/kernel_overlay K1-K3 33/33
