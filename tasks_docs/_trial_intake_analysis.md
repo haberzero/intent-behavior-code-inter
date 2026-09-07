@@ -247,7 +247,7 @@ raw="}"→n≥2 提案约定）。**诊断面（B1 源行号 + 编译期类型�
    - 批② `vector` 值类型（公理层，值语义 C5 判别，全量 pytest 评估）；
    - 批③ `ai.embed` 模块面 + MOCK:VEC + 检索最小闭包（K3 平移）；
    - 批④ 真实服务试用（SiliconFlow embedding 端点已验证可用）。
-2. **结晶注册表（N2）设计**：设计文档已产出（`tasks_docs/_n2_answer_registry.md`，平实展开 + 11 项设计问题逐问推荐，**待用户确认**）——
+2. **N2 已验证答案注册表设计**：设计文档已产出（`tasks_docs/_n2_answer_registry.md`，平实展开 + 11 项设计问题逐问推荐，**待用户确认**）——
    API 形态（试用方建议的 `ai.crystallize(name, value, predicate)` 等四方法为输入，
    最终以 design-philosophy 审查为准：谓词类型（确定性 fn）、存储形态（平铺池+UID
    侧表 vs 独立 registry 对象）、检索键（结构签名——e31b 实证的模式匹配键）、
