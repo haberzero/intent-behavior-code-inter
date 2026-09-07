@@ -928,6 +928,27 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   ④ BOUNDARY-LLM-5 = 机制澄清文档化（观测契约入 11_modules）+ mock 路径观测面机制同构
   （provider_meta 补 generation——字段结构与真实路径一致）。
   全量 pytest 3447 passed / 1 skipped 零回归；git 承载（本段 2 commit）。
+- **恶意边界未测项支线收敛（2026-09-07，free-explore）**：#15/#17/#19 全部核销
+  （mock 层对抗性用例 + 零缺陷实证）：
+  - **#15 intent_context 类字段 deep_clone 路径**（T15-E-M30）：两条独立机制——①
+    snapshot 捕获持有 intent_context 类字段的容器（定义时深克隆，嵌套对象路径
+    [类实例字段 → intent_context 内部结构] 冻结语义保持：原 context 定义后 push
+    不改变快照拷贝）② 序列化 round-trip 类字段路径嵌套保真（与 M28 顶层变量路径
+    互补）。观测面确认：intent_context 语言面方法族无实例级栈顶查询，to_prompt
+    渲染内部活跃意图结构为权威观测面（#15 前置"观测面确认"成立）。
+  - **#19 overlay × 序列化/snapshot/retry 交互**（T15-E-M31）：① overlay ×
+    snapshot（作用域化运行时状态不被 snapshot 捕获——与值深克隆捕获语义正交；
+    作用域内调用经覆层/作用域外原渲染）② overlay × 序列化（with 块内 save/load
+    后渲染回落原形态——overlay 状态不跨序列化边界，临时作用域状态非持久值）③
+    overlay × retry 经机制同构确立（retry 复用首轮已渲染字符串不重新渲染——
+    无附加对抗面）。
+  - **#17 跨引擎序列化/水化**（T15-E-M29，前批）：特化类类型身份 + enum 值模型
+    round-trip 保真（SER-1 修复后解封）。
+  - **剩余**：#33（_pending_futures 长会话累积——依赖 KERNEL_ISSUE-LLM-5 同子系统
+    修复后观测，被动挂起）；KERNEL_ISSUE-LLM-5（llm 可调用类声明用户类赋值约 1/6
+    竞态——事件驱动监视复发，近期运行无复发）。
+  - harness 附修：expect-out 断言尾部空白不敏感（内容语义匹配；行首敏感保持）。
+  git 承载（本段 commit：M29/M30/M31 + harness 修正）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
