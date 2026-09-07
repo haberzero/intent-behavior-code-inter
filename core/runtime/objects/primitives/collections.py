@@ -280,12 +280,21 @@ class IbDict(IbValue):
     """
     包装 Python 原生 dict 的 IBC 对象。
 
-    约定: ``payload`` 与 ``fields`` 指向同一个底层映射。
-    ``fields`` 保持对象系统现有的消息/属性访问兼容面，``payload`` 则让
-    该值同时满足统一 ``IbValue`` 承载层的结构约定。
+    约定: ``payload`` 与 ``fields`` 指向同一个底层映射。``fields`` 经 property
+    落在 ``payload`` 上（与 ``IbList``/``IbTuple`` 的 ``elements`` property 同构
+    的单点真理约定）——任何对 ``fields`` 的整体替换同步 ``payload``，双写真相
+    结构上不可能；映射同时承载对象系统现有的消息/属性访问兼容面。
     """
     def __init__(self, fields: Dict[str, IbObject], ib_class: IbClass):
         super().__init__(ib_class, payload=fields, fields=fields)
+
+    @property
+    def fields(self):
+        return self.payload
+
+    @fields.setter
+    def fields(self, val):
+        self.payload = val
 
     def to_native(self, memo=None) -> Dict[str, Any]:
         if memo is None: memo = {}

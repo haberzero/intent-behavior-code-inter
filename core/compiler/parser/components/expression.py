@@ -243,6 +243,12 @@ class ExpressionComponent(BaseComponent):
 
         expr = self.parse_expression()
         self.stream.consume(TokenType.RPAREN, "Expect ')' after expression.")
+        # 括号表达式 = 独立操作数：括号内的比较不得被外层比较运算符当作
+        # "链式比较"续接（`(a > b) == (c > d)` 是两次独立比较，不是
+        # `a > b == c > d` 链——链的语义边界以括号为界）。标记仅在解析期
+        # 由 binary() 的链式合并判定消费；AST 序列化只取声明字段，不入产物。
+        if isinstance(expr, ast.IbCompare):
+            expr._parenthesized = True
         return expr
     
     def _extract_type_name(self, type_node: ast.IbASTNode) -> str:
@@ -484,7 +490,10 @@ class ExpressionComponent(BaseComponent):
         
         # 处理链式比较 (Chained Comparison)
         if op_token.type in (TokenType.GT, TokenType.GE, TokenType.LT, TokenType.LE, TokenType.EQ, TokenType.NE):
-            if isinstance(left, ast.IbCompare):
+            # 括号包裹的左操作数（grouping 标记 _parenthesized）是独立比较，
+            # 链的语义边界以括号为界——不得并入（否则 `(a > b) == c` 误解析为
+            # `a > b == c`，求值语义反转）。
+            if isinstance(left, ast.IbCompare) and not getattr(left, "_parenthesized", False):
                 left.ops.append(op_str)
                 left.comparators.append(right)
                 return self._extend_loc(left, right)
