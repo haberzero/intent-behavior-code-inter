@@ -1,0 +1,36 @@
+# T15-E-M30 [边界清单 #15] intent_context 类字段 deep_clone 路径（两条独立机制）：
+#   ① snapshot 捕获持有 intent_context 类字段的容器（定义时深克隆）——定义后
+#      变异原 context（push）不得泄漏进快照（冻结语义在嵌套对象路径上的保持：
+#      类实例字段 → intent_context 内部活跃意图结构；快照体内读取类字段
+#      get_active_intents 返回定义时活跃意图，原 context 后续 push 不改变拷贝）；
+#   ② 序列化 round-trip（save_state/load_state）——类字段路径的 intent_context
+#      嵌套保真（与 T15-E-M28 顶层变量路径互补：深克隆/水化的嵌套对象分支；
+#      load 后类字段活跃意图保真 + 方法可用（push 后活跃意图更新））。
+# doc: docs/architecture/04_vm_interpreter.md §snapshot
+# expect-class: PASS
+# expect-out: frozen=True | roundtrip=True | DONE
+# expect-exit: 0
+# expect-llm: false
+import ai
+import ihost
+ai.set_mock_mode()
+class Holder:
+    intent_context ic
+intent_context c1 = intent_context.get_current()
+intent_context.use(c1)
+c1.push("base-intent")
+Holder h = Holder(c1)
+fn snap = snapshot -> str: (str)(h.ic)
+str v1 = snap()
+c1.push("mutated-intent")
+str v2 = snap()
+bool frozen = ("base-intent" in v1) and ("mutated-intent" not in v2) and (v1 == v2)
+ihost.save_state("./logs/t15_m30_state.json")
+ihost.load_state("./logs/t15_m30_state.json")
+str saved = (str)(h.ic)
+h.ic.push("after-load")
+str after = (str)(h.ic)
+bool roundtrip = ("mutated-intent" in saved) and ("after-load" in after)
+print("frozen=" + (str)frozen)
+print("roundtrip=" + (str)roundtrip)
+print("DONE")

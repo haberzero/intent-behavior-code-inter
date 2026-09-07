@@ -41,7 +41,7 @@
 |---|------|------|----------|
 | 6 | snapshot 内嵌 LLM 调用交叉（冻结 vs 调用点 live） | ✅ **已测（2026-09-05）**：T15-E-M24 snapshot 捕获容器自由变量（定义时深克隆），定义后变异原容器不泄漏进快照调用（frozen1/frozen2 双断言）——冻结语义零缺陷 | `T15/.../T15-E-M24-snapshot-frozen-capture.ibci` |
 | 14 | 流式中断 / llmexcept 组合错误传播 | ✅ **已测（2026-09-05）**：T15-E-M25 流式 provider 层失败经 except Exception 干净传播（不吞、无部分结果）；T15-E-M26 llmexcept 附着流式 await → 编译期 `SEM_LLMEXCEPT_BINDING` fail-fast（流式失败属非解析不确定域，不经 retry——与 KERNEL_ISSUE-LLM-1 处置一致） | `T15/.../T15-E-M25/M26-*.ibci` |
-| 15 | intent_context 类字段 deep_clone 路径 | ⏸ 未测 | 后续专项（需先确认 snapshot 多语句体/类字段捕获观测面） |
+| 15 | intent_context 类字段 deep_clone 路径 | ✅ **已测（2026-09-07）**：T15-E-M30 两条独立机制——① snapshot 捕获持有 intent_context 类字段的容器（定义时深克隆，冻结语义在嵌套对象路径保持：快照体读类字段 to_prompt = 定义时活跃意图，原 context 后续 push 不改变拷贝）；② 序列化 round-trip 类字段路径嵌套保真（与 M28 顶层变量路径互补——load 后类字段活跃意图保真 + 方法可用）——深克隆/水化的嵌套对象分支零缺陷 | `T15/.../T15-E-M30-ic-classfield-deepclone.ibci` |
 | 16 | 序列化 round-trip inherited_smear/override 槽 | ✅ **已测（2026-09-05）**：SER-1 修复后 M28 三断言 PASS——持久意图保真 / save 后变更丢弃 / 插件状态（返回类型提示）round-trip 保真。`@` 涂抹消费时序观测经用户裁定确认与既有文档语义一致（任何语句消费窗口），非缺陷、无专项 | `T15/.../T15-E-M28-state-roundtrip-intent.ibci` |
 | 17 | 跨引擎序列化/水化（特化类/枚举/意图上下文） | ✅ **已测（2026-09-07，SER-1 修复后解封）**：T15-E-M29 特化类实例类型身份（`Box[int]`）round-trip 保真 + enum 成员值模型 round-trip 一致（成员值 = 底层值，静态类型经声明层承载）；意图上下文 round-trip 见 M28——序列化子系统零缺陷 | `T15/.../T15-E-M29-serialization-spec-enum.ibci` |
 | 19 | overlay 与序列化/snapshot/retry 交互 | ⏸ 未测 | 后续专项 |
