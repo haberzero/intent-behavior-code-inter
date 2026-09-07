@@ -39,6 +39,14 @@ wheel 发布面实证齐备，裁定依据见 `tasks_docs/WORKLOG.md`）；`scri
 修复 = 流句柄生命周期闭环：cancel 协作式截断 + producer 契约 = 生成器 + 退出 drain）；
 **残留清场项**（见下第 2 条）：named-model 端点泄漏 2 用例 / T06 子目录用例复跑缺口 /
 恶意边界未测 #15/#17/#19/#33（`trials/INDEX.md` 清单）/ BOUNDARY-LLM-5 裁定收敛。
+**外部试用工程（ibci-trial）回接完成（2026-09-06）**：试用方 172 轮灰盒语言自动机探索
+全量读取 + 需求/缺陷逐条实测核验——试用方 P9a（len(dict) 函数形态恒 0）/P9b（括号比较
+误并入链式比较，求值语义反转）根因定位并修复（commit `1205a530`，+10 判别测试，
+全量 3219/1 零回归）；P9c 定性 = dict 不可迭代（keys/items 可用）、P11 微测试实为
+比较运算符编译期类型检查缺失（新登记 `KERNEL_ISSUE-SEM-1`，诊断面打包设计候选）；
+PT-FEAT-16 实施条件齐备（Q1-Q4 裁决建议 + K1-K3 参考实现审查，批①可平移）；
+适配点与发展方向（P0×3/P1×2/P2×4/挂起×1）与端点切换记录（SiliconFlow）见
+`tasks_docs/_trial_intake_analysis.md`。
 **周期质量维护**（PT-AUDIT-1/3 + Tier B + quality-maintenance）恢复时机随阶段排布待裁定。
 
 测试基线以实跑为准（不冻结数字；唯一命令 `python -m pytest tests/`）。
