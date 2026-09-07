@@ -130,7 +130,7 @@ max_tokens（T4）已处理完毕**；**环境变量通道（T2）/ 文档示例
 | 编号 | 需求 | 状态 |
 |------|------|------|
 | **N1** | 思考模型支持（extra_body 透传 + 空 content 确定性处理 + max_tokens 预算） | ⏳ **P1-1**（已重定性为根因项：provider 现硬编码双字段抑制 dict 进每请求且无条件发送——vendor 机器事实滞留代码层 + `reasoning: true` 请求层不可表达；并入"生成参数面批"六项——temperature/top_p/top_k/seed 命名字段 + extra_body + 硬编码归位 + `**kwargs` fail-fast + call_info 审计闭环 + 未知字段严格性，详见 `_trial_intake_analysis.md` §五 5.4/5.5） |
-| **N2** | 已验证答案注册表（试用方原名“结晶注册表”为黑话，用户 2026-09-07 裁定废除；机制 = 验证过的 LLM 答案登记：确定性验证门 + 查表命中 0 调用 + append-only 更正 + 事件审计） | ✅ **方向已裁定认可；设计文档已产出** `tasks_docs/_n2_answer_registry.md`（平实展开 + 11 项设计问题逐问推荐，**待用户确认**） |
+| **N2** | 已验证答案注册表（试用方原名"结晶注册表"为黑话，用户 2026-09-07 裁定废除；机制 = 验证过的 LLM 答案登记：确定性验证门 + 查表命中 0 调用 + append-only 更正 + 事件审计） | ✅ **方向已裁定认可；2026-09-07 用户裁定重新定位**（不以 ai 为载体 = 一等内置值类型/语言级知识子系统，`@~...~` 保持纯 LLM 语义无隐式路由）；设计文档已产出 `tasks_docs/_knowledge_registry_design.md`（取代已删的 `_n2_answer_registry.md`；**待用户确认 K1-K9**） |
 | **N3** | measure_freq（logprob 测量通道） | ⏸ **挂起，方向保留**（试用方自我质疑后建议挂起；e26-e28 为现成验收基线；待 embedding/答案注册表面落地后重估） |
 | **N4** | finish_reason 暴露 + max_tokens 键 | ⏳ **P1 队列**（max_tokens 键 = T4 ✅ 已落地；finish_reason 暴露未做 = call_info 观测面补充，截断检测是批量管线运行细节） |
 
@@ -179,7 +179,7 @@ P7/P8（既有 DDG 设计，走文档面）。
 |----|----|------|------|
 | **P0-1** | **线 1 · 诊断面打包** | 一个设计文档 `tasks_docs/_diagnostic_design.md` 覆盖"错误定位链"三段：① 编译期类型检查覆盖审计（`KERNEL_ISSUE-SEM-1` 比较运算符起点，同类漏检面一次审完：二元运算/调用参数等）；② 运行期错误对象携带 ibci 源行列（B1；`node_to_loc` 侧表已有位置信息，断点在运行期错误路径；含 LLMParseError repr 直漏渲染）；③ 解析错误位置漂移修正（P2）。复现资产 `.tmp_verify/p11*.ibci`、`p9*.ibci` | SEM 面变更 = 语义错误集 → 全量 pytest 评估门；三形态复现脚本全转回归测试 |
 | **P0-2** | **线 2 · PT-FEAT-16 四批**（Q1-Q4 已裁定） | ① 契约包+provider+配置（底本 = ibci-trial `kernel_overlay/` K1-K3 33/33，3 处合入处理项见 `_trial_intake_analysis.md` §4.2）→ ② `vector` 值类型（公理层：值语义 C5/克隆/序列化，全量评估；pre-study 检查单 C1-C15/T1-T10）→ ③ `ai` 模块面+MOCK:VEC+检索最小闭包（cosine=vector 方法面；top-k=模块面）→ ④ SiliconFlow 真实试用 | 设计文档 `_embedding_design.md`（Q1-Q4 已落裁定）+ 四批各全量零回归 + ④ 真实端点实证存档 |
-| **P0-3** | **线 3 · N2 已验证答案注册表**（用户 2026-09-07 裁定废除"结晶注册表"黑话名） | 设计文档已产出：`tasks_docs/_n2_answer_registry.md`（需求平实展开 + 11 项设计问题逐问推荐，**待用户确认**——重点：§一 API 命名 / Q3 路由形态[用户显式组合 vs 引擎层路由，与试用方原始强调存在分歧] / Q5-Q8 v1 边界）。确认后实施；check 函数的编译期 SEM 错误依赖 P0-1 诊断面 | 设计文档四问确认 → 实施（4 API + 验证门 + 深克隆快照 + append-only 更正 + 事件序号审计 + save_state 纳入） |
+| **P0-3** | **线 3 · N2 已验证答案注册表**（用户 2026-09-07 裁定废除"结晶注册表"黑话名 + 重新定位：**不以 ai 为载体、一等内置值类型/语言级子系统**） | 设计文档已产出：`tasks_docs/_knowledge_registry_design.md`（取代已删的 `_n2_answer_registry.md`；重新定位后展开——**一等内置值类型**（同 dict/vector 地位，可构造/多实例/可 save_state）而非 ai 的 4 个 API + 方法面 store/get/amend/history/keys/len + **语义不变量**（`@~...~` 永远纯 LLM、无查表隐式路由）+ 验证门机器强制（check 不纯/不透明 = 编译期 SEM，fail-fast）+ 交互矩阵 + 批次 ①公理层→②方法面+诊断域→③save_state+文档→④T 试用，**待用户确认 K1-K9**）。确认后实施；check 函数的编译期 SEM 错误依赖 P0-1 诊断面 | K1-K9 确认 → 实施（一等值类型 + 验证门 + 深克隆冻结快照 + append-only 更正 + 事件序号审计 + save_state 值语义自动持久） |
 
 ### 5.2 P1（运行面；P0 三线推进间隙或其后按 agent 判断排入）
 

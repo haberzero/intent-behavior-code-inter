@@ -247,12 +247,17 @@ raw="}"→n≥2 提案约定）。**诊断面（B1 源行号 + 编译期类型�
    - 批② `vector` 值类型（公理层，值语义 C5 判别，全量 pytest 评估）；
    - 批③ `ai.embed` 模块面 + MOCK:VEC + 检索最小闭包（K3 平移）；
    - 批④ 真实服务试用（SiliconFlow embedding 端点已验证可用）。
-2. **N2 已验证答案注册表设计**：设计文档已产出（`tasks_docs/_n2_answer_registry.md`，平实展开 + 11 项设计问题逐问推荐，**待用户确认**）——
-   API 形态（试用方建议的 `ai.crystallize(name, value, predicate)` 等四方法为输入，
-   最终以 design-philosophy 审查为准：谓词类型（确定性 fn）、存储形态（平铺池+UID
-   侧表 vs 独立 registry 对象）、检索键（结构签名——e31b 实证的模式匹配键）、
-   生命周期（append-only 事件流 + correct 修订语义）、与 intent/snapshot 的交互
-   （答案注册表是否进 snapshot？——裁定：不进，注册表 = 引擎级状态，随 save_state 持久；见 _n2_answer_registry Q7）。
+2. **N2 已验证答案注册表设计**：设计文档已产出（`tasks_docs/_knowledge_registry_design.md`，
+    **2026-09-07 用户裁定重新定位**：不以 `ai` 模块为载体、行为描述语句保持纯 LLM 语义、
+    定位为语言级一等知识子类型/子系统；取代已删的 `_n2_answer_registry.md`）——
+    核心建模 = **一等内置值类型**（可构造/多实例/可 save_state，地位同 dict/vector）而非
+    ai 的 4 个 API；方法面（store/get/amend/history/keys/len，命名待确认）；验证门机器
+    强制（check 不纯 = 编译期 SEM，不透明 fn 值 = 同 SEM，fail-fast 不做运行期探测）；
+    语义不变量（`@~...~` 永远是纯 LLM 调用，无查表短路隐式路由）；交互矩阵
+    （snapshot=深克隆 / save_state=自动值语义 / llmexcept 无交互 / overlay 不覆盖 /
+    mock=真实）；批次 ① 公理层→② 方法面+诊断域→③ save_state+文档→④ T 套件试用。
+    **待用户确认 K1-K9**（K1 类型命名 / K2 方法动词族 / K3 类型形态 / K4 诊断码域 /
+    K5-K9 验证门·更正·审计·取回·并发语义，推荐已给）。
 3. **诊断面打包设计**（B1 源行号 + SEM-1 编译期比较类型检查 + P2 错误位置漂移）：
    三同域缺口一次设计（错误定位链：编译期 SEM 检查覆盖 → 运行期诊断码 →
    ibci 源行/列渲染）。
