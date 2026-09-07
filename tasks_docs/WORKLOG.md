@@ -850,6 +850,32 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   召回；断言纪律 = mock 确定性 + 真实面相对测量）。全量 pytest 3376 passed / 1 skipped
   零回归（3289 → 3376 = +87 判别/回归测试）。**P0 主线前移线 3（N2 已验证知识注册表，
   K1-K9 已定案实施就绪）**。
+- **P0-3 已验证知识注册表（N2 四批）完成（2026-09-07，free-explore）**：P0 三线之
+  线 3 全链路落地（K1-K9 已定案：类型 `knowledge`；设计文档
+  `tasks_docs/_knowledge_registry_design.md`；每批独立 commit + 全量零回归）：
+  ①+② **一等值类型 + 验证门**（公理层 KnowledgeAxiom + IbKnowledge 值对象
+  [_create_blank 类型化实例钩子——thread 先例同型，knowledge() 零参构造产生真实
+  实现]；条目模型 = 键 → {value 冻结快照, check 谓词引用, check_name 审计,
+  events append-only 事件流 + 引擎单调 seq}；混合语义显式声明[知识库可变容器
+  同 dict + 条目值冻结快照双深克隆——防引用陷阱污染审计]；方法面
+  store/get/amend/history/keys/len；**验证门铁律编译期检查**——visit_IbCall
+  hook 遍历 check 函数体 AST[IBCI dataclass 经 __dataclass_fields__ 子节点遍历]：
+  行为表达式/ai 模块调用 → SEM_KNW_CHECK_LLM，不透明值 → SEM_KNW_CHECK_OPAQUE
+  [不纯度不可证明即拒绝]；KNW_ 码域 3 码 + SEM_KNW_ 2 码三处同步；序列化/克隆
+  专用分支[谓词引用不入值快照——水化后 amend fail-fast 已知边界文档化]）；
+  ③ **状态保真 + docs 子系统页**（save_state/load_state 保真实证[同入口程序
+  形态 T15-E-M28 契约同型：save 后变更丢弃/值保真/事件保真；load 后 VM 读经
+  UID 绑定表恢复快照面]；docs/syntax/16_knowledge_system.md[地位三支柱/语义
+  不变量/条目模型/方法面/canonical idiom/边界/并发语义]）；④ **T17 试用套件
+  7/7**（mock 6 + 真实 1：**L1 canonical idiom 双轨实证 e25 机制"用得越久越
+  确定"语言级落地**——首次未命中 LLM 提案+验证+登记、复查命中 0 次 LLM 调用）。
+  **附修复**：T17 M6 暴露 host 层缺陷——save_state 单层相对路径[无目录组件]
+  经 IbPath.resolve_dot_segments 后 parent=None → os.makedirs('') 抛
+  FileNotFoundError（Python 3.12 空串 makedirs 语义）——空目录名守卫 + 回归
+  +2。全量 pytest 3400 passed / 1 skipped 零回归（3376 → 3400 = +24
+  判别/回归/保真测试）。**P0 三线全部收官（线 1 诊断面 3289 → 线 2 词嵌入
+  3376 → 线 3 知识注册表 3400）；主线前移 P1（N1 生成参数面 6 项 / N4
+  finish_reason 结构化）**。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

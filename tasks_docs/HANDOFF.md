@@ -115,17 +115,21 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线 = P0 三线推进（2026-09-07，free-explore 分支）**：**线 1 · 诊断面打包
-  已完成**（SEM-1 编译期运算符类型检查 + B1 错误定位链 + LLMParseError 渲染修复 +
-  P2 解析位置归位；判别测试 +70）；**线 2 · PT-FEAT-16 词嵌入一等能力四批已完成**
-  （① 契约包 `core.base.embedding_protocol` + EMB_ 码域；② `vector` 一等值类型
-  （公理层全链路：值语义/方法面/序列化/克隆/`vec()` 静态返回 vector）；③ `ai` 模块面
-  （embed 动态重载/retrieve 检索/api_config `kind: "embedding"`/MOCK:VEC）；④ T16
-  真实试用 8/8（SiliconFlow dim=1024）；判别/回归测试 +87）。全量 3376/1 零回归。
-  **当前阶段 = 线 3 · N2 已验证知识注册表实施**（K1-K9 已定案：类型 `knowledge` /
-  方法面 store 族 / 一等内置值类型 / 诊断域 `KNW_`；不以 ai 为载体、`@~...~` 保持
-  纯 LLM 语义；设计文档 `tasks_docs/_knowledge_registry_design.md`，实施就绪）。
-  详见 `tasks_docs/NEXT_STEPS.md` + `tasks_docs/_embedding_design.md` §九/§9.6/§9.7 +
+- **🔴 当前主线 = P0 三线全部收官 → P1 开工（2026-09-07，free-explore 分支）**：
+  **线 1 · 诊断面打包已完成**（SEM-1 编译期运算符类型检查 + B1 错误定位链 +
+  LLMParseError 渲染修复 + P2 解析位置归位；判别测试 +70）；**线 2 · PT-FEAT-16
+  词嵌入一等能力四批已完成**（① 契约包 + EMB_ 码域；② `vector` 一等值类型
+  （公理层全链路）；③ `ai` 模块面（embed 动态重载/retrieve/api_config
+  `kind: "embedding"`/MOCK:VEC；unbox_args 机制泛化 + 幽灵码原码透传）；④ T16
+  真实试用 8/8（SiliconFlow dim=1024）；判别/回归测试 +87）；**线 3 · N2 已验证
+  知识注册表四批已完成**（①+② `knowledge` 一等值类型 + 验证门铁律编译期检查
+  （SEM_KNW_CHECK_LLM/OPAQUE）+ KNW_ 码域；③ 状态保真 + docs 子系统页
+  `docs/syntax/16_knowledge_system.md`；④ T17 试用套件 7/7（L1 canonical idiom
+  双轨实证 e25 机制"用得越久越确定"语言级落地）；附 host 层 save_state 单层
+  相对路径缺陷修复；判别/回归测试 +24）。全量 pytest 3400/1 零回归
+  （P0 期间 3219 → 3400 = +181）。**当前阶段 = P1（N1 生成参数面 6 项 /
+  N4 finish_reason 结构化）**。详见 `tasks_docs/NEXT_STEPS.md` +
+  `tasks_docs/_embedding_design.md` §九/§9.6/§9.7 +
   `tasks_docs/_knowledge_registry_design.md`。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +

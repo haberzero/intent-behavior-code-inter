@@ -27,18 +27,18 @@
 
 ## 🔴 当前状态
 
-**P0 主线推进中：线 2 完成，线 3 开工**。线 1 · 诊断面打包完成（2026-09-07，批次 0-5）；
-**线 2 · PT-FEAT-16 词嵌入一等能力四批全部完成（2026-09-07）**：① 契约包
-`core.base.embedding_protocol`（K1-K3 平移 + EMB_ 码域 6 码）→ ② `vector` 一等值类型
-（公理层：固定维度不可变/值语义/方法面/序列化/克隆全链路；`vec()` 静态返回类型 =
-vector 实测）→ ③ `ai` 模块面（embed 动态重载 / retrieve 检索最小闭包 / api_config
-`kind: "embedding"` 路由 / MOCK:VEC mock / 内省；unbox_args 机制泛化 + 幽灵码原码
-透传）→ ④ SiliconFlow 真实试用（T16 套件 8/8：mock 6 + 真实 2，dim=1024）。全量
-pytest 3376/1 零回归（+87 判别/回归）。
-**下一阶段 = 线 3 · N2 已验证知识注册表实施**（K1-K9 已定案：类型 `knowledge` /
-方法面 store 族 / 一等内置值类型[公理层] / 诊断域 `KNW_`；不以 ai 为载体、
-`@~...~` 保持纯 LLM 语义无隐式路由；设计文档 `tasks_docs/_knowledge_registry_design.md`，
-实施就绪；批② 验证门 SEM 消费 P0-1 诊断面已就位）。
+**P0 三线全部收官（2026-09-07，free-explore）**：线 1 · 诊断面打包（SEM-1 编译期
+运算符类型检查 + B1 错误定位链 + P2 解析位置归位）；线 2 · PT-FEAT-16 词嵌入一等
+能力四批（契约包 / `vector` 值类型 / `ai` 模块面 / T16 真实试用 8/8）；线 3 · N2 已
+验证知识注册表四批（`knowledge` 一等值类型 + 验证门铁律编译期检查 / 状态保真 +
+docs 子系统页 16 / T17 试用套件 7/7，含 host 层 save_state 单层相对路径缺陷
+修复）。全量 pytest 3400 passed / 1 skipped 零回归（P0 期间 3219 → 3400 = +181
+判别/回归/保真/试用测试）。
+**下一阶段 = P1**：N1 生成参数面（6 项——temperature/top_p/max_tokens/
+response_format/停止符/系统提示面扩展）→ N4 finish_reason 结构化（调用结果
+携带结束原因——重试/截断判定面）→ P2 项（dict for-iteration + `in` 运算符
+检查 KERNEL_ISSUE-SEM-2 评估、尾逗号、named-model `IBCI_TRIAL_LLM_URL` 环境
+通道等）→ 支线 → 周期性质量维护。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
@@ -49,9 +49,8 @@ pytest 3376/1 零回归（+87 判别/回归）。
    ~~线 1 · 诊断面打包~~ **已完成（2026-09-07，git 承载）** →
    ~~线 2 · PT-FEAT-16 四批~~ **已完成（2026-09-07，git 承载：① 契约包 ② vector 值类型
    ③ ai 模块面 ④ T16 真实试用 8/8）** →
-   **线 3 · N2 已验证知识注册表实施**（2026-09-07 用户裁定重新定位：不以 ai 为
-   载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；
-   设计文档 `tasks_docs/_knowledge_registry_design.md` 已产出，**K1-K9 已按推荐确认定案（2026-09-07 用户），实施就绪**）。
+   **~~线 3 · N2 已验证知识注册表实施~~ 已完成（2026-09-07，git 承载：①+② knowledge 一等值类型 + 验证门 + SEM 纯度检查 + KNW_/SEM_KNW_ 码域 ③ 状态保真 + docs 16 ④ T17 7/7；附 host save_state 单层相对路径缺陷修复）**（2026-09-07 用户裁定重新定位：不以 ai 为载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；K1-K9 已定案；设计文档 `tasks_docs/_knowledge_registry_design.md`）。
+   **P0 三线全部收官 → 主线前移 P1（N1 生成参数面 / N4 finish_reason）**。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
    ① named-model 端点泄漏
    2 用例（T01 D1-07-006 / T08 D5-03 在 tracked 文件硬编码旧本机端点 → 端点 URL 走
