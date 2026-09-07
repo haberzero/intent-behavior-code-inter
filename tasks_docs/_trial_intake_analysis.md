@@ -145,7 +145,7 @@ raw="}"→n≥2 提案约定）。**诊断面（B1 源行号 + 编译期类型�
 
 | 需求 | 核验 | 立场（按语言自动机使命 + design-philosophy 审查） |
 |------|------|-----------|
-| **N1 思考模型支持**（extra_body 透传 + 空 content 确定性处理 + max_tokens 预算） | SiliconFlow `Qwen/Qwen3.6-35B-A3B` 已实证：双字段抑制有效（`reasoning_content` 兼容已验证）；空 content 处理/max_tokens 键仍缺 | **做**（P1）：共享云端思考模型成为常态端点后，空 content/预算是运行面必需，非通用化 |
+| **N1 思考模型支持**（extra_body 透传 + 空 content 确定性处理 + max_tokens 预算） | SiliconFlow `Qwen/Qwen3.6-35B-A3B` 已实证：双字段抑制有效（`reasoning_content` 兼容已验证）；空 content 处理/max_tokens 键仍缺。**2026-09-06 追加实证（overlay 配置面评估）**：provider 当前把双字段抑制 dict **硬编码**进每个请求的 `extra_body`（3 个调用点：非流/流/probe，`provider_impl.py` call/stream/probe 路径）且**无条件发送**——`reasoning: true`（思考模型模式）在请求层实际不可表达（抑制仍发出）；vendor 参数（机器事实）滞留 tracked 代码层 = 与 named-model 端点泄漏同源的"机器事实未收敛配置单源"问题 | **做**（P1，**重定性为根因项并前置**）：per-model `extra_body` 配置字段（dict，fail-fast 类型校验，CFG_ 码族，与 T4 max_tokens 同型）+ 代码默认 = 不发送（对 vendor 零意见）+ 本机抑制 dict 迁入 `api_config.json`（机器事实归位）；空 content 确定性处理同批（现状 = 静默以 reasoning 替代 content，违反可审计纪律）。**脚本层"整 schema 覆写"形态评估结论 = 不做**（单一权威源/密钥卫生/双通道/可审计性四重违反；真实需求 = ihost 子环境配置隔离，归 ref E1 设计，scoping 形态而非覆写形态；详见本文件 §五 5.4） |
 | **N2 结晶注册表**（`ai.crystallize/lookup/correct/crystal_log`；引擎内路由：registry 命中→跳过 LLM；铁律：原始 LLM 输出不可直接结晶，必须过确定性谓词；append-only 事件流） | 试用方 e25/e31 机制实证收益路径（fast path + 模式匹配 few-shot）；存储面与 IBCI 平铺池+UID 侧表同构 | **做**（P0 候选，语言自动机使命核心机制——"用得越久越确定"的机器承载）：设计阶段文档先行（§五 3.1） |
 | **N3 measure_freq**（logprob 测量通道） | 试用方自我质疑后建议**挂起**；e26-e28 为现成验收基线 | **挂起、方向保留**：measurement 是铁律允许的第三类操作；logprob 通道是"测量"能力的机器承载，但当前语料/探针设计全部手工，内化时机未到 |
 | **N4 finish_reason 暴露 + max_tokens 键** | provider 未暴露 | **做**（P1，与 N1 同批：批量管线运行细节） |
@@ -259,8 +259,10 @@ raw="}"→n≥2 提案约定）。**诊断面（B1 源行号 + 编译期类型�
 
 **P1（运行面必需，云端思考模型常态化的直接后果）**
 
-4. **N1 思考模型支持**：`extra_body` 透传（provider 层）+ 空 content 确定性处理
-   （uncertain 信号路径 or fail-fast——需设计裁决）+ `max_tokens` 预算键。
+4. **N1 思考模型支持**（**2026-09-06 重定性为根因项**：per-model `extra_body` 配置字段
+   + 代码默认不发送 + 本机硬编码抑制 dict 迁入 api_config.json 归位 + 空 content
+   确定性处理同批——详见 §五 5.4 形态 A）：落地后 `reasoning: true` 思考模型模式
+   请求层可表达；max_tokens 预算键已随 T4 落地。
 5. **N4 finish_reason 暴露**：call_info 观测面补 `finish_reason`（截断检测是
    批量管线的运行细节：截断 ≠ 解析失败）。
 
@@ -287,6 +289,52 @@ raw="}"→n≥2 提案约定）。**诊断面（B1 源行号 + 编译期类型�
 - **不把 judgment 类操作（LLM 评分）做成语言内建**（铁律：禁止）。
 - **不改 P3（显式返回注解）**：类型论 ISA 的承载，试用方自身机制依赖。
 - **不复制试用方的自包含测试 runner**（C4）：其零改动纪律的产物，不适用我方。
+
+### 5.4 脚本层"覆写 LLM 配置面"评估（extra_body / 整 api_config schema overlay，2026-09-06 用户质询）
+
+> 来源：更早试用者提出"直接允许 ibci 层书写 overlay，比如直接覆盖 extra_body 甚至直接覆盖
+> 整个 api_config.json 的 schema"。该表述混合了三种不同形态，逐形态评估：
+
+**形态 A · 配置级 `extra_body` 透传（N1 项 1）——✅ 合理且可行，前置到 P1 首位**
+
+- 内容：`api_config.json` per-model 增加 `extra_body` 字段（dict），原样合并进请求体
+  （如 `{"chat_template_kwargs": {"enable_thinking": false}}`）。
+- **追加实证（本轮）**：provider 现有 `extra_body=` 参数接线点已齐备（3 处调用点：
+  非流/流/probe）；且**双字段抑制 dict 当前硬编码在 tracked 代码层并随每个请求无条件发送**
+  （`provider_impl.py` call/stream/probe 路径）——`reasoning: true` 声明的思考模型模式在
+  请求层实际不可表达（抑制仍发出）；vendor 参数滞留代码层 = 与 named-model 端点泄漏同源
+  的"机器事实未收敛配置单源"问题（AGENTS.local 纪律：机器事实归 gitignored 配置层）。
+- 设计形态：per-model `extra_body`（fail-fast 类型校验，CFG_ 码族，与 T4 max_tokens 同型）；
+  **代码默认 = 不发送**（对 vendor 零意见）；本机（SiliconFlow/qwen3.6）抑制 dict 迁入
+  `api_config.json` = 机器事实归位。ibci 校验形状（dict）、vendor 解释语义——职责边界清晰
+  （透传口子 ≠ 兜底：不是"未知参数静默吞掉"，是显式声明的 vendor 原生参数面）。
+- 原则对照：单一权威源（vendor 参数从代码层回到配置单源）/ 字面量散落治理
+  （code-quality 十查 #3：硬编码 vendor 魔法值提炼单点）/ 行业同构（OpenAI SDK 自身
+  `extra_body` 即此形态——"一个透传口子比 n 个专用开关更可维护"成立）。
+
+**形态 B · 语言层窄运行时开关（`ai.set_extra_body` 类 set_* 族）——⏸ 挂起**
+
+- 现有运行时面设计语言 = "配置来自文件单源 + 运行时窄开关（set_retry/set_timeout/
+  set_mock_mode/set_config/register_model）+ 命名路由（@NAME~）"。per-call 参数变化
+  已被命名模型路由覆盖（register_model 每模型 timeout/max_tokens）。形态 A 落地后，
+  若出现真实 per-script override 需求，按同型加窄开关（`set_*` 族），**不新开面**。
+
+**形态 C · 脚本层整 schema 覆写（覆写整个 api_config.json 逻辑配置面）——❌ 不做**
+
+- 技术可行（`apply_config` 已接受逻辑配置）但架构不合理，四重原则违反：
+  1. **单一权威源**（design-philosophy §一）："生效的 LLM 配置"现有单一答案点
+     （仓库根 api_config.json + 显式窄开关）。脚本级整 schema 第二入口 = 同一系统级概念
+     两处可写 → T1 刚清场的 61 份副本双写真相问题以语言层形态复生；
+  2. **密钥卫生回归**：schema 含 providers api_key。脚本内联整配置面诱导密钥进
+     `.ibci` 源文件（tracked!）——直接回退 "{env:VAR} + tracked 不落密钥"纪律；
+  3. **双通道**（code-quality 红线）：vendor 特定行为的既有原则性扩展点 = 宿主绑定
+     自写 provider 实现（可实现任意请求组装）；整 schema 覆写是同一需求的第二、更弱
+     扩展口（能力上做不到自定义 provider 的事）→ 同一决策两条通道；
+  4. **可审计性**（使命）：生效配置可从单一文件回答 = 可审计；file + script overlay +
+     set_* 调用栈三层叠加 = LLM 调用时的生效配置只能靠重建脚本内容推知。
+- **背后的真实需求 ≠ 覆写，= 作用域**：唯一真实场景是 ihost 子环境需要不同 LLM 配置
+  （ref E1：子环境 LLM 配置继承/隔离）。正确形态 = **scoping**（spawn API 接受配置引用，
+  子环境独立配置作用域，父环境不受影响），非全局面覆写 → 归 ref E1 设计（批次表 P1-P2）。
 
 ---
 
