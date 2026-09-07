@@ -374,6 +374,57 @@ fail-fast 诊断，不静默丢弃）。这也是 F1/F2 正确而 F4 错误的�
 ③ 硬编码抑制 dict 迁出归位 ④ `**kwargs` 静默吞参 → fail-fast ⑤ call_info 采样姿态审计
 闭环 ⑥ 配置 model 条目未知字段严格性检查（静默丢弃 → fail-fast）。
 
+### 5.6 配置格式生态对齐评估（api_config vs OpenCode/DSH；YAML 问题，2026-09-06 用户质询）
+
+**证据**：OpenCode 官方配置文档（opencode.ai/docs/config/，2026-09-07 核查）+ DSH 本机
+配置（`~/.dsh/settings.yaml` + `.credentials.yaml`）+ IBCI 现状（config_loader/provider_impl）。
+
+| 维度 | IBCI api_config.json | OpenCode opencode.json[c] | DSH settings.yaml |
+|------|---------------------|---------------------------|-------------------|
+| 格式 | JSON（严格） | JSON + JSONC | YAML + 独立凭据文件（.credentials.yaml，600） |
+| 连接层 | providers: base_url + api_key | provider: options.baseURL + apiKey | provider: baseURL + **apiKeyEnv（仅 env 变量名）** |
+| 协议 | openai SDK 直连（OpenAI 兼容） | provider 按 OpenAI 兼容/各家 | `api: openai-completions` 显式标注 |
+| 模型选择 | models: 命名 → {provider, model, 每模型参数} | model: "provider/model-id" 字符串引用 + models 段 | provider.models[]: id/name/contextWindow/input |
+| 默认模型 | default_model（字符串引用或对象） | 顶层 "model" | agent-default-model: {provider, model} |
+| 密钥通道 | {env:VAR} 插值（内联亦可） | env 变量 / auth 文件 | 仅 env 变量名（配置永不含 key） |
+| 发现 | 仓库根单源 + 向上发现（.git 边界） | 多层合并（global→project[向上到 git]→inline→managed） | DSH_HOME 单点 |
+| 校验 | 内建 fail-fast（12 CFG_ 码） | 发布公开 JSON Schema（编辑器校验） | 内建 |
+
+**对齐度判断**：**设计思路对齐，差异是范围选择非设计分歧**——
+① 三层结构（连接层 provider / 模型选择 models / 默认引用 default）三方同构；
+② OpenAI 兼容为通用连接协议三方同构（DSH 显式标注 openai-completions）；
+③ env 密钥通道三方同构（DSH 最严：仅变量名；IBCI {env:VAR} + 内联可选，项目范围下合理）；
+④ 向上发现（.git 边界）与 OpenCode 项目配置发现同思路；IBCI 单源不合并 = T1 裁定
+（项目级语言服务的范围选择，与 DSH 单点同形；OpenCode 多层合并是全局 CLI 工具 +
+企业 managed 层的范围产物，不是更"先进"的设计）；
+⑤ 字段命名随生态惯例（Python snake_case 对齐 openai SDK / JS camelCase 对齐 Node 生态），
+语义一一对应。
+**对齐缺口（记录，不紧迫）**：① 无公开 JSON Schema（OpenCode 发布 schema 供编辑器
+校验/补全——N1 批 schema 生长[extra_body/采样参数]后可顺带发布，P2 可选）；② DSH
+"contextWindow/input 能力元数据"对应 IBCI 的动态 `probe_model`（不同路线：静态声明 vs
+动态探测，IBCI 路线适配试用场景，无需改）。
+
+**YAML 评估（两问两答）**：
+
+1. **api_config 支持 YAML？——❌ 不做，JSON 保持单格式**。依据：
+   - 生态事实：LLM 工具配置主流 = JSON（OpenCode/VS Code/OpenAI SDK 生态）；YAML 主流在
+     DevOps/k8s/CI 域（DSH 属之）。无"应跟随 YAML"的生态压力；
+   - 语言数据面一致性：JSON 是 IBCI 一等数据面（json 模块 / dict↔native / LLM 结构化
+     输出约定 = JSON——试用方 172 轮范式全部 JSON）；配置格式与语言数据面异构 = 同一
+     "数据"概念两种形态（设计语言割裂）；
+   - 语义纪律：YAML 隐式语义（类型推断/锚点/别名/`yes-no-on-off` 陷阱/性进制数字）与
+     IBCI 显式 + fail-fast 纪律相悖——JSON 严格解析本身就是 fail-fast 面；
+   - 成本：双格式 = 配置边界双通道（发现优先级/两套解析面）+ 新增 PyYAML 运行时依赖
+     （现仅 openai 一个依赖）。
+   - 若未来出现"配置注释"真实需求：对齐的扩展是 **JSONC**（OpenCode 同款，非 YAML），
+     且当前不需要（api_config 是 gitignored 机器文件，非人工协作书写面）。
+2. **IBCI 语言层支持 YAML（yaml 模块/值类型）？——❌ 不做**。依据：
+   - 使命无消费者：试用方 172 轮结构化数据全部 JSON；LLM 结构化输出行业约定 = JSON
+     （C2 契约建立在 JSON 上）；YAML 不是 LLM 输出形态；
+   - 范围漂移：新增解析器依赖 + 值面 = 通用语言方向的扩张（违背使命定位）；
+   - json 模块即语言数据格式面，与 LLM 提案/裁判范式（e04/e12/e13/e29 全部 json.parse）
+     同构——这是 IBCI 对语言自动机使命的正确数据格式选择。
+
 ---
 
 ## 六、本轮工作记录（free-explore @ 2026-09-06）
@@ -389,5 +440,9 @@ fail-fast 诊断，不静默丢弃）。这也是 F1/F2 正确而 F4 错误的�
 | 残留队列 | 见 §五 5.2（P0×3 / P1×2 / P2×4 / 挂起×1）+ handoff §三（恶意边界 #15/#17/#19/#33、T06 缺口、named-model 泄漏、BOUNDARY-LLM-5 裁定） |
 
 > 注：试用方文档中的 API 命名/签名均为**建议形态**（"最终以开发智能体的
-> design-philosophy 审查为准"）；本文件 §五 的裁决建议同为此性质——待用户确认后
-> 进入设计阶段（`tasks_docs/_<task>.md`）与实施。
+> design-philosophy 审查为准"）。**状态（2026-09-06/07）**：用户已认可本文件全部建议
+>（Q1-Q4 / 批次顺序 / P0 三线 / 排除项）；追加三组独立评估已落账——§五 5.4
+> overlay 配置面（A 做 / B 挂起 / C 不做）、§五 5.5 生成参数面（F1/F2 做，并入 N1 批；
+> F3/F4 不做）、§五 5.6 配置格式生态对齐 + YAML 评估（JSON 单格式维持；语言层不做
+> YAML；公开 JSON Schema 可选随 N1 批）。设计阶段（`tasks_docs/_<task>.md`）与实施
+> 按 handoff §五 队列推进（第一动作 = 线 1 诊断面设计文档）。
