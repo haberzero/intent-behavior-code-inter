@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from dataclasses import dataclass
+from typing import Optional
 from core.base.source_atomic import Location
 
 class TokenType(Enum):
@@ -147,6 +148,10 @@ class Token:
     end_line: int = 0
     end_column: int = 0
     is_at_line_start: bool = False
+    # 跨行续行标记：生成该 token 时处于未闭合构造（括号/方括号/花括号
+    # 跨行未闭合）内且 token 与构造起点不同行时，记录构造起点 (line, col)。
+    # 解析错误位置归位消费（错误卡住在续行行时归位到构造起点）。
+    continuation_start: Optional[tuple] = None
 
     @property
     def length(self) -> int:

@@ -231,8 +231,12 @@ class ExpressionComponent(BaseComponent):
 
             # 在 speculate 上下文外发出硬错误，确保记录到真实的 issue_tracker
             if _behavior_cast_detected:
+                # 位置 = cast 起点（checkpoint 前的 LPAREN token）而非 peek
+                # （speculate 已消费整个 @~...~ 块，peek 在块后/下一行会误导）
+                cast_start_idx = max(0, checkpoint - 1)
+                cast_start = self.stream.tokens[cast_start_idx]
                 raise self.stream.error(
-                    self.stream.peek(),
+                    cast_start,
                     "Cast expression '(Type) @~...~' is no longer supported. "
                     "Use 'fn varname = lambda -> TYPE: @~...~' or 'fn varname = snapshot -> TYPE: @~...~' instead.",
                     code=PAR_DEPRECATED_CAST_SYNTAX

@@ -12,6 +12,10 @@ class StrStream:
         self.current_token_start_pos = 0
         self.current_token_start_line = 1
         self.current_token_start_col = 1
+        # 当前最内层未闭合构造起点 (line, col)（CoreScanner 经括号栈维护）；
+        # None = 无未闭合构造。create_token 对跨行 token 附 continuation_start
+        # 标记，供解析错误位置归位（卡住点跨行时归位到构造起点）。
+        self.continuation_start: Optional[tuple] = None
     
     def peek(self, offset: int = 0) -> str:
         """返回当前位置+偏移量的字符。"""
@@ -72,7 +76,7 @@ class StrStream:
         if value is None:
             value = self.source[self.current_token_start_pos : self.pos]
             
-        return Token(
+        token = Token(
             type=type,
             value=value,
             line=self.current_token_start_line,
@@ -81,3 +85,11 @@ class StrStream:
             end_column=self.col,
             is_at_line_start=at_line_start
         )
+        # 跨行续行标记：token 起点与未闭合构造起点不同行时附构造起点
+        # （同行 token 不标记——错误卡住点同行时列号精确，维持现状）。
+        if (
+            self.continuation_start is not None
+            and self.current_token_start_line > self.continuation_start[0]
+        ):
+            token.continuation_start = self.continuation_start
+        return token

@@ -15,7 +15,10 @@ class CoreTokenScanner:
         
         # Internal State
         self.state_stack: List[SubState] = [SubState.NORMAL]
-        self.paren_level = 0
+        # 未闭合构造（括号/方括号/花括号）位置栈：栈底 → 栈顶 = 外层 → 内层。
+        # 单一权威源 = 本栈；paren_level 为派生计数（len）。栈顶位置 = 最内层
+        # 未闭合构造起点，经 StrStream.continuation_start 供解析错误位置归位。
+        self.paren_stack: List[Tuple[int, int]] = []
         self.continuation_mode = False
         
         # IN_INTENT state: track whether any content token has been emitted yet.
@@ -73,12 +76,23 @@ class CoreTokenScanner:
             return self.state_stack.pop()
         return SubState.NORMAL
 
+    @property
+    def paren_level(self) -> int:
+        """未闭合构造层数（派生自 paren_stack 单一权威源）。"""
+        return len(self.paren_stack)
+
+    def _sync_continuation_start(self) -> None:
+        """同步 StrStream.continuation_start = 最内层未闭合构造起点。"""
+        self.scanner.continuation_start = (
+            self.paren_stack[-1] if self.paren_stack else None
+        )
+
     def get_snapshot(self) -> tuple:
         """获取当前扫描器完整逻辑快照"""
         return (
             self.scanner.get_snapshot(),
             list(self.state_stack),
-            self.paren_level,
+            list(self.paren_stack),
             self.is_raw_string,
             self.quote_char,
             self.current_string_val,
@@ -90,7 +104,8 @@ class CoreTokenScanner:
         stream_snap, stack_snap, paren, raw, quote, s_val, intent_content = snapshot
         self.scanner.restore_snapshot(stream_snap)
         self.state_stack = list(stack_snap)
-        self.paren_level = paren
+        self.paren_stack = list(paren)
+        self._sync_continuation_start()
         self.is_raw_string = raw
         self.quote_char = quote
         self.current_string_val = s_val
@@ -303,27 +318,36 @@ class CoreTokenScanner:
 
         # 8. Symbols
         if char == '(': 
-            self.paren_level += 1
+            self.paren_stack.append((self.scanner.current_token_start_line, self.scanner.current_token_start_col))
+            self._sync_continuation_start()
             tokens.append(self.scanner.create_token(TokenType.LPAREN))
             return False
         elif char == ')':
-            self.paren_level = max(0, self.paren_level - 1)
+            if self.paren_stack:
+                self.paren_stack.pop()
+                self._sync_continuation_start()
             tokens.append(self.scanner.create_token(TokenType.RPAREN))
             return False
         elif char == '[': 
-            self.paren_level += 1
+            self.paren_stack.append((self.scanner.current_token_start_line, self.scanner.current_token_start_col))
+            self._sync_continuation_start()
             tokens.append(self.scanner.create_token(TokenType.LBRACKET))
             return False
         elif char == ']':
-            self.paren_level = max(0, self.paren_level - 1)
+            if self.paren_stack:
+                self.paren_stack.pop()
+                self._sync_continuation_start()
             tokens.append(self.scanner.create_token(TokenType.RBRACKET))
             return False
         elif char == '{': 
-            self.paren_level += 1
+            self.paren_stack.append((self.scanner.current_token_start_line, self.scanner.current_token_start_col))
+            self._sync_continuation_start()
             tokens.append(self.scanner.create_token(TokenType.LBRACE))
             return False
         elif char == '}':
-            self.paren_level = max(0, self.paren_level - 1)
+            if self.paren_stack:
+                self.paren_stack.pop()
+                self._sync_continuation_start()
             tokens.append(self.scanner.create_token(TokenType.RBRACE))
             return False
         
@@ -462,6 +486,9 @@ class CoreTokenScanner:
             self.current_string_val += char
 
     def _scan_behavior_char(self, tokens: List[Token]):
+        # 记录本段起始位置（闭合 ~ / RAW_TEXT 段的位置起点——此前直接
+        # advance 后 create_token 会复用上一 token 的陈旧 start 位）
+        self.scanner.start_token()
         char = self.scanner.peek()
         
         # 1. Check for closing marker ~
@@ -520,7 +547,8 @@ class CoreTokenScanner:
             text += self.scanner.advance()
         
         if text:
-            tokens.append(Token(TokenType.RAW_TEXT, text, self.scanner.line, self.scanner.col))
+            # 位置 = 段起点（start_token 已记录；原用 advance 后的结束位）
+            tokens.append(self.scanner.create_token(TokenType.RAW_TEXT, text))
 
     def _scan_string_in_behavior(self, tokens: List[Token]):
         """扫描行为表达式中的字符串字面量，支持内部变量引用如 "$var" """
@@ -620,6 +648,7 @@ class CoreTokenScanner:
             return
 
         # 5. Raw Text
+        self.scanner.start_token()
         text = ""
         while not self.scanner.is_at_end():
             peek_char = self.scanner.peek()
@@ -631,7 +660,8 @@ class CoreTokenScanner:
             text += self.scanner.advance()
         
         if text:
-            tokens.append(Token(TokenType.RAW_TEXT, text, self.scanner.line, self.scanner.col))
+            # 位置 = 段起点（start_token 已记录；原用 advance 后的结束位）
+            tokens.append(self.scanner.create_token(TokenType.RAW_TEXT, text))
             self._intent_has_content = True
 
     def _scan_var_ref_with_access(self, tokens: List[Token]):

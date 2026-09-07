@@ -94,5 +94,18 @@ class TokenStream:
                 old_tracker.merge(temp_tracker)
 
     def error(self, token: Token, message: str, code: str = PAR_EXPECTED_TOKEN) -> Exception:
-        self.issue_tracker.error(message, token, code=code)
+        # 位置归位：token 带跨行续行标记（生成时处于未闭合括号构造内且
+        # 与构造起点不同行）时，失败卡住点在续行行会误导用户——错误位置
+        # 归位到构造起点（最内层未闭合开括号位置）。同行错误维持卡住点
+        # （列号精确，不劣化）。
+        if token.continuation_start is not None:
+            from core.base.source_atomic import Location
+            line, col = token.continuation_start
+            self.issue_tracker.error(
+                message,
+                Location(file_path=None, line=line, column=col),
+                code=code,
+            )
+        else:
+            self.issue_tracker.error(message, token, code=code)
         return ParseControlFlowError()
