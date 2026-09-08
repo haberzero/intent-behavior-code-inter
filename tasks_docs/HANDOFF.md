@@ -147,9 +147,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **剩余被动项**：#33（_pending_futures 长会话累积——依赖 KERNEL_ISSUE-LLM-5
   同子系统）+ KERNEL_ISSUE-LLM-5（llm 可调用类赋值约 1/6 竞态——事件驱动监视复发，
   近期运行无复发）；远程 CI 启用（用户裁定暂不启动，需显式授权）；阶段 D 远期演进
-  （VISION-4/5/1——试用稳定后）。**阶段 E 批次 1 剩余队列**：C3（用户模块路径解析
-  定案——KERNEL_ISSUE-IMPORT-2 锚点语义）/ A1（用户自定义协议一等公民）/ B3
-  （一等环境对象）；批次 2/3 见 `tasks_docs/_next_phase_targets.md` §三。详见
+  （VISION-4/5/1——试用稳定后）。**阶段 E 批次 1**：C1/B1/A3/C2/T2/C3/A1 全部完成
+  （C3 模块路径解析定案[KERNEL_ISSUE-IMPORT-2 修复：绝对导入两级搜索 +
+  artifact 键=用户 import 名 + 合成载体越界跳过]；A1 用户自定义协议核验
+  [机制已落地 ref 宣称过期：协议声明/结构判定/bound 编译期 fail-fast/继承]；
+  C4 裁定维持现状）——**剩余 B3（一等环境/作用域对象：world/mode/discourse
+  环境对象，可快照/嵌套；intent_context 已结构化但偏提示词注入）**；批次 2/3
+  见 `tasks_docs/_next_phase_targets.md` §三。基线 **3493 passed / 1
+  skipped**。详见
   `tasks_docs/NEXT_STEPS.md` + `tasks_docs/WORKLOG.md`（本段完整记录）+ git log。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
