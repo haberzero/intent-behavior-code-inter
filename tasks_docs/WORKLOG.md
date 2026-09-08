@@ -1769,6 +1769,25 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   触发超时，孤儿寿命 ~3.75s]，稳定复跑 164s 退出 0）。M2（meta.compile 编译门）接续。
 ---
 
+- **meta 层 MVP M2 实施（2026-09-08，free-explore）**：meta 模块 + meta.compile 编译门
+  （代码作值 fail-fast 校验面）。M2 落地裁定（`_meta_layer_design.md` §8.4 M2）：①
+  meta = 新内核原生模块（KERNEL_NATIVE + IMPORT_GATED，_SPEC_META：`compile(code: str)
+  -> void`）；② 实现 = 子引擎 compile-only（新 IBCIEngine 锚定父 project_root，零父状态
+  污染[父可能自身即字符串运行·合成 entry 同名冲突面]；compile-only 无 LLM 继承/防卡死
+  [编译不执行]）；③ 编译失败 fail-fast：compile_string 的 CompilerError[引擎级诊断集]
+  翻译为**可被 IBCI try/except 结构化捕获**的 InterpreterError[首个诊断 = 根因面，携带
+  ibci 源定位——诊断码 + 合成 entry 标记 `__string_exec__.ibci` + line/column；message
+  含源定位]。裁定：不引入新 IBCI 异常类型（MVP 不新增 CompileError 类型——复用既有
+  Exception 捕获面 + InterpreterError 定位透传）；源定位 file_path 从 compile_string 的
+  tempfile 载体重写为合成 entry 标记[字符串源可辨识，替代实现细节]（原生函数边界对
+  CompilerError 会扁平化包装[functions.py]，对 InterpreterError 透传[IbTry 捕获 str()
+  含定位]——翻译面即据此）；④ 成功静默（void）——与 CLI check 面同构（compile-only +
+  失败即断）。诊断码零新增（复用 PAR_*/SEM_* 码族）。判别：e2e test_meta_compile 7 项
+  [成功静默/语法错误捕获/语义错误捕获/message 含 ibci 源定位[marker+line1+col9+PAR_]/
+  父状态零污染/compile-only 不执行/mock 模式无 LLM 依赖]。全量 3909 passed / 1 skipped
+  零回归。M3（三门管线惯用法固化）接续。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

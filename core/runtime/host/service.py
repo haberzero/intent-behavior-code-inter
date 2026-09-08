@@ -352,6 +352,52 @@ class HostService(IHostService):
         return IbRunResult(run_result_cls, exit_status=exit_status, stdout=stdout,
                            exception=exception_record)
 
+    def meta_compile(self, code: str) -> None:
+        """meta.compile：代码字符串进程内 **compile-only** 静态校验（编译门，不执行）。
+
+        子引擎 compile-only（新 IBCIEngine，**零父状态污染**——父程序可能自身即字符串
+        运行[合成 entry 同名冲突面]；compile-only 无需 LLM 继承/防卡死[编译不执行]）。
+        编译失败 fail-fast：首个诊断（根因面）经 ``InterpreterError`` 上抛（携带 ibci
+        源定位——合成 entry 标记 + line/column，IBCI ``try/except`` 可捕获，message
+        含源定位），成功静默返回（void）——与 CLI ``check`` 面同构（compile-only +
+        失败即断）。
+
+        注：compile_string 产出 ``CompilerError``（引擎级，诊断集），本方法将其翻译为
+        可被 IBCI ``try/except`` 结构化捕获的 ``InterpreterError``（首个诊断 = 根因面；
+        源定位 file_path 从 tempfile 载体重写为合成 entry 标记——字符串源可辨识）。
+        """
+        from core.engine import IBCIEngine
+        from core.kernel.issue import CompilerError
+
+        # 父 project_root（子引擎锚定，合成 entry 同源；meta.compile 仅经运行中的
+        # 父 VM 调用，父 root 必已确立）。
+        parent_root = getattr(self.orchestrator, "root_dir", None)
+        if parent_root is None:
+            raise InterpreterError(
+                "meta.compile 须父 project_root 已确立（经运行中的父 VM 调用）。", None)
+        sub_engine = IBCIEngine(root_dir=parent_root)
+        try:
+            sub_engine.compile_string(code, silent=True)
+        except CompilerError as e:
+            diags = e.diagnostics or []
+            d = diags[0] if diags else None
+            if d is None:
+                raise InterpreterError("meta.compile 编译失败。", None) from e
+            loc = getattr(d, "location", None)
+            if loc is not None:
+                loc.file_path = self._string_source_marker(parent_root)
+            raise InterpreterError(d.message, loc, error_code=d.code) from e
+
+    @staticmethod
+    def _string_source_marker(parent_root: str) -> str:
+        """字符串源定位的合成 entry 标记（``<parent_root>/__string_exec__.ibci``）。
+
+        与 ``compile_string`` 的 entry 锚定同源（稳定 + 可辨识"字符串源"）；替代
+        compile_string 的 tempfile 载体路径（实现细节，不应暴露给用户源定位面）。
+        """
+        from core.kernel.path import IbPath
+        return (IbPath.from_native(parent_root) / "__string_exec__.ibci").to_native()
+
     def _resolve_isolated_path(self, path: str) -> str:
         """
         把 ``ihost.run_isolated``/``spawn_isolated`` 传入的脚本路径解析为绝对路径。

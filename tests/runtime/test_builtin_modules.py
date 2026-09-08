@@ -3,8 +3,8 @@
 tests/runtime/test_builtin_modules.py
 ======================================
 
-内置模块（内核原生 5 + 工具 5 + file）构造期预注册验证。
-内核原生 5：ai/ihost/idbg/isys/iruntime（kernel-native）。
+内置模块（内核原生 6 + 工具 5 + file）构造期预注册验证。
+内核原生 6：ai/ihost/meta/idbg/isys/iruntime（kernel-native）。
 工具 5：math/json/time/net/schema（内联 spec 构造期预注册，USER_DEFINED）。
 """
 import os
@@ -26,7 +26,7 @@ class TestBuiltinRegistration:
     """构造期预注册与元数据标记。"""
 
     def test_modules_pre_registered_at_init(self):
-        """Engine 构造后，内核原生 5 模块已实现+元数据就绪。"""
+        """Engine 构造后，内核原生 6 模块已实现+元数据就绪。"""
         eng = IBCIEngine(root_dir=REPO_ROOT)
         for name in KERNEL_NATIVE_MODULES:
             impl = eng.host_interface.get_module_implementation(name)

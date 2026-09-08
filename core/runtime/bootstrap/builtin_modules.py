@@ -34,6 +34,7 @@ from core.runtime.path import InstallPaths
 KERNEL_NATIVE_MODULES: Dict[str, str] = {
     "ai": "ibci_ai",
     "ihost": "ibci_ihost",
+    "meta": "ibci_meta",
     "idbg": "ibci_idbg",
     "isys": "ibci_isys",
     "iruntime": "ibci_iruntime",
@@ -273,6 +274,16 @@ _SPEC_IHOST = TypeDef(name="ihost", kind="module", provenance=Provenance.KERNEL_
             ]),
     })
 
+
+_SPEC_META = TypeDef(name="meta", kind="module", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED, members={
+        # 编译门原语：代码字符串进程内 compile-only 静态校验（不执行）。失败抛
+        # CompilerError（ibci 源定位：合成 entry 标记 + line/column），成功 void。
+        "compile": MethodMemberSpec(name="compile", kind="method", type_ref=TypeRef.of("void"), param_types=[
+                TypeRef.of("str")
+            ], return_type=TypeRef.of("void"), param_descriptors=[
+                ParamDescriptor(name="code", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+    })
 
 _SPEC_IDBG = TypeDef(name="idbg", kind="module", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED, members={
         "vars": MethodMemberSpec(name="vars", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
@@ -722,6 +733,7 @@ _SPEC_SCHEMA = TypeDef(name="schema", kind="module", provenance=Provenance.USER_
 BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "ai": _SPEC_AI,
     "ihost": _SPEC_IHOST,
+    "meta": _SPEC_META,
     "idbg": _SPEC_IDBG,
     "isys": _SPEC_ISYS,
     "iruntime": _SPEC_IRUNTIME,

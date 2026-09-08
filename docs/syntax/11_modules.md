@@ -413,6 +413,33 @@ func test() -> auto:
   对象延续（如 `datetime.replace` 返回新 datetime 仍是 IBCI `datetime`）。
 - 契约外成员 / 缺失宿主类 / 缺失成员 → fail-fast。
 
+### 11.11 meta 模块（代码作值编译门）
+
+`meta` 暴露"代码作值"的**编译门**原语——代码字符串进程内**静态校验**（**不执行**），
+与 `ihost.run_file`/`run_code`（隔离门）+ 调用方判定（判定门）构成安全执行代码作值的
+三门管线（设计：`tasks_docs/_meta_layer_design.md` §二/§三）。
+
+```ibci
+import meta
+
+meta.compile("str a = '1'\nprint(a)\n")   # 编译门：静态校验，不执行；成功静默（void）
+# 编译失败 → fail-fast 抛错（可被 try/except 捕获，message 含 ibci 源定位）
+try:
+    meta.compile("int x = = 5")           # 语法错误
+except Exception as e:
+    print(e.message)   # [ERROR][PAR_UNEXPECTED_TOKEN] at <root>/__string_exec__.ibci:line 1, column 9: ...
+```
+
+- `meta.compile(code)`：代码字符串进程内 **compile-only** 静态校验（**不执行**），成功
+  静默返回（void）；语法/语义错误 **fail-fast** 抛出，可被 IBCI `try/except` 捕获。
+  子引擎独立（**零父状态污染**——父程序可能自身即字符串运行[合成 entry 同名冲突面]）。
+- **ibci 源定位**：错误 message 含诊断码 + 合成 entry 标记 `__string_exec__.ibci` +
+  line/column（字符串源可辨识，替代 tempfile 载体路径）——与 CLI `check` 面同构
+  （compile-only + 失败即断）。
+- **无 LLM 依赖**：compile-only 不调用 LLM（mock 态与非 mock 态行为一致）。
+- **三门管线用法**：`meta.compile`（编译门）→ `ihost.run_code`（隔离门 + 结果捕获
+  `run_result`）→ 调用方机械判定（判定门；设计见 `tasks_docs/_meta_layer_design.md` §三）。
+
 ---
 
 ## 深入指引
