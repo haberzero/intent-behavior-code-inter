@@ -1107,6 +1107,24 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   3520 → **3527 passed / 1 skipped**（零回归；git 6b068790）。**阶段 E 批 2
   进度**：E2 ✅ / A4 ✅ / D1 ✅；剩余 A2 泛型约束 / A5 解构 / B2 惰性结构 /
   B4 编译定位 / C5 思考抑制重估 / E1 ihost 完善。
+- **C5 思考抑制重估定案（2026-09-07，free-explore——阶段 E 批 2，
+  PT-DECIDE-2 重估）**：ref C5 焦点"后端强制思考场景"重估——现状核
+  （provider 已含双形态抑制固定发送 + 模型声明 is_reasoning + 抑制失败
+  一次性告警 + 空内容+reasoning RUN_LLM_EMPTY_CONTENT 确定性诊断）——
+  重估定案三面完整化：① **reasoning 捕获记录**（provider 调用路径
+  reasoning 非空即记录进 provider_meta[reasoning]——强制思考可观测面：
+  调试时可见模型实际思考过程，此前仅告警、思考内容丢弃；provider_meta
+  瞬态不持久化，无 token 成本）；② 既有双面回归锁定（空内容+reasoning
+  fail-fast + 抑制失败告警去重）；③ **接口位裁定**——api_config model
+  条目 reasoning: true 显式声明强制推理模型（驱动 is_reasoning，既有）；
+  请求级 LLMCallRequest.thinking_mode 供应商无关远期接口位**维持未接线**
+  （模型级声明已覆盖现有场景——无每请求切换用例）。文档 LLM_SERVICE.md
+  §二补强制思考场景重估定案。判别测试 +3
+  （test_llm_reasoning_capture.py：reasoning 记录 / 空内容+reasoning
+  fail-fast / 无 reasoning 无键）。全量 pytest 基线 3527 → **3534 passed
+  / 1 skipped**（零回归；git f5192e4e）。**阶段 E 批 2 进度**：E2 ✅ /
+  A4 ✅ / D1 ✅ / C5 ✅；剩余 A2 泛型约束 / A5 解构 / B2 惰性结构 / B4
+  编译定位 / E1 ihost 完善。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
