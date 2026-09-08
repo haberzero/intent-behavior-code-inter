@@ -105,7 +105,7 @@ provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4
 | C5 | 供应商感知思考抑制 | PT-DECIDE-2（sealed）；**新实证：双字段抑制对新端点 vLLM 有效（非思考亚秒、无告警），缺口收窄为"后端强制思考"场景**——解封重估待裁定 | 批 2（重估后） |
 | C6 | 流式/批量/多模型编排完善 | stream/run_batch/命名路由已有（T11/T08）；多模型组合文档弱 | 批 3 |
 | C7 | 性能内省（单调时钟/调用级埋点） | time 模块有；单调时钟与埋点缺 | 批 3 |
-| D1 | idbg 增强（意图栈/环境/world register 可视化、UID 反查源码行） | 现有 intents/env(运行时诊断)/show_*；**idbg.env 命名冲突（T2）一并收敛** | 批 2 |
+| D1 | idbg 增强（意图栈/环境/world 注册可视化，UID 反查源行） | ✅ **主项已落地（2026-09-07）**：show_environment 一等环境可视化面（frames 栈键值行 + 键数/帧数统计；与 environment.get_current() 同源）；意图栈可视化[show_intents 既有] / UID 反查源行[line-1 定位链既有] | 批 2 |
 | D2 | CLI inspect/check 导出 | 无 | 批 3 |
 | D3 | 新能力配套诊断码 | 诊断体系已有（codes/catalog），随新能力配套 | 批 3（随批 1 大项） |
 | E1 | ihost 完善（子环境 LLM 配置继承/隔离边界/调试体验） | run_isolated/spawn_isolated/collect 已有；配置继承缺 | 批 2 |

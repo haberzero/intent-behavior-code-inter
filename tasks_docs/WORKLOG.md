@@ -1093,6 +1093,20 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **3520 passed / 1 skipped**（零回归；git 8ed6d189）。**阶段 E 批 2
   进度**：E2 ✅ / A4 ✅；剩余 A2 泛型约束 / A5 解构 / B2 惰性结构 / B4
   编译定位 / C5 思考抑制重估 / D1 idbg 增强 / E1 ihost 完善。
+- **D1 idbg 增强——show_environment 环境可视化（2026-09-07，free-explore——
+  阶段 E 批 2）**：ref D1"意图栈/环境/world 注册可视化，UID 反查源行"——
+  环境可视化面补齐（主项落地）：① `idbg.show_environment()` 打印当前帧环境
+  （frames 栈：键值行[最内层帧在前——读取序] + 键数[去重遮蔽后]/帧数统计；
+  空环境显式 '(空)'）——单一权威源经当前帧 current_environment（与
+  environment.get_current() 同源，B3/E2 延伸）；② _SPEC_IDBG 增
+  show_environment MethodMemberSpec；③ 文档 11_modules idbg API 面补
+  show_environment。D1 三面现状核销：意图栈可视化（show_intents 既有）/
+  环境可视化（本项）/ UID 反查源行（line-1 定位链既有——诊断 SEM-1 文件
+  行号）。判别测试 +3（test_idbg_show_environment.py：空/有值[键值行+统计]/
+  use 替换后输出；capsys 捕获[idbg Python print 先例]）。全量 pytest 基线
+  3520 → **3527 passed / 1 skipped**（零回归；git 6b068790）。**阶段 E 批 2
+  进度**：E2 ✅ / A4 ✅ / D1 ✅；剩余 A2 泛型约束 / A5 解构 / B2 惰性结构 /
+  B4 编译定位 / C5 思考抑制重估 / E1 ihost 完善。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
