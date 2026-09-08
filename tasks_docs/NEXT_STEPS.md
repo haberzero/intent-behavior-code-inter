@@ -50,7 +50,7 @@ response_format/停止符/系统提示面扩展）→ N4 finish_reason 结构化
    ~~线 2 · PT-FEAT-16 四批~~ **已完成（2026-09-07，git 承载：① 契约包 ② vector 值类型
    ③ ai 模块面 ④ T16 真实试用 8/8）** →
    **~~线 3 · N2 已验证知识注册表实施~~ 已完成（2026-09-07，git 承载：①+② knowledge 一等值类型 + 验证门 + SEM 纯度检查 + KNW_/SEM_KNW_ 码域 ③ 状态保真 + docs 16 ④ T17 7/7；附 host save_state 单层相对路径缺陷修复）**（2026-09-07 用户裁定重新定位：不以 ai 为载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；K1-K9 已定案；设计文档 `tasks_docs/_knowledge_registry_design.md`）。
-   **P0 三线全部收官 → 主线前移 P1（N1 生成参数面 / N4 finish_reason）**。
+   **P0 三线全部收官 → P1 完成 → P2 四项完成 → 阶段 E 批次 0 清场 + T2 环境变量通道 + C2 容器边缘完成（2026-09-07）**。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
    ~~① named-model 端点泄漏 2 用例（T01 D1-07-006 / T08 D5-03 硬编码旧本机端点 →
    `IBCI_TRIAL_LLM_URL`/`IBCI_TRIAL_LLM_MODEL`/`IBCI_TRIAL_LLM_KEY` env 通道）~~ **已完成

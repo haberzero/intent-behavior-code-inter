@@ -37,7 +37,7 @@ LLM/mock 双冒烟 PASS。见 git log。）
 - **分类与处置方向**：架构漂移（同一概念多套真相）→ 配置**单源收敛**（发现/继承 +
   env 优先密钥通道），而不是再造一个同步脚本。
 
-### T2 语言层无环境变量通道 + "env" 命名冲突（设计语言割裂）
+### T2 语言层无环境变量通道 + "env" 命名冲突（设计语言割裂）✅ 已落地
 
 - **事实**：IBCI 脚本读 OS 环境变量的唯一通道 = python 宿主绑定样板（`import python "os"`
   + `bind getenv`，每个需要机器事实的用例重复一遍）；`docs/syntax/07_behavior_expressions.md`
