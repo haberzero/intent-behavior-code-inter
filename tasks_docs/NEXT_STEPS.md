@@ -51,6 +51,16 @@ response_format/停止符/系统提示面扩展）→ N4 finish_reason 结构化
    ③ ai 模块面 ④ T16 真实试用 8/8）** →
    **~~线 3 · N2 已验证知识注册表实施~~ 已完成（2026-09-07，git 承载：①+② knowledge 一等值类型 + 验证门 + SEM 纯度检查 + KNW_/SEM_KNW_ 码域 ③ 状态保真 + docs 16 ④ T17 7/7；附 host save_state 单层相对路径缺陷修复）**（2026-09-07 用户裁定重新定位：不以 ai 为载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；K1-K9 已定案；设计文档 `tasks_docs/_knowledge_registry_design.md`）。
    **P0 三线全部收官 → P1 完成 → P2 四项完成 → 阶段 E 批次 0 清场 + T2 环境变量通道 + C2 容器边缘完成（2026-09-07）**。
+   **阶段 E 批次 1 全部完成 + 批次 2 推进中（2026-09-07 轮）**：批次 1
+   （C1/B1/A3/C2/T2/C3/A1/B3 ✅，C4 裁定维持现状）+ 批次 2（E2 save_load
+   帧级 Environment ✅ / A4 缺省 void ✅ / D1 idbg show_environment ✅ /
+   C5 思考抑制重估 ✅ / **E1 子环境 LLM 配置继承——进行中（设计定案 +
+   首次尝试[execute 形态]回退[sealed registry 冲突]，重做方案 = hook 形态
+   on_ready[prepare 后 execute 前触发钩子应用父配置快照]——见 HANDOFF
+   §2.1 + WORKLOG E1 条目）**；剩余批次 2：E1[重做] / A2 泛型约束 /
+   A5 解构 / B2 惰性结构 / B4 编译定位；批次 3：A6/B5/C6/C7/D2/D3（
+   `tasks_docs/_next_phase_targets.md` §三）。基线 **3534 passed / 1
+   skipped**。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
    ~~① named-model 端点泄漏 2 用例（T01 D1-07-006 / T08 D5-03 硬编码旧本机端点 →
    `IBCI_TRIAL_LLM_URL`/`IBCI_TRIAL_LLM_MODEL`/`IBCI_TRIAL_LLM_KEY` env 通道）~~ **已完成
