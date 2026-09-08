@@ -1262,6 +1262,28 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   1 skipped 零回归**（基线 3563 + 判别 36 + meta 按文件参数化增长，对账一致）。
 ---
 
+- **R3-③ D-3/D-4 str 原语四件套完成（2026-09-08，free-explore）**：试用方
+  round3 需求 D-3/D-4（v3 机制栈语料规模摩擦：sub_str 逐字符拼接 12k 窗口
+  挂起 >180s；str.find 单参双参 RUN_TYPE_MISMATCH）。缺口面实证收窄
+  （probe 先行）：原生切片已支持（s[1:3]/s[::2] 实证 OK，__getitem__ slice
+  处理）→ 本项 = 判别锁定 + 文档确认，无实施。实施三面：① count(sub[,
+  from]) 新增（运行期 + 公理表；不重叠计数，Python str.count 对等）；
+  ② find 扩 from 选参（运行期 find(sub, from_idx=None)；公理表声明全形
+  [str, int]——split 先例：内建方法声明最大参数列、运行期接受更少、编译期
+  绑定非严格[split() 零参先例实证]）；③ find_last 改名 rfind（试用方点名
+  Python 惯用语 + 仓内零消费方[tests/ibci 代码均无 find_last]，破坏性改名
+  授权下不留兼容层；行为不变仅命名对齐）。from 选参语义 = 直接委托 Python
+  原语（负偏移等语义天然 Python 对等；判别测试期望值逐一按 Python 真值
+  计算验证——本 session 三处期望值算错后按真值修正，运行期自始正确）。
+  判别 27 项（tests/e2e/test_str_primitives.py：count/find/rfind 各形态 +
+  from 生效判别[无 from 基线对照] + 切片 8 形态 + 三引号×切片组合面 +
+  既有方法对照面）。公理层变更（str 方法表）→ 全量 pytest 破坏面评估：
+  **3638 passed / 1 skipped 零回归**（基线 3605 + 判别 27 + meta 按文件
+  参数化 +6，对账一致）。文档 12_builtins §12.2 同步（find from/rfind/
+  count/切片示例）。长期项 D-3.3（VM 逐字符快速路径）维持登记不实施
+  （本轮四件套消解试用方 90%+ 摩擦而不动执行模型）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

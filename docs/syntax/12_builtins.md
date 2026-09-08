@@ -71,13 +71,17 @@ s.startswith("  Hello")     # True
 s.endswith("  ")            # True
 s.contains("World")         # True
 s.find("World")             # 8
-s.find_last("l")            # 11
+s.find("World", 9)          # -1（from 选参 = 起始偏移，含负偏移均 Python 对等）
+s.rfind("l")                # 11
+s.count("l")                # 2（不重叠计数）
 s.is_empty()                # False
 
-# 拼接、重复与下标访问
+# 拼接、重复、下标与原生切片
 str a = "ab" + "cd"    # "abcd"
 str b = "ab" * 3       # "ababab"
 str ch = s[0]          # " "
+str sub = s[2:7]       # "Hello"（原生切片 O(n) 单次分配）
+str step = s[::2]      # 步长切片
 ```
 
 ### 12.3 list 方法

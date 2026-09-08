@@ -106,8 +106,14 @@
    同路径既有缺陷修复（字符串内置位 continuation_mode 泄漏吞声明收尾换行
    → PAR_EXPECTED_TOKEN，实证触发后移除字符串内置位）；判别 36 项 +
    文档（01_types §1.1.1 字符串字面量权威节）+ 全量 3605/1 零回归。
-3. **R3-③ D-3/D-4 str 原语四件套**：count / find(m,from) 重载 / rfind / 原生切片
-   （O(n) 单次分配）→ 内建 str vtable 面 + 12_builtins 同步 + 判别。
+3. **R3-③ D-3/D-4 str 原语四件套** ✅ **已完成（2026-09-08）**：缺口面实证
+   收窄（probe 先行）——原生切片已支持（s[1:3]/s[::2] 实证 OK）= 判别锁定
+   +文档；count(sub[, from]) 新增（运行期+公理表）；find 扩 from 选参（公理表
+   声明全形 [str,int]——split 先例：内建方法编译期绑定非严格）；find_last 改名
+   rfind（试用方点名 Python 惯用语 + 仓内零消费方，破坏性改名不留兼容层）。
+   from 语义直接委托 Python 原语（负偏移对等）。判别 27 项
+   （test_str_primitives.py）+ 12_builtins §12.2 同步 + 公理层变更全量
+   3638/1 零回归。D-3.3（VM 快速路径）维持长期登记。
 4. **R3-④ D-5 stdout 行缓冲/--unbuffered**：ibci print 通道行级 flush（设计对照：
    默认行缓冲 vs 旗标——以系统一致性定）。
 5. **R3-⑤ R-1+R-3+R-4 run 级可观测子系统**：设计文档 `_run_observability_design.md`

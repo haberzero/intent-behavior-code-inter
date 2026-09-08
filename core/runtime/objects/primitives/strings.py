@@ -74,17 +74,29 @@ class IbString(IbValue):
     def is_empty(self) -> IbObject:
         return self.ib_class.registry.box(len(self.value.strip()) == 0)
 
-    def find(self, substring: Any) -> IbObject:
-        """查找子串首次出现的位置，未找到返回 -1"""
+    def find(self, substring: Any, from_idx: Any = None) -> IbObject:
+        """查找子串首次出现的位置，未找到返回 -1。
+
+        from 选参 = 起始偏移，含负偏移语义均与 Python str.find 对等
+        （直接委托 Python 原语归一）。
+        """
         sub_str = substring.to_native() if isinstance(substring, IbObject) else str(substring)
-        idx = self.value.find(sub_str)
+        start = 0 if from_idx is None else unbox(from_idx)
+        idx = self.value.find(sub_str, start)
         return self.ib_class.registry.box(idx)
 
-    def find_last(self, substring: Any) -> IbObject:
-        """查找子串最后一次出现的位置，未找到返回 -1"""
+    def rfind(self, substring: Any, from_idx: Any = None) -> IbObject:
+        """查找子串最后一次出现的位置，未找到返回 -1（Python str.rfind 对等）。"""
         sub_str = substring.to_native() if isinstance(substring, IbObject) else str(substring)
-        idx = self.value.rfind(sub_str)
+        start = 0 if from_idx is None else unbox(from_idx)
+        idx = self.value.rfind(sub_str, start)
         return self.ib_class.registry.box(idx)
+
+    def count(self, substring: Any, from_idx: Any = None) -> IbObject:
+        """统计子串不重叠出现次数（Python str.count 对等）。from 选参 = 起始偏移。"""
+        sub_str = substring.to_native() if isinstance(substring, IbObject) else str(substring)
+        start = 0 if from_idx is None else unbox(from_idx)
+        return self.ib_class.registry.box(self.value.count(sub_str, start))
 
     def contains(self, substring: Any) -> IbObject:
         """检查是否包含子串"""

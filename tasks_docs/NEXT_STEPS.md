@@ -37,9 +37,10 @@
 → ~~R3-② D-2 三引号多行字符串~~ 已完成（2026-09-08：LEX 层 IN_TRIPLE_STRING
 态 + 转义共享 _apply_string_escape + 同路径既有缺陷修复[字符串内置位
 continuation_mode 泄漏吞声明收尾换行 → PAR_EXPECTED_TOKEN]；判别 36 项 +
-全量 3605/1 零回归，git 承载）→ **R3-③ D-3/D-4 str 原语四件套**（当前项）
-（count/find(m,from)/rfind/原生切片）→ R3-④ D-5 stdout 行缓冲/
---unbuffered → R3-⑤ R-1+R-3+R-4 run 级可观测子系统（journal + 确定性重放 +
+全量 3605/1 零回归，git 承载）→ ~~R3-③ D-3/D-4 str 原语四件套~~ 已完成（2026-09-08：count 新增 + find
+扩 from 选参 + find_last 改名 rfind[零消费方破坏性改名] + 原生切片实证
+已支持[判别锁定+文档]；公理层变更全量 3638/1 零回归，git 承载）
+→ **R3-④ D-5 stdout 行缓冲/--unbuffered**（当前项）→ R3-⑤ R-1+R-3+R-4 run 级可观测子系统（journal + 确定性重放 +
 预算核算 + result-json，单一设计文档一批批实施，对照原批 3 C7 消重）
 → R3-⑥ E1 重做 + R-2a run_file（ihost 子环境整合设计——E1 on_ready hook 形态
 定案，细节见 HANDOFF §2.1）**；P1 六项（诊断消息批[含原 B4] / D-7 裸声明
