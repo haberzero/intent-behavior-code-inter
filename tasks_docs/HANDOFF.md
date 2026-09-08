@@ -129,15 +129,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   队列 + 终态）；每项实施细节见 WORKLOG round3 条目 + git log。
 
 - **工程事实**：
-  - 分支 = `free-explore`（本 session 后续开发在此；`main` 不触碰）；HEAD = `359b1eef`
-    （M1 run_result + 执行路径统一）；工作区干净；**全程未 push（全本地，硬原则）**。
+  - 分支 = `free-explore`（本 session 后续开发在此；`main` 不触碰）；HEAD = `3fa51eec`
+    （M2 meta.compile 编译门）；工作区干净；**全程未 push（全本地，硬原则）**。
     **session 级分支裁定（2026-09-08 用户指示）**：开代码修改前已把 free-explore
     fast-forward merge 到 `unsafe-vibe-dev`（0 behind/105 ahead，纯 ff；unsafe-vibe-dev
     = free-explore = `b67d87b0` 起，现推进至 `359b1eef`）；free-explore 不删除（后续
     在其上开发）——详见 WORKLOG 本 session 分支拓扑条目。
   - 测试基线 = `.venv/bin/python -m pytest tests/`（本机解释器见 `AGENTS.local.md`——
     本机无 miniconda3 `ibci` 环境，§2.2 旧条目的 miniconda3 路径作废）；末次全量
-    **3896 passed / 1 skipped 零回归**（M1 后；数字以实跑为准，不冻结）。
+    **3909 passed / 1 skipped 零回归**（M2 后；数字以实跑为准，不冻结）。
   - 本轮提交链（round3 全段，新→旧）：`a2d9e096`(Phase F) → `e6a8cfe4`(Phase E) →
     `8d8242e7`(Phase D) → `ce55f4ce`(R3-⑭/⑮) → `82aa9804`(R3-⑬) → `97da922e`(R3-⑫) →
     `7ab0cc6e`(R3-⑪) → `6f4c5ce9`(R3-⑩) → `458a7aa6`(R3-⑨) → `dba9e3c6`(R3-⑧) →
@@ -175,9 +175,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
        exception: any[结构化 dict {code, message, source}]，exception 捕获面从平坦错误串
        升级为结构化[CLI result-json exception 面同构]）+ 执行路径统一（单一 spawn 核心
        两源形式：run_file 精化 dict→run_result + 新 run_code 字符串形式）→
-       **M2（当前 P0）** meta 模块（新内核原生模块）+ meta.compile(code: str) fail-fast 校验面
+       ~~**M2**~~ **✅ 已完成（2026-09-08，commit 3fa51eec，判别 7 项 + 3909/1 零回归）** meta 模块
+        + meta.compile(code: str) fail-fast 校验面[子引擎 compile-only + ibci 源定位 +
+        IBCI try/except 可捕获；不新增 IBCI 异常类型]
        （子引擎 compile-only；失败抛 CompilerError[ibci 源定位]，成功 void；与 CLI check
-       面同构）→ **M3** 三门管线惯用法固化（howto run_code_safely.md + 参考实现
+       面同构）→ **M3（当前 P0）** 三门管线惯用法固化（howto run_code_safely.md + 参考实现
        [预注册向量 + 机械判定 e34_p4 形态] + 文档同步）。
      - **范围重划对账**（§8.3）：MVP/全形态重划非推翻 Phase D"防半接通"裁定——MVP 边界
        crisp 自洽无空洞承诺（每个交付面机制完整 + 判别测试）；全形态继续登记（VISION-4
