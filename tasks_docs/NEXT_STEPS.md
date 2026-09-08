@@ -27,12 +27,21 @@
 
 ## 🔴 当前状态
 
-> **✅ round3 队列 + 原阶段 E 顺延批全部收束（2026-09-08）——收敛判据达成，转稳定维护态。**
+> **✅ round3 队列 + 原阶段 E 顺延批全部收束（2026-09-08）——收敛判据达成。**
 > 全阶段（A P0 / B P1 / C P2 文档批 / D meta 层设计 / E 顺延批 / F 收敛）全部项处于
 > 完成/挂起/裁定不做终态。测试基线以实跑为准（末次全量 3867 passed / 1 skipped 零回归）。
-> 后续 = 稳定维护态：周期质量维护（Tier A 随主线 / Tier B 阶段边界窗口 / Tier C 专项审计
-> 按需）+ 长期注册项（VISION-4/5/6 / R-2b/R-6 / D-3.3 / N3 / 远程 CI）按各自重估触发条件
-> 推进。新需求单（round4+）到达时按恒高优先原则重新 intake 插队。
+>
+> **🔴 当前 P0 = meta 层 MVP（字符串级直接执行，用户 2026-09-08 定向再评估后列入主线）**：
+> 依赖评估结论——**MVP 前置依赖 = 0**（机制面全部既有：compile_string/run_string 合成
+> entry / request_spawn_isolated 子环境 / E1 继承 / collect_timeout / 诊断面 / 值类型
+> 注册模式；字符串源扩展点 = 子线程体 run(abs_path)↔run_string(code) 同构单点）；
+> **VISION-6 内核工程化非前置**（独立线；唯一交点 = 档 B 隔离改造，MVP 落地后联合重估）；
+> **VISION-4/5 类型层只约束全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
+> 批次计划（M1 run_result 值类型 + 执行路径统一 → M2 meta.compile 编译门 → M3 三门管线
+> 惯用法固化）+ 范围重划对账（防半接通原则不变）= `tasks_docs/_meta_layer_design.md` §八。
+> 每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit。
+> 其余稳定维护态工作（周期质量维护 / 长期注册项按重估触发推进 / round4 需求单到达重新
+> intake）在 MVP 主线之外并行。
 
 **当前主线 = round3 试用需求整合队列（2026-09-08 intake，free-explore）**：
 试用方第三轮需求单（`ibci_feedback_round3.md`，v3 统一自动机实证摩擦全集）
@@ -56,9 +65,13 @@ B5 = 挂起[并发一等原语已成熟[14_concurrency + howto + KNOWN_LIMITS �
 强弱分工/跨模型校验/扇出聚合 + 关键语义澄清[behavior 型容器元素/retry 保留词]]；
 D2 = 完成[check --format json 结构化诊断导出，判别 4 项 + 3867/1 零回归]]（
 `tasks_docs/_next_phase_targets.md` §三）。**round3 全阶段 + 原阶段 E 顺延批全部收束**
-（A/B/C/D/E 全部项处于完成/挂起/裁定不做终态——收敛判据达成）。 → ~~Phase F 收敛~~ ✅ 已完成[2026-09-08：周期质量维护 Tier B 窗口[注释任务代号 4 处已修[红线] + 宽 except 3 处 A 合法保留[best-effort] + 历史叙述注释 7 处 A 合法保留[功能语境]+ 未用 import 无命中] + 长期注册项状态复查[VISION-4/6 补设计文档指针，R-2b/R-6/N3/D-3.3/远程 CI 状态一致无漂移]；全量 3867/1 零回归[本窗口仅注释清理+文档指针，无行为变更]]。长期登记不实施：R-2b
+（A/B/C/D/E 全部项处于完成/挂起/裁定不做终态——收敛判据达成）。 → ~~Phase F 收敛~~ ✅ 已完成[2026-09-08：周期质量维护 Tier B 窗口[注释任务代号 4 处已修[红线] + 宽 except 3 处 A 合法保留[best-effort] + 历史叙述注释 7 处 A 合法保留[功能语境]+ 未用 import 无命中] + 长期注册项状态复查[VISION-4/6 补设计文档指针，R-2b/R-6/N3/D-3.3/远程 CI 状态一致无漂移]；全量 3867/1 零回归[本窗口仅注释清理+文档指针，无行为变更]]。~~长期登记不实施：R-2b
 meta.compile + R-6 行为表达式作值（VISION-4/5 类型类/函数式方向耦合，不半
-接通）/ D-3.3 VM 字符串扫描快速路径（VM 执行模型性能架构面，Tier C 候选）。
+接通）~~ **范围重划（2026-09-08 用户定向再评估，`_meta_layer_design.md` §八）**：
+R-2b meta.compile 拆 **MVP**（meta.compile fail-fast 校验面 + ihost.run_code 字符串
+形式 + run_result 值类型——不依赖类型层，**当前 P0 主线**）/ **全形态**（artifact
+作值 + R-6 行为表达式作值——VISION-4/5 类型层前置，登记不实施，防半接通原则不变）/
+D-3.3 VM 字符串扫描快速路径（VM 执行模型性能架构面，Tier C 候选）。
 背景（git 承载）：P0 三线 / P1 生成参数面 / P2 四项 / 阶段 E 批次 1 /
 批次 2（E2/A4/D1/C5 ✅ + E1 进行中）均已完成，基线以实跑为准。
 
@@ -81,7 +94,13 @@ meta.compile + R-6 行为表达式作值（VISION-4/5 类型类/函数式方向�
    run_file[E1 on_ready hook 形态定案；细节见 HANDOFF §2.1 + 防卡死：spawn
    测试传有限 collect 超时] → P1 六项 → P2 文档批）；原批 2 剩余（A2/A5/B2；
    B4 并入 R3-⑦）与批 3（A6/B5/C6/C7/D2/D3；C7 对照 R3-⑤ 消重）整体顺延
-   保留（`tasks_docs/_next_phase_targets.md` §三）；基线以实跑为准。
+   **终态裁定收束**[A2/A5/A6/B2 挂起 VISION-4 / C7 完成 / D3 挂起 / B5 挂起 / C6 完成 / D2
+   完成] → **round3 全收束（收敛判据达成）** → **当前 P0 = meta 层 MVP（字符串级直接
+   执行）**（2026-09-08 用户定向再评估列入主线；批次计划 M1 run_result 值类型 +
+   执行路径统一 → M2 meta.compile 编译门 → M3 三门管线惯用法固化；依赖评估[前置=0 /
+   VISION-6 非前置 / VISION-4 只约束全形态] + 范围重划对账[防半接通原则不变] =
+   `tasks_docs/_meta_layer_design.md` §八；每批全量 pytest 零回归 + 落账 + commit）；
+   基线以实跑为准。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
    ~~① named-model 端点泄漏 2 用例（T01 D1-07-006 / T08 D5-03 硬编码旧本机端点 →
    `IBCI_TRIAL_LLM_URL`/`IBCI_TRIAL_LLM_MODEL`/`IBCI_TRIAL_LLM_KEY` env 通道）~~ **已完成

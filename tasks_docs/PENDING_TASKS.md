@@ -266,6 +266,10 @@
   类型值 / BehaviorExpr 值类型 / fn[...] 高阶签名 / Verdict 判定结果类型）= VISION-4
   开工输入（what 非 how）。ref 类型层项 A2 泛型约束 / A5 解构模式匹配 / A6 Enum-tagged
   union / B2 惰性短路结构经 round3 阶段 E 裁定挂起 → 本项整合推进（同域）。
+- **范围重划（2026-09-08 用户定向再评估，`_meta_layer_design.md` §八）**：meta 层拆
+  MVP / 全形态——**MVP**（meta.compile fail-fast 校验面 + ihost.run_code 字符串形式 +
+  run_result 值类型）= 不依赖类型层，已列当前 P0 主线（NEXT_STEPS）；**全形态**
+  （本清单 ①③④⑤ + ② run_result 类型层深度参与）= 本项 VISION-4 范畴，开工输入不变。
 
 ### VISION-5 函数式地基补齐（五大地基改造 · P8）
 

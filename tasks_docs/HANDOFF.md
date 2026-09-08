@@ -116,7 +116,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/GOVERNANCE.md`（任务控制治理）+ `git log --oneline -30`（近期提交与工作动线）
 > + `tasks_docs/WORKLOG.md`（round3 整合条目，逐项详录）。
 
-- **🔴 当前状态 = round3 试用需求整合队列全部收束（2026-09-08）→ 收敛判据达成，转稳定维护态**。
+- **🔴 当前状态 = round3 试用需求整合队列全部收束（2026-09-08，收敛判据达成）→ 转稳定维护态**；
+  **当前 P0 主线 = meta 层 MVP（字符串级直接执行）**（2026-09-08 用户定向再评估后列入主线——
+  依赖评估结论：MVP 前置依赖 = 0[机制面全部既有] / VISION-6 内核工程化非前置[独立线，
+  唯一交点档 B 隔离改造 MVP 落地后联合重估] / VISION-4/5 类型层只约束全形态[artifact
+  作值/R-6/fn[...]/Verdict]；批次计划 M1→M2→M3 + 范围重划对账[防半接通原则不变] =
+  `tasks_docs/_meta_layer_design.md` §八，详见下方主线延续点）。
   round3 需求单（`ibci_feedback_round3.md`，试用方 v3 统一自动机 R185–R202 实证摩擦全集）
   全阶段完成：A（P0 R3-①~⑥ + Tier B 窗口）/ B（P1 R3-⑦~⑬）/ C（P2 文档批 R3-⑭~⑮）/
   D（meta 层/代码作值设计交付）/ E（原阶段 E 顺延批终态裁定）/ F（收敛：Tier B 窗口 +
@@ -146,28 +151,48 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     ⑩ 设计文档 `_meta_layer_design.md`（meta 层/代码作值）+ `_n3_measure_freq_design.md`
     （N3 探针实证 + 待决裁定）。
 
-- **⏳ 主线延续点（下一位智能体的工作队列）**——round3 队列已空，稳定维护态：
-  1. **round4 试用需求单到达时**：按恒高优先重新 intake（参照 `_trial_round3_intake.md`
+- **🔴 主线延续点（下一位智能体的工作队列）**：
+  1. **当前 P0 = meta 层 MVP（字符串级直接执行）**（2026-09-08 用户定向再评估列入主线；
+     完整规划 = `_meta_layer_design.md` §八）：
+     - **依赖评估结论**（§8.1/§8.2）：MVP 前置依赖 = 0（机制面全部既有并验证：
+       `compile_string`/`run_string` 合成 entry `__string_exec__` / `request_spawn_isolated`
+       子环境[E1 继承/防卡死/输出捕获] / 诊断面 / 值类型注册模式[file_handle/knowledge
+       先例]；字符串源扩展点 = spawn 子线程体 `run(abs_path)`↔`run_string(code)` 同构
+       单点）；**VISION-6 内核工程化非前置**（独立线；档 B 隔离改造 = 唯一交点，MVP
+       落地后联合重估[新增隔离消费方 + 威胁模型边界]）；VISION-4/5 类型层只约束
+       **全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
+     - **批次计划**（每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit）：
+       **M1** run_result 值类型（新内核原生值类型 exit_status: str / stdout: str /
+       exception: any[结构化 dict {code, message, source}]，exception 捕获面从平坦错误串
+       升级为结构化[CLI result-json exception 面同构]）+ 执行路径统一（单一 spawn 核心
+       两源形式：run_file 精化 dict→run_result + 新 run_code 字符串形式）→
+       **M2** meta 模块（新内核原生模块）+ meta.compile(code: str) fail-fast 校验面
+       （子引擎 compile-only；失败抛 CompilerError[ibci 源定位]，成功 void；与 CLI check
+       面同构）→ **M3** 三门管线惯用法固化（howto run_code_safely.md + 参考实现
+       [预注册向量 + 机械判定 e34_p4 形态] + 文档同步）。
+     - **范围重划对账**（§8.3）：MVP/全形态重划非推翻 Phase D"防半接通"裁定——MVP 边界
+       crisp 自洽无空洞承诺（每个交付面机制完整 + 判别测试）；全形态继续登记（VISION-4
+       依赖，§四清单收窄为 ①③④⑤ + ② 类型层深度参与——run_result 类型存在半被 MVP 满足）。
+     - **边界注记**（入 KNOWN_LIMITS）：威胁模型 = 受信任候选代码（选项 A 调用方治理；
+       非对抗性代码安全边界[无进程级隔离]）；性能 = 每调用一次子引擎构造（候选验证场景
+       充分；热循环 = VISION-6 档 A/真 JIT 上修输入）。
+  2. **round4 试用需求单到达时**：按恒高优先重新 intake（参照 `_trial_round3_intake.md`
      模式：逐条核验 + 耦合分析 + 新队列 + NEXT_STEPS 插队）；试用方 run 存档
      （`/home/dsh/proj/ibci-trial/`）为实证证据源（只读）。
-  2. **周期质量维护**：Tier A 随主线顺带 / Tier B 阶段边界窗口（Phase F 窗口已完成，
-     结果见 WORKLOG）/ Tier C 专项审计仅用户指定时独立分支执行。
-  3. **候选下一主线（长期登记项，不自主开工——需用户指示或重估触发条件成立）**：
+  3. **周期质量维护**（MVP 主线之外并行）：Tier A 随主线顺带 / Tier B 阶段边界窗口 /
+     Tier C 专项审计仅用户指定时独立分支执行。
+  4. **候选后续主线（长期登记项，不自主开工——需用户指示或重估触发条件成立）**：
      - **VISION-4 类型理论加固**：开工输入已就绪——`_meta_layer_design.md` §四 类型层
-       承诺需求清单 5 项（CompilationArtifact/RunResult/BehaviorExpr 值类型 / fn[...]
-       高阶签名 / Verdict 类型）+ ref A2/A5/A6/B2 挂起整合推进。
+       承诺需求清单（MVP 后收窄：① CompilationArtifact 作类型值 / ③ BehaviorExpr 值
+       类型 / ④ fn[...] 高阶签名 / ⑤ Verdict 类型 + ② run_result 类型层深度参与）+
+       ref A2/A5/A6/B2 挂起整合推进。
      - **N3 measure_freq（logprob 通道）**：待决（探针实证：SiliconFlow chat 通道静默
-       忽略 logprobs、legacy completions 通道完整支持——能力存在但 IBCI 现用通道不暴露）；
-       重估触发 = provider 支持 completions/logprob 通道 或 corpus/probe 设计内化。
-     - **R-2b meta.compile / R-6 行为表达式作值**（"运行中执行字符串代码"的语言级接通）：
-       登记不实施，设计就绪（`_meta_layer_design.md`）；机制面已存在（Python 宿主层
-       `engine.compile_string`/`run_string` + IBCI 语言级 `ihost.run_file`[文件级]）；
-       缺口 = 语言级 `meta.compile(code_str)` 入口 + 代码工件作类型值（类型层承诺，待
-       VISION-4）——不半接通。
+       忽略 logprobs、legacy completions 通道完整支持）；重估触发 = provider 支持
+       completions/logprob 通道 或 corpus/probe 设计内化。
      - **D-3.3 VM 字符串扫描快速路径**：长期登记（Tier C 专项候选；与演化平面设计合流
        规划）。**B5 并发成熟化**：挂起（一等原语已成熟，专项需单独立项）。**远程 CI**：
        待用户显式授权（`ci_local.sh` 四层本地复现已就绪）。
-  4. **每轮自主评估现状**（队列有活持续推进；调整顺序/优先级/批次划分的理由记入 WORKLOG）。
+  5. **每轮自主评估现状**（队列有活持续推进；调整顺序/优先级/批次划分的理由记入 WORKLOG）。
 
 - **本 session 重要设计裁定（下一位智能体须知，均见 WORKLOG 详录）**：
   - R3-⑤ journal/replay/budget/result-json = 单一子系统单一设计（`_run_observability_design.md`）；
@@ -198,7 +223,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   | D3 新能力配套诊断码 | 挂起 | 随新能力实施（纯增面 + catalog + 15_diagnostics + parity 门） |
   | B5 并发原语成熟化 | 挂起 | 专项需单独立项评估（一等原语已成熟；流式观测边界记 KNOWN_LIMITS 待评估） |
   | N3 measure_freq（logprob 通道） | 待决（方向保留） | provider 支持 completions/logprob 通道 或 corpus/probe 设计内化 |
-  | R-2b meta.compile / R-6 行为表达式作值 | 登记不实施（设计就绪） | VISION-4/5 类型层承诺落地（`_meta_layer_design.md` §四 清单） |
+  | R-2b meta.compile / R-6 行为表达式作值 | **MVP = 当前 P0 主线**（不依赖类型层，`_meta_layer_design.md` §八 批次计划）/ 全形态登记不实施 | 全形态前置 = VISION-4/5 类型层（§四清单收窄 ①③④⑤ + ② 深度参与）；MVP 批次 M1→M2→M3 |
   | D-3.3 VM 字符串扫描快速路径 | 长期登记（Tier C 候选） | 与演化平面设计合流规划（VM 执行模型性能架构面） |
   | 远程 CI | 待用户显式授权 | 用户授权后启用（`ci_local.sh` 四层本地复现已就绪） |
   | #33 / LLM-5 事件驱动监视 | 被动项 | 待重估 |

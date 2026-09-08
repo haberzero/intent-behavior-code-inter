@@ -1676,6 +1676,60 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   （基线 3867 不变——本窗口仅注释清理 + 文档指针，无行为变更）。
 ---
 
+- **meta 层 MVP（字符串级直接执行）依赖评估 + 任务规划（2026-09-08，free-explore；用户定向再评估）**：
+  用户问"语言级字符串直接执行是否可稳健推进？内核工程化紧随其后还是须先行？"——评估结论
+  已写入 `_meta_layer_design.md` §八（新增实施任务规划节）：
+  **① MVP 前置依赖 = 0（机制面全部既有并实证）**：compile_string/run_string 合成 entry
+  `__string_exec__`（engine.py:316-337）/ request_spawn_isolated 子环境（新 Engine + 子线程
+  + LLM 快照 + on_ready，engine.py:608）/ 字符串源扩展点 = 子线程体 `sub_engine.run(abs_path)`
+  ↔ `sub_engine.run_string(code)` **同构单点**（同一 spawn 核心两源形式）/ E1 继承（R3-⑥）/
+  collect_timeout 防卡死 / CompilerError.diagnostics 诊断面（R3-⑦）/ 值类型注册模式
+  （file_handle/knowledge 先例）/ 模块注册模式（ihost TypeDef 先例）/ `meta`（模块名）与
+  `run_result`（类型名）无占用非保留词（lexer KEYWORDS 核验）。MVP 缺口 = 纯新增面
+  （run_result 值类型 + meta 模块 + ihost.run_code + 执行路径统一化）。
+  **② VISION-6 内核工程化非前置**（用户问题二答案）：档 A 缓存/内核自举/真 JIT/反射 =
+  无关（MVP 进程内单次，新增模块走既有注册模式）；**档 B 隔离改造 = 唯一交点**——MVP
+  威胁模型 = 受信任候选代码（选项 A 调用方治理），既有进程内子环境隔离充分；威胁模型
+  演进到对抗性代码 → 档 B 上修（MVP 落地后联合重估：新增隔离消费方 + 威胁模型边界实证）。
+  依赖方向 = MVP 不依赖 VISION-6；VISION-6 档 B 在 MVP 后获得新重估输入。推荐顺序：
+  MVP 先行 → MVP 后联合重估 VISION-6 档 B → VISION-4/5 类型层（全形态前置）。
+  **③ MVP / 全形态范围重划（对 Phase D §七"防半接通"裁定的对账）**：MVP 边界 crisp
+  自洽无空洞承诺（meta.compile = fail-fast 校验操作[成功 void/失败抛 CompilerError——
+  纯既有机制，与 CLI check 面同构]；ihost.run_code = 字符串形式[同一 spawn 核心 + 错误作值
+  + 类型化结果 run_result]；判定门 = 调用方普通 IBCI 代码）——试用方 R-2b 真实用例
+  （候选代码执行 + 机械判定 e34_p4 形态）MVP 全满足；全形态（artifact 作类型值 / R-6 /
+  fn[...] / Verdict）继续登记 VISION-4 依赖（§四清单收窄 ①③④⑤ + ② run_result 类型层
+  深度参与——类型存在半被 MVP 满足）。user-principles 裁决四问通过（普适性 = code-as-value
+  主流模式 Python compile/exec/Lua load+pcall/JS new Function；架构合理性 = 机制同构无新
+  执行模型；实测优于现状 = 消除试用方手写临时文件 + run_file 胶水绕路；非机械遵循历史 =
+  范围重划尊重"不半接通"原则而重划范围）。
+  **④ 批次计划**（每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit）：
+  **M1** = run_result 值类型（axiom + TypeDef[KERNEL_NATIVE] + 深克隆 + 序列化 + to_native
+  全链照先例；字段面 exit_status: str[ok/error] / stdout: str / exception: any[None 或
+  结构化 dict {code, message, source{file,line,column,snippet}}]——exception 捕获面从
+  既有平坦错误串升级为结构化[CLI --result-json exception 面同构，统一设计语言]）+ 执行
+  路径统一（request_spawn_isolated 子线程体提取单一 spawn 核心：文件形式 = run(abs_path)
+  [R3-⑥ 行为不变] / 字符串形式 = run_string(code)[新，sub project_root = 父 project_root
+  合成 entry 锚定]）+ ihost.run_file 返回值 dict → run_result 精化[破坏性精化：消费方仅
+  本轮判别测试 → 安全] + 新 ihost.run_code。
+  **M2** = meta 模块（_SPEC_META：KERNEL_NATIVE + IMPORT_GATED；compile(code: str) →
+  void）+ 实现 = 子引擎 compile-only（新 Engine + compile_string，零父状态污染——父程序
+  可能自身即字符串运行[合成 entry 同名冲突面]；compile-only 无需 LLM 继承/防卡死）+
+  失败抛 CompilerError[ibci 源定位：合成 entry 标记 + line/column]。
+  **M3** = 三门管线惯用法固化（howto run_code_safely.md[meta.compile 校验 + ihost.run_code
+  执行 + 机械判定参考实现] + README 单点真理表登记 + 设计文档 §四/§七 对账注记 +
+  NEXT_STEPS/PENDING_TASKS/HANDOFF 同步）。**M4（登记不启动）** = 全形态
+  （CompilationArtifact 作类型值[meta.compile 返回值 void → Compilation 接口扩展] / R-6 /
+  fn[...] / Verdict）← VISION-4/5。
+  **⑤ 边界注记**（M1 实施时入 KNOWN_LIMITS）：威胁模型 = 进程内子环境隔离（变量不继承 /
+  LLM 继承 / fs 沙箱 / 防卡死），**非对抗性代码安全边界**（无进程级隔离）；性能 = 每
+  run_code/meta.compile 一次子引擎构造（候选验证场景充分；热循环 = VISION-6 上修输入）。
+  **⑥ 诊断码面**：预期零新码（meta.compile 复用 PAR_*/SEM_* 码族；run_code 子运行失败 =
+  既有码经 exception 值面传递）；若实施中确需新码按纯增面纪律。
+  本条纯评估 + 规划（设计文档/台账更新，无代码改动，零回归面 = 文档面）。MVP 实施自
+  M1 起按 NEXT_STEPS 当前 P0 推进。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
