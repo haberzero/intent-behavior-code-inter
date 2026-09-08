@@ -100,7 +100,7 @@ provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4
 | B5 | 并发原语成熟化 | chan/slot/thread + run_batch 已有基础 | 批 3 |
 | C1 | **embedding/向量一等能力**（vector 类型/相似度/检索/外部接入） | 全仓无向量能力；ref 主张"语义内容缝 ≠ media"，请求独立立项——**与 PT-SEALED-1 media 封存边界需用户裁定** | 批 1（P0，愿景关键） |
 | C2 | 结构化 LLM 输出契约（schema 生成/稳健解析/自动重试） | `expected_type` 单值解析已修；复杂嵌套 schema 支持弱、`json.parse` 脆弱、无自动重试闭环 | 批 1（P0） |
-| C3 | 用户模块路径解析完善与文档化 | .ibci 用户模块机制存在；路径解析未文档化、多文件工程未验证；与 T2/T1（工程化）协同 | 批 1（P0） |
+| C3 | 用户模块路径解析完善与文档化 | ✅ **已落地（2026-09-07）**：绝对导入两级搜索（① 导入方目录同目录模块 → ② 项目根兜底）+ 模块 artifact 键 = 用户 import 名（运行期一致）+ 合成入口载体越界候选跳过 + 11_modules §11.1 文档化；KERNEL_ISSUE-IMPORT-2 修复；判别 +5 / T06 20/20 | 批 1（P0） |
 | C4 | ibci 内测试设施（assert/test 模块 + 运行器 + 行号） | 语言无 assert/test 设施；现有 trials harness 是 Python 侧 | 批 1（P0） |
 | C5 | 供应商感知思考抑制 | PT-DECIDE-2（sealed）；**新实证：双字段抑制对新端点 vLLM 有效（非思考亚秒、无告警），缺口收窄为"后端强制思考"场景**——解封重估待裁定 | 批 2（重估后） |
 | C6 | 流式/批量/多模型编排完善 | stream/run_batch/命名路由已有（T11/T08）；多模型组合文档弱 | 批 3 |

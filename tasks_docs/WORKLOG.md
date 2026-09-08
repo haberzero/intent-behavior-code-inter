@@ -1002,6 +1002,27 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   - 全量 pytest 基线 3457 → **3474 passed / 1 skipped**（本段 +19，零回归；
     分三组实跑验证——job 时长上限规避）；git 承载（本段 2 commit：dbc15a15 T2 /
     6334fe15 C2）。
+- **C3 用户模块路径解析定案（2026-09-07，free-explore——阶段 E 批 1，
+  KERNEL_ISSUE-IMPORT-2 修复）**：
+  - ① **绝对导入两级搜索**：① 导入方文件所在目录（同目录模块——多文件用例
+    入口目录模块可解析，此前锚定 project_root 单候选致 DEP_MODULE_NOT_FOUND；
+    T06 子目录用例"须 harness 以用例目录为 root"的隐性耦合消除）→ ② 项目根
+    （项目级模块兜底，既有语义）；逐级探测首个命中；相对导入（./.. 前缀）
+    锚定导入方目录不变。
+  - ② **模块 artifact 键 = 用户 import 名**：导入模块经 scheduler 用户名映射
+    （resolved_path → import 声明名）——运行期 import_module 查询名一致
+    （此前键 = 路径 root 相对派生嵌套名，子目录模块键（cases.D1-02.geo）
+    与用户 import 名（geo）不一致致运行期 DEP_MODULE_NOT_FOUND）；包路径
+    形态（pkg.sub.mod）键 = 完整包路径名（既有嵌套导入语义一致——三段包
+    路径回归通过）；入口模块按路径派生/显式锚点名（既有）。
+  - ③ **合成入口载体场景**：run_string 入口 = tempfile 载体（系统临时目录，
+    沙箱外）——① 级越界候选跳过（沙箱外不报错），回落 ② 级（项目根恒在
+    沙箱内）；安全边界（DEP_SECURITY_ERROR）相对导入语义不变。
+  - 文档：11_modules §11.1 模块路径解析（两级搜索序 + 模块键语义 + 安全
+    边界）。判别测试 +5（test_module_path_resolution.py）。T06 全量复跑
+    20/20 PASS（harness root=用例目录形态保持兼容）。
+  - 全量 pytest 基线 3474 → **3484 passed / 1 skipped**（零回归；git
+    c0d40eaf）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
