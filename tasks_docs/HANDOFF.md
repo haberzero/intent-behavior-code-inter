@@ -115,88 +115,40 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/PENDING_TASKS.md`（远期规划）+ `tasks_docs/GOVERNANCE.md`（任务控制治理）
 > + `git log --oneline -30`（近期提交与工作动线）。
 
-- **🔴 当前主线 = P0/P1/P2 主线队列全部完成 + 支线收敛（2026-09-07，free-explore 分支）**：
-  **P0 三线**（诊断面打包 / PT-FEAT-16 词嵌入 / N2 知识注册表）四批各完成
-  （3219 → 3400 = +181）；**P1 · N1+N4 生成参数面**完成（配置 schema 标准生成参数
-  命名字段 + extra_body vendor 透传口子[硬编码思考抑制迁入 api_config] + 配置未知字段
-  严格性[CFG_CONFIG_UNKNOWN_FIELD]；provider 参数通道路由单点[SDK kwarg vs
-  extra_body] + finish_reason 契约面暴露 + 空内容确定性处理[RUN_LLM_EMPTY_CONTENT +
-  LLMProviderError 码透传] + call_info 采样姿态审计闭环[generation/finish_reason 经
-  provider_meta 单通道]；register_model/set_config 参数面显式化；T18 5/5 + 测试 +19，
-  3400 → 3423）；**P2 四项**完成（dict 可迭代 P9c[to_list 协议面 + vtable] /
-  尾逗号 A3[list/dict 字面量尾逗号接受] / named-model 端点泄漏修复[T01/T08 两用例
-  机器事实收敛 IBCI_TRIAL_LLM_URL/MODEL/KEY env 通道] / T06 子目录复跑缺口关闭
-  [run_batch 收集支持子目录布局 + 目录型用例 root=用例目录；T06 复跑 20/20 PASS]）；
-  **支线**（阶段 C 真实 LLM 残留项）：恶意边界 #15/#17/#19 全部核销（T15-E-M29/M30/M31
-  零缺陷实证——序列化特化/enum、intent_context 类字段 deep_clone 双路径、overlay 三交互
-  面）；阶段 C 文档复核登记项收敛（call_info 键结构 11_modules 单点 + 观测契约文档化；
-  装配 dict 未知键 LLM_ASSEMBLY_UNKNOWN_KEY 警告实施[T10 M5]；KNOWN_LIMITS 零漂移；
-  BOUNDARY-LLM-5 机制澄清 + mock 路径观测面机制同构）；**基础设施修复**（全量 pytest
-  间歇性 120s 超时根因 = ThreadPoolExecutor worker 非 daemon 无哨兵唤醒——进程级 weakref
-  池登记 + atexit shutdown + None 终止哨兵；MockServer daemon_threads=True）；
-  **Tier B 质量巡检**（范围常量单点化 + 残留扫描 + 注释纪律）；**无目的审视清单新起**
-  （4 条潜在参考）。全量 pytest 基线 **3447 passed / 1 skipped**（本段 +47，全程零
-  回归）。**阶段 E 批次推进（2026-09-07 轮）**：**T2 环境变量一等通道**（ihost.getenv
-  缺失返回空串——HostService/插件委托链 + spec 成员；用例收敛 T01/T08 真实端点验证；
-  idbg.env/show_env → runtime/show_runtime 改名消歧——语言面破坏性变更旧名运行期
-  RUN_ATTRIBUTE_ERROR）+ **C2 结构化 LLM 输出契约边缘补齐**（边缘核验发现 dict 容器
-  expected_type 不可用——根因 MOCK:STR 值指令首 token 截断：全量回显语义修复
-  [空格/冒号/JSON 忠实回显] + 控制指令 SLEEP/ERROR 内容解析前剥离 [组合指令正交]；
-  裸容器名 list/dict JSON 解析可用 + 08_llm_callable/13_mock_testing 文档 + 回归
-  +14）。基线 **3474 passed / 1 skipped**。
-  **剩余被动项**：#33（_pending_futures 长会话累积——依赖 KERNEL_ISSUE-LLM-5
-  同子系统）+ KERNEL_ISSUE-LLM-5（llm 可调用类赋值约 1/6 竞态——事件驱动监视复发，
-  近期运行无复发）；远程 CI 启用（用户裁定暂不启动，需显式授权）；阶段 D 远期演进
-  （VISION-4/5/1——试用稳定后）。**阶段 E 批次 1 全部完成**（2026-09-07）：C1/B1/A3/C2/T2/C3/A1/B3 ✅
-  （C3 模块路径解析定案[KERNEL_ISSUE-IMPORT-2 修复]；A1 用户自定义协议
-  核验[机制已落地 ref 宣称过期]；B3 一等环境对象[environment 一等值类型：
-  frames 栈键值环境 + 内帧遮蔽 + 值深拷贝读写隔离 + fork 快照 + use fork
-  替换——与 intent_context 平行；序列化 round-trip + 池前缀一致性修复
-  [含 _get_intent_context 潜伏缺陷] + docs 17]；C4 裁定维持现状）。
-  **批次 2/3 队列**：**已完成 E2 save_load 覆盖 Environment ✅（帧级
-  环境状态序列化收集 + 恢复[use_environment fork 语义]）/ A4 缺省 void ✅
-  （func 无返回标注 = 缺省 void[消样板；return 值丢弃同 -> void]；
-  lambda/llm 行为体保持显式[值表达式语义]）/ D1 idbg 增强主项 ✅
-  （show_environment 一等环境可视化面[frames 栈键值行 + 键数/帧数统计]）
-  / C5 思考抑制重估 ✅（强制思考场景三面完整化——reasoning 捕获记录进
-  provider_meta[可观测面] + 既有双面回归[空内容 fail-fast / 抑制失败告警
-  去重] + 接口位裁定[模型级声明既有 / 请求级远期位维持未接线]）**；
-  **E1 ihost 完善[子环境 LLM 配置继承]——进行中（设计定案 + 首次尝试
-  回退，待重做）**：定案 = spawn 时点快照继承（父激活 provider 运行时
-  配置[CAP_LLM_PROVIDER 能力注册中心]经能力中心读取；子引擎 bootstrap
-  后应用——sealed registry 约束：继承须在子 prepare 之后；快照非活链接）。
-  首次尝试（spawn 时点 sub.compile + sub prepare + execute）**sealed
-  registry 冲突**（sub prepare 封印后 execute 拒绝新 artifact）——工作树
-  已恢复干净（基线零回归）。**重做方案（hook 形态）**：engine.run 增
-  on_ready 参数（prepare 后、execute 前触发——run 的 execute 调用点以
-  abs_entry 上下文精确定位[run_string 同名形态排除]）；子线程 run(
-  on_ready=_on_sub_ready) 钩子内应用父配置快照（to_llm_config 归一化
-  apply_config）；失败 issue_tracker WARNING（HOST_ISOLATE_LLM_INHERIT_
-  FAILED，不阻断）；验证 = mock 模式（set_mock_mode + set_config 免
-  client）+ 继承断言 + 快照语义（spawn 后父变异子不变）。
-  **防卡死注意（2026-09-07 接手智能体卡死报告后补充）**：spawn 测试的
-  request_collect 默认无界等待（collect_timeout=None）——子线程 hang 时
-  collect 无界阻塞；E1 判别测试须传有限 collect 超时（IsolationPolicy
-  collect_timeout）。
-  **测试套件自身安全（系统化双层防护，2026-09-07——用户裁定：安全不靠
-  智能体测试行为操作）**：① 第一层 pytest-timeout（pytest.ini
-  timeout=60 / timeout_method=thread）——每测试独立 60s 超时，卡死测试
-  自动 FAIL + 输出测试名与全部线程栈（自动定位，无需人工干预；70s sleep
-  探针已验证精确到 hang 行）；② 第二层 conftest 进程级看门狗（180s）——
-  仅框架层 hang 触发（dump_traceback + os._exit(124)）。依赖单源
-  pyproject.toml（pytest-timeout>=2）。接手者遇"pytest 无输出退出 124"
-  = 第二层触发（框架层 hang）——完整 stderr 的 dump_traceback 即线程栈；
-  测试级卡死由第一层自动报告（测试名 + hang 行），不再出现无输出假象。
-  **本 span 轮次总览（Round 1-9，阶段 E 批次 1-2）**：C3 模块路径解析
-  定案（批 1 收官前置）→ A1 用户自定义协议核验[机制已落地] → B3 一等
-  环境对象[批 1 收官] → E2 save_load 帧级 Environment → A4 缺省 void →
-  D1 idbg show_environment → C5 思考抑制重估 → E1[进行中]。全量 pytest
-  基线 3474 → **3534 passed / 1 skipped**（本 span +60，全程零回归）。
-  剩余批 2：E1[重做] / A2 泛型约束 / A5 解构 / B2 惰性结构 / B4 编译定位；
-  批 3：A6 Enum 增强 / B5 并发成熟化 / C6 流式编排 / C7 性能内省 / D2
-  CLI 导出 / D3 配套诊断码——见 `tasks_docs/_next_phase_targets.md` §三。
-  详见 `tasks_docs/NEXT_STEPS.md` + `tasks_docs/WORKLOG.md`（本段完整
-  记录）+ git log。
+- **🔴 当前主线 = round3 试用需求整合队列（2026-09-08 intake，free-explore）**：
+  试用方第三轮需求单 `ibci_feedback_round3.md`（v3 统一自动机 R185–R202 实证摩擦
+  全集）intake 完成——单点记录 = `tasks_docs/_trial_round3_intake.md`（逐条核验 +
+  耦合分析 + 新队列）；`trials/INDEX.md` 补登记 `KERNEL_ISSUE-VM-2`（试用方 R183
+  上报的 D-1 fielded 类×LLM 调用 VM 缺陷，此前未入台账 = 流程缺口已修）。
+  按恒高优先原则 round3 P0 插入现有阶段 E 队列之前：**R3-① D-1
+  KERNEL_ISSUE-VM-2 修复[队列首位，mock 确定性复现：fielded 类实例化 + @~ 调用；
+  错误源 _shared.py:179 param spec 名空绑定路径] → R3-② D-2 三引号多行字符串
+  [LEX/PAR 面] → R3-③ D-3/D-4 str 原语四件套[count/find(m,from)/rfind/原生切片
+  O(n)] → R3-④ D-5 stdout 行缓冲/--unbuffered → R3-⑤ R-1+R-3+R-4 run 级可观测
+  子系统[journal append-only + --replay 确定性重放 + run_summary 预算 +
+  --result-json；单一设计文档一批批实施，对照原批 3 C7 消重防双通道]
+  → R3-⑥ E1 重做 + R-2a run_file[ihost 子环境整合设计]**；P1 六项（诊断消息
+  批[含原 B4] / D-7 裸声明语义 / D-10 json 鲁棒面 / F-2 思考抑制警告可配置 /
+  R-7 429 退避 / R-8 knowledge 扩展面）+ P2 文档批两项按序；原批 2 剩余
+  （A2/A5/B2）与批 3（A6/B5/C6/C7/D2/D3）整体顺延保留。长期登记不实施
+  （架构安全/长期收益优先，用户 2026-09-08 指示）：R-2b meta.compile + R-6
+  行为表达式作值（VISION-4/5 类型类/函数式方向耦合，不半接通）/ D-3.3 VM
+  字符串扫描快速路径（VM 执行模型性能架构面，Tier C 候选）。F-2 真相核验
+  （run 存档实证）：警告每进程一次性（去重机制正常）+ 试用方 4B 后端强制
+  思考为事实（reasoning 隔离 `reasoning_content` 字段，content 干净）→ 处置
+  = 可配置静默 + 语义澄清（非机制缺陷）。基线以实跑为准（intake 前实跑
+  3534 passed / 1 skipped 零回归）。**E1 重做方案（R3-⑥ 前置，设计定案
+  保留）**：spawn 时点快照继承——engine.run 增 on_ready 参数（prepare 后、
+  execute 前触发；run 的 execute 调用点以 abs_entry 上下文精确定位）；子
+  线程 run(on_ready=...) 钩子内应用父配置快照（to_llm_config 归一化
+  apply_config）；失败 issue_tracker WARNING（HOST_ISOLATE_LLM_INHERIT_FAILED，
+  不阻断）；验证 = mock 模式 + 继承断言 + 快照语义（spawn 后父变异子不变）；
+  **防卡死：spawn 测试 request_collect 默认无界等待——判别测试须传有限
+  collect 超时（IsolationPolicy collect_timeout）**。运行注记：测试套件
+  双层防卡死已就位（pytest-timeout 每测试 60s 自动报告 + 看门狗 180s——
+  无输出退出 124 = 框架层 hang，读完整 stderr 线程栈；用法见
+  docs/howto/keep_tests_safe.md）。详见 `tasks_docs/NEXT_STEPS.md` +
+  `tasks_docs/WORKLOG.md`（round3 整合条目）+ git log。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
   规划已读）；**push 已获用户显式授权并执行**（本地 28 提交 `b2322214..e1a9b3d9` 推送

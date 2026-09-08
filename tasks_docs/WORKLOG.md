@@ -1184,6 +1184,28 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   - 双层防护注释落位（pytest.ini + conftest 看门狗头注）——后续接手者
     直接可读防护机制与定位路径。全量 pytest 基线 **3534 passed / 1
     skipped**（零回归）。
+- **round3 试用需求接入与主线整合（2026-09-08，free-explore）**：试用方
+  `docs/ibci_feedback_round3.md`（v3 统一自动机 R185–R202 实证摩擦全集）intake
+  完成。裁定要点：① **恒高优先**——round3 P0（D-1 VM 缺陷 / D-2 三引号 /
+  D-3/4 str 原语 / D-5 输出缓冲 / R-1+R-3+R-4 run 级可观测 / E1+R-2a ihost
+  子环境整合）插入现有阶段 E 队列之前，原批 2 剩余（A2/A5/B2）与批 3
+  （A6/B5/C6/C7/D2/D3）整体顺延保留；② **架构安全优先**（用户 2026-09-08
+  指示：与主线架构/长期任务耦合项以代码质量、架构安全、IBCI 长期演进收益
+  为准）——R-2b meta.compile 与 R-6 行为表达式作值耦合 VISION-4/5 类型类/
+  函数式长期方向，**登记不实施**（不半接通 meta 层）；D-3.3 VM 字符串扫描
+  快速路径 = VM 执行模型性能架构面，**登记不实施**（Tier C 专项候选；str
+  内建四件套消解 90%+ 摩擦而不动执行模型）；③ **单点真理**——R-1/R-3/R-4
+  同源数据合并为一个 run 级可观测子系统（一个设计文档一批批实施，对照原批
+  3 C7 消重防双通道）；E1（子环境 LLM 配置继承，on_ready hook 形态定案）与
+  R-2a run_file 同属 ihost 子环境设计域，整合为一个设计（继承语义 + 结果
+  捕获契约 + 沙箱/配置源语义）；④ D-1（fielded 类×LLM 调用 VM 缺陷，试用方
+  R183 上报）**补登记 `KERNEL_ISSUE-VM-2`**（此前未入 trials/INDEX = 流程
+  缺口，已修）；⑤ F-2 真相核验 = 警告每进程一次性（去重机制工作正常）+
+  试用方 4B 后端强制思考为事实（reasoning 隔离 `reasoning_content` 字段），
+  处置 = 可配置静默 + 语义澄清（非机制缺陷）。单点记录 =
+  `tasks_docs/_trial_round3_intake.md`（逐条核验 + 耦合分析 + 新队列 P0×6/
+  P1×6/P2×2/长期×2）；`trials/INDEX.md`（KERNEL_ISSUE-VM-2）/
+  `NEXT_STEPS.md`（主线刷新）同步。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

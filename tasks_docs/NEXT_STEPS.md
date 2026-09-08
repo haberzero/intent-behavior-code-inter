@@ -27,18 +27,25 @@
 
 ## 🔴 当前状态
 
-**P0 三线全部收官（2026-09-07，free-explore）**：线 1 · 诊断面打包（SEM-1 编译期
-运算符类型检查 + B1 错误定位链 + P2 解析位置归位）；线 2 · PT-FEAT-16 词嵌入一等
-能力四批（契约包 / `vector` 值类型 / `ai` 模块面 / T16 真实试用 8/8）；线 3 · N2 已
-验证知识注册表四批（`knowledge` 一等值类型 + 验证门铁律编译期检查 / 状态保真 +
-docs 子系统页 16 / T17 试用套件 7/7，含 host 层 save_state 单层相对路径缺陷
-修复）。全量 pytest 3400 passed / 1 skipped 零回归（P0 期间 3219 → 3400 = +181
-判别/回归/保真/试用测试）。
-**下一阶段 = P1**：N1 生成参数面（6 项——temperature/top_p/max_tokens/
-response_format/停止符/系统提示面扩展）→ N4 finish_reason 结构化（调用结果
-携带结束原因——重试/截断判定面）→ P2 项（dict for-iteration + `in` 运算符
-检查 KERNEL_ISSUE-SEM-2 评估、尾逗号、named-model `IBCI_TRIAL_LLM_URL` 环境
-通道等）→ 支线 → 周期性质量维护。
+**当前主线 = round3 试用需求整合队列（2026-09-08 intake，free-explore）**：
+试用方第三轮需求单（`ibci_feedback_round3.md`，v3 统一自动机实证摩擦全集）
+已完成 intake（单点记录 = `tasks_docs/_trial_round3_intake.md`：逐条核验 +
+耦合分析 + 队列）。按恒高优先原则，round3 队列插入现有阶段 E 队列之前：
+**R3-① D-1 fielded 类×LLM 调用 VM 缺陷修复（`KERNEL_ISSUE-VM-2`，队列首位，
+试用方数据建模硬阻塞）→ R3-② D-2 三引号多行字符串 → R3-③ D-3/D-4 str 原语
+四件套（count/find(m,from)/rfind/原生切片）→ R3-④ D-5 stdout 行缓冲/
+--unbuffered → R3-⑤ R-1+R-3+R-4 run 级可观测子系统（journal + 确定性重放 +
+预算核算 + result-json，单一设计文档一批批实施，对照原批 3 C7 消重）
+→ R3-⑥ E1 重做 + R-2a run_file（ihost 子环境整合设计——E1 on_ready hook 形态
+定案，细节见 HANDOFF §2.1）**；P1 六项（诊断消息批[含原 B4] / D-7 裸声明
+语义 / D-10 json 鲁棒面 / F-2 思考抑制警告可配置 / R-7 429 退避 / R-8
+knowledge 扩展面）+ P2 文档批两项（F-1/F-3/D-9 howto 组 / R-5 弱模型测量）
+按序。原批 2 剩余（A2/A5/B2）与批 3（A6/B5/C6/C7/D2/D3）整体顺延保留
+（`tasks_docs/_next_phase_targets.md` §三）。长期登记不实施：R-2b
+meta.compile + R-6 行为表达式作值（VISION-4/5 类型类/函数式方向耦合，不半
+接通）/ D-3.3 VM 字符串扫描快速路径（VM 执行模型性能架构面，Tier C 候选）。
+背景（git 承载）：P0 三线 / P1 生成参数面 / P2 四项 / 阶段 E 批次 1 /
+批次 2（E2/A4/D1/C5 ✅ + E1 进行中）均已完成，基线以实跑为准。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
@@ -51,16 +58,15 @@ response_format/停止符/系统提示面扩展）→ N4 finish_reason 结构化
    ③ ai 模块面 ④ T16 真实试用 8/8）** →
    **~~线 3 · N2 已验证知识注册表实施~~ 已完成（2026-09-07，git 承载：①+② knowledge 一等值类型 + 验证门 + SEM 纯度检查 + KNW_/SEM_KNW_ 码域 ③ 状态保真 + docs 16 ④ T17 7/7；附 host save_state 单层相对路径缺陷修复）**（2026-09-07 用户裁定重新定位：不以 ai 为载体、一等内置值类型/语言级知识子系统、`@~...~` 保持纯 LLM 语义无隐式路由；K1-K9 已定案；设计文档 `tasks_docs/_knowledge_registry_design.md`）。
    **P0 三线全部收官 → P1 完成 → P2 四项完成 → 阶段 E 批次 0 清场 + T2 环境变量通道 + C2 容器边缘完成（2026-09-07）**。
-   **阶段 E 批次 1 全部完成 + 批次 2 推进中（2026-09-07 轮）**：批次 1
-   （C1/B1/A3/C2/T2/C3/A1/B3 ✅，C4 裁定维持现状）+ 批次 2（E2 save_load
-   帧级 Environment ✅ / A4 缺省 void ✅ / D1 idbg show_environment ✅ /
-   C5 思考抑制重估 ✅ / **E1 子环境 LLM 配置继承——进行中（设计定案 +
-   首次尝试[execute 形态]回退[sealed registry 冲突]，重做方案 = hook 形态
-   on_ready[prepare 后 execute 前触发钩子应用父配置快照]——见 HANDOFF
-   §2.1 + WORKLOG E1 条目）**；剩余批次 2：E1[重做] / A2 泛型约束 /
-   A5 解构 / B2 惰性结构 / B4 编译定位；批次 3：A6/B5/C6/C7/D2/D3（
-   `tasks_docs/_next_phase_targets.md` §三）。基线 **3534 passed / 1
-   skipped**。
+   **阶段 E 批次 1 全部完成 + 批次 2（E2/A4/D1/C5）完成（git 承载）**。
+   **当前主线 = round3 试用需求整合队列（2026-09-08 intake）**：见
+   "🔴 当前状态" + `tasks_docs/_trial_round3_intake.md` §三（R3-① D-1
+   `KERNEL_ISSUE-VM-2` 修复首位 → R3-② 三引号字符串 → R3-③ str 原语四件套
+   → R3-④ 输出缓冲 → R3-⑤ run 级可观测子系统 → R3-⑥ E1 重做 + R-2a
+   run_file[E1 on_ready hook 形态定案；细节见 HANDOFF §2.1 + 防卡死：spawn
+   测试传有限 collect 超时] → P1 六项 → P2 文档批）；原批 2 剩余（A2/A5/B2；
+   B4 并入 R3-⑦）与批 3（A6/B5/C6/C7/D2/D3；C7 对照 R3-⑤ 消重）整体顺延
+   保留（`tasks_docs/_next_phase_targets.md` §三）；基线以实跑为准。
 2. **支线（不中断主线时介入）· 阶段 C 真实 LLM 残留项清场（全量 LLM 回归复跑已完成）**：
    ~~① named-model 端点泄漏 2 用例（T01 D1-07-006 / T08 D5-03 硬编码旧本机端点 →
    `IBCI_TRIAL_LLM_URL`/`IBCI_TRIAL_LLM_MODEL`/`IBCI_TRIAL_LLM_KEY` env 通道）~~ **已完成
