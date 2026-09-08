@@ -143,9 +143,17 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   源之一；ThrownException 消息面根因修复 "TypeName: message" 显示对等] +
   ihost.run_file 结果捕获[exit_status/stdout/exception 错误作值；防卡死
   collect_timeout 经 policy；11_modules §11.6 整节更新]；判别 15 项 + 全量
-  3770/1 零回归）**→ Tier B 质量巡检窗口[阶段边界] →；P1 六项（诊断消息
-  批[含原 B4] / D-7 裸声明语义 / D-10 json 鲁棒面 / F-2 思考抑制警告可配置 /
-  R-7 429 退避 / R-8 knowledge 扩展面）+ P2 文档批两项按序；原批 2 剩余
+  3770/1 零回归）**→ ~~Tier B 质量巡检窗口~~ ✅ 已完成（2026-09-08：低强度批量
+  巡检，已修 7 项低风险 + 维持现状 4 项）→ ~~P1 六项~~ ✅ 全部完成（2026-09-08：
+  R3-⑦ 诊断消息批 / R3-⑧ D-7 裸声明[裁定 (c) 编译期检查] / R3-⑨ D-10 json
+  鲁棒面 / R3-⑩ F-2 思考抑制警告可配置 / R3-⑪ R-7 429 退避 / R3-⑫ R-8
+  knowledge 扩展面）→ ~~R3-⑬ N3 measure_freq~~ ✅ 设计优先完成[待决裁定——
+  SiliconFlow logprobs 探针实证：chat 通道静默忽略、completions 通道完整
+  支持；设计文档 `_n3_measure_freq_design.md`] → ~~P2 文档批~~ ✅ 全部完成
+  （2026-09-08：R3-⑭ howto 组[F-1 漂移测量 + F-3 fs.write --root + D-9 保留
+  词表 + F-4 embedding 通道确认] + R3-⑮ R-5 提案稳定性测量 howto）→
+  **round3 队列全收束**（P0/P1/P2 全部完成/待决终态；测试基线以实跑为准，末次
+  全量 3857 passed / 1 skipped 零回归）；原批 2 剩余
   （A2/A5/B2）与批 3（A6/B5/C6/C7/D2/D3）整体顺延保留。长期登记不实施
   （架构安全/长期收益优先，用户 2026-09-08 指示）：R-2b meta.compile + R-6
   行为表达式作值（VISION-4/5 类型类/函数式方向耦合，不半接通）/ D-3.3 VM

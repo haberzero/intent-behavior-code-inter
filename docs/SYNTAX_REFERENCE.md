@@ -47,3 +47,25 @@ IBCI 是实验性意图驱动混合编程语言：Python 风格的确定性代�
 | 章 | 文件 | 标题 | 说明 |
 |----|------|------|------|
 | 15 | [15_diagnostics](syntax/15_diagnostics.md) | 诊断码参考 | 全量诊断码的触发条件与修复指引（码集合与 catalog 契约一致） |
+
+## 保留词（关键字）
+
+> 以下为 IBCI 的保留词单点清单（词法器关键字表）——**不可用作标识符**（变量/函数/类/
+> 模块名等）。以保留词命名会产生解析歧义（如函数名 `fn` 与 `fn` 关键字碰撞）。
+> 大小写敏感：`True`/`False`/`None`/`Uncertain` 为关键字，小写 `true`/`false`/`none`
+> 不是（见 `docs/syntax/01_types.md` 布尔字面量）。
+
+| 类别 | 保留词 |
+|------|--------|
+| import / 模块 | `import` `from` `as` `bind` |
+| 函数 / 高阶 | `func` `return` `lambda` `fn` `yield` `await` |
+| 作用域 / 流程控制 | `global` `nonlocal` `pass` `break` `continue` |
+| 控制流 | `if` `elif` `else` `switch` `case` `default` `for` `while` `in` |
+| 异常处理 | `try` `except` `finally` `raise` |
+| 类型 / 声明 | `auto` `class` `protocol` `implements` `impl` `self` |
+| 并发 / 结构 | `chan` `slot` `overlay` `with` |
+| 逻辑 | `and` `or` `not` `is` |
+| 常量 / 特殊 | `True` `False` `None` `Uncertain` |
+| LLM / 健壮性 | `llmexcept` `retry` `snapshot` |
+
+完整语法见各章（`docs/syntax/01`–`15`）。

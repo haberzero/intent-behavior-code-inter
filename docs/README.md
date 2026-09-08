@@ -127,6 +127,8 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 | 试用套件体系 | `docs/trials/README.md` |
 | 试用套件运行方式 | `docs/howto/run_trials.md` |
 | 仓库测试套件自身安全（卡死识别/超时配置） | `docs/howto/keep_tests_safe.md` |
+| 弱模型输出漂移测量（call_info 两形态 + finish_reason） | `docs/howto/measure_weak_model_drift.md` |
+| 弱模型提案稳定性测量（journal 跨运行语料） | `docs/howto/measure_proposal_stability.md` |
 
 ### 3.2 数字纪律（测试基线）
 

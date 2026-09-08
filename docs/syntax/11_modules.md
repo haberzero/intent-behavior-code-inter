@@ -275,6 +275,37 @@ fs.remove("data.txt")
 2. `save_state` 遇到活跃 `file_handle`/`audio`/`image`/`video` 变量时直接报错。
 3. `llmexcept` retry body 中禁用 `fs.write`（避免污染 gold snapshot；磁盘型快照是浅路径引用，无法静态判别目标是否已入快照）。涉及可能失败的 LLM 调用时，先完成文件写入再进入可能重试的调用。
 
+**写入目标基准与越界（`--root` 场景最小示例）**：
+
+`fs.write` 的**相对路径**以 `project_root` 为基准解析（`project_root` 由 CLI `--root`
+旗标 / 入口文件位置确立，`isys.project_root()` 可查询当前基准）。越出 `project_root`
+的写入被沙箱拒绝，抛 `RUN_PERMISSION_ERROR`（非静默、非写成功）。
+
+```ibci
+import fs
+import isys
+
+str root = isys.project_root()      # 当前 project_root（写入基准）
+print(root)
+
+# 相对路径 = 落在 project_root 之下（基准内，合法）
+file_handle h = fs.write("data/out.txt", "content")
+str back = fs.read("data/out.txt")  # 读回验证
+print(back)
+fs.remove("data/out.txt")
+
+# 越界路径（../../ 逃逸出 project_root）= 沙箱拒绝
+try:
+    file_handle bad = fs.write("../../escape.txt", "nope")
+except Exception:
+    print("越界写入被拒（RUN_PERMISSION_ERROR）")
+```
+
+- **基准内**（相对路径 / `project_root` 下的绝对路径）：正常读写。
+- **越界**（`..` 逃逸、`project_root` 外的绝对路径）：`RUN_PERMISSION_ERROR`
+  （"Security Error: Permission denied ... path outside workspace"）。需外部访问时
+  显式 `isys.request_external_access()`（谨慎使用）。
+
 ### 11.8 json 模块
 
 JSON 解析与序列化。

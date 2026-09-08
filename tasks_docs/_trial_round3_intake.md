@@ -213,11 +213,18 @@
 
 ### P2（文档批）
 
-14. **R3-⑭ 文档 howto 组**：F-1《弱模型输出漂移测量》（call_info 两形态 + finish_reason
-    最小用法）+ F-3 fs.write --root 最小示例（实证语义）+ D-9 保留词表（SYNTAX_REFERENCE
-    单点）+ F-4 embedding 通道确认回复。
-15. **R3-⑮ R-5《弱模型提案稳定性测量》**：依赖 R3-⑤ journal 落地；试用方 v3 记录面
-    （e33_p37/e34_p2/e34_p4，授权引用）为示例语料。
+14. **R3-⑭ 文档 howto 组** ✅ **已完成（2026-09-08）**：
+    F-1《弱模型输出漂移测量》howto（call_info 两形态[活面 get_current_call_info /
+    journal 持久面] + finish_reason 最小用法[stop/length 截断检测]）→
+    docs/howto/measure_weak_model_drift.md；F-3 fs.write --root 最小示例（实证语义：
+    isys.project_root() 基准 + 越界 RUN_PERMISSION_ERROR，11_modules §11.7 追加）；
+    D-9 保留词表（lexer KEYWORDS 49 词单点，SYNTAX_REFERENCE 追加，核验零缺失）；
+    F-4 embedding 通道确认（PT-FEAT-16 已落地，T16 8/8 验收——16 项 embedding 测试
+    复核通过；无 docs 动作，落账确认）。纯文档批，无代码/测试改动。
+15. **R3-⑮ R-5《弱模型提案稳定性测量》** ✅ **已完成（2026-09-08）**：
+    依赖 journal（已落地）；howto（journal 跨运行语料 + 稳定性度量面[完全一致率/
+    归一化一致率/长度离散度/截断占比/两两相似度] + 最小度量脚本 + 结晶门槛判定）→
+    docs/howto/measure_proposal_stability.md。纯文档批。
 
 ### 长期登记（不实施，git/WORKLOG 承载）
 

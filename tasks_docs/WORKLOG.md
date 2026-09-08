@@ -1578,6 +1578,30 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   （静默忽略 = 探测无意义）；不为此新增独立数值科学计算面（同 PT-FEAT-16 排除项）。
 ---
 
+- **R3-⑭/R3-⑮ P2 文档批完成（2026-09-08，free-explore；round3 P2 文档 howto 组 +
+  R-5 弱模型测量 howto）**：纯文档批（**无代码/测试改动**——零回归面 = 文档面，
+  全量 pytest 计数不变）。交付面：① **F-1《弱模型输出漂移测量》howto**（
+  docs/howto/measure_weak_model_drift.md）——call_info 两形态[活面
+  ai.get_current_call_info() 进程内最近值 / journal 持久面 llm_journal/<run-id>.jsonl
+  跨运行语料] + finish_reason 最小用法[stop=正常 / length=达 max_tokens 截断——
+  弱模型"没说完"漂移第一信号] + 漂移测量五步流程；② **F-3 fs.write --root 最小
+  示例**（11_modules §11.7 追加）——实证语义：相对路径以 isys.project_root() 为
+  基准解析、越出 project_root = RUN_PERMISSION_ERROR 沙箱拒绝（"Security Error:
+  Permission denied ... path outside workspace"）；③ **D-9 保留词表**（
+  SYNTAX_REFERENCE 追加）——lexer KEYWORDS 49 词单点清单（分类：import/函数/
+  作用域/控制流/异常处理/类型/并发/逻辑/常量/LLM 健壮性），核验零缺失
+  （表内 49 词全覆盖 lexer；小写 true/false/none 正确标注"非"关键字）；④ **F-4
+  embedding 通道确认**（无 docs 动作）——PT-FEAT-16 已落地（embedding_impl +
+  embedding_protocol），T16 8/8 验收，16 项 embedding 测试复核通过（通道可用：
+  SiliconFlow Qwen3-Embedding-0.6B）；⑤ **R-5《弱模型提案稳定性测量》howto**（
+  docs/howto/measure_proposal_stability.md）——journal 跨运行语料 + 稳定性度量面
+  [完全一致率/归一化一致率/长度离散度 CV/截断占比/两两相似度] + 最小度量脚本 +
+  结晶门槛判定（与知识注册表结晶验收衔接）。文档治理：README 单点真理表登记两
+  howto；零日期戳/零任务编号（移除 R3-⑤ 引用）/零断链（引用面核验）/零 agent
+  元信息（docs/ 面向人类）。**round3 队列全收束**（P0 R3-②~⑥ + Tier B + P1
+  R3-⑦~⑬ + P2 R3-⑭~⑮ 全部完成/待决终态）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
