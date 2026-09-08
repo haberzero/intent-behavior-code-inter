@@ -177,8 +177,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   **防卡死注意（2026-09-07 接手智能体卡死报告后补充）**：spawn 测试的
   request_collect 默认无界等待（collect_timeout=None）——子线程 hang 时
   collect 无界阻塞；E1 判别测试须传有限 collect 超时（IsolationPolicy
-  collect_timeout）。另：tests/conftest.py 看门狗超时已从 90s 调至 180s
-  （与全量 pytest ~95s 时长竞态误杀修复——详见 WORKLOG 卡死处置条目）。
+  collect_timeout）。
+  **测试套件自身安全（系统化双层防护，2026-09-07——用户裁定：安全不靠
+  智能体测试行为操作）**：① 第一层 pytest-timeout（pytest.ini
+  timeout=60 / timeout_method=thread）——每测试独立 60s 超时，卡死测试
+  自动 FAIL + 输出测试名与全部线程栈（自动定位，无需人工干预；70s sleep
+  探针已验证精确到 hang 行）；② 第二层 conftest 进程级看门狗（180s）——
+  仅框架层 hang 触发（dump_traceback + os._exit(124)）。依赖单源
+  pyproject.toml（pytest-timeout>=2）。接手者遇"pytest 无输出退出 124"
+  = 第二层触发（框架层 hang）——完整 stderr 的 dump_traceback 即线程栈；
+  测试级卡死由第一层自动报告（测试名 + hang 行），不再出现无输出假象。
   **本 span 轮次总览（Round 1-9，阶段 E 批次 1-2）**：C3 模块路径解析
   定案（批 1 收官前置）→ A1 用户自定义协议核验[机制已落地] → B3 一等
   环境对象[批 1 收官] → E2 save_load 帧级 Environment → A4 缺省 void →
