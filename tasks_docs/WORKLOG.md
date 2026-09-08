@@ -1146,6 +1146,24 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   失败经 issue_tracker WARNING（HOST_ISOLATE_LLM_INHERIT_FAILED，不阻断）。
   验证面：mock 模式（set_mock_mode + set_config 免 client）+ 继承断言（子
   model = 父 spawn 时点 model）+ 快照语义（spawn 后父变异子不变）。
+- **pytest 卡死问题处置（2026-09-07，free-explore——接手智能体报告"特定测试项
+  死循环无法退出/无有效输出"）**：
+  - **根因**：tests/conftest.py 死锁看门狗 `_DEADLOCK_TIMEOUT_S = 90` 与全量
+    pytest 时长（本机 ~95s——含启动/解释开销）竞态——全量 ~95s 完成时看门狗
+    90s 先 `os._exit(124)` 误杀进程，表现为"pytest 无输出退出 124 / 卡死"
+    假象（非真实死锁；接手智能体跑特定套件时长接近/超过 90s 时触发）。
+    期间逐文件复测全部通过（compiler 434 in 4.81s；三组 3534/1 零回归）——
+    确认无真实 hang。
+  - **处置**：看门狗超时 90s → 180s（全量 2 倍余量——真死锁[线程 join 无界
+    等待等]仍被终止并经 faulthandler.dump_traceback 留 traceback）。
+  - **卡死定位指引（交接）**：pytest 无输出退出 124 时，捕获**完整 stderr**
+    （勿 tail 截断）——看门狗 dump_traceback 输出全部线程栈，hang 线程栈
+    即根因所在；先核对看门狗注释的时长基准再怀疑真实死锁。
+  - **E1 重做防卡死注意**：spawn 隔离执行测试（request_collect 无界等待
+    collect_timeout=None 默认）——若子线程 hang，collect 将无界阻塞至看门狗
+    终止。E1 重做的判别测试须传有限 collect 超时（IsolationPolicy
+    collect_timeout 或测试级 timeout 守护），避免重蹈卡死表象。
+  - 全量 pytest 基线 **3534 passed / 1 skipped**（零回归；conftest 改动）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

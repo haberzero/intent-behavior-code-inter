@@ -174,6 +174,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   apply_config）；失败 issue_tracker WARNING（HOST_ISOLATE_LLM_INHERIT_
   FAILED，不阻断）；验证 = mock 模式（set_mock_mode + set_config 免
   client）+ 继承断言 + 快照语义（spawn 后父变异子不变）。
+  **防卡死注意（2026-09-07 接手智能体卡死报告后补充）**：spawn 测试的
+  request_collect 默认无界等待（collect_timeout=None）——子线程 hang 时
+  collect 无界阻塞；E1 判别测试须传有限 collect 超时（IsolationPolicy
+  collect_timeout）。另：tests/conftest.py 看门狗超时已从 90s 调至 180s
+  （与全量 pytest ~95s 时长竞态误杀修复——详见 WORKLOG 卡死处置条目）。
   **本 span 轮次总览（Round 1-9，阶段 E 批次 1-2）**：C3 模块路径解析
   定案（批 1 收官前置）→ A1 用户自定义协议核验[机制已落地] → B3 一等
   环境对象[批 1 收官] → E2 save_load 帧级 Environment → A4 缺省 void →
