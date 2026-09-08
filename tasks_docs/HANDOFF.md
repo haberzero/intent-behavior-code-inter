@@ -129,11 +129,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   队列 + 终态）；每项实施细节见 WORKLOG round3 条目 + git log。
 
 - **工程事实**：
-  - 分支 = `free-explore`（`main` 不触碰；`unsafe-vibe-dev` 不触碰）；HEAD = `a2d9e096`
-    （Phase F 收敛）；工作区干净；**全程未 push（全本地，硬原则）**。
+  - 分支 = `free-explore`（本 session 后续开发在此；`main` 不触碰）；HEAD = `359b1eef`
+    （M1 run_result + 执行路径统一）；工作区干净；**全程未 push（全本地，硬原则）**。
+    **session 级分支裁定（2026-09-08 用户指示）**：开代码修改前已把 free-explore
+    fast-forward merge 到 `unsafe-vibe-dev`（0 behind/105 ahead，纯 ff；unsafe-vibe-dev
+    = free-explore = `b67d87b0` 起，现推进至 `359b1eef`）；free-explore 不删除（后续
+    在其上开发）——详见 WORKLOG 本 session 分支拓扑条目。
   - 测试基线 = `.venv/bin/python -m pytest tests/`（本机解释器见 `AGENTS.local.md`——
     本机无 miniconda3 `ibci` 环境，§2.2 旧条目的 miniconda3 路径作废）；末次全量
-    **3867 passed / 1 skipped 零回归**（数字以实跑为准，不冻结）。
+    **3896 passed / 1 skipped 零回归**（M1 后；数字以实跑为准，不冻结）。
   - 本轮提交链（round3 全段，新→旧）：`a2d9e096`(Phase F) → `e6a8cfe4`(Phase E) →
     `8d8242e7`(Phase D) → `ce55f4ce`(R3-⑭/⑮) → `82aa9804`(R3-⑬) → `97da922e`(R3-⑫) →
     `7ab0cc6e`(R3-⑪) → `6f4c5ce9`(R3-⑩) → `458a7aa6`(R3-⑨) → `dba9e3c6`(R3-⑧) →
@@ -162,11 +166,16 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
        落地后联合重估[新增隔离消费方 + 威胁模型边界]）；VISION-4/5 类型层只约束
        **全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
      - **批次计划**（每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit）：
-       **M1** run_result 值类型（新内核原生值类型 exit_status: str / stdout: str /
+       ~~**M1**~~ **✅ 已完成（2026-09-08，commit 359b1eef，判别 23 项 + 3896/1 零回归；实施细化
+        `_code_meta_mvp_m1.md`）** run_result 值类型（三字段 attribute 访问
+        r.exit_status/r.stdout/r.exception + 值相等 + 序列化保真；exception 结构化单一
+        权威源 exception_record[CLI+host 共用]）+ 执行路径统一（单一 spawn 核心两源形式：
+        文件源既有 + 字符串源新）+ run_file dict→run_result 精化 + run_code 落地）→
+        原批次：run_result 值类型（新内核原生值类型 exit_status: str / stdout: str /
        exception: any[结构化 dict {code, message, source}]，exception 捕获面从平坦错误串
        升级为结构化[CLI result-json exception 面同构]）+ 执行路径统一（单一 spawn 核心
        两源形式：run_file 精化 dict→run_result + 新 run_code 字符串形式）→
-       **M2** meta 模块（新内核原生模块）+ meta.compile(code: str) fail-fast 校验面
+       **M2（当前 P0）** meta 模块（新内核原生模块）+ meta.compile(code: str) fail-fast 校验面
        （子引擎 compile-only；失败抛 CompilerError[ibci 源定位]，成功 void；与 CLI check
        面同构）→ **M3** 三门管线惯用法固化（howto run_code_safely.md + 参考实现
        [预注册向量 + 机械判定 e34_p4 形态] + 文档同步）。
@@ -214,6 +223,17 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   - Phase E 终态裁定：A2/A5/A6/B2 = 挂起 → VISION-4 整合推进（类型层同域，不半接通）；
     D3 = 挂起（随新能力配套）；B5 = 挂起（并发一等原语已成熟）；C6 = 完成（多模型组合
     编排 howto）；D2 = 完成（check --format json）。
+  - **M1（meta 层 MVP 批次 M1，commit 359b1eef）落地裁定**（M2/M3 须沿用）：
+    ① run_result = 不可变值类型（CLASS kind / PRELUDE 可见；字段访问面 = **字段**
+    attribute `r.exit_status`/`r.stdout`/`r.exception`——`MemberSpec kind="field"` 经
+    `_dispatch_getattr` 实例字段优先命中，Exception.message 先例；**非方法**[误导须括号]
+    **非下标**[map 语义]）；② exception 结构化 `{code,message,source{file,line,column,
+    snippet}}` = 单一权威源 `core/runtime/exception_record.py`（CLI --result-json + host
+    run_file/run_code 共用，消双写真相）；③ 执行路径统一 = `request_spawn_isolated`
+    单一 spawn 核心两源形式（文件源 entry_path XOR 字符串源 code，fail-fast 恰好一源；
+    字符串源 sub project_root = 父 project_root 合成 entry 锚定，沙箱外 = 既有
+    RUN_PERMISSION_ERROR）；④ 诊断码零新增（子运行失败经 exception 值面传递既有码）。
+    威胁模型/性能边界入 KNOWN_LIMITS §二十六。
 
 - **挂起/待决清单（本轮 7 项 + 长期登记 8 项）**：
 
