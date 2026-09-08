@@ -40,6 +40,70 @@ def _render_runtime_error(engine: IBCIEngine, exc: IBCBaseException) -> str:
     return DiagnosticFormatter.format(diag, source_manager=engine.scheduler.source_manager)
 
 
+def _read_source_line(file_path, line):
+    """读单行源码（result trailer snippet 用；读取失败 = None，尽力而为）。"""
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            for i, text in enumerate(f, start=1):
+                if i == line:
+                    return text.rstrip("\n")
+                if i > line:
+                    break
+    except (OSError, UnicodeDecodeError):
+        pass
+    return None
+
+
+def _source_dict(location):
+    """诊断位置 → trailer source 对象（location 为 None = None）。"""
+    if location is None:
+        return None
+    source = {
+        "file": getattr(location, "file_path", None),
+        "line": getattr(location, "line", None),
+        "column": getattr(location, "column", None),
+    }
+    if source["file"] and source["line"]:
+        snippet = _read_source_line(source["file"], source["line"])
+        if snippet is not None:
+            source["snippet"] = snippet
+    return source
+
+
+def _extract_compile_error(e):
+    """编译错误 → trailer exception（首个诊断 = 根因面；复用诊断对象，无新渲染）。"""
+    diags = e.diagnostics or []
+    if not diags:
+        return {"code": None, "message": str(e), "source": None}
+    d = diags[0]
+    return {
+        "code": d.code,
+        "message": d.message,
+        "source": _source_dict(getattr(d, "location", None)),
+    }
+
+
+def _extract_runtime_error(e):
+    """运行期错误 → trailer exception（复用异常对象字段，无新渲染）。"""
+    return {
+        "code": getattr(e, "error_code", None),
+        "message": getattr(e, "message", None) or str(e),
+        "source": _source_dict(getattr(e, "location", None)),
+    }
+
+
+def _build_result_json(*, exit_status, exception, journal, budget, replay):
+    """组装 result trailer（v1 契约：单行 JSON）。"""
+    return json.dumps({
+        "v": 1,
+        "exit_status": exit_status,
+        "exception": exception,
+        "journal": journal,
+        "budget": budget,
+        "replay": replay,
+    }, ensure_ascii=False)
+
+
 def main():
     parser = argparse.ArgumentParser(description="IBC-Inter CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -55,6 +119,10 @@ def main():
                             help="Deterministic replay: serve LLM calls from a journal "
                                  "file in seq order (real provider not loaded; exhaustion "
                                  "fails fast). Implies journaling of the replay run.")
+    run_parser.add_argument("--result-json", action="store_true",
+                            help="Emit a machine-readable result trailer (single JSON line "
+                                 "at the end of stdout: exit_status / exception / journal / "
+                                 "budget / replay)")
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
@@ -172,6 +240,7 @@ def main():
         # 真实 provider（真实 provider 不加载，无需 API key）；加载期校验
         # fail-fast（损坏/不合法 = 拒绝，不部分消费）。
         replay_journal_path = None
+        replay_journal = None
         replay_arg = getattr(args, 'replay', None)
         if replay_arg:
             from core.runtime.capability_registry import CapabilityPriority, CapabilityRegistry
@@ -206,7 +275,13 @@ def main():
             )
             print(f"journal: {journal_rel}", file=sys.stderr)
 
-        # 运行引擎（silent=True：CLI 为唯一渲染点，engine 层不重复打印）
+        # 运行引擎（silent=True：CLI 为唯一渲染点，engine 层不重复打印）。
+        # --result-json：stdout 末行机器可读结果 trailer（v1 契约：
+        # exit_status / exception{code,message,source} / journal / budget /
+        # replay）；数据面（print 输出）不受影响——验收机数据 = 末行之前，
+        # 结果 = 末行解析（tail -n1）。
+        result_json_flag = getattr(args, 'result_json', False)
+        run_error = None
         try:
             try:
                 engine.run(args.file, variables=cli_variables, silent=True,
@@ -216,19 +291,32 @@ def main():
                     journal_writer.close()
         except FileNotFoundError as e:
             print(f"Error: {e}")
-            sys.exit(1)
+            run_error = {"code": None, "message": str(e), "source": None}
         except CompilerError as e:
             # 编译错误：与其余 CLI 命令同形态（DiagnosticFormatter 渲染）
             print("\n--- Compilation Errors ---")
             print(DiagnosticFormatter.format_all(e.diagnostics, source_manager=engine.scheduler.source_manager))
             tracker = engine.scheduler.issue_tracker
             print(f"\nCompilation failed: {tracker.error_count} errors, {tracker.warning_count} warnings.")
-            sys.exit(1)
+            run_error = _extract_compile_error(e)
         except IBCBaseException as e:
             # 运行期错误：同编译错误形态（码 + 说明/修复 + --> file:line:col + 源行 + caret）
             print(_render_runtime_error(engine, e))
-            sys.exit(1)
-        sys.exit(0)
+            run_error = _extract_runtime_error(e)
+
+        if result_json_flag:
+            print(_build_result_json(
+                exit_status="error" if run_error else "ok",
+                exception=run_error,
+                journal=os.path.join("llm_journal", os.path.basename(journal_writer.path))
+                        if journal_writer is not None else None,
+                budget=budget_guard.snapshot() if budget_guard is not None else None,
+                replay={"source": replay_journal_path,
+                        "consumed": replay_journal.consumed_calls,
+                        "total": replay_journal.total_calls}
+                       if replay_journal_path else None,
+            ))
+        sys.exit(1 if run_error else 0)
 
     elif args.command == "check":
         success = engine.check(args.file)

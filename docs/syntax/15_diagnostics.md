@@ -19,9 +19,39 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 - **bench**：warmup 后重复编译 N 次，报告 min/avg/max（可加 stdev）；编译失败按诊断码格式报错并以非零码退出。
 - CLI 命令：`inspect` / `semantic`（导出）与 `bench`（基准）。
 
-**run 命令输出**：`python main.py run <entry.ibci>` 的 ibci `print` 输出为**行级 flush**——
-每行 print 即时可见（非 TTY 管道/重定向下同为行缓冲），长 run（LLM 批次 / 大语料
-扫描）进度可观测，可区分"慢"与"挂"。
+**run 命令可观测面**：
+
+- **输出行级 flush**：`python main.py run <entry.ibci>` 的 ibci `print` 输出为
+  **行级 flush**——每行 print 即时可见（非 TTY 管道/重定向下同为行缓冲），长 run
+  （LLM 批次 / 大语料扫描）进度可观测，可区分"慢"与"挂"。
+- **LLM 调用 journal（默认开）**：每次 `run` 将全部 LLM 调用 append-only 记录到
+  项目根 `llm_journal/<run-id>.jsonl`（首行 run 元数据 + 每调用一行：
+  prompt 全文 / raw 响应 / model / finish_reason / generation / usage / 时间戳）。
+  启动提示走 stderr（不入 stdout 数据面）。`--no-journal` 关闭。
+  ```bash
+  python main.py run app.ibci                 # 默认写 journal
+  python main.py run app.ibci --no-journal    # 关闭
+  ```
+- **确定性重放**：`--replay <journal>` 让 LLM 调用全部来自记录（同一入口代码 +
+  同一 journal = 同一执行轨迹；真实 provider 不加载、无需 API key）。复测/审计零
+  LLM 成本。调用次数超记录 = fail-fast（确定性契约违背）；提前结束 = 合法。
+  ```bash
+  python main.py run app.ibci --replay llm_journal/20260908T120000Z-a1b2.jsonl
+  ```
+- **run 级 LLM 预算**：`api_config.json` 顶层可选 `budget` 节——
+  `{"max_tokens": 100000, "max_calls": 500, "max_wall_s": 600, "on_exceed": "warn"|"fail"}`
+  （各阈值可选）。`warn`（默认）= 每维度首次超限 stderr 告警一次、run 继续；
+  `fail` = 超限在**下一次 LLM 调用的 provider 调用前**拦截
+  （`RUN_BUDGET_EXCEEDED`，被拦调用不发出）。无 `budget` 节 = 无预算核算。
+- **机器可读结果 trailer**：`--result-json` 在 stdout **末行**输出一行 JSON
+  （验收机 `tail -n1` 即得；数据面 = 末行之前）：
+  `{"v":1, "exit_status":"ok"|"error", "exception":null|{"code","message",
+  "source":{"file","line","column","snippet"}}, "journal":..., "budget":
+  {"calls","tokens","wall_s","exceeded"}|null, "replay":
+  {"source","consumed","total"}|null}`。
+  ```bash
+  python main.py run app.ibci --result-json
+  ```
 
 ### 如何阅读
 

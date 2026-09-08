@@ -40,13 +40,11 @@ continuation_mode 泄漏吞声明收尾换行 → PAR_EXPECTED_TOKEN]；判别 3
 全量 3605/1 零回归，git 承载）→ ~~R3-③ D-3/D-4 str 原语四件套~~ 已完成（2026-09-08：count 新增 + find
 扩 from 选参 + find_last 改名 rfind[零消费方破坏性改名] + 原生切片实证
 已支持[判别锁定+文档]；公理层变更全量 3638/1 零回归，git 承载）
-→ ~~R3-④ D-5 stdout 行缓冲~~ 已完成（2026-09-08：run 命令默认行级 flush，不加 --unbuffered 旗标[裁定：行缓冲=默认底线，旗标=第二通道不设]；时间隙判别 1 项 + 全量 3645/1 零回归，git 承载）→ **R3-⑤ R-1+R-3+R-4 run 级可观测子系统**（当前项）（journal + 确定性重放 +
-预算核算 + result-json，单一设计文档一批批实施，对照原批 3 C7 消重）
-→ R3-⑥ E1 重做 + R-2a run_file（ihost 子环境整合设计——E1 on_ready hook 形态
-定案，细节见 HANDOFF §2.1）**；P1 六项（诊断消息批[含原 B4] / D-7 裸声明
+→ ~~R3-④ D-5 stdout 行缓冲~~ 已完成（2026-09-08：run 命令默认行级 flush，不加 --unbuffered 旗标[裁定：行缓冲=默认底线，旗标=第二通道不设]；时间隙判别 1 项 + 全量 3645/1 零回归，git 承载）→ ~~R3-⑤ R-1+R-3+R-4 run 级可观测子系统~~ 已完成（2026-09-08：journal append-only[CLI 默认开] + --replay 确定性重放[能力槽 SYSTEM 优先级替换 provider] + 预算核算[api_config budget 节 warn/fail] + --result-json trailer；单一设计文档四批实施 + C7 消重；判别 59 项 + 全量 3739/1 零回归，git 承载）→ **R3-⑥ E1 重做 + R-2a run_file**（当前项；ihost 子环境整合设计——E1 on_ready hook 形态定案，细节见 HANDOFF §2.1）**；P1 六项（诊断消息批[含原 B4] / D-7 裸声明
 语义 / D-10 json 鲁棒面 / F-2 思考抑制警告可配置 / R-7 429 退避 / R-8
 knowledge 扩展面）+ P2 文档批两项（F-1/F-3/D-9 howto 组 / R-5 弱模型测量）
-按序。原批 2 剩余（A2/A5/B2）与批 3（A6/B5/C6/C7/D2/D3）整体顺延保留
+按序。原批 2 剩余（A2/A5/B2）与批 3（A6/B5/C6/D2/D3；C7 已消重——由 R3-⑤
+run 级可观测子系统承载，见 `_next_phase_targets.md`）整体顺延保留
 （`tasks_docs/_next_phase_targets.md` §三）。长期登记不实施：R-2b
 meta.compile + R-6 行为表达式作值（VISION-4/5 类型类/函数式方向耦合，不半
 接通）/ D-3.3 VM 字符串扫描快速路径（VM 执行模型性能架构面，Tier C 候选）。

@@ -122,9 +122,20 @@
    实施 = main.py run 分支 sys.stdout.reconfigure(line_buffering=True)；时间隙
    判别 1 项（第一版 poll() 竞态误过后重构；双向验证）+ 15_diagnostics §诊断
    工具补 run 输出语义 + 全量 3645/1 零回归。
-5. **R3-⑤ R-1+R-3+R-4 run 级可观测子系统**：设计文档 `_run_observability_design.md`
-   （journal append-only + --replay 确定性重放 + run_summary 预算面 + --result-json；
-   对照 C7 消重）→ 批次实施 ① journal ② replay ③ budget ④ result-json。
+5. **R3-⑤ R-1+R-3+R-4 run 级可观测子系统** ✅ **已完成（2026-09-08，四批）**：
+   设计文档 `_run_observability_design.md`（单一设计，试用方"治理可审计性命脉"
+   三面合并；C7 消重）。① journal（LLMJournalWriter append-only JSONL，schema
+   v1；汇点 _call_llm 单一挂接成功/失败两面；CLI 默认开 + --no-journal + stderr
+   提示行；写失败不阻断 run）② --replay 确定性重放（ReplayLLMProvider 能力槽
+   SYSTEM 优先级替换真实 provider，无需 API key；seq 序重放/error 行同形态
+   raise/耗尽 fail-fast[经既有 LLMCallError 面，实施裁定不新增专用码]；重放
+   run 仍写新 journal[replay_of 审计链]）③ 预算核算（api_config budget 节
+   {max_tokens/max_calls/max_wall_s; on_exceed warn|fail}；fail = provider 调用
+   前确定性拦截 RUN_BUDGET_EXCEEDED[零浪费]；warn 每维度首次告警一次；provider
+   _extract_usage 入 provider_meta；+2 诊断码）④ --result-json trailer（stdout
+   末行单行 JSON v1：exit_status/exception{code,message,source}/journal/
+   budget/replay；复用诊断对象无新渲染）。文档 15_diagnostics run 可观测面
+   完整节。判别 59 项；全量 3739/1 零回归。
 6. **R3-⑥ E1 重做 + R-2a run_file（ihost 子环境完善）**：整合设计（E1 on_ready hook
    形态[定案] + run_file 结果契约 + 沙箱/配置源语义；防卡死：有限 collect 超时）→
    实施 + 判别（mock 模式）。

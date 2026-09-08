@@ -1331,6 +1331,38 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   1 skipped 零回归**（语义错误集变更面：parity 门 + 全量过）。
 ---
 
+- **R3-⑤ run 级可观测子系统完成（2026-09-08，free-explore）**：round3 需求
+  R-1（journal + 确定性重放）+ R-3（预算核算）+ R-4（result-json）单一设计
+  四批实施（设计文档 `tasks_docs/_run_observability_design.md`——试用方
+  "治理可审计性命脉"：复测/审计零 LLM 成本、长 run 预算护栏、验收机告别
+  grep stdout 文本面）。批 1 journal（b87d8a00）：LLMJournalWriter
+  （append-only JSONL，schema v1 版本化；汇点 _call_llm 单一挂接成功/失败
+  两面；写失败不阻断 run[观测侧信道尽力而为定位]；CLI 默认开 + --no-journal
+  + stderr 提示行）。批 2 replay（bd55212b）：ReplayLLMProvider =
+  LLMProvider 协议实现形态（能力槽 SYSTEM 优先级替换真实 provider，真实
+  provider 不加载无需 key；seq 序重放/error 行同形态 raise/流式诚实
+  拒绝[覆盖边界]；耗尽 fail-fast 经既有 LLMCallError 面[实施裁定：不新增
+  专用码——改内核包装路径破坏面>收益]；重放 run 仍写新 journal[replay_of
+  审计链完整]）。批 3 预算（5c05d73b）：BudgetGuard（api_config budget 节
+  驱动；fail = provider 调用前确定性拦截 RUN_BUDGET_EXCEEDED[零浪费]；warn
+  每维度首次告警一次；calls 成功/失败同计/tokens usage 缺失=0/wall
+  monotonic）+ provider _extract_usage（OpenAI 兼容字段入 provider_meta）
+  + 诊断码 +2（RUN_BUDGET_EXCEEDED/CFG_CONFIG_INVALID_BUDGET 纯增面 +
+  catalog + 15_diagnostics + parity 门）+ **C7 消重落地**（_next_phase_
+  targets：调用级埋点 = journal 行 + 预算累计，不开第二条埋点管线）。
+  批 4 result-json（本条目）：stdout 末行单行 JSON trailer（v1 契约：
+  exit_status/exception{code,message,source[含 snippet]}/journal/budget/
+  replay；三 exit 面 ok/运行期/编译期——exception 复用既有诊断对象与异常
+  字段，无新渲染管线；默认无 trailer 零侵入）。文档收敛：15_diagnostics
+  §诊断工具 run 命令可观测面完整节（行级 flush/journal/replay/预算/
+  trailer 五面 + 用法示例）。**架构要点**（系统统一性）：四面共享单一
+  汇点（_call_llm：journal/预算/事件/call_info 同源同点，无第二条调用
+  管线）；replay provider 走能力槽既有优先级机制（机制同构：provider 就是
+  provider）；trailer 复用诊断对象（单一渲染源）。判别累计 59 项（批 1 11 +
+  批 2 20 + 批 3 22 + 批 4 6）。全量 pytest **3739 passed / 1 skipped
+  零回归**（批 4 后终态；各批间亦零回归）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
