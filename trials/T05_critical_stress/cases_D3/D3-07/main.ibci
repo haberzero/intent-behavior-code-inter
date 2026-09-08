@@ -13,7 +13,7 @@ else:
     print("real-len=" + (str)len(r))
 ai.set_mock_mode()
 str m = @~ MOCK:STR:mocked 测试 ~
-if m == "mocked":
+if m == "mocked 测试":
     print("mock-ok")
 else:
     print("mock-miss")

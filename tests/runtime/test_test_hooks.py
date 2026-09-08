@@ -63,7 +63,8 @@ class TestOnLLMCallHook:
         )
         assert len(hooks.calls) == 1
         node_uid, sys_prompt, user_prompt, target_model, response = hooks.calls[0]
-        assert response == "hello"
+        # MOCK:STR 全量回显（hello + name 拼接内容含空格）
+        assert response == "hello ibci"
         assert "MOCK:STR:hello" in user_prompt
 
     def test_no_hooks_means_no_callbacks(self):

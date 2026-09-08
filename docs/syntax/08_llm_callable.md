@@ -57,7 +57,7 @@ print(result)
 ### 8.5 返回类型解析
 
 - **标量**：`int` / `float` / `str` / `bool` 经内建解析器从模型输出提取（`bool` 识别 `True/False` / `true/false` 等形态）。
-- **容器**：`list[T]` / `dict[K,V]` 等容器类型按容器解析——模型输出按元素类型逐个解析进容器（如 `list[int]` 解析数字列表、`dict[str,int]` 解析键值对）。
+- **容器**：`list[T]` / `dict[K,V]` 等容器类型按容器解析——模型输出按元素类型逐个解析进容器（如 `list[int]` 解析数字列表、`dict[str,int]` 解析键值对）。裸容器名（无类型参数）亦支持：`list` 解析 JSON 数组、`dict` 解析 JSON 对象（如 `expected_type: "dict"` + 模型输出 `{"a": 1}` → `dict` 值）；模型输出经模糊 JSON 提取（允许前后缀文字包裹）。
 - **用户类**：经 `__from_prompt__` 解析（契约见 `docs/syntax/06_oop.md` §6.7），可配合 `__validate_prompt__` 校验。
 - **void 边界**：`expected_type` 不声明可解析目标时按字符串解析；需要纯副作用调用时使用行为表达式（`@~ ... ~`）。
 

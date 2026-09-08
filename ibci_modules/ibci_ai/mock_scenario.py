@@ -64,9 +64,11 @@ class MockScenarioEngine:
         """解析一条 LLM user prompt，返回内容与传输控制。
 
         内容解析（含 seq/retry 状态变更）在锁内完成；控制指令
-        （``SLEEP`` / ``ERROR``）为纯扫描，在锁外完成。
+        （``SLEEP`` / ``ERROR``）为纯传输控制——其文本在内容解析前剥离，
+        值指令（如 ``MOCK:STR``）的全量回显语义不泄漏控制文本。
         """
-        content = self._resolve(prompt)
+        clean = _ERROR_RE.sub("", _SLEEP_RE.sub("", prompt)).strip()
+        content = self._resolve(clean)
         delay_ms = 0
         error_status: Optional[int] = None
         chunks: Optional[List[str]] = None
@@ -135,8 +137,11 @@ class MockScenarioEngine:
                         q = mock_value[0]
                         close = mock_value.index(q, 1)
                         return mock_value[1:close]
-                    str_val = mock_value.split()[0] if mock_value.split() else mock_value
-                    return str_val
+                    # 全量语义：MOCK:STR:<content> 回显指令后的完整内容
+                    # （空格/冒号保留——JSON 对象/自然语言等任意字符串忠实回显；
+                    # 引号包裹 = 显式字符串边界（去引号）。INT/FLOAT/BOOL 等
+                    # 结构化指令保持首 token 语义（数值单 token 合理）。
+                    return mock_value
                 if mock_type == "FLOAT":
                     float_val = mock_value.split()[0] if mock_value.split() else mock_value
                     return str(float(float_val))

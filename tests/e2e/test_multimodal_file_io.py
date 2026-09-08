@@ -48,7 +48,7 @@ class TestMultimodalFileRead:
             "print(r)\n"
         )
         lines = run_ibci(code, root_dir=str(tmp_path))
-        assert "transcript" in lines
+        assert any("transcript" in ln for ln in lines)  # STR 全量回显（含空格/占位符）
 
     def test_image_from_file_into_behavior_expression(self, tmp_path):
         """image 对象能被行为表达式接收。"""
@@ -59,7 +59,7 @@ class TestMultimodalFileRead:
             "print(r)\n"
         )
         lines = run_ibci(code, root_dir=str(tmp_path))
-        assert "caption" in lines
+        assert any("caption" in ln for ln in lines)  # STR 全量回显（含空格/占位符）
 
     def test_video_from_file_into_behavior_expression(self, tmp_path):
         """video 对象能被行为表达式接收。"""
@@ -70,7 +70,7 @@ class TestMultimodalFileRead:
             "print(r)\n"
         )
         lines = run_ibci(code, root_dir=str(tmp_path))
-        assert "summary" in lines
+        assert any("summary" in ln for ln in lines)  # STR 全量回显（含空格/占位符）
 
     def test_full_next_steps_example(self, tmp_path):
         """文档示例代码在 MOCK 模式下端到端跑通。"""
@@ -81,4 +81,4 @@ class TestMultimodalFileRead:
             "print(transcript)\n"
         )
         lines = run_ibci(code, root_dir=str(tmp_path))
-        assert "transcript" in lines
+        assert any("transcript" in ln for ln in lines)  # STR 全量回显（含空格/占位符）

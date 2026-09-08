@@ -23,7 +23,7 @@ MOCK 指令写在行为表达式（`@~...~`）或 LLM 可调用类的用户提�
 
 | 指令 | 说明 | 示例 |
 |------|------|------|
-| `MOCK:STR:value` | 返回指定字符串；含空格需用引号包裹 | `MOCK:STR:"hello world"` → `hello world`；`MOCK:STR:hello` → `hello` |
+| `MOCK:STR:value` | 返回指令后的完整内容（任意字符串——空格/冒号/引号原样保留，JSON 对象等忠实回显）；显式引号包裹时去引号 | `MOCK:STR:hello` → `hello`；`MOCK:STR:{"a": 1}` → `{"a": 1}`；`MOCK:STR:"hello world"` → `hello world`（去引号） |
 | `MOCK:INT:value` | 返回指定整数字符串 | `MOCK:INT:42` |
 | `MOCK:FLOAT:value` | 返回指定浮点字符串 | `MOCK:FLOAT:3.14` |
 | `MOCK:BOOL:value` | 返回 `1`（True）或 `0`（False）；仅 `TRUE`（大写）判真 | `MOCK:BOOL:TRUE` → `1`；`MOCK:BOOL:1` → `0` |

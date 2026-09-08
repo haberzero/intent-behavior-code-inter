@@ -50,10 +50,10 @@ class TestTypedDirectives:
         result = mock_plugin._handle_mock_response("MOCK:STR:hello")
         assert result == "hello"
 
-    def test_mock_str_strips_trailing_whitespace(self, mock_plugin):
-        """未加引号的 STR 值取第一个空白分隔的词。"""
+    def test_mock_str_full_value_with_spaces(self, mock_plugin):
+        """未加引号的 STR 值全量回显（空格保留——JSON/自然语言忠实回显）。"""
         result = mock_plugin._handle_mock_response("MOCK:STR:hello world")
-        assert result == "hello"
+        assert result == "hello world"
 
     def test_mock_float(self, mock_plugin):
         result = mock_plugin._handle_mock_response("MOCK:FLOAT:3.14")

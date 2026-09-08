@@ -648,7 +648,7 @@ print(r)
 """
         lines = run_ibci(code)
         assert "concat_retry" in lines
-        assert "xok" in lines
+        assert any("xok" in ln for ln in lines)  # STR 全量回显（含空格）
 
     def test_ambiguous_str_condition_retry_is_bounded(self):
         """模糊字符串条件在 llmexcept 帧内重试有界：耗尽后抛错，不无限循环。

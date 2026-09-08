@@ -248,8 +248,9 @@ class TestBehaviorRoundTrip:
         # expected_type 按接口契约以类型名字符串序列化（运行期经 node_to_type 解析）
         assert g.expected_type == "str"
         ec.runtime_context = rest
-        # MOCK 直接指令不展开 $p，原始行为调用同样返回 "hi"——验证恢复后调用一致
-        assert _call(ec, g).to_native() == "hi"
+        # 行为表达式提示词经变量插值展开 $p（p=world），MOCK 全量回显 "hi world"
+        # ——验证恢复后调用与原语义一致
+        assert _call(ec, g).to_native() == "hi world"
 
     def test_behavior_serialized_with_closure(self, engine):
         """behavior 序列化产物包含 closure 条目（此前缺 closure 全丢）。"""
