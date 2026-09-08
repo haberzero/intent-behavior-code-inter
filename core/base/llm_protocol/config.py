@@ -71,6 +71,10 @@ class CallDefaults:
     # （强制思考为已知行为而非待补缺口），思考抑制失败警告静默。
     # 缺省 false = 警告显形（stderr，一次性）。
     accept_forced_thinking: bool = False
+    # 429 限流退避秒数（R-7）：provider 检测到 429 时 sleep 此值后上抛，
+    # 供重试层（llmexcept / __retry__）在退避后重试。缺省 0.0 = 不退避
+    # （零侵入，opt-in）；>0 = 退避 + call_info 记录退避事件。
+    backoff_s: float = 0.0
 
 
 @dataclass(frozen=True)

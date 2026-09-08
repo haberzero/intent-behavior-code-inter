@@ -188,6 +188,7 @@ class ApiConfig:
             "auto_intent_injection": _DEFAULT_AUTO_INTENT,
             "mock": _DEFAULT_MOCK,
             "accept_forced_thinking": False,
+            "backoff_s": 0.0,
         }
         if raw is None:
             return result
@@ -201,6 +202,7 @@ class ApiConfig:
         cls._check_bool(raw, "defaults", "auto_intent_injection", result)
         cls._check_bool(raw, "defaults", "mock", result)
         cls._check_bool(raw, "defaults", "accept_forced_thinking", result)
+        cls._check_number(raw, "defaults", "backoff_s", result)
         return result
 
     @classmethod

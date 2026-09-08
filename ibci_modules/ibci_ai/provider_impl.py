@@ -111,6 +111,7 @@ class RecommendedProvider(LLMProvider):
             "auto_intent_injection": _DEFAULT_AUTO_INTENT,
             "mock": False,
             "accept_forced_thinking": False,
+            "backoff_s": 0.0,
         }
         # 命名模型注册表：用于 @NAME~ 语法的模型路由
         # 格式: { "NAME": {"url": ..., "key": ..., "model": ..., "timeout": ...} }
@@ -208,6 +209,45 @@ class RecommendedProvider(LLMProvider):
     def _is_test_mode(self) -> bool:
         """当前是否处于 MOCK 测试模式（仅显式声明：``_config["mock"]``）。"""
         return bool(self._config.get("mock", False))
+
+    @staticmethod
+    def _is_rate_limit_error(e: Any) -> bool:
+        """检测 429 限流错误（openai.RateLimitError 或 status_code == 429）。
+
+        属性探测（``status_code`` / ``response.status_code``）而非字符串嗅探——
+        供应商 SDK 错误对象的合法适配面。
+        """
+        try:
+            import openai
+            if isinstance(e, openai.RateLimitError):
+                return True
+        except ImportError:
+            pass
+        status = getattr(e, "status_code", None)
+        if status is None:
+            resp = getattr(e, "response", None)
+            status = getattr(resp, "status_code", None)
+        return status == 429
+
+    def _apply_rate_limit_backoff(self, error: Any) -> None:
+        """429 限流退避（R-7）：sleep(backoff_s) + call_info 记录退避事件。
+
+        ``backoff_s`` 缺省 0 = 不退避（零侵入，opt-in）。退避在 provider 层
+        （429 检测点）执行——随后的重试层（llmexcept / ``__retry__``）重试
+        发生在退避之后。退避事件入 call_info（可观测面）。
+        """
+        delay = self._config.get("backoff_s", 0.0) or 0.0
+        if delay <= 0:
+            return
+        import time
+        time.sleep(delay)
+        info = self._last_call_info if isinstance(self._last_call_info, dict) else {}
+        info["last_backoff"] = {
+            "delay_s": delay,
+            "reason": "rate_limit_429",
+            "error": str(error),
+        }
+        self._last_call_info = info
 
     # ------------------------------------------------------------------ #
     # LLMProvider 协议实现（内核 / 用户经 call/stream 调 LLM 抽象动作）
@@ -312,6 +352,10 @@ class RecommendedProvider(LLMProvider):
             # 上抛（码透传机制）；其余失败包装为泛化调用失败。
             if isinstance(e, LLMProviderError):
                 raise
+            # 429 限流退避（R-7）：配置化 backoff_s + call_info 退避事件记录；
+            # 退避后上抛，供重试层在退避后重试。
+            if self._is_rate_limit_error(e):
+                self._apply_rate_limit_backoff(e)
             raise RuntimeError(f"LLM 调用失败: {str(e)}")
 
     def stream(self, request: LLMCallRequest):
@@ -783,6 +827,8 @@ class RecommendedProvider(LLMProvider):
         self._config["auto_intent_injection"] = defaults.auto_intent_injection
         # 已知后端强制思考确认面（F-2）：思考抑制失败警告的静默开关
         self._config["accept_forced_thinking"] = defaults.accept_forced_thinking
+        # 429 限流退避秒数（R-7）：缺省 0 = 不退避（零侵入）
+        self._config["backoff_s"] = defaults.backoff_s
 
         # 命名模型注册表始终落地（供 @NAME~ 路由，mock 与真实模式皆可用）
         for name, model in config.models.items():

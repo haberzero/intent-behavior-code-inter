@@ -53,6 +53,7 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
     default_timeout = defaults.get("timeout", _DEFAULT_TIMEOUT)
     default_auto_intent = defaults.get("auto_intent_injection", _DEFAULT_AUTO_INTENT)
     default_accept_forced = defaults.get("accept_forced_thinking", False)
+    default_backoff = defaults.get("backoff_s", 0.0)
 
     dm_raw = validated.get("default_model", {})
     if isinstance(dm_raw, str):
@@ -100,5 +101,6 @@ def to_llm_config(validated: dict) -> LLMConnectionConfig:
             timeout=default_timeout,
             auto_intent_injection=default_auto_intent,
             accept_forced_thinking=default_accept_forced,
+            backoff_s=default_backoff,
         ),
     )

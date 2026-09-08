@@ -60,7 +60,7 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 字段说明：
 - `providers`：连接层，声明 `base_url` + `api_key`（支持 `{env:VAR}` 环境变量引用）。
 - `models`：命名模型，引用 `provider` + 模型名 + 每模型参数（`timeout`/`reasoning`）。
-- `defaults`：全局默认（`timeout`/`retry`/`mock`/`auto_intent_injection`/`accept_forced_thinking`）。
+- `defaults`：全局默认（`timeout`/`retry`/`mock`/`auto_intent_injection`/`accept_forced_thinking`/`backoff_s`）。
 - `default_model`：默认模型引用（字符串指向 `models` 的键，或对象形态直接声明）。
 
 `api_key` 支持 `{env:VAR}` 引用环境变量，避免硬编码密钥。`reasoning:false` 声明非思考模型（跳过 `probe_model`，直接按标准指令模型处理）。`mock:true` 显式进入 MOCK 模式。
@@ -73,6 +73,12 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 > 最终答案）；强制思考的代价是思考预算（tokens）消耗，可经 `provider_meta[reasoning]`
 > / journal 观测。若该后端的强制思考是**已知行为**（非待补缺口），可在 `defaults`
 > 声明 `accept_forced_thinking: true` 静默该警告。
+
+> **429 限流退避与 `backoff_s`**：当 LLM 后端返回 429（rate limit）时，IBCI 在
+> provider 层检测并 sleep `defaults.backoff_s` 秒后再上抛，供重试层
+> （`llmexcept` / `__retry__`）在退避后重试。缺省 `0` = 不退避（零侵入，opt-in）；
+> 设为正数（如 `1.0`）启用退避，退避事件经 `call_info`（`last_backoff`）可观测。
+> 限流后端的配额恢复需要时间，退避可显著降低连续 429 的浪费。
 
 > **格式可插拔**：上述 schema 是 IBCI 默认配置源适配器（`ProjectApiConfigAdapter`，
 > 供应商无关逻辑映射到 `core.base.llm_protocol`）识别的推荐写法。需要自定义

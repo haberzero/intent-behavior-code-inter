@@ -1515,6 +1515,27 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   静默/通道/澄清/失配/去重 5）。全量 pytest **3827 passed / 1 skipped 零回归**（基线 3816 + 判别 7 + meta 按文件参数化增长）。
 ---
 
+- **R3-⑪ R-7 provider 429 退避完成（2026-09-08，free-explore）**：round3 P1
+  第五项（provider 429 退避：retry.backoff_s 配置化 + call_info 退避事件记录）。
+  缺口面实证：全仓无 429/rate-limit 处理、无退避 sleep（唯一 sleep = mock
+  MOCK:SLEEP 模拟）——429 限流错误经 provider 包装为泛化 RuntimeError 立即
+  上抛，重试层（llmexcept / __retry__）无退避立即重试 = 连续撞限流配额。
+  实施面：① 配置——api_config `defaults.backoff_s`（float，缺省 0.0 = 不退避
+  零侵入 opt-in）：CallDefaults 新字段纯增面 + config_loader 校验（
+  _check_number）+ to_llm_config 映射 + apply_config 落地 _config（全配置链
+  贯通；E1 继承面自动覆盖）；② 429 检测——provider `_is_rate_limit_error`
+  （openai.RateLimitError isinstance 支 + status_code==429 属性支——供应商
+  SDK 错误对象合法适配面，非字符串嗅探）；③ 退避执行——provider `call()`
+  异常面（429 检测点）：检测命中 → `_apply_rate_limit_backoff`（sleep
+  backoff_s + call_info 记录 last_backoff 事件{delay_s/reason/error}）→ 上抛
+  （供重试层在退避后重试）。退避在 provider 层（唯一见原始 429 的点），
+  重试层无感知（机制同构——重试循环不改动）。文档 01_setup defaults 字段 +
+  429 退避语义注记。判别 11 项（test_rate_limit_backoff.py：配置落地 2 +
+  429 检测 5[status 支/response 支/非 429 拒/泛化拒/真实 openai.RateLimitError
+  isinstance 支] + 退避执行 2[事件记录/零缺省不记录] + 集成 2[call 遇 429
+  退避+上抛/零缺省无事件]）。全量 pytest **3842 passed / 1 skipped 零回归**（基线 3827 + 判别 11 + meta 按文件参数化增长）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -184,7 +184,12 @@
     tokens 消耗 / 观测面 provider_meta[reasoning]·journal / 静默途径提示）
     + 声明失配提示面保留 + 一次性去重保持。文档 01_setup defaults 说明 +
     思考抑制警告语义注记。判别 7 项；全量 3827/1 零回归。
-11. **R3-⑪ R-7 provider 429 退避**：retry.backoff_s 配置化 + call_info 退避事件记录。
+11. **R3-⑪ R-7 provider 429 退避** ✅ **已完成（2026-09-08）**：
+    429 限流退避——api_config defaults.backoff_s（缺省 0 = 零侵入 opt-in）
+    + provider 层 429 检测（openai.RateLimitError / status_code 属性支）
+    + 退避执行（sleep backoff_s 后上抛，供重试层退避后重试）+ call_info
+    退避事件记录（last_backoff{delay_s/reason/error}）。文档 01_setup
+    429 退避语义注记。判别 11 项；全量 3842/1 零回归。
 12. **R3-⑫ R-8 knowledge 扩展面**：export / history kind 过滤 / provenance 字段。
 
 ### P2（文档批）
