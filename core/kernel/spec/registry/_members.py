@@ -87,6 +87,88 @@ class _MemberMixin:
 
         return None
 
+    def get_constructor_descriptors(self, spec: IbSpec) -> Optional[list]:
+        """类构造器参数描述符的编译期单一入口（auto/explicit ``__init__``）。
+
+        与运行期 hydration auto-constructor 规则同源（interpreter auto-init）：
+
+        - 显式 ``__init__`` 成员且描述符已精化（``descriptors_synced``）→ 返回其
+          描述符（零参 = 空列表，同样是权威签名）；未精化（调用点先于定义）→
+          None（动态跳过，维持运行期裁决，防误报）。
+        - 否则 auto 构造器：继承链（父类优先、子类同名覆盖）全部无默认值字段 =
+          必填位置参数；覆盖/位置规则与运行期共享 ``merge_decl_fields`` 单点，
+          字段 type_ref 取生效覆盖方声明。链上无必填字段时与运行期回退同判据：
+          链上有字段（全部带默认值，含子类同名覆盖）→ 零参构造器；链上无字段
+          → 继承祖先显式 ``__init__``（已精化时）否则零参。
+        - 仅 USER_DEFINED 类（内置/enum 走各自构造路径，与运行期 auto-init 同门）。
+
+        返回 None = 静态签名不可用（调用方回落动态跳过）。
+        """
+        from ...ast import ARG_POSITIONAL_OR_KEYWORD
+        from ..member import ParamDescriptor, merge_decl_fields
+
+        if spec.kind != TypeKind.CLASS.value or spec.provenance != Provenance.USER_DEFINED:
+            return None
+        parent_ref = spec.parent_type
+        if parent_ref is not None and parent_ref.head == "Enum":
+            return None  # Enum 变体访问走成员路径，不经构造器
+        members = getattr(spec, "members", None) or {}
+        init_member = members.get("__init__")
+        if init_member is not None:
+            if (getattr(init_member, "metadata", None) or {}).get("descriptors_synced"):
+                return list(getattr(init_member, "param_descriptors", None) or [])
+            return None  # 显式 __init__ 尚未经类型检查精化 → 动态跳过
+        # auto 构造器：继承链字段收集（self → base 遍历，base → self 序入表）
+        chain = [spec]
+        seen = {id(spec)}
+        cls = spec
+        while True:
+            pt = cls.parent_type
+            if pt is None:
+                break
+            parent = self.resolve_typeref(pt)
+            if parent is None or id(parent) in seen:
+                break
+            seen.add(id(parent))
+            chain.append(parent)
+            cls = parent
+        # 显式内置父（非 Object 的内置类型，如 `class MyList[T](list[T])`）：
+        # auto 构造器字段规则仅适用纯用户类链——内置父带来原生构造机制
+        # （运行期边界按既有形态裁决）→ 静态检查不覆盖，动态跳过。
+        for ancestor in chain[1:]:
+            if (ancestor.provenance != Provenance.USER_DEFINED
+                    and ancestor.get_base_name() != "Object"):
+                return None
+        field_maps = [
+            {
+                name: ((m.metadata or {}).get("has_default", False), m.type_ref)
+                for name, m in (getattr(c, "members", None) or {}).items()
+                if m.kind == "field"
+            }
+            for c in reversed(chain)
+        ]
+        effective = merge_decl_fields(field_maps)
+        required = [(name, value) for name, value in effective.items() if not value[0]]
+        if required:
+            return [
+                ParamDescriptor(name=name, kind=ARG_POSITIONAL_OR_KEYWORD, type_ref=value[1])
+                for name, value in required
+            ]
+        # 链上无必填字段（与运行期回退同判据）：
+        # ① 链上有字段（全部带默认值，含子类同名覆盖父类无默认字段）→ 零参
+        #    auto 构造器（权威签名，仍走结构检查）；
+        # ② 链上无字段 → 继承祖先显式 __init__（lookup_method 同规则；描述符
+        #    已精化时取其签名），否则零参。
+        if effective:
+            return []
+        for ancestor in chain[1:]:
+            pinit = (getattr(ancestor, "members", None) or {}).get("__init__")
+            if pinit is not None and (getattr(pinit, "metadata", None) or {}).get(
+                "descriptors_synced"
+            ):
+                return list(pinit.param_descriptors or [])
+        return []
+
     def get_diff_hint(self, src: IbSpec, target: IbSpec) -> Optional[str]:
         """Return an axiom-provided diagnostic hint for a type mismatch."""
         src_axiom = self._axiom_registry.get_axiom(src.get_base_name())

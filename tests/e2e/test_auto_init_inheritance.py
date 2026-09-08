@@ -6,7 +6,7 @@
 any 逃生阀校验：动态 any 类对象赋给用户类变量时运行时强制 ``RUN_TYPE_MISMATCH``
 （any 值用于类型化上下文时运行时强制校验契约）。
 """
-from tests.conftest import run_ibci, expect_runtime_error
+from tests.conftest import run_ibci, expect_runtime_error, compile_or_errors
 
 
 class TestAutoInitInheritanceChain:
@@ -93,14 +93,18 @@ print(s.tag)
         assert lines == ["None", "A"]
 
     def test_missing_arg_fails_fast(self):
-        # 构造器参数 = 全链 decl-only；少传报错（不再静默错误值）
+        # 构造器参数 = 全链 decl-only；少传报错（不再静默错误值）。
+        # 语义演进（D-1 修复）：构造器绑定错误由运行期裸 RuntimeError（无码无行，
+        # 试用方误读为 VM/LLM 分派缺陷）前移为编译期 SEM_MISSING_REQUIRED_ARG
+        # （带 ibci 源行列）。触发场景保留，语义按新契约断言。
         code = """class Base:
     int data
 class Sub(Base):
     str tag
 Sub s = Sub(5)
 """
-        expect_runtime_error(code, "missing required argument")
+        _, errors = compile_or_errors(code)
+        assert "SEM_MISSING_REQUIRED_ARG" in errors
 
     def test_explicit_init_ancestor_bypassed(self):
         # 祖先显式 __init__ + 子类 auto-init：子类 auto-init 接管全链 decl-only 字段，

@@ -31,8 +31,10 @@
 试用方第三轮需求单（`ibci_feedback_round3.md`，v3 统一自动机实证摩擦全集）
 已完成 intake（单点记录 = `tasks_docs/_trial_round3_intake.md`：逐条核验 +
 耦合分析 + 队列）。按恒高优先原则，round3 队列插入现有阶段 E 队列之前：
-**R3-① D-1 fielded 类×LLM 调用 VM 缺陷修复（`KERNEL_ISSUE-VM-2`，队列首位，
-试用方数据建模硬阻塞）→ R3-② D-2 三引号多行字符串 → R3-③ D-3/D-4 str 原语
+**~~R3-① D-1 fielded 类×LLM 调用 VM 缺陷修复（`KERNEL_ISSUE-VM-2`）~~ 已完成
+（2026-09-08：编译期构造器/方法静态绑定检查 + 运行期 auto-init 回退角落修正 +
+显式内置父动态跳过；判别 25 项 + 既有 4 项语义演进 + 全量零回归，git 承载）
+→ **R3-② D-2 三引号多行字符串**（当前项）→ R3-③ D-3/D-4 str 原语
 四件套（count/find(m,from)/rfind/原生切片）→ R3-④ D-5 stdout 行缓冲/
 --unbuffered → R3-⑤ R-1+R-3+R-4 run 级可观测子系统（journal + 确定性重放 +
 预算核算 + result-json，单一设计文档一批批实施，对照原批 3 C7 消重）

@@ -801,6 +801,10 @@ class DeclarationVisitorsMixin:
         member = self.current_class.members.get(method_name)
         if member is not None:
             member.param_descriptors = list(param_descriptors)
+            # 描述符已精化标记：编译期构造器/方法绑定检查据此区分"零参方法
+            # （描述符空但权威）"与"定义尚未经过类型检查（描述符空且不权威——
+            # 调用点先于定义时动态跳过，防误报）"。
+            member.metadata["descriptors_synced"] = True
             # 同步特化类成员（class Box[T] → Box[int] 的同一方法）。
             if getattr(self.current_class, "type_params", None):
                 self._sync_specialized_members(method_name, param_descriptors)
@@ -841,3 +845,4 @@ class DeclarationVisitorsMixin:
                 )
                 for d in param_descriptors
             ]
+            m.metadata["descriptors_synced"] = True

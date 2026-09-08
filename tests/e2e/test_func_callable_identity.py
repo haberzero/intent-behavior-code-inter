@@ -577,14 +577,19 @@ class TestCallableSigSignature:
         assert run_ibci(code) == ["3", "7"]
 
     def test_fn_sig_covariant_return_allowed(self):
-        """签名返回协变保持：`fn[() -> Animal]` 收返回 Dog 的函数。"""
+        """签名返回协变保持：`fn[() -> Animal]` 收返回 Dog 的函数。
+
+        注：Dog 的 auto 构造器参数 = 继承链无默认值字段（Animal.a + Dog.d），
+        构造调用须 `Dog(0, 0)`——`Dog()` 缺必填现由编译期拦截（D-1 修复面），
+        本测试关注签名协变而非构造体，故修正为合法构造。
+        """
         code = (
             "class Animal:\n"
             "    int a\n"
             "class Dog(Animal):\n"
             "    int d\n"
             "func g() -> Dog:\n"
-            "    return Dog()\n"
+            "    return Dog(0, 0)\n"
             "fn[() -> Animal] f = g\n"
             "print(1)\n"
         )

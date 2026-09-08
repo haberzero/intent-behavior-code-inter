@@ -92,11 +92,14 @@ print(b.get()) if False else None
 
 class TestInitArityContract:
     def test_init_missing_argument_errors(self, engine):
-        # 参数绑定层（_resolve_call_arguments_runtime）先于 __init__ 契约
-        # 校验拦截缺失实参（签名驱动 fail-fast）
+        # 语义演进（D-1 修复）：显式 __init__ 构造器缺失实参由编译期
+        # SEM_MISSING_REQUIRED_ARG 拦截（带 ibci 源行列）——此前为运行期绑定层
+        # 裸 RuntimeError（无码无行）。触发场景保留，断言随新契约。
         import pytest
 
-        with pytest.raises(RuntimeError):
+        from core.kernel.issue import CompilerError
+
+        with pytest.raises(CompilerError):
             engine.run_string("""
 class C:
     int a
@@ -109,9 +112,12 @@ C c = C(1)
 """, silent=True)
 
     def test_init_extra_argument_errors(self, engine):
+        # 语义演进（D-1 修复）：构造器多参由编译期 SEM_TOO_MANY_POSITIONAL 拦截。
         import pytest
 
-        with pytest.raises(RuntimeError):
+        from core.kernel.issue import CompilerError
+
+        with pytest.raises(CompilerError):
             engine.run_string("""
 class C:
     int a

@@ -81,6 +81,30 @@ class MethodMemberSpec(MemberSpec):
     param_descriptors: List[ParamDescriptor] = field(default_factory=list)
 
 
+def merge_decl_fields(field_maps):
+    """生效字段表：``field_maps`` 为 base → derived 序的 ``{字段名: 值}`` 映射序列，
+    子类同名字段覆盖父类，位置保持首次出现序；返回按生效序的 dict（值 = 最后胜出
+    方的原值，对值类型不透明）。
+
+    编译期（auto 构造器绑定检查：值 = ``(has_default, type_ref)``）与运行期
+    （hydration auto-init：值 = ``has_default`` 布尔）的构造器参数收集共享此单一
+    覆盖/位置规则——双端不各自实现，规则漂移结构性不可能。
+    """
+    effective: dict = {}
+    for fmap in field_maps:
+        effective.update(fmap)
+    return effective
+
+
+def collect_decl_only_fields(field_maps):
+    """构造器须位置参数绑定的字段名：生效字段表中无默认值者（值真值 = 有默认）。
+
+    运行期 hydration auto-init 的字段收集规则（父类优先、子类同名覆盖、仅留无
+    默认值声明字段）；编译期构造器绑定检查经 :func:`merge_decl_fields` 同源。
+    """
+    return [name for name, value in merge_decl_fields(field_maps).items() if not value]
+
+
 @dataclass(frozen=True)
 class ParamDescriptor:
     """

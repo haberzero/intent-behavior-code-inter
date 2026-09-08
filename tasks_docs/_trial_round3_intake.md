@@ -27,7 +27,7 @@
 
 | 项 | 核验结论 | 定性 |
 |----|----------|------|
-| **D-1 fielded 类×LLM 调用 → `VM: missing required argument`（参数名空）** | **根因已定（2026-09-08 实码核验，试用方 min_repro 独立复现 100%）**：非 VM 分派污染（试用方 R183 归因有误——其最小复现 `class Ctx: str tag` + `Ctx c = Ctx()` + `@~` 中，失败点在 **`Ctx()` 构造器调用自身**（traceback 实证：vm_handle_IbAssign→vm_handle_IbCall→_shared.py:179，报错参数名 = 字段名 'tag'））。真实缺陷 = **语义层无类构造器/方法调用静态参数绑定检查**（盲区实证：`Ctx()` 缺必填/`Ctx("a","b")` 多参/`Ctx(x="a")` 未知具名全部编译通过 → 运行期裸 RuntimeError 无码无行）；`Ctx()` 缺必填是 IBCI 合法报错（auto 构造器参数 = 继承链全部无默认值字段，父先子覆写——interpreter.py:908-941 运行期权威），缺陷在诊断质量（裸 RuntimeError 逃诊断体系：无诊断码/无 ibci 源行列/无说明 → 试用方误读为 LLM 分派 bug 并回避 fielded 类 = 数据建模硬阻塞的真相）。普通函数调用静态检查已齐（SEM_MISSING_REQUIRED_ARG 等四码，test_function_params 锁定）；盲区 = 类构造器（auto/explicit __init__）+ 方法调用（现仅 warn 级 SEM_CONTAINER_METHOD_HINT 类型提示，无绑定检查） | **P0 队列首位（定性修正：诊断/语义检查缺陷，非 VM 机制缺陷）**。修复设计 = 语义层暴露构造器/方法的 `param_descriptors` 接入既有 `_resolve_with_descriptors` 统一绑定检查（同一绑定算法 resolve_call_binding + 同一 SEM_* 四码 + ibci 源行列）；auto 构造器签名规则须与运行期 hydration（_collect_chain_decl_only_fields：链上无默认值字段父先子覆写）同源不双写；方法调用同机制补齐（防半修）。运行期裸 RuntimeError 面 = 动态接收者残余面（any 类型接收者），登记为既有错误定位链残余（不扩本轮） |
+| **D-1 fielded 类×LLM 调用 → `VM: missing required argument`（参数名空）** | **根因已定（2026-09-08 实码核验，试用方 min_repro 独立复现 100%）**：非 VM 分派污染（试用方 R183 归因有误——其最小复现 `class Ctx: str tag` + `Ctx c = Ctx()` + `@~` 中，失败点在 **`Ctx()` 构造器调用自身**（traceback 实证：vm_handle_IbAssign→vm_handle_IbCall→_shared.py:179，报错参数名 = 字段名 'tag'））。真实缺陷 = **语义层无类构造器/方法调用静态参数绑定检查**（盲区实证：`Ctx()` 缺必填/`Ctx("a","b")` 多参/`Ctx(x="a")` 未知具名全部编译通过 → 运行期裸 RuntimeError 无码无行）；`Ctx()` 缺必填是 IBCI 合法报错（auto 构造器参数 = 继承链全部无默认值字段，父先子覆写——interpreter.py:908-941 运行期权威），缺陷在诊断质量（裸 RuntimeError 逃诊断体系：无诊断码/无 ibci 源行列/无说明 → 试用方误读为 LLM 分派 bug 并回避 fielded 类 = 数据建模硬阻塞的真相）。普通函数调用静态检查已齐（SEM_MISSING_REQUIRED_ARG 等四码，test_function_params 锁定）；盲区 = 类构造器（auto/explicit __init__）+ 方法调用（现仅 warn 级 SEM_CONTAINER_METHOD_HINT 类型提示，无绑定检查） | **✅ 已修复（2026-09-08，定性修正：诊断/语义检查缺陷 + 运行期 auto-init 回退角落缺陷，非 VM 机制缺陷）**：① 语义层构造器调用静态绑定检查（`registry.get_constructor_descriptors` 单入口：explicit __init__ 精化描述符 / auto = 链上有效无默认值字段，与运行期共享 `merge_decl_fields` 单一规则源；接入统一 `_resolve_with_descriptors`：同一 resolve_call_binding + SEM_* 四码 + ibci 源行列 + kind 感知主语）；② 零参绑定方法 arity 补全（param_types=[] 收集期权威）；③ **运行期 auto-init 回退条件修正**（实施中新发现：链上无必填字段时原回退"继承父构造器"把"子类同名覆盖父类无默认字段为默认值"误判为"链上无字段"——`class Base: str name` + `class Sub(Base): str name = "d"` + `Sub()` 运行期误要求 name，编译期/运行期语义分裂；修正 = 链上有字段 → 零参 auto-init，链上无字段 → 继承祖先显式构造器）；④ 显式内置父（如 `MyList[T](list[T])`）构造器调用动态跳过（auto 字段规则仅适用纯用户类链，防误报）。判别 25 项 + 既有 4 项语义演进 + 全量零回归。残余面（登记不扩）：动态接收者（any 类型 callee）构造器/方法调用仍运行期裁决 |
 | D-2 无多行字符串（三引号 → LEX_UNTERMINATED_STRING ×16） | lexer 无语言级三引号形态（实证）；提示词 = 自动机核心资产，逐行拼接为 round1 以来最高频字符串摩擦 | **P0 语言特性**（LEX/PAR 面 → 全量 pytest 门；语义按 Python 三引号：保留内部换行、转义同单行；`'''` 是否同支持 = 开工设计裁定） |
 | D-3 字符串原语 O(n²)/VM 逐字符 ~1000× 开销 | 实证：试用方 `sub_str` 逐字符拼接 12k 窗口挂起（>180s）；机制栈扫描习语 170-200s vs Python <0.1s。str 原语面缺 count/rfind/find(m,from)/原生切片（D-4 同面） | **P0 内建 str 面扩展**（四件套 O(n) 原生实现，机制栈代码量 -40%+）；**VM 逐字符分派快速路径（D-3.3）= VM 性能架构面 → 长期登记不实施**（不半接通） |
 | D-4 str.find 单参（双参 RUN_TYPE_MISMATCH） | 与 D-3 同面（str 方法表） | 并入 R3-③（find(m,from) 重载 + 12_builtins 同步） |
@@ -91,8 +91,13 @@
 
 ### P0（按序，每步全量 pytest 零回归 + commit + 落账）
 
-1. **R3-① D-1 修复**（KERNEL_ISSUE-VM-2）：mock 确定性复现 → 根因（param spec 名丢失
-   绑定路径）→ 修复 → 判别回归 + 全量零回归。
+1. **R3-① D-1 修复**（KERNEL_ISSUE-VM-2）✅ **已完成（2026-09-08）**：mock 确定性复现
+   （试用方 min_repro 100%）→ 根因（语义层无构造器/方法静态绑定检查 + 运行期
+   auto-init 回退条件把"链上全默认/子类覆盖"误判为"继承父构造器"）→ 修复
+   （编译期构造器描述符单入口 `get_constructor_descriptors` + 零参方法 arity
+   补全 + 运行期回退两形态区分 + 显式内置父动态跳过防误报）→ 判别 25 项
+   （tests/compiler/semantic/test_constructor_call_binding.py）+ 既有 4 项测试
+   语义演进（运行期→编译期，触发场景保留）+ 全量零回归。
 2. **R3-② D-2 三引号多行字符串**：LEX/PAR 语言特性（设计对照 Python 语义 + IBCI
    字面量面统一性）→ 实施 + 判别 + KNOWN_LIMITS/文档同步。
 3. **R3-③ D-3/D-4 str 原语四件套**：count / find(m,from) 重载 / rfind / 原生切片

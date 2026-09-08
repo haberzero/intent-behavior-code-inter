@@ -154,11 +154,19 @@ Dog d = Dog("Rex", 5)
         assert len(init_member.param_types) == 2
 
     def test_arity_error_from_single_authority(self):
-        """参数数量错误经 _init_expected_arity（成员表）统一拦截。"""
+        """构造器参数数量错误编译期统一拦截（D-1 语义演进）。
+
+        此前经 _init_expected_arity（成员表）运行期拦截为裸 RuntimeError（无码
+        无行）；现编译期 SEM_MISSING_REQUIRED_ARG 先行拦截（带 ibci 源行列），
+        成员表声明仍是运行期 arity 校验单一权威（动态 callee 形态仍运行期裁决）。
+        触发场景保留，断言随新契约。
+        """
         import pytest
 
+        from core.kernel.issue import CompilerError
+
         engine = _engine()
-        with pytest.raises(RuntimeError):
+        with pytest.raises(CompilerError):
             _run_class(engine, """
 class Dog:
     str name

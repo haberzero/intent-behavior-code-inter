@@ -1206,6 +1206,37 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `tasks_docs/_trial_round3_intake.md`（逐条核验 + 耦合分析 + 新队列 P0×6/
   P1×6/P2×2/长期×2）；`trials/INDEX.md`（KERNEL_ISSUE-VM-2）/
   `NEXT_STEPS.md`（主线刷新）同步。
+- **R3-① D-1 修复完成（2026-09-08，free-explore）**：KERNEL_ISSUE-VM-2
+  （试用方 R183 上报 D-R183-1）。归因修正：非 VM/LLM 分派污染——失败点在
+  fielded 类零参构造器调用自身（`class Ctx: str tag` + `Ctx()` = auto 构造器
+  缺必填，IBCI 合法报错）；真实缺陷 = 构造器/零参方法调用无编译期静态绑定
+  检查（缺必填/多参/未知具名全编译放行 → 运行期裸 RuntimeError 无码无行，
+  误导试用方误读为内核 bug 并回避 fielded 类）。修复三面：① 编译期构造器
+  描述符单一入口（`registry.get_constructor_descriptors`：explicit __init__
+  精化描述符[descriptors_synced 门防前置引用误报] / auto = 链上有效无默认
+  值字段，与运行期 hydration 共享 `core.kernel.spec.member.merge_decl_fields`
+  单一规则源；接入既有 `_resolve_with_descriptors` 统一绑定检查：同一
+  resolve_call_binding + SEM_* 四码 + ibci 源行列 + kind 感知主语）；② 零参
+  绑定方法 arity 补全（param_types=[] 收集期权威签名——多余实参结构裁决；
+  resolved 独立变量限定路由范围防既有空描述符可调用误入）；③ 运行期
+  auto-init 回退条件修正（实施中新发现的同域角落缺陷：链上无必填字段时原
+  回退把"子类同名覆盖父类无默认字段为默认值"误判为"链上无字段→继承父构造器"
+  ——`Base: str name` + `Sub(Base): str name = "d"` + `Sub()` 运行期误要求
+  name，编译期/运行期语义分裂；修正 = 链上有字段 → 零参 auto-init，链上无
+  字段 → 继承祖先显式构造器，两判据编译期/运行期同构）。边界裁定：显式内置
+  父（`MyList[T](list[T])`）构造器调用动态跳过（auto 字段规则仅适用纯用户类
+  链，内置父原生构造机制按既有运行期边界形态裁决——防误报）；动态接收者
+  （any 类型 callee）残余面登记不扩。变化前后：既有 4 项测试语义演进
+  （运行期 RuntimeError → 编译期 SEM_*，触发场景保留：
+  test_missing_arg_fails_fast / test_arity_error_from_single_authority /
+  test_init_missing_argument_errors / test_init_extra_argument_errors）+
+  1 项 fixture 修正（test_fn_sig_covariant_return_allowed 的 `Dog()` 缺必填
+  潜伏错误 → `Dog(0, 0)`——新检查正确暴露的既有潜伏错误）+ 判别 25 项
+  （test_constructor_call_binding.py：auto/explicit/继承链/默认值排除/子类
+  覆盖/泛型特化/零参方法/防误报面）+ 文档（06_oop auto 构造器节 +
+  KNOWN_LIMITS §六 补编译期绑定检查与两形态边界）。全量 pytest
+  **3563 passed / 1 skipped 零回归**（基线 3534 + 判别 25 + meta 按文件
+  参数化 +4，计数对账一致）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

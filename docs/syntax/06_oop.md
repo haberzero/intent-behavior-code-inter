@@ -109,7 +109,9 @@ print(sb.describe())    # SB:7
 > **自动构造器（无显式 `__init__` 时）**：参数 = 当前类 + 继承链全部无默认值字段
 > （父类优先、子类同名覆盖）——继承特化场景下 `Linked[int](data, tag)` 一并绑定
 > 父类字段。需要自定义构造逻辑（如字段变换、祖先 `__init__` 副作用）时显式写
-> `__init__` + `super`（见 §6.5）。
+> `__init__` + `super`（见 §6.5）。构造器调用的参数绑定错误（缺必填/多参/未知具名）
+> 编译期即报 `SEM_MISSING_REQUIRED_ARG` / `SEM_TOO_MANY_POSITIONAL` /
+> `SEM_UNKNOWN_KEYWORD`（带源行列；auto 构造器签名与运行期同一规则）。
 
 ### 6.5 `super()`
 

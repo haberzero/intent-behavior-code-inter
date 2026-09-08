@@ -647,6 +647,28 @@ class ExpressionVisitorsMixin:
                 node, func_type, descriptors,
                 positional_specs, starred_specs, keyword_specs,
             )
+        # 权威零参签名补全（此前空列表落入策略二/三而免检的两类调用体）：
+        # ① 构造器调用（类名/泛型特化下标 callee：类 spec 本身不携带可调用
+        #    签名——经注册表解析构造器描述符，规则与运行期 auto-init 同源；
+        #    实例 __call__ / LLMCallable 已在 visit_IbCall 提前返回，CLASS 到达
+        #    此处必为构造器调用；空列表 = 零参构造器权威签名，仍走结构检查；
+        #    None = 静态签名不可用 → 回落原策略二/三）。② 零参绑定方法
+        #    （param_types = [] 为收集期权威签名，self 已被 parser 消费不入表
+        #    ——多余实参须结构裁决）。resolved 独立变量限定路由范围——空描述符
+        #    的既有可调用（未同步/无签名）不进入绑定检查，行为不变。
+        if not descriptors:
+            resolved = None
+            if func_type.kind == TypeKind.CLASS.value:
+                resolved = self.registry.get_constructor_descriptors(func_type)
+            elif (func_type.kind == TypeKind.BOUND_METHOD.value
+                    and not (getattr(func_type, "param_types", None) or [])
+                    and (positional_specs or keyword_specs)):
+                resolved = []
+            if resolved is not None:
+                return self._resolve_with_descriptors(
+                    node, func_type, resolved,
+                    positional_specs, starred_specs, keyword_specs,
+                )
 
         param_types = getattr(func_type, "param_types", None) or []
         if not param_types:
@@ -710,6 +732,16 @@ class ExpressionVisitorsMixin:
         本方法把其中性问题映射为 SEM_* 诊断，并对绑定实参做类型校验。
         返回位置实参类型列表（供返回类型推断的近似输入）。
         """
+        # 错误主语按调用体 kind 区分（统一设计语言：同类错误同形态）：类 =
+        # 构造器；绑定方法的 spec name 恒为 "bound_method"（不携带方法名）——
+        # 经调用节点 IbAttribute.attr 取；其余 = 函数。
+        if func_type.kind == TypeKind.CLASS.value:
+            subject = f"Constructor of '{func_type.name}'"
+        elif func_type.kind == TypeKind.BOUND_METHOD.value:
+            attr = getattr(getattr(node, "func", None), "attr", None)
+            subject = f"Method '{attr}'" if attr else "Method"
+        else:
+            subject = f"Function '{func_type.name}'"
         params = [
             ParamDecl(name=d.name, kind=d.kind, has_default=d.has_default)
             for d in descriptors
@@ -739,7 +771,7 @@ class ExpressionVisitorsMixin:
                 )
             elif outcome[0] == "unknown":
                 self.error(
-                    f"Function '{func_type.name}' has no parameter named '{name}'.",
+                    f"{subject} has no parameter named '{name}'.",
                     node, code=SEM_UNKNOWN_KEYWORD,
                 )
 
@@ -771,7 +803,7 @@ class ExpressionVisitorsMixin:
             if issue.code == TOO_MANY_POSITIONAL:
                 if not has_dynamic:
                     self.error(
-                        f"Function '{func_type.name}' expects at most "
+                        f"{subject} expects at most "
                         f"{pos_or_kw_count} positional argument(s), "
                         f"but got {len(positional_specs)}.",
                         node, code=SEM_TOO_MANY_POSITIONAL,
@@ -779,8 +811,7 @@ class ExpressionVisitorsMixin:
             elif issue.code == MISSING_REQUIRED:
                 if not has_dynamic:
                     self.error(
-                        f"Function '{func_type.name}' missing required "
-                        f"argument '{issue.name}'.",
+                        f"{subject} missing required argument '{issue.name}'.",
                         node, code=SEM_MISSING_REQUIRED_ARG,
                     )
 

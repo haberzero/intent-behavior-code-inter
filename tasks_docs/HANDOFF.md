@@ -120,12 +120,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   全集）intake 完成——单点记录 = `tasks_docs/_trial_round3_intake.md`（逐条核验 +
   耦合分析 + 新队列）；`trials/INDEX.md` 补登记 `KERNEL_ISSUE-VM-2`（试用方 R183
   上报的 D-1 fielded 类×LLM 调用 VM 缺陷，此前未入台账 = 流程缺口已修）。
-  按恒高优先原则 round3 P0 插入现有阶段 E 队列之前：**R3-① D-1
-  KERNEL_ISSUE-VM-2 修复[队列首位，mock 确定性复现：fielded 类实例化 + @~ 调用；
-  错误源 _shared.py:179 param spec 名空绑定路径] → R3-② D-2 三引号多行字符串
-  [LEX/PAR 面] → R3-③ D-3/D-4 str 原语四件套[count/find(m,from)/rfind/原生切片
-  O(n)] → R3-④ D-5 stdout 行缓冲/--unbuffered → R3-⑤ R-1+R-3+R-4 run 级可观测
-  子系统[journal append-only + --replay 确定性重放 + run_summary 预算 +
+  按恒高优先原则 round3 P0 插入现有阶段 E 队列之前：**~~R3-① D-1
+  KERNEL_ISSUE-VM-2 修复~~ ✅ 已完成（2026-09-08：编译期构造器/零参方法静态
+  绑定检查 + 运行期 auto-init 回退角落修正 + 显式内置父动态跳过；判别 25 项 +
+  既有 4 项语义演进 + 全量 3563/1 零回归，git 承载）→ R3-② D-2 三引号多行字符串
+  [LEX/PAR 面，当前项] → R3-③ D-3/D-4 str 原语四件套[count/find(m,from)/rfind/
+  原生切片 O(n)] → R3-④ D-5 stdout 行缓冲/--unbuffered → R3-⑤ R-1+R-3+R-4 run
+  级可观测子系统[journal append-only + --replay 确定性重放 + run_summary 预算 +
   --result-json；单一设计文档一批批实施，对照原批 3 C7 消重防双通道]
   → R3-⑥ E1 重做 + R-2a run_file[ihost 子环境整合设计]**；P1 六项（诊断消息
   批[含原 B4] / D-7 裸声明语义 / D-10 json 鲁棒面 / F-2 思考抑制警告可配置 /

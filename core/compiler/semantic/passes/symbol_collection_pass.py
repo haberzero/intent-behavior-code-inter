@@ -520,6 +520,14 @@ class SymbolCollector:
                     member = self.current_class.members.get(name)
                     if member is not None and member.kind == "field":
                         member.metadata["value"] = literal
+                # 字段默认值标记 → MemberSpec.metadata["has_default"]：编译期 auto
+                # 构造器绑定检查的数据源（无默认值字段 = 必填构造器位置参数）。与
+                # 运行期 hydration（val_uid/static_val 判定）同规则，单一源 = 类
+                # 声明（有无初始化表达式）。
+                if self.current_class is not None:
+                    member = self.current_class.members.get(name)
+                    if member is not None and member.kind == "field":
+                        member.metadata["has_default"] = node.value is not None
 
         # 递归扫描（处理嵌套结构）
         self.generic_visit(node)

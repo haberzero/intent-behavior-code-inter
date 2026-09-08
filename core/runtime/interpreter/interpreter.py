@@ -923,7 +923,15 @@ class Interpreter:
                 continue  # 用户显式构造器优先
             field_names = self._collect_chain_decl_only_fields(ib_cls)
             if not field_names:
-                continue  # 链上无无默认值字段：经 lookup_method 继承父类构造器
+                # 链上无"无默认值字段"时区分两形态（与编译期构造器绑定检查同判据）：
+                # ① 链上有字段（全部带默认值——含子类同名把父类无默认字段覆盖为
+                #    有默认值）→ 注册零参 auto-init（构造器参数 = 链上有效无默认
+                #    字段 = 0，覆盖/位置规则与 _collect_chain_decl_only_fields 同源）；
+                # ② 链上根本无字段 → 经 lookup_method 继承祖先显式构造器/Object
+                #    零参构造器（不注册，既有语义）。
+                if not self._chain_has_any_field(ib_cls):
+                    continue
+                field_names = []  # 零参构造器（走下方统一注册）
             # 声明 1：类属性注册字段名清单（共享实现读取）
             ib_cls.auto_init_fields = field_names
             # 声明 2：spec.members['__init__'] 参数签名（成员表权威——
@@ -956,30 +964,43 @@ class Interpreter:
 
         self.current_module_name = old_module
 
-    def _collect_chain_decl_only_fields(self, ib_class) -> list:
-        """收集类构造器需绑定的继承链无默认值字段（父类优先、子类同名覆盖）。
-
-        与 :meth:`instantiate`（ib_class.py ``all_default_fields`` 收集）同构：
-        沿继承链 Object → ... → 自身遍历，子类同名字段覆盖父类；最终仅保留
-        仍为无默认值声明（``IbClassField`` 且 ``val_uid``/``static_val`` 均为空）的
-        字段——这些字段须经构造器位置参数赋值。
-        """
+    @staticmethod
+    def _class_chain(ib_class) -> list:
+        """继承链（自身 → 父类 → ... → 根）。auto-init 规则与链字段探测共用。"""
         chain = []
         cls = ib_class
         while cls is not None:
             chain.append(cls)
-            cls = cls.parent
-        effective = {}
-        for ancestor in reversed(chain):
-            for fname, finfo in ancestor.default_fields.items():
-                effective[fname] = finfo
-        return [
-            fname
-            for fname, finfo in effective.items()
-            if isinstance(finfo, IbClassField)
-            and finfo.val_uid is None
-            and finfo.static_val is None
+            cls = getattr(cls, "parent", None)
+        return chain
+
+    def _collect_chain_decl_only_fields(self, ib_class) -> list:
+        """收集类构造器需绑定的继承链无默认值字段（父类优先、子类同名覆盖）。
+
+        与 :meth:`instantiate`（ib_class.py ``all_default_fields`` 收集）同构：
+        沿继承链 Object → ... → 自身遍历，子类同名字段覆盖父类；仅保留无默认值
+        声明（``IbClassField`` 且 ``val_uid``/``static_val`` 均为空）的字段——这些
+        字段须经构造器位置参数赋值。覆盖/位置规则收敛于共享纯函数
+        ``core.kernel.spec.member.collect_decl_only_fields``（与编译期构造器绑定
+        检查同源，双端不各写一份规则）。
+        """
+        from core.kernel.spec.member import collect_decl_only_fields
+        field_maps = [
+            {
+                fname: (finfo.val_uid is not None or finfo.static_val is not None)
+                for fname, finfo in ancestor.default_fields.items()
+                if isinstance(finfo, IbClassField)
+            }
+            for ancestor in reversed(self._class_chain(ib_class))
         ]
+        return collect_decl_only_fields(field_maps)
+
+    def _chain_has_any_field(self, ib_class) -> bool:
+        """继承链（含自身）是否存在任何字段声明（不论有无默认值）。"""
+        return any(
+            getattr(ancestor, "default_fields", None)
+            for ancestor in self._class_chain(ib_class)
+        )
 
     def _method_declared_spec(self, stmt_uid: str) -> Optional[Any]:
         """方法 def 的声明 spec（函数签名 spec，单一权威）。
