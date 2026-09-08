@@ -114,8 +114,14 @@
    from 语义直接委托 Python 原语（负偏移对等）。判别 27 项
    （test_str_primitives.py）+ 12_builtins §12.2 同步 + 公理层变更全量
    3638/1 零回归。D-3.3（VM 快速路径）维持长期登记。
-4. **R3-④ D-5 stdout 行缓冲/--unbuffered**：ibci print 通道行级 flush（设计对照：
-   默认行缓冲 vs 旗标——以系统一致性定）。
+4. **R3-④ D-5 stdout 行缓冲/--unbuffered** ✅ **已完成（2026-09-08）**：通道
+   实证（CLI run → engine silent=True + output_callback=None → _print → Python
+   print → sys.stdout；缓冲源 = Python 非 TTY 块缓冲非 ibci 累积；无修复态
+   时间戳实证 L1/L2 同刻到达[终止 flush 1.7ms]）；设计裁定 = run 命令默认行级
+   flush 不加旗标（试用方请求二选一；行缓冲=默认底线，旗标=第二通道不设）；
+   实施 = main.py run 分支 sys.stdout.reconfigure(line_buffering=True)；时间隙
+   判别 1 项（第一版 poll() 竞态误过后重构；双向验证）+ 15_diagnostics §诊断
+   工具补 run 输出语义 + 全量 3645/1 零回归。
 5. **R3-⑤ R-1+R-3+R-4 run 级可观测子系统**：设计文档 `_run_observability_design.md`
    （journal append-only + --replay 确定性重放 + run_summary 预算面 + --result-json；
    对照 C7 消重）→ 批次实施 ① journal ② replay ③ budget ④ result-json。

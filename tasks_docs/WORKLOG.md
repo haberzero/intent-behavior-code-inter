@@ -1284,6 +1284,26 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   （本轮四件套消解试用方 90%+ 摩擦而不动执行模型）。
 ---
 
+- **R3-④ D-5 stdout 行缓冲完成（2026-09-08，free-explore）**：试用方
+  round3 需求 D-5（长 run 不可观测：v3 长批次惯例=后台作业+轮询，e34_p6
+  run2 外部 timeout 150s 截断后归档文件只有半程输出——无法区分"慢"与"挂"，
+  误读为网络故障）。通道实证（开工前置）：CLI run → engine.run(silent=True,
+  output_callback=None) → _print → Python print → sys.stdout——缓冲源 =
+  Python 非 TTY stdout 块缓冲（非 ibci 累积）；无修复态时间戳实证：L1/L2
+  同刻到达（进程终止 flush，间隔 1.7ms）= 试用方现象复现。设计裁定：
+  **run 命令默认行级 flush，不加 --unbuffered 旗标**（试用方请求为二选一
+  "行缓冲/flush 或旗标"；ibci print = 行输出语义，可观测性为默认底线；
+  旗标 = 同一目标第二通道，不设）。实施 = main.py run 分支
+  sys.stdout.reconfigure(line_buffering=True)（TTY 本已行缓冲无副作用；
+  非 TTY 管道/重定向 = 每行 print 即时可见）。判别 1 项（subprocess
+  Popen 时间隙判别：L1 到达须早于进程结束 ≥1.5s——循环 ~4s 裕量充分；
+  第一版 poll() 即时性判别实证竞态误过[终止窗口 0.25s 内 poll()=None]后
+  重构为时间隙判定；双向验证：无修复 0.25s 失败 / 带修复通过）。文档
+  15_diagnostics §诊断工具补 run 命令输出语义（CLI 面单点归属）。全量
+  pytest **3645 passed / 1 skipped 零回归**（基线 3638 + 判别 1 + meta
+  按文件参数化 +6，对账一致；新测试 ~5s 入套件总时长）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

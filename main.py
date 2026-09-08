@@ -121,6 +121,15 @@ def main():
     engine = IBCIEngine(root_dir=root_dir)
 
     if args.command == "run":
+        # 输出通道行级 flush：ibci print = 行输出语义，长 run 可观测性为
+        # 默认底线——非 TTY（管道/重定向）stdout 默认块缓冲，行缓冲化后
+        # 每行 print 即时可见（TTY 本已行缓冲，重配置无副作用）。
+        if hasattr(sys.stdout, "reconfigure"):
+            try:
+                sys.stdout.reconfigure(line_buffering=True)
+            except (OSError, ValueError):
+                pass
+
         # 加载命令行变量
         cli_variables = {}
         if getattr(args, 'auto', None):

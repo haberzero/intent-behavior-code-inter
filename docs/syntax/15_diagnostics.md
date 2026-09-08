@@ -19,6 +19,10 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 - **bench**：warmup 后重复编译 N 次，报告 min/avg/max（可加 stdev）；编译失败按诊断码格式报错并以非零码退出。
 - CLI 命令：`inspect` / `semantic`（导出）与 `bench`（基准）。
 
+**run 命令输出**：`python main.py run <entry.ibci>` 的 ibci `print` 输出为**行级 flush**——
+每行 print 即时可见（非 TTY 管道/重定向下同为行缓冲），长 run（LLM 批次 / 大语料
+扫描）进度可观测，可区分"慢"与"挂"。
+
 ### 如何阅读
 
 - **触发条件**：该诊断在何种输入下产生（精确判断）。
