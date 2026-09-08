@@ -1076,6 +1076,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   （零回归；git e855db78）。**阶段 E 批 2 进度**：E2 ✅；剩余 A2 泛型约束 /
   A4 缺省 void / A5 解构 / B2 惰性结构 / B4 编译定位 / C5 思考抑制重估 /
   D1 idbg 增强 / E1 ihost 完善。
+- **A4 缺省 void 实施（2026-09-07，free-explore——阶段 E 批 2）**：
+  ref A4"无显式返回 void/auto | 现无缺省；样板负担"落地——① **func 函数无
+  返回标注 = 缺省 void**（副作用函数声明简化——消 `-> void` 样板；体内
+  return 值丢弃，与显式 `-> void` 同语义；返回值不可赋非 void 变量
+  [void 语义 SEM_TYPE_MISMATCH 拦截]）。此前的缺标注 fail-fast
+  （SEM_MISSING_RETURN_ANNOTATION）所防为隐式 **any**（击穿类型推断与
+  泛型体系——设计注释明确）：**void 缺省返回类型已知，不击穿推断体系**
+  （原则裁定：缺省语义须类型确定——void 确定，any 不成立）。② 显式标注
+  （-> void / -> auto / -> TYPE / -> any）行为不变（4 形态回归）。③
+  lambda 与 llm 行为体保持显式标注要求（值表达式语义——缺失标注仍
+  SEM_MISSING_RETURN_ANNOTATION）。④ 文档 05_functions 返回类型面重写
+  （缺省 void + lambda/llm 严格性边界）。判别测试 +8
+  （test_default_void_return.py：缺省 void 运行 / return 值丢弃 / void 值
+  不可赋 + 显式四形态 + lambda 缺标注仍报错）。全量 pytest 基线 3507 →
+  **3520 passed / 1 skipped**（零回归；git 8ed6d189）。**阶段 E 批 2
+  进度**：E2 ✅ / A4 ✅；剩余 A2 泛型约束 / A5 解构 / B2 惰性结构 / B4
+  编译定位 / C5 思考抑制重估 / D1 idbg 增强 / E1 ihost 完善。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

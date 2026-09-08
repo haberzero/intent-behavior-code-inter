@@ -90,7 +90,7 @@ provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4
 | A1 | 用户自定义协议/类型类一等公民 | ✅ **已核验（2026-09-07）**：机制已落地（ref 宣称过期）——协议声明（protocol Name: + 方法签名 pass 体）/ 结构判定满足（satisfies_protocol 用户协议路径）/ 类型参数 bound（T: Shape 符合/违约编译期 fail-fast）/ 协议继承（protocol Child(Parent)）；文档 06_oop 协议节已存在；回归锁定 tests/compiler/test_user_protocols.py（4 判别） | 批 1（P0） |
 | A2 | 泛型约束/泛型函数 | 当前泛型无约束；§3.4 重合 | 批 2 |
 | A3 | 多行容器字面量尾逗号 | PAR 语法面变更；**触及语义错误集，须全量 pytest 评估破坏面** | 批 1（P0） |
-| A4 | 无显式返回缺省 void/auto | 现无缺省；样板负担 | 批 2 |
+| A4 | 无显式返回缺省 void/auto | ✅ **已落地（2026-09-07）**：func 函数无标注 = 缺省 void（消样板；return 值丢弃同 -> void；void 值不可赋拦截）；显式四形态不变；lambda/llm 行为体保持显式要求[值表达式语义]；05_functions 文档重写；判别 +8 | 批 2 |
 | A5 | 结构化解构/模式匹配 | 与 VISION-4 `match` 方向重合，整合推进 | 批 2 |
 | A6 | Enum/tagged union 增强 | 与 VISION-4 ADT 方向重合，整合推进 | 批 3 |
 | B1 | 运行时错误携带 ibci 源码行号 | RUN_* 诊断有码无行，traceback 全 Python 帧（本 session 冒烟实证 RUN_INDEX_ERROR）；诊断体系承载增强 | 批 1（P0） |
