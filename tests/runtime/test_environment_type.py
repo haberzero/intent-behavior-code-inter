@@ -144,3 +144,43 @@ class TestSerializationRoundTrip:
             'print("m=" + m + " c=" + (str)c + " it=" + (str)it)\n',
             output_callback=out.append, silent=True)
         assert out and "m=draft c=7 it=[a, b]" in out[0]
+
+
+class TestFrameEnvironmentSerialization:
+    """E2：save_state/load_state 覆盖帧级环境状态（当前环境 frames 栈）。"""
+
+    def test_save_load_restores_saved_state(self, engine):
+        """save（保存当前环境）→ 当前环境变异 → load → 恢复保存态。"""
+        out = []
+        engine.run_string(
+            "import ihost\n"
+            "environment e = environment()\n"
+            'e.set("phase", "init")\n'
+            "environment.use(e)\n"
+            'ihost.save_state("./logs/env_frame_rt.json")\n'
+            "environment cur = environment.get_current()\n"
+            'cur.set("phase", "mutated")\n'
+            'ihost.load_state("./logs/env_frame_rt.json")\n'
+            "environment after = environment.get_current()\n"
+            'str phase = (str)after.get("phase")\n'
+            'print("phase=" + phase)\n',
+            output_callback=out.append, silent=True)
+        assert out and "phase=init" in out[0]
+
+    def test_frame_env_key_value_fidelity(self, engine):
+        """帧环境键值保真（int/str 值经 save/load 不变）。"""
+        out = []
+        engine.run_string(
+            "import ihost\n"
+            "environment e = environment()\n"
+            'e.set("k", 1)\n'
+            'e.set("name", "env-val")\n'
+            "environment.use(e)\n"
+            'ihost.save_state("./logs/env_frame_kvs.json")\n'
+            'ihost.load_state("./logs/env_frame_kvs.json")\n'
+            "environment cur = environment.get_current()\n"
+            'int v = (int)cur.get("k")\n'
+            'str n = (str)cur.get("name")\n'
+            'print("v=" + (str)v + " n=" + n)\n',
+            output_callback=out.append, silent=True)
+        assert out and "v=1 n=env-val" in out[0]

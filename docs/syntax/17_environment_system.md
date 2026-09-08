@@ -45,9 +45,10 @@ list   ks  = e.keys()        # 全部帧键并集（内→外序，去重）
 - **值类型**：帧值以原生形态存储（`any`）。用户类实例值经 `to_native`
   结构降级存储（读回为原生容器结构，非原类实例）——需要用户类身份保真的
   场景应直接持有类实例变量，而非存入环境。
-- **序列化**：`save_state`/`load_state` 保真 environment 实例（frames 键值
-  + 嵌套容器值）；水化后实例身份共享（池引用），与 intent_context 序列化
-  同构。
+- **序列化**：`save_state`/`load_state` 保真 environment **实例**（frames 键值
+  + 嵌套容器值）与**帧级环境状态**（当前环境 frames 栈——save 时收集，
+  load 时以保存态替换当前环境；恢复后当前环境独立于快照池副本，
+  与 intent_context 序列化同构）；水化后实例身份共享（池引用）。
 - **无隐式路由**：environment 是普通值——引擎不提供任何"环境命中则跳过
   LLM"的隐式语义（`@~...~` 语义不变量，同 knowledge 铁律）。
 

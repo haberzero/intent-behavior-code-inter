@@ -59,12 +59,17 @@ class RuntimeSerializer(BaseFlatSerializer):
         if active is not None:
             active_intent_ibobj_uid = self._collect_instance(active)
 
+        # 帧级一等环境状态（B3/E2）：当前环境（frames 栈）快照。
+        # 空环境亦收集（frames=[] 保真——恢复端与未保存区分无歧义）。
+        environment_uid = self._collect_environment(context.current_environment)
+
         return {
             "version": "2.1",
             "root_scope_uid": root_scope_uid,
             "global_intents": context.get_global_intents(),
             "intent_ctx_uid": full_intent_ctx_uid,
             "active_intent_ibobj_uid": active_intent_ibobj_uid,
+            "environment_uid": environment_uid,
             "pools": pools
         }
 
@@ -622,6 +627,14 @@ class RuntimeDeserializer:
                     if get_intent_ctx(active_obj) is not context.intent_context:
                         set_intent_ctx(active_obj, context.intent_context)
                 context.set_active_intent_ibobj(active_obj)
+
+        # 帧级一等环境状态恢复（B3/E2）：以保存的 frames 栈替换当前环境
+        #（use_environment fork 语义——恢复后当前环境独立于池内副本）。
+        env_uid = data.get("environment_uid")
+        if env_uid:
+            restored_env = self._get_environment(env_uid)
+            if restored_env is not None:
+                context.use_environment(restored_env)
 
         # 闭包 cell 重链 post-pass：作用域树与全部可达实例恢复完成后执行。
         self._relink_cells()
