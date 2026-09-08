@@ -90,7 +90,7 @@ class TestIdbgSpec:
         assert "protection_map" in members
         assert "show_retry_stack" in members
         assert "show_protection_map" in members
-        assert "show_env" in members
+        assert "show_runtime" in members
 
 
 class TestIdbgProtectionMap:

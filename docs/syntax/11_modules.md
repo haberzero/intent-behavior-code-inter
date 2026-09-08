@@ -157,8 +157,9 @@ idbg.protection_map()    # 返回 llmexcept 保护映射（target_uid -> handler
 idbg.show_protection_map() # 打印 llmexcept 保护映射
 idbg.intents()           # 返回当前意图栈列表
 idbg.show_intents()      # 打印当前意图栈
-idbg.env()               # 返回当前运行环境信息
-idbg.show_env()          # 打印当前运行环境信息
+idbg.runtime()           # 返回当前运行环境信息（调用栈深度 + 活跃意图；
+                         #   原名 env 与"OS 环境变量"同名不同物，已改名消歧）
+idbg.show_runtime()      # 打印当前运行环境信息
 idbg.fields(obj)         # 返回对象所有字段
 ```
 
@@ -180,7 +181,14 @@ dict result = ihost.collect(handle)   # 等待子环境完成，返回子环境�
 ihost.save_state(path)                # 保存当前状态
 ihost.load_state(path)                # 加载状态
 str src = ihost.get_source()          # 获取当前入口源码
+str val = ihost.getenv("SOME_KEY")    # 读取宿主 OS 环境变量（缺失返回空串）
 ```
+
+> **OS 环境变量通道**：`ihost.getenv(key)` 是 IBCI 脚本读取宿主 OS 环境变量的
+> 一等语言面通道（缺失返回空串，对齐 `os.getenv(key, "")` 语义——语言层 str
+> 类型无需空值分支）。高级/任意宿主 API 仍可经宿主绑定
+> （`import python "os" as oslib: bind getenv(...) -> str`）直接访问，`ihost.getenv`
+> 是常用路径的便捷面。
 
 子环境完全独立（独立 Engine 实例、构造期自行注册同一组内置模块、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境经 `ai.load_project_config()` 按自身 `project_root` 显式加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json` 并调用 `ai.load_project_config()`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
 

@@ -9,13 +9,12 @@
 # expect-exit: 0
 # expect-llm: true
 import ai
-import python "os" as oslib:
-    bind getenv(key: str) -> str
+import ihost
 ai.load_project_config()
 
-str key = oslib.getenv("IBCI_TRIAL_LLM_KEY")
-str url = oslib.getenv("IBCI_TRIAL_LLM_URL")
-str model_id = oslib.getenv("IBCI_TRIAL_LLM_MODEL")
+str key = ihost.getenv("IBCI_TRIAL_LLM_KEY")
+str url = ihost.getenv("IBCI_TRIAL_LLM_URL")
+str model_id = ihost.getenv("IBCI_TRIAL_LLM_MODEL")
 ai.register_model("LOCAL1", url, key, model_id)
 str t = @LOCAL1~ 用一个词形容太阳 ~
 print("t=" + t)

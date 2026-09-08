@@ -13,6 +13,7 @@ IHost 是 IBCI 核心级插件（Core-Level Plugin）：
 - load_state(path)       恢复运行现场
 - run_isolated(path, policy)  在隔离环境中运行另一个 .ibci 脚本
 - get_source()           获取当前模块源代码（元编程）
+- getenv(key)            读取宿主 OS 环境变量（缺失返回空串）
 """
 from typing import Any, Dict, Optional
 from core.extension.ibcext import IbPlugin, ExtensionCapabilities
@@ -80,6 +81,13 @@ class IHostPlugin(IbPlugin):
         hs = self._host_service()
         if hs:
             return hs.get_source()
+        return ""
+
+    def getenv(self, key: str) -> str:
+        """读取宿主 OS 环境变量（缺失返回空串）。"""
+        hs = self._host_service()
+        if hs:
+            return hs.getenv(key)
         return ""
 
     # ------------------------------------------------------------------

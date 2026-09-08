@@ -62,16 +62,19 @@ mock 模式：`defaults.mock: true`（用例无需真实调用时用；无 LLM �
 
 ## 五、命名路由用例的密钥通道
 
-- 硬编码端点凭据的用例（如 T01 `D1-07-006`、T08 `D5-03`）经宿主绑定读取环境变量
-  （变量名本机事实见 `AGENTS.local.md`）作为密钥——**tracked 用例文件不得包含真实密钥**：
+- 硬编码端点凭据的用例（如 T01 `D1-07-006`、T08 `D5-03`）经 `ihost.getenv`
+  读取环境变量（变量名本机事实见 `AGENTS.local.md`）作为密钥——**tracked
+  用例文件不得包含真实密钥**：
 
 ```ibci
-import python "os" as oslib:
-    bind getenv(key: str) -> str
-str key = oslib.getenv("<本机环境变量名>")
+import ihost
+str key = ihost.getenv("<本机环境变量名>")
 ai.register_model("NAME", "<端点>", key, "<模型>")
 ```
 
+- `ihost.getenv(key)` 是宿主 OS 环境变量的一等语言面通道（缺失返回空串）。
+  任意宿主 API 仍可经宿主绑定（`import python "os" as oslib: bind getenv(...)`）
+  直接访问——`ihost.getenv` 是常用路径的便捷面，绑定是通用底层手段。
 - 运行此类用例前导出该变量（本机导出行见 `AGENTS.local.md`）。
 
 ## 六、用例分层与耗时预算

@@ -169,7 +169,7 @@ class TestImportStarContract:
             silent=True,
         )
         assert out, "expected vars() callable via import * (uid 未对齐会 RUN_UNDEFINED_VARIABLE)"
-        assert "current_llm" in out[0] and "show_env" in out[0], out[0]
+        assert "current_llm" in out[0] and "show_runtime" in out[0], out[0]
 
     def test_import_star_does_not_leak_protocol_methods(self):
         """import * 只导出 spec 成员，不泄漏 setup/expose/plugin_id 等协议方法。"""
@@ -186,7 +186,7 @@ class TestImportStarContract:
         eng.run_string('from idbg import *\n', silent=True)
         rt = eng.interpreter.runtime_context
         sym_names = set(rt.get_vars().keys())
-        for member in ("vars", "env", "show_env", "current_llm", "print_vars"):
+        for member in ("vars", "runtime", "show_runtime", "current_llm", "print_vars"):
             assert member in sym_names, f"spec member missing via import *: {member}"
 
 

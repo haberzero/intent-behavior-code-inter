@@ -302,3 +302,9 @@ class HostService(IHostService):
         if provider:
             return provider.get_module_source(current_mod) or ""
         return ""
+
+    def getenv(self, key: str) -> str:
+        """读取宿主 OS 环境变量（一等语言面通道；缺失返回空串——
+        对齐 os.getenv(key, "") 语义，语言层 str 类型无需空值分支）。"""
+        import os
+        return os.environ.get(key, "")

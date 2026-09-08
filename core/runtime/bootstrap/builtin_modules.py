@@ -252,6 +252,11 @@ _SPEC_IHOST = TypeDef(name="ihost", kind="module", provenance=Provenance.KERNEL_
                 ParamDescriptor(name="handle", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
             ]),
         "get_source": MethodMemberSpec(name="get_source", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),
+        "getenv": MethodMemberSpec(name="getenv", kind="method", type_ref=TypeRef.of("str"), param_types=[
+                TypeRef.of("str")
+            ], return_type=TypeRef.of("str"), param_descriptors=[
+                ParamDescriptor(name="key", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
     })
 
 
@@ -269,8 +274,8 @@ _SPEC_IDBG = TypeDef(name="idbg", kind="module", provenance=Provenance.KERNEL_NA
         "show_protection_map": MethodMemberSpec(name="show_protection_map", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
         "intents": MethodMemberSpec(name="intents", kind="method", type_ref=TypeRef.of("list"), return_type=TypeRef.of("list")),
         "show_intents": MethodMemberSpec(name="show_intents", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
-        "env": MethodMemberSpec(name="env", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
-        "show_env": MethodMemberSpec(name="show_env", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
+        "runtime": MethodMemberSpec(name="runtime", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
+        "show_runtime": MethodMemberSpec(name="show_runtime", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
         "fields": MethodMemberSpec(name="fields", kind="method", type_ref=TypeRef.of("dict"), param_types=[
                 TypeRef.of("any")
             ], return_type=TypeRef.of("dict"), param_descriptors=[

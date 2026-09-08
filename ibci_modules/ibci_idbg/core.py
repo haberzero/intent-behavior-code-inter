@@ -207,7 +207,7 @@ class IDbgPlugin(IbPlugin):
         print()
         self.show_retry_stack()
         print()
-        self.show_env()
+        self.show_runtime()
         print()
         self.show_protection_map()
         print()
@@ -292,10 +292,10 @@ class IDbgPlugin(IbPlugin):
                     f"raw={lr.get('raw_response')}"
                 )
 
-    def show_env(self):
+    def show_runtime(self):
         """直接打印当前运行环境信息。"""
         print("[IDBG] 运行环境:")
-        env_info = self.env()
+        env_info = self.runtime()
         if not env_info:
             print("  (无可用信息)")
             return
@@ -344,7 +344,7 @@ class IDbgPlugin(IbPlugin):
         for idx, i in enumerate(intents):
             print(f"  [{idx}] {i['mode']} | {i['role']} | {i['content']}")
 
-    def env(self) -> Dict[str, Any]:
+    def runtime(self) -> Dict[str, Any]:
         si = self._stack_inspector()
         if not si:
             return {}

@@ -1,6 +1,6 @@
-# D3-61 idbg.fields / show_all / env（文档化 idbg API）
+# D3-61 idbg.fields / show_all / runtime（文档化 idbg API）
 # doc: docs/syntax/11_modules.md §11.5
-# 期望: fields(obj)/show_all/env 正常
+# 期望: fields(obj)/show_all/runtime 正常
 
 # expect-class: PASS
 # expect-out: fields_ok=[x, y]
@@ -19,7 +19,7 @@ Point p = Point(1, 2)
 dict fields = idbg.fields(p)
 print("fields_ok=" + (str)fields.keys())
 
-dict env = idbg.env()
+dict env = idbg.runtime()
 print("env_ok=" + (str)env.keys())
 idbg.show_all()
 print("DONE")
