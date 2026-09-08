@@ -136,11 +136,21 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   池登记 + atexit shutdown + None 终止哨兵；MockServer daemon_threads=True）；
   **Tier B 质量巡检**（范围常量单点化 + 残留扫描 + 注释纪律）；**无目的审视清单新起**
   （4 条潜在参考）。全量 pytest 基线 **3447 passed / 1 skipped**（本段 +47，全程零
-  回归）。**剩余被动项**：#33（_pending_futures 长会话累积——依赖 KERNEL_ISSUE-LLM-5
+  回归）。**阶段 E 批次推进（2026-09-07 轮）**：**T2 环境变量一等通道**（ihost.getenv
+  缺失返回空串——HostService/插件委托链 + spec 成员；用例收敛 T01/T08 真实端点验证；
+  idbg.env/show_env → runtime/show_runtime 改名消歧——语言面破坏性变更旧名运行期
+  RUN_ATTRIBUTE_ERROR）+ **C2 结构化 LLM 输出契约边缘补齐**（边缘核验发现 dict 容器
+  expected_type 不可用——根因 MOCK:STR 值指令首 token 截断：全量回显语义修复
+  [空格/冒号/JSON 忠实回显] + 控制指令 SLEEP/ERROR 内容解析前剥离 [组合指令正交]；
+  裸容器名 list/dict JSON 解析可用 + 08_llm_callable/13_mock_testing 文档 + 回归
+  +14）。基线 **3474 passed / 1 skipped**。
+  **剩余被动项**：#33（_pending_futures 长会话累积——依赖 KERNEL_ISSUE-LLM-5
   同子系统）+ KERNEL_ISSUE-LLM-5（llm 可调用类赋值约 1/6 竞态——事件驱动监视复发，
   近期运行无复发）；远程 CI 启用（用户裁定暂不启动，需显式授权）；阶段 D 远期演进
-  （VISION-4/5/1——试用稳定后）。详见 `tasks_docs/NEXT_STEPS.md` + `tasks_docs/WORKLOG.md`
-  （本段完整记录）+ git log（本段 15+ commit）。
+  （VISION-4/5/1——试用稳定后）。**阶段 E 批次 1 剩余队列**：C3（用户模块路径解析
+  定案——KERNEL_ISSUE-IMPORT-2 锚点语义）/ A1（用户自定义协议一等公民）/ B3
+  （一等环境对象）；批次 2/3 见 `tasks_docs/_next_phase_targets.md` §三。详见
+  `tasks_docs/NEXT_STEPS.md` + `tasks_docs/WORKLOG.md`（本段完整记录）+ git log。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
   规划已读）；**push 已获用户显式授权并执行**（本地 28 提交 `b2322214..e1a9b3d9` 推送
