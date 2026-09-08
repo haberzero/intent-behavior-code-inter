@@ -163,9 +163,10 @@ class StatementVisitorsMixin:
                 src_name = getattr(val_type, 'name', str(val_type))
                 tgt_name = getattr(target_type, 'name', str(target_type))
                 hint = self.registry.get_diff_hint(val_type, target_type)
+                # 定位 = RHS 值节点（实际违约源）——比整条语句行首更精确
                 self.error(
                     f"Cannot assign '{src_name}' to '{tgt_name}'",
-                    node, code=SEM_TYPE_MISMATCH, hint=hint
+                    node.value, code=SEM_TYPE_MISMATCH, hint=hint
                 )
 
             # 绑定类型
@@ -199,9 +200,10 @@ class StatementVisitorsMixin:
             # 类型兼容性检查
             if target_type and not self.is_assignable(val_type, target_type):
                 hint = self.registry.get_diff_hint(val_type, target_type)
+                # 定位 = RHS 值节点（实际违约源）——比整条语句行首更精确
                 self.error(
                     f"Cannot assign '{getattr(val_type, 'name', str(val_type))}' to '{getattr(target_type, 'name', str(target_type))}'",
-                    node, code=SEM_TYPE_MISMATCH, hint=hint
+                    node.value, code=SEM_TYPE_MISMATCH, hint=hint
                 )
 
             # 下标/属性赋值 RHS 容器字面量绑定目标特化类型（m[0] = [9] 且

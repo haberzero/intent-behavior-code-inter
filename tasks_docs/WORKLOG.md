@@ -1428,6 +1428,26 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   （全量 **3770 passed / 1 skipped 零回归**——仅重构无新增测试，计数持平）。
 ---
 
+- **R3-⑦ 诊断消息批完成（2026-09-08，free-explore）**：round3 P1 首项
+  （D-6 顶层缩进提示 + D-8 小写布尔 did-you-mean + 原批 2 B4 编译定位并入）。
+  核验面：D-8 既有已修（symbol_resolution_pass did-you-mean 面已存在——
+  "Did you mean 'True'? IBCI boolean/null literals are capitalized"；intake
+  时点前落地）= 本批锁定防回归。实施面：① D-6——parse_precedence 遇
+  INDENT/DEDENT 期望表达式 = 缩进结构错乱 → stream.error 增 hint 参数
+  （tracker 既有 hint 面）+ 定向提示"顶层语句须顶格（列 0）/ 块内同级缩进
+  一致"（码面 PAR_UNEXPECTED_TOKEN 不变，提示定向不泛化——非缩进类语法
+  错误无提示）；② B4——赋值型 SEM_TYPE_MISMATCH 定位精化 = RHS 值节点
+  （实际违约源：变量/属性/下标两赋值路径 node → node.value）——实证前态
+  `int x = "abc"` 定位 line 1 col 1（语句行首）→ 后态 col 9（"abc" 字面量）；
+  二元运算定位（运算符位置）已精确不变。文档 15_diagnostics 三条目同步
+  （PAR_UNEXPECTED_TOKEN 缩进提示 / SEM_UNDEFINED_SYMBOL 大小写 did-you-mean
+  / SEM_TYPE_MISMATCH 定位面说明）。判别 8 项（test_diagnostic_precision.py：
+  D-6 提示 2 项[D-6 有提示/非缩进无提示定向性] + D-8 锁定 3 项[true/false/none
+  参数化] + B4 定位 3 项[变量 RHS/属性 RHS 精确列/调用 RHS 行]）。
+  全量 pytest **3783 passed / 1 skipped 零回归**（基线 3770 + 判别 8 +
+  meta 按文件参数化增长）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

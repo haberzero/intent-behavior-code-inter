@@ -149,8 +149,13 @@
 
 ### P1（按序）
 
-7. **R3-⑦ 诊断消息批**：D-6 顶层缩进说明 + D-8 true/false/None did-you-mean + 原批 2
-   B4 编译定位并入。
+7. **R3-⑦ 诊断消息批** ✅ **已完成（2026-09-08）**：D-6 顶层缩进 PAR 诊断附定向
+   缩进修复提示（stream.error hint 面；定向不泛化）；D-8 小写布尔/空字面量
+   did-you-mean（核验 = 既有已修面——intake 时点前落地，本批锁定防回归
+   [true/false/none 参数化判别]）；B4 编译定位精化（赋值型 SEM_TYPE_MISMATCH
+   定位 = RHS 值节点[实际违约源]——变量/属性/下标两路径；实证 col 1 行首 →
+   col 9 字面量）。文档 15_diagnostics 三条目同步。判别 8 项；全量 3783/1
+   零回归。
 8. **R3-⑧ D-7 裸声明语义**：设计对照（零值缺省 vs 精确诊断 vs 编译期检查）→ 裁定实施。
 9. **R3-⑨ D-10 json.parse 鲁棒面**：数组直 parse + parse_or_none 显式形态（消 print
    副作用，fail-fast 形态）。

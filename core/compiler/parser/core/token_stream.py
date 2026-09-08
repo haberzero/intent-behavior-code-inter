@@ -93,7 +93,7 @@ class TokenStream:
             if success:
                 old_tracker.merge(temp_tracker)
 
-    def error(self, token: Token, message: str, code: str = PAR_EXPECTED_TOKEN) -> Exception:
+    def error(self, token: Token, message: str, code: str = PAR_EXPECTED_TOKEN, hint: Optional[str] = None) -> Exception:
         # 位置归位：token 带跨行续行标记（生成时处于未闭合括号构造内且
         # 与构造起点不同行）时，失败卡住点在续行行会误导用户——错误位置
         # 归位到构造起点（最内层未闭合开括号位置）。同行错误维持卡住点
@@ -105,7 +105,8 @@ class TokenStream:
                 message,
                 Location(file_path=None, line=line, column=col),
                 code=code,
+                hint=hint,
             )
         else:
-            self.issue_tracker.error(message, token, code=code)
+            self.issue_tracker.error(message, token, code=code, hint=hint)
         return ParseControlFlowError()

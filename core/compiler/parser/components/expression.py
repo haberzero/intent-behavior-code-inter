@@ -34,7 +34,17 @@ class ExpressionComponent(BaseComponent):
         rule = self.get_rule(token.type)
         prefix = rule.prefix
         if prefix is None:
-            raise self.stream.error(token, f"Expect expression. Got {token.type}", code=PAR_UNEXPECTED_TOKEN)
+            # INDENT/DEDENT 处期望表达式 = 缩进结构错乱（顶层缩进 / 块内
+            # 缩进层级不符）——附定向修复提示（码面精确但用户不知如何修）
+            indent_hint = (
+                "缩进结构错误：IBCI 以缩进界定代码块——顶层语句须顶格（列 0）；"
+                "块内语句须与同级语句缩进一致"
+                if token.type in (TokenType.INDENT, TokenType.DEDENT) else None
+            )
+            raise self.stream.error(
+                token, f"Expect expression. Got {token.type}",
+                code=PAR_UNEXPECTED_TOKEN, hint=indent_hint,
+            )
         
         left = prefix()
         
