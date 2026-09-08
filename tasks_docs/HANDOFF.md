@@ -123,8 +123,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   按恒高优先原则 round3 P0 插入现有阶段 E 队列之前：**~~R3-① D-1
   KERNEL_ISSUE-VM-2 修复~~ ✅ 已完成（2026-09-08：编译期构造器/零参方法静态
   绑定检查 + 运行期 auto-init 回退角落修正 + 显式内置父动态跳过；判别 25 项 +
-  既有 4 项语义演进 + 全量 3563/1 零回归，git 承载）→ R3-② D-2 三引号多行字符串
-  [LEX/PAR 面，当前项] → R3-③ D-3/D-4 str 原语四件套[count/find(m,from)/rfind/
+  既有 4 项语义演进 + 全量 3563/1 零回归，git 承载）→ ~~R3-② D-2 三引号多行字符串~~ ✅ 已完成（2026-09-08：IN_TRIPLE_STRING
+  态 + 转义共享 _apply_string_escape + 既有缺陷修复[字符串内置位
+  continuation_mode 泄漏]；判别 36 项 + 全量 3605/1 零回归）
+  → R3-③ D-3/D-4 str 原语四件套（当前项）[count/find(m,from)/rfind/
   原生切片 O(n)] → R3-④ D-5 stdout 行缓冲/--unbuffered → R3-⑤ R-1+R-3+R-4 run
   级可观测子系统[journal append-only + --replay 确定性重放 + run_summary 预算 +
   --result-json；单一设计文档一批批实施，对照原批 3 C7 消重防双通道]

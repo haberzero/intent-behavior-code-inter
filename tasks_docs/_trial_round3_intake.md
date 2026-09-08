@@ -98,8 +98,14 @@
    补全 + 运行期回退两形态区分 + 显式内置父动态跳过防误报）→ 判别 25 项
    （tests/compiler/semantic/test_constructor_call_binding.py）+ 既有 4 项测试
    语义演进（运行期→编译期，触发场景保留）+ 全量零回归。
-2. **R3-② D-2 三引号多行字符串**：LEX/PAR 语言特性（设计对照 Python 语义 + IBCI
-   字面量面统一性）→ 实施 + 判别 + KNOWN_LIMITS/文档同步。
+2. **R3-② D-2 三引号多行字符串** ✅ **已完成（2026-09-08）**：双形态
+   同构（双/单三引号定界均支持）+ raw 前缀正交 + 值语义对照 Python（换行
+   保留含首个换行、缩进保留、闭合=连续三引号、转义表与单行同一规则源
+   [_apply_string_escape 共享]、反斜杠+换行=拼接）；实施 = LEX 层
+   IN_TRIPLE_STRING 态（机制同构：多行构造独立 SubState 先例 = IN_BEHAVIOR）；
+   同路径既有缺陷修复（字符串内置位 continuation_mode 泄漏吞声明收尾换行
+   → PAR_EXPECTED_TOKEN，实证触发后移除字符串内置位）；判别 36 项 +
+   文档（01_types §1.1.1 字符串字面量权威节）+ 全量 3605/1 零回归。
 3. **R3-③ D-3/D-4 str 原语四件套**：count / find(m,from) 重载 / rfind / 原生切片
    （O(n) 单次分配）→ 内建 str vtable 面 + 12_builtins 同步 + 判别。
 4. **R3-④ D-5 stdout 行缓冲/--unbuffered**：ibci print 通道行级 flush（设计对照：

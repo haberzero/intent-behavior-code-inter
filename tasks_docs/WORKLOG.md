@@ -1239,6 +1239,29 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   参数化 +4，计数对账一致）。
 ---
 
+- **R3-② D-2 三引号多行字符串完成（2026-09-08，free-explore）**：试用方
+  round3 需求 D-2（v3 统一自动机高频摩擦：提示词是核心资产，LEX_UNTERMINATED_
+  STRING ×16 实证）。设计裁定：双形态同构（双/单三引号定界均支持——与 Python
+  同构、扫描器零额外成本）；raw 前缀正交（r 前缀 + 三引号定界）；值语义对照
+  Python（换行保留含开定界符后首个换行、无 docstring 式剥离；缩进保留；
+  闭合 = 连续三引号；转义表与单行同一规则源；反斜杠+换行 = 拼接）。实施面
+  （core/compiler/lexer/：tokens.py SubState + IN_TRIPLE_STRING；core_scanner.py
+  字符串开启统一 _open_string[单行/三引号/正交 raw 单一入口]、_scan_triple_
+  string_char[三引号态字符扫描]、_handle_newline 三引号分支[换行入值]、
+  check_eof_state 三引号分支、转义逻辑抽取共享 _apply_string_escape[单行/
+  三引号同一规则源，不双写]）。**同路径既有缺陷修复**（实施中实证发现）：
+  字符串内反斜杠+换行续行此前泄漏语句级 continuation_mode 标志（字符串
+  token 跨物理行由 _handle_newline 返回 False 机制承载，两机制本不混用）→
+  字符串收尾后声明终止换行被 _handle_newline case 4 吞掉（无 NEWLINE token）→
+  PAR_EXPECTED_TOKEN（单行串 `str s = "abc\\<nl>def"` 顶层声明此前必挂——
+  缺陷触发实证后修复：移除字符串内置位，NORMAL 态语句级续行路径不变）。判别
+  36 项（tests/compiler/test_lexer.py +14：token 值/位置/边界形态；
+  tests/e2e/test_triple_quoted_strings.py +22：值语义精确断言[eq 模式]/既有
+  缺陷修复面/对照面/未闭合错误码）+ 文档（01_types §1.1.1 字符串字面量
+  权威节——四种形态+三引号语义，此前无此节）。全量 pytest **3605 passed /
+  1 skipped 零回归**（基线 3563 + 判别 36 + meta 按文件参数化增长，对账一致）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -164,6 +164,8 @@ class CoreTokenScanner:
                 self._scan_normal_char(tokens)
             elif self.sub_state == SubState.IN_STRING:
                 self._scan_string_char(tokens)
+            elif self.sub_state == SubState.IN_TRIPLE_STRING:
+                self._scan_triple_string_char(tokens)
             elif self.sub_state == SubState.IN_BEHAVIOR:
                 self._scan_behavior_char(tokens)
             elif self.sub_state == SubState.IN_INTENT:
@@ -175,6 +177,8 @@ class CoreTokenScanner:
         """Check for unclosed states at EOF."""
         if self.sub_state == SubState.IN_STRING:
             self.issue_tracker.error("Unexpected EOF while scanning string literal", self.scanner, code=LEX_UNTERMINATED_STRING)
+        elif self.sub_state == SubState.IN_TRIPLE_STRING:
+            self.issue_tracker.error("Unexpected EOF while scanning triple-quoted string literal", self.scanner, code=LEX_UNTERMINATED_STRING)
         elif self.sub_state == SubState.IN_BEHAVIOR:
             self.issue_tracker.error("Unexpected EOF while scanning behavior description", self.scanner, code=LEX_UNTERMINATED_BEHAVIOR)
 
@@ -189,7 +193,12 @@ class CoreTokenScanner:
         if current_state == SubState.IN_STRING:
             self._scan_string_char(tokens)
             return False
-        
+
+        # Case 1b: In triple-quoted string — 换行是字符串值的一部分
+        elif current_state == SubState.IN_TRIPLE_STRING:
+            self._scan_triple_string_char(tokens)
+            return False
+
         # Case 2: In behavior description
         elif current_state == SubState.IN_BEHAVIOR:
             tokens.append(Token(TokenType.RAW_TEXT, "\n", self.scanner.line, self.scanner.col))
@@ -265,21 +274,16 @@ class CoreTokenScanner:
             self._skip_comment() 
             return False
 
-        # 5. Raw String Prefix
+        # 5. Raw String Prefix（r"..." / r'...'; 三引号形态 r""" / r''' 同下）
         if char == 'r' and (self.scanner.peek() == '"' or self.scanner.peek() == "'"):
             quote = self.scanner.advance()
-            self.push_state(SubState.IN_STRING)
-            self.quote_char = quote
-            self.current_string_val = ""
-            self.is_raw_string = True
+            self._open_string(quote, is_raw=True)
             return False
 
-        # 6. String Literals
+        # 6. String Literals（单行 "..." / '...'; 连续三个同类引号 = 三引号
+        #    多行字符串 """...""" / '''...'''）
         if char == '"' or char == "'":
-            self.push_state(SubState.IN_STRING)
-            self.quote_char = char
-            self.current_string_val = ""
-            self.is_raw_string = False
+            self._open_string(char, is_raw=False)
             return False
 
         # 7. Behavior Description and Intent Comments
@@ -436,6 +440,23 @@ class CoreTokenScanner:
         self.issue_tracker.error(f"Unexpected character '{char}'", self.scanner, code=LEX_INVALID_CHAR)
         return False
 
+    def _open_string(self, quote: str, is_raw: bool) -> None:
+        """开启字符串字面量（首引号已消费）。
+
+        其后连续两个同类引号 = 三引号多行字符串（IN_TRIPLE_STRING，换行是
+        字符串值的一部分）；否则单行字符串（IN_STRING）。raw/非 raw 与
+        引号形态正交。
+        """
+        if self.scanner.peek() == quote and self.scanner.peek(1) == quote:
+            self.scanner.advance()
+            self.scanner.advance()
+            self.push_state(SubState.IN_TRIPLE_STRING)
+        else:
+            self.push_state(SubState.IN_STRING)
+        self.quote_char = quote
+        self.current_string_val = ""
+        self.is_raw_string = is_raw
+
     def _scan_string_char(self, tokens: List[Token]):
         char = self.scanner.advance()
         
@@ -444,39 +465,8 @@ class CoreTokenScanner:
             return
 
         if char == '\\':
-            if self.scanner.peek() == '\n':
-                # Explicit continuation inside string
-                self.continuation_mode = True
-                self.scanner.advance() # Consume newline
-                return
-            else:
-                # Escape sequence handling
-                if self.is_raw_string:
-                    # Raw string: Keep backslash, but allow escaping quote
-                    next_char = self.scanner.peek()
-                    if next_char == self.quote_char:
-                        self.scanner.advance() # Consume quote
-                        self.current_string_val += "\\" + next_char # Keep backslash
-                    elif next_char == '\\':
-                        # Handle double backslash to prevent escaping a following quote
-                        self.scanner.advance()
-                        self.current_string_val += "\\\\" 
-                    else:
-                        self.current_string_val += "\\" # Just keep backslash
-                    return
-                else:
-                    # Standard escape sequences
-                    next_char = self.scanner.advance()
-                    ESCAPE_SEQUENCES = {
-                        'n': '\n', 't': '\t', 'r': '\r', 
-                        '\\': '\\', '"': '"', "'": "'",
-                        'b': '\b', 'f': '\f'
-                    }
-                    if next_char in ESCAPE_SEQUENCES:
-                        self.current_string_val += ESCAPE_SEQUENCES[next_char]
-                    else:
-                        self.current_string_val += "\\" + next_char
-                    return
+            self._apply_string_escape()
+            return
 
         if char == self.quote_char:
             tokens.append(self.scanner.create_token(TokenType.STRING, self.current_string_val))
@@ -484,6 +474,71 @@ class CoreTokenScanner:
             self.pop_state()
         else:
             self.current_string_val += char
+
+    def _scan_triple_string_char(self, tokens: List[Token]):
+        """三引号多行字符串内的字符扫描。
+
+        闭合 = 连续三个同类引号；换行是字符串值的一部分（单行字符串报
+        LEX_UNTERMINATED_STRING，此处不做该检查）；转义规则与单行字符串
+        共享 _apply_string_escape（单一规则源）。
+        """
+        char = self.scanner.advance()
+
+        if (char == self.quote_char and self.scanner.peek() == self.quote_char
+                and self.scanner.peek(1) == self.quote_char):
+            # 闭合定界符（连续三个引号）
+            self.scanner.advance()
+            self.scanner.advance()
+            tokens.append(self.scanner.create_token(TokenType.STRING, self.current_string_val))
+            self.pop_state()
+            return
+
+        if char == '\\':
+            self._apply_string_escape()
+            return
+
+        self.current_string_val += char
+
+    def _apply_string_escape(self):
+        """字符串内反斜杠转义处理（单行/三引号字符串共享单一规则源）。
+
+        前置：反斜杠本身已消费（stream 位于转义字符处）。raw 串保留反斜杠
+        （反斜杠+引号 = 引号不闭合字符串、值含双字符）；非 raw 串走标准
+        转义表；反斜杠+换行 = 字符串内拼接（结果不含换行，缩进保留）。
+        注：字符串内换行续行不置 continuation_mode——该标志是语句级行续行
+        契约（NORMAL 态反斜杠+换行），字符串 token 跨物理行由
+        _handle_newline 返回 False 的机制承载，两机制不混用。
+        """
+        if self.scanner.peek() == '\n':
+            # 字符串内显式拼接（反斜杠+换行）：消费换行，结果不含换行
+            self.scanner.advance()
+            return
+
+        if self.is_raw_string:
+            # Raw string: Keep backslash, but allow escaping quote
+            next_char = self.scanner.peek()
+            if next_char == self.quote_char:
+                self.scanner.advance() # Consume quote
+                self.current_string_val += "\\" + next_char # Keep backslash
+            elif next_char == '\\':
+                # Handle double backslash to prevent escaping a following quote
+                self.scanner.advance()
+                self.current_string_val += "\\\\"
+            else:
+                self.current_string_val += "\\" # Just keep backslash
+            return
+
+        # Standard escape sequences
+        next_char = self.scanner.advance()
+        ESCAPE_SEQUENCES = {
+            'n': '\n', 't': '\t', 'r': '\r',
+            '\\': '\\', '"': '"', "'": "'",
+            'b': '\b', 'f': '\f'
+        }
+        if next_char in ESCAPE_SEQUENCES:
+            self.current_string_val += ESCAPE_SEQUENCES[next_char]
+        else:
+            self.current_string_val += "\\" + next_char
 
     def _scan_behavior_char(self, tokens: List[Token]):
         # 记录本段起始位置（闭合 ~ / RAW_TEXT 段的位置起点——此前直接

@@ -136,6 +136,7 @@ class LexerMode(Enum):
 class SubState(Enum):
     NORMAL = auto()
     IN_STRING = auto()
+    IN_TRIPLE_STRING = auto()
     IN_BEHAVIOR = auto()
     IN_INTENT = auto()
 

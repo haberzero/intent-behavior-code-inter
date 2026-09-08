@@ -80,6 +80,69 @@ class TestLexerLiterals:
 
 
 # ---------------------------------------------------------------------------
+# 2b. 三引号多行字符串字面量
+# ---------------------------------------------------------------------------
+
+def string_token_values(code: str):
+    """Helper: 返回代码中所有 STRING token 的 (value) 列表。"""
+    return [v for t, v in tokenize(code) if t == TokenType.STRING]
+
+
+class TestLexerTripleQuotedStrings:
+    def test_basic_double_triple(self):
+        assert string_token_values('"""abc\ndef"""') == ["abc\ndef"]
+
+    def test_basic_single_triple(self):
+        assert string_token_values("'''abc\ndef'''") == ["abc\ndef"]
+
+    def test_newlines_preserved(self):
+        assert string_token_values('"""a\n\nb"""') == ["a\n\nb"]
+
+    def test_indentation_preserved(self):
+        assert string_token_values('"""abc\n    def"""') == ["abc\n    def"]
+
+    def test_first_newline_after_open_preserved(self):
+        # Python 语义：开定界符后的首个换行保留（无 docstring 式剥离）
+        assert string_token_values('"""\nabc"""') == ["\nabc"]
+
+    def test_empty_triple(self):
+        assert string_token_values('""""""') == [""]
+
+    def test_escapes_handled(self):
+        assert string_token_values(r'"""a\tb\"c"""') == ["a\tb\"c"]
+
+    def test_backslash_newline_join(self):
+        # 反斜杠+换行 = 拼接（结果不含换行，缩进保留）
+        assert string_token_values('"""abc\\\n   def"""') == ["abc   def"]
+
+    def test_raw_triple(self):
+        assert string_token_values(r'r"""C:\path\x"""') == [r"C:\path\x"]
+
+    def test_raw_triple_escaped_quote(self):
+        # raw：反斜杠+引号不闭合字符串，值保留双字符
+        assert string_token_values(r'r"""a\"b"""') == [r'a\"b']
+
+    def test_lone_quotes_inside(self):
+        assert string_token_values('"""a\'b"c\'d"""') == ['a\'b"c\'d']
+
+    def test_escaped_quote_does_not_close(self):
+        assert string_token_values('"""a\\"b"""') == ['a"b']
+
+    def test_token_start_position(self):
+        # 多行字符串 token 起点 = 开引号所在行
+        lexer = Lexer('x = 1\n"""abc\ndef"""', issue_tracker=None)
+        tokens = [t for t in lexer.tokenize() if t.type == TokenType.STRING]
+        assert tokens[0].line == 2
+        assert tokens[0].value == "abc\ndef"
+
+    def test_single_line_unchanged(self):
+        # 对照面：单行字符串 token 化行为不变
+        assert string_token_values('"abc"') == ["abc"]
+        assert string_token_values("''") == [""]
+        assert string_token_values(r'r"\n"') == [r"\n"]
+
+
+# ---------------------------------------------------------------------------
 # 3. Operators
 # ---------------------------------------------------------------------------
 
