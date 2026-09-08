@@ -273,6 +273,7 @@ _SPEC_IDBG = TypeDef(name="idbg", kind="module", provenance=Provenance.KERNEL_NA
         "protection_map": MethodMemberSpec(name="protection_map", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
         "show_protection_map": MethodMemberSpec(name="show_protection_map", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
         "intents": MethodMemberSpec(name="intents", kind="method", type_ref=TypeRef.of("list"), return_type=TypeRef.of("list")),
+        "show_environment": MethodMemberSpec(name="show_environment", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
         "show_intents": MethodMemberSpec(name="show_intents", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
         "runtime": MethodMemberSpec(name="runtime", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
         "show_runtime": MethodMemberSpec(name="show_runtime", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),

@@ -168,6 +168,9 @@ idbg.protection_map()    # 返回 llmexcept 保护映射（target_uid -> handler
 idbg.show_protection_map() # 打印 llmexcept 保护映射
 idbg.intents()           # 返回当前意图栈列表
 idbg.show_intents()      # 打印当前意图栈
+idbg.show_environment()  # 打印当前一等环境（frames 栈：键值行 + 键数/帧数
+                         #   统计；最内层帧在前——帧级环境状态可视化，
+                         #   与 environment.get_current() 同源）
 idbg.runtime()           # 返回当前运行环境信息（调用栈深度 + 活跃意图；
                          #   原名 env 与"OS 环境变量"同名不同物，已改名消歧）
 idbg.show_runtime()      # 打印当前运行环境信息

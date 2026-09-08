@@ -330,6 +330,34 @@ class IDbgPlugin(IbPlugin):
             for i in intents
         ]
 
+    def show_environment(self):
+        """直接打印当前一等环境（frames 栈）到控制台（B3 可视化面）。
+
+        单一权威源：经当前帧的 ``current_environment``（EnvironmentState）
+        读取——与 ``environment.get_current()`` 同源（帧级环境状态）。
+        帧展示按读取序（最内层帧在前——内帧遮蔽外帧的查找方向）。
+        """
+        from core.runtime.frame import get_current_frame
+
+        print("[IDBG] 当前环境 (frames 栈):")
+        frame = get_current_frame()
+        state = getattr(frame, "current_environment", None)
+        if state is None:
+            print("  (无环境状态)")
+            return
+        frames = state.to_native().get("frames") or []
+        if not frames:
+            print("  (空)")
+            return
+        # 读取序：最内层帧在前（frames 尾部 = 最内层）
+        for idx, f in enumerate(reversed(frames)):
+            if not f:
+                print(f"  [帧 {idx}] (空帧)")
+                continue
+            parts = [f"{k}={v!r}" for k, v in f.items()]
+            print(f"  [帧 {idx}] " + " | ".join(parts))
+        print(f"  键数(去重遮蔽后): {state.len()} / 帧数: {state.frames_count()}")
+
     def show_intents(self):
         """直接打印意图栈到控制台（IBCI 友好）。
 
