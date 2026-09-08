@@ -1036,6 +1036,33 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   A1 ✅ / C4（裁定维持现状）；**剩余 B3（一等环境/作用域对象）**——
   intent_context 已结构化但偏提示词注入，world/mode/discourse 环境对象缺
   （可快照/嵌套；批 1-2 P0-P1）。
+- **B3 一等环境对象实施（2026-09-07，free-explore——阶段 E 批 1 收官项）**：
+  `environment` 一等内置值类型落地（可快照/嵌套的作用域化键值环境；与
+  intent_context 平行——意图栈[提示词注入专用] vs 键值环境[一般执行上下文]）：
+  - EnvironmentState frames 栈（内帧遮蔽外帧 shadowing；get 内→外 / set/pop
+    最内层帧）+ 值深拷贝读写双向隔离（同 knowledge 冻结快照纪律）+ fork
+    深拷贝快照（双向隔离）。
+  - 语言面（预lude 可见）：environment() 构造 + 静态面 get_current()（当前
+    环境 fork 快照）/ use(env)（fork 副本替换——原件变异不泄漏，与
+    intent_context.use 同构）+ 实例面 get/set/pop/clear/fork/len/contains/
+    keys（vtable unbox_args=False 值直通）。
+  - Axiom（EnvironmentAxiom）+ ENVIRONMENT_SPEC（kind=CLASS parent=Object）
+    + 注册链；deep_clone EnvironmentState 分支（类字段/容器值深克隆独立副本）。
+  - 序列化 round-trip（native 条目[frames 原生值] + wrapper[_environment 槽
+    env_uid] + hydration 双分支 + 池重建）——save_state/load_state 保真
+    frames 键值（含嵌套容器）。
+  - **序列化池前缀一致性修复**：_collect 返回值/pool 键统一 inst_ 前缀
+    （environment 同型）；修复 _get_intent_context 池查询无 inst_ 前缀回落的
+    同类潜伏缺陷（intent_context 实例 _ctx 水化跨池命中——此前水化恒 None
+    静默降级，M28 测试未覆盖 _ctx 字段断言故未暴露）。
+  - 文档：docs/syntax/17_environment_system.md（语义不变量/方法面/边界
+    [用户类值 to_native 降级说明]/与 intent_context 关系对照表）+ docs/README 树。
+  - 判别测试 +8（test_environment_type.py：基本面 + fork 双向隔离 + use fork
+    语义 + 容器值深拷贝入 + 序列化 round-trip）。
+  - 全量 pytest 基线 3493 → **3505 passed / 1 skipped**（零回归；git 9c952524）。
+  - **阶段 E 批 1 全部完成**：C1/B1/A3/C2/T2/C3/A1/B3 ✅（C4 裁定维持现状）；
+    批 2/3 剩余：A2/A4/A5/B2/B4/C5 重估/D1/E1/E2（批 2）+ A6/B5/C6/C7/D2/D3
+    （批 3）+ D1（idbg 增强——T2 命名消歧已完成，增强面随批 2）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

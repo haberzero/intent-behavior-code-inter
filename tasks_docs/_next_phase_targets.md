@@ -95,7 +95,7 @@ provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4
 | A6 | Enum/tagged union 增强 | 与 VISION-4 ADT 方向重合，整合推进 | 批 3 |
 | B1 | 运行时错误携带 ibci 源码行号 | RUN_* 诊断有码无行，traceback 全 Python 帧（本 session 冒烟实证 RUN_INDEX_ERROR）；诊断体系承载增强 | 批 1（P0） |
 | B2 | 惰性/短路求值结构 | 生成器消费协作化已做；∀/∃ 推导惰性结构缺 | 批 2 |
-| B3 | 一等环境/作用域对象（可快照/嵌套） | intent_context 已结构化但偏提示词注入；world/mode/discourse 环境对象缺 | 批 1-2（P0-P1） |
+| B3 | 一等环境/作用域对象（可快照/嵌套） | ✅ **已落地（2026-09-07）**：environment 一等值类型（frames 栈键值环境 + 内帧遮蔽 + 值深拷贝读写隔离 + fork 快照 + use fork 替换[与 intent_context 平行]）+ Axiom/spec/vtable/序列化 round-trip + 池前缀一致性修复[含 _get_intent_context 潜伏缺陷] + docs 17 + 判别 +8 | 批 1-2（P0-P1） |
 | B4 | 编译错误定位准确 | 诊断体系增强项 | 批 2 |
 | B5 | 并发原语成熟化 | chan/slot/thread + run_batch 已有基础 | 批 3 |
 | C1 | **embedding/向量一等能力**（vector 类型/相似度/检索/外部接入） | 全仓无向量能力；ref 主张"语义内容缝 ≠ media"，请求独立立项——**与 PT-SEALED-1 media 封存边界需用户裁定** | 批 1（P0，愿景关键） |
