@@ -1023,6 +1023,19 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     20/20 PASS（harness root=用例目录形态保持兼容）。
   - 全量 pytest 基线 3474 → **3484 passed / 1 skipped**（零回归；git
     c0d40eaf）。
+- **A1 用户自定义协议核验（2026-09-07，free-explore——阶段 E 批 1）**：
+  机制端到端核验**已落地**（LANGUAGE_DESIGN_EVOLUTION §3.1 规划项已实现——
+  ref A1"内置协议族为封闭集合"宣称过期）：① 协议声明（`protocol Name:` +
+  方法签名 pass 体）② 类结构判定满足（satisfies_protocol 用户协议路径：
+  无内置判定声明 → required methods 全部结构判定）③ 类型参数 bound
+  （`class Box[T: Shape]` 符合参数通过 / 违约 `Box[int]` 编译期 fail-fast
+  SEM_TYPE_MISMATCH）④ 协议继承（`protocol Child(Parent)`）。文档
+  06_oop 协议节已存在。回归锁定 +4（tests/compiler/test_user_protocols.py）。
+  全量 pytest 基线 3484 → **3493 passed / 1 skipped**（零回归；git 62e56155）。
+  **阶段 E 批 1 状态**：C1 ✅ / B1 ✅ / A3 ✅ / C2 ✅ / T2 ✅ / C3 ✅ /
+  A1 ✅ / C4（裁定维持现状）；**剩余 B3（一等环境/作用域对象）**——
+  intent_context 已结构化但偏提示词注入，world/mode/discourse 环境对象缺
+  （可快照/嵌套；批 1-2 P0-P1）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
