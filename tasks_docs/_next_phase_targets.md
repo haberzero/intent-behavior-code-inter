@@ -104,7 +104,7 @@ provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4
 | C4 | ibci 内测试设施（assert/test 模块 + 运行器 + 行号） | 语言无 assert/test 设施；现有 trials harness 是 Python 侧 | 批 1（P0） |
 | C5 | 思考抑制重估（PT-DECIDE-2） | ✅ **已重估定案（2026-09-07）**：强制思考场景三面完整化——reasoning 捕获记录进 provider_meta[可观测面] + 既有双面回归[空内容 fail-fast / 抑制失败告警去重] + 接口位裁定[模型级 reasoning 声明既有；请求级 thinking_mode 远期位维持未接线]；LLM_SERVICE §二定案记录；判别 +3 | 批 2 |
 | C6 | 流式/批量/多模型编排完善 | stream/run_batch/命名路由已有（T11/T08）；多模型组合文档弱 | 批 3 |
-| C7 | 性能内省（单调时钟/调用级埋点） | time 模块有；单调时钟与埋点缺 | 批 3 |
+| C7 | 性能内省（单调时钟/调用级埋点） | **✅ 消重（2026-09-08，R3-⑤ 承载）**：调用级埋点面 = LLM journal 行（每调用 ts/ts_mono）+ 预算核算（wall/calls/tokens 累计，api_config budget 节）——由 run 级可观测子系统统一承载，不开第二条埋点管线；独立批取消（设计：`_run_observability_design.md` §4.3） | ~~批 3~~ 消重 |
 | D1 | idbg 增强（意图栈/环境/world 注册可视化，UID 反查源行） | ✅ **主项已落地（2026-09-07）**：show_environment 一等环境可视化面（frames 栈键值行 + 键数/帧数统计；与 environment.get_current() 同源）；意图栈可视化[show_intents 既有] / UID 反查源行[line-1 定位链既有] | 批 2 |
 | D2 | CLI inspect/check 导出 | 无 | 批 3 |
 | D3 | 新能力配套诊断码 | 诊断体系已有（codes/catalog），随新能力配套 | 批 3（随批 1 大项） |

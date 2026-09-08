@@ -165,6 +165,14 @@ class LLMExecutorCore:
             return None
         return sc.llm_journal
 
+    def _get_budget_guard(self) -> Optional[Any]:
+        """当前 run 的 LLM 预算守卫（无预算返回 None）。"""
+        try:
+            sc = self.service_context
+        except RuntimeError:
+            return None
+        return sc.budget_guard
+
     def _finalize_call(self, result: Any, call_info: Mapping[str, Any], record_current: bool = True) -> Any:
         """绑定调用信息到结果对象（可选记录主线程单写槽）。
 
@@ -228,6 +236,11 @@ class LLMExecutorCore:
         """
         if self.llm_callback:
             journal = self._get_llm_journal()
+            budget = self._get_budget_guard()
+            # 预算 fail 模式：provider 调用前确定性拦截（零浪费——被拦调用
+            # 不发出）。无守卫/无超限 = 无副作用（零侵入）。
+            if budget is not None:
+                budget.check_pre_call(request.node_uid)
             self._emit_llm_event(
                 "llm_dispatched", {"node_uid": request.node_uid, "target_model": request.target_model}
             )
@@ -260,6 +273,8 @@ class LLMExecutorCore:
                         generation=meta.get("generation"),
                         usage=meta.get("usage"),
                     )
+                if budget is not None:
+                    budget.record_post_call((result.provider_meta or {}).get("usage"))
                 return result
             except Exception as e:
                 # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
@@ -282,6 +297,9 @@ class LLMExecutorCore:
                         user_prompt=request.user_prompt,
                         error=str(e),
                     )
+                if budget is not None:
+                    # 失败调用同计（调用本身即预算消耗；tokens 记 0）
+                    budget.record_post_call(None)
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),
                     provider_error=str(e),

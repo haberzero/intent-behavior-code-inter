@@ -328,6 +328,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="运行时违反了 llmexcept 快照隔离约束。",
         fix="避免在快照隔离区域内执行被禁止的写入/副作用。",
     ),
+    "RUN_BUDGET_EXCEEDED": CodeInfo(
+        title="LLM 运行预算超限（tokens / 调用次数 / 墙钟，on_exceed=fail 时在 provider 调用前拦截）。",
+        fix="在 api_config.json budget 节调整阈值（max_tokens / max_calls / max_wall_s）或 on_exceed=warn 改为仅告警。",
+    ),
     # ==================== 内核诊断 (KDIAG_) ====================
     "KDIAG_PROTOCOL_TO_PROMPT_FALLBACK": CodeInfo(
         title="协议回退：to_prompt 能力缺失，回退默认提示词构造。",
@@ -459,6 +463,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
     "CFG_CONFIG_UNKNOWN_FIELD": CodeInfo(
         title="api_config model 条目含未知字段（拼写错误/废弃字段）。",
         fix="按报错消息列出的允许字段修正；未知字段不再静默丢弃（配置面可审计性纪律）。",
+    ),
+    "CFG_CONFIG_INVALID_BUDGET": CodeInfo(
+        title="api_config.json budget 节形态错误（阈值非正数 / on_exceed 非 warn|fail）。",
+        fix="budget 节为可选：{max_tokens, max_calls, max_wall_s 均为正数; on_exceed 为 \"warn\"(默认) 或 \"fail\"}；按报错消息修正或移除该节。",
     ),
     "RUN_LLM_EMPTY_CONTENT": CodeInfo(
         title="LLM 返回空内容（仅有思考内容、无最终答案）。",

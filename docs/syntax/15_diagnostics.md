@@ -504,6 +504,12 @@ llm 可调用类装配 dict 含契约外字段。
 - **严重级别**：WARNING。
 - **修复方式**：避免在快照隔离区域内执行被禁止的写入/副作用。
 
+#### `RUN_BUDGET_EXCEEDED`
+LLM 运行预算超限（run 级 tokens / 调用次数 / 墙钟核算）。
+- **触发条件**：`api_config.json` `budget` 节声明 `on_exceed: "fail"` 且累计超限（max_tokens / max_calls / max_wall_s）——拦截发生在**下一次 LLM 调用的 provider 调用前**（被拦调用不发出，零浪费）。`on_exceed: "warn"`（默认）不触发本码：stderr 告警一次 + run 继续。无 budget 节 = 无预算核算（零侵入）。
+- **严重级别**：ERROR。
+- **修复方式**：调整 `budget` 节阈值（max_tokens / max_calls / max_wall_s），或改 `on_exceed: "warn"` 仅告警。
+
 ---
 
 ### 内核诊断（KDIAG_）
@@ -713,6 +719,12 @@ api_config model 条目含未知字段。
 - **触发条件**：model 条目出现允许集之外的字段（拼写错误/废弃字段）。
 - **严重级别**：ERROR。
 - **修复方式**：按报错消息列出的允许字段修正（model 条目允许：model/provider/base_url/api_key/timeout/reasoning/max_tokens/temperature/top_p/top_k/seed/extra_body/kind）。未知字段不再静默丢弃——配置面的拼写错误须显式暴露（可审计性纪律）。
+
+#### `CFG_CONFIG_INVALID_BUDGET`
+api_config.json `budget` 节形态错误。
+- **触发条件**：`budget` 节存在但形态非法——阈值（max_tokens / max_calls / max_wall_s）非正数、`on_exceed` 非 `"warn"|"fail"`、含未知字段。CLI `run` 启动期校验（budget 节自身形态 = 本码责任面；文件级 JSON 有效性归其他 CFG_ 码）。用户显式写了预算且写错须 fail-fast 显形，不静默忽略。
+- **严重级别**：ERROR。
+- **修复方式**：`budget` 节修正为 `{"max_tokens": 正数, "max_calls": 正数, "max_wall_s": 正数, "on_exceed": "warn"|"fail"}`（各阈值可选）；或移除该节（无预算核算）。
 
 ---
 

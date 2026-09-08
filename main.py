@@ -144,6 +144,30 @@ def main():
                     k, v = auto_var.split("=", 1)
                     cli_variables[k] = v
 
+        # LLM 预算（api_config.json budget 节；无节 = 无预算，零侵入）。
+        # budget 节自身形态错误 = fail-fast（用户显式写了预算且写错，不静默
+        # 忽略）；文件级有效性归 ai 模块自身校验面（此处不重复验证）。
+        budget_guard = None
+        api_config_path = os.path.join(root_dir, "api_config.json")
+        if os.path.isfile(api_config_path):
+            from core.base.diagnostics.codes import CFG_CONFIG_INVALID_BUDGET
+            from core.runtime.observability.budget import (
+                BudgetConfigError, BudgetGuard, parse_budget_section,
+            )
+            try:
+                with open(api_config_path, encoding="utf-8") as _f:
+                    _cfg = json.load(_f)
+                _spec = parse_budget_section(_cfg if isinstance(_cfg, dict) else {})
+                if _spec is not None:
+                    budget_guard = BudgetGuard(_spec)
+            except BudgetConfigError as e:
+                print(f"Error: [{CFG_CONFIG_INVALID_BUDGET}] {e}")
+                sys.exit(1)
+            except (OSError, ValueError):
+                # 文件级损坏（JSON 非法等）= ai 模块配置加载自身的校验面，
+                # 此处不重复报告（预算面只对自己的节负责）。
+                pass
+
         # 确定性重放（--replay）：replay provider 经能力槽 SYSTEM 优先级替换
         # 真实 provider（真实 provider 不加载，无需 API key）；加载期校验
         # fail-fast（损坏/不合法 = 拒绝，不部分消费）。
@@ -185,7 +209,8 @@ def main():
         # 运行引擎（silent=True：CLI 为唯一渲染点，engine 层不重复打印）
         try:
             try:
-                engine.run(args.file, variables=cli_variables, silent=True, journal_writer=journal_writer)
+                engine.run(args.file, variables=cli_variables, silent=True,
+                           journal_writer=journal_writer, budget_guard=budget_guard)
             finally:
                 if journal_writer is not None:
                     journal_writer.close()

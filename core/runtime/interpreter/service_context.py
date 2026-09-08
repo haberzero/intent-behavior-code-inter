@@ -47,6 +47,7 @@ class ServiceContextImpl:
         self._orchestrator = None
         self._test_hooks = None
         self._llm_journal = None
+        self._budget_guard = None
 
     @property
     def test_hooks(self) -> Optional[Any]:
@@ -154,3 +155,12 @@ class ServiceContextImpl:
     def set_llm_journal(self, writer: Optional[Any]) -> None:
         """挂载当前 run 的 LLM journal（Engine 在解释器就绪后调用）。"""
         self._llm_journal = writer
+
+    @property
+    def budget_guard(self) -> Optional[Any]:
+        """当前 run 的 LLM 预算守卫（无预算 = None，零侵入）。"""
+        return self._budget_guard
+
+    def set_budget_guard(self, guard: Optional[Any]) -> None:
+        """挂载当前 run 的 LLM 预算守卫（Engine 在解释器就绪后调用）。"""
+        self._budget_guard = guard

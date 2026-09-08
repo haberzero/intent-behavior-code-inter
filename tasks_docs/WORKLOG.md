@@ -1304,6 +1304,33 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   按文件参数化 +6，对账一致；新测试 ~5s 入套件总时长）。
 ---
 
+- **R3-⑤ 批 3 预算核算完成（2026-09-08，free-explore）**：round3 需求
+  R-3（run 级预算：tokens/calls/wall，api_config 阈值）。实施面：
+  ① core/runtime/observability/budget.py（BudgetGuard：check_pre_call =
+  provider 调用前确定性拦截[fail 模式超限 → InterpreterError
+  RUN_BUDGET_EXCEEDED，零浪费——被拦调用不发出]；record_post_call = 调用后
+  累计[calls 成功/失败同计；tokens += usage.total，usage 缺失 = 0；wall =
+  monotonic]；warn 模式每维度首次超限 stderr 告警一次[不重复不阻断] +
+  exceeded 标记[批 4 result-json 面]；parse_budget_section 纯函数校验
+  [正数/enum/未知字段 fail-fast，不静默忽略用户写错的预算]）；② 核算挂接
+  _call_llm 汇点（与 journal 同源——单一核算点；check 在 try 前[拦截不包
+  装为 LLMCallError]，record 成功/失败两面）；③ provider usage 提取
+  （_extract_usage：OpenAI 兼容标准字段入 provider_meta[usage]——瞬态观测
+  通道，契约不变；未上报 = 缺省）；④ CLI（api_config.json budget 节读取：
+  节自身形态错 = [CFG_CONFIG_INVALID_BUDGET] exit 1；文件级损坏 = ai 模块
+  自身校验面不重复报告）+ ServiceContext 槽 + engine 参数链（journal 同
+  模式）。诊断码新增 2（RUN_BUDGET_EXCEEDED / CFG_CONFIG_INVALID_BUDGET，
+  纯增面 + catalog + 15_diagnostics 两节 + parity 门过）。**C7 消重落地**
+  （_next_phase_targets 批 3 清单 C7 = ~~消重~~：调用级埋点面由 journal
+  行[ts/ts_mono] + 预算累计承载，不开第二条埋点管线）。实施裁定：预算是
+  独立治理概念（区别于 VM 指令上限 RUN_LIMIT_EXCEEDED——失败语义单一权威
+  源，不复用）；核算边界诚实记录（wall 仅在 LLM 调用点检查非轮询；流式不
+  经汇点 = 不入 journal 同边界）。判别 22 项（runtime 白箱 18：parse
+  校验/拒绝面 12 + guard fail/warn/维度 6；e2e CLI 黑箱 4：零侵入对照/
+  fail 拦截[拦截前 2 次完成]/warn 告警显形/坏节拒绝）。全量 pytest **3727 passed /
+  1 skipped 零回归**（语义错误集变更面：parity 门 + 全量过）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

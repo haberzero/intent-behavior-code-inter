@@ -148,6 +148,22 @@ class RecommendedProvider(LLMProvider):
             reasoning = message.reasoning_content
         return reasoning
 
+    @staticmethod
+    def _extract_usage(completion: Any) -> Optional[Dict[str, int]]:
+        """从响应提取 usage（token 计数）——OpenAI 兼容标准字段。
+
+        供预算核算面（api_config budget 节 tokens 维度）；provider 未上报
+        usage = None（调用方以 calls/wall 兜底，tokens 记 0）。
+        """
+        u = getattr(completion, "usage", None)
+        if u is None:
+            return None
+        return {
+            "input_tokens": getattr(u, "prompt_tokens", None),
+            "output_tokens": getattr(u, "completion_tokens", None),
+            "total_tokens": getattr(u, "total_tokens", None),
+        }
+
     def _warn_thinking_suppress_failed(self, config_declared_non_reasoning: bool = False) -> None:
         """思考禁用失败告警（一次性去重）。
 
@@ -228,6 +244,7 @@ class RecommendedProvider(LLMProvider):
             reasoning = self._extract_reasoning(completion.choices[0].message)
             thinking_detected = reasoning is not None
             finish_reason = getattr(completion.choices[0], "finish_reason", None)
+            usage = self._extract_usage(completion)
 
             if reasoning:
                 self._warn_thinking_suppress_failed(
@@ -261,6 +278,10 @@ class RecommendedProvider(LLMProvider):
             #（不持久化），记录无 token 成本。
             if reasoning:
                 meta["reasoning"] = reasoning
+            # usage（token 核算/预算面）：OpenAI 兼容标准字段；provider 未
+            # 上报 = 缺省（预算面以 calls/wall 兜底，tokens 记 0）
+            if usage:
+                meta["usage"] = usage
             meta["generation"] = {**gen_params,
                                   "max_tokens": self._resolve_max_tokens(request.target_model)}
             self._record_call_info(
