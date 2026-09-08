@@ -341,14 +341,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
-    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
+    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None) -> bool:
         """
         运行一段 IBCI 代码字符串。
         """
         try:
             artifact = self.compile_string(code, variables, silent=silent)
             if prepare_interpreter:
-                return self.execute(artifact, variables, output_callback)
+                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer)
             return True
         except CompilerError as e:
             if not silent:
@@ -362,7 +362,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 print(f"\nRuntime Error: {str(e)}")
             raise e
 
-    def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True) -> bool:
+    def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None) -> bool:
         # 多阶段启动：先确立 project_root + root-dependent 初始化
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
@@ -390,7 +390,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             artifact = self.compile(abs_entry, variables, silent=silent)
 
             if prepare_interpreter:
-                return self.execute(artifact, variables, output_callback)
+                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer)
 
             return True
 
@@ -444,7 +444,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         
         return self.scheduler.compile_project(abs_entry, entry_module_name=entry_module_name)
 
-    def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None) -> bool:
+    def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None, journal_writer=None) -> bool:
         """
          调度入口。执行编译产物。
          注意：如果引擎已经处于 READY 状态，调用此方法将抛出状态冲突错误。建议每个执行流创建新的引擎实例。
@@ -472,7 +472,11 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         if not self.interpreter:
             self._prepare_interpreter(immutable_artifact, output_callback=output_callback)
-        
+
+        # LLM journal 挂载（run 级审计侧信道；None = 不挂载，行为与无 journal 完全一致）
+        if journal_writer is not None:
+            self.interpreter.service_context.set_llm_journal(journal_writer)
+
         # 委派执行权给运行时调度器
         # 目前调度器内部仍然通过 Engine 的准备机制来启动解释器
         # 但从宏观视角看，Engine 已经不再直接驱动 Interpreter

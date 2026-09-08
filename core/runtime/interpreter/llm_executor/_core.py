@@ -157,6 +157,14 @@ class LLMExecutorCore:
         with self._pending_futures_lock:
             return len(self._pending_futures)
 
+    def _get_llm_journal(self) -> Optional[Any]:
+        """当前 run 的 LLM journal（未挂载返回 None）。"""
+        try:
+            sc = self.service_context
+        except RuntimeError:
+            return None
+        return sc.llm_journal
+
     def _finalize_call(self, result: Any, call_info: Mapping[str, Any], record_current: bool = True) -> Any:
         """绑定调用信息到结果对象（可选记录主线程单写槽）。
 
@@ -219,6 +227,7 @@ class LLMExecutorCore:
         不触碰任何供应商 SDK/字段（供应商组装/解析/思考抑制全在 provider 实现）。
         """
         if self.llm_callback:
+            journal = self._get_llm_journal()
             self._emit_llm_event(
                 "llm_dispatched", {"node_uid": request.node_uid, "target_model": request.target_model}
             )
@@ -238,6 +247,19 @@ class LLMExecutorCore:
                 self._emit_llm_event(
                     "llm_resolved", {"node_uid": request.node_uid, "response": result.content}
                 )
+                if journal is not None:
+                    meta = result.provider_meta or {}
+                    journal.record_call(
+                        node_uid=request.node_uid,
+                        target_model=request.target_model,
+                        sys_prompt=meta.get("sys_prompt", ""),
+                        user_prompt=request.user_prompt,
+                        content=result.content,
+                        raw_response=result.raw_response or "",
+                        finish_reason=result.finish_reason,
+                        generation=meta.get("generation"),
+                        usage=meta.get("usage"),
+                    )
                 return result
             except Exception as e:
                 # LLM provider 层失败（网络错误、鉴权错误、配额耗尽等）→ LLMCallError。
@@ -251,6 +273,15 @@ class LLMExecutorCore:
                 self._emit_llm_event(
                     "llm_resolved", {"node_uid": request.node_uid, "error": str(e)}
                 )
+                if journal is not None:
+                    # 失败面同录（审计完整性：重放时同形态 raise）
+                    journal.record_call(
+                        node_uid=request.node_uid,
+                        target_model=request.target_model,
+                        sys_prompt="",
+                        user_prompt=request.user_prompt,
+                        error=str(e),
+                    )
                 error_obj = self.registry.make_llm_call_error(
                     message=str(e),
                     provider_error=str(e),

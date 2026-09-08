@@ -43,8 +43,11 @@ class TestRunOutputLineBuffering:
         import time
 
         entry = self._write_entry(tmp_path)
+        # --no-journal：本测试面 = 输出缓冲（非 journal）；且 entry 位于仓库内
+        # .tmp_pytest 下，默认 journal 会经根检测写入仓库根（run 产物污染面）。
         proc = subprocess.Popen(
-            [sys.executable, os.path.join(REPO_ROOT, "main.py"), "run", str(entry)],
+            [sys.executable, os.path.join(REPO_ROOT, "main.py"), "run",
+             str(entry), "--no-journal"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, cwd=REPO_ROOT,
         )

@@ -58,6 +58,9 @@ AGENTS.local.md
 # repo-root runtime artifacts (state-file experiments)
 logs/
 
+# LLM journal（run 级审计产物，本地保留备查，不入库——同 trials/**/logs/ 定位）
+llm_journal/
+
 # 本机复现脚本工作目录（KERNEL_ISSUE-SEM-1/P9* 复现资产，trials/INDEX 引用；临时，不入库）
 .tmp_verify/
 

@@ -49,6 +49,8 @@ def main():
     run_parser.add_argument("file", help="Path to the .ibci entry file")
     run_parser.add_argument("--root", help="Project root directory", default=None)
     run_parser.add_argument("--auto", action="append", help="Set variable (key=value)")
+    run_parser.add_argument("--no-journal", action="store_true",
+                            help="Disable LLM call journal (default: on, llm_journal/<run-id>.jsonl)")
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
@@ -138,9 +140,27 @@ def main():
                     k, v = auto_var.split("=", 1)
                     cli_variables[k] = v
 
+        # LLM journal（run 级调用审计，默认开；--no-journal 关闭）。路径在项目
+        # 根下（与 --root 一致）；启动提示走 stderr（stdout 是数据面，审计提示
+        # 不入数据面）。
+        journal_writer = None
+        if not getattr(args, 'no_journal', False):
+            from core.runtime.observability.llm_journal import LLMJournalWriter, make_run_id
+            run_id = make_run_id()
+            journal_rel = os.path.join("llm_journal", f"{run_id}.jsonl")
+            journal_writer = LLMJournalWriter(
+                os.path.join(root_dir, journal_rel),
+                entry=os.path.basename(args.file),
+            )
+            print(f"journal: {journal_rel}", file=sys.stderr)
+
         # 运行引擎（silent=True：CLI 为唯一渲染点，engine 层不重复打印）
         try:
-            engine.run(args.file, variables=cli_variables, silent=True)
+            try:
+                engine.run(args.file, variables=cli_variables, silent=True, journal_writer=journal_writer)
+            finally:
+                if journal_writer is not None:
+                    journal_writer.close()
         except FileNotFoundError as e:
             print(f"Error: {e}")
             sys.exit(1)

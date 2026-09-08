@@ -46,6 +46,7 @@ class ServiceContextImpl:
         self._interpreter = interpreter
         self._orchestrator = None
         self._test_hooks = None
+        self._llm_journal = None
 
     @property
     def test_hooks(self) -> Optional[Any]:
@@ -144,3 +145,12 @@ class ServiceContextImpl:
     def set_host_service(self, host_service: Optional['IHostService']) -> None:
         """注入宿主服务（rt_scheduler.spawn 创建 HostService 后调用）。"""
         self._host_service = host_service
+
+    @property
+    def llm_journal(self) -> Optional[Any]:
+        """当前 run 的 LLM 调用 journal（观测侧信道；None = 未挂载）。"""
+        return self._llm_journal
+
+    def set_llm_journal(self, writer: Optional[Any]) -> None:
+        """挂载当前 run 的 LLM journal（Engine 在解释器就绪后调用）。"""
+        self._llm_journal = writer
