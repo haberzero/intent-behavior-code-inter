@@ -131,7 +131,7 @@ max_tokens（T4）已处理完毕**；**环境变量通道（T2）/ 文档示例
 |------|------|------|
 | **N1** | 思考模型支持（extra_body 透传 + 空 content 确定性处理 + max_tokens 预算） | ⏳ **P1-1**（已重定性为根因项：provider 现硬编码双字段抑制 dict 进每请求且无条件发送——vendor 机器事实滞留代码层 + `reasoning: true` 请求层不可表达；并入"生成参数面批"六项——temperature/top_p/top_k/seed 命名字段 + extra_body + 硬编码归位 + `**kwargs` fail-fast + call_info 审计闭环 + 未知字段严格性，详见 `_trial_intake_analysis.md` §五 5.4/5.5） |
 | **N2** | 已验证知识注册表（试用方原名"结晶注册表"为黑话，用户 2026-09-07 裁定废除；机制 = 验证过的 LLM 答案登记：确定性验证门 + 查表命中 0 调用 + append-only 更正 + 事件审计） | ✅ **方向已裁定认可；2026-09-07 用户裁定重新定位**（不以 ai 为载体 = 一等内置值类型/语言级知识子系统，`@~...~` 保持纯 LLM 语义无隐式路由）；设计文档已产出 `tasks_docs/_knowledge_registry_design.md`（取代已删的 `_n2_answer_registry.md`；**K1-K9 已按推荐确认（2026-09-07），实施就绪**） |
-| **N3** | measure_freq（logprob 测量通道） | ⏸ **挂起，方向保留**（试用方自我质疑后建议挂起；e26-e28 为现成验收基线；待 embedding/知识注册表面落地后重估） |
+| **N3** | measure_freq（logprob 测量通道） | ⏸ **待决（挂起，方向保留）**（2026-09-08 探针实证：SiliconFlow **chat 通道静默忽略 logprobs**[IBCI provider 现用通道]，**legacy completions 通道完整支持** logprobs+top_logprobs——logprob 能力在后端存在但 IBCI chat 路径不暴露，落地须新增 completions 形态通道[新面设计]；corpus/probe 设计当前全手工、内化时机未到。设计文档 `tasks_docs/_n3_measure_freq_design.md`；e26-e28 为现成验收基线；重估触发 = provider 支持 completions/logprob 通道 或 corpus/probe 设计内化） |
 | **N4** | finish_reason 暴露 + max_tokens 键 | ⏳ **P1 队列**（max_tokens 键 = T4 ✅ 已落地；finish_reason 暴露未做 = call_info 观测面补充，截断检测是批量管线运行细节） |
 
 ### 4.3 需求表 A1-E2（ref 需求单 + 试用方 A1-E2 表）
@@ -221,8 +221,9 @@ P7/P8（既有 DDG 设计，走文档面）。
 - **周期质量维护（PT-AUDIT-1/3 + Tier B + quality-maintenance 等全部非主线质量工作）**：
   **用户 2026-09-07 裁定解封**——解封节点 = **本次主线任务之后**（§5.1-5.4 全部项处于
   完成/挂起/裁定不做终态，即 §5.6 收敛判据成立时）→ **自主启动**（无需再等用户指令）；
-- **N3 measure_freq**（logprob 通道）：挂起，方向保留（e26-e28 为验收基线；待 embedding/
-  知识注册表面落地后重估）；
+- **N3 measure_freq**（logprob 通道）：待决，方向保留（2026-09-08 探针实证：chat 通道
+  静默忽略 logprobs、completions 通道完整支持——落地须新增 completions 形态通道；e26-e28
+  为验收基线；设计文档 `_n3_measure_freq_design.md`）；
 - **ref E1 ihost 子环境配置隔离**：scoping 设计（overlay 评估 §5.4 形态 C 的真实需求归宿）；
 - PT-FEAT-6/12（工具链项）：远期；**远程 CI**：用户裁定暂不启动；**PT-SEALED-1 media**：封存；
 - **PT-DECIDE-2**（供应商思考禁用）：已解封，缺口收窄为"后端强制思考"场景——P1-1 批

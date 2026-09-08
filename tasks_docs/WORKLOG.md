@@ -1555,6 +1555,29 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   未知空] + runtime test_knowledge_type.py provenance 往返保真 1）。全量 pytest **3857 passed / 1 skipped 零回归**（基线 3842 + 判别 11 + meta 按文件参数化增长）。
 ---
 
+- **R3-⑬ N3 measure_freq 设计优先完成（2026-09-08，free-explore；待决裁定）**：
+  round3 P1 收束项（N3 新解封；设计先行含 SiliconFlow logprobs 能力探测——端点
+  不支持则记"待决"转其他项，不硬造通道；试用方 e26-e28 验收基线）。本项 =
+  设计 + 探针实证交付物（**无代码/测试改动**——零回归面 = 文档面，全量 pytest
+  计数不变）。探针实证（SiliconFlow 真实端点 api.siliconflow.cn/v1，openai SDK
+  3.8.0 直连，模型 Qwen/Qwen3.6-35B-A3B）：① **chat completions**（IBCI provider
+  现用通道）`logprobs=True, top_logprobs=5` = 400 校验错；仅 `logprobs=True` =
+  **静默忽略**（接受参数但响应无 logprobs 字段——不报错、无数据）；② **legacy
+  completions** `logprobs=N` = **完整支持**（返回 tokens/token_logprobs/
+  top_logprobs 逐 token top 候选——样例 "The capital of France is" → " Paris"
+  logprob -0.547，top3 含 " a" -2.172 / " the" -3.047）。**结论**：logprob 能力
+  在 SiliconFlow 后端**存在**，但仅经 legacy completions 暴露；IBCI 的 chat 路径
+  **不暴露**（通道形态约束，非 IBCI 缺陷）。**裁定 = 待决（挂起，方向保留）**，
+  依据：① 与试用方自我裁定一致（corpus/probe 设计当前全手工、内化时机未到——
+  e26-e28 为现成验收基线，无需 IBCI 承载即可跑通）；② 通道约束（落地须新增
+  completions 形态通道 = 新面设计，非小改——与 PT-FEAT-16 embedding 面同属
+  "收窄内容层数值面落外部 Python"边界，可同批评估）；③ 重估触发条件明确
+  （provider 支持 completions/logprob 通道 或 corpus/probe 设计内化）。交付物：
+  `tasks_docs/_n3_measure_freq_design.md`（定位/探针实证/设计影响/裁定/验收基线
+  五节）+ handoff N3 行探针实证更新（单点）。不做什么：不在 chat 通道强行探测
+  （静默忽略 = 探测无意义）；不为此新增独立数值科学计算面（同 PT-FEAT-16 排除项）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

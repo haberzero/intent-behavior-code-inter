@@ -199,12 +199,24 @@
     16_knowledge_system 条目模型 + 方法面更新。判别 11 项；全量 3857/1
     零回归。
 
+13. **R3-⑬ N3 measure_freq（logprob 测量通道）** ✅ **设计优先完成（2026-09-08，待决裁定）**：
+    新解封（原挂起、方向保留）；设计先行含 SiliconFlow logprobs 能力探测。探针实证
+    （真实端点）：**chat completions 通道（IBCI provider 现用）静默忽略 logprobs**
+    [仅 logprobs=True 接受但响应无字段；logprobs+top_logprobs = 400 校验错]；
+    **legacy completions 通道完整支持** logprobs+top_logprobs（tokens/token_logprobs/
+    top_logprobs 逐 token top 候选）。结论：logprob 能力在后端存在但 IBCI chat 路径
+    不暴露（通道形态约束，非缺陷）；落地须新增 completions 形态通道（新面设计）。
+    裁定 = **待决（挂起，方向保留）**——与试用方自我裁定一致（corpus/probe 设计当前
+    全手工、内化时机未到；e26-e28 现成验收基线）+ 通道约束。重估触发 = provider 支持
+    completions/logprob 通道 或 corpus/probe 设计内化。设计文档 `tasks_docs/
+    _n3_measure_freq_design.md`。无代码/测试改动（零回归面 = 文档面）。
+
 ### P2（文档批）
 
-13. **R3-⑬ 文档 howto 组**：F-1《弱模型输出漂移测量》（call_info 两形态 + finish_reason
+14. **R3-⑭ 文档 howto 组**：F-1《弱模型输出漂移测量》（call_info 两形态 + finish_reason
     最小用法）+ F-3 fs.write --root 最小示例（实证语义）+ D-9 保留词表（SYNTAX_REFERENCE
     单点）+ F-4 embedding 通道确认回复。
-14. **R3-⑭ R-5《弱模型提案稳定性测量》**：依赖 R3-⑤ journal 落地；试用方 v3 记录面
+15. **R3-⑮ R-5《弱模型提案稳定性测量》**：依赖 R3-⑤ journal 落地；试用方 v3 记录面
     （e33_p37/e34_p2/e34_p4，授权引用）为示例语料。
 
 ### 长期登记（不实施，git/WORKLOG 承载）
