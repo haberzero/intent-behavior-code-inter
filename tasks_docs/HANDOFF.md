@@ -154,14 +154,15 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   替换——与 intent_context 平行；序列化 round-trip + 池前缀一致性修复
   [含 _get_intent_context 潜伏缺陷] + docs 17]；C4 裁定维持现状）。
   **批次 2/3 队列**：**已完成 E2 save_load 覆盖 Environment ✅（帧级环境
-  状态序列化收集 + 恢复[use_environment fork 语义]——与 B3 实例级合成
-  完整 Environment 覆盖）/ A4 缺省 void ✅（func 函数无返回标注 = 缺省
-  void[消样板；return 值丢弃同 -> void]；lambda/llm 行为体保持显式要求
-  [值表达式语义]）**；剩余批 2：A2 泛型约束 / A5 解构 / B2 惰性结构 /
-  B4 编译定位 / C5 思考抑制重估 / D1 idbg 增强 / E1 ihost 完善；批 3：
-  A6 Enum 增强 / B5 并发成熟化 / C6 流式编排 / C7 性能内省 / D2 CLI 导出 /
-  D3 配套诊断码——见 `tasks_docs/_next_phase_targets.md` §三。基线
-  **3520 passed / 1 skipped**。详见
+  状态序列化收集 + 恢复[use_environment fork 语义]）/ A4 缺省 void ✅
+  （func 无返回标注 = 缺省 void；lambda/llm 行为体保持显式）/ D1 idbg
+  增强主项 ✅（show_environment 一等环境可视化面——frames 栈键值行 +
+  键数/帧数统计，与 environment.get_current() 同源）**；剩余批 2：
+  A2 泛型约束 / A5 解构 / B2 惰性结构 / B4 编译定位 / C5 思考抑制重估 /
+  E1 ihost 完善；批 3：A6 Enum 增强 / B5 并发成熟化 / C6 流式编排 /
+  C7 性能内省 / D2 CLI 导出 / D3 配套诊断码——见
+  `tasks_docs/_next_phase_targets.md` §三。基线 **3527 passed / 1
+  skipped**。详见
   `tasks_docs/NEXT_STEPS.md` + `tasks_docs/WORKLOG.md`（本段完整记录）+ git log。
 - **✅ 会话交接核验接手完成（2026-08-21）**：HANDOFF_SESSION 待验证清单全通过（git 干净 /
   main 未动 / 提交序列对齐 / 全量 pytest 实跑 **3182 passed / 1 skipped** / 契约 §五-§七 +
