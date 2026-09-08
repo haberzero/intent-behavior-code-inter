@@ -440,14 +440,12 @@ class DeclarationVisitorsMixin:
         self.current_function_type_params = list(node.type_params)
         self.current_function_type_param_bounds = dict(node.type_param_bounds)
 
-        # 静态名义强类型：函数必须声明返回类型（显式 TYPE / auto 推断 / any 逃生）。
-        # 缺标注静默回填 any 会击穿类型推断与泛型体系，不做回填。
-        if node.returns is None:
-            self.error(
-                f"Function '{node.name}' must declare a return type. "
-                "Add '-> TYPE', '-> auto', or '-> any'.",
-                node, code=SEM_MISSING_RETURN_ANNOTATION
-            )
+        # 静态名义强类型：返回类型标注可选（缺省 void）——无标注 = void
+        # （副作用函数声明简化；体内 return 值丢弃，与 `-> void` 同语义）。
+        # 显式 `-> auto`（推断）/ `-> any`（逃生）/ `-> TYPE`（显式）不变。
+        # 此前的缺标注 fail-fast 所防为隐式 *any*（击穿推断）——void 缺省
+        # 返回类型已知，不击穿推断体系。lambda 保持显式标注要求
+        # （值表达式语义，见 visit_IbLambdaExpr）。
 
         # 参数签名唯一权威：解析类型 + 描述符 + 定义处默认值校验
         # 方法 def 的 param_types 恒不含 self（与类成员表
@@ -455,8 +453,9 @@ class DeclarationVisitorsMixin:
         # 注入的作用域变量，经 node_to_symbol 侧表解析，独立于 spec 签名）。
         param_types, param_descriptors = self._build_function_signature(node.args)
 
-        # 解析返回类型标注
-        ret_type = self._resolve_type(node.returns) if node.returns else self._any_desc
+        # 解析返回类型标注（无标注 = void 缺省——ret_type None 经下方
+        # spec 回填回落 TypeRef.of("void")）
+        ret_type = self._resolve_type(node.returns) if node.returns else None
         is_auto_return = (node.returns and
                          isinstance(node.returns, ast.IbName) and
                          node.returns.id == "auto")

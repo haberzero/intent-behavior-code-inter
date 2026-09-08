@@ -12,16 +12,21 @@ str msg = greet("World")
 print(msg)
 ```
 
-**返回类型必须声明**：`func` / `llm` / lambda 缺失返回标注产生 `SEM_MISSING_RETURN_ANNOTATION`
-编译错误（不静默回填 `any` 击穿类型推断）。必须显式声明 `-> TYPE`、`-> auto`（从 body 推断）
-或 `-> any`（显式逃生）：
+**返回类型标注可选（缺省 void）**：`func` 函数无返回标注时**缺省为
+`void`**（副作用函数声明简化——消 `-> void` 样板；体内 `return 值`
+丢弃，与显式 `-> void` 同语义）。显式标注 `-> TYPE`、`-> auto`（从 body
+推断）、`-> any`（显式逃生）行为不变。lambda 与 `llm` 行为体保持显式
+标注要求（值表达式语义——缺失返回标注产生 `SEM_MISSING_RETURN_ANNOTATION`
+编译错误，不静默回填 `any` 击穿类型推断）：
 
 ```ibci
+func say_hello(str name):             # 缺省 void：无返回值
+    print("Hello, " + name)
+
+func say_hello2(str name) -> void:    # 显式 void：与缺省等价
+
 func double(int x) -> auto:      # auto：从 return 推断实际类型（此处 int）
     return x * 2
-
-func say_hello(str name) -> void:    # void：无返回值
-    print("Hello, " + name)
 
 func identity(int x) -> auto:   # 显式 auto，与显式 TYPE 等价（推断结果）
     return x
