@@ -29,6 +29,17 @@
 用例断言与结果分类以非思考输出形态为基准。探测/调用检测"请求已抑制但仍思考"时
 触发一次性告警（引导联系开发者，不引导改配置绕开）。
 
+**强制思考场景（重估定案，2026-09-07）**：思考抑制对某些模型/后端无效
+（模型仍输出 `reasoning`/`reasoning_content`）——provider 处理三面：
+① 检测"请求已抑制但仍思考"→ 一次性告警（`_warn_thinking_suppress_failed`，
+去重）；② 空内容 + reasoning 非空（只思考未作答）→ `RUN_LLM_EMPTY_CONTENT`
+确定性诊断（不静默以 reasoning 替代 content）；③ **reasoning 内容记录进
+`provider_meta["reasoning"]`**（非空即记录——强制思考的可观测面：调试时
+可见模型实际思考过程；provider_meta 为瞬态观测面、不持久化）。`api_config`
+model 条目 `reasoning: true` 显式声明强制推理模型（驱动 is_reasoning 能力
+判定）；请求级 `thinking_mode` 为供应商无关远期接口位（当前未接线——
+模型级声明已覆盖现有场景）。
+
 **死机/超时防护**：批量试用用 `run_batch.py`（每用例 harness 超时 SIGKILL，进程组清理
 彻底）；避免大量用例并发压爆本地服务。
 

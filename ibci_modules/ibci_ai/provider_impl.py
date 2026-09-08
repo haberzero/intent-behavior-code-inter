@@ -255,6 +255,12 @@ class RecommendedProvider(LLMProvider):
             meta = {"sys_prompt": sys_prompt}
             if finish_reason is not None:
                 meta["finish_reason"] = finish_reason
+            # reasoning（思考内容）非空即记录——强制思考场景（思考抑制
+            # 对该模型无效）的可观测面：调试时可见模型实际思考过程
+            #（此前仅告警、思考内容丢弃）。provider_meta 为瞬态观测面
+            #（不持久化），记录无 token 成本。
+            if reasoning:
+                meta["reasoning"] = reasoning
             meta["generation"] = {**gen_params,
                                   "max_tokens": self._resolve_max_tokens(request.target_model)}
             self._record_call_info(
