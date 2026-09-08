@@ -910,7 +910,7 @@ class Interpreter:
         # 与 instantiate 的字段收集同构（消除"auto-init 只收自身 body"的机制分裂）。
         # 须在全部类字段 hydrate 完成后执行（父类 default_fields 已填充），
         # 故独立于主循环之外。
-        # B4 声明化：不生成运行时闭包——字段名清单注册到 ib_cls.auto_init_fields
+        # 声明化：不生成运行时闭包——字段名清单注册到 ib_cls.auto_init_fields
         # （声明），执行经共享实现 _auto_init_impl（interpreter.py 模块级），
         # 参数数量校验由 _init_expected_arity（spec.members['__init__'] 声明）
         # 单一权威承担（消三处并存校验）。

@@ -1653,6 +1653,29 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   处于完成/挂起/裁定不做终态——收敛判据达成）。全量 pytest **3867 passed / 1 skipped 零回归**（基线 3857 + D2 判别 4 + meta 按文件参数化增长；C6 纯文档无测试增量）。
 ---
 
+- **Phase F 收敛——周期质量维护 Tier B 窗口 + 长期注册项状态复查（2026-09-08，free-explore；收敛判据达成后自主启动）**：
+  round3 全阶段 + 原阶段 E 顺延批全部收束（A/B/C/D/E 全部项处于完成/挂起/裁定不做终态）
+  → 收敛判据达成 → 周期质量维护于收敛判据成立时自主启动（AGENTS.md 排布：Tier B 定期窗口
+  于主线阶段边界低强度批量巡检）。**Tier B 窗口**（code-quality 十查 + code-odor 特征码
+  扫描全仓，只分类 + 只修低风险无契约影响项）：① 注释任务代号（红线——代码注释禁任务
+  代号/PT 编号/历史叙述）扫描命中 4 处（vector.py 拆箱边界"C6 排除面" / ib_class.py
+  auto-init"B4 声明化" / interpreter.py auto-init"B4 声明化" / _declaration_visitors.py
+  协议签名"PT-DECIDE-3 项③"）——**已修**（移除任务代号，保留功能设计语义；注释不影响
+  行为，低风险）；复核零残留。② 宽 except（except Exception: pass）扫描命中 3 处
+  （events.py 事件发射 / _scheduler.py 线程清理×2）——**A 合法保留**（best-effort
+  清理/关停/事件发射面，吞错合理且刻意，非错误吞噬异味）。③ 历史叙述注释扫描命中 7 处
+  ——**A 合法保留**（"此前/旧的"均为功能语境[设计理由/已知问题/观测面变化说明]，非任务
+  追踪，符合"注释注功能设计+已知问题"纪律）。④ 未用 import——linter 未装（pyflakes/ruff
+  缺），手动扫描无命中。**长期注册项状态复查**（各项终态一致性核验）：VISION-4/5/6
+  （PENDING_TASKS 远期，无排期）状态准确——补 VISION-4 开工输入指针（meta 层设计 §四
+  类型层承诺需求清单 5 项 = VISION-4 开工输入 what 非 how + ref A2/A5/A6/B2 挂起整合推进）
+  + 补 VISION-6 重估指针（F5 档案项与 meta 层正交，档 B 隔离/反射 = 长期主线，真 JIT 挂
+  数据平面性能线，D-3.3 维持长期登记）；R-2b/R-6（meta 层，设计交付不实施）/ N3
+  （measure_freq，待决——探针实证 chat 通道不支持）/ D-3.3（VM 快速路径，Tier C 候选）/
+  远程 CI（待授权）状态一致，无漂移。**全量 pytest 3867 passed / 1 skipped 零回归**
+  （基线 3867 不变——本窗口仅注释清理 + 文档指针，无行为变更）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

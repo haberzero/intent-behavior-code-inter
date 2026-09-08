@@ -260,6 +260,12 @@
   泛型上，`docs/LANGUAGE_DESIGN_EVOLUTION.md` §3.7/Phase 4）；轻量约束收集推断扩展（非完整
   HM，HM 仍非目标）；fn[...] 变体规则形式化。调研与总路线见 git 历史
   （`_five_foundation_redesign.md` 已随 P1-P6 竣工删除，git 承载）§四 P7。
+- **开工输入（2026-09-08 round3 阶段 D 沉淀）**：meta 层/代码作值设计
+  （`tasks_docs/_meta_layer_design.md` §四）给出"类型层承诺需求清单"——meta.compile/
+  run_file/R-6 接通所需的 5 项类型层承诺（CompilationArtifact 作类型值 / RunResult 作
+  类型值 / BehaviorExpr 值类型 / fn[...] 高阶签名 / Verdict 判定结果类型）= VISION-4
+  开工输入（what 非 how）。ref 类型层项 A2 泛型约束 / A5 解构模式匹配 / A6 Enum-tagged
+  union / B2 惰性短路结构经 round3 阶段 E 裁定挂起 → 本项整合推进（同域）。
 
 ### VISION-5 函数式地基补齐（五大地基改造 · P8）
 
@@ -277,6 +283,10 @@
   与内核构造期契约表达不匹配）、档 B 真 JIT / 隔离改造 / 反射能力（无当前可验证收益/消费方）。
   评估依据与决策见 `tasks_docs/WORKLOG.md` F5 决策记录。
 - **当前理解**：不当前实现、不展开详细设计；未来出现可验证收益或消费方时重启评估。
+- **重估（2026-09-08 round3 阶段 D）**：F5 档案项与 meta 层（代码作值）正交——meta 层
+  复用既有原语（`compile_string`/`ihost.run_file`），不依赖本项落地。档 B 隔离改造/反射
+  能力 = 长期主线；真 JIT 挂数据平面性能线；D-3.3 VM 字符串扫描快速路径维持长期登记
+  （与演化平面设计合流规划）。详见 `tasks_docs/_meta_layer_design.md` §五。
 
 ### VISION-7 真实使用整改与灰盒愿景整合（阶段 E）
 

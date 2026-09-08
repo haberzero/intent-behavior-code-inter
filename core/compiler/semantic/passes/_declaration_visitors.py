@@ -591,7 +591,7 @@ class DeclarationVisitorsMixin:
             self._check_override_compatibility(node, sym.spec)
 
         # SEM_PROTOCOL_SIGNATURE: Prompt protocol signature validation
-        # （PT-DECIDE-3 项③：required 协议成员签名违约 = 契约破坏 → error fail-fast；
+        # （required 协议成员签名违约 = 契约破坏 → error fail-fast；
         #  optional 成员 __intent__/__retry__ 不经此路径，运行期 fail-fast 校验）。
         if self.in_class_def and is_prompt_protocol_method(node.name):
             # Count params excluding self
