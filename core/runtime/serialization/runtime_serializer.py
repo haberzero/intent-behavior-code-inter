@@ -420,6 +420,7 @@ class RuntimeSerializer(BaseFlatSerializer):
             k: {
                 "value": self._process_value(v["value"]),
                 "check_name": v["check_name"],
+                "provenance": v.get("provenance", ""),
                 "events": [
                     {
                         "seq": ev["seq"],
@@ -1044,6 +1045,7 @@ class RuntimeDeserializer:
                     "value": self._deserialize_value(ev["value"]),
                     "check": None,
                     "check_name": ev.get("check_name", ""),
+                    "provenance": ev.get("provenance", ""),
                     "events": events,
                 }
             obj = IbKnowledge(ib_class, payload={"entries": entries, "seq": data.get("seq", 0)})

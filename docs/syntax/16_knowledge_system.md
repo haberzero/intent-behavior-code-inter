@@ -45,10 +45,11 @@ IBC 结构 = 稳定可靠的语言自动机。"验证过的知识从非确定性
 
 ```
 键（str，显式）→ 条目 {
-  value:   深克隆冻结快照
-  check:   登记时的验证谓词（审计"经谁验证"）
-  events:  append-only 事件流 [ {seq, kind: store|amend, value, reason} ]
-           （seq = 引擎事件序号，单调，可复现——非墙钟）
+  value:      深克隆冻结快照
+  check:      登记时的验证谓词（审计"经谁验证"）
+  provenance: 来源标记（store 第 4 参，可选；知识出处——模块/文件/采集轮次等）
+  events:     append-only 事件流 [ {seq, kind: store|amend, value, reason} ]
+             （seq = 引擎事件序号，单调，可复现——非墙钟）
 }
 ```
 
@@ -56,10 +57,11 @@ IBC 结构 = 稳定可靠的语言自动机。"验证过的知识从非确定性
 
 | 方法 | 语义 | 纪律 |
 |------|------|------|
-| `k.store(key, value, check)` | 登记（首次写入） | 引擎求值 `check(value)`：假 = 运行期错误 `KNW_CHECK_REJECTED`；键已存在 = `KNW_KEY_EXISTS`（"登记"与"更正"机器强制区分） |
+| `k.store(key, value, check, provenance?)` | 登记（首次写入） | 引擎求值 `check(value)`：假 = 运行期错误 `KNW_CHECK_REJECTED`；键已存在 = `KNW_KEY_EXISTS`（"登记"与"更正"机器强制区分）；`provenance`（可选，来源标记）入条目，经 export/history 可观测 |
 | `k.get(key)` | 查询当前值 | 未登记 → `null`（合法状态非错误）；返回深克隆快照 |
 | `k.amend(key, new_value, reason)` | 更正 | `reason` 强制非空（`KNW_REASON_EMPTY`）；新值再过 check 门；append-only（原值保留于事件流，当前值指针切换） |
-| `k.history(key)` | 审计 | 事件序列 `list`（元素为 `{seq, kind, value, reason}` dict）；未登记 → 空 list |
+| `k.history(key, kind?)` | 审计 | 事件序列 `list`（元素为 `{seq, kind, value, reason}` dict）；未登记 → 空 list；`kind`（可选，"store"/"amend"）过滤事件类型，缺省 = 全事件 |
+| `k.export()` | 整库导出 | 返回 `dict`：键 → `{value, check_name, provenance, events}`（审计链全量）；值 = 快照深克隆（防导出引用污染活库）；供整库序列化/检视/迁移 |
 | `k.keys()` | 枚举键 | `list[str]`（容器约定与 dict 同构） |
 | `k.len()` | 计数 | `int`（容器约定与 dict 同构） |
 

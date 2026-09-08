@@ -271,4 +271,17 @@ class TestSerialization:
         p_rest = rest.get_variable("kb").payload
         assert set(p_orig["entries"].keys()) == set(p_rest["entries"].keys())
         assert p_orig["seq"] == p_rest["seq"], "事件序号保真"
+
+    def test_provenance_roundtrip(self, engine):
+        """provenance 经序列化往返保真（R-8：水化/深克隆面随行不丢失）。"""
+        orig, rest = _round_trip(
+            engine,
+            'func c(any x) -> bool:\n    return x.len() > 0\n'
+            'knowledge kb = knowledge()\n'
+            'kb.store("k", "v1", c, "round-9")\n',
+        )
+        p_orig = orig.get_variable("kb").payload
+        p_rest = rest.get_variable("kb").payload
+        assert p_orig["entries"]["k"]["provenance"] == "round-9"
+        assert p_rest["entries"]["k"]["provenance"] == "round-9", "provenance 往返保真"
         assert p_rest["entries"]["k"]["check"] is None, "谓词引用不入快照（amend 边界 fail-fast）"

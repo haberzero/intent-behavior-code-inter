@@ -27,10 +27,14 @@ class KnowledgeAxiom(BaseAxiom):
 
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
-            "store":    _m("store",    params=["str", "any", "any"], ret="void"),
+            # store 第 4 参 provenance（来源标记，可选）/ history 第 2 参 kind
+            # （事件类型过滤，可选）——内建方法声明最大参数列、运行期接受更少、
+            # 编译期绑定非严格（str.find from_idx 先例）。
+            "store":    _m("store",    params=["str", "any", "any", "str"], ret="void"),
             "get":      _m("get",      params=["str"], ret="any"),
             "amend":    _m("amend",    params=["str", "any", "str"], ret="void", mutating=True),
-            "history":  _m("history",  params=["str"], ret="list"),
+            "history":  _m("history",  params=["str", "str"], ret="list"),
+            "export":   _m("export",   ret="dict"),
             "keys":     _m("keys",     ret="list"),
             "len":      _m("len",      ret="int"),
             "cast_to":  _m("cast_to",  params=["any"], ret="any"),

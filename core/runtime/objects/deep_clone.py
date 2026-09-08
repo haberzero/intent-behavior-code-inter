@@ -118,6 +118,7 @@ def try_deep_clone(
                 "value": cloned_value,
                 "check": entry.get("check"),
                 "check_name": entry["check_name"],
+                "provenance": entry.get("provenance", ""),
                 "events": cloned_events,
             }
         return placeholder_k

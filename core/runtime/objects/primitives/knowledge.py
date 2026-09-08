@@ -24,7 +24,7 @@ IbKnowledge —— 已验证知识注册表值对象（一等内置值类型）�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from core.base.diagnostics.codes import (
     KNW_CHECK_REJECTED,
@@ -83,10 +83,13 @@ class IbKnowledge(IbValue):
     # 方法面（vtable receive 派发）
     # ------------------------------------------------------------------ #
 
-    def store(self, key: IbObject, value: IbObject, check: IbObject) -> IbObject:
+    def store(self, key: IbObject, value: IbObject, check: IbObject,
+              provenance: Optional[IbObject] = None) -> IbObject:
         """登记（首次写入）：引擎求值 check(value) 过门 + 深克隆快照。
 
         键已存在 = 错误（"登记"与"更正"机器强制区分，更正走 amend）。
+        ``provenance``（可选）= 来源标记（知识出处：模块/文件/采集轮次等），
+        入条目 + 经 export/history 可观测（审计"知识从哪来"）。
         """
         k = unbox(key)
         if not isinstance(k, str) or not k:
@@ -110,11 +113,15 @@ class IbKnowledge(IbValue):
                 error_code=KNW_CHECK_REJECTED,
             )
         seq = self._next_seq()
+        prov = unbox(provenance) if provenance is not None else ""
+        if not isinstance(prov, str):
+            prov = str(prov)
         entries[k] = {
             "value": snapshot,
             "check": check,  # 谓词引用（同进程/会话内 amend 再过门复用；
                              # 序列化恢复后为 None——amend fail-fast，见 KNW_ 边界）
             "check_name": self._check_name(check),
+            "provenance": prov,
             "events": [
                 {"seq": seq, "kind": "store", "value": snapshot, "reason": ""}
             ],
@@ -167,14 +174,23 @@ class IbKnowledge(IbValue):
         entry["value"] = snapshot
         return self.ib_class.registry.get_none()
 
-    def history(self, key: IbObject) -> IbObject:
-        """审计：事件序列 list（{seq, kind, value, reason}）；未登记 → 空 list。"""
+    def history(self, key: IbObject, kind: Optional[IbObject] = None) -> IbObject:
+        """审计：事件序列 list（{seq, kind, value, reason}）；未登记 → 空 list。
+
+        ``kind``（可选）= 事件类型过滤（"store"/"amend"）；缺省/空 = 全事件。
+        """
         k = unbox(key)
         entries = self._entries()
         reg = self.ib_class.registry
         if not isinstance(k, str) or k not in entries:
             return reg.box([])
-        events = entries[k]["events"]
+        kind_filter = unbox(kind) if kind is not None else ""
+        if not isinstance(kind_filter, str):
+            kind_filter = ""
+        events = [
+            ev for ev in entries[k]["events"]
+            if not kind_filter or ev["kind"] == kind_filter
+        ]
         out: List[Any] = []
         for ev in events:
             d = reg.box({})
@@ -194,6 +210,33 @@ class IbKnowledge(IbValue):
     def len(self) -> IbObject:
         """计数（dict 容器约定同构）。"""
         return self.ib_class.registry.box(len(self._entries()))
+
+    def export(self) -> IbObject:
+        """全注册表导出（dict 容器约定之外的整库检视面）。
+
+        返回 ``dict``：键 → ``{value, check_name, provenance, events}``，
+        events = ``[{seq, kind, value, reason}]``（append-only 审计链全量）。
+        供整库序列化/检视/迁移（逐键 get+history 的批量替代）。值 = 快照深
+        克隆（防导出引用污染活库）。
+        """
+        reg = self.ib_class.registry
+        out = reg.box({})
+        for k, entry in self._entries().items():
+            rec = reg.box({})
+            rec.receive("__setitem__", [reg.box("value"), _clone_snapshot(entry["value"])])
+            rec.receive("__setitem__", [reg.box("check_name"), reg.box(entry.get("check_name", ""))])
+            rec.receive("__setitem__", [reg.box("provenance"), reg.box(entry.get("provenance", ""))])
+            evs: List[Any] = []
+            for ev in entry["events"]:
+                d = reg.box({})
+                d.receive("__setitem__", [reg.box("seq"), reg.box(ev["seq"])])
+                d.receive("__setitem__", [reg.box("kind"), reg.box(ev["kind"])])
+                d.receive("__setitem__", [reg.box("value"), _clone_snapshot(ev["value"])])
+                d.receive("__setitem__", [reg.box("reason"), reg.box(ev["reason"])])
+                evs.append(d)
+            rec.receive("__setitem__", [reg.box("events"), reg.box(evs)])
+            out.receive("__setitem__", [reg.box(k), rec])
+        return out
 
     # ------------------------------------------------------------------ #
     # 内部辅助
@@ -228,6 +271,7 @@ class IbKnowledge(IbValue):
                 k: {
                     "value": v["value"].to_native(memo),
                     "check_name": v["check_name"],
+                    "provenance": v.get("provenance", ""),
                 }
                 for k, v in self._entries().items()
             },

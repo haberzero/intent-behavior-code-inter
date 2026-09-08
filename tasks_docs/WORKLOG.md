@@ -1536,6 +1536,25 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   退避+上抛/零缺省无事件]）。全量 pytest **3842 passed / 1 skipped 零回归**（基线 3827 + 判别 11 + meta 按文件参数化增长）。
 ---
 
+- **R3-⑫ R-8 knowledge 扩展面完成（2026-09-08，free-explore）**：round3 P1
+  第六项（knowledge 模块扩展面：export / history kind 过滤 / provenance 字段——
+  均 P2 级价值，试用方手工替代已验证可行，排批内后段）。实施面：① provenance
+  字段——store 第 4 参（可选，来源标记：知识出处——模块/文件/采集轮次等），
+  入条目 + 经 export/history 可观测（审计"知识从哪来"）；② history kind 过滤——
+  第 2 参（可选，"store"/"amend"）过滤事件类型，缺省 = 全事件（向后兼容）；
+  ③ export()——整库导出（dict：键 → {value, check_name, provenance, events}
+  审计链全量；值 = 快照深克隆防导出引用污染活库；供整库序列化/检视/迁移）。
+  公理表：store params +provenance / history params +kind / 新增 export（内建
+  方法声明最大参数列、运行期接受更少、编译期绑定非严格——str.find from_idx
+  先例）。保真面：provenance 经深克隆（deep_clone 条目重建）+ 序列化（
+  runtime_serializer _collect_knowledge 收集 + 水化 .get 默认空——旧快照无
+  provenance 面兼容）+ to_native（原生表征完整性）全链随行不丢失。文档
+  16_knowledge_system 条目模型 +provenance + 方法面 store/history 行更新 +
+  新增 export 行。判别 11 项（e2e test_knowledge_extension.py：provenance 2
+  [带/缺省空] + export 2[结构/多键] + history kind 过滤 4[amend/store/缺省全/
+  未知空] + runtime test_knowledge_type.py provenance 往返保真 1）。全量 pytest **3857 passed / 1 skipped 零回归**（基线 3842 + 判别 11 + meta 按文件参数化增长）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -190,7 +190,14 @@
     + 退避执行（sleep backoff_s 后上抛，供重试层退避后重试）+ call_info
     退避事件记录（last_backoff{delay_s/reason/error}）。文档 01_setup
     429 退避语义注记。判别 11 项；全量 3842/1 零回归。
-12. **R3-⑫ R-8 knowledge 扩展面**：export / history kind 过滤 / provenance 字段。
+12. **R3-⑫ R-8 knowledge 扩展面** ✅ **已完成（2026-09-08）**：
+    三面——provenance 字段（store 第 4 参可选来源标记，入条目 + 经
+    export/history 可观测）+ history kind 过滤（第 2 参可选 store/amend，
+    缺省全事件）+ export()（整库导出 键→{value,check_name,provenance,
+    events} 审计链全量，值深克隆防污染）。保真面：provenance 经深克隆 +
+    序列化（收集/水化 .get 默认空兼容旧快照）+ to_native 全链随行。文档
+    16_knowledge_system 条目模型 + 方法面更新。判别 11 项；全量 3857/1
+    零回归。
 
 ### P2（文档批）
 
