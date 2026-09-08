@@ -1164,6 +1164,26 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     终止。E1 重做的判别测试须传有限 collect 超时（IsolationPolicy
     collect_timeout 或测试级 timeout 守护），避免重蹈卡死表象。
   - 全量 pytest 基线 **3534 passed / 1 skipped**（零回归；conftest 改动）。
+- **测试套件自身安全——系统化双层防护（2026-09-07，free-explore）**：
+  用户裁定：不应靠智能体的测试行为操作（外部手动超时/捕获）确保安全——
+  测试套件自身须能确保自身安全。实施 pytest-timeout 系统化方案：
+  - **第一层（pytest-timeout 插件，每测试独立超时）**：pytest.ini
+    `timeout = 60` / `timeout_method = thread`——单测试 60s 上限；卡死测试
+    （线程 join 无界等待 / spawn collect 无界 / 死锁）**自动 FAIL** 并输出
+    测试名 + 全部线程栈（faulthandler dump 到 hang 行）——自动定位，无需
+    人工干预。验证：70s sleep 探针测试 60s 自动失败，报告精确到
+    `test_hang_probe` 的 `time.sleep(70)` 行。全量 pytest 时长（~95s）
+    不受影响——超时按测试计、非按套件计（三组 3534/1 零回归）。
+  - **第二层（conftest 进程级看门狗，180s 兜底）**：仅 pytest 框架层 hang
+    （collect/plugin 死锁——测试级超时不生效的场景）触发：dump_traceback
+    全部线程栈到 stderr 后 os._exit(124)。时长基准注释更新（90s 曾与全量
+    时长竞态误杀——180s = 2 倍余量）。
+  - **易用/单源**：pytest-timeout 为 pytest 标准插件（无自定义代码）；依赖
+    进 pyproject.toml test/dev（`pytest-timeout>=2`，环境规格单源）；超时
+    配置进 pytest.ini（addopts 同域单源）。
+  - 双层防护注释落位（pytest.ini + conftest 看门狗头注）——后续接手者
+    直接可读防护机制与定位路径。全量 pytest 基线 **3534 passed / 1
+    skipped**（零回归）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）

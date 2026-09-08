@@ -23,8 +23,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7"]
-dev = ["pytest>=7"]
+# pytest-timeout：每测试独立超时——卡死测试自动失败并定位（测试名 + 线程
+# 栈），套件自身安全不依赖外部手动超时/捕获（conftest 进程级看门狗为
+# 第二层兜底，见 tests/conftest.py 看门狗注释）。
+test = ["pytest>=7", "pytest-timeout>=2"]
+dev = ["pytest>=7", "pytest-timeout>=2"]
 
 [tool.setuptools.packages.find]
 where = ["."]

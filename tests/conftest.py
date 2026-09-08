@@ -35,14 +35,19 @@ from typing import Any, Callable, List, Optional, Set, Tuple
 import pytest
 
 # ---------------------------------------------------------------------------
-# 死锁/卡死防护看门狗（进程级，纯 stdlib）
+# 死锁/卡死防护看门狗（进程级，纯 stdlib）——第二层兜底
 # ---------------------------------------------------------------------------
-# 超时须大于全量 pytest 时长（本机 ~95s——含启动/解释开销）并留余量：
-# 90s 曾与全量时长竞态——全量 ~95s 完成时看门狗 90s 先 os._exit(124) 误杀
-# 进程（表现为"pytest 无输出退出 124 / 卡死"假象）。180s = 全量 2 倍余量，
-# 真死锁（线程 join 无界等待等）仍会被终止并留下 traceback（stderr）。
-# 卡死定位：pytest 无输出退出 124 时，捕获完整 stderr（勿 tail 截断）——
-# 看门狗 dump_traceback 输出全部线程栈，hang 线程栈即根因所在。
+# 双层防护体系（套件自身安全，不依赖外部操作）：
+# ① 第一层 = pytest-timeout（pytest.ini：timeout=60 / timeout_method=thread）
+#    ——每测试独立 60s 超时，卡死测试自动 FAIL + 输出测试名与全部线程栈
+#    （faulthandler dump）——绝大多数卡死场景在此层被定位，无需人工干预；
+# ② 第二层（本看门狗）= 进程级 180s 兜底——仅 pytest 框架层 hang
+#    （collect/plugin 死锁，测试级超时不生效的场景）触发：dump_traceback
+#    全部线程栈到 stderr 后 os._exit(124)。
+# 时长基准：全量 pytest ~95s（本机）——90s 曾与全量时长竞态误杀（表现为
+# "无输出退出 124"假象），180s = 2 倍余量。真死锁定位：第一层报告含
+# 测试名 + 线程栈；第二层（退出 124）时完整 stderr 中的 dump_traceback
+# 即全部线程栈。
 _DEADLOCK_TIMEOUT_S = 180
 
 
