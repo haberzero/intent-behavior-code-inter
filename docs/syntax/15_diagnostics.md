@@ -236,6 +236,12 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
 - **严重级别**：ERROR。
 - **修复方式**：确认该类型已定义/导入，且名称拼写正确。
 
+#### `SEM_DECLARATION_WITHOUT_INITIALIZER`
+语句域裸类型声明（无初始值）——如 `int x`。
+- **触发条件**：语句域（顶层 / 函数局部）出现仅声明类型而无初始值的赋值语句（`int x` / `str s`）。IBCI 语句域变量**无 None 缺省初始化语义**（fail-fast）：未初始化的类型化变量读取即类型违约，故编译期拒绝、精确定位到声明语句。
+- **严重级别**：ERROR。
+- **修复方式**：补充初始值（`int x = 0`）。**类字段裸声明**（`class P: int v`）= 构造器必填参数（`P(3)`），为合法形态，不受此限；`for` 循环变量 / 函数形参的声明亦为合法形态。
+
 #### `SEM_KNW_CHECK_LLM`
 knowledge 登记验证谓词（check）体内含 LLM 调用。
 - **触发条件**：`knowledge.store`/`amend` 的 check 参数为同模块函数引用，且其函数体含 LLM 调用（行为表达式/LLM 面调用）——登记门须为确定性验证。

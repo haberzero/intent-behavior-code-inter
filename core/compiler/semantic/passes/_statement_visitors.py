@@ -10,7 +10,10 @@ pure mechanical refactoring — no logic changes.
 from typing import Optional
 
 from core.base.enums import Provenance
-from core.base.diagnostics.codes import SEM_TYPE_MISMATCH, SEM_UNRESOLVED_TYPE, ICE_TYPE_LEAK, SEM_OVERLAY_UNUSED
+from core.base.diagnostics.codes import (
+    SEM_TYPE_MISMATCH, SEM_UNRESOLVED_TYPE, ICE_TYPE_LEAK, SEM_OVERLAY_UNUSED,
+    SEM_DECLARATION_WITHOUT_INITIALIZER,
+)
 from core.kernel import ast
 from core.kernel.symbols import SymbolKind
 from core.kernel.spec import IbSpec
@@ -48,6 +51,23 @@ class StatementVisitorsMixin:
 
     def visit_IbAssign(self, node: ast.IbAssign) -> Optional[IbSpec]:
         """访问赋值节点"""
+        # 语句域裸声明（无初始值）= 编译期拒绝（fail-fast）：
+        # `int x` 式声明在语句域无合法运行期语义（未初始化的类型化变量
+        # 读取即 RUN_TYPE_MISMATCH；无 None 缺省初始化魔法默认）。
+        # 类字段裸声明（class P: int v）= 构造器必填参数，为合法形态，
+        # 由 in_class_def 标志排除（类域语义不同，不在此限）。
+        if node.value is None and not self.in_class_def:
+            # 定位 = 声明节点（精确归因到裸声明语句，非后续读取点——
+            # 裸声明本身即违约，无"首次读取点"可言）
+            self.error(
+                "Bare declaration without initializer: declares a type but no "
+                "value. IBCI statement-scope variables have no None-default "
+                "initialization semantics (fail-fast). Supply an initializer "
+                "(e.g. `int x = 0`).",
+                node, code=SEM_DECLARATION_WITHOUT_INITIALIZER
+            )
+            return self._void_desc
+
         # 先计算右侧表达式的类型
         val_type = self.visit(node.value)
         if not val_type:

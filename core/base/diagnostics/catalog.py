@@ -141,6 +141,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="类型注解中的类型名称无法解析。",
         fix="确认该类型已定义/导入，且名称拼写正确。",
     ),
+    "SEM_DECLARATION_WITHOUT_INITIALIZER": CodeInfo(
+        title="语句域裸类型声明（无初始值）——如 `int x`。",
+        fix="补充初始值（`int x = 0`）。IBCI 语句域变量无 None 缺省初始化语义（fail-fast：未初始化的类型化变量无合法运行期语义，编译期拒绝）。类字段裸声明（`class P: int v`）= 构造器必填参数，为合法形态，不受此限。",
+    ),
     # -- 知识注册表（check 纯度铁律，编译期） --
     "SEM_KNW_CHECK_LLM": CodeInfo(
         title="knowledge.store/amend 的验证谓词（check）体内含 LLM 调用——不纯度不可接受，登记门须为确定性验证。",
