@@ -167,8 +167,15 @@
    （node.value is None 且非类域——in_class_def 既有标志排除）。语义变更
    面 = 纯收紧（可编译→编译拒），0 既有测试依赖裸声明运行期行为。
    判别 9 项；全量 3797/1 零回归。
-9. **R3-⑨ D-10 json.parse 鲁棒面**：数组直 parse + parse_or_none 显式形态（消 print
-   副作用，fail-fast 形态）。
+9. **R3-⑨ D-10 json.parse 鲁棒面** ✅ **已完成（2026-09-08）**：
+   parse 返回实际值（对象→dict/数组→list/原始值→标量——消除 _list/_value
+   魔法包装键，仓内零消费方实证安全）；malformed = 可捕获异常
+   RUN_JSON_PARSE_ERROR（新码，VM 显式码透传机制；fail-fast——消"print 副作用
+   + 静默空 dict"双兜底缺陷）；新增 parse_or_none（显式宽松形态：malformed =
+   None，无副作用——调用方显式选择失败面）；stringify/pretty 同缺陷族同修
+   （失败 = 异常，无 print、无 "{}" 静默回退）。文档 11_modules §11.8 更新
+   （parse 语义 + parse_or_none + 失败面示例）。判别 13 项；全量 3816/1
+   零回归。
 10. **R3-⑩ F-2 思考抑制警告可配置**：api_config 可配置静默 + 语义澄清（reasoning 隔离
     字段 = 思考预算已消耗；provider_meta[reasoning] 观测面）+ 文档。
 11. **R3-⑪ R-7 provider 429 退避**：retry.backoff_s 配置化 + call_info 退避事件记录。

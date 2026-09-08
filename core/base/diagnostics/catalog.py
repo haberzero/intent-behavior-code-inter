@@ -336,6 +336,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="LLM 运行预算超限（tokens / 调用次数 / 墙钟，on_exceed=fail 时在 provider 调用前拦截）。",
         fix="在 api_config.json budget 节调整阈值（max_tokens / max_calls / max_wall_s）或 on_exceed=warn 改为仅告警。",
     ),
+    "RUN_JSON_PARSE_ERROR": CodeInfo(
+        title="JSON 解析/序列化失败（malformed JSON / 不可序列化值）。",
+        fix="检查 JSON 字符串格式合法性（引号、逗号、括号配对）；改用 `json.parse_or_none(s)` 以显式宽松形态处理（失败返回 None，无副作用）。",
+    ),
     # ==================== 内核诊断 (KDIAG_) ====================
     "KDIAG_PROTOCOL_TO_PROMPT_FALLBACK": CodeInfo(
         title="协议回退：to_prompt 能力缺失，回退默认提示词构造。",

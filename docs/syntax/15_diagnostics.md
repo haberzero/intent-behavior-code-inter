@@ -547,6 +547,12 @@ LLM 运行预算超限（run 级 tokens / 调用次数 / 墙钟核算）。
 - **严重级别**：ERROR。
 - **修复方式**：调整 `budget` 节阈值（max_tokens / max_calls / max_wall_s），或改 `on_exceed: "warn"` 仅告警。
 
+#### `RUN_JSON_PARSE_ERROR`
+JSON 解析/序列化失败（malformed JSON / 不可序列化值）。
+- **触发条件**：`json.parse` 遇非法 JSON；`json.stringify`/`json.pretty` 遇不可序列化值（如循环引用）。fail-fast 抛可捕获异常（经 `try/except` 处理），不静默返回空值、无 print 副作用。
+- **严重级别**：ERROR。
+- **修复方式**：检查 JSON 字符串格式合法性（引号、逗号、括号配对）；如需"失败 = 显式可判"的宽松形态，改用 `json.parse_or_none(s)`（malformed 返回 `None`，无副作用）。
+
 ---
 
 ### 内核诊断（KDIAG_）

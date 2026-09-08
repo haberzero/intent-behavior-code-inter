@@ -1472,6 +1472,28 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   meta 按文件参数化增长）。
 ---
 
+- **R3-⑨ D-10 json.parse 鲁棒面完成（2026-09-08，free-explore）**：round3
+  P1 第三项（json 模块解析侧鲁棒面缺口——生成侧 C2 已落地）。缺陷面实证：
+  parse 返回魔法包装键（数组 `{"_list": [...]}` / 原始值 `{"_value": ...}`——
+  试用方"数组须包装"摩擦源）+ malformed = print 副作用 + 静默空 dict 双兜底
+  （调用方无法区分"解析空对象"与"解析失败"）；stringify/pretty 同缺陷族
+  （print + "{}" 静默回退）。**破坏性变更面评估**：`_list`/`_value` 包装键
+  仓内零消费方（grep 实证）→ 安全移除。实施面：① parse 返回实际值（对象→
+  dict / 数组→list / 原始值→标量；无包装键）——TypeDef 返回类型 dict→any
+  （数据形态决定结果形态 = any 正当语义）；② malformed = JsonParseError
+  （新插件级异常，code 属性 = RUN_JSON_PARSE_ERROR——VM 边界显式码透传机制
+  原码透传，可经 try/except 捕获；fail-fast 替代双兜底）；③ 新增
+  parse_or_none（显式宽松形态：malformed = None，无副作用——调用方按数据
+  形态显式选择失败面[None 判定 vs 异常捕获]，非默认回退）；④ stringify/
+  pretty 同缺陷族同修（失败 = JsonParseError，无 print、无 "{}" 静默回退——
+  半修复禁止）。新码 RUN_JSON_PARSE_ERROR（纯增面 + catalog + 15_diagnostics
+  + parity 门）。文档 11_modules §11.8 更新（parse 实际值语义 + parse_or_none
+  + 失败面示例）。判别 13 项（test_json_robust.py：实际值 5[对象/数组/标量
+  int/str/null] + fail-fast 3[可捕获/未捕获终止/码面] + parse_or_none 3
+  [None/值/无副作用] + stringify 2[正常/循环引用抛错]）。全量 pytest
+  **3816 passed / 1 skipped 零回归**（基线 3797 + 判别 13 + meta 按文件参数化增长）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

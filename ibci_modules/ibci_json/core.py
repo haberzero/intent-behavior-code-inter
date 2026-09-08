@@ -15,51 +15,78 @@ import copy
 import json
 from typing import Any, Dict, List, Optional
 
+from core.base.diagnostics.codes import RUN_JSON_PARSE_ERROR
+
+
+class JsonParseError(Exception):
+    """JSON 解析/序列化失败（fail-fast）。
+
+    ``code`` 属性 = 失败语义单点权威源（VM 边界显式码透传机制——
+    经 ``_runtime_error_code_for`` 原码透传，替代裸 RUN_GENERIC_ERROR）。
+    """
+
+    code = RUN_JSON_PARSE_ERROR
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
 
 class JSONLib:
     """
     JSON 序列化/反序列化及结构操作工具。
 
-    parse  始终返回 dict：
-      - JSON 对象 → dict（直接返回）
-      - JSON 数组 → {"_list": [...]}
-      - JSON 原始值 → {"_value": ...}
-      - 解析失败 → {}
+    parse          返回解析后的实际值（对象 → dict / 数组 → list /
+                   原始值 → 标量；无包装键）；malformed = JsonParseError
+                   （可经 try/except 捕获）。
+    parse_or_none  显式宽松形态：malformed = None（无 print 副作用、不抛）
+                   ——调用方以 None 判定失败（fail-fast 形态的显式选择面）。
+    stringify/pretty  失败 = JsonParseError（无 print、无 "{}" 静默回退）。
     """
 
     # ------------------------------------------------------------------
     # 基础序列化
     # ------------------------------------------------------------------
 
-    def parse(self, s: str) -> Dict[str, Any]:
-        """将 JSON 字符串解析为 dict。数组/原始值用 _list/_value 包装。"""
+    def parse(self, s: str) -> Any:
+        """解析 JSON 字符串，返回实际值（dict / list / 标量）。
+
+        malformed JSON = JsonParseError（fail-fast；经 try/except 捕获）。
+        """
         try:
-            result = json.loads(s)
-            if isinstance(result, dict):
-                return result
-            elif isinstance(result, list):
-                return {"_list": result}
-            else:
-                return {"_value": result}
+            return json.loads(s)
         except json.JSONDecodeError as e:
-            print(f"[IBCI JSON Error] Parse failed: {e}")
-            return {}
+            raise JsonParseError(f"JSON parse failed: {e}") from e
+
+    def parse_or_none(self, s: str) -> Optional[Any]:
+        """显式宽松形态：malformed = None（无副作用——不 print、不抛）。
+
+        与 parse（fail-fast 抛错）互补：调用方按数据形态显式选择失败面
+        （None 判定 vs 异常捕获），非默认回退。
+        """
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            return None
 
     def stringify(self, obj: Any) -> str:
-        """将任意值序列化为 JSON 字符串（无缩进）。"""
+        """将任意值序列化为 JSON 字符串（无缩进）。
+
+        不可序列化值（如循环引用）= JsonParseError（fail-fast）。
+        """
         try:
             return json.dumps(obj, ensure_ascii=False, default=str)
         except (TypeError, ValueError) as e:
-            print(f"[IBCI JSON Error] Stringify failed: {e}")
-            return "{}"
+            raise JsonParseError(f"JSON stringify failed: {e}") from e
 
     def pretty(self, obj: Any) -> str:
-        """将任意值序列化为美化（4 空格缩进）的 JSON 字符串。"""
+        """将任意值序列化为美化（4 空格缩进）的 JSON 字符串。
+
+        不可序列化值 = JsonParseError（fail-fast）。
+        """
         try:
             return json.dumps(obj, ensure_ascii=False, indent=4, default=str)
         except (TypeError, ValueError) as e:
-            print(f"[IBCI JSON Error] Pretty failed: {e}")
-            return "{}"
+            raise JsonParseError(f"JSON pretty failed: {e}") from e
 
     # ------------------------------------------------------------------
     # 结构操作
@@ -117,7 +144,7 @@ class JSONLib:
         json 模块的 __prompt__ 表示。
         当 json 模块对象作为意图注入内容时，返回此描述字符串。
         """
-        return "[JSON module: provides parse/stringify/merge/get_nested/set_nested/keys/values/pretty]"
+        return "[JSON module: provides parse/parse_or_none/stringify/merge/get_nested/set_nested/keys/values/pretty]"
 
 
 def create_implementation() -> JSONLib:

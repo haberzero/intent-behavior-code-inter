@@ -453,9 +453,14 @@ _SPEC_MATH = TypeDef(name="math", kind="module", provenance=Provenance.USER_DEFI
 
 
 _SPEC_JSON = TypeDef(name="json", kind="module", provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED, members={
-        "parse": MethodMemberSpec(name="parse", kind="method", type_ref=TypeRef.of("dict"), param_types=[
+        "parse": MethodMemberSpec(name="parse", kind="method", type_ref=TypeRef.of("any"), param_types=[
                 TypeRef.of("str")
-            ], return_type=TypeRef.of("dict"), param_descriptors=[
+            ], return_type=TypeRef.of("any"), param_descriptors=[
+                ParamDescriptor(name="s", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+        "parse_or_none": MethodMemberSpec(name="parse_or_none", kind="method", type_ref=TypeRef.of("any"), param_types=[
+                TypeRef.of("str")
+            ], return_type=TypeRef.of("any"), param_descriptors=[
                 ParamDescriptor(name="s", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
             ]),
         "stringify": MethodMemberSpec(name="stringify", kind="method", type_ref=TypeRef.of("str"), param_types=[

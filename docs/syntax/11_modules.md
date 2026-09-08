@@ -283,14 +283,36 @@ JSON 解析与序列化。
 import json
 
 str raw = '{"name": "Alice", "age": 30}'
-dict parsed = json.parse(raw)
+dict parsed = json.parse(raw)          # 对象 → dict
+list items  = json.parse("[1, 2, 3]")  # 数组 → list（直接，无包装）
+int n       = json.parse("42")         # 原始值 → 标量（直接，无包装）
 str serialized = json.stringify(parsed)
 str pretty = json.pretty(obj)        # 格式化输出
-dict merged = json.merge(a, b)       # 合并两个 dict/list
+dict merged = json.merge(a, b)       # 合并两个 dict
 list keys = json.keys(obj)           # 获取 dict 的键列表
 list vals = json.values(obj)         # 获取 dict 的值列表
 any val = json.get_nested(obj, path) # 按路径取嵌套值
 json.set_nested(obj, path, value)    # 按路径设置嵌套值
+```
+
+- **`json.parse(s)`**：返回解析后的**实际值**（JSON 对象 → `dict`、数组 →
+  `list`、原始值 → 标量；无包装键）。`s` 为非法 JSON 时**抛出可捕获异常**
+  （`RUN_JSON_PARSE_ERROR`，经 `try/except` 处理）——fail-fast，不静默返回空值、
+  无 print 副作用。
+- **`json.parse_or_none(s)`**：显式宽松形态——非法 JSON 返回 `None`（无副作用：
+  不抛、不 print）。调用方按数据形态在"抛错（parse）"与"None 判定
+  （parse_or_none）"间显式选择失败面。
+
+```ibci
+# 失败面示例
+try:
+    dict d = json.parse(raw)
+except Exception:
+    print("malformed JSON")
+
+any maybe = json.parse_or_none(raw)   # malformed = None
+if maybe == None:
+    print("absent/invalid")
 ```
 
 ### 11.9 用户扩展：宿主绑定
