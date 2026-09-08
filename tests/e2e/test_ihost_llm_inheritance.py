@@ -15,7 +15,7 @@ tasks_docs/_ihost_subenv_design.md §二）：
 import os
 import tempfile
 
-from tests.conftest import AI_MOCK_PREFIX, run_ibci
+from tests.conftest import run_ibci
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 

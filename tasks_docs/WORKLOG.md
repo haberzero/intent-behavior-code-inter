@@ -1408,6 +1408,26 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   后修正）。全量 pytest **3770 passed / 1 skipped 零回归**（基线 3739 + 判别 15 + meta 按文件参数化增长）。
 ---
 
+- **Tier B 质量巡检窗口完成（2026-09-08，Phase A 阶段边界）**：低强度批量
+  巡检（code-quality 十查 + §九特征码扫描 + 兼容/兜底措辞扫描——本会话新面
+  重点 + 全仓快扫）。**已修（低风险 7 项）**：① main.py `_source_dict`
+  Locatable 面提纯（line/column 契约直取；file_path = Location 专属字段
+  显式 None 默认 + 注释理由）；② ThrownException.__str__ hasattr 探测 →
+  isinstance(IbObject) 协议化解箱；③ journal write_failed 半接通面接线
+  （CLI 收尾面报告——写失败 stderr 警告"journal may be incomplete"；承诺
+  的"收尾面报告"获得消费方）；④ test_budget_cli 死参数（budget_key 恒参）
+  清理；⑤ test_ihost_llm_inheritance 未用导入（AI_MOCK_PREFIX）清理；
+  ⑥ host/service.py 历史叙述注释移除（注释卫生：不叙述历史）；
+  ⑦ provider_impl.py 模糊"保持兼容"措辞移除。**维持现状（合法保留 4 项，
+  不扩窗处理）**：observability/snapshot.py getattr 探测（既有观测面
+  duck-typed 跨层访问——Tier C 候选）；host/service.py save_state getattr
+  链（既有检查点面）；budget/provider docstring"兜底"措辞（维度降级诚实
+  描述：usage 缺失 → tokens 记 0，预算以 calls/wall 维继续功能——文档化
+  设计非掩盖）；get_current_call_info 覆写链（协议层覆写 provider 层，
+  文档化职责分离）。**待决断：无**。判别 = 受影响组回归 + 全量零回归
+  （全量 **3770 passed / 1 skipped 零回归**——仅重构无新增测试，计数持平）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

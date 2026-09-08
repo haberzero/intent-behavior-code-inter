@@ -59,9 +59,11 @@ def _source_dict(location):
     if location is None:
         return None
     source = {
+        # file_path 为 Location 专属字段（Locatable 契约只保证 line/column；
+        # 非 Location 位置面 = 无文件，显式 None 而非静默）
         "file": getattr(location, "file_path", None),
-        "line": getattr(location, "line", None),
-        "column": getattr(location, "column", None),
+        "line": location.line,
+        "column": location.column,
     }
     if source["file"] and source["line"]:
         snippet = _read_source_line(source["file"], source["line"])
@@ -289,6 +291,14 @@ def main():
             finally:
                 if journal_writer is not None:
                     journal_writer.close()
+                    # 收尾面报告：写失败降级显形（审计可见性——journal 可能
+                    # 不完整；run 本身不受影响，此处只把降级事实呈现给用户）
+                    if journal_writer.write_failed:
+                        print(
+                            f"warning: journal write failures — "
+                            f"{journal_writer.path} may be incomplete",
+                            file=sys.stderr,
+                        )
         except FileNotFoundError as e:
             print(f"Error: {e}")
             run_error = {"code": None, "message": str(e), "source": None}

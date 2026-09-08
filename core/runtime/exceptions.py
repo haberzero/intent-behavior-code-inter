@@ -24,7 +24,8 @@ class ThrownException(Exception):
             type_name = value.ib_class.name
             raw = value.fields.get("message")
             if raw is not None:
-                if hasattr(raw, "to_native"):
+                # 装箱值经 to_native 解箱（IbObject 标准协议面）
+                if isinstance(raw, IbObject):
                     raw = raw.to_native()
                 if isinstance(raw, str) and raw:
                     return f"{type_name}: {raw}" if type_name else raw

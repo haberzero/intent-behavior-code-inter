@@ -31,9 +31,9 @@ ENTRY_THREE_CALLS = (
 )
 
 
-def _run_cli(tmp_path, budget=None, budget_key="api_config.json"):
+def _run_cli(tmp_path, budget=None):
     if budget is not None:
-        (tmp_path / budget_key).write_text(
+        (tmp_path / "api_config.json").write_text(
             json.dumps(budget), encoding="utf-8"
         )
     return subprocess.run(

@@ -192,7 +192,6 @@ class HostService(IHostService):
         self.setup_context_callback(context, force=True)
         
         # 2. 重新注入原生插件 (Native Plugins)
-        # 直接使用注册表查询方法，消除 HostInterface 兼容性接口依赖。
         # 模块对象按 import 路径同构构造（vtable/白名单契约 + IbModule 包装）——
         # 缺契约的裸 NativeObject 会在成员访问时被模块契约门拒绝。
         live_modules: Dict[str, Any] = {}
