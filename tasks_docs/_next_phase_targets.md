@@ -87,7 +87,7 @@ provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4
 
 | ref | 需求 | IBCI 现状 / 关联 | 批次建议 |
 |-----|------|------------------|----------|
-| A1 | 用户自定义协议/类型类一等公民 | 内置协议族为封闭集合（dunder/契约方法）；`docs/LANGUAGE_DESIGN_EVOLUTION.md` §3.1 已规划 | 批 1（P0） |
+| A1 | 用户自定义协议/类型类一等公民 | ✅ **已核验（2026-09-07）**：机制已落地（ref 宣称过期）——协议声明（protocol Name: + 方法签名 pass 体）/ 结构判定满足（satisfies_protocol 用户协议路径）/ 类型参数 bound（T: Shape 符合/违约编译期 fail-fast）/ 协议继承（protocol Child(Parent)）；文档 06_oop 协议节已存在；回归锁定 tests/compiler/test_user_protocols.py（4 判别） | 批 1（P0） |
 | A2 | 泛型约束/泛型函数 | 当前泛型无约束；§3.4 重合 | 批 2 |
 | A3 | 多行容器字面量尾逗号 | PAR 语法面变更；**触及语义错误集，须全量 pytest 评估破坏面** | 批 1（P0） |
 | A4 | 无显式返回缺省 void/auto | 现无缺省；样板负担 | 批 2 |
