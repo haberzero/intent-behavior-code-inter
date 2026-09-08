@@ -1627,6 +1627,32 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   层设计交付）。
 ---
 
+- **Phase E 原阶段 E 顺延批收束（2026-09-08，free-explore）**：round3 阶段 E（原批
+  2 剩余 A2/A5/B2 + 批 3 A6/B5/C6/C7/D2/D3 终态裁定 + 两项实施）。**终态裁定**：
+  ① **A2 泛型约束 / A5 解构模式匹配 / A6 Enum-tagged union / B2 惰性短路结构**
+  = **挂起 → VISION-4 整合推进**（类型层语义项，与 VISION-4 类型理论加固[ADT/match/
+  泛型约束]同域——round3 intake 已定"整合推进"；实施须待 VISION-4 类型理论设计落地
+  后按该方向推进，禁止以"试用方急需"为由半接通——工作模式定论：禁止半修复/半接通）；
+  ② **C7 性能内省** = 完成（R3-⑤ run 级可观测子系统消重——调用级埋点面 = LLM journal
+  行 + 预算核算，不开第二条埋点管线）；③ **D3 新能力配套诊断码** = 挂起（随新能力
+  配套——诊断码经纯增面随各特性落地，非独立批）；④ **B5 并发原语成熟化** = 挂起
+  （chan/slot/subscriber/thread/thread_result 已是一等原语[14_concurrency +
+  write_concurrent_tasks howto + KNOWN_LIMITS §二十二 边界完整]——基础成熟；具体
+  成熟化专项需单独立项评估；流式调用观测边界[stream 不入 call_info]已记 KNOWN_LIMITS
+  §五十为待评估）；⑤ **C6 流式/批量/多模型编排完善** = **完成**（多模型组合编排
+  模式 howto——orchestrate_llm_calls.md 新增"多模型组合编排"节：强弱分工[强模型规划
+  + 弱模型 @FAST~ 执行]/跨模型校验[生成 + 独立判官 @JUDGE~]/扇出聚合[多模型投票]三
+  模式 + 命名路由 @NAME~ 机制面 + 关键语义澄清[行为表达式作容器元素保持 behavior 型
+  须经类型变量强转；retry 是保留词不可作变量名——D-9 保留词表暴露的陷阱]；三模式
+  示例均实测编译验证）；⑥ **D2 CLI inspect/check 导出** = **完成**（check 命令新增
+  --format json / --output——静态检查诊断结构化导出[success + diagnostics{severity,
+  code, message, location{file,line,column}, hint}]；check 与 compile 同源
+  scheduler.compile_project，JSON 导出复用 compile 面捕获诊断序列化；默认 pretty
+  形态不变零侵入；判别 4 项 test_check_export.py：成功 json/失败诊断面/输出到文件/
+  默认 pretty 不变）。**round3 全阶段 + 原阶段 E 顺延批全部收束**（A/B/C/D/E 全部项
+  处于完成/挂起/裁定不做终态——收敛判据达成）。全量 pytest **3867 passed / 1 skipped 零回归**（基线 3857 + D2 判别 4 + meta 按文件参数化增长；C6 纯文档无测试增量）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

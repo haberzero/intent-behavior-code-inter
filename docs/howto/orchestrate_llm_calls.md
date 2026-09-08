@@ -123,12 +123,71 @@ except LLMRetryExhaustedError:
     print("服务暂时不可用，使用默认分 5")
 ```
 
+## 多模型组合编排
+
+单个程序内可同时路由到**多个不同模型**（经 `@NAME~` 命名模型路由，
+`docs/syntax/07_behavior_expressions.md` §7.5），组合出单模型做不到的编排形态。
+三种常用模式：
+
+**模式 1：强弱分工（规划 + 执行）**——强模型做规划/决策，弱模型（便宜/快）做
+批量执行。规划用默认强模型，执行用注册的弱模型：
+
+```ibci
+import ai
+# 弱模型（便宜快）注册为命名模型
+ai.register_model("FAST", "https://api.siliconflow.cn/v1", fast_key, "Qwen/Qwen3.5-4B")
+
+# 强模型（默认）规划：分解任务
+list[str] steps = @~ 把"整理销售报表"分解为 3 步，JSON 数组 ~
+# 弱模型执行每一步
+for str s in steps:
+    str result = @FAST~ 执行这一步：$s，输出结果 ~
+    print(result)
+```
+
+**模式 2：跨模型校验（生成 + 判官）**——模型 A 生成，模型 B 独立校验
+（降低单模型系统性偏差）：
+
+```ibci
+str answer  = @~ 解这道题：$problem ~          # 默认模型生成
+str verdict = @JUDGE~ 答案 $answer 对吗？只答 对/错 ~  # 独立模型判官
+if verdict == "错":
+    str fixed = @~ 重新解题：$problem ~        # 生成失败再修正
+```
+
+> **命名注意**：`retry` 是保留词（`llmexcept` 重试关键字，见
+> `docs/SYNTAX_REFERENCE.md` 保留词表）——不可用作变量名。上例用 `fixed`
+> 而非 `retry` 承接修正答案。
+
+**模式 3：扇出 + 聚合（fan-out）**——同一任务发给多个模型，聚合结果
+（投票/取最优）：
+
+```ibci
+# 每个模型调用先落类型变量（行为表达式作容器元素时保持 behavior 型，
+# 须经类型变量赋值强转后组列表）
+str v1 = @~ 选 A 还是 B？只答 A 或 B ~
+str v2 = @JUDGE~ 选 A 还是 B？只答 A 或 B ~
+str v3 = @FAST~ 选 A 还是 B？只答 A 或 B ~
+list[str] votes = [v1, v2, v3]
+# 多数表决
+str decision = (votes.count("A") >= 2) ? "A" : "B"
+```
+
+> **注意**：每个 `@NAME~` 调用是独立 LLM 调用（独立 `llmexcept`/`retry`/
+> `set_retry` 作用域）——多模型组合不共享重试状态。密钥经环境变量/
+> `api_config.json` 读取（不硬编码）；MOCK 模式下未注册模型名不报错
+> （见 `docs/syntax/13_mock_testing.md` §13.4）。批量场景用 `ai.run_batch`
+> （`docs/syntax/08_llm_callable.md`），流式用 `stream`（同文档）。
+
 ## 编排决策速查
 
 | 场景 | 选用 |
 |------|------|
 | 单次调用、输出格式敏感 | 声明类型 + `llmexcept` + `retry` |
 | 单次调用、网络可能抖动 | `ai.set_retry(n)`（自动重试基础设施失败） |
+| 规划重/执行轻（成本优化） | 多模型组合·强弱分工（强模型规划 + 弱模型 `@FAST~` 执行） |
+| 降低单模型系统性偏差 | 多模型组合·跨模型校验（生成 + 独立判官 `@JUDGE~`） |
+| 关键决策需稳健 | 多模型组合·扇出聚合（多模型投票） |
 | 某一类调用反复格式失败 | 类上声明 `__retry__` 默认策略 |
 | 重试耗尽后必须继续 | 外层 `try/except LLMRetryExhaustedError` 降级 |
 | 循环/长链中的每一步 | 每步独立 `llmexcept` + 整链一个兜底 `try/except` |

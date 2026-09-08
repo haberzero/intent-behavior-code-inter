@@ -130,6 +130,9 @@ def main():
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
     check_parser.add_argument("file", help="Path to the .ibci entry file")
     check_parser.add_argument("--root", help="Project root directory", default=None)
+    check_parser.add_argument("--format", choices=["pretty", "json"], default="pretty",
+                              help="Output format: pretty (human-readable, default) or json (structured diagnostics export)")
+    check_parser.add_argument("--output", "-o", help="Output file for json export (default: stdout)", default=None)
 
     # Compile command
     compile_parser = subparsers.add_parser("compile", help="Compile only (no interpret)")
@@ -329,6 +332,45 @@ def main():
         sys.exit(1 if run_error else 0)
 
     elif args.command == "check":
+        if args.format == "json" or getattr(args, "output", None):
+            # check export：静态检查诊断结构化导出（json）——复用 compile 面
+            # （check 与 compile 同源 scheduler.compile_project），捕获诊断序列化。
+            def _loc_dict(loc):
+                if loc is None:
+                    return None
+                return {k: v for k, v in {
+                    "file": getattr(loc, "file_path", None),
+                    "line": getattr(loc, "line", None),
+                    "column": getattr(loc, "column", None),
+                    "end_line": getattr(loc, "end_line", None),
+                    "end_column": getattr(loc, "end_column", None),
+                }.items() if v is not None}
+
+            def _diag_dict(d):
+                return {
+                    "severity": getattr(d.severity, "name", str(d.severity)),
+                    "code": d.code,
+                    "message": d.message,
+                    "location": _loc_dict(d.location),
+                    "hint": getattr(d, "hint", None),
+                }
+
+            try:
+                engine.compile(args.file)
+                result = {"success": True, "diagnostics": []}
+                exit_code = 0
+            except CompilerError as e:
+                result = {"success": False,
+                          "diagnostics": [_diag_dict(d) for d in e.diagnostics]}
+                exit_code = 1
+            output = json.dumps(result, indent=2, ensure_ascii=False)
+            if getattr(args, "output", None):
+                with open(args.output, "w", encoding="utf-8") as f:
+                    f.write(output + "\n")
+                print(f"Check diagnostics exported to: {args.output}")
+            else:
+                print(output)
+            sys.exit(exit_code)
         success = engine.check(args.file)
         sys.exit(0 if success else 1)
 
