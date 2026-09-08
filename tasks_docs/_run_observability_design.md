@@ -242,12 +242,18 @@ run 级可观测子系统承载，消重"）；未来若需 ibci 内"调用级�
 
 | 码 | 域 | 触发 |
 |----|----|------|
-| `RUN_REPLAY_EXHAUSTED` | RUN_ | replay journal 耗尽（调用次数超记录） |
 | `RUN_BUDGET_EXCEEDED` | RUN_ | budget on_exceed=fail 且超限（provider 调用前拦截） |
 | `CFG_CONFIG_INVALID_BUDGET` | CFG_ | budget 节形态错误（加载期 fail-fast） |
-| `CFG_JOURNAL_INVALID` | CFG_ | --replay 源 journal 格式损坏/不合法（启动期 fail-fast） |
 
 （语义错误集变更 → 每批实施后全量 pytest 破坏面评估；15_diagnostics 同步。）
+
+**实施裁定（批 2，2026-09-08）**：原设计的 `RUN_REPLAY_EXHAUSTED` 专用码
+取消——replay 耗尽错误经既有 LLMCallError 包装面到达（`_call_llm` 异常面统一
+包装 provider 失败；新增专用码需改内核包装路径，破坏面 > 收益，错误消息
+自身携带精确语义 "replay journal exhausted at call #N — code diverges from
+the recorded run"）。journal 格式校验失败 = CLI 启动期错误面（`Error: ...`
+stdout + exit 1，与 FileNotFoundError 同形态惯例）——非运行期诊断，不进
+诊断码目录。
 
 ## 八、质量红线自查（对照工作模式定论）
 

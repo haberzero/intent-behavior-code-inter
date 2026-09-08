@@ -51,6 +51,10 @@ def main():
     run_parser.add_argument("--auto", action="append", help="Set variable (key=value)")
     run_parser.add_argument("--no-journal", action="store_true",
                             help="Disable LLM call journal (default: on, llm_journal/<run-id>.jsonl)")
+    run_parser.add_argument("--replay", metavar="JOURNAL",
+                            help="Deterministic replay: serve LLM calls from a journal "
+                                 "file in seq order (real provider not loaded; exhaustion "
+                                 "fails fast). Implies journaling of the replay run.")
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
@@ -140,9 +144,32 @@ def main():
                     k, v = auto_var.split("=", 1)
                     cli_variables[k] = v
 
+        # 确定性重放（--replay）：replay provider 经能力槽 SYSTEM 优先级替换
+        # 真实 provider（真实 provider 不加载，无需 API key）；加载期校验
+        # fail-fast（损坏/不合法 = 拒绝，不部分消费）。
+        replay_journal_path = None
+        replay_arg = getattr(args, 'replay', None)
+        if replay_arg:
+            from core.runtime.capability_registry import CapabilityPriority, CapabilityRegistry
+            from core.runtime.replay import ReplayJournal, ReplayLLMProvider, JournalFormatError
+            try:
+                replay_journal = ReplayJournal(replay_arg)
+            except JournalFormatError as e:
+                print(f"Error: {e}")
+                sys.exit(1)
+            engine.capability_registry.register(
+                CapabilityRegistry.CAP_LLM_PROVIDER,
+                ReplayLLMProvider(replay_journal),
+                plugin_id="cli_replay",
+                priority=CapabilityPriority.SYSTEM,
+            )
+            replay_journal_path = replay_arg
+            print(f"replay: {replay_arg} ({replay_journal.total_calls} recorded calls)",
+                  file=sys.stderr)
+
         # LLM journal（run 级调用审计，默认开；--no-journal 关闭）。路径在项目
         # 根下（与 --root 一致）；启动提示走 stderr（stdout 是数据面，审计提示
-        # 不入数据面）。
+        # 不入数据面）。重放 run 仍写新 journal（审计链完整：replay_of 指向源）。
         journal_writer = None
         if not getattr(args, 'no_journal', False):
             from core.runtime.observability.llm_journal import LLMJournalWriter, make_run_id
@@ -151,6 +178,7 @@ def main():
             journal_writer = LLMJournalWriter(
                 os.path.join(root_dir, journal_rel),
                 entry=os.path.basename(args.file),
+                replay_of=replay_journal_path,
             )
             print(f"journal: {journal_rel}", file=sys.stderr)
 
