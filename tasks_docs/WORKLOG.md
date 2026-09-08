@@ -976,6 +976,32 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
      resolve 取决于调度）。当下 = 顺序场景契约清晰（T18 观测契约已文档化）；
      潜在参考 = 并发场景 call_info 的观测语义（per-future 观测面 vs 全局
      最近——run_many 批量调用场景的观测需求未现，暂不设计）。
+- **T2 环境变量一等通道 + C2 容器解析边缘（2026-09-07，free-explore）**：
+  - **T2（handoff §五 队列项，阶段 E 小项）**：① `ihost.getenv(key)` —— IBCI 脚本
+    读取宿主 OS 环境变量的一等语言面通道（缺失返回空串，对齐 os.getenv(key, "")
+    语义）：HostService.getenv（宿主能力委托链单点）+ IHostPlugin.getenv（插件
+    委托纪律保持）+ _SPEC_IHOST spec 成员；此前唯一通道 = 宿主绑定样板
+    （import python "os" + bind getenv）——样板保留为通用底层手段，ihost.getenv
+    为常用路径便捷面；用例收敛（T01 D1-07-006 / T08 D5-03 密钥通道读法改
+    ihost.getenv，真实端点验证通过）+ 文档同步（11_modules/LLM_SERVICE §五/
+    AGENTS.local）。② `idbg.env`/`show_env` → `idbg.runtime`/`show_runtime`
+    改名消歧——运行环境诊断（调用栈深度+活跃意图）与"OS 环境变量"同名不同物；
+    语言面破坏性变更（旧名运行期 RUN_ATTRIBUTE_ERROR fail-fast）；T01 D3-61 用例
+    + 文档同步。测试 +5（test_ihost_getenv.py）。
+  - **C2（阶段 E 批 1，结构化 LLM 输出契约"文档+边缘补齐"）**：边缘核验发现
+    dict 容器 expected_type 解析不可用（LLMParseError）——根因 = MOCK:STR 值
+    指令首 token 截断（`MOCK:STR:{"a": 1}` → `{"a":`——JSON 对象冒号/空格处
+    截断；解析器/策略层经 spy 实证均正常，mock 内容截断为唯一根因）。修复：
+    MOCK:STR 全量回显语义（指令后完整内容原样保留；引号包裹兼容形态去引号；
+    INT/FLOAT/BOOL/LIST/DICT 结构化指令不变）+ 控制指令（SLEEP/ERROR）文本
+    内容解析前剥离（组合指令语义正交）。文档：08_llm_callable 容器解析（裸
+    形态 list/dict + 模糊提取）+ 13_mock_testing STR 语义。回归测试 +14
+    （test_mock_scenario.py）+ 既有断言 6 处按全量语义更新（llmexcept/
+    multimodal×4/mock_directives/closure/test_hooks——含 closure 注释勘误：
+    提示词变量插值展开 $p 为真实语义，旧截断掩盖之）。
+  - 全量 pytest 基线 3457 → **3474 passed / 1 skipped**（本段 +19，零回归；
+    分三组实跑验证——job 时长上限规避）；git 承载（本段 2 commit：dbc15a15 T2 /
+    6334fe15 C2）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
