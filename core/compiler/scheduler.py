@@ -58,6 +58,10 @@ class Scheduler(ICompilerService):
         
         # Caches (Using OrderedDict for LRU behavior)
         self.modules: Dict[str, ModuleInfo] = {} # Path -> Info
+        # 导入模块的用户名映射（解析路径 -> import 声明名）：导入模块的 artifact
+        # 模块键 = 用户 import 名（与运行期 import_module 查询名一致）；入口/
+        # 非导入模块按路径派生（既有语义）。
+        self._import_names: Dict[str, str] = {}
         self.ast_cache: OrderedDict[str, IbModule] = OrderedDict()   # Path -> AST
         self.symbol_table_cache: OrderedDict[str, Any] = OrderedDict() # Path -> SymbolTable
         self.token_cache: OrderedDict[str, List[Token]] = OrderedDict() # Path -> Tokens
@@ -173,9 +177,12 @@ class Scheduler(ICompilerService):
                 mod_info.status = ModuleStatus.FAILED
                 continue
 
-            # Determine module name
-            rel_path = safe_relpath(file_path, self.root_dir)
-            module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
+            # Determine module name（导入模块 = 用户 import 名——与运行期
+            # import_module 查询名一致；入口/非导入模块 = 路径派生，既有语义）
+            module_name = self._import_names.get(file_path)
+            if module_name is None:
+                rel_path = safe_relpath(file_path, self.root_dir)
+                module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
             self.module_name_to_path[module_name] = file_path
             # 入口模块名覆盖（run_string 场景）：源码经 tempfile 载体、路径派生名
             # 非确定，显式入口锚点名使模块身份稳定可复现。
@@ -315,6 +322,9 @@ class Scheduler(ICompilerService):
                 try:
                     resolved_path = self.resolver.resolve(imp.module_name, current_path)
                     imp.file_path = resolved_path
+                    # 用户名映射（artifact 键 = 用户 import 名；setdefault 保
+                    # 首个导入声明——同路径多次导入名一致）
+                    self._import_names.setdefault(resolved_path, imp.module_name)
                     
                     # Cycle Prevention: Only add to queue if not visited
                     if resolved_path not in visited and resolved_path not in queue:
@@ -340,9 +350,11 @@ class Scheduler(ICompilerService):
         if not module_info:
             return 
 
-        # Determine module name
-        rel_path = safe_relpath(file_path, self.root_dir)
-        module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
+        # Determine module name（导入模块 = 用户 import 名；否则路径派生）
+        module_name = self._import_names.get(file_path)
+        if module_name is None:
+            rel_path = safe_relpath(file_path, self.root_dir)
+            module_name = ModuleNameSpace.relpath_to_module_name(rel_path)
         self.module_name_to_path[module_name] = file_path
         # 入口模块名覆盖（run_string 场景，与 compile_project 主循环一致）：
         # 源码经 tempfile 载体、路径派生名非确定，显式锚点名使模块身份稳定。

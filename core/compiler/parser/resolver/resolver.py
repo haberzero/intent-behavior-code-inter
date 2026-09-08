@@ -111,25 +111,63 @@ class ModuleResolver:
     def resolve(self, module_name: str, context_file: Optional[str] = None) -> str:
         """
         Resolve a module name to an absolute file path.
-        
+
+        解析语义：
+        - 相对导入（``.``/``..`` 前缀）：锚定导入方文件目录（level 逐级上溯），
+          单候选；
+        - 绝对导入：两级搜索——① 导入方文件所在目录（入口目录/子模块同目录
+          模块——sys.path[0] 惯例，多文件用例的同目录模块可解析）→ ② 项目根
+          （root_dir，项目级模块，既有语义兜底）。逐级探测，首个命中返回。
+
         Args:
             module_name: The module name (e.g., 'pkg.mod' or '..mod').
-            context_file: The absolute path of the file importing the module (required for relative imports).
-            
+            context_file: The absolute path of the file importing the module
+                (required for relative imports; 绝对导入两级搜索的 ① 级锚点)。
+
         Returns:
             The absolute path to the resolved file.
-            
+
         Raises:
             ModuleResolveError: If the module cannot be found.
         """
-        candidate_path = self._get_candidate_path(module_name, context_file)
-        
-        # Check for file existence
-        resolved = self._probe_file(candidate_path)
-        if resolved:
-            return resolved
-            
+        if module_name.startswith("."):
+            candidates = [self._get_candidate_path(module_name, context_file)]
+            absolute = False
+        else:
+            candidates = self._get_absolute_candidates(module_name, context_file)
+            absolute = True
+
+        for cand in candidates:
+            # Security Check——相对导入单候选：越界即安全错误（既有语义）；
+            # 绝对导入 ① 级（导入方目录）可能位于沙箱外（如合成入口载体
+            # tempfile 位于系统临时目录）——越界候选跳过，回落 ② 级（项目根，
+            # 恒在沙箱内）。
+            try:
+                self._check_path_security(cand)
+            except Exception:
+                if not absolute or len(candidates) == 1:
+                    raise
+                continue
+            resolved = self._probe_file(cand)
+            if resolved:
+                return resolved
+
         raise ModuleResolveError(module_name, context_file)
+
+    def _get_absolute_candidates(self, module_name: str,
+                                 context_file: Optional[str]) -> list:
+        """绝对导入候选序列：导入方文件目录（同目录模块）→ 项目根。"""
+        rel_path = ModuleNameSpace.module_to_relpath(module_name)
+        cands = []
+        if context_file:
+            ctx_dir = IbPath.from_native(context_file).resolve_dot_segments().parent
+            if ctx_dir is not None:
+                cands.append(
+                    (IbPath.from_native(ctx_dir.to_native()) / rel_path).to_native()
+                )
+        cands.append((IbPath.from_native(self.root_dir) / rel_path).to_native())
+        # 去重（导入方位于项目根时两级同候选）——保序
+        return list(dict.fromkeys(cands))
 
     def _probe_file(self, base_path: str) -> Optional[str]:
         """Check for file existence with various extensions and package inits."""
