@@ -109,7 +109,7 @@ provider `_resolve_max_tokens`（命名模型注册项 > 默认配置 > 内置 4
 | D2 | CLI inspect/check 导出 | 无 | 批 3 |
 | D3 | 新能力配套诊断码 | 诊断体系已有（codes/catalog），随新能力配套 | 批 3（随批 1 大项） |
 | E1 | ihost 完善（子环境 LLM 配置继承/隔离边界/调试体验） | run_isolated/spawn_isolated/collect 已有；配置继承缺 | 批 2 |
-| E2 | save/load_state 覆盖 Environment（world/mode/话语） | 现仅变量级 | 批 2 |
+| E2 | save/load_state 覆盖 Environment（world/mode/话语） | ✅ **已落地（2026-09-07）**：帧级环境状态（当前环境 frames 栈）序列化收集 + 恢复（use_environment fork 语义——保存态替换当前环境）；与 B3 environment 值类型序列化（实例 frames 键值保真）合成完整 Environment 覆盖（变量级[既有] + 帧级 + 实例级）；判别 +2 | 批 2 |
 
 ## 四、批次结构建议
 

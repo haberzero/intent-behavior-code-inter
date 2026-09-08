@@ -1063,6 +1063,19 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   - **阶段 E 批 1 全部完成**：C1/B1/A3/C2/T2/C3/A1/B3 ✅（C4 裁定维持现状）；
     批 2/3 剩余：A2/A4/A5/B2/B4/C5 重估/D1/E1/E2（批 2）+ A6/B5/C6/C7/D2/D3
     （批 3）+ D1（idbg 增强——T2 命名消歧已完成，增强面随批 2）。
+- **E2 save/load 覆盖帧级 Environment（2026-09-07，free-explore——阶段 E 批 2，
+  B3 后续解锁项）**：ref E2"save/load_state 覆盖 Environment（现仅变量级）"
+  落地——① serialize_context 增 `environment_uid`（当前帧环境 frames 栈经
+  _collect_environment 拓扑收集；空环境亦收集[frames=[] 保真]；旧快照无该键
+  恢复端跳过[向前兼容]）；② deserialize_context 恢复——保存 frames 栈经
+  use_environment 替换当前环境（fork 语义：恢复后当前环境独立于池内副本，
+  与 intent_context 恢复先例同构）；③ 文档 17_environment_system §边界
+  序列化面补帧级语义（实例 + 帧级状态双保真）。判别测试 +2
+  （TestFrameEnvironmentSerialization：save→变异→load 恢复保存态 /
+  帧环境键值保真）。全量 pytest 基线 3505 → **3507 passed / 1 skipped**
+  （零回归；git e855db78）。**阶段 E 批 2 进度**：E2 ✅；剩余 A2 泛型约束 /
+  A4 缺省 void / A5 解构 / B2 惰性结构 / B4 编译定位 / C5 思考抑制重估 /
+  D1 idbg 增强 / E1 ihost 完善。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
