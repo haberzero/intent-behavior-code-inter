@@ -43,6 +43,7 @@ from core.kernel.axioms.primitives.file_handle import FileHandleAxiom
 from core.kernel.axioms.primitives.vector import VectorAxiom
 from core.kernel.axioms.primitives.knowledge import KnowledgeAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
+from core.kernel.axioms.primitives.environment import EnvironmentAxiom
 from core.kernel.axioms.intent import IntentAxiom
 from core.kernel.axioms.primitives.comm import (
     ThreadAxiom,
@@ -94,6 +95,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(FnCallableAxiom())
     registry.register(BehaviorAxiom())
     registry.register(IntentContextAxiom())
+    registry.register(EnvironmentAxiom())
     registry.register(IntentAxiom())
     registry.register(LlmCallResultAxiom())
     registry.register(LLMUncertainAxiom())

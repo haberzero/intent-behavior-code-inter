@@ -844,6 +844,109 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         _reg_native(intent_context_class, 'use', _ic_use, unbox=False)
         _reg_native(intent_context_class, 'get_current', _ic_get_current, unbox=False)
 
+    # 5.7 注册 environment 一等环境对象（B3——frames 栈键值环境，
+    # 可快照/嵌套；与 intent_context 同构：预lude 可见具体类型 +
+    # get_current/use 静态面 + 实例面 vtable 注册，unbox_args=False
+    # 使 environment 值经 box 直通）。
+    environment_class = ib_classes.get("environment")
+    if environment_class:
+        from core.runtime.objects.environment import (
+            EnvironmentState,
+            require_env_state,
+            set_env_state,
+            get_env_state,
+        )
+
+        def _env_init(receiver, *args):
+            """environment() 构造函数：创建空环境（单帧）。"""
+            set_env_state(receiver, EnvironmentState())
+            return registry.get_none()
+
+        def _env_get(receiver, *args):
+            """env.get(key)：内→外查找（遮蔽），返回深拷贝；缺失 None。"""
+            key = args[0].to_native() if isinstance(args[0], IbObject) else args[0]
+            value = require_env_state(receiver).get(key)
+            if value is None:
+                return registry.get_none()
+            return registry.box(value)
+
+        def _env_set(receiver, *args):
+            """env.set(key, value)：最内层帧写入（值深拷贝隔离）。"""
+            key = args[0].to_native() if isinstance(args[0], IbObject) else args[0]
+            val = args[1]
+            native = val.to_native() if isinstance(val, IbObject) else val
+            require_env_state(receiver).set(key, native)
+            return registry.get_none()
+
+        def _env_pop(receiver, *args):
+            """env.pop(key)：自内向外移除并返回（深拷贝）；缺失 None。"""
+            key = args[0].to_native() if isinstance(args[0], IbObject) else args[0]
+            value = require_env_state(receiver).pop(key)
+            if value is None:
+                return registry.get_none()
+            return registry.box(value)
+
+        def _env_clear(receiver, *args):
+            """env.clear()：清空全部帧。"""
+            require_env_state(receiver).clear()
+            return registry.get_none()
+
+        def _env_fork(receiver, *args):
+            """env.fork()：深拷贝快照（新实例）。"""
+            new_instance = IbObject(environment_class)
+            set_env_state(new_instance, require_env_state(receiver).fork())
+            return new_instance
+
+        def _env_len(receiver, *args):
+            """env.len()：键数（遮蔽去重后）。"""
+            return registry.box(require_env_state(receiver).len())
+
+        def _env_contains(receiver, *args):
+            """env.contains(key)：任一帧含键。"""
+            key = args[0].to_native() if isinstance(args[0], IbObject) else args[0]
+            return registry.box(require_env_state(receiver).contains(key))
+
+        def _env_keys(receiver, *args):
+            """env.keys()：全部帧键并集（内→外序，去重）。"""
+            return registry.box(require_env_state(receiver).keys())
+
+        def _env_get_current(receiver, *args):
+            """environment.get_current()：当前帧环境的 fork 快照（新实例）。"""
+            from core.runtime.frame import get_current_frame
+
+            frame = get_current_frame()
+            new_instance = IbObject(environment_class)
+            set_env_state(new_instance, frame.current_environment.fork())
+            return new_instance
+
+        def _env_use(receiver, *args):
+            """environment.use(env)：以 env 的 fork 副本替换当前帧环境
+            （非引用绑定——与 intent_context.use 同构）。"""
+            from core.runtime.frame import get_current_frame
+            from core.kernel.issue import InterpreterError
+
+            state = get_env_state(args[0])
+            if state is None:
+                raise InterpreterError(
+                    "environment.use(): expected an environment instance, "
+                    f"got {type(args[0]).__name__}"
+                )
+            get_current_frame().use_environment(state)
+            return registry.get_none()
+
+        _reg_native(environment_class, '__init__', _env_init, unbox=False)
+        # 实例面/静态面方法注册：
+        _reg_native(environment_class, 'get', _env_get, unbox=False)
+        _reg_native(environment_class, 'set', _env_set, unbox=False)
+        _reg_native(environment_class, 'pop', _env_pop, unbox=False)
+        _reg_native(environment_class, 'clear', _env_clear, unbox=False)
+        _reg_native(environment_class, 'fork', _env_fork, unbox=False)
+        _reg_native(environment_class, 'len', _env_len, unbox=False)
+        _reg_native(environment_class, 'contains', _env_contains, unbox=False)
+        _reg_native(environment_class, 'keys', _env_keys, unbox=False)
+        _reg_native(environment_class, 'get_current', _env_get_current, unbox=False)
+        _reg_native(environment_class, 'use', _env_use, unbox=False)
+
     # 5b'. thread 类型构造函数注册
     #
     # thread 类方法（start/join/cancel/is_done）已由 ThreadAxiom → axiom-driven

@@ -122,6 +122,14 @@ INTENT_SPEC = TypeDef(name="Intent", kind=TypeKind.CLASS.value, provenance=Prove
 INTENT_CONTEXT_SPEC = TypeDef(name="intent_context", kind=TypeKind.CLASS.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                                parent_type=TypeRef.of("Object"))
 
+# environment 一等环境对象类型规格 — frames 栈键值环境（B3；
+# get_current/use 静态面 + get/set/pop/clear/fork/len 实例面，
+# 与 intent_context 同构的预lude 可见具体类型）
+ENVIRONMENT_SPEC = TypeDef(name="environment", kind=TypeKind.CLASS.value,
+                           provenance=Provenance.KERNEL_NATIVE,
+                           visibility=Visibility.PRELUDE_VISIBLE,
+                           parent_type=TypeRef.of("Object"))
+
 # 多模态类型规格 — IbAudio / IbImage / IbVideo 的公理化描述符
 # 作为普通类名注册（非关键字）。
 # 继承 file_handle，使用磁盘型存储模型。

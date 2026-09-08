@@ -14,6 +14,7 @@ from core.runtime.objects.kernel import IbClass, IbModule, IbObject, IbValue, Ib
 from core.runtime.objects.kernel.base import unbox
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.objects.environment import EnvironmentState
 from core.runtime.objects.cell import IbCell
 from core.runtime.interpreter.llm_except_frame import LLMExceptFrame
 
@@ -465,6 +466,11 @@ class RuntimeContextImpl(RuntimeContext):
         # 持久意图栈、涂抹意图队列、排他意图槽、全局意图全部统一持有在此对象中。
         self._intent_ctx: IbIntentContext = IbIntentContext()
 
+        # 一等环境对象（B3）：当前帧环境状态（frames 栈）。
+        # environment.get_current() / environment.use(env) 的持有面——
+        # 与 _intent_ctx 同构（帧级持有，use 以 fork 语义替换）。
+        self._current_environment: "EnvironmentState" = EnvironmentState()
+
         # 帧级活跃 intent_context IBCI 实例指针
         # ----------------------------------------------------------------
         # 指向当前帧"正在使用"的 intent_context IBCI 对象（用户命名身份）。
@@ -857,6 +863,16 @@ class RuntimeContextImpl(RuntimeContext):
     def intent_context(self) -> 'IbIntentContext':
         """当前帧的意图上下文（直接持有的 IbIntentContext 实例）。"""
         return self._intent_ctx
+
+    @property
+    def current_environment(self) -> "EnvironmentState":
+        """当前帧的一等环境状态（B3：frames 栈）。"""
+        return self._current_environment
+
+    def use_environment(self, env: "EnvironmentState") -> None:
+        """以指定环境替换当前帧环境（fork 拷贝语义——与 use_intent_context
+        同构：避免引用共享，原始实参不受泄漏影响）。"""
+        self._current_environment = env.fork()
 
     def use_intent_context(self, intent_ctx_obj: Any) -> None:
         """

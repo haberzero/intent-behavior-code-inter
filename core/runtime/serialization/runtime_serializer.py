@@ -9,6 +9,7 @@ from core.runtime.objects.primitives import IbOptional
 from core.runtime.objects.intent_node import IntentNode
 from core.runtime.objects.intent import IbIntent
 from core.runtime.objects.intent_context import IbIntentContext
+from core.runtime.objects.environment import EnvironmentState
 from core.runtime.objects.cell import IbCell
 from core.kernel.intent_logic import IntentMode, IntentRole
 
@@ -175,8 +176,31 @@ class RuntimeSerializer(BaseFlatSerializer):
         if isinstance(value, IbIntentContext):
             return self._collect_intent_context(value)
 
+        # 拓扑序列化 EnvironmentState Python 值（environment 实例的
+        # _environment 槽）——frames 原生值直存，经 uid 引用共享
+        if isinstance(value, EnvironmentState):
+            return self._collect_environment(value)
+
         # 处理基本 Python 类型 (Fallback)
         return super()._process_value(value)
+
+    def _collect_environment(self, env: Any) -> str:
+        """序列化 ``EnvironmentState``（environment 实例的 _environment 槽）。
+
+        frames 值为原生值（unbox 后存值深拷贝）——JSON 直存；以
+        ``_type == "environment_native"`` 区分。Python id memo 维持身份共享。
+        """
+        env_id = id(env)
+        if env_id in self.memo:
+            return self.memo[env_id]
+
+        base_uid = f"ienv_{len(self.instance_pool)}"
+        uid = f"inst_{base_uid}"
+        self.memo[env_id] = uid
+        data = dict(env.to_native())
+        data["_type"] = "environment_native"
+        self.instance_pool[uid] = data
+        return uid
 
     def _collect_intent_context(self, ic: Any) -> str:
         """序列化完整的 ``IbIntentContext`` Python 对象。
@@ -322,6 +346,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             self._collect_fn_callable(obj, data)
         elif base_name == "intent_context":
             self._collect_intent_context_wrapper(obj, data)
+        elif base_name == "environment":
+            self._collect_environment_wrapper(obj, data)
         elif isinstance(obj, IbIntent):
             self._collect_intent(obj, data)
         else:
@@ -493,6 +519,19 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["return_type"] = obj.return_type
         data["closure"] = self._serialize_closure(obj.closure, obj.capture_mode)
 
+    def _collect_environment_wrapper(self, obj, data):
+        # ``environment`` IBCI 封装实例序列化（_environment 槽 = EnvironmentState）
+        data["_type"] = "environment"
+        from core.runtime.objects.environment import get_env_state
+
+        state = get_env_state(obj)
+        data["env_uid"] = self._collect_environment(state) if state is not None else None
+        data["fields"] = {
+            k: self._process_value(v)
+            for k, v in (obj.fields or {}).items()
+            if k != "_environment"
+        }
+
     def _collect_intent_context_wrapper(self, obj, data):
         # ``intent_context`` IBCI 封装实例序列化
         data["_type"] = "intent_context"
@@ -597,11 +636,27 @@ class RuntimeDeserializer:
         """
         return [self._get_scope(uid) for uid in list(self.runtime_scope_pool.keys())]
 
+    def _get_environment(self, uid: str) -> Any:
+        """从池中重建 EnvironmentState Python 对象（共享身份，memoized）。"""
+        cache = getattr(self, "_env_state_cache", None)
+        if cache is None:
+            cache = self._env_state_cache = {}
+        if uid in cache:
+            return cache[uid]
+        data = self.instance_pool.get(uid) or self.instance_pool.get(uid.removeprefix("inst_"))
+        if data is None or data.get("_type") != "environment_native":
+            return None
+        from core.runtime.objects.environment import EnvironmentState
+
+        state = EnvironmentState(data.get("frames"))
+        cache[uid] = state
+        return state
+
     def _get_intent_context(self, uid: str) -> Any:
         """从池中重建 IbIntentContext Python 对象（共享身份）。"""
         if uid in self.intent_ctx_cache:
             return self.intent_ctx_cache[uid]
-        data = self.instance_pool.get(uid)
+        data = self.instance_pool.get(uid) or self.instance_pool.get(uid.removeprefix("inst_"))
         if data is None or data.get("_type") != "intent_context_native":
             return None
         ic = IbIntentContext()
@@ -908,6 +963,10 @@ class RuntimeDeserializer:
             # 调用方误以 inst_ 前缀来到这里时，回退到 native 路径。
             return self._get_intent_context(uid)
 
+        elif _type == "environment_native":
+            # environment 实例的 _environment 槽状态重建（frames 原生值）
+            return EnvironmentState(data.get("frames"))
+
         if _type == "disk_backed":
             descriptor = data.get("descriptor", {})
             descriptor_obj = (
@@ -1100,6 +1159,19 @@ class RuntimeDeserializer:
                 from core.runtime.objects.intent_context import set_intent_ctx
 
                 set_intent_ctx(obj, self._get_intent_context(ctx_uid))
+            for k, v in (data.get("fields") or {}).items():
+                obj.fields[k] = self._deserialize_value(v)
+
+        elif _type == "environment":
+            # ``environment`` IBCI 封装实例 — 先入缓存，再恢复 ``_environment``
+            # 字段为对应的 native EnvironmentState（共享身份，与 intent_context 同构）。
+            obj = IbObject(ib_class)
+            self.instance_cache[uid] = obj
+            env_uid = data.get("env_uid")
+            if env_uid:
+                from core.runtime.objects.environment import set_env_state
+
+                set_env_state(obj, self._get_environment(env_uid))
             for k, v in (data.get("fields") or {}).items():
                 obj.fields[k] = self._deserialize_value(v)
 

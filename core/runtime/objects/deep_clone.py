@@ -150,6 +150,16 @@ def try_deep_clone(
         memo[val_id] = forked
         return forked
 
+    # ``EnvironmentState`` Python 值（``environment`` 实例的 ``_environment``
+    # 字段）：fork 深拷贝快照（frames + 值双向隔离）——一等环境对象作为类
+    # 字段/容器值参与深克隆时获得独立副本语义。
+    from core.runtime.objects.environment import EnvironmentState
+
+    if isinstance(val, EnvironmentState):
+        forked = val.fork()
+        memo[val_id] = forked
+        return forked
+
     # 内存型 ``IbValue`` 子类（如 media / file_handle）：克隆 payload 与字段。
     if isinstance(val, IbValue):
         new_val = type(val).__new__(type(val))
