@@ -67,6 +67,10 @@ class CallDefaults:
     timeout: float = 30.0
     auto_intent_injection: bool = True
     thinking_mode: str = THINKING_AUTO
+    # 已知后端强制思考的确认面：true = 用户已知晓所用后端忽略思考抑制参数
+    # （强制思考为已知行为而非待补缺口），思考抑制失败警告静默。
+    # 缺省 false = 警告显形（stderr，一次性）。
+    accept_forced_thinking: bool = False
 
 
 @dataclass(frozen=True)

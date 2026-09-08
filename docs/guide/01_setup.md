@@ -60,10 +60,19 @@ IBCI 的配置加载是**显式动作**：脚本在入口调用 `ai.load_project
 字段说明：
 - `providers`：连接层，声明 `base_url` + `api_key`（支持 `{env:VAR}` 环境变量引用）。
 - `models`：命名模型，引用 `provider` + 模型名 + 每模型参数（`timeout`/`reasoning`）。
-- `defaults`：全局默认（`timeout`/`retry`/`mock`/`auto_intent_injection`）。
+- `defaults`：全局默认（`timeout`/`retry`/`mock`/`auto_intent_injection`/`accept_forced_thinking`）。
 - `default_model`：默认模型引用（字符串指向 `models` 的键，或对象形态直接声明）。
 
 `api_key` 支持 `{env:VAR}` 引用环境变量，避免硬编码密钥。`reasoning:false` 声明非思考模型（跳过 `probe_model`，直接按标准指令模型处理）。`mock:true` 显式进入 MOCK 模式。
+
+> **思考抑制失败警告与 `accept_forced_thinking`**：IBCI 对非思考模型固定发送
+> 思考抑制参数（`enable_thinking=false` + `chat_template_kwargs.enable_thinking=false`）。
+> 若所用后端强制思考（API 参数无法关闭），响应仍含思考内容——此时 IBCI 在
+> **stderr** 输出一次性警告（stdout 是数据面，警告不入数据面）。**语义**：思考内容
+> 隔离在 `reasoning` 字段（`reasoning_content`），不混入 `content`（`content` = 干净
+> 最终答案）；强制思考的代价是思考预算（tokens）消耗，可经 `provider_meta[reasoning]`
+> / journal 观测。若该后端的强制思考是**已知行为**（非待补缺口），可在 `defaults`
+> 声明 `accept_forced_thinking: true` 静默该警告。
 
 > **格式可插拔**：上述 schema 是 IBCI 默认配置源适配器（`ProjectApiConfigAdapter`，
 > 供应商无关逻辑映射到 `core.base.llm_protocol`）识别的推荐写法。需要自定义

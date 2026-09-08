@@ -176,8 +176,14 @@
    （失败 = 异常，无 print、无 "{}" 静默回退）。文档 11_modules §11.8 更新
    （parse 语义 + parse_or_none + 失败面示例）。判别 13 项；全量 3816/1
    零回归。
-10. **R3-⑩ F-2 思考抑制警告可配置**：api_config 可配置静默 + 语义澄清（reasoning 隔离
-    字段 = 思考预算已消耗；provider_meta[reasoning] 观测面）+ 文档。
+10. **R3-⑩ F-2 思考抑制警告可配置** ✅ **已完成（2026-09-08）**：
+    可配置静默（api_config defaults.accept_forced_thinking——true = 用户已知晓
+    后端强制思考为已知行为，警告静默；CallDefaults 纯增面 + 全配置链贯通 +
+    E1 继承面自动覆盖）+ 警告通道 stdout→stderr（数据面纪律）+ 语义澄清入
+    警告文本（reasoning 隔离 reasoning_content / content 干净 / 思考预算
+    tokens 消耗 / 观测面 provider_meta[reasoning]·journal / 静默途径提示）
+    + 声明失配提示面保留 + 一次性去重保持。文档 01_setup defaults 说明 +
+    思考抑制警告语义注记。判别 7 项；全量 3827/1 零回归。
 11. **R3-⑪ R-7 provider 429 退避**：retry.backoff_s 配置化 + call_info 退避事件记录。
 12. **R3-⑫ R-8 knowledge 扩展面**：export / history kind 过滤 / provenance 字段。
 

@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from typing import Any, Dict, List, Optional, Union
 
 from core.base.llm_protocol import (
@@ -109,6 +110,7 @@ class RecommendedProvider(LLMProvider):
             "timeout": _DEFAULT_TIMEOUT,
             "auto_intent_injection": _DEFAULT_AUTO_INTENT,
             "mock": False,
+            "accept_forced_thinking": False,
         }
         # 命名模型注册表：用于 @NAME~ 语法的模型路由
         # 格式: { "NAME": {"url": ..., "key": ..., "model": ..., "timeout": ...} }
@@ -165,34 +167,43 @@ class RecommendedProvider(LLMProvider):
         }
 
     def _warn_thinking_suppress_failed(self, config_declared_non_reasoning: bool = False) -> None:
-        """思考禁用失败告警（一次性去重）。
+        """思考禁用失败告警（一次性去重 + 可配置静默 + 语义澄清）。
 
-        请求已带 ``enable_thinking=false`` 抑制思考，但模型响应仍含 ``reasoning``——
-        该模型在所用后端强制思考，API 参数无法关闭。这是 IBCI 的**待完善覆盖缺口**
-        （供应商感知的思考禁用机制）。提示用户联系开发者 / 提交 issue，附供应商文档
-        说明——**不引导用户改配置绕开**（那是掩盖而非解决）。本警告属推荐 provider
-        的适配行为，用户可自定义 provider 覆盖。
+        请求已带 ``enable_thinking=false`` 抑制思考，但模型响应仍含 ``reasoning``
+        ——该模型在所用后端强制思考，API 参数无法关闭。
+
+        **语义澄清**（run 存档实证，F-2）：思考内容隔离在 reasoning 字段
+        （``reasoning_content``），不混入 ``content``（content = 干净最终答案）；
+        强制思考的代价 = 思考预算（tokens）消耗，观测面 =
+        ``provider_meta[reasoning]`` / journal。
+        **可配置静默**：``defaults.accept_forced_thinking = true`` = 用户已知晓
+        后端强制思考为已知行为（非待补缺口）→ 警告静默。
+        警告走 **stderr**（stdout 是数据面——审计/适配警告不入数据面）。
         """
         if self._thinking_suppress_failed_warned:
             return
         self._thinking_suppress_failed_warned = True
+        # 已知后端强制思考确认面：用户已知晓的已知行为 → 静默
+        if self._config.get("accept_forced_thinking", False):
+            return
         model = self._config.get("model", "?")
+        lines = [
+            f"[警告] 模型 '{model}' 输出思考内容（reasoning），但已请求的思考抑制\n"
+            "        （enable_thinking=false / chat_template_kwargs.enable_thinking=false）\n"
+            "        对该模型无效（后端强制思考）。",
+        ]
         if config_declared_non_reasoning:
-            print(
-                f"[警告] 模型 '{model}' 输出思考内容，但配置声明 reasoning:false（非思考）。\n"
-                "        尝试的思考抑制参数（enable_thinking=false /"
-                " chat_template_kwargs.enable_thinking=false）对该模型无效（后端强制思考）。\n"
-                "        这是 IBCI 待完善的覆盖缺口（供应商感知的思考禁用），请联系开发者或\n"
-                "        提交 issue，并附供应商文档说明。"
+            lines.append(
+                "        配置声明 reasoning:false（非思考）——声明与后端行为不一致，此处提示。"
             )
-        else:
-            print(
-                f"[警告] 探测到模型 '{model}' 输出思考内容（reasoning），尽管已请求启用思考抑制\n"
-                "        （enable_thinking=false / chat_template_kwargs.enable_thinking=false）\n"
-                "        ——API 参数对该模型无效（后端强制思考）。\n"
-                "        这是 IBCI 待完善的覆盖缺口（供应商感知的思考禁用），请联系开发者或\n"
-                "        提交 issue，并附供应商文档说明。"
-            )
+        lines += [
+            "        语义澄清：思考内容隔离在 reasoning 字段（reasoning_content），不混入\n"
+            "        content（content = 干净最终答案）；强制思考的代价 = 思考预算（tokens）\n"
+            "        消耗（观测面：provider_meta[reasoning] / journal）。\n"
+            "        若该后端强制思考为已知行为，可在 api_config.json 声明\n"
+            "        defaults.accept_forced_thinking = true 静默本警告。",
+        ]
+        print("\n".join(lines), file=sys.stderr)
 
     def _is_test_mode(self) -> bool:
         """当前是否处于 MOCK 测试模式（仅显式声明：``_config["mock"]``）。"""
@@ -770,6 +781,8 @@ class RecommendedProvider(LLMProvider):
         defaults = config.defaults
         self._config["retry"] = defaults.retry
         self._config["auto_intent_injection"] = defaults.auto_intent_injection
+        # 已知后端强制思考确认面（F-2）：思考抑制失败警告的静默开关
+        self._config["accept_forced_thinking"] = defaults.accept_forced_thinking
 
         # 命名模型注册表始终落地（供 @NAME~ 路由，mock 与真实模式皆可用）
         for name, model in config.models.items():

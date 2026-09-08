@@ -1494,6 +1494,27 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **3816 passed / 1 skipped 零回归**（基线 3797 + 判别 13 + meta 按文件参数化增长）。
 ---
 
+- **R3-⑩ F-2 思考抑制警告可配置完成（2026-09-08，free-explore）**：round3
+  P1 第四项（F-2 真相核验后的处置：可配置静默 + 语义澄清——非机制缺陷）。
+  缺陷面/语义面：① 警告走 **stdout**（数据面污染——审计/适配警告混入 run
+  数据，试用方验收机解析 stdout 受影响）；② 试用方 4B 后端强制思考
+  （run 存档实证：reasoning 隔离 reasoning_content 字段，content 干净）→
+  警告每进程一次 = 已知行为下的噪音；③ 原警告文本"待完善覆盖缺口，联系
+  开发者"——真相核验后语义过时（思考隔离机制下 content 不受影响，代价 =
+  思考预算 tokens 消耗）。实施面：① 可配置静默——api_config.json
+  `defaults.accept_forced_thinking`（bool，缺省 false）：true = 用户已知晓
+  后端强制思考为已知行为 → 警告静默（CallDefaults 新字段纯增面 +
+  config_loader 校验 + to_llm_config 映射 + apply_config 落地 _config——
+  全配置链贯通；E1 继承面自动覆盖——_config 在快照内）；② 警告通道
+  stdout → **stderr**（数据面纪律——与 journal/replay 提示行同定位）；
+  ③ 语义澄清入警告文本（reasoning 隔离 reasoning_content / content 干净 /
+  思考预算 tokens 消耗 / 观测面 provider_meta[reasoning]·journal / 静默
+  途径提示）+ 声明失配提示面保留（config_declared_non_reasoning）。一次性
+  去重（每进程一次）保持。文档 01_setup defaults 字段说明 + 思考抑制警告
+  语义注记。判别 7 项（test_thinking_suppress_warning.py：配置落地 2 +
+  静默/通道/澄清/失配/去重 5）。全量 pytest **3827 passed / 1 skipped 零回归**（基线 3816 + 判别 7 + meta 按文件参数化增长）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -187,6 +187,7 @@ class ApiConfig:
             "retry": _DEFAULT_RETRY,
             "auto_intent_injection": _DEFAULT_AUTO_INTENT,
             "mock": _DEFAULT_MOCK,
+            "accept_forced_thinking": False,
         }
         if raw is None:
             return result
@@ -199,6 +200,7 @@ class ApiConfig:
         cls._check_int(raw, "defaults", "retry", result)
         cls._check_bool(raw, "defaults", "auto_intent_injection", result)
         cls._check_bool(raw, "defaults", "mock", result)
+        cls._check_bool(raw, "defaults", "accept_forced_thinking", result)
         return result
 
     @classmethod
