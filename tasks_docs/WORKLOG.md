@@ -1125,6 +1125,27 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   / 1 skipped**（零回归；git f5192e4e）。**阶段 E 批 2 进度**：E2 ✅ /
   A4 ✅ / D1 ✅ / C5 ✅；剩余 A2 泛型约束 / A5 解构 / B2 惰性结构 / B4
   编译定位 / E1 ihost 完善。
+- **E1 ihost 完善——子环境 LLM 配置继承（2026-09-07 设计定案 + 首次尝试
+  回退，free-explore——阶段 E 批 2；进行中/待重做）**：ref E1"run_isolated/
+  spawn_isolated/collect 已有；配置继承缺"——设计定案：**spawn 时点快照继承**
+  （父激活 provider 的运行时配置状态[model/端点/生成参数/mock]经能力注册
+  中心（CAP_LLM_PROVIDER）读取，spawn 时点快照；子引擎 bootstrap 后应用
+  （sealed registry 约束：继承须在子 prepare 之后——子 registry 封印前无
+  新 artifact 注入）；快照而非活链接（spawn 后父端变异不影响子）。
+  **首次尝试（execute 形态）回退**：spawn 时点 sub.compile + sub
+  ._prepare_interpreter（bootstrap）+ 继承 + 子线程 execute——
+  **sealed registry 冲突**（sub prepare 封印 registry 后 execute 拒绝新
+  artifact：PermissionError "Cannot execute new artifact on a sealed
+  registry"）+ 继承未生效（子 provider 在 prepare 前读取）。工作树已恢复
+  干净（git checkout core/engine.py；全量 pytest 3534/1 基线零回归）。
+  **下轮重做方案（hook 形态）**：engine.run 增 on_ready 参数——prepare
+  （bootstrap）后、execute 前触发钩子（run 的 L~395 execute 调用点，以
+  abs_entry 上下文精确定位——run_string 同名形态须排除）；子 provider 在
+  bootstrap 后可及（capability registry 已注册）——子线程 run(on_ready=
+  _on_sub_ready) 钩子内应用父配置快照（to_llm_config 归一化 apply_config）；
+  失败经 issue_tracker WARNING（HOST_ISOLATE_LLM_INHERIT_FAILED，不阻断）。
+  验证面：mock 模式（set_mock_mode + set_config 免 client）+ 继承断言（子
+  model = 父 spawn 时点 model）+ 快照语义（spawn 后父变异子不变）。
 ---
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
