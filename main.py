@@ -15,6 +15,10 @@ from core.kernel.issue import CompilerError, IBCBaseException, Diagnostic
 from core.base.diagnostics.codes import RUN_GENERIC_ERROR
 from core.compiler.diagnostics.formatter import DiagnosticFormatter
 from core.compiler.lexer.lexer import Lexer
+from core.runtime.exception_record import (
+    build_exception_record as _build_exception_record,
+    build_source_dict as _build_source_dict,
+)
 
 
 def _render_runtime_error(engine: IBCIEngine, exc: IBCBaseException) -> str:
@@ -40,58 +44,15 @@ def _render_runtime_error(engine: IBCIEngine, exc: IBCBaseException) -> str:
     return DiagnosticFormatter.format(diag, source_manager=engine.scheduler.source_manager)
 
 
-def _read_source_line(file_path, line):
-    """读单行源码（result trailer snippet 用；读取失败 = None，尽力而为）。"""
-    try:
-        with open(file_path, encoding="utf-8") as f:
-            for i, text in enumerate(f, start=1):
-                if i == line:
-                    return text.rstrip("\n")
-                if i > line:
-                    break
-    except (OSError, UnicodeDecodeError):
-        pass
-    return None
-
-
-def _source_dict(location):
-    """诊断位置 → trailer source 对象（location 为 None = None）。"""
-    if location is None:
-        return None
-    source = {
-        # file_path 为 Location 专属字段（Locatable 契约只保证 line/column；
-        # 非 Location 位置面 = 无文件，显式 None 而非静默）
-        "file": getattr(location, "file_path", None),
-        "line": location.line,
-        "column": location.column,
-    }
-    if source["file"] and source["line"]:
-        snippet = _read_source_line(source["file"], source["line"])
-        if snippet is not None:
-            source["snippet"] = snippet
-    return source
-
-
 def _extract_compile_error(e):
-    """编译错误 → trailer exception（首个诊断 = 根因面；复用诊断对象，无新渲染）。"""
-    diags = e.diagnostics or []
-    if not diags:
-        return {"code": None, "message": str(e), "source": None}
-    d = diags[0]
-    return {
-        "code": d.code,
-        "message": d.message,
-        "source": _source_dict(getattr(d, "location", None)),
-    }
+    """编译错误 → trailer exception（共享结构化记录面，单一权威源
+    ``core/runtime/exception_record.py``——首个诊断 = 根因面）。"""
+    return _build_exception_record(e)
 
 
 def _extract_runtime_error(e):
-    """运行期错误 → trailer exception（复用异常对象字段，无新渲染）。"""
-    return {
-        "code": getattr(e, "error_code", None),
-        "message": getattr(e, "message", None) or str(e),
-        "source": _source_dict(getattr(e, "location", None)),
-    }
+    """运行期错误 → trailer exception（共享结构化记录面，单一权威源）。"""
+    return _build_exception_record(e)
 
 
 def _build_result_json(*, exit_status, exception, journal, budget, replay):

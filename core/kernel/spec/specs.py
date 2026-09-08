@@ -130,6 +130,13 @@ ENVIRONMENT_SPEC = TypeDef(name="environment", kind=TypeKind.CLASS.value,
                            visibility=Visibility.PRELUDE_VISIBLE,
                            parent_type=TypeRef.of("Object"))
 
+# run_result 进程内子运行结果值类型（ihost.run_file/run_code 返回值；不可变
+# 值语义，三字段 exit_status/stdout/exception；命名与 thread_result 区分）。
+RUN_RESULT_SPEC = TypeDef(name="run_result", kind=TypeKind.CLASS.value,
+                           provenance=Provenance.KERNEL_NATIVE,
+                           visibility=Visibility.PRELUDE_VISIBLE,
+                           parent_type=TypeRef.of("Object"))
+
 # 多模态类型规格 — IbAudio / IbImage / IbVideo 的公理化描述符
 # 作为普通类名注册（非关键字）。
 # 继承 file_handle，使用磁盘型存储模型。

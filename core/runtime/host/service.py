@@ -15,6 +15,7 @@ import json
 # =============================================================================
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
 from core.runtime.serialization.immutable_artifact import ImmutableArtifact
+from core.runtime.exception_record import build_exception_record
 from core.runtime.interfaces import ServiceContext, IHostService, IInterpreterFactory, InterOp, IExecutionContext, IKernelOrchestrator
 from core.kernel.host_interface import HostInterface
 from core.kernel.registry import KernelRegistry
@@ -282,36 +283,74 @@ class HostService(IHostService):
 
         return HostAwaitable(self.orchestrator, handle)
 
-    def run_file(self, path: str, policy: Dict[str, Any]) -> Dict[str, Any]:
+    def run_file(self, path: str, policy: Dict[str, Any]) -> "IbRunResult":
         """
         进程内运行另一个 .ibci 文件并捕获执行结果（结果记录消费面）。
 
         与 ``run_isolated``（变量交换消费面：错误作异常 + 导出变量字典）互补：
-        ``run_file`` 返回结果记录 ``{"exit_status", "stdout", "exception"}``
-        （**错误作值**；子 print 输出被捕获、不经父 stdout）。同一 spawn 机制
-        （``request_spawn_isolated``）+ 同步 collect——本方法在 VM 线程被调，
-        子线程经独立引擎执行（不依赖父 VM 线程，无循环等待）。
+        ``run_file`` 返回 ``run_result`` 值类型（三字段 ``exit_status``/``stdout``/
+        ``exception``；**错误作值**；子 print 输出被捕获、不经父 stdout）。同一
+        spawn 核心（``request_spawn_isolated`` 文件源）+ 同步 collect——本方法在
+        VM 线程被调，子线程经独立引擎执行（不依赖父 VM 线程，无循环等待）。
+
+        ``exception`` 字段 = ``None`` 或结构化 dict ``{code, message,
+        source{file,line,column,snippet}}``（与 CLI ``--result-json`` exception 面
+        同构，单一权威源 ``core/runtime/exception_record.py``）。
 
         防卡死：collect_timeout 经 policy 传递（IsolationPolicy 既有面）；
         默认 None = 无界（与 run_isolated 一致）。
         """
-        if not self.orchestrator:
-            raise RuntimeError("Kernel Orchestrator not available. run_file cannot be performed.")
+        return self._spawn_and_capture(entry_path=self._resolve_isolated_path(path),
+                                       policy=policy)
 
-        abs_path = self._resolve_isolated_path(path)
+    def run_code(self, code: str, policy: Dict[str, Any]) -> "IbRunResult":
+        """
+        进程内运行一段 IBCI 代码字符串并捕获执行结果（结果记录消费面，字符串源）。
+
+        与 ``run_file`` **机制同构**（同一 spawn 核心字符串源：子 project_root =
+        父 project_root，合成 entry ``__string_exec__`` 锚定；同一 E1 LLM 继承 /
+        沙箱 / 防卡死 / 输出捕获 / 错误作值纪律）——消除试用方"手写临时文件 +
+        run_file"的胶水绕路。返回 ``run_result`` 值类型（字段面同 run_file）。
+
+        防卡死：collect_timeout 经 policy 传递（IsolationPolicy 既有面）。
+        """
+        return self._spawn_and_capture(code=code, policy=policy)
+
+    def _spawn_and_capture(self, *, entry_path: Optional[str] = None, code: Optional[str] = None,
+                           policy: Optional[Dict[str, Any]] = None) -> "IbRunResult":
+        """run_file / run_code 共享的 spawn + 结果捕获核心（两源形式）。
+
+        源形式：``entry_path``（文件源）XOR ``code``（字符串源）——经
+        ``request_spawn_isolated`` 单一 spawn 核心。子 print 经 ``output_callback``
+        捕获（不经父 stdout）；子异常/超时经 ``request_collect`` 的 ``RuntimeError``
+        上抛，此处捕获并经 ``build_exception_record`` 结构化（``__cause__`` = 子
+        原始异常[编译/运行期]；超时 = 无 ``__cause__`` → 取 RuntimeError 自身）。
+        """
+        if not self.orchestrator:
+            raise RuntimeError(
+                "Kernel Orchestrator not available. run_file/run_code cannot be performed.")
+
         chunks: List[str] = []
         handle = self.orchestrator.request_spawn_isolated(
-            abs_path, policy, silent=True, output_callback=chunks.append)
-        error = None
+            entry_path, policy, silent=True, output_callback=chunks.append, code=code)
+        exit_status = "ok"
+        exception_record = None
         try:
             self.orchestrator.request_collect(handle)
         except RuntimeError as e:
-            error = str(e)
-        return {
-            "exit_status": "ok" if error is None else "error",
-            "stdout": "\n".join(chunks),
-            "exception": error or "",
-        }
+            exit_status = "error"
+            # __cause__ = 子线程原始异常（编译 CompilerError / 运行 IBCBaseException /
+            # ThrownException）；超时 RuntimeError 无 __cause__ → 取自身。
+            exception_record = build_exception_record(e.__cause__ if e.__cause__ is not None else e)
+        return self._make_run_result(exit_status, "\n".join(chunks), exception_record)
+
+    def _make_run_result(self, exit_status: str, stdout: str,
+                         exception_record: Optional[Dict[str, Any]]) -> "IbRunResult":
+        """装箱 run_result 值对象（经 box 透传，非 dict 装箱——单一权威源）。"""
+        from core.runtime.objects.primitives.run_result import IbRunResult
+        run_result_cls = self.registry.get_class("run_result")
+        return IbRunResult(run_result_cls, exit_status=exit_status, stdout=stdout,
+                           exception=exception_record)
 
     def _resolve_isolated_path(self, path: str) -> str:
         """

@@ -337,6 +337,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             self._collect_vector(obj, data)
         elif isinstance(obj, IbValue) and base_name == "knowledge":
             self._collect_knowledge(obj, data)
+        elif isinstance(obj, IbValue) and base_name == "run_result":
+            self._collect_run_result(obj, data)
         elif isinstance(obj, IbValue) and base_name == "Optional":
             self._collect_optional(obj, data)
         elif base_name == "thread_result" and not isinstance(obj, IbClass):
@@ -433,6 +435,16 @@ class RuntimeSerializer(BaseFlatSerializer):
             }
             for k, v in obj.payload["entries"].items()
         }
+
+    def _collect_run_result(self, obj, data):
+        # 进程内子运行结果（不可变值类型）：三字段全原生值（str + native dict +
+        # None），无嵌套 IbObject / 无环形引用——直存（同 vector 纪律，无需
+        # cache-before-recurse）。exception 结构化 dict 的字段全为原生 str，
+        # 直存后经 hydration 原样重建。
+        data["_type"] = "run_result"
+        data["exit_status"] = obj.payload.get("exit_status", "ok")
+        data["stdout"] = obj.payload.get("stdout", "")
+        data["exception"] = obj.payload.get("exception")
 
     def _collect_tuple(self, obj, data):
         data["_type"] = "tuple"
@@ -1049,6 +1061,16 @@ class RuntimeDeserializer:
                     "events": events,
                 }
             obj = IbKnowledge(ib_class, payload={"entries": entries, "seq": data.get("seq", 0)})
+            self.instance_cache[uid] = obj
+
+        elif _type == "run_result":
+            # 进程内子运行结果：三字段全原生值，原样重建（无拓扑引用）。
+            from core.runtime.objects.primitives.run_result import IbRunResult
+            obj = IbRunResult(ib_class, payload={
+                "exit_status": data.get("exit_status", "ok"),
+                "stdout": data.get("stdout", ""),
+                "exception": data.get("exception"),
+            })
             self.instance_cache[uid] = obj
 
         elif _type == "optional":

@@ -605,19 +605,49 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             )
         return abs_path, sub_root_dir
 
-    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], silent: bool = True, output_callback=None) -> str:
+    def request_spawn_isolated(self, entry_path: Optional[str] = None, policy: Dict[str, Any] = None,
+                               silent: bool = True, output_callback=None,
+                               code: Optional[str] = None) -> str:
         """
-        [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用。
-        在后台线程中启动全新的 Engine 实例；立即返回 handle 字符串。
-        调用方随后通过 request_collect(handle) 阻塞等待结果。
+        [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用（**单一 spawn 核心，
+        两源形式**：文件源 / 字符串源）。在后台线程中启动全新的 Engine 实例；
+        立即返回 handle 字符串。调用方随后通过 request_collect(handle) 阻塞等待
+        结果。
+
+        源形式（**恰好其一**，fail-fast）：
+        - **文件源** = ``entry_path``：子运行一个 .ibci 文件（既有
+          ``run_file``/``run_isolated``/``spawn_isolated`` 行为不变）；隔离反转
+          校验（子 entry 须在父 project_root 内）+ 子 project_root = 子 entry_dir。
+        - **字符串源** = ``code``：子运行一段 IBCI 代码字符串（新，``run_code``）；
+          子 project_root = 父 project_root（合成 entry ``__string_exec__`` 锚定，
+          与 ``compile_string`` 同义），隔离反转校验平凡成立（锚定即父内）。
+
+        两源共享同一 spawn 核心：E1 LLM 配置继承快照 / 防卡死 collect_timeout /
+        输出捕获 output_callback / 唤醒回调表 / 错误作值透传。
 
         ``silent``：子引擎是否抑制输出。``spawn_isolated``（后台任务）默认 True；
         ``run_isolated``（阻塞式运行）传 False 以保留子脚本输出。
         ``output_callback``：子脚本 print 输出收集器（Callable[[str], None]）；
         None = 子输出按 silent 语义走默认面。
         """
-        # 派生 + 隔离反转校验。
-        abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
+        # 源形式判定：恰好其一（fail-fast——双源/零源 = 契约违约）。
+        if (entry_path is None) == (code is None):
+            raise InterpreterError(
+                "request_spawn_isolated 须恰好一个源形式：entry_path（文件源）或 "
+                "code（字符串源）。",
+                None,
+            )
+
+        # 子 project_root 派生（文件源 = 隔离反转校验 + 子 entry_dir；
+        # 字符串源 = 父 project_root，合成 entry 锚定——隔离平凡成立）。
+        if code is None:
+            abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
+            source_label = f"file:{abs_path}"
+        else:
+            if not self._root_initialized:
+                self._ensure_root_initialized(self._establish_project_root(None))
+            sub_root_dir = self.root_dir
+            source_label = "string"
 
         policy_obj = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
 
@@ -640,13 +670,22 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         def _run_child():
             try:
-                sub_engine.run(
-                    abs_path,
-                    silent=silent,
-                    output_callback=output_callback,
-                    on_ready=(lambda e: _apply_llm_inheritance(e, llm_snapshot))
-                            if llm_snapshot is not None else None,
-                )
+                if code is None:
+                    sub_engine.run(
+                        abs_path,
+                        silent=silent,
+                        output_callback=output_callback,
+                        on_ready=(lambda e: _apply_llm_inheritance(e, llm_snapshot))
+                                if llm_snapshot is not None else None,
+                    )
+                else:
+                    sub_engine.run_string(
+                        code,
+                        silent=silent,
+                        output_callback=output_callback,
+                        on_ready=(lambda e: _apply_llm_inheritance(e, llm_snapshot))
+                                if llm_snapshot is not None else None,
+                    )
             except Exception as e:
                 exc_holder[0] = e
             finally:
@@ -657,7 +696,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 for ev in callbacks:
                     ev.set()
 
-        thread = threading.Thread(target=_run_child, daemon=True, name=f"ibci-spawn-{abs_path}")
+        thread = threading.Thread(target=_run_child, daemon=True, name=f"ibci-spawn-{source_label}")
         thread.start()
 
         handle = f"spawn_{uuid.uuid4().hex[:16]}"

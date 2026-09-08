@@ -37,7 +37,11 @@
 > 注册模式；字符串源扩展点 = 子线程体 run(abs_path)↔run_string(code) 同构单点）；
 > **VISION-6 内核工程化非前置**（独立线；唯一交点 = 档 B 隔离改造，MVP 落地后联合重估）；
 > **VISION-4/5 类型层只约束全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
-> 批次计划（M1 run_result 值类型 + 执行路径统一 → M2 meta.compile 编译门 → M3 三门管线
+> 批次计划（~~M1 run_result 值类型 + 执行路径统一~~ **✅ 已完成 2026-09-08**[run_result
+> 内核原生值类型[三字段 attribute 访问/值相等/序列化保真] + request_spawn_isolated 单一
+> spawn 核心两源形式[文件源既有 + 字符串源新] + ihost.run_file dict→run_result 精化 +
+> ihost.run_code 落地 + 异常结构化单一权威源 exception_record；判别 23 项 + 全量零回归，
+> 实施细化 `tasks_docs/_code_meta_mvp_m1.md`] → M2 meta.compile 编译门 → M3 三门管线
 > 惯用法固化）+ 范围重划对账（防半接通原则不变）= `tasks_docs/_meta_layer_design.md` §八。
 > 每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit。
 > 其余稳定维护态工作（周期质量维护 / 长期注册项按重估触发推进 / round4 需求单到达重新

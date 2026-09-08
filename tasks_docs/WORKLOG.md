@@ -1730,6 +1730,45 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   M1 起按 NEXT_STEPS 当前 P0 推进。
 ---
 
+- **本 session 分支拓扑 + goal 配置（2026-09-08，free-explore）**：用户直接指示——
+  开启代码修改前把现阶段 free-explore 代码 merge 到 unsafe-vibe-dev，后续开发继续在
+  free-explore 分支进行。执行：free-explore 相对 origin/unsafe-vibe-dev = 0 behind /
+  105 ahead（merge-base = origin tip b89fdc39，纯 fast-forward，零冲突零分歧）；建本地
+  unsafe-vibe-dev 分支并 `--ff-only` merge free-explore → unsafe-vibe-dev = free-explore
+  = b67d87b0。**全本地不 push**（硬原则未授权 push；main 不触碰）。free-explore 不删除
+  （本 session 后续在其上开发——偏离历史"短期工作分支合并即删"细则，用户明示，属 session
+  级分支裁定）。merge 前置复跑全量 pytest 3867 passed / 1 skipped 零回归。配置长期 goal
+  （meta 层 MVP 无人值守，max_goal_rounds=7，按 HANDOFF §1.2.1 习惯）；主线 M1→M2→M3
+  依 `_meta_layer_design.md` §八 批次计划推进。
+---
+
+- **meta 层 MVP M1 实施（2026-09-08，free-explore）**：run_result 内核原生值类型 +
+  执行路径统一（ihost.run_file dict→run_result 精化 + ihost.run_code 落地）。M1 落地
+  细化（`_meta_layer_design.md` §八.4 未定实现取舍的定案）：
+  ① run_result = 不可变值类型（CLASS kind / parent Object / PRELUDE 可见——同
+  knowledge/environment 先例；命名与 thread_result 区分[非泛型]）；② 字段访问面 =
+  **字段**（attribute，`r.exit_status`/`r.stdout`/`r.exception`，`MemberSpec
+  kind="field"` 经 `_dispatch_getattr` 实例字段优先命中——Exception.message 先例；
+  设计 §8.3 明言"字段面"；非方法[误导须括号]非下标[map 语义]）；③ exception 结构化
+  `{code, message, source{file,line,column,snippet}}` = 单一权威源
+  `core/runtime/exception_record.py`（CLI --result-json + host run_file/run_code 共用，
+  消双写真相；main.py `_extract_compile/runtime_error` 委托之）；④ 执行路径统一 =
+  `request_spawn_isolated` 单一 spawn 核心两源形式（文件源 entry_path[既有行为不变]
+  XOR 字符串源 code[新，sub project_root = 父 project_root 合成 entry `__string_exec__`
+  锚定]，fail-fast 恰好一源；两源共享 E1 继承/沙箱/防卡死/输出捕获/错误作值）；⑤
+  deep_clone 不可变引用复用[同 vector] + serializer collect/hydration + 全链值类型
+  注册模式。诊断码零新增（子运行失败经 exception 值面传递既有码；字符串源沙箱外 =
+  既有 RUN_PERMISSION_ERROR）。判别：runtime test_run_result_type 12 项[字段 attribute
+  访问/exception None/未知字段 fail-fast/值相等/不可哈希/to_native/deep_clone identity/
+  cast_to str·违约/序列化 round-trip/类型锁] + e2e test_ihost_run_file 4 项[精化：字段
+  访问 + 结构化 exception + 超时] + test_ihost_run_code 7 项[成功/运行异常
+  RUN_DIVISION_BY_ZERO/字符串源编译错误 PAR_ 码作值/超时[孤儿负载压低至 ~20000 迭代
+  ·~3.75s 防看门狗]/沙箱内 ok/沙箱外 RUN_PERMISSION_ERROR/E1 LLM 继承]。全量
+  3896 passed / 1 skipped 零回归（首跑 GC 收尾孤儿线程拖过 180s 看门狗[run_code 超时
+  孤儿 ~100k/18s 叠加既有 run_file 孤儿]——裁定：run_code 超时循环 100000→20000[仍 >1s
+  触发超时，孤儿寿命 ~3.75s]，稳定复跑 164s 退出 0）。M2（meta.compile 编译门）接续。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -76,13 +76,22 @@ class IHostPlugin(IbPlugin):
             raise RuntimeError("IHost service not available; cannot collect.")
         return hs.collect(handle)
 
-    def run_file(self, path: str, policy: Dict[str, Any]) -> Dict[str, Any]:
-        """进程内运行另一个 .ibci 文件，捕获执行结果记录
-        {exit_status, stdout, exception}（错误作值；stdout 被捕获不经父面）。"""
+    def run_file(self, path: str, policy: Dict[str, Any]) -> "IbRunResult":
+        """进程内运行另一个 .ibci 文件，捕获执行结果记录 ``run_result``
+        （字段 exit_status/stdout/exception；错误作值；stdout 被捕获不经父面）。"""
         hs = self._host_service()
         if not hs:
             raise RuntimeError("IHost service not available; cannot run_file.")
         return hs.run_file(path, policy)
+
+    def run_code(self, code: str, policy: Dict[str, Any]) -> "IbRunResult":
+        """进程内运行一段 IBCI 代码字符串，捕获执行结果记录 ``run_result``
+        （与 run_file 机制同构：同一 spawn 核心字符串源，子 project_root = 父
+        project_root；错误作值；stdout 被捕获不经父面）。"""
+        hs = self._host_service()
+        if not hs:
+            raise RuntimeError("IHost service not available; cannot run_code.")
+        return hs.run_code(code, policy)
 
     def get_source(self) -> str:
         """获取当前运行模块的源代码（元编程）。"""

@@ -44,6 +44,7 @@ from core.kernel.axioms.primitives.vector import VectorAxiom
 from core.kernel.axioms.primitives.knowledge import KnowledgeAxiom
 from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.primitives.environment import EnvironmentAxiom
+from core.kernel.axioms.primitives.run_result import RunResultAxiom
 from core.kernel.axioms.intent import IntentAxiom
 from core.kernel.axioms.primitives.comm import (
     ThreadAxiom,
@@ -96,6 +97,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(BehaviorAxiom())
     registry.register(IntentContextAxiom())
     registry.register(EnvironmentAxiom())
+    registry.register(RunResultAxiom())
     registry.register(IntentAxiom())
     registry.register(LlmCallResultAxiom())
     registry.register(LLMUncertainAxiom())

@@ -192,7 +192,8 @@ dict policy = {"isolated": True}
 dict result = ihost.run_isolated("./sub/child.ibci", policy)  # 隔离运行子脚本，返回子环境变量字典
 str handle = ihost.spawn_isolated("./sub/child.ibci", policy) # 启动子环境（不等待），返回 handle
 dict result = ihost.collect(handle)   # 等待子环境完成，返回子环境变量字典
-dict rec = ihost.run_file("./sub/child.ibci", policy)  # 进程内运行子脚本并捕获执行结果记录
+run_result rec = ihost.run_file("./sub/child.ibci", policy)  # 进程内运行子脚本，返回结果记录（run_result）
+run_result rc = ihost.run_code("print('hi')", policy)        # 进程内运行代码字符串，返回结果记录（run_result）
 ihost.save_state(path)                # 保存当前状态
 ihost.load_state(path)                # 加载状态
 str src = ihost.get_source()          # 获取当前入口源码
@@ -216,26 +217,35 @@ str val = ihost.getenv("SOME_KEY")    # 读取宿主 OS 环境变量（缺失返
 继承失败（非标准 provider 等边界）不阻断子执行，经内核诊断
 （`HOST_ISOLATE_LLM_INHERIT_FAILED`）显形，子 LLM 调用按其自身配置状态得清晰错误。
 
-**`run_file` 结果记录**：`ihost.run_file(path, policy)` 进程内运行子脚本并返回
-执行结果记录（**错误作值**——子失败不抛穿父；与 `run_isolated` 的**错误作异常** +
-变量字典互补，同一子 run 机制的两个消费面）：
+**`run_file` / `run_code` 结果记录（`run_result`）**：`ihost.run_file(path, policy)`
+进程内运行子脚本、`ihost.run_code(code, policy)` 进程内运行一段 IBCI 代码字符串，
+二者返回 `run_result` 值类型（**错误作值**——子失败不抛穿父；与 `run_isolated` 的
+**错误作异常** + 变量字典互补，同一子 run 机制的两个消费面）。`run_code` 与
+`run_file` **机制同构**（同一 spawn 核心：文件源 / 字符串源两形式；字符串源子
+project_root = 父 project_root）——消除"手写临时文件 + `run_file`"的绕路：
 
 ```ibci
-dict rec = ihost.run_file("./sub/child.ibci", {})
-if rec["exit_status"] == "ok":
-    print(rec["stdout"])        # 子 print 输出（捕获，不经父 stdout 直接面）
+run_result rec = ihost.run_file("./sub/child.ibci", {})
+run_result rc  = ihost.run_code("print('hi')", {})   # 字符串源，无需落盘
+if rec.exit_status == "ok":
+    print(rec.stdout)        # 子 print 输出（捕获，不经父 stdout 直接面）
 else:
-    print(rec["exception"])     # 错误消息（含编译失败/运行期异常）
+    dict ex = rec.exception  # 结构化异常记录（含编译失败/运行期异常/超时）
+    print(ex["code"])        # 错误码（如 RUN_DIVISION_BY_ZERO / PAR_* / 沙箱拒绝）
+    print(ex["message"])     # 错误消息
 ```
 
-- `exit_status`：`"ok"` / `"error"`（子编译失败、运行期异常、collect 超时均为
-  `"error"`）；
-- `stdout`：子 `print` 输出全文（捕获）；
-- `exception`：错误消息；`exit_status = "ok"` 时为空串。
+- `run_result` 三**字段**（attribute 访问，非 map 下标）：
+  - `exit_status`：`"ok"` / `"error"`（子编译失败、运行期异常、collect 超时、沙箱
+    越界均为 `"error"`）；
+  - `stdout`：子 `print` 输出全文（捕获）；
+  - `exception`：`None`（成功）或**结构化 dict** `{code, message,
+    source{file, line, column, snippet}}`（与 CLI `--result-json` 的 exception 面
+    同构，单一权威源）——子源码定位经 `source`（字符串源定位到合成入口 + 行列）。
 - **防卡死**：`policy` 可含 `collect_timeout`（秒，墙钟上限）——默认无界
-  （与 `run_isolated` 一致）；超时 = `exit_status = "error"` 且 `exception` 携带
-  `timed out`（子线程无法强杀，作为 daemon 孤儿继续至自然结束，调用方不应假设
-  子已停止）。
+  （与 `run_isolated` 一致）；超时 = `exit_status = "error"` 且 `exception.message`
+  携带 `timed out`（子线程无法强杀，作为 daemon 孤儿继续至自然结束，调用方不应
+  假设子已停止）。
 
 ### 11.7 fs 模块
 
