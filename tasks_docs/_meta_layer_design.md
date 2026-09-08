@@ -1,10 +1,14 @@
 # meta 层 / 代码作值设计（安全执行架构 + 安全模型选项 A）
 
-> 状态：**设计交付，本运行不实施**（用户 2026-09-08 裁定：架构安全与长期收益优先，
-> 不半接通 meta 层；实施待类型类/函数式方向 VISION-4/5 落地后按该方向推进）。
-> 本文 = round3 阶段 D 单点设计文档。相关既载：R-2b meta.compile / R-6 行为表达式作值
-> （长期登记，`_trial_round3_intake.md` §1.6/§二.1）、ihost.run_file（R3-⑥ 已落地）、
-> `engine.compile_string`（既有机制）、VISION-4/5/6（`PENDING_TASKS.md` §八）。
+> 状态：**MVP 实施中（字符串级直接执行，用户 2026-09-08 定向再评估后列入主线）**——
+> **M1（run_result 值类型 + 执行路径统一）✅ + M2（meta.compile 编译门）✅ 已完成**
+> （2026-09-08，commit 359b1eef / 3fa51eec；判别 + 全量零回归），M3（三门管线惯用法
+> 固化）推进中。**全形态（M4：artifact 作值 / R-6 / fn[...] / Verdict）继续登记
+> VISION-4/5 类型层前置，不实施**（防半接通原则不变）。
+> 本文 = round3 阶段 D 单点设计文档 + §八 MVP 实施任务规划。相关既载：R-2b
+> meta.compile / R-6 行为表达式作值（长期登记，`_trial_round3_intake.md` §1.6/§二.1）、
+> ihost.run_file（R3-⑥ 已落地）/ run_code（M1 落地）、`engine.compile_string`（既有机制）、
+> VISION-4/5/6（`PENDING_TASKS.md` §八）。
 
 ## 一、定位与范围
 

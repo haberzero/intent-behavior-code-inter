@@ -95,8 +95,11 @@ ihost.load_state("./state.json")   # 恢复此前保存的状态
 
 - **子脚本必须在父 project_root 内**：现阶段子入口路径不得超出父项目根目录，
   否则隔离执行被拒绝。
-- **LLM provider 配置不继承**：子环境需真实 LLM 时，须在子项目目录放置自己的
-  `api_config.json` 并调用 `ai.load_project_config()`。
+- **LLM provider 配置继承**：子环境**自动继承**父环境 LLM 配置（spawn 时点快照：
+  默认端点/模型、mock 态、命名模型注册表、生成参数）——子脚本无需自写
+  `api_config.json` 即可沿用父环境配置调 LLM；子代码执行期显式
+  `ai.load_project_config()` / `ai.set_config(...)` 覆盖继承（时间序优先）。
+  非标准 provider 等边界继承失败不阻断子执行（经内核诊断显形）。
 - **子环境变量隔离是单向的**：父环境变量不进入子环境；子环境变量只经 `collect`
   的返回值传回。
 - **`run_isolated` 与 `spawn_isolated` 的取舍**：只需顺序执行用 `run_isolated`；

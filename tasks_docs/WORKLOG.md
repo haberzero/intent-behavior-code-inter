@@ -1788,6 +1788,26 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   零回归。M3（三门管线惯用法固化）接续。
 ---
 
+- **meta 层 MVP M3 实施（2026-09-08，free-explore）——MVP 主线收束**：三门管线惯用法
+  固化（纯文档批，零代码变更[docs 面]，test 计数沿用 M2 3909/1 零回归）。交付：① 新
+  howto `docs/howto/run_code_safely.md`（代码作值安全执行：三门管线[编译门 meta.compile /
+  隔离门 ihost.run_code[run_result] / 判定门 调用方机械判定] + 完整参考实现[预注册
+  期望向量 + 机械判定 e34_p4 形态，实测编译运行验证：候选 A 三门全通过 + 候选 B 编译门
+  拒绝[PAR_ 码 + ibci 源定位]] + 安全保证与边界[威胁模型=非对抗性/性能=每调用一次子引擎]
+  + 常见陷阱[布尔字面量大小写 / run_result 值类型非 dict / 判定门调用方职责]）；② README
+  单点真理表登记（howto 目录树 + 单点真理行）；③ 跨文件一致性修正——use_isolation.md
+  "常见陷阱" 旧"LLM provider 配置不继承"表述（E1 前残留）→ 更正为"自动继承父 LLM 配置
+  [spawn 时点快照] + 子代码显式覆盖[时间序优先]"（跨文件一致，零断链）；④ 台账同步：
+  设计文档 `_meta_layer_design.md` 头部状态[设计交付→MVP 实施中 M1/M2✅] + NEXT_STEPS
+  [MVP 主线收束→转稳定维护态] + PENDING_TASKS VISION-4 [MVP 落地注记] + HANDOFF §2.1
+  [M3✅/MVP 收束/候选后续主线 VISION-4]；⑤ 删除 M1 临时实施文档 `_code_meta_mvp_m1.md`
+  [内容已收敛入 WORKLOG M1 条目 + 设计文档 §八.4；MVP 完成后按文档生命周期删除]。
+  **meta 层 MVP（M1 run_result+执行路径统一 / M2 meta.compile / M3 三门管线 howto）主线
+  收束**——全形态（M4：artifact 作值/R-6/fn[...]/Verdict）登记 VISION-4/5 类型层前置不
+  实施（防半接通原则不变）。候选后续主线 = VISION-4 类型理论加固[开工输入就绪] / round4
+  需求单到达重新 intake / 周期质量维护。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

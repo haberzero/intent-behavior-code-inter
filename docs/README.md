@@ -37,6 +37,7 @@ docs/
 │   ├── extend_with_host_binding.md
 │   ├── modify_llm_provider.md
 │   ├── orchestrate_llm_calls.md
+│   ├── run_code_safely.md
 │   ├── run_trials.md
 │   ├── use_generators.md
 │   ├── use_isolation.md
@@ -126,6 +127,7 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 | 语言设计演进评估（规划参考，不替代上表权威） | `docs/LANGUAGE_DESIGN_EVOLUTION.md` |
 | 试用套件体系 | `docs/trials/README.md` |
 | 试用套件运行方式 | `docs/howto/run_trials.md` |
+| 代码作值安全执行（三门管线：meta.compile / ihost.run_code / 机械判定） | `docs/howto/run_code_safely.md` |
 | 仓库测试套件自身安全（卡死识别/超时配置） | `docs/howto/keep_tests_safe.md` |
 | 弱模型输出漂移测量（call_info 两形态 + finish_reason） | `docs/howto/measure_weak_model_drift.md` |
 | 弱模型提案稳定性测量（journal 跨运行语料） | `docs/howto/measure_proposal_stability.md` |

@@ -268,8 +268,11 @@
   union / B2 惰性短路结构经 round3 阶段 E 裁定挂起 → 本项整合推进（同域）。
 - **范围重划（2026-09-08 用户定向再评估，`_meta_layer_design.md` §八）**：meta 层拆
   MVP / 全形态——**MVP**（meta.compile fail-fast 校验面 + ihost.run_code 字符串形式 +
-  run_result 值类型）= 不依赖类型层，已列当前 P0 主线（NEXT_STEPS）；**全形态**
-  （本清单 ①③④⑤ + ② run_result 类型层深度参与）= 本项 VISION-4 范畴，开工输入不变。
+  run_result 值类型）= 不依赖类型层，**✅ 主线收束（2026-09-08，M1/M2/M3 全完成：
+  commit 359b1eef/3fa51eec/M3；run_result 值类型 + 执行路径统一 + meta.compile 编译门 +
+  三门管线 howto）**；**全形态**（本清单 ①③④⑤ + ② run_result 类型层深度参与）=
+  本项 VISION-4 范畴，开工输入不变（MVP 后 §四清单 ② run_result 类型存在半被满足，
+  收窄为 ①③④⑤ + ② 类型层深度参与）。
 
 ### VISION-5 函数式地基补齐（五大地基改造 · P8）
 

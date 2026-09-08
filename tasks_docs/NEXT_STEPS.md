@@ -31,19 +31,21 @@
 > 全阶段（A P0 / B P1 / C P2 文档批 / D meta 层设计 / E 顺延批 / F 收敛）全部项处于
 > 完成/挂起/裁定不做终态。测试基线以实跑为准（末次全量 3867 passed / 1 skipped 零回归）。
 >
-> **🔴 当前 P0 = meta 层 MVP（字符串级直接执行，用户 2026-09-08 定向再评估后列入主线）**：
+> **🔴 meta 层 MVP（字符串级直接执行）✅ 主线收束（2026-09-08，M1/M2/M3 全完成）→ 转稳定维护态**：
 > 依赖评估结论——**MVP 前置依赖 = 0**（机制面全部既有：compile_string/run_string 合成
 > entry / request_spawn_isolated 子环境 / E1 继承 / collect_timeout / 诊断面 / 值类型
 > 注册模式；字符串源扩展点 = 子线程体 run(abs_path)↔run_string(code) 同构单点）；
 > **VISION-6 内核工程化非前置**（独立线；唯一交点 = 档 B 隔离改造，MVP 落地后联合重估）；
 > **VISION-4/5 类型层只约束全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
-> 批次计划（~~M1 run_result 值类型 + 执行路径统一~~ **✅ 已完成 2026-09-08**[run_result
-> 内核原生值类型[三字段 attribute 访问/值相等/序列化保真] + request_spawn_isolated 单一
-> spawn 核心两源形式[文件源既有 + 字符串源新] + ihost.run_file dict→run_result 精化 +
-> ihost.run_code 落地 + 异常结构化单一权威源 exception_record；判别 23 项 + 全量零回归，
-> 实施细化 `tasks_docs/_code_meta_mvp_m1.md`] → M2 meta.compile 编译门 → M3 三门管线
-> 惯用法固化）+ 范围重划对账（防半接通原则不变）= `tasks_docs/_meta_layer_design.md` §八。
-> 每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit。
+> **批次计划 M1 → M2 → M3 全部 ✅ 完成（2026-09-08）**（M1 run_result 值类型 + 执行路径
+> 统一[commit 359b1eef，判别 23 项]；M2 meta.compile 编译门[commit 3fa51eec，判别 7 项]；
+> M3 三门管线惯用法固化[howto run_code_safely.md + 参考实现[预注册向量 + 机械判定
+> e34_p4 形态，实测编译验证] + 文档同步[README 单点真理表 + use_isolation LLM 继承面
+> 修正]，全量零回归]）+ 范围重划对账（防半接通原则不变；全形态 M4[artifact 作值/R-6/
+> fn[...]/Verdict] 登记 VISION-4/5 前置不实施）= `tasks_docs/_meta_layer_design.md` §八。
+> **meta 层 MVP 收束 → 转稳定维护态**（round4 需求单到达重新 intake / 周期质量维护 /
+> 长期注册项按重估触发推进）；候选后续主线 = VISION-4 类型理论加固（MVP 后开工输入就绪，
+> 见 `_meta_layer_design.md` §四清单）。
 > 其余稳定维护态工作（周期质量维护 / 长期注册项按重估触发推进 / round4 需求单到达重新
 > intake）在 MVP 主线之外并行。
 

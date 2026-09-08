@@ -116,8 +116,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/GOVERNANCE.md`（任务控制治理）+ `git log --oneline -30`（近期提交与工作动线）
 > + `tasks_docs/WORKLOG.md`（round3 整合条目，逐项详录）。
 
-- **🔴 当前状态 = round3 试用需求整合队列全部收束（2026-09-08，收敛判据达成）→ 转稳定维护态**；
-  **当前 P0 主线 = meta 层 MVP（字符串级直接执行）**（2026-09-08 用户定向再评估后列入主线——
+- **🔴 当前状态 = meta 层 MVP（字符串级直接执行）✅ 主线收束（2026-09-08，M1/M2/M3 全完成）→ 转稳定维护态**；
+  候选后续主线 = VISION-4 类型理论加固[开工输入就绪，MVP 后触发] / round4 需求单到达重新 intake / 周期质量维护（2026-09-08 用户定向再评估后列入主线的 meta 层 MVP 已收束——
   依赖评估结论：MVP 前置依赖 = 0[机制面全部既有] / VISION-6 内核工程化非前置[独立线，
   唯一交点档 B 隔离改造 MVP 落地后联合重估] / VISION-4/5 类型层只约束全形态[artifact
   作值/R-6/fn[...]/Verdict]；批次计划 M1→M2→M3 + 范围重划对账[防半接通原则不变] =
@@ -167,7 +167,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
        **全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
      - **批次计划**（每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit）：
        ~~**M1**~~ **✅ 已完成（2026-09-08，commit 359b1eef，判别 23 项 + 3896/1 零回归；实施细化
-        `_code_meta_mvp_m1.md`）** run_result 值类型（三字段 attribute 访问
+        `_code_meta_mvp_m1.md`设计细化  §八.4 + WORKLOG M1 条目）** run_result 值类型（三字段 attribute 访问
         r.exit_status/r.stdout/r.exception + 值相等 + 序列化保真；exception 结构化单一
         权威源 exception_record[CLI+host 共用]）+ 执行路径统一（单一 spawn 核心两源形式：
         文件源既有 + 字符串源新）+ run_file dict→run_result 精化 + run_code 落地）→
@@ -179,7 +179,9 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
         + meta.compile(code: str) fail-fast 校验面[子引擎 compile-only + ibci 源定位 +
         IBCI try/except 可捕获；不新增 IBCI 异常类型]
        （子引擎 compile-only；失败抛 CompilerError[ibci 源定位]，成功 void；与 CLI check
-       面同构）→ **M3（当前 P0）** 三门管线惯用法固化（howto run_code_safely.md + 参考实现
+       面同构）→ ~~**M3**~~ **✅ 已完成（2026-09-08，判别 3 门实测 + 文档同步[README 单点真理
+       表 + howto + use_isolation LLM 继承面修正] + 全量零回归）** 三门管线惯用法固化
+       （howto run_code_safely.md + 参考实现
        [预注册向量 + 机械判定 e34_p4 形态] + 文档同步）。
      - **范围重划对账**（§8.3）：MVP/全形态重划非推翻 Phase D"防半接通"裁定——MVP 边界
        crisp 自洽无空洞承诺（每个交付面机制完整 + 判别测试）；全形态继续登记（VISION-4
