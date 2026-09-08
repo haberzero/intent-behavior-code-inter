@@ -100,7 +100,8 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 
 | 角色 | 推荐阅读顺序 |
 |------|------------|
-| **新加入的开发者** | `README.md`（根目录）-> `GETTING_STARTED.md` -> `docs/guide/00_environment.md` -> `docs/guide/01_setup.md` -> `docs/guide/` -> `SYNTAX_REFERENCE.md` -> `ARCHITECTURE.md` |
+| **新加入的开发者** | `README.md`（根目录）-> `GETTING_STARTED.md` -> `docs/guide/00_environment.md` -> `docs/guide/01_setup.md` -> `docs/guide/` -> `docs/howto/keep_tests_safe.md`（测试套件运行与卡死防护） -> `SYNTAX_REFERENCE.md` -> `ARCHITECTURE.md` |
+| **要写/维护仓库测试的人** | `docs/howto/keep_tests_safe.md` -> `docs/guide/07_testing.md`（MOCK 测试） |
 | **写 IBCI 代码的用户** | `README.md`（根目录）-> `docs/guide/` 教程 -> `SYNTAX_REFERENCE.md`（查语法）-> `KNOWN_LIMITS.md`（查边界） |
 | **要改类型系统的人** | `architecture/03_type_system.md` -> `architecture/02_metadata_ast.md` |
 | **要改 VM/解释器的人** | `architecture/04_vm_interpreter.md` -> `architecture/05_vm_specification.md` |
@@ -125,6 +126,7 @@ tests_docs/                          测试方法论（受 docs/WRITING_GUIDE.md
 | 语言设计演进评估（规划参考，不替代上表权威） | `docs/LANGUAGE_DESIGN_EVOLUTION.md` |
 | 试用套件体系 | `docs/trials/README.md` |
 | 试用套件运行方式 | `docs/howto/run_trials.md` |
+| 仓库测试套件自身安全（卡死识别/超时配置） | `docs/howto/keep_tests_safe.md` |
 
 ### 3.2 数字纪律（测试基线）
 
