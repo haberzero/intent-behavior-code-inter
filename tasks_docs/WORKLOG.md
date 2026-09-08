@@ -1363,6 +1363,51 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   零回归**（批 4 后终态；各批间亦零回归）。
 ---
 
+- **R3-⑥ E1 重做 + R-2a run_file 完成（2026-09-08，free-explore）**：ihost
+  子环境整合（round3 需求 R-2a P0 + round2 遗留 E1；设计文档
+  `tasks_docs/_ihost_subenv_design.md`；试用方实证摩擦"子环境不继承 LLM 配置
+  + 需自身 api_config"修复）。
+  **E1（子环境 LLM 配置继承）**：① 快照源裁定（对 HANDOFF 原设计措辞偏离，
+  依据记录）——采用父 LLM provider 活状态快照（经既有 IbStatefulPlugin
+  save/restore 契约——机制同构，跨引擎状态既有通道），弃用文件快照 +
+  to_llm_config（api_config.json 只是配置初始源之一，活状态可经
+  register_model/set_mock_mode/set_config 漂移；单一权威源 = provider 活
+  _config）；② save_plugin_state 补 `_model_registry`（@NAME~ 命名模型注册表
+  = 活配置状态一部分——既有状态保真缺口补漏，checkpoint/restore 同受益）；
+  ③ engine run/run_string/execute 增 on_ready 参数（解释器 + 插件就绪后、
+  执行开始前触发；None 零侵入）；request_spawn_isolated spawn 时点捕获快照
+  （深拷贝不可变）+ 子线程 run(on_ready=_apply_llm_inheritance)；失败/不适用
+  = kernel_diagnostic WARNING（新码 HOST_ISOLATE_LLM_INHERIT_FAILED，不阻断——
+  与同域 KDIAG_RUNTIME_COLLECT_SKIP 同通道；实施裁定：issue_tracker = 编译
+  诊断收集器，运行时告警非其职责面）；④ 语义面：子继承父 LLM 配置（mock
+  态/端点/命名模型/生成参数）；子代码显式 load_project_config/set_config
+  覆盖继承（时间序优先）；快照语义 = spawn 时点值（父后续变异不影响已
+  spawn 子）。**ThrownException 消息面根因修复（判别面发现既有缺陷）**：
+  str(ThrownException) 原 = IbObject 裸 repr（<LLMCallError object at 0x...>
+  ——错误文本跨 VM 边界/子线程透传丢失）→ 显示面 = "TypeName: message"
+  （Python 异常显示对等；类型名 + message 双保真；既有 4 项契约测试的
+  类型名断言在新形态下仍满足——旧断言本经 repr 副作用成立）。
+  **R-2a（ihost.run_file 进程内子 run + 结果捕获）**：语言面
+  `ihost.run_file(path, policy) -> dict{exit_status, stdout, exception}`
+  （**错误作值**——子失败不抛穿父；与 run_isolated 的错误作异常 + 导出变量
+  字典互补 = 同一 spawn 机制的两个消费面，各负责子 run 结果的一个面，非
+  双通道）；机制 = request_spawn_isolated（增 output_callback 参数——子
+  print 收集）+ 同步 request_collect（子线程经独立引擎执行，不依赖父 VM
+  线程，无循环等待）；防卡死 = collect_timeout 经 policy（IsolationPolicy
+  既有面；默认无界文档化；超时 = exception 携带 timed out，daemon 孤儿
+  语义既有）；TypeDef/接口协议/插件包装三面对称。
+  文档：11_modules §11.6 整节更新（推翻"LLM provider 配置也不继承"旧表述
+  + 继承语义/优先级/边界 + run_file 结果记录契约 + 防卡死）+ 15_diagnostics
+  HOST_ 节 + parity 门。
+  判别 15 项（runtime 白箱 8：快照深拷贝/registry 补漏/restore 面/apply
+  成功/非 stateful 跳过警告/损坏快照 fail-safe/on_ready 时序 2 项 + e2e
+  黑箱 7：继承 mock 保真/干净态对照 + 消息保真[非裸 repr]/快照语义[spawn
+  后父变异]/run_file ok 记录/错误记录[错误作值]/stdout 捕获隔离/
+  collect_timeout 防卡死）。孤儿线程 CPU 裁定（超时测试循环 10 亿 → 10 万：
+  daemon 孤儿须套件时间尺度内收尾，不抢 CPU 拖垮全量套件——全量门 124 实证
+  后修正）。全量 pytest **3770 passed / 1 skipped 零回归**（基线 3739 + 判别 15 + meta 按文件参数化增长）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

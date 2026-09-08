@@ -381,6 +381,11 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="运行时降级：跨引擎 round-trip 特化类重建失败（注册表封印），值回落基类。",
         fix="KNOWN_LIMITS §十 契约：特化跨引擎身份保真须目标引擎已编译该类；回退后值字段与基类方法可用，仅特化身份丢失。如需保真须目标引擎先编译该类。",
     ),
+    # ==================== 宿主隔离 (HOST_) ====================
+    "HOST_ISOLATE_LLM_INHERIT_FAILED": CodeInfo(
+        title="ihost 隔离子环境 LLM 配置继承应用失败（spawn 时点父配置快照未能应用到子 provider）。",
+        fix="不阻断子执行（子照常运行）；子环境 LLM 调用将按其自身配置状态得清晰错误。排查：子项目 api_config/插件发现面或快照内容异常。",
+    ),
     # ==================== 词嵌入 (EMB_) ====================
     "EMB_CONFIG_MISSING": CodeInfo(
         title="embedding 配置缺失（base_url/api_key/model 未提供且未进入 mock 模式）。",

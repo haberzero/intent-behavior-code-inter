@@ -251,6 +251,13 @@ _SPEC_IHOST = TypeDef(name="ihost", kind="module", provenance=Provenance.KERNEL_
             ], return_type=TypeRef.of("dict"), param_descriptors=[
                 ParamDescriptor(name="handle", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
             ]),
+        "run_file": MethodMemberSpec(name="run_file", kind="method", type_ref=TypeRef.of("dict"), param_types=[
+                TypeRef.of("str"),
+                TypeRef.of("dict")
+            ], return_type=TypeRef.of("dict"), param_descriptors=[
+                ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="policy", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
+            ]),
         "get_source": MethodMemberSpec(name="get_source", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),
         "getenv": MethodMemberSpec(name="getenv", kind="method", type_ref=TypeRef.of("str"), param_types=[
                 TypeRef.of("str")

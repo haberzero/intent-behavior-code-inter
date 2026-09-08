@@ -618,6 +618,16 @@ LLM 运行预算超限（run 级 tokens / 调用次数 / 墙钟核算）。
 - **严重级别**：WARNING。
 - **修复方式**：回退后值字段与基类方法可用，仅特化身份丢失；如需身份保真须目标引擎先编译该类。
 
+### 宿主隔离（HOST_）
+
+> ihost 隔离子环境（独立 Engine 子 run）的宿主侧降级/边界事件；均为运行时告警，不阻断执行。
+
+#### `HOST_ISOLATE_LLM_INHERIT_FAILED`
+ihost 隔离子环境 LLM 配置继承应用失败（spawn 时点父配置快照未能应用到子 provider）。
+- **触发条件**：子环境 on_ready 钩子应用继承快照时失败——子 provider 不支持状态恢复（自定义/replay provider 等非 stateful 形态）或快照内容异常。
+- **严重级别**：WARNING（不阻断：子 run 照常执行，其 LLM 调用按自身配置状态得清晰错误）。
+- **修复方式**：排查子项目插件发现面（子 provider 形态）或父环境 LLM 配置状态；继承语义见 docs/syntax/11_modules.md §11.6。
+
 ### 词嵌入（EMB_）
 
 > embedding 调用是一等 I/O 面（机制同构 LLM 面）：契约违约/服务失败/维度保序违约等错误面独立可定位。均为运行时诊断，fail-fast 不静默回退。

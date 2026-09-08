@@ -118,6 +118,10 @@ KDIAG_RUNTIME_ENV_LIMIT = "KDIAG_RUNTIME_ENV_LIMIT"
 KDIAG_RUNTIME_PRE_EVAL_FALLBACK = "KDIAG_RUNTIME_PRE_EVAL_FALLBACK"
 KDIAG_RUNTIME_SPECIALIZATION_FALLBACK = "KDIAG_RUNTIME_SPECIALIZATION_FALLBACK"
 
+# === 宿主隔离 (HOST_) ===
+# ihost 隔离子环境（独立 Engine 子 run）的宿主侧降级/边界事件。
+HOST_ISOLATE_LLM_INHERIT_FAILED = "HOST_ISOLATE_LLM_INHERIT_FAILED"
+
 # === 词嵌入 (EMB_) ===
 # embedding 调用是一等 I/O 面（机制同构 = LLM 面）：契约违约/服务失败/维度
 # 保序违约等错误面独立可定位。provider 层异常（EmbeddingProviderError /

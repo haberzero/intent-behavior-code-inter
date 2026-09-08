@@ -47,7 +47,7 @@ from core.runtime.serialization.immutable_artifact import ImmutableArtifact
 from core.runtime.capability_registry import CapabilityRegistry
 from core.runtime.observability.events import EventBus
 from core.runtime.observability.diagnostics import kernel_diagnostic
-from core.base.diagnostics.codes import KDIAG_RUNTIME_COLLECT_SKIP
+from core.base.diagnostics.codes import KDIAG_RUNTIME_COLLECT_SKIP, HOST_ISOLATE_LLM_INHERIT_FAILED
 
 
 from core.base.enums import RegistrationState
@@ -341,14 +341,18 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
-    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None) -> bool:
+    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None, on_ready=None) -> bool:
         """
         运行一段 IBCI 代码字符串。
+
+        ``on_ready``：解释器与插件就绪后、执行开始前触发的钩子
+        （Callable[[IBCIEngine], None]，接收本引擎）——供子环境场景在
+        执行前应用继承配置等；None = 无钩子（零侵入）。
         """
         try:
             artifact = self.compile_string(code, variables, silent=silent)
             if prepare_interpreter:
-                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard)
+                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard, on_ready=on_ready)
             return True
         except CompilerError as e:
             if not silent:
@@ -362,7 +366,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 print(f"\nRuntime Error: {str(e)}")
             raise e
 
-    def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None) -> bool:
+    def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None, on_ready=None) -> bool:
         # 多阶段启动：先确立 project_root + root-dependent 初始化
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
@@ -390,7 +394,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             artifact = self.compile(abs_entry, variables, silent=silent)
 
             if prepare_interpreter:
-                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard)
+                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard, on_ready=on_ready)
 
             return True
 
@@ -444,7 +448,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         
         return self.scheduler.compile_project(abs_entry, entry_module_name=entry_module_name)
 
-    def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None, journal_writer=None, budget_guard=None) -> bool:
+    def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None, journal_writer=None, budget_guard=None, on_ready=None) -> bool:
         """
          调度入口。执行编译产物。
          注意：如果引擎已经处于 READY 状态，调用此方法将抛出状态冲突错误。建议每个执行流创建新的引擎实例。
@@ -479,6 +483,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # LLM 预算守卫挂载（api_config budget 节驱动；None = 无预算，零侵入）
         if budget_guard is not None:
             self.interpreter.service_context.set_budget_guard(budget_guard)
+        # on_ready 钩子（解释器 + 插件就绪后、执行开始前；None = 无钩子，零侵入）
+        if on_ready is not None:
+            on_ready(self)
 
         # 委派执行权给运行时调度器
         # 目前调度器内部仍然通过 Engine 的准备机制来启动解释器
@@ -598,7 +605,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             )
         return abs_path, sub_root_dir
 
-    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], silent: bool = True) -> str:
+    def request_spawn_isolated(self, entry_path: str, policy: Dict[str, Any], silent: bool = True, output_callback=None) -> str:
         """
         [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用。
         在后台线程中启动全新的 Engine 实例；立即返回 handle 字符串。
@@ -606,6 +613,8 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         ``silent``：子引擎是否抑制输出。``spawn_isolated``（后台任务）默认 True；
         ``run_isolated``（阻塞式运行）传 False 以保留子脚本输出。
+        ``output_callback``：子脚本 print 输出收集器（Callable[[str], None]）；
+        None = 子输出按 silent 语义走默认面。
         """
         # 派生 + 隔离反转校验。
         abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
@@ -616,6 +625,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             root_dir=sub_root_dir,
         )
 
+        # LLM 配置继承快照（spawn 时点父 provider 活状态；深拷贝不可变——
+        # spawn 后父变异不影响已 spawn 子）。非 stateful provider
+        # （replay/自定义）= 无快照（诚实边界：子不继承，调 LLM 得清晰错误）。
+        llm_snapshot = None
+        _llm_provider = self.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        if _is_stateful_llm_provider(_llm_provider):
+            llm_snapshot = _llm_provider.save_plugin_state()
+
         # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出
         exc_holder: list = [None]
         # 子任务完成的唤醒回调表（HostAwaitable.register_wake 注册的 event）
@@ -623,7 +640,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         def _run_child():
             try:
-                sub_engine.run(abs_path, silent=silent)
+                sub_engine.run(
+                    abs_path,
+                    silent=silent,
+                    output_callback=output_callback,
+                    on_ready=(lambda e: _apply_llm_inheritance(e, llm_snapshot))
+                            if llm_snapshot is not None else None,
+                )
             except Exception as e:
                 exc_holder[0] = e
             finally:
@@ -740,3 +763,39 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     )
 
         return result
+
+
+# ------------------------------------------------------------------ #
+# ihost 子环境 LLM 配置继承（spawn 时点快照；机制 = IbStatefulPlugin
+# save/restore 既有跨引擎状态契约）
+# ------------------------------------------------------------------ #
+
+def _is_stateful_llm_provider(provider) -> bool:
+    """LLM provider 是否支持快照存/取（IbStatefulPlugin 契约）。"""
+    from core.extension.ibcext import IbStatefulPlugin
+    return isinstance(provider, IbStatefulPlugin)
+
+
+def _apply_llm_inheritance(sub_engine, snapshot) -> None:
+    """把父 LLM 配置快照应用到子引擎（on_ready 钩子体；执行前触发）。
+
+    失败/不适用 = 不阻断（子 run 照常执行，其 LLM 调用按自身配置状态得
+    清晰错误）；失败面经 kernel_diagnostic 显形（警告语义，同域
+    KDIAG_RUNTIME_COLLECT_SKIP 机制同构）。
+    """
+    try:
+        provider = sub_engine.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        if not _is_stateful_llm_provider(provider):
+            kernel_diagnostic(
+                code=HOST_ISOLATE_LLM_INHERIT_FAILED,
+                detail={"reason": "child llm provider does not support state restore"},
+                message="ihost 子环境 LLM 配置继承跳过（子 provider 不支持状态恢复）",
+            )
+            return
+        provider.restore_plugin_state(snapshot)
+    except Exception as e:
+        kernel_diagnostic(
+            code=HOST_ISOLATE_LLM_INHERIT_FAILED,
+            detail={"error": str(e)},
+            message=f"ihost 子环境 LLM 配置继承应用失败: {e}",
+        )

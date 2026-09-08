@@ -136,7 +136,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   provider] + 预算核算[api_config budget 节 warn/fail，RUN_BUDGET_EXCEEDED/
   CFG_CONFIG_INVALID_BUDGET 新增] + --result-json trailer；单一设计文档四批
   实施 + C7 消重 + 15_diagnostics 可观测面节；判别 59 项 + 全量 3739/1 零回归）
-  → R3-⑥ E1 重做 + R-2a run_file[ihost 子环境整合设计，当前项]**；P1 六项（诊断消息
+  → ~~R3-⑥ E1 重做 + R-2a run_file~~ ✅ 已完成（2026-09-08：E1 子环境 LLM 配置继承
+  [spawn 时点活状态快照——IbStatefulPlugin save/restore 机制同构 + on_ready 钩子 +
+  _model_registry 补漏 + HOST_ISOLATE_LLM_INHERIT_FAILED 新增；快照源裁定偏离
+  HANDOFF 原"文件快照 + to_llm_config"措辞：活状态 = 单一权威源，文件只是初始
+  源之一；ThrownException 消息面根因修复 "TypeName: message" 显示对等] +
+  ihost.run_file 结果捕获[exit_status/stdout/exception 错误作值；防卡死
+  collect_timeout 经 policy；11_modules §11.6 整节更新]；判别 15 项 + 全量
+  3770/1 零回归）**→ Tier B 质量巡检窗口[阶段边界] →；P1 六项（诊断消息
   批[含原 B4] / D-7 裸声明语义 / D-10 json 鲁棒面 / F-2 思考抑制警告可配置 /
   R-7 429 退避 / R-8 knowledge 扩展面）+ P2 文档批两项按序；原批 2 剩余
   （A2/A5/B2）与批 3（A6/B5/C6/C7/D2/D3）整体顺延保留。长期登记不实施

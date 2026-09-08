@@ -192,6 +192,7 @@ dict policy = {"isolated": True}
 dict result = ihost.run_isolated("./sub/child.ibci", policy)  # 隔离运行子脚本，返回子环境变量字典
 str handle = ihost.spawn_isolated("./sub/child.ibci", policy) # 启动子环境（不等待），返回 handle
 dict result = ihost.collect(handle)   # 等待子环境完成，返回子环境变量字典
+dict rec = ihost.run_file("./sub/child.ibci", policy)  # 进程内运行子脚本并捕获执行结果记录
 ihost.save_state(path)                # 保存当前状态
 ihost.load_state(path)                # 加载状态
 str src = ihost.get_source()          # 获取当前入口源码
@@ -204,7 +205,37 @@ str val = ihost.getenv("SOME_KEY")    # 读取宿主 OS 环境变量（缺失返
 > （`import python "os" as oslib: bind getenv(...) -> str`）直接访问，`ihost.getenv`
 > 是常用路径的便捷面。
 
-子环境完全独立（独立 Engine 实例、构造期自行注册同一组内置模块、默认不继承父环境变量）。**LLM provider 配置也不继承**——子环境经 `ai.load_project_config()` 按自身 `project_root` 显式加载 `api_config.json`；子脚本若需真实 LLM，须在子项目目录放置自己的 `api_config.json` 并调用 `ai.load_project_config()`（父环境的 `ai.set_config(...)` / 命名模型配置不传递到子环境）。
+子环境完全独立（独立 Engine 实例、构造期自行注册同一组内置模块、不继承父环境变量
+与全局变量——数据交换经 `run_isolated`/`collect` 的导出变量字典或显式 file 读写）。
+
+**LLM 配置继承**：子环境**自动继承父环境的 LLM provider 配置**（spawn 时点快照：
+默认端点/模型、mock 态、`@NAME~` 命名模型注册表、生成参数）——子脚本无需自写
+`api_config.json` 即可沿用父环境的 LLM 配置调用 LLM。快照语义：spawn 时点值
+（spawn 后父配置变异不影响已 spawn 子）；子脚本显式 `ai.load_project_config()` /
+`ai.set_config(...)` 在子代码执行期覆盖继承快照（时间序优先）。子环境 LLM 配置
+继承失败（非标准 provider 等边界）不阻断子执行，经内核诊断
+（`HOST_ISOLATE_LLM_INHERIT_FAILED`）显形，子 LLM 调用按其自身配置状态得清晰错误。
+
+**`run_file` 结果记录**：`ihost.run_file(path, policy)` 进程内运行子脚本并返回
+执行结果记录（**错误作值**——子失败不抛穿父；与 `run_isolated` 的**错误作异常** +
+变量字典互补，同一子 run 机制的两个消费面）：
+
+```ibci
+dict rec = ihost.run_file("./sub/child.ibci", {})
+if rec["exit_status"] == "ok":
+    print(rec["stdout"])        # 子 print 输出（捕获，不经父 stdout 直接面）
+else:
+    print(rec["exception"])     # 错误消息（含编译失败/运行期异常）
+```
+
+- `exit_status`：`"ok"` / `"error"`（子编译失败、运行期异常、collect 超时均为
+  `"error"`）；
+- `stdout`：子 `print` 输出全文（捕获）；
+- `exception`：错误消息；`exit_status = "ok"` 时为空串。
+- **防卡死**：`policy` 可含 `collect_timeout`（秒，墙钟上限）——默认无界
+  （与 `run_isolated` 一致）；超时 = `exit_status = "error"` 且 `exception` 携带
+  `timed out`（子线程无法强杀，作为 daemon 孤儿继续至自然结束，调用方不应假设
+  子已停止）。
 
 ### 11.7 fs 模块
 

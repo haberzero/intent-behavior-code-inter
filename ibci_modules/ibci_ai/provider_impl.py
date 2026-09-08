@@ -896,6 +896,9 @@ class RecommendedProvider(LLMProvider):
         return {
             "config": dict(self._config),
             "return_type_prompts": dict(self._return_type_prompts),
+            # 命名模型注册表（@NAME~ 路由）= 活配置状态的一部分（运行时
+            # register_model 可漂移，快照须含）
+            "model_registry": {k: dict(v) for k, v in self._model_registry.items()},
         }
 
     def restore_plugin_state(self, state: dict) -> None:
@@ -903,6 +906,10 @@ class RecommendedProvider(LLMProvider):
             self._config.update(state["config"])
         if "return_type_prompts" in state:
             self._return_type_prompts.update(state["return_type_prompts"])
+        if "model_registry" in state:
+            self._model_registry.update(state["model_registry"])
+            # 命名模型客户端缓存绑定旧上下文，整体重置（按配置惰性重建）
+            self._named_clients = {}
         self._client = None
         self._model_capabilities["probed"] = False
         self._unprobed_warned = False

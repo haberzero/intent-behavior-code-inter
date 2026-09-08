@@ -283,6 +283,37 @@ class HostService(IHostService):
 
         return HostAwaitable(self.orchestrator, handle)
 
+    def run_file(self, path: str, policy: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        进程内运行另一个 .ibci 文件并捕获执行结果（结果记录消费面）。
+
+        与 ``run_isolated``（变量交换消费面：错误作异常 + 导出变量字典）互补：
+        ``run_file`` 返回结果记录 ``{"exit_status", "stdout", "exception"}``
+        （**错误作值**；子 print 输出被捕获、不经父 stdout）。同一 spawn 机制
+        （``request_spawn_isolated``）+ 同步 collect——本方法在 VM 线程被调，
+        子线程经独立引擎执行（不依赖父 VM 线程，无循环等待）。
+
+        防卡死：collect_timeout 经 policy 传递（IsolationPolicy 既有面）；
+        默认 None = 无界（与 run_isolated 一致）。
+        """
+        if not self.orchestrator:
+            raise RuntimeError("Kernel Orchestrator not available. run_file cannot be performed.")
+
+        abs_path = self._resolve_isolated_path(path)
+        chunks: List[str] = []
+        handle = self.orchestrator.request_spawn_isolated(
+            abs_path, policy, silent=True, output_callback=chunks.append)
+        error = None
+        try:
+            self.orchestrator.request_collect(handle)
+        except RuntimeError as e:
+            error = str(e)
+        return {
+            "exit_status": "ok" if error is None else "error",
+            "stdout": "\n".join(chunks),
+            "exception": error or "",
+        }
+
     def _resolve_isolated_path(self, path: str) -> str:
         """
         把 ``ihost.run_isolated``/``spawn_isolated`` 传入的脚本路径解析为绝对路径。

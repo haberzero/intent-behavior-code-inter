@@ -136,9 +136,16 @@
    末行单行 JSON v1：exit_status/exception{code,message,source}/journal/
    budget/replay；复用诊断对象无新渲染）。文档 15_diagnostics run 可观测面
    完整节。判别 59 项；全量 3739/1 零回归。
-6. **R3-⑥ E1 重做 + R-2a run_file（ihost 子环境完善）**：整合设计（E1 on_ready hook
-   形态[定案] + run_file 结果契约 + 沙箱/配置源语义；防卡死：有限 collect 超时）→
-   实施 + 判别（mock 模式）。
+6. **R3-⑥ E1 重做 + R-2a run_file（ihost 子环境完善）** ✅ **已完成（2026-09-08）**：
+   E1 子环境 LLM 配置继承（spawn 时点活状态快照，IbStatefulPlugin save/restore 机制
+   同构 + engine on_ready 钩子 + save_plugin_state 补 _model_registry 命名模型面；
+   mock 态/端点/命名模型/生成参数全继承；子代码显式 load 覆盖继承[时间序优先]；
+   失败 = HOST_ISOLATE_LLM_INHERIT_FAILED WARNING 不阻断）+ ihost.run_file(path,
+   policy) -> {exit_status, stdout, exception}（错误作值消费面，与 run_isolated 的
+   错误作异常 + 变量字典互补；stdout 捕获不经父面；防卡死 collect_timeout 经
+   policy）。伴随根因修复：ThrownException 消息面（str 原 = IbObject 裸 repr →
+   "TypeName: message" Python 显示对等）。文档 11_modules §11.6 整节更新（推翻
+   "LLM provider 配置也不继承"旧表述）。判别 15 项；全量 3770/1 零回归。
 
 ### P1（按序）
 
