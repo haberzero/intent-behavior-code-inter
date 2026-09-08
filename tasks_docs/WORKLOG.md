@@ -1602,6 +1602,31 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   R3-⑦~⑬ + P2 R3-⑭~⑮ 全部完成/待决终态）。
 ---
 
+- **Phase D meta 层/代码作值设计交付完成（2026-09-08，free-explore；设计交付，本运行
+  不实施）**：round3 阶段 D（用户 2026-09-08 裁定：架构安全与长期收益优先，不半接通
+  meta 层；实施待 VISION-4/5 类型类/函数式方向落地后推进）。交付物 = 单点设计文档
+  `tasks_docs/_meta_layer_design.md`（**无代码/测试改动**——零回归面 = 文档面）。设计
+  内容：① **安全执行架构**（run_file + meta.compile + R-6 行为表达式作值 统一）——
+  分层为原语面（内核提供安全基元：compile[engine.compile_string 语言级暴露]/
+  execute-isolated[ihost.run_file R3-⑥ 已落地]/capture[结果作值
+  {exit_status,stdout,exception}]/judge[调用方机械判定]）+ 治理面（调用方用 IBCI 表达）；
+  R-6 归位（复用统一原语面，值类型待 VISION-4）；② **安全模型选项 A**（用户 2026-09-08
+  裁定：调用方表达治理 + 语言原语）——内核 = 安全基元提供者、调用方 = 治理策略表达者；
+  三门管线（编译门 meta.compile / 隔离门 ihost.run_file / 判定门 调用方 judge）固化为
+  文档化惯用法 + 参考实现（非内核强制机制）+ e34_p4 形态[预注册向量+机械判定]；选项 A
+  依据[使命定位/单一权威源/可组合性]；ihost policy 参数 = 未来策略模型演进点（A 不堵死
+  此路）；③ **类型层承诺需求清单**（VISION-4 开工输入，"自举台阶 ④ 只差类型层承诺"）——
+  ① CompilationArtifact 作类型值 / ② RunResult 作类型值[dict→具名类型] / ③ BehaviorExpr
+  值类型[R-6] / ④ fn[...] 高阶签名 / ⑤ Verdict 判定结果类型（what 非 how——how = VISION-4/5）；
+  ④ **F5 档案重估结论**——档 A 缓存预编译/真 JIT 与 meta 层正交（挂独立性能线）、档 B 隔离
+  改造/反射 = 长期主线、D-3.3 VM 字符串扫描快速路径维持长期登记（与演化平面设计合流规划）；
+  meta 层不依赖任何 F5 档案项；⑤ **自举台阶 ④ 端到端架构**——台阶 ①-③ 已达成 → 台阶 ④
+  [机制面已存在 + 类型层承诺待 VISION-4/5 + 治理面选项 A] → 自举闭环[IBCI 用 IBCI 表达
+  "安全运行 IBCI 代码"治理]。边界：本运行不实施 / 不设计 VISION-4 类型理论本身 / 不设计
+  真 JIT / 不内建治理引擎。**round3 全部阶段收束**（A P0 + B P1 + C P2 文档批 + D meta
+  层设计交付）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
