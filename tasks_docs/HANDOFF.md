@@ -166,8 +166,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
        落地后联合重估[新增隔离消费方 + 威胁模型边界]）；VISION-4/5 类型层只约束
        **全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
      - **批次计划**（每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit）：
-       ~~**M1**~~ **✅ 已完成（2026-09-08，commit 359b1eef，判别 23 项 + 3896/1 零回归；实施细化
-        `_code_meta_mvp_m1.md`设计细化  §八.4 + WORKLOG M1 条目）** run_result 值类型（三字段 attribute 访问
+       ~~**M1**~~ **✅ 已完成（2026-09-08，commit 359b1eef，判别 23 项 + 3896/1 零回归；设计细化
+        `_meta_layer_design.md` §八.4 + WORKLOG M1 条目）** run_result 值类型（三字段 attribute 访问
         r.exit_status/r.stdout/r.exception + 值相等 + 序列化保真；exception 结构化单一
         权威源 exception_record[CLI+host 共用]）+ 执行路径统一（单一 spawn 核心两源形式：
         文件源既有 + 字符串源新）+ run_file dict→run_result 精化 + run_code 落地）→

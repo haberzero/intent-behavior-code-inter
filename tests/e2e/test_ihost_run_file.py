@@ -109,12 +109,12 @@ class TestRunFile:
     def test_collect_timeout_policy(self):
         """防卡死：policy collect_timeout 有限 → 超时 = exception.message 携带
         timed out（子线程 daemon 孤儿语义既有，不阻断父）。"""
-        # 循环规模裁定：须 > collect_timeout(1s) 才触发超时判别；VM 执行
-        # 显著慢于 Python（~100k 迭代 ≈ 数秒）——孤儿线程（daemon，collect
-        # 超时后继续跑至自然结束）须在套件时间尺度内收尾，不抢 CPU 拖垮套件。
+        # 循环规模裁定：VM 实测 ~20000 迭代 ≈ 3.75s（> collect_timeout 1s，触发超时
+        # 判别）；孤儿线程（daemon，collect 超时后继续跑至自然结束）总寿命 ~3.75s——
+        # 压低套件 GC 收尾的孤儿负载（防看门狗误杀；run_code 超时判别同裁定）。
         child = _write_child(
             "int i = 0\n"
-            "while i < 100000:\n"
+            "while i < 20000:\n"
             "    i = i + 1\n"
         )
         try:
