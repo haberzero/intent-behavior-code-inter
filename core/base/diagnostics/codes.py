@@ -142,6 +142,13 @@ KNW_CHECK_REJECTED = "KNW_CHECK_REJECTED"
 KNW_KEY_EXISTS = "KNW_KEY_EXISTS"
 KNW_REASON_EMPTY = "KNW_REASON_EMPTY"
 
+# === 层级记忆基底 (MEM_) ===
+# 一等值类型 memory 的运行期契约违约：层名/容量/键存在性。
+MEM_KEY_EXISTS = "MEM_KEY_EXISTS"
+MEM_KEY_NOT_FOUND = "MEM_KEY_NOT_FOUND"
+MEM_TIER_FULL = "MEM_TIER_FULL"
+MEM_TIER_UNKNOWN = "MEM_TIER_UNKNOWN"
+
 # === 配置 (CFG_) ===
 # api_config.json 加载与校验失败（ai.load_project_config / ai.load_config / ai.apply_config）。
 CFG_CONFIG_NOT_FOUND = "CFG_CONFIG_NOT_FOUND"

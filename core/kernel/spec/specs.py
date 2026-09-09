@@ -90,6 +90,10 @@ VECTOR_SPEC       = TypeDef(name="vector", kind=TypeKind.PRIMITIVE.value, proven
 KNOWLEDGE_SPEC    = TypeDef(name="knowledge", kind=TypeKind.CLASS.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
                             parent_type=TypeRef.of("Object"))
 
+# 层级记忆基底 —— 一等内置值类型（Round4 记忆层；分层/生命周期/完整性）。
+MEMORY_SPEC       = TypeDef(name="memory", kind=TypeKind.CLASS.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE,
+                            parent_type=TypeRef.of("Object"))
+
 # 并发/通信类型规格
 CHANNEL_SPEC = TypeDef(name="chan",   kind=TypeKind.CHANNEL.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)
 SLOT_SPEC    = TypeDef(name="slot",   kind=TypeKind.SLOT.value, provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.PRELUDE_VISIBLE)

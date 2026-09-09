@@ -432,6 +432,23 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="knowledge.amend 理由（reason）为空，或键未登记。",
         fix="amend 必须附非空理由（审计链完整性要求）；更正仅适用于已登记条目。",
     ),
+    # ==================== 层级记忆基底 (MEM_) ====================
+    "MEM_KEY_EXISTS": CodeInfo(
+        title="memory.encode 键已存在或键非法（非空 str）。",
+        fix="重复键须先 prune 或 promote/demote 到其它层再 encode；键须为非空字符串。",
+    ),
+    "MEM_KEY_NOT_FOUND": CodeInfo(
+        title="memory 操作（promote/content_hash 等）引用未登记键。",
+        fix="确认键已 encode 登记；跨层操作前用 tier() 确认条目位置。",
+    ),
+    "MEM_TIER_FULL": CodeInfo(
+        title="memory 层容量已满，拒绝写入。",
+        fix="先 prune（遗忘）或 demote（降级）腾出空间；或 set_capacity 扩大容量。",
+    ),
+    "MEM_TIER_UNKNOWN": CodeInfo(
+        title="memory 操作引用了非法层名（非 working_set/session/knowledge/long_term）。",
+        fix="层名须为固定四值之一：working_set / session / knowledge / long_term。",
+    ),
     # ==================== 配置 (CFG_) ====================
     "CFG_CONFIG_NOT_FOUND": CodeInfo(
         title="配置加载指定的配置文件不存在（ai.load_config / ai.load_project_config）。",

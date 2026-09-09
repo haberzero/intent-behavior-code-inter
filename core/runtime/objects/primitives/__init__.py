@@ -5,6 +5,7 @@ from .exceptions import IbException
 from .collections import IbList, IbTuple, IbDict
 from .vector import IbVector
 from .knowledge import IbKnowledge
+from .memory import IbMemory
 from .run_result import IbRunResult
 from .callables import IbFnCallable, IbBehavior
 from .optional import IbOptional
@@ -22,6 +23,7 @@ __all__ = [
     "IbDict",
     "IbVector",
     "IbKnowledge",
+    "IbMemory",
     "IbRunResult",
     "IbFnCallable",
     "IbBehavior",
