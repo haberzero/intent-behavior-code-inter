@@ -2227,6 +2227,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   隔离判别。下一里程碑 = P7 档 B 进程级隔离 + 反射能力（高风险 → 隔离分支 100% 授权）；
   P3 D-3.3 可交错。P6 期间附交付：P5 缓存复核根因修复（信任域前缀策略，9eb638ca）+
   测试基础设施看门狗阶段感知修复（上条）。
+- **unsafe-vibe-dev 合并安全评估（用户指定：性能/功能/内核稳定性/风险回归四面实证，2026-09-09，free-explore）**：
+  评估对象 = P6 收束态（HEAD 4e024377，unsafe-vibe-dev 已 ff 收束）。方法 = 两面 A/B 实测
+  （pre-P6 worktree `9eb638ca` vs post-P6 主树，交错多轮）+ 官方裁判 harness + 稳定性探针
+  + 残留扫描。**功能面**：干净全量 3963/1 零回归（157s）+ 用户面 e2e + P6 判别 8 例 +
+  P4 D1-D7 / P5 哨兵（套件内）全过。**性能面**：① 数据平面官方裁判 harness
+  （scripts/perf_bench.py，5 轮取中位）A/B：六项（arith/branch/recurse/string/container/
+  class）皆噪声范围内（最大偏差 +1.8% < 该项 stdev）——P4 ~7× 收益完整保留，P6 对执行
+  平面零影响；② 构造期 A/B 发现 **P6 引入 +12.6 ms/engine 回归**（40 次构造均值，3 轮
+  交错复现非噪声）——成本分布实证 = 每引擎 4 次契约源 lex+parse（10.2ms/引擎，install
+  树静态文件重复解析）→ **修复 = 契约源解析进程级缓存**（内容哈希自失效键；首引擎
+  parse+synthesize+fail-fast 语义不变，后续引擎 deepcopy 成员表保 per-engine spec 身份；
+  per-engine 实现对象/隔离守卫语义不变）→ 复测 **+12.6 → +3.3 ms/engine（-74%）**，残余
+  皆内存有界操作；③ 编译期 = P5 缓存通道未触碰（kernel_version 递增为设计内失效）。
+  **内核稳定性面**：10 引擎同进程链（构造 + 工具 4 运行 + 正确性断言）全过，10 个独立
+  per-engine math 实现（registry 隔离守卫 intact）；net per-engine 状态隔离探针
+  （n1.set_timeout 不泄漏 n2）。**风险回归面**：残留扫描全绿（任务代号/孤儿引用/未用
+  导入/旧阶段边界引用零命中）+ B4 文档一致性（两域分述单点真理）+ 测试基础设施缺陷
+  根因修复两项（见下条）。**评估结论：四面全绿，合并安全成立**。附：评估期间暴露并
+  根因修复的测试基础设施缺陷 = 看门狗阶段边界（sessionfinish → collection_finish：
+  全量 98% 处 exit 124 实证 = 180s 固定窗口与套件总时长竞态的第二次形态；修正后
+  窗口与套件时长彻底解耦）+ 遗留合成文件干扰实证（dump 精确捕获真实 collect hang，
+  设计行为确认）。
+- **测试基础设施裁定：死锁看门狗阶段边界 = collection 结束（sessionfinish 不足的根因）（2026-09-09，free-explore）**：
+  合并安全评估期间全量 98% 处再遇 exit 124（dump 实证主线程在测试执行中）——
+  sessionfinish 解除边界仍不足：180s 固定窗口自进程启动计，套件 collect+执行总时长
+  （~180s+）越过窗口 → 执行期误杀。**根因 = 阶段边界选错**（sessionfinish 在 100% 才
+  触发，窗口与执行时长仍耦合）。修正 = ``pytest_collection_finish`` 即解除：职责分界
+  彻底——框架层（进程启动→collect 结束）= 看门狗 180s 窗口；测试执行期 = 第一层 60s
+  每测试超时（含 setup）；teardown 慢 ≠ 死锁。验证：① 干净全量 3963/1（157s 零误杀，
+  collect ~20s 即解除）② 合成 collect 阻塞 → 124 + dump 主线程栈精确指向卡死模块导入行
+  ③ 干扰实证：遗留合成文件误入全量 collect → dump 精确捕获真实 collect hang（设计行为）。
+  keep_tests_safe.md 同步（阶段边界 = collect 结束）。**记录更正**：本 session 早先条目中
+  "test_task_scheduler 全量负载偶发 hang[单独 0.17s 过·重跑全绿] = 已知框架层并发 flake
+  类"诊断有误——两次 96%/98% 处 exit 124 的实证根因皆为看门狗固定窗口误杀（线程栈：
+  套件已 100%/98%，主线程在 GC/执行中），test_task_scheduler 本身无 hang（单独 0.17s
+  通过 + 全量测试 100% 完成后才被杀）。该观察项关闭。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

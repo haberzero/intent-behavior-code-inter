@@ -84,7 +84,14 @@
  > 登记 = bind 默认值语法独立立项）+ B4 ✅ 文档收敛（01_native_host_binding §六 内核契约自举
  > + 5 文档两域分述同步）。P6 期间附交付：测试基础设施看门狗阶段感知修复（固定 180s 时点与
  > 增长中套件总时长竞态 → sessionfinish 解除，根因修复非调大时限；keep_tests_safe 文档同步）。
- > P3 D-3.3[紧迫性下调可交错]。
+ >
+ > **P7 档 B 进程级隔离 + 反射 = 当前 P0（危险工作，下一 agent 开工）**：100% 授权独立
+ > 隔离分支（建议 `p7-process-isolation`，自 free-explore 拉出；main/unsafe-vibe-dev/
+ > free-explore 永不触碰）。**Phase 0 只读实证先行**（代码零改动）：① 现状隔离边界面
+ > （sys.modules 共享 / ihost spawn / LLM 通道[不变量 #4] / 文件沙箱 / 引擎间通信面）
+ > ② 进程隔离形态对照 9 项 VM 不变量 ③ 反射能力消费方重估 ④ VISION-4 交点联合重估 →
+ > 设计文档 `tasks_docs/_p7_process_isolation_design.md`。开工指令详情 = HANDOFF §2.0
+ > 主线延续点第 1 条（含性能锚 + A/B 方法论指针）。P3 D-3.3[紧迫性下调可交错]。
 >
 > **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
 > 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离

@@ -109,84 +109,84 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-09 round3 P4+P5 收束 → 下一 agent 接 P6）
+### 2.0 🔴 本 session 交接（2026-09-09 P6 内核自举收束 + 合并安全评估 → 下一 agent 接 P7 危险工作）
 
-> **接手起点**：读本节 + `tasks_docs/NEXT_STEPS.md`（P4/P5 进度 + ⛔ 工作模式定论）+
-> `git log --oneline -30`（近期提交动线）+ `tasks_docs/WORKLOG.md`（P4/P5 落账条目）。
-> 本节取代下方 §2.1 的旧动态状态（round3/meta MVP 历史保留为参照）。
-
-- **🔴 当前状态 = 内核完整系统工程化（VISION-6）自主推进主线；子方向 ① 真 JIT + ②
-  缓存预编译 + ③ 内核自举（P6）均已收束并入 unsafe-vibe-dev（全本地未 push），下一里程碑 =
-  ④ 进程级隔离 + 反射能力（P7，高风险→隔离分支）**。
-
+> **接手起点**：读本节 + `tasks_docs/NEXT_STEPS.md`（P6 收束 + P7 开工指令 + ⛔ 工作模式定论）+
+> `tasks_docs/WORKLOG.md`（P6 批次 + 合并安全评估 + 看门狗根因条目）+ `git log --oneline -30`（提交动线）。
+> **本 agent 任务 = P7 档 B 进程级隔离 + 反射能力（危险工作，隔离分支）**——见"主线延续点"第 1 条
+> 开工指令。本节取代下方 §2.1 的旧动态状态（round3/meta MVP 历史保留为参照）。
 - **工程事实（本 session 收束点）**：
-  - 分支 = `free-explore`（工作分支）+ `unsafe-vibe-dev`（里程碑分支，已 ff 到
-    free-explore，全本地未 push）+ `main`（永不触碰）。当前 HEAD = `be0cb55a`
-    （P6 里程碑收束点：P6 内核自举 B1/B2/B4 + 测试基础设施看门狗修复）。`free-explore`
-    = `unsafe-vibe-dev`（0 差异，P6 已 ff 收束）。
-  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3963 passed / 1 skipped
-    零回归**（P6 收束后；数字以实跑为准，不冻结）。
-  - 提交链（新→旧，P6 内核自举 + 看门狗修复 + P5 缓存）：`be0cb55a`(看门狗 dump 文件通道)
-    → `af15f7c8`(看门狗阶段感知 + P6 收束账目) → `e645d3ee`(P6·B4 文档收敛) →
-    `a5ebc996`(P6·B2 工具 4 契约源自举) → `e356f3cc`(P6·B1 落账) → `df4af9c2`(P6·B1
-    共享合成) → `0ecac385`(P6 Phase 0 设计) → `9eb638ca`(P5 缓存根因修复·信任域前缀策略)
-    → 其后 P4/P5 链（git 承载）。
-  - 交付新功能面（本 session）：① **P4 真 JIT**（codegen 路线 ①——v1.0 循环体直接执行 +
-    v1.5 cond-codegen[条件+体一起 codegen，drive-loop 交互归零，~5-7× 数据平面收益] +
-    v1.1 控制流[break/continue] + 判别套件 D1-D7[15 例语义等价性验证]）；② **P5 持久
-    artifact 缓存**（编译期上修——相同源码+内核版本编译产物缓存到磁盘，命中跳过 5 阶段
-    管线，IBCI_ARTIFACT_CACHE=1 启用默认关闭零侵入，~8× 编译加速）。
+  - 分支 = `free-explore`（工作分支）+ `unsafe-vibe-dev`（里程碑分支，已 ff 收束 P6，全本地未
+    push）+ `main`（永不触碰）。`free-explore` = `unsafe-vibe-dev`（0 差异）。
+  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3963 passed / 1 skipped 零回归
+    （干净环境 157s；数字以实跑为准，不冻结）。
+  - 提交链（新→旧，本 session 段）：`d0fa88be`(P6 契约源解析进程级缓存·A/B 实证 +12.6→+3.3ms
+    构造回归根因修复) → `aadc459e`(看门狗阶段边界=collection 结束·98% 误杀根因) → `4e024377`
+    (P6 收束账目) → `be0cb55a`(看门狗 dump 文件通道) → `af15f7c8`(看门狗阶段感知+P6 收束) →
+    `e645d3ee`(P6·B4 文档) → `a5ebc996`(P6·B2 契约源自举) → `df4af9c2`(P6·B1 共享合成) →
+    `9eb638ca`(P5 缓存根因修复) → 其后 P4/P5 链（git 承载）。
+  - 交付面（本 session）：**P6 内核自举 ✅**（工具 4 契约源 IBCI bind 声明化 + bootstrap 通道
+    + 实现重打包 + 4 字面量真删除；net 实施期实证维持宿主侧；设计文档
+    `tasks_docs/_p6_selfbootstrap_design.md` 含实施期裁定记录）+ **测试基础设施看门狗根因修复
+    ×2**（固定窗口误杀 → collection 边界阶段感知 + dump 文件通道）+ **合并安全评估**（四面
+    实证，见下）。
 
-- **🔴 主线延续点（下一位智能体的工作队列）**：
-  1. **P6 内核自举（bind 表达内核契约，台阶 ④ 之后方向）✅ 完成 + 里程碑收束（2026-09-09，详见进度块）**——把 IBCI 内核
-     契约用 `bind`（宿主绑定）表达，自举台阶 ④（meta 层/字符串级直接执行）之后的方向。
-     设计起点 = `tasks_docs/_meta_layer_design.md` §六（自举台阶 ④ 端到端架构）+ §八
-     （批次计划）。**注意**：§六 台阶 ④ 达成条件 = "类型层承诺清单经 VISION-4/5 落地"
-     ——VISION-4/5 类型层是独立方向（user-gated，非内核工程化范畴）。P6 的"台阶 ④ 之后
-     方向"须先**实证裁定**：内核契约 bind 化的具体范围（哪些既有 builtin 机制可经 bind
-     表达 + 哪些须保持宿主侧）+ 设计确认（对照 9 不变量）→ 分阶段实施。
-      **进度（✅ P6 里程碑完成 + 收束，2026-09-09）**：Phase 0 实证裁定 + B1 ✅（共享
-      合成提取，判别 7 例）+ B2 ✅（工具 4 契约源自举：契约源 4 件
-      contracts/{math,json,time,schema}.ibci + bootstrap 阶段 kernel_contracts[parse→
-      共享合成→per-engine 严格命名空间→register_module，零新运行期机制] + 实现重打包
-      [类实例→模块级函数] + 4 字面量真删除 + kernel_version 递增；全量 3963/1 零回归）
-      + **B3（net）实施期实证取消**（net 8 方法 headers 默认参数面[has_default]超出 bind
-      表达力 + per-engine 状态双重边界 → net 维持宿主侧字面量[USER_DEFINED]；远期项登记
-      = bind 默认值语法独立立项）+ B4 ✅ 文档收敛（01_native_host_binding §六 内核契约
-      自举 + 5 文档两域分述同步）。provenance 变更（工具 4 → EXTERNAL_MODULE）行为安全
-      实证完成。**附交付**：测试基础设施看门狗阶段感知修复（固定 180s 时点与增长中套件
-      总时长竞态 → sessionfinish 解除；keep_tests_safe.md 同步）。设计文档
-      `tasks_docs/_p6_selfbootstrap_design.md`（含 B2 实施期裁定记录）。
-  2. **当前 P0 = P7 隔离改造 + 反射能力（档 B）**——高风险→隔离分支（100% 授权独立分支
-     实验）。P7 与 P6 的交点 = 档 B 隔离改造是 VISION-6 唯一与 VISION-4 类型层有交点
-     的方向（MVP 落地后联合重估）。
-  3. **P3 D-3.3 VM 字符串扫描快速路径**——紧迫性下调（P1 实证已 O(n)），可交错。
+- **🔴 主线延续点（下一位智能体 = P7 危险工作开工指令）**：
+  1. **P7 档 B 进程级隔离 + 反射能力 = 当前 P0（危险工作，隔离分支）**：
+     - **是什么**：档 B 隔离改造（进程级引擎隔离——消除同进程多引擎共享 sys.modules/模块级
+       状态的边界，KNOWN_LIMITS 已登记的"IBC-Inter 无强制力"面）+ 反射能力（F5 档案项，
+       消费方重估未做）。
+     - **为什么危险**：执行模型过程边界的根本性改变——跨进程生命周期/IPC 或序列化边界/沙箱
+       策略/引擎内部服务通道面全变；影响面大、边界无法预先完全确认。
+     - **分支政策（硬规则）**：100% 授权独立隔离分支（建议名 `p7-process-isolation`，自
+       `free-explore` 拉出）；允许任意程度破坏性实验；**永不触碰 main/unsafe-vibe-dev/
+       free-explore**；确认零风险（全量 pytest 零回归 + 复核放行）后 ff 并入 unsafe-vibe-dev，
+       merge 无误删分支。
+     - **开工顺序（Phase 0 只读实证先行，代码零改动）**：① 现状隔离边界面实证（sys.modules
+       共享面、ihost spawn 子环境机制、LLM 通道[不变量 #4]、文件沙箱/isys 外访面、引擎间
+       通信面现状）→ ② 进程隔离实现形态对比（multiprocessing/subprocess+协议/…）对照 9 项
+       VM 不变量（尤其 #1 统一执行入口）→ ③ 反射能力消费方重估（无消费方 = 裁定延期，
+       实证后登记）→ ④ VISION-4 类型层交点联合重估（档 B 是唯一交点方向）→ 设计文档
+       `tasks_docs/_p7_process_isolation_design.md`（设计阶段文档规则：先 tasks_docs，
+       落地后收敛 docs/）。
+     - **硬约束**：9 项 VM 不变量 + 工作模式定论九条 + 全量零回归门（每批）+ 禁 push +
+       详尽落账（WORKLOG）。
+     - **性能锚**：`scripts/perf_bench.py` = 数据平面官方改前/改后裁判（5 轮取中位；
+       post-P6 本机基线 2026-09-09 实跑：arith ~352/branch ~494/recurse ~2292/string ~30/
+       container ~2100/class ~1061 ms——机器/负载相关，价值 = 相对裁判）。A/B 方法论：
+       `git worktree add /tmp/<name> <commit>` + `AB_TREE`/`PYTHONPATH` 注入双树对比
+       （本 session 合并安全评估技术，WORKLOG 有全记录）。
+  2. **P6 内核自举 ✅ 完成 + 里程碑收束（2026-09-09）**：工具 4（math/json/time/schema）
+     契约单一权威源 = IBCI bind 声明契约源（`core/runtime/bootstrap/contracts/*.ibci`）+ 
+     bootstrap 通道（`kernel_contracts`，零新运行期机制）+ 实现重打包 + 4 字面量真删除；
+     net 实施期实证维持宿主侧（默认参数面 + per-engine 状态超出 bind 表达力；远期项 = bind
+     默认值语法独立立项）；全量 3963/1；已 ff 收束 unsafe-vibe-dev。细节 = WORKLOG +
+     设计文档。
+  3. **支线（P7 解阻/间隙期）**：P3 D-3.3 VM 字符串快速路径（紧迫性下调，可交错）/ 质量
+     维护 Tier B 巡检 / 文档对账。
 
-- **⚠️ 安全/稳定性评估（合并 unsafe-vibe-dev 的回顾性裁定）**：
-  - **功能**：P4 真 JIT（~5-7× 数据平面）+ P5 缓存（~8× 编译期）均经**全量 3938/1 零回归
-    + 判别套件 D1-D7（15 例语义等价性）+ P5 契约 4 例[含命中/未命中哨兵判别——
-    复核发现加固提交白名单与产物真实类闭包不符致缓存静默死亡，已根因修复：信任域
-    前缀策略 + 加载边界类型契约 + 篡改可观测，commit 9eb638ca]**验证，功能正确性已证。
-  - **稳定**：P5 缓存**默认关闭**（IBCI_ARTIFACT_CACHE=1 才启用）——零侵入既有行为；
-    P4 codegen 体经 `__builtins__: {}`（B7）+ 白名单判据（仅 IbAssign/IbIf/IbPass/
-    IbBreak/IbContinue）+ LLM 污点声呐（B4）三重门控，不可 codegen 形状回退 CPS（不改变
-    既有执行路径）。协作取消（cancel_event）在 codegen 体步进边界显式检查（与
-    _drive_loop_gen 同语义）。
-  - **安全**：① P4 codegen 体 = 生成 Python 直接执行函数（**非 eval 用户代码**）——生成
-    源码仅经 `rt.get/set_variable_by_uid` + `receive`（协议分派）+ `ec.is_truthy`，无
-    用户代码注入面；`__builtins__: {}` 禁内置访问。② **P5 缓存反序列化安全**：pickle
-    信任域策略（仅 core/core.* + builtins 类引用，外部模块一律拒绝——安全前提实证 =
-    core 全域零 `__reduce__`/`__setstate__` 定义，重建 = 分配 + 字段赋值无执行面）+ 缓存目录
-    0700/payload 0600 + 篡改拒绝 stderr 可观测 + 命中/未命中哨兵判别（复核发现首版精确
-    白名单与产物真实类闭包不符致缓存静默死亡，已根因修复为信任域前缀策略，9eb638ca）。
-    当前评估：**已闭合**（无后续加固待办）。
+- **⚠️ 合并安全评估（用户指定四面实证，2026-09-09，unsafe-vibe-dev 收束态）**：
+  - **功能**：全量 3963/1 零回归（干净环境）+ P6 判别 8 例 + P4 D1-D7 语义等价 15 例 +
+    P5 命中/未命中哨兵（套件内全过）。
+  - **性能**：① 数据平面官方裁判 harness A/B（pre-P6 worktree 9eb638ca vs post-P6，5 轮取
+    中位）六项皆噪声内——P4 ~7× 收益完整保留；② 构造期 A/B 发现 P6 +12.6 ms/engine 回归
+    → 根因 = 每引擎 4 次契约源重复 lex+parse（10.2ms）→ 修复 = 解析进程级缓存（内容哈希
+    自失效）→ +3.3 ms/engine（-74%，残余皆内存有界操作）；③ 编译期 = P5 通道未触碰。
+  - **内核稳定性**：10 引擎同进程链（工具 4 运行正确性 + 10 独立 per-engine 实现，registry
+    隔离守卫 intact）+ net per-engine 状态隔离（set_timeout 不跨引擎泄漏）。
+  - **风险回归**：残留扫描全绿（任务代号/孤儿引用/未用导入零命中）+ B4 文档一致性（两域
+    分述单点真理）。**结论：四面全绿，合并安全成立**。
+  - **评估期附发现**：测试看门狗阶段边界缺陷第二次形态（执行期 98% 误杀）→ collection
+    边界根因修复（aadc459e）；"test_task_scheduler 偶发 hang"旧诊断更正 = 皆为看门狗
+    误杀，该观察项关闭（WORKLOG 更正注记）。
 
 - **安全待办清单（登记，非本轮阻塞）**：
-  | 项 | 状态 | 加固方向 | 触发 |
-  |----|------|---------|------|
-  | P5 缓存 pickle 反序列化篡改风险 | 已闭合（2dac1e11 加固 + 9eb638ca 根因修复：信任域前缀策略 + 加载边界类型契约 + 篡改可观测 + 命中哨兵判别） | 无（已闭合） | 无 |
-  | P4 codegen 体 `__builtins__: {}` 边界 | 已验证 | 确认 codegen 体无任何内置访问面（D1-D7 已覆盖值/错误/污点/Signal 面） | 无（已验证） |
-  | P6 内核自举 bind 化范围 | 待设计 | 实证裁定 bind 表达内核契约的具体范围 + 对照 9 不变量 | P6 开工 |
+  | 项 | 状态 | 备注 |
+  |----|------|------|
+  | P5 缓存 pickle 反序列化篡改风险 | 已闭合 | 信任域前缀策略 + 加载边界类型契约 + 篡改可观测 + 命中哨兵判别（9eb638ca） |
+  | P4 codegen 体 `__builtins__: {}` 边界 | 已验证 | 无内置访问面（D1-D7 覆盖值/错误/污点/Signal 面） |
+  | P6 bind 化范围 + net 边界 | 已闭合 | 工具 4 契约源自举落地；net/kernel 5+fs 维持宿主侧（实证裁定记录在设计文档 + 边界表在 01_native_host_binding §六）；远期项 = bind 默认值语法独立立项 |
+  | P7 进程级隔离 | 待开工（下一 agent） | 危险工作 → 独立隔离分支（p7-process-isolation）；Phase 0 只读实证先行（见主线延续点 1） |
 
 - **硬约束（延续）**：全程本地 commit、**禁 push**（硬原则）；不触碰 `main`；里程碑
   fast-forward 并入 `unsafe-vibe-dev`（全本地）；9 项 VM 设计不变量（04_vm_interpreter
@@ -198,10 +198,12 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   书写必须参照）` 锚点前；commit 消息 = 描述性中文；每项完成同步 NEXT_STEPS / HANDOFF；
   测试数字以实跑为准（不冻结）；设计阶段文档先写 `tasks_docs/_<task>.md`（落地后删除，
   最终内容按治理收敛入 `docs/`）。
-- **运行注记（测试防卡死）**：pytest-timeout 每测试 60s + 进程看门狗 180s（无输出退出
-  124 = 框架层 hang，读完整 stderr 线程栈定位）；daemon 孤儿线程（collect-timeout 测试）
-  须控制在套件时间尺度内（P4 v1.5 cond-codegen ~5× 加速后，超时判别阈值已上调
-  test_collect_timeout_policy 20000→100000 迭代）。
+- **运行注记（测试防卡死，本 session 更新）**：pytest-timeout 每测试 60s（第一层）+ 进程
+  看门狗 180s **阶段感知**（第二层：仅框架层 collect/plugin 死锁；collect 结束即解除，
+  与套件总时长零竞态）。**无输出退出 124 = 框架层真卡死**，读线程栈 dump 文件
+  `.tmp_pytest/deadlock_watchdog_dump.txt`（**非 stderr**——collect 期 stderr 被 pytest fd
+  capture 吞没，文件通道阶段无关；文档 = docs/howto/keep_tests_safe.md）。basetemp 强制
+  `.tmp_pytest/`；bash landlock partial enforcement 警告无害。
 
 ### 2.1 当前工程状态 / 下一阶段（历史保留：round3 + meta 层 MVP）
 
@@ -369,6 +371,22 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ### 2.2 交接检查单（当前有效）
 
+- [ ] **P7 危险工作开工（下一 agent 首任务）**：读 §2.0"主线延续点"第 1 条开工指令
+  （分支政策 + Phase 0 只读实证顺序 + 硬约束 + 性能锚）；拉独立隔离分支
+  `p7-process-isolation`（自 free-explore）；Phase 0 产出 = 设计文档
+  `tasks_docs/_p7_process_isolation_design.md`（代码零改动）。
+- [ ] 读 `NEXT_STEPS.md`（P6 ✅ 收束 + P7 开工指令 + ⛔ 工作模式定论）
+- [ ] 读 `WORKLOG.md`（P6 批次条目 + 合并安全评估条目 + 看门狗根因条目 + 更正注记）
+- [ ] 读设计文档：`tasks_docs/_p6_selfbootstrap_design.md`（P6 实施期裁定记录——net
+  边界/bind 默认值远期项/F5 精化，P7 设计须知悉）
+- [ ] 测试基线：`.venv/bin/python -m pytest tests/`（唯一命令；末次 3963/1 干净环境实跑；
+  数字以实跑为准不冻结）
+- [ ] 看门狗语义：collection 边界 180s + dump 文件 `.tmp_pytest/deadlock_watchdog_dump.txt`
+  （docs/howto/keep_tests_safe.md；旧"读 stderr 线程栈"说法作废）
+- [ ] 全程本地 commit、禁 push（硬原则）；P7 实验限独立隔离分支（main/unsafe-vibe-dev/
+  free-explore 永不触碰）；确认零风险后 ff unsafe-vibe-dev 并删分支。
+
+<!-- round3 历史检查单（2026-09-08，已收束） -->
 - [x] **✅ round3 试用需求整合队列全部收束（2026-09-08 session 交付）**：A/B/C/D/E/F 全阶段
   完成/挂起/裁定不做终态——收敛判据达成，转稳定维护态。本轮 21 提交（`46d5534d`~`a2d9e096`，
   全本地未 push）；末次全量 **3867 passed / 1 skipped 零回归**；逐项详录见
