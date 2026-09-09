@@ -183,6 +183,22 @@ class TypeRef:
 
     @classmethod
     def from_spec(cls, spec: "IbSpec") -> "TypeRef":
+        # [P2 值层分派] 按 spec 缓存 TypeRef：spec 不可变（单一类型身份源），TypeRef
+        # 仅由 spec 字段派生（name/kind/module/element/key/value/wrapped，非 members），
+        # 故同 spec 结果恒定可复用——每标量装箱（IbValue.__init__）触发一次 from_spec，
+        # profile：~80k 次/程序。缓存键 = spec 实例（生命周期内 id 稳定）。
+        cached = getattr(spec, "_type_ref", None)
+        if cached is not None:
+            return cached
+        result = cls._from_spec_uncached(spec)
+        try:
+            spec._type_ref = result
+        except Exception:
+            pass  # spec 若为 frozen/禁写（异常路径），缓存失败不阻断构造
+        return result
+
+    @classmethod
+    def _from_spec_uncached(cls, spec: "IbSpec") -> "TypeRef":
         """
         桥接方法：从现有 IbSpec 构造对应的 TypeRef。
 
