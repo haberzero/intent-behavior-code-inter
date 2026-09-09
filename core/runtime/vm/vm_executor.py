@@ -76,6 +76,13 @@ class VMExecutor:
         # 当前正在执行的帧栈引用；仅在 _drive_loop_gen 驱动活跃时非 None
         # （调度器多任务下为"当前推进任务"的栈，随任务步进切换）。
         self._current_stack: Optional[list] = None
+        # [P4 真 JIT] 热直线体 codegen 执行体缓存（per node_uid，B7：建表期初始化，
+        # 非 getattr 懒初始化双路径）。键 = 循环体根 uid（content hash，确定性/重放稳定）；
+        # 值 = codegen 函数 或 None（不可 codegen，走原 CPS 路径）。
+        self._jit_body_cache: dict = {}
+        # [P4 v1.5 cond-codegen] 条件 + 体一起 codegen 缓存（drive-loop 交互归零）。
+        # 键 = while 节点 uid；值 = _jit_loop 函数 或 None（条件不可 codegen）。
+        self._jit_loop_cache: dict = {}
 
     # ------------------------------------------------------------------
     # Service accessors
@@ -93,6 +100,13 @@ class VMExecutor:
     @property
     def registry(self) -> Any:
         return self._ec.registry
+
+    @property
+    def cancel_event(self) -> Any:
+        """协作取消事件（threading.Event）；P4 v1.5 cond-codegen 体在步进边界检查
+        （与 _drive_loop_gen 同语义——codegen 体整循环一次执行，须显式检查 cancel
+        保协作取消不变式）。"""
+        return self._cancel_event
 
     @property
     def frame_stack_depth(self) -> int:
@@ -390,6 +404,39 @@ class VMExecutor:
                 message=exc.message,
                 location=exc.location,
             )
+
+    # ------------------------------------------------------------------
+    # 内部：P4 真 JIT codegen 体（热直线体直接执行，绕开每节点 CPS 生成器协议）
+    # ------------------------------------------------------------------
+
+    def _get_jit_loop(self, node_uid: str, test_uid: str, body: list) -> Optional[Any]:
+        """v1.5 cond-codegen：条件 + 体一起 codegen（drive-loop 交互归零）。
+
+        条件 ∈ ExprSet 且无 llmexcept handler → 生成 ``_jit_loop``（内含 while 条件检查 +
+        循环体，整个循环一次执行完，vm_handle_IbWhile 纯 return 无 per-iteration gen.send）；
+        否则 None（走 v1.0/CPS）。per node_uid 缓存。
+        """
+        if node_uid in self._jit_loop_cache:
+            return self._jit_loop_cache[node_uid]
+        from core.runtime.vm.jit_codegen import generate_jit_loop
+        jit_loop = generate_jit_loop(body, test_uid, self._ec, self.registry, self.registry.box)
+        self._jit_loop_cache[node_uid] = jit_loop
+        return jit_loop
+
+    def _get_jit_body(self, node_uid: str, body: list) -> Optional[Any]:
+        """获取/生成热直线体的 codegen 执行体（per node_uid 缓存，B7 建表期初始化）。
+
+        安全子集判据未过（非直线赋值/含嵌套控制流/LLM 污点/函数调用等）→ None（调用方
+        走原 CPS 路径）。codegen 体经 ``generate_jit_body`` 生成：直线赋值/if 序列 →
+        直接执行体（经 ``rt.get/set_variable_by_uid`` + ``receive`` 分派，无 CPS 生成器
+        协议），在 CPS 循环内被 handler 调用（保统一执行入口，invariant #1）。
+        """
+        if node_uid in self._jit_body_cache:
+            return self._jit_body_cache[node_uid]
+        from core.runtime.vm.jit_codegen import generate_jit_body
+        jit_body = generate_jit_body(body, self._ec, self.registry, self.registry.box)
+        self._jit_body_cache[node_uid] = jit_body
+        return jit_body
 
     # ------------------------------------------------------------------
     # 内部：任务构造

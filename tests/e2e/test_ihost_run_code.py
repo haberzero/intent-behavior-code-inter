@@ -78,10 +78,12 @@ class TestRunCode:
     def test_collect_timeout_policy(self):
         """防卡死：policy collect_timeout 有限 → 超时 = exception.message 携带
         timed out（子线程 daemon 孤儿语义既有，不阻断父）。"""
-        # 循环规模裁定：VM 实测 ~20000 迭代 ≈ 3.75s（> collect_timeout 1s，触发
-        # 超时判别）；孤儿线程（daemon）总寿命 ~3.75s——远小于 run_file 的
-        # ~100k/18s，压低套件 GC 收尾的孤儿负载（防看门狗误杀）。
-        child = "int i = 0\nwhile i < 20000:\n    i = i + 1\n"
+        # 循环规模裁定：P4 v1.5 cond-codegen 后 VM 实测 ~100000 迭代 ≈ 2.4s（>
+        # collect_timeout 1s，触发超时判别）；此前（CPS 路径）~20000 迭代 ≈ 3.75s——
+        # codegen 加速 ~5×，迭代数相应上调保超时判别成立。孤儿线程（daemon）总寿命
+        # ~2.4s——远小于 run_file 的 ~100k/18s，压低套件 GC 收尾的孤儿负载（防看门狗
+        # 误杀）。
+        child = "int i = 0\nwhile i < 100000:\n    i = i + 1\n"
         code = (
             "import ihost\n"
             f'run_result r = ihost.run_code("{_ibci_str(child)}", '
