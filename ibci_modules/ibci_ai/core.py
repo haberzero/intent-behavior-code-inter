@@ -314,13 +314,23 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
         ):
             self._require_embedding().apply_config(config)
 
-    def embed(self, texts: Any, model: Any = None, dimensions: Any = None) -> Any:
-        """embedding 调用：str → vector（单文本）/ list[str] → list[vector]。"""
+    def embed(self, texts: Any, model: Any = None, dimensions: Any = None,
+              side: Any = None, instruct: Any = None) -> Any:
+        """embedding 调用：str → vector / list[str] → list[vector]。
+
+        新增参数（REC-6 query/doc 不对称 + MRL 维度轴）：
+        - side: "doc"（默认，裸嵌入/可缓存）或 "query"（instruction 条件化）
+        - instruct: query 侧 instruction 文本（仅 side="query" 时生效）
+        """
         svc = self._require_embedding()
+        side_native = side.to_native() if hasattr(side, "to_native") else side
+        instruct_native = instruct.to_native() if hasattr(instruct, "to_native") else instruct
         return svc.embed(
             texts,
             model=model.to_native() if hasattr(model, "to_native") else model,
             dimensions=dimensions.to_native() if hasattr(dimensions, "to_native") else dimensions,
+            side=side_native or "doc",
+            instruct=instruct_native,
         )
 
     def set_embedding_config(self, url: str, key: str, model: str, timeout: float = 30.0) -> None:

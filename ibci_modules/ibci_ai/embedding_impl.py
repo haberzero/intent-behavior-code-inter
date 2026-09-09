@@ -129,11 +129,22 @@ class EmbeddingService:
         texts: Any,
         model: Optional[str] = None,
         dimensions: Optional[int] = None,
+        side: str = "doc",
+        instruct: Optional[str] = None,
     ) -> Any:
         """embedding 调用（批量保序；失败 fail-fast 携带 EMB_ 码）。
 
         - ``str`` 输入 → 单个 ``vector``（单文本 = 长度 1 批的用户面形态）；
         - ``list[str]`` 输入 → ``list[vector]``（批形态，与请求顺序对应）。
+
+        **query/doc 不对称**（REC-6 内核保证）：
+        - ``side="doc"``（默认）：裸嵌入（不加 instruction 前缀）——document 侧
+          任务无关，可缓存；
+        - ``side="query"``：instruction 条件化（`Instruct: {instruct}\\nQuery:{text}`）
+          ——query 侧任务特定，按查询条件化。
+
+        **MRL 维度轴**：``dimensions`` 控制输出维度截断（32-1024）——
+        粗召回 = 小维省成本，精召回 = 大维。
 
         参数形态：vtable 代理边界已拆箱（IbStr → str / IbList → native
         list）；直用 Python 调用时可能为 IbObject 原形——两态统一处理
@@ -141,6 +152,22 @@ class EmbeddingService:
         """
         from core.runtime.objects.primitives.collections import IbList
         from core.runtime.objects.primitives.vector import IbVector
+
+        if side not in ("doc", "query"):
+            raise InterpreterError(
+                f"TypeError: ai.embed side 须为 'doc' 或 'query'（收到 {side!r}）",
+                error_code=EMB_INVALID_INPUT,
+            )
+        if side == "query" and instruct is not None:
+            # 验证 instruct 类型
+            instruct_native = unbox(instruct) if hasattr(instruct, "to_native") else instruct
+            if not isinstance(instruct_native, str) or not instruct_native.strip():
+                raise InterpreterError(
+                    "TypeError: ai.embed instruct（side='query'）须为非空 str",
+                    error_code=EMB_INVALID_INPUT,
+                )
+        else:
+            instruct_native = None
 
         if isinstance(texts, IbList):
             items = [unbox(e) for e in texts.elements]
@@ -164,6 +191,10 @@ class EmbeddingService:
                     "TypeError: ai.embed 文本元素须为 str",
                     error_code=EMB_INVALID_INPUT,
                 )
+
+        # query 侧：instruction 前缀（仅 query 侧，doc 侧裸嵌入）
+        if side == "query" and instruct_native:
+            items = [f"Instruct: {instruct_native}\nQuery:{t}" for t in items]
 
         target = model if model else (self._active and self._active.get("model"))
         request = EmbeddingRequest(

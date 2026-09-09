@@ -183,7 +183,9 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
             ], return_type=TypeRef.of("any"), param_descriptors=[
                 ParamDescriptor(name="texts", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
                 ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
-                ParamDescriptor(name="dimensions", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None)
+                ParamDescriptor(name="dimensions", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="side", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value="doc"),
+                ParamDescriptor(name="instruct", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None)
             ]),
         "set_embedding_config": MethodMemberSpec(name="set_embedding_config", kind="method", type_ref=TypeRef.of("void"), param_types=[
                 TypeRef.of("str"),
