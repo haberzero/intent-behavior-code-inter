@@ -26,7 +26,9 @@
 - **测试**：`python -m pytest tests/`（唯一命令；环境规格权威源 = `pyproject.toml` + `docs/guide/00_environment.md` 规范 recipe；本机事实见 `AGENTS.local.md`）。
 - **Skill 工作流**：code-workflow（实现）/ code-review（缺陷复核）/ code-quality（健康诊断）/
   code-odor（异味扫描）/ quality-maintenance（分层质量维护）/ doc-governance（文档治理）/
-  self-grill（自我质询）/ design-philosophy（设计哲学）。
+  self-grill（自我质询）/ design-philosophy（设计哲学）/ user-principles（裁决基准四问/历史
+  非权威）/ aimless-review（无目的审视）。全集与加载规则（含分析类任务不豁免）=
+  `AGENTS.md` 开工前必读清单。
 
 ### 1.2 关键用户裁定与工作原则
 
@@ -42,15 +44,25 @@
 
 ### 1.2.1 goal 配置习惯（每个 session 新配置 goal 时自动采用，用户定案）
 
-> 创建 goal（`create_goal` / `set_goal`）时按此默认参数，除非用户在本 session 显式覆盖：
+> 创建 goal 时按**当前 goal 工具面**与下列默认参数，除非用户在本 session 显式覆盖：
 >
-> | 参数 | 值 | 说明 |
-> |------|----|------|
-> | `max_duration_seconds` | **14400（4 小时）** | 最晚结束时间 = 当前时刻 + 4h |
-> | `max_auto_turns` | **7** | 允许 goal 自动续跑次数 |
-> | `token_budget` | **null（无限制）** | 不设 token 预算上限（预算无限制；720K 为模型上下文窗口系统层硬限制，非 goal budget） |
+> **API（唯一权威 = 当前工具面，勿按旧形态调用）**：
+> - `create_goal(objective, max_goal_rounds)` — 创建（objective = §1.3 模板全文；
+>   `max_goal_rounds` = 自动续跑轮次预算）；
+> - `get_goal` — 读当前 goal 状态（id / revision / phase / 已用轮次；**更新前必须先调**，
+>   取精确 goal_id 与 revision）；
+> - `update_goal(action, goal_id, revision)` — `action` ∈ {`edit`, `pause`, `resume`,
+>   `complete`, `blocked`}。
 >
-> `objective` 正文仍按下方 §1.3 模板套用（无人值守 + 主线 + 交付纪律 + 工作流 + 停止条件 + 非目标）。
+> **默认参数（用户定案习惯）**：`max_goal_rounds` = **7**（轮次预算）；objective 正文按
+> 下方 §1.3 模板套用（无人值守 + 主线 + 交付纪律 + 工作流 + 支线 + 停止条件 + 非目标）。
+>
+> **生命周期语义**：
+> - session resume / fork 后 active goal 自动**解除武装**（不自动续跑）——人要求接续
+>   （任何措辞）时用 `update_goal(action="resume")` 重新武装；
+> - 用户显式要求暂停 → `update_goal(action="pause")`（pause/resume 须直接顶级人类请求）；
+> - `blocked` 仅同一阻塞条件连续 ≥3 个 goal 轮次后允许，`blocked_reason` 写具体条件；
+> - `complete` 仅目标实际达成时允许（达成判据 = 主线各批全收束 + 全量零回归 + 落账同步）。
 
 ### 1.3 goal objective 模板（通用骨架，可直接套用）
 
@@ -84,26 +96,33 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 残留扫描。
 
 五、主任务阻塞/暂停时的支线（按优先级，解阻立即回主线）：1) 质量维护/代码健康
-（quality-maintenance Tier A/B）；2) PT-AUDIT-1/2 代码质量审计（独立分支）；
-3) PT-FEAT-5 错误用户友好化（剩余 CI/CD 可靠化设计；PT-FEAT-2 已完成、已移除）；
-4) 测试体系补测（PT-TEST-2 覆盖矩阵缺口；PT-TEST-1 已完成、已移除）。每条支线仍须全量 pytest 零回归、commit+留痕（仅本地）。
+（quality-maintenance Tier A/B）；2) 长期登记项中重估触发已到达者（状态单点 =
+PENDING_TASKS.md）；3) 周期文档对账/残留扫描。每条支线仍须全量 pytest 零回归、commit+留痕（仅本地）。
 
 六、停止条件：先穷尽自主手段，仅当确实无法自主决定时（用户意图不明穷尽无解/公理层语义
 错误集确需用户裁决/与工作模式定论冲突/破坏性重构无法确认边界且独立隔离分支也无法确定
-技术路线）才 update_goal(status="unmet", blocker=具体卡点+建议)。
+技术路线）才 update_goal(action="blocked", blocked_reason=具体卡点+建议)（须先 get_goal
+取 goal_id/revision；同一条件连续 ≥3 轮方可 blocked）。
 
-七、非目标：media Phase 4（PT-SEALED-1）、跨进程/CPU 并行、跨引擎通信、线程无损挂起/恢复、用户级泛型类（PT-FEAT-3）、Hindley-Milner 约束求解。`yield` 惰性生成器（PT-FEAT-1）是阶段 5 下一主线，非"非目标"；是否纳入本 goal 视主任务界定。
+七、非目标：media Phase 4（PT-SEALED-1）、线程无损挂起/恢复、Hindley-Milner 约束求解；
+其余非目标 = **任务特定**（按当前主线界定填写——不硬编码旧任务码；长期项状态见
+PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 ```
+
+> **危险工作变体（隔离分支里程碑，如 P7）**：objective 的批次结构以本文件 §2.0"主线
+> 延续点"开工指令为准（分支政策 / Phase 0 只读实证先行[代码零改动] / 性能锚 / 零风险 ff
+> 合并细则）；主线任务节改为"Phase 0 只读实证 → 设计文档 → 批次实施（隔离分支内）"。
 
 ### 1.4 tasks_docs/ 文档结构指针
 
 | 文档 | 用途 |
 |------|------|
-| `NEXT_STEPS.md` | 当前最紧要项 / 工作模式定论（强制约束）/ 工作规则 / 下一步候选 |
+| `GOVERNANCE.md` | 任务控制治理章程（文档职责/生命周期/红线；体系级规则单点） |
+| `NEXT_STEPS.md` | 当前最紧要项 / 工作模式定论（强制约束，单点）/ 工作规则 / 下一步候选 / 测试基线锚点 |
 | `PENDING_TASKS.md` | 长期规划与搁置任务（任务代号按性质分域：PT-FEAT/PT-DEBT/PT-AUDIT/PT-DOC/PT-TEST/PT-DECIDE/PT-SEALED） |
 | `HANDOFF.md` | 本文件：固定化内容 + 动态状态 |
-| `WORKLOG.md` | 自主工作日志（关键裁定；设计决策收敛于 `PENDING_TASKS.md`） |
-| `trials/` | 试用地基（T01-T07）与工具链 `trials/_toolkit/`（harness / batch / 用例即契约 / LLM_SERVICE）——测试资产，非任务控制文档 |
+| `WORKLOG.md` | 自主工作日志（关键裁定 + 重大方向决策的详尽记录，记录类） |
+| `trials/` | 试用地基（T01-T18，清单见 `trials/INDEX.md`）与工具链 `trials/_toolkit/`（harness / batch / 用例即契约 / LLM_SERVICE）——测试资产，非任务控制文档 |
 
 ---
 
@@ -114,7 +133,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > **接手起点**：读本节 + `tasks_docs/NEXT_STEPS.md`（P6 收束 + P7 开工指令 + ⛔ 工作模式定论）+
 > `tasks_docs/WORKLOG.md`（P6 批次 + 合并安全评估 + 看门狗根因条目）+ `git log --oneline -30`（提交动线）。
 > **本 agent 任务 = P7 档 B 进程级隔离 + 反射能力（危险工作，隔离分支）**——见"主线延续点"第 1 条
-> 开工指令。本节取代下方 §2.1 的旧动态状态（round3/meta MVP 历史保留为参照）。
+> 开工指令。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
 - **工程事实（本 session 收束点）**：
   - 分支 = `free-explore`（工作分支）+ `unsafe-vibe-dev`（里程碑分支，已 ff 收束 P6，全本地未
     push）+ `main`（永不触碰）。`free-explore` = `unsafe-vibe-dev`（0 差异）。
@@ -127,7 +146,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     `9eb638ca`(P5 缓存根因修复) → 其后 P4/P5 链（git 承载）。
   - 交付面（本 session）：**P6 内核自举 ✅**（工具 4 契约源 IBCI bind 声明化 + bootstrap 通道
     + 实现重打包 + 4 字面量真删除；net 实施期实证维持宿主侧；设计文档
-    `tasks_docs/_p6_selfbootstrap_design.md` 含实施期裁定记录）+ **测试基础设施看门狗根因修复
+    设计文档已随 B4 收敛删除[git 承载]，实施期裁定记录见 WORKLOG P6 条目 +
+    docs/architecture/01_native_host_binding.md §六）+ **测试基础设施看门狗根因修复
     ×2**（固定窗口误杀 → collection 边界阶段感知 + dump 文件通道）+ **合并安全评估**（四面
     实证，见下）。
 
@@ -147,8 +167,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
        通信面现状）→ ② 进程隔离实现形态对比（multiprocessing/subprocess+协议/…）对照 9 项
        VM 不变量（尤其 #1 统一执行入口）→ ③ 反射能力消费方重估（无消费方 = 裁定延期，
        实证后登记）→ ④ VISION-4 类型层交点联合重估（档 B 是唯一交点方向）→ 设计文档
-       `tasks_docs/_p7_process_isolation_design.md`（设计阶段文档规则：先 tasks_docs，
-       落地后收敛 docs/）。
+       `tasks_docs/_p7_process_isolation_design.md`（**待产出**，Phase 0 交付物；设计
+       阶段文档规则：先 tasks_docs，落地后收敛 docs/）。
      - **硬约束**：9 项 VM 不变量 + 工作模式定论九条 + 全量零回归门（每批）+ 禁 push +
        详尽落账（WORKLOG）。
      - **性能锚**：`scripts/perf_bench.py` = 数据平面官方改前/改后裁判（5 轮取中位；
@@ -205,169 +225,11 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   capture 吞没，文件通道阶段无关；文档 = docs/howto/keep_tests_safe.md）。basetemp 强制
   `.tmp_pytest/`；bash landlock partial enforcement 警告无害。
 
-### 2.1 当前工程状态 / 下一阶段（历史保留：round3 + meta 层 MVP）
+### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
-> **接手起点（下一位智能体 = 主线任务延续）**：读本节 + `tasks_docs/NEXT_STEPS.md`
-> （当前最紧要 + ⛔ 工作模式定论）+ `tasks_docs/PENDING_TASKS.md`（远期规划）+
-> `tasks_docs/GOVERNANCE.md`（任务控制治理）+ `git log --oneline -30`（近期提交与工作动线）
-> + `tasks_docs/WORKLOG.md`（round3 整合条目，逐项详录）。
-
-- **🔴 当前状态 = 内核完整系统工程化 + 真 JIT（数据平面性能线）自主执行主线进行中（2026-09-08 用户定向扩展，把内核工程化 + JIT 纳入无人值守自主推进）**；meta 层 MVP[自举台阶 ④] 已收束（M1/M2/M3 全完成）+ 按用户指示一次 fast-forward 并入 unsafe-vibe-dev[全本地未 push]。Phase 0 = 现状实证调查 + 数据平面性能基线 → JIT/性能上修插入点 + 分阶段路线图 → 分阶段实施。硬约束 = 9 项 VM 设计不变量（04_vm_interpreter §11）+ 工作模式定论。VISION-4 类型层 = 独立方向[user-gated，非内核工程化范畴]（2026-09-08 用户定向再评估后列入主线的 meta 层 MVP 已收束——
-  依赖评估结论：MVP 前置依赖 = 0[机制面全部既有] / VISION-6 内核工程化非前置[独立线，
-  唯一交点档 B 隔离改造 MVP 落地后联合重估] / VISION-4/5 类型层只约束全形态[artifact
-  作值/R-6/fn[...]/Verdict]；批次计划 M1→M2→M3 + 范围重划对账[防半接通原则不变] =
-  `tasks_docs/_meta_layer_design.md` §八，详见下方主线延续点）。
-  round3 需求单（`ibci_feedback_round3.md`，试用方 v3 统一自动机 R185–R202 实证摩擦全集）
-  全阶段完成：A（P0 R3-①~⑥ + Tier B 窗口）/ B（P1 R3-⑦~⑬）/ C（P2 文档批 R3-⑭~⑮）/
-  D（meta 层/代码作值设计交付）/ E（原阶段 E 顺延批终态裁定）/ F（收敛：Tier B 窗口 +
-  长期注册项复查）。单点记录 = `tasks_docs/_trial_round3_intake.md`（逐条核验 + 耦合分析 +
-  队列 + 终态）；每项实施细节见 WORKLOG round3 条目 + git log。
-
-- **工程事实**：
-  - 分支 = `free-explore`（本 session 后续开发在此；`main` 不触碰）；HEAD = `f598a609`
-    （M3 + 质量收尾）；**meta 层 MVP 已并入 unsafe-vibe-dev**（用户 2026-09-08 指示，一次 fast-forward：unsafe = free-explore = f598a609，全本地未 push）；工作区干净；**全程未 push（全本地，硬原则）**。
-    **session 级分支裁定（2026-09-08 用户指示）**：开代码修改前已把 free-explore
-    fast-forward merge 到 `unsafe-vibe-dev`（0 behind/105 ahead，纯 ff；unsafe-vibe-dev
-    = free-explore = `b67d87b0` 起，现推进至 `359b1eef`）；free-explore 不删除（后续
-    在其上开发）——详见 WORKLOG 本 session 分支拓扑条目。
-  - 测试基线 = `.venv/bin/python -m pytest tests/`（本机解释器见 `AGENTS.local.md`——
-    本机无 miniconda3 `ibci` 环境，§2.2 旧条目的 miniconda3 路径作废）；末次全量
-    **3909 passed / 1 skipped 零回归**（M2 后；数字以实跑为准，不冻结）。
-  - 本轮提交链（round3 全段，新→旧）：`a2d9e096`(Phase F) → `e6a8cfe4`(Phase E) →
-    `8d8242e7`(Phase D) → `ce55f4ce`(R3-⑭/⑮) → `82aa9804`(R3-⑬) → `97da922e`(R3-⑫) →
-    `7ab0cc6e`(R3-⑪) → `6f4c5ce9`(R3-⑩) → `458a7aa6`(R3-⑨) → `dba9e3c6`(R3-⑧) →
-    `a4b3d8b4`(R3-⑦) → `76373b44`(Tier B 窗口) → `1905b2a2`(R3-⑥) → `9c887f9d`~
-    `47d1562a`(R3-⑤ 四批) → `84d0911f`(R3-④) → `f5656c53`(R3-③) → `87787e3b`(R3-②) →
-    `f74c82ee`(R3-①) → `46d5534d`(intake)。
-  - 本轮交付新功能面（试用方视角速览）：① run 级可观测子系统（LLM journal 默认开 +
-    `--replay` 确定性重放 + 预算核算 + `--result-json` trailer）；② ihost 子环境（E1 LLM
-    配置继承 + `ihost.run_file` 进程内运行 .ibci 文件 + 结果捕获错误作值）；③ json 鲁棒面
-    （parse 直值 + `parse_or_none` + fail-fast）；④ 429 限流退避（`backoff_s` + call_info
-    事件）；⑤ 思考抑制警告可配置静默（`accept_forced_thinking`，警告移 stderr）；⑥ knowledge
-    扩展面（provenance / history kind 过滤 / export）；⑦ 诊断精化批（缩进提示 / 小写布尔
-    did-you-mean / 赋值定位 RHS / 裸声明编译期拒绝）；⑧ CLI `check --format json` 结构化
-    诊断导出；⑨ 弱模型测量 howto 组 + 多模型组合编排 howto + 保留词表 + fs.write --root 示例；
-    ⑩ 设计文档 `_meta_layer_design.md`（meta 层/代码作值）+ `_n3_measure_freq_design.md`
-    （N3 探针实证 + 待决裁定）。
-
-- **🔴 主线延续点（下一位智能体的工作队列）**：
-  1. **当前 P0 = 内核完整系统工程化 + 真 JIT（数据平面性能线）**（2026-09-08 用户定向扩展：
-     把内核工程化 + JIT 纳入无人值守自主推进范畴；VISION-6 范畴[数据平面性能线/真 JIT[优先]
-     + 缓存预编译 + 内核自举 + 隔离改造 + 反射能力]；硬约束 = 9 项 VM 设计不变量
-     04_vm_interpreter §11 + 工作模式定论；Phase 0 = 现状实证调查 + 数据平面性能基线 →
-     JIT/性能上修插入点 + 分阶段路线图 → 分阶段实施）：
-     - **前置里程碑（已完成）**：meta 层 MVP[自举台阶 ④，字符串级直接执行]✅（M1/M2/M3
-       全完成 + 按用户指示一次 ff 并入 unsafe-vibe-dev）——批次记录见下。
-     - **依赖评估结论**（§8.1/§8.2）：MVP 前置依赖 = 0（机制面全部既有并验证：
-       `compile_string`/`run_string` 合成 entry `__string_exec__` / `request_spawn_isolated`
-       子环境[E1 继承/防卡死/输出捕获] / 诊断面 / 值类型注册模式[file_handle/knowledge
-       先例]；字符串源扩展点 = spawn 子线程体 `run(abs_path)`↔`run_string(code)` 同构
-       单点）；**VISION-6 内核工程化非前置**（独立线；档 B 隔离改造 = 唯一交点，MVP
-       落地后联合重估[新增隔离消费方 + 威胁模型边界]）；VISION-4/5 类型层只约束
-       **全形态**（artifact 作值/R-6/fn[...]/Verdict），MVP 不依赖。
-     - **批次计划**（每批 = 设计确认 → 实现 → 全量 pytest 零回归 → 落账 → commit）：
-       ~~**M1**~~ **✅ 已完成（2026-09-08，commit 359b1eef，判别 23 项 + 3896/1 零回归；设计细化
-        `_meta_layer_design.md` §八.4 + WORKLOG M1 条目）** run_result 值类型（三字段 attribute 访问
-        r.exit_status/r.stdout/r.exception + 值相等 + 序列化保真；exception 结构化单一
-        权威源 exception_record[CLI+host 共用]）+ 执行路径统一（单一 spawn 核心两源形式：
-        文件源既有 + 字符串源新）+ run_file dict→run_result 精化 + run_code 落地）→
-        原批次：run_result 值类型（新内核原生值类型 exit_status: str / stdout: str /
-       exception: any[结构化 dict {code, message, source}]，exception 捕获面从平坦错误串
-       升级为结构化[CLI result-json exception 面同构]）+ 执行路径统一（单一 spawn 核心
-       两源形式：run_file 精化 dict→run_result + 新 run_code 字符串形式）→
-       ~~**M2**~~ **✅ 已完成（2026-09-08，commit 3fa51eec，判别 7 项 + 3909/1 零回归）** meta 模块
-        + meta.compile(code: str) fail-fast 校验面[子引擎 compile-only + ibci 源定位 +
-        IBCI try/except 可捕获；不新增 IBCI 异常类型]
-       （子引擎 compile-only；失败抛 CompilerError[ibci 源定位]，成功 void；与 CLI check
-       面同构）→ ~~**M3**~~ **✅ 已完成（2026-09-08，判别 3 门实测 + 文档同步[README 单点真理
-       表 + howto + use_isolation LLM 继承面修正] + 全量零回归）** 三门管线惯用法固化
-       （howto run_code_safely.md + 参考实现
-       [预注册向量 + 机械判定 e34_p4 形态] + 文档同步）。
-     - **范围重划对账**（§8.3）：MVP/全形态重划非推翻 Phase D"防半接通"裁定——MVP 边界
-       crisp 自洽无空洞承诺（每个交付面机制完整 + 判别测试）；全形态继续登记（VISION-4
-       依赖，§四清单收窄为 ①③④⑤ + ② 类型层深度参与——run_result 类型存在半被 MVP 满足）。
-     - **边界注记**（入 KNOWN_LIMITS）：威胁模型 = 受信任候选代码（选项 A 调用方治理；
-       非对抗性代码安全边界[无进程级隔离]）；性能 = 每调用一次子引擎构造（候选验证场景
-       充分；热循环 = VISION-6 档 A/真 JIT 上修输入）。
-  2. **round4 试用需求单到达时**：按恒高优先重新 intake（参照 `_trial_round3_intake.md`
-     模式：逐条核验 + 耦合分析 + 新队列 + NEXT_STEPS 插队）；试用方 run 存档
-     （`/home/dsh/proj/ibci-trial/`）为实证证据源（只读）。
-  3. **周期质量维护**（MVP 主线之外并行）：Tier A 随主线顺带 / Tier B 阶段边界窗口 /
-     Tier C 专项审计仅用户指定时独立分支执行。
-  4. **候选后续主线（长期登记项，不自主开工——需用户指示或重估触发条件成立）**：
-     - **VISION-4 类型理论加固**：开工输入已就绪——`_meta_layer_design.md` §四 类型层
-       承诺需求清单（MVP 后收窄：① CompilationArtifact 作类型值 / ③ BehaviorExpr 值
-       类型 / ④ fn[...] 高阶签名 / ⑤ Verdict 类型 + ② run_result 类型层深度参与）+
-       ref A2/A5/A6/B2 挂起整合推进。
-     - **N3 measure_freq（logprob 通道）**：待决（探针实证：SiliconFlow chat 通道静默
-       忽略 logprobs、legacy completions 通道完整支持）；重估触发 = provider 支持
-       completions/logprob 通道 或 corpus/probe 设计内化。
-   - **D-3.3 VM 字符串扫描快速路径**：已并入内核工程化 P0（数据平面性能线，§1；与演化平面性能方向合流）。
-       **B5 并发成熟化**：挂起（一等原语已成熟，专项需单独立项）。**远程 CI**：
-       待用户显式授权（`ci_local.sh` 四层本地复现已就绪）。
-  5. **每轮自主评估现状**（队列有活持续推进；调整顺序/优先级/批次划分的理由记入 WORKLOG）。
-
-- **本 session 重要设计裁定（下一位智能体须知，均见 WORKLOG 详录）**：
-  - R3-⑤ journal/replay/budget/result-json = 单一子系统单一设计（`_run_observability_design.md`）；
-    journal CLI 默认开；replay = 能力槽 SYSTEM 优先级替换 provider（不新建执行模型）；预算 =
-    独立治理码（不复用 RUN_LIMIT_EXCEEDED）；重放耗尽 = 既有 LLMCallError 路径 fail-fast（不设
-    专用码）。
-  - R3-⑥ E1 继承 = **spawn 时点活状态快照**（IbStatefulPlugin save/restore 机制同构；
-    api_config.json 只是初始源，活状态 = 单一权威源——偏离早期"文件快照 + to_llm_config"
-    措辞）；`ihost.run_file` = 错误作值（{exit_status, stdout, exception}）；
-    ThrownException 显示面 = "TypeName: message"（Python 异常显示对等）。
-  - R3-⑧ 裸声明 = 编译期拒绝（裁定 (c)——语句域裸声明无合法运行期语义 = 死语法，
-    fail-first；类字段/for 变量/形参合法形态不受限）；D-10 json.parse fail-fast
-    （RUN_JSON_PARSE_ERROR 新码；_list/_value 魔法包装键移除——试用方"数组须包装"摩擦消除，
-    数组直 parse 为 list）；F-2 警告 = stderr（数据面纪律）+ 可配置静默；R-7 429 退避 =
-    provider 层检测 + sleep（`backoff_s` 缺省 0 零侵入）；R-8 knowledge = 纯增面。
-  - Phase D meta 层 = **选项 A**（用户 2026-09-08 裁定：调用方表达治理 + 语言原语；三门
-    管线[编译门/隔离门/判定门]固化为文档化惯用法 + 参考实现；ihost policy 参数 = 未来策略
-    模型演进点，A 不堵死此路）；meta.compile/R-6 不半接通（登记不实施）。
-  - Phase E 终态裁定：A2/A5/A6/B2 = 挂起 → VISION-4 整合推进（类型层同域，不半接通）；
-    D3 = 挂起（随新能力配套）；B5 = 挂起（并发一等原语已成熟）；C6 = 完成（多模型组合
-    编排 howto）；D2 = 完成（check --format json）。
-  - **M1（meta 层 MVP 批次 M1，commit 359b1eef）落地裁定**（M2/M3 须沿用）：
-    ① run_result = 不可变值类型（CLASS kind / PRELUDE 可见；字段访问面 = **字段**
-    attribute `r.exit_status`/`r.stdout`/`r.exception`——`MemberSpec kind="field"` 经
-    `_dispatch_getattr` 实例字段优先命中，Exception.message 先例；**非方法**[误导须括号]
-    **非下标**[map 语义]）；② exception 结构化 `{code,message,source{file,line,column,
-    snippet}}` = 单一权威源 `core/runtime/exception_record.py`（CLI --result-json + host
-    run_file/run_code 共用，消双写真相）；③ 执行路径统一 = `request_spawn_isolated`
-    单一 spawn 核心两源形式（文件源 entry_path XOR 字符串源 code，fail-fast 恰好一源；
-    字符串源 sub project_root = 父 project_root 合成 entry 锚定，沙箱外 = 既有
-    RUN_PERMISSION_ERROR）；④ 诊断码零新增（子运行失败经 exception 值面传递既有码）。
-    威胁模型/性能边界入 KNOWN_LIMITS §二十六。
-
-- **挂起/待决清单（本轮 7 项 + 长期登记 8 项）**：
-
-  | 项 | 状态 | 重估触发 / 条件 |
-  |----|------|----------------|
-  | A2 泛型约束 / A5 解构 / A6 Enum-tagged union / B2 惰性结构 | 挂起 → VISION-4 整合推进 | VISION-4 开工（类型理论设计落地） |
-  | D3 新能力配套诊断码 | 挂起 | 随新能力实施（纯增面 + catalog + 15_diagnostics + parity 门） |
-  | B5 并发原语成熟化 | 挂起 | 专项需单独立项评估（一等原语已成熟；流式观测边界记 KNOWN_LIMITS 待评估） |
-  | N3 measure_freq（logprob 通道） | 待决（方向保留） | provider 支持 completions/logprob 通道 或 corpus/probe 设计内化 |
-  | R-2b meta.compile / R-6 行为表达式作值 | **MVP ✅ 已收束并入 unsafe**（不依赖类型层，§八 批次计划 M1→M2→M3）/ 全形态登记不实施 | 全形态前置 = VISION-4/5 类型层（§四清单收窄 ①③④⑤ + ② 深度参与）；当前 P0 = 内核完整系统工程化 + JIT |
-  | D-3.3 VM 字符串扫描快速路径 | 已并入内核工程化 P0（数据平面性能线，§1） | 与演化平面性能方向合流（VM 执行模型性能架构面） |
-  | 远程 CI | 待用户显式授权 | 用户授权后启用（`ci_local.sh` 四层本地复现已就绪） |
-  | #33 / LLM-5 事件驱动监视 | 被动项 | 待重估 |
-  | PT-SEALED-1 media Phase 4 | 封存 | 需显式解封并重估 |
-  | VISION-4 / VISION-5 / VISION-6 | 长期·无排期 | VISION-4 开工输入已就绪（见上）；VISION-6 档 B = 长期主线、真 JIT 挂数据平面性能线 |
-
-- **硬约束（延续）**：全程本地 commit、**禁 push**（硬原则，除非用户显式授权）；不触碰
-  `main` / `unsafe-vibe-dev`；`/home/dsh/proj/ibci-trial/` 只读（其 run 存档 = 实证证据源；
-  向该目录写入须用户明确指示——2026-09-08 "复制代码到试用者文件夹" 指令已被用户撤销）。
-  工作模式定论九条（禁 compat shim/胶水/tricky/过程式硬编码分发；质量优先于速度；原则
-  优先于行为维持；可推翻 IBCI 自身设计缺陷）凌驾一切；改动公理层或语义错误集须全量
-  pytest 评估破坏面。
-- **落账纪律**：WORKLOG 条目经临时文件 splice 至 `## 附、书写模式（本文档专用模板，
-  书写必须参照）` 锚点前；commit 消息 = 描述性中文（可引用队列项 R3-x）；每项完成同步
-  NEXT_STEPS / intake / HANDOFF；测试数字以实跑为准（不冻结）；设计阶段文档先写
-  `tasks_docs/_<task>.md`（落地后删除，最终内容按治理收敛入 `docs/`）。
-- **运行注记（测试防卡死）**：测试套件双层防卡死已就位（pytest-timeout 每测试 60s 自动
-  报告 + 进程看门狗 180s——无输出退出 124 = 框架层 hang，读完整 stderr 线程栈定位；
-  用法见 `docs/howto/keep_tests_safe.md`）。daemon 孤儿线程（collect-timeout 测试）须
-  控制在套件时间尺度内完成。
+> round3 试用需求整合 / meta 层 MVP / VISION-6 P1-P6 的收束历史不在本节登记（章程红线：
+> 不保留已完成历史叙述）。过程记录 = `tasks_docs/WORKLOG.md` + `git log`；长期项状态单点
+> 真理 = `tasks_docs/PENDING_TASKS.md`；试用需求 intake 模式参照 = WORKLOG round3 条目。
 
 ### 2.2 交接检查单（当前有效）
 
@@ -377,40 +239,14 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   `tasks_docs/_p7_process_isolation_design.md`（代码零改动）。
 - [ ] 读 `NEXT_STEPS.md`（P6 ✅ 收束 + P7 开工指令 + ⛔ 工作模式定论）
 - [ ] 读 `WORKLOG.md`（P6 批次条目 + 合并安全评估条目 + 看门狗根因条目 + 更正注记）
-- [ ] 读设计文档：`tasks_docs/_p6_selfbootstrap_design.md`（P6 实施期裁定记录——net
-  边界/bind 默认值远期项/F5 精化，P7 设计须知悉）
+- [ ] 读 P6 实施期裁定（net 边界/bind 默认值远期项/F5 精化，P7 设计须知悉）：
+  `WORKLOG.md` P6 条目 + `docs/architecture/01_native_host_binding.md` §六 边界表
 - [ ] 测试基线：`.venv/bin/python -m pytest tests/`（唯一命令；末次 3963/1 干净环境实跑；
   数字以实跑为准不冻结）
 - [ ] 看门狗语义：collection 边界 180s + dump 文件 `.tmp_pytest/deadlock_watchdog_dump.txt`
   （docs/howto/keep_tests_safe.md；旧"读 stderr 线程栈"说法作废）
 - [ ] 全程本地 commit、禁 push（硬原则）；P7 实验限独立隔离分支（main/unsafe-vibe-dev/
   free-explore 永不触碰）；确认零风险后 ff unsafe-vibe-dev 并删分支。
-
-<!-- round3 历史检查单（2026-09-08，已收束） -->
-- [x] **✅ round3 试用需求整合队列全部收束（2026-09-08 session 交付）**：A/B/C/D/E/F 全阶段
-  完成/挂起/裁定不做终态——收敛判据达成，转稳定维护态。本轮 21 提交（`46d5534d`~`a2d9e096`，
-  全本地未 push）；末次全量 **3867 passed / 1 skipped 零回归**；逐项详录见
-  `tasks_docs/WORKLOG.md` round3 条目 + git log（历史状态条目已按书写模式移除，git 承载）。
-- [x] 读 `NEXT_STEPS.md`（当前状态：round3 全收束 + ⛔ 工作模式定论 + 下一步候选）
-- [x] 读 `PENDING_TASKS.md`（远期：VISION-4/5/6 + 长期登记项；VISION-4 已补开工输入指针）
-- [x] 读 `GOVERNANCE.md`（任务控制治理章程）
-- [x] 读 `WORKLOG.md`（round3 整合条目：R3-①~⑬ + P2 文档批 + Phase D/E/F + 各设计裁定）
-- [x] 读 `tasks_docs/_trial_round3_intake.md`（round3 需求单逐条核验 + 队列 + 终态——下一轮
-  round4 intake 的模式参照）
-- [x] 读设计文档：`tasks_docs/_meta_layer_design.md`（meta 层/代码作值 + 选项 A + 类型层
-  承诺清单）/ `tasks_docs/_n3_measure_freq_design.md`（N3 探针实证 + 待决）/
-  `tasks_docs/_run_observability_design.md`（run 级可观测子系统）/
-  `tasks_docs/_ihost_subenv_design.md`（ihost 子环境 E1 + run_file）/
-  `tasks_docs/_knowledge_registry_design.md`（知识注册表）
-- [x] 测试基线：`.venv/bin/python -m pytest tests/`（以实跑为准，不冻结数字；本机无
-  miniconda3 `ibci` 环境——`AGENTS.local.md` 为准）
-- [x] 全程本地 commit、禁 push（除非用户显式授权）；分支 `free-explore`（main 不触碰）
-- [x] 稳定维护态工作模式：round4 需求单到达 → 重新 intake 插队；周期质量维护 Tier A/B；
-  长期注册项按重估触发条件推进（不自主开工 VISION-4 等长期项）
-- [x] 试用方目录 `/home/dsh/proj/ibci-trial/` 只读（run 存档 = 实证证据源；写入须用户明确
-  指示——2026-09-08 代码复制指令已撤销）
-
----
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
@@ -429,8 +265,10 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   1.3 goal objective 模板
   1.4 tasks_docs/ 文档结构指针（表格）
 二、动态状态（随任务更新）
-  2.1 当前工程状态 / 下一阶段
-  2.2 交接检查单（当前有效）
+  2.0 本 session 交接（接手起点 / 工程事实 / 主线延续点[开工指令] / 安全评估收束记录 /
+      安全待办清单 / 硬约束延续 / 落账纪律 / 运行注记）——当前 session 动态状态唯一节
+  2.1 历史状态（git / WORKLOG 承载；已完成历史叙述不登记，仅留指针）
+  2.2 交接检查单（当前有效；已完成项移除）
 ```
 
 ### 2. 分区规则

@@ -1,8 +1,9 @@
 # N3 measure_freq（logprob 测量通道）设计
 
 > 状态：**待决（挂起，方向保留）**。本文 = R3-⑬"设计优先"交付物——探针实证 + 面设计 +
-> 重估触发条件。实施未启动。单点记录：发展方向裁定见 `_trial_intake_analysis.md` §1.6 /
-> `_free_explore_handoff.md` N3 行。
+> 重估触发条件。实施未启动。单点记录：状态登记 = `PENDING_TASKS.md` PT-FEAT-17；
+> 发展方向裁定历史 = `WORKLOG.md`（round3 条目）+ git log（本文引用的早期回接单点
+> 已随清理删除，git 承载）。
 
 ## 一、定位
 
