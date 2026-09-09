@@ -969,10 +969,16 @@ class RecommendedProvider(LLMProvider):
             self._model_registry.update(state["model_registry"])
             # 命名模型客户端缓存绑定旧上下文，整体重置（按配置惰性重建）
             self._named_clients = {}
-        self._client = None
-        self._model_capabilities["probed"] = False
+        # mock 模式：恢复 MOCK_CLIENT_SENTINEL（与 set_mock_mode 同语义）
+        if self._config.get("mock"):
+            self._client = MOCK_CLIENT_SENTINEL
+            self._model_capabilities["probed"] = True
+            self._model_capabilities["is_reasoning"] = False
+        else:
+            self._client = None
+            self._model_capabilities["probed"] = False
         self._unprobed_warned = False
-        if self._config.get("url") and self._config.get("key"):
+        if not self._config.get("mock") and self._config.get("url") and self._config.get("key"):
             self._init_client()
 
     @staticmethod

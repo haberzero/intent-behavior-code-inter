@@ -55,16 +55,60 @@ def _extract_runtime_error(e):
     return _build_exception_record(e)
 
 
-def _build_result_json(*, exit_status, exception, journal, budget, replay):
+def _extract_engine_variables(engine) -> dict:
+    """从引擎全局作用域提取用户变量（原生 Python 值），排除内置/不可序列化对象。
+
+    与 ``IBCIEngine.request_collect`` 的变量提取逻辑同构（单一语义：
+    全局 scope → 排除 intrinsic → 排除 IbObject 占位符 → to_native）。
+    """
+    from core.runtime.objects.kernel.base import IbObject
+
+    _SKIP_TYPES = {
+        "function", "lambda", "snapshot", "behavior", "fn_callable", "callable", "void",
+        "Type", "bound_method", "module", "host_import", "host_class", "Intent", "IntentStack",
+        "any", "auto", "fn", "slice", "Enum", "thread", "thread_result",
+        "generator", "chan", "subscriber", "slot",
+    }
+
+    result = {}
+    if engine.interpreter and engine.interpreter.runtime_context:
+        all_syms = engine.interpreter.runtime_context.global_scope.get_all_symbols()
+        for name, sym in all_syms.items():
+            if sym.is_intrinsic:
+                continue
+            val = sym.value
+            if val is None:
+                continue
+            if not isinstance(val, IbObject):
+                continue
+            type_name = val.ib_class.name
+            if type_name in _SKIP_TYPES:
+                continue
+            try:
+                native = val.to_native()
+                # JSON 可序列化性验证（安全网：防止 IbClass/非基元值泄漏）
+                json.dumps(native)
+                result[name] = native
+            except (TypeError, ValueError):
+                continue
+            except Exception:
+                continue
+    return result
+
+
+def _build_result_json(*, exit_status, exception, journal, budget, replay, variables=None):
     """组装 result trailer（v1 契约：单行 JSON）。"""
-    return json.dumps({
+    result = {
         "v": 1,
         "exit_status": exit_status,
         "exception": exception,
         "journal": journal,
         "budget": budget,
         "replay": replay,
-    }, ensure_ascii=False)
+    }
+    if variables is not None:
+        result["variables"] = variables
+    return json.dumps(result, ensure_ascii=False)
 
 
 def main():
@@ -86,6 +130,9 @@ def main():
                             help="Emit a machine-readable result trailer (single JSON line "
                                  "at the end of stdout: exit_status / exception / journal / "
                                  "budget / replay)")
+    run_parser.add_argument("--export-variables", action="store_true",
+                            help="Include exported global variables in the result JSON "
+                                 "(requires --result-json)")
 
     # Check command
     check_parser = subparsers.add_parser("check", help="Static check an IBCI project")
@@ -279,6 +326,11 @@ def main():
             run_error = _extract_runtime_error(e)
 
         if result_json_flag:
+            # --export-variables：从引擎全局作用域提取用户变量（与
+            # request_collect 同逻辑：排除内置符号 / 不可序列化值）
+            exported_vars = None
+            if getattr(args, 'export_variables', False):
+                exported_vars = _extract_engine_variables(engine)
             print(_build_result_json(
                 exit_status="error" if run_error else "ok",
                 exception=run_error,
@@ -289,6 +341,7 @@ def main():
                         "consumed": replay_journal.consumed_calls,
                         "total": replay_journal.total_calls}
                        if replay_journal_path else None,
+                variables=exported_vars,
             ))
         sys.exit(1 if run_error else 0)
 

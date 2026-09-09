@@ -122,11 +122,16 @@ class TestRunCode:
                 os.unlink(p)
 
     def test_fs_outside_project_root_rejected(self):
-        """沙箱外：字符串源子代码 fs 写父 project_root 外（../）= RUN_PERMISSION_ERROR
-        经 exception 值面（错误作值，父存活）。"""
+        """沙箱外：字符串源子代码 fs 写绝对路径（project_root 外）= RUN_PERMISSION_ERROR
+        经 exception 值面（错误作值，父存活）。
+
+        进程级隔离下子进程 cwd = project_root；绝对路径 /tmp/... 必定超出
+        沙箱边界（替代旧进程内模型的 ../ 相对路径——子进程临时文件位置
+        使 ../ 解析到 project_root 内）。
+        """
         child = (
             "import fs\n"
-            "fs.write('../_run_code_escape.txt', 'escape')\n"
+            "fs.write('/tmp/_ibci_run_code_escape.txt', 'escape')\n"
         )
         try:
             code = (
@@ -143,8 +148,7 @@ class TestRunCode:
             assert "RUN_PERMISSION_ERROR" in joined
             assert "parent-alive" in out
         finally:
-            # ../ 相对 TESTS_ROOT = REPO_ROOT；沙箱外写被拒（不落地），防御性清理
-            p = os.path.join(TESTS_ROOT, "..", "_run_code_escape.txt")
+            p = "/tmp/_ibci_run_code_escape.txt"
             if os.path.exists(p):
                 os.unlink(p)
 

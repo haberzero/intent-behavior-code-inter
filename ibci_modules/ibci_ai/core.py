@@ -19,6 +19,7 @@
 自定义入口。本宿主文件不改（改它会破坏 ``ai`` 模块的 IBCI 集成）。
 """
 
+import json
 import os
 from typing import Any, Dict, List, Optional
 
@@ -89,6 +90,24 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
         # 默认 NORMAL 优先级；`set_provider` 可经宿主绑定的自定义 provider
         # 以更高优先级覆盖之（见 set_provider）。
         capabilities.expose(CapabilityRegistry.CAP_LLM_PROVIDER, self)
+
+        # 进程级隔离 LLM 配置继承：子进程 setup 时检查父 provider 状态快照
+        # （经环境变量 IBCI_LLM_STATE_FILE 传递的 JSON 文件路径）。
+        # 这是进程间 LLM 配置继承的单一应用点（在 provider 存在后、
+        # 用户 IBCI 代码执行前）。
+        _inherited_state_file = os.environ.get("IBCI_LLM_STATE_FILE")
+        if _inherited_state_file:
+            try:
+                with open(_inherited_state_file, encoding="utf-8") as _f:
+                    _snapshot = json.load(_f)
+                self.restore_plugin_state(_snapshot)
+            except Exception:
+                pass  # 加载失败 = 按自身配置执行（清晰错误）
+            finally:
+                try:
+                    os.unlink(_inherited_state_file)
+                except OSError:
+                    pass
 
     # ------------------------------------------------------------------ #
     # 自定义 provider 注册（宿主绑定统一 provider 自定义）

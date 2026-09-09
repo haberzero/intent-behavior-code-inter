@@ -1,18 +1,19 @@
 """
-tests/runtime/test_ihost_llm_inheritance.py
+tests/runtime/test_ihost_llm_inheritance_state.py
 
 ihost 子环境 LLM 配置继承（E1）白箱契约（设计：
 E1 子环境 LLM 配置继承（状态面）；E2E 面见 tests/e2e/）：
 
 - 快照 = spawn 时点活状态深拷贝（父后续变异不影响快照）；
 - 快照含命名模型注册表（@NAME~ 路由面补漏）；
-- _apply_llm_inheritance：正常应用 / 非 stateful provider 跳过 /
-  损坏快照 fail-safe（kernel_diagnostic 警告，不阻断）；
+- restore 重建配置 + 命名模型注册表 + 客户端缓存重置；
 - on_ready 钩子时序（解释器就绪后、执行开始前，恰一次）。
+
+注：进程级隔离下子进程经 api_config.json 自动发现继承端点/模型/密钥；
+运行时 model_registry 变化继承归 B2（temp JSON 文件传递快照）。
 """
 import warnings
 
-from core.engine import _apply_llm_inheritance
 from core.extension.ibcext import IbStatefulPlugin
 
 
@@ -31,24 +32,7 @@ class _FakeStatefulProvider(IbStatefulPlugin):
         if isinstance(state.get("config"), dict):
             self._config.update(state["config"])
         else:
-            # 损坏快照面（restore 内部 fail-fast；_apply 侧捕获 → 警告）
             raise ValueError(f"corrupt snapshot config: {state.get('config')!r}")
-
-
-class _FakeRegistry:
-    def __init__(self, provider):
-        self._provider = provider
-
-    def get(self, name):
-        return self._provider
-
-
-class _FakeEngine:
-    def __init__(self, provider):
-        class _CR:
-            CAP_LLM_PROVIDER = "llm_provider"
-        self.capability_registry = _FakeRegistry(provider)
-        self._cr = _CR
 
 
 class TestSnapshotSemantics:
@@ -96,37 +80,10 @@ class TestSnapshotSemantics:
         assert prov._config["mock"] is True and prov._config["model"] == "m1"
         assert prov._model_registry["nm"]["model"] == "mm"
         assert prov._named_clients == {}       # 客户端缓存整体重置
-        assert prov._client is None
-        assert prov._model_capabilities["probed"] is False
-
-
-class TestApplyInheritance:
-    def test_apply_success(self):
-        provider = _FakeStatefulProvider({"mock": False})
-        eng = _FakeEngine(provider)
-        _apply_llm_inheritance(eng, {"config": {"mock": True}, "model_registry": {}})
-        assert provider._config["mock"] is True
-        assert provider.restored is not None
-
-    def test_apply_non_stateful_skips_with_warning(self):
-        """非 stateful provider = 跳过继承 + kernel_diagnostic 显形。"""
-        eng = _FakeEngine(object())  # 非 stateful
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _apply_llm_inheritance(eng, {"config": {}})
-        # 警告投影 = 人类文本（码字面量在事件投影 detail 面，不入 warn 文本）
-        assert any("继承跳过" in str(w.message) for w in caught)
-
-    def test_apply_corrupt_snapshot_fail_safe(self):
-        """损坏快照 = 警告不阻断（子照常执行，LLM 调用按自身状态得清晰错误）。"""
-        provider = _FakeStatefulProvider({"mock": True})
-        eng = _FakeEngine(provider)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _apply_llm_inheritance(eng, {"config": "corrupt-not-dict"})
-        # 警告投影 = 人类文本（码字面量在事件投影 detail 面，不入 warn 文本）
-        assert any("继承应用失败" in str(w.message) for w in caught)
-        assert provider._config["mock"] is True  # 原状保留（未被损坏状态污染）
+        # mock 模式：restore 恢复 MOCK_CLIENT_SENTINEL（与 set_mock_mode 同语义）
+        from ibci_modules.ibci_ai.provider_impl import MOCK_CLIENT_SENTINEL
+        assert prov._client is MOCK_CLIENT_SENTINEL
+        assert prov._model_capabilities["probed"] is True
 
 
 class TestOnReadyHook:

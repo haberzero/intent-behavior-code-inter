@@ -1,4 +1,8 @@
 import os
+import sys
+import json
+import shutil
+import subprocess
 import importlib.util
 import tempfile
 import traceback
@@ -53,9 +57,8 @@ from core.base.diagnostics.codes import KDIAG_RUNTIME_COLLECT_SKIP, HOST_ISOLATE
 from core.base.enums import RegistrationState
 
 # collect() 时跳过的 IBCI 类型名集合（函数/行为/可调用实例等不可序列化为原生 Python 值）
-_COLLECT_SKIP_TYPES: frozenset = frozenset({
-    "fn", "lambda", "snapshot", "behavior", "fn_callable", "callable", "void",
-})
+# 变量导出跳过类型清单的单一权威源在 main.py `_extract_engine_variables`
+# （子进程 CLI 端执行变量提取；父进程 request_collect 从 JSON 读取结果）。
 
 
 @dataclass(frozen=True)
@@ -628,25 +631,26 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                                code: Optional[str] = None) -> str:
         """
         [IKernelOrchestrator] 非阻塞版本的隔离执行系统调用（**单一 spawn 核心，
-        两源形式**：文件源 / 字符串源）。在后台线程中启动全新的 Engine 实例；
+        两源形式**：文件源 / 字符串源）。在独立子进程中启动全新的 Engine 实例
+        （进程级隔离——消除同进程 sys.modules/模块级状态共享边界）；
         立即返回 handle 字符串。调用方随后通过 request_collect(handle) 阻塞等待
         结果。
 
         源形式（**恰好其一**，fail-fast）：
-        - **文件源** = ``entry_path``：子运行一个 .ibci 文件（既有
-          ``run_file``/``run_isolated``/``spawn_isolated`` 行为不变）；隔离反转
+        - **文件源** = ``entry_path``：子进程运行一个 .ibci 文件；隔离反转
           校验（子 entry 须在父 project_root 内）+ 子 project_root = 子 entry_dir。
-        - **字符串源** = ``code``：子运行一段 IBCI 代码字符串（新，``run_code``）；
-          子 project_root = 父 project_root（合成 entry ``__string_exec__`` 锚定，
-          与 ``compile_string`` 同义），隔离反转校验平凡成立（锚定即父内）。
+        - **字符串源** = ``code``：子进程运行一段 IBCI 代码字符串（写入临时
+          .ibci 文件）；子 project_root = 父 project_root。
 
-        两源共享同一 spawn 核心：E1 LLM 配置继承快照 / 防卡死 collect_timeout /
-        输出捕获 output_callback / 唤醒回调表 / 错误作值透传。
+        通信协议：subprocess + JSON（stdout 末行 ``--result-json`` trailer）。
+        子进程 = ``python main.py run <entry> --result-json --export-variables
+        --root <project_root> --no-journal``。
 
-        ``silent``：子引擎是否抑制输出。``spawn_isolated``（后台任务）默认 True；
-        ``run_isolated``（阻塞式运行）传 False 以保留子脚本输出。
+        ``collect_timeout``（经 IsolationPolicy 传入）：
+            None = 无界等待；正数 = 墙钟上限（超时 kill 子进程）。
+
         ``output_callback``：子脚本 print 输出收集器（Callable[[str], None]）；
-        None = 子输出按 silent 语义走默认面。
+        子进程 stdout 中 result JSON 之前的行经此回调逐行投递。
         """
         # 源形式判定：恰好其一（fail-fast——双源/零源 = 契约违约）。
         if (entry_path is None) == (code is None):
@@ -657,7 +661,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             )
 
         # 子 project_root 派生（文件源 = 隔离反转校验 + 子 entry_dir；
-        # 字符串源 = 父 project_root，合成 entry 锚定——隔离平凡成立）。
+        # 字符串源 = 父 project_root）。
         if code is None:
             abs_path, sub_root_dir = self._validate_and_derive_isolated(entry_path)
             source_label = f"file:{abs_path}"
@@ -669,72 +673,148 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
 
         policy_obj = IsolationPolicy.from_dict(policy) if isinstance(policy, dict) else policy
 
-        sub_engine = IBCIEngine(
-            root_dir=sub_root_dir,
+        # 字符串源 → 临时文件（须在子 project_root 内——安全策略约束）
+        temp_files: list = []
+        if code is not None:
+            temp_dir = os.path.join(sub_root_dir, ".tmp_ibci_spawn")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_files.append(temp_dir)  # 记录目录以便清理
+            fd, temp_path = tempfile.mkstemp(suffix=".ibci", prefix="ibci_spawn_", dir=temp_dir)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(code)
+            temp_files.append(temp_path)
+            abs_path = temp_path
+
+        # LLM 配置继承快照 → 临时 JSON 文件（经环境变量传递路径）
+        llm_state_file = None
+        _llm_provider = self.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
+        if _llm_provider is not None:
+            try:
+                from core.extension.ibcext import IbStatefulPlugin
+                if isinstance(_llm_provider, IbStatefulPlugin):
+                    llm_snapshot = _llm_provider.save_plugin_state()
+                    if llm_snapshot:
+                        fd, llm_state_file = tempfile.mkstemp(
+                            suffix=".json", prefix="ibci_llm_state_")
+                        with os.fdopen(fd, "w", encoding="utf-8") as f:
+                            json.dump(llm_snapshot, f, ensure_ascii=False)
+                        temp_files.append(llm_state_file)
+            except Exception:
+                llm_state_file = None
+
+        # 构建子进程命令 + 环境变量
+        main_py = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "main.py",
+        )
+        cmd = [
+            sys.executable, main_py, "run", abs_path,
+            "--result-json", "--export-variables",
+            "--root", sub_root_dir,
+            "--no-journal",
+        ]
+
+        # 环境变量：传递 LLM 状态文件路径（子进程启动时加载）
+        env = os.environ.copy()
+        if llm_state_file:
+            env["IBCI_LLM_STATE_FILE"] = llm_state_file
+
+        # 启动子进程
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=sub_root_dir,
+            env=env,
         )
 
-        # LLM 配置继承快照（spawn 时点父 provider 活状态；深拷贝不可变——
-        # spawn 后父变异不影响已 spawn 子）。非 stateful provider
-        # （replay/自定义）= 无快照（诚实边界：子不继承，调 LLM 得清晰错误）。
-        llm_snapshot = None
-        _llm_provider = self.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
-        if _is_stateful_llm_provider(_llm_provider):
-            llm_snapshot = _llm_provider.save_plugin_state()
-
-        # exc_holder[0] 捕获子线程中抛出的异常，以便 collect 时重新抛出
-        exc_holder: list = [None]
-        # 子任务完成的唤醒回调表（HostAwaitable.register_wake 注册的 event）
+        # output_holder: (stdout_lines, result_json_str, returncode)
+        output_holder: list = [None]
+        # 子进程完成的唤醒回调表
         wake_callbacks: list = []
 
-        def _run_child():
+        def _watch_child():
+            """看门线程：等待子进程完成，收集 stdout+stderr，触发唤醒回调。
+
+            output_holder[0] = (stdout_lines, result_json_str, returncode, stderr_str)
+            """
+            stderr_str = ""
             try:
-                if code is None:
-                    sub_engine.run(
-                        abs_path,
-                        silent=silent,
-                        output_callback=output_callback,
-                        on_ready=(lambda e: _apply_llm_inheritance(e, llm_snapshot))
-                                if llm_snapshot is not None else None,
-                    )
-                else:
-                    sub_engine.run_string(
-                        code,
-                        silent=silent,
-                        output_callback=output_callback,
-                        on_ready=(lambda e: _apply_llm_inheritance(e, llm_snapshot))
-                                if llm_snapshot is not None else None,
-                    )
-            except Exception as e:
-                exc_holder[0] = e
+                stdout_lines = []
+                result_json_str = None
+                # 逐行读 stdout：末行 = result JSON trailer，其余 = print 输出
+                for line in proc.stdout:
+                    stripped = line.rstrip("\n")
+                    if stripped.startswith('{"v":') and '"exit_status"' in stripped:
+                        result_json_str = stripped
+                    else:
+                        stdout_lines.append(stripped)
+                        if output_callback:
+                            try:
+                                output_callback(stripped)
+                            except Exception:
+                                pass
+                        elif not silent:
+                            # silent=False（run_isolated）：子输出经父 stdout 可见
+                            try:
+                                import sys as _sys
+                                print(stripped, file=_sys.stdout, flush=True)
+                            except Exception:
+                                pass
+                proc.wait()
+                # 读取 stderr（诊断用，不阻塞）
+                try:
+                    stderr_str = proc.stderr.read() or ""
+                except Exception:
+                    pass
+                output_holder[0] = (stdout_lines, result_json_str, proc.returncode, stderr_str)
+            except Exception:
+                output_holder[0] = ([], None, -1, "watcher exception")
             finally:
-                # 子线程完成 → 触发全部唤醒回调（调度器即时唤醒，无轮询延迟）
+                # 子进程完成 → 触发全部唤醒回调（调度器即时唤醒）
                 with self._spawned_tasks_lock:
-                    callbacks, _cb_ref = wake_callbacks, []
+                    callbacks = wake_callbacks[:]
                     wake_callbacks[:] = []
                 for ev in callbacks:
                     ev.set()
+                # 关闭管道（防止资源泄漏）
+                try:
+                    proc.stdout.close()
+                except Exception:
+                    pass
+                try:
+                    proc.stderr.close()
+                except Exception:
+                    pass
 
-        thread = threading.Thread(target=_run_child, daemon=True, name=f"ibci-spawn-{source_label}")
-        thread.start()
+        watcher = threading.Thread(
+            target=_watch_child, daemon=True,
+            name=f"ibci-spawn-watch-{source_label}",
+        )
+        watcher.start()
 
         handle = f"spawn_{uuid.uuid4().hex[:16]}"
         with self._spawned_tasks_lock:
-            self._spawned_tasks[handle] = (thread, sub_engine, exc_holder, policy_obj.collect_timeout, wake_callbacks)
+            self._spawned_tasks[handle] = (
+                proc, watcher, output_holder, temp_files,
+                policy_obj.collect_timeout, wake_callbacks,
+            )
 
         return handle
 
     def register_spawn_wake(self, handle: str, event) -> bool:
         """[IKernelOrchestrator] 为 spawn handle 注册完成通知。
 
-        子线程完成时设置 ``event``（调度器即时唤醒）。返回 False 表示 handle
+        子进程完成时设置 ``event``（调度器即时唤醒）。返回 False 表示 handle
         已不存在/已完成（调用方退回首轮询）。
         """
         with self._spawned_tasks_lock:
             task = self._spawned_tasks.get(handle)
             if task is None:
                 return False
-            thread, _sub, _exc, _to, wake_callbacks = task
-            if not thread.is_alive():
+            _proc, watcher, _output, _temp, _to, wake_callbacks = task
+            if not watcher.is_alive():
                 # 已完成：立即唤醒（竞态下注册晚于完成）
                 event.set()
                 return True
@@ -742,7 +822,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             return True
 
     def is_spawn_done(self, handle: str) -> bool:
-        """[IKernelOrchestrator] 非破坏性检查 spawn handle 的子线程是否已执行完成。
+        """[IKernelOrchestrator] 非破坏性检查 spawn handle 的子进程是否已执行完成。
 
         供 ``HostAwaitable.is_done`` 轮询；不消费 handle（不 pop），与
         ``request_collect`` 的消费语义互补。handle 不存在/已消费视为已完成。
@@ -751,19 +831,16 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             task = self._spawned_tasks.get(handle)
         if task is None:
             return True
-        return not task[0].is_alive()
+        return not task[1].is_alive()  # watcher thread
 
     def request_collect(self, handle: str) -> Dict[str, Any]:
         """
-        [IKernelOrchestrator] 阻塞等待 spawn handle 对应的子执行完成。
-        线程 join 后提取子环境的全局变量（排除内置符号和不可序列化值），
-        以 Python dict 形式返回，由 HostService 层装箱为 IbDict 传回 IBCI。
+        [IKernelOrchestrator] 阻塞等待 spawn handle 对应的子进程执行完成。
+        子进程退出后解析 stdout 末行 JSON（result trailer），提取变量返回。
 
         collect_timeout（spawn 时由 IsolationPolicy 传入）：
-            None = 无界等待（默认，阻塞至子执行完成）；
-            正数 = 墙钟等待上限（秒），超时抛 RuntimeError。Python 无法强杀
-                   线程，超时后子线程作为 daemon 孤儿继续运行直至自身结束
-                   或进程退出，调用方不应假设子任务已停止。
+            None = 无界等待（默认，阻塞至子进程退出）；
+            正数 = 墙钟等待上限（秒），超时 kill 子进程并抛 RuntimeError。
         """
         with self._spawned_tasks_lock:
             task = self._spawned_tasks.pop(handle, None)
@@ -771,88 +848,68 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             raise RuntimeError(f"Unknown spawn handle: {handle!r}. "
                                "The handle may have already been collected or never spawned.")
 
-        thread, sub_engine, exc_holder, collect_timeout, _wake_callbacks = task
-        thread.join(timeout=collect_timeout)  # None = 无界阻塞；正数 = 墙钟上限
-        if thread.is_alive():
-            # 超时：handle 已消费，子线程作为 daemon 孤儿继续运行。
+        proc, watcher, output_holder, temp_files, collect_timeout, _wake_callbacks = task
+
+        # 等待 watcher 线程（它阻塞在 proc.stdout 读取 + proc.wait）
+        watcher.join(timeout=collect_timeout)
+        if watcher.is_alive():
+            # 超时：kill 子进程（与线程不同，进程可被 OS 强杀）
+            proc.kill()
+            watcher.join(timeout=5)  # 给 watcher 时间清理
             raise RuntimeError(
                 f"collect({handle!r}) timed out after {collect_timeout}s; "
-                "the isolated child thread is still running as a daemon orphan "
-                "and could not be joined."
+                "the isolated child process was killed."
             )
 
-        # 子线程异常透传至父环境
-        if exc_holder[0] is not None:
-            raise RuntimeError(
-                f"Isolated execution ({handle!r}) raised an exception: {exc_holder[0]}"
-            ) from exc_holder[0]
+        # 清理临时文件/目录（字符串源 + LLM 状态文件）
+        for tf in temp_files:
+            try:
+                if os.path.isdir(tf):
+                    import shutil
+                    shutil.rmtree(tf, ignore_errors=True)
+                else:
+                    os.unlink(tf)
+            except OSError:
+                pass
 
-        # 从子引擎全局作用域提取用户变量（原生 Python 值）
-        # 排除内置/不可序列化对象（函数、行为、插件模块等）
-        result: Dict[str, Any] = {}
-
-        if sub_engine.interpreter and sub_engine.interpreter.runtime_context:
-            all_syms = sub_engine.interpreter.runtime_context.global_scope.get_all_symbols()
-            for name, sym in all_syms.items():
-                if sym.is_intrinsic:
-                    continue
-                val = sym.value
-                if val is None:
-                    continue
-                # 非 IbObject 占位符（未执行的 LLMFuture 等）不属于可收集变量：
-                # 结构化判别前置，替代宽 except 吞错（try 只保留 to_native 转换）。
-                if not isinstance(val, IbObject):
-                    continue
-                type_name = val.ib_class.name
-                if type_name in _COLLECT_SKIP_TYPES:
-                    continue
-                try:
-                    result[name] = val.to_native()
-                except Exception as e:
-                    # 跳过无法转为原生值的对象（未执行的延迟值、循环引用等）
-                    kernel_diagnostic(
-                        code=KDIAG_RUNTIME_COLLECT_SKIP,
-                        detail={"handle": handle, "name": name, "error": repr(e)},
-                        message=(
-                            f"collect({handle!r}) skipped non-convertible "
-                            f"variable '{name}': {e!r}"
-                        ),
-                    )
-
-        return result
-
-
-# ------------------------------------------------------------------ #
-# ihost 子环境 LLM 配置继承（spawn 时点快照；机制 = IbStatefulPlugin
-# save/restore 既有跨引擎状态契约）
-# ------------------------------------------------------------------ #
-
-def _is_stateful_llm_provider(provider) -> bool:
-    """LLM provider 是否支持快照存/取（IbStatefulPlugin 契约）。"""
-    from core.extension.ibcext import IbStatefulPlugin
-    return isinstance(provider, IbStatefulPlugin)
-
-
-def _apply_llm_inheritance(sub_engine, snapshot) -> None:
-    """把父 LLM 配置快照应用到子引擎（on_ready 钩子体；执行前触发）。
-
-    失败/不适用 = 不阻断（子 run 照常执行，其 LLM 调用按自身配置状态得
-    清晰错误）；失败面经 kernel_diagnostic 显形（警告语义，同域
-    KDIAG_RUNTIME_COLLECT_SKIP 机制同构）。
-    """
-    try:
-        provider = sub_engine.capability_registry.get(CapabilityRegistry.CAP_LLM_PROVIDER)
-        if not _is_stateful_llm_provider(provider):
-            kernel_diagnostic(
-                code=HOST_ISOLATE_LLM_INHERIT_FAILED,
-                detail={"reason": "child llm provider does not support state restore"},
-                message="ihost 子环境 LLM 配置继承跳过（子 provider 不支持状态恢复）",
-            )
-            return
-        provider.restore_plugin_state(snapshot)
-    except Exception as e:
-        kernel_diagnostic(
-            code=HOST_ISOLATE_LLM_INHERIT_FAILED,
-            detail={"error": str(e)},
-            message=f"ihost 子环境 LLM 配置继承应用失败: {e}",
+        # 解析子进程输出
+        stdout_lines, result_json_str, returncode, stderr_str = (
+            output_holder[0] if output_holder[0] else ([], None, -1, "")
         )
+
+        if result_json_str is None:
+            # 子进程未输出 result JSON（异常退出 / crash）
+            raise RuntimeError(
+                f"Isolated execution ({handle!r}) failed: child process exited "
+                f"with code {returncode} without producing a result JSON. "
+                f"stderr: {stderr_str[:500] if stderr_str else '<empty>'}"
+            )
+
+        try:
+            result_data = json.loads(result_json_str)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"Isolated execution ({handle!r}) produced malformed result JSON: {e}"
+            ) from e
+
+        # 错误透传（携带结构化错误码——`build_exception_record` 经
+        # `getattr(exc, "error_code", None)` 提取）
+        if result_data.get("exit_status") != "ok":
+            exc = result_data.get("exception")
+            exc_msg = exc.get("message") if isinstance(exc, dict) else str(exc)
+            err = RuntimeError(
+                f"Isolated execution ({handle!r}) raised an exception: {exc_msg}"
+            )
+            if isinstance(exc, dict):
+                err.error_code = exc.get("code")
+            raise err
+
+        # 提取变量（子进程已导出为原生 Python 值）
+        return result_data.get("variables", {})
+
+
+# ------------------------------------------------------------------ #
+# ihost 子环境 LLM 配置继承（进程级隔离下 = 子进程经 api_config.json
+# 自动发现继承父端点/模型/密钥；运行时 model_registry 变化继承
+# 归 B2 批次——temp JSON 文件传递 save_plugin_state 快照）
+# ------------------------------------------------------------------ #
