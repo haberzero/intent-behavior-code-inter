@@ -2110,6 +2110,26 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   **下一里程碑**：P6 内核自举（bind 表达内核契约）/ P7 隔离改造 + 反射。
 ---
 
+- **VISION-6 P5 持久 artifact 缓存复核裁定：信任域前缀策略替代猜测式白名单（2026-09-09，free-explore，commit 2dac1e11→9eb638ca）**：
+  里程碑 ff 合并前复核发现 2dac1e11（安全加固）功能回归——精确模块白名单与 CompilationArtifact
+  真实类闭包不符（实测闭包 = core.kernel.ast/symbols/spec.base/spec.member/spec.type_ref +
+  core.base.enums；白名单内 core.compiler.ast 为不存在模块）→ 全部合法缓存文件被 find_class
+  拒绝 → 缓存自加固提交起功能死亡（每次静默未命中→重编译，零收益）而安全契约仍成立 + 全量
+  测试绿（命中测试只断言输出、不可区分命中/未命中，无判别力）。根因 = 白名单凭目测未实证
+  推导 + 缓存编码与产物类闭包无一致性契约 + 命中路径无可观测性（静默功能死亡不可测）。
+  **修复（根因而非症状）**：① 精确模块枚举 → **信任域前缀策略**（core/core.* + builtins，
+  外部模块一律拒绝）——安全前提实证 = core 全域零 __reduce__/__setstate__ 定义（pickle 重建
+  = 分配 + 字段赋值，无代码执行面）；前缀策略对表面增长稳定（新 AST/spec/符号类自动入域，
+  消枚举漂移的静默失效模式）；② 加载边界类型契约（仅返回 CompilationArtifact，漂移→未命中）；
+  ③ 篡改事件可观测（外部模块类引用拒绝 → stderr 一行告警，不静默）；④ 目录权限缺口闭合
+  （0700 每次保存强制收敛，含既有目录）；⑤ 命中/未命中判别测试（哨兵：patch 5 阶段管线入口
+  IBCIEngine.compile 抛异常 → 二跑仍成功 ⇒ 产物由缓存供给）锁定命中路径。缓存粒度（engine
+  边界 CompilationArtifact——execute() 内部经 FlatSerializer 再序列化，产物是引擎级接口）与
+  编码（plain-data dataclass 的 pickle）裁定正确；FlatSerializer/dict 编码替代方案否决（反向
+  dict→CompilationArtifact 不存在，引入须新建子系统 + 双通道为更劣解）。判别探针：合法产物
+  加载 OK / 命中哨兵通过（管线真实跳过）/ 篡改仍拒绝（posix.system 等外部模块 → 无执行）/
+  前缀逃逸 corex 不匹配。全量 3938/1 零回归（新增 1 例哨兵测试）。unsafe-vibe-dev ff 合并
+  （零风险直接合并细则：全量零回归 + 复核放行）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
