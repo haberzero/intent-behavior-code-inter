@@ -109,7 +109,86 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 
 ## 二、动态状态（随任务更新）
 
-### 2.1 当前工程状态 / 下一阶段
+### 2.0 🔴 本 session 交接（2026-09-09 round3 P4+P5 收束 → 下一 agent 接 P6）
+
+> **接手起点**：读本节 + `tasks_docs/NEXT_STEPS.md`（P4/P5 进度 + ⛔ 工作模式定论）+
+> `git log --oneline -30`（近期提交动线）+ `tasks_docs/WORKLOG.md`（P4/P5 落账条目）。
+> 本节取代下方 §2.1 的旧动态状态（round3/meta MVP 历史保留为参照）。
+
+- **🔴 当前状态 = 内核完整系统工程化（VISION-6）自主推进主线；子方向 ① 真 JIT + ②
+  缓存预编译已收束并入 unsafe-vibe-dev（全本地未 push），下一里程碑 = ③ 内核自举（P6）**。
+
+- **工程事实（本 session 收束点）**：
+  - 分支 = `free-explore`（工作分支）+ `unsafe-vibe-dev`（里程碑分支，已 ff 到
+    free-explore，全本地未 push）+ `main`（永不触碰）。当前 HEAD = `f46d8f2d`
+    （P5 落账）。`free-explore` = `unsafe-vibe-dev`（0 差异）。
+  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3936 passed / 1 skipped
+    零回归**（P5 后；数字以实跑为准，不冻结）。
+  - 本 session 提交链（新→旧，P4 真 JIT + P5 缓存）：`f46d8f2d`(P5 落账) →
+    `b146e602`(P5 持久 artifact 缓存) → `b370a3c8`(P4 里程碑合并落账) → `e94afd7c`
+    (P4 文档收敛 04 §12) → `a170747e`(P4 隔离分支并入 free-explore) → `af632a78`
+    (P4 v1.1 落账) → `4cbc8da3`(P4 v1.1 控制流) → `7952663c`(P4 D1-D7 落账) →
+    `b4c4137c`(P4 判别套件 D1-D7) → `067c792c`(P4 v1.5 落账) → `88545392`(P4 v1.5
+    cond-codegen) → `5225c151`(P4 v1.0 落账) → `5fd9372e`(P4 v1.0 codegen)。
+  - 交付新功能面（本 session）：① **P4 真 JIT**（codegen 路线 ①——v1.0 循环体直接执行 +
+    v1.5 cond-codegen[条件+体一起 codegen，drive-loop 交互归零，~5-7× 数据平面收益] +
+    v1.1 控制流[break/continue] + 判别套件 D1-D7[15 例语义等价性验证]）；② **P5 持久
+    artifact 缓存**（编译期上修——相同源码+内核版本编译产物缓存到磁盘，命中跳过 5 阶段
+    管线，IBCI_ARTIFACT_CACHE=1 启用默认关闭零侵入，~8× 编译加速）。
+
+- **🔴 主线延续点（下一位智能体的工作队列）**：
+  1. **当前 P0 = P6 内核自举（bind 表达内核契约，台阶 ④ 之后方向）**——把 IBCI 内核
+     契约用 `bind`（宿主绑定）表达，自举台阶 ④（meta 层/字符串级直接执行）之后的方向。
+     设计起点 = `tasks_docs/_meta_layer_design.md` §六（自举台阶 ④ 端到端架构）+ §八
+     （批次计划）。**注意**：§六 台阶 ④ 达成条件 = "类型层承诺清单经 VISION-4/5 落地"
+     ——VISION-4/5 类型层是独立方向（user-gated，非内核工程化范畴）。P6 的"台阶 ④ 之后
+     方向"须先**实证裁定**：内核契约 bind 化的具体范围（哪些既有 builtin 机制可经 bind
+     表达 + 哪些须保持宿主侧）+ 设计确认（对照 9 不变量）→ 分阶段实施。
+  2. **后续 = P7 隔离改造 + 反射能力（档 B）**——高风险→隔离分支（100% 授权独立分支
+     实验）。P7 与 P6 的交点 = 档 B 隔离改造是 VISION-6 唯一与 VISION-4 类型层有交点
+     的方向（MVP 落地后联合重估）。
+  3. **P3 D-3.3 VM 字符串扫描快速路径**——紧迫性下调（P1 实证已 O(n)），可交错。
+
+- **⚠️ 安全/稳定性评估（合并 unsafe-vibe-dev 的回顾性裁定）**：
+  - **功能**：P4 真 JIT（~5-7× 数据平面）+ P5 缓存（~8× 编译期）均经**全量 3936/1 零回归
+    + 判别套件 D1-D7（15 例语义等价性）+ P5 契约 3 例**验证，功能正确性已证。
+  - **稳定**：P5 缓存**默认关闭**（IBCI_ARTIFACT_CACHE=1 才启用）——零侵入既有行为；
+    P4 codegen 体经 `__builtins__: {}`（B7）+ 白名单判据（仅 IbAssign/IbIf/IbPass/
+    IbBreak/IbContinue）+ LLM 污点声呐（B4）三重门控，不可 codegen 形状回退 CPS（不改变
+    既有执行路径）。协作取消（cancel_event）在 codegen 体步进边界显式检查（与
+    _drive_loop_gen 同语义）。
+  - **安全**：① P4 codegen 体 = 生成 Python 直接执行函数（**非 eval 用户代码**）——生成
+    源码仅经 `rt.get/set_variable_by_uid` + `receive`（协议分派）+ `ec.is_truthy`，无
+    用户代码注入面；`__builtins__: {}` 禁内置访问。② **P5 缓存用 `pickle.load` 反序列化
+    ——潜在安全风险（缓存文件被篡改 → 任意代码执行）**。缓解：默认关闭 + 缓存文件在
+    `<project_root>/.ibci_cache/`（用户可控目录）+ 缓存键含 kernel_version（内核变更
+    失效）。**后续加固（P6/P7 或安全专项）**：缓存文件加 HMAC 签名校验（防篡改）或改用
+    白名单反序列化。当前评估：**可接受**（默认关闭 + 用户可控目录），但**须登记为安全
+    待办**。
+
+- **安全待办清单（登记，非本轮阻塞）**：
+  | 项 | 状态 | 加固方向 | 触发 |
+  |----|------|---------|------|
+  | P5 缓存 pickle.load 篡改风险 | 已登记 | HMAC 签名 / 白名单反序列化 / 缓存目录权限 0600 | 安全专项 或 P7 隔离改造联合重估 |
+  | P4 codegen 体 `__builtins__: {}` 边界 | 已验证 | 确认 codegen 体无任何内置访问面（D1-D7 已覆盖值/错误/污点/Signal 面） | 无（已验证） |
+  | P6 内核自举 bind 化范围 | 待设计 | 实证裁定 bind 表达内核契约的具体范围 + 对照 9 不变量 | P6 开工 |
+
+- **硬约束（延续）**：全程本地 commit、**禁 push**（硬原则）；不触碰 `main`；里程碑
+  fast-forward 并入 `unsafe-vibe-dev`（全本地）；9 项 VM 设计不变量（04_vm_interpreter
+  §11）+ 工作模式定论九条（禁 compat shim/胶水/tricky/过程式硬编码分发；质量优先于速度；
+  原则优先于行为维持；可推翻 IBCI 自身设计缺陷）凌驾一切；改动公理层或语义错误集须全量
+  pytest 评估破坏面；破坏性重构默认已授权（详尽记录决策依据 + 变化前后）；无法确认边界
+  的破坏性重构 100% 授权独立分支实验（永不触碰 main）。
+- **落账纪律**：WORKLOG 条目经临时文件 splice 至 `## 附、书写模式（本文档专用模板，
+  书写必须参照）` 锚点前；commit 消息 = 描述性中文；每项完成同步 NEXT_STEPS / HANDOFF；
+  测试数字以实跑为准（不冻结）；设计阶段文档先写 `tasks_docs/_<task>.md`（落地后删除，
+  最终内容按治理收敛入 `docs/`）。
+- **运行注记（测试防卡死）**：pytest-timeout 每测试 60s + 进程看门狗 180s（无输出退出
+  124 = 框架层 hang，读完整 stderr 线程栈定位）；daemon 孤儿线程（collect-timeout 测试）
+  须控制在套件时间尺度内（P4 v1.5 cond-codegen ~5× 加速后，超时判别阈值已上调
+  test_collect_timeout_policy 20000→100000 迭代）。
+
+### 2.1 当前工程状态 / 下一阶段（历史保留：round3 + meta 层 MVP）
 
 > **接手起点（下一位智能体 = 主线任务延续）**：读本节 + `tasks_docs/NEXT_STEPS.md`
 > （当前最紧要 + ⛔ 工作模式定论）+ `tasks_docs/PENDING_TASKS.md`（远期规划）+
