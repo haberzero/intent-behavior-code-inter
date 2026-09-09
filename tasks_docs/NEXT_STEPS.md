@@ -47,15 +47,16 @@
 > 异常驱动控制流；**D-3/D-3.3 实证 ~1000× 逐字符开销**（12k 窗口 sub_str 挂起 >180s；
 > 170-200s vs Python <0.1s；已落地缓解 = R3-③ str 四件套 O(n)，D-3.3 VM 侧快速路径登记不
 > 实施）。
-> **P2 进度（主体完成）**：step1 ✅ AST 只读视图缓存 + 嵌套包装记忆化（commit e2949d2b，
-> ~6-9%）；step2 ✅ TypeRef.from_spec 按 spec 缓存（commit 62194fb9，~11-18%）——**累计
-> 数据平面 ~-11%~-24%（vs P1 基线）**。调查结论：box per-call 开销 + _check_type isinstance
-> 复用 = wall-clock wash[isinstance 廉价 C 级检查·分散多站点]已回退；per-stmt TaskScheduler
-> 仅顶层语句非热点；inspect.getattr_static 源未定位到热路径可削减点[暂搁]。**P2（CPS 内数据
-> 平面快速路径）主体完成**——剩余主导成本 = CPS 生成器协议[每节点 send/StopIteration] +
-> 每节点分派（_drive_loop_gen 主导）= **真 JIT/P4 范畴**（核心执行模型改动，高风险→隔离分
-> 支）。P3 D-3.3 字符串快速路径[P1 实证已 O(n)，紧迫性下调] / P4 真 JIT[用户点名优先·隔离
-> 分支] / P5 持久 artifact 缓存[编译期·可并行] 接续。
+> **P2 进度（收束）**：step1 ✅ AST 只读视图缓存（commit e2949d2b，~6-9%）；step2 ✅
+> TypeRef.from_spec 按 spec 缓存（commit 62194fb9，~11-18%）；后段 ✅ CPS 循环每节点
+> is_generator 建表期预计算（commit 5dc56f03，~4-9%）——**累计数据平面 vs P1 基线：arith
+> -30.1% / branch -29.4% / recurse -24.2% / string -24.9% / container -22.1% / class -23.9%**
+> （算术/分支热程序达 ~30% 目标）。调查结论：box per-call 开销 + _check_type isinstance
+> 复用 = wall-clock wash 已回退；per-stmt TaskScheduler 仅顶层非热点。**P2 收束**——CPS 内
+> 可干净削减项全部落地（AST 视图/TypeRef/is_generator 缓存）；剩余主导 = CPS 生成器协议核心
+> [每节点 send/StopIteration] + 每节点分派 = **真 JIT/P4 范畴**（核心执行模型，高风险→隔离
+> 分支）。P4 真 JIT[用户点名优先·隔离分支] / P5 持久 artifact 缓存[编译期·可并行·较低风险]
+> 接续；P3 D-3.3[P1 实证已 O(n)，紧迫性下调]。
 >
 > **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
 > 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离

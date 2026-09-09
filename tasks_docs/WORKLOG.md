@@ -1948,6 +1948,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   支）。P2（CPS 内数据平面快速路径）主体完成，P3/P4 接续。
 ---
 
+- **VISION-6 P2·后段 数据平面快速路径 #1c——CPS 循环每节点 is_generator 建表期预计算
+  （2026-09-08，free-explore，commit 5dc56f03）**：P1 profile：_make_task 每节点调用
+  inspect.isgeneratorfunction(handler)（~110k 次/程序，反射开销）。裁定：handler 为模块级
+  函数，生成器身份恒定 → 建表期一次判定（_handler_is_generator 缓存；dispatch 表建表后
+  只读[无扩展点]，缓存与表一致），运行期查表免反射。改前/改后一致 ~4-9%：arith
+  196.7→179.7 / branch 281.4→262.9 / recurse 4816.5→4513.6 / string 227.2→215.2 /
+  container 222.4→212.9 / class 557.2→524.4。**累计 P2（step1 AST 视图缓存 + step2
+  TypeRef 缓存 + 后段 is_generator 缓存）vs P1 基线：arith -30.1% / branch -29.4% /
+  recurse -24.2% / string -24.9% / container -22.1% / class -23.9%**——算术/分支热程序
+  达 ~30% 数据平面目标（P1 设计验收阈值）。全量 3909/1 零回归。
+  **P2 数据平面快速路径小结**：CPS 内可干净削减项已全部落地（AST 只读视图缓存 + TypeRef
+  按 spec 缓存 + 每节点 is_generator 建表期预计算），累计 ~-22%~-30%。剩余主导成本 =
+  CPS 生成器协议核心[每节点 gen.send/StopIteration] + 每节点分派 = 真 JIT/P4 范畴（核心
+  执行模型改动，高风险→隔离分支）。P2 收束，P4（真 JIT）/ P5（持久 artifact 缓存，编译
+  期可并行）接续。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
