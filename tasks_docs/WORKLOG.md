@@ -2296,6 +2296,34 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   全仓残留复扫零命中（WORKLOG 历史落账豁免，保审计链）。**WORKLOG 结构修复**：更正回注
   原条目（test_task_scheduler 误诊标失效）+ §二表格挤行拆分 + 缩进/行尾归一。全量 pytest
   零回归验证后提交（本条随批）。
+- **Round5 自指性体系架构转向 + 试用者本地提交吸收 + ai.recall 设计调和（2026-09-09，unsafe-vibe-dev）**：
+   ①**战略转向（来自试用方 R216）**：试用方（ibci-trial）独立自主 agent R205–R218 基于实证
+   （e49 LLM 写 ibci 3/3 语法伪迹失败 vs e50/e51 LLM 低阈值+架构确定性组装成功）确立
+   **自指性体系架构**横切原则——可靠性与自指性来自确定性代码/架构非 LLM 智力；LLM =
+   低阈值基础细胞（仅语义选择/分类/草稿/先验，不产结构/不写 ibci/不做判定）；架构 =
+   确定性计算机。该原则与 IBCI 设计本意一致（`01_principles` §1.3/§1.4/§3.7/§十一），
+   round5 需求单（SR-1..5：自描述/显式 IBCI 生成器/自修改安全/行为值直接执行/LLM 阈值纪律）
+   作为最高优先主线。**裁定：Phase C 从原"pattern 自由调参"重定为自指性架构一等化
+   （显式生成器 + 自描述 + 确定性验证门），非 LLM 提自由文本 instruction**（依据 = 试用方
+   e49 实证 LLM 产码不可靠 + 工作模式定论 #4 协议驱动 + §十一排除 generate_and_run）。
+   ②**ai.recall 设计调和（命名/架构裁定，用户授权自主决定）**：试用方 `f5a6e356`(REC-6) 与
+   上游 B5b 均欲占用 `ai.recall` 名但签名/语义不同（试用方 = 低层 corpus 向量原语，上游 B5b
+   = 高层 memory 感知）。按单一权威 + 机制同构裁定：**`ai.recall(query,corpus,k,instruct,
+   dimensions)` = 低层向量原语**（吸收试用方版，含 document 侧内容缓存 + `ai.recall_stats`
+   成本遥测，与 `ai.retrieve` 同族）；**`mem.search` = 文本召回**（原 mem.recall 改名，Jaccard
+   零 LLM）；**`mem.corpus(scope)` = 组合向量召回的语料收集**。记忆感知向量召回 = 调用方组合
+   （`ai.recall(query, mem.corpus(scope), ...)`），**非 memory 方法**——因 embedding 服务
+   （含 doc 缓存/配置状态）归 ai 插件持有，memory 值对象不持有引用（无 memory→ai 依赖、
+   单一权威、符合试用方 e40-e51 实际用法）。
+   ③**TYPE-1 吸收**：试用方 `af5c9c6e`（meta.compile 返回编译产物摘要 dict）= 上游 Phase D
+   的 TYPE-1，已吸收落地（host/service.py meta_compile + interfaces + ibci_meta/core.py +
+   _SPEC_META）。
+   ④**试用者交接**：TRIAL_ANNOUNCE_2026-09-09.md（gitignored 交接工件）+ 指针
+   UPSTREAM_ANNOUNCE_POINTER_2026-09-09.md（置于试用方工作区，指引重新钉扎 123a341f +
+   回收本地补丁 + 原生 memory 替换 Python PoC）。
+   ⑤**分支收束 + push（用户 2026-09-09 显式授权）**：free-explore 纯 ff 并入
+   unsafe-vibe-dev（= 123a341f），free-explore 删除；unsafe-vibe-dev push origin
+   （11a893a7..123a341f，13 提交）。全量 3973/1 零回归。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -135,11 +135,12 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 > **本 agent 任务 = P7 档 B 进程级隔离 + 反射能力（危险工作，隔离分支）**——见"主线延续点"第 1 条
 > 开工指令。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
 - **工程事实（本 session 收束点）**：
-  - 分支 = `free-explore`（工作分支）+ `unsafe-vibe-dev`（里程碑分支，已 ff 收束；
-    **已推送 origin**[b89fdc39..1957132c，154 提交，用户显式授权]）+ `main`（永不触碰）。
-    `free-explore` = `unsafe-vibe-dev`（0 差异）；`free-explore` 本身不推送。
-  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3963 passed / 1 skipped 零回归
-    （干净环境 157s；数字以实跑为准，不冻结）。
+  - 分支 = `unsafe-vibe-dev`（日常开发主线 = `123a341f`）+ `main`（永不触碰）。
+    `free-explore` 工作分支已删（内容已 ff 并入 unsafe-vibe-dev）。**已推送 origin**
+    [`11a893a7..123a341f`，13 提交：P7 + round4 MEM/REC + round5 整合，用户 2026-09-09
+    显式授权]。
+  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3973 passed / 1 skipped 零回归
+    （干净环境 ~243s；数字以实跑为准，不冻结）**。
   - 提交链（新→旧，本 session 段）：`d0fa88be`(P6 契约源解析进程级缓存·A/B 实证 +12.6→+3.3ms
     构造回归根因修复) → `aadc459e`(看门狗阶段边界=collection 结束·98% 误杀根因) → `4e024377`
     (P6 收束账目) → `be0cb55a`(看门狗 dump 文件通道) → `af15f7c8`(看门狗阶段感知+P6 收束) →

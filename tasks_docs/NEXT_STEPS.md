@@ -31,36 +31,44 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令）；
-> 末次全量 **3963 passed / 1 skipped 零回归**（P6 里程碑收束后，干净环境实跑；数字以实跑
-> 为准，不冻结）。分支 = `free-explore`（工作分支）= `unsafe-vibe-dev`（里程碑分支，已 ff
-> 收束）；`main` 永不触碰；`unsafe-vibe-dev` 已推送 origin（b89fdc39..1957132c，154 提交，
-> 用户授权）；`free-explore` 本地工作分支不推送。
+> 末次全量 **3973 passed / 1 skipped 零回归**（数字以实跑为准，不冻结）。分支 =
+> `unsafe-vibe-dev`（日常开发主线）= `123a341f`；`main` 永不触碰。`unsafe-vibe-dev`
+> 已推送 origin（`11a893a7..123a341f`，13 提交：P7 + round4 MEM/REC + round5 整合，
+> 用户 2026-09-09 授权）。
 
-> **🔴 当前 P0 = VISION-8 Round4 P0（MEM 记忆基底 + REC 指令条件化召回）**：
-> - **范围**：一等 `memory` 值类型（分层/生命周期/容量/完整性+内容寻址）+ 指令条件化
->   召回（`recall` 操作 / query-doc 不对称内核保证 / MRL 维度轴 / 经验证召回 / 成本模型）。
-> - **需求权威源**：`/home/dsh/proj/ibci-trial/docs/ibci_round4_vision_requirements.md`
->   （试用方 2026-09-09 需求单）；`PENDING_TASKS.md` VISION-8 条目（分层/建造顺序/依赖图）。
-> - **设计纪律**：系统级架构设计先行（design-philosophy 全面审视 + 既有 knowledge/
->   vector/LLM 先例作机制同构基准）。
-> - **硬约束**：9 项 VM 设计不变量 + 工作模式定论九条 + 每批全量零回归门 + 禁 push +
->   详尽落账（`tasks_docs/WORKLOG.md`）。
+> **🔴 当前 P0 = VISION-8 Round5 自指性体系架构（自描述/显式生成器/自修改安全）**：
+> - **范围**：SR-1 自描述原语（系统自省自身结构 → 结构化自描述值，支持递归）/
+>   SR-2 显式 IBCI 生成器（行为模板 + 确定性组装 + 验证门，LLM 仅低阈值语义参数）/
+>   SR-3 自指性自修改安全（宪法不变量 + 确定性验证门[编译+执行+结果]）/ SR-5 LLM
+>   阈值纪律 / SR-4 行为值直接执行（Phase D）。
+> - **需求权威源**：`/home/dsh/proj/ibci-trial/docs/ibci_round5_selfref_requirements.md`
+>   （试用方 2026-09-09 round5 需求单，SR-1..5）+ round4（MEM/REC/SELF/OBS/COST/TYPE，
+>   已大部落地）；`PENDING_TASKS.md` VISION-8 条目。
+> - **总原则（横切）**：自指性体系架构——可靠性与自指性来自确定性代码/架构，非 LLM
+>   智力。LLM = 低阈值基础细胞（语义选择/分类/草稿/先验，不产结构/不写 ibci/不做判定）。
+> - **设计纪律**：系统级架构设计先行（design-philosophy + self-grill + 既有 memory/
+>   meta.compile/ihost.run_code 先例作机制同构基准）。
+> - **硬约束**：9 项 VM 设计不变量 + 工作模式定论九条 + 每批全量零回归门 + 详尽落账
+>   （`tasks_docs/WORKLOG.md`）。
 >
 > **里程碑记录（过程/细节 = git 历史 + WORKLOG，不在此登记）**：round3 ✅ / meta 层
 > MVP ✅ / VISION-6 P1-P6 ✅ / **P7 进程级隔离 ✅**（subprocess+JSON 协议·LLM 继承
-> 跨进程·变量导出·资源限制·判别 9 例·3973/1 零回归）——全部完成并 ff 收束
-> `unsafe-vibe-dev`。
+> 跨进程·变量导出·资源限制·判别 9 例）/ **Round4 MEM+REC ✅**（memory 一等值类型·
+> ai.recall/recall_stats 低层向量原语+doc 缓存·REC-6 query/doc 不对称+MRL·meta.compile
+> 返回行为值）/ **Round5 整合 ✅**（吸收试用者 REC-6/TYPE-1 提交·ai.recall 设计调和·
+> 3973/1 零回归）——全部完成收束 `unsafe-vibe-dev`（= `123a341f`，已 push origin）。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进；同一时刻只推
 一个 P0。**试用方需求恒高优先**（来自真实试用者的功能性需求优先于自研/卫生项）。
 
-1. **主线 = P7**（见上"当前状态"开工指令；自主推进，无人值守偏好）。
-2. **P7 完成后下一主线 = VISION-8 Round4 基础智能基底**（试用方 2026-09-09 需求单；
-   P0 = MEM 记忆基底 + REC 指令条件化召回；需求权威源 =
-   `/home/dsh/proj/ibci-trial/docs/ibci_round4_vision_requirements.md`；详见
-   `PENDING_TASKS.md` VISION-8）。
+1. **主线 = VISION-8 Round5 自指性体系架构**（见上"当前状态"开工指令；自主推进，
+   无人值守偏好；C1 SR-1 自描述原语 起步 → C2 显式生成器 → C3 自修改安全 → C4 LLM
+   阈值纪律 → C5 OBS 深化；Phase D = SR-4 行为值直接执行 + TYPE-2 + 回滚/成本）。
+2. **Round4 基础智能基底 ✅ 已大部落地**（memory/ai.recall/recall_stats/meta.compile
+   行为值——已收束 `unsafe-vibe-dev` + push origin；试用方 round5 已引用并转为自指性
+   横切原则）。
 3. **支线 · P3 D-3.3 VM 字符串扫描快速路径**：紧迫性下调（P1 实证已 O(n)），可交错；与
    演化平面（`docs/LANGUAGE_DESIGN_EVOLUTION.md` 性能方向）合流规划。
 4. **支线 · 恶意边界未测项**（`trials/INDEX.md` 清单，mock 层）：#15（snapshot 类字段
