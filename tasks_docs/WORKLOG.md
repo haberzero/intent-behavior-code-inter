@@ -1874,6 +1874,37 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     内推进（"不绕统一入口提性能"核心设计假设，P2 为第一块试金石）。
 ---
 
+- **VISION-6 P1 执行期性能基准 harness + 数据平面热路径 profile（2026-09-08，free-explore）——
+  性能线改前/改后裁判交付**：① **新执行期基准 harness**（`scripts/perf_bench.py`，区别于
+  `main.py bench` 编译期）：6 项代表性程序[算术 arith/分支 branch/递归 recurse[strampoline
+  调用帧]/字符串 string[D-3 热路径]/容器 container/类方法 class[协议分派+实例化]] + warmup +
+  N 次取中位 + 每迭代成本[规模无关主指标]；可复现（改前/改后相对比较）。② **执行期基线
+  （us/iter，本机实跑，warmup+3 取中位，以实跑为准）**：arith 257.1 / branch 372.4 /
+  recurse 5954.6[函数调用 ~10× trampoline 开销] / string 286.6 / container 273.3 / class
+  688.7[实例化+方法分派]。**关键发现：string 项 = 286.6 us/iter（非历史 D-3 ~1000× 逐字符
+  开销）——R3-③ str 四件套 O(n) 原生方法已消解逐字符热点，`s + 'x'` 现走 O(n) 原生拼接
+  [144ms/500 iter = ~1.16 ns/char-copy]**（P3 D-3.3 VM 侧快速路径的紧迫性因此下调：执行
+  面 str 已 O(n)，余量 = 更深的 VM char 级分派/字符串热路径）。③ **热路径 profile（cProfile
+  arith N=1e4，8s[含 ~3× cProfile 开销，绝对值膨胀但相对占比有效]）——主导成本 = 值层分派
+  而非 CPS 控制流结构**：(a) **isinstance 分派（不变量 #6 `isinstance(obj, IbValue) and
+  ib_class.name == ...`）= 2.8M 次调用 / ~2.2s = 单一大头**（每 binop/assign/compare 多次
+  类型身份判定）；(b) **box（native→IbValue 装箱）= ~2.5s**（每个原生运算结果装箱：
+  registry.box + bootstrapper.box）；(c) **receive（协议分派）= ~2.3s**（60k 次属性/方法
+  分派）；(d) **inspect.getattr_static = 200k 次 / ~1.1s**（协议/vtable 查找经 inspect 反射）；
+  (e) **ast_view.get（ReadOnlyNodePool 每节点 dict 代理）= 490k 次 / ~0.63s**；(f) **_gen
+  [每节点生成器包装] = 20k / ~0.57s**；(g) **_make_task = 110k / ~0.94s**；(h) TypeRef.from_spec
+  = 80k / ~1.06s（类型解析）。④ **P2 目标裁定（据 profile 量化）**：**数据平面开销主导 = 值
+  层分派（isinstance/box/inspect/receive），非 CPS 循环结构**——故 P2 首个数据平面快速路径
+  优先攻**值层分派**（低风险高收益，且"不绕统一执行入口"核心假设的试金石）：(1) isinstance
+  分派降频[类型身份缓存/更省判定路径，目标 2.2s 大头]；(2) 去 inspect 反射[协议/vtable 直查，
+  目标 1.1s]；(3) box 装箱降频[热数值运算路径，目标 2.5s]；(4) ast_view 每节点代理直读[目标
+  0.63s]。**CPS 循环结构重构（每语句 TaskScheduler 合并/每节点生成器消除）= 更硬的后段项
+  （P2 后段或 P4 真 JIT 范畴）**。硬约束复申：任何上修须保留 §11 不变量（#1 统一执行入口/
+  #2 控制流数据化/#6 isinstance 分派形态可优化但判定语义不变/协作挂起/调度器不阻塞）。
+  ⑤ 全量零回归待验（harness 纯观测+落账，无行为变更）；P1 交付 = harness + 基线 + profile +
+  P2 目标裁定，**P2 = 下一轮开工（值层分派快速路径，isinstance/box/inspect 三目标）**。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
