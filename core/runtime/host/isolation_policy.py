@@ -1,24 +1,26 @@
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
 class IsolationPolicy:
     """
-    隔离策略（收敛为实际生效的单维）。
+    隔离策略。
 
-    实际参与决策的字段（复核后收敛，删除零消费者字段 inherit_plugins）：
-
+    字段：
     - ``collect_timeout``：
-        None = 无界等待（默认，阻塞至子执行完成，严格遵循 ISO-5）
-        正数 = collect 的墙钟等待上限（秒）；超时则抛 RuntimeError，
-               子线程作为 daemon 孤儿继续运行（Python 无法强杀线程），
-               直至自身结束或进程退出。0 表示零等待探测。
+        None = 无界等待（默认）；正数 = 墙钟等待上限（秒），超时 kill 子进程。
+    - ``resource_limits``（可选）：
+        dict 形式的 OS 资源限制（进程级隔离下施加于子进程）：
+        - ``max_memory_mb``：RLIMIT_AS 上限（MB）
+        - ``max_cpu_seconds``：RLIMIT_CPU 上限（秒）
+        仅 Linux 有效（POSIX resource 模块）；非 POSIX 平台静默忽略（no-op）。
 
     设计决策：变量不跨隔离边界继承——子环境与父环境之间不做隐式内存交互，
     父->子 数据传递应通过显式 file 读写完成。
     """
     collect_timeout: Optional[float] = None
+    resource_limits: Optional[dict] = None
 
     @staticmethod
     def full() -> 'IsolationPolicy':
@@ -26,12 +28,16 @@ class IsolationPolicy:
         return IsolationPolicy()
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "collect_timeout": self.collect_timeout,
         }
+        if self.resource_limits is not None:
+            result["resource_limits"] = self.resource_limits
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> 'IsolationPolicy':
         return cls(
             collect_timeout=data.get("collect_timeout", None),
+            resource_limits=data.get("resource_limits", None),
         )

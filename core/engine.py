@@ -719,6 +719,23 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if llm_state_file:
             env["IBCI_LLM_STATE_FILE"] = llm_state_file
 
+        # 资源限制（进程级隔离下施加于子进程；仅 POSIX 有效）
+        preexec_fn = None
+        if policy_obj.resource_limits:
+            try:
+                import resource as _resource
+                limits = policy_obj.resource_limits
+                def _apply_rlimits():
+                    if "max_memory_mb" in limits:
+                        limit_bytes = int(limits["max_memory_mb"] * 1024 * 1024)
+                        _resource.setrlimit(_resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+                    if "max_cpu_seconds" in limits:
+                        _resource.setrlimit(_resource.RLIMIT_CPU,
+                                           (limits["max_cpu_seconds"], limits["max_cpu_seconds"]))
+                preexec_fn = _apply_rlimits
+            except ImportError:
+                pass  # 非 POSIX 平台（Windows）：no-op
+
         # 启动子进程
         proc = subprocess.Popen(
             cmd,
@@ -727,6 +744,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             text=True,
             cwd=sub_root_dir,
             env=env,
+            preexec_fn=preexec_fn,
         )
 
         # output_holder: (stdout_lines, result_json_str, returncode)
