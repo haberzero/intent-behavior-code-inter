@@ -1,5 +1,5 @@
 """
-tests/compiler/test_artifact_cache.py — P5 持久 artifact 缓存（编译期上修）契约。
+tests/compiler/test_artifact_cache.py — 持久 artifact 缓存（编译期上修）契约。
 
 **定位**：编译期性能上修——相同源码 + 相同内核版本的编译产物缓存到磁盘，命中时跳过
 5 阶段编译管线（扫描/依赖图/拓扑/语义/序列化），直接加载缓存产物。
@@ -7,7 +7,11 @@ tests/compiler/test_artifact_cache.py — P5 持久 artifact 缓存（编译期�
 **契约**：
 - 默认关闭（零侵入既有行为）；IBCI_ARTIFACT_CACHE=1 启用。
 - 命中 → 输出正确（值 oracle）+ 缓存文件创建。
+- 命中可观测：二跑不再经过 5 阶段管线（哨兵判别"命中加载"与"静默未命中重编译"——
+  二者输出相同，值 oracle 不可区分）。
 - 源码变更 → 键变更 → 缓存未命中（重新编译）。
+- 篡改拒绝：外部模块类引用（__main__/os 等）的 pickle → 信任域拒绝 → 重新编译 →
+  恶意代码不执行。
 """
 from __future__ import annotations
 
@@ -93,12 +97,46 @@ class TestArtifactCache:
         files = [f for f in os.listdir(_CACHE_DIR) if f.startswith("artifact_")]
         assert len(files) == 2, f"expected 2 cache files (v1 + v2), got {files}"
 
-    def test_cache_tamper_rejected_by_whitelist(self):
-        """缓存文件被篡改（注入恶意 pickle）→ 白名单反序列化拒绝 → 重新编译 → 输出正确。
+    def test_cache_hit_skips_pipeline(self):
+        """命中可观测：二跑不经过 5 阶段编译管线（哨兵判别）。
 
-        安全契约：pickle 反序列化仅允许已知模块的类（core.kernel.blueprint /
-        core.compiler.ast / core.runtime.objects.kernel / builtins）；非白名单模块的类
-        （如 __main__.Evil）→ 拒绝（缓存未命中），不执行恶意代码。
+        值 oracle 无法区分"命中加载"与"静默未命中重编译"（输出相同）——哨兵 =
+        编译入口（IBCIEngine.compile，5 阶段管线入口）被触达即抛异常；二跑仍成功
+        ⇒ 产物由缓存供给（加载路径真实工作）。
+        """
+        from core.engine import IBCIEngine
+
+        os.environ["IBCI_ARTIFACT_CACHE"] = "1"
+        code = "int x = 5\nprint((str)x)\n"
+        # 首跑（未命中 → 编译 + 缓存写入）
+        e1 = IBCIEngine(root_dir=TESTS_ROOT)
+        buf1 = io.StringIO()
+        with contextlib.redirect_stdout(buf1):
+            e1.run_string(code, silent=True)
+        assert buf1.getvalue().split() == ["5"]
+        # 哨兵：5 阶段编译入口被触达即抛
+        original_compile = IBCIEngine.compile
+
+        def _refuse_compile(self, *args, **kwargs):
+            raise AssertionError("5-stage pipeline re-executed despite cache hit")
+
+        IBCIEngine.compile = _refuse_compile
+        try:
+            e2 = IBCIEngine(root_dir=TESTS_ROOT)
+            buf2 = io.StringIO()
+            with contextlib.redirect_stdout(buf2):
+                e2.run_string(code, silent=True)
+        finally:
+            IBCIEngine.compile = original_compile
+        # 二跑成功（产物来自缓存，管线未触达）+ 输出正确
+        assert buf2.getvalue().split() == ["5"]
+
+    def test_cache_tamper_rejected_by_whitelist(self):
+        """缓存文件被篡改（注入恶意 pickle）→ 信任域反序列化拒绝 → 重新编译 → 输出正确。
+
+        安全契约：pickle 反序列化仅允许项目自身代码域（core / core.*）与 builtins
+        基础类型的类引用；外部模块的类（如 __main__.Evil）→ 拒绝（缓存未命中），
+        不执行恶意代码。
         """
         from core.engine import IBCIEngine
 

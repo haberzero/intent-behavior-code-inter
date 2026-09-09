@@ -322,7 +322,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 合成 entry：anchor 语义，非源码文件
         synthetic_entry = (IbPath.from_native(project_root) / "__string_exec__.ibci").to_native()
 
-        # P5 持久 artifact 缓存：键 = sha256(源码 + entry_module_name + kernel_version
+        # 持久 artifact 缓存：键 = sha256(源码 + entry_module_name + kernel_version
         # + project_root)；命中 → 跳过 5 阶段编译管线，直接加载缓存产物。默认关闭
         # （IBCI_ARTIFACT_CACHE=1 启用），零侵入既有行为。
         from core.compiler.artifact_cache import (
@@ -348,7 +348,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             # 非确定，传合成锚点名（__string_exec__）使入口模块身份稳定可复现。
             artifact = self.compile(temp_path, variables, silent=silent,
                                     entry_module_name="__string_exec__")
-            # P5 缓存：保存产物（失败不抛穿编译流程）
+            # 持久 artifact 缓存：保存产物（失败不抛穿编译流程）
             save_artifact(project_root, cache_key, artifact)
             return artifact
         finally:
