@@ -2061,6 +2061,24 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   证据）落地。下一步：v1.1 break/continue/return（控制流数据化扩展）+ 合并 unsafe-vibe-dev。
 ---
 
+- **VISION-6 P4 真 JIT·v1.1 控制流扩展落地（2026-09-09，隔离分支 p4-real-jit，commit
+  4cbc8da3）**：P4 v1.1 控制流数据化扩展——IbBreak/IbContinue 在 v1.5 cond-codegen
+  （while True 循环体）中合法（Python break/continue 作用于 while True 循环）。
+  **实现**：`_stmt_eligible` + `_gen_body_source` 加 `allow_break_continue` 参数（仅
+  `generate_jit_loop` 传 True——cond-codegen 体含 while True 循环）；v1.0 体 codegen
+  （per-iteration 调用）中 break/continue 会作用于函数体（非循环）⇒ 非法（allow_break_
+  continue=False，raise _Ineligible 回退 CPS）。
+  **同时修复 B4 声呐**：`_module_has_behavior_expr` 原用 `ec._nodes`（历史属性，未
+  populate）→ LLM 污点检测失效（`ai.run_batch` 模块被错误 codegen）。改用 `ec.node_pool`
+  （dict，populate 期填充）⇒ 正确检测 `IbBehaviorExpr` ⇒ LLM 污点模块循环回退 CPS。
+  **判别套件 D5 更新**：break/continue 在 cond-codegen 体 eligible（缓存非空）+ v1.1 边界
+  （break 在 v1.0 体 ineligible，条件含调用非 ExprSet ⇒ v1.5 回退 + v1.0 体回退 ⇒ CPS）。
+  全量 **3928/1 零回归**。
+  **P4 真 JIT 进度**：v1.0 codegen + v1.5 cond-codegen（~5-7×）+ v1.1 控制流（break/
+  continue）+ 判别套件 D1-D7 落地。下一步：合并 unsafe-vibe-dev + P4 收敛进
+  `docs/architecture/04_vm_interpreter.md` §真 JIT。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
