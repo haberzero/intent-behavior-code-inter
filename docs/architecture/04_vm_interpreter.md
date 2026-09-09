@@ -488,7 +488,30 @@ body 执行后、retry 前，比对被保护变量当前值与黄金快照。若
 
 ---
 
-## §12 深入指引
+## §12 真 JIT（codegen 路线 ①）
+
+**定位**：数据平面性能上修——为 eligible while 循环体生成**直接执行 Python 函数**（`core/runtime/vm/jit_codegen.py`），经 `rt.get/set_variable_by_uid` + `receive`（协议分派）+ `ec.is_truthy` 执行，绕开每节点 CPS 生成器协议（`gen.send`）的主导开销。
+
+**路线裁定**：route ①（Python codegen）实证成功（数据平面 ~5-7× 收益）；route ②（IR/字节码层）评估后弃——双重真相源 + Python opcode 上限低（~1.3-1.5×）。
+
+**版本线**：
+- **v1.0**：while 直线循环体直接执行体（`generate_jit_body`），`vm_handle_IbWhile` 每迭代调用。
+- **v1.5 cond-codegen**：while 条件 + 循环体一起 codegen（`generate_jit_loop`），整个循环一次执行完（drive-loop 交互归零）。
+- **v1.1 控制流**：`IbBreak`/`IbContinue` 在 cond-codegen 体合法（Python `break`/`continue` 作用于 `while True`）。
+
+**eligible 判据（白名单）**：模块无 `IbBehaviorExpr`（LLM 污点）+ 每语句 ∈ {IbAssign 单目标 / IbIf 递归 / IbPass / IbBreak / IbContinue} + 无 llmexcept handler + 条件 ∈ ExprSet。其余形状回退 CPS。
+
+**9 不变量对照**：① 统一入口 ✅（codegen 体经 `vm_handle_IbWhile` 调用，不绕过调度循环）；② 控制流数据化 ✅（`break`/`continue` 仅 cond-codegen 体内，CPS 路径不变）；③ 执行帧抽象 ✅（经 `rt` 访问变量）；④ LLM 通道唯一 ✅（污点模块回退 CPS）；⑤ 公理层无运行时依赖 ✅；⑥ isinstance 禁用 ✅（经 `receive` 协议分派）；⑦ 快照隔离 ✅；⑧ 阻塞即挂起 ✅；⑨ 调度器永不阻塞 ✅（codegen 体纯 Python 不阻塞）。
+
+**协作取消**：codegen 体整循环一次执行（无 per-iteration `gen.send`），显式检查 `cancel_event.is_set()` → `raise TaskCancelled`（与 `_drive_loop_gen` 同语义）。
+
+**数据平面线收益**（vs P1 基线 arith 257 / branch 372 µs/iter）：P2 收束 ~-30% → v1.0 ~-46% → **v1.5 ~-86%（~7×）**。
+
+**判别测试套件**：`tests/runtime/test_p4_jit_discriminants.py`（D1-D7：值 oracle / 判据边界 / 错误等价 / 污点 / Signal / 多引擎缓存 / 协议分派）。
+
+---
+
+## §13 深入指引
 
 - VM 公理化规范（合规测试）：`docs/architecture/05_vm_specification.md`
 - 类型系统设计：`docs/architecture/03_type_system.md`
