@@ -292,6 +292,196 @@ class IbMemory(IbValue):
         return out
 
     # ------------------------------------------------------------------ #
+    # 生命周期操作（consolidate / prune）
+    # ------------------------------------------------------------------ #
+
+    def consolidate(self, policy: IbObject) -> IbObject:
+        """巩固：按策略批量从低层提升到高层（session → knowledge 典型）。
+
+        policy = dict：
+        - from_tier: str（源层）
+        - to_tier: str（目标层）
+        - min_age_events: int（可选，条目 age ≥ 此值才提升；缺省 = 全部提升）
+        """
+        p = unbox(policy)
+        if not isinstance(p, dict):
+            raise InterpreterError(
+                "memory.consolidate policy 须为 dict",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+        src = p.get("from_tier", "")
+        dst = p.get("to_tier", "")
+        min_age = p.get("min_age_events", 0)
+        if not isinstance(src, str) or src not in VALID_TIERS:
+            raise InterpreterError(
+                f"memory.consolidate from_tier 须为 {VALID_TIERS} 之一",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+        if not isinstance(dst, str) or dst not in VALID_TIERS:
+            raise InterpreterError(
+                f"memory.consolidate to_tier 须为 {VALID_TIERS} 之一",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+        if not isinstance(min_age, int) or isinstance(min_age, bool) or min_age < 0:
+            raise InterpreterError(
+                "memory.consolidate min_age_events 须为非负 int",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+        current_seq = self.payload["seq"]
+        moved = 0
+        for k, entry in list(self._tiers()[src].items()):
+            # age = 当前序号 - 条目首次 encode 序号（events[0]["seq"]）
+            if entry["events"]:
+                age = current_seq - entry["events"][0]["seq"]
+            else:
+                age = 0
+            if age >= min_age:
+                # 检查目标层容量
+                cap = self._capacities().get(dst)
+                if cap is not None and len(self._tiers()[dst]) >= cap:
+                    break  # 容量满 = 停止（不 fail-fast，巩固是批量操作）
+                del self._tiers()[src][k]
+                self._tiers()[dst][k] = entry
+                seq = self._next_seq()
+                entry["events"].append(
+                    {"seq": seq, "kind": "consolidate", "reason": f"{src}→{dst}"}
+                )
+                moved += 1
+        return self.ib_class.registry.box(moved)
+
+    def prune(self, policy: IbObject) -> IbObject:
+        """遗忘：按策略删除低价值条目。
+
+        policy = dict：
+        - tier: str（目标层）
+        - max_age_events: int（可选，age > 此值的条目被删除；缺省 = 无年龄限制）
+        - min_access_count: int（可选，events 数 < 此值的条目被删除；缺省 = 1）
+        """
+        p = unbox(policy)
+        if not isinstance(p, dict):
+            raise InterpreterError(
+                "memory.prune policy 须为 dict",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+        t = p.get("tier", "")
+        max_age = p.get("max_age_events", None)
+        min_access = p.get("min_access_count", 1)
+        if not isinstance(t, str) or t not in VALID_TIERS:
+            raise InterpreterError(
+                f"memory.prune tier 须为 {VALID_TIERS} 之一",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+        current_seq = self.payload["seq"]
+        pruned = 0
+        for k in list(self._tiers()[t].keys()):
+            entry = self._tiers()[t][k]
+            if entry["events"]:
+                age = current_seq - entry["events"][0]["seq"]
+            else:
+                age = 0
+            access_count = len(entry["events"])
+            should_prune = False
+            if max_age is not None and isinstance(max_age, int) and age > max_age:
+                should_prune = True
+            if isinstance(min_access, int) and access_count < min_access:
+                should_prune = True
+            if should_prune:
+                del self._tiers()[t][k]
+                pruned += 1
+        return self.ib_class.registry.box(pruned)
+
+    # ------------------------------------------------------------------ #
+    # 召回操作（recall）
+    # ------------------------------------------------------------------ #
+
+    def recall(self, query: IbObject, scope: IbObject = None,
+               k: IbObject = None) -> IbObject:
+        """从 memory 中按文本相似度召回最相关片段（线性 top-k）。
+
+        当前实现：
+        - 对 scope 内所有条目的 str 值做关键词匹配（词频重叠度）
+        - 返回 list[dict]：[{key, tier, score, value}, ...]（按 score 降序，取 top-k）
+
+        参数：
+        - query: str（查询文本）
+        - scope: str（可选，"all"=跨层 / 具体层名；缺省="all"）
+        - k: int（可选，最大返回数；缺省=5）
+
+        注：向量相似度召回（经 ai.embed）归 B5b（需 vector 索引 + embedding 通道）；
+        本方法为确定性文本匹配（无 LLM 调用，零成本）。
+        """
+        q = unbox(query)
+        if not isinstance(q, str) or not q.strip():
+            raise InterpreterError(
+                "memory.recall query 须为非空 str",
+                error_code=MEM_KEY_NOT_FOUND,
+            )
+        s = unbox(scope) if scope is not None else "all"
+        if not isinstance(s, str):
+            s = "all"
+        k_native = unbox(k) if k is not None else 5
+        if not isinstance(k_native, int) or isinstance(k_native, bool) or k_native <= 0:
+            k_native = 5
+
+        # 确定搜索范围
+        if s == "all":
+            search_tiers = list(VALID_TIERS)
+        elif s in VALID_TIERS:
+            search_tiers = [s]
+        else:
+            raise InterpreterError(
+                f"memory.recall scope 须为 'all' 或 {VALID_TIERS} 之一",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+
+        # 关键词提取（简单分词：按非字母数字切分）
+        import re
+        q_words = set(w for w in re.split(r'[^a-zA-Z0-9\u4e00-\u9fff]+', q.lower()) if w)
+
+        reg = self.ib_class.registry
+        results: List[Dict[str, Any]] = []
+        for tier in search_tiers:
+            for key, entry in self._tiers()[tier].items():
+                val = entry["value"]
+                # 尝试转 str 做文本匹配
+                try:
+                    native_val = val.to_native()
+                    val_text = str(native_val).lower() if native_val is not None else ""
+                except Exception:
+                    val_text = ""
+                if not val_text:
+                    continue
+                val_words = set(w for w in re.split(r'[^a-zA-Z0-9\u4e00-\u9fff]+', val_text) if w)
+                if not q_words or not val_words:
+                    continue
+                # 相似度 = Jaccard 系数（交集/并集）
+                overlap = len(q_words & val_words)
+                union = len(q_words | val_words)
+                score = overlap / union if union > 0 else 0.0
+                if score > 0:
+                    results.append({
+                        "key": key,
+                        "tier": tier,
+                        "score": score,
+                        "value": val,
+                    })
+
+        # 排序 + 取 top-k
+        results.sort(key=lambda x: x["score"], reverse=True)
+        top = results[:k_native]
+
+        # 返回 list[dict]
+        out_items: List[Any] = []
+        for r in top:
+            d = reg.box({})
+            d.receive("__setitem__", [reg.box("key"), reg.box(r["key"])])
+            d.receive("__setitem__", [reg.box("tier"), reg.box(r["tier"])])
+            d.receive("__setitem__", [reg.box("score"), reg.box(r["score"])])
+            d.receive("__setitem__", [reg.box("value"), _clone_snapshot(r["value"])])
+            out_items.append(d)
+        return reg.box(out_items)
+
+    # ------------------------------------------------------------------ #
     # 值对象协议面
     # ------------------------------------------------------------------ #
 
