@@ -43,6 +43,7 @@ class MemoryAxiom(BaseAxiom):
             "keys":         _m("keys",         ret="list"),
             "len":          _m("len",          ret="int"),
             "export":       _m("export",       ret="dict"),
+            "snapshot":     _m("snapshot",     ret="dict"),
             "cast_to":      _m("cast_to",      params=["any"], ret="any"),
         }
 

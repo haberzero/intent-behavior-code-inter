@@ -291,6 +291,28 @@ class IbMemory(IbValue):
             out.receive("__setitem__", [reg.box(t), tier_dict])
         return out
 
+    def snapshot(self) -> IbObject:
+        """活体状态快照（OBS-1）：返回当前记忆状态摘要 dict。
+
+        返回 dict：
+        - total: int（总条目数）
+        - seq: int（事件序号）
+        - tiers: dict（tier → {size, capacity}）
+        """
+        reg = self.ib_class.registry
+        out = reg.box({})
+        out.receive("__setitem__", [reg.box("total"), reg.box(self.len().to_native())])
+        out.receive("__setitem__", [reg.box("seq"), reg.box(self.payload["seq"])])
+        tiers_dict = reg.box({})
+        for t in VALID_TIERS:
+            tier_info = reg.box({})
+            tier_info.receive("__setitem__", [reg.box("size"), reg.box(len(self._tiers()[t]))])
+            cap = self._capacities().get(t)
+            tier_info.receive("__setitem__", [reg.box("capacity"), reg.box(cap if cap is not None else -1)])
+            tiers_dict.receive("__setitem__", [reg.box(t), tier_info])
+        out.receive("__setitem__", [reg.box("tiers"), tiers_dict])
+        return out
+
     # ------------------------------------------------------------------ #
     # 生命周期操作（consolidate / prune）
     # ------------------------------------------------------------------ #
