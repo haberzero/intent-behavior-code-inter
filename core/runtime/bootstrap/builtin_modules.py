@@ -226,6 +226,16 @@ _SPEC_AI = TypeDef(name="ai", kind="module", provenance=Provenance.KERNEL_NATIVE
                 ParamDescriptor(name="corpus", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("list")),
                 ParamDescriptor(name="k", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"))
             ], unbox_args=False),
+        "recall": MethodMemberSpec(name="recall", kind="method", type_ref=TypeRef.of("list"), param_types=[
+                TypeRef.of("memory"),
+                TypeRef.of("str"),
+            ], return_type=TypeRef.of("list"), param_descriptors=[
+                ParamDescriptor(name="mem", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("memory")),
+                ParamDescriptor(name="query", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="scope", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="k", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None),
+                ParamDescriptor(name="instruct", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"), has_default=True, default_value=None)
+            ], unbox_args=False),
         "get_embedding_call_info": MethodMemberSpec(name="get_embedding_call_info", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
         "probe_embedding": MethodMemberSpec(name="probe_embedding", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),
     })
