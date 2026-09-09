@@ -15,7 +15,7 @@
 | 层 | 触发场景 | 报告形态 |
 |---|---|---|
 | 第一层（每测试超时，`pytest-timeout` 插件） | 单个测试卡死（线程 join 无界等待、等待子进程/子线程、死锁） | 该测试**自动 FAIL**，报告含**测试名 + 全部线程栈**（精确到卡死行） |
-| 第二层（进程级看门狗，`tests/conftest.py`，**阶段感知**） | pytest 框架层卡死（collect/插件死锁——测试级超时不生效的场景）。**职责止于框架层**：测试执行完毕（sessionfinish）即解除——teardown（unconfigure 期 GC）慢 ≠ 死锁，不与套件总时长竞态 | 进程以退出码 **124** 终止，全部线程栈（`dump_traceback` 输出）写入 `.tmp_pytest/deadlock_watchdog_dump.txt` |
+| 第二层（进程级看门狗，`tests/conftest.py`，**阶段感知**） | pytest 框架层卡死（collect/插件死锁——测试级超时不生效的场景）。**职责止于框架层**：collect 结束（collection_finish）即解除——测试执行期由第一层 60s 每测试超时覆盖，teardown（unconfigure 期 GC）慢 ≠ 死锁；看门狗窗口与套件总时长彻底解耦，不与套件增长竞态 | 进程以退出码 **124** 终止，全部线程栈（`dump_traceback` 输出）写入 `.tmp_pytest/deadlock_watchdog_dump.txt` |
 
 ## 运行测试（常规用法）
 
@@ -58,7 +58,7 @@ tests/xxx/test_yyy.py::test_some_name
 ## 出现"无输出退出 124"时：读第二层
 
 整个 pytest 进程无正常结果输出、以退出码 124 结束 = 进程级看门狗触发
-（框架层卡死——collect/插件死锁；看门狗阶段感知，测试执行完毕后即解除，
+（框架层卡死——collect/插件死锁；看门狗阶段感知，collect 结束即解除，
 故触发即意味着框架层真卡死，非时长竞态）。**读取全部线程栈 dump 文件
 `.tmp_pytest/deadlock_watchdog_dump.txt`**（阶段无关通道：collect 期卡死的
 stderr dump 会被 pytest 的 fd capture 吞没，文件通道任何阶段触发皆可读；

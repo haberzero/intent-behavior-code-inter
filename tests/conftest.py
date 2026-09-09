@@ -44,10 +44,13 @@ import pytest
 # ② 第二层（本看门狗）= 框架层（collect/plugin 阶段）180s 兜底——仅 pytest
 #    框架层 hang（collect/plugin 死锁，测试级超时不生效的场景）触发：
 #    全部线程栈 dump 到 `.tmp_pytest/deadlock_watchdog_dump.txt` 后 os._exit(124)。
-# **阶段感知**：``pytest_sessionfinish``（测试执行完毕、进入 teardown）设置
-# 事件 → 看门狗解除。teardown（unconfigure 期 GC）慢 ≠ 死锁，且测试级超时
-# 已覆盖执行期——看门狗与套件总时长不设竞态（固定时点触发曾与增长中的
-# 全量时长竞态：100% 测试完成后在 teardown GC 期被误杀，exit 124 假象）。
+# **阶段感知（边界 = collect 结束）**：``pytest_collection_finish`` 设置事件 →
+# 看门狗解除。职责分界：框架层（进程启动→collect 结束）= 本看门狗；测试执行期
+# = 第一层 60s 每测试超时（含 setup 阶段）；teardown（unconfigure 期 GC）慢 ≠
+# 死锁。固定时点窗口与套件总时长竞态的两次实证误杀：① 100% 后 teardown GC 期
+# 误杀（→ sessionfinish 解除，仍不足）② 执行期 98% 处误杀（套件 collect+执行
+# 总时长越过 180s 窗口）→ 正确边界 = collection_finish（看门狗窗口与执行时长
+# 彻底解耦，套件任意增长不再竞态）。
 # **dump 走显式文件通道（阶段无关）**：pytest 的 fd capture 自 session 启动
 # 即活跃——测试执行期之前的 hang（collect 期）其 stderr dump 会被 capture 吞没
 # （os._exit 不触发 capture 冲刷）。文件通道不受 pytest capture 影响，任何阶段
@@ -56,7 +59,7 @@ import pytest
 # 真死锁定位：第一层报告含测试名 + 线程栈；第二层（退出 124）时读
 # `.tmp_pytest/deadlock_watchdog_dump.txt` 即全部线程栈。
 _DEADLOCK_TIMEOUT_S = 180
-_session_finished = threading.Event()
+_collection_finished = threading.Event()
 _DEADLOCK_DUMP_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     ".tmp_pytest", "deadlock_watchdog_dump.txt",
@@ -64,9 +67,9 @@ _DEADLOCK_DUMP_PATH = os.path.join(
 
 
 def _deadlock_watchdog() -> None:
-    """框架层看门狗：sessionfinish 前 180s 无进展 = 框架 hang → dump + exit(124)。"""
-    if _session_finished.wait(_DEADLOCK_TIMEOUT_S):
-        return  # 测试执行完毕（看门狗职责止于框架层）
+    """框架层看门狗：collection 结束前 180s 无进展 = 框架 hang → dump + exit(124)。"""
+    if _collection_finished.wait(_DEADLOCK_TIMEOUT_S):
+        return  # collect 完毕（职责分界：执行期 = 第一层 60s 每测试超时）
     try:
         os.makedirs(os.path.dirname(_DEADLOCK_DUMP_PATH), exist_ok=True)
         with open(_DEADLOCK_DUMP_PATH, "a", encoding="utf-8") as f:
@@ -97,9 +100,9 @@ def pytest_configure(config):
     config.option.basetemp = basetemp
 
 
-def pytest_sessionfinish(session, exitstatus):
-    """测试执行完毕（进入 teardown）→ 解除死锁看门狗（阶段感知，见模块头注记）。"""
-    _session_finished.set()
+def pytest_collection_finish(session):
+    """collect 完毕 → 解除死锁看门狗（阶段边界 = 框架层/执行期分界，见模块头注记）。"""
+    _collection_finished.set()
 
 
 # ---------------------------------------------------------------------------
