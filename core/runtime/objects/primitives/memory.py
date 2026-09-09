@@ -413,16 +413,44 @@ class IbMemory(IbValue):
         return self.ib_class.registry.box(pruned)
 
     # ------------------------------------------------------------------ #
-    # 召回操作（recall）
+    # 召回操作（search = 文本召回 / corpus = 组合向量召回的语料收集）
     # ------------------------------------------------------------------ #
 
-    def recall(self, query: IbObject, scope: IbObject = None,
+    def corpus(self, scope: IbObject = None) -> IbObject:
+        """收集某范围内全部条目的文本表示（list[str]），供 ``ai.recall`` 组合向量召回。
+
+        - scope：str（"all"=跨层 / 具体层名；缺省="all"）
+        - 返回 list[str]（按层序 + 键序；值为 str 表示）
+        用法：``hits = ai.recall(query, mem.corpus("knowledge"), 5, instruct, dim)``
+        """
+        s = unbox(scope) if scope is not None else "all"
+        if not isinstance(s, str) or s == "all":
+            search_tiers = list(VALID_TIERS)
+        elif s in VALID_TIERS:
+            search_tiers = [s]
+        else:
+            raise InterpreterError(
+                f"memory.corpus scope 须为 'all' 或 {VALID_TIERS} 之一",
+                error_code=MEM_TIER_UNKNOWN,
+            )
+        texts: List[str] = []
+        for t in search_tiers:
+            for _key, entry in self._tiers()[t].items():
+                try:
+                    nv = entry["value"].to_native()
+                    texts.append(str(nv) if nv is not None else "")
+                except Exception:
+                    texts.append("")
+        return self.ib_class.registry.box(texts)
+
+    def search(self, query: IbObject, scope: IbObject = None,
                k: IbObject = None) -> IbObject:
-        """从 memory 中按文本相似度召回最相关片段（线性 top-k）。
+        """文本召回（确定性，零 LLM 成本）：按关键词重叠度选取最相关片段。
 
         当前实现：
-        - 对 scope 内所有条目的 str 值做关键词匹配（词频重叠度）
+        - 对 scope 内所有条目的 str 值做关键词匹配（Jaccard 词频重叠度）
         - 返回 list[dict]：[{key, tier, score, value}, ...]（按 score 降序，取 top-k）
+        - 语义召回（余弦相似度 + instruction 条件化）用 ``recall_vector``
 
         参数：
         - query: str（查询文本）
@@ -435,7 +463,7 @@ class IbMemory(IbValue):
         q = unbox(query)
         if not isinstance(q, str) or not q.strip():
             raise InterpreterError(
-                "memory.recall query 须为非空 str",
+                "memory.search query 须为非空 str",
                 error_code=MEM_KEY_NOT_FOUND,
             )
         s = unbox(scope) if scope is not None else "all"
@@ -452,7 +480,7 @@ class IbMemory(IbValue):
             search_tiers = [s]
         else:
             raise InterpreterError(
-                f"memory.recall scope 须为 'all' 或 {VALID_TIERS} 之一",
+                f"memory.search scope 须为 'all' 或 {VALID_TIERS} 之一",
                 error_code=MEM_TIER_UNKNOWN,
             )
 

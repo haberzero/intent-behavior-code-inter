@@ -352,15 +352,20 @@ class HostService(IHostService):
         return IbRunResult(run_result_cls, exit_status=exit_status, stdout=stdout,
                            exception=exception_record)
 
-    def meta_compile(self, code: str) -> None:
-        """meta.compile：代码字符串进程内 **compile-only** 静态校验（编译门，不执行）。
+    def meta_compile(self, code: str) -> Dict[str, Any]:
+        """meta.compile：代码字符串进程内 **compile-only** 静态校验 + **返回编译产物值**
+        （行为作值，TYPE-1：可检查/可作值返回/可组合）。
 
         子引擎 compile-only（新 IBCIEngine，**零父状态污染**——父程序可能自身即字符串
         运行[合成 entry 同名冲突面]；compile-only 无需 LLM 继承/防卡死[编译不执行]）。
         编译失败 fail-fast：首个诊断（根因面）经 ``InterpreterError`` 上抛（携带 ibci
         源定位——合成 entry 标记 + line/column，IBCI ``try/except`` 可捕获，message
-        含源定位），成功静默返回（void）——与 CLI ``check`` 面同构（compile-only +
-        失败即断）。
+        含源定位）——与 CLI ``check`` 面同构（compile-only + 失败即断）。
+
+        **成功返回编译产物摘要（dict）**（行为作值 TYPE-1）：
+        ok/n_modules/entry_module/n_top_stmts/n_funcs/func_names/n_classes/class_names——
+        系统可持已编译行为为值，确定性内省（D1）其结构（定义了几何函数/类、顶层规模），
+        为"代码自修改台阶 4"（LLM 生成代码→编译作值→确定性验证→持有/观测）提供承载。
 
         注：compile_string 产出 ``CompilerError``（引擎级，诊断集），本方法将其翻译为
         可被 IBCI ``try/except`` 结构化捕获的 ``InterpreterError``（首个诊断 = 根因面；
@@ -368,6 +373,7 @@ class HostService(IHostService):
         """
         from core.engine import IBCIEngine
         from core.kernel.issue import CompilerError
+        from core.kernel.ast import IbFunctionDef, IbClassDef
 
         # 父 project_root（子引擎锚定，合成 entry 同源；meta.compile 仅经运行中的
         # 父 VM 调用，父 root 必已确立）。
@@ -377,7 +383,7 @@ class HostService(IHostService):
                 "meta.compile 须父 project_root 已确立（经运行中的父 VM 调用）。", None)
         sub_engine = IBCIEngine(root_dir=parent_root)
         try:
-            sub_engine.compile_string(code, silent=True)
+            artifact = sub_engine.compile_string(code, silent=True)
         except CompilerError as e:
             diags = e.diagnostics or []
             d = diags[0] if diags else None
@@ -387,6 +393,36 @@ class HostService(IHostService):
             if loc is not None:
                 loc.file_path = self._string_source_marker(parent_root)
             raise InterpreterError(d.message, loc, error_code=d.code) from e
+
+        # 行为作值（TYPE-1）：提取入口模块编译产物摘要（确定性内省其结构）。
+        n_top = 0
+        n_funcs = 0
+        n_classes = 0
+        func_names: List[str] = []
+        class_names: List[str] = []
+        entry = artifact.entry_module
+        entry_result = artifact.get_module(entry) if entry else None
+        if entry_result is not None:
+            body = entry_result.module_ast.body
+            n_top = len(body)
+            for stmt in body:
+                if isinstance(stmt, IbFunctionDef):
+                    n_funcs += 1
+                    func_names.append(stmt.name)
+                elif isinstance(stmt, IbClassDef):
+                    n_classes += 1
+                    class_names.append(stmt.name)
+
+        return {
+            "ok": True,
+            "n_modules": len(artifact.modules) if hasattr(artifact, "modules") else 1,
+            "entry_module": entry or "",
+            "n_top_stmts": n_top,
+            "n_funcs": n_funcs,
+            "func_names": func_names,
+            "n_classes": n_classes,
+            "class_names": class_names,
+        }
 
     @staticmethod
     def _string_source_marker(parent_root: str) -> str:

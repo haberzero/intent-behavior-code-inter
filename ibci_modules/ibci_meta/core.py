@@ -14,7 +14,7 @@ meta 通过 capabilities.kernel_registry.get_host_service() 委托内核 HostSer
 （meta_compile）——自身不持有运行时状态（同 ihost 模式）。
 """
 from core.extension.ibcext import IbPlugin, ExtensionCapabilities
-from typing import Optional
+from typing import Any, Optional
 
 
 class MetaPlugin(IbPlugin):
@@ -36,17 +36,19 @@ class MetaPlugin(IbPlugin):
     # ibci 暴露接口
     # ------------------------------------------------------------------
 
-    def compile(self, code: str) -> None:
-        """代码字符串进程内编译校验（compile-only，**不执行**）。
+    def compile(self, code: str) -> Any:
+        """代码字符串进程内编译校验（compile-only，**不执行**）+ **返回编译产物值**。
 
         语法/语义错误 fail-fast 抛 ``CompilerError``（diagnostics 带 ibci 源定位：
-        合成 entry ``__string_exec__`` 标记 + line/column）；成功静默返回（void）。
+        合成 entry ``__string_exec__`` 标记 + line/column）。成功**返回编译产物摘要
+        dict**（行为作值 TYPE-1）：ok/n_modules/entry_module/n_top_stmts/n_funcs/
+        func_names/n_classes/class_names——系统可持已编译行为为值、确定性内省其结构。
         经 HostService.meta_compile：子引擎 compile-only（零父状态污染）。
         """
         hs = self._host_service()
         if not hs:
             raise RuntimeError("Meta service not available; cannot meta.compile.")
-        hs.meta_compile(code)
+        return hs.meta_compile(code)
 
     # ------------------------------------------------------------------
     # 内部辅助

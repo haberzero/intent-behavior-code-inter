@@ -356,113 +356,36 @@ class AIPlugin(RecommendedProvider, IbStatefulPlugin):
         k_native = k.to_native() if hasattr(k, "to_native") else k
         return self._require_embedding().retrieve(query, corpus, k_native)
 
-    def recall(self, mem: Any, query: Any, scope: Any = None,
-               k: Any = None, instruct: Any = None) -> List[Any]:
-        """向量召回：从 memory 中按 embedding 余弦相似度选取最相关片段。
+    def recall(
+        self,
+        query: Any,
+        corpus: Any,
+        k: Any,
+        instruct: Any = "",
+        dimensions: Any = None,
+    ) -> List[Any]:
+        """指令条件化向量召回（低层原语，REC-6）：str query × list[str] corpus → top-k。
 
-        参数：
-        - mem: memory 实例（源记忆）
-        - query: str（查询文本）
-        - scope: str（可选，"all"=跨层 / 具体层名；缺省="all"）
-        - k: int（可选，最大返回数；缺省=5）
-        - instruct: str（可选，query 侧 instruction 条件化——REC-6）
-
-        返回 list[dict]：[{key, tier, score, value}, ...]（按 score 降序 top-k）
+        - ``query``：str（查询文本）；instruction **仅作用于 query 侧**（内核保证不对称）
+        - ``corpus``：list[str]（候选文本）；document 侧裸嵌入 + 内容缓存
+        - ``k``：int（top-k）
+        - ``instruct``：str（任务描述；空串 = 无 instruction，退化为普通向量检索）
+        - ``dimensions``：int（MRL 输出维度；None = 模型默认）
+        返回 list[dict]：[{index, score}, ...]（与 retrieve 同形态）。
+        记忆感知召回（从 memory 取条目）用 ``mem.recall_vector``。
         """
-        from core.runtime.objects.primitives.memory import IbMemory, VALID_TIERS
-        from core.runtime.objects.primitives.collections import IbList
-
-        if not isinstance(mem, IbMemory):
-            raise InterpreterError(
-                "TypeError: ai.recall 第一参数须为 memory 实例"
-            )
-
-        q = query.to_native() if hasattr(query, "to_native") else query
-        if not isinstance(q, str) or not q.strip():
-            raise InterpreterError(
-                "ai.recall query 须为非空 str"
-            )
-        s = scope.to_native() if hasattr(scope, "to_native") else scope
-        if not isinstance(s, str):
-            s = "all"
         k_native = k.to_native() if hasattr(k, "to_native") else k
-        if not isinstance(k_native, int) or isinstance(k_native, bool) or k_native <= 0:
-            k_native = 5
-        instr = instruct.to_native() if hasattr(instruct, "to_native") else instruct
-        if instr is not None and not isinstance(instr, str):
-            instr = None
+        instruct_native = instruct.to_native() if hasattr(instruct, "to_native") else instruct
+        dims_native = dimensions.to_native() if hasattr(dimensions, "to_native") else dimensions
+        return self._require_embedding().recall(
+            query, corpus, k_native,
+            instruct=instruct_native if instruct_native is not None else "",
+            dimensions=dims_native,
+        )
 
-        # 确定搜索范围
-        if s == "all":
-            search_tiers = list(VALID_TIERS)
-        elif s in VALID_TIERS:
-            search_tiers = [s]
-        else:
-            search_tiers = list(VALID_TIERS)
-
-        # 收集候选条目文本
-        candidates: List[Dict[str, Any]] = []
-        for tier in search_tiers:
-            tier_entries = mem.payload["tiers"].get(tier, {})
-            for key, entry in tier_entries.items():
-                try:
-                    native_val = entry["value"].to_native()
-                    text = str(native_val) if native_val is not None else ""
-                except Exception:
-                    text = ""
-                if text.strip():
-                    candidates.append({"key": key, "tier": tier, "text": text, "value": entry["value"]})
-
-        if not candidates:
-            reg = mem.ib_class.registry
-            return reg.box([])
-
-        # 嵌入 query（side="query" + instruct）
-        svc = self._require_embedding()
-        query_vec = svc.embed(q, side="query", instruct=instr)
-        q_native = list(query_vec.payload)
-
-        # 嵌入所有候选（side="doc"，无 instruction）
-        texts = [c["text"] for c in candidates]
-        # 批量嵌入（如果支持）或逐个
-        doc_vecs = []
-        for t in texts:
-            v = svc.embed(t, side="doc")
-            doc_vecs.append(list(v.payload))
-
-        # 余弦相似度
-        import math
-        def _cosine(a: List[float], b: List[float]) -> float:
-            if len(a) != len(b):
-                # 维度不匹配（MRL 截断差异）→ 取较短
-                n = min(len(a), len(b))
-                a, b = a[:n], b[:n]
-            dot = sum(x * y for x, y in zip(a, b))
-            mag_a = math.sqrt(sum(x * x for x in a))
-            mag_b = math.sqrt(sum(x * x for x in b))
-            if mag_a == 0 or mag_b == 0:
-                return 0.0
-            return dot / (mag_a * mag_b)
-
-        # 计算分数
-        for i, c in enumerate(candidates):
-            c["score"] = _cosine(q_native, doc_vecs[i])
-
-        # 排序 + top-k
-        candidates.sort(key=lambda x: x["score"], reverse=True)
-        top = candidates[:k_native]
-
-        # 返回 list[dict]
-        reg = mem.ib_class.registry
-        out_items = []
-        for r in top:
-            d = reg.box({})
-            d.receive("__setitem__", [reg.box("key"), reg.box(r["key"])])
-            d.receive("__setitem__", [reg.box("tier"), reg.box(r["tier"])])
-            d.receive("__setitem__", [reg.box("score"), reg.box(r["score"])])
-            d.receive("__setitem__", [reg.box("value"), r["value"]])
-            out_items.append(d)
-        return reg.box(out_items)
+    def recall_stats(self) -> Dict[str, Any]:
+        """document 侧缓存遥测（COST 成本可观测面）：hits/misses/entries。"""
+        return self._require_embedding().recall_stats()
 
     def get_embedding_call_info(self) -> Dict[str, Any]:
         """最近一次 embedding 调用的诊断信息（内省/观测面）。"""

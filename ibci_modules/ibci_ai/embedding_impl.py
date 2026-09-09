@@ -44,6 +44,13 @@ class EmbeddingService:
         self._named: Dict[str, Dict[str, Any]] = {}
         # 当前激活配置（set_embedding_config / set_embedding_model 落地）
         self._active: Optional[Dict[str, Any]] = None
+        # document 侧嵌入缓存（recall 用）：内容键 → list[vector]。
+        # 语义：document 侧任务无关（裸嵌入，不带 instruction），同语料同维度可复用；
+        # instruction 仅作用于 query 侧（query/document 不对称由本服务保证）。
+        self._doc_vec_cache: Dict[tuple, list] = {}
+        # document 侧缓存遥测（COST 成本可观测面）：hits/misses 计数
+        self._recall_hits: int = 0
+        self._recall_misses: int = 0
 
     # ------------------------------------------------------------------ #
     # 配置面
@@ -250,6 +257,100 @@ class EmbeddingService:
         return [
             {"index": hit.index, "score": hit.score} for hit in hits
         ]
+
+    # ------------------------------------------------------------------ #
+    # 指令条件化召回（REC-6：query/document 不对称内核保证 + doc 缓存 + MRL）
+    # ------------------------------------------------------------------ #
+
+    def recall(
+        self,
+        query: Any,
+        corpus: Any,
+        k: int,
+        instruct: str = "",
+        dimensions: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """指令条件化向量召回（低层原语）：str query × list[str] corpus → top-k。
+
+        - ``query``：str（原始查询文本）；instruction **仅作用于 query 侧**；
+        - ``corpus``：list[str]（候选文本）；document 侧**裸嵌入**（不带 instruction）
+          且**按内容缓存**（任务无关、可复用）；
+        - ``instruct``：str（任务描述；空串 = 无 instruction，退化为普通向量检索）；
+        - ``dimensions``：int（MRL 输出维度；None = 模型默认）；
+        - ``k``：int（top-k）。
+        返回 ``[{"index": int, "score": float}, ...]``（与 retrieve 同形态）。
+        """
+        from core.runtime.objects.primitives.collections import IbList
+
+        q_nat = unbox(query)
+        if not isinstance(q_nat, str):
+            raise InterpreterError(
+                f"TypeError: ai.recall 查询须为 str（收到 {type(q_nat).__name__}）",
+                error_code=EMB_INVALID_INPUT,
+            )
+        if isinstance(corpus, IbList):
+            corpus_items = [unbox(e) for e in corpus.elements]
+        elif isinstance(corpus, (list, tuple)):
+            corpus_items = [unbox(e) for e in corpus]
+        else:
+            corpus_items = [unbox(corpus)]
+        if not corpus_items:
+            raise InterpreterError(
+                "TypeError: ai.recall 语料须为非空 list[str]",
+                error_code=EMB_INVALID_INPUT,
+            )
+        for it in corpus_items:
+            if not isinstance(it, str):
+                raise InterpreterError(
+                    "TypeError: ai.recall 语料元素须为 str",
+                    error_code=EMB_INVALID_INPUT,
+                )
+        if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
+            raise InterpreterError(
+                f"ai.recall k 须为正整数（收到 {k!r}）",
+                error_code=EMB_INVALID_INPUT,
+            )
+
+        # document 侧：任务无关裸嵌入 + 内容键缓存（instruction 不入 document 侧）
+        doc_key = (tuple(corpus_items), dimensions)
+        corpus_vecs = self._doc_vec_cache.get(doc_key)
+        if corpus_vecs is None:
+            corpus_vecs = self.embed(corpus_items, dimensions=dimensions)
+            self._doc_vec_cache[doc_key] = corpus_vecs
+            self._recall_misses += 1
+        else:
+            self._recall_hits += 1
+
+        # query 侧：instruction 条件化（Qwen3 官方形态 Instruct: {task}\nQuery:{query}）
+        inst = unbox(instruct) if instruct is not None else ""
+        if not isinstance(inst, str):
+            inst = str(inst)
+        query_text = f"Instruct: {inst}\nQuery:{q_nat}" if inst else q_nat
+        query_vec = self.embed(query_text, dimensions=dimensions)
+
+        # top-k：embed 产出原生 list[IbVector]（非 IbList 形态），直接经 linear_topk
+        # 同源计算（与 retrieve 同一原语），不经 retrieve 的 IbList 形态校验。
+        from core.runtime.objects.primitives.vector import IbVector
+
+        if not isinstance(query_vec, IbVector):
+            raise InterpreterError(
+                "TypeError: ai.recall query 嵌入须为 vector",
+                error_code=EMB_INVALID_INPUT,
+            )
+        hits = linear_topk(
+            list(query_vec.payload),
+            [list(v.payload) for v in corpus_vecs],
+            k,
+        )
+        return [{"index": hit.index, "score": hit.score} for hit in hits]
+
+    def recall_stats(self) -> Dict[str, Any]:
+        """document 侧缓存遥测（COST 成本可观测面）：hits/misses/entries。"""
+        return {
+            "hits": self._recall_hits,
+            "misses": self._recall_misses,
+            "entries": len(self._doc_vec_cache),
+        }
 
     # ------------------------------------------------------------------ #
     # 内省
