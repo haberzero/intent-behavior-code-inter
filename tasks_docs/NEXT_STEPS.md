@@ -63,19 +63,23 @@
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进；同一时刻只推
-一个 P0。
+一个 P0。**试用方需求恒高优先**（来自真实试用者的功能性需求优先于自研/卫生项）。
 
 1. **主线 = P7**（见上"当前状态"开工指令；自主推进，无人值守偏好）。
-2. **支线 · P3 D-3.3 VM 字符串扫描快速路径**：紧迫性下调（P1 实证已 O(n)），可交错；与
+2. **P7 完成后下一主线 = VISION-8 Round4 基础智能基底**（试用方 2026-09-09 需求单；
+   P0 = MEM 记忆基底 + REC 指令条件化召回；需求权威源 =
+   `/home/dsh/proj/ibci-trial/docs/ibci_round4_vision_requirements.md`；详见
+   `PENDING_TASKS.md` VISION-8）。
+3. **支线 · P3 D-3.3 VM 字符串扫描快速路径**：紧迫性下调（P1 实证已 O(n)），可交错；与
    演化平面（`docs/LANGUAGE_DESIGN_EVOLUTION.md` 性能方向）合流规划。
-3. **支线 · 恶意边界未测项**（`trials/INDEX.md` 清单，mock 层）：#15（snapshot 类字段
+4. **支线 · 恶意边界未测项**（`trials/INDEX.md` 清单，mock 层）：#15（snapshot 类字段
    捕获观测面）/ #19（overlay × 序列化/snapshot/retry 交互）/ #33（依赖 KERNEL_ISSUE-LLM-5
    同子系统）；缺陷追修：KERNEL_ISSUE-LLM-5（事件驱动监视复发）。
-4. **支线 · 周期质量维护**（PT-AUDIT-1/3 + Tier B/C）：触发节点 = 主线任务完成后自主
+5. **支线 · 周期质量维护**（PT-AUDIT-1/3 + Tier B/C）：触发节点 = 主线任务完成后自主
    启动（真实 LLM 环境已就位，旧"试用后恢复"阈值已过）。
-5. **远程 CI 启用（暂不启动，待用户授权）**：`ci.yml` 恢复 push/PR 触发（本地分层验证经
+6. **远程 CI 启用（暂不启动，待用户授权）**：`ci.yml` 恢复 push/PR 触发（本地分层验证经
    `scripts/ci_local.sh`，不依赖远程）。
-6. **远期演进（试用稳定后）**：VISION-4 类型理论加固 / VISION-5 函数式地基 / VISION-1
+7. **远期演进（试用稳定后）**：VISION-4 类型理论加固 / VISION-5 函数式地基 / VISION-1
    二层 IR（见 `tasks_docs/PENDING_TASKS.md` §八）；PT-SEALED-1 保持封存。
 
 **长期登记（状态单点真理 = `PENDING_TASKS.md`）**：PT-DECIDE-2（供应商思考禁用，已解封；
