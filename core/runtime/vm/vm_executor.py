@@ -64,6 +64,15 @@ class VMExecutor:
         self._interpreter = interpreter
         self._cancel_event = cancel_event
         self._dispatch = build_dispatch_table()
+        # [P4-前段 数据平面] 每 handler 的"是否生成器函数"预计算（建表一次）：
+        # handler 是模块级函数，生成器身份恒定，原 _make_task 每节点调用
+        # inspect.isgeneratorfunction(handler)（profile ~110k 次/程序，反射开销）→
+        # 改为建表期一次判定，运行期查表。dispatch 表建表后只读（无扩展点），
+        # 缓存与表一致。
+        self._handler_is_generator = {
+            node_type: inspect.isgeneratorfunction(handler)
+            for node_type, handler in self._dispatch.items()
+        }
         # 当前正在执行的帧栈引用；仅在 _drive_loop_gen 驱动活跃时非 None
         # （调度器多任务下为"当前推进任务"的栈，随任务步进切换）。
         self._current_stack: Optional[list] = None
@@ -402,9 +411,11 @@ class VMExecutor:
                 f"VMExecutor: no CPS handler for node type {node_type!r} "
                 f"(uid={node_uid})"
             )
-        if not inspect.isgeneratorfunction(handler):
+        if not self._handler_is_generator.get(node_type, False):
             # 非生成器 handler（纯 return 值）：中央化包装为生成器，
             # 消除各 handler 内的 ``if False: yield`` 身份 hack。
+            # [P4-前段] 生成器身份经建表期预计算缓存（_handler_is_generator），
+            # 免每节点 inspect.isgeneratorfunction 反射。
             def _gen(h=handler):
                 return h(self, node_uid, node_data)
                 yield  # pragma: no cover
