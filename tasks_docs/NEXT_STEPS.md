@@ -47,10 +47,15 @@
 > 异常驱动控制流；**D-3/D-3.3 实证 ~1000× 逐字符开销**（12k 窗口 sub_str 挂起 >180s；
 > 170-200s vs Python <0.1s；已落地缓解 = R3-③ str 四件套 O(n)，D-3.3 VM 侧快速路径登记不
 > 实施）。
-> **P2 进度**：step1 ✅（AST 只读视图缓存 + 嵌套包装记忆化，commit e2949d2b，一致 ~6-9%
-> 数据平面提升，3909/1 零回归）；step2 起 = 值层分派更大头[isinstance 分派~2.2s 2.8M 次
-> [热站点 = runtime_context 变量赋值类型校验] / box 装箱~2.5s / inspect 反射~1.1s]——更硬
-> 核心分派/类型安全面，逐个低风险先行。
+> **P2 进度（主体完成）**：step1 ✅ AST 只读视图缓存 + 嵌套包装记忆化（commit e2949d2b，
+> ~6-9%）；step2 ✅ TypeRef.from_spec 按 spec 缓存（commit 62194fb9，~11-18%）——**累计
+> 数据平面 ~-11%~-24%（vs P1 基线）**。调查结论：box per-call 开销 + _check_type isinstance
+> 复用 = wall-clock wash[isinstance 廉价 C 级检查·分散多站点]已回退；per-stmt TaskScheduler
+> 仅顶层语句非热点；inspect.getattr_static 源未定位到热路径可削减点[暂搁]。**P2（CPS 内数据
+> 平面快速路径）主体完成**——剩余主导成本 = CPS 生成器协议[每节点 send/StopIteration] +
+> 每节点分派（_drive_loop_gen 主导）= **真 JIT/P4 范畴**（核心执行模型改动，高风险→隔离分
+> 支）。P3 D-3.3 字符串快速路径[P1 实证已 O(n)，紧迫性下调] / P4 真 JIT[用户点名优先·隔离
+> 分支] / P5 持久 artifact 缓存[编译期·可并行] 接续。
 >
 > **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
 > 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离

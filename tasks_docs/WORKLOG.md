@@ -1924,6 +1924,30 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   变更面）——step2 起逐个评估（低风险先行）。
 ---
 
+- **VISION-6 P2·step2 数据平面快速路径 #1b——TypeRef.from_spec 按 spec 缓存（2026-09-08，
+  free-explore，commit 62194fb9）**：P1 profile 定位值层分派中 **TypeRef.from_spec ~80k
+  次/程序**（每标量装箱一次，IbValue.__init__ 触发，profile 1.06s）。裁定：TypeRef 仅由
+  spec 字段派生（name/kind/module/element/key/value/wrapped，**非 members**）+ spec 不可
+  变（单一类型身份源）→ 同 spec 结果恒定 → 按 spec 实例缓存。实现：① from_spec 拆为缓存
+  包装 + `_from_spec_uncached`（既有逻辑原样保留，多 return 点不动）；② 缓存键 = spec
+  实例（生命周期内 id 稳定；`_type_ref` 为实例属性[非 dataclass 字段]，不影响 asdict
+  序列化/eq；frozen 异常路径缓存失败不阻断构造）。**改前/改后（perf_bench，µs/iter，
+  warmup+3）一致 ~11-18%**：arith 240.5→196.7 / branch 343.5→281.4 / recurse 5429.9→
+  4816.5 / string 270.8→227.2 / container 255.8→222.4 / class 624.7→557.2。累计 P2（step1
+  AST 视图缓存 ~6-9% + step2 TypeRef 缓存 ~11-18%）≈ **-11%~-24%**（vs P1 基线 257/372/
+  5955/287/273/689）。全量 3909/1 零回归。
+  **P2 调查结论（同批，自纠错）**：box 装箱 per-call 开销[Uncertain 串比较 + memo={} 分配]
+  + _check_type isinstance 复用[5→1] = 均 **wall-clock wash**（isinstance 为廉价 C 级检查、
+  分散多站点[~28 处]，per-call 节省在 ~2% 噪声内）→ 已回退；per-stmt TaskScheduler 仅
+  顶层语句（非循环迭代热路径，while 体经 handler 内部 CPS 驱动）→ 非热点。inspect.
+  getattr_static[~200k/1.1s] 源非热路径直接 isinstance（vm_executor/loader 仅 setup 用
+  inspect.isgeneratorfunction/signature）→ 未定位到热路径可削减点，暂搁。
+  **P2 数据平面 CPS 内可干净削减项裁定**：AST 视图缓存[step1] + TypeRef 缓存[step2] =
+  已落地（累计 ~11-24%）；剩余主导成本 = **CPS 生成器协议[每节点 send/StopIteration] +
+  每节点分派**（_drive_loop_gen 主导）= 真 JIT/P4 范畴（核心执行模型改动，高风险→隔离分
+  支）。P2（CPS 内数据平面快速路径）主体完成，P3/P4 接续。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
