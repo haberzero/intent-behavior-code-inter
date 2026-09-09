@@ -43,22 +43,37 @@ import pytest
 #    （faulthandler dump）——绝大多数卡死场景在此层被定位，无需人工干预；
 # ② 第二层（本看门狗）= 框架层（collect/plugin 阶段）180s 兜底——仅 pytest
 #    框架层 hang（collect/plugin 死锁，测试级超时不生效的场景）触发：
-#    dump_traceback 全部线程栈到 stderr 后 os._exit(124)。
+#    全部线程栈 dump 到 `.tmp_pytest/deadlock_watchdog_dump.txt` 后 os._exit(124)。
 # **阶段感知**：``pytest_sessionfinish``（测试执行完毕、进入 teardown）设置
 # 事件 → 看门狗解除。teardown（unconfigure 期 GC）慢 ≠ 死锁，且测试级超时
 # 已覆盖执行期——看门狗与套件总时长不设竞态（固定时点触发曾与增长中的
 # 全量时长竞态：100% 测试完成后在 teardown GC 期被误杀，exit 124 假象）。
-# 真死锁定位：第一层报告含测试名 + 线程栈；第二层（退出 124）时完整 stderr
-# 中的 dump_traceback 即全部线程栈。
+# **dump 走显式文件通道（阶段无关）**：pytest 的 fd capture 自 session 启动
+# 即活跃——测试执行期之前的 hang（collect 期）其 stderr dump 会被 capture 吞没
+# （os._exit 不触发 capture 冲刷）。文件通道不受 pytest capture 影响，任何阶段
+# 触发皆可读。exit(124) 信号是权威的，dump 是诊断通道（best effort：写 dump 失败
+# 不得吞掉 exit 信号——异常上抛会令看门狗线程静默死亡、进程永不退出 = 兜底失效）。
+# 真死锁定位：第一层报告含测试名 + 线程栈；第二层（退出 124）时读
+# `.tmp_pytest/deadlock_watchdog_dump.txt` 即全部线程栈。
 _DEADLOCK_TIMEOUT_S = 180
 _session_finished = threading.Event()
+_DEADLOCK_DUMP_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    ".tmp_pytest", "deadlock_watchdog_dump.txt",
+)
 
 
 def _deadlock_watchdog() -> None:
     """框架层看门狗：sessionfinish 前 180s 无进展 = 框架 hang → dump + exit(124)。"""
     if _session_finished.wait(_DEADLOCK_TIMEOUT_S):
         return  # 测试执行完毕（看门狗职责止于框架层）
-    faulthandler.dump_traceback()
+    try:
+        os.makedirs(os.path.dirname(_DEADLOCK_DUMP_PATH), exist_ok=True)
+        with open(_DEADLOCK_DUMP_PATH, "a", encoding="utf-8") as f:
+            f.write("\n===== deadlock watchdog fired（框架层 hang，退出 124） =====\n")
+            faulthandler.dump_traceback(file=f, all_threads=True)
+    except OSError:
+        pass  # dump best effort——exit(124) 信号不依赖 dump（见模块头注记）
     os._exit(124)
 
 
