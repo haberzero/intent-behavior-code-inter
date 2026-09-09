@@ -135,25 +135,26 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     管线，IBCI_ARTIFACT_CACHE=1 启用默认关闭零侵入，~8× 编译加速）。
 
 - **🔴 主线延续点（下一位智能体的工作队列）**：
-  1. **当前 P0 = P6 内核自举（bind 表达内核契约，台阶 ④ 之后方向）**——把 IBCI 内核
+  1. **P6 内核自举（bind 表达内核契约，台阶 ④ 之后方向）✅ 完成 + 里程碑收束（2026-09-09，详见进度块）**——把 IBCI 内核
      契约用 `bind`（宿主绑定）表达，自举台阶 ④（meta 层/字符串级直接执行）之后的方向。
      设计起点 = `tasks_docs/_meta_layer_design.md` §六（自举台阶 ④ 端到端架构）+ §八
      （批次计划）。**注意**：§六 台阶 ④ 达成条件 = "类型层承诺清单经 VISION-4/5 落地"
      ——VISION-4/5 类型层是独立方向（user-gated，非内核工程化范畴）。P6 的"台阶 ④ 之后
      方向"须先**实证裁定**：内核契约 bind 化的具体范围（哪些既有 builtin 机制可经 bind
      表达 + 哪些须保持宿主侧）+ 设计确认（对照 9 不变量）→ 分阶段实施。
-     **进度**：Phase 0 实证裁定 + B1 ✅（共享合成提取，判别 7 例）+ B2 ✅（工具 4
-     契约源自举：契约源 4 件 contracts/{math,json,time,schema}.ibci + bootstrap 阶段
-     kernel_contracts[parse→共享合成→per-engine 严格命名空间→register_module，零新
-     运行期机制] + 实现重打包[类实例→模块级函数] + 4 字面量真删除 + kernel_version
-     递增；全量 3963/1 零回归）。**B3（net）实施期实证取消**：net 8 方法 headers 默认
-     参数面[has_default]超出 bind 表达力 + per-engine 状态双重边界 → net 维持宿主侧
-     字面量（USER_DEFINED）；远期项登记 = bind 默认值语法（独立立项）。provenance
-     变更（工具 4 → EXTERNAL_MODULE）行为安全实证完成。**下一 agent 起点 = B4 文档
-     收敛**（01_native_host_binding 内核契约自举节 + 插件体系同步 + KNOWN_LIMITS
-     边界注记 + P6 里程碑收束 ff unsafe-vibe-dev）。设计文档
-     `tasks_docs/_p6_selfbootstrap_design.md`（含 B2 实施期裁定记录）。
-  2. **后续 = P7 隔离改造 + 反射能力（档 B）**——高风险→隔离分支（100% 授权独立分支
+      **进度（✅ P6 里程碑完成 + 收束，2026-09-09）**：Phase 0 实证裁定 + B1 ✅（共享
+      合成提取，判别 7 例）+ B2 ✅（工具 4 契约源自举：契约源 4 件
+      contracts/{math,json,time,schema}.ibci + bootstrap 阶段 kernel_contracts[parse→
+      共享合成→per-engine 严格命名空间→register_module，零新运行期机制] + 实现重打包
+      [类实例→模块级函数] + 4 字面量真删除 + kernel_version 递增；全量 3963/1 零回归）
+      + **B3（net）实施期实证取消**（net 8 方法 headers 默认参数面[has_default]超出 bind
+      表达力 + per-engine 状态双重边界 → net 维持宿主侧字面量[USER_DEFINED]；远期项登记
+      = bind 默认值语法独立立项）+ B4 ✅ 文档收敛（01_native_host_binding §六 内核契约
+      自举 + 5 文档两域分述同步）。provenance 变更（工具 4 → EXTERNAL_MODULE）行为安全
+      实证完成。**附交付**：测试基础设施看门狗阶段感知修复（固定 180s 时点与增长中套件
+      总时长竞态 → sessionfinish 解除；keep_tests_safe.md 同步）。设计文档
+      `tasks_docs/_p6_selfbootstrap_design.md`（含 B2 实施期裁定记录）。
+  2. **当前 P0 = P7 隔离改造 + 反射能力（档 B）**——高风险→隔离分支（100% 授权独立分支
      实验）。P7 与 P6 的交点 = 档 B 隔离改造是 VISION-6 唯一与 VISION-4 类型层有交点
      的方向（MVP 落地后联合重估）。
   3. **P3 D-3.3 VM 字符串扫描快速路径**——紧迫性下调（P1 实证已 O(n)），可交错。

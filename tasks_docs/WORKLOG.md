@@ -2197,6 +2197,36 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   全量负载偶发 hang[单独 0.17s 过、重跑全绿] = 已知框架层并发 flake 类，非 B2 引入——
   该测试不构造引擎；观察项）。下一批 = B4 文档收敛（01_native_host_binding 内核契约自举
   节 + 插件体系同步 + KNOWN_LIMITS 边界注记）。
+- **测试基础设施裁定：死锁看门狗改阶段感知（进程级固定时点触发 → sessionfinish 解除）（2026-09-09，free-explore）**：
+  P6 全量验证期间两次 exit 124（"无输出退出"假象）触发根因排查——线程栈实证：套件已
+  100% 完成，hang 点在 pytest unconfigure 期 GC（弱引用回调 + 孤儿 futures worker
+  线程）；conftest 看门狗为进程启动后 180s **固定时点**触发（time.sleep 后无条件
+  dump + os._exit(124)），其设计注释自述时长基准 = 全量 ~95s——套件增长至 150s+
+  （collect + 执行 + teardown GC）后越过 180s 总窗口 → teardown 期误杀。**根因 =
+  固定时点看门狗与增长中的套件总时长竞态**（注释预言的"运行时长越过看门狗时限"
+  场景实证命中），非测试卡死。**修复（根因，非调大时限的魔法数字）**：看门狗改
+  **阶段感知**——职责与其文档化用途对齐（框架层 collect/plugin 死锁，测试级超时不
+  生效的场景）：``pytest_sessionfinish``（测试执行完毕）设置事件 → 看门狗解除
+  （event.wait 替代 sleep）；teardown 慢 ≠ 死锁，测试级 60s 超时已覆盖执行期。
+  合成验证：collect 期死锁用例（临时文件，跑完即删）→ 看门狗 180s 触发 exit 124 +
+  线程栈（保护面不缩水）；正常全量 3963/1 干净跑完含 teardown。文档同步：
+  docs/howto/keep_tests_safe.md 第二层语义更新（阶段感知 + 触发即框架层真卡死）。
+- **VISION-6 P6 内核自举里程碑收束（2026-09-09，free-explore）**：P6（bind 表达内核
+  契约）分阶段实施完成——Phase 0 实证裁定（bind 化范围 = 工具 4；kernel 5+fs 维持
+  宿主侧；F5 时序矛盾裁定精化）→ B1 共享合成函数提取（host_spec_synthesis 单一权威
+  源，用户路径/bootstrap 路径机制同构）→ B2 工具 4 契约源自举落地（contracts/ 4 件
+  IBCI bind 声明 = 契约单一权威源 + kernel_contracts bootstrap[parse→共享合成→per-
+  engine 严格命名空间→register_module→STAGE 4→5 既有严格绑定，零新运行期机制] + 实现
+  重打包[类实例→模块级函数] + 4 字面量真删除 + kernel_version 递增 + 判别套件 8 例）→
+  **B3（net）实施期实证取消**（net 8 方法 headers 默认参数面 has_default 超出 bind 表达
+  力[F3-0 裁定未推翻] + per-engine 可变状态双重边界 → net 维持宿主侧字面量 USER_DEFINED；
+  远期项登记 = bind 默认值语法独立立项）→ B4 文档收敛（01_native_host_binding §六 内核
+  契约自举[形态/设计理由/边界表] + 04_plugin_system/07_kernel_native/01_principles/
+  06_path_system 五文档两域分述同步）。**P6 收束判据**：全量 3963/1 零回归 + 用户面
+  既有测试全量锁定 + 契约源↔字面量逐字段等价 + provenance 变更行为安全实证 + 多引擎
+  隔离判别。下一里程碑 = P7 档 B 进程级隔离 + 反射能力（高风险 → 隔离分支 100% 授权）；
+  P3 D-3.3 可交错。P6 期间附交付：P5 缓存复核根因修复（信任域前缀策略，9eb638ca）+
+  测试基础设施看门狗阶段感知修复（上条）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

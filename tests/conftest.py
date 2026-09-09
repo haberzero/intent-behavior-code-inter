@@ -35,26 +35,29 @@ from typing import Any, Callable, List, Optional, Set, Tuple
 import pytest
 
 # ---------------------------------------------------------------------------
-# 死锁/卡死防护看门狗（进程级，纯 stdlib）——第二层兜底
+# 死锁/卡死防护看门狗（进程级，纯 stdlib，阶段感知）——第二层兜底
 # ---------------------------------------------------------------------------
 # 双层防护体系（套件自身安全，不依赖外部操作）：
 # ① 第一层 = pytest-timeout（pytest.ini：timeout=60 / timeout_method=thread）
 #    ——每测试独立 60s 超时，卡死测试自动 FAIL + 输出测试名与全部线程栈
 #    （faulthandler dump）——绝大多数卡死场景在此层被定位，无需人工干预；
-# ② 第二层（本看门狗）= 进程级 180s 兜底——仅 pytest 框架层 hang
-#    （collect/plugin 死锁，测试级超时不生效的场景）触发：dump_traceback
-#    全部线程栈到 stderr 后 os._exit(124)。
-# 时长基准：全量 pytest ~95s（本机）——90s 曾与全量时长竞态误杀（表现为
-# "无输出退出 124"假象），180s = 2 倍余量。真死锁定位：第一层报告含
-# 测试名 + 线程栈；第二层（退出 124）时完整 stderr 中的 dump_traceback
-# 即全部线程栈。
+# ② 第二层（本看门狗）= 框架层（collect/plugin 阶段）180s 兜底——仅 pytest
+#    框架层 hang（collect/plugin 死锁，测试级超时不生效的场景）触发：
+#    dump_traceback 全部线程栈到 stderr 后 os._exit(124)。
+# **阶段感知**：``pytest_sessionfinish``（测试执行完毕、进入 teardown）设置
+# 事件 → 看门狗解除。teardown（unconfigure 期 GC）慢 ≠ 死锁，且测试级超时
+# 已覆盖执行期——看门狗与套件总时长不设竞态（固定时点触发曾与增长中的
+# 全量时长竞态：100% 测试完成后在 teardown GC 期被误杀，exit 124 假象）。
+# 真死锁定位：第一层报告含测试名 + 线程栈；第二层（退出 124）时完整 stderr
+# 中的 dump_traceback 即全部线程栈。
 _DEADLOCK_TIMEOUT_S = 180
+_session_finished = threading.Event()
 
 
 def _deadlock_watchdog() -> None:
-    import time
-
-    time.sleep(_DEADLOCK_TIMEOUT_S)
+    """框架层看门狗：sessionfinish 前 180s 无进展 = 框架 hang → dump + exit(124)。"""
+    if _session_finished.wait(_DEADLOCK_TIMEOUT_S):
+        return  # 测试执行完毕（看门狗职责止于框架层）
     faulthandler.dump_traceback()
     os._exit(124)
 
@@ -77,6 +80,11 @@ def pytest_configure(config):
     basetemp = os.path.join(REPO_ROOT, ".tmp_pytest")
     os.makedirs(basetemp, exist_ok=True)
     config.option.basetemp = basetemp
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """测试执行完毕（进入 teardown）→ 解除死锁看门狗（阶段感知，见模块头注记）。"""
+    _session_finished.set()
 
 
 # ---------------------------------------------------------------------------
