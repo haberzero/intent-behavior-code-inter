@@ -10,14 +10,14 @@
 
 | 域 | 活跃 | 搁置 | 封存 | 说明 |
 |----|------|------|------|------|
-| FEAT（功能） | 4 | 0 | 0 | 语言/工具链功能愿景（PT-FEAT-15 provider 分离/原生绑定两段式主干已完成移除；PT-FEAT-16 embedding 一等能力立项，阶段 E 批 1） |
+| FEAT（功能） | 3 | 1 | 0 | 语言/工具链功能（PT-FEAT-16 embedding 一等能力 done[四批落地]；PT-FEAT-17 N3 度量 shelved；PT-FEAT-5 远程 CI 启用待用户授权） |
 | DEBT（技术债） | 0 | 1 | 0 | 架构缺陷与清理项（PT-DEBT-35/36 已完成；PT-DEBT-5 搁置） |
 | AUDIT（审计） | 3 | 0 | 0 | 周期审计与健康检查 |
-| DOC（文档） | 0 | 0 | 0 | 文档体系缺口（PT-DOC-3P2 已完成） |
+| DOC（文档） | 1 | 0 | 0 | 文档体系缺口（PT-DOC-4 文档示例验证闭环[待评估]；PT-DOC-3P2 done） |
 | TEST（测试） | 1 | 0 | 0 | 测试体系缺口 |
-| DECIDE（决策） | 0 | 0 | 1 | 待裁定设计问题（PT-DECIDE-3 项②④ 已定案落地 2026-08-20，全部清零；PT-DECIDE-2 已封存） |
-| SEALED（封存） | 0 | 0 | 2 | 显式封存（恢复需解封评估） |
-| VISION（愿景） | 6 | 0 | 0 | 远期方向（无排期；VISION-7 = 阶段 E 整合目标，批次建议见 `tasks_docs/_next_phase_targets.md`） |
+| DECIDE（决策） | 1 | 0 | 0 | 待裁定设计问题（PT-DECIDE-2 已解封[覆盖缺口收窄为后端强制思考场景的探测/降级语义 + 其它供应商映射实施窗口]；PT-DECIDE-3 done） |
+| SEALED（封存） | 0 | 0 | 1 | 显式封存（恢复需解封评估；embedding 边界已裁定切出 → PT-FEAT-16） |
+| VISION（愿景） | 4 | 0 | 0 | 远期方向（VISION-4/5 = user-gated；VISION-6 = 主线进行中[P1-P6 ✅，P7 = 当前 P0，详见 `tasks_docs/NEXT_STEPS.md`]；VISION-3/7 done） |
 
 ---
 
@@ -29,7 +29,7 @@
 - **动机**：语义错误（`SEM_xxx`）转用户友好表述、符号表/类型绑定导出、编译基准，服务语言易用性与可诊断性。
 - **成因**：语义 4 阶段管线稳定后暴露的错误可读性/工具链缺口。
 - **当前理解**：前三项已落地（诊断码目录 + 符号表/类型绑定导出 + `bench` 编译基准）。**CI/CD
-  可靠化/实用化设计已落地（2026-08-20，阶段 B6）**：四层可靠性（L1 fast 单元/契约、L2 全量
+  可靠化/实用化设计已落地（阶段 B6）**：四层可靠性（L1 fast 单元/契约、L2 全量
   跨平台矩阵、L3 真实 LLM e2e 手动可选、L4 发布产物 build+smoke）+ `scripts/ci_local.sh` 本地
   分层复现；`.github/workflows/ci.yml` 保持 `workflow_dispatch`（远程启用待用户显式授权后恢复
   push/PR 触发并 push）。落地物：`scripts/ci_local.sh` + `.github/workflows/ci.yml`（分层模板，
@@ -55,8 +55,9 @@
 
 ### PT-FEAT-16 词嵌入（embedding）一等能力（阶段 E · ref C1）
 
-- **状态**：active（用户 2026-09-05 裁定立项并解封 media 边界：embedding = 语义内容缝
-  基础能力、非媒体，从 PT-SEALED-1 切出独立推进）｜**域**：FEAT｜**优先级**：P0
+- **状态**：done（四批落地：契约包 / vector 值类型 / ai.embedding 语言面 + MOCK:VEC /
+  试用 T16 8/8；语言面文档收敛 = `docs/syntax/11_modules.md` ai 节 +
+  `docs/syntax/15_diagnostics.md` EMB_ 诊断码；设计文档已删除，git 承载）｜**域**：FEAT｜**优先级**：P0
 - **动机**：灰盒自动机愿景的关键缺口（ref C1）——检索/候选生成/相对排序的语义侧当前
   完全无法在 ibci 内做，是"不寄生 Python"的最大单点。
 - **成因**：外部灰盒自动机工作区实证（trial2 e18：短词坍缩、VSA 需离散层）；阶段 E
@@ -66,13 +67,23 @@
   系统级角色、ibci 其它全部元素与新成员的交互协议，经设计哲学（单一权威源/设计语言
   统一/机制同构/配合模式统一/一致性先于便利）全面审视；深读 LLM 集成先例（协议化
   契约/provider 契约/ai 模块面/mock 体系/序列化与类型边界五地基）作为机制同构基准。
-  设计文档落 `tasks_docs/_embedding_design.md`（临时，实现落地后按治理收敛进
-  `docs/architecture/`）。范围基线（ref C1）：vector 类型 + 相似度（cosine）+ 向量
-  检索 + 与 LLM 协同 + OpenAI 兼容 embeddings 服务接入。
+  范围基线（ref C1）：vector 类型 + 相似度（cosine）+ 向量检索 + 与 LLM 协同 +
+  OpenAI 兼容 embeddings 服务接入。设计过程（系统级架构设计先行纪律/五层同构/
+  配置单源）git 承载。
 
 ---
 
 ## 二、技术债（DEBT）
+
+### PT-FEAT-17 N3 弱模型输出漂移度量（logprobs 通道）
+
+- **状态**：shelved（设计完成、实施未启动、方向保留；重估触发 = provider 支持
+  completions/logprob 通道，或 corpus/probe 内化时机成熟）｜**域**：FEAT｜**优先级**：P3
+- **动机**：试用方需求（round3 N3 measure_freq）——弱模型输出漂移的频率度量需 logprobs
+  通道。
+- **唯一探针实证**：SiliconFlow——chat 通道（IBCI 现用）静默忽略 logprobs；legacy
+  completions 通道完整支持。设计 + 实证记录 = `tasks_docs/_n3_measure_freq_design.md`
+  （活跃挂起，不删）。
 
 ### PT-DEBT-5 全项目文件命名清理
 
@@ -83,33 +94,14 @@
 
 ### PT-DEBT-35 `_ctx` 内部契约完整形式化（intent_context 判别单一权威）
 
-- **状态**：done（2026-08-20 阶段 B 落地）｜**域**：DEBT｜**优先级**：P2
-- **动机**：`intent_context` 封装对象的 `fields["_ctx"]` 槽是全仓 ~20 处共享的半文档化内部契约；
-  `_helpers.py:32` 用字段探测判别意图上下文实参（缺 `isinstance(IbIntentContext)` 校验，任何
-  `fields["_ctx"]` 非 None 的普通对象误激活）——判别机制"侧表注解 + 字段探测"双轨并存。
-- **成因**：Tier C 审计（2026-08-20，_helpers:32 层穿透项）；用户决策：本次仅最小收紧
-  （补 isinstance 校验），**完整形式化登记为独立任务**。
-- **完成记录（2026-08-20）**：`_ctx` 契约单一权威 = `intent_context.get_intent_ctx`/
-  `set_intent_ctx`（isinstance(IbIntentContext) 精确判别，全仓唯一读写入口）；全仓 ~10 处
-  `_ctx` 字段探测双轨收敛（`_helpers` 判别 / `use` / `merge` / `combine` / `get_current` /
-  序列化 collect + rehydrate）；判别测试 +9（fake `_ctx` 不误激活 / round-trip / 非对象 None /
-  clear）。全量 pytest **3182 passed / 1 skipped 零回归**（基线 3173）。
+- **状态**：done（`_ctx` 契约单一权威 = `intent_context.get_intent_ctx`/`set_intent_ctx`
+  精确判别[isinstance]，全仓 ~10 处字段探测双轨收敛；过程与判别测试 git 承载）｜**域**：DEBT｜**优先级**：P2
 
 ### PT-DEBT-36 intent_context 方法族结构重构 + axiom 声明能力契约校验
 
-- **状态**：done（2026-08-20 阶段 B 落地）｜**域**：DEBT｜**优先级**：P2
-- **动机**：primitive_initializer 中 intent_context OOP 方法族（L546-728）+ 帧探测簇聚集
-  10 处恒真死守卫；bootstrap 建议"axiom 声明能力静默未绑定 → 加契约校验"（L44/L128 宿主实现
-  类魔法方法检查无绑定验证）。
-- **成因**：Tier C 审计（2026-08-20，bootstrap 组深层次 A/C）；用户决策：死守卫本次清除，
-  **方法族结构重构 + axiom 能力契约校验登记为独立任务**（与 contract_validator:63 公理契约
-  校验主题相关，可合并评估）。
-- **完成记录（2026-08-20）**：① intent_context 方法族收敛——`_ic_get_ctx`/`_ic_frame` 单一
-  权威访问，消除 10 处恒真死守卫/帧探测簇/hasattr 字段探测，缺参 fail-fast（push/merge/combine/use
-  不再静默 no-op）；② `_is_impl_method` 用 `getattr_static` 排除元类伪影——修复 `bool | bool`
-  误绑 `type.__or__`（PEP 604 运算符，运行期 expected 1 argument 缺陷）；③ `_verify_axiom_bindings`
-  bootstrap 末契约校验（公理声明方法必须 vtable/协议分派/字段承载，否则 fail-fast）。判别测试 +13；
-  全量 pytest **3173 passed / 1 skipped 零回归**（基线 3160）。
+- **状态**：done（方法族收敛至 `_ic_get_ctx`/`_ic_frame` 单一权威访问[消 10 处恒真死守卫]；
+  `_verify_axiom_bindings` bootstrap 末契约校验；`bool | bool` 误绑 `type.__or__` 修复；
+  过程与判别测试 git 承载）｜**域**：DEBT｜**优先级**：P2
 
 ---
 
@@ -120,7 +112,7 @@
 - **状态**：active（周期，用户 2026-08-20 裁定推迟到真实试用后）｜**域**：AUDIT｜**优先级**：P2
 - **动机**：按 code-quality/code-odor 技能周期回顾；历史 CODE_SMELL_AUDIT 结论（A/B/C/D 全量定案）已并入 WORKLOG 与 git。
 - **当前理解**：A/B/C/D 全量定案已完成；**D2「hasattr 全量逐点分类」已由 Tier C 专项审计完成**
-  （2026-08-20，113 处位点分类：58 合法保留 / 50 简单异味 / 4 真缺陷 / 4 深层次，处置见
+  （113 处位点分类：58 合法保留 / 50 简单异味 / 4 真缺陷 / 4 深层次，处置见
   NEXT_STEPS Tier C + WORKLOG 审计记录）；周期复核。
 
 ### PT-AUDIT-2 条件分支与异常嵌套复杂度审计
@@ -147,15 +139,14 @@
 
 ### PT-DOC-3P2 How-to 层补齐（读者旅程）
 
-- **状态**：done（2026-08-20 阶段 B 落地）｜**域**：DOC｜**优先级**：P2
-- **动机**：Reference→How-to 读者旅程断裂——生成器/并发/llmexcept/隔离等场景缺
-  操作指南（现 howto 5 篇：调试/试用/生成器/并发/插件）。
-- **成因**：三轴盘点登记（Reference→How-to 读者旅程缺口）。
-- **完成记录（2026-08-20）**：生成器/并发已有 howto；补齐 **`use_isolation.md`**（ihost
-  动态宿主隔离：run_isolated/spawn_isolated+collect/超时/状态保存/并发多子环境/陷阱）与
-  **`orchestrate_llm_calls.md`**（三层失败防线/修正型重试/长链独立设防/循环/__retry__
-  调用级/最终降级/编排决策速查）；交叉引用接线（debug_llm_calls→orchestrate、guide 03→
-  orchestrate、syntax 11→use_isolation、README 目录树）；代码示例实跑验证。纯文档变更。
+- **状态**：done（补齐 `use_isolation.md` + `orchestrate_llm_calls.md` + 交叉引用接线 +
+  代码示例实跑验证；过程 git 承载）｜**域**：DOC｜**优先级**：P2
+
+### PT-DOC-4 文档示例验证闭环
+
+- **状态**：active（待评估："文档示例抽取冒烟验证"机制可行性）｜**域**：DOC｜**优先级**：P3
+- **动机**：docs 代码块无"与内核对账"机制（诊断/语法有契约测试，文档示例没有）——治理
+  缺口；`env("KEY")` 漂移实证暴露（docs 示例用漂移形态未被拦截）。
 
 ---
 
@@ -165,7 +156,7 @@
 
 - **状态**：active（阶段 B 主体已补齐，剩余随主线顺带）｜**域**：TEST｜**优先级**：P2
 - **动机**：覆盖缺口由 `tests/COVERAGE_MATRIX.md` 矩阵 `🔶 缺失` 项承接。
-- **当前理解**：`for...if` 过滤、复合赋值运算符 e2e 已补；**阶段 B 缺口全收敛（B1，2026-08-20）**
+- **当前理解**：`for...if` 过滤、复合赋值运算符 e2e 已补；**阶段 B 缺口全收敛（B1）**
   ——新增判别测试 17 项（INV-CAST-2 隐式转换 / INV-INTENT-PRIORITY-2 / INV-INTENT-FLOW-3 /
   INV-MOCK-3 / 模块缓存 / 循环 import / switch 内 return）+ 矩阵卫生（INV-INTENT-SCOPE-3 已有
   snapshot 冻结测试、INV-LLMEXCEPT-CATCH-4→5 重号、switch 已有 break+continue）+ §7 模块重载
@@ -192,30 +183,11 @@
 
 ### PT-DECIDE-3 LLM prompt 协议家族待决项
 
-- **状态**：done（2026-08-21，项①-④ 全部定案落地，DECIDE 活跃清零）｜**域**：DECIDE｜**优先级**：P2
-- **动机**：① 用户类 `__from_prompt__` 返回目标类实例的 auto-boxing 二次封装边界；
-  ② `__validate_prompt__` 是否扩展至内置类型；③ `SEM_PROTOCOL_SIGNATURE` 强度
-  （warning vs error）；④ `__to_prompt__`/`__payload_prompt__` 异常回退可观测性复核。
-- **定案记录（2026-08-19）**：① 选 B 单向契约——`__from_prompt__` 返回值必须是目标类型
-  实例，非实例=契约违约（诊断+uncertain），删除 `_auto_box_value` 三级启发式兜底（对齐
-  06_oop §6.7 既有文档契约）；③ 选 B——required 协议成员签名违约升编译错误（fail-fast），
-  optional 成员（`__intent__`/`__retry__`）运行期 fail-fast 不经此路径。
-- **定案记录（2026-08-20）**：② 评估定论 = **不扩展至内置类型**——内置 LLM 输出预校验由
-  内建解析器承担（from_prompt_cap/内建 parser，单一权威），扩展即与 parser 构成双通道；
-  同时闭合半接通边缘：`impl` 在内置类型上定义 `__from_prompt__`/`__validate_prompt__` 编译期
-  SEM_TYPE_MISMATCH 拒绝（同 `__init__` 先例——AxiomParsingStrategy 永不分派 impl 补充的解析
-  协议方法）；④ 复核结论 = `PromptRenderer.to_prompt_str` 的 AttributeError 静默吞并改为
-  `KDIAG_PROTOCOL_TO_PROMPT_FALLBACK` 可观测发射（与 to_payload/base.py 回退路径同构），
-  不再隐藏用户 `__to_prompt__` 方法 bug。
-- **成因**：PROMPT_DESIGN_REVIEW 收敛。
-- **实证补充（2026-08-18，exp/protocol-vtable）**：D2 `to_prompt` 协议**零消费者**
-  （核心无 `satisfies_protocol(...,'to_prompt')` 调用；所有内置类型 satisfies=F 但运行期均经
-  vtable `__to_prompt__` 渲染）——真激活须接 PromptRenderer 协议前置，**归 P5**；
-  D1 `PROMPT_PROTOCOL_SPECS`（4 方法，无 `__payload_prompt__`）与 `BUILTIN_PROTOCOLS` 的
-  `payload_prompt` 双注册表——补 `__payload_prompt__` 会激活 `validate_prompt_protocol_signature`
-  （L565 警告级）对用户声明的校验；`trials/T08/D2-05-payload.ibci` 与 test_multimodal_* mock
-  类有此声明，契约须按 axiom 签名 `(self,value,spec=None)` 定，需核验不产生伪警告——**归 P5**。
-  另：str 已补齐 output_hint（D4，exp 分支 `eb8ecd30`）——PT-DECIDE-3 项②若涉 str 现有基础确认。
+- **状态**：done（项①-④ 全部定案：① `__from_prompt__` 单向契约[返回值必须是目标类型实例，
+  非实例=契约违约，删三级启发式兜底]；② 不扩展至内置类型[内置预校验由内建解析器单一权威
+  承担，`impl` 在内置类型上定义解析协议方法编译期 SEM_TYPE_MISMATCH 拒绝]；③ required
+  协议成员签名违约升编译错误；④ `__to_prompt__` 异常回退可观测发射
+  `KDIAG_PROTOCOL_TO_PROMPT_FALLBACK`；过程实证 git 承载）｜**域**：DECIDE｜**优先级**：P2
 
 ## 七、封存（SEALED）
 
@@ -242,15 +214,8 @@
 
 ### VISION-3 真实 LLM 压力试用扩展（T08 延续）
 
-- **状态**：done（2026-08-21 阶段 C 完成——六套件 T10-T15 + 全量回归 + 恶意边界 22 例 + 压力 PR1-4）
-- **动机**：T08 第一轮（41 例）完成后待扩展的压力维度——更长 prompt（>4k token）、
-  多轮长对话、批量并发上限、多模态真实媒体文件（media 封存除外）。
-- **成因**：试用主线；被协议化重构主线占用而顺延。
-- **完成记录（2026-08-21）**：六套件 T10-T15（llm 可调用类/stream/run_batch/overlay/协议族/
-  意图一等值/fs/Optional/值语义，mock + 真实 LLM 全过）+ 全量 LLM 回归（T01/T02/T06/T07/T08/T09）+
-  恶意边界 22 例（无内核缺陷）+ 压力维度（>4k token/多轮 retry/批量并发/多模块交叉）+
-  缺陷闭环（KERNEL_ISSUE-LLM-4 修复，基线 3185）+ 技术文档全方位复核（KNOWN_LIMITS §十二/
-  overlay §6.9/装配键）。详见 trials/INDEX.md。
+- **状态**：done（六套件 T10-T15 + 全量回归 + 恶意边界 22 例 + 压力 PR1-4；过程 git 承载）
+  ｜**域**：VISION
 
 ### VISION-4 类型理论加固（五大地基改造 · P7）
 
@@ -260,20 +225,23 @@
   泛型上，`docs/LANGUAGE_DESIGN_EVOLUTION.md` §3.7/Phase 4）；轻量约束收集推断扩展（非完整
   HM，HM 仍非目标）；fn[...] 变体规则形式化。调研与总路线见 git 历史
   （`_five_foundation_redesign.md` 已随 P1-P6 竣工删除，git 承载）§四 P7。
-- **开工输入（2026-09-08 round3 阶段 D 沉淀）**：meta 层/代码作值设计
-  （`tasks_docs/_meta_layer_design.md` §四）给出"类型层承诺需求清单"——meta.compile/
-  run_file/R-6 接通所需的 5 项类型层承诺（CompilationArtifact 作类型值 / RunResult 作
-  类型值 / BehaviorExpr 值类型 / fn[...] 高阶签名 / Verdict 判定结果类型）= VISION-4
-  开工输入（what 非 how）。ref 类型层项 A2 泛型约束 / A5 解构模式匹配 / A6 Enum-tagged
-  union / B2 惰性短路结构经 round3 阶段 E 裁定挂起 → 本项整合推进（同域）。
-- **范围重划（2026-09-08 用户定向再评估，`_meta_layer_design.md` §八）**：meta 层拆
-  MVP / 全形态——**MVP**（meta.compile fail-fast 校验面 + ihost.run_code 字符串形式 +
-  run_result 值类型）= 不依赖类型层，**✅ 主线收束（2026-09-08，M1/M2/M3 全完成：
-  commit 359b1eef/3fa51eec/M3；run_result 值类型 + 执行路径统一 + meta.compile 编译门 +
-  三门管线 howto）**；**全形态**（本清单 ①③④⑤ + ② run_result 类型层深度参与）=
-  本项 VISION-4 范畴，开工输入不变（MVP 后 §四清单 ② run_result 类型存在半被满足，
-  收窄为 ①③④⑤ + ② 类型层深度参与）。
-
+- **开工输入（类型层承诺需求清单，按依赖序）**：meta 层接通（代码作值）缺的是类型层
+  承诺——代码工件/行为表达式/判定结果作为**有类型的一等值**（机制面 `compile_string` /
+  `run_file` 已存在）。清单（what 非 how；类型理论设计 = 本项范畴）：
+  1. `compile(code: str) -> CompilationArtifact`——编译工件作类型值（可传参/可存变量/
+     可进 save_state；当前 artifact 是内核内部对象，未暴露为语言级类型值）；
+  2. `run_file(path, policy) -> RunResult`——执行结果作类型值（字段 `exit_status: int` /
+     `stdout: str` / `exception: Optional[ExceptionInfo]`；当前返回 dict——MVP 已落地
+     `run_result` 值类型[既有值类型注册模式]，本项收窄为类型层深度参与[内建/参与而非仅
+     内核注册]）；
+  3. 行为表达式值类型（R-6 归位）——`@~ ... ~` 作有类型的一等值（如 `BehaviorExpr`，
+     可传参/可作 LLM 可调用类的提案源；依赖本项类型类方向）；
+  4. `fn[...]` 高阶签名支持——meta 函数一等性（`meta.compile`/`run_file`/`judge` 可
+     引用/可组合；依赖 VISION-5 函数式地基）；
+  5. 判定结果类型——`judge(result, expectation) -> Verdict`（`pass/fail + 漂移度量`，
+     供调用方消费）。
+  ref 类型层项 A2 泛型约束 / A5 解构模式匹配 / A6 Enum-tagged union / B2 惰性短路结构经
+  round3 阶段 E 裁定挂起 → 本项整合推进（同域）。
 ### VISION-5 函数式地基补齐（五大地基改造 · P8）
 
 - **动机**：五大地基"完整改造"最终目标的一部分（用户 2026-08-18 定方向，决策 6 列为
@@ -296,21 +264,19 @@
   执行"模型下缓存失效/序列化保真/沙箱边界风险 > 收益）、内核自举（bind 为运行时用户侧机制，
   与内核构造期契约表达不匹配）、档 B 真 JIT / 隔离改造 / 反射能力（无当前可验证收益/消费方）。
   评估依据与决策见 `tasks_docs/WORKLOG.md` F5 决策记录。
-- **当前理解**：不当前实现、不展开详细设计；未来出现可验证收益或消费方时重启评估。
-- **重估（2026-09-08 round3 阶段 D）**：F5 档案项与 meta 层（代码作值）正交——meta 层
-  复用既有原语（`compile_string`/`ihost.run_file`），不依赖本项落地。档 B 隔离改造/反射
-  能力 = 长期主线；真 JIT 挂数据平面性能线；D-3.3 VM 字符串扫描快速路径维持长期登记
-  （与演化平面设计合流规划）。详见 `tasks_docs/_meta_layer_design.md` §五。
-- **进度（分阶段路线图 P1→P7，详见 `tasks_docs/NEXT_STEPS.md` + WORKLOG）**：
-  P1 执行期基准 ✅ / P2 每节点开销消除 ✅ / P4 真 JIT（数据平面 ~7×）✅ 并入
-  unsafe-vibe-dev / P5 持久 artifact 缓存（含信任域反序列化加固与复核根因修复）✅ 并入
-  unsafe-vibe-dev / **P6 内核自举（bind 表达内核契约）✅ 完成 + 里程碑收束（2026-09-09，已 ff
-  并入 unsafe-vibe-dev）**——Phase 0 实证裁定 + B1 共享合成 + B2 工具 4（math/json/time/
-  schema）契约源自举 + B4 文档收敛；net 实施期实证维持宿主侧（默认参数面 + per-engine 状态
-  超出 bind 表达力；bind 默认值语法 = 远期登记项，独立立项）/ P3 D-3.3 紧迫性下调可交错 /
-  **P7 档 B 隔离改造 + 反射 = 当前 P0**（高风险→隔离分支 100% 授权）。
+- **F5 档案项（2026-08-18 评估）归位现状**：档 A 缓存预编译 → P5 ✅（持久 artifact
+  缓存落地）；真 JIT → P4 ✅（数据平面 ~7×）；内核自举 → P6 ✅（bind 表达内核契约，
+  原"时序矛盾"裁定经实证精化——纯声明契约面无矛盾）；档 B 隔离改造/反射 → P7（当前
+  P0，高风险→隔离分支）；D-3.3 VM 字符串快速路径 → 长期登记（紧迫性下调，可交错；与
+  演化平面设计合流规划）。meta 层（代码作值）与本项各档案项正交（复用既有原语，无依赖）。
+- **进度**：P1-P6 ✅ 完成 + 里程碑收束并入 `unsafe-vibe-dev`（git 承载）；**P7 档 B 隔离
+  改造 + 反射 = 当前 P0**（高风险→独立隔离分支）。主线状态单点真理 = `tasks_docs/NEXT_STEPS.md`。
 
 ### VISION-7 真实使用整改与灰盒愿景整合（阶段 E）
+
+- **状态**：done（阶段 E + round3 全收束：批次建议各线终态——C1 embedding = PT-FEAT-16 done；
+  其余线完成/挂起/裁定不做（挂起项归 VISION-4 整合推进 / 长期登记区）；过程 git 承载）
+  ｜**域**：VISION
 
 - **动机**：用户裁定下一阶段主攻目标——本机真实 LLM 试用与端点迁移实证暴露的易用性/缺陷
   项（配置体系单源收敛、语言层环境变量通道、trial harness 可用性、provider 配置面、文档
@@ -318,8 +284,7 @@
   愿景基调："灰盒自然语言自动机全部在 ibci 内完成、ibci 不寄生 Python"。
 - **成因**：阶段 C 真实试用 + 端点迁移实证暴露（配置碎片化 / 脚本密钥通道缺失 / harness
   路径解析脆弱等）；外部使用反馈（e01-e17 / trial2 e18-e23）沉淀为需求单。
-- **当前理解**：汇总映射与批次建议见临时文档 `tasks_docs/_next_phase_targets.md`（条目
-  正式化后删除，git 承载）。批次建议：批 0 = 阶段 C 残留 LLM 项清场 + 配置单源收敛 +
+- **当前理解**：批次建议（git 承载历史）：批 0 = 阶段 C 残留 LLM 项清场 + 配置单源收敛 +
   harness 可用性；批 1 = ref P0 语言大项（C1 embedding / C2 结构化输出 / C3 模块解析 /
   C4 ibci 内测试 / B1 源码行号 / A3 容器尾逗号 / A1 用户协议 / B3 一等环境）；批 2/3 =
   P1/P2。**裁定（用户）**：C1 embedding 必须、解封独立立项（PT-FEAT-16，media 封存
