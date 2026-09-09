@@ -1905,6 +1905,25 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   P2 目标裁定，**P2 = 下一轮开工（值层分派快速路径，isinstance/box/inspect 三目标）**。
 ---
 
+- **VISION-6 P2·step1 数据平面快速路径 #1a（2026-09-08，free-explore，commit e2949d2b）**：
+  P1 profile 定位值层分派主导，首个快速路径攻 **AST 只读视图重复包装**（profile：
+  ast_view.get ~490k 次/程序）——消除逐次节点访问的 ReadOnlyNodePool 重包装。交付（§11
+  不变量内，不绕统一执行入口）：① interpreter.get_node_data 缓存只读视图（node_uid →
+  ReadOnlyNodePool，per-interpreter；同一节点反复访问[循环体]复用同一视图实例，消除逐次
+  外层包装；随解释器回收无泄漏）；② ReadOnlyNodePool._wrap 记忆化（id → 已包装视图，
+  per-instance；AST 节点不可变且生命周期内存活[id 稳定]，重复字段访问命中缓存，消除逐次
+  嵌套 dict/list 递归重包装）。只读语义不变（视图不可变）；62 处调用点无身份依赖（仅
+  is None）。**改前/改后（perf_bench，µs/iter，warmup+3 取中位）一致 ~6-9%**：arith
+  257.1→240.5 / branch 372.4→343.5 / recurse 5954.6→5429.9 / string 286.6→270.8 /
+  container 273.3→255.8 / class 688.7→624.7。全量 3909/1 零回归。
+  **P2 后续（值层分派更大头，更硬核心分派面，下一步评估）**：isinstance 分派[~2.2s，2.8M
+  次；热站点 = runtime_context 变量赋值类型校验[每赋值 ~7 次 isinstance + 句柄物化/spec
+  兼容检查，简单 int/str 赋值也全跑] + binop/compare handler + receive] / box 装箱[~2.5s，
+  每原生值转换] / inspect 反射[~1.1s，typing.Protocol isinstance 经 inspect.getattr_static]。
+  这些触及核心分派/类型安全逻辑，风险高于 ast_view 视图缓存（后者纯只读视图复用，零行为
+  变更面）——step2 起逐个评估（低风险先行）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
