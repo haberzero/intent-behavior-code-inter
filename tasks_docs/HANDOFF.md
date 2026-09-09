@@ -142,9 +142,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
      ——VISION-4/5 类型层是独立方向（user-gated，非内核工程化范畴）。P6 的"台阶 ④ 之后
      方向"须先**实证裁定**：内核契约 bind 化的具体范围（哪些既有 builtin 机制可经 bind
      表达 + 哪些须保持宿主侧）+ 设计确认（对照 9 不变量）→ 分阶段实施。
-     **进度**：Phase 0 实证调查进行中（2026-09-09 交接 session）——bind 机制 / 内核
-     契约面 / 引擎启动时序 / 工具 5 实现形态（类实例工厂 + net 有状态面）已实证；设计文档
-     `tasks_docs/_p6_selfbootstrap_design.md` 待落。
+     **进度**：Phase 0 实证裁定完成（2026-09-09 交接 session）——设计文档
+     `tasks_docs/_p6_selfbootstrap_design.md` 已落：bind 化范围 = 工具 4（math/json/
+     time/schema）契约源 IBCI 化 + 实现重打包[模块级函数 + per-engine 命名空间]；
+     net 契约源 IBCI 化[实现保留 per-engine 实例，本质差异登记]；kernel 5 + fs 维持
+     宿主侧[lifecycle/不变量 #4 通道/引擎内部服务——bind 机制无对应表达面]。bootstrap
+     阶段 = parse + 共享合成函数 + 既有注册/绑定通道[零新运行期机制]；批次 B1[共享合成
+     提取]→B2[契约源 4 件]→B3[net]→B4[文档收敛]。**下一 agent 起点 = B1 开工**。
   2. **后续 = P7 隔离改造 + 反射能力（档 B）**——高风险→隔离分支（100% 授权独立分支
      实验）。P7 与 P6 的交点 = 档 B 隔离改造是 VISION-6 唯一与 VISION-4 类型层有交点
      的方向（MVP 落地后联合重估）。

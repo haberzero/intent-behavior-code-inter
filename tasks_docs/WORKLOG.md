@@ -2130,6 +2130,35 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   加载 OK / 命中哨兵通过（管线真实跳过）/ 篡改仍拒绝（posix.system 等外部模块 → 无执行）/
   前缀逃逸 corex 不匹配。全量 3938/1 零回归（新增 1 例哨兵测试）。unsafe-vibe-dev ff 合并
   （零风险直接合并细则：全量零回归 + 复核放行）。
+- **VISION-6 P6 内核自举 Phase 0 实证裁定：bind 化范围 = 工具 4 完整通道 + net 契约源（2026-09-09，free-explore，设计文档 tasks_docs/_p6_selfbootstrap_design.md）**：
+  实证基础（逐项代码/测试证据，详见设计文档 §一）：① 内核契约面 = 11 内置模块
+  （builtin_modules.py 构造期字面量 + ibci_modules 工厂实现）——工具 5
+  （math/json/time/net/schema）无 setup 钩子、无 exported_types = 纯声明面；net 独有
+  per-engine 可变状态；② bind 机制表达力边界（01_native_host_binding）= 成员契约
+  声明 + importlib 运行期绑定，无构造期 lifecycle/内核值类型/引擎内部服务表达面；
+  ③ 引擎时序：spec 可见性 = 共享 metadata registry（构造期注册先于一切编译）+
+  STAGE 4→5 loader 循环对"registry 有 spec + HostInterface 有实现"的模块自动严格
+  绑定（_validate_and_bind 完全泛型 getattr + 签名校验，实现对象须 per-engine
+  身份——registry 隔离守卫）；④ built-in 通道与 bind 通道机制同构（同 spec 消费/
+  同绑定/同运行期 InterOp 路径）；⑤ F5（2026-08-18）时序矛盾裁定**精化非推翻**：
+  对 kernel 5+fs 成立（lifecycle/不变量 #4 LLM 通道/spawn/沙箱/值类型导出），对工具
+  5 纯声明面不成立（bootstrap 期处理声明源无时序矛盾）。
+  **裁定**：bind 化 = 工具 4（math/json/time/schema）契约源 IBCI bind 声明化
+  （单一权威源迁移，字面量真删除）+ 实现重打包（模块级函数 + per-engine 身份命名
+  空间，消 sys.modules 单例的引擎隔离违规）；net 契约源 bind 化但实现绑定保留
+  per-engine 实例（本质差异登记：模块级函数无法表达 per-engine 状态）；kernel 5 +
+  fs 维持宿主侧字面量（bind 机制无对应表达面，强行为之 = tricky 违反工作模式
+  定论 #3）。bootstrap 阶段 = 直接 parse + 共享合成函数（自 _inject_host_import/
+  _inject_host_class 提取，用户路径与 bootstrap 路径机制同构）+ 既有
+  register_module 通道 + 既有 STAGE 4→5 严格绑定——**零新运行期机制**；拒绝全 5
+  阶段管线编译契约源（死 artifact + 符号表副作用 harvest = 穿透耦合）。9 不变量
+  对照通过（#5 依赖方向实施期核查）；工作模式定论九条对照通过。
+  **批次计划**：B1 共享合成提取（低风险纯重构，合成等价判别）→ B2 契约源 4 件 +
+  bootstrap + 重打包（中风险；用户面既有测试全量锁定 + provenance 等价判别 +
+  契约漂移 fail-fast 判别；破坏面超预期 → 独立隔离分支）→ B3 net（B2 模式单模块
+  复制 + 多引擎状态隔离判别）→ B4 文档收敛（01_native_host_binding 增内核契约
+  自举节）。self-grill 8 问全部自主消解（冲突处理留在用户路径/契约源不泄漏用户
+  编译域/子引擎逐引擎重 parse 成本可忽略/P5 缓存无交互/无待用户决断项）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
