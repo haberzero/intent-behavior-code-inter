@@ -1965,6 +1965,32 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   期可并行）接续。
 ---
 
+- **VISION-6 P4 真 JIT·设计确认 + 最小可行 codegen 实验（2026-09-08，free-explore，设计
+  commit 7e091cfd）**：P2 收束后数据平面剩余主导 = CPS 生成器协议核心/每节点分派 = 真 JIT/
+  P4 范畴（用户点名优先·高风险→隔离分支）。本轮完成 P4 设计确认（`tasks_docs/_p4_jit_design.
+  md`，route ① Python codegen，codegen 体作为 CPS 循环内快速路径[保统一入口+Signal 数据化+
+  receive 分派，§11 九项不变量合规表]）+ 最小可行 codegen 实验（隔离分支 p4-real-jit，已删）。
+  **设计要点**：插入点 = `vm_handle_IbWhile` line ~103（循环体 `yield from _vm_execute_stmt_
+  sequence`）/ `_vm_call_function` line ~445（函数体）；codegen 体经 `rt.get/set_variable_
+  by_uid`（O(1) 作用域）+ `receive`（协议分派，binop 经 OP_MAPPING）+ `return Signal(...)`
+  （控制流数据化）直接执行直线体，绕开每节点 CPS 生成器协议；安全子集 v1 = 直线赋值序列
+  （排除嵌套控制流/LLM/IO/异常/函数调用/复合赋值/多目标）。验收判据 = arith/branch ≥2× P2
+  基线 + 全量 pytest 零回归 + 语义等价判别测试。
+  **最小可行 codegen 实验发现（自纠错，已回退）**：codegen 体（生成 `_jit_body(rt)` 函数，
+  经 exec 一次创建）在 `vm_handle_IbWhile` 内被调用时，`rt.get_variable_by_uid('scope___
+  string_exec__:i')` 返回 None（循环变量 `i` 读不出）→ `int.__add__` 报 `unsupported operand
+  type(s) for +: 'int' and 'NoneType'`。符号 UID 正确（target/value 节点 `node_to_symbol` 均
+  解析到 `scope___string_exec__:i`），但 codegen 体上下文的作用域变量读取与 CPS 路径（`vm_
+  handle_IbName`）不等价——**P4 codegen 语义等价性 = 核心难点**（codegen 体须复刻 CPS 路径的
+  变量读取/作用域/装箱/binop 边界/Signal 语义，非平凡）。
+  **P4 定性**：真 JIT = MAJOR 高风险工程（核心执行模型改动，语义等价性为最高风险面）。最小可
+  行 codegen（while 直线体）已证实现状下不 trivial——需深入作用域/变量读取机制（codegen 体
+  上下文的 `rt._current_scope` 与 CPS 路径的等价性）方能正确复刻。设计已确认（route ① + 插入
+  点 + 不变量合规 + 验收判据），实现留后续（多轮·隔离分支实验）。**下一步候选**：P4 实现续推
+  （codegen 语义等价性攻坚，隔离分支）/ P5 持久 artifact 缓存（编译期·可并行·较低风险）/
+  P3 D-3.3（P1 实证已 O(n)，紧迫性下调）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

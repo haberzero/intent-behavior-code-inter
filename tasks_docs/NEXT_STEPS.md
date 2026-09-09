@@ -58,6 +58,16 @@
 > 分支）。P4 真 JIT[用户点名优先·隔离分支] / P5 持久 artifact 缓存[编译期·可并行·较低风险]
 > 接续；P3 D-3.3[P1 实证已 O(n)，紧迫性下调]。
 >
+> **P4 进度**：设计确认 ✅（`_p4_jit_design.md`，commit 7e091cfd——route ① Python codegen，
+> codegen 体作为 CPS 循环内快速路径[保统一入口+Signal 数据化+receive 分派]，插入点 =
+> vm_handle_IbWhile ~103/_vm_call_function ~445，§11 九项不变量合规表 + 验收判据[arith/
+> branch ≥2× P2 基线]）。最小可行 codegen 实验（隔离分支，已删/回退）发现：**P4 codegen
+> 语义等价性 = 核心难点**（codegen 体上下文 `rt.get_variable_by_uid` 与 CPS 路径变量读取不等
+> 价——循环变量读不出 None；符号 UID 正确但作用域读取非平凡）。真 JIT = MAJOR 高风险工程
+> （核心执行模型改动，语义等价性最高风险）。实现留后续（多轮·隔离分支·codegen 语义等价性攻
+> 坚）。**下一步候选**：P4 实现续推[隔离分支] / P5 持久 artifact 缓存[编译期·可并行·较低风
+> 险] / P3 D-3.3[紧迫性下调]。
+>
 > **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
 > 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离
 > 分支永不触碰 main）：**P1 执行期性能基准 + 热路径 profile（⭐低风险先行，纯观测，解锁
