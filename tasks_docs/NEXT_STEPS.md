@@ -36,29 +36,20 @@
 > 收束）；`main` 永不触碰；`unsafe-vibe-dev` 已推送 origin（b89fdc39..1957132c，154 提交，
 > 用户授权）；`free-explore` 本地工作分支不推送。
 
-> **🔴 当前 P0 = P7 档 B 进程级隔离 + 反射能力（危险工作，隔离分支）**：
-> - **范围**：进程级引擎隔离（消除同进程多引擎共享 `sys.modules`/模块级状态的边界——
->   `docs/KNOWN_LIMITS.md` 已登记的"IBC-Inter 无强制力"面）+ 反射能力（消费方重估）。
-> - **分支政策（硬规则）**：独立隔离分支（建议名 `p7-process-isolation`，自 `free-explore`
->   拉出）；允许任意程度破坏性实验；**`main`/`unsafe-vibe-dev`/`free-explore` 永不触碰**；
->   确认零风险（全量 pytest 零回归 + 复核放行）后 ff 并入 `unsafe-vibe-dev`，merge 无误删分支。
-> - **Phase 0 只读实证先行（代码零改动）**：① 现状隔离边界面实证（`sys.modules` 共享面 /
->   ihost spawn 子环境机制 / LLM 通道[不变量 #4] / 文件沙箱与 isys 外访面 / 引擎间通信面
->   现状）→ ② 进程隔离实现形态对比（`multiprocessing`/`subprocess`+协议/…）对照 9 项 VM
->   不变量（`docs/architecture/04_vm_interpreter.md` §11，尤其 #1 统一执行入口）→ ③ 反射
->   能力消费方重估（无消费方 = 裁定延期，实证后登记）→ ④ VISION-4 类型层交点联合重估
->   （档 B 是唯一交点方向）→ 设计文档 `tasks_docs/_p7_process_isolation_design.md`
->   （**待产出**，Phase 0 交付物；设计阶段文档规则：先 tasks_docs，落地后收敛 docs/）。
-> - **硬约束**：9 项 VM 设计不变量 + 工作模式定论九条（上方 ⛔ 节）+ 每批全量零回归门 +
->   禁 push + 详尽落账（`tasks_docs/WORKLOG.md`）。
-> - **性能锚**：`scripts/perf_bench.py` = 数据平面改前/改后官方裁判（5 轮取中位，机器/
->   负载相关，价值 = 相对裁判）；A/B 方法论 = `git worktree` 双树对照（WORKLOG 合并安全
->   评估条目有全记录）。
+> **🔴 当前 P0 = VISION-8 Round4 P0（MEM 记忆基底 + REC 指令条件化召回）**：
+> - **范围**：一等 `memory` 值类型（分层/生命周期/容量/完整性+内容寻址）+ 指令条件化
+>   召回（`recall` 操作 / query-doc 不对称内核保证 / MRL 维度轴 / 经验证召回 / 成本模型）。
+> - **需求权威源**：`/home/dsh/proj/ibci-trial/docs/ibci_round4_vision_requirements.md`
+>   （试用方 2026-09-09 需求单）；`PENDING_TASKS.md` VISION-8 条目（分层/建造顺序/依赖图）。
+> - **设计纪律**：系统级架构设计先行（design-philosophy 全面审视 + 既有 knowledge/
+>   vector/LLM 先例作机制同构基准）。
+> - **硬约束**：9 项 VM 设计不变量 + 工作模式定论九条 + 每批全量零回归门 + 禁 push +
+>   详尽落账（`tasks_docs/WORKLOG.md`）。
 >
-> **里程碑记录（过程/细节 = git 历史 + WORKLOG，不在此登记）**：round3 试用需求整合
-> 队列 ✅ / meta 层 MVP（代码作值，M1/M2/M3）✅ / VISION-6 P1 基准 / P2 每节点开销消除 /
-> P4 真 JIT（数据平面 ~7×，隔离分支 p4-real-jit）/ P5 持久 artifact 缓存（含复核根因
-> 修复）/ P6 内核自举（工具 4 契约源自举）——**全部 ✅ 完成并 ff 收束 unsafe-vibe-dev**。
+> **里程碑记录（过程/细节 = git 历史 + WORKLOG，不在此登记）**：round3 ✅ / meta 层
+> MVP ✅ / VISION-6 P1-P6 ✅ / **P7 进程级隔离 ✅**（subprocess+JSON 协议·LLM 继承
+> 跨进程·变量导出·资源限制·判别 9 例·3973/1 零回归）——全部完成并 ff 收束
+> `unsafe-vibe-dev`。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
