@@ -2048,6 +2048,19 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   合并 unsafe-vibe-dev（全本地未 push）。
 ---
 
+- **VISION-6 P4 真 JIT·判别测试套件 D1-D7 落地（2026-09-09，隔离分支 p4-real-jit，commit
+  b4c4137c）**：codegen 语义等价性验证（vs CPS 路径）——`tests/runtime/test_p4_jit_discriminants.py`
+  14 例：D1 值 oracle（eligible 程序固定最终值）/ D2 判据边界（每个 ineligible 特征[调用/嵌套
+  循环/增强赋值/llmexcept]断言回退 CPS + oracle 正确）/ D3 错误等价（codegen 体内除零报
+  RUN_DIVISION_BY_ZERO + 位置 = 出错语句行[B3 标注，line 7 非 while 节点 line 4]）/ D4 污点
+  （模块含 behavior expr[LLM 调用]⇒ 循环 ineligible）/ D5 Signal（break/continue 在 while 体
+  ⇒ 控制流信号 ⇒ 循环 ineligible 走 CPS）/ D6 多引擎缓存（两独立引擎同源 ⇒ 各自独立缓存）/
+  D7 协议分派（codegen 体经 receive 分派，非硬编码 Python 运算符）。全量 **3927/1 零回归**。
+  命名规范适配：类名避免里程碑代号（TestD1..TestD7 → TestJit*）。
+  **P4 真 JIT 进度**：v1.5 cond-codegen（~5-7× 数据平面收益）+ 判别套件 D1-D7（语义等价性
+  证据）落地。下一步：v1.1 break/continue/return（控制流数据化扩展）+ 合并 unsafe-vibe-dev。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
