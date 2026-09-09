@@ -76,12 +76,16 @@ def _jit_cache_after_run(code: str):
     orig_get_loop = vm_executor.VMExecutor._get_jit_loop
 
     def _cap_body(self, node_uid, body):
+        result = orig_get_body(self, node_uid, body)
+        # 捕获 _get_jit_body 之后的缓存状态（populate 后）
         captured["body_cache"] = dict(self._jit_body_cache)
-        return orig_get_body(self, node_uid, body)
+        return result
 
     def _cap_loop(self, node_uid, test_uid, body):
+        result = orig_get_loop(self, node_uid, test_uid, body)
+        # 捕获 _get_jit_loop 之后的缓存状态（populate 后）
         captured["loop_cache"] = dict(self._jit_loop_cache)
-        return orig_get_loop(self, node_uid, test_uid, body)
+        return result
 
     vm_executor.VMExecutor._get_jit_body = _cap_body
     vm_executor.VMExecutor._get_jit_loop = _cap_loop
@@ -195,11 +199,11 @@ class TestJitTaint:
         )
         lines, captured = _jit_cache_after_run(code)
         assert lines == ["3"]
-        # 模块含 behavior expr ⇒ 循环 ineligible（codegen 缓存为空）
+        # 模块含 behavior expr ⇒ 循环 ineligible（codegen 体 None）
         loop_cache = captured.get("loop_cache", {})
         body_cache = captured.get("body_cache", {})
-        assert not loop_cache, f"LLM-tainted module should not codegen: {loop_cache}"
-        assert not body_cache, f"LLM-tainted module should not codegen: {body_cache}"
+        assert all(v is None for v in loop_cache.values()), f"LLM-tainted: {loop_cache}"
+        assert all(v is None for v in body_cache.values()), f"LLM-tainted: {body_cache}"
 
 
 # ---------------------------------------------------------------------------
@@ -207,30 +211,47 @@ class TestJitTaint:
 # ---------------------------------------------------------------------------
 
 class TestJitSignal:
-    def test_break_in_while_body_ineligible(self):
-        """break 在 while 体内 ⇒ 控制流信号 ⇒ 循环 ineligible（codegen 体不生成，走 CPS）。
+    def test_break_in_while_body_codegen(self):
+        """v1.1：break 在 while 体内 ⇒ cond-codegen 体生成 break（作用于 while True）。
 
-        v1.1（break/continue/return）未实现前，含控制流信号的循环体回退 CPS（codegen
-        体 None）。break 是控制流信号（非白名单 stmt）⇒ 循环 ineligible。
+        v1.1 控制流数据化扩展：IbBreak 在 v1.5 cond-codegen（while True 循环体）中合法
+        （Python break 作用于 while True 循环）。值 oracle + codegen 缓存非空。
         """
         code = "int i = 0\nwhile i < 10:\n    i = i + 1\n    if i == 5:\n        break\nprint((str)i)\n"
         lines, captured = _jit_cache_after_run(code)
-        assert lines == ["5"]
-        # 含 break（控制流信号）⇒ 循环 ineligible（codegen 缓存为空）
+        assert lines == ["5"]  # break at i=5
         loop_cache = captured.get("loop_cache", {})
-        body_cache = captured.get("body_cache", {})
-        assert not loop_cache, f"break body should be ineligible: {loop_cache}"
-        assert not body_cache, f"break body should be ineligible: {body_cache}"
+        assert loop_cache, f"v1.1 break body should be eligible (cond-codegen): {loop_cache}"
 
-    def test_continue_in_while_body_ineligible(self):
-        """continue 在 while 体内 ⇒ 控制流信号 ⇒ 循环 ineligible（走 CPS）。"""
+    def test_continue_in_while_body_codegen(self):
+        """v1.1：continue 在 while 体内 ⇒ cond-codegen 体生成 continue。"""
         code = "int i = 0\nint s = 0\nwhile i < 10:\n    i = i + 1\n    if i % 2 == 0:\n        continue\n    s = s + 1\nprint((str)s)\n"
         lines, captured = _jit_cache_after_run(code)
-        assert lines == ["5"]
+        assert lines == ["5"]  # odd i: 1,3,5,7,9 → s=5
         loop_cache = captured.get("loop_cache", {})
+        assert loop_cache, f"v1.1 continue body should be eligible (cond-codegen): {loop_cache}"
+
+    def test_break_in_v10_body_ineligible(self):
+        """v1.1 边界：break 在 v1.0 体 codegen（per-iteration）中非法——v1.0 体无 while True
+        循环，break 会作用于函数体（非循环）⇒ v1.0 体 ineligible。
+
+        条件含调用（非 ExprSet）⇒ v1.5 cond-codegen 回退；体含 break（v1.0 不允许）
+        ⇒ v1.0 体 codegen 也回退 ⇒ CPS。
+        """
+        code = (
+            "func f() -> int:\n    return 1\n"
+            "int i = 0\n"
+            "while f() < 10:\n"  # 条件含调用（非 ExprSet）⇒ v1.5 回退
+            "    i = i + 1\n"
+            "    if i == 5:\n"
+            "        break\n"
+            "print((str)i)\n"
+        )
+        lines, captured = _jit_cache_after_run(code)
+        assert lines == ["5"]  # break at i=5（CPS 路径）
         body_cache = captured.get("body_cache", {})
-        assert not loop_cache, f"continue body should be ineligible: {loop_cache}"
-        assert not body_cache, f"continue body should be ineligible: {body_cache}"
+        assert all(v is None for v in body_cache.values()), f"v1.0 body with break: {body_cache}"
+
 
 
 # ---------------------------------------------------------------------------

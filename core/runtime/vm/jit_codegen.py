@@ -104,19 +104,27 @@ def _gen_expr(expr_uid, ec, box, consts, counter):
 
 
 def _module_has_behavior_expr(ec) -> bool:
-    """B4 声呐：模块节点池含 IbBehaviorExpr（LLM 污点）→ codegen 不安全。"""
-    nodes = getattr(ec, "_nodes", None)
-    if not nodes:
+    """B4 声呐：模块节点池含 IbBehaviorExpr（LLM 污点）→ codegen 不安全。
+
+    节点池经 ec.node_pool（dict）访问——ec._nodes 为历史属性（未 populate）。
+    """
+    pool = getattr(ec, "node_pool", None)
+    if not pool:
         return False
-    for uid in list(nodes.keys()):
+    for uid in list(pool.keys()):
         nd = ec.get_node_data(uid)
         if nd and nd.get("_type") == "IbBehaviorExpr":
             return True
     return False
 
 
-def _stmt_eligible(stmt_uid, ec, registry, _depth=0):
-    """单语句符合 codegen 安全子集判据（B4/B5）。"""
+def _stmt_eligible(stmt_uid, ec, registry, _depth=0, allow_break_continue=False):
+    """单语句符合 codegen 安全子集判据（B4/B5 + v1.1 控制流）。
+
+    allow_break_continue（v1.1）：IbBreak/IbContinue 仅在 v1.5 cond-codegen（while True
+    循环体）中合法——Python break/continue 作用于 while True 循环；v1.0 体 codegen
+    （per-iteration 调用）中 break/continue 会作用于函数体（非循环）→ 非法。
+    """
     if _depth > 8:
         return False
     node_data = ec.get_node_data(stmt_uid) if stmt_uid else None
@@ -125,6 +133,8 @@ def _stmt_eligible(stmt_uid, ec, registry, _depth=0):
     if node_data.get("llmexcept_handler"):
         return False
     node_type = node_data.get("_type")
+    if node_type in ("IbBreak", "IbContinue"):
+        return allow_break_continue
     if node_type == "IbAssign":
         targets = node_data.get("targets") or []
         if len(targets) != 1:
@@ -138,7 +148,7 @@ def _stmt_eligible(stmt_uid, ec, registry, _depth=0):
             return False
         for sub in (node_data.get("body") or [], node_data.get("orelse") or []):
             for suid in sub:
-                if not _stmt_eligible(suid, ec, registry, _depth + 1):
+                if not _stmt_eligible(suid, ec, registry, _depth + 1, allow_break_continue):
                     return False
         return True
     if node_type == "IbPass":
@@ -146,11 +156,13 @@ def _stmt_eligible(stmt_uid, ec, registry, _depth=0):
     return False
 
 
-def _gen_body_source(stmt_uids, ec, box):
+def _gen_body_source(stmt_uids, ec, box, allow_break_continue=False):
     """生成直线语句序列的 Python 源码行 + 常量表；不可 codegen 返回 None。
 
     返回 ``(src_lines, consts)``；调用方（generate_jit_body / generate_jit_loop）据此
     编译函数。``src_lines`` 缩进 4 格（函数体一级），``loc[0]`` 逐语句设值（B3）。
+    allow_break_continue（v1.1）：IbBreak/IbContinue 仅在 v1.5 cond-codegen（while True
+    循环体）中生成 break/continue；v1.0 体 codegen 中非法（raise _Ineligible）。
     """
     src_lines = []
     consts = {}
@@ -188,6 +200,12 @@ def _gen_body_source(stmt_uids, ec, box):
                     src_lines.append(f"{indent}pass")
             elif node_type == "IbPass":
                 src_lines.append(f"{indent}pass")
+            elif node_type in ("IbBreak", "IbContinue"):
+                if not allow_break_continue:
+                    raise _Ineligible()
+                # IbBreak → Python break; IbContinue → Python continue（作用于 while True）
+                py_kw = "break" if node_type == "IbBreak" else "continue"
+                src_lines.append(f"{indent}{py_kw}")
             else:
                 raise _Ineligible()
 
@@ -235,8 +253,10 @@ def generate_jit_loop(stmt_uids, test_uid, ec, registry, box):
         return None
     if _module_has_behavior_expr(ec):
         return None
+    # v1.1：cond-codegen 体含 while True 循环，IbBreak/IbContinue 合法（Python
+    # break/continue 作用于 while True 循环）
     for suid in stmt_uids:
-        if not _stmt_eligible(suid, ec, registry):
+        if not _stmt_eligible(suid, ec, registry, allow_break_continue=True):
             return None
     # 条件须 ∈ ExprSet（无 llmexcept handler——保护语句重试协议不可绕过）
     test_data = ec.get_node_data(test_uid) if test_uid else None
@@ -245,9 +265,9 @@ def generate_jit_loop(stmt_uids, test_uid, ec, registry, box):
     cond_expr = _gen_expr(test_uid, ec, box, {}, [0])
     if cond_expr is None:
         return None
-    # 重新生成（条件常量与体常量统一）
+    # 重新生成（条件常量与体常量统一；v1.1 允许 break/continue）
     try:
-        src_lines, consts = _gen_body_source(stmt_uids, ec, box)
+        src_lines, consts = _gen_body_source(stmt_uids, ec, box, allow_break_continue=True)
         cond_expr = _gen_expr(test_uid, ec, box, consts, [len(consts)])
         if cond_expr is None:
             return None
