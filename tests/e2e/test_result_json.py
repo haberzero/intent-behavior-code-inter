@@ -2,7 +2,7 @@
 tests/e2e/test_result_json.py
 
 CLI result trailer（--result-json）黑箱契约（round3 需求 R-4；
-设计：tasks_docs/_run_observability_design.md §六）：
+--result-json trailer 结果捕获 e2e 面）：
 
 - stdout 末行 = 单行 JSON（v1 契约：exit_status / exception{code,message,
   source} / journal / budget / replay）；数据面（print 输出）= 末行之前，

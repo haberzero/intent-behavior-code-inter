@@ -135,6 +135,34 @@ chan c = ai.stream_channel(s)        # stream_channel(target: LLMCallable) -> ch
 > `__llm_call__` 的用户 llm 可调用类，见 `docs/syntax/08_llm_callable.md`），经统一装配入口
 > 装配请求后流式执行；不接受字符串形态（`stream_call(sys_prompt, user_prompt)`）的调用。
 
+**Embedding 服务面**（语义内容缝：词嵌入一等能力；OpenAI 兼容 embeddings 服务接入 +
+MOCK:VEC 离线面）：
+
+```ibci
+import ai
+
+# 模型配置（三选一入口）
+ai.set_embedding_config(url, key, model)            # 直接配置
+ai.register_embedding_model(name, url, key, model)  # 注册命名模型（api_config.json
+                                                    #   embedding 条目 kind="embedding" 按名路由）
+ai.set_embedding_model(name)                        # 激活命名模型
+ai.set_embedding_mock(enable, dim, seed)            # MOCK:VEC 确定性向量（零网络零 key）
+
+# 嵌入（动态重载）
+vector v = ai.embed("hello")               # str → vector（单文本）
+list[vector] vs = ai.embed(["a", "b"])     # list[str] → list[vector]（批量）
+# 可选具名参数：ai.embed("t", model="m", dimensions=512)
+
+# 检索最小闭包（线性 top-k，按 cosine 降序）
+list hits = ai.retrieve(q, vs, k)          # q: vector, vs: list[vector], k: int → list[vector]
+# k 越界/非法 = fail-fast（EMB_INVALID_INPUT）
+```
+
+- `vector` 内置值类型（方法面/值语义见 `docs/syntax/01_types.md` §1.5）。
+- 内省面：`ai.get_embedding_call_info()`（最近调用记录）/ `ai.probe_embedding()`（探活）。
+- 诊断：配置缺失 `EMB_CONFIG_MISSING` / 非法输入 `EMB_INVALID_INPUT`（`EMB_` 域，
+  见 `docs/syntax/15_diagnostics.md`）。
+
 ### 11.4 isys 模块
 
 运行时路径查询：入口文件与项目根目录的定位。
@@ -417,7 +445,7 @@ func test() -> auto:
 
 `meta` 暴露"代码作值"的**编译门**原语——代码字符串进程内**静态校验**（**不执行**），
 与 `ihost.run_file`/`run_code`（隔离门）+ 调用方判定（判定门）构成安全执行代码作值的
-三门管线（设计：`tasks_docs/_meta_layer_design.md` §二/§三）。
+三门管线（操作指南：`docs/howto/run_code_safely.md`）。
 
 ```ibci
 import meta
@@ -438,7 +466,7 @@ except Exception as e:
   （compile-only + 失败即断）。
 - **无 LLM 依赖**：compile-only 不调用 LLM（mock 态与非 mock 态行为一致）。
 - **三门管线用法**：`meta.compile`（编译门）→ `ihost.run_code`（隔离门 + 结果捕获
-  `run_result`）→ 调用方机械判定（判定门；设计见 `tasks_docs/_meta_layer_design.md` §三）。
+  `run_result`）→ 调用方机械判定（判定门；操作指南见 `docs/howto/run_code_safely.md`）。
 
 ---
 

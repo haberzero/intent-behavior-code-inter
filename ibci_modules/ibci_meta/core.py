@@ -4,7 +4,7 @@ ibci_modules/ibci_meta/core.py
 IBCI Meta 核心级元编程插件实现。
 
 meta 是 IBCI 核心级插件（Core-Level Plugin）：暴露"代码作值"的**编译门**原语
-（安全执行架构的编译门——`_meta_layer_design.md` §二/§三）：
+（安全执行架构的编译门：
 
 - ``compile(code)``：代码字符串进程内**编译作值**（compile-only 静态校验，**不执行**）——
   语法/语义错误 fail-fast 抛 ``CompilerError``（diagnostics 带 ibci 源定位：合成 entry

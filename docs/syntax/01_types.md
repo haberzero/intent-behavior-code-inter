@@ -111,6 +111,31 @@ str s = (str)t          # "25.0°C"
 ```
 
 **编译期检查**：对于声明了转换规则的类型，编译器会在转换明显不合法时报 `SEM_CAST_NO_CONVERTER` 错误（如 `(int)file_handle`）。未声明转换规则的类型不做编译期校验，由运行时裁定。
+### 1.5 vector（内置值类型）
+
+词嵌入向量：固定维度、创建后不可变的**纯值类型**（值语义——逐元素精确相等/不等，
+可作 dict key / set 成员）：
+
+- **产生面**：经 `ai.embed` embedding 服务产生（见 `docs/syntax/11_modules.md` §11.3）；
+  无字面量语法、不经 LLM 输出解析。
+- **方法面**（修改操作走方法、返回新 vector；无算术运算符面）：
+
+  | 方法 | 签名 | 说明 |
+  |------|------|------|
+  | `dim` | `dim() -> int` | 维度 |
+  | `dot` | `dot(other: vector) -> float` | 点积 |
+  | `norm` | `norm() -> float` | 模长 |
+  | `cosine` | `cosine(other: vector) -> float` | 余弦相似度（尺度不变） |
+  | `scale` | `scale(k: float) -> vector` | 标量缩放 |
+  | `add` | `add(other: vector) -> vector` | 逐元素加 |
+  | `sub` | `sub(other: vector) -> vector` | 逐元素减 |
+  | `cast_to` | `cast_to(target) -> auto` | 类型转换 |
+
+- **元素访问**：只读下标 `v[0] -> float`（越界 fail-fast）。
+- **相等与相似**：`==`/`!=` = 逐元素精确相等（维度不同 = 不等）；相似度判定经
+  `cosine` 显式表达，无隐式容差、无隐式归一化。
+- **序列化**：snapshot / save_state / deep_clone 全链路支持。
+
 ---
 
 ## 深入指引

@@ -2,7 +2,7 @@
 tests/e2e/test_replay.py
 
 CLI 确定性重放黑箱契约（round3 需求 R-1 子系统，批 2；
-设计：tasks_docs/_run_observability_design.md §五）：
+确定性重放 e2e 面）：
 
 - 记录 run（mock）→ 同代码 --replay = 同输出（确定性轨迹）；
 - 真实 provider 不加载（临时项目无 api_config 亦成功——replay 自足）;

@@ -2,7 +2,7 @@
 tests/runtime/test_ihost_llm_inheritance.py
 
 ihost 子环境 LLM 配置继承（E1）白箱契约（设计：
-tasks_docs/_ihost_subenv_design.md §二；E2E 面见 tests/e2e/）：
+E1 子环境 LLM 配置继承（状态面）；E2E 面见 tests/e2e/）：
 
 - 快照 = spawn 时点活状态深拷贝（父后续变异不影响快照）；
 - 快照含命名模型注册表（@NAME~ 路由面补漏）；

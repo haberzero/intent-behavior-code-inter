@@ -1,7 +1,7 @@
 """
 core.runtime.replay — LLM 确定性重放（round3 需求 R-1 子系统，批 2）。
 
-设计：tasks_docs/_run_observability_design.md §五。
+确定性重放（--replay：能力槽 SYSTEM 优先级替换 provider）。
 
 同一入口代码 + 同一 journal = 同一执行轨迹：LLM 输出全部来自记录
 （replay provider 经能力槽替换真实 provider，真实 provider 不加载——

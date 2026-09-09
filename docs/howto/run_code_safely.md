@@ -166,7 +166,6 @@ reject-compile-bad: [ERROR][PAR_UNEXPECTED_TOKEN] at <root>/__string_exec__.ibci
 
 ## 深入指引
 
-- 代码作值设计（安全执行架构 + 安全模型选项 A + 三门管线）：`tasks_docs/_meta_layer_design.md` §二/§三
 - ihost 模块完整语法（run_file/run_code/run_result）：`docs/syntax/11_modules.md` §11.6
 - meta 模块（compile 编译门）：`docs/syntax/11_modules.md` §11.11
 - 隔离的工程示例：`examples/03_advanced_features/isolation_demo/`

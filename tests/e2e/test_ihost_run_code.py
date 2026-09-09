@@ -4,7 +4,7 @@ tests/e2e/test_ihost_run_code.py
 ihost.run_code（字符串源进程内子 run + 结果捕获）E2E 契约——与 run_file
 **机制同构**（同一 spawn 核心字符串源：子 project_root = 父 project_root，合成
 entry ``__string_exec__`` 锚定；同一 E1 LLM 继承 / 沙箱 / 防卡死 / 输出捕获 /
-错误作值纪律）。判别面（`_meta_layer_design.md` §8.4 M1）：
+错误作值纪律）。判别面（批次 M1）：
 
 - 正常路径：输出捕获（r.stdout）+ exit_status=ok；
 - 运行期异常路径：错误作值（exit_status=error + 结构化 exception{code,source}，

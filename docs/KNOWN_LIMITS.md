@@ -731,7 +731,7 @@ project_root，越出 = `RUN_PERMISSION_ERROR` 拒绝）/ 防卡死（`collect_t
 挂数据平面性能线（缓存预编译 / 真 JIT），非当前范围。
 
 **应对**：以候选代码执行 + 机械判定为目的（三门管线：编译门 / 隔离门 / 判定门，
-设计见 `tasks_docs/_meta_layer_design.md` §三）时当前边界充分；需运行**不可信/
+操作指南见 `docs/howto/run_code_safely.md`）时当前边界充分；需运行**不可信/
 对抗性**代码时不得依赖本机制（进程级隔离待 VISION-6 档 B）。
 
 ---

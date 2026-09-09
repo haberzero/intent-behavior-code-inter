@@ -2,7 +2,7 @@
 tests/e2e/test_meta_compile.py
 
 meta.compile（编译门原语，代码作值 M2）E2E 契约（设计：
-`_meta_layer_design.md` §二/§三/§8.4 M2）：
+编译门批次 M2）：
 
 - **compile-only**：代码字符串进程内静态校验（**不执行**）——子引擎（零父状态污染：
   父程序可能自身即字符串运行[合成 entry 同名冲突面]）；

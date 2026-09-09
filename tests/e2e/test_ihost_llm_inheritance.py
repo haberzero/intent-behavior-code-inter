@@ -2,7 +2,7 @@
 tests/e2e/test_ihost_llm_inheritance.py
 
 ihost 子环境 LLM 配置继承（E1）E2E 契约（设计：
-tasks_docs/_ihost_subenv_design.md §二）：
+E1 子环境 LLM 配置继承）：
 
 - 子环境继承父 LLM 配置（spawn 时点快照，经 IbStatefulPlugin save/restore
   既有跨引擎状态契约）——子脚本不写自身 api_config 即可调 LLM（试用方

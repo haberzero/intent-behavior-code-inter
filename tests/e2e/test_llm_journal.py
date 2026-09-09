@@ -2,7 +2,7 @@
 tests/e2e/test_llm_journal.py
 
 LLM journal（append-only run 级审计）契约——R3-⑤ 批 1
-（设计：tasks_docs/_run_observability_design.md §三）：
+（journal append-only 可观测子系统 e2e 面）：
 
 - schema v1：首行 type=run 元数据 + 每调用一行 type=call（seq 单调）；
 - 汇点覆盖：成功面（prompts/content/raw/finish_reason/generation/usage）与

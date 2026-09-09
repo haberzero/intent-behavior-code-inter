@@ -2,7 +2,7 @@
 tests/runtime/test_budget_guard.py
 
 LLM 预算守卫白箱契约（round3 需求 R-3；设计：
-tasks_docs/_run_observability_design.md §四）：
+预算核算 guard 面）：
 
 - parse_budget_section：无节/仅 on_exceed = None（零侵入）；形态错误 =
   BudgetConfigError（fail-fast，不静默忽略）；

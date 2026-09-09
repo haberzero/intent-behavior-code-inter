@@ -2,7 +2,7 @@
 core.runtime.observability.llm_journal — LLM 调用 journal（append-only JSONL）。
 
 run 级 LLM 调用审计基底（round3 需求 R-1/R-3/R-4 子系统，设计见
-tasks_docs/_run_observability_design.md）：
+run 级 journal append-only 可观测子系统）：
 
 - 一 run 一文件（``<root_dir>/llm_journal/<run-id>.jsonl``）；首行 = run 元数据
   （type=run），其后每行一次 LLM 调用（type=call，seq 单调递增）；

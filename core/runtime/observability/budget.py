@@ -1,6 +1,6 @@
 """
 core.runtime.observability.budget — run 级 LLM 预算守卫
-（round3 需求 R-3；设计：tasks_docs/_run_observability_design.md §四）。
+（预算核算：api_config budget 节 warn/fail）。
 
 - 阈值 = api_config.json 顶层 ``budget`` 节（可选；缺省 = 无预算，零侵入）：
   ``{max_tokens, max_calls, max_wall_s, on_exceed: "warn"|"fail"}``；
