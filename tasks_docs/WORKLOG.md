@@ -2159,6 +2159,21 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   复制 + 多引擎状态隔离判别）→ B4 文档收敛（01_native_host_binding 增内核契约
   自举节）。self-grill 8 问全部自主消解（冲突处理留在用户路径/契约源不泄漏用户
   编译域/子引擎逐引擎重 parse 成本可忽略/P5 缓存无交互/无待用户决断项）。
+- **VISION-6 P6·B1 共享合成函数提取落地（2026-09-09，free-explore）**：宿主绑定声明 →
+  成员 spec 合成逻辑自 scheduler（_inject_host_import 模块成员循环 + _inject_host_class
+  嵌套成员循环，两处同构手写）提取为单一权威源
+  core/compiler/host_spec_synthesis.synthesize_host_members（用户侧编译路径与内核
+  bootstrap 契约路径共用——P6 bootstrap 阶段设计 §3.3 的前置）。scheduler 两方法改调
+  共享函数：成员表逐字段同构（方法 → MethodMemberSpec[逐参注解 + 返回注解/void 缺省 +
+  descriptors 同源]、属性 → MemberSpec[field/any 缺省]、重复同名 → 不入表 + 结构化
+  校验错误由调用方携自身语境定位/消息上报）。重复条目上报时序微差（成员表先成、class
+  注入后行）经全量零回归裁定无消费方敏感（诊断顺序无既有断言）。scheduler 未用导入
+  清理（annotation_to_typeref/ParamDescriptor 重构后零消费）。判别测试 7 例
+  （tests/compiler/test_host_spec_synthesis.py：方法/字段/缺省语义/泛型注解/重复条目/
+  混合序）+ 既有宿主绑定 22 例 + 全量 **3950/1 零回归**（收集数对账：+7 判别 + 5 meta
+  扫描[新模块 1 + 命名 3 + 重复助手 1]，逐文件 diff 全消——新模块经 layering/naming/
+  no_duplicate_helpers 元契约自动纳管且通过）。B1 完成，下一批 = B2（契约源 4 件 +
+  bootstrap 阶段 + 实现重打包，中风险，用户面既有测试全量锁定）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

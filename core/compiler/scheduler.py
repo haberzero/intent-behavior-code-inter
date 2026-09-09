@@ -31,9 +31,9 @@ from core.kernel.symbols import (
     Symbol, VariableSymbol, SymbolKind, SymbolTable, FunctionSymbol, TypeSymbol
 )
 from core.kernel.spec import TypeDef as ModuleMetadata, IbSpec, TypeKind
-from core.kernel.spec.member import MemberSpec, MethodMemberSpec, ParamDescriptor
+from core.kernel.spec.member import MemberSpec, MethodMemberSpec
 from core.kernel.spec.type_ref import TypeRef
-from core.compiler.semantic.passes._annotation_utils import annotation_to_typeref
+from core.compiler.host_spec_synthesis import synthesize_host_members
 from core.kernel import ast as ast
 class Scheduler(ICompilerService):
     """
@@ -683,51 +683,29 @@ class Scheduler(ICompilerService):
             kind=TypeKind.MODULE.value,
             provenance=Provenance.EXTERNAL_MODULE,
         )
+        # 成员 spec 合成（单一权威源：宿主绑定声明 → 成员表，内核 bootstrap
+        # 契约路径共用；重复同名条目经自身诊断通道上报）
+        member_bindings = [
+            b for b in imp.host_bindings if not getattr(b, "is_class", False)
+        ]
+        host_spec.members, member_dups = synthesize_host_members(member_bindings)
+        for dup in member_dups:
+            # 重复 bind 同名成员 fail-fast（与 impl 方法冲突检查同构，SEM_REDEFINITION）
+            file_tracker.error(
+                f"Host binding: member '{dup.member_name}' is bound more than once "
+                f"in '{lib_name}'.",
+                location=Location(
+                    file_path=file_path,
+                    line=getattr(dup.binding, "lineno", imp.lineno),
+                    column=getattr(dup.binding, "col_offset", 1),
+                ),
+                code=SEM_REDEFINITION,
+            )
         for binding in imp.host_bindings:
             # 宿主类型绑定（bind class Name: ...）→ 注册一等类型（非模块成员）。
             if getattr(binding, "is_class", False):
                 self._inject_host_class(
                     analyzer, file_path, lib_name, binding, module_name, file_tracker
-                )
-                continue
-            member_name = binding.name
-            # 重复 bind 同名成员 fail-fast（与 impl 方法冲突检查同构，SEM_REDEFINITION）
-            if member_name in host_spec.members:
-                file_tracker.error(
-                    f"Host binding: member '{member_name}' is bound more than once "
-                    f"in '{lib_name}'.",
-                    location=Location(
-                        file_path=file_path,
-                        line=getattr(binding, "lineno", imp.lineno),
-                        column=getattr(binding, "col_offset", 1),
-                    ),
-                    code=SEM_REDEFINITION,
-                )
-                continue
-            if binding.is_method:
-                param_refs = [
-                    annotation_to_typeref(p.annotation)
-                    for p in binding.params
-                ]
-                return_ref = annotation_to_typeref(binding.return_type) if binding.return_type is not None else TypeRef.of("void")
-                # 描述符 type_ref 与 param_types 同源同步（discovery 路径两轴一致；
-                # 宿主绑定同样填——避免未来读 descriptor.type_ref 的消费方被静默降级 any）。
-                descriptors = [
-                    ParamDescriptor(name=p.name, kind="POSITIONAL_OR_KEYWORD", type_ref=pref)
-                    for p, pref in zip(binding.params, param_refs)
-                ]
-                host_spec.members[member_name] = MethodMemberSpec(
-                    name=member_name,
-                    kind="method",
-                    param_types=param_refs,
-                    return_type=return_ref,
-                    param_descriptors=descriptors,
-                )
-            else:
-                host_spec.members[member_name] = MemberSpec(
-                    name=member_name,
-                    kind="field",
-                    type_ref=annotation_to_typeref(binding.return_type) if binding.return_type is not None else TypeRef.of("any"),
                 )
 
         mod_sym = VariableSymbol(
@@ -774,50 +752,21 @@ class Scheduler(ICompilerService):
         )
         # 成员来自嵌套 bind 声明（与模块成员绑定同构：方法 → MethodMemberSpec，
         # 属性 → MemberSpec；协议满足判定在"宿主声明成员 + impl 补充"并集上进行）。
-        for m in binding.members:
+        # 合成逻辑经共享函数（单一权威源）；重复同名条目经自身诊断通道上报。
+        cls_meta.members, class_dups = synthesize_host_members(binding.members)
+        for dup in class_dups:
             # 重复 bind 同名成员 fail-fast（与模块成员重复 bind 检查同构，
             # SEM_REDEFINITION）
-            if m.name in cls_meta.members:
-                file_tracker.error(
-                    f"Host class binding: member '{m.name}' is bound more than once "
-                    f"in class '{class_name}'.",
-                    location=Location(
-                        file_path=file_path,
-                        line=getattr(m, "lineno", getattr(binding, "lineno", 0)),
-                        column=getattr(m, "col_offset", 1),
-                    ),
-                    code=SEM_REDEFINITION,
-                )
-                continue
-            if m.is_method:
-                param_refs = [
-                    annotation_to_typeref(p.annotation)
-                    for p in m.params
-                ]
-                return_ref = (
-                    annotation_to_typeref(m.return_type)
-                    if m.return_type is not None else TypeRef.of("void")
-                )
-                descriptors = [
-                    ParamDescriptor(name=p.name, kind="POSITIONAL_OR_KEYWORD", type_ref=pref)
-                    for p, pref in zip(m.params, param_refs)
-                ]
-                cls_meta.members[m.name] = MethodMemberSpec(
-                    name=m.name,
-                    kind="method",
-                    param_types=param_refs,
-                    return_type=return_ref,
-                    param_descriptors=descriptors,
-                )
-            else:
-                cls_meta.members[m.name] = MemberSpec(
-                    name=m.name,
-                    kind="field",
-                    type_ref=(
-                        annotation_to_typeref(m.return_type)
-                        if m.return_type is not None else TypeRef.of("any")
-                    ),
-                )
+            file_tracker.error(
+                f"Host class binding: member '{dup.member_name}' is bound more than once "
+                f"in class '{class_name}'.",
+                location=Location(
+                    file_path=file_path,
+                    line=getattr(dup.binding, "lineno", getattr(binding, "lineno", 0)),
+                    column=getattr(dup.binding, "col_offset", 1),
+                ),
+                code=SEM_REDEFINITION,
+            )
 
         registered = self.registry.register(cls_meta)
         type_sym = TypeSymbol(
