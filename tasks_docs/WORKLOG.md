@@ -1808,6 +1808,72 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   需求单到达重新 intake / 周期质量维护。
 ---
 
+- **VISION-6 内核工程化 Phase 0 现状实证调查 + 数据平面性能基线（2026-09-08，free-explore，
+  主线转移后首阶段交付；只读调查未改代码，末次全量 3909/1 零回归以实跑为准）**：
+  ① **架构实证**（引实际代码/文档 path:line）：编译管线五阶段无字节码/IR 层——项目扫描+词法+
+  依赖图（scheduler.py）→ 逐模块编译（Parser→AST class IbModule）→ 语义分析 4-Phase 流水线
+  [Symbol/Type/Binding/Integrity，产物写 AST 节点字段+MetadataStore]（semantic/pipeline.py）→
+  FlatSerializer 序列化[AST→扁平 UID 池，**node_uid = 内容哈希 node_{sha256[:16]} 确定性**
+  （serializer.py:127-128，UID 权威源 core/base/uid.py）→ ImmutableArtifact]→ 水化执行
+  （interpreter.py 水化为运行期 node_pool[dict 池]，ReadOnlyNodePool 只读代理）。**VM 数据面
+  = AST 直走的 CPS/生成器解释器**（VMExecutor._drive_loop_gen，显式帧栈非递归，50 个
+  vm_handle_IbXxx 经 node_type 字符串查表分派；Signal 经 StopIteration.value 数据化传递；
+  函数调用 trampoline；LLM dispatch-before-use Waitable 协作挂起）。
+  ② **单语句/单节点开销实证（JIT/快速路径目标点，5 条）**：(1) 每语句新建 TaskScheduler
+  （run_body 逐 stmt 调 run()→vm_executor.py:144）；(2) 每节点生成器分配（非生成器 handler
+  中央化包装 _gen，vm_executor.py:405-411）；(3) 每节点 dict + ReadOnlyNodePool 递归代理
+  （get_node_data，interpreter.py:406-412）；(4) 分派查找 node_data["_type"] 字符串查表；
+  (5) StopIteration 异常驱动正常控制流（每帧完成走 except StopIteration）。
+  ③ **D-3/D-3.3 实证（唯一既有性能数据）**：VM 逐字符操作经生成器分派 ~1000× 开销（试用方
+  sub_str 逐字符 12k 窗口挂起 >180s；机制栈扫描 170-200s vs Python <0.1s）；已落地缓解 = R3-③
+  内建 str 四件套 O(n) 原生方法（消解 90%+ 摩擦）；D-3.3 VM 逐字符分派快速路径本身 = 登记不
+  实施（Tier C 候选）。
+  ④ **JIT 就绪度**：已有 = 编译期 bench CLI（main.py bench，仅测编译非执行）+ 内存 mtime 增量
+  缓存[非持久] + 确定性内容哈希 node_uid[磁盘缓存天然地基] + O(n) str 原语 + 并发墙钟测试；
+  缺失 = 执行期性能基准/profiler + 字节码/IR 层 + JIT + VM 热点快速路径 + 持久 artifact 缓存。
+  ⑤ **JIT/快速路径插入点（受 9 项 VM 设计不变量 04_vm_interpreter §11 约束，不可绕过统一执行
+  入口 #1）**：(a) 确定性子树内联特化求值[产出仍交回 CPS 帧栈]；(b) 模块级复用持久
+  TaskScheduler[消除逐 stmt 构造]；(c) 去 ReadOnlyNodePool 每节点递归代理；(d) D-3.3 字符串
+  扫描快速路径；(e) 真 JIT codegen[最高风险，隔离分支]。
+  ⑥ **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性，数据平面/真 JIT 用户点名优先；每阶段
+  闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离
+  分支永不触碰 main）：
+  - **P1 执行期性能基准 + 热路径 profile**（⭐低风险先行，纯观测无行为变更，解锁 P2-P5 全部
+    性能工作[改前/改后裁判]）：建执行期基准 harness[代表性程序集 算术/循环/函数递归/字符串/
+    容器/类方法/并发 + 计时协议，区别于 main.py bench 编译期] + cProfile 量化 CPS 热路径
+    [send 步/每节点生成器/代理/StopIteration/逐 stmt TaskScheduler]→ 定量基线。
+  - **P2 数据平面快速路径 #1：每节点开销消除**（⭐优先、中风险）：§11 不变量内消除 ①的
+    5 条开销（内联特化 + 持久 TaskScheduler + 去每节点代理），严格保留 EXEC-1/2/Signal/协作
+    挂起；验收 = P1 基准可测执行时间下降[如热程序 -30%+] + 行为等价判别 + 全量零回归。
+  - **P3 D-3.3 字符串扫描快速路径**（中高风险）：VM 侧逐字符/字符串分派快速路径（消除 char
+    级生成器分派，下沉原生 O(n)）；验收 = D-3 复现程序 挂起/170-200s → Python 同量级。
+  - **P4 真 JIT（代码生成）**（⭐用户点名优先、**高风险→隔离分支**）：§11 约束下生成更快执行
+    体（Python codegen 到闭包/字节码 保持 receive 分派+Signal+Waitable；或引入受约束 IR/字节
+    码层[须评估与 AST 直走不变量冲突]）；验收 = P1 基准 JIT vs 解释吞吐比 + 语义等价判别 +
+    隔离分支实验通过。
+  - **P5 档 A 缓存预编译（持久 artifact 缓存）**（中风险、编译期面与 JIT 正交，可并行）：按
+    源码内容哈希键[复用确定性 node_uid]持久化 FlatSerializer 产物，re-run 命中跳过
+    lex/parse/semantic + 保真校验[水化 round-trip] + 沙箱边界[路径规范化]；验收 = 二次 run 编
+    译时间 → ~0 + 失效正确性判别。
+  - **P6 内核自举（bind 表达内核契约）+ 反射能力**（高工作量、结构面）：内置契约[
+    builtin_modules.py 字面量单一权威]再表达为 bind 声明（解 F5"bind 运行时 vs 构造期时序"矛盾
+    ）；反射 = 元数据/协议面（喂类型层）；验收 = 行为等价 + 全量零回归。
+  - **P7 档 B 隔离改造（进程级隔离）**（高风险→隔离分支）：威胁模型演进到对抗性代码时进程级
+    隔离上修（现为进程内子环境，KNOWN_LIMITS §二十六）；验收 = 对抗性用例正确拒止。
+  ⑦ **风险分层**：低风险先行 = P1[纯观测] + P5[编译期不动执行模型]；优先主线[数据平面/真 JIT
+    用户点名] = P2 → P3 → P4[高风险隔离分支]；结构/高风险 = P6 + P7[排性能线之后，避免执行模
+    型剧变中并动契约/威胁模型面]；P5 可并行 P2-P4[编译期 vs 执行期不同轴]。
+  ⑧ **硬约束**（任何 JIT/性能/工程化工作必遵守）：9 项 VM 设计不变量[统一执行入口/控制流
+    数据化/执行帧抽象/LLM 通道唯一/公理层无运行时依赖/isinstance(IbXxx) 禁用/快照隔离/阻塞
+    即挂起/调度器永不阻塞] + 元数据/AST 不变量[AST 不可变蓝图、静态分析写 AST 节点、确定性
+    UID 单一权威源[**不得改变已产出 UID 值**]、侧表编译期临时、运行只收 UID] + 公理化可验证
+    规范 05_vm_specification.md + 工作模式定论[禁 compat shim/胶水/tricky]。
+  ⑨ **裁定/决定**：Phase 0 完成（架构实证 + 开销量化 + 路线图）；**P1 = 唯一低风险先行且解锁
+    后续一切性能工作的阶段，下一轮直接开工 P1**（执行期基准 harness + 热路径 profile → 定量
+    基线）。P4/P7 须先开独立隔离分支实验。所有 JIT/快速路径须在 §11 不变量 #1[统一执行入口]
+    内推进（"不绕统一入口提性能"核心设计假设，P2 为第一块试金石）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

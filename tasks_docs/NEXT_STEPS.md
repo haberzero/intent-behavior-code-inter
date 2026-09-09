@@ -37,9 +37,25 @@
 > push，unsafe = free-explore = f598a609）。新主线 = VISION-6 内核工程化范畴[数据平面
 > 性能线/真 JIT[优先，用户点名] + 缓存预编译 + 内核自举 + 隔离改造 + 反射能力]，硬约束
 > = 9 项 VM 设计不变量（`docs/architecture/04_vm_interpreter.md` §11）+ 工作模式定论。
-> **Phase 0 = 现状实证调查 + 数据平面性能基线**（profile 热路径 → 量化基线 → JIT/性能
-> 上修插入点 + 分阶段路线图）→ 落账 + 设计确认 → 分阶段实施。当前 VM 架构实证：CPS
-> 调度循环 + AST 直走[**无字节码层**] + 协议分派（`core/runtime/vm/`）。
+> **Phase 0 ✅ 完成（2026-09-08，只读实证调查，WORKLOG 详录）**：架构实证 = 编译管线五
+> 阶段无字节码/IR[确定性内容哈希 node_uid node_{sha256[:16]}] → VM 数据面 = AST 直走的
+> CPS/生成器解释器[显式帧栈非递归 + 50 个 vm_handle_IbXxx 查表分派 + Signal 经
+> StopIteration.value 数据化 + 函数调用 trampoline + LLM Waitable 协作挂起]。
+> **量化锚点（JIT/快速路径目标点）**：单节点 5 条开销 = (1) 每语句新建 TaskScheduler
+> [run_body 逐 stmt run()] / (2) 每节点生成器分配[纯 return handler 中央化包装] / (3) 每
+> 节点 dict + ReadOnlyNodePool 递归代理 / (4) node_type 字符串查表分派 / (5) StopIteration
+> 异常驱动控制流；**D-3/D-3.3 实证 ~1000× 逐字符开销**（12k 窗口 sub_str 挂起 >180s；
+> 170-200s vs Python <0.1s；已落地缓解 = R3-③ str 四件套 O(n)，D-3.3 VM 侧快速路径登记不
+> 实施）。
+> **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
+> 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离
+> 分支永不触碰 main）：**P1 执行期性能基准 + 热路径 profile（⭐低风险先行，纯观测，解锁
+> P2-P5 一切性能工作[改前/改后裁判]）→ P2 每节点开销消除[§11 不变量内]（⭐优先、中风险）
+> → P3 D-3.3 字符串扫描快速路径（中高风险）→ P4 真 JIT codegen（⭐用户点名优先、高风险→
+> 隔离分支）→ P5 档 A 持久 artifact 缓存[编译期与 JIT 正交，可并行]（中风险）→ P6 内核自举
+> + 反射（高工作量、结构面）→ P7 档 B 进程级隔离（高风险→隔离分支）**。**当前 P0 = P1
+> 开工**（执行期基准 harness + 热路径 profile → 定量基线）。硬约束 = 9 项 VM 设计不变量
+> [§11，尤其 #1 统一执行入口] + 确定性 UID 单一权威源[不得改变已产出 UID 值] + 工作模式定论。
 >
 > ~~meta 层 MVP（字符串级直接执行）~~ **✅ 已收束并入 unsafe（见上）**：
 > 依赖评估结论——**MVP 前置依赖 = 0**（机制面全部既有：compile_string/run_string 合成
