@@ -18,6 +18,7 @@ from core.runtime.exceptions import (
 )
 from core.kernel.issue import InterpreterError
 from core.runtime.observability.diagnostics import handle_environment_limit
+from core.runtime.vm.task import VMTask
 from core.runtime.vm.handlers._shared import (
     _vm_execute_stmt_sequence,
     _vm_invoke_behavior,
@@ -91,6 +92,11 @@ def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
     test_uid = node_data.get("test")
     handler_uid = node_data.get("llmexcept_handler")
     body = node_data.get("body", [])
+    # [P4 真 JIT] 热直线循环体 codegen 快速路径：codegen 体经 rt.get/set_variable_by_uid
+    # + receive 分派直接执行（无每节点 CPS 生成器协议），在 CPS 循环内被本 handler 调用
+    # （保统一执行入口 invariant #1）；不可 codegen（安全子集判据未过）→ jit_body None，
+    # 走原 CPS 路径。控制流经 res 的 Signal 判定（break/continue/return），与 CPS 路径同语义。
+    jit_body = executor._get_jit_body(node_uid, body)
     while True:
         cond = yield test_uid
         cond = yield from _resolve_condition(executor, cond, handler_uid, test_uid, "IbWhile")
@@ -100,7 +106,17 @@ def vm_handle_IbWhile(executor, node_uid: str, node_data: Mapping[str, Any]):
             break
 
         # 执行循环体；任意 stmt 返回 Signal 时立即处理
-        res = yield from _vm_execute_stmt_sequence(executor, body)
+        if jit_body is not None:
+            # [P4 B3] 异常位置标注：codegen 体逐语句设 loc[0]；捕获后复用单一权威
+            # _annotate_exception_location（内层帧 = 出错现场，避免 while 节点误导位置）。
+            loc = [node_uid]
+            try:
+                res = jit_body(executor.runtime_context, executor.ec, loc)
+            except BaseException as e:
+                executor._annotate_exception_location(e, VMTask(node_uid=loc[0]))
+                raise
+        else:
+            res = yield from _vm_execute_stmt_sequence(executor, body)
         if isinstance(res, Signal):
             if res.kind is ControlSignal.BREAK:
                 break

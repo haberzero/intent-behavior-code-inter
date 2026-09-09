@@ -76,6 +76,10 @@ class VMExecutor:
         # 当前正在执行的帧栈引用；仅在 _drive_loop_gen 驱动活跃时非 None
         # （调度器多任务下为"当前推进任务"的栈，随任务步进切换）。
         self._current_stack: Optional[list] = None
+        # [P4 真 JIT] 热直线体 codegen 执行体缓存（per node_uid，B7：建表期初始化，
+        # 非 getattr 懒初始化双路径）。键 = 循环体根 uid（content hash，确定性/重放稳定）；
+        # 值 = codegen 函数 或 None（不可 codegen，走原 CPS 路径）。
+        self._jit_body_cache: dict = {}
 
     # ------------------------------------------------------------------
     # Service accessors
@@ -390,6 +394,25 @@ class VMExecutor:
                 message=exc.message,
                 location=exc.location,
             )
+
+    # ------------------------------------------------------------------
+    # 内部：P4 真 JIT codegen 体（热直线体直接执行，绕开每节点 CPS 生成器协议）
+    # ------------------------------------------------------------------
+
+    def _get_jit_body(self, node_uid: str, body: list) -> Optional[Any]:
+        """获取/生成热直线体的 codegen 执行体（per node_uid 缓存，B7 建表期初始化）。
+
+        安全子集判据未过（非直线赋值/含嵌套控制流/LLM 污点/函数调用等）→ None（调用方
+        走原 CPS 路径）。codegen 体经 ``generate_jit_body`` 生成：直线赋值/if 序列 →
+        直接执行体（经 ``rt.get/set_variable_by_uid`` + ``receive`` 分派，无 CPS 生成器
+        协议），在 CPS 循环内被 handler 调用（保统一执行入口，invariant #1）。
+        """
+        if node_uid in self._jit_body_cache:
+            return self._jit_body_cache[node_uid]
+        from core.runtime.vm.jit_codegen import generate_jit_body
+        jit_body = generate_jit_body(body, self._ec, self.registry, self.registry.box)
+        self._jit_body_cache[node_uid] = jit_body
+        return jit_body
 
     # ------------------------------------------------------------------
     # 内部：任务构造
