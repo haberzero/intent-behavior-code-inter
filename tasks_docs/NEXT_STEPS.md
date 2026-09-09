@@ -58,15 +58,18 @@
 > 分支）。P4 真 JIT[用户点名优先·隔离分支] / P5 持久 artifact 缓存[编译期·可并行·较低风险]
 > 接续；P3 D-3.3[P1 实证已 O(n)，紧迫性下调]。
 >
-> **P4 进度**：设计确认 ✅（`_p4_jit_design.md`，commit 7e091cfd——route ① Python codegen，
-> codegen 体作为 CPS 循环内快速路径[保统一入口+Signal 数据化+receive 分派]，插入点 =
-> vm_handle_IbWhile ~103/_vm_call_function ~445，§11 九项不变量合规表 + 验收判据[arith/
-> branch ≥2× P2 基线]）。最小可行 codegen 实验（隔离分支，已删/回退）发现：**P4 codegen
-> 语义等价性 = 核心难点**（codegen 体上下文 `rt.get_variable_by_uid` 与 CPS 路径变量读取不等
-> 价——循环变量读不出 None；符号 UID 正确但作用域读取非平凡）。真 JIT = MAJOR 高风险工程
-> （核心执行模型改动，语义等价性最高风险）。实现留后续（多轮·隔离分支·codegen 语义等价性攻
-> 坚）。**下一步候选**：P4 实现续推[隔离分支] / P5 持久 artifact 缓存[编译期·可并行·较低风
-> 险] / P3 D-3.3[紧迫性下调]。
+> **P4 进度（v1.0 落地）**：设计确认 ✅（`_p4_jit_design.md`，commit 7e091cfd）。**v1.0
+> codegen 落地 ✅**（隔离分支 p4-real-jit，commit 5fd9372e——while 直线循环体直接执行体，
+> 绕开每节点 CPS 生成器协议，保 §11 不变量[统一入口#1/控制流数据化#2/receive 分派#6]；
+> subagent B1-B7 修复版：B1 常量 box(native) 即前轮 `i+NoneType` 崩溃根因 / B2 赋值去
+> skip_type_check 保类型检查 / B3 异常位置标注 / B4 LLM 污点声呐 / B5 IbIf+IbCompare 判据 /
+> B7 `__builtins__={}`+缓存建表期初始化）。**改前/改后：arith 179.7→96.8（~1.86×）/ branch
+> 262.9→110.7（~2.37×，超 2× 目标）；全量 3909/1 零回归**。subagent 关键结论：P2.5（CPS 内
+> 驱动层）上限 ~1.4-1.6×（每节点协议地板 11 VMTasks/iter 不可约）；codegen（route ①）~2-4×
+> 余量；route ②（IR/字节码）更险弃。**P4 v1.0 后段（隔离分支续推）**：v1.5 cond-codegen
+> [arith 推至 ~2×+] / v1.1 break/continue/return / 判别测试套件 D1-D7 / 语义等价攻坚。合并
+> unsafe-vibe-dev 待 v1.5+判别套件。P5 持久 artifact 缓存[编译期·可并行·较低风险] 可交错；
+> P3 D-3.3[紧迫性下调]。
 >
 > **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
 > 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离

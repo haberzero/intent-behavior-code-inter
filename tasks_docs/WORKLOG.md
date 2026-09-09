@@ -1991,6 +1991,36 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   P3 D-3.3（P1 实证已 O(n)，紧迫性下调）。
 ---
 
+- **VISION-6 P4 真 JIT·v1.0 codegen 落地（2026-09-09，隔离分支 p4-real-jit，commit 5fd9372e）**：
+  P4 真 JIT（用户点名优先）v1.0——为符合安全子集判据的 **while 循环体**生成**直接执行体**
+  （Python 函数），绕开每节点 CPS 生成器协议（P1 profile 主导成本），保 §11 不变量（统一
+  执行入口#1: codegen 体在 CPS 循环内被 vm_handle_IbWhile 调用，非独立通道；控制流数据化
+  #2: v1 体无 return/break/continue → 返回 None；协议分派#6: binop/比较经 receive，禁内联
+  op 特化）。
+  **实现（subagent B1-B7 修复版）**：① `jit_codegen.py`——`_gen_expr`（IbConstant/IbName/
+  IbBinOp/IbUnaryOp/IbCompare[left/ops/comparators]）+ `_stmt_eligible`（whitelist 判据：
+  IbAssign 单目标/IbIf 递归/IbPass，llmexcept None）+ `_module_has_behavior_expr`（B4 声呐：
+  模块节点池含 IbBehaviorExpr → LLM 污点不安全 → None）+ `generate_jit_body`（编译一次，
+  `__builtins__={}` 闭包 B7）。② `vm_executor._get_jit_body`——per node_uid 缓存（B7 建表期
+  初始化 `_jit_body_cache`）。③ `vm_handle_IbWhile`——codegen 体直接执行（`jit_body` 非
+  None）；**B3 异常位置标注**（`loc[0]` 逐语句设值 + `_annotate_exception_location` 复用
+  单一权威标注器，避免 while 节点误导位置）。④ **B1** 常量 `box(native)`（原 `box(None,
+  native)` 因 box=registry.box 绑定方法误传 memo → 每常量 IbNone，即前轮 `i+NoneType` 崩溃
+  根因）；⑤ **B2** 赋值去 `skip_type_check`（保运行时类型检查同 CPS 语义——该 flag 是
+  LLMFuture 写回内部标志，误用跳过类型检查致语义分歧）。
+  **改前/改后（perf_bench，µs/iter，warmup2+5）**：arith 179.7→96.8（**~1.86×**，loop-body
+  codegen；v1.5 cond-codegen 推至 ~2×+）/ branch 262.9→110.7（**~2.37×，超 2× 目标**）。
+  全量 **3909/1 零回归**。
+  **subagent 调查关键结论（设计依据）**：P2.5（CPS 内驱动层快速路径）上限 ~1.4-1.6×（每节点
+  协议地板 11 VMTasks/iter ≈ 30-45% 不可约）；codegen（route ①）实测 ~2-4× 余量（值层复合
+  32.8µs/iter 无 CPS）。route ②（IR/字节码层）更险（双通道 + Python opcode 分派 ~1.3-1.5×
+  上限）→ 弃。§11 九项不变量逐条合规（codegen 体经 receive，不内联 op 特化——#6 最难守）。
+  **v1.0 后段（隔离分支续推）**：v1.5 cond-codegen（条件也 codegen，drive-loop 交互归零，
+  arith 推至 ~2×+）/ v1.1 break/continue/return / 判别测试套件（D1-D7：值 oracle/判据边界/
+  错误等价/污点/Signal/多引擎缓存/overlay）/ 语义等价攻坚。v1.0 已证 codegen 路线可行 +
+  保语义 + 超 2× 收益面（branch）；合并 unsafe-vibe-dev 待 v1.5 + 判别套件完成。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
