@@ -25,30 +25,47 @@ kernel-native 注册被忽略并告警）。
 
 ### 1.2 内置工具模块
 
-| 模块 | 功能 |
-|------|------|
-| `json` | JSON 解析与序列化 |
-| `math` | 数学运算 |
-| `time` | 时间查询 |
-| `net` | 网络请求 |
-| `schema` | 数据验证 |
+| 模块 | 功能 | 契约源 |
+|------|------|--------|
+| `json` | JSON 解析与序列化 | IBCI 契约源（`contracts/json.ibci`） |
+| `math` | 数学运算 | IBCI 契约源（`contracts/math.ibci`） |
+| `time` | 时间查询 | IBCI 契约源（`contracts/time.ibci`） |
+| `schema` | 数据验证 | IBCI 契约源（`contracts/schema.ibci`） |
+| `net` | 网络请求 | 宿主侧字面量（默认参数 + per-engine 状态面，见 §2） |
 
 ---
 
 ## 2. 构造期注册（无插件搜索路径）
 
-全部 11 个内置模块（内核原生 6 + 工具 5）的 TypeDef 字面量集中于
-`core/runtime/bootstrap/builtin_modules.py`，在 Engine 构造期由
-`register_builtin_modules(host_interface)` 一次注册。**不存在插件搜索路径**：
-无 `plugin_paths` / `global_plugin` 配置，无目录嗅探，无继承父环境插件路径——
+全部 11 个内置模块在 Engine 构造期一次就绪。**不存在插件搜索路径**：无
+`plugin_paths` / `global_plugin` 配置，无目录嗅探，无继承父环境插件路径——
 每个 Engine 构造期即获得同一组内置模块。
 
-- 内核原生 6 + 工具 5 中，除 `file` 外均有物理包，位于 `ibci_modules/` 目录（`create_implementation()`
-  工厂）；`file` 无物理包，实现为内核模块 `core/runtime/modules/fs_impl.py`。
-- 内核原生模块为 `KERNEL_NATIVE` provenance；工具 5 为 `USER_DEFINED` provenance
-  （不参与覆盖保护）。全部内置模块 `visibility=IMPORT_GATED`（须显式 import）。
-- 模块函数的描述符（参数名 / 种类 / 默认值存在性）来自 `builtin_modules.py` 中
-  `param_descriptors` 声明，是具名调用与默认值填充的权威。
+契约描述有两个源（按契约面性质分域，各域单一权威源）：
+
+- **宿主侧字面量**（内核原生 6 + `net`，共 7 个）：TypeDef 字面量集中于
+  `core/runtime/bootstrap/builtin_modules.py`，由 `register_builtin_modules(host_interface)`
+  注册。这些契约面含构造期 lifecycle / LLM 通道 / 引擎内部服务 / 内核值类型导出
+  （`file`），或带默认参数与 per-engine 可变状态（`net`）——bind 声明无对应表达面。
+- **IBCI 契约源**（工具 4：`math` / `json` / `time` / `schema`）：契约单一权威源 =
+  IBCI bind 声明文件 `core/runtime/bootstrap/contracts/<module>.ibci`（与用户侧宿主
+  绑定同一声明形态），由 `kernel_contracts.load_tool_contracts(host_interface)` 于构造期
+  处理：parse → 成员 spec 合成（与用户侧宿主绑定共用同一合成逻辑）→ 注册。设计理由见
+  `docs/architecture/01_native_host_binding.md` §六（内核契约自举）。
+
+其余事实：
+
+- 除 `file` 外均有物理包，位于 `ibci_modules/` 目录：内核原生 6 + `net` 经
+  `create_implementation()` 工厂（per-engine 实例）；工具 4 为模块级函数面
+  （per-engine 实现容器由构造期按契约声明的成员面构造）。`file` 无物理包，实现为
+  内核模块 `core/runtime/modules/fs_impl.py`。
+- 内核原生 6 + `file` 为 `KERNEL_NATIVE` provenance；`net` 为 `USER_DEFINED`
+  provenance；工具 4 为 `EXTERNAL_MODULE` provenance（契约源自 bind 声明合成，与用户侧
+  宿主绑定派生同构）。仅 `KERNEL_NATIVE` 受覆盖保护。全部内置模块
+  `visibility=IMPORT_GATED`（须显式 import）。
+- 模块函数的描述符（参数名 / 种类 / 默认值存在性）是具名调用与默认值填充的权威：
+  字面量模块来自 `builtin_modules.py` 的 `param_descriptors` 声明；工具 4 来自契约源
+  的 bind 声明（无默认值语法——工具 4 契约面无默认参数）。
 
 ---
 

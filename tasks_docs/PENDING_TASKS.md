@@ -301,6 +301,13 @@
   复用既有原语（`compile_string`/`ihost.run_file`），不依赖本项落地。档 B 隔离改造/反射
   能力 = 长期主线；真 JIT 挂数据平面性能线；D-3.3 VM 字符串扫描快速路径维持长期登记
   （与演化平面设计合流规划）。详见 `tasks_docs/_meta_layer_design.md` §五。
+- **进度（分阶段路线图 P1→P7，详见 `tasks_docs/NEXT_STEPS.md` + WORKLOG）**：
+  P1 执行期基准 ✅ / P2 每节点开销消除 ✅ / P4 真 JIT（数据平面 ~7×）✅ 并入
+  unsafe-vibe-dev / P5 持久 artifact 缓存（含信任域反序列化加固与复核根因修复）✅ 并入
+  unsafe-vibe-dev / **P6 内核自举（bind 表达内核契约）进行中**——Phase 0 实证裁定 +
+  B1 共享合成 + B2 工具 4（math/json/time/schema）契约源自举 ✅（net 实施期实证维持
+  宿主侧：默认参数面 + per-engine 状态超出 bind 表达力；bind 默认值语法 = 远期登记项，
+  独立立项）/ P3 D-3.3 紧迫性下调可交错 / P7 档 B 隔离改造 + 反射 = 后续里程碑。
 
 ### VISION-7 真实使用整改与灰盒愿景整合（阶段 E）
 

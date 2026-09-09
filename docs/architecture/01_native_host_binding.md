@@ -226,6 +226,46 @@ import python "json" as j2:
 
 ---
 
+## 六、内核契约自举（工具契约源）
+
+**形态**：内核自身的工具模块契约（`math` / `json` / `time` / `schema`）用与用户侧
+**同一 bind 声明形态**表达——契约源文件
+`core/runtime/bootstrap/contracts/<module>.ibci`：
+
+```ibci
+import python "ibci_modules.ibci_math" as math:
+    bind sqrt(x: float) -> float
+    bind pi -> float
+    ...
+```
+
+Engine 构造期经 `kernel_contracts.load_tool_contracts` 处理契约源：parse（声明域，
+非声明形态 fail-fast）→ 成员 spec 合成（与 §四 用户侧宿主绑定**共用同一合成逻辑**）→
+注册 → 既有构造期严格绑定（spec ↔ 实现成员/签名校验，`docs/subsystems/04_plugin_system.md`
+§2）。工具模块的 spec provenance = `EXTERNAL_MODULE`，与用户侧 bind 派生同构。
+
+**设计理由**：
+
+1. **契约单一权威源**：工具契约（成员面 + 签名）此前是 Python 字面量中对实现签名的
+   手写重复（双写真相，人工维护漂移）。迁移后契约以 IBCI 声明表达，实现面
+   （模块级函数）与契约面经构造期严格绑定对账——漂移即启动失败。
+2. **设计语言统一**：内核与用户使用同一声明形态描述宿主成员契约；"绑定声明即契约"
+   的语义不因声明者是用户还是内核而分叉。
+3. **机制同构**：不新增运行期机制——spec 合成、严格绑定、运行期消费全部复用宿主
+   绑定既有通道；构造期仅新增"处理声明源"一步（parse + 合成 + 注册）。
+
+**边界（哪些契约不表达为 bind 声明，及原因）**：
+
+| 契约面 | 维持形态 | 原因 |
+|--------|---------|------|
+| `net` | 宿主侧字面量 | 8 个方法的 `headers` 参数带默认值（`has_default`）——bind 声明无默认值语法；且 per-engine 可变状态需实例形态 |
+| `ai` / `ihost` / `meta` / `idbg` / `isys` / `iruntime` / `file` | 宿主侧字面量 | 构造期 lifecycle / LLM 服务通道 / 引擎内部服务（子环境 spawn、编译门）/ 内核值类型导出（`file_handle` 等）——bind 是运行期用户侧机制，无对应表达面 |
+
+**bind 默认值语法**（`net` 契约源化的前置）为语言级设计项，独立立项评估——默认值
+放置位置（bind 声明内 vs 包装层）与既有"默认值放 .ibci 包装层"裁定的关系须一并裁定。
+
+---
+
 ## 深入指引
 
 - 宿主绑定用户 howto：`docs/howto/extend_with_host_binding.md`

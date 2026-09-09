@@ -303,9 +303,13 @@ IBC-Inter 公理体系中的 fallback 分为两类，必须严格区分：
 
 ### 7.1 构造期注册（无插件搜索路径）
 
-全部内置模块（内核原生 6 + 工具 5）的 TypeDef 字面量集中于
-`core/runtime/bootstrap/builtin_modules.py`，Engine 构造期经
-`register_builtin_modules(host_interface)` 一次注册。不存在磁盘发现/嗅探通道：
+全部内置模块（内核原生 6 + 工具 5）在 Engine 构造期一次就绪。契约描述分两域：
+内核原生 6 + `net` 的 TypeDef 字面量集中于 `core/runtime/bootstrap/builtin_modules.py`
+（`register_builtin_modules(host_interface)` 注册）；工具 4（`math`/`json`/`time`/
+`schema`）的契约单一权威源 = IBCI bind 声明契约源
+（`core/runtime/bootstrap/contracts/<module>.ibci`，与用户侧宿主绑定同一声明形态，
+`kernel_contracts.load_tool_contracts(host_interface)` 构造期自举处理——内核契约自举，
+见 `docs/architecture/01_native_host_binding.md` §六）。不存在磁盘发现/嗅探通道：
 无 `_spec.py` 契约文件、无 `plugin_paths`/`global_plugin` 配置、无
 AutoDiscovery。用户侧扩展唯一通道是宿主绑定
 （`import python "..." as lib: bind ...`，见
@@ -315,16 +319,18 @@ AutoDiscovery。用户侧扩展唯一通道是宿主绑定
 
 | 位置 | 职责 | 说明 |
 |------|------|------|
-| `builtin_modules.py` | 元数据 | 模块的 TypeDef 字面量（成员签名、`param_descriptors`、provenance/visibility） |
-| `ibci_modules/<pkg>/core.py` | 具体逻辑实现 | 模块的 Python 实现类 |
-| `ibci_modules/<pkg>/__init__.py` | 工厂模式入口 | 只负责导入和 `create_implementation()` 工厂函数 |
+| `builtin_modules.py` | 元数据（字面量域） | 内核原生 6 + `net` 的 TypeDef 字面量（成员签名、`param_descriptors`、provenance/visibility） |
+| `contracts/<module>.ibci` | 元数据（契约源域） | 工具 4 的契约 = IBCI bind 声明（成员签名，无默认值语法——工具 4 契约面无默认参数） |
+| `ibci_modules/<pkg>/core.py` | 具体逻辑实现 | 内核原生 6 + `net` = Python 实现类（`create_implementation()` 工厂）；工具 4 = 模块级函数 |
+| `ibci_modules/<pkg>/__init__.py` | 包入口 | 内核原生 6 + `net` = 工厂模式入口（`create_implementation()`）；工具 4 = `from .core import *`（经 `__all__` 再导出） |
 
 **两级模块架构**：
 
 | 级别 | 说明 | 包含模块 |
 |------|------|---------------|
 | 内核原生（kernel-native）| 随内核发行，构造期注册，`KERNEL_NATIVE` + IMPORT_GATED；物理位于 `ibci_modules/`（`file` 为内核模块 `core/runtime/modules/fs_impl.py`），受 HostInterface 覆盖保护 | `ai` / `file` / `ihost` / `idbg` / `isys` / `iruntime` |
-| 内置工具 | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*`；`USER_DEFINED` provenance | `math` / `json` / `time` / `net` / `schema`（实现包 `ibci_math` / `ibci_json` / `ibci_time` / `ibci_net` / `ibci_schema`） |
+| 内置工具（契约源 4） | 模块级函数实现，实现不导入 `core.*`；契约源 bind 声明合成，`EXTERNAL_MODULE` provenance（与用户侧 bind 派生同构） | `math` / `json` / `time` / `schema`（实现包 `ibci_math` / `ibci_json` / `ibci_time` / `ibci_schema`；契约源 `contracts/<module>.ibci`） |
+| 内置工具（字面量 1） | 不继承 `IbPlugin`，通过 `setup(capabilities)` 接收浅层能力注入，实现类不导入 `core.*`；`USER_DEFINED` provenance（默认参数面 + per-engine 可变状态，bind 声明无对应表达面） | `net`（实现包 `ibci_net`） |
 | 核心级 | 继承 `IbPlugin`，可访问 `ExtensionCapabilities`；有状态模块实现 `IbStatefulPlugin` | `ibci_ai` / `ibci_ihost` / `ibci_idbg` |
 
 **示例（AI 模块）**：
@@ -339,7 +345,8 @@ AutoDiscovery。用户侧扩展唯一通道是宿主绑定
 ```
 Engine.__init__()
     ↓
-register_builtin_modules() → HostInterface.metadata
+register_builtin_modules() → HostInterface.metadata   [字面量域：内核原生 6 + net]
+load_tool_contracts() → HostInterface.metadata        [契约源域：工具 4，bind 声明合成]
     ↓
 compiler/scheduler 使用 HostInterface.metadata 做静态类型检查
 ```
@@ -364,7 +371,7 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 
 | 机制 | 位置 | 说明 |
 |------|------|------|
-| **内置模块构造期注册** | `runtime/bootstrap/builtin_modules.py` | 内置 11 模块 TypeDef 字面量集中定义，Engine 构造期一次注册 |
+| **内置模块构造期注册** | `runtime/bootstrap/builtin_modules.py` + `contracts/` | 内置 11 模块 Engine 构造期一次就绪：内核原生 6 + `net` 字面量集中定义（`register_builtin_modules`），工具 4 契约单一权威源 = IBCI bind 声明契约源（`kernel_contracts.load_tool_contracts` 自举处理） |
 | **两阶段注册** | `kernel/spec/registry/`（包） | 占位阶段 + 填充阶段 + 公理注入 |
 
 ---
@@ -416,7 +423,8 @@ IBCI 在绝大多数情况下严格禁止硬编码。所有内置函数、内置
 | `core/runtime/bootstrap/primitive_initializer.py` | 高 | 内置类型注册与装箱器 |
 | `core/compiler/serialization/serializer.py` | 高 | FlatSerializer |
 | `core/compiler/scheduler.py` | 高 | 编译调度器，import 注入 |
-| `core/runtime/bootstrap/builtin_modules.py` | 高 | 内置 11 模块 TypeDef 字面量与构造期注册（register_builtin_modules） |
+| `core/runtime/bootstrap/builtin_modules.py` | 高 | 内核原生 6 + `net` TypeDef 字面量与构造期注册（register_builtin_modules） |
+| `core/runtime/bootstrap/kernel_contracts.py` + `contracts/<module>.ibci` | 高 | 工具 4 契约源自举（load_tool_contracts；IBCI bind 声明 = 契约单一权威源） |
 | `core/extension/ibcext.py` | 高 | IbPlugin / IbStatefulPlugin |
 | `ibci_modules/ibci_ai/core.py` | 高 | AI 插件（IBCI 胶水宿主） |
 | `ibci_modules/ibci_ai/provider_impl.py` | 高 | 推荐 LLM provider（纯 provider，kernel-free） |

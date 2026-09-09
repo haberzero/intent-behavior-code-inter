@@ -31,10 +31,13 @@
 
 ### 3. 模块加载（无插件搜索路径）
 
-模块加载不经过任何插件搜索路径：全部内置模块（内核原生 6 + 工具 5）的
-TypeDef 字面量集中于 `core/runtime/bootstrap/builtin_modules.py`，在 Engine 构造期
-一次注册（详见 `docs/architecture/07_kernel_native_modules.md`）。用户扩展走宿主
-绑定（`import python "..." as lib: bind ...`），不经路径发现。
+模块加载不经过任何插件搜索路径：全部内置模块（内核原生 6 + 工具 5）在 Engine 构造期
+一次就绪——内核原生 6 + `net` 的 TypeDef 字面量集中于
+`core/runtime/bootstrap/builtin_modules.py`，工具 4（`math`/`json`/`time`/`schema`）
+契约单一权威源 = IBCI bind 声明契约源（`contracts/<module>.ibci`，构造期自举处理，
+详见 `docs/architecture/07_kernel_native_modules.md` 与
+`docs/architecture/01_native_host_binding.md` §六）。用户扩展走宿主绑定
+（`import python "..." as lib: bind ...`），不经路径发现。
 
 ### 4. 隔离语义
 

@@ -19,10 +19,17 @@
 
 ### 内核原生模块清单
 
-内置 11 个模块（内核原生 6 + 工具 5）的 TypeDef 字面量集中于
-`core/runtime/bootstrap/builtin_modules.py`，在 Engine 构造期经
-`register_builtin_modules` 一次注册。其中内核原生 6 个模块（`KERNEL_NATIVE`
-provenance，含 `file`）为：
+内置 11 个模块（内核原生 6 + 工具 5）在 Engine 构造期一次就绪，契约描述分两域
+（注册机制与 provenance 模型详见 `docs/subsystems/04_plugin_system.md` §2 与
+`docs/architecture/01_native_host_binding.md` §六）：
+
+- 内核原生 6 + `net` 的 TypeDef 字面量集中于 `core/runtime/bootstrap/builtin_modules.py`，
+  经 `register_builtin_modules` 注册；
+- 工具 4（`math`/`json`/`time`/`schema`）的契约单一权威源 = IBCI bind 声明契约源
+  （`core/runtime/bootstrap/contracts/<module>.ibci`），经 `kernel_contracts`
+  构造期自举处理（内核契约自举）。
+
+其中内核原生 6 个模块（`KERNEL_NATIVE` provenance，含 `file`）为：
 
 | 模块 | 功能 | 安全语义 |
 |---|---|---|
