@@ -146,21 +146,12 @@ def _stmt_eligible(stmt_uid, ec, registry, _depth=0):
     return False
 
 
-def generate_jit_body(stmt_uids, ec, registry, box):
-    """为直线语句序列生成直接执行体；不可 codegen 返回 None（调用方走原 CPS 路径）。
+def _gen_body_source(stmt_uids, ec, box):
+    """生成直线语句序列的 Python 源码行 + 常量表；不可 codegen 返回 None。
 
-    返回 ``_jit_body(rt, ec, loc)``：经 ``rt.get/set_variable_by_uid`` + ``receive`` 直接
-    执行（无 CPS 生成器协议）；``loc[0]`` 逐语句设值（B3 异常位置标注）；无控制流信号
-    时返回 None。``ec.is_truthy`` 驱动 if 分支（与 CPS 路径同语义）。
+    返回 ``(src_lines, consts)``；调用方（generate_jit_body / generate_jit_loop）据此
+    编译函数。``src_lines`` 缩进 4 格（函数体一级），``loc[0]`` 逐语句设值（B3）。
     """
-    if not stmt_uids:
-        return None
-    if _module_has_behavior_expr(ec):
-        return None
-    for suid in stmt_uids:
-        if not _stmt_eligible(suid, ec, registry):
-            return None
-
     src_lines = []
     consts = {}
     counter = [0]
@@ -177,11 +168,15 @@ def generate_jit_body(stmt_uids, ec, registry, box):
                     target_uid = t_data.get("target")
                 target_sym_uid = ec.get_side_table("node_to_symbol", target_uid)
                 value_expr = _gen_expr(node_data.get("value"), ec, box, consts, counter)
+                if value_expr is None:
+                    raise _Ineligible()
                 src_lines.append(
                     f"{indent}rt.set_variable_by_uid({target_sym_uid!r}, {value_expr})"
                 )  # B2：无 skip_type_check
             elif node_type == "IbIf":
                 cond_expr = _gen_expr(node_data.get("test"), ec, box, consts, counter)
+                if cond_expr is None:
+                    raise _Ineligible()
                 then_body = node_data.get("body") or []
                 else_body = node_data.get("orelse") or []
                 src_lines.append(f"{indent}if ec.is_truthy({cond_expr}):")
@@ -193,11 +188,86 @@ def generate_jit_body(stmt_uids, ec, registry, box):
                     src_lines.append(f"{indent}pass")
             elif node_type == "IbPass":
                 src_lines.append(f"{indent}pass")
+            else:
+                raise _Ineligible()
 
     _emit(stmt_uids, "    ")
-    source = "\n".join(src_lines)
-    func_source = "def _jit_body(rt, ec, loc):\n" + source + "\n    return None\n"
+    return src_lines, consts
+
+
+class _Ineligible(Exception):
+    """codegen 生成期中不可 codegen 节点形状（内部信号，非运行时错误）。"""
+
+
+def generate_jit_body(stmt_uids, ec, registry, box):
+    """为直线语句序列生成直接执行体（v1.0）；不可 codegen 返回 None。
+
+    返回 ``_jit_body(rt, ec, loc)``：经 ``rt.get/set_variable_by_uid`` + ``receive`` 直接
+    执行（无 CPS 生成器协议）；``loc[0]`` 逐语句设值（B3）；无控制流信号时返回 None。
+    """
+    if not stmt_uids:
+        return None
+    if _module_has_behavior_expr(ec):
+        return None
+    for suid in stmt_uids:
+        if not _stmt_eligible(suid, ec, registry):
+            return None
+    try:
+        src_lines, consts = _gen_body_source(stmt_uids, ec, box)
+    except _Ineligible:
+        return None
+    func_source = "def _jit_body(rt, ec, loc):\n" + "\n".join(src_lines) + "\n    return None\n"
     code_obj = compile(func_source, "<ibci_jit_body>", "exec")
     namespace = {"__builtins__": {}, **consts}  # B7
     exec(code_obj, namespace)
     return namespace["_jit_body"]
+
+
+def generate_jit_loop(stmt_uids, test_uid, ec, registry, box):
+    """v1.5 cond-codegen：条件 + 体一起 codegen（drive-loop 交互归零）。
+
+    条件（test）也 ∈ ExprSet 时，生成 ``_jit_loop(rt, ec, loc)``：内含 ``while True``
+    条件检查（``ec.is_truthy``）+ 循环体，整个 while 循环在 codegen 体内一次执行完
+    （vm_handle_IbWhile 纯 return，无 per-iteration gen.send）。条件含 LLM/不确定
+    （llmexcept handler / 非 ExprSet）→ 返回 None（走 v1.0/CPS）。
+    """
+    if not stmt_uids:
+        return None
+    if _module_has_behavior_expr(ec):
+        return None
+    for suid in stmt_uids:
+        if not _stmt_eligible(suid, ec, registry):
+            return None
+    # 条件须 ∈ ExprSet（无 llmexcept handler——保护语句重试协议不可绕过）
+    test_data = ec.get_node_data(test_uid) if test_uid else None
+    if not test_data or test_data.get("llmexcept_handler"):
+        return None
+    cond_expr = _gen_expr(test_uid, ec, box, {}, [0])
+    if cond_expr is None:
+        return None
+    # 重新生成（条件常量与体常量统一）
+    try:
+        src_lines, consts = _gen_body_source(stmt_uids, ec, box)
+        cond_expr = _gen_expr(test_uid, ec, box, consts, [len(consts)])
+        if cond_expr is None:
+            return None
+    except _Ineligible:
+        return None
+    # 协作取消：codegen 体整循环一次执行（无 per-iteration gen.send），须在步进边界
+    # 显式检查 cancel_event（与 _drive_loop_gen 同语义——否则 t.cancel() 无法终止
+    # codegen 循环体）。cancel_event 经调用方（vm_handle_IbWhile）传入。
+    from core.runtime.vm.task_scheduler import TaskCancelled
+    loop_src = (
+        f"    while True:\n"
+        f"        if cancel_event is not None and cancel_event.is_set():\n"
+        f"            raise TaskCancelled()\n"
+        f"        loc[0] = {test_uid!r}\n"
+        f"        if not ec.is_truthy({cond_expr}):\n"
+        f"            break\n"
+        + "\n".join("    " + line for line in src_lines)
+    )
+    func_source = "def _jit_loop(rt, ec, loc, cancel_event):\n" + loop_src + "\n    return None\n"
+    code_obj = compile(func_source, "<ibci_jit_loop>", "exec")
+    namespace = {"__builtins__": {}, "TaskCancelled": TaskCancelled, **consts}  # B7 + cancel
+    exec(code_obj, namespace)
+    return namespace["_jit_loop"]
