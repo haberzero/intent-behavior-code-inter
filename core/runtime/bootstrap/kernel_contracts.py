@@ -17,8 +17,10 @@ lifecycle / LLM 通道 / 引擎内部服务 / 内核值类型导出无对应表�
 
 from __future__ import annotations
 
+import hashlib
 import os
-from typing import Any, List
+from copy import deepcopy
+from typing import Any, Dict, List, Tuple
 
 from core.base.enums import Provenance
 from core.compiler.lexer.lexer import Lexer
@@ -91,6 +93,33 @@ def _import_contract_package(module_name: str) -> Any:
         return importlib.import_module(module_name)
 
 
+# 进程级契约解析缓存：内容哈希 → (库名, 模块名, 合成成员表)。
+# 契约源 = install 树静态文件；内容哈希作键 = 变更即自失效（无手工失效通道），
+# 首引擎 parse+synthesize，后续引擎仅复制成员表（deepcopy 保 per-engine spec 身份——
+# spec 对象不得跨引擎共享：注册表/loader 持有 per-engine spec，共享可变对象 = 跨
+# 引擎污染风险面）。失败语义不变：契约源损坏 = 进程内首次 parse fail-fast。
+_CONTRACT_BUNDLE_CACHE: Dict[str, Tuple[str, str, Dict[str, Any]]] = {}
+
+
+def _parse_contract_bundle(path: str) -> Tuple[str, str, Dict[str, Any]]:
+    """解析 + 合成单一契约源（进程级缓存，内容哈希键）→ (库名, 模块名, 成员表)。"""
+    with open(path, "rb") as f:
+        key = hashlib.sha256(f.read()).hexdigest()
+    bundle = _CONTRACT_BUNDLE_CACHE.get(key)
+    if bundle is None:
+        node = _parse_contract_source(path)
+        members, dups = synthesize_host_members(node.bindings)
+        if dups:
+            raise InterpreterError(
+                f"Kernel contract source '{os.path.basename(path)}': duplicate bindings "
+                f"for member(s) {', '.join(sorted(d.member_name for d in dups))}",
+                None,
+            )
+        bundle = (node.asname or node.module_name, node.module_name, members)
+        _CONTRACT_BUNDLE_CACHE[key] = bundle
+    return bundle
+
+
 def load_tool_contracts(
     host_interface: "HostInterface",
     contracts_dir: str = _CONTRACTS_DIR,
@@ -107,26 +136,19 @@ def load_tool_contracts(
         if not fname.endswith(".ibci"):
             continue
         path = os.path.join(contracts_dir, fname)
-        node = _parse_contract_source(path)
-        lib_name = node.asname or node.module_name
-        members, dups = synthesize_host_members(node.bindings)
-        if dups:
-            raise InterpreterError(
-                f"Kernel contract source '{fname}': duplicate bindings for member(s) "
-                f"{', '.join(sorted(d.member_name for d in dups))}",
-                None,
-            )
+        lib_name, module_name, cached_members = _parse_contract_bundle(path)
+        members = deepcopy(cached_members)  # per-engine spec 身份（缓存 bundle 进程共享）
         spec = TypeDef(
             name=lib_name,
             kind=TypeKind.MODULE.value,
             provenance=Provenance.EXTERNAL_MODULE,
         )
         spec.members = dict(members)
-        py_module = _import_contract_package(node.module_name)
+        py_module = _import_contract_package(module_name)
         implementation = BoundToolModule(py_module, list(members.keys()))
         host_interface.register_module(
             lib_name,
             implementation,
             metadata=spec,
-            discovery_name=node.module_name,
+            discovery_name=module_name,
         )
