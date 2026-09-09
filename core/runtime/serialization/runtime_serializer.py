@@ -337,6 +337,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             self._collect_vector(obj, data)
         elif isinstance(obj, IbValue) and base_name == "knowledge":
             self._collect_knowledge(obj, data)
+        elif isinstance(obj, IbValue) and base_name == "memory":
+            self._collect_memory(obj, data)
         elif isinstance(obj, IbValue) and base_name == "run_result":
             self._collect_run_result(obj, data)
         elif isinstance(obj, IbValue) and base_name == "Optional":
@@ -435,6 +437,31 @@ class RuntimeSerializer(BaseFlatSerializer):
             }
             for k, v in obj.payload["entries"].items()
         }
+
+    def _collect_memory(self, obj, data):
+        # 层级记忆基底（可变容器）：条目值/事件值经实例池引用（拓扑序列化）
+        data["_type"] = "memory"
+        data["seq"] = obj.payload["seq"]
+        data["capacities"] = obj.payload.get("capacities", {})
+        data["tiers"] = {}
+        for tier_name, tier_entries in obj.payload["tiers"].items():
+            tier_data = {}
+            for k, v in tier_entries.items():
+                tier_data[k] = {
+                    "value": self._process_value(v["value"]),
+                    "content_hash": v["content_hash"],
+                    "provenance": v.get("provenance", ""),
+                    "events": [
+                        {
+                            "seq": ev["seq"],
+                            "kind": ev["kind"],
+                            "value": self._process_value(ev["value"]) if "value" in ev else None,
+                            "reason": ev.get("reason", ""),
+                        }
+                        for ev in v["events"]
+                    ],
+                }
+            data["tiers"][tier_name] = tier_data
 
     def _collect_run_result(self, obj, data):
         # 进程内子运行结果（不可变值类型）：三字段全原生值（str + native dict +
@@ -1070,6 +1097,37 @@ class RuntimeDeserializer:
                 "exit_status": data.get("exit_status", "ok"),
                 "stdout": data.get("stdout", ""),
                 "exception": data.get("exception"),
+            })
+            self.instance_cache[uid] = obj
+
+        elif _type == "memory":
+            # 层级记忆基底：条目值经实例池还原（拓扑引用）
+            from core.runtime.objects.primitives.memory import IbMemory, VALID_TIERS
+            tiers = {}
+            for t in VALID_TIERS:
+                tier_data = (data.get("tiers") or {}).get(t, {})
+                tier_entries = {}
+                for k, ev in tier_data.items():
+                    events = [
+                        {
+                            "seq": e["seq"],
+                            "kind": e["kind"],
+                            "value": self._deserialize_value(e["value"]) if "value" in e else None,
+                            "reason": e.get("reason", ""),
+                        }
+                        for e in ev.get("events", [])
+                    ]
+                    tier_entries[k] = {
+                        "value": self._deserialize_value(ev["value"]),
+                        "content_hash": ev.get("content_hash", ""),
+                        "provenance": ev.get("provenance", ""),
+                        "events": events,
+                    }
+                tiers[t] = tier_entries
+            obj = IbMemory(ib_class, payload={
+                "tiers": tiers,
+                "seq": data.get("seq", 0),
+                "capacities": data.get("capacities", {}),
             })
             self.instance_cache[uid] = obj
 
