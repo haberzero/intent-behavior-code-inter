@@ -116,8 +116,7 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > `tasks_docs/GOVERNANCE.md`（任务控制治理）+ `git log --oneline -30`（近期提交与工作动线）
 > + `tasks_docs/WORKLOG.md`（round3 整合条目，逐项详录）。
 
-- **🔴 当前状态 = meta 层 MVP（字符串级直接执行）✅ 主线收束（2026-09-08，M1/M2/M3 全完成）→ 转稳定维护态**；
-  候选后续主线 = VISION-4 类型理论加固[开工输入就绪，MVP 后触发] / round4 需求单到达重新 intake / 周期质量维护（2026-09-08 用户定向再评估后列入主线的 meta 层 MVP 已收束——
+- **🔴 当前状态 = 内核完整系统工程化 + 真 JIT（数据平面性能线）自主执行主线进行中（2026-09-08 用户定向扩展，把内核工程化 + JIT 纳入无人值守自主推进）**；meta 层 MVP[自举台阶 ④] 已收束（M1/M2/M3 全完成）+ 按用户指示一次 fast-forward 并入 unsafe-vibe-dev[全本地未 push]。Phase 0 = 现状实证调查 + 数据平面性能基线 → JIT/性能上修插入点 + 分阶段路线图 → 分阶段实施。硬约束 = 9 项 VM 设计不变量（04_vm_interpreter §11）+ 工作模式定论。VISION-4 类型层 = 独立方向[user-gated，非内核工程化范畴]（2026-09-08 用户定向再评估后列入主线的 meta 层 MVP 已收束——
   依赖评估结论：MVP 前置依赖 = 0[机制面全部既有] / VISION-6 内核工程化非前置[独立线，
   唯一交点档 B 隔离改造 MVP 落地后联合重估] / VISION-4/5 类型层只约束全形态[artifact
   作值/R-6/fn[...]/Verdict]；批次计划 M1→M2→M3 + 范围重划对账[防半接通原则不变] =
@@ -129,8 +128,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   队列 + 终态）；每项实施细节见 WORKLOG round3 条目 + git log。
 
 - **工程事实**：
-  - 分支 = `free-explore`（本 session 后续开发在此；`main` 不触碰）；HEAD = `3fa51eec`
-    （M2 meta.compile 编译门）；工作区干净；**全程未 push（全本地，硬原则）**。
+  - 分支 = `free-explore`（本 session 后续开发在此；`main` 不触碰）；HEAD = `f598a609`
+    （M3 + 质量收尾）；**meta 层 MVP 已并入 unsafe-vibe-dev**（用户 2026-09-08 指示，一次 fast-forward：unsafe = free-explore = f598a609，全本地未 push）；工作区干净；**全程未 push（全本地，硬原则）**。
     **session 级分支裁定（2026-09-08 用户指示）**：开代码修改前已把 free-explore
     fast-forward merge 到 `unsafe-vibe-dev`（0 behind/105 ahead，纯 ff；unsafe-vibe-dev
     = free-explore = `b67d87b0` 起，现推进至 `359b1eef`）；free-explore 不删除（后续
@@ -156,8 +155,13 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
     （N3 探针实证 + 待决裁定）。
 
 - **🔴 主线延续点（下一位智能体的工作队列）**：
-  1. **当前 P0 = meta 层 MVP（字符串级直接执行）**（2026-09-08 用户定向再评估列入主线；
-     完整规划 = `_meta_layer_design.md` §八）：
+  1. **当前 P0 = 内核完整系统工程化 + 真 JIT（数据平面性能线）**（2026-09-08 用户定向扩展：
+     把内核工程化 + JIT 纳入无人值守自主推进范畴；VISION-6 范畴[数据平面性能线/真 JIT[优先]
+     + 缓存预编译 + 内核自举 + 隔离改造 + 反射能力]；硬约束 = 9 项 VM 设计不变量
+     04_vm_interpreter §11 + 工作模式定论；Phase 0 = 现状实证调查 + 数据平面性能基线 →
+     JIT/性能上修插入点 + 分阶段路线图 → 分阶段实施）：
+     - **前置里程碑（已完成）**：meta 层 MVP[自举台阶 ④，字符串级直接执行]✅（M1/M2/M3
+       全完成 + 按用户指示一次 ff 并入 unsafe-vibe-dev）——批次记录见下。
      - **依赖评估结论**（§8.1/§8.2）：MVP 前置依赖 = 0（机制面全部既有并验证：
        `compile_string`/`run_string` 合成 entry `__string_exec__` / `request_spawn_isolated`
        子环境[E1 继承/防卡死/输出捕获] / 诊断面 / 值类型注册模式[file_handle/knowledge
@@ -202,8 +206,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
      - **N3 measure_freq（logprob 通道）**：待决（探针实证：SiliconFlow chat 通道静默
        忽略 logprobs、legacy completions 通道完整支持）；重估触发 = provider 支持
        completions/logprob 通道 或 corpus/probe 设计内化。
-     - **D-3.3 VM 字符串扫描快速路径**：长期登记（Tier C 专项候选；与演化平面设计合流
-       规划）。**B5 并发成熟化**：挂起（一等原语已成熟，专项需单独立项）。**远程 CI**：
+   - **D-3.3 VM 字符串扫描快速路径**：已并入内核工程化 P0（数据平面性能线，§1；与演化平面性能方向合流）。
+       **B5 并发成熟化**：挂起（一等原语已成熟，专项需单独立项）。**远程 CI**：
        待用户显式授权（`ci_local.sh` 四层本地复现已就绪）。
   5. **每轮自主评估现状**（队列有活持续推进；调整顺序/优先级/批次划分的理由记入 WORKLOG）。
 
@@ -247,8 +251,8 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
   | D3 新能力配套诊断码 | 挂起 | 随新能力实施（纯增面 + catalog + 15_diagnostics + parity 门） |
   | B5 并发原语成熟化 | 挂起 | 专项需单独立项评估（一等原语已成熟；流式观测边界记 KNOWN_LIMITS 待评估） |
   | N3 measure_freq（logprob 通道） | 待决（方向保留） | provider 支持 completions/logprob 通道 或 corpus/probe 设计内化 |
-  | R-2b meta.compile / R-6 行为表达式作值 | **MVP = 当前 P0 主线**（不依赖类型层，`_meta_layer_design.md` §八 批次计划）/ 全形态登记不实施 | 全形态前置 = VISION-4/5 类型层（§四清单收窄 ①③④⑤ + ② 深度参与）；MVP 批次 M1→M2→M3 |
-  | D-3.3 VM 字符串扫描快速路径 | 长期登记（Tier C 候选） | 与演化平面设计合流规划（VM 执行模型性能架构面） |
+  | R-2b meta.compile / R-6 行为表达式作值 | **MVP ✅ 已收束并入 unsafe**（不依赖类型层，§八 批次计划 M1→M2→M3）/ 全形态登记不实施 | 全形态前置 = VISION-4/5 类型层（§四清单收窄 ①③④⑤ + ② 深度参与）；当前 P0 = 内核完整系统工程化 + JIT |
+  | D-3.3 VM 字符串扫描快速路径 | 已并入内核工程化 P0（数据平面性能线，§1） | 与演化平面性能方向合流（VM 执行模型性能架构面） |
   | 远程 CI | 待用户显式授权 | 用户授权后启用（`ci_local.sh` 四层本地复现已就绪） |
   | #33 / LLM-5 事件驱动监视 | 被动项 | 待重估 |
   | PT-SEALED-1 media Phase 4 | 封存 | 需显式解封并重估 |

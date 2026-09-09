@@ -31,7 +31,17 @@
 > 全阶段（A P0 / B P1 / C P2 文档批 / D meta 层设计 / E 顺延批 / F 收敛）全部项处于
 > 完成/挂起/裁定不做终态。测试基线以实跑为准（末次全量 3867 passed / 1 skipped 零回归）。
 >
-> **🔴 meta 层 MVP（字符串级直接执行）✅ 主线收束（2026-09-08，M1/M2/M3 全完成）→ 转稳定维护态**：
+> **🔴 当前 P0 = 内核完整系统工程化 + 真 JIT（数据平面性能线，自主执行主线，2026-09-08
+> 用户定向扩展）**：meta 层 MVP（自举台阶 ④，字符串级直接执行）✅ 主线收束（2026-09-08，
+> M1/M2/M3 全完成）+ **按用户指示一次 fast-forward 并入 `unsafe-vibe-dev`**（全本地未
+> push，unsafe = free-explore = f598a609）。新主线 = VISION-6 内核工程化范畴[数据平面
+> 性能线/真 JIT[优先，用户点名] + 缓存预编译 + 内核自举 + 隔离改造 + 反射能力]，硬约束
+> = 9 项 VM 设计不变量（`docs/architecture/04_vm_interpreter.md` §11）+ 工作模式定论。
+> **Phase 0 = 现状实证调查 + 数据平面性能基线**（profile 热路径 → 量化基线 → JIT/性能
+> 上修插入点 + 分阶段路线图）→ 落账 + 设计确认 → 分阶段实施。当前 VM 架构实证：CPS
+> 调度循环 + AST 直走[**无字节码层**] + 协议分派（`core/runtime/vm/`）。
+>
+> ~~meta 层 MVP（字符串级直接执行）~~ **✅ 已收束并入 unsafe（见上）**：
 > 依赖评估结论——**MVP 前置依赖 = 0**（机制面全部既有：compile_string/run_string 合成
 > entry / request_spawn_isolated 子环境 / E1 继承 / collect_timeout / 诊断面 / 值类型
 > 注册模式；字符串源扩展点 = 子线程体 run(abs_path)↔run_string(code) 同构单点）；
@@ -43,9 +53,10 @@
 > e34_p4 形态，实测编译验证] + 文档同步[README 单点真理表 + use_isolation LLM 继承面
 > 修正]，全量零回归]）+ 范围重划对账（防半接通原则不变；全形态 M4[artifact 作值/R-6/
 > fn[...]/Verdict] 登记 VISION-4/5 前置不实施）= `tasks_docs/_meta_layer_design.md` §八。
-> **meta 层 MVP 收束 → 转稳定维护态**（round4 需求单到达重新 intake / 周期质量维护 /
-> 长期注册项按重估触发推进）；候选后续主线 = VISION-4 类型理论加固（MVP 后开工输入就绪，
-> 见 `_meta_layer_design.md` §四清单）。
+> （meta 层 MVP 已收束并入 unsafe；其后 = 内核完整系统工程化 + JIT 自主主线[当前 P0]。
+> VISION-4 类型理论加固 = 独立方向[非内核工程化范畴，user-gated]，MVP 后开工输入就绪见
+> `_meta_layer_design.md` §四清单。支线 = 周期质量维护 / round4 需求单到达重新 intake /
+> 长期注册项按重估触发推进。）
 > 其余稳定维护态工作（周期质量维护 / 长期注册项按重估触发推进 / round4 需求单到达重新
 > intake）在 MVP 主线之外并行。
 
