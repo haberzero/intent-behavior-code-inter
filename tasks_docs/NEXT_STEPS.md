@@ -33,7 +33,8 @@
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令）；
 > 末次全量 **3963 passed / 1 skipped 零回归**（P6 里程碑收束后，干净环境实跑；数字以实跑
 > 为准，不冻结）。分支 = `free-explore`（工作分支）= `unsafe-vibe-dev`（里程碑分支，已 ff
-> 收束）；`main` 永不触碰；全本地未 push。
+> 收束）；`main` 永不触碰；`unsafe-vibe-dev` 已推送 origin（b89fdc39..1957132c，154 提交，
+> 用户授权）；`free-explore` 本地工作分支不推送。
 
 > **🔴 当前 P0 = P7 档 B 进程级隔离 + 反射能力（危险工作，隔离分支）**：
 > - **范围**：进程级引擎隔离（消除同进程多引擎共享 `sys.modules`/模块级状态的边界——
