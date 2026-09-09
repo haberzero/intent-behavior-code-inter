@@ -116,18 +116,21 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
 > 本节取代下方 §2.1 的旧动态状态（round3/meta MVP 历史保留为参照）。
 
 - **🔴 当前状态 = 内核完整系统工程化（VISION-6）自主推进主线；子方向 ① 真 JIT + ②
-  缓存预编译已收束并入 unsafe-vibe-dev（全本地未 push），下一里程碑 = ③ 内核自举（P6）**。
+  缓存预编译 + ③ 内核自举（P6）均已收束并入 unsafe-vibe-dev（全本地未 push），下一里程碑 =
+  ④ 进程级隔离 + 反射能力（P7，高风险→隔离分支）**。
 
 - **工程事实（本 session 收束点）**：
   - 分支 = `free-explore`（工作分支）+ `unsafe-vibe-dev`（里程碑分支，已 ff 到
-    free-explore，全本地未 push）+ `main`（永不触碰）。当前 HEAD = `9eb638ca`
-    （P5 缓存根因修复）。`free-explore` = `unsafe-vibe-dev`（0 差异）。
-  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3938 passed / 1 skipped
-    零回归**（P5 复核根因修复后；数字以实跑为准，不冻结）。
-  - 提交链（新→旧，P4 真 JIT + P5 缓存 + P5 复核修复）：`9eb638ca`(P5 缓存根因修复·
-    信任域前缀策略) → `2dac1e11`(P5 pickle 信任域加固) → `2a377db3`(本交接 §2.0) →
-    `f46d8f2d`(P5 落账) → `b146e602`(P5 持久 artifact 缓存) → `b370a3c8`(P4 里程碑
-    合并落账) → 其后 P4 链（`e94afd7c`~`5fd9372e`，git 承载）。
+    free-explore，全本地未 push）+ `main`（永不触碰）。当前 HEAD = `be0cb55a`
+    （P6 里程碑收束点：P6 内核自举 B1/B2/B4 + 测试基础设施看门狗修复）。`free-explore`
+    = `unsafe-vibe-dev`（0 差异，P6 已 ff 收束）。
+  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3963 passed / 1 skipped
+    零回归**（P6 收束后；数字以实跑为准，不冻结）。
+  - 提交链（新→旧，P6 内核自举 + 看门狗修复 + P5 缓存）：`be0cb55a`(看门狗 dump 文件通道)
+    → `af15f7c8`(看门狗阶段感知 + P6 收束账目) → `e645d3ee`(P6·B4 文档收敛) →
+    `a5ebc996`(P6·B2 工具 4 契约源自举) → `e356f3cc`(P6·B1 落账) → `df4af9c2`(P6·B1
+    共享合成) → `0ecac385`(P6 Phase 0 设计) → `9eb638ca`(P5 缓存根因修复·信任域前缀策略)
+    → 其后 P4/P5 链（git 承载）。
   - 交付新功能面（本 session）：① **P4 真 JIT**（codegen 路线 ①——v1.0 循环体直接执行 +
     v1.5 cond-codegen[条件+体一起 codegen，drive-loop 交互归零，~5-7× 数据平面收益] +
     v1.1 控制流[break/continue] + 判别套件 D1-D7[15 例语义等价性验证]）；② **P5 持久

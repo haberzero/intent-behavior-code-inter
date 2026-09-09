@@ -304,10 +304,11 @@
 - **进度（分阶段路线图 P1→P7，详见 `tasks_docs/NEXT_STEPS.md` + WORKLOG）**：
   P1 执行期基准 ✅ / P2 每节点开销消除 ✅ / P4 真 JIT（数据平面 ~7×）✅ 并入
   unsafe-vibe-dev / P5 持久 artifact 缓存（含信任域反序列化加固与复核根因修复）✅ 并入
-  unsafe-vibe-dev / **P6 内核自举（bind 表达内核契约）进行中**——Phase 0 实证裁定 +
-  B1 共享合成 + B2 工具 4（math/json/time/schema）契约源自举 ✅（net 实施期实证维持
-  宿主侧：默认参数面 + per-engine 状态超出 bind 表达力；bind 默认值语法 = 远期登记项，
-  独立立项）/ P3 D-3.3 紧迫性下调可交错 / P7 档 B 隔离改造 + 反射 = 后续里程碑。
+  unsafe-vibe-dev / **P6 内核自举（bind 表达内核契约）✅ 完成 + 里程碑收束（2026-09-09，已 ff
+  并入 unsafe-vibe-dev）**——Phase 0 实证裁定 + B1 共享合成 + B2 工具 4（math/json/time/
+  schema）契约源自举 + B4 文档收敛；net 实施期实证维持宿主侧（默认参数面 + per-engine 状态
+  超出 bind 表达力；bind 默认值语法 = 远期登记项，独立立项）/ P3 D-3.3 紧迫性下调可交错 /
+  **P7 档 B 隔离改造 + 反射 = 当前 P0**（高风险→隔离分支 100% 授权）。
 
 ### VISION-7 真实使用整改与灰盒愿景整合（阶段 E）
 
