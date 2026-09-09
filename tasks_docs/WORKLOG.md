@@ -2324,6 +2324,21 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
    ⑤**分支收束 + push（用户 2026-09-09 显式授权）**：free-explore 纯 ff 并入
    unsafe-vibe-dev（= 123a341f），free-explore 删除；unsafe-vibe-dev push origin
    （11a893a7..123a341f，13 提交）。全量 3973/1 零回归。
+- **Phase C 自指性架构一等化起步：selfref 模块地基（2026-09-09，unsafe-vibe-dev，C1）**：
+   ①**命名裁定**：自指性架构承载模块名 = `selfref`（非 `self`）——IBCI 类方法首参即
+   `self`（`func m(self, ...)`），模块名 `self` 与方法参数概念冲突（混淆命名）；`selfref`
+   对齐 round5 需求 ID（SR = SELF-REF）。
+   ②**架构裁定（design-philosophy 单一权威/机制同构）**：自指性架构所有原语集中在一个
+   core-level plugin `selfref`（同 meta/idbg 族，但**持有系统级状态**：宪法 + 模板注册表，
+   每引擎一实例）——非散落各子系统。机制同构：模板注册同 knowledge、审计同 memory、
+   验证同 meta。
+   ③**C1 落地**：SR-1 `describe()`（真内省，从系统实际结构组装 dict{modules/constitution/
+   templates}，非 e50 硬编码字符串）+ SR-3 `constitution()`（结构化不变量集）+ SR-2
+   `register_template`/`templates`/`render`（模板注册 + 确定性组装，零 LLM，fail-fast）。
+   SR-5 结构性保证：selfref 零 LLM（组装/内省/判定全确定性）。完整管线实证：register →
+   render（确定性组装合法 ibci）→ meta.compile（n_funcs 内省）= e49 教训的架构解。
+   设计要点固化 = `tasks_docs/_round5_selfref_design.md`（SR-1..5 全景 + C1-C5 批次规划 +
+   开放问题裁定 Q1-Q4）。verify 三关门 / modify 自修改+回滚 归 C2/C3。全量 3988/1 零回归。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
