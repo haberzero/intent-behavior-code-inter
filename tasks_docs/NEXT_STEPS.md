@@ -58,17 +58,14 @@
 > 分支）。P4 真 JIT[用户点名优先·隔离分支] / P5 持久 artifact 缓存[编译期·可并行·较低风险]
 > 接续；P3 D-3.3[P1 实证已 O(n)，紧迫性下调]。
 >
- > **P4 进度（v1.5 落地）**：设计确认 ✅（_p4_jit_design.md，commit 7e091cfd）。v1.0 codegen
- > ✅（commit 5fd9372e）+ **v1.5 cond-codegen ✅**（commit 88545392——while 条件 + 循环体一起
- > codegen 为单一直接执行体 _jit_loop，整个循环一次执行完，drive-loop 交互归零；协作取消
- > 检查[cancel_event.is_set → raise TaskCancelled，与 _drive_loop_gen 同语义]；cancel_event
- > 公共属性[封装纪律]）。**改前/改后：arith 179.7→36.1（~4.98×）/ branch 262.9→50.0
- > （~5.26×）——远超 2× 验收目标；全量 3909/1 零回归**。测试适配：test_collect_timeout_policy
- > 超时阈值 20000→100000 迭代（codegen ~5× 加速）。**P4 数据平面线累计收益（vs P1 基线
- > arith 257）**：P2 收束 ~-30% → v1.0 ~-46% → **v1.5 ~-86%（~7×）**。route ① 实证成功
- > （route ② 弃）。**P4 后段（隔离分支续推）**：v1.1 break/continue/return + 判别测试套件
- > D1-D7 + 语义等价攻坚 + 合并 unsafe-vibe-dev。P5 持久 artifact 缓存[编译期·可并行·较低
- > 风险] 可交错；P3 D-3.3[紧迫性下调]。
+ > **P4 真 JIT（用户点名优先）✅ 完成 + 里程碑合并 unsafe-vibe-dev**：v1.0 codegen
+ > ✅ + v1.5 cond-codegen ✅[drive-loop 交互归零，arith 179.7→36.1(~5×)/branch 262.9→50.0
+ > (~5.3×)，远超 2× 目标] + v1.1 控制流 ✅[break/continue 在 cond-codegen 体合法] + 判别
+ > 套件 D1-D7 ✅[15 例语义等价性验证]。**全量 3928/1 零回归**。数据平面线累计收益（vs
+ > P1 基线 arith 257）：P2 收束 ~-30% → v1.0 ~-46% → **v1.5 ~-86%（~7×）**。route ①
+ > 实证成功（route ② 弃）。合并：隔离分支 p4-real-jit → free-explore（ort 无冲突）→
+ > ff unsafe-vibe-dev（全本地未 push）+ 文档收敛 04_vm_interpreter §12。**P4 完成**。下一
+ > 里程碑：P5 持久 artifact 缓存[编译期·可并行·较低风险]；P3 D-3.3[紧迫性下调]。
 >
 > **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
 > 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离

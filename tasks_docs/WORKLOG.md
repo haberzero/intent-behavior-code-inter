@@ -2079,6 +2079,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   `docs/architecture/04_vm_interpreter.md` §真 JIT。
 ---
 
+- **VISION-6 P4 真 JIT·里程碑合并 unsafe-vibe-dev（2026-09-09）**：P4 真 JIT（用户点名
+  优先）全形态落地——v1.0 codegen（循环体直接执行）+ v1.5 cond-codegen（条件 + 体一起
+  codegen，drive-loop 交互归零，**~5-7× 数据平面收益**）+ v1.1 控制流（break/continue）
+  + 判别测试套件 D1-D7（15 例语义等价性验证）。
+  **合并流程**：隔离分支 `p4-real-jit`（4 commits：5fd9372e v1.0 / 88545392 v1.5 /
+  b4c4137c D1-D7 / 4cbc8da3 v1.1）→ merge 入 `free-explore`（ort 策略，无冲突）→ 全量
+  **3928/1 零回归**验证 → 删除 `p4-real-jit` 分支 → fast-forward `unsafe-vibe-dev`
+  （里程碑分支，全本地未 push）。
+  **文档收敛**：P4 真 JIT 收敛进 `docs/architecture/04_vm_interpreter.md` §12（codegen
+  路线 ①——定位/路线裁定/版本线/eligible 判据/9 不变量对照/协作取消/数据平面线收益/
+  判别套件；§12 深入指引 → §13；无跨文档引用需更新）。
+  **P4 数据平面线累计收益（vs P1 基线 arith 257/branch 372 µs/iter）**：P2 收束 ~-30%
+  → v1.0 ~-46% → **v1.5 ~-86%（~7×）**。route ① 实证成功（route ② 弃）。
+  **核心主线 ①（数据平面性能线 / 真 JIT，用户点名优先）实质完成**。下一里程碑：**P5
+  持久 artifact 缓存**（编译期、可并行、较低风险）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
