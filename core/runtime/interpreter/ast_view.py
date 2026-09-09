@@ -8,18 +8,29 @@ class ReadOnlyNodePool(Mapping[str, Any]):
     """
     def __init__(self, data: Dict[str, Any]):
         self._data = data
+        # [P2 数据平面快速路径] 嵌套容器包装记忆化（id → 已包装视图）：AST 节点不可变
+        # 且生命周期内存活（node_pool 持有），id 稳定；重复字段访问命中缓存，消除逐次
+        # 递归重新包装（profile：ast_view.get ~490k 次/程序）。只读语义不变。
+        self._wrap_memo: Dict[int, Any] = {}
 
     def __getitem__(self, key: str) -> Any:
         val = self._data[key]
         return self._wrap(val)
 
     def _wrap(self, val: Any) -> Any:
-        if isinstance(val, dict):
-            # 递归包装嵌套字典 (AST 节点通常是嵌套字典)
-            return ReadOnlyNodePool(val)
-        if isinstance(val, list):
-            # 包装列表中的所有元素
-            return [self._wrap(i) for i in val]
+        if isinstance(val, (dict, list)):
+            key = id(val)
+            cached = self._wrap_memo.get(key)
+            if cached is not None:
+                return cached
+            if isinstance(val, dict):
+                # 递归包装嵌套字典 (AST 节点通常是嵌套字典)
+                res: Any = ReadOnlyNodePool(val)
+            else:
+                # 包装列表中的所有元素
+                res = [self._wrap(i) for i in val]
+            self._wrap_memo[key] = res
+            return res
         return val
 
     def __len__(self) -> int:

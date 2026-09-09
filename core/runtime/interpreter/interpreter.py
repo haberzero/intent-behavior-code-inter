@@ -266,6 +266,11 @@ class Interpreter:
         self.asset_pool = loaded.asset_pool
         self.entry_module = loaded.entry_module
         self.type_hydrator = loaded.artifact_rehydrator
+        # [P2 数据平面快速路径] 只读视图缓存（node_uid → ReadOnlyNodePool）：同一节点
+        # 反复访问（如循环体）复用同一只读视图实例，消除逐次外层包装 + 借助视图内
+        # _wrap 记忆化消除逐次嵌套重包装。只读语义不变（视图不可变，缓存安全无泄漏——
+        # 随解释器生命周期回收）。
+        self._node_view_cache: Dict[str, "ReadOnlyNodePool"] = {}
         
         # 同步池引用到 ExecutionContext 数据容器
         self._execution_context.node_pool = self.node_pool
@@ -404,12 +409,17 @@ class Interpreter:
         self.logical_stack.pop()
 
     def get_node_data(self, node_uid: str) -> Mapping[str, Any]:
-        """[Standardized] 获取 AST 节点数据的唯一入口，返回只读视图"""
+        """[Standardized] 获取 AST 节点数据的唯一入口，返回只读视图（缓存复用）"""
+        cached = self._node_view_cache.get(node_uid)
+        if cached is not None:
+            return cached
         node_data = self.node_pool.get(node_uid)
         if node_data is None:
             # 这是一个防御性检查，通常由编译器保证正确
             raise self._report_error(f"Internal Error: Node pool lookup failed for {node_uid}")
-        return ReadOnlyNodePool(node_data)
+        view = ReadOnlyNodePool(node_data)
+        self._node_view_cache[node_uid] = view
+        return view
 
     def save_state(self) -> Mapping[str, Any]:
         """导出当前解释器的运行状态快照 (用于调试或热替换)"""
