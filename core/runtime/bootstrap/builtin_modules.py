@@ -44,6 +44,7 @@ KERNEL_NATIVE_MODULES: Dict[str, str] = {
     "ai": "ibci_ai",
     "ihost": "ibci_ihost",
     "meta": "ibci_meta",
+    "selfref": "ibci_selfref",
     "idbg": "ibci_idbg",
     "isys": "ibci_isys",
     "iruntime": "ibci_iruntime",
@@ -306,6 +307,32 @@ _SPEC_META = TypeDef(name="meta", kind="module", provenance=Provenance.KERNEL_NA
             ]),
     })
 
+_SPEC_SELFREF = TypeDef(name="selfref", kind="module", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED, members={
+        # 自指性体系架构（Phase C）确定性原语——零 LLM（SR-5 结构性保证）。
+        # SR-1 自描述：从系统实际结构组装结构化自描述值（非硬编码字符串）。
+        "describe": MethodMemberSpec(name="describe", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
+        # SR-3 宪法：系统不变量集（自修改元规则）。
+        "constitution": MethodMemberSpec(name="constitution", kind="method", type_ref=TypeRef.of("list"), return_type=TypeRef.of("list")),
+        # SR-2 显式生成器：行为模板注册（name + 含 {placeholder} 的代码模板体）。
+        "register_template": MethodMemberSpec(name="register_template", kind="method", type_ref=TypeRef.of("void"), param_types=[
+                TypeRef.of("str"),
+                TypeRef.of("str"),
+            ], return_type=TypeRef.of("void"), param_descriptors=[
+                ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="body", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+        # SR-2：已注册模板名列表。
+        "templates": MethodMemberSpec(name="templates", kind="method", type_ref=TypeRef.of("list"), return_type=TypeRef.of("list")),
+        # SR-2 确定性组装：模板 + 语义参数 → 合法 ibci 源串。
+        "render": MethodMemberSpec(name="render", kind="method", type_ref=TypeRef.of("str"), param_types=[
+                TypeRef.of("str"),
+                TypeRef.of("dict"),
+            ], return_type=TypeRef.of("str"), param_descriptors=[
+                ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="params", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
+            ]),
+    })
+
 _SPEC_IDBG = TypeDef(name="idbg", kind="module", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED, members={
         "vars": MethodMemberSpec(name="vars", kind="method", type_ref=TypeRef.of("dict"), return_type=TypeRef.of("dict")),
         "print_vars": MethodMemberSpec(name="print_vars", kind="method", type_ref=TypeRef.of("void"), return_type=TypeRef.of("void")),
@@ -452,6 +479,7 @@ BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "ai": _SPEC_AI,
     "ihost": _SPEC_IHOST,
     "meta": _SPEC_META,
+    "selfref": _SPEC_SELFREF,
     "idbg": _SPEC_IDBG,
     "isys": _SPEC_ISYS,
     "iruntime": _SPEC_IRUNTIME,
