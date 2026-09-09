@@ -2174,6 +2174,29 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   扫描[新模块 1 + 命名 3 + 重复助手 1]，逐文件 diff 全消——新模块经 layering/naming/
   no_duplicate_helpers 元契约自动纳管且通过）。B1 完成，下一批 = B2（契约源 4 件 +
   bootstrap 阶段 + 实现重打包，中风险，用户面既有测试全量锁定）。
+- **VISION-6 P6·B2 工具 4 契约源自举落地 + B3（net）实施期实证取消（2026-09-09，free-explore）**：
+  B2 交付：① 契约源 4 件 `core/runtime/bootstrap/contracts/{math,json,time,schema}.ibci`
+  （IBCI bind 声明 = 工具契约单一权威源；成员面经探针与现字面量逐字段等价锁定[27/10/
+  14/5 成员，param_types/return/descriptors 全同]）；② bootstrap 阶段
+  `kernel_contracts.load_tool_contracts`（engine 构造期：parse[声明域，非声明体/重复绑定
+  fail-fast] → 共享合成 → TypeDef[EXTERNAL_MODULE/IMPORT_GATED] → importlib[modules_path
+  _guard 单一原语] → BoundToolModule per-engine 严格命名空间[仅契约声明成员，缺失
+  fail-fast] → register_module → STAGE 4→5 既有严格绑定——零新运行期机制）；③ 实现重打包
+  （4 包类实例 → 模块级函数，builtins 遮蔽显式化[math abs/round 经 builtins.*，消书写
+  顺序依赖]；__init__ 经 __all__ 再导出）；④ builtin_modules 4 字面量真删除（单一权威
+  源迁移非双写）+ sys.path 守卫收敛单一原语；⑤ kernel_version 递增（ibci-2026.09.1-py312
+  ——工具 spec 派生机制/provenance 变更 = 内核变更，P5 缓存失效设计用途）；⑥ 测试迁移
+  （test_plugin_implementations 4 fixture → 模块级函数面）+ 判别套件 8 例（spec 形态/
+  成员面锁定、缺失成员/重复绑定/非声明体构造期 fail-fast、per-engine 隔离、shadowing
+  等价）。**B3（net 契约源）实施期实证取消**：net 8 方法 headers 参数 has_default=True
+  默认值面超出 bind 表达力（F3-0 默认值裁定未推翻）+ per-engine 可变状态双重边界 →
+  net 维持宿主侧字面量（USER_DEFINED 不变）；远期项登记 = bind 默认值语法（语言级设计，
+  独立立项）。provenance 变更（工具 4 USER_DEFINED→EXTERNAL_MODULE）行为安全实证：
+  消费点仅符号兼容性[EXTERNAL 互兼，宽松方向]+ 诊断只读投影；import 解析/覆盖保护与
+  provenance 无关（e2e + shadowing 判别锁定）。全量 **3963/1 零回归**（test_task_scheduler
+  全量负载偶发 hang[单独 0.17s 过、重跑全绿] = 已知框架层并发 flake 类，非 B2 引入——
+  该测试不构造引擎；观察项）。下一批 = B4 文档收敛（01_native_host_binding 内核契约自举
+  节 + 插件体系同步 + KNOWN_LIMITS 边界注记）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

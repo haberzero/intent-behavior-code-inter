@@ -142,9 +142,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 注入诊断发射器（kernel 层不依赖 runtime；经注入的 kernel_diagnostic
         # 发射覆盖站点的警告+事件双投影）。
         self.host_interface.set_diagnostic_emitter(kernel_diagnostic)
-        # 预注册全部内置模块（内核原生 5 + 工具 5 + file）
+        # 预注册宿主侧构造期内置模块（内核原生 5 + net + file）
         from core.runtime.bootstrap.builtin_modules import register_builtin_modules
         register_builtin_modules(self.host_interface)
+        # 工具契约自举（bind 声明契约源：math/json/time/schema——契约单一权威源
+        # = contracts/<module>.ibci，经既有注册/绑定通道）
+        from core.runtime.bootstrap.kernel_contracts import load_tool_contracts
+        load_tool_contracts(self.host_interface)
 
         # 运行时调度器
         self.rt_scheduler = RuntimeSchedulerImpl(None)  # ServiceContext 尚未就绪，后续注入

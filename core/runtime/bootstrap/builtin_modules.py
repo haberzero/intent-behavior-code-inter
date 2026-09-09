@@ -1,18 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-内置模块 spec 集中预注册（插件体系重构后）。
+宿主侧构造期内置契约注册。
 
-职责：全部内置模块（内核原生 5 + 工具 5 + file）的 TypeDef 字面量 + Engine 构造期注册。
+职责：内核原生 5（ai/ihost/meta/idbg/isys/iruntime）+ net + file 的 TypeDef 字面量 +
+Engine 构造期注册——这些契约面含构造期 lifecycle / LLM 通道 / 引擎内部服务 / 内核值类型
+导出，bind 机制无对应表达面，维持宿主侧字面量（契约单一权威源）。
+
+**工具 4（math/json/time/schema）契约已迁移**：契约单一权威源 = IBCI bind 声明契约源
+（``contracts/<module>.ibci``），经 ``kernel_contracts.load_tool_contracts`` 于构造期
+处理（自举方向：内核以自身语言表达工具契约）；本文件不再承载其字面量。
+
 用户侧扩展唯一边 = 宿主绑定 bind（不保留 Python 侧 _spec.py 磁盘发现通道）。
 
 说明：
-- 内核原生 5 + 工具 5 的字面量原由一次性生成脚本经旧 discovery 路径产出（结构等价，
-  防手写漂移）；该脚本重构后已删除（用后即删，决策沉入 WORKLOG/架构文档）。
+- 字面量原由一次性生成脚本经旧 discovery 路径产出（结构等价，防手写漂移）；该脚本
+  重构后已删除（用后即删，决策沉入 WORKLOG/架构文档）。
 - file 的 spec 自 core/engine.py 挪入（保留 mutating/param_descriptors/exported_types 语义字段）。
-- 工具 5 模块显式 provenance=USER_DEFINED（非 KERNEL_NATIVE，host_interface 覆盖保护不适用）；
-  全部内置模块 visibility=IMPORT_GATED（须显式 import 才可用）。
+- net 显式 provenance=USER_DEFINED（非 KERNEL_NATIVE，host_interface 覆盖保护不适用）；
+  内核原生 6 + file = KERNEL_NATIVE；全部内置模块 visibility=IMPORT_GATED（须显式
+  import 才可用）。
 
 """
+import contextlib
 import importlib
 import sys
 from typing import Any, Dict
@@ -40,14 +49,12 @@ KERNEL_NATIVE_MODULES: Dict[str, str] = {
     "iruntime": "ibci_iruntime",
 }
 
-# 全部内置模块（内核原生 5 + 工具 5）；file 无物理包（实现为 core.runtime.modules.fs_impl.FileLib）。
+# 宿主侧构造期注册的全部内置模块（内核原生 5 + net）；file 无物理包（实现为
+# core.runtime.modules.fs_impl.FileLib）。工具 4（math/json/time/schema）经契约源
+# 自举注册（kernel_contracts.load_tool_contracts），不在此表。
 BUILTIN_MODULES: Dict[str, str] = dict(KERNEL_NATIVE_MODULES)
 BUILTIN_MODULES.update({
-    "math": "ibci_math",
-    "json": "ibci_json",
-    "time": "ibci_time",
     "net": "ibci_net",
-    "schema": "ibci_schema",
 })
 
 
@@ -331,273 +338,6 @@ _SPEC_IRUNTIME = TypeDef(name="iruntime", kind="module", provenance=Provenance.K
     })
 
 
-_SPEC_MATH = TypeDef(name="math", kind="module", provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED, members={
-        "sqrt": MethodMemberSpec(name="sqrt", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "pow": MethodMemberSpec(name="pow", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="y", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "abs": MethodMemberSpec(name="abs", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "floor": MethodMemberSpec(name="floor", kind="method", type_ref=TypeRef.of("int"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("int"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "ceil": MethodMemberSpec(name="ceil", kind="method", type_ref=TypeRef.of("int"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("int"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "round": MethodMemberSpec(name="round", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("int")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="ndigits", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"))
-            ]),
-        "clamp": MethodMemberSpec(name="clamp", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="lo", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="hi", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "min": MethodMemberSpec(name="min", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="a", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="b", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "max": MethodMemberSpec(name="max", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="a", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="b", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "exp": MethodMemberSpec(name="exp", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "log": MethodMemberSpec(name="log", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "log2": MethodMemberSpec(name="log2", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "log10": MethodMemberSpec(name="log10", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "sin": MethodMemberSpec(name="sin", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "cos": MethodMemberSpec(name="cos", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "tan": MethodMemberSpec(name="tan", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "asin": MethodMemberSpec(name="asin", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "acos": MethodMemberSpec(name="acos", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "atan": MethodMemberSpec(name="atan", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "atan2": MethodMemberSpec(name="atan2", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="y", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="x", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "degrees": MethodMemberSpec(name="degrees", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="radians", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "radians": MethodMemberSpec(name="radians", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="degrees", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "random": MethodMemberSpec(name="random", kind="method", type_ref=TypeRef.of("float"), return_type=TypeRef.of("float")),
-        "randint": MethodMemberSpec(name="randint", kind="method", type_ref=TypeRef.of("int"), param_types=[
-                TypeRef.of("int"),
-                TypeRef.of("int")
-            ], return_type=TypeRef.of("int"), param_descriptors=[
-                ParamDescriptor(name="lo", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int")),
-                ParamDescriptor(name="hi", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"))
-            ]),
-        "pi": MemberSpec(name="pi", kind="field", type_ref=TypeRef.of("float")),
-        "e": MemberSpec(name="e", kind="field", type_ref=TypeRef.of("float")),
-        "inf": MemberSpec(name="inf", kind="field", type_ref=TypeRef.of("float")),
-    })
-
-
-_SPEC_JSON = TypeDef(name="json", kind="module", provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED, members={
-        "parse": MethodMemberSpec(name="parse", kind="method", type_ref=TypeRef.of("any"), param_types=[
-                TypeRef.of("str")
-            ], return_type=TypeRef.of("any"), param_descriptors=[
-                ParamDescriptor(name="s", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
-            ]),
-        "parse_or_none": MethodMemberSpec(name="parse_or_none", kind="method", type_ref=TypeRef.of("any"), param_types=[
-                TypeRef.of("str")
-            ], return_type=TypeRef.of("any"), param_descriptors=[
-                ParamDescriptor(name="s", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
-            ]),
-        "stringify": MethodMemberSpec(name="stringify", kind="method", type_ref=TypeRef.of("str"), param_types=[
-                TypeRef.of("any")
-            ], return_type=TypeRef.of("str"), param_descriptors=[
-                ParamDescriptor(name="obj", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"))
-            ]),
-        "pretty": MethodMemberSpec(name="pretty", kind="method", type_ref=TypeRef.of("str"), param_types=[
-                TypeRef.of("any")
-            ], return_type=TypeRef.of("str"), param_descriptors=[
-                ParamDescriptor(name="obj", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"))
-            ]),
-        "merge": MethodMemberSpec(name="merge", kind="method", type_ref=TypeRef.of("dict"), param_types=[
-                TypeRef.of("dict"),
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("dict"), param_descriptors=[
-                ParamDescriptor(name="a", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict")),
-                ParamDescriptor(name="b", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-        "keys": MethodMemberSpec(name="keys", kind="method", type_ref=TypeRef.of("list"), param_types=[
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("list"), param_descriptors=[
-                ParamDescriptor(name="obj", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-        "values": MethodMemberSpec(name="values", kind="method", type_ref=TypeRef.of("list"), param_types=[
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("list"), param_descriptors=[
-                ParamDescriptor(name="obj", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-        "get_nested": MethodMemberSpec(name="get_nested", kind="method", type_ref=TypeRef.of("any"), param_types=[
-                TypeRef.of("dict"),
-                TypeRef.of("str")
-            ], return_type=TypeRef.of("any"), param_descriptors=[
-                ParamDescriptor(name="obj", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict")),
-                ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
-            ]),
-        "set_nested": MethodMemberSpec(name="set_nested", kind="method", type_ref=TypeRef.of("dict"), param_types=[
-                TypeRef.of("dict"),
-                TypeRef.of("str"),
-                TypeRef.of("any")
-            ], return_type=TypeRef.of("dict"), param_descriptors=[
-                ParamDescriptor(name="obj", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict")),
-                ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
-                ParamDescriptor(name="value", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"))
-            ]),
-        "__to_prompt__": MethodMemberSpec(name="__to_prompt__", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),
-    })
-
-
-_SPEC_TIME = TypeDef(name="time", kind="module", provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED, members={
-        "now": MethodMemberSpec(name="now", kind="method", type_ref=TypeRef.of("float"), return_type=TypeRef.of("float")),
-        "now_ms": MethodMemberSpec(name="now_ms", kind="method", type_ref=TypeRef.of("int"), return_type=TypeRef.of("int")),
-        "utcnow": MethodMemberSpec(name="utcnow", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),
-        "localtime": MethodMemberSpec(name="localtime", kind="method", type_ref=TypeRef.of("str"), return_type=TypeRef.of("str")),
-        "format": MethodMemberSpec(name="format", kind="method", type_ref=TypeRef.of("str"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("str")
-            ], return_type=TypeRef.of("str"), param_descriptors=[
-                ParamDescriptor(name="timestamp", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="fmt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
-            ]),
-        "parse": MethodMemberSpec(name="parse", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("str"),
-                TypeRef.of("str")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="time_str", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
-                ParamDescriptor(name="fmt", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
-            ]),
-        "date_str": MethodMemberSpec(name="date_str", kind="method", type_ref=TypeRef.of("str"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("str"), param_descriptors=[
-                ParamDescriptor(name="timestamp", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "datetime_str": MethodMemberSpec(name="datetime_str", kind="method", type_ref=TypeRef.of("str"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("str"), param_descriptors=[
-                ParamDescriptor(name="timestamp", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "add_seconds": MethodMemberSpec(name="add_seconds", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="timestamp", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="seconds", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "add_days": MethodMemberSpec(name="add_days", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("int")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="timestamp", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="days", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"))
-            ]),
-        "diff_seconds": MethodMemberSpec(name="diff_seconds", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="ts1", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="ts2", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "diff_days": MethodMemberSpec(name="diff_days", kind="method", type_ref=TypeRef.of("float"), param_types=[
-                TypeRef.of("float"),
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("float"), param_descriptors=[
-                ParamDescriptor(name="ts1", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float")),
-                ParamDescriptor(name="ts2", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "sleep": MethodMemberSpec(name="sleep", kind="method", type_ref=TypeRef.of("void"), param_types=[
-                TypeRef.of("float")
-            ], return_type=TypeRef.of("void"), param_descriptors=[
-                ParamDescriptor(name="seconds", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("float"))
-            ]),
-        "sleep_ms": MethodMemberSpec(name="sleep_ms", kind="method", type_ref=TypeRef.of("void"), param_types=[
-                TypeRef.of("int")
-            ], return_type=TypeRef.of("void"), param_descriptors=[
-                ParamDescriptor(name="milliseconds", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("int"))
-            ]),
-    })
-
-
 _SPEC_NET = TypeDef(name="net", kind="module", provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED, members={
         "set_timeout": MethodMemberSpec(name="set_timeout", kind="method", type_ref=TypeRef.of("void"), param_types=[
                 TypeRef.of("float")
@@ -694,42 +434,6 @@ _SPEC_NET = TypeDef(name="net", kind="module", provenance=Provenance.USER_DEFINE
     })
 
 
-_SPEC_SCHEMA = TypeDef(name="schema", kind="module", provenance=Provenance.USER_DEFINED, visibility=Visibility.IMPORT_GATED, members={
-        "validate": MethodMemberSpec(name="validate", kind="method", type_ref=TypeRef.of("bool"), param_types=[
-                TypeRef.of("dict"),
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("bool"), param_descriptors=[
-                ParamDescriptor(name="data", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict")),
-                ParamDescriptor(name="rules", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-        "assert_schema": MethodMemberSpec(name="assert_schema", kind="method", type_ref=TypeRef.of("void"), param_types=[
-                TypeRef.of("dict"),
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("void"), param_descriptors=[
-                ParamDescriptor(name="data", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict")),
-                ParamDescriptor(name="rules", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-        "required_fields": MethodMemberSpec(name="required_fields", kind="method", type_ref=TypeRef.of("list"), param_types=[
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("list"), param_descriptors=[
-                ParamDescriptor(name="rules", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-        "infer": MethodMemberSpec(name="infer", kind="method", type_ref=TypeRef.of("dict"), param_types=[
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("dict"), param_descriptors=[
-                ParamDescriptor(name="data", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-        "coerce": MethodMemberSpec(name="coerce", kind="method", type_ref=TypeRef.of("dict"), param_types=[
-                TypeRef.of("dict"),
-                TypeRef.of("dict")
-            ], return_type=TypeRef.of("dict"), param_descriptors=[
-                ParamDescriptor(name="data", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict")),
-                ParamDescriptor(name="rules", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
-            ]),
-    })
-
-
-
 BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "ai": _SPEC_AI,
     "ihost": _SPEC_IHOST,
@@ -737,43 +441,51 @@ BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "idbg": _SPEC_IDBG,
     "isys": _SPEC_ISYS,
     "iruntime": _SPEC_IRUNTIME,
-    "math": _SPEC_MATH,
-    "json": _SPEC_JSON,
-    "time": _SPEC_TIME,
     "net": _SPEC_NET,
-    "schema": _SPEC_SCHEMA,
 }
 
 
-def _load_implementation(package_name: str) -> Any:
-    """加载内置模块的实现包并调用 create_implementation() 工厂。"""
+@contextlib.contextmanager
+def modules_path_guard():
+    """install 模块目录（ibci_modules 包的父目录）的 sys.path 守卫（退出即还原）。
+
+    内核原生 / net 的工厂加载（_load_implementation）与工具契约自举
+    （kernel_contracts）共用本单一守卫；导入目标字符串由调用方按自身语义提供
+    （包名 vs 契约源声明的完整模块路径）。
+    """
     modules_dir = InstallPaths.modules_dir().to_native()
     parent_dir = IbPath.from_native(modules_dir).parent
     if parent_dir is None:
         raise RuntimeError(f"Cannot determine parent of modules_dir: {modules_dir}")
     parent_native = parent_dir.to_native()
-
     added = False
     if parent_native not in sys.path:
         sys.path.insert(0, parent_native)
         added = True
     try:
-        mod = importlib.import_module(f"ibci_modules.{package_name}")
-        factory = getattr(mod, "create_implementation", None)
-        if factory is None:
-            raise RuntimeError(f"Builtin package {package_name} has no create_implementation")
-        return factory()
+        yield
     finally:
         if added and parent_native in sys.path:
             sys.path.remove(parent_native)
 
 
+def _load_implementation(package_name: str) -> Any:
+    """加载内置模块的实现包并调用 create_implementation() 工厂。"""
+    with modules_path_guard():
+        mod = importlib.import_module(f"ibci_modules.{package_name}")
+    factory = getattr(mod, "create_implementation", None)
+    if factory is None:
+        raise RuntimeError(f"Builtin package {package_name} has no create_implementation")
+    return factory()
+
+
 def register_builtin_modules(host_interface: "HostInterface") -> None:
-    """在 HostInterface 中预注册全部内置模块（构造期；含内核原生 5 + 工具 5 + file）。
+    """在 HostInterface 中预注册宿主侧构造期内置模块（构造期；内核原生 5 + net + file）。
 
     KERNEL_NATIVE provenance 的模块经 register_module 内建机制自动 reserve
     （HostInterface.register_module：is_kernel_native_meta 时加入 _kernel_native_names），
-    file 同此；工具 5 为 USER_DEFINED provenance，不参与覆盖保护。
+    file 同此；net 为 USER_DEFINED provenance，不参与覆盖保护。
+    工具 4（math/json/time/schema）经契约源自举注册（kernel_contracts.load_tool_contracts）。
     """
     from core.kernel.host_interface import HostInterface
 
@@ -794,7 +506,6 @@ def register_builtin_modules(host_interface: "HostInterface") -> None:
         FileLib(),
         metadata=BUILTIN_MODULE_SPECS["fs"],
     )
-
 
 
 def _spec_file() -> TypeDef:
@@ -847,5 +558,6 @@ __all__ = [
     "KERNEL_NATIVE_MODULES",
     "BUILTIN_MODULES",
     "BUILTIN_MODULE_SPECS",
+    "modules_path_guard",
     "register_builtin_modules",
 ]

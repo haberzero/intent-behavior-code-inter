@@ -37,8 +37,9 @@ from typing import Optional
 
 from core.kernel.blueprint import CompilationArtifact
 
-# 内核版本标识（缓存键组件）——core 包版本 + Python 版本（保证跨版本缓存失效）
-_KERNEL_VERSION = "ibci-2026.09-py312"
+# 内核版本标识（缓存键组件）——core 包版本 + Python 版本（保证跨版本缓存失效）。
+# 内核变更（含内置模块注册机制/契约面）须递增本标识以失效既有缓存。
+_KERNEL_VERSION = "ibci-2026.09.1-py312"
 
 # 缓存目录名（project_root 下）
 _CACHE_DIR_NAME = ".ibci_cache"

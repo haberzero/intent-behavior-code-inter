@@ -130,8 +130,8 @@ F5（2026-08-18）："bind 为运行时用户侧机制，与内核构造期需�
 
 | 模块 | 裁定 | 依据 |
 |------|------|------|
-| math / json / time / schema | **bind 化（完整通道）**：契约源 = IBCI bind 声明（单一权威源）；实现 = 模块级函数 + per-engine 身份命名空间；绑定 = 既有 `_validate_and_bind` | §1.1 纯声明面无 lifecycle；§1.4 机制同构零新运行期机制 |
-| net | **契约源 bind 化；实现绑定保留 per-engine 实例**（本质差异登记） | per-engine 可变状态（§1.1）——模块级函数无法表达（sys.modules 单例 = 进程全局状态 → 多引擎语义回归）；bind 声明仍为签名单一权威源，实例绑定经同一 `_validate_and_bind`（getattr 泛型，§1.3） |
+| math / json / time / schema | **bind 化（完整通道）**：契约源 = IBCI bind 声明（单一权威源）；实现 = 模块级函数 + per-engine 身份命名空间；绑定 = 既有 `_validate_and_bind` | §1.1 纯声明面无 lifecycle；§1.4 机制同构零新运行期机制；**B2 实施期实证：4 工具契约零默认参数**（bind 无默认值语法无表达缺口） |
+| net | **维持宿主侧**（builtin_modules.py 字面量，USER_DEFINED）——**B3 取消** | **B2 实施期实证精化**：net 8 个方法（get/get_json/post/post_json/post_form/put/delete/head）的 `headers` 参数带 `has_default=True, default_value=None`（字面量 descriptors）——bind 声明无默认值语法（F3-0 裁定"默认值放 .ibci 包装层"未推翻），契约源化将丢失 has_default 面 → `net.get(url)`（省略 headers）用户面调用语义回归。per-engine 可变状态（§1.1）同属本质差异。双重边界 → net 维持宿主侧字面量 |
 | ai / ihost / meta / idbg / isys / iruntime / fs | **维持宿主侧**（builtin_modules.py 字面量） | §1.5 时序矛盾成立：lifecycle / 不变量 #4 LLM 通道 / 引擎内部服务 / 内核值类型导出——bind 机制无对应表达面 |
 
 **单一权威源收敛**：工具 5 契约 = 5 份 IBCI 契约源文件（per-module）；kernel 5+fs
@@ -258,10 +258,27 @@ UID 产生 → 既有 UID 值零扰动。
 
 | 批 | 内容 | 风险 | 判别门 |
 |----|------|------|--------|
-| B1 | 共享合成函数提取（`_inject_host_import`/`_inject_host_class` 逻辑抽出，用户路径改调共享函数；行为等价锁定） | 低（纯重构） | 合成等价判别：同一声明文本 → 同 spec（逐字段）；全量零回归（用户 host import 测试面全过） |
-| B2 | 契约源 4 件（math/json/time/schema）+ bootstrap 阶段 + 实现重打包（模块级函数 + create_namespace）+ 字面量真删除 | 中（bootstrap/打包/spec 源三面；用户面契约由既有测试全量锁定） | 用户面不变（既有 import math/json/time/schema 测试全过）+ provenance 等价判别（用户模块覆盖语义前后一致）+ 契约漂移 fail-fast 判别（改契约源签名 → 绑定期报错）+ 全量零回归；**破坏面超预期 → 独立隔离分支续推** |
-| B3 | net 契约源（实例绑定形态）+ net 字面量真删除 | 低（B2 模式的单模块复制） | net 多引擎状态隔离判别（子引擎 set_timeout 不泄漏父引擎）+ 全量零回归 |
+| ~~B1~~ ✅ | 共享合成函数提取（`host_spec_synthesis.synthesize_host_members`，用户路径改调共享函数；行为等价锁定） | 低（纯重构） | 合成等价判别 7 例 + 既有宿主绑定 22 例 + 全量零回归 |
+| ~~B2~~ ✅ | 契约源 4 件（math/json/time/schema）+ bootstrap 阶段（`kernel_contracts.load_tool_contracts`）+ 实现重打包（模块级函数；per-engine 命名空间由 bootstrap 经 spec 成员面构造——声明列表单一源 = 契约源，实现包不重复成员清单）+ 4 字面量真删除 + kernel_version 递增（P5 缓存失效） | 中（bootstrap/打包/spec 源三面；用户面契约由既有测试全量锁定） | 契约源↔字面量逐字段等价探针 + 用户面 e2e（import math/json/time/schema 全过）+ provenance 等价判别（用户模块覆盖语义一致）+ 契约漂移 fail-fast 判别（缺失成员/重复绑定/非声明体 → 构造期 InterpreterError）+ per-engine 隔离判别 + 全量零回归（3963/1） |
+| ~~B3~~ **取消** | （原：net 契约源）——**实施期实证精化：net 维持宿主侧**（§二 裁定表注记：has_default 默认参数面超出 bind 表达力 + per-engine 状态双重边界） | — | 远期项登记：bind 默认值语法（推翻/精化 F3-0 裁定的语言级设计，独立立项） |
 | B4 | 文档收敛（01_native_host_binding 增"内核契约自举"节；插件体系文档同步；KNOWN_LIMITS 边界注记）+ HANDOFF/NEXT_STEPS 同步 | 低 | doc 治理自检（单点真理/跨文件一致） |
+
+**B2 实施期裁定记录（2026-09-09，free-explore）**：
+1. **net B3 取消**（上表）——默认参数实证（8 方法 has_default=True）+ 状态本质差异。
+2. **provenance 变更（工具 4：USER_DEFINED → EXTERNAL_MODULE）行为安全实证**：
+   模块 spec 的 provenance 消费点仅两处——符号重定义兼容性（`compatible_with`：
+   EXTERNAL 互兼可重定义，宽松于 USER_DEFINED 互斥，对用户 import 无影响）+ 诊断
+   导出（只读投影）；import 解析经"metadata registry 可解析即跳过源文件"（与
+   provenance 无关）；覆盖保护仅 KERNEL_NATIVE 触发（工具 4 前后皆不受保护）。
+   e2e + shadowing 判别测试锁定。
+3. **sys.path 守卫收敛为单一原语**（`modules_path_guard` contextmanager）：
+   builtin 工厂加载与契约自举共用；导入目标字符串由调用方按语义提供（包名 vs
+   契约源声明的完整模块路径）——消两处镜像的路径守卫逻辑。
+4. **kernel_version 递增**（`ibci-2026.09.1-py312`）：工具模块 spec 派生机制/
+   provenance 变更 = 内核变更，既有 P5 缓存须失效（kernel_version 的设计用途）。
+5. **test_task_scheduler 全量负载下偶发 hang**（96% 处，单独运行 0.17s 通过；
+   重跑全量 3963/1 绿）= HANDOFF 已知的框架层并发 flake 类，非 B2 引入（该测试
+   不构造引擎），登记观察项。
 
 **非目标**：kernel 5 + fs 契约 bind 化（§二裁定维持宿主侧）；VISION-4/5 类型层
 （user-gated，不触碰）；P7 档 B 进程级隔离（后续里程碑）。

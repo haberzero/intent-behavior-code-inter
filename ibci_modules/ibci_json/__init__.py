@@ -1,3 +1,5 @@
-from .core import JSONLib, create_implementation
-
-__all__ = ["JSONLib", "create_implementation"]
+"""
+json — JSON 序列化/操作内核实现（模块级函数形态）。
+契约（成员面 + 签名）单一权威源 = 内核契约源（bind 表达）；本包 = 实现面。
+"""
+from .core import *

@@ -1,0 +1,30 @@
+# 数学函数内核契约（bind 表达；契约单一权威源）。
+# 实现面 = ibci_modules.ibci_math（模块级函数）。
+import python "ibci_modules.ibci_math" as math:
+    bind sqrt(x: float) -> float
+    bind pow(x: float, y: float) -> float
+    bind abs(x: float) -> float
+    bind floor(x: float) -> int
+    bind ceil(x: float) -> int
+    bind round(x: float, ndigits: int) -> float
+    bind clamp(x: float, lo: float, hi: float) -> float
+    bind min(a: float, b: float) -> float
+    bind max(a: float, b: float) -> float
+    bind exp(x: float) -> float
+    bind log(x: float) -> float
+    bind log2(x: float) -> float
+    bind log10(x: float) -> float
+    bind sin(x: float) -> float
+    bind cos(x: float) -> float
+    bind tan(x: float) -> float
+    bind asin(x: float) -> float
+    bind acos(x: float) -> float
+    bind atan(x: float) -> float
+    bind atan2(y: float, x: float) -> float
+    bind degrees(radians: float) -> float
+    bind radians(degrees: float) -> float
+    bind random() -> float
+    bind randint(lo: int, hi: int) -> int
+    bind pi -> float
+    bind e -> float
+    bind inf -> float

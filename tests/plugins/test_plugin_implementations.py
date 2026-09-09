@@ -1,7 +1,7 @@
 """
 tests/runtime/test_plugin_implementations.py
 
-Smoke tests for plugin implementations (pure Python, no IBCI engine needed).
+Smoke tests for builtin tool implementations (module-level function form, pure Python, no IBCI engine needed).
 
 Testing strategy: Each plugin gets 3-5 smoke tests to verify basic functionality.
 We do NOT exhaustively test Python stdlib functions (math.sqrt, json.dumps, etc).
@@ -26,8 +26,8 @@ import json
 class TestMathPlugin:
     @pytest.fixture
     def math_lib(self):
-        from ibci_modules.ibci_math.core import MathLib
-        return MathLib()
+        from ibci_modules.ibci_math import core as math_mod
+        return math_mod
 
     def test_sqrt_basic(self, math_lib):
         """Smoke test: basic math function works"""
@@ -58,8 +58,8 @@ class TestMathPlugin:
 class TestJsonPlugin:
     @pytest.fixture
     def json_lib(self):
-        from ibci_modules.ibci_json.core import JSONLib
-        return JSONLib()
+        from ibci_modules.ibci_json import core as json_mod
+        return json_mod
 
     def test_parse_and_stringify_roundtrip(self, json_lib):
         """Smoke test: parse and stringify work"""
@@ -92,8 +92,8 @@ class TestJsonPlugin:
 class TestTimePlugin:
     @pytest.fixture
     def time_lib(self):
-        from ibci_modules.ibci_time.core import TimeLib
-        return TimeLib()
+        from ibci_modules.ibci_time import core as time_mod
+        return time_mod
 
     def test_now_returns_timestamp(self, time_lib):
         """Smoke test: now() returns valid timestamp"""
@@ -128,8 +128,8 @@ class TestTimePlugin:
 class TestSchemaPlugin:
     @pytest.fixture
     def schema_lib(self):
-        from ibci_modules.ibci_schema.core import SchemaLib
-        return SchemaLib()
+        from ibci_modules.ibci_schema import core as schema_mod
+        return schema_mod
 
     def test_validate_success(self, schema_lib):
         """Smoke test: validate() accepts valid data (JSON-Schema-subset dict input)."""

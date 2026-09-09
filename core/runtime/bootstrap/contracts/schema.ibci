@@ -1,0 +1,8 @@
+# 数据校验内核契约（bind 表达；契约单一权威源）。
+# 实现面 = ibci_modules.ibci_schema（模块级函数）。
+import python "ibci_modules.ibci_schema" as schema:
+    bind validate(data: dict, rules: dict) -> bool
+    bind assert_schema(data: dict, rules: dict) -> void
+    bind required_fields(rules: dict) -> list
+    bind infer(data: dict) -> dict
+    bind coerce(data: dict, rules: dict) -> dict

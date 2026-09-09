@@ -1,0 +1,17 @@
+# 时间工具内核契约（bind 表达；契约单一权威源）。
+# 实现面 = ibci_modules.ibci_time（模块级函数）。
+import python "ibci_modules.ibci_time" as time:
+    bind now() -> float
+    bind now_ms() -> int
+    bind utcnow() -> str
+    bind localtime() -> str
+    bind format(timestamp: float, fmt: str) -> str
+    bind parse(time_str: str, fmt: str) -> float
+    bind date_str(timestamp: float) -> str
+    bind datetime_str(timestamp: float) -> str
+    bind add_seconds(timestamp: float, seconds: float) -> float
+    bind add_days(timestamp: float, days: int) -> float
+    bind diff_seconds(ts1: float, ts2: float) -> float
+    bind diff_days(ts1: float, ts2: float) -> float
+    bind sleep(seconds: float) -> void
+    bind sleep_ms(milliseconds: int) -> void

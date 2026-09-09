@@ -1,0 +1,13 @@
+# JSON 序列化/操作内核契约（bind 表达；契约单一权威源）。
+# 实现面 = ibci_modules.ibci_json（模块级函数）。
+import python "ibci_modules.ibci_json" as json:
+    bind parse(s: str) -> any
+    bind parse_or_none(s: str) -> any
+    bind stringify(obj: any) -> str
+    bind pretty(obj: any) -> str
+    bind merge(a: dict, b: dict) -> dict
+    bind keys(obj: dict) -> list
+    bind values(obj: dict) -> list
+    bind get_nested(obj: dict, path: str) -> any
+    bind set_nested(obj: dict, path: str, value: any) -> dict
+    bind __to_prompt__() -> str

@@ -142,14 +142,17 @@ push，否则一律禁止 git push 到任何远程仓库。破坏性重构授权
      ——VISION-4/5 类型层是独立方向（user-gated，非内核工程化范畴）。P6 的"台阶 ④ 之后
      方向"须先**实证裁定**：内核契约 bind 化的具体范围（哪些既有 builtin 机制可经 bind
      表达 + 哪些须保持宿主侧）+ 设计确认（对照 9 不变量）→ 分阶段实施。
-     **进度**：Phase 0 实证裁定完成（2026-09-09 交接 session）——设计文档
-     `tasks_docs/_p6_selfbootstrap_design.md` 已落：bind 化范围 = 工具 4（math/json/
-     time/schema）契约源 IBCI 化 + 实现重打包[模块级函数 + per-engine 命名空间]；
-     net 契约源 IBCI 化[实现保留 per-engine 实例，本质差异登记]；kernel 5 + fs 维持
-     宿主侧[lifecycle/不变量 #4 通道/引擎内部服务——bind 机制无对应表达面]。bootstrap
-     阶段 = parse + 共享合成函数 + 既有注册/绑定通道[零新运行期机制]；批次 B1[共享合成
-     提取]✅[commit df4af9c2，判别 7 例 + 全量 3950/1 零回归]→B2[契约源 4 件 +
-     bootstrap + 实现重打包，中风险]→B3[net]→B4[文档收敛]。**下一 agent 起点 = B2 开工**。
+     **进度**：Phase 0 实证裁定 + B1 ✅（共享合成提取，判别 7 例）+ B2 ✅（工具 4
+     契约源自举：契约源 4 件 contracts/{math,json,time,schema}.ibci + bootstrap 阶段
+     kernel_contracts[parse→共享合成→per-engine 严格命名空间→register_module，零新
+     运行期机制] + 实现重打包[类实例→模块级函数] + 4 字面量真删除 + kernel_version
+     递增；全量 3963/1 零回归）。**B3（net）实施期实证取消**：net 8 方法 headers 默认
+     参数面[has_default]超出 bind 表达力 + per-engine 状态双重边界 → net 维持宿主侧
+     字面量（USER_DEFINED）；远期项登记 = bind 默认值语法（独立立项）。provenance
+     变更（工具 4 → EXTERNAL_MODULE）行为安全实证完成。**下一 agent 起点 = B4 文档
+     收敛**（01_native_host_binding 内核契约自举节 + 插件体系同步 + KNOWN_LIMITS
+     边界注记 + P6 里程碑收束 ff unsafe-vibe-dev）。设计文档
+     `tasks_docs/_p6_selfbootstrap_design.md`（含 B2 实施期裁定记录）。
   2. **后续 = P7 隔离改造 + 反射能力（档 B）**——高风险→隔离分支（100% 授权独立分支
      实验）。P7 与 P6 的交点 = 档 B 隔离改造是 VISION-6 唯一与 VISION-4 类型层有交点
      的方向（MVP 落地后联合重估）。

@@ -1,3 +1,5 @@
-from .core import SchemaLib, create_implementation
-
-__all__ = ["SchemaLib", "create_implementation"]
+"""
+schema — 数据校验内核实现（模块级函数形态）。
+契约（成员面 + 签名）单一权威源 = 内核契约源（bind 表达）；本包 = 实现面。
+"""
+from .core import *

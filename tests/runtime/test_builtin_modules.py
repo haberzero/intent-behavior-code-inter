@@ -3,9 +3,11 @@
 tests/runtime/test_builtin_modules.py
 ======================================
 
-内置模块（内核原生 6 + 工具 5 + file）构造期预注册验证。
-内核原生 6：ai/ihost/meta/idbg/isys/iruntime（kernel-native）。
-工具 5：math/json/time/net/schema（内联 spec 构造期预注册，USER_DEFINED）。
+内置模块构造期预注册验证。
+内核原生 6：ai/ihost/meta/idbg/isys/iruntime（kernel-native，宿主侧字面量）。
+工具 4：math/json/time/schema（契约源自举——IBCI bind 声明契约源合成 spec，
+EXTERNAL_MODULE，与用户侧 bind 派生同构）。
+net：宿主侧工厂字面量（per-engine 可变状态，bind 机制无对应表达面），USER_DEFINED。
 """
 import os
 import pytest
@@ -38,16 +40,31 @@ class TestBuiltinRegistration:
             assert spec.visibility == Visibility.IMPORT_GATED
 
     def test_tool_modules_pre_registered_at_init(self):
-        """工具 5 模块构造期预注册（USER_DEFINED + IMPORT_GATED + 实现就绪）。"""
+        """工具 4 模块构造期经契约源自举预注册（EXTERNAL_MODULE + IMPORT_GATED + 实现就绪）。
+
+        math/json/time/schema 的 spec 由 IBCI bind 声明契约源合成（契约单一权威源 =
+        contracts/<module>.ibci）；provenance = EXTERNAL_MODULE（与用户侧 bind 派生
+        同构——同一合成逻辑，同一 provenance 语义）。
+        """
         eng = IBCIEngine(root_dir=REPO_ROOT)
-        for name in ("math", "json", "time", "net", "schema"):
+        for name in ("math", "json", "time", "schema"):
             impl = eng.host_interface.get_module_implementation(name)
             assert impl is not None, f"{name} should be pre-registered"
 
             spec = eng.host_interface.metadata.resolve(name)
             assert spec is not None, f"{name} spec should be registered"
-            assert spec.provenance == Provenance.USER_DEFINED
+            assert spec.provenance == Provenance.EXTERNAL_MODULE
             assert spec.visibility == Visibility.IMPORT_GATED
+
+    def test_net_pre_registered_user_defined(self):
+        """net 维持宿主侧工厂字面量（per-engine 可变状态；USER_DEFINED + IMPORT_GATED）。"""
+        eng = IBCIEngine(root_dir=REPO_ROOT)
+        impl = eng.host_interface.get_module_implementation("net")
+        assert impl is not None, "net should be pre-registered"
+        spec = eng.host_interface.metadata.resolve("net")
+        assert spec is not None, "net spec should be registered"
+        assert spec.provenance == Provenance.USER_DEFINED
+        assert spec.visibility == Visibility.IMPORT_GATED
 
     def test_file_pre_registered_kernel_native(self):
         """file 模块自 engine.py 挪入集中注册（fs 模块，KERNEL_NATIVE + exported_types 保留）。"""
