@@ -2021,6 +2021,33 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   保语义 + 超 2× 收益面（branch）；合并 unsafe-vibe-dev 待 v1.5 + 判别套件完成。
 ---
 
+- **VISION-6 P4 真 JIT·v1.5 cond-codegen 落地（2026-09-09，隔离分支 p4-real-jit，commit
+  88545392）**：P4 真 JIT（用户点名优先）v1.5——while **条件 + 循环体一起 codegen** 为单一
+  直接执行体 `_jit_loop(rt, ec, loc, cancel_event)`（内含 `while True` 条件检查
+  `ec.is_truthy` + 循环体），整个 while 循环在 codegen 体内**一次执行完**（vm_handle_IbWhile
+  纯 return，无 per-iteration gen.send，**drive-loop 交互归零**）。条件含 LLM/不确定/非
+  ExprSet → 回退 v1.0（循环体 codegen）/CPS。
+  **实现**：① `jit_codegen.generate_jit_loop`——`_gen_body_source` 复用 v1.0 体生成；
+  loop_src 加**协作取消检查**（`cancel_event.is_set()` → `raise TaskCancelled`，与
+  _drive_loop_gen 同语义——codegen 体整循环一次执行，须显式检查 cancel 保 `t.cancel()`
+  终止，否则 test_cancel_stops_while_loop_body 卡死）；TaskCancelled 进 namespace。②
+  `vm_executor`——`_jit_loop_cache`（v1.5 缓存）+ `cancel_event` **公共属性**（封装纪律，免
+  穿透 `_cancel_event` 私有属性）+ `_get_jit_loop`（per node_uid 缓存）。③
+  `vm_handle_IbWhile`——v1.5 优先（jit_loop 非 None → 一次执行整个循环）；否则回退
+  v1.0/CPS。
+  **改前/改后（perf_bench，µs/iter，warmup2+5）**：arith 179.7→36.1（**~4.98×**）/ branch
+  262.9→50.0（**~5.26×**）——**远超 2× 验收目标**。全量 **3909/1 零回归**。
+  **测试适配**（codegen ~5× 加速 → 超时判别阈值上调）：test_collect_timeout_policy
+  （run_code + run_file）child 循环 20000→100000 迭代（保 > collect_timeout 1s 触发超时
+  判别）。
+  **P4 数据平面线累计收益（vs P1 基线 arith 257/branch 372）**：P2 收束 ~-30%（arith
+  179.7）→ P4 v1.0 ~-46%（arith 96.8）→ **P4 v1.5 ~-86%（arith 36.1，~7×）**。真 JIT 路线
+  ① 实证成功（route ② IR/字节码层弃——更险 + 上限低）。
+  **P4 后段（隔离分支续推）**：v1.1 break/continue/return（控制流数据化扩展）+ 判别测试
+  套件 D1-D7（值 oracle/判据边界/错误等价/污点/Signal/多引擎缓存/overlay）+ 语义等价攻坚 +
+  合并 unsafe-vibe-dev（全本地未 push）。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

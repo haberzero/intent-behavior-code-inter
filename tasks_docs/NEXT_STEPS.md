@@ -58,18 +58,17 @@
 > 分支）。P4 真 JIT[用户点名优先·隔离分支] / P5 持久 artifact 缓存[编译期·可并行·较低风险]
 > 接续；P3 D-3.3[P1 实证已 O(n)，紧迫性下调]。
 >
-> **P4 进度（v1.0 落地）**：设计确认 ✅（`_p4_jit_design.md`，commit 7e091cfd）。**v1.0
-> codegen 落地 ✅**（隔离分支 p4-real-jit，commit 5fd9372e——while 直线循环体直接执行体，
-> 绕开每节点 CPS 生成器协议，保 §11 不变量[统一入口#1/控制流数据化#2/receive 分派#6]；
-> subagent B1-B7 修复版：B1 常量 box(native) 即前轮 `i+NoneType` 崩溃根因 / B2 赋值去
-> skip_type_check 保类型检查 / B3 异常位置标注 / B4 LLM 污点声呐 / B5 IbIf+IbCompare 判据 /
-> B7 `__builtins__={}`+缓存建表期初始化）。**改前/改后：arith 179.7→96.8（~1.86×）/ branch
-> 262.9→110.7（~2.37×，超 2× 目标）；全量 3909/1 零回归**。subagent 关键结论：P2.5（CPS 内
-> 驱动层）上限 ~1.4-1.6×（每节点协议地板 11 VMTasks/iter 不可约）；codegen（route ①）~2-4×
-> 余量；route ②（IR/字节码）更险弃。**P4 v1.0 后段（隔离分支续推）**：v1.5 cond-codegen
-> [arith 推至 ~2×+] / v1.1 break/continue/return / 判别测试套件 D1-D7 / 语义等价攻坚。合并
-> unsafe-vibe-dev 待 v1.5+判别套件。P5 持久 artifact 缓存[编译期·可并行·较低风险] 可交错；
-> P3 D-3.3[紧迫性下调]。
+ > **P4 进度（v1.5 落地）**：设计确认 ✅（_p4_jit_design.md，commit 7e091cfd）。v1.0 codegen
+ > ✅（commit 5fd9372e）+ **v1.5 cond-codegen ✅**（commit 88545392——while 条件 + 循环体一起
+ > codegen 为单一直接执行体 _jit_loop，整个循环一次执行完，drive-loop 交互归零；协作取消
+ > 检查[cancel_event.is_set → raise TaskCancelled，与 _drive_loop_gen 同语义]；cancel_event
+ > 公共属性[封装纪律]）。**改前/改后：arith 179.7→36.1（~4.98×）/ branch 262.9→50.0
+ > （~5.26×）——远超 2× 验收目标；全量 3909/1 零回归**。测试适配：test_collect_timeout_policy
+ > 超时阈值 20000→100000 迭代（codegen ~5× 加速）。**P4 数据平面线累计收益（vs P1 基线
+ > arith 257）**：P2 收束 ~-30% → v1.0 ~-46% → **v1.5 ~-86%（~7×）**。route ① 实证成功
+ > （route ② 弃）。**P4 后段（隔离分支续推）**：v1.1 break/continue/return + 判别测试套件
+ > D1-D7 + 语义等价攻坚 + 合并 unsafe-vibe-dev。P5 持久 artifact 缓存[编译期·可并行·较低
+ > 风险] 可交错；P3 D-3.3[紧迫性下调]。
 >
 > **分阶段路线图 P1→P7**（排序 = 价值/依赖/可验证性；数据平面/真 JIT 用户点名优先；每阶段
 > 闭环 = 设计确认→实现→全量零回归→落账→本地 commit[禁 push]；高破坏性/边界不清走独立隔离
