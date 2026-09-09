@@ -2096,6 +2096,20 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
   持久 artifact 缓存**（编译期、可并行、较低风险）。
 ---
 
+- **VISION-6 P5 持久 artifact 缓存落地（2026-09-09，free-explore，commit b146e602）**：
+  P5 持久 artifact 缓存（编译期上修）——相同源码 + 相同内核版本的编译产物（CompilationArtifact
+  蓝图）缓存到磁盘（`<project_root>/.ibci_cache/artifact_<key>.pkl`），命中时跳过 5 阶段
+  编译管线（扫描/依赖图/拓扑/语义/序列化），直接加载缓存产物。
+  **设计**：① 缓存键 = sha256(源码 + entry_module_name + kernel_version + project_root)
+  ——源码内容（非 tempfile 路径）保 run_string 可复现；kernel_version 保内核变更后失效；
+  project_root 保跨项目隔离。② 启用门：IBCI_ARTIFACT_CACHE=1（env）；默认关闭（零侵入）。
+  ③ 缓存存储：pickle 序列化。④ 命中/未命中：命中 → 加载；未命中 → 编译 + 保存（失败
+  不抛穿编译流程）。
+  **契约**（tests/compiler/test_artifact_cache.py，3 例）：命中 → 值 oracle + 缓存文件
+  创建 / 默认关闭 → 不创建缓存 / 源码变更 → 键变更 → 未命中。全量 **3936/1 零回归**。
+  **下一里程碑**：P6 内核自举（bind 表达内核契约）/ P7 隔离改造 + 反射。
+---
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
