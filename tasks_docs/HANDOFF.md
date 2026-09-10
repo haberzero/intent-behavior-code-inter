@@ -201,8 +201,8 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   （Python 内核参考基线 + 确定性验证 + `run_kernel("rust")` drop-in + `--diff` 对拍）+ 常设门
   `tests/contracts/test_differential_harness.py`（smoke 子集）。下一 session 扩语料（并入 R-B 里程碑）+
   实现 `run_kernel("rust")` 后即成 py↔rust 差分门（Rust 安全网）。
-- **全量 pytest 基线（2026-09-10 实跑，干净）**：**3990 passed / 1 skipped / 103.58s / rc=0**（供下一
-  session 参照，不冻结）。
+- **全量 pytest 基线（2026-09-10 实跑，干净）**：**3998 passed / 1 skipped / 115.03s / rc=0**（含差分
+  harness 常设门；供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
