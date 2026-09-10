@@ -96,8 +96,13 @@ def _extract_engine_variables(engine) -> dict:
     return result
 
 
-def _build_result_json(*, exit_status, exception, journal, budget, replay, variables=None):
-    """组装 result trailer（v1 契约：单行 JSON）。"""
+def _build_result_json(*, exit_status, exception, journal, budget, replay, deterministic, variables=None):
+    """组装 result trailer（v1 契约：单行 JSON）。
+
+    ``deterministic``：确定性执行模式审计凭证（``--deterministic`` 时 =
+    ``{"enforced": true, "llm_calls": 0}``，机读"LLM 调用次数=0"）；未启用
+    = None（字段缺省，v1 契约新增可选字段——加法演进，既有读取方不受影响）。
+    """
     result = {
         "v": 1,
         "exit_status": exit_status,
@@ -106,6 +111,8 @@ def _build_result_json(*, exit_status, exception, journal, budget, replay, varia
         "budget": budget,
         "replay": replay,
     }
+    if deterministic is not None:
+        result["deterministic"] = deterministic
     if variables is not None:
         result["variables"] = variables
     return json.dumps(result, ensure_ascii=False)
@@ -138,10 +145,18 @@ def main():
                             help="Deterministic replay: serve LLM calls from a journal "
                                  "file in seq order (real provider not loaded; exhaustion "
                                  "fails fast). Implies journaling of the replay run.")
+    run_parser.add_argument("--deterministic", action="store_true",
+                            help="Deterministic execution mode (R-C): zero-LLM invariant — "
+                                 "any LLM call is intercepted at the call chokepoint before "
+                                 "the provider (fail-fast RUN_DETERMINISTIC_LLM_CALL). "
+                                 "Machine-readable credential in --result-json "
+                                 "(deterministic: {enforced, llm_calls: 0}). "
+                                 "Mutually exclusive with --replay (replay serves LLM "
+                                 "responses; deterministic forbids them).")
     run_parser.add_argument("--result-json", action="store_true",
                             help="Emit a machine-readable result trailer (single JSON line "
                                  "at the end of stdout: exit_status / exception / journal / "
-                                 "budget / replay)")
+                                 "budget / replay / deterministic)")
     run_parser.add_argument("--export-variables", action="store_true",
                             help="Include exported global variables in the result JSON "
                                  "(requires --result-json)")
@@ -230,6 +245,17 @@ def main():
                     k, v = auto_var.split("=", 1)
                     cli_variables[k] = v
 
+        # --deterministic × --replay 互斥校验（校验期 fail-fast——矛盾组合
+        # 不进入装配：replay 供给 LLM 响应 = 预期有 LLM 调用，deterministic
+        # = 零容忍 LLM 调用）。
+        if getattr(args, 'deterministic', False) and getattr(args, 'replay', None):
+            print(
+                "Error: --deterministic 与 --replay 互斥（replay 供给 LLM 响应，"
+                "deterministic 零容忍 LLM 调用——矛盾组合）。",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         # LLM 预算（api_config.json budget 节；无节 = 无预算，零侵入）。
         # budget 节自身形态错误 = fail-fast（用户显式写了预算且写错，不静默
         # 忽略）；文件级有效性归 ai 模块自身校验面（此处不重复验证）。
@@ -278,6 +304,14 @@ def main():
             print(f"replay: {replay_arg} ({replay_journal.total_calls} recorded calls)",
                   file=sys.stderr)
 
+        # 确定性执行模式（--deterministic，R-C）：零 LLM 不变量守卫（run 级
+        # 单实例，汇点消费；与 --replay 互斥已在装配前校验）。
+        deterministic_guard = None
+        if getattr(args, 'deterministic', False):
+            from core.runtime.observability.deterministic import DeterministicGuard
+            deterministic_guard = DeterministicGuard()
+            print("deterministic: zero-LLM invariant enforced", file=sys.stderr)
+
         # LLM journal（run 级调用审计，默认开；--no-journal 关闭）。路径在项目
         # 根下（与 --root 一致）；启动提示走 stderr（stdout 是数据面，审计提示
         # 不入数据面）。重放 run 仍写新 journal（审计链完整：replay_of 指向源）。
@@ -303,7 +337,8 @@ def main():
         try:
             try:
                 engine.run(args.file, variables=cli_variables, silent=True,
-                           journal_writer=journal_writer, budget_guard=budget_guard)
+                           journal_writer=journal_writer, budget_guard=budget_guard,
+                           deterministic_guard=deterministic_guard)
             finally:
                 if journal_writer is not None:
                     journal_writer.close()
@@ -346,6 +381,8 @@ def main():
                         "consumed": replay_journal.consumed_calls,
                         "total": replay_journal.total_calls}
                        if replay_journal_path else None,
+                deterministic=deterministic_guard.snapshot()
+                       if deterministic_guard is not None else None,
                 variables=exported_vars,
             ))
         sys.exit(1 if run_error else 0)

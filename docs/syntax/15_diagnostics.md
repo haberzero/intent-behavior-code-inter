@@ -43,12 +43,24 @@ python main.py bench <entry.ibci> --runs 10 --warmup 2  # 编译时间基准（m
   （各阈值可选）。`warn`（默认）= 每维度首次超限 stderr 告警一次、run 继续；
   `fail` = 超限在**下一次 LLM 调用的 provider 调用前**拦截
   （`RUN_BUDGET_EXCEEDED`，被拦调用不发出）。无 `budget` 节 = 无预算核算。
+- **确定性执行模式**：`--deterministic` 启用 run 级**零 LLM 不变量**——任何
+  LLM 调用（`@~...~`）在**调用汇点、provider 调用前**结构性拦截
+  （`RUN_DETERMINISTIC_LLM_CALL`，被拦调用不发出、无 API key 消耗）；适用于
+  判定/验证路径的确定性 run（同输入逐字节可复现）。与 `--replay` 互斥
+  （矛盾组合 = 启动期拒绝）。边界：拦截面 = LLM 调用汇点（同 journal/budget；
+  流式 `ai.stream_call` 与 `meta.eval` 子进程不经守卫，见 `docs/KNOWN_LIMITS.md`
+  §二十七 / 第二十六）。
+  ```bash
+  python main.py run app.ibci --deterministic --result-json
+  # trailer: "deterministic": {"enforced": true, "llm_calls": 0}（审计凭证，机读）
+  ```
 - **机器可读结果 trailer**：`--result-json` 在 stdout **末行**输出一行 JSON
   （验收机 `tail -n1` 即得；数据面 = 末行之前）：
   `{"v":1, "exit_status":"ok"|"error", "exception":null|{"code","message",
   "source":{"file","line","column","snippet"}}, "journal":..., "budget":
   {"calls","tokens","wall_s","exceeded"}|null, "replay":
-  {"source","consumed","total"}|null}`。
+  {"source","consumed","total"}|null, "deterministic":
+  {"enforced","llm_calls"}|null}`。
   ```bash
   python main.py run app.ibci --result-json
   ```

@@ -34,12 +34,17 @@ class DeterministicGuard:
     """
 
     def check_pre_call(self, node_uid: Optional[str]) -> None:
-        """provider 调用前拦截（恒 fail-fast——确定性模式零容忍，无阈值面）。"""
+        """provider 调用前拦截（恒 fail-fast——确定性模式零容忍，无阈值面）。
+
+        ``location=None``（本错误在 LLM 调用汇点抛出，无源位置对象——node_uid
+        是调试标识非 Location；经 VM 翻译面到达时定位信息归 statement 侧
+        诊断承载）。
+        """
         raise InterpreterError(
             "确定性执行模式（--deterministic）下禁止 LLM 调用："
             "本 run 的零 LLM 不变量在调用汇点结构性拦截（D1：判定/验证路径"
             "零 LLM）。移除此调用点、或去掉 --deterministic 以允许 LLM。",
-            node_uid,
+            None,
             error_code=RUN_DETERMINISTIC_LLM_CALL,
         )
 

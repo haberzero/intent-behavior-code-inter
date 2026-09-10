@@ -2497,6 +2497,57 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
    设计要点 = `tasks_docs/_p3_disk_format_design.md`（P4 批次开工前保留——含
    §3 加载三级门 + §4 保存语义 + §6 测试面；试用方配合项 ② = 按此格式重新
    导出 v30 补 id/source/status 元数据）。
+- **P4 R-C 确定性执行模式落地（--deterministic 零 LLM 不变量 + 审计凭证，
+   2026-09-10，unsafe-vibe-dev；世界模型 DB 主线批次 4，两批 D1-D2 收束）**：
+   **试用方 R-C 验收面 + M1 余项收口**（M1 = P2+P3+P4 联合——P4 落地即 M1
+   达成）。面 = CLI `run --deterministic` + 引擎级 `deterministic_guard` 参数
+   （同 budget_guard 装配路径）+ result-json 凭证字段。
+   **关键裁定（self-grill 全分支消解）**：① 面定位 = CLI flag + 引擎参数
+   （非新 IBCI 模块——run 级执行模式 = 宿主装配语义，同 journal/budget/replay
+   三兄弟；脚本内容不因模式改变；试用方请求字面 = "run --deterministic 或
+   等价"）；② 机制 = **LLM 调用汇点 guard**（journal/budget 同点同边界——
+   单一核算点 `_call_llm`；流式 ai.stream_call 不经汇点 = 子系统既有诚实
+   边界同族；meta.eval 子进程 = 新引擎守卫不跨 spawn 继承——eval 环境参数
+   边界同族，M1 事实表达式 = 纯代码子进程自然零 LLM）；③ 与 budget 分码
+   （RUN_DETERMINISTIC_LLM_CALL vs RUN_BUDGET_EXCEEDED——零容忍 run 级
+   不变量 vs 用户配置阈值——不同概念不同码；检查序 deterministic 先行
+   [强不变量优先]）；④ 凭证 = `{enforced: true, llm_calls: 0}`（拦截在前
+   post-call 永不达——计数恒 0 = 结构事实非观测推断；result-json v1 加法
+   演进：字段缺省 = 未启用）；⑤ --deterministic × --replay **互斥**（replay
+   供给 LLM 响应 = 预期有 LLM 调用 vs 零容忍——矛盾组合装配前校验期
+   fail-fast，不装入注定失败的组合）；⑥ 审计凭证机读 = 试用方"LLM 调用
+   次数=0"验收的字面落法（trailer 末行 JSON，验收机 tail -n1 即得）。
+   **关键发现（既有缺陷 + 既有边界，落档）**：
+   - **既有缺陷修复**：budget/deterministic guard 的 `InterpreterError` 曾把
+     node_uid（str）当 location（Location 对象）传——CLI 渲染面
+     DiagnosticFormatter 按 Location 契约取 `.file_path` 崩溃（budget fail
+     面同型既有崩溃实证后修复：location=None + 消息面；经 VM 翻译面到达时
+     定位信息归 statement 侧诊断承载——CLI 实证含源定位 + snippet 正常渲染）。
+   - **既有边界发现并落档**（KNOWN_LIMITS 新 §二十七）：行为值 future 按需
+     解析——**未引用 LLM 值的错误静默吞没**（无 guard 基线同型实证：mock
+     失败/真失败/确定性拦截同面——值被消费或顶层 = 正常 fail-fast）；
+     应对 = 需显形的 LLM 值必须被消费；确定性零 LLM 不变量结构性成立
+     不受影响（拦截在 provider 前——llm_calls=0 凭证恒真）。
+   **变化前后**：+DeterministicGuard（core/runtime/observability/
+   deterministic.py 新模块——observability 三兄弟 journal/budget/
+   deterministic）+ ServiceContext set_deterministic_guard/属性 + _call_llm
+   汇点检查（budget 之前）+ 引擎 run/run_string/execute deterministic_guard
+   参数 + main.py --deterministic（互斥校验 + 凭证字段 + result-json schema
+   加法）+ budget.py location 修复 + 新码 RUN_DETERMINISTIC_LLM_CALL
+   （catalog + 15_diagnostics[码条目 + run 可观测面节 + 凭证 schema]）+
+   KNOWN_LIMITS §二十七 + 测试 12 例（runtime 7：单元恒拦截/凭证形态/引擎面
+   纯代码零侵入/顶层拦截/无 guard 基线/双 guard 先行 + budget 零消耗/
+   try-except 可捕获[值消费面] + e2e CLI 5：**M1 验收形态**[KB artifact +
+   load_kb + quote/eval 一条事实数据形态对拍 + 成立性判定；两次独立 CLI run
+   数据面逐字节一致 + 凭证 llm_calls=0] / LLM 脚本拦截面 / 互斥面 /
+   零侵入对照 / 纯代码凭证）。
+   **验证**：全量 pytest 零回归（语义错误集变更放行门——新 RUN_ 码 +
+   budget 行为修复；见 NEXT_STEPS 基线锚点）。**M1 验收达成**（试用方里程碑
+   1：load_kb → 确定性模式下 quote/eval 一条事实，全程零 LLM、可复现、
+   凭证机读——替代静态投影的最小活集成）。
+   设计要点 = `tasks_docs/_p4_deterministic_mode_design.md`（P5 批次开工前
+   保留——含 §2 汇点机制/边界 + §5 测试面；quote/eval 当前契约 = 纯表达式
+   自包含源[__qeval__ = <source> 包装]——M1 脚本形态按此契约书写）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

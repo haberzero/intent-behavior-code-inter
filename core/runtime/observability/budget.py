@@ -96,7 +96,9 @@ class BudgetGuard:
                 f"LLM 运行预算超限（fail 模式拦截）：{dim} 当前 {self._fmt(dim, current)}"
                 f" ≥ 阈值 {self._fmt(dim, limit)}（api_config budget 节；"
                 f"调高阈值或改 on_exceed=warn 解除）",
-                node_uid,
+                # location=None（汇点错误无源位置对象；node_uid 非 Location——
+                # str 占位会击穿 CLI 渲染面 DiagnosticFormatter 的 Location 契约）。
+                None,
                 error_code=RUN_BUDGET_EXCEEDED,
             )
 
