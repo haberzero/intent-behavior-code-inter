@@ -331,6 +331,22 @@ impl Interpreter {
                 }
                 Flow::Next
             }
+            Stmt::AugAssign { target, op, value, .. } => {
+                // x op= v → x = x op v（load x，应用 op，store）
+                if let Expr::Name { id, .. } = target {
+                    let cur = env.borrow().get(id).unwrap_or(IbValue::Int(0));
+                    let rhs = self.eval_expr(env, value, output);
+                    // 复合算子映射（"+=" → "+"，"-=" → "-"）
+                    let base_op = match op.as_str() {
+                        "+=" => "+",
+                        "-=" => "-",
+                        _ => op.as_str(),
+                    };
+                    let result = self.binop(&cur, base_op, &rhs);
+                    env.borrow_mut().set(id, result);
+                }
+                Flow::Next
+            }
             Stmt::ExprStmt { value, .. } => {
                 self.eval_expr(env, value, output);
                 Flow::Next
@@ -566,6 +582,14 @@ impl Interpreter {
                     elts.iter().map(|e| self.eval_expr(env, e, output)).collect();
                 IbValue::list_new(items)
             }
+            Expr::Tuple { elts, .. } => {
+                // 元组：IBC 数据面 = 列表（同 List）
+                let items: Vec<IbValue> =
+                    elts.iter().map(|e| self.eval_expr(env, e, output)).collect();
+                IbValue::list_new(items)
+            }
+            // 切片仅在 Subscript 内有意义（x[1:3]）——独立求值无定义 = None_
+            Expr::Slice { .. } => IbValue::None_,
             Expr::Dict { keys, values, .. } => {
                 let pairs: Vec<(IbValue, IbValue)> = keys
                     .iter()
@@ -586,8 +610,19 @@ impl Interpreter {
             }
             Expr::Subscript { value, slice, .. } => {
                 let base = self.eval_expr(env, value, output);
-                let key = self.eval_expr(env, slice, output);
-                subscript_get(&base, &key)
+                match slice.as_ref() {
+                    // 切片：x[lower:upper]
+                    Expr::Slice { lower, upper, .. } => {
+                        let lo = lower.as_ref().map(|e| self.eval_expr(env, e, output));
+                        let hi = upper.as_ref().map(|e| self.eval_expr(env, e, output));
+                        subscript_slice(&base, lo.as_ref(), hi.as_ref())
+                    }
+                    // 单表达式下标：x[1]
+                    _ => {
+                        let key = self.eval_expr(env, slice, output);
+                        subscript_get(&base, &key)
+                    }
+                }
             }
             Expr::IfExp { test, body, orelse, .. } => {
                 let cond = self.eval_expr(env, test, output).truthy();
@@ -1028,6 +1063,28 @@ fn subscript_get(base: &IbValue, key: &IbValue) -> IbValue {
             .nth(*i as usize)
             .map(|c| IbValue::Str(c.to_string()))
             .unwrap_or(IbValue::None_),
+        _ => IbValue::None_,
+    }
+}
+
+/// 列表切片 x[lower:upper]（Python 语义：[lower, upper)；lower/upper 缺省 = 端点）。
+fn subscript_slice(base: &IbValue, lower: Option<&IbValue>, upper: Option<&IbValue>) -> IbValue {
+    match base {
+        IbValue::List(l) => {
+            let v = l.borrow();
+            let len = v.len() as i64;
+            let lo = match lower {
+                Some(IbValue::Int(i)) => (*i).max(0),
+                _ => 0,
+            };
+            let hi = match upper {
+                Some(IbValue::Int(i)) => (*i).min(len).max(0),
+                _ => len,
+            };
+            let items: Vec<IbValue> = v[lo as usize..hi as usize].to_vec();
+            drop(v);
+            IbValue::list_new(items)
+        }
         _ => IbValue::None_,
     }
 }

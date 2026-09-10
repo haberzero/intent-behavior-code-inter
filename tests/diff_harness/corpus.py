@@ -51,6 +51,10 @@ CORPUS: List[Tuple[str, str]] = [
     ("str_methods", "s = 'a,b,c'\nprint(s.split(','))\nprint(s.find('b'))\n"),
     # ---- 链式比较 ----
     ("chained_cmp", "a = 1\nb = 2\nc = 3\nprint(a < b < c)\nprint(1 < 2 < 3)\n"),
+    # ---- 复合赋值 / 元组 / 切片（阶段④ CPS 优化：扩 3 高频节点）----
+    ("aug_assign", "x = 0\nx += 1\nx += 2\nprint(x)\ny = 10\ny -= 3\nprint(y)\n"),
+    ("tuple_basic", "t = (1, 2, 3)\nprint(t[0])\nprint(len(t))\n"),
+    ("list_slice", "xs = [1, 2, 3, 4, 5]\nprint(xs[1:3])\nprint(xs[:2])\n"),
     # ---- quoted 值（自指原语：meta.quote 冻结 / meta.eval 取值，host service 桥接）----
     ("quoted_source", 'import meta\nq = meta.quote("21 * 2")\nprint(q.source)\n'),
     ("quoted_eval_value", 'import meta\nprint(meta.eval(meta.quote("1 + 2")))\n'),

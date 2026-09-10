@@ -3412,6 +3412,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（CPS 优化
     [43 节点 enum 分发] + task_scheduler GIL-free 集成）续在隔离分支（差分门逐级
     验证）；语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 第二增量（CPS 优化——node_types dispatch table + 扩 3 高频节点
+  AugAssign/Tuple/Slice，33 语料全级差分等价，2026-09-10，隔离分支
+  `rust-kernel`）**：**Rust 执行核心 CPS 优化**——① `node_types()` 暴露执行核心
+  分发的节点类型（CPS dispatch table，对齐 Python VM 的 43/50 节点分发）；② 扩 3
+  高频节点（IbAugAssign 复合赋值 / IbTuple 元组 / IbSlice 切片），33 语料全级差分
+  逐条等价（token/AST/反序列化/数据面 + 符号表/类型表）。
+  **交付**：
+  - **CPS dispatch table**（`ibci-ext/src/deserializer.rs` `node_types()` +
+    `ibci_ext.node_types()`）：执行核心分发的节点类型（反序列化 match 覆盖的 AST
+    节点）——差分 harness 经此与 Python VM dispatch table（53 节点）比对覆盖差
+    （当前 30 节点，23 节点覆盖差 = 阶段④ CPS 优化目标）。
+  - **IbAugAssign**（`x += 1` / `x -= 1`）：parser（复合赋值 token PlusAssign/
+    MinusAssign）+ deserializer + interpreter（load x → 应用 op → store，复合算子
+    映射 +=→+ / -=→-）。
+  - **IbTuple**（`(1, 2, 3)`）：parser（Lparen 后随 Comma = Tuple，位置 = 首元素起
+    → 末元素止[不含括号]）+ deserializer + interpreter（元组 = 列表，IBC 数据面）。
+  - **IbSlice**（`x[1:3]` / `x[:2]`）：parser（Lbracket 内 ':' = Slice，lower/upper
+    可空[空 lower = xs[:2]]，位置 = ':' token）+ deserializer + interpreter（列表
+    切片 lower:upper，Python 语义 [lower, upper)）。
+  - **语料扩展**（+aug_assign/tuple_basic/list_slice）。
+  **关键裁定（self-grill 全分支消解）**：① **node_types = CPS dispatch table**
+    （执行核心分发的节点类型——对齐 Python VM 43/50 节点分发，差分 harness 经此
+    比对覆盖差[当前 30/53，23 节点覆盖差 = 优化目标]）；② **IbTuple 位置 = 首元素
+    起 → 末元素止**（不含括号——对齐 Python IbTuple 位置约定，非 `(` → `)`）；③
+    **IbSlice lower/upper 可空**（`xs[:2]` 空 lower——parser 检测 `[` 后直接 `:`，
+    非 parse_expr 误调）；④ **IbSlice 位置 = ':' token**（对齐 Python IbSlice 位
+    置约定）；⑤ **复合算子映射**（`+=` → `+` / `-=` → `-`——复用 binop，非重复实
+    现）；⑥ **元组 = 列表**（IBC 数据面元组表示 = 列表，同 List）。
+  **验证**：**33/33 全语料数据面差分等价**（含 aug_assign[3,7]/tuple_basic[1,3]/
+  list_slice[[2, 3],[1, 2]]）+ 全级差分 33/33 逐条等价[token/AST/反序列化/数据面
+  + 符号表/类型表] + node_types = 30 节点（覆盖差 23）+ 全量 pytest 零回归（阶段④
+  第二增量放行门——加法式增量不动 Python 执行路径，计数稳定 4276；见 NEXT_STEPS
+  基线锚点）。**阶段④ 第二增量出口达成**（Rust 执行核心 CPS 优化——node_types
+  dispatch table + 扩 3 高频节点）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 第二增量零风险加法式（opt-in，不动
+    Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（CPS 优化
+    续[覆盖差 23 节点逐步补齐] + task_scheduler GIL-free 集成）续在隔离分支（差分
+    门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

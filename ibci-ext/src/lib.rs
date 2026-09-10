@@ -83,6 +83,18 @@ fn type_table(artifact_json: &str) -> String {
     deserializer::type_table(artifact_json).unwrap_or_default()
 }
 
+/// CPS dispatch table：执行核心分发的节点类型（反序列化 match 覆盖的 AST 节点）。
+/// 差分 harness 经此与 Python VM dispatch table（53 节点）比对覆盖差（优化目标：
+/// 对齐全量节点分发）。
+#[pyfunction]
+fn node_types(py: Python<'_>) -> PyResult<Py<PyList>> {
+    let list = PyList::empty(py);
+    for nt in deserializer::node_types() {
+        list.append(nt)?;
+    }
+    Ok(list.unbind())
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（3 = 执行核心）；status = 就绪门
 /// （"execution-core" = 执行核心就绪[数据面经 run_artifact 可用]；"ready" =
@@ -147,6 +159,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(deserialize_struct, m)?)?;
     m.add_function(wrap_pyfunction!(symbol_table, m)?)?;
     m.add_function(wrap_pyfunction!(type_table, m)?)?;
+    m.add_function(wrap_pyfunction!(node_types, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())

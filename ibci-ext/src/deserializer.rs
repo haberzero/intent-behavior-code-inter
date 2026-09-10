@@ -72,6 +72,12 @@ fn build_node(uid: &str, nodes: &NodeMap) -> Node {
             targets: uids_of(&n["targets"]).iter().map(|u| expr_of(u, nodes)).collect(),
             value: opt_uid(n.get("value")).map(|u| expr_of(&u, nodes)),
         }),
+        "IbAugAssign" => Node::Stmt(Stmt::AugAssign {
+            pos: pos_of(n),
+            target: expr_of(&uid_of(&n["target"]), nodes),
+            op: str_of(&n["op"]),
+            value: expr_of(&uid_of(&n["value"]), nodes),
+        }),
         "IbExprStmt" => Node::Stmt(Stmt::ExprStmt {
             pos: pos_of(n),
             value: expr_of(&uid_of(&n["value"]), nodes),
@@ -241,6 +247,17 @@ fn build_node(uid: &str, nodes: &NodeMap) -> Node {
             body: Box::new(expr_of(&uid_of(&n["body"]), nodes)),
             orelse: Box::new(expr_of(&uid_of(&n["orelse"]), nodes)),
         }),
+        "IbTuple" => Node::Expr(Expr::Tuple {
+            pos: pos_of(n),
+            elts: uids_of(&n["elts"]).iter().map(|u| expr_of(u, nodes)).collect(),
+            ctx: str_of(&n["ctx"]),
+        }),
+        "IbSlice" => Node::Expr(Expr::Slice {
+            pos: pos_of(n),
+            lower: opt_uid(n.get("lower")).map(|u| Box::new(expr_of(&u, nodes))),
+            upper: opt_uid(n.get("upper")).map(|u| Box::new(expr_of(&u, nodes))),
+            step: opt_uid(n.get("step")).map(|u| Box::new(expr_of(&u, nodes))),
+        }),
         "IbLambdaExpr" => {
             let params: Vec<Arg> = uids_of(&n["params"])
                 .iter()
@@ -333,7 +350,9 @@ fn expr_pos(e: &Expr) -> Pos {
         | Expr::Attribute { pos, .. }
         | Expr::Subscript { pos, .. }
         | Expr::IfExp { pos, .. }
-        | Expr::Lambda { pos, .. } => *pos,
+        | Expr::Lambda { pos, .. }
+        | Expr::Tuple { pos, .. }
+        | Expr::Slice { pos, .. } => *pos,
     }
 }
 
@@ -459,4 +478,22 @@ pub fn type_table(artifact_json: &str) -> Option<String> {
             .collect::<Vec<_>>()
             .join("\n"),
     )
+}
+
+/// CPS dispatch table：执行核心分发的节点类型（反序列化 match 覆盖的 AST 节点）。
+/// 优化目标：对齐 Python VM 的全量节点分发（53 节点）——本表 = 当前覆盖（语料面
+/// 高频节点）；差分 harness 经此与 Python VM dispatch table 比对覆盖差。
+pub fn node_types() -> Vec<&'static str> {
+    vec![
+        // 语句
+        "IbAssign", "IbAugAssign", "IbExprStmt", "IbIf", "IbFor", "IbFunctionDef",
+        "IbReturn", "IbBreak", "IbContinue", "IbPass", "IbImport", "IbWhile",
+        "IbTry", "IbClassDef",
+        // 表达式
+        "IbConstant", "IbName", "IbBinOp", "IbUnaryOp", "IbBoolOp", "IbCompare",
+        "IbCall", "IbListExpr", "IbTuple", "IbDict", "IbAttribute", "IbSubscript",
+        "IbSlice", "IbIfExp", "IbLambdaExpr",
+        // 容器/根
+        "IbModule",
+    ]
 }

@@ -140,6 +140,13 @@ pub enum Expr {
         // Box 断环（Expr::Lambda → Option<Expr> 递归）
         returns: Option<Box<Expr>>,
     },
+    Tuple { pos: Pos, elts: Vec<Expr>, ctx: String },
+    Slice {
+        pos: Pos,
+        lower: Option<Box<Expr>>,
+        upper: Option<Box<Expr>>,
+        step: Option<Box<Expr>>,
+    },
 }
 
 impl Expr {
@@ -252,6 +259,16 @@ impl Expr {
                     r
                 )
             }
+            Expr::Tuple { pos, elts, ctx } => {
+                let e: Vec<String> = elts.iter().map(|x| x.dump()).collect();
+                format!("IbTuple({}, elts=[{}], ctx='{}')", pos.prefix(), e.join(", "), ctx)
+            }
+            Expr::Slice { pos, lower, upper, step } => {
+                let l = lower.as_ref().map(|x| x.dump()).unwrap_or_else(|| "None".into());
+                let u = upper.as_ref().map(|x| x.dump()).unwrap_or_else(|| "None".into());
+                let s = step.as_ref().map(|x| x.dump()).unwrap_or_else(|| "None".into());
+                format!("IbSlice({}, lower={}, upper={}, step={})", pos.prefix(), l, u, s)
+            }
         }
     }
 }
@@ -312,6 +329,7 @@ impl Alias {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Assign { pos: Pos, targets: Vec<Expr>, value: Option<Expr> },
+    AugAssign { pos: Pos, target: Expr, op: String, value: Expr },
     ExprStmt { pos: Pos, value: Expr },
     If { pos: Pos, test: Expr, body: Vec<Stmt>, orelse: Vec<Stmt> },
     For { pos: Pos, target: Expr, iter: Expr, body: Vec<Stmt>, orelse: Vec<Stmt> },
@@ -388,6 +406,15 @@ impl Stmt {
                     pos.prefix(),
                     t.join(", "),
                     v
+                )
+            }
+            Stmt::AugAssign { pos, target, op, value } => {
+                format!(
+                    "IbAugAssign({}, target={}, op='{}', value={})",
+                    pos.prefix(),
+                    target.dump(),
+                    op,
+                    value.dump()
                 )
             }
             Stmt::ExprStmt { pos, value } => {
@@ -637,7 +664,7 @@ impl Parser {
             }
             TokenType::Identifier => {
                 // 回退式前瞻：解析 target（Name 或 Subscript/Attribute），若后随
-                // ASSIGN = Assign；否则回退按 ExprStmt 解析。
+                // ASSIGN = Assign；AUG（+= / -=）= AugAssign；否则回退按 ExprStmt。
                 let save = self.pos;
                 let target = self.parse_assign_target();
                 if self.at(TokenType::Assign) {
@@ -651,7 +678,26 @@ impl Parser {
                         value: Some(value),
                     };
                 }
-                self.pos = save; // 非 Assign → ExprStmt
+                // 复合赋值（x += 1 / x -= 1）
+                if let (true, op) =
+                    (matches!(self.peek().type_, TokenType::PlusAssign | TokenType::MinusAssign),
+                     match self.peek().type_ {
+                         TokenType::PlusAssign => "+=",
+                         TokenType::MinusAssign => "-=",
+                         _ => "",
+                     })
+                {
+                    self.advance(); // += / -=
+                    let value = self.parse_expr();
+                    let tpos = expr_pos(&target);
+                    return Stmt::AugAssign {
+                        pos: tpos,
+                        target,
+                        op: op.to_string(),
+                        value,
+                    };
+                }
+                self.pos = save; // 非 Assign/AugAssign → ExprStmt
                 let value = self.parse_expr();
                 Stmt::ExprStmt {
                     pos: expr_pos(&value),
@@ -1169,21 +1215,67 @@ impl Parser {
                 }
                 TokenType::Lbracket => {
                     self.advance(); // [
-                    let slice = self.parse_expr();
-                    let rbr = self.advance(); // ]
-                    let value = expr;
-                    let vpos = expr_pos(&value);
-                    expr = Expr::Subscript {
-                        pos: Pos {
-                            lineno: vpos.lineno,
-                            col_offset: vpos.col_offset,
-                            end_lineno: Some(rbr.end_line as i64),
-                            end_col_offset: Some(rbr.end_column as i64),
-                        },
-                        value: Box::new(value),
-                        slice: Box::new(slice),
-                        ctx: "Load".to_string(),
+                    // lower 可能为空（xs[:2] 直接 ':'）
+                    let lower = if self.at(TokenType::Colon) {
+                        None
+                    } else {
+                        Some(self.parse_expr())
                     };
+                    if self.at(TokenType::Colon) {
+                        // Slice：lower : upper [: step]（Slice 位置 = ':' token）
+                        let colon = self.advance(); // :
+                        let upper = if self.at(TokenType::Colon) || self.at(TokenType::Rbracket) {
+                            None
+                        } else {
+                            Some(self.parse_expr())
+                        };
+                        let step = if self.at(TokenType::Colon) {
+                            self.advance(); // :
+                            if self.at(TokenType::Rbracket) {
+                                None
+                            } else {
+                                Some(self.parse_expr())
+                            }
+                        } else {
+                            None
+                        };
+                        let rbr = self.advance(); // ]
+                        let value = expr;
+                        let vpos = expr_pos(&value);
+                        let slice = Expr::Slice {
+                            pos: Pos::from_token(&colon),
+                            lower: lower.map(Box::new),
+                            upper: upper.map(Box::new),
+                            step: step.map(Box::new),
+                        };
+                        expr = Expr::Subscript {
+                            pos: Pos {
+                                lineno: vpos.lineno,
+                                col_offset: vpos.col_offset,
+                                end_lineno: Some(rbr.end_line as i64),
+                                end_col_offset: Some(rbr.end_column as i64),
+                            },
+                            value: Box::new(value),
+                            slice: Box::new(slice),
+                            ctx: "Load".to_string(),
+                        };
+                    } else {
+                        // 单表达式下标：x[1]
+                        let rbr = self.advance(); // ]
+                        let value = expr;
+                        let vpos = expr_pos(&value);
+                        expr = Expr::Subscript {
+                            pos: Pos {
+                                lineno: vpos.lineno,
+                                col_offset: vpos.col_offset,
+                                end_lineno: Some(rbr.end_line as i64),
+                                end_col_offset: Some(rbr.end_column as i64),
+                            },
+                            value: Box::new(value),
+                            slice: Box::new(lower.unwrap()),
+                            ctx: "Load".to_string(),
+                        };
+                    }
                 }
                 _ => break,
             }
@@ -1289,10 +1381,37 @@ impl Parser {
                 }
             }
             TokenType::Lparen => {
-                self.advance();
-                let inner = self.parse_expr();
-                self.expect(TokenType::Rparen);
-                inner
+                self.advance(); // (
+                let first = self.parse_expr();
+                if self.at(TokenType::Comma) {
+                    // Tuple：(e1, e2, ...)
+                    let mut elts = vec![first];
+                    while self.at(TokenType::Comma) {
+                        self.advance();
+                        if self.at(TokenType::Rparen) {
+                            break; // 尾逗号：(e1, e2,)
+                        }
+                        elts.push(self.parse_expr());
+                    }
+                    self.advance(); // )
+                    // IbTuple 位置 = 首元素起 → 末元素止（不含括号）
+                    let fp = expr_pos(&elts[0]);
+                    let lp = expr_pos(elts.last().unwrap());
+                    Expr::Tuple {
+                        pos: Pos {
+                            lineno: fp.lineno,
+                            col_offset: fp.col_offset,
+                            end_lineno: lp.end_lineno,
+                            end_col_offset: lp.end_col_offset,
+                        },
+                        elts,
+                        ctx: "Load".to_string(),
+                    }
+                } else {
+                    // 括号表达式（分组）
+                    self.expect(TokenType::Rparen);
+                    first
+                }
             }
             TokenType::Lambda => self.parse_lambda(),
             TokenType::Identifier => {
@@ -1426,7 +1545,9 @@ fn expr_pos(e: &Expr) -> Pos {
         | Expr::Attribute { pos, .. }
         | Expr::Subscript { pos, .. }
         | Expr::IfExp { pos, .. }
-        | Expr::Lambda { pos, .. } => *pos,
+        | Expr::Lambda { pos, .. }
+        | Expr::Tuple { pos, .. }
+        | Expr::Slice { pos, .. } => *pos,
     }
 }
 

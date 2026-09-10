@@ -32,9 +32,9 @@
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4276 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段④ 首增量[GIL-free 并行执行 py.allow_threads + 并行基准，计数稳定]放行门[注：
-> test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，并行负载下
-> 临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
+> P9 阶段④ 第二增量[CPS 优化 node_types dispatch + AugAssign/Tuple/Slice，计数稳定]放行门
+> [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，并行
+> 负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -212,7 +212,16 @@
 >   放借用 Python 内存]；scripts/bench_rust_parallel.py 并行基准[固定总工作量 W 对等
 >   比较]——**4 线程并行 3.58x**[≈4x 理想，GIL-free 真并行成立] vs Python GIL-bound
 >   ≈1.00x；零风险加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段④ 首增量条目）
->   → **当前批次 = P9 阶段④ 续（并发解除：CPS 优化[43 节点 enum 分发] +
+>   → **P9 阶段④ 第二增量 ✅**（CPS 优化——node_types dispatch table + 扩 3 高频节
+>   点：`ibci_ext.node_types()` 暴露执行核心分发的节点类型[CPS dispatch table，对齐
+>   Python VM 43/50 节点分发，差分 harness 经此比对覆盖差——当前 30 节点/覆盖差
+>   23]；扩 IbAugAssign[复合赋值 x += / x -=，复合算子映射 +=→+/-=→- 复用 binop]
+>   + IbTuple[元组 (1,2,3)，位置 = 首元素起→末元素止不含括号，元组 = 列表] +
+>   IbSlice[切片 x[1:3]/x[:2]，lower/upper 可空，位置 = ':' token，Python 语义
+>   [lower, upper)]；语料 +aug_assign/tuple_basic/list_slice；**33/33 全语料全级
+>   差分逐条等价**[token/AST/反序列化/数据面 + 符号表/类型表]；零风险加法式，merge
+>   删分支；设计/裁定 = WORKLOG P9 阶段④ 第二增量条目）
+>   → **当前批次 = P9 阶段④ 续（并发解除：CPS 优化续[覆盖差 23 节点逐步补齐] +
 >   task_scheduler GIL-free 集成；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
@@ -265,7 +274,8 @@
    → 阶段③ 第十增量 quoted 值面 IbImport + host 属性 + meta 桥接 30/30 全级 ✅
    → 阶段③ 收束 执行核心就绪 kernel_info stage 3/execution-core ✅
    → 阶段④ 首增量 GIL-free 并行执行 py.allow_threads 4 线程 3.58x ✅
-   → 阶段④ 续（CPS 43 节点 enum 分发 + task_scheduler GIL-free 集成）[当前]
+   → 阶段④ 第二增量 CPS 优化 node_types dispatch + AugAssign/Tuple/Slice 33/33 全级 ✅
+   → 阶段④ 续（CPS 覆盖差 23 节点补齐 + task_scheduler GIL-free 集成）[当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
