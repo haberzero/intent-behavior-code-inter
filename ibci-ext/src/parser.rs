@@ -288,6 +288,28 @@ impl Arg {
 }
 
 #[derive(Debug, Clone)]
+pub struct Alias {
+    pub pos: Pos,
+    pub name: String,
+    pub asname: Option<String>,
+}
+
+impl Alias {
+    fn dump(&self) -> String {
+        let asname = match &self.asname {
+            Some(a) => format!("'{}'", a),
+            None => "None".to_string(),
+        };
+        format!(
+            "IbAlias({}, name='{}', asname={})",
+            self.pos.prefix(),
+            self.name,
+            asname
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Assign { pos: Pos, targets: Vec<Expr>, value: Option<Expr> },
     ExprStmt { pos: Pos, value: Expr },
@@ -304,6 +326,7 @@ pub enum Stmt {
     Break { pos: Pos },
     Continue { pos: Pos },
     Pass { pos: Pos },
+    Import { pos: Pos, names: Vec<Alias> },
     While { pos: Pos, test: Expr, body: Vec<Stmt>, orelse: Vec<Stmt> },
     Try {
         pos: Pos,
@@ -426,6 +449,10 @@ impl Stmt {
             Stmt::Break { pos } => format!("IbBreak({})", pos.prefix()),
             Stmt::Continue { pos } => format!("IbContinue({})", pos.prefix()),
             Stmt::Pass { pos } => format!("IbPass({})", pos.prefix()),
+            Stmt::Import { pos, names } => {
+                let names_str: Vec<String> = names.iter().map(|n| n.dump()).collect();
+                format!("IbImport({}, names=[{}])", pos.prefix(), names_str.join(", "))
+            }
             Stmt::While { pos, test, body, orelse } => {
                 let b: Vec<String> = body.iter().map(|s| s.dump()).collect();
                 let o: Vec<String> = orelse.iter().map(|s| s.dump()).collect();
@@ -575,6 +602,38 @@ impl Parser {
             TokenType::Pass => {
                 let kw = self.advance();
                 Stmt::Pass { pos: Pos::from_token(&kw) }
+            }
+            TokenType::Import => {
+                // import X [as Y]：Alias{name, asname}（位置 = name 起 → asname/name 止）
+                let kw = self.advance(); // IMPORT
+                let mut names = Vec::new();
+                loop {
+                    let name_tok = self.advance(); // Identifier
+                    let (asname, end_tok) = if self.at(TokenType::As) {
+                        self.advance(); // AS
+                        let a = self.advance(); // asname Identifier
+                        (Some(a.value.clone()), a)
+                    } else {
+                        (None, name_tok.clone())
+                    };
+                    names.push(Alias {
+                        pos: Pos {
+                            lineno: name_tok.line as i64,
+                            col_offset: name_tok.column as i64,
+                            end_lineno: Some(end_tok.end_line as i64),
+                            end_col_offset: Some(end_tok.end_column as i64),
+                        },
+                        name: name_tok.value,
+                        asname,
+                    });
+                    // 多模块（import a, b）
+                    if self.at(TokenType::Comma) {
+                        self.advance();
+                        continue;
+                    }
+                    break;
+                }
+                Stmt::Import { pos: Pos::from_token(&kw), names }
             }
             TokenType::Identifier => {
                 // 回退式前瞻：解析 target（Name 或 Subscript/Attribute），若后随

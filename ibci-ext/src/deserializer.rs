@@ -10,7 +10,7 @@
 //! diff_harness/ast_dump.py` include_positions=True 参考）——验证 Rust 侧可消费
 //! 序列化 artifact（执行核心的输入契约）。
 
-use crate::parser::{Arg, ConstVal, Expr, Module, Pos, Stmt};
+use crate::parser::{Alias, Arg, ConstVal, Expr, Module, Pos, Stmt};
 use serde_json::Value;
 
 // --------------------------------------------------------------------------- //
@@ -116,6 +116,21 @@ fn build_node(uid: &str, nodes: &NodeMap) -> Node {
         "IbBreak" => Node::Stmt(Stmt::Break { pos: pos_of(n) }),
         "IbContinue" => Node::Stmt(Stmt::Continue { pos: pos_of(n) }),
         "IbPass" => Node::Stmt(Stmt::Pass { pos: pos_of(n) }),
+        "IbImport" => {
+            // names = IbAlias uid 数组；每个 alias = {name, asname, 位置}
+            let names: Vec<Alias> = uids_of(&n["names"])
+                .iter()
+                .map(|u| {
+                    let alias = &nodes[u];
+                    Alias {
+                        pos: pos_of(alias),
+                        name: str_of(&alias["name"]),
+                        asname: alias["asname"].as_str().map(|s| s.to_string()),
+                    }
+                })
+                .collect();
+            Node::Stmt(Stmt::Import { pos: pos_of(n), names })
+        }
         "IbTry" => {
             let handlers = uids_of(&n["handlers"])
                 .iter()

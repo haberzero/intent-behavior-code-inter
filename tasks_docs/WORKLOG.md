@@ -3308,6 +3308,43 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [43 节点 enum 分发，在 27x 基础上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料
   [quoted 值/行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；语义层 Rust
   移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第十增量（执行核心 quoted 值面——IbImport + host 属性访问 + meta
+  模块桥接，30 语料全级差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust
+  执行核心 IBCI 自指原语**——quoted 值（meta.quote 冻结 / meta.eval 取值，P1 R-A
+  自指地基）经 host service 桥接（宿主逻辑留 Python 单点真理），全语料 **30/30
+  全级差分等价**（token/AST/反序列化/数据面 + 符号表/类型表），执行核心可处理
+  IBCI 自指面（import + 宿主模块 + 宿主属性访问）。
+  **交付**：
+  - **IbImport 反序列化**（parser `Stmt::Import` + `Alias` 结构{name/asname/位置}
+    + dumper[IbAlias 格式] + deserializer[IbImport → Alias 数组] + interpreter
+    [import X [as Y] 绑定宿主模块]）。
+  - **host 属性访问**（interpreter `Expr::Attribute`：宿主对象属性[如 q.source]委托
+    桥接 host_getattr——IBC 宿主值类型经运行时 _dispatch_getattr 提供，纯 getattr
+    不可达，对已知宿主值类型经 to_native 边界拆箱取字段）。
+  - **meta 模块桥接**（bridge `get_host_module("meta")` → `_MetaModule` 封装 host
+    service 的 quote_expression[编译门冻结 quoted 值] / eval_quoted[子进程取值]；
+    engine project_root 确立[root_dir + _explicit_root，_sub_engine_compile +
+    request_spawn_isolated 要求]）。
+  - **语料扩展**（+quoted_source/quoted_eval_value/quoted_eval_expr）。
+  **关键裁定（self-grill 全分支消解）**：① **quoted 值经 host service 桥接**（宿主
+  逻辑留 Python 单点真理——meta.quote/eval 委托 Python host service，不复制自指
+  逻辑到 Rust 避免双通道）；② **IbImport.names = Alias 节点数组**（非字符串——对齐
+  Python IbImport 格式，含 IbAlias 位置 + asname）；③ **host 属性访问经桥接
+  host_getattr**（IbQuoted.source 纯 getattr 不可达[经 IBC 运行时 _dispatch_getattr
+  需 IbObject 包装]——对已知宿主值类型经 to_native 边界拆箱，非 tricky 硬编码分
+  发）；④ **engine project_root 双重确立**（root_dir[_sub_engine_compile 读
+  orchestrator.root_dir] + _explicit_root[request_spawn_isolated 读]）；⑤ **quoted
+  数据面经桥接**（meta.eval 子进程 spawn——每例 ~0.3-1s，差分 harness 覆盖）。
+  **验证**：quoted 值面 4/4 MATCH[quote_source[21 * 2]/eval_value[3]/eval_expr
+  [13]/eval_str[hi]] + 全级差分 30/30 全语料逐条等价[token/AST/反序列化/数据面 +
+  符号表/类型表] + 全量 pytest 零回归（阶段边界放行门——加法式增量不动 Python 执行
+  路径，计数稳定 4276[语料扩展不增测试数]；见 NEXT_STEPS 基线锚点）。**阶段③ 第十
+  增量出口达成**（Rust 执行核心 IBCI 自指原语——quoted 值经 host service 桥接）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 第十增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（CPS 优化
+  [43 节点 enum 分发，在 27x 基础上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料
+  [行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全
+  量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

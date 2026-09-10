@@ -32,7 +32,7 @@
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4276 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段③ 第九增量[执行核心类型池/node_to_type 反序列化 + 类型表差分 1 例]阶段边界放行门；数字以实跑为准，不冻结）。
+> P9 阶段③ 第十增量[执行核心 quoted 值面 IbImport + host 属性 + meta 桥接，计数稳定]阶段边界放行门；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -187,9 +187,18 @@
 >   本增量不用于执行[tree-walking 用简单变量绑定，类型表用于后续类型检查/错误报
 >   告/CPS 分发]；资产池本增量不含[语料面 assets 池为空]；零风险加法式，merge 删
 >   分支；设计/裁定 = WORKLOG P9 阶段③ 第九增量条目）
+>   → **P9 阶段③ 第十增量 ✅**（执行核心 quoted 值面——IBCI 自指原语[meta.quote
+>   冻结 / meta.eval 取值，P1 R-A 自指地基]经 host service 桥接[宿主逻辑留 Python
+>   单点真理]：IbImport 反序列化[parser Stmt::Import + Alias 结构{name/asname/
+>   位置} + dumper + deserializer + interpreter 绑定宿主模块] + host 属性访问
+>   [q.source 委托桥接 host_getattr，IbQuoted 经 to_native 边界拆箱] + meta 模块
+>   桥接[get_host_module → _MetaModule 封装 quote_expression/eval_quoted，engine
+>   project_root 双重确立 root_dir + _explicit_root]；语料 +quoted_source/
+>   quoted_eval_value/quoted_eval_expr；**30/30 全级差分逐条等价**[token/AST/反序列
+>   化/数据面 + 符号表/类型表]；零风险加法式，merge 删分支；设计/裁定 = WORKLOG
+>   P9 阶段③ 第十增量条目）
 >   → **当前批次 = P9 阶段③ 续（执行核心：CPS 优化[43 节点 enum 分发，在 27x 基础
->   上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料[quoted 值/行为表达式]；隔离
->   分支续）**。
+>   上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料[行为表达式]；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -238,7 +247,8 @@
    → 阶段③ 第七增量 更宽 IBCI 面[链式比较/方法/嵌套容器] 27/27 四级 ✅
    → 阶段③ 第八增量 符号池/侧表反序列化 完整 artifact 27/27 符号表 ✅
    → 阶段③ 第九增量 类型池/node_to_type 反序列化 27/27 类型表 ✅
-   → 阶段③ 续（CPS 优化 + 资产池 + quoted 值/行为表达式）[当前]
+   → 阶段③ 第十增量 quoted 值面 IbImport + host 属性 + meta 桥接 30/30 全级 ✅
+   → 阶段③ 续（CPS 优化 + 资产池 + 行为表达式）[当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式

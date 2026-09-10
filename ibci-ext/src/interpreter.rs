@@ -408,10 +408,59 @@ impl Interpreter {
             Stmt::Break { .. } => Flow::Break,
             Stmt::Continue { .. } => Flow::Continue,
             Stmt::Pass { .. } => Flow::Next,
+            Stmt::Import { names, .. } => {
+                // import X [as Y]：绑定名 = asname 或 X；经桥接解析为宿主模块
+                // （host object）绑定到环境；未知模块 = no-op（宿主环境处理）
+                for alias in names {
+                    let binding = alias
+                        .asname
+                        .clone()
+                        .unwrap_or_else(|| alias.name.clone());
+                    if let Some(host) = self.get_host_module(&binding) {
+                        env.borrow_mut().set(&binding, host);
+                    }
+                }
+                Flow::Next
+            }
             Stmt::Try { body, .. } | Stmt::ClassDef { body, .. } => {
                 self.exec_body(env, body, output)
             }
         }
+    }
+
+    /// 宿主对象属性访问（如 q.source）——委托桥接 host_getattr（IBC 宿主值类型
+    /// 经运行时属性分发，非纯 getattr）。
+    fn get_host_attribute(&self, pyobj: &Py<PyAny>, attr: &str) -> IbValue {
+        let bridge = match &self.bridge {
+            Some(b) => b,
+            None => return IbValue::None_,
+        };
+        Python::with_gil(|py| -> PyResult<IbValue> {
+            let b = bridge.bind(py);
+            let obj_ref = pyobj.bind(py);
+            let res = b.call_method("host_getattr", (obj_ref, attr), None)?;
+            Ok(from_py(py, &res))
+        })
+        .unwrap_or(IbValue::None_)
+    }
+
+    /// 经 host service 桥接取宿主模块（如 meta）——None = 未知模块。
+    fn get_host_module(&self, name: &str) -> Option<IbValue> {
+        let bridge = match &self.bridge {
+            Some(b) => b,
+            None => return None,
+        };
+        Python::with_gil(|py| -> PyResult<Option<IbValue>> {
+            let b = bridge.bind(py);
+            let obj = b.call_method("get_host_module", (name,), None)?;
+            if obj.is_none() {
+                Ok(None)
+            } else {
+                Ok(Some(IbValue::Host(obj.unbind())))
+            }
+        })
+        .ok()
+        .flatten()
     }
 
     fn exec_body(
@@ -527,7 +576,14 @@ impl Interpreter {
                     .collect();
                 IbValue::dict_new(pairs)
             }
-            Expr::Attribute { value, .. } => self.eval_expr(env, value, output),
+            Expr::Attribute { value, attr, .. } => {
+                let obj = self.eval_expr(env, value, output);
+                match obj {
+                    // 宿主对象属性访问（如 q.source）——委托 Python
+                    IbValue::Host(h) => self.get_host_attribute(&h, attr),
+                    other => other,
+                }
+            }
             Expr::Subscript { value, slice, .. } => {
                 let base = self.eval_expr(env, value, output);
                 let key = self.eval_expr(env, slice, output);

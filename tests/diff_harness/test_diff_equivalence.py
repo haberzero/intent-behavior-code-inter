@@ -288,15 +288,23 @@ class TestRustExecutionDataPlane:
     == Python print 输出。本增量 = 非 KB 语料面（KB 语料需宿主服务 = 后续增量）。
     """
 
-    def test_data_plane_non_kb_corpus(self):
-        """数据面差分等价：非 KB 语料（Rust 执行 == Python 执行）。"""
+    def test_data_plane_non_host_corpus(self):
+        """数据面差分等价：非宿主服务语料（无桥接，Rust 执行 == Python 执行）。
+
+        KB（knowledge()）与 quoted 值（import meta）需 host service 桥接——由
+        test_data_plane_full_corpus 覆盖；本测试仅无桥接语料。
+        """
         from tests.conftest import run_ibci
         from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
         rk = load_rust_kernel()
         if not rk.loaded:
             return
-        non_kb = [(n, c) for n, c in CORPUS if not n.startswith("kb_")]
-        for name, code in non_kb:
+        non_host = [
+            (n, c)
+            for n, c in CORPUS
+            if not n.startswith("kb_") and "import meta" not in c
+        ]
+        for name, code in non_host:
             py = run_ibci(code)
             rs = rust_execution_data_plane(code)
             assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
@@ -336,7 +344,8 @@ class TestRustExecutionDataPlane:
             assert rs == py, f"语料 {name} KB 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
     def test_data_plane_full_corpus(self):
-        """数据面差分等价：全语料 14/14（11 非 KB + 3 KB host service 桥接）。"""
+        """数据面差分等价：全语料（非 KB/quoted + KB host service 桥接 + quoted
+        值 meta host service 桥接）。"""
         from tests.conftest import run_ibci
         from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
         from tests.diff_harness import bridge
@@ -344,7 +353,8 @@ class TestRustExecutionDataPlane:
         if not rk.loaded:
             return
         for name, code in CORPUS:
-            is_kb = name.startswith("kb_")
+            # KB（knowledge()）与 quoted 值（import meta）经 host service 桥接
+            needs_bridge = name.startswith("kb_") or "import meta" in code
             py = run_ibci(code)
-            rs = rust_execution_data_plane(code, bridge if is_kb else None)
+            rs = rust_execution_data_plane(code, bridge if needs_bridge else None)
             assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"

@@ -348,15 +348,25 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     类型表差分等价**[Rust type_table == Python node_to_type 解析]。本增量不用于执行
     （tree-walking 用简单变量绑定，类型表用于后续类型检查/错误报告/CPS 分发）。
     **零风险加法式**（opt-in，不动 Python 执行路径）。
+  - **P9 阶段③ 第十增量 quoted 值面 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：IBCI 自指原语
+    [meta.quote 冻结 / meta.eval 取值，P1 R-A 自指地基]经 host service 桥接
+    [宿主逻辑留 Python 单点真理]——IbImport 反序列化[parser Stmt::Import + Alias
+    结构 + dumper + deserializer + interpreter 绑定宿主模块]+ host 属性访问
+    [q.source 委托桥接 host_getattr，IbQuoted 经 to_native 边界拆箱]+ meta 模块
+    桥接[get_host_module → _MetaModule 封装 quote_expression/eval_quoted，engine
+    project_root 双重确立]——**30/30 全级差分逐条等价**[token/AST/反序列化/数据面
+    + 符号表/类型表]。**零风险加法式**（opt-in，不动 Python 执行路径）。
   - **P9 阶段③ 续（当前批次，隔离分支续）**：执行核心——CPS 优化[43 节点 enum
-    分发，在 27x 基础上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料[quoted 值/
-    行为表达式]。四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 + 剩余面
-    + 位置 + 布尔逻辑 ✅ / 语义推迟）→ **③ 执行核心[主战场：反序列化器 ✅ / 对象
-    模型 + 解释器 + 数据面 ✅ / 性能基准 23–30x ✅ / KB 语料面 host service 桥接 ✅ /
-    更宽语料 20/20 四级 ✅ / 闭包完整语义 22/22 四级 ✅ / 更宽 IBCI 面 27/27 四级
-    ✅ / 符号池/侧表 27/27 符号表 ✅ / 类型池/node_to_type 27/27 类型表 ✅ / CPS
-    优化当前]** → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。
-    确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+    分发，在 27x 基础上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料[行为表达式]。
+    四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 + 剩余面 + 位置 +
+    布尔逻辑 + import ✅ / 语义推迟）→ **③ 执行核心[主战场：反序列化器 ✅ / 对象
+    模型 + 解释器 + 数据面 ✅ / 性能基准 23–30x ✅ / KB 语料面 host service 桥接 ✅
+    / 更宽语料 20/20 四级 ✅ / 闭包完整语义 22/22 四级 ✅ / 更宽 IBCI 面 27/27 四级
+    ✅ / 符号池/侧表 27/27 符号表 ✅ / 类型池/node_to_type 27/27 类型表 ✅ / quoted
+    值面 30/30 全级 ✅ / CPS 优化当前]** → ④ 并发解除[task_scheduler IO-only →
+    CPU+IO 真并行 GIL-free]。确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev
+    并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -415,9 +425,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段③ 第九增量阶段边界实跑）**：**4276 passed /
-  1 skipped / 134.58s / rc=0**（= 前基线 4275 + 类型表差分 1 例；供下一 session
-  参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段③ 第十增量阶段边界实跑）**：**4276 passed /
+  1 skipped / 139.28s / rc=0**（计数稳定 4276[quoted 值面 + 更宽语料 30 条不增测试
+  数——现有全级差分测试自动覆盖 30 语料]；供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
