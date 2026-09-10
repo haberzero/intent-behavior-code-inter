@@ -150,6 +150,10 @@ KNW_VOCAB_MALFORMED = "KNW_VOCAB_MALFORMED"        # 词表/事实参数形态�
 KNW_FACT_DUPLICATE = "KNW_FACT_DUPLICATE"          # 同 (world,s,r,o) active 事实重复
 KNW_FACT_NOT_FOUND = "KNW_FACT_NOT_FOUND"          # 未知 fact_id
 KNW_FACT_RETRACTED = "KNW_FACT_RETRACTED"          # 对已 retract 事实再 retract/amend
+# KB 磁盘面（world_model.load_kb/save_kb 内容寻址 artifact 契约）：
+KNW_KB_ARTIFACT_MALFORMED = "KNW_KB_ARTIFACT_MALFORMED"  # artifact 结构非法
+KNW_KB_SCHEMA_VERSION = "KNW_KB_SCHEMA_VERSION"          # 未知 schema_version（无自动迁移）
+KNW_KB_HASH_MISMATCH = "KNW_KB_HASH_MISMATCH"            # content_hash 验证失败（篡改/损坏）
 
 # === 层级记忆基底 (MEM_) ===
 # 一等值类型 memory 的运行期契约违约：层名/容量/键存在性。

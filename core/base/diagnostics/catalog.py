@@ -456,6 +456,18 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="对已 retract（墓碑）事实再 retract / amend_fact——事实已废止。",
         fix="墓碑事实只读（get_fact/facts/history_fact 仍可查全史）；需恢复语义 = 登记新事实（append-only 纪律：不复活的版本是新事实）。",
     ),
+    "KNW_KB_ARTIFACT_MALFORMED": CodeInfo(
+        title="world_model.load_kb / save_kb 的 KB artifact 结构非法（非合法 JSON / 缺封套字段 / facts-vocab 记录形态错 / seq 非负 int 违约）。",
+        fix="经 world_model.save_kb 重新导出合规 artifact（封套 {schema_version, content_hash, facts, vocab, seq}；facts 记录含 id/world/s/r/o/source/status/events；vocab 含 words/relations/worlds 三面）。",
+    ),
+    "KNW_KB_SCHEMA_VERSION": CodeInfo(
+        title="world_model.load_kb 遇到未知 schema_version（本版本仅支持 1；无自动迁移）。",
+        fix="以支持该版本的引擎版本加载，或由导出方按当前 schema_version 重新导出 artifact。",
+    ),
+    "KNW_KB_HASH_MISMATCH": CodeInfo(
+        title="world_model.load_kb 的 content_hash 验证失败——artifact 数据损坏或被篡改（内容寻址完整性门）。",
+        fix="重新经 world_model.save_kb 导出（取回 content_hash 作钉扎基准）；跨传输场景以 hash 比对检出损坏后重传。",
+    ),
     # ==================== 层级记忆基底 (MEM_) ====================
     "MEM_KEY_EXISTS": CodeInfo(
         title="memory.encode 键已存在或键非法（非空 str）。",

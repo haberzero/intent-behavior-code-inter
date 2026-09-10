@@ -740,6 +740,24 @@ embedding/检索非法输入。
 - **严重级别**：ERROR。
 - **修复方式**：墓碑事实只读（`get_fact`/`facts`/`history_fact` 仍可查全史）；恢复语义 = 登记新事实（不复活的版本是新事实）。
 
+#### `KNW_KB_ARTIFACT_MALFORMED`
+`world_model.load_kb` / `save_kb` 的 KB artifact 结构非法。
+- **触发条件**：artifact 非合法 JSON / 顶层非对象 / 缺封套字段（`schema_version`/`content_hash`/`facts`/`vocab`/`seq`）/ facts-vocab 记录缺必填字段或形态错 / `seq` 非负 int 违约。
+- **严重级别**：ERROR。
+- **修复方式**：经 `world_model.save_kb` 重新导出合规 artifact（`save_kb` 保存前同构结构门——畸形 KB 面在此即 fail-fast）。
+
+#### `KNW_KB_SCHEMA_VERSION`
+`world_model.load_kb` 遇到未知 `schema_version`。
+- **触发条件**：artifact 的 `schema_version ≠ 1`（当前唯一支持版本；无自动迁移面）。
+- **严重级别**：ERROR。
+- **修复方式**：以支持该版本的引擎加载，或由导出方按当前版本重新导出。
+
+#### `KNW_KB_HASH_MISMATCH`
+`world_model.load_kb` 的 `content_hash` 验证失败（内容寻址完整性门）。
+- **触发条件**：canonical 载荷（facts/vocab/seq 规范形态）重算 sha256 ≠ artifact 所载 `content_hash`——数据损坏或被篡改。
+- **严重级别**：ERROR。
+- **修复方式**：重新导出（`save_kb` 返回值 = 钉扎基准 hash）；跨传输场景以 hash 比对检出损坏后重传。
+
 ### 层级记忆基底（MEM_）
 
 > 一等值类型 `memory` 的运行期契约违约：分层/容量/键存在性。均为运行时诊断，fail-fast 不静默降级。

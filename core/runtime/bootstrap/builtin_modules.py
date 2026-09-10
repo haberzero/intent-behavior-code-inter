@@ -15,10 +15,12 @@ Engine 构造期注册——这些契约面含构造期 lifecycle / LLM 通道 /
 说明：
 - 字面量原由一次性生成脚本经旧 discovery 路径产出（结构等价，防手写漂移）；该脚本
   重构后已删除（用后即删，决策沉入 WORKLOG/架构文档）。
-- file 的 spec 自 core/engine.py 挪入（保留 mutating/param_descriptors/exported_types 语义字段）。
+- file（逻辑名 ``fs``）的 spec 自 core/engine.py 挪入（保留 mutating/param_descriptors/
+  exported_types 语义字段）；world_model（KB 磁盘面）同 file 为内核模块（无物理包，
+  实现 core.runtime.modules.world_model_impl.WorldModelLib）。
 - net 显式 provenance=USER_DEFINED（非 KERNEL_NATIVE，host_interface 覆盖保护不适用）；
-  内核原生 7 + file = KERNEL_NATIVE；全部内置模块 visibility=IMPORT_GATED（须显式
-  import 才可用）。
+  内核原生 7 + file + world_model = KERNEL_NATIVE；全部内置模块 visibility=IMPORT_GATED
+  （须显式 import 才可用）。
 
 """
 import contextlib
@@ -321,6 +323,34 @@ _SPEC_META = TypeDef(name="meta", kind="module", provenance=Provenance.KERNEL_NA
             ]),
     })
 
+_SPEC_WORLD_MODEL = TypeDef(
+    name="world_model",
+    kind=TypeKind.MODULE.value,
+    provenance=Provenance.KERNEL_NATIVE,
+    visibility=Visibility.IMPORT_GATED,
+    members={
+        # KB 磁盘面（内容寻址 artifact）：load_kb = 三级验证门（结构/版本/
+        # 完整性 hash）后水化为活 KB 值（加载后可查询 + 可增量 add_fact）；
+        # save_kb = KB 面序列化写盘，返回 content_hash（钉扎/审计）。
+        "load_kb": MethodMemberSpec(
+            name="load_kb", kind="method", type_ref=TypeRef.of("knowledge"),
+            param_types=[TypeRef.of("str")], return_type=TypeRef.of("knowledge"),
+            param_descriptors=[
+                ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+            ],
+        ),
+        "save_kb": MethodMemberSpec(
+            name="save_kb", kind="method", type_ref=TypeRef.of("str"),
+            param_types=[TypeRef.of("knowledge"), TypeRef.of("str")],
+            return_type=TypeRef.of("str"),
+            param_descriptors=[
+                ParamDescriptor(name="kb", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("knowledge")),
+                ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+            ],
+        ),
+    },
+)
+
 _SPEC_SELFREF = TypeDef(name="selfref", kind="module", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED, members={
         # 自指性体系架构（Phase C）确定性原语——零 LLM（SR-5 结构性保证）。
         # SR-1 自描述：从系统实际结构组装结构化自描述值（非硬编码字符串）。
@@ -508,6 +538,7 @@ BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "isys": _SPEC_ISYS,
     "iruntime": _SPEC_IRUNTIME,
     "net": _SPEC_NET,
+    "world_model": _SPEC_WORLD_MODEL,
 }
 
 
@@ -546,11 +577,11 @@ def _load_implementation(package_name: str) -> Any:
 
 
 def register_builtin_modules(host_interface: "HostInterface") -> None:
-    """在 HostInterface 中预注册宿主侧构造期内置模块（构造期；内核原生 5 + net + file）。
+    """在 HostInterface 中预注册宿主侧构造期内置模块（构造期；内核原生 + net）。
 
     KERNEL_NATIVE provenance 的模块经 register_module 内建机制自动 reserve
     （HostInterface.register_module：is_kernel_native_meta 时加入 _kernel_native_names），
-    file 同此；net 为 USER_DEFINED provenance，不参与覆盖保护。
+    file/world_model 同此；net 为 USER_DEFINED provenance，不参与覆盖保护。
     工具 4（math/json/time/schema）经契约源自举注册（kernel_contracts.load_tool_contracts）。
     """
     from core.kernel.host_interface import HostInterface
@@ -571,6 +602,14 @@ def register_builtin_modules(host_interface: "HostInterface") -> None:
         "fs",
         FileLib(),
         metadata=BUILTIN_MODULE_SPECS["fs"],
+    )
+
+    # world_model：KB 磁盘面（内容寻址 artifact），实现为内核模块（无物理包）。
+    from core.runtime.modules.world_model_impl import WorldModelLib
+    host_interface.register_module(
+        "world_model",
+        WorldModelLib(),
+        metadata=BUILTIN_MODULE_SPECS["world_model"],
     )
 
 
