@@ -50,7 +50,7 @@ IBC-Inter 是实验性意图驱动混合编程语言（Python-style 确定性代
 2. **设计与质询**：方案对照 `NEXT_STEPS.md` "⛔ 工作模式定论" + `self-grill` 自我质询 + `code-odor` 工作过程自查。
 3. **自主决策**：能自主决断的自行决断并记录理由；仅触及下方上报阈值的项才向用户陈述（方案 + 推荐 + 理由）。
 4. **实现**：按 `code-workflow` P3 卫生纪律执行。
-5. **自反馈验证**：`python -m pytest tests/` + 残留扫描 + 自复核（`code-review` P4 精神，subagent 报告不等于做完）。
+5. **自反馈验证**：单任务默认 = 受影响子集 + smoke 子集（使用策略见 §测试，临时至 Rust 内核替换结束；merge/放行门与公理层/语义错误集变更仍全量）+ 残留扫描 + 自复核（`code-review` P4 精神，subagent 报告不等于做完）。
 6. **自主纠错**：验证失败 / 异味命中 → 回到根因阶段修复再验证，循环至干净或需上报；禁止症状层打补丁。
 7. **交付自查**：`code-quality` §九 提交前自查 + `self-grill` 未决断项归零。
 8. **收尾**：文档同步（单点真理表）、临时文档清理、汇报（`code-workflow` P5 / `doc-governance` P8）。
@@ -99,6 +99,12 @@ python -m pytest tests/
 ```
 
 - 这是**唯一命令**。`pytest.ini` 已配 `-q --tb=short --strict-markers`，无需附加 flag。
+- **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：全量重跑代价较大（2026-09-10 实测：main ~45s /
+  unsafe-vibe-dev ~114s；e2e 层 44% 子进程启动主导 / runtime 层 38% 解释器 CPU）。
+  **单任务默认验证 = 受影响子集（改动关联的层/文件）+ smoke 子集（`tests/contracts` +
+  `tests/compiler`，~11s，纯进程内无子进程）**；全量 pytest 仅以下场合：① merge/放行门
+  （硬规则不变）② 改动公理层或语义错误集（红线不变）③ 阶段边界/里程碑 ④ 开新分支前。
+  Rust 内核替换结束且全量耗时显著降低后，重新评估默认验证策略。
 - 环境规格权威源 = `pyproject.toml`（`requires-python` / `dependencies` / `optional-dependencies`）；创建运行环境的规范 recipe（venv + 可编辑安装）见 `docs/guide/00_environment.md`。本机解释器路径与激活方式见 `AGENTS.local.md`（本地层，不入版本控制；缺失时自行探测环境并记录到该文件）。
 - `tests/conftest.py` 强制 pytest basetemp 为 `.tmp_pytest/`（仓库不变量，跨平台兼容）。
 - **结果查看建议**：通常跑全量 pytest 时用 `... 2>&1 | tail -3` 只留结果摘要（pass/fail/skipped 计数行），避免警告挤掉计数；若仍被 warning 挤掉可再加 `| tail -3`。是否加 flag、是否重定向、分组/子集用法等其余情形由智能体自行判断。

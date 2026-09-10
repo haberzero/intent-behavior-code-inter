@@ -29,7 +29,7 @@ Phase 0 理解任务上下文 -> Phase 1 理解代码上下文 -> Phase 2 方案
 遵循现有命名约定与文件组织，不引入新风格。代码注释卫生、诊断码使用规则、路径约定见 `docs/README.md` §三.6 与 §四--不在此重复，以该文档为准。每完成一个独立修改单元记入临时任务文档。
 
 ### Phase 4: 测试与验证
-唯一命令 `python -m pytest tests/`（`pytest.ini` 已配置，无需附加 flag）。报告 pass/fail 计数。基线以实跑为准，不冻结数字。改动公理层或语义错误集必须全量 pytest 评估破坏面。
+唯一命令 `python -m pytest tests/`（`pytest.ini` 已配置，无需附加 flag）。报告 pass/fail 计数。基线以实跑为准，不冻结数字。**单任务默认验证 = 受影响子集 + smoke 子集（`tests/contracts` + `tests/compiler`）——临时策略，2026-09-10 起至 Rust 内核替换结束（全量重跑代价大；详见 `AGENTS.md` §测试）**；改动公理层或语义错误集必须全量 pytest 评估破坏面；merge/放行门前全量零回归不变。
 
 ### Phase 5: 收尾与清理
 汇报：改动文件、测试结果、后续技术债。重大架构决策写入 `docs/architecture/`（不创建独立 ADR）。新发现的语言级限制更新 `docs/KNOWN_LIMITS.md`。清理临时任务文档（汇报后经用户确认删除）。已完成条目从 `NEXT_STEPS.md` 移除。
