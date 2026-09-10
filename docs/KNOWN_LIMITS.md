@@ -392,6 +392,17 @@ fn f = snapshot(int a, int b) -> str: EXPR  # snapshot 有参
 +返回类型检查会漏掉参数类型不符的签名——`fn[(Box[int]) -> int]` 收 `get2(str)->int`
 （参数类型不符）、`Host[int]` 特化后 `fn[(Box[T]) -> int]` 收错误签名，均编译期拦截。
 
+### 10.5 容器 `==` / `!=` 为恒等语义（结构相等对比经序列化路径）
+
+`dict` / `list` / `tuple` 值的 `==` / `!=` 按**值对象身份**判定（非结构深比较）：
+`{"a": 1} == {"a": 1}` 与 `[1, 2] == [1, 2]` 均为 `False`（两个独立构造的容器，
+即便内容相同）。标量（`int`/`float`/`str`/`bool`/`None`）的 `==` 为值语义。
+
+**规避路径**：需要结构相等断言时，经 JSON 序列化对比（`import json`；
+`json.stringify(d1) == json.stringify(d2)`——键序确定性，逐字节可比），或逐字段
+对比（`d1["k"] == d2["k"]`）。典型场景 = 验证"同一派生操作多次调用结果一致"
+（如 `knowledge.expand` 的逐字节可复现断言）。
+
 ---
 
 ## 十一、Switch 语句使用约束

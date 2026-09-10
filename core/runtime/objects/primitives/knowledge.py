@@ -573,7 +573,7 @@ class IbKnowledge(IbValue):
         return len(self._facts())
 
     # ------------------------------------------------------------------ #
-    # 查找面（图平面：active 视图，全确定性零 LLM——试用方七查找）
+    # 查找面（图平面：active 视图，全确定性零 LLM——七类查询原语）
     # ------------------------------------------------------------------ #
 
     def lookup_pair(self, s: IbObject, r: IbObject) -> Any:

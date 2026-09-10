@@ -2413,6 +2413,46 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
    1 skipped / 115.28s / rc=0**（公理层变更放行门；= 基线 3998 + 新增 30 + tests/meta 治理参数化
    增量 10[docs 同步所致]，收集计数逐文件核对吻合）。设计要点 = `tasks_docs/_ra_quote_eval_design.md`
    （P2 批次开工前保留——含 §7 边界裁定：eval 环境参数/归一化对比/SR-4 承载 均 P2+ 不预置）。
+- **P2 R-B 世界模型 KB 落地（knowledge 就地演化为三元组知识图谱，2026-09-10，
+   unsafe-vibe-dev；世界模型 DB 主线批次 2，四批 B1-B4 收束）**：`knowledge` 值就地演化为
+   世界模型 KB——**一个值、一个审计序号、三正交数据面**（entries 通用登记面[既有契约
+   零改动] / facts append-only 事实日志[KB 单一权威源] / vocab 治理词表
+   words-relations-worlds）+ 8 派生索引（6 图索引 active 视图 + by_source/by_status 全日志
+   视图；**日志是权威、索引是视图**——增量维护 + 构造/水化确定性重建，永不独立序列化）。
+   **关键裁定（self-grill 全分支消解）**：① 就地演化非新类型（单点真理：KB = D 纸带，
+   knowledge 公理文档明写的知识层——另立平行类型 = 碎片化；消费面实证审计 = 轻
+   [语义层 check 纯度 1 处 + serializer + deep_clone + 注册]，entries 面零改动零回归）；
+   ② facts 准入 = **内建治理门**（world/relation/s/o 词表 allowlist 机器强制，确定性零
+   LLM——knowledge check 门纪律的图平面落法；entries 面调用方谓词门不变，两门各辖
+   一面非双通道）；③ fact_id = str(KB seq)（引擎单调序号，同操作序列同 id 字节可复现）；
+   ④ s/o = 已注册词 lexeme（治理 allowlist；**结构化 o / R-E 自指事实 = 后续扩展面**，
+   P2 不预置）；⑤ 墓碑/版本化同构 knowledge amend 纪律（retract/amend_fact reason 强制 +
+   append-only 事件链 + 图视图即时排除 + 日志全史保留；**恢复语义 = 登记新事实**，墓碑
+   不复活）；⑥ 事实平面操作一律收 fact_id 返回 KB 权威数据（防调用方自持陈旧副本双真相）；
+   ⑦ by_pair/by_subject 按试用方规格 §3.2 为 **world 无关** 索引（world 维经
+   all_in_world/by_triple 表达）；⑧ transitive 非传递关系 = 空 list（无闭包 ≠ 错误——
+   诚实语义）；⑨ compare 层 4 语义相似归向量面不预置（D1：判定恒走确定性 1/2/3/5 层）；
+   ⑩ 对比/展开的字节对比经 JSON 序列化路径（**新发现语言边界：容器 == 恒等语义**——
+   既有事实，落 KNOWN_LIMITS §10.5 + 规避路径）。
+   **变化前后**：IbKnowledge payload 三面扩展 + 27 方法面（词表 9 / 事实 8 / 查找 7 /
+   对比展开 3——B1 词表+事实+索引+序列化/克隆 13 方法 → B2 查询面 10 方法 → B3 审计面 4
+   方法）+ 派生索引 8（_build_indexes_from_facts 单一重建源）+ 诊断码 +6（KNW_VOCAB_
+   UNREGISTERED/EXISTS/MALFORMED + KNW_FACT_DUPLICATE/NOT_FOUND/RETRACTED；reason 空
+   复用 KNW_REASON_EMPTY 单名）+ 序列化双面（facts/vocab 原生直存、索引丢弃水化重建）+
+   deep_clone KB 面独立深拷贝 + to_native 三面对外快照 + 文档（16_knowledge_system 主文档
+   扩展 KB 三面/27 方法/边界；15_diagnostics +6 码对账；KNOWN_LIMITS §10.5 容器 == 恒等
+   边界 + §二十六 值通道边界[P1 批]）+ 测试 48 例（tests/runtime/test_world_model_kb.py
+   42：词表/事实/治理门/索引确定性/序列化/克隆/7 查找/矛盾 multi_valued 门/传递闭包链+
+   防环/展开逐字节一致/对比 4 层/墓碑/版本化/entries 零回归 + tests/e2e/
+   test_world_model_kb_e2e.py 6：用户面微型世界模型 2 世界/3 关系/4 词/5 事实全链路）+
+   差分 harness 语料 +2（kb_query + kb_expand_determinism——R-B 里程碑语料）。
+   **验证**：全量 pytest 零回归 **4090 passed / 1 skipped / 116.49s / rc=0**（公理层变更
+   放行门；= 前基线 4038 + 新增 48 + tests/meta 治理参数化增量 4[docs 同步所致]）。**双写根治（结构性）**：词关系
+   = by_subject 派生（无 word.relations 独立存储面）；展开态不存（expand 纯派生）；
+   索引不存（水化重建）——v30 的 word.relations×axioms 双写（34 条 only_in_axioms）
+   在活 KB 中无对应物（P3 load_kb 时 axioms 单一落点 = facts 平面）。
+   设计要点 = `tasks_docs/_p2_world_model_kb_design.md`（P3 批次开工前保留——含
+   §2 D5 值域边界裁定 + §6.2 验收对照：试用方 M1 = P2+P3+P4 联合达成）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
