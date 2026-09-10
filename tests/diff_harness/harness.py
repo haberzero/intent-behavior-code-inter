@@ -28,10 +28,18 @@ def python_kernel_data_plane(script: str) -> str:
 
 
 def python_lexer_tokens(script: str) -> List[Dict[str, object]]:
-    """Python 参考 lexer：source → token 流（type 名/value/line/column）。"""
+    """Python 参考 lexer：source → token 流（type 名/value/line/column/end_line/
+    end_column——完整位置，含合成 token[NEWLINE/EOF/INDENT/DEDENT]的 end=(0,0)）。"""
     from core.compiler.lexer.lexer import Lexer
     return [
-        {"type": t.type.name, "value": t.value, "line": t.line, "column": t.column}
+        {
+            "type": t.type.name,
+            "value": t.value,
+            "line": t.line,
+            "column": t.column,
+            "end_line": t.end_line,
+            "end_column": t.end_column,
+        }
         for t in Lexer(script).tokenize()
     ]
 
@@ -92,7 +100,14 @@ def rust_lexer_tokens(script: str) -> List[Dict[str, object]]:
     if not rk.loaded:
         return []
     return [
-        {"type": t["type"], "value": t["value"], "line": t["line"], "column": t["column"]}
+        {
+            "type": t["type"],
+            "value": t["value"],
+            "line": t["line"],
+            "column": t["column"],
+            "end_line": t["end_line"],
+            "end_column": t["end_column"],
+        }
         for t in rk._module.lex(script)
     ]
 
@@ -120,7 +135,8 @@ def rust_parse_struct(script: str) -> str:
 
 
 def ast_differential(script: str) -> bool:
-    """AST 级差分等价：Rust parser AST structure == Python parser AST structure。
+    """AST 级差分等价：Rust parser AST 完整形态（含位置）== Python parser AST
+    完整形态。
 
     .so 未构建 → 降级（返回 True，不冒充等价——由调用方据 loaded 判定覆盖）。
     """
@@ -128,7 +144,7 @@ def ast_differential(script: str) -> bool:
     rust = rust_parse_struct(script)
     if not rust:
         return True
-    return rust == parse_ast_dump(script, include_positions=False)
+    return rust == parse_ast_dump(script, include_positions=True)
 
 
 @dataclass

@@ -182,13 +182,15 @@ pub struct Token {
 
 impl Token {
     fn at(type_: TokenType, value: String, line: usize, column: usize) -> Self {
+        // 合成 token（NEWLINE/EOF/INDENT/DEDENT）：end 位置 = (0,0)（对齐 Python
+        // Token dataclass 默认 end_line=0/end_column=0——这些 token 无实际结束位置）
         Token {
             type_,
             value,
             line,
             column,
-            end_line: line,
-            end_column: column,
+            end_line: 0,
+            end_column: 0,
             is_at_line_start: false,
         }
     }

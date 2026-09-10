@@ -129,9 +129,10 @@ class TestRustParserAstDifferential:
     Rust parser = Rust 前端第二增量（完整语句/表达式面：Assign[Name/Subscript
     target] / ExprStmt / If[elif 链] / For / FunctionDef[typed args + returns] /
     Return / Break / Continue / Pass / Constant / Name / BinOp[+ - * / // % **] /
-    UnaryOp / Compare / Call / List / Dict / Attribute / Subscript）。AST 级差分
-    = Rust AST structure 规范形态 == Python AST structure 规范形态（tests/
-    diff_harness/ast_dump.py include_positions=False 参考）。
+    UnaryOp / Compare / Call / List / Dict / Attribute / Subscript）+ **位置跟踪
+    对齐**（每节点 lineno/col_offset/end_lineno/end_col_offset 对齐 Python _loc）。
+    AST 级差分 = Rust AST 完整形态（含位置）== Python AST 完整形态（tests/
+    diff_harness/ast_dump.py include_positions=True 参考）。
     """
 
     def test_ast_differential_simple(self):
@@ -151,7 +152,7 @@ class TestRustParserAstDifferential:
         ]
         for src in snippets:
             rs = rust_parse_struct(src)
-            py = parse_ast_dump(src, include_positions=False)
+            py = parse_ast_dump(src, include_positions=True)
             assert rs == py, f"AST 级差分不等价：\n  py : {py}\n  rust: {rs}"
 
     def test_ast_differential_corpus(self):
@@ -163,5 +164,5 @@ class TestRustParserAstDifferential:
             return
         for name, script in CORPUS:
             rs = rust_parse_struct(script)
-            py = parse_ast_dump(script, include_positions=False)
+            py = parse_ast_dump(script, include_positions=True)
             assert rs == py, f"语料 {name} AST 级差分不等价：\n  py : {py}\n  rust: {rs}"

@@ -2912,6 +2912,43 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（位置跟踪
   对齐 + 语义层 + 剩余语句/表达式[while/try/lambda/三元/复合类型注解]）+ ③ 执行
   核心 + ④ 并发解除续在隔离分支（差分门逐级验证）。
+- **P9 阶段② 第四增量（Rust parser 位置跟踪对齐 + AST 完整形态差分等价，
+  2026-09-10，隔离分支 `rust-kernel`；全量 Rust 化迁移的前端位置跟踪）**：**Rust
+  parser 位置跟踪对齐**——每节点 (lineno/col_offset/end_lineno/end_col_offset) 对齐
+  Python parser 的 `_loc`（start token 的 line/col + end token 的 end_line/end_col），
+  经 AST 完整形态（含位置）差分等价验证与 Python 参考 parser 逐字节等价。
+  **交付**：
+  - **lexer end 位置修复**（`ibci-ext/src/lexer.rs`）：合成 token（NEWLINE/EOF/
+    INDENT/DEDENT）的 end_line/end_column 统一 = (0,0)（对齐 Python Token dataclass
+    默认 end=(0,0)——这些 token 无实际结束位置）。**关键发现**：此前 token 级差分
+    只比 (type/value/line/column)，未比 end 位置，漏过此 bug（NEWLINE/EOF/INDENT/
+    DEDENT 的 end 误设为自身位置）。修复后 token 完整位置（含 end）14/14 语料等价。
+  - **Rust parser 位置跟踪**（`ibci-ext/src/parser.rs`）：每 AST 节点记录 Pos
+    （line/col + end_line/end_col），从 token 设置——对齐 Python `_loc` 模式：
+    IbName/IbConstant=token 位置；IbBinOp=left 起/right 止；IbCall=func 起/RPAREN
+    止；IbAssign=**target 起/target 止**（end=target.end，非 value.end）；IbExprStmt
+    =value 位置；IbIf/IbFor/IbFunctionDef=**keyword 起/DEDENT 止(0,0)**；IbReturn=
+    **RETURN token 起/止**（非 value 止）；IbArg=arg name 起/止；IbUnaryOp=**op
+    token 起/止**（非 operand 止）；IbModule=(0,0,None,None)。
+  - **AST dumper 含位置**：`parse_struct` 产出完整形态（含位置）；差分 harness
+    `ast_differential` 升级为完整形态比对（include_positions=True）；token 级差分
+    升级为完整位置比对（含 end_line/end_column）。
+  **关键裁定（self-grill 全分支消解）**：① **位置跟踪 = 从 token 设置**（每节点
+  的 start/end token 对齐 Python `_loc` 的 token 选择——IbAssign end=target.end /
+  IbReturn end=RETURN.end / IbUnaryOp end=op.end 等节点特定规则）；② **合成 token
+  end=(0,0)**（NEWLINE/EOF/INDENT/DEDENT 无实际结束位置——修 lexer 的 end 误设）；
+  ③ **IbModule end=None**（模块节点 end 未设——区别于其他节点的 Some(0)）；④
+  **位置跟踪对齐 = 完整 AST 差分门**（Rust AST 完整形态[含位置] == Python AST 完整
+  形态——比 structure 模式更强）。
+  **验证**：AST 完整形态（含位置）差分 **14/14 语料逐字节等价** + token 完整位置
+  （含 end）差分 14/14 语料等价 + 全量 pytest 零回归（阶段边界放行门——加法式增量
+  不动 Python 执行路径，计数 = 4268；测试数不变[更新现有 10 例，非新增]；见
+  NEXT_STEPS 基线锚点）。**阶段② 第四增量出口达成**（Rust parser 位置跟踪对齐 +
+  AST 完整形态差分等价门就位）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段② 第四增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（语义层
+  [符号表/类型环境] + 剩余语句/表达式[while/try/lambda/三元/复合类型注解/class]）
+  + ③ 执行核心 + ④ 并发解除续在隔离分支（差分门逐级验证）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -32,7 +32,7 @@
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4268 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段② 第三增量[加法式 + 语料 AST 级差分 1 例]阶段边界放行门；数字以实跑为准，不冻结）。
+> P9 阶段② 第四增量[位置跟踪对齐，更新现有 harness 10 例非新增]阶段边界放行门；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -100,8 +100,18 @@
 >   + INDENT/DEDENT body 解析 + 回退式前瞻 Assign[Name/Subscript target]]；
 >   **14/14 语料 AST 级逐字节等价**；渐进移植 + 差分门，非 subset 双通道；零风险
 >   加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段② 第三增量条目）
->   → **当前批次 = P9 阶段② 续（Rust parser 位置跟踪对齐 + 语义层[符号表/类型
->   环境] + 剩余语句/表达式[while/try/lambda/三元/复合类型注解]；隔离分支续）**。
+>   → **P9 阶段② 第四增量 ✅**（Rust parser 位置跟踪对齐——每节点
+>   lineno/col_offset/end_lineno/end_col_offset 对齐 Python _loc[start token
+>   line/col + end token end_line/end_col]；lexer 合成 token[NEWLINE/EOF/INDENT/
+>   DEDENT] end 位置修复 = (0,0)[此前 token 级差分只比 type/value/line/column，
+>   漏过 end 位置 bug]；AST dumper 含位置 + 差分 harness 升级[AST 完整形态含位置
+>   比对 + token 完整位置比对]；**14/14 语料 AST 完整形态[含位置]逐字节等价 +
+>   token 完整位置 14/14 等价**；节点特定规则[IbAssign end=target.end / IbReturn
+>   end=RETURN.end / IbUnaryOp end=op.end / IbIf·For·FunctionDef end=DEDENT(0,0)
+>   / IbModule end=None]；零风险加法式，merge 删分支；设计/裁定 = WORKLOG P9
+>   阶段② 第四增量条目）
+>   → **当前批次 = P9 阶段② 续（Rust 语义层[符号表/类型环境] + 剩余语句/表达式
+>   [while/try/lambda/三元/复合类型注解/class]；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -138,8 +148,9 @@
    P1 R-A quote/eval ✅ → P2 R-B KB ✅ → P3 磁盘格式 ✅ → P4 R-C 确定性模式 ✅
    → P5 R-D 工件加载 ✅ → P6 向量面 ✅ → P7 R-F 投影派生视图 ✅ → P8 测试进程内化 ✅
    → **P9 Rust 内核 阶段① 地基 ✅ → 阶段② 首增量 Rust lexer ✅
-   → 阶段② 第二增量 Rust parser 最小面 ✅ → 阶段② 第三增量 Rust parser 完整面 ✅**
-   → 阶段② 续（位置 + 语义层 + 剩余面）[当前] → 阶段③ 执行核心[主战场]
+   → 阶段② 第二增量 Rust parser 最小面 ✅ → 阶段② 第三增量 Rust parser 完整面 ✅
+   → 阶段② 第四增量 位置跟踪对齐 ✅**
+   → 阶段② 续（语义层 + 剩余面）[当前] → 阶段③ 执行核心[主战场]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
