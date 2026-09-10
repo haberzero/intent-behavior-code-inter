@@ -128,12 +128,14 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-09 P6 内核自举收束 + 合并安全评估 → 下一 agent 接 P7 危险工作）
+### 2.0 🔴 本 session 交接（2026-09-09 Round5 自指性架构主线 → **机器更换交接**）
 
-> **接手起点**：读本节 + `tasks_docs/NEXT_STEPS.md`（P6 收束 + P7 开工指令 + ⛔ 工作模式定论）+
-> `tasks_docs/WORKLOG.md`（P6 批次 + 合并安全评估 + 看门狗根因条目）+ `git log --oneline -30`（提交动线）。
-> **本 agent 任务 = P7 档 B 进程级隔离 + 反射能力（危险工作，隔离分支）**——见"主线延续点"第 1 条
-> 开工指令。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
+> **接手起点**：读 **`tasks_docs/HANDOFF_MACHINE_CHANGE.md`**（机器更换自包含交接：环境重建 +
+> 完整任务清单 + gitignored 丢失项 + 协作状态）+ `tasks_docs/NEXT_STEPS.md`（Round5 主线 + ⛔ 工作模式
+> 定论）+ `tasks_docs/WORKLOG.md`（Round5 自指性转向 + ai.recall 调和 + C1/C2 裁定）+ `git log --oneline -30`。
+> **当前主线 = Round5 自指性体系架构（`selfref` 模块）**：C1 自描述地基 ✅ / C2 verify 三关门 ✅ /
+> 下一步 C3 自修改 + 回滚。本轮已 push unsafe-vibe-dev（用户 2026-09-09 授权）。
+> 本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
 - **工程事实（本 session 收束点）**：
   - 分支 = `unsafe-vibe-dev`（日常开发主线 = `123a341f`）+ `main`（永不触碰）。
     `free-explore` 工作分支已删（内容已 ff 并入 unsafe-vibe-dev）。**已推送 origin**
