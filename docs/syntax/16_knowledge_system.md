@@ -136,6 +136,27 @@ IBC 结构 = 稳定可靠的语言自动机。"验证过的知识从非确定性
 | `k.same_word(a, b)` | 词同一性（对比层 5）：`a == b` 且均为已注册词（未注册 = `false` 非错误） |
 | `k.compare(a, b)`（fact_id 对） | 对比 4 层：`{exact: (world,s,r,o) 全等（层 1）, contradiction: 同 (s,r) 不同 o 且非 multi_valued（层 2）, scale: "same"/"cross"（层 3——异 world 不直接可比，`size_rank` 语境判定）, same_word: 主语词同一性（层 5）}`；未知 id = `KNW_FACT_NOT_FOUND`。**层 4（语义相似）归向量面**（内容信号非判定——判定恒走确定性路径） |
 
+**向量面**（词嵌入——内容信号非判定；D1 判定恒走图平面确定性路径，与
+`compare` 层 4 / `narrow_model.score` 同定位）：
+
+| 方法 | 语义 | 纪律 |
+|------|------|------|
+| `k.set_embedding(word, vec)` | 给已注册词挂/换嵌入（可变面） | 词须已注册（`KNW_VOCAB_UNREGISTERED`）；维度须与既有嵌入一致（`KNW_EMB_DIM_MISMATCH`）；`vec` = `vector` 值 |
+| `k.embedding(word)` | 取词嵌入（`vector` 值） | 词未注册 = `KNW_VOCAB_UNREGISTERED`；未挂 = `KNW_EMB_NOT_SET` |
+| `k.has_embedding(word)` | 是否已挂嵌入（`bool`） | 未挂 = `false`（合法态非错误） |
+| `k.embedding_dim()` | 嵌入维度（`int`） | 嵌入面空 = `KNW_EMB_NOT_SET`；维度全一致（set_embedding 门保证） |
+| `k.embed_search(query, k)` | 全嵌入词暴力 cosine 取前 `k`（**内容信号**） | `query` = `vector` 值；返回 `list` 每项 `{word, score}`（score = cosine 越大越相似）；排序键 `(−score, word)` 升序（score 降序 + 平手按词名，确定性 tie-break）；`k` 非正整数 = `KNW_EMB_SEARCH_INVALID`，`k` 超嵌入词数 = 返回全部（截断非违约）；嵌入面空 = `KNW_EMB_NOT_SET` |
+
+- **内容信号非判定**：`embed_search` 返回相似度 rank/分数（异常检测 / 语义对比
+  用），从不做判定（判定走图平面 `contradicts`/`transitive`/`compare` 确定性
+  路径）。嵌入只作**内容信号**（向量平面），与窄模型 `score` 同定位。
+- **暴力 cosine**（小规模；无索引常驻服务——不可变工件加载，非常驻）；ANN/
+  FAISS 派生加速 = 后置（磁盘格式预留）。
+- **query 来源**：按词检索先 `k.embedding(word)` 取向量；任意文本经 `ai.embed`
+  取向量（`ai.set_embedding_mock` 提供确定性 mock——零 LLM）。
+- **持久化**：嵌入面入 KB artifact v2 `vector` 节（`{dim, embeddings}`，内容
+  寻址；见 §11.12）；v1 artifact（无 vector 节）向后兼容加载（嵌入面空）。
+
 ## 惯用法（canonical idiom）
 
 "先查知识库再决定是否调 LLM"——用户控制流的确定性验证门模式：

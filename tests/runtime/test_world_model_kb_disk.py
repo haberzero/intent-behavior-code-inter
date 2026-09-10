@@ -65,7 +65,7 @@ class TestCanonicalHash:
         assert text == text2
 
     def test_schema_version_constant(self):
-        assert KB_SCHEMA_VERSION == 1
+        assert KB_SCHEMA_VERSION == 2
 
 
 def _save_kb(tmp_path, name="kb.json"):
@@ -93,11 +93,12 @@ class TestSaveLoadRoundTrip:
         from tests.conftest import run_ibci
         h, artifact_path = _save_kb(tmp_path)
         assert len(h) == 64
-        # artifact 落盘 = 合规封套
+        # artifact 落盘 = 合规封套（v2 = 含 vector 节；空 KB 嵌入面 dim=0）
         a = json.loads(artifact_path.read_text(encoding="utf-8"))
-        assert a["schema_version"] == 1
+        assert a["schema_version"] == 2
         assert a["content_hash"] == h
         assert len(a["facts"]) == 1 and len(a["vocab"]["words"]) == 2
+        assert a["vector"]["dim"] == 0 and a["vector"]["embeddings"] == {}
         # 经语言面 load → 活查询
         code = (
             f"import world_model\n"

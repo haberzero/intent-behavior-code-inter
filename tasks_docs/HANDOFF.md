@@ -146,17 +146,17 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 > 下一 session 据 §2.2 检查单**新建 goal**（resume 仅对同 session 内被解除武装的 active
 > goal 有效）。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
 - **工程事实（本 session 收束点）**：
-  - 分支 = `unsafe-vibe-dev`（日常开发主线）+ `main`（永不触碰）。**已 push 至 origin**
-    （本 session 收束点 `f5a42db7`，2026-09-10 用户阶段末显式授权"进行一次 push"——push 前全量
-    pytest 零回归门 4191/1 通过）。默认仍**不 push**（硬原则：push 须用户单独授权；下次 push
-    待新的显式授权）。
+  - 分支 = `unsafe-vibe-dev`（日常开发主线）+ `main`（永不触碰）。**最近一次 push = origin
+    `f5a42db7`**（2026-09-10 用户阶段末显式授权"进行一次 push"——push 前全量 pytest 零回归门
+    4191/1 通过）；push 后本 session 续有新提交（P5 doc-sync + P6 F1/F2 向量面）尚未 push。
+    默认仍**不 push**（硬原则：push 须用户单独授权；下次 push 待新的显式授权）。
   - **环境已验证**：venv Python 3.12.3 + editable 安装 ✅；probe ✅（SiliconFlow 35B 非思考基线）；
     maturin 1.15.0 + Rust 1.98.1 + 3.12 dev headers ✅（P9 无环境阻塞）。
   - 测试基线 = `.venv/bin/python -m pytest tests/`（**addopts 已含 `-q`，勿显式再加**——双 `-q`
     隐藏计数行）；**smoke 子集（tests/contracts+tests/compiler）832 passed / ~13s 进程内无子进程**
     （高频验证用）；末次全量 **4191/1**（~126s，P5 公理层放行门，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P6 向量面）**：
+- **🔴 主线延续点（下一位智能体 = P7 R-F 投影派生视图）**：
   - **P1 R-A quote/eval 已落地（本 session）**：`meta.quote`/`meta.eval` + `quoted` 一等值类型
     （单一验证门 + 值通道）。裁定 = WORKLOG（P1 R-A 条目）。
   - **P2 R-B 世界模型 KB 已落地（本 session）**：`knowledge` 就地演化为三元组知识图谱——
@@ -193,12 +193,21 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     （权重加载即冻结，无 optimizer/反向传播）。**R-D 验收达成**（bind 后
     score/topk 可调用且确定性同输入同输出，全程无训练调用）。裁定全记录 =
     WORKLOG（P5 条目）。
-  - **P6 向量面（当前批次）**：纯 IBCI 值 + `ImmutableArtifact` 工件（暴力
-    cosine 起步，格式预留 ANN/FAISS 派生加速）——向量平面 = 内容信号（非判定，
-    D1 判定走确定性路径）。
+  - **P6 向量面已落地（本 session）**：`knowledge` 值类型加**词嵌入面**（单点
+    真理 = KB 值，不另立平行向量索引类型）——`set_embedding(word, vec)` /
+    `embedding(word)` / `has_embedding` / `embedding_dim()` / `embed_search(query, k)`
+    （全嵌入词暴力 cosine 取前 k，**内容信号非判定**——D1 判定走图平面；确定性
+    tie-break = (−score, word) 升序）；KB artifact **v2 加法演进**（加 `vector`
+    节持久化嵌入，canonical/hash 版本感知，**v1 向后兼容**）。机制分层非重复：
+    `ai.embed`/`ai.retrieve` = 低层原语保留，`kb.embed_search` = KB 自身词表高层
+    内容信号检索。裁定全记录 = WORKLOG（P6 条目）。
+  - **P7 R-F 投影派生视图（当前批次）**：`to_ibci()` 确定性导出 IBCI 代码视图
+    （替代 lossy 静态投影器 `schema_to_ibci.py`）——派生/便利特性，非数据层
+    本身（数据层 = 活 KB + 向量面 + 窄模型工件）；试用方验收 = 投影产物与活
+    KB 查询结果一致（对拍）。
   - **P0-P9 执行清单**（详见 `_world_model_db_design.md` §6）：P0 设计定稿 ✅ → **P1 R-A
     quote/eval ✅** → **P2 R-B 世界模型 KB ✅** → **P3 磁盘格式 ✅** → **P4 R-C 确定性模式
-    ✅** → **P5 R-D 工件加载 ✅** → **P6 向量面（当前批次）** → P7 R-F 投影派生视图
+    ✅** → **P5 R-D 工件加载 ✅** → **P6 向量面 ✅** → **P7 R-F 投影派生视图（当前批次）**
     → P8 测试进程内化 → P9 Rust 内核
     （设计 + 构建；pin `CARGO_HOME` 到 workspace + 网络，免审批；harness 语料已含 quote/eval +
     KB 判别面）。每步：受影响子集+smoke 验证零回归 + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
@@ -246,8 +255,8 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P5 放行门实跑）**：**4191 passed / 1 skipped / 125.75s / rc=0**
-  （= 前基线 4139 + P5 新增 38 + tests/meta 治理参数化增量 14[docs 同步所致]；供下一 session
+- **全量 pytest 基线（本 session P6 放行门实跑）**：**4231 passed / 1 skipped / 126.11s / rc=0**
+  （= 前基线 4191 + P6 新增 26 + tests/meta 治理参数化增量 14[docs 同步所致]；供下一 session
   参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
@@ -259,14 +268,14 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 ### 2.2 交接检查单（当前有效）
 
 - [ ] 读 **`_world_model_db_design.md`**（本主线设计 + 调研结论 + 决策点/风险 + P0-P9 执行清单；
-  **首读**）+ **`_p5_artifact_loading_design.md`**（P5 窄模型工件机制裁定——P6 开工后删除该
-  文档；P2/P3/P4 设计文档已收束删除，裁定全在 WORKLOG + docs/）
-- [ ] 读 `NEXT_STEPS.md`（当前主线 = 世界模型 DB + **当前批次 P6 向量面** + 工作节奏 +
+  **首读**）+ **`_p6_vector_plane_design.md`**（P6 向量面机制裁定——P7 开工后删除该
+  文档；P2/P3/P4/P5 设计文档已收束删除，裁定全在 WORKLOG + docs/）
+- [ ] 读 `NEXT_STEPS.md`（当前主线 = 世界模型 DB + **当前批次 P7 R-F 投影派生视图** + 工作节奏 +
   ⛔ 工作模式定论）
 - [ ] 读 `_rust_kernel_survey.md`（Rust 内核替换调研 + 全量 pytest 临时策略：单任务=受影响子集+smoke）
-- [ ] 读 `WORKLOG.md`（P1 R-A + P2 R-B + P3 磁盘格式 + P4 确定性模式 + P5 窄模型工件 裁定 +
-  世界模型 DB 设计裁定 + 环境重建 + 本交接）
-- [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P6-P9；objective 按 §1.3 模板套用，
+- [ ] 读 `WORKLOG.md`（P1 R-A + P2 R-B + P3 磁盘格式 + P4 确定性模式 + P5 窄模型工件 + P6 向量面
+  裁定 + 世界模型 DB 设计裁定 + 环境重建 + 本交接）
+- [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P7-P9；objective 按 §1.3 模板套用，
   含约束：**禁 push**（须用户单独授权）；**常规网络允许**（不触发审批）；**Rust 构建可行**
   （pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到 workspace，免审批）；**避免**写 workspace 外文件 /
   无必要沙箱提权；用户不在场且需 push 时延后记录不阻塞）；跨 session 需**新建** goal（旧 goal

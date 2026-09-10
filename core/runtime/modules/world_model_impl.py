@@ -45,11 +45,19 @@ from core.runtime.objects.primitives.knowledge import IbKnowledge
 from core.runtime.objects.primitives.narrow_model import IbNarrowModel
 
 
-#: artifact 格式版本（共享契约；未知版本加载 fail-fast，无自动迁移）。
-KB_SCHEMA_VERSION = 1
+#: artifact 当前格式版本（共享契约；保存恒写当前版本）。
+KB_SCHEMA_VERSION = 2
 
-#: artifact 封套必需键（结构门）。
+#: 加载接受版本集（v1 = 无向量面[KB 面 only]；v2 = 加向量面。无自动迁移——
+#: 未知版本 fail-fast）。
+_KB_KNOWN_VERSIONS = (1, 2)
+
+#: artifact 封套必需键（结构门；vector 节 v2 特有，v1 无——版本感知门）。
 _KB_ARTIFACT_KEYS = ("schema_version", "content_hash", "facts", "vocab", "seq")
+_KB_V2_EXTRA_KEYS = ("vector",)
+
+#: 向量节必需键（v2 结构门）。
+_KB_VECTOR_KEYS = ("dim", "embeddings")
 
 #: 事实记录必需字段（结构门）。
 _KB_FACT_KEYS = ("id", "world", "s", "r", "o", "source", "status", "events")
@@ -62,14 +70,21 @@ def kb_canonical_payload(
     facts: Dict[str, Dict[str, Any]],
     vocab: Dict[str, Dict[str, Any]],
     seq: int,
+    vector: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """artifact canonical 载荷（内容身份的单一规范形态）。
+    """artifact canonical 载荷（内容身份的单一规范形态；版本感知）。
 
-    ``{"facts", "seq", "vocab"}`` 经 ``sort_keys`` + 紧凑分隔 + UTF-8 字面序列化
-    ——dict 键排序、list 序保持（facts 按 seq 序传入 = 确定性）。同内容不同
-    文件排版（缩进/键序）映射到同一 canonical 文本。
+    经 ``sort_keys`` + 紧凑分隔 + UTF-8 字面序列化——dict 键排序、list 序保持
+    （facts 按 seq 序传入 = 确定性）。同内容不同文件排版（缩进/键序）映射到
+    同一 canonical 文本。
+
+    版本感知：``vector=None`` = v1 载荷 ``{facts, seq, vocab}``（无 vector 键——
+    匹配既有 v1 存储 hash）；``vector={...}`` = v2 载荷 ``{facts, seq, vocab,
+    vector}``（vector 节入 hash）。
     """
     payload = {"facts": facts, "seq": seq, "vocab": vocab}
+    if vector is not None:
+        payload["vector"] = vector
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
@@ -77,10 +92,15 @@ def kb_content_hash(
     facts: Dict[str, Dict[str, Any]],
     vocab: Dict[str, Dict[str, Any]],
     seq: int,
+    vector: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """content_hash = canonical 载荷的 sha256 全摘要（64-hex，内容即身份）。"""
+    """content_hash = canonical 载荷的 sha256 全摘要（64-hex，内容即身份）。
+
+    版本感知：``vector=None`` = v1 hash（无向量节）；``vector={...}`` = v2 hash
+    （向量节入摘要）。
+    """
     return hashlib.sha256(
-        kb_canonical_payload(facts, vocab, seq).encode("utf-8")
+        kb_canonical_payload(facts, vocab, seq, vector).encode("utf-8")
     ).hexdigest()
 
 
@@ -380,16 +400,56 @@ class WorldModelLib:
                 )
             facts_map[rec["id"]] = rec
         self._validate_kb_payload(facts_map, vocab, seq)
-        # ② 版本门
+        # ② 版本门（v1 = 无向量面 / v2 = 加向量面；未知版本 fail-fast 无自动迁移）
         version = artifact["schema_version"]
-        if version != KB_SCHEMA_VERSION:
+        if version not in _KB_KNOWN_VERSIONS:
             raise InterpreterError(
                 f"world_model.load_kb: 未知 schema_version {version!r}"
-                f"（本版本仅支持 {KB_SCHEMA_VERSION}；无自动迁移）。",
+                f"（本版本支持 {list(_KB_KNOWN_VERSIONS)}；无自动迁移）。",
                 error_code=KNW_KB_SCHEMA_VERSION,
             )
-        # ③ 完整性门（内容寻址：canonical 重算比对）
-        expected = kb_content_hash(facts_map, vocab, seq)
+        # v2 向量节结构门（v1 无 vector 节）
+        vector = None
+        if version >= 2:
+            if "vector" not in artifact:
+                raise InterpreterError(
+                    "world_model.load_kb: v2 artifact 缺 vector 节。",
+                    error_code=KNW_KB_ARTIFACT_MALFORMED,
+                )
+            vector = artifact["vector"]
+            if not isinstance(vector, dict):
+                raise InterpreterError(
+                    "world_model.load_kb: vector 节须为对象（dict）。",
+                    error_code=KNW_KB_ARTIFACT_MALFORMED,
+                )
+            for key in _KB_VECTOR_KEYS:
+                if key not in vector:
+                    raise InterpreterError(
+                        f"world_model.load_kb: vector 节缺 '{key}' 键。",
+                        error_code=KNW_KB_ARTIFACT_MALFORMED,
+                    )
+            # dim = 嵌入维度；0 = 空向量面哨兵（无嵌入）；非空嵌入时 _is_vector
+            # 校验 dim 与实际维度一致（dim=0 + 非空嵌入 = 维度违约 fail-fast）
+            if not isinstance(vector["dim"], int) or isinstance(vector["dim"], bool) \
+                    or vector["dim"] < 0:
+                raise InterpreterError(
+                    "world_model.load_kb: vector.dim 须为非负 int（0 = 空向量面）。",
+                    error_code=KNW_KB_ARTIFACT_MALFORMED,
+                )
+            if not isinstance(vector["embeddings"], dict):
+                raise InterpreterError(
+                    "world_model.load_kb: vector.embeddings 须为 dict。",
+                    error_code=KNW_KB_ARTIFACT_MALFORMED,
+                )
+            for word, emb in vector["embeddings"].items():
+                if not _is_vector(emb, vector["dim"]):
+                    raise InterpreterError(
+                        f"world_model.load_kb: vector 嵌入 '{word}' 须为 "
+                        f"dim={vector['dim']} 数值向量。",
+                        error_code=KNW_KB_ARTIFACT_MALFORMED,
+                    )
+        # ③ 完整性门（内容寻址：canonical 重算比对——版本感知 hash）
+        expected = kb_content_hash(facts_map, vocab, seq, vector)
         if expected != artifact["content_hash"]:
             raise InterpreterError(
                 "world_model.load_kb: content_hash 验证失败"
@@ -397,22 +457,27 @@ class WorldModelLib:
                 "——数据损坏或被篡改。",
                 error_code=KNW_KB_HASH_MISMATCH,
             )
-        # 水化：活 KB 值（entries 面空——artifact 只辖 KB 面；索引经构造
-        # 入口从事实日志确定性重建，派生面纪律）
+        # 水化：活 KB 值（entries 面空——artifact 只辖 KB+向量面；索引经构造
+        # 入口从事实日志确定性重建，派生面纪律；v1 嵌入面空）
+        embeddings = vector["embeddings"] if (version >= 2 and vector) else {}
         cls = self.registry.get_class("knowledge")
         return IbKnowledge(
             cls,
-            payload={"entries": {}, "seq": seq, "facts": facts_map, "vocab": vocab},
+            payload={
+                "entries": {}, "seq": seq, "facts": facts_map,
+                "vocab": vocab, "embeddings": embeddings,
+            },
         )
 
     def save_kb(self, kb: Dict[str, Any], path: str) -> str:
         """序列化 KB 面为 artifact 写盘，返回 ``content_hash``（钉扎/审计面：
         调用方可经 hash 比对验证落盘内容）。
 
-        ``kb`` 参数经调用边界拆箱到达 = 值快照（``to_native`` 三面 dict）；
-        保存只取 KB 面三键（facts/vocab/seq）——entries 面不入 artifact
+        ``kb`` 参数经调用边界拆箱到达 = 值快照（``to_native`` 含 facts/vocab/
+        seq/embeddings）；保存取 KB 面 + 向量面——entries 面不入 artifact
         （其持久化通道 = ihost.save_state 全状态面，两通道各辖其面）。
-        文件布局 = 传输（pretty JSON）；身份 = canonical（紧凑规范形态）。
+        保存恒写当前版本（v2，含 vector 节）；文件布局 = 传输（pretty JSON）；
+        身份 = canonical（紧凑规范形态，版本感知 hash）。
         """
         if not isinstance(kb, dict):
             raise InterpreterError(
@@ -428,14 +493,19 @@ class WorldModelLib:
         facts = kb["facts"]
         vocab = kb["vocab"]
         seq = kb["seq"]
+        embeddings = kb.get("embeddings", {})
         self._validate_kb_payload(facts, vocab, seq)
-        content_hash = kb_content_hash(facts, vocab, seq)
+        # 向量节（v2）：dim = 嵌入维度（空 = 0）；embeddings = 全嵌入面
+        dim = len(next(iter(embeddings.values()))) if embeddings else 0
+        vector = {"dim": dim, "embeddings": embeddings}
+        content_hash = kb_content_hash(facts, vocab, seq, vector)
         artifact = {
             "schema_version": KB_SCHEMA_VERSION,
             "content_hash": content_hash,
             "facts": _kb_facts_list(facts),
             "vocab": vocab,
             "seq": seq,
+            "vector": vector,
         }
         text = json.dumps(artifact, ensure_ascii=False, indent=2)
         native_path = self._resolve_native_path(path, operation="write")

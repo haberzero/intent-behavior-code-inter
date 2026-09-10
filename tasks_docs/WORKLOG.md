@@ -2601,6 +2601,57 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
    可调用且确定性同输入同输出；全程无训练调用——纯推理零 LLM）。
    设计要点 = `tasks_docs/_p5_artifact_loading_design.md`（P5 设计单点
    真理：调研结论 + 面定位 + artifact 格式 + 测试面；P6 批次开工前保留）。
+   **P5 批次开工收尾**：删除 `tasks_docs/_p5_artifact_loading_design.md`
+   （P6 开工——裁定全在本条目 + docs/）。
+- **P6 向量面落地（knowledge 词嵌入面 + KB artifact v2，2026-09-10，
+   unsafe-vibe-dev；世界模型 DB 主线批次 6，两批 F1-F2 收束）**：**KB 词嵌入
+   cosine 内容信号（非判定）；磁盘格式预留 ANN**。
+   **调研结论（现有向量面实证）**：`ai` 模块已有低层向量原语——`embed(texts)`
+   （文本→向量，`set_embedding_mock` 提供**确定性 mock 向量**）+ `retrieve
+   (query: vector, corpus: list, k)`（通用暴力 cosine 检索）+ `recall`（文本→
+   embed→retrieve）；`vector` 原语已有一等值类型（dot/cosine/scale/add/sub）。
+   **缺口 = KB 无嵌入面**（词/事实嵌入无处持久化 + KB 无原生相似检索）。
+   **关键裁定（self-grill 全分支消解）**：① **嵌入面挂 `knowledge` 值类型**
+   （单点真理 = KB 值，决策点3；与 P2"演化 knowledge 就地"同纪律——不另立
+   平行向量索引类型）；② **词级（非事实级）**——嵌入挂治理词表（词全局非
+   per-world）；事实级嵌入（需定义事实嵌入=词嵌入组合 or 独立）= 后置扩展不
+   预置（避免事实嵌入语义臆测）；设计签名 `embed_search(query, world?, k)`
+   的 `world?` 对词嵌入无意义（词全局）——本批落词级 `embed_search(query, k)`
+   ，world 过滤归事实级嵌入扩展；③ **内容信号非判定**（`embed_search` 返回
+   相似度 rank/分数，异常检测/语义对比用，从不做判定——D1 判定走图平面，与
+   narrow_model.score 同定位）；④ **query = vector**（纯内容信号，str/vector
+   无多态；按词检索先 `embedding(word)` 取向量，任意文本经 `ai.embed`）；
+   ⑤ **暴力 cosine**（小规模；无索引常驻服务；ANN/FAISS 派生加速 = 后置，
+   决策点3：纯 IBCI 值+工件起步）；⑥ **确定性**（cosine = IEEE 浮点纯算术；
+   排序键 (−score, word) 升序 = score 降序 + 平手按词名稳定 tie-break）；
+   ⑦ **机制分层非重复**（`ai.embed`/`ai.retrieve` = 低层原语保留；
+   `kb.embed_search` = KB 自身词表上高层内容信号检索）；⑧ **vector 参数不可
+   unbox**（`vector.to_native` 显式违约）——set_embedding/embed_search 经
+   `.elements` 取原生元素（统一纪律）。
+   **KB artifact 版本演进（v1 → v2 加法）**：v2 加 `vector: {dim,
+   embeddings}` 节（词嵌入持久化）；canonical/hash **版本感知**（v1 =
+   `{facts,seq,vocab}` 无 vector / v2 = `{facts,seq,vocab,vector}` 含 vector）；
+   保存恒 v2（空嵌入面 `dim=0`）；加载接受 v1+v2（v1 向后兼容嵌入面空）；
+   `KB_SCHEMA_VERSION = 2` + `_KB_KNOWN_VERSIONS = (1, 2)`。
+   **变化前后**：+`knowledge` 嵌入面（payload 新面 `embeddings: {word: [float]}`
+   + 5 方法 set_embedding/embedding/has_embedding/embedding_dim/embed_search
+   + 公理 KnowledgeAxiom 加 5 方法面 + 序列化 collect/hydrate 嵌入面）+
+   world_model load_kb/save_kb 版本感知（v1 向后兼容 + v2 vector 节）+ 新码
+   +3（KNW_EMB_DIM_MISMATCH / KNW_EMB_NOT_SET / KNW_EMB_SEARCH_INVALID）+
+   catalog + 15_diagnostics + 16_knowledge_system 向量面节 + 11_modules KB
+   artifact v2 格式 + 测试 26 例（F1 值类型 18：set_embedding 治理门/
+   embedding 取回+fail-fast/embed_search cosine 排序+确定性 tie-break+同输入
+   同输出+k 非法超界截断空面+cosine 值对照手工/embedding_dim+has_embedding/
+   序列化 round-trip + F2 磁盘面 6：v2 round-trip 保真/重导出幂等/v1 向后兼容/
+   hash 版本感知 v1≠v2/嵌入篡改检测 + e2e 2：内容信号确定性两次独立 CLI run
+   逐字节一致+凭证 llm_calls=0/v2 artifact 往返）。
+   **既有边界**：`ai.embed`/embedding provider 不经 LLM 汇点（独立 provider
+   路径）——`--deterministic` 零 LLM 凭证对向量面成立（mock 嵌入零 LLM，
+   cosine 纯算术）；与 P4 流式/eval 子进程边界同族（embedding 独立面）。
+   **验证**：全量 pytest 零回归（公理层变更放行门——knowledge 新面 + artifact
+   v2 + 新码；见 NEXT_STEPS 基线锚点）。
+   设计要点 = `tasks_docs/_p6_vector_plane_design.md`（P6 设计单点真理：
+   调研结论 + 面定位 + artifact v2 演进 + 测试面；P7 批次开工前保留）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -546,31 +546,37 @@ print(kb2.lookup_pair("atom", "composed_of")[0]["o"])   # proton
 kb2.add_fact("modern", "atom", "composed_of", "electron", "v31")  # 增量
 ```
 
-**artifact 格式**（共享契约；单 JSON 文件）：
+**artifact 格式**（共享契约；单 JSON 文件；**当前版本 v2**）：
 
 ```
-{ schema_version: 1, content_hash: <sha256 64-hex>,
+{ schema_version: 2, content_hash: <sha256 64-hex>,
   facts: [ {id, world, s, r, o, source, status, events}, ... ],   // seq 序
   vocab: { words: {...}, relations: {...}, worlds: {...} },
-  seq: <int> }
+  seq: <int>,
+  vector: { dim: <int>, embeddings: { <word>: [float, ...], ... } } }
 ```
 
-- **`content_hash`** = canonical 载荷（`facts`/`vocab`/`seq` 经键排序 + 紧凑
-  分隔规范形态）的 sha256 全摘要——**内容即身份**：同内容不同文件排版
-  （缩进/键序）= 同 hash；文件布局是传输，身份是 canonical。
+- **`content_hash`** = canonical 载荷的 sha256 全摘要——**内容即身份**：同内容
+  不同文件排版（缩进/键序）= 同 hash；文件布局是传输，身份是 canonical。
+  **版本感知**：v2 canonical = `{facts, seq, vocab, vector}`（向量节入 hash）；
+  v1 canonical = `{facts, seq, vocab}`（无 vector 键）。
+- **版本演进（v1 → v2 加法）**：v2 加 `vector` 节（词嵌入面）。**保存恒 v2**；
+  **加载接受 v1 + v2**——v1（无 vector 节）向后兼容加载（嵌入面空），v2 读
+  vector 节。未知版本 = `KNW_KB_SCHEMA_VERSION`（无自动迁移）。
 - **加载三级验证门**（fail-fast 不静默降级）：
-  1. **结构门**（合法 JSON + 封套键齐备 + 记录形态）→ `KNW_KB_ARTIFACT_MALFORMED`；
-  2. **版本门**（`schema_version` 未知；无自动迁移）→ `KNW_KB_SCHEMA_VERSION`；
-  3. **完整性门**（canonical 重算 hash ≠ 所载 `content_hash`——篡改/损坏）
-     → `KNW_KB_HASH_MISMATCH`。
+  1. **结构门**（合法 JSON + 封套键齐备 + 记录形态 + v2 vector 节形态）→
+     `KNW_KB_ARTIFACT_MALFORMED`；
+  2. **版本门**（`schema_version` ∉ {1,2}；无自动迁移）→ `KNW_KB_SCHEMA_VERSION`；
+  3. **完整性门**（canonical 重算 hash ≠ 所载 `content_hash`——篡改/损坏；
+     版本感知 hash）→ `KNW_KB_HASH_MISMATCH`。
 - **保存同构结构门**：`save_kb` 落盘前经同一结构验证（畸形 KB 面 fail-fast，
-  不落盘半成品）。
+  不落盘半成品）；保存恒写 v2（含 vector 节，嵌入面空时 `dim=0`）。
 - **沙箱纪律**（同 `fs`）：相对路径以 `project_root` 为基准解析 +
   `PermissionManager` 校验；越界/缺失文件复用 `fs` 面诊断（`RUN_PERMISSION_ERROR`
   / `RUN_GENERIC_ERROR`），不另造码。
-- **entries 面不入 artifact**：artifact 只辖 KB 面（facts/vocab/seq）；通用
-  登记面（entries）的持久化通道 = `ihost.save_state` 全状态面（两通道各辖
-  其面）。加载的 KB 值 entries 面为空。
+- **entries 面不入 artifact**：artifact 辖 KB 面（facts/vocab/seq）+ 向量面
+  （vector）；通用登记面（entries）的持久化通道 = `ihost.save_state` 全状态面
+  （两通道各辖其面）。加载的 KB 值 entries 面为空。
 
 #### 窄模型 artifact（bind_artifact / save_artifact）
 
