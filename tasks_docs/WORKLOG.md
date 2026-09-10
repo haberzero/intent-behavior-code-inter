@@ -3776,6 +3776,51 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     （序列化 Rust 化续[节点数据序列化[node_data dict] + 符号/类型/scope 收集] + 语义层
     Rust 移植[最大面 8317 行] + 值对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级
     验证）；保留 Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。
+- **P9 全量 Rust 化阶段 B 第二增量（序列化 Rust 化续——节点数据序列化 node_data dict，
+  34 语料节点池差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**阶段 B 续（序列化
+  面：节点数据序列化）**——Rust 节点数据序列化（Rust AST → node_data dict，对应 Python
+  FlatSerializer._collect_node）——AST 节点 → node_data dict（_type + 基类位置字段 +
+  节点字段 + 节点引用[UID]）→ content_str[自定义 JSON 序列化，匹配 Python json.dumps
+  sort_keys] → node_uid → 节点池[uid → node_data]。与 Python 节点池逐条差分等价（34
+  语料，节点内容 829/835 匹配，剩余 6 因 free_vars[语义层输出，Rust parser 未承载]）。
+  **交付**：
+  - **node_serializer 模块**（`ibci-ext/src/node_serializer.rs`）：NodeSerializer[Rust
+    AST → 节点池]——serialize_module[根节点] + serialize_stmt[14 语句] + serialize_expr
+    [16 表达式] + serialize_arg[IbArg] + serialize_alias[IbAlias]；node_data dict[_type
+    + 基类位置字段[lineno/col_offset/end_lineno/end_col_offset] + 节点字段 + 节点引用
+    [UID]]；content_str 自定义 JSON 序列化[匹配 Python json.dumps[sort_keys=True]：键
+    字母序 + `": "` 分隔 + `", "` 对间分隔 + 非 ASCII → \uXXXX[ensure_ascii]] → node_uid
+    → 节点池。
+  - **parser.rs**：加 parse_to_module[source → Rust AST Module]（供节点数据序列化消费）。
+  - **pyo3 暴露**：`ibci_ext.serialize_nodes(source) -> (root_uid, node_pool_json)`。
+  - **差分 harness 测试**（TestRustSerializationUid::test_node_pool_corpus）：34 语料节
+    点池差分（Rust 节点池 == Python 节点池，节点内容集合等价；排除 free_vars[语义层
+    输出] + 规范化节点引用 UID[node_... → <UID>]）。
+  **关键裁定（self-grill 全分支消解）**：① **content_str 自定义 JSON 序列化**（匹配
+    Python json.dumps[sort_keys=True]：键字母序 + `": "` 分隔 + `", "` 对间分隔 + 值格式
+    [string 带引号 JSON 转义 + 非 ASCII → \uXXXX[ensure_ascii] / int 原样 / float[整值
+    = 4.0] / null / list[", " 分隔]]——serde_json::to_string 用 `","`/`":"` 无空格，不匹
+    配，故自定义序列化器）；② **节点引用 = UID**（node_data 的节点引用字段[targets/
+    value/body/elts/...] = 子节点 UID[递归序列化]——与 Python _process_value[IbASTNode
+    → _collect_node → UID] 对齐）；③ **缺失字段对齐 Python**（IbCall.keywords=[] /
+    IbFunctionDef.type_params=[]+type_param_uids=[]+type_param_bounds={}-free_vars=[]-
+    is_generator=False / IbIf·For·While·ExprStmt·Assign.llmexcept_handler=null /
+    IbImportFrom.level=0[Rust parser 未承载，对齐默认值] / IbList→IbListExpr[Python 类
+    名] / IbFunctionDef.returns[-> int 类型标注，Rust parser 已产生]）；④ **free_vars =
+    语义层输出**（非序列化面——Rust parser 未承载[闭包捕获]，比对时排除[其值差异改变
+    content_str → UID]；归语义层 Rust 移植后续）；⑤ **ClassDef/Try = 占位**（语料面不
+    含；Rust/Python 结构差异[fields/methods vs parent/parent_args]归后续）；⑥ **零风险
+    加法式**（serialize_nodes 为独立 pyfunction，不动 Python 执行路径/FlatSerializer）。
+  **验证**：34 语料节点池节点内容 829/835 匹配[剩余 6 因 free_vars 语义层输出] + 差分
+    harness 23/23 + 全量 pytest 零回归（阶段 B 第二增量放行门——加法式增量不动 Python
+    执行路径，计数 = 4280 + 节点池差分测试 1 例 = 4281；见 NEXT_STEPS 基线锚点）。**阶
+    段 B 第二增量出口达成**（序列化 Rust 化续——节点数据序列化 node_data dict）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段 B 第二增量零风险加法式（serialize_nodes
+    为独立 pyfunction，不动 Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；
+    阶段 B 后续（序列化 Rust 化续[符号/类型/scope 收集 + 完整 artifact 组装] + 语义层
+    Rust 移植[最大面 8317 行，含 free_vars 闭包捕获] + 值对象[IbValue 扩展 8902 行]）
+    续在隔离分支（差分门逐级验证）；保留 Python 接口[HostService + CPS VM[LLM/意图/
+    宿主面]]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

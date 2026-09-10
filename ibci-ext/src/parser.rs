@@ -1601,3 +1601,10 @@ pub fn parse_struct(source: &str) -> String {
     let module = parser.parse_module();
     module.dump()
 }
+
+/// 解析 IBCI 源码 → Rust AST（Module）——供节点数据序列化消费。
+pub fn parse_to_module(source: &str) -> Module {
+    let tokens = lex(source);
+    let mut parser = Parser::new(tokens);
+    parser.parse_module()
+}

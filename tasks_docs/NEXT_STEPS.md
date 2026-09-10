@@ -31,9 +31,9 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4280 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 全量 Rust 化阶段 B 第一增量[序列化 UID 生成 node_uid/type_uid/asset_uid + 测试 2 例]
-> 放行门[注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4281 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 全量 Rust 化阶段 B 第二增量[节点数据序列化 node_data + 节点池差分测试 1 例]放行门
+> [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
@@ -306,11 +306,24 @@
 >   test_type_uid_and_asset_uid]——**34 语料节点池逐条差分等价**；零风险加法式[UID 生成为
 >   独立 pyfunction，不动 Python 执行路径/FlatSerializer]，merge 删分支；设计/裁定 =
 >   WORKLOG P9 全量 Rust 化阶段 B 第一增量条目）
->   → **当前批次 = P9 全量 Rust 化阶段 B 续（可 Rust 化，纯计算：序列化 Rust 化续[节点
->   数据序列化[node_data dict] + 符号/类型/scope 收集] + 语义层 Rust 移植[最大面 8317 行]
->   + 值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留
->   Python 接口[HostService + CPS VM[LLM/意图/宿主面]]；CPS 优化续[覆盖差 22 节点——LLM/
->   意图面按需补齐]随推进）**。
+>   → **P9 全量 Rust 化阶段 B 第二增量 ✅**（序列化 Rust 化续——节点数据序列化 node_
+>   data dict：ibci-ext/src/node_serializer.rs NodeSerializer[serialize_module +
+>   serialize_stmt[14 语句] + serialize_expr[16 表达式] + serialize_arg + serialize_
+>   alias]；node_data dict[_type + 基类位置字段 + 节点字段 + 节点引用[UID]]；content_str
+>   自定义 JSON 序列化[匹配 Python json.dumps[sort_keys=True]：键字母序 + `": "` + `", `
+>   + 非 ASCII → \uXXXX[ensure_ascii]] → node_uid → 节点池；parser.rs 加 parse_to_module；
+>   pyo3 暴露 serialize_nodes[source → (root_uid, node_pool_json)]；差分 harness 加
+>   test_node_pool_corpus[34 语料节点池差分，排除 free_vars 语义层输出 + 规范化 UID]——
+>   **34 语料节点池节点内容 829/835 匹配**[剩余 6 因 free_vars 语义层输出，Rust parser 未
+>   承载]；缺失字段对齐 Python[IbCall.keywords / IbFunctionDef.type_params+type_param_
+>   uids+free_vars+is_generator / llmexcept_handler / IbImportFrom.level / IbList→
+>   IbListExpr / returns]；零风险加法式[serialize_nodes 独立 pyfunction]，merge 删分支；
+>   设计/裁定 = WORKLOG P9 全量 Rust 化阶段 B 第二增量条目）
+>   → **当前批次 = P9 全量 Rust 化阶段 B 续（可 Rust 化，纯计算：序列化 Rust 化续[符号
+>   /类型/scope 收集 + 完整 artifact 组装] + 语义层 Rust 移植[最大面 8317 行，含 free_
+>   vars 闭包捕获] + 值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值
+>   对象面] + 保留 Python 接口[HostService + CPS VM[LLM/意图/宿主面]]；CPS 优化续[覆盖
+>   差 22 节点——LLM/意图面按需补齐]随推进）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -372,7 +385,8 @@
    → 阶段④ 收束 ✅[kernel_info stage 4 / concurrency-core，task_scheduler GIL-free 集成完成]
    → 全量 Rust 化评估 ✅[核心逻辑面盘点 + 可行性评估 + 关键 Python 接口识别]
    → 全量 Rust 化阶段 B 第一增量 序列化 UID 生成 node_uid/type_uid/asset_uid 34 节点池差分 ✅
-   → 全量 Rust 化阶段 B 续[序列化续 + 语义层 + 值对象 Rust 化 + 差分验证][当前]
+   → 全量 Rust 化阶段 B 第二增量 节点数据序列化 node_data 829/835 ✅
+   → 全量 Rust 化阶段 B 续[序列化续[符号/类型/scope] + 语义层 + 值对象 Rust 化][当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式

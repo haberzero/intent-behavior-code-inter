@@ -469,3 +469,46 @@ class TestRustSerializationUid:
             rs = rk._module.asset_uid(text)
             py = py_asset_uid(text)
             assert rs == py, f"asset_uid 差分不等价：py={py} rust={rs}"
+
+    def test_node_pool_corpus(self):
+        """34 语料节点池差分（全量 Rust 化·序列化面）：Rust 节点池 == Python 节点池
+        （node_data 内容等价）。free_vars 字段 = 语义层输出（Rust parser 未承载，非
+        序列化面），其值差异会改变节点 content_str → UID，故比对时排除 free_vars 字段
+        并规范化节点引用 UID（node_... → <UID>），按节点内容集合比对（节点结构 + 非
+        UID 字段值等价；UID 本身由 content_str 派生，free_vars 差异不影响节点结构）。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "serialize_nodes"):
+            return
+
+        def _norm(val):
+            if isinstance(val, str) and val.startswith("node_"):
+                return "<UID>"
+            if isinstance(val, list):
+                return [_norm(v) for v in val]
+            return val
+
+        def _normalize(node_data):
+            # 排除 free_vars（语义层输出，非序列化面）+ 规范化节点引用 UID
+            return {
+                k: _norm(v) for k, v in node_data.items() if k != "free_vars"
+            }
+
+        for name, code in CORPUS:
+            root, pool_json = rk._module.serialize_nodes(code)
+            rs_pool = json.loads(pool_json)
+            py_pool = FlatSerializer().serialize_artifact(compile_ibci(code))["pools"]["nodes"]
+            # 节点内容集合比对（排除 free_vars + 规范化 UID）
+            rs_set = {json.dumps(_normalize(nd), sort_keys=True) for nd in rs_pool.values()}
+            py_set = {json.dumps(_normalize(nd), sort_keys=True) for nd in py_pool.values()}
+            missing = py_set - rs_set
+            assert not missing, (
+                f"语料 {name} 节点池差分缺失（Python 有 Rust 无）：\n  {sorted(missing)[:2]}"
+            )
+            extra = rs_set - py_set
+            assert not extra, (
+                f"语料 {name} 节点池差分多余（Rust 有 Python 无）：\n  {sorted(extra)[:2]}"
+            )

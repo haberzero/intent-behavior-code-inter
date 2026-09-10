@@ -19,6 +19,7 @@
 mod deserializer;
 mod interpreter;
 mod lexer;
+mod node_serializer;
 mod parser;
 mod serialization;
 mod task_pool;
@@ -120,6 +121,19 @@ fn type_uid(name: &str, module_path: Option<&str>) -> String {
 #[pyfunction]
 fn asset_uid(text: &str) -> String {
     serialization::asset_uid(text)
+}
+
+/// 节点数据序列化（全量 Rust 化·序列化面）：IBC 源码 → Rust AST → 节点池（uid →
+/// node_data）。返回 (root_uid, node_pool_json)——node_pool_json = 节点池的 JSON 串
+/// （serde_json）。差分 harness 经此与 Python FlatSerializer 节点池逐条比对。
+#[pyfunction]
+fn serialize_nodes(source: &str) -> PyResult<(String, String)> {
+    let module = parser::parse_to_module(source);
+    let mut serializer = node_serializer::NodeSerializer::new();
+    let (root_uid, node_pool) = serializer.serialize_module(&module);
+    let pool_json = serde_json::to_string(&node_pool)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    Ok((root_uid, pool_json))
 }
 
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
@@ -247,6 +261,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(node_uid, m)?)?;
     m.add_function(wrap_pyfunction!(type_uid, m)?)?;
     m.add_function(wrap_pyfunction!(asset_uid, m)?)?;
+    m.add_function(wrap_pyfunction!(serialize_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
