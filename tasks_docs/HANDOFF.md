@@ -357,16 +357,20 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     桥接[get_host_module → _MetaModule 封装 quote_expression/eval_quoted，engine
     project_root 双重确立]——**30/30 全级差分逐条等价**[token/AST/反序列化/数据面
     + 符号表/类型表]。**零风险加法式**（opt-in，不动 Python 执行路径）。
-  - **P9 阶段③ 续（当前批次，隔离分支续）**：执行核心——CPS 优化[43 节点 enum
-    分发，在 27x 基础上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料[行为表达式]。
-    四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 + 剩余面 + 位置 +
-    布尔逻辑 + import ✅ / 语义推迟）→ **③ 执行核心[主战场：反序列化器 ✅ / 对象
-    模型 + 解释器 + 数据面 ✅ / 性能基准 23–30x ✅ / KB 语料面 host service 桥接 ✅
-    / 更宽语料 20/20 四级 ✅ / 闭包完整语义 22/22 四级 ✅ / 更宽 IBCI 面 27/27 四级
-    ✅ / 符号池/侧表 27/27 符号表 ✅ / 类型池/node_to_type 27/27 类型表 ✅ / quoted
-    值面 30/30 全级 ✅ / CPS 优化当前]** → ④ 并发解除[task_scheduler IO-only →
-    CPU+IO 真并行 GIL-free]。确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev
-    并删分支。
+  - **P9 阶段③ 收束（本 session 落地，unsafe-vibe-dev 直接提交[加法式零风险]）**：
+    执行核心就绪评估——tree-walking 执行核心经 10 增量达成完整数据面[30 语料全级
+    差分等价 + 23–30x + 闭包完整语义 + KB 世界模型面 + quoted 值自指原语 + 完整
+    artifact 消费]，**执行核心就绪**[数据面经 run_artifact 消费 Python 前端
+    artifact]；`kernel_info` 状态升级 stage 1/skeleton → stage 3/execution-core
+    [执行核心就绪≠全量内核就绪——run script 入口待 Rust 前端[语义层]移植后升
+    ready]；模块/run 文档更新。
+  - **P9 阶段④ 并发解除（当前批次，隔离分支续）**：task_scheduler IO-only →
+    CPU+IO 真并行 GIL-free——**CPS 优化[43 节点 enum 分发]在此落地**（tree-walking
+    已 27x，CPS 为并发解除[task_scheduler 集成]服务）。四阶段全貌：① 地基 ✅ →
+    ② 前端（lexer ✅ / parser 完整面 + 剩余面 + 位置 + 布尔逻辑 + import ✅ / 语义
+    推迟）→ **③ 执行核心 ✅[收束：30/30 全级 + 23–30x + 闭包 + KB + quoted 值 +
+    完整 artifact 消费 + kernel_info stage 3/execution-core]** → ④ 并发解除[当前]。
+    确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -425,9 +429,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段③ 第十增量阶段边界实跑）**：**4276 passed /
-  1 skipped / 139.28s / rc=0**（计数稳定 4276[quoted 值面 + 更宽语料 30 条不增测试
-  数——现有全级差分测试自动覆盖 30 语料]；供下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段③ 收束阶段③→④ 边界实跑）**：**4276 passed /
+  1 skipped / 139.51s / rc=0**（计数稳定 4276[阶段③ 收束 kernel_info + 文档不动 Python
+  执行路径]；注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程
+  spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session
+  参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 

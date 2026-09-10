@@ -5,10 +5,13 @@
 //! 层语义红线。本 crate = Rust 内核的执行体（GIL-free，py.allow_threads 释放
 //! GIL）。
 //!
-//! 当前形态：构建链 + Rust lexer（version / kernel_info / lex / run 显式
-//! NotImplemented）——验证构建链 + pyo3 绑定 + 差分 harness 接入点。run 执行
-//! 核心待后续扩展落地（kernel_info.status 由 "skeleton" 升 "ready" 后 run 才
-//! 生效）。
+//! 当前形态：构建链 + Rust lexer + Rust parser + 反序列化器 + 执行核心
+//! （tree-walking 解释器）——执行核心消费 Python 前端产出的序列化 artifact
+//! （FlatSerializer JSON）执行，数据面经差分 harness 与 Python 参考内核逐条
+//! 比对（30 语料全级差分等价：token/AST/反序列化/数据面 + 符号表/类型表；
+//! 性能 23–30x）。kernel_info.stage = 3（执行核心就绪），status =
+//! "execution-core"（执行核心就绪，数据面经 run_artifact 可用；run[script 入口]
+//! 待 Rust 前端[语义层]移植后升 "ready" 生效）。
 
 mod deserializer;
 mod interpreter;
@@ -81,26 +84,30 @@ fn type_table(artifact_json: &str) -> String {
 }
 
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
-/// 探明 Rust 内核状态，决定双内核比对是否就绪（status != "ready" = 未就绪，
-/// 仅跑 Python 参考内核）。
+/// 探明 Rust 内核状态。stage = 当前阶段（3 = 执行核心）；status = 就绪门
+/// （"execution-core" = 执行核心就绪[数据面经 run_artifact 可用]；"ready" =
+/// 全量内核就绪[run script 入口生效，待 Rust 前端移植]）。
 #[pyfunction]
 fn kernel_info(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let dict = PyDict::new(py);
     dict.set_item("name", "rust")?;
-    dict.set_item("stage", 1u32)?;
-    dict.set_item("status", "skeleton")?;
+    dict.set_item("stage", 3u32)?;
+    dict.set_item("status", "execution-core")?;
     Ok(dict)
 }
 
-/// 执行 IBCI 源码（Rust 内核快路径入口）。
+/// 执行 IBCI 源码（Rust 内核全量入口：script → 数据面）。
 ///
-/// 执行核心未落地——**显式 NotImplemented（无静默回退）**。双内核协议：Rust
-/// 内核不可用/未实现 = 显式报错，不悄悄切 Python 内核（kernel_info.status ==
-/// "ready" 前 run 恒 NotImplemented）。
+/// 执行核心已落地（经 run_artifact 消费 artifact 执行），但全量 script 入口需
+/// Rust 前端（lexer + parser + 语义层）——语义层移植未落地，故 script 入口
+/// **显式 NotImplemented（无静默回退）**。双内核协议：Rust 内核全量入口未就绪
+/// = 显式报错，不悄悄切 Python 内核（kernel_info.status == "ready" 前 run 恒
+/// NotImplemented；执行核心就绪面经 run_artifact 单独验证）。
 #[pyfunction]
 fn run(_script: &str) -> PyResult<String> {
     Err(PyNotImplementedError::new_err(
-        "ibci_ext.run: Rust 内核执行核心未落地（双内核协议 = 无静默回退）",
+        "ibci_ext.run: Rust 内核全量 script 入口待前端（语义层）移植；执行核心就绪面 \
+         经 ibci_ext.run_artifact 验证（双内核协议 = 无静默回退）",
     ))
 }
 

@@ -3345,6 +3345,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [43 节点 enum 分发，在 27x 基础上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料
   [行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全
   量 Rust 化后续。
+- **P9 阶段③ 收束（执行核心就绪评估——kernel_info 状态升级 + 模块/run 文档，
+  2026-09-10，`unsafe-vibe-dev` 直接提交[加法式零风险]）**：**P9 阶段③ 执行核心
+  收束**——tree-walking 执行核心经 10 增量达成完整数据面（30 语料全级差分等价
+  [token/AST/反序列化/数据面 + 符号表/类型表] + 性能 23–30x + 闭包完整语义 + KB
+  世界模型面 + quoted 值自指原语 + 完整 artifact 消费[nodes/symbols/types 池 + 侧
+  表]），**执行核心就绪**（数据面经 `run_artifact` 消费 Python 前端 artifact 执
+  行）。本收束升级 `kernel_info` 状态（stage 1/skeleton → stage 3/execution-
+  core）+ 更新模块/run 文档（执行核心就绪态 + run script 入口待前端）。
+  **交付**：
+  - **kernel_info 状态升级**（`ibci-ext/src/lib.rs`）：`{stage: 3, status:
+    "execution-core"}`——执行核心就绪（数据面经 run_artifact 可用）；"ready"
+    保留给全量内核（run script 入口，待 Rust 前端[语义层]移植后升）。
+  - **模块文档更新**（`//!`）：执行核心就绪态（构建链 + lexer + parser + 反序列化
+    器 + tree-walking 执行核心；30 语料全级差分等价 + 23–30x）。
+  - **run 文档/消息更新**：全量 script 入口待前端（语义层）移植——执行核心就绪面
+    经 run_artifact 单独验证（双内核协议无静默回退）。
+  **关键裁定（self-grill 全分支消解）**：① **执行核心就绪 ≠ 全量内核就绪**
+    （tree-walking 执行核心消费 Python 前端 artifact 执行——数据面就绪；全量
+    script 入口需 Rust 前端[lexer + parser + 语义层]，语义层移植未落地故 run
+    script 入口显式 NotImplemented；两就绪面区分：execution-core[数据面] /
+    ready[全量]）；② **kernel_info.stage = 3**（阶段③ 执行核心）；③ **常设门行为
+    不变**（`differential_check` 用 run script 全量入口，status "execution-core"
+    ≠ "ready" → 仅 Python 确定性验证——Rust 数据面由 test_data_plane_* 经
+    run_artifact 单独验证，覆盖不降）；④ **资产池不消费**（语料面 0 条，无差分
+    价值——后续语料扩展后再消费）；⑤ **CPS 优化[43 节点 enum 分发]归阶段④**
+    （tree-walking 已是 27x，CPS 为并发解除[task_scheduler 集成]服务，非执行核心
+    数据面需求）。
+  **验证**：kernel_info = {stage 3, execution-core} + run 显式 NotImplemented
+    [消息更新] + 差分 harness 18/18 + smoke 832 零回归 + 性能基准重测[23–30x 确认
+    仍成立] + 全量 pytest 零回归（阶段③→④ 边界放行门——加法式增量不动 Python
+    执行路径，计数稳定 4276；见 NEXT_STEPS 基线锚点）。**阶段③ 收束达成**（Rust
+    执行核心就绪——数据面经 run_artifact 消费 Python 前端 artifact）。
+  **分支状态**：`unsafe-vibe-dev` 直接提交（加法式零风险——kernel_info + 文档，不
+    动 Python 执行路径）；**阶段③ 执行核心收束**，下一批 = **阶段④ 并发解除**
+    （task_scheduler IO-only → CPU+IO 真并行 GIL-free——CPS 优化[43 节点 enum 分发]
+    在此落地）+ 语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
