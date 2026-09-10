@@ -13,7 +13,7 @@
 细则；2026-08-18 取消手动 cherry-pick，改为"确认低风险直接 merge 到 unsafe-vibe-dev +
 merge 无误即删分支"，main 不更新不触碰）/ 自主推进偏好与上报阈值 / 工作日志纪律 /
 碎片化判断基准 / "不删也不修"两档 /
-subagent 仅 general agent / 决策纪律 / goal 配置习惯。
+subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵活微调（2026-09-10）。
 
 ## 二、主线与方向裁定（保留追溯价值）
 
