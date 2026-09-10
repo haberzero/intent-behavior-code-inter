@@ -786,6 +786,148 @@ class IbKnowledge(IbValue):
         }
 
     # ------------------------------------------------------------------ #
+    # 审计面（墓碑/版本化——append-only 纪律 + reason 强制 + 全史可溯）
+    # ------------------------------------------------------------------ #
+
+    def retract(self, fact_id: IbObject, reason: IbObject) -> Any:
+        """墓碑：status → "retracted"（append-only 事件，reason 强制非空）。
+
+        图索引即时移除（active 视图——事实退出世界模型）；日志保留全史
+        （get_fact/facts/history_fact 仍可查，审计视图）。已 retracted 再
+        retract = fail-fast（KNW_FACT_RETRACTED——append-only 纪律：墓碑只读，
+        恢复语义 = 登记新事实）。
+        """
+        fid = unbox(fact_id)
+        r = unbox(reason)
+        if not isinstance(fid, str):
+            raise InterpreterError(
+                "knowledge.retract fact_id 须为 str。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        f = self._facts().get(fid)
+        if f is None:
+            raise InterpreterError(
+                f"knowledge.retract fact_id '{fid}' 未在事实日志。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        if f["status"] == "retracted":
+            raise InterpreterError(
+                f"knowledge.retract 事实 '{fid}' 已墓碑（append-only 纪律：墓碑只读；"
+                f"恢复语义 = 登记新事实）。",
+                error_code=KNW_FACT_RETRACTED,
+            )
+        if not isinstance(r, str) or not r.strip():
+            raise InterpreterError(
+                "knowledge.retract 理由（reason）强制非空（审计链完整性）。",
+                error_code=KNW_REASON_EMPTY,
+            )
+        was_active = f["status"] == "active"
+        seq = self._next_seq()
+        f["status"] = "retracted"
+        f["events"].append({"seq": seq, "kind": "retract", "reason": r, "new_o": None})
+        idx = self._indexes()
+        active_lst = idx["by_status"].get("active")
+        if active_lst and fid in active_lst:
+            active_lst.remove(fid)
+        idx["by_status"].setdefault("retracted", []).append(fid)
+        if was_active:
+            self._index_remove_graph(idx, f)
+        return None
+
+    def amend_fact(self, fact_id: IbObject, new_o: IbObject,
+                   reason: IbObject) -> Any:
+        """o 版本化：new_o 替换当前 o（原 o 留事件链全史可溯；reason 强制
+        非空）。new_o 须已注册词（治理门同 add_fact）。
+
+        索引更新：by_object（旧 o 移除/新 o 加入）+ by_triple（同 (w,s,r)
+        的 o 键切换）；by_pair 不变（(s,r) 未变）。已 retracted 事实
+        amend = fail-fast（KNW_FACT_RETRACTED）。
+        """
+        fid = unbox(fact_id)
+        no = unbox(new_o)
+        r = unbox(reason)
+        if not isinstance(fid, str) or not isinstance(no, str) or not no:
+            raise InterpreterError(
+                "knowledge.amend_fact 参数须为 (fact_id: str, new_o: 非空 str, reason: str)。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        f = self._facts().get(fid)
+        if f is None:
+            raise InterpreterError(
+                f"knowledge.amend_fact fact_id '{fid}' 未在事实日志。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        if f["status"] == "retracted":
+            raise InterpreterError(
+                f"knowledge.amend_fact 事实 '{fid}' 已墓碑（append-only 纪律：墓碑只读）。",
+                error_code=KNW_FACT_RETRACTED,
+            )
+        if not isinstance(r, str) or not r.strip():
+            raise InterpreterError(
+                "knowledge.amend_fact 理由（reason）强制非空（审计链完整性）。",
+                error_code=KNW_REASON_EMPTY,
+            )
+        if no not in self._vocab()["words"]:
+            raise InterpreterError(
+                f"knowledge.amend_fact 新对象 '{no}' 未注册为词（先 register_word）。",
+                error_code=KNW_VOCAB_UNREGISTERED,
+            )
+        old_o = f["o"]
+        seq = self._next_seq()
+        f["events"].append({"seq": seq, "kind": "amend", "reason": r, "new_o": no})
+        f["o"] = no
+        # 索引仅在新 o 变更时更新（同 o 版本化 = 纯审计事件，索引零扰动）
+        if old_o != no and f["status"] == "active":
+            idx = self._indexes()
+            old_lst = idx["by_object"].get(old_o)
+            if old_lst and fid in old_lst:
+                old_lst.remove(fid)
+            idx["by_object"].setdefault(no, []).append(fid)
+            old_triple = (idx["by_triple"].get(f["world"], {}).get(f["s"], {})
+                          .get(f["r"], {}).get(old_o))
+            if old_triple and fid in old_triple:
+                old_triple.remove(fid)
+            idx["by_triple"].setdefault(f["world"], {}) \
+                  .setdefault(f["s"], {}) \
+                  .setdefault(f["r"], {}) \
+                  .setdefault(no, []).append(fid)
+        return None
+
+    def source(self, fact_id: IbObject) -> Any:
+        """来源标记（审计"事实从哪来"）；未知 id = fail-fast。"""
+        fid = unbox(fact_id)
+        if not isinstance(fid, str):
+            raise InterpreterError(
+                "knowledge.source fact_id 须为 str。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        f = self._facts().get(fid)
+        if f is None:
+            raise InterpreterError(
+                f"knowledge.source fact_id '{fid}' 未在事实日志。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        return f["source"]
+
+    def history_fact(self, fact_id: IbObject) -> Any:
+        """事件链（append-only 全史：{seq, kind: add/amend/retract, reason,
+        new_o}）；未知 id = fail-fast（事实面严格语义——区别于 entries 面
+        history 的"未登记 = 空 list"查询语义）。"""
+        fid = unbox(fact_id)
+        if not isinstance(fid, str):
+            raise InterpreterError(
+                "knowledge.history_fact fact_id 须为 str。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        f = self._facts().get(fid)
+        if f is None:
+            raise InterpreterError(
+                f"knowledge.history_fact fact_id '{fid}' 未在事实日志。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        return [dict(e) for e in f["events"]]
+
+    # ------------------------------------------------------------------ #
     # 内部辅助
     # ------------------------------------------------------------------ #
 

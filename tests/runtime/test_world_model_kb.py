@@ -26,6 +26,8 @@ import pytest
 from core.base.diagnostics.codes import (
     KNW_FACT_DUPLICATE,
     KNW_FACT_NOT_FOUND,
+    KNW_FACT_RETRACTED,
+    KNW_REASON_EMPTY,
     KNW_VOCAB_EXISTS,
     KNW_VOCAB_MALFORMED,
     KNW_VOCAB_UNREGISTERED,
@@ -475,6 +477,114 @@ class TestCompareExpandPlane:
         with pytest.raises(InterpreterError) as exc:
             kb.compare(f1, "999")
         assert _code_err(exc.value) == KNW_FACT_NOT_FOUND
+
+
+class TestAuditPlane:
+    def test_retract_tombstone_semantics(self, engine):
+        """墓碑语义：retract = status 切换（append-only 事件 + reason 强制）；
+        图视图即时排除（active 视图）；日志保留全史（审计视图）。"""
+        cls = _bootstrap(engine)
+        kb, f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        kb.retract(f1, "实验推翻")
+        # 图视图：f1 退出（active 视图）
+        assert all(r["id"] != f1 for r in kb.lookup_pair("atom", "composed_of"))
+        assert kb.exists("modern", "atom", "composed_of", "proton") is False
+        # 审计视图：全史保留
+        assert kb.fact_len() == 4
+        rec = kb.get_fact(f1)
+        assert rec["status"] == "retracted"
+        assert rec["events"][-1] == {
+            "seq": 5, "kind": "retract", "reason": "实验推翻", "new_o": None,
+        }
+        # by_status 全日志视图（墓碑桶）
+        assert f1 in kb._indexes()["by_status"]["retracted"]
+
+    def test_retract_error_surfaces(self, engine):
+        """retract 错误面：未知 id / reason 空 / 重复墓碑 全 fail-fast。"""
+        cls = _bootstrap(engine)
+        kb, f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        with pytest.raises(InterpreterError) as exc:
+            kb.retract("999", "r")
+        assert _code_err(exc.value) == KNW_FACT_NOT_FOUND
+        with pytest.raises(InterpreterError) as exc:
+            kb.retract(f1, "   ")
+        assert _code_err(exc.value) == KNW_REASON_EMPTY
+        kb.retract(f1, "r1")
+        with pytest.raises(InterpreterError) as exc:
+            kb.retract(f1, "r2")
+        assert _code_err(exc.value) == KNW_FACT_RETRACTED
+
+    def test_amend_fact_versioning(self, engine):
+        """版本化：amend_fact = o 切换（原 o 留事件链全史可溯 + reason 强制 +
+        新 o 治理门）；索引更新（by_object/by_triple 切换，by_pair 不变）。"""
+        cls = _bootstrap(engine)
+        kb, f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        kb.amend_fact(f1, "electron", "重新测量")
+        rec = kb.get_fact(f1)
+        # 当前 o = electron；事件链含原 o 可溯（new_o 字段）
+        assert rec["o"] == "electron"
+        assert rec["events"][-1]["kind"] == "amend"
+        assert rec["events"][-1]["new_o"] == "electron"
+        # 索引切换：proton 的 by_object 不含 f1，electron 含
+        assert f1 not in kb._indexes()["by_object"]["proton"]
+        assert f1 in kb._indexes()["by_object"]["electron"]
+        assert kb.exists("modern", "atom", "composed_of", "electron") is True
+        assert kb.exists("modern", "atom", "composed_of", "proton") is False
+        # by_pair 不变（(s,r) 未变——f1 仍在 (atom, composed_of) 对下）
+        assert f1 in kb._indexes()["by_pair"]["atom"]["composed_of"]
+
+    def test_amend_fact_error_surfaces(self, engine):
+        """amend_fact 错误面：未知 id / 墓碑 / 新 o 未注册 全 fail-fast。"""
+        cls = _bootstrap(engine)
+        kb, f1, f2, _f3, _f4 = _kb_with_chain(cls)
+        with pytest.raises(InterpreterError) as exc:
+            kb.amend_fact("999", "proton", "r")
+        assert _code_err(exc.value) == KNW_FACT_NOT_FOUND
+        # 墓碑检查优先于治理门（墓碑只读全停——retracted 事实不再接受任何
+        # 修正操作，new_o 是否注册 moot）
+        kb.retract(f1, "r1")
+        with pytest.raises(InterpreterError) as exc:
+            kb.amend_fact(f1, "quark", "r2")
+        assert _code_err(exc.value) == KNW_FACT_RETRACTED
+        # active 事实 + 新 o 未注册 = 治理门 fail-fast
+        with pytest.raises(InterpreterError) as exc:
+            kb.amend_fact(f2, "quark", "r3")
+        assert _code_err(exc.value) == KNW_VOCAB_UNREGISTERED
+
+    def test_source_and_history_fact(self, engine):
+        """source（审计来源）+ history_fact（全事件链快照）；未知 id
+        fail-fast（事实面严格语义）。"""
+        cls = _bootstrap(engine)
+        kb, f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        # 夹具 4 事实（seq 1-4）+ 第 5 事实（source 标记）
+        f5 = kb.add_fact("modern", "atom", "depends_on", "proton", "v30-flywheel")
+        assert kb.source(f1) == ""
+        assert f5 == "5" and kb.source(f5) == "v30-flywheel"
+        hist = kb.history_fact(f5)
+        assert hist[0]["kind"] == "add" and hist[0]["seq"] == 5
+        with pytest.raises(InterpreterError) as exc:
+            kb.source("999")
+        assert _code_err(exc.value) == KNW_FACT_NOT_FOUND
+        with pytest.raises(InterpreterError) as exc:
+            kb.history_fact("999")
+        assert _code_err(exc.value) == KNW_FACT_NOT_FOUND
+
+    def test_tombstone_then_new_fact_reactivation(self, engine):
+        """恢复语义 = 登记新事实（append-only 纪律：墓碑不复活——
+        新版本是新事实，全史可溯）。"""
+        cls = _bootstrap(engine)
+        kb, f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        kb.retract(f1, "推翻")
+        f_new = kb.add_fact("modern", "atom", "composed_of", "proton", "v31")
+        assert f_new != f1
+        # 新旧两版都在日志（审计全史）；图视图含新版 + 既有的 f2（同 (s,r) 对
+        # 的另一 o——lookup_pair 返回整对，非仅 proton 事实）
+        assert kb.fact_len() == 5
+        recs = kb.lookup_pair("atom", "composed_of")
+        assert [r["id"] for r in recs] == ["2", f_new]
+        assert all(r["id"] != f1 for r in recs)  # 墓碑 f1 不入图视图
+        assert kb.get_fact(f1)["status"] == "retracted"
+        assert kb.get_fact(f_new)["status"] == "active"
 
 
 class TestEntriesPlaneZeroRegression:

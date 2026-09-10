@@ -85,6 +85,10 @@ CORPUS: list[tuple[str, str]] = [
     # 纯代码表达式 = 确定性）。
     ("quote_eval_value", 'import meta\nq = meta.quote("21 * 2")\nprint(q.source)\nprint(meta.eval(q))\nprint(meta.eval(q) == 42)'),
     ("quote_eval_compare", 'import meta\nx = meta.quote("7 * 6")\ny = meta.quote("7 * 6")\nz = meta.quote("6 * 7")\nprint(x.source == y.source)\nprint(x.source == z.source)'),
+    # R-B 世界模型 KB（数据层确定性查询面）：治理词表 + 事实日志 + 查找/矛盾
+    # 判定——全确定性零 LLM（差分面）。
+    ("kb_query", 'kb = knowledge()\nkb.register_world("modern", "现代物理世界", 3)\nkb.register_relation("composed_of", "组成关系", False, False)\nkb.register_word("atom", "原子", False, [], {})\nkb.register_word("proton", "质子", False, [], {})\nkb.register_word("electron", "电子", False, [], {})\nkb.add_fact("modern", "atom", "composed_of", "proton", "v30")\nkb.add_fact("modern", "atom", "composed_of", "electron", "v30")\nprint(len(kb.lookup_pair("atom", "composed_of")))\nprint(kb.exists("modern", "atom", "composed_of", "proton"))\nprint(kb.contradicts("atom", "composed_of", "neutron"))\nprint(kb.by_subject("atom")[0]["o"])'),
+    ("kb_expand_determinism", 'import json\nkb = knowledge()\nkb.register_world("modern", "现代物理世界", 3)\nkb.register_relation("composed_of", "组成关系", False, False)\nkb.register_word("atom", "原子", False, [], {"modern": {"form": "atom", "self_ref": "self"}})\nkb.register_word("proton", "质子", False, [], {})\nf1 = kb.add_fact("modern", "atom", "composed_of", "proton", "v30")\ne1 = kb.expand(f1)\ne2 = kb.expand(f1)\nprint(json.stringify(e1) == json.stringify(e2))\nprint(e1["subject"]["gloss"])\nprint(e1["subject_form"]["form"])'),
 ]
 
 

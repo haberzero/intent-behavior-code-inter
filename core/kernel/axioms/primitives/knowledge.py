@@ -69,6 +69,11 @@ class KnowledgeAxiom(BaseAxiom):
             "expand":       _m("expand",       params=["str"], ret="dict"),
             "same_word":    _m("same_word",    params=["str", "str"], ret="bool"),
             "compare":      _m("compare",      params=["str", "str"], ret="dict"),
+            # ---- 审计面（墓碑/版本化——append-only 纪律 + reason 强制）----
+            "retract":      _m("retract",      params=["str", "str"], ret="void", mutating=True),
+            "amend_fact":   _m("amend_fact",   params=["str", "str", "str"], ret="void", mutating=True),
+            "source":       _m("source",       params=["str"], ret="str"),
+            "history_fact": _m("history_fact", params=["str"], ret="list"),
         }
 
     def get_operators(self) -> Dict[str, str]:
