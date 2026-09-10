@@ -192,11 +192,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `CARGO_TARGET_DIR` 到 workspace 内**（`$PWD/.cargo_local`+`$PWD/target`）；常规网络允许（依赖下载
   免审批）。**Rust↔Python 协同已端到端验证**：pyo3 crate（extension-module）`cargo build --release`
   → `.so` → Python import + 调用 Rust 函数 OK（pyo3 3.12 用 0.22/0.23；工具链全通）。
-  **⚠️ 唯一前置缺口 = Python 3.12 dev headers 缺失**（venv 基座 `/usr/bin/python3.12` 无 headers；
-  系统无 3.12 headers；唯一 conda 3.14 不兼容）。**agent 被 `NoNewPrivs=1` 锁死无法 sudo**；但
-  **`/etc/sudoers.d/dsh` 规则存在 → 人工 dsh shell（非 agent 进程树）可 `sudo apt-get install -y
-  python3.12-dev`**（conda 3.12 备选受 ToS + 双 Python 限制，非首选）。**该缺口仅阻塞 P9 Rust
-  构建；P1-P8 纯 Python 主线不受影响。**
+  **✅ Python 3.12 dev headers 已安装（用户 `apt-get install python3.12-dev`）+ 端到端已验证**：
+  pyo3 0.23 crate `cargo build --release`（pin workspace + `PYO3_PYTHON`=venv）→ `.so` → venv
+  （3.12.3）import + 调用 Rust 函数 OK（`PROJECT_RUST_PY_312_OK`）。**项目 Rust 构建路径全通，
+  P9 无环境阻塞。**（备注：agent 被 `NoNewPrivs=1` 锁死无法 sudo；`/etc/sudoers.d/dsh` 规则存在，
+  人工 dsh shell 可 sudo——供未来重装参考。）
 - **全量 pytest 基线（2026-09-10 实跑，干净）**：**3990 passed / 1 skipped / 103.58s / rc=0**（供下一
   session 参照，不冻结）。
 

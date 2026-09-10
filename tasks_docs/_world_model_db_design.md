@@ -95,9 +95,11 @@
 - **Rust↔Python 协同已端到端验证（2026-09-10）**：pyo3 crate（extension-module）`cargo build
   --release` → `.so` → Python import + 调用 Rust 函数 OK（`hello()="rust-py-ok"`/`add(20,22)=42`，
   `RUST_PY_COLLAB_OK`）。pyo3 3.12 用 0.22/0.23（3.14 需 ≥0.29）；工具链 maturin 1.15.0 + cargo/rustc
-  1.98.1。**⚠️ 唯一前置缺口 = Python 3.12 dev headers 缺失**（venv 基座 `/usr/bin/python3.12` 无
-  headers；系统无 3.12 headers；agent 无 root 无法装 → **需用户/root `apt-get install -y
-  python3.12-dev`**）。该缺口仅阻塞 P9 Rust 构建；**P1-P8 纯 Python 主线不受影响**。
+  1.98.1。**✅ Python 3.12 dev headers 已安装（用户 `apt-get install python3.12-dev`）+ 端到端已
+  验证**：pyo3 0.23 crate `cargo build --release`（pin workspace + `PYO3_PYTHON`=venv）→ `.so` →
+  venv（3.12.3）import + 调用 Rust 函数 OK（`PROJECT_RUST_PY_312_OK`）。**项目 Rust 构建路径全通，
+  P9 无环境阻塞。**（agent 被 `NoNewPrivs=1` 锁死无法 sudo；`/etc/sudoers.d/dsh` 规则存在，人工
+  dsh shell 可 sudo——供重装参考。）
 - **全量 pytest 基线（2026-09-10 实跑，干净）**：**3990 passed / 1 skipped / 103.58s / rc=0**。
 - venv Python 3.12.3 + editable 安装 ✅；api_config.json ✅（probe 通过）；smoke 子集 `tests/contracts`+`tests/compiler` = **828 passed, 11.3s**（进程内无子进程，无审批）。
 
