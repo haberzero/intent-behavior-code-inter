@@ -11,6 +11,7 @@
 //! 生效）。
 
 mod lexer;
+mod parser;
 
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
@@ -46,6 +47,14 @@ fn lex(script: &str, py: Python<'_>) -> PyResult<Py<PyList>> {
     Ok(list.unbind())
 }
 
+/// IBC 源码 → AST structure 规范形态（Rust parser；对齐 Python parser 的 AST
+/// structure）。AST 级差分门：经此与 Python `ast_dump(include_positions=False)`
+/// 逐字节比对。
+#[pyfunction]
+fn parse_struct(script: &str) -> String {
+    parser::parse_struct(script)
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态，决定双内核比对是否就绪（status != "ready" = 未就绪，
 /// 仅跑 Python 参考内核）。
@@ -75,6 +84,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(kernel_info, m)?)?;
     m.add_function(wrap_pyfunction!(lex, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_struct, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())
 }

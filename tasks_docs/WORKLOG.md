@@ -2839,6 +2839,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   **分支状态**：`rust-kernel` 隔离分支；阶段② 首增量零风险加法式（opt-in，不动
   Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（parser/
   semantic）+ ③ 执行核心 + ④ 并发解除续在隔离分支（差分门逐级验证）。
+- **P9 阶段② 第二增量（Rust parser 移植 + AST 级差分等价，2026-09-10，
+  隔离分支 `rust-kernel`；全量 Rust 化迁移的前端第二增量）**：**Rust 化 IBCI
+  parser 首增量**——最小语句/表达式面（Assign / ExprStmt / Constant / Name /
+  BinOp[+] / Call[func(args)]）移植到 Rust，经 AST 级差分等价验证与 Python
+  参考 parser 逐条等价（差分 harness 门）。
+  **交付**：
+  - **AST 规范 dumper**（`tests/diff_harness/ast_dump.py`，Python 侧差分参考
+    工具）：IBC 语法树 → 规范字符串形态 `<节点类名>(field1=<val1>, ...)`（字段
+    按 dataclass 声明序，子节点递归，标量 repr，列表 `[...]`，None = "None"）；
+    `include_positions=False` = structure 模式（排除位置字段——AST 结构差分核心；
+    位置跟踪 = Rust parser 后续增量单独验证）。
+  - **Rust parser**（`ibci-ext/src/parser.rs`）：对齐 Python `core/compiler/
+    parser` 的最小面——AST 类型（Module / Assign / ExprStmt / Constant[int/
+    str/bool/None] / Name / BinOp / Call）+ 递归下降解析（token 流 → AST）+
+    structure dumper（产出与 Python ast_dump 一致的规范形态）。
+  - **pyo3 暴露**：`ibci_ext.parse_struct(source) -> str`（AST structure 规范
+    形态）。
+  - **差分 harness 扩展**：AST 级差分面（`rust_parse_struct` / `ast_differential`
+    ）——Rust AST structure == Python AST structure（逐字节）；.so 未构建 = 优雅
+    降级。
+  **关键裁定（self-grill 全分支消解）**：① **AST 级差分 = parser 增量门**（Rust
+  parser 与 Python parser 的 AST structure 逐字节等价——三级差分逐级验证：token
+  级[lexer ✅] → AST 级[parser 本增量] → 数据面[执行核心]）；② **structure 模式**
+  （AST 结构差分核心 = 节点类型 + 字段值；位置跟踪 = 后续增量单独验证——避免
+  本轮陷入复杂的位置跟踪对齐）；③ **最小语句/表达式面**（Assign / ExprStmt /
+  Constant / Name / BinOp[+] / Call——覆盖差分验证面；完整语句/表达式面 + 语义层
+  = 后续增量，渐进移植 + 差分门，非 subset 双通道）；④ **Rust 借用纪律**（parse_
+  primary 先拷贝 token type+value 再 match + 消费——避免 peek 借用跨 advance
+  mutable 调用）。
+  **验证**：AST 级差分 6/6 片段等价（assign_int/assign_str/binop/call/call_2arg/
+  multi——Rust AST structure == Python AST structure 逐字节）+ 全量 pytest 零
+  回归（阶段边界放行门——加法式增量不动 Python 执行路径，计数 = 4266 + AST 级
+  差分 1 例 = 4267；见 NEXT_STEPS 基线锚点）。**阶段② 第二增量出口达成**（Rust
+  parser 移植 + AST 级差分等价门就位）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段② 第二增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（完整语句/
+  表达式面 + 位置跟踪对齐 + 语义层）+ ③ 执行核心 + ④ 并发解除续在隔离分支
+  （差分门逐级验证）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

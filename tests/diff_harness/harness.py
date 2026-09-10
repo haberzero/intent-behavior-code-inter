@@ -108,6 +108,29 @@ def token_differential(script: str) -> bool:
     return rust == python_lexer_tokens(script)
 
 
+def rust_parse_struct(script: str) -> str:
+    """Rust parser（ibci_ext.parse_struct）：source → AST structure 规范形态。
+
+    .so 未构建 = 空串（合法态——AST 级差分降级为仅 Python 参考）。
+    """
+    rk = load_rust_kernel()
+    if not rk.loaded:
+        return ""
+    return rk._module.parse_struct(script)
+
+
+def ast_differential(script: str) -> bool:
+    """AST 级差分等价：Rust parser AST structure == Python parser AST structure。
+
+    .so 未构建 → 降级（返回 True，不冒充等价——由调用方据 loaded 判定覆盖）。
+    """
+    from tests.diff_harness.ast_dump import parse_ast_dump
+    rust = rust_parse_struct(script)
+    if not rust:
+        return True
+    return rust == parse_ast_dump(script, include_positions=False)
+
+
 @dataclass
 class DiffReport:
     """差分比对报告：每语料的 Python/Rust 数据面 + 等价判定 + 汇总。"""
