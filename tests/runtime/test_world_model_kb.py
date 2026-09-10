@@ -281,6 +281,202 @@ class TestDeepCloneIndependence:
         assert kb._indexes()["by_subject"]["atom"] == ["1"]
 
 
+def _kb_with_chain(cls):
+    """B2 测试夹具：微型 KB（传递链 atom -depends_on-> nucleus -depends_on->
+    proton；composed_of 非传递非多值）。返回 (kb, f1..f4 fact_ids)。"""
+    kb = IbKnowledge(cls)
+    _register_micro_world(kb)
+    kb.register_word("nucleus", "原子核", False, [], {})
+    f1 = kb.add_fact("modern", "atom", "composed_of", "proton")
+    f2 = kb.add_fact("modern", "atom", "composed_of", "electron")
+    f3 = kb.add_fact("modern", "nucleus", "depends_on", "proton")
+    f4 = kb.add_fact("modern", "atom", "depends_on", "nucleus")
+    return kb, f1, f2, f3, f4
+
+
+class TestLookupPlane:
+    def test_lookup_pair_all_o(self, engine):
+        """查找 1：s 经 r 指向什么——lookup_pair 返回全部 active 事实
+        （确定性序 = seq 序；无事实 = 空 list 合法态）。"""
+        cls = _bootstrap(engine)
+        kb, f1, f2, _f3, _f4 = _kb_with_chain(cls)
+        res = kb.lookup_pair("atom", "composed_of")
+        assert [r["id"] for r in res] == [f1, f2]
+        assert [r["o"] for r in res] == ["proton", "electron"]
+        assert kb.lookup_pair("atom", "excites") == []
+
+    def test_exists_dedup(self, engine):
+        """查找 2：事实存在吗（by_triple 成员检查）——去重语义。"""
+        cls = _bootstrap(engine)
+        kb, f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        assert kb.exists("modern", "atom", "composed_of", "proton") is True
+        assert kb.exists("modern", "atom", "composed_of", "neutron") is False
+        # 同 (s,r,o) 不同 world 非同一事实（by_triple 含 world 维）
+        kb.register_world("quantum", "量子世界", 4)
+        kb.add_fact("quantum", "atom", "composed_of", "proton")
+        assert kb.exists("quantum", "atom", "composed_of", "proton") is True
+        assert kb.exists("modern", "atom", "composed_of", "proton") is True
+
+    def test_all_in_world(self, engine):
+        """查找 3：某 world 的全部 active 事实。"""
+        cls = _bootstrap(engine)
+        kb, _f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        res = kb.all_in_world("modern")
+        assert len(res) == 4
+        assert all(r["world"] == "modern" for r in res)
+        assert kb.all_in_world("quantum") == []
+
+    def test_by_source_audit_full_log(self, engine):
+        """查找 4：某来源的全部事实（审计面——全日志视图）。"""
+        cls = _bootstrap(engine)
+        kb = _mk_kb(cls)
+        _register_micro_world(kb)
+        a = kb.add_fact("modern", "atom", "composed_of", "proton", "v30")
+        b = kb.add_fact("modern", "atom", "composed_of", "electron", "v31")
+        assert [f["id"] for f in kb.by_source("v30")] == [a]
+        assert [f["id"] for f in kb.by_source("v31")] == [b]
+        assert kb.by_source("v30") + kb.by_source("v31")  # 非空断言
+
+    def test_by_subject_derived_not_stored(self, engine):
+        """查找 7：关于某词的全部事实（**word.relations 的派生替代**——
+        根治双写真相：词关系从不独立存储，只从事实日志派生）。"""
+        cls = _bootstrap(engine)
+        kb, f1, f2, _f3, f4 = _kb_with_chain(cls)
+        res = kb.by_subject("atom")
+        assert [r["id"] for r in res] == [f1, f2, f4]
+
+    def test_contradicts_multi_valued_gate(self, engine):
+        """查找 5：矛盾检查——同 (s,r) 不同 o 且关系非 multi_valued ⇒ 矛盾；
+        multi_valued 关系恒非矛盾（治理词表元数据驱动）。"""
+        cls = _bootstrap(engine)
+        kb, _f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        # 矛盾语义（试用方规格 §3.3-5）：新事实 (s,r,o') 加入时，by_pair[(s,r)]
+        # 已有 o≠o' 且关系非 multi_valued ⇒ 矛盾。
+        # composed_of 非 multi_valued，atom 已有 o={proton, electron}：
+        # 新 o=neutron ≠ 既有 o → 矛盾
+        assert kb.contradicts("atom", "composed_of", "neutron") is True
+        # 单 o 的 (s,r) 且候选 o == 既有 o → 无冲突 o' → 非矛盾
+        kb.add_fact("modern", "proton", "composed_of", "electron")
+        assert kb.contradicts("proton", "composed_of", "electron") is False
+        # 无既有事实的 (s,r) → 非矛盾
+        assert kb.contradicts("electron", "composed_of", "proton") is False
+        # depends_on 为 multi_valued（夹具）→ 恒非矛盾（同 (s,r) 允许多 o）
+        assert kb.contradicts("atom", "depends_on", "electron") is False
+        # 未注册关系 = fail-fast
+        with pytest.raises(InterpreterError) as exc:
+            kb.contradicts("atom", "excites", "proton")
+        assert _code_err(exc.value) == KNW_VOCAB_UNREGISTERED
+
+    def test_transitive_closure_chain(self, engine):
+        """查找 6：传递闭包——沿 transitive 关系链展开（含直接；via =
+        中间链；BFS 确定性序；防环）。"""
+        cls = _bootstrap(engine)
+        kb, _f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        # atom -depends_on-> nucleus -depends_on-> proton（传递链）
+        res = kb.transitive("atom", "depends_on")
+        # BFS 发现序：直接目标 nucleus 先，再经 nucleus 到 proton
+        assert res[0] == {"s": "atom", "r": "depends_on", "o": "nucleus", "via": []}
+        assert res[1] == {"s": "atom", "r": "depends_on", "o": "proton", "via": ["nucleus"]}
+        # 非传递关系 = 空 list（无传递闭包 = 空，非错误）
+        assert kb.transitive("atom", "composed_of") == []
+        # 无出边的主语 = 空 list
+        assert kb.transitive("electron", "depends_on") == []
+        # 未注册关系 = fail-fast
+        with pytest.raises(InterpreterError) as exc:
+            kb.transitive("atom", "excites")
+        assert _code_err(exc.value) == KNW_VOCAB_UNREGISTERED
+
+    def test_transitive_cycle_safe(self, engine):
+        """传递闭包防环：环（a→b→a）不死循环，结果确定性。"""
+        cls = _bootstrap(engine)
+        kb = _mk_kb(cls)
+        _register_micro_world(kb)
+        kb.register_word("loop_a", "环A", False, [], {})
+        kb.register_word("loop_b", "环B", False, [], {})
+        kb.add_fact("modern", "loop_a", "depends_on", "loop_b")
+        kb.add_fact("modern", "loop_b", "depends_on", "loop_a")
+        res = kb.transitive("loop_a", "depends_on")
+        # 可达：loop_b（直接）+ loop_a 经环回到自身 = 不入结果面（o == s 排除）
+        assert [r["o"] for r in res] == ["loop_b"]
+        assert res[0]["via"] == []
+
+
+class TestCompareExpandPlane:
+    def test_expand_deterministic_byte_identical(self, engine):
+        """展开确定性：expand 纯派生（不存展开态）——多次调用原生结构
+        逐字节一致（同输入同输出）。"""
+        cls = _bootstrap(engine)
+        kb, f1, _f2, _f3, _f4 = _kb_with_chain(cls)
+        e1 = kb.expand(f1)
+        e2 = kb.expand(f1)
+        assert e1 == e2  # 原生 dict 深比较（全字段 + 嵌套记录 + 事件链）
+
+    def test_expand_full_derivation(self, engine):
+        """展开全字段：事实 + 主语/对象词记录 + 跨世界词形 + 关系语义 +
+        世界上下文（存定理不存证明——展开态 = 日志 + 词表的确定性函数）。"""
+        cls = _bootstrap(engine)
+        kb = _mk_kb(cls)
+        # 跨世界词形（跨尺度自指面）：atom 的 modern 词形 + self_ref
+        kb.register_world("modern", "现代物理世界", 3)
+        kb.register_relation("composed_of", "组成关系", False, False)
+        kb.register_word("atom", "原子", False, [],
+                         {"modern": {"form": "atom", "self_ref": "self"}})
+        kb.register_word("proton", "质子", False, [], {})
+        f1 = kb.add_fact("modern", "atom", "composed_of", "proton", "v30")
+        e = kb.expand(f1)
+        assert (e["id"], e["world"], e["s"], e["r"], e["o"]) == (f1, "modern", "atom", "composed_of", "proton")
+        assert e["source"] == "v30" and e["status"] == "active"
+        assert e["subject"]["gloss"] == "原子"
+        assert e["object"]["gloss"] == "质子"
+        assert e["subject_form"] == {"form": "atom", "self_ref": "self"}
+        assert e["object_form"] == {}
+        assert e["relation"]["semantics"] == "组成关系"
+        assert e["world_ctx"]["size_rank"] == 3
+
+    def test_expand_unknown_id_fail_fast(self, engine):
+        """expand 未知 fact_id = fail-fast（KNW_FACT_NOT_FOUND）。"""
+        cls = _bootstrap(engine)
+        kb = _mk_kb(cls)
+        with pytest.raises(InterpreterError) as exc:
+            kb.expand("999")
+        assert _code_err(exc.value) == KNW_FACT_NOT_FOUND
+
+    def test_same_word_identity(self, engine):
+        """词同一性（层 5）：lexeme 相等且均注册 = 真；未注册 = false
+        （非错误——词同一性以治理词表为权威）。"""
+        cls = _bootstrap(engine)
+        kb = _mk_kb(cls)
+        _register_micro_world(kb)
+        assert kb.same_word("atom", "atom") is True
+        assert kb.same_word("atom", "proton") is False
+        assert kb.same_word("quark", "quark") is False  # 未注册 = 非词
+
+    def test_compare_four_layers(self, engine):
+        """对比 4 层（1/2/3/5；层 4 语义相似归向量面不预置）：
+        exact / contradiction / scale / same_word 各判别。"""
+        cls = _bootstrap(engine)
+        kb, f1, f2, _f3, _f4 = _kb_with_chain(cls)
+        # f1=(modern,atom,composed_of,proton) vs f2=(modern,atom,composed_of,electron)
+        c = kb.compare(f1, f2)
+        assert c["exact"] is False
+        assert c["contradiction"] is True   # 同 (s,r) 不同 o 且非 multi_valued
+        assert c["scale"] == "same"         # 同 world
+        assert c["same_word"] is True       # s 词同一
+        # 自身对比 = exact
+        c_self = kb.compare(f1, f1)
+        assert c_self["exact"] is True and c_self["contradiction"] is False
+        # 跨 world = scale cross
+        kb.register_world("quantum", "量子世界", 4)
+        f5 = kb.add_fact("quantum", "atom", "composed_of", "proton")
+        c_cross = kb.compare(f1, f5)
+        assert c_cross["scale"] == "cross"
+        assert c_cross["exact"] is False
+        # 未知 id = fail-fast
+        with pytest.raises(InterpreterError) as exc:
+            kb.compare(f1, "999")
+        assert _code_err(exc.value) == KNW_FACT_NOT_FOUND
+
+
 class TestEntriesPlaneZeroRegression:
     def test_store_get_amend_history_unchanged(self, engine):
         """entries 面既有契约零回归（KB 面扩展不改通用登记语义）。"""

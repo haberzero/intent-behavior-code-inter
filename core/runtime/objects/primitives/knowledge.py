@@ -573,6 +573,219 @@ class IbKnowledge(IbValue):
         return len(self._facts())
 
     # ------------------------------------------------------------------ #
+    # 查找面（图平面：active 视图，全确定性零 LLM——试用方七查找）
+    # ------------------------------------------------------------------ #
+
+    def lookup_pair(self, s: IbObject, r: IbObject) -> Any:
+        """"s 经 r 指向什么"——by_pair[(s,r)] 全部 active 事实记录
+        （确定性序 = seq 序）。无事实 = 空 list（合法态）。"""
+        subj = unbox(s)
+        rel = unbox(r)
+        if not isinstance(subj, str) or not isinstance(rel, str):
+            raise InterpreterError(
+                "knowledge.lookup_pair 参数须为 (s: str, r: str)。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        ids = self._indexes()["by_pair"].get(subj, {}).get(rel, [])
+        return [self._facts()[i] for i in ids]
+
+    def exists(self, world: IbObject, s: IbObject, r: IbObject,
+               o: IbObject) -> Any:
+        """事实存在吗（去重）——by_triple[(world,s,r,o)] 成员检查（active）。"""
+        w = unbox(world)
+        subj = unbox(s)
+        rel = unbox(r)
+        obj = unbox(o)
+        if not all(isinstance(v, str) for v in (w, subj, rel, obj)):
+            raise InterpreterError(
+                "knowledge.exists 参数须为 (world, s, r, o: 全 str)。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        return bool(
+            self._indexes()["by_triple"].get(w, {})
+            .get(subj, {}).get(rel, {}).get(obj)
+        )
+
+    def all_in_world(self, world: IbObject) -> Any:
+        """某 world 的全部 active 事实（确定性序 = seq 序）。"""
+        w = unbox(world)
+        if not isinstance(w, str):
+            raise InterpreterError(
+                "knowledge.all_in_world 参数须为 str。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        return [self._facts()[i] for i in self._indexes()["by_world"].get(w, [])]
+
+    def by_source(self, source: IbObject) -> Any:
+        """某来源的全部事实（审计面——全日志视图，含墓碑）。"""
+        src = unbox(source)
+        if not isinstance(src, str):
+            raise InterpreterError(
+                "knowledge.by_source 参数须为 str。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        return [self._facts()[i] for i in self._indexes()["by_source"].get(src, [])]
+
+    def by_subject(self, s: IbObject) -> Any:
+        """关于某词的全部 active 事实（**word.relations 的派生替代**——
+        根治词关系独立存储的双写真相；确定性序 = seq 序）。"""
+        subj = unbox(s)
+        if not isinstance(subj, str):
+            raise InterpreterError(
+                "knowledge.by_subject 参数须为 str。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        return [self._facts()[i] for i in self._indexes()["by_subject"].get(subj, [])]
+
+    def contradicts(self, s: IbObject, r: IbObject, o: IbObject) -> Any:
+        """矛盾检查：同 (s,r) 已有 active o'≠o 且关系非 multi_valued ⇒ 矛盾。
+
+        关系未注册 = fail-fast（KNW_VOCAB_UNREGISTERED——矛盾判定以治理
+        词表的 multi_valued 元数据为准）；multi_valued 关系恒非矛盾
+        （同 (s,r) 允许多 o = 关系语义）。
+        """
+        subj = unbox(s)
+        rel = unbox(r)
+        obj = unbox(o)
+        if not all(isinstance(v, str) for v in (subj, rel, obj)):
+            raise InterpreterError(
+                "knowledge.contradicts 参数须为 (s, r, o: 全 str)。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        rel_rec = self._vocab()["relations"].get(rel)
+        if rel_rec is None:
+            raise InterpreterError(
+                f"knowledge.contradicts 关系类型 '{rel}' 未注册（矛盾判定以治理"
+                f"词表 multi_valued 元数据为准；先 register_relation）。",
+                error_code=KNW_VOCAB_UNREGISTERED,
+            )
+        if rel_rec["multi_valued"]:
+            return False
+        others = self._indexes()["by_pair"].get(subj, {}).get(rel, [])
+        return any(self._facts()[i]["o"] != obj for i in others)
+
+    def transitive(self, s: IbObject, r: IbObject) -> Any:
+        """传递闭包：沿 active by_pair 链展开 transitive 关系 r 的可达集
+        （含直接；每项 {s, r, o, via}——via = 中间对象链）。
+
+        关系未注册 = fail-fast（KNW_VOCAB_UNREGISTERED）；**非传递关系 =
+        空 list**（无传递闭包 = 空，非错误状态——诚实语义）；BFS 防环
+        （visited 集）；确定性序 = BFS 发现序（由日志 seq 序驱动，可复现）。
+        自环可达（o == s 经环回到主语）不入结果面（查询语义：s 指向谁）。
+        """
+        subj = unbox(s)
+        rel = unbox(r)
+        if not isinstance(subj, str) or not isinstance(rel, str):
+            raise InterpreterError(
+                "knowledge.transitive 参数须为 (s: str, r: str)。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        rel_rec = self._vocab()["relations"].get(rel)
+        if rel_rec is None:
+            raise InterpreterError(
+                f"knowledge.transitive 关系类型 '{rel}' 未注册（先 register_relation）。",
+                error_code=KNW_VOCAB_UNREGISTERED,
+            )
+        if not rel_rec["transitive"]:
+            return []
+        facts = self._facts()
+        by_pair = self._indexes()["by_pair"]
+        paths = {subj: []}  # 节点 → via 链（BFS 最短路径，确定性发现序）
+        queue = [subj]
+        while queue:
+            cur = queue.pop(0)
+            for tid in by_pair.get(cur, {}).get(rel, []):
+                to = facts[tid]["o"]
+                if to not in paths:
+                    paths[to] = paths[cur] + ([] if cur == subj else [cur])
+                    queue.append(to)
+        return [
+            {"s": subj, "r": rel, "o": o, "via": paths[o]}
+            for o in paths
+            if o != subj
+        ]
+
+    # ------------------------------------------------------------------ #
+    # 对比/展开面（5 层对比的确定性 4 层 + 按需确定性展开；层 4 语义相似
+    # 归向量面——内容信号非判定，D1：判定走确定性路径）
+    # ------------------------------------------------------------------ #
+
+    def expand(self, fact_id: IbObject) -> Any:
+        """按需确定性展开：事实 + 主语/对象词记录（含跨世界词形）+ 关系
+        语义 + 世界上下文。**纯派生不存展开态**——多次调用逐字节一致
+        （展开态 = 日志 + 词表的确定性函数，派生即复现）。"""
+        fid = unbox(fact_id)
+        f = self._facts().get(fid) if isinstance(fid, str) else None
+        if f is None:
+            raise InterpreterError(
+                f"knowledge.expand fact_id '{fid}' 未在事实日志。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        vocab = self._vocab()
+        # 治理门保证 s/o/r/world 已注册（词表无删除面 → 恒可解析）
+        word_s = vocab["words"][f["s"]]
+        word_o = vocab["words"][f["o"]]
+        return {
+            "id": f["id"], "world": f["world"], "s": f["s"], "r": f["r"],
+            "o": f["o"], "source": f["source"], "status": f["status"],
+            "subject": word_s,
+            "object": word_o,
+            # 跨世界词形（跨尺度自指面：同一词在事实世界中的呈现 + 尺度相对指涉）
+            "subject_form": word_s["entries"].get(f["world"], {}),
+            "object_form": word_o["entries"].get(f["world"], {}),
+            "relation": vocab["relations"][f["r"]],
+            "world_ctx": vocab["worlds"][f["world"]],
+        }
+
+    def same_word(self, a: IbObject, b: IbObject) -> Any:
+        """词同一性（对比层 5）：a == b 且均为已注册词（未注册 = false
+        非错误——词同一性以治理词表为权威）。"""
+        la = unbox(a)
+        lb = unbox(b)
+        if not isinstance(la, str) or not isinstance(lb, str):
+            raise InterpreterError(
+                "knowledge.same_word 参数须为 (a: str, b: str)。",
+                error_code=KNW_VOCAB_MALFORMED,
+            )
+        if la != lb:
+            return False
+        return la in self._vocab()["words"]
+
+    def compare(self, a: IbObject, b: IbObject) -> Any:
+        """对比（5 层中的确定性 4 层；层 4 语义相似归向量面不在此预置）：
+        {exact: 层 1 (world,s,r,o) 全等 / contradiction: 层 2 同 (s,r) 不同 o
+        且非 multi_valued / scale: 层 3 world 同("same")/异("cross"——不直接
+        可比，size_rank 语境判定) / same_word: 层 5 主语词同一性}。
+        任一 fact_id 未知 = fail-fast（KNW_FACT_NOT_FOUND）。"""
+        fa_id = unbox(a)
+        fb_id = unbox(b)
+        fa = self._facts().get(fa_id) if isinstance(fa_id, str) else None
+        fb = self._facts().get(fb_id) if isinstance(fb_id, str) else None
+        if fa is None or fb is None:
+            raise InterpreterError(
+                f"knowledge.compare fact_id ('{fa_id}', '{fb_id}') 须均在事实日志。",
+                error_code=KNW_FACT_NOT_FOUND,
+            )
+        vocab = self._vocab()
+        rel_rec = vocab["relations"][fa["r"]] if fa["r"] == fb["r"] else None
+        exact = (
+            fa["world"] == fb["world"] and fa["s"] == fb["s"]
+            and fa["r"] == fb["r"] and fa["o"] == fb["o"]
+        )
+        contradiction = (
+            fa["s"] == fb["s"] and fa["r"] == fb["r"] and fa["o"] != fb["o"]
+            and rel_rec is not None and not rel_rec["multi_valued"]
+        )
+        scale = "same" if fa["world"] == fb["world"] else "cross"
+        same_word = fa["s"] == fb["s"] and fa["s"] in vocab["words"]
+        return {
+            "exact": exact,
+            "contradiction": contradiction,
+            "scale": scale,
+            "same_word": same_word,
+        }
+
+    # ------------------------------------------------------------------ #
     # 内部辅助
     # ------------------------------------------------------------------ #
 

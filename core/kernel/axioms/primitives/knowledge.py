@@ -57,6 +57,18 @@ class KnowledgeAxiom(BaseAxiom):
             "get_fact":   _m("get_fact",   params=["str"], ret="any"),
             "facts":      _m("facts",      ret="list"),
             "fact_len":   _m("fact_len",   ret="int"),
+            # ---- 查找面（图平面 active 视图，全确定性零 LLM）----
+            "lookup_pair":  _m("lookup_pair",  params=["str", "str"], ret="list"),
+            "exists":       _m("exists",       params=["str", "str", "str", "str"], ret="bool"),
+            "all_in_world": _m("all_in_world", params=["str"], ret="list"),
+            "by_source":    _m("by_source",    params=["str"], ret="list"),
+            "by_subject":   _m("by_subject",   params=["str"], ret="list"),
+            "contradicts":  _m("contradicts",  params=["str", "str", "str"], ret="bool"),
+            "transitive":   _m("transitive",   params=["str", "str"], ret="list"),
+            # ---- 对比/展开面（5 层对比的确定性 4 层 + 按需确定性展开）----
+            "expand":       _m("expand",       params=["str"], ret="dict"),
+            "same_word":    _m("same_word",    params=["str", "str"], ret="bool"),
+            "compare":      _m("compare",      params=["str", "str"], ret="dict"),
         }
 
     def get_operators(self) -> Dict[str, str]:
