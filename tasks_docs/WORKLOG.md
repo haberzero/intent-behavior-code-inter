@@ -2376,6 +2376,18 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     Rust 1.98.1 + in-workspace offline cargo build 可行（`CARGO_HOME`+`CARGO_TARGET_DIR` pin
     workspace，no-dep lib rc=0）。venv Python 3.12.3 + editable 安装 intact；smoke 子集
     （contracts+compiler）828 passed / 11.3s 进程内。
+ - **世界模型 DB 前期检验（环境/工具/库完备性，2026-09-10，unsafe-vibe-dev）**：为下一 session
+    自主执行预先核验，避免开工后缺环境/库/工具。① **Rust↔Python 协同端到端验证**：pyo3 crate
+    （extension-module）`cargo build --release`（`CARGO_HOME`+`CARGO_TARGET_DIR` pin workspace +
+    网络下载 pyo3）→ `.so` → Python import + 调用 Rust 函数 OK（`RUST_PY_COLLAB_OK`）；工具链
+    maturin 1.15.0 + cargo/rustc 1.98.1 全通；pyo3 3.12 用 0.22/0.23（3.14 需 ≥0.29）。② **全量
+    pytest 基线实跑**：3990 passed / 1 skipped / 103.58s / rc=0（干净起点）。③ **P1-P9 子件核验**：
+    conftest `run_ibci`/`compile_ibci` + `IBCIEngine.run_string(output_callback, journal_writer,
+    budget_guard)`（差分 harness 基石，原生带 LLM 审计/预算钩子）/ llm_journal / budget /
+    HostService(run_code/meta_compile/save_state) / knowledge 测试 均在位。④ **发现唯一前置缺口 =
+    Python 3.12 dev headers 缺失**（venv 基座 `/usr/bin/python3.12` 无 headers；系统无 3.12 headers；
+    agent 无 root 无法装）→ **需用户/root `apt-get install -y python3.12-dev`**；该缺口仅阻塞 P9 Rust
+    构建，**P1-P8 纯 Python 主线不受影响**。落账 = AGENTS.local.md + HANDOFF.md §2.0 + 设计文档 §2.5。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

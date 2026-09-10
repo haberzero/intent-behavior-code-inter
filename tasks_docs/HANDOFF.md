@@ -188,10 +188,16 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   同步 NEXT_STEPS / HANDOFF；测试数字以实跑为准（不冻结）；设计阶段文档先写 `tasks_docs/_<task>.md`
   （落地后删除，最终内容按治理收敛入 `docs/`；公理/语义重大决策写 `docs/architecture/` 对应章节）。
 - **环境注记（下一 session Rust 路径）**：maturin 1.15.0 已装 `.venv`；Rust 1.98.1；**agent bash 对
-  默认 cargo 写位置（`~/.cargo`、`CARGO_HOME=/opt/rust/cargo`）不可写（Permission denied）→ 构建须
-  pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到 workspace 内**（如 `$PWD/.cargo_local`+`$PWD/target`）；
-  **常规网络允许**（依赖下载免审批）；实测 `cargo fetch`（libc v0.2.189）+ no-dep 构建 rc=0。
-  **Rust 构建可行（非"仅设计"）**。
+  默认 cargo 写位置（`~/.cargo`、`CARGO_HOME=/opt/rust/cargo`）不可写 → 构建须 pin `CARGO_HOME`+
+  `CARGO_TARGET_DIR` 到 workspace 内**（`$PWD/.cargo_local`+`$PWD/target`）；常规网络允许（依赖下载
+  免审批）。**Rust↔Python 协同已端到端验证**：pyo3 crate（extension-module）`cargo build --release`
+  → `.so` → Python import + 调用 Rust 函数 OK（pyo3 3.12 用 0.22/0.23；工具链全通）。
+  **⚠️ 唯一前置缺口 = Python 3.12 dev headers 缺失**（venv 基座 `/usr/bin/python3.12` 无 headers；
+  系统无 3.12 headers；唯一 conda 3.14 不兼容；**agent 无 root 无法装 → 需用户/root
+  `apt-get install -y python3.12-dev`**）。**该缺口仅阻塞 P9 Rust 构建；P1-P8 纯 Python 主线不受
+  影响。**
+- **全量 pytest 基线（2026-09-10 实跑，干净）**：**3990 passed / 1 skipped / 103.58s / rc=0**（供下一
+  session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
