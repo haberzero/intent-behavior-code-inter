@@ -3381,6 +3381,37 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     动 Python 执行路径）；**阶段③ 执行核心收束**，下一批 = **阶段④ 并发解除**
     （task_scheduler IO-only → CPU+IO 真并行 GIL-free——CPS 优化[43 节点 enum 分发]
     在此落地）+ 语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 首增量（并发解除——GIL-free 并行执行：py.allow_threads + 并行基准，
+  4 线程 3.58x 真并行，2026-09-10，隔离分支 `rust-kernel`）**：**Rust 执行核心
+  CPU+IO 真并行地基**——解释执行（CPU 工作）经 `py.allow_threads` 释放 GIL，多执行
+  核心可**真正并行**（非协作式轮转）；IO 工作（宿主服务）经 `Python::with_gil` 重
+  取 GIL 协作式推进。**4 线程并行 3.58x**（≈4x 理想，GIL-free 真并行成立）vs Python
+  参考内核 GIL-bound ≈1.00x（无加速）。
+  **交付**：
+  - **GIL-free 执行**（`ibci-ext/src/lib.rs` `run_artifact`）：解释执行（CPU 工作）
+    经 `py.allow_threads` 释放 GIL（持有 JSON 所有权，不跨 GIL 释放借用 Python 内
+    存）；纯 CPU artifact（无 bridge）全程 GIL 释放；含宿主服务的 artifact 仅在宿主
+    操作时经 `Python::with_gil` 重取 GIL。
+  - **并行执行基准**（`scripts/bench_rust_parallel.py`）：固定总工作量 W 对等比较
+    ——单线程跑 W 次 = T1，N 线程各跑 W/N 次墙钟 = TN，并行加速比 = T1/TN；Rust
+    GIL-free（加速比 ≈N）vs Python GIL-bound（加速比 ≈1）对照。
+  **关键裁定（self-grill 全分支消解）**：① **CPU+IO 真并行模型**（CPU 工作[解释
+    执行]GIL-free 真并行 + IO 工作[宿主服务]GIL-bound 协作式——两面对应两种并发
+    语义，非双通道）；② **持有 JSON 所有权**（不跨 GIL 释放借用 Python 内存——
+    `&str` 借 Python 内存，跨 `allow_threads` 会悬垂，故 `to_string()` 持有）；③
+    **并行基准对等比较**（固定总工作量 W——单线程 W 次 vs N 线程各 W/N 次，非不对
+    等的单线程 3 次 vs 4 线程 12 次[初版基准计算错误已修正]）；④ **3.58x ≈ 4x
+    理想**（GIL-free 真并行成立——略低于理想 = 线程启动/调度开销，非 GIL 竞争）；
+    ⑤ **CPS 优化[43 节点 enum 分发]本增量不含**（GIL-free 地基先行，CPS 为 task_
+    scheduler 集成服务，后续增量）。
+  **验证**：**GIL-free 真并行 4 线程 3.58x**（≈4x 理想）vs Python GIL-bound ≈1.00x
+    + 差分 harness 18/18 + smoke 832 零回归 + 全量 pytest 零回归（阶段④ 首增量放行
+    门——加法式增量不动 Python 执行路径，计数稳定 4276；见 NEXT_STEPS 基线锚点）。
+    **阶段④ 首增量出口达成**（Rust 执行核心 CPU 工作 GIL-free 真并行地基）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 首增量零风险加法式（opt-in，不动
+    Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（CPS 优化
+    [43 节点 enum 分发] + task_scheduler GIL-free 集成）续在隔离分支（差分门逐级
+    验证）；语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

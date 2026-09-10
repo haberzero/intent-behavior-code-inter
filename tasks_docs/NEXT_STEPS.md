@@ -32,9 +32,9 @@
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4276 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段③ 收束[执行核心就绪评估 kernel_info stage 3/execution-core + 模块/run 文档，计数稳定]阶段③→④
-> 边界放行门[注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
-> 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
+> P9 阶段④ 首增量[GIL-free 并行执行 py.allow_threads + 并行基准，计数稳定]放行门[注：
+> test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，并行负载下
+> 临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -206,8 +206,14 @@
 >   [执行核心就绪≠全量内核就绪——run script 入口待 Rust 前端[语义层]移植后升
 >   ready]；模块/run 文档更新；零风险加法式[不动 Python 执行路径]，直接提交 unsafe-
 >   vibe-dev；设计/裁定 = WORKLOG P9 阶段③ 收束条目）
->   → **当前批次 = P9 阶段④ 并发解除（task_scheduler IO-only → CPU+IO 真并行
->   GIL-free——CPS 优化[43 节点 enum 分发]在此落地；隔离分支续）**。
+>   → **P9 阶段④ 首增量 ✅**（并发解除——GIL-free 并行执行：解释执行[CPU 工作]经
+>   py.allow_threads 释放 GIL，多执行核心可真并行[非协作式轮转]；IO 工作[宿主服务]
+>   经 Python::with_gil 重取 GIL 协作式；run_artifact 持有 JSON 所有权[不跨 GIL 释
+>   放借用 Python 内存]；scripts/bench_rust_parallel.py 并行基准[固定总工作量 W 对等
+>   比较]——**4 线程并行 3.58x**[≈4x 理想，GIL-free 真并行成立] vs Python GIL-bound
+>   ≈1.00x；零风险加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段④ 首增量条目）
+>   → **当前批次 = P9 阶段④ 续（并发解除：CPS 优化[43 节点 enum 分发] +
+>   task_scheduler GIL-free 集成；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -258,7 +264,8 @@
    → 阶段③ 第九增量 类型池/node_to_type 反序列化 27/27 类型表 ✅
    → 阶段③ 第十增量 quoted 值面 IbImport + host 属性 + meta 桥接 30/30 全级 ✅
    → 阶段③ 收束 执行核心就绪 kernel_info stage 3/execution-core ✅
-   → 阶段④ 并发解除（CPS 43 节点 enum 分发 + task_scheduler GIL-free）[当前]
+   → 阶段④ 首增量 GIL-free 并行执行 py.allow_threads 4 线程 3.58x ✅
+   → 阶段④ 续（CPS 43 节点 enum 分发 + task_scheduler GIL-free 集成）[当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式

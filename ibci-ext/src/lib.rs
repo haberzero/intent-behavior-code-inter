@@ -115,6 +115,11 @@ fn run(_script: &str) -> PyResult<String> {
 /// 消费 Python 前端产出的 artifact（含语义层输出）；迁移期策略（执行核心 Rust
 /// + 前端 Python）。Rust 语义层移植后 = 全量 Rust 前端 + 执行核心。
 /// bridge = host service 桥接（KB 操作经此委托；None = 无宿主服务，非 KB 面）。
+///
+/// **CPU+IO 真并行（GIL-free）**：解释执行（CPU 工作）经 `py.allow_threads`
+/// 释放 GIL——多执行核心可真正并行（非协作式轮转）；IO 工作（宿主服务）经
+/// `Python::with_gil` 重取 GIL 协作式推进。纯 CPU artifact（无 bridge）全程 GIL
+/// 释放；含宿主服务的 artifact 仅在宿主操作时重取 GIL。
 #[pyfunction]
 fn run_artifact(
     artifact_json: &str,
@@ -122,7 +127,10 @@ fn run_artifact(
     py: Python<'_>,
 ) -> PyResult<Py<PyList>> {
     let bridge_owned = bridge.map(|b| b.unbind());
-    let lines = interpreter::run_artifact(artifact_json, bridge_owned);
+    // 持有 JSON 所有权（不跨 GIL 释放借用 Python 内存）
+    let json_owned = artifact_json.to_string();
+    // CPU 工作（解释执行）释放 GIL——CPU+IO 真并行地基
+    let lines = py.allow_threads(|| interpreter::run_artifact(&json_owned, bridge_owned));
     let list = PyList::empty(py);
     for line in lines {
         list.append(line)?;

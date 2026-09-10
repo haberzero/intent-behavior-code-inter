@@ -364,13 +364,21 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     artifact]；`kernel_info` 状态升级 stage 1/skeleton → stage 3/execution-core
     [执行核心就绪≠全量内核就绪——run script 入口待 Rust 前端[语义层]移植后升
     ready]；模块/run 文档更新。
-  - **P9 阶段④ 并发解除（当前批次，隔离分支续）**：task_scheduler IO-only →
-    CPU+IO 真并行 GIL-free——**CPS 优化[43 节点 enum 分发]在此落地**（tree-walking
-    已 27x，CPS 为并发解除[task_scheduler 集成]服务）。四阶段全貌：① 地基 ✅ →
-    ② 前端（lexer ✅ / parser 完整面 + 剩余面 + 位置 + 布尔逻辑 + import ✅ / 语义
-    推迟）→ **③ 执行核心 ✅[收束：30/30 全级 + 23–30x + 闭包 + KB + quoted 值 +
-    完整 artifact 消费 + kernel_info stage 3/execution-core]** → ④ 并发解除[当前]。
-    确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+  - **P9 阶段④ 首增量 GIL-free 并行执行 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：并发解除地基——解释执行
+    [CPU 工作]经 py.allow_threads 释放 GIL，多执行核心可**真正并行**[非协作式轮转]；
+    IO 工作[宿主服务]经 Python::with_gil 重取 GIL 协作式；run_artifact 持有 JSON
+    所有权[不跨 GIL 释放借用 Python 内存]；scripts/bench_rust_parallel.py 并行基准
+    [固定总工作量 W 对等比较]——**4 线程并行 3.58x**[≈4x 理想，GIL-free 真并行成立]
+    vs Python GIL-bound ≈1.00x。**零风险加法式**（opt-in，不动 Python 执行路径）。
+  - **P9 阶段④ 续（当前批次，隔离分支续）**：并发解除——**CPS 优化[43 节点 enum
+    分发] + task_scheduler GIL-free 集成**（task_scheduler IO-only → CPU+IO 真并行
+    GIL-free）。四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 + 剩余面
+    + 位置 + 布尔逻辑 + import ✅ / 语义推迟）→ **③ 执行核心 ✅[收束：30/30 全级 +
+    23–30x + 闭包 + KB + quoted 值 + 完整 artifact 消费 + kernel_info stage
+    3/execution-core]** → ④ 并发解除[当前：GIL-free 并行执行地基 3.58x ✅ + CPS
+    优化 + task_scheduler 集成]。确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev
+    并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -429,11 +437,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段③ 收束阶段③→④ 边界实跑）**：**4276 passed /
-  1 skipped / 139.51s / rc=0**（计数稳定 4276[阶段③ 收束 kernel_info + 文档不动 Python
-  执行路径]；注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程
-  spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session
-  参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段④ 首增量放行门实跑）**：**4276 passed /
+  1 skipped / 138.03s / rc=0**（计数稳定 4276[阶段④ 首增量 GIL-free 并行执行 + 并行
+  基准不动 Python 执行路径]；注：test_p7_process_isolation / test_run_result_type 为
+  flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供
+  下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
