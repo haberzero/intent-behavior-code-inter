@@ -3739,6 +3739,43 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     Rust/测试代码），验证后 merge unsafe-vibe-dev 并删分支；后续 = 阶段 B 启动[全量 Rust
     化：语义 + 序列化 + 值对象 Rust 化 + 差分验证] + 保留 Python 接口[HostService + CPS
     VM[LLM/意图/宿主面]]。
+- **P9 全量 Rust 化阶段 B 第一增量（序列化 Rust 化——Rust UID 生成 node_uid/type_uid/
+  asset_uid，34 语料节点池差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**阶段 B
+  启动（可 Rust 化，纯计算：序列化面）**——Rust UID 生成（node_uid/type_uid/asset_uid，
+  对应 Python core/base/uid.py）——FlatSerializer 的节点/类型/资产 UID 生成核心 Rust 化，
+  与 Python UID 逐条差分等价（确定性哈希 = sha256 前 16 hex；稳定 UID = 命名规则）。
+  **交付**：
+  - **serialization 模块**（`ibci-ext/src/serialization.rs`）：node_uid[content →
+    `node_<sha256[:16]>`，内容确定性] + type_uid[module_path + name → `type_<module>.<name>`
+    [root 模块退化 `type_root.<name>`]] + asset_uid[text → `asset_<sha256[:16]>`，内容确定
+    性]（sha2 crate，sha256 哈希）。
+  - **Cargo.toml**：加 sha2 0.10 依赖（sha256 哈希）。
+  - **pyo3 暴露**：`ibci_ext.node_uid/type_uid/asset_uid`（pyfunctions）。
+  - **差分 harness 测试**（TestRustSerializationUid）：test_node_uid_corpus_node_pool[34
+    语料节点池：Rust node_uid[json.dumps(node_data, sort_keys=True)] == Python uid[节点池
+    键]] + test_type_uid_and_asset_uid[type_uid/asset_uid Rust == Python]。
+  **关键裁定（self-grill 全分支消解）**：① **确定性哈希 = sha256 前 16 hex**（node_uid =
+    `node_<sha256[:16]>`，asset_uid = `asset_<sha256[:16]>`——与 Python hashlib.sha256
+    .hexdigest()[:16] 逐条等价；sha2 crate[sha256]）；② **稳定 UID = 命名规则**（type_uid
+    = `type_<module>.<name>`[root 模块退化 `type_root.<name>`]——与 Python type_uid 等价）；
+    ③ **节点池差分 = json.dumps(node_data, sort_keys=True)**（Python _collect_node 用
+    json.dumps(node_data, sort_keys=True) 生成内容串 → node_uid；Rust node_uid 消费同一
+    内容串 → 逐条等价[34 语料节点池]）；④ **type_uid 参数序适配 pyo3**（name 必需在前 +
+    module_path Option 在后——pyo3 禁 Option 后跟必需参数；Python type_uid(module_path,
+    name) 经差分 harness 按此序调用）；⑤ **序列化面 = UID 生成核心先 Rust 化**（FlatSerializer
+    的节点/类型/资产 UID 生成 = 序列化核心；节点数据序列化[node_data dict] + 符号/类型/
+    scope 收集归后续增量——先证 UID 生成核心 Rust 可行）；⑥ **零风险加法式**（UID 生成为
+    独立 pyfunction，不动 Python 执行路径/FlatSerializer，计数 +2 测试）。
+  **验证**：34 语料节点池 Rust node_uid == Python uid[逐条差分等价] + type_uid/asset_uid
+    Rust == Python + 差分 harness 22/22 + 全量 pytest 零回归（阶段 B 第一增量放行门——
+    加法式增量不动 Python 执行路径，计数 = 4278 + 序列化 UID 测试 2 例 = 4280；见
+    NEXT_STEPS 基线锚点）。**阶段 B 第一增量出口达成**（序列化 Rust 化——Rust UID 生成
+    node_uid/type_uid/asset_uid）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段 B 第一增量零风险加法式（UID 生成为独立
+    pyfunction，不动 Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段 B 后续
+    （序列化 Rust 化续[节点数据序列化[node_data dict] + 符号/类型/scope 收集] + 语义层
+    Rust 移植[最大面 8317 行] + 值对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级
+    验证）；保留 Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

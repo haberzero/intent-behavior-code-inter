@@ -454,11 +454,20 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     LLM/意图/宿主面保留 Python 接口[非纯计算]。**关键 Python 接口** = 入口能力[run_ibci/
     compile_ibci + Rust 内核 pyo3 入口[run_artifact/TaskPool]] + LLM/意图/宿主面[Host
     Service + CPS VM + 值对象]。**零风险加法式**（仅评估文档，不动 Rust/测试代码）。
-  - **P9 全量 Rust 化阶段 B 启动（当前批次）**：阶段 B（可 Rust 化，纯计算）——语义层
-    Rust 移植[最大面 8317 行] + 序列化[FlatSerializer 329 行] + 值对象[IbValue 扩展
-    8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留 Python 接口[HostService +
-    CPS VM[LLM/意图/宿主面]]。证明绝大部分关键核心逻辑可 Rust 化后全量转向 Rust（不保留
-    Python 双通道和对比）。CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]随推进。
+  - **P9 全量 Rust 化阶段 B 第一增量 序列化 UID 生成 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：序列化 Rust 化——Rust UID 生成
+    （node_uid/type_uid/asset_uid，对应 Python core/base/uid.py）——ibci-ext/src/
+    serialization.rs[node_uid = `node_<sha256[:16]>` 内容确定性 + type_uid = `type_<module>
+    .<name>`[root 退化 type_root.<name>] + asset_uid = `asset_<sha256[:16]>`]，sha2 crate
+    [sha256]；**34 语料节点池 Rust node_uid[json.dumps(node_data, sort_keys=True)] ==
+    Python uid 逐条差分等价** + type_uid/asset_uid 差分等价。**零风险加法式**（UID 生成为
+    独立 pyfunction，不动 Python 执行路径/FlatSerializer）。
+  - **P9 全量 Rust 化阶段 B 续（当前批次）**：阶段 B（可 Rust 化，纯计算）——序列化 Rust
+    化续[节点数据序列化[node_data dict] + 符号/类型/scope 收集] + 语义层 Rust 移植[最大面
+    8317 行] + 值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] +
+    保留 Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。证明绝大部分关键核心逻辑可
+    Rust 化后全量转向 Rust（不保留 Python 双通道和对比）。CPS 优化续[覆盖差 22 节点——
+    LLM/意图面按需补齐]随推进。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -517,9 +526,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段④ 收束放行门实跑）**：**4278 passed /
-  1 skipped / 141.24s / rc=0**（计数稳定 4278[阶段④ 收束 kernel_info 升级 stage 4 /
-  concurrency-core，不动 Python 执行路径]；注：test_p7_process_isolation /
+- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第一增量放行门实跑）**：**4280
+  passed / 1 skipped / 140.05s / rc=0**（= 前基线 4278 + 序列化 UID 测试 2 例[阶段 B
+  第一增量 序列化 Rust 化 node_uid/type_uid/asset_uid]；注：test_p7_process_isolation /
   test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，
   隔离重跑通过，非回归]；供下一 session 参照，不冻结）。
 

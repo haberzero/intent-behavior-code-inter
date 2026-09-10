@@ -20,6 +20,7 @@ mod deserializer;
 mod interpreter;
 mod lexer;
 mod parser;
+mod serialization;
 mod task_pool;
 
 use pyo3::exceptions::PyNotImplementedError;
@@ -97,6 +98,28 @@ fn node_types(py: Python<'_>) -> PyResult<Py<PyList>> {
         list.append(nt)?;
     }
     Ok(list.unbind())
+}
+
+/// 序列化 UID（全量 Rust 化·序列化面）：node_uid = `node_<sha256[:16]>`（内容
+/// 确定性，AST 节点 UID）；与 Python core/base/uid.py 的 node_uid 逐条差分等价。
+#[pyfunction]
+fn node_uid(content: &str) -> String {
+    serialization::node_uid(content)
+}
+
+/// 类型 UID：`type_<module>.<name>`（root 模块退化 `type_root.<name>`）；与 Python
+/// type_uid 差分等价。参数序（name 必需在前，module_path Option 在后）适配 pyo3
+/// （Option 后不可跟必需参数）；Python type_uid(module_path, name) 经差分 harness
+/// 按此序调用。
+#[pyfunction]
+fn type_uid(name: &str, module_path: Option<&str>) -> String {
+    serialization::type_uid(module_path, name)
+}
+
+/// 文本资产 UID：`asset_<sha256[:16]>`（内容确定性）；与 Python asset_uid 差分等价。
+#[pyfunction]
+fn asset_uid(text: &str) -> String {
+    serialization::asset_uid(text)
 }
 
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
@@ -221,6 +244,9 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(symbol_table, m)?)?;
     m.add_function(wrap_pyfunction!(type_table, m)?)?;
     m.add_function(wrap_pyfunction!(node_types, m)?)?;
+    m.add_function(wrap_pyfunction!(node_uid, m)?)?;
+    m.add_function(wrap_pyfunction!(type_uid, m)?)?;
+    m.add_function(wrap_pyfunction!(asset_uid, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

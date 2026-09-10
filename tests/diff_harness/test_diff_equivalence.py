@@ -425,3 +425,47 @@ class TestRustExecutionDataPlane:
         assert par == seq, f"任务池并行 != 顺序执行：\n  seq: {seq}\n  par: {par}"
         # 空池 run_all = 空列表
         assert rk._module.TaskPool(2).run_all() == []
+
+
+class TestRustSerializationUid:
+    """序列化 UID 差分（全量 Rust 化·序列化面）：Rust node_uid/type_uid/asset_uid
+    与 Python core/base/uid.py 逐条等价（确定性哈希 = sha256 前 16 hex）。"""
+
+    def test_node_uid_corpus_node_pool(self):
+        """34 语料节点池：Rust node_uid[json.dumps(node_data, sort_keys=True)] ==
+        Python uid（节点池键）——序列化 UID 差分等价。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "node_uid"):
+            return
+        for name, code in CORPUS:
+            artifact = compile_ibci(code)
+            data = FlatSerializer().serialize_artifact(artifact)
+            # 节点池（uid → node_data）
+            node_pool = data["pools"]["nodes"]
+            for uid, node_data in node_pool.items():
+                content = json.dumps(node_data, sort_keys=True)
+                rs = rk._module.node_uid(content)
+                assert rs == uid, (
+                    f"语料 {name} 节点 UID 差分不等价：\n  py: {uid}\n  rust: {rs}\n"
+                    f"  node_data: {node_data}"
+                )
+
+    def test_type_uid_and_asset_uid(self):
+        """type_uid / asset_uid：Rust == Python（确定性哈希 + 稳定 UID）。"""
+        from core.base.uid import asset_uid as py_asset_uid, type_uid as py_type_uid
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "type_uid"):
+            return
+        for module_path, name in [(None, "int"), ("core.mod", "MyClass"), ("root", "x")]:
+            rs = rk._module.type_uid(name, module_path)
+            py = py_type_uid(module_path, name)
+            assert rs == py, f"type_uid 差分不等等：py={py} rust={rs}"
+        for text in ["hello world", "1 + 2", ""]:
+            rs = rk._module.asset_uid(text)
+            py = py_asset_uid(text)
+            assert rs == py, f"asset_uid 差分不等价：py={py} rust={rs}"
