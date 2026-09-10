@@ -340,15 +340,23 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     == Python node_to_symbol 解析]。本增量不用于执行（tree-walking 用简单变量绑定，
     符号表用于后续类型检查/错误报告/CPS 分发）。**零风险加法式**（opt-in，不动
     Python 执行路径）。
+  - **P9 阶段③ 第九增量 类型池/node_to_type 反序列化 已落地（本 session，隔离
+    分支 `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：完整 artifact 消费
+    续——反序列化器从 symbols 池 + node_to_symbol 侧表扩展至 types 池 + node_to_type
+    侧表[语义层类型输出，节点类型解析]；`ibci_ext.type_table` 暴露[node → type 名
+    解析规范表示，按 node_uid 排序]+ 差分 harness 加类型表差分面——**27/27 全语料
+    类型表差分等价**[Rust type_table == Python node_to_type 解析]。本增量不用于执行
+    （tree-walking 用简单变量绑定，类型表用于后续类型检查/错误报告/CPS 分发）。
+    **零风险加法式**（opt-in，不动 Python 执行路径）。
   - **P9 阶段③ 续（当前批次，隔离分支续）**：执行核心——CPS 优化[43 节点 enum
-    分发，在 27x 基础上进一步提升] + 类型池/资产池反序列化 + 更宽 IBCI 语料
-    [quoted 值/行为表达式]。四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser
-    完整面 + 剩余面 + 位置 + 布尔逻辑 ✅ / 语义推迟）→ **③ 执行核心[主战场：
-    反序列化器 ✅ / 对象模型 + 解释器 + 数据面 ✅ / 性能基准 23–30x ✅ / KB 语料面
-    host service 桥接 ✅ / 更宽语料 20/20 四级 ✅ / 闭包完整语义 22/22 四级 ✅ /
-    更宽 IBCI 面 27/27 四级 ✅ / 符号池/侧表 27/27 符号表 ✅ / CPS 优化当前]**
-    → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。确认零风险
-    （全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+    分发，在 27x 基础上进一步提升] + 资产池反序列化 + 更宽 IBCI 语料[quoted 值/
+    行为表达式]。四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 + 剩余面
+    + 位置 + 布尔逻辑 ✅ / 语义推迟）→ **③ 执行核心[主战场：反序列化器 ✅ / 对象
+    模型 + 解释器 + 数据面 ✅ / 性能基准 23–30x ✅ / KB 语料面 host service 桥接 ✅ /
+    更宽语料 20/20 四级 ✅ / 闭包完整语义 22/22 四级 ✅ / 更宽 IBCI 面 27/27 四级
+    ✅ / 符号池/侧表 27/27 符号表 ✅ / 类型池/node_to_type 27/27 类型表 ✅ / CPS
+    优化当前]** → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。
+    确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -407,8 +415,8 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段③ 第八增量阶段边界实跑）**：**4275 passed /
-  1 skipped / 130.67s / rc=0**（= 前基线 4274 + 符号表差分 1 例；供下一 session
+- **全量 pytest 基线（本 session P9 阶段③ 第九增量阶段边界实跑）**：**4276 passed /
+  1 skipped / 134.58s / rc=0**（= 前基线 4275 + 类型表差分 1 例；供下一 session
   参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）

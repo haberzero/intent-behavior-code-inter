@@ -408,3 +408,40 @@ pub fn symbol_table(artifact_json: &str) -> Option<String> {
             .join("\n"),
     )
 }
+
+/// artifact JSON → 类型表规范表示（node → type 解析，按 node_uid 排序）。
+/// 消费完整 artifact 的 types 池 + node_to_type 侧表（执行核心的完整 artifact
+/// 消费——语义层类型输出）。None = 解析失败。
+pub fn type_table(artifact_json: &str) -> Option<String> {
+    let root: Value = serde_json::from_str(artifact_json).ok()?;
+    let entry = root["entry_module"].as_str()?;
+    let module = &root["modules"][entry];
+    // types 池：uid → name
+    let types_pool = &module["pools"]["types"];
+    let mut types: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    if let Some(obj) = types_pool.as_object() {
+        for (uid, t) in obj {
+            types.insert(uid.clone(), t["name"].as_str().unwrap_or("").to_string());
+        }
+    }
+    // node_to_type 侧表：node_uid → type_uid
+    let ntt = &module["side_tables"]["node_to_type"];
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    if let Some(obj) = ntt.as_object() {
+        for (node_uid, type_uid) in obj {
+            if let Some(tu) = type_uid.as_str() {
+                if let Some(tname) = types.get(tu) {
+                    pairs.push((node_uid.clone(), tname.clone()));
+                }
+            }
+        }
+    }
+    pairs.sort();
+    Some(
+        pairs
+            .iter()
+            .map(|(n, t)| format!("{} -> {}", n, t))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}

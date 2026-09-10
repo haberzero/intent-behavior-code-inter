@@ -249,6 +249,36 @@ class TestRustDeserializerDifferential:
             )
             assert rs == py, f"语料 {name} 符号表差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_type_table_corpus(self):
+        """类型表差分等价：全部语料（Rust type_table == Python node_to_type
+        解析）。执行核心的完整 artifact 消费——types 池 + node_to_type 侧表。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel, rust_type_table
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        for name, code in CORPUS:
+            try:
+                artifact = compile_ibci(code)
+            except Exception:
+                continue  # 编译失败语料跳过（合法态）
+            data = FlatSerializer().serialize_artifact(artifact)
+            js = json.dumps(data, ensure_ascii=False)
+            rs = rust_type_table(js)
+            # Python 参考：同一 artifact 的 node_to_type 解析（node → type 名）
+            mod = data["modules"][data["entry_module"]]
+            types = {u: t["name"] for u, t in mod["pools"]["types"].items()}
+            py = "\n".join(
+                sorted(
+                    f"{n} -> {types[t]}"
+                    for n, t in mod["side_tables"]["node_to_type"].items()
+                    if t in types
+                )
+            )
+            assert rs == py, f"语料 {name} 类型表差分不等价：\n  py : {py}\n  rust: {rs}"
+
 
 class TestRustExecutionDataPlane:
     """Rust 执行核心（ibci_ext.run_artifact）vs Python 执行核心的数据面差分等价。
