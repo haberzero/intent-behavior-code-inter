@@ -195,7 +195,12 @@ run --deterministic  →  "LLM 调用=0" 审计凭证（复用 llm_journal + bud
 - **P6 向量面**：KB 事实/词嵌入 cosine 内容信号（非判定）；磁盘格式预留 ANN。
 - **P7 R-F 投影降级为派生视图** `kb.to_ibci()`（确定性导出，替代 lossy 静态投影器；对拍试用方参考）。
 - **P8 测试进程内化**：e2e 用 conftest run_ibci 进程内助手进程内化（降全量门成本）。
-- **P9 Rust 内核（设计 only）**：写 `_rust_kernel_design.md` + 差分等价 harness 设计（crate 结构 frontend/exec/pyo3 三层 + AST 序列化契约对接 + kernel 选择协议 + harness 入口/比对粒度/失败面 + 阶段①实施清单）。**不实际 cargo 构建/编译（延期至用户在场）**。
+- **P9 Rust 内核**：① **差分等价 harness 骨架已就绪**（`scripts/differential_harness.py` + 常设门
+  `tests/contracts/test_differential_harness.py`；Python 内核参考基线 + 确定性已验证，`run_kernel("rust")`
+  drop-in 点 + `--diff` 对拍在位）；② 写 `_rust_kernel_design.md`（crate 结构 frontend/exec/pyo3 三层 +
+  AST 序列化契约对接 + kernel 选择协议）；③ 实际构建（**3.12 headers 已装 + pyo3 0.23 端到端已验证 →
+  可行**；CARGO pin workspace + 允许网络）。harness 语料后续并入 R-B 世界模型里程碑（KB 事实 /
+  quote-eval 表达式）作 fuzz 语料。
 
 ---
 

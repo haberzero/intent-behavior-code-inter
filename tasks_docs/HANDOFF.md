@@ -197,6 +197,10 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   （3.12.3）import + 调用 Rust 函数 OK（`PROJECT_RUST_PY_312_OK`）。**项目 Rust 构建路径全通，
   P9 无环境阻塞。**（备注：agent 被 `NoNewPrivs=1` 锁死无法 sudo；`/etc/sudoers.d/dsh` 规则存在，
   人工 dsh shell 可 sudo——供未来重装参考。）
+- **差分等价 harness 骨架已就绪（P9 phase ① 部分交付，2026-09-10）**：`scripts/differential_harness.py`
+  （Python 内核参考基线 + 确定性验证 + `run_kernel("rust")` drop-in + `--diff` 对拍）+ 常设门
+  `tests/contracts/test_differential_harness.py`（smoke 子集）。下一 session 扩语料（并入 R-B 里程碑）+
+  实现 `run_kernel("rust")` 后即成 py↔rust 差分门（Rust 安全网）。
 - **全量 pytest 基线（2026-09-10 实跑，干净）**：**3990 passed / 1 skipped / 103.58s / rc=0**（供下一
   session 参照，不冻结）。
 
