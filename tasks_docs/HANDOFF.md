@@ -317,13 +317,21 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     右结合]+ deserializer 加 IbBoolOp + interpreter 加 and/or 短路 + not——**全
     语料 20/20 四级差分逐条等价**[token/AST/反序列化/数据面]。**零风险加法式**
     （opt-in，不动 Python 执行路径）。
+  - **P9 阶段③ 第六增量 闭包完整语义 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：Rc<RefCell<Environment>>
+    重构（环境共享可变，作用域链 + 闭包捕获经 Rc 共享）+ Function 捕获 enclosing
+    （定义处环境，嵌套函数 call_env parent = enclosing 访问 outer 局部/顶层 =
+    global 递归+读全局）+ global_rc 短借用走链（不跨递归持借用）——**22/22 四级
+    差分逐条等价**（token/AST/反序列化/数据面）。IBCI 闭包边界对齐（mut captured
+    全局是 IBCI 限制，非执行核心缺陷）。**零风险加法式**（opt-in，不动 Python 执行
+    路径）。
   - **P9 阶段③ 续（当前批次，隔离分支续）**：执行核心——CPS 优化[43 节点 enum
-    分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 闭包完整语义
-    + 更宽 IBCI 语料[行为表达式/quoted 值等]。四阶段全貌：① 地基 ✅ → ② 前端
-    （lexer ✅ / parser 完整面 + 剩余面 + 位置 + 布尔逻辑 ✅ / 语义推迟）→ **③
-    执行核心[主战场：反序列化器 ✅ / 对象模型 + 解释器 + 数据面 ✅ / 性能基准
-    23–30x ✅ / KB 语料面 host service 桥接 ✅ / 更宽语料 20/20 四级 ✅ / CPS
-    优化当前]** → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。
+    分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 更宽 IBCI 语料
+    [quoted 值/行为表达式]。四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser
+    完整面 + 剩余面 + 位置 + 布尔逻辑 ✅ / 语义推迟）→ **③ 执行核心[主战场：
+    反序列化器 ✅ / 对象模型 + 解释器 + 数据面 ✅ / 性能基准 23–30x ✅ / KB 语料面
+    host service 桥接 ✅ / 更宽语料 20/20 四级 ✅ / 闭包完整语义 22/22 四级 ✅ /
+    CPS 优化当前]** → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。
     确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
@@ -383,9 +391,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段③ 第五增量阶段边界实跑）**：**4274 passed /
-  1 skipped / 132.49s / rc=0**（计数稳定 4274[更宽语料扩展不增测试数——现有四级
-  差分测试自动覆盖 20 语料]；供下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段③ 第六增量阶段边界实跑）**：**4274 passed /
+  1 skipped / 129.95s / rc=0**（计数稳定 4274[闭包重构 + 更宽语料 22 条不增测试数
+  ——现有四级差分测试自动覆盖 22 语料]；供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 

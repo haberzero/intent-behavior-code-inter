@@ -3174,6 +3174,41 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 闭
   包完整语义 + 更宽 IBCI 语料[行为表达式/quoted 值等]）+ ④ 并发解除续在隔离分支
   （差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第六增量（执行核心闭包完整语义——嵌套函数访问 outer 局部变量，22
+  语料四级差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust 执行核心闭包
+  语义**——`Rc<RefCell<Environment>>` 重构（环境共享可变）+ Function 捕获
+  enclosing（定义处环境）——嵌套函数可访问 outer 局部变量（closure_capture /
+  closure_top_global），全语料 **22/22 四级差分等价**（token/AST/反序列化/数据
+  面），执行核心作用域语义完整（递归 + 顶层读全局 + 嵌套闭包捕获）。
+  **交付**：
+  - **Rc<RefCell<Environment>> 重构**（`ibci-ext/src/interpreter.rs`）：环境从
+    `Box<Environment>`（独占）→ `Rc<RefCell<Environment>>`（共享）——作用域链 +
+    闭包捕获经 Rc 共享（同一环境可被多处引用）。
+  - **Function 捕获 enclosing**（定义处环境）：FunctionDef 执行时 `enclosing =
+    Some(env.clone())`（捕获当前环境 Rc）；调用时 `call_env` 的 parent = enclosing
+    [嵌套函数访问 outer 局部] 或 global[顶层函数，递归 + 读全局]。
+  - **global_rc 自由函数**：短借用走 Rc 链取全局环境（不跨递归持借用——避免
+    RefCell 运行时 panic）。
+  - **语料扩展**（+closure_capture[嵌套函数读 outer 局部] / closure_top_global[
+    顶层函数读全局]）。
+  **关键裁定（self-grill 全分支消解）**：① **Rc<RefCell> 共享环境**（闭包需共享
+  同一环境——Box 独占无法共享；RefCell 运行时借用检查，短借用避免跨递归持借用）；
+  ② **enclosing 捕获**（定义处环境——嵌套函数 call_env parent = enclosing，访问
+  outer 局部；顶层函数 enclosing = global，递归 + 读全局）；③ **global_rc 短借用
+  走链**（不跨递归持借用——RefCell 双借用运行时 panic 防护）；④ **IBCI 闭包边界
+  对齐**（读 captured 变量工作；mut captured 全局是 IBCI 限制[VM Symbol UID 作用
+  域]，非执行核心缺陷——Python VM 亦报错）；⑤ **删 Environment::global()**（返回
+  临时借用悬空 E0515——被 global_rc 取代）。
+  **验证**：闭包面 3/3 MATCH（nested_read_local[10]/top_read_global[100]/
+  closure_counter2[42]）+ 四级差分 22/22 全语料逐条等价[token/AST/反序列化/数据
+  面] + 全量 pytest 零回归（阶段边界放行门——加法式增量不动 Python 执行路径，计数
+  稳定 4274[语料扩展不增测试数]；见 NEXT_STEPS 基线锚点）。**阶段③ 第六增量出口
+  达成**（Rust 执行核心闭包语义完整——作用域链 + 闭包捕获 + 递归）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 第六增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（CPS 优化
+  [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 更
+  宽 IBCI 语料[quoted 值/行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；
+  语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

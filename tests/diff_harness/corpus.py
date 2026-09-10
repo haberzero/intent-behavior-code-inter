@@ -39,6 +39,9 @@ CORPUS: List[Tuple[str, str]] = [
     # ---- 函数扩展（嵌套）----
     ("function_nested",
      "func outer(int n) -> int:\n    func inner(int m) -> int:\n        return m + 1\n    return inner(n)\nprint(outer(41))\n"),
+    ("closure_capture",
+     "func make(int k) -> int:\n    a = k * 2\n    func get() -> int:\n        return a\n    return get()\nprint(make(21))\n"),
+    ("closure_top_global", "a = 100\nfunc get_a() -> int:\n    return a\nprint(get_a())\n"),
     # ---- 容器扩展 ----
     ("list_more", "a = [1, 2]\nb = [3, 4]\nprint(a + b)\nprint(a[0] * 2)\n"),
     # ---- KB 世界模型（主线核心面）----

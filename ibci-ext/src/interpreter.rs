@@ -184,33 +184,49 @@ fn num_result(a: &IbValue, b: &IbValue, f: fn(f64, f64) -> f64) -> IbValue {
 // --------------------------------------------------------------------------- //
 // 环境（变量绑定 + 函数定义 + 作用域链）
 // --------------------------------------------------------------------------- //
-#[derive(Debug, Clone)]
 pub struct Environment {
     vars: HashMap<String, IbValue>,
     functions: HashMap<String, Function>,
-    parent: Option<Box<Environment>>,
+    parent: Option<Rc<RefCell<Environment>>>,
 }
 
-#[derive(Debug, Clone)]
+/// 函数（含闭包捕获的 enclosing 环境——嵌套函数可访问 outer 局部变量）。
 pub struct Function {
     pub name: String,
     pub params: Vec<String>,
     pub body: Vec<Stmt>,
+    /// 定义处的环境（闭包捕获——调用时 call_env 的 parent = 此环境）。
+    pub enclosing: Option<Rc<RefCell<Environment>>>,
+}
+
+impl Clone for Function {
+    fn clone(&self) -> Self {
+        Function {
+            name: self.name.clone(),
+            params: self.params.clone(),
+            body: self.body.clone(),
+            // enclosing = Rc 共享（闭包捕获同一环境）
+            enclosing: self.enclosing.clone(),
+        }
+    }
+}
+
+impl std::fmt::Debug for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Function")
+            .field("name", &self.name)
+            .field("params", &self.params)
+            .field("body_len", &self.body.len())
+            .finish()
+    }
 }
 
 impl Environment {
-    fn new(parent: Option<Box<Environment>>) -> Environment {
+    fn new(parent: Option<Rc<RefCell<Environment>>>) -> Environment {
         Environment {
             vars: HashMap::new(),
             functions: HashMap::new(),
             parent,
-        }
-    }
-    /// 全局环境（作用域链根）。
-    fn global(&self) -> &Environment {
-        match &self.parent {
-            Some(p) => p.global(),
-            None => self,
         }
     }
     fn set(&mut self, name: &str, value: IbValue) {
@@ -221,7 +237,7 @@ impl Environment {
             return Some(v.clone());
         }
         match &self.parent {
-            Some(p) => p.get(name),
+            Some(p) => p.borrow().get(name),
             None => None,
         }
     }
@@ -233,9 +249,18 @@ impl Environment {
             return Some(f.clone());
         }
         match &self.parent {
-            Some(p) => p.get_function(name),
+            Some(p) => p.borrow().get_function(name),
             None => None,
         }
+    }
+}
+
+/// 全局环境（作用域链根）的 Rc——短借用走链（不跨递归持借用）。
+fn global_rc(env: &Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
+    let parent = env.borrow().parent.clone();
+    match parent {
+        Some(p) => global_rc(&p),
+        None => env.clone(),
     }
 }
 
@@ -268,10 +293,9 @@ impl Interpreter {
     /// 执行模块（返回数据面 print 输出）。
     pub fn run_module(&self, module: &Module) -> Vec<String> {
         let mut output: Vec<String> = Vec::new();
-        let global = Environment::new(None);
-        let mut env = global;
+        let env = Rc::new(RefCell::new(Environment::new(None)));
         for stmt in &module.body {
-            let flow = self.exec_stmt(&mut env, stmt, &mut output);
+            let flow = self.exec_stmt(&env, stmt, &mut output);
             if !matches!(flow, Flow::Next) {
                 break;
             }
@@ -281,7 +305,7 @@ impl Interpreter {
 
     fn exec_stmt(
         &self,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
         stmt: &Stmt,
         output: &mut Vec<String>,
     ) -> Flow {
@@ -292,7 +316,7 @@ impl Interpreter {
                     match target {
                         Expr::Name { id, .. } => {
                             if let Some(val) = &v {
-                                env.set(id, val.clone());
+                                env.borrow_mut().set(id, val.clone());
                             }
                         }
                         Expr::Subscript { value, slice, .. } => {
@@ -327,7 +351,7 @@ impl Interpreter {
                         Expr::Name { id, .. } => id.clone(),
                         _ => continue,
                     };
-                    env.set(&name, item);
+                    env.borrow_mut().set(&name, item);
                     match self.exec_body(env, body, output) {
                         Flow::Break => {
                             ran_else = false;
@@ -364,10 +388,13 @@ impl Interpreter {
             }
             Stmt::FunctionDef { name, args, body, .. } => {
                 let params: Vec<String> = args.iter().map(|a| a.arg.clone()).collect();
-                env.define_function(Function {
+                // enclosing = 当前环境（闭包捕获——嵌套函数可访问 outer 局部变量）
+                let enclosing = Some(env.clone());
+                env.borrow_mut().define_function(Function {
                     name: name.clone(),
                     params,
                     body: body.clone(),
+                    enclosing,
                 });
                 Flow::Next
             }
@@ -389,7 +416,7 @@ impl Interpreter {
 
     fn exec_body(
         &self,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
         body: &[Stmt],
         output: &mut Vec<String>,
     ) -> Flow {
@@ -402,10 +429,10 @@ impl Interpreter {
         Flow::Next
     }
 
-    fn eval_expr(&self, env: &mut Environment, expr: &Expr, output: &mut Vec<String>) -> IbValue {
+    fn eval_expr(&self, env: &Rc<RefCell<Environment>>, expr: &Expr, output: &mut Vec<String>) -> IbValue {
         match expr {
             Expr::Constant { value, .. } => const_to_value(value),
-            Expr::Name { id, .. } => match env.get(id) {
+            Expr::Name { id, .. } => match env.borrow().get(id) {
                 Some(v) => v,
                 None => IbValue::None_,
             },
@@ -515,7 +542,7 @@ impl Interpreter {
 
     fn eval_iter(
         &self,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
         iter: &Expr,
         output: &mut Vec<String>,
     ) -> Vec<IbValue> {
@@ -588,7 +615,7 @@ impl Interpreter {
 
     fn call_function(
         &self,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
         name: &str,
         args: Vec<IbValue>,
         output: &mut Vec<String>,
@@ -633,9 +660,9 @@ impl Interpreter {
                 self.call_knowledge()
             }
             _ => {
-                if let Some(f) = env.get_function(name) {
-                    // 全局环境（函数定义处——使函数体可访问全局函数[递归]）
-                    let global = env.global().clone();
+                if let Some(f) = env.borrow().get_function(name) {
+                    // 全局环境（作用域链根——使函数体可访问全局函数[递归]）
+                    let global = global_rc(env);
                     self.call_user_function(&f, args, output, &global)
                 } else {
                     IbValue::None_
@@ -663,16 +690,18 @@ impl Interpreter {
         f: &Function,
         args: Vec<IbValue>,
         output: &mut Vec<String>,
-        global: &Environment,
+        global: &Rc<RefCell<Environment>>,
     ) -> IbValue {
-        // 新作用域（父 = 全局环境，使函数体内可访问全局函数[递归]）
-        let mut call_env = Environment::new(Some(Box::new(global.clone())));
+        // 新作用域：parent = enclosing[闭包捕获，嵌套函数访问 outer 局部] 或
+        // global[顶层函数，使函数体可访问全局函数/变量——递归 + 读全局]
+        let parent = f.enclosing.clone().unwrap_or_else(|| global.clone());
+        let call_env = Rc::new(RefCell::new(Environment::new(Some(parent))));
         for (i, arg) in args.iter().enumerate() {
             if let Some(param) = f.params.get(i) {
-                call_env.set(param, arg.clone());
+                call_env.borrow_mut().set(param, arg.clone());
             }
         }
-        let flow = self.exec_body(&mut call_env, &f.body, output);
+        let flow = self.exec_body(&call_env, &f.body, output);
         match flow {
             Flow::Return(v) => v,
             _ => IbValue::None_,
