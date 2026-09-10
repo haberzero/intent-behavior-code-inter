@@ -17,6 +17,7 @@ mod deserializer;
 mod interpreter;
 mod lexer;
 mod parser;
+mod task_pool;
 
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
@@ -219,5 +220,6 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
+    m.add_class::<task_pool::TaskPool>()?;
     Ok(())
 }

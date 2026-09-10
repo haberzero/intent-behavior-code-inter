@@ -3549,6 +3549,40 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     submit CPU 任务经 run_artifacts_parallel 并行] + CPS 优化续[覆盖差 22 节点——
     LLM/意图面按需补齐]）续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量
     Rust 化后续。
+- **P9 阶段④ 第六增量（task_scheduler GIL-free 集成——Rust 有状态任务池 TaskPool：
+  submit/run_all GIL-free 并行，4 线程 3.37x，2026-09-10，隔离分支
+  `rust-kernel`）**：**Rust 执行核心 task_scheduler GIL-free 集成的有状态执行体**——
+  有状态任务池（pyclass TaskPool）：CPU 任务（artifact）经 submit 增量入队、run_all
+  经 Rust 线程 GIL-free 真并行执行、按任务 ID 取结果。这是 task_scheduler 增量 submit
+  CPU 任务 + 一次性并行执行 + 按 ID 取结果的集成点（区别于 run_artifacts_parallel 的
+  无状态批处理 API）。
+  **交付**：
+  - **TaskPool**（`ibci-ext/src/task_pool.rs`，pyclass）：有状态任务池——`__new__(
+    workers)`[创建池] + `submit(artifact_json) -> task_id`[入队，返回任务 ID] +
+    `pending() -> usize`[入队任务数] + `run_all() -> list of [task_id, result_list]`
+    [取出全部任务，Rust 线程 GIL-free 真并行执行，按任务 ID 序返回]。
+  - **pyo3 暴露**：`ibci_ext.TaskPool`（pyclass，m.add_class）。
+  - **差分 harness 测试**（`test_task_pool_equivalence`）：TaskPool run_all（按任务
+    ID 序）== 顺序执行（run_artifact），空池 run_all = 空列表。
+  **关键裁定（self-grill 全分支消解）**：① **有状态任务池（pyclass）**（task_
+    scheduler 可增量 submit CPU 任务[submit 入队]、一次性 run_all 并行执行、按任务
+    ID 取结果——区别于 run_artifacts_parallel 的无状态批处理 API[一次性传入全部
+    artifact]；两 API 互补：批处理 = 简单场景，任务池 = 增量 submit 场景）；② **按
+    任务 ID 序返回**（chunk 按任务序均分 → 线程序拼接 = 任务序；结果 = list of
+    [task_id, result_list]，调用方按 ID 匹配）；③ **纯 CPU 面**（无宿主服务——含宿主
+    服务的任务由单线程 run_artifact 经桥接处理[IO 协作式]）；④ **Mutex 任务队列 +
+    AtomicU64 任务 ID**（submit 线程安全[多任务增量入队]，run_all 取出全部[drain]）；
+    ⑤ **空池 run_all = 空列表**（无任务 = 无操作，非报错）。
+  **验证**：TaskPool 4 线程 3.37x 真并行[≈4x 理想] + run_all（按任务 ID 序）== 顺序
+    执行[MATCH] + 空池 run_all = [] + 差分 harness 20/20 + 全量 pytest 零回归（阶段④
+    第六增量放行门——加法式增量不动 Python 执行路径，计数 = 4277 + TaskPool 测试 1 例
+    = 4278；见 NEXT_STEPS 基线锚点）。**阶段④ 第六增量出口达成**（Rust 执行核心
+    task_scheduler GIL-free 集成的有状态执行体——TaskPool）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 第六增量零风险加法式（opt-in，不动
+    Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（task_
+    scheduler GIL-free 集成续[Python task_scheduler 接入 TaskPool[submit CPU 任务] +
+    CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]）续在隔离分支（差分门逐级验证）；
+    语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

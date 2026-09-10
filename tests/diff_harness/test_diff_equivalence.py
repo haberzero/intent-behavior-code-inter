@@ -392,3 +392,36 @@ class TestRustExecutionDataPlane:
         par = rk._module.run_artifacts_parallel(artifacts, 4)
         par = [list(x) for x in par]
         assert par == seq, f"并行执行 != 顺序执行：\n  seq: {seq}\n  par: {par}"
+
+    def test_task_pool_equivalence(self):
+        """有状态任务池（TaskPool）：CPU 任务 submit 入队 → run_all 经 Rust 线程
+        GIL-free 真并行执行——结果（按任务 ID 序）== 顺序执行，空池 = 空列表。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "TaskPool"):
+            return
+        # 4 个纯 CPU artifact（不同值，无宿主服务）
+        artifacts = []
+        for i in range(4):
+            code = f"s = 0\nfor j in range(1, 20001):\n    s = s + j + {i}\nprint(s)\n"
+            a = compile_ibci(code)
+            artifacts.append(
+                json.dumps(FlatSerializer().serialize_artifact(a), ensure_ascii=False)
+            )
+        # TaskPool：submit 入队 → run_all 并行执行
+        pool = rk._module.TaskPool(4)
+        for js in artifacts:
+            pool.submit(js)
+        assert pool.pending() == 4
+        res = pool.run_all()
+        # 按任务 ID 序取结果
+        par = [item[1] for item in sorted(res, key=lambda x: x[0])]
+        par = [list(x) for x in par]
+        # 顺序执行（run_artifact）
+        seq = [list(rk._module.run_artifact(js, None)) for js in artifacts]
+        assert par == seq, f"任务池并行 != 顺序执行：\n  seq: {seq}\n  par: {par}"
+        # 空池 run_all = 空列表
+        assert rk._module.TaskPool(2).run_all() == []

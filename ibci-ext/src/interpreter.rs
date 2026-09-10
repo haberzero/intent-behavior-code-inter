@@ -16,7 +16,7 @@
 
 use crate::parser::{ConstVal, Expr, Module, Stmt};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyList, PyTuple};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;

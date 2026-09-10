@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4277 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段④ 第五增量[CPU+IO 真并行验证 bench_rust_cpu_io 常设基准，计数稳定]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4278 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 阶段④ 第六增量[task_scheduler 集成 有状态任务池 TaskPool + 测试 1 例]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，并行
 > 负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
@@ -244,10 +244,17 @@
 >   sum 0.058s]；timing 验证非常设测试[归常设基准，不入 pytest 避免 flaky]；零风险
 >   加法式[仅常设基准脚本，不动 Rust/测试代码]，merge 删分支；设计/裁定 = WORKLOG
 >   P9 阶段④ 第五增量条目）
+>   → **P9 阶段④ 第六增量 ✅**（task_scheduler GIL-free 集成——Rust 有状态任务池
+>   TaskPool：`ibci_ext.TaskPool(workers)` pyclass[submit(artifact) -> task_id 增量
+>   入队 + pending() 入队数 + run_all() -> list of [task_id, result_list] 取出全部
+>   经 Rust 线程 GIL-free 真并行执行按任务 ID 序返回]；Mutex 任务队列 + AtomicU64 任
+>   务 ID[submit 线程安全]；纯 CPU 面[无宿主服务，含宿主服务任务由单线程 run_artifact
+>   经桥接]；空池 run_all = 空列表；差分 harness 加 test_task_pool_equivalence[run_
+>   all 按任务 ID 序 == 顺序执行 + 空池 = []]——**4 线程 3.37x 真并行**[≈4x 理想]；
+>   零风险加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段④ 第六增量条目）
 >   → **当前批次 = P9 阶段④ 续（并发解除：task_scheduler GIL-free 集成续[Python
->   task_scheduler 实际接入 Rust 并行执行 API——submit CPU 任务经 run_artifacts_
->   parallel 并行] + CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]；隔离分支
->   续）**。
+>   task_scheduler 接入 TaskPool[submit CPU 任务]] + CPS 优化续[覆盖差 22 节点——
+>   LLM/意图面按需补齐]；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -303,7 +310,8 @@
    → 阶段④ 第三增量 CPS 续 IbImportFrom + 覆盖差可行性分析 34/34 全级 ✅
    → 阶段④ 第四增量 task_scheduler GIL-free 集成 run_artifacts_parallel 3.31x ✅
    → 阶段④ 第五增量 CPU+IO 真并行验证 bench_rust_cpu_io 并行比 1.07 ✅
-   → 阶段④ 续（task_scheduler 实际接入 + CPS 覆盖差 22 节点补齐）[当前]
+   → 阶段④ 第六增量 task_scheduler 集成 有状态任务池 TaskPool 3.37x ✅
+   → 阶段④ 续（task_scheduler 接入 TaskPool + CPS 覆盖差 22 节点补齐）[当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
