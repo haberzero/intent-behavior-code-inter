@@ -3583,6 +3583,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     scheduler GIL-free 集成续[Python task_scheduler 接入 TaskPool[submit CPU 任务] +
     CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]）续在隔离分支（差分门逐级验证）；
     语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 第七增量（task_scheduler GIL-free 集成续——Python task_scheduler 接入
+  TaskPool：CPU+IO 并发验证，并发比 1.05≈1.0，2026-09-10，隔离分支
+  `rust-kernel`）**：**Phase ④ CPU+IO GIL-free 集成落地验证**——实际 Python
+  task_scheduler（TaskScheduler，协作式调度 IO 任务，持 GIL）与 Rust TaskPool（GIL-free
+  真并行执行 CPU 任务）协同工作——IO 任务经 task_scheduler 协作式推进（持 GIL），CPU
+  任务经 TaskPool GIL-free 真并行（释放 GIL），两者并发（墙钟 ≈ max[IO, CPU]，非
+  sum[串行]）。这是 task_scheduler 接入 TaskPool 的集成验证（Phase ④ 目标：task_
+  scheduler IO-only → CPU+IO GIL-free）。
+  **交付**：
+  - **task_scheduler 集成验证**（`scripts/bench_task_scheduler_integration.py`，常设
+    基准）：线程 A = 实际 TaskScheduler.run() 推进 IO 任务[生成器，协作式，持 GIL，
+    T_io]；主线程 = Rust TaskPool.run_all() 并行执行 CPU 任务[释放 GIL，T_cpu]；两者
+    并发测墙钟 T_wall——**GIL-free 真并行集成 = T_wall ≈ max(T_io, T_cpu)**[非 T_io +
+    T_cpu 串行]。
+  **关键裁定（self-grill 全分支消解）**：① **实际 TaskScheduler + TaskPool 协同**
+    （非简化模型——用实际的 Python task_scheduler[TaskScheduler.run() 协作式推进 IO
+    任务] + 实际的 Rust TaskPool[run_all GIL-free 并行 CPU 任务]，验证真实集成）；
+    ② **IO 任务 = 生成器**（task_scheduler 契约：yield 挂起 / return 完成——本演示的
+    IO 任务为 CPU 密集[持 GIL，无实际 IO]，经 yield from iter(()) 成为生成器[无 yield
+    挂起，一步完成]）；③ **并发比 T_wall/T_io ≈ 1.0**（IO 主导，CPU 任务并行叠加，不
+    串行阻塞 IO——若 TaskPool 持 GIL，T_wall ≈ T_io + T_cpu[串行]）；④ **timing 验证
+    非常设测试**（CPU+IO 集成是 timing 属性，归常设基准，不入 pytest 避免 flaky）；
+    ⑤ **task_scheduler 本身不改**（本增量验证集成能力[TaskScheduler + TaskPool 并发]；
+    task_scheduler 内部接入 TaskPool[submit CPU 任务]归后续增量[需 task_scheduler 支
+    持 CPU 任务类型]）。
+  **验证**：**task_scheduler GIL-free 集成并发比 1.05 ≈ 1.0**（T_io=0.045s[TaskScheduler
+    协作式持 GIL] + CPU 任务×4[TaskPool GIL-free 并行] → T_wall=0.047s ≈ max[0.045s]，
+    非 sum）+ 差分 harness 20/20 + 全量 pytest 零回归（阶段④ 第七增量放行门——仅加常
+    设基准脚本，不动 Rust/测试代码，计数稳定 4278；见 NEXT_STEPS 基线锚点）。**阶段④
+    第七增量出口达成**（Phase ④ CPU+IO GIL-free 集成落地验证——实际 TaskScheduler +
+    TaskPool 并发）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 第七增量零风险加法式（仅常设基准脚本，
+    不动 Rust/测试代码），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（task_
+    scheduler GIL-free 集成续[task_scheduler 内部接入 TaskPool——支持 CPU 任务类型，
+    submit CPU 任务经 TaskPool 并行] + CPS 优化续[覆盖差 22 节点——LLM/意图面按需补
+    齐]）续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
