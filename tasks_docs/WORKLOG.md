@@ -3516,6 +3516,39 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     scheduler GIL-free 集成续[Python task_scheduler 接入 Rust 并行执行 API] + CPS
     优化续[覆盖差 22 节点——LLM/意图面按需补齐]）续在隔离分支（差分门逐级验证）；
     语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 第五增量（task_scheduler GIL-free 集成——CPU+IO 真并行验证：Rust
+  CPU 任务 GIL-free 与 GIL-bound Python 任务真并行，并行比 1.07≈1.0，2026-09-10，
+  隔离分支 `rust-kernel`）**：**Phase ④ 核心能力验证**——CPU+IO GIL-free 真并行（
+  task_scheduler IO-only → CPU+IO GIL-free 目标）。验证 Rust 执行核心的 CPU 工作
+  （GIL-free，经 py.allow_threads/run_artifacts_parallel 释放 GIL）可与 GIL-bound
+  的 Python 任务**真并行**（墙钟 ≈ max[CPU, IO]，非 sum[串行]）——task_scheduler 可
+  调度 CPU+IO 真并行（GIL-free）的地基。
+  **交付**：
+  - **CPU+IO 真并行验证**（`scripts/bench_rust_cpu_io.py`，常设基准）：线程 A =
+    GIL-bound Python 任务[纯 Python CPU 计算，持 GIL，T_io]；线程 B = GIL-free Rust
+    执行核心[run_artifacts_parallel，释放 GIL，T_cpu]；两线程并行测墙钟 T_wall——
+    **GIL-free 真并行 = T_wall ≈ max(T_io, T_cpu)**[非 T_io + T_cpu 串行]。
+  **关键裁定（self-grill 全分支消解）**：① **CPU+IO 真并行模型**（Rust CPU 工作
+    GIL-free[释放 GIL] + Python IO/CPU 工作 GIL-bound[持 GIL]——两者真并行，墙钟
+    ≈ max 非 sum；这是 Phase ④ 的核心目标[task_scheduler IO-only → CPU+IO GIL-
+    free]）；② **GIL-bound Python 任务 = 纯 Python CPU 计算**（持 GIL——对照组：
+    若 Rust 也持 GIL，两者串行[墙钟 ≈ sum]）；③ **并行比 T_wall/max**（≈1.0 = 真
+    并行；≈(T_io+T_cpu)/max = 串行——本验证 1.07 ≈ 1.0 真并行成立）；④ **timing
+    验证非常设测试**（CPU+IO 并行是 timing 属性，非确定性断言——归常设基准[bench_
+    rust_cpu_io.py]，不入 pytest[避免 flaky]）；⑤ **task_scheduler 接入后续**
+    （本增量验证核心能力；Python task_scheduler 实际接入 Rust 并行执行 API 归后续
+    增量）。
+  **验证**：**CPU+IO GIL-free 真并行并行比 1.07 ≈ 1.0**（T_io=0.045s GIL-bound +
+    T_cpu=0.013s GIL-free → T_wall=0.048s ≈ max[0.045s]，非 sum[0.058s]）+ 差分
+    harness 19/19 + 全量 pytest 零回归（阶段④ 第五增量放行门——仅加常设基准脚本，
+    不动 Rust/测试代码，计数稳定 4277；见 NEXT_STEPS 基线锚点）。**阶段④ 第五增量
+    出口达成**（Phase ④ 核心能力验证——CPU+IO GIL-free 真并行成立）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 第五增量零风险加法式（仅常设基准脚本，
+    不动 Rust/测试代码），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（task_
+    scheduler GIL-free 集成续[Python task_scheduler 实际接入 Rust 并行执行 API——
+    submit CPU 任务经 run_artifacts_parallel 并行] + CPS 优化续[覆盖差 22 节点——
+    LLM/意图面按需补齐]）续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量
+    Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
