@@ -150,6 +150,62 @@ fn run_artifact(
     Ok(list.unbind())
 }
 
+/// 并行执行 API（task_scheduler GIL-free 集成地基）：多 artifact（JSON 列表）经
+/// Rust 线程（std::thread）**GIL-free 真并行**执行——每线程分配一批 artifact，纯
+/// CPU（无宿主服务）全程 GIL 释放。返回 list of list（每项 = 一个 artifact 的
+/// print 输出列表）。workers = 并行线程数（纯 CPU 面；含宿主服务的 artifact 由
+/// 单线程 run_artifact 经桥接处理）。
+#[pyfunction]
+fn run_artifacts_parallel(
+    artifact_jsons: Vec<String>,
+    workers: u32,
+    py: Python<'_>,
+) -> PyResult<Py<PyList>> {
+    let n = artifact_jsons.len();
+    let w = (workers as usize).max(1).min(n.max(1));
+    // 均分：每线程 per 个 artifact（余数并入末批）
+    let per = n.div_ceil(w);
+    let chunks: Vec<Vec<String>> = (0..w)
+        .map(|wi| {
+            let lo = wi * per;
+            let hi = (lo + per).min(n);
+            artifact_jsons[lo..hi].to_vec()
+        })
+        .filter(|c| !c.is_empty())
+        .collect();
+    // GIL-free 真并行：释放 GIL，Rust 线程各执行一批（纯 CPU 无宿主服务）。每线程
+    // 返回 Vec<Vec<String>>（每 artifact 一个 print 输出列表）
+    let results: Vec<Vec<String>> = py.allow_threads(|| {
+        let handles: Vec<std::thread::JoinHandle<Vec<Vec<String>>>> = chunks
+            .into_iter()
+            .map(|chunk| {
+                std::thread::spawn(move || {
+                    chunk
+                        .into_iter()
+                        .map(|js| interpreter::run_artifact(&js, None))
+                        .collect()
+                })
+            })
+            .collect();
+        // 按线程序拼接（chunk 按 artifact 序均分 → 拼接 = artifact 序）
+        let mut all: Vec<Vec<String>> = Vec::new();
+        for h in handles {
+            all.extend(h.join().unwrap());
+        }
+        all
+    });
+    // 组装结果：list of list（每项 = 一个 artifact 的 print 输出）
+    let list = PyList::empty(py);
+    for artifact_results in results {
+        let inner = PyList::empty(py);
+        for line in artifact_results {
+            inner.append(line)?;
+        }
+        list.append(inner)?;
+    }
+    Ok(list.unbind())
+}
+
 #[pymodule]
 fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
@@ -161,6 +217,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(type_table, m)?)?;
     m.add_function(wrap_pyfunction!(node_types, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
+    m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())
 }

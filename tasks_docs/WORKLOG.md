@@ -3483,6 +3483,39 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（CPS 优化
     续[覆盖差 22 节点——IBC 支持面按需补齐 + LLM/意图面后续] + task_scheduler GIL-
     free 集成）续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 第四增量（task_scheduler GIL-free 集成——Rust 原生并行执行 API
+  run_artifacts_parallel，4 线程 3.31x 真并行，2026-09-10，隔离分支
+  `rust-kernel`）**：**Rust 执行核心 task_scheduler GIL-free 集成地基**——原生 Rust
+  并行执行 API（std::thread，GIL-free 真并行），多 artifact 经 Rust 线程并行执行，
+  结果 == 顺序执行（顺序保持）。这是 task_scheduler GIL-free 集成的地基（Rust 内核
+  可并行执行 CPU 任务）。
+  **交付**：
+  - **run_artifacts_parallel**（`ibci-ext/src/lib.rs`）：多 artifact（JSON 列表）经
+    Rust 线程（std::thread）GIL-free 真并行执行——均分 workers 批，每线程执行一批
+    （纯 CPU 无宿主服务，全程 GIL 释放），按线程序拼接（chunk 按 artifact 序均分 →
+    拼接 = artifact 序，顺序保持）；返回 list of list（每项 = 一个 artifact 的 print
+    输出列表）。
+  - **差分 harness 测试**（`test_parallel_execution_equivalence`）：并行执行 == 顺序
+    执行（结果 + 顺序保持）。
+  **关键裁定（self-grill 全分支消解）**：① **Rust 原生并行（std::thread）**（非
+    Python 线程——Rust 线程经 py.allow_threads 释放 GIL 后各执行一批，纯 CPU GIL-
+    free 真并行；区别于 bench_rust_parallel 的 Python 线程模型）；② **按线程序拼接
+    = artifact 序**（chunk 按 artifact 序均分[chunk i = artifact i*per..(i+1)*per]
+    → 线程序拼接 = artifact 序，顺序保持）；③ **纯 CPU 面**（无宿主服务——含宿主服务
+    的 artifact 由单线程 run_artifact 经桥接处理[IO 协作式]）；④ **每线程返回
+    Vec<Vec<String>>**（每 artifact 一个 print 输出列表——类型显式化，避免 collect
+    目标类型歧义）；⑤ **3.31x ≈ 4x 理想**（GIL-free 真并行成立——略低于理想 = 线程
+    启动/调度开销，非 GIL 竞争）。
+  **验证**：**4 线程并行 3.31x**（≈4x 理想，GIL-free 真并行）+ 并行结果 == 顺序结果
+    [4 artifact 顺序保持 MATCH] + 差分 harness 19/19 + smoke 832 零回归 + 全量 pytest
+    零回归（阶段④ 第四增量放行门——加法式增量不动 Python 执行路径，计数 4276 + 并行
+    执行测试 1 例 = 4277；见 NEXT_STEPS 基线锚点）。**阶段④ 第四增量出口达成**（Rust
+    执行核心 task_scheduler GIL-free 集成地基——原生 Rust 并行执行 API）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 第四增量零风险加法式（opt-in，不动
+    Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（task_
+    scheduler GIL-free 集成续[Python task_scheduler 接入 Rust 并行执行 API] + CPS
+    优化续[覆盖差 22 节点——LLM/意图面按需补齐]）续在隔离分支（差分门逐级验证）；
+    语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

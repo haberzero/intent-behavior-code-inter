@@ -367,3 +367,28 @@ class TestRustExecutionDataPlane:
             py = run_ibci(code)
             rs = rust_execution_data_plane(code, bridge if needs_bridge else None)
             assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+
+    def test_parallel_execution_equivalence(self):
+        """并行执行 API（run_artifacts_parallel）：多纯 CPU artifact 经 Rust 线程
+        GIL-free 真并行执行——结果 == 顺序执行（run_artifact），顺序保持。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "run_artifacts_parallel"):
+            return
+        # 4 个纯 CPU artifact（不同值，无宿主服务）
+        artifacts = []
+        for i in range(4):
+            code = f"s = 0\nfor j in range(1, 20001):\n    s = s + j + {i}\nprint(s)\n"
+            a = compile_ibci(code)
+            artifacts.append(
+                json.dumps(FlatSerializer().serialize_artifact(a), ensure_ascii=False)
+            )
+        # 顺序执行（run_artifact）
+        seq = [list(rk._module.run_artifact(js, None)) for js in artifacts]
+        # 4 线程并行执行（run_artifacts_parallel）
+        par = rk._module.run_artifacts_parallel(artifacts, 4)
+        par = [list(x) for x in par]
+        assert par == seq, f"并行执行 != 顺序执行：\n  seq: {seq}\n  par: {par}"
