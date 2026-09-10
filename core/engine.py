@@ -362,7 +362,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
-    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None, on_ready=None) -> bool:
+    def run_string(self, code: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None, deterministic_guard=None, on_ready=None) -> bool:
         """
         运行一段 IBCI 代码字符串。
 
@@ -373,7 +373,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         try:
             artifact = self.compile_string(code, variables, silent=silent)
             if prepare_interpreter:
-                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard, on_ready=on_ready)
+                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard, deterministic_guard=deterministic_guard, on_ready=on_ready)
             return True
         except CompilerError as e:
             if not silent:
@@ -387,7 +387,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 print(f"\nRuntime Error: {str(e)}")
             raise e
 
-    def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None, on_ready=None) -> bool:
+    def run(self, entry_file: str, variables: Optional[Dict[str, Any]] = None, output_callback=None, silent: bool = False, prepare_interpreter: bool = True, journal_writer=None, budget_guard=None, deterministic_guard=None, on_ready=None) -> bool:
         # 多阶段启动：先确立 project_root + root-dependent 初始化
         project_root = self._establish_project_root(entry_file)
         self._ensure_root_initialized(project_root)
@@ -415,7 +415,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             artifact = self.compile(abs_entry, variables, silent=silent)
 
             if prepare_interpreter:
-                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard, on_ready=on_ready)
+                return self.execute(artifact, variables, output_callback, journal_writer=journal_writer, budget_guard=budget_guard, deterministic_guard=deterministic_guard, on_ready=on_ready)
 
             return True
 
@@ -469,7 +469,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         
         return self.scheduler.compile_project(abs_entry, entry_module_name=entry_module_name)
 
-    def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None, journal_writer=None, budget_guard=None, on_ready=None) -> bool:
+    def execute(self, artifact: CompilationArtifact, variables: Optional[Dict[str, Any]] = None, output_callback=None, journal_writer=None, budget_guard=None, deterministic_guard=None, on_ready=None) -> bool:
         """
          调度入口。执行编译产物。
          注意：如果引擎已经处于 READY 状态，调用此方法将抛出状态冲突错误。建议每个执行流创建新的引擎实例。
@@ -504,6 +504,9 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # LLM 预算守卫挂载（api_config budget 节驱动；None = 无预算，零侵入）
         if budget_guard is not None:
             self.interpreter.service_context.set_budget_guard(budget_guard)
+        # 确定性执行守卫挂载（--deterministic 零 LLM 不变量；None = 未启用，零侵入）
+        if deterministic_guard is not None:
+            self.interpreter.service_context.set_deterministic_guard(deterministic_guard)
         # on_ready 钩子（解释器 + 插件就绪后、执行开始前；None = 无钩子，零侵入）
         if on_ready is not None:
             on_ready(self)

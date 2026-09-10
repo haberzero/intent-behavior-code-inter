@@ -48,6 +48,7 @@ class ServiceContextImpl:
         self._test_hooks = None
         self._llm_journal = None
         self._budget_guard = None
+        self._deterministic_guard = None
 
     @property
     def test_hooks(self) -> Optional[Any]:
@@ -164,3 +165,13 @@ class ServiceContextImpl:
     def set_budget_guard(self, guard: Optional[Any]) -> None:
         """挂载当前 run 的 LLM 预算守卫（Engine 在解释器就绪后调用）。"""
         self._budget_guard = guard
+
+    @property
+    def deterministic_guard(self) -> Optional[Any]:
+        """当前 run 的确定性执行守卫（--deterministic 零 LLM 不变量；
+        未启用 = None，零侵入）。"""
+        return self._deterministic_guard
+
+    def set_deterministic_guard(self, guard: Optional[Any]) -> None:
+        """挂载当前 run 的确定性执行守卫（Engine 在解释器就绪后调用）。"""
+        self._deterministic_guard = guard

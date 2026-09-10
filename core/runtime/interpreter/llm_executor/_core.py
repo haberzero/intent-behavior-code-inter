@@ -173,6 +173,14 @@ class LLMExecutorCore:
             return None
         return sc.budget_guard
 
+    def _get_deterministic_guard(self) -> Optional[Any]:
+        """当前 run 的确定性执行守卫（未启用返回 None）。"""
+        try:
+            sc = self.service_context
+        except RuntimeError:
+            return None
+        return sc.deterministic_guard
+
     def _finalize_call(self, result: Any, call_info: Mapping[str, Any], record_current: bool = True) -> Any:
         """绑定调用信息到结果对象（可选记录主线程单写槽）。
 
@@ -237,6 +245,12 @@ class LLMExecutorCore:
         if self.llm_callback:
             journal = self._get_llm_journal()
             budget = self._get_budget_guard()
+            deterministic = self._get_deterministic_guard()
+            # 确定性执行模式（--deterministic）：零 LLM 不变量，provider 调用
+            # 前结构性拦截（强不变量优先于 budget 阈值面——首个 LLM 调用即
+            # fail-fast RUN_DETERMINISTIC_LLM_CALL，被拦调用不发出）。
+            if deterministic is not None:
+                deterministic.check_pre_call(request.node_uid)
             # 预算 fail 模式：provider 调用前确定性拦截（零浪费——被拦调用
             # 不发出）。无守卫/无超限 = 无副作用（零侵入）。
             if budget is not None:

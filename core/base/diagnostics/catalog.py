@@ -336,6 +336,10 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="LLM 运行预算超限（tokens / 调用次数 / 墙钟，on_exceed=fail 时在 provider 调用前拦截）。",
         fix="在 api_config.json budget 节调整阈值（max_tokens / max_calls / max_wall_s）或 on_exceed=warn 改为仅告警。",
     ),
+    "RUN_DETERMINISTIC_LLM_CALL": CodeInfo(
+        title="确定性执行模式（run --deterministic）下尝试 LLM 调用——零 LLM 不变量在调用汇点结构性拦截。",
+        fix="本 run 要求零 LLM（D1：判定/验证路径确定性）：移除/改写触发 LLM 的 @~...~ 调用点，或去掉 --deterministic 以允许 LLM。与 RUN_BUDGET_EXCEEDED 分面（零容忍不变量 vs 用户配置阈值）。",
+    ),
     "RUN_JSON_PARSE_ERROR": CodeInfo(
         title="JSON 解析/序列化失败（malformed JSON / 不可序列化值）。",
         fix="检查 JSON 字符串格式合法性（引号、逗号、括号配对）；改用 `json.parse_or_none(s)` 以显式宽松形态处理（失败返回 None，无副作用）。",

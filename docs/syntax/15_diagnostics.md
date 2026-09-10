@@ -547,6 +547,12 @@ LLM 运行预算超限（run 级 tokens / 调用次数 / 墙钟核算）。
 - **严重级别**：ERROR。
 - **修复方式**：调整 `budget` 节阈值（max_tokens / max_calls / max_wall_s），或改 `on_exceed: "warn"` 仅告警。
 
+#### `RUN_DETERMINISTIC_LLM_CALL`
+确定性执行模式（`run --deterministic`）下尝试 LLM 调用。
+- **触发条件**：以 `--deterministic` 启动的 run 中发生任何 LLM 调用（`@~...~` 行为表达式执行）——零 LLM 不变量在**调用汇点、provider 调用前**结构性拦截（被拦调用不发出，无部分 LLM 态）。与 `RUN_BUDGET_EXCEEDED` 分面：本码 = run 级零容忍不变量（无阈值、无 warn 面），预算码 = 用户配置阈值。
+- **严重级别**：ERROR。
+- **修复方式**：移除/改写触发 LLM 的 `@~...~` 调用点（确定性模式的目标正是判定/验证路径零 LLM），或去掉 `--deterministic` 以允许 LLM。边界：拦截面 = LLM 调用汇点（同 journal/budget）；流式 `ai.stream_call` 与 `meta.eval` 子进程不经本守卫（见 `docs/KNOWN_LIMITS.md`）。
+
 #### `RUN_JSON_PARSE_ERROR`
 JSON 解析/序列化失败（malformed JSON / 不可序列化值）。
 - **触发条件**：`json.parse` 遇非法 JSON；`json.stringify`/`json.pretty` 遇不可序列化值（如循环引用）。fail-fast 抛可捕获异常（经 `try/except` 处理），不静默返回空值、无 print 副作用。
