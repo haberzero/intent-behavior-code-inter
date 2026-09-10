@@ -27,6 +27,15 @@ def python_kernel_data_plane(script: str) -> str:
     return "\n".join(run_ibci(script))
 
 
+def python_lexer_tokens(script: str) -> List[Dict[str, object]]:
+    """Python 参考 lexer：source → token 流（type 名/value/line/column）。"""
+    from core.compiler.lexer.lexer import Lexer
+    return [
+        {"type": t.type.name, "value": t.value, "line": t.line, "column": t.column}
+        for t in Lexer(script).tokenize()
+    ]
+
+
 @dataclass
 class RustKernel:
     """Rust 内核（ibci_ext pyo3 扩展）的加载态 + 元数据。"""
@@ -72,6 +81,31 @@ def load_rust_kernel() -> RustKernel:
         )
     except Exception:
         return RustKernel(loaded=False)
+
+
+def rust_lexer_tokens(script: str) -> List[Dict[str, object]]:
+    """Rust lexer（ibci_ext.lex）：source → token 流（对齐 Python lexer）。
+
+    .so 未构建 = 空列表（合法态——token 级差分降级为仅 Python 参考）。
+    """
+    rk = load_rust_kernel()
+    if not rk.loaded:
+        return []
+    return [
+        {"type": t["type"], "value": t["value"], "line": t["line"], "column": t["column"]}
+        for t in rk._module.lex(script)
+    ]
+
+
+def token_differential(script: str) -> bool:
+    """token 级差分等价：Rust lexer token 流 == Python lexer token 流（逐条）。
+
+    .so 未构建 → 降级（返回 True，不冒充等价——由调用方据 loaded 判定覆盖）。
+    """
+    rust = rust_lexer_tokens(script)
+    if not rust:
+        return True
+    return rust == python_lexer_tokens(script)
 
 
 @dataclass

@@ -226,14 +226,24 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     内核 = 生产快路径（显式 opt-in **无静默回退** fail-fast）；两内核共享同一 AST
     契约 + contracts 语义红线；Rust 扩展 opt-in（默认 Python 零依赖可装，.so 可再
     生 gitignore）。**零风险加法式地基**（不动 Python 执行路径）。
-  - **P9 阶段② Rust 前端（当前批次，隔离分支续）**：lexer/parser/semantic →
-    序列化 AST（契约对接 `core/compiler/serialization` 的 FlatSerializer——字节串
-    → AST）；opt-in kernel 选择点（engine 前端）；差分 harness 门（前端落地后
-    Rust AST 与 Python AST 差分等价）。**低风险**（纯 CPU、契约最清晰：字节串→
-    AST）。四阶段全貌：① 地基 ✅ → **② 前端（当前）** → ③ 执行核心[主战场，高
-    风险：CPS dispatch 表 → Rust enum 分发 + 差分门] → ④ 并发解除[task_scheduler
-    IO-only → CPU+IO 真并行 GIL-free]。确认零风险（全量零回归 + 复核）后 merge
-    unsafe-vibe-dev 并删分支。
+  - **P9 阶段② 首增量 Rust lexer 已落地（本 session，隔离分支 `rust-kernel` →
+    已 merge unsafe-vibe-dev 删分支）**：Rust lexer 移植（`ibci-ext/src/lexer.rs`
+    对齐 Python `core/compiler/lexer` core normal 模式——StrStream + CoreScanner
+    + IndentProcessor + 行处理）+ `ibci_ext.lex` 暴露 token 流 + 差分 harness 加
+    **token 级差分面**（Rust token 流 == Python token 流，type/value/line/column
+    逐条）——**14/14 语料 token 级逐条等价**（修 3 类移植 bug：运算符先消费首
+    字符 / INDENT column 消费前记录 / EOF dedent column=0）。行为块(@~...~)/意图/
+    三引号串/raw 串/变量引用 = 后续增量（渐进移植 + 差分门，非 subset 双通道）。
+    **零风险加法式**（opt-in，不动 Python 执行路径）。
+  - **P9 阶段② 续 Rust parser→AST（当前批次，隔离分支续）**：lexer → parser
+    （token 流 → AST）+ **AST 级差分门**（Rust AST == Python AST，契约对接
+    `core/compiler/serialization` 的 FlatSerializer）；opt-in kernel 选择点
+    （engine 前端）。**低风险**（纯 CPU、契约最清晰：token 流→AST）。三级差分
+    逐级验证：token 级（lexer ✅）→ AST 级（parser/semantic）→ 数据面（执行
+    核心，现有 harness）。四阶段全貌：① 地基 ✅ → **② 前端（lexer ✅ / parser
+    当前）** → ③ 执行核心[主战场，高风险：CPS dispatch 表 → Rust enum 分发 +
+    差分门] → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。
+    确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -292,9 +302,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段① 开分支/阶段边界实跑）**：**4263 passed /
-  1 skipped / 128.92s / rc=0**（= 前基线 4257 + 差分 harness 5 例 + meta 参数化增量 1；
-  供下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段② 首增量阶段边界实跑）**：**4266 passed /
+  1 skipped / 127.55s / rc=0**（= 前基线 4263 + token 级差分 3 例；供下一 session
+  参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 

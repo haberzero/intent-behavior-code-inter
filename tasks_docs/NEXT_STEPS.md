@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4263 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段① 开分支/阶段边界放行门[加法式地基 + harness 5 例]；数字以实跑为准，不冻结）。
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4266 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 阶段② 首增量[加法式 + token 级差分 3 例]阶段边界放行门；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -82,8 +82,14 @@
 >   Rust，废弃 Python 双通道/对比**（迁移期安全网退场）。双内核 + 差分 harness =
 >   **迁移期临时安全网**（非永久）。设计/裁定 = `_rust_kernel_survey.md` §2.3/§2.6
 >   + WORKLOG（P9 终点裁定条目）。
->   → **当前批次 = P9 阶段② Rust 前端（lexer/parser/semantic→序列化 AST，
->   隔离分支续；契约对接 core/compiler/serialization）**。
+>   → **P9 阶段② 首增量 ✅**（Rust lexer 移植——对齐 Python core normal 模式
+>   [StrStream + CoreScanner + IndentProcessor + 行处理]；`ibci_ext.lex` 暴露
+>   token 流；差分 harness 加 token 级差分面；**14/14 语料 token 级逐条等价**；
+>   修 3 类移植 bug[运算符先消费首字符/INDENT column 消费前记录/EOF dedent
+>   column=0]；行为块/意图/三引号/raw/变量引用 = 后续增量；零风险加法式，merge
+>   删分支；设计/裁定 = WORKLOG P9 阶段② 首增量条目）
+>   → **当前批次 = P9 阶段② 续（Rust parser→AST 级差分门；契约对接
+>   core/compiler/serialization 的 FlatSerializer；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -119,8 +125,8 @@
    可灵活微调[用户 2026-09-10 裁定]；执行序列
    P1 R-A quote/eval ✅ → P2 R-B KB ✅ → P3 磁盘格式 ✅ → P4 R-C 确定性模式 ✅
    → P5 R-D 工件加载 ✅ → P6 向量面 ✅ → P7 R-F 投影派生视图 ✅ → P8 测试进程内化 ✅
-   → **P9 Rust 内核 阶段① 地基 ✅ → 阶段② Rust 前端（下一批次，隔离分支续）**
-   → 阶段③ 执行核心[主战场] → 阶段④ 并发解除
+   → **P9 Rust 内核 阶段① 地基 ✅ → 阶段② 首增量 Rust lexer ✅**
+   → 阶段② 续 Rust parser→AST[当前] → 阶段③ 执行核心[主战场] → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root）；

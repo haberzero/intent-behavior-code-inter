@@ -5,18 +5,45 @@
 //! 层语义红线。本 crate = Rust 内核的执行体（GIL-free，py.allow_threads 释放
 //! GIL）。
 //!
-//! 当前形态：骨架（version / kernel_info / run 显式 NotImplemented）——验证
-//! 构建链 + pyo3 绑定 + 差分 harness 接入点。run 执行核心待后续扩展落地
-//! （kernel_info.status 由 "skeleton" 升 "ready" 后 run 才生效）。
+//! 当前形态：构建链 + Rust lexer（version / kernel_info / lex / run 显式
+//! NotImplemented）——验证构建链 + pyo3 绑定 + 差分 harness 接入点。run 执行
+//! 核心待后续扩展落地（kernel_info.status 由 "skeleton" 升 "ready" 后 run 才
+//! 生效）。
+
+mod lexer;
 
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
+use pyo3::Py;
 
 /// crate 版本（构建链自检面）。
 #[pyfunction]
 fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// IBC 源码 → token 流（Rust lexer；对齐 Python `core/compiler/lexer`）。
+///
+/// 返回 list of dict（每项 = {type, value, line, column, end_line,
+/// end_column, is_at_line_start}）——差分 harness 经此与 Python lexer token
+/// 流逐条比对（type 名 + value + line/column 等价）。
+#[pyfunction]
+fn lex(script: &str, py: Python<'_>) -> PyResult<Py<PyList>> {
+    let tokens = lexer::lex(script);
+    let list = PyList::empty(py);
+    for t in tokens {
+        let d = PyDict::new(py);
+        d.set_item("type", t.type_.name())?;
+        d.set_item("value", t.value)?;
+        d.set_item("line", t.line)?;
+        d.set_item("column", t.column)?;
+        d.set_item("end_line", t.end_line)?;
+        d.set_item("end_column", t.end_column)?;
+        d.set_item("is_at_line_start", t.is_at_line_start)?;
+        list.append(d)?;
+    }
+    Ok(list.unbind())
 }
 
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
@@ -47,6 +74,7 @@ fn run(_script: &str) -> PyResult<String> {
 fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(kernel_info, m)?)?;
+    m.add_function(wrap_pyfunction!(lex, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())
 }

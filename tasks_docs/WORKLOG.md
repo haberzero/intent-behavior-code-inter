@@ -2805,6 +2805,40 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   完成后开启新评估 + 新自主执行模式（评估全核心逻辑全量 Rust 化：编译/语义/调度/
   并发等核心面逐一证明可 Rust 化）→ 证明绝大部分关键核心逻辑可 Rust 化 → 全量
   转向 Rust + 废弃 Python 双通道/对比（保留关键部分 Python 接口）。
+- **P9 阶段② Rust 前端首增量（Rust lexer 移植 + token 级差分等价，2026-09-10，
+  隔离分支 `rust-kernel`；全量 Rust 化迁移的前端地基）**：**Rust 化 IBCI 前端
+  首增量**——lexer（源码 → token 流）移植到 Rust，经 token 级差分等价验证与
+  Python 参考 lexer 逐条等价（差分 harness 门）。
+  **交付**：
+  - **Rust lexer**（`ibci-ext/src/lexer.rs`）：对齐 Python `core/compiler/lexer`
+    的 core normal 模式——StrStream（位置跟踪 line/col，对齐 str_stream.py）+
+    CoreScanner（scan_line 行循环 + _scan_normal_char 字符分派 + 字符串/数字/
+    标识符/关键字/运算符[两字符优先] + 括号栈[续行] + 注释）+ IndentProcessor
+    （INDENT/DEDENT，start_col 消费前记录 + tab=1 + EOF dedent column=0）+ 行
+    处理（lexer.py 循环 + 续行）。移植范围 = 语料面（算术/控制流/函数/容器/
+    字符串/KB）；行为块(@~...~)/意图/三引号串/raw 串/变量引用($x) = 后续增量。
+  - **pyo3 暴露**：`ibci_ext.lex(script) -> list[dict]`（每项 = {type, value,
+    line, column, end_line, end_column, is_at_line_start}）。
+  - **差分 harness 扩展**（`tests/diff_harness/harness.py`）：token 级差分面
+    （`python_lexer_tokens`/`rust_lexer_tokens`/`token_differential`）——Rust
+    token 流 == Python token 流（type 名 + value + line + column 逐条）；.so 未
+    构建 = 优雅降级（不冒充等价）。
+  **关键裁定（self-grill 全分支消解）**：① **token 级差分 = 前端首增量门**
+  （Rust lexer 与 Python lexer 逐条等价——后续 parser/semantic 增量经 AST 级
+  差分门，最终执行核心经数据面差分门[现有 harness]，三级差分逐级验证）；②
+  **移植范围 = 语料面**（覆盖差分 harness 14 条语料；行为块/意图等子状态 = 后续
+  增量，非 subset 双通道——是渐进移植 + 差分门，终点 = 全量 Rust 前端）；③
+  **差分等价实证（14/14 语料 token 级逐条等价）**——修 3 类移植 bug（运算符未
+  先消费首字符致 match 误匹配 / INDENT column 须消费前记录 start_col / EOF
+  dedent column=0）；④ **Rust 借用纪律**（单一 Lexer struct 自持 scanner + 状态，
+  `&mut` 方法——避免 Python 共享 StrStream 的借用问题）。
+  **验证**：token 级差分 14/14 语料逐条等价 + 全量 pytest 零回归（阶段边界放行
+  门——加法式增量不动 Python 执行路径，计数 = 4263 + harness 3 = 4266；见
+  NEXT_STEPS 基线锚点）。**阶段② 首增量出口达成**（Rust lexer 移植 + token 级
+  差分等价门就位）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段② 首增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（parser/
+  semantic）+ ③ 执行核心 + ④ 并发解除续在隔离分支（差分门逐级验证）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

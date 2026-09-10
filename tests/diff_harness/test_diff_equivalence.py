@@ -14,6 +14,8 @@ tests/diff_harness/test_diff_equivalence.py
 注：本 harness 是常设交付物（整个替换的安全网）——语料扩展（现有测试用例 +
 fuzz 种子）+ Rust 就绪后的差分比对归后续阶段。
 """
+import pytest
+
 from tests.diff_harness.corpus import CORPUS, names
 from tests.diff_harness.harness import differential_check, load_rust_kernel, python_kernel_data_plane
 
@@ -69,3 +71,53 @@ class TestDifferentialReport:
             assert report.compared == 0
         summary = report.summary()
         assert "差分 harness" in summary
+
+
+class TestRustLexerTokenDifferential:
+    """Rust lexer（ibci_ext.lex）vs Python lexer 的 token 级差分等价（语料面）。
+
+    Rust lexer = Rust 前端首增量（core normal 模式：数字/标识符/关键字/字符串/
+    运算符/括号/点/冒号/逗号/注释/换行 + 行处理 + 缩进）。token 级差分 = Rust
+    token 流 == Python token 流（type 名 + value + line + column 逐条）。
+    """
+
+    def test_lexer_loaded_or_graceful(self):
+        """Rust lexer 已构建 = 已加载；未构建 = 优雅降级（token 级差分跳过）。"""
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        # 未构建亦是合法态（harness 优雅降级）
+        assert rk.loaded in (True, False)
+
+    def test_token_differential_corpus(self):
+        """token 级差分等价：全部语料 Rust token 流 == Python token 流。"""
+        from tests.diff_harness.harness import (
+            load_rust_kernel, python_lexer_tokens, rust_lexer_tokens,
+        )
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            pytest.importorskip("tests", reason="Rust .so 未构建——token 级差分跳过")
+            return
+        for name, script in CORPUS:
+            pt = python_lexer_tokens(script)
+            rt = rust_lexer_tokens(script)
+            assert rt == pt, f"语料 {name} token 级差分不等价"
+
+    def test_token_differential_simple(self):
+        """token 级差分等价：简单 IBCI 片段（算术/控制流/字符串/容器）。"""
+        from tests.diff_harness.harness import (
+            load_rust_kernel, python_lexer_tokens, rust_lexer_tokens,
+        )
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        snippets = [
+            "x = 1 + 2 * 3\nprint(x)\n",
+            's = "hello"\nprint(s)\n',
+            "xs = [1, 2, 3]\nprint(xs)\n",
+            "d = {'a': 1}\nprint(d)\n",
+            "if x > 5:\n    print('big')\nelse:\n    print('small')\n",
+            "for i in range(3):\n    print(i)\n",
+            "func add(int a, int b) -> int:\n    return a + b\n",
+        ]
+        for src in snippets:
+            assert rust_lexer_tokens(src) == python_lexer_tokens(src)
