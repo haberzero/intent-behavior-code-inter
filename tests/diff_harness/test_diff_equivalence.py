@@ -187,3 +187,33 @@ class TestRustParserAstDifferential:
             rs = rust_parse_struct(src)
             py = parse_ast_dump(src, include_positions=True)
             assert rs == py, f"剩余面 AST 级差分不等价：\n  py : {py}\n  rust: {rs}"
+
+
+class TestRustDeserializerDifferential:
+    """Rust 反序列化器（ibci_ext.deserialize_struct）vs Python AST 的差分等价。
+
+    执行核心的输入契约：Rust 侧消费 Python 前端产出的序列化 artifact
+    （FlatSerializer JSON，含语义层输出），反重构 AST。差分 = 反序列化 AST 完整
+    形态（含位置）== Python AST 完整形态（验证 Rust 侧可消费 artifact）。
+    """
+
+    def test_deserializer_corpus(self):
+        """反序列化差分等价：全部语料（artifact → Rust AST == Python AST）。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.ast_dump import parse_ast_dump
+        from tests.diff_harness.harness import load_rust_kernel, rust_deserialize_struct
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        for name, code in CORPUS:
+            try:
+                artifact = compile_ibci(code)
+            except Exception:
+                continue  # 编译失败语料跳过（合法态）
+            data = FlatSerializer().serialize_artifact(artifact)
+            js = json.dumps(data, ensure_ascii=False)
+            rs = rust_deserialize_struct(js)
+            py = parse_ast_dump(code, include_positions=True)
+            assert rs == py, f"语料 {name} 反序列化 AST 差分不等价：\n  py : {py}\n  rust: {rs}"

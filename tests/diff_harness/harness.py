@@ -147,6 +147,18 @@ def ast_differential(script: str) -> bool:
     return rust == parse_ast_dump(script, include_positions=True)
 
 
+def rust_deserialize_struct(artifact_json: str) -> str:
+    """Rust 反序列化器（ibci_ext.deserialize_struct）：artifact JSON → AST 完整
+    形态（执行核心的输入契约——消费 Python 前端产出的 artifact）。
+
+    .so 未构建 = 空串（合法态——降级为仅 Python 参考）。
+    """
+    rk = load_rust_kernel()
+    if not rk.loaded:
+        return ""
+    return rk._module.deserialize_struct(artifact_json)
+
+
 @dataclass
 class DiffReport:
     """差分比对报告：每语料的 Python/Rust 数据面 + 等价判定 + 汇总。"""

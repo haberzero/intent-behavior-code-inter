@@ -39,7 +39,7 @@ impl Pos {
         }
     }
     /// 合成模块位置（IbModule：(0,0,None,None)）。
-    fn module() -> Pos {
+    pub fn module() -> Pos {
         Pos {
             lineno: 0,
             col_offset: 0,

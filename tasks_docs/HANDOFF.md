@@ -271,14 +271,27 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     parse_ternary→parse_compare，右结合] / Lambda[IbLambdaExpr，typed params +
     返回类型]——**7/7 剩余面 AST 完整形态[含位置]逐字节等价 + 语料面 14/14 无回
     归**。**零风险加法式**（opt-in，不动 Python 执行路径）。
-  - **P9 阶段② 续（当前批次，隔离分支续）**：**语义层**（symbol table / type
-    env，AST → 带符号/类型的 AST）。三级差分逐级验证：token 级（lexer ✅ 完整位
-    置）→ AST 级（parser 完整面 + 剩余面 + 位置 ✅ / 语义当前）→ 数据面（执行核
-    心，现有 harness）。四阶段全貌：① 地基 ✅ → **② 前端（lexer ✅ / parser 完
-    整面 + 剩余面 + 位置 ✅ / 语义当前）** → ③ 执行核心[主战场，高风险：CPS
-    dispatch 表 → Rust enum 分发 + 差分门] → ④ 并发解除[task_scheduler IO-only
-    → CPU+IO 真并行 GIL-free]。确认零风险（全量零回归 + 复核）后 merge
-    unsafe-vibe-dev 并删分支。
+  - **战略微调（2026-09-10，据总体规划灵活微调授权）**：语义层（7427 行 + 完整
+    环境依赖[registry/source manager]）Rust 移植**推迟 = 全量 Rust 化后续**；
+    **直接推进阶段③ 执行核心（主战场）**——执行核心消费 Python 前端产出的序列化
+    artifact（FlatSerializer JSON，含语义层输出[符号表/类型/侧表]），Rust 侧反序
+    列化 + 执行（cProfile 实证性能瓶颈，价值最高）。渐进 Rust 化：执行核心（Rust）
+    + 前端（Python）先行，前端 Rust 化（语义层）后续。
+  - **P9 阶段③ 首增量 执行核心反序列化器 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：Rust artifact 反序列化器
+    （`ibci-ext/src/deserializer.rs`）——序列化 CompilationArtifact（FlatSerializer
+    JSON，nodes/symbols/scopes/types 池 + UID 引用）→ Rust AST（复用 parser 的
+    Expr/Stmt 类型 + dumper）。本增量 = nodes 池[语料面 19 种节点] → Rust AST。
+    + serde_json 依赖 + 差分 harness 加反序列化器差分面——**14/14 语料反序列化
+    AST 逐字节等价**（artifact → Rust AST == Python AST）。执行核心输入契约就位。
+    **零风险加法式**（opt-in，不动 Python 执行路径）。
+  - **P9 阶段③ 续（当前批次，隔离分支续）**：执行核心——符号池/类型池/侧表反序列
+    化 + 对象模型（IbValue：int/str/list/dict 等）+ CPS 分发[43 节点 → Rust enum
+    分发] + **数据面差分门**（Rust 执行 == Python 执行，现有 harness）。四阶段全
+    貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 + 剩余面 + 位置 ✅ / 语义
+    推迟）→ **③ 执行核心[主战场，当前：反序列化器 ✅ / 对象模型 + CPS 分发]** →
+    ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。确认零风险
+    （全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -337,8 +350,8 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段② 第五增量阶段边界实跑）**：**4269 passed /
-  1 skipped / 127.89s / rc=0**（= 前基线 4268 + 剩余面 1 例；供下一 session
+- **全量 pytest 基线（本 session P9 阶段③ 首增量阶段边界实跑）**：**4270 passed /
+  1 skipped / 130.82s / rc=0**（= 前基线 4269 + 反序列化器 1 例；供下一 session
   参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）

@@ -2985,6 +2985,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（语义层
   [符号表/类型环境]——AST → 带符号/类型的 AST）+ ③ 执行核心 + ④ 并发解除续在
   隔离分支（差分门逐级验证）。
+- **P9 阶段③ 首增量（执行核心：Rust artifact 反序列化器 + 战略微调，2026-09-10，
+  隔离分支 `rust-kernel`）**：
+  **战略微调（据总体规划灵活微调授权）**：P9 阶段②（前端）的语义层（7427 行多
+  pass pipeline + 需完整编译环境[registry/source manager/issue tracker]）推迟
+  Rust 移植；**直接推进阶段③ 执行核心（主战场）**——执行核心消费 Python 前端
+  产出的序列化 artifact（FlatSerializer JSON，含语义层输出[符号表/类型/侧表]），
+  Rust 侧反序列化 + 执行；语义层 Rust 移植 = 全量 Rust 化后续（非阻塞执行核心）。
+  **依据**：① 执行核心 = cProfile 实证的性能瓶颈（per-step Python 反射/间接，
+  量级差距）——主战场，价值最高；② 语义层 7427 行 + 完整环境依赖，移植成本高，
+  且执行核心可消费 Python 语义层输出（经 artifact），非阻塞；③ 渐进 Rust 化：
+  执行核心（Rust）+ 前端（Python）先行，前端 Rust 化（语义层）后续。
+  **交付**：
+  - **Rust artifact 反序列化器**（`ibci-ext/src/deserializer.rs`）：序列化
+    CompilationArtifact（FlatSerializer JSON dict，nodes/symbols/scopes/types 池
+    + UID 引用）→ Rust AST（复用 parser 的 Expr/Stmt 类型 + dumper）。本增量 =
+    nodes 池（AST 节点，语料面 19 种节点类型）→ Rust AST。符号池/类型池/侧表 =
+    后续增量（执行核心需要）。
+  - **pyo3 暴露**：`ibci_ext.deserialize_struct(artifact_json) -> str`（反序列化
+    AST 完整形态，含位置）。
+  - **serde_json 依赖**（Cargo.toml + cargo 网络下载）——artifact JSON 解析。
+  - **差分 harness 扩展**：反序列化器差分面（`rust_deserialize_struct`）——
+    artifact JSON → Rust AST == Python AST（完整形态含位置）。
+  **关键裁定（self-grill 全分支消解）**：① **执行核心消费 Python artifact**（迁移
+  期策略——前端 Python[lexer/parser/semantic] → artifact → Rust 执行核心；前端
+  Rust 化[语义层]后续，非阻塞执行核心）；② **反序列化器 = 执行核心输入契约**
+  （Rust 侧消费 FlatSerializer JSON——nodes 池 UID 引用 → 重构 AST；符号/类型/
+  侧表后续）；③ **复用 parser AST 类型 + dumper**（反序列化器重构 parser 的
+  Expr/Stmt，复用 dumper 验证——单一 AST 权威形态）；④ **serde_json 依赖**
+  （artifact 是 JSON dict，serde_json 是标准解析——非常规网络下载，允许）。
+  **验证**：反序列化 AST 差分 **14/14 语料逐字节等价**（artifact → Rust AST ==
+  Python AST，完整形态含位置）+ 全量 pytest 零回归（阶段边界放行门——加法式增量
+  不动 Python 执行路径，计数 = 4269 + 反序列化器 1 例 = 4270；见 NEXT_STEPS 基线
+  锚点）。**阶段③ 首增量出口达成**（Rust artifact 反序列化器 + 执行核心输入契约
+  就位）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 首增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（执行核心：
+  符号池/类型池/侧表反序列化 + 对象模型 + CPS 分发[43 节点] + 数据面差分门）+ ④
+  并发解除续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -10,6 +10,7 @@
 //! 核心待后续扩展落地（kernel_info.status 由 "skeleton" 升 "ready" 后 run 才
 //! 生效）。
 
+mod deserializer;
 mod lexer;
 mod parser;
 
@@ -55,6 +56,13 @@ fn parse_struct(script: &str) -> String {
     parser::parse_struct(script)
 }
 
+/// 序列化 artifact（JSON dict 字符串）→ 反序列化 AST 完整形态（含位置）。
+/// 执行核心的输入契约：Rust 侧消费 Python 前端产出的 artifact（含语义层输出）。
+#[pyfunction]
+fn deserialize_struct(artifact_json: &str) -> String {
+    deserializer::deserialize_struct(artifact_json)
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态，决定双内核比对是否就绪（status != "ready" = 未就绪，
 /// 仅跑 Python 参考内核）。
@@ -85,6 +93,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(kernel_info, m)?)?;
     m.add_function(wrap_pyfunction!(lex, m)?)?;
     m.add_function(wrap_pyfunction!(parse_struct, m)?)?;
+    m.add_function(wrap_pyfunction!(deserialize_struct, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())
 }
