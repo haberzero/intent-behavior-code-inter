@@ -32,8 +32,8 @@
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4278 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段④ 第八增量[task_scheduler 内部接入 异步 CPU 任务 waitable bench 常设基准，计数稳定]
-> 放行门[注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
+> P9 阶段④ 收束[kernel_info 升级 stage 4 / concurrency-core，计数稳定]放行门
+> [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
@@ -274,9 +274,21 @@
 >   非常设测试[归常设基准，不入 pytest 避免 flaky]；task_scheduler 本身不改[CPUTask
 >   Waitable 为 Python 侧集成点[依赖 Rust 内核 opt-in]，归全量 Rust 化后续]；零风险加
 >   法式[仅常设基准脚本]，merge 删分支；设计/裁定 = WORKLOG P9 阶段④ 第八增量条目）
->   → **当前批次 = P9 阶段④ 续（并发解除：task_scheduler GIL-free 集成收束[CPUTask
->   Waitable 归全量 Rust 化——task_scheduler 原生 CPU 任务类型] + CPS 优化续[覆盖差
->   22 节点——LLM/意图面按需补齐]；隔离分支续）**。
+>   → **P9 阶段④ 收束 ✅**（task_scheduler GIL-free 集成完成——kernel_info 升级
+>   stage 3 → 4 / status "execution-core" → "concurrency-core"：阶段④ 并发解除收束
+>   [Rust 侧 GIL-free 并行执行能力验证全部完成：GIL-free 并行执行地基[py.allow_
+>   threads] + Rust 原生并行执行 API[run_artifacts_parallel] + CPU+IO 真并行验证
+>   [bench_rust_cpu_io] + 有状态任务池[TaskPool] + task_scheduler 接入验证 + task_
+>   scheduler 内部接入[异步 CPU 任务 waitable]]；kernel_info stage 4 / concurrency-
+>   core[并发核心就绪，"ready" 仍保留[全量内核就绪，待 Rust 前端[语义层]移植后 run
+>   script 入口生效]]；standing gate 行为不变[status != "ready" → ready=False → 仅
+>   Python 确定性]；CPUTaskWaitable 归全量 Rust 化[Python 侧集成点，非生产模块]；零
+>   风险加法式[kernel_info 升级不动 Python 执行路径]，merge 删分支；设计/裁定 =
+>   WORKLOG P9 阶段④ 收束条目）
+>   → **当前批次 = P9 全量 Rust 化评估开启（用户 2026-09-10 裁定：Rust 部分[阶段②③
+>   ④]完成后开启新评估 + 新自主执行模式，评估全核心逻辑全量 Rust 化——编译/语义/执行
+>   /调度/并发，保留关键 Python 接口，证明绝大部分关键核心逻辑可 Rust 化后全量转向
+>   Rust 不保留双通道；CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]随评估推进）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -335,7 +347,8 @@
    → 阶段④ 第六增量 task_scheduler 集成 有状态任务池 TaskPool 3.37x ✅
    → 阶段④ 第七增量 task_scheduler 接入 TaskPool CPU+IO 并发验证 1.05 ✅
    → 阶段④ 第八增量 task_scheduler 内部接入 异步 CPU 任务 waitable 1.04 ✅
-   → 阶段④ 续（task_scheduler 集成收束[归全量 Rust 化] + CPS 覆盖差 22 节点补齐）[当前]
+   → 阶段④ 收束 ✅[kernel_info stage 4 / concurrency-core，task_scheduler GIL-free 集成完成]
+   → 全量 Rust 化评估开启[Rust 部分完成，用户裁定新评估 + 新自主执行模式][当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式

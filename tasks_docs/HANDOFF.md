@@ -431,18 +431,24 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     CPU 后台 GIL-free 真并行]**——**并发比 1.04 ≈ 1.0 成立**[T_io=0.043s + CPU×4 →
     T_wall=0.045s ≈ max 非 sum]（scripts/bench_task_scheduler_cpu_task.py 常设基准）。
     **零风险加法式**（仅常设基准脚本，不动 Rust/测试代码）。
-  - **P9 阶段④ 续（当前批次，隔离分支续）**：并发解除——**task_scheduler GIL-free
-    集成收束[CPUTaskWaitable 归全量 Rust 化——task_scheduler 原生 CPU 任务类型] + CPS
-    优化续[覆盖差 22 节点——LLM/意图面按需补齐]**（task_scheduler IO-only → CPU+IO
-    真并行 GIL-free）。四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 +
-    剩余面 + 位置 + 布尔逻辑 + import + from-import ✅ / 语义推迟）→ **③ 执行核心 ✅
-    [收束：30/30 全级 + 23–30x + 闭包 + KB + quoted 值 + 完整 artifact 消费 + kernel_
-    info stage 3/execution-core]** → ④ 并发解除[当前：GIL-free 并行执行地基 3.58x ✅ +
-    CPS 优化 node_types + AugAssign/Tuple/Slice 33/33 全级 ✅ + IbImportFrom 34/34 全
-    级 ✅ + run_artifacts_parallel 3.31x ✅ + CPU+IO 真并行验证 1.07 ✅ + TaskPool
-    3.37x ✅ + task_scheduler 接入 TaskPool CPU+IO 并发验证 1.05 ✅ + task_scheduler
-    内部接入 异步 CPU 任务 waitable 1.04 ✅ + 集成收束[归全量 Rust 化] + CPS 覆盖差
-    补齐]。确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+  - **P9 阶段④ 收束 已落地（本 session，隔离分支 `rust-kernel` → 已 merge
+    unsafe-vibe-dev 删分支）**：task_scheduler GIL-free 集成完成——kernel_info 升级
+    stage 3 → 4 / status "execution-core" → "concurrency-core"（阶段④ 并发解除收束：
+    Rust 侧 GIL-free 并行执行能力验证全部完成——GIL-free 并行执行地基[py.allow_threads]
+    + Rust 原生并行执行 API[run_artifacts_parallel] + CPU+IO 真并行验证[bench_rust_
+    cpu_io] + 有状态任务池[TaskPool] + task_scheduler 接入验证 + task_scheduler 内部
+    接入[异步 CPU 任务 waitable]；standing gate 行为不变[status != "ready" → ready=False]；
+    CPUTaskWaitable 归全量 Rust 化）。**零风险加法式**（kernel_info 升级，不动 Python
+    执行路径）。四阶段全貌：① 地基 ✅ → ② 前端 ✅ → ③ 执行核心 ✅ → **④ 并发解除 ✅
+    [收束：GIL-free 并行执行地基 3.58x + run_artifacts_parallel 3.31x + CPU+IO 真并行
+    1.07 + TaskPool 3.37x + task_scheduler 接入 1.05 + 内部接入 1.04 + kernel_info
+    stage 4 / concurrency-core]**。
+  - **P9 全量 Rust 化评估（当前批次）**：Rust 部分（阶段②③④）完成 = 全量 Rust 化评估
+    前置就绪。按用户 2026-09-10 裁定，开启**新评估 + 新自主执行模式**，评估**全核心
+    逻辑全量 Rust 化**（编译/语义/执行/调度/并发等核心面）——**保留关键部分 Python 接
+    口**（灵活性和供 Python 使用的入口能力）；证明绝大部分关键核心逻辑可 Rust 化后
+    全量转向 Rust（不保留 Python 双通道和对比）。CPS 优化续[覆盖差 22 节点——LLM/意图
+    面按需补齐]随评估推进。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -501,11 +507,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段④ 第八增量放行门实跑）**：**4278 passed /
-  1 skipped / 136.58s / rc=0**（计数稳定 4278[阶段④ 第八增量 task_scheduler 内部接入
-  异步 CPU 任务 waitable bench 常设基准，不动 Rust/测试代码]；注：test_p7_process_
-  isolation / test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序
-  偶发失败，隔离重跑通过，非回归]；供下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段④ 收束放行门实跑）**：**4278 passed /
+  1 skipped / 141.24s / rc=0**（计数稳定 4278[阶段④ 收束 kernel_info 升级 stage 4 /
+  concurrency-core，不动 Python 执行路径]；注：test_p7_process_isolation /
+  test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，
+  隔离重跑通过，非回归]；供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 

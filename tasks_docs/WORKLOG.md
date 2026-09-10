@@ -3663,6 +3663,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     scheduler GIL-free 集成收束[CPUTaskWaitable 归全量 Rust 化——task_scheduler 原生
     CPU 任务类型] + CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]）续在隔离分支
     （差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 收束（task_scheduler GIL-free 集成完成——kernel_info 升级 stage 4 /
+  concurrency-core，2026-09-10，隔离分支 `rust-kernel`）**：**阶段④ 并发解除收束**——
+  task_scheduler GIL-free 集成全部 Rust 侧验证完成（GIL-free 并行执行地基 + Rust 原生
+  并行执行 API + CPU+IO 真并行验证 + 有状态任务池 TaskPool + task_scheduler 接入验证
+  + task_scheduler 内部接入[异步 CPU 任务 waitable]），kernel_info 升级 stage 3 → 4
+  （status "execution-core" → "concurrency-core"）——阶段④ 收束（并发核心就绪）。
+  **交付**：
+  - **kernel_info 升级**（`ibci-ext/src/lib.rs`）：stage 3 → 4（并发解除[GIL-free 并行
+    执行 + 任务池]）；status "execution-core" → "concurrency-core"（并发核心就绪：GIL-
+    free 并行执行[run_artifacts_parallel + TaskPool] + 数据面经 run_artifact 可用）。
+  - **模块 //! doc 更新**：当前形态加并发解除（GIL-free 并行执行：run_artifacts_
+    parallel 无状态批处理 + TaskPool 有状态任务池，Rust 线程 py.allow_threads 释放 GIL
+    真并行）；语料 30 → 34 全级差分等价；GIL-free 并行 4 线程 ≈3.3x；kernel_info.stage
+    = 4 / status = "concurrency-core"。
+  **关键裁定（self-grill 全分支消解）**：① **阶段④ 收束 = Rust 侧验证全部完成**（GIL-
+    free 并行执行地基[py.allow_threads] + Rust 原生并行执行 API[run_artifacts_parallel]
+    + CPU+IO 真并行验证[bench_rust_cpu_io] + 有状态任务池[TaskPool] + task_scheduler
+    接入验证[bench_task_scheduler_integration] + task_scheduler 内部接入[异步 CPU 任务
+    waitable，bench_task_scheduler_cpu_task]——全部 Rust 侧 GIL-free 并行执行能力验证
+    完成，阶段④ 并发解除收束）；② **kernel_info stage 3 → 4 / status "execution-core"
+    → "concurrency-core"**（阶段④ 收束 = 并发核心就绪；"ready" 仍保留[全量内核就绪，
+    待 Rust 前端[语义层]移植后 run script 入口生效]——双内核协议不变）；③ **standing
+    gate 行为不变**（kernel_info.status != "ready" → ready=False → 仅 Python 确定性；
+    Rust 并发核心经 run_artifact/run_artifacts_parallel/TaskPool 单独验证——差分 harness
+    不变）；④ **CPUTaskWaitable 归全量 Rust 化**（Python 侧集成点[依赖 Rust 内核
+    TaskPool，opt-in]，非生产模块——task_scheduler 原生 CPU 任务类型归全量 Rust 化后续）；
+    ⑤ **零风险加法式**（kernel_info 升级不动 Python 执行路径，计数稳定）。
+  **验证**：kernel_info = {stage:4, status:"concurrency-core"} + node_types 31 + run_
+    artifacts_parallel/TaskPool 全在 + 差分 harness 20/20 + 全量 pytest 零回归（阶段④
+    收束放行门——加法式增量不动 Python 执行路径，计数稳定 4278；见 NEXT_STEPS 基线锚
+    点）。**阶段④ 收束出口达成**（并发解除完成——kernel_info stage 4 / concurrency-core）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 收束零风险加法式（kernel_info 升级，不动
+    Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支。**阶段④ 并发解除全部完
+    成**（GIL-free 并行执行 + task_scheduler GIL-free 集成 + kernel_info stage 4 /
+    concurrency-core）；P9 Rust 部分（阶段②③④）完成 = 全量 Rust 化评估前置就绪；后续
+    = 全量 Rust 化评估[用户 2026-09-10 裁定：Rust 部分完成后开启新评估 + 新自主执行模
+    式，评估全核心逻辑全量 Rust 化——编译/语义/执行/调度/并发，保留关键 Python 接口] +
+    CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

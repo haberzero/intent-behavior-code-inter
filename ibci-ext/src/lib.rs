@@ -6,12 +6,15 @@
 //! GIL）。
 //!
 //! 当前形态：构建链 + Rust lexer + Rust parser + 反序列化器 + 执行核心
-//! （tree-walking 解释器）——执行核心消费 Python 前端产出的序列化 artifact
-//! （FlatSerializer JSON）执行，数据面经差分 harness 与 Python 参考内核逐条
-//! 比对（30 语料全级差分等价：token/AST/反序列化/数据面 + 符号表/类型表；
-//! 性能 23–30x）。kernel_info.stage = 3（执行核心就绪），status =
-//! "execution-core"（执行核心就绪，数据面经 run_artifact 可用；run[script 入口]
-//! 待 Rust 前端[语义层]移植后升 "ready" 生效）。
+//! （tree-walking 解释器）+ 并发解除（GIL-free 并行执行：run_artifacts_parallel
+//! 无状态批处理 + TaskPool 有状态任务池，Rust 线程 py.allow_threads 释放 GIL 真
+//! 并行）——执行核心消费 Python 前端产出的序列化 artifact（FlatSerializer JSON）
+//! 执行，数据面经差分 harness 与 Python 参考内核逐条比对（34 语料全级差分等价：
+//! token/AST/反序列化/数据面 + 符号表/类型表；性能 23–30x；GIL-free 并行 4 线程
+//! ≈3.3x）。kernel_info.stage = 4（并发解除就绪），status =
+//! "concurrency-core"（并发核心就绪，数据面经 run_artifact + 并行执行经
+//! run_artifacts_parallel/TaskPool 可用；run[script 入口]待 Rust 前端[语义层]移植
+//! 后升 "ready" 生效）。
 
 mod deserializer;
 mod interpreter;
@@ -97,15 +100,16 @@ fn node_types(py: Python<'_>) -> PyResult<Py<PyList>> {
 }
 
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
-/// 探明 Rust 内核状态。stage = 当前阶段（3 = 执行核心）；status = 就绪门
-/// （"execution-core" = 执行核心就绪[数据面经 run_artifact 可用]；"ready" =
-/// 全量内核就绪[run script 入口生效，待 Rust 前端移植]）。
+/// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
+/// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
+/// [run_artifacts_parallel + TaskPool] + 数据面经 run_artifact 可用]；"ready" =
+/// 全量内核就绪[run script 入口生效，待 Rust 前端[语义层]移植]）。
 #[pyfunction]
 fn kernel_info(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let dict = PyDict::new(py);
     dict.set_item("name", "rust")?;
-    dict.set_item("stage", 3u32)?;
-    dict.set_item("status", "execution-core")?;
+    dict.set_item("stage", 4u32)?;
+    dict.set_item("status", "concurrency-core")?;
     Ok(dict)
 }
 
