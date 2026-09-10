@@ -91,9 +91,15 @@ fn run(_script: &str) -> PyResult<String> {
 /// 执行核心入口：序列化 artifact（JSON）→ 执行 → 数据面（print 输出列表）。
 /// 消费 Python 前端产出的 artifact（含语义层输出）；迁移期策略（执行核心 Rust
 /// + 前端 Python）。Rust 语义层移植后 = 全量 Rust 前端 + 执行核心。
+/// bridge = host service 桥接（KB 操作经此委托；None = 无宿主服务，非 KB 面）。
 #[pyfunction]
-fn run_artifact(artifact_json: &str, py: Python<'_>) -> PyResult<Py<PyList>> {
-    let lines = interpreter::run_artifact(artifact_json);
+fn run_artifact(
+    artifact_json: &str,
+    bridge: Option<Bound<'_, PyAny>>,
+    py: Python<'_>,
+) -> PyResult<Py<PyList>> {
+    let bridge_owned = bridge.map(|b| b.unbind());
+    let lines = interpreter::run_artifact(artifact_json, bridge_owned);
     let list = PyList::empty(py);
     for line in lines {
         list.append(line)?;

@@ -159,11 +159,13 @@ def rust_deserialize_struct(artifact_json: str) -> str:
     return rk._module.deserialize_struct(artifact_json)
 
 
-def rust_execution_data_plane(script: str) -> List[str]:
+def rust_execution_data_plane(script: str, bridge=None) -> List[str]:
     """Rust 执行核心（ibci_ext.run_artifact）：script → 数据面（print 输出列表）。
 
     迁移期策略：Python 前端（compile → artifact）→ Rust 执行核心（反序列化 +
-    执行）。.so 未构建 = 空列表（合法态——降级为仅 Python 参考）。
+    执行）。bridge = host service 桥接（KB 操作经此委托给 Python knowledge
+    对象；None = 无宿主服务，非 KB 语料面）。.so 未构建 = 空列表（合法态——降级
+    为仅 Python 参考）。
     """
     import json
     from tests.conftest import compile_ibci
@@ -174,7 +176,7 @@ def rust_execution_data_plane(script: str) -> List[str]:
     artifact = compile_ibci(script)
     data = FlatSerializer().serialize_artifact(artifact)
     js = json.dumps(data, ensure_ascii=False)
-    return list(rk._module.run_artifact(js))
+    return list(rk._module.run_artifact(js, bridge))
 
 
 @dataclass

@@ -258,3 +258,32 @@ class TestRustExecutionDataPlane:
             py = run_ibci(src)
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+
+    def test_data_plane_kb_corpus(self):
+        """数据面差分等价：KB 语料面（host service 桥接——KB 操作委托 Python
+        knowledge 对象，KB 逻辑留 Python 单点真理）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        from tests.diff_harness import bridge
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        kb = [(n, c) for n, c in CORPUS if n.startswith("kb_")]
+        for name, code in kb:
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code, bridge)
+            assert rs == py, f"语料 {name} KB 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+
+    def test_data_plane_full_corpus(self):
+        """数据面差分等价：全语料 14/14（11 非 KB + 3 KB host service 桥接）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        from tests.diff_harness import bridge
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        for name, code in CORPUS:
+            is_kb = name.startswith("kb_")
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code, bridge if is_kb else None)
+            assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"

@@ -3098,6 +3098,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   破坏性，无需隔离分支）；阶段③ 后续（CPS 优化[43 节点 enum 分发] + KB 语料面
   [宿主服务] + 符号池/类型池/侧表反序列化）+ ④ 并发解除续推进（差分门逐级验证）；
   语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第四增量（执行核心 KB 语料面——host service 桥接，全语料 14/14 数据
+  面差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust 执行核心覆盖全语料
+  面**——KB 语料面（knowledge() 宿主服务）经 host service 桥接（Rust → Python
+  回调）委托给 Python knowledge 对象（KB 逻辑留 Python 单点真理，不复制 KB 逻辑
+  到 Rust 避免双通道），全语料 **14/14 数据面差分等价**（11 非 KB + 3 KB）。
+  **交付**：
+  - **host service 桥接**（Rust → Python 回调）：`IbValue::Host(Py<PyAny>)` 变体
+    （宿主对象引用）+ `knowledge()` → 经桥接 `create_knowledge()` 创建 Python
+    knowledge 对象 + KB 方法调用（register_world/add_fact/worlds/exists/
+    lookup_pair/contradicts）→ 委托 Python 对象方法（GIL 下 call_method）+ 参数/
+    结果双向转换（Rust IbValue ↔ Python 对象：int/str/bool/None/list/dict/宿主
+    对象）。
+  - **Python 桥接助手**（`tests/diff_harness/bridge.py`）：`create_knowledge()`
+    （经 IBCI 类型系统 registry 创建 knowledge 对象——单点真理）。
+  - **pyo3 暴露**：`ibci_ext.run_artifact(artifact_json, bridge)`——bridge = host
+    service 桥接（KB 操作经此委托；None = 无宿主服务，非 KB 面）。
+  **关键裁定（self-grill 全分支消解）**：① **host service 桥接（Rust → Python
+  回调）**（KB 逻辑留 Python 单点真理——不复制 KB 逻辑到 Rust 避免双通道；Rust
+  执行核心委托 KB 操作给 Python knowledge 对象）；② **IbValue::Host（宿主对象
+  引用）**（Rust 侧持有 Python 对象引用——KB 对象经桥接创建，方法调用委托）；
+  ③ **参数/结果双向转换**（Rust IbValue ↔ Python 对象——int/str/bool/None/
+  list/dict/宿主对象，嵌套结构[lookup_pair 的 list of dict of nested list]正确
+  转换）；④ **call_method 动态参数**（pyo3 0.23：args = 直接传 PyTuple[解包为
+  独立参数]，非 (tuple,)[包装成单参数]——修复参数传递 bug）；⑤ **Py<PyAny> 无
+  Clone**（手动 Clone impl 经 clone_ref 增引用 + as_ptr 身份比较）；⑥ **桥接助手
+  经 registry 创建**（`reg.get_class("knowledge")` + `IbKnowledge._create_blank`
+  ——经 IBCI 类型系统，非直接构造）。
+  **验证**：数据面差分 **14/14 全语料逐条等价**（11 非 KB[算术/循环/控制流/函数/
+  递归/list/dict/string] + 3 KB[kb_world_vocab/kb_fact_lookup/kb_contradicts，
+  host service 桥接]）+ 全量 pytest 零回归（阶段边界放行门——加法式增量不动
+  Python 执行路径，计数 = 4272 + 数据面差分 2 例 = 4274；见 NEXT_STEPS 基线锚点）。
+  **阶段③ 第四增量出口达成**（Rust 执行核心覆盖全语料面——14/14 数据面差分等价
+  + host service 桥接就位）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 第四增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（CPS 优化
+  [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 +
+  更宽 IBCI 语料[超出当前 14 条]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；
+  语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

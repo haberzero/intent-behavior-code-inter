@@ -300,13 +300,23 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     实证（cProfile 实证的 per-step Python 反射/间接瓶颈被 Rust 消除）。公平对比
     （两侧均含 load + execute：Python compile 缓存查找 vs Rust JSON 反序列化）。
     非测试（性能断言 flaky）。
+  - **P9 阶段③ 第四增量 执行核心 KB 语料面 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：host service 桥接
+    （Rust → Python 回调，KB 逻辑留 Python 单点真理，不复制避免双通道）——
+    `IbValue::Host`[宿主对象引用] + `knowledge()` 经桥接 `create_knowledge` + KB
+    方法委托 Python 对象[register_world/add_fact/worlds/exists/lookup_pair/
+    contradicts] + 参数/结果双向转换[Rust IbValue ↔ Python 对象，嵌套结构正确]
+    + `ibci_ext.run_artifact(artifact_json, bridge)` 暴露 + 桥接助手
+    bridge.py[经 registry 创建 knowledge]——**全语料 14/14 数据面逐条等价**[11
+    非 KB + 3 KB]。**零风险加法式**（opt-in，不动 Python 执行路径）。
   - **P9 阶段③ 续（当前批次，隔离分支续）**：执行核心——CPS 优化[43 节点 enum
-    分发，数据面等价后做性能优化，在 27x 基础上进一步提升] + KB 语料面[宿主
-    服务] + 符号池/类型池/侧表反序列化。四阶段全貌：① 地基 ✅ → ② 前端（lexer
-    ✅ / parser 完整面 + 剩余面 + 位置 ✅ / 语义推迟）→ **③ 执行核心[主战场：
-    反序列化器 ✅ / 对象模型 + 解释器 + 数据面 11/11 ✅ / 性能基准 23–30x ✅ /
-    CPS 优化当前]** → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。
-    确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+    分发，数据面等价后做性能优化，在 27x 基础上进一步提升] + 符号池/类型池/侧表
+    反序列化 + 更宽 IBCI 语料[超出当前 14 条]。四阶段全貌：① 地基 ✅ → ② 前端
+    （lexer ✅ / parser 完整面 + 剩余面 + 位置 ✅ / 语义推迟）→ **③ 执行核心
+    [主战场：反序列化器 ✅ / 对象模型 + 解释器 + 数据面 11/11 ✅ / 性能基准
+    23–30x ✅ / KB 语料面 host service 桥接 全语料 14/14 ✅ / CPS 优化当前]**
+    → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。确认零风险
+    （全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -365,9 +375,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段③ 第二增量阶段边界实跑）**：**4272 passed /
-  1 skipped / 132.13s / rc=0**（= 前基线 4270 + 数据面差分 2 例；供下一 session
-  参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段③ 第四增量阶段边界实跑）**：**4274 passed /
+  1 skipped / 133.26s / rc=0**（= 前基线 4272 + 数据面差分 2 例[KB 语料面 host
+  service 桥接]；供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 

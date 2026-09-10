@@ -15,14 +15,15 @@
 //! 差分门：数据面（Rust 执行 print 输出）== Python 执行 print 输出（非 KB 语料）。
 
 use crate::parser::{ConstVal, Expr, Module, Stmt};
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 // --------------------------------------------------------------------------- //
-// 对象模型（IbValue——IBC 运行时值；List/Dict 共享可变）
+// 对象模型（IbValue——IBC 运行时值；List/Dict 共享可变；Host = Python 宿主对象）
 // --------------------------------------------------------------------------- //
-#[derive(Debug, Clone)]
 pub enum IbValue {
     Int(i64),
     Float(f64),
@@ -31,6 +32,43 @@ pub enum IbValue {
     None_,
     List(Rc<RefCell<Vec<IbValue>>>),
     Dict(Rc<RefCell<Vec<(IbValue, IbValue)>>>),
+    /// 宿主对象（Python 对象引用——KB 服务经 host service 桥接委托）。
+    Host(Py<PyAny>),
+}
+
+/// 手动 Clone（Py<PyAny> 不实现 Clone——经 clone_ref 增引用）。
+impl Clone for IbValue {
+    fn clone(&self) -> Self {
+        match self {
+            IbValue::Int(i) => IbValue::Int(*i),
+            IbValue::Float(f) => IbValue::Float(*f),
+            IbValue::Str(s) => IbValue::Str(s.clone()),
+            IbValue::Bool(b) => IbValue::Bool(*b),
+            IbValue::None_ => IbValue::None_,
+            IbValue::List(l) => IbValue::List(l.clone()),
+            IbValue::Dict(d) => IbValue::Dict(d.clone()),
+            IbValue::Host(h) => {
+                // clone_ref 需 GIL（执行期 GIL 已持有，with_gil 可重入）
+                let cloned = Python::with_gil(|py| h.clone_ref(py));
+                IbValue::Host(cloned)
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for IbValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IbValue::Int(i) => write!(f, "Int({i})"),
+            IbValue::Float(v) => write!(f, "Float({v})"),
+            IbValue::Str(s) => write!(f, "Str({s:?})"),
+            IbValue::Bool(b) => write!(f, "Bool({b})"),
+            IbValue::None_ => write!(f, "None_"),
+            IbValue::List(_) => write!(f, "List(..)"),
+            IbValue::Dict(_) => write!(f, "Dict(..)"),
+            IbValue::Host(_) => write!(f, "Host(<py object>)"),
+        }
+    }
 }
 
 /// 逻辑值相等（dict 键查找/比较；非 Rc 身份）。
@@ -53,6 +91,10 @@ impl PartialEq for IbValue {
                 av.len() == bv.len() && av.iter().zip(bv.iter()).all(|((k1, v1), (k2, v2))| {
                     k1 == k2 && v1 == v2
                 })
+            }
+            (IbValue::Host(a), IbValue::Host(b)) => {
+                // 宿主对象身份相等（同一 Python 对象指针）
+                a.as_ptr() == b.as_ptr()
             }
             _ => false,
         }
@@ -93,6 +135,7 @@ impl IbValue {
                     .collect();
                 format!("{{{}}}", items.join(", "))
             }
+            IbValue::Host(_) => "<host>".into(),
         }
     }
     fn truthy(&self) -> bool {
@@ -104,6 +147,7 @@ impl IbValue {
             IbValue::Str(s) => !s.is_empty(),
             IbValue::List(l) => !l.borrow().is_empty(),
             IbValue::Dict(d) => !d.borrow().is_empty(),
+            IbValue::Host(_) => true,
         }
     }
     fn as_num(&self) -> Option<(f64, bool)> {
@@ -205,11 +249,20 @@ enum Flow {
 // --------------------------------------------------------------------------- //
 // 解释器（tree-walking；&self + output 参数——避免双可变借用）
 // --------------------------------------------------------------------------- //
-pub struct Interpreter;
+pub struct Interpreter {
+    /// host service 桥接（Python 对象——KB 操作经此委托；None = 无宿主服务）。
+    bridge: Option<Py<PyAny>>,
+}
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter
+        Interpreter { bridge: None }
+    }
+    /// 带 host service 桥接（KB 操作经此委托给 Python knowledge 对象）。
+    pub fn with_bridge(bridge: Py<PyAny>) -> Interpreter {
+        Interpreter {
+            bridge: Some(bridge),
+        }
     }
 
     /// 执行模块（返回数据面 print 输出）。
@@ -551,6 +604,10 @@ impl Interpreter {
                 };
                 IbValue::list_new(items)
             }
+            "knowledge" => {
+                // KB 宿主服务——经桥接创建 Python knowledge 对象（单点真理）
+                self.call_knowledge()
+            }
             _ => {
                 if let Some(f) = env.get_function(name) {
                     // 全局环境（函数定义处——使函数体可访问全局函数[递归]）
@@ -561,6 +618,20 @@ impl Interpreter {
                 }
             }
         }
+    }
+
+    /// knowledge() → 经 host service 桥接创建 Python knowledge 对象。
+    fn call_knowledge(&self) -> IbValue {
+        let bridge = match &self.bridge {
+            Some(b) => b.clone(),
+            None => return IbValue::None_,
+        };
+        Python::with_gil(|py| -> PyResult<IbValue> {
+            let b = bridge.bind(py);
+            let kb = b.call_method0("create_knowledge")?;
+            Ok(IbValue::Host(kb.unbind()))
+        })
+        .unwrap_or(IbValue::None_)
     }
 
     fn call_user_function(
@@ -586,6 +657,8 @@ impl Interpreter {
 
     fn call_method(&self, obj: &IbValue, method: &str, args: Vec<IbValue>) -> IbValue {
         match obj {
+            // 宿主对象（KB 服务）——委托 Python 对象方法（host service 桥接）
+            IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
             IbValue::List(l) => match method {
                 "append" => {
                     if let Some(v) = args.first() {
@@ -608,6 +681,86 @@ impl Interpreter {
             _ => IbValue::None_,
         }
     }
+
+    /// 宿主对象方法委托（KB 服务——经 host service 桥接调 Python 对象方法）。
+    fn call_host_method(&self, pyobj: &Py<PyAny>, method: &str, args: Vec<IbValue>) -> IbValue {
+        Python::with_gil(|py| -> PyResult<IbValue> {
+            let obj = pyobj.bind(py);
+            // 参数转换（Rust IbValue → Python 对象）
+            let py_args: Vec<PyObject> = args.iter().map(|a| to_py(py, a)).collect();
+            let tuple = PyTuple::new(py, &py_args)?;
+            let res = obj.call_method(method, tuple, None)?;
+            // 结果转换（Python 对象 → Rust IbValue）
+            Ok(from_py(py, &res))
+        })
+        .unwrap_or(IbValue::None_)
+    }
+}
+
+/// Rust IbValue → Python 对象（host service 桥接参数转换）。
+fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
+    use pyo3::IntoPy;
+    match v {
+        IbValue::Int(i) => (*i).into_py(py),
+        IbValue::Float(f) => (*f).into_py(py),
+        IbValue::Str(s) => s.clone().into_py(py),
+        IbValue::Bool(b) => (*b).into_py(py),
+        IbValue::None_ => py.None(),
+        IbValue::List(l) => {
+            let items: Vec<PyObject> = l.borrow().iter().map(|x| to_py(py, x)).collect();
+            PyList::new(py, items).unwrap().into_py(py)
+        }
+        IbValue::Dict(d) => {
+            let dict = PyDict::new(py);
+            for (k, val) in d.borrow().iter() {
+                let _ = dict.set_item(to_py(py, k), to_py(py, val));
+            }
+            dict.into_py(py)
+        }
+        IbValue::Host(h) => h.clone().into_py(py),
+    }
+}
+
+/// Python 对象 → Rust IbValue（host service 桥接结果转换）。
+fn from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> IbValue {
+    // None
+    if obj.is_none() {
+        return IbValue::None_;
+    }
+    // bool（先于 int——bool 是 int 子类）
+    if let Ok(b) = obj.extract::<bool>() {
+        return IbValue::Bool(b);
+    }
+    // int
+    if let Ok(i) = obj.extract::<i64>() {
+        return IbValue::Int(i);
+    }
+    // float
+    if let Ok(f) = obj.extract::<f64>() {
+        return IbValue::Float(f);
+    }
+    // str
+    if let Ok(s) = obj.extract::<String>() {
+        return IbValue::Str(s);
+    }
+    // list
+    if let Ok(l) = obj.extract::<Vec<PyObject>>() {
+        let items: Vec<IbValue> = l
+            .iter()
+            .map(|x| from_py(py, x.bind(py)))
+            .collect();
+        return IbValue::list_new(items);
+    }
+    // dict
+    if let Ok(d) = obj.downcast::<PyDict>() {
+        let mut pairs = Vec::new();
+        for (k, v) in d.iter() {
+            pairs.push((from_py(py, &k), from_py(py, &v)));
+        }
+        return IbValue::dict_new(pairs);
+    }
+    // 其他（knowledge 对象等）= 宿主对象（克隆 Bound 取所有权）
+    IbValue::Host(obj.clone().unbind())
 }
 
 fn const_to_value(c: &ConstVal) -> IbValue {
@@ -704,12 +857,16 @@ fn assign_subscript(base: &IbValue, key: &IbValue, val: IbValue) {
 // --------------------------------------------------------------------------- //
 use crate::deserializer::deserialize_module;
 
-/// artifact JSON → 执行 → 数据面（print 输出列表）。
-pub fn run_artifact(artifact_json: &str) -> Vec<String> {
+/// artifact JSON → 执行 → 数据面（print 输出列表）。bridge = host service 桥接
+///（KB 操作经此委托；None = 无宿主服务，非 KB 语料面）。
+pub fn run_artifact(artifact_json: &str, bridge: Option<Py<PyAny>>) -> Vec<String> {
     let module = match deserialize_module(artifact_json) {
         Some(m) => m,
         None => return Vec::new(),
     };
-    let interp = Interpreter::new();
+    let interp = match bridge {
+        Some(b) => Interpreter::with_bridge(b),
+        None => Interpreter::new(),
+    };
     interp.run_module(&module)
 }

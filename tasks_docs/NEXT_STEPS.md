@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4272 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段③ 第二增量[执行核心对象模型 + 解释器 + 数据面差分 2 例]阶段边界放行门；数字以实跑为准，不冻结）。
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4274 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 阶段③ 第四增量[执行核心 KB 语料面 host service 桥接 + 数据面差分 2 例]阶段边界放行门；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -143,9 +143,17 @@
 >   未优化即显著领先]；公平对比[两侧均含 load + execute：Python compile 缓存查找
 >   vs Rust JSON 反序列化]；非 KB 语料面 11 条；非测试[性能断言 flaky]；加法式零
 >   风险直接提交；设计/裁定 = WORKLOG P9 阶段③ 第三增量条目）
+>   → **P9 阶段③ 第四增量 ✅**（执行核心 KB 语料面——host service 桥接[Rust →
+>   Python 回调，KB 逻辑留 Python 单点真理，不复制避免双通道]：IbValue::Host
+>   [宿主对象引用] + knowledge() 经桥接 create_knowledge + KB 方法委托 Python
+>   对象[register_world/add_fact/worlds/exists/lookup_pair/contradicts] + 参数/
+>   结果双向转换[Rust IbValue ↔ Python 对象，嵌套结构正确] + `ibci_ext.
+>   run_artifact(artifact_json, bridge)` 暴露 + 桥接助手 bridge.py[经 registry
+>   创建 knowledge]；**全语料 14/14 数据面逐条等价**[11 非 KB + 3 KB]；零风险
+>   加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段③ 第四增量条目）
 >   → **当前批次 = P9 阶段③ 续（执行核心：CPS 优化[43 节点 enum 分发，数据面
->   等价后做性能优化，在 27x 基础上进一步提升] + KB 语料面[宿主服务] + 符号池/
->   类型池/侧表反序列化；隔离分支续）**。
+>   等价后做性能优化，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 +
+>   更宽 IBCI 语料[超出当前 14 条]；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -188,7 +196,8 @@
    后续；执行核心消费 Python artifact）→ 阶段③ 第二增量 执行核心对象模型 +
    解释器 + 数据面 11/11 等价 ✅**（**主战场突破**）
    → 阶段③ 第三增量 执行核心性能基准 23–30x ✅
-   → 阶段③ 续（CPS 优化 + KB 语料面 + 符号/类型/侧表）[当前] → 阶段④ 并发解除
+   → 阶段③ 第四增量 执行核心 KB 语料面 host service 桥接 全语料 14/14 ✅
+   → 阶段③ 续（CPS 优化 + 符号/类型/侧表 + 更宽语料）[当前] → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root）；
