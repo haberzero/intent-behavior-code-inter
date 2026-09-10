@@ -218,6 +218,37 @@ class TestRustDeserializerDifferential:
             py = parse_ast_dump(code, include_positions=True)
             assert rs == py, f"语料 {name} 反序列化 AST 差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_symbol_table_corpus(self):
+        """符号表差分等价：全部语料（Rust symbol_table == Python node_to_symbol
+        解析）。执行核心的完整 artifact 消费——不止 nodes 池（symbols 池 +
+        node_to_symbol 侧表）。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel, rust_symbol_table
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        for name, code in CORPUS:
+            try:
+                artifact = compile_ibci(code)
+            except Exception:
+                continue  # 编译失败语料跳过（合法态）
+            data = FlatSerializer().serialize_artifact(artifact)
+            js = json.dumps(data, ensure_ascii=False)
+            rs = rust_symbol_table(js)
+            # Python 参考：同一 artifact 的 node_to_symbol 解析（node → symbol 名）
+            mod = data["modules"][data["entry_module"]]
+            syms = {u: s["name"] for u, s in mod["pools"]["symbols"].items()}
+            py = "\n".join(
+                sorted(
+                    f"{n} -> {syms[s]}"
+                    for n, s in mod["side_tables"]["node_to_symbol"].items()
+                    if s in syms
+                )
+            )
+            assert rs == py, f"语料 {name} 符号表差分不等价：\n  py : {py}\n  rust: {rs}"
+
 
 class TestRustExecutionDataPlane:
     """Rust 执行核心（ibci_ext.run_artifact）vs Python 执行核心的数据面差分等价。

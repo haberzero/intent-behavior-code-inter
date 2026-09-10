@@ -64,6 +64,14 @@ fn deserialize_struct(artifact_json: &str) -> String {
     deserializer::deserialize_struct(artifact_json)
 }
 
+/// artifact JSON → 符号表规范表示（node → symbol 解析，按 node_uid 排序）。
+/// 消费完整 artifact 的 symbols 池 + node_to_symbol 侧表（执行核心的完整 artifact
+/// 消费——不止 nodes 池）。
+#[pyfunction]
+fn symbol_table(artifact_json: &str) -> String {
+    deserializer::symbol_table(artifact_json).unwrap_or_default()
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态，决定双内核比对是否就绪（status != "ready" = 未就绪，
 /// 仅跑 Python 参考内核）。
@@ -114,6 +122,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(lex, m)?)?;
     m.add_function(wrap_pyfunction!(parse_struct, m)?)?;
     m.add_function(wrap_pyfunction!(deserialize_struct, m)?)?;
+    m.add_function(wrap_pyfunction!(symbol_table, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())

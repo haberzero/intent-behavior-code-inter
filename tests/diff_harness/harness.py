@@ -159,6 +159,19 @@ def rust_deserialize_struct(artifact_json: str) -> str:
     return rk._module.deserialize_struct(artifact_json)
 
 
+def rust_symbol_table(artifact_json: str) -> str:
+    """Rust 符号表（ibci_ext.symbol_table）：artifact JSON → node → symbol 解析
+    规范表示（按 node_uid 排序）。消费完整 artifact 的 symbols 池 + node_to_symbol
+    侧表（执行核心的完整 artifact 消费——不止 nodes 池）。
+
+    .so 未构建 = 空串（合法态——降级为仅 Python 参考）。
+    """
+    rk = load_rust_kernel()
+    if not rk.loaded:
+        return ""
+    return rk._module.symbol_table(artifact_json)
+
+
 def rust_execution_data_plane(script: str, bridge=None) -> List[str]:
     """Rust 执行核心（ibci_ext.run_artifact）：script → 数据面（print 输出列表）。
 

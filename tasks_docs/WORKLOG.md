@@ -3245,6 +3245,38 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 更
   宽 IBCI 语料[quoted 值/行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；
   语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第八增量（执行核心符号池/侧表反序列化——完整 artifact 消费，27 语料
+  符号表差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust 执行核心完整
+  artifact 消费**——反序列化器从 nodes 池（AST）扩展至 symbols 池 + node_to_symbol
+  侧表（语义层输出：变量/函数/方法的符号解析），全语料 **27/27 符号表差分等价**
+  （Rust symbol_table == Python node_to_symbol 解析），执行核心可消费完整 artifact
+  （不止 nodes 池）。
+  **交付**：
+  - **符号池/侧表反序列化**（`ibci-ext/src/deserializer.rs`）：`Symbol` 结构
+    [name/kind/type_uid] + `symbol_table(artifact_json)`（消费 symbols 池 +
+    node_to_symbol 侧表，输出 node → symbol 名解析规范表示，按 node_uid 排序）。
+  - **pyo3 暴露**：`ibci_ext.symbol_table(artifact_json) -> str`（符号表规范表示）。
+  - **差分 harness 扩展**：`rust_symbol_table` + `test_symbol_table_corpus`（符号
+    表差分门——Rust symbol_table == Python node_to_symbol 解析）。
+  **关键裁定（self-grill 全分支消解）**：① **完整 artifact 消费**（执行核心不止
+  消费 nodes 池[AST]——还消费 symbols 池 + 侧表[语义层输出]，为后续类型检查/错误
+  报告/CPS 分发就位）；② **node → symbol 解析**（node_to_symbol 侧表映射 AST 节点
+  → 符号 UID，解析符号名——执行核心经此关联节点与语义）；③ **规范表示按 node_uid
+  排序**（确定性输出，差分可比）；④ **serde_json Value 的 as_str 返回 Option**
+    （侧表值是 Value，需解 Option——修 E0308）；⑤ **本增量不用于执行**（符号表
+  是完整 artifact 消费的就位——tree-walking 解释器当前用简单变量绑定，符号表用于
+  后续类型检查/错误报告，非当前数据面需求）。
+  **验证**：符号表差分 **27/27 全语料逐条等价**（Rust symbol_table == Python
+  node_to_symbol 解析）+ 四级差分 27/27 全语料逐条等价[token/AST/反序列化/数据
+  面，无回归] + 全量 pytest 零回归（阶段边界放行门——加法式增量不动 Python 执行
+  路径，计数 = 4274 + 符号表差分 1 例 = 4275；见 NEXT_STEPS 基线锚点）。**阶段③
+  第八增量出口达成**（Rust 执行核心完整 artifact 消费——symbols 池 + node_to_symbol
+  侧表就位）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 第八增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（CPS 优化
+  [43 节点 enum 分发，在 27x 基础上进一步提升] + 类型池/资产池反序列化 + 更宽 IBCI
+  语料[quoted 值/行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；语义层
+  Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

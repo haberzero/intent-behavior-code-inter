@@ -353,3 +353,58 @@ pub fn deserialize_struct(artifact_json: &str) -> String {
         None => String::new(),
     }
 }
+
+// --------------------------------------------------------------------------- //
+// 符号池 + 侧表（node → symbol 解析）
+// --------------------------------------------------------------------------- //
+/// 符号（语义层输出——变量/函数/方法等，执行核心类型检查/错误报告/分发用）。
+#[derive(Debug, Clone)]
+pub struct Symbol {
+    pub name: String,
+    pub kind: String,
+    pub type_uid: Option<String>,
+}
+
+/// artifact JSON → 符号表规范表示（node → symbol 解析，按 node_uid 排序）。
+/// 消费完整 artifact 的 symbols 池 + node_to_symbol 侧表（执行核心的完整 artifact
+/// 消费——不止 nodes 池）。None = 解析失败。
+pub fn symbol_table(artifact_json: &str) -> Option<String> {
+    let root: Value = serde_json::from_str(artifact_json).ok()?;
+    let entry = root["entry_module"].as_str()?;
+    let module = &root["modules"][entry];
+    // symbols 池：uid → {name, kind, type_uid}
+    let symbols_pool = &module["pools"]["symbols"];
+    let mut symbols: std::collections::HashMap<String, Symbol> = std::collections::HashMap::new();
+    if let Some(obj) = symbols_pool.as_object() {
+        for (uid, s) in obj {
+            symbols.insert(
+                uid.clone(),
+                Symbol {
+                    name: s["name"].as_str().unwrap_or("").to_string(),
+                    kind: s["kind"].as_str().unwrap_or("").to_string(),
+                    type_uid: s["type_uid"].as_str().map(|s| s.to_string()),
+                },
+            );
+        }
+    }
+    // node_to_symbol 侧表：node_uid → symbol_uid
+    let nts = &module["side_tables"]["node_to_symbol"];
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    if let Some(obj) = nts.as_object() {
+        for (node_uid, sym_uid) in obj {
+            if let Some(su) = sym_uid.as_str() {
+                if let Some(sym) = symbols.get(su) {
+                    pairs.push((node_uid.clone(), sym.name.clone()));
+                }
+            }
+        }
+    }
+    pairs.sort();
+    Some(
+        pairs
+            .iter()
+            .map(|(n, s)| format!("{} -> {}", n, s))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}
