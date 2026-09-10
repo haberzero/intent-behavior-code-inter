@@ -17,7 +17,7 @@ Engine 构造期注册——这些契约面含构造期 lifecycle / LLM 通道 /
   重构后已删除（用后即删，决策沉入 WORKLOG/架构文档）。
 - file 的 spec 自 core/engine.py 挪入（保留 mutating/param_descriptors/exported_types 语义字段）。
 - net 显式 provenance=USER_DEFINED（非 KERNEL_NATIVE，host_interface 覆盖保护不适用）；
-  内核原生 6 + file = KERNEL_NATIVE；全部内置模块 visibility=IMPORT_GATED（须显式
+  内核原生 7 + file = KERNEL_NATIVE；全部内置模块 visibility=IMPORT_GATED（须显式
   import 才可用）。
 
 """
@@ -50,7 +50,7 @@ KERNEL_NATIVE_MODULES: Dict[str, str] = {
     "iruntime": "ibci_iruntime",
 }
 
-# 宿主侧构造期注册的全部内置模块（内核原生 5 + net）；file 无物理包（实现为
+# 宿主侧构造期注册的全部内置模块（内核原生 7 + net）；file 无物理包（实现为
 # core.runtime.modules.fs_impl.FileLib）。工具 4（math/json/time/schema）经契约源
 # 自举注册（kernel_contracts.load_tool_contracts），不在此表。
 BUILTIN_MODULES: Dict[str, str] = dict(KERNEL_NATIVE_MODULES)
@@ -304,6 +304,20 @@ _SPEC_META = TypeDef(name="meta", kind="module", provenance=Provenance.KERNEL_NA
                 TypeRef.of("str")
             ], return_type=TypeRef.of("dict"), param_descriptors=[
                 ParamDescriptor(name="code", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+        # quote/eval 数据/命令二元：quote = 表达式源串经编译门验证冻结为 quoted
+        # 值（数据形态；自包含性由构造成立，fresh scope 门）；eval = 执行 quoted
+        # 值取回表达式**值**（命令形态；值通道非 stdout；fail-fast）。入参类型
+        # quoted 静态强制（str 直调 = 编译期类型错）。
+        "quote": MethodMemberSpec(name="quote", kind="method", type_ref=TypeRef.of("quoted"), param_types=[
+                TypeRef.of("str")
+            ], return_type=TypeRef.of("quoted"), param_descriptors=[
+                ParamDescriptor(name="source", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
+        "eval": MethodMemberSpec(name="eval", kind="method", type_ref=TypeRef.of("any"), param_types=[
+                TypeRef.of("quoted")
+            ], return_type=TypeRef.of("any"), param_descriptors=[
+                ParamDescriptor(name="expr", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("quoted"))
             ]),
     })
 

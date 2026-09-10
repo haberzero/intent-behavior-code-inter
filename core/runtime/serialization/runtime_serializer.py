@@ -341,6 +341,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             self._collect_memory(obj, data)
         elif isinstance(obj, IbValue) and base_name == "run_result":
             self._collect_run_result(obj, data)
+        elif isinstance(obj, IbValue) and base_name == "quoted":
+            self._collect_quoted(obj, data)
         elif isinstance(obj, IbValue) and base_name == "Optional":
             self._collect_optional(obj, data)
         elif base_name == "thread_result" and not isinstance(obj, IbClass):
@@ -464,7 +466,7 @@ class RuntimeSerializer(BaseFlatSerializer):
             data["tiers"][tier_name] = tier_data
 
     def _collect_run_result(self, obj, data):
-        # 进程内子运行结果（不可变值类型）：三字段全原生值（str + native dict +
+        # 子进程子运行结果（不可变值类型）：三字段全原生值（str + native dict +
         # None），无嵌套 IbObject / 无环形引用——直存（同 vector 纪律，无需
         # cache-before-recurse）。exception 结构化 dict 的字段全为原生 str，
         # 直存后经 hydration 原样重建。
@@ -472,6 +474,12 @@ class RuntimeSerializer(BaseFlatSerializer):
         data["exit_status"] = obj.payload.get("exit_status", "ok")
         data["stdout"] = obj.payload.get("stdout", "")
         data["exception"] = obj.payload.get("exception")
+
+    def _collect_quoted(self, obj, data):
+        # 被提及表达式（不可变值类型）：source 全原生 str，无嵌套 IbObject /
+        # 无环形引用——直存（同 run_result 纪律），hydration 原样重建。
+        data["_type"] = "quoted"
+        data["source"] = obj.payload.get("source", "")
 
     def _collect_tuple(self, obj, data):
         data["_type"] = "tuple"
@@ -1091,13 +1099,19 @@ class RuntimeDeserializer:
             self.instance_cache[uid] = obj
 
         elif _type == "run_result":
-            # 进程内子运行结果：三字段全原生值，原样重建（无拓扑引用）。
+            # 子进程子运行结果：三字段全原生值，原样重建（无拓扑引用）。
             from core.runtime.objects.primitives.run_result import IbRunResult
             obj = IbRunResult(ib_class, payload={
                 "exit_status": data.get("exit_status", "ok"),
                 "stdout": data.get("stdout", ""),
                 "exception": data.get("exception"),
             })
+            self.instance_cache[uid] = obj
+
+        elif _type == "quoted":
+            # 被提及表达式：source 原生 str，原样重建（无拓扑引用）。
+            from core.runtime.objects.primitives.quoted import IbQuoted
+            obj = IbQuoted(ib_class, payload={"source": data.get("source", "")})
             self.instance_cache[uid] = obj
 
         elif _type == "memory":

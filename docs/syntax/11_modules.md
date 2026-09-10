@@ -220,8 +220,8 @@ dict policy = {"isolated": True}
 dict result = ihost.run_isolated("./sub/child.ibci", policy)  # 隔离运行子脚本，返回子环境变量字典
 str handle = ihost.spawn_isolated("./sub/child.ibci", policy) # 启动子环境（不等待），返回 handle
 dict result = ihost.collect(handle)   # 等待子环境完成，返回子环境变量字典
-run_result rec = ihost.run_file("./sub/child.ibci", policy)  # 进程内运行子脚本，返回结果记录（run_result）
-run_result rc = ihost.run_code("print('hi')", policy)        # 进程内运行代码字符串，返回结果记录（run_result）
+run_result rec = ihost.run_file("./sub/child.ibci", policy)  # 独立子进程运行子脚本，返回结果记录（run_result）
+run_result rc = ihost.run_code("print('hi')", policy)        # 独立子进程运行代码字符串，返回结果记录（run_result）
 ihost.save_state(path)                # 保存当前状态
 ihost.load_state(path)                # 加载状态
 str src = ihost.get_source()          # 获取当前入口源码
@@ -246,7 +246,8 @@ str val = ihost.getenv("SOME_KEY")    # 读取宿主 OS 环境变量（缺失返
 （`HOST_ISOLATE_LLM_INHERIT_FAILED`）显形，子 LLM 调用按其自身配置状态得清晰错误。
 
 **`run_file` / `run_code` 结果记录（`run_result`）**：`ihost.run_file(path, policy)`
-进程内运行子脚本、`ihost.run_code(code, policy)` 进程内运行一段 IBCI 代码字符串，
+在独立子进程运行子脚本、`ihost.run_code(code, policy)` 在独立子进程运行一段 IBCI
+代码字符串，
 二者返回 `run_result` 值类型（**错误作值**——子失败不抛穿父；与 `run_isolated` 的
 **错误作异常** + 变量字典互补，同一子 run 机制的两个消费面）。`run_code` 与
 `run_file` **机制同构**（同一 spawn 核心：文件源 / 字符串源两形式；字符串源子
@@ -441,11 +442,13 @@ func test() -> auto:
   对象延续（如 `datetime.replace` 返回新 datetime 仍是 IBCI `datetime`）。
 - 契约外成员 / 缺失宿主类 / 缺失成员 → fail-fast。
 
-### 11.11 meta 模块（代码作值编译门）
+### 11.11 meta 模块（代码作值：编译门 + quote/eval）
 
-`meta` 暴露"代码作值"的**编译门**原语——代码字符串进程内**静态校验**（**不执行**），
-与 `ihost.run_file`/`run_code`（隔离门）+ 调用方判定（判定门）构成安全执行代码作值的
-三门管线（操作指南：`docs/howto/run_code_safely.md`）。
+`meta` 暴露"代码作值"的两组原语：**编译门**（`compile`：代码字符串进程内
+**静态校验**，**不执行**，与 `ihost.run_file`/`run_code`（隔离门）+ 调用方判定
+（判定门）构成安全执行代码作值的三门管线，操作指南：`docs/howto/run_code_safely.md`）
+与 **quote/eval 数据/命令二元**（`quote`/`eval`：表达式同时是数据——可查询/可
+打印自身/精确对比——又是命令——执行取回其值，转换确定性）。
 
 ```ibci
 import meta
@@ -468,7 +471,46 @@ except Exception as e:
 - **三门管线用法**：`meta.compile`（编译门）→ `ihost.run_code`（隔离门 + 结果捕获
   `run_result`）→ 调用方机械判定（判定门；操作指南见 `docs/howto/run_code_safely.md`）。
 
----
+**`meta.quote(source)` / `meta.eval(expr)`（数据/命令二元）**：
+
+```ibci
+import meta
+
+quoted q = meta.quote("2 * (3 + 4)")   # quote：验证门冻结为 quoted 值（数据形态）
+print(q.source)                        # 数据形态：完整源串（可查询/可打印自身）
+int v = meta.eval(q)                   # eval：执行并取回表达式的**值**（命令形态）
+print(v)                               # 14
+print(meta.eval(q) == v)               # 确定性：同源两次 eval 逐值一致
+```
+
+- `meta.quote(source) -> quoted`：表达式源串经**验证门**（子引擎 compile-only，
+  同 `meta.compile` 路径）冻结为 `quoted` 值。验证门一次门尽：语法 / 语义 /
+  **表达式性**（语句源 = 非表达式，fail-fast）/ **自包含性**（fresh scope——
+  引用父模块自由名的源在 quote 时刻即 fail-fast，无隐式捕获面）。失败上抛
+  （IBCI `try/except` 可捕获，message 含 ibci 源定位，同 `meta.compile` 面）。
+- `meta.eval(expr) -> any`：执行 `quoted` 值（入参类型静态锁定 `quoted`——str
+  直调 = 编译期类型违约），经子进程独立引擎（fresh scope + 进程级隔离 + LLM
+  态继承，同 `ihost.run_code` 机制族）取回表达式的**值**（值交换通道，非
+  stdout 文本）。错误面 fail-fast：子编译/运行失败、或结果不可经值通道取回
+  （复杂值/函数值——边界见 `docs/KNOWN_LIMITS.md` §二十六）均上抛（`try/except`
+  可捕获）。`None` 是合法结果值。
+- **确定性**：转换路径零 LLM；纯代码表达式的 eval 子进程 LLM 调用 = 0；同源
+  两次 eval 逐值一致（可复现）。
+- **精确对比**：`quoted` 值按 `source` 逐字节相等（`q1.source == q2.source`）；
+  无运算符面——判定门由调用方普通 IBCI 代码表达（同 `run_result` 纪律）。
+
+**`quoted` 值类型**（`meta.quote` 返回值；不可变，单字段）：
+
+- **字段**：`source: str`——被提及表达式的完整源串（`q.source` attribute 访问；
+  `print(q)` / `(str)q` = 完整源串，无截断——数据形态即源串，截断即失真）。
+- **核心不变量**：
+  - **良构由构造成立**：`quoted` 仅经 `meta.quote` 验证门产出——str→quoted 无
+    隐式转换（`(quoted)s` 编译期拒绝）；
+  - **值语义**：按 `source` 逐字节相等；不可变（无修改面）；
+  - **可移植**：可序列化 / 可跨引擎携带（数据形态是**值**，非 AST 引用）。
+- **与 `behavior`/`fn_callable` 区分**：后两者捕获 AST 节点引用（绑定具体引擎
+  上下文，非可移植值）；`quoted` 自包含（源串），非可调用（提及/使用的切换
+  必经显式 `meta.eval`——二元性的结构保证）。
 
 ## 深入指引
 

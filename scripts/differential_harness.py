@@ -80,6 +80,11 @@ CORPUS: list[tuple[str, str]] = [
     # 数据/命令二元性最小面（R-A quote/eval 的朴素实例）：字符串是数据（原样打印），
     # 同一字面量被运算是命令（求值为 4）。
     ("data_command_duality", 'msg = "2 + 2"\nprint(msg)\nprint(2 + 2)'),
+    # R-A quote/eval（数据/命令二元原语）：quote = 验证门冻结数据形态
+    # （自包含性由构造成立）；eval = 值通道取回表达式值（子进程 spawn + JSON；
+    # 纯代码表达式 = 确定性）。
+    ("quote_eval_value", 'import meta\nq = meta.quote("21 * 2")\nprint(q.source)\nprint(meta.eval(q))\nprint(meta.eval(q) == 42)'),
+    ("quote_eval_compare", 'import meta\nx = meta.quote("7 * 6")\ny = meta.quote("7 * 6")\nz = meta.quote("6 * 7")\nprint(x.source == y.source)\nprint(x.source == z.source)'),
 ]
 
 

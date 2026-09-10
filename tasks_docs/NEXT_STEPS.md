@@ -30,15 +30,19 @@
 
 ## 🔴 当前状态
 
-> **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令）；末次全量
-> **3990 passed / 1 skipped 零回归**（2026-09-10 实跑，含测试降层提交 `896fa102`；数字以实跑为准，不冻结）。
+> **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4038 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P1 R-A 公理层变更放行门；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
-> （`tests/contracts` + `tests/compiler`，~11s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
+> （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
-> `unsafe-vibe-dev`（日常开发主线）= 本地 `896fa102`（领先 origin `e5f6fd2d` 一提交，待用户授权 push；
-> 2026-09-09 已推送 `11a893a7..123a341f` 13 提交，用户授权）；`main` 永不触碰。
+> `unsafe-vibe-dev`（日常开发主线）= 本地（领先 origin `e5f6fd2d` 12 提交，**不 push**——用户 2026-09-10
+> 本 session 明确；2026-09-09 已推送 `11a893a7..123a341f` 13 提交，用户授权）；`main` 永不触碰。
 
 > **🔴 当前 P0 = IBCI 原生数据库（世界模型知识图谱）+ 自指性主线收束 + 测试进程内化**：
+> - **执行进度**：**P1 R-A quote/eval ✅**（`meta.quote`/`meta.eval` + `quoted` 一等值类型——单一
+>   验证门[良构由构造成立] + 值通道[返回值非文本]；设计/裁定 = `_ra_quote_eval_design.md` + WORKLOG）
+>   → **当前批次 = P2 R-B 世界模型 KB（演化 knowledge）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -71,11 +75,13 @@
 
 1. **主线 = IBCI 原生数据库（世界模型知识图谱）+ 自指性收束 + 测试进程内化**（见上"当前
    状态"；**设计单点真理 = `_world_model_db_design.md`**；自主推进，无人值守偏好；执行序列
-   P1 R-A quote/eval → P2 R-B KB（演化 knowledge）→ P3 磁盘格式 → P4 R-C 确定性模式 →
-   P5 R-D 工件加载 → P6 向量面 → P7 R-F 投影派生视图 → P8 测试进程内化 → P9 Rust 设计 only；
+   P1 R-A quote/eval ✅ → **P2 R-B KB（演化 knowledge，下一批次）** → P3 磁盘格式 →
+   P4 R-C 确定性模式 → P5 R-D 工件加载 → P6 向量面 → P7 R-F 投影派生视图 → P8 测试进程内化
+   → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval 判别面）；
    每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
-2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval = selfref 地基；R-B KB 与
-   memory/meta.compile 机制同构。C3 自修改安全 / D1 SR-4 行为值直接执行 随主线一并推进。
+2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify
+   验证门可改走 `meta.quote` 单点化——C3 批评估）；R-B KB 与 memory/meta.compile 机制同构。
+   C3 自修改安全 / D1 SR-4 行为值直接执行 随主线一并推进。
 3. **Rust 内核替换 = 独立隔离分支 `rust-kernel`（设计 + 构建均可：pin `CARGO_HOME` 到 workspace +
    允许网络，免审批）**：`_rust_kernel_survey.md` 四阶段（① 构建链+差分 harness → ② 前端 →
    ③ 执行核心 → ④ 并发解除）；harness 语料 = 世界模型里程碑；确认零风险后 merge unsafe-vibe-dev 并

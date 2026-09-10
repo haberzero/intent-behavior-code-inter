@@ -27,6 +27,11 @@ from core.extension.ibcext import IbStatefulPlugin
 # 序列化格式约定：save_state 外化资产时用此哨兵占位，load_state 据此回填。
 _EXTERNAL_FILE_REF_SENTINEL = "__EXTERNAL_FILE_REF__"
 
+# quote/eval 表达式结果槽（内部命名空间，单一权威源 = _wrap_expression）：
+# 双下划线顶层变量（IBCI 合法变量名），quote 验证门与 eval 执行侧共享同一
+# 包装形态；子进程导出变量通道据此取回表达式值。
+_EVAL_RESULT_SLOT = "__qeval__"
+
 class HostService(IHostService):
     """
     IBCI 2.0 内核级宿主服务子系统。
@@ -285,7 +290,7 @@ class HostService(IHostService):
 
     def run_file(self, path: str, policy: Dict[str, Any]) -> "IbRunResult":
         """
-        进程内运行另一个 .ibci 文件并捕获执行结果（结果记录消费面）。
+        独立子进程运行另一个 .ibci 文件并捕获执行结果（结果记录消费面）。
 
         与 ``run_isolated``（变量交换消费面：错误作异常 + 导出变量字典）互补：
         ``run_file`` 返回 ``run_result`` 值类型（三字段 ``exit_status``/``stdout``/
@@ -305,7 +310,7 @@ class HostService(IHostService):
 
     def run_code(self, code: str, policy: Dict[str, Any]) -> "IbRunResult":
         """
-        进程内运行一段 IBCI 代码字符串并捕获执行结果（结果记录消费面，字符串源）。
+        独立子进程运行一段 IBCI 代码字符串并捕获执行结果（结果记录消费面，字符串源）。
 
         与 ``run_file`` **机制同构**（同一 spawn 核心字符串源：子 project_root =
         父 project_root，合成 entry ``__string_exec__`` 锚定；同一 E1 LLM 继承 /
@@ -352,47 +357,55 @@ class HostService(IHostService):
         return IbRunResult(run_result_cls, exit_status=exit_status, stdout=stdout,
                            exception=exception_record)
 
+    def _sub_engine_compile(self, code: str) -> Any:
+        """子引擎 compile-only（**单一编译门核心**：meta.compile / meta.quote 共享）。
+
+        新 IBCIEngine（父 project_root 锚定，合成 entry 同名同源；**零父状态污染**
+        ——父程序可能自身即字符串运行；compile-only 无需 LLM 继承/防卡死[编译不
+        执行]）。仅经运行中的父 VM 调用（父 root 必已确立）。
+
+        成功返回编译产物；编译失败 fail-fast：首个诊断（根因面）经
+        ``InterpreterError`` 上抛（携带 ibci 源定位——合成 entry 标记 + line/
+        column，IBCI ``try/except`` 可捕获）——与 CLI ``check`` 面同构
+        （compile-only + 失败即断）。源定位 file_path 从 tempfile 载体重写为
+        合成 entry 标记（字符串源可辨识）。
+        """
+        from core.engine import IBCIEngine
+        from core.kernel.issue import CompilerError
+
+        parent_root = getattr(self.orchestrator, "root_dir", None)
+        if parent_root is None:
+            raise InterpreterError(
+                "子引擎编译须父 project_root 已确立（经运行中的父 VM 调用）。", None)
+        sub_engine = IBCIEngine(root_dir=parent_root)
+        try:
+            return sub_engine.compile_string(code, silent=True)
+        except CompilerError as e:
+            diags = e.diagnostics or []
+            d = diags[0] if diags else None
+            if d is None:
+                raise InterpreterError("子引擎编译失败。", None) from e
+            loc = getattr(d, "location", None)
+            if loc is not None:
+                loc.file_path = self._string_source_marker(parent_root)
+            raise InterpreterError(d.message, loc, error_code=d.code) from e
+
     def meta_compile(self, code: str) -> Dict[str, Any]:
         """meta.compile：代码字符串进程内 **compile-only** 静态校验 + **返回编译产物值**
         （行为作值，TYPE-1：可检查/可作值返回/可组合）。
 
-        子引擎 compile-only（新 IBCIEngine，**零父状态污染**——父程序可能自身即字符串
-        运行[合成 entry 同名冲突面]；compile-only 无需 LLM 继承/防卡死[编译不执行]）。
-        编译失败 fail-fast：首个诊断（根因面）经 ``InterpreterError`` 上抛（携带 ibci
-        源定位——合成 entry 标记 + line/column，IBCI ``try/except`` 可捕获，message
-        含源定位）——与 CLI ``check`` 面同构（compile-only + 失败即断）。
+        经 ``_sub_engine_compile`` 单一编译门核心（子引擎 compile-only，零父状态
+        污染；失败 fail-fast 经 ``InterpreterError`` 上抛携带 ibci 源定位——与 CLI
+        ``check`` 面同构）。
 
         **成功返回编译产物摘要（dict）**（行为作值 TYPE-1）：
         ok/n_modules/entry_module/n_top_stmts/n_funcs/func_names/n_classes/class_names——
         系统可持已编译行为为值，确定性内省（D1）其结构（定义了几何函数/类、顶层规模），
         为"代码自修改台阶 4"（LLM 生成代码→编译作值→确定性验证→持有/观测）提供承载。
-
-        注：compile_string 产出 ``CompilerError``（引擎级，诊断集），本方法将其翻译为
-        可被 IBCI ``try/except`` 结构化捕获的 ``InterpreterError``（首个诊断 = 根因面；
-        源定位 file_path 从 tempfile 载体重写为合成 entry 标记——字符串源可辨识）。
         """
-        from core.engine import IBCIEngine
-        from core.kernel.issue import CompilerError
         from core.kernel.ast import IbFunctionDef, IbClassDef
 
-        # 父 project_root（子引擎锚定，合成 entry 同源；meta.compile 仅经运行中的
-        # 父 VM 调用，父 root 必已确立）。
-        parent_root = getattr(self.orchestrator, "root_dir", None)
-        if parent_root is None:
-            raise InterpreterError(
-                "meta.compile 须父 project_root 已确立（经运行中的父 VM 调用）。", None)
-        sub_engine = IBCIEngine(root_dir=parent_root)
-        try:
-            artifact = sub_engine.compile_string(code, silent=True)
-        except CompilerError as e:
-            diags = e.diagnostics or []
-            d = diags[0] if diags else None
-            if d is None:
-                raise InterpreterError("meta.compile 编译失败。", None) from e
-            loc = getattr(d, "location", None)
-            if loc is not None:
-                loc.file_path = self._string_source_marker(parent_root)
-            raise InterpreterError(d.message, loc, error_code=d.code) from e
+        artifact = self._sub_engine_compile(code)
 
         # 行为作值（TYPE-1）：提取入口模块编译产物摘要（确定性内省其结构）。
         n_top = 0
@@ -423,6 +436,75 @@ class HostService(IHostService):
             "n_classes": n_classes,
             "class_names": class_names,
         }
+
+    # ------------------------------------------------------------------ #
+    # quote/eval（数据/命令二元：meta.quote 验证门 / meta.eval 值通道）
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _wrap_expression(source: str) -> str:
+        """表达式源串 → 验证/执行包装码（**单一包装源**：quote 门与 eval 执行侧共享）。
+
+        形态 = ``__qeval__ = <source>``（``_EVAL_RESULT_SLOT`` 结果槽）。包装本身
+        即**表达式性门**：语句源在 ``=`` 位置编译失败（fail-fast，非表达式 =
+        quote 拒绝面）。
+        """
+        return f"{_EVAL_RESULT_SLOT} = {source}\n"
+
+    def quote_expression(self, source: str):
+        """meta.quote：表达式源串经**单一验证门**冻结为 ``quoted`` 值（数据形态）。
+
+        验证门 = ``_sub_engine_compile`` 编译门核心（同 meta.compile 路径）对包装体
+        ``__qeval__ = <source>`` compile-only——语法/语义/**表达式性**/**自包含性**
+        （fresh scope：引用父模块自由名的源在此门即 fail-fast，无隐式捕获面）一次
+        门尽。失败上抛 ``InterpreterError``（首个诊断 + ibci 源定位，IBCI
+        ``try/except`` 可捕获）。
+
+        成功返回 ``quoted`` 不可变值（字段 ``source`` = 完整源串——可打印其自身/
+        精确对比逐字节/可序列化/可跨引擎移植）。**良构由构造成立**：quoted 值
+        必已通过验证门（无未验证的 quoted 构造面——str→quoted 不经 cast，仅本
+        方法入口）。零 LLM（compile-only）。执行侧配对原语 = ``eval_quoted``。
+        """
+        from core.runtime.objects.primitives.quoted import IbQuoted
+        if not isinstance(source, str) or not source.strip():
+            raise InterpreterError("meta.quote 须非空 str 表达式源串。", None)
+        self._sub_engine_compile(self._wrap_expression(source))
+        quoted_cls = self.registry.get_class("quoted")
+        return IbQuoted(quoted_cls, source=source)
+
+    def eval_quoted(self, source: str) -> Any:
+        """meta.eval：quoted 值的表达式源串执行并取回其**值**（命令形态）。
+
+        机制同构（与 ihost.run_code 同一 spawn 核心，**值交换消费面**）：子进程
+        独立引擎（fresh scope + 进程级隔离 + LLM 态继承）运行包装体
+        ``__qeval__ = <source>``；collect 取回导出变量（JSON 原生值）的结果槽。
+        **返回值而非 stdout 文本**——stdout 通道 = run_code 的观察面，值通道 =
+        eval 的取值面（两面对应两种意图，非双通道）。
+
+        错误面（**fail-fast**，与 run_code 错误作值互补——不同概念不同面）：
+        子编译/运行错误经 collect 上抛（携带 error_code）→ 本方法翻译为
+        ``InterpreterError``（IBCI ``try/except`` 可捕获）；**结果槽缺失** = 显式
+        上抛（结果不可经值通道序列化——复杂值/函数值，或表达式无值）。``None``
+        是合法值（结果槽存在 → 取值，含 None）。
+        """
+        if not isinstance(source, str) or not source.strip():
+            raise InterpreterError("meta.eval 须非空 str 表达式源串。", None)
+        if not self.orchestrator:
+            raise InterpreterError(
+                "Kernel Orchestrator is not available. meta.eval cannot be performed.", None)
+        handle = self.orchestrator.request_spawn_isolated(
+            None, {}, silent=True, code=self._wrap_expression(source))
+        try:
+            variables = self.orchestrator.request_collect(handle)
+        except RuntimeError as e:
+            err_code = getattr(e, "error_code", None)
+            raise InterpreterError(f"meta.eval 执行失败: {e}", None,
+                                   error_code=err_code) from e
+        if not isinstance(variables, dict) or _EVAL_RESULT_SLOT not in variables:
+            raise InterpreterError(
+                f"meta.eval: 表达式值不可经值通道取回（复杂值/函数值非 JSON 可序列化）"
+                f"或表达式无值。source={source!r}", None)
+        return variables[_EVAL_RESULT_SLOT]
 
     @staticmethod
     def _string_source_marker(parent_root: str) -> str:

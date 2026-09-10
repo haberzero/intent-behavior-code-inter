@@ -134,12 +134,20 @@ ENVIRONMENT_SPEC = TypeDef(name="environment", kind=TypeKind.CLASS.value,
                            visibility=Visibility.PRELUDE_VISIBLE,
                            parent_type=TypeRef.of("Object"))
 
-# run_result 进程内子运行结果值类型（ihost.run_file/run_code 返回值；不可变
+# run_result 子进程子运行结果值类型（ihost.run_file/run_code 返回值；不可变
 # 值语义，三字段 exit_status/stdout/exception；命名与 thread_result 区分）。
 RUN_RESULT_SPEC = TypeDef(name="run_result", kind=TypeKind.CLASS.value,
                            provenance=Provenance.KERNEL_NATIVE,
                            visibility=Visibility.PRELUDE_VISIBLE,
                            parent_type=TypeRef.of("Object"))
+
+# quoted 被提及表达式值类型（meta.quote 返回值；不可变值语义，单字段 source——
+# 经 compile-only 验证门冻结的自包含源串；与 behavior/fn_callable 的 AST node
+# uid 绑定可调用区分：quoted = 自包含数据值，非可调用）。
+QUOTED_SPEC = TypeDef(name="quoted", kind=TypeKind.CLASS.value,
+                      provenance=Provenance.KERNEL_NATIVE,
+                      visibility=Visibility.PRELUDE_VISIBLE,
+                      parent_type=TypeRef.of("Object"))
 
 # 多模态类型规格 — IbAudio / IbImage / IbVideo 的公理化描述符
 # 作为普通类名注册（非关键字）。

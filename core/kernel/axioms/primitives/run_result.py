@@ -1,10 +1,10 @@
 """
 core/kernel/axioms/primitives/run_result.py
 
-RunResultAxiom —— 进程内子运行结果值类型的公理声明（类型名 / 字段面 / 能力）。
+RunResultAxiom —— 子进程子运行结果值类型的公理声明（类型名 / 字段面 / 能力）。
 
 run_result = 一等内核原生**不可变**值类型（`ihost.run_file` / `ihost.run_code`
-的返回值）：进程内隔离子运行的结果记录，**错误作值**（子失败不抛穿父）。
+的返回值）：独立子进程隔离子运行的结果记录，**错误作值**（子失败不抛穿父）。
 三**字段**（record 固定面，attribute 访问，非 map 下标——Exception.message 先例）：
 - ``exit_status: str``（``"ok"`` / ``"error"``）
 - ``stdout: str``（子 print 输出捕获，不经父 stdout 直接面）

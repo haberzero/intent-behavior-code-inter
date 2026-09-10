@@ -2388,6 +2388,31 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     Python 3.12 dev headers 缺失**（venv 基座 `/usr/bin/python3.12` 无 headers；系统无 3.12 headers；
     agent 无 root 无法装）→ **需用户/root `apt-get install -y python3.12-dev`**；该缺口仅阻塞 P9 Rust
     构建，**P1-P8 纯 Python 主线不受影响**。落账 = AGENTS.local.md + HANDOFF.md §2.0 + 设计文档 §2.5。
+- **P1 R-A quote/eval 落地（数据/命令二元地基，2026-09-10，unsafe-vibe-dev；世界模型 DB 主线批次 1）**：
+   世界模型 DB 主线 P1 批次收束——`meta.quote(source) -> quoted` / `meta.eval(expr) -> any` 语言原语 +
+   `quoted` 一等不可变值类型（单字段 `source: str`；无运算符面/无 call 能力——提及与使用的切换必经显式
+   eval，二元性的结构保证）。**关键裁定（self-grill 全分支消解，无待用户项）**：① 承载 = `meta` 模块
+   （"代码作值"单一权威源：compile = 验证侧既有面，quote/eval = 数据侧/执行侧——新模块 = 碎片化）；
+   ② 提及形态 = **源串**（非 AST 捕获——AST node uid 绑定具体引擎 = 不可移植值，正是"代码不是值"
+   陷阱；系统代码作值轴全部以源串为传输形态，机制同构）；③ quote **单一验证门**（子引擎 compile-only
+   包装 `__qeval__ = <source>`：语法/语义/表达式性/自包含性一次门尽——fresh scope 使引用父模块自由名
+   的源 quote 时刻即 fail-fast，**良构由构造成立**；eval 子进程同 root 重编译必然通过，错误面 = 纯
+   运行期）；④ eval = 子进程 spawn + JSON **值通道**（复用 run_isolated collect 协议——唯一既有值交换
+   面；返回值非 stdout 文本；结果槽缺失 = 显式 fail-fast 非静默 None；None 合法）；⑤ 错误语义 fail-fast
+   上抛（与 run_code 错误作值互补——不同概念不同面，非双通道）；⑥ 对比语义 = source **逐字节**（语义
+   等价判定不可判定，归 P2 事实层 UID）；⑦ str→quoted 无隐式 cast（验证门唯一入口 = meta.quote）。
+   **变化前后**：新增 quoted 类型全链（axiom/spec/runtime object/deep_clone 不可变集/serializer 双面）
+   + HostService（quote_expression/eval_quoted + `_sub_engine_compile` 单一编译门核心提取——
+   meta.compile 同路径复用，消双写）+ meta 插件（quote/eval 方法 + spec 面：入参静态锁定 quoted/str，
+   str 直调 eval = 编译期类型违约）+ 测试 30 例（tests/runtime/test_quoted_type.py 13 +
+   tests/e2e/test_meta_quote_eval.py 17，含 R-A 自指验收演示：句作数据 + 句作命令）+ 差分 harness 语料
+   2 例（quote/eval 判别面，P9 fuzz 语料首批）。**文档漂移修复（同批）**：KNOWN_LIMITS §二十六 重写
+   （子运行 = 子进程进程级隔离 + JSON 值通道边界——原文"进程内/无进程级隔离"为 P7 前旧态）+ 11_modules
+   11.6/11.11 + 07_kernel_native_modules 模块表（meta/selfref 行缺失 + 计数漂移：内核原生 6→8）+
+   run_result 面 9 处 docstring "进程内"→"子进程"。**验证**：全量 pytest 零回归 **4038 passed /
+   1 skipped / 115.28s / rc=0**（公理层变更放行门；= 基线 3998 + 新增 30 + tests/meta 治理参数化
+   增量 10[docs 同步所致]，收集计数逐文件核对吻合）。设计要点 = `tasks_docs/_ra_quote_eval_design.md`
+   （P2 批次开工前保留——含 §7 边界裁定：eval 环境参数/归一化对比/SR-4 承载 均 P2+ 不预置）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

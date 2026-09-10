@@ -7,6 +7,7 @@ from .vector import IbVector
 from .knowledge import IbKnowledge
 from .memory import IbMemory
 from .run_result import IbRunResult
+from .quoted import IbQuoted
 from .callables import IbFnCallable, IbBehavior
 from .optional import IbOptional
 from ..media_types import IbAudio, IbImage, IbVideo
@@ -25,6 +26,7 @@ __all__ = [
     "IbKnowledge",
     "IbMemory",
     "IbRunResult",
+    "IbQuoted",
     "IbFnCallable",
     "IbBehavior",
     "IbOptional",

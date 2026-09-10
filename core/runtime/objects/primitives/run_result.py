@@ -1,11 +1,11 @@
 """
 core/runtime/objects/primitives/run_result.py
 
-IbRunResult —— 进程内子运行结果值对象（一等不可变值类型）。
+IbRunResult —— 子进程子运行结果值对象（一等不可变值类型）。
 
-``run_result`` 是 ``ihost.run_file`` / ``ihost.run_code`` 的返回值：进程内隔离子
-运行的结果记录，**错误作值**（子失败不抛穿父，与 run_isolated 的错误作异常 + 变量
-字典互补）。三**字段**（record 固定面，attribute 访问）：
+``run_result`` 是 ``ihost.run_file`` / ``ihost.run_code`` 的返回值：独立子进程
+隔离子运行的结果记录，**错误作值**（子失败不抛穿父，与 run_isolated 的错误作异常
++ 变量字典互补）。三**字段**（record 固定面，attribute 访问）：
 
 - ``exit_status: str``（``"ok"`` / ``"error"``）
 - ``stdout: str``（子 print 输出捕获，不经父 stdout 直接面）
@@ -39,7 +39,7 @@ from core.runtime.objects.ib_type_mapping import register_ib_type
 
 @register_ib_type("run_result")
 class IbRunResult(IbValue):
-    """进程内子运行结果值对象。
+    """子进程子运行结果值对象。
 
     ``payload`` = 原生结构 ``{"exit_status": str, "stdout": str,
     "exception": dict-or-None}``（序列化/边界 to_native 消费）；``fields`` = 三
