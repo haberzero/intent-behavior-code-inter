@@ -134,3 +134,62 @@ print("n_const=" + str(cons.len()))
 ''')
         assert f"n_modules={len(KERNEL_NATIVE_MODULES)}" in out
         assert "n_const=3" in out
+
+
+class TestSelfRefVerify:
+    """SR-3 验证门（编译 + 执行 + 结果，三关非仅编译）。"""
+
+    def test_verify_pass_all_gates(self):
+        """三关全过：组装的 classify 编译 + 执行 + RESULT=assert。"""
+        out = _run('''import selfref
+selfref.register_template("classify", """func classify(str x) -> str:
+    if {cond}:
+        return 'assert'
+    return 'hedge'
+""")
+str code = selfref.render("classify", {"cond": "x.find('证实') >= 0"})
+dict r = selfref.verify(code, 'print("RESULT=" + classify("普朗克数据证实了暗物质"))', "RESULT=assert")
+print("ok=" + str(r["ok"]))
+print("gate=" + str(r["gate"]))
+''')
+        assert "ok=True" in out
+        assert "gate=pass" in out
+
+    def test_verify_result_gate_fails(self):
+        """结果门失败：代码编译+执行成功但 RESULT 不符期望 → gate=result（e49 教训：仅编译不足）。"""
+        out = _run('''import selfref
+selfref.register_template("classify", """func classify(str x) -> str:
+    if {cond}:
+        return 'assert'
+    return 'hedge'
+""")
+str code = selfref.render("classify", {"cond": "x.find('证实') >= 0"})
+dict r = selfref.verify(code, 'print("RESULT=" + classify("普朗克数据证实了暗物质"))', "RESULT=wrong")
+print("ok=" + str(r["ok"]))
+print("gate=" + str(r["gate"]))
+''')
+        assert "ok=False" in out
+        assert "gate=result" in out
+
+    def test_verify_compile_gate_fails(self):
+        """编译门失败：非法 code → gate=compile（fail-fast 翻译为结构化失败，不抛）。"""
+        out = _run('''import selfref
+dict r = selfref.verify("func broken( -> int:", "print(1)", "x")
+print("ok=" + str(r["ok"]))
+print("gate=" + str(r["gate"]))
+''')
+        assert "ok=False" in out
+        assert "gate=compile" in out
+
+    def test_verify_execute_gate_fails(self):
+        """执行门失败：合法编译但执行抛异常 → gate=execute（非 compile，因编译通过）。"""
+        out = _run('''import selfref
+dict r = selfref.verify("""func f() -> int:
+    return (int)"abc"
+""", 'print(f())', "x")
+print("ok=" + str(r["ok"]))
+print("gate=" + str(r["gate"]))
+''')
+        # 执行期类型错误（(int)"abc" 编译通过但运行失败）→ gate=execute
+        assert "ok=False" in out
+        assert "gate=execute" in out

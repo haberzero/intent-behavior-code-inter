@@ -119,6 +119,59 @@ class SelfRefPlugin(IbPlugin):
             return str(params[m.group(1)])
         return _PLACEHOLDER_RE.sub(_sub, body)
 
+    # ------------------------------------------------------------------
+    # SR-3 验证门（编译 + 执行 + 结果——三关，非仅编译）
+    # ------------------------------------------------------------------
+
+    def verify(self, code: str, test_call: str, expected: str) -> Dict[str, Any]:
+        """确定性验证门（SR-3）：编译 + 执行 + 结果校验，三关（非仅编译）。
+
+        - **gate 1 (compile)**：``meta.compile(code)`` 成功（模板产出的 ibci 合法）
+        - **gate 2 (execute)**：``ihost.run_code(code + test_call)`` exit_status == "ok"
+          （组装的行为可执行）
+        - **gate 3 (result)**：stdout 含 expected（**结果校验**——e49 证明仅编译不足）
+        返回 dict {ok, gate, detail}：报告哪一关通过/失败（审计面；不抛，结构化
+        失败）。全确定性（零 LLM）。对齐试用方 e52 的 verify（本设计提升为一等原语）。
+        """
+        hs = self._host_service()
+        if not hs:
+            raise RuntimeError("SelfRef service not available; cannot selfref.verify.")
+        # gate 1：编译（meta.compile 契约 = 编译失败 fail-fast 上抛 → verify 翻译为结构化失败）
+        try:
+            hs.meta_compile(code)
+        except Exception as e:  # 翻译编译失败为 gate 结果（verify 是门，非能力探测）
+            return {"ok": False, "gate": "compile", "detail": str(e)}
+        # gate 2 + 3：执行 + 结果
+        full = code + "\n" + test_call
+        result = hs.run_code(full, {})
+        payload = result.payload if hasattr(result, "payload") else {}
+        exit_status = payload.get("exit_status", "")
+        stdout = payload.get("stdout", "")
+        if exit_status != "ok":
+            exc = payload.get("exception")
+            return {
+                "ok": False, "gate": "execute",
+                "detail": (str(exc) if exc else f"exit_status={exit_status}"),
+            }
+        if expected not in stdout:
+            return {
+                "ok": False, "gate": "result",
+                "detail": f"expected '{expected}' not in stdout",
+            }
+        return {"ok": True, "gate": "pass", "detail": ""}
+
+    # ------------------------------------------------------------------
+    # 内部辅助
+    # ------------------------------------------------------------------
+
+    def _host_service(self) -> Optional[object]:
+        """通过 KernelRegistry 稳定钩子获取内核 HostService 实例（同 meta 模式）。"""
+        if self._capabilities:
+            kr = self._capabilities.kernel_registry
+            if kr:
+                return kr.get_host_service()
+        return None
+
 
 def create_implementation() -> SelfRefPlugin:
     """工厂函数：创建 SelfRefPlugin 实例（每引擎一实例，状态隔离）。"""

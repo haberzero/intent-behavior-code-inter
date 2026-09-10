@@ -331,6 +331,16 @@ _SPEC_SELFREF = TypeDef(name="selfref", kind="module", provenance=Provenance.KER
                 ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
                 ParamDescriptor(name="params", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("dict"))
             ]),
+        # SR-3 验证门：编译 + 执行 + 结果（三关，非仅编译）→ {ok, gate, detail}。
+        "verify": MethodMemberSpec(name="verify", kind="method", type_ref=TypeRef.of("dict"), param_types=[
+                TypeRef.of("str"),
+                TypeRef.of("str"),
+                TypeRef.of("str"),
+            ], return_type=TypeRef.of("dict"), param_descriptors=[
+                ParamDescriptor(name="code", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="test_call", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+                ParamDescriptor(name="expected", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str"))
+            ]),
     })
 
 _SPEC_IDBG = TypeDef(name="idbg", kind="module", provenance=Provenance.KERNEL_NATIVE, visibility=Visibility.IMPORT_GATED, members={
