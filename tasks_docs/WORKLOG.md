@@ -2735,6 +2735,51 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   **诚实结论（P8 价值定性）**：e2e 子进程开销大部分不可化约（CLI 机制 +
   子运行 by design）；P8 安全内化空间有限（~3s，全量门 ~129→~126s）。主价值 =
   **消 dual-channel 冗余（质量）**，非大幅省时（速度）。
+- **P9 Rust 内核 阶段① 地基（构建链 + 差分等价 harness，2026-09-10，
+  隔离分支 `rust-kernel`；世界模型 DB 主线批次 9 第 1 阶段）**：**Rust 化最耗时
+  的 VM 执行层**（生产负载 cProfile 实证：执行层每步 Python 反射/间接开销 =
+  数量级瓶颈，Rust 移植后同循环预计 ~1ms 量级 100-1000x；runtime 层 38% 解释器
+  CPU 直接受益）——pyo3 四阶段（① 地基 → ② Rust 前端 → ③ 执行核心[主战场] →
+  ④ 并发解除），每阶段独立有价值、可回退。
+  **阶段① 交付（零风险加法式地基）**：
+  - **构建链**：新 crate `ibci-ext/`（pyo3 0.23 extension-module，crate-type
+    cdylib，产物 `ibci_ext.so`）+ `scripts/build_rust_ext.sh`（**pin
+    CARGO_HOME=$PWD/.cargo_local + CARGO_TARGET_DIR=$PWD/target**——默认 cargo
+    位置不可写[agent bash EACCES]；PYO3_PYTHON=项目 venv；常规网络允许[pyo3
+    依赖下载免审批]）。Rust 扩展 = **opt-in**（默认 Python 内核零依赖可装——
+    wheel 发布面不变；.so 为可再生构建产物 gitignore 不入库）。
+  - **crate 骨架**：`version()`/`kernel_info()`（name/stage/status 元数据——
+    差分 harness 接入点）/`run()`（**显式 NotImplemented，无静默回退**——双
+    内核协议：Rust 内核未落地 = 显式报错，不悄悄切 Python 内核）。
+  - **差分等价 harness**（`tests/diff_harness/`，**常设交付物 = 整个替换的
+    安全网**）：比对 Python 内核（一等实验内核，参考）与 Rust 内核（生产快
+    路径）对同一 IBCI 语料的数据面（print 输出）**同输入→同输出逐字节等价**。
+    语料 = 代表语义面种子 14 条（算术/控制流/函数[显式类型注解]/容器/字符串/KB
+    世界模型[register/add_fact/lookup/contradicts]）+ 后续扩展（现有测试用例 +
+    fuzz 种子）。Rust 未就绪（status != "ready"）→ 仅 Python 参考确定性验证
+    （两次执行逐字节一致），不冒充 Rust。
+  **关键裁定（self-grill 全分支消解）**：① **双内核协议**（核心设计裁定）：
+  Python 内核 = 一等实验内核（默认，保留不删）+ Rust 内核 = 生产快路径（显式
+  opt-in，**无静默回退** fail-fast）——两内核共享同一 AST 契约 + contracts 层
+  语义红线，语言语义单点真理不变；双内核 ≠ compat shim（工作模式定论）= 同一
+  语言的两个一等执行后端，选择经协议显式化；② **构建链 opt-in**（Rust 非硬
+  构建依赖——setuptools 后端不变，.so 经独立 build 脚本产出，默认安装零 Rust
+  依赖）；③ **差分 harness 为常设安全网**（阶段②/③/④ 每阶段 Rust 落地后须经
+  harness 验证与 Python 参考内核差分等价零差异方可放行；语义漂移 = 最高风险，
+  harness + contracts 红线 + 公理层/语义错误集变更全量 pytest 红线三重防护）；
+  ④ **CARGO pin 纪律**（默认 cargo 位置不可写 → pin workspace 内，免审批）；
+  ⑤ **IBCI 函数须显式类型注解**（参数 + 返回值；用返回值/递归须 `-> 类型` 定
+  型——语料种子面实证）。
+  **验证**：全量 pytest 零回归（开新分支前 + 阶段边界放行门——加法式地基不动
+  Python 执行路径，计数 = 4257 + harness 5 = 4262；见 NEXT_STEPS 基线锚点）。
+  **阶段① 出口达成**（构建链 + crate 骨架 + 差分 harness 安全网就位；Rust 扩展
+  可构建可加载，run 显式 NotImplemented 待阶段②/③ 落地执行核心）。
+  **分支状态**：`rust-kernel` 隔离分支（自 unsafe-vibe-dev）；阶段① 零风险加
+  法式地基，验证后 merge unsafe-vibe-dev 并删分支（分支政策：确认零风险即
+  merge + 删分支）；阶段②/③/④ 续在隔离分支（Rust 执行核心触及公理层语义，
+  高风险面须隔离 + 差分 harness 门）。
+  **P9 调研单点真理** = `tasks_docs/_rust_kernel_survey.md`（实测定性 + 四阶段
+  + 双内核协议 + 预期效果 + 风险对策 + 环境事实）；本阶段展开 = 阶段① 实施。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

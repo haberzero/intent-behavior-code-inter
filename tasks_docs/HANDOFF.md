@@ -157,7 +157,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     隐藏计数行）；**smoke 子集（tests/contracts+tests/compiler）832 passed / ~13s 进程内无子进程**
     （高频验证用）；末次全量 **4191/1**（~126s，P5 公理层放行门，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P9 Rust 内核，独立隔离分支 rust-kernel）**：
+- **🔴 主线延续点（下一位智能体 = P9 Rust 内核 阶段② Rust 前端，隔离分支续）**：
   - **P1 R-A quote/eval 已落地（本 session）**：`meta.quote`/`meta.eval` + `quoted` 一等值类型
     （单一验证门 + 值通道）。裁定 = WORKLOG（P1 R-A 条目）。
   - **P2 R-B 世界模型 KB 已落地（本 session）**：`knowledge` 就地演化为三元组知识图谱——
@@ -215,17 +215,31 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     **诚实结论**：e2e 子进程开销大部分不可化约（纯 CLI 机制测试 + ihost 子运行
     测试 = subprocess by design）；P8 安全内化空间有限（~3s，全量门噪声内），
     主价值 = 消 dual-channel 冗余（质量）。裁定全记录 = WORKLOG（P8 条目）。
-  - **P9 Rust 内核（当前批次，独立隔离分支 `rust-kernel`）**：四阶段——① 构建链
-    + 差分 harness 扩语料 → ② 前端 → ③ 执行核心 → ④ 并发解除；harness 语料 =
-    世界模型里程碑；确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并
-    删分支。构建 pin `CARGO_HOME=$PWD/.cargo_local` + `CARGO_TARGET_DIR=$PWD/target`
-    （默认 cargo 位置不可写）+ 常规网络免审批；Rust↔Python 协同已端到端验证
-    （pyo3 0.23，P9 无环境阻塞）。
-  - **P0-P9 执行清单**（详见 `_world_model_db_design.md` §6）：P0 设计定稿 ✅ → **P1 R-A
-    quote/eval ✅** → **P2 R-B 世界模型 KB ✅** → **P3 磁盘格式 ✅** → **P4 R-C 确定性模式
-    ✅** → **P5 R-D 工件加载 ✅** → **P6 向量面 ✅** → **P7 R-F 投影派生视图 ✅**
-    → **P8 测试进程内化 ✅** → **P9 Rust 内核（当前批次，隔离分支）**
-    。每步：受影响子集+smoke 验证零回归 + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
+  - **P9 Rust 内核 阶段① 地基已落地（本 session，隔离分支 `rust-kernel` → 已
+    merge unsafe-vibe-dev 删分支）**：构建链（crate `ibci-ext/`[pyo3 0.23
+    extension-module cdylib] + `scripts/build_rust_ext.sh`[pin CARGO_HOME=
+    .cargo_local + CARGO_TARGET_DIR=target workspace 内 + PYO3_PYTHON=venv + 常规
+    网络免审批]）+ 差分等价 harness（`tests/diff_harness/` **常设安全网**——双
+    内核同输入→同输出逐字节等价；14 条语料种子面[算术/控制流/函数显式类型/容器/
+    字符串/KB 世界模型] + Python 参考内核确定性验证 + Rust 未就绪不冒充）。
+    **双内核协议**（核心裁定）：Python 内核 = 一等实验内核（默认保留不删）+ Rust
+    内核 = 生产快路径（显式 opt-in **无静默回退** fail-fast）；两内核共享同一 AST
+    契约 + contracts 语义红线；Rust 扩展 opt-in（默认 Python 零依赖可装，.so 可再
+    生 gitignore）。**零风险加法式地基**（不动 Python 执行路径）。
+  - **P9 阶段② Rust 前端（当前批次，隔离分支续）**：lexer/parser/semantic →
+    序列化 AST（契约对接 `core/compiler/serialization` 的 FlatSerializer——字节串
+    → AST）；opt-in kernel 选择点（engine 前端）；差分 harness 门（前端落地后
+    Rust AST 与 Python AST 差分等价）。**低风险**（纯 CPU、契约最清晰：字节串→
+    AST）。四阶段全貌：① 地基 ✅ → **② 前端（当前）** → ③ 执行核心[主战场，高
+    风险：CPS dispatch 表 → Rust enum 分发 + 差分门] → ④ 并发解除[task_scheduler
+    IO-only → CPU+IO 真并行 GIL-free]。确认零风险（全量零回归 + 复核）后 merge
+    unsafe-vibe-dev 并删分支。
+  - **P0-P9 执行清单**（详见 `_world_model_db_design.md` §6 + `_rust_kernel_survey.md`）：
+    P0 设计定稿 ✅ → **P1 R-A quote/eval ✅** → **P2 R-B 世界模型 KB ✅** →
+    **P3 磁盘格式 ✅** → **P4 R-C 确定性模式 ✅** → **P5 R-D 工件加载 ✅** →
+    **P6 向量面 ✅** → **P7 R-F 投影派生视图 ✅** → **P8 测试进程内化 ✅**
+    → **P9 Rust 内核 阶段① 地基 ✅ / 阶段② 前端（当前批次）**。每步：受影响子集+
+    smoke 验证零回归 + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
   - **工作节奏（三轴收束进自指弧线，不新设竞争主线）**：R-A 并入 selfref 弧线 / R-B 演化 knowledge /
     R-C 横切；Rust 内核 = 独立隔离分支 `rust-kernel`（**设计 + 构建均可**：pin `CARGO_HOME`+
     `CARGO_TARGET_DIR` 到 workspace + 允许网络 → 免审批），harness 语料 = 世界模型里程碑；
@@ -270,9 +284,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P8 阶段边界实跑）**：**4257 passed / 1 skipped / 130.22s / rc=0**
-  （P8 测试层变更，计数同 P7[4257]——P8 瘦身两 run 不增删测试；供下一 session
-  参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段① 开分支/阶段边界实跑）**：**4263 passed /
+  1 skipped / 128.92s / rc=0**（= 前基线 4257 + 差分 harness 5 例 + meta 参数化增量 1；
+  供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
@@ -285,15 +299,20 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 - [ ] 读 **`_world_model_db_design.md`**（本主线设计 + 调研结论 + 决策点/风险 + P0-P9 执行清单；
   **首读**）+ `_rust_kernel_survey.md`（Rust 内核替换调研——P9 依据；P2/P3/P4/P5/P6/P7 设计
   文档已收束删除，裁定全在 WORKLOG + docs/）
-- [ ] 读 `NEXT_STEPS.md`（当前主线 = 世界模型 DB + **当前批次 P9 Rust 内核[隔离分支]** +
+- [ ] 读 `NEXT_STEPS.md`（当前主线 = 世界模型 DB + **当前批次 P9 阶段② Rust 前端[隔离分支续]** +
   工作节奏 + ⛔ 工作模式定论）
 - [ ] 读 `WORKLOG.md`（P1 R-A + P2 R-B + P3 磁盘格式 + P4 确定性模式 + P5 窄模型工件 + P6 向量面
-  + P7 投影派生视图 + P8 测试进程内化 裁定 + 世界模型 DB 设计裁定 + 环境重建 + 本交接）
-- [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P9；objective 按 §1.3 模板套用，
-  含约束：**禁 push**（须用户单独授权）；**常规网络允许**（不触发审批）；**Rust 构建可行**
-  （pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到 workspace，免审批）；**避免**写 workspace 外文件 /
-  无必要沙箱提权；用户不在场且需 push 时延后记录不阻塞）；跨 session 需**新建** goal（旧 goal
-  不跨 session 续跑）
+  + P7 投影派生视图 + P8 测试进程内化 + P9 Rust 内核阶段① 地基 裁定 + 世界模型 DB 设计裁定 +
+  环境重建 + 本交接）
+- [ ] **P9 环境**：Rust 构建 pin `CARGO_HOME=$PWD/.cargo_local` + `CARGO_TARGET_DIR=$PWD/target`
+  （默认 cargo 位置不可写[agent bash EACCES]）+ PYO3_PYTHON=venv + 常规网络免审批；构建链 =
+  `scripts/build_rust_ext.sh`（产物 `core/runtime/kernels/ibci_ext.so`，gitignore 可再生）；
+  差分 harness = `tests/diff_harness/`（常设安全网——Rust 每阶段落地后须差分等价零差异放行）。
+- [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P9 阶段②-④；objective 按
+  §1.3 模板套用，含约束：**禁 push**（须用户单独授权）；**常规网络允许**（不触发审批）；
+  **Rust 构建可行**（pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到 workspace，免审批）；**避免**写
+  workspace 外文件 / 无必要沙箱提权；用户不在场且需 push 时延后记录不阻塞）；跨 session 需
+  **新建** goal（旧 goal 不跨 session 续跑）
 - [ ] **环境自检**：`.venv/bin/python -m pytest tests/contracts tests/compiler`（smoke，~13s 进程内；
   **勿显式加 `-q`**——addopts 已含，双 `-q` 隐藏计数行）+ `.venv/bin/python trials/_toolkit/probe.py`
   （LLM 端点鉴权+模型可用）

@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4257 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P8 阶段边界放行门[测试层变更，计数不变]；数字以实跑为准，不冻结）。
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4263 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 阶段① 开分支/阶段边界放行门[加法式地基 + harness 5 例]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -68,7 +68,15 @@
 >   P5/P6/P7 e2e 两 run → 单 run CLI 凭证，确定性归并进 process + P4 M1 代表性
 >   流水线可复现性；e2e 子进程开销大部分不可化约[CLI 机制 + 子运行 by design]，
 >   主价值 = 消冗余质量而非大幅省时；设计/裁定 = WORKLOG P8 条目）
->   → **当前批次 = P9 Rust 内核（独立隔离分支 rust-kernel）**。
+>   → **P9 Rust 内核 阶段① 地基 ✅**（构建链 + 差分等价 harness——crate
+>   ibci-ext[pyo3 0.23] + build_rust_ext.sh[pin CARGO_HOME/TARGET_DIR workspace]
+>   + tests/diff_harness[常设安全网：双内核同输入→同输出逐字节等价；14 条语料
+>   种子面 + Python 参考确定性验证；Rust 未就绪不冒充]；双内核协议[Python 一等
+>   实验内核默认 + Rust 生产快路径 opt-in 无静默回退]；零风险加法式地基，
+>   merge unsafe-vibe-dev 删分支；设计/裁定 = WORKLOG P9 阶段① 条目 +
+>   `_rust_kernel_survey.md`）
+>   → **当前批次 = P9 阶段② Rust 前端（lexer/parser/semantic→序列化 AST，
+>   隔离分支续；契约对接 core/compiler/serialization）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -104,7 +112,8 @@
    可灵活微调[用户 2026-09-10 裁定]；执行序列
    P1 R-A quote/eval ✅ → P2 R-B KB ✅ → P3 磁盘格式 ✅ → P4 R-C 确定性模式 ✅
    → P5 R-D 工件加载 ✅ → P6 向量面 ✅ → P7 R-F 投影派生视图 ✅ → P8 测试进程内化 ✅
-   → **P9 Rust 内核（下一批次，独立隔离分支 rust-kernel）**
+   → **P9 Rust 内核 阶段① 地基 ✅ → 阶段② Rust 前端（下一批次，隔离分支续）**
+   → 阶段③ 执行核心[主战场] → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root）；

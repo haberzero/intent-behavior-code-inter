@@ -1,0 +1,17 @@
+[package]
+name = "ibci-ext"
+version = "0.1.0"
+edition = "2021"
+description = "IBC-Inter Rust 内核（pyo3 扩展）——双内核协议的 Rust 执行后端（生产快路径，opt-in）"
+license = "MIT"
+
+[lib]
+name = "ibci_ext"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

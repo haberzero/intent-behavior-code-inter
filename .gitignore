@@ -34,6 +34,13 @@ dist/
 .eggs/
 trials/T07_fixes_critical_stress/_scratch/
 
+# Rust 内核构建产物（P9 ibci-ext pyo3 扩展；构建链 = scripts/build_rust_ext.sh，
+# pin CARGO_HOME=.cargo_local + CARGO_TARGET_DIR=target；.so 为可再生构建产物
+# 不入版本控制）
+.cargo_local/
+target/
+core/runtime/kernels/ibci_ext.so
+
 # trial run outputs are local reference analysis, not versioned
 trials/**/logs/
 trials/**/batch_result.jsonl
