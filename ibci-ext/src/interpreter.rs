@@ -416,14 +416,38 @@ impl Interpreter {
             }
             Expr::UnaryOp { op, operand, .. } => {
                 let v = self.eval_expr(env, operand, output);
-                if op == "-" {
-                    match v {
+                match op.as_str() {
+                    "-" => match v {
                         IbValue::Int(i) => IbValue::Int(-i),
                         IbValue::Float(f) => IbValue::Float(-f),
                         _ => v,
+                    },
+                    "not" => IbValue::Bool(!v.truthy()),
+                    _ => v,
+                }
+            }
+            Expr::BoolOp { op, values, .. } => {
+                // and / or（短路求值）
+                if op == "and" {
+                    let mut result = IbValue::Bool(true);
+                    for v in values {
+                        let x = self.eval_expr(env, v, output);
+                        if !x.truthy() {
+                            return x; // 短路：返回第一个假值
+                        }
+                        result = x;
                     }
+                    result
                 } else {
-                    v
+                    let mut result = IbValue::Bool(false);
+                    for v in values {
+                        let x = self.eval_expr(env, v, output);
+                        if x.truthy() {
+                            return x; // 短路：返回第一个真值
+                        }
+                        result = x;
+                    }
+                    result
                 }
             }
             Expr::Compare { left, ops, comparators, .. } => {

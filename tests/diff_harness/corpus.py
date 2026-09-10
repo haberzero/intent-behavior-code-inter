@@ -31,6 +31,16 @@ CORPUS: List[Tuple[str, str]] = [
     ("dict_ops", "d = {'a': 1, 'b': 2}\nd['c'] = 3\nprint(d['a'])\nprint(d)\n"),
     # ---- 字符串 ----
     ("string_ops", "s = 'hello'\nprint(s + ' world')\nprint(len(s))\n"),
+    ("string_methods", "s = '  hello  '\nprint(s.strip())\nprint(s.upper())\nprint(s.lower())\n"),
+    # ---- 扩展控制流 / 表达式 ----
+    ("control_while", "i = 0\ns = 0\nwhile i < 5:\n    s = s + i\n    i = i + 1\nprint(s)\n"),
+    ("expr_ternary", "x = 7\ny = 'big' if x > 5 else 'small'\nprint(y)\n"),
+    ("expr_bool", "print(True and False)\nprint(True or False)\nprint(not True)\n"),
+    # ---- 函数扩展（嵌套）----
+    ("function_nested",
+     "func outer(int n) -> int:\n    func inner(int m) -> int:\n        return m + 1\n    return inner(n)\nprint(outer(41))\n"),
+    # ---- 容器扩展 ----
+    ("list_more", "a = [1, 2]\nb = [3, 4]\nprint(a + b)\nprint(a[0] * 2)\n"),
     # ---- KB 世界模型（主线核心面）----
     ("kb_world_vocab", (
         "kb = knowledge()\n"

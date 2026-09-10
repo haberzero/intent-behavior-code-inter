@@ -151,9 +151,16 @@
 >   run_artifact(artifact_json, bridge)` 暴露 + 桥接助手 bridge.py[经 registry
 >   创建 knowledge]；**全语料 14/14 数据面逐条等价**[11 非 KB + 3 KB]；零风险
 >   加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段③ 第四增量条目）
->   → **当前批次 = P9 阶段③ 续（执行核心：CPS 优化[43 节点 enum 分发，数据面
->   等价后做性能优化，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 +
->   更宽 IBCI 语料[超出当前 14 条]；隔离分支续）**。
+>   → **P9 阶段③ 第五增量 ✅**（执行核心更宽 IBCI 语料 + 布尔逻辑解析——语料 14
+>   → 20[+control_while/expr_ternary/expr_bool/function_nested/string_methods/
+>   list_more]；Rust parser 加布尔逻辑层级[parse_or/parse_and/parse_not，优先级
+>   ternary<or<and<not<compare 对齐 Python，BoolOp 左结合/not 右结合]+ deserializer
+>   加 IbBoolOp + interpreter 加 and/or 短路 + not；**全语料 20/20 四级差分逐条
+>   等价**[token/AST/反序列化/数据面]；零风险加法式，merge 删分支；设计/裁定 =
+>   WORKLOG P9 阶段③ 第五增量条目）
+>   → **当前批次 = P9 阶段③ 续（执行核心：CPS 优化[43 节点 enum 分发，在 27x 基础
+>   上进一步提升] + 符号池/类型池/侧表反序列化 + 闭包完整语义 + 更宽 IBCI 语料
+>   [行为表达式/quoted 值等]；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -197,7 +204,9 @@
    解释器 + 数据面 11/11 等价 ✅**（**主战场突破**）
    → 阶段③ 第三增量 执行核心性能基准 23–30x ✅
    → 阶段③ 第四增量 执行核心 KB 语料面 host service 桥接 全语料 14/14 ✅
-   → 阶段③ 续（CPS 优化 + 符号/类型/侧表 + 更宽语料）[当前] → 阶段④ 并发解除
+   → 阶段③ 第五增量 更宽语料 20 条 + 布尔逻辑解析 四级 20/20 ✅
+   → 阶段③ 续（CPS 优化 + 符号/类型/侧表 + 闭包 + 行为表达式）[当前]
+   → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root）；

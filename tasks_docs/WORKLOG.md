@@ -3136,6 +3136,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 +
   更宽 IBCI 语料[超出当前 14 条]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；
   语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第五增量（执行核心更宽 IBCI 语料 + 布尔逻辑解析——全语料 20/20 数据
+  面差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust 执行核心泛化性验证**
+  ——语料从 14 扩至 20（+control_while/expr_ternary/expr_bool/function_nested/
+  string_methods/list_more），全语料 **20/20 数据面差分等价**（四级差分逐级验证：
+  token/AST/反序列化/数据面），证明执行核心可处理更宽 IBCI 语义面（while 循环/
+  三元表达式/布尔逻辑 and/or/not/嵌套函数/字符串方法/列表拼接）。
+  **交付**：
+  - **语料扩展**（`tests/diff_harness/corpus.py`）：+6 条（control_while[while
+    循环] / expr_ternary[三元表达式赋值形式] / expr_bool[布尔逻辑 and/or/not] /
+    function_nested[嵌套函数] / string_methods[strip/upper/lower] / list_more[列表
+    拼接 + 下标]）。
+  - **Rust parser 加布尔逻辑层级**（`ibci-ext/src/parser.rs`）：`Expr::BoolOp`
+    变体 + dumper[对齐 Python IbBoolOp 格式] + parse_or/parse_and/parse_not 层级
+    （优先级：ternary < or < and < not < compare，对齐 Python；BoolOp 左结合，
+    not 右结合；位置：BoolOp = 首 value 起/末 value 止，not = not token 起/止）。
+  - **Rust deserializer 加 IbBoolOp**（`ibci-ext/src/deserializer.rs`）：artifact
+    IbBoolOp 节点 → Rust BoolOp（values = UID 数组 → expr_of）。
+  - **Rust interpreter 加 BoolOp + not**（`ibci-ext/src/interpreter.rs`）：and/or
+    短路求值（and 返回第一个假值/末值，or 返回第一个真值/末值）+ not（UnaryOp
+    op='not' → !truthy）。
+  **关键裁定（self-grill 全分支消解）**：① **布尔逻辑优先级对齐 Python**（ternary
+  < or < and < not < compare——parse_or/parse_and/parse_not 层级插入 ternary 与
+  compare 之间）；② **BoolOp 左结合 + not 右结合**（`a or b or c` = (a or b) or
+  c；`not not x` = not (not x)）；③ **BoolOp 位置 = 首/末 value**（start=首个
+  value 起，end=末个 value 止，对齐 Python）；④ **三元用赋值形式**（IBCI 三元
+  `body if test else orelse` 在赋值上下文工作，call 参数内受限[IBCI 语法边界]）；
+  ⑤ **嵌套函数当前实现支持语料面**（inner 不访问 outer 变量——闭包完整语义[访问
+  outer 局部] = 后续增量，非当前语料面需求）。
+  **验证**：四级差分 20/20 全语料逐条等价（token[完整位置]/AST[完整形态含位置]/
+  反序列化[artifact → Rust AST]/数据面[Rust 执行 == Python 执行]）+ 全量 pytest
+  零回归（阶段边界放行门——加法式增量不动 Python 执行路径；计数 = 4274；见
+  NEXT_STEPS 基线锚点）。**阶段③ 第五增量出口达成**（Rust 执行核心泛化性验证
+  ——全语料 20/20 四级差分等价）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 第五增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（CPS 优化
+  [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 闭
+  包完整语义 + 更宽 IBCI 语料[行为表达式/quoted 值等]）+ ④ 并发解除续在隔离分支
+  （差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -119,6 +119,7 @@ pub enum Expr {
     Name { pos: Pos, id: String, ctx: String },
     BinOp { pos: Pos, left: Box<Expr>, op: String, right: Box<Expr> },
     UnaryOp { pos: Pos, op: String, operand: Box<Expr> },
+    BoolOp { pos: Pos, op: String, values: Vec<Expr> },
     Compare {
         pos: Pos,
         left: Box<Expr>,
@@ -159,6 +160,15 @@ impl Expr {
             ),
             Expr::UnaryOp { pos, op, operand } => {
                 format!("IbUnaryOp({}, op='{}', operand={})", pos.prefix(), op, operand.dump())
+            }
+            Expr::BoolOp { pos, op, values } => {
+                let vals: Vec<String> = values.iter().map(|v| v.dump()).collect();
+                format!(
+                    "IbBoolOp({}, op='{}', values=[{}])",
+                    pos.prefix(),
+                    op,
+                    vals.join(", ")
+                )
             }
             Expr::Compare { pos, left, ops, comparators } => {
                 let ops_str: Vec<String> = ops.iter().map(|o| format!("'{}'", o)).collect();
@@ -887,10 +897,10 @@ impl Parser {
 
     /// 最低优先级：三元（IbIfExp）——`body if test else orelse`。
     fn parse_expr(&mut self) -> Expr {
-        let body = self.parse_compare();
+        let body = self.parse_or();
         if self.at(TokenType::If) {
             self.advance(); // IF
-            let test = self.parse_compare();
+            let test = self.parse_or();
             self.expect(TokenType::Else);
             let orelse = self.parse_expr(); // 右结合（嵌套三元）
             // IbIfExp 位置 = start=body 的起，end=orelse 的止
@@ -909,6 +919,57 @@ impl Parser {
             };
         }
         body
+    }
+
+    /// or 优先级（IbBoolOp op='or'，左结合）。
+    fn parse_or(&mut self) -> Expr {
+        let mut values = vec![self.parse_and()];
+        while self.at(TokenType::Or) {
+            self.advance();
+            values.push(self.parse_and());
+        }
+        if values.len() == 1 {
+            values.pop().unwrap()
+        } else {
+            Expr::BoolOp {
+                pos: boolop_pos(&values),
+                op: "or".to_string(),
+                values,
+            }
+        }
+    }
+
+    /// and 优先级（IbBoolOp op='and'，左结合）。
+    fn parse_and(&mut self) -> Expr {
+        let mut values = vec![self.parse_not()];
+        while self.at(TokenType::And) {
+            self.advance();
+            values.push(self.parse_not());
+        }
+        if values.len() == 1 {
+            values.pop().unwrap()
+        } else {
+            Expr::BoolOp {
+                pos: boolop_pos(&values),
+                op: "and".to_string(),
+                values,
+            }
+        }
+    }
+
+    /// not 优先级（IbUnaryOp op='not'，右结合）。
+    fn parse_not(&mut self) -> Expr {
+        if self.at(TokenType::Not) {
+            let not_tok = self.advance(); // NOT
+            let operand = self.parse_not(); // 右结合（not not x）
+            // IbUnaryOp 位置 = op token 的起/止（对齐 Python）
+            return Expr::UnaryOp {
+                pos: Pos::from_token(&not_tok),
+                op: "not".to_string(),
+                operand: Box::new(operand),
+            };
+        }
+        self.parse_compare()
     }
 
     /// 比较优先级。
@@ -1279,6 +1340,18 @@ fn make_binop(left: Expr, op: String, right: Expr) -> Expr {
     }
 }
 
+/// BoolOp 位置 = start=首个 value 的起，end=末个 value 的止。
+fn boolop_pos(values: &[Expr]) -> Pos {
+    let first = expr_pos(&values[0]);
+    let last = expr_pos(values.last().unwrap());
+    Pos {
+        lineno: first.lineno,
+        col_offset: first.col_offset,
+        end_lineno: last.end_lineno,
+        end_col_offset: last.end_col_offset,
+    }
+}
+
 /// 取 Expr 的位置（起 line/col + 止 end_line/end_col）。
 fn expr_pos(e: &Expr) -> Pos {
     match e {
@@ -1286,6 +1359,7 @@ fn expr_pos(e: &Expr) -> Pos {
         | Expr::Name { pos, .. }
         | Expr::BinOp { pos, .. }
         | Expr::UnaryOp { pos, .. }
+        | Expr::BoolOp { pos, .. }
         | Expr::Compare { pos, .. }
         | Expr::Call { pos, .. }
         | Expr::List { pos, .. }

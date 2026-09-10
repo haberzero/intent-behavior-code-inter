@@ -173,6 +173,11 @@ fn build_node(uid: &str, nodes: &NodeMap) -> Node {
             op: str_of(&n["op"]),
             operand: Box::new(expr_of(&uid_of(&n["operand"]), nodes)),
         }),
+        "IbBoolOp" => Node::Expr(Expr::BoolOp {
+            pos: pos_of(n),
+            op: str_of(&n["op"]),
+            values: uids_of(&n["values"]).iter().map(|u| expr_of(u, nodes)).collect(),
+        }),
         "IbCompare" => {
             let ops: Vec<String> = n["ops"]
                 .as_array()
@@ -305,6 +310,7 @@ fn expr_pos(e: &Expr) -> Pos {
         | Expr::Name { pos, .. }
         | Expr::BinOp { pos, .. }
         | Expr::UnaryOp { pos, .. }
+        | Expr::BoolOp { pos, .. }
         | Expr::Compare { pos, .. }
         | Expr::Call { pos, .. }
         | Expr::List { pos, .. }
