@@ -159,6 +159,24 @@ def rust_deserialize_struct(artifact_json: str) -> str:
     return rk._module.deserialize_struct(artifact_json)
 
 
+def rust_execution_data_plane(script: str) -> List[str]:
+    """Rust 执行核心（ibci_ext.run_artifact）：script → 数据面（print 输出列表）。
+
+    迁移期策略：Python 前端（compile → artifact）→ Rust 执行核心（反序列化 +
+    执行）。.so 未构建 = 空列表（合法态——降级为仅 Python 参考）。
+    """
+    import json
+    from tests.conftest import compile_ibci
+    from core.compiler.serialization.serializer import FlatSerializer
+    rk = load_rust_kernel()
+    if not rk.loaded:
+        return []
+    artifact = compile_ibci(script)
+    data = FlatSerializer().serialize_artifact(artifact)
+    js = json.dumps(data, ensure_ascii=False)
+    return list(rk._module.run_artifact(js))
+
+
 @dataclass
 class DiffReport:
     """差分比对报告：每语料的 Python/Rust 数据面 + 等价判定 + 汇总。"""

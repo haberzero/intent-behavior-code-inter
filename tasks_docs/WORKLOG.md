@@ -3023,6 +3023,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（执行核心：
   符号池/类型池/侧表反序列化 + 对象模型 + CPS 分发[43 节点] + 数据面差分门）+ ④
   并发解除续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第二增量（执行核心：Rust 对象模型 + tree-walking 解释器 + 数据面
+  差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust 执行核心（主战场）
+  突破**——非 KB 语料面（11/11）数据面差分等价（Rust 执行 print 输出 == Python
+  执行 print 输出），证明 Rust 执行核心可消费 Python 前端 artifact 并产出等价数据
+  面。
+  **交付**：
+  - **Rust 对象模型**（`ibci-ext/src/interpreter.rs` IbValue）：Int / Float / Str /
+    Bool / None / List / Dict——List/Dict 经 **Rc<RefCell>**（共享可变——append/
+    dict 下标赋值原地修改，clean Rust 方式，避免 tricky 特判）。数据面 repr 对齐
+    Python print（float 整数值 = `4.0`；list `[e, e]`；dict `{"k": v}`；str 原样）。
+  - **Rust 解释器**（tree-walking）：反序列化 AST → 执行 → 数据面。语句面：Assign
+    [Name/Subscript target] / ExprStmt / If[elif 链] / For / While / FunctionDef /
+    Return / Break / Continue / Pass；表达式面：Constant / Name / BinOp[+ - * /
+    // % **] / UnaryOp / Compare / Call / List / Dict / Attribute[方法] / Subscript /
+    IfExp；内建：print / len / range；方法：list.append / str 方法（upper 等）。
+  - **IBC 数值语义对齐**：`/` = `//` = floor 除（`-7 / 2` = `-4`）；int + float =
+    float（`2 + 2.0` = `4.0`）；`%` = euclidean（`rem_euclid`）；`**` = pow。
+  - **环境 + 作用域链**：变量绑定 + 函数定义 + 递归（call_env 父 = 全局环境，使
+    函数体可访问全局函数）。
+  - **pyo3 暴露**：`ibci_ext.run_artifact(artifact_json) -> list`（数据面）。
+  **关键裁定（self-grill 全分支消解）**：① **tree-walking 解释器**（非 CPS——
+  迁移期验证数据面等价；CPS 优化[43 节点 enum 分发] = 后续增量，数据面等价后做
+  性能优化）；② **Rc<RefCell> 共享可变容器**（clean Rust 方式——避免 tricky 特判
+  的 append/dict 赋值）；③ **递归经作用域链**（call_env 父 = 全局环境——函数体可
+  访问全局函数）；④ **IBC 数值语义 = floor 除**（`/` 与 `//` 同义，`-7/2 = -4`——
+  对齐 Python IBCI 行为，非 IEEE 除）；⑤ **KB 语料面 = 后续增量**（knowledge()
+  宿主服务需宿主环境——非 KB 语料面 11/11 先验证）。
+  **验证**：数据面差分 **11/11 非 KB 语料逐条等价**（Rust 执行 == Python 执行：
+  算术[7,2,1]/循环[55]/负数[-2,8]/控制流[big,0,1,2,嵌套]/函数[5,7]/递归[120]/
+  list[1,2,3,4,2,4]/dict[1,{"a":1,"b":2,"c":3}]/string[hello world,5]）+ 全量
+  pytest 零回归（阶段边界放行门——加法式增量不动 Python 执行路径，计数 = 4270 +
+  数据面差分 2 例 = 4272；见 NEXT_STEPS 基线锚点）。**阶段③ 第二增量出口达成**
+  （Rust 执行核心对象模型 + 解释器 + 数据面差分等价门就位——**主战场突破**）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 第二增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（CPS 优化
+  [43 节点 enum 分发] + KB 语料面[宿主服务] + 符号池/类型池/侧表反序列化 + 性能
+  基准[cProfile 对比]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；语义层 Rust
+  移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

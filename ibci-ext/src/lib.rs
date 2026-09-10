@@ -11,6 +11,7 @@
 //! 生效）。
 
 mod deserializer;
+mod interpreter;
 mod lexer;
 mod parser;
 
@@ -87,6 +88,19 @@ fn run(_script: &str) -> PyResult<String> {
     ))
 }
 
+/// 执行核心入口：序列化 artifact（JSON）→ 执行 → 数据面（print 输出列表）。
+/// 消费 Python 前端产出的 artifact（含语义层输出）；迁移期策略（执行核心 Rust
+/// + 前端 Python）。Rust 语义层移植后 = 全量 Rust 前端 + 执行核心。
+#[pyfunction]
+fn run_artifact(artifact_json: &str, py: Python<'_>) -> PyResult<Py<PyList>> {
+    let lines = interpreter::run_artifact(artifact_json);
+    let list = PyList::empty(py);
+    for line in lines {
+        list.append(line)?;
+    }
+    Ok(list.unbind())
+}
+
 #[pymodule]
 fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
@@ -94,6 +108,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(lex, m)?)?;
     m.add_function(wrap_pyfunction!(parse_struct, m)?)?;
     m.add_function(wrap_pyfunction!(deserialize_struct, m)?)?;
+    m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
     Ok(())
 }

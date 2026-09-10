@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4270 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段③ 首增量[执行核心反序列化器 + 反序列化器 1 例]阶段边界放行门；数字以实跑为准，不冻结）。
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4272 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 阶段③ 第二增量[执行核心对象模型 + 解释器 + 数据面差分 2 例]阶段边界放行门；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -129,8 +129,17 @@
 >   反序列化器差分面；**14/14 语料反序列化 AST 逐字节等价**[artifact → Rust AST
 >   == Python AST]；执行核心输入契约就位；零风险加法式，merge 删分支；设计/裁定
 >   = WORKLOG P9 阶段③ 首增量条目）
->   → **当前批次 = P9 阶段③ 续（执行核心：符号池/类型池/侧表反序列化 + 对象
->   模型 + CPS 分发[43 节点] + 数据面差分门；隔离分支续）**。
+>   → **P9 阶段③ 第二增量 ✅**（执行核心：Rust 对象模型[IbValue：Int/Float/Str/
+>   Bool/None/List/Dict，List/Dict 经 Rc<RefCell> 共享可变] + tree-walking 解释器
+>   [Assign/ExprStmt/If/For/While/FunctionDef/Return/Break/Continue/Pass + 表达式
+>   全面 + 内建 print/len/range + 方法 append/str] + IBC 数值语义[/ 与 // = floor
+>   除，int+float=float] + 环境/作用域链[递归] + `ibci_ext.run_artifact` 暴露 +
+>   差分 harness 加数据面差分面；**11/11 非 KB 语料数据面逐条等价**[Rust 执行 ==
+>   Python 执行]；**主战场突破**；KB 语料面[宿主服务] = 后续增量；零风险加法式，
+>   merge 删分支；设计/裁定 = WORKLOG P9 阶段③ 第二增量条目）
+>   → **当前批次 = P9 阶段③ 续（执行核心：CPS 优化[43 节点 enum 分发，数据面
+>   等价后做性能优化] + KB 语料面[宿主服务] + 符号池/类型池/侧表反序列化 + 性能
+>   基准[cProfile 对比 Python]；隔离分支续）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -170,9 +179,9 @@
    → 阶段② 第二增量 Rust parser 最小面 ✅ → 阶段② 第三增量 Rust parser 完整面 ✅
    → 阶段② 第四增量 位置跟踪对齐 ✅ → 阶段② 第五增量 剩余语句/表达式面 ✅
    → 阶段③ 首增量 执行核心反序列化器 ✅（语义层 Rust 移植推迟 = 全量 Rust 化
-   后续；执行核心消费 Python artifact）**
-   → 阶段③ 续（执行核心：符号/类型/侧表 + 对象模型 + CPS 分发[主战场]）[当前]
-   → 阶段④ 并发解除
+   后续；执行核心消费 Python artifact）→ 阶段③ 第二增量 执行核心对象模型 +
+   解释器 + 数据面 11/11 等价 ✅**（**主战场突破**）
+   → 阶段③ 续（CPS 优化 + KB 语料面 + 性能基准）[当前] → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root）；

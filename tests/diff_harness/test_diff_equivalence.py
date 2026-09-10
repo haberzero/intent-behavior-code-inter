@@ -217,3 +217,44 @@ class TestRustDeserializerDifferential:
             rs = rust_deserialize_struct(js)
             py = parse_ast_dump(code, include_positions=True)
             assert rs == py, f"语料 {name} 反序列化 AST 差分不等价：\n  py : {py}\n  rust: {rs}"
+
+
+class TestRustExecutionDataPlane:
+    """Rust 执行核心（ibci_ext.run_artifact）vs Python 执行核心的数据面差分等价。
+
+    执行核心 = P9 阶段③ 主战场（cProfile 实证性能瓶颈）。迁移期策略：Python 前端
+    → artifact → Rust 执行核心（反序列化 + 执行）。数据面差分 = Rust print 输出
+    == Python print 输出。本增量 = 非 KB 语料面（KB 语料需宿主服务 = 后续增量）。
+    """
+
+    def test_data_plane_non_kb_corpus(self):
+        """数据面差分等价：非 KB 语料（Rust 执行 == Python 执行）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        non_kb = [(n, c) for n, c in CORPUS if not n.startswith("kb_")]
+        for name, code in non_kb:
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code)
+            assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+
+    def test_data_plane_simple(self):
+        """数据面差分等价：简单 IBCI 片段（算术/控制流/函数/容器/字符串）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        snippets = [
+            "print(1 + 2 * 3)\n",
+            "x = 0\nfor i in range(1, 11):\n    x = x + i\nprint(x)\n",
+            "func double(int n) -> int:\n    return n * 2\nprint(double(21))\n",
+            "xs = [1, 2]\nxs.append(3)\nprint(xs)\n",
+            "print('a' + 'b')\n",
+        ]
+        for src in snippets:
+            py = run_ibci(src)
+            rs = rust_execution_data_plane(src)
+            assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"

@@ -319,10 +319,10 @@ fn expr_pos(e: &Expr) -> Pos {
 // --------------------------------------------------------------------------- //
 // 入口：artifact JSON → 反序列化 AST 完整形态（含位置）
 // --------------------------------------------------------------------------- //
-pub fn deserialize_struct(artifact_json: &str) -> String {
-    let root: Value = serde_json::from_str(artifact_json).expect("artifact JSON 解析失败");
-    // 取入口模块的 nodes 池 + root_node_uid
-    let entry = root["entry_module"].as_str().expect("entry_module 缺失");
+/// artifact JSON → 反序列化 Module（AST）。None = 解析失败（artifact 非良构）。
+pub fn deserialize_module(artifact_json: &str) -> Option<Module> {
+    let root: Value = serde_json::from_str(artifact_json).ok()?;
+    let entry = root["entry_module"].as_str()?;
     let module = &root["modules"][entry];
     let nodes_pool = &module["pools"]["nodes"];
     let mut nodes: NodeMap = std::collections::HashMap::new();
@@ -331,13 +331,19 @@ pub fn deserialize_struct(artifact_json: &str) -> String {
             nodes.insert(uid.clone(), node.clone());
         }
     }
-    let root_uid = module["root_node_uid"].as_str().expect("root_node_uid 缺失");
-    // root = IbModule
-    let n = nodes.get(root_uid).expect("root 节点缺失");
+    let root_uid = module["root_node_uid"].as_str()?;
+    let n = nodes.get(root_uid)?;
     let body: Vec<Stmt> = uids_of(&n["body"]).iter().map(|u| stmt_of(u, &nodes)).collect();
-    let module_ast = Module {
+    Some(Module {
         pos: pos_of(n),
         body,
-    };
-    module_ast.dump()
+    })
+}
+
+/// artifact JSON → 反序列化 AST 完整形态（含位置）。
+pub fn deserialize_struct(artifact_json: &str) -> String {
+    match deserialize_module(artifact_json) {
+        Some(m) => m.dump(),
+        None => String::new(),
+    }
 }
