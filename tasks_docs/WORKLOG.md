@@ -3061,6 +3061,43 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [43 节点 enum 分发] + KB 语料面[宿主服务] + 符号池/类型池/侧表反序列化 + 性能
   基准[cProfile 对比]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；语义层 Rust
   移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第三增量（执行核心性能基准——Rust 23–30x 加速实证，2026-09-10，
+  加法式零风险增量直接提交 unsafe-vibe-dev）**：**Rust 执行核心性能基准**——
+  常设基准脚本 `scripts/bench_rust_kernel.py`（测量同一 IBCI 语料的两执行核心
+  耗时，微秒/次）实证 Rust 执行核心比 Python 执行核心**快 23–30x**（主战场价值
+  实证——cProfile 实证的 per-step Python 反射/间接瓶颈被 Rust 消除）。
+  **交付**：
+  - **常设基准脚本**（`scripts/bench_rust_kernel.py`）：Python（run_ibci =
+    compile[artifact 缓存] + VM 执行）vs Rust（compile[Python 缓存] → serialize →
+    run_artifact[反序列化 + 执行]）耗时对比（微秒/次，300 次迭代均值）。非测试
+    （性能断言 flaky）——基准脚本，结果记录 WORKLOG。
+  **基准结果（2026-09-10 实跑，非 KB 语料面 11 条）**：
+    - arithmetic_basic：Python 10427μs / Rust 378μs = **27.6x**
+    - arithmetic_loop：10806 / 379 = **28.5x**
+    - arithmetic_neg：10298 / 356 = **28.9x**
+    - control_if：10645 / 384 = **27.7x**
+    - control_for_break：10954 / 367 = **29.9x**
+    - control_nested：10856 / 379 = **28.6x**
+    - function_basic：11107 / 397 = **28.0x**
+    - function_recursion：11008 / 402 = **27.4x**
+    - list_ops：11029 / 470 = **23.5x**
+    - dict_ops：10784 / 468 = **23.1x**
+    - string_ops：10690 / 369 = **28.9x**
+    - **均值 ≈ 27x 加速**（Rust tree-walking 未优化即显著领先）。
+  **关键裁定（self-grill 全分支消解）**：① **基准公平性**（两侧均含 load +
+  execute——Python 的 compile 缓存查找 vs Rust 的 JSON 反序列化，非偏袒）；②
+  **tree-walking 未优化即 27x**（Rust 执行核心即使未做 CPS 优化[43 节点 enum
+  分发]已显著领先——CPS 优化 = 后续增量，进一步提升）；③ **非 KB 语料面**（KB
+  语料需宿主服务——后续增量）；④ **基准脚本非测试**（性能断言 flaky——记录
+  结果，不进测试套件）。
+  **验证**：基准脚本运行无错（11/11 非 KB 语料产出加速比）+ 全量 pytest 零回归
+  （加法式增量——基准脚本非测试，不动 Python 执行路径，计数 = 4272；见 NEXT_STEPS
+  基线锚点）。**阶段③ 第三增量出口达成**（执行核心性能基准 + 23–30x 加速实证
+  就位——主战场价值确认）。
+  **分支状态**：加法式零风险增量直接提交 `unsafe-vibe-dev`（与 doc-sync 同理——非
+  破坏性，无需隔离分支）；阶段③ 后续（CPS 优化[43 节点 enum 分发] + KB 语料面
+  [宿主服务] + 符号池/类型池/侧表反序列化）+ ④ 并发解除续推进（差分门逐级验证）；
+  语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

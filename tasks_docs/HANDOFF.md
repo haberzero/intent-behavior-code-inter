@@ -293,13 +293,20 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     `ibci_ext.run_artifact` 暴露 + 差分 harness 加数据面差分面——**11/11 非 KB
     语料数据面逐条等价**（Rust 执行 == Python 执行）。**主战场突破**。**零风险
     加法式**（opt-in，不动 Python 执行路径）。
+  - **P9 阶段③ 第三增量 执行核心性能基准 已落地（本 session，加法式零风险直接
+    提交 unsafe-vibe-dev）**：常设基准脚本 `scripts/bench_rust_kernel.py`（Python
+    run_ibci vs Rust run_artifact，微秒/次，300 次均值）实证 **Rust 执行核心比
+    Python 快 23–30x**（均值 ≈27x，tree-walking 未优化即显著领先）——主战场价值
+    实证（cProfile 实证的 per-step Python 反射/间接瓶颈被 Rust 消除）。公平对比
+    （两侧均含 load + execute：Python compile 缓存查找 vs Rust JSON 反序列化）。
+    非测试（性能断言 flaky）。
   - **P9 阶段③ 续（当前批次，隔离分支续）**：执行核心——CPS 优化[43 节点 enum
-    分发，数据面等价后做性能优化] + KB 语料面[宿主服务] + 符号池/类型池/侧表反
-    序列化 + **性能基准[cProfile 对比 Python]**。四阶段全貌：① 地基 ✅ → ② 前端
-    （lexer ✅ / parser 完整面 + 剩余面 + 位置 ✅ / 语义推迟）→ **③ 执行核心
-    [主战场：反序列化器 ✅ / 对象模型 + 解释器 + 数据面 11/11 ✅ / CPS 优化当前]**
-    → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。确认零风险
-    （全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+    分发，数据面等价后做性能优化，在 27x 基础上进一步提升] + KB 语料面[宿主
+    服务] + 符号池/类型池/侧表反序列化。四阶段全貌：① 地基 ✅ → ② 前端（lexer
+    ✅ / parser 完整面 + 剩余面 + 位置 ✅ / 语义推迟）→ **③ 执行核心[主战场：
+    反序列化器 ✅ / 对象模型 + 解释器 + 数据面 11/11 ✅ / 性能基准 23–30x ✅ /
+    CPS 优化当前]** → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。
+    确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
