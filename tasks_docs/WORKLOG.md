@@ -2949,6 +2949,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（语义层
   [符号表/类型环境] + 剩余语句/表达式[while/try/lambda/三元/复合类型注解/class]）
   + ③ 执行核心 + ④ 并发解除续在隔离分支（差分门逐级验证）。
+- **P9 阶段② 第五增量（Rust parser 剩余语句/表达式面 + AST 完整形态差分等价，
+  2026-09-10，隔离分支 `rust-kernel`；全量 Rust 化迁移的前端剩余面）**：**Rust
+  parser 扩至剩余语句/表达式面**——while / try[except/else/finally] / class / 三元
+  （IbIfExp）/ lambda[IbLambdaExpr，typed params + 返回类型]，经 AST 完整形态（含
+  位置）差分等价验证与 Python 参考 parser 逐字节等价。
+  **交付**：
+  - **Rust parser 剩余面**（`ibci-ext/src/parser.rs`）：
+    - 语句面：While（while test: body [else]）/ Try（try: body except [type] [as
+      name]: body [else] [finally]，IbExceptHandler）/ ClassDef（class Name: body，
+      fields = Assign 语句[类变量] / methods = FunctionDef 语句）。
+    - 表达式面：IfExp 三元（`body if test else orelse`，最低优先级层——parse_expr
+      拆为 parse_ternary[三元] → parse_compare[比较]）/ Lambda（`lambda [(typed
+      params)][: or -> TYPE:] body_expr`，IbLambdaExpr，capture_mode='lambda'）。
+  - **位置跟踪**：IbWhile/IbClassDef = keyword 起/DEDENT 止(0,0)；IbTry = TRY
+    token 起/止；IbExceptHandler = EXCEPT token 起/止；IbIfExp = body 起/orelse
+    止；IbLambdaExpr = LAMBDA 起/body 止。
+  - **递归类型断环**（Rust 借用/大小纪律）：Expr::Lambda → Vec<Arg> →
+    Option<Expr> 递归致无限大小——Box Arg.annotation/default + Lambda.returns
+    断环。
+  **关键裁定（self-grill 全分支消解）**：① **三元 = 最低优先级层**（parse_expr 拆
+  为 parse_ternary → parse_compare——三元低于比较，右结合[嵌套三元]）；② **class
+  fields/methods 从 body 提取**（fields = Assign 语句，methods = FunctionDef 语句，
+  对齐 Python IbClassDef——body 含全部语句，fields/methods 为分类视图）；③ **lambda
+  语法 = `lambda[(typed params)][: or -> TYPE:] body`**（params 须类型注解，对齐
+  IBCI——`lambda(a):` 无类型注解编译失败，`lambda(int a):` 正确）；④ **递归类型断
+  环**（Box 断 Expr→Lambda→Arg→Expr 循环——Rust 类型大小纪律）。
+  **验证**：剩余面 AST 完整形态（含位置）差分 **7/7 逐字节等价**（while/try/class/
+  三元/lambda[typed/noarg/ret]）+ 语料面 14/14 无回归 + 全量 pytest 零回归（阶段
+  边界放行门——加法式增量不动 Python 执行路径，计数 = 4268 + 剩余面 1 例 = 4269；
+  见 NEXT_STEPS 基线锚点）。**阶段② 第五增量出口达成**（Rust parser 剩余语句/
+  表达式面 + AST 完整形态差分等价门就位——Rust 前端 parser 面（语料面 + 剩余面）
+  全量对齐 Python parser）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段② 第五增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（语义层
+  [符号表/类型环境]——AST → 带符号/类型的 AST）+ ③ 执行核心 + ④ 并发解除续在
+  隔离分支（差分门逐级验证）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -166,3 +166,24 @@ class TestRustParserAstDifferential:
             rs = rust_parse_struct(script)
             py = parse_ast_dump(script, include_positions=True)
             assert rs == py, f"语料 {name} AST 级差分不等价：\n  py : {py}\n  rust: {rs}"
+
+    def test_ast_differential_remaining_forms(self):
+        """AST 级差分等价：剩余语句/表达式面（while/try/class/三元/lambda）。"""
+        from tests.diff_harness.ast_dump import parse_ast_dump
+        from tests.diff_harness.harness import load_rust_kernel, rust_parse_struct
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        snippets = [
+            "i = 0\nwhile i < 3:\n    i = i + 1\n",
+            "try:\n    x = 1\nexcept:\n    x = 0\n",
+            "class Animal:\n    name = 'generic'\n",
+            "y = 'pos' if x > 0 else 'non'\n",
+            "f = lambda(int a): a + 1\n",
+            "f = lambda: 1 + 1\n",
+            "f = lambda -> int: 1\n",
+        ]
+        for src in snippets:
+            rs = rust_parse_struct(src)
+            py = parse_ast_dump(src, include_positions=True)
+            assert rs == py, f"剩余面 AST 级差分不等价：\n  py : {py}\n  rust: {rs}"

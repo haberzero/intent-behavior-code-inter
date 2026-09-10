@@ -130,6 +130,15 @@ pub enum Expr {
     Dict { pos: Pos, keys: Vec<Expr>, values: Vec<Expr> },
     Attribute { pos: Pos, value: Box<Expr>, attr: String, ctx: String },
     Subscript { pos: Pos, value: Box<Expr>, slice: Box<Expr>, ctx: String },
+    IfExp { pos: Pos, test: Box<Expr>, body: Box<Expr>, orelse: Box<Expr> },
+    Lambda {
+        pos: Pos,
+        params: Vec<Arg>,
+        body: Box<Expr>,
+        capture_mode: String,
+        // Box 断环（Expr::Lambda → Option<Expr> 递归）
+        returns: Option<Box<Expr>>,
+    },
 }
 
 impl Expr {
@@ -208,6 +217,31 @@ impl Expr {
                     ctx
                 )
             }
+            Expr::IfExp { pos, test, body, orelse } => {
+                format!(
+                    "IbIfExp({}, test={}, body={}, orelse={})",
+                    pos.prefix(),
+                    test.dump(),
+                    body.dump(),
+                    orelse.dump()
+                )
+            }
+            Expr::Lambda { pos, params, body, capture_mode, returns } => {
+                let p: Vec<String> = params.iter().map(|a| a.dump()).collect();
+                let r = match returns {
+                    Some(r) => r.dump(),
+                    None => "None".to_string(),
+                };
+                format!(
+                    "IbLambdaExpr({}, params=[{}], body={}, capture_mode='{}', \
+                     returns={}, free_vars=[])",
+                    pos.prefix(),
+                    p.join(", "),
+                    body.dump(),
+                    capture_mode,
+                    r
+                )
+            }
         }
     }
 }
@@ -216,8 +250,9 @@ impl Expr {
 pub struct Arg {
     pub pos: Pos,
     pub arg: String,
-    pub annotation: Option<Expr>,
-    pub default: Option<Expr>,
+    // Box 断环（Expr::Lambda → Vec<Arg> → Option<Expr> 递归）
+    pub annotation: Option<Box<Expr>>,
+    pub default: Option<Box<Expr>>,
     pub kind: String,
 }
 
@@ -259,6 +294,51 @@ pub enum Stmt {
     Break { pos: Pos },
     Continue { pos: Pos },
     Pass { pos: Pos },
+    While { pos: Pos, test: Expr, body: Vec<Stmt>, orelse: Vec<Stmt> },
+    Try {
+        pos: Pos,
+        body: Vec<Stmt>,
+        handlers: Vec<ExceptHandler>,
+        orelse: Vec<Stmt>,
+        finalbody: Vec<Stmt>,
+    },
+    ClassDef {
+        pos: Pos,
+        name: String,
+        body: Vec<Stmt>,
+        fields: Vec<Stmt>,
+        methods: Vec<Stmt>,
+    },
+}
+
+/// try 的 except 处理块（对齐 IbExceptHandler：type / name / body）。
+#[derive(Debug, Clone)]
+pub struct ExceptHandler {
+    pub pos: Pos,
+    pub exc_type: Option<Expr>,
+    pub name: Option<String>,
+    pub body: Vec<Stmt>,
+}
+
+impl ExceptHandler {
+    fn dump(&self) -> String {
+        let ty = match &self.exc_type {
+            Some(t) => t.dump(),
+            None => "None".to_string(),
+        };
+        let nm = match &self.name {
+            Some(n) => format!("'{}'", n),
+            None => "None".to_string(),
+        };
+        let b: Vec<String> = self.body.iter().map(|s| s.dump()).collect();
+        format!(
+            "IbExceptHandler({}, type={}, name={}, body=[{}])",
+            self.pos.prefix(),
+            ty,
+            nm,
+            b.join(", ")
+        )
+    }
 }
 
 impl Stmt {
@@ -336,6 +416,49 @@ impl Stmt {
             Stmt::Break { pos } => format!("IbBreak({})", pos.prefix()),
             Stmt::Continue { pos } => format!("IbContinue({})", pos.prefix()),
             Stmt::Pass { pos } => format!("IbPass({})", pos.prefix()),
+            Stmt::While { pos, test, body, orelse } => {
+                let b: Vec<String> = body.iter().map(|s| s.dump()).collect();
+                let o: Vec<String> = orelse.iter().map(|s| s.dump()).collect();
+                format!(
+                    "IbWhile({}, test={}, body=[{}], orelse=[{}], \
+                     llmexcept_handler=None)",
+                    pos.prefix(),
+                    test.dump(),
+                    b.join(", "),
+                    o.join(", ")
+                )
+            }
+            Stmt::Try { pos, body, handlers, orelse, finalbody } => {
+                let b: Vec<String> = body.iter().map(|s| s.dump()).collect();
+                let h: Vec<String> = handlers.iter().map(|x| x.dump()).collect();
+                let o: Vec<String> = orelse.iter().map(|s| s.dump()).collect();
+                let f: Vec<String> = finalbody.iter().map(|s| s.dump()).collect();
+                format!(
+                    "IbTry({}, body=[{}], handlers=[{}], orelse=[{}], \
+                     finalbody=[{}])",
+                    pos.prefix(),
+                    b.join(", "),
+                    h.join(", "),
+                    o.join(", "),
+                    f.join(", ")
+                )
+            }
+            Stmt::ClassDef { pos, name, body, fields, methods } => {
+                let b: Vec<String> = body.iter().map(|s| s.dump()).collect();
+                let f: Vec<String> = fields.iter().map(|s| s.dump()).collect();
+                let m: Vec<String> = methods.iter().map(|s| s.dump()).collect();
+                format!(
+                    "IbClassDef({}, name='{}', body=[{}], parent=None, \
+                     parent_args=[], type_params=[], type_param_bounds={{}}, \
+                     implements=[], implements_args={{}}, methods=[{}], \
+                     fields=[{}])",
+                    pos.prefix(),
+                    name,
+                    b.join(", "),
+                    m.join(", "),
+                    f.join(", ")
+                )
+            }
         }
     }
 }
@@ -416,6 +539,9 @@ impl Parser {
             TokenType::If => self.parse_if(),
             TokenType::For => self.parse_for(),
             TokenType::Func => self.parse_function_def(),
+            TokenType::While => self.parse_while(),
+            TokenType::Try => self.parse_try(),
+            TokenType::Class => self.parse_class(),
             TokenType::Return => {
                 let kw = self.advance(); // RETURN
                 let value = if self.is_stmt_end() {
@@ -527,6 +653,109 @@ impl Parser {
         }
     }
 
+    fn parse_while(&mut self) -> Stmt {
+        let kw = self.advance(); // WHILE
+        let test = self.parse_expr();
+        self.expect(TokenType::Colon);
+        self.skip_newlines();
+        let body = self.parse_body();
+        let orelse = if self.at(TokenType::Else) {
+            self.advance();
+            self.expect(TokenType::Colon);
+            self.skip_newlines();
+            self.parse_body()
+        } else {
+            vec![]
+        };
+        Stmt::While {
+            pos: Pos::block(&kw),
+            test,
+            body,
+            orelse,
+        }
+    }
+
+    fn parse_try(&mut self) -> Stmt {
+        let kw = self.advance(); // TRY
+        self.expect(TokenType::Colon);
+        self.skip_newlines();
+        let body = self.parse_body();
+        let mut handlers: Vec<ExceptHandler> = Vec::new();
+        let mut orelse: Vec<Stmt> = Vec::new();
+        let mut finalbody: Vec<Stmt> = Vec::new();
+        // except / else / finally（同缩进层，DEDENT 后）
+        while self.at(TokenType::Except)
+            || self.at(TokenType::Else)
+            || self.at(TokenType::Finally)
+        {
+            if self.at(TokenType::Except) {
+                let ekw = self.advance(); // EXCEPT
+                // 可选异常类型 + as name
+                let mut exc_type = None;
+                let mut name = None;
+                if !self.at(TokenType::Colon) {
+                    exc_type = Some(self.parse_expr());
+                    if self.at(TokenType::As) {
+                        self.advance();
+                        name = Some(self.advance().value);
+                    }
+                }
+                self.expect(TokenType::Colon);
+                self.skip_newlines();
+                let hbody = self.parse_body();
+                handlers.push(ExceptHandler {
+                    pos: Pos::from_token(&ekw),
+                    exc_type,
+                    name,
+                    body: hbody,
+                });
+            } else if self.at(TokenType::Else) {
+                self.advance();
+                self.expect(TokenType::Colon);
+                self.skip_newlines();
+                orelse = self.parse_body();
+            } else {
+                self.advance(); // FINALLY
+                self.expect(TokenType::Colon);
+                self.skip_newlines();
+                finalbody = self.parse_body();
+            }
+        }
+        Stmt::Try {
+            pos: Pos::from_token(&kw),
+            body,
+            handlers,
+            orelse,
+            finalbody,
+        }
+    }
+
+    fn parse_class(&mut self) -> Stmt {
+        let kw = self.advance(); // CLASS
+        let name = self.advance().value; // IDENTIFIER
+        self.expect(TokenType::Colon);
+        self.skip_newlines();
+        let body = self.parse_body();
+        // fields = Assign 语句（类变量）；methods = FunctionDef 语句
+        let fields: Vec<Stmt> = body
+            .iter()
+            .filter(|s| matches!(s, Stmt::Assign { .. }))
+            .cloned()
+            .collect();
+        let methods: Vec<Stmt> = body
+            .iter()
+            .filter(|s| matches!(s, Stmt::FunctionDef { .. }))
+            .cloned()
+            .collect();
+        Stmt::ClassDef {
+            pos: Pos::block(&kw),
+            name,
+            body,
+            fields,
+            methods,
+        }
+    }
+
     fn parse_function_def(&mut self) -> Stmt {
         let kw = self.advance(); // FUNC
         let name = self.advance().value; // IDENTIFIER
@@ -544,7 +773,7 @@ impl Parser {
                 let arg_name = arg_tok.value.clone();
                 let default = if self.at(TokenType::Assign) {
                     self.advance();
-                    Some(self.parse_expr())
+                    Some(Box::new(self.parse_expr()))
                 } else {
                     None
                 };
@@ -552,7 +781,7 @@ impl Parser {
                 args.push(Arg {
                     pos: Pos::from_token(&arg_tok),
                     arg: arg_name,
-                    annotation: Some(annotation),
+                    annotation: Some(Box::new(annotation)),
                     default,
                     kind: "POSITIONAL_OR_KEYWORD".to_string(),
                 });
@@ -656,8 +885,34 @@ impl Parser {
 
     // ---- 表达式（递归下降 + 优先级 + 位置）---- //
 
-    /// 最低优先级：比较。
+    /// 最低优先级：三元（IbIfExp）——`body if test else orelse`。
     fn parse_expr(&mut self) -> Expr {
+        let body = self.parse_compare();
+        if self.at(TokenType::If) {
+            self.advance(); // IF
+            let test = self.parse_compare();
+            self.expect(TokenType::Else);
+            let orelse = self.parse_expr(); // 右结合（嵌套三元）
+            // IbIfExp 位置 = start=body 的起，end=orelse 的止
+            let bpos = expr_pos(&body);
+            let opos = expr_pos(&orelse);
+            return Expr::IfExp {
+                pos: Pos {
+                    lineno: bpos.lineno,
+                    col_offset: bpos.col_offset,
+                    end_lineno: opos.end_lineno,
+                    end_col_offset: opos.end_col_offset,
+                },
+                test: Box::new(test),
+                body: Box::new(body),
+                orelse: Box::new(orelse),
+            };
+        }
+        body
+    }
+
+    /// 比较优先级。
+    fn parse_compare(&mut self) -> Expr {
         let left = self.parse_additive();
         let (ops, comparators) = self.parse_compare_chain();
         if ops.is_empty() {
@@ -919,6 +1174,7 @@ impl Parser {
                 self.expect(TokenType::Rparen);
                 inner
             }
+            TokenType::Lambda => self.parse_lambda(),
             TokenType::Identifier => {
                 let tok = self.advance();
                 Expr::Name {
@@ -935,6 +1191,73 @@ impl Parser {
                     ctx: "Load".to_string(),
                 }
             }
+        }
+    }
+
+    /// lambda：`lambda [(typed params)][: or -> TYPE:] body_expr`。
+    fn parse_lambda(&mut self) -> Expr {
+        let kw = self.advance(); // LAMBDA
+        let mut params: Vec<Arg> = Vec::new();
+        if self.at(TokenType::Lparen) {
+            self.advance(); // (
+            if !self.at(TokenType::Rparen) {
+                loop {
+                    let ann_tok = self.advance();
+                    let annotation = Expr::Name {
+                        pos: Pos::from_token(&ann_tok),
+                        id: ann_tok.value,
+                        ctx: "Load".to_string(),
+                    };
+                    let arg_tok = self.advance();
+                    let arg_name = arg_tok.value.clone();
+                    let default = if self.at(TokenType::Assign) {
+                        self.advance();
+                        Some(Box::new(self.parse_expr()))
+                    } else {
+                        None
+                    };
+                    params.push(Arg {
+                        pos: Pos::from_token(&arg_tok),
+                        arg: arg_name,
+                        annotation: Some(Box::new(annotation)),
+                        default,
+                        kind: "POSITIONAL_OR_KEYWORD".to_string(),
+                    });
+                    if self.at(TokenType::Comma) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            self.expect(TokenType::Rparen);
+        }
+        let returns = if self.at(TokenType::Arrow) {
+            self.advance();
+            let ret_tok = self.advance();
+            Some(Box::new(Expr::Name {
+                pos: Pos::from_token(&ret_tok),
+                id: ret_tok.value,
+                ctx: "Load".to_string(),
+            }))
+        } else {
+            None
+        };
+        self.expect(TokenType::Colon);
+        let body = self.parse_expr();
+        // IbLambdaExpr 位置 = start=LAMBDA 的起，end=body 的止
+        let bpos = expr_pos(&body);
+        Expr::Lambda {
+            pos: Pos {
+                lineno: kw.line as i64,
+                col_offset: kw.column as i64,
+                end_lineno: bpos.end_lineno,
+                end_col_offset: bpos.end_col_offset,
+            },
+            params,
+            body: Box::new(body),
+            capture_mode: "lambda".to_string(),
+            returns,
         }
     }
 }
@@ -968,7 +1291,9 @@ fn expr_pos(e: &Expr) -> Pos {
         | Expr::List { pos, .. }
         | Expr::Dict { pos, .. }
         | Expr::Attribute { pos, .. }
-        | Expr::Subscript { pos, .. } => *pos,
+        | Expr::Subscript { pos, .. }
+        | Expr::IfExp { pos, .. }
+        | Expr::Lambda { pos, .. } => *pos,
     }
 }
 

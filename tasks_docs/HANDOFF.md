@@ -264,14 +264,21 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     end / IbReturn end=RETURN.end / IbUnaryOp end=op.end / IbIf·For·FunctionDef
     end=DEDENT(0,0) / IbModule end=None。**零风险加法式**（opt-in，不动 Python 执行
     路径）。
+  - **P9 阶段② 第五增量 剩余语句/表达式面 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：Rust parser 扩至剩余面
+    ——While / Try[except/else/finally，IbExceptHandler] / ClassDef[fields=Assign
+    / methods=FunctionDef] / IfExp 三元[body if test else orelse，最低优先级层
+    parse_ternary→parse_compare，右结合] / Lambda[IbLambdaExpr，typed params +
+    返回类型]——**7/7 剩余面 AST 完整形态[含位置]逐字节等价 + 语料面 14/14 无回
+    归**。**零风险加法式**（opt-in，不动 Python 执行路径）。
   - **P9 阶段② 续（当前批次，隔离分支续）**：**语义层**（symbol table / type
-    env，AST → 带符号/类型的 AST）+ 剩余语句/表达式（while/try/lambda/三元/
-    复合类型注解/class）。三级差分逐级验证：token 级（lexer ✅ 完整位置）→ AST 级
-    （parser 完整面 + 位置 ✅ / 语义当前）→ 数据面（执行核心，现有 harness）。
-    四阶段全貌：① 地基 ✅ → **② 前端（lexer ✅ / parser 完整面 + 位置 ✅ / 语义
-    当前）** → ③ 执行核心[主战场，高风险：CPS dispatch 表 → Rust enum 分发 +
-    差分门] → ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。确认
-    零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+    env，AST → 带符号/类型的 AST）。三级差分逐级验证：token 级（lexer ✅ 完整位
+    置）→ AST 级（parser 完整面 + 剩余面 + 位置 ✅ / 语义当前）→ 数据面（执行核
+    心，现有 harness）。四阶段全貌：① 地基 ✅ → **② 前端（lexer ✅ / parser 完
+    整面 + 剩余面 + 位置 ✅ / 语义当前）** → ③ 执行核心[主战场，高风险：CPS
+    dispatch 表 → Rust enum 分发 + 差分门] → ④ 并发解除[task_scheduler IO-only
+    → CPU+IO 真并行 GIL-free]。确认零风险（全量零回归 + 复核）后 merge
+    unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -330,9 +337,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段② 第四增量阶段边界实跑）**：**4268 passed /
-  1 skipped / 127.84s / rc=0**（= 前基线 4268，位置跟踪对齐更新现有 harness 10 例
-  非新增；供下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 阶段② 第五增量阶段边界实跑）**：**4269 passed /
+  1 skipped / 127.89s / rc=0**（= 前基线 4268 + 剩余面 1 例；供下一 session
+  参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
