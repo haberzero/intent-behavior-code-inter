@@ -75,6 +75,13 @@
 >   实验内核默认 + Rust 生产快路径 opt-in 无静默回退]；零风险加法式地基，
 >   merge unsafe-vibe-dev 删分支；设计/裁定 = WORKLOG P9 阶段① 条目 +
 >   `_rust_kernel_survey.md`）
+>   → **P9 终点（用户 2026-09-10 裁定，重新定义）**：Rust 部分（阶段②③④）完成
+>   后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量 Rust 化**（编译/语义/
+>   执行/调度/并发等核心面）；**保留关键部分 Python 接口**（灵活性 + 供 Python 入口
+>   能力，非 100% 无 Python）；**证明绝大部分关键核心逻辑可 Rust 化时全量转向
+>   Rust，废弃 Python 双通道/对比**（迁移期安全网退场）。双内核 + 差分 harness =
+>   **迁移期临时安全网**（非永久）。设计/裁定 = `_rust_kernel_survey.md` §2.3/§2.6
+>   + WORKLOG（P9 终点裁定条目）。
 >   → **当前批次 = P9 阶段② Rust 前端（lexer/parser/semantic→序列化 AST，
 >   隔离分支续；契约对接 core/compiler/serialization）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等

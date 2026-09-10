@@ -234,6 +234,14 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     风险：CPS dispatch 表 → Rust enum 分发 + 差分门] → ④ 并发解除[task_scheduler
     IO-only → CPU+IO 真并行 GIL-free]。确认零风险（全量零回归 + 复核）后 merge
     unsafe-vibe-dev 并删分支。
+  - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
+    （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
+    Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
+    （灵活性 + 供 Python 入口能力，非 100% 无 Python）；**证明绝大部分关键核心
+    逻辑可 Rust 化时全量转向 Rust，废弃 Python 双通道/对比**（迁移期安全网退场）。
+    双内核 + 差分 harness = **迁移期临时安全网**（非永久——调研 §2.3 已从"永久
+    双内核"演进为"迁移机制"）。裁定全记录 = WORKLOG（P9 终点裁定条目）+
+    `_rust_kernel_survey.md` §2.3/§2.6。
   - **P0-P9 执行清单**（详见 `_world_model_db_design.md` §6 + `_rust_kernel_survey.md`）：
     P0 设计定稿 ✅ → **P1 R-A quote/eval ✅** → **P2 R-B 世界模型 KB ✅** →
     **P3 磁盘格式 ✅** → **P4 R-C 确定性模式 ✅** → **P5 R-D 工件加载 ✅** →
