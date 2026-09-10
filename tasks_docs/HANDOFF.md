@@ -443,12 +443,22 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     [收束：GIL-free 并行执行地基 3.58x + run_artifacts_parallel 3.31x + CPU+IO 真并行
     1.07 + TaskPool 3.37x + task_scheduler 接入 1.05 + 内部接入 1.04 + kernel_info
     stage 4 / concurrency-core]**。
-  - **P9 全量 Rust 化评估（当前批次）**：Rust 部分（阶段②③④）完成 = 全量 Rust 化评估
-    前置就绪。按用户 2026-09-10 裁定，开启**新评估 + 新自主执行模式**，评估**全核心
-    逻辑全量 Rust 化**（编译/语义/执行/调度/并发等核心面）——**保留关键部分 Python 接
-    口**（灵活性和供 Python 使用的入口能力）；证明绝大部分关键核心逻辑可 Rust 化后
-    全量转向 Rust（不保留 Python 双通道和对比）。CPS 优化续[覆盖差 22 节点——LLM/意图
-    面按需补齐]随评估推进。
+  - **P9 全量 Rust 化评估 已落地（本 session，隔离分支 `rust-kernel` → 已 merge
+    unsafe-vibe-dev 删分支）**：核心逻辑面盘点 + Rust 化覆盖分析 + 可行性评估 + 关键
+    Python 接口识别（tasks_docs/_full_rustification_evaluation.md 评估文档）。核心逻辑
+    面规模 + 当前 Rust 化状态：编译·lexer 1238 行 ✅ + 编译·parser 3267 行 ✅ + 编译·
+    semantic 8317 行 ⏸[最大面] + 序列化 329 行 ⏸ + 执行·VM ≈11000 行 🟡[部分，Rust tree-
+    walking 执行核心 数据面 34/34 全级] + 调度 229 行 🟡[GIL-free 集成] + 并发 ✅ + 值
+    对象 8902 行 ⏸ + 宿主服务 670 行 ⏸。**可行性结论**：绝大部分关键核心逻辑[确定性
+    代码路径：编译 + 执行 + 并发 + 语义 + 序列化 + 值对象]可 Rust 化[已证明 + 可证明]；
+    LLM/意图/宿主面保留 Python 接口[非纯计算]。**关键 Python 接口** = 入口能力[run_ibci/
+    compile_ibci + Rust 内核 pyo3 入口[run_artifact/TaskPool]] + LLM/意图/宿主面[Host
+    Service + CPS VM + 值对象]。**零风险加法式**（仅评估文档，不动 Rust/测试代码）。
+  - **P9 全量 Rust 化阶段 B 启动（当前批次）**：阶段 B（可 Rust 化，纯计算）——语义层
+    Rust 移植[最大面 8317 行] + 序列化[FlatSerializer 329 行] + 值对象[IbValue 扩展
+    8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留 Python 接口[HostService +
+    CPS VM[LLM/意图/宿主面]]。证明绝大部分关键核心逻辑可 Rust 化后全量转向 Rust（不保留
+    Python 双通道和对比）。CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]随推进。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**

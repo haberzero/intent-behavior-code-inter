@@ -3701,6 +3701,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     = 全量 Rust 化评估[用户 2026-09-10 裁定：Rust 部分完成后开启新评估 + 新自主执行模
     式，评估全核心逻辑全量 Rust 化——编译/语义/执行/调度/并发，保留关键 Python 接口] +
     CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]。
+- **P9 全量 Rust 化评估开启（核心逻辑面盘点 + Rust 化覆盖分析 + 可行性评估 + 关键
+  Python 接口识别，2026-09-10，隔离分支 `rust-kernel`）**：**P9 Rust 部分（阶段②③④）
+  完成后的全量 Rust 化评估前置**——按用户 2026-09-10 裁定，开启新评估 + 新自主执行模
+  式，评估全核心逻辑全量 Rust 化（编译/语义/执行/调度/并发/值对象/宿主服务），保留关
+  键 Python 接口，证明绝大部分关键核心逻辑可 Rust 化后全量转向 Rust。
+  **交付**：
+  - **全量 Rust 化评估文档**（`tasks_docs/_full_rustification_evaluation.md`）：核心
+    逻辑面盘点[规模 + 当前 Rust 化状态] + Rust 化覆盖分析[已证明 vs 剩余] + 可行性评
+    估[逐面] + 关键 Python 接口识别[保留供 Python 使用的入口能力] + 全量 Rust 化执行
+    计划[阶段 A[已证明] + 阶段 B[可 Rust 化，纯计算] + 阶段 C[保留 Python，LLM/意图/宿
+    主面]]。
+  **核心逻辑面盘点（规模 + 当前 Rust 化状态）**：编译·lexer[1238 行，✅ 已 Rust 化] +
+    编译·parser[3267 行，✅ 已 Rust 化] + 编译·semantic[8317 行，⏸ 推迟，最大面] + 序列
+    化[FlatSerializer 329 行，⏸ 未 Rust 化] + 执行·VM[CPS 执行核心 4404 行 + interpreter
+    6589 行 ≈ 11000 行，🟡 部分 Rust 化[Rust 执行核心 = tree-walking 解释器，数据面 34/34
+    全级差分等价，23–30x]] + 调度·task_scheduler[229 行，🟡 GIL-free 集成已验证] + 并发
+    [横切，✅ 已 Rust 化[GIL-free 并行执行 + TaskPool]] + 值对象[core/runtime/objects
+    8902 行，⏸ 未 Rust 化] + 宿主服务[core/runtime/host 670 行，⏸ 未 Rust 化]。
+  **关键裁定（self-grill 全分支消解）**：① **确定性代码路径[编译 + 执行 + 并发]已 Rust
+    化**（绝大部分关键核心逻辑[确定性代码]可 Rust 化，已证明[34 语料全级差分等价]）；
+    ② **语义层 + 序列化 + 值对象 = 可 Rust 化[纯计算]**（语义层[8317 行，最大工作量] +
+    序列化[FlatSerializer 329 行] + 值对象[8902 行]是纯计算面，Rust 化可行[lexer/parser
+    已证 Rust 前端可行，IbValue 已证 Rust 值类型可行]）；③ **宿主服务 + CPS VM[LLM/意
+    图/宿主面] = 保留 Python**（涉及 LLM IO + 宿主集成[非纯计算]，保留 Python 接口[用户
+    裁定：保留关键部分 Python 接口]）；④ **关键 Python 接口 = 入口能力[run_ibci/compile_
+    ibci + Rust 内核 pyo3 入口[run_artifact/TaskPool]] + LLM/意图/宿主面[HostService +
+    CPS VM + 值对象]**（供 Python 使用的入口 + 非纯计算面保留 Python）；⑤ **全量 Rust
+    化 = 阶段 B[语义 + 序列化 + 值对象]Rust 化 + 差分验证，之后全量转向 Rust**（不保留
+    Python 双通道和对比；LLM/意图/宿主面保留 Python 接口）。
+  **可行性结论**：**绝大部分关键核心逻辑[确定性代码路径：编译 + 执行 + 并发 + 语义 + 序
+    列化 + 值对象]可 Rust 化**（已证明 + 可证明）；**LLM/意图/宿主面保留 Python 接口**
+    （非纯计算）。**全量 Rust 化评估开启**（下一步 = 阶段 B 启动[语义层 Rust 移植[最大
+    面] 或序列化[FlatSerializer，规模小，先启动] 或值对象[IbValue 扩展]] + 差分 harness
+    扩语料[语义/序列化/值对象面] + 保留 Python 接口[HostService + CPS VM]）。
+  **分支状态**：`rust-kernel` 隔离分支；全量 Rust 化评估零风险加法式（仅评估文档，不动
+    Rust/测试代码），验证后 merge unsafe-vibe-dev 并删分支；后续 = 阶段 B 启动[全量 Rust
+    化：语义 + 序列化 + 值对象 Rust 化 + 差分验证] + 保留 Python 接口[HostService + CPS
+    VM[LLM/意图/宿主面]]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -285,10 +285,22 @@
 >   Python 确定性]；CPUTaskWaitable 归全量 Rust 化[Python 侧集成点，非生产模块]；零
 >   风险加法式[kernel_info 升级不动 Python 执行路径]，merge 删分支；设计/裁定 =
 >   WORKLOG P9 阶段④ 收束条目）
->   → **当前批次 = P9 全量 Rust 化评估开启（用户 2026-09-10 裁定：Rust 部分[阶段②③
->   ④]完成后开启新评估 + 新自主执行模式，评估全核心逻辑全量 Rust 化——编译/语义/执行
->   /调度/并发，保留关键 Python 接口，证明绝大部分关键核心逻辑可 Rust 化后全量转向
->   Rust 不保留双通道；CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]随评估推进）**。
+>   → **P9 全量 Rust 化评估 ✅**（核心逻辑面盘点 + Rust 化覆盖分析 + 可行性评估 + 关键
+>   Python 接口识别：tasks_docs/_full_rustification_evaluation.md 评估文档[编译·lexer
+>   1238 行 ✅ + 编译·parser 3267 行 ✅ + 编译·semantic 8317 行 ⏸ 最大面 + 序列化 329 行
+>   ⏸ + 执行·VM ≈11000 行 🟡 部分[Rust tree-walking 执行核心 数据面 34/34 全级] + 调度
+>   229 行 🟡 GIL-free 集成 + 并发 ✅ + 值对象 8902 行 ⏸ + 宿主服务 670 行 ⏸]——**可行性
+>   结论：绝大部分关键核心逻辑[确定性代码路径：编译 + 执行 + 并发 + 语义 + 序列化 + 值
+>   对象]可 Rust 化[已证明 + 可证明]；LLM/意图/宿主面保留 Python 接口[非纯计算]**；关键
+>   Python 接口 = 入口能力[run_ibci/compile_ibci + Rust 内核 pyo3 入口] + LLM/意图/宿主
+>   面[HostService + CPS VM + 值对象]；全量 Rust 化 = 阶段 B[语义 + 序列化 + 值对象]Rust
+>   化 + 差分验证，之后全量转向 Rust；零风险加法式[仅评估文档]，merge 删分支；设计/裁
+>   定 = WORKLOG P9 全量 Rust 化评估开启条目）
+>   → **当前批次 = P9 全量 Rust 化阶段 B 启动（用户 2026-09-10 裁定：证明绝大部分关键
+>   核心逻辑可 Rust 化后全量转向 Rust——阶段 B[可 Rust 化，纯计算：语义层 Rust 移植[最
+>   大面 8317 行] + 序列化[FlatSerializer 329 行] + 值对象[IbValue 扩展 8902 行]] + 差
+>   分 harness 扩语料[语义/序列化/值对象面] + 保留 Python 接口[HostService + CPS VM
+>   [LLM/意图/宿主面]]；CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]随推进）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -348,7 +360,8 @@
    → 阶段④ 第七增量 task_scheduler 接入 TaskPool CPU+IO 并发验证 1.05 ✅
    → 阶段④ 第八增量 task_scheduler 内部接入 异步 CPU 任务 waitable 1.04 ✅
    → 阶段④ 收束 ✅[kernel_info stage 4 / concurrency-core，task_scheduler GIL-free 集成完成]
-   → 全量 Rust 化评估开启[Rust 部分完成，用户裁定新评估 + 新自主执行模式][当前]
+   → 全量 Rust 化评估 ✅[核心逻辑面盘点 + 可行性评估 + 关键 Python 接口识别]
+   → 全量 Rust 化阶段 B 启动[语义 + 序列化 + 值对象 Rust 化 + 差分验证][当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
