@@ -1096,6 +1096,110 @@ class IbKnowledge(IbValue):
         return [{"word": w, "score": score} for score, w in scored[:kk]]
 
     # ------------------------------------------------------------------ #
+    # 投影面（to_ibci——KB 当前态的确定性 IBCI 代码派生视图，非存储层）
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _ibci_str(s: str) -> str:
+        """str → IBCI 双引号字面量（转义 \\ \" \\n \\t；UTF-8 原样）。"""
+        out = []
+        for ch in s:
+            if ch == "\\":
+                out.append("\\\\")
+            elif ch == '"':
+                out.append('\\"')
+            elif ch == "\n":
+                out.append("\\n")
+            elif ch == "\t":
+                out.append("\\t")
+            else:
+                out.append(ch)
+        return '"' + "".join(out) + '"'
+
+    @classmethod
+    def _ibci_literal(cls, value: Any) -> str:
+        """原生值 → IBCI 字面量（确定性：dict 键排序 + str 转义；bool 先于 int）。"""
+        if isinstance(value, bool):  # bool 是 int 子类——先判
+            return "True" if value else "False"
+        if isinstance(value, str):
+            return cls._ibci_str(value)
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
+            return repr(value)
+        if isinstance(value, list):
+            return "[" + ", ".join(cls._ibci_literal(v) for v in value) + "]"
+        if isinstance(value, dict):
+            # 键排序 = 确定性 canonical 序（同 KB 同投影，逐字节一致）
+            return "{" + ", ".join(
+                f"{cls._ibci_literal(k)}: {cls._ibci_literal(v)}"
+                for k, v in sorted(value.items())
+            ) + "}"
+        raise InterpreterError(
+            f"knowledge.to_ibci: 不可序列化的字面量 {value!r}（投影仅覆盖"
+            " str/bool/int/float/list/dict）。",
+        )
+
+    def to_ibci(self) -> Any:
+        """导出 KB **当前态**的确定性 IBCI 代码（**派生视图，非存储层**）。
+
+        投影 = 活 KB 当前态（全词汇 + 全事实当前 o/source/status，active+
+        retracted 均含）的 IBCI 源码——可经执行重建等价 KB，替代 lossy 静态
+        投影器（全词汇/全事实无丢失、无魔法默认、按需派生免全量重编译）。
+        单一权威源 = 活 KB / artifact；本代码是其派生视图（代码投影从日志
+        派生，绝不独立存储）。
+
+        **确定性**：词汇序 = KB 自身插入序（worlds/relations/words）；事实序
+        = fact_id（str(seq)）序；字面量序列化规范化（dict 键排序 + str 转义）
+        → 同 KB 逐字节一致。只读导出（无修改面、无治理违约面——不新造码）。
+
+        **当前态非全史**：不回放 amend/retract 事件史（amend 原始 o 不可恢复
+        ——事件链只存 new_o）；投影重建当前态，历史归 fact 日志权威面。
+        """
+        vocab = self._vocab()
+        lines = [
+            "# knowledge.to_ibci() 确定性导出（派生视图——KB 当前态的 IBCI 代码"
+            " 投影；非存储层，单一权威源 = 活 KB / artifact）",
+            "kb = knowledge()",
+        ]
+        # 世界（KB 插入序）
+        for name, rec in vocab["worlds"].items():
+            lines.append(
+                f"kb.register_world({self._ibci_str(name)}, "
+                f"{self._ibci_str(rec['description'])}, {rec['size_rank']})"
+            )
+        # 关系（KB 插入序）
+        for rtype, rec in vocab["relations"].items():
+            lines.append(
+                f"kb.register_relation({self._ibci_str(rtype)}, "
+                f"{self._ibci_str(rec['semantics'])}, "
+                f"{self._ibci_literal(rec['transitive'])}, "
+                f"{self._ibci_literal(rec['multi_valued'])})"
+            )
+        # 词（KB 插入序）
+        for lexeme, rec in vocab["words"].items():
+            lines.append(
+                f"kb.register_word({self._ibci_str(lexeme)}, "
+                f"{self._ibci_str(rec['gloss'])}, "
+                f"{self._ibci_literal(rec['is_set'])}, "
+                f"{self._ibci_literal(rec['members'])}, "
+                f"{self._ibci_literal(rec['entries'])})"
+            )
+        # 事实（fact_id/seq 序；当前态 o/source/status——active+retracted 均含）
+        facts = self._facts()
+        for fid in sorted(facts, key=lambda x: int(x)):
+            f = facts[fid]
+            lines.append(
+                f"kb.add_fact({self._ibci_str(f['world'])}, "
+                f"{self._ibci_str(f['s'])}, {self._ibci_str(f['r'])}, "
+                f"{self._ibci_str(f['o'])}, {self._ibci_str(f['source'])}, "
+                f"{self._ibci_str(f['status'])})"
+            )
+        # 末尾裸 kb = 代码可求值为重建 KB（执行后 get_variable("kb") / 末值）
+        lines.append("kb")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------ #
     # 值对象协议面
     # ------------------------------------------------------------------ #
 

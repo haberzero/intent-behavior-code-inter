@@ -80,6 +80,8 @@ class KnowledgeAxiom(BaseAxiom):
             "has_embedding":  _m("has_embedding",  params=["str"], ret="bool"),
             "embedding_dim":  _m("embedding_dim",  ret="int"),
             "embed_search":   _m("embed_search",   params=["vector", "int"], ret="list"),
+            # ---- 投影面（to_ibci——KB 当前态的确定性 IBCI 代码派生视图）----
+            "to_ibci":        _m("to_ibci",        ret="str"),
         }
 
     def get_operators(self) -> Dict[str, str]:
