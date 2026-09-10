@@ -2453,6 +2453,50 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
    在活 KB 中无对应物（P3 load_kb 时 axioms 单一落点 = facts 平面）。
    设计要点 = `tasks_docs/_p2_world_model_kb_design.md`（P3 批次开工前保留——含
    §2 D5 值域边界裁定 + §6.2 验收对照：试用方 M1 = P2+P3+P4 联合达成）。
+- **P3 磁盘格式落地（KB 内容寻址 artifact + world_model 模块，2026-09-10，
+   unsafe-vibe-dev；世界模型 DB 主线批次 3，两批 C1-C2 收束）**：世界模型 KB 的
+   **磁盘面** = 新 kernel-native 模块 `world_model`（同 `fs` 注册模式，无物理包）：
+   `load_kb(path) -> knowledge`（三级验证门后水化为**活 KB 值**）/
+   `save_kb(kb, path) -> str`（KB 面序列化落盘，返回 content_hash 钉扎基准）。
+   **artifact 格式（共享契约 = 试用方按此重新导出 v30）**：单 JSON 文件
+   `{schema_version: 1, content_hash, facts[seq 序], vocab{words,relations,
+   worlds}, seq}`；**JSON 降为传输格式**（pretty 布局），**身份 = canonical**
+   （facts/vocab/seq 键排序 + 紧凑分隔 + UTF-8 字面 sha256 全摘要 64-hex——
+   同内容不同排版 = 同 hash，排版无关性实证）。
+   **关键裁定（self-grill 全分支消解）**：① 磁盘面归**模块域**非值方法
+   （load_kb 产生值——值方法面无接收者；磁盘 I/O = 外部效应面，沙箱校验
+   resolve_path + PermissionManager 归模块域[fs 先例]；值方法无 capabilities
+   注入面）；② 函数名 `load_kb`/`save_kb`（试用方 B1 验收字面 = 共享契约名；
+   模块名 `world_model` = 主设计 §3.3 sketch 名——试用方文档为权威）；③
+   **entries 面不入 artifact**（artifact 只辖 KB 面——entries 持久化通道 =
+   ihost.save_state 全状态面，两通道各辖其面非双通道：不同概念不同载体）；
+   ④ content_hash = sha256 **全摘要**（非 UID 家族 16-hex 前缀——数据完整性
+   契约非进程内标识符；uid.py 不扩）；⑤ schema_version 策略 = 1，未知版本
+   fail-fast 无自动迁移（兼容层红线）；⑥ 文件缺失/沙箱拒绝**复用 fs 面
+   诊断**（RUN_GENERIC_ERROR/RUN_PERMISSION_ERROR——实证 fs.read 缺失文件
+   同码同构，不另造码）；⑦ 加载 = 活 KB（B1 验收"增量可用无需重编译"=
+   活 KB 值语义；artifact 文件只读不被 load 改写）；⑧ 差分 harness 语料
+   **不做磁盘 I/O**（语料纪律 = 自包含脚本无外部文件依赖；磁盘面由 pytest
+   覆盖——P9 差分面如需文件语料再显式扩 temp root，不预置）。
+   **变化前后**：+world_model 模块（core/runtime/modules/world_model_impl.py
+   WorldModelLib：load_kb/save_kb + canonical/hash 纯函数 + 共用结构门
+   _validate_kb_payload）+ builtin_modules 注册面（_SPEC_WORLD_MODEL +
+   BUILTIN_MODULE_SPECS + register_builtin_modules；kernel-native 8→9）+ 诊断码
+   +3（KNW_KB_ARTIFACT_MALFORMED/SCHEMA_VERSION/HASH_MISMATCH；catalog +
+   15_diagnostics 对账）+ 文档（11_modules §11.12 world_model 节 + 11.2 列表
+   [meta/selfref 补列——既有缺列一致性修正] + 16_knowledge_system 磁盘面节 +
+   07_kernel_native_modules 计数/表行[既有 `file`→`fs` 命名漂移修正]）+ 测试
+   17 例（runtime 13：canonical 确定性/排版无关/round-trip 保真/加载=活 KB
+   增量/重导出同 hash/三级门各判别/排版无关 load/空 KB 面合法存 + e2e 4：
+   **B1 验收形态**[load→活查询→增量 100 事实[循环批量注册+登记]→重导出再
+   加载] + hash 审计面 + 篡改 try/except 用户面）。
+   **验证**：全量 pytest 零回归（模块注册面变更保守放行门，见 NEXT_STEPS 基线
+   锚点）。**B1 验收达成**（试用方 R-B 验收面 1/4）：load_kb 后活查询 + 增量
+   100 事实可用 + 无需重编译（全 IBCI 代码面实证）；M1 = P2+P3+P4 联合
+   （P4 确定性模式为余项）。
+   设计要点 = `tasks_docs/_p3_disk_format_design.md`（P4 批次开工前保留——含
+   §3 加载三级门 + §4 保存语义 + §6 测试面；试用方配合项 ② = 按此格式重新
+   导出 v30 补 id/source/status 元数据）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

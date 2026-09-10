@@ -19,29 +19,30 @@
 
 ### 内核原生模块清单
 
-内置 13 个模块（内核原生 8 + `net` + 工具 4）在 Engine 构造期一次就绪，契约描述分两域
+内置 14 个模块（内核原生 9 + `net` + 工具 4）在 Engine 构造期一次就绪，契约描述分两域
 （注册机制与 provenance 模型详见 `docs/subsystems/04_plugin_system.md` §2 与
 `docs/architecture/01_native_host_binding.md` §六）：
 
-- 内核原生 8 + `net` 的 TypeDef 字面量集中于 `core/runtime/bootstrap/builtin_modules.py`，
+- 内核原生 9 + `net` 的 TypeDef 字面量集中于 `core/runtime/bootstrap/builtin_modules.py`，
   经 `register_builtin_modules` 注册（`net` 的 spec provenance = `USER_DEFINED`，
   注册域同内核原生）；
 - 工具 4（`math`/`json`/`time`/`schema`）的契约单一权威源 = IBCI bind 声明契约源
   （`core/runtime/bootstrap/contracts/<module>.ibci`），经 `kernel_contracts`
   构造期自举处理（内核契约自举）。
 
-其中内核原生 8 个模块（`KERNEL_NATIVE` provenance，含 `file`）为：
+其中内核原生 9 个模块（`KERNEL_NATIVE` provenance，含 `fs`）为：
 
 | 模块 | 功能 | 安全语义 |
 |---|---|---|
 | `ai` | LLM 调用 | 有状态（配置跨断点保存） |
-| `file` | 文件 I/O + 类型注入 | 沙箱相关 |
+| `fs` | 文件 I/O + 类型注入 | 沙箱相关 |
 | `ihost` | 宿主保存/恢复 + 隔离子运行 | `save_state` by design 绕沙箱 |
 | `meta` | 代码作值（compile 编译门 + quote/eval 数据/命令二元） | 验证门零执行；eval 子进程隔离 |
 | `selfref` | 自指性架构确定性原语（自描述/模板注册/验证门） | 零 LLM（SR-5 结构性保证） |
 | `idbg` | 运行时信息输出 | 调试钩子 |
 | `isys` | 外部访问请求 | `request_external_access` 全局关沙箱 |
 | `iruntime` | 运行时内省（snapshot / subscribe / configure） | 观测全局，只读 |
+| `world_model` | 世界模型 KB 磁盘面（内容寻址 artifact 加载/保存） | 沙箱相关（同 `fs` 路径纪律）；三级验证门 fail-fast |
 
 ### HostInterface 覆盖保护
 

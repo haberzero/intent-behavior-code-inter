@@ -180,6 +180,33 @@ else:
   （`KNW_CHECK_REJECTED`）——需重新 `store` 登记。KB 面不受此边界影响
   （治理门内建于 KB，不依赖调用方谓词）。
 
+## 磁盘面（内容寻址 artifact，`world_model` 模块）
+
+KB 面（facts/vocab/seq）可经 `world_model` 模块持久化为**内容寻址 artifact**
+（单 JSON 文件；详见 §11 模块 `11.12`）：
+
+```ibci
+import world_model
+str h = world_model.save_kb(kb, "./kb.json")   # 保存：返回 content_hash（钉扎基准）
+kb2 = world_model.load_kb("./kb.json")         # 加载：水化为活 KB 值（可增量）
+```
+
+- **artifact 格式**（共享契约）：`{ schema_version, content_hash, facts[seq
+  序], vocab{words,relations,worlds}, seq }`。JSON 是**传输格式**——运行时
+  模型 = 加载后水化的活 KB 值，非文件本体。
+- **内容即身份**：`content_hash` = canonical 载荷（facts/vocab/seq 键排序 +
+  紧凑分隔规范形态）的 sha256 全摘要。同内容不同文件排版（缩进/键序）= 同
+  hash；`save_kb` 返回值即钉扎/审计基准（调用方可 hash 比对验证落盘内容）。
+- **加载三级验证门**（fail-fast 不静默降级）：结构门
+  （`KNW_KB_ARTIFACT_MALFORMED`）→ 版本门（`KNW_KB_SCHEMA_VERSION`，无自动
+  迁移）→ 完整性门（canonical 重算 hash ≠ 所载 `content_hash` =
+  `KNW_KB_HASH_MISMATCH`，篡改/损坏）。文件缺失/沙箱拒绝复用 `fs` 面诊断。
+- **加载 = 活 KB**：水化后可查询（全方法面）+ 可增量 `add_fact`（治理门/
+  去重门照常生效；派生索引经构造入口从事实日志确定性重建）——**无需重
+  编译**（对照静态投影 stopgap：KB 增长不再触发全量重编译）。
+- **通道分工**：artifact 只辖 KB 面（entries 面不入——其持久化通道 =
+  `save_state` 全状态面，两通道各辖其面）；加载的 KB 值 entries 面为空。
+
 ## 并发语义
 
 知识库对象是值对象：同一实例可被多线程/多协程共享（引用语义，同 dict）。

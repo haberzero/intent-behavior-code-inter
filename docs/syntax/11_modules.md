@@ -56,6 +56,9 @@ import idbg    # 调试探查工具
 import ihost   # 动态宿主（隔离子环境运行）
 import fs    # 受限文件系统操作
 import iruntime  # 运行时内省（snapshot / subscribe / configure）
+import meta    # 代码作值（compile 编译门 + quote/eval 数据/命令二元）
+import selfref # 自指性架构确定性原语（零 LLM）
+import world_model  # 世界模型 KB 磁盘面（内容寻址 artifact 加载/保存）
 ```
 
 **内置工具模块**（随内核发行，与内核原生模块同在 Engine 构造期一次注册，
@@ -511,6 +514,57 @@ print(meta.eval(q) == v)               # 确定性：同源两次 eval 逐值一
 - **与 `behavior`/`fn_callable` 区分**：后两者捕获 AST 节点引用（绑定具体引擎
   上下文，非可移植值）；`quoted` 自包含（源串），非可调用（提及/使用的切换
   必经显式 `meta.eval`——二元性的结构保证）。
+
+### 11.12 world_model 模块（KB 磁盘面：内容寻址 artifact）
+
+`world_model` 提供世界模型 KB（`knowledge` 值的 KB 面——facts 事实日志 +
+vocab 治理词表，见 §16 知识注册表）的**磁盘面**：内容寻址 artifact 的
+加载/保存。磁盘文件是**传输格式**，运行时模型 = 加载后水化的**活 KB 值**
+（可查询 + 可增量 `add_fact`，无需重编译）。
+
+```ibci
+import world_model
+
+# 保存：KB 面序列化落盘，返回 content_hash（钉扎/审计基准）
+kb = knowledge()
+kb.register_world("modern", "现代物理世界", 3)
+kb.register_relation("composed_of", "组成关系", False, False)
+kb.register_word("atom", "原子", False, [], {})
+kb.register_word("proton", "质子", False, [], {})
+kb.add_fact("modern", "atom", "composed_of", "proton", "v30")
+str h = world_model.save_kb(kb, "./kb.json")
+
+# 加载：三级验证门后水化为活 KB 值（加载后增量可用）
+kb2 = world_model.load_kb("./kb.json")
+print(kb2.lookup_pair("atom", "composed_of")[0]["o"])   # proton
+kb2.add_fact("modern", "atom", "composed_of", "electron", "v31")  # 增量
+```
+
+**artifact 格式**（共享契约；单 JSON 文件）：
+
+```
+{ schema_version: 1, content_hash: <sha256 64-hex>,
+  facts: [ {id, world, s, r, o, source, status, events}, ... ],   // seq 序
+  vocab: { words: {...}, relations: {...}, worlds: {...} },
+  seq: <int> }
+```
+
+- **`content_hash`** = canonical 载荷（`facts`/`vocab`/`seq` 经键排序 + 紧凑
+  分隔规范形态）的 sha256 全摘要——**内容即身份**：同内容不同文件排版
+  （缩进/键序）= 同 hash；文件布局是传输，身份是 canonical。
+- **加载三级验证门**（fail-fast 不静默降级）：
+  1. **结构门**（合法 JSON + 封套键齐备 + 记录形态）→ `KNW_KB_ARTIFACT_MALFORMED`；
+  2. **版本门**（`schema_version` 未知；无自动迁移）→ `KNW_KB_SCHEMA_VERSION`；
+  3. **完整性门**（canonical 重算 hash ≠ 所载 `content_hash`——篡改/损坏）
+     → `KNW_KB_HASH_MISMATCH`。
+- **保存同构结构门**：`save_kb` 落盘前经同一结构验证（畸形 KB 面 fail-fast，
+  不落盘半成品）。
+- **沙箱纪律**（同 `fs`）：相对路径以 `project_root` 为基准解析 +
+  `PermissionManager` 校验；越界/缺失文件复用 `fs` 面诊断（`RUN_PERMISSION_ERROR`
+  / `RUN_GENERIC_ERROR`），不另造码。
+- **entries 面不入 artifact**：artifact 只辖 KB 面（facts/vocab/seq）；通用
+  登记面（entries）的持久化通道 = `ihost.save_state` 全状态面（两通道各辖
+  其面）。加载的 KB 值 entries 面为空。
 
 ## 深入指引
 
