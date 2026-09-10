@@ -146,9 +146,10 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 > 下一 session 据 §2.2 检查单**新建 goal**（resume 仅对同 session 内被解除武装的 active
 > goal 有效）。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
 - **工程事实（本 session 收束点）**：
-  - 分支 = `unsafe-vibe-dev`（日常开发主线）+ `main`（永不触碰）。**领先 origin 24 提交未 push**
-    （P1/P2 设计/实现 + 上一 session 的 docs/handoff/harness 系列）——**不 push**（用户 2026-09-10
-    本 session 明确"不 push，直接开工"；push 待用户显式授权，硬原则）。
+  - 分支 = `unsafe-vibe-dev`（日常开发主线）+ `main`（永不触碰）。**已 push 至 origin**
+    （本 session 收束点 `f5a42db7`，2026-09-10 用户阶段末显式授权"进行一次 push"——push 前全量
+    pytest 零回归门 4191/1 通过）。默认仍**不 push**（硬原则：push 须用户单独授权；下次 push
+    待新的显式授权）。
   - **环境已验证**：venv Python 3.12.3 + editable 安装 ✅；probe ✅（SiliconFlow 35B 非思考基线）；
     maturin 1.15.0 + Rust 1.98.1 + 3.12 dev headers ✅（P9 无环境阻塞）。
   - 测试基线 = `.venv/bin/python -m pytest tests/`（**addopts 已含 `-q`，勿显式再加**——双 `-q`
