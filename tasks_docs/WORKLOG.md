@@ -2350,6 +2350,30 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
    内联提取为具名函数] 调用后行缓冲生效）；e2e 计时黑箱测试删除。边界：run
    输出通道行级 flush 契约不变（单点真理 = 15_diagnostics §run 命令可观测面）；
    机器标定依赖的墙钟判别不置于 e2e 层（防未来复犯）。
+ - **世界模型数据库（IBCI 原生 DB）主线确立 + 设计定稿（2026-09-10，unsafe-vibe-dev；试用方
+    v2 需求单驱动）**：试用方提"数据结构 + 数据库"需求（**不能永远用 IBCI 代码 / JSON 承载
+    数据**）→ 深度调研确立"IBCI 原生数据库"设计：一等值类型（世界模型知识图谱），单一权威源 =
+    append-only 事实日志 `(world,s,r,o)`+source/status，融合**图/三元组平面**（治理词表 + 8 倒排
+    索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**（内容信号，非判定）；压缩态存储/按需展开 +
+    quote/eval 数据行为二元 + 跨尺度自指 + 值化存储（非服务）。**设计裁定（用户授权推进）**：
+    ① 演化现有 `knowledge`（文档明写=D 纸带，append-only amend/history + 引擎单调序号；消费面
+    轻 → 低风险）为一等 KB，**不另立平行类型**；② R-A quote/eval 先设计+POC（触及公理层 → 全量
+    pytest 评估）；③ 向量面 = 纯 IBCI 值 + `ImmutableArtifact` 工件（暴力 cosine 起步，格式预留
+    ANN/FAISS 派生加速）；④ 磁盘格式 = IBCI 内容寻址 artifact（JSON 降传输格式，IBCI 代码降派生
+    视图 `to_ibci()`）。**实证关键**：现状 stopgap（trial `schema_to_ibci.py`）lossy（丢 34 条
+    only_in_axioms / 关系字符串化 / `return "unknown"` 魔法默认 / 无查询 / 全量重编译）；IBCI 已
+    有全部子件（knowledge/vector/memory/behavior/ai.recall/ImmutableArtifact）——**缺的是"融合
+    成一致数据层"，非从零造库**。工作节奏：三轴收束进自指弧线（R-A 并入 selfref / R-B 演化
+    knowledge / R-C 横切）+ Rust 内核独立隔离分支（仅设计，构建延期）+ e2e 进程内化升格使能项。
+    设计要点落点 = `tasks_docs/_world_model_db_design.md`（调研结论/决策点/风险/P0-P9 执行清单）
+    + `tasks_docs/HANDOFF.md` §2.0 + `tasks_docs/NEXT_STEPS.md` 当前 P0。
+ - **环境重建（机器更换后，2026-09-10，unsafe-vibe-dev）**：按 `/shared/CONTAINERS.md` +
+    `/shared/MODELS.md` 重建丢失的 gitignored 工件：`api_config.json`（SiliconFlow key 取自
+    /shared/MODELS.md；probe 通过 + 35B 非思考基线 `has_reasoning=False` + embedding 0.6B 实证）
+    + `AGENTS.local.md`（本机环境事实）；补装 `maturin 1.15.0` 入 `.venv`（pyo3 构建前置）；验证
+    Rust 1.98.1 + in-workspace offline cargo build 可行（`CARGO_HOME`+`CARGO_TARGET_DIR` pin
+    workspace，no-dep lib rc=0）。venv Python 3.12.3 + editable 安装 intact；smoke 子集
+    （contracts+compiler）828 passed / 11.3s 进程内。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

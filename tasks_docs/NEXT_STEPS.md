@@ -38,54 +38,55 @@
 > `unsafe-vibe-dev`（日常开发主线）= 本地 `896fa102`（领先 origin `e5f6fd2d` 一提交，待用户授权 push；
 > 2026-09-09 已推送 `11a893a7..123a341f` 13 提交，用户授权）；`main` 永不触碰。
 
-> **🔴 当前 P0 = VISION-8 Round5 自指性体系架构（自描述/显式生成器/自修改安全）**：
-> - **范围**：SR-1 自描述原语（系统自省自身结构 → 结构化自描述值，支持递归）/
->   SR-2 显式 IBCI 生成器（行为模板 + 确定性组装 + 验证门，LLM 仅低阈值语义参数）/
->   SR-3 自指性自修改安全（宪法不变量 + 确定性验证门[编译+执行+结果]）/ SR-5 LLM
->   阈值纪律 / SR-4 行为值直接执行（Phase D）。
-> - **需求权威源**：`/home/dsh/proj/ibci-trial/docs/ibci_round5_selfref_requirements.md`
->   （试用方 2026-09-09 round5 需求单，SR-1..5）+ round4（MEM/REC/SELF/OBS/COST/TYPE，
->   已大部落地）；`PENDING_TASKS.md` VISION-8 条目。
-> - **总原则（横切）**：自指性体系架构——可靠性与自指性来自确定性代码/架构，非 LLM
->   智力。LLM = 低阈值基础细胞（语义选择/分类/草稿/先验，不产结构/不写 ibci/不做判定）。
-> - **设计纪律**：系统级架构设计先行（design-philosophy + self-grill + 既有 memory/
->   meta.compile/ihost.run_code 先例作机制同构基准）。
-> - **硬约束**：9 项 VM 设计不变量 + 工作模式定论九条 + 每批全量零回归门 + 详尽落账
->   （`tasks_docs/WORKLOG.md`）。
+> **🔴 当前 P0 = IBCI 原生数据库（世界模型知识图谱）+ 自指性主线收束 + 测试进程内化**：
+> - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
+>   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
+>   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
+>   （内容信号，非判定）；**quote/eval**（数据/行为二元）地基 + 确定性执行模式 + 推理时窄模型
+>   工件加载。**"不能永远用 IBCI 代码/JSON 承载数据"**——IBCI 值化 KB 取代二者（值化存储，非服务）。
+> - **需求权威源**：试用方 v2（`/home/dsh/proj/ibci-trial/docs/REQ_IBCI_WORLD_MODEL_INTEGRATION.md`
+>   R-A~R-F + M1-M4）+ 数据分析（`DATA_STRUCTURE_DATABASE_ANALYSIS.md`）；**设计单点真理 =
+>   `tasks_docs/_world_model_db_design.md`**（本轮定稿，含调研结论/决策点/风险/P0-P9 执行清单）。
+> - **设计裁定（用户 2026-09-10 授权推进）**：① 演化现有 `knowledge` 为一等 KB（单点真理，不另立
+>   平行类型）② R-A quote/eval 先设计+POC（触及公理层 → 全量 pytest 评估）③ 向量面 = 纯 IBCI 值 +
+>   `ImmutableArtifact` 工件（暴力 cosine 起步，格式预留 ANN）④ 磁盘格式 = IBCI 内容寻址 artifact
+>   （JSON 降传输格式，IBCI 代码降派生视图 `to_ibci()`）。
+> - **工作节奏（三轴收束，不新设竞争主线）**：R-A 并入 selfref 弧线（C3/D1）/ R-B 演化 knowledge /
+>   R-C 确定性模式横切；**Rust 内核 = 独立隔离分支 `rust-kernel`（仅设计，构建延期——需网络/审批），
+>   harness 语料 = 世界模型里程碑**；**e2e 进程内化 = 早期使能项**（降全量门成本）。
+> - **硬约束**：9 项 VM 设计不变量 + 工作模式定论九条 + D1（判定零 LLM）+ 每批验证（单任务=受影响
+>   子集+smoke；全量仅 merge 门/公理层或语义错误集/阶段边界/开新分支前）+ 详尽落账（WORKLOG）。
 >
-> **里程碑记录（过程/细节 = git 历史 + WORKLOG，不在此登记）**：round3 ✅ / meta 层
-> MVP ✅ / VISION-6 P1-P6 ✅ / **P7 进程级隔离 ✅**（subprocess+JSON 协议·LLM 继承
-> 跨进程·变量导出·资源限制·判别 9 例）/ **Round4 MEM+REC ✅**（memory 一等值类型·
-> ai.recall/recall_stats 低层向量原语+doc 缓存·REC-6 query/doc 不对称+MRL·meta.compile
-> 返回行为值）/ **Round5 整合 ✅**（吸收试用者 REC-6/TYPE-1 提交·ai.recall 设计调和·
-> 3973/1 零回归）——全部完成收束 `unsafe-vibe-dev`（= `123a341f`，已 push origin）。
+> **里程碑记录（过程/细节 = git 历史 + WORKLOG，不在此登记）**：round3 ✅ / meta 层 MVP ✅ /
+> VISION-6 P1-P7 ✅（P7 进程级隔离 subprocess+JSON 协议）/ **Round4 MEM+REC ✅**（memory 一等值
+> 类型·ai.recall/recall_stats 向量原语+doc 缓存·REC-6+MRL·meta.compile 行为值）/ **Round5 整合 +
+> C1/C2 ✅**（selfref 地基·verify 三关门·吸收试用者 REC-6/TYPE-1）/ **Rust 内核替换调研 ✅**
+> （VM 执行层定性·pyo3 四阶段·双内核纪律·全量 pytest 临时策略）——收束 `unsafe-vibe-dev`。
 
 ## 下一步候选（当前主干按序；支线仅在不打断主线时介入）
 
 **排布总则**：健康度优先（代码/架构）→ 功能稳健 → 对外能力 → 远期演进；同一时刻只推
 一个 P0。**试用方需求恒高优先**（来自真实试用者的功能性需求优先于自研/卫生项）。
 
-1. **主线 = VISION-8 Round5 自指性体系架构**（见上"当前状态"开工指令；自主推进，
-   无人值守偏好；C1 SR-1 自描述原语 起步 → C2 显式生成器 → C3 自修改安全 → C4 LLM
-   阈值纪律 → C5 OBS 深化；Phase D = SR-4 行为值直接执行 + TYPE-2 + 回滚/成本）。
-2. **Round4 基础智能基底 ✅ 已大部落地**（memory/ai.recall/recall_stats/meta.compile
-   行为值——已收束 `unsafe-vibe-dev` + push origin；试用方 round5 已引用并转为自指性
-   横切原则）。
-3. **支线 · P3 D-3.3 VM 字符串扫描快速路径**：紧迫性下调（P1 实证已 O(n)），可交错；与
-   演化平面（`docs/LANGUAGE_DESIGN_EVOLUTION.md` 性能方向）合流规划。
-4. **支线 · 恶意边界未测项**（`trials/INDEX.md` 清单，mock 层）：#15（snapshot 类字段
-   捕获观测面）/ #19（overlay × 序列化/snapshot/retry 交互）/ #33（依赖 KERNEL_ISSUE-LLM-5
-   同子系统）；缺陷追修：KERNEL_ISSUE-LLM-5（事件驱动监视复发）。
-5. **支线 · 周期质量维护**（PT-AUDIT-1/3 + Tier B/C）：触发节点 = 主线任务完成后自主
-   启动（真实 LLM 环境已就位，旧"试用后恢复"阈值已过）。
-6. **远程 CI 启用（暂不启动，待用户授权）**：`ci.yml` 恢复 push/PR 触发（本地分层验证经
-   `scripts/ci_local.sh`，不依赖远程）。
-7. **远期演进（试用稳定后）**：VISION-4 类型理论加固 / VISION-5 函数式地基 / VISION-1
-   二层 IR（见 `tasks_docs/PENDING_TASKS.md` §八）；PT-SEALED-1 保持封存。
+1. **主线 = IBCI 原生数据库（世界模型知识图谱）+ 自指性收束 + 测试进程内化**（见上"当前
+   状态"；**设计单点真理 = `_world_model_db_design.md`**；自主推进，无人值守偏好；执行序列
+   P1 R-A quote/eval → P2 R-B KB（演化 knowledge）→ P3 磁盘格式 → P4 R-C 确定性模式 →
+   P5 R-D 工件加载 → P6 向量面 → P7 R-F 投影派生视图 → P8 测试进程内化 → P9 Rust 设计 only；
+   每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
+2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval = selfref 地基；R-B KB 与
+   memory/meta.compile 机制同构。C3 自修改安全 / D1 SR-4 行为值直接执行 随主线一并推进。
+3. **Rust 内核替换 = 独立隔离分支 `rust-kernel`（仅设计，构建延期）**：`_rust_kernel_survey.md`
+   四阶段（① 构建链+差分 harness → ② 前端 → ③ 执行核心 → ④ 并发解除）；harness 语料 =
+   世界模型里程碑；确认零风险后 merge unsafe-vibe-dev 并删分支。
+4. **支线 · e2e 进程内化**（套件 44% 子进程开销，`conftest run_ibci` 进程内助手）：升格为
+   早期使能项（降全量门成本，服务主线高频验证）。
+5. **支线 · 周期质量维护**（PT-AUDIT-1/3 + Tier B/C）+ **恶意边界未测项**（`trials/INDEX.md`
+   mock 层）+ **远程 CI 启用（暂不启动，待用户授权）**。
+6. **远期演进（试用稳定后）**：VISION-4 类型理论加固 / VISION-5 函数式地基 / VISION-1 二层 IR
+   （见 `PENDING_TASKS.md` §八）；PT-SEALED-1 保持封存。
 
-**长期登记（状态单点真理 = `PENDING_TASKS.md`）**：PT-DECIDE-2（供应商思考禁用，已解封；
-重估聚焦"后端强制思考"场景的探测/降级语义）/ PT-FEAT-17 N3 度量（shelved，方向保留）/
-PT-FEAT-6/12（划远期，近期不处理）/ bind 默认值语法（P6 期间远期登记，独立立项）。
+**长期登记（状态单点真理 = `PENDING_TASKS.md`）**：PT-DECIDE-2（供应商思考禁用，已解封）/
+PT-FEAT-17 N3 度量（shelved）/ PT-FEAT-6/12（远期）/ bind 默认值语法（独立立项）。
 （最近完成与过程记录见 git log；长期裁定见 `tasks_docs/WORKLOG.md`。）
 
 ---

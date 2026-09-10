@@ -128,106 +128,66 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-09 Round5 自指性架构主线 → **机器更换交接**）
+### 2.0 🔴 本 session 交接（2026-09-10 世界模型数据库主线 → **下一 session 自主执行接手**）
 
-> **接手起点**：读 **`tasks_docs/HANDOFF_MACHINE_CHANGE.md`**（机器更换自包含交接：环境重建 +
-> 完整任务清单 + gitignored 丢失项 + 协作状态）+ `tasks_docs/NEXT_STEPS.md`（Round5 主线 + ⛔ 工作模式
-> 定论）+ `tasks_docs/WORKLOG.md`（Round5 自指性转向 + ai.recall 调和 + C1/C2 裁定）+ `git log --oneline -30`。
-> **当前主线 = Round5 自指性体系架构（`selfref` 模块）**：C1 自描述地基 ✅ / C2 verify 三关门 ✅ /
-> 下一步 C3 自修改 + 回滚。本轮已 push unsafe-vibe-dev（用户 2026-09-09 授权）。
-> 本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
+> **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
+> 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**）+ `tasks_docs/NEXT_STEPS.md`（当前主线 +
+> 工作节奏 + ⛔ 工作模式定论）+ `tasks_docs/_rust_kernel_survey.md`（Rust 内核替换调研 + 全量
+> pytest 临时策略）+ `tasks_docs/WORKLOG.md`（设计裁定 + 环境重建 + 本交接）+ `git log --oneline -30`。
+> **当前主线 = IBCI 原生数据库（世界模型知识图谱）+ 自指性主线收束 + 测试进程内化**。需求源 =
+> 试用方 v2（`/home/dsh/proj/ibci-trial/docs/REQ_IBCI_WORLD_MODEL_INTEGRATION.md`，D-ISO 只读）。
+> 本 goal（自主执行）已由上一 session **pause**（phase=paused）；下一 session 据 §2.2 检查单**新建
+> 或 resume** goal。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
 - **工程事实（本 session 收束点）**：
-  - 分支 = `unsafe-vibe-dev`（日常开发主线 = `123a341f`）+ `main`（永不触碰）。
-    `free-explore` 工作分支已删（内容已 ff 并入 unsafe-vibe-dev）。**已推送 origin**
-    [`11a893a7..123a341f`，13 提交：P7 + round4 MEM/REC + round5 整合，用户 2026-09-09
-    显式授权]。
-  - 测试基线 = `.venv/bin/python -m pytest tests/`；末次全量 **3973 passed / 1 skipped 零回归
-    （干净环境 ~243s；数字以实跑为准，不冻结）**。
-  - 提交链（新→旧，本 session 段）：`d0fa88be`(P6 契约源解析进程级缓存·A/B 实证 +12.6→+3.3ms
-    构造回归根因修复) → `aadc459e`(看门狗阶段边界=collection 结束·98% 误杀根因) → `4e024377`
-    (P6 收束账目) → `be0cb55a`(看门狗 dump 文件通道) → `af15f7c8`(看门狗阶段感知+P6 收束) →
-    `e645d3ee`(P6·B4 文档) → `a5ebc996`(P6·B2 契约源自举) → `df4af9c2`(P6·B1 共享合成) →
-    `9eb638ca`(P5 缓存根因修复) → 其后 P4/P5 链（git 承载）。
-  - 交付面（本 session）：**P6 内核自举 ✅**（工具 4 契约源 IBCI bind 声明化 + bootstrap 通道
-    + 实现重打包 + 4 字面量真删除；net 实施期实证维持宿主侧；设计文档
-    设计文档已随 B4 收敛删除[git 承载]，实施期裁定记录见 WORKLOG P6 条目 +
-    docs/architecture/01_native_host_binding.md §六）+ **测试基础设施看门狗根因修复
-    ×2**（固定窗口误杀 → collection 边界阶段感知 + dump 文件通道）+ **合并安全评估**（四面
-    实证，见下）。
+  - 分支 = `unsafe-vibe-dev`（日常开发主线）+ `main`（永不触碰）。**领先 origin 3 提交未 push**
+    （`896fa102` e2e 降层白箱 / `39924ebd` pytest 策略文档 / `664b6093` Rust 内核调研交接）——
+    **push 待用户显式授权**（硬原则）。
+  - **环境已重建并验证**（机器更换后）：venv Python 3.12.3 + editable 安装 ✅；`api_config.json`
+    重建（SiliconFlow key 取自 `/shared/MODELS.md`；probe 通过 + 35B 非思考基线 `has_reasoning=False`
+    + embedding 0.6B 实证 ✅）；`AGENTS.local.md` 重建 ✅；**maturin 1.15.0 装入 `.venv`**（pyo3 构建前置）；
+    Rust 1.98.1 + **in-workspace offline cargo build 可行**（`CARGO_HOME`+`CARGO_TARGET_DIR` pin workspace）。
+  - 测试基线 = `.venv/bin/python -m pytest tests/`；**smoke 子集（tests/contracts+tests/compiler）
+    828 passed / 11.3s 进程内无子进程**（下一 session 高频验证用）；末次全量 3990/1（~114s，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P7 危险工作开工指令）**：
-  1. **P7 档 B 进程级隔离 + 反射能力 = 当前 P0（危险工作，隔离分支）**：
-     - **是什么**：档 B 隔离改造（进程级引擎隔离——消除同进程多引擎共享 sys.modules/模块级
-       状态的边界，KNOWN_LIMITS 已登记的"IBC-Inter 无强制力"面）+ 反射能力（F5 档案项，
-       消费方重估未做）。
-     - **为什么危险**：执行模型过程边界的根本性改变——跨进程生命周期/IPC 或序列化边界/沙箱
-       策略/引擎内部服务通道面全变；影响面大、边界无法预先完全确认。
-     - **分支政策（硬规则）**：100% 授权独立隔离分支（建议名 `p7-process-isolation`，自
-       `free-explore` 拉出）；允许任意程度破坏性实验；**永不触碰 main/unsafe-vibe-dev/
-       free-explore**；确认零风险（全量 pytest 零回归 + 复核放行）后 ff 并入 unsafe-vibe-dev，
-       merge 无误删分支。
-     - **开工顺序（Phase 0 只读实证先行，代码零改动）**：① 现状隔离边界面实证（sys.modules
-       共享面、ihost spawn 子环境机制、LLM 通道[不变量 #4]、文件沙箱/isys 外访面、引擎间
-       通信面现状）→ ② 进程隔离实现形态对比（multiprocessing/subprocess+协议/…）对照 9 项
-       VM 不变量（尤其 #1 统一执行入口）→ ③ 反射能力消费方重估（无消费方 = 裁定延期，
-       实证后登记）→ ④ VISION-4 类型层交点联合重估（档 B 是唯一交点方向）→ 设计文档
-       `tasks_docs/_p7_process_isolation_design.md`（**待产出**，Phase 0 交付物；设计
-       阶段文档规则：先 tasks_docs，落地后收敛 docs/）。
-     - **硬约束**：9 项 VM 不变量 + 工作模式定论九条 + 全量零回归门（每批）+ 禁 push +
-       详尽落账（WORKLOG）。
-     - **性能锚**：`scripts/perf_bench.py` = 数据平面官方改前/改后裁判（5 轮取中位；
-       post-P6 本机基线 2026-09-09 实跑：arith ~352/branch ~494/recurse ~2292/string ~30/
-       container ~2100/class ~1061 ms——机器/负载相关，价值 = 相对裁判）。A/B 方法论：
-       `git worktree add /tmp/<name> <commit>` + `AB_TREE`/`PYTHONPATH` 注入双树对比
-       （本 session 合并安全评估技术，WORKLOG 有全记录）。
-  2. **P6 内核自举 ✅ 完成 + 里程碑收束（2026-09-09）**：工具 4（math/json/time/schema）
-     契约单一权威源 = IBCI bind 声明契约源（`core/runtime/bootstrap/contracts/*.ibci`）+ 
-     bootstrap 通道（`kernel_contracts`，零新运行期机制）+ 实现重打包 + 4 字面量真删除；
-     net 实施期实证维持宿主侧（默认参数面 + per-engine 状态超出 bind 表达力；远期项 = bind
-     默认值语法独立立项）；全量 3963/1；已 ff 收束 unsafe-vibe-dev。细节 = WORKLOG +
-     设计文档。
-  3. **支线（P7 解阻/间隙期）**：P3 D-3.3 VM 字符串快速路径（紧迫性下调，可交错）/ 质量
-     维护 Tier B 巡检 / 文档对账。
+- **🔴 主线延续点（下一位智能体 = 世界模型 DB 自主执行）**：
+  - **设计裁定（用户已授权推进，见 `_world_model_db_design.md` 顶部）**：① 演化现有 `knowledge` 为
+    一等世界模型知识图谱（单点真理，不另立平行类型）；② R-A quote/eval 先出最小设计+POC 再定契约
+    （**触及公理层 → 全量 pytest 评估破坏面**）；③ 向量面 = 纯 IBCI 值 + `ImmutableArtifact` 工件
+    （暴力 cosine 起步，格式预留 ANN/FAISS 派生加速）；④ 磁盘格式 = IBCI 内容寻址 artifact
+    （JSON 降为传输格式，IBCI 代码降为派生视图 `to_ibci()`）。
+  - **P0-P9 执行清单**（详见 `_world_model_db_design.md` §6）：P0 设计定稿 ✅ → P1 R-A quote/eval
+    POC+机制 → P2 R-B 世界模型 KB（演化 knowledge）→ P3 磁盘格式 → P4 R-C 确定性模式 → P5 R-D 工件
+    加载 → P6 向量面 → P7 R-F 投影派生视图 → P8 测试进程内化 → P9 Rust 内核（设计 only，构建延期）。
+    每步：受影响子集+smoke 验证零回归 + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
+  - **工作节奏（三轴收束进自指弧线，不新设竞争主线）**：R-A 并入 selfref 弧线 / R-B 演化 knowledge /
+    R-C 横切；Rust 内核 = 独立隔离分支 `rust-kernel`（**仅设计，构建延期**——需 ~/.cargo+网络=审批），
+    harness 语料 = 世界模型里程碑；e2e 进程内化 = 早期使能项（降全量门成本，服务高频进程内验证）。
+  - **🔴 硬约束（下一 session 特别）**：全程本地 commit；**禁 push**（须用户单独授权）；**若下一 session
+    为无人值守且用户不在场：禁任何触发审批的操作（沙箱提权/网络/写 workspace 外/cargo 构建）**——
+    需 push/审批/网络/cargo 的项一律不执行、记录 WORKLOG 待办、不阻塞（延后至用户在场）；Rust 实际
+    构建 = 延后项。**若用户在场/审批解禁：可 push、可 cargo 构建**（maturin 已装、工具链已验）。
 
-- **⚠️ 合并安全评估（用户指定四面实证，2026-09-09，unsafe-vibe-dev 收束态）**：
-  - **功能**：全量 3963/1 零回归（干净环境）+ P6 判别 8 例 + P4 D1-D7 语义等价 15 例 +
-    P5 命中/未命中哨兵（套件内全过）。
-  - **性能**：① 数据平面官方裁判 harness A/B（pre-P6 worktree 9eb638ca vs post-P6，5 轮取
-    中位）六项皆噪声内——P4 ~7× 收益完整保留；② 构造期 A/B 发现 P6 +12.6 ms/engine 回归
-    → 根因 = 每引擎 4 次契约源重复 lex+parse（10.2ms）→ 修复 = 解析进程级缓存（内容哈希
-    自失效）→ +3.3 ms/engine（-74%，残余皆内存有界操作）；③ 编译期 = P5 通道未触碰。
-  - **内核稳定性**：10 引擎同进程链（工具 4 运行正确性 + 10 独立 per-engine 实现，registry
-    隔离守卫 intact）+ net per-engine 状态隔离（set_timeout 不跨引擎泄漏）。
-  - **风险回归**：残留扫描全绿（任务代号/孤儿引用/未用导入零命中）+ B4 文档一致性（两域
-    分述单点真理）。**结论：四面全绿，合并安全成立**。
-  - **评估期附发现**：测试看门狗阶段边界缺陷第二次形态（执行期 98% 误杀）→ collection
-    边界根因修复（aadc459e）；"test_task_scheduler 偶发 hang"旧诊断更正 = 皆为看门狗
-    误杀，该观察项关闭（WORKLOG 更正注记）。
+- **⚠️ 关键调研结论（防下一 session 重查，详见 `_world_model_db_design.md` §2）**：
+  - IBCI **已有全部子件**：`knowledge`（文档明写=D 纸带，append-only amend/history+引擎单调序号）/
+    `vector`（不可变+cosine+`__to_prompt__`）/`memory`/`behavior`/`ai.recall`/`ImmutableArtifact`
+    （哈希钉扎只读可加载值）——**缺的是"融合成一致数据层"**，非从零造库。
+  - 现状 stopgap（trial `schema_to_ibci.py`）**lossy**（丢 34 条 only_in_axioms / 关系字符串化 /
+    `return "unknown"` 魔法默认 / 无查询 / 全量重编译）→ 论证"不能永远用 IBCI 代码承载数据"。
+  - v30 真实数据：`axioms=[{world,s,r,o}]`(451，无 id/source/status=目标态)；`word.relations`×`axioms`
+    双写（only_in_axioms=34）；99 词/51 关系(v30 裸名 vs governed_vocab 59 带语义)/21 世界。
+  - `knowledge` 消费面轻（多为类型系统/序列化基础设施）→ 演化低风险（仍需审计消费方，§7 决策点 #1）。
 
-- **安全待办清单（登记，非本轮阻塞）**：
-  | 项 | 状态 | 备注 |
-  |----|------|------|
-  | P5 缓存 pickle 反序列化篡改风险 | 已闭合 | 信任域前缀策略 + 加载边界类型契约 + 篡改可观测 + 命中哨兵判别（9eb638ca） |
-  | P4 codegen 体 `__builtins__: {}` 边界 | 已验证 | 无内置访问面（D1-D7 覆盖值/错误/污点/Signal 面） |
-  | P6 bind 化范围 + net 边界 | 已闭合 | 工具 4 契约源自举落地；net/kernel 5+fs 维持宿主侧（实证裁定记录在设计文档 + 边界表在 01_native_host_binding §六）；远期项 = bind 默认值语法独立立项 |
-  | P7 进程级隔离 | 待开工（下一 agent） | 危险工作 → 独立隔离分支（p7-process-isolation）；Phase 0 只读实证先行（见主线延续点 1） |
-
-- **硬约束（延续）**：全程本地 commit、**禁 push**（硬原则）；不触碰 `main`；里程碑
-  fast-forward 并入 `unsafe-vibe-dev`（全本地）；9 项 VM 设计不变量（04_vm_interpreter
-  §11）+ 工作模式定论九条（禁 compat shim/胶水/tricky/过程式硬编码分发；质量优先于速度；
-  原则优先于行为维持；可推翻 IBCI 自身设计缺陷）凌驾一切；改动公理层或语义错误集须全量
-  pytest 评估破坏面；破坏性重构默认已授权（详尽记录决策依据 + 变化前后）；无法确认边界
-  的破坏性重构 100% 授权独立分支实验（永不触碰 main）。
-- **落账纪律**：WORKLOG 条目经临时文件 splice 至 `## 附、书写模式（本文档专用模板，
-  书写必须参照）` 锚点前；commit 消息 = 描述性中文；每项完成同步 NEXT_STEPS / HANDOFF；
-  测试数字以实跑为准（不冻结）；设计阶段文档先写 `tasks_docs/_<task>.md`（落地后删除，
-  最终内容按治理收敛入 `docs/`）。
-- **运行注记（测试防卡死，本 session 更新）**：pytest-timeout 每测试 60s（第一层）+ 进程
-  看门狗 180s **阶段感知**（第二层：仅框架层 collect/plugin 死锁；collect 结束即解除，
-  与套件总时长零竞态）。**无输出退出 124 = 框架层真卡死**，读线程栈 dump 文件
-  `.tmp_pytest/deadlock_watchdog_dump.txt`（**非 stderr**——collect 期 stderr 被 pytest fd
-  capture 吞没，文件通道阶段无关；文档 = docs/howto/keep_tests_safe.md）。basetemp 强制
-  `.tmp_pytest/`；bash landlock partial enforcement 警告无害。
+- **硬约束（延续）**：全程本地 commit、**禁 push**（硬原则，须显式授权）；不触碰 `main`；9 项 VM
+  设计不变量（04_vm_interpreter §11）+ 工作模式定论九条（禁 compat shim/胶水/tricky/过程式硬编码分发；
+  质量优先于速度；原则优先于行为维持；可推翻 IBCI 自身设计缺陷）凌驾一切；改动公理层或语义错误集须
+  全量 pytest 评估破坏面；破坏性重构默认已授权（详尽记录决策依据 + 变化前后）；无法确认边界的破坏性
+  重构 100% 授权独立分支实验（永不触碰 main）。
+- **落账纪律**：WORKLOG 条目 splice 至 `## 附、书写模式` 锚点前；commit 消息 = 描述性中文；每项完成
+  同步 NEXT_STEPS / HANDOFF；测试数字以实跑为准（不冻结）；设计阶段文档先写 `tasks_docs/_<task>.md`
+  （落地后删除，最终内容按治理收敛入 `docs/`；公理/语义重大决策写 `docs/architecture/` 对应章节）。
+- **环境注记（下一 session Rust 路径）**：maturin 1.15.0 已装 `.venv`；Rust 1.98.1；`CARGO_HOME` 默认
+  `~/.cargo`（DSH 沙箱写限 workspace，需提权时 pin `CARGO_HOME`/`CARGO_TARGET_DIR` 到 workspace 内可
+  离线构建，已验）；**实际 crate 构建需预取 pyo3 依赖（首次需网络）**——无人值守时延后。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
@@ -237,20 +197,17 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ### 2.2 交接检查单（当前有效）
 
-- [ ] **P7 危险工作开工（下一 agent 首任务）**：读 §2.0"主线延续点"第 1 条开工指令
-  （分支政策 + Phase 0 只读实证顺序 + 硬约束 + 性能锚）；拉独立隔离分支
-  `p7-process-isolation`（自 free-explore）；Phase 0 产出 = 设计文档
-  `tasks_docs/_p7_process_isolation_design.md`（代码零改动）。
-- [ ] 读 `NEXT_STEPS.md`（P6 ✅ 收束 + P7 开工指令 + ⛔ 工作模式定论）
-- [ ] 读 `WORKLOG.md`（P6 批次条目 + 合并安全评估条目 + 看门狗根因条目 + 更正注记）
-- [ ] 读 P6 实施期裁定（net 边界/bind 默认值远期项/F5 精化，P7 设计须知悉）：
-  `WORKLOG.md` P6 条目 + `docs/architecture/01_native_host_binding.md` §六 边界表
-- [ ] 测试基线：`.venv/bin/python -m pytest tests/`（唯一命令；末次 3963/1 干净环境实跑；
-  数字以实跑为准不冻结）
-- [ ] 看门狗语义：collection 边界 180s + dump 文件 `.tmp_pytest/deadlock_watchdog_dump.txt`
-  （docs/howto/keep_tests_safe.md；旧"读 stderr 线程栈"说法作废）
-- [ ] 全程本地 commit、禁 push（硬原则）；P7 实验限独立隔离分支（main/unsafe-vibe-dev/
-  free-explore 永不触碰）；确认零风险后 ff unsafe-vibe-dev 并删分支。
+- [ ] 读 **`_world_model_db_design.md`**（本主线设计 + 调研结论 + 决策点/风险 + P0-P9 执行清单；
+  **首读**）
+- [ ] 读 `NEXT_STEPS.md`（当前主线 = 世界模型 DB + 工作节奏 + ⛔ 工作模式定论）
+- [ ] 读 `_rust_kernel_survey.md`（Rust 内核替换调研 + 全量 pytest 临时策略：单任务=受影响子集+smoke）
+- [ ] 读 `WORKLOG.md`（世界模型 DB 设计裁定 + 环境重建 + 本交接）
+- [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P0-P9；objective 按 §1.3 模板套用，
+  含本 session 约束：无人值守且用户不在场时禁审批/禁 push/禁网络/禁 cargo 构建；用户在场/解禁时可
+  push/可构建）；上 session goal 已 pause，需 resume 或新建
+- [ ] **环境自检**：`.venv/bin/python -m pytest tests/contracts tests/compiler`（smoke，~11s 进程内）+
+  `.venv/bin/python trials/_toolkit/probe.py`（LLM 端点鉴权+模型可用）
+- [ ] 全程本地 commit；**禁 push**（须用户显式授权）；Rust 构建/网络/审批依在场与否（见 §2.0 硬约束）
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
