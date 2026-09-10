@@ -2364,7 +2364,9 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
     only_in_axioms / 关系字符串化 / `return "unknown"` 魔法默认 / 无查询 / 全量重编译）；IBCI 已
     有全部子件（knowledge/vector/memory/behavior/ai.recall/ImmutableArtifact）——**缺的是"融合
     成一致数据层"，非从零造库**。工作节奏：三轴收束进自指弧线（R-A 并入 selfref / R-B 演化
-    knowledge / R-C 横切）+ Rust 内核独立隔离分支（仅设计，构建延期）+ e2e 进程内化升格使能项。
+    knowledge / R-C 横切）+ Rust 内核独立隔离分支（设计+构建均可：pin `CARGO_HOME` 到 workspace +
+    允许网络免审批——实测 agent bash 对默认 `~/.cargo`/`/opt/rust/cargo` 不可写，须 pin）+
+    e2e 进程内化升格使能项。
     设计要点落点 = `tasks_docs/_world_model_db_design.md`（调研结论/决策点/风险/P0-P9 执行清单）
     + `tasks_docs/HANDOFF.md` §2.0 + `tasks_docs/NEXT_STEPS.md` 当前 P0。
  - **环境重建（机器更换后，2026-09-10，unsafe-vibe-dev）**：按 `/shared/CONTAINERS.md` +

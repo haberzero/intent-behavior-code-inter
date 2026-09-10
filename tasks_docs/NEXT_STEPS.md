@@ -52,8 +52,9 @@
 >   `ImmutableArtifact` 工件（暴力 cosine 起步，格式预留 ANN）④ 磁盘格式 = IBCI 内容寻址 artifact
 >   （JSON 降传输格式，IBCI 代码降派生视图 `to_ibci()`）。
 > - **工作节奏（三轴收束，不新设竞争主线）**：R-A 并入 selfref 弧线（C3/D1）/ R-B 演化 knowledge /
->   R-C 确定性模式横切；**Rust 内核 = 独立隔离分支 `rust-kernel`（仅设计，构建延期——需网络/审批），
->   harness 语料 = 世界模型里程碑**；**e2e 进程内化 = 早期使能项**（降全量门成本）。
+>   R-C 确定性模式横切；**Rust 内核 = 独立隔离分支 `rust-kernel`（设计 + 构建均可：pin
+>   `CARGO_HOME` 到 workspace + 允许网络 → 免审批），harness 语料 = 世界模型里程碑**；
+>   **e2e 进程内化 = 早期使能项**（降全量门成本）。
 > - **硬约束**：9 项 VM 设计不变量 + 工作模式定论九条 + D1（判定零 LLM）+ 每批验证（单任务=受影响
 >   子集+smoke；全量仅 merge 门/公理层或语义错误集/阶段边界/开新分支前）+ 详尽落账（WORKLOG）。
 >
@@ -75,9 +76,10 @@
    每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval = selfref 地基；R-B KB 与
    memory/meta.compile 机制同构。C3 自修改安全 / D1 SR-4 行为值直接执行 随主线一并推进。
-3. **Rust 内核替换 = 独立隔离分支 `rust-kernel`（仅设计，构建延期）**：`_rust_kernel_survey.md`
-   四阶段（① 构建链+差分 harness → ② 前端 → ③ 执行核心 → ④ 并发解除）；harness 语料 =
-   世界模型里程碑；确认零风险后 merge unsafe-vibe-dev 并删分支。
+3. **Rust 内核替换 = 独立隔离分支 `rust-kernel`（设计 + 构建均可：pin `CARGO_HOME` 到 workspace +
+   允许网络，免审批）**：`_rust_kernel_survey.md` 四阶段（① 构建链+差分 harness → ② 前端 →
+   ③ 执行核心 → ④ 并发解除）；harness 语料 = 世界模型里程碑；确认零风险后 merge unsafe-vibe-dev 并
+   删分支。
 4. **支线 · e2e 进程内化**（套件 44% 子进程开销，`conftest run_ibci` 进程内助手）：升格为
    早期使能项（降全量门成本，服务主线高频验证）。
 5. **支线 · 周期质量维护**（PT-AUDIT-1/3 + Tier B/C）+ **恶意边界未测项**（`trials/INDEX.md`

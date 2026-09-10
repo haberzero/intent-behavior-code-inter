@@ -157,15 +157,17 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     （JSON 降为传输格式，IBCI 代码降为派生视图 `to_ibci()`）。
   - **P0-P9 执行清单**（详见 `_world_model_db_design.md` §6）：P0 设计定稿 ✅ → P1 R-A quote/eval
     POC+机制 → P2 R-B 世界模型 KB（演化 knowledge）→ P3 磁盘格式 → P4 R-C 确定性模式 → P5 R-D 工件
-    加载 → P6 向量面 → P7 R-F 投影派生视图 → P8 测试进程内化 → P9 Rust 内核（设计 only，构建延期）。
+    加载 → P6 向量面 → P7 R-F 投影派生视图 → P8 测试进程内化 → P9 Rust 内核（设计 + 构建；pin
+    `CARGO_HOME` 到 workspace + 网络，免审批）。
     每步：受影响子集+smoke 验证零回归 + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
   - **工作节奏（三轴收束进自指弧线，不新设竞争主线）**：R-A 并入 selfref 弧线 / R-B 演化 knowledge /
-    R-C 横切；Rust 内核 = 独立隔离分支 `rust-kernel`（**仅设计，构建延期**——需 ~/.cargo+网络=审批），
-    harness 语料 = 世界模型里程碑；e2e 进程内化 = 早期使能项（降全量门成本，服务高频进程内验证）。
-  - **🔴 硬约束（下一 session 特别）**：全程本地 commit；**禁 push**（须用户单独授权）；**若下一 session
-    为无人值守且用户不在场：禁任何触发审批的操作（沙箱提权/网络/写 workspace 外/cargo 构建）**——
-    需 push/审批/网络/cargo 的项一律不执行、记录 WORKLOG 待办、不阻塞（延后至用户在场）；Rust 实际
-    构建 = 延后项。**若用户在场/审批解禁：可 push、可 cargo 构建**（maturin 已装、工具链已验）。
+    R-C 横切；Rust 内核 = 独立隔离分支 `rust-kernel`（**设计 + 构建均可**：pin `CARGO_HOME`+
+    `CARGO_TARGET_DIR` 到 workspace + 允许网络 → 免审批），harness 语料 = 世界模型里程碑；
+    e2e 进程内化 = 早期使能项（降全量门成本，服务高频进程内验证）。
+  - **🔴 硬约束（下一 session）**：全程本地 commit；**禁 push**（须用户单独授权）；**常规网络操作
+    允许**（依赖/下载不触发审批）；**Rust 构建可行**（pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到
+    workspace → 免审批；默认 `~/.cargo`/`/opt/rust/cargo` 不可写，勿用）；**仍须避免**：写 workspace
+    外文件、无必要的沙箱提权。**若用户不在场且需 push** → 延后记录 WORKLOG 待办、不阻塞。
 
 - **⚠️ 关键调研结论（防下一 session 重查，详见 `_world_model_db_design.md` §2）**：
   - IBCI **已有全部子件**：`knowledge`（文档明写=D 纸带，append-only amend/history+引擎单调序号）/
@@ -185,9 +187,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 - **落账纪律**：WORKLOG 条目 splice 至 `## 附、书写模式` 锚点前；commit 消息 = 描述性中文；每项完成
   同步 NEXT_STEPS / HANDOFF；测试数字以实跑为准（不冻结）；设计阶段文档先写 `tasks_docs/_<task>.md`
   （落地后删除，最终内容按治理收敛入 `docs/`；公理/语义重大决策写 `docs/architecture/` 对应章节）。
-- **环境注记（下一 session Rust 路径）**：maturin 1.15.0 已装 `.venv`；Rust 1.98.1；`CARGO_HOME` 默认
-  `~/.cargo`（DSH 沙箱写限 workspace，需提权时 pin `CARGO_HOME`/`CARGO_TARGET_DIR` 到 workspace 内可
-  离线构建，已验）；**实际 crate 构建需预取 pyo3 依赖（首次需网络）**——无人值守时延后。
+- **环境注记（下一 session Rust 路径）**：maturin 1.15.0 已装 `.venv`；Rust 1.98.1；**agent bash 对
+  默认 cargo 写位置（`~/.cargo`、`CARGO_HOME=/opt/rust/cargo`）不可写（Permission denied）→ 构建须
+  pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到 workspace 内**（如 `$PWD/.cargo_local`+`$PWD/target`）；
+  **常规网络允许**（依赖下载免审批）；实测 `cargo fetch`（libc v0.2.189）+ no-dep 构建 rc=0。
+  **Rust 构建可行（非"仅设计"）**。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
@@ -203,11 +207,13 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 - [ ] 读 `_rust_kernel_survey.md`（Rust 内核替换调研 + 全量 pytest 临时策略：单任务=受影响子集+smoke）
 - [ ] 读 `WORKLOG.md`（世界模型 DB 设计裁定 + 环境重建 + 本交接）
 - [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P0-P9；objective 按 §1.3 模板套用，
-  含本 session 约束：无人值守且用户不在场时禁审批/禁 push/禁网络/禁 cargo 构建；用户在场/解禁时可
-  push/可构建）；上 session goal 已 pause，需 resume 或新建
+  含约束：**禁 push**（须用户单独授权）；**常规网络允许**（不触发审批）；**Rust 构建可行**
+  （pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到 workspace，免审批）；**避免**写 workspace 外文件 /
+  无必要沙箱提权；用户不在场且需 push 时延后记录不阻塞）；上 session goal 已 pause，需 resume 或新建
 - [ ] **环境自检**：`.venv/bin/python -m pytest tests/contracts tests/compiler`（smoke，~11s 进程内）+
   `.venv/bin/python trials/_toolkit/probe.py`（LLM 端点鉴权+模型可用）
-- [ ] 全程本地 commit；**禁 push**（须用户显式授权）；Rust 构建/网络/审批依在场与否（见 §2.0 硬约束）
+- [ ] 全程本地 commit；**禁 push**（须用户显式授权）；常规网络允许；Rust 构建 pin `CARGO_HOME` 到
+  workspace（见 §2.0 环境注记 / 硬约束）
 
 ## 附、书写模式（本文档专用模板，书写必须参照）
 

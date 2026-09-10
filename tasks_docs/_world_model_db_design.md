@@ -88,8 +88,12 @@
 引用 `knowledge` 的多为**基础设施**（semantic 表达式访问器 / serializer / memory / environment / deep_clone / run_result / registry / specs），**无重用户面**。→ **演化 `knowledge` 为知识图谱不会破坏重依赖**（仍需逐一核对消费方，见 §7 决策点 #1）。
 
 ### 2.5 环境事实（本轮已核验，2026-09-10）
-- Rust 工具链 **cargo/rustc 1.98.1**；**in-workspace offline cargo build 可行**（`CARGO_HOME`+`CARGO_TARGET_DIR` pin 到 workspace 内 `.tmp_verify/`，no-dep lib 构建 rc=0，0.04s）→ 下一 session 可离线构建（前提：依赖已预取）。
-- **maturin 1.15.0 已装入 `.venv`**（pyo3 构建前置，本轮补装）；默认 `~/.cargo` 与 `/opt/rust`（只读）可用（DSH 沙箱写限 workspace，`CARGO_HOME` 覆盖方案已验）。
+- Rust 工具链 **cargo/rustc 1.98.1**；**agent bash 对默认 cargo 写位置不可写**（`~/.cargo` 与
+  `CARGO_HOME=/opt/rust/cargo` 均 Permission denied）→ **实际构建须 pin `CARGO_HOME`+`CARGO_TARGET_DIR`
+  到 workspace 内**（如 `$PWD/.cargo_local`+`$PWD/target`）。**实测 `cargo fetch`（网络下载 libc
+  v0.2.189）+ no-dep 构建 rc=0，免审批**（workspace 写 + 允许的常规网络）。
+- **maturin 1.15.0 已装入 `.venv`**（pyo3 构建前置）。**常规网络操作允许**（依赖下载不触发审批）
+  → **Rust 构建可行（非"仅设计"）**，下一 session 可达成的实际 crate 构建/编译。
 - venv Python 3.12.3 + editable 安装 ✅；api_config.json ✅（probe 通过）；smoke 子集 `tests/contracts`+`tests/compiler` = **828 passed, 11.3s**（进程内无子进程，无审批）。
 
 ---
