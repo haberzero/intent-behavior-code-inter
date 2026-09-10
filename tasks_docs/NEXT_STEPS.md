@@ -32,7 +32,7 @@
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4257 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P7 公理层变更放行门[knowledge 投影面 to_ibci]；数字以实跑为准，不冻结）。
+> P8 阶段边界放行门[测试层变更，计数不变]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -63,8 +63,12 @@
 >   → **P7 R-F 投影派生视图 ✅**（`knowledge.to_ibci()` = KB 当前态的确定性
 >   IBCI 代码派生视图[非存储层]——全词汇/全事实无 lossy + 确定性逐字节一致 +
 >   对拍活 KB 一致；替代 lossy stopgap schema_to_ibci；设计/裁定 =
->   `_p7_projection_design.md` + WORKLOG）
->   → **当前批次 = P8 测试进程内化（e2e 降子进程开销，降全量门成本）**。
+>   `_p7_projection_design.md`[已删] + WORKLOG）
+>   → **P8 测试进程内化 ✅**（消端到端流水线可复现性 4x 冗余 dual-channel——
+>   P5/P6/P7 e2e 两 run → 单 run CLI 凭证，确定性归并进 process + P4 M1 代表性
+>   流水线可复现性；e2e 子进程开销大部分不可化约[CLI 机制 + 子运行 by design]，
+>   主价值 = 消冗余质量而非大幅省时；设计/裁定 = WORKLOG P8 条目）
+>   → **当前批次 = P9 Rust 内核（独立隔离分支 rust-kernel）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -99,8 +103,8 @@
    状态"；**设计单点真理 = `_world_model_db_design.md`**；自主推进，无人值守偏好 + 总体规划
    可灵活微调[用户 2026-09-10 裁定]；执行序列
    P1 R-A quote/eval ✅ → P2 R-B KB ✅ → P3 磁盘格式 ✅ → P4 R-C 确定性模式 ✅
-   → P5 R-D 工件加载 ✅ → P6 向量面 ✅ → P7 R-F 投影派生视图 ✅
-   → **P8 测试进程内化（下一批次）**
+   → P5 R-D 工件加载 ✅ → P6 向量面 ✅ → P7 R-F 投影派生视图 ✅ → P8 测试进程内化 ✅
+   → **P9 Rust 内核（下一批次，独立隔离分支 rust-kernel）**
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
    harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root）；

@@ -5,14 +5,20 @@ CLI 窄模型工件加载（world_model.bind_artifact，P5 R-D）黑箱契约（
 形态**：bind 已训练窄模型工件 → 推理时 score/topk 可调用且确定性，全程无训练
 调用）：
 
-- **R-D 全链路**（临时项目：窄模型 artifact + bind 脚本）：两次独立 CLI run
-  （`--deterministic --result-json`）→ 数据面（末行 result-json 之前）
-  **逐字节一致** + 两次凭证均 `deterministic.llm_calls == 0` + exit_status
-  ok（score/topk = 纯算术推理，零 LLM、零训练——确定性凭证佐证）；
+- **R-D CLI 凭证**（`--deterministic --result-json` 单 run）：exit ok + 凭证
+  `deterministic.llm_calls == 0`（score/topk = 纯算术推理，零 LLM、零训练——
+  确定性凭证佐证）+ 数据面查询值（name/score/topk 对照手工 TransE 距离）；
 - **score/topk 可调用**（语言面）：bind 后 `m.score(s,r,o)` / `m.topk(s,r,k)`
   返回确定值（对照手工 TransE 距离）；
 - **零侵入对照**：artifact 是冻结工件——bind 不触发任何训练（无 optimizer /
   反向传播；加载仅读文件 + 算术验证 hash）。
+
+**确定性覆盖归并（P8）**：score/topk 的确定性（同输入同输出）归**进程内**
+（`tests/runtime/test_narrow_model_type.py` test_topk_same_input_same_output +
+本文件 test_bind_is_pure_read）；端到端 CLI 流水线可复现性（两次独立 run 逐
+字节一致）归**单一代表性测试**（`tests/e2e/test_deterministic_mode_e2e.py`
+M1——流水线属性，非每 feature 属性）。本 e2e 聚焦 CLI 凭证机制 + 查询值，
+不再重复两 run。
 
 注：narrow_model 仅经 world_model.bind_artifact 水化（无语言级构造）；本 e2e
 的 artifact 由 Python 夹具落盘（经 model_content_hash 计算合规 content_hash）
@@ -88,28 +94,24 @@ def _split_data_plane(stdout: str):
 
 
 class TestRDAcceptance:
-    def test_two_runs_byte_identical_zero_training(self, tmp_path):
-        """R-D 核心验收：两次独立 run 数据面逐字节一致 + 凭证 llm_calls=0 +
-        exit ok（score/topk 纯算术确定性；全程零训练零 LLM）。"""
+    def test_cli_credential_zero_training(self, tmp_path):
+        """R-D CLI 凭证：单 run `--deterministic --result-json` → exit ok + 凭证
+        llm_calls=0（score/topk 纯算术零 LLM 零训练）+ 数据面查询值对照手工
+        TransE 距离。（确定性归并进 process + P4 M1 代表性流水线可复现。）"""
         _write_artifact(tmp_path)
         (tmp_path / "bind.ibci").write_text(_BIND_SCRIPT, encoding="utf-8")
-        results = []
-        for _ in range(2):
-            r = _run_cli(tmp_path, "bind.ibci", "--deterministic", "--result-json")
-            assert r.returncode == 0, (r.stdout, r.stderr)
-            data, result = _split_data_plane(r.stdout)
-            assert result["exit_status"] == "ok"
-            assert result["deterministic"] == {"enforced": True, "llm_calls": 0}
-            results.append(data)
+        r = _run_cli(tmp_path, "bind.ibci", "--deterministic", "--result-json")
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        data, result = _split_data_plane(r.stdout)
+        assert result["exit_status"] == "ok"
+        assert result["deterministic"] == {"enforced": True, "llm_calls": 0}
         # 数据面：name + score(a,r1,b)=0.0 + score(a,r1,c)=sqrt(5) + topk=[b,a,c]
-        assert results[0][0] == "toy"
-        assert results[0][1] == "0.0"
-        assert abs(float(results[0][2]) - math.sqrt(5)) < 1e-6
-        assert 'o": b' in results[0][3]
-        assert results[0][3].index('o": b') < results[0][3].index('o": a') \
-            < results[0][3].index('o": c')
-        # 两次独立 run 逐字节一致（确定性——同输入同输出）
-        assert results[0] == results[1]
+        assert data[0] == "toy"
+        assert data[1] == "0.0"
+        assert abs(float(data[2]) - math.sqrt(5)) < 1e-6
+        assert 'o": b' in data[3]
+        assert data[3].index('o": b') < data[3].index('o": a') \
+            < data[3].index('o": c')
 
     def test_score_topk_callable_values(self, tmp_path):
         """score/topk 可调用且返回确定值（对照手工 TransE 距离）。"""
@@ -139,8 +141,8 @@ class TestZeroTraining:
         from tests.conftest import run_ibci
         _write_artifact(tmp_path)
         # bind 后多次推理 = 同值（权重冻结，无学习态漂移）。
-        # 注：容器 == 为恒等语义（KNOWN_LIMITS §10.5）——topk 列表不直接 ==
-        # 对比；逐元素值对比（score/实体名 = str/float 按值）。
+        # 注：容器 == 为恒等语义（IBCI 语言级限制）——topk 列表不直接 == 对比；
+        # 逐元素值对比（score/实体名 = str/float 按值）。
         code = (
             "import world_model\n"
             'm = world_model.bind_artifact("model.json")\n'

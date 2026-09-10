@@ -18,6 +18,12 @@ load_kb → 确定性模式下 quote/eval 一条事实——数据形态查询 +
 
 注：meta.eval 子进程 = 新引擎（守卫不跨 spawn 继承——KNOWN_LIMITS 边界）；
 M1 事实表达式 = 纯代码（子进程自然零 LLM），父进程凭证覆盖本 run 数据面。
+
+**端到端流水线可复现性的单一代表性测试（P8 归并）**：M1 两 run 逐字节一致
+覆盖的是**流水线属性**（CLI → 引擎 → 输出序列化的端到端可复现性），非每
+feature 属性——流水线确定性对全部 feature 一致。故 narrow_model/embedding/
+to_ibci 等 feature 的 e2e 不重复两 run（其确定性归进程内同输入同输出测试），
+由本 M1 两 run 作为**单一代表性**端到端流水线可复现性测试。
 """
 import json
 import os

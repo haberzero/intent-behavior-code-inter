@@ -2698,6 +2698,43 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
    对拍一致；派生视图确定性/零 LLM/无 lossy）。
    设计要点 = `tasks_docs/_p7_projection_design.md`（P7 设计单点真理：stopgap
    缺陷实证 + 面定位 + 投影代码形态 + 对拍面 + 测试面；P8 批次开工前保留）。
+    **P7 批次开工收尾**：删除 `tasks_docs/_p7_projection_design.md`
+    （P8 开工——裁定全在本条目 + docs/）。
+- **P8 测试进程内化（e2e 降子进程开销 + 消冗余，2026-09-10，
+  unsafe-vibe-dev；世界模型 DB 主线批次 8，单批收束）**：**消除端到端流水线
+  可复现性的 4x 冗余（dual-channel）**——P4-P7 各做一次 CLI 两 run 逐字节一致
+  测试，但流水线可复现性是**流水线属性**（CLI → 引擎 → 输出序列化的端到端
+  可复现性），非每 feature 属性——流水线确定性对全部 feature 一致，测一次即
+  够。
+  **调研结论（e2e 子进程开销实证，2026-09-10 实跑）**：e2e 层子进程开销
+  **大部分不可化约**——① 纯 CLI 机制测试（replay 8 / result_json 6 / budget 5 /
+  journal 3 / check_export 等 `_run_cli` 调用，每次 ~0.4-1s 子进程）测 CLI 本身
+  机制，subprocess by design；② ihost 子运行测试（run_file/run_code/run_isolated
+  5 文件 ~19s）测子进程子运行机制，subprocess by design。安全内化空间 = ③
+  P4-P7 的 4x 冗余流水线可复现性两 run 测试（每 feature 各重复一次流水线
+  属性，3x 冗余）。
+  **关键裁定（self-grill 全分支消解）**：① **流水线可复现性 = 流水线属性**
+  （非 feature 属性）——归并为**单一代表性测试**（P4 M1 两 run：旗舰 R-C 验收
+  + 代表性流水线可复现性）；② **feature 确定性 = feature 属性**（同输入同
+  输出）——归**进程内**（P5 test_topk_same_input_same_output / P6
+  test_search_same_input_same_output / P7 test_same_kb_byte_identical 已存在；
+  P5 另有 test_bind_is_pure_read 进程内同值）；③ **CLI 凭证机制 = CLI 属性**
+  （`--deterministic` 凭证 llm_calls=0 + exit ok + 查询值）——每 feature
+  **单 run** CLI 保留（非两 run）；④ **P4 不加进程内 M1 两 run**（P4 M1 两 run
+  即代表性流水线可复现性 + M1 确定性，保留 CLI 两 run 不瘦身）。
+  **变化前后**：P5 narrow_model e2e（两 run → 单 run CLI 凭证，确定性归并进
+  process）+ P6 embedding e2e（两 run → 单 run CLI 凭证，确定性归并进 process）
+  + P7 to_ibci e2e（两 run → 单 run CLI 凭证，确定性归并进 process）+ P4 M1
+  e2e（文档澄清 = 代表性流水线可复现性单一测试，保留两 run）。
+  **既有边界**：纯 CLI 机制测试 + ihost 子运行测试 subprocess by design 保留
+  （非冗余——测 CLI/子运行机制本身）；端到端流水线可复现性由 P4 M1 单点覆盖。
+  **验证**：全量 pytest 零回归（阶段边界放行门——P7→P8；测试层变更不动
+  core/，见 NEXT_STEPS 基线锚点）。**P8 验收达成**（消 3x 冗余流水线可复现性
+  两 run + 4 e2e 文件省 ~3s[12→9s]；确定性覆盖无损——进程内 feature 确定性 +
+  P4 M1 代表性流水线可复现性 + 单 run CLI 凭证）。
+  **诚实结论（P8 价值定性）**：e2e 子进程开销大部分不可化约（CLI 机制 +
+  子运行 by design）；P8 安全内化空间有限（~3s，全量门 ~129→~126s）。主价值 =
+  **消 dual-channel 冗余（质量）**，非大幅省时（速度）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

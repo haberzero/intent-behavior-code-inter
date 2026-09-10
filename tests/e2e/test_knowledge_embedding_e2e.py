@@ -3,15 +3,19 @@ tests/e2e/test_knowledge_embedding_e2e.py
 
 CLI KB 向量面（词嵌入——内容信号非判定，P6 F2）黑箱契约：
 
-- **内容信号确定性**（R-D 同纪律）：确定性 mock 嵌入 → set_embedding →
-  save_kb(v2) → load_kb → embed_search——两次独立 CLI run（`--deterministic
-  --result-json`）数据面**逐字节一致** + 凭证 `deterministic.llm_calls == 0`
-  + exit ok（向量面 = 纯算术内容信号，零 LLM——mock 嵌入确定性 + cosine 纯
-  算术）；
+- **内容信号 CLI 凭证**（`--deterministic --result-json` 单 run）：确定性 mock
+  嵌入 → set_embedding → save_kb(v2) → load_kb → embed_search——exit ok + 凭证
+  `deterministic.llm_calls == 0`（向量面 = 纯算术内容信号，零 LLM——mock 嵌入
+  确定性 + cosine 纯算术）；
 - **v2 artifact 往返**：嵌入面经磁盘 round-trip 保真（load 后 embed_search
   结果一致）；
 - **零 LLM 佐证**：mock 嵌入不经 LLM 汇点（embedding provider 独立路径）——
   `--deterministic` 凭证 llm_calls=0 佐证向量面零 LLM。
+
+**确定性覆盖归并（P8）**：embed_search 的确定性（同输入同输出）归**进程内**
+（`tests/runtime/test_knowledge_embedding.py` test_search_same_input_same_output）；
+端到端 CLI 流水线可复现性归**单一代表性测试**（`test_deterministic_mode_e2e.py`
+M1）。本 e2e 聚焦 CLI 凭证机制 + v2 往返 + 查询值，不再重复两 run。
 
 注：向量面 = 内容信号（异常检测/语义对比用），从不做判定（D1：判定走图平面
 确定性路径）——与 narrow_model.score 同定位。mock 嵌入（ai.set_embedding_mock）
@@ -60,24 +64,20 @@ def _split_data_plane(stdout: str):
 
 
 class TestVectorPlaneDeterministic:
-    def test_two_runs_byte_identical_zero_llm(self, tmp_path):
-        """内容信号确定性：两次独立 run 数据面逐字节一致 + 凭证 llm_calls=0 +
-        exit ok（向量面纯算术零 LLM）。"""
+    def test_cli_credential_zero_llm(self, tmp_path):
+        """内容信号 CLI 凭证：单 run `--deterministic --result-json` → exit ok +
+        凭证 llm_calls=0（向量面纯算术零 LLM）+ 数据面 dim + embed_search 查询
+        值。（确定性归并进 process + P4 M1 代表性流水线可复现。）"""
         (tmp_path / "emb.ibci").write_text(_EMB_SCRIPT, encoding="utf-8")
-        results = []
-        for _ in range(2):
-            r = _run_cli(tmp_path, "emb.ibci", "--deterministic", "--result-json")
-            assert r.returncode == 0, (r.stdout, r.stderr)
-            data, result = _split_data_plane(r.stdout)
-            assert result["exit_status"] == "ok"
-            assert result["deterministic"] == {"enforced": True, "llm_calls": 0}
-            results.append(data)
+        r = _run_cli(tmp_path, "emb.ibci", "--deterministic", "--result-json")
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        data, result = _split_data_plane(r.stdout)
+        assert result["exit_status"] == "ok"
+        assert result["deterministic"] == {"enforced": True, "llm_calls": 0}
         # 数据面：dim=4 + embed_search 结果（atom 自身最相似 cosine≈1）
-        assert results[0][0] == "4"
-        assert "atom" in results[0][1]
-        assert results[0][1].index("atom") < results[0][1].index("proton")
-        # 两次独立 run 逐字节一致（确定性）
-        assert results[0] == results[1]
+        assert data[0] == "4"
+        assert "atom" in data[1]
+        assert data[1].index("atom") < data[1].index("proton")
 
     def test_embedding_persisted_across_runs(self, tmp_path):
         """v2 artifact 往返：嵌入面经磁盘 round-trip 保真（两次 run 的
