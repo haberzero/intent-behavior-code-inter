@@ -3209,6 +3209,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 更
   宽 IBCI 语料[quoted 值/行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；
   语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段③ 第七增量（执行核心更宽 IBCI 面——链式比较/方法/嵌套容器，27 语料
+  四级差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust 执行核心更宽 IBCI
+  语义面**——链式比较（a < b < c）+ list 方法（index/pop）+ dict 方法（get[带
+  默认值]/keys/values）+ str 方法（split/find）+ 嵌套容器（data['xs'][1]），全
+  语料 **27/27 四级差分等价**（token/AST/反序列化/数据面），执行核心覆盖更宽 IBCI
+  语义面。
+  **交付**：
+  - **链式比较**（`ibci-ext/src/interpreter.rs`）：Compare 从单比较（ops.first()）
+    → 全链（左到右，全部成立——`a < b < c` = (a<b) and (b<c)，当前比较右值 = 下一
+    比较左值）。
+  - **list 方法扩展**：index[首次出现位置] / pop[末元素弹出+返回]。
+  - **dict 方法扩展**：get[key] / get[key, default][缺失返默认] / keys[键列表] /
+    values[值列表]。
+  - **str 方法扩展**：split[分隔符切分→list] / find[子串位置，缺失=-1]。
+  - **嵌套容器**：subscript on subscript（data['xs'][1]）——eval_expr 递归已支持。
+  - **语料扩展**（+list_methods/dict_methods/nested_container/str_methods/
+    chained_cmp）。
+  **关键裁定（self-grill 全分支消解）**：① **链式比较左到右全链**（a < b < c =
+  (a<b) and (b<c)——当前比较右值 = 下一比较左值，对齐 Python/IBC 链式语义）；②
+  **dict.get 带默认值**（get[key, default] 缺失返默认——args.get(1)）；③ **str.
+  split 空分隔符**（sep 空 = 按字符切分，对齐 Python）；④ **str.find 缺失 = -1**
+  （对齐 Python）；⑤ **嵌套容器经递归**（subscript on subscript——eval_expr 递归
+  求值 base 再求 slice，无特殊处理）；⑥ **while-else 是 IBCI 限制**（编译失败——
+  非执行核心缺陷，Python VM 亦不支持，语料不含）。
+  **验证**：更宽面 5/5 MATCH[链式比较[True, True]/list 方法[2, [1,2,3]]/dict
+  方法[1, 0, [a, b]]/str 方法[[a, b, c], 2]/嵌套容器[2, 13]] + 四级差分 27/27 全
+  语料逐条等价[token[完整位置]/AST[完整形态含位置]/反序列化[artifact→Rust AST]/
+  数据面[Rust 执行==Python 执行]] + 全量 pytest 零回归（阶段边界放行门——加法式
+  增量不动 Python 执行路径，计数稳定 4274[语料扩展不增测试数]；见 NEXT_STEPS 基线
+  锚点）。**阶段③ 第七增量出口达成**（Rust 执行核心更宽 IBCI 语义面——链式比较 +
+  方法扩展 + 嵌套容器）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段③ 第七增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段③ 后续（CPS 优化
+  [43 节点 enum 分发，在 27x 基础上进一步提升] + 符号池/类型池/侧表反序列化 + 更
+  宽 IBCI 语料[quoted 值/行为表达式]）+ ④ 并发解除续在隔离分支（差分门逐级验证）；
+  语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

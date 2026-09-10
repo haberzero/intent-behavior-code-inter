@@ -478,13 +478,18 @@ impl Interpreter {
                 }
             }
             Expr::Compare { left, ops, comparators, .. } => {
-                let l = self.eval_expr(env, left, output);
-                if let (Some(op), Some(r)) = (ops.first(), comparators.first()) {
+                // 链式比较（a < b < c）——左到右，全部成立
+                let mut cur = self.eval_expr(env, left, output);
+                let mut result = true;
+                for (op, r) in ops.iter().zip(comparators.iter()) {
                     let rv = self.eval_expr(env, r, output);
-                    self.compare(&l, op, &rv)
-                } else {
-                    IbValue::Bool(false)
+                    if !self.compare(&cur, op, &rv).truthy() {
+                        result = false;
+                        break;
+                    }
+                    cur = rv; // 链：当前比较的右值 = 下一比较的左值
                 }
+                IbValue::Bool(result)
             }
             Expr::Call { func, args, .. } => {
                 // func: &Box<Expr> → as_ref() 得 &Expr
@@ -720,9 +725,86 @@ impl Interpreter {
                     IbValue::None_
                 }
                 "len" => IbValue::Int(l.borrow().len() as i64),
+                "index" => {
+                    let items = l.borrow().clone();
+                    if let Some(v) = args.first() {
+                        items
+                            .iter()
+                            .position(|x| x == v)
+                            .map(|i| IbValue::Int(i as i64))
+                            .unwrap_or(IbValue::None_)
+                    } else {
+                        IbValue::None_
+                    }
+                }
+                "pop" => {
+                    let mut m = l.borrow_mut();
+                    m.pop().unwrap_or(IbValue::None_)
+                }
+                _ => IbValue::None_,
+            },
+            IbValue::Dict(d) => match method {
+                "get" => {
+                    // get(key) / get(key, default)
+                    let items = d.borrow().clone();
+                    if let Some(k) = args.first() {
+                        let found = items.iter().find(|(dk, _)| dk == k).map(|(_, v)| v.clone());
+                        match found {
+                            Some(v) => v,
+                            None => args.get(1).cloned().unwrap_or(IbValue::None_),
+                        }
+                    } else {
+                        IbValue::None_
+                    }
+                }
+                "keys" => {
+                    let items = d.borrow().clone();
+                    let keys: Vec<IbValue> = items.into_iter().map(|(k, _)| k).collect();
+                    IbValue::list_new(keys)
+                }
+                "values" => {
+                    let items = d.borrow().clone();
+                    let vals: Vec<IbValue> = items.into_iter().map(|(_, v)| v).collect();
+                    IbValue::list_new(vals)
+                }
+                "len" => IbValue::Int(d.borrow().len() as i64),
                 _ => IbValue::None_,
             },
             IbValue::Str(s) => {
+                match method {
+                    "split" => {
+                        // split(sep)
+                        let sep = args
+                            .first()
+                            .and_then(|a| match a {
+                                IbValue::Str(x) => Some(x.clone()),
+                                _ => None,
+                            })
+                            .unwrap_or_default();
+                        let parts: Vec<IbValue> = if sep.is_empty() {
+                            s.chars().map(|c| IbValue::Str(c.to_string())).collect()
+                        } else {
+                            s.split(&sep)
+                                .map(|p| IbValue::Str(p.to_string()))
+                                .collect()
+                        };
+                        return IbValue::list_new(parts);
+                    }
+                    "find" => {
+                        let sub = args.first().and_then(|a| match a {
+                            IbValue::Str(x) => Some(x.clone()),
+                            _ => None,
+                        });
+                        return match sub {
+                            Some(sub) => match s.find(&sub) {
+                                Some(i) => IbValue::Int(i as i64),
+                                None => IbValue::Int(-1),
+                            },
+                            None => IbValue::Int(-1),
+                        };
+                    }
+                    _ => {}
+                }
                 let r = match method {
                     "upper" => s.to_uppercase(),
                     "lower" => s.to_lowercase(),

@@ -32,7 +32,7 @@
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4274 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 阶段③ 第六增量[执行核心闭包完整语义 + 更宽语料 22 条，计数稳定]阶段边界放行门；数字以实跑为准，不冻结）。
+> P9 阶段③ 第七增量[执行核心更宽 IBCI 面 + 更宽语料 27 条，计数稳定]阶段边界放行门；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
 > （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
 > 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
@@ -165,6 +165,12 @@
 >   panic]；语料 +closure_capture/closure_top_global；**22/22 四级差分逐条等价**
 >   [token/AST/反序列化/数据面]；IBCI 闭包边界对齐[mut captured 全局是 IBCI 限制]；
 >   零风险加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段③ 第六增量条目）
+>   → **P9 阶段③ 第七增量 ✅**（执行核心更宽 IBCI 面——链式比较[a < b < c 左到右
+>   全链]+ list 方法[index/pop]+ dict 方法[get 带默认/keys/values]+ str 方法
+>   [split/find]+ 嵌套容器[subscript on subscript 经递归]；语料 +list_methods/
+>   dict_methods/nested_container/str_methods/chained_cmp；**27/27 四级差分逐条
+>   等价**[token/AST/反序列化/数据面]；while-else 是 IBCI 限制[编译失败，非执行核心
+>   缺陷]；零风险加法式，merge 删分支；设计/裁定 = WORKLOG P9 阶段③ 第七增量条目）
 >   → **当前批次 = P9 阶段③ 续（执行核心：CPS 优化[43 节点 enum 分发，在 27x 基础
 >   上进一步提升] + 符号池/类型池/侧表反序列化 + 更宽 IBCI 语料[quoted 值/行为
 >   表达式]；隔离分支续）**。
@@ -213,6 +219,7 @@
    → 阶段③ 第四增量 执行核心 KB 语料面 host service 桥接 全语料 14/14 ✅
    → 阶段③ 第五增量 更宽语料 20 条 + 布尔逻辑解析 四级 20/20 ✅
    → 阶段③ 第六增量 闭包完整语义 Rc<RefCell> + enclosing 22/22 四级 ✅
+   → 阶段③ 第七增量 更宽 IBCI 面[链式比较/方法/嵌套容器] 27/27 四级 ✅
    → 阶段③ 续（CPS 优化 + 符号/类型/侧表 + quoted 值/行为表达式）[当前]
    → 阶段④ 并发解除
    → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；

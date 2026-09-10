@@ -44,6 +44,13 @@ CORPUS: List[Tuple[str, str]] = [
     ("closure_top_global", "a = 100\nfunc get_a() -> int:\n    return a\nprint(get_a())\n"),
     # ---- 容器扩展 ----
     ("list_more", "a = [1, 2]\nb = [3, 4]\nprint(a + b)\nprint(a[0] * 2)\n"),
+    ("list_methods", "xs = [1, 2, 3]\nxs.append(4)\nprint(xs.index(3))\nxs.pop()\nprint(xs)\n"),
+    ("dict_methods", "d = {'a': 1, 'b': 2}\nprint(d.get('a'))\nprint(d.get('z', 0))\nprint(d.keys())\n"),
+    ("nested_container", "data = {'xs': [1, 2], 'ys': [3, 4]}\nprint(data['xs'][1])\nprint(data['ys'][0] + 10)\n"),
+    # ---- 字符串方法扩展 ----
+    ("str_methods", "s = 'a,b,c'\nprint(s.split(','))\nprint(s.find('b'))\n"),
+    # ---- 链式比较 ----
+    ("chained_cmp", "a = 1\nb = 2\nc = 3\nprint(a < b < c)\nprint(1 < 2 < 3)\n"),
     # ---- KB 世界模型（主线核心面）----
     ("kb_world_vocab", (
         "kb = knowledge()\n"
