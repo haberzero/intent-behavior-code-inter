@@ -343,6 +343,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             self._collect_run_result(obj, data)
         elif isinstance(obj, IbValue) and base_name == "quoted":
             self._collect_quoted(obj, data)
+        elif isinstance(obj, IbValue) and base_name == "narrow_model":
+            self._collect_narrow_model(obj, data)
         elif isinstance(obj, IbValue) and base_name == "Optional":
             self._collect_optional(obj, data)
         elif base_name == "thread_result" and not isinstance(obj, IbClass):
@@ -484,6 +486,13 @@ class RuntimeSerializer(BaseFlatSerializer):
         # 无环形引用——直存（同 run_result 纪律），hydration 原样重建。
         data["_type"] = "quoted"
         data["source"] = obj.payload.get("source", "")
+
+    def _collect_narrow_model(self, obj, data):
+        # 推理时窄模型（不可变冻结工件）：全字段原生结构（嵌入向量 list[float] +
+        # 词表），无嵌套 IbObject / 无环形引用——结构化快照直存（同 quoted /
+        # run_result 纪律），hydration 原样重建。
+        data["_type"] = "narrow_model"
+        data.update(obj._payload_snapshot())
 
     def _collect_tuple(self, obj, data):
         data["_type"] = "tuple"
@@ -1124,6 +1133,23 @@ class RuntimeDeserializer:
             # 被提及表达式：source 原生 str，原样重建（无拓扑引用）。
             from core.runtime.objects.primitives.quoted import IbQuoted
             obj = IbQuoted(ib_class, payload={"source": data.get("source", "")})
+            self.instance_cache[uid] = obj
+
+        elif _type == "narrow_model":
+            # 推理时窄模型（冻结工件）：全字段原生结构原样重建（无拓扑引用）。
+            from core.runtime.objects.primitives.narrow_model import IbNarrowModel
+            payload = {
+                "model_name": data.get("model_name", ""),
+                "architecture": data.get("architecture", "transe"),
+                "dim": data.get("dim", 0),
+                "entities": data.get("entities", []),
+                "entity_embeddings": data.get("entity_embeddings", {}),
+                "relations": data.get("relations", []),
+                "relation_embeddings": data.get("relation_embeddings", {}),
+                "schema_version": data.get("schema_version", 1),
+                "content_hash": data.get("content_hash", ""),
+            }
+            obj = IbNarrowModel(ib_class, payload=payload)
             self.instance_cache[uid] = obj
 
         elif _type == "memory":

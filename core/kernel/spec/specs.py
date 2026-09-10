@@ -149,6 +149,14 @@ QUOTED_SPEC = TypeDef(name="quoted", kind=TypeKind.CLASS.value,
                       visibility=Visibility.PRELUDE_VISIBLE,
                       parent_type=TypeRef.of("Object"))
 
+# narrow_model 推理时窄模型值类型（world_model.bind_artifact 返回值；不可变
+# 冻结工件，KG 嵌入向量空间模型 TransE 纯推理零训练；与 quoted 同纪律 =
+# 值类型无空白构造面，必经加载门水化）。
+NARROW_MODEL_SPEC = TypeDef(name="narrow_model", kind=TypeKind.CLASS.value,
+                            provenance=Provenance.KERNEL_NATIVE,
+                            visibility=Visibility.PRELUDE_VISIBLE,
+                            parent_type=TypeRef.of("Object"))
+
 # 多模态类型规格 — IbAudio / IbImage / IbVideo 的公理化描述符
 # 作为普通类名注册（非关键字）。
 # 继承 file_handle，使用磁盘型存储模型。

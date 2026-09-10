@@ -76,9 +76,13 @@ def try_deep_clone(
     # 不可变原语：引用复用即可（vector = 不可变值类型：固定维度 + 无修改
     # 面，克隆语义 = 原对象本身，与 int/str 同纪律）
     if isinstance(val, IbNone) or (
-        isinstance(val, IbValue) and _value_base_name(val) in ("int", "float", "str", "bool", "vector", "run_result", "quoted")
+        isinstance(val, IbValue) and _value_base_name(val) in (
+            "int", "float", "str", "bool", "vector", "run_result", "quoted",
+            "narrow_model",
+        )
     ):
-        # vector / run_result / quoted = 不可变值类型（固定面 + 无修改方法面），
+        # vector / run_result / quoted / narrow_model = 不可变值类型
+        # （固定面 + 无修改方法面——narrow_model = 冻结窄模型工件），
         # 克隆语义 = 原对象本身（引用复用，与 int/str 同纪律）
         return val
 

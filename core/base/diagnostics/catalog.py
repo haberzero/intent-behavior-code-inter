@@ -472,6 +472,19 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="world_model.load_kb 的 content_hash 验证失败——artifact 数据损坏或被篡改（内容寻址完整性门）。",
         fix="重新经 world_model.save_kb 导出（取回 content_hash 作钉扎基准）；跨传输场景以 hash 比对检出损坏后重传。",
     ),
+    # ==================== 窄模型工件 (NAR_) ====================
+    "NAR_ENTITY_UNREGISTERED": CodeInfo(
+        title="narrow_model.score/topk 的 s/o 引用未注册实体（冻结工件词表固定，无静默默认）。",
+        fix="仅用工件 entities() 已注册实体作 s/o；候选空间见 model.entities()。",
+    ),
+    "NAR_RELATION_UNREGISTERED": CodeInfo(
+        title="narrow_model.score/topk 的 r 引用未注册关系（冻结工件词表固定，无静默默认）。",
+        fix="仅用工件 relations() 已注册关系作 r；关系空间见 model.relations()。",
+    ),
+    "NAR_TOPK_INVALID": CodeInfo(
+        title="narrow_model.topk 的 k 非正整数（k ≥ 1 整数；k 超候选数 = 返回全部候选，非错误）。",
+        fix="传正整数 k；k 超候选数时返回全部候选（截断语义，非违约）。",
+    ),
     # ==================== 层级记忆基底 (MEM_) ====================
     "MEM_KEY_EXISTS": CodeInfo(
         title="memory.encode 键已存在或键非法（非空 str）。",

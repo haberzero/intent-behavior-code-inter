@@ -776,6 +776,30 @@ embedding/检索非法输入。
 - **严重级别**：ERROR。
 - **修复方式**：重新导出（`save_kb` 返回值 = 钉扎基准 hash）；跨传输场景以 hash 比对检出损坏后重传。
 
+### 窄模型工件（NAR_）
+
+> 推理时窄模型（一等值类型 `narrow_model`，`world_model.bind_artifact` 返回值）的
+> 运行期契约违约。纯推理零训练（TransE 向量空间模型；`score`/`topk` = 内容信号，
+> D1 判定归确定性路径）。推理面参考未注册词 / `topk` 参数形态——fail-fast 不静默降级。
+
+#### `NAR_ENTITY_UNREGISTERED`
+`narrow_model.score`/`topk` 的 `s`/`o` 引用未注册实体。
+- **触发条件**：`score(s,r,o)` 的 `s` 或 `o`、或 `topk(s,r,k)` 的 `s` 不在工件 `entities()` 词表（冻结工件词表固定，无静默默认）。
+- **严重级别**：ERROR。
+- **修复方式**：仅用已注册实体作 `s`/`o`；候选空间见 `model.entities()`。
+
+#### `NAR_RELATION_UNREGISTERED`
+`narrow_model.score`/`topk` 的 `r` 引用未注册关系。
+- **触发条件**：`score(s,r,o)` 或 `topk(s,r,k)` 的 `r` 不在工件 `relations()` 词表（冻结工件词表固定，无静默默认）。
+- **严重级别**：ERROR。
+- **修复方式**：仅用已注册关系作 `r`；关系空间见 `model.relations()`。
+
+#### `NAR_TOPK_INVALID`
+`narrow_model.topk` 的 `k` 非正整数。
+- **触发条件**：`topk(s,r,k)` 的 `k` 非 int / 为 bool / `k < 1`。
+- **严重级别**：ERROR。
+- **修复方式**：传正整数 `k`；`k` 超候选数 = 返回全部候选（截断语义，非违约）。
+
 ### 层级记忆基底（MEM_）
 
 > 一等值类型 `memory` 的运行期契约违约：分层/容量/键存在性。均为运行时诊断，fail-fast 不静默降级。

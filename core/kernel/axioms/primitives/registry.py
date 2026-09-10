@@ -47,6 +47,7 @@ from core.kernel.axioms.intent_context import IntentContextAxiom
 from core.kernel.axioms.primitives.environment import EnvironmentAxiom
 from core.kernel.axioms.primitives.run_result import RunResultAxiom
 from core.kernel.axioms.primitives.quoted import QuotedAxiom
+from core.kernel.axioms.primitives.narrow_model import NarrowModelAxiom
 from core.kernel.axioms.intent import IntentAxiom
 from core.kernel.axioms.primitives.comm import (
     ThreadAxiom,
@@ -102,6 +103,7 @@ def register_core_axioms(registry: "AxiomRegistry") -> None:
     registry.register(EnvironmentAxiom())
     registry.register(RunResultAxiom())
     registry.register(QuotedAxiom())
+    registry.register(NarrowModelAxiom())
     registry.register(IntentAxiom())
     registry.register(LlmCallResultAxiom())
     registry.register(LLMUncertainAxiom())

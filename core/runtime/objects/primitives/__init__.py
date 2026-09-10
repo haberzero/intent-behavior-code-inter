@@ -8,6 +8,7 @@ from .knowledge import IbKnowledge
 from .memory import IbMemory
 from .run_result import IbRunResult
 from .quoted import IbQuoted
+from .narrow_model import IbNarrowModel
 from .callables import IbFnCallable, IbBehavior
 from .optional import IbOptional
 from ..media_types import IbAudio, IbImage, IbVideo
@@ -27,6 +28,7 @@ __all__ = [
     "IbMemory",
     "IbRunResult",
     "IbQuoted",
+    "IbNarrowModel",
     "IbFnCallable",
     "IbBehavior",
     "IbOptional",
