@@ -302,7 +302,11 @@ class TestRustExecutionDataPlane:
         non_host = [
             (n, c)
             for n, c in CORPUS
-            if not n.startswith("kb_") and "import meta" not in c
+            if (
+                not n.startswith("kb_")
+                and "import meta" not in c
+                and "from meta import" not in c
+            )
         ]
         for name, code in non_host:
             py = run_ibci(code)
@@ -353,8 +357,13 @@ class TestRustExecutionDataPlane:
         if not rk.loaded:
             return
         for name, code in CORPUS:
-            # KB（knowledge()）与 quoted 值（import meta）经 host service 桥接
-            needs_bridge = name.startswith("kb_") or "import meta" in code
+            # KB（knowledge()）、quoted 值（import meta）与 from-import
+            # （from meta import）经 host service 桥接
+            needs_bridge = (
+                name.startswith("kb_")
+                or "import meta" in code
+                or "from meta import" in code
+            )
             py = run_ibci(code)
             rs = rust_execution_data_plane(code, bridge if needs_bridge else None)
             assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"

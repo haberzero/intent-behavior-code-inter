@@ -55,6 +55,8 @@ CORPUS: List[Tuple[str, str]] = [
     ("aug_assign", "x = 0\nx += 1\nx += 2\nprint(x)\ny = 10\ny -= 3\nprint(y)\n"),
     ("tuple_basic", "t = (1, 2, 3)\nprint(t[0])\nprint(len(t))\n"),
     ("list_slice", "xs = [1, 2, 3, 4, 5]\nprint(xs[1:3])\nprint(xs[:2])\n"),
+    # ---- from-import（from X import Y——阶段④ CPS 覆盖差补齐）----
+    ("from_import", 'from meta import quote\nq = quote("1 + 2")\nprint(q.source)\n'),
     # ---- quoted 值（自指原语：meta.quote 冻结 / meta.eval 取值，host service 桥接）----
     ("quoted_source", 'import meta\nq = meta.quote("21 * 2")\nprint(q.source)\n'),
     ("quoted_eval_value", 'import meta\nprint(meta.eval(meta.quote("1 + 2")))\n'),

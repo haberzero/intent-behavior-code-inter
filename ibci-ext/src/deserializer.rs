@@ -137,6 +137,25 @@ fn build_node(uid: &str, nodes: &NodeMap) -> Node {
                 .collect();
             Node::Stmt(Stmt::Import { pos: pos_of(n), names })
         }
+        "IbImportFrom" => {
+            // from X import Y [as Z]：module + names（IbAlias 数组）
+            let names: Vec<Alias> = uids_of(&n["names"])
+                .iter()
+                .map(|u| {
+                    let alias = &nodes[u];
+                    Alias {
+                        pos: pos_of(alias),
+                        name: str_of(&alias["name"]),
+                        asname: alias["asname"].as_str().map(|s| s.to_string()),
+                    }
+                })
+                .collect();
+            Node::Stmt(Stmt::FromImport {
+                pos: pos_of(n),
+                module: str_of(&n["module"]),
+                names,
+            })
+        }
         "IbTry" => {
             let handlers = uids_of(&n["handlers"])
                 .iter()
@@ -487,8 +506,8 @@ pub fn node_types() -> Vec<&'static str> {
     vec![
         // 语句
         "IbAssign", "IbAugAssign", "IbExprStmt", "IbIf", "IbFor", "IbFunctionDef",
-        "IbReturn", "IbBreak", "IbContinue", "IbPass", "IbImport", "IbWhile",
-        "IbTry", "IbClassDef",
+        "IbReturn", "IbBreak", "IbContinue", "IbPass", "IbImport", "IbImportFrom",
+        "IbWhile", "IbTry", "IbClassDef",
         // 表达式
         "IbConstant", "IbName", "IbBinOp", "IbUnaryOp", "IbBoolOp", "IbCompare",
         "IbCall", "IbListExpr", "IbTuple", "IbDict", "IbAttribute", "IbSubscript",

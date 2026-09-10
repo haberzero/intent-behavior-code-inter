@@ -438,6 +438,24 @@ impl Interpreter {
                 }
                 Flow::Next
             }
+            Stmt::FromImport { module, names, .. } => {
+                // from X import Y [as Z]：绑定名 = asname 或 Y；Y = X 的宿主属性
+                // （经桥接 host_getattr 解析）；未知模块/属性 = no-op
+                if let Some(mod_host) = self.get_host_module(module) {
+                    if let IbValue::Host(h) = &mod_host {
+                        for alias in names {
+                            let src = alias.name.clone();
+                            let binding = alias
+                                .asname
+                                .clone()
+                                .unwrap_or_else(|| src.clone());
+                            let val = self.get_host_attribute(h, &src);
+                            env.borrow_mut().set(&binding, val);
+                        }
+                    }
+                }
+                Flow::Next
+            }
             Stmt::Try { body, .. } | Stmt::ClassDef { body, .. } => {
                 self.exec_body(env, body, output)
             }
@@ -573,7 +591,12 @@ impl Interpreter {
                         };
                         let arg_vals: Vec<IbValue> =
                             args.iter().map(|a| self.eval_expr(env, a, output)).collect();
-                        self.call_function(env, &func_name, arg_vals, output)
+                        // 函数为宿主对象（如 from meta import quote）→ 调宿主函数
+                        if let Some(IbValue::Host(h)) = env.borrow().get(&func_name) {
+                            self.call_host_function(&h, arg_vals)
+                        } else {
+                            self.call_function(env, &func_name, arg_vals, output)
+                        }
                     }
                 }
             }
@@ -917,6 +940,18 @@ impl Interpreter {
             let tuple = PyTuple::new(py, &py_args)?;
             let res = obj.call_method(method, tuple, None)?;
             // 结果转换（Python 对象 → Rust IbValue）
+            Ok(from_py(py, &res))
+        })
+        .unwrap_or(IbValue::None_)
+    }
+
+    /// 调宿主函数对象（如 from meta import quote 的 quote）——委托 Python 调用。
+    fn call_host_function(&self, pyobj: &Py<PyAny>, args: Vec<IbValue>) -> IbValue {
+        Python::with_gil(|py| -> PyResult<IbValue> {
+            let obj = pyobj.bind(py);
+            let py_args: Vec<PyObject> = args.iter().map(|a| to_py(py, a)).collect();
+            let tuple = PyTuple::new(py, &py_args)?;
+            let res = obj.call(tuple, None)?;
             Ok(from_py(py, &res))
         })
         .unwrap_or(IbValue::None_)

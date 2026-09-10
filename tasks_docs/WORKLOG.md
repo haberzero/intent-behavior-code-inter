@@ -3450,6 +3450,39 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（CPS 优化
     续[覆盖差 23 节点逐步补齐] + task_scheduler GIL-free 集成）续在隔离分支（差分
     门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 第三增量（CPS 优化续——扩 IbImportFrom[from X import Y] + 覆盖差
+  可行性分析，34 语料全级差分等价，2026-09-10，隔离分支 `rust-kernel`）**：**Rust
+  执行核心 CPS 优化续**——扩 IbImportFrom（from X import Y，经桥接 host_getattr 解析
+  Y = X 的宿主属性 + call_host_function 调宿主函数对象），并分析覆盖差 23 节点的可
+  行性（哪些 IBCI 支持/可 parse，哪些不支持/LLM 特殊），34 语料全级差分逐条等价。
+  **交付**：
+  - **IbImportFrom**（`from meta import quote`）：parser（From token + module 名 +
+    import + Alias 列表）+ deserializer（module + names[IbAlias 数组] + level）+
+    interpreter（bind Y = host_getattr(host_module X, Y)）。
+  - **call_host_function**（interpreter）：调宿主函数对象（如 from meta import quote
+    的 quote）——委托 Python 调用（obj.call），区别于 call_host_method[方法调用]。
+  - **Call 的 Name 分支扩展**：函数为宿主对象（env 变量为 Host）→ 调宿主函数；否则
+    → call_function[Rust 函数]。
+  - **语料扩展**（+from_import）。
+  **关键裁定（self-grill 全分支消解）**：① **IbImportFrom = from X import Y**（Y =
+    X 的宿主属性，经桥接 host_getattr 解析——与 import X[绑定模块本身]互补：import
+    绑模块，from-import 绑模块的属性[函数/值]）；② **call_host_function vs
+    call_host_method**（前者调宿主函数对象[obj.call]，后者调宿主对象的方法
+    [obj.call_method]——两面对应两种调用语义，非双通道）；③ **覆盖差可行性分析**
+    （23 节点中：IBC 支持/可 parse = IbImportFrom[本增量已补]；IBC 不支持[parse
+    错误] = IbGlobalStmt/IbNonlocalStmt/IbStarred/IbSwitch[IbRaise 因无 Python 内建
+    异常 SEM_UNDEFINED_SYMBOL]；LLM/意图/宿主特殊面 = IbBehaviorExpr/IbAwaitExpr/
+    IbChannelExpr 等——语料面低频，后续按需补齐）；④ **node_types 30→31**（覆盖差
+    23→22）。
+  **验证**：**34/34 全语料数据面差分等价**（含 from_import[1 + 2]）+ 全级差分
+    34/34 逐条等价[token/AST/反序列化/数据面 + 符号表/类型表] + node_types = 31 节
+    点[覆盖差 22] + 全量 pytest 零回归（阶段④ 第三增量放行门——加法式增量不动
+    Python 执行路径，计数稳定 4276；见 NEXT_STEPS 基线锚点）。**阶段④ 第三增量出口
+    达成**（Rust 执行核心 CPS 优化续——IbImportFrom + 覆盖差可行性分析）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 第三增量零风险加法式（opt-in，不动
+    Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（CPS 优化
+    续[覆盖差 22 节点——IBC 支持面按需补齐 + LLM/意图面后续] + task_scheduler GIL-
+    free 集成）续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
