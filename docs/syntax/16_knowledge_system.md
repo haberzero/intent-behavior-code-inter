@@ -157,6 +157,25 @@ IBC 结构 = 稳定可靠的语言自动机。"验证过的知识从非确定性
 - **持久化**：嵌入面入 KB artifact v2 `vector` 节（`{dim, embeddings}`，内容
   寻址；见 §11.12）；v1 artifact（无 vector 节）向后兼容加载（嵌入面空）。
 
+**投影面**（`to_ibci`——KB 当前态的确定性 IBCI 代码派生视图；非存储层）：
+
+| 方法 | 语义 | 纪律 |
+|------|------|------|
+| `k.to_ibci()` | 导出 KB 当前态的确定性 IBCI 源码（派生视图） | 只读导出（无修改面/无新诊断码）；返回 `str` |
+
+- **派生视图非存储层**：投影 = 活 KB 当前态（全词汇 + 全事实当前 o/source/
+  status，active+retracted 均含）的 IBCI 源码——可经执行重建等价 KB，替代
+  lossy 静态投影器（全词汇/全事实无丢失、无魔法默认、按需派生免全量重编译）。
+  单一权威源 = 活 KB / artifact；代码投影从日志派生，绝不独立存储。
+- **确定性**：词汇序 = KB 自身插入序（worlds/relations/words）；事实序 =
+  fact_id（str(seq)）序；字面量序列化规范化（dict 键排序 + str 转义）→
+  **同 KB 逐字节一致**（派生视图可复现）。
+- **当前态非全史**：不回放 amend/retract 事件史（amend 原始 o 不可恢复——事件
+  链只存 new_o）；投影重建当前态，历史归 fact 日志权威面 + artifact。
+- **对拍**：投影代码经执行重建 KB，其查询结果（lookup_pair/exists/by_subject/
+  contradicts/transitive/facts 语义字段）与活 KB 一致（add-only KB 的 fact_id
+  亦一致）。
+
 ## 惯用法（canonical idiom）
 
 "先查知识库再决定是否调 LLM"——用户控制流的确定性验证门模式：

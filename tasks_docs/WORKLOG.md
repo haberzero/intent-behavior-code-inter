@@ -2652,6 +2652,52 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
    v2 + 新码；见 NEXT_STEPS 基线锚点）。
    设计要点 = `tasks_docs/_p6_vector_plane_design.md`（P6 设计单点真理：
    调研结论 + 面定位 + artifact v2 演进 + 测试面；P7 批次开工前保留）。
+   **P6 批次开工收尾**：删除 `tasks_docs/_p6_vector_plane_design.md`
+   （P7 开工——裁定全在本条目 + docs/）。
+- **P7 R-F 投影派生视图落地（knowledge.to_ibci()，2026-09-10，
+   unsafe-vibe-dev；世界模型 DB 主线批次 7，两批 G1-G2 收束）**：**KB 当前态
+   的确定性 IBCI 代码派生视图（非存储层）**——替代 lossy stopgap
+   `schema_to_ibci.py`（全词汇/全事实无丢失 + 无魔法默认 + 按需派生免全量
+   重编译）。
+   **调研结论（stopgap 实证 + IBCI 代码面实证）**：stopgap 每词生成 IBCI
+   class 用硬编码 if 字符串分支 + `"target:relation_type"` 单字符串 + **根本不
+   存 axioms（静默丢 34 条 only_in_axioms 事实，lossy 实证）** + `return
+   "unknown"`/`return ""` 魔法默认（红线）+ 无查询/索引 + KB 增长需全量重编译。
+   IBCI 代码面实证：支持 dict/list/bool 字面量 + 字符串转义 + 末尾裸值合法
+   可执行 + 执行后经 `runtime_context.get_variable` 取回重建值 → 投影代码可
+   确定性生成 + 可执行重建 + 可对拍。
+   **关键裁定（self-grill 全分支消解）**：① 面定位 = `to_ibci()` 挂
+   `knowledge` 值类型（设计 §3.3 `kb.to_ibci()` 权威形态；与 P6 嵌入面同纪律
+   ——KB 值的方法面；只读导出无修改面，同 export()）；② **派生视图非存储
+   层**（单一权威源 = 活 KB / artifact；代码投影从日志派生绝不独立存储）；
+   ③ **当前态非全史**（不回放 amend/retract 事件史——amend 原始 o 不可恢复
+   [事件链只存 new_o，原 o 被覆盖丢失]→ 全史回放不可能；投影重建当前态，
+   active+retracted 事实均含 status 保真；历史归 fact 日志权威面 + artifact）；
+   ④ **确定性**（词汇序 = KB 自身插入序[worlds/relations/words] + 事实序 =
+   fact_id(str(seq))序 + 字面量序列化规范化[dict 键排序 + str 转义 \\\" \\\\
+   \\n \\t，bool 先于 int] → 同 KB 逐字节一致）；⑤ **治理门顺序**（先注册全
+   词汇 worlds→relations→words 再 add_fact——满足 add_fact 词表 allowlist
+   门）；⑥ **无新诊断码**（to_ibci 只读导出无治理违约面——语义错误集不变）；
+   ⑦ **fact_id 边界**（add-only KB = 投影 fact_id 与原一致；含 amend/retract
+   历史的 KB = id 可能偏移[历史事件也增 seq]——当前态 o/status 仍一致，对拍
+   按语义查询结果非 fact_id 本身）。
+   **变化前后**：+`knowledge.to_ibci()`（确定性 IBCI 代码发射器：词汇[KB 插入
+   序] + 当前态事实[fact_id 序] + 字面量序列化 _ibci_literal/_ibci_str + 末尾
+   裸 kb 可求值）+ 公理 KnowledgeAxiom 加 to_ibci 方法面 + 测试 16 例（G1
+   runtime 对拍 13：确定性两次/两引擎逐字节一致/投影代码编译+执行无错/末尾裸
+   kb/对拍 lookup_pair+exists+by_subject+contradicts+transitive+facts 语义字段
+   全一致 + 词表一致/retracted 事实投影 status 保真/全事实无 lossy + G2 e2e 3：
+   投影代码两次独立 CLI run 数据面逐字节一致 + 零 LLM 凭证/对拍活 KB 逐字节
+   一致/独立执行重建 KB 无外部依赖）。
+   **既有边界（e2e 层红线）**：e2e 禁 import `core.runtime.objects.`——投影
+   代码经 `run_ibci`（`print(kb.to_ibci())`）生成（黑箱，不 import runtime
+   内部件），经独立 CLI run 执行；对拍/确定性/零 LLM 凭证全在 CLI 数据面
+   验证。
+   **验证**：全量 pytest 零回归（公理层变更放行门——knowledge 新面 to_ibci；
+   见 NEXT_STEPS 基线锚点）。**R-F 验收达成**（to_ibci 产物与活 KB 查询结果
+   对拍一致；派生视图确定性/零 LLM/无 lossy）。
+   设计要点 = `tasks_docs/_p7_projection_design.md`（P7 设计单点真理：stopgap
+   缺陷实证 + 面定位 + 投影代码形态 + 对拍面 + 测试面；P8 批次开工前保留）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

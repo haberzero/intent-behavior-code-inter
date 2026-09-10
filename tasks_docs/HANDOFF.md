@@ -157,7 +157,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     隐藏计数行）；**smoke 子集（tests/contracts+tests/compiler）832 passed / ~13s 进程内无子进程**
     （高频验证用）；末次全量 **4191/1**（~126s，P5 公理层放行门，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P7 R-F 投影派生视图）**：
+- **🔴 主线延续点（下一位智能体 = P8 测试进程内化）**：
   - **P1 R-A quote/eval 已落地（本 session）**：`meta.quote`/`meta.eval` + `quoted` 一等值类型
     （单一验证门 + 值通道）。裁定 = WORKLOG（P1 R-A 条目）。
   - **P2 R-B 世界模型 KB 已落地（本 session）**：`knowledge` 就地演化为三元组知识图谱——
@@ -202,14 +202,19 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     节持久化嵌入，canonical/hash 版本感知，**v1 向后兼容**）。机制分层非重复：
     `ai.embed`/`ai.retrieve` = 低层原语保留，`kb.embed_search` = KB 自身词表高层
     内容信号检索。裁定全记录 = WORKLOG（P6 条目）。
-  - **P7 R-F 投影派生视图（当前批次）**：`to_ibci()` 确定性导出 IBCI 代码视图
-    （替代 lossy 静态投影器 `schema_to_ibci.py`）——派生/便利特性，非数据层
-    本身（数据层 = 活 KB + 向量面 + 窄模型工件）；试用方验收 = 投影产物与活
-    KB 查询结果一致（对拍）。
+  - **P7 R-F 投影派生视图已落地（本 session）**：`knowledge.to_ibci()` = KB
+    **当前态**的确定性 IBCI 代码派生视图（**非存储层**——单一权威源 = 活 KB /
+    artifact；代码投影从日志派生绝不独立存储）——全词汇/全事实（active+
+    retracted）无 lossy + 确定性逐字节一致（同 KB 同投影）+ 对拍活 KB 查询
+    结果一致；替代 lossy stopgap `schema_to_ibci.py`（无魔法默认 + 按需派生免
+    全量重编译）。当前态非全史（amend 原始 o 不可恢复——不回放事件史）。裁定
+    全记录 = WORKLOG（P7 条目）。
+  - **P8 测试进程内化（当前批次）**：e2e 降子进程开销（44% 子进程启动主导
+    全量门成本）→ 降全量门成本；早期使能项（服务高频进程内验证）。
   - **P0-P9 执行清单**（详见 `_world_model_db_design.md` §6）：P0 设计定稿 ✅ → **P1 R-A
     quote/eval ✅** → **P2 R-B 世界模型 KB ✅** → **P3 磁盘格式 ✅** → **P4 R-C 确定性模式
-    ✅** → **P5 R-D 工件加载 ✅** → **P6 向量面 ✅** → **P7 R-F 投影派生视图（当前批次）**
-    → P8 测试进程内化 → P9 Rust 内核
+    ✅** → **P5 R-D 工件加载 ✅** → **P6 向量面 ✅** → **P7 R-F 投影派生视图 ✅**
+    → **P8 测试进程内化（当前批次）** → P9 Rust 内核
     （设计 + 构建；pin `CARGO_HOME` 到 workspace + 网络，免审批；harness 语料已含 quote/eval +
     KB 判别面）。每步：受影响子集+smoke 验证零回归 + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
   - **工作节奏（三轴收束进自指弧线，不新设竞争主线）**：R-A 并入 selfref 弧线 / R-B 演化 knowledge /
@@ -256,8 +261,8 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P6 放行门实跑）**：**4231 passed / 1 skipped / 126.11s / rc=0**
-  （= 前基线 4191 + P6 新增 26 + tests/meta 治理参数化增量 14[docs 同步所致]；供下一 session
+- **全量 pytest 基线（本 session P7 放行门实跑）**：**4257 passed / 1 skipped / 129.04s / rc=0**
+  （= 前基线 4231 + P7 新增 16 + tests/meta 治理参数化增量 10[docs 同步所致]；供下一 session
   参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
@@ -269,14 +274,14 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 ### 2.2 交接检查单（当前有效）
 
 - [ ] 读 **`_world_model_db_design.md`**（本主线设计 + 调研结论 + 决策点/风险 + P0-P9 执行清单；
-  **首读**）+ **`_p6_vector_plane_design.md`**（P6 向量面机制裁定——P7 开工后删除该
-  文档；P2/P3/P4/P5 设计文档已收束删除，裁定全在 WORKLOG + docs/）
-- [ ] 读 `NEXT_STEPS.md`（当前主线 = 世界模型 DB + **当前批次 P7 R-F 投影派生视图** + 工作节奏 +
+  **首读**）+ **`_p7_projection_design.md`**（P7 投影派生视图机制裁定——P8 开工后删除该
+  文档；P2/P3/P4/P5/P6 设计文档已收束删除，裁定全在 WORKLOG + docs/）
+- [ ] 读 `NEXT_STEPS.md`（当前主线 = 世界模型 DB + **当前批次 P8 测试进程内化** + 工作节奏 +
   ⛔ 工作模式定论）
 - [ ] 读 `_rust_kernel_survey.md`（Rust 内核替换调研 + 全量 pytest 临时策略：单任务=受影响子集+smoke）
 - [ ] 读 `WORKLOG.md`（P1 R-A + P2 R-B + P3 磁盘格式 + P4 确定性模式 + P5 窄模型工件 + P6 向量面
-  裁定 + 世界模型 DB 设计裁定 + 环境重建 + 本交接）
-- [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P7-P9；objective 按 §1.3 模板套用，
+  + P7 投影派生视图 裁定 + 世界模型 DB 设计裁定 + 环境重建 + 本交接）
+- [ ] **设 goal**（据 §2.0 主线 + `_world_model_db_design.md` §6 P8-P9；objective 按 §1.3 模板套用，
   含约束：**禁 push**（须用户单独授权）；**常规网络允许**（不触发审批）；**Rust 构建可行**
   （pin `CARGO_HOME`+`CARGO_TARGET_DIR` 到 workspace，免审批）；**避免**写 workspace 外文件 /
   无必要沙箱提权；用户不在场且需 push 时延后记录不阻塞）；跨 session 需**新建** goal（旧 goal
