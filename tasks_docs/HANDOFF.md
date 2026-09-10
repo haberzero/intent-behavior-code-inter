@@ -421,18 +421,28 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     task_scheduler_integration.py 常设基准）——**并发比 1.05 ≈ 1.0 集成成立**[T_io=
     0.045s + CPU×4 → T_wall=0.047s ≈ max 非 sum]。task_scheduler IO-only → CPU+IO
     GIL-free 目标落地验证。**零风险加法式**（仅常设基准脚本，不动 Rust/测试代码）。
+  - **P9 阶段④ 第八增量 task_scheduler 内部接入 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：CPU+IO GIL-free 集成
+    （task_scheduler 内部接入）落地验证——task_scheduler 可调度异步 CPU 任务（CPU 工作
+    经 TaskPool 在后台线程 GIL-free 真并行执行）——CPUTaskWaitable（Python 侧 waitable，
+    符合 task_scheduler 的 waitable 协议：is_done / 非阻塞 try_result[未完成 = (False,
+    None)] / register_wake / result）；CPU 任务（生成器）yield 该 waitable 完成后取结
+    果；**提交序 = 并行序[CPU 任务先提交[后台线程先启动] + IO 任务后跑[持 GIL]——期间
+    CPU 后台 GIL-free 真并行]**——**并发比 1.04 ≈ 1.0 成立**[T_io=0.043s + CPU×4 →
+    T_wall=0.045s ≈ max 非 sum]（scripts/bench_task_scheduler_cpu_task.py 常设基准）。
+    **零风险加法式**（仅常设基准脚本，不动 Rust/测试代码）。
   - **P9 阶段④ 续（当前批次，隔离分支续）**：并发解除——**task_scheduler GIL-free
-    集成续[task_scheduler 内部接入 TaskPool——支持 CPU 任务类型，submit CPU 任务经
-    TaskPool 并行] + CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]**（task_
-    scheduler IO-only → CPU+IO 真并行 GIL-free）。四阶段全貌：① 地基 ✅ → ② 前端
-    （lexer ✅ / parser 完整面 + 剩余面 + 位置 + 布尔逻辑 + import + from-import ✅ /
-    语义推迟）→ **③ 执行核心 ✅[收束：30/30 全级 + 23–30x + 闭包 + KB + quoted 值 +
-    完整 artifact 消费 + kernel_info stage 3/execution-core]** → ④ 并发解除[当前：
-    GIL-free 并行执行地基 3.58x ✅ + CPS 优化 node_types + AugAssign/Tuple/Slice
-    33/33 全级 ✅ + IbImportFrom 34/34 全级 ✅ + run_artifacts_parallel 3.31x ✅ +
-    CPU+IO 真并行验证 1.07 ✅ + TaskPool 3.37x ✅ + task_scheduler 接入 TaskPool
-    CPU+IO 并发验证 1.05 ✅ + task_scheduler 内部接入 + CPS 覆盖差补齐]。确认零风险
-    （全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
+    集成收束[CPUTaskWaitable 归全量 Rust 化——task_scheduler 原生 CPU 任务类型] + CPS
+    优化续[覆盖差 22 节点——LLM/意图面按需补齐]**（task_scheduler IO-only → CPU+IO
+    真并行 GIL-free）。四阶段全貌：① 地基 ✅ → ② 前端（lexer ✅ / parser 完整面 +
+    剩余面 + 位置 + 布尔逻辑 + import + from-import ✅ / 语义推迟）→ **③ 执行核心 ✅
+    [收束：30/30 全级 + 23–30x + 闭包 + KB + quoted 值 + 完整 artifact 消费 + kernel_
+    info stage 3/execution-core]** → ④ 并发解除[当前：GIL-free 并行执行地基 3.58x ✅ +
+    CPS 优化 node_types + AugAssign/Tuple/Slice 33/33 全级 ✅ + IbImportFrom 34/34 全
+    级 ✅ + run_artifacts_parallel 3.31x ✅ + CPU+IO 真并行验证 1.07 ✅ + TaskPool
+    3.37x ✅ + task_scheduler 接入 TaskPool CPU+IO 并发验证 1.05 ✅ + task_scheduler
+    内部接入 异步 CPU 任务 waitable 1.04 ✅ + 集成收束[归全量 Rust 化] + CPS 覆盖差
+    补齐]。确认零风险（全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -491,9 +501,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段④ 第七增量放行门实跑）**：**4278 passed /
-  1 skipped / 140.78s / rc=0**（计数稳定 4278[阶段④ 第七增量 task_scheduler 接入
-  TaskPool CPU+IO 并发验证 bench 常设基准，不动 Rust/测试代码]；注：test_p7_process_
+- **全量 pytest 基线（本 session P9 阶段④ 第八增量放行门实跑）**：**4278 passed /
+  1 skipped / 136.58s / rc=0**（计数稳定 4278[阶段④ 第八增量 task_scheduler 内部接入
+  异步 CPU 任务 waitable bench 常设基准，不动 Rust/测试代码]；注：test_p7_process_
   isolation / test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序
   偶发失败，隔离重跑通过，非回归]；供下一 session 参照，不冻结）。
 

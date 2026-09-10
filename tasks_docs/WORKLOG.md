@@ -3619,6 +3619,50 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     scheduler GIL-free 集成续[task_scheduler 内部接入 TaskPool——支持 CPU 任务类型，
     submit CPU 任务经 TaskPool 并行] + CPS 优化续[覆盖差 22 节点——LLM/意图面按需补
     齐]）续在隔离分支（差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
+- **P9 阶段④ 第八增量（task_scheduler GIL-free 集成续——task_scheduler 内部接入
+  TaskPool：异步 CPU 任务 waitable，并发比 1.04≈1.0，2026-09-10，隔离分支
+  `rust-kernel`）**：**Phase ④ CPU+IO GIL-free 集成（task_scheduler 内部接入）落地
+  验证**——task_scheduler 可调度**异步 CPU 任务**（CPU 工作经 TaskPool 在后台线程
+  GIL-free 真并行执行）——CPU 任务 waitable 符合 task_scheduler 的 waitable 协议
+  （is_done / 非阻塞 try_result / register_wake）；task_scheduler 推进 IO 任务（持
+  GIL）时，CPU 任务在后台线程 GIL-free 真并行（墙钟 ≈ max[IO, CPU]，非 sum[串行]）。
+  这是 task_scheduler 内部接入 TaskPool 的集成验证（Phase ④ 目标：task_scheduler
+  支持 CPU 任务类型）。
+  **交付**：
+  - **异步 CPU 任务 waitable 集成验证**（`scripts/bench_task_scheduler_cpu_task.py`，
+    常设基准）：CPUTaskWaitable（Python 侧 waitable，CPU 工作经 TaskPool 在后台线程
+    GIL-free 真并行执行，符合 task_scheduler 的 waitable 协议：is_done[非阻塞查询
+    完成] / try_result[非阻塞取结果，未完成 = (False, None) 继续等待] / register_
+    wake[完成时设事件] / result[阻塞取结果，宿主/线程体兜底]）；CPU 任务（生成器，
+    task_scheduler 契约）yield 该 waitable，完成后取结果；task_scheduler 按提交序
+    推进——CPU 任务先提交[后台线程先启动] + IO 任务后跑[持 GIL T_io]——期间 CPU 后台
+    线程 GIL-free 真并行。
+  **关键裁定（self-grill 全分支消解）**：① **异步 CPU 任务 waitable 协议**（符合
+    task_scheduler 契约：is_done 非阻塞查询完成 / try_result 非阻塞取结果[未完成 =
+    (False, None) 继续等待，区别于 BaseCPSDrive 的阻塞 try_result[宿主/线程体兜底]]
+    / register_wake 完成时设事件[唤醒全等待 park] / result 阻塞取结果[宿主/线程体同
+    步兜底]）；② **CPU 工作经 TaskPool 在后台线程 GIL-free 真并行**（后台线程调
+    pool.run_all()[释放 GIL，Rust 线程各执行一批纯 CPU]——task_scheduler 推进 IO 任务
+    [持 GIL] 时，CPU 后台线程 GIL-free 真并行）；③ **每 waitable 独立 TaskPool**
+    （避免共享池 run_all 竞争[run_all drain 全部已 submit 任务]）；④ **提交序 =
+    并行序**（task_scheduler 按提交序推进 ready 任务——CPU 任务先提交[后台线程先启动]
+    + IO 任务后跑[持 GIL]——期间 CPU 后台 GIL-free 真并行；若 IO 任务先提交[先跑完
+    T_io]，CPU 后台线程才启动 = 串行[并发比 ≈ (T_io+T_cpu)/T_io]）；⑤ **timing 验证
+    非常设测试**（CPU 任务并行是 timing 属性，归常设基准，不入 pytest 避免 flaky）；
+    ⑥ **task_scheduler 本身不改**（本增量验证 task_scheduler 内部接入能力[调度异步
+    CPU 任务 waitable]；CPUTaskWaitable 为 Python 侧集成点[依赖 Rust 内核 TaskPool，
+    opt-in]，非生产模块——归全量 Rust 化后续）。
+  **验证**：**task_scheduler 内部接入（异步 CPU 任务 waitable）并发比 1.04 ≈ 1.0**
+    （CPU 任务先提交[后台线程先启动] + IO 任务后跑[持 GIL T_io=0.043s] → T_wall=
+    0.045s ≈ max[T_io, T_cpu]，非 sum[T_io + T_cpu]）+ 差分 harness 20/20 + 全量
+    pytest 零回归（阶段④ 第八增量放行门——仅加常设基准脚本，不动 Rust/测试代码，计数
+    稳定 4278；见 NEXT_STEPS 基线锚点）。**阶段④ 第八增量出口达成**（Phase ④ CPU+IO
+    GIL-free 集成[task_scheduler 内部接入]落地验证——异步 CPU 任务 waitable）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段④ 第八增量零风险加法式（仅常设基准脚本，
+    不动 Rust/测试代码），验证后 merge unsafe-vibe-dev 并删分支；阶段④ 后续（task_
+    scheduler GIL-free 集成收束[CPUTaskWaitable 归全量 Rust 化——task_scheduler 原生
+    CPU 任务类型] + CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]）续在隔离分支
+    （差分门逐级验证）；语义层 Rust 移植 = 全量 Rust 化后续。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
