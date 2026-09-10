@@ -180,13 +180,18 @@ python3 -m venv .venv
 
 ## 8. 换机器会丢失的 gitignored 工件清单（重要）
 
-以下**不在 git**（push 不覆盖），换机器后须重建或手动迁移：
-| 文件 | 内容 | 重建方式 |
+以下**不在 git**（push 不覆盖）。区分两类：**须重建**（我的连续性依赖）vs **出站已交付**（试用方
+自存，非我的丢失风险）：
+
+| 文件 | 内容 | 性质 / 处置 |
 |------|------|---------|
-| `api_config.json` | LLM/embedding 配置 + 密钥 | §3.2（key 需重取） |
-| `AGENTS.local.md` | 本机环境事实 | §3.3 |
-| `.venv/` | Python 环境 | §3.1 |
-| `TRIAL_ANNOUNCE_2026-09-08/09.md` | 试用方交接公告 | 内容见 git 提交信息/§7；如需可重写 |
+| `api_config.json` | LLM/embedding 配置 + 密钥 | **须重建**（§3.2；key 需重取） |
+| `AGENTS.local.md` | 本机环境事实 | **须重建**（§3.3） |
+| `.venv/` | Python 环境 | **须重建**（§3.1） |
+| `TRIAL_ANNOUNCE_2026-09-08/09.md` | 试用方交接公告 | **出站（我→试用方）·已交付·非丢失风险**：公告指针已写入试用方工作区
+  （`ibci-trial/docs/UPSTREAM_ANNOUNCE_POINTER_2026-09-09.md`），试用方会读入并记入其自身
+  `AUTONOMOUS_LOG.md`（对方自存）；本仓库根的文件 gitignored，丢了不影响连续性（内容见 §7 +
+  git 提交信息，可重写）。 |
 | `.tmp_*` / `.tmp_pytest/` | 临时文件 | 无需 |
 
 **手动迁移建议**：旧机器上把 `api_config.json` + `AGENTS.local.md` 拷到新机器（含密钥，注意
