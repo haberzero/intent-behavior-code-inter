@@ -111,6 +111,18 @@ def _build_result_json(*, exit_status, exception, journal, budget, replay, varia
     return json.dumps(result, ensure_ascii=False)
 
 
+def _ensure_stdout_line_buffered() -> None:
+    """run 命令输出通道行缓冲化：ibci print = 行输出语义，长 run 可观测性为
+    默认底线——非 TTY（管道/重定向）stdout 默认块缓冲，行缓冲化后每行 print
+    即时可见（TTY 本已行缓冲，重配置无副作用）。重配置失败不阻断 run 主路径
+    （观测侧信道尽力而为定位）。"""
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(line_buffering=True)
+        except (OSError, ValueError):
+            pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="IBC-Inter CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -208,14 +220,7 @@ def main():
     engine = IBCIEngine(root_dir=root_dir)
 
     if args.command == "run":
-        # 输出通道行级 flush：ibci print = 行输出语义，长 run 可观测性为
-        # 默认底线——非 TTY（管道/重定向）stdout 默认块缓冲，行缓冲化后
-        # 每行 print 即时可见（TTY 本已行缓冲，重配置无副作用）。
-        if hasattr(sys.stdout, "reconfigure"):
-            try:
-                sys.stdout.reconfigure(line_buffering=True)
-            except (OSError, ValueError):
-                pass
+        _ensure_stdout_line_buffered()
 
         # 加载命令行变量
         cli_variables = {}

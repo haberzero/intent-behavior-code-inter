@@ -2339,6 +2339,15 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯。
    render（确定性组装合法 ibci）→ meta.compile（n_funcs 内省）= e49 教训的架构解。
    设计要点固化 = `tasks_docs/_round5_selfref_design.md`（SR-1..5 全景 + C1-C5 批次规划 +
    开放问题裁定 Q1-Q4）。verify 三关门 / modify 自修改+回滚 归 C2/C3。全量 3988/1 零回归。
+- **run 输出行缓冲契约 e2e 计时测试降层（2026-09-10，unsafe-vibe-dev）**：e2e 墙钟
+   时间隙判别（`gap>1.5s` + 40000 次循环"~4s"标定假设）实证为机器速度依赖——
+   32 核机上循环 ~1.1s 致误报失败（契约本身生效：实测 L1 到达 t+0.10s，非退出
+   时 flush；main.py run 分支 reconfigure 在位）。裁定：契约断言降层为机器无关
+   白箱（`tests/runtime/test_run_stdout_line_buffering.py`：真实管道 TextIOWrapper
+   默认块缓冲 → `main._ensure_stdout_line_buffered()` [run 分支初始化，自 main()
+   内联提取为具名函数] 调用后行缓冲生效）；e2e 计时黑箱测试删除。边界：run
+   输出通道行级 flush 契约不变（单点真理 = 15_diagnostics §run 命令可观测面）；
+   机器标定依赖的墙钟判别不置于 e2e 层（防未来复犯）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
