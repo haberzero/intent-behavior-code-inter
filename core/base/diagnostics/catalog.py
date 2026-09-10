@@ -429,8 +429,32 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         fix="已登记条目的更新走 amend（附 reason 审计）；检查键为非空字符串。",
     ),
     "KNW_REASON_EMPTY": CodeInfo(
-        title="knowledge.amend 理由（reason）为空，或键未登记。",
-        fix="amend 必须附非空理由（审计链完整性要求）；更正仅适用于已登记条目。",
+        title="knowledge.amend / amend_fact / retract 理由（reason）为空，或键/fact_id 未登记。",
+        fix="更正/墓碑必须附非空理由（审计链完整性要求）；操作仅适用于已登记条目/已登记事实。",
+    ),
+    "KNW_VOCAB_UNREGISTERED": CodeInfo(
+        title="knowledge.add_fact 引用未注册词表项（世界/关系类型/主语词/对象词）——KB 治理门（allowlist 机器强制）。",
+        fix="先经 register_world / register_relation / register_word 注册对应词表项，再 add_fact。",
+    ),
+    "KNW_VOCAB_EXISTS": CodeInfo(
+        title="knowledge.register_word / register_relation / register_world 重复注册（词表单一权威源）。",
+        fix="词表项已注册则查询其记录（word/relation/world）；更正归调用方治理流程，KB 值面只有登记。",
+    ),
+    "KNW_VOCAB_MALFORMED": CodeInfo(
+        title="knowledge 词表/事实方法参数形态非法（非 str / 非 bool / 非 list / 非 dict / 空串）。",
+        fix="按方法签名提供正确形态：词表名非空 str、is_set/transitive/multi_valued 为 bool、members 为 list、entries 为 dict、size_rank 为 int。",
+    ),
+    "KNW_FACT_DUPLICATE": CodeInfo(
+        title="knowledge.add_fact 同 (world,s,r,o) 已有 active 事实——去重机器强制。",
+        fix="事实已存在则查询其记录（get_fact/lookup_pair）；更正在事实面走 amend_fact（附 reason），废止走 retract（附 reason）。",
+    ),
+    "KNW_FACT_NOT_FOUND": CodeInfo(
+        title="knowledge 事实面操作引用未知 fact_id（get_fact/source/history_fact/expand/compare/retract/amend_fact）。",
+        fix="fact_id 须为 add_fact 返回值（或经 facts 枚举确认在日志中）；未知 id 经 get_fact 返回 null 预检。",
+    ),
+    "KNW_FACT_RETRACTED": CodeInfo(
+        title="对已 retract（墓碑）事实再 retract / amend_fact——事实已废止。",
+        fix="墓碑事实只读（get_fact/facts/history_fact 仍可查全史）；需恢复语义 = 登记新事实（append-only 纪律：不复活的版本是新事实）。",
     ),
     # ==================== 层级记忆基底 (MEM_) ====================
     "MEM_KEY_EXISTS": CodeInfo(

@@ -683,7 +683,8 @@ embedding/检索非法输入。
 
 ### 知识注册表（KNW_）
 
-> 已验证知识注册表（一等值类型 `knowledge`）的运行期契约违约：登记/更正/审计面。均为运行时诊断，fail-fast 不静默降级。
+> 已验证知识注册表（一等值类型 `knowledge`）的运行期契约违约：登记/更正/审计面 +
+> 世界模型 KB 面（词表治理门/事实日志契约）。均为运行时诊断，fail-fast 不静默降级。
 
 #### `KNW_CHECK_REJECTED`
 知识登记/更正未过验证门，或谓词引用跨快照丢失。
@@ -698,10 +699,46 @@ embedding/检索非法输入。
 - **修复方式**：已登记条目的更新走 `amend`（附非空 reason 审计）；检查键为非空字符串。
 
 #### `KNW_REASON_EMPTY`
-`knowledge.amend` 理由为空或键未登记。
-- **触发条件**：`amend` 的 reason 为空字符串（审计链完整性要求）；或对未登记键 `amend`。
+`knowledge.amend` / `amend_fact` / `retract` 理由为空，或键/fact_id 未登记。
+- **触发条件**：`amend`/`amend_fact`/`retract` 的 reason 为空字符串（审计链完整性要求）；或对未登记键/未知 fact_id 执行。
 - **严重级别**：ERROR。
-- **修复方式**：`amend` 必须附非空理由；更正仅适用于已登记条目。
+- **修复方式**：更正/墓碑必须附非空理由；操作仅适用于已登记条目/已登记事实。
+
+#### `KNW_VOCAB_UNREGISTERED`
+`knowledge.add_fact` 引用未注册词表项（KB 治理门）。
+- **触发条件**：`add_fact` 的世界/关系类型/主语词/对象词任一未在治理词表注册（allowlist 机器强制，确定性零 LLM）。
+- **严重级别**：ERROR。
+- **修复方式**：先经 `register_world`/`register_relation`/`register_word` 注册对应词表项，再 `add_fact`。
+
+#### `KNW_VOCAB_EXISTS`
+`knowledge.register_word` / `register_relation` / `register_world` 重复注册。
+- **触发条件**：对已注册词表项再次登记（词表单一权威源，KB 值面无更正通道）。
+- **严重级别**：ERROR。
+- **修复方式**：已注册项经 `word`/`relation`/`world` 查询其记录；治理更正归调用方流程，KB 值面只有登记。
+
+#### `KNW_VOCAB_MALFORMED`
+`knowledge` 词表/事实方法参数形态非法。
+- **触发条件**：词表名/事实字段非非空 str、`is_set`/`transitive`/`multi_valued` 非 bool、`members` 非 list、`entries` 非 dict、`size_rank` 非 int（动态 `any` 面穿透静态类型时）。
+- **严重级别**：ERROR。
+- **修复方式**：按方法签名提供正确形态的值。
+
+#### `KNW_FACT_DUPLICATE`
+`knowledge.add_fact` 重复 active 事实（去重机器强制）。
+- **触发条件**：同 `(world, s, r, o)` 已有 status 为 `active` 的事实（`by_triple` 索引成员检查）。
+- **严重级别**：ERROR。
+- **修复方式**：事实已存在则经 `get_fact`/`lookup_pair` 查询其记录；更正走 `amend_fact`（附 reason），废止走 `retract`（附 reason）。
+
+#### `KNW_FACT_NOT_FOUND`
+`knowledge` 事实面操作引用未知 fact_id。
+- **触发条件**：`get_fact`/`source`/`history_fact`/`expand`/`compare`/`retract`/`amend_fact` 的 fact_id 不在事实日志（或 fact_id 非 str）。
+- **严重级别**：ERROR。
+- **修复方式**：fact_id 须为 `add_fact` 返回值（或经 `facts` 枚举确认）；查询面未知 id 经 `get_fact` 返回 null 预检。
+
+#### `KNW_FACT_RETRACTED`
+对已 `retract`（墓碑）事实再 `retract` / `amend_fact`。
+- **触发条件**：目标事实 status 已为 `retracted`（append-only 纪律：墓碑只读）。
+- **严重级别**：ERROR。
+- **修复方式**：墓碑事实只读（`get_fact`/`facts`/`history_fact` 仍可查全史）；恢复语义 = 登记新事实（不复活的版本是新事实）。
 
 ### 层级记忆基底（MEM_）
 

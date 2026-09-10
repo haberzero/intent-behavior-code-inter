@@ -419,7 +419,9 @@ class RuntimeSerializer(BaseFlatSerializer):
 
     def _collect_knowledge(self, obj, data):
         # 知识库（可变容器）：条目值/事件值经实例池引用（拓扑序列化），
-        # 谓词引用不入值快照（函数非值快照——恢复后 amend 边界 fail-fast）
+        # 谓词引用不入值快照（函数非值快照——恢复后 amend 边界 fail-fast）；
+        # facts/vocab 全原生结构直存（同 quoted/run_result 纪律）；索引为
+        # 派生面——**不入快照**（水化时构造入口从事实日志确定性重建）
         data["_type"] = "knowledge"
         data["seq"] = obj.payload["seq"]
         data["entries"] = {
@@ -439,6 +441,8 @@ class RuntimeSerializer(BaseFlatSerializer):
             }
             for k, v in obj.payload["entries"].items()
         }
+        data["facts"] = obj._facts_snapshot()
+        data["vocab"] = obj._vocab_snapshot()
 
     def _collect_memory(self, obj, data):
         # 层级记忆基底（可变容器）：条目值/事件值经实例池引用（拓扑序列化）
@@ -1095,7 +1099,15 @@ class RuntimeDeserializer:
                     "provenance": ev.get("provenance", ""),
                     "events": events,
                 }
-            obj = IbKnowledge(ib_class, payload={"entries": entries, "seq": data.get("seq", 0)})
+            # facts/vocab = 全原生结构直存（水化原样取回；缺省空 = 旧快照
+            # 向前兼容语义——KB 面为空库）。索引不入快照——构造入口从事实
+            # 日志确定性重建（派生面，单一权威源 = 日志）。
+            obj = IbKnowledge(ib_class, payload={
+                "entries": entries,
+                "seq": data.get("seq", 0),
+                "facts": data.get("facts", {}),
+                "vocab": data.get("vocab") or IbKnowledge._blank_vocab(),
+            })
             self.instance_cache[uid] = obj
 
         elif _type == "run_result":

@@ -137,10 +137,19 @@ EMB_INVALID_INPUT = "EMB_INVALID_INPUT"
 
 # === 知识注册表 (KNW_) ===
 # 已验证知识注册表（一等值类型 knowledge）的运行期契约违约：验证门/键/
-# 更正理由面。编译期 check 纯度检查用 SEM_KNW_* 码（语义分析域）。
+# 更正理由面 + 世界模型 KB 面（词表治理门/事实日志契约）。编译期 check
+# 纯度检查用 SEM_KNW_* 码（语义分析域）。
 KNW_CHECK_REJECTED = "KNW_CHECK_REJECTED"
 KNW_KEY_EXISTS = "KNW_KEY_EXISTS"
 KNW_REASON_EMPTY = "KNW_REASON_EMPTY"
+# KB 词表治理面（register_word/relation/world + add_fact 治理门）：
+KNW_VOCAB_UNREGISTERED = "KNW_VOCAB_UNREGISTERED"   # 事实/查询引用未注册词表项
+KNW_VOCAB_EXISTS = "KNW_VOCAB_EXISTS"              # 词表重复注册
+KNW_VOCAB_MALFORMED = "KNW_VOCAB_MALFORMED"        # 词表/事实参数形态非法
+# KB 事实日志面（add_fact/get_fact/retract/amend_fact 契约）：
+KNW_FACT_DUPLICATE = "KNW_FACT_DUPLICATE"          # 同 (world,s,r,o) active 事实重复
+KNW_FACT_NOT_FOUND = "KNW_FACT_NOT_FOUND"          # 未知 fact_id
+KNW_FACT_RETRACTED = "KNW_FACT_RETRACTED"          # 对已 retract 事实再 retract/amend
 
 # === 层级记忆基底 (MEM_) ===
 # 一等值类型 memory 的运行期契约违约：层名/容量/键存在性。

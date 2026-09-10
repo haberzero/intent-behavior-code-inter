@@ -38,6 +38,25 @@ class KnowledgeAxiom(BaseAxiom):
             "keys":     _m("keys",     ret="list"),
             "len":      _m("len",      ret="int"),
             "cast_to":  _m("cast_to",  params=["any"], ret="any"),
+            # ---- 词表面（治理 allowlist——KB 元规则；全确定性零 LLM）----
+            # register_word 后两参（members/entries）可选，同 store 先例。
+            "register_word":    _m("register_word",    params=["str", "str", "bool", "list", "dict"], ret="void", mutating=True),
+            "register_relation": _m("register_relation", params=["str", "str", "bool", "bool"], ret="void", mutating=True),
+            "register_world":   _m("register_world",   params=["str", "str", "int"], ret="void", mutating=True),
+            # word/relation/world 未注册 = null 合法态 → ret any（同 get 先例）
+            "word":             _m("word",             params=["str"], ret="any"),
+            "relation":         _m("relation",         params=["str"], ret="any"),
+            "world":            _m("world",            params=["str"], ret="any"),
+            "words":            _m("words",            ret="list"),
+            "relations":        _m("relations",        ret="list"),
+            "worlds":           _m("worlds",           ret="list"),
+            # ---- 事实面（append-only 事实日志——KB 单一权威源；内建治理门）----
+            # add_fact 后两参（source/status）可选，同 store 先例。
+            "add_fact":   _m("add_fact",   params=["str", "str", "str", "str", "str", "str"], ret="str", mutating=True),
+            # get_fact 未知 id = null 合法态 → ret any（同 get 先例）
+            "get_fact":   _m("get_fact",   params=["str"], ret="any"),
+            "facts":      _m("facts",      ret="list"),
+            "fact_len":   _m("fact_len",   ret="int"),
         }
 
     def get_operators(self) -> Dict[str, str]:

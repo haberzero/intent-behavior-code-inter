@@ -15,11 +15,22 @@ snapshot 路径也需要同样的深克隆能力，抽到独立模块以避免�
 """
 from __future__ import annotations
 
+import copy
 from typing import Any, Dict, Optional
 
 from core.base.enums import StorageModel
 from core.runtime.objects.kernel import IbObject as KernelIbObject
 from core.runtime.objects.kernel import IbValue, IbNone
+
+
+def _clone_native_struct(struct: Any) -> Any:
+    """全原生结构深拷贝（dict/list/str/int/float/bool/None——无 IbObject 成员）。
+
+    knowledge KB 面（facts/vocab）的克隆通道：KB 面记录全为原生值（fact 字段
+    字符串 + 事件链 + 词表记录），无嵌套 IbObject / 无环形引用——``copy.deepcopy``
+    即正确且完整的克隆语义（防两个克隆共享结构被单方变异）。
+    """
+    return copy.deepcopy(struct) if struct is not None else struct
 
 
 def _value_base_name(val: Any) -> str:
@@ -99,10 +110,17 @@ def try_deep_clone(
 
     # knowledge：可变容器（引用语义）——条目快照递归深克隆（store 入时 +
     # get 出时双克隆纪律的克隆面）；验证谓词引用共享（函数非值快照——
-    # 水化/克隆后 amend 边界 fail-fast，属已知边界）
+    # 水化/克隆后 amend 边界 fail-fast，属已知边界）；facts/vocab 全原生
+    # 结构深拷贝（KB 面独立——防两个克隆共享事实日志被单方变异）；索引
+    # 派生面不跨克隆存活（构造入口从事实日志重建）
     if isinstance(val, IbValue) and _value_base_name(val) == "knowledge":
         new_entries: dict = {}
-        placeholder_k = type(val)(val.ib_class, payload={"entries": new_entries, "seq": val.payload["seq"]})
+        placeholder_k = type(val)(val.ib_class, payload={
+            "entries": new_entries,
+            "seq": val.payload["seq"],
+            "facts": _clone_native_struct(val.payload.get("facts", {})),
+            "vocab": _clone_native_struct(val.payload.get("vocab") or {}),
+        })
         memo[val_id] = placeholder_k
         for k, entry in val.payload["entries"].items():
             cloned_value = try_deep_clone(entry["value"], memo)
