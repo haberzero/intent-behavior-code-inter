@@ -46,6 +46,9 @@ from typing import Any, Dict, List, Optional
 
 from core.base.diagnostics.codes import (
     KNW_CHECK_REJECTED,
+    KNW_EMB_DIM_MISMATCH,
+    KNW_EMB_NOT_SET,
+    KNW_EMB_SEARCH_INVALID,
     KNW_FACT_DUPLICATE,
     KNW_FACT_NOT_FOUND,
     KNW_FACT_RETRACTED,
@@ -95,6 +98,7 @@ class IbKnowledge(IbValue):
         payload.setdefault("entries", {})
         payload.setdefault("facts", {})
         payload.setdefault("vocab", self._blank_vocab())
+        payload.setdefault("embeddings", {})
         payload["indexes"] = self._build_indexes_from_facts(payload["facts"])
         super().__init__(ib_class, payload=payload)
 
@@ -110,6 +114,9 @@ class IbKnowledge(IbValue):
 
     def _vocab(self) -> Dict[str, Dict[str, Any]]:
         return self.payload["vocab"]
+
+    def _embeddings(self) -> Dict[str, List[float]]:
+        return self.payload["embeddings"]
 
     def _indexes(self) -> Dict[str, Any]:
         return self.payload["indexes"]
@@ -949,6 +956,146 @@ class IbKnowledge(IbValue):
         return entry.get("check")
 
     # ------------------------------------------------------------------ #
+    # 向量面（词嵌入——内容信号非判定；D1 判定走图平面确定性路径）
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _is_numeric_vec(v: Any) -> bool:
+        """向量形态：list/tuple 非空，元素全为 int/float（非 bool）。"""
+        if not isinstance(v, (list, tuple)) or len(v) == 0:
+            return False
+        return all(not isinstance(x, bool) and isinstance(x, (int, float))
+                   for x in v)
+
+    @staticmethod
+    def _cosine(a: List[float], b: List[float]) -> float:
+        """余弦相似度（内容信号；零范数 = 未定义，返回 -inf 由调用方 fail-fast
+        面处理——mock 契约保证非零范数，真实 provider 归 provider 面）。"""
+        dot = 0.0
+        na = 0.0
+        nb = 0.0
+        for i in range(len(a)):
+            dot += a[i] * b[i]
+            na += a[i] * a[i]
+            nb += b[i] * b[i]
+        denom = (na ** 0.5) * (nb ** 0.5)
+        if denom == 0.0:
+            return float("-inf")
+        return dot / denom
+
+    def set_embedding(self, word: IbObject, vec: IbObject) -> None:
+        """给已注册词挂/换嵌入（可变面，同 add_fact 纪律）。
+
+        治理门（fail-fast 不静默）：``word`` 须已注册（复用
+        ``KNW_VOCAB_UNREGISTERED``）；``vec`` 须数值向量；维度须与既有嵌入一致
+        （首个嵌入定维度，后续不一致 = ``KNW_EMB_DIM_MISMATCH``）。内容信号
+        面——嵌入只作相似度检索/异常检测，从不做判定。
+        """
+        from core.runtime.objects.primitives.vector import IbVector
+        w = unbox(word)
+        # vector 参数不可 unbox（to_native 显式违约）——经 .elements 取原生元素
+        v = list(vec.elements) if isinstance(vec, IbVector) else unbox(vec)
+        if not self._is_numeric_vec(v):
+            raise InterpreterError(
+                f"knowledge.set_embedding: 嵌入须为数值向量（收到 {v!r}）。",
+                error_code=KNW_EMB_DIM_MISMATCH,
+            )
+        if w not in self._vocab()["words"]:
+            raise InterpreterError(
+                f"knowledge.set_embedding: 词 '{w}' 未注册（嵌入面挂治理词表，"
+                "须先 register_word）。",
+                error_code=KNW_VOCAB_UNREGISTERED,
+            )
+        dim = len(v)
+        for existing in self._embeddings().values():
+            if len(existing) != dim:
+                raise InterpreterError(
+                    f"knowledge.set_embedding: 词 '{w}' 嵌入维度 {dim} 与既有嵌入"
+                    f"维度 {len(existing)} 不一致（嵌入面维度须全一致）。",
+                    error_code=KNW_EMB_DIM_MISMATCH,
+                )
+        self._embeddings()[w] = [float(x) for x in v]
+
+    def embedding(self, word: IbObject) -> Any:
+        """取词嵌入（数值向量；未挂 = fail-fast）。"""
+        from core.runtime.objects.primitives.vector import IbVector
+        w = unbox(word)
+        if w not in self._vocab()["words"]:
+            raise InterpreterError(
+                f"knowledge.embedding: 词 '{w}' 未注册。",
+                error_code=KNW_VOCAB_UNREGISTERED,
+            )
+        emb = self._embeddings().get(w)
+        if emb is None:
+            raise InterpreterError(
+                f"knowledge.embedding: 词 '{w}' 未挂嵌入（先 set_embedding）。",
+                error_code=KNW_EMB_NOT_SET,
+            )
+        vec_cls = self.ib_class.registry.get_class("vector")
+        return IbVector(list(emb), vec_cls)
+
+    def has_embedding(self, word: IbObject) -> Any:
+        """词是否已挂嵌入（bool）。"""
+        w = unbox(word)
+        return w in self._embeddings()
+
+    def embedding_dim(self) -> Any:
+        """嵌入维度（无嵌入 = fail-fast；嵌入面维度全一致，取任一即全维度）。"""
+        embs = self._embeddings()
+        if not embs:
+            raise InterpreterError(
+                "knowledge.embedding_dim: 无嵌入（嵌入面空）。",
+                error_code=KNW_EMB_NOT_SET,
+            )
+        return len(next(iter(embs.values())))
+
+    def embed_search(self, query: IbObject, k: IbObject) -> Any:
+        """全嵌入词暴力 cosine 取前 k（**内容信号非判定**）。
+
+        ``query`` = 数值向量（按词检索先 ``embedding(word)`` 取向量；任意文本
+        经 ``ai.embed`` 取向量）。返回 ``list``，每项 ``{word, score}``（score
+        = cosine，越大越相似）；排序键 ``(−score, word)`` 升序（score 降序 +
+        平手按词名，确定性 tie-break）；``k`` 须正整数（``KNW_EMB_SEARCH_
+        INVALID``），``k`` 超嵌入词数 = 返回全部（截断非违约）。无嵌入面 =
+        ``KNW_EMB_NOT_SET``。异常检测/语义对比用，从不做判定。
+        """
+        from core.runtime.objects.primitives.vector import IbVector
+        kk = unbox(k)
+        if not isinstance(kk, int) or isinstance(kk, bool) or kk < 1:
+            raise InterpreterError(
+                f"knowledge.embed_search: k 须为正整数（收到 {kk!r}）。",
+                error_code=KNW_EMB_SEARCH_INVALID,
+            )
+        # query = vector 值（不可 unbox——to_native 显式违约），经 .elements 取
+        # 原生元素
+        if not isinstance(query, IbVector):
+            raise InterpreterError(
+                "knowledge.embed_search: query 须为 vector 值。",
+                error_code=KNW_EMB_SEARCH_INVALID,
+            )
+        q = list(query.elements)
+        if not self._is_numeric_vec(q):
+            raise InterpreterError(
+                "knowledge.embed_search: query 须为数值向量。",
+                error_code=KNW_EMB_SEARCH_INVALID,
+            )
+        embs = self._embeddings()
+        if not embs:
+            raise InterpreterError(
+                "knowledge.embed_search: 无嵌入（嵌入面空，先 set_embedding）。",
+                error_code=KNW_EMB_NOT_SET,
+            )
+        scored = []
+        for w, e in embs.items():
+            if len(e) != len(q):
+                continue  # 维度不符 = 不可比（跳过——维度一致性由 set_embedding 门保证）
+            scored.append((self._cosine(q, e), w))
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        # 返回原生结构（list of {word: str, score: float}）——VM 层统一装箱
+        # （同 lookup_pair/expand 纪律，不预装箱内部值）
+        return [{"word": w, "score": score} for score, w in scored[:kk]]
+
+    # ------------------------------------------------------------------ #
     # 值对象协议面
     # ------------------------------------------------------------------ #
 
@@ -968,6 +1115,7 @@ class IbKnowledge(IbValue):
             "seq": self.payload["seq"],
             "facts": self._facts_snapshot(),
             "vocab": self._vocab_snapshot(),
+            "embeddings": self._embeddings_snapshot(),
         }
 
     def _facts_snapshot(self) -> Dict[str, Dict[str, Any]]:
@@ -992,6 +1140,10 @@ class IbKnowledge(IbValue):
             "relations": {k: dict(v) for k, v in vocab["relations"].items()},
             "worlds": {k: dict(v) for k, v in vocab["worlds"].items()},
         }
+
+    def _embeddings_snapshot(self) -> Dict[str, List[float]]:
+        """embeddings 面结构化快照（向量拷贝——边界不共享内部引用）。"""
+        return {w: list(e) for w, e in self._embeddings().items()}
 
     def serialize_for_debug(self):
         entries = self._entries()

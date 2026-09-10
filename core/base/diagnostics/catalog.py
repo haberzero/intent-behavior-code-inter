@@ -472,6 +472,19 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="world_model.load_kb 的 content_hash 验证失败——artifact 数据损坏或被篡改（内容寻址完整性门）。",
         fix="重新经 world_model.save_kb 导出（取回 content_hash 作钉扎基准）；跨传输场景以 hash 比对检出损坏后重传。",
     ),
+    # KB 向量面（词嵌入——内容信号非判定）：
+    "KNW_EMB_DIM_MISMATCH": CodeInfo(
+        title="knowledge.set_embedding 的嵌入维度与既有嵌入不一致（嵌入面维度须全一致）。",
+        fix="统一嵌入维度（同一嵌入模型/配置生成）；首个嵌入定维度，后续须同维。",
+    ),
+    "KNW_EMB_NOT_SET": CodeInfo(
+        title="knowledge 嵌入面引用未挂嵌入（词已注册但无嵌入 / 嵌入面空）。",
+        fix="先 set_embedding 挂嵌入（词须已注册）；embed_search/embedding_dim 需嵌入面非空。",
+    ),
+    "KNW_EMB_SEARCH_INVALID": CodeInfo(
+        title="knowledge.embed_search 的 k 非正整数 / query 非数值向量。",
+        fix="传正整数 k（k 超嵌入词数 = 返回全部候选，截断非违约）；query 须数值向量（按词检索先 embedding(word)）。",
+    ),
     # ==================== 窄模型工件 (NAR_) ====================
     "NAR_ENTITY_UNREGISTERED": CodeInfo(
         title="narrow_model.score/topk 的 s/o 引用未注册实体（冻结工件词表固定，无静默默认）。",

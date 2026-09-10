@@ -74,6 +74,12 @@ class KnowledgeAxiom(BaseAxiom):
             "amend_fact":   _m("amend_fact",   params=["str", "str", "str"], ret="void", mutating=True),
             "source":       _m("source",       params=["str"], ret="str"),
             "history_fact": _m("history_fact", params=["str"], ret="list"),
+            # ---- 向量面（词嵌入——内容信号非判定；D1 判定走图平面）----
+            "set_embedding":  _m("set_embedding",  params=["str", "vector"], ret="void", mutating=True),
+            "embedding":      _m("embedding",      params=["str"], ret="vector"),
+            "has_embedding":  _m("has_embedding",  params=["str"], ret="bool"),
+            "embedding_dim":  _m("embedding_dim",  ret="int"),
+            "embed_search":   _m("embed_search",   params=["vector", "int"], ret="list"),
         }
 
     def get_operators(self) -> Dict[str, str]:

@@ -445,6 +445,7 @@ class RuntimeSerializer(BaseFlatSerializer):
         }
         data["facts"] = obj._facts_snapshot()
         data["vocab"] = obj._vocab_snapshot()
+        data["embeddings"] = obj._embeddings_snapshot()
 
     def _collect_memory(self, obj, data):
         # 层级记忆基底（可变容器）：条目值/事件值经实例池引用（拓扑序列化）
@@ -1116,6 +1117,9 @@ class RuntimeDeserializer:
                 "seq": data.get("seq", 0),
                 "facts": data.get("facts", {}),
                 "vocab": data.get("vocab") or IbKnowledge._blank_vocab(),
+                # embeddings = 全原生结构直存（水化原样取回；缺省空 = 旧快照
+                # 向前兼容语义——嵌入面为空）
+                "embeddings": data.get("embeddings", {}),
             })
             self.instance_cache[uid] = obj
 

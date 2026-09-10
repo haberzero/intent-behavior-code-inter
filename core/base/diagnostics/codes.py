@@ -157,6 +157,10 @@ KNW_FACT_RETRACTED = "KNW_FACT_RETRACTED"          # 对已 retract 事实再 re
 KNW_KB_ARTIFACT_MALFORMED = "KNW_KB_ARTIFACT_MALFORMED"  # artifact 结构非法
 KNW_KB_SCHEMA_VERSION = "KNW_KB_SCHEMA_VERSION"          # 未知 schema_version（无自动迁移）
 KNW_KB_HASH_MISMATCH = "KNW_KB_HASH_MISMATCH"            # content_hash 验证失败（篡改/损坏）
+# KB 向量面（词嵌入——内容信号非判定，D1 判定走图平面确定性路径）：
+KNW_EMB_DIM_MISMATCH = "KNW_EMB_DIM_MISMATCH"    # set_embedding 维度与既有嵌入不一致
+KNW_EMB_NOT_SET = "KNW_EMB_NOT_SET"              # embedding 面引用未挂嵌入
+KNW_EMB_SEARCH_INVALID = "KNW_EMB_SEARCH_INVALID"  # embed_search 的 k 非正整数
 
 # === 窄模型工件 (NAR_) ===
 # 推理时窄模型（一等值类型 narrow_model）的运行期契约违约。纯推理零训练

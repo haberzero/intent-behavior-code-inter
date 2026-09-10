@@ -776,6 +776,30 @@ embedding/检索非法输入。
 - **严重级别**：ERROR。
 - **修复方式**：重新导出（`save_kb` 返回值 = 钉扎基准 hash）；跨传输场景以 hash 比对检出损坏后重传。
 
+### KB 向量面（KNW_EMB_）
+
+> `knowledge` 词嵌入面（内容信号非判定——D1 判定走图平面确定性路径）的运行期
+> 契约违约：嵌入维度一致性 / 未挂嵌入引用 / `embed_search` 参数形态。fail-fast
+> 不静默降级。
+
+#### `KNW_EMB_DIM_MISMATCH`
+`knowledge.set_embedding` 的嵌入维度与既有嵌入不一致。
+- **触发条件**：挂嵌入的向量维度 ≠ 既有嵌入维度（首个嵌入定维度，后续须同维）；或向量非数值向量。
+- **严重级别**：ERROR。
+- **修复方式**：统一嵌入维度（同一嵌入模型/配置生成）；嵌入面维度须全一致。
+
+#### `KNW_EMB_NOT_SET`
+`knowledge` 嵌入面引用未挂嵌入。
+- **触发条件**：`embedding(word)` 对已注册但未挂嵌入的词；或 `embed_search`/`embedding_dim` 在嵌入面空时调用。
+- **严重级别**：ERROR。
+- **修复方式**：先 `set_embedding` 挂嵌入（词须已注册）；`embed_search`/`embedding_dim` 需嵌入面非空。
+
+#### `KNW_EMB_SEARCH_INVALID`
+`knowledge.embed_search` 的 `k` 非正整数 / query 非数值向量。
+- **触发条件**：`embed_search(query, k)` 的 `k` 非 int / 为 bool / `k < 1`；或 query 非数值向量。
+- **严重级别**：ERROR。
+- **修复方式**：传正整数 `k`（`k` 超嵌入词数 = 返回全部候选，截断非违约）；query 须数值向量（按词检索先 `embedding(word)` 取向量，任意文本经 `ai.embed`）。
+
 ### 窄模型工件（NAR_）
 
 > 推理时窄模型（一等值类型 `narrow_model`，`world_model.bind_artifact` 返回值）的
