@@ -2877,6 +2877,41 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（完整语句/
   表达式面 + 位置跟踪对齐 + 语义层）+ ③ 执行核心 + ④ 并发解除续在隔离分支
   （差分门逐级验证）。
+- **P9 阶段② 第三增量（Rust parser 完整语句/表达式面 + AST 级差分等价，
+  2026-09-10，隔离分支 `rust-kernel`；全量 Rust 化迁移的前端第三增量）**：**Rust
+  parser 扩至完整语料面**——从最小面（Assign/ExprStmt/Constant/Name/BinOp[+]/Call）
+  扩展到完整语料面（14/14 语料 AST 级逐字节等价），覆盖 if/elif/for/func def 等
+  完整语句 + 完整表达式。
+  **交付**：
+  - **Rust parser 扩展**（`ibci-ext/src/parser.rs` 完整重写）：
+    - 语句面：Assign[Name/Subscript/Attribute target，回退式前瞻] / ExprStmt /
+      If[elif 链 = orelse 嵌套 IbIf] / For[target ctx='Store'] / FunctionDef[typed
+      args Ibrg + returns] / Return / Break / Continue / Pass + INDENT/DEDENT body
+      解析（parse_body）。
+    - 表达式面：Constant / Name / BinOp[+ - * / // % **，递归下降优先级
+      compare < additive < term < power[右结合] < unary < postfix] / UnaryOp /
+      Compare[链] / Call[func(args)] / List / Dict / Attribute[obj.method] /
+      Subscript[obj[idx]]。
+  - **AST 级差分门扩展**：`test_ast_differential_corpus`（全部 14 条语料 Rust AST
+    structure == Python AST structure 逐字节）。
+  **关键裁定（self-grill 全分支消解）**：① **回退式前瞻 Assign 解析**（解析
+  target[Name/Subscript/Attribute]后随 ASSIGN = Assign，否则回退 ExprStmt——
+  处理 `d['c'] = 3`[Subscript target] 与 `xs.append(4)`[ExprStmt] 的区分）；②
+  **递归下降优先级**（compare < additive < term < power[右结合] < unary <
+  postfix[call/attr/subscript]——对齐 Python 运算符优先级）；③ **INDENT/DEDENT
+  body 解析**（parse_body 经 lexer 的 INDENT/DEDENT token 界定 if/for/func body）；
+  ④ **elif 链 = orelse 嵌套 IbIf**（对齐 Python AST——elif 非独立节点，是 orelse
+  里的嵌套 If）；⑤ **For target ctx='Store'**（对齐 Python——for 循环 target 是
+  存储上下文）。
+  **验证**：AST 级差分 **14/14 语料逐字节等价**（完整语料面——Rust parser 完整
+  语句/表达式面 == Python parser）+ 全量 pytest 零回归（阶段边界放行门——加法式
+  增量不动 Python 执行路径，计数 = 4267 + AST 级差分 1 例 = 4268；见 NEXT_STEPS
+  基线锚点）。**阶段② 第三增量出口达成**（Rust parser 完整语料面 + AST 级差分
+  等价门就位）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段② 第三增量零风险加法式（opt-in，不动
+  Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；阶段② 后续（位置跟踪
+  对齐 + 语义层 + 剩余语句/表达式[while/try/lambda/三元/复合类型注解]）+ ③ 执行
+  核心 + ④ 并发解除续在隔离分支（差分门逐级验证）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

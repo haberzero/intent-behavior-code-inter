@@ -1,19 +1,18 @@
 //! ibci-ext Rust parser——IBC token 流 → AST（对齐 Python `core/compiler/parser`）。
 //!
-//! 移植范围（本增量）：最小语句/表达式面——Assign（单 target = Name，value =
-//! Expr）/ ExprStmt / 表达式（Constant[int/str/bool/None] / Name / BinOp[+] /
-//! Call[func(args)]）。AST 级差分门：Rust AST structure 规范形态 == Python AST
-//! structure 规范形态（`tests/diff_harness/ast_dump.py` 参考）。后续增量 = 完整
-//! 语句/表达式面 + 位置跟踪对齐 + 语义层。
-//!
-//! AST structure 规范形态（对齐 Python ast_dump include_positions=False）：
-//! `<节点类名>(field1=<val1>, ...)`，子节点递归，标量 repr，列表 `[...]`，
-//! None = "None"。
+//! 移植范围（本增量）：语料面完整语句/表达式——
+//!   语句：Assign / ExprStmt / If[elif 链] / For / FunctionDef[typed args + returns] /
+//!         Return / Break / Continue / Pass
+//!   表达式：Constant[int/str/bool/None] / Name / BinOp[+ - * / // % **] / UnaryOp[- +] /
+//!           Compare[> < >= <= == !=] / Call[func(args)] / List / Dict / Attribute / Subscript
+//! AST 级差分门：Rust AST structure 规范形态 == Python AST structure 规范形态
+//! （`tests/diff_harness/ast_dump.py` include_positions=False 参考）。后续增量 = 完整
+//! 语义层 + 位置跟踪对齐 + 剩余语句/表达式（while/try/lambda/三元/类型注解复合）。
 
-// AST 类型含后续增量将用的变体/方法（Float/name）
+// AST 类型含后续增量将用的变体/方法
 #![allow(dead_code)]
 
-use crate::lexer::{Token, TokenType, lex};
+use crate::lexer::{lex, Token, TokenType};
 
 // --------------------------------------------------------------------------- //
 // AST 类型（对齐 core/kernel/ast.py 的节点子集）
@@ -33,7 +32,6 @@ impl ConstVal {
         match self {
             ConstVal::Int(i) => i.to_string(),
             ConstVal::Float(f) => {
-                // 对齐 Python repr(float)
                 let fv = *f;
                 if fv.fract() == 0.0 {
                     format!("{}.0", fv as i64)
@@ -53,84 +51,185 @@ pub enum Expr {
     Constant { value: ConstVal },
     Name { id: String, ctx: String },
     BinOp { left: Box<Expr>, op: String, right: Box<Expr> },
+    UnaryOp { op: String, operand: Box<Expr> },
+    Compare { left: Box<Expr>, ops: Vec<String>, comparators: Vec<Expr> },
     Call { func: Box<Expr>, args: Vec<Expr> },
+    List { elts: Vec<Expr>, ctx: String },
+    Dict { keys: Vec<Expr>, values: Vec<Expr> },
+    Attribute { value: Box<Expr>, attr: String, ctx: String },
+    Subscript { value: Box<Expr>, slice: Box<Expr>, ctx: String },
 }
 
 impl Expr {
-    fn name(&self) -> &'static str {
-        match self {
-            Expr::Constant { .. } => "IbConstant",
-            Expr::Name { .. } => "IbName",
-            Expr::BinOp { .. } => "IbBinOp",
-            Expr::Call { .. } => "IbCall",
-        }
-    }
     /// structure 规范形态（对齐 Python ast_dump include_positions=False）。
     fn dump(&self) -> String {
         match self {
-            Expr::Constant { value } => {
-                format!("IbConstant(value={})", value.dump())
-            }
-            Expr::Name { id, ctx } => {
-                format!("IbName(id='{}', ctx='{}')", id, ctx)
-            }
+            Expr::Constant { value } => format!("IbConstant(value={})", value.dump()),
+            Expr::Name { id, ctx } => format!("IbName(id='{}', ctx='{}')", id, ctx),
             Expr::BinOp { left, op, right } => {
+                format!("IbBinOp(left={}, op='{}', right={})", left.dump(), op, right.dump())
+            }
+            Expr::UnaryOp { op, operand } => {
+                format!("IbUnaryOp(op='{}', operand={})", op, operand.dump())
+            }
+            Expr::Compare { left, ops, comparators } => {
+                let ops_str: Vec<String> = ops.iter().map(|o| format!("'{}'", o)).collect();
+                let comp_str: Vec<String> = comparators.iter().map(|c| c.dump()).collect();
                 format!(
-                    "IbBinOp(left={}, op='{}', right={})",
-                    left.dump(), op, right.dump()
+                    "IbCompare(left={}, ops=[{}], comparators=[{}])",
+                    left.dump(),
+                    ops_str.join(", "),
+                    comp_str.join(", ")
                 )
             }
             Expr::Call { func, args } => {
                 let args_str: Vec<String> = args.iter().map(|a| a.dump()).collect();
-                let kw: Vec<String> = vec![]; // 本增量无具名实参
                 format!(
-                    "IbCall(func={}, args=[{}], keywords=[{}])",
+                    "IbCall(func={}, args=[{}], keywords=[])",
                     func.dump(),
-                    args_str.join(", "),
-                    kw.join(", ")
+                    args_str.join(", ")
+                )
+            }
+            Expr::List { elts, ctx } => {
+                let elts_str: Vec<String> = elts.iter().map(|e| e.dump()).collect();
+                format!("IbListExpr(elts=[{}], ctx='{}')", elts_str.join(", "), ctx)
+            }
+            Expr::Dict { keys, values } => {
+                let keys_str: Vec<String> = keys.iter().map(|k| k.dump()).collect();
+                let vals_str: Vec<String> = values.iter().map(|v| v.dump()).collect();
+                format!(
+                    "IbDict(keys=[{}], values=[{}])",
+                    keys_str.join(", "),
+                    vals_str.join(", ")
+                )
+            }
+            Expr::Attribute { value, attr, ctx } => {
+                format!(
+                    "IbAttribute(value={}, attr='{}', ctx='{}')",
+                    value.dump(), attr, ctx
+                )
+            }
+            Expr::Subscript { value, slice, ctx } => {
+                format!(
+                    "IbSubscript(value={}, slice={}, ctx='{}')",
+                    value.dump(), slice.dump(), ctx
                 )
             }
         }
+    }
+}
+
+/// 函数参数（对齐 IbArg：arg / annotation / default / kind）。
+#[derive(Debug, Clone)]
+pub struct Arg {
+    pub arg: String,
+    pub annotation: Option<Expr>,
+    pub default: Option<Expr>,
+    pub kind: String,
+}
+
+impl Arg {
+    fn dump(&self) -> String {
+        let ann = match &self.annotation {
+            Some(a) => a.dump(),
+            None => "None".to_string(),
+        };
+        let def = match &self.default {
+            Some(d) => d.dump(),
+            None => "None".to_string(),
+        };
+        format!(
+            "IbArg(arg='{}', annotation={}, default={}, kind='{}')",
+            self.arg, ann, def, self.kind
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Assign {
-        targets: Vec<Expr>,
-        value: Option<Expr>,
-    },
+    Assign { targets: Vec<Expr>, value: Option<Expr> },
     ExprStmt { value: Expr },
+    If { test: Expr, body: Vec<Stmt>, orelse: Vec<Stmt> },
+    For { target: Expr, iter: Expr, body: Vec<Stmt>, orelse: Vec<Stmt> },
+    FunctionDef {
+        name: String,
+        args: Vec<Arg>,
+        body: Vec<Stmt>,
+        returns: Option<Expr>,
+    },
+    Return { value: Option<Expr> },
+    Break,
+    Continue,
+    Pass,
 }
 
 impl Stmt {
-    fn name(&self) -> &'static str {
-        match self {
-            Stmt::Assign { .. } => "IbAssign",
-            Stmt::ExprStmt { .. } => "IbExprStmt",
-        }
-    }
-    /// structure 规范形态。
+    /// structure 规范形态（对齐 Python ast_dump include_positions=False）。
     fn dump(&self) -> String {
         match self {
             Stmt::Assign { targets, value } => {
-                let targets_str: Vec<String> = targets.iter().map(|t| t.dump()).collect();
-                let value_str = match value {
+                let t: Vec<String> = targets.iter().map(|x| x.dump()).collect();
+                let v = match value {
                     Some(v) => v.dump(),
                     None => "None".to_string(),
                 };
                 format!(
                     "IbAssign(targets=[{}], value={}, llmexcept_handler=None)",
-                    targets_str.join(", "),
-                    value_str
+                    t.join(", "),
+                    v
                 )
             }
             Stmt::ExprStmt { value } => {
+                format!("IbExprStmt(value={}, llmexcept_handler=None)", value.dump())
+            }
+            Stmt::If { test, body, orelse } => {
+                let b: Vec<String> = body.iter().map(|s| s.dump()).collect();
+                let o: Vec<String> = orelse.iter().map(|s| s.dump()).collect();
                 format!(
-                    "IbExprStmt(value={}, llmexcept_handler=None)",
-                    value.dump()
+                    "IbIf(test={}, body=[{}], orelse=[{}], llmexcept_handler=None)",
+                    test.dump(),
+                    b.join(", "),
+                    o.join(", ")
                 )
             }
+            Stmt::For { target, iter, body, orelse } => {
+                let b: Vec<String> = body.iter().map(|s| s.dump()).collect();
+                let o: Vec<String> = orelse.iter().map(|s| s.dump()).collect();
+                format!(
+                    "IbFor(target={}, iter={}, body=[{}], orelse=[{}], llmexcept_handler=None)",
+                    target.dump(),
+                    iter.dump(),
+                    b.join(", "),
+                    o.join(", ")
+                )
+            }
+            Stmt::FunctionDef { name, args, body, returns } => {
+                let a: Vec<String> = args.iter().map(|x| x.dump()).collect();
+                let b: Vec<String> = body.iter().map(|s| s.dump()).collect();
+                let r = match returns {
+                    Some(r) => r.dump(),
+                    None => "None".to_string(),
+                };
+                format!(
+                    "IbFunctionDef(name='{}', args=[{}], body=[{}], returns={}, \
+                     type_params=[], type_param_bounds={{}}, free_vars=[], \
+                     is_generator=False, type_param_uids=[])",
+                    name,
+                    a.join(", "),
+                    b.join(", "),
+                    r
+                )
+            }
+            Stmt::Return { value } => {
+                let v = match value {
+                    Some(v) => v.dump(),
+                    None => "None".to_string(),
+                };
+                format!("IbReturn(value={})", v)
+            }
+            Stmt::Break => "IbBreak()".to_string(),
+            Stmt::Continue => "IbContinue()".to_string(),
+            Stmt::Pass => "IbPass()".to_string(),
         }
     }
 }
@@ -141,18 +240,14 @@ pub struct Module {
 }
 
 impl Module {
-    /// structure 规范形态（对齐 Python ast_dump include_positions=False）。
     pub fn dump(&self) -> String {
-        let body_str: Vec<String> = self.body.iter().map(|s| s.dump()).collect();
-        format!(
-            "IbModule(body=[{}], file_path=None)",
-            body_str.join(", ")
-        )
+        let b: Vec<String> = self.body.iter().map(|s| s.dump()).collect();
+        format!("IbModule(body=[{}], file_path=None)", b.join(", "))
     }
 }
 
 // --------------------------------------------------------------------------- //
-// Parser（递归下降——最小语句/表达式面）
+// Parser（递归下降——语料面完整语句/表达式 + INDENT/DEDENT body）
 // --------------------------------------------------------------------------- //
 struct Parser {
     tokens: Vec<Token>,
@@ -164,7 +259,6 @@ impl Parser {
         Parser { tokens, pos: 0 }
     }
     fn peek(&self) -> &Token {
-        // EOF 后返回末 token（防越界）
         if self.pos < self.tokens.len() {
             &self.tokens[self.pos]
         } else {
@@ -181,13 +275,17 @@ impl Parser {
         }
         t
     }
+    fn expect(&mut self, ty: TokenType) {
+        if self.at(ty) {
+            self.advance();
+        }
+    }
     fn skip_newlines(&mut self) {
         while self.at(TokenType::Newline) {
             self.advance();
         }
     }
 
-    /// 解析模块（语句序列，NEWLINE 分隔）。
     fn parse_module(&mut self) -> Module {
         let mut body: Vec<Stmt> = Vec::new();
         self.skip_newlines();
@@ -199,37 +297,244 @@ impl Parser {
         Module { body }
     }
 
-    /// 解析单条语句（Assign 或 ExprStmt）。
     fn parse_stmt(&mut self) -> Stmt {
-        // 前瞻：IDENTIFIER ASSIGN → Assign；否则 ExprStmt
-        if self.at(TokenType::Identifier) {
-            let save = self.pos;
-            let _name = self.advance();
-            if self.at(TokenType::Assign) {
-                self.advance(); // 消费 =
-                let value = self.parse_expr();
-                return Stmt::Assign {
-                    targets: vec![Expr::Name {
-                        id: _name.value,
-                        ctx: "Load".to_string(),
-                    }],
-                    value: Some(value),
+        match self.peek().type_ {
+            TokenType::If => self.parse_if(),
+            TokenType::For => self.parse_for(),
+            TokenType::Func => self.parse_function_def(),
+            TokenType::Return => {
+                self.advance();
+                let value = if self.is_stmt_end() {
+                    None
+                } else {
+                    Some(self.parse_expr())
                 };
+                Stmt::Return { value }
             }
-            self.pos = save; // 回退（非 Assign）
+            TokenType::Break => {
+                self.advance();
+                Stmt::Break
+            }
+            TokenType::Continue => {
+                self.advance();
+                Stmt::Continue
+            }
+            TokenType::Pass => {
+                self.advance();
+                Stmt::Pass
+            }
+            TokenType::Identifier => {
+                // 回退式前瞻：解析 target（Name 或 Subscript/Attribute），若后随
+                // ASSIGN = Assign；否则回退按 ExprStmt 解析。
+                let save = self.pos;
+                let target = self.parse_assign_target();
+                if self.at(TokenType::Assign) {
+                    self.advance(); // =
+                    let value = self.parse_expr();
+                    return Stmt::Assign {
+                        targets: vec![target],
+                        value: Some(value),
+                    };
+                }
+                self.pos = save; // 非 Assign → ExprStmt
+                let value = self.parse_expr();
+                Stmt::ExprStmt { value }
+            }
+            _ => {
+                let value = self.parse_expr();
+                Stmt::ExprStmt { value }
+            }
         }
-        // ExprStmt
-        let value = self.parse_expr();
-        Stmt::ExprStmt { value }
     }
 
-    /// 解析表达式（最小面：BinOp[+] / Call / primary）。
+    /// Assign target：Name 或 Subscript（d['c']）/ Attribute（obj.attr）。
+    fn parse_assign_target(&mut self) -> Expr {
+        let name_id = self.advance().value; // IDENTIFIER
+        let base = Expr::Name {
+            id: name_id,
+            ctx: "Load".to_string(),
+        };
+        if self.at(TokenType::Lbracket) {
+            self.advance(); // [
+            let slice = self.parse_expr();
+            self.expect(TokenType::Rbracket);
+            Expr::Subscript {
+                value: Box::new(base),
+                slice: Box::new(slice),
+                ctx: "Load".to_string(),
+            }
+        } else if self.at(TokenType::Dot) {
+            self.advance(); // .
+            let attr = self.advance().value;
+            Expr::Attribute {
+                value: Box::new(base),
+                attr,
+                ctx: "Load".to_string(),
+            }
+        } else {
+            base
+        }
+    }
+
+    fn parse_if(&mut self) -> Stmt {
+        self.advance(); // IF 或 ELIF
+        let test = self.parse_expr();
+        self.expect(TokenType::Colon);
+        self.skip_newlines();
+        let body = self.parse_body();
+        let orelse = if self.at(TokenType::Elif) {
+            vec![self.parse_if()]
+        } else if self.at(TokenType::Else) {
+            self.advance();
+            self.expect(TokenType::Colon);
+            self.skip_newlines();
+            self.parse_body()
+        } else {
+            vec![]
+        };
+        Stmt::If { test, body, orelse }
+    }
+
+    fn parse_for(&mut self) -> Stmt {
+        self.advance(); // FOR
+        let target = Expr::Name {
+            id: self.advance().value,
+            ctx: "Store".to_string(),
+        };
+        self.expect(TokenType::In);
+        let iter = self.parse_expr();
+        self.expect(TokenType::Colon);
+        self.skip_newlines();
+        let body = self.parse_body();
+        let orelse = if self.at(TokenType::Else) {
+            self.advance();
+            self.expect(TokenType::Colon);
+            self.skip_newlines();
+            self.parse_body()
+        } else {
+            vec![]
+        };
+        Stmt::For { target, iter, body, orelse }
+    }
+
+    fn parse_function_def(&mut self) -> Stmt {
+        self.advance(); // FUNC
+        let name = self.advance().value; // IDENTIFIER
+        self.expect(TokenType::Lparen);
+        let mut args: Vec<Arg> = Vec::new();
+        if !self.at(TokenType::Rparen) {
+            loop {
+                // annotation（IDENTIFIER → Name）+ arg name（IDENTIFIER）
+                let annotation = Expr::Name {
+                    id: self.advance().value,
+                    ctx: "Load".to_string(),
+                };
+                let arg_name = self.advance().value;
+                let default = if self.at(TokenType::Assign) {
+                    self.advance();
+                    Some(self.parse_expr())
+                } else {
+                    None
+                };
+                args.push(Arg {
+                    arg: arg_name,
+                    annotation: Some(annotation),
+                    default,
+                    kind: "POSITIONAL_OR_KEYWORD".to_string(),
+                });
+                if self.at(TokenType::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+        self.expect(TokenType::Rparen);
+        // 返回类型（ARROW + type）
+        let returns = if self.at(TokenType::Arrow) {
+            self.advance();
+            Some(Expr::Name {
+                id: self.advance().value,
+                ctx: "Load".to_string(),
+            })
+        } else {
+            None
+        };
+        self.expect(TokenType::Colon);
+        self.skip_newlines();
+        let body = self.parse_body();
+        Stmt::FunctionDef { name, args, body, returns }
+    }
+
+    /// body：INDENT ... DEDENT（语句序列）。
+    fn parse_body(&mut self) -> Vec<Stmt> {
+        let mut body: Vec<Stmt> = Vec::new();
+        self.expect(TokenType::Indent);
+        self.skip_newlines();
+        while !self.at(TokenType::Dedent) && !self.at(TokenType::Eof) {
+            let stmt = self.parse_stmt();
+            body.push(stmt);
+            self.skip_newlines();
+        }
+        self.expect(TokenType::Dedent);
+        body
+    }
+
+    fn is_stmt_end(&self) -> bool {
+        matches!(
+            self.peek().type_,
+            TokenType::Newline | TokenType::Eof | TokenType::Dedent
+        )
+    }
+
+    // ---- 表达式（递归下降 + 优先级）---- //
+
+    /// 最低优先级：比较。
     fn parse_expr(&mut self) -> Expr {
-        let mut left = self.parse_primary();
-        // BinOp（+）——右结合非，本增量仅处理 +
-        while self.at(TokenType::Plus) {
+        let left = self.parse_additive();
+        // 比较链（> < >= <= == !=）
+        let (ops, comparators) = self.parse_compare_chain();
+        if ops.is_empty() {
+            left
+        } else {
+            Expr::Compare {
+                left: Box::new(left),
+                ops,
+                comparators,
+            }
+        }
+    }
+
+    fn parse_compare_chain(&mut self) -> (Vec<String>, Vec<Expr>) {
+        let mut ops: Vec<String> = Vec::new();
+        let mut comparators: Vec<Expr> = Vec::new();
+        loop {
+            let op = match self.peek().type_ {
+                TokenType::Gt => ">",
+                TokenType::Lt => "<",
+                TokenType::Ge => ">=",
+                TokenType::Le => "<=",
+                TokenType::Eq => "==",
+                TokenType::Ne => "!=",
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_additive();
+            ops.push(op.to_string());
+            comparators.push(right);
+        }
+        (ops, comparators)
+    }
+
+    /// 加/减。
+    fn parse_additive(&mut self) -> Expr {
+        let mut left = self.parse_term();
+        while matches!(
+            self.peek().type_,
+            TokenType::Plus | TokenType::Minus
+        ) {
             let op = self.advance().value;
-            let right = self.parse_primary();
+            let right = self.parse_term();
             left = Expr::BinOp {
                 left: Box::new(left),
                 op,
@@ -239,21 +544,106 @@ impl Parser {
         left
     }
 
-    /// 解析 primary（Constant / Name / Call / paren）。
-    /// 先拷贝当前 token 的 type + value（不持借用），再 match 并消费。
+    /// 乘/除/整除/取模。
+    fn parse_term(&mut self) -> Expr {
+        let mut left = self.parse_power();
+        while matches!(
+            self.peek().type_,
+            TokenType::Star
+                | TokenType::Slash
+                | TokenType::FloorDiv
+                | TokenType::Percent
+        ) {
+            let op = self.advance().value;
+            let right = self.parse_power();
+            left = Expr::BinOp {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            };
+        }
+        left
+    }
+
+    /// 幂（右结合）。
+    fn parse_power(&mut self) -> Expr {
+        let left = self.parse_unary();
+        if self.at(TokenType::StarStar) {
+            let op = self.advance().value;
+            let right = Box::new(self.parse_power()); // 右结合递归
+            return Expr::BinOp { left: Box::new(left), op, right };
+        }
+        left
+    }
+
+    /// 一元（- / +）。
+    fn parse_unary(&mut self) -> Expr {
+        if matches!(self.peek().type_, TokenType::Minus | TokenType::Plus) {
+            let op = self.advance().value;
+            let operand = Box::new(self.parse_unary());
+            return Expr::UnaryOp { op, operand };
+        }
+        self.parse_postfix()
+    }
+
+    /// postfix（call / attribute / subscript）。
+    fn parse_postfix(&mut self) -> Expr {
+        let mut expr = self.parse_primary();
+        loop {
+            match self.peek().type_ {
+                TokenType::Lparen => {
+                    self.advance();
+                    let mut args: Vec<Expr> = Vec::new();
+                    if !self.at(TokenType::Rparen) {
+                        args.push(self.parse_expr());
+                        while self.at(TokenType::Comma) {
+                            self.advance();
+                            args.push(self.parse_expr());
+                        }
+                    }
+                    self.expect(TokenType::Rparen);
+                    expr = Expr::Call {
+                        func: Box::new(expr),
+                        args,
+                    };
+                }
+                TokenType::Dot => {
+                    self.advance();
+                    let attr = self.advance().value; // IDENTIFIER
+                    expr = Expr::Attribute {
+                        value: Box::new(expr),
+                        attr,
+                        ctx: "Load".to_string(),
+                    };
+                }
+                TokenType::Lbracket => {
+                    self.advance();
+                    let slice = self.parse_expr();
+                    self.expect(TokenType::Rbracket);
+                    expr = Expr::Subscript {
+                        value: Box::new(expr),
+                        slice: Box::new(slice),
+                        ctx: "Load".to_string(),
+                    };
+                }
+                _ => break,
+            }
+        }
+        expr
+    }
+
+    /// primary（literal / name / list / dict / paren）。
     fn parse_primary(&mut self) -> Expr {
         let cur_type = self.peek().type_;
         let cur_value = self.peek().value.clone();
         match cur_type {
             TokenType::Number => {
                 self.advance();
-                // 十进制 int（本增量主面）→ float（次面）；非十进制（hex/bin/oct
-                // = 后续增量）保留原串（不静默数值默认——最小面不解释为非十进制数）
                 let value = match cur_value.parse::<i64>() {
                     Ok(i) => ConstVal::Int(i),
                     Err(_) => match cur_value.parse::<f64>() {
                         Ok(f) => ConstVal::Float(f),
-                        Err(_) => ConstVal::Str(cur_value.clone()),
+                        Err(_) => ConstVal::Str(cur_value),
                     },
                 };
                 Expr::Constant { value }
@@ -266,62 +656,62 @@ impl Parser {
             }
             TokenType::True => {
                 self.advance();
-                Expr::Constant {
-                    value: ConstVal::Bool(true),
-                }
+                Expr::Constant { value: ConstVal::Bool(true) }
             }
             TokenType::False => {
                 self.advance();
-                Expr::Constant {
-                    value: ConstVal::Bool(false),
-                }
+                Expr::Constant { value: ConstVal::Bool(false) }
             }
             TokenType::None => {
                 self.advance();
-                Expr::Constant {
-                    value: ConstVal::None_,
-                }
+                Expr::Constant { value: ConstVal::None_ }
             }
-            TokenType::Identifier => {
-                self.advance(); // 消费 IDENTIFIER
-                // Call：IDENTIFIER LPAREN ... RPAREN
-                if self.at(TokenType::Lparen) {
-                    self.advance(); // (
-                    let mut args: Vec<Expr> = Vec::new();
-                    if !self.at(TokenType::Rparen) {
-                        args.push(self.parse_expr());
-                        while self.at(TokenType::Comma) {
+            TokenType::Lbracket => {
+                self.advance();
+                let mut elts: Vec<Expr> = Vec::new();
+                if !self.at(TokenType::Rbracket) {
+                    elts.push(self.parse_expr());
+                    while self.at(TokenType::Comma) {
+                        self.advance();
+                        elts.push(self.parse_expr());
+                    }
+                }
+                self.expect(TokenType::Rbracket);
+                Expr::List { elts, ctx: "Load".to_string() }
+            }
+            TokenType::Lbrace => {
+                self.advance();
+                let mut keys: Vec<Expr> = Vec::new();
+                let mut values: Vec<Expr> = Vec::new();
+                if !self.at(TokenType::Rbrace) {
+                    loop {
+                        keys.push(self.parse_expr());
+                        self.expect(TokenType::Colon);
+                        values.push(self.parse_expr());
+                        if self.at(TokenType::Comma) {
                             self.advance();
-                            args.push(self.parse_expr());
+                        } else {
+                            break;
                         }
                     }
-                    if self.at(TokenType::Rparen) {
-                        self.advance(); // )
-                    }
-                    Expr::Call {
-                        func: Box::new(Expr::Name {
-                            id: cur_value,
-                            ctx: "Load".to_string(),
-                        }),
-                        args,
-                    }
-                } else {
-                    Expr::Name {
-                        id: cur_value,
-                        ctx: "Load".to_string(),
-                    }
                 }
+                self.expect(TokenType::Rbrace);
+                Expr::Dict { keys, values }
             }
             TokenType::Lparen => {
-                self.advance(); // (
+                self.advance();
                 let inner = self.parse_expr();
-                if self.at(TokenType::Rparen) {
-                    self.advance(); // )
-                }
+                self.expect(TokenType::Rparen);
                 inner
             }
+            TokenType::Identifier => {
+                self.advance();
+                Expr::Name {
+                    id: cur_value,
+                    ctx: "Load".to_string(),
+                }
+            }
             _ => {
-                // 未覆盖（本增量）——消费避免死循环
                 self.advance();
                 Expr::Name {
                     id: cur_value,

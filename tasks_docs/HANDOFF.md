@@ -244,13 +244,21 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     **AST 级差分面**（Rust AST structure == Python AST structure 逐字节）——
     **6/6 片段 AST 级逐字节等价**。渐进移植 + 差分门（非 subset 双通道，终点 =
     全量 Rust 前端）。**零风险加法式**（opt-in，不动 Python 执行路径）。
-  - **P9 阶段② 续（当前批次，隔离分支续）**：Rust parser 完整语句/表达式面
-    （if/for/func def/class/return/break/while/try 等 + 完整表达式[比较/一元/
-    列表/字典/属性/下标/三元]）+ **位置跟踪对齐**（Rust AST 位置 == Python AST
-    位置，ast_dump include_positions=True 差分）+ 语义层（symbol table / type
-    env）。三级差分逐级验证：token 级（lexer ✅）→ AST 级（parser 最小面 ✅ /
-    完整面当前）→ 数据面（执行核心，现有 harness）。四阶段全貌：① 地基 ✅ →
-    **② 前端（lexer ✅ / parser 最小面 ✅ / 完整面 + 位置 + 语义当前）** →
+  - **P9 阶段② 第三增量 Rust parser 完整面 已落地（本 session，隔离分支
+    `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：Rust parser 从最小面扩至
+    完整语料面（`ibci-ext/src/parser.rs` 完整重写）——语句面[Assign[Name/
+    Subscript target，回退式前瞻] / ExprStmt / If[elif 链 = orelse 嵌套] / For
+    [target ctx='Store'] / FunctionDef[typed args + returns] / Return / Break /
+    Continue / Pass + INDENT/DEDENT body 解析] + 表达式面[BinOp[+ - * / // % **
+    递归下降优先级] / UnaryOp / Compare[链] / List / Dict / Attribute / Subscript
+    / Call]——**14/14 语料 AST 级逐字节等价**。**零风险加法式**（opt-in，不动
+    Python 执行路径）。
+  - **P9 阶段② 续（当前批次，隔离分支续）**：**位置跟踪对齐**（Rust AST 位置 ==
+    Python AST 位置，ast_dump include_positions=True 差分）+ 语义层（symbol table
+    / type env）+ 剩余语句/表达式（while/try/lambda/三元/复合类型注解/class）。
+    三级差分逐级验证：token 级（lexer ✅）→ AST 级（parser 最小面 ✅ / 完整面
+    ✅ / 位置 + 语义当前）→ 数据面（执行核心，现有 harness）。四阶段全貌：① 地基
+    ✅ → **② 前端（lexer ✅ / parser 完整面 ✅ / 位置 + 语义当前）** →
     ③ 执行核心[主战场，高风险：CPS dispatch 表 → Rust enum 分发 + 差分门] →
     ④ 并发解除[task_scheduler IO-only → CPU+IO 真并行 GIL-free]。确认零风险
     （全量零回归 + 复核）后 merge unsafe-vibe-dev 并删分支。
@@ -312,8 +320,8 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 阶段② 第二增量阶段边界实跑）**：**4267 passed /
-  1 skipped / 127.73s / rc=0**（= 前基线 4266 + AST 级差分 1 例；供下一 session
+- **全量 pytest 基线（本 session P9 阶段② 第三增量阶段边界实跑）**：**4268 passed /
+  1 skipped / 130.53s / rc=0**（= 前基线 4267 + 语料 AST 级差分 1 例；供下一 session
   参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）

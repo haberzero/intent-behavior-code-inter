@@ -126,10 +126,12 @@ class TestRustLexerTokenDifferential:
 class TestRustParserAstDifferential:
     """Rust parser（ibci_ext.parse_struct）vs Python parser 的 AST 级差分等价。
 
-    Rust parser = Rust 前端第二增量（最小语句/表达式面：Assign / ExprStmt /
-    Constant[int/str/bool/None] / Name / BinOp[+] / Call[func(args)]）。AST 级
-    差分 = Rust AST structure 规范形态 == Python AST structure 规范形态
-    （tests/diff_harness/ast_dump.py include_positions=False 参考）。
+    Rust parser = Rust 前端第二增量（完整语句/表达式面：Assign[Name/Subscript
+    target] / ExprStmt / If[elif 链] / For / FunctionDef[typed args + returns] /
+    Return / Break / Continue / Pass / Constant / Name / BinOp[+ - * / // % **] /
+    UnaryOp / Compare / Call / List / Dict / Attribute / Subscript）。AST 级差分
+    = Rust AST structure 规范形态 == Python AST structure 规范形态（tests/
+    diff_harness/ast_dump.py include_positions=False 参考）。
     """
 
     def test_ast_differential_simple(self):
@@ -151,3 +153,15 @@ class TestRustParserAstDifferential:
             rs = rust_parse_struct(src)
             py = parse_ast_dump(src, include_positions=False)
             assert rs == py, f"AST 级差分不等价：\n  py : {py}\n  rust: {rs}"
+
+    def test_ast_differential_corpus(self):
+        """AST 级差分等价：全部语料（Rust parser 完整面 == Python）。"""
+        from tests.diff_harness.ast_dump import parse_ast_dump
+        from tests.diff_harness.harness import load_rust_kernel, rust_parse_struct
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        for name, script in CORPUS:
+            rs = rust_parse_struct(script)
+            py = parse_ast_dump(script, include_positions=False)
+            assert rs == py, f"语料 {name} AST 级差分不等价：\n  py : {py}\n  rust: {rs}"
