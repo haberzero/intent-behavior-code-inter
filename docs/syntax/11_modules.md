@@ -515,12 +515,18 @@ print(meta.eval(q) == v)               # 确定性：同源两次 eval 逐值一
   上下文，非可移植值）；`quoted` 自包含（源串），非可调用（提及/使用的切换
   必经显式 `meta.eval`——二元性的结构保证）。
 
-### 11.12 world_model 模块（KB 磁盘面：内容寻址 artifact）
+### 11.12 world_model 模块（工件磁盘面：内容寻址 artifact）
 
-`world_model` 提供世界模型 KB（`knowledge` 值的 KB 面——facts 事实日志 +
-vocab 治理词表，见 §16 知识注册表）的**磁盘面**：内容寻址 artifact 的
-加载/保存。磁盘文件是**传输格式**，运行时模型 = 加载后水化的**活 KB 值**
-（可查询 + 可增量 `add_fact`，无需重编译）。
+`world_model` 提供世界模型**工件磁盘面**：KB（`knowledge` 值的 KB 面——facts
+事实日志 + vocab 治理词表，见 §16 知识注册表）与推理时窄模型（`narrow_model` 值 = 冻结
+KG 嵌入工件，值类型面见本节"窄模型 artifact"）两类内容寻址 artifact 的加载
+/保存。磁盘文件是**传输格式**，运行时模型 = 加载后水化的**活值**（非文件
+本体）。
+
+#### KB artifact（load_kb / save_kb）
+
+`load_kb`/`save_kb` 辖 KB 面（facts/vocab/seq）：加载 = 三级验证门后水化为**活
+KB 值**（可查询 + 可增量 `add_fact`，无需重编译）。
 
 ```ibci
 import world_model
@@ -565,6 +571,51 @@ kb2.add_fact("modern", "atom", "composed_of", "electron", "v31")  # 增量
 - **entries 面不入 artifact**：artifact 只辖 KB 面（facts/vocab/seq）；通用
   登记面（entries）的持久化通道 = `ihost.save_state` 全状态面（两通道各辖
   其面）。加载的 KB 值 entries 面为空。
+
+#### 窄模型 artifact（bind_artifact / save_artifact）
+
+`bind_artifact`/`save_artifact` 辖**推理时窄模型**（`narrow_model` 值 = 冻结
+KG 嵌入工件）：加载 = 三级验证门后水化为**活 narrow_model 值**（推理时
+`score`/`topk`，**纯推理零训练**）。窄模型在宿主侧离线训练成工件，IBCI 仅
+加载冻结权重做确定性推理（无 optimizer / 反向传播）。
+
+```ibci
+import world_model
+
+# 加载：三级验证门后水化为活 narrow_model（纯推理零训练）
+m = world_model.bind_artifact("./model.json")
+print(m.score("atom", "composed_of", "proton"))   # TransE 距离（越小越优）
+print(m.topk("atom", "composed_of", 3))           # [{o, score}, ...] 前 3 候选
+str h = world_model.save_artifact(m, "./model2.json")  # 重导出，返回 content_hash
+```
+
+**artifact 格式**（共享契约；单 JSON 文件）：
+
+```
+{ schema_version: 1, content_hash: <sha256 64-hex>,
+  model_name: <str>, architecture: "transe", dim: <int>,
+  entities: [ <str>, ... ],                 // 候选实体空间（固定序）
+  entity_embeddings:  { <name>: [float, ...], ... },  // dim 维向量
+  relations: [ <str>, ... ],                // 关系空间（固定序）
+  relation_embeddings: { <name>: [float, ...], ... } }
+```
+
+- **`content_hash`** = canonical 载荷（model_name/architecture/dim/
+  entities/entity_embeddings/relations/relation_embeddings 经键排序 + 紧凑
+  分隔规范形态）的 sha256 全摘要——**内容即身份**（同 KB 纪律）。
+- **加载三级验证门**（fail-fast 不静默降级，同 KB）：
+  1. **结构门**（合法 JSON + 封套键齐备 + 向量维度与 `dim` 一致 + 名-嵌入键
+     匹配 + `architecture` 受支持[当前仅 `transe`]）→ `NAR_ARTIFACT_MALFORMED`；
+  2. **版本门**（`schema_version` 未知；无自动迁移）→ `NAR_SCHEMA_VERSION`；
+  3. **完整性门**（canonical 重算 hash ≠ 所载 `content_hash`——篡改/损坏）
+     → `NAR_HASH_MISMATCH`。
+- **保存同构结构门**：`save_artifact` 落盘前经同一结构验证（畸形工件面
+  fail-fast，不落盘半成品）。
+- **纯推理零训练**：`score(s,r,o)` = `‖e_s + r_r − e_o‖`（TransE 平移距离，
+  越小越优）；`topk(s,r,k)` = 全部候选按距离升序取前 `k`（确定性 tie-break =
+  (距离, 实体名) 升序）。权重加载即冻结——推理不触发任何训练/学习态。
+- **沙箱纪律**（同 `fs`）：相对路径以 `project_root` 为基准解析 +
+  `PermissionManager` 校验；越界/缺失文件复用 `fs` 面诊断，不另造码。
 
 ## 深入指引
 

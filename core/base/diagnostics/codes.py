@@ -161,6 +161,10 @@ KNW_KB_HASH_MISMATCH = "KNW_KB_HASH_MISMATCH"            # content_hash 验证�
 # === 窄模型工件 (NAR_) ===
 # 推理时窄模型（一等值类型 narrow_model）的运行期契约违约。纯推理零训练
 # （TransE 向量空间模型；score/topk 内容信号，D1 判定归确定性路径）。
+# 磁盘面（world_model.bind_artifact/save_artifact 内容寻址 artifact 契约）：
+NAR_ARTIFACT_MALFORMED = "NAR_ARTIFACT_MALFORMED"  # artifact 结构非法
+NAR_SCHEMA_VERSION = "NAR_SCHEMA_VERSION"          # 未知 schema_version（无自动迁移）
+NAR_HASH_MISMATCH = "NAR_HASH_MISMATCH"            # content_hash 验证失败（篡改/损坏）
 # 推理面：参考未注册词 / topk 参数形态。
 NAR_ENTITY_UNREGISTERED = "NAR_ENTITY_UNREGISTERED"  # score/topk 的 s/o 未注册实体
 NAR_RELATION_UNREGISTERED = "NAR_RELATION_UNREGISTERED"  # score/topk 的 r 未注册关系

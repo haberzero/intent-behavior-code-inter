@@ -485,6 +485,18 @@ CODE_CATALOG: Dict[str, CodeInfo] = {
         title="narrow_model.topk 的 k 非正整数（k ≥ 1 整数；k 超候选数 = 返回全部候选，非错误）。",
         fix="传正整数 k；k 超候选数时返回全部候选（截断语义，非违约）。",
     ),
+    "NAR_ARTIFACT_MALFORMED": CodeInfo(
+        title="world_model.bind_artifact / save_artifact 的窄模型 artifact 结构非法（非合法 JSON / 缺封套字段 / 向量维度错 / 名-嵌入键不匹配 / 架构不受支持）。",
+        fix="经 world_model.save_artifact 重新导出合规 artifact（封套 {schema_version, content_hash, model_name, architecture, dim, entities, entity_embeddings, relations, relation_embeddings}；嵌入 = dim 维数值向量，键集与空间一致）。",
+    ),
+    "NAR_SCHEMA_VERSION": CodeInfo(
+        title="world_model.bind_artifact 遇到未知 schema_version（本版本仅支持 1；无自动迁移）。",
+        fix="以支持该版本的引擎版本加载，或由导出方按当前 schema_version 重新导出 artifact。",
+    ),
+    "NAR_HASH_MISMATCH": CodeInfo(
+        title="world_model.bind_artifact 的 content_hash 验证失败——artifact 数据损坏或被篡改（内容寻址完整性门）。",
+        fix="重新经 world_model.save_artifact 导出（取回 content_hash 作钉扎基准）；跨传输场景以 hash 比对检出损坏后重传。",
+    ),
     # ==================== 层级记忆基底 (MEM_) ====================
     "MEM_KEY_EXISTS": CodeInfo(
         title="memory.encode 键已存在或键非法（非空 str）。",

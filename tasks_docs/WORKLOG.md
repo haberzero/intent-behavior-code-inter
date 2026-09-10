@@ -2548,6 +2548,59 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
    设计要点 = `tasks_docs/_p4_deterministic_mode_design.md`（P5 批次开工前
    保留——含 §2 汇点机制/边界 + §5 测试面；quote/eval 当前契约 = 纯表达式
    自包含源[__qeval__ = <source> 包装]——M1 脚本形态按此契约书写）。
+    **P4 批次开工收尾**：删除 `tasks_docs/_p4_deterministic_mode_design.md`
+    （P5 开工——裁定全在本条目 + docs/）。
+- **P5 R-D 工件加载落地（narrow_model 值类型 + world_model.bind_artifact
+   窄模型工件面，2026-09-10，unsafe-vibe-dev；世界模型 DB 主线批次 5，
+   两批 E1-E2 收束）**：**试用方 R-D 验收面**（bind 已训练窄模型工件 →
+   推理时 score/topk 可调用且确定性，**纯推理零训练**）。
+   **调研结论（试用方窄模型真实形态，D-ISO 实证）**：试用方窄模型 = **KG
+   嵌入向量空间模型**（e30/e40）——主架构 **TransE**（实体嵌入 E∈R^{N×d} +
+   关系嵌入 R∈R^{M×d}；`f(s,r,o)=‖e_s + r_r − e_o‖` 平移假设，距离越小越
+   优）；推理面 = `predict_rank`（全候选算距离升序排序）——**纯算术零训练**
+   （训练在试用方侧离线完成）。多架构（TransE+DistMult）consensus = 试用方
+   侧**离线交叉验证/质控**，非推理时 score 面——**推理时模型 = TransE**
+   （实证：predict_rank 只用 TransE fdist）。
+   **关键裁定（self-grill 全分支消解）**：① 实现 **TransE 推理面**（忠实
+   试用方实际推理模型）；DistMult/ComplEx **不预置**（离线质控面非 R-D
+   推理契约；架构字段预留扩展位，未知架构 = 结构门 fail-fast）；② 面定位 =
+   **新值类型 `narrow_model`（不可变冻结工件值）+ `world_model` 模块加载面**
+   （与 P3 `knowledge` 值 + `world_model.load_kb` 同构——值类型承载数据，
+   模块函数承载磁盘装配）；③ score 语义 = TransE **距离**（忠实试用方
+   predict_rank 升序语义，文档明示"越小越优"；不反转——忠实试用方实际
+   指标，判定面归 D1 确定性路径，此处仅内容信号）；④ 确定性 = 候选序
+   artifact entities 固定序 + 排序键 (距离,实体名) 升序（稳定 tie-break）+
+   IEEE 浮点纯算术（同输入同输出）；⑤ 参考未注册词 = **fail-fast**（同 KB
+   治理门纪律：冻结模型词表固定，无静默默认）；⑥ 不可变（同
+   quoted/vector/run_result 纪律：无修改面 + deep_clone 引用复用 + 序列化
+   原生直存）；⑦ 空白构造 fail-fast（模型必经 bind_artifact 加载门——良构
+   由加载门成立，同 quoted 仅经 meta.quote 产出）。
+   **变化前后**：+`narrow_model` 值类型（core/runtime/objects/primitives/
+   narrow_model.py 新原语 + NarrowModelAxiom 新公理 + NARROW_MODEL_SPEC 新
+   spec 原型 + 序列化 collect/hydrate + deep_clone 不可变面 + primitives
+   __init__ 注册）+ world_model 模块扩展（bind_artifact/save_artifact +
+   窄模型 artifact 格式 + canonical hash + 三级门——同 load_kb 纪律）+
+   builtin_modules world_model spec 面加 bind_artifact/save_artifact +
+   新码 +6（NAR_ARTIFACT_MALFORMED/SCHEMA_VERSION/HASH_MISMATCH 加载门域 +
+   NAR_ENTITY_UNREGISTERED/RELATION_UNREGISTERED/TOPK_INVALID 推理域）+
+   catalog + 15_diagnostics + 11_modules §11.12 窄模型工件面 + 测试 38 例
+   （E1 值类型 20：注册/vtable 绑定/score 算术对照手工 TransE/topk 排序+
+   tie-break 确定性/同输入同输出/未注册实体关系 k 非法 fail-fast/k 超界
+   截断/元数据面+副本/不可变无修改面/to_native 快照独立/deep_clone 引用
+   复用/序列化 round-trip + E2 磁盘面 15：canonical hash 确定性/排版无关/
+   内容敏感/版本常量 + bind 保真/save 重导出同 hash/save 门 + 三级门各
+   判别/未知架构/维度不符/排版重排/缺失文件 fs 同构 + e2e 3：R-D 两次独立
+   CLI run 数据面逐字节一致+凭证 llm_calls=0/score topk 可调用确定值/
+   bind 纯读取零训练）。
+   **关键发现（既有边界落档）**：topk 返回容器（list of dict）经 IBCI `==`
+   = **恒等语义**（KNOWN_LIMITS §10.5，P2 已落档）——e2e 确定性断言不直接
+   容器 `==` 对比（改逐元素值对比 / CLI 数据面逐字节对比）；narrow_model
+   的确定性由"值（str/float）逐元素按值 + CLI 数据面逐字节"两路佐证。
+   **验证**：全量 pytest 零回归（公理层变更放行门——新值类型 + 新码 +
+   模块面；见 NEXT_STEPS 基线锚点）。**R-D 验收达成**（bind 后 score/topk
+   可调用且确定性同输入同输出；全程无训练调用——纯推理零 LLM）。
+   设计要点 = `tasks_docs/_p5_artifact_loading_design.md`（P5 设计单点
+   真理：调研结论 + 面定位 + artifact 格式 + 测试面；P6 批次开工前保留）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

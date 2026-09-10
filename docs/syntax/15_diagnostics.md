@@ -780,7 +780,26 @@ embedding/检索非法输入。
 
 > 推理时窄模型（一等值类型 `narrow_model`，`world_model.bind_artifact` 返回值）的
 > 运行期契约违约。纯推理零训练（TransE 向量空间模型；`score`/`topk` = 内容信号，
-> D1 判定归确定性路径）。推理面参考未注册词 / `topk` 参数形态——fail-fast 不静默降级。
+> D1 判定归确定性路径）。磁盘面（`bind_artifact`/`save_artifact` 内容寻址 artifact
+> 三级门）+ 推理面（参考未注册词 / `topk` 参数形态）——fail-fast 不静默降级。
+
+#### `NAR_ARTIFACT_MALFORMED`
+`world_model.bind_artifact` / `save_artifact` 的窄模型 artifact 结构非法。
+- **触发条件**：artifact 非合法 JSON / 顶层非对象 / 缺封套字段 / 向量维度与 `dim` 不符 / 名-嵌入键集不匹配 / `architecture` 不受支持（当前仅 `transe`）/ `dim` 非正 int / `model_name` 空。
+- **严重级别**：ERROR。
+- **修复方式**：经 `world_model.save_artifact` 重新导出合规 artifact（封套 `{schema_version, content_hash, model_name, architecture, dim, entities, entity_embeddings, relations, relation_embeddings}`；嵌入 = `dim` 维数值向量，键集与空间一致）。
+
+#### `NAR_SCHEMA_VERSION`
+`world_model.bind_artifact` 遇到未知 `schema_version`。
+- **触发条件**：artifact 的 `schema_version ≠ 1`（当前唯一支持版本；无自动迁移面）。
+- **严重级别**：ERROR。
+- **修复方式**：以支持该版本的引擎加载，或由导出方按当前版本重新导出。
+
+#### `NAR_HASH_MISMATCH`
+`world_model.bind_artifact` 的 `content_hash` 验证失败（内容寻址完整性门）。
+- **触发条件**：canonical 载荷（model_name/architecture/dim/entities/entity_embeddings/relations/relation_embeddings 规范形态）重算 sha256 ≠ artifact 所载 `content_hash`——数据损坏或被篡改。
+- **严重级别**：ERROR。
+- **修复方式**：重新导出（`save_artifact` 返回值 = 钉扎基准 hash）；跨传输场景以 hash 比对检出损坏后重传。
 
 #### `NAR_ENTITY_UNREGISTERED`
 `narrow_model.score`/`topk` 的 `s`/`o` 引用未注册实体。

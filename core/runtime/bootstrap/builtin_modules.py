@@ -348,6 +348,26 @@ _SPEC_WORLD_MODEL = TypeDef(
                 ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
             ],
         ),
+        # 窄模型工件面（内容寻址 artifact；纯推理零训练）：bind_artifact =
+        # 三级验证门（结构/版本/完整性 hash）后水化为活 narrow_model 值
+        # （推理时 score/topk）；save_artifact = 工件序列化写盘，返回
+        # content_hash（钉扎/审计）。
+        "bind_artifact": MethodMemberSpec(
+            name="bind_artifact", kind="method", type_ref=TypeRef.of("narrow_model"),
+            param_types=[TypeRef.of("str")], return_type=TypeRef.of("narrow_model"),
+            param_descriptors=[
+                ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+            ],
+        ),
+        "save_artifact": MethodMemberSpec(
+            name="save_artifact", kind="method", type_ref=TypeRef.of("str"),
+            param_types=[TypeRef.of("narrow_model"), TypeRef.of("str")],
+            return_type=TypeRef.of("str"),
+            param_descriptors=[
+                ParamDescriptor(name="model", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("narrow_model")),
+                ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+            ],
+        ),
     },
 )
 
