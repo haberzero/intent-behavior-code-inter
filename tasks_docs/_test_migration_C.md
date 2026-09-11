@@ -25,7 +25,7 @@
 | test_world_model_kb.py | KB 世界模型（治理/事实/查询） | 行为 | ✅ C7a+C7b 完成：tests/behavior/test_kb_world_model_behavior.py（30 断言——词表/事实/查找/对比展开/审计/deep_clone/entries 零回归）；索引结构（_indexes 内部形态）= 内部删除（契约 = 查询面[active vs 全日志]已承接）；legacy 序列化 round-trip = ⑦ 路径删除（Rust artifact 契约面 + ihost 宿主层状态测试）——白盒文件删除 |
 | test_knowledge_type.py | KB 类型（store/快照/amend 门） | 行为/宿主 | ✅ 迁移 tests/behavior/test_knowledge_store_behavior.py（15 断言：store/get/快照隔离/keys/审计链/验证门[诊断码+定位]/check 纯度[编译诊断码]）+ tests/host/test_knowledge_state.py（2 断言：ihost 状态往返）；2 序列化 round-trip = ⑦ 路径删除+契约登记（Rust artifact 契约面）——白盒文件删除 |
 | test_knowledge_to_ibci.py | KB → IBCI 投影（P7 to_ibci） | ⑦ 路径 | ✅ 删除 + 契约登记：to_ibci = Python 参考 KB 功能（Rust kb.rs 无此分派——角路由送 Python；行为层须内核无关，非本层材料）；投影语义 = PENDING（⑦ 终点裁决：移植 Rust kb.rs 或退役） |
-| test_narrow_model_type.py | narrow_model 工件（score/topk，P5） | 宿主 | 保留并迁移宿主层（Rust 无 narrow_model 值变体——Python 宿主功能[world_model.bind_artifact]；迁移 = bind_artifact 语言路径 + artifact JSON 夹具[content_hash 正确计算]） |
+| test_narrow_model_type.py | narrow_model 工件（score/topk，P5） | 宿主 | ✅ 迁移 tests/host/test_narrow_model.py（12 断言：TransE score/topk[序/k/确定性 tie-break/纯函数]/元数据/fail-fast[NAR_*]/不可变面/content_hash 篡改门——bind_artifact 语言路径 + artifact 夹具[canonical hash 正确计算]）；vtable 绑定/内部 to_native/deep_clone/legacy 序列化 collect = 内部/⑦ 路径删除——白盒文件删除 |
 | test_run_result_type.py | run_result 值类型 | 行为/契约 | 保留（契约层归类） |
 | test_specialization_identity_runtime.py | 容器特化身份（运行时） | 行为/内部 | ✅ 迁移行为层（跨模块特化独立 = 可观察类型不匹配断言）；3 个 VM 内部函数直调（_resolve_type_identifier/_type_ref_name）= 删除（VM 内部形态，无语言级契约）——白盒文件删除 |
 | test_storage_model_dispatch.py | 存储模型分发 | 内部/契约 | 保留（契约层）；内部断言后续重构 |
@@ -41,6 +41,7 @@
 - **R3-C5**：test_knowledge_type.py → 行为层 15 断言 + 宿主层 2 断言迁移，2 序列化 round-trip = ⑦ 路径删除，白盒删除。
 - **R3-C6**：test_optional_value_model.py → 行为层 28 断言（含打破清单 #2：Optional 空值 = None 值语义统一——`a is b`=True，optional_instance_identity 角移除），白盒删除。
 - **R3-C7a/C7b**：test_world_model_kb.py → 行为层 30 断言全平面迁移（前置 GAP-vec-kb-failfast 已关闭）；索引结构 = 内部删除；legacy 序列化 = ⑦ 路径删除——白盒文件删除。
+- **R3-C8**：test_narrow_model_type.py → 宿主层 12 断言（bind_artifact 语言路径 + artifact 夹具）；内部/⑦ 删除 8——白盒文件删除。
 - **已归层无动作**：file_handle/media_file_handle/overlay_concurrency/pre_eval_fallback（宿主层）/ protocol_dispatch_contract/member_single_authority/serialization/run_result_type/storage_model_dispatch（契约层）——保留原文件仅归层。
 - **剩余工作项**：optional_value_model（30 测试——identity 2 例 = 打破清单 #2 待重设计）/ world_model_kb（36 测试——大件，kb 治理 GAP 一并裁决）/ narrow_model（宿主层 + artifact 夹具）/ file_handle·generic_value_identity·storage_model_dispatch（clone_ref 内部断言重构）+ cargo test 内核层组建。
 
