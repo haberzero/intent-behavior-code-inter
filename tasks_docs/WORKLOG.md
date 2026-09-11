@@ -4032,6 +4032,30 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   closure 仍跳过/非字面值仍条件比对）——纯收敛，零行为变化，零风险加法式。**验证**：
   diff_harness 子集 34 passed（34 语料差分门零差异 + 新 6 测试）+ smoke 子集 832 passed
   零回归（2026-09-11 实跑）；设计/裁定 = _p9b1_harness_state_registry.md[落地后删]。
+- **P9 全量 Rust 化第二批 侦察（语义层类型解析，2026-09-11，本 session）**：**Phase
+  0-1 代码上下文侦察完成**（实现留后续 round，质量优先不 rushed）——① 非字面值 type_uid
+  目标精确锁定（诊断脚本 func_ret/binop/name_ref）：Name[变量引用→查类型环境，t=s→
+  str] / BinOp[二元运算→结果类型，c=a+b→int，d=c*1.5→float[IBCI 数值语义 int*float=
+  float]] / Call[函数调用→返回类型，x=add(1,2)→int[add 的 ->int 注解]] / 参数[类型
+  注解，func add(int a)→a:int]；字面值[int/str/float/bool/None/list/dict/tuple]已由
+  阶段 B 第七增量 Rust 承载（34 语料 23/43）。② IBCI 类型推导架构（关键裁定基准）：
+  TypeCheckBase.visit(node)→IbSpec[类型 spec 对象非字符串；type_uid 字符串 = Flat
+  Serializer 序列化 IbSpec 派生]；**运算符类型推导 = 公理层数据驱动**（registry.
+  resolve_op(left,op,right)→各类型公理 resolve_operation_type_name(op,other)：int/
+  float/str/bool/list/dict/tuple/None 各声明支持 op + 结果类型，core/kernel/axioms/
+  primitives/*.py）；**无兜底推断**（数值提升/str 规则已并入公理声明，兜底与公理并存
+  =双写真相；resolve 失败=None→报错 SEM_TYPE_MISMATCH + 退化 any）——贯彻"一切皆对象"。
+  ③ 战略判断（自主裁定，记 WORKLOG）：Rust 类型推导应**同构对齐 IBCI 公理驱动架构**
+  [类型→运算符声明表，协议驱动非硬编码 if，工作模式定论 #4]，非机械复刻 Python
+  TypeCheckingVisitor 历史实现[含未接线的 TypeSlot/TypeInferenceState 设计载体=
+  code-quality §一.4 预留未激活红旗]；按新方向[对齐 Python 非首要]，Rust 实现干净的
+  IBCI 类型推导，确定性语义面差分等价 + 已裁定偏离白名单[divergence.py 机制已就绪，
+  第一批]。④ 下一步（实现计划，后续 round 起）：移植 numeric.py[int/float op 表] +
+  sequences.py[list/dict/tuple] + str/bool/None 运算符声明→Rust 运算符公理表[协议
+  驱动]；Rust 类型环境[作用域栈 Name→type string，赋值/参数/声明填充]；Call 函数
+  返回类型[func 定义 -> TYPE 注解]；差分验证[test_scope_symbols_type_uid_corpus 非字
+  面值补齐]；偏离白名单登记。IBCI 类型 = 声明式 + 简单推断[非 HM 约束求解，非目标]，
+  规则可管理。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
