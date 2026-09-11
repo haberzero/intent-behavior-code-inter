@@ -29,6 +29,10 @@ class VectorAxiom(BaseAxiom):
     def get_method_specs(self) -> Dict[str, MethodMemberSpec]:
         return {
             "dim":      _m("dim",       ret="int"),
+            "to_list":  _m("to_list",    ret="list"),
+            "shape":    _m("shape",      ret="list"),
+            "ndim":     _m("ndim",       ret="int"),
+            "dtype":    _m("dtype",      ret="str"),
             "dot":      _m("dot",       params=["vector"], ret="float"),
             "norm":     _m("norm",      ret="float"),
             "cosine":   _m("cosine",    params=["vector"], ret="float"),

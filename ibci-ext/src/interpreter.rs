@@ -2135,6 +2135,20 @@ impl Interpreter {
                 ),
                 "ndim" => IbValue::Int(t.shape.len() as i64),
                 "dtype" => IbValue::Str("f64".into()),
+                "to_list" => {
+                    // 数据面原生列表（interchange——计算编排网关/宿主边界显式
+                    // 拆箱面；1D = 平铺列表，2D = 嵌套行列表）
+                    if t.is_1d() {
+                        IbValue::list_new(t.data.iter().map(|x| IbValue::Float(*x)).collect())
+                    } else {
+                        let cols = t.shape[1];
+                        let rows: Vec<IbValue> = t.data
+                            .chunks(cols)
+                            .map(|row| IbValue::list_new(row.iter().map(|x| IbValue::Float(*x)).collect()))
+                            .collect();
+                        IbValue::list_new(rows)
+                    }
+                }
                 "dim" => match t.to_1d() {
                     Some(v) => IbValue::Int(v.len() as i64),
                     None => {
@@ -2509,9 +2523,20 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
         }
         // quoted 值跨边界 = 完整源串（同 to_native 边界拆箱契约）
         IbValue::Quoted { source } => source.clone().into_py(py),
-        // 原生 meta 函数引用 / 原生 KB 值 / vector 值 / 函数值不经桥接
-        // （vector 是值语义一等类型，不可拆箱——同 to_native 显式违约契约）
-        IbValue::MetaFn(_) | IbValue::Knowledge(_) | IbValue::Tensor(_)
+        // tensor 值跨边界 = typed 形态（P2：{"shape": [...], "data": [...]}——
+        // 计算编排网关[compute 宿主模块]消费；与 numpy 缓冲互转零拷贝语义面）
+        IbValue::Tensor(t) => {
+            let dict = PyDict::new(py);
+            let _ = dict.set_item(
+                "shape",
+                PyList::new(py, t.shape.iter().map(|d| *d as i64)).unwrap(),
+            );
+            let _ = dict.set_item("data", t.data.clone().into_py(py));
+            dict.into_py(py)
+        }
+        // 原生 meta 函数引用 / 原生 KB 值 / 函数值不经桥接（同 to_native
+        // 显式违约契约——非数据值保持宿主句柄面）
+        IbValue::MetaFn(_) | IbValue::Knowledge(_)
         | IbValue::Function(_) | IbValue::Error { .. } => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
@@ -2549,6 +2574,21 @@ fn from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> IbValue {
     }
     // dict
     if let Ok(d) = obj.downcast::<PyDict>() {
+        // tensor typed 形态（P2：{"shape","data"}——compute 编排网关返回面）
+        if let (Ok(shape), Ok(data)) = (d.get_item("shape"), d.get_item("data")) {
+            if let (Some(shape), Some(data)) = (shape, data) {
+                if let (Ok(shape), Ok(data)) = (
+                    shape.extract::<Vec<i64>>(),
+                    data.extract::<Vec<f64>>(),
+                ) {
+                    let shape: Vec<usize> = shape.iter().map(|d| *d as usize).collect();
+                    let n: usize = shape.iter().product();
+                    if data.len() == n && !shape.is_empty() {
+                        return IbValue::Tensor(TensorValue { shape, data });
+                    }
+                }
+            }
+        }
         let mut pairs = Vec::new();
         for (k, v) in d.iter() {
             pairs.push((from_py(py, &k), from_py(py, &v)));

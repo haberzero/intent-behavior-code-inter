@@ -235,6 +235,10 @@ class Bootstrapper:
         # 异步基础设施对象，非普通值，不应被包装为 primitive。
         if isinstance(val, Waitable):
             return val
+        # numpy ndarray（计算编排网关返回面）→ 原生列表（interchange 契约——
+        # 宿主边界值形态归一；ndarray 参与 == 比较会触发元素级真值歧义，须先归位）
+        if type(val).__module__ == "numpy" and type(val).__name__ == "ndarray":
+            return self.box(registry, val.tolist(), memo)
         # Uncertain 字面量哨兵：Uncertain 关键字被解析为此特殊字符串常量，
         # 此处将其映射到 llm_uncertain 单例，与 None → get_none() 的模式完全对称。
         if val == "__IBCI_UNCERTAIN_LITERAL__":

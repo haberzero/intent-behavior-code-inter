@@ -130,6 +130,23 @@ class IbVector(IbValue):
         """维度（元素个数）。"""
         return self.ib_class.registry.box(len(self.payload))
 
+    def to_list(self) -> IbObject:
+        """数据面原生列表（interchange——计算编排网关/宿主边界显式拆箱面；
+        vector = 1D tensor 的缓冲交换形态）。"""
+        return self.ib_class.registry.box(list(self.payload))
+
+    def shape(self) -> IbObject:
+        """形状（vector = 1D tensor → [dim]）。"""
+        return self.ib_class.registry.box([len(self.payload)])
+
+    def ndim(self) -> IbObject:
+        """维数（vector = 1D tensor → 1）。"""
+        return self.ib_class.registry.box(1)
+
+    def dtype(self) -> IbObject:
+        """元素类型（f64——当前统一数据形态）。"""
+        return self.ib_class.registry.box("f64")
+
     def dot(self, other: IbObject) -> IbObject:
         """点积（dim 不一致 fail-fast）。"""
         o = _as_vector(other)

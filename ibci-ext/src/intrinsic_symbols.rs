@@ -505,7 +505,7 @@ pub const METHOD_MEMBERS: &[(&str, &[(&str, &str)])] = &[
     ("thread", &[("cancel", "method"), ("is_done", "method"), ("join", "method"), ("start", "method")]),
     ("thread_result", &[("error", "method"), ("expect", "method"), ("is_error", "method"), ("is_success", "method"), ("status", "method"), ("unwrap", "method"), ("unwrap_or", "method"), ("value", "method")]),
     ("tuple", &[("__getitem__", "method"), ("cast_to", "method"), ("len", "method")]),
-    ("vector", &[("__getitem__", "method"), ("__to_prompt__", "method"), ("add", "method"), ("cast_to", "method"), ("cosine", "method"), ("dim", "method"), ("dot", "method"), ("norm", "method"), ("scale", "method"), ("sub", "method")]),
+    ("vector", &[("__getitem__", "method"), ("__to_prompt__", "method"), ("add", "method"), ("cast_to", "method"), ("cosine", "method"), ("dim", "method"), ("dot", "method"), ("dtype", "method"), ("ndim", "method"), ("norm", "method"), ("scale", "method"), ("shape", "method"), ("sub", "method"), ("to_list", "method")]),
 ];
 /// 方法声明签名表（(base, method) → ([params], ret)）——转录自 IBCI 公理层
 /// 声明式方法表（core/kernel/axioms/）；泛型特化另经 specialize_method_signature。
@@ -729,6 +729,10 @@ const METHOD_SIGS: &[(&str, &str, &[&str], &str)] = &[
     ("vector", "cast_to", &["any"], "any"),
     ("vector", "cosine", &["vector"], "float"),
     ("vector", "dim", &[], "int"),
+    ("vector", "dtype", &[], "str"),
+    ("vector", "ndim", &[], "int"),
+    ("vector", "shape", &[], "list"),
+    ("vector", "to_list", &[], "list"),
     ("vector", "dot", &["vector"], "float"),
     ("vector", "norm", &[], "float"),
     ("vector", "scale", &["float"], "vector"),

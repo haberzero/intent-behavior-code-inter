@@ -549,6 +549,25 @@ _SPEC_NET = TypeDef(name="net", kind="module", provenance=Provenance.USER_DEFINE
     })
 
 
+_SPEC_COMPUTE = TypeDef(name="compute_engine", kind="module", provenance=Provenance.KERNEL_NATIVE,
+                        visibility=Visibility.IMPORT_GATED, members={
+    "register_engine": MethodMemberSpec(name="register_engine", kind="method", type_ref=TypeRef.of("void"),
+        param_types=[TypeRef.of("str"), TypeRef.of("any")], return_type=TypeRef.of("void"),
+        param_descriptors=[
+            ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+            ParamDescriptor(name="engine", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
+        ]),
+    "run": MethodMemberSpec(name="run", kind="method", type_ref=TypeRef.of("any"),
+        param_types=[TypeRef.of("str"), TypeRef.of("any"), TypeRef.of("any")],
+        return_type=TypeRef.of("any"),
+        param_descriptors=[
+            ParamDescriptor(name="op", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+            ParamDescriptor(name="operands", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
+            ParamDescriptor(name="engine", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any"),
+                            has_default=True, default_value=None),
+        ]),
+})
+
 BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "ai": _SPEC_AI,
     "ihost": _SPEC_IHOST,
@@ -559,6 +578,7 @@ BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "iruntime": _SPEC_IRUNTIME,
     "net": _SPEC_NET,
     "world_model": _SPEC_WORLD_MODEL,
+    "compute_engine": _SPEC_COMPUTE,
 }
 
 
@@ -630,6 +650,15 @@ def register_builtin_modules(host_interface: "HostInterface") -> None:
         "world_model",
         WorldModelLib(),
         metadata=BUILTIN_MODULE_SPECS["world_model"],
+    )
+
+    # compute：计算编排网关（R5-2——引擎注册/调度/Tensor 缓冲交换；numpy 引擎
+    # 参考实现；内核不做 SIMD）。
+    from core.runtime.modules.compute_impl import ComputeLib
+    host_interface.register_module(
+        "compute_engine",
+        ComputeLib(),
+        metadata=BUILTIN_MODULE_SPECS["compute_engine"],
     )
 
 
