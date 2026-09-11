@@ -5531,6 +5531,21 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   全量 pytest 4283/0/1。
 - 剩余：ihost（状态往返）、async/thread 深集成。
 
+## 阶段 D2-③d 评估 + ihost async 边界裁决（2026-09-11，commit 43bfeb63）
+
+- **Host 下标桥接**：subscript_get 线程化 bridge + host_getitem（HostAwaitable/
+  run_result 多值面——通用修复保留）。
+- **ihost 路由试探（回退）**：11 失败——async/spawn/collect **并发 = Python VM
+  CPS 调度机制**（Rust 顺序内核无 async 执行模型）；状态往返（save/load +
+  Rust KB 集成）亦深。**裁决**：ihost = 宿主执行层（职责重定位"宿主面保留"）——
+  async 并发源保持 Python 路由。⑦ 终点对此类源的处置 = 保留 Python 宿主执行
+  （IBCI 编排平台职责：宿主执行 = Python 生态层，非内核语义）。
+- 路由现状：**6 模块 Rust**（meta/compute_engine/plugins/fs/world_model/ai）+
+  ihost/async = 宿主执行层保留。
+- **D2 路由完成判定**：数据面/宿主调用面全 Rust（6 模块）；async 并发 + 宿主
+  执行层保留 Python（职责边界成立）。下一项：差分机制退场评估 + Python 参考
+  内核退役范围界定（差分语料 vs 行为层契约）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
