@@ -4153,6 +4153,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   intrinsic_type_pool 66/66 全对齐 0 field diff 无多余；diff_harness 36 passed[+1] +
   smoke 832 passed 零回归。**第三批剩余**：scopes 池 / global_symbols / node_to_loc /
   method 符号 / free_vars / modules 组装。
+- **P9 全量 Rust 化第三批 子项 2a（Rust 独立 artifact 产出：scopes 池，39 scope +
+  2194 symbol 全对齐，2026-09-11，本 session，unsafe-vibe-dev）**：**scope 池**——顶层
+  scope[scope___string_exec__] = intrinsic 符号[固定 63，intrinsic:<name>] + 用户顶层
+  符号；函数 scope[scope___string_exec__/f] = 用户函数内符号，parent = 定义处 scope
+  [scope 串去最后一段]；global_refs=[]。**交付**：intrinsic_symbols.rs 加
+  intrinsic_names()[63]；scope_serializer.rs[新] scope_pool(source)[解析 AST →
+  SymbolResolver.resolve_module → 按 scope 分组用户符号[uid=scope_<串>:<name>] → 顶层
+  组合 intrinsic 63 + 用户顶层 + 函数 scope[parent 推导]]；lib.rs 加 scope_pool
+  pyfunction；差分 harness 加 test_scope_pool_corpus[Rust ⊆ Python：每个 scope
+  uid/parent_uid + 每 symbol name→uid 相等，允许 Python 多 IMPORT_GATED]。**关键裁定**：
+  ① scopes 池的 symbols 字段引用符号 uid（intrinsic:<name> 或 scope_<串>:<name>），顶层
+  scope 含全 63 intrinsic[固有] + 用户顶层；② parent_uid = scope_<父 scope 串>[含
+  scope_ 前缀，非裸串]——初版漏 scope_ 前缀致 5 parent DIFF，修复；③ IMPORT_GATED
+  [meta/quote/eval 按需引入] 不在 intrinsic 固定 63，差分用 ⊆ 验证[Rust 产的对，Python
+  可多]。**验证**：scope_pool 39 scope 全 parent 对齐 + 2194 symbol name→uid 全对齐
+  0 DIFF；diff_harness 37 passed[+1] + smoke 832 passed 零回归。**第三批剩余**：
+  global_symbols / node_to_loc 侧表 / method 符号 / free_vars / modules 组装。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

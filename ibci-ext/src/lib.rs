@@ -22,6 +22,7 @@ mod intrinsic_symbols;
 mod lexer;
 mod node_serializer;
 mod parser;
+mod scope_serializer;
 mod serialization;
 mod symbol_resolver;
 mod task_pool;
@@ -182,6 +183,16 @@ fn intrinsic_type_pool() -> PyResult<String> {
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// scope 池（全量 Rust 化·artifact 产出：scopes 池）——顶层[63 intrinsic + 用户顶层] +
+/// 函数 scope[用户内符号，parent = 定义处 scope]。差分 harness 经此与 Python scopes 池
+/// 比对（Rust ⊆ Python）。
+#[pyfunction]
+fn scope_pool(source: &str) -> PyResult<String> {
+    let scopes = scope_serializer::scope_pool(source);
+    serde_json::to_string(&scopes)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
 /// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
@@ -312,6 +323,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(intrinsic_type_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(intrinsic_symbol_table, m)?)?;
     m.add_function(wrap_pyfunction!(intrinsic_type_pool, m)?)?;
+    m.add_function(wrap_pyfunction!(scope_pool, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

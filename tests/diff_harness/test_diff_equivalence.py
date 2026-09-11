@@ -709,6 +709,34 @@ class TestRustSerializationUid:
                     f"intrinsic 类型 {name} 差分不等价（{f}）：\n  py : {p.get(f)}\n  rust: {r.get(f)}"
                 )
 
+    def test_scope_pool_corpus(self):
+        """scopes 池差分（全量 Rust 化·artifact 产出：scopes 池）：Rust scope_pool
+        ⊆ Python scopes 池——每个 scope uid/parent_uid 相等 + 每个 symbol name→uid 相等
+        （允许 Python 多 IMPORT_GATED 符号：Rust 固定 63 intrinsic + 用户）。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "scope_pool"):
+            return
+        for name, code in CORPUS:
+            rs_scopes = json.loads(rk._module.scope_pool(code))
+            data = FlatSerializer().serialize_artifact(compile_ibci(code))
+            mod = data["modules"][data["entry_module"]]
+            py_scopes = mod["pools"]["scopes"]
+            for uid, rs in rs_scopes.items():
+                py = py_scopes.get(uid)
+                assert py is not None, f"语料 {name} scope {uid} Python 缺失"
+                assert rs["parent_uid"] == py["parent_uid"], (
+                    f"语料 {name} scope {uid} parent_uid 不等：rs={rs['parent_uid']} py={py['parent_uid']}"
+                )
+                for sym_name, sym_uid in rs["symbols"].items():
+                    assert py["symbols"].get(sym_name) == sym_uid, (
+                        f"语料 {name} scope {uid} symbol {sym_name} 不等："
+                        f"rs={sym_uid} py={py['symbols'].get(sym_name)}"
+                    )
+
 
 class TestDivergenceRegistry:
     """差分 harness 状态注册表（单一权威源）自检：合法性 + 被消费（非死代码）。"""

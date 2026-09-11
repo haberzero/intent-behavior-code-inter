@@ -222,3 +222,18 @@ pub fn builtin_intrinsic_types() -> BTreeMap<String, Value> {
     }
     types
 }
+
+/// intrinsic 符号 name 全集（42 类型 + 19 函数 + 2 模块 = 63）——顶层 scope 的固有符号。
+pub fn intrinsic_names() -> Vec<String> {
+    let mut names = Vec::new();
+    for n in BUILTIN_TYPES {
+        names.push(n.to_string());
+    }
+    for n in BUILTIN_FUNCTIONS {
+        names.push(n.to_string());
+    }
+    for n in BUILTIN_MODULES {
+        names.push(n.to_string());
+    }
+    names
+}

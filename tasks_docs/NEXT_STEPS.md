@@ -452,7 +452,8 @@
    → 全量 Rust 化第二批 增量 3 子项 1 scope 完整收集[owned_scope_uid，52/52 0 DIFF] ✅
    → 第三批 reframe：完整 artifact 产出[method/free_vars/types/scopes/组装，战略 reframe]
    → 第三批 子项 1 types 池 KERNEL_NATIVE 固定集[intrinsic_type_pool 66/66 0 diff] ✅
-   → 第三批 子项 2 续[scopes 池+global_symbols+node_to_loc+method 符号+free_vars+组装][当前]
+   → 第三批 子项 2a scopes 池[scope_pool 39 scope + 2194 symbol 全对齐 0 DIFF] ✅
+   → 第三批 子项 2b 续[global_symbols+node_to_loc+method 符号+free_vars+modules 组装][当前]
    + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
