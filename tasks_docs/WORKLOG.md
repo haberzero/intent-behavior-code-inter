@@ -5267,6 +5267,30 @@ migration_C.md`——21 个强白盒文件逐文件分类[行为/契约/宿主/�
 ComputeSubstrate trait（批量同构计算协议，scalar 实现；AVX/GPU = 未来战略
 期接口预留，不实现）；IBCI 传 tilelang 代码给底层 = 值编组形态（不包装）。
 
+## R5 计算编排协议（R5-1 Tensor 统一 + R5-2 compute_engine 网关，2026-09-11）
+
+**R5 = 职责重定位落地（内核不实现外部引擎内部数学——编排而非执行；`_ibci_role_
+platform.md`）**：
+- **R5-1（commit 0dcbd6ff）Tensor 值入值模型**：IbValue::Vector(Vec<f64>) →
+  IbValue::Tensor(TensorValue{shape, data})——**值模型统一**（vector = 1D
+  tensor，架构健康原则"同一语义两种实现必漂移"——不并行保留两套 bulk 值）；
+  tensor() 内征（1D/2D 矩形校验）+ 方法面（shape/ndim/dtype + dim/norm/dot/
+  cosine[1D] + scale/add/sub[元素级泛化]）+ 2D 下标 = 行；typed 通道
+  kind="tensor"；kb 嵌入面迁移；语言三处注册 + 静态表（full_artifact 对齐）。
+- **R5-2（commit ab6f2151）compute_engine 编排网关**：宿主模块（IMPORT_GATED）
+  register_engine + run(op, operands, engine) 分派到已注册引擎（numpy 参考引擎
+  add/sub/scale/dot/matmul）；无引擎 = 显式错误、引擎失败 = 显式传播（fail-fast
+  非静默）；Tensor 缓冲交换 = to_list/tensor（vector 一等值契约保持，对象不跨
+  边界、数据穿越）+ bootstrapper.box ndarray→list 守卫；Python 路径 tensor 内征
+  + IbVector to_list/shape/ndim/dtype；Tensor 桥接穿越（to_py/from_py）。
+- **全量 pytest 4333 → 4343/0/1 零回归**（+5 tensor 行为 +4 编排）；diff_harness
+  全绿（含 full_artifact/intrinsic 符号表对齐）。
+- **R5 续**：torch 互转 + tilelang 插件后端 = 未来战略期（接口已就绪——编排协议
+  + Tensor 缓冲交换；2D Python 对象模型统一 = R5-3 后续）。
+
+**下一步 = R6 Rust 插件协议**（④层：ibci-sdk crate + cdylib 插件 ABI——回答
+"外部人员写 Rust"，不在内核核心）+ 背景 R3 阶段 C 长尾。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
