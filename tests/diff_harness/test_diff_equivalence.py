@@ -618,3 +618,29 @@ class TestRustSerializationUid:
                     f"语料 {name} scope 符号 node_uid 差分不等价（{uid}）：\n"
                     f"  py : {d.get('node_uid')}\n  rust: {rs.get('node_uid')}"
                 )
+
+    def test_scope_symbols_type_uid_corpus(self):
+        """34 语料 scope 符号 type_uid 差分（全量 Rust 化·语义层：类型解析，字面值子
+        集）：Rust scope 符号 type_uid（Rust 设值时）== Python（字面值类型推断 int/
+        str/bool/float/list/dict/tuple）。非字面值[变量引用/函数调用/二元运算等，需类
+        型环境 + 函数签名]Rust 不产（type_uid = null）——归类型解析后续。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "resolve_symbols"):
+            return
+        for name, code in CORPUS:
+            rs_syms = json.loads(rk._module.resolve_symbols(code))
+            py_pool = FlatSerializer().serialize_artifact(compile_ibci(code))["pools"]["symbols"]
+            py_scope = {u: d for u, d in py_pool.items() if u.startswith("scope_") and d["kind"] == "VARIABLE"}
+            for uid, d in py_scope.items():
+                rs = rs_syms.get(uid)
+                assert rs is not None, f"语料 {name} scope 符号缺失：{uid}"
+                # Rust 设值时（字面值可推断）比对；非字面值 Rust 不产（type_uid = null）
+                if rs.get("type_uid") is not None:
+                    assert rs.get("type_uid") == d.get("type_uid"), (
+                        f"语料 {name} scope 符号 type_uid 差分不等价（{uid}）：\n"
+                        f"  py : {d.get('type_uid')}\n  rust: {rs.get('type_uid')}"
+                    )

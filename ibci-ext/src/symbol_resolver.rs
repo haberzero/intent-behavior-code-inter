@@ -16,6 +16,7 @@ use serde_json::Value;
 
 use crate::node_serializer::NodeSerializer;
 use crate::parser::{Arg, Expr, Module, Stmt};
+use crate::type_inference;
 
 /// 默认模块名（Python 语义层的 `__string_exec__`）。
 const DEFAULT_MODULE: &str = "__string_exec__";
@@ -35,6 +36,8 @@ pub struct SymbolResolver<'a> {
     scope_stack: Vec<String>,
     /// 定义节点（符号 uid → 定义节点）。
     def_nodes: BTreeMap<String, DefNode<'a>>,
+    /// 值表达式（VARIABLE 符号 uid → 赋值右值表达式，供类型解析）。
+    value_exprs: BTreeMap<String, &'a Expr>,
 }
 
 impl<'a> SymbolResolver<'a> {
@@ -43,6 +46,7 @@ impl<'a> SymbolResolver<'a> {
             symbols: BTreeMap::new(),
             scope_stack: vec![DEFAULT_MODULE.to_string()],
             def_nodes: BTreeMap::new(),
+            value_exprs: BTreeMap::new(),
         }
     }
 
@@ -70,23 +74,37 @@ impl<'a> SymbolResolver<'a> {
                 }
             }
         }
+        // 类型解析：计算 VARIABLE 符号的 type_uid（经 type_inference，字面值可推断子集）
+        for (uid, value_expr) in &self.value_exprs {
+            if let Some(type_str) = type_inference::infer_type(value_expr) {
+                if let Some(sym) = self.symbols.get_mut(uid) {
+                    if let Some(map) = sym.as_object_mut() {
+                        map.insert(
+                            "type_uid".to_string(),
+                            Value::String(format!("type_root.{}", type_str)),
+                        );
+                    }
+                }
+            }
+        }
         &self.symbols
     }
 
     fn resolve_stmt(&mut self, stmt: &'a Stmt) {
         match stmt {
-            Stmt::Assign { targets, .. } => {
-                // 赋值目标 → scope 符号（VARIABLE，定义节点 = IbAssign）
+            Stmt::Assign { targets, value, .. } => {
+                // 赋值目标 → scope 符号（VARIABLE，定义节点 = IbAssign，值表达式供类型解析）
+                let v_expr = value.as_ref();
                 for target in targets {
                     if let Expr::Name { id, .. } = target {
-                        self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
+                        self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)), v_expr);
                     }
                 }
             }
             Stmt::AugAssign { target, .. } => {
                 // 增赋值目标 → scope 符号（VARIABLE，定义节点 = IbAugAssign）
                 if let Expr::Name { id, .. } = target {
-                    self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
+                    self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)), None);
                 }
             }
             Stmt::FunctionDef { name, args, body, .. } => {
@@ -95,12 +113,12 @@ impl<'a> SymbolResolver<'a> {
                 // 定义节点 = IbFunctionDef。
                 let is_top = self.scope_stack.len() == 1;
                 let kind = if is_top { "FUNCTION" } else { "VARIABLE" };
-                self.bind_symbol(name, kind, Some(DefNode::Stmt(stmt)));
+                self.bind_symbol(name, kind, Some(DefNode::Stmt(stmt)), None);
                 // 进入函数 scope（绑定参数 + 递归函数体）
                 self.scope_stack.push(name.clone());
                 for arg in args {
                     // 参数 → scope 符号（VARIABLE，定义节点 = IbArg）
-                    self.bind_symbol(&arg.arg, "VARIABLE", Some(DefNode::Arg(arg)));
+                    self.bind_symbol(&arg.arg, "VARIABLE", Some(DefNode::Arg(arg)), None);
                 }
                 for s in body {
                     self.resolve_stmt(s);
@@ -110,7 +128,7 @@ impl<'a> SymbolResolver<'a> {
             Stmt::For { target, body, orelse, .. } => {
                 // for 循环目标 → scope 符号（VARIABLE，定义节点 = IbFor）
                 if let Expr::Name { id, .. } = target {
-                    self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
+                    self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)), None);
                 }
                 for s in body.iter().chain(orelse) {
                     self.resolve_stmt(s);
@@ -121,7 +139,7 @@ impl<'a> SymbolResolver<'a> {
                 // 定义节点（node_uid = null），故不传定义节点。
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
-                    self.bind_symbol(&binding, "MODULE", None);
+                    self.bind_symbol(&binding, "MODULE", None, None);
                 }
             }
             Stmt::FromImport { module, names, .. } => {
@@ -130,12 +148,12 @@ impl<'a> SymbolResolver<'a> {
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
                     let _ = module; // module 名（import 绑定用 asname/name）
-                    self.bind_symbol(&binding, "FUNCTION", None);
+                    self.bind_symbol(&binding, "FUNCTION", None, None);
                 }
             }
             Stmt::ClassDef { name, body, .. } => {
                 // 类名 → scope 符号（CLASS，定义节点 = IbClassDef）
-                self.bind_symbol(name, "CLASS", Some(DefNode::Stmt(stmt)));
+                self.bind_symbol(name, "CLASS", Some(DefNode::Stmt(stmt)), None);
                 for s in body {
                     self.resolve_stmt(s);
                 }
@@ -164,7 +182,14 @@ impl<'a> SymbolResolver<'a> {
     }
 
     /// 绑定符号：scope 符号 UID = `scope_<scope>:<name>`（scope = scope 栈串）。
-    fn bind_symbol(&mut self, name: &str, kind: &str, def_node: Option<DefNode<'a>>) {
+    /// `value_expr` = 赋值右值表达式（VARIABLE 符号，供类型解析）。
+    fn bind_symbol(
+        &mut self,
+        name: &str,
+        kind: &str,
+        def_node: Option<DefNode<'a>>,
+        value_expr: Option<&'a Expr>,
+    ) {
         let scope = self.current_scope();
         let uid = format!("scope_{}:{}", scope, name);
         if self.symbols.contains_key(&uid) {
@@ -172,6 +197,9 @@ impl<'a> SymbolResolver<'a> {
         }
         if let Some(def) = def_node {
             self.def_nodes.insert(uid.clone(), def);
+        }
+        if let Some(v) = value_expr {
+            self.value_exprs.insert(uid.clone(), v);
         }
         let sym_data = Value::Object(serde_json::Map::from_iter([
             ("uid".to_string(), Value::String(uid.clone())),

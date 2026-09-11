@@ -25,6 +25,7 @@ mod parser;
 mod serialization;
 mod symbol_resolver;
 mod task_pool;
+mod type_inference;
 
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;

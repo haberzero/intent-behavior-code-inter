@@ -3959,6 +3959,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     完整收集[owned_scope_uid]] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] + 值
     对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级验证）；保留 Python 接口[Host-
     Service + CPS VM[LLM/意图/宿主面]]。
+- **P9 全量 Rust 化阶段 B 第七增量（语义层 Rust 移植续——类型解析 type_uid 字面值，
+  34 语料 VARIABLE scope 符号 type_uid 23/43 字面值匹配，2026-09-10，隔离分支
+  `rust-kernel`）**：**阶段 B 续（语义层：类型解析 type_uid 字面值子集）**——Rust 类
+  型解析（对应 Python 语义层的类型解析[type resolution]中的字面值类型推断）：遍历 Rust
+  AST 表达式，推断字面值的类型（int/str/bool/float/list/dict/tuple），计算 VARIABLE
+  scope 符号的 type_uid（`type_root.<类型字符串>`）。类型字符串格式：`int`/`float`/
+  `str`/`bool`/`None`/`list[<元素类型>]`/`dict[<键类型>,<值类型>]`/`tuple[<元素类型
+  列表>]`。**交付**：
+  - **type_inference 模块**（`ibci-ext/src/type_inference.rs`）：`infer_type(expr) ->
+    Option<String>`[字面值类型推断：Constant → int/float/str/bool/None / List →
+    list[<元素类型>] / Dict → dict[<键类型>,<值类型>] / Tuple → tuple[<元素类型列表>
+    ]；非字面值 → None]。
+  - **symbol_resolver 扩展**（`ibci-ext/src/symbol_resolver.rs`）：加 `value_exprs`
+    字段[VARIABLE 符号 uid → 赋值右值表达式] + `bind_symbol` 加 `value_expr: Option<
+    &Expr>` 参数[赋值传值表达式，其他传 None]；`resolve_module` 末尾经 type_inference
+    计算 VARIABLE 符号的 type_uid（字面值可推断子集）。
+  - **差分 harness 测试**（TestRustSerializationUid::test_scope_symbols_type_uid_corpus）：
+    34 语料 VARIABLE scope 符号 type_uid 差分（Rust 设值时[字面值可推断]比对 Python；
+    非字面值 Rust 不产[type_uid = null]——归类型解析后续）。
+  **关键裁定（self-grill 全分支消解）**：① **类型解析 = 字面值类型推断**（int/str/
+    bool/float/list/dict/tuple；type_uid = type_root.<类型字符串>；容器类型 = 首元素/
+    键值/元素列表类型[list[<首元素类型>] / dict[<首键类型>,<首值类型>] / tuple[<全元
+    素类型>]]）；② **非字面值归后续**（变量引用/函数调用/二元运算等需类型环境 + 函数
+    签名——Rust 不产[type_uid = null]，34 语料 20 例）；③ **value_expr 跟踪**（赋值
+    右值表达式[Option<Expr>]，bind_symbol 加参数[赋值传值表达式，其他传 None]）；
+    ④ **零风险加法式**（resolve_symbols 签名不变，type_uid 从 null → 字面值类型[对齐
+    Python]，不动 Python 执行路径）。**验证**：34 语料 VARIABLE scope 符号 type_uid
+    23/43 字面值匹配[20 非字面值归后续，无 DIFF] + 差分 harness 28/28 + 全量 pytest
+    零回归（阶段 B 第七增量放行门——加法式增量不动 Python 执行路径，计数 = 4285 + 类型
+    解析差分测试 1 例 = 4286；见 NEXT_STEPS 基线锚点）。**阶段 B 第七增量出口达成**
+    （语义层 Rust 移植续——类型解析 type_uid 字面值）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段 B 第七增量零风险加法式（resolve_symbols
+    签名不变，type_uid 对齐 Python），验证后 merge unsafe-vibe-dev 并删分支；阶段 B 后
+    续（语义层 Rust 移植续[类型解析续[变量引用/函数调用/二元运算等需类型环境 + 函数
+    签名] + method[sym_anon_*] + free_vars 闭包捕获 + scope 完整收集[owned_scope_uid]]
+    + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] + 值对象[IbValue 扩展 8902
+    行]）续在隔离分支（差分门逐级验证）；保留 Python 接口[HostService + CPS VM[LLM/意
+    图/宿主面]]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
