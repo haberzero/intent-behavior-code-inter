@@ -25,7 +25,7 @@
 | test_world_model_kb.py | KB 世界模型（治理/事实/查询） | 行为 | 保留并迁移行为层（KB 语义） |
 | test_knowledge_type.py | KB 类型（store/快照/amend 门） | 行为/宿主 | ✅ 迁移 tests/behavior/test_knowledge_store_behavior.py（15 断言：store/get/快照隔离/keys/审计链/验证门[诊断码+定位]/check 纯度[编译诊断码]）+ tests/host/test_knowledge_state.py（2 断言：ihost 状态往返）；2 序列化 round-trip = ⑦ 路径删除+契约登记（Rust artifact 契约面）——白盒文件删除 |
 | test_knowledge_to_ibci.py | KB → IBCI 投影（P7 to_ibci） | ⑦ 路径 | ✅ 删除 + 契约登记：to_ibci = Python 参考 KB 功能（Rust kb.rs 无此分派——角路由送 Python；行为层须内核无关，非本层材料）；投影语义 = PENDING（⑦ 终点裁决：移植 Rust kb.rs 或退役） |
-| test_narrow_model_type.py | narrow_model 工件（score/topk，P5） | 行为 | 保留并迁移行为层 |
+| test_narrow_model_type.py | narrow_model 工件（score/topk，P5） | 宿主 | 保留并迁移宿主层（Rust 无 narrow_model 值变体——Python 宿主功能[world_model.bind_artifact]；迁移 = bind_artifact 语言路径 + artifact JSON 夹具[content_hash 正确计算]） |
 | test_run_result_type.py | run_result 值类型 | 行为/契约 | 保留（契约层归类） |
 | test_specialization_identity_runtime.py | 容器特化身份（运行时） | 行为/内部 | ✅ 迁移行为层（跨模块特化独立 = 可观察类型不匹配断言）；3 个 VM 内部函数直调（_resolve_type_identifier/_type_ref_name）= 删除（VM 内部形态，无语言级契约）——白盒文件删除 |
 | test_storage_model_dispatch.py | 存储模型分发 | 内部/契约 | 保留（契约层）；内部断言后续重构 |
@@ -39,6 +39,8 @@
 - **R3-C3**：test_specialization_identity_runtime.py → 行为层迁移（跨模块特化独立可观察断言；3 个 VM 内部直调删除），白盒删除。
 - **R3-C4**：test_knowledge_to_ibci.py 删除（to_ibci = Python 参考 KB 功能，⑦ 路径；契约登记 PENDING——移植 Rust 或退役，⑦ 终点裁决）。
 - **R3-C5**：test_knowledge_type.py → 行为层 15 断言 + 宿主层 2 断言迁移，2 序列化 round-trip = ⑦ 路径删除，白盒删除。
+- **已归层无动作**：file_handle/media_file_handle/overlay_concurrency/pre_eval_fallback（宿主层）/ protocol_dispatch_contract/member_single_authority/serialization/run_result_type/storage_model_dispatch（契约层）——保留原文件仅归层。
+- **剩余工作项**：optional_value_model（30 测试——identity 2 例 = 打破清单 #2 待重设计）/ world_model_kb（36 测试——大件，kb 治理 GAP 一并裁决）/ narrow_model（宿主层 + artifact 夹具）/ file_handle·generic_value_identity·storage_model_dispatch（clone_ref 内部断言重构）+ cargo test 内核层组建。
 
 ### C1 切片（原记录）
 

@@ -5315,6 +5315,26 @@ platform.md`）**：
 vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 + cargo test
 内核层组建）+ R2 续项（方法分派表/i128）+ 阶段 D（差分退场）。
 
+## R3 阶段 C 长尾（R3-C2 ~ C5，2026-09-11，commit 30e4fbbd~bf670054）
+
+**测试体系重构推进（21 强白盒文件：C1 已删 2）**：
+- **C2**（30e4fbbd）：test_vector_type.py → tests/behavior/test_vector_behavior.py
+  （18 断言：值语义/构造封死/dim 不一致/dict 键/数学性质精确值；round-trip =
+  Rust artifact 契约面）——白盒删除。
+- **C3**（542bbd97）：test_specialization_identity_runtime.py → 跨模块特化独立
+  可观察断言（SEM_TYPE_MISMATCH 锁定独立身份）；3 个 VM 内部直调删除。
+- **C4**（0d0adb5e + 89770e4d）：test_knowledge_to_ibci.py 裁决——to_ibci =
+  Python 参考 KB 功能（Rust kb.rs 无分派，角路由送 Python；行为层须内核无关）
+  → 删除 + PENDING 登记（⑦ 终点裁决移植/退役 + kb.rs catch-all None_ GAP）。
+- **C5**（bf670054）：test_knowledge_type.py → 行为层 15 断言 + 宿主层 2 断言
+  （ihost 状态往返）；2 序列化 round-trip = ⑦ 路径删除。
+- **全量门**：4332/0/1（e2e CLI 投影测试间歇性失败 1 次——序依赖，隔离/重跑
+  通过，登记观察）。
+- **归类无动作**：7 文件归宿主/契约层（保留原文件）。
+- **剩余**：optional_value_model（identity 2 例 = 打破清单 #2）/ world_model_kb
+  （36 测试大件）/ narrow_model（宿主层 + artifact 夹具）/ 3 个 clone_ref 内部
+  断言重构 + cargo test 内核层组建。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
