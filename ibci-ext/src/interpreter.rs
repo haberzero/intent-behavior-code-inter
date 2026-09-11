@@ -121,6 +121,12 @@ impl PartialEq for IbValue {
             (IbValue::Float(a), IbValue::Int(b)) => *a == (*b as f64),
             (IbValue::Str(a), IbValue::Str(b)) => a == b,
             (IbValue::Bool(a), IbValue::Bool(b)) => a == b,
+            // bool 与数值相等（Python 契约：True == 1——dict 键相等面与
+            // operator == 的 as_num 语义一致；R2-1 修复 Bool/Int 键失配）
+            (IbValue::Bool(a), IbValue::Int(b)) => (*a as i64) == *b,
+            (IbValue::Int(a), IbValue::Bool(b)) => *a == (*b as i64),
+            (IbValue::Bool(a), IbValue::Float(b)) => (*a as i64) as f64 == *b,
+            (IbValue::Float(a), IbValue::Bool(b)) => *a == (*b as i64) as f64,
             (IbValue::None_, IbValue::None_) => true,
             (IbValue::List(a), IbValue::List(b)) => {
                 let (av, bv) = (a.borrow(), b.borrow());
@@ -280,25 +286,27 @@ fn intrinsic_len(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) 
         Some(IbValue::Dict(d)) => Ok(IbValue::Int(d.borrow().len() as i64)),
         // 空 Optional len = 属性错误（Python 契约：空包装无 len 面）
         Some(IbValue::None_) => Err(runtime_error("AttributeError", "len on empty optional")),
-        _ => Ok(IbValue::Int(0)),
+        // 不支持类型 = TypeError（R2-1 静默清零：旧 = 静默 0）
+        _ => Err(runtime_error("TypeError", "object of that type has no len()")),
     }
 }
 
 fn intrinsic_range(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+    let err = || runtime_error("TypeError", "range() integer argument expected");
     let items: Vec<IbValue> = if args.len() == 1 {
         let stop = match &args[0] {
             IbValue::Int(i) => *i,
-            _ => 0,
+            _ => return Err(err()),
         };
         (0..stop).map(IbValue::Int).collect()
     } else if args.len() >= 2 {
         let start = match &args[0] {
             IbValue::Int(i) => *i,
-            _ => 0,
+            _ => return Err(err()),
         };
         let stop = match &args[1] {
             IbValue::Int(i) => *i,
-            _ => 0,
+            _ => return Err(err()),
         };
         (start..stop).map(IbValue::Int).collect()
     } else {
@@ -611,18 +619,18 @@ fn dict_key_repr(k: &IbValue) -> String {
     }
 }
 
-fn num_result(a: &IbValue, b: &IbValue, f: fn(f64, f64) -> f64) -> IbValue {
-    // 非数值 → None_（不静默数值默认——类型错误由语义层捕获；执行核心假设良型输入）
+fn num_result(a: &IbValue, b: &IbValue, f: fn(f64, f64) -> f64) -> Result<IbValue, Thrown> {
     match (a.as_num(), b.as_num()) {
         (Some((av, ai)), Some((bv, bi))) => {
             let r = f(av, bv);
             if ai && bi && r.fract() == 0.0 {
-                IbValue::Int(r as i64)
+                Ok(IbValue::Int(r as i64))
             } else {
-                IbValue::Float(r)
+                Ok(IbValue::Float(r))
             }
         }
-        _ => IbValue::None_,
+        // 非数值操作数 = TypeError（R2-1 静默清零：旧 = None_ 静默）
+        _ => Err(runtime_error("TypeError", "unsupported operand type(s)")),
     }
 }
 
@@ -929,7 +937,7 @@ impl Interpreter {
                             let base = self.eval_expr(env, value, output)?;
                             let key = self.eval_expr(env, slice, output)?;
                             if let Some(val) = &v {
-                                assign_subscript(&base, &key, val.clone());
+                                assign_subscript(&base, &key, val.clone())?;
                             }
                         }
                         _ => {}
@@ -1325,7 +1333,14 @@ impl Interpreter {
             Expr::Constant { value, .. } => const_to_value(value),
             Expr::Name { id, .. } => match env.borrow().get(id) {
                 Some(v) => v,
-                None => IbValue::None_,
+                // 运行期未定义名 = NameError（Python 契约；R2-1 静默清零——
+                // 旧 = None_ 静默；编译期未定义 = 语义层拦截，此处 = 防御面）
+                None => {
+                    return Err(runtime_error(
+                        "NameError",
+                        &format!("name '{}' is not defined", id),
+                    ))
+                }
             },
             Expr::BinOp { pos, left, op, right, .. } => {
                 let l = self.eval_expr(env, left, output)?;
@@ -1502,7 +1517,7 @@ impl Interpreter {
                             Some(e) => Some(self.eval_expr(env, e, output)?),
                             None => None,
                         };
-                        subscript_slice(&base, lo.as_ref(), hi.as_ref(), st.as_ref())
+                        subscript_slice(&base, lo.as_ref(), hi.as_ref(), st.as_ref())?
                     }
                     // 单表达式下标：x[1]
                     _ => {
@@ -1542,8 +1557,11 @@ impl Interpreter {
                 "AttributeError",
                 "iteration over empty optional",
             )),
-            // 非可迭代值静默（登记角——Python TypeError 面未移植）
-            _ => Ok(Vec::new()),
+            // 非可迭代值 = TypeError（Python 契约；R2-1 静默清零）
+            other => Err(runtime_error(
+                "TypeError",
+                &format!("'{}' object is not iterable", value_type_name(&other)),
+            )),
         }
     }
 
@@ -1575,16 +1593,16 @@ impl Interpreter {
             }
         }
         Ok(match op {
-            "+" => num_result(l, r, |a, b| a + b),
-            "-" => num_result(l, r, |a, b| a - b),
-            "*" => num_result(l, r, |a, b| a * b),
+            "+" => num_result(l, r, |a, b| a + b)?,
+            "-" => num_result(l, r, |a, b| a - b)?,
+            "*" => num_result(l, r, |a, b| a * b)?,
             "/" => floor_div(l, r)?,
             "//" => floor_div(l, r)?,
             "%" => modulo(l, r)?,
-            "**" => pow_op(l, r),
+            "**" => pow_op(l, r)?,
             // 位运算（int/bool——Python 契约：bool 位运算 = bool 结果
             // [True | False = True]；int 位运算 = int）
-            "|" | "&" | "^" => bitwise(l, op, r),
+            "|" | "&" | "^" => bitwise(l, op, r)?,
             _ => IbValue::None_,
         })
     }
@@ -1857,10 +1875,10 @@ impl Interpreter {
                 "dim" => IbValue::Int(v.len() as i64),
                 "dot" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return Ok(IbValue::None_);
+                        return Err(runtime_error("TypeError", "dot() requires a vector argument"));
                     };
                     if v.len() != o.len() {
-                        return Ok(IbValue::None_);
+                        return Err(runtime_error("ValueError", "vector dimension mismatch"));
                     }
                     IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum())
                 }
@@ -1869,10 +1887,10 @@ impl Interpreter {
                 }
                 "cosine" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return Ok(IbValue::None_);
+                        return Err(runtime_error("TypeError", "cosine() requires a vector argument"));
                     };
                     if v.len() != o.len() {
-                        return Ok(IbValue::None_);
+                        return Err(runtime_error("ValueError", "vector dimension mismatch"));
                     }
                     let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
                     let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
@@ -1892,14 +1910,14 @@ impl Interpreter {
                     Some(IbValue::Float(k)) => {
                         IbValue::Vector(v.iter().map(|x| x * k).collect())
                     }
-                    _ => return Err(runtime_error("AttributeError", "attribute not found")),
+                    _ => return Err(runtime_error("TypeError", "scale() requires a numeric argument")),
                 },
                 "add" | "sub" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return Ok(IbValue::None_);
+                        return Err(runtime_error("TypeError", "vector add/sub requires a vector argument"));
                     };
                     if v.len() != o.len() {
-                        return Ok(IbValue::None_);
+                        return Err(runtime_error("ValueError", "vector dimension mismatch"));
                     }
                     let out: Vec<f64> = if method == "add" {
                         v.iter().zip(o.iter()).map(|(a, b)| a + b).collect()
@@ -1925,19 +1943,19 @@ impl Interpreter {
                 "len" => IbValue::Int(l.borrow().len() as i64),
                 "index" => {
                     let items = l.borrow().clone();
-                    if let Some(v) = args.first() {
-                        items
-                            .iter()
-                            .position(|x| x == v)
-                            .map(|i| IbValue::Int(i as i64))
-                            .unwrap_or(IbValue::None_)
-                    } else {
-                        IbValue::None_
-                    }
+                    let v = args.first().ok_or_else(|| {
+                        runtime_error("TypeError", "index() takes exactly one argument")
+                    })?;
+                    items
+                        .iter()
+                        .position(|x| x == v)
+                        .map(|i| IbValue::Int(i as i64))
+                        .ok_or_else(|| runtime_error("ValueError", "list.index(x): x not in list"))?
                 }
                 "pop" => {
+                    // Python 契约：空列表 pop = IndexError（无静默 None_）
                     let mut m = l.borrow_mut();
-                    m.pop().unwrap_or(IbValue::None_)
+                    m.pop().ok_or_else(|| runtime_error("IndexError", "pop from empty list"))?
                 }
                 // insert(index, value)——负索引/越界 = 端点钳制（Python 契约）
                 "insert" => {
@@ -1953,15 +1971,17 @@ impl Interpreter {
                     }
                     IbValue::None_
                 }
-                // remove(value)——移除首个相等元素（Python 契约：原地修改，
-                // 无返回值；未找到 = ValueError[登记——语料面无探针]）
+                // remove(value)——移除首个相等元素（Python 契约：原地修改；
+                // 未找到 = ValueError——R2-1 静默清零）
                 "remove" => {
-                    if let Some(v) = args.first() {
-                        let mut m = l.borrow_mut();
-                        if let Some(ix) = m.iter().position(|x| x == v) {
-                            m.remove(ix);
-                        }
-                    }
+                    let v = args.first().ok_or_else(|| {
+                        runtime_error("TypeError", "remove() takes exactly one argument")
+                    })?;
+                    let mut m = l.borrow_mut();
+                    let ix = m.iter().position(|x| x == v).ok_or_else(|| {
+                        runtime_error("ValueError", "list.remove(x): x not in list")
+                    })?;
+                    m.remove(ix);
                     IbValue::None_
                 }
                 _ => return Err(runtime_error("AttributeError", "attribute not found")),
@@ -1996,117 +2016,116 @@ impl Interpreter {
             IbValue::Str(s) => {
                 match method {
                     "split" => {
-                        // split(sep)
-                        let sep = args
-                            .first()
-                            .and_then(|a| match a {
-                                IbValue::Str(x) => Some(x.clone()),
-                                _ => None,
-                            })
-                            .unwrap_or_default();
-                        let parts: Vec<IbValue> = if sep.is_empty() {
-                            s.chars().map(|c| IbValue::Str(c.to_string())).collect()
-                        } else {
-                            s.split(&sep)
-                                .map(|p| IbValue::Str(p.to_string()))
-                                .collect()
+                        // Python 契约（R2-1 静默清零——旧实现无参 = 逐字符切分错）：
+                        // 无参 = 空白切分（split_whitespace 折叠连续空白）；
+                        // sep 空串 = ValueError；sep 非 str = TypeError
+                        let parts: Vec<IbValue> = match args.first() {
+                            None => s.split_whitespace().map(|p| IbValue::Str(p.to_string())).collect(),
+                            Some(IbValue::Str(sep)) if !sep.is_empty() => {
+                                s.split(sep.as_str()).map(|p| IbValue::Str(p.to_string())).collect()
+                            }
+                            Some(IbValue::Str(_)) => {
+                                return Err(runtime_error("ValueError", "empty separator"))
+                            }
+                            Some(_) => {
+                                return Err(runtime_error("TypeError", "split() argument must be str"))
+                            }
                         };
                         return Ok(IbValue::list_new(parts));
                     }
                     "find" => {
-                        let sub = args.first().and_then(|a| match a {
-                            IbValue::Str(x) => Some(x.clone()),
-                            _ => None,
-                        });
-                        return Ok(match sub {
-                            Some(sub) => match s.find(&sub) {
-                                Some(i) => IbValue::Int(i as i64),
-                                None => IbValue::Int(-1),
-                            },
+                        let sub = args.first().ok_or_else(|| {
+                            runtime_error("TypeError", "find() takes exactly one argument")
+                        })?;
+                        let sub = match sub {
+                            IbValue::Str(x) => x.clone(),
+                            _ => return Err(runtime_error("TypeError", "find() argument must be str")),
+                        };
+                        return Ok(match s.find(&sub) {
+                            Some(i) => IbValue::Int(i as i64),
                             None => IbValue::Int(-1),
                         });
                     }
                     "rfind" => {
-                        let sub = args.first().and_then(|a| match a {
-                            IbValue::Str(x) => Some(x.clone()),
-                            _ => None,
-                        });
+                        let sub = args.first().ok_or_else(|| {
+                            runtime_error("TypeError", "rfind() takes exactly one argument")
+                        })?;
+                        let sub = match sub {
+                            IbValue::Str(x) => x.clone(),
+                            _ => return Err(runtime_error("TypeError", "rfind() argument must be str")),
+                        };
                         // rfind 从尾部扫描（Python rfind 对等——find 反向遍历）
-                        return Ok(match sub {
-                            Some(sub) => {
-                                if sub.is_empty() {
-                                    return Ok(IbValue::Int(s.len() as i64));
-                                }
-                                let mut i = s.len().saturating_sub(sub.len()) as i64;
-                                let mut found = -1;
-                                while i >= 0 {
-                                    if s[i as usize..].starts_with(&sub) {
-                                        found = i;
-                                        break;
-                                    }
-                                    i -= 1;
-                                }
-                                IbValue::Int(found)
+                        if sub.is_empty() {
+                            return Ok(IbValue::Int(s.len() as i64));
+                        }
+                        let mut i = s.len().saturating_sub(sub.len()) as i64;
+                        let mut found = -1;
+                        while i >= 0 {
+                            if s[i as usize..].starts_with(&sub) {
+                                found = i;
+                                break;
                             }
-                            None => IbValue::Int(-1),
-                        });
+                            i -= 1;
+                        }
+                        return Ok(IbValue::Int(found));
                     }
                     "count" => {
-                        let sub = args.first().and_then(|a| match a {
-                            IbValue::Str(x) => Some(x.clone()),
-                            _ => None,
-                        });
-                        return Ok(match sub {
-                            Some(sub) if !sub.is_empty() => IbValue::Int(
-                                s.match_indices(&sub).count() as i64,
-                            ),
-                            _ => IbValue::Int(0),
+                        let sub = args.first().ok_or_else(|| {
+                            runtime_error("TypeError", "count() takes exactly one argument")
+                        })?;
+                        let sub = match sub {
+                            IbValue::Str(x) => x.clone(),
+                            _ => return Err(runtime_error("TypeError", "count() argument must be str")),
+                        };
+                        return Ok(if sub.is_empty() {
+                            IbValue::Int(0)
+                        } else {
+                            IbValue::Int(s.match_indices(&sub).count() as i64)
                         });
                     }
                     "contains" => {
-                        let sub = args.first().and_then(|a| match a {
-                            IbValue::Str(x) => Some(x.clone()),
-                            _ => None,
-                        });
-                        return Ok(IbValue::Bool(match sub {
-                            Some(sub) => s.contains(&sub),
-                            None => false,
-                        }));
+                        let sub = args.first().ok_or_else(|| {
+                            runtime_error("TypeError", "contains() takes exactly one argument")
+                        })?;
+                        let sub = match sub {
+                            IbValue::Str(x) => x.clone(),
+                            _ => return Err(runtime_error("TypeError", "contains() argument must be str")),
+                        };
+                        return Ok(IbValue::Bool(s.contains(&sub)));
                     }
                     "is_empty" => {
                         return Ok(IbValue::Bool(s.trim().is_empty()));
                     }
                     "startswith" | "endswith" => {
-                        let pre = args.first().and_then(|a| match a {
-                            IbValue::Str(x) => Some(x.clone()),
-                            _ => None,
-                        });
-                        return Ok(IbValue::Bool(match pre {
-                            Some(pre) => {
-                                if method == "startswith" {
-                                    s.starts_with(&pre)
-                                } else {
-                                    s.ends_with(&pre)
-                                }
-                            }
-                            None => false,
+                        let pre = args.first().ok_or_else(|| {
+                            runtime_error("TypeError", "startswith() takes exactly one argument")
+                        })?;
+                        let pre = match pre {
+                            IbValue::Str(x) => x.clone(),
+                            _ => return Err(runtime_error("TypeError", "argument must be str")),
+                        };
+                        return Ok(IbValue::Bool(if method == "startswith" {
+                            s.starts_with(&pre)
+                        } else {
+                            s.ends_with(&pre)
                         }));
                     }
                     "replace" => {
-                        let old = args.first().and_then(|a| match a {
-                            IbValue::Str(x) => Some(x.clone()),
-                            _ => None,
-                        });
-                        let new = args.get(1).and_then(|a| match a {
-                            IbValue::Str(x) => Some(x.clone()),
-                            _ => None,
-                        });
-                        return Ok(match (old, new) {
-                            (Some(old), Some(new)) => {
-                                IbValue::Str(s.replace(&old, &new))
-                            }
-                            _ => IbValue::Str(s.clone()),
-                        });
+                        let old = args.first().ok_or_else(|| {
+                            runtime_error("TypeError", "replace() takes at least 2 arguments")
+                        })?;
+                        let old = match old {
+                            IbValue::Str(x) => x.clone(),
+                            _ => return Err(runtime_error("TypeError", "replace() argument must be str")),
+                        };
+                        let new = args.get(1).ok_or_else(|| {
+                            runtime_error("TypeError", "replace() takes at least 2 arguments")
+                        })?;
+                        let new = match new {
+                            IbValue::Str(x) => x.clone(),
+                            _ => return Err(runtime_error("TypeError", "replace() argument must be str")),
+                        };
+                        return Ok(IbValue::Str(s.replace(&old, &new)));
                     }
                     "join" => {
                         // join(list) = 本串作分隔符连接元素（Python str.join 对等）
@@ -2277,7 +2296,7 @@ fn floor_div(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
                 Ok(IbValue::Float(res))
             }
         }
-        _ => Ok(IbValue::None_),
+        _ => Err(runtime_error("TypeError", "unsupported operand type(s) for //")),
     }
 }
 
@@ -2294,16 +2313,16 @@ fn modulo(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
                 Ok(IbValue::Float(res))
             }
         }
-        _ => Ok(IbValue::None_),
+        _ => Err(runtime_error("TypeError", "unsupported operand type(s) for %")),
     }
 }
 
 /// 位运算（int/bool 面：| & ^——操作数须为 int/bool[数值]；bool+bool =
 /// bool 结果[Python 契约]，否则 int）。
-fn bitwise(l: &IbValue, op: &str, r: &IbValue) -> IbValue {
+fn bitwise(l: &IbValue, op: &str, r: &IbValue) -> Result<IbValue, Thrown> {
     let both_bool = matches!(l, IbValue::Bool(_)) && matches!(r, IbValue::Bool(_));
     let (Some((a, _)), Some((b, _))) = (l.as_num(), r.as_num()) else {
-        return IbValue::None_;
+        return Err(runtime_error("TypeError", "unsupported operand type(s) for bitwise op"));
     };
     let ai = a as i64;
     let bi = b as i64;
@@ -2314,23 +2333,23 @@ fn bitwise(l: &IbValue, op: &str, r: &IbValue) -> IbValue {
         _ => 0,
     };
     if both_bool {
-        IbValue::Bool(res != 0)
+        Ok(IbValue::Bool(res != 0))
     } else {
-        IbValue::Int(res)
+        Ok(IbValue::Int(res))
     }
 }
 
-fn pow_op(l: &IbValue, r: &IbValue) -> IbValue {
+fn pow_op(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
     match (l.as_num(), r.as_num()) {
         (Some((a, ai)), Some((b, bi))) => {
             let res = a.powf(b);
             if ai && bi && res.fract() == 0.0 {
-                IbValue::Int(res as i64)
+                Ok(IbValue::Int(res as i64))
             } else {
-                IbValue::Float(res)
+                Ok(IbValue::Float(res))
             }
         }
-        _ => IbValue::None_,
+        _ => Err(runtime_error("TypeError", "unsupported operand type(s) for **")),
     }
 }
 
@@ -2414,14 +2433,17 @@ fn subscript_slice(
     lower: Option<&IbValue>,
     upper: Option<&IbValue>,
     step: Option<&IbValue>,
-) -> IbValue {
+) -> Result<IbValue, Thrown> {
     let step_v = match step {
         Some(IbValue::Int(i)) => *i,
-        Some(_) => 1, // 非 int step = 保守 step 1（Python TypeError 角——登记）
+        // 非 int step = TypeError（Python 契约；R2-1 删"保守 step 1"静默）
+        Some(_) => {
+            return Err(runtime_error("TypeError", "slice step must be an integer"))
+        }
         None => 1,
     };
     if step_v == 0 {
-        return IbValue::None_; // step 0 = 保守 None（登记角）
+        return Err(runtime_error("ValueError", "slice step cannot be zero"));
     }
     match base {
         // 字符串切片 = 新字符串（Python 契约：str slice returns str）
@@ -2429,27 +2451,50 @@ fn subscript_slice(
             let chars: Vec<char> = s.chars().collect();
             let idx = slice_indices(chars.len() as i64, lower, upper, step_v);
             let out: String = idx.iter().map(|&i| chars[i]).collect();
-            IbValue::Str(out)
+            Ok(IbValue::Str(out))
         }
         IbValue::List(l) => {
             let v = l.borrow();
             let idx = slice_indices(v.len() as i64, lower, upper, step_v);
             let items: Vec<IbValue> = idx.iter().map(|&i| v[i].clone()).collect();
             drop(v);
-            IbValue::list_new(items)
+            Ok(IbValue::list_new(items))
         }
-        _ => IbValue::None_,
+        // 非序列切片 = TypeError（Python 契约；R2-1 删静默 None_）
+        _ => Err(runtime_error("TypeError", "object is not sliceable")),
     }
 }
 
-fn assign_subscript(base: &IbValue, key: &IbValue, val: IbValue) {
-    if let IbValue::Dict(d) = base {
-        let mut m = d.borrow_mut();
-        if let Some(pair) = m.iter_mut().find(|(dk, _)| dk == key) {
-            pair.1 = val;
-        } else {
-            m.push((key.clone(), val));
+fn assign_subscript(base: &IbValue, key: &IbValue, val: IbValue) -> Result<(), Thrown> {
+    match base {
+        IbValue::Dict(d) => {
+            let mut m = d.borrow_mut();
+            if let Some(pair) = m.iter_mut().find(|(dk, _)| dk == key) {
+                pair.1 = val;
+            } else {
+                m.push((key.clone(), val));
+            }
+            Ok(())
         }
+        // R2-1 静默清零：旧实现仅 Dict——List 元素赋值 = 静默 no-op（错误）
+        IbValue::List(l) => {
+            let key = match key {
+                IbValue::Int(i) => *i,
+                // 非整数下标 = TypeError（Python 契约）
+                _ => return Err(runtime_error("TypeError", "list indices must be integers")),
+            };
+            let mut m = l.borrow_mut();
+            let len = m.len() as i64;
+            // 负索引归一（Python 契约：l[-1] = 末元素）；越界 = IndexError
+            let ix = if key < 0 { len + key } else { key };
+            if ix < 0 || ix >= len {
+                return Err(runtime_error("IndexError", "list assignment index out of range"));
+            }
+            m[ix as usize] = val;
+            Ok(())
+        }
+        // 非可写容器 = 错误（Python 契约）
+        _ => Err(runtime_error("TypeError", "object does not support item assignment")),
     }
 }
 
