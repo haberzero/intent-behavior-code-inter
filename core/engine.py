@@ -539,89 +539,6 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 但从宏观视角看，Engine 已经不再直接驱动 Interpreter
         return self.rt_scheduler.execute(immutable_artifact, variables=variables, output_callback=output_callback)
 
-    def _bind_container_specialization(self, value, declared_type):
-        """⑦ 镜像容器特化绑定（leaf._bind_container_specialization 同构
-        registry 面）：声明为内置容器特化的容器值 → ib_class 重绑水化特化
-        类 + type_ref 结构化；嵌套容器元素经 spec.element_type 递归绑定
-        （VM 嵌套字面量各层独立绑定的镜像等价面）。非容器/非特化声明 =
-        原样返回（保守）。"""
-        if not isinstance(value, (list, dict)) or declared_type is None:
-            return value
-        spec_name = (
-            getattr(declared_type, "qualified_name", None)
-            or getattr(declared_type, "name", None)
-        ) or ""
-        container_kind = "list" if isinstance(value, list) else "dict"
-        if spec_name.split("[", 1)[0].strip() != container_kind:
-            return value
-        registry = self.interpreter.registry
-        spec_reg = registry.get_metadata_registry()
-        if spec_reg is None:
-            return value
-        if "[" not in spec_name or spec_reg.resolve(spec_name) is None:
-            return value
-        specialized_cls = registry.get_class(spec_name)
-        if specialized_cls is None:
-            return value
-        try:
-            from core.runtime.objects.kernel import IbClass as _IbClass
-
-            if not isinstance(specialized_cls, _IbClass):
-                return value
-            boxed = (
-                value if hasattr(value, "ib_class") else registry.box(value)
-            )
-            if getattr(boxed, "ib_class", None) is None:
-                return value
-            boxed.ib_class = specialized_cls
-            from core.kernel.spec.type_ref import TypeRef as _TypeRef
-
-            boxed.type_ref = _TypeRef.from_spec(declared_type)
-            # 嵌套元素递归（spec 元素类型 ref → 解析 → 绑定）
-            elem_ref = getattr(declared_type, "element_type", None)
-            if elem_ref is not None:
-                elem_spec = spec_reg.resolve_typeref(elem_ref)
-                if elem_spec is not None:
-                    elements = getattr(boxed, "elements", None)
-                    if elements is not None and isinstance(elements, list):
-                        # 仅容器元素递归（标量元素装箱形态保持——解箱/
-                        # 回箱循环会破坏元素装箱身份）
-                        for i, elt in enumerate(list(elements)):
-                            elt_base = (
-                                getattr(
-                                    getattr(elt, "ib_class", None), "name", ""
-                                )
-                                or ""
-                            ).split("[", 1)[0]
-                            if isinstance(elt, (list, dict)) or elt_base in (
-                                "list",
-                                "dict",
-                            ):
-                                native = (
-                                    elt
-                                    if isinstance(elt, (list, dict))
-                                    else self._maybe_unbox(elt)
-                                )
-                                bound = self._bind_container_specialization(
-                                    native, elem_spec
-                                )
-                                if bound is not None and bound is not elt:
-                                    elements[i] = bound
-            return boxed
-        except Exception:
-            return value
-
-    @staticmethod
-    def _maybe_unbox(v):
-        """容器元素解箱（绑定面以原生值为操作面——box 幂等[已装箱原样
-        返回]，unbox 统一递归绑定的元素操作面）。"""
-        if hasattr(v, "to_native"):
-            try:
-                return v.to_native()
-            except Exception:
-                return v
-        return v
-
     def _execute_rust(
         self,
         artifact_dict: dict,
@@ -715,12 +632,14 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         else:
             for line in lines:
                 print(line)
-        # 最终状态镜像：执行真相 = Rust；Python 运行时上下文 = 状态容器
+        # 最终状态物化：执行真相 = Rust；Python 运行时上下文 = 状态容器
         # （get_variable/runtime_context 契约面——数据面源执行后可读）。
-        # declared_type = prepare 期符号声明类型（artifact 符号池经 prepare
-        # 加载）——运行时内省契约（declared_type 泛型身份保留）；可调用声明
-        # 跳过运行时类型检查（VM 同面：值 = 函数对象时直放行——镜像值 =
-        # 显示形态串，检查面不适用）。
+        # P2 typed 值通道：Rust 状态 = {kind, value} 类型标签值；StateMaterializer
+        # = 单一数据驱动转换表（kind → 对象模型），engine 零语义判断
+        # （审计 3.2 收敛——删 quoted 特判/容器特化复刻/函数代理/declared 白名单）。
+        # 写入路径按 kind 数据驱动：数据 kind → define_variable（VM 权威类型
+        # 检查面同构）；非数据 kind → materialize_variable（无检查面——函数/
+        # 显示形态值不适用运行时类型检查；旁路 E4 随函数值一等化删除）。
         if self.interpreter is not None and self.interpreter.runtime_context is not None:
             # 顶层符号 UID 面（artifact 符号池：scope 级 VARIABLE 符号——
             # 声明类型经 execution_context.resolve_type_from_symbol 解析，
@@ -737,66 +656,26 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     sym_uid_by_name[s.get("name")] = uid
             rc = self.interpreter.runtime_context
             ec = self.interpreter.execution_context
-            for name, value in state.items():
+            from core.runtime.kernels.materialize import StateMaterializer
+
+            materializer = StateMaterializer(
+                self.interpreter.registry,
+                self.interpreter,
+                kernel=kernel,
+                session_handle=_handle,
+            )
+            for name, typed in state.items():
                 sym_uid = sym_uid_by_name.get(name)
                 declared_type = (
                     ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
                 )
-                # quoted 保真物化（⑦ 状态契约：Rust Quoted 值 = 源串显示
-                # 形态——declared quoted 声明的值经 IbQuoted 物化[源串全
-                # 保真——repr 面单一权威]，运行时序列化/边界契约同面）
-                _decl_name = getattr(declared_type, "name", None) or ""
-                if (
-                    _decl_name.split("[", 1)[0].strip() == "quoted"
-                    and isinstance(value, str)
-                ):
-                    quoted_cls = self.interpreter.registry.get_class("quoted")
-                    if quoted_cls is not None:
-                        try:
-                            from core.runtime.objects.primitives.quoted import (
-                                IbQuoted,
-                            )
-
-                            value = IbQuoted(quoted_cls, source=value)
-                        except Exception:
-                            pass
-                # 双路径镜像（⑦ 状态契约，声明家族驱动）：
-                # - 数据家族声明（int/float/str/bool/any/list/dict/Optional
-                #   ——镜像值 = 真数据值）= define_variable（VM 权威运行时
-                #   类型检查面同构——语义错误集经同一 _check_type 发射）；
-                # - 非数据家族声明（vector/quoted/knowledge/tuple/函数/类
-                #   等——镜像值 = 显示形态串或保真度缺口）= materialize_
-                #   variable（符号物化——declared_type 内省契约保留，
-                #   类型检查面不适用）。
-                # 容器特化身份（Python VM 同面：list[int]/dict[str,int] 声明
-                # 的容器值对象 ib_class = 水化特化类——运行时特化身份/
-                # 可赋值性契约；registry 面解析[特化类经 prepare 期水化
-                # 注册]，非注册特化 = 保守基类值）
-                # 容器特化身份绑定（VM 同面——递归嵌套；registry 面解析）
-                value = self._bind_container_specialization(value, declared_type)
-                declared_name = getattr(declared_type, "name", None) or ""
-                declared_base = declared_name.split("[", 1)[0].strip()
-                # 函数声明 = 宿主可调用代理物化（⑦ host 桥接面：.call
-                # 薄包装语义经 Rust 会话调用——函数值宿主调用契约；
-                # 值形态 = 会话函数值[显示串仅作 repr 面]）
-                kind = (
-                    getattr(declared_type, "kind", None)
-                    if declared_type is not None
-                    else None
-                )
-                if kind in ("function", "bound_method", "callable_sig"):
-                    from core.runtime.kernels import RustFunctionProxy
-
-                    value = RustFunctionProxy(
-                        kernel, _handle, name, self.interpreter.registry
-                    )
-                if declared_base in (
-                    "int", "float", "str", "bool", "any", "list", "dict",
-                    "Optional",
-                ):
-                    rc.define_variable(name, value, declared_type=declared_type)
+                kind = typed.get("kind") if isinstance(typed, dict) else None
+                value = typed.get("value") if isinstance(typed, dict) else typed
+                materialized = materializer.materialize(kind, value, declared_type)
+                if kind in ("int", "float", "str", "bool", "none", "list", "dict"):
+                    rc.define_variable(name, materialized, declared_type=declared_type)
                 else:
-                    rc.materialize_variable(name, value, declared_type=declared_type, uid=sym_uid)
+                    rc.materialize_variable(name, materialized, declared_type=declared_type, uid=sym_uid)
         return True
 
     def set_variable(self, name: str, val: Any):

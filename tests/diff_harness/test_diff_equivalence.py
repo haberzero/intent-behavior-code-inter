@@ -354,7 +354,17 @@ class TestRustExecutionDataPlane:
             lines, state = rk._module.run_artifact_state(js, None, variables)
             return list(lines), dict(state)
 
-        # 1) 最终状态 vs Python 参考（无注入）
+        def unwrap(v):
+            """P2 typed 值深度解包（嵌套 {kind, value} → 原生数据形态）。"""
+            if isinstance(v, dict) and "kind" in v:
+                if v["kind"] == "list":
+                    return [unwrap(e) for e in v["value"]]
+                if v["kind"] == "dict":
+                    return {k: unwrap(val) for k, val in v["value"].items()}
+                return v["value"]
+            return v
+
+        # 1) 最终状态 vs Python 参考（无注入）——P2 typed 通道（解包后对比）
         code = 'x = 5\ny = "hi"\nz = [1, 2]\nd = {"k": 1}\nprint(x)\n'
         lines, state = rust_state(code)
         ref = {}
@@ -366,7 +376,8 @@ class TestRustExecutionDataPlane:
             v = rc.get_variable(name)
             ref[name] = v.payload if v is not None else None
         assert lines == py_lines, f"状态面数据面差分：{lines} != {py_lines}"
-        assert state == ref, f"状态面最终状态差分：{state} != {ref}"
+        typed_ref = {k: unwrap(v) for k, v in state.items()}
+        assert typed_ref == ref, f"状态面最终状态差分：{typed_ref} != {ref}"
 
         # 2) 初始变量注入（数据面自洽 + 状态回读）
         lines2, state2 = rust_state(
@@ -374,21 +385,24 @@ class TestRustExecutionDataPlane:
             {"a": 10, "b": [7, 8], "c": {"k": "v"}},
         )
         assert lines2 == ["11", "7", "v"], f"注入数据面差分：{lines2}"
-        assert state2["a"] == 10 and state2["b"] == [7, 8] and state2["c"] == {"k": "v"}
+        assert unwrap(state2["a"]) == 10 and unwrap(state2["b"]) == [7, 8]
+        assert unwrap(state2["c"]) == {"k": "v"}
 
-        # 3) 函数值 = 显示形态字符串（非数据值 repr 契约）+ 声明面状态
+        # 3) 函数值 = typed 通道（kind=function，签名描述——非 repr 显示串降级）
         lines3, state3 = rust_state(
             'func f(int a) -> int:\n    return a + 1\nx = f(41)\nint y = 2\nprint(x)\n'
         )
         assert lines3 == ["42"]
-        assert state3["x"] == 42 and state3["y"] == 2
-        assert isinstance(state3["f"], str), f"函数值状态 = 显示形态：{state3['f']!r}"
+        assert unwrap(state3["x"]) == 42 and unwrap(state3["y"]) == 2
+        assert state3["f"]["kind"] == "function", f"函数值状态 = typed：{state3['f']!r}"
+        assert state3["f"]["value"]["name"] == "f"
+        assert state3["f"]["value"]["param_types"] == ["int"]
 
         # 4) 异常变量全局绑定入状态（try 后 e 可见）
         lines4, state4 = rust_state(
             'try:\n    raise 5\nexcept int as e:\n    print("caught")\nprint(e)\n'
         )
-        assert state4["e"] == 5, f"异常变量状态：{state4}"
+        assert unwrap(state4["e"]) == 5, f"异常变量状态：{state4}"
 
     def test_rust_routing_decision(self):
         """⑦ 切换门面分区路由判定（artifact_is_rust_executable）：artifact

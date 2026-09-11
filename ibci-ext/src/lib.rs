@@ -627,7 +627,7 @@ fn open_session(
     let state: Vec<(String, interpreter::IbValue)> = env.borrow().snapshot_vars();
     let state_json: Vec<(String, serde_json::Value)> = state
         .into_iter()
-        .map(|(k, v)| (k, interpreter::ibvalue_to_json(&v)))
+        .map(|(k, v)| (k, interpreter::ibvalue_to_typed_json(&v)))
         .collect();
     let session = Box::new(SessionState { env });
     let ptr = Box::into_raw(session);
@@ -805,7 +805,7 @@ fn run_artifact_state(
                 .map_err(errors::ErrorPayload::from_thrown)?;
             let state_json: Vec<(String, serde_json::Value)> = state
                 .into_iter()
-                .map(|(k, v)| (k, interpreter::ibvalue_to_json(&v)))
+                .map(|(k, v)| (k, interpreter::ibvalue_to_typed_json(&v)))
                 .collect();
             Ok((output, state_json))
             })

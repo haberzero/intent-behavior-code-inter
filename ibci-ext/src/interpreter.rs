@@ -354,6 +354,57 @@ pub fn intrinsic_names() -> Vec<&'static str> {
 /// bool/null/list/dict]；非数据值[Function/MetaFn/Knowledge/Quoted/Error/
 /// Vector/Host] = 显示形态字符串[repr 契约]——数据面源最终状态无 Host
 /// 值；初始 Host 残差值回导 = "<host>" 标记字符串）。
+/// 值 → typed JSON（P2 协议——架构 v2 R0 §三）：每值 = {kind, value} 带类型
+/// 标签跨边界（int/float/str/bool/none/list/dict/quoted/meta/vector/knowledge/
+/// function/error/host），替代"非数据值 = repr 显示形态串"降级（审计 N1——
+/// 类型信息显式携带，Python 侧按 kind 物化，零猜测）。
+pub(crate) fn ibvalue_to_typed_json(v: &IbValue) -> serde_json::Value {
+    let (kind, value) = match v {
+        IbValue::Int(i) => ("int", serde_json::json!(*i)),
+        IbValue::Float(f) => ("float", serde_json::json!(f)),
+        IbValue::Str(s) => ("str", serde_json::json!(s)),
+        IbValue::Bool(b) => ("bool", serde_json::json!(b)),
+        IbValue::None_ => ("none", serde_json::Value::Null),
+        IbValue::List(items) => (
+            "list",
+            serde_json::json!(
+                items.borrow().iter().map(ibvalue_to_typed_json).collect::<Vec<_>>()
+            ),
+        ),
+        IbValue::Dict(pairs) => {
+            let mut obj = serde_json::Map::new();
+            for (k, val) in pairs.borrow().iter() {
+                // JSON 对象键 = 字符串：str 键原生，其余键 = 显示形态
+                let key = match k {
+                    IbValue::Str(s) => s.clone(),
+                    other => other.repr(),
+                };
+                obj.insert(key, ibvalue_to_typed_json(val));
+            }
+            ("dict", serde_json::Value::Object(obj))
+        }
+        IbValue::Quoted { source } => ("quoted", serde_json::json!(source)),
+        IbValue::MetaFn(n) => ("meta", serde_json::json!(n)),
+        IbValue::Knowledge(_) => ("knowledge", serde_json::Value::Null),
+        IbValue::Vector(vec) => ("vector", serde_json::json!(vec)),
+        IbValue::Function(f) => (
+            "function",
+            serde_json::json!({
+                "name": f.name,
+                "param_types": f.param_types,
+                "ret": f.ret,
+            }),
+        ),
+        IbValue::Error { class, message } => (
+            "error",
+            serde_json::json!({"class": class, "message": message}),
+        ),
+        IbValue::Host(_) => ("host", serde_json::Value::Null),
+    };
+    serde_json::json!({"kind": kind, "value": value})
+}
+
+/// 值 → JSON（会话调用结果面——WIP 会话 API 专用，E4 随会话删除）。
 pub(crate) fn ibvalue_to_json(v: &IbValue) -> serde_json::Value {
     match v {
         IbValue::Int(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
