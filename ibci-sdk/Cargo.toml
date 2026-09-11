@@ -1,0 +1,12 @@
+[package]
+name = "ibci-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "IBC-Inter 插件 SDK——外部 Rust 插件协议（架构 v2 R6 ④层）：C-ABI 值模型 + 注册 API。外部 Rust 经本 crate 编译为 cdylib 插件，由内核加载注册，不在内核核心。"
+
+[lib]
+name = "ibci_sdk"
+crate-type = ["lib"]
+
+[profile.release]
+opt-level = 3

@@ -549,6 +549,21 @@ _SPEC_NET = TypeDef(name="net", kind="module", provenance=Provenance.USER_DEFINE
     })
 
 
+_SPEC_PLUGINS = TypeDef(name="plugins", kind="module", provenance=Provenance.KERNEL_NATIVE,
+                          visibility=Visibility.IMPORT_GATED, members={
+    "load": MethodMemberSpec(name="load", kind="method", type_ref=TypeRef.of("int"),
+        param_types=[TypeRef.of("str")], return_type=TypeRef.of("int"),
+        param_descriptors=[
+            ParamDescriptor(name="path", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+        ]),
+    "call": MethodMemberSpec(name="call", kind="method", type_ref=TypeRef.of("any"),
+        param_types=[TypeRef.of("str"), TypeRef.of("any")], return_type=TypeRef.of("any"),
+        param_descriptors=[
+            ParamDescriptor(name="name", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("str")),
+            ParamDescriptor(name="args", kind="POSITIONAL_OR_KEYWORD", type_ref=TypeRef.of("any")),
+        ]),
+})
+
 _SPEC_COMPUTE = TypeDef(name="compute_engine", kind="module", provenance=Provenance.KERNEL_NATIVE,
                         visibility=Visibility.IMPORT_GATED, members={
     "register_engine": MethodMemberSpec(name="register_engine", kind="method", type_ref=TypeRef.of("void"),
@@ -579,6 +594,7 @@ BUILTIN_MODULE_SPECS: Dict[str, TypeDef] = {
     "net": _SPEC_NET,
     "world_model": _SPEC_WORLD_MODEL,
     "compute_engine": _SPEC_COMPUTE,
+    "plugins": _SPEC_PLUGINS,
 }
 
 
@@ -659,6 +675,14 @@ def register_builtin_modules(host_interface: "HostInterface") -> None:
         "compute_engine",
         ComputeLib(),
         metadata=BUILTIN_MODULE_SPECS["compute_engine"],
+    )
+
+    # plugins：Rust 插件网关（R6 ④层——外部 Rust 插件加载/调用，内核 GIL-free）
+    from core.runtime.modules.plugins_impl import PluginsLib
+    host_interface.register_module(
+        "plugins",
+        PluginsLib(),
+        metadata=BUILTIN_MODULE_SPECS["plugins"],
     )
 
 

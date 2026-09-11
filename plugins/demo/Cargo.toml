@@ -1,0 +1,15 @@
+[package]
+name = "ibci-plugin-demo"
+version = "0.1.0"
+edition = "2021"
+description = "IBC-Inter 示例 Rust 插件（④层）——演示 ibci-sdk 插件协议：外部 Rust 编译为 cdylib，由内核加载注册。"
+
+[lib]
+name = "ibci_plugin_demo"
+crate-type = ["cdylib"]
+
+[dependencies]
+ibci-sdk = { path = "../../ibci-sdk" }
+
+[profile.release]
+opt-level = 3

@@ -19,6 +19,7 @@
 mod deserializer;
 mod errors;
 mod interpreter;
+mod plugins;
 mod kb;
 mod intrinsic_symbols;
 mod lexer;
@@ -578,6 +579,69 @@ fn json_to_ibvalue(v: &serde_json::Value) -> interpreter::IbValue {
 }
 
 // --------------------------------------------------------------------------- //
+/// JSON 原生标量 → PluginValue（pyo3 边界传输；R6-1：实参 = 扁平标量数组）。
+fn json_to_plugin_scalar(v: &serde_json::Value) -> PyResult<ibci_sdk::PluginValue> {
+    use ibci_sdk::PluginValue;
+    Ok(match v {
+        serde_json::Value::Null => PluginValue::None_,
+        serde_json::Value::Bool(b) => PluginValue::Bool(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                PluginValue::Int(i)
+            } else {
+                PluginValue::Float(n.as_f64().unwrap_or(0.0))
+            }
+        }
+        // R6-1：嵌套数组/字符串实参 = 显式错误（值模型后续增量）
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "插件实参须为标量（int/float/bool/null）——嵌套容器后续增量",
+            ))
+        }
+    })
+}
+
+/// PluginValue（标量结果）→ JSON（pyo3 边界传输）。
+fn plugin_value_to_json(v: &ibci_sdk::PluginValue) -> serde_json::Value {
+    use ibci_sdk::PluginValue;
+    match v {
+        PluginValue::None_ => serde_json::Value::Null,
+        PluginValue::Bool(b) => serde_json::Value::Bool(*b),
+        PluginValue::Int(i) => serde_json::Value::from(*i),
+        PluginValue::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        PluginValue::Str(ptr, len) => {
+            // SAFETY: 内核构造保证有效（借用——结果面后续增量）
+            let s = unsafe { std::slice::from_raw_parts(*ptr, *len) };
+            serde_json::Value::String(String::from_utf8_lossy(s).into_owned())
+        }
+        PluginValue::List(..) => serde_json::Value::Null,
+    }
+}
+
+/// 加载外部 Rust 插件（cdylib，ibci-sdk 协议）——注册其函数入内核插件注册表。
+#[pyfunction]
+fn load_plugin(path: &str) -> PyResult<usize> {
+    plugins::load(path).map_err(PyRuntimeError::new_err)
+}
+
+/// 调用已注册插件函数（args_json = 扁平标量 JSON 数组 → 结果 JSON）。
+#[pyfunction]
+fn call_plugin(name: &str, args_json: &str) -> PyResult<String> {
+    let value: serde_json::Value = serde_json::from_str(args_json)
+        .map_err(|e| PyRuntimeError::new_err(format!("插件实参 JSON 解析失败: {e}")))?;
+    let arr = value.as_array().ok_or_else(|| {
+        PyRuntimeError::new_err("插件实参须为 JSON 数组")
+    })?;
+    let mut pv_args: Vec<ibci_sdk::PluginValue> = Vec::with_capacity(arr.len());
+    for item in arr {
+        pv_args.push(json_to_plugin_scalar(item)?);
+    }
+    let result = plugins::call(name, &pv_args).map_err(PyRuntimeError::new_err)?;
+    Ok(plugin_value_to_json(&result).to_string())
+}
+
 #[pyfunction]
 fn rust_intrinsic_names(py: Python<'_>) -> PyResult<Py<PyList>> {
     // 派生自 interpreter 内征分发表（INTRINSICS + EXCEPTION_CLASSES + meta
@@ -898,6 +962,8 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rust_intrinsic_names, m)?)?;
     m.add_function(wrap_pyfunction!(capability, m)?)?;
     m.add_function(wrap_pyfunction!(call_top_level_function, m)?)?;
+    m.add_function(wrap_pyfunction!(load_plugin, m)?)?;
+    m.add_function(wrap_pyfunction!(call_plugin, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
