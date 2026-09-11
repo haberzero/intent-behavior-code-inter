@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4305 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 154.16s，P9 全量 Rust 化第四批 增量 3e[错误面统一——异常传播机制]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4306 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 154.40s，P9 全量 Rust 化第四批 增量 3f[全 Rust 管线闭环]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -527,8 +527,14 @@
        <message>` 显示面] + try/except/else/finally 全语义[类可赋性匹配 +
        继承链 + 异常变量全局绑定 + finally signal 覆盖 + re-raise] + artifact
        面 IbTry/IbExceptHandler 全序列化 + e 符号绑定 + 多参 print 空格连接
-       修复；13 探针 + try 源 3 全等价][当前批次推进中]
-    + LLM 面 15 节点覆盖差[归 LLM 运行时移植批次] + Host 变体退役收尾
+       修复；13 探针 + try 源 3 全等价] ✅
+    → 第四批 增量 3f 全 Rust 管线闭环[rust_run_source：源 → Rust lexer/
+       parser → Rust artifact → Rust 反序列化 → Rust 执行——全程不消费
+       Python 前端[双内核输入面收敛证明面]；LLM 面 15 节点 = HostService
+       边界保留面裁定[非移植范围]；⑦ 切换门 = engine 内核选择面独立放行门
+       批次[status 提升 + run 入口 + LLM/意图边界行为验证]；34 语料 + 8
+       探针全管线等价][当前批次推进中]
+    + ⑦ 切换门批次[engine 内核选择面切换 + Host 变体退役收尾]
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

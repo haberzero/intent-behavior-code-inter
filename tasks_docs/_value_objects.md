@@ -210,3 +210,37 @@ Rust 解释器异常传播机制（3b 登记的跨切面错误面增量落地）
   无参 = 空行——Python print 语义实证）
 差分门：test_data_plane_exception_surface_snippets（13 探针全语义 + 未捕获面
 双侧报错）。
+
+## 增量 3f：全 Rust 管线闭环 + LLM 面边界裁定（2026-09-11 落地）
+
+### 全 Rust 管线（主线 ⑦ 安全证明门）
+
+`rust_run_source(source, bridge)` pyfunction：IBC 源 → Rust lexer/parser →
+Rust artifact 组装（assemble_artifact_json——full_artifact pyfunction 共享的
+单一权威源）→ Rust 反序列化 → Rust 解释器执行。**全程不消费 Python 前端**
+（消除"消费 Python 前端 JSON"输入边界——双内核输入面收敛为 Rust 单通道）。
+assemble_artifact_json 签名裁定 = `-> String`（实质不可失败：Rust parser
+非失败 + serde_json::to_string 对本 Value 形态[有限整数/字符串/结构]不
+报错——仅非有限浮点序列化报错，值域无浮点条目）。
+差分门：test_full_rust_pipeline_equivalence（34 语料 + 8 探针面[异常/声明/
+switch/循环+try 组合]数据面逐字节等价）。
+**⑦ 切换门登记（生产切换 = 独立批次）**：engine 内核选择面（kernel_info.
+status 提升 + run 入口激活 + LLM/意图面 HostService 边界行为验证）= 独立
+放行门——本增量仅完成安全证明面（管线等价），不改变生产行为（run 仍
+NotImplemented[双内核协议：无静默回退]）。
+
+### LLM 面 15 节点边界裁定（HostService 保留面——非移植范围）
+
+CPS 覆盖差 15 节点（IbCastExpr/IbRetry/IbIntentAnnotation/IbImplDef/
+IbProtocolDef/IbHostImport/IbBehaviorExpr/IbChannelExpr/IbAwaitExpr/
+IbYieldExpr/IbYieldFromExpr/IbFilteredExpr/IbSlotExpr/IbIntentStackOperation/
+IbWithOverlay）**裁定 = 不纳入 Rust 解释器移植范围**：
+- 主线目标明确"仅 LLM/意图/宿主 IO 面保留 Python 接口（HostService）"——
+  15 节点全部属 LLM/意图运行时面（协程/通道/行为/overlay 执行语义），其
+  语义宿主 = Python LLM 运行时（非纯 CPU 数据面）
+- 语料面（34）与全部差分探针零 LLM 节点——Rust 解释器对 LLM 源的执行
+  需求 = LLM 运行时面在 Python 侧执行（IbValue::Host 残差承载边界值）
+- 差分 harness 退场条件 = 数据面等价（已证）+ LLM 面边界行为契约
+  （HostService 接口面——归 ⑦ 切换门批次验证）
+登记收缩：CPS 覆盖差 15 = 边界保留面（非缺口）；Rust 解释器节点覆盖 =
+数据面全集（36 类）✅ 完整。

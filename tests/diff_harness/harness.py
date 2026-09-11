@@ -205,6 +205,18 @@ def rust_execution_data_plane(script: str, bridge=None) -> List[str]:
     return list(rk._module.run_artifact(js, bridge))
 
 
+def rust_execution_full_pipeline(script: str, bridge=None) -> List[str]:
+    """全 Rust 管线（主线 ⑦"全量转向 Rust"闭环证明面）：script → Rust
+    lexer/parser → Rust artifact 组装 → Rust 反序列化 → Rust 解释器执行。
+    全程不消费 Python 前端（对比 rust_execution_data_plane = Python 前端
+    artifact 输入——本函数证明 Rust 前端输入边界同样数据面等价）。.so 未构建
+    = 空列表（合法态）。"""
+    rk = load_rust_kernel()
+    if not rk.loaded or not hasattr(rk._module, "rust_run_source"):
+        return []
+    return list(rk._module.rust_run_source(script, bridge))
+
+
 @dataclass
 class DiffReport:
     """差分比对报告：每语料的 Python/Rust 数据面 + 等价判定 + 汇总。"""

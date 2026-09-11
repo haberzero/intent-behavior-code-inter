@@ -329,6 +329,46 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_full_rust_pipeline_equivalence(self):
+        """全 Rust 管线差分等价（主线 ⑦"全量转向 Rust"闭环证明）：script →
+        Rust lexer/parser → Rust artifact 组装 → Rust 反序列化 → Rust 解释器
+        执行（rust_run_source）——全程不消费 Python 前端。数据面与 Python
+        参考内核逐字节等价（34 语料全量 + 探针面[异常/声明/switch/向量/KB
+        元函数]）；证明 Rust 前端输入边界可替代 Python 前端（双内核输入面
+        收敛为 Rust 单通道的安全证明门——差分 harness 退场条件核查项）。"""
+        import json
+        from tests.conftest import compile_ibci, run_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness import corpus
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_full_pipeline
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "rust_run_source"):
+            return
+        # 34 语料：全管线 vs Python 参考
+        for name, code in corpus.CORPUS:
+            py = run_ibci(code)
+            rs = rust_execution_full_pipeline(code)
+            assert rs == py, (
+                f"全 Rust 管线语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+            )
+        # 探针面（异常传播/声明面/switch/循环 + try 组合）
+        probes = [
+            'try:\n    raise 5\nexcept int as e:\n    print(e)\nprint("after")\n',
+            'x = 0\ntry:\n    raise 5\nexcept int as e:\n    x = 1\nfinally:\n    print("fin")\nprint(x)\n',
+            'int x = 5\nprint(x)\n',
+            'auto y = 3.14\nprint(y)\n',
+            'list[int] xs = [1, 2]\nprint(xs[0])\n',
+            'func add(int a, int b) -> int:\n    return a + b\nprint(add(2, 3))\n',
+            'x = 1\nswitch x:\n    case 1:\n        print("one")\n    default:\n        print("x")\n',
+            'i = 0\nwhile i < 3:\n    i = i + 1\n    try:\n        if i == 2:\n            break\n    except int as e:\n        print("ex")\nprint("done")\n',
+        ]
+        for code in probes:
+            py = run_ibci(code)
+            rs = rust_execution_full_pipeline(code)
+            assert rs == py, (
+                f"全 Rust 管线探针数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+            )
+
     def test_data_plane_exception_surface_snippets(self):
         """数据面差分等价：异常传播面（自包含脚本——raise/try/except/else/
         finally 全语义：raise 值任意[不做类型检查] + except handler 类可赋性

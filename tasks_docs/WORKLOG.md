@@ -4823,6 +4823,28 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   **验证**：13 探针全对齐 + try 源 3 全等价 + 34 语料回归无损[异常机制 +
   多参 print 核心面] + 全 harness 47 passed + smoke 832 passed + 全量 pytest
   零回归（放行门实跑）。
+- **P9 全量 Rust 化第四批 增量 3f（全 Rust 管线闭环 + LLM 面边界裁定，
+  2026-09-11，本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：
+  **① 全 Rust 管线（主线 ⑦ 安全证明门）**：`rust_run_source(source, bridge)`
+  pyfunction——IBC 源 → Rust lexer/parser → Rust artifact 组装
+  （assemble_artifact_json）→ Rust 反序列化 → Rust 解释器执行；全程不消费
+  Python 前端（消除"消费 Python 前端 JSON"输入边界——双内核输入面收敛为 Rust
+  单通道的证明面）。assemble_artifact_json 从 full_artifact pyfunction 体抽出
+  为共享权威源（签名裁定 `-> String`：Rust parser 非失败 + serde_json 对本
+  Value 形态实质不可失败[仅非有限浮点报错——值域无浮点条目]）。
+  **② LLM 面 15 节点边界裁定**：CPS 覆盖差 15 节点（IbCastExpr/IbRetry/
+  IbIntentAnnotation/IbImplDef/IbProtocolDef/IbHostImport/IbBehaviorExpr/
+  IbChannelExpr/IbAwaitExpr/IbYieldExpr/IbYieldFromExpr/IbFilteredExpr/
+  IbSlotExpr/IbIntentStackOperation/IbWithOverlay）= HostService 边界保留面
+  （非移植范围）——主线目标"仅 LLM/意图/宿主 IO 面保留 Python 接口"裁定；
+  语料 + 全部差分探针零 LLM 节点；Rust 解释器数据面节点覆盖 = 全集（36 类）
+  完整。**③ ⑦ 切换门登记**：engine 内核选择面切换（kernel_info.status 提升 +
+  run 入口激活 + LLM/意图面 HostService 边界行为验证）= 独立放行门批次——
+  本增量仅证明管线安全，不改变生产行为（run 仍 NotImplemented[双内核协议]）。
+  **差分门**：test_full_rust_pipeline_equivalence 新增（34 语料 + 8 探针面
+  数据面逐字节等价——全管线 vs Python 参考）。
+  **验证**：34/34 语料 + 8/8 探针全管线等价 + 全 harness 48 passed + smoke 832
+  passed + 全量 pytest 零回归（放行门实跑）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

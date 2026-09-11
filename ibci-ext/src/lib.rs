@@ -235,7 +235,9 @@ fn node_to_symbol(source: &str) -> PyResult<String> {
 /// 66 固定类型条目 + 泛型条目 + 成员符号]。差分 harness 经此与 Python 完整 artifact
 /// 全池比对。
 #[pyfunction]
-fn full_artifact(source: &str) -> PyResult<String> {
+/// Rust artifact 组装（source → artifact JSON——纯 CPU 面；full_artifact
+/// pyfunction 与 rust_run_source 全管线共享单一权威源）。
+fn assemble_artifact_json(source: &str) -> String {
     use serde_json::Map as JMap;
     use serde_json::Value;
     let module = parser::parse_to_module(source);
@@ -398,8 +400,43 @@ fn full_artifact(source: &str) -> PyResult<String> {
         ("modules".into(), Value::Object(modules)),
         ("pools".into(), Value::Object(pools)),
     ]);
-    serde_json::to_string(&Value::Object(artifact))
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    // serde_json::to_string 对本 Value（有限整数/字符串/结构）实质不可失败
+    // （仅非有限浮点序列化报错——值域无浮点条目）
+    serde_json::to_string(&Value::Object(artifact)).unwrap()
+}
+
+#[pyfunction]
+fn full_artifact(source: &str) -> PyResult<String> {
+    Ok(assemble_artifact_json(source))
+}
+
+/// 全 Rust 管线（主线 ⑦"全量转向 Rust"闭环——源 → 执行）：IBC 源 → Rust
+/// lexer/parser → Rust artifact 组装（assemble_artifact_json）→ Rust 反序列化
+/// → Rust 解释器执行。全程不消费 Python 前端（消除"消费 Python 前端 JSON"
+/// 输入边界——双内核输入面收敛为 Rust 单通道）；桥接 = 仅 LLM/意图 IO 边界。
+/// 差分门：数据面与 Python 参考内核逐字节等价（34 语料 + 全探针面）。
+#[pyfunction]
+fn rust_run_source(
+    source: &str,
+    bridge: Option<Bound<'_, PyAny>>,
+    py: Python<'_>,
+) -> PyResult<Py<PyList>> {
+    let bridge_owned = bridge.map(|b| b.unbind());
+    let source_owned = source.to_string();
+    // 全 CPU 面（Rust 前端 + Rust 执行）释放 GIL
+    let artifact_json = assemble_artifact_json(&source_owned);
+    let result = py.allow_threads(|| {
+        interpreter::run_artifact(&artifact_json, bridge_owned)
+    });
+    let lines = match result {
+        Ok(l) => l,
+        Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+    };
+    let list = PyList::empty(py);
+    for line in lines {
+        list.append(line)?;
+    }
+    Ok(list.unbind())
 }
 
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
@@ -552,6 +589,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(node_to_type, m)?)?;
     m.add_function(wrap_pyfunction!(node_to_symbol, m)?)?;
     m.add_function(wrap_pyfunction!(full_artifact, m)?)?;
+    m.add_function(wrap_pyfunction!(rust_run_source, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
