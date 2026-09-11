@@ -44,7 +44,7 @@
 - **R3-C8**：test_narrow_model_type.py → 宿主层 12 断言（bind_artifact 语言路径 + artifact 夹具）；内部/⑦ 删除 8——白盒文件删除。
 - **R3-C9**：clone_ref/deep_clone 内部断言重构——test_deep_clone_behavior.py（新，3 断言[list/dict 类型保留+独立]）+ file_handle 原位可观察化（deepcopy 句柄）；generic_value_identity/storage_model_dispatch 的 deep_clone 内部断言删除（契约承接）。
 - **已归层无动作**：file_handle/media_file_handle/overlay_concurrency/pre_eval_fallback（宿主层）/ protocol_dispatch_contract/member_single_authority/serialization/run_result_type/storage_model_dispatch（契约层）——保留原文件仅归层。
-- **剩余工作项**：optional_value_model（30 测试——identity 2 例 = 打破清单 #2 待重设计）/ world_model_kb（36 测试——大件，kb 治理 GAP 一并裁决）/ narrow_model（宿主层 + artifact 夹具）/ file_handle·generic_value_identity·storage_model_dispatch（clone_ref 内部断言重构）+ cargo test 内核层组建。
+- **全部完成（C1-C9）**：21 强白盒文件处置完毕（迁移行为/宿主层 + 内部/⑦ 删除，契约逐项承接）；**cargo test 内核层组建**（scripts/test_rust.sh——ibci-sdk 2 + ibci-ext 6 内核内部层单测[TensorValue/ErrorKind/错误码通道/PluginValue]）。
 
 ### C1 切片（原记录）
 

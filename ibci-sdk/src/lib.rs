@@ -137,3 +137,34 @@ macro_rules! register_plugin {
         }
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plugin_value_int_float_bool_accessors() {
+        assert_eq!(PluginValue::Int(42).as_int(), Some(42));
+        assert_eq!(PluginValue::Float(1.5).as_float(), Some(1.5));
+        assert_eq!(PluginValue::Bool(true).as_bool(), Some(true));
+        assert_eq!(PluginValue::None_.as_int(), None);
+        assert_eq!(PluginValue::Int(1).as_float(), None);
+    }
+
+    #[test]
+    fn plugin_value_borrowed_str_and_list() {
+        let s = b"hello";
+        let v = PluginValue::Str(s.as_ptr(), s.len());
+        assert_eq!(v.as_str(), Some("hello"));
+        let items = [PluginValue::Int(1), PluginValue::Int(2)];
+        let l = PluginValue::List(items.as_ptr(), items.len());
+        let slice = l.as_list().unwrap();
+        assert_eq!(slice.len(), 2);
+        assert_eq!(slice[1].as_int(), Some(2));
+        // 越界守卫
+        let bad = PluginValue::List(std::ptr::null(), 5);
+        assert!(bad.as_list().is_none());
+        let bad_str = PluginValue::Str(std::ptr::null(), 5);
+        assert!(bad_str.as_str().is_none());
+    }
+}

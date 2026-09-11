@@ -2825,3 +2825,65 @@ pub fn run_artifact(
     };
     interp.run_module(&module).map_err(crate::errors::ErrorPayload::from_thrown)
 }
+
+#[cfg(test)]
+mod kernel_tests {
+    use super::*;
+
+    #[test]
+    fn tensor_from_1d_shape_and_data() {
+        let t = TensorValue::from_1d(vec![1.0, 2.0, 3.0]);
+        assert_eq!(t.shape, vec![3]);
+        assert_eq!(t.is_1d(), true);
+        assert_eq!(t.to_1d().unwrap(), &[1.0, 2.0, 3.0][..]);
+        assert_eq!(t.data.len(), 3);
+    }
+
+    #[test]
+    fn tensor_from_2d_rectangular() {
+        let t = TensorValue::from_2d(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        assert_eq!(t.shape, vec![2, 2]);
+        assert_eq!(t.data, vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(t.is_1d(), false);
+        assert_eq!(t.to_1d(), None);
+    }
+
+    #[test]
+    fn tensor_from_2d_rejects_ragged() {
+        assert!(TensorValue::from_2d(vec![vec![1.0, 2.0], vec![3.0]]).is_none());
+    }
+
+    #[test]
+    fn tensor_value_equality_shape_and_data() {
+        let a = TensorValue::from_1d(vec![1.0, 2.0]);
+        let b = TensorValue::from_1d(vec![1.0, 2.0]);
+        let c = TensorValue::from_1d(vec![1.0, 3.0]);
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        // 值语义相等 = shape + data 全等（同数据不同 shape 不相等）
+        let d2 = TensorValue::from_2d(vec![vec![1.0, 2.0]]).unwrap();
+        assert_ne!(a, d2);
+    }
+
+    #[test]
+    fn error_kind_class_name_mapping() {
+        assert_eq!(ErrorKind::TypeError.class_name(), "TypeError");
+        assert_eq!(ErrorKind::ZeroDivisionError.class_name(), "ZeroDivisionError");
+        assert_eq!(ErrorKind::AttributeError.class_name(), "AttributeError");
+    }
+
+    #[test]
+    fn runtime_error_coded_carries_semantic_code() {
+        let t = runtime_error_coded(ErrorKind::ValueError, "msg", Some("KNW_TEST"));
+        assert_eq!(t.code.as_deref(), Some("KNW_TEST"));
+        let plain = runtime_error(ErrorKind::TypeError, "msg");
+        assert_eq!(plain.code, None);
+        match &t.value {
+            IbValue::Error { class, message } => {
+                assert_eq!(class, "ValueError");
+                assert_eq!(message, "msg");
+            }
+            other => panic!("expected Error value, got {:?}", other),
+        }
+    }
+}
