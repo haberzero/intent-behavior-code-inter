@@ -44,6 +44,9 @@ pub enum IbValue {
     /// Rust 原生 KB 值（knowledge() 返回——世界模型知识图谱执行面；治理词表 +
     /// append-only 事实日志 + active 索引，方法经 kb::dispatch 原生分发）。
     Knowledge(Rc<RefCell<KbState>>),
+    /// vector 值（词嵌入向量——不可变 float 元素面；值语义相等；显示面 =
+    /// 截断摘要 vector[<dim>](前 8 维 %.6g, ...)——同 __to_prompt__）。
+    Vector(Vec<f64>),
     /// 宿主对象（Python 对象引用——host service 桥接委托面）。
     Host(Py<PyAny>),
 }
@@ -65,6 +68,7 @@ impl Clone for IbValue {
             IbValue::MetaFn(n) => IbValue::MetaFn(*n),
             // 共享可变容器（同 List/Dict——Rc clone = 共享引用）
             IbValue::Knowledge(k) => IbValue::Knowledge(k.clone()),
+            IbValue::Vector(v) => IbValue::Vector(v.clone()),
             IbValue::Host(h) => {
                 // clone_ref 需 GIL（执行期 GIL 已持有，with_gil 可重入）
                 let cloned = Python::with_gil(|py| h.clone_ref(py));
@@ -85,6 +89,7 @@ impl std::fmt::Debug for IbValue {
             IbValue::Quoted { source } => write!(f, "Quoted({source:?})"),
             IbValue::MetaFn(n) => write!(f, "MetaFn({n:?})"),
             IbValue::Knowledge(_) => write!(f, "Knowledge(..)"),
+            IbValue::Vector(v) => write!(f, "Vector({v:?})"),
             IbValue::List(_) => write!(f, "List(..)"),
             IbValue::Dict(_) => write!(f, "Dict(..)"),
             IbValue::Host(_) => write!(f, "Host(<py object>)"),
@@ -117,6 +122,8 @@ impl PartialEq for IbValue {
             (IbValue::Quoted { source: a }, IbValue::Quoted { source: b }) => a == b,
             // KB 对象相等 = 身份（共享引用——同宿主对象身份语义）
             (IbValue::Knowledge(a), IbValue::Knowledge(b)) => Rc::ptr_eq(a, b),
+            // vector 相等 = 元素逐位值语义（公理：payload 元组相等）
+            (IbValue::Vector(a), IbValue::Vector(b)) => a == b,
             (IbValue::Host(a), IbValue::Host(b)) => {
                 // 宿主对象身份相等（同一 Python 对象指针）
                 a.as_ptr() == b.as_ptr()
@@ -164,6 +171,9 @@ impl IbValue {
             IbValue::Quoted { source } => source.clone(),
             IbValue::MetaFn(n) => format!("meta.{n}"),
             IbValue::Knowledge(_) => "<knowledge>".into(),
+            // vector 显示面 = 截断摘要（dim + 前 8 维 %.6g——同 __to_prompt__；
+            // 全量维度进提示词 = 污染风险，截断即纪律）
+            IbValue::Vector(v) => vector_repr(v),
             IbValue::Host(_) => "<host>".into(),
         }
     }
@@ -179,6 +189,7 @@ impl IbValue {
             IbValue::Quoted { .. } => true,
             IbValue::MetaFn(_) => true,
             IbValue::Knowledge(_) => true,
+            IbValue::Vector(v) => !v.is_empty(),
             IbValue::Host(_) => true,
         }
     }
@@ -187,6 +198,78 @@ impl IbValue {
             IbValue::Int(i) => Some((*i as f64, true)),
             IbValue::Float(f) => Some((*f, false)),
             _ => None,
+        }
+    }
+}
+
+/// vector 显示面 = 截断摘要（dim + 前 8 维 %.6g——同 __to_prompt__/_string_
+/// repr：全量维度进提示词 = 污染风险，截断即纪律）。
+fn vector_repr(v: &[f64]) -> String {
+    let head: Vec<String> = v.iter().take(8).map(|x| format_g6(*x)).collect();
+    let ellipsis = if v.len() > 8 { ", ..." } else { "" };
+    format!("vector[{}]({}{})", v.len(), head.join(", "), ellipsis)
+}
+
+/// Python `%.6g` 等价（C %g 语义：6 位有效数字；-4 ≤ 指数 < 6 用定点 +
+/// 尾零截断，否则科学计数法[e±两位指数]）——vector 显示面/摘要渲染单一
+/// 权威源（截断摘要即纪律）。非有限值 = Rust Display（语料面不可达——
+/// vector 构造期封死 NaN/Inf）。
+fn format_g6(x: f64) -> String {
+    if !x.is_finite() {
+        return format!("{}", x);
+    }
+    if x == 0.0 {
+        return "0".to_string();
+    }
+    let s = format!("{:.5e}", x);
+    let (mant, exp_s) = s.split_once('e').unwrap();
+    let exp: i32 = exp_s.parse().unwrap();
+    let neg = mant.starts_with('-');
+    let mant = mant.trim_start_matches('-');
+    let digits: String = mant.chars().filter(|c| *c != '.').collect();
+    if exp < -4 || exp >= 6 {
+        // 科学计数法：d.ddddd（尾零截断） e±<两位指数>
+        let (ip, fp) = digits.split_at(1);
+        let fp = fp.trim_end_matches('0');
+        let mant_out = if fp.is_empty() {
+            ip.to_string()
+        } else {
+            format!("{}.{}", ip, fp)
+        };
+        let exp_str = if exp >= 0 {
+            format!("e+{exp:02}")
+        } else {
+            format!("e-{:-02}", -exp)
+        };
+        if neg {
+            format!("-{}{}", mant_out, exp_str)
+        } else {
+            format!("{}{}", mant_out, exp_str)
+        }
+    } else {
+        // 定点：按指数置小数点 + 尾零截断
+        let (int_part, frac_part) = if exp >= 0 {
+            let n = (exp + 1) as usize;
+            if n >= digits.len() {
+                (digits.clone(), "0".repeat(n - digits.len()))
+            } else {
+                (digits[..n].to_string(), digits[n..].to_string())
+            }
+        } else {
+            let n = (-exp) as usize;
+            ("0".to_string(), format!("{}{}", "0".repeat(n - 1), digits))
+        };
+        let frac = frac_part.trim_end_matches('0').to_string();
+        if frac.is_empty() {
+            if neg {
+                format!("-{}", int_part)
+            } else {
+                int_part
+            }
+        } else if neg {
+            format!("-{}.{}", int_part, frac)
+        } else {
+            format!("{}.{}", int_part, frac)
         }
     }
 }
@@ -836,6 +919,23 @@ impl Interpreter {
                 // KB 宿主服务——经桥接创建 Python knowledge 对象（单点真理）
                 self.call_knowledge()
             }
+            "vec" => {
+                // vector 值构造（元素面校验：数值元素，非数值 = None_[错误面]）
+                match args.first() {
+                    Some(IbValue::List(items)) => {
+                        let mut elems: Vec<f64> = Vec::new();
+                        for x in items.borrow().iter() {
+                            match x {
+                                IbValue::Int(i) => elems.push(*i as f64),
+                                IbValue::Float(f) => elems.push(*f),
+                                _ => return IbValue::None_,
+                            }
+                        }
+                        IbValue::Vector(elems)
+                    }
+                    _ => IbValue::None_,
+                }
+            }
             _ => {
                 if let Some(f) = env.borrow().get_function(name) {
                     // 全局环境（作用域链根——使函数体可访问全局函数[递归]）
@@ -936,6 +1036,68 @@ impl Interpreter {
         match obj {
             // Rust 原生 KB 值——方法面经 kb::dispatch（治理门 + 确定性序）
             IbValue::Knowledge(kb) => crate::kb::dispatch(kb, method, &args),
+            // vector 值——方法面（dim/dot/norm/cosine/scale/add/sub/cast_to；
+            // 修改操作返回新 vector，不可变值语义）
+            IbValue::Vector(v) => match method {
+                "dim" => IbValue::Int(v.len() as i64),
+                "dot" => {
+                    let [IbValue::Vector(o)] = args.as_slice() else {
+                        return IbValue::None_;
+                    };
+                    if v.len() != o.len() {
+                        return IbValue::None_;
+                    }
+                    IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum())
+                }
+                "norm" => {
+                    IbValue::Float(v.iter().map(|x| x * x).sum::<f64>().sqrt())
+                }
+                "cosine" => {
+                    let [IbValue::Vector(o)] = args.as_slice() else {
+                        return IbValue::None_;
+                    };
+                    if v.len() != o.len() {
+                        return IbValue::None_;
+                    }
+                    let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+                    let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
+                    if na == 0.0 || nb == 0.0 {
+                        // 零范数 = 余弦未定义（fail-fast 面——错误面登记 = None_）
+                        return IbValue::None_;
+                    }
+                    IbValue::Float(
+                        v.iter().zip(o.iter()).map(|(a, b)| a * b).sum::<f64>()
+                            / (na * nb),
+                    )
+                }
+                "scale" => match args.first() {
+                    Some(IbValue::Int(k)) => IbValue::Vector(
+                        v.iter().map(|x| x * (*k as f64)).collect(),
+                    ),
+                    Some(IbValue::Float(k)) => {
+                        IbValue::Vector(v.iter().map(|x| x * k).collect())
+                    }
+                    _ => IbValue::None_,
+                },
+                "add" | "sub" => {
+                    let [IbValue::Vector(o)] = args.as_slice() else {
+                        return IbValue::None_;
+                    };
+                    if v.len() != o.len() {
+                        return IbValue::None_;
+                    }
+                    let out: Vec<f64> = if method == "add" {
+                        v.iter().zip(o.iter()).map(|(a, b)| a + b).collect()
+                    } else {
+                        v.iter().zip(o.iter()).map(|(a, b)| a - b).collect()
+                    };
+                    IbValue::Vector(out)
+                }
+                // 注：cast_to 目标 = 类对象（`v.cast_to(str)` 的 str 经 VM 类型名
+                // 解析为 class——值域无类对象面，执行面不可达 = 3b 类型面职责；
+                // 用户调用 cast_to("str") = 非法 IBCI[Python 参考 fail-fast 实证]
+                _ => IbValue::None_,
+            },
             // 宿主对象——委托 Python 对象方法（host service 桥接）
             IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
             IbValue::List(l) => match method {
@@ -1087,8 +1249,9 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
         }
         // quoted 值跨边界 = 完整源串（同 to_native 边界拆箱契约）
         IbValue::Quoted { source } => source.clone().into_py(py),
-        // 原生 meta 函数引用 / 原生 KB 值不经桥接（去 Host 化后桥接面不含）
-        IbValue::MetaFn(_) | IbValue::Knowledge(_) => py.None(),
+        // 原生 meta 函数引用 / 原生 KB 值 / vector 值不经桥接（vector 是值语义
+        // 一等类型，不可拆箱为原生值——同 to_native 显式违约契约）
+        IbValue::MetaFn(_) | IbValue::Knowledge(_) | IbValue::Vector(_) => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
 }
@@ -1208,6 +1371,12 @@ fn subscript_get(base: &IbValue, key: &IbValue) -> IbValue {
             .chars()
             .nth(*i as usize)
             .map(|c| IbValue::Str(c.to_string()))
+            .unwrap_or(IbValue::None_),
+        // vector 下标：元素 float（同 __getitem__）
+        (IbValue::Vector(v), IbValue::Int(i)) => v
+            .get(*i as usize)
+            .copied()
+            .map(IbValue::Float)
             .unwrap_or(IbValue::None_),
         _ => IbValue::None_,
     }

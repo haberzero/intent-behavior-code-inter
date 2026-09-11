@@ -329,6 +329,58 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_data_plane_vector_surface_snippets(self):
+        """数据面差分等价：vector 值 + KB 嵌入面合成探针（自包含脚本——去
+        Host 化后全原生无桥接：vector 值[截断摘要显示面 dim+前 8 维 %.6g] /
+        dim/dot/norm/cosine/scale/add/sub/下标 + KB 嵌入面[set_embedding 维度
+        全一致治理门 / embedding / has_embedding / embedding_dim /
+        embed_search 暴力 cosine + (−score, word) 确定性排序 + top-k 截断]；
+        浮点显示 = 最短往返 repr 双侧同构；%.6g = C %g 语义[科学/定点/尾零
+        截断全形态探针覆盖]）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        probe = (
+            'v = vec([1.0, 2.0, 3.0])\n'
+            'print(v)\n'
+            'print(v.dim())\n'
+            'w = vec([4.0, 5.0, 6.0])\n'
+            'print(v.dot(w))\n'
+            'print(v.norm())\n'
+            'print(v.cosine(w))\n'
+            'print(v.scale(2.5))\n'
+            'print(v.add(w))\n'
+            'print(v.sub(w))\n'
+            'print(v[0])\n'
+            'big = vec([1234567.0, 0.0000123456, 1e20, -0.000123456, 2.5, 31415926.5, 0.1, 0.2, 0.3])\n'
+            'print(big)\n'
+            'kb = knowledge()\n'
+            'kb.register_word("a", "A", False, [], {})\n'
+            'kb.register_word("b", "B", False, [], {})\n'
+            'kb.register_word("c", "C", False, [], {})\n'
+            'kb.set_embedding("a", v)\n'
+            'kb.set_embedding("b", vec([2.0, 1.0, 0.5]))\n'
+            'print(kb.has_embedding("a"))\n'
+            'print(kb.has_embedding("c"))\n'
+            'print(kb.embedding_dim())\n'
+            'print(kb.embedding("a"))\n'
+            'print(kb.embed_search(w, 2))\n'
+            'print(kb.embed_search(w, 5))\n'
+            'print(kb.embedding("b"))\n'
+        )
+        py = run_ibci(probe)
+        rs = rust_execution_data_plane(probe)  # 无桥接——原生 vector + KB 嵌入面
+        assert rs == py, (
+            f"vector/KB 嵌入面合成探针数据面差分不等价（{len(py)} vs {len(rs)} 行）：\n"
+            + "\n".join(
+                f"  行{i} py: {a[:180]}\n        rs: {b[:180]}"
+                for i, (a, b) in enumerate(zip(py, rs))
+                if a != b
+            )
+        )
+
     def test_data_plane_kb_surface_snippets(self):
         """数据面差分等价：KB 查询/审计/对比/展开/传递面合成探针（自包含脚本——
         语料集 3 条只覆盖 register/add_fact/exists/lookup_pair/contradicts/worlds/

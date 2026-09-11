@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4300 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 141.63s，P9 全量 Rust 化第四批 增量 2b[KB 查询/审计/对比/展开/传递面]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4301 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 141.36s，P9 全量 Rust 化第四批 增量 2c[vector 值 + KB 嵌入面]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -497,10 +497,15 @@
        world 查询[未注册 None] + get_fact/facts/fact_len/all_in_world/source/
        history_fact + amend_fact[o 版本化 + by_triple 切换] + retract[墓碑 +
        active 索引移除] + same_word/compare/expand[纯派生] + transitive[BFS 闭包
-       确定性发现序]；25 行合成探针无桥接全对齐一次通过；41 成员面 22 已载][当前
-       批次推进中]
-    + 增量 2c 向量面[embedding 5 + 向量运算 + vec intrinsic；embedding 端点 =
-      Host IO 边界] + 增量 3 Host 变体退役 + CPS 同构
+       确定性发现序]；25 行合成探针无桥接全对齐一次通过；41 成员面 22 已载] ✅
+       确定性发现序]；25 行合成探针无桥接全对齐一次通过；41 成员面 22 已载] ✅
+    → 第四批 增量 2c vector 值 + KB 嵌入面[IbValue::Vector 不可变值[截断摘要
+       显示面 + format_g6 = Python %.6g 等价助手] + vec intrinsic + dim/dot/
+       norm/cosine/scale/add/sub/下标 + KB 嵌入面 5 方法[set_embedding 维度全
+       一致门 / embed_search 暴力 cosine 确定性排序]；22 行合成探针全对齐；
+       vector.cast_to 执行面不可达裁定[类对象面 = 类型面]；embedding 文本端点
+       = LLM IO 边界保留][当前批次推进中]
+    + 增量 3 Host 变体退役 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

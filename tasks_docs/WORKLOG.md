@@ -4643,6 +4643,41 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   零回归（141.63s，放行门实跑）。**KB 41 成员面进度**：词表 3 + 事实 4 + 查询
   9 + 审计 2 + 对比/展开 3 + 传递 1 = 22 方法原生；剩向量面[embedding 5 +
   向量运算] = 增量 2c。
+- **P9 全量 Rust 化第四批 增量 2c（值对象去 Host 化：vector 值 + KB 嵌入面，
+  2026-09-11，本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：
+  向量面全原生（41 成员面收官面——KB 全 41 成员面 = 22[2a+2b] + 5 嵌入面[2c] +
+  向量类型 10 成员[2c] 全载）。**实施**：
+  - **IbValue::Vector(Vec<f64>) 不可变值**：值语义相等（元素逐位）；显示面 =
+    截断摘要 `vector[<dim>](前 8 维 %.6g, ...)`（同 __to_prompt__/_string_repr
+    ——全量维度进提示词 = 污染风险，截断即纪律）；真值 = 非空。
+  - **format_g6 = Python `%.6g` 等价助手**（C %g 语义转录：6 位有效数字；
+    -4 ≤ 指数 < 6 = 定点 + 尾零截断，否则科学计数法[e±两位指数]）——vector
+    显示面单一权威源；非有限值 = Rust Display（vector 构造期封死 NaN/Inf——
+    公理契约，语料面不可达）。
+  - **vec intrinsic**（元素面数值校验：Int/Float 元素，非数值 = None_[错误面]）。
+  - **vector 方法面**（dim/dot/norm/cosine[零范数 fail-fast 面]/scale/add/sub——
+    修改操作返回新 vector[不可变值语义] + 维度一致门 + 下标元素 float）。
+  - **KB 嵌入面**（kb.rs +5 方法 + embeddings 存储[词 → float 向量，插入序]）：
+    set_embedding[治理门：词已注册 + 数值向量 + 维度全一致——首个嵌入定维度；
+    同词重设 = 替换] / embedding[未挂 = None_[fail-fast 面]] / has_embedding /
+    embedding_dim[全一致取任一] / embed_search[query 须 vector 值 + k 正整数；
+    暴力 cosine + 维度不符跳过 + (−score, word) 确定性排序[tie-break] + top-k
+    截断[k 超 = 全量]；返回原生结构 list of {word, score}]。
+  **裁定（vector.cast_to 执行面不可达）**：cast_to 目标 = 类对象（`v.cast_to(str)`
+  的 str 经 VM 类型名解析为 class 对象——Rust 值域无类对象面，执行面不可达 =
+  类型面[artifact]职责）；用户调用 `v.cast_to("str")` = 非法 IBCI（Python 参考
+  fail-fast 实证：AttributeError → InterpreterError）→ 执行面 dispatch 不含
+  cast_to（死代码红线——不承载不可达面）。**裁定（embedding 文本端点）**：
+  ai.embed 文本 → 向量 = LLM IO 边界保留（HostService 契约；语料面零依赖——
+  嵌入面语料 = 显式向量 set_embedding）。
+  **差分门**：test_data_plane_vector_surface_snippets 新增（22 行自包含合成探针
+  全对齐一次通过——%.6g 全形态[1.23457e+06 / 1.23456e-05 / 1e+20 /
+  -0.000123456 / 3.14159e+07 / 尾零截断] + 9 维截断摘要[...] + 浮点最短往返
+  repr[dot 32.0 / norm / cosine] + embed_search 排序 + top-k 截断）。
+  **验证**：合成探针 22 行全对齐 + KB 3 + quoted 4 + 2b 探针 25 行无桥接回归
+  无损 + 全 harness 43 passed + smoke 832 passed + 全量 pytest 零回归（放行门
+  实跑）。**值域封闭进度**：8 → 10 原生变体（+Quoted/MetaFn 增量 1、+
+  Knowledge/Vector 增量 2）；Host 残差 = 仅 LLM/意图 IO 边界消费。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

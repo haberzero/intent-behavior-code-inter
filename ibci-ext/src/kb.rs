@@ -73,6 +73,9 @@ pub struct KbState {
     pub by_pair: BTreeMap<(String, String), Vec<usize>>,
     /// active 倒排索引：(world, s, r, o) → 事实下标（去重门）
     pub by_triple: BTreeMap<(String, String, String, String), usize>,
+    /// 嵌入面（词 → float 向量；插入序——内容信号非判定；维度全一致门由
+    /// set_embedding 治理门保证）
+    pub embeddings: Vec<(String, Vec<f64>)>,
     /// 事实序号（前置自增——首事实 id = "1"）
     pub seq: i64,
 }
@@ -86,6 +89,7 @@ impl KbState {
             facts: Vec::new(),
             by_pair: BTreeMap::new(),
             by_triple: BTreeMap::new(),
+            embeddings: Vec::new(),
             seq: 0,
         }
     }
@@ -643,6 +647,101 @@ pub fn dispatch(
         // ------------------------------------------------------------------ //
         // 对比/展开面（纯派生不存展开态——确定性复现）
         // ------------------------------------------------------------------ //
+        // ------------------------------------------------------------------ //
+        // 向量面（词嵌入——内容信号非判定；维度全一致治理门）
+        // ------------------------------------------------------------------ //
+        "set_embedding" => {
+            // 挂/换嵌入：word 须已注册 + vec 须数值向量 + 维度与既有嵌入一致
+            // （首个嵌入定维度）
+            let [IbValue::Str(w), vec_arg] = args else {
+                return IbValue::None_;
+            };
+            let Some(elems) = numeric_vec(vec_arg) else {
+                return IbValue::None_;
+            };
+            let mut st = kb.borrow_mut();
+            if !find_name(&st.words, w) {
+                return IbValue::None_;
+            }
+            let dim = elems.len();
+            if st.embeddings.iter().any(|(_, e)| e.len() != dim) {
+                return IbValue::None_;
+            }
+            // 挂/换（同词重设 = 替换）
+            if let Some(slot) = st.embeddings.iter_mut().find(|(n, _)| n == w) {
+                slot.1 = elems;
+            } else {
+                st.embeddings.push((w.clone(), elems));
+            }
+            IbValue::None_
+        }
+        "embedding" => {
+            // 取词嵌入（未挂 = None_[fail-fast 面——错误面登记]）
+            let [IbValue::Str(w)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            if !find_name(&st.words, w) {
+                return IbValue::None_;
+            }
+            st.embeddings
+                .iter()
+                .find(|(n, _)| n == w)
+                .map(|(_, e)| IbValue::Vector(e.clone()))
+                .unwrap_or(IbValue::None_)
+        }
+        "has_embedding" => {
+            let [IbValue::Str(w)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            IbValue::Bool(st.embeddings.iter().any(|(n, _)| n == w))
+        }
+        "embedding_dim" => {
+            // 嵌入维度（嵌入面维度全一致，取任一即全维度；无嵌入 = None_）
+            let st = kb.borrow();
+            match st.embeddings.first() {
+                Some((_, e)) => IbValue::Int(e.len() as i64),
+                None => IbValue::None_,
+            }
+        }
+        "embed_search" => {
+            // 全嵌入词暴力 cosine 取前 k（排序键 (−score, word)——score 降序 +
+            // 平手按词名确定性 tie-break；k 超嵌入词数 = 返回全部）
+            let [IbValue::Vector(q), IbValue::Int(kk)] = args else {
+                return IbValue::None_;
+            };
+            if *kk < 1 {
+                return IbValue::None_;
+            }
+            let st = kb.borrow();
+            if st.embeddings.is_empty() {
+                return IbValue::None_;
+            }
+            let mut scored: Vec<(f64, String)> = st
+                .embeddings
+                .iter()
+                .filter(|(_, e)| e.len() == q.len()) // 维度不符 = 不可比（跳过）
+                .map(|(w, e)| (kb_cosine(q, e), w.clone()))
+                .collect();
+            scored.sort_by(|a, b| {
+                // (−score, word) 升序 = score 降序 + 词名升序
+                b.0.partial_cmp(&a.0)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a.1.cmp(&b.1))
+            });
+            let items: Vec<IbValue> = scored
+                .into_iter()
+                .take(*kk as usize)
+                .map(|(score, w)| {
+                    IbValue::dict_new(vec![
+                        (k("word"), IbValue::Str(w)),
+                        (k("score"), IbValue::Float(score)),
+                    ])
+                })
+                .collect();
+            IbValue::list_new(items)
+        }
         "same_word" => {
             // 词同一性：a == b 且均为已注册词（未注册 = false 非错误）
             let [IbValue::Str(a), IbValue::Str(b)] = args else {
@@ -785,4 +884,41 @@ fn w_entries_form(
 /// dict 键助手（局部闭包面——dispatch 各分支复用）。
 fn k(s: &str) -> IbValue {
     IbValue::Str(s.to_string())
+}
+
+/// 余弦相似度（KB 嵌入面内部——内容信号非判定；零范数 = -inf 由调用方
+/// fail-fast 面处理[同 Python KB._cosine 契约；mock 契约保证非零范数]）。
+fn kb_cosine(a: &[f64], b: &[f64]) -> f64 {
+    let mut dot = 0.0;
+    let mut na = 0.0;
+    let mut nb = 0.0;
+    for i in 0..a.len() {
+        dot += a[i] * b[i];
+        na += a[i] * a[i];
+        nb += b[i] * b[i];
+    }
+    let denom = (na.sqrt()) * (nb.sqrt());
+    if denom == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    dot / denom
+}
+
+/// 数值向量提取（vector 值或数值 List——set_embedding 参数面）。
+fn numeric_vec(v: &IbValue) -> Option<Vec<f64>> {
+    match v {
+        IbValue::Vector(e) => Some(e.clone()),
+        IbValue::List(items) => {
+            let mut out = Vec::new();
+            for x in items.borrow().iter() {
+                match x {
+                    IbValue::Int(i) => out.push(*i as f64),
+                    IbValue::Float(f) => out.push(*f),
+                    _ => return None,
+                }
+            }
+            (!out.is_empty()).then_some(out)
+        }
+        _ => None,
+    }
 }

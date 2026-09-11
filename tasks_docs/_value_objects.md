@@ -79,8 +79,21 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
      发现序 + via 中间链；非传递关系 = 空 list]。差分门：
      test_data_plane_kb_surface_snippets（25 行合成探针全对齐——语料集 3 条只
      覆盖基础面，合成探针 = 自包含脚本纪律）。
-   - **2c embedding + vector 运算面**（向量运算 = 纯数学原生；embedding 端点 =
-     Host IO 边界；vec intrinsic 顺带实现）。
+   - **2c embedding + vector 运算面 ✅[2026-09-11 落地]**：IbValue::Vector(Vec<f64>)
+     不可变值[值语义相等；显示面 = 截断摘要 vector[<dim>](前 8 维 %.6g, ...，
+     format_g6 = Python %.6g 等价助手[C %g 语义：6 位有效数字 + 科学/定点 +
+     尾零截断]] + vec intrinsic[元素面数值校验] + 方法面[dim/dot/norm/cosine[
+     零范数 fail-fast 面]/scale/add/sub 不可变返回新值/下标] + KB 嵌入面
+     [set_embedding[维度全一致治理门：首个嵌入定维度] / embedding /
+     has_embedding / embedding_dim / embed_search[暴力 cosine + (−score, word)
+     确定性排序 + top-k 截断 + 维度不符跳过]]。差分门：
+     test_data_plane_vector_surface_snippets（22 行合成探针全对齐——%.6g 全形态
+     [科学/定点/负指/尾零] + 浮点最短往返 repr + 排序 tie-break）。
+     **裁定**：vector.cast_to 目标 = 类对象（`v.cast_to(str)` 的 str 经 VM 类型
+     名解析为 class——值域无类对象面，执行面不可达 = 类型面职责；用户调用
+     cast_to("str") = 非法 IBCI[Python 参考 fail-fast 实证]）→ 执行面 dispatch
+     不含 cast_to（死代码红线）。embedding 文本端点（ai.embed）= LLM IO 边界
+     保留（HostService；语料面零依赖）。
    - 差分门：kb_world_vocab / kb_fact_lookup / kb_contradicts 语料数据面等价
      + KB 方法返回值跨内核比对。
 3. **增量 3：Host 变体退役**：

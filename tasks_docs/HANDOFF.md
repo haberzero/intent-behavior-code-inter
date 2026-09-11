@@ -133,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 quoted+meta 原生面 ✅ + 增量 2a KB 语料面原生 ✅ + 增量 2b KB 查询/审计/对比/传递面 ✅ → 增量 2c/3[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 quoted+meta 原生面 ✅ + 增量 2a/2b/2c KB 全 41 成员面 + vector 值原生 ✅ → 增量 3 Host 退役 + CPS[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -170,11 +170,15 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   已落地**[Quoted/MetaFn 变体 + quote 验证门[非空/语法/单表达式/自包含] + eval 隔离
   执行[fresh env + 值通道] + q.source 原生；quoted 4 语料无桥接数据面等价；错误面
   = 后续跨切面增量]；**增量 2a 已落地**[kb.rs KB 语料面 10 方法面原生——KB 3 语料
-  无桥接数据面等价，full_corpus 全原生无桥接化]；**增量 2b 已落地**[kb.rs +13
-  方法：查询/审计[amend/retract 事件链 + active 索引更新]/对比/展开/传递面——
-  25 行合成探针无桥接全对齐；41 成员面 22 已载]，下一位智能体 = 增量 2c[向量面：
-  embedding 5 + 向量运算 + vec intrinsic；embedding 端点 = Host IO 边界] / 增量 3
-  [Host 变体退役 + CPS 同构]]；
+  无桥接数据面等价，full_corpus 全原生无桥接化]；**增量 2b/2c 已落地**[2b：
+  kb.rs +13 方法查询/审计[amend/retract 事件链]/对比/展开/传递面——25 行合成
+  探针全对齐；2c：IbValue::Vector 不可变值[截断摘要显示面 + format_g6 = Python
+  %.6g 等价] + vec intrinsic + 向量运算 7 方法 + KB 嵌入面 5 方法[维度全一致
+  门 + embed_search 确定性排序]——22 行合成探针全对齐；vector.cast_to 执行面
+  不可达裁定[类对象面 = 类型面]；embedding 文本端点 = LLM IO 边界保留]，
+  下一位智能体 = 增量 3[Host 变体退役：import meta 死绑定清理 + 宿主桥接调用面
+  收敛[KB/quoted 已退役] + CPS 同构[tree-walking → CPS 分发表，覆盖差 31→53
+  收缩]]]；
   每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest
   可按需自由[2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由处理[重构
   质量原则优先]）**：
@@ -661,10 +665,10 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 2b[KB 查询/审计/
-  对比/展开/传递面]放行门实跑）**：
-  **4300 passed / 1 skipped / 141.63s / rc=0**（2026-09-11；= 增量 2a 基线 4299
-  + test_data_plane_kb_surface_snippets 1 例[25 行合成探针]；注：
+- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 2c[vector 值 + KB
+  嵌入面]放行门实跑）**：
+  **4301 passed / 1 skipped / 141.36s / rc=0**（2026-09-11；= 增量 2b 基线 4300
+  + test_data_plane_vector_surface_snippets 1 例[22 行合成探针]；注：
   test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试
   [并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session 参照，
   不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
