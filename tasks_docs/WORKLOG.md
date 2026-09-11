@@ -5432,6 +5432,23 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - 全量 pytest 4283/0/1 每步零回归；diff harness 语料现含 Rust 路由的元组源
   且匹配（契约权威化推进）。
 
+## 阶段 D1（⑦ 终点前置）完成：kb_vec 角移除（2026-09-11，commit 2c6fa77b）
+
+- **D1c（2c6fa77b）kb_vec 角移除 + knowledge 面全量 Rust 移植**：KbState.
+  entries 登记面 + store/get/keys/len/amend/history/export + to_ibci 投影 +
+  deep_clone_value 快照隔离；修复角隐藏的 Rust 缺口（str.len/审计面 fail-
+  fast[KNW_*]/未注册关系 fail-fast/by_subject/by_source/relations 臂/dict 键
+  可哈希门/cosine 零范数/错误位置内层优先/add_fact 5 参）。
+- **角移除进度 3/4**：intrinsic_redefinition + tuple + kb_vec 移除（语义缺口
+  全 Rust 化 + 行为测试转 Rust 验证）；**meta_compile 保留**——编译器访问面
+  （编译器 = Python 宿主服务，非 Rust 语义缺口；按职责重定位 = 宿主路由正确）。
+- **D1 完成**：非宿主 IBCI 语义全部 Rust 路由（行为层 108 测试[KB/vector/
+  knowledge] Rust 验证）。
+- 全量 pytest 4283/0/1 每步零回归；diff harness 全绿。
+- **剩余**：D2（Python 参考内核退役 + 差分退场——宿主 import 源仍路由 Python
+  [fs/ai/ihost 等 = 宿主面保留]；差分 = Rust vs Python 参考，D2 退休）+ D3
+  （双码族统一）+ D4（artifact IR）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
