@@ -4845,6 +4845,27 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   数据面逐字节等价——全管线 vs Python 参考）。
   **验证**：34/34 语料 + 8/8 探针全管线等价 + 全 harness 48 passed + smoke 832
   passed + 全量 pytest 零回归（放行门实跑）。
+- **P9 全量 Rust 化第四批 增量 3f 续：⑦ 切换门批次设计（2026-09-11，本
+  session，unsafe-vibe-dev，设计 = tasks_docs/_p9_switch.md）**：
+  **① engine 内核选择面侦察**：生产 engine 零 ibci_ext 消费（Rust 仅差分
+  harness 验证面）——⑦ 切换 = engine 执行路径替换（engine.execute →
+  run_string/compile_string → FlatSerializer → rt_scheduler.execute
+  [Python 运行时调度器]）；engine 外围面（journal_writer/budget_guard/
+  deterministic_guard/on_ready/variables/output_callback）= 切换门承载面。
+  **② 切换门批次设计（v1，_p9_switch.md）**：目标架构 = 数据面 Rust 唯一
+  执行者 + LLM/意图/宿主 IO 面 Python HostService；engine 路由 = 面分区
+  （artifact 节点类型判定：无 LLM 面 15 节点 → Rust 内核[run_artifact +
+  bridge]；含 → Python 运行时全源执行[单一内核归属纪律，无对比/无回退]）；
+  HostService 桥接面 = 现有 bridge 机制承载（LLM 调用/意图/journal/budget；
+  KB = Rust 原生不经桥）；LLM 面 15 节点 = Python 语义宿主（Rust 反序列化
+  器不实现此 15 类[3f 边界裁定]；长期 b 模型 = Rust 语义 + IO 桥[非本批次]）；
+  变量面 = 初始注入（py_to_ibvalue 转换面缺口）+ 数据面源执行后状态 = 仅
+  print 输出（Rust 执行函数化——无残留态）；切换 3 阶段（每阶段独立放行门：
+  ①engine 路由 + HostService 桥 + 初始变量 → ②Python 数据面 VM 退役
+  [双通道消亡] → ③差分 harness 退场 + 基线重建）。
+  **裁定（切换策略）**：面分区路由（非双通道 fallback）——每源按节点类型
+  归属单一内核，维持双内核协议显式态纪律；阶段 1 实施 = 下一轮起点。
+## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
