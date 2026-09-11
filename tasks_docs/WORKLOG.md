@@ -4469,6 +4469,67 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   实跑）。**第三批剩余**：generic/用户类型条目（泛型 members[owner uid 区分] +
   __string_exec__ 用户模块成员）+ modules 组装[完整 artifact 闭环——消除"消费
   Python 前端 JSON"输入边界]。
+- **P9 全量 Rust 化第三批 子项 2b-2b-2 增量 5（Rust 独立完整 artifact 产出闭环——
+  第三批收官，2026-09-11，本 session，unsafe-vibe-dev）**：`full_artifact(source)`
+  pyfunction——Rust 从源码独立产出完整 artifact JSON（顶层形态与 Python
+  FlatSerializer.serialize_artifact 同构），**34 语料全池精确等价**（nodes /
+  symbols / scopes / types / assets 五池 uid 精确 + 全字段；module 条目 side_tables
+  值多重集 + root uids + import_star_members + pools；entry_module / global_symbols）。
+  **消除"消费 Python 前端 JSON"输入边界**——双内核差分协议进入 Rust 独立 artifact
+  产出阶段（后续批次 = 值对象 / KB 推理面 / CPS 同构，非 artifact 产出面）。
+  **交付**：
+  - **lib.rs**：full_artifact 组装（NodeSerializer 统一遍历[nodes + side tables +
+    泛型/用户面] + scope_serializer[scopes 池] + SymbolResolver[scope 符号] +
+    intrinsic_symbols[63 符号 + 类型池 + 成员符号]；types 池键 = 类型 uid）。
+  - **intrinsic_symbols.rs**：METHOD_SIGS 方法声明签名表（35 类型 / 223 方法——
+    公理层声明式方法表转录，错误类继承面合并）+ method_signature 查表 +
+    type_entry 全字段构建（kind 载荷：函数签名 / 类 parent[CLASS_PARENTS 16 条] /
+    callable_instance axiom_name / list-dict-tuple-optional-channel-slot-thread-
+    generator payload[裸 = any] / subscriber members-only / exported_types 恒 []）+
+    generic_type_entry（list[T] / dict[K,V] / tuple[T,...]——payload 实参 + members
+    继承基类表[owner uid 区分] + tuple positional 表[element = any]）。
+  - **type_inference.rs**：method_signature_specialized（**public core 泛型成员特化
+    协议转录**——core/kernel/spec/generic.py 的 resolve_member 回调：list[T] 的
+    pop/__getitem__ → T、append/insert/__setitem__ 末参 → T；dict[K,V] 的 get/pop →
+    V、values → list[V]、keys → list[K]；Optional[T] 的 unwrap/or_else → T[or_else
+    首参]；thread/T 的 join → thread_result[T]、unwrap → Optional[T]）+
+    bound_method_rewrite（attribute_type 判定单一权威源）+ attribute_type 转 pub。
+  - **node_serializer.rs**：bound_method_sig last-wins 记录（方法属性访问即触发——
+    Full 模式）+ method_returns[泛型闭包种子] + 泛型闭包产出
+    [generic_type_names：类型环境值 + 方法特化返回种子 → payload 实参展开] +
+    用户函数类型条目[user_function_entries：全深度 FunctionDef + from-import 函数
+    绑定，USER_DEFINED + IMPORT_GATED + 注解签名] + __string_exec__ 用户模块类型
+    条目[entry_module_type_entry：用户顶层符号成员，函数 → method 其余 → field——
+    from-import 函数绑定亦 method；空成员键省略] + IMPORT_GATED 条件包含
+    [called_module_functions：meta.X() 属性调用 → X KERNEL 函数类型进池；
+    imported_modules：import meta → meta 模块类型进池；from-import 裸名调用只产
+    USER 条目] + top_functions / user_functions / called_module_functions /
+    bound_method_sig / method_returns 字段。
+  - **scope_serializer.rs**：函数 scope 由 AST 结构枚举（每个函数定义建 scope
+    条目——**含空符号 scope**，Python 实证；替代符号分组推导——空 scope 消失
+    缺陷修复：closure_capture 的 make/get）。
+  - **symbol_resolver.rs**：FUNCTION/MODULE/CLASS/from-import 符号 type_uid =
+    type_root.<name>（此前仅 VARIABLE 绑定 type——FUNCTION/MODULE 符号 type_uid
+    空缺陷修复）。
+  - **差分 harness**：test_full_artifact_corpus（34 语料全池精确等价 + file_path
+    规范化[Python 编译临时路径副产物，既有声明的非对齐偏离]）；test_intrinsic_
+    type_pool 升级完整条目等价（全字段）；divergence 注册表 gap-entry-module-user-
+    members rationale 更新（完整 artifact 面已承载用户成员，GAP 仅指固定产出面）。
+  **Python 参考内核既有缺陷再发现（bound_method 共享单例就地改写）**：types 池
+  bound_method 条目（单一共享 TypeDef）的 param_type_names / return_type_name 随
+  **源序最后一个方法属性访问**改写（last-wins；受控实验 strip/keys 顺序敏感 +
+  属性访问未调用亦改写 + 容器方法 params 按泛型协议特化[list[int].append →
+  ['int']、dict[str,int].keys → ret list[str]]）——**types 池内容依赖书写顺序 =
+  artifact 内容非 canonical**（与工作模式定论"靠书写顺序掩盖数据依赖"同型缺陷，
+  且使 artifact 身份对源码等价重排不稳定）。迁移期裁定：**Rust 忠实复现**
+  （统一遍历源序 = 与 checker 遍历同序，实证 34/34 对齐）；根因修复（bound_method
+  条目签名独立化/稳定化）= 后续架构裁定项（触及公理层 spec 建模，按红线场合
+  全量评估后推进）。**验证**：full_artifact 34/34 全池精确等价 + 全部既有差分门
+  回归无损（node_to_type 635/635 + node_to_symbol 262/262 + 节点池全字段 + scope
+  52/52 + intrinsic 66 完整条目 + members_uids）+ diff_harness 41 passed +
+  smoke 832 passed + 全量 pytest 零回归（放行门实跑）。**第三批 = 完成**
+  （2b-2b-2 增量 1-5：node_to_type 完整面 → node_to_symbol → free_vars/def_node_
+  uids/GAP 清零 → members_uids + canonical 哈希根因修复 → 完整 artifact 闭环）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

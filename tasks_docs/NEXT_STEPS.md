@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4297 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 141.54s，P9 全量 Rust 化第三批 子项 2b-2b-2 增量 1[node_to_type 完整面 + 测试扩全节点面]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4299 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 141.69s，P9 全量 Rust 化第三批 子项 2b-2b-2 增量 5[完整 artifact 产出闭环 + 第三批收官]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -473,19 +473,27 @@
       随机 → artifact 身份非 canonical；canonical JSON[owner_type_uid+name+kind+null/{}]
       sha256[:16] 与 node_uid 同机制；跨进程 3 次同指纹] + __string_exec__ 用户模块成员面
       GAP 登记[modules 组装增量]] ✅
-   → 第三批 子项 2b-2b-2 增量 5 续[generic/用户类型条目[泛型 members owner uid 区分 +
-      __string_exec__ 用户模块成员] + modules 组装[完整 artifact 闭环——消除"消费 Python
-      前端 JSON"输入边界]][当前]
-   + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
+   → 第三批 子项 2b-2b-2 增量 5 完整 artifact 产出闭环[full_artifact(source)：34 语料
+      五池[nodes/symbols/scopes/types/assets] uid 精确 + 全字段等价 + module 条目 +
+      顶层形态——泛型闭包条目[dict[str,list[int]] → list[int] payload 展开] +
+      __string_exec__ 用户模块成员[函数 → method/其余 → field] + 用户函数类型条目
+      [USER_DEFINED + IMPORT_GATED] + IMPORT_GATED 条件包含[eval/quote 仅 meta.X()
+      属性调用、meta 仅 import] + bound_method 共享类型 last-wins 特化签名[METHOD_SIGS
+      223 方法声明表 + generic.py 泛型成员特化协议转录] + 空符号函数 scope[AST 结构
+      枚举] + FUNCTION/MODULE/CLASS 符号 type_uid 修复；消除"消费 Python 前端 JSON"
+      输入边界]** ✅[第三批收官]
+   → 第四批 值对象[Rust 执行面去 Py<PyAny>，8902 行 IbValue 扩展][当前]
+   + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify
    验证门可改走 `meta.quote` 单点化——C3 批评估）；R-B KB 与 memory/meta.compile 机制同构
    （已落）。C3 自修改安全 / D1 SR-4 行为值直接执行 随主线一并推进。
-3. **Rust 内核替换 = 独立隔离分支 `rust-kernel`（设计 + 构建均可：pin `CARGO_HOME` 到 workspace +
-   允许网络，免审批）**：`_rust_kernel_survey.md` 四阶段（① 构建链+差分 harness → ② 前端 →
-   ③ 执行核心 → ④ 并发解除）；harness 语料 = 世界模型里程碑；确认零风险后 merge unsafe-vibe-dev 并
-   删分支。
+3. **Rust 内核替换（构建均可：pin `CARGO_HOME`/`CARGO_TARGET_DIR` 到 workspace + 允许网络，
+   免审批）**：`_rust_kernel_survey.md` 四阶段（① 构建链+差分 harness → ② 前端 →
+   ③ 执行核心 → ④ 并发解除）均已在 `unsafe-vibe-dev` 主线推进（第三批 reframe 后取消
+   独立分支——加法式零风险，每步 commit + 差分门）；harness 语料 = 世界模型里程碑；
+   当前 = 第四批 值对象/KB 推理面/CPS 同构。
 4. **支线 · e2e 进程内化**（套件 44% 子进程开销，`conftest run_ibci` 进程内助手）：升格为
    早期使能项（降全量门成本，服务主线高频验证）。
 5. **支线 · 周期质量维护**（PT-AUDIT-1/3 + Tier B/C）+ **恶意边界未测项**（`trials/INDEX.md`

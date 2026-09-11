@@ -225,6 +225,180 @@ fn node_to_symbol(source: &str) -> PyResult<String> {
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// 完整 artifact（全量 Rust 化·artifact 产出：Rust 独立完整 artifact 闭环）——
+/// source → 完整 artifact JSON（顶层形态与 Python FlatSerializer.serialize_artifact
+/// 同构：entry_module / global_symbols / modules / pools[nodes/symbols/scopes/
+/// types/assets]）。组装：NodeSerializer 统一遍历[nodes + node_to_type/symbol +
+/// 泛型类型 + 用户函数类型 + __string_exec__ 用户模块类型] + scope_serializer
+/// [scopes 池] + SymbolResolver[scope 符号] + intrinsic_symbols[63 intrinsic 符号 +
+/// 66 固定类型条目 + 泛型条目 + 成员符号]。差分 harness 经此与 Python 完整 artifact
+/// 全池比对。
+#[pyfunction]
+fn full_artifact(source: &str) -> PyResult<String> {
+    use serde_json::Map as JMap;
+    use serde_json::Value;
+    let module = parser::parse_to_module(source);
+
+    // 1) NodeSerializer 统一遍历：nodes + 侧表 + 泛型/用户面
+    let mut ns = node_serializer::NodeSerializer::new();
+    let (root_uid, nodes) = ns.serialize_module(&module);
+    let node_to_type = ns.node_to_type_map();
+    let node_to_symbol = ns.node_to_symbol_map();
+    let generics = ns.generic_type_names();
+    let module_type = ns.entry_module_type_entry();
+    let module_member_kinds = ns.entry_module_member_kinds();
+    let user_function_types = ns.user_function_entries();
+
+    // 2) scopes 池 + scope 符号
+    let scopes = scope_serializer::scope_pool(source);
+    let mut sr = symbol_resolver::SymbolResolver::new();
+    let scope_symbols: JMap<String, Value> = sr
+        .resolve_module(&module)
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    // 3) types 池：66 固定[全字段，IMPORT_GATED 条件包含：eval/quote 仅模块属性
+    //    调用时进池，meta 仅 import 时进池——Python 实证] + 泛型[payload + 继承
+    //    成员表] + 用户函数 + __string_exec__[用户顶层符号成员]
+    // types 池键 = 类型 uid（type_root.<name>——Python types 池键形态）
+    let called_mf = ns.called_module_functions();
+    let imported = ns.imported_modules();
+    let mut types: JMap<String, Value> = intrinsic_symbols::builtin_intrinsic_types()
+        .into_iter()
+        .filter(|(k, _)| match k.as_str() {
+            "eval" | "quote" => called_mf.contains(k),
+            "meta" => imported.contains(k),
+            _ => true,
+        })
+        .map(|(name, entry)| (format!("type_root.{}", name), entry))
+        .collect();
+    for name in &generics {
+        if let Some(e) = intrinsic_symbols::generic_type_entry(name) {
+            types.insert(format!("type_root.{}", name), e);
+        }
+    }
+    for (name, entry) in user_function_types {
+        types.insert(format!("type_root.{}", name), entry);
+    }
+    types.insert("type_root.__string_exec__".to_string(), module_type);
+    // bound_method 共享类型 last-wins 改写（无方法属性访问 = 默认 ([], void)）
+    if let Some((params, ret)) = ns.bound_method_sig() {
+        if let Some(bm) = types.get_mut("type_root.bound_method") {
+            bm["param_type_names"] =
+                Value::Array(params.into_iter().map(Value::String).collect());
+            bm["return_type_name"] = Value::String(ret);
+        }
+    }
+
+    // 4) node_to_loc 侧表（节点池位置字段——全节点，file_path=null）
+    let mut node_to_loc: JMap<String, Value> = JMap::new();
+    for (uid, nd) in nodes.iter() {
+        let mut loc = JMap::new();
+        loc.insert("file_path".into(), Value::Null);
+        loc.insert(
+            "line".into(),
+            nd.get("lineno").cloned().unwrap_or(Value::Null),
+        );
+        loc.insert(
+            "column".into(),
+            nd.get("col_offset").cloned().unwrap_or(Value::Null),
+        );
+        node_to_loc.insert(uid.clone(), Value::Object(loc));
+    }
+
+    // 5) symbols 池：63 intrinsic + scope 符号 + 成员符号（canonical 内容条目）
+    let mut symbols: JMap<String, Value> = intrinsic_symbols::builtin_intrinsic_symbols()
+        .into_iter()
+        .collect();
+    for (uid, sym) in scope_symbols.iter() {
+        symbols.insert(uid.clone(), sym.clone());
+    }
+    let mut module_kinds: std::collections::BTreeMap<String, String> = module_member_kinds
+        .into_iter()
+        .map(|(n, k)| (n, k))
+        .collect();
+    for (tname, tval) in types.iter() {
+        if let Some(members) = tval.get("members_uids").and_then(|m| m.as_object()) {
+            for (mname, muid) in members {
+                let kind = if tname == "type_root.__string_exec__" {
+                    module_kinds.get(mname).cloned().unwrap_or_else(|| "field".to_string())
+                } else {
+                    // 固定/泛型成员：基类成员表 kind（泛型继承基类表；基类名 = 条目
+                    // name 字段[键 = 类型 uid type_root.<name>]）
+                    let entry_name = tval
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(tname);
+                    let base = crate::type_inference::parse_container(entry_name).0;
+                    crate::intrinsic_symbols::METHOD_MEMBERS
+                        .iter()
+                        .find(|(t, _)| *t == base)
+                        .and_then(|(_, ms)| ms.iter().find(|(n, _)| *n == mname))
+                        .map(|(_, k)| k.to_string())
+                        .unwrap_or_else(|| "method".to_string())
+                };
+                let mut m = JMap::new();
+                m.insert("uid".into(), muid.clone());
+                m.insert("name".into(), Value::String(mname.clone()));
+                m.insert("kind".into(), Value::String(kind));
+                m.insert("type_uid".into(), Value::Null);
+                m.insert("node_uid".into(), Value::Null);
+                m.insert("owned_scope_uid".into(), Value::Null);
+                m.insert("metadata".into(), Value::Object(JMap::new()));
+                symbols.insert(muid.as_str().unwrap().to_string(), Value::Object(m));
+            }
+        }
+    }
+
+    // 6) 池 + module 条目 + 顶层
+    let pools: JMap<String, Value> = JMap::from_iter([
+        ("nodes".into(), Value::Object(nodes.into_iter().collect())),
+        ("symbols".into(), Value::Object(symbols.clone())),
+        ("scopes".into(), Value::Object(scopes.into_iter().collect())),
+        ("types".into(), Value::Object(types.clone())),
+        ("assets".into(), Value::Object(JMap::new())),
+    ]);
+    let side_tables: JMap<String, Value> = JMap::from_iter([
+        (
+            "node_to_symbol".into(),
+            Value::Object(
+                node_to_symbol
+                    .into_iter()
+                    .map(|(k, v)| (k, Value::String(v)))
+                    .collect(),
+            ),
+        ),
+        (
+            "node_to_type".into(),
+            Value::Object(
+                node_to_type
+                    .into_iter()
+                    .map(|(k, v)| (k, Value::String(v)))
+                    .collect(),
+            ),
+        ),
+        ("node_to_loc".into(), Value::Object(node_to_loc.into_iter().collect())),
+    ]);
+    let module_entry: JMap<String, Value> = JMap::from_iter([
+        ("import_star_members".into(), Value::Object(JMap::new())),
+        ("pools".into(), Value::Object(pools.clone())),
+        ("root_node_uid".into(), Value::String(root_uid)),
+        ("root_scope_uid".into(), Value::String("scope___string_exec__".to_string())),
+        ("side_tables".into(), Value::Object(side_tables)),
+    ]);
+    let modules: JMap<String, Value> =
+        JMap::from_iter([("__string_exec__".to_string(), Value::Object(module_entry))]);
+    let artifact: JMap<String, Value> = JMap::from_iter([
+        ("entry_module".into(), Value::String("__string_exec__".to_string())),
+        ("global_symbols".into(), Value::Object(JMap::new())),
+        ("modules".into(), Value::Object(modules)),
+        ("pools".into(), Value::Object(pools)),
+    ]);
+    serde_json::to_string(&Value::Object(artifact))
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
 /// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
@@ -359,6 +533,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(node_to_loc, m)?)?;
     m.add_function(wrap_pyfunction!(node_to_type, m)?)?;
     m.add_function(wrap_pyfunction!(node_to_symbol, m)?)?;
+    m.add_function(wrap_pyfunction!(full_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

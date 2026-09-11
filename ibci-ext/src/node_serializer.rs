@@ -17,7 +17,8 @@ use serde_json::{Map, Value};
 use crate::parser::{ConstVal, Expr, Module, Pos, Stmt};
 use crate::serialization;
 use crate::type_inference::{
-    infer_type_env, parse_type_annotation, symbol_level_type, FuncSignatures, InferCtx,
+    bound_method_rewrite, infer_type_env, parse_type_annotation, symbol_level_type,
+    FuncSignatures, InferCtx,
     ModuleNames, TypeEnv,
 };
 
@@ -55,6 +56,25 @@ pub struct NodeSerializer {
     /// 内记录（供 scope 符号 node_uid 绑定；非事后重序列化——嵌套函数 free_vars 等
     /// scope 相关节点内容只在定义处上下文可正确产出）。
     def_node_uids: BTreeMap<String, String>,
+    /// 顶层用户函数名（__string_exec__ 模块类型成员 kind = method 的判定依据——
+    /// Python 实证：用户顶层函数 = method 成员，变量/模块/类 = field 成员）。
+    top_functions: BTreeSet<String>,
+    /// 用户函数类型条目（name → ([参数类型名], 返回类型名)）——types 池
+    /// USER_DEFINED function 条目（全深度函数定义 + from-import 函数绑定；
+    /// Python 实证：USER_DEFINED + IMPORT_GATED + 注解签名）。
+    user_functions: BTreeMap<String, (Vec<String>, String)>,
+    /// 模块属性调用的函数名（`meta.X(...)` 的 X）——types 池 IMPORT_GATED 函数
+    /// 类型条件包含规则（Python 实证：quote/eval 仅在模块属性调用时进池；
+    /// from-import 裸名调用只产 USER_DEFINED 条目）。
+    called_module_functions: BTreeSet<String>,
+    /// bound_method 共享类型最后改写（last-wins）——types 池 bound_method 条目
+    /// (param_type_names, return_type_name)：每个方法属性访问（bound_method 判定
+    /// 命中）改写共享 bound_method TypeDef 的特化签名（params + ret；Python 实证：
+    /// last-wins + 属性访问即改写；受控实验 strip/keys 顺序敏感）。
+    bound_method_sig: Option<(Vec<String>, String)>,
+    /// 方法调用返回类型全集（泛型闭包种子——types 池泛型条目：d.keys() →
+    /// list[str] 等特化返回类型也进池）。
+    method_returns: BTreeSet<String>,
 }
 
 impl NodeSerializer {
@@ -79,6 +99,11 @@ impl NodeSerializer {
             node_to_type: BTreeMap::new(),
             node_to_symbol: BTreeMap::new(),
             def_node_uids: BTreeMap::new(),
+            top_functions: BTreeSet::new(),
+            user_functions: BTreeMap::new(),
+            called_module_functions: BTreeSet::new(),
+            bound_method_sig: None,
+            method_returns: BTreeSet::new(),
         }
     }
 
@@ -159,6 +184,119 @@ impl NodeSerializer {
     /// 定义节点表（符号 uid → 定义节点 uid）——统一遍历产出（scope 上下文内记录）。
     pub fn def_node_uids_map(&mut self) -> BTreeMap<String, String> {
         std::mem::take(&mut self.def_node_uids)
+    }
+
+    /// types 池泛型容器类型名（泛型闭包）：种子 = 类型环境值[变量绑定] + 方法调用
+    /// 特化返回类型；每个泛型串展开其 payload 实参（dict[str,list[int]] →
+    /// list[int] → int），全部泛型串进池（Python 实证：注册表泛型闭包语义）。
+    pub fn generic_type_names(&self) -> BTreeSet<String> {
+        let mut seeds = self.method_returns.clone();
+        for scope in self.type_env.iter() {
+            for t in scope.values() {
+                seeds.insert(t.clone());
+            }
+        }
+        let mut out = BTreeSet::new();
+        let mut stack: Vec<String> = seeds
+            .into_iter()
+            .filter(|t| t.contains('['))
+            .collect();
+        while let Some(s) = stack.pop() {
+            if out.insert(s.clone()) {
+                let (_, params) = crate::type_inference::parse_container(&s);
+                for p in params {
+                    if p.contains('[') {
+                        stack.push(p);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// __string_exec__ 入口模块类型完整条目（基础字段 + 用户顶层符号成员：函数 →
+    /// method，变量/模块/类 → field——Python 实证；canonical 成员哈希 owner =
+    /// type_root.__string_exec__）。完整 artifact 组装面。
+    pub fn entry_module_type_entry(&self) -> Value {
+        let mut m = crate::intrinsic_symbols::type_entry(
+            "__string_exec__",
+            "module",
+            "PRELUDE_VISIBLE",
+        )
+        .as_object()
+        .unwrap()
+        .clone();
+        let top = self.user_defined.first().unwrap();
+        let mut members = serde_json::Map::new();
+        for name in top.keys() {
+            let kind = if self.top_functions.contains(name) { "method" } else { "field" };
+            members.insert(
+                name.clone(),
+                Value::String(crate::intrinsic_symbols::anon_member_uid(
+                    name,
+                    kind,
+                    "type_root.__string_exec__",
+                )),
+            );
+        }
+        // 空成员键省略（Python `if t.members:` 语义——空 members_uids 不进条目）
+        if !members.is_empty() {
+            m.insert("members_uids".into(), Value::Object(members));
+        }
+        Value::Object(m)
+    }
+
+    /// __string_exec__ 用户模块成员 kind 表（name → method/field）——symbols 池成员
+    /// 符号条目构建（完整 artifact 组装面）。
+    pub fn entry_module_member_kinds(&self) -> Vec<(String, String)> {
+        let top = self.user_defined.first().unwrap();
+        top
+            .keys()
+            .map(|name| {
+                let kind = if self.top_functions.contains(name) { "method" } else { "field" };
+                (name.clone(), kind.to_string())
+            })
+            .collect()
+    }
+
+    /// 模块属性调用的函数名（types 池 IMPORT_GATED 函数类型条件包含）。
+    pub fn called_module_functions(&self) -> &BTreeSet<String> {
+        &self.called_module_functions
+    }
+
+    /// 导入模块名集合（types 池模块类型条件包含：import meta → meta 模块类型）。
+    pub fn imported_modules(&self) -> &BTreeSet<String> {
+        &self.modules
+    }
+
+    /// bound_method 共享类型最后改写特化签名（types 池 bound_method 条目
+    /// (param_type_names, return_type_name)；无方法属性访问 = None[默认 ([] , void)]）。
+    pub fn bound_method_sig(&self) -> Option<(Vec<String>, String)> {
+        self.bound_method_sig.clone()
+    }
+
+    /// 用户函数类型条目（types 池 USER_DEFINED function 条目：全深度函数定义 +
+    /// from-import 函数绑定；IMPORT_GATED + 注解签名——Python 实证）。
+    pub fn user_function_entries(&self) -> BTreeMap<String, Value> {
+        let mut out = BTreeMap::new();
+        for (name, (params, ret)) in &self.user_functions {
+            let mut m = serde_json::Map::new();
+            m.insert("uid".into(), Value::String(format!("type_root.{}", name)));
+            m.insert("kind".into(), Value::String("function".into()));
+            m.insert("name".into(), Value::String(name.clone()));
+            m.insert("module_path".into(), Value::Null);
+            m.insert("provenance".into(), Value::String("USER_DEFINED".into()));
+            m.insert("visibility".into(), Value::String("IMPORT_GATED".into()));
+            m.insert("storage_model".into(), Value::String("MEMORY_BACKED".into()));
+            m.insert("exported_types".into(), Value::Array(Vec::new()));
+            m.insert(
+                "param_type_names".into(),
+                Value::Array(params.iter().map(|p| Value::String(p.clone())).collect()),
+            );
+            m.insert("return_type_name".into(), Value::String(ret.clone()));
+            out.insert(name.clone(), Value::Object(m));
+        }
+        out
     }
 
     /// Module 节点：{"_type": "IbModule", 基类位置, body: [UIDs], file_path: null}。
@@ -261,10 +399,19 @@ impl NodeSerializer {
             Stmt::FromImport { pos, module, names } => {
                 let a_uids: Vec<String> = names.iter().map(|a| self.serialize_alias(a)).collect();
                 // 统一遍历：from-import 绑定名 → type_env（IbName 绑定名 → 源函数/类型
-                // 的 type_root.<name>——语料实证 from meta import quote：quote → type_root.quote）。
+                // 的 type_root.<name>——语料实证 from meta import quote：quote →
+                // type_root.quote）+ from-import 函数绑定 → 用户函数类型条目
+                // （签名 = 模块函数声明——types 池 USER_DEFINED function 条目）。
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
                     self.define_name(&binding, &binding);
+                    if let Some(sig) = crate::intrinsic_symbols::function_sig(&binding) {
+                        self.user_functions
+                            .insert(binding.clone(), sig.clone());
+                        // from-import 函数绑定 = 函数成员（__string_exec__ 成员
+                        // kind = method——Python 实证：quote 绑定 → method）
+                        self.top_functions.insert(binding.clone());
+                    }
                 }
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbImportFrom".to_string()));
@@ -332,6 +479,26 @@ impl NodeSerializer {
             Stmt::FunctionDef { pos, name, args, body, returns } => {
                 // 统一遍历：函数名 type_env[含顶层函数，IbName 函数名 → 函数类型
                 // type_root.<name>] + func_sigs（returns）+ push_scope + 参数 type_env。
+                // 顶层函数标记（__string_exec__ 模块成员 kind = method 判定）。
+                if self.scope_stack.len() == 1 {
+                    self.top_functions.insert(name.clone());
+                }
+                // 用户函数类型条目（全深度：顶层 + 嵌套——types 池 USER_DEFINED
+                // function 条目；from-import 函数绑定另计）。
+                let params: Vec<String> = args
+                    .iter()
+                    .map(|a| match a.annotation.as_ref() {
+                        Some(e) => parse_type_annotation(e).unwrap_or_else(|| "any".to_string()),
+                        None => "any".to_string(),
+                    })
+                    .collect();
+                let ret = returns
+                    .as_ref()
+                    .map(|e| parse_type_annotation(e))
+                    .flatten()
+                    .unwrap_or_else(|| "auto".to_string());
+                self.user_functions
+                    .insert(name.clone(), (params, ret));
                 self.define_name(name, name);
                 if let Some(rt) = returns {
                     if let Some(ts) = parse_type_annotation(rt) {
@@ -562,6 +729,15 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::Call { pos, func, args } => {
+                // 模块属性调用追踪（meta.X(...) 的 X——types 池 IMPORT_GATED 函数
+                // 类型条件包含规则）。
+                if let Expr::Attribute { value, attr, .. } = func.as_ref() {
+                    if let Expr::Name { id, .. } = value.as_ref() {
+                        if self.modules.contains(id) {
+                            self.called_module_functions.insert(attr.clone());
+                        }
+                    }
+                }
                 let f_uid = self.ser(func, mode);
                 let a_uids: Vec<String> = args.iter().map(|e| self.ser(e, mode)).collect();
                 let mut node_data = base_fields(pos);
@@ -591,6 +767,14 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::Attribute { pos, value, attr, ctx } => {
+                if mode == RecordMode::Full {
+                    // bound_method 共享类型 last-wins 改写（属性访问即触发——types 池
+                    // bound_method 条目特化签名；Python 实证顺序敏感）
+                    if let Some(sig) = bound_method_rewrite(value, attr, &self.ctx()) {
+                        self.bound_method_sig = Some(sig.clone());
+                        self.method_returns.insert(sig.1);
+                    }
+                }
                 let v_uid = self.ser(value, mode);
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbAttribute".to_string()));

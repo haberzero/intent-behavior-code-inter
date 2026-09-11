@@ -73,9 +73,10 @@ REGISTERED: List[DeclaredState] = [
         rationale=(
             "__string_exec__ 入口模块类型的 members_uids = 用户顶层符号（import 模块名/"
             "顶层变量/顶层函数，随语料变化）——Rust 固定产出面（intrinsic_type_pool，无"
-            " source 输入）不承载用户面成员；归 modules 组装增量（统一遍历完整 artifact"
-            " 产出：入口模块类型 = 固定基础字段 + 用户顶层符号成员[同一 canonical 哈希]）。"
-            " 静态 35 类型成员面已 Rust 承载并 uid 逐条精确等价。"
+            " source 输入）不承载用户面成员。完整 artifact 组装面（full_artifact）已"
+            " 承载用户面成员并 34 语料全池等价（test_full_artifact_corpus）；本 GAP 仅"
+            " 指向固定产出面（无 source 输入的静态 66 类型池）。静态 35 类型成员面已"
+            " Rust 承载并 uid 逐条精确等价。"
         ),
     ),
 ]

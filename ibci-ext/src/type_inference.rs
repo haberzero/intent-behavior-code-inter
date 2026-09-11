@@ -152,6 +152,52 @@ pub fn symbol_level_type(expr: &Expr, ctx: &InferCtx) -> Option<String> {
     infer_type_env(expr, ctx)
 }
 
+/// 方法签名特化（public core 的泛型成员特化协议转录——core/kernel/spec/generic.py
+/// 的 resolve_member 回调）：list[T] 的 pop/__getitem__ → T；append/insert/
+/// __setitem__ 末参 → T；dict[K,V] 的 get/pop → V、values → list[V]、keys → list[K]；
+/// Optional[T] 的 unwrap/or_else → T（or_else 首参 → T）。
+pub fn method_signature_specialized(base: &str, attr: &str) -> Option<(Vec<String>, String)> {
+    let (kind, params) = parse_container(base);
+    let elem = params.first().map(|s| s.as_str());
+    let (declared_params, _declared_ret) =
+        crate::intrinsic_symbols::method_signature(kind, attr)?;
+    let mut p = declared_params;
+    let r = method_call_return(base, attr).unwrap_or_else(|| _declared_ret.to_string());
+    match kind {
+        "list" => {
+            if let Some(e) = elem {
+                if e != "any"
+                    && matches!(attr, "append" | "insert" | "__setitem__")
+                    && !p.is_empty()
+                {
+                    *p.last_mut().unwrap() = e.to_string();
+                }
+            }
+        }
+        "Optional" => {
+            if let Some(w) = elem {
+                if w != "any" && attr == "or_else" && !p.is_empty() {
+                    p[0] = w.to_string();
+                }
+            }
+        }
+        _ => {}
+    }
+    Some((p, r))
+}
+
+/// bound_method 共享类型改写（last-wins）：方法属性访问（attribute_type 判定
+/// bound_method）→ 该方法特化签名 (params, ret)（单一权威源：声明表 + 泛型特化 +
+/// 方法返回表，无重复判定）；非方法属性（模块成员/字段/任意 any 属性）= None。
+pub fn bound_method_rewrite(value: &Expr, attr: &str, ctx: &InferCtx) -> Option<(Vec<String>, String)> {
+    if attribute_type(value, attr, ctx).as_deref() == Some("bound_method") {
+        let base = infer_type_env(value, ctx)?;
+        method_signature_specialized(&base, attr)
+    } else {
+        None
+    }
+}
+
 /// 变量类型查找（从内层 scope 往外——closure/global 链）。
 fn lookup_type(type_env: &TypeEnv, name: &str) -> Option<String> {
     for scope in type_env.iter().rev() {
@@ -495,7 +541,7 @@ fn subscript_type(value: &Expr, slice: &Expr, ctx: &InferCtx) -> Option<String> 
 /// 属性节点类型：模块成员（import 模块 X 的 X.attr）→ 成员类型（type_root.<attr>，
 /// 语料实证 meta.quote → quote / meta.eval → eval）；方法访问 → bound_method
 /// （公理方法表判定）；字段访问（quoted.source = str，语料实证）；其余 → any。
-fn attribute_type(value: &Expr, attr: &str, ctx: &InferCtx) -> Option<String> {
+pub fn attribute_type(value: &Expr, attr: &str, ctx: &InferCtx) -> Option<String> {
     if let Expr::Name { id, .. } = value {
         if ctx.modules.contains(id) {
             return Some(attr.to_string());

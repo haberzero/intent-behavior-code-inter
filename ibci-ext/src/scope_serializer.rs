@@ -53,18 +53,69 @@ pub fn scope_pool(source: &str) -> BTreeMap<String, Value> {
         scope_value(TOP_SCOPE, None, top_syms),
     );
 
-    // 函数 scope：用户内符号，parent = 定义处 scope（scope 串去最后一段）。
-    for (scope_str, syms) in &by_scope {
-        if scope_str == TOP_SCOPE {
-            continue;
-        }
-        let parent = parent_scope_str(scope_str);
+    // 函数 scope：AST 结构枚举（每个函数定义建 scope 条目——Python 实证含空符号
+    // scope；符号 = by_scope 分组或空集），parent = 定义处 scope。
+    let mut fn_scopes: Vec<String> = Vec::new();
+    for s in &module.body {
+        collect_function_scopes(s, TOP_SCOPE, &mut fn_scopes);
+    }
+    for scope_str in fn_scopes {
+        let parent = parent_scope_str(&scope_str);
+        let syms = by_scope.get(&scope_str).cloned().unwrap_or_default();
         scopes.insert(
             format!("scope_{}", scope_str),
-            scope_value(scope_str, parent, syms.clone()),
+            scope_value(&scope_str, parent, syms),
         );
     }
     scopes
+}
+
+/// 函数 scope 串枚举（全深度：函数嵌套 + if/for/while/try/class 体内的函数定义；
+/// scope 串 = 定义处 scope 串 + "/" + 函数名）。
+fn collect_function_scopes(
+    stmt: &crate::parser::Stmt,
+    scope_str: &str,
+    out: &mut Vec<String>,
+) {
+    use crate::parser::Stmt;
+    match stmt {
+        Stmt::FunctionDef { name, body, .. } => {
+            let child = format!("{}/{}", scope_str, name);
+            for s in body {
+                collect_function_scopes(s, &child, out);
+            }
+            out.push(child);
+        }
+        Stmt::If { body, orelse, .. }
+        | Stmt::For { body, orelse, .. }
+        | Stmt::While { body, orelse, .. } => {
+            for s in body.iter().chain(orelse.iter()) {
+                collect_function_scopes(s, scope_str, out);
+            }
+        }
+        Stmt::Try {
+            body,
+            handlers,
+            orelse,
+            finalbody,
+            ..
+        } => {
+            for s in body.iter().chain(orelse.iter()).chain(finalbody.iter()) {
+                collect_function_scopes(s, scope_str, out);
+            }
+            for h in handlers {
+                for s in &h.body {
+                    collect_function_scopes(s, scope_str, out);
+                }
+            }
+        }
+        Stmt::ClassDef { body, .. } => {
+            for s in body {
+                collect_function_scopes(s, scope_str, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// 父 scope 串：`__string_exec__/f` → `__string_exec__`；`__string_exec__/a/b` →

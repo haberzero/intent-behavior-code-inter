@@ -153,10 +153,10 @@ impl SymbolResolver {
                 let kind = if is_top { "FUNCTION" } else { "VARIABLE" };
                 let def_scope = self.current_scope();
                 self.bind_symbol(name, kind);
-                // 嵌套函数名 = 函数类型（type_root.<name>）—— 持有函数的变量类型。
-                if !is_top {
-                    self.bind_var_type(name, name);
-                }
+                // 函数名符号 type_uid = 函数类型（type_root.<name>）——顶层 FUNCTION
+                // 与嵌套（VARIABLE 持有函数的变量）同语义（Python 实证：scope 符号
+                // type_uid = type_root.<name>）。
+                self.bind_var_type(name, name);
                 // 函数返回类型 → 签名表（returns 注解，intrinsic Name 子集）。
                 if let Some(rt) = returns {
                     if let Some(ts) = parse_type_annotation(rt) {
@@ -204,6 +204,8 @@ impl SymbolResolver {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
                     self.modules.insert(binding.clone());
                     self.bind_symbol(&binding, "MODULE");
+                    // MODULE 符号 type_uid = 模块类型（type_root.<name>，Python 实证）
+                    self.bind_var_type(&binding, &binding);
                 }
             }
             Stmt::FromImport { module, names, .. } => {
@@ -212,11 +214,15 @@ impl SymbolResolver {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
                     let _ = module;
                     self.bind_symbol(&binding, "FUNCTION");
+                    // from-import FUNCTION 符号 type_uid = 函数类型（Python 实证：
+                    // scope___string_exec__:quote → type_root.quote）
+                    self.bind_var_type(&binding, &binding);
                 }
             }
             Stmt::ClassDef { name, body, .. } => {
-                // 类名 → scope 符号（CLASS，定义节点 = IbClassDef）。
+                // 类名 → scope 符号（CLASS）+ type_uid = 类类型（type_root.<name>）。
                 self.bind_symbol(name, "CLASS");
+                self.bind_var_type(name, name);
                 for s in body {
                     self.resolve_stmt(s);
                 }

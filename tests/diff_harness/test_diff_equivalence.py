@@ -709,24 +709,20 @@ class TestRustSerializationUid:
                 assert r.get(f) == p.get(f), (
                     f"intrinsic 类型 {name} 差分不等价（{f}）：\n  py : {p.get(f)}\n  rust: {r.get(f)}"
                 )
-            # members_uids（成员名 → 成员符号 canonical uid——双方同一确定性内容
-            # 哈希[owner_type_uid + name + kind + 固定 null/{} 内容]，uid 精确等价）。
+            # 完整条目等价（全字段：基础 + kind 载荷[param/return/axiom/element/
+            # key/value/wrapped/positional/parent/exported_types] + members_uids
+            # [成员符号 canonical uid——双方同一确定性内容哈希，uid 精确等价]）。
             # 用户面类型（__string_exec__ 入口模块成员 = 用户顶层符号）经 divergence
             # 注册表声明排除（归 modules 组装增量）。
             from tests.diff_harness import divergence as _dv
             if name in _dv.skipped_cases(_dv.TYPE_MEMBERS):
                 continue
-            r_members = r.get("members_uids")
-            p_members = p.get("members_uids")
-            assert (r_members is None) == (p_members is None), (
-                f"intrinsic 类型 {name} members_uids 有无不一致：py={p_members is not None} rs={r_members is not None}"
+            assert r == p, (
+                f"intrinsic 类型 {name} 完整条目不等价：\n"
+                f"  字段差: {sorted(set(r.keys()) ^ set(p.keys()))}\n"
+                f"  py : {json.dumps(p, sort_keys=True)[:300]}\n"
+                f"  rs : {json.dumps(r, sort_keys=True)[:300]}"
             )
-            if r_members is not None:
-                assert r_members == p_members, (
-                    f"intrinsic 类型 {name} members_uids 不等价：\n"
-                    f"  py only: {sorted(set(p_members.items()) - set(r_members.items()))[:3]}\n"
-                    f"  rs only: {sorted(set(r_members.items()) - set(p_members.items()))[:3]}"
-                )
 
     def test_scope_pool_corpus(self):
         """scopes 池差分（全量 Rust 化·artifact 产出：scopes 池）：Rust scope_pool
@@ -783,6 +779,71 @@ class TestRustSerializationUid:
                 f"语料 {name} node_to_loc 位置分布不等价：\n"
                 f"  rust: {sorted(rs_multiset.elements())}\n  py : {sorted(py_multiset.elements())}"
             )
+
+    def test_full_artifact_corpus(self):
+        """完整 artifact 差分（全量 Rust 化·artifact 产出：Rust 独立完整 artifact
+        闭环）：Rust full_artifact(source) == Python
+        FlatSerializer.serialize_artifact(compile(source))（34 语料）——顶层形态
+        [entry_module / global_symbols / modules / pools] + 各池全等价[nodes /
+        symbols / scopes / types / assets——uid 精确 + 全字段，含 types 池泛型条目
+        [泛型闭包] + __string_exec__ 用户模块成员 + bound_method 共享类型 last-wins
+        特化签名] + module 条目[side_tables 多重集 / root uids / import_star_members
+        / pools == 顶层池]。"""
+        import json
+        from collections import Counter
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "full_artifact"):
+            return
+        for name, code in CORPUS:
+            rs = json.loads(rk._module.full_artifact(code))
+            py = FlatSerializer().serialize_artifact(compile_ibci(code))
+            assert rs["entry_module"] == py["entry_module"], f"语料 {name} entry_module 不等"
+            assert rs["global_symbols"] == py["global_symbols"], f"语料 {name} global_symbols 不等"
+            for pool in ("nodes", "symbols", "scopes", "types", "assets"):
+                r, p = rs["pools"][pool], py["pools"][pool]
+                only_r = set(r) - set(p)
+                only_p = set(p) - set(r)
+                diff = {k for k in set(r) & set(p) if r[k] != p[k]}
+                if only_r or only_p or diff:
+                    d0 = next(iter(diff), None)
+                    sample = (
+                        json.dumps(
+                            {"py": p[d0], "rs": r[d0]}, ensure_ascii=False
+                        )[:300]
+                        if d0
+                        else ""
+                    )
+                    raise AssertionError(
+                        f"语料 {name} {pool} 池差分不等价："
+                        f"rs_only={list(only_r)[:3]} py_only={list(only_p)[:3]} "
+                        f"diff={list(diff)[:3]}\n  首个 diff: {sample}"
+                    )
+            mod_r = rs["modules"][rs["entry_module"]]
+            mod_p = py["modules"][py["entry_module"]]
+            assert mod_r["root_node_uid"] == mod_p["root_node_uid"], f"语料 {name} root_node_uid 不等"
+            assert mod_r["root_scope_uid"] == mod_p["root_scope_uid"], f"语料 {name} root_scope_uid 不等"
+            assert mod_r["import_star_members"] == mod_p["import_star_members"], f"语料 {name} import_star_members 不等"
+            for k in mod_p["side_tables"]:
+                rs_st = mod_r["side_tables"][k]
+                py_st = mod_p["side_tables"][k]
+                # 值多重集（str / dict 值统一经 canonical JSON 排序——closure 语料
+                # 节点 uid 键可能偏移，值面多重集等价即位置/类型/符号面对齐；
+                # node_to_loc 的 file_path 规范化 null——Python 编译临时路径是副产物，
+                # 非对齐偏离（test_node_to_loc_corpus 同声明））
+                def _norm(vals):
+                    out = []
+                    for v in vals:
+                        if isinstance(v, dict) and "file_path" in v:
+                            v = {**v, "file_path": None}
+                        out.append(json.dumps(v, sort_keys=True))
+                    return sorted(out)
+                assert _norm(rs_st.values()) == _norm(py_st.values()), (
+                    f"语料 {name} side_table {k} 多重集不等（节点 uid 键 closure 友好）"
+                )
+            assert mod_r["pools"] == mod_p["pools"], f"语料 {name} module 条目 pools 不等"
 
     def test_node_to_type_corpus(self):
         """node_to_type 侧表差分（全量 Rust 化·artifact 产出：节点级 type_uid 完整面）：

@@ -203,6 +203,71 @@ const INTRINSIC_TYPES: &[(&str, &str, &str)] = &[
     ("module", "module", "PRELUDE_VISIBLE"),
 ];
 
+/// 类类型静态父类表（name → 父类名）——转录自 IBCI 内置类继承声明（全语料实证
+/// 稳定；parent_module 恒 null）。未列出的类 = 无父类（null）。
+const CLASS_PARENTS: &[(&str, &str)] = &[
+    ("Enum", "Object"),
+    ("Intent", "Object"),
+    ("LLMCallError", "LLMError"),
+    ("LLMError", "Exception"),
+    ("LLMParseError", "LLMError"),
+    ("LLMRetryExhaustedError", "LLMError"),
+    ("ThreadCancelled", "ThreadError"),
+    ("ThreadError", "Exception"),
+    ("ThreadFailed", "ThreadError"),
+    ("environment", "Object"),
+    ("intent_context", "Object"),
+    ("knowledge", "Object"),
+    ("memory", "Object"),
+    ("narrow_model", "Object"),
+    ("quoted", "Object"),
+    ("run_result", "Object"),
+];
+
+/// 函数类型静态签名表（name → ([参数类型名], 返回类型名)）——转录自 IBCI intrinsic
+/// 函数声明（全语料实证稳定；含 bound_method 类型条目[固定 void 签名]）。
+const FUNCTION_SIGS: &[(&str, &[&str], &str)] = &[
+    ("all", &["any"], "bool"),
+    ("bound_method", &[], "void"),
+    ("callable", &[], "auto"),
+    ("copy", &["any"], "any"),
+    ("deepcopy", &["any"], "any"),
+    ("enumerate", &["any"], "list"),
+    ("eval", &["quoted"], "any"),
+    ("fn", &[], "auto"),
+    ("get_self_source", &[], "str"),
+    ("len", &["any"], "int"),
+    ("max", &["any"], "any"),
+    ("min", &["any"], "any"),
+    ("next", &["any"], "any"),
+    ("print", &["any"], "void"),
+    ("quote", &["str"], "quoted"),
+    ("range", &["int"], "list"),
+    ("reversed", &["any"], "list"),
+    ("sorted", &["any"], "list"),
+    ("sum", &["any"], "any"),
+    ("type", &["any"], "str"),
+    ("vec", &["list"], "vector"),
+    ("zip", &["any"], "list"),
+];
+
+/// 函数签名查表（name → ([参数类型名], 返回类型名)）——intrinsic 函数声明（from-
+/// import 函数绑定的用户函数类型条目签名来源）。
+pub fn function_sig(name: &str) -> Option<(Vec<String>, String)> {
+    FUNCTION_SIGS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, p, r)| (p.iter().map(|s| s.to_string()).collect(), r.to_string()))
+}
+
+/// 方法声明签名查表（(base, method) → ([params], ret)）——公理层声明式方法表。
+pub fn method_signature(base: &str, method: &str) -> Option<(Vec<String>, String)> {
+    METHOD_SIGS
+        .iter()
+        .find(|(b, m, _, _)| *b == base && *m == method)
+        .map(|(_, _, p, r)| (p.iter().map(|s| s.to_string()).collect(), r.to_string()))
+}
+
 /// 成员符号 canonical uid（与 Python FlatSerializer._collect_symbol 匿名符号内容哈希
 /// 同构）：canonical JSON（**键字母序**——owned_scope_uid < owner_type_uid[d<r] +
 /// compact 分隔）=
@@ -217,34 +282,163 @@ pub fn anon_member_uid(member_name: &str, kind: &str, owner_type_uid: &str) -> S
     crate::serialization::anon_symbol_uid(&crate::serialization::hash_prefix(&content))
 }
 
-/// 构建 intrinsic 类型池（66 non-generic KERNEL_NATIVE 类型：基础字段 +
-/// members_uids[35 类型成员静态表，泛型条目继承基类表]）。BTreeMap 按 name 序
-/// （确定性）。与 Python types 池的 KERNEL_NATIVE non-generic 子集差分等价。
+/// 类型条目全字段构建（基础字段 + kind 载荷 + members_uids）——与 Python types 池
+/// 条目同构（全语料实证字段面）：
+/// - class: parent_name/parent_module[null] + members
+/// - primitive: members
+/// - module: members（meta 有；module 无）
+/// - function/bound_method: param_type_names + return_type_name[FUNCTION_SIGS]
+/// - callable_instance: axiom_name + value_type_name[auto]/value_type_module[null]
+/// - list/tuple: element_type_name[裸=any]/element_type_module + members
+///   （tuple 泛型另加 positional_element_types_names/modules——generic_type_entry）
+/// - dict: key/value_type_name[裸=any]/module + members
+/// - optional: wrapped_type_name[any]/module + members
+/// - channel/slot/thread/thread_result/generator: value_type_name[any]/module + members
+/// - subscriber: members only
+/// - exported_types 恒 []（全语料实证）
+pub fn type_entry(name: &str, kind: &str, visibility: &str) -> Value {
+    let uid = format!("type_root.{}", name);
+    let mut m = serde_json::Map::new();
+    m.insert("uid".into(), Value::String(uid.clone()));
+    m.insert("kind".into(), Value::String(kind.to_string()));
+    m.insert("name".into(), Value::String(name.to_string()));
+    m.insert("module_path".into(), Value::Null);
+    m.insert("provenance".into(), Value::String("KERNEL_NATIVE".into()));
+    m.insert("visibility".into(), Value::String(visibility.to_string()));
+    m.insert("storage_model".into(), Value::String("MEMORY_BACKED".into()));
+    m.insert("exported_types".into(), Value::Array(Vec::new()));
+    let has_members = METHOD_MEMBERS.iter().any(|(t, _)| *t == name);
+    match kind {
+        "class" => {
+            // 父类（静态继承表；未列出 = 无父类 null——parent_module 恒 null）
+            let parent = CLASS_PARENTS.iter().find(|(n, _)| *n == name).map(|(_, p)| *p);
+            m.insert(
+                "parent_name".into(),
+                parent
+                    .map(|p| Value::String(p.to_string()))
+                    .unwrap_or(Value::Null),
+            );
+            m.insert("parent_module".into(), Value::Null);
+            if has_members {
+                m.insert("members_uids".into(), members_value(name, &uid));
+            }
+        }
+        "primitive" | "module" | "subscriber" => {
+            if has_members {
+                m.insert("members_uids".into(), members_value(name, &uid));
+            }
+        }
+        "function" | "bound_method" => {
+            let sig = FUNCTION_SIGS.iter().find(|(n, _, _)| *n == name).unwrap();
+            m.insert(
+                "param_type_names".into(),
+                Value::Array(sig.1.iter().map(|p| Value::String(p.to_string())).collect()),
+            );
+            m.insert("return_type_name".into(), Value::String(sig.2.to_string()));
+        }
+        "callable_instance" => {
+            m.insert("axiom_name".into(), Value::String(name.to_string()));
+            m.insert("value_type_name".into(), Value::String("auto".into()));
+            m.insert("value_type_module".into(), Value::Null);
+        }
+        "list" | "tuple" => {
+            m.insert("element_type_name".into(), Value::String("any".into()));
+            m.insert("element_type_module".into(), Value::Null);
+            if has_members {
+                m.insert("members_uids".into(), members_value(name, &uid));
+            }
+        }
+        "dict" => {
+            m.insert("key_type_name".into(), Value::String("any".into()));
+            m.insert("key_type_module".into(), Value::Null);
+            m.insert("value_type_name".into(), Value::String("any".into()));
+            m.insert("value_type_module".into(), Value::Null);
+            if has_members {
+                m.insert("members_uids".into(), members_value(name, &uid));
+            }
+        }
+        "optional" => {
+            m.insert("wrapped_type_name".into(), Value::String("any".into()));
+            m.insert("wrapped_type_module".into(), Value::Null);
+            if has_members {
+                m.insert("members_uids".into(), members_value(name, &uid));
+            }
+        }
+        "channel" | "slot" | "thread" | "thread_result" | "generator" => {
+            m.insert("value_type_name".into(), Value::String("any".into()));
+            m.insert("value_type_module".into(), Value::Null);
+            if has_members {
+                m.insert("members_uids".into(), members_value(name, &uid));
+            }
+        }
+        _ => {}
+    }
+    Value::Object(m)
+}
+
+/// 成员 uid 字典（成员静态表 × canonical 哈希，owner = 声明类型 uid）。
+fn members_value(type_name: &str, owner_uid: &str) -> Value {
+    let members = METHOD_MEMBERS.iter().find(|(t, _)| *t == type_name).unwrap().1;
+    let mut m = serde_json::Map::new();
+    for (mn, mk) in members {
+        m.insert(mn.to_string(), Value::String(anon_member_uid(mn, mk, owner_uid)));
+    }
+    Value::Object(m)
+}
+
+/// 泛型类型条目（list[T] / dict[K,V] / tuple[T1,T2,...]）：基础字段 + payload
+/// （实参类型名，module 恒 null）+ members[继承基类表，owner = 泛型 uid——同名成员
+/// 跨基类/泛型区分]。tuple 泛型：element_type_name = any + positional 实参表（Python
+/// 实证）。
+pub fn generic_type_entry(name: &str) -> Option<Value> {
+    let (kind, params) = crate::type_inference::parse_container(name);
+    let uid = format!("type_root.{}", name);
+    let mut m = serde_json::Map::new();
+    m.insert("uid".into(), Value::String(uid.clone()));
+    m.insert("kind".into(), Value::String(kind.to_string()));
+    m.insert("name".into(), Value::String(name.to_string()));
+    m.insert("module_path".into(), Value::Null);
+    m.insert("provenance".into(), Value::String("KERNEL_NATIVE".into()));
+    m.insert("visibility".into(), Value::String("PRELUDE_VISIBLE".into()));
+    m.insert("storage_model".into(), Value::String("MEMORY_BACKED".into()));
+    m.insert("exported_types".into(), Value::Array(Vec::new()));
+    match kind {
+        "list" => {
+            m.insert("element_type_name".into(), Value::String(params.first().cloned().unwrap_or_else(|| "any".into())));
+            m.insert("element_type_module".into(), Value::Null);
+        }
+        "dict" => {
+            m.insert("key_type_name".into(), Value::String(params.first().cloned().unwrap_or_else(|| "any".into())));
+            m.insert("key_type_module".into(), Value::Null);
+            m.insert("value_type_name".into(), Value::String(params.get(1).cloned().unwrap_or_else(|| "any".into())));
+            m.insert("value_type_module".into(), Value::Null);
+        }
+        "tuple" => {
+            m.insert("element_type_name".into(), Value::String("any".into()));
+            m.insert("element_type_module".into(), Value::Null);
+            m.insert(
+                "positional_element_types_names".into(),
+                Value::Array(params.iter().map(|p| Value::String(p.clone())).collect()),
+            );
+            m.insert(
+                "positional_element_types_modules".into(),
+                Value::Array(vec![Value::Null; params.len()]),
+            );
+        }
+        _ => return None,
+    }
+    m.insert("members_uids".into(), members_value(kind, &uid));
+    Some(Value::Object(m))
+}
+
+/// 构建 intrinsic 类型池（66 non-generic KERNEL_NATIVE 类型全字段：基础 + kind 载荷
+/// + members_uids[__string_exec__ 用户模块成员面 = 完整 artifact 组装面，固定产出
+/// 不含]）。BTreeMap 按 name 序（确定性）。与 Python types 池的 KERNEL_NATIVE
+/// non-generic 子集差分等价。
 pub fn builtin_intrinsic_types() -> BTreeMap<String, Value> {
     let mut types = BTreeMap::new();
     for (name, kind, visibility) in INTRINSIC_TYPES {
-        let uid = format!("type_root.{}", name);
-        let mut type_data = Value::Object(serde_json::Map::from_iter([
-            ("uid".to_string(), Value::String(uid.clone())),
-            ("kind".to_string(), Value::String((*kind).to_string())),
-            ("name".to_string(), Value::String((*name).to_string())),
-            ("module_path".to_string(), Value::Null),
-            ("provenance".to_string(), Value::String("KERNEL_NATIVE".to_string())),
-            ("visibility".to_string(), Value::String((*visibility).to_string())),
-            ("storage_model".to_string(), Value::String("MEMORY_BACKED".to_string())),
-        ]));
-        // members_uids（成员名 → 成员符号 canonical uid；成员静态表覆盖的类型）。
-        if let Some((_, members)) = METHOD_MEMBERS.iter().find(|(t, _)| *t == *name) {
-            let mut members_uids = serde_json::Map::new();
-            for (mn, mk) in *members {
-                members_uids.insert(mn.to_string(), Value::String(anon_member_uid(mn, mk, &uid)));
-            }
-            type_data
-                .as_object_mut()
-                .unwrap()
-                .insert("members_uids".to_string(), Value::Object(members_uids));
-        }
-        types.insert((*name).to_string(), type_data);
+        types.insert((*name).to_string(), type_entry(name, *kind, *visibility));
     }
     types
 }
@@ -304,4 +498,231 @@ pub const METHOD_MEMBERS: &[(&str, &[(&str, &str)])] = &[
     ("thread_result", &[("error", "method"), ("expect", "method"), ("is_error", "method"), ("is_success", "method"), ("status", "method"), ("unwrap", "method"), ("unwrap_or", "method"), ("value", "method")]),
     ("tuple", &[("__getitem__", "method"), ("cast_to", "method"), ("len", "method")]),
     ("vector", &[("__getitem__", "method"), ("__to_prompt__", "method"), ("add", "method"), ("cast_to", "method"), ("cosine", "method"), ("dim", "method"), ("dot", "method"), ("norm", "method"), ("scale", "method"), ("sub", "method")]),
+];
+/// 方法声明签名表（(base, method) → ([params], ret)）——转录自 IBCI 公理层
+/// 声明式方法表（core/kernel/axioms/）；泛型特化另经 specialize_method_signature。
+const METHOD_SIGS: &[(&str, &str, &[&str], &str)] = &[
+    ("Enum", "len", &[], "int"),
+    ("Enum", "to_list", &[], "list"),
+    ("Exception", "__to_prompt__", &[], "str"),
+    ("Exception", "cast_to", &["any"], "any"),
+    ("Intent", "get_content", &[], "str"),
+    ("Intent", "get_mode", &[], "str"),
+    ("Intent", "get_tag", &[], "str"),
+    ("LLMCallError", "__to_prompt__", &[], "str"),
+    ("LLMCallError", "cast_to", &["any"], "any"),
+    ("LLMError", "__to_prompt__", &[], "str"),
+    ("LLMError", "cast_to", &["any"], "any"),
+    ("LLMParseError", "__to_prompt__", &[], "str"),
+    ("LLMParseError", "cast_to", &["any"], "any"),
+    ("LLMRetryExhaustedError", "__to_prompt__", &[], "str"),
+    ("LLMRetryExhaustedError", "cast_to", &["any"], "any"),
+    ("None", "cast_to", &["any"], "any"),
+    ("None", "to_bool", &[], "bool"),
+    ("Optional", "__to_prompt__", &[], "str"),
+    ("Optional", "cast_to", &["any"], "any"),
+    ("Optional", "is_none", &[], "bool"),
+    ("Optional", "is_some", &[], "bool"),
+    ("Optional", "or_else", &["any"], "any"),
+    ("Optional", "to_bool", &[], "bool"),
+    ("Optional", "unwrap", &[], "any"),
+    ("ThreadCancelled", "__to_prompt__", &[], "str"),
+    ("ThreadCancelled", "cast_to", &["any"], "any"),
+    ("ThreadError", "__to_prompt__", &[], "str"),
+    ("ThreadError", "cast_to", &["any"], "any"),
+    ("ThreadFailed", "__to_prompt__", &[], "str"),
+    ("ThreadFailed", "cast_to", &["any"], "any"),
+    ("bool", "cast_to", &["any"], "any"),
+    ("bool", "to_bool", &[], "bool"),
+    ("chan", "close", &[], "void"),
+    ("chan", "recv", &[], "any"),
+    ("chan", "recv_nowait", &[], "any"),
+    ("chan", "send", &["any"], "void"),
+    ("chan", "send_nowait", &["any"], "bool"),
+    ("chan", "subscribe", &["int"], "subscriber"),
+    ("dict", "__getitem__", &["any"], "any"),
+    ("dict", "__setitem__", &["any", "any"], "void"),
+    ("dict", "cast_to", &["any"], "any"),
+    ("dict", "contains", &["any"], "bool"),
+    ("dict", "get", &["any", "any"], "any"),
+    ("dict", "items", &[], "list"),
+    ("dict", "keys", &[], "list"),
+    ("dict", "len", &[], "int"),
+    ("dict", "pop", &["any"], "any"),
+    ("dict", "remove", &["any"], "void"),
+    ("dict", "update", &["any"], "void"),
+    ("dict", "values", &[], "list"),
+    ("environment", "clear", &[], "void"),
+    ("environment", "contains", &["str"], "bool"),
+    ("environment", "fork", &[], "environment"),
+    ("environment", "get", &["str"], "any"),
+    ("environment", "get_current", &[], "environment"),
+    ("environment", "keys", &[], "list"),
+    ("environment", "len", &[], "int"),
+    ("environment", "pop", &["str"], "any"),
+    ("environment", "set", &["str", "any"], "void"),
+    ("environment", "use", &["environment"], "void"),
+    ("file_handle", "cast_to", &["any"], "any"),
+    ("file_handle", "close", &[], "void"),
+    ("file_handle", "read", &[], "str"),
+    ("file_handle", "read_bytes", &[], "any"),
+    ("float", "cast_to", &["any"], "any"),
+    ("float", "to_bool", &[], "bool"),
+    ("generator", "generic_next", &[], "any"),
+    ("generator", "to_list", &[], "list"),
+    ("int", "cast_to", &["any"], "any"),
+    ("int", "to_bool", &[], "bool"),
+    ("int", "to_list", &[], "list"),
+    ("intent_context", "__to_prompt__", &[], "str"),
+    ("intent_context", "clear", &[], "void"),
+    ("intent_context", "clear_inherited", &[], "void"),
+    ("intent_context", "combine", &["intent_context"], "void"),
+    ("intent_context", "fork", &[], "intent_context"),
+    ("intent_context", "get_current", &[], "intent_context"),
+    ("intent_context", "merge", &["intent_context"], "void"),
+    ("intent_context", "pop", &[], "any"),
+    ("intent_context", "push", &["any"], "void"),
+    ("intent_context", "resolve", &[], "any"),
+    ("intent_context", "use", &["intent_context"], "void"),
+    ("knowledge", "add_fact", &["str", "str", "str", "str", "str", "str"], "str"),
+    ("knowledge", "all_in_world", &["str"], "list"),
+    ("knowledge", "amend", &["str", "any", "str"], "void"),
+    ("knowledge", "amend_fact", &["str", "str", "str"], "void"),
+    ("knowledge", "by_source", &["str"], "list"),
+    ("knowledge", "by_subject", &["str"], "list"),
+    ("knowledge", "cast_to", &["any"], "any"),
+    ("knowledge", "compare", &["str", "str"], "dict"),
+    ("knowledge", "contradicts", &["str", "str", "str"], "bool"),
+    ("knowledge", "embed_search", &["vector", "int"], "list"),
+    ("knowledge", "embedding", &["str"], "vector"),
+    ("knowledge", "embedding_dim", &[], "int"),
+    ("knowledge", "exists", &["str", "str", "str", "str"], "bool"),
+    ("knowledge", "expand", &["str"], "dict"),
+    ("knowledge", "export", &[], "dict"),
+    ("knowledge", "fact_len", &[], "int"),
+    ("knowledge", "facts", &[], "list"),
+    ("knowledge", "get", &["str"], "any"),
+    ("knowledge", "get_fact", &["str"], "any"),
+    ("knowledge", "has_embedding", &["str"], "bool"),
+    ("knowledge", "history", &["str", "str"], "list"),
+    ("knowledge", "history_fact", &["str"], "list"),
+    ("knowledge", "keys", &[], "list"),
+    ("knowledge", "len", &[], "int"),
+    ("knowledge", "lookup_pair", &["str", "str"], "list"),
+    ("knowledge", "register_relation", &["str", "str", "bool", "bool"], "void"),
+    ("knowledge", "register_word", &["str", "str", "bool", "list", "dict"], "void"),
+    ("knowledge", "register_world", &["str", "str", "int"], "void"),
+    ("knowledge", "relation", &["str"], "any"),
+    ("knowledge", "relations", &[], "list"),
+    ("knowledge", "retract", &["str", "str"], "void"),
+    ("knowledge", "same_word", &["str", "str"], "bool"),
+    ("knowledge", "set_embedding", &["str", "vector"], "void"),
+    ("knowledge", "source", &["str"], "str"),
+    ("knowledge", "store", &["str", "any", "any", "str"], "void"),
+    ("knowledge", "to_ibci", &[], "str"),
+    ("knowledge", "transitive", &["str", "str"], "list"),
+    ("knowledge", "word", &["str"], "any"),
+    ("knowledge", "words", &[], "list"),
+    ("knowledge", "world", &["str"], "any"),
+    ("knowledge", "worlds", &[], "list"),
+    ("list", "__getitem__", &["int"], "any"),
+    ("list", "__setitem__", &["int", "any"], "void"),
+    ("list", "append", &["any"], "void"),
+    ("list", "cast_to", &["any"], "any"),
+    ("list", "clear", &[], "void"),
+    ("list", "contains", &["any"], "bool"),
+    ("list", "count", &["any"], "int"),
+    ("list", "index", &["any"], "int"),
+    ("list", "insert", &["int", "any"], "void"),
+    ("list", "len", &[], "int"),
+    ("list", "pop", &[], "any"),
+    ("list", "remove", &["any"], "void"),
+    ("list", "reverse", &[], "void"),
+    ("list", "sort", &[], "void"),
+    ("llm_uncertain", "__eq__", &["any"], "bool"),
+    ("llm_uncertain", "__ne__", &["any"], "bool"),
+    ("llm_uncertain", "__to_prompt__", &[], "str"),
+    ("llm_uncertain", "cast_to", &["any"], "any"),
+    ("llm_uncertain", "to_bool", &[], "bool"),
+    ("memory", "cast_to", &["any"], "any"),
+    ("memory", "consolidate", &["dict"], "int"),
+    ("memory", "content_hash", &["str"], "str"),
+    ("memory", "corpus", &["str"], "list"),
+    ("memory", "demote", &["str", "str"], "void"),
+    ("memory", "encode", &["str", "any", "str", "str"], "void"),
+    ("memory", "export", &[], "dict"),
+    ("memory", "keys", &[], "list"),
+    ("memory", "len", &[], "int"),
+    ("memory", "promote", &["str", "str"], "void"),
+    ("memory", "prune", &["dict"], "int"),
+    ("memory", "retrieve", &["str"], "any"),
+    ("memory", "search", &["str", "str", "int"], "list"),
+    ("memory", "set_capacity", &["str", "any"], "void"),
+    ("memory", "snapshot", &[], "dict"),
+    ("memory", "tier", &["str"], "str"),
+    ("memory", "tier_keys", &["str"], "list"),
+    ("memory", "tier_size", &["str"], "int"),
+    ("memory", "verify", &["str"], "bool"),
+    ("narrow_model", "__to_prompt__", &[], "str"),
+    ("narrow_model", "architecture", &[], "str"),
+    ("narrow_model", "cast_to", &["any"], "any"),
+    ("narrow_model", "content_hash", &[], "str"),
+    ("narrow_model", "dim", &[], "int"),
+    ("narrow_model", "entities", &[], "list"),
+    ("narrow_model", "name", &[], "str"),
+    ("narrow_model", "relations", &[], "list"),
+    ("narrow_model", "score", &["str", "str", "str"], "float"),
+    ("narrow_model", "topk", &["str", "str", "int"], "list"),
+    ("quoted", "__to_prompt__", &[], "str"),
+    ("quoted", "cast_to", &["any"], "any"),
+    ("run_result", "__to_prompt__", &[], "str"),
+    ("run_result", "cast_to", &["any"], "any"),
+    ("slot", "get", &[], "any"),
+    ("slot", "set", &["any"], "void"),
+    ("slot", "update", &["any"], "void"),
+    ("str", "cast_to", &["any"], "any"),
+    ("str", "contains", &["str"], "bool"),
+    ("str", "count", &["str", "int"], "int"),
+    ("str", "endswith", &["str"], "bool"),
+    ("str", "find", &["str", "int"], "int"),
+    ("str", "format", &["any"], "str"),
+    ("str", "is_empty", &[], "bool"),
+    ("str", "join", &["list"], "str"),
+    ("str", "len", &[], "int"),
+    ("str", "lower", &[], "str"),
+    ("str", "replace", &["str", "str"], "str"),
+    ("str", "rfind", &["str", "int"], "int"),
+    ("str", "split", &["str"], "list"),
+    ("str", "startswith", &["str"], "bool"),
+    ("str", "strip", &[], "str"),
+    ("str", "to_bool", &[], "bool"),
+    ("str", "upper", &[], "str"),
+    ("subscriber", "close", &[], "void"),
+    ("subscriber", "recv", &[], "any"),
+    ("subscriber", "recv_nowait", &[], "any"),
+    ("thread", "cancel", &[], "any"),
+    ("thread", "is_done", &[], "bool"),
+    ("thread", "join", &[], "any"),
+    ("thread", "start", &[], "thread"),
+    ("thread_result", "error", &[], "any"),
+    ("thread_result", "expect", &[], "any"),
+    ("thread_result", "is_error", &[], "bool"),
+    ("thread_result", "is_success", &[], "bool"),
+    ("thread_result", "status", &[], "str"),
+    ("thread_result", "unwrap", &[], "any"),
+    ("thread_result", "unwrap_or", &["any"], "any"),
+    ("thread_result", "value", &[], "any"),
+    ("tuple", "__getitem__", &["int"], "any"),
+    ("tuple", "cast_to", &["any"], "any"),
+    ("tuple", "len", &[], "int"),
+    ("vector", "__getitem__", &["int"], "float"),
+    ("vector", "__to_prompt__", &[], "str"),
+    ("vector", "add", &["vector"], "vector"),
+    ("vector", "cast_to", &["any"], "any"),
+    ("vector", "cosine", &["vector"], "float"),
+    ("vector", "dim", &[], "int"),
+    ("vector", "dot", &["vector"], "float"),
+    ("vector", "norm", &[], "float"),
+    ("vector", "scale", &["float"], "vector"),
+    ("vector", "sub", &["vector"], "vector"),
 ];
