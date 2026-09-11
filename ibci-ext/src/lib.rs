@@ -719,7 +719,7 @@ fn capability() -> PyResult<String> {
         "intrinsic_names": interpreter::intrinsic_names(),
         // 内建符号全集（42 类型 + 19 函数 + 2 模块）——内建名重定义角检测用
         "intrinsic_symbol_names": intrinsic_symbols::intrinsic_names(),
-        "native_modules": ["meta", "compute_engine", "plugins", "fs", "world_model"],
+        "native_modules": ["meta", "compute_engine", "plugins", "fs", "world_model", "ai"],
         "unported_corners": [
             {
                 "feature": "meta_compile",

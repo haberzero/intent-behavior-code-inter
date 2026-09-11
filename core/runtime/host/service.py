@@ -60,6 +60,10 @@ class HostService(IHostService):
         单一权威；返回 = 宿主模块对象[Python]）。"""
         return self.interop.get_package(name)
 
+    def host_eq(self, a, b) -> bool:
+        """宿主对象相等（Rust cmp 桥接面——值身份对象[vector 等]元素比较）。"""
+        return bool(a == b)
+
     def host_getattr(self, obj, attr):
         """宿主属性访问（Rust 桥接面——D2）：经对象系统 ``__getattr__`` 协议
         （字段 → 类方法 → 默认——Python VM 同路径）；裸 Python 对象 = 直接
@@ -89,6 +93,21 @@ class HostService(IHostService):
             caps._plugin_id = type(obj).__name__
             obj.setup(capabilities=caps)
             setattr(obj, "_ibci_host_call_setup", True)
+        # 模块方法：经绑定契约（loader vtable proxy——unbox_args/装箱正确性
+        # 单一权威；retrieve 等值身份面参数保留 boxed）
+        mod_name = self._module_name_for(obj)
+        if mod_name is not None:
+            contract = self.interop.get_native_contract(mod_name)
+            if contract is not None:
+                vtable, _ = contract
+                if method in vtable:
+                    # vtable 值 = (proxy_wrapper, param_meta) 元组——取 wrapper；
+                    # 参数装箱（proxy 的 unbox_args=False 面保留 IbObject 原形
+                    # [retrieve 值身份参数]；unbox_args=True 面由 proxy 再拆箱）
+                    wrapped = vtable[method]
+                    proxy_fn = wrapped[0] if isinstance(wrapped, tuple) else wrapped
+                    boxed_args = [self.registry.box(a) for a in args]
+                    return proxy_fn(*boxed_args)
         target = getattr(obj, method, None)
         if target is None:
             # 对象方法 receive 分派（vtable 面——裸属性缺失时）
@@ -99,12 +118,22 @@ class HostService(IHostService):
                 return result
             raise RuntimeError(f"host_call: {type(obj).__name__} 无方法 '{method}'")
         # 参数拆箱（同 proxy_wrapper 调用边界单一入口——IbObject → native
-        # [save_kb 收值快照 dict 等]；可调用实例原样透传；标量直通）
+        # [save_kb 收值快照 dict 等]；可调用实例 + 值身份类型原样透传；标量直通）
         from core.runtime.objects.kernel.base import unbox_for_native_call
 
         native_args = [unbox_for_native_call(a) for a in args]
         result = target(*native_args)
         return result
+
+    def _module_name_for(self, obj) -> Optional[str]:
+        """宿主模块名反查（host_call vtable 契约定位——registry 实例身份）。"""
+        hi = getattr(self.interop, "host_interface", None)
+        if hi is None:
+            return None
+        for name in hi.get_all_module_names():
+            if hi.get_module_implementation(name) is obj:
+                return name
+        return None
 
     @property
     def orchestrator(self) -> Optional[IKernelOrchestrator]:

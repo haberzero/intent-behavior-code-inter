@@ -550,7 +550,26 @@ pub(crate) fn ibvalue_to_typed_json(v: &IbValue) -> serde_json::Value {
             "error",
             serde_json::json!({"class": class, "message": message}),
         ),
-        IbValue::Host(_) => ("host", serde_json::Value::Null),
+        IbValue::Host(h) => {
+            // vector 类宿主值 → 元素导出（kind="vector"——状态镜像物化面；
+            // 其余宿主 = host null[句柄无数据面]）
+            Python::with_gil(|py| -> (&'static str, serde_json::Value) {
+                let obj = h.bind(py);
+                let cls: Option<String> = obj
+                    .getattr("ib_class")
+                    .ok()
+                    .and_then(|c| c.getattr("name").ok())
+                    .and_then(|n| n.extract::<String>().ok());
+                if cls.as_deref() == Some("vector") {
+                    if let Ok(el) = obj.getattr("elements") {
+                        if let Ok(v) = el.extract::<Vec<f64>>() {
+                            return ("vector", serde_json::json!(v));
+                        }
+                    }
+                }
+                ("host", serde_json::Value::Null)
+            })
+        }
     };
     serde_json::json!({"kind": kind, "value": value})
 }
@@ -2701,6 +2720,14 @@ impl Interpreter {
                     (IbValue::Tensor(a), IbValue::Tensor(b)) => {
                         if a == b { 0 } else { 2 }
                     }
+                    // 宿主对象相等 = 经桥接 Python ==（值身份对象[vector 等]
+                    // 元素比较；无桥接 = 不相等）
+                    (IbValue::Host(a), IbValue::Host(b)) => {
+                        let eq = self
+                            .host_eq(a, b)
+                            .unwrap_or(false);
+                        if eq { 0 } else { 2 }
+                    }
                     // 跨族[数值 vs str 等] = 不相等（== 面；关系面已前置 TypeError）
                     _ => 2,
                 },
@@ -2930,6 +2957,18 @@ impl Interpreter {
     }
 
     /// 宿主对象方法委托（KB 服务——经 host service 桥接调 Python 对象方法）。
+    /// 宿主对象相等（经桥接 Python ==——值身份对象元素比较）。
+    fn host_eq(&self, a: &Py<PyAny>, b: &Py<PyAny>) -> Option<bool> {
+        let bridge = self.bridge.as_ref()?;
+        Python::with_gil(|py| -> PyResult<bool> {
+            let r = bridge
+                .bind(py)
+                .call_method1("host_eq", (a.bind(py), b.bind(py)))?;
+            r.extract::<bool>()
+        })
+        .ok()
+    }
+
     /// 宿主方法调用（D2 桥接面）：经 bridge.host_call 分派（模块懒 setup +
     /// 对象系统 receive/裸属性 + 显式错误传播[旧 unwrap_or 吞错 = 静默]）。
     fn call_host_method(&self, pyobj: &Py<PyAny>, method: &str, args: Vec<IbValue>) -> Result<IbValue, Thrown> {
@@ -2972,7 +3011,13 @@ fn host_pyerr_to_thrown(e: PyErr) -> Thrown {
         let code: Option<String> = obj
             .getattr("error_code")
             .ok()
-            .and_then(|c| c.extract::<String>().ok());
+            .and_then(|c| c.extract::<String>().ok())
+            // EmbeddingProviderError 等契约异常用 code 属性（非 error_code）
+            .or_else(|| {
+                obj.getattr("code")
+                    .ok()
+                    .and_then(|c| c.extract::<String>().ok())
+            });
         // 回退类 = Python 异常类名（引擎 error_code_for_class 映射——非硬编码）
         let class = obj
             .getattr("error_class")
@@ -3307,6 +3352,55 @@ fn from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> IbValue {
     if obj.is_none() {
         return IbValue::None_;
     }
+    // IbObject（有 ib_class）先分派——value 身份类型（vector 等）不被原生
+    // extract 捕获（旧 list 分支把 IbVector 提取成 Rust List——值身份丢失）；
+    // 基本值类型经 to_native 解箱；knowledge 重建为 Rust 首等值
+    if obj.hasattr("ib_class").unwrap_or(false) {
+        let class_name: Option<String> = obj
+            .getattr("ib_class")
+            .ok()
+            .and_then(|c| c.getattr("name").ok())
+            .and_then(|n| n.extract::<String>().ok());
+        match class_name.as_deref() {
+            Some("knowledge") => {
+                if let Ok(native) = obj.call_method0("to_native") {
+                    if let Ok(state) = native.downcast::<PyDict>() {
+                        if let Some(kv) = knowledge_from_state(py, state) {
+                            return kv;
+                        }
+                    }
+                }
+            }
+            Some("str" | "int" | "float" | "bool" | "tuple" | "None") => {
+                if let Ok(native) = obj.call_method0("to_native") {
+                    return from_py(py, &native);
+                }
+            }
+            // list/dict 类：元素面直读（to_native 可能因值身份元素[vector]
+            // 递归失败——逐元素 from_py 保留元素对象）
+            Some("list") => {
+                if let Ok(el) = obj.getattr("elements") {
+                    if let Ok(items) = el.extract::<Vec<PyObject>>() {
+                        let vals: Vec<IbValue> =
+                            items.iter().map(|x| from_py(py, x.bind(py))).collect();
+                        return IbValue::list_new(vals);
+                    }
+                }
+                if let Ok(native) = obj.call_method0("to_native") {
+                    return from_py(py, &native);
+                }
+            }
+            Some("dict") => {
+                if let Ok(native) = obj.call_method0("to_native") {
+                    return from_py(py, &native);
+                }
+            }
+            _ => {
+                // vector/file_handle/narrow_model 等 = 宿主值对象（句柄/值身份）
+                return IbValue::Host(obj.clone().unbind());
+            }
+        }
+    }
     // bool（先于 int——bool 是 int 子类）
     if let Ok(b) = obj.extract::<bool>() {
         return IbValue::Bool(b);
@@ -3354,43 +3448,7 @@ fn from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> IbValue {
         }
         return IbValue::dict_new(pairs);
     }
-    // IbObject（宿主值对象）→ 基本值类型解箱为原生（to_native）→ typed
-    // 转换（D2 桥接结果面——boxed 标量/容器[path 等字段]恢复数据值形态）；
-    // 自定义类型（file_handle/narrow_model 等）= Host（句柄语义——不解箱）
-    if obj.hasattr("to_native").unwrap_or(false) {
-        let class_name: Option<String> = obj
-            .getattr("ib_class")
-            .ok()
-            .and_then(|c| c.getattr("name").ok())
-            .and_then(|n| n.extract::<String>().ok());
-        let is_primitive = matches!(
-            class_name.as_deref(),
-            Some("str" | "int" | "float" | "bool" | "list" | "dict" | "tuple" | "None")
-        );
-        if is_primitive {
-            if let Ok(native) = obj.call_method0("to_native") {
-                return from_py(py, &native);
-            }
-        }
-    }
-    // IbKnowledge（class name = "knowledge"）→ 状态重建为 Rust 首等值
-    // （D2-③b：load_kb 结果等——全方法走 Rust 分派臂，不经 Python 对象方法）
-    if obj.hasattr("ib_class").unwrap_or(false) {
-        let class_name: Option<String> = obj
-            .getattr("ib_class")
-            .ok()
-            .and_then(|c| c.getattr("name").ok())
-            .and_then(|n| n.extract::<String>().ok());
-        if class_name.as_deref() == Some("knowledge") {
-            if let Ok(native) = obj.call_method0("to_native") {
-                if let Ok(state) = native.downcast::<PyDict>() {
-                    if let Some(kv) = knowledge_from_state(py, state) {
-                        return kv;
-                    }
-                }
-            }
-        }
-    }
+
     // 其他 = 宿主对象（克隆 Bound 取所有权）
     IbValue::Host(obj.clone().unbind())
 }

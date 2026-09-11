@@ -154,6 +154,7 @@ class StateMaterializer:
             "meta": self._display,
             "error": self._display,
             "host": self._none,
+            "vector": self._vector,
         }
 
     def materialize(self, kind, value, declared_type):
@@ -165,6 +166,13 @@ class StateMaterializer:
     # -- 原生数据面 --
     def _as_is(self, v, dt):
         return v
+
+    def _vector(self, v, dt):
+        # vector 宿主值元素面（状态镜像——向量物化；ib_class 经 registry）
+        from core.runtime.objects.primitives.vector import IbVector
+
+        vector_class = self._registry.get_class("vector")
+        return IbVector(list(v or []), vector_class)
 
     def _none(self, v, dt):
         return None

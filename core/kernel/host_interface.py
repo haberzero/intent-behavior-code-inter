@@ -127,6 +127,10 @@ class HostInterface:
         单一权威；返回 = 宿主模块对象[Python]）。"""
         return self.get_module_implementation(name)
 
+    def get_all_module_names(self):
+        """全模块名枚举（host_call 模块名反查用）。"""
+        return list(self.runtime._implementations.keys())
+
     def get_module_implementation(self, name: str) -> Optional[Any]:
         return self.runtime.get(name)
 

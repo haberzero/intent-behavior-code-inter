@@ -485,15 +485,29 @@ def is_callable_object(obj: Any) -> bool:
 
 
 def unbox_for_native_call(value: Any) -> Any:
-    """调用边界拆箱单一入口：可调用实例原样透传，其余经 ``unbox`` 拆为原生。
+    """调用边界拆箱单一入口：可调用实例 + 值身份类型原样透传，其余经
+    ``unbox`` 拆为原生。
 
     收敛全仓"构造/调用原生成员前逐个参数拆箱"的散落写法（插件代理参数、
     宿主类型实例化实参等）：统一可调用透传 + 数据值拆箱双分支，避免站点各自
-    内联 ``getattr(a, "to_native", None)`` 双轨写法。
+    内联 ``getattr(a, "to_native", None)`` 双轨写法。值身份类型（vector 等
+    to_native 显式违约）不可拆箱——透传（retrieve 等检索面经 .elements 直读）。
     """
     if is_callable_object(value):
         return value
+    # 值身份类型（vector 等）透传——to_native 显式违约，unbox 必抛
+    if is_value_identity(value):
+        return value
     return unbox(value)
+
+
+def is_value_identity(value: Any) -> bool:
+    """值身份判定：to_native 显式违约的一等值类型（vector 等）——调用边界
+    原样透传（不可拆箱为原生值）。"""
+    if not hasattr(value, "ib_class"):
+        return False
+    cls_name = getattr(getattr(value, "ib_class", None), "name", "")
+    return cls_name == "vector"
 
 
 def is_sequence_value(value: Any) -> bool:
