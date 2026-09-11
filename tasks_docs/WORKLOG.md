@@ -5463,6 +5463,21 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   IbObjects——退役需 host 函数返回 typed 形态经桥接物化）。
 - 全量 pytest 4283/0/1 维持。
 
+## 阶段 D2-① 完成 + 路由变更评估（2026-09-11，commit 89ea63b5）
+
+- **D2-①（89ea63b5）宿主桥接 host_call 打通**：HostService.host_call（模块懒
+  setup[capabilities 注入同 loader 装配协议] + 裸属性/receive 分派 + 显式错误
+  传播）+ get_host_module + set_service_context；Rust call_host_method →
+  bridge.host_call + Result 化；engine 传 HostService 作 bridge。验证（内核
+  直调）：fs.open/read → hello-d2、compute_engine/tensor 2D/str.len/tuple
+  count 全通。
+- **路由变更评估（未落地——本轮回退）**：扩 native_modules 试探 → 宿主测试
+  6+ 失败。**缺口 = 宿主错误码边界**：host 面 InterpreterError（NAR_*/KNW_*）
+  经桥接丢失码（Rust map_err → AttributeError）——需 host-call 错误边界提取
+  error_code + 现场（P3 typed 错误贯通）+ compute/ihost 等形态差异修复。
+- **下一步 D2-②**：宿主错误码边界（桥接异常 → RustRuntimeError[code+line]）
+  → 路由全源送 Rust（大验证）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
