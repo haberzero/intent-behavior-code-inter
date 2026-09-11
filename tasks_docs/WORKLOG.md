@@ -5644,6 +5644,25 @@ interpreter.rs = 生产，消费 parser 的 AST 类型定义）。
 **风险**：parser.rs 切分（类型 vs 解析）+ deserializer 构造路径独立性；行为/
 契约 = 生产语义验证（差分移除后权威）。实施 = 下一轮专项手术。
 
+## 阶段 D7 完成：前端差分退役 + 语义转录退役（⑦ 终点最终块，2026-09-11，62346af4）
+
+**差分机制全部退场（-4425 行）**：
+- 语义转录组件退役（node_serializer/symbol_resolver/type_inference/
+  scope_serializer——差分面 pyfunction 生产零调用实证）；生产面保留：
+  lexer/parser（meta.quote/eval Rust 独立解析 + AST 类型）、deserializer
+  （deserialize_module/node_types——执行 + capability）、annotation.rs
+  （annotation_type_str/collect_refs 族/parse_container——手术提取生产纯 AST
+  辅助）。
+- 差分面 pyfunction 退役（lex/parse_struct/deserialize_struct/symbol_table/
+  type_table/node_types/rust_intrinsic_names——Python 零消费）。
+- 差分 harness 机制退役（35 前端差分 + scripts/differential_harness + 契约 +
+  harness/ast_dump/bridge——语料 + 分歧注册表保留；TestCorpus 确定性 = 行为
+  契约冻结输出权威）。
+- **⑦ 终点架构达成**：Rust = 反序列化 + 执行内核（生产）；Python = 编译器 +
+  LLM/宿主执行层；**无转录层**（"转录文化"最终消除）；行为/契约层 = 语义验证
+  权威（数据面 + 前端差分全部退役）。
+- 验证：cargo build + 内核单测 6/0 + 全量 pytest 4268/0/1。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
