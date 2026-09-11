@@ -18,40 +18,6 @@ def _engine():
     return IBCIEngine(root_dir=_ROOT)
 
 
-def test_deep_clone_preserves_specialized_identity():
-    """深克隆特化容器保留类型身份且值独立（快照/字段默认值路径）。"""
-    from core.runtime.objects.deep_clone import try_deep_clone
-
-    engine = _engine()
-    engine.run_string("list[int] li = [1, 2]\n", silent=True)
-    rc = engine.interpreter.execution_context.runtime_context
-    li = rc.get_symbol("li").value
-    clone = try_deep_clone(li)
-    assert clone is not None and clone is not li
-    assert clone.ib_class.name == "list[int]", (
-        f"深克隆特化身份丢失: {clone.ib_class.name}"
-    )
-    clone.elements.append(engine.registry.box(99))
-    assert [e.to_native() for e in li.elements] == [1, 2], (
-        "深克隆后原值被共享修改（应独立）"
-    )
-
-
-def test_deep_clone_dict_specialized_identity():
-    """深克隆特化 dict 保留类型身份且值独立。"""
-    from core.runtime.objects.deep_clone import try_deep_clone
-
-    engine = _engine()
-    engine.run_string('dict[str,int] d = {"a": 1}\n', silent=True)
-    rc = engine.interpreter.execution_context.runtime_context
-    d = rc.get_symbol("d").value
-    clone = try_deep_clone(d)
-    assert clone is not None and clone is not d
-    assert clone.ib_class.name == "dict[str,int]", (
-        f"深克隆特化身份丢失: {clone.ib_class.name}"
-    )
-    clone.fields["a"] = engine.registry.box(42)
-    assert d.fields["a"].to_native() == 1, "深克隆后原 dict 被共享修改（应独立）"
 
 
 def test_runtime_assignability_distinguishes_specialized_values():

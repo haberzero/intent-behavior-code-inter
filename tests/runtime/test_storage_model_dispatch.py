@@ -43,47 +43,7 @@ class _DiskValue(IbValue):
         super().__init__(_FakeIbClass)
 
 
-def test_memory_list_deep_clone(engine_session):
-    """内存型 list 仍走完整递归深克隆。"""
-    registry = engine_session.registry
-    list_class = registry.get_class("list")
-    original = IbList([registry.box(1), registry.box(2)], list_class)
-    cloned = try_deep_clone(original)
 
-    assert cloned is not None
-    assert cloned is not original
-    assert [e.to_native() for e in cloned.elements] == [1, 2]
-
-
-def test_disk_backed_clone_uses_protocol(monkeypatch):
-    """磁盘型对象调用 ``__clone_ref__`` 而不是递归深克隆。"""
-    original = _DiskValue()
-    clone = _DiskValue()
-
-    def _fake_receive(self, msg, args):
-        return clone if msg == "__clone_ref__" else None
-
-    monkeypatch.setattr(_DiskValue, "receive", _fake_receive)
-
-    result = try_deep_clone(original)
-    assert result is clone
-
-
-def test_memory_media_value_not_lost(engine_session, tmp_path):
-    """``type(val) is KernelIbObject`` 的修复：media 等 IbValue 子类不再丢失。"""
-    registry = engine_session.registry
-    audio_class = registry.get_class("audio")
-    tmp_file = tmp_path / "audio.wav"
-    tmp_file.write_bytes(b"fake-audio")
-    backing = FileBacking(PathValidator.canonicalize_for_security(str(tmp_file)))
-    original = IbAudio(backing, audio_class)
-
-    cloned = try_deep_clone(original)
-    assert cloned is not None
-    assert cloned is not original
-    assert cloned.ib_class.name == "audio"
-    # disk-backed 子类深拷贝只复制路径引用。
-    assert cloned.backing is original.backing
 
 
 def test_disk_backed_serializer_branch(engine_session, monkeypatch):

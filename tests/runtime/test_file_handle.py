@@ -10,7 +10,6 @@ import pytest
 
 from core.base.path import IbPath
 from core.kernel.path import PathValidator
-from core.runtime.objects.deep_clone import try_deep_clone
 from core.runtime.objects.file_handle import IbFileHandle
 from core.runtime.objects.media_backing import FileBacking, GeneratedBacking
 from core.runtime.serialization.runtime_serializer import RuntimeSerializer, RuntimeDeserializer
@@ -91,18 +90,18 @@ def test_file_handle_close_is_noop(engine_session, tmp_path):
     assert fh.close().to_native() is None
 
 
-def test_file_handle_clone_ref_shares_backing(engine_session, tmp_path):
-    fh = _make_file_handle(engine_session.registry, tmp_path)
-    clone = fh.__clone_ref__()
-    assert clone is not fh
-    assert clone.backing is fh.backing
-
-
-def test_deep_clone_uses_clone_ref(engine_session, tmp_path):
-    fh = _make_file_handle(engine_session.registry, tmp_path)
-    clone = try_deep_clone(fh)
-    assert clone is not fh
-    assert clone.backing is fh.backing
+def test_file_handle_deepcopy_shares_backing(file_engine, tmp_path):
+    """deepcopy 克隆句柄共享磁盘后备（可观察：克隆读同一文件内容）。"""
+    p = tmp_path / "clone.txt"
+    p.write_text("hello-clone", encoding="utf-8")
+    lines = []
+    file_engine.run_string(
+        f'import fs\nh = fs.open("{p.name}", "r")\nh2 = deepcopy(h)\n'
+        f'print(h2.read())\n',
+        output_callback=lambda t: lines.append(str(t)),
+        silent=True,
+    )
+    assert lines == ["hello-clone"]
 
 
 def test_file_handle_descriptor_round_trip(engine_session, tmp_path):
