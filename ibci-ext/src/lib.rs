@@ -578,132 +578,6 @@ fn json_to_ibvalue(v: &serde_json::Value) -> interpreter::IbValue {
 }
 
 // --------------------------------------------------------------------------- //
-// 持久执行会话（⑦ host 桥接面：函数值宿主 .call——顶层环境保活，闭包/
-// 计数器状态跨调用存活；handle 为 Python 侧 opaque 整数）
-// --------------------------------------------------------------------------- //
-#[derive(Copy, Clone)]
-struct RawSessionPtr(std::ptr::NonNull<std::ffi::c_void>);
-// SAFETY: 会话指针仅经 GIL 保护路径消费（pyfunction = Python 单线程面），
-// 跨线程移动不产生并发访问。
-unsafe impl Send for RawSessionPtr {}
-
-struct SessionState {
-    env: std::rc::Rc<std::cell::RefCell<interpreter::Environment>>,
-}
-
-static SESSIONS: std::sync::LazyLock<
-    std::sync::Mutex<std::collections::HashMap<u64, (RawSessionPtr, u64)>>,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
-static NEXT_HANDLE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-
-#[pyfunction]
-fn open_session(
-    artifact_json: &str,
-    initial_vars: Option<Bound<'_, PyDict>>,
-    py: Python<'_>,
-) -> PyResult<(u64, Py<PyList>, Py<PyDict>)> {
-    // GIL 侧：初始变量 → JSON
-    let initial_json: Vec<(String, serde_json::Value)> = match initial_vars {
-        Some(d) => d
-            .iter()
-            .map(|(k, v)| -> PyResult<(String, serde_json::Value)> {
-                Ok((k.extract::<String>()?, py_to_json(&v)?))
-            })
-            .collect::<PyResult<Vec<_>>>()?,
-        None => Vec::new(),
-    };
-    let module = deserializer::deserialize_module(artifact_json)
-        .ok_or_else(|| PyRuntimeError::new_err("IBCI: artifact 反序列化失败"))?;
-    let interp = interpreter::Interpreter::new();
-    let initial: Vec<(String, interpreter::IbValue)> = initial_json
-        .into_iter()
-        .map(|(k, v)| (k, json_to_ibvalue(&v)))
-        .collect();
-    let (output, env) = match interp.run_module_session(&module, &initial) {
-        Ok(r) => r,
-        Err(t) => return Err(errors::thrown_to_pyerr(&t)),
-    };
-    // 状态导出（执行后顶层环境全条目）
-    let state: Vec<(String, interpreter::IbValue)> = env.borrow().snapshot_vars();
-    let state_json: Vec<(String, serde_json::Value)> = state
-        .into_iter()
-        .map(|(k, v)| (k, interpreter::ibvalue_to_typed_json(&v)))
-        .collect();
-    let session = Box::new(SessionState { env });
-    let ptr = Box::into_raw(session);
-    let handle = NEXT_HANDLE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    SESSIONS
-        .lock()
-        .unwrap()
-        .insert(handle, (RawSessionPtr(unsafe { std::ptr::NonNull::new(ptr as *mut std::ffi::c_void).unwrap() }), 1));
-    // 组装返回
-    let list = PyList::empty(py);
-    for line in output {
-        list.append(line)?;
-    }
-    let state_dict = PyDict::new(py);
-    for (k, v) in state_json {
-        state_dict.set_item(k, json_to_py(py, &v)?)?;
-    }
-    Ok((handle, list.unbind(), state_dict.unbind()))
-}
-
-#[pyfunction]
-fn session_call(
-    handle: u64,
-    name: &str,
-    args_json: &str,
-    py: Python<'_>,
-) -> PyResult<(Py<PyAny>, Py<PyList>)> {
-    let ptr = {
-        let guard = SESSIONS.lock().unwrap();
-        guard
-            .get(&handle)
-            .map(|(p, _)| *p)
-            .ok_or_else(|| PyRuntimeError::new_err("IBCI: 会话已释放"))?
-    };
-    let session = unsafe { &*(ptr.0.as_ptr() as *const SessionState) };
-    let interp = interpreter::Interpreter::new();
-    let args: Vec<interpreter::IbValue> = match serde_json::from_str::<serde_json::Value>(args_json)
-    {
-        Ok(serde_json::Value::Array(arr)) => {
-            arr.iter().map(json_to_ibvalue).collect()
-        }
-        Ok(_) => return Err(PyRuntimeError::new_err("IBCI: args 须为 JSON 数组")),
-        Err(_) => Vec::new(),
-    };
-    let mut out: Vec<String> = Vec::new();
-    let result = match interp.session_call(&session.env, name, args, &mut out) {
-        Ok(r) => r,
-        Err(t) => return Err(errors::thrown_to_pyerr(&t)),
-    };
-    let result_json = interpreter::ibvalue_to_json(&result).to_string();
-    let result_py: Py<PyAny> = pyo3::types::PyString::new(py, &result_json).into_py(py);
-    let list = PyList::empty(py);
-    for line in out {
-        list.append(line)?;
-    }
-    Ok((result_py, list.unbind()))
-}
-
-#[pyfunction]
-fn session_release(handle: u64) {
-    let mut guard = SESSIONS.lock().unwrap();
-    if let Some(entry) = guard.get_mut(&handle) {
-        entry.1 -= 1;
-        if entry.1 == 0 {
-            let (p, _) = guard.remove(&handle).unwrap();
-            drop(guard);
-            unsafe {
-                let _ = Box::from_raw(p.0.as_ptr() as *mut SessionState);
-            }
-        }
-    }
-}
-
-/// Rust 解释器已实现的内征函数名集合（⑦ 路由判定单一真相源：数据面源
-/// 引用的内征名 ⊆ 本集 = Rust 可执行；引用未移植内征 = Python 语义宿主。
-/// 随内征移植批次自动扩展——无 Python 侧硬编码清单）。
 #[pyfunction]
 fn rust_intrinsic_names(py: Python<'_>) -> PyResult<Py<PyList>> {
     // 派生自 interpreter 内征分发表（INTRINSICS + EXCEPTION_CLASSES + meta
@@ -719,7 +593,65 @@ fn rust_intrinsic_names(py: Python<'_>) -> PyResult<Py<PyList>> {
 /// 内核能力声明（P1 协议——架构 v2 R0 §三）：node_types / intrinsic_names /
 /// native_modules / unported_corners[{feature, reason}] JSON。路由判定 =
 /// 本声明的查询结果（Python 侧零谓词堆零硬编码集合）；unported_corners 随
-/// 语义移植推进条目删除（消除后路由自动放行）。
+/// 宿主 .call 契约入口（P4 协议）：顶层函数值无状态调用——反序列化 →
+/// 执行模块[fresh] → 按名调用（纯函数契约；DIVERGENCE 登记
+/// host_call_closure_state）。
+#[pyfunction]
+fn call_top_level_function(
+    artifact_json: &str,
+    name: &str,
+    args_json: &str,
+    py: Python<'_>,
+) -> PyResult<(Py<PyAny>, Py<PyList>)> {
+    // 宿主 .call 契约（无会话通道）：反序列化 → 执行模块[fresh] → 按名调用
+    // 顶层函数（纯函数契约——DIVERGENCE 登记 host_call_closure_state）。
+    let json_owned = artifact_json.to_string();
+    let name_owned = name.to_string();
+    let args_owned = args_json.to_string();
+    let (result_json, out): (String, Vec<String>) = match py.allow_threads(
+        || -> Result<(String, Vec<String>), errors::ErrorPayload> {
+            let module = match deserializer::deserialize_module(&json_owned) {
+                Some(m) => m,
+                None => {
+                    return Err(errors::ErrorPayload {
+                        class: "ArtifactDeserializeError".to_string(),
+                        detail: "artifact 反序列化失败".to_string(),
+                        pos: None,
+                    })
+                }
+            };
+            let interp = interpreter::Interpreter::new();
+            let args: Vec<interpreter::IbValue> =
+                match serde_json::from_str::<serde_json::Value>(&args_owned) {
+                    Ok(serde_json::Value::Array(arr)) => {
+                        arr.iter().map(json_to_ibvalue).collect()
+                    }
+                    Ok(_) => {
+                        return Err(errors::ErrorPayload {
+                            class: "TypeError".to_string(),
+                            detail: "args 须为 JSON 数组".to_string(),
+                            pos: None,
+                        })
+                    }
+                    Err(_) => Vec::new(),
+                };
+            let (result, out) = interp
+                .run_module_call_function(&module, &name_owned, args)
+                .map_err(errors::ErrorPayload::from_thrown)?;
+            Ok((interpreter::ibvalue_to_json(&result).to_string(), out))
+        },
+    ) {
+        Ok(r) => r,
+        Err(payload) => return Err(payload.to_pyerr()),
+    };
+    let result_py: Py<PyAny> = pyo3::types::PyString::new(py, &result_json).into_py(py);
+    let list = PyList::empty(py);
+    for line in out {
+        list.append(line)?;
+    }
+    Ok((result_py, list.unbind()))
+}
+
 #[pyfunction]
 fn capability() -> PyResult<String> {
     // node_types = 反序列化器可处理集 − 对象系统执行排除集（IbClassDef/
@@ -958,9 +890,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_artifact_state, m)?)?;
     m.add_function(wrap_pyfunction!(rust_intrinsic_names, m)?)?;
     m.add_function(wrap_pyfunction!(capability, m)?)?;
-    m.add_function(wrap_pyfunction!(open_session, m)?)?;
-    m.add_function(wrap_pyfunction!(session_call, m)?)?;
-    m.add_function(wrap_pyfunction!(session_release, m)?)?;
+    m.add_function(wrap_pyfunction!(call_top_level_function, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

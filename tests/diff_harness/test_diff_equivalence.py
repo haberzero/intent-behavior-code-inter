@@ -1436,13 +1436,17 @@ class TestDivergenceRegistry:
         assert divergence.null_gap_fields(divergence.SCOPE_TYPE_UID) == set()
 
     def test_divergence_mechanism_ready(self):
-        """DIVERGENCE 机制就绪：当前无正向偏离 + GAP 计数 = 1（__string_exec__ 用户
-        模块成员面——modules 组装增量）。"""
+        """DIVERGENCE 机制就绪：GAP 计数 = 1（__string_exec__ 用户模块成员面——
+        modules 组装增量）+ DIVERGENCE 计数 = 1（host_call_closure_state——R1-E4
+        P4 宿主 .call 纯函数契约，fresh 重执行 ≠ 持久环境）。"""
         from tests.diff_harness import divergence
         assert divergence.divergences_for(divergence.NODE_POOL) == []
         assert divergence.gap_count() == 1
         assert divergence.skipped_cases(divergence.TYPE_MEMBERS) == {"__string_exec__"}
-        assert divergence.divergence_count() == 0
+        assert divergence.divergence_count() == 1
+        assert {
+            d.scope for d in divergence.divergences_for(divergence.DATA_PLANE)
+        } == {"case:host_call_closure_state"}
 
     def test_registry_actually_consumed(self, monkeypatch):
         """注册表真的驱动逻辑（非死代码）：注入一个 GAP 声明 → 排除集合变化。"""

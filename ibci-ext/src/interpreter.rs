@@ -846,16 +846,17 @@ impl Interpreter {
         Ok((output, state))
     }
 
-    /// 会话函数调用（host 桥接面：顶层环境按名调用——vars 函数值优先
-    /// [变量绑定函数/闭包值]，functions 表次之[声明函数]；调用后状态
-    /// [闭包计数器/变量改写]跨调用存活于顶层环境）。
-    pub fn session_call(
+    /// 宿主 .call 契约：顶层函数调用（无状态执行——执行模块[fresh env] →
+    /// 按名调用顶层函数）。纯函数契约（DIVERGENCE 登记：闭包/可变态跨调用
+    /// 存活 = 未支持角——host_call_closure_state；数据面函数值宿主调用 =
+    /// 纯函数面[现有契约测试全纯函数]）。
+    pub fn run_module_call_function(
         &self,
-        env: &Rc<RefCell<Environment>>,
+        module: &Module,
         name: &str,
         args: Vec<IbValue>,
-        output: &mut Vec<String>,
-    ) -> Result<IbValue, Thrown> {
+    ) -> Result<(IbValue, Vec<String>), Thrown> {
+        let (_, env) = self.run_module_session(module, &[])?;
         let f: Option<std::rc::Rc<Function>> = {
             let b = env.borrow();
             b.vars
@@ -864,18 +865,16 @@ impl Interpreter {
                     IbValue::Function(f) => Some(f.clone()),
                     _ => None,
                 })
-                .or_else(|| {
-                    b.functions
-                        .get(name)
-                        .map(|f| std::rc::Rc::new(f.clone()))
-                })
+                .or_else(|| b.functions.get(name).map(|f| std::rc::Rc::new(f.clone())))
         };
         match f {
-            Some(f) => self.call_user_function(&f, args, output, env),
-            None => Err(runtime_error(
-                "NameError",
-                &format!("name not found: {}", name),
-            )),
+            Some(f) => {
+                let mut out = Vec::new();
+                let global = global_rc(&env);
+                let result = self.call_user_function(&f, args, &mut out, &global)?;
+                Ok((result, out))
+            }
+            None => Err(runtime_error("NameError", &format!("name not found: {name}"))),
         }
     }
 

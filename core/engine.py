@@ -565,10 +565,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             on_ready(self)
         artifact_json = _json.dumps(artifact_dict, ensure_ascii=False)
         try:
-            # 持久会话执行（host 桥接面：顶层环境保活——函数值宿主
-            # .call 经会话调用，闭包/计数器状态跨调用存活）
-            _handle, lines, state = kernel.open_session(
-                artifact_json, variables if variables else None
+            # 单一执行入口（D5）：run_artifact_state = 一次性执行 + typed 状态
+            # 导出（P2）；函数值宿主 .call 经 RustHostCallable（P4，无会话通道）
+            lines, state = kernel.run_artifact_state(
+                artifact_json, None, variables if variables else None
             )
         except RuntimeError as e:
             # RustRuntimeError = 类型化错误契约（P3：error_class/code/line/
@@ -662,7 +662,7 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 self.interpreter.registry,
                 self.interpreter,
                 kernel=kernel,
-                session_handle=_handle,
+                artifact_json=artifact_json,
             )
             for name, typed in state.items():
                 sym_uid = sym_uid_by_name.get(name)

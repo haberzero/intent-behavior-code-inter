@@ -7,7 +7,7 @@ engine 零语义判断（只做"调物化器 → 按 kind 决定写入路径"）
 - 数据 kind（int/float/str/bool/none/list/dict）= 原生值直通 + 容器特化绑定；
 - quoted = IbQuoted 物化（源串全保真，kind 驱动——不再依赖 declared 特判）；
 - vector = IbVector 物化（真实数据，替代 repr 显示串降级）；
-- function = 会话代理（E4 换 RustHostCallable——宿主 callable 统一协议）；
+- function = RustHostCallable（宿主 callable 统一协议——无状态执行）；
 - knowledge/meta/error/host = 显示形态（KB 数据面未跨边界，E4/R2 后收敛）。
 
 状态写入路径（define/materialize 双路径）按 kind 数据驱动，非 declared 白名单：
@@ -95,17 +95,49 @@ def _maybe_unbox(v):
     return v
 
 
+class RustHostCallable:
+    """宿主 .call 契约（P4 协议）：Rust 顶层函数值的可调用代理——经
+    ``call_top_level_function`` 无状态执行（纯函数契约，DIVERGENCE 登记
+    host_call_closure_state）。生命周期 = 对象持有（artifact 引用），无全局
+    注册表无 unsafe（审计 3.6 会话 API 收敛）。
+
+    ``__call__``（Python callable）→ registry.box 包装为 IbNativeFunction
+    （.call 委托 py_func(*args)）——函数值状态读回 = 可调用对象（宿主
+    ``obj.call(None, args)`` 契约成立）。
+    """
+
+    def __init__(self, kernel, artifact_json, name, registry):
+        self._kernel = kernel
+        self._artifact_json = artifact_json
+        self._name = name
+        self._registry = registry
+
+    def __call__(self, *args):
+        import json as _json
+
+        payload = [
+            a.to_native() if hasattr(a, "to_native") else a
+            for a in args
+        ]
+        result_json, _out = self._kernel.call_top_level_function(
+            self._artifact_json,
+            self._name,
+            _json.dumps(payload, ensure_ascii=False),
+        )
+        return _json.loads(result_json)
+
+
 class StateMaterializer:
     """P2 typed 值通道物化（单一数据驱动转换表——kind → handler）。"""
 
-    # 非数据/非原生 kind → 显示形态（KB 数据面未跨边界——E4/R2 收敛）
+    # 非数据/非原生 kind → 显示形态（KB 数据面未跨边界——R2 收敛）
     _DISPLAY_KINDS = {"meta", "error", "host"}
 
-    def __init__(self, registry, interpreter=None, kernel=None, session_handle=None):
+    def __init__(self, registry, interpreter=None, kernel=None, artifact_json=None):
         self._registry = registry
         self._interpreter = interpreter
         self._kernel = kernel
-        self._handle = session_handle
+        self._artifact_json = artifact_json
         self._kind_handlers: Dict[str, Callable[[Any, Any], Any]] = {
             "int": self._as_is,
             "float": self._as_is,
@@ -191,10 +223,10 @@ class StateMaterializer:
             return v
 
     def _function(self, v, dt):
-        # E3：会话代理（顶层环境保活——闭包/计数器跨调用存活）；E4 换
-        # RustHostCallable（宿主 callable 统一协议，无会话通道）。
-        if self._kernel is None or self._handle is None or not isinstance(v, dict):
+        # 宿主 callable 统一协议（P4）：RustHostCallable——经
+        # call_top_level_function 无状态执行（纯函数契约）。
+        if self._kernel is None or self._artifact_json is None or not isinstance(v, dict):
             return v
-        from core.runtime.kernels import RustFunctionProxy
-
-        return RustFunctionProxy(self._kernel, self._handle, v.get("name"), self._registry)
+        return RustHostCallable(
+            self._kernel, self._artifact_json, v.get("name"), self._registry
+        )

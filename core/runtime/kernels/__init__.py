@@ -43,48 +43,6 @@ def load_kernel():
     return module
 
 
-class RustFunctionProxy:
-    """宿主函数值桥（host .call 薄包装语义 = M1 契约面）：Rust 内核
-    函数值（持久会话——顶层环境保活，闭包/计数器状态跨调用存活）的
-    Python 侧可调用代理。宿主经 .call(receiver, args) 调用；返回值经
-    registry.box 物化（IbObject 契约——to_native 等面可用）。
-
-    会话生命周期：open_session 初始引用 = 1；每 proxy 释放递减
-    （__del__）；归零 = Rust 侧释放顶层环境（RAII 纪律）。
-    """
-
-    def __init__(self, kernel, handle, name, registry):
-        self._kernel = kernel
-        self._handle = handle
-        self._name = name
-        self._registry = registry
-        self._released = False
-
-    def call(self, receiver, args):
-        """宿主同步调用（VM 函数对象 .call 同契约：receiver 忽略，
-        args = 位置实参列表）。"""
-        import json as _json
-
-        payload = [
-            a.to_native() if hasattr(a, "to_native") else a
-            for a in (args or [])
-        ]
-        result_json, _out = self._kernel.session_call(
-            self._handle, self._name,
-            _json.dumps(payload, ensure_ascii=False),
-        )
-        return self._registry.box(_json.loads(result_json))
-
-    def __del__(self):
-        if self._released:
-            return
-        self._released = True
-        try:
-            self._kernel.session_release(self._handle)
-        except Exception:
-            pass
-
-
 # --------------------------------------------------------------------------- #
 # 路由判定（P1 能力声明查询——单一入口）
 # --------------------------------------------------------------------------- #

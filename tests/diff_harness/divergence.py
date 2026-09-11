@@ -79,6 +79,20 @@ REGISTERED: List[DeclaredState] = [
             " Rust 承载并 uid 逐条精确等价。"
         ),
     ),
+    DeclaredState(
+        id="divergence-host-call-closure-state",
+        kind=DIVERGENCE,
+        plane=DATA_PLANE,
+        scope="case:host_call_closure_state",
+        rationale=(
+            "宿主 .call 数据面函数值契约（R1-E4，P4 协议）：RustHostCallable 经 "
+            "call_top_level_function 无状态执行（反序列化 → 执行模块[fresh] → 按名调用"
+            " 顶层函数）——纯函数契约。闭包/模块可变态的跨调用状态存活 = 未支持角"
+            "（fresh 重执行 ≠ Python VM 持久环境语义；涉及源按能力角路由 Python 或按"
+            " 需显式设计，不重开会话通道）。现有契约测试（test_call_drive_convergence"
+            " 宿主 .call）全为纯函数，零偏离。"
+        ),
+    ),
 ]
 
 
