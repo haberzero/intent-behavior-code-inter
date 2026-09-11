@@ -766,9 +766,14 @@ class TestRustSerializationUid:
             )
 
     def test_node_to_type_corpus(self):
-        """node_to_type 侧表差分（全量 Rust 化·artifact 产出：节点级 type_uid）：Rust
-        node_to_type 的 type_uid 多重集 == Python（节点级 type_uid，复用 type_inference +
-        统一遍历 scope 栈/type_env/func_sigs）。closure node_uid gap 友好（多重集验证）。"""
+        """node_to_type 侧表差分（全量 Rust 化·artifact 产出：节点级 type_uid 完整面）：
+        Rust node_to_type 的 type_uid 全量多重集 == Python（完整节点级类型面：字面值 /
+        变量[intrinsic 63 固有名字 + import 模块 + from-import 绑定 + 用户函数/类/变量]
+        / 函数调用[intrinsic 返回类型表 19 + 用户签名 + 方法表[容器特化] + 模块成员]
+        / 方法属性 bound_method / 字段访问[quoted.source] / 容器[裸 + 泛型] / 下标
+        [切片 + 元素特化] / 运算符[公理 op 表 + any/auto 传播] / 比较[any 传播] / 三元
+        [body 类型]；参数注解 Name 不绑定 + Slice 不绑定 = Python 实证一致）。
+        closure node_uid gap 友好（多重集验证）。"""
         import json
         from collections import Counter
         from tests.conftest import compile_ibci
@@ -777,38 +782,17 @@ class TestRustSerializationUid:
         rk = load_rust_kernel()
         if not rk.loaded or not hasattr(rk._module, "node_to_type"):
             return
-        # 验证 IbConstant[字面量] + IbCall[intrinsic 函数返回类型：print→void/range→list/
-        # len→int + 用户函数 func_sigs + eval→any 修正]。IbCall 排除 Attribute callee
-        # [方法 bound_method 返回类型后续] + generic[泛型后续]。IbName 的 any/int-from-Call
-        # + infer_type_env 节点覆盖[UnaryOp/BoolOp/Compare/Subscript/Attribute] 后续。
-        covered = {"IbConstant", "IbCall"}
         for name, code in CORPUS:
             rs = json.loads(rk._module.node_to_type(code))
             data = FlatSerializer().serialize_artifact(compile_ibci(code))
             mod = data["modules"][data["entry_module"]]
             py = mod["side_tables"]["node_to_type"]
-            py_nodes = mod["pools"]["nodes"]
-            def _filter(nodes_map):
-                out = {}
-                for u, t in nodes_map.items():
-                    nt = py_nodes.get(u, {}).get("_type")
-                    if nt not in covered:
-                        continue
-                    if nt == "IbCall":
-                        f = py_nodes.get(u, {}).get("func", "")
-                        if isinstance(f, str) and f in py_nodes and py_nodes[f].get("_type") == "IbAttribute":
-                            continue  # 方法 bound_method 返回类型后续
-                        if "[" in t:
-                            continue  # generic 泛型后续
-                    out[u] = t
-                return out
-            rs_f = _filter(rs)
-            py_f = _filter(py)
-            rs_multiset = Counter(rs_f.values())
-            py_multiset = Counter(py_f.values())
+            rs_multiset = Counter(rs.values())
+            py_multiset = Counter(py.values())
             assert rs_multiset == py_multiset, (
-                f"语料 {name} node_to_type type_uid 分布不等价（IbConstant+IbCall 非方法/非 generic）：\n"
-                f"  rust: {sorted(rs_multiset.elements())}\n  py : {sorted(py_multiset.elements())}"
+                f"语料 {name} node_to_type type_uid 全量分布不等价：\n"
+                f"  rust only: {sorted((rs_multiset - py_multiset).elements())}\n"
+                f"  py   only: {sorted((py_multiset - rs_multiset).elements())}"
             )
 
 

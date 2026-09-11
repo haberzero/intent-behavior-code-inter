@@ -8,13 +8,15 @@
 //! 类型推导即时进行（遍历中）：赋值右值类型 → 类型环境 + 符号 type_uid；函数 returns /
 //! 参数注解 → 签名表 / 类型环境。与 Python 语义层逐条差分等价（34 语料）。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
 use crate::node_serializer::NodeSerializer;
 use crate::parser::{Arg, Expr, Module, Stmt};
-use crate::type_inference::{infer_type_env, parse_type_annotation, FuncSignatures, TypeEnv};
+use crate::type_inference::{
+    parse_type_annotation, symbol_level_type, FuncSignatures, InferCtx, ModuleNames, TypeEnv,
+};
 
 /// 默认模块名（Python 语义层的 `__string_exec__`）。
 const DEFAULT_MODULE: &str = "__string_exec__";
@@ -38,6 +40,8 @@ pub struct SymbolResolver<'a> {
     type_env: TypeEnv,
     /// 函数签名表：函数名 → 返回类型字符串（returns 注解，intrinsic Name 子集）。
     func_sigs: FuncSignatures,
+    /// 导入模块名集合（`import X` 的绑定名——模块成员属性解析，type_inference 共用）。
+    modules: ModuleNames,
 }
 
 impl<'a> SymbolResolver<'a> {
@@ -48,6 +52,16 @@ impl<'a> SymbolResolver<'a> {
             def_nodes: BTreeMap::new(),
             type_env: vec![BTreeMap::new()],
             func_sigs: BTreeMap::new(),
+            modules: BTreeSet::new(),
+        }
+    }
+
+    /// 推导上下文（type_env + func_sigs + modules——type_inference 单一入口）。
+    fn ctx(&self) -> InferCtx<'_> {
+        InferCtx {
+            type_env: &self.type_env,
+            func_sigs: &self.func_sigs,
+            modules: &self.modules,
         }
     }
 
@@ -110,15 +124,27 @@ impl<'a> SymbolResolver<'a> {
     fn resolve_stmt(&mut self, stmt: &'a Stmt) {
         match stmt {
             Stmt::Assign { targets, value, .. } => {
-                // 赋值目标 → scope 符号（VARIABLE）+ 即时类型解析（类型环境 + 函数签名）。
-                let type_str: Option<String> = value
-                    .as_ref()
-                    .and_then(|v| infer_type_env(v, &self.type_env, &self.func_sigs));
+                // 赋值目标 → scope 符号（VARIABLE）+ 即时类型解析（符号通道：类型环境 +
+                // 函数签名 + 声明返回类型——meta.eval() = auto，与节点通道 any 分离）。
+                // 首次绑定优先：符号已有 type_uid 不覆盖（IBCI 变量类型 = 首次声明定型；
+                // 语料实证 arithmetic_loop：total = total + i 保持 int，不经 any 传播退化）。
+                let type_str: Option<String> =
+                    value.as_ref().and_then(|v| symbol_level_type(v, &self.ctx()));
                 for target in targets {
                     if let Expr::Name { id, .. } = target {
                         self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
-                        if let Some(ts) = &type_str {
-                            self.bind_var_type(id, ts);
+                        let scope = self.current_scope();
+                        let uid = format!("scope_{}:{}", scope, id);
+                        let has_type = self
+                            .symbols
+                            .get(&uid)
+                            .and_then(|s| s.get("type_uid"))
+                            .and_then(|v| v.as_str())
+                            .is_some();
+                        if !has_type {
+                            if let Some(ts) = &type_str {
+                                self.bind_var_type(id, ts);
+                            }
                         }
                     }
                 }
@@ -181,9 +207,11 @@ impl<'a> SymbolResolver<'a> {
                 }
             }
             Stmt::Import { names, .. } => {
-                // import X → scope 符号（MODULE）。import 模块绑定无定义节点（node_uid=null）。
+                // import X → scope 符号（MODULE）+ modules 集（模块成员属性解析依据）。
+                // import 模块绑定无定义节点（node_uid=null）。
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
+                    self.modules.insert(binding.clone());
                     self.bind_symbol(&binding, "MODULE", None);
                 }
             }

@@ -99,12 +99,15 @@ python -m pytest tests/
 ```
 
 - 这是**唯一命令**。`pytest.ini` 已配 `-q --tb=short --strict-markers`，无需附加 flag。
-- **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：全量重跑代价较大（2026-09-10 实测：main ~45s /
-  unsafe-vibe-dev ~114s；e2e 层 44% 子进程启动主导 / runtime 层 38% 解释器 CPU）。
+- **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：
   **单任务默认验证 = 受影响子集（改动关联的层/文件）+ smoke 子集（`tests/contracts` +
-  `tests/compiler`，~11s，纯进程内无子进程）**；全量 pytest 仅以下场合：① merge/放行门
-  （硬规则不变）② 改动公理层或语义错误集（红线不变）③ 阶段边界/里程碑 ④ 开新分支前。
-  Rust 内核替换结束且全量耗时显著降低后，重新评估默认验证策略。
+  `tests/compiler`，~11s，纯进程内无子进程）**；**全量 pytest 不再限于特定场合，可按需自由
+  全量**（Rust 化推进后测试耗时缩短、全量可接受——用户 2026-09-11 裁定）；以下场合仍为
+  强制门：① merge/放行门（硬规则不变）② 改动公理层或语义错误集（红线不变）③
+  阶段边界/里程碑 ④ 开新分支前。Rust 内核替换结束后重新评估默认验证策略。
+- **测试资产处理（2026-09-11 用户裁定）**：已过期或被证不正确的测试脚本可自由处理
+  （重构/修正/删除）——重构的质量原则大于维持现状的重要性（与 user-principles"不冻结
+  历史资产"一致）。
 - 环境规格权威源 = `pyproject.toml`（`requires-python` / `dependencies` / `optional-dependencies`）；创建运行环境的规范 recipe（venv + 可编辑安装）见 `docs/guide/00_environment.md`。本机解释器路径与激活方式见 `AGENTS.local.md`（本地层，不入版本控制；缺失时自行探测环境并记录到该文件）。
 - `tests/conftest.py` 强制 pytest basetemp 为 `.tmp_pytest/`（仓库不变量，跨平台兼容）。
 - **结果查看建议**：通常跑全量 pytest 时用 `... 2>&1 | tail -3` 只留结果摘要（pass/fail/skipped 计数行），避免警告挤掉计数；若仍被 warning 挤掉可再加 `| tail -3`。是否加 flag、是否重定向、分组/子集用法等其余情形由智能体自行判断。

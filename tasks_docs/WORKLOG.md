@@ -50,6 +50,7 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
 | **任务规划自由 + 试用者需求恒高优先**（2026-09-07，用户指示） | 用户明确：① 主线顺序可微调——下一 agent 获**相当程度的自由任务规划权**，可基于实际执行、实时代码分析与开发进度状态自主微调进度顺序/优先级/批次划分（§五 为基线队列非固定脚本，调整理由记工作日志，不得把队列外新大任务拉入主线）；② **恒高优先原则：来自真实试用者（ibci-trial 反馈/早期试用者质询）的需求始终是优先处理的高优先级选项**——自由微调不得系统性地把试用者真实需求排到自研/卫生项之后，冲突时试用者需求优先。已同步 handoff §五 0（队列性质 + 恒高优先原则）/ §10.1（goal 文本内嵌两条款）/ §九（第一动作标注默认可调整）。 |
 | **Rust 内核替换方向**（2026-09-10，用户） | ibci 主工程最耗时/最重负担部分（实测定性 = **VM 执行层**：40k 迭代微基准 ~1.1s / 24M Python 函数调用，每步 isinstance/typing/inspect 反射 + ast_view 包装 + 侧表查询开销主导；全量套件 114s 中 runtime 层 38% 即解释器 CPU）改用 Rust 实现，编译为 Python 可直接访问形态（pyo3），整合进 ibci——保持 Python 灵活性 + Rust 性能 + 线程真并行（执行期释放 GIL，解除 `task_scheduler` 既有文档化约束"只为 LLM IO 并发"）。**双内核纪律（用户明确）**：Python 内核**保留不删**，实验阶段继续以 Python 侧做灵活修改（一等实验内核，非过渡残留）；内核选择显式（无静默回退，fail-fast 一致）；语言语义单点真理不变（公理 + contracts 层语义红线为门）；差分等价 harness（双内核同输入输出比对）为常设交付物。分阶段：① 构建链 + 等价 harness → ② Rust 前端（lexer/parser/semantic，纯 CPU 高频、契约最清晰）→ ③ Rust 执行核心（CPS dispatch 表 43 节点移植，主战场）→ ④ 并发解除（task_scheduler 从 IO-only 升 CPU+IO）。基线数据（2026-09-10 实测，供替换后对比）：全量 main ~45s / dev ~114s（e2e 44% / runtime 38% / contracts 9% / compliance 7% / compiler 1.2%）；40k 迭代循环 ~1.1s；82KB 脚本编译 <0.2s。 |
 | **全量 pytest 使用策略临时调整**（2026-09-10，用户） | 全量重跑代价较大（dev ~114s）且 Rust 内核替换期改动频繁 → 临时策略（**生效至 Rust 内核替换结束且测试速度显著提高**）：单任务默认验证 = 受影响子集 + smoke 子集（`tests/contracts` + `tests/compiler`，~11s 纯进程内无子进程）；全量 pytest 仅 ① merge/放行门（硬规则不变）② 公理层或语义错误集变更（红线不变）③ 阶段边界/里程碑 ④ 开新分支前。单点真理 = AGENTS.md §测试（本次同步：AGENTS.md §测试 + P5 / NEXT_STEPS 基线锚点 / code-workflow P4 / code-review P4；quality-maintenance 窗口级全量与 user-principles 放行门表述不变）。重估触发 = Rust 内核替换结束且全量耗时显著降低后重新评估默认验证策略。 |
+| **测试验证策略放开 + 测试资产处理**（2026-09-11，用户） | ① **全量 pytest 使用限制略微放开**：Rust 化推进后测试耗时缩短、全量并非不可接受 → 全量 pytest **不再限 4 场合**（原 ① merge/放行门 ② 公理层或语义错误集 ③ 阶段边界/里程碑 ④ 开新分支前 仍为强制门），**可按需自由全量**；单任务默认（受影响子集 + smoke）不变。② **测试脚本自由处理**：已过期或被证不正确的测试脚本可自由处理（重构/修正/删除），**重构的质量原则大于维持现状的重要性**（与 user-principles"不冻结历史资产 / 问题直接重构"一致）。已同步 AGENTS.md §测试 / NEXT_STEPS 基线锚点 / HANDOFF §1.2。 |
 
 ## 三、重大方向决策记录（防止未来误解）
 
@@ -4260,6 +4261,68 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [IbCall 方法 bound_method + generic + intrinsic 函数返回类型其他 16 个 + IbName any +
   infer_type_env 节点覆盖] / node_to_symbol / free_vars / method 符号 / generic+用户类型
   / modules 组装。
+- **P9 全量 Rust 化第三批 子项 2b-2b-2 增量 1（Rust 独立 artifact 产出：node_to_type
+  完整面——全节点级 type_uid 34 语料 635/635 全量多重集对齐 0 DIFF，2026-09-11，本
+  session，unsafe-vibe-dev）**：**node_to_type 完整面**（消除 2b-2a/2b-2b-1 的节点
+  类型过滤门——测试从"IbConstant+非方法非 generic IbCall"扩至**全节点类型全量**多重集
+  等价，无过滤无排除）。**侦察实证**（Python node_to_type 34 语料 635 条全分布 + 节点
+  覆盖面对账）：① 节点覆盖 = 全部表达式节点，**唯二例外**：参数注解 Name 不绑定（6/6
+  实证——Python type checker 绑定返回注解不绑定参数注解）+ Slice 节点不绑定（2/2 实证）；
+  ② **双通道语义实证**（2b-2b-1 裁定实体化）：meta.eval() 的 Call 节点 = any（checker
+  绑定回退）vs 符号 x = auto（声明返回类型）vs target 节点 x = any（右值节点类型）——
+  三值分属节点通道/符号通道/target 绑定；③ **首次绑定优先实证**（arithmetic_loop）：
+  `total = total + i` 的 target 节点与符号 = int（既有类型保持），非右值 any——any
+  传播只影响右值节点绑定；④ **容器裸形态实证**：空列表/空字典字面量 = 裸 list/dict
+  （非 list[any]——Rust 此前空容器产 list[any]/dict[any,any] 为既有错误，本增量修复）；
+  ⑤ **方法返回类型表实证**（公理声明式方法表 `_m(name, params, ret)` 为权威源）：str
+  [strip/upper/lower→str, split→list, find→int] / list[append→void, index→int, pop→
+  元素 T] / dict[get→值 V, keys→list[K], values→list[V]——**容器方法按类型参数特化**：
+  公理声明 ret=any 但 checker 按容器实参特化，语料实证 list[int].pop→int /
+  dict[str,int].get→int / dict[str,int].keys→list[str]] / knowledge[40 方法全表，
+  add_fact→str 非 void] / vector / 数值族[cast_to/to_bool/to_list] / quoted[字段
+  source→str 非方法]；⑥ **intrinsic 函数返回类型表 19 实证探测**（all→bool/
+  callable→auto/copy→any/deepcopy→any/len→int/max→any/min→any/print→void/range→
+  list/reversed→list/sorted→list/sum→any/type→str/vec→vector/zip→list +
+  knowledge→knowledge + quote→quoted；enumerate/fn/next/get_self_source = 特殊形态
+  语料面不覆盖）；⑦ **运算符 any/auto 传播实证**（BinOp/Compare 任一操作数 any/auto →
+  any）+ list+list→list（公理 sequences 不特化）。**交付**：
+  - **type_inference.rs 重构**（单一入口 `infer_type_env(expr, &InferCtx)`——InferCtx
+    [type_env + func_sigs + modules] 供符号/节点两 walker 共用[机制同构，无平行实现]）：
+    完整节点规则[Name 类型环境/容器[裸+泛型+空裸形态]/BinOp[公理 op 表 + any 传播 +
+    list 拼接]/UnaryOp[not→bool, ±→操作数类型]/BoolOp[bool]/Compare[any 传播]/Call
+    [Name callee=签名+intrinsic 19 表 / Attribute callee=模块成员[meta.quote→quoted,
+    meta.eval→any 节点通道] + 方法表[容器特化]]/IfExp[body]/Subscript[容器元素特化]/
+    Attribute[模块成员→type_root.<attr> / 方法→bound_method / quoted.source→str /
+    其余→any]/Slice 不绑定]；`symbol_level_type`[符号通道：meta.eval→auto 唯一差异]
+    ；`method_call_return`[公理方法表转录，parse_container 括号深度感知分割
+    dict[str,list[int]]]；`intrinsic_function_return`[19 表]。
+  - **node_serializer.rs 统一遍历扩展**：顶层 type_env = 全 63 intrinsic 符号名
+    [42 类型 + 19 函数 + 2 模块，与 scope 池"顶层 scope = intrinsic 63"语义同构] +
+    modules 集[Import 绑定] + from-import 绑定名 + ClassDef 类名绑定；Assign 双通道
+    + 首次绑定优先[target 节点/type_env：当前 scope 已有类型 = 保持，新变量 = 右值
+    节点通道[节点]/符号通道[环境]]；serialize_expr 记录态参数化[ser(e, record) 单一
+    递归路径]——参数注解位置无记录[serialize_expr_no_record，Python 实证一致]。
+  - **symbol_resolver.rs 接入 InferCtx**（modules 集 + 符号通道 symbol_level_type +
+    首次绑定优先[符号已有 type_uid 不覆盖]）。
+  - **差分 harness**：test_node_to_type_corpus 去过滤——**全节点类型全量多重集等价**
+    （rust only / py only 差集诊断输出）。
+  **关键裁定（self-grill 全分支消解）**：① **双通道实体化非回避**——meta.eval 的
+  any[节点]/auto[符号] 分离是 Python 实际语义（checker 绑定 vs 声明类型）的忠实
+  转录，非静默兜底；两通道共用单一 infer 实现 + 一处显式差异[已记录]；② **静态表
+  = 公理转录**（与 sub-item 1 类型池 66 固定集同模式——Rust 独立 artifact 产出的
+  固有面，权威源 = IBCI 公理，差分门 = 安全网）；③ **首次绑定优先 = IBCI 变量
+  类型语义**（首次声明定型，语料实证；非"保持行为"迁就）；④ **空容器裸形态修复
+  = 根因修正**（既有 list[any] 产式与 Python 实证不符——原则优先于行为维持）；
+  ⑤ **any 语义合法**（IBC 动态类型一等语义——dict.get 声明 ret=any / 未解析
+  checker 绑定 any = Python 实际语义转录，非掩盖型兜底）；⑥ **零风险加法式**
+  （Rust 侧扩展面变更 + 测试扩面，不动 Python 执行路径/FlatSerializer/语义层）。
+  **验证**：node_to_type **34 语料 635/635 全量多重集对齐 0 DIFF**（全节点类型，无
+  过滤无排除；scope 符号 type_uid 43/43 + owned_scope 52/52 + 节点池 829/832 +
+  intrinsic 面全回归无损）；diff_harness 39 passed + smoke 832 passed + **全量
+  pytest 4297 passed / 1 skipped 零回归**（2026-09-11 实跑 141.54s；用户本 session
+  裁定全量 pytest 限制放开后首跑）。**第三批剩余**：node_to_symbol 侧表独立产出
+  / free_vars / method 符号[sym_anon_* content_hash 偏离白名单] / generic+用户类型
+  条目 / modules 组装[完整 artifact 闭环]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

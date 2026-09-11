@@ -31,15 +31,16 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4286 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 全量 Rust 化阶段 B 第七增量[语义层续 类型解析 type_uid 字面值 + 测试 1 例]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4297 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 141.54s，P9 全量 Rust 化第三批 子项 2b-2b-2 增量 1[node_to_type 完整面 + 测试扩全节点面]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
-> **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
-> （`tests/contracts` + `tests/compiler`，~13s）；全量仅 merge/放行门 / 公理层或语义错误集 / 阶段边界 /
-> 开新分支前（单点真理 = `AGENTS.md` §测试；Rust 替换结束且耗时显著降低后重新评估）。分支 =
-> `unsafe-vibe-dev`（日常开发主线）= 本地（领先 origin `e5f6fd2d` 12 提交，**不 push**——用户 2026-09-10
-> 本 session 明确；2026-09-09 已推送 `11a893a7..123a341f` 13 提交，用户授权）；`main` 永不触碰。
+> **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
+> 受影响子集 + smoke 子集（`tests/contracts` + `tests/compiler`，~13s）；**全量 pytest 不再限于
+> 特定场合，可按需自由全量**（Rust 化推进后测试耗时缩短、全量可接受）；merge/放行门 / 公理层或语义
+> 错误集 / 阶段边界 / 开新分支前 4 场合仍为强制门（单点真理 = `AGENTS.md` §测试）。分支 =
+> `unsafe-vibe-dev`（日常开发主线）= 本地（领先 origin `63973071` 49 提交，**不 push**——默认禁
+> push 硬原则；上次 push 2026-09-10 用户阶段末授权至 `63973071`）；`main` 永不触碰。
 
 > **🔴 当前 P0 = IBCI 原生数据库（世界模型知识图谱）+ 自指性主线收束 + 测试进程内化**：
 > - **执行进度**：**P1 R-A quote/eval ✅**（`meta.quote`/`meta.eval` + `quoted` 一等值类型——单一
@@ -456,9 +457,12 @@
    → 第三批 子项 2b-1 node_to_loc 侧表[位置多重集全对齐 + file_path=null 架构自然] ✅
    → 第三批 子项 2b-2a node_to_type 独立产出 + NodeSerializer 统一遍历基础[IbConstant 34/34] ✅
    → 第三批 子项 2b-2b-1 node_to_type 的 IbCall[intrinsic 函数返回类型，IbConstant+IbCall 34/34] ✅
-   → 第三批 子项 2b-2b-2 续[node_to_type 完整[方法 bound_method+generic+intrinsic 其他 16
-      +IbName any+infer_type_env 节点覆盖]+node_to_symbol+free_vars+method 符号+generic/
-      用户类型+modules 组装][当前]
+   → 第三批 子项 2b-2b-2 增量 1 node_to_type 完整面[全节点类型全量多重集 34 语料 635/635：
+      IbName[63 intrinsic 名+import/from-import 绑定] / IbCall[方法表[容器特化]+intrinsic 19
+      +模块成员] / bound_method+字段 / 下标特化 / any 传播 / 空容器裸形态 / 参数注解+Slice
+      不绑定 / 双通道+首次绑定优先] ✅
+   → 第三批 子项 2b-2b-2 增量 2 续[node_to_symbol 侧表独立产出 + free_vars + method 符号
+      + generic/用户类型 + modules 组装[完整 artifact 闭环]][当前]
    + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。

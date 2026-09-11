@@ -42,6 +42,8 @@
 | 工作模式定论 | 禁 compat shim/胶水/tricky/过程式硬编码；质量优先于速度；原则优先于行为维持；可推翻 IBCI 自身设计缺陷 |
 | 破坏性重构授权 / 分支政策 / 禁 push | 见 AGENTS.md（权威源）。**分支合并细则（2026-08-18 更新，取消 cherry-pick）**：确认低风险/边界清晰（全量 pytest 零回归 + 复核放行）可直接 **merge** unsafe-vibe-dev；merge 无误即删无用分支（除 main 与 unsafe-vibe-dev 外不长期保留分支）；main 不更新不触碰；判定以"是否确认零风险"为准 |
 | 总体规划灵活微调（2026-09-10） | 基准规划（如 `_world_model_db_design.md` §6 P0-P9 执行清单）可据项目进度与具体实验情况（实证证据/阻塞项/新发现/成本变化）**自行灵活微调**——批次重排/合并/细分/补充验证/推迟或提前均允许；不改变主线方向、不违反硬约束（工作模式定论/禁 push/不碰 main/验证纪律）时无需用户拍板；微调依据须详尽记录 WORKLOG（调了什么+为何+变化前后） |
+| 测试验证策略放开（2026-09-11） | 全量 pytest 不再限 4 场合（merge/放行门 / 公理层或语义错误集 / 阶段边界 / 开新分支前 仍为强制门），**可按需自由全量**（Rust 化推进后测试耗时缩短、全量可接受）；单任务默认 = 受影响子集 + smoke 子集不变 |
+| 测试资产处理（2026-09-11） | 已过期或被证不正确的测试脚本可**自由处理**（重构/修正/删除）——重构的质量原则大于维持现状的重要性（历史资产不冻结；唯一底线 = 不为规避缺陷改套件） |
 
 ### 1.2.1 goal 配置习惯（每个 session 新配置 goal 时自动采用，用户定案）
 
@@ -131,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B 第七增量 ✅ → 第一批 harness 状态注册表 ✅ → 第二批 语义层续[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1 ✅ → 2b-2b-2 增量 2[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -147,17 +149,21 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 > goal 有效）。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
 - **工程事实（本 session 收束点）**：
   - 分支 = `unsafe-vibe-dev`（日常开发主线）+ `main`（永不触碰）。**已 push 至 origin
-    `63973071`**（本 session 收束点，2026-09-10 用户两次显式授权 push——P5 阶段末 1 次
-    [origin f5a42db7] + P6 收束后 1 次[origin 63973071，含 P5 doc-sync + P6 F1/F2 向量面]——
-    每次 push 前全量 pytest 零回归门通过[4191/1、4231/1]）。默认仍**不 push**（硬原则：push
-    须用户单独授权；下次 push 待新的显式授权）。
+    `63973071`**（2026-09-10 用户阶段末显式授权，含 P5 doc-sync + P6 向量面 + P9 阶段①-④；
+    每次 push 前全量 pytest 零回归门通过）；本地当前领先 origin **49 提交**（全量 Rust 化
+    第一批/第二批/第三批推进，均本地 commit）。默认仍**不 push**（硬原则：push 须用户单独
+    授权；下次 push 待新的显式授权）。
   - **环境已验证**：venv Python 3.12.3 + editable 安装 ✅；probe ✅（SiliconFlow 35B 非思考基线）；
     maturin 1.15.0 + Rust 1.98.1 + 3.12 dev headers ✅（P9 无环境阻塞）。
   - 测试基线 = `.venv/bin/python -m pytest tests/`（**addopts 已含 `-q`，勿显式再加**——双 `-q`
     隐藏计数行）；**smoke 子集（tests/contracts+tests/compiler）832 passed / ~13s 进程内无子进程**
     （高频验证用）；末次全量 **4191/1**（~126s，P5 公理层放行门，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P9 Rust 内核 阶段② Rust 前端，隔离分支续）**：
+- **🔴 主线延续点（下一位智能体 = P9 全量 Rust 化 第三批 子项 2b-2b-2 增量 2：node_to_symbol
+  侧表独立产出 → free_vars 闭包捕获 → method 符号[sym_anon_*] → generic/用户类型条目 + modules
+  组装[完整 artifact 闭环]；每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步
+  文档；全量 pytest 可按需自由[2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由
+  处理[重构质量原则优先]）**：
   - **P1 R-A quote/eval 已落地（本 session）**：`meta.quote`/`meta.eval` + `quoted` 一等值类型
     （单一验证门 + 值通道）。裁定 = WORKLOG（P1 R-A 条目）。
   - **P2 R-B 世界模型 KB 已落地（本 session）**：`knowledge` 就地演化为三元组知识图谱——
@@ -530,14 +536,37 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     面值 type_uid 条件）+ DIVERGENCE 机制就绪 + 进度可观测（GAP 数随批次收缩）。零行
     为变化纯加法式。验证 diff_harness 34 + smoke 832 零回归。设计/裁定 =
     _p9b1_harness_state_registry.md[落地后删] + WORKLOG P9 第一批条目。
-  - **P9 全量 Rust 化阶段 B 续（当前批次）**：阶段 B（可 Rust 化，纯计算）——语义层
-    Rust 移植续[类型解析续[变量引用/函数调用/二元运算等需类型环境 + 函数签名] +
-    method[sym_anon_*] + free_vars 闭包捕获 + scope 完整收集[owned_scope_uid]] + 序列
-    化续[符号/类型/scope 收集 + 完整 artifact 组装] +
-    值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留
-    Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。证明绝大部分关键核心逻辑可
-    Rust 化后全量转向 Rust（不保留 Python 双通道和对比）。CPS 优化续[覆盖差 22 节点
-    ——LLM/意图面按需补齐]随推进。
+  - **P9 全量 Rust 化 第一批/第二批/第三批（本 session，2026-09-11，unsafe-vibe-dev
+    直接推进[加法式零风险，每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit]）**：
+    第一批 = 差分 harness 状态注册表（GAP/DIVERGENCE 显式化，单一权威源
+    `tests/diff_harness/divergence.py`，收敛 3 处散落隐式 if）→ 第二批 = 语义层类型解析
+    收束（非字面值 type_uid[Name/BinOp/Call/参数/returns，公理驱动 IBCI 类型推导非机械
+    复刻 Python 历史] 30/43→43/43 全对齐 + scope 完整收集 owned_scope_uid 52/52 + 容器
+    泛型 type_uid 确认已对齐）→ 战略 reframe：第二批收束于 scope 符号核心；**第三批 =
+    Rust 独立完整 artifact 产出**（消除"消费 Python 前端 JSON"输入边界的完整闭环）：
+    子项 1 types 池 KERNEL_NATIVE 固定集 66/66 0 diff ✅ → 子项 2a scopes 池[39 scope +
+    2194 symbol 全对齐] ✅ → 子项 2b-1 node_to_loc 侧表[位置多重集全对齐，file_path=null
+    架构自然] ✅ → 子项 2b-2a node_to_type 独立产出 + NodeSerializer 统一遍历基础[scope
+    栈/type_env/func_sigs 复用 SymbolResolver 逻辑，消除双通道方向，IbConstant 34/34] ✅
+    → 子项 2b-2b-1 node_to_type IbCall[intrinsic 函数返回类型 print→void/range→list/
+    len→int + 用户函数 func_sigs 查表，IbConstant+IbCall 34/34 全对齐] ✅ →
+    子项 2b-2b-2 增量 1 node_to_type 完整面[全节点类型全量多重集 34 语料 635/635 0
+    DIFF：IbName[63 intrinsic 名+import/from-import 绑定] / IbCall[方法表[容器特化
+    list.pop→T·dict.get→V·keys→list[K]]+intrinsic 19 表[实证探测]+模块成员] /
+    bound_method+字段[quoted.source] / 下标特化 / 运算符 any 传播+list 拼接 / 比较
+    any 传播 / 一元 / 布尔 / 三元 / 空容器裸形态[修复既有 list[any] 错误] / 参数注解
+    +Slice 不绑定[Python 实证一致] / 双通道实体化[节点 any vs 符号 auto] + 首次绑定
+    优先[arithmetic_loop 实证]；type_inference 单一入口 InferCtx[两 walker 共用，
+    机制同构]] ✅[HEAD]。裁定全记录 = WORKLOG 第一批/第二批/第三批条目。
+  - **P9 全量 Rust 化 第三批 2b-2b-2 增量 2 + 后续（当前批次）**：[当前] = node_to_symbol
+    侧表独立产出（统一遍历方向：node_uid → symbol uid，复用 scope 符号解析）→ free_vars
+    闭包捕获 → method 符号
+    [sym_anon_*，content_hash 用原始 spec = 已裁定偏离，divergence.py 白名单登记] →
+    generic/用户类型条目 + modules 组装[完整 artifact 闭环] → 值对象[IbValue 扩展 8902
+    行，去 Py<PyAny>] → KB/quoted/meta 推理面唯一真相[消 host 桥接双真相] → CPS 同构
+    [tree-walking → CPS 分发表，覆盖差 31→53 收缩]；差分 harness 语料纪律[自包含脚本]
+    + 注册表随批次收缩；仅 LLM/意图 IO 面[HostService]保留 Python 接口。证明绝大部分
+    关键核心逻辑可 Rust 化后全量转向 Rust（废弃 Python 双通道/对比，harness 退场）。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -550,8 +579,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     P0 设计定稿 ✅ → **P1 R-A quote/eval ✅** → **P2 R-B 世界模型 KB ✅** →
     **P3 磁盘格式 ✅** → **P4 R-C 确定性模式 ✅** → **P5 R-D 工件加载 ✅** →
     **P6 向量面 ✅** → **P7 R-F 投影派生视图 ✅** → **P8 测试进程内化 ✅**
-    → **P9 Rust 内核 阶段① 地基 ✅ / 阶段② 前端（当前批次）**。每步：受影响子集+
-    smoke 验证零回归 + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
+    → **P9 Rust 内核 阶段①-④ 全 ✅ / 全量 Rust 化 第一批/第二批 ✅ / 第三批（当前
+    批次，2b-2b-2 续）**。每步：差分门零差异放行 + 受影响子集+smoke 验证零回归
+    + 本地 commit + 同步 NEXT_STEPS/WORKLOG。
   - **工作节奏（三轴收束进自指弧线，不新设竞争主线）**：R-A 并入 selfref 弧线 / R-B 演化 knowledge /
     R-C 横切；Rust 内核 = 独立隔离分支 `rust-kernel`（**设计 + 构建均可**：pin `CARGO_HOME`+
     `CARGO_TARGET_DIR` 到 workspace + 允许网络 → 免审批），harness 语料 = 世界模型里程碑；
@@ -596,11 +626,15 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第七增量放行门实跑）**：**4286
-  passed / 1 skipped / 136.23s / rc=0**（= 前基线 4285 + 类型解析差分测试 1 例[阶段 B
-  第七增量 语义层续 类型解析 type_uid 字面值]；注：test_p7_process_isolation /
-  test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离
-  重跑通过，非回归]；供下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 全量 Rust 化第三批 子项 2b-2b-2 增量 1 放行门实跑）**：
+  **4297 passed / 1 skipped / 141.54s / rc=0**（2026-09-11；= 前基线 4286 + 第一批/第二批/
+  第三批各差分测试 11 例；注：test_p7_process_isolation / test_run_result_type 为 flaky
+  子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session
+  参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
+  放开——测试速度已提高、全量并非不可接受，不再限 4 场合（merge/放行门、公理层或语义错误
+  集、阶段边界/里程碑、开新分支前 仍为强制门），可按需自由全量；② 已过期或被证不正确的
+  测试脚本可自由处理（重构/修正/删除）——重构的质量原则大于维持现状的重要性。已同步
+  AGENTS.md §测试 / NEXT_STEPS 基线锚点 / HANDOFF §1.2 / WORKLOG §二。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
