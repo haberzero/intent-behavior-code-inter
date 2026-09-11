@@ -4547,6 +4547,37 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   边界值即过即转]。**登记缺口**：vec intrinsic 未在 Rust 解释器实现（34 语料无
   用例，非阻塞，增量 2 顺带）。红线 = 语义单一权威源（公理转录）+ 迁移期差分门
   零差异放行。
+- **P9 全量 Rust 化第四批 增量 1（值对象去 Host 化：quoted + meta 模块原生面，
+  2026-09-11，本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：
+  meta 函数面（quote/eval）+ quoted 值 + q.source 属性 **去 Host 化**——Rust 执行面
+  原生闭环（bridge=None 下 4 语料数据面等价实证）。**实施**：
+  - `IbValue::Quoted { source: String }` 变体（不可变值；相等 = 源串逐字节精确对比
+    [公理]；repr = 完整源串[同 __to_prompt__ 数据面忠实呈现]；真值 = true）+
+    `IbValue::MetaFn(&'static str)` 变体（from meta import quote/eval 的原生函数
+    引用绑定值）。clone/debug/cmp/repr/truthy/to_py[quoted 跨边界 = source 串，同
+    to_native 边界拆箱契约] 全臂。
+  - **quote 验证门转录**（HostService.quote_expression 契约——包装体
+    `__qeval__ = <source>` compile-only 门等价）：① 非空 str ② parse 语法 ③
+    表达式性[module = 单 ExprStmt] ④ 自包含性[collect_refs_expr 自由名 ⊆ intrinsic
+    63——fresh scope 无用户绑定，引用父模块自由名即 fail-fast 等价]。零 LLM
+    （compile-only 同契约）。
+  - **eval 隔离执行转录**（HostService.eval_quoted 契约——子进程独立引擎 + 值通道
+    结果槽）：fresh Environment（无用户全局——自包含门已保证）+ 值通道取回表达式
+    值 + silent stdout 面丢弃（同 silent=True）。**裁定（进程隔离 vs scope 隔离）**：
+    子进程进程级隔离 = 资源治理面，数据面语义等价 fresh scope 隔离——语料零 LLM /
+    零跨进程状态依赖（KB/LLM 态不经 quoted 面）；资源治理差异登记于限制面。
+  - 分发拦截：Call Attribute func（value = Name "meta" + attr ∈ {quote, eval}）+
+    Call Name func（env 值 = MetaFn）→ call_meta_fn 原生分发；FromImport meta 绑定
+    = MetaFn（非宿主属性取值）；Attribute q.source = 原生字段访问。
+  **登记限制（非本增量范围）**：验证门失败 / eval 运行错误 = None_ 静默（Rust
+  解释器无错误传播面——InterpreterError 值语义[try/except 可捕获] = 跨切面后续
+  增量；34 语料无错误探针，数据面无偏离；bridge 失败面同为 unwrap_or(None_) 惯例）。
+  **验证**：test_data_plane_quoted_native[新增——quoted 4 语料[import meta 3 +
+  from meta import 1]**无桥接**数据面等价：bridge=None 证明 meta 函数面去 Host 化
+  完成] + 全差分 harness 42 passed + smoke 832 passed + 全量 pytest 4300 passed /
+  1 skipped 零回归（141.47s，放行门实跑）。**值域 Host 残差收缩**：KB 对象 +
+  宿主方法/属性/比较/真值分支（quoted/meta 面已除）——第四批增量 2 = KB Rust 原生
+  数据模型。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

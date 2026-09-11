@@ -347,6 +347,31 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(code, bridge)
             assert rs == py, f"语料 {name} KB 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_data_plane_quoted_native(self):
+        """数据面差分等价：quoted/meta 面原生闭环（去 Host 化）——quoted 相关语料
+        （import meta / from meta import，4 条）数据面**无宿主桥接**等价：meta.quote
+        单一验证门[非空 str + 语法 + 表达式性[单表达式] + 自包含性[自由名 ⊆
+        intrinsic 63]] + quoted 值[source 字段逐字节] + q.source 原生属性 +
+        meta.eval 隔离执行[fresh 环境 + 值通道取回 + silent stdout 面] 全 Rust 原生
+        （bridge 参数 None——meta 函数面不再经桥接）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        quoted = [
+            (n, c)
+            for n, c in CORPUS
+            if "import meta" in c or "from meta import" in c
+        ]
+        assert len(quoted) == 4, "quoted 语料面规模变化——核对语料集"
+        for name, code in quoted:
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code)  # 无桥接——原生闭环
+            assert rs == py, (
+                f"语料 {name} quoted 原生面数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+            )
+
     def test_data_plane_full_corpus(self):
         """数据面差分等价：全语料（非 KB/quoted + KB host service 桥接 + quoted
         值 meta host service 桥接）。"""

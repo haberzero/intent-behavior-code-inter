@@ -32,6 +32,12 @@ pub enum IbValue {
     None_,
     List(Rc<RefCell<Vec<IbValue>>>),
     Dict(Rc<RefCell<Vec<(IbValue, IbValue)>>>),
+    /// quoted 值（meta.quote 冻结的表达式源串——不可变，逐字节精确对比；
+    /// 字段 source = 完整源串，经 q.source 属性访问）。
+    Quoted { source: String },
+    /// 原生 meta 函数引用（from meta import quote/eval 的绑定值——去 Host 化；
+    /// 调用经 call_meta_fn 原生分发）。
+    MetaFn(&'static str),
     /// 宿主对象（Python 对象引用——KB 服务经 host service 桥接委托）。
     Host(Py<PyAny>),
 }
@@ -47,6 +53,10 @@ impl Clone for IbValue {
             IbValue::None_ => IbValue::None_,
             IbValue::List(l) => IbValue::List(l.clone()),
             IbValue::Dict(d) => IbValue::Dict(d.clone()),
+            IbValue::Quoted { source } => IbValue::Quoted {
+                source: source.clone(),
+            },
+            IbValue::MetaFn(n) => IbValue::MetaFn(*n),
             IbValue::Host(h) => {
                 // clone_ref 需 GIL（执行期 GIL 已持有，with_gil 可重入）
                 let cloned = Python::with_gil(|py| h.clone_ref(py));
@@ -64,6 +74,8 @@ impl std::fmt::Debug for IbValue {
             IbValue::Str(s) => write!(f, "Str({s:?})"),
             IbValue::Bool(b) => write!(f, "Bool({b})"),
             IbValue::None_ => write!(f, "None_"),
+            IbValue::Quoted { source } => write!(f, "Quoted({source:?})"),
+            IbValue::MetaFn(n) => write!(f, "MetaFn({n:?})"),
             IbValue::List(_) => write!(f, "List(..)"),
             IbValue::Dict(_) => write!(f, "Dict(..)"),
             IbValue::Host(_) => write!(f, "Host(<py object>)"),
@@ -92,6 +104,8 @@ impl PartialEq for IbValue {
                     k1 == k2 && v1 == v2
                 })
             }
+            // quoted 值相等 = 源串逐字节精确对比（公理：可精确对比逐字节）
+            (IbValue::Quoted { source: a }, IbValue::Quoted { source: b }) => a == b,
             (IbValue::Host(a), IbValue::Host(b)) => {
                 // 宿主对象身份相等（同一 Python 对象指针）
                 a.as_ptr() == b.as_ptr()
@@ -135,6 +149,9 @@ impl IbValue {
                     .collect();
                 format!("{{{}}}", items.join(", "))
             }
+            // 数据面忠实呈现 = 完整源串（同 __to_prompt__——无截断）
+            IbValue::Quoted { source } => source.clone(),
+            IbValue::MetaFn(n) => format!("meta.{n}"),
             IbValue::Host(_) => "<host>".into(),
         }
     }
@@ -147,6 +164,8 @@ impl IbValue {
             IbValue::Str(s) => !s.is_empty(),
             IbValue::List(l) => !l.borrow().is_empty(),
             IbValue::Dict(d) => !d.borrow().is_empty(),
+            IbValue::Quoted { .. } => true,
+            IbValue::MetaFn(_) => true,
             IbValue::Host(_) => true,
         }
     }
@@ -440,15 +459,23 @@ impl Interpreter {
             }
             Stmt::FromImport { module, names, .. } => {
                 // from X import Y [as Z]：绑定名 = asname 或 Y；Y = X 的宿主属性
-                // （经桥接 host_getattr 解析）；未知模块/属性 = no-op
-                if let Some(mod_host) = self.get_host_module(module) {
-                    if let IbValue::Host(h) = &mod_host {
-                        for alias in names {
-                            let src = alias.name.clone();
-                            let binding = alias
-                                .asname
-                                .clone()
-                                .unwrap_or_else(|| src.clone());
+                // （经桥接 host_getattr 解析）；未知模块/属性 = no-op。meta 的
+                // quote/eval = 原生函数引用（去 Host 化——call_meta_fn 分发）。
+                for alias in names {
+                    let src = alias.name.clone();
+                    let binding = alias
+                        .asname
+                        .clone()
+                        .unwrap_or_else(|| src.clone());
+                    if module == "meta" && (src == "quote" || src == "eval") {
+                        env.borrow_mut().set(
+                            &binding,
+                            IbValue::MetaFn(if src == "quote" { "quote" } else { "eval" }),
+                        );
+                        continue;
+                    }
+                    if let Some(mod_host) = self.get_host_module(module) {
+                        if let IbValue::Host(h) = &mod_host {
                             let val = self.get_host_attribute(h, &src);
                             env.borrow_mut().set(&binding, val);
                         }
@@ -578,6 +605,17 @@ impl Interpreter {
                 // func: &Box<Expr> → as_ref() 得 &Expr
                 match func.as_ref() {
                     Expr::Attribute { value, attr, .. } => {
+                        // 原生 meta 函数面（meta.quote / meta.eval——去 Host 化：
+                        // 验证门 + 隔离执行，经 call_meta_fn 原生分发）
+                        if let Expr::Name { id, .. } = value.as_ref() {
+                            if id == "meta" && (attr == "quote" || attr == "eval") {
+                                let arg_vals: Vec<IbValue> =
+                                    args.iter()
+                                        .map(|a| self.eval_expr(env, a, output))
+                                        .collect();
+                                return self.call_meta_fn(attr, arg_vals, output);
+                            }
+                        }
                         let obj = self.eval_expr(env, value, output);
                         let attr = attr.clone();
                         let arg_vals: Vec<IbValue> =
@@ -591,8 +629,11 @@ impl Interpreter {
                         };
                         let arg_vals: Vec<IbValue> =
                             args.iter().map(|a| self.eval_expr(env, a, output)).collect();
-                        // 函数为宿主对象（如 from meta import quote）→ 调宿主函数
-                        if let Some(IbValue::Host(h)) = env.borrow().get(&func_name) {
+                        // 原生 meta 函数绑定（from meta import quote/eval）
+                        if let Some(IbValue::MetaFn(n)) = env.borrow().get(&func_name) {
+                            self.call_meta_fn(n, arg_vals, output)
+                        // 函数为宿主对象 → 调宿主函数
+                        } else if let Some(IbValue::Host(h)) = env.borrow().get(&func_name) {
                             self.call_host_function(&h, arg_vals)
                         } else {
                             self.call_function(env, &func_name, arg_vals, output)
@@ -626,7 +667,11 @@ impl Interpreter {
             Expr::Attribute { value, attr, .. } => {
                 let obj = self.eval_expr(env, value, output);
                 match obj {
-                    // 宿主对象属性访问（如 q.source）——委托 Python
+                    // quoted 的 source 字段（原生——完整源串）
+                    IbValue::Quoted { ref source } if attr == "source" => {
+                        IbValue::Str(source.clone())
+                    }
+                    // 宿主对象属性访问——委托 Python
                     IbValue::Host(h) => self.get_host_attribute(&h, attr),
                     other => other,
                 }
@@ -787,6 +832,61 @@ impl Interpreter {
                     IbValue::None_
                 }
             }
+        }
+    }
+
+    /// meta.quote / meta.eval 原生分发（去 Host 化——语义单点真理 =
+    /// HostService.quote_expression / eval_quoted 的编译期/执行期契约转录）。
+    ///
+    /// quote(source: str) → quoted 值：单一验证门（包装体 `__qeval__ = <source>`
+    /// 的 compile-only 等价——① 非空 str ② 语法 ③ 表达式性[单表达式语句]
+    /// ④ 自包含性[fresh scope：自由名 ⊆ intrinsic 集，无隐式捕获面]）。零 LLM。
+    ///
+    /// eval(quoted) → 隔离执行取回**值**（命令形态）：quoted 源串经 Rust parser +
+    /// interpreter 在 fresh 环境执行（无用户全局——自包含门已保证；stdout 面
+    /// 丢弃[同 silent=True]，返回表达式值）。子进程进程级隔离 = 资源治理面，
+    /// 数据面语义等价于 fresh scope 隔离（语料零 LLM / 零跨进程状态依赖）。
+    fn call_meta_fn(&self, name: &str, args: Vec<IbValue>, output: &mut Vec<String>) -> IbValue {
+        match name {
+            "quote" => {
+                let Some(IbValue::Str(source)) = args.first() else {
+                    return IbValue::None_;
+                };
+                if source.trim().is_empty() {
+                    return IbValue::None_;
+                }
+                let module = crate::parser::parse_to_module(source);
+                // 表达式性：单表达式语句（__qeval__ = <source> 可编译 ⟺ source 是表达式）
+                let value = match &module.body[..] {
+                    [crate::parser::Stmt::ExprStmt { value, .. }] => value.clone(),
+                    _ => return IbValue::None_,
+                };
+                // 自包含性：自由名 ⊆ intrinsic 63 固有集（fresh scope 无用户绑定）
+                let mut refs = std::collections::BTreeSet::new();
+                crate::node_serializer::collect_refs_expr(&value, &mut refs);
+                let intrinsics: std::collections::BTreeSet<String> =
+                    crate::intrinsic_symbols::intrinsic_names().into_iter().collect();
+                if !refs.is_subset(&intrinsics) {
+                    return IbValue::None_;
+                }
+                IbValue::Quoted { source: source.clone() }
+            }
+            "eval" => {
+                let Some(IbValue::Quoted { source }) = args.first() else {
+                    return IbValue::None_;
+                };
+                let module = crate::parser::parse_to_module(source);
+                let value = match &module.body[..] {
+                    [crate::parser::Stmt::ExprStmt { value, .. }] => value.clone(),
+                    _ => return IbValue::None_,
+                };
+                // 隔离执行（fresh 环境——与主执行同构：intrinsic 经 call_function
+                // 分发；silent stdout 面丢弃）
+                let fresh = Rc::new(RefCell::new(Environment::new(None)));
+                let mut silent_output: Vec<String> = Vec::new();
+                self.eval_expr(&fresh, &value, &mut silent_output)
+            }
+            _ => IbValue::None_,
         }
     }
 
@@ -978,6 +1078,10 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
             }
             dict.into_py(py)
         }
+        // quoted 值跨边界 = 完整源串（同 to_native 边界拆箱契约）
+        IbValue::Quoted { source } => source.clone().into_py(py),
+        // 原生 meta 函数引用不经桥接（桥接面不含 meta 函数）
+        IbValue::MetaFn(_) => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
 }

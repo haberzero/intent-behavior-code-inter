@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4299 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 141.69s，P9 全量 Rust 化第三批 子项 2b-2b-2 增量 5[完整 artifact 产出闭环 + 第三批收官]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4300 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 141.47s，P9 全量 Rust 化第四批 增量 1[quoted + meta 模块原生面去 Host 化]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -482,8 +482,11 @@
       223 方法声明表 + generic.py 泛型成员特化协议转录] + 空符号函数 scope[AST 结构
       枚举] + FUNCTION/MODULE/CLASS 符号 type_uid 修复；消除"消费 Python 前端 JSON"
       输入边界]** ✅[第三批收官]
-   → 第四批 值对象[Rust 执行面去 Py<PyAny>，8902 行 IbValue 扩展][当前]
-   + KB/quoted 唯一真相 + CPS 同构
+   → 第四批 增量 1 quoted + meta 模块原生面[去 Host 化：Quoted{source} + MetaFn 变体
+      + quote 验证门[非空/语法/单表达式/自包含 自由名⊆intrinsic 63] + eval 隔离执行
+      [fresh env + 值通道 + silent stdout] + q.source 原生；quoted 4 语料无桥接数据面
+      等价（bridge=None 证明）；错误面 = 后续跨切面增量][当前批次推进中]
+   + 增量 2 KB Rust 原生数据模型 + 增量 3 Host 变体退役 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

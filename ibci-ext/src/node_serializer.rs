@@ -950,7 +950,7 @@ fn collect_refs_stmt(s: &Stmt, out: &mut BTreeSet<String>) {
     }
 }
 
-fn collect_refs_expr(e: &Expr, out: &mut BTreeSet<String>) {
+pub(crate) fn collect_refs_expr(e: &Expr, out: &mut BTreeSet<String>) {
     match e {
         Expr::Name { id, .. } => {
             out.insert(id.clone());

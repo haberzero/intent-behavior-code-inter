@@ -40,16 +40,25 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
 | KB | Rust 原生 KB 数据模型（facts 三元组 / worlds / words / relations / embeddings 向量 / 向量运算纯数学） | IBCI 公理层 KB 声明（41 成员表）+ Python KB 参照（差分门） |
 | embedding IO | **保留 Host 边界**（Qwen3-Embedding 端点 = LLM IO——HostService 桥接） | 用户裁定：LLM/意图 IO 面保留 Python 接口 |
 
-## 增量序列（草案）
+## 增量序列
 
-1. **增量 1：quoted + meta 模块原生面**（小垂直切片）：
-   - `IbValue::Quoted { source: String }` 新变体 + clone/debug/比较/真值/类型名。
-   - intrinsic 分发：`quote(s) → Quoted`；`eval(q) → parse(source) + exec`
-     （Rust 原生闭环）；模块属性调用 meta.quote/meta.eval 经 intrinsic 面
-     （called_module_functions 已追踪——解释器同规则）。
-   - `q.source` 属性访问原生（Attribute 分支 Quoted 特判）。
-   - 差分门：quoted_source / quoted_eval_value / quoted_eval_expr 语料数据面
-     全级等价（3 语料 = eval 语义面完整探针）。
+1. **增量 1：quoted + meta 模块原生面**（小垂直切片）✅[2026-09-11 落地]：
+   - 实施 = `IbValue::Quoted { source }` + `IbValue::MetaFn(&'static str)` 变体
+     （clone/debug/逐字节相等/repr[= source，同 __to_prompt__]/真值）+ Call 分发
+     拦截（meta.quote/meta.eval 属性调用 + from-import 绑定名 → call_meta_fn 原生
+     分发）+ q.source 原生属性 + FromImport meta 绑定 = MetaFn（非宿主属性）。
+   - quote 验证门转录（HostService.quote_expression 契约）：非空 str + parse 语法 +
+     单表达式[ExprStmt] + 自包含性[collect_refs_expr 自由名 ⊆ intrinsic 63——fresh
+     scope 无用户绑定]。
+   - eval 隔离执行（HostService.eval_quoted 契约转录）：fresh Environment（无用户
+     全局）+ 值通道取回 + silent stdout 面丢弃。**进程级隔离 = 资源治理面，数据面
+     语义等价 fresh scope 隔离**（裁定：语料零 LLM / 零跨进程状态依赖——记录于
+     WORKLOG）。
+   - 差分门：test_data_plane_quoted_native（quoted 4 语料**无桥接**原生闭环等价——
+     bridge=None 证明 meta 函数面去 Host 化完成）+ 全 harness / smoke / 全量零回归。
+   - 登记限制（非本增量范围）：验证门失败 / eval 运行错误面 = None_ 静默（Rust
+     解释器无错误传播面——InterpreterError 值语义 = 跨切面后续增量；语料无错误
+     探针，数据面无偏离）。
 2. **增量 2：KB Rust 原生数据模型**（大面——世界模型核心，可能拆分
    2a facts/2b worlds/2c embeddings+vector 运算）：
    - Rust KB 结构体（事实三元组 / 词 / 世界 / 关系 / 向量）+ 41 成员方法面

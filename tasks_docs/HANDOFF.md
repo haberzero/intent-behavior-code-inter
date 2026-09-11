@@ -133,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 值对象[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 quoted+meta 原生面[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -166,8 +166,10 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   单例 last-wins 为 Python 参考内核既有非 canonical 行为[artifact 内容依赖书写顺序]，
   Rust 迁移期忠实复现，根因修复 = 后续架构裁定项[触及公理层 spec 建模]；method 符号
   canonical 哈希增量 4 已收束]；**设计文档 = tasks_docs/_value_objects.md**[值域
-  现状盘点 + 面分解[quoted/meta/KB/边界保留] + 增量 1-3 序列[quoted+meta 原生面 →
-  KB Rust 原生数据模型[eval = parse+exec 原生闭环] → Host 变体退役] + 红线 5 条]；
+  现状盘点 + 面分解[quoted/meta/KB/边界保留] + 增量 1-3 序列 + 红线 5 条；**增量 1
+  已落地**[Quoted/MetaFn 变体 + quote 验证门[非空/语法/单表达式/自包含] + eval 隔离
+  执行[fresh env + 值通道] + q.source 原生；quoted 4 语料无桥接数据面等价；错误面
+  = 后续跨切面增量]，下一位智能体 = 增量 2 KB Rust 原生数据模型]；
   每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest
   可按需自由[2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由处理[重构
   质量原则优先]）**：
@@ -654,12 +656,12 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化第三批 子项 2b-2b-2 增量 5[完整 artifact
-  闭环 + 第三批收官]放行门实跑）**：
-  **4299 passed / 1 skipped / 141.69s / rc=0**（2026-09-11；= 增量 4 基线 4298 +
-  full_artifact 差分测试 1 例；注：test_p7_process_isolation / test_run_result_type 为
-  flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供
-  下一 session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
+- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 1[quoted + meta 模块
+  原生面去 Host 化]放行门实跑）**：
+  **4300 passed / 1 skipped / 141.47s / rc=0**（2026-09-11；= 第三批收官基线 4299 +
+  test_data_plane_quoted_native 1 例；注：test_p7_process_isolation /
+  test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，
+  隔离重跑通过，非回归]；供下一 session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
   放开——测试速度已提高、全量并非不可接受，不再限 4 场合（merge/放行门、公理层或语义错误
   集、阶段边界/里程碑、开新分支前 仍为强制门），可按需自由全量；② 已过期或被证不正确的
   测试脚本可自由处理（重构/修正/删除）——重构的质量原则大于维持现状的重要性。已同步
