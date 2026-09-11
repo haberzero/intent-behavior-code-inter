@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 
@@ -39,20 +38,15 @@ class PluginsLib:
         return self._k().load_plugin(p)
 
     def call(self, name: Any, args: Any) -> Any:
-        """调用已注册插件函数（args = 标量/列表原生数据；结果 = 原生标量）。"""
+        """调用已注册插件函数（args = 标量原生数据；结果 = 原生标量）。"""
         n = str(name)
-        try:
-            args_json = json.dumps(_to_jsonable(args))
-        except (TypeError, ValueError) as e:
-            raise ValueError(f"plugins.call: 实参不可 JSON 化（{n}）: {e}") from e
-        result_json = self._k().call_plugin(n, args_json)
-        return json.loads(result_json)
+        return self._k().call_plugin(n, _to_native_list(args))
 
 
-def _to_jsonable(v: Any) -> Any:
-    """宿主边界值 → JSON 可序列化原生（IbObject 拆箱 + 列表递归）。"""
+def _to_native_list(v: Any) -> Any:
+    """宿主边界值 → 原生列表（IbObject 拆箱 + 列表递归；标量直通）。"""
     if isinstance(v, (list, tuple)):
-        return [_to_jsonable(x) for x in v]
+        return [_to_native_list(x) for x in v]
     if hasattr(v, "to_native"):
         try:
             return v.to_native()

@@ -579,44 +579,38 @@ fn json_to_ibvalue(v: &serde_json::Value) -> interpreter::IbValue {
 }
 
 // --------------------------------------------------------------------------- //
-/// JSON 原生标量 → PluginValue（pyo3 边界传输；R6-1：实参 = 扁平标量数组）。
-fn json_to_plugin_scalar(v: &serde_json::Value) -> PyResult<ibci_sdk::PluginValue> {
+/// Python 对象 → PluginValue（pyo3 边界直接提取——无序列化层；P2 typed 精神：
+/// 值面 = 标量 int/float/bool/None；嵌套容器 = 显式错误[R6-1 值面]）。
+fn py_to_plugin_value(obj: &Bound<'_, PyAny>) -> PyResult<ibci_sdk::PluginValue> {
     use ibci_sdk::PluginValue;
-    Ok(match v {
-        serde_json::Value::Null => PluginValue::None_,
-        serde_json::Value::Bool(b) => PluginValue::Bool(*b),
-        serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                PluginValue::Int(i)
-            } else {
-                PluginValue::Float(n.as_f64().unwrap_or(0.0))
-            }
-        }
-        // R6-1：嵌套数组/字符串实参 = 显式错误（值模型后续增量）
-        _ => {
-            return Err(pyo3::exceptions::PyValueError::new_err(
-                "插件实参须为标量（int/float/bool/null）——嵌套容器后续增量",
-            ))
-        }
-    })
+    if obj.is_none() {
+        return Ok(PluginValue::None_);
+    }
+    if let Ok(b) = obj.extract::<bool>() {
+        return Ok(PluginValue::Bool(b));
+    }
+    if let Ok(i) = obj.extract::<i64>() {
+        return Ok(PluginValue::Int(i));
+    }
+    if let Ok(f) = obj.extract::<f64>() {
+        return Ok(PluginValue::Float(f));
+    }
+    Err(pyo3::exceptions::PyValueError::new_err(
+        "插件实参须为标量（int/float/bool/null）——嵌套容器后续增量",
+    ))
 }
 
-/// PluginValue（标量结果）→ JSON（pyo3 边界传输）。
-fn plugin_value_to_json(v: &ibci_sdk::PluginValue) -> serde_json::Value {
+/// PluginValue（标量结果）→ Python 对象（pyo3 边界直接构造）。
+fn plugin_value_to_py(py: Python<'_>, v: &ibci_sdk::PluginValue) -> PyObject {
     use ibci_sdk::PluginValue;
+    use pyo3::IntoPy;
     match v {
-        PluginValue::None_ => serde_json::Value::Null,
-        PluginValue::Bool(b) => serde_json::Value::Bool(*b),
-        PluginValue::Int(i) => serde_json::Value::from(*i),
-        PluginValue::Float(f) => serde_json::Number::from_f64(*f)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        PluginValue::Str(ptr, len) => {
-            // SAFETY: 内核构造保证有效（借用——结果面后续增量）
-            let s = unsafe { std::slice::from_raw_parts(*ptr, *len) };
-            serde_json::Value::String(String::from_utf8_lossy(s).into_owned())
-        }
-        PluginValue::List(..) => serde_json::Value::Null,
+        PluginValue::None_ => py.None(),
+        PluginValue::Bool(b) => b.into_py(py),
+        PluginValue::Int(i) => i.into_py(py),
+        PluginValue::Float(f) => f.into_py(py),
+        // 结果面后续增量（Str/List 所有权纪律未定前不开放）
+        PluginValue::Str(..) | PluginValue::List(..) => py.None(),
     }
 }
 
@@ -626,20 +620,16 @@ fn load_plugin(path: &str) -> PyResult<usize> {
     plugins::load(path).map_err(PyRuntimeError::new_err)
 }
 
-/// 调用已注册插件函数（args_json = 扁平标量 JSON 数组 → 结果 JSON）。
+/// 调用已注册插件函数（args = 原生标量列表——直接提取，无序列化层）。
 #[pyfunction]
-fn call_plugin(name: &str, args_json: &str) -> PyResult<String> {
-    let value: serde_json::Value = serde_json::from_str(args_json)
-        .map_err(|e| PyRuntimeError::new_err(format!("插件实参 JSON 解析失败: {e}")))?;
-    let arr = value.as_array().ok_or_else(|| {
-        PyRuntimeError::new_err("插件实参须为 JSON 数组")
-    })?;
-    let mut pv_args: Vec<ibci_sdk::PluginValue> = Vec::with_capacity(arr.len());
-    for item in arr {
-        pv_args.push(json_to_plugin_scalar(item)?);
+fn call_plugin(py: Python<'_>, name: &str, args: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    let items = args.downcast::<pyo3::types::PyList>()?;
+    let mut pv_args: Vec<ibci_sdk::PluginValue> = Vec::with_capacity(items.len());
+    for item in items.iter() {
+        pv_args.push(py_to_plugin_value(&item)?);
     }
     let result = plugins::call(name, &pv_args).map_err(PyRuntimeError::new_err)?;
-    Ok(plugin_value_to_json(&result).to_string())
+    Ok(plugin_value_to_py(py, &result))
 }
 
 #[pyfunction]
