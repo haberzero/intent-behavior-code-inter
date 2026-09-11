@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde_json::{Map, Value};
 
-use crate::parser::{ConstVal, Expr, Module, Pos, Stmt};
+use crate::parser::{Case, ConstVal, Expr, Module, Pos, Stmt};
 use crate::serialization;
 use crate::type_inference::{
     bound_method_rewrite, infer_type_env, parse_type_annotation, symbol_level_type,
@@ -625,7 +625,76 @@ impl NodeSerializer {
                 self.def_node_uids.entry(sym_uid).or_insert(cd_uid.clone());
                 cd_uid
             }
+            // IbGlobalStmt / IbNonlocalStmt（编译期语义——names 裸名字串）
+            Stmt::Global { pos, names } | Stmt::Nonlocal { pos, names } => {
+                let ty = if matches!(stmt, Stmt::Global { .. }) {
+                    "IbGlobalStmt"
+                } else {
+                    "IbNonlocalStmt"
+                };
+                let mut node_data = base_fields(pos);
+                node_data.insert("_type".to_string(), Value::String(ty.to_string()));
+                node_data.insert(
+                    "names".to_string(),
+                    Value::Array(
+                        names
+                            .iter()
+                            .map(|n| Value::String(n.clone()))
+                            .collect(),
+                    ),
+                );
+                self.collect(node_data)
+            }
+            // IbRaise（exc 节点引用；null = 裸 raise）
+            Stmt::Raise { pos, exc } => {
+                let e_uid = exc.as_ref().map(|e| self.serialize_expr(e));
+                let mut node_data = base_fields(pos);
+                node_data.insert("_type".to_string(), Value::String("IbRaise".to_string()));
+                node_data.insert(
+                    "exc".to_string(),
+                    e_uid.map(Value::String).unwrap_or(Value::Null),
+                );
+                self.collect(node_data)
+            }
+            // IbSwitch（test + cases 节点 uid + llmexcept_handler=null[LLM 面]；
+            // end 位置 = 0——Python 序列化器 switch/case 位置约定，语料实证）
+            Stmt::Switch { pos, test, cases } => {
+                let t_uid = self.serialize_expr(test);
+                let c_uids: Vec<String> =
+                    cases.iter().map(|c| self.serialize_case(c)).collect();
+                let mut node_data = base_fields(pos);
+                node_data.insert("_type".to_string(), Value::String("IbSwitch".to_string()));
+                node_data.insert("test".to_string(), Value::String(t_uid));
+                node_data.insert(
+                    "cases".to_string(),
+                    Value::Array(c_uids.into_iter().map(Value::String).collect()),
+                );
+                node_data.insert("llmexcept_handler".to_string(), Value::Null);
+                node_data.insert("end_lineno".to_string(), Value::from(0));
+                node_data.insert("end_col_offset".to_string(), Value::from(0));
+                self.collect(node_data)
+            }
         }
+    }
+
+    /// IbCase 节点（switch 的 case 块：pattern 节点引用[null = default] + body
+    /// 语句 uid；end 位置 = 0——Python 位置约定）。
+    fn serialize_case(&mut self, c: &Case) -> String {
+        let p_uid = c.pattern.as_ref().map(|p| self.serialize_expr(p));
+        let b_uids: Vec<String> = c.body.iter().map(|s| self.serialize_stmt(s)).collect();
+        let mut node_data = base_fields(&c.pos);
+        node_data.insert("_type".to_string(), Value::String("IbCase".to_string()));
+        node_data.insert(
+            "pattern".to_string(),
+            p_uid.map(Value::String).unwrap_or(Value::Null),
+        );
+        node_data.insert(
+            "body".to_string(),
+            Value::Array(b_uids.into_iter().map(Value::String).collect()),
+        );
+        node_data.insert("end_lineno".to_string(), Value::from(0));
+        node_data.insert("end_col_offset".to_string(), Value::from(0));
+        self.collect(node_data)
     }
 
     /// 表达式节点分发（值/表达式位置：node_to_type[node_uid → type_uid，type_inference
@@ -942,6 +1011,24 @@ fn collect_refs_stmt(s: &Stmt, out: &mut BTreeSet<String>) {
             let _ = names;
         }
         Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Pass { .. } => {}
+        Stmt::Global { .. } | Stmt::Nonlocal { .. } => {
+            // 编译期语义——无表达式引用
+        }
+        Stmt::Raise { exc, .. } => {
+            if let Some(e) = exc {
+                collect_refs_expr(e, out);
+            }
+        }
+        Stmt::Switch { test, cases, .. } => {
+            // test + 各 case pattern/体 = 定义处 scope 求值（同 If test）
+            collect_refs_expr(test, out);
+            for c in cases {
+                if let Some(p) = &c.pattern {
+                    collect_refs_expr(p, out);
+                }
+                collect_refs(&c.body, out);
+            }
+        }
         Stmt::Try { body, orelse, finalbody, .. } => {
             collect_refs(body, out);
             collect_refs(orelse, out);

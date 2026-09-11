@@ -361,6 +361,18 @@ pub enum Stmt {
         fields: Vec<Stmt>,
         methods: Vec<Stmt>,
     },
+    Global { pos: Pos, names: Vec<String> },
+    Nonlocal { pos: Pos, names: Vec<String> },
+    Raise { pos: Pos, exc: Option<Expr> },
+    Switch { pos: Pos, test: Expr, cases: Vec<Case> },
+}
+
+/// switch 的 case 块（对齐 IbCase：pattern[None = default] / body）。
+#[derive(Debug, Clone)]
+pub struct Case {
+    pub pos: Pos,
+    pub pattern: Option<Expr>,
+    pub body: Vec<Stmt>,
 }
 
 /// try 的 except 处理块（对齐 IbExceptHandler：type / name / body）。
@@ -533,8 +545,47 @@ impl Stmt {
                     f.join(", ")
                 )
             }
+            Stmt::Global { pos, names } => {
+                let n: Vec<String> = names.iter().map(|x| format!("'{}'", x)).collect();
+                format!("IbGlobalStmt({}, names=[{}])", pos.prefix(), n.join(", "))
+            }
+            Stmt::Nonlocal { pos, names } => {
+                let n: Vec<String> = names.iter().map(|x| format!("'{}'", x)).collect();
+                format!("IbNonlocalStmt({}, names=[{}])", pos.prefix(), n.join(", "))
+            }
+            Stmt::Raise { pos, exc } => {
+                let e = match exc {
+                    Some(e) => e.dump(),
+                    None => "None".to_string(),
+                };
+                format!("IbRaise({}, exc={})", pos.prefix(), e)
+            }
+            Stmt::Switch { pos, test, cases } => {
+                let c: Vec<String> = cases.iter().map(case_dump).collect();
+                format!(
+                    "IbSwitch({}, test={}, cases=[{}], llmexcept_handler=None)",
+                    pos.prefix(),
+                    test.dump(),
+                    c.join(", ")
+                )
+            }
         }
     }
+}
+
+/// IbCase 节点 dump（AST 差分面——同 Python AST dump 约定）。
+fn case_dump(c: &Case) -> String {
+    let p = match &c.pattern {
+        Some(p) => p.dump(),
+        None => "None".to_string(),
+    };
+    let b: Vec<String> = c.body.iter().map(|s| s.dump()).collect();
+    format!(
+        "IbCase({}, pattern={}, body=[{}])",
+        c.pos.prefix(),
+        p,
+        b.join(", ")
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -705,6 +756,36 @@ impl Parser {
                 }
                 Stmt::FromImport { pos: Pos::from_token(&kw), module, names }
             }
+            TokenType::Global | TokenType::Nonlocal => {
+                // global/nonlocal x[, y]（编译期语义——运行时 no-op）
+                let kw = self.advance();
+                let is_global = kw.type_ == TokenType::Global;
+                let mut names = Vec::new();
+                loop {
+                    let t = self.advance(); // Identifier
+                    names.push(t.value);
+                    if !self.at(TokenType::Comma) {
+                        break;
+                    }
+                    self.advance();
+                }
+                if is_global {
+                    Stmt::Global { pos: Pos::from_token(&kw), names }
+                } else {
+                    Stmt::Nonlocal { pos: Pos::from_token(&kw), names }
+                }
+            }
+            TokenType::Raise => {
+                // raise [exc]
+                let kw = self.advance();
+                let exc = if self.is_stmt_end() {
+                    None
+                } else {
+                    Some(self.parse_expr())
+                };
+                Stmt::Raise { pos: Pos::from_token(&kw), exc }
+            }
+            TokenType::Switch => self.parse_switch(),
             TokenType::Identifier => {
                 // 回退式前瞻：解析 target（Name 或 Subscript/Attribute），若后随
                 // ASSIGN = Assign；AUG（+= / -=）= AugAssign；否则回退按 ExprStmt。
@@ -754,6 +835,41 @@ impl Parser {
                     value,
                 }
             }
+        }
+    }
+
+    /// switch <test>:\n    case <pattern>:\n    ...\n    default:\n    ...
+    /// （匹配后自动跳出——无 fall-through；case/default = 独立缩进块）
+    fn parse_switch(&mut self) -> Stmt {
+        let kw = self.advance(); // SWITCH
+        let test = self.parse_expr();
+        self.expect(TokenType::Colon);
+        self.skip_newlines();
+        self.expect(TokenType::Indent); // switch 块
+        self.skip_newlines();
+        let mut cases = Vec::new();
+        while self.at(TokenType::Case) || self.at(TokenType::Default) {
+            let is_case = self.at(TokenType::Case);
+            self.advance(); // CASE 或 DEFAULT
+            // case <expr> = 有 pattern；default = 无 pattern
+            let pattern = if is_case { Some(self.parse_expr()) } else { None };
+            self.expect(TokenType::Colon);
+            self.skip_newlines();
+            let body = self.parse_body(); // case 体
+            // IbCase 位置 = switch 关键字位置（Python 序列化器约定：case 节点
+            // 复用 switch start_token，语料实证全部 case 同位置）
+            cases.push(Case {
+                pos: Pos::from_token(&kw),
+                pattern,
+                body,
+            });
+            self.skip_newlines();
+        }
+        self.expect(TokenType::Dedent); // switch 块结束
+        Stmt::Switch {
+            pos: Pos::block(&kw),
+            test,
+            cases,
         }
     }
 

@@ -579,6 +579,46 @@ impl Interpreter {
                 }
                 Flow::Next
             }
+            // global/nonlocal：编译期语义——运行时无操作（语义效果在编译期经
+            // 符号解析完成；运行期赋值经作用域链自然穿透）
+            Stmt::Global { .. } | Stmt::Nonlocal { .. } => Flow::Next,
+            // raise：异常对象求值——错误面（Rust 解释器无异常传播机制——
+            // ThrownException/Try 捕获语义 = 跨切面后续增量；语料面无 raise）
+            Stmt::Raise { exc, .. } => {
+                if let Some(e) = exc {
+                    self.eval_expr(env, e, output);
+                }
+                Flow::Next
+            }
+            // switch：匹配后自动跳出（无 fall-through）；case 内 break = no-op
+            // （C 习惯，接受为退出 case）；Return 透传、Continue 透传外层循环
+            // （switch 本身不是循环）
+            Stmt::Switch { test, cases, .. } => {
+                let tv = self.eval_expr(env, test, output);
+                for case in cases {
+                    let matched = match &case.pattern {
+                        None => true, // default case
+                        Some(p) => {
+                            let pv = self.eval_expr(env, p, output);
+                            &tv == &pv
+                        }
+                    };
+                    if !matched {
+                        continue;
+                    }
+                    for s in &case.body {
+                        match self.exec_stmt(env, s, output) {
+                            Flow::Return(v) => return Flow::Return(v),
+                            Flow::Continue => return Flow::Continue,
+                            // break = no-op（匹配后自动跳出——退出 case）
+                            Flow::Break => break,
+                            Flow::Next => {}
+                        }
+                    }
+                    break; // 自动跳出（无 fall-through）
+                }
+                Flow::Next
+            }
             Stmt::Try { body, .. } | Stmt::ClassDef { body, .. } => {
                 self.exec_body(env, body, output)
             }

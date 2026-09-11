@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4301 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 141.36s，P9 全量 Rust 化第四批 增量 2c[vector 值 + KB 嵌入面]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4302 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 144.42s，P9 全量 Rust 化第四批 增量 3b[CPS 覆盖差收缩 5 节点]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -504,8 +504,15 @@
        norm/cosine/scale/add/sub/下标 + KB 嵌入面 5 方法[set_embedding 维度全
        一致门 / embed_search 暴力 cosine 确定性排序]；22 行合成探针全对齐；
        vector.cast_to 执行面不可达裁定[类对象面 = 类型面]；embedding 文本端点
-       = LLM IO 边界保留][当前批次推进中]
-    + 增量 3 Host 变体退役 + CPS 同构
+       = LLM IO 边界保留] ✅
+    → 第四批 增量 3b CPS 覆盖差收缩 31→36[5 节点移植：global/nonlocal[运行时
+       no-op] + raise[错误面登记：无异常传播机制] + switch/case[匹配后自动跳出
+       无 fall-through + break no-op + Return/Continue 透传；IbCase 位置 = switch
+       位置约定 + end = 0]；lexer/parser/deserializer/node_serializer/
+       interpreter 五面全载；3 探针 + switch 源 full_artifact 五池全等价][当前
+       批次推进中]
+    + 声明面移植[int x = v IbTypeAnnotatedExpr——Rust parser 既有缺口] + LLM 面
+      15 节点覆盖差[归 LLM 运行时移植批次] + Host 变体退役收尾
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

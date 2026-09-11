@@ -329,6 +329,68 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_data_plane_switch_global_snippets(self):
+        """数据面差分等价：switch/global/nonlocal 合成探针（自包含脚本——CPS
+        覆盖差收缩 31→36 增量：IbGlobalStmt/IbNonlocalStmt 编译期语义运行时
+        no-op；IbSwitch 匹配后自动跳出[无 fall-through] + case 内 break no-op +
+        Return/Continue 透传[continue 透传外层循环]；IbRaise 错误面[无异常传播
+        机制 = 跨切面后续，不探针]。纯赋值形态——声明面[int x = 2 类型注解赋值
+        IbTypeAnnotatedExpr]为 Rust parser 既有缺口[登记后续增量]，探针规避。
+        switch 语料面节点位置约定经 full_artifact 全池等价门覆盖）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        probes = [
+            # switch：匹配 + break no-op + 无 fall-through
+            (
+                'x = 2\n'
+                'switch x:\n'
+                '    case 1:\n'
+                '        print("one")\n'
+                '        break\n'
+                '    case 2:\n'
+                '        print("two")\n'
+                '        break\n'
+                '    case 3:\n'
+                '        print("three")\n'
+                '    default:\n'
+                '        print("other")\n'
+                'print("after_switch")\n'
+            ),
+            # switch：default 命中 + continue 透传外层循环
+            (
+                'i = 0\n'
+                'while i < 4:\n'
+                '    i = i + 1\n'
+                '    switch i:\n'
+                '        case 2:\n'
+                '            continue\n'
+                '        default:\n'
+                '            print(i)\n'
+                'print("done")\n'
+            ),
+            # global/nonlocal：编译期语义（运行时 no-op——读取面）
+            (
+                'func f() -> int:\n'
+                '    global y\n'
+                '    return 1\n'
+                'print(f())\n'
+                'func outer() -> int:\n'
+                '    x = 5\n'
+                '    func inner() -> int:\n'
+                '        nonlocal x\n'
+                '        return x\n'
+                '    return inner()\n'
+                'print(outer())\n'
+            ),
+        ]
+        for code in probes:
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code)  # 无桥接——原生执行
+            assert rs == py, f"switch/global/nonlocal 探针数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+
     def test_data_plane_vector_surface_snippets(self):
         """数据面差分等价：vector 值 + KB 嵌入面合成探针（自包含脚本——去
         Host 化后全原生无桥接：vector 值[截断摘要显示面 dim+前 8 维 %.6g] /

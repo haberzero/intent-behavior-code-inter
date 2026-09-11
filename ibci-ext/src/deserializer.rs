@@ -192,6 +192,35 @@ fn build_node(uid: &str, nodes: &NodeMap) -> Node {
                 methods,
             })
         }
+        "IbGlobalStmt" => {
+            // global x[, y]：names = 裸名字串数组（非节点引用）
+            Node::Stmt(Stmt::Global {
+                pos: pos_of(n),
+                names: names_of(&n["names"]),
+            })
+        }
+        "IbNonlocalStmt" => {
+            Node::Stmt(Stmt::Nonlocal {
+                pos: pos_of(n),
+                names: names_of(&n["names"]),
+            })
+        }
+        "IbRaise" => Node::Stmt(Stmt::Raise {
+            pos: pos_of(n),
+            exc: opt_uid(n.get("exc")).map(|u| expr_of(&u, nodes)),
+        }),
+        "IbSwitch" => {
+            // test + cases（IbCase 节点 uid 数组）；llmexcept_handler = LLM 面
+            // （null 语料面，执行面不消费）
+            Node::Stmt(Stmt::Switch {
+                pos: pos_of(n),
+                test: expr_of(&uid_of(&n["test"]), nodes),
+                cases: uids_of(&n["cases"])
+                    .iter()
+                    .map(|u| case_of(u, nodes))
+                    .collect(),
+            })
+        }
         // ---- 表达式 ---- //
         "IbConstant" => Node::Expr(Expr::Constant {
             pos: pos_of(n),
@@ -304,6 +333,30 @@ fn stmt_of(uid: &str, nodes: &NodeMap) -> Stmt {
             pos: expr_pos(&e),
             value: e,
         },
+    }
+}
+
+/// 裸名字串数组（global/nonlocal 的 names 字段——非节点引用）。
+fn names_of(v: &Value) -> Vec<String> {
+    match v {
+        Value::Array(a) => a
+            .iter()
+            .filter_map(|x| x.as_str().map(String::from))
+            .collect(),
+        _ => vec![],
+    }
+}
+
+/// IbCase 节点（switch 的 case 块：pattern[null = default] + body 语句 uid）。
+fn case_of(uid: &str, nodes: &NodeMap) -> crate::parser::Case {
+    let n = &nodes[uid];
+    crate::parser::Case {
+        pos: pos_of(n),
+        pattern: opt_uid(n.get("pattern")).map(|u| expr_of(&u, nodes)),
+        body: uids_of(&n["body"])
+            .iter()
+            .map(|u| stmt_of(u, nodes))
+            .collect(),
     }
 }
 
@@ -507,7 +560,8 @@ pub fn node_types() -> Vec<&'static str> {
         // 语句
         "IbAssign", "IbAugAssign", "IbExprStmt", "IbIf", "IbFor", "IbFunctionDef",
         "IbReturn", "IbBreak", "IbContinue", "IbPass", "IbImport", "IbImportFrom",
-        "IbWhile", "IbTry", "IbClassDef",
+        "IbWhile", "IbTry", "IbClassDef", "IbGlobalStmt", "IbNonlocalStmt",
+        "IbRaise", "IbSwitch", "IbCase",
         // 表达式
         "IbConstant", "IbName", "IbBinOp", "IbUnaryOp", "IbBoolOp", "IbCompare",
         "IbCall", "IbListExpr", "IbTuple", "IbDict", "IbAttribute", "IbSubscript",

@@ -4678,6 +4678,36 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   无损 + 全 harness 43 passed + smoke 832 passed + 全量 pytest 零回归（放行门
   实跑）。**值域封闭进度**：8 → 10 原生变体（+Quoted/MetaFn 增量 1、+
   Knowledge/Vector 增量 2）；Host 残差 = 仅 LLM/意图 IO 边界消费。
+- **P9 全量 Rust 化第四批 增量 3b（CPS 覆盖差收缩 31→36：5 节点移植，2026-09-11，
+  本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：Rust 执行
+  核心 CPS 分发扩 5 节点（Python VM dispatch 50 handler 对照，覆盖差 19→15）：
+  **IbGlobalStmt/IbNonlocalStmt**（`global x[, y]` / `nonlocal x`——编译期语义，
+  运行时无操作[语义效果经符号解析在编译期完成，运行期赋值经作用域链自然穿透]）；
+  **IbRaise**（`raise [exc]`——异常对象求值；错误面登记：Rust 解释器无异常
+  传播机制[ThrownException/Try 捕获语义 = 跨切面后续增量]，语料面无 raise）；
+  **IbSwitch + IbCase**（`switch <test>:` + `case <pattern>:` / `default:`——
+  匹配后自动跳出[无 fall-through]；case 内 break = no-op[C 习惯，接受为退出
+  case]；Return 透传；Continue 透传外层循环[switch 本身不是循环]；pattern 值
+  相等匹配，default = 无 pattern）。**实施面**：lexer（switch/case/default
+  token）+ parser（parse_switch 缩进块 + Case 节点 + 3 语句）+ deserializer
+  （5 节点数据反序列化——names 裸串数组 / cases uid 数组 / pattern null =
+  default）+ node_serializer（节点内容——**IbCase 位置 = switch 关键字位置**
+  [Python 序列化器约定：case 节点复用 switch start_token，语料实证全部 case 同
+  位置] + end 位置 = 0）+ interpreter（执行语义）。**差分门**：
+  test_data_plane_switch_global_snippets 新增（3 探针：case 2 匹配 + break no-op
+  + 无 fall-through；continue 透传外层循环[while 内 switch]；global/nonlocal
+  no-op 读取面）+ switch 源 full_artifact 五池全等价实证（nodes 35 / symbols
+  306——含 IbSwitch/IbCase 节点内容 + 位置约定全对齐）。**登记缺口（非本增量
+  范围）**：① 声明面 `TYPE x = v`（IbTypeAnnotatedExpr——auto/fn/泛型注解/
+  元组解包）= Rust parser 既有缺口[语料面零覆盖，探针规避；移植 = 后续 parser
+  增量——实证：Rust 将 `int x = 2` 误解析为 ExprStmt(int) + Assign(x=2)]；② LLM
+  面 15 节点覆盖差（IbCastExpr[类型注解消歧复杂] + IbRetry/IbIntentAnnotation/
+  IbImplDef/IbProtocolDef/IbHostImport/IbBehaviorExpr/IbChannelExpr/IbAwaitExpr/
+  IbYieldExpr/IbYieldFromExpr/IbFilteredExpr/IbSlotExpr/IbIntentStackOperation/
+  IbWithOverlay——LLM/意图/宿主运行时面 = 协程/通道/行为深度语义，归 LLM 运行时
+  移植批次）；③ raise 错误面（异常传播机制 = 跨切面增量）。
+  **验证**：3 探针全对齐 + 34 语料回归无损 + 全 harness 44 passed + smoke 832
+  passed + 全量 pytest 4302 passed / 1 skipped 零回归（144.42s，放行门实跑）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -40,7 +40,33 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
 | KB | Rust 原生 KB 数据模型（facts 三元组 / worlds / words / relations / embeddings 向量 / 向量运算纯数学） | IBCI 公理层 KB 声明（41 成员表）+ Python KB 参照（差分门） |
 | embedding IO | **保留 Host 边界**（Qwen3-Embedding 端点 = LLM IO——HostService 桥接） | 用户裁定：LLM/意图 IO 面保留 Python 接口 |
 
-## 增量序列
+## 增量 3：Host 面收敛 + CPS 覆盖差收缩（进行中）
+
+1. **增量 3a Host 面收敛**：meta/KB/quoted 全部去 Host 化后，宿主桥接（bridge.py /
+   get_host_module / call_host_method / call_host_function / get_host_attribute）
+   仅余 LLM/意图 IO 边界面（语料面零依赖）。`import meta` 的 Host 模块绑定经
+   Call/FromImport 分发拦截后不再被值域消费（meta 模块对象退役为分发面标记）。
+2. **增量 3b CPS 覆盖差收缩（31→36，2026-09-11）**：移植 5 节点（lexer
+   switch/case/default token + parser[Global/Nonlocal/Raise/Switch + Case 节点] +
+   deserializer[IbGlobalStmt/IbNonlocalStmt/IbRaise/IbSwitch/IbCase 节点数据] +
+   node_serializer[节点内容——IbCase 位置 = switch 关键字位置[Python 序列化器
+   约定，语料实证] + end 位置 = 0] + interpreter[global/nonlocal = 运行时 no-op
+   [编译期语义]；raise = 异常对象求值[错误面：无异常传播机制，跨切面后续]；
+   switch = 匹配后自动跳出[无 fall-through] + case 内 break no-op +
+   Return/Continue 透传]）。差分门：test_data_plane_switch_global_snippets
+   （3 探针：匹配/break/无 fall-through + continue 透传外层循环 +
+   global/nonlocal no-op 读取面）+ switch 源 full_artifact 五池全等价实证。
+   **登记缺口（非本增量范围）**：① 声明面 `TYPE x = v`（IbTypeAnnotatedExpr——
+   auto/fn/泛型注解/元组解包）= Rust parser 既有缺口[语料面零覆盖，探针规避；
+   移植 = 后续 parser 增量]；② LLM 面 15 节点覆盖差（IbCastExpr/IbRetry/
+   IbIntentAnnotation/IbImplDef/IbProtocolDef/IbHostImport/IbBehaviorExpr/
+   IbChannelExpr/IbAwaitExpr/IbYieldExpr/IbYieldFromExpr/IbFilteredExpr/
+   IbSlotExpr/IbIntentStackOperation/IbWithOverlay——其中 IbCastExpr 语法复杂
+   [类型注解消歧]，LLM/意图/宿主运行时面 = 协程/通道/行为深度语义，归 LLM 运行时
+   移植批次；③ raise 错误面（异常传播机制 = 跨切面增量——try/except 捕获语义）。
+   node_types = 36（handler 覆盖差 50-35 = 15——IbCase 为节点无独立 handler）。
+
+## 增量序列（历史）
 
 1. **增量 1：quoted + meta 模块原生面**（小垂直切片）✅[2026-09-11 落地]：
    - 实施 = `IbValue::Quoted { source }` + `IbValue::MetaFn(&'static str)` 变体
