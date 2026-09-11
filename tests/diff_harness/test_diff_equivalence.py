@@ -329,6 +329,64 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_data_plane_kb_surface_snippets(self):
+        """数据面差分等价：KB 查询/审计/对比/展开/传递面合成探针（自包含脚本——
+        语料集 3 条只覆盖 register/add_fact/exists/lookup_pair/contradicts/worlds/
+        words；本探针覆盖 word/relation/world 查询[未注册 = None] + get_fact/
+        facts/fact_len/all_in_world/source/history_fact[事件链] + amend_fact[o
+        版本化 + 事件链 + active 索引切换] + retract[墓碑 + 事件链 + active 视图
+        退出] + same_word/compare[确定性 4 层]/expand[纯派生]/transitive[BFS 传递
+        闭包 + 非传递 = 空]——全原生无桥接）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        probe = (
+            'kb = knowledge()\n'
+            'kb.register_world("modern", "现代物理世界", 3)\n'
+            'kb.register_relation("composed_of", "组成关系", False, False)\n'
+            'kb.register_relation("causes", "因果关系", True, False)\n'
+            'kb.register_word("atom", "原子", False, [], {})\n'
+            'kb.register_word("proton", "质子", False, [], {})\n'
+            'kb.register_word("electron", "电子", False, [], {})\n'
+            'kb.add_fact("modern", "atom", "composed_of", "proton", "v1", "active")\n'
+            'print(kb.word("atom"))\n'
+            'print(kb.word("unknown"))\n'
+            'print(kb.relation("composed_of"))\n'
+            'print(kb.world("modern"))\n'
+            'print(kb.get_fact("1"))\n'
+            'print(kb.fact_len())\n'
+            'print(kb.facts())\n'
+            'print(kb.all_in_world("modern"))\n'
+            'print(kb.source("1"))\n'
+            'print(kb.history_fact("1"))\n'
+            'kb.add_fact("modern", "atom", "causes", "electron", "v2", "active")\n'
+            'kb.amend_fact("2", "proton", "correction")\n'
+            'print(kb.get_fact("2"))\n'
+            'print(kb.exists("modern", "atom", "causes", "proton"))\n'
+            'print(kb.lookup_pair("atom", "causes"))\n'
+            'kb.retract("1", "deprecated")\n'
+            'print(kb.facts())\n'
+            'print(kb.lookup_pair("atom", "composed_of"))\n'
+            'print(kb.history_fact("1"))\n'
+            'print(kb.same_word("atom", "atom"))\n'
+            'print(kb.compare("1", "2"))\n'
+            'print(kb.expand("2"))\n'
+            'print(kb.transitive("atom", "causes"))\n'
+            'print(kb.transitive("atom", "composed_of"))\n'
+        )
+        py = run_ibci(probe)
+        rs = rust_execution_data_plane(probe)  # 无桥接——原生 KB
+        assert rs == py, (
+            f"KB 2b 面合成探针数据面差分不等价（{len(py)} vs {len(rs)} 行）：\n"
+            + "\n".join(
+                f"  行{i} py: {a[:180]}\n        rs: {b[:180]}"
+                for i, (a, b) in enumerate(zip(py, rs))
+                if a != b
+            )
+        )
+
     def test_data_plane_quoted_native(self):
         """数据面差分等价：quoted/meta 面原生闭环（去 Host 化）——quoted 相关语料
         （import meta / from meta import，4 条）数据面**无宿主桥接**等价：meta.quote

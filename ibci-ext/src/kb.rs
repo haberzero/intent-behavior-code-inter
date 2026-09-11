@@ -331,6 +331,458 @@ pub fn dispatch(
                 .unwrap_or(false);
             IbValue::Bool(conflict)
         }
+        // ------------------------------------------------------------------ //
+        // 词表查询面（未注册 = None[合法态非错误]）
+        // ------------------------------------------------------------------ //
+        "word" => {
+            let [IbValue::Str(lex)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            match st.words.iter().find(|(n, _)| n == lex) {
+                Some((_, w)) => {
+                    let mut entries = Vec::new();
+                    for (k, v) in &w.entries {
+                        entries.push((k.clone(), v.clone()));
+                    }
+                    IbValue::dict_new(vec![
+                        (k("lexeme"), IbValue::Str(lex.clone())),
+                        (k("gloss"), IbValue::Str(w.gloss.clone())),
+                        (k("is_set"), IbValue::Bool(w.is_set)),
+                        (
+                            k("members"),
+                            IbValue::List(Rc::new(RefCell::new(
+                                w.members.clone(),
+                            ))),
+                        ),
+                        (
+                            k("entries"),
+                            IbValue::Dict(Rc::new(RefCell::new(entries))),
+                        ),
+                    ])
+                }
+                None => IbValue::None_,
+            }
+        }
+        "relation" => {
+            let [IbValue::Str(rt)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            match st.relations.iter().find(|(n, _)| n == rt) {
+                Some((_, rec)) => IbValue::dict_new(vec![
+                    (k("type"), IbValue::Str(rt.clone())),
+                    (k("semantics"), IbValue::Str(rec.semantics.clone())),
+                    (k("transitive"), IbValue::Bool(rec.transitive)),
+                    (k("multi_valued"), IbValue::Bool(rec.multi_valued)),
+                ]),
+                None => IbValue::None_,
+            }
+        }
+        "world" => {
+            let [IbValue::Str(n)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            match st.worlds.iter().find(|(nm, _)| nm == n) {
+                Some((_, w)) => IbValue::dict_new(vec![
+                    (k("name"), IbValue::Str(n.clone())),
+                    (k("description"), IbValue::Str(w.description.clone())),
+                    (k("size_rank"), IbValue::Int(w.size_rank)),
+                ]),
+                None => IbValue::None_,
+            }
+        }
+        // ------------------------------------------------------------------ //
+        // 事实查询面（全日志 = 含 retracted 墓碑；seq 序）
+        // ------------------------------------------------------------------ //
+        "get_fact" => {
+            let [IbValue::Str(fid)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            st.facts
+                .iter()
+                .find(|f| &f.id == fid)
+                .map(fact_value)
+                .unwrap_or(IbValue::None_)
+        }
+        "facts" => {
+            let st = kb.borrow();
+            let items: Vec<IbValue> = st.facts.iter().map(fact_value).collect();
+            IbValue::list_new(items)
+        }
+        "fact_len" => {
+            let st = kb.borrow();
+            IbValue::Int(st.facts.len() as i64)
+        }
+        "all_in_world" => {
+            // 某 world 的全部 active 事实（seq 序）
+            let [IbValue::Str(w)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            let items: Vec<IbValue> = st
+                .facts
+                .iter()
+                .filter(|f| f.status == "active" && &f.world == w)
+                .map(fact_value)
+                .collect();
+            IbValue::list_new(items)
+        }
+        "source" => {
+            let [IbValue::Str(fid)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            st.facts
+                .iter()
+                .find(|f| &f.id == fid)
+                .map(|f| IbValue::Str(f.source.clone()))
+                .unwrap_or(IbValue::None_)
+        }
+        "history_fact" => {
+            // 事件链（append-only 全史：{seq, kind, reason, new_o}）
+            let [IbValue::Str(fid)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            match st.facts.iter().find(|f| &f.id == fid) {
+                Some(f) => {
+                    let items: Vec<IbValue> = f
+                        .events
+                        .iter()
+                        .map(|e| {
+                            IbValue::dict_new(vec![
+                                (k("seq"), IbValue::Int(e.seq)),
+                                (k("kind"), IbValue::Str(e.kind.clone())),
+                                (k("reason"), IbValue::Str(e.reason.clone())),
+                                (
+                                    k("new_o"),
+                                    e.new_o
+                                        .clone()
+                                        .map(IbValue::Str)
+                                        .unwrap_or(IbValue::None_),
+                                ),
+                            ])
+                        })
+                        .collect();
+                    IbValue::list_new(items)
+                }
+                None => IbValue::None_,
+            }
+        }
+        // ------------------------------------------------------------------ //
+        // 审计面（墓碑/版本化——append-only 纪律 + reason 强制 + 全史可溯）
+        // ------------------------------------------------------------------ //
+        "retract" => {
+            // 墓碑：status → retracted + 事件链；active 索引即时移除（审计视图
+            // 保留全史）；已 retracted 再 retract = None_（墓碑只读）
+            let [IbValue::Str(fid), IbValue::Str(reason)] = args else {
+                return IbValue::None_;
+            };
+            if reason.trim().is_empty() {
+                return IbValue::None_;
+            }
+            let mut st = kb.borrow_mut();
+            let Some(idx) = st.facts.iter().position(|f| &f.id == fid) else {
+                return IbValue::None_;
+            };
+            if st.facts[idx].status == "retracted" {
+                return IbValue::None_;
+            }
+            let was_active = st.facts[idx].status == "active";
+            st.seq += 1;
+            let seq = st.seq;
+            st.facts[idx].status = "retracted".to_string();
+            st.facts[idx].events.push(KbEvent {
+                seq,
+                kind: "retract".to_string(),
+                reason: reason.clone(),
+                new_o: None,
+            });
+            if was_active {
+                // 图索引移除（active 视图——事实退出世界模型）
+                let triple_key = (
+                    st.facts[idx].world.clone(),
+                    st.facts[idx].s.clone(),
+                    st.facts[idx].r.clone(),
+                    st.facts[idx].o.clone(),
+                );
+                if st
+                    .by_triple
+                    .get(&triple_key)
+                    .is_some_and(|&i| i == idx)
+                {
+                    st.by_triple.remove(&triple_key);
+                }
+                let pair_key = (st.facts[idx].s.clone(), st.facts[idx].r.clone());
+                if let Some(lst) = st.by_pair.get_mut(&pair_key) {
+                    lst.retain(|&i| i != idx);
+                }
+            }
+            IbValue::None_
+        }
+        "amend_fact" => {
+            // o 版本化：new_o 替换当前 o（事件链全史可溯）；索引仅在新 o 变更
+            // 且 active 时更新；已 retracted 事实 amend = None_
+            let [IbValue::Str(fid), IbValue::Str(new_o), IbValue::Str(reason)] = args
+            else {
+                return IbValue::None_;
+            };
+            if new_o.is_empty() || reason.trim().is_empty() {
+                return IbValue::None_;
+            }
+            let mut st = kb.borrow_mut();
+            let Some(idx) = st.facts.iter().position(|f| &f.id == fid) else {
+                return IbValue::None_;
+            };
+            if st.facts[idx].status == "retracted" {
+                return IbValue::None_;
+            }
+            // 治理门：new_o 须已注册词
+            if !find_name(&st.words, new_o) {
+                return IbValue::None_;
+            }
+            let old_o = st.facts[idx].o.clone();
+            st.seq += 1;
+            let seq = st.seq;
+            st.facts[idx].events.push(KbEvent {
+                seq,
+                kind: "amend".to_string(),
+                reason: reason.clone(),
+                new_o: Some(new_o.clone()),
+            });
+            st.facts[idx].o = new_o.clone();
+            if old_o != *new_o && st.facts[idx].status == "active" {
+                // by_triple 切换（同 (w,s,r) 的 o 键）
+                let old_triple = (
+                    st.facts[idx].world.clone(),
+                    st.facts[idx].s.clone(),
+                    st.facts[idx].r.clone(),
+                    old_o,
+                );
+                if st
+                    .by_triple
+                    .get(&old_triple)
+                    .is_some_and(|&i| i == idx)
+                {
+                    st.by_triple.remove(&old_triple);
+                }
+                let new_triple = (
+                    st.facts[idx].world.clone(),
+                    st.facts[idx].s.clone(),
+                    st.facts[idx].r.clone(),
+                    new_o.clone(),
+                );
+                st.by_triple.insert(new_triple, idx);
+            }
+            // by_pair 不变（(s,r) 未变）
+            IbValue::None_
+        }
+        // ------------------------------------------------------------------ //
+        // 查找面（传递闭包——BFS 防环，确定性发现序）
+        // ------------------------------------------------------------------ //
+        "transitive" => {
+            // 沿 active by_pair 链展开 transitive 关系 r 的可达集（含直接；
+            // 每项 {s, r, o, via}——via = 中间对象链）；非传递关系 = 空 list
+            let [IbValue::Str(subj), IbValue::Str(rel)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            let rel_rec = st.relations.iter().find(|(n, _)| n == rel);
+            let Some((_, rec)) = rel_rec else {
+                return IbValue::None_;
+            };
+            if !rec.transitive {
+                return IbValue::list_new(Vec::new());
+            }
+            // BFS（确定性发现序 = 队列序；via = 中间节点链[不含端点]）
+            let mut paths: Vec<(String, Vec<String>)> = vec![(subj.clone(), Vec::new())];
+            let mut head = 0usize;
+            while head < paths.len() {
+                let cur = paths[head].0.clone();
+                let cur_via = paths[head].1.clone();
+                head += 1;
+                let ids = st.by_pair.get(&(cur.clone(), rel.clone())).cloned();
+                if let Some(ids) = ids {
+                    for &fi in &ids {
+                        let to = st.facts[fi].o.clone();
+                        if !paths.iter().any(|(n, _)| n == &to) {
+                            let via = if cur == *subj {
+                                cur_via.clone()
+                            } else {
+                                let mut v = cur_via.clone();
+                                v.push(cur.clone());
+                                v
+                            };
+                            paths.push((to, via));
+                        }
+                    }
+                }
+            }
+            let items: Vec<IbValue> = paths
+                .iter()
+                .skip(1)
+                .map(|(o, via)| {
+                    IbValue::dict_new(vec![
+                        (k("s"), IbValue::Str(subj.clone())),
+                        (k("r"), IbValue::Str(rel.clone())),
+                        (k("o"), IbValue::Str(o.clone())),
+                        (
+                            k("via"),
+                            IbValue::list_new(
+                                via.iter().map(|v| IbValue::Str(v.clone())).collect(),
+                            ),
+                        ),
+                    ])
+                })
+                .collect();
+            IbValue::list_new(items)
+        }
+        // ------------------------------------------------------------------ //
+        // 对比/展开面（纯派生不存展开态——确定性复现）
+        // ------------------------------------------------------------------ //
+        "same_word" => {
+            // 词同一性：a == b 且均为已注册词（未注册 = false 非错误）
+            let [IbValue::Str(a), IbValue::Str(b)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            let same = a == b && find_name(&st.words, a);
+            IbValue::Bool(same)
+        }
+        "compare" => {
+            // {exact/contradiction/scale/same_word}（确定性 4 层）
+            let [IbValue::Str(a), IbValue::Str(b)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            let (fa, fb) = match (
+                st.facts.iter().find(|f| &f.id == a),
+                st.facts.iter().find(|f| &f.id == b),
+            ) {
+                (Some(fa), Some(fb)) => (fa, fb),
+                _ => return IbValue::None_,
+            };
+            let rel_rec = if fa.r == fb.r {
+                st.relations.iter().find(|(n, _)| n == &fa.r).map(|(_, r)| r)
+            } else {
+                None
+            };
+            let exact = fa.world == fb.world && fa.s == fb.s && fa.r == fb.r && fa.o == fb.o;
+            let contradiction = fa.s == fb.s
+                && fa.r == fb.r
+                && fa.o != fb.o
+                && rel_rec.is_some_and(|r| !r.multi_valued);
+            let scale = if fa.world == fb.world { "same" } else { "cross" };
+            let same_word = fa.s == fb.s && find_name(&st.words, &fa.s);
+            IbValue::dict_new(vec![
+                (k("exact"), IbValue::Bool(exact)),
+                (k("contradiction"), IbValue::Bool(contradiction)),
+                (k("scale"), IbValue::Str(scale.to_string())),
+                (k("same_word"), IbValue::Bool(same_word)),
+            ])
+        }
+        "expand" => {
+            // 事实 + 主语/对象词记录 + 关系语义 + 世界上下文（纯派生）
+            let [IbValue::Str(fid)] = args else {
+                return IbValue::None_;
+            };
+            let st = kb.borrow();
+            let f = match st.facts.iter().find(|f| &f.id == fid) {
+                Some(f) => f,
+                None => return IbValue::None_,
+            };
+            let word_value = |st_: &KbState, name: &str| -> IbValue {
+                match st_.words.iter().find(|(n, _)| n == name) {
+                    Some((_, w)) => {
+                        let mut entries = Vec::new();
+                        for (ek, ev) in &w.entries {
+                            entries.push((ek.clone(), ev.clone()));
+                        }
+                        IbValue::dict_new(vec![
+                            (k("lexeme"), IbValue::Str(name.to_string())),
+                            (k("gloss"), IbValue::Str(w.gloss.clone())),
+                            (k("is_set"), IbValue::Bool(w.is_set)),
+                            (
+                                k("members"),
+                                IbValue::List(Rc::new(RefCell::new(
+                                    w.members.clone(),
+                                ))),
+                            ),
+                            (k("entries"), IbValue::Dict(Rc::new(RefCell::new(entries)))),
+                        ])
+                    }
+                    None => IbValue::None_,
+                }
+            };
+            let subject_form = w_entries_form(&st.words, &f.s, &f.world);
+            let object_form = w_entries_form(&st.words, &f.o, &f.world);
+            IbValue::dict_new(vec![
+                (k("id"), IbValue::Str(f.id.clone())),
+                (k("world"), IbValue::Str(f.world.clone())),
+                (k("s"), IbValue::Str(f.s.clone())),
+                (k("r"), IbValue::Str(f.r.clone())),
+                (k("o"), IbValue::Str(f.o.clone())),
+                (k("source"), IbValue::Str(f.source.clone())),
+                (k("status"), IbValue::Str(f.status.clone())),
+                (k("subject"), word_value(&st, &f.s)),
+                (k("object"), word_value(&st, &f.o)),
+                (k("subject_form"), subject_form),
+                (k("object_form"), object_form),
+                (
+                    k("relation"),
+                    st.relations
+                        .iter()
+                        .find(|(n, _)| n == &f.r)
+                        .map(|(_, rec)| {
+                            IbValue::dict_new(vec![
+                                (k("type"), IbValue::Str(f.r.clone())),
+                                (k("semantics"), IbValue::Str(rec.semantics.clone())),
+                                (k("transitive"), IbValue::Bool(rec.transitive)),
+                                (k("multi_valued"), IbValue::Bool(rec.multi_valued)),
+                            ])
+                        })
+                        .unwrap_or(IbValue::None_),
+                ),
+                (
+                    k("world_ctx"),
+                    st.worlds
+                        .iter()
+                        .find(|(n, _)| n == &f.world)
+                        .map(|(_, w)| {
+                            IbValue::dict_new(vec![
+                                (k("name"), IbValue::Str(f.world.clone())),
+                                (k("description"), IbValue::Str(w.description.clone())),
+                                (k("size_rank"), IbValue::Int(w.size_rank)),
+                            ])
+                        })
+                        .unwrap_or(IbValue::None_),
+                ),
+            ])
+        }
         _ => IbValue::None_,
     }
+}
+
+/// 词条目 entries 面查询（{world: {form, self_ref}} 跨世界词形；未登记 = 空
+/// dict[合法态——Python entries.get(world, {}) 语义]）。
+fn w_entries_form(
+    words: &[(String, KbWord)],
+    lex: &str,
+    world: &str,
+) -> IbValue {
+    match words.iter().find(|(n, _)| n == lex) {
+        Some((_, w)) => match w.entries.iter().find(|(ek, _)| ek == &IbValue::Str(world.to_string())) {
+            Some((_, ev)) => ev.clone(),
+            None => IbValue::Dict(Rc::new(RefCell::new(Vec::new()))),
+        },
+        None => IbValue::Dict(Rc::new(RefCell::new(Vec::new()))),
+    }
+}
+
+/// dict 键助手（局部闭包面——dispatch 各分支复用）。
+fn k(s: &str) -> IbValue {
+    IbValue::Str(s.to_string())
 }

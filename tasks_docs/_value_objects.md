@@ -70,8 +70,15 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
      full_corpus 全原生无桥接化。事实记录数据面形态对齐（键序 + 事件链 + None）。
      登记限制：错误面 None_ 静默（跨切面后续）/ 41 成员面未齐（2b/2c）/
      embedding 端点保留 Host IO 边界。
-   - **2b 词表/事实查询面 + 治理面**（word/relation/world/get_fact/facts/
-     fact_len/all_in_world + amend_fact/retract 事件链）——后续。
+   - **2b 词表/事实查询面 + 审计/对比/展开/传递面 ✅[2026-09-11 落地]**：word/
+     relation/world 查询[未注册 = None 合法态] + get_fact/facts[全日志 seq 序]/
+     fact_len/all_in_world[active 视图]/source/history_fact[事件链] + amend_fact
+     [o 版本化 + 事件链 + by_triple 切换] + retract[墓碑 + 事件链 + active 索引
+     移除] + same_word/compare[确定性 4 层]/expand[纯派生：事实 + 词记录 + 关系
+     语义 + 世界上下文 + 跨世界词形] + transitive[BFS 传递闭包 防环 + 确定性
+     发现序 + via 中间链；非传递关系 = 空 list]。差分门：
+     test_data_plane_kb_surface_snippets（25 行合成探针全对齐——语料集 3 条只
+     覆盖基础面，合成探针 = 自包含脚本纪律）。
    - **2c embedding + vector 运算面**（向量运算 = 纯数学原生；embedding 端点 =
      Host IO 边界；vec intrinsic 顺带实现）。
    - 差分门：kb_world_vocab / kb_fact_lookup / kb_contradicts 语料数据面等价

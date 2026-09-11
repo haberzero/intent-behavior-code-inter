@@ -4616,6 +4616,33 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   passed + 全量 pytest 4299 passed / 1 skipped 零回归（139.02s，放行门实跑——
   净 −1 = 删过期桥接测试）。**值域 Host 残差**：宿主对象变体仅 LLM/意图 IO 边界
   消费（语料面 = 0）。
+- **P9 全量 Rust 化第四批 增量 2b（值对象去 Host 化：KB 查询/审计/对比/展开/传递
+  面，2026-09-11，本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：
+  kb.rs dispatch 扩 13 方法——**词表查询面**（word/relation/world 记录查询，未注册
+  = None 合法态非错误——记录 = 词{lexeme/gloss/is_set/members/entries} / 关系
+  {type/semantics/transitive/multi_valued} / 世界{name/description/size_rank}）+
+  **事实查询面**（get_fact 权威形态[含全事件链] / facts 全日志[seq 序，含 retracted
+  墓碑] / fact_len / all_in_world[active 视图 seq 序] / source / history_fact 事件
+  链）+ **审计面**（retract：墓碑 status → retracted + 事件链 + active 图索引即时
+  移除[by_pair 过滤 + by_triple 删键] + 已墓碑再 retract 拒绝 + reason 强制非空；
+  amend_fact：o 版本化 + 事件链[new_o 留史] + new_o 词表治理门 + 索引仅在新 o
+  变更且 active 时 by_triple 切换[by_pair 不变——(s,r) 未变]）+ **对比/展开面**
+  （same_word：a==b 且均已注册；compare 确定性 4 层{exact/contradiction/scale/
+  same_word}；expand 纯派生不存展开态：事实 + 主语/对象词记录 + 关系语义 + 世界
+  上下文 + 跨世界词形 entries[world]，未登记 = 空 dict）+ **传递闭包面**
+  （transitive：BFS 防环 + 确定性发现序[队列序] + via 中间对象链[不含端点] +
+  非传递关系 = 空 list[诚实语义] + 关系未注册拒绝）。
+  **差分门**：test_data_plane_kb_surface_snippets 新增（25 行自包含合成探针——
+  语料集 3 条只覆盖 register/add_fact/exists/lookup_pair/contradicts/worlds/
+  words 基础面；本探针覆盖全 2b 面：查询[含未注册 None] / 事件链[add → amend →
+  retract 全史] / 索引更新语义[amend 后 exists/lookup_pair 切换；retract 后
+  lookup_pair 空 + facts 全日志保留墓碑] / compare / expand / transitive[传递
+  闭包 + 非传递空]——**无桥接全对齐一次通过**）。
+  **验证**：合成探针 25 行全对齐 + KB 3 语料 + quoted 4 语料无桥接回归无损 +
+  全 harness 42 passed + smoke 832 passed + 全量 pytest 4300 passed / 1 skipped
+  零回归（141.63s，放行门实跑）。**KB 41 成员面进度**：词表 3 + 事实 4 + 查询
+  9 + 审计 2 + 对比/展开 3 + 传递 1 = 22 方法原生；剩向量面[embedding 5 +
+  向量运算] = 增量 2c。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
