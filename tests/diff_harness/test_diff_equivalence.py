@@ -653,6 +653,29 @@ class TestRustSerializationUid:
                     f"  py : {d.get('type_uid')}\n  rust: {rs.get('type_uid')}"
                 )
 
+    def test_scope_symbols_owned_scope_corpus(self):
+        """scope 符号 owned_scope_uid 差分（全量 Rust 化·语义层：scope 完整收集）：
+        函数符号（FUNCTION + 嵌套持有函数的 VARIABLE）owned_scope_uid == Python
+        （scope_<函数体 scope 串>）；非函数符号 = null。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "resolve_symbols"):
+            return
+        for name, code in CORPUS:
+            rs_syms = json.loads(rk._module.resolve_symbols(code))
+            py_pool = FlatSerializer().serialize_artifact(compile_ibci(code))["pools"]["symbols"]
+            for uid, d in py_pool.items():
+                rs = rs_syms.get(uid)
+                if rs is None:
+                    continue
+                assert rs.get("owned_scope_uid") == d.get("owned_scope_uid"), (
+                    f"语料 {name} owned_scope_uid 差分不等价（{uid}）：\n"
+                    f"  py : {d.get('owned_scope_uid')}\n  rust: {rs.get('owned_scope_uid')}"
+                )
+
 
 class TestDivergenceRegistry:
     """差分 harness 状态注册表（单一权威源）自检：合法性 + 被消费（非死代码）。"""

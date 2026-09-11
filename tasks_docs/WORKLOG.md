@@ -4096,6 +4096,21 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   DIFF**（增量 1 后 30/43→43/43）；diff_harness 34 passed + smoke 832 passed 零回归。
   **第二批剩余（增量 3+）**：method[sym_anon_* 方法符号] + free_vars 闭包捕获 + scope
   完整[owned_scope_uid] + UnaryOp/BoolOp/Compare + 容器泛型 type_uid 格式对齐。
+- **P9 全量 Rust 化第二批 增量 3 子项 1（语义层 scope 完整收集：owned_scope_uid，
+  52/52 全对齐，2026-09-11，本 session，unsafe-vibe-dev）**：**owned_scope_uid**——
+  函数符号（FUNCTION + 嵌套持有函数的 VARIABLE）拥有的函数体 scope 的 UID
+  （`scope_<函数体 scope 串>`），非函数符号 = null。侦察发现容器泛型 type_uid 已
+  对齐（Rust list[int]/dict[str,int] == Python，name 直接含泛型参数，无额外工作）。
+  **交付**：symbol_resolver.rs FunctionDef push_scope 后设函数符号 owned_scope_uid =
+  scope_ + current_scope()[push 后]（正对应 Rust scope_stack 语义——函数体 scope 串）；
+  差分 harness 加 test_scope_symbols_owned_scope_corpus[比对全符号 owned_scope_uid]。
+  **关键裁定**：① owned_scope_uid 是 IBCI scope 收集语义（函数符号拥有函数体
+  SymbolTable），Rust scope_stack push 后的 current_scope 天然对应（机制同构，非
+  硬编码）；② 容器泛型 type_uid 侦察确认已对齐（消除后续顾虑）；③ method 符号
+  [sym_anon_<content_hash>] + free_vars[节点级 Lambda/闭包分析] 较复杂，归后续子项。
+  **验证**：owned_scope_uid 52/52 全对齐 0 DIFF（7 函数符号有值 + 45 null）；
+  diff_harness 35 passed[+1 owned_scope 门] + smoke 832 passed 零回归。
+  **第二批剩余（增量 3 子项 2+）**：method 符号[sym_anon_*] + free_vars[闭包捕获]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -134,6 +134,7 @@ impl<'a> SymbolResolver<'a> {
                 //（Python 语义层：嵌套函数名是持有函数的变量，非顶层函数定义）。
                 let is_top = self.scope_stack.len() == 1;
                 let kind = if is_top { "FUNCTION" } else { "VARIABLE" };
+                let def_scope = self.current_scope();
                 self.bind_symbol(name, kind, Some(DefNode::Stmt(stmt)));
                 // 嵌套函数名 = 函数类型（type_root.<name>）—— 持有函数的变量类型。
                 if !is_top {
@@ -147,6 +148,14 @@ impl<'a> SymbolResolver<'a> {
                 }
                 // 进入函数 scope（绑定参数 + 递归函数体）。
                 self.push_scope(name);
+                // 函数符号 owned_scope_uid = 函数体 scope 的 UID（scope_<函数体 scope 串>）。
+                let func_uid = format!("scope_{}:{}", def_scope, name);
+                let owned = format!("scope_{}", self.current_scope());
+                if let Some(sym) = self.symbols.get_mut(&func_uid) {
+                    if let Some(map) = sym.as_object_mut() {
+                        map.insert("owned_scope_uid".to_string(), Value::String(owned));
+                    }
+                }
                 for arg in args {
                     // 参数 → scope 符号（VARIABLE）+ 注解类型。
                     self.bind_symbol(&arg.arg, "VARIABLE", Some(DefNode::Arg(arg)));
