@@ -5623,6 +5623,27 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   传播修复；其余 unwrap_or(None) = 契约查询面（get_fact/词表记录未知 → None
   ——合法语义非错误吞掉）。全量 4303/0/1。
 
+## 前端层差分退役评估（⑦ 终点最终块，2026-09-11）
+
+**实证（grep）**：Rust 转录组件（lexer.rs/parser 解析/node_serializer.rs/
+symbol_resolver.rs/type_inference.rs ≈ 5500 行 + 35 差分测试）的 pyfunction 出口
+（serialize_nodes/resolve_symbols/tokenize/parse_struct）**生产零调用**——
+生产路径 = Python 编译 → artifact → Rust 反序列化 + 执行（deserializer.rs/
+interpreter.rs = 生产，消费 parser 的 AST 类型定义）。
+
+**退役 = 转录组件退役 + 差分删除**（"全量 Rust 化"验证机制 = 迁移期产物；
+行为/契约层 = 生产路径语义验证——稳定实证：契约 + 34 语料契约 + 行为层全绿）：
+1. lib.rs 删差分面 pyfunction（lex/tokenize/parse_struct/serialize_nodes/
+   resolve_symbols/intrinsic/type 符号出口）；
+2. 删 node_serializer/symbol_resolver/type_inference/lexer；
+3. parser.rs 手术切分：AST 类型（Module/Expr/Stmt/Pos/Alias/Arg/ConstVal/Case——
+   deserializer/interpreter 共享）保留，解析函数移除；
+4. 删 35 前端差分测试；
+5. 验证：cargo build + 全量 pytest + 内核单测。
+
+**风险**：parser.rs 切分（类型 vs 解析）+ deserializer 构造路径独立性；行为/
+契约 = 生产语义验证（差分移除后权威）。实施 = 下一轮专项手术。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
