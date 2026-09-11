@@ -5352,6 +5352,21 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   narrow_model（宿主层 + artifact 夹具）、3 个 clone_ref 内部断言重构 +
   cargo test 内核层。
 
+## GAP-vec-kb-failfast 关闭 + R3-C7a（2026-09-11，commit af6f30d7 + b004bb9a）
+
+- **GAP 关闭（af6f30d7，打破清单 #6 实质清零）**：Thrown.code + ErrorPayload.
+  code + RustRuntimeError.code 通道（P3 typed 错误协议扩展——语义码 EMB_/KNW_
+  经 typed 错误承载，engine 优先取 e.code）；runtime_error_coded 新增；
+  intrinsic_vec fail-fast[EMB_INVALID_INPUT]；**kb.rs 分派 Result 化**（治理门
+  fail-fast[KNW_VOCAB_EXISTS/MALFORMED/UNREGISTERED/FACT_DUPLICATE] + 未知方法
+  AttributeError[旧 catch-all 静默 None_ 清零] + 查询面 Ok 化行为不变）；
+  divergence gap-kb-governance-error-face → CLOSED。全量 4304/0/1。
+- **R3-C7a（b004bb9a）**：world_model_kb Vocab+Fact 平面 → 行为层 11 断言
+  （词表/事实/治理门[诊断码+定位]）；前置 GAP 关闭后迁移可行。全量 4316/0/1。
+- **剩余**：C7b（KB 索引/序列化/deep_clone/查找/对比/审计平面）、narrow_model
+  （宿主层 + artifact 夹具）、3 个 clone_ref 内部断言重构、cargo test 内核层、
+  R2 续项（方法分派表/i128）、阶段 D（⑦ 终点：角移除 + 双码族统一 + IR）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
