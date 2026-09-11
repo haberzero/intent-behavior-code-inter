@@ -5604,6 +5604,16 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   行为层全覆盖；enum 化 = 边际收益[小表 typo 风险低] vs 重构成本——不推进，
   记录在案）。
 
+## 支线：PT-DECIDE-2 重估 + 周期对账（2026-09-11）
+
+- **PT-DECIDE-2 重估（"后端强制思考"场景）**：实证核查——机制完整：
+  provider 一性警告（stderr——数据面不入）+ ``accept_forced_thinking`` 配置
+  静默（已知行为确认面）+ ``thinking_detected`` 结果字段 + 去重。**重估结论**：
+  当前语义（一性警告 + 配置静默）= 该场景的接受语义；其它供应商参数映射 =
+  未来 provider-mapping 实施窗口（PENDING 登记保持）。不阻塞主线。
+- **周期文档对账**：WORKLOG 阶段 D/R3-C/R2 记录齐备；PENDING 状态核对
+  （PT-DECIDE-2 active 重估完成、PT-DECIDE-3 done、PT-FEAT-16 done）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
