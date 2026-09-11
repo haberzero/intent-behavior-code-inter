@@ -4530,6 +4530,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   smoke 832 passed + 全量 pytest 零回归（放行门实跑）。**第三批 = 完成**
   （2b-2b-2 增量 1-5：node_to_type 完整面 → node_to_symbol → free_vars/def_node_
   uids/GAP 清零 → members_uids + canonical 哈希根因修复 → 完整 artifact 闭环）。
+- **P9 全量 Rust 化第四批设计（值对象去 Host 化——IbValue 值域封闭，2026-09-11，
+  本 session，unsafe-vibe-dev）**：设计阶段文档 `tasks_docs/_value_objects.md`
+  （落地后按治理纪律收敛/删除）。**现状盘点**：IbValue 8 变体 = 7 原生
+  [Int/Float/Str/Bool/None_/List/Dict] + 1 Host(Py<PyAny>)——值域已 ~75% 原生，
+  from_py 边界转换器已就位；Host 残差面 4 类[KB 对象 41 成员 / 模块对象[语料面仅
+  meta] / quoted[q.source 经 host_getattr] / 宿主方法属性比较真值类型名分支]。
+  **面分解裁定**：① quoted = Quoted{source} 原生变体；② meta 模块对象退役——
+  quote/eval/compile 直接 intrinsic 分发；③ **eval 语义 = Rust parser + interpreter
+  原生闭环**（source → artifact → 执行，与 2b-2b-2 完整 artifact 闭环机制同构——
+  不发明新求值器）；④ KB = Rust 原生数据模型（公理层 41 成员表转录，Python KB =
+  差分参照非真相源）；⑤ **embedding 端点保留 Host IO 边界**（LLM IO = 用户裁定面）。
+  **增量序列**：增量 1 quoted+meta 原生面[差分探针 = quoted 3 语料] → 增量 2 KB
+  Rust 原生数据模型[2a facts / 2b worlds / 2c embeddings+vector，差分探针 = kb
+  3 语料；vec intrinsic 顺带实现] → 增量 3 Host 变体退役[执行面 Host 分支全删，
+  边界值即过即转]。**登记缺口**：vec intrinsic 未在 Rust 解释器实现（34 语料无
+  用例，非阻塞，增量 2 顺带）。红线 = 语义单一权威源（公理转录）+ 迁移期差分门
+  零差异放行。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
