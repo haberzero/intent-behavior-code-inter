@@ -4170,6 +4170,21 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   可多]。**验证**：scope_pool 39 scope 全 parent 对齐 + 2194 symbol name→uid 全对齐
   0 DIFF；diff_harness 37 passed[+1] + smoke 832 passed 零回归。**第三批剩余**：
   global_symbols / node_to_loc 侧表 / method 符号 / free_vars / modules 组装。
+- **P9 全量 Rust 化第三批 子项 2b-1（Rust 独立 artifact 产出：node_to_loc 侧表，
+  位置多重集全对齐，2026-09-11，本 session，unsafe-vibe-dev）**：**node_to_loc 侧表**
+  ——node_uid → {file_path, line, column}。**交付**：node_serializer.rs 加
+  node_to_loc[source]（派生自 node 池的 lineno/col_offset，file_path=null）；lib.rs 加
+  node_to_loc pyfunction；差分 harness 加 test_node_to_loc_corpus[位置多重集验证]。
+  **关键裁定**：① Rust node 已有 lineno/col_offset/end_*[== Python node_to_loc 的
+  line/column，1-based]，node_to_loc 直接派生[node_uid → {file_path:null, line:lineno,
+  column:col_offset}]；② file_path=null 是 Rust 架构自然（Rust 无临时文件，source
+  直接输入；Python 的 file_path 是编译临时 .ibci 文件的副产物，非 artifact 语义）——
+  非对齐偏离；③ node_to_loc 差分验证用 (line,column) 多重集[非 uid 关联]——closure 的
+  IbFunctionDef/IbModule node_uid 属既有 closure gap[Rust uid ≠ Python]，但**位置集合
+  完全相等**[closure_capture 23==23]，位置多重集验证 closure 友好。**验证**：
+  node_to_loc 位置多重集 34 语料全对齐（832 node，closure 位置集合相等）+ file_path
+  全 null；diff_harness 38 passed[+1] + smoke 832 passed 零回归。**第三批剩余**：
+  global_symbols / method 符号 / free_vars / modules 组装。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

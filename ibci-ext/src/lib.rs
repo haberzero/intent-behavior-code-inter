@@ -193,6 +193,14 @@ fn scope_pool(source: &str) -> PyResult<String> {
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// node_to_loc 侧表（全量 Rust 化·artifact 产出：位置侧表）：node_uid →
+/// {file_path: null, line, column}。file_path=null（Rust 无临时文件，架构自然）。
+#[pyfunction]
+fn node_to_loc(source: &str) -> PyResult<String> {
+    serde_json::to_string(&node_serializer::node_to_loc(source))
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
 /// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
@@ -324,6 +332,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(intrinsic_symbol_table, m)?)?;
     m.add_function(wrap_pyfunction!(intrinsic_type_pool, m)?)?;
     m.add_function(wrap_pyfunction!(scope_pool, m)?)?;
+    m.add_function(wrap_pyfunction!(node_to_loc, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

@@ -737,6 +737,34 @@ class TestRustSerializationUid:
                         f"rs={sym_uid} py={py['symbols'].get(sym_name)}"
                     )
 
+    def test_node_to_loc_corpus(self):
+        """node_to_loc 侧表差分（全量 Rust 化·artifact 产出：位置侧表）：Rust node_to_loc
+        的 (line, column) 多重集 == Python（节点位置分布对齐，closure 友好——closure 的
+        node_uid 属既有 gap，不依赖 uid 关联）；file_path=null（Rust 无临时文件，架构
+        自然——非对齐偏离，Python 临时路径是编译副产物）。"""
+        import json
+        from collections import Counter
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "node_to_loc"):
+            return
+        for name, code in CORPUS:
+            rs_loc = json.loads(rk._module.node_to_loc(code))
+            data = FlatSerializer().serialize_artifact(compile_ibci(code))
+            mod = data["modules"][data["entry_module"]]
+            py_loc = mod["side_tables"]["node_to_loc"]
+            assert all(v["file_path"] is None for v in rs_loc.values()), (
+                f"语料 {name} file_path 偏离应 null"
+            )
+            rs_multiset = Counter((v["line"], v["column"]) for v in rs_loc.values())
+            py_multiset = Counter((v["line"], v["column"]) for v in py_loc.values())
+            assert rs_multiset == py_multiset, (
+                f"语料 {name} node_to_loc 位置分布不等价：\n"
+                f"  rust: {sorted(rs_multiset.elements())}\n  py : {sorted(py_multiset.elements())}"
+            )
+
 
 class TestDivergenceRegistry:
     """差分 harness 状态注册表（单一权威源）自检：合法性 + 被消费（非死代码）。"""

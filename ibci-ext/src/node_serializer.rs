@@ -367,6 +367,32 @@ fn base_fields(pos: &Pos) -> HashMap<String, Value> {
     m
 }
 
+/// node_to_loc 侧表（全量 Rust 化·artifact 产出：位置侧表）：node_uid →
+/// {file_path: null, line: lineno, column: col_offset}。file_path=null（Rust 无临时
+/// 文件，source 直接输入；Python 的 file_path 是编译临时 .ibci 文件的副产物，非
+/// artifact 语义——Rust 架构自然，非对齐偏离）。line/column 与 Python node_to_loc
+/// 对齐（节点位置，1-based）。
+pub fn node_to_loc(source: &str) -> std::collections::BTreeMap<String, Value> {
+    let module = crate::parser::parse_to_module(source);
+    let mut serializer = NodeSerializer::new();
+    let (_root, node_pool) = serializer.serialize_module(&module);
+    let mut loc: std::collections::BTreeMap<String, Value> =
+        std::collections::BTreeMap::new();
+    for (uid, nd) in node_pool {
+        let line = nd.get("lineno").cloned().unwrap_or(Value::Null);
+        let column = nd.get("col_offset").cloned().unwrap_or(Value::Null);
+        loc.insert(
+            uid,
+            Value::Object(serde_json::Map::from_iter([
+                ("file_path".to_string(), Value::Null),
+                ("line".to_string(), line),
+                ("column".to_string(), column),
+            ])),
+        );
+    }
+    loc
+}
+
 /// 常量值（ConstVal → Value）。
 fn const_value(v: &ConstVal) -> Value {
     match v {
