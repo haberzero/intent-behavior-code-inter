@@ -5214,6 +5214,22 @@ ComputeSubstrate（R5 计算基板）。**下一步 = R3 测试体系五层重�
 断言降级删除（runtime/kernel 层 VM 内部形态断言逐项迁移映射）+ 宿主面层组建 →
 阶段 D（⑦ 终点）差分机制退场。
 
+## R3 阶段 B：语料升格 + 契约层巩固（2026-09-11，unsafe-vibe-dev）
+
+- **R3-阶段B-1（commit 17f09522）**：diff_harness 34 语料升格 = tests/behavior/
+  test_corpus_behavior.py 显式预期用例（绝对行为断言，非双内核对比）——预期 =
+  当前生产行为捕获（引擎自动路由 Rust/Python 混合内核，34/34 确定性）；
+  差分机制 = 迁移期临时壳（⑦ 终点退场），语料种子正式入行为层。
+- **R3-阶段B-2（commit 本条目）**：契约层 tests/contracts/test_error_contract.py
+  ——诊断码映射单一权威（runtime_error_map 全映射可解析 + 已知映射 + 未映射
+  None）+ 引擎错误面契约（Rust 执行错误 → InterpreterError + 诊断码 + 现场；
+  ValueError/OverflowError → RUN_GENERIC_ERROR）。
+- 全量 pytest **4328/0/1** 零回归；行为层 18 测试 + 契约层 7 测试。
+
+**下一步 R3 续**：阶段 C 白盒断言降级删除（runtime/kernel ~50 文件 VM 内部形态
+断言逐项迁移映射）+ 宿主面层组建（LLM/意图/ihost/overlay 归类）→ 阶段 D（⑦
+终点）差分机制退场。R4 HOST-EXT+pip 打包紧随其后。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
