@@ -5546,6 +5546,16 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   执行层保留 Python（职责边界成立）。下一项：差分机制退场评估 + Python 参考
   内核退役范围界定（差分语料 vs 行为层契约）。
 
+## 阶段 D2-⑤ 完成：数据面差分退场（2026-09-11，commit 5652dbb5）
+
+- **差分退场第一块（数据面执行）**：34 语料探针 → 行为契约冻结
+  （test_diff_corpus_contracts.py——可观察断言面，期望输出自 Python 参考）；
+  退休 TestRustExecutionDataPlane（Rust vs Python 参考执行对拍——数据面语义
+  已权威化）。前端层差分（lexer/parser/deserializer/UID/符号表）保留。
+- 全量 pytest 4303/0/1 零回归。
+- **剩余**：前端层差分退场（Rust 前端权威化——大件）+ Python 参考内核退役
+  范围 + D3 双码族 + D4 artifact IR。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
