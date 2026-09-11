@@ -4056,6 +4056,29 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   返回类型[func 定义 -> TYPE 注解]；差分验证[test_scope_symbols_type_uid_corpus 非字
   面值补齐]；偏离白名单登记。IBCI 类型 = 声明式 + 简单推断[非 HM 约束求解，非目标]，
   规则可管理。
+- **P9 全量 Rust 化第二批 增量 1（语义层类型解析·非字面值 type_uid：Name/BinOp/Call/
+  参数/returns，2026-09-11，本 session，unsafe-vibe-dev）**：**Rust 类型推导子系统**
+  ——对齐 IBCI 公理驱动类型推导（侦察结论），非机械复刻 Python TypeCheckingVisitor。
+  **交付**：① type_inference.rs 重构：infer_type_env[expr, 类型环境, 函数签名]（Name
+  查类型环境[作用域栈，内层往外] + BinOp[公理 op 表] + Call[函数签名返回类型] + 容器/
+  字面值）；infer_type = 空环境特例[单一实现无重复]；resolve_op[left,op,right] 移植
+  IBCI int/float/bool/str 公理 resolve_operation_type_name[从左操作数类型分派，无兜底，
+  贯彻一切皆对象]；parse_type_annotation[returns/参数 Name → intrinsic 子集]。②
+  symbol_resolver.rs 重构：加 type_env[作用域栈，与 scope_stack 同步，push_scope/
+  pop_scope 单一权威源] + func_sigs[函数名→返回类型]；Assign 即时算 type_uid（推断右
+  值类型→类型环境+符号 type_uid，替换原 value_exprs 事后算）；FunctionDef 注册 returns
+  签名 + 参数注解类型 + push/pop scope；bind_symbol 去 value_expr 参数[即时化]。**关键
+  裁定**：① 对齐 IBCI 公理（numeric/sequences resolve_operation_type_name），非 Python
+  TypeCheckingVisitor 历史[含未接线 TypeSlot 设计载体]——按新方向[对齐 Python 非首要]
+  Rust 实现干净的 IBCI 类型推导；② IBCI 数值语义复现（int*float=float / int*str=str
+  [字符串重复] / 比较→bool / str+str=str）；③ UnaryOp/BoolOp/Compare/用户类类型/容器
+  泛型格式 = 后续增量（gap 声明 symbol:null:type_uid 自适应跳过）；④ 即时类型环境贴近
+  Python 递归 visit 语义[先定义后使用]。**验证**：诊断脚本 func_ret/binop/name_ref/
+  str_concat 全 OK（a/b 参数 int + x=add 返回 int + c=a+b int + d=c*1.5 float + t=s
+  str + b=a+"y" str）；34 语料 VARIABLE type_uid 23/43→**30/43**（非字面值补齐 7，全部
+  匹配，**0 DIFF**）；diff_harness 34 passed + smoke 832 passed 零回归。gap 注册表
+  自适应（Rust 未产 13 个跳过）。第二批后续：method[sym_anon_*] + free_vars 闭包捕获 +
+  scope 完整[owned_scope_uid] + 容器泛型 type_uid 格式对齐 + UnaryOp/BoolOp/Compare。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

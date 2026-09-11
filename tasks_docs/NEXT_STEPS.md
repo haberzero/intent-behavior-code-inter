@@ -447,8 +447,9 @@
    → 全量 Rust 化阶段 B 第二增量 节点数据序列化 node_data 829/835 ✅
    → 全量 Rust 化阶段 B 第七增量 语义层续 类型解析 type_uid 字面值 23/43 ✅
    → 全量 Rust 化第一批 差分 harness 状态注册表[gap/divergence 显式化，单一权威源] ✅
-   → 全量 Rust 化阶段 B 续[语义层续[类型解析续[非字面值]+method+free_vars+scope 完整]
-   + 序列化产出端 + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构][当前]
+   → 全量 Rust 化第二批 增量 1 语义层非字面值 type_uid[Name/BinOp/Call/参数/returns，30/43 0 DIFF] ✅
+   → 全量 Rust 化第二批 增量 2 续[method+free_vars+scope 完整+容器泛型+UnaryOp/BoolOp/Compare][当前]
+   + 序列化产出端 + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify
