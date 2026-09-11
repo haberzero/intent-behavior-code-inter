@@ -733,10 +733,6 @@ fn capability() -> PyResult<String> {
                 "feature": "kb_vec_payload_materialization",
                 "reason": "KB/vector 构造 = payload 物化契约（对象身份读回）——镜像物化面",
             },
-            {
-                "feature": "intrinsic_redefinition",
-                "reason": "裸名赋值 target = 内建名（常量保护面 Cannot redefine constant）——Python 宿主",
-            },
         ],
     });
     Ok(serde_json::to_string(&cap).map_err(|e| {

@@ -170,24 +170,6 @@ def _detect_tuple_materialization(view: ArtifactView) -> bool:
     return False
 
 
-def _detect_intrinsic_redefinition(view: ArtifactView, intrinsic_symbol_names: FrozenSet[str]) -> bool:
-    """裸名（无注解）赋值 target = 内建名 → 内建绑定改写面（Python 宿主）。"""
-    nodes = view.nodes
-    for nd in nodes.values():
-        if nd.get("_type") != "IbAssign":
-            continue
-        for t_uid in nd.get("targets") or []:
-            t = nodes.get(t_uid)
-            check_ids = []
-            if isinstance(t, dict) and t.get("_type") == "IbName":
-                check_ids.append(t.get("id"))
-            elif isinstance(t, dict) and t.get("_type") == "IbTypeAnnotatedExpr":
-                inner = nodes.get(t.get("target"))
-                if isinstance(inner, dict) and inner.get("_type") == "IbName":
-                    check_ids.append(inner.get("id"))
-            if any(i in intrinsic_symbol_names for i in check_ids):
-                return True
-    return False
 
 def _detect_meta_compile(view: ArtifactView) -> bool:
     """meta.compile 属性调用（编译器访问面——Python 宿主承载）。"""
@@ -231,9 +213,6 @@ class ArtifactRouter:
             "kb_vec_payload_materialization": _detect_object_identity,
         }
 
-    def _detect_intrinsic_redefinition(self, view: ArtifactView) -> bool:
-        return _detect_intrinsic_redefinition(view, self._cap.intrinsic_symbol_names)
-
     def can_execute(self, view: ArtifactView) -> bool:
         """数据面源（Rust 可执行）判定 = 能力清单查询结果。"""
         if not view.node_types <= self._cap.node_types:
@@ -245,7 +224,4 @@ class ArtifactRouter:
         for feature, detect in self._corners.items():
             if feature in self._cap.unported_corners and detect(view):
                 return False
-        # 内建名重定义角（需能力内征集——单独注册）
-        if "intrinsic_redefinition" in self._cap.unported_corners and self._detect_intrinsic_redefinition(view):
-            return False
         return True

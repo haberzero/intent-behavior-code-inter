@@ -1761,6 +1761,7 @@ impl Interpreter {
                 if let Some(target) = targets.first() {
                     // 声明面 target（TypeAnnotatedExpr）= 运行时纯赋值——注解仅
                     // 类型/编译期语义（值域不消费）
+                    let is_declaration = matches!(target, Expr::TypeAnnotatedExpr { .. });
                     let effective = match target {
                         Expr::TypeAnnotatedExpr { target: inner, .. } => inner.as_ref(),
                         other => other,
@@ -1768,6 +1769,24 @@ impl Interpreter {
                     match effective {
                         Expr::Name { id, .. } => {
                             if let Some(val) = &v {
+                                // 顶层常量保护（Python 契约 Cannot reassign
+                                // constant）：裸赋值重绑内建名[非声明 + 无先例
+                                // 局部变量] = 拒绝；带注解声明可遮蔽内建
+                                // （`int len = 5` = 新变量非 const 重绑）；函数
+                                // 局部遮蔽 = 允许。顶层 print = 5 已在编译期
+                                // 拒绝——本检查覆盖类型名等编译可过的内建符号。
+                                if !is_declaration
+                                    && env.borrow().parent.is_none()
+                                    && !env.borrow().vars.contains_key(id)
+                                    && crate::intrinsic_symbols::intrinsic_names()
+                                        .iter()
+                                        .any(|n| n.as_str() == id)
+                                {
+                                    return Err(runtime_error(
+                                        ErrorKind::TypeError,
+                                        &format!("Cannot reassign constant '{id}'"),
+                                    ));
+                                }
                                 assign_env(env, id, val.clone());
                             }
                         }
