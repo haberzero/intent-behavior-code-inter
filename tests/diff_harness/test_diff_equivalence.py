@@ -283,35 +283,32 @@ class TestRustDeserializerDifferential:
 class TestRustExecutionDataPlane:
     """Rust 执行核心（ibci_ext.run_artifact）vs Python 执行核心的数据面差分等价。
 
-    执行核心 = P9 阶段③ 主战场（cProfile 实证性能瓶颈）。迁移期策略：Python 前端
-    → artifact → Rust 执行核心（反序列化 + 执行）。数据面差分 = Rust print 输出
-    == Python print 输出。本增量 = 非 KB 语料面（KB 语料需宿主服务 = 后续增量）。
+    执行核心 = P9 阶段③ 主战场（cProfile 实证性能瓶颈）。Python 前端 → artifact
+    → Rust 执行核心（反序列化 + 执行）。数据面差分 = Rust print 输出 == Python
+    print 输出。全语料全原生无桥接（去 Host 化：KB = 原生 KB 值，quoted/meta =
+    原生 quote/eval/q.source；宿主桥接仅余 LLM/意图 IO 边界）。
     """
 
-    def test_data_plane_non_host_corpus(self):
-        """数据面差分等价：非宿主服务语料（无桥接，Rust 执行 == Python 执行）。
-
-        KB（knowledge()）与 quoted 值（import meta）需 host service 桥接——由
-        test_data_plane_full_corpus 覆盖；本测试仅无桥接语料。
-        """
+    def test_data_plane_kb_native(self):
+        """数据面差分等价：KB 面原生闭环（去 Host 化）——KB 语料（knowledge() +
+        治理词表 register_world/relation/word + add_fact + exists/lookup_pair/
+        contradicts + worlds/words 枚举，3 条）数据面**无宿主桥接**等价：Rust 原生
+        KB 值（kb::KbState 治理词表 + append-only 事实日志 + active 倒排索引；治理门
+        fail-fast + 确定性插入序/seq 序；事实记录数据面形态[键序 + 事件链 + None]
+        对齐）。"""
         from tests.conftest import run_ibci
         from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
         rk = load_rust_kernel()
         if not rk.loaded:
             return
-        non_host = [
-            (n, c)
-            for n, c in CORPUS
-            if (
-                not n.startswith("kb_")
-                and "import meta" not in c
-                and "from meta import" not in c
-            )
-        ]
-        for name, code in non_host:
+        kb = [(n, c) for n, c in CORPUS if n.startswith("kb_")]
+        assert len(kb) == 3, "KB 语料面规模变化——核对语料集"
+        for name, code in kb:
             py = run_ibci(code)
-            rs = rust_execution_data_plane(code)
-            assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+            rs = rust_execution_data_plane(code)  # 无桥接——原生 KB
+            assert rs == py, (
+                f"语料 {name} KB 原生面数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+            )
 
     def test_data_plane_simple(self):
         """数据面差分等价：简单 IBCI 片段（算术/控制流/函数/容器/字符串）。"""
@@ -331,21 +328,6 @@ class TestRustExecutionDataPlane:
             py = run_ibci(src)
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
-
-    def test_data_plane_kb_corpus(self):
-        """数据面差分等价：KB 语料面（host service 桥接——KB 操作委托 Python
-        knowledge 对象，KB 逻辑留 Python 单点真理）。"""
-        from tests.conftest import run_ibci
-        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
-        from tests.diff_harness import bridge
-        rk = load_rust_kernel()
-        if not rk.loaded:
-            return
-        kb = [(n, c) for n, c in CORPUS if n.startswith("kb_")]
-        for name, code in kb:
-            py = run_ibci(code)
-            rs = rust_execution_data_plane(code, bridge)
-            assert rs == py, f"语料 {name} KB 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
     def test_data_plane_quoted_native(self):
         """数据面差分等价：quoted/meta 面原生闭环（去 Host 化）——quoted 相关语料
@@ -373,26 +355,19 @@ class TestRustExecutionDataPlane:
             )
 
     def test_data_plane_full_corpus(self):
-        """数据面差分等价：全语料（非 KB/quoted + KB host service 桥接 + quoted
-        值 meta host service 桥接）。"""
+        """数据面差分等价：全语料（34 条）——**全原生无桥接**（去 Host 化后 Rust
+        执行面值域封闭：KB 语料 = 原生 KB 值[治理词表 + 事实日志 + active 索引]，
+        quoted 语料 = 原生 quote/eval/q.source；宿主桥接仅余 LLM/意图 IO 边界，
+        语料面零依赖）。"""
         from tests.conftest import run_ibci
         from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
-        from tests.diff_harness import bridge
         rk = load_rust_kernel()
         if not rk.loaded:
             return
         for name, code in CORPUS:
-            # KB（knowledge()）、quoted 值（import meta）与 from-import
-            # （from meta import）经 host service 桥接
-            needs_bridge = (
-                name.startswith("kb_")
-                or "import meta" in code
-                or "from meta import" in code
-            )
             py = run_ibci(code)
-            rs = rust_execution_data_plane(code, bridge if needs_bridge else None)
+            rs = rust_execution_data_plane(code)  # 无桥接——全原生
             assert rs == py, f"语料 {name} 数据面差分不等价：\n  py : {py}\n  rust: {rs}"
-
     def test_parallel_execution_equivalence(self):
         """并行执行 API（run_artifacts_parallel）：多纯 CPU artifact 经 Rust 线程
         GIL-free 真并行执行——结果 == 顺序执行（run_artifact），顺序保持。"""

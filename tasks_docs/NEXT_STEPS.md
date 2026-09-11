@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4300 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 141.47s，P9 全量 Rust 化第四批 增量 1[quoted + meta 模块原生面去 Host 化]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4299 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 139.02s，P9 全量 Rust 化第四批 增量 2a[KB 语料面 Rust 原生数据模型]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -485,8 +485,15 @@
    → 第四批 增量 1 quoted + meta 模块原生面[去 Host 化：Quoted{source} + MetaFn 变体
       + quote 验证门[非空/语法/单表达式/自包含 自由名⊆intrinsic 63] + eval 隔离执行
       [fresh env + 值通道 + silent stdout] + q.source 原生；quoted 4 语料无桥接数据面
-      等价（bridge=None 证明）；错误面 = 后续跨切面增量][当前批次推进中]
-   + 增量 2 KB Rust 原生数据模型 + 增量 3 Host 变体退役 + CPS 同构
+      等价（bridge=None 证明）；错误面 = 后续跨切面增量] ✅
+    → 第四批 增量 2a KB 语料面 Rust 原生数据模型[kb.rs：KbState 治理词表 + append-only
+       事实日志 + active 倒排索引 by_pair/by_triple；10 方法面 register_*/worlds/words/
+       add_fact[治理门 allowlist + 去重]/exists/lookup_pair/contradicts；语义转录自
+       Python knowledge.py 单一权威源] + IbValue::Knowledge 共享可变容器[同 List/Dict
+       机制] + knowledge() 去桥接；KB 3 语料无桥接数据面等价 + full_corpus 全原生
+       无桥接化[宿主桥接仅余 LLM/意图 IO 边界，语料面零依赖]；删过期桥接测试
+       [kb_corpus 桥接版]；错误面/41 成员全面/embedding 面 = 2b/2c/跨切面后续][当前]
+    + 增量 2b/2c + 增量 3 Host 变体退役 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

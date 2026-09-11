@@ -1,8 +1,10 @@
-"""Rust 执行核心 host service 桥接（迁移期——宿主逻辑留 Python 单点真理）。
+"""Rust 执行核心 host service 桥接（LLM/意图 IO 边界——宿主逻辑留 Python 单点真理）。
 
-Rust 执行核心消费 Python 前端 artifact 执行；宿主操作（KB 的 knowledge()、meta
-模块的 quote/eval）经本桥接委托给 Python 对象——不复制宿主逻辑到 Rust（避免双
-通道）。本桥接 = 迁移期安全网；全量 Rust 化后宿主服务或 Rust 化或经稳定宿主接口。
+Rust 执行核心消费 Python 前端 artifact 执行。值域已封闭（去 Host 化）：KB 的
+knowledge() = Rust 原生 KB 值（ibci-ext/src/kb.rs），meta 模块的 quote/eval =
+Rust 原生（验证门 + 隔离执行），quoted 值 = 原生 Quoted 变体——均不经本桥接。
+本桥接仅余 LLM/意图 IO 边界面（HostService 契约；语料面零依赖）。全量 Rust 化
+终点 = 本边界经稳定宿主接口收窄。
 """
 from __future__ import annotations
 

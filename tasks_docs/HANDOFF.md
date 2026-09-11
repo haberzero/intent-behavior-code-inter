@@ -133,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 quoted+meta 原生面[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 quoted+meta 原生面 ✅ + 增量 2a KB 语料面原生[kb.rs 10 方法面] → 增量 2b/2c/3[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -656,12 +656,13 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 1[quoted + meta 模块
-  原生面去 Host 化]放行门实跑）**：
-  **4300 passed / 1 skipped / 141.47s / rc=0**（2026-09-11；= 第三批收官基线 4299 +
-  test_data_plane_quoted_native 1 例；注：test_p7_process_isolation /
-  test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，
-  隔离重跑通过，非回归]；供下一 session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
+- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 2a[KB 语料面 Rust 原生
+  数据模型]放行门实跑）**：
+  **4299 passed / 1 skipped / 139.02s / rc=0**（2026-09-11；= 增量 1 基线 4300
+  − 1[删过期桥接测试 test_data_plane_kb_corpus]；本门含 KB 3 语料无桥接数据面
+  等价门；注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程
+  spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一
+  session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
   放开——测试速度已提高、全量并非不可接受，不再限 4 场合（merge/放行门、公理层或语义错误
   集、阶段边界/里程碑、开新分支前 仍为强制门），可按需自由全量；② 已过期或被证不正确的
   测试脚本可自由处理（重构/修正/删除）——重构的质量原则大于维持现状的重要性。已同步

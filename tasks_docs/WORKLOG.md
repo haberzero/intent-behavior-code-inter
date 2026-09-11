@@ -4578,6 +4578,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   1 skipped 零回归（141.47s，放行门实跑）。**值域 Host 残差收缩**：KB 对象 +
   宿主方法/属性/比较/真值分支（quoted/meta 面已除）——第四批增量 2 = KB Rust 原生
   数据模型。
+- **P9 全量 Rust 化第四批 增量 2a（值对象去 Host 化：KB 语料面 Rust 原生数据模型，
+  2026-09-11，本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：
+  KB 执行面（knowledge() 值 + 语料面 10 方法）去 Host 化——Rust 原生 KB 值
+  （KB 3 语料无桥接数据面等价实证）。**实施**：
+  - **ibci-ext/src/kb.rs（新模块）**：KbState（治理词表 words/relations/worlds
+    [插入序 = 确定性枚举序] + append-only 事实日志 facts[seq 前置自增，fact_id =
+    str(seq)] + active 倒排索引 by_pair[(s,r) → 事实下标] / by_triple[(w,s,r,o) →
+    事实下标][派生视图——日志是权威]）+ KbWord/KbRelation/KbWorld/KbFact/KbEvent
+    记录；dispatch 方法面（register_world/register_relation/register_word[参数形态
+    门 + 重复登记拒绝] / worlds/words[插入序枚举] / add_fact[治理门：词表
+    allowlist——world/relation/s/o 全注册 + 去重门：同 (w,s,r,o) active 唯一；
+    缺省 source=""/status="active"] / exists[by_triple 成员检查] / lookup_pair[
+    by_pair 全部 active 事实记录] / contradicts[关系未注册拒绝 + multi_valued 恒
+    非矛盾 + 同 (s,r) 存在 active o'≠o]）——语义转录自 Python 参考内核
+    knowledge.py（单一权威源 = IBCI KB 声明；零 LLM 机器强制治理门）。
+  - **interpreter.rs**：IbValue::Knowledge(Rc<RefCell<KbState>>) 变体（共享可变
+    容器——同 List/Dict 机制；clone = Rc 共享引用；相等 = 身份[ptr_eq]；repr =
+    "<knowledge>"）；knowledge() intrinsic → 原生空白 KB（call_knowledge 去桥接）；
+    call_method Knowledge 分支 → kb::dispatch。
+  - **差分 harness**：test_data_plane_kb_native 新增（KB 3 语料无桥接数据面等价——
+    bridge=None 证明 KB 面去 Host 化完成）；test_data_plane_kb_corpus（桥接版）
+    删除（过期——KB 面不再经桥接；按 2026-09-11 用户裁定"过期测试脚本可自由
+    处理"）；test_data_plane_full_corpus 改全原生无桥接（34 语料全 native——
+    宿主桥接仅余 LLM/意图 IO 边界，语料面零依赖）；bridge.py / harness.py
+    docstring 更新（边界语义收窄声明）。
+  **KB 语料面数据面形态对齐实证**：lookup_pair 事实记录 = Dict[键序 id/world/s/
+  r/o/source/status/events——Python 事实 dict 插入序同构] + events 事件链
+  [seq/kind/reason/new_o(None)]；worlds()/words() = 插入序 list[str]；exists/
+  contradicts = bool——全对齐。
+  **登记限制（非本增量范围）**：① 错误面 = None_ 静默（同增量 1——治理门失败/
+  参数形态错误不产生 InterpreterError 值语义；语料无错误探针，数据面无偏离；
+  错误传播面 = 跨切面后续增量）② KB 全 41 成员面未齐（语料面 10 方法 + 枚举面
+  已载；amend_fact/retract/transitive/embedding 面 = 增量 2b/2c）③ embedding
+  端点 = LLM IO 边界保留（HostService——用户裁定面）。**验证**：KB 3 语料无桥接
+  数据面等价 + quoted 4 语料无桥接回归无损 + 全 harness 41 passed + smoke 832
+  passed + 全量 pytest 4299 passed / 1 skipped 零回归（139.02s，放行门实跑——
+  净 −1 = 删过期桥接测试）。**值域 Host 残差**：宿主对象变体仅 LLM/意图 IO 边界
+  消费（语料面 = 0）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

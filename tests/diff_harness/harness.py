@@ -188,10 +188,10 @@ def rust_type_table(artifact_json: str) -> str:
 def rust_execution_data_plane(script: str, bridge=None) -> List[str]:
     """Rust 执行核心（ibci_ext.run_artifact）：script → 数据面（print 输出列表）。
 
-    迁移期策略：Python 前端（compile → artifact）→ Rust 执行核心（反序列化 +
-    执行）。bridge = host service 桥接（KB 操作经此委托给 Python knowledge
-    对象；None = 无宿主服务，非 KB 语料面）。.so 未构建 = 空列表（合法态——降级
-    为仅 Python 参考）。
+    Python 前端（compile → artifact）→ Rust 执行核心（反序列化 + 执行）。值域
+    封闭（去 Host 化）：KB/quoted/meta 函数面 = Rust 原生——语料面无桥接依赖
+    （bridge 参数仅 LLM/意图 IO 边界面保留，默认 None）。.so 未构建 = 空列表
+    （合法态——降级为仅 Python 参考）。
     """
     import json
     from tests.conftest import compile_ibci

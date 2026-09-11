@@ -18,6 +18,7 @@
 
 mod deserializer;
 mod interpreter;
+mod kb;
 mod intrinsic_symbols;
 mod lexer;
 mod node_serializer;

@@ -59,13 +59,23 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
    - 登记限制（非本增量范围）：验证门失败 / eval 运行错误面 = None_ 静默（Rust
      解释器无错误传播面——InterpreterError 值语义 = 跨切面后续增量；语料无错误
      探针，数据面无偏离）。
-2. **增量 2：KB Rust 原生数据模型**（大面——世界模型核心，可能拆分
-   2a facts/2b worlds/2c embeddings+vector 运算）：
-   - Rust KB 结构体（事实三元组 / 词 / 世界 / 关系 / 向量）+ 41 成员方法面
-     （向量运算 = 纯数学原生；embedding 端点 = Host IO 边界）。
+2. **增量 2：KB Rust 原生数据模型**（大面——世界模型核心）：
+   - **2a 语料面 KB 值 ✅[2026-09-11 落地]**：ibci-ext/src/kb.rs（KbState 治理
+     词表 + append-only 事实日志 + active 倒排索引 by_pair/by_triple——语义转录自
+     Python knowledge.py 单一权威源；10 方法面 register_world/relation/word +
+     worlds/words 枚举 + add_fact[治理门 allowlist + 去重] + exists + lookup_pair
+     + contradicts）+ IbValue::Knowledge(Rc<RefCell<KbState>>) 共享可变容器
+     （同 List/Dict 机制）+ knowledge() intrinsic 去桥接 + call_method 原生分发。
+     差分门：test_data_plane_kb_native（KB 3 语料**无桥接**数据面等价）+
+     full_corpus 全原生无桥接化。事实记录数据面形态对齐（键序 + 事件链 + None）。
+     登记限制：错误面 None_ 静默（跨切面后续）/ 41 成员面未齐（2b/2c）/
+     embedding 端点保留 Host IO 边界。
+   - **2b 词表/事实查询面 + 治理面**（word/relation/world/get_fact/facts/
+     fact_len/all_in_world + amend_fact/retract 事件链）——后续。
+   - **2c embedding + vector 运算面**（向量运算 = 纯数学原生；embedding 端点 =
+     Host IO 边界；vec intrinsic 顺带实现）。
    - 差分门：kb_world_vocab / kb_fact_lookup / kb_contradicts 语料数据面等价
      + KB 方法返回值跨内核比对。
-   - vec intrinsic 顺带实现（vector 原生形态 = Vec<f64> 包装）。
 3. **增量 3：Host 变体退役**：
    - 执行面 Host 分支全删（比较/真值/类型名/方法/属性——仅 LLM/意图 IO 边界
      保留 bridge 委托，值不进入 IbValue 值域[边界值即过即转]）。

@@ -9,11 +9,14 @@
 //! 对象模型（IbValue）：Int / Float / Str / Bool / None / List / Dict——
 //!   List/Dict 经 Rc<RefCell>（共享可变——append/dict 下标赋值原地修改，clean
 //!   Rust 方式，避免 tricky 特判）。数据面 repr 对齐 Python print（float 整数值 =
-//!   `4.0`；list `[e, e]`；dict `{"k": v}`；str 原样）。KB 语料面（knowledge()
-//!   宿主服务）= 后续增量（需宿主环境）。
+//!   `4.0`；list `[e, e]`；dict `{"k": v}`；str 原样）。KB 语料面（knowledge()）
+//!   = Rust 原生 KB 值（kb::KbState——治理词表 + 事实日志 + active 索引，去
+//!   Host 化）。quoted/meta 函数面 = 原生（Quoted/MetaFn 变体 + call_meta_fn）。
 //!
-//! 差分门：数据面（Rust 执行 print 输出）== Python 执行 print 输出（非 KB 语料）。
+//! 差分门：数据面（Rust 执行 print 输出）== Python 执行 print 输出（全语料
+//! 无桥接——宿主桥接仅余 LLM/意图 IO 边界）。
 
+use crate::kb::KbState;
 use crate::parser::{ConstVal, Expr, Module, Stmt};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
@@ -38,7 +41,10 @@ pub enum IbValue {
     /// 原生 meta 函数引用（from meta import quote/eval 的绑定值——去 Host 化；
     /// 调用经 call_meta_fn 原生分发）。
     MetaFn(&'static str),
-    /// 宿主对象（Python 对象引用——KB 服务经 host service 桥接委托）。
+    /// Rust 原生 KB 值（knowledge() 返回——世界模型知识图谱执行面；治理词表 +
+    /// append-only 事实日志 + active 索引，方法经 kb::dispatch 原生分发）。
+    Knowledge(Rc<RefCell<KbState>>),
+    /// 宿主对象（Python 对象引用——host service 桥接委托面）。
     Host(Py<PyAny>),
 }
 
@@ -57,6 +63,8 @@ impl Clone for IbValue {
                 source: source.clone(),
             },
             IbValue::MetaFn(n) => IbValue::MetaFn(*n),
+            // 共享可变容器（同 List/Dict——Rc clone = 共享引用）
+            IbValue::Knowledge(k) => IbValue::Knowledge(k.clone()),
             IbValue::Host(h) => {
                 // clone_ref 需 GIL（执行期 GIL 已持有，with_gil 可重入）
                 let cloned = Python::with_gil(|py| h.clone_ref(py));
@@ -76,6 +84,7 @@ impl std::fmt::Debug for IbValue {
             IbValue::None_ => write!(f, "None_"),
             IbValue::Quoted { source } => write!(f, "Quoted({source:?})"),
             IbValue::MetaFn(n) => write!(f, "MetaFn({n:?})"),
+            IbValue::Knowledge(_) => write!(f, "Knowledge(..)"),
             IbValue::List(_) => write!(f, "List(..)"),
             IbValue::Dict(_) => write!(f, "Dict(..)"),
             IbValue::Host(_) => write!(f, "Host(<py object>)"),
@@ -106,6 +115,8 @@ impl PartialEq for IbValue {
             }
             // quoted 值相等 = 源串逐字节精确对比（公理：可精确对比逐字节）
             (IbValue::Quoted { source: a }, IbValue::Quoted { source: b }) => a == b,
+            // KB 对象相等 = 身份（共享引用——同宿主对象身份语义）
+            (IbValue::Knowledge(a), IbValue::Knowledge(b)) => Rc::ptr_eq(a, b),
             (IbValue::Host(a), IbValue::Host(b)) => {
                 // 宿主对象身份相等（同一 Python 对象指针）
                 a.as_ptr() == b.as_ptr()
@@ -152,6 +163,7 @@ impl IbValue {
             // 数据面忠实呈现 = 完整源串（同 __to_prompt__——无截断）
             IbValue::Quoted { source } => source.clone(),
             IbValue::MetaFn(n) => format!("meta.{n}"),
+            IbValue::Knowledge(_) => "<knowledge>".into(),
             IbValue::Host(_) => "<host>".into(),
         }
     }
@@ -166,6 +178,7 @@ impl IbValue {
             IbValue::Dict(d) => !d.borrow().is_empty(),
             IbValue::Quoted { .. } => true,
             IbValue::MetaFn(_) => true,
+            IbValue::Knowledge(_) => true,
             IbValue::Host(_) => true,
         }
     }
@@ -890,18 +903,10 @@ impl Interpreter {
         }
     }
 
-    /// knowledge() → 经 host service 桥接创建 Python knowledge 对象。
+    /// knowledge() → Rust 原生 KB 值（去 Host 化：治理词表 + 事实日志 + active
+    /// 索引——kb::KbState 空白实例；方法面经 kb::dispatch 原生分发）。
     fn call_knowledge(&self) -> IbValue {
-        let bridge = match &self.bridge {
-            Some(b) => b.clone(),
-            None => return IbValue::None_,
-        };
-        Python::with_gil(|py| -> PyResult<IbValue> {
-            let b = bridge.bind(py);
-            let kb = b.call_method0("create_knowledge")?;
-            Ok(IbValue::Host(kb.unbind()))
-        })
-        .unwrap_or(IbValue::None_)
+        IbValue::Knowledge(Rc::new(RefCell::new(crate::kb::KbState::blank())))
     }
 
     fn call_user_function(
@@ -929,7 +934,9 @@ impl Interpreter {
 
     fn call_method(&self, obj: &IbValue, method: &str, args: Vec<IbValue>) -> IbValue {
         match obj {
-            // 宿主对象（KB 服务）——委托 Python 对象方法（host service 桥接）
+            // Rust 原生 KB 值——方法面经 kb::dispatch（治理门 + 确定性序）
+            IbValue::Knowledge(kb) => crate::kb::dispatch(kb, method, &args),
+            // 宿主对象——委托 Python 对象方法（host service 桥接）
             IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
             IbValue::List(l) => match method {
                 "append" => {
@@ -1080,8 +1087,8 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
         }
         // quoted 值跨边界 = 完整源串（同 to_native 边界拆箱契约）
         IbValue::Quoted { source } => source.clone().into_py(py),
-        // 原生 meta 函数引用不经桥接（桥接面不含 meta 函数）
-        IbValue::MetaFn(_) => py.None(),
+        // 原生 meta 函数引用 / 原生 KB 值不经桥接（去 Host 化后桥接面不含）
+        IbValue::MetaFn(_) | IbValue::Knowledge(_) => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
 }
