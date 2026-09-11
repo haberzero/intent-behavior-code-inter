@@ -22,7 +22,7 @@
 | test_generic_value_identity.py | 值身份/特化 + deep_clone 内部 | 契约（序列化往返）+ 内部 | 保留（契约层）；deep_clone 内部断言 → 后续重构（阶段 C 续） |
 | test_optional_value_model.py | Optional 值语义（is_none/unwrap/identity/包装） | 行为 | ✅ 迁移 tests/behavior/test_optional_behavior.py（28 断言）；**打破清单 #2 落地**：空 Optional = None 值语义统一（`a is b`=True——原 Python 包装实例身份废弃，optional_instance_identity 角移除，Rust 权威化）——白盒文件删除 |
 | test_vector_type.py | vector 值语义/方法面 | 行为 | ✅ 迁移 tests/behavior/test_vector_behavior.py（18 可观察断言：值语义/构造封死/dim 不一致/dict 键/数学性质[精确值钉语义]；round-trip = Rust artifact 契约面；parity = 契约层 embedding_protocol）——白盒文件删除 |
-| test_world_model_kb.py | KB 世界模型（治理/事实/查询） | 行为 | 迁移前置 = GAP-vec-kb-failfast（Rust kb.rs 治理门静默 None_ vs Python KNW_ 码；行为测试现 = Python 验证契约，⑦ 终点角移除后 Rust 验证） |
+| test_world_model_kb.py | KB 世界模型（治理/事实/查询） | 行为 | ✅ C7a：Vocab+Fact 平面 → tests/behavior/test_kb_world_model_behavior.py（11 断言，前置 GAP-vec-kb-failfast 已关闭）；剩余平面（索引/序列化/deep_clone/查找/对比/审计）= C7b 续 |
 | test_knowledge_type.py | KB 类型（store/快照/amend 门） | 行为/宿主 | ✅ 迁移 tests/behavior/test_knowledge_store_behavior.py（15 断言：store/get/快照隔离/keys/审计链/验证门[诊断码+定位]/check 纯度[编译诊断码]）+ tests/host/test_knowledge_state.py（2 断言：ihost 状态往返）；2 序列化 round-trip = ⑦ 路径删除+契约登记（Rust artifact 契约面）——白盒文件删除 |
 | test_knowledge_to_ibci.py | KB → IBCI 投影（P7 to_ibci） | ⑦ 路径 | ✅ 删除 + 契约登记：to_ibci = Python 参考 KB 功能（Rust kb.rs 无此分派——角路由送 Python；行为层须内核无关，非本层材料）；投影语义 = PENDING（⑦ 终点裁决：移植 Rust kb.rs 或退役） |
 | test_narrow_model_type.py | narrow_model 工件（score/topk，P5） | 宿主 | 保留并迁移宿主层（Rust 无 narrow_model 值变体——Python 宿主功能[world_model.bind_artifact]；迁移 = bind_artifact 语言路径 + artifact JSON 夹具[content_hash 正确计算]） |
@@ -40,6 +40,7 @@
 - **R3-C4**：test_knowledge_to_ibci.py 删除（to_ibci = Python 参考 KB 功能，⑦ 路径；契约登记 PENDING——移植 Rust 或退役，⑦ 终点裁决）。
 - **R3-C5**：test_knowledge_type.py → 行为层 15 断言 + 宿主层 2 断言迁移，2 序列化 round-trip = ⑦ 路径删除，白盒删除。
 - **R3-C6**：test_optional_value_model.py → 行为层 28 断言（含打破清单 #2：Optional 空值 = None 值语义统一——`a is b`=True，optional_instance_identity 角移除），白盒删除。
+- **R3-C7a**：test_world_model_kb.py Vocab+Fact 平面 → 行为层 11 断言（前置 GAP-vec-kb-failfast 已关闭：Rust kb.rs 治理门 fail-fast + KNW_ 码与 Python 对齐）。
 - **已归层无动作**：file_handle/media_file_handle/overlay_concurrency/pre_eval_fallback（宿主层）/ protocol_dispatch_contract/member_single_authority/serialization/run_result_type/storage_model_dispatch（契约层）——保留原文件仅归层。
 - **剩余工作项**：optional_value_model（30 测试——identity 2 例 = 打破清单 #2 待重设计）/ world_model_kb（36 测试——大件，kb 治理 GAP 一并裁决）/ narrow_model（宿主层 + artifact 夹具）/ file_handle·generic_value_identity·storage_model_dispatch（clone_ref 内部断言重构）+ cargo test 内核层组建。
 
