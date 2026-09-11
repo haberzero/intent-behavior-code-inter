@@ -122,21 +122,56 @@ impl SymbolResolver {
                 let type_str: Option<String> =
                     value.as_ref().and_then(|v| symbol_level_type(v, &self.ctx()));
                 for target in targets {
-                    if let Expr::Name { id, .. } = target {
-                        self.bind_symbol(id, "VARIABLE");
-                        let scope = self.current_scope();
-                        let uid = format!("scope_{}:{}", scope, id);
-                        let has_type = self
-                            .symbols
-                            .get(&uid)
-                            .and_then(|s| s.get("type_uid"))
-                            .and_then(|v| v.as_str())
-                            .is_some();
-                        if !has_type {
-                            if let Some(ts) = &type_str {
-                                self.bind_var_type(id, ts);
+                    match target {
+                        Expr::Name { id, .. } => {
+                            self.bind_symbol(id, "VARIABLE");
+                            let scope = self.current_scope();
+                            let uid = format!("scope_{}:{}", scope, id);
+                            let has_type = self
+                                .symbols
+                                .get(&uid)
+                                .and_then(|s| s.get("type_uid"))
+                                .and_then(|v| v.as_str())
+                                .is_some();
+                            if !has_type {
+                                if let Some(ts) = &type_str {
+                                    self.bind_var_type(id, ts);
+                                }
                             }
                         }
+                        // 声明面（TypeAnnotatedExpr target）：声明类型优先
+                        // （auto = 值推导符号通道类型）
+                        Expr::TypeAnnotatedExpr {
+                            target: inner,
+                            annotation,
+                            ..
+                        } => {
+                            if let Expr::Name { id, .. } = inner.as_ref() {
+                                self.bind_symbol(id, "VARIABLE");
+                                let scope = self.current_scope();
+                                let uid = format!("scope_{}:{}", scope, id);
+                                let has_type = self
+                                    .symbols
+                                    .get(&uid)
+                                    .and_then(|s| s.get("type_uid"))
+                                    .and_then(|v| v.as_str())
+                                    .is_some();
+                                if !has_type {
+                                    let ann = crate::node_serializer::annotation_type_str(
+                                        annotation,
+                                    );
+                                    let ts = if ann == "auto" {
+                                        type_str.clone()
+                                    } else {
+                                        Some(ann)
+                                    };
+                                    if let Some(ts) = ts {
+                                        self.bind_var_type(id, &ts);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }

@@ -313,7 +313,36 @@ impl NodeSerializer {
     pub fn serialize_stmt(&mut self, stmt: &Stmt) -> String {
         match stmt {
             Stmt::Assign { pos, targets, value } => {
-                let t_uids: Vec<String> = targets.iter().map(|e| self.serialize_expr(e)).collect();
+                // 目标序列化（声明面 target = TypeAnnotatedExpr 时内联序列化
+                // 注解/target 子节点——uid 需暴露给绑定面）
+                let mut t_uids: Vec<String> = Vec::new();
+                let mut decl_parts: Option<(String, String, String)> = None;
+                for t in targets {
+                    match t {
+                        Expr::TypeAnnotatedExpr {
+                            target,
+                            annotation,
+                            pos: tpos,
+                        } => {
+                            // 注解 = ser_annotation（仅顶层节点 node_to_type——
+                            // 泛型内层名字不单独绑定，Python 实证）；target name
+                            // = Full（Store 节点经 Assign 臂显式绑 symbol）
+                            let a_uid = self.ser_annotation(annotation);
+                            let n_uid = self.ser(target, RecordMode::Full);
+                            let mut nd = base_fields(tpos);
+                            nd.insert(
+                                "_type".to_string(),
+                                Value::String("IbTypeAnnotatedExpr".to_string()),
+                            );
+                            nd.insert("target".to_string(), Value::String(n_uid.clone()));
+                            nd.insert("annotation".to_string(), Value::String(a_uid.clone()));
+                            let annotated_uid = self.collect(nd);
+                            decl_parts = Some((annotated_uid.clone(), n_uid, a_uid));
+                            t_uids.push(annotated_uid);
+                        }
+                        other => t_uids.push(self.serialize_expr(other)),
+                    }
+                }
                 let v_uid = value.as_ref().map(|e| self.serialize_expr(e));
                 // 统一遍历：双通道（type_inference 裁定语义）+ 首次绑定优先——
                 // target 节点 node_to_type / type_env 绑定：变量当前 scope 已有类型 =
@@ -349,14 +378,55 @@ impl NodeSerializer {
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbAssign".to_string()));
                 node_data.insert("targets".to_string(), Value::Array(t_uids.into_iter().map(Value::String).collect()));
-                node_data.insert("value".to_string(), v_uid.map(Value::String).unwrap_or(Value::Null));
+                node_data.insert(
+                    "value".to_string(),
+                    v_uid.clone().map(Value::String).unwrap_or(Value::Null),
+                );
                 node_data.insert("llmexcept_handler".to_string(), Value::Null);
                 let assign_uid = self.collect(node_data);
+                // 声明面绑定（Python 实证：int x = 2 / list[int] ys / auto a）：
+                // 注解节点 node_to_type = type_root.<注解串>（含 auto →
+                // type_root.auto）；annotated/Assign/值节点 node_to_type = 声明
+                // 类型（auto = 值推导符号通道类型）；target name/annotated/
+                // Assign/值节点 node_to_symbol → 定义符号；符号 type_uid = 声明
+                // 类型（auto = 推导）；定义节点 = Assign 节点（同普通赋值）。
+                if let Some((annotated_uid, name_uid, ann_uid)) = decl_parts {
+                    if let Some(Expr::TypeAnnotatedExpr { target, annotation, .. }) = targets.first() {
+                        if let Expr::Name { id, .. } = &**target {
+                            let ctx = self.ctx();
+                            let ann_str = annotation_type_str(&**annotation);
+                            let declared = if ann_str == "auto" {
+                                value.as_ref().and_then(|v| symbol_level_type(v, &ctx))
+                            } else {
+                                Some(ann_str.clone())
+                            };
+                            if let Some(ts) = &declared {
+                                self.define_name(id, ts);
+                            }
+                            self.node_to_type.insert(
+                                ann_uid.clone(),
+                                format!("type_root.{}", ann_str.clone()),
+                            );
+                            if let Some(d) = declared {
+                                let du = format!("type_root.{}", d);
+                                self.node_to_type.insert(annotated_uid.clone(), du.clone());
+                                // 值节点 = 声明类型（auto = 推导值 ser 已绑，覆盖一致）
+                                if let Some(vu) = &v_uid {
+                                    self.node_to_type.insert(vu.clone(), du);
+                                }
+                            }
+                            let sym_uid = self.current_scope_symbol_uid(id);
+                            self.node_to_symbol.insert(name_uid.clone(), sym_uid.clone());
+                            self.node_to_symbol.insert(annotated_uid.clone(), sym_uid.clone());
+                            self.node_to_symbol.insert(assign_uid.clone(), sym_uid.clone());
+                        }
+                    }
+                }
                 // node_to_symbol：IbAssign 节点 → 目标 VARIABLE scope 符号（定义 scope
                 // = 当前 scope——Python 实证 34/34 IbAssign 全绑定）。
                 // 定义节点：目标符号 → IbAssign 节点 uid（首次定义优先）。
-                if let Some(Expr::Name { id, .. }) = targets.first() {
-                    let sym_uid = self.current_scope_symbol_uid(id);
+                if let Some(id) = assign_target_name(targets) {
+                    let sym_uid = self.current_scope_symbol_uid(&id);
                     self.node_to_symbol.insert(assign_uid.clone(), sym_uid.clone());
                     self.def_node_uids
                         .entry(sym_uid)
@@ -708,6 +778,16 @@ impl NodeSerializer {
         self.serialize_expr_recorded(expr, RecordMode::TypeOnly)
     }
 
+    /// 声明注解序列化（`int x = 1` 的 annotation）：节点内层 = None 记录
+    /// （泛型内层名字不单独绑 node_to_type，Python 实证）；顶层节点
+    /// node_to_type = type_root.<注解串>（含 auto / 泛型 list[int]）。
+    fn ser_annotation(&mut self, e: &Expr) -> String {
+        let uid = self.serialize_expr_impl(e, RecordMode::None);
+        self.node_to_type
+            .insert(uid.clone(), format!("type_root.{}", annotation_type_str(e)));
+        uid
+    }
+
     /// 无记录变体（参数注解位置——Python type checker 不产参数注解 Name 节点的
     /// node_to_type / node_to_symbol 绑定，语料实证 6/6 未绑定；节点仍入节点池）。
     pub fn serialize_expr_no_record(&mut self, expr: &Expr) -> String {
@@ -892,6 +972,24 @@ impl NodeSerializer {
                 node_data.insert("_type".to_string(), Value::String("IbLambda".to_string()));
                 self.collect(node_data)
             }
+            Expr::TypeAnnotatedExpr {
+                pos,
+                target,
+                annotation,
+            } => {
+                // IbTypeAnnotatedExpr（声明面 target——位置 = 类型起始 token；
+                // Assign 臂内联序列化时已产出，此臂 = 表达式位置完整面）
+                let t_uid = self.ser(target, mode);
+                let a_uid = self.ser(annotation, mode);
+                let mut node_data = base_fields(pos);
+                node_data.insert(
+                    "_type".to_string(),
+                    Value::String("IbTypeAnnotatedExpr".to_string()),
+                );
+                node_data.insert("target".to_string(), Value::String(t_uid));
+                node_data.insert("annotation".to_string(), Value::String(a_uid));
+                self.collect(node_data)
+            }
         }
     }
 
@@ -942,6 +1040,40 @@ impl NodeSerializer {
         let uid = serialization::node_uid(&content);
         self.node_pool.insert(uid.clone(), Value::Object(map));
         uid
+    }
+}
+
+/// Assign 目标变量名（普通 = Name target；声明面 = TypeAnnotatedExpr 内层
+/// Name target）。
+fn assign_target_name(targets: &[Expr]) -> Option<String> {
+    match targets.first() {
+        Some(Expr::Name { id, .. }) => Some(id.clone()),
+        Some(Expr::TypeAnnotatedExpr { target, .. }) => match target.as_ref() {
+            Expr::Name { id, .. } => Some(id.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// 注解类型串（Name = 名字；Subscript = base[args]——多参 IbTuple 逗号连接；
+/// 声明面符号/节点绑定面单一权威源）。
+pub(crate) fn annotation_type_str(e: &Expr) -> String {
+    match e {
+        Expr::Name { id, .. } => id.clone(),
+        Expr::Subscript { value, slice, .. } => {
+            let base = annotation_type_str(value);
+            let args = match slice.as_ref() {
+                Expr::Tuple { elts, .. } => elts
+                    .iter()
+                    .map(annotation_type_str)
+                    .collect::<Vec<_>>()
+                    .join(","),
+                other => annotation_type_str(other),
+            };
+            format!("{base}[{args}]")
+        }
+        _ => "any".to_string(),
     }
 }
 
@@ -1042,6 +1174,8 @@ pub(crate) fn collect_refs_expr(e: &Expr, out: &mut BTreeSet<String>) {
         Expr::Name { id, .. } => {
             out.insert(id.clone());
         }
+        // 声明面：target 名 = 定义（非 free 引用）；注解 = 类型级名字（非值引用）
+        Expr::TypeAnnotatedExpr { .. } => {}
         Expr::BinOp { left, right, .. } => {
             collect_refs_expr(left, out);
             collect_refs_expr(right, out);

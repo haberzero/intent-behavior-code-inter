@@ -56,9 +56,21 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
    Return/Continue 透传]）。差分门：test_data_plane_switch_global_snippets
    （3 探针：匹配/break/无 fall-through + continue 透传外层循环 +
    global/nonlocal no-op 读取面）+ switch 源 full_artifact 五池全等价实证。
-   **登记缺口（非本增量范围）**：① 声明面 `TYPE x = v`（IbTypeAnnotatedExpr——
-   auto/fn/泛型注解/元组解包）= Rust parser 既有缺口[语料面零覆盖，探针规避；
-   移植 = 后续 parser 增量]；② LLM 面 15 节点覆盖差（IbCastExpr/IbRetry/
+   **声明面移植 ✅[2026-09-11 落地，3b 同批]**：`TYPE x = v` / `auto x = v` /
+   泛型 `list[int] xs = v` / `TYPE x: TYPE2 = v` 显式覆盖——parser（声明面前瞻
+   is_var_declaration + parse_declaration_identifier/auto + parse_type_annotation
+   [泛型多参 = IbTuple]）+ AST（Expr::TypeAnnotatedExpr）+ node_serializer
+   [IbTypeAnnotatedExpr 节点 + 声明 Assign 位置 end=0 + 绑定面：注解仅顶层节点
+   node_to_type[泛型内层名字不单独绑定，ser_annotation 内层 None 记录] /
+   annotated + 值节点 node_to_type = 声明类型[auto = 推导] / target name +
+   annotated + Assign 节点 node_to_symbol → 定义符号] + symbol_resolver
+   [声明类型优先，auto = 符号通道推导] + interpreter[声明 target = 运行时纯
+   赋值，注解不消费] + deserializer。差分门：
+   test_data_plane_declaration_snippets（数据面 + 5 池 + 2 侧表内容归一全等价；
+   顶层 + 函数内 scope 双探针）。
+   **登记缺口（非本增量范围）**：① 声明面剩余形态——`fn f = ...` 可调用声明 /
+   元组解包 `(int x, int y) = t` / 点分类型 `mod.Type` / chan/slot 类型[LLM
+   运行时面]；② LLM 面 15 节点覆盖差（IbCastExpr/IbRetry/
    IbIntentAnnotation/IbImplDef/IbProtocolDef/IbHostImport/IbBehaviorExpr/
    IbChannelExpr/IbAwaitExpr/IbYieldExpr/IbYieldFromExpr/IbFilteredExpr/
    IbSlotExpr/IbIntentStackOperation/IbWithOverlay——其中 IbCastExpr 语法复杂

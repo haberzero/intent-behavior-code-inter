@@ -329,6 +329,58 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_data_plane_declaration_snippets(self):
+        """数据面 + artifact 面差分等价：变量声明面（自包含脚本——
+        `int x = v` / `auto x = v` / 泛型 `list[int] xs = v` / `str s = v`
+        显式类型 + auto 推导；数据面 = 运行时纯赋值[注解仅类型/编译期语义]；
+        artifact 面 = 5 池 + node_to_type/node_to_symbol 内容归一等价
+        [IbTypeAnnotatedExpr 节点 + 声明 Assign 位置 end=0 + 声明类型优先
+        绑定 + 注解仅顶层节点 node_to_type[泛型内层名字不单独绑定]]。
+        元组解包/点分类型/fn 可调用声明 = 登记缺口[后续增量]）。"""
+        from tests.conftest import run_ibci, compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        import json, re
+        from collections import Counter
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        probes = [
+            'int x = 2\nlist[int] ys = [1, 2]\nauto a = 3\nstr s = "hi"\nprint(x)\nprint(a)\n',
+            'func f() -> int:\n    int local = 5\n    auto twice = local * 2\n    return twice\nprint(f())\n',
+        ]
+        def norm(d):
+            return re.sub(r"node_[0-9a-f]{16}", "<UID>", json.dumps(d, sort_keys=True, ensure_ascii=False))
+        for code in probes:
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code)
+            assert rs == py, f"声明面数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+            # artifact 面：5 池 + 2 侧表内容归一等价（uid 归一——两侧独立生成
+            # 节点 uid，内容等价 = 结构等价）
+            art = FlatSerializer().serialize_artifact(compile_ibci(code))
+            rs_art = json.loads(rk._module.full_artifact(code))
+            mod_p = art["modules"][art["entry_module"]]
+            mod_r = rs_art["modules"][rs_art["entry_module"]]
+            for pool in ("nodes", "symbols", "scopes", "types", "assets"):
+                r, p = rs_art["pools"][pool], art["pools"][pool]
+                cr = Counter(norm(v) for v in r.values())
+                cp = Counter(norm(v) for v in p.values())
+                assert cr == cp, (
+                    f"声明面 artifact {pool} 内容差：rs_only={list((cr-cp).elements())[:2]} "
+                    f"py_only={list((cp-cr).elements())[:2]}"
+                )
+            for st in ("node_to_type", "node_to_symbol"):
+                r, p = mod_r["side_tables"][st], mod_p["side_tables"][st]
+                rc, pc = {}, {}
+                for k, v in r.items():
+                    rc.setdefault(norm(json.dumps(mod_r["pools"]["nodes"][k], sort_keys=True)), []).append(v)
+                for k, v in p.items():
+                    pc.setdefault(norm(json.dumps(mod_p["pools"]["nodes"][k], sort_keys=True)), []).append(v)
+                assert rc == pc, (
+                    f"声明面侧表 {st} 内容差：rs_only={list(set(rc)-set(pc))[:2]} "
+                    f"py_only={list(set(pc)-set(rc))[:2]}"
+                )
+
     def test_data_plane_switch_global_snippets(self):
         """数据面差分等价：switch/global/nonlocal 合成探针（自包含脚本——CPS
         覆盖差收缩 31→36 增量：IbGlobalStmt/IbNonlocalStmt 编译期语义运行时

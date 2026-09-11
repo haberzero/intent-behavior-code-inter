@@ -222,6 +222,14 @@ fn build_node(uid: &str, nodes: &NodeMap) -> Node {
             })
         }
         // ---- 表达式 ---- //
+        "IbTypeAnnotatedExpr" => {
+            // 声明面 target（target Name + annotation 类型节点）
+            Node::Expr(Expr::TypeAnnotatedExpr {
+                pos: pos_of(n),
+                target: Box::new(expr_of(&uid_of(&n["target"]), nodes)),
+                annotation: Box::new(expr_of(&uid_of(&n["annotation"]), nodes)),
+            })
+        }
         "IbConstant" => Node::Expr(Expr::Constant {
             pos: pos_of(n),
             value: const_of(&n["value"]),
@@ -424,7 +432,8 @@ fn expr_pos(e: &Expr) -> Pos {
         | Expr::IfExp { pos, .. }
         | Expr::Lambda { pos, .. }
         | Expr::Tuple { pos, .. }
-        | Expr::Slice { pos, .. } => *pos,
+        | Expr::Slice { pos, .. }
+        | Expr::TypeAnnotatedExpr { pos, .. } => *pos,
     }
 }
 

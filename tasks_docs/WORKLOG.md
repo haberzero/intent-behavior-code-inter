@@ -4708,6 +4708,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   移植批次）；③ raise 错误面（异常传播机制 = 跨切面增量）。
   **验证**：3 探针全对齐 + 34 语料回归无损 + 全 harness 44 passed + smoke 832
   passed + 全量 pytest 4302 passed / 1 skipped 零回归（144.42s，放行门实跑）。
+- **P9 全量 Rust 化第四批 增量 3c（声明面移植：TYPE x = v 变量声明，2026-09-11，
+  本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：Rust
+  parser 声明面——**`TYPE x = v` / `auto x = v` / 泛型 `list[int] xs = v` /
+  `TYPE x: TYPE2 = v` 显式覆盖**（auto = 值推导；声明类型优先于推导）。
+  **实施面**：
+  - **parser**：声明面前瞻 is_var_declaration（TYPE [ [ typeargs ] ] x (=|:)
+    识别——类型名 + 可选泛型括号深度匹配 + 变量名 + =/:）+ parse_declaration_
+    identifier / parse_declaration_auto（Auto token 独立臂）+ parse_type_
+    annotation（IDENT [ [ typearg, ... ] ]；多参 = IbTuple[ctx Load]；位置 =
+    类型名 token——泛型节点 end = 类型名 end，非括号跨度，Python 位置约定实证）
+    + Expr::TypeAnnotatedExpr{target: Name(Store), annotation}（位置 = 类型起始
+    token；IbAssign 位置 = 类型起始 token，end = 0[Python 声明 Assign 位置
+    约定，实证]）。
+  - **node_serializer**：IbTypeAnnotatedExpr 节点内容 + 声明 Assign 绑定面
+    （Python 实证裁定：注解节点仅顶层 node_to_type[泛型内层名字不单独绑定——
+    ser_annotation 内层 None 记录 + 顶层 = type_root.<注解串>，含 auto →
+    type_root.auto]；annotated 节点 + 值节点 node_to_type = 声明类型[auto =
+    符号通道推导]；target name + annotated + Assign 节点 node_to_symbol → 定义
+    符号；Assign 节点不绑 node_to_type[实证：仅 annotated/值/注解]；符号
+    type_uid = 声明类型[auto = 推导]）。
+  - **symbol_resolver**：声明 target 解包（TypeAnnotatedExpr → 内层 Name）+
+    声明类型优先绑定（annotation_type_str 单一权威源[node_serializer 导出]，
+    auto = symbol_level_type 推导）。
+  - **interpreter**：声明 target = 运行时纯赋值（注解仅类型/编译期语义，值域
+    不消费——Assign 臂 effective target 解包）。
+  - **deserializer**：IbTypeAnnotatedExpr 节点数据反序列化。
+  **差分门**：test_data_plane_declaration_snippets 新增（顶层 + 函数内 scope
+  双探针：数据面 = 运行时纯赋值对齐 + artifact 5 池[节点 33 / 符号 326 /
+  类型 64] + node_to_type[20]/node_to_symbol[16] 侧表内容归一全等价——
+  声明面全语义对齐一次通过[经 2 轮侧表绑定面修正：注解记录模式 + 泛型内层
+  去绑定]）。
+  **登记缺口（非本增量范围）**：声明面剩余形态——`fn f = ...` 可调用声明 /
+  元组解包 `(int x, int y) = t` / 裸列 `int a, int b = t` / 点分类型
+  `mod.Type` / chan/slot 类型[LLM 运行时面]。
+  **验证**：2 探针全对齐 + 34 语料回归无损[Assign 臂重构面] + 全 harness 45
+  passed + smoke 832 passed + 全量 pytest 零回归（放行门实跑）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

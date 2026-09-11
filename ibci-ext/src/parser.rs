@@ -147,6 +147,13 @@ pub enum Expr {
         upper: Option<Box<Expr>>,
         step: Option<Box<Expr>>,
     },
+    /// 类型注解表达式（声明面：`int x = 1` 的 target = Name(Store) + annotation
+    /// = 类型节点；运行时 = 纯赋值，注解仅类型/编译期语义）。
+    TypeAnnotatedExpr {
+        pos: Pos,
+        target: Box<Expr>,
+        annotation: Box<Expr>,
+    },
 }
 
 impl Expr {
@@ -157,6 +164,14 @@ impl Expr {
             }
             Expr::Name { pos, id, ctx } => {
                 format!("IbName({}, id='{}', ctx='{}')", pos.prefix(), id, ctx)
+            }
+            Expr::TypeAnnotatedExpr { pos, target, annotation } => {
+                format!(
+                    "IbTypeAnnotatedExpr({}, target={}, annotation={})",
+                    pos.prefix(),
+                    target.dump(),
+                    annotation.dump()
+                )
             }
             Expr::BinOp { pos, left, op, right } => format!(
                 "IbBinOp({}, left={}, op='{}', right={})",
@@ -786,7 +801,16 @@ impl Parser {
                 Stmt::Raise { pos: Pos::from_token(&kw), exc }
             }
             TokenType::Switch => self.parse_switch(),
+            TokenType::Auto => {
+                // auto x = v（类型推导声明——annotation = Name(auto)）
+                self.parse_declaration_auto()
+            }
             TokenType::Identifier => {
+                // 声明面前瞻：TYPE x = v / TYPE x: TYPE2 = v（TYPE = 标识符[可带
+                // 泛型括号]，后随变量名 + = / :）
+                if self.is_var_declaration() {
+                    return self.parse_declaration_identifier();
+                }
                 // 回退式前瞻：解析 target（Name 或 Subscript/Attribute），若后随
                 // ASSIGN = Assign；AUG（+= / -=）= AugAssign；否则回退按 ExprStmt。
                 let save = self.pos;
@@ -836,6 +860,159 @@ impl Parser {
                 }
             }
         }
+    }
+
+    /// 声明面前瞻：TYPE [ [ typeargs ] ] x (= | :)（TYPE = 标识符[可带泛型
+    /// 括号]；后随变量名 + Assign/Colon = 变量声明；否则 = 普通语句形态）。
+    fn is_var_declaration(&mut self) -> bool {
+        if !self.at(TokenType::Identifier) {
+            return false;
+        }
+        let save = self.pos;
+        self.advance(); // 类型名
+        if self.at(TokenType::Lbracket) {
+            // 泛型：消费至匹配 Rbracket
+            let mut depth = 0;
+            loop {
+                match self.peek().type_ {
+                    TokenType::Eof => {
+                        self.pos = save;
+                        return false;
+                    }
+                    TokenType::Lbracket => {
+                        depth += 1;
+                        self.advance();
+                    }
+                    TokenType::Rbracket => {
+                        depth -= 1;
+                        self.advance();
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {
+                        self.advance();
+                    }
+                }
+            }
+        }
+        // 变量名
+        if !self.at(TokenType::Identifier) {
+            self.pos = save;
+            return false;
+        }
+        self.advance();
+        let ok = self.at(TokenType::Assign) || self.at(TokenType::Colon);
+        self.pos = save;
+        ok
+    }
+
+    /// 类型注解（IDENT [ [ typearg, ... ] ]；多参 = IbTuple[ctx Load]；位置 =
+    /// 类型名 token——泛型节点 end = 类型名 end，非括号跨度）。
+    fn parse_type_annotation(&mut self) -> Expr {
+        let tok = self.advance(); // 类型名
+        let base = Expr::Name {
+            pos: Pos::from_token(&tok).clone(),
+            id: tok.value,
+            ctx: "Load".to_string(),
+        };
+        self.parse_generic_annotation(base)
+    }
+
+    /// 既有类型名 token 后续接泛型括号（位置 = 类型名 token）。
+    fn parse_generic_annotation(&mut self, base: Expr) -> Expr {
+        let ty_pos = match &base {
+            Expr::Name { pos, .. } => pos.clone(),
+            _ => Pos::module(),
+        };
+        if !self.at(TokenType::Lbracket) {
+            return base;
+        }
+        self.advance(); // [
+        let mut elts = vec![self.parse_type_annotation()];
+        while self.at(TokenType::Comma) {
+            self.advance();
+            elts.push(self.parse_type_annotation());
+        }
+        self.advance(); // ]
+        let slice = if elts.len() == 1 {
+            elts.pop().unwrap()
+        } else {
+            Expr::Tuple {
+                pos: ty_pos.clone(),
+                elts,
+                ctx: "Load".to_string(),
+            }
+        };
+        Expr::Subscript {
+            pos: ty_pos,
+            value: Box::new(base),
+            slice: Box::new(slice),
+            ctx: "Load".to_string(),
+        }
+    }
+
+    /// 声明收尾（name + [=/: 注解] + 值 → Assign[TypeAnnotatedExpr target]；
+    /// IbAssign 位置 = 类型起始 token，end = 0[Python 声明 Assign 位置约定]）。
+    fn finish_declaration(
+        &mut self,
+        ty_pos: Pos,
+        default_annotation: Expr,
+    ) -> Stmt {
+        let name_tok = self.advance(); // 变量名
+        let annotation = if self.at(TokenType::Colon) {
+            // 显式覆盖：auto x: int = 1（annotation = 冒号后类型）
+            self.advance();
+            self.parse_type_annotation()
+        } else {
+            default_annotation
+        };
+        self.expect(TokenType::Assign); // =
+        let value = self.parse_expr();
+        let store_name = Expr::Name {
+            pos: Pos::from_token(&name_tok),
+            id: name_tok.value,
+            ctx: "Store".to_string(),
+        };
+        let annotated = Expr::TypeAnnotatedExpr {
+            pos: ty_pos.clone(),
+            target: Box::new(store_name),
+            annotation: Box::new(annotation),
+        };
+        let mut apos = ty_pos;
+        apos.end_lineno = Some(0);
+        apos.end_col_offset = Some(0);
+        Stmt::Assign {
+            pos: apos,
+            targets: vec![annotated],
+            value: Some(value),
+        }
+    }
+
+    /// 显式类型声明：int x = 1 / list[int] xs = ...（入口 = is_var_declaration
+    /// 已确认）。
+    fn parse_declaration_identifier(&mut self) -> Stmt {
+        let ty_tok = self.advance(); // 类型名
+        let ty_pos = Pos::from_token(&ty_tok);
+        let base = Expr::Name {
+            pos: ty_pos.clone(),
+            id: ty_tok.value,
+            ctx: "Load".to_string(),
+        };
+        let annotation = self.parse_generic_annotation(base);
+        self.finish_declaration(ty_pos, annotation)
+    }
+
+    /// auto x = v（入口 = Auto token；annotation = Name(auto)）。
+    fn parse_declaration_auto(&mut self) -> Stmt {
+        let kw = self.advance(); // auto
+        let kw_pos = Pos::from_token(&kw);
+        let annotation = Expr::Name {
+            pos: kw_pos.clone(),
+            id: "auto".to_string(),
+            ctx: "Load".to_string(),
+        };
+        self.finish_declaration(kw_pos, annotation)
     }
 
     /// switch <test>:\n    case <pattern>:\n    ...\n    default:\n    ...
@@ -1706,7 +1883,8 @@ fn expr_pos(e: &Expr) -> Pos {
         | Expr::IfExp { pos, .. }
         | Expr::Lambda { pos, .. }
         | Expr::Tuple { pos, .. }
-        | Expr::Slice { pos, .. } => *pos,
+        | Expr::Slice { pos, .. }
+        | Expr::TypeAnnotatedExpr { pos, .. } => *pos,
     }
 }
 

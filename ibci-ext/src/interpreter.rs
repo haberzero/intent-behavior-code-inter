@@ -428,7 +428,13 @@ impl Interpreter {
             Stmt::Assign { targets, value, .. } => {
                 let v = value.as_ref().map(|e| self.eval_expr(env, e, output));
                 if let Some(target) = targets.first() {
-                    match target {
+                    // 声明面 target（TypeAnnotatedExpr）= 运行时纯赋值——注解仅
+                    // 类型/编译期语义（值域不消费）
+                    let effective = match target {
+                        Expr::TypeAnnotatedExpr { target: inner, .. } => inner.as_ref(),
+                        other => other,
+                    };
+                    match effective {
                         Expr::Name { id, .. } => {
                             if let Some(val) = &v {
                                 env.borrow_mut().set(id, val.clone());
@@ -835,6 +841,11 @@ impl Interpreter {
                 } else {
                     self.eval_expr(env, orelse, output)
                 }
+            }
+            Expr::TypeAnnotatedExpr { target, .. } => {
+                // 声明面 target 表达式位置（防御臂——声明 target 仅经 Assign 消费；
+                // 若被求值 = 内层名字值）
+                self.eval_expr(env, target, output)
             }
             Expr::Lambda { .. } => IbValue::None_,
         }
