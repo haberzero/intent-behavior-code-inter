@@ -3099,6 +3099,25 @@ fn from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> IbValue {
         }
         return IbValue::dict_new(pairs);
     }
+    // IbObject（宿主值对象）→ 基本值类型解箱为原生（to_native）→ typed
+    // 转换（D2 桥接结果面——boxed 标量/容器[path 等字段]恢复数据值形态）；
+    // 自定义类型（file_handle/narrow_model 等）= Host（句柄语义——不解箱）
+    if obj.hasattr("to_native").unwrap_or(false) {
+        let class_name: Option<String> = obj
+            .getattr("ib_class")
+            .ok()
+            .and_then(|c| c.getattr("name").ok())
+            .and_then(|n| n.extract::<String>().ok());
+        let is_primitive = matches!(
+            class_name.as_deref(),
+            Some("str" | "int" | "float" | "bool" | "list" | "dict" | "tuple" | "None")
+        );
+        if is_primitive {
+            if let Ok(native) = obj.call_method0("to_native") {
+                return from_py(py, &native);
+            }
+        }
+    }
     // 其他（knowledge 对象等）= 宿主对象（克隆 Bound 取所有权）
     IbValue::Host(obj.clone().unbind())
 }

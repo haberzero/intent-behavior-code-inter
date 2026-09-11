@@ -60,6 +60,14 @@ class HostService(IHostService):
         单一权威；返回 = 宿主模块对象[Python]）。"""
         return self.interop.get_package(name)
 
+    def host_getattr(self, obj, attr):
+        """宿主属性访问（Rust 桥接面——D2）：经对象系统 ``__getattr__`` 协议
+        （字段 → 类方法 → 默认——Python VM 同路径）；裸 Python 对象 = 直接
+        属性；结果原样返回（Rust from_py 消费）。"""
+        if hasattr(obj, "receive"):
+            return obj.receive("__getattr__", [self.registry.box(attr)])
+        return getattr(obj, attr, None)
+
     def host_call(self, obj, method, args):
         """宿主调用分派（Rust 内核桥接面——D2 关键路径）。
 
