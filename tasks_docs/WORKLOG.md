@@ -3921,6 +3921,44 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     vars 闭包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装]
     + 值对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级验证）；保留 Python 接口
     [HostService + CPS VM[LLM/意图/宿主面]]。
+- **P9 全量 Rust 化阶段 B 第六增量（语义层 Rust 移植续——node 绑定 node_uid，34 语料
+  scope 符号 node_uid 50/52 匹配，2026-09-10，隔离分支 `rust-kernel`）**：**阶段 B 续
+  （语义层：node 绑定）**——Rust scope 符号的 node 绑定（node_uid = 定义节点 UID）。对应
+  Python 语义层的 scope 符号 node 绑定：遍历 Rust AST，将用户定义符号绑定到定义节点
+  （经 node_serializer 计算节点 UID）。定义节点映射：赋值目标/增赋值 → IbAssign/
+  IbAugAssign / 函数名 → IbFunctionDef / 参数 → IbArg / for 目标 → IbFor / import 绑定
+  → null（Python 语义层：import 模块/from-import 绑定无定义节点）/ 类名 → IbClassDef。
+  **交付**：
+  - **node_serializer 暴露**（`ibci-ext/src/node_serializer.rs`）：`serialize_stmt` /
+    `serialize_expr` / `serialize_arg` 改 pub（供符号解析计算定义节点 UID）。
+  - **symbol_resolver 改造**（`ibci-ext/src/symbol_resolver.rs`）：加 lifetime `'a`（绑定
+    AST）+ `DefNode`[Stmt/Arg] + `def_nodes` 字段[符号 uid → 定义节点]；`resolve_stmt`
+    改 `&'a Stmt`；`bind_symbol` 加 `def_node: Option<DefNode>` 参数；`resolve_module`
+    末尾经 NodeSerializer 计算各定义符号的 node_uid（serialize_module 填充节点池 +
+    serialize_stmt/arg 算定义节点 UID[节点 UID 确定性]）。
+  - **差分 harness 测试**（TestRustSerializationUid::test_scope_symbols_node_uid_corpus）：
+    34 语料 scope 符号 node_uid 差分（已知边界：closure_capture 嵌套函数 free_vars 致节
+    点 UID 链式差异，跳过）。
+  **关键裁定（self-grill 全分支消解）**：① **node 绑定 = 定义节点 UID**（经
+    node_serializer 计算；节点 UID 确定性[content_str → sha256]，serialize_module 后
+    serialize_stmt/arg 重算同一 UID）；② **lifetime 参数**（SymbolResolver<'a> 绑定
+    AST；def_nodes 持有 AST 节点引用；resolve_stmt 改 &'a Stmt）；③ **import 绑定
+    node_uid = null**（Python 语义层：import 模块/from-import 绑定无定义节点——已核，
+    Rust 对齐[不传定义节点]）；④ **嵌套函数 = VARIABLE**（沿用阶段 B 第三增量裁定）；
+    ⑤ **已知边界：closure_capture**（嵌套函数 `get` + 外层 `make` 2 例——嵌套函数 IbFunc-
+    tionDef 节点含 free_vars[闭包捕获，语义层输出，Rust 节点不产]致节点 UID 差异 + 外层
+    函数 body 含嵌套函数 UID 链式差异——归 free_vars Rust 移植后续）；⑥ **零风险加法式**
+    （resolve_symbols 签名不变，node_uid 从 null → 定义节点 UID[对齐 Python]，不动 Python
+    执行路径）。**验证**：34 语料 scope 符号 node_uid 50/52 匹配[2 差异 = closure_capture
+    已知边界] + 差分 harness 27/27 + 全量 pytest 零回归（阶段 B 第六增量放行门——加法式
+    增量不动 Python 执行路径，计数 = 4284 + node 绑定差分测试 1 例 = 4285；见 NEXT_STEPS
+    基线锚点）。**阶段 B 第六增量出口达成**（语义层 Rust 移植续——node 绑定 node_uid）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段 B 第六增量零风险加法式（resolve_symbols 签名
+    不变，node_uid 对齐 Python），验证后 merge unsafe-vibe-dev 并删分支；阶段 B 后续（语
+    义层 Rust 移植续[类型解析[type_uid] + method[sym_anon_*] + free_vars 闭包捕获 + scope
+    完整收集[owned_scope_uid]] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] + 值
+    对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级验证）；保留 Python 接口[Host-
+    Service + CPS VM[LLM/意图/宿主面]]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

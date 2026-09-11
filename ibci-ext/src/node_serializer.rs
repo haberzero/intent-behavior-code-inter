@@ -45,8 +45,8 @@ impl NodeSerializer {
         self.collect(node_data)
     }
 
-    /// 语句节点分发。
-    fn serialize_stmt(&mut self, stmt: &Stmt) -> String {
+    /// 语句节点分发（pub：供符号解析计算定义节点 UID）。
+    pub fn serialize_stmt(&mut self, stmt: &Stmt) -> String {
         match stmt {
             Stmt::Assign { pos, targets, value } => {
                 let t_uids: Vec<String> = targets.iter().map(|e| self.serialize_expr(e)).collect();
@@ -192,7 +192,8 @@ impl NodeSerializer {
     }
 
     /// 表达式节点分发。
-    fn serialize_expr(&mut self, expr: &Expr) -> String {
+    /// 表达式节点分发（pub：供符号解析计算定义节点 UID）。
+    pub fn serialize_expr(&mut self, expr: &Expr) -> String {
         match expr {
             Expr::Constant { pos, value } => {
                 let mut node_data = base_fields(pos);
@@ -332,7 +333,8 @@ impl NodeSerializer {
     }
 
     /// Arg 节点（IbArg）：{"_type": "IbArg", 基类位置, arg, annotation, default, kind}。
-    fn serialize_arg(&mut self, arg: &crate::parser::Arg) -> String {
+    /// Arg 节点（pub：供符号解析计算参数定义节点 UID）。
+    pub fn serialize_arg(&mut self, arg: &crate::parser::Arg) -> String {
         let ann = arg.annotation.as_ref().map(|e| self.serialize_expr(e));
         let def = arg.default.as_ref().map(|e| self.serialize_expr(e));
         let mut node_data = base_fields(&arg.pos);

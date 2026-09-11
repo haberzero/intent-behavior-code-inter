@@ -498,9 +498,19 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     = type_root.<name>，node_uid/owned null，metadata {}]）——**63/63 全字段匹配无多
     余**（差分 harness test_intrinsic_symbol_table_corpus）。**零风险加法式**
     （intrinsic_symbol_table 独立 pyfunction，不动 Python 执行路径/语义层）。
+  - **P9 全量 Rust 化阶段 B 第六增量 语义层续 node 绑定 node_uid 已落地（本 session，
+    隔离分支 `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：语义层 Rust 移植续
+    ——node 绑定（node_serializer.rs serialize_stmt/expr/arg 改 pub + symbol_resolver.rs
+    加 lifetime 'a + DefNode[Stmt/Arg] + def_nodes 字段 + resolve_module 末尾经
+    NodeSerializer 算 node_uid[节点 UID 确定性]——定义节点映射 赋值→IbAssign / 函数名
+    →IbFunctionDef / 参数→IbArg / for→IbFor / import 绑定→null / 类名→IbClassDef）
+    ——**34 语料 scope 符号 node_uid 50/52 匹配**（2 差异 = closure_capture 嵌套函数
+    free_vars 已知边界[归 free_vars Rust 移植后续]；差分 harness
+    test_scope_symbols_node_uid_corpus）。**零风险加法式**（resolve_symbols 签名不变，
+    node_uid 对齐 Python，不动 Python 执行路径/语义层）。
   - **P9 全量 Rust 化阶段 B 续（当前批次）**：阶段 B（可 Rust 化，纯计算）——语义层
-    Rust 移植续[类型解析[type_uid] + 节点绑定[node_uid] + method[sym_anon_*] + free_vars
-    闭包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] +
+    Rust 移植续[类型解析[type_uid] + method[sym_anon_*] + free_vars 闭包捕获 + scope
+    完整收集[owned_scope_uid]] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] +
     值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留
     Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。证明绝大部分关键核心逻辑可
     Rust 化后全量转向 Rust（不保留 Python 双通道和对比）。CPS 优化续[覆盖差 22 节点
@@ -563,9 +573,9 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第五增量放行门实跑）**：**4284
-  passed / 1 skipped / 138.07s / rc=0**（= 前基线 4283 + intrinsic 符号表差分测试 1 例
-  [阶段 B 第五增量 intrinsic 符号表完整 63 符号]；注：test_p7_process_isolation /
+- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第六增量放行门实跑）**：**4285
+  passed / 1 skipped / 137.26s / rc=0**（= 前基线 4284 + node 绑定差分测试 1 例[阶段 B
+  第六增量 语义层续 node 绑定 node_uid]；注：test_p7_process_isolation /
   test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离
   重跑通过，非回归]；供下一 session 参照，不冻结）。
 

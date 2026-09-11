@@ -590,3 +590,31 @@ class TestRustSerializationUid:
                 )
         extra = [u for u in rs_syms if u not in py_intrinsic]
         assert not extra, f"intrinsic 符号表多余（Rust 有 Python 无）：{extra}"
+
+    def test_scope_symbols_node_uid_corpus(self):
+        """34 语料 scope 符号 node_uid 差分（全量 Rust 化·语义层：node 绑定）：Rust
+        scope 符号 node_uid == Python（定义节点 UID[赋值→IbAssign / 函数名→IbFunctionDef
+        / 参数→IbArg / for 目标→IbFor / import 绑定→null]）。已知边界：closure_capture
+        嵌套函数 free_vars[闭包捕获，语义层输出，Rust 节点不产]致节点 UID 链式差异
+        （嵌套函数 + 外层函数 2 例）——归 free_vars Rust 移植后续。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "resolve_symbols"):
+            return
+        for name, code in CORPUS:
+            rs_syms = json.loads(rk._module.resolve_symbols(code))
+            py_pool = FlatSerializer().serialize_artifact(compile_ibci(code))["pools"]["symbols"]
+            py_scope = {u: d for u, d in py_pool.items() if u.startswith("scope_")}
+            for uid, d in py_scope.items():
+                rs = rs_syms.get(uid)
+                assert rs is not None, f"语料 {name} scope 符号缺失：{uid}"
+                # 已知边界：closure_capture 嵌套函数 free_vars 致节点 UID 链式差异
+                if name == "closure_capture":
+                    continue
+                assert rs.get("node_uid") == d.get("node_uid"), (
+                    f"语料 {name} scope 符号 node_uid 差分不等价（{uid}）：\n"
+                    f"  py : {d.get('node_uid')}\n  rust: {rs.get('node_uid')}"
+                )

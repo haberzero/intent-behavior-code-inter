@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4284 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 全量 Rust 化阶段 B 第五增量[intrinsic 符号表完整 63 符号 + 测试 1 例]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4285 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 全量 Rust 化阶段 B 第六增量[语义层续 node 绑定 node_uid + 测试 1 例]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
@@ -348,10 +348,21 @@
 >   test_intrinsic_symbol_table_corpus[63 符号全字段等价 + 无多余]——**63/63 全字段匹配
 >   无多余**；method = sym_anon_* 归类型解析后续；零风险加法式，merge 删分支；设计/裁定
 >   = WORKLOG P9 全量 Rust 化阶段 B 第五增量条目）
+>   → **P9 全量 Rust 化阶段 B 第六增量 ✅**（语义层续 node 绑定 node_uid：
+>   ibci-ext/src/node_serializer.rs serialize_stmt/expr/arg 改 pub[供符号解析算定义节
+>   点 UID]；ibci-ext/src/symbol_resolver.rs 加 lifetime 'a + DefNode[Stmt/Arg] +
+>   def_nodes 字段 + resolve_stmt 改 &'a Stmt + bind_symbol 加 def_node 参数 +
+>   resolve_module 末尾经 NodeSerializer 算 node_uid[节点 UID 确定性]；定义节点映射
+>   赋值→IbAssign / 函数名→IbFunctionDef / 参数→IbArg / for→IbFor / import 绑定→
+>   null / 类名→IbClassDef；差分 harness 加 test_scope_symbols_node_uid_corpus[34 语
+>   料 scope 符号 node_uid 差分，已知边界 closure_capture 嵌套函数 free_vars 跳过]——
+>   **50/52 匹配[2 差异 = closure_capture 已知边界]**；零风险加法式[resolve_symbols 签
+>   名不变，node_uid 对齐 Python]，merge 删分支；设计/裁定 = WORKLOG P9 全量 Rust 化
+>   阶段 B 第六增量条目）
 >   → **当前批次 = P9 全量 Rust 化阶段 B 续（可 Rust 化，纯计算：语义层 Rust 移植续
->   [类型解析[type_uid] + 节点绑定[node_uid] + method[sym_anon_*] + free_vars 闭包捕
->   获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] + 值对
->   象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留 Python
+>   [类型解析[type_uid] + method[sym_anon_*] + free_vars 闭包捕获 + scope 完整收集
+>   [owned_scope_uid]] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] + 值对象
+>   [IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留 Python
 >   接口[HostService + CPS VM[LLM/意图/宿主面]]；CPS 优化续[覆盖差 22 节点——LLM/意图
 >   面按需补齐]随推进）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
@@ -416,7 +427,8 @@
    → 全量 Rust 化评估 ✅[核心逻辑面盘点 + 可行性评估 + 关键 Python 接口识别]
    → 全量 Rust 化阶段 B 第一增量 序列化 UID 生成 node_uid/type_uid/asset_uid 34 节点池差分 ✅
    → 全量 Rust 化阶段 B 第二增量 节点数据序列化 node_data 829/835 ✅
-   → 全量 Rust 化阶段 B 第五增量 intrinsic 符号表完整 63 符号 63/63 ✅
+   → 全量 Rust 化阶段 B 第六增量 语义层续 node 绑定 node_uid 50/52 ✅
+   → 全量 Rust 化阶段 B 续[语义层续[类型+method+free_vars+scope 完整] + 序列化续 + 值对象][当前]
    → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+method+free_vars] + 序列化续 + 值对象][当前]
    → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+intrinsic 函数/方法/模块+free_vars] + 序列化续 + 值对象][当前]
    → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+intrinsic+free_vars] + 序列化续 + 值对象][当前]
