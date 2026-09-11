@@ -91,13 +91,18 @@ pub fn infer_type_env(
             resolve_op(&l, op, &r)
         }
         Expr::Call { func, .. } => {
-            if let Expr::Name { id, .. } = func.as_ref() {
-                func_sigs.get(id).cloned()
-            } else {
-                None
-            }
+            // 用户函数签名优先，再内置调用类型表（intrinsic）
+            let from_sigs = match func.as_ref() {
+                Expr::Name { id, .. } => func_sigs.get(id).cloned(),
+                _ => None,
+            };
+            from_sigs.or_else(|| intrinsic_call_type(func))
         }
-        // UnaryOp/BoolOp/Compare/Attribute/Subscript/IfExp/Lambda 等 → None（gap）
+        Expr::IfExp { body, .. } => {
+            // 三元表达式类型 = body 类型（IBCI：假设 body/orelse 同类型，取 body）
+            infer_type_env(body, type_env, func_sigs)
+        }
+        // UnaryOp/BoolOp/Compare/Attribute/Subscript/Lambda 等 → None（gap）
         _ => None,
     }
 }
@@ -226,6 +231,24 @@ fn str_op(op: &str, other: &str) -> Option<String> {
 pub fn parse_type_annotation(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Name { id, .. } if is_intrinsic_type(id) => Some(id.clone()),
+        _ => None,
+    }
+}
+
+/// 内置调用类型表（构造函数/特殊函数 → 返回类型，IBCI 一等值类型/内置类型）。
+/// 对齐 IBCI：knowledge() → knowledge / quote → quoted / meta.eval → auto。
+pub fn intrinsic_call_type(func: &Expr) -> Option<String> {
+    match func {
+        Expr::Name { id, .. } => match id.as_str() {
+            "knowledge" => Some("knowledge".to_string()),
+            "quote" => Some("quoted".to_string()),
+            _ => None,
+        },
+        Expr::Attribute { attr, .. } => match attr.as_str() {
+            "quote" => Some("quoted".to_string()),
+            "eval" => Some("auto".to_string()),
+            _ => None,
+        },
         _ => None,
     }
 }

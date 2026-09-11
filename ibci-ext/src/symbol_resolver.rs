@@ -135,6 +135,10 @@ impl<'a> SymbolResolver<'a> {
                 let is_top = self.scope_stack.len() == 1;
                 let kind = if is_top { "FUNCTION" } else { "VARIABLE" };
                 self.bind_symbol(name, kind, Some(DefNode::Stmt(stmt)));
+                // 嵌套函数名 = 函数类型（type_root.<name>）—— 持有函数的变量类型。
+                if !is_top {
+                    self.bind_var_type(name, name);
+                }
                 // 函数返回类型 → 签名表（returns 注解，intrinsic Name 子集）。
                 if let Some(rt) = returns {
                     if let Some(ts) = parse_type_annotation(rt) {
@@ -158,9 +162,10 @@ impl<'a> SymbolResolver<'a> {
                 self.pop_scope();
             }
             Stmt::For { target, body, orelse, .. } => {
-                // for 循环目标 → scope 符号（VARIABLE，定义节点 = IbFor）。
+                // for 循环目标 → scope 符号（VARIABLE）+ 类型 = any（IBCI：iter 类型不推断）。
                 if let Expr::Name { id, .. } = target {
                     self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
+                    self.bind_var_type(id, "any");
                 }
                 for s in body.iter().chain(orelse) {
                     self.resolve_stmt(s);

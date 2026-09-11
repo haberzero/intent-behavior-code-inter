@@ -4079,6 +4079,23 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   匹配，**0 DIFF**）；diff_harness 34 passed + smoke 832 passed 零回归。gap 注册表
   自适应（Rust 未产 13 个跳过）。第二批后续：method[sym_anon_*] + free_vars 闭包捕获 +
   scope 完整[owned_scope_uid] + 容器泛型 type_uid 格式对齐 + UnaryOp/BoolOp/Compare。
+- **P9 全量 Rust 化第二批 增量 2（语义层类型解析·剩余面补齐：for 目标/IfExp/嵌套
+  函数/内置调用，type_uid 43/43 全对齐，2026-09-11，本 session，unsafe-vibe-dev）**：
+  **类型解析面 100% 对齐里程碑**——增量 1 后 13 个 gap 分 6 类（均 IBCI 语义规则，非
+  机械复刻 Python）：① for 循环目标 = any[IBCI iter 类型不推断]；② IfExp 三元 = body
+  类型；③ 嵌套函数名 = 函数类型 type_root.<name>[持有函数的变量类型]；④⑤⑥ 内置调用
+  类型表（intrinsic_call_type）：knowledge()→knowledge / quote→quoted / meta.eval→
+  auto[一等值类型 + 无注解返回]。**交付**：type_inference.rs 加 IfExp 分支[body 类型]
+  + intrinsic_call_type[内置调用表，Name/Attribute 分派] + Call 分支[用户 func_sigs
+  优先，再 intrinsic]；symbol_resolver.rs For 目标 bind_var_type(any) + 嵌套函数名
+  bind_var_type(name)。**关键裁定**：① 6 类规则均为 IBCI 类型系统语义（for 目标 any/
+  三元 body/嵌套函数类型/一等值类型 knowledge·quoted/无注解 auto），非 Python 历史
+  复刻——按新方向对齐 IBCI 语义；② intrinsic_call_type 协议驱动[Name/Attribute 分派]
+  非硬编码 if；③ UnaryOp/BoolOp/Compare 仍 gap（op 格式对齐[Python unary- vs Rust -]
+  + 运算符扩展归后续增量）。**验证**：34 语料 VARIABLE type_uid **43/43 全对齐 0
+  DIFF**（增量 1 后 30/43→43/43）；diff_harness 34 passed + smoke 832 passed 零回归。
+  **第二批剩余（增量 3+）**：method[sym_anon_* 方法符号] + free_vars 闭包捕获 + scope
+  完整[owned_scope_uid] + UnaryOp/BoolOp/Compare + 容器泛型 type_uid 格式对齐。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
