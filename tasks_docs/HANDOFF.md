@@ -133,21 +133,26 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 ✅ + 2a/2b/2c KB 全 41 成员面 + vector 值原生 ✅ + 3b CPS 31→36 ✅ + 3c/3d 声明面 + 函数值一等化 ✅ + 3e 异常传播机制 ✅ + 3f 全 Rust 管线闭环 ✅ → ⑦ 切换门批次[阶段 ① 1a/1b ✅ → 1c engine 路由接入][当前]**）
+### 2.0 🔴 本 session 交接（**2026-09-11 用户转向裁定：停止 ⑦ 增量移植 → 内核接口层重审 + 测试体系重设计 + 授权从 8129af0a 起推翻重来的引擎级重构**）
 
-> **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
-> 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
-> `docs/syntax/11_modules.md` §11.12 + 试用方配合项 ② 输入）+
-> `tasks_docs/NEXT_STEPS.md`（当前主线 + 工作节奏 + ⛔ 工作模式定论）+
-> `tasks_docs/_rust_kernel_survey.md`（Rust 内核替换调研 + 全量 pytest 临时策略）+
-> `tasks_docs/WORKLOG.md`（P1/P2 裁定 + 环境重建 + 本交接）+ `git log --oneline -30`。
-> **当前主线 = IBCI 原生数据库（世界模型知识图谱）+ 自指性主线收束 + 测试进程内化**；**当前批次 =
-> P3 磁盘格式（IBCI 内容寻址 artifact + load_kb）**。需求源 = 试用方 v2
-> （`/home/dsh/proj/ibci-trial/docs/REQ_IBCI_WORLD_MODEL_INTEGRATION.md`，D-ISO 只读）。
-> 本 session goal（自主执行，`max_goal_rounds=100` + 总体规划灵活微调授权）**active**；
-> 下一 session 据 §2.2 检查单**新建 goal**（resume 仅对同 session 内被解除武装的 active
-> goal 有效）。本节 = 当前动态状态唯一节；历史 = §2.1（git / WORKLOG 承载）。
-- **工程事实（本 session 收束点）**：
+> **接手起点**（下一个智能体，**必读顺序**）：
+> 1. **`tasks_docs/_handoff_kernel_reaudit.md`**（本次转向的交接任务书——用户裁定
+>    verbatim + 使命分解[接口审计/测试体系重设计/条件触发推翻重来] + 嫌疑清单
+>    3.1-3.7 + 开工入口序列 + 硬约束继承面——**最核心**）；
+> 2. `tasks_docs/NEXT_STEPS.md`（当前状态锚点 + ⑦ 批次史 + ⛔ 工作模式定论）；
+> 3. `tasks_docs/WORKLOG.md`（⑦-1a/1b/1c 三批全记录——审计主要史料源）；
+> 4. `tasks_docs/_p9_switch.md`（⑦ 设计 v1——对照"设计意图 vs 实现漂移"）；
+> 5. `git log --oneline 8129af0a..HEAD`（**审计范围 = 8129af0a 之后全部提交**：
+>    08758567[⑦-1a/1b] / fe1dfcf7[⑦-1c] / b66a210a[WIP 会话 API 标本 + 交接文档]）。
+> **用户裁定（2026-09-11）**：初步 Rust 验证停留在 **8129af0a**，其后所有修改
+> 都可能藏着代码异味；接口区分/接口设计/架构层级设计被怀疑存在碎片适配性代码
+> （碎片化 if-else 本质，形式未必是 if-else）；测试脚本体系**必须**做体系/
+> 架构级重设计（哪怕上千测试项，代价巨大可接受）；授权从 8129af0a 起接口层/
+> 架构设计/整个内核体系推翻重来（引擎级重构，不计代价）。
+> **交接时点全量基线**：4306 passed / 2 failed / 1 skipped / 138.49s（b66a210a；
+> 2 failed = 宿主 .call 面 WIP 未接线预期失败——使命 1 审计对象，非待修项）。
+> 本 session goal（自主执行，`max_goal_rounds=100`）**active**（objective 已按
+> 转向裁定改写）；下一 session 据 §2.2 检查单接续。- **工程事实（本 session 收束点）**：
   - 分支 = `unsafe-vibe-dev`（日常开发主线）+ `main`（永不触碰）。**已 push 至 origin
     `63973071`**（2026-09-10 用户阶段末显式授权，含 P5 doc-sync + P6 向量面 + P9 阶段①-④；
     每次 push 前全量 pytest 零回归门通过）；本地当前领先 origin **49 提交**（全量 Rust 化
