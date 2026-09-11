@@ -5449,6 +5449,20 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   [fs/ai/ihost 等 = 宿主面保留]；差分 = Rust vs Python 参考，D2 退休）+ D3
   （双码族统一）+ D4（artifact IR）。
 
+## 阶段 D2 评估：Python 参考内核退役路径（2026-09-11）
+
+- **D2 关键路径 = Rust 宿主 import 执行**：import 绑定（get_host_module 别名已
+  加）✓；宿主方法调用 = **桥接重设计点**——Rust call_host_method 现为裸 Python
+  call_method，但宿主对象（IbFileHandle 等）的方法经 Python 对象系统
+  vtable/receive 分派（非裸属性）→ 需桥接 host_call API（经对象系统分派 +
+  typed 结果）。fs.open 可调（返回 Host 对象），h.read() 不通（vtable 面）。
+- **D2 步骤**：① 桥接 host_call API（对象系统分派）② 路由全源送 Rust
+  （native_modules 扩为全宿主模块）③ Python VM + 参考对象系统退役（大删）
+  ④ 差分 harness 退场（数据面先、前端面后）⑤ 前端 Rust 权威化。
+- **D2 = 多轮项目**（非单轮）：宿主对象系统耦合深（host 函数返回 boxed
+  IbObjects——退役需 host 函数返回 typed 形态经桥接物化）。
+- 全量 pytest 4283/0/1 维持。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
