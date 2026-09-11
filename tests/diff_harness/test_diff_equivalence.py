@@ -329,6 +329,94 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_rust_state_surface(self):
+        """Rust 状态面（⑦ 切换门变量面契约）：run_artifact_state =
+        artifact + 初始变量（Python dict）→（print 输出列表, 最终状态
+        dict）。初始变量 = 模块顶层环境预置（原生数据值：int/float/str/
+        bool/None/list/dict——经 py_to_json → JSON → json_to_ibvalue
+        [Send 安全：IbValue 含 Rc 非 Send，转换于线程内]）；最终状态 =
+        顶层环境全条目（原生数据值 = 原生 Python 形态；非数据值[函数] =
+        显示形态字符串[repr 契约]）。差分门：最终状态 vs Python 参考
+        （engine runtime_context payload）等价；注入数据面自洽（注入值
+        可见 + 状态回读）；异常变量全局绑定入状态。"""
+        import json
+        from core.engine import IBCIEngine
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "run_artifact_state"):
+            return
+
+        def rust_state(code, variables=None):
+            engine = IBCIEngine(root_dir="tests")
+            art = engine.compile_string(code, variables=variables or {}, silent=True)
+            js = json.dumps(FlatSerializer().serialize_artifact(art), ensure_ascii=False)
+            lines, state = rk._module.run_artifact_state(js, None, variables)
+            return list(lines), dict(state)
+
+        # 1) 最终状态 vs Python 参考（无注入）
+        code = 'x = 5\ny = "hi"\nz = [1, 2]\nd = {"k": 1}\nprint(x)\n'
+        lines, state = rust_state(code)
+        ref = {}
+        engine = IBCIEngine(root_dir="tests")
+        py_lines = []
+        engine.run_string(code, output_callback=lambda t: py_lines.append(str(t)), silent=True)
+        rc = engine.interpreter.execution_context.runtime_context
+        for name in ("x", "y", "z", "d"):
+            v = rc.get_variable(name)
+            ref[name] = v.payload if v is not None else None
+        assert lines == py_lines, f"状态面数据面差分：{lines} != {py_lines}"
+        assert state == ref, f"状态面最终状态差分：{state} != {ref}"
+
+        # 2) 初始变量注入（数据面自洽 + 状态回读）
+        lines2, state2 = rust_state(
+            'print(a + 1)\nprint(b[0])\nprint(c["k"])\n',
+            {"a": 10, "b": [7, 8], "c": {"k": "v"}},
+        )
+        assert lines2 == ["11", "7", "v"], f"注入数据面差分：{lines2}"
+        assert state2["a"] == 10 and state2["b"] == [7, 8] and state2["c"] == {"k": "v"}
+
+        # 3) 函数值 = 显示形态字符串（非数据值 repr 契约）+ 声明面状态
+        lines3, state3 = rust_state(
+            'func f(int a) -> int:\n    return a + 1\nx = f(41)\nint y = 2\nprint(x)\n'
+        )
+        assert lines3 == ["42"]
+        assert state3["x"] == 42 and state3["y"] == 2
+        assert isinstance(state3["f"], str), f"函数值状态 = 显示形态：{state3['f']!r}"
+
+        # 4) 异常变量全局绑定入状态（try 后 e 可见）
+        lines4, state4 = rust_state(
+            'try:\n    raise 5\nexcept int as e:\n    print("caught")\nprint(e)\n'
+        )
+        assert state4["e"] == 5, f"异常变量状态：{state4}"
+
+    def test_rust_routing_decision(self):
+        """⑦ 切换门面分区路由判定（artifact_is_rust_executable）：artifact
+        节点类型全集 ⊆ Rust node_types（单一真相源）= 数据面源（Rust 可
+        执行）；含 LLM/宿主面节点 = False（Python 语义宿主——全源 Python
+        执行）。34 语料 = 全数据面判定 True；ihost 宿主面源 = False。"""
+        import json
+        from core.engine import IBCIEngine
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness import corpus
+        from tests.diff_harness.harness import load_rust_kernel, artifact_is_rust_executable
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        # 34 语料 = 数据面（Rust 可执行）
+        for name, code in corpus.CORPUS:
+            engine = IBCIEngine(root_dir="tests")
+            art = engine.compile_string(code, silent=True)
+            data = FlatSerializer().serialize_artifact(art)
+            assert artifact_is_rust_executable(data), f"语料 {name} 路由判定 != 数据面"
+        # ihost 宿主面 = Python 语义宿主
+        engine = IBCIEngine(root_dir="tests")
+        art = engine.compile_string(
+            'import ihost\nstr v = ihost.getenv("X")\nprint(v)\n', silent=True
+        )
+        data = FlatSerializer().serialize_artifact(art)
+        assert not artifact_is_rust_executable(data), "ihost 源路由判定 != Python 面"
+
     def test_full_rust_pipeline_equivalence(self):
         """全 Rust 管线差分等价（主线 ⑦"全量转向 Rust"闭环证明）：script →
         Rust lexer/parser → Rust artifact 组装 → Rust 反序列化 → Rust 解释器

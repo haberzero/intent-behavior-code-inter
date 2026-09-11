@@ -103,6 +103,19 @@
   `_verify_axiom_bindings` bootstrap 末契约校验；`bool | bool` 误绑 `type.__or__` 修复；
   过程与判别测试 git 承载）｜**域**：DEBT｜**优先级**：P2
 
+### PT-DEBT-37 engine run_string(variables=...) 运行时注入缺陷（RUN_UNDEFINED_VARIABLE）
+
+- **状态**：registered（2026-09-11 P9 ⑦ 切换门侦察发现）｜**域**：DEBT｜**优先级**：P2
+- **动机**：⑦ 状态面差分门构建中实证：`engine.run_string('print(a)\n',
+  variables={'a': 42})` 编译通过（variables 编译面预知符号名 ✅）但运行时 VM
+  报 RUN_UNDEFINED_VARIABLE（`scope___string_exec__:a` 未定义）——
+  rt_scheduler.execute 的 `runtime_context.define_variable(name, val)` 注入
+  未生效于 VM 符号 UID 查找面（注入/符号绑定/当前 scope 三者的衔接缺陷）。
+- **当前理解**：既有 Python 运行时缺陷（非 Rust 化引入）；⑦ 切换门变量面
+  契约 = Rust 状态面（run_artifact_state 初始注入 + 最终状态导出，已自洽
+  验证）——修复面归 Python 运行时批次（define_variable → runtime_context
+  符号 UID 绑定面核查）。
+
 ---
 
 ## 三、周期审计（AUDIT）

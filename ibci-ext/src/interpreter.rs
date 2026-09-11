@@ -258,6 +258,52 @@ fn is_exception_class(name: &str) -> bool {
     )
 }
 
+/// 值 → JSON（状态导出面：原生数据值 = 原生 JSON 形态[int/float/str/
+/// bool/null/list/dict]；非数据值[Function/MetaFn/Knowledge/Quoted/Error/
+/// Vector/Host] = 显示形态字符串[repr 契约]——数据面源最终状态无 Host
+/// 值；初始 Host 残差值回导 = "<host>" 标记字符串）。
+pub(crate) fn ibvalue_to_json(v: &IbValue) -> serde_json::Value {
+    match v {
+        IbValue::Int(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
+        IbValue::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        IbValue::Str(s) => serde_json::Value::String(s.clone()),
+        IbValue::Bool(b) => serde_json::Value::Bool(*b),
+        IbValue::None_ => serde_json::Value::Null,
+        IbValue::List(items) => {
+            let arr: Vec<serde_json::Value> =
+                items.borrow().iter().map(ibvalue_to_json).collect();
+            serde_json::Value::Array(arr)
+        }
+        IbValue::Dict(pairs) => {
+            let mut obj = serde_json::Map::new();
+            for (k, val) in pairs.borrow().iter() {
+                // JSON 对象键 = 字符串：str 键原生，其余键 = 显示形态
+                let key = match k {
+                    IbValue::Str(s) => s.clone(),
+                    other => other.repr(),
+                };
+                obj.insert(key, ibvalue_to_json(val));
+            }
+            serde_json::Value::Object(obj)
+        }
+        IbValue::Vector(v) => {
+            let arr: Vec<serde_json::Value> = v
+                .iter()
+                .map(|f| {
+                    serde_json::Number::from_f64(*f)
+                        .map(serde_json::Value::Number)
+                        .unwrap_or(serde_json::Value::Null)
+                })
+                .collect();
+            serde_json::Value::Array(arr)
+        }
+        // 非数据值 = 显示形态（repr 契约）
+        other => serde_json::Value::String(other.repr()),
+    }
+}
+
 /// 全局绑定（parent 链顶——异常变量语义：Python runtime_context 全局面，
 /// 越 try 块可见[实证]）。
 fn set_global_env(env: &Rc<RefCell<Environment>>, name: &str, value: IbValue) {
@@ -538,15 +584,32 @@ impl Interpreter {
 
     /// 执行模块（返回数据面 print 输出）。
     pub fn run_module(&self, module: &Module) -> Result<Vec<String>, Thrown> {
+        self.run_module_with_state(module, &[]).map(|(output, _)| output)
+    }
+
+    /// 执行模块（带初始变量注入 + 最终状态导出——⑦ 切换门变量面契约：
+    /// 初始变量 = 模块顶层环境预置；最终状态 = 顶层环境全条目
+    /// [vars 表——函数经双写亦在 vars]）。
+    pub fn run_module_with_state(
+        &self,
+        module: &Module,
+        initial: &[(String, IbValue)],
+    ) -> Result<(Vec<String>, Vec<(String, IbValue)>), Thrown> {
         let mut output: Vec<String> = Vec::new();
-        let env = Rc::new(RefCell::new(Environment::new(None)));
+        let mut env = Environment::new(None);
+        for (name, value) in initial {
+            env.set(name, value.clone());
+        }
+        let env = Rc::new(RefCell::new(env));
         for stmt in &module.body {
             let flow = self.exec_stmt(&env, stmt, &mut output)?;
             if !matches!(flow, Flow::Next) {
                 break;
             }
         }
-        Ok(output)
+        let state: Vec<(String, IbValue)> =
+            env.borrow().vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        Ok((output, state))
     }
 
     fn exec_stmt(

@@ -133,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 ✅ + 2a/2b/2c KB 全 41 成员面 + vector 值原生 ✅ + 3b CPS 31→36 ✅ + 3c/3d 声明面 + 函数值一等化 ✅ + 3e 异常传播机制 ✅ + 3f 全 Rust 管线闭环 ✅ → ⑦ 切换门批次[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 ✅ + 2a/2b/2c KB 全 41 成员面 + vector 值原生 ✅ + 3b CPS 31→36 ✅ + 3c/3d 声明面 + 函数值一等化 ✅ + 3e 异常传播机制 ✅ + 3f 全 Rust 管线闭环 ✅ → ⑦ 切换门批次[阶段 ① 1a/1b ✅ → 1c engine 路由接入][当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -182,8 +182,8 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   面裁定[非移植范围] + ⑦ 切换门 = engine 内核选择面独立放行门批次]；
   登记缺口：声明面剩余[auto/fn 分量解包[Python 不支持] / 可调用签名 / 普通
   赋值别名链 Call 返回类型[仅 artifact 差]] + 内部治理错误不转 Thrown[语料面
-  零探针]，下一位智能体 = ⑦ 切换门批次[设计 v1 ✅ _p9_switch.md——面分区
-  路由 + 3 阶段放行门；阶段 ① = engine 路由 + HostService 桥 + 初始变量] / 声明面剩余]；
+  零探针]，下一位智能体 = ⑦ 切换门批次 阶段 ① 增量 1c[engine 路由接入：
+  execute 数据面源 → Rust 内核 + 状态契约 + HostService 桥] / 声明面剩余 / PT-DEBT-37[engine variables 既有缺陷]；
   每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest
   可按需自由[2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由处理[重构
   质量原则优先]）**：
@@ -670,10 +670,10 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 3f[全 Rust 管线
-  闭环]放行门实跑）**：
-  **4306 passed / 1 skipped / 154.40s / rc=0**（2026-09-11；= 增量 3e 基线
-  4305 + test_full_rust_pipeline_equivalence 1 例[34 语料 + 8 探针]；注：
+- **全量 pytest 基线（本 session P9 全量 Rust 化 ⑦ 切换门批次 阶段 ①
+  增量 1a/1b[状态面 + 路由判定面]放行门实跑）**：
+  **4308 passed / 1 skipped / 154.75s / rc=0**（2026-09-11；= 增量 3f 基线
+  4306 + test_rust_state_surface + test_rust_routing_decision 2 例；注：
   test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试
   [并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session 参照，
   不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微

@@ -4865,6 +4865,40 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   [双通道消亡] → ③差分 harness 退场 + 基线重建）。
   **裁定（切换策略）**：面分区路由（非双通道 fallback）——每源按节点类型
   归属单一内核，维持双内核协议显式态纪律；阶段 1 实施 = 下一轮起点。
+- **P9 全量 Rust 化 ⑦ 切换门批次 阶段 ① 增量 1a/1b（状态面 + 路由判定面，
+  2026-09-11，本 session，unsafe-vibe-dev，设计 = tasks_docs/_p9_switch.md）**：
+  **① Rust 状态面（⑦ 变量面契约——engine 路由前置能力）**：
+  - `Interpreter::run_module_with_state`（初始变量 = 顶层环境预置 + 最终
+    状态 = 顶层环境全条目导出）；`ibvalue_to_json`（原生数据值 = 原生
+    JSON 形态；非数据值[Function/MetaFn/Knowledge/Quoted/Error/Vector] =
+    显示形态字符串[repr 契约]）
+  - `run_artifact_state(artifact_json, bridge, initial_vars) -> (输出列表,
+    状态 dict)` pyfunction：**Send 安全设计**——初始变量 GIL 侧 py_to_json
+    （Python 对象 → JSON）→ 线程内 json_to_ibvalue（IbValue 含 Rc 非
+    Send——转换于 GIL 释放区内完成）；状态于线程内降级 JSON（ibvalue_to_json）
+    → GIL 侧 json_to_py 还原
+  - 验证：最终状态 vs Python 参考（engine runtime_context payload）等价 +
+    注入数据面自洽（注入值可见 + 状态回读）+ 函数值 = 显示形态字符串 +
+    异常变量全局绑定入状态（e=5）
+  **② 路由判定面（⑦ 面分区）**：
+  - `artifact_is_rust_executable`（harness）：artifact 节点类型全集 ⊆ Rust
+    node_types = 数据面源（Rust 可执行）——**单一真相源 = Rust
+    deserializer::node_types**（缺口集随 deserializer 演进自动正确，无
+    Python 侧硬编码 LLM 面清单）
+  - node_types 补 IbArg/IbAlias（arg_of/alias 内联消费节点——池节点不经
+    build_node 分发但属处理全集；文档注记修正）；验证：34 语料 = 全 True +
+    ihost 宿主面源 = False
+  **③ 既有缺陷登记（PT-DEBT-37）**：engine run_string(variables=...) 运行时
+  注入缺陷——编译面预知符号名 ✅ 但 VM 报 RUN_UNDEFINED_VARIABLE（rt_scheduler
+  define_variable 注入未生效于 VM 符号 UID 查找面）——既有 Python 运行时缺陷
+  （非 Rust 化引入）；⑦ 变量面契约 = Rust 状态面（本增量自洽验证）。
+  **裁定（变量面契约）**：⑦ 切换后变量面 = Rust 状态面（run_artifact_state：
+  初始注入 + 最终状态导出）——Python 引擎 variables 通道缺陷修复归 Python
+  运行时批次（PT-DEBT-37）。
+  **差分门**：test_rust_state_surface + test_rust_routing_decision 新增。
+  **验证**：50 harness passed + smoke 832 passed + 全量 pytest 零回归
+  （放行门实跑）。
+## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 

@@ -500,6 +500,187 @@ fn run_artifact(
     Ok(list.unbind())
 }
 
+/// Python 对象 → JSON（⑦ 切换门变量注入面 GIL 侧：原生数据值 = 原生 JSON
+/// 形态[int→整数 number / float→浮点 number / str / bool[先于 int 检查] /
+/// None→null / list+tuple→array / dict→object]；非数据值 = 显示形态字符串
+/// [边界值——str() 契约]）。
+fn py_to_json(v: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
+    use serde_json::Value;
+    if v.is_none() {
+        return Ok(Value::Null);
+    }
+    if v.is_instance_of::<pyo3::types::PyBool>() {
+        return Ok(Value::Bool(v.extract::<bool>()?));
+    }
+    if let Ok(i) = v.extract::<i64>() {
+        return Ok(Value::from(i)); // PyInt（bool 已先检查）
+    }
+    if let Ok(f) = v.extract::<f64>() {
+        return Ok(Value::from(f));
+    }
+    if let Ok(s) = v.extract::<String>() {
+        return Ok(Value::String(s));
+    }
+    if v.is_instance_of::<PyDict>() {
+        let d = v.downcast::<PyDict>().unwrap();
+        let mut obj = serde_json::Map::new();
+        for (k, val) in d {
+            // JSON 对象键 = 字符串：str 键原生，其余键 = 显示形态
+            let key = match k.extract::<String>() {
+                Ok(s) => s,
+                Err(_) => k.str()?.to_string_lossy().into_owned(),
+            };
+            obj.insert(key, py_to_json(&val)?);
+        }
+        return Ok(Value::Object(obj));
+    }
+    if v.is_instance_of::<PyList>() || v.is_instance_of::<pyo3::types::PyTuple>() {
+        let mut arr = Vec::new();
+        for item in v.try_iter()? {
+            arr.push(py_to_json(&item?)?);
+        }
+        return Ok(Value::Array(arr));
+    }
+    // 边界值 = 显示形态（str() 契约——初始变量面 = 原生数据值，非数据值
+    // 此路径不出现[登记]）
+    Ok(Value::String(v.str()?.to_string_lossy().into_owned()))
+}
+
+/// JSON → IbValue（⑦ 切换门变量注入面线程侧：整数 number→Int / 浮点
+/// number→Float / str→Str / bool / null / array→List / object→Dict[str
+/// 键]——纯 CPU 面，Send 安全）。
+fn json_to_ibvalue(v: &serde_json::Value) -> interpreter::IbValue {
+    use interpreter::IbValue;
+    match v {
+        serde_json::Value::Null => IbValue::None_,
+        serde_json::Value::Bool(b) => IbValue::Bool(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                IbValue::Int(i)
+            } else {
+                IbValue::Float(n.as_f64().unwrap_or(0.0))
+            }
+        }
+        serde_json::Value::String(s) => IbValue::Str(s.clone()),
+        serde_json::Value::Array(arr) => {
+            let items: Vec<IbValue> = arr.iter().map(json_to_ibvalue).collect();
+            IbValue::list_new(items)
+        }
+        serde_json::Value::Object(obj) => {
+            let pairs: Vec<(IbValue, IbValue)> = obj
+                .iter()
+                .map(|(k, val)| (IbValue::Str(k.clone()), json_to_ibvalue(val)))
+                .collect();
+            IbValue::dict_new(pairs)
+        }
+    }
+}
+
+/// 执行核心（带变量面）：artifact + 初始变量（Python dict）→ （print 输出
+/// 列表, 最终状态 dict）。⑦ 切换门变量面契约：初始变量 = 模块顶层环境
+/// 预置（原生数据值）；最终状态 = 顶层环境全条目（原生数据值 = 原生 Python
+/// 形态；非数据值 = 显示形态字符串——repr 契约）。
+#[pyfunction]
+fn run_artifact_state(
+    artifact_json: &str,
+    bridge: Option<Bound<'_, PyAny>>,
+    initial_vars: Option<Bound<'_, PyDict>>,
+    py: Python<'_>,
+) -> PyResult<(Py<PyList>, Py<PyDict>)> {
+    let bridge_owned = bridge.map(|b| b.unbind());
+    // GIL 侧：初始变量 → JSON（Send 安全；IbValue 含 Rc 非 Send——转换于
+    // 线程内经 json_to_ibvalue 完成）
+    let initial_json: Vec<(String, serde_json::Value)> = match initial_vars {
+        Some(d) => d
+            .iter()
+            .map(|(k, v)| -> PyResult<(String, serde_json::Value)> {
+                Ok((k.extract::<String>()?, py_to_json(&v)?))
+            })
+            .collect::<PyResult<Vec<_>>>()?,
+        None => Vec::new(),
+    };
+    let json_owned = artifact_json.to_string();
+    // GIL 释放：反序列化 + 执行 + 状态 → JSON（纯 CPU 面）
+    let (lines, state_json): (Vec<String>, Vec<(String, serde_json::Value)>) =
+        match py
+            .allow_threads(|| -> Result<(Vec<String>, Vec<(String, serde_json::Value)>), String> {
+            let module = match deserializer::deserialize_module(&json_owned) {
+                Some(m) => m,
+                None => return Ok((Vec::new(), Vec::new())),
+            };
+            let interp = match bridge_owned {
+                Some(b) => interpreter::Interpreter::with_bridge(b),
+                None => interpreter::Interpreter::new(),
+            };
+            let initial: Vec<(String, interpreter::IbValue)> = initial_json
+                .into_iter()
+                .map(|(k, v)| (k, json_to_ibvalue(&v)))
+                .collect();
+            let (output, state) = interp
+                .run_module_with_state(&module, &initial)
+                .map_err(|t| format!("IBCI: uncaught exception: {}", t.value.repr()))?;
+            let state_json: Vec<(String, serde_json::Value)> = state
+                .into_iter()
+                .map(|(k, v)| (k, interpreter::ibvalue_to_json(&v)))
+                .collect();
+            Ok((output, state_json))
+            })
+        {
+            Ok(r) => r,
+            Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+        };
+    // GIL 侧：组装返回（输出列表 + 状态 dict）
+    let list = PyList::empty(py);
+    for line in lines {
+        list.append(line)?;
+    }
+    let state_dict = PyDict::new(py);
+    for (k, v) in state_json {
+        state_dict.set_item(k, json_to_py(py, &v)?)?;
+    }
+    Ok((list.unbind(), state_dict.unbind()))
+}
+
+/// JSON → Python 对象（状态导出的 GIL 侧还原：number→int[整数形态]/
+/// float / string→str / bool / null→None / array→list / object→dict）。
+fn json_to_py(
+    py: Python<'_>,
+    v: &serde_json::Value,
+) -> PyResult<pyo3::PyObject> {
+    match v {
+        serde_json::Value::Null => Ok(py.None()),
+        serde_json::Value::Bool(b) => {
+            let obj: pyo3::Py<pyo3::PyAny> = pyo3::types::PyBool::new(py, *b).into_py(py);
+            Ok(obj)
+        }
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Ok(i.into_pyobject(py).unwrap().unbind().into())
+            } else {
+                Ok(n.as_f64().unwrap_or(0.0).into_pyobject(py).unwrap().unbind().into())
+            }
+        }
+        serde_json::Value::String(s) => {
+            let obj: pyo3::Py<pyo3::PyAny> = pyo3::types::PyString::new(py, s).into_py(py);
+            Ok(obj)
+        }
+        serde_json::Value::Array(arr) => {
+            let list = PyList::empty(py);
+            for item in arr {
+                list.append(json_to_py(py, item)?)?;
+            }
+            Ok(list.into())
+        }
+        serde_json::Value::Object(obj) => {
+            let dict = PyDict::new(py);
+            for (k, val) in obj {
+                dict.set_item(k, json_to_py(py, val)?)?;
+            }
+            Ok(dict.into())
+        }
+    }
+}
+
 /// 并行执行 API（task_scheduler GIL-free 集成地基）：多 artifact（JSON 列表）经
 /// Rust 线程（std::thread）**GIL-free 真并行**执行——每线程分配一批 artifact，纯
 /// CPU（无宿主服务）全程 GIL 释放。返回 list of list（每项 = 一个 artifact 的
@@ -590,6 +771,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(node_to_symbol, m)?)?;
     m.add_function(wrap_pyfunction!(full_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(rust_run_source, m)?)?;
+    m.add_function(wrap_pyfunction!(run_artifact_state, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

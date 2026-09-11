@@ -205,6 +205,22 @@ def rust_execution_data_plane(script: str, bridge=None) -> List[str]:
     return list(rk._module.run_artifact(js, bridge))
 
 
+def artifact_is_rust_executable(artifact_dict: dict) -> bool:
+    """⑦ 切换门面分区路由判定：artifact 节点类型全集 ⊆ Rust 反序列化器
+    node_types（单一真相源——缺口集随 deserializer 演进自动正确，无
+    Python 侧硬编码 LLM 面清单）= 数据面源（Rust 可执行）；含 LLM 面
+    节点 = Python 语义宿主（全源 Python 执行——单一内核归属纪律）。"""
+    rk = load_rust_kernel()
+    if not rk.loaded:
+        return False
+    supported = set(rk._module.node_types())
+    mod = artifact_dict["modules"][artifact_dict["entry_module"]]
+    return all(
+        n.get("_type") in supported
+        for n in mod["pools"]["nodes"].values()
+    )
+
+
 def rust_execution_full_pipeline(script: str, bridge=None) -> List[str]:
     """全 Rust 管线（主线 ⑦"全量转向 Rust"闭环证明面）：script → Rust
     lexer/parser → Rust artifact 组装 → Rust 反序列化 → Rust 解释器执行。

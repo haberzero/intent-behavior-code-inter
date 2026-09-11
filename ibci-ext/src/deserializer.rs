@@ -561,9 +561,11 @@ pub fn type_table(artifact_json: &str) -> Option<String> {
     )
 }
 
-/// CPS dispatch table：执行核心分发的节点类型（反序列化 match 覆盖的 AST 节点）。
-/// 优化目标：对齐 Python VM 的全量节点分发（53 节点）——本表 = 当前覆盖（语料面
-/// 高频节点）；差分 harness 经此与 Python VM dispatch table 比对覆盖差。
+/// 反序列化器处理的节点类型全集（⑦ 切换门路由判定面单一真相源：artifact
+/// 节点类型 ⊆ 本集 = 数据面源[Rust 可执行]；LLM 面 15 节点不在此集 =
+/// Python 语义宿主）。含 build_node 分发表节点 + arg/alias 内联消费节点
+/// [IbArg/IbAlias——FunctionDef args / ImportFrom names 经独立 builder 消费，
+/// 池内节点不经 build_node]。
 pub fn node_types() -> Vec<&'static str> {
     vec![
         // 语句
@@ -571,6 +573,8 @@ pub fn node_types() -> Vec<&'static str> {
         "IbReturn", "IbBreak", "IbContinue", "IbPass", "IbImport", "IbImportFrom",
         "IbWhile", "IbTry", "IbClassDef", "IbGlobalStmt", "IbNonlocalStmt",
         "IbRaise", "IbSwitch", "IbCase",
+        // 内联消费（池节点——arg_of / alias 字段 builder）
+        "IbArg", "IbAlias",
         // 表达式
         "IbConstant", "IbName", "IbBinOp", "IbUnaryOp", "IbBoolOp", "IbCompare",
         "IbCall", "IbListExpr", "IbTuple", "IbDict", "IbAttribute", "IbSubscript",

@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4306 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 154.40s，P9 全量 Rust 化第四批 增量 3f[全 Rust 管线闭环]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4308 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 154.75s，P9 全量 Rust 化 ⑦ 切换门批次 阶段 ① 增量 1a/1b[状态面 + 路由判定面]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -533,13 +533,15 @@
        Python 前端[双内核输入面收敛证明面]；LLM 面 15 节点 = HostService
        边界保留面裁定[非移植范围]；⑦ 切换门 = engine 内核选择面独立放行门
        批次[status 提升 + run 入口 + LLM/意图边界行为验证]；34 语料 + 8
-       探针全管线等价][当前批次推进中]
-    + ⑦ 切换门批次[设计 v1 ✅ = tasks_docs/_p9_switch.md——面分区路由
-       （无 LLM 面 15 节点源 → Rust 内核[run_artifact + HostService 桥]；
-       含 → Python 运行时全源执行）；3 阶段[①engine 路由 + 桥 + 初始变量
-       → ②Python 数据面 VM 退役 → ③差分 harness 退场 + 基线重建]；
-       变量面缺口 = py_to_ibvalue 初始注入 + 数据面源执行后状态 = 仅 print
-       输出；Host 变体退役收尾归阶段 ②]
+       探针全管线等价] ✅
+    → ⑦ 切换门批次[设计 v1 ✅ _p9_switch.md——面分区路由（无 LLM 面 15
+       节点源 → Rust 内核；含 → Python 全源执行）；阶段 ① = 1a ✅ Rust
+       状态面[run_artifact_state：初始注入 + 最终状态导出；Send 安全
+       JSON 中转] + 1b ✅ 路由判定面[artifact_is_rust_executable——单一
+       真相源 = Rust node_types] + 1c 待实施 engine 路由接入[execute：
+       数据面源 → Rust 内核 + 状态契约面]；PT-DEBT-37 = engine
+       run_string(variables=...) 既有缺陷登记；阶段 ② Python 数据面 VM
+       退役 + ③ 差分 harness 退场]
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify
