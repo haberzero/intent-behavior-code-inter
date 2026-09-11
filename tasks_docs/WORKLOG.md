@@ -5506,6 +5506,20 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - 路由现状：meta/compute_engine/plugins/fs → Rust；ai/ihost/world_model 仍
   Python（逐模块验证推进中）。
 
+## 阶段 D2-③b 完成：Knowledge 值跨桥接 + world_model 路由（2026-09-11，f3a4913e）
+
+- **Knowledge 穿越**：to_py Knowledge → 状态 dict（to_native 同构——save_kb
+  消费值快照；word/relation/world 记录补 lexeme/type/name）；from_py
+  IbKnowledge → 状态 → Rust 首等值重建（knowledge_from_state——by_pair/
+  by_triple 派生重建；entries 谓词恢复后 = None[KNW 边界]）——load_kb 结果
+  全方法走 Rust 臂。
+- **host_call 参数拆箱**（同 proxy_wrapper 单一入口——IbObject → native；
+  可调用实例透传）+ host_pyerr 回退类 = Python 异常类名（非硬编码）。
+- **路由：4 模块 Rust**（compute_engine/plugins/fs/world_model）——逐模块增量
+  + 全量门（4283/0/1）；world_model disk 9 + embedding 往返 + host 38 全绿。
+- 剩余：ai（LLM 面——深）、ihost（状态往返）、async/thread；之后 Python VM
+  退役 + 差分退场 + 前端权威化。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
