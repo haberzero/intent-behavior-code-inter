@@ -5195,6 +5195,25 @@ ComputeSubstrate（R5 计算基板）。**下一步 = R3 测试体系五层重�
 测试太慢/碎片——语言行为层升格 + 白盒降级删除 + cargo test 内核层 + 差分机制
 退场准备）。
 
+## R3 测试体系五层重构——R3-1 语言行为层骨架（2026-09-11，unsafe-vibe-dev）
+
+**R3 = 用户⑧（测试太慢/碎片）体系级重构**（设计 = `_test_redesign.md` 五层）。
+- **R3-1（commit 274b9644）**：tests/behavior/ 语言行为层种子——helpers
+  （run/assert_output/assert_error[诊断码+结构化现场，禁消息子串]/assert_
+  compile_error）+ 18 测试（数据面[typed 数值精度/floor 除/容器/字符串/函数/
+  quoted] + 运行时错误[诊断码+位置] + 编译错误[诊断码]）。
+- **引擎错误边界补齐（P3 契约完成）**：未映射错误类（ValueError/OverflowError
+  等）= InterpreterError[RUN_GENERIC_ERROR]（与 Python VM 边界同一契约——
+  不泄漏内核边界 RustRuntimeError）；行为层 assert_error 断言面据此成立。
+- **实证**：IBCI 容器 str 元素显示无引号（Python 参考同 [a, b]——Rust 正确，
+  非偏差）；str.format = IBCI 单参简化语义（非偏差）。
+- 全量 pytest 4308 → **4326/0/1** 零回归（+18 行为层）。
+
+**下一步 R3 续（后续轮次）**：阶段 B 行为层语料升格（diff_harness 语料/探针 →
+显式预期用例）+ 契约层巩固（诊断码表/错误现场/artifact 格式测试）→ 阶段 C 白盒
+断言降级删除（runtime/kernel 层 VM 内部形态断言逐项迁移映射）+ 宿主面层组建 →
+阶段 D（⑦ 终点）差分机制退场。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
