@@ -5492,6 +5492,20 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   → ihost 状态 → async/thread）④ Python VM 退役 ⑤ 差分退场。
 - 全量 pytest 4283/0/1。
 
+## 阶段 D2-③：路由增量 + Knowledge 穿越缺口（2026-09-11，commit 976aba01）
+
+- **D2-③a（976aba01）3 模块路由 Rust**：compute_engine + plugins + fs → Rust
+  （native_modules 增量；宿主 getattr 经对象系统 __getattr__ 协议 + from_py
+  基本值类型解箱[自定义类型 = Host 句柄语义]）——fs e2e（write/read/path）+
+  host 38 测试全绿 + 全量 4283/0/1。
+- **world_model 路由试探（回退）**：20 失败——**Knowledge 值跨桥接缺口**：
+  to_py 显式违约（Knowledge → None，"不经桥接"）——world_model.save_kb(kb,
+  path) 第一参须为 knowledge 值失败。**D2-③b = Knowledge 穿越设计**：
+  Rust Knowledge → 状态导出（KbState → dict）+ host_call 参数处理重建
+  IbKnowledge（registry + 状态装载）——深集成，多轮。
+- 路由现状：meta/compute_engine/plugins/fs → Rust；ai/ihost/world_model 仍
+  Python（逐模块验证推进中）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
