@@ -5335,6 +5335,23 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   （36 测试大件）/ narrow_model（宿主层 + artifact 夹具）/ 3 个 clone_ref 内部
   断言重构 + cargo test 内核层组建。
 
+## R3-C6 + 打破清单 #2 落地 + 码族/GAP 分析（2026-09-11，commit 0172fd5c）
+
+- **C6（0172fd5c）**：test_optional_value_model.py → tests/behavior/
+  test_optional_behavior.py（28 断言）。**打破清单 #2 落地**：Optional 空值 =
+  None 值语义统一——`a is b`（两空 Optional）= True（原 Python 包装实例身份
+  废弃）；optional_instance_identity 角移除（Rust `is` 对 None_ 恒真）。全量
+  4304/0/1。
+- **分析发现（登记 PENDING）**：① kb_vec_payload_materialization 角路由所有
+  knowledge()/vec() 源送 Python——Rust kb.rs/intrinsic_vec 静默 None_ GAP
+  （生产不可见，diff harness 直调才见）；② 双码族：Rust RUN_* vs Python
+  EMB_/KNW_（ValueError 未映射 →RUN_GENERIC_ERROR）——行为层错误断言目前 =
+  Python 码（内核相关）。关闭方案 = Rust 错误面扩展承载语义码 + kb.rs/vec
+  fail-fast + 角移除（⑦ 终点/内核收尾）。
+- **剩余迁移**：world_model_kb（36 测试，前置 = GAP 关闭或 Python 验证）、
+  narrow_model（宿主层 + artifact 夹具）、3 个 clone_ref 内部断言重构 +
+  cargo test 内核层。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）

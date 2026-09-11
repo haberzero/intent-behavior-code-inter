@@ -486,3 +486,17 @@ VISION 条目模板（仅保留规划价值字段）：
   已删——行为层须内核无关，非本层材料）。
 - **关联**：kb.rs 分派 catch-all `_ => None_`（未知方法静默）——R2 登记的 kb
   治理门 GAP（生产不可见）；⑦ 终点一并裁决（fail-fast AttributeError 化）。
+
+## Rust vec/kb 静默 GAP 关闭 + 双码族统一（2026-09-11 R3-C6 分析登记）
+
+- **现状**：① kb_vec_payload_materialization 角路由所有 knowledge()/vec() 源
+  送 Python——Rust kb.rs/intrinsic_vec 静默 None_（生产不可见，仅 diff harness
+  直调）；② 双码族：Rust ErrorKind→runtime_error_map→RUN_*（ValueError 未映射
+  →RUN_GENERIC_ERROR）vs Python 语义码 EMB_/KNW_（axioms）——行为层错误断言
+  目前 = Python 码（内核相关）。
+- **关闭方案（⑦ 终点/内核收尾）**：① Rust 错误面扩展承载 EMB_/KNW_ 语义码
+  （runtime_error_map 增映射 + ValueError 补映射）→ kb.rs/intrinsic_vec fail-
+  fast（打破清单 #6 清零）→ 角移除（源路由 Rust）；② 双码族统一 = ⑦ 终点裁决
+  （语义码并入 Rust 错误面 或 RUN_* 单一权威化）。
+- **影响**：C2/C5 行为测试（EMB_/KNW_ 断言）= 契约文档（Python 验证），⑦ 终点
+  角移除后 Rust 验证；test_world_model_kb 迁移前置 = 本项或 Python 验证迁移。
