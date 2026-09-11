@@ -5556,6 +5556,24 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - **剩余**：前端层差分退场（Rust 前端权威化——大件）+ Python 参考内核退役
   范围 + D3 双码族 + D4 artifact IR。
 
+## 阶段 D3+D4 裁决：双码族 + artifact IR（2026-09-11，评估定论）
+
+- **D3 双码族统一**：层级已单源（实证）——引擎码派生 = ① RustRuntimeError.code
+  （语义码 EMB_/KNW_，内核直接承载）→ ② error_code_for_class（runtime_error_map
+  单表：TypeError/ZeroDivisionError/IndexError/KeyError/AttributeError/
+  PermissionError → RUN_*）→ ③ RUN_GENERIC_ERROR。Rust 侧全用语义码（零 RUN_*
+  直写——grep 实证）。**裁决**：语义码 = 域码（主），RUN_* = 通用回退（单表权威），
+  GENERIC = 终回退——正式化层级（文档 + 零重复映射）。
+- **D4 artifact IR（UID canonical 去 json.dumps 绑定）**：node_uid = sha256
+  (json.dumps[node_data, sort_keys=True, ensure_ascii=True])——json.dumps 格式
+  本身 = 稳定、可文档化的 canonical 规范（键字母序 + Python 值形态 + ASCII 转义）；
+  Rust node_serializer = 规范合规实现（非 Python 实现的转录——合规性由 UID 差分
+  验证）。**裁决**：规范 = JSON 格式（文档化单点真理）；**UID 差分（前端层）保留
+  至规范稳定实证**（转录合规的验证网——D4 的验证面）；"去绑定" = 规范形式化
+  （json.dumps = 规范的一种实现，非权威）。
+- **前端层差分退场评估**：lexer/parser/deserializer/UID 差分 = Rust 转录合规验证
+  ——**D4 前置**（UID 规范稳定实证后退役）；Rust 前端权威化 = ⑦ 终点最终断言。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
