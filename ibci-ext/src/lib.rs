@@ -722,10 +722,6 @@ fn capability() -> PyResult<String> {
         "native_modules": ["meta"],
         "unported_corners": [
             {
-                "feature": "tuple_value_materialization",
-                "reason": "单符号赋值值子树含 IbTuple = 元组值物化面（tuple 声明类型推断 + 运行时类型检查交互）——Python 语义宿主",
-            },
-            {
                 "feature": "meta_compile",
                 "reason": "meta.compile 属性调用（编译器访问面）——Python 宿主",
             },

@@ -145,6 +145,7 @@ class StateMaterializer:
             "bool": self._as_is,
             "none": self._none,
             "list": self._list,
+            "tuple": self._tuple,
             "dict": self._dict,
             "quoted": self._quoted,
             "tensor": self._tensor,
@@ -183,6 +184,19 @@ class StateMaterializer:
             for e in (v or [])
         ]
         return bind_container_specialization(self._registry, items, dt)
+    def _tuple(self, v, dt):
+        # tuple = 冻结列表（数据面 = Python tuple——恢复值语义保真
+        # [旧 = list 物化致 tuple 变 list]）
+        items = [
+            self.materialize(
+                e.get("kind") if isinstance(e, dict) else None,
+                e.get("value") if isinstance(e, dict) else e,
+                None,
+            )
+            for e in (v or [])
+        ]
+        return tuple(items)
+
 
     def _dict(self, v, dt):
         out = {}

@@ -73,6 +73,9 @@ pub enum IbValue {
     Bool(bool),
     None_,
     List(Rc<RefCell<Vec<IbValue>>>),
+    /// tuple 值（冻结列表——不可变；Python 契约：无修改方法面，数据面 = 列表
+    /// 语义但不可变；Rc<Vec> 无 RefCell = 不可变冻结）。
+    Tuple(Rc<Vec<IbValue>>),
     Dict(Rc<RefCell<Vec<(IbValue, IbValue)>>>),
     /// quoted 值（meta.quote 冻结的表达式源串——不可变，逐字节精确对比；
     /// 字段 source = 完整源串，经 q.source 属性访问）。
@@ -107,6 +110,7 @@ impl Clone for IbValue {
             IbValue::Bool(b) => IbValue::Bool(*b),
             IbValue::None_ => IbValue::None_,
             IbValue::List(l) => IbValue::List(l.clone()),
+            IbValue::Tuple(t) => IbValue::Tuple(t.clone()),
             IbValue::Dict(d) => IbValue::Dict(d.clone()),
             IbValue::Quoted { source } => IbValue::Quoted {
                 source: source.clone(),
@@ -145,6 +149,7 @@ impl std::fmt::Debug for IbValue {
             IbValue::Function(fn_val) => write!(f, "Function({})", fn_val.name),
             IbValue::Error { class, .. } => write!(f, "Error({class})"),
             IbValue::List(_) => write!(f, "List(..)"),
+            IbValue::Tuple(t) => write!(f, "Tuple({:?})", t.len()),
             IbValue::Dict(_) => write!(f, "Dict(..)"),
             IbValue::Host(_) => write!(f, "Host(<py object>)"),
         }
@@ -172,6 +177,7 @@ impl PartialEq for IbValue {
                 let (av, bv) = (a.borrow(), b.borrow());
                 av.len() == bv.len() && av.iter().zip(bv.iter()).all(|(x, y)| x == y)
             }
+            (IbValue::Tuple(a), IbValue::Tuple(b)) => a.as_ref() == b.as_ref(),
             (IbValue::Dict(a), IbValue::Dict(b)) => {
                 let (av, bv) = (a.borrow(), b.borrow());
                 av.len() == bv.len() && av.iter().zip(bv.iter()).all(|((k1, v1), (k2, v2))| {
@@ -234,7 +240,16 @@ impl IbValue {
                 format!("{{{}}}", items.join(", "))
             }
             // 数据面忠实呈现 = 完整源串（同 __to_prompt__——无截断）
-            IbValue::Quoted { source } => source.clone(),
+                        // tuple 显示面 = (元素, 逗号, ...)（Python 契约；单元素尾逗号）
+            IbValue::Tuple(t) => {
+                let items: Vec<String> = t.iter().map(|x| x.repr()).collect();
+                if t.len() == 1 {
+                    format!("({},)", items[0])
+                } else {
+                    format!("({})", items.join(", "))
+                }
+            }
+IbValue::Quoted { source } => source.clone(),
             IbValue::MetaFn(n) => format!("meta.{n}"),
             IbValue::Knowledge(_) => "<knowledge>".into(),
             // tensor 显示面 = 截断摘要（1D = vector[<dim>](...) 兼容 vector
@@ -270,6 +285,7 @@ impl IbValue {
             IbValue::Float(f) => *f != 0.0,
             IbValue::Str(s) => !s.is_empty(),
             IbValue::List(l) => !l.borrow().is_empty(),
+            IbValue::Tuple(t) => !t.is_empty(),
             IbValue::Dict(d) => !d.borrow().is_empty(),
             IbValue::Quoted { .. } => true,
             IbValue::MetaFn(_) => true,
@@ -323,6 +339,7 @@ fn intrinsic_print(_i: &Interpreter, args: &[IbValue], output: &mut Vec<String>)
 fn intrinsic_len(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
     match args.first() {
         Some(IbValue::List(l)) => Ok(IbValue::Int(l.borrow().len() as i64)),
+        Some(IbValue::Tuple(t)) => Ok(IbValue::Int(t.len() as i64)),
         Some(IbValue::Str(s)) => Ok(IbValue::Int(s.len() as i64)),
         Some(IbValue::Dict(d)) => Ok(IbValue::Int(d.borrow().len() as i64)),
         // 空 Optional len = 属性错误（Python 契约：空包装无 len 面）
@@ -496,6 +513,12 @@ pub(crate) fn ibvalue_to_typed_json(v: &IbValue) -> serde_json::Value {
                 items.borrow().iter().map(ibvalue_to_typed_json).collect::<Vec<_>>()
             ),
         ),
+        IbValue::Tuple(items) => (
+            "tuple",
+            serde_json::json!(
+                items.iter().map(ibvalue_to_typed_json).collect::<Vec<_>>()
+            ),
+        ),
         IbValue::Dict(pairs) => {
             let mut obj = serde_json::Map::new();
             for (k, val) in pairs.borrow().iter() {
@@ -622,6 +645,7 @@ fn value_type_name(v: &IbValue) -> &str {
         IbValue::Bool(_) => "bool",
         IbValue::None_ => "none",
         IbValue::List(_) => "list",
+        IbValue::Tuple(_) => "tuple",
         IbValue::Dict(_) => "dict",
         IbValue::Quoted { .. } => "quoted",
         IbValue::MetaFn(_) => "meta",
@@ -1644,6 +1668,43 @@ fn str_strip(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
     Ok(IbValue::Str(s.trim().to_string()))
 }
 
+fn tuple_len(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tuple(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tuple method on non-tuple"));
+    };
+    Ok(IbValue::Int(t.len() as i64))
+}
+
+fn tuple_index(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tuple(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tuple method on non-tuple"));
+    };
+    let v = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "index() takes exactly one argument")
+    })?;
+    Ok(t.iter()
+        .position(|x| x == v)
+        .map(|i| IbValue::Int(i as i64))
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "tuple.index(x): x not in tuple"))?)
+}
+
+fn tuple_count(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tuple(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tuple method on non-tuple"));
+    };
+    let v = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "count() takes exactly one argument")
+    })?;
+    Ok(IbValue::Int(t.iter().filter(|x| *x == v).count() as i64))
+}
+
+/// tuple 值方法分派表（单一权威源——冻结列表：仅 len/index/count，无修改面）。
+const TUPLE_METHODS: &[(&str, MethodFn)] = &[
+    ("len", tuple_len),
+    ("index", tuple_index),
+    ("count", tuple_count),
+];
+
 /// str 值方法分派表（单一权威源）。
 const STR_METHODS: &[(&str, MethodFn)] = &[
     ("split", str_split),
@@ -1793,22 +1854,26 @@ impl Interpreter {
                         // 元组解包声明（Store target）：值 = List → 逐元素赋值
                         // （分量 = annotated 内层名字；长度不符 = 错误面静默）
                         Expr::Tuple { elts, .. } => {
-                            if let Some(IbValue::List(items)) = &v {
-                                let elems = items.borrow();
-                                for (i, e) in elts.iter().enumerate() {
-                                    let name = match e {
-                                        Expr::TypeAnnotatedExpr { target: inner, .. } => {
-                                            match inner.as_ref() {
-                                                Expr::Name { id, .. } => Some(id.clone()),
-                                                _ => None,
-                                            }
+                            // 解包值 = List 或 Tuple（`a, b = t` 的 t 可为元组
+                            // 或列表——Python 契约；长度不符 = 错误面静默[既有面]）
+                            let elems: Vec<IbValue> = match &v {
+                                Some(IbValue::List(items)) => items.borrow().clone(),
+                                Some(IbValue::Tuple(t)) => (**t).clone(),
+                                _ => Vec::new(),
+                            };
+                            for (i, e) in elts.iter().enumerate() {
+                                let name = match e {
+                                    Expr::TypeAnnotatedExpr { target: inner, .. } => {
+                                        match inner.as_ref() {
+                                            Expr::Name { id, .. } => Some(id.clone()),
+                                            _ => None,
                                         }
-                                        Expr::Name { id, .. } => Some(id.clone()),
-                                        _ => None,
-                                    };
-                                    if let (Some(id), Some(val)) = (name, elems.get(i)) {
-                                        env.borrow_mut().set(&id, val.clone());
                                     }
+                                    Expr::Name { id, .. } => Some(id.clone()),
+                                    _ => None,
+                                };
+                                if let (Some(id), Some(val)) = (name, elems.get(i)) {
+                                    env.borrow_mut().set(&id, val.clone());
                                 }
                             }
                         }
@@ -1898,8 +1963,9 @@ impl Interpreter {
                 };
                 for item in items {
                     if let Some(names) = &target_tuple {
-                        let list = match item {
+                        let list = match &item {
                             IbValue::List(l) => l.borrow().clone(),
+                            IbValue::Tuple(t) => t.as_ref().clone(),
                             _ => continue,
                         };
                         for (n, v) in names.iter().zip(list.iter()) {
@@ -2347,12 +2413,12 @@ impl Interpreter {
                 IbValue::list_new(items)
             }
             Expr::Tuple { elts, .. } => {
-                // 元组：IBC 数据面 = 列表（同 List）
+                // 元组 = 冻结列表值（不可变——Python 契约：无修改方法面）
                 let items: Vec<IbValue> = elts
                     .iter()
                     .map(|e| self.eval_expr(env, e, output))
                     .collect::<Result<Vec<IbValue>, _>>()?;
-                IbValue::list_new(items)
+                IbValue::Tuple(Rc::new(items))
             }
             // 切片仅在 Subscript 内有意义（x[1:3]）——独立求值无定义 = None_
             Expr::Slice { .. } => IbValue::None_,
@@ -2432,6 +2498,8 @@ impl Interpreter {
         let v = self.eval_expr(env, iter, output)?;
         match v {
             IbValue::List(l) => Ok(l.borrow().clone()),
+            // tuple = 冻结列表（可迭代）
+            IbValue::Tuple(t) => Ok(t.as_ref().clone()),
             // 空 Optional 迭代 = 属性错误（Python 契约：空包装无迭代面）
             IbValue::None_ => Err(runtime_error(ErrorKind::AttributeError,
                 "iteration over empty optional",
@@ -2547,6 +2615,10 @@ impl Interpreter {
                     (IbValue::None_, IbValue::None_) => 0,
                     (IbValue::Str(a), IbValue::Str(b)) => {
                         a.partial_cmp(b).map(|o| o as i64).unwrap_or(2)
+                    }
+                    // tuple 相等 = 逐元素值相等（冻结列表）
+                    (IbValue::Tuple(a), IbValue::Tuple(b)) => {
+                        if a.as_ref() == b.as_ref() { 0 } else { 2 }
                     }
                     // 跨族[数值 vs str 等] = 不相等（== 面；关系面已前置 TypeError）
                     _ => 2,
@@ -2753,6 +2825,8 @@ impl Interpreter {
             // shape）。R5-2 计算编排协议落地后元素级运算经协议调度（当前 =
             // 标量直算正确性路径，非 SIMD）。
             IbValue::Tensor(_) => dispatch_method(TENSOR_METHODS, obj, method, &args)?,
+            // tuple = 冻结列表（仅 len/index/count——无修改面 AttributeError）
+            IbValue::Tuple(_) => dispatch_method(TUPLE_METHODS, obj, method, &args)?,
             // 宿主对象——委托 Python 对象方法（host service 桥接）
             IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
             IbValue::List(_) => dispatch_method(LIST_METHODS, obj, method, &args)?,
@@ -2804,6 +2878,10 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
         IbValue::None_ => py.None(),
         IbValue::List(l) => {
             let items: Vec<PyObject> = l.borrow().iter().map(|x| to_py(py, x)).collect();
+            PyList::new(py, items).unwrap().into_py(py)
+        }
+        IbValue::Tuple(t) => {
+            let items: Vec<PyObject> = t.iter().map(|x| to_py(py, x)).collect();
             PyList::new(py, items).unwrap().into_py(py)
         }
         IbValue::Dict(d) => {
@@ -2922,6 +3000,12 @@ fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
                 None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
             }
         }
+        (IbValue::Tuple(t), IbValue::Int(i)) => match norm_idx(t.len(), *i)
+            .and_then(|ix| t.get(ix).cloned())
+        {
+            Some(item) => Ok(item),
+            None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
+        },
         (IbValue::Dict(d), k) => d
             .borrow()
             .iter()

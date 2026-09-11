@@ -126,50 +126,6 @@ class ArtifactView:
         return self._node_to_symbol
 
 
-# --------------------------------------------------------------------------- #
-# 角检测器（注册式——每个未移植语义角一个检测器 + 一个 reason）
-# --------------------------------------------------------------------------- #
-def _detect_tuple_materialization(view: ArtifactView) -> bool:
-    """单符号赋值（IbAssign 单 Name target）值子树含 IbTuple = 元组值物化面。"""
-    nodes = view.nodes
-
-    def subtree_has_tuple(uid: str) -> bool:
-        stack = [uid]
-        seen: Set[str] = set()
-        while stack:
-            u = stack.pop()
-            if u in seen:
-                continue
-            seen.add(u)
-            nd = nodes.get(u)
-            if not isinstance(nd, dict):
-                continue
-            if nd.get("_type") == "IbTuple":
-                return True
-            for v in nd.values():
-                if isinstance(v, str) and v.startswith("node_"):
-                    stack.append(v)
-                elif isinstance(v, list):
-                    for item in v:
-                        if isinstance(item, str) and item.startswith("node_"):
-                            stack.append(item)
-        return False
-
-    for nd in nodes.values():
-        if nd.get("_type") != "IbAssign":
-            continue
-        targets = nd.get("targets") or []
-        value = nd.get("value")
-        if not value or not isinstance(value, str) or not value.startswith("node_"):
-            continue
-        if len(targets) == 1:
-            t = nodes.get(targets[0])
-            if isinstance(t, dict) and t.get("_type") in ("IbName", "IbTypeAnnotatedExpr"):
-                if subtree_has_tuple(value):
-                    return True
-    return False
-
-
 
 def _detect_meta_compile(view: ArtifactView) -> bool:
     """meta.compile 属性调用（编译器访问面——Python 宿主承载）。"""
@@ -208,7 +164,6 @@ class ArtifactRouter:
         # 角注册表（feature → 检测器）——新增角 = 注册一行 + Rust unported
         # 加条目；移植角 = 双向删除（角消除后路由自动放行）。
         self._corners: Dict[str, Callable[[ArtifactView], bool]] = {
-            "tuple_value_materialization": _detect_tuple_materialization,
             "meta_compile": _detect_meta_compile,
             "kb_vec_payload_materialization": _detect_object_identity,
         }
