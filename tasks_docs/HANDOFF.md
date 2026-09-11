@@ -482,6 +482,14 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     FromImport 绑定 → FUNCTION；scope 栈[module → function]）——**34 语料 scope 符号
     52/52 全 MATCH**（差分 harness test_scope_symbols_corpus）。**零风险加法式**
     （resolve_symbols 独立 pyfunction，不动 Python 执行路径/语义层）。
+  - **P9 全量 Rust 化阶段 B 第四增量 intrinsic 符号表 42 内置类型 已落地（本 session，
+    隔离分支 `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：语义层 Rust 移植续
+    ——intrinsic 符号表中的内置类型（ibci-ext/src/intrinsic_symbols.rs BUILTIN_TYPES[42
+    内置类型固定集] + builtin_type_symbols[→ 42 CLASS 符号]——uid = intrinsic:<name>，
+    kind = CLASS，type_uid = type_root.<name>，node_uid/owned_scope_uid = null，
+    metadata = {}）——**42/42 全字段匹配**（差分 harness
+    test_intrinsic_type_symbols_corpus）。**零风险加法式**（intrinsic_type_symbols 独立
+    pyfunction，不动 Python 执行路径/语义层）。
   - **P9 全量 Rust 化阶段 B 续（当前批次）**：阶段 B（可 Rust 化，纯计算）——语义层
     Rust 移植续[类型解析[type_uid] + 节点绑定[node_uid] + intrinsic 符号表 + free_vars
     闭包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] +
@@ -547,11 +555,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第三增量放行门实跑）**：**4282
-  passed / 1 skipped / 138.32s / rc=0**（= 前基线 4281 + scope 符号差分测试 1 例[阶段 B
-  第三增量 语义层启动 scope 符号解析]；注：test_p7_process_isolation / test_run_result_
-  type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；
-  供下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第四增量放行门实跑）**：**4283
+  passed / 1 skipped / 137.18s / rc=0**（= 前基线 4282 + intrinsic 类型差分测试 1 例[阶段
+  B 第四增量 intrinsic 符号表 42 内置类型]；注：test_p7_process_isolation /
+  test_run_result_type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离
+  重跑通过，非回归]；供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 
