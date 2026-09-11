@@ -30,18 +30,21 @@
 
 ## 🔴 当前状态
 
-> **🔴 转向裁定（2026-09-11 用户）**：停止 ⑦ 增量移植 → **内核接口层重审 + 测试体系体系级
-> 重设计 + 授权从 8129af0a 起推翻重来的引擎级重构**。接手起点 =
-> **`tasks_docs/_handoff_kernel_reaudit.md`**（交接任务书——嫌疑清单/使命分解/开工序列）。
-> 初步 Rust 验证停留点 = **8129af0a**——其后提交（08758567 / fe1dfcf7 / b66a210a）全部在
-> 审计范围内（可能藏代码异味）。
+> **🔴 架构 v2 体系化重设计（2026-09-11 用户转向裁定 + 战略框架八点，技术路线授权自主裁定）**：
+> 技术路线 = **`tasks_docs/_architecture_v2_route.md`**（R0 裁定：分层[语言面/协议层/
+> Rust 内核/Python 宿主面] + 五协议 P1-P5[能力声明/typed 值通道/typed 错误/宿主调用/
+> 计算基板] + Python 宿主角色[HOST-EXT 用户扩展，保留易用性] + pip 打包[maturin wheel]
+> + 计算基板预留[Tensor 值 + ComputeSubstrate trait，AVX/GPU = 战略期不实现] + 执行
+> 核心推倒重写[typed 值模型 + 无静默路径 + enum 分派 + i128 有界整数 + 真正多线程 =
+> 批量计算并行 + 任务并行] + 打破清单 8 项[无负向收益论证] + 保留清单 + 实施路线 R1-R5）。
+> 前序：使命 1 审计收束（触发使命 3，`_kernel_interface_audit.md`）+ Rust 内核深扫收束
+> （执行面 = Python 语义转录，静默降级系统性）+ 使命 2 测试体系重设计文档
+> （`_test_redesign.md`，五层）。
 >
-> **✅ 使命 1 审计已收束（2026-09-11）**：结论 = **触发使命 3（推翻重来）**——嫌疑清单
-> 3.1-3.6 全部证实 + 用户两问均确认（测试驱动不干净接口存在 / 分层职责分配不合理）+ 重设计
-> 蓝图 D1-D5。结论文档 = `tasks_docs/_kernel_interface_audit.md`（第一手证据 + 三分类 +
-> 推翻范围[8129af0a 之后接口适配层] + 复用面[8129af0a 之前可信地基] + 红线）。**当前下一步**：
-> 使命 2 测试体系重设计文档 → 使命 3 独立隔离分支接口层重设计（D1-D5，独立分支实验，
-> 零风险确认后 merge unsafe-vibe-dev 即删分支；main 永不触碰）。
+> **当前下一步 = R1 接口协议化**（使命 3 D1-D5 实施）：P1 能力声明表（Rust capability() +
+> Python 路由零谓词堆零硬编码集）→ P3 typed 错误（RustRuntimeError + 诊断码单一权威，
+> 删正则/映射表）→ P2 typed 值通道（StateMaterializer 单一物化）→ P4 删 WIP 会话 API +
+> 单一执行入口。分支 `kernel-interface-rebuild`（已建，仅文档 commit）。
 >
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4306 passed / 2 failed / 1 skipped**（2026-09-11

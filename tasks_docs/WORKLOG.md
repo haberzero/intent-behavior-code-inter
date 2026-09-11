@@ -5057,6 +5057,49 @@ contains 特判删除）；D4 宿主 callable 统一协议（替代 WIP 会话 A
 协同推进（新接口落地后测试断言面按新体系承接，契约不留空洞）。**审计结论文档** =
 tasks_docs/_kernel_interface_audit.md（详细证据 + 三分类 + 重设计方向）。
 
+## IBCI 架构 v2 技术路线裁定（R0，2026-09-11 用户战略框架八点）
+
+**用户授权**："总体的技术路线由你自己决定，我不过多干涉"，唯一原则 = 代码质量 /
+可维护性 / 远期长期收益。八点框架：① 顶层 Python 保留 = 易用性（用户写 Python 实现
+自己的功能/逻辑）② pip 安装 ③ 未来 tilelang 类并行低级库（GPU 块层，不裸 CUDA）
+④ Rust↔Python 交融须协议化不能碎片 ⑤ 特性尽量不破坏，允许更合理设计（无负向收益
+论证）⑥ 允许推倒重写执行核心 + 真正多线程 + 统一化大量同构计算（AVX/GPU 可各自独立
+库；或 IBCI 传 tilelang 代码给底层只取结果）⑦ AVX/GPU = 未来战略储备非当前性能目的，
+内核易维护/易用/架构稳固 >> 语言性能 ⑧ 测试体系全量重构（碎片 Python 测试太慢）。
+
+**裁定（R0 文档 = tasks_docs/_architecture_v2_route.md）**：
+- **核心命题**：Rust 不是换执行后端，而是体系化重设计契机——利用 Rust 严格性让内核
+  更稳固（typed 值模型/无静默路径/enum 分派/协议化），保持 IBCI DSL 易用性。
+  **内部严格性 ≠ 语言严格性**（严格性在内核内部，不推向用户；IBCI 绝不变成 Rust 式
+  通用语言）。
+- **目标分层**：语言面（IBCI DSL + Python 宿主扩展 HOST-EXT）/ 协议层（五协议 P1-P5：
+  能力声明/typed 值通道/typed 错误/宿主调用/计算基板）/ Rust 内核（前端→typed IR、
+  执行核心重写、值模型、计算基板、并发）/ Python 宿主面（HostService + 用户扩展 + 编排）。
+- **八点裁定**：① Python = 宿主层 + 用户扩展层（HOST-EXT 协议化一等扩展，typed 值
+  转换 + 句柄生命周期，非内核）② maturin wheel（pip install ibci；插件独立 wheel）
+  ③⑤⑥⑦ 计算基板 = P5 ComputeSubstrate trait + Tensor 值入值模型；协议统一、实现
+  独立（scalar 原生/AVX crate/tilelang-GPU 插件）；IBCI 传 tilelang 代码只做值编组
+  调度不包装；AVX/GPU 当前只接口预留不实现 ④ 五协议禁碎片 ⑥ 执行核心推倒重写 =
+  typed tree-walking（非 bytecode，易维护>>性能）：typed 值 + 无静默路径 + enum 分派
+  + Result 全链 + i128 有界整数（超界显式错误）；真正多线程 = 批量计算并行 + 任务
+  并行（TaskPool 保留）+ 语言级并行谨慎评估 ⑧ 测试五层重构（使命 2 设计落地，
+  cargo test 内核层，速度目标秒级）。
+- **打破清单 8 项**（无负向收益论证，登记 §五）：last-wins 确定性化 / Optional 值
+  语义 / handler 异常变量词法作用域 / 错误协议诊断码化 / f64 全包→typed 运算+i128 /
+  静默降级 13+ 实例清零 / artifact UID 去 Python json.dumps 绑定（canonical 哈希，
+  artifact v2 版本化迁移）/ Python 语义转录文化→公理契约驱动。
+- **保留清单**：语言表面/KB 27 方法+磁盘格式/quote-eval/vector-embedding/LLM 15
+  节点宿主面/intent-behavior-memory/ihost-overlay-journal-budget-deterministic/
+  诊断码契约面。
+- **实施路线**：R0 裁定（本文档）→ R1 接口协议化（使命 3 D1-D5，kernel-interface-
+  rebuild 分支）→ R2 执行核心重写（独立分支，推倒授权）→ R3 测试五层重构 → R4
+  HOST-EXT + maturin 打包 → R5 计算基板（Tensor + ComputeSubstrate；AVX/GPU =
+  战略期）。
+
+**变化前后**：变化前 = 双内核 + Python 转录 Rust + 接口适配层（审计判定推翻重来）；
+变化后 = Rust 唯一内核 + 协议层 + HOST-EXT + 计算基板预留。目标（用户裁定/本裁定）
+已同步 goal objective（revision 4 active）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
