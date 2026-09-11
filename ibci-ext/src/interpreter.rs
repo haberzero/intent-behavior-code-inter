@@ -285,14 +285,14 @@ fn intrinsic_len(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) 
         Some(IbValue::Str(s)) => Ok(IbValue::Int(s.len() as i64)),
         Some(IbValue::Dict(d)) => Ok(IbValue::Int(d.borrow().len() as i64)),
         // 空 Optional len = 属性错误（Python 契约：空包装无 len 面）
-        Some(IbValue::None_) => Err(runtime_error("AttributeError", "len on empty optional")),
+        Some(IbValue::None_) => Err(runtime_error(ErrorKind::AttributeError, "len on empty optional")),
         // 不支持类型 = TypeError（R2-1 静默清零：旧 = 静默 0）
-        _ => Err(runtime_error("TypeError", "object of that type has no len()")),
+        _ => Err(runtime_error(ErrorKind::TypeError, "object of that type has no len()")),
     }
 }
 
 fn intrinsic_range(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
-    let err = || runtime_error("TypeError", "range() integer argument expected");
+    let err = || runtime_error(ErrorKind::TypeError, "range() integer argument expected");
     let items: Vec<IbValue> = if args.len() == 1 {
         let stop = match &args[0] {
             IbValue::Int(i) => *i,
@@ -675,13 +675,13 @@ fn int_arith(a: i64, b: i64, op: &str) -> Result<IbValue, Thrown> {
         "*" => a.checked_mul(b),
         "/" | "//" => {
             if b == 0 {
-                return Err(runtime_error("ZeroDivisionError", "division by zero"));
+                return Err(runtime_error(ErrorKind::ZeroDivisionError, "division by zero"));
             }
             Some(floor_div_i64(a, b))
         }
         "%" => {
             if b == 0 {
-                return Err(runtime_error("ZeroDivisionError", "integer modulo by zero"));
+                return Err(runtime_error(ErrorKind::ZeroDivisionError, "integer modulo by zero"));
             }
             Some(floor_mod_i64(a, b))
         }
@@ -695,18 +695,18 @@ fn int_arith(a: i64, b: i64, op: &str) -> Result<IbValue, Thrown> {
         "|" => Some(a | b),
         "&" => Some(a & b),
         "^" => Some(a ^ b),
-        _ => return Err(runtime_error("TypeError", "unsupported operand type(s)")),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "unsupported operand type(s)")),
     };
     match r {
         Some(v) => Ok(IbValue::Int(v)),
-        None => Err(runtime_error("OverflowError", "integer overflow")),
+        None => Err(runtime_error(ErrorKind::OverflowError, "integer overflow")),
     }
 }
 
 /// typed 浮点算术（Int/Float/Bool → f64；/ 与 // = floor 除）。
 fn float_arith(a: Option<f64>, b: Option<f64>, op: &str) -> Result<IbValue, Thrown> {
     let (Some(av), Some(bv)) = (a, b) else {
-        return Err(runtime_error("TypeError", "unsupported operand type(s)"));
+        return Err(runtime_error(ErrorKind::TypeError, "unsupported operand type(s)"));
     };
     match op {
         "+" => Ok(IbValue::Float(av + bv)),
@@ -714,18 +714,18 @@ fn float_arith(a: Option<f64>, b: Option<f64>, op: &str) -> Result<IbValue, Thro
         "*" => Ok(IbValue::Float(av * bv)),
         "/" | "//" => {
             if bv == 0.0 {
-                return Err(runtime_error("ZeroDivisionError", "division by zero"));
+                return Err(runtime_error(ErrorKind::ZeroDivisionError, "division by zero"));
             }
             Ok(IbValue::Float((av / bv).floor()))
         }
         "%" => {
             if bv == 0.0 {
-                return Err(runtime_error("ZeroDivisionError", "float modulo by zero"));
+                return Err(runtime_error(ErrorKind::ZeroDivisionError, "float modulo by zero"));
             }
             Ok(IbValue::Float(av.rem_euclid(bv)))
         }
         "**" => Ok(IbValue::Float(av.powf(bv))),
-        _ => Err(runtime_error("TypeError", "unsupported operand type(s)")),
+        _ => Err(runtime_error(ErrorKind::TypeError, "unsupported operand type(s)")),
     }
 }
 
@@ -779,13 +779,45 @@ pub struct Thrown {
     pub pos: Option<(i64, i64)>,
 }
 
-/// 运行时环境错误（Python 内建异常类名契约——engine 边界映射诊断码：
+/// 运行时错误种类（R2-4 typed 错误类——消除 stringly-typed 错误类名；
+/// class_name() = 跨边界 RustRuntimeError.error_class 契约面 + engine
+/// error_code_for_class 映射输入）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorKind {
+    TypeError,
+    ValueError,
+    AttributeError,
+    IndexError,
+    KeyError,
+    ZeroDivisionError,
+    NameError,
+    OverflowError,
+    RecursionError,
+}
+
+impl ErrorKind {
+    pub fn class_name(self) -> &'static str {
+        match self {
+            ErrorKind::TypeError => "TypeError",
+            ErrorKind::ValueError => "ValueError",
+            ErrorKind::AttributeError => "AttributeError",
+            ErrorKind::IndexError => "IndexError",
+            ErrorKind::KeyError => "KeyError",
+            ErrorKind::ZeroDivisionError => "ZeroDivisionError",
+            ErrorKind::NameError => "NameError",
+            ErrorKind::OverflowError => "OverflowError",
+            ErrorKind::RecursionError => "RecursionError",
+        }
+    }
+}
+
+/// 运行时环境错误（typed ErrorKind——engine 边界经 class_name() 映射诊断码：
 /// ZeroDivisionError→RUN_DIVISION_BY_ZERO / IndexError|KeyError→
 /// RUN_INDEX_ERROR / AttributeError→RUN_ATTRIBUTE_ERROR）。
-fn runtime_error(class: &str, message: &str) -> Thrown {
+fn runtime_error(kind: ErrorKind, message: &str) -> Thrown {
     Thrown {
         value: IbValue::Error {
-            class: class.to_string(),
+            class: kind.class_name().to_string(),
             message: message.to_string(),
         },
         pos: None,
@@ -995,7 +1027,7 @@ impl Interpreter {
                 let result = self.call_user_function(&f, args, &mut out, &global)?;
                 Ok((result, out))
             }
-            None => Err(runtime_error("NameError", &format!("name not found: {name}"))),
+            None => Err(runtime_error(ErrorKind::NameError, &format!("name not found: {name}"))),
         }
     }
 
@@ -1449,8 +1481,7 @@ impl Interpreter {
                 // 运行期未定义名 = NameError（Python 契约；R2-1 静默清零——
                 // 旧 = None_ 静默；编译期未定义 = 语义层拦截，此处 = 防御面）
                 None => {
-                    return Err(runtime_error(
-                        "NameError",
+                    return Err(runtime_error(ErrorKind::NameError,
                         &format!("name '{}' is not defined", id),
                     ))
                 }
@@ -1666,13 +1697,11 @@ impl Interpreter {
         match v {
             IbValue::List(l) => Ok(l.borrow().clone()),
             // 空 Optional 迭代 = 属性错误（Python 契约：空包装无迭代面）
-            IbValue::None_ => Err(runtime_error(
-                "AttributeError",
+            IbValue::None_ => Err(runtime_error(ErrorKind::AttributeError,
                 "iteration over empty optional",
             )),
             // 非可迭代值 = TypeError（Python 契约；R2-1 静默清零）
-            other => Err(runtime_error(
-                "TypeError",
+            other => Err(runtime_error(ErrorKind::TypeError,
                 &format!("'{}' object is not iterable", value_type_name(&other)),
             )),
         }
@@ -1694,7 +1723,7 @@ impl Interpreter {
                 }
                 _ => {
                     let msg = format!("unsupported operand type(s) for {}", op);
-                    Err(runtime_error("TypeError", &msg))
+                    Err(runtime_error(ErrorKind::TypeError, &msg))
                 }
             };
         }
@@ -1737,7 +1766,7 @@ impl Interpreter {
             };
             if fam(l) != fam(r) {
                 let msg = format!("unsupported operand type(s) for {}", op);
-                return Err(runtime_error("TypeError", &msg));
+                return Err(runtime_error(ErrorKind::TypeError, &msg));
             }
         }
         let c = self.cmp(l, r);
@@ -1901,13 +1930,10 @@ impl Interpreter {
         // RecursionError 根因原样传播）
         let depth = CALL_DEPTH.with(|c| c.get()) + 1;
         if depth > RECURSION_LIMIT {
-            return Err(Thrown {
-                value: IbValue::Error {
-                    class: "RecursionError".to_string(),
-                    message: "maximum recursion depth exceeded".to_string(),
-                },
-                pos: None,
-            });
+            return Err(runtime_error(
+                ErrorKind::RecursionError,
+                "maximum recursion depth exceeded",
+            ));
         }
         let _guard = DepthGuard(CALL_DEPTH.with(|c| c.get()));
         CALL_DEPTH.with(|c| c.set(depth));
@@ -1945,8 +1971,7 @@ impl Interpreter {
         // 空 Optional 解包 = 异常]）
         if method == "unwrap" {
             return match obj {
-                IbValue::None_ => Err(runtime_error(
-                    "AttributeError",
+                IbValue::None_ => Err(runtime_error(ErrorKind::AttributeError,
                     "unwrap on empty optional",
                 )),
                 v => Ok(v.clone()),
@@ -1956,8 +1981,7 @@ impl Interpreter {
         // 解包同语义：有值 = 值本身，空值 = 错误）
         if method == "to_list" {
             return match obj {
-                IbValue::None_ => Err(runtime_error(
-                    "AttributeError",
+                IbValue::None_ => Err(runtime_error(ErrorKind::AttributeError,
                     "to_list on empty optional",
                 )),
                 v => Ok(v.clone()),
@@ -1977,8 +2001,7 @@ impl Interpreter {
         // [Python 契约：空 Optional next/迭代 = RUN_ATTRIBUTE_ERROR]）
         if method == "next" {
             return match obj {
-                IbValue::None_ => Err(runtime_error(
-                    "AttributeError",
+                IbValue::None_ => Err(runtime_error(ErrorKind::AttributeError,
                     "next on empty optional",
                 )),
                 v => Ok(v.clone()),
@@ -1993,10 +2016,10 @@ impl Interpreter {
                 "dim" => IbValue::Int(v.len() as i64),
                 "dot" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return Err(runtime_error("TypeError", "dot() requires a vector argument"));
+                        return Err(runtime_error(ErrorKind::TypeError, "dot() requires a vector argument"));
                     };
                     if v.len() != o.len() {
-                        return Err(runtime_error("ValueError", "vector dimension mismatch"));
+                        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
                     }
                     IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum())
                 }
@@ -2005,10 +2028,10 @@ impl Interpreter {
                 }
                 "cosine" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return Err(runtime_error("TypeError", "cosine() requires a vector argument"));
+                        return Err(runtime_error(ErrorKind::TypeError, "cosine() requires a vector argument"));
                     };
                     if v.len() != o.len() {
-                        return Err(runtime_error("ValueError", "vector dimension mismatch"));
+                        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
                     }
                     let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
                     let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
@@ -2028,14 +2051,14 @@ impl Interpreter {
                     Some(IbValue::Float(k)) => {
                         IbValue::Vector(v.iter().map(|x| x * k).collect())
                     }
-                    _ => return Err(runtime_error("TypeError", "scale() requires a numeric argument")),
+                    _ => return Err(runtime_error(ErrorKind::TypeError, "scale() requires a numeric argument")),
                 },
                 "add" | "sub" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return Err(runtime_error("TypeError", "vector add/sub requires a vector argument"));
+                        return Err(runtime_error(ErrorKind::TypeError, "vector add/sub requires a vector argument"));
                     };
                     if v.len() != o.len() {
-                        return Err(runtime_error("ValueError", "vector dimension mismatch"));
+                        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
                     }
                     let out: Vec<f64> = if method == "add" {
                         v.iter().zip(o.iter()).map(|(a, b)| a + b).collect()
@@ -2047,7 +2070,7 @@ impl Interpreter {
                 // 注：cast_to 目标 = 类对象（`v.cast_to(str)` 的 str 经 VM 类型名
                 // 解析为 class——值域无类对象面，执行面不可达 = 3b 类型面职责；
                 // 用户调用 cast_to("str") = 非法 IBCI[Python 参考 fail-fast 实证]
-                _ => return Err(runtime_error("AttributeError", "attribute not found")),
+                _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
             },
             // 宿主对象——委托 Python 对象方法（host service 桥接）
             IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
@@ -2062,18 +2085,18 @@ impl Interpreter {
                 "index" => {
                     let items = l.borrow().clone();
                     let v = args.first().ok_or_else(|| {
-                        runtime_error("TypeError", "index() takes exactly one argument")
+                        runtime_error(ErrorKind::TypeError, "index() takes exactly one argument")
                     })?;
                     items
                         .iter()
                         .position(|x| x == v)
                         .map(|i| IbValue::Int(i as i64))
-                        .ok_or_else(|| runtime_error("ValueError", "list.index(x): x not in list"))?
+                        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "list.index(x): x not in list"))?
                 }
                 "pop" => {
                     // Python 契约：空列表 pop = IndexError（无静默 None_）
                     let mut m = l.borrow_mut();
-                    m.pop().ok_or_else(|| runtime_error("IndexError", "pop from empty list"))?
+                    m.pop().ok_or_else(|| runtime_error(ErrorKind::IndexError, "pop from empty list"))?
                 }
                 // insert(index, value)——负索引/越界 = 端点钳制（Python 契约）
                 "insert" => {
@@ -2093,16 +2116,16 @@ impl Interpreter {
                 // 未找到 = ValueError——R2-1 静默清零）
                 "remove" => {
                     let v = args.first().ok_or_else(|| {
-                        runtime_error("TypeError", "remove() takes exactly one argument")
+                        runtime_error(ErrorKind::TypeError, "remove() takes exactly one argument")
                     })?;
                     let mut m = l.borrow_mut();
                     let ix = m.iter().position(|x| x == v).ok_or_else(|| {
-                        runtime_error("ValueError", "list.remove(x): x not in list")
+                        runtime_error(ErrorKind::ValueError, "list.remove(x): x not in list")
                     })?;
                     m.remove(ix);
                     IbValue::None_
                 }
-                _ => return Err(runtime_error("AttributeError", "attribute not found")),
+                _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
             },
             IbValue::Dict(d) => match method {
                 "get" => {
@@ -2129,7 +2152,7 @@ impl Interpreter {
                     IbValue::list_new(vals)
                 }
                 "len" => IbValue::Int(d.borrow().len() as i64),
-                _ => return Err(runtime_error("AttributeError", "attribute not found")),
+                _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
             },
             IbValue::Str(s) => {
                 match method {
@@ -2143,21 +2166,21 @@ impl Interpreter {
                                 s.split(sep.as_str()).map(|p| IbValue::Str(p.to_string())).collect()
                             }
                             Some(IbValue::Str(_)) => {
-                                return Err(runtime_error("ValueError", "empty separator"))
+                                return Err(runtime_error(ErrorKind::ValueError, "empty separator"))
                             }
                             Some(_) => {
-                                return Err(runtime_error("TypeError", "split() argument must be str"))
+                                return Err(runtime_error(ErrorKind::TypeError, "split() argument must be str"))
                             }
                         };
                         return Ok(IbValue::list_new(parts));
                     }
                     "find" => {
                         let sub = args.first().ok_or_else(|| {
-                            runtime_error("TypeError", "find() takes exactly one argument")
+                            runtime_error(ErrorKind::TypeError, "find() takes exactly one argument")
                         })?;
                         let sub = match sub {
                             IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error("TypeError", "find() argument must be str")),
+                            _ => return Err(runtime_error(ErrorKind::TypeError, "find() argument must be str")),
                         };
                         return Ok(match s.find(&sub) {
                             Some(i) => IbValue::Int(i as i64),
@@ -2166,11 +2189,11 @@ impl Interpreter {
                     }
                     "rfind" => {
                         let sub = args.first().ok_or_else(|| {
-                            runtime_error("TypeError", "rfind() takes exactly one argument")
+                            runtime_error(ErrorKind::TypeError, "rfind() takes exactly one argument")
                         })?;
                         let sub = match sub {
                             IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error("TypeError", "rfind() argument must be str")),
+                            _ => return Err(runtime_error(ErrorKind::TypeError, "rfind() argument must be str")),
                         };
                         // rfind 从尾部扫描（Python rfind 对等——find 反向遍历）
                         if sub.is_empty() {
@@ -2189,11 +2212,11 @@ impl Interpreter {
                     }
                     "count" => {
                         let sub = args.first().ok_or_else(|| {
-                            runtime_error("TypeError", "count() takes exactly one argument")
+                            runtime_error(ErrorKind::TypeError, "count() takes exactly one argument")
                         })?;
                         let sub = match sub {
                             IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error("TypeError", "count() argument must be str")),
+                            _ => return Err(runtime_error(ErrorKind::TypeError, "count() argument must be str")),
                         };
                         return Ok(if sub.is_empty() {
                             IbValue::Int(0)
@@ -2203,11 +2226,11 @@ impl Interpreter {
                     }
                     "contains" => {
                         let sub = args.first().ok_or_else(|| {
-                            runtime_error("TypeError", "contains() takes exactly one argument")
+                            runtime_error(ErrorKind::TypeError, "contains() takes exactly one argument")
                         })?;
                         let sub = match sub {
                             IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error("TypeError", "contains() argument must be str")),
+                            _ => return Err(runtime_error(ErrorKind::TypeError, "contains() argument must be str")),
                         };
                         return Ok(IbValue::Bool(s.contains(&sub)));
                     }
@@ -2216,11 +2239,11 @@ impl Interpreter {
                     }
                     "startswith" | "endswith" => {
                         let pre = args.first().ok_or_else(|| {
-                            runtime_error("TypeError", "startswith() takes exactly one argument")
+                            runtime_error(ErrorKind::TypeError, "startswith() takes exactly one argument")
                         })?;
                         let pre = match pre {
                             IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error("TypeError", "argument must be str")),
+                            _ => return Err(runtime_error(ErrorKind::TypeError, "argument must be str")),
                         };
                         return Ok(IbValue::Bool(if method == "startswith" {
                             s.starts_with(&pre)
@@ -2230,18 +2253,18 @@ impl Interpreter {
                     }
                     "replace" => {
                         let old = args.first().ok_or_else(|| {
-                            runtime_error("TypeError", "replace() takes at least 2 arguments")
+                            runtime_error(ErrorKind::TypeError, "replace() takes at least 2 arguments")
                         })?;
                         let old = match old {
                             IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error("TypeError", "replace() argument must be str")),
+                            _ => return Err(runtime_error(ErrorKind::TypeError, "replace() argument must be str")),
                         };
                         let new = args.get(1).ok_or_else(|| {
-                            runtime_error("TypeError", "replace() takes at least 2 arguments")
+                            runtime_error(ErrorKind::TypeError, "replace() takes at least 2 arguments")
                         })?;
                         let new = match new {
                             IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error("TypeError", "replace() argument must be str")),
+                            _ => return Err(runtime_error(ErrorKind::TypeError, "replace() argument must be str")),
                         };
                         return Ok(IbValue::Str(s.replace(&old, &new)));
                     }
@@ -2278,14 +2301,14 @@ impl Interpreter {
                     "upper" => s.to_uppercase(),
                     "lower" => s.to_lowercase(),
                     "strip" => s.trim().to_string(),
-                    _ => return Err(runtime_error("AttributeError", "attribute not found")),
+                    _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
                 };
                 IbValue::Str(r)
             }
             _ => {
                 // 未知对象类型方法 = 环境错误（Python 契约：AttributeError →
                 // RUN_ATTRIBUTE_ERROR）
-                return Err(runtime_error("AttributeError", "attribute not found"))
+                return Err(runtime_error(ErrorKind::AttributeError, "attribute not found"))
             }
         })
     }
@@ -2417,7 +2440,7 @@ fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
             match norm_idx(v.len(), *i).and_then(|ix| v.get(ix).cloned()) {
                 Some(item) => Ok(item),
                 // 越界 = 环境错误（Python 契约：IndexError → RUN_INDEX_ERROR）
-                None => Err(runtime_error("IndexError", "index out of range")),
+                None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
             }
         }
         (IbValue::Dict(d), k) => d
@@ -2425,20 +2448,20 @@ fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
             .iter()
             .find(|(dk, _)| dk == k)
             .map(|(_, v)| v.clone())
-            .ok_or_else(|| runtime_error("KeyError", "key not found")),
+            .ok_or_else(|| runtime_error(ErrorKind::KeyError, "key not found")),
         (IbValue::Str(s), IbValue::Int(i)) => {
             let chars: Vec<char> = s.chars().collect();
             match norm_idx(chars.len(), *i).and_then(|ix| chars.get(ix)) {
                 Some(c) => Ok(IbValue::Str(c.to_string())),
-                None => Err(runtime_error("IndexError", "index out of range")),
+                None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
             }
         }
         // vector 下标：元素 float（同 __getitem__）
         (IbValue::Vector(v), IbValue::Int(i)) => match norm_idx(v.len(), *i).and_then(|ix| v.get(ix)) {
             Some(f) => Ok(IbValue::Float(*f)),
-            None => Err(runtime_error("IndexError", "index out of range")),
+            None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
         },
-        _ => Err(runtime_error("TypeError", "object is not subscriptable")),
+        _ => Err(runtime_error(ErrorKind::TypeError, "object is not subscriptable")),
     }
 }
 
@@ -2487,12 +2510,12 @@ fn subscript_slice(
         Some(IbValue::Int(i)) => *i,
         // 非 int step = TypeError（Python 契约；R2-1 删"保守 step 1"静默）
         Some(_) => {
-            return Err(runtime_error("TypeError", "slice step must be an integer"))
+            return Err(runtime_error(ErrorKind::TypeError, "slice step must be an integer"))
         }
         None => 1,
     };
     if step_v == 0 {
-        return Err(runtime_error("ValueError", "slice step cannot be zero"));
+        return Err(runtime_error(ErrorKind::ValueError, "slice step cannot be zero"));
     }
     match base {
         // 字符串切片 = 新字符串（Python 契约：str slice returns str）
@@ -2510,7 +2533,7 @@ fn subscript_slice(
             Ok(IbValue::list_new(items))
         }
         // 非序列切片 = TypeError（Python 契约；R2-1 删静默 None_）
-        _ => Err(runtime_error("TypeError", "object is not sliceable")),
+        _ => Err(runtime_error(ErrorKind::TypeError, "object is not sliceable")),
     }
 }
 
@@ -2530,20 +2553,20 @@ fn assign_subscript(base: &IbValue, key: &IbValue, val: IbValue) -> Result<(), T
             let key = match key {
                 IbValue::Int(i) => *i,
                 // 非整数下标 = TypeError（Python 契约）
-                _ => return Err(runtime_error("TypeError", "list indices must be integers")),
+                _ => return Err(runtime_error(ErrorKind::TypeError, "list indices must be integers")),
             };
             let mut m = l.borrow_mut();
             let len = m.len() as i64;
             // 负索引归一（Python 契约：l[-1] = 末元素）；越界 = IndexError
             let ix = if key < 0 { len + key } else { key };
             if ix < 0 || ix >= len {
-                return Err(runtime_error("IndexError", "list assignment index out of range"));
+                return Err(runtime_error(ErrorKind::IndexError, "list assignment index out of range"));
             }
             m[ix as usize] = val;
             Ok(())
         }
         // 非可写容器 = 错误（Python 契约）
-        _ => Err(runtime_error("TypeError", "object does not support item assignment")),
+        _ => Err(runtime_error(ErrorKind::TypeError, "object does not support item assignment")),
     }
 }
 
