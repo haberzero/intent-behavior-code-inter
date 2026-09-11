@@ -189,49 +189,6 @@ def _detect_intrinsic_redefinition(view: ArtifactView, intrinsic_symbol_names: F
                 return True
     return False
 
-
-def _detect_optional_identity(view: ArtifactView) -> bool:
-    """Optional 实例同一性角（2+ Optional 声明变量间 is/is not 比较）。"""
-    nodes = view.nodes
-    node_to_type = view.node_to_type
-    optional_names: Set[str] = set()
-    for uid, nd in nodes.items():
-        if nd.get("_type") != "IbTypeAnnotatedExpr":
-            continue
-        t = node_to_type.get(uid)
-        if not isinstance(t, str):
-            continue
-        base = t.split("[", 1)[0].strip()
-        base = base.rsplit(".", 1)[-1] if "." in base else base
-        if base != "Optional":
-            continue
-        target = nodes.get(nd.get("target"))
-        if isinstance(target, dict) and target.get("_type") == "IbName":
-            optional_names.add(target.get("id"))
-    if len(optional_names) < 2:
-        return False
-    for nd in nodes.values():
-        if nd.get("_type") != "IbCompare":
-            continue
-        ops = nd.get("ops") or []
-        if not any(op in ("is", "is not") for op in ops):
-            continue
-        sides = [nd.get("left")] + list(nd.get("comparators") or [])
-
-        def name_id(u):
-            if not isinstance(u, str) or not u.startswith("node_"):
-                return None
-            inner = nodes.get(u)
-            if isinstance(inner, dict) and inner.get("_type") == "IbName":
-                return inner.get("id")
-            return None
-
-        ids = [name_id(u) for u in sides]
-        if all(i in optional_names for i in ids):
-            return True
-    return False
-
-
 def _detect_meta_compile(view: ArtifactView) -> bool:
     """meta.compile 属性调用（编译器访问面——Python 宿主承载）。"""
     nodes = view.nodes
@@ -270,7 +227,6 @@ class ArtifactRouter:
         # 加条目；移植角 = 双向删除（角消除后路由自动放行）。
         self._corners: Dict[str, Callable[[ArtifactView], bool]] = {
             "tuple_value_materialization": _detect_tuple_materialization,
-            "optional_instance_identity": _detect_optional_identity,
             "meta_compile": _detect_meta_compile,
             "kb_vec_payload_materialization": _detect_object_identity,
         }

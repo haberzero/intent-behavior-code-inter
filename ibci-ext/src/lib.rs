@@ -724,10 +724,6 @@ fn capability() -> PyResult<String> {
                 "reason": "单符号赋值值子树含 IbTuple = 元组值物化面（tuple 声明类型推断 + 运行时类型检查交互）——Python 语义宿主",
             },
             {
-                "feature": "optional_instance_identity",
-                "reason": "Optional 包装值实例恒等面（空 Optional 各自独立实例，is 语义）——Python 包装值模型",
-            },
-            {
                 "feature": "meta_compile",
                 "reason": "meta.compile 属性调用（编译器访问面）——Python 宿主",
             },
