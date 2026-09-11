@@ -368,12 +368,21 @@
 >   type_uid 差分，Rust 设值时比对]——**23/43 字面值匹配[20 非字面值归后续，无
 >   DIFF]**；零风险加法式[resolve_symbols 签名不变，type_uid 对齐 Python]，merge 删
 >   分支；设计/裁定 = WORKLOG P9 全量 Rust 化阶段 B 第七增量条目）
->   → **当前批次 = P9 全量 Rust 化阶段 B 续（可 Rust 化，纯计算：语义层 Rust 移植续
->   [类型解析续[变量引用/函数调用/二元运算等需类型环境 + 函数签名] + method[sym_anon_
->   *] + free_vars 闭包捕获 + scope 完整收集[owned_scope_uid]] + 序列化续[符号/类型/
->   scope 收集 + 完整 artifact 组装] + 值对象[IbValue 扩展 8902 行] + 差分 harness
->   扩语料[语义/序列化/值对象面] + 保留 Python 接口[HostService + CPS VM[LLM/意图/宿
->   主面]]；CPS 优化续[覆盖差 22 节点——LLM/意图面按需补齐]随推进）**。
+>   → **方向裁定重述（用户 2026-09-11，凌驾"对齐 Python 为验证门"旧定位）**：与 Python
+>   行为对齐非首要；设计合理性/系统健康性/内部架构/宏观设计一致性 = 设计最主要原则；
+>   Rust 化后行为若可证明正向（或至少无害）的轻微改变允许；已有设计可推翻。
+>   → **全量 Rust 化第一批 ✅**（差分 harness 状态注册表——gap/divergence 显式化，单一
+>   权威源 `tests/diff_harness/divergence.py`；3 处散落隐式 if 收敛 + DIVERGENCE 机制
+>   就绪 + 进度可观测；设计/裁定 = WORKLOG P9 第一批条目）
+>   → **当前批次 = 全量 Rust 化阶段 B 续**（可 Rust 化纯计算面：语义层 Rust 移植续
+>   [类型解析续[非字面值：变量引用/函数调用/二元运算需类型环境+函数签名] + method
+>   [sym_anon_*] + free_vars 闭包捕获 + scope 完整收集[owned_scope_uid]] + 序列化产出端
+>   [FlatSerializer] + 值对象[IbValue 扩展 8902 行，去 Py<PyAny>] + KB/quoted/meta 推理面
+>   [纯计算零 LLM，Rust 化为唯一真相，消除 host 桥接双真相] + CPS dispatch 同构[执行
+>   核心 tree-walking → CPS 分发表，覆盖差 31→53]；差分 harness 扩语料 + 注册表随批次
+>   收缩；**仅 LLM/意图 IO 面[真实 LLM 调用点/宿主集成]保留 Python 接口**[HostService]；
+>   A 类正向偏离[mut captured/while-else/global·switch/starred/位置 (0,0)→Option<Pos>]
+>   随批落地 + 注册表登记；每步受影响子集+smoke 零回归 + commit + 同步文档）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -437,16 +446,11 @@
    → 全量 Rust 化阶段 B 第一增量 序列化 UID 生成 node_uid/type_uid/asset_uid 34 节点池差分 ✅
    → 全量 Rust 化阶段 B 第二增量 节点数据序列化 node_data 829/835 ✅
    → 全量 Rust 化阶段 B 第七增量 语义层续 类型解析 type_uid 字面值 23/43 ✅
-   → 全量 Rust 化阶段 B 续[语义层续[类型解析续+method+free_vars+scope 完整] + 序列化续 + 值对象][当前]
-   → 全量 Rust 化阶段 B 续[语义层续[类型+method+free_vars+scope 完整] + 序列化续 + 值对象][当前]
-   → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+method+free_vars] + 序列化续 + 值对象][当前]
-   → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+intrinsic 函数/方法/模块+free_vars] + 序列化续 + 值对象][当前]
-   → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+intrinsic+free_vars] + 序列化续 + 值对象][当前]
-   → 阶段④ 并发解除
-   → P9 Rust（设计 + 构建；差分 harness 语料已含 quote/eval + KB 判别面；
-   harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
-   扩 temp root）；
-   每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
+   → 全量 Rust 化第一批 差分 harness 状态注册表[gap/divergence 显式化，单一权威源] ✅
+   → 全量 Rust 化阶段 B 续[语义层续[类型解析续[非字面值]+method+free_vars+scope 完整]
+   + 序列化产出端 + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构][当前]
+   （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
+   扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify
    验证门可改走 `meta.quote` 单点化——C3 批评估）；R-B KB 与 memory/meta.compile 机制同构
    （已落）。C3 自修改安全 / D1 SR-4 行为值直接执行 随主线一并推进。

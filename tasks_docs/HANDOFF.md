@@ -131,7 +131,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10 世界模型数据库主线 **P4 ✅ → P5 接手**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B 第七增量 ✅ → 第一批 harness 状态注册表 ✅ → 第二批 语义层续[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -518,6 +518,18 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     配**（20 非字面值归后续[变量引用/函数调用/二元运算等需类型环境 + 函数签名]，无
     DIFF；差分 harness test_scope_symbols_type_uid_corpus）。**零风险加法式**
     （resolve_symbols 签名不变，type_uid 对齐 Python，不动 Python 执行路径/语义层）。
+  - **P9 全量 Rust 化第一批 差分 harness 状态注册表 已落地（本 session，
+    unsafe-vibe-dev）**：**方向裁定重述（用户 2026-09-11）**——与 Python 行为对齐非
+    首要目标；设计合理性/系统健康性/内部架构/宏观设计一致性 = 设计最主要原则；Rust
+    化后行为若可证明正向（或至少无害/无负面/无危险）的轻微改变允许；已有设计非绝对
+    事实，允许按破坏性重构授权推翻。用户授权全量 Rust 化无人值守（goal
+    max_goal_rounds=100）+ 最大自主权限（批次重排/合并/细分/实现思路调整均可，不改变
+    主线方向 + 不违反硬约束时无需拍板）。新增 tests/diff_harness/divergence.py = 已
+    裁定状态注册表（单一权威源，GAP/DIVERGENCE/DEGRADE 三态 + 结构化 scope + 通用
+    查询 API）——收敛 3 处散落隐式 if（free_vars 排除 / closure_capture 跳过 / 非字
+    面值 type_uid 条件）+ DIVERGENCE 机制就绪 + 进度可观测（GAP 数随批次收缩）。零行
+    为变化纯加法式。验证 diff_harness 34 + smoke 832 零回归。设计/裁定 =
+    _p9b1_harness_state_registry.md[落地后删] + WORKLOG P9 第一批条目。
   - **P9 全量 Rust 化阶段 B 续（当前批次）**：阶段 B（可 Rust 化，纯计算）——语义层
     Rust 移植续[类型解析续[变量引用/函数调用/二元运算等需类型环境 + 函数签名] +
     method[sym_anon_*] + free_vars 闭包捕获 + scope 完整收集[owned_scope_uid]] + 序列

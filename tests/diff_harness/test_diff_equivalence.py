@@ -479,10 +479,14 @@ class TestRustSerializationUid:
         import json
         from tests.conftest import compile_ibci
         from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness import divergence
         from tests.diff_harness.harness import load_rust_kernel
         rk = load_rust_kernel()
         if not rk.loaded or not hasattr(rk._module, "serialize_nodes"):
             return
+
+        # 按状态注册表排除 GAP 字段（单一权威源，非硬编码 if）
+        excluded = divergence.excluded_fields(divergence.NODE_POOL)
 
         def _norm(val):
             if isinstance(val, str) and val.startswith("node_"):
@@ -492,10 +496,8 @@ class TestRustSerializationUid:
             return val
 
         def _normalize(node_data):
-            # 排除 free_vars（语义层输出，非序列化面）+ 规范化节点引用 UID
-            return {
-                k: _norm(v) for k, v in node_data.items() if k != "free_vars"
-            }
+            # 排除已声明 GAP 字段 + 规范化节点引用 UID
+            return {k: _norm(v) for k, v in node_data.items() if k not in excluded}
 
         for name, code in CORPUS:
             root, pool_json = rk._module.serialize_nodes(code)
@@ -600,10 +602,13 @@ class TestRustSerializationUid:
         import json
         from tests.conftest import compile_ibci
         from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness import divergence
         from tests.diff_harness.harness import load_rust_kernel
         rk = load_rust_kernel()
         if not rk.loaded or not hasattr(rk._module, "resolve_symbols"):
             return
+        # 已声明 GAP：跳过的语料 case（单一权威源，非按名硬编码 continue）
+        skip = divergence.skipped_cases(divergence.SCOPE_NODE_UID)
         for name, code in CORPUS:
             rs_syms = json.loads(rk._module.resolve_symbols(code))
             py_pool = FlatSerializer().serialize_artifact(compile_ibci(code))["pools"]["symbols"]
@@ -611,8 +616,7 @@ class TestRustSerializationUid:
             for uid, d in py_scope.items():
                 rs = rs_syms.get(uid)
                 assert rs is not None, f"语料 {name} scope 符号缺失：{uid}"
-                # 已知边界：closure_capture 嵌套函数 free_vars 致节点 UID 链式差异
-                if name == "closure_capture":
+                if name in skip:
                     continue
                 assert rs.get("node_uid") == d.get("node_uid"), (
                     f"语料 {name} scope 符号 node_uid 差分不等价（{uid}）：\n"
@@ -627,10 +631,13 @@ class TestRustSerializationUid:
         import json
         from tests.conftest import compile_ibci
         from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness import divergence
         from tests.diff_harness.harness import load_rust_kernel
         rk = load_rust_kernel()
         if not rk.loaded or not hasattr(rk._module, "resolve_symbols"):
             return
+        # 已声明 GAP：字段为 null 即跳过的字段（单一权威源，非硬编码 if）
+        null_fields = divergence.null_gap_fields(divergence.SCOPE_TYPE_UID)
         for name, code in CORPUS:
             rs_syms = json.loads(rk._module.resolve_symbols(code))
             py_pool = FlatSerializer().serialize_artifact(compile_ibci(code))["pools"]["symbols"]
@@ -638,9 +645,53 @@ class TestRustSerializationUid:
             for uid, d in py_scope.items():
                 rs = rs_syms.get(uid)
                 assert rs is not None, f"语料 {name} scope 符号缺失：{uid}"
-                # Rust 设值时（字面值可推断）比对；非字面值 Rust 不产（type_uid = null）
-                if rs.get("type_uid") is not None:
-                    assert rs.get("type_uid") == d.get("type_uid"), (
-                        f"语料 {name} scope 符号 type_uid 差分不等价（{uid}）：\n"
-                        f"  py : {d.get('type_uid')}\n  rust: {rs.get('type_uid')}"
-                    )
+                # Rust 已设值时比对；null GAP 字段（非字面值，Rust 尚未承载）跳过
+                if any(rs.get(f) is None for f in null_fields):
+                    continue
+                assert rs.get("type_uid") == d.get("type_uid"), (
+                    f"语料 {name} scope 符号 type_uid 差分不等价（{uid}）：\n"
+                    f"  py : {d.get('type_uid')}\n  rust: {rs.get('type_uid')}"
+                )
+
+
+class TestDivergenceRegistry:
+    """差分 harness 状态注册表（单一权威源）自检：合法性 + 被消费（非死代码）。"""
+
+    def test_registry_well_formed(self):
+        from tests.diff_harness import divergence
+        ids = {s.id for s in divergence.REGISTERED}
+        assert len(ids) == len(divergence.REGISTERED)  # ID 唯一
+        for s in divergence.REGISTERED:
+            assert s.kind in divergence._KINDS
+            assert s.plane in divergence._PLANES
+            assert s.rationale  # rationale 非空（声明根因）
+            assert s.scope      # scope 非空
+
+    def test_gap_query_drives_node_pool_exclusion(self):
+        """node_pool 面：free_vars GAP 声明驱动字段排除（query API 返回正确值）。"""
+        from tests.diff_harness import divergence
+        assert divergence.excluded_fields(divergence.NODE_POOL) == {"free_vars"}
+
+    def test_gap_query_drives_scope_node_uid_skip(self):
+        from tests.diff_harness import divergence
+        assert divergence.skipped_cases(divergence.SCOPE_NODE_UID) == {"closure_capture"}
+
+    def test_gap_query_drives_scope_type_uid_null(self):
+        from tests.diff_harness import divergence
+        assert divergence.null_gap_fields(divergence.SCOPE_TYPE_UID) == {"type_uid"}
+
+    def test_divergence_mechanism_ready(self):
+        """DIVERGENCE 机制就绪：当前无正向偏离 + GAP 计数 = 3。"""
+        from tests.diff_harness import divergence
+        assert divergence.divergences_for(divergence.NODE_POOL) == []
+        assert divergence.gap_count() == 3
+        assert divergence.divergence_count() == 0
+
+    def test_registry_actually_consumed(self, monkeypatch):
+        """注册表真的驱动逻辑（非死代码）：移除一个 GAP 声明 → 排除集合变化。"""
+        import tests.diff_harness.divergence as dv
+        assert "free_vars" in dv.excluded_fields(dv.NODE_POOL)
+        # 模拟 free_vars GAP 已消除（Rust 承载了 free_vars）→ 该字段不再被排除
+        remaining = [s for s in dv.REGISTERED if s.id != "gap-node-pool-free-vars"]
+        monkeypatch.setattr(dv, "REGISTERED", remaining)
+        assert dv.excluded_fields(dv.NODE_POOL) == set()

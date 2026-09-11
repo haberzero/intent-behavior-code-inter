@@ -3997,6 +3997,41 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] + 值对象[IbValue 扩展 8902
     行]）续在隔离分支（差分门逐级验证）；保留 Python 接口[HostService + CPS VM[LLM/意
     图/宿主面]]。
+- **P9 全量 Rust 化方向裁定重述 + 第一批（差分 harness 状态注册表：gap/divergence
+  显式化，2026-09-11，本 session，unsafe-vibe-dev）**：**方向裁定（用户本 session 重申，
+  凌驾于"对齐 Python 为验证门"旧定位）**：与 Python 行为对齐非首要目标；设计合理性/
+  系统健康性/内部代码架构/宏观设计思路一致性 = 设计最主要原则；Rust 化后行为若有可证明
+  正向（或至少无害/无负面/无危险）的轻微改变允许；已有设计非绝对事实，允许按破坏性
+  重构授权推翻。用户授权全量 Rust 化无人值守（goal max_goal_rounds=100）+ 最大自主权限
+  （批次重排/合并/细分/实现思路调整均可，不改变主线方向 + 不违反硬约束时无需拍板）。
+  **第一批 = 差分 harness 状态注册表（单一权威源 + 通用查询）**——现状问题：随语义层
+  Rust 化推进，Rust 中间产物（节点池/scope 符号/类型表）相对 Python 参考存在已知缺口，
+  原本散落在各差分测试函数隐式 if + 注释（① test_node_pool_corpus `_normalize`
+  `if k != "free_vars"` 静默排除 free_vars 字段；② test_scope_symbols_node_uid_corpus
+  `if name == "closure_capture": continue` 按语料名硬编码跳过；③
+  test_scope_symbols_type_uid_corpus `if rs.get("type_uid") is not None` 非字面值条件
+  跳过）。违反 code-quality §二 静默绕过/§一.4 半接通 + design-philosophy §一 单一
+  权威源/§二 统一设计语言（三处割裂形态表达同一概念）+ 工作模式定论 #3 禁 tricky（
+  按名 continue 隐式约定）。**方案**：新增 tests/diff_harness/divergence.py = 已裁定
+  状态注册表（单一权威源）——声明三态（GAP[Rust 尚未承载，随批次收缩，可观测度量] /
+  DIVERGENCE[已裁定正向偏离，含 verify 核对器，供后续批次] / DEGRADE[环境态降级]）；
+  DeclaredState[id/kind/plane/scope/rationale/verify?]；scope 结构化前缀（field:<name>
+  排除字段 / case:<name> 跳 case / symbol:null:<field> 字段 null 即 gap）——协议驱动
+  分派，非能力探测；通用查询 API（excluded_fields/skipped_cases/null_gap_fields/
+  divergences_for/gap_count/summary）；测试函数改查注册表（消除散落硬编码 if）+ 新
+  测试类 TestDivergenceRegistry 验证合法性 + 被消费（monkeypatch 移除声明→排除集合
+  变化，证明非死代码）。**关键裁定（self-grill 全分支消解）**：① 单一权威源放 tests
+  安全网层（非 core 内核层）——描述"Rust 相对 Python 参考的迁移期已知状态"，全量转向
+  后 harness + 注册表一并退场，不污染生产内核；② GAP 不冒充通过——命中不计 fail 但显式
+  声明可查询，超出 scope 差异仍 fail（fail-fast，不掩盖范围外回归）；③ DIVERGENCE 需
+  verify 核对器（正向偏离不靠跳过，靠核对符合已登记预期）；④ 注册表有明确退场（每 GAP
+  rationale 标归属批次，批次落地→移除，全量转向→GAP 清空退场）；⑤ 不双写文档（注册表
+  = 机器权威状态，WORKLOG/NEXT_STEPS 只指针指向）。**变化前后**：前 = 3 处散落隐式 if
+  + 注释承载"为什么豁免"（不可观测/不可统一治理/tricky）；后 = 单一声明式注册表 + 通用
+  查询（可观测 + 随批次收缩 + DIVERGENCE 机制就绪）；比对语义不变（free_vars 仍排除/
+  closure 仍跳过/非字面值仍条件比对）——纯收敛，零行为变化，零风险加法式。**验证**：
+  diff_harness 子集 34 passed（34 语料差分门零差异 + 新 6 测试）+ smoke 子集 832 passed
+  零回归（2026-09-11 实跑）；设计/裁定 = _p9b1_harness_state_registry.md[落地后删]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
