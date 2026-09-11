@@ -679,8 +679,9 @@ class TestRustSerializationUid:
     def test_intrinsic_type_pool(self):
         """intrinsic 类型池差分（全量 Rust 化·语义层：types 池 KERNEL_NATIVE 固定集）：
         Rust 66 non-generic KERNEL_NATIVE 类型基础字段（uid/kind/name/module_path/
-        provenance/visibility/storage_model）== Python types 池对应类型（用含 meta 的
-        语料覆盖 IMPORT_GATED）。members_uids[方法] / 用户类 / 泛型实例 = 后续。"""
+        provenance/visibility/storage_model）+ members_uids[成员符号 canonical uid——
+        双方同一确定性内容哈希，uid 逐条精确等价] == Python types 池对应类型（用含
+        meta 的语料覆盖 IMPORT_GATED）。用户类 / 泛型实例成员 = 后续。"""
         import json
         from tests.conftest import compile_ibci
         from core.compiler.serialization.serializer import FlatSerializer
@@ -707,6 +708,24 @@ class TestRustSerializationUid:
             for f in ("uid", "kind", "name", "module_path", "provenance", "visibility", "storage_model"):
                 assert r.get(f) == p.get(f), (
                     f"intrinsic 类型 {name} 差分不等价（{f}）：\n  py : {p.get(f)}\n  rust: {r.get(f)}"
+                )
+            # members_uids（成员名 → 成员符号 canonical uid——双方同一确定性内容
+            # 哈希[owner_type_uid + name + kind + 固定 null/{} 内容]，uid 精确等价）。
+            # 用户面类型（__string_exec__ 入口模块成员 = 用户顶层符号）经 divergence
+            # 注册表声明排除（归 modules 组装增量）。
+            from tests.diff_harness import divergence as _dv
+            if name in _dv.skipped_cases(_dv.TYPE_MEMBERS):
+                continue
+            r_members = r.get("members_uids")
+            p_members = p.get("members_uids")
+            assert (r_members is None) == (p_members is None), (
+                f"intrinsic 类型 {name} members_uids 有无不一致：py={p_members is not None} rs={r_members is not None}"
+            )
+            if r_members is not None:
+                assert r_members == p_members, (
+                    f"intrinsic 类型 {name} members_uids 不等价：\n"
+                    f"  py only: {sorted(set(p_members.items()) - set(r_members.items()))[:3]}\n"
+                    f"  rs only: {sorted(set(r_members.items()) - set(p_members.items()))[:3]}"
                 )
 
     def test_scope_pool_corpus(self):
@@ -855,10 +874,12 @@ class TestDivergenceRegistry:
         assert divergence.null_gap_fields(divergence.SCOPE_TYPE_UID) == set()
 
     def test_divergence_mechanism_ready(self):
-        """DIVERGENCE 机制就绪：当前无正向偏离 + GAP 计数 = 0（全部缺口已收束）。"""
+        """DIVERGENCE 机制就绪：当前无正向偏离 + GAP 计数 = 1（__string_exec__ 用户
+        模块成员面——modules 组装增量）。"""
         from tests.diff_harness import divergence
         assert divergence.divergences_for(divergence.NODE_POOL) == []
-        assert divergence.gap_count() == 0
+        assert divergence.gap_count() == 1
+        assert divergence.skipped_cases(divergence.TYPE_MEMBERS) == {"__string_exec__"}
         assert divergence.divergence_count() == 0
 
     def test_registry_actually_consumed(self, monkeypatch):

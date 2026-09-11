@@ -10,6 +10,7 @@ from core.kernel.spec.type_ref import TypeRef
 from core.kernel.blueprint import CompilationArtifact, CompilationResult
 from core.base.serialization import BaseFlatSerializer
 from core.base.uid import node_uid, type_uid, anon_symbol_uid
+from core.base.uid import _hash_prefix
 
 # S4 声明驱动：payload 字段名即序列化键（与 artifact_rehydrator 读侧一致，
 # 单一权威源——不维护兼容键映射）。
@@ -131,21 +132,39 @@ class FlatSerializer(BaseFlatSerializer):
         self.node_pool[uid] = node_data
         return uid
 
-    def _collect_symbol(self, sym: Any) -> str:
+    def _collect_symbol(self, sym: Any, owner_type_uid: Optional[str] = None) -> str:
         sym_id = id(sym)
         if sym_id in self.type_map:
             return self.type_map[sym_id]
-            
+
         # 使用符号自身的稳定 UID (name@depth)
         uid = getattr(sym, 'uid', None)
         if not uid:
+            # 匿名符号（类型成员 method/field）= 内容哈希（sha256[:16]，canonical）——
+            # 与 node_uid 同机制（内容确定性）：符号序列化内容（name/kind/type_uid/
+            # node_uid/owned_scope_uid/metadata）+ 声明类型 uid（owner）。旧
+            # hash(str(sym)) 进程随机（PYTHONHASHSEED）→ artifact 身份非 canonical
+            #（内容寻址不变量破损），确定性内容哈希替代。
             if hasattr(sym, 'get_content_hash'):
                 uid = anon_symbol_uid(sym.get_content_hash())
             else:
-                uid = anon_symbol_uid(f"{hash(str(sym)) & 0xFFFFFFFFFFFFFFFF:016x}")
-        
+                kind = sym.kind.name if hasattr(sym.kind, 'name') else str(sym.kind)
+                content = {
+                    "kind": kind,
+                    "metadata": sym.metadata,
+                    "name": sym.name,
+                    "node_uid": self._collect_node(sym.def_node) if hasattr(sym, 'def_node') and sym.def_node else None,
+                    "owned_scope_uid": self._collect_scope(sym.owned_scope) if hasattr(sym, 'owned_scope') and sym.owned_scope else None,
+                    "type_uid": self._collect_type(sym.spec) if hasattr(sym, 'spec') and sym.spec else None,
+                }
+                if owner_type_uid is not None:
+                    content["owner_type_uid"] = owner_type_uid
+                uid = anon_symbol_uid(
+                    _hash_prefix(json.dumps(content, sort_keys=True, separators=(",", ":")))
+                )
+
         self.type_map[sym_id] = uid
-        
+
         sym_data = {
             "uid": uid,
             "name": sym.name,
@@ -257,8 +276,10 @@ class FlatSerializer(BaseFlatSerializer):
         # 收集成员表 (实现元数据与符号系统的闭环)
         # 运行时加载器虽然不认符号，但序列化时需要将成员符号中的类型 UID 提取出来
         if t.members:
+            # owner_type_uid = 声明类型 uid（canonical 内容哈希的 owner 分量——
+            # 同名成员跨类型区分，如 str.len vs dict.len）。
             type_data["members_uids"] = {
-                name: self._collect_symbol(sym) for name, sym in t.members.items()
+                name: self._collect_symbol(sym, owner_type_uid=uid) for name, sym in t.members.items()
             }
             
         self.type_pool[uid] = type_data

@@ -7,13 +7,18 @@
 use sha2::{Digest, Sha256};
 
 /// 内容哈希前缀（sha256 前 16 hex 字符，UTF-8 编码）。
-fn hash_prefix(content: &str) -> String {
+pub fn hash_prefix(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     let result = hasher.finalize();
     // 前 16 hex 字符（sha256 hexdigest 前 16）
     let hex: String = result.iter().map(|b| format!("{:02x}", b)).collect();
     hex[..16].to_string()
+}
+
+/// 匿名符号 UID：`sym_anon_<content_hash>`（与 Python anon_symbol_uid 同构）。
+pub fn anon_symbol_uid(content_hash: &str) -> String {
+    format!("sym_anon_{}", content_hash)
 }
 
 /// AST 节点 UID：`node_<sha256[:16]>`（内容确定性）。

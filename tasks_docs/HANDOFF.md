@@ -133,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-3 ✅[divergence GAP 清零] → 2b-2b-2 增量 4[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-4 ✅[divergence GAP 清零 → __string_exec__ 用户成员面 1 项] → 2b-2b-2 增量 5[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -159,10 +159,12 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     隐藏计数行）；**smoke 子集（tests/contracts+tests/compiler）832 passed / ~13s 进程内无子进程**
     （高频验证用）；末次全量 **4191/1**（~126s，P5 公理层放行门，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P9 全量 Rust 化 第三批 子项 2b-2b-2 增量 4：method 符号
-  [sym_anon_*，content_hash 已裁定偏离走 divergence.py DIVERGENCE 白名单登记] → generic/用户
-  类型条目 + modules 组装[完整 artifact 闭环——消除"消费 Python 前端 JSON"输入边界]；每步
-  差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest 可按需自由
+- **🔴 主线延续点（下一位智能体 = P9 全量 Rust 化 第三批 子项 2b-2b-2 增量 5：generic/用户
+  类型条目[泛型 members[owner uid 区分] + __string_exec__ 用户模块成员[统一遍历产出，
+  同一 canonical 哈希]] + modules 组装[完整 artifact 闭环——消除"消费 Python 前端 JSON"
+  输入边界]；method 符号 canonical 哈希已收束[增量 4：Python 既有缺陷 hash(str(sym))
+  进程随机根因修复——artifact 身份 canonical 化，uid 双侧精确等价]；每步差分门零差异
+  放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest 可按需自由
   [2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由处理[重构质量原则优先]）**：
   - **P1 R-A quote/eval 已落地（本 session）**：`meta.quote`/`meta.eval` + `quoted` 一等值类型
     （单一验证门 + 值通道）。裁定 = WORKLOG（P1 R-A 条目）。
@@ -566,16 +568,22 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     def_node_uids 统一遍历记录[删 DefNode 事后重序列化——根因修复：嵌套函数节点
     free_vars 只在定义处上下文可正确产出] + **divergence 注册表 GAP 3→0 清零**
     [free_vars 2 处消除 + 非字面值 type_uid 过期移除] + 死代码清理[infer_type/
-    EMPTY_MODULES/builtin_function_names]] ✅[HEAD]。裁定全记录 = WORKLOG 第一批/
-    第二批/第三批条目。
-  - **P9 全量 Rust 化 第三批 2b-2b-2 增量 4 + 后续（当前批次）**：[当前] = method 符号
-    [sym_anon_*，content_hash 用原始 spec = 已裁定偏离，divergence.py DIVERGENCE 白名单
-    登记] → generic/用户类型条目 + modules 组装[完整 artifact 闭环] → 值对象[IbValue
-    扩展 8902 行，去 Py<PyAny>] → KB/quoted/meta 推理面唯一真相[消 host 桥接双真相] →
-    CPS 同构[tree-walking → CPS 分发表，覆盖差 31→53 收缩]；差分 harness 语料纪律
-    [自包含脚本] + 注册表随批次收缩[GAP 已清零，method content_hash 偏离将以
-    DIVERGENCE 声明进入]；仅 LLM/意图 IO 面[HostService]保留 Python 接口。证明大部分
-    关键核心逻辑可 Rust 化后全量转向 Rust（废弃 Python 双通道/对比，harness 退场）。
+    EMPTY_MODULES/builtin_function_names]] ✅ → 子项 2b-2b-2 增量 4 types 池
+    members_uids 成员面[35 类型 244 成员 uid 逐条精确等价 0 DIFF + **Python 匿名符号
+    canonical 内容哈希根因修复**[既有缺陷：hash(str(sym)) 进程随机 → artifact 身份
+    非 canonical——canonical JSON[owner_type_uid+name+kind+null/{}] sha256[:16] 与
+    node_uid 同机制，跨进程 3 次同指纹；anon_symbol_uid 唯一消费方，格式不变] +
+    __string_exec__ 用户模块成员面 GAP 登记[TYPE_MEMBERS 面，modules 组装增量]]
+    ✅[HEAD]。裁定全记录 = WORKLOG 第一批/第二批/第三批条目。
+  - **P9 全量 Rust 化 第三批 2b-2b-2 增量 5 + 后续（当前批次）**：[当前] = generic/
+    用户类型条目（泛型 members[owner uid 区分：list[int].append ≠ list.append] +
+    __string_exec__ 用户模块成员[统一遍历产出]）+ modules 组装[完整 artifact 闭环]
+    → 值对象[IbValue 扩展 8902 行，去 Py<PyAny>] → KB/quoted/meta 推理面唯一真相
+    [消 host 桥接双真相] → CPS 同构[tree-walking → CPS 分发表，覆盖差 31→53 收缩]；
+    差分 harness 语料纪律[自包含脚本] + 注册表随批次收缩[当前 GAP = 1：
+    __string_exec__ 用户成员面]；仅 LLM/意图 IO 面[HostService]保留 Python 接口。
+    证明大部分关键核心逻辑可 Rust 化后全量转向 Rust（废弃 Python 双通道/对比，
+    harness 退场）。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -635,11 +643,12 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化第三批 子项 2b-2b-2 增量 2 放行门实跑）**：
-  **4298 passed / 1 skipped / 139.98s / rc=0**（2026-09-11；= 增量 1 基线 4297 +
-  node_to_symbol 差分测试 1 例；注：test_p7_process_isolation / test_run_result_type 为
-  flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一
-  session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
+- **全量 pytest 基线（本 session P9 全量 Rust 化第三批 子项 2b-2b-2 增量 4 放行门实跑）**：
+  **4298 passed / 1 skipped / 141.38s / rc=0**（2026-09-11；= 增量 2 基线 4298[members
+  断言扩面不计例数]——本门含 **Python 序列化生产路径变更**[匿名符号 canonical 内容哈希
+  根因修复]的全量零回归验证；注：test_p7_process_isolation / test_run_result_type 为
+  flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供
+  下一 session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
   放开——测试速度已提高、全量并非不可接受，不再限 4 场合（merge/放行门、公理层或语义错误
   集、阶段边界/里程碑、开新分支前 仍为强制门），可按需自由全量；② 已过期或被证不正确的
   测试脚本可自由处理（重构/修正/删除）——重构的质量原则大于维持现状的重要性。已同步

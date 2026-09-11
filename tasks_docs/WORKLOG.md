@@ -4418,6 +4418,57 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     放行门以清理后全量实跑为准）。**第三批剩余**：method 符号[sym_anon_*
     content_hash 偏离白名单] / generic+用户类型条目 / modules 组装[完整 artifact
     闭环]。
+- **P9 全量 Rust 化第三批 子项 2b-2b-2 增量 4（Rust 独立 artifact 产出：types 池
+  members_uids 成员面 35 类型 244 成员 uid 逐条精确等价 + Python 匿名符号 canonical
+  内容哈希根因修复[既有缺陷：artifact 身份非 canonical]，2026-09-11，本 session，
+  unsafe-vibe-dev）**：**types 池成员面**（members_uids——intrinsic 类型池 66 基础
+  字段之上的成员符号引用面）。**既有缺陷发现（侦察实证）**：Python 匿名符号（类型
+  成员 method/field + __string_exec__ 用户模块成员）的 uid = `hash(str(sym)) &
+  0xFFFFFFFFFFFFFFFF`（serializer._collect_symbol fallback）——**PYTHONHASHSEED 进程
+  随机 → 同 corpus 跨进程 members_uids 指纹不同（3 进程实证）→ artifact 身份非
+  canonical**（违反 P3 artifact 内容寻址不变量[identity = canonical sha256 全摘要] +
+  双内核差分协议的跨进程可比性前提）。**根因修复（变化前后详记）**：
+  - **变化前**：`_collect_symbol` 匿名分支 = `get_content_hash`[无实现] →
+    `hash(str(sym))`[进程随机]；成员 uid 跨进程漂移；members_uids 不可差分。
+  - **变化后**：匿名分支 = **canonical 内容哈希**（与 node_uid 同机制——设计语言
+    统一：内容确定性）：content = {kind, metadata, name, node_uid, owned_scope_uid,
+    type_uid, owner_type_uid[声明类型 uid，_collect_type 成员循环传入]} 的 canonical
+    JSON（json.dumps sort_keys + compact separators）→ sha256[:16] →
+    sym_anon_<hash>；成员符号 metadata 固定 {}、type_uid/node_uid/owned_scope_uid
+    固定 null（全语料实证），content 实变 = owner_type_uid + name + kind。
+  - **owner 分量**：同名成员跨类型区分（str.len vs dict.len vs list.len——实证 3 类
+    各含 len）；owner = 声明类型 uid（type_root.<name>，确定性）。
+  - **影响面**：anon_symbol_uid 唯一消费方 = _collect_symbol（grep 实证）；格式
+    不变（sym_anon_<16hex>，contracts/test_uid_generator 仅断言格式✅）；artifact
+    自洽（uid = 池内引用键，全量再生成）；缓存原子性（artifact 整体换代，无跨代
+    混合）。
+  **交付**：
+  - **intrinsic_symbols.rs**：METHOD_MEMBERS 静态成员表[35 类型 / 244 成员，转录自
+    IBCI 公理层声明式成员表，全语料实证跨语料稳定；(type name, [(member name,
+    kind)]) 字母序] + anon_member_uid[canonical 内容哈希，键序 owned_scope_uid <
+    owner_type_uid[d<r]——首跑因键序错位 1 次后修正] + builtin_intrinsic_types 扩
+    members_uids[35 类型；泛型条目继承基类表[owner uid 区分]归后续]。
+  - **serialization.rs**：hash_prefix 转 pub + anon_symbol_uid[与 Python 同构]。
+  - **差分 harness**：test_intrinsic_type_pool 扩 members_uids 断言（uid 逐条精确
+    等价——双方同一 canonical 哈希）；__string_exec__ 用户模块成员面（用户顶层符号，
+    随语料变化）经 divergence 注册表声明 GAP（gap-entry-module-user-members，
+    TYPE_MEMBERS 新面）——归 modules 组装增量。
+  **关键裁定（self-grill 全分支消解）**：① **canonical 内容哈希替代进程 hash =
+  根因修复非行为维持**（历史非权威——旧 uid 机制使 artifact 身份不可判定，属 IBCI
+  自身设计缺陷，可推翻[工作模式定论 7]；修复方向 = 与 node_uid/asset_uid 同一
+  内容确定性机制[设计语言统一]，非发明新方案）；② **owner 分量 = 区分性必要**
+  （同名成员跨类型实证；owner = 类型 uid 而非裸名——与池内引用键同构）；③ **静态
+  成员表 = 公理转录**（与 66 类型池/intrinsic 符号表/方法返回类型表同模式——Rust
+  独立 artifact 产出的固有面；权威源 = IBCI 公理，差分门 = 安全网）；④ **Python
+  生产路径变更经全量 pytest 门**（序列化面变更 = 红线场合；smoke + 全量双验）；
+  ⑤ **__string_exec__ 用户面归 modules 组装**（固定产出面无 source 输入——机制边界
+  清晰，GAP 声明登记非隐式排除）。**验证**：members_uids 35 类型 244 成员 **uid
+  逐条精确等价 0 DIFF**（跨进程 3 次同指纹）+ intrinsic 66 基础字段回归无损 +
+  node_to_type 635/635 + node_to_symbol 262/262 + 节点池全字段 + scope 52/52 全
+  回归无损；diff_harness 40 passed + smoke 832 passed + 全量 pytest 零回归（放行门
+  实跑）。**第三批剩余**：generic/用户类型条目（泛型 members[owner uid 区分] +
+  __string_exec__ 用户模块成员）+ modules 组装[完整 artifact 闭环——消除"消费
+  Python 前端 JSON"输入边界]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

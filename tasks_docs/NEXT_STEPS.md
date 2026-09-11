@@ -468,8 +468,14 @@
    → 第三批 子项 2b-2b-2 增量 3 free_vars 闭包捕获 + 定义节点 UID 统一遍历化[free_vars
       [name, 定义符号 uid] 外层函数 scope 捕获[顶层排除] + def_node_uids 统一遍历记录
       [删 DefNode 事后重序列化根因修复] + divergence 注册表 GAP 3→0 + 死代码清理] ✅
-   → 第三批 子项 2b-2b-2 增量 4 续[method 符号 sym_anon_* + generic/用户类型条目 +
-      modules 组装[完整 artifact 闭环]][当前]
+   → 第三批 子项 2b-2b-2 增量 4 types 池 members_uids 成员面[35 类型 244 成员 uid 逐条
+      精确等价 + Python 匿名符号 canonical 内容哈希根因修复[既有缺陷 hash(str(sym)) 进程
+      随机 → artifact 身份非 canonical；canonical JSON[owner_type_uid+name+kind+null/{}]
+      sha256[:16] 与 node_uid 同机制；跨进程 3 次同指纹] + __string_exec__ 用户模块成员面
+      GAP 登记[modules 组装增量]] ✅
+   → 第三批 子项 2b-2b-2 增量 5 续[generic/用户类型条目[泛型 members owner uid 区分 +
+      __string_exec__ 用户模块成员] + modules 组装[完整 artifact 闭环——消除"消费 Python
+      前端 JSON"输入边界]][当前]
    + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。

@@ -31,13 +31,14 @@ SCOPE_SYMBOL = "scope_symbol"      # scope 符号 name + kind
 SCOPE_NODE_UID = "scope_node_uid"  # scope 符号 node_uid
 SCOPE_TYPE_UID = "scope_type_uid"  # scope 符号 type_uid
 INTRINSIC = "intrinsic"            # intrinsic 符号表
+TYPE_MEMBERS = "type_members"      # types 池成员面（members_uids）
 TOKEN = "token"
 AST = "ast"
 DESERIALIZE = "deserialize"
 DATA_PLANE = "data_plane"
 _PLANES = {
     NODE_POOL, SCOPE_SYMBOL, SCOPE_NODE_UID, SCOPE_TYPE_UID, INTRINSIC,
-    TOKEN, AST, DESERIALIZE, DATA_PLANE,
+    TYPE_MEMBERS, TOKEN, AST, DESERIALIZE, DATA_PLANE,
 }
 
 
@@ -63,7 +64,21 @@ class DeclaredState:
 # 2026-09-11 收缩：gap-node-pool-free-vars（free_vars 闭包捕获已 Rust 承载——NodeSerializer
 # 统一遍历产出）/ gap-scope-node-uid-closure（节点 UID 链式差异随 free_vars 对齐消除）/
 # gap-scope-type-uid-non-literal（第二批类型解析 43/43 收束后已过期）移除。
-REGISTERED: List[DeclaredState] = []
+REGISTERED: List[DeclaredState] = [
+    DeclaredState(
+        id="gap-entry-module-user-members",
+        kind=GAP,
+        plane=TYPE_MEMBERS,
+        scope="case:__string_exec__",
+        rationale=(
+            "__string_exec__ 入口模块类型的 members_uids = 用户顶层符号（import 模块名/"
+            "顶层变量/顶层函数，随语料变化）——Rust 固定产出面（intrinsic_type_pool，无"
+            " source 输入）不承载用户面成员；归 modules 组装增量（统一遍历完整 artifact"
+            " 产出：入口模块类型 = 固定基础字段 + 用户顶层符号成员[同一 canonical 哈希]）。"
+            " 静态 35 类型成员面已 Rust 承载并 uid 逐条精确等价。"
+        ),
+    ),
+]
 
 
 # ---- 查询 API（单一权威源消费入口）----
