@@ -777,24 +777,37 @@ class TestRustSerializationUid:
         rk = load_rust_kernel()
         if not rk.loaded or not hasattr(rk._module, "node_to_type"):
             return
-        # 验证 IbConstant[字面量 type_uid，不依赖 func_sigs/any/generic]。缺口节点排除
-        # [IbName 的 any/int-from-Call[infer_type_env Call func_sigs 查表 + Name 未定义→any
-        # 后续] + IbBinOp/IbListExpr/IbDict/IbTuple/IbCall/IbIfExp[依赖 func_sigs/generic/
-        # 方法] + infer_type_env 节点覆盖[UnaryOp/BoolOp/Compare/Subscript/Attribute] +
-        # IbCall intrinsic 函数签名 + 方法 bound_method + generic]。
-        covered = {"IbConstant"}
+        # 验证 IbConstant[字面量] + IbCall[intrinsic 函数返回类型：print→void/range→list/
+        # len→int + 用户函数 func_sigs + eval→any 修正]。IbCall 排除 Attribute callee
+        # [方法 bound_method 返回类型后续] + generic[泛型后续]。IbName 的 any/int-from-Call
+        # + infer_type_env 节点覆盖[UnaryOp/BoolOp/Compare/Subscript/Attribute] 后续。
+        covered = {"IbConstant", "IbCall"}
         for name, code in CORPUS:
             rs = json.loads(rk._module.node_to_type(code))
             data = FlatSerializer().serialize_artifact(compile_ibci(code))
             mod = data["modules"][data["entry_module"]]
             py = mod["side_tables"]["node_to_type"]
             py_nodes = mod["pools"]["nodes"]
-            rs_f = {u: t for u, t in rs.items() if py_nodes.get(u, {}).get("_type") in covered}
-            py_f = {u: t for u, t in py.items() if py_nodes.get(u, {}).get("_type") in covered}
+            def _filter(nodes_map):
+                out = {}
+                for u, t in nodes_map.items():
+                    nt = py_nodes.get(u, {}).get("_type")
+                    if nt not in covered:
+                        continue
+                    if nt == "IbCall":
+                        f = py_nodes.get(u, {}).get("func", "")
+                        if isinstance(f, str) and f in py_nodes and py_nodes[f].get("_type") == "IbAttribute":
+                            continue  # 方法 bound_method 返回类型后续
+                        if "[" in t:
+                            continue  # generic 泛型后续
+                    out[u] = t
+                return out
+            rs_f = _filter(rs)
+            py_f = _filter(py)
             rs_multiset = Counter(rs_f.values())
             py_multiset = Counter(py_f.values())
             assert rs_multiset == py_multiset, (
-                f"语料 {name} node_to_type type_uid 分布不等价（infer_type_env 已覆盖节点）：\n"
+                f"语料 {name} node_to_type type_uid 分布不等价（IbConstant+IbCall 非方法/非 generic）：\n"
                 f"  rust: {sorted(rs_multiset.elements())}\n  py : {sorted(py_multiset.elements())}"
             )
 

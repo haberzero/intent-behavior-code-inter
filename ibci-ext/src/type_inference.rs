@@ -242,10 +242,16 @@ pub fn intrinsic_call_type(func: &Expr) -> Option<String> {
         Expr::Name { id, .. } => match id.as_str() {
             "knowledge" => Some("knowledge".to_string()),
             "quote" => Some("quoted".to_string()),
+            "print" => Some("void".to_string()),
+            "range" => Some("list".to_string()),
+            "len" => Some("int".to_string()),
             _ => None,
         },
         Expr::Attribute { attr, .. } => match attr.as_str() {
             "quote" => Some("quoted".to_string()),
+            // meta.eval → auto：对齐 scope 符号 type_uid（`y = meta.eval(x)` 的 y 符号
+            // type_uid = auto，Python 43/43）。node_to_type 的 meta.eval() 调用返回 any
+            // 属节点级偏离（已排除 Attribute callee，gap）——符号 type_uid 优先。
             "eval" => Some("auto".to_string()),
             _ => None,
         },

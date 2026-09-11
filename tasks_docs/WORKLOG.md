@@ -4238,6 +4238,28 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   查表 + Name 未定义→any + 节点覆盖 + IbCall intrinsic 函数签名 + 方法 + generic] /
   node_to_symbol 侧表 / free_vars / method 符号 / generic+用户类型条目 / modules 组装
   [完整 artifact 闭环]。
+- **P9 全量 Rust 化第三批 子项 2b-2b-1（Rust 独立 artifact 产出：node_to_type 的
+  IbCall intrinsic 函数返回类型，IbConstant+IbCall 34/34 全对齐，2026-09-11，本
+  session，unsafe-vibe-dev）**：**node_to_type 的 IbCall**（**intrinsic 函数返回类型**
+  + 用户函数 func_sigs）。**侦察**：node_to_type 剩余 DIFF[IbConstant+IbCall 24/34]
+  **根因** = **intrinsic_call_type** **不含** **intrinsic 函数返回类型**
+  [print→void/range→list/len→int，之前只含 knowledge/quote/eval]；用户函数 IbCall
+  [add] **已对齐**[func_sigs 查表，infer_type_env 的 Call 处理已查 func_sigs]。**交付**：
+  type_inference 的 intrinsic_call_type 加 **print→void + range→list + len→int**
+  [intrinsic 函数返回类型]；差分 harness 的 test_node_to_type_corpus **验证**
+  **IbConstant+IbCall**[排除 Attribute callee 方法[bound_method 返回类型后续] +
+  generic[泛型后续]]。**关键裁定**：① **intrinsic_call_type 的 eval 保持 auto**
+  [非 any]——**scope 符号 type_uid**[y = meta.eval(x) 的 y] **= auto**[Python 43/43]，
+  **node_to_type** 的 **meta.eval() 调用 = any**[Python]**是节点级偏离**[已排除
+  Attribute callee，gap]——**符号 type_uid 优先**[43/43 已验证]；② **IbCall 方法**
+  [Attribute callee：xs.append/s.upper] **的返回类型** **缺口**[方法类型 bound_method，
+  后续]；③ **完整 intrinsic 函数返回类型**[19 个，34 语料覆盖 print/range/len，其他后续
+  从 Python 语义层移植]。**验证**：node_to_type **IbConstant+IbCall 非方法/非 generic**
+  **34/34 全对齐 0 DIFF**；**scope 符号 type_uid 43/43 恢复**[eval→auto 保持]；
+  diff_harness 39 passed + smoke 832 passed 零回归。**第三批剩余**：node_to_type 完整
+  [IbCall 方法 bound_method + generic + intrinsic 函数返回类型其他 16 个 + IbName any +
+  infer_type_env 节点覆盖] / node_to_symbol / free_vars / method 符号 / generic+用户类型
+  / modules 组装。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
