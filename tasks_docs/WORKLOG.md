@@ -5520,6 +5520,17 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - 剩余：ai（LLM 面——深）、ihost（状态往返）、async/thread；之后 Python VM
   退役 + 差分退场 + 前端权威化。
 
+## 阶段 D2-③c 完成：ai 模块路由 Rust（2026-09-11，commit 86550f21）
+
+- **LLM 面桥接贯通**：host_call vtable 契约分派（loader proxy 单一权威——
+  unbox_args/装箱正确性；参数 box + proxy 再拆箱/保持原形）+ 模块名反查；
+  host_pyerr 补 code 属性（契约异常 EMB_*）；cmp Host 相等经桥接；unbox
+  值身份类型透传；from_py 重构（IbObject 先分派——vector 不被原生 extract
+  捕获；list 元素面直读）；state 导出 vector 元素面 + 物化器保真。
+- **路由：5 模块 Rust**（meta/compute_engine/plugins/fs/world_model/ai）——
+  全量 pytest 4283/0/1。
+- 剩余：ihost（状态往返）、async/thread 深集成。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
