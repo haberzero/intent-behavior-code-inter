@@ -5478,6 +5478,20 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - **下一步 D2-②**：宿主错误码边界（桥接异常 → RustRuntimeError[code+line]）
   → 路由全源送 Rust（大验证）。
 
+## 阶段 D2-② 完成 + 路由变更评估（2026-09-11，commit a7a103d3）
+
+- **D2-②（a7a103d3）宿主错误码边界**：host_pyerr_to_thrown（宿主异常 →
+  Thrown 携带 error_code + line/col——P3 typed 错误贯通）；call_host_method/
+  Function 错误传播改造；Optional to_list 特例跳过 Tensor（遮蔽修复）。
+  验证（内核直调）：narrow_model NAR_* + line 经桥接 ✓；tensor to_list ✓。
+- **路由变更评估（回退）**：扩 native_modules → **55 失败**（LLM/async/thread/
+  ihost 状态/文件内核集成深缺口）——路由全源送 Rust = 多轮项目。桥接 +
+  错误码成果保留（D2-② 为 D2 后续的地基）。
+- **D2 路线修正**：① 桥接 host_call ✓ ② 错误码边界 ✓（均为地基）③ 路由
+  变更 = 后续多轮（按宿主面逐模块验证：compute/plugins[已通] → fs → ai/LLM
+  → ihost 状态 → async/thread）④ Python VM 退役 ⑤ 差分退场。
+- 全量 pytest 4283/0/1。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
