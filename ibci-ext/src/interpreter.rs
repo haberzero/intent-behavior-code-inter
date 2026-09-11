@@ -52,6 +52,9 @@ pub enum IbValue {
     /// 显示面 = source 形态 `func <name>(<param types>) -> <ret>`）。
     Function(Rc<Function>),
     Host(Py<PyAny>),
+    /// 异常对象值（Exception/LLMError/ThreadError 家族实例——class + message；
+    /// 显示面 = `<class>: <message>`[无 message = 仅类名]）。
+    Error { class: String, message: String },
 }
 
 /// 手动 Clone（Py<PyAny> 不实现 Clone——经 clone_ref 增引用）。
@@ -74,6 +77,10 @@ impl Clone for IbValue {
             IbValue::Vector(v) => IbValue::Vector(v.clone()),
             // 函数值 = Rc 共享（同一函数对象）
             IbValue::Function(f) => IbValue::Function(f.clone()),
+            IbValue::Error { class, message } => IbValue::Error {
+                class: class.clone(),
+                message: message.clone(),
+            },
             IbValue::Host(h) => {
                 // clone_ref 需 GIL（执行期 GIL 已持有，with_gil 可重入）
                 let cloned = Python::with_gil(|py| h.clone_ref(py));
@@ -96,6 +103,7 @@ impl std::fmt::Debug for IbValue {
             IbValue::Knowledge(_) => write!(f, "Knowledge(..)"),
             IbValue::Vector(v) => write!(f, "Vector({v:?})"),
             IbValue::Function(fn_val) => write!(f, "Function({})", fn_val.name),
+            IbValue::Error { class, .. } => write!(f, "Error({class})"),
             IbValue::List(_) => write!(f, "List(..)"),
             IbValue::Dict(_) => write!(f, "Dict(..)"),
             IbValue::Host(_) => write!(f, "Host(<py object>)"),
@@ -132,6 +140,10 @@ impl PartialEq for IbValue {
             (IbValue::Vector(a), IbValue::Vector(b)) => a == b,
             // 函数值相等 = 对象身份（Rc 共享——同一函数定义）
             (IbValue::Function(a), IbValue::Function(b)) => Rc::ptr_eq(a, b),
+            // 异常对象相等 = 值语义（class + message）
+            (IbValue::Error { class: a, message: ma }, IbValue::Error { class: b, message: mb }) => {
+                a == b && ma == mb
+            }
             (IbValue::Host(a), IbValue::Host(b)) => {
                 // 宿主对象身份相等（同一 Python 对象指针）
                 a.as_ptr() == b.as_ptr()
@@ -191,6 +203,15 @@ impl IbValue {
                 }
                 s
             }
+            // 异常对象显示面 = `<class>: <message>`（无 message = 仅类名——
+            // Python IbException.__to_prompt__ 契约）
+            IbValue::Error { class, message } => {
+                if message.is_empty() {
+                    class.clone()
+                } else {
+                    format!("{class}: {message}")
+                }
+            }
             IbValue::Host(_) => "<host>".into(),
         }
     }
@@ -208,6 +229,7 @@ impl IbValue {
             IbValue::Knowledge(_) => true,
             IbValue::Vector(v) => !v.is_empty(),
             IbValue::Function(_) => true,
+            IbValue::Error { .. } => true,
             IbValue::Host(_) => true,
         }
     }
@@ -218,6 +240,75 @@ impl IbValue {
             _ => None,
         }
     }
+}
+
+/// 异常类名集合（可构造异常对象的 intrinsic 类——CLASS_PARENTS 异常家族 +
+/// Exception 基类）。
+fn is_exception_class(name: &str) -> bool {
+    matches!(
+        name,
+        "Exception"
+            | "LLMError"
+            | "LLMCallError"
+            | "LLMParseError"
+            | "LLMRetryExhaustedError"
+            | "ThreadError"
+            | "ThreadCancelled"
+            | "ThreadFailed"
+    )
+}
+
+/// 全局绑定（parent 链顶——异常变量语义：Python runtime_context 全局面，
+/// 越 try 块可见[实证]）。
+fn set_global_env(env: &Rc<RefCell<Environment>>, name: &str, value: IbValue) {
+    let b = env.borrow();
+    match &b.parent {
+        Some(p) => set_global_env(p, name, value),
+        None => {
+            drop(b);
+            env.borrow_mut().set(name, value);
+        }
+    }
+}
+
+/// 值类型名（异常匹配面：raise 值 → 类型名）。
+fn value_type_name(v: &IbValue) -> &str {
+    match v {
+        IbValue::Int(_) => "int",
+        IbValue::Float(_) => "float",
+        IbValue::Str(_) => "str",
+        IbValue::Bool(_) => "bool",
+        IbValue::None_ => "none",
+        IbValue::List(_) => "list",
+        IbValue::Dict(_) => "dict",
+        IbValue::Quoted { .. } => "quoted",
+        IbValue::MetaFn(_) => "meta",
+        IbValue::Knowledge(_) => "knowledge",
+        IbValue::Vector(_) => "vector",
+        IbValue::Function(_) => "function",
+        IbValue::Error { class, .. } => class.as_str(),
+        IbValue::Host(_) => "host",
+    }
+}
+
+/// 异常可赋性（except handler 匹配：handler 类型 = 值类型名，或 handler 在值
+/// 类型继承链上——CLASS_PARENTS 传递闭包；原语类型不继承 Exception[Python
+/// 实证：raise 5 不被 except Exception 捕获]）。
+fn exception_assignable(value: &IbValue, handler_type: &str) -> bool {
+    let vt = value_type_name(value);
+    if vt == handler_type {
+        return true;
+    }
+    // 继承链：vt → parent → ...
+    let mut cur = String::from(vt);
+    for _ in 0..16 {
+        match crate::intrinsic_symbols::class_parent(&cur) {
+            Some(p) if p == handler_type => return true,
+            Some(p) => cur = p,
+            None => return false,
+        }
+    }
+    false
 }
 
 /// vector 显示面 = 截断摘要（dim + 前 8 维 %.6g——同 __to_prompt__/_string_
@@ -317,6 +408,14 @@ fn num_result(a: &IbValue, b: &IbValue, f: fn(f64, f64) -> f64) -> IbValue {
 // --------------------------------------------------------------------------- //
 // 环境（变量绑定 + 函数定义 + 作用域链）
 // --------------------------------------------------------------------------- //
+/// 抛出的异常值（raise 传播面——Rust 解释器异常机制；try/except 捕获面）。
+/// 值 = 被 raise 的任意 IbValue（IBCI 语义：raise 不做类型检查，匹配在
+/// except 处理器面——类可赋性）。
+#[derive(Debug, Clone)]
+pub struct Thrown {
+    pub value: IbValue,
+}
+
 pub struct Environment {
     vars: HashMap<String, IbValue>,
     functions: HashMap<String, Function>,
@@ -372,6 +471,8 @@ impl Environment {
     fn set(&mut self, name: &str, value: IbValue) {
         self.vars.insert(name.to_string(), value);
     }
+
+
     fn get(&self, name: &str) -> Option<IbValue> {
         if let Some(v) = self.vars.get(name) {
             return Some(v.clone());
@@ -436,16 +537,16 @@ impl Interpreter {
     }
 
     /// 执行模块（返回数据面 print 输出）。
-    pub fn run_module(&self, module: &Module) -> Vec<String> {
+    pub fn run_module(&self, module: &Module) -> Result<Vec<String>, Thrown> {
         let mut output: Vec<String> = Vec::new();
         let env = Rc::new(RefCell::new(Environment::new(None)));
         for stmt in &module.body {
-            let flow = self.exec_stmt(&env, stmt, &mut output);
+            let flow = self.exec_stmt(&env, stmt, &mut output)?;
             if !matches!(flow, Flow::Next) {
                 break;
             }
         }
-        output
+        Ok(output)
     }
 
     fn exec_stmt(
@@ -453,10 +554,13 @@ impl Interpreter {
         env: &Rc<RefCell<Environment>>,
         stmt: &Stmt,
         output: &mut Vec<String>,
-    ) -> Flow {
-        match stmt {
+    ) -> Result<Flow, Thrown> {
+        Ok(match stmt {
             Stmt::Assign { targets, value, .. } => {
-                let v = value.as_ref().map(|e| self.eval_expr(env, e, output));
+                let v: Option<IbValue> = match value {
+                    Some(e) => Some(self.eval_expr(env, e, output)?),
+                    None => None,
+                };
                 if let Some(target) = targets.first() {
                     // 声明面 target（TypeAnnotatedExpr）= 运行时纯赋值——注解仅
                     // 类型/编译期语义（值域不消费）
@@ -493,8 +597,8 @@ impl Interpreter {
                             }
                         }
                         Expr::Subscript { value, slice, .. } => {
-                            let base = self.eval_expr(env, value, output);
-                            let key = self.eval_expr(env, slice, output);
+                            let base = self.eval_expr(env, value, output)?;
+                            let key = self.eval_expr(env, slice, output)?;
                             if let Some(val) = &v {
                                 assign_subscript(&base, &key, val.clone());
                             }
@@ -508,7 +612,7 @@ impl Interpreter {
                 // x op= v → x = x op v（load x，应用 op，store）
                 if let Expr::Name { id, .. } = target {
                     let cur = env.borrow().get(id).unwrap_or(IbValue::Int(0));
-                    let rhs = self.eval_expr(env, value, output);
+                    let rhs = self.eval_expr(env, value, output)?;
                     // 复合算子映射（"+=" → "+"，"-=" → "-"）
                     let base_op = match op.as_str() {
                         "+=" => "+",
@@ -521,19 +625,19 @@ impl Interpreter {
                 Flow::Next
             }
             Stmt::ExprStmt { value, .. } => {
-                self.eval_expr(env, value, output);
+                self.eval_expr(env, value, output)?;
                 Flow::Next
             }
             Stmt::If { test, body, orelse, .. } => {
-                let cond = self.eval_expr(env, test, output).truthy();
+                let cond = self.eval_expr(env, test, output)?.truthy();
                 if cond {
-                    self.exec_body(env, body, output)
+                    self.exec_body(env, body, output)?
                 } else {
-                    self.exec_body(env, orelse, output)
+                    self.exec_body(env, orelse, output)?
                 }
             }
             Stmt::For { target, iter, body, orelse, .. } => {
-                let items = self.eval_iter(env, iter, output);
+                let items = self.eval_iter(env, iter, output)?;
                 let mut ran_else = false;
                 for item in items {
                     let name = match target {
@@ -541,36 +645,36 @@ impl Interpreter {
                         _ => continue,
                     };
                     env.borrow_mut().set(&name, item);
-                    match self.exec_body(env, body, output) {
+                    match self.exec_body(env, body, output)? {
                         Flow::Break => {
                             ran_else = false;
                             break;
                         }
-                        Flow::Return(v) => return Flow::Return(v),
+                        Flow::Return(v) => return Ok(Flow::Return(v)),
                         _ => {}
                     }
                 }
                 if !ran_else && !orelse.is_empty() {
-                    self.exec_body(env, orelse, output)
+                    self.exec_body(env, orelse, output)?
                 } else {
                     Flow::Next
                 }
             }
             Stmt::While { test, body, orelse, .. } => {
                 let mut ran_else = false;
-                while self.eval_expr(env, test, output).truthy() {
-                    match self.exec_body(env, body, output) {
+                while self.eval_expr(env, test, output)?.truthy() {
+                    match self.exec_body(env, body, output)? {
                         Flow::Break => {
                             ran_else = false;
                             break;
                         }
                         Flow::Continue => continue,
-                        Flow::Return(v) => return Flow::Return(v),
+                        Flow::Return(v) => return Ok(Flow::Return(v)),
                         _ => {}
                     }
                 }
                 if !ran_else && !orelse.is_empty() {
-                    self.exec_body(env, orelse, output)
+                    self.exec_body(env, orelse, output)?
                 } else {
                     Flow::Next
                 }
@@ -601,7 +705,7 @@ impl Interpreter {
             }
             Stmt::Return { value, .. } => {
                 let v = match value {
-                    Some(e) => self.eval_expr(env, e, output),
+                    Some(e) => self.eval_expr(env, e, output)?,
                     None => IbValue::None_,
                 };
                 Flow::Return(v)
@@ -652,24 +756,26 @@ impl Interpreter {
             // global/nonlocal：编译期语义——运行时无操作（语义效果在编译期经
             // 符号解析完成；运行期赋值经作用域链自然穿透）
             Stmt::Global { .. } | Stmt::Nonlocal { .. } => Flow::Next,
-            // raise：异常对象求值——错误面（Rust 解释器无异常传播机制——
-            // ThrownException/Try 捕获语义 = 跨切面后续增量；语料面无 raise）
+            // raise：异常对象求值后抛出（异常传播机制——try/except 捕获面；
+            // IBCI 语义：raise 不做类型检查，匹配在 except 处理器面[类可赋性]；
+            // 裸 raise = 编译错误[Python 实证]，exc 必在）
             Stmt::Raise { exc, .. } => {
-                if let Some(e) = exc {
-                    self.eval_expr(env, e, output);
-                }
-                Flow::Next
+                let value = match exc {
+                    Some(e) => self.eval_expr(env, e, output)?,
+                    None => IbValue::None_,
+                };
+                return Err(Thrown { value });
             }
             // switch：匹配后自动跳出（无 fall-through）；case 内 break = no-op
             // （C 习惯，接受为退出 case）；Return 透传、Continue 透传外层循环
             // （switch 本身不是循环）
             Stmt::Switch { test, cases, .. } => {
-                let tv = self.eval_expr(env, test, output);
+                let tv = self.eval_expr(env, test, output)?;
                 for case in cases {
                     let matched = match &case.pattern {
                         None => true, // default case
                         Some(p) => {
-                            let pv = self.eval_expr(env, p, output);
+                            let pv = self.eval_expr(env, p, output)?;
                             &tv == &pv
                         }
                     };
@@ -677,9 +783,9 @@ impl Interpreter {
                         continue;
                     }
                     for s in &case.body {
-                        match self.exec_stmt(env, s, output) {
-                            Flow::Return(v) => return Flow::Return(v),
-                            Flow::Continue => return Flow::Continue,
+                        match self.exec_stmt(env, s, output)? {
+                            Flow::Return(v) => return Ok(Flow::Return(v)),
+                            Flow::Continue => return Ok(Flow::Continue),
                             // break = no-op（匹配后自动跳出——退出 case）
                             Flow::Break => break,
                             Flow::Next => {}
@@ -689,10 +795,81 @@ impl Interpreter {
                 }
                 Flow::Next
             }
-            Stmt::Try { body, .. } | Stmt::ClassDef { body, .. } => {
-                self.exec_body(env, body, output)
+            // try/except/else/finally（异常传播捕获面——Python VM IbTry 语义
+            // 转录：body 抛异常 = 逐 handler 匹配[类可赋性：handler 类型 = 值
+            // 类型名或在值类型继承链上]；handler 变量 = 全局绑定[Python 实证：
+            // runtime_context.define_variable——越 try 块可见]；else 仅无异常
+            // 无 signal 时执行；finally 所有路径执行且 signal 覆盖 pending；
+            // 无匹配 handler = finally 后 re-raise）
+            Stmt::Try { body, handlers, orelse, finalbody, .. } => {
+                let mut pending: Option<Flow> = None;
+                let mut raised: Option<Thrown> = None;
+                match self.exec_body(env, body, output) {
+                    Ok(Flow::Next) => {}
+                    Ok(sig) => pending = Some(sig),
+                    Err(t) => raised = Some(t),
+                }
+                if let Some(t) = &raised {
+                    let exc_value = t.value.clone();
+                    let mut handled = false;
+                    for h in handlers {
+                        let matched = match &h.exc_type {
+                            Some(Expr::Name { id, .. }) => {
+                                exception_assignable(&exc_value, id)
+                            }
+                            _ => false,
+                        };
+                        if !matched {
+                            continue;
+                        }
+                        if let Some(name) = &h.name {
+                            // 异常变量 = 全局绑定（越 try 块可见——Python 实证）
+                            set_global_env(env, name, exc_value.clone());
+                        }
+                        match self.exec_body(env, &h.body, output) {
+                            Ok(Flow::Next) => {}
+                            Ok(sig) => pending = Some(sig),
+                            Err(t2) => {
+                                // handler 内再抛 = 未处理（finally 后 re-raise）
+                                raised = Some(t2);
+                                continue;
+                            }
+                        }
+                        handled = true;
+                        break;
+                    }
+                    if !handled {
+                        // 无匹配：finally 后 re-raise
+                        match self.exec_body(env, finalbody, output) {
+                            Ok(Flow::Next) => {}
+                            Ok(sig) => return Ok(sig), // finally signal 覆盖
+                            Err(t2) => return Err(t2),
+                        }
+                        return Err(Thrown { value: exc_value });
+                    }
+                    // 已处理 = 异常消解（不 re-raise）
+                    raised = None;
+                } else if pending.is_none() {
+                    // 无异常且 body 无 signal：else
+                    match self.exec_body(env, orelse, output) {
+                        Ok(Flow::Next) => {}
+                        Ok(sig) => pending = Some(sig),
+                        Err(t) => raised = Some(t),
+                    }
+                }
+                // finally：所有路径执行（signal 覆盖 pending）
+                match self.exec_body(env, finalbody, output) {
+                    Ok(Flow::Next) => {}
+                    Ok(sig) => pending = Some(sig),
+                    Err(t) => return Err(t),
+                }
+                if let Some(t) = &raised {
+                    return Err(t.clone());
+                }
+                pending.unwrap_or(Flow::Next)
             }
-        }
+            Stmt::ClassDef { body, .. } => self.exec_body(env, body, output)?
+        })
     }
 
     /// 宿主对象属性访问（如 q.source）——委托桥接 host_getattr（IBC 宿主值类型
@@ -735,30 +912,30 @@ impl Interpreter {
         env: &Rc<RefCell<Environment>>,
         body: &[Stmt],
         output: &mut Vec<String>,
-    ) -> Flow {
+    ) -> Result<Flow, Thrown> {
         for s in body {
-            let flow = self.exec_stmt(env, s, output);
+            let flow = self.exec_stmt(env, s, output)?;
             if !matches!(flow, Flow::Next) {
-                return flow;
+                return Ok(flow);
             }
         }
-        Flow::Next
+        Ok(Flow::Next)
     }
 
-    fn eval_expr(&self, env: &Rc<RefCell<Environment>>, expr: &Expr, output: &mut Vec<String>) -> IbValue {
-        match expr {
+    fn eval_expr(&self, env: &Rc<RefCell<Environment>>, expr: &Expr, output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+        Ok(match expr {
             Expr::Constant { value, .. } => const_to_value(value),
             Expr::Name { id, .. } => match env.borrow().get(id) {
                 Some(v) => v,
                 None => IbValue::None_,
             },
             Expr::BinOp { left, op, right, .. } => {
-                let l = self.eval_expr(env, left, output);
-                let r = self.eval_expr(env, right, output);
+                let l = self.eval_expr(env, left, output)?;
+                let r = self.eval_expr(env, right, output)?;
                 self.binop(&l, op, &r)
             }
             Expr::UnaryOp { op, operand, .. } => {
-                let v = self.eval_expr(env, operand, output);
+                let v = self.eval_expr(env, operand, output)?;
                 match op.as_str() {
                     "-" => match v {
                         IbValue::Int(i) => IbValue::Int(-i),
@@ -774,9 +951,9 @@ impl Interpreter {
                 if op == "and" {
                     let mut result = IbValue::Bool(true);
                     for v in values {
-                        let x = self.eval_expr(env, v, output);
+                        let x = self.eval_expr(env, v, output)?;
                         if !x.truthy() {
-                            return x; // 短路：返回第一个假值
+                            return Ok(x); // 短路：返回第一个假值
                         }
                         result = x;
                     }
@@ -784,9 +961,9 @@ impl Interpreter {
                 } else {
                     let mut result = IbValue::Bool(false);
                     for v in values {
-                        let x = self.eval_expr(env, v, output);
+                        let x = self.eval_expr(env, v, output)?;
                         if x.truthy() {
-                            return x; // 短路：返回第一个真值
+                            return Ok(x); // 短路：返回第一个真值
                         }
                         result = x;
                     }
@@ -795,10 +972,10 @@ impl Interpreter {
             }
             Expr::Compare { left, ops, comparators, .. } => {
                 // 链式比较（a < b < c）——左到右，全部成立
-                let mut cur = self.eval_expr(env, left, output);
+                let mut cur = self.eval_expr(env, left, output)?;
                 let mut result = true;
                 for (op, r) in ops.iter().zip(comparators.iter()) {
-                    let rv = self.eval_expr(env, r, output);
+                    let rv = self.eval_expr(env, r, output)?;
                     if !self.compare(&cur, op, &rv).truthy() {
                         result = false;
                         break;
@@ -815,17 +992,17 @@ impl Interpreter {
                         // 验证门 + 隔离执行，经 call_meta_fn 原生分发）
                         if let Expr::Name { id, .. } = value.as_ref() {
                             if id == "meta" && (attr == "quote" || attr == "eval") {
-                                let arg_vals: Vec<IbValue> =
-                                    args.iter()
-                                        .map(|a| self.eval_expr(env, a, output))
-                                        .collect();
-                                return self.call_meta_fn(attr, arg_vals, output);
+                                let arg_vals: Vec<IbValue> = args
+                                    .iter()
+                                    .map(|a| self.eval_expr(env, a, output))
+                                    .collect::<Result<Vec<IbValue>, _>>()?;
+                                return Ok(self.call_meta_fn(attr, arg_vals, output));
                             }
                         }
-                        let obj = self.eval_expr(env, value, output);
+                        let obj = self.eval_expr(env, value, output)?;
                         let attr = attr.clone();
                         let arg_vals: Vec<IbValue> =
-                            args.iter().map(|a| self.eval_expr(env, a, output)).collect();
+                            args.iter().map(|a| self.eval_expr(env, a, output)).collect::<Result<Vec<IbValue>, _>>()?;
                         self.call_method(&obj, &attr, arg_vals)
                     }
                     _ => {
@@ -834,32 +1011,36 @@ impl Interpreter {
                             _ => String::new(),
                         };
                         let arg_vals: Vec<IbValue> =
-                            args.iter().map(|a| self.eval_expr(env, a, output)).collect();
+                            args.iter().map(|a| self.eval_expr(env, a, output)).collect::<Result<Vec<IbValue>, _>>()?;
                         // 原生 meta 函数绑定（from meta import quote/eval）
                         if let Some(IbValue::MetaFn(n)) = env.borrow().get(&func_name) {
                             self.call_meta_fn(n, arg_vals, output)
                         // 函数值（一等值别名——fn f = g / x = g）→ 按值调用
                         } else if let Some(IbValue::Function(f)) = env.borrow().get(&func_name) {
                             let global = global_rc(env);
-                            self.call_user_function(&f, arg_vals, output, &global)
+                            self.call_user_function(&f, arg_vals, output, &global)?
                         // 函数为宿主对象 → 调宿主函数
                         } else if let Some(IbValue::Host(h)) = env.borrow().get(&func_name) {
                             self.call_host_function(&h, arg_vals)
                         } else {
-                            self.call_function(env, &func_name, arg_vals, output)
+                            self.call_function(env, &func_name, arg_vals, output)?
                         }
                     }
                 }
             }
             Expr::List { elts, .. } => {
-                let items: Vec<IbValue> =
-                    elts.iter().map(|e| self.eval_expr(env, e, output)).collect();
+                let items: Vec<IbValue> = elts
+                    .iter()
+                    .map(|e| self.eval_expr(env, e, output))
+                    .collect::<Result<Vec<IbValue>, _>>()?;
                 IbValue::list_new(items)
             }
             Expr::Tuple { elts, .. } => {
                 // 元组：IBC 数据面 = 列表（同 List）
-                let items: Vec<IbValue> =
-                    elts.iter().map(|e| self.eval_expr(env, e, output)).collect();
+                let items: Vec<IbValue> = elts
+                    .iter()
+                    .map(|e| self.eval_expr(env, e, output))
+                    .collect::<Result<Vec<IbValue>, _>>()?;
                 IbValue::list_new(items)
             }
             // 切片仅在 Subscript 内有意义（x[1:3]）——独立求值无定义 = None_
@@ -869,13 +1050,15 @@ impl Interpreter {
                     .iter()
                     .zip(values.iter())
                     .map(|(k, v)| {
-                        (self.eval_expr(env, k, output), self.eval_expr(env, v, output))
+                        let kv = self.eval_expr(env, k, output)?;
+                        let vv = self.eval_expr(env, v, output)?;
+                        Ok((kv, vv))
                     })
-                    .collect();
+                    .collect::<Result<Vec<(IbValue, IbValue)>, _>>()?;
                 IbValue::dict_new(pairs)
             }
             Expr::Attribute { value, attr, .. } => {
-                let obj = self.eval_expr(env, value, output);
+                let obj = self.eval_expr(env, value, output)?;
                 match obj {
                     // quoted 的 source 字段（原生——完整源串）
                     IbValue::Quoted { ref source } if attr == "source" => {
@@ -887,36 +1070,42 @@ impl Interpreter {
                 }
             }
             Expr::Subscript { value, slice, .. } => {
-                let base = self.eval_expr(env, value, output);
+                let base = self.eval_expr(env, value, output)?;
                 match slice.as_ref() {
                     // 切片：x[lower:upper]
                     Expr::Slice { lower, upper, .. } => {
-                        let lo = lower.as_ref().map(|e| self.eval_expr(env, e, output));
-                        let hi = upper.as_ref().map(|e| self.eval_expr(env, e, output));
+                        let lo = match lower.as_ref() {
+                            Some(e) => Some(self.eval_expr(env, e, output)?),
+                            None => None,
+                        };
+                        let hi = match upper.as_ref() {
+                            Some(e) => Some(self.eval_expr(env, e, output)?),
+                            None => None,
+                        };
                         subscript_slice(&base, lo.as_ref(), hi.as_ref())
                     }
                     // 单表达式下标：x[1]
                     _ => {
-                        let key = self.eval_expr(env, slice, output);
+                        let key = self.eval_expr(env, slice, output)?;
                         subscript_get(&base, &key)
                     }
                 }
             }
             Expr::IfExp { test, body, orelse, .. } => {
-                let cond = self.eval_expr(env, test, output).truthy();
+                let cond = self.eval_expr(env, test, output)?.truthy();
                 if cond {
-                    self.eval_expr(env, body, output)
+                    self.eval_expr(env, body, output)?
                 } else {
-                    self.eval_expr(env, orelse, output)
+                    self.eval_expr(env, orelse, output)?
                 }
             }
             Expr::TypeAnnotatedExpr { target, .. } => {
                 // 声明面 target 表达式位置（防御臂——声明 target 仅经 Assign 消费；
                 // 若被求值 = 内层名字值）
-                self.eval_expr(env, target, output)
+                self.eval_expr(env, target, output)?
             }
             Expr::Lambda { .. } => IbValue::None_,
-        }
+        })
     }
 
     fn eval_iter(
@@ -924,11 +1113,11 @@ impl Interpreter {
         env: &Rc<RefCell<Environment>>,
         iter: &Expr,
         output: &mut Vec<String>,
-    ) -> Vec<IbValue> {
-        let v = self.eval_expr(env, iter, output);
+    ) -> Result<Vec<IbValue>, Thrown> {
+        let v = self.eval_expr(env, iter, output)?;
         match v {
-            IbValue::List(l) => l.borrow().clone(),
-            _ => Vec::new(),
+            IbValue::List(l) => Ok(l.borrow().clone()),
+            _ => Ok(Vec::new()),
         }
     }
 
@@ -998,12 +1187,13 @@ impl Interpreter {
         name: &str,
         args: Vec<IbValue>,
         output: &mut Vec<String>,
-    ) -> IbValue {
-        match name {
+    ) -> Result<IbValue, Thrown> {
+        Ok(match name {
             "print" => {
-                if let Some(v) = args.first() {
-                    output.push(v.repr());
-                }
+                // 多参 = 空格连接（Python print 语义——数据面实证 print(a, b) =
+                // "a b"；单参行为不变）
+                let parts: Vec<String> = args.iter().map(|a| a.repr()).collect();
+                output.push(parts.join(" ")); // 无参 = 空行（Python print() 语义）
                 IbValue::None_
             }
             "len" => match args.first() {
@@ -1012,6 +1202,19 @@ impl Interpreter {
                 Some(IbValue::Dict(d)) => IbValue::Int(d.borrow().len() as i64),
                 _ => IbValue::Int(0),
             },
+            // 异常对象构造（Exception/LLMError/ThreadError 家族——class +
+            // message；显示面 = `<class>: <message>`[无 message = 仅类名]）
+            name if is_exception_class(name) => {
+                let message = match args.first() {
+                    Some(IbValue::Str(s)) => s.clone(),
+                    Some(other) => other.repr(),
+                    None => String::new(),
+                };
+                IbValue::Error {
+                    class: name.to_string(),
+                    message,
+                }
+            }
             "range" => {
                 let items: Vec<IbValue> = if args.len() == 1 {
                     let stop = match &args[0] {
@@ -1047,7 +1250,7 @@ impl Interpreter {
                             match x {
                                 IbValue::Int(i) => elems.push(*i as f64),
                                 IbValue::Float(f) => elems.push(*f),
-                                _ => return IbValue::None_,
+                                _ => return Ok(IbValue::None_),
                             }
                         }
                         IbValue::Vector(elems)
@@ -1059,12 +1262,12 @@ impl Interpreter {
                 if let Some(f) = env.borrow().get_function(name) {
                     // 全局环境（作用域链根——使函数体可访问全局函数[递归]）
                     let global = global_rc(env);
-                    self.call_user_function(&f, args, output, &global)
+                    self.call_user_function(&f, args, output, &global)?
                 } else {
                     IbValue::None_
                 }
             }
-        }
+        })
     }
 
     /// meta.quote / meta.eval 原生分发（去 Host 化——语义单点真理 =
@@ -1116,7 +1319,12 @@ impl Interpreter {
                 // 分发；silent stdout 面丢弃）
                 let fresh = Rc::new(RefCell::new(Environment::new(None)));
                 let mut silent_output: Vec<String> = Vec::new();
-                self.eval_expr(&fresh, &value, &mut silent_output)
+                // 隔离执行取回值；执行期 raise = 错误面（None_——meta.eval 语料
+                // 面无 raise 探针，跨切面错误面统一后续）
+                match self.eval_expr(&fresh, &value, &mut silent_output) {
+                    Ok(v) => v,
+                    Err(_) => IbValue::None_,
+                }
             }
             _ => IbValue::None_,
         }
@@ -1134,7 +1342,7 @@ impl Interpreter {
         args: Vec<IbValue>,
         output: &mut Vec<String>,
         global: &Rc<RefCell<Environment>>,
-    ) -> IbValue {
+    ) -> Result<IbValue, Thrown> {
         // 新作用域：parent = enclosing[闭包捕获，嵌套函数访问 outer 局部] 或
         // global[顶层函数，使函数体可访问全局函数/变量——递归 + 读全局]
         let parent = f.enclosing.clone().unwrap_or_else(|| global.clone());
@@ -1144,11 +1352,11 @@ impl Interpreter {
                 call_env.borrow_mut().set(param, arg.clone());
             }
         }
-        let flow = self.exec_body(&call_env, &f.body, output);
-        match flow {
+        let flow = self.exec_body(&call_env, &f.body, output)?;
+        Ok(match flow {
             Flow::Return(v) => v,
             _ => IbValue::None_,
-        }
+        })
     }
 
     fn call_method(&self, obj: &IbValue, method: &str, args: Vec<IbValue>) -> IbValue {
@@ -1371,7 +1579,7 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
         // 原生 meta 函数引用 / 原生 KB 值 / vector 值 / 函数值不经桥接
         // （vector 是值语义一等类型，不可拆箱——同 to_native 显式违约契约）
         IbValue::MetaFn(_) | IbValue::Knowledge(_) | IbValue::Vector(_)
-        | IbValue::Function(_) => py.None(),
+        | IbValue::Function(_) | IbValue::Error { .. } => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
 }
@@ -1542,14 +1750,18 @@ use crate::deserializer::deserialize_module;
 
 /// artifact JSON → 执行 → 数据面（print 输出列表）。bridge = host service 桥接
 ///（KB 操作经此委托；None = 无宿主服务，非 KB 语料面）。
-pub fn run_artifact(artifact_json: &str, bridge: Option<Py<PyAny>>) -> Vec<String> {
+pub fn run_artifact(artifact_json: &str, bridge: Option<Py<PyAny>>) -> Result<Vec<String>, String> {
     let module = match deserialize_module(artifact_json) {
         Some(m) => m,
-        None => return Vec::new(),
+        None => return Ok(Vec::new()),
     };
     let interp = match bridge {
         Some(b) => Interpreter::with_bridge(b),
         None => Interpreter::new(),
     };
-    interp.run_module(&module)
+    // 未捕获异常 = 执行错误（消息面——跨线程边界 Send 约束：Thrown 含 Rc 非
+    // Send，于模块边界降级为消息）
+    interp.run_module(&module).map_err(|t| {
+        format!("IBCI: uncaught exception: {}", t.value.repr())
+    })
 }

@@ -205,6 +205,11 @@ const INTRINSIC_TYPES: &[(&str, &str, &str)] = &[
 
 /// 类类型静态父类表（name → 父类名）——转录自 IBCI 内置类继承声明（全语料实证
 /// 稳定；parent_module 恒 null）。未列出的类 = 无父类（null）。
+/// 类型名 → 直接父类（CLASS_PARENTS 查表；无 = None）。
+pub fn class_parent(name: &str) -> Option<String> {
+    CLASS_PARENTS.iter().find(|(n, _)| *n == name).map(|(_, p)| p.to_string())
+}
+
 const CLASS_PARENTS: &[(&str, &str)] = &[
     ("Enum", "Object"),
     ("Intent", "Object"),

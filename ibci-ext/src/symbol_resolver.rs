@@ -312,12 +312,36 @@ impl SymbolResolver {
             }
             Stmt::Try {
                 body,
+                handlers,
                 orelse,
                 finalbody,
                 ..
             } => {
                 for s in body.iter().chain(orelse).chain(finalbody) {
                     self.resolve_stmt(s);
+                }
+                for h in handlers {
+                    // except 变量 = 全局 scope 符号（Python 实证：runtime_context
+                    // 全局面——越 try 块可见；type = any）
+                    if let Some(name) = &h.name {
+                        let top = self.scope_stack.first().cloned().unwrap_or_else(|| self.current_scope());
+                        let uid = format!("scope_{}:{}", top, name);
+                        if !self.symbols.contains_key(&uid) {
+                            let sym_data = Value::Object(serde_json::Map::from_iter([
+                                ("uid".to_string(), Value::String(uid.clone())),
+                                ("name".to_string(), Value::String(name.clone())),
+                                ("kind".to_string(), Value::String("VARIABLE".to_string())),
+                                ("metadata".to_string(), Value::Object(serde_json::Map::new())),
+                                ("node_uid".to_string(), Value::Null),
+                                ("owned_scope_uid".to_string(), Value::Null),
+                                ("type_uid".to_string(), Value::String("type_root.any".to_string())),
+                            ]));
+                            self.symbols.insert(uid, sym_data);
+                        }
+                    }
+                    for s in &h.body {
+                        self.resolve_stmt(s);
+                    }
                 }
             }
             // 其他语句（Return/Break/Continue/Pass/ExprStmt）无绑定

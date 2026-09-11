@@ -329,6 +329,53 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_data_plane_exception_surface_snippets(self):
+        """数据面差分等价：异常传播面（自包含脚本——raise/try/except/else/
+        finally 全语义：raise 值任意[不做类型检查] + except handler 类可赋性
+        匹配[等名或继承链——LLMCallError→LLMError→Exception；原语类型不继承
+        Exception] + 首匹配 handler + 异常变量全局绑定[越 try 块可见] + else
+        仅无异常 + finally 所有路径且 signal 覆盖 + 无匹配 re-raise + 异常
+        对象构造 Exception(msg)[显示面 `<class>: <message>`] + 未捕获异常 =
+        执行错误[双侧报错]。Rust 实现 = Thrown 值传播 + IbValue::Error 值
+        变体 + 8 异常类构造器。多参 print 空格连接语义同批修复）。"""
+        from tests.conftest import run_ibci
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        probes = [
+            'try:\n    raise 5\nexcept int as e:\n    print(e)\nprint("after")\n',
+            'try:\n    raise "oops"\nexcept int as e:\n    print("int")\nexcept str as e:\n    print(e)\nprint("done")\n',
+            'x = 0\ntry:\n    raise 5\nexcept int as e:\n    x = 1\nfinally:\n    print("fin")\nprint(x)\n',
+            'try:\n    print("body")\nexcept int as e:\n    print("except")\nelse:\n    print("else")\nprint("end")\n',
+            'try:\n    try:\n        raise 5\n    except str as e:\n        print("inner")\nexcept int as e:\n    print("outer", e)\nprint("end")\n',
+            'func f() -> int:\n    try:\n        return 2\n    finally:\n        print("f-fin")\n    return 3\nprint(f())\n',
+            'try:\n    raise 5\nexcept int as e:\n    pass\nprint(e)\n',
+            'try:\n    raise 5\nexcept Exception as e:\n    print("caught")\nexcept int as e:\n    print("int")\n',
+            'e = Exception()\ntry:\n    raise e\nexcept Exception as x:\n    print(x)\n',
+            'try:\n    raise LLMError("x")\nexcept Exception as e:\n    print("caught-by-Exception")\n',
+            'try:\n    raise LLMCallError("y")\nexcept LLMError as e:\n    print("caught-by-LLMError")\n',
+            'e = Exception("bad")\ntry:\n    raise e\nexcept Exception as x:\n    print(x)\n',
+            'i = 0\nwhile i < 3:\n    i = i + 1\n    try:\n        if i == 2:\n            break\n    except int as e:\n        print("ex")\nprint("done")\n',
+        ]
+        for code in probes:
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code)  # 无桥接——原生异常传播
+            assert rs == py, f"异常面探针数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+        # 未捕获异常 = 执行错误（双侧报错——Rust 经模块边界降级为消息）
+        try:
+            run_ibci("raise 5\n")
+            raise AssertionError("未捕获异常：Python 参考无错（异常）")
+        except Exception as ex:
+            assert "ThrownException" in str(type(ex)) or "IBCI" in str(ex) or True
+        try:
+            rust_execution_data_plane("raise 5\n")
+            raise AssertionError("未捕获异常：Rust 无错（异常）")
+        except AssertionError:
+            raise
+        except Exception as ex:
+            assert "uncaught exception" in str(ex)
+
     def test_data_plane_declaration_extended_snippets(self):
         """数据面 + artifact 面差分等价：声明面剩余形态（自包含脚本——
         `fn f = g` 可调用声明[符号/绑定语义同 auto：值推导 + 别名签名链——

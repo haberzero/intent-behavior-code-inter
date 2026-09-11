@@ -185,3 +185,28 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
   为本批次重点探针）。
 - smoke：tests/contracts + tests/compiler。
 - 全量 pytest：增量放行门 + 第三/四批边界门。
+
+## 增量 3e：错误面统一——异常传播机制（2026-09-11 落地）
+
+Rust 解释器异常传播机制（3b 登记的跨切面错误面增量落地）：
+- **Thrown 值传播**：exec_stmt/exec_body/eval_expr/call_function/
+  call_user_function 全签名 Result<_, Thrown> 线程化（raise 求值后抛出；
+  未捕获 = 模块边界降级为消息[Send 约束：Thrown 含 Rc 非 Send]→ Python
+  RuntimeError；meta.eval 隔离执行内 raise = 错误面 None_）
+- **IbValue::Error{class, message} 值变体**：异常对象（Exception/LLMError/
+  ThreadError 家族 8 类构造器——显示面 `<class>: <message>`[无 message = 仅
+  类名，Python IbException.__to_prompt__ 契约]；值语义相等；不经桥接）
+- **try/except/else/finally 全语义**（Python VM IbTry 转录）：raise 不做类型
+  检查 + handler 类可赋性匹配[值类型名 = handler 类型或在继承链上——
+  CLASS_PARENTS 传递闭包；原语类型不继承 Exception[实证：raise 5 不被
+  except Exception 捕获]] + 首匹配 + 异常变量全局绑定[set_global_env——
+  Python runtime_context 全局面，越 try 块可见实证] + else 仅无异常无 signal +
+  finally 所有路径且 signal 覆盖 pending + 无匹配 re-raise + handler 内再抛
+  = 未处理
+- **artifact 面**：IbTry/IbExceptHandler 节点全序列化（handler type/name/body
+  + e 符号绑定[VARIABLE/any/定义节点 = handler 节点]）+ IbRaise cause=null +
+  位置约定（raise 位置 = 关键字 end）
+- **多参 print 修复**（同批暴露的既有缺口）：print(a, b) = "a b"（空格连接；
+  无参 = 空行——Python print 语义实证）
+差分门：test_data_plane_exception_surface_snippets（13 探针全语义 + 未捕获面
+双侧报错）。

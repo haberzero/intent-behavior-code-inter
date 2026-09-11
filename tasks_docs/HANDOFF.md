@@ -133,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 ✅ + 2a/2b/2c KB 全 41 成员面 + vector 值原生 ✅ + 3b CPS 31→36 ✅ + 3c 声明面 ✅ + 3d 声明面剩余 + 函数值一等化 ✅ → LLM 运行时面/Host 退役收尾[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-5 ✅[完整 artifact 闭环——34 语料五池精确等价，第三批收官] → 第四批 增量 1 ✅ + 2a/2b/2c KB 全 41 成员面 + vector 值原生 ✅ + 3b CPS 31→36 ✅ + 3c/3d 声明面 + 函数值一等化 ✅ + 3e 异常传播机制 ✅ → LLM 运行时面/Host 退役收尾[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -170,21 +170,20 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   已落地**[Quoted/MetaFn 变体 + quote 验证门[非空/语法/单表达式/自包含] + eval 隔离
   执行[fresh env + 值通道] + q.source 原生；quoted 4 语料无桥接数据面等价；错误面
   = 后续跨切面增量]；**增量 2a 已落地**[kb.rs KB 语料面 10 方法面原生——KB 3 语料
-  无桥接数据面等价，full_corpus 全原生无桥接化]；**增量 2b/2c/3b/3c/3d 已落地**
-  [2b：kb.rs +13 方法查询/审计/对比/展开/传递面——25 行合成探针全对齐；2c：
-  IbValue::Vector 不可变值[format_g6 = Python %.6g 等价] + vec intrinsic +
-  向量运算 + KB 嵌入面 5 方法——22 行合成探针全对齐；3b：CPS 覆盖差收缩
-  31→36——5 节点移植[global/nonlocal + raise 错误面 + switch/case]；3c：
-  声明面移植——TYPE x = v / auto / 泛型 / 显式覆盖，声明 Assign 绑定面；3d：
-  声明面剩余形态[fn 可调用声明 + 别名签名链 / 括号 + 裸列元组解包 / 点分类型
-  / 函数内解包] + **IbValue::Function 一等值变体**[根因修复：函数别名调用
-  env.get = None——双写 functions/vars 表 + source 形态显示面
-  func name(types) -> ret + 身份相等] + types 池泛型条目触发面扩 node_to_type
-  种子[lib.rs 顺序修正：generic_type_names 先于 node_to_type_map[mem::take]]，
-  每探针数据面 + 5 池 + 2 侧表内容归一全等价]；登记缺口：LLM 面 15 节点
-  [归 LLM 运行时移植批次] + raise 异常传播机制[跨切面] + 声明面剩余
-  [auto/fn 分量解包[Python 不支持] / 可调用签名 / 普通赋值别名链 Call 返回
-  类型[仅 artifact 差]]，下一位智能体 = LLM 运行时面 / Host 变体退役收尾]；
+  无桥接数据面等价，full_corpus 全原生无桥接化]；**增量 2b/2c/3b/3c/3d/3e 已
+  落地**[2b：kb.rs +13 方法查询/审计/对比/展开/传递面；2c：IbValue::Vector
+  + 向量运算 + KB 嵌入面 5 方法；3b：CPS 覆盖差收缩 31→36[5 节点移植]；3c：
+  声明面移植[TYPE x = v / auto / 泛型 / 显式覆盖]；3d：声明面剩余形态[fn /
+  括号 + 裸列元组解包 / 点分类型] + IbValue::Function 一等值变体；3e：
+  **错误面统一——异常传播机制**[Thrown 值传播全签名 Result 线程化 +
+  IbValue::Error 异常对象[8 类构造器 + `<class>: <message>` 显示面] +
+  try/except/else/finally 全语义[类可赋性匹配 + 继承链[原语不继承 Exception]
+  + 异常变量全局绑定 + finally signal 覆盖 + re-raise] + artifact 面
+  IbTry/IbExceptHandler 全序列化 + e 符号绑定 + 多参 print 空格连接修复；13
+  探针 + try 源 3 全等价]；登记缺口：LLM 面 15 节点[归 LLM 运行时移植批次] +
+  声明面剩余[auto/fn 分量解包[Python 不支持] / 可调用签名 / 普通赋值别名链
+  Call 返回类型[仅 artifact 差]] + 内部治理错误不转 Thrown[语料面零探针]，
+  下一位智能体 = LLM 运行时面 / Host 变体退役收尾]；
   每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest
   可按需自由[2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由处理[重构
   质量原则优先]）**：
@@ -671,10 +670,10 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 3d[声明面剩余形态
-  + 函数值一等化]放行门实跑）**：
-  **4304 passed / 1 skipped / 155.22s / rc=0**（2026-09-11；= 增量 3c 基线 4303
-  + test_data_plane_declaration_extended_snippets 1 例[2 探针]；注：
+- **全量 pytest 基线（本 session P9 全量 Rust 化第四批 增量 3e[错误面统一——
+  异常传播机制]放行门实跑）**：
+  **4305 passed / 1 skipped / 154.16s / rc=0**（2026-09-11；= 增量 3d 基线 4304
+  + test_data_plane_exception_surface_snippets 1 例[13 探针]；注：
   test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试
   [并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session 参照，
   不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微

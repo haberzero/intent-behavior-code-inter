@@ -29,7 +29,7 @@ mod symbol_resolver;
 mod task_pool;
 mod type_inference;
 
-use pyo3::exceptions::PyNotImplementedError;
+use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use pyo3::Py;
@@ -450,7 +450,12 @@ fn run_artifact(
     // 持有 JSON 所有权（不跨 GIL 释放借用 Python 内存）
     let json_owned = artifact_json.to_string();
     // CPU 工作（解释执行）释放 GIL——CPU+IO 真并行地基
-    let lines = py.allow_threads(|| interpreter::run_artifact(&json_owned, bridge_owned));
+    let lines = match py
+        .allow_threads(|| interpreter::run_artifact(&json_owned, bridge_owned))
+    {
+        Ok(l) => l,
+        Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+    };
     let list = PyList::empty(py);
     for line in lines {
         list.append(line)?;
@@ -483,26 +488,36 @@ fn run_artifacts_parallel(
         .collect();
     // GIL-free 真并行：释放 GIL，Rust 线程各执行一批（纯 CPU 无宿主服务）。每线程
     // 返回 Vec<Vec<String>>（每 artifact 一个 print 输出列表）
-    let results: Vec<Vec<String>> = py.allow_threads(|| {
-        let handles: Vec<std::thread::JoinHandle<Vec<Vec<String>>>> = chunks
-            .into_iter()
-            .map(|chunk| {
-                std::thread::spawn(move || {
-                    chunk
-                        .into_iter()
-                        .map(|js| interpreter::run_artifact(&js, None))
-                        .collect()
+    let results: Result<Vec<Vec<String>>, String> = py.allow_threads(|| {
+        let handles: Vec<std::thread::JoinHandle<Result<Vec<Vec<String>>, String>>> =
+            chunks
+                .into_iter()
+                .map(|chunk| {
+                    std::thread::spawn(move || {
+                        let mut out = Vec::new();
+                        for js in chunk {
+                            out.push(interpreter::run_artifact(&js, None)?);
+                        }
+                        Ok(out)
+                    })
                 })
-            })
-            .collect();
+                .collect();
         // 按线程序拼接（chunk 按 artifact 序均分 → 拼接 = artifact 序）
         let mut all: Vec<Vec<String>> = Vec::new();
         for h in handles {
-            all.extend(h.join().unwrap());
+            let r = h.join().unwrap();
+            if let Err(e) = r {
+                return Err(e);
+            }
+            all.extend(r.unwrap());
         }
-        all
+        Ok(all)
     });
     // 组装结果：list of list（每项 = 一个 artifact 的 print 输出）
+    let results = match results {
+        Ok(r) => r,
+        Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+    };
     let list = PyList::empty(py);
     for artifact_results in results {
         let inner = PyList::empty(py);

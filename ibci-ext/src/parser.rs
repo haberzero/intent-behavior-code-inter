@@ -791,7 +791,8 @@ impl Parser {
                 }
             }
             TokenType::Raise => {
-                // raise [exc]
+                // raise <exc>（IBCI：exc 必在——裸 raise = 编译错误[Python
+                // 实证]；位置 = raise 关键字[含 end]——Python 位置约定实证）
                 let kw = self.advance();
                 let exc = if self.is_stmt_end() {
                     None

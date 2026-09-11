@@ -4780,6 +4780,49 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   **验证**：2 探针全对齐 + 函数值面独立探针全对齐（f()/g()/print(f)/x = g
   别名/参数化函数 repr）+ 34 语料回归无损[Function 值变体核心面] + 全
   harness 46 passed + smoke 832 passed + 全量 pytest 零回归（放行门实跑）。
+- **P9 全量 Rust 化第四批 增量 3e（错误面统一——异常传播机制，2026-09-11，
+  本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：Rust
+  解释器异常传播机制（3b 登记的跨切面错误面增量落地——raise/try/except 全
+  语义原生）：
+  **① Thrown 值传播（架构面）**：exec_stmt/exec_body/eval_expr/eval_iter/
+  call_function/call_user_function 全签名 Result<_, Thrown> 线程化（raise 求值
+  后 Err(Thrown{value})；未捕获异常 = 模块边界降级为消息[Send 约束：Thrown 含
+  Rc 非 Send——lib.rs run_artifact/run_artifacts_parallel/TaskPool 边界
+  PyRuntimeError；meta.eval 隔离执行内 raise = 错误面 None_[登记]]）。
+  **② IbValue::Error{class, message} 值变体**：异常对象（8 类构造器：
+  Exception/LLMError/LLMCallError/LLMParseError/LLMRetryExhaustedError/
+  ThreadError/ThreadCancelled/ThreadFailed——call_function 名分支；显示面 =
+  `<class>: <message>`[无 message = 仅类名——Python IbException.__to_prompt__
+  契约实证]；值语义相等；真值 = true；不经桥接）。
+  **③ try/except/else/finally 全语义（Python VM IbTry 转录）**：raise 不做
+  类型检查[值任意] + handler 类可赋性匹配[exception_assignable：值类型名 =
+  handler 类型名或在继承链上——intrinsic_symbols::class_parent[CLASS_PARENTS
+  传递闭包]；**原语类型不继承 Exception[Python 实证：raise 5 不被 except
+  Exception 捕获，落入 except int]**] + 首匹配 handler + **异常变量全局绑定**
+  [set_global_env parent 链顶——Python runtime_context.define_variable 全局面，
+  越 try 块可见实证] + else 仅无异常且 body 无 signal + finally 所有路径执行
+  且 signal 覆盖 pending + 无匹配 = finally 后 re-raise + handler 内再抛 =
+  未处理（re-raise）。
+  **④ artifact 面**：IbTry/IbExceptHandler 节点全序列化（handler type 表达式 +
+  name + body 语句；e 符号 = VARIABLE/any/全局 scope[scope_stack 顶] + 定义
+  节点 = handler 节点[Python 实证 node_uid] + node_to_symbol[handler 节点 +
+  body 内引用]）+ IbRaise 节点 cause=null 字段 + 位置约定（raise 位置 = 关键
+  字 end[实证]）。
+  **⑤ 多参 print 修复（同批暴露的既有数据面缺口）**：print(a, b) = "a b"
+  （repr 空格连接；无参 = 空行——Python print 语义实证；单参行为不变）。
+  **差分门**：test_data_plane_exception_surface_snippets 新增（13 探针：
+  raise+catch / 多 handler 首匹配 / finally / else / 嵌套 rethrow /
+  finally+return / 变量泄漏 / Exception 基类不捕获原语 / 异常对象 / 继承链
+  [LLMError→Exception / LLMCallError→LLMError] / 构造 msg / break 透传 +
+  未捕获面双侧报错）+ try 源 full_artifact 5 池 + 2 侧表内容归一全等价
+  （3 源实证）。
+  **裁定（错误面统一登记限制收缩）**：原"治理门失败/参数错误 = None_ 静默"
+  登记限制仍成立（Rust 内部治理错误不转 Thrown——语料面无内部错误探针）；
+  **显式 raise = 可传播值**（本增量落地）；meta.eval 内 raise = None_（隔离
+  执行错误面——同 2b 登记）。
+  **验证**：13 探针全对齐 + try 源 3 全等价 + 34 语料回归无损[异常机制 +
+  多参 print 核心面] + 全 harness 47 passed + smoke 832 passed + 全量 pytest
+  零回归（放行门实跑）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

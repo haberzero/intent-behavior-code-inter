@@ -783,15 +783,56 @@ impl NodeSerializer {
                 node_data.insert("_type".to_string(), Value::String("IbPass".to_string()));
                 self.collect(node_data)
             }
-            Stmt::Try { pos, body, orelse, finalbody, .. } => {
-                // IbTry（语料面不含；占位：基类位置 + body/orelse/finalbody，handlers 归后续）
+            Stmt::Try { pos, body, handlers, orelse, finalbody, .. } => {
+                // IbTry（异常传播面：body/handlers/orelse/finalbody 全序列化；
+                // except 变量 = 符号绑定[any 类型 + 全局 scope——Python 实证
+                // runtime_context 全局面] + node_to_symbol[handler 节点 +
+                // 定义节点 = handler 节点]）
                 let b_uids: Vec<String> = body.iter().map(|s| self.serialize_stmt(s)).collect();
+                let mut h_uids: Vec<String> = Vec::new();
+                for h in handlers {
+                    // 异常变量符号先定义（body 内引用解析依据）
+                    if let Some(name) = &h.name {
+                        self.define_name(name, "any");
+                    }
+                    let t_uid = h
+                        .exc_type
+                        .as_ref()
+                        .map(|e| self.serialize_expr(e));
+                    let hb_uids: Vec<String> =
+                        h.body.iter().map(|s| self.serialize_stmt(s)).collect();
+                    let mut nd = base_fields(&h.pos);
+                    nd.insert("_type".to_string(), Value::String("IbExceptHandler".to_string()));
+                    nd.insert(
+                        "type".to_string(),
+                        t_uid.map(Value::String).unwrap_or(Value::Null),
+                    );
+                    nd.insert(
+                        "name".to_string(),
+                        h.name.clone().map(Value::String).unwrap_or(Value::Null),
+                    );
+                    nd.insert(
+                        "body".to_string(),
+                        Value::Array(hb_uids.into_iter().map(Value::String).collect()),
+                    );
+                    let handler_uid = self.collect(nd);
+                    if let Some(name) = &h.name {
+                        let sym_uid = self.current_scope_symbol_uid(name);
+                        self.node_to_symbol
+                            .insert(handler_uid.clone(), sym_uid.clone());
+                        // 定义节点：异常变量 → handler 节点（Python 实证）
+                        self.def_node_uids
+                            .entry(sym_uid)
+                            .or_insert(handler_uid.clone());
+                    }
+                    h_uids.push(handler_uid);
+                }
                 let o_uids: Vec<String> = orelse.iter().map(|s| self.serialize_stmt(s)).collect();
                 let f_uids: Vec<String> = finalbody.iter().map(|s| self.serialize_stmt(s)).collect();
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbTry".to_string()));
                 node_data.insert("body".to_string(), Value::Array(b_uids.into_iter().map(Value::String).collect()));
-                node_data.insert("handlers".to_string(), Value::Array(Vec::new()));
+                node_data.insert("handlers".to_string(), Value::Array(h_uids.into_iter().map(Value::String).collect()));
                 node_data.insert("orelse".to_string(), Value::Array(o_uids.into_iter().map(Value::String).collect()));
                 node_data.insert("finalbody".to_string(), Value::Array(f_uids.into_iter().map(Value::String).collect()));
                 self.collect(node_data)
@@ -832,7 +873,8 @@ impl NodeSerializer {
                 );
                 self.collect(node_data)
             }
-            // IbRaise（exc 节点引用；null = 裸 raise）
+            // IbRaise（exc 节点引用 + cause=null[LLM 面]；end 位置 = exc 表达式
+            // end[Python 位置约定]）
             Stmt::Raise { pos, exc } => {
                 let e_uid = exc.as_ref().map(|e| self.serialize_expr(e));
                 let mut node_data = base_fields(pos);
@@ -841,6 +883,7 @@ impl NodeSerializer {
                     "exc".to_string(),
                     e_uid.map(Value::String).unwrap_or(Value::Null),
                 );
+                node_data.insert("cause".to_string(), Value::Null);
                 self.collect(node_data)
             }
             // IbSwitch（test + cases 节点 uid + llmexcept_handler=null[LLM 面]；

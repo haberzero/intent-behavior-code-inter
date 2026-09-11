@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use pyo3::prelude::*;
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::PyList;
 
 use crate::interpreter;
@@ -77,26 +78,37 @@ impl TaskPool {
             .filter(|c| !c.is_empty())
             .collect();
         // GIL-free 真并行：释放 GIL，Rust 线程各执行一批（纯 CPU 无宿主服务）
-        let results: Vec<(u64, Vec<String>)> = py.allow_threads(|| {
-            let handles: Vec<std::thread::JoinHandle<Vec<(u64, Vec<String>)>>> = chunks
-                .into_iter()
-                .map(|chunk| {
-                    std::thread::spawn(move || {
-                        chunk
-                            .into_iter()
-                            .map(|(id, js)| (id, interpreter::run_artifact(&js, None)))
-                            .collect()
+        let results: Result<Vec<(u64, Vec<String>)>, String> = py.allow_threads(|| {
+            let handles: Vec<std::thread::JoinHandle<Result<Vec<(u64, Vec<String>)>, String>>> =
+                chunks
+                    .into_iter()
+                    .map(|chunk| {
+                        std::thread::spawn(move || {
+                            let mut out = Vec::new();
+                            for (id, js) in chunk {
+                                let lines = interpreter::run_artifact(&js, None)?;
+                                out.push((id, lines));
+                            }
+                            Ok(out)
+                        })
                     })
-                })
-                .collect();
+                    .collect();
             // 按线程序拼接（chunk 按任务序均分 → 拼接 = 任务序）
             let mut all: Vec<(u64, Vec<String>)> = Vec::new();
             for h in handles {
-                all.extend(h.join().unwrap());
+                let r = h.join().unwrap();
+                if let Err(e) = r {
+                    return Err(e);
+                }
+                all.extend(r.unwrap());
             }
-            all
+            Ok(all)
         });
         // 组装结果：list of [task_id, result_list]（每项 = 一个任务的 print 输出）
+        let results = match results {
+            Ok(r) => r,
+            Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+        };
         let list = PyList::empty(py);
         for (id, result) in results {
             let inner = PyList::empty(py);
