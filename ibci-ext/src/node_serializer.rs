@@ -21,16 +21,36 @@ use crate::type_inference::{
     ModuleNames, TypeEnv,
 };
 
+/// 侧表记录模式（位置语义显式分派，非能力探测）：
+/// - `Full` = 值/表达式位置：node_to_type + node_to_symbol 均记录；
+/// - `TypeOnly` = 返回注解位置：仅 node_to_type（Python 实证：返回注解 Name 绑定
+///   类型 7/7、符号 0/7）；
+/// - `None` = 参数注解位置：均不记录（Python 实证 6/6）。
+#[derive(Clone, Copy, PartialEq)]
+enum RecordMode {
+    Full,
+    TypeOnly,
+    None,
+}
+
 /// 节点序列化器：Rust AST → 节点池（uid → node_data）。
 pub struct NodeSerializer {
     node_pool: HashMap<String, Value>,
-    // 统一遍历：scope 栈 + type_env + func_sigs + modules（复用 SymbolResolver 逻辑）
-    // + node_to_type 侧表[node_uid → type_uid，复用 type_inference 完整节点规则推导]。
+    // 统一遍历：scope 栈 + type_env + user_defined + func_sigs + modules（复用
+    // SymbolResolver 逻辑）+ node_to_type[node_uid → type_uid，type_inference 完整节点
+    // 规则推导] + node_to_symbol[node_uid → symbol uid，scope 链/intrinsic 解析]。
     scope_stack: Vec<String>,
     type_env: TypeEnv,
+    /// 用户定义名字标记层（与 scope_stack/type_env 同步 push/pop）：每 scope 一个
+    /// Name 集——区分"用户顶层定义"与"顶层 intrinsic 固有绑定"（node_to_symbol 的
+    /// scope uid vs intrinsic uid 解析依据）。
+    user_defined: Vec<BTreeMap<String, String>>,
+    /// intrinsic 63 名字固定集（node_to_symbol：固有名字 → intrinsic:<name>）。
+    intrinsic_names: BTreeSet<String>,
     func_sigs: FuncSignatures,
     modules: ModuleNames,
     node_to_type: BTreeMap<String, String>,
+    node_to_symbol: BTreeMap<String, String>,
 }
 
 impl NodeSerializer {
@@ -38,17 +58,22 @@ impl NodeSerializer {
         // 顶层 scope type_env 绑定全 63 intrinsic 符号名（42 类型 + 19 函数 + 2 模块，
         // 与 scope 池"顶层 scope = intrinsic 63 + 用户顶层"语义同构）：IbName 固有名字
         // → type_root.<name>（函数类型/类类型/模块类型，语料实证对齐 Python）。
-        let top_env: BTreeMap<String, String> = crate::intrinsic_symbols::intrinsic_names()
-            .into_iter()
-            .map(|n| (n.clone(), n))
+        let intrinsic_names: BTreeSet<String> =
+            crate::intrinsic_symbols::intrinsic_names().into_iter().collect();
+        let top_env: BTreeMap<String, String> = intrinsic_names
+            .iter()
+            .map(|n| (n.clone(), n.clone()))
             .collect();
         Self {
             node_pool: HashMap::new(),
             scope_stack: vec!["__string_exec__".to_string()],
             type_env: vec![top_env],
+            user_defined: vec![BTreeMap::new()],
+            intrinsic_names,
             func_sigs: BTreeMap::new(),
             modules: BTreeSet::new(),
             node_to_type: BTreeMap::new(),
+            node_to_symbol: BTreeMap::new(),
         }
     }
 
@@ -61,23 +86,52 @@ impl NodeSerializer {
         }
     }
 
-    /// push 函数 scope（scope_stack + type_env 同步，单一权威源避免漂移）。
+    /// push 函数 scope（scope_stack + type_env + user_defined 同步，单一权威源避免漂移）。
     fn push_scope(&mut self, name: &str) {
         self.scope_stack.push(name.to_string());
         self.type_env.push(BTreeMap::new());
+        self.user_defined.push(BTreeMap::new());
     }
 
-    /// pop 函数 scope（scope_stack + type_env 同步）。
+    /// pop 函数 scope（scope_stack + type_env + user_defined 同步）。
     fn pop_scope(&mut self) {
         self.scope_stack.pop();
         self.type_env.pop();
+        self.user_defined.pop();
     }
 
-    /// 类型环境绑定（当前 scope 的 Name → 类型串）——供 infer_type_env 推导。
-    fn bind_type_env(&mut self, name: &str, type_str: &str) {
+    /// 当前 scope 的符号 uid（`scope_<scope 串>:<name>`）。
+    fn current_scope_symbol_uid(&self, name: &str) -> String {
+        format!("scope_{}:{}", self.scope_stack.join("/"), name)
+    }
+
+    /// 用户定义名字绑定（当前 scope）：type_env[Name → 类型串，供 infer_type_env 推导]
+    /// + user_defined 标记[Name → Name，node_to_symbol 定义 scope 解析依据]——单一
+    /// 写入点同步三表，无漂移。
+    fn define_name(&mut self, name: &str, type_str: &str) {
         if let Some(scope) = self.type_env.last_mut() {
             scope.insert(name.to_string(), type_str.to_string());
         }
+        if let Some(scope) = self.user_defined.last_mut() {
+            scope.insert(name.to_string(), name.to_string());
+        }
+    }
+
+    /// 名字 → 符号 uid 解析（node_to_symbol）：用户定义（scope 链内层→外层，含顶层
+    /// 用户定义）优先 → `scope_<定义 scope 串>:<name>`；否则 intrinsic 63 固定集 →
+    /// `intrinsic:<name>`（Python：intrinsic 符号 uid 独立，驻顶层 scope 符号表）；
+    /// 均未命中 → None（不产条目）。
+    fn resolve_symbol_uid(&self, name: &str) -> Option<String> {
+        for (i, scope) in self.user_defined.iter().enumerate().rev() {
+            if scope.contains_key(name) {
+                let scope_str = self.scope_stack[..=i].join("/");
+                return Some(format!("scope_{}:{}", scope_str, name));
+            }
+        }
+        if self.intrinsic_names.contains(name) {
+            return Some(format!("intrinsic:{}", name));
+        }
+        None
     }
 
     /// 序列化 Module → 根节点 UID + 节点池。
@@ -89,6 +143,12 @@ impl NodeSerializer {
     /// node_to_type 侧表（node_uid → type_uid）——统一遍历产出（复用 type_inference）。
     pub fn node_to_type_map(&mut self) -> BTreeMap<String, String> {
         std::mem::take(&mut self.node_to_type)
+    }
+
+    /// node_to_symbol 侧表（node_uid → symbol uid）——统一遍历产出（scope 链/intrinsic
+    /// 解析）。
+    pub fn node_to_symbol_map(&mut self) -> BTreeMap<String, String> {
+        std::mem::take(&mut self.node_to_symbol)
     }
 
     /// Module 节点：{"_type": "IbModule", 基类位置, body: [UIDs], file_path: null}。
@@ -125,11 +185,16 @@ impl NodeSerializer {
                                 .and_then(|s| s.get(id))
                                 .cloned();
                             if let Some(ts) = existing.clone().or(sym_t.clone()) {
-                                self.bind_type_env(id, &ts);
+                                self.define_name(id, &ts);
                             }
                             if let Some(ts) = existing.or(node_t.clone()) {
                                 self.node_to_type.insert(t_uid.clone(), format!("type_root.{}", ts));
                             }
+                            // node_to_symbol：target Name 节点 → 定义符号（当前 scope）——
+                            // 首次赋值时 target 序列化在先、定义在后，Python 实证 target
+                            // Name 节点同样绑定（arithmetic_loop total 4 Name + 2 IbAssign）。
+                            self.node_to_symbol
+                                .insert(t_uid.clone(), self.current_scope_symbol_uid(id));
                         }
                     }
                 }
@@ -138,7 +203,14 @@ impl NodeSerializer {
                 node_data.insert("targets".to_string(), Value::Array(t_uids.into_iter().map(Value::String).collect()));
                 node_data.insert("value".to_string(), v_uid.map(Value::String).unwrap_or(Value::Null));
                 node_data.insert("llmexcept_handler".to_string(), Value::Null);
-                self.collect(node_data)
+                let assign_uid = self.collect(node_data);
+                // node_to_symbol：IbAssign 节点 → 目标 VARIABLE scope 符号（定义 scope
+                // = 当前 scope——Python 实证 34/34 IbAssign 全绑定）。
+                if let Some(Expr::Name { id, .. }) = targets.first() {
+                    self.node_to_symbol
+                        .insert(assign_uid.clone(), self.current_scope_symbol_uid(id));
+                }
+                assign_uid
             }
             Stmt::AugAssign { pos, target, op, value } => {
                 let t_uid = self.serialize_expr(target);
@@ -165,7 +237,7 @@ impl NodeSerializer {
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
                     self.modules.insert(binding.clone());
-                    self.bind_type_env(&binding, &binding);
+                    self.define_name(&binding, &binding);
                 }
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbImport".to_string()));
@@ -178,7 +250,7 @@ impl NodeSerializer {
                 // 的 type_root.<name>——语料实证 from meta import quote：quote → type_root.quote）。
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
-                    self.bind_type_env(&binding, &binding);
+                    self.define_name(&binding, &binding);
                 }
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbImportFrom".to_string()));
@@ -204,10 +276,13 @@ impl NodeSerializer {
                 let t_uid = self.serialize_expr(target);
                 let i_uid = self.serialize_expr(iter);
                 // 统一遍历：for 目标 type_env = any（IBCI：iter 类型不推断）+ node_to_type
-                // 更新（target IbName = any，bind_type_env 后）。
+                // 更新（target IbName = any，define_name 后）+ node_to_symbol（for 目标 →
+                // VARIABLE scope 符号，当前 scope——Python 实证 Store Name 全绑定）。
                 if let Expr::Name { id, .. } = target {
-                    self.bind_type_env(id, "any");
+                    self.define_name(id, "any");
                     self.node_to_type.insert(t_uid.clone(), "type_root.any".to_string());
+                    self.node_to_symbol
+                        .insert(t_uid.clone(), self.current_scope_symbol_uid(id));
                 }
                 let b_uids: Vec<String> = body.iter().map(|s| self.serialize_stmt(s)).collect();
                 let o_uids: Vec<String> = orelse.iter().map(|s| self.serialize_stmt(s)).collect();
@@ -235,7 +310,7 @@ impl NodeSerializer {
             Stmt::FunctionDef { pos, name, args, body, returns } => {
                 // 统一遍历：函数名 type_env[含顶层函数，IbName 函数名 → 函数类型
                 // type_root.<name>] + func_sigs（returns）+ push_scope + 参数 type_env。
-                self.bind_type_env(name, name);
+                self.define_name(name, name);
                 if let Some(rt) = returns {
                     if let Some(ts) = parse_type_annotation(rt) {
                         self.func_sigs.insert(name.clone(), ts);
@@ -245,18 +320,22 @@ impl NodeSerializer {
                 for a in args {
                     if let Some(ann) = &a.annotation {
                         if let Some(ts) = parse_type_annotation(ann) {
-                            self.bind_type_env(&a.arg, &ts);
+                            self.define_name(&a.arg, &ts);
                         } else {
-                            self.bind_type_env(&a.arg, "any");
+                            self.define_name(&a.arg, "any");
                         }
                     } else {
-                        self.bind_type_env(&a.arg, "any");
+                        self.define_name(&a.arg, "any");
                     }
                 }
                 let b_uids: Vec<String> = body.iter().map(|s| self.serialize_stmt(s)).collect();
-                self.pop_scope();
+                // 参数序列化在函数 scope 内（arg 节点 → 参数符号的 scope = 函数体
+                // scope——scope___string_exec__/add:a，Python 实证）。
                 let arg_uids: Vec<String> = args.iter().map(|a| self.serialize_arg(a)).collect();
-                let ret_uid = returns.as_ref().map(|e| self.serialize_expr(e));
+                self.pop_scope();
+                // 返回注解 = 类型位置（有 node_to_type 绑定、无 node_to_symbol 绑定——
+                // Python 实证：返回注解 Name 绑定类型 7/7、符号 0/7；参数注解两者皆无）。
+                let ret_uid = returns.as_ref().map(|e| self.serialize_expr_type_only(e));
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbFunctionDef".to_string()));
                 node_data.insert("name".to_string(), Value::String(name.clone()));
@@ -268,7 +347,14 @@ impl NodeSerializer {
                 node_data.insert("type_param_bounds".to_string(), Value::Object(Map::new()));
                 node_data.insert("free_vars".to_string(), Value::Array(Vec::new()));
                 node_data.insert("is_generator".to_string(), Value::Bool(false));
-                self.collect(node_data)
+                let fd_uid = self.collect(node_data);
+                // node_to_symbol：IbFunctionDef 节点 → 函数名 scope 符号（定义 scope =
+                // 定义处外层 scope，pop_scope 后当前 scope 即定义处——顶层函数 =
+                // scope___string_exec__:add，嵌套函数 = scope___string_exec__/outer:inner，
+                // Python 实证 7/7）。
+                self.node_to_symbol
+                    .insert(fd_uid.clone(), self.current_scope_symbol_uid(name));
+                fd_uid
             }
             Stmt::Return { pos, value } => {
                 let v_uid = value.as_ref().map(|e| self.serialize_expr(e));
@@ -304,7 +390,7 @@ impl NodeSerializer {
             Stmt::ClassDef { pos, name, body, .. } => {
                 // 统一遍历：类名 → type_env 绑定（IbName 类名 → type_root.<name>，
                 // 用户类固有名字语义同 intrinsic 类型名）。
-                self.bind_type_env(name, name);
+                self.define_name(name, name);
                 // IbClassDef（语料面不含；占位：基类位置 + name + body）
                 let b_uids: Vec<String> = body.iter().map(|s| self.serialize_stmt(s)).collect();
                 let mut node_data = base_fields(pos);
@@ -316,35 +402,56 @@ impl NodeSerializer {
         }
     }
 
-    /// 表达式节点分发（统一遍历：委托 serialize_expr_impl[record=true] + infer_type_env
-    /// 记录 node_to_type[node_uid → type_uid，type_inference 完整节点规则]）。
+    /// 表达式节点分发（值/表达式位置：node_to_type[node_uid → type_uid，type_inference
+    /// 完整节点规则] + node_to_symbol[Name 引用 → 符号 uid] 均记录）。
     pub fn serialize_expr(&mut self, expr: &Expr) -> String {
-        let uid = self.serialize_expr_impl(expr, true);
-        // type_uid = type_root.<类型名>（与符号 type_uid 格式一致；infer_type_env 返回
-        // 裸类型名，module_path=None → root 前缀）。
-        if let Some(type_uid) = infer_type_env(expr, &self.ctx()) {
-            self.node_to_type.insert(uid.clone(), format!("type_root.{}", type_uid));
+        self.serialize_expr_recorded(expr, RecordMode::Full)
+    }
+
+    /// 仅类型记录变体（返回注解位置——有 node_to_type、无 node_to_symbol，Python 实证）。
+    pub fn serialize_expr_type_only(&mut self, expr: &Expr) -> String {
+        self.serialize_expr_recorded(expr, RecordMode::TypeOnly)
+    }
+
+    /// 无记录变体（参数注解位置——Python type checker 不产参数注解 Name 节点的
+    /// node_to_type / node_to_symbol 绑定，语料实证 6/6 未绑定；节点仍入节点池）。
+    pub fn serialize_expr_no_record(&mut self, expr: &Expr) -> String {
+        self.serialize_expr_recorded(expr, RecordMode::None)
+    }
+
+    /// 表达式序列化（mode 决定侧表记录——单一递归路径，无平行实现）。
+    fn ser(&mut self, e: &Expr, mode: RecordMode) -> String {
+        match mode {
+            RecordMode::Full => self.serialize_expr(e),
+            RecordMode::TypeOnly => self.serialize_expr_type_only(e),
+            RecordMode::None => self.serialize_expr_no_record(e),
+        }
+    }
+
+    /// 表达式节点序列化入口（mode = 位置记录模式，内部递归经 ser[e, mode] 保持一致）。
+    fn serialize_expr_recorded(&mut self, expr: &Expr, mode: RecordMode) -> String {
+        let uid = self.serialize_expr_impl(expr, mode);
+        if mode != RecordMode::None {
+            // type_uid = type_root.<类型名>（与符号 type_uid 格式一致；infer_type_env
+            // 返回裸类型名，module_path=None → root 前缀）。
+            if let Some(type_uid) = infer_type_env(expr, &self.ctx()) {
+                self.node_to_type.insert(uid.clone(), format!("type_root.{}", type_uid));
+            }
+        }
+        if mode == RecordMode::Full {
+            // node_to_symbol：Name 引用 → 符号 uid（scope 链用户定义优先 / intrinsic
+            // 63 固定集；未解析 = 不产条目）。
+            if let Expr::Name { id, .. } = expr {
+                if let Some(suid) = self.resolve_symbol_uid(id) {
+                    self.node_to_symbol.insert(uid.clone(), suid);
+                }
+            }
         }
         uid
     }
 
-    /// 无记录变体（参数注解位置——Python type checker 不产参数注解 Name 节点的
-    /// node_to_type 绑定，语料实证 6/6 未绑定；节点仍入节点池）。
-    pub fn serialize_expr_no_record(&mut self, expr: &Expr) -> String {
-        self.serialize_expr_impl(expr, false)
-    }
-
-    /// 子表达式序列化（record = 是否记录 node_to_type——单一递归路径，无平行实现）。
-    fn ser(&mut self, e: &Expr, record: bool) -> String {
-        if record {
-            self.serialize_expr(e)
-        } else {
-            self.serialize_expr_no_record(e)
-        }
-    }
-
-    /// 表达式节点序列化（内部递归经 ser[e, record] 保持记录态一致）。
-    fn serialize_expr_impl(&mut self, expr: &Expr, record: bool) -> String {
+    /// 表达式节点序列化（内部递归经 ser[e, mode] 保持记录态一致）。
+    fn serialize_expr_impl(&mut self, expr: &Expr, mode: RecordMode) -> String {
         match expr {
             Expr::Constant { pos, value } => {
                 let mut node_data = base_fields(pos);
@@ -360,8 +467,8 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::BinOp { pos, left, op, right } => {
-                let l_uid = self.ser(left, record);
-                let r_uid = self.ser(right, record);
+                let l_uid = self.ser(left, mode);
+                let r_uid = self.ser(right, mode);
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbBinOp".to_string()));
                 node_data.insert("left".to_string(), Value::String(l_uid));
@@ -370,7 +477,7 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::UnaryOp { pos, op, operand } => {
-                let o_uid = self.ser(operand, record);
+                let o_uid = self.ser(operand, mode);
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbUnaryOp".to_string()));
                 node_data.insert("op".to_string(), Value::String(op.clone()));
@@ -378,7 +485,7 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::BoolOp { pos, op, values } => {
-                let v_uids: Vec<String> = values.iter().map(|e| self.ser(e, record)).collect();
+                let v_uids: Vec<String> = values.iter().map(|e| self.ser(e, mode)).collect();
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbBoolOp".to_string()));
                 node_data.insert("op".to_string(), Value::String(op.clone()));
@@ -386,8 +493,8 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::Compare { pos, left, ops, comparators } => {
-                let l_uid = self.ser(left, record);
-                let c_uids: Vec<String> = comparators.iter().map(|e| self.ser(e, record)).collect();
+                let l_uid = self.ser(left, mode);
+                let c_uids: Vec<String> = comparators.iter().map(|e| self.ser(e, mode)).collect();
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbCompare".to_string()));
                 node_data.insert("left".to_string(), Value::String(l_uid));
@@ -396,8 +503,8 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::Call { pos, func, args } => {
-                let f_uid = self.ser(func, record);
-                let a_uids: Vec<String> = args.iter().map(|e| self.ser(e, record)).collect();
+                let f_uid = self.ser(func, mode);
+                let a_uids: Vec<String> = args.iter().map(|e| self.ser(e, mode)).collect();
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbCall".to_string()));
                 node_data.insert("func".to_string(), Value::String(f_uid));
@@ -408,7 +515,7 @@ impl NodeSerializer {
             }
             Expr::List { pos, elts, ctx } | Expr::Tuple { pos, elts, ctx } => {
                 let ty = if matches!(expr, Expr::List { .. }) { "IbListExpr" } else { "IbTuple" };
-                let e_uids: Vec<String> = elts.iter().map(|e| self.ser(e, record)).collect();
+                let e_uids: Vec<String> = elts.iter().map(|e| self.ser(e, mode)).collect();
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String(ty.to_string()));
                 node_data.insert("elts".to_string(), Value::Array(e_uids.into_iter().map(Value::String).collect()));
@@ -416,8 +523,8 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::Dict { pos, keys, values } => {
-                let k_uids: Vec<String> = keys.iter().map(|e| self.ser(e, record)).collect();
-                let v_uids: Vec<String> = values.iter().map(|e| self.ser(e, record)).collect();
+                let k_uids: Vec<String> = keys.iter().map(|e| self.ser(e, mode)).collect();
+                let v_uids: Vec<String> = values.iter().map(|e| self.ser(e, mode)).collect();
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbDict".to_string()));
                 node_data.insert("keys".to_string(), Value::Array(k_uids.into_iter().map(Value::String).collect()));
@@ -425,7 +532,7 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::Attribute { pos, value, attr, ctx } => {
-                let v_uid = self.ser(value, record);
+                let v_uid = self.ser(value, mode);
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbAttribute".to_string()));
                 node_data.insert("value".to_string(), Value::String(v_uid));
@@ -434,8 +541,8 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::Subscript { pos, value, slice, ctx } => {
-                let v_uid = self.ser(value, record);
-                let s_uid = self.ser(slice, record);
+                let v_uid = self.ser(value, mode);
+                let s_uid = self.ser(slice, mode);
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbSubscript".to_string()));
                 node_data.insert("value".to_string(), Value::String(v_uid));
@@ -444,9 +551,9 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Expr::IfExp { pos, test, body, orelse } => {
-                let t_uid = self.ser(test, record);
-                let b_uid = self.ser(body, record);
-                let o_uid = self.ser(orelse, record);
+                let t_uid = self.ser(test, mode);
+                let b_uid = self.ser(body, mode);
+                let o_uid = self.ser(orelse, mode);
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbIfExp".to_string()));
                 node_data.insert("test".to_string(), Value::String(t_uid));
@@ -457,9 +564,9 @@ impl NodeSerializer {
             Expr::Slice { pos, lower, upper, step } => {
                 // Slice 子表达式保持记录态（Slice 自身节点 infer_type_env = None 不产
                 // 绑定——Python 实证；其内层值表达式如 xs[1:3] 的 1/3 正常绑定）。
-                let lo = lower.as_ref().map(|e| self.ser(e, record));
-                let up = upper.as_ref().map(|e| self.ser(e, record));
-                let st = step.as_ref().map(|e| self.ser(e, record));
+                let lo = lower.as_ref().map(|e| self.ser(e, mode));
+                let up = upper.as_ref().map(|e| self.ser(e, mode));
+                let st = step.as_ref().map(|e| self.ser(e, mode));
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbSlice".to_string()));
                 node_data.insert("lower".to_string(), lo.map(Value::String).unwrap_or(Value::Null));
@@ -476,20 +583,29 @@ impl NodeSerializer {
         }
     }
 
-    /// Alias 节点（import 名）：{"_type": "IbAlias", 基类位置, name, asname}。
+    /// Alias 节点（import 名）：{"_type": "IbAlias", 基类位置, name, asname} +
+    /// node_to_symbol（IbAlias 节点 → import 绑定符号，当前 scope——Python 实证
+    /// 4/4：import meta → scope___string_exec__:meta / from-import quote →
+    /// scope___string_exec__:quote）。
     fn serialize_alias(&mut self, alias: &crate::parser::Alias) -> String {
         let mut node_data = base_fields(&alias.pos);
         node_data.insert("_type".to_string(), Value::String("IbAlias".to_string()));
         node_data.insert("name".to_string(), Value::String(alias.name.clone()));
         node_data.insert("asname".to_string(), alias.asname.clone().map(Value::String).unwrap_or(Value::Null));
-        self.collect(node_data)
+        let alias_uid = self.collect(node_data);
+        let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
+        self.node_to_symbol
+            .insert(alias_uid.clone(), self.current_scope_symbol_uid(&binding));
+        alias_uid
     }
 
-    /// Arg 节点（IbArg）：{"_type": "IbArg", 基类位置, arg, annotation, default, kind}。
-    /// Arg 节点（pub：供符号解析计算参数定义节点 UID）。
+    /// Arg 节点（IbArg）：{"_type": "IbArg", 基类位置, arg, annotation, default, kind}
+    /// + node_to_symbol（IbArg 节点 → 参数 VARIABLE scope 符号，当前 scope = 函数体
+    /// scope——Python 实证 6/6：scope___string_exec__/add:a）。pub：供符号解析计算
+    /// 参数定义节点 UID。
     pub fn serialize_arg(&mut self, arg: &crate::parser::Arg) -> String {
-        // 参数注解 = 类型位置（无 node_to_type 绑定——Python 实证）；默认值 = 值位置
-        // （正常绑定）。
+        // 参数注解 = 类型位置（无 node_to_type / node_to_symbol 绑定——Python 实证）；
+        // 默认值 = 值位置（正常绑定）。
         let ann = arg.annotation.as_ref().map(|e| self.serialize_expr_no_record(e));
         let def = arg.default.as_ref().map(|e| self.serialize_expr(e));
         let mut node_data = base_fields(&arg.pos);
@@ -498,7 +614,10 @@ impl NodeSerializer {
         node_data.insert("annotation".to_string(), ann.map(Value::String).unwrap_or(Value::Null));
         node_data.insert("default".to_string(), def.map(Value::String).unwrap_or(Value::Null));
         node_data.insert("kind".to_string(), Value::String(arg.kind.clone()));
-        self.collect(node_data)
+        let arg_uid = self.collect(node_data);
+        self.node_to_symbol
+            .insert(arg_uid.clone(), self.current_scope_symbol_uid(&arg.arg));
+        arg_uid
     }
 
     /// 收集节点：content_str[自定义 JSON 序列化，匹配 Python json.dumps sort_keys] →

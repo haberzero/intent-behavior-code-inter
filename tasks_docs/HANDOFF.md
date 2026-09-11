@@ -626,11 +626,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化第三批 子项 2b-2b-2 增量 1 放行门实跑）**：
-  **4297 passed / 1 skipped / 141.54s / rc=0**（2026-09-11；= 前基线 4286 + 第一批/第二批/
-  第三批各差分测试 11 例；注：test_p7_process_isolation / test_run_result_type 为 flaky
-  子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session
-  参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
+- **全量 pytest 基线（本 session P9 全量 Rust 化第三批 子项 2b-2b-2 增量 2 放行门实跑）**：
+  **4298 passed / 1 skipped / 139.98s / rc=0**（2026-09-11；= 增量 1 基线 4297 +
+  node_to_symbol 差分测试 1 例；注：test_p7_process_isolation / test_run_result_type 为
+  flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一
+  session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
   放开——测试速度已提高、全量并非不可接受，不再限 4 场合（merge/放行门、公理层或语义错误
   集、阶段边界/里程碑、开新分支前 仍为强制门），可按需自由全量；② 已过期或被证不正确的
   测试脚本可自由处理（重构/修正/删除）——重构的质量原则大于维持现状的重要性。已同步

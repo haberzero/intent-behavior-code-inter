@@ -212,6 +212,19 @@ fn node_to_type(source: &str) -> PyResult<String> {
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// node_to_symbol 侧表（全量 Rust 化·artifact 产出：节点级符号 uid）——统一遍历产出
+/// （node_uid → symbol uid：Name 引用[scope 链用户定义 / intrinsic 63 固定集] +
+/// IbAssign/IbFunctionDef/IbArg/IbAlias/for 目标 定义节点）。差分 harness 经此与
+/// Python node_to_symbol 比对。
+#[pyfunction]
+fn node_to_symbol(source: &str) -> PyResult<String> {
+    let module = parser::parse_to_module(source);
+    let mut serializer = node_serializer::NodeSerializer::new();
+    let (_root, _nodes) = serializer.serialize_module(&module);
+    serde_json::to_string(&serializer.node_to_symbol_map())
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
 /// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
@@ -345,6 +358,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scope_pool, m)?)?;
     m.add_function(wrap_pyfunction!(node_to_loc, m)?)?;
     m.add_function(wrap_pyfunction!(node_to_type, m)?)?;
+    m.add_function(wrap_pyfunction!(node_to_symbol, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

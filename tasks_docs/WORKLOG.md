@@ -4323,6 +4323,48 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   裁定全量 pytest 限制放开后首跑）。**第三批剩余**：node_to_symbol 侧表独立产出
   / free_vars / method 符号[sym_anon_* content_hash 偏离白名单] / generic+用户类型
   条目 / modules 组装[完整 artifact 闭环]。
+- **P9 全量 Rust 化第三批 子项 2b-2b-2 增量 2（Rust 独立 artifact 产出：node_to_symbol
+  侧表独立产出，34 语料 262/262 全量多重集对齐 0 DIFF，2026-09-11，本 session，
+  unsafe-vibe-dev）**：**node_to_symbol 侧表独立产出**（node_uid → symbol uid——消除
+  2b-2a 侦察指出的"node_to_symbol Rust 尚未独立产出"缺口）。**侦察实证**（Python
+  node_to_symbol 34 语料 262 条全分布）：① 条目构成 = IbName 引用[211：VARIABLE 127
+  变量 + FUNCTION 76[intrinsic 函数 4 + 用户函数引用] + MODULE 5 + CLASS 3] +
+  IbAssign[34 定义节点] + IbFunctionDef[7：顶层 5 FUNCTION + 嵌套 2 VARIABLE——uid
+  串同构] + IbArg[6 参数] + IbAlias[4 import 绑定] + for 目标 Store Name[4]；② 符号
+  uid 双形态：用户定义 = `scope_<定义 scope 串>:<name>`（含嵌套 scope 串
+  scope___string_exec__/outer:inner）/ intrinsic 固有名字 = `intrinsic:<name>`
+  [print/range/len/knowledge 等——Python：intrinsic 符号 uid 独立驻顶层 scope 符号表]；
+  ③ **注解位置不绑定符号**（Python 实证 13/13：返回注解 Name 7 + 参数注解 Name 6——
+  node_to_symbol 与 node_to_type 的注解规则不同：返回注解有类型无符号）；④ **首次赋值
+  target Name 节点也绑定定义符号**（arithmetic_loop：total 4 Name + 2 IbAssign = 6）。
+  **交付**：
+  - **NodeSerializer 统一遍历扩展**：user_defined 标记层[每 scope 一个 Name 集，与
+    scope_stack/type_env 同步 push/pop] + define_name 单一写入点[type_env + user
+    _defined 同步写，无漂移——区分"用户顶层定义"与"顶层 intrinsic 固有绑定"] +
+    intrinsic_names 固定集[new() 预计算] + resolve_symbol_uid[scope 链内层→外层用户
+    定义优先 → scope uid；否则 intrinsic 63 → intrinsic uid；未命中 → 不产条目]；
+    定义节点条目：IbAssign[IbAssign 节点 + target Name 节点 双重绑定定义符号] /
+    IbFunctionDef[定义 scope = 外层，pop_scope 后当前 scope 即定义处] / IbArg[函数体
+    scope——serialize_arg 移入函数 scope 内序列化] / IbAlias[绑定名，当前 scope] /
+    for 目标；Name 引用条目经 Full 模式记录（serialize_expr_recorded + RecordMode
+    三态[Full=值位置 type+symbol / TypeOnly=返回注解 type only / None=参数注解
+    无记录——位置语义显式分派，非能力探测]）。
+  - **lib.rs**：node_to_symbol pyfunction[独立产出，同 node_to_type 模式]。
+  - **差分 harness**：test_node_to_symbol_corpus[全量多重集等价，无过滤——scope 串
+    确定性非 uid 派生，closure 友好]。
+  **关键裁定（self-grill 全分支消解）**：① **user_defined 标记层非双通道**——与
+  type_env 经 define_name 单一写入点同步（同 push_scope 同步 scope_stack+type_env
+  的既有模式），承载"用户定义 vs intrinsic 固有"的解析差异（两事实：类型值 vs
+  定义性）；② **Arg 序列化移入函数 scope**（scope 语义修正——arg 符号归属函数体
+  scope，此前 pop 后序列化是既有错误面，节点池 uid 不受影响[内容确定性]）；③
+  **RecordMode 三态 = 位置语义显式化**（值/返回注解/参数注解三位置的绑定规则差异是
+  Python 实证事实，以模式参数承载，非散落 if）；④ **零风险加法式**（Rust 侧扩展面
+  + 测试新增，不动 Python 执行路径/FlatSerializer/语义层）。**验证**：node_to_symbol
+  **34 语料 262/262 全量多重集对齐 0 DIFF**（node_to_type 635/635 + scope 符号 43/43
+  + owned_scope 52/52 + 节点池 829/832 + intrinsic 面全回归无损）；diff_harness
+  40 passed[+1 node_to_symbol 门] + smoke 832 passed 零回归（全量 pytest 见放行门
+  实跑）。**第三批剩余**：free_vars 闭包捕获 / method 符号[sym_anon_* content_hash
+  偏离白名单] / generic+用户类型条目 / modules 组装[完整 artifact 闭环]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

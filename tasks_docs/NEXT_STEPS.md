@@ -461,8 +461,12 @@
       IbName[63 intrinsic 名+import/from-import 绑定] / IbCall[方法表[容器特化]+intrinsic 19
       +模块成员] / bound_method+字段 / 下标特化 / any 传播 / 空容器裸形态 / 参数注解+Slice
       不绑定 / 双通道+首次绑定优先] ✅
-   → 第三批 子项 2b-2b-2 增量 2 续[node_to_symbol 侧表独立产出 + free_vars + method 符号
-      + generic/用户类型 + modules 组装[完整 artifact 闭环]][当前]
+   → 第三批 子项 2b-2b-2 增量 2 node_to_symbol 侧表独立产出[全量多重集 34 语料
+      262/262：IbName 引用[scope 链/intrinsic 63]+IbAssign/IbFunctionDef/IbArg/IbAlias/
+      for 目标定义节点；注解位置不绑定符号[Python 实证 13/13]；RecordMode 三态位置
+      语义显式分派] ✅
+   → 第三批 子项 2b-2b-2 增量 3 续[free_vars 闭包捕获 + method 符号 + generic/用户类型
+      + modules 组装[完整 artifact 闭环]][当前]
    + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。

@@ -795,6 +795,33 @@ class TestRustSerializationUid:
                 f"  py   only: {sorted((py_multiset - rs_multiset).elements())}"
             )
 
+    def test_node_to_symbol_corpus(self):
+        """node_to_symbol 侧表差分（全量 Rust 化·artifact 产出：节点级符号 uid 完整面）：
+        Rust node_to_symbol 全量多重集 == Python（IbName 引用[scope 链用户定义定义
+        scope / intrinsic 63 固定集] + IbAssign/IbFunctionDef/IbArg/IbAlias/for 目标
+        定义节点 → scope 符号；参数注解/返回注解 Name 无符号绑定 = Python 实证
+        13/13；scope 串为确定性定义（非 uid 派生）——closure 友好）。"""
+        import json
+        from collections import Counter
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "node_to_symbol"):
+            return
+        for name, code in CORPUS:
+            rs = json.loads(rk._module.node_to_symbol(code))
+            data = FlatSerializer().serialize_artifact(compile_ibci(code))
+            mod = data["modules"][data["entry_module"]]
+            py = mod["side_tables"]["node_to_symbol"]
+            rs_multiset = Counter(rs.values())
+            py_multiset = Counter(py.values())
+            assert rs_multiset == py_multiset, (
+                f"语料 {name} node_to_symbol symbol_uid 全量分布不等价：\n"
+                f"  rust only: {sorted((rs_multiset - py_multiset).elements())}\n"
+                f"  py   only: {sorted((py_multiset - rs_multiset).elements())}"
+            )
+
 
 class TestDivergenceRegistry:
     """差分 harness 状态注册表（单一权威源）自检：合法性 + 被消费（非死代码）。"""
