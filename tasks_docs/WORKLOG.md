@@ -5383,6 +5383,23 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   重构（file_handle/generic_value_identity/storage_model_dispatch）、cargo
   test 内核层组建、R2 续项、阶段 D。
 
+## R3 阶段 C 全部完成（C8-C10，2026-09-11，commit 7052b167/7327ff05/3335d7ad）
+
+- **C8**（7052b167）：narrow_model → 宿主层 12 断言（bind_artifact 语言路径 +
+  artifact 夹具[canonical hash]；TransE/topk/元数据/NAR_* fail-fast/content_hash
+  篡改门）。
+- **C9**（7327ff05）：clone_ref/deep_clone 内部断言重构 → 行为层 3 断言（list/dict
+  特化类型保留+独立）+ file_handle 原位可观察化；generic_value_identity/
+  storage_model_dispatch 内部断言删除（契约承接）。
+- **C10**（3335d7ad）：**cargo test 内核层组建**——ibci-sdk 2 + ibci-ext 6 内核
+  内部层单测（TensorValue/ErrorKind/错误码通道/PluginValue）+ scripts/test_rust.sh。
+- **R3 阶段 C 全量完成**：21 强白盒文件处置完毕（C1-C10 逐项迁移/删除，契约
+  逐项承接）+ 测试体系五层齐备（行为/契约/宿主/前端/内核内部层）。
+- **用户要求"测试体系重构最终全部推进完毕"达成**。
+- 全量 pytest 4283/0/1；Rust 单测 8/0。
+- **剩余**：R2 续项（方法分派表 enum 化 / i128 评估）+ 阶段 D（⑦ 终点：差分
+  退场 + Python 参考内核退役 + 双码族统一 + artifact IR）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
