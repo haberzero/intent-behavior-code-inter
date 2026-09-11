@@ -624,6 +624,29 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                     raise InterpreterError(
                         message, location=location, error_code=code
                     ) from e
+                # 未映射错误类（ValueError/OverflowError 等）→ RUN_GENERIC_ERROR
+                # InterpreterError（与 Python VM 边界同一契约——R3 语言行为层
+                # 断言面：未映射 = 通用运行时错误，不泄漏内核边界异常）
+                from core.base.diagnostics.codes import RUN_GENERIC_ERROR
+
+                location = None
+                if e.line is not None and e.column is not None:
+                    from core.base.source_atomic import Location
+
+                    file_path = Path(self.root_dir) / (
+                        f"{artifact_dict['entry_module']}.ibci"
+                    )
+                    location = Location(
+                        file_path=str(file_path),
+                        line=e.line,
+                        column=e.column,
+                    )
+                message = (
+                    e.error_class if not e.detail else f"{e.error_class}: {e.detail}"
+                )
+                raise InterpreterError(
+                    message, location=location, error_code=RUN_GENERIC_ERROR
+                ) from e
             raise
         # 输出投递（VM 同面：有 callback → callback；无 = stdout 渲染点）
         if output_callback is not None:
