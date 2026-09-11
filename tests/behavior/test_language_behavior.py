@@ -144,3 +144,65 @@ class TestTensor:
 
     def test_tensor_ragged_rejected(self):
         assert_error("t = tensor([[1, 2], [3]])\n", "RUN_GENERIC_ERROR")
+
+
+class TestCrossModuleSpecialization:
+    """跨模块特化身份（R3-C 迁移——原 test_specialization_identity_runtime
+    白盒断言 → 可观察面：跨模块同名特化类独立，类型赋值经编译期显式校验）。
+
+    可观察契约：入口模块 Box[int] 与 geo.Box[int] 独立（module 限定特化键不
+    坍缩）——以"互传类型错误"锁定独立身份（坍缩则类型检查通过）。
+    """
+
+    def test_cross_module_specialization_distinct(self):
+        import pathlib
+        import tempfile
+
+        from core.kernel.issue import CompilerError
+
+        from tests.behavior.helpers import run
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "geo.ibci").write_text(
+                "class Box[T]:\n"
+                "    T value\n"
+                "    func __init__(self, T v) -> auto:\n"
+                "        self.value = v\n",
+                encoding="utf-8",
+            )
+            from core.engine import IBCIEngine
+
+            # 入口模块自身 Box[int] 合法
+            eng = IBCIEngine(root_dir=str(root))
+            lines = []
+            eng.run_string(
+                "class Box[T]:\n"
+                "    T value\n"
+                "    func __init__(self, T v) -> auto:\n"
+                "        self.value = v\n"
+                "Box[int] m = Box[int](2)\n"
+                "print(m.value)\n",
+                output_callback=lambda t: lines.append(str(t)),
+                silent=True,
+            )
+            assert lines == ["2"]
+            # 跨模块 Box[int] 互传 = 类型不匹配（特化键独立——不坍缩）
+            eng2 = IBCIEngine(root_dir=str(root))
+            try:
+                eng2.run_string(
+                    "import geo\n"
+                    "class Box[T]:\n"
+                    "    T value\n"
+                    "    func __init__(self, T v) -> auto:\n"
+                    "        self.value = v\n"
+                    "func f(Box[int] x) -> int:\n"
+                    "    return x.value\n"
+                    "geo.Box[int] g = geo.Box[int](1)\n"
+                    "print(f(g))\n",
+                    silent=True,
+                )
+                raise AssertionError("跨模块同名特化应独立（类型不匹配）")
+            except CompilerError as e:
+                codes = [d.code for d in getattr(e, "diagnostics", [])]
+                assert "SEM_TYPE_MISMATCH" in codes, f"diags={codes}"
