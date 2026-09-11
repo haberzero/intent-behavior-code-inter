@@ -4185,6 +4185,59 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   node_to_loc 位置多重集 34 语料全对齐（832 node，closure 位置集合相等）+ file_path
   全 null；diff_harness 38 passed[+1] + smoke 832 passed 零回归。**第三批剩余**：
   global_symbols / method 符号 / free_vars / modules 组装。
+- **P9 全量 Rust 化第三批 战略判断 + 统一 artifact 产出设计（2026-09-11，本 session）**：
+  **node_to_symbol/node_to_type/free_vars 统一遍历分析** + **双通道消除设计**。**侦察
+  发现**：① global_symbols 0/34（当前语料全空，低价值）；② node_to_symbol[262：
+  IbName 211/IbAssign 34/IbFunctionDef 7/IbArg 6/IbAlias 4] + node_to_type[635：
+  IbName/IbConstant/IbCall/IbAttribute/IbBinOp/... 几乎所有表达式节点] 的**节点 uid =
+  node_data content hash**（NodeSerializer sha256[:16]），但**符号解析需 scope
+  栈**（SymbolResolver）+ **type_uid 推导需 type_env**（type_inference）—— 三者分离；
+  ③ symbol_table/type_table pyfunction 是 **deserializer（消费 artifact）**，**非独立
+  产出**——node_to_symbol/node_to_type 侧表 Rust **尚未独立产出**（只有 node_to_loc）；
+  ④ node_to_type 的值 = type_uid（Rust type_inference 已推导，符号级 43/43 验证；节点
+  级复用）。**战略判断**：第三批**核心确定性池**[nodes/scope 符号 type_uid 43/43 +
+  owned_scope_uid 52/52/intrinsic 符号 63/类型 66/scopes 池/node_to_loc side_table]
+  **已 Rust 化并验证**；剩余[node_to_type/node_to_symbol 侧表独立产出 + method 符号
+  187[content_hash 用原始 spec，探针 0/148] + generic/用户类型条目[耦合 method
+  members_uids] + free_vars + modules 组装]**都需统一 AST 遍历**[节点 uid + scope
+  栈 + type_env + 节点语义关联]。**设计[统一 artifact 产出]**：当前 NodeSerializer
+  [node uid/node_data] + SymbolResolver[scope 栈/符号/type_uid] + type_inference
+  [type_env] **分离**[潜在双通道——都遍历 AST]。**正确方向**[design-philosophy
+  机制同构/单一权威源]：统一 AST 遍历[一次遍历产 nodes + symbols + scopes +
+  side_tables[node_to_symbol/node_to_type/node_to_loc] + free_vars]，消除双通道。
+  **推进序列**：node_to_type[节点级 type_uid，复用 type_inference + NodeSerializer
+  scope 栈] → node_to_symbol → free_vars → method 符号[content_hash 偏离：Rust 确定性
+  hash，语义等价[方法集+签名]，白名单] → generic/用户类型[耦合 method] → modules 组装
+  [完整 artifact 闭环]。
+- **P9 全量 Rust 化第三批 子项 2b-2a（Rust 独立 artifact 产出：node_to_type 侧表独立
+  产出 + NodeSerializer 统一遍历基础，IbConstant 字面量 type_uid 34/34 全对齐，
+  2026-09-11，本 session，unsafe-vibe-dev）**：**node_to_type 侧表独立产出**
+  （node_uid → type_uid，节点级 type_uid）+ **NodeSerializer 统一遍历基础**（scope 栈
+  + type_env + func_sigs，**消除双通道的方向**——design-philosophy 机制同构）。**交付**
+  ：NodeSerializer 加 scope_stack + type_env + func_sigs + node_to_type 字段（**复用
+  SymbolResolver 逻辑**：push_scope/pop_scope/bind_type_env，单一权威源避免双通道漂移）
+  + serialize_expr 委托 serialize_expr_impl + infer_type_env 记录 node_to_type
+  [type_root.<类型名> 前缀，与符号 type_uid 格式一致] + serialize_stmt[IbAssign 目标
+  type_env 绑定 + node_to_type 更新[bind_type_env 后] / IbFunctionDef 函数名 type_env
+  [含顶层] + func_sigs[returns] + 参数 type_env / IbFor 目标 any] + new() 绑定
+  intrinsic 函数[19]；intrinsic_symbols 加 builtin_function_names；lib.rs 加
+  node_to_type pyfunction；差分 harness 加 test_node_to_type_corpus[验证 IbConstant
+  字面量 type_uid 多重集对齐]。**关键裁定**：① node_to_type 值 = type_root.<类型名>
+  [infer_type_env 返回裸类型名加前缀]——初版漏 type_root 前缀致全 34 DIFF，修复；
+  ② node_to_type 的 IbName/IbAssign/IbFor 目标 type_uid **顺序**：serialize_expr 先
+  记录[未绑定] → bind_type_env 后**更新**[值类型/any]——初版顺序错误致 target None，
+  修复；③ NodeSerializer 复用 SymbolResolver 的 scope 栈/type_env 逻辑[统一遍历方向，
+  消除 NodeSerializer/SymbolResolver 分离]；④ node_to_type **IbConstant**[字面量]
+  **34/34 全对齐**[不依赖 func_sigs/any/generic]，**其余**[IbName any/int-from-Call +
+  IbBinOp/IbListExpr/IbDict/IbTuple/IbCall/IbIfExp + infer_type_env 节点覆盖
+  [UnaryOp/BoolOp/Compare/Subscript/Attribute] + IbCall intrinsic 函数签名
+  [print→void/range→list] + 方法 bound_method + generic]**是 infer_type_env 的改进**
+  [后续]。**验证**：node_to_type IbConstant 字面量 type_uid 34/34 全对齐 0 DIFF；node
+  池不破坏[829/832，closure 3 个 uid 既有 gap]；diff_harness 39 passed[+1] + smoke 832
+  passed 零回归。**第三批剩余**：node_to_type 完整[infer_type_env 改进：Call func_sigs
+  查表 + Name 未定义→any + 节点覆盖 + IbCall intrinsic 函数签名 + 方法 + generic] /
+  node_to_symbol 侧表 / free_vars / method 符号 / generic+用户类型条目 / modules 组装
+  [完整 artifact 闭环]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

@@ -10,22 +10,57 @@
 //! 原样 / null / list[", " 分隔]]。自定义 JSON 序列化器实现该格式（serde_json::to_
 //! string 用 `","`/`":"` 无空格，不匹配）。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde_json::{Map, Value};
 
 use crate::parser::{ConstVal, Expr, Module, Pos, Stmt};
 use crate::serialization;
+use crate::type_inference::{infer_type_env, parse_type_annotation, FuncSignatures, TypeEnv};
 
 /// 节点序列化器：Rust AST → 节点池（uid → node_data）。
 pub struct NodeSerializer {
     node_pool: HashMap<String, Value>,
+    // 统一遍历：scope 栈 + type_env + func_sigs（复用 SymbolResolver 逻辑）+ node_to_type
+    // 侧表[node_uid → type_uid，复用 type_inference 推导]。
+    scope_stack: Vec<String>,
+    type_env: TypeEnv,
+    func_sigs: FuncSignatures,
+    node_to_type: BTreeMap<String, String>,
 }
 
 impl NodeSerializer {
     pub fn new() -> Self {
+        // 顶层 scope type_env 绑定 intrinsic 函数（IbName 函数名 → 函数类型）。
+        let mut top_env: BTreeMap<String, String> = BTreeMap::new();
+        for name in crate::intrinsic_symbols::builtin_function_names() {
+            top_env.insert(name.clone(), name.clone());
+        }
         Self {
             node_pool: HashMap::new(),
+            scope_stack: vec!["__string_exec__".to_string()],
+            type_env: vec![top_env],
+            func_sigs: BTreeMap::new(),
+            node_to_type: BTreeMap::new(),
+        }
+    }
+
+    /// push 函数 scope（scope_stack + type_env 同步，单一权威源避免漂移）。
+    fn push_scope(&mut self, name: &str) {
+        self.scope_stack.push(name.to_string());
+        self.type_env.push(BTreeMap::new());
+    }
+
+    /// pop 函数 scope（scope_stack + type_env 同步）。
+    fn pop_scope(&mut self) {
+        self.scope_stack.pop();
+        self.type_env.pop();
+    }
+
+    /// 类型环境绑定（当前 scope 的 Name → 类型串）——供 infer_type_env 推导。
+    fn bind_type_env(&mut self, name: &str, type_str: &str) {
+        if let Some(scope) = self.type_env.last_mut() {
+            scope.insert(name.to_string(), type_str.to_string());
         }
     }
 
@@ -33,6 +68,11 @@ impl NodeSerializer {
     pub fn serialize_module(&mut self, module: &Module) -> (String, HashMap<String, Value>) {
         let root_uid = self.serialize_module_node(module);
         (root_uid, std::mem::take(&mut self.node_pool))
+    }
+
+    /// node_to_type 侧表（node_uid → type_uid）——统一遍历产出（复用 type_inference）。
+    pub fn node_to_type_map(&mut self) -> BTreeMap<String, String> {
+        std::mem::take(&mut self.node_to_type)
     }
 
     /// Module 节点：{"_type": "IbModule", 基类位置, body: [UIDs], file_path: null}。
@@ -51,6 +91,18 @@ impl NodeSerializer {
             Stmt::Assign { pos, targets, value } => {
                 let t_uids: Vec<String> = targets.iter().map(|e| self.serialize_expr(e)).collect();
                 let v_uid = value.as_ref().map(|e| self.serialize_expr(e));
+                // 统一遍历：type_env 绑定目标（IbName）= 值的 type_uid（复用 type_inference）
+                // + node_to_type 更新（target IbName = 值类型，bind_type_env 后）。
+                if let Some(v) = value {
+                    if let Some(ts) = infer_type_env(v, &self.type_env, &self.func_sigs) {
+                        for (t, t_uid) in targets.iter().zip(t_uids.iter()) {
+                            if let Expr::Name { id, .. } = t {
+                                self.bind_type_env(id, &ts);
+                                self.node_to_type.insert(t_uid.clone(), format!("type_root.{}", ts));
+                            }
+                        }
+                    }
+                }
                 let mut node_data = base_fields(pos);
                 node_data.insert("_type".to_string(), Value::String("IbAssign".to_string()));
                 node_data.insert("targets".to_string(), Value::Array(t_uids.into_iter().map(Value::String).collect()));
@@ -108,6 +160,12 @@ impl NodeSerializer {
             Stmt::For { pos, target, iter, body, orelse } => {
                 let t_uid = self.serialize_expr(target);
                 let i_uid = self.serialize_expr(iter);
+                // 统一遍历：for 目标 type_env = any（IBCI：iter 类型不推断）+ node_to_type
+                // 更新（target IbName = any，bind_type_env 后）。
+                if let Expr::Name { id, .. } = target {
+                    self.bind_type_env(id, "any");
+                    self.node_to_type.insert(t_uid.clone(), "type_root.any".to_string());
+                }
                 let b_uids: Vec<String> = body.iter().map(|s| self.serialize_stmt(s)).collect();
                 let o_uids: Vec<String> = orelse.iter().map(|s| self.serialize_stmt(s)).collect();
                 let mut node_data = base_fields(pos);
@@ -132,7 +190,28 @@ impl NodeSerializer {
                 self.collect(node_data)
             }
             Stmt::FunctionDef { pos, name, args, body, returns } => {
+                // 统一遍历：函数名 type_env[含顶层函数，IbName 函数名 → 函数类型
+                // type_root.<name>] + func_sigs（returns）+ push_scope + 参数 type_env。
+                self.bind_type_env(name, name);
+                if let Some(rt) = returns {
+                    if let Some(ts) = parse_type_annotation(rt) {
+                        self.func_sigs.insert(name.clone(), ts);
+                    }
+                }
+                self.push_scope(name);
+                for a in args {
+                    if let Some(ann) = &a.annotation {
+                        if let Some(ts) = parse_type_annotation(ann) {
+                            self.bind_type_env(&a.arg, &ts);
+                        } else {
+                            self.bind_type_env(&a.arg, "any");
+                        }
+                    } else {
+                        self.bind_type_env(&a.arg, "any");
+                    }
+                }
                 let b_uids: Vec<String> = body.iter().map(|s| self.serialize_stmt(s)).collect();
+                self.pop_scope();
                 let arg_uids: Vec<String> = args.iter().map(|a| self.serialize_arg(a)).collect();
                 let ret_uid = returns.as_ref().map(|e| self.serialize_expr(e));
                 let mut node_data = base_fields(pos);
@@ -191,9 +270,20 @@ impl NodeSerializer {
         }
     }
 
-    /// 表达式节点分发。
-    /// 表达式节点分发（pub：供符号解析计算定义节点 UID）。
+    /// 表达式节点分发（统一遍历：委托 serialize_expr_impl + infer_type_env 记录
+    /// node_to_type[node_uid → type_uid，复用 type_inference]）。
     pub fn serialize_expr(&mut self, expr: &Expr) -> String {
+        let uid = self.serialize_expr_impl(expr);
+        // type_uid = type_root.<类型名>（与符号 type_uid 格式一致；infer_type_env 返回
+        // 裸类型名，module_path=None → root 前缀）。
+        if let Some(type_uid) = infer_type_env(expr, &self.type_env, &self.func_sigs) {
+            self.node_to_type.insert(uid.clone(), format!("type_root.{}", type_uid));
+        }
+        uid
+    }
+
+    /// 表达式节点序列化（现有逻辑；内部递归调用 serialize_expr[委托 + record_type_uid]）。
+    fn serialize_expr_impl(&mut self, expr: &Expr) -> String {
         match expr {
             Expr::Constant { pos, value } => {
                 let mut node_data = base_fields(pos);
