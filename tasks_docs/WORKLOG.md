@@ -5590,6 +5590,20 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - **"参考内核"术语处置**：文档/注释中的"参考"指代 → "LLM/宿主执行层"（角色
   形式化——Python 运行时 = 宿主生态层，非语义参考）。
 
+## R3-C 长尾完成核查 + R2 续项裁决（2026-09-11）
+
+- **R3-C 迁移 = 全部执行完毕**（19 白盒文件核查）：vm_run_many/execution_context/
+  optional_value_model/vector_type/world_model_kb/knowledge_type/knowledge_to_ibci/
+  narrow_model_type/specialization_identity_runtime = 删除 + 行为/宿主承接 ✓；
+  storage_model_dispatch/generic_value_identity/file_handle/media/overlay/
+  pre_eval/thread_cleanup/quoted = 归类保留 ✓；宿主层新测试（llm_behavior_roots 等）
+  ✓；内核内部层 cargo test（scripts/test_rust.sh，8 单测）✓。**测试体系五层
+  + 白盒迁移 = 最终全部推进完毕。**
+- **R2 续项裁决**：i128 = 已裁决（i64 有界契约，KNOWN_LIMITS §二十八）；
+  分派表 enum 化 = **评估保留现状**（字符串键表 + dispatch_method = 单一权威 +
+  行为层全覆盖；enum 化 = 边际收益[小表 typo 风险低] vs 重构成本——不推进，
+  记录在案）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
