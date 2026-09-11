@@ -5291,6 +5291,30 @@ platform.md`）**：
 **下一步 = R6 Rust 插件协议**（④层：ibci-sdk crate + cdylib 插件 ABI——回答
 "外部人员写 Rust"，不在内核核心）+ 背景 R3 阶段 C 长尾。
 
+## R6 Rust 插件协议（④层，2026-09-11，commit 492c56ba + 2eb1bdb8）
+
+**R6 = 回答"外部人员书写 Rust"**（不修改内核、不 python.h；职责重定位"内核不执行
+外来代码"：插件 = 纯函数面[数据进 → 数据出]，内核 GIL-free 执行）：
+- **ibci-sdk crate**：repr(C) PluginValue（借用实参 Int/Float/Bool/None/Str/List
+  + 自有标量结果）+ PluginApi（内核回调 register_function/log）+ ibci_plugin_
+  register 入口 + register_plugin! 宏（插件作者安全注册）。
+- **内核加载**（ibci-ext/src/plugins.rs）：libloading 加载 cdylib + 调 C-ABI
+  注册入口（与编译器/版本解耦）；进程级注册表 + Arc<Library> 保活（函数指针
+  生命周期内库不卸载）；pyo3 load_plugin/call_plugin。
+- **plugins 宿主模块**（IMPORT_GATED）：IBCI 侧 load(path)/call(name, args)。
+- **示例插件**（plugins/demo）：sum/mul（register_plugin!）。
+- **自审修正（2eb1bdb8）**：插件桥去 JSON 字符串传输 → pyo3 对象直接提取/构造
+  （P2 typed 精神——无序列化层；字符串协议异味自审清除）。
+- **验证**：端到端 load → 2 函数 → call("sum",[1,2,3,4])=10、mul=42；全量
+  pytest 4343 → **4347/0/1** 零回归；宿主层 +3 插件测试。
+- **R6 值面**（R6-1）：标量 int/float/bool/null + 扁平列表实参；Str/List 结果
+  + 嵌套容器 = 后续增量（所有权纪律）。
+
+**主线 R5+R6 全部完成**（架构 v2 编排平台：Tensor 统一数据形态 + 计算编排协议
++ Rust 插件协议）。剩余 = 背景（R3 阶段 C 长尾：21 白盒文件——C1 已删 2；
+vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 + cargo test
+内核层组建）+ R2 续项（方法分派表/i128）+ 阶段 D（差分退场）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
