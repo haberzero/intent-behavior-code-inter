@@ -1083,6 +1083,585 @@ pub struct Interpreter {
     bridge: Option<Py<PyAny>>,
 }
 
+/// 值方法分派函数签名（obj = 被调值[分派表按值类型分组]；args = 实参）。
+type MethodFn = fn(&IbValue, &[IbValue]) -> Result<IbValue, Thrown>;
+
+/// 方法分派（单一权威表查找——替代 stringly-typed match 臂；新增方法 = 只加
+/// 表项 + 实现 fn，杜绝"match 臂 vs 语义层方法表"双真相漂移）。
+fn dispatch_method(
+    table: &[(&str, MethodFn)],
+    obj: &IbValue,
+    method: &str,
+    args: &[IbValue],
+) -> Result<IbValue, Thrown> {
+    match table.iter().find(|(n, _)| *n == method) {
+        Some((_, f)) => f(obj, args),
+        None => Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
+    }
+}
+
+// --------------------------------------------------------------------------- //
+// tensor 值方法分派表（vector = 1D tensor——shape/ndim/dtype 通用 + dim/norm/
+// dot/cosine[1D] + scale/add/sub[元素级泛化]；R5-2 计算编排协议落地后元素级
+// 运算经协议调度，当前 = 标量直算正确性路径）
+// --------------------------------------------------------------------------- //
+fn tensor_shape(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    Ok(IbValue::list_new(
+        t.shape.iter().map(|d| IbValue::Int(*d as i64)).collect(),
+    ))
+}
+
+fn tensor_ndim(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    Ok(IbValue::Int(t.shape.len() as i64))
+}
+
+fn tensor_dtype(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(_) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    Ok(IbValue::Str("f64".into()))
+}
+
+fn tensor_to_list(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    // 数据面原生列表（interchange——计算编排网关/宿主边界显式拆箱面；
+    // 1D = 平铺列表，2D = 嵌套行列表）
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    if t.is_1d() {
+        Ok(IbValue::list_new(t.data.iter().map(|x| IbValue::Float(*x)).collect()))
+    } else {
+        let cols = t.shape[1];
+        let rows: Vec<IbValue> = t
+            .data
+            .chunks(cols)
+            .map(|row| IbValue::list_new(row.iter().map(|x| IbValue::Float(*x)).collect()))
+            .collect();
+        Ok(IbValue::list_new(rows))
+    }
+}
+
+fn tensor_dim(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    match t.to_1d() {
+        Some(v) => Ok(IbValue::Int(v.len() as i64)),
+        None => Err(runtime_error(
+            ErrorKind::ValueError,
+            "dim() is 1D-only; use shape()/ndim() for N-D tensor",
+        )),
+    }
+}
+
+fn tensor_dot(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    let v = t
+        .to_1d()
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor"))?;
+    let [IbValue::Tensor(o)] = args else {
+        return Err(runtime_error(ErrorKind::TypeError, "dot() requires a vector argument"));
+    };
+    let o = o
+        .to_1d()
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor"))?;
+    if v.len() != o.len() {
+        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
+    }
+    Ok(IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum()))
+}
+
+fn tensor_norm(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    let v = t
+        .to_1d()
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "norm() requires a 1D tensor"))?;
+    Ok(IbValue::Float(v.iter().map(|x| x * x).sum::<f64>().sqrt()))
+}
+
+fn tensor_cosine(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    let v = t
+        .to_1d()
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor"))?;
+    let [IbValue::Tensor(o)] = args else {
+        return Err(runtime_error(ErrorKind::TypeError, "cosine() requires a vector argument"));
+    };
+    let o = o
+        .to_1d()
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor"))?;
+    if v.len() != o.len() {
+        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
+    }
+    let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if na == 0.0 || nb == 0.0 {
+        // 零范数 = 余弦未定义（显式语义角——保持既有面）
+        return Ok(IbValue::None_);
+    }
+    Ok(IbValue::Float(
+        v.iter().zip(o.iter()).map(|(a, b)| a * b).sum::<f64>() / (na * nb),
+    ))
+}
+
+fn tensor_scale(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    Ok(match args.first() {
+        Some(IbValue::Int(k)) => IbValue::Tensor(TensorValue {
+            shape: t.shape.clone(),
+            data: t.data.iter().map(|x| x * (*k as f64)).collect(),
+        }),
+        Some(IbValue::Float(k)) => IbValue::Tensor(TensorValue {
+            shape: t.shape.clone(),
+            data: t.data.iter().map(|x| x * k).collect(),
+        }),
+        _ => {
+            return Err(runtime_error(
+                ErrorKind::TypeError,
+                "scale() requires a numeric argument",
+            ))
+        }
+    })
+}
+
+fn tensor_add_sub(t: &TensorValue, o: &TensorValue, is_add: bool) -> IbValue {
+    let out: Vec<f64> = if is_add {
+        t.data.iter().zip(o.data.iter()).map(|(a, b)| a + b).collect()
+    } else {
+        t.data.iter().zip(o.data.iter()).map(|(a, b)| a - b).collect()
+    };
+    IbValue::Tensor(TensorValue { shape: t.shape.clone(), data: out })
+}
+
+fn tensor_add(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    let [IbValue::Tensor(o)] = args else {
+        return Err(runtime_error(ErrorKind::TypeError, "tensor add/sub requires a tensor argument"));
+    };
+    if t.shape != o.shape {
+        return Err(runtime_error(ErrorKind::ValueError, "tensor shape mismatch"));
+    }
+    Ok(tensor_add_sub(t, o, true))
+}
+
+fn tensor_sub(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Tensor(t) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
+    };
+    let [IbValue::Tensor(o)] = args else {
+        return Err(runtime_error(ErrorKind::TypeError, "tensor add/sub requires a tensor argument"));
+    };
+    if t.shape != o.shape {
+        return Err(runtime_error(ErrorKind::ValueError, "tensor shape mismatch"));
+    }
+    Ok(tensor_add_sub(t, o, false))
+}
+
+/// tensor 值方法分派表（单一权威源——新增方法 = 只加表项 + 实现 fn）。
+const TENSOR_METHODS: &[(&str, MethodFn)] = &[
+    ("shape", tensor_shape),
+    ("ndim", tensor_ndim),
+    ("dtype", tensor_dtype),
+    ("to_list", tensor_to_list),
+    ("dim", tensor_dim),
+    ("dot", tensor_dot),
+    ("norm", tensor_norm),
+    ("cosine", tensor_cosine),
+    ("scale", tensor_scale),
+    ("add", tensor_add),
+    ("sub", tensor_sub),
+];
+
+// --------------------------------------------------------------------------- //
+// list 值方法分派表（Python 契约方法面；空容器操作 fail-fast 非静默）
+// --------------------------------------------------------------------------- //
+fn list_append(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::List(l) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: list method on non-list"));
+    };
+    if let Some(v) = args.first() {
+        l.borrow_mut().push(v.clone());
+    }
+    Ok(IbValue::None_)
+}
+
+fn list_len(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::List(l) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: list method on non-list"));
+    };
+    Ok(IbValue::Int(l.borrow().len() as i64))
+}
+
+fn list_index(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::List(l) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: list method on non-list"));
+    };
+    let items = l.borrow().clone();
+    let v = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "index() takes exactly one argument")
+    })?;
+    Ok(items
+        .iter()
+        .position(|x| x == v)
+        .map(|i| IbValue::Int(i as i64))
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "list.index(x): x not in list"))?)
+}
+
+fn list_pop(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::List(l) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: list method on non-list"));
+    };
+    // Python 契约：空列表 pop = IndexError（无静默 None_）
+    let mut m = l.borrow_mut();
+    Ok(m.pop().ok_or_else(|| runtime_error(ErrorKind::IndexError, "pop from empty list"))?)
+}
+
+fn list_insert(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::List(l) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: list method on non-list"));
+    };
+    // insert(index, value)——负索引/越界 = 端点钳制（Python 契约）
+    let items = l.borrow().clone();
+    if let (Some(IbValue::Int(i)), Some(v)) = (args.first(), args.get(1)) {
+        let mut m = l.borrow_mut();
+        let len = m.len() as i64;
+        let ix = {
+            let raw = if *i < 0 { (len + i).max(0) } else { *i };
+            (raw as usize).min(m.len())
+        };
+        m.insert(ix, v.clone());
+    }
+    Ok(IbValue::None_)
+}
+
+fn list_remove(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::List(l) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: list method on non-list"));
+    };
+    // remove(value)——移除首个相等元素（Python 契约：原地修改；未找到 =
+    // ValueError——R2-1 静默清零）
+    let v = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "remove() takes exactly one argument")
+    })?;
+    let mut m = l.borrow_mut();
+    let ix = m
+        .iter()
+        .position(|x| x == v)
+        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "list.remove(x): x not in list"))?;
+    m.remove(ix);
+    Ok(IbValue::None_)
+}
+
+/// list 值方法分派表（单一权威源）。
+const LIST_METHODS: &[(&str, MethodFn)] = &[
+    ("append", list_append),
+    ("len", list_len),
+    ("index", list_index),
+    ("pop", list_pop),
+    ("insert", list_insert),
+    ("remove", list_remove),
+];
+
+// --------------------------------------------------------------------------- //
+// dict 值方法分派表（Python 契约方法面）
+// --------------------------------------------------------------------------- //
+fn dict_get(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Dict(d) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: dict method on non-dict"));
+    };
+    // get(key) / get(key, default)
+    let items = d.borrow().clone();
+    if let Some(k) = args.first() {
+        let found = items.iter().find(|(dk, _)| dk == k).map(|(_, v)| v.clone());
+        Ok(match found {
+            Some(v) => v,
+            None => args.get(1).cloned().unwrap_or(IbValue::None_),
+        })
+    } else {
+        Ok(IbValue::None_)
+    }
+}
+
+fn dict_keys(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Dict(d) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: dict method on non-dict"));
+    };
+    let items = d.borrow().clone();
+    let keys: Vec<IbValue> = items.into_iter().map(|(k, _)| k).collect();
+    Ok(IbValue::list_new(keys))
+}
+
+fn dict_values(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Dict(d) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: dict method on non-dict"));
+    };
+    let items = d.borrow().clone();
+    let vals: Vec<IbValue> = items.into_iter().map(|(_, v)| v).collect();
+    Ok(IbValue::list_new(vals))
+}
+
+fn dict_len(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Dict(d) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: dict method on non-dict"));
+    };
+    Ok(IbValue::Int(d.borrow().len() as i64))
+}
+
+/// dict 值方法分派表（单一权威源）。
+const DICT_METHODS: &[(&str, MethodFn)] = &[
+    ("get", dict_get),
+    ("keys", dict_keys),
+    ("values", dict_values),
+    ("len", dict_len),
+];
+
+// --------------------------------------------------------------------------- //
+// str 值方法分派表（Python 契约方法面；split/join/format 语义对等）
+// --------------------------------------------------------------------------- //
+fn str_split(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    // Python 契约（R2-1 静默清零——旧实现无参 = 逐字符切分错）：无参 = 空白
+    // 切分（split_whitespace 折叠连续空白）；sep 空串 = ValueError；sep 非
+    // str = TypeError
+    let parts: Vec<IbValue> = match args.first() {
+        None => s.split_whitespace().map(|p| IbValue::Str(p.to_string())).collect(),
+        Some(IbValue::Str(sep)) if !sep.is_empty() => {
+            s.split(sep.as_str()).map(|p| IbValue::Str(p.to_string())).collect()
+        }
+        Some(IbValue::Str(_)) => {
+            return Err(runtime_error(ErrorKind::ValueError, "empty separator"))
+        }
+        Some(_) => {
+            return Err(runtime_error(ErrorKind::TypeError, "split() argument must be str"))
+        }
+    };
+    Ok(IbValue::list_new(parts))
+}
+
+fn str_find(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    let sub = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "find() takes exactly one argument")
+    })?;
+    let sub = match sub {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "find() argument must be str")),
+    };
+    Ok(match s.find(&sub) {
+        Some(i) => IbValue::Int(i as i64),
+        None => IbValue::Int(-1),
+    })
+}
+
+fn str_rfind(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    let sub = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "rfind() takes exactly one argument")
+    })?;
+    let sub = match sub {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "rfind() argument must be str")),
+    };
+    // rfind 从尾部扫描（Python rfind 对等——find 反向遍历）
+    if sub.is_empty() {
+        return Ok(IbValue::Int(s.len() as i64));
+    }
+    let mut i = s.len().saturating_sub(sub.len()) as i64;
+    let mut found = -1;
+    while i >= 0 {
+        if s[i as usize..].starts_with(&sub) {
+            found = i;
+            break;
+        }
+        i -= 1;
+    }
+    Ok(IbValue::Int(found))
+}
+
+fn str_count(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    let sub = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "count() takes exactly one argument")
+    })?;
+    let sub = match sub {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "count() argument must be str")),
+    };
+    Ok(if sub.is_empty() {
+        IbValue::Int(0)
+    } else {
+        IbValue::Int(s.match_indices(&sub).count() as i64)
+    })
+}
+
+fn str_contains(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    let sub = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "contains() takes exactly one argument")
+    })?;
+    let sub = match sub {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "contains() argument must be str")),
+    };
+    Ok(IbValue::Bool(s.contains(&sub)))
+}
+
+fn str_is_empty(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    Ok(IbValue::Bool(s.trim().is_empty()))
+}
+
+fn str_startswith(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    let pre = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "startswith() takes exactly one argument")
+    })?;
+    let pre = match pre {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "argument must be str")),
+    };
+    Ok(IbValue::Bool(s.starts_with(&pre)))
+}
+
+fn str_endswith(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    let pre = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "endswith() takes exactly one argument")
+    })?;
+    let pre = match pre {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "argument must be str")),
+    };
+    Ok(IbValue::Bool(s.ends_with(&pre)))
+}
+
+fn str_replace(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    let old = args.first().ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "replace() takes at least 2 arguments")
+    })?;
+    let old = match old {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "replace() argument must be str")),
+    };
+    let new = args.get(1).ok_or_else(|| {
+        runtime_error(ErrorKind::TypeError, "replace() takes at least 2 arguments")
+    })?;
+    let new = match new {
+        IbValue::Str(x) => x.clone(),
+        _ => return Err(runtime_error(ErrorKind::TypeError, "replace() argument must be str")),
+    };
+    Ok(IbValue::Str(s.replace(&old, &new)))
+}
+
+fn str_join(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    // join(list) = 本串作分隔符连接元素（Python str.join 对等）
+    let parts: Vec<String> = match args.first() {
+        Some(IbValue::List(l)) => {
+            let v = l.borrow();
+            v.iter().map(|x| x.repr()).collect()
+        }
+        _ => Vec::new(),
+    };
+    Ok(IbValue::Str(parts.join(s.as_str())))
+}
+
+fn str_format(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    // format(arg) = {} 占位符替换（Python str.format 简化对等）
+    let arg = match args.first() {
+        Some(a) => a.repr(),
+        None => String::new(),
+    };
+    let mut out = String::new();
+    let mut rest = s.as_str();
+    while let Some(i) = rest.find("{}") {
+        out.push_str(&rest[..i]);
+        out.push_str(&arg);
+        rest = &rest[i + 2..];
+    }
+    out.push_str(rest);
+    Ok(IbValue::Str(out))
+}
+
+fn str_upper(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    Ok(IbValue::Str(s.to_uppercase()))
+}
+
+fn str_lower(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    Ok(IbValue::Str(s.to_lowercase()))
+}
+
+fn str_strip(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    Ok(IbValue::Str(s.trim().to_string()))
+}
+
+/// str 值方法分派表（单一权威源）。
+const STR_METHODS: &[(&str, MethodFn)] = &[
+    ("split", str_split),
+    ("find", str_find),
+    ("rfind", str_rfind),
+    ("count", str_count),
+    ("contains", str_contains),
+    ("is_empty", str_is_empty),
+    ("startswith", str_startswith),
+    ("endswith", str_endswith),
+    ("replace", str_replace),
+    ("join", str_join),
+    ("format", str_format),
+    ("upper", str_upper),
+    ("lower", str_lower),
+    ("strip", str_strip),
+];
+
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter { bridge: None }
@@ -2096,6 +2675,7 @@ impl Interpreter {
         })
     }
 
+
     fn call_method(&self, obj: &IbValue, method: &str, args: Vec<IbValue>) -> Result<IbValue, Thrown> {
         // Optional 面：is_some/is_none = 任意值的全局方法（值非 None_ = some；
         // Python 契约：Optional 包装幂等——裸值同样可查）
@@ -2153,343 +2733,12 @@ impl Interpreter {
             // dot[1D]/cosine[1D] 向量语义 + scale/add/sub 元素级泛化（任意
             // shape）。R5-2 计算编排协议落地后元素级运算经协议调度（当前 =
             // 标量直算正确性路径，非 SIMD）。
-            IbValue::Tensor(t) => match method {
-                "shape" => IbValue::list_new(
-                    t.shape.iter().map(|d| IbValue::Int(*d as i64)).collect(),
-                ),
-                "ndim" => IbValue::Int(t.shape.len() as i64),
-                "dtype" => IbValue::Str("f64".into()),
-                "to_list" => {
-                    // 数据面原生列表（interchange——计算编排网关/宿主边界显式
-                    // 拆箱面；1D = 平铺列表，2D = 嵌套行列表）
-                    if t.is_1d() {
-                        IbValue::list_new(t.data.iter().map(|x| IbValue::Float(*x)).collect())
-                    } else {
-                        let cols = t.shape[1];
-                        let rows: Vec<IbValue> = t.data
-                            .chunks(cols)
-                            .map(|row| IbValue::list_new(row.iter().map(|x| IbValue::Float(*x)).collect()))
-                            .collect();
-                        IbValue::list_new(rows)
-                    }
-                }
-                "dim" => match t.to_1d() {
-                    Some(v) => IbValue::Int(v.len() as i64),
-                    None => {
-                        return Err(runtime_error(
-                            ErrorKind::ValueError,
-                            "dim() is 1D-only; use shape()/ndim() for N-D tensor",
-                        ))
-                    }
-                },
-                "dot" => {
-                    let v = t.to_1d().ok_or_else(|| {
-                        runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor")
-                    })?;
-                    let [IbValue::Tensor(o)] = args.as_slice() else {
-                        return Err(runtime_error(ErrorKind::TypeError, "dot() requires a vector argument"));
-                    };
-                    let o = o.to_1d().ok_or_else(|| {
-                        runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor")
-                    })?;
-                    if v.len() != o.len() {
-                        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
-                    }
-                    IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum())
-                }
-                "norm" => {
-                    let v = t.to_1d().ok_or_else(|| {
-                        runtime_error(ErrorKind::ValueError, "norm() requires a 1D tensor")
-                    })?;
-                    IbValue::Float(v.iter().map(|x| x * x).sum::<f64>().sqrt())
-                }
-                "cosine" => {
-                    let v = t.to_1d().ok_or_else(|| {
-                        runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor")
-                    })?;
-                    let [IbValue::Tensor(o)] = args.as_slice() else {
-                        return Err(runtime_error(ErrorKind::TypeError, "cosine() requires a vector argument"));
-                    };
-                    let o = o.to_1d().ok_or_else(|| {
-                        runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor")
-                    })?;
-                    if v.len() != o.len() {
-                        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
-                    }
-                    let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
-                    let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
-                    if na == 0.0 || nb == 0.0 {
-                        // 零范数 = 余弦未定义（显式语义角——保持既有面）
-                        return Ok(IbValue::None_);
-                    }
-                    IbValue::Float(
-                        v.iter().zip(o.iter()).map(|(a, b)| a * b).sum::<f64>()
-                            / (na * nb),
-                    )
-                }
-                "scale" => match args.first() {
-                    Some(IbValue::Int(k)) => IbValue::Tensor(TensorValue {
-                        shape: t.shape.clone(),
-                        data: t.data.iter().map(|x| x * (*k as f64)).collect(),
-                    }),
-                    Some(IbValue::Float(k)) => IbValue::Tensor(TensorValue {
-                        shape: t.shape.clone(),
-                        data: t.data.iter().map(|x| x * k).collect(),
-                    }),
-                    _ => return Err(runtime_error(ErrorKind::TypeError, "scale() requires a numeric argument")),
-                },
-                "add" | "sub" => {
-                    let [IbValue::Tensor(o)] = args.as_slice() else {
-                        return Err(runtime_error(ErrorKind::TypeError, "tensor add/sub requires a tensor argument"));
-                    };
-                    if t.shape != o.shape {
-                        return Err(runtime_error(ErrorKind::ValueError, "tensor shape mismatch"));
-                    }
-                    let out: Vec<f64> = if method == "add" {
-                        t.data.iter().zip(o.data.iter()).map(|(a, b)| a + b).collect()
-                    } else {
-                        t.data.iter().zip(o.data.iter()).map(|(a, b)| a - b).collect()
-                    };
-                    IbValue::Tensor(TensorValue { shape: t.shape.clone(), data: out })
-                }
-                // 注：cast_to 目标 = 类对象（`v.cast_to(str)` 的 str 经 VM 类型名
-                // 解析为 class——值域无类对象面，执行面不可达 = 3b 类型面职责；
-                // 用户调用 cast_to("str") = 非法 IBCI[Python 参考 fail-fast 实证]
-                _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
-            },
+            IbValue::Tensor(_) => dispatch_method(TENSOR_METHODS, obj, method, &args)?,
             // 宿主对象——委托 Python 对象方法（host service 桥接）
             IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
-            IbValue::List(l) => match method {
-                "append" => {
-                    if let Some(v) = args.first() {
-                        l.borrow_mut().push(v.clone());
-                    }
-                    IbValue::None_
-                }
-                "len" => IbValue::Int(l.borrow().len() as i64),
-                "index" => {
-                    let items = l.borrow().clone();
-                    let v = args.first().ok_or_else(|| {
-                        runtime_error(ErrorKind::TypeError, "index() takes exactly one argument")
-                    })?;
-                    items
-                        .iter()
-                        .position(|x| x == v)
-                        .map(|i| IbValue::Int(i as i64))
-                        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "list.index(x): x not in list"))?
-                }
-                "pop" => {
-                    // Python 契约：空列表 pop = IndexError（无静默 None_）
-                    let mut m = l.borrow_mut();
-                    m.pop().ok_or_else(|| runtime_error(ErrorKind::IndexError, "pop from empty list"))?
-                }
-                // insert(index, value)——负索引/越界 = 端点钳制（Python 契约）
-                "insert" => {
-                    let items = l.borrow().clone();
-                    if let (Some(IbValue::Int(i)), Some(v)) = (args.first(), args.get(1)) {
-                        let mut m = l.borrow_mut();
-                        let len = m.len() as i64;
-                        let ix = {
-                            let raw = if *i < 0 { (len + i).max(0) } else { *i };
-                            (raw as usize).min(m.len())
-                        };
-                        m.insert(ix, v.clone());
-                    }
-                    IbValue::None_
-                }
-                // remove(value)——移除首个相等元素（Python 契约：原地修改；
-                // 未找到 = ValueError——R2-1 静默清零）
-                "remove" => {
-                    let v = args.first().ok_or_else(|| {
-                        runtime_error(ErrorKind::TypeError, "remove() takes exactly one argument")
-                    })?;
-                    let mut m = l.borrow_mut();
-                    let ix = m.iter().position(|x| x == v).ok_or_else(|| {
-                        runtime_error(ErrorKind::ValueError, "list.remove(x): x not in list")
-                    })?;
-                    m.remove(ix);
-                    IbValue::None_
-                }
-                _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
-            },
-            IbValue::Dict(d) => match method {
-                "get" => {
-                    // get(key) / get(key, default)
-                    let items = d.borrow().clone();
-                    if let Some(k) = args.first() {
-                        let found = items.iter().find(|(dk, _)| dk == k).map(|(_, v)| v.clone());
-                        match found {
-                            Some(v) => v,
-                            None => args.get(1).cloned().unwrap_or(IbValue::None_),
-                        }
-                    } else {
-                        IbValue::None_
-                    }
-                }
-                "keys" => {
-                    let items = d.borrow().clone();
-                    let keys: Vec<IbValue> = items.into_iter().map(|(k, _)| k).collect();
-                    IbValue::list_new(keys)
-                }
-                "values" => {
-                    let items = d.borrow().clone();
-                    let vals: Vec<IbValue> = items.into_iter().map(|(_, v)| v).collect();
-                    IbValue::list_new(vals)
-                }
-                "len" => IbValue::Int(d.borrow().len() as i64),
-                _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
-            },
-            IbValue::Str(s) => {
-                match method {
-                    "split" => {
-                        // Python 契约（R2-1 静默清零——旧实现无参 = 逐字符切分错）：
-                        // 无参 = 空白切分（split_whitespace 折叠连续空白）；
-                        // sep 空串 = ValueError；sep 非 str = TypeError
-                        let parts: Vec<IbValue> = match args.first() {
-                            None => s.split_whitespace().map(|p| IbValue::Str(p.to_string())).collect(),
-                            Some(IbValue::Str(sep)) if !sep.is_empty() => {
-                                s.split(sep.as_str()).map(|p| IbValue::Str(p.to_string())).collect()
-                            }
-                            Some(IbValue::Str(_)) => {
-                                return Err(runtime_error(ErrorKind::ValueError, "empty separator"))
-                            }
-                            Some(_) => {
-                                return Err(runtime_error(ErrorKind::TypeError, "split() argument must be str"))
-                            }
-                        };
-                        return Ok(IbValue::list_new(parts));
-                    }
-                    "find" => {
-                        let sub = args.first().ok_or_else(|| {
-                            runtime_error(ErrorKind::TypeError, "find() takes exactly one argument")
-                        })?;
-                        let sub = match sub {
-                            IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error(ErrorKind::TypeError, "find() argument must be str")),
-                        };
-                        return Ok(match s.find(&sub) {
-                            Some(i) => IbValue::Int(i as i64),
-                            None => IbValue::Int(-1),
-                        });
-                    }
-                    "rfind" => {
-                        let sub = args.first().ok_or_else(|| {
-                            runtime_error(ErrorKind::TypeError, "rfind() takes exactly one argument")
-                        })?;
-                        let sub = match sub {
-                            IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error(ErrorKind::TypeError, "rfind() argument must be str")),
-                        };
-                        // rfind 从尾部扫描（Python rfind 对等——find 反向遍历）
-                        if sub.is_empty() {
-                            return Ok(IbValue::Int(s.len() as i64));
-                        }
-                        let mut i = s.len().saturating_sub(sub.len()) as i64;
-                        let mut found = -1;
-                        while i >= 0 {
-                            if s[i as usize..].starts_with(&sub) {
-                                found = i;
-                                break;
-                            }
-                            i -= 1;
-                        }
-                        return Ok(IbValue::Int(found));
-                    }
-                    "count" => {
-                        let sub = args.first().ok_or_else(|| {
-                            runtime_error(ErrorKind::TypeError, "count() takes exactly one argument")
-                        })?;
-                        let sub = match sub {
-                            IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error(ErrorKind::TypeError, "count() argument must be str")),
-                        };
-                        return Ok(if sub.is_empty() {
-                            IbValue::Int(0)
-                        } else {
-                            IbValue::Int(s.match_indices(&sub).count() as i64)
-                        });
-                    }
-                    "contains" => {
-                        let sub = args.first().ok_or_else(|| {
-                            runtime_error(ErrorKind::TypeError, "contains() takes exactly one argument")
-                        })?;
-                        let sub = match sub {
-                            IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error(ErrorKind::TypeError, "contains() argument must be str")),
-                        };
-                        return Ok(IbValue::Bool(s.contains(&sub)));
-                    }
-                    "is_empty" => {
-                        return Ok(IbValue::Bool(s.trim().is_empty()));
-                    }
-                    "startswith" | "endswith" => {
-                        let pre = args.first().ok_or_else(|| {
-                            runtime_error(ErrorKind::TypeError, "startswith() takes exactly one argument")
-                        })?;
-                        let pre = match pre {
-                            IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error(ErrorKind::TypeError, "argument must be str")),
-                        };
-                        return Ok(IbValue::Bool(if method == "startswith" {
-                            s.starts_with(&pre)
-                        } else {
-                            s.ends_with(&pre)
-                        }));
-                    }
-                    "replace" => {
-                        let old = args.first().ok_or_else(|| {
-                            runtime_error(ErrorKind::TypeError, "replace() takes at least 2 arguments")
-                        })?;
-                        let old = match old {
-                            IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error(ErrorKind::TypeError, "replace() argument must be str")),
-                        };
-                        let new = args.get(1).ok_or_else(|| {
-                            runtime_error(ErrorKind::TypeError, "replace() takes at least 2 arguments")
-                        })?;
-                        let new = match new {
-                            IbValue::Str(x) => x.clone(),
-                            _ => return Err(runtime_error(ErrorKind::TypeError, "replace() argument must be str")),
-                        };
-                        return Ok(IbValue::Str(s.replace(&old, &new)));
-                    }
-                    "join" => {
-                        // join(list) = 本串作分隔符连接元素（Python str.join 对等）
-                        let parts: Vec<String> = match args.first() {
-                            Some(IbValue::List(l)) => {
-                                let v = l.borrow();
-                                v.iter().map(|x| x.repr()).collect()
-                            }
-                            _ => Vec::new(),
-                        };
-                        return Ok(IbValue::Str(parts.join(s.as_str())));
-                    }
-                    "format" => {
-                        // format(arg) = {} 占位符替换（Python str.format 简化对等）
-                        let arg = match args.first() {
-                            Some(a) => a.repr(),
-                            None => String::new(),
-                        };
-                        let mut out = String::new();
-                        let mut rest = s.as_str();
-                        while let Some(i) = rest.find("{}") {
-                            out.push_str(&rest[..i]);
-                            out.push_str(&arg);
-                            rest = &rest[i + 2..];
-                        }
-                        out.push_str(rest);
-                        return Ok(IbValue::Str(out));
-                    }
-                    _ => {}
-                }
-                let r = match method {
-                    "upper" => s.to_uppercase(),
-                    "lower" => s.to_lowercase(),
-                    "strip" => s.trim().to_string(),
-                    _ => return Err(runtime_error(ErrorKind::AttributeError, "attribute not found")),
-                };
-                IbValue::Str(r)
-            }
+            IbValue::List(_) => dispatch_method(LIST_METHODS, obj, method, &args)?,
+            IbValue::Dict(_) => dispatch_method(DICT_METHODS, obj, method, &args)?,
+            IbValue::Str(_) => dispatch_method(STR_METHODS, obj, method, &args)?,
             _ => {
                 // 未知对象类型方法 = 环境错误（Python 契约：AttributeError →
                 // RUN_ATTRIBUTE_ERROR）
