@@ -687,7 +687,7 @@ pub fn dispatch(
             st.embeddings
                 .iter()
                 .find(|(n, _)| n == w)
-                .map(|(_, e)| IbValue::Vector(e.clone()))
+                .map(|(_, e)| IbValue::Tensor(crate::interpreter::TensorValue::from_1d(e.clone())))
                 .unwrap_or(IbValue::None_)
         }
         "has_embedding" => {
@@ -708,8 +708,13 @@ pub fn dispatch(
         "embed_search" => {
             // 全嵌入词暴力 cosine 取前 k（排序键 (−score, word)——score 降序 +
             // 平手按词名确定性 tie-break；k 超嵌入词数 = 返回全部）
-            let [IbValue::Vector(q), IbValue::Int(kk)] = args else {
+            let [IbValue::Tensor(q), IbValue::Int(kk)] = args else {
                 return IbValue::None_;
+            };
+            // 查询须为 1D tensor（vector）；2D = 不可比（合法拒绝）
+            let qv = match q.to_1d() {
+                Some(v) => v,
+                None => return IbValue::None_,
             };
             if *kk < 1 {
                 return IbValue::None_;
@@ -721,8 +726,8 @@ pub fn dispatch(
             let mut scored: Vec<(f64, String)> = st
                 .embeddings
                 .iter()
-                .filter(|(_, e)| e.len() == q.len()) // 维度不符 = 不可比（跳过）
-                .map(|(w, e)| (kb_cosine(q, e), w.clone()))
+                .filter(|(_, e)| e.len() == qv.len()) // 维度不符 = 不可比（跳过）
+                .map(|(w, e)| (kb_cosine(qv, e), w.clone()))
                 .collect();
             scored.sort_by(|a, b| {
                 // (−score, word) 升序 = score 降序 + 词名升序
@@ -907,7 +912,7 @@ fn kb_cosine(a: &[f64], b: &[f64]) -> f64 {
 /// 数值向量提取（vector 值或数值 List——set_embedding 参数面）。
 fn numeric_vec(v: &IbValue) -> Option<Vec<f64>> {
     match v {
-        IbValue::Vector(e) => Some(e.clone()),
+        IbValue::Tensor(t) => t.to_1d().map(|v| v.to_vec()),
         IbValue::List(items) => {
             let mut out = Vec::new();
             for x in items.borrow().iter() {

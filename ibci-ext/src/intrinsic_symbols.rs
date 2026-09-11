@@ -76,6 +76,7 @@ const BUILTIN_FUNCTIONS: &[&str] = &[
     "reversed",
     "sorted",
     "sum",
+    "tensor",
     "type",
     "vec",
     "zip",
@@ -197,6 +198,7 @@ const INTRINSIC_TYPES: &[(&str, &str, &str)] = &[
     ("sum", "function", "PRELUDE_VISIBLE"),
     ("type", "function", "PRELUDE_VISIBLE"),
     ("vec", "function", "PRELUDE_VISIBLE"),
+    ("tensor", "function", "PRELUDE_VISIBLE"),
     ("zip", "function", "PRELUDE_VISIBLE"),
     ("__string_exec__", "module", "PRELUDE_VISIBLE"),
     ("meta", "module", "IMPORT_GATED"),
@@ -253,6 +255,7 @@ const FUNCTION_SIGS: &[(&str, &[&str], &str)] = &[
     ("sum", &["any"], "any"),
     ("type", &["any"], "str"),
     ("vec", &["list"], "vector"),
+    ("tensor", &["list"], "any"),
     ("zip", &["any"], "list"),
 ];
 

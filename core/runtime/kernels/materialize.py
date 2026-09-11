@@ -6,7 +6,7 @@ engine 零语义判断（只做"调物化器 → 按 kind 决定写入路径"）
 
 - 数据 kind（int/float/str/bool/none/list/dict）= 原生值直通 + 容器特化绑定；
 - quoted = IbQuoted 物化（源串全保真，kind 驱动——不再依赖 declared 特判）；
-- vector = IbVector 物化（真实数据，替代 repr 显示串降级）；
+- tensor = 1D → IbVector（vector = 1D tensor，统一数据形态）；2D → 原生嵌套列表；
 - function = RustHostCallable（宿主 callable 统一协议——无状态执行）；
 - knowledge/meta/error/host = 显示形态（KB 数据面未跨边界，E4/R2 后收敛）。
 
@@ -147,7 +147,7 @@ class StateMaterializer:
             "list": self._list,
             "dict": self._dict,
             "quoted": self._quoted,
-            "vector": self._vector,
+            "tensor": self._tensor,
             "knowledge": self._display,
             "function": self._function,
             "meta": self._display,
@@ -211,16 +211,32 @@ class StateMaterializer:
         except Exception:
             return v
 
-    def _vector(self, v, dt):
-        vector_cls = self._registry.get_class("vector")
-        if vector_cls is None:
+    def _tensor(self, v, dt):
+        # P2 typed 通道：tensor 值 = {"shape": [...], "data": [...]}。1D =
+        # IbVector 物化（vector = 1D tensor——统一数据形态）；2D+ = 原生数据
+        # 列表形态（tensor 对象模型/宿主互转 = R5-2 编排协议 + 宿主面）。
+        if not isinstance(v, dict):
             return v
-        from core.runtime.objects.primitives.vector import IbVector
+        shape = v.get("shape") or []
+        data = v.get("data") or []
+        if len(shape) == 1:
+            vector_cls = self._registry.get_class("vector")
+            if vector_cls is None:
+                return data
+            from core.runtime.objects.primitives.vector import IbVector
 
-        try:
-            return IbVector(v or [], vector_cls)
-        except Exception:
-            return v
+            try:
+                return IbVector(data, vector_cls)
+            except Exception:
+                return data
+        # 2D：按 shape 重组为嵌套列表（原生形态，供宿主面 numpy 互转）
+        if len(shape) == 2:
+            rows, cols = shape
+            return [
+                data[r * cols:(r + 1) * cols]
+                for r in range(rows)
+            ]
+        return data
 
     def _function(self, v, dt):
         # 宿主 callable 统一协议（P4）：RustHostCallable——经

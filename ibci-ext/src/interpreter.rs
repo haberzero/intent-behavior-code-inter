@@ -27,6 +27,45 @@ use std::rc::Rc;
 // --------------------------------------------------------------------------- //
 // 对象模型（IbValue——IBC 运行时值；List/Dict 共享可变；Host = Python 宿主对象）
 // --------------------------------------------------------------------------- //
+/// 批量数值值（统一数据形态——R5：vector = 1D tensor；shape 支持 1D/2D。
+/// dtype = f64（当前；numpy/torch 互转在 Python 宿主面，dtype 扩展后续）。
+/// 值语义相等（shape + data 全等）；显示面 = 截断摘要（1D = vector[..] 兼容
+/// vector 契约；2D = tensor[r,c](..)——同 __to_prompt__，截断即纪律）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct TensorValue {
+    pub shape: Vec<usize>,
+    pub data: Vec<f64>,
+}
+
+impl TensorValue {
+    pub fn from_1d(data: Vec<f64>) -> Self {
+        let n = data.len();
+        TensorValue { shape: vec![n], data }
+    }
+
+    /// 嵌套矩形列表 → 2D tensor（非矩形 = None）。
+    pub fn from_2d(rows: Vec<Vec<f64>>) -> Option<Self> {
+        let cols = rows.first().map(|r| r.len()).unwrap_or(0);
+        let nrows = rows.len();
+        if rows.iter().any(|r| r.len() != cols) {
+            return None;
+        }
+        let mut data = Vec::with_capacity(nrows * cols);
+        for r in rows {
+            data.extend(r);
+        }
+        Some(TensorValue { shape: vec![nrows, cols], data })
+    }
+
+    pub fn is_1d(&self) -> bool {
+        self.shape.len() == 1
+    }
+
+    pub fn to_1d(&self) -> Option<&[f64]> {
+        if self.is_1d() { Some(&self.data) } else { None }
+    }
+}
+
 pub enum IbValue {
     Int(i64),
     Float(f64),
@@ -44,9 +83,10 @@ pub enum IbValue {
     /// Rust 原生 KB 值（knowledge() 返回——世界模型知识图谱执行面；治理词表 +
     /// append-only 事实日志 + active 索引，方法经 kb::dispatch 原生分发）。
     Knowledge(Rc<RefCell<KbState>>),
-    /// vector 值（词嵌入向量——不可变 float 元素面；值语义相等；显示面 =
-    /// 截断摘要 vector[<dim>](前 8 维 %.6g, ...)——同 __to_prompt__）。
-    Vector(Vec<f64>),
+    /// tensor 值（统一批量数值形态——vector = 1D tensor；不可变 float 数据
+    /// 面；值语义相等；显示面 = 截断摘要[1D = vector[<dim>](...)，2D =
+    /// tensor[r,c](...)]）。
+    Tensor(TensorValue),
     /// 宿主对象（Python 对象引用——host service 桥接委托面）。
     /// 函数值（一等值——值域可赋值/别名/传参；Rc 共享 = 同一函数对象身份；
     /// 显示面 = source 形态 `func <name>(<param types>) -> <ret>`）。
@@ -74,7 +114,7 @@ impl Clone for IbValue {
             IbValue::MetaFn(n) => IbValue::MetaFn(*n),
             // 共享可变容器（同 List/Dict——Rc clone = 共享引用）
             IbValue::Knowledge(k) => IbValue::Knowledge(k.clone()),
-            IbValue::Vector(v) => IbValue::Vector(v.clone()),
+            IbValue::Tensor(t) => IbValue::Tensor(t.clone()),
             // 函数值 = Rc 共享（同一函数对象）
             IbValue::Function(f) => IbValue::Function(f.clone()),
             IbValue::Error { class, message } => IbValue::Error {
@@ -101,7 +141,7 @@ impl std::fmt::Debug for IbValue {
             IbValue::Quoted { source } => write!(f, "Quoted({source:?})"),
             IbValue::MetaFn(n) => write!(f, "MetaFn({n:?})"),
             IbValue::Knowledge(_) => write!(f, "Knowledge(..)"),
-            IbValue::Vector(v) => write!(f, "Vector({v:?})"),
+            IbValue::Tensor(t) => write!(f, "Tensor(shape={:?})", t.shape),
             IbValue::Function(fn_val) => write!(f, "Function({})", fn_val.name),
             IbValue::Error { class, .. } => write!(f, "Error({class})"),
             IbValue::List(_) => write!(f, "List(..)"),
@@ -143,7 +183,7 @@ impl PartialEq for IbValue {
             // KB 对象相等 = 身份（共享引用——同宿主对象身份语义）
             (IbValue::Knowledge(a), IbValue::Knowledge(b)) => Rc::ptr_eq(a, b),
             // vector 相等 = 元素逐位值语义（公理：payload 元组相等）
-            (IbValue::Vector(a), IbValue::Vector(b)) => a == b,
+            (IbValue::Tensor(a), IbValue::Tensor(b)) => a == b,
             // 函数值相等 = 对象身份（Rc 共享——同一函数定义）
             (IbValue::Function(a), IbValue::Function(b)) => Rc::ptr_eq(a, b),
             // 异常对象相等 = 值语义（class + message）
@@ -197,9 +237,10 @@ impl IbValue {
             IbValue::Quoted { source } => source.clone(),
             IbValue::MetaFn(n) => format!("meta.{n}"),
             IbValue::Knowledge(_) => "<knowledge>".into(),
-            // vector 显示面 = 截断摘要（dim + 前 8 维 %.6g——同 __to_prompt__；
+            // tensor 显示面 = 截断摘要（1D = vector[<dim>](...) 兼容 vector
+            // 契约；2D = tensor[r,c](...)；前 8 维 %.6g——同 __to_prompt__，
             // 全量维度进提示词 = 污染风险，截断即纪律）
-            IbValue::Vector(v) => vector_repr(v),
+            IbValue::Tensor(t) => tensor_repr(t),
             // 函数值显示面 = source 形态（Python 实证：func f(int) -> str——
             // 参数面仅类型名不含参数名；无返回类型 = 省略 -> 段）
             IbValue::Function(f) => {
@@ -233,7 +274,7 @@ impl IbValue {
             IbValue::Quoted { .. } => true,
             IbValue::MetaFn(_) => true,
             IbValue::Knowledge(_) => true,
-            IbValue::Vector(v) => !v.is_empty(),
+            IbValue::Tensor(t) => !t.data.is_empty(),
             IbValue::Function(_) => true,
             IbValue::Error { .. } => true,
             IbValue::Host(_) => true,
@@ -332,9 +373,72 @@ fn intrinsic_vec(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) 
                     _ => return Ok(IbValue::None_),
                 }
             }
-            Ok(IbValue::Vector(elems))
+            Ok(IbValue::Tensor(TensorValue::from_1d(elems)))
         }
         _ => Ok(IbValue::None_),
+    }
+}
+
+fn intrinsic_tensor(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+    // tensor(list) → 1D（vector 同构）；tensor([[..],[..]]) → 2D（矩形校验）。
+    // 统一批量数值数据形态（R5——与 vec() 同族：vec = 1D tensor 的便捷内征）。
+    let Some(IbValue::List(items)) = args.first() else {
+        return Err(runtime_error(ErrorKind::TypeError, "tensor() requires a list argument"));
+    };
+    let items = items.borrow();
+    let first_is_list = items
+        .first()
+        .map(|x| matches!(x, IbValue::List(_)))
+        .unwrap_or(false);
+    if !first_is_list {
+        let mut elems: Vec<f64> = Vec::new();
+        for x in items.iter() {
+            match x {
+                IbValue::Int(i) => elems.push(*i as f64),
+                IbValue::Float(f) => elems.push(*f),
+                _ => {
+                    return Err(runtime_error(
+                        ErrorKind::TypeError,
+                        "tensor() elements must be numeric",
+                    ))
+                }
+            }
+        }
+        return Ok(IbValue::Tensor(TensorValue::from_1d(elems)));
+    }
+    let mut rows: Vec<Vec<f64>> = Vec::new();
+    for x in items.iter() {
+        match x {
+            IbValue::List(r) => {
+                let mut row: Vec<f64> = Vec::new();
+                for y in r.borrow().iter() {
+                    match y {
+                        IbValue::Int(i) => row.push(*i as f64),
+                        IbValue::Float(f) => row.push(*f),
+                        _ => {
+                            return Err(runtime_error(
+                                ErrorKind::TypeError,
+                                "tensor() elements must be numeric",
+                            ))
+                        }
+                    }
+                }
+                rows.push(row);
+            }
+            _ => {
+                return Err(runtime_error(
+                    ErrorKind::TypeError,
+                    "tensor() ragged input (rows must be lists)",
+                ))
+            }
+        }
+    }
+    match TensorValue::from_2d(rows) {
+        Some(t) => Ok(IbValue::Tensor(t)),
+        None => Err(runtime_error(
+            ErrorKind::ValueError,
+            "tensor() non-rectangular rows",
+        )),
     }
 }
 
@@ -346,6 +450,7 @@ pub const INTRINSICS: &[(&str, IntrinsicFn)] = &[
     ("range", intrinsic_range),
     ("knowledge", intrinsic_knowledge),
     ("vec", intrinsic_vec),
+    ("tensor", intrinsic_tensor),
 ];
 
 /// Rust 已实现内征集（capability 单一权威源——路由判定经此派生）。
@@ -394,7 +499,10 @@ pub(crate) fn ibvalue_to_typed_json(v: &IbValue) -> serde_json::Value {
         IbValue::Quoted { source } => ("quoted", serde_json::json!(source)),
         IbValue::MetaFn(n) => ("meta", serde_json::json!(n)),
         IbValue::Knowledge(_) => ("knowledge", serde_json::Value::Null),
-        IbValue::Vector(vec) => ("vector", serde_json::json!(vec)),
+        IbValue::Tensor(t) => (
+            "tensor",
+            serde_json::json!({"shape": t.shape, "data": t.data}),
+        ),
         IbValue::Function(f) => (
             "function",
             serde_json::json!({
@@ -439,17 +547,10 @@ pub(crate) fn ibvalue_to_json(v: &IbValue) -> serde_json::Value {
             }
             serde_json::Value::Object(obj)
         }
-        IbValue::Vector(v) => {
-            let arr: Vec<serde_json::Value> = v
-                .iter()
-                .map(|f| {
-                    serde_json::Number::from_f64(*f)
-                        .map(serde_json::Value::Number)
-                        .unwrap_or(serde_json::Value::Null)
-                })
-                .collect();
-            serde_json::Value::Array(arr)
-        }
+        IbValue::Tensor(t) => serde_json::json!({
+            "shape": t.shape,
+            "data": t.data,
+        }),
         // 非数据值 = 显示形态（repr 契约）
         other => serde_json::Value::String(other.repr()),
     }
@@ -513,7 +614,7 @@ fn value_type_name(v: &IbValue) -> &str {
         IbValue::Quoted { .. } => "quoted",
         IbValue::MetaFn(_) => "meta",
         IbValue::Knowledge(_) => "knowledge",
-        IbValue::Vector(_) => "vector",
+        IbValue::Tensor(t) => if t.is_1d() { "vector" } else { "tensor" },
         IbValue::Function(_) => "function",
         IbValue::Error { class, .. } => class.as_str(),
         IbValue::Host(_) => "host",
@@ -540,7 +641,20 @@ fn exception_assignable(value: &IbValue, handler_type: &str) -> bool {
     false
 }
 
-/// vector 显示面 = 截断摘要（dim + 前 8 维 %.6g——同 __to_prompt__/_string_
+/// tensor 显示面 = 截断摘要（1D = vector[<dim>](...) 兼容 vector 契约；
+/// 2D = tensor[r,c](...)；前 8 维 %.6g——同 __to_prompt__，截断即纪律）。
+fn tensor_repr(t: &TensorValue) -> String {
+    if t.is_1d() {
+        vector_repr(&t.data)
+    } else {
+        let dims: Vec<String> = t.shape.iter().map(|d| d.to_string()).collect();
+        let head: Vec<String> = t.data.iter().take(8).map(|x| format_g6(*x)).collect();
+        let ellipsis = if t.data.len() > 8 { ", ..." } else { "" };
+        format!("tensor[{}]({}{})", dims.join(","), head.join(", "), ellipsis)
+    }
+}
+
+/// vector 1D 显示面 = 截断摘要（dim + 前 8 维 %.6g——同 __to_prompt__/_string_
 /// repr：全量维度进提示词 = 污染风险，截断即纪律）。
 fn vector_repr(v: &[f64]) -> String {
     let head: Vec<String> = v.iter().take(8).map(|x| format_g6(*x)).collect();
@@ -2010,33 +2124,64 @@ impl Interpreter {
         Ok(match obj {
             // Rust 原生 KB 值——方法面经 kb::dispatch（治理门 + 确定性序）
             IbValue::Knowledge(kb) => crate::kb::dispatch(kb, method, &args),
-            // vector 值——方法面（dim/dot/norm/cosine/scale/add/sub/cast_to；
-            // 修改操作返回新 vector，不可变值语义）
-            IbValue::Vector(v) => match method {
-                "dim" => IbValue::Int(v.len() as i64),
+            // tensor 值——统一批量数值形态（vector = 1D tensor；R5-1 值模型
+            // 统一）。方法面：shape/ndim/dtype 通用 + dim[1D]/norm[1D]/
+            // dot[1D]/cosine[1D] 向量语义 + scale/add/sub 元素级泛化（任意
+            // shape）。R5-2 计算编排协议落地后元素级运算经协议调度（当前 =
+            // 标量直算正确性路径，非 SIMD）。
+            IbValue::Tensor(t) => match method {
+                "shape" => IbValue::list_new(
+                    t.shape.iter().map(|d| IbValue::Int(*d as i64)).collect(),
+                ),
+                "ndim" => IbValue::Int(t.shape.len() as i64),
+                "dtype" => IbValue::Str("f64".into()),
+                "dim" => match t.to_1d() {
+                    Some(v) => IbValue::Int(v.len() as i64),
+                    None => {
+                        return Err(runtime_error(
+                            ErrorKind::ValueError,
+                            "dim() is 1D-only; use shape()/ndim() for N-D tensor",
+                        ))
+                    }
+                },
                 "dot" => {
-                    let [IbValue::Vector(o)] = args.as_slice() else {
+                    let v = t.to_1d().ok_or_else(|| {
+                        runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor")
+                    })?;
+                    let [IbValue::Tensor(o)] = args.as_slice() else {
                         return Err(runtime_error(ErrorKind::TypeError, "dot() requires a vector argument"));
                     };
+                    let o = o.to_1d().ok_or_else(|| {
+                        runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor")
+                    })?;
                     if v.len() != o.len() {
                         return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
                     }
                     IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum())
                 }
                 "norm" => {
+                    let v = t.to_1d().ok_or_else(|| {
+                        runtime_error(ErrorKind::ValueError, "norm() requires a 1D tensor")
+                    })?;
                     IbValue::Float(v.iter().map(|x| x * x).sum::<f64>().sqrt())
                 }
                 "cosine" => {
-                    let [IbValue::Vector(o)] = args.as_slice() else {
+                    let v = t.to_1d().ok_or_else(|| {
+                        runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor")
+                    })?;
+                    let [IbValue::Tensor(o)] = args.as_slice() else {
                         return Err(runtime_error(ErrorKind::TypeError, "cosine() requires a vector argument"));
                     };
+                    let o = o.to_1d().ok_or_else(|| {
+                        runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor")
+                    })?;
                     if v.len() != o.len() {
                         return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
                     }
                     let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
                     let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
                     if na == 0.0 || nb == 0.0 {
-                        // 零范数 = 余弦未定义（fail-fast 面——错误面登记 = None_）
+                        // 零范数 = 余弦未定义（显式语义角——保持既有面）
                         return Ok(IbValue::None_);
                     }
                     IbValue::Float(
@@ -2045,27 +2190,29 @@ impl Interpreter {
                     )
                 }
                 "scale" => match args.first() {
-                    Some(IbValue::Int(k)) => IbValue::Vector(
-                        v.iter().map(|x| x * (*k as f64)).collect(),
-                    ),
-                    Some(IbValue::Float(k)) => {
-                        IbValue::Vector(v.iter().map(|x| x * k).collect())
-                    }
+                    Some(IbValue::Int(k)) => IbValue::Tensor(TensorValue {
+                        shape: t.shape.clone(),
+                        data: t.data.iter().map(|x| x * (*k as f64)).collect(),
+                    }),
+                    Some(IbValue::Float(k)) => IbValue::Tensor(TensorValue {
+                        shape: t.shape.clone(),
+                        data: t.data.iter().map(|x| x * k).collect(),
+                    }),
                     _ => return Err(runtime_error(ErrorKind::TypeError, "scale() requires a numeric argument")),
                 },
                 "add" | "sub" => {
-                    let [IbValue::Vector(o)] = args.as_slice() else {
-                        return Err(runtime_error(ErrorKind::TypeError, "vector add/sub requires a vector argument"));
+                    let [IbValue::Tensor(o)] = args.as_slice() else {
+                        return Err(runtime_error(ErrorKind::TypeError, "tensor add/sub requires a tensor argument"));
                     };
-                    if v.len() != o.len() {
-                        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
+                    if t.shape != o.shape {
+                        return Err(runtime_error(ErrorKind::ValueError, "tensor shape mismatch"));
                     }
                     let out: Vec<f64> = if method == "add" {
-                        v.iter().zip(o.iter()).map(|(a, b)| a + b).collect()
+                        t.data.iter().zip(o.data.iter()).map(|(a, b)| a + b).collect()
                     } else {
-                        v.iter().zip(o.iter()).map(|(a, b)| a - b).collect()
+                        t.data.iter().zip(o.data.iter()).map(|(a, b)| a - b).collect()
                     };
-                    IbValue::Vector(out)
+                    IbValue::Tensor(TensorValue { shape: t.shape.clone(), data: out })
                 }
                 // 注：cast_to 目标 = 类对象（`v.cast_to(str)` 的 str 经 VM 类型名
                 // 解析为 class——值域无类对象面，执行面不可达 = 3b 类型面职责；
@@ -2364,7 +2511,7 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
         IbValue::Quoted { source } => source.clone().into_py(py),
         // 原生 meta 函数引用 / 原生 KB 值 / vector 值 / 函数值不经桥接
         // （vector 是值语义一等类型，不可拆箱——同 to_native 显式违约契约）
-        IbValue::MetaFn(_) | IbValue::Knowledge(_) | IbValue::Vector(_)
+        IbValue::MetaFn(_) | IbValue::Knowledge(_) | IbValue::Tensor(_)
         | IbValue::Function(_) | IbValue::Error { .. } => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
@@ -2457,9 +2604,22 @@ fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
             }
         }
         // vector 下标：元素 float（同 __getitem__）
-        (IbValue::Vector(v), IbValue::Int(i)) => match norm_idx(v.len(), *i).and_then(|ix| v.get(ix)) {
-            Some(f) => Ok(IbValue::Float(*f)),
-            None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
+        (IbValue::Tensor(t), IbValue::Int(i)) => match t.to_1d() {
+            // 1D = 元素（vector 契约）
+            Some(v) => match norm_idx(v.len(), *i).and_then(|ix| v.get(ix)) {
+                Some(f) => Ok(IbValue::Float(*f)),
+                None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
+            },
+            // 2D = 行（返回 1D tensor 行）
+            None => {
+                let row_len = t.shape[1];
+                let ix = norm_idx(t.shape[0], *i).ok_or_else(|| {
+                    runtime_error(ErrorKind::IndexError, "index out of range")
+                })?;
+                let start = ix * row_len;
+                let row = t.data[start..start + row_len].to_vec();
+                Ok(IbValue::Tensor(TensorValue::from_1d(row)))
+            }
         },
         _ => Err(runtime_error(ErrorKind::TypeError, "object is not subscriptable")),
     }

@@ -426,6 +426,7 @@ fn intrinsic_function_return(id: &str) -> Option<String> {
         "sum" => "any",
         "type" => "str",
         "vec" => "vector",
+        "tensor" => "any",
         "zip" => "list",
         "knowledge" => "knowledge",
         "quote" => "quoted",

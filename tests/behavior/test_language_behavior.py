@@ -109,3 +109,38 @@ class TestCompileErrors:
 
     def test_type_mismatch_decl(self):
         assert_compile_error("int x = 'hello'\n", "SEM_TYPE_MISMATCH")
+
+
+class TestTensor:
+    """统一批量数值形态（R5——vector = 1D tensor；tensor = 通用 N-D）。"""
+
+    def test_tensor_1d_surface(self):
+        assert_output("t = tensor([1, 2, 3])\nprint(t.shape())\n", ["[3]"])
+        assert_output("t = tensor([1, 2, 3])\nprint(t.dtype())\n", ["f64"])
+        assert_output("t = tensor([1, 2, 3])\nprint(t.dim())\n", ["3"])
+        assert_output("t = tensor([1, 2, 3])\nprint(t[1])\n", ["2.0"])
+
+    def test_tensor_2d_surface(self):
+        assert_output(
+            "t = tensor([[1, 2], [3, 4]])\nprint(t.shape())\nprint(t.ndim())\n",
+            ["[2, 2]", "2"],
+        )
+        # 2D 下标 = 行（返回 1D tensor）
+        assert_output("t = tensor([[1, 2], [3, 4]])\nprint(t[1])\n", ["vector[2](3, 4)"])
+        # 2D 显示面
+        assert_output("t = tensor([[1, 2], [3, 4]])\nprint(t)\n", ["tensor[2,2](1, 2, 3, 4)"])
+
+    def test_tensor_elementwise(self):
+        assert_output(
+            "a = tensor([1, 2])\nb = tensor([3, 4])\nprint(a.add(b))\nprint(a.sub(b))\n",
+            ["vector[2](4, 6)", "vector[2](-2, -2)"],
+        )
+        assert_output("a = tensor([1, 2, 3])\nprint(a.scale(2))\n", ["vector[3](2, 4, 6)"])
+
+    def test_tensor_1d_is_vector(self):
+        """vector = 1D tensor（统一数据形态——vec() 与 tensor() 1D 同构）。"""
+        assert_output("v = vec([1.0, 2.0, 3.0])\nprint(v.dim())\nprint(v.dot(vec([4.0, 5.0, 6.0])))\n", ["3", "32.0"])
+        assert_output("t = tensor([1.0, 2.0, 3.0])\nprint(t.dim())\nprint(t.norm())\n", ["3", "3.7416573867739413"])
+
+    def test_tensor_ragged_rejected(self):
+        assert_error("t = tensor([[1, 2], [3]])\n", "RUN_GENERIC_ERROR")

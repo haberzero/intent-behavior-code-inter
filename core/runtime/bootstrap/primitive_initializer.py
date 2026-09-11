@@ -334,6 +334,12 @@ def initialize_primitive_classes(registry: KernelRegistry) -> Any:
         return_type_name="vector"
     ), token)
 
+    registry.register_function("tensor", factory.create_func(
+        "tensor",
+        param_type_names=["list"],
+        return_type_name="any"
+    ), token)
+
     registry.register_function("copy", factory.create_func(
         "copy",
         param_type_names=["any"],
