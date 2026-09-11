@@ -722,7 +722,14 @@ fn run_artifact_state(
             .allow_threads(|| -> Result<(Vec<String>, Vec<(String, serde_json::Value)>), errors::ErrorPayload> {
             let module = match deserializer::deserialize_module(&json_owned) {
                 Some(m) => m,
-                None => return Ok((Vec::new(), Vec::new())),
+                // R2-2 静默清零：反序列化失败 = 显式错误（fail-fast，旧 = 空输出）
+                None => {
+                    return Err(errors::ErrorPayload {
+                        class: "ArtifactDeserializeError".to_string(),
+                        detail: "artifact 反序列化失败（非良构输入）".to_string(),
+                        pos: None,
+                    })
+                }
             };
             let interp = match bridge_owned {
                 Some(b) => interpreter::Interpreter::with_bridge(b),

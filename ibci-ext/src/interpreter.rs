@@ -2562,7 +2562,14 @@ pub fn run_artifact(
 ) -> Result<Vec<String>, crate::errors::ErrorPayload> {
     let module = match deserialize_module(artifact_json) {
         Some(m) => m,
-        None => return Ok(Vec::new()),
+        // R2-2 静默清零：反序列化失败 = 显式错误（fail-fast，旧 = 空输出）
+        None => {
+            return Err(crate::errors::ErrorPayload {
+                class: "ArtifactDeserializeError".to_string(),
+                detail: "artifact 反序列化失败（非良构输入）".to_string(),
+                pos: None,
+            })
+        }
     };
     let interp = match bridge {
         Some(b) => Interpreter::with_bridge(b),
