@@ -173,6 +173,15 @@ fn intrinsic_symbol_table() -> PyResult<String> {
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// intrinsic 类型池（66 non-generic KERNEL_NATIVE 类型基础字段）——Rust 静态表（对齐
+/// Python registry/prelude 固有类型集）。差分 harness 经此与 Python types 池比对。
+#[pyfunction]
+fn intrinsic_type_pool() -> PyResult<String> {
+    let types = intrinsic_symbols::builtin_intrinsic_types();
+    serde_json::to_string(&types)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
 /// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
@@ -302,6 +311,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(resolve_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(intrinsic_type_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(intrinsic_symbol_table, m)?)?;
+    m.add_function(wrap_pyfunction!(intrinsic_type_pool, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

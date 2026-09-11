@@ -450,8 +450,10 @@
    → 全量 Rust 化第二批 增量 1 语义层非字面值 type_uid[Name/BinOp/Call/参数/returns，30/43 0 DIFF] ✅
    → 全量 Rust 化第二批 增量 2 类型解析剩余面[for目标/IfExp/嵌套函数/内置调用，type_uid 43/43 0 DIFF] ✅
    → 全量 Rust 化第二批 增量 3 子项 1 scope 完整收集[owned_scope_uid，52/52 0 DIFF] ✅
-   → 全量 Rust 化第二批 增量 3 子项 2 续[method sym_anon_*+free_vars 闭包捕获][当前]
-   + 序列化产出端 + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
+   → 第三批 reframe：完整 artifact 产出[method/free_vars/types/scopes/组装，战略 reframe]
+   → 第三批 子项 1 types 池 KERNEL_NATIVE 固定集[intrinsic_type_pool 66/66 0 diff] ✅
+   → 第三批 子项 2 续[scopes 池+global_symbols+node_to_loc+method 符号+free_vars+组装][当前]
+   + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

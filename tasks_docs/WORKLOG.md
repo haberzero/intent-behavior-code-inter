@@ -4111,6 +4111,48 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   **验证**：owned_scope_uid 52/52 全对齐 0 DIFF（7 函数符号有值 + 45 null）；
   diff_harness 35 passed[+1 owned_scope 门] + smoke 832 passed 零回归。
   **第二批剩余（增量 3 子项 2+）**：method 符号[sym_anon_*] + free_vars[闭包捕获]。
+- **P9 全量 Rust 化 战略 reframe + 第三批侦察（2026-09-11，本 session）**：**第二批
+  语义层类型解析收束 + method/free_vars 重新定位**（批次细分，自主裁定）。侦察发现：
+  ① method 符号[sym_anon_*，187 distinct/5390 总/34 语料]的 get_content_hash 用**原始
+  Symbol 的 spec[MethodMemberSpec.module_path/name]**（非序列化 type_uid）——探针
+  0/148 无法从序列化 sym_data 反推；method 符号是类型系统方法声明固有面，正确 Rust 化
+  需统一 artifact 产出流程。② free_vars[节点级 node_data，当前语料仅 1 节点
+  closure_capture]跨"符号分析[scope]→节点序列化"两层，正确实现需统一 artifact 产出。
+  ③ 完整 artifact = modules[entry_module + root_node/scope_uid + import_star_members +
+  side_tables[node_to_symbol/node_to_type/**node_to_loc**] + pools[nodes/symbols/
+  **scopes**/**types**/assets]] + **global_symbols**——Rust 当前已有 nodes
+  [serialize_nodes，free_vars 缺] + symbols[resolve_symbols + intrinsic 63] +
+  side_tables[node_to_symbol/node_to_type]，**缺 types 池[78 distinct = 73 fixed[66
+  KERNEL_NATIVE + 7 USER_DEFINED] + 5 generic 容器泛型] / scopes 池 / global_symbols /
+  node_to_loc / method 符号 / free_vars / modules 组装**。**战略 reframe**：第二批
+  "语义层类型解析"收束于 scope 符号 + type_uid 43/43 + owned_scope_uid 52/52 +
+  node_uid + intrinsic 符号 63[已达成核心]；method 符号 + free_vars +
+  types/scopes/global_symbols/node_to_loc 池 + modules 组装 = **第三批[Rust 独立完整
+  artifact 产出]**（消除"消费 Python 前端 JSON"输入边界的完整闭环）。第三批子项序列：
+  types 池[intrinsic 固定集 + 用户 + 泛型] → scopes 池 → global_symbols → node_to_loc
+  → method 符号 → free_vars → modules 组装。
+- **P9 全量 Rust 化第三批 子项 1（Rust 独立 artifact 产出：types 池 KERNEL_NATIVE
+  固定集，66/66 全对齐，2026-09-11，本 session，unsafe-vibe-dev）**：**intrinsic 类型
+  池**——Rust 静态表（对齐 Python registry/prelude 固有类型集，与 intrinsic_symbol_table
+  机制同构）。**侦察**：完整 artifact = modules[root_node/scope_uid + import_star_members
+  + side_tables[node_to_symbol/node_to_type/node_to_loc] + pools[nodes/symbols/scopes/
+  types/assets]] + global_symbols；types 池 = 66 non-generic KERNEL_NATIVE 固定集[10
+  primitive + 2 callable_instance + 19 class + 1 optional + 1 bound_method + list/tuple/
+  dict/chan/slot/subscriber/thread/thread_result/generator 各 1 + 21 function + 3 module]
+  + 5 generic 容器泛型[随语料] + 7 USER_DEFINED[用户类/模块]。**交付**：intrinsic_symbols
+  .rs 加 INTRINSIC_TYPES[66，含 3 IMPORT_GATED eval/quote/meta] + builtin_intrinsic_types
+  [uid=type_root.<name> + kind[细粒度 TypeKind，非符号 CLASS/FUNCTION] + module_path=None
+  + provenance=KERNEL_NATIVE + visibility[PRELUDE/IMPORT_GATED] + storage_model=
+  MEMORY_BACKED]；lib.rs 加 intrinsic_type_pool pyfunction；差分 harness 加
+  test_intrinsic_type_pool[用 import meta + quote + eval 语料覆盖全部 66，含 IMPORT_GATED
+  按需引入]。**关键裁定**：① types 池 kind = 细粒度 TypeKind（primitive/callable_instance/
+  class/...），非 intrinsic_symbol_table 的符号 kind[CLASS/FUNCTION/MODULE]——两池 kind
+  语义不同；② IMPORT_GATED（meta/quote/eval）按需引入[import/调用时]，固有 intrinsic 集
+  含之[语言设计]，差分语料需同时引入全覆盖；③ members_uids[方法 sym_anon] / 用户类 /
+  泛型实例 = 后续子项[需统一 artifact 产出 + method content_hash 原始 spec]。**验证**：
+  intrinsic_type_pool 66/66 全对齐 0 field diff 无多余；diff_harness 36 passed[+1] +
+  smoke 832 passed 零回归。**第三批剩余**：scopes 池 / global_symbols / node_to_loc /
+  method 符号 / free_vars / modules 组装。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

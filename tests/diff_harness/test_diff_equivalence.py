@@ -676,6 +676,39 @@ class TestRustSerializationUid:
                     f"  py : {d.get('owned_scope_uid')}\n  rust: {rs.get('owned_scope_uid')}"
                 )
 
+    def test_intrinsic_type_pool(self):
+        """intrinsic 类型池差分（全量 Rust 化·语义层：types 池 KERNEL_NATIVE 固定集）：
+        Rust 66 non-generic KERNEL_NATIVE 类型基础字段（uid/kind/name/module_path/
+        provenance/visibility/storage_model）== Python types 池对应类型（用含 meta 的
+        语料覆盖 IMPORT_GATED）。members_uids[方法] / 用户类 / 泛型实例 = 后续。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "intrinsic_type_pool"):
+            return
+        rs_types = json.loads(rk._module.intrinsic_type_pool())
+        # 同时 import meta + 调 quote/eval——Python types 池含全部 IMPORT_GATED
+        # （eval/quote/meta 按需引入，此语料全覆盖 66 non-generic KERNEL_NATIVE）
+        data = FlatSerializer().serialize_artifact(
+            compile_ibci('import meta\nq = meta.quote("1")\nv = meta.eval(q)\nprint(v)\n')
+        )
+        mod = data["modules"][data["entry_module"]]
+        py_types = {
+            t["name"]: t
+            for t in mod["pools"]["types"].values()
+            if t.get("provenance") == "KERNEL_NATIVE"
+            and "[" not in (t.get("name") or "")
+        }
+        for name, r in rs_types.items():
+            p = py_types.get(name)
+            assert p is not None, f"intrinsic 类型 {name} 在 Python types 池缺失"
+            for f in ("uid", "kind", "name", "module_path", "provenance", "visibility", "storage_model"):
+                assert r.get(f) == p.get(f), (
+                    f"intrinsic 类型 {name} 差分不等价（{f}）：\n  py : {p.get(f)}\n  rust: {r.get(f)}"
+                )
+
 
 class TestDivergenceRegistry:
     """差分 harness 状态注册表（单一权威源）自检：合法性 + 被消费（非死代码）。"""

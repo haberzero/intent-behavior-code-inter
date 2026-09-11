@@ -127,3 +127,98 @@ pub fn builtin_intrinsic_symbols() -> BTreeMap<String, Value> {
     }
     symbols
 }
+
+/// intrinsic 类型池（66 non-generic KERNEL_NATIVE 类型基础字段）——Rust 静态表（对齐
+/// Python registry/prelude 固有类型集，迁移期差分基准）。uid = type_root.<name>
+/// （module_path=None），provenance=KERNEL_NATIVE，storage_model=MEMORY_BACKED。
+/// members_uids[方法 sym_anon] / 用户类 / 泛型实例 = 后续（需统一 artifact 产出）。
+/// IMPORT_GATED：eval/quote（from meta import）+ meta（import meta）。
+const INTRINSIC_TYPES: &[(&str, &str, &str)] = &[
+    // (name, kind, visibility)
+    ("int", "primitive", "PRELUDE_VISIBLE"),
+    ("float", "primitive", "PRELUDE_VISIBLE"),
+    ("str", "primitive", "PRELUDE_VISIBLE"),
+    ("bool", "primitive", "PRELUDE_VISIBLE"),
+    ("void", "primitive", "PRELUDE_VISIBLE"),
+    ("any", "primitive", "PRELUDE_VISIBLE"),
+    ("auto", "primitive", "PRELUDE_VISIBLE"),
+    ("None", "primitive", "PRELUDE_VISIBLE"),
+    ("slice", "primitive", "PRELUDE_VISIBLE"),
+    ("vector", "primitive", "PRELUDE_VISIBLE"),
+    ("behavior", "callable_instance", "PRELUDE_VISIBLE"),
+    ("fn_callable", "callable_instance", "PRELUDE_VISIBLE"),
+    ("Exception", "class", "PRELUDE_VISIBLE"),
+    ("Enum", "class", "PRELUDE_VISIBLE"),
+    ("Intent", "class", "PRELUDE_VISIBLE"),
+    ("LLMCallError", "class", "PRELUDE_VISIBLE"),
+    ("LLMError", "class", "PRELUDE_VISIBLE"),
+    ("LLMParseError", "class", "PRELUDE_VISIBLE"),
+    ("LLMRetryExhaustedError", "class", "PRELUDE_VISIBLE"),
+    ("ThreadCancelled", "class", "PRELUDE_VISIBLE"),
+    ("ThreadError", "class", "PRELUDE_VISIBLE"),
+    ("ThreadFailed", "class", "PRELUDE_VISIBLE"),
+    ("environment", "class", "PRELUDE_VISIBLE"),
+    ("intent_context", "class", "PRELUDE_VISIBLE"),
+    ("knowledge", "class", "PRELUDE_VISIBLE"),
+    ("llm_call_result", "class", "PRELUDE_VISIBLE"),
+    ("llm_uncertain", "class", "PRELUDE_VISIBLE"),
+    ("memory", "class", "PRELUDE_VISIBLE"),
+    ("narrow_model", "class", "PRELUDE_VISIBLE"),
+    ("quoted", "class", "PRELUDE_VISIBLE"),
+    ("run_result", "class", "PRELUDE_VISIBLE"),
+    ("Optional", "optional", "PRELUDE_VISIBLE"),
+    ("bound_method", "bound_method", "PRELUDE_VISIBLE"),
+    ("list", "list", "PRELUDE_VISIBLE"),
+    ("tuple", "tuple", "PRELUDE_VISIBLE"),
+    ("dict", "dict", "PRELUDE_VISIBLE"),
+    ("chan", "channel", "PRELUDE_VISIBLE"),
+    ("slot", "slot", "PRELUDE_VISIBLE"),
+    ("subscriber", "subscriber", "PRELUDE_VISIBLE"),
+    ("thread", "thread", "PRELUDE_VISIBLE"),
+    ("thread_result", "thread_result", "PRELUDE_VISIBLE"),
+    ("generator", "generator", "PRELUDE_VISIBLE"),
+    ("all", "function", "PRELUDE_VISIBLE"),
+    ("callable", "function", "PRELUDE_VISIBLE"),
+    ("copy", "function", "PRELUDE_VISIBLE"),
+    ("deepcopy", "function", "PRELUDE_VISIBLE"),
+    ("enumerate", "function", "PRELUDE_VISIBLE"),
+    ("eval", "function", "IMPORT_GATED"),
+    ("fn", "function", "PRELUDE_VISIBLE"),
+    ("get_self_source", "function", "PRELUDE_VISIBLE"),
+    ("len", "function", "PRELUDE_VISIBLE"),
+    ("max", "function", "PRELUDE_VISIBLE"),
+    ("min", "function", "PRELUDE_VISIBLE"),
+    ("next", "function", "PRELUDE_VISIBLE"),
+    ("print", "function", "PRELUDE_VISIBLE"),
+    ("quote", "function", "IMPORT_GATED"),
+    ("range", "function", "PRELUDE_VISIBLE"),
+    ("reversed", "function", "PRELUDE_VISIBLE"),
+    ("sorted", "function", "PRELUDE_VISIBLE"),
+    ("sum", "function", "PRELUDE_VISIBLE"),
+    ("type", "function", "PRELUDE_VISIBLE"),
+    ("vec", "function", "PRELUDE_VISIBLE"),
+    ("zip", "function", "PRELUDE_VISIBLE"),
+    ("__string_exec__", "module", "PRELUDE_VISIBLE"),
+    ("meta", "module", "IMPORT_GATED"),
+    ("module", "module", "PRELUDE_VISIBLE"),
+];
+
+/// 构建 intrinsic 类型池（66 non-generic KERNEL_NATIVE 类型基础字段）。BTreeMap 按
+/// name 序（确定性）。与 Python types 池的 KERNEL_NATIVE non-generic 子集差分等价。
+pub fn builtin_intrinsic_types() -> BTreeMap<String, Value> {
+    let mut types = BTreeMap::new();
+    for (name, kind, visibility) in INTRINSIC_TYPES {
+        let uid = format!("type_root.{}", name);
+        let type_data = Value::Object(serde_json::Map::from_iter([
+            ("uid".to_string(), Value::String(uid)),
+            ("kind".to_string(), Value::String((*kind).to_string())),
+            ("name".to_string(), Value::String((*name).to_string())),
+            ("module_path".to_string(), Value::Null),
+            ("provenance".to_string(), Value::String("KERNEL_NATIVE".to_string())),
+            ("visibility".to_string(), Value::String((*visibility).to_string())),
+            ("storage_model".to_string(), Value::String("MEMORY_BACKED".to_string())),
+        ]));
+        types.insert((*name).to_string(), type_data);
+    }
+    types
+}
