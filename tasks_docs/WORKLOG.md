@@ -5614,6 +5614,15 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - **周期文档对账**：WORKLOG 阶段 D/R3-C/R2 记录齐备；PENDING 状态核对
   （PT-DECIDE-2 active 重估完成、PT-DECIDE-3 done、PT-FEAT-16 done）。
 
+## Tier B 健康扫描（2026-09-11，commit 5e47775a）
+
+- **R5/R6 完成度复查**：compute_engine/plugins 宿主测试 + 内核单测全绿
+  （R5 计算编排 + R6 插件协议 = 完成态确认）。
+- **健康扫描（近期 D2 变更）**：1 处真实静默路径——**get_host_attribute 桥接
+  错误 → 静默 None**（D2-① 清 call_host_method 时遗漏）→ Result-化 + 错误
+  传播修复；其余 unwrap_or(None) = 契约查询面（get_fact/词表记录未知 → None
+  ——合法语义非错误吞掉）。全量 4303/0/1。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
