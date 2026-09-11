@@ -98,7 +98,12 @@ class HostService(IHostService):
                 result = obj.receive(method, boxed)
                 return result
             raise RuntimeError(f"host_call: {type(obj).__name__} 无方法 '{method}'")
-        result = target(*args)
+        # 参数拆箱（同 proxy_wrapper 调用边界单一入口——IbObject → native
+        # [save_kb 收值快照 dict 等]；可调用实例原样透传；标量直通）
+        from core.runtime.objects.kernel.base import unbox_for_native_call
+
+        native_args = [unbox_for_native_call(a) for a in args]
+        result = target(*native_args)
         return result
 
     @property

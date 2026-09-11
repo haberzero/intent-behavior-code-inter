@@ -2973,10 +2973,17 @@ fn host_pyerr_to_thrown(e: PyErr) -> Thrown {
             .getattr("error_code")
             .ok()
             .and_then(|c| c.extract::<String>().ok());
+        // 回退类 = Python 异常类名（引擎 error_code_for_class 映射——非硬编码）
         let class = obj
             .getattr("error_class")
             .ok()
             .and_then(|c| c.extract::<String>().ok())
+            .or_else(|| {
+                obj.get_type()
+                    .getattr("__name__")
+                    .ok()
+                    .and_then(|n| n.extract::<String>().ok())
+            })
             .unwrap_or_else(|| "AttributeError".to_string());
         let (line, col): (Option<i64>, Option<i64>) = match obj.getattr("location") {
             Ok(loc) => (
@@ -2999,6 +3006,253 @@ fn host_pyerr_to_thrown(e: PyErr) -> Thrown {
             code,
         }
     })
+}
+
+/// Python 状态 dict → Rust Knowledge（D2-③b 重建：load_kb 等宿主返回的
+/// IbKnowledge 状态 → 首等 Rust KbState——全方法走 Rust 分派臂；by_pair/
+/// by_triple = 从 facts 派生重建；entries 谓词引用恢复后 = None[KNW 边界]）。
+fn knowledge_from_state(
+    py: Python<'_>,
+    state: &Bound<'_, PyDict>,
+) -> Option<IbValue> {
+    use crate::kb::{KbEntry, KbEntryEvent, KbEvent, KbFact, KbRelation, KbState, KbWord, KbWorld};
+    use pyo3::IntoPy;
+    let get = |k: &str| state.get_item(k).ok().flatten();
+    let seq: i64 = get("seq")?.extract().ok()?;
+    let mut st = KbState::blank();
+    st.seq = seq;
+    // vocab：words/relations/worlds
+    let vocab = get("vocab")?;
+    let vd = vocab.downcast::<PyDict>().ok()?;
+    if let Some(words) = vd.get_item("words").ok().flatten() {
+        if let Ok(wd) = words.downcast::<PyDict>() {
+            for (k, v) in wd.iter() {
+                let name: String = k.extract().ok()?;
+                let rec = v.downcast::<PyDict>().ok()?;
+                let gloss: String = rec.get_item("gloss").ok().flatten()?.extract().ok()?;
+                let is_set: bool = rec.get_item("is_set").ok().flatten()?.extract().ok()?;
+                let members: Vec<IbValue> = match rec.get_item("members").ok().flatten() {
+                    Some(m) => {
+                        let mut out = Vec::new();
+                        if let Ok(ml) = m.downcast::<PyList>() {
+                            for it in ml.iter() {
+                                out.push(from_py(py, &it));
+                            }
+                        }
+                        out
+                    }
+                    None => Vec::new(),
+                };
+                let mut entries = Vec::new();
+                if let Some(ent) = rec.get_item("entries").ok().flatten() {
+                    if let Ok(ed) = ent.downcast::<PyDict>() {
+                        for (wk, wv) in ed.iter() {
+                            entries.push((from_py(py, &wk), from_py(py, &wv)));
+                        }
+                    }
+                }
+                st.words.push((
+                    name,
+                    KbWord { gloss, is_set, members, entries },
+                ));
+            }
+        }
+    }
+    if let Some(rels) = vd.get_item("relations").ok().flatten() {
+        if let Ok(rd) = rels.downcast::<PyDict>() {
+            for (k, v) in rd.iter() {
+                let name: String = k.extract().ok()?;
+                let rec = v.downcast::<PyDict>().ok()?;
+                let semantics: String = rec.get_item("semantics").ok().flatten()?.extract().ok()?;
+                let transitive: bool = rec.get_item("transitive").ok().flatten()?.extract().ok()?;
+                let multi_valued: bool = rec.get_item("multi_valued").ok().flatten()?.extract().ok()?;
+                st.relations.push((
+                    name,
+                    KbRelation { semantics, transitive, multi_valued },
+                ));
+            }
+        }
+    }
+    if let Some(worlds) = vd.get_item("worlds").ok().flatten() {
+        if let Ok(wrd) = worlds.downcast::<PyDict>() {
+            for (k, v) in wrd.iter() {
+                let name: String = k.extract().ok()?;
+                let rec = v.downcast::<PyDict>().ok()?;
+                let description: String = rec.get_item("description").ok().flatten()?.extract().ok()?;
+                let size_rank: i64 = rec.get_item("size_rank").ok().flatten()?.extract().ok()?;
+                st.worlds.push((
+                    name,
+                    KbWorld { description, size_rank },
+                ));
+            }
+        }
+    }
+    // facts（记录 + 事件链）→ by_pair/by_triple 派生重建
+    if let Some(facts) = get("facts") {
+        if let Ok(fd) = facts.downcast::<PyDict>() {
+            for (_fid, v) in fd.iter() {
+                let rec = v.downcast::<PyDict>().ok()?;
+                let id: String = rec.get_item("id").ok().flatten()?.extract().ok()?;
+                let world: String = rec.get_item("world").ok().flatten()?.extract().ok()?;
+                let s: String = rec.get_item("s").ok().flatten()?.extract().ok()?;
+                let r: String = rec.get_item("r").ok().flatten()?.extract().ok()?;
+                let o: String = rec.get_item("o").ok().flatten()?.extract().ok()?;
+                let source: String = rec.get_item("source").ok().flatten()?.extract().ok()?;
+                let status: String = rec.get_item("status").ok().flatten()?.extract().ok()?;
+                let mut events = Vec::new();
+                if let Some(evs) = rec.get_item("events").ok().flatten() {
+                    if let Ok(el) = evs.downcast::<PyList>() {
+                        for it in el.iter() {
+                            if let Ok(ed) = it.downcast::<PyDict>() {
+                                let eseq: i64 = ed.get_item("seq").ok().flatten()?.extract().ok()?;
+                                let kind: String = ed.get_item("kind").ok().flatten()?.extract().ok()?;
+                                let reason: String = ed.get_item("reason").ok().flatten()?.extract().ok()?;
+                                let new_o: Option<String> = match ed.get_item("new_o").ok().flatten() {
+                                    Some(n) => n.extract::<String>().ok(),
+                                    None => None,
+                                };
+                                events.push(KbEvent { seq: eseq, kind, reason, new_o });
+                            }
+                        }
+                    }
+                }
+                let idx = st.facts.len();
+                if status == "active" {
+                    st.by_pair.entry((s.clone(), r.clone())).or_default().push(idx);
+                    st.by_triple.insert((world.clone(), s.clone(), r.clone(), o.clone()), idx);
+                }
+                st.facts.push(KbFact { id, world, s, r, o, source, status, events });
+            }
+        }
+    }
+    // embeddings
+    if let Some(emb) = get("embeddings") {
+        if let Ok(ed) = emb.downcast::<PyDict>() {
+            for (k, v) in ed.iter() {
+                let w: String = k.extract().ok()?;
+                let vals: Vec<f64> = v.extract().ok()?;
+                st.embeddings.push((w, vals));
+            }
+        }
+    }
+    // entries（值快照 + check_name + provenance——谓词引用恢复后 = None）
+    if let Some(ents) = get("entries") {
+        if let Ok(ed) = ents.downcast::<PyDict>() {
+            for (k, v) in ed.iter() {
+                let key: String = k.extract().ok()?;
+                let rec = v.downcast::<PyDict>().ok()?;
+                let value = match rec.get_item("value").ok().flatten() {
+                    Some(val) => from_py(py, &val),
+                    None => IbValue::None_,
+                };
+                let check_name: String = rec.get_item("check_name").ok().flatten()?.extract().ok()?;
+                let provenance: String = rec.get_item("provenance").ok().flatten()?.extract().ok()?;
+                st.entries.insert(
+                    key,
+                    KbEntry {
+                        value,
+                        check: None,
+                        check_name,
+                        provenance,
+                        events: Vec::new(),
+                    },
+                );
+            }
+        }
+    }
+    Some(IbValue::Knowledge(Rc::new(RefCell::new(st))))
+}
+
+/// Knowledge 值 → Python 状态 dict（D2-③b 跨桥接：to_native 同构——
+/// {entries, seq, facts, vocab, embeddings}；host 面[world_model.save_kb]
+/// 消费值快照；facts 记录 + 事件链 + 词表记录 + 嵌入面结构化导出）。
+fn knowledge_state_to_py(py: Python<'_>, kb: &Rc<RefCell<crate::kb::KbState>>) -> PyObject {
+    use pyo3::IntoPy;
+    let st = kb.borrow();
+    let d = PyDict::new(py);
+    // entries 面（值快照 + 审计名 + provenance——谓词引用不入快照）
+    let entries = PyDict::new(py);
+    for (k, e) in &st.entries {
+        let ed = PyDict::new(py);
+        let _ = ed.set_item("value", to_py(py, &e.value));
+        let _ = ed.set_item("check_name", &e.check_name);
+        let _ = ed.set_item("provenance", &e.provenance);
+        let _ = entries.set_item(k, ed);
+    }
+    let _ = d.set_item("entries", entries);
+    let _ = d.set_item("seq", st.seq);
+    // facts 面（记录 + 事件链——append-only 全史）
+    let facts = PyDict::new(py);
+    for f in &st.facts {
+        let fd = PyDict::new(py);
+        let _ = fd.set_item("id", &f.id);
+        let _ = fd.set_item("world", &f.world);
+        let _ = fd.set_item("s", &f.s);
+        let _ = fd.set_item("r", &f.r);
+        let _ = fd.set_item("o", &f.o);
+        let _ = fd.set_item("source", &f.source);
+        let _ = fd.set_item("status", &f.status);
+        let events: Vec<PyObject> = f
+            .events
+            .iter()
+            .map(|e| {
+                let ev = PyDict::new(py);
+                let _ = ev.set_item("seq", e.seq);
+                let _ = ev.set_item("kind", &e.kind);
+                let _ = ev.set_item("reason", &e.reason);
+                let _ = ev.set_item("new_o", e.new_o.clone().into_py(py));
+                ev.into_py(py)
+            })
+            .collect();
+        let _ = fd.set_item("events", PyList::new(py, events).unwrap());
+        let _ = facts.set_item(&f.id, fd);
+    }
+    let _ = d.set_item("facts", facts);
+    // vocab 面（词/关系/世界——插入序）
+    let vocab = PyDict::new(py);
+    let words = PyDict::new(py);
+    for (name, w) in &st.words {
+        let wd = PyDict::new(py);
+        let _ = wd.set_item("lexeme", name);
+        let _ = wd.set_item("gloss", &w.gloss);
+        let _ = wd.set_item("is_set", w.is_set);
+        let members: Vec<PyObject> = w.members.iter().map(|m| to_py(py, m)).collect();
+        let _ = wd.set_item("members", PyList::new(py, members).unwrap());
+        let ent = PyDict::new(py);
+        for (wk, wv) in &w.entries {
+            let _ = ent.set_item(to_py(py, wk), to_py(py, wv));
+        }
+        let _ = wd.set_item("entries", ent);
+        let _ = words.set_item(name, wd);
+    }
+    let _ = vocab.set_item("words", words);
+    let relations = PyDict::new(py);
+    for (n, r) in &st.relations {
+        let rd = PyDict::new(py);
+        let _ = rd.set_item("type", n);
+        let _ = rd.set_item("semantics", &r.semantics);
+        let _ = rd.set_item("transitive", r.transitive);
+        let _ = rd.set_item("multi_valued", r.multi_valued);
+        let _ = relations.set_item(n, rd);
+    }
+    let _ = vocab.set_item("relations", relations);
+    let worlds = PyDict::new(py);
+    for (n, w) in &st.worlds {
+        let wd = PyDict::new(py);
+        let _ = wd.set_item("name", n);
+        let _ = wd.set_item("description", &w.description);
+        let _ = wd.set_item("size_rank", w.size_rank);
+        let _ = worlds.set_item(n, wd);
+    }
+    let _ = vocab.set_item("worlds", worlds);
+    let _ = d.set_item("vocab", vocab);
+    // embeddings 面
+    let emb = PyDict::new(py);
+    for (w, v) in &st.embeddings {
+        let _ = emb.set_item(w, v.clone().into_py(py));
+    }
+    let _ = d.set_item("embeddings", emb);
+    d.into_py(py)
 }
 
 /// Rust IbValue → Python 对象（host service 桥接参数转换）。
@@ -3038,10 +3292,11 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
             let _ = dict.set_item("data", t.data.clone().into_py(py));
             dict.into_py(py)
         }
-        // 原生 meta 函数引用 / 原生 KB 值 / 函数值不经桥接（同 to_native
-        // 显式违约契约——非数据值保持宿主句柄面）
-        IbValue::MetaFn(_) | IbValue::Knowledge(_)
-        | IbValue::Function(_) | IbValue::Error { .. } => py.None(),
+        // 原生 KB 值跨桥接 = 状态导出（to_native 同构 dict——facts/vocab/
+        // seq/embeddings/entries；host 面[world_model.save_kb 等]消费值快照）；
+        // meta 函数引用 / 函数值 / 错误值不经桥接（非数据值保持宿主句柄面）
+        IbValue::Knowledge(k) => knowledge_state_to_py(py, k),
+        IbValue::MetaFn(_) | IbValue::Function(_) | IbValue::Error { .. } => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
 }
@@ -3118,7 +3373,25 @@ fn from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> IbValue {
             }
         }
     }
-    // 其他（knowledge 对象等）= 宿主对象（克隆 Bound 取所有权）
+    // IbKnowledge（class name = "knowledge"）→ 状态重建为 Rust 首等值
+    // （D2-③b：load_kb 结果等——全方法走 Rust 分派臂，不经 Python 对象方法）
+    if obj.hasattr("ib_class").unwrap_or(false) {
+        let class_name: Option<String> = obj
+            .getattr("ib_class")
+            .ok()
+            .and_then(|c| c.getattr("name").ok())
+            .and_then(|n| n.extract::<String>().ok());
+        if class_name.as_deref() == Some("knowledge") {
+            if let Ok(native) = obj.call_method0("to_native") {
+                if let Ok(state) = native.downcast::<PyDict>() {
+                    if let Some(kv) = knowledge_from_state(py, state) {
+                        return kv;
+                    }
+                }
+            }
+        }
+    }
+    // 其他 = 宿主对象（克隆 Bound 取所有权）
     IbValue::Host(obj.clone().unbind())
 }
 
