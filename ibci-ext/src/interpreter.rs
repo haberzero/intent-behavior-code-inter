@@ -2564,7 +2564,7 @@ impl Interpreter {
                     // 单表达式下标：x[1]
                     _ => {
                         let key = self.eval_expr(env, slice, output)?;
-                        subscript_get(&base, &key)?
+                        subscript_get(&self.bridge, &base, &key)?
                     }
                 }
             }
@@ -3466,7 +3466,11 @@ fn const_to_value(c: &ConstVal) -> IbValue {
 // （floor_div/modulo/bitwise/pow_op 已被 num_arith 族的 typed 实现取代——
 // R2-3a 消灭 f64 全包；见 num_arith/int_arith/float_arith）
 
-fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
+fn subscript_get(
+    bridge: &Option<Py<PyAny>>,
+    base: &IbValue,
+    key: &IbValue,
+) -> Result<IbValue, Thrown> {
     // 负索引归一（Python 契约：l[-1] = 末元素）
     let norm_idx = |v: usize, i: i64| -> Option<usize> {
         if i < 0 {
@@ -3490,6 +3494,22 @@ fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
             Some(item) => Ok(item),
             None => Err(runtime_error(ErrorKind::IndexError, "index out of range")),
         },
+        // Host 值下标 = 经桥接（宿主容器/句柄面——run_isolated 多值 dict 等）
+        (IbValue::Host(h), k) => {
+            let bridge = match bridge {
+                Some(b) => b.clone(),
+                None => return Err(runtime_error(ErrorKind::TypeError, "object is not subscriptable")),
+            };
+            let key = k.clone();
+            Python::with_gil(|py| -> PyResult<IbValue> {
+                let res = bridge.bind(py).call_method1(
+                    "host_getitem",
+                    (h.bind(py), to_py(py, &key)),
+                )?;
+                Ok(from_py(py, &res))
+            })
+            .map_err(|_| runtime_error(ErrorKind::TypeError, "object is not subscriptable"))
+        }
         (IbValue::Dict(d), k) => d
             .borrow()
             .iter()

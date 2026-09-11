@@ -60,6 +60,10 @@ class HostService(IHostService):
         单一权威；返回 = 宿主模块对象[Python]）。"""
         return self.interop.get_package(name)
 
+    def host_getitem(self, obj, key):
+        """宿主容器下标（Rust 桥接面——HostAwaitable/run_result 多值 dict 等）。"""
+        return obj[key]
+
     def host_eq(self, a, b) -> bool:
         """宿主对象相等（Rust cmp 桥接面——值身份对象[vector 等]元素比较）。"""
         return bool(a == b)
