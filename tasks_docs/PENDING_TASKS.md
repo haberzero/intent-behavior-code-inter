@@ -476,3 +476,13 @@ VISION 条目模板（仅保留规划价值字段）：
 - 概览表统计（各域 活跃/搁置/封存 计数）在条目增删/状态变更时**同步更新**。
 - 条目完成：标 `done` 或从本文档移除（历史由 git 承载），同时更新概览表。
 - 条目不承载已完成内容的历史叙述；需要追溯时用 `git log`。
+
+## knowledge.to_ibci 投影（2026-09-11 R3-C4 迁移登记）
+
+- **状态**：Python 参考 KB 功能（⑦ 路径）。Rust kb.rs 无 to_ibci 分派——含
+  to_ibci 的源经角路由送 Python。
+- **⑦ 终点裁决项**：移植 Rust kb.rs（投影 = 确定性 IBCI 派生视图，有价值）或
+  退役（Python 参考内核退场）。裁决前无测试资产（test_knowledge_to_ibci.py
+  已删——行为层须内核无关，非本层材料）。
+- **关联**：kb.rs 分派 catch-all `_ => None_`（未知方法静默）——R2 登记的 kb
+  治理门 GAP（生产不可见）；⑦ 终点一并裁决（fail-fast AttributeError 化）。
