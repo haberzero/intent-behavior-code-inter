@@ -1,15 +1,32 @@
-"""语言行为层：knowledge 世界模型 KB 面（R3-C7a 迁移——原 test_world_model_kb.py
-Vocab/Fact 平面 → 可观察断言面[数据面输出 + 诊断码 + 现场位置]）。
+"""语言行为层：knowledge 世界模型 KB 面（R3-C7b 迁移——原 test_world_model_kb.py
+查找/对比/展开/审计/deep_clone/entries 平面 → 可观察断言面）。
 
-**迁移映射**：词表登记/查询 + 枚举序 + fact_id 确定性 + get_fact 权威形态 +
-facts 序 + 治理门（重复登记/参数形态/未注册引用/重复事实——KNW_ 码 + 定位）
-→ 数据面 + 诊断码断言。索引/序列化/deep_clone 平面 = 后续切片（C7b）。
-
-注：KB 源经 kb_vec_payload_materialization 角路由 Python（行为测试现 = Python
-验证契约；⑦ 终点角移除后 Rust 验证——Rust kb.rs 治理门已对齐[GAP 关闭]）。
+**迁移映射**：lookup_pair/exists/all_in_world/contradicts/transitive/by_source/
+by_subject（查找）+ expand/same_word/compare（对比展开）+ retract/amend_fact/
+source/history_fact（审计）+ deepcopy 独立（克隆）+ store/get/amend/history
+零回归（entries）→ 数据面 + 诊断码断言。索引结构（_indexes 内部形态）与
+legacy 序列化 round-trip = 内部/⑦ 路径删除（契约 = 查询面[active vs 全日志]
++ Rust artifact 契约面，见迁移表）。
 """
 
 from tests.behavior.helpers import assert_error, assert_output
+
+_CHAIN = (
+    "k = knowledge()\n"
+    'k.register_world("modern", "现代物理世界", 3)\n'
+    'k.register_relation("composed_of", "组成关系", False, False)\n'
+    'k.register_relation("depends_on", "依赖关系", True, True)\n'
+    'k.register_word("atom", "原子", False, [], {})\n'
+    'k.register_word("proton", "质子", False, [], {})\n'
+    'k.register_word("electron", "电子", False, [], {})\n'
+    'k.register_word("nucleus", "原子核", False, [], {})\n'
+    'f1 = k.add_fact("modern", "atom", "composed_of", "proton")\n'
+    'f2 = k.add_fact("modern", "atom", "composed_of", "electron")\n'
+    'f3 = k.add_fact("modern", "nucleus", "depends_on", "proton")\n'
+    'f4 = k.add_fact("modern", "atom", "depends_on", "nucleus")\n'
+)
+
+
 
 _MICRO = (
     "k = knowledge()\n"
@@ -161,4 +178,300 @@ class TestFactPlane:
             + 'f2 = k.add_fact("modern", "atom", "composed_of", "electron")\n'
             + "print(f2)\n",
             ["2"],
+        )
+
+
+class TestLookupPlane:
+    def test_lookup_pair_all_o(self):
+        """s 经 r 指向什么——lookup_pair 返回全部 active 事实（确定性序）。"""
+        assert_output(
+            _CHAIN
+            + "print(len(k.lookup_pair('atom', 'composed_of')))\n"
+            + "print(k.lookup_pair('atom', 'composed_of')[0]['o'])\n"
+            + "print(k.lookup_pair('atom', 'composed_of')[1]['o'])\n"
+            + "print(len(k.lookup_pair('atom', 'excites')))\n",
+            ["2", "proton", "electron", "0"],
+        )
+
+    def test_exists_dedup(self):
+        """事实存在吗（by_triple 成员检查）——去重语义。"""
+        assert_output(
+            _CHAIN
+            + "print(k.exists('modern', 'atom', 'composed_of', 'proton'))\n"
+            + "print(k.exists('modern', 'atom', 'composed_of', 'neutron'))\n"
+            + "k.register_world('quantum', '量子世界', 4)\n"
+            + "k.add_fact('quantum', 'atom', 'composed_of', 'proton')\n"
+            + "print(k.exists('quantum', 'atom', 'composed_of', 'proton'))\n"
+            + "print(k.exists('modern', 'atom', 'composed_of', 'proton'))\n",
+            ["True", "False", "True", "True"],
+        )
+
+    def test_all_in_world(self):
+        """某 world 的全部 active 事实。"""
+        assert_output(
+            _CHAIN
+            + "print(len(k.all_in_world('modern')))\n"
+            + "print(k.all_in_world('modern')[0]['world'])\n"
+            + "print(len(k.all_in_world('quantum')))\n",
+            ["4", "modern", "0"],
+        )
+
+    def test_by_subject_derived_not_stored(self):
+        """关于某词的全部事实（word.relations 的派生替代——根治双写真相）。"""
+        assert_output(
+            _CHAIN + "print(len(k.by_subject('atom')))\nprint(k.by_subject('atom')[0]['id'])\n",
+            ["3", "1"],
+        )
+
+    def test_by_source_audit_full_log(self):
+        """某来源的全部事实（审计面——全日志视图）。"""
+        assert_output(
+            _CHAIN
+            + "a5 = k.add_fact('modern', 'atom', 'depends_on', 'proton', 'v30-fly')\n"
+            + "print(k.source('1') + '|' + k.source(a5))\n"
+            + "print(k.by_source('v30-fly')[0]['id'])\n"
+            + "print(len(k.by_source('nonexistent')))\n",
+            ["|v30-fly", "5", "0"],
+        )
+
+    def test_contradicts_multi_valued_gate(self):
+        """矛盾检查——同 (s,r) 不同 o 且关系非 multi_valued ⇒ 矛盾。"""
+        assert_output(
+            _CHAIN
+            + "print(k.contradicts('atom', 'composed_of', 'neutron'))\n"
+            + "k.add_fact('modern', 'proton', 'composed_of', 'electron')\n"
+            + "print(k.contradicts('proton', 'composed_of', 'electron'))\n"
+            + "print(k.contradicts('electron', 'composed_of', 'proton'))\n"
+            + "print(k.contradicts('atom', 'depends_on', 'electron'))\n",
+            ["True", "False", "False", "False"],
+        )
+        # 未注册关系 = fail-fast
+        assert_error(
+            _CHAIN + "print(k.contradicts('atom', 'excites', 'proton'))\n",
+            "KNW_VOCAB_UNREGISTERED",
+            line=13,
+        )
+
+    def test_transitive_closure_chain(self):
+        """传递闭包——沿 transitive 关系链展开（含直接；via = 中间链）。"""
+        assert_output(
+            _CHAIN
+            + "t = k.transitive('atom', 'depends_on')\n"
+            + "print(len(t))\n"
+            + "print(t[0]['o'] + '|' + str(len(t[0]['via'])))\n"
+            + "print(t[1]['o'] + '|' + t[1]['via'][0])\n"
+            + "print(len(k.transitive('atom', 'composed_of')))\n"
+            + "print(len(k.transitive('electron', 'depends_on')))\n",
+            ["2", "nucleus|0", "proton|nucleus", "0", "0"],
+        )
+        assert_error(
+            _CHAIN + "print(k.transitive('atom', 'excites'))\n",
+            "KNW_VOCAB_UNREGISTERED",
+            line=13,
+        )
+
+    def test_transitive_cycle_safe(self):
+        """传递闭包防环：环（a→b→a）不死循环，结果确定性。"""
+        assert_output(
+            _CHAIN
+            + "k.register_word('loop_a', '环A', False, [], {})\n"
+            + "k.register_word('loop_b', '环B', False, [], {})\n"
+            + "k.add_fact('modern', 'loop_a', 'depends_on', 'loop_b')\n"
+            + "k.add_fact('modern', 'loop_b', 'depends_on', 'loop_a')\n"
+            + "t = k.transitive('loop_a', 'depends_on')\n"
+            + "print(len(t))\n"
+            + "print(t[0]['o'] + '|' + str(len(t[0]['via'])))\n",
+            ["1", "loop_b|0"],
+        )
+
+
+class TestCompareExpandPlane:
+    def test_expand_full_derivation(self):
+        """展开全字段：事实 + 主语/对象词记录 + 跨世界词形 + 关系语义。"""
+        assert_output(
+            "k = knowledge()\n"
+            'k.register_world("modern", "现代物理世界", 3)\n'
+            'k.register_relation("composed_of", "组成关系", False, False)\n'
+            'k.register_word("atom", "原子", False, [], '
+            '{"modern": {"form": "atom", "self_ref": "self"}})\n'
+            'k.register_word("proton", "质子", False, [], {})\n'
+            'f1 = k.add_fact("modern", "atom", "composed_of", "proton", "v30")\n'
+            "e = k.expand(f1)\n"
+            "print(e['id'] + '|' + e['world'] + '|' + e['s'] + '|' + e['r'] + '|' + e['o'])\n"
+            "print(e['source'] + '|' + e['status'])\n"
+            "print(e['subject']['gloss'] + '|' + e['object']['gloss'])\n"
+            "print(e['subject_form']['form'] + '|' + e['subject_form']['self_ref'])\n"
+            "print(len(e['object_form']))\n"
+            "print(e['relation']['semantics'])\n"
+            "print(e['world_ctx']['size_rank'])\n",
+            [
+                "1|modern|atom|composed_of|proton",
+                "v30|active",
+                "原子|质子",
+                "atom|self",
+                "0",
+                "组成关系",
+                "3",
+            ],
+        )
+
+    def test_expand_unknown_id_fail_fast(self):
+        assert_error(
+            "k = knowledge()\nprint(k.expand('999'))\n",
+            "KNW_FACT_NOT_FOUND",
+            line=2,
+        )
+
+    def test_same_word_identity(self):
+        """词同一性：lexeme 相等且均注册 = 真；未注册 = false。"""
+        assert_output(
+            _CHAIN
+            + "print(k.same_word('atom', 'atom'))\n"
+            + "print(k.same_word('atom', 'proton'))\n"
+            + "print(k.same_word('quark', 'quark'))\n",
+            ["True", "False", "False"],
+        )
+
+    def test_compare_four_layers(self):
+        """对比 4 层：exact / contradiction / scale / same_word 各判别。"""
+        assert_output(
+            _CHAIN
+            + "c = k.compare(f1, f2)\n"
+            + "print(str(c['exact']) + '|' + str(c['contradiction']) + '|' + c['scale'] + '|' + str(c['same_word']))\n"
+            + "cs = k.compare(f1, f1)\n"
+            + "print(str(cs['exact']) + '|' + str(cs['contradiction']))\n"
+            + "k.register_world('quantum', '量子世界', 4)\n"
+            + "f5 = k.add_fact('quantum', 'atom', 'composed_of', 'proton')\n"
+            + "cc = k.compare(f1, f5)\n"
+            + "print(cc['scale'] + '|' + str(cc['exact']))\n",
+            ["False|True|same|True", "True|False", "cross|False"],
+        )
+        assert_error(
+            _CHAIN + "print(k.compare(f1, '999'))\n",
+            "KNW_FACT_NOT_FOUND",
+            line=13,
+        )
+
+
+class TestAuditPlane:
+    def test_retract_tombstone_semantics(self):
+        """墓碑语义：retract = status 切换；图视图排除；日志保留全史。"""
+        assert_output(
+            _CHAIN
+            + "k.retract(f1, '实验推翻')\n"
+            + "print(k.exists('modern', 'atom', 'composed_of', 'proton'))\n"
+            + "print(k.fact_len())\n"
+            + "rec = k.get_fact(f1)\n"
+            + "print(rec['status'])\n"
+            + "print(rec['events'][1]['kind'] + '|' + rec['events'][1]['reason'])\n",
+            ["False", "4", "retracted", "retract|实验推翻"],
+        )
+
+    def test_retract_error_surfaces(self):
+        """retract 错误面：未知 id / reason 空 / 重复墓碑 全 fail-fast。"""
+        assert_error(
+            _CHAIN + "k.retract('999', 'r')\n", "KNW_FACT_NOT_FOUND", line=13
+        )
+        assert_error(
+            _CHAIN + "k.retract(f1, '   ')\n", "KNW_REASON_EMPTY", line=13
+        )
+        assert_error(
+            _CHAIN + "k.retract(f1, 'r1')\nk.retract(f1, 'r2')\n",
+            "KNW_FACT_RETRACTED",
+            line=14,
+        )
+
+    def test_amend_fact_versioning(self):
+        """版本化：amend_fact = o 切换（原 o 留事件链全史可溯 + reason 强制）。"""
+        assert_output(
+            _CHAIN
+            + "k.amend_fact(f1, 'electron', '重新测量')\n"
+            + "rec = k.get_fact(f1)\n"
+            + "print(rec['o'])\n"
+            + "print(rec['events'][1]['kind'] + '|' + rec['events'][1]['new_o'])\n"
+            + "print(k.exists('modern', 'atom', 'composed_of', 'electron'))\n"
+            + "print(k.exists('modern', 'atom', 'composed_of', 'proton'))\n",
+            ["electron", "amend|electron", "True", "False"],
+        )
+
+    def test_amend_fact_error_surfaces(self):
+        """amend_fact 错误面：未知 id / 墓碑 / 新 o 未注册 全 fail-fast。"""
+        assert_error(
+            _CHAIN + "k.amend_fact('999', 'proton', 'r')\n",
+            "KNW_FACT_NOT_FOUND",
+            line=13,
+        )
+        assert_error(
+            _CHAIN + "k.retract(f1, 'r1')\nk.amend_fact(f1, 'quark', 'r2')\n",
+            "KNW_FACT_RETRACTED",
+            line=14,
+        )
+        assert_error(
+            _CHAIN + "k.amend_fact(f2, 'quark', 'r3')\n",
+            "KNW_VOCAB_UNREGISTERED",
+            line=13,
+        )
+
+    def test_source_and_history_fact(self):
+        """source + history_fact（全事件链快照）；未知 id fail-fast。"""
+        assert_output(
+            _CHAIN
+            + "f5 = k.add_fact('modern', 'atom', 'depends_on', 'proton', 'v30-flywheel')\n"
+            + "print(k.source(f1) + '|' + k.source(f5))\n"
+            + "h = k.history_fact(f5)\n"
+            + "print(h[0]['kind'] + '|' + str(h[0]['seq']))\n",
+            ["|v30-flywheel", "add|5"],
+        )
+        assert_error(
+            _CHAIN + "print(k.source('999'))\n", "KNW_FACT_NOT_FOUND", line=13
+        )
+
+    def test_tombstone_then_new_fact_reactivation(self):
+        """恢复语义 = 登记新事实（墓碑不复活——新版本是新事实）。"""
+        assert_output(
+            _CHAIN
+            + "k.retract(f1, '推翻')\n"
+            + "f_new = k.add_fact('modern', 'atom', 'composed_of', 'proton', 'v31')\n"
+            + "print(f_new == f1)\n"
+            + "print(k.fact_len())\n"
+            + "recs = k.lookup_pair('atom', 'composed_of')\n"
+            + "print(str(len(recs)) + '|' + recs[0]['id'] + '|' + recs[1]['id'])\n"
+            + "print(k.get_fact(f1)['status'] + '|' + k.get_fact(f_new)['status'])\n",
+            ["False", "5", "2|2|6", "retracted|active"],
+        )
+
+
+class TestDeepCloneIndependence:
+    def test_clone_kb_planes_independent(self):
+        """KB 深拷贝：克隆 A 的 add_fact 不影响克隆 B（可变容器引用语义）。"""
+        assert_output(
+            "k = knowledge()\n"
+            'k.register_world("modern", "现代物理世界", 3)\n'
+            'k.register_relation("composed_of", "组成关系", False, False)\n'
+            'k.register_word("atom", "原子", False, [], {})\n'
+            'k.register_word("proton", "质子", False, [], {})\n'
+            'k.register_word("electron", "电子", False, [], {})\n'
+            'k.add_fact("modern", "atom", "composed_of", "proton")\n'
+            + "k2 = deepcopy(k)\n"
+            + "k2.add_fact('modern', 'atom', 'composed_of', 'electron')\n"
+            + "print(k.fact_len())\n"
+            + "print(k2.fact_len())\n",
+            ["1", "2"],
+        )
+
+
+class TestEntriesPlaneZeroRegression:
+    def test_store_get_amend_history_unchanged(self):
+        """entries 面既有契约零回归（KB 面扩展不改通用登记语义）。"""
+        assert_output(
+            "kb = knowledge()\n"
+            "func ok(any x) -> bool:\n"
+            "    return True\n"
+            'kb.store("k1", 42, ok)\n'
+            'print(kb.get("k1"))\n'
+            "print(kb.len())\n"
+            'kb.amend("k1", 43, "更正值")\n'
+            'print(kb.get("k1"))\n'
+            'print(len(kb.history("k1")))\n',
+            ["42", "1", "43", "2"],
         )
