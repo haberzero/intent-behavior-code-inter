@@ -3821,6 +3821,46 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     Rust 移植[最大面 8317 行，含 free_vars 闭包捕获] + 值对象[IbValue 扩展 8902 行]）
     续在隔离分支（差分门逐级验证）；保留 Python 接口[HostService + CPS VM[LLM/意图/
     宿主面]]。
+- **P9 全量 Rust 化阶段 B 第三增量（语义层 Rust 移植启动——scope 符号解析，34 语料
+  scope 符号 52/52 全 MATCH，2026-09-10，隔离分支 `rust-kernel`）**：**阶段 B 续（语
+  义层：scope 符号解析启动）**——Rust scope 符号解析（对应 Python 语义层的 scope 符号
+  解析：遍历 Rust AST，将用户定义的名字绑定到 scope 符号 `scope_<scope>:<name>`）。
+  scope 符号 = 用户定义符号（区别于 intrinsic 符号[内置类型/方法，语义层 intrinsic
+  符号表产出]）。与 Python scope 符号逐条差分等价（34 语料，52/52 全 MATCH）。
+  **交付**：
+  - **symbol_resolver 模块**（`ibci-ext/src/symbol_resolver.rs`）：SymbolResolver[Rust
+    AST → scope 符号池]——resolve_module[遍历 Module.body] + resolve_stmt[语句分发：
+    Assign/AugAssign 目标 → VARIABLE / FunctionDef 名 → 顶层 FUNCTION·嵌套 VARIABLE +
+    参数 → VARIABLE + scope 栈 push/pop / ClassDef 名 → CLASS / For 目标 → VARIABLE /
+    Import 模块 → MODULE / FromImport 绑定 → FUNCTION]；scope 栈[module → function
+    ...]，scope 符号 UID = `scope_<scope_stack 串>:<name>`。
+  - **pyo3 暴露**：`ibci_ext.resolve_symbols(source) -> symbol_pool_json`。
+  - **差分 harness 测试**（TestRustSerializationUid::test_scope_symbols_corpus）：34
+    语料 scope 符号差分（Rust scope 符号 == Python scope 符号，name + kind 逐条等价）。
+  **关键裁定（self-grill 全分支消解）**：① **scope 符号 = 用户定义符号**（区别于
+    intrinsic 符号[内置类型/方法，语义层 intrinsic 符号表产出]——归语义层 Rust 移植后
+    续；本增量 = 用户定义符号[赋值目标/函数名/for 循环变量/import 模块/from-import
+    绑定/嵌套函数]）；② **scope 栈**（module scope → function scope ...，scope 符号
+    UID = `scope_<scope_stack 串>:<name>`——顶层 = `scope___string_exec__:x`，函数内 =
+    `scope___string_exec__/f:a`）；③ **顶层函数 = FUNCTION，嵌套函数 = VARIABLE**
+    （Python 语义层：嵌套函数名是持有函数的变量[非顶层函数定义]——scope_stack.len()==
+    1 时 FUNCTION，否则 VARIABLE）；④ **for 循环目标 = VARIABLE**（for 循环变量绑定到
+    当前 scope）；⑤ **import 模块 = MODULE，from-import 绑定 = FUNCTION**（import X
+    绑定 X 模块[MODULE]，from X import Y 绑定 Y[模块属性，FUNCTION]）；⑥ **type_uid/
+    node_uid = null**（Rust scope 符号解析不产 type_uid/node_uid[类型解析/节点绑定归语
+    义层后续]——比对 name + kind）；⑦ **零风险加法式**（resolve_symbols 为独立
+    pyfunction，不动 Python 执行路径/语义层）。
+  **验证**：34 语料 scope 符号 52/52 全 MATCH[顶层函数/嵌套函数/for 变量/import 模块/
+    from-import 绑定] + 差分 harness 24/24 + 全量 pytest 零回归（阶段 B 第三增量放行
+    门——加法式增量不动 Python 执行路径，计数 = 4281 + scope 符号差分测试 1 例 = 4282；
+    见 NEXT_STEPS 基线锚点）。**阶段 B 第三增量出口达成**（语义层 Rust 移植启动——
+    scope 符号解析）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段 B 第三增量零风险加法式（resolve_symbols
+    为独立 pyfunction，不动 Python 执行路径），验证后 merge unsafe-vibe-dev 并删分支；
+    阶段 B 后续（语义层 Rust 移植续[类型解析[type_uid] + 节点绑定[node_uid] + intrinsic
+    符号表 + free_vars 闭包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完
+    整 artifact 组装] + 值对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级验证）；
+    保留 Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

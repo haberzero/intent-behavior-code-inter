@@ -473,12 +473,22 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     **34 语料节点池节点内容 829/835 匹配**[剩余 6 因 free_vars 语义层输出，Rust parser 未
     承载]（差分 harness test_node_pool_corpus）。**零风险加法式**（serialize_nodes 独立
     pyfunction，不动 Python 执行路径/FlatSerializer）。
-  - **P9 全量 Rust 化阶段 B 续（当前批次）**：阶段 B（可 Rust 化，纯计算）——序列化 Rust
-    化续[符号/类型/scope 收集 + 完整 artifact 组装] + 语义层 Rust 移植[最大面 8317 行，
-    含 free_vars 闭包捕获] + 值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/
-    序列化/值对象面] + 保留 Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。证明绝
-    大部分关键核心逻辑可 Rust 化后全量转向 Rust（不保留 Python 双通道和对比）。CPS 优
-    化续[覆盖差 22 节点——LLM/意图面按需补齐]随推进。
+  - **P9 全量 Rust 化阶段 B 第三增量 语义层启动 scope 符号解析 已落地（本 session，
+    隔离分支 `rust-kernel` → 已 merge unsafe-vibe-dev 删分支）**：语义层 Rust 移植启动
+    ——scope 符号解析（ibci-ext/src/symbol_resolver.rs SymbolResolver[遍历 Rust AST 将
+    用户定义名字绑定到 scope 符号 scope_<scope>:<name>]——Assign/AugAssign 目标 →
+    VARIABLE / FunctionDef 名 → 顶层 FUNCTION·嵌套 VARIABLE + 参数 → VARIABLE + scope
+    栈 push/pop / ClassDef 名 → CLASS / For 目标 → VARIABLE / Import 模块 → MODULE /
+    FromImport 绑定 → FUNCTION；scope 栈[module → function]）——**34 语料 scope 符号
+    52/52 全 MATCH**（差分 harness test_scope_symbols_corpus）。**零风险加法式**
+    （resolve_symbols 独立 pyfunction，不动 Python 执行路径/语义层）。
+  - **P9 全量 Rust 化阶段 B 续（当前批次）**：阶段 B（可 Rust 化，纯计算）——语义层
+    Rust 移植续[类型解析[type_uid] + 节点绑定[node_uid] + intrinsic 符号表 + free_vars
+    闭包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] +
+    值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留
+    Python 接口[HostService + CPS VM[LLM/意图/宿主面]]。证明绝大部分关键核心逻辑可
+    Rust 化后全量转向 Rust（不保留 Python 双通道和对比）。CPS 优化续[覆盖差 22 节点
+    ——LLM/意图面按需补齐]随推进。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量
     Rust 化**（编译/语义/执行/调度/并发等核心面）；**保留关键部分 Python 接口**
@@ -537,11 +547,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   `tests/contracts/test_differential_harness.py`（smoke 子集）。后续并入 R-B 更大事实集
   语料（P3 load_kb 后以 v30 451 事实驱动）+ 实现 `run_kernel("rust")` 后即成 py↔rust
   差分门（Rust 安全网）。
-- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第二增量放行门实跑）**：**4281
-  passed / 1 skipped / 140.37s / rc=0**（= 前基线 4280 + 节点池差分测试 1 例[阶段 B 第二
-  增量 节点数据序列化 node_data]；注：test_p7_process_isolation / test_run_result_type
-  为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供
-  下一 session 参照，不冻结）。
+- **全量 pytest 基线（本 session P9 全量 Rust 化阶段 B 第三增量放行门实跑）**：**4282
+  passed / 1 skipped / 138.32s / rc=0**（= 前基线 4281 + scope 符号差分测试 1 例[阶段 B
+  第三增量 语义层启动 scope 符号解析]；注：test_p7_process_isolation / test_run_result_
+  type 为 flaky 子进程 spawn 测试[并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；
+  供下一 session 参照，不冻结）。
 
 ### 2.1 历史状态（git / WORKLOG 承载，本文件不再登记）
 

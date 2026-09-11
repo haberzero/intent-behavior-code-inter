@@ -22,6 +22,7 @@ mod lexer;
 mod node_serializer;
 mod parser;
 mod serialization;
+mod symbol_resolver;
 mod task_pool;
 
 use pyo3::exceptions::PyNotImplementedError;
@@ -134,6 +135,19 @@ fn serialize_nodes(source: &str) -> PyResult<(String, String)> {
     let pool_json = serde_json::to_string(&node_pool)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok((root_uid, pool_json))
+}
+
+/// scope 符号解析（全量 Rust 化·语义层启动）：IBC 源码 → Rust AST → scope 符号池
+/// （uid → sym_data，用户定义符号[scope_<module>:<name>]）。返回符号池 JSON 串。差分
+/// harness 经此与 Python 语义层 scope 符号逐条比对（区别于 intrinsic 符号[内置类型/
+/// 方法]——归语义层 intrinsic 符号表 Rust 移植后续）。
+#[pyfunction]
+fn resolve_symbols(source: &str) -> PyResult<String> {
+    let module = parser::parse_to_module(source);
+    let mut resolver = symbol_resolver::SymbolResolver::new();
+    let symbols = resolver.resolve_module(&module);
+    serde_json::to_string(symbols)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
@@ -262,6 +276,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(type_uid, m)?)?;
     m.add_function(wrap_pyfunction!(asset_uid, m)?)?;
     m.add_function(wrap_pyfunction!(serialize_nodes, m)?)?;
+    m.add_function(wrap_pyfunction!(resolve_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
