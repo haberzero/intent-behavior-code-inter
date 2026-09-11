@@ -165,9 +165,12 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   Rust 独立完整 artifact 产出——34 语料五池 uid 精确 + 全字段等价；bound_method 共享
   单例 last-wins 为 Python 参考内核既有非 canonical 行为[artifact 内容依赖书写顺序]，
   Rust 迁移期忠实复现，根因修复 = 后续架构裁定项[触及公理层 spec 建模]；method 符号
-  canonical 哈希增量 4 已收束]；每步差分门零差异放行 + 受影响子集+smoke 零回归 +
-  commit + 同步文档；全量 pytest 可按需自由[2026-09-11 用户裁定放开]，过期/被证
-  不正确的测试脚本可自由处理[重构质量原则优先]）**：
+  canonical 哈希增量 4 已收束]；**设计文档 = tasks_docs/_value_objects.md**[值域
+  现状盘点 + 面分解[quoted/meta/KB/边界保留] + 增量 1-3 序列[quoted+meta 原生面 →
+  KB Rust 原生数据模型[eval = parse+exec 原生闭环] → Host 变体退役] + 红线 5 条]；
+  每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest
+  可按需自由[2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由处理[重构
+  质量原则优先]）**：
   - **P1 R-A quote/eval 已落地（本 session）**：`meta.quote`/`meta.eval` + `quoted` 一等值类型
     （单一验证门 + 值通道）。裁定 = WORKLOG（P1 R-A 条目）。
   - **P2 R-B 世界模型 KB 已落地（本 session）**：`knowledge` 就地演化为三元组知识图谱——
