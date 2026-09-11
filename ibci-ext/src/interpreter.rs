@@ -619,18 +619,131 @@ fn dict_key_repr(k: &IbValue) -> String {
     }
 }
 
-fn num_result(a: &IbValue, b: &IbValue, f: fn(f64, f64) -> f64) -> Result<IbValue, Thrown> {
-    match (a.as_num(), b.as_num()) {
-        (Some((av, ai)), Some((bv, bi))) => {
-            let r = f(av, bv);
-            if ai && bi && r.fract() == 0.0 {
-                Ok(IbValue::Int(r as i64))
-            } else {
-                Ok(IbValue::Float(r))
+/// 值 → 整数面（Int 原生；Bool 按 0/1——Python 契约 bool 是 int 子类）。
+fn as_int(v: &IbValue) -> Option<i64> {
+    match v {
+        IbValue::Int(i) => Some(*i),
+        IbValue::Bool(b) => Some(if *b { 1 } else { 0 }),
+        _ => None,
+    }
+}
+
+/// 值 → 浮点面（Int/Float/Bool；None = 非数值）。
+fn as_float(v: &IbValue) -> Option<f64> {
+    match v {
+        IbValue::Int(i) => Some(*i as f64),
+        IbValue::Float(f) => Some(*f),
+        IbValue::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+        _ => None,
+    }
+}
+
+/// 整数 floor 除（Python 契约：向负无穷取整——-7 // 2 = -4）。
+fn floor_div_i64(a: i64, b: i64) -> i64 {
+    let q = a / b;
+    let rem = a % b;
+    if rem != 0 && ((rem < 0) != (b < 0)) {
+        q - 1
+    } else {
+        q
+    }
+}
+
+/// 整数 floor mod（Python 契约：结果符号随除数——-7 % 2 = 1）。
+fn floor_mod_i64(a: i64, b: i64) -> i64 {
+    a - floor_div_i64(a, b) * b
+}
+
+/// 整数幂（checked——溢出 = None → OverflowError；负指数 = 浮点路径）。
+fn checked_pow_i64(a: i64, b: i64) -> Option<i64> {
+    if b == 0 {
+        return Some(1);
+    }
+    if b > u32::MAX as i64 {
+        return None;
+    }
+    a.checked_pow(b as u32)
+}
+
+/// typed 整数算术（R2-3a——打破清单 #5：消灭 f64 全包精度丢失）。
+/// i64 精确路径（checked 溢出 = 显式 OverflowError，无静默）；除零 =
+/// ZeroDivisionError；负指数幂 = 浮点路径。
+fn int_arith(a: i64, b: i64, op: &str) -> Result<IbValue, Thrown> {
+    let r: Option<i64> = match op {
+        "+" => a.checked_add(b),
+        "-" => a.checked_sub(b),
+        "*" => a.checked_mul(b),
+        "/" | "//" => {
+            if b == 0 {
+                return Err(runtime_error("ZeroDivisionError", "division by zero"));
             }
+            Some(floor_div_i64(a, b))
         }
-        // 非数值操作数 = TypeError（R2-1 静默清零：旧 = None_ 静默）
+        "%" => {
+            if b == 0 {
+                return Err(runtime_error("ZeroDivisionError", "integer modulo by zero"));
+            }
+            Some(floor_mod_i64(a, b))
+        }
+        "**" => {
+            if b < 0 {
+                // 负指数 = 浮点路径（Python 契约：2 ** -1 = 0.5）
+                return float_arith(Some(a as f64), Some(b as f64), op);
+            }
+            checked_pow_i64(a, b)
+        }
+        "|" => Some(a | b),
+        "&" => Some(a & b),
+        "^" => Some(a ^ b),
+        _ => return Err(runtime_error("TypeError", "unsupported operand type(s)")),
+    };
+    match r {
+        Some(v) => Ok(IbValue::Int(v)),
+        None => Err(runtime_error("OverflowError", "integer overflow")),
+    }
+}
+
+/// typed 浮点算术（Int/Float/Bool → f64；/ 与 // = floor 除）。
+fn float_arith(a: Option<f64>, b: Option<f64>, op: &str) -> Result<IbValue, Thrown> {
+    let (Some(av), Some(bv)) = (a, b) else {
+        return Err(runtime_error("TypeError", "unsupported operand type(s)"));
+    };
+    match op {
+        "+" => Ok(IbValue::Float(av + bv)),
+        "-" => Ok(IbValue::Float(av - bv)),
+        "*" => Ok(IbValue::Float(av * bv)),
+        "/" | "//" => {
+            if bv == 0.0 {
+                return Err(runtime_error("ZeroDivisionError", "division by zero"));
+            }
+            Ok(IbValue::Float((av / bv).floor()))
+        }
+        "%" => {
+            if bv == 0.0 {
+                return Err(runtime_error("ZeroDivisionError", "float modulo by zero"));
+            }
+            Ok(IbValue::Float(av.rem_euclid(bv)))
+        }
+        "**" => Ok(IbValue::Float(av.powf(bv))),
         _ => Err(runtime_error("TypeError", "unsupported operand type(s)")),
+    }
+}
+
+/// typed 数值运算（R2-3a 单一入口）：Int/Bool 操作数 = i64 精确路径；含
+/// Float = f64 路径；非数值 = TypeError。bool 位运算结果 = bool（Python 契约）。
+fn num_arith(l: &IbValue, r: &IbValue, op: &str) -> Result<IbValue, Thrown> {
+    let both_bool = matches!(l, IbValue::Bool(_)) && matches!(r, IbValue::Bool(_));
+    match (as_int(l), as_int(r)) {
+        (Some(a), Some(b)) => {
+            let res = int_arith(a, b, op)?;
+            if both_bool && matches!(op, "|" | "&" | "^") {
+                if let IbValue::Int(v) = res {
+                    return Ok(IbValue::Bool(v != 0));
+                }
+            }
+            Ok(res)
+        }
+        _ => float_arith(as_float(l), as_float(r), op),
     }
 }
 
@@ -1593,16 +1706,9 @@ impl Interpreter {
             }
         }
         Ok(match op {
-            "+" => num_result(l, r, |a, b| a + b)?,
-            "-" => num_result(l, r, |a, b| a - b)?,
-            "*" => num_result(l, r, |a, b| a * b)?,
-            "/" => floor_div(l, r)?,
-            "//" => floor_div(l, r)?,
-            "%" => modulo(l, r)?,
-            "**" => pow_op(l, r)?,
-            // 位运算（int/bool——Python 契约：bool 位运算 = bool 结果
-            // [True | False = True]；int 位运算 = int）
-            "|" | "&" | "^" => bitwise(l, op, r)?,
+            "+" | "-" | "*" | "/" | "//" | "%" | "**" | "|" | "&" | "^" => {
+                num_arith(l, r, op)?
+            }
             _ => IbValue::None_,
         })
     }
@@ -1648,8 +1754,10 @@ impl Interpreter {
     }
 
     fn cmp(&self, l: &IbValue, r: &IbValue) -> i64 {
-        match (l.as_num(), r.as_num()) {
-            (Some((a, _)), Some((b, _))) => {
+        // 数值比较：Int/Bool 精确 i64（R2-3a——消灭 f64 比较精度丢失）；
+        // 含 Float = f64
+        match (as_int(l), as_int(r)) {
+            (Some(a), Some(b)) => {
                 if a < b {
                     -1
                 } else if a > b {
@@ -1658,16 +1766,26 @@ impl Interpreter {
                     0
                 }
             }
-            _ => match (l, r) {
-                // None 相等性（None == None / None == 空 Optional 对称——
-                // 空 Optional 值面 = None_；Python 契约：is/== 同真）
-                (IbValue::None_, IbValue::None_) => 0,
-                (IbValue::Str(a), IbValue::Str(b)) => {
-                    a.partial_cmp(b).map(|o| o as i64).unwrap_or(2)
+            _ => match (as_float(l), as_float(r)) {
+                (Some(a), Some(b)) => {
+                    if a < b {
+                        -1
+                    } else if a > b {
+                        1
+                    } else {
+                        0
+                    }
                 }
-                (IbValue::Bool(a), IbValue::Bool(b)) => (*a as i64) - (*b as i64),
-                // 跨族[数值 vs str 等] = 不相等（== 面；关系面已前置 TypeError）
-                _ => 2,
+                _ => match (l, r) {
+                    // None 相等性（None == None / None == 空 Optional 对称——
+                    // 空 Optional 值面 = None_；Python 契约：is/== 同真）
+                    (IbValue::None_, IbValue::None_) => 0,
+                    (IbValue::Str(a), IbValue::Str(b)) => {
+                        a.partial_cmp(b).map(|o| o as i64).unwrap_or(2)
+                    }
+                    // 跨族[数值 vs str 等] = 不相等（== 面；关系面已前置 TypeError）
+                    _ => 2,
+                },
             },
         }
     }
@@ -2281,77 +2399,8 @@ fn const_to_value(c: &ConstVal) -> IbValue {
     }
 }
 
-fn floor_div(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
-    match (l.as_num(), r.as_num()) {
-        (Some((a, ai)), Some((b, bi))) => {
-            if b == 0.0 {
-                // 除零 = 环境错误（Python 契约：ZeroDivisionError →
-                // RUN_DIVISION_BY_ZERO；int/float 同面）
-                return Err(runtime_error("ZeroDivisionError", "division by zero"));
-            }
-            let res = (a / b).floor();
-            if ai && bi {
-                Ok(IbValue::Int(res as i64))
-            } else {
-                Ok(IbValue::Float(res))
-            }
-        }
-        _ => Err(runtime_error("TypeError", "unsupported operand type(s) for //")),
-    }
-}
-
-fn modulo(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
-    match (l.as_num(), r.as_num()) {
-        (Some((a, ai)), Some((b, bi))) => {
-            if b == 0.0 {
-                return Err(runtime_error("ZeroDivisionError", "division by zero"));
-            }
-            let res = a.rem_euclid(b);
-            if ai && bi {
-                Ok(IbValue::Int(res as i64))
-            } else {
-                Ok(IbValue::Float(res))
-            }
-        }
-        _ => Err(runtime_error("TypeError", "unsupported operand type(s) for %")),
-    }
-}
-
-/// 位运算（int/bool 面：| & ^——操作数须为 int/bool[数值]；bool+bool =
-/// bool 结果[Python 契约]，否则 int）。
-fn bitwise(l: &IbValue, op: &str, r: &IbValue) -> Result<IbValue, Thrown> {
-    let both_bool = matches!(l, IbValue::Bool(_)) && matches!(r, IbValue::Bool(_));
-    let (Some((a, _)), Some((b, _))) = (l.as_num(), r.as_num()) else {
-        return Err(runtime_error("TypeError", "unsupported operand type(s) for bitwise op"));
-    };
-    let ai = a as i64;
-    let bi = b as i64;
-    let res = match op {
-        "|" => ai | bi,
-        "&" => ai & bi,
-        "^" => ai ^ bi,
-        _ => 0,
-    };
-    if both_bool {
-        Ok(IbValue::Bool(res != 0))
-    } else {
-        Ok(IbValue::Int(res))
-    }
-}
-
-fn pow_op(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
-    match (l.as_num(), r.as_num()) {
-        (Some((a, ai)), Some((b, bi))) => {
-            let res = a.powf(b);
-            if ai && bi && res.fract() == 0.0 {
-                Ok(IbValue::Int(res as i64))
-            } else {
-                Ok(IbValue::Float(res))
-            }
-        }
-        _ => Err(runtime_error("TypeError", "unsupported operand type(s) for **")),
-    }
-}
+// （floor_div/modulo/bitwise/pow_op 已被 num_arith 族的 typed 实现取代——
+// R2-3a 消灭 f64 全包；见 num_arith/int_arith/float_arith）
 
 fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
     // 负索引归一（Python 契约：l[-1] = 末元素）

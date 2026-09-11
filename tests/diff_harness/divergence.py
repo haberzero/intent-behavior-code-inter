@@ -93,6 +93,19 @@ REGISTERED: List[DeclaredState] = [
             " 宿主 .call）全为纯函数，零偏离。"
         ),
     ),
+    DeclaredState(
+        id="divergence-bounded-int-overflow",
+        kind=DIVERGENCE,
+        plane=DATA_PLANE,
+        scope="case:int_overflow",
+        rationale=(
+            "R2-3a typed 数值契约（打破清单 #5）：Int = i64 有界（Rust 值模型），"
+            "算术经 checked 运算——超出 i64 范围（如 2**100 / i64 加法溢出）="
+            "显式 OverflowError（无静默）。Python 参考内核 = 任意精度（无溢出）。"
+            "语言契约收敛方向 = i128/num-bigint（R2 值模型后续）；当前 = 显式错误"
+            "优于静默错误值。语料无大整数探针，零现有偏离。"
+        ),
+    ),
 ]
 
 

@@ -28,18 +28,23 @@ class TestCPSExecutionModel:
     """
 
     def test_deep_recursion_no_python_overflow(self):
-        """INV-CPS-1: Deep recursion doesn't cause Python stack overflow."""
+        """INV-CPS-1: Deep recursion doesn't cause Python stack overflow.
+
+        R2-3a typed 数值契约（打破清单 #5）：Int = i64 有界——factorial(100) 的
+        100! 超出 i64 = 显式 OverflowError（旧 Rust 静默 i64::MAX 垃圾）。改
+        factorial(20)（20! = 2.43e18 < i64 上限）保持递归压力意图 + 断言精确
+        值（不再依赖静默垃圾输出）。"""
         code = """
 func factorial(int n) -> int:
     if n <= 1:
         return 1
     return n * factorial(n - 1)
 
-print(factorial(100))
+print(factorial(20))
 """
-        # Should succeed without Python RecursionError
+        # Should succeed without Python RecursionError / Rust overflow
         result = run_ibci(code)
-        assert result  # Any output means CPS handled deep recursion
+        assert result == ["2432902008176640000"], f"20! 精确值：{result}"
 
     def test_deep_call_chain_succeeds(self):
         """INV-CPS-2: Deep call chains execute via trampoline."""
