@@ -5417,6 +5417,21 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   等角未移除；⑦ 终点前置 = 先移植 Rust 剩余面 + 角移除，再退役 Python 语义
   执行 + 差分机制（独立项目，下轮主线）。
 
+## 阶段 D（⑦ 终点）D1：角移除前置（2026-09-11，commit c41ad788 + a4df9944）
+
+- **D1a（c41ad788）**：intrinsic_redefinition 角移除——Rust 顶层常量保护
+  （裸赋值重绑内建名 = RUN_TYPE_MISMATCH；带注解声明可遮蔽；函数局部允许）。
+  编译期已拒顶层 print = 5[类型检查]，本检查覆盖 int/str 类型名等。
+- **D1b（a4df9944）**：tuple_value_materialization 角移除 + **IbValue::Tuple
+  冻结列表变体**——旧 tuple-as-list 泄漏可变方法面（append 可改元组 = 真实
+  语义分歧，角隐藏）；tuple 不可变契约落地（TUPLE_METHODS len/index/count
+  无修改面）+ 值模型全触点 + 解包/迭代/序列化（materialize _tuple = Python
+  tuple 保真）。
+- **角进度**：4 角移除 2（intrinsic_redefinition + tuple）；剩 kb_vec
+  （knowledge store 面移植 + 大验证）与 meta_compile。
+- 全量 pytest 4283/0/1 每步零回归；diff harness 语料现含 Rust 路由的元组源
+  且匹配（契约权威化推进）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
