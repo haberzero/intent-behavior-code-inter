@@ -5247,6 +5247,26 @@ migration_C.md`——21 个强白盒文件逐文件分类[行为/契约/宿主/�
   内部）/ storage_model_dispatch（内部）等逐文件迁移映射执行；行为类白盒文件
   （vector/knowledge/narrow_model/optional 语义）重构为行为层可观察断言。
 
+## R4：HOST-EXT 用户 Python 扩展协议 + pip 打包（2026-09-11，unsafe-vibe-dev）
+
+**R4 = 用户战略点①②**（Python 保留 = 易用性 + 允许 pip 安装）落地：
+- **R4-1（commit 83ba220a）**：core/host_ext.py register_host_extension
+  （engine, name, implementation）——从实现成员签名自动构建 IBCI TypeDef
+  （inspect 内省：Python 注解 → IBCI TypeRef[基础 + 容器泛型 + 显式 None=void
+  + 无注解=any]）；复用既有宿主模块装配链（构造期注册 → 编译期跳过文件解析 →
+  装配期 loader 自动绑定 vtable → 运行期 interop.get_package 分发），零碎片；
+  值转换 = 原生直通（P2 精神）；扩展异常显式传播；迟到注册拒绝。e2e 7 测试
+  （标量/容器/dict 返回/动态/错误/迟到）。
+- **R4-2（commit 23860c50）**：pyproject.toml 改 maturin 后端 + include
+  core/ibci_modules 收录；内核加载器支持 wheel 形态（import ibci_ext 优先，
+  dev .so 回退）。**验收（全新 venv）**：pip install wheel → Rust 内核加载
+  + 运行 + HOST-EXT 全正常；dev editable 回归。
+- 全量 pytest 4326 → **4333/0/1** 零回归（+7 HOST-EXT）。
+
+**下一步 = R5 计算基板**（架构 v2 用户点③⑥⑦）：Tensor 值入值模型 + 
+ComputeSubstrate trait（批量同构计算协议，scalar 实现；AVX/GPU = 未来战略
+期接口预留，不实现）；IBCI 传 tilelang 代码给底层 = 值编组形态（不包装）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
