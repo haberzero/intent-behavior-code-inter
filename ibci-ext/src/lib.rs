@@ -161,6 +161,17 @@ fn intrinsic_type_symbols() -> PyResult<String> {
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
+/// intrinsic 符号表完整（全量 Rust 化·语义层）：返回 63 个 intrinsic 符号池
+/// （42 内置类型 CLASS + 19 内置函数 FUNCTION + 2 内置模块 MODULE，uid → sym_data）。
+/// 差分 harness 经此与 Python intrinsic 符号表逐条比对（method = sym_anon_* 归类型解析
+/// 后续）。
+#[pyfunction]
+fn intrinsic_symbol_table() -> PyResult<String> {
+    let symbols = intrinsic_symbols::builtin_intrinsic_symbols();
+    serde_json::to_string(&symbols)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
 /// 内核元数据（name / stage / status）——差分 harness 的接入点：harness 经此
 /// 探明 Rust 内核状态。stage = 当前阶段（4 = 并发解除[GIL-free 并行执行 + 任务池]）；
 /// status = 就绪门（"concurrency-core" = 并发核心就绪[GIL-free 并行执行
@@ -289,6 +300,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(serialize_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(intrinsic_type_symbols, m)?)?;
+    m.add_function(wrap_pyfunction!(intrinsic_symbol_table, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

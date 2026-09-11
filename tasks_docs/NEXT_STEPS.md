@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4283 passed / 1 skipped 零回归**（2026-09-10 实跑，
-> P9 全量 Rust 化阶段 B 第四增量[intrinsic 符号表 42 内置类型 + 测试 1 例]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4284 passed / 1 skipped 零回归**（2026-09-10 实跑，
+> P9 全量 Rust 化阶段 B 第五增量[intrinsic 符号表完整 63 符号 + 测试 1 例]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 → 直至 Rust 内核替换结束）**：单任务默认验证 = 受影响子集 + smoke 子集
@@ -339,12 +339,21 @@
 >   全字段匹配**；只移植 CLASS 类型[内置函数/方法/模块归后续]；零风险加法式[intrinsic_
 >   type_symbols 独立 pyfunction]，merge 删分支；设计/裁定 = WORKLOG P9 全量 Rust 化
 >   阶段 B 第四增量条目）
+>   → **P9 全量 Rust 化阶段 B 第五增量 ✅**（intrinsic 符号表完整 63 符号：
+>   ibci-ext/src/intrinsic_symbols.rs 加 BUILTIN_FUNCTIONS[19 内置函数] +
+>   BUILTIN_MODULES[2 内置模块] + make_intrinsic[name,kind 共用单符号构建] +
+>   builtin_intrinsic_symbols[→ 63 符号]——42 类型 + 19 函数 + 2 模块，全同构[type_uid
+>   = type_root.<name>，node_uid/owned null，metadata {}]；pyo3 暴露
+>   intrinsic_symbol_table[区别于 intrinsic_type_symbols 42 类型]；差分 harness 加
+>   test_intrinsic_symbol_table_corpus[63 符号全字段等价 + 无多余]——**63/63 全字段匹配
+>   无多余**；method = sym_anon_* 归类型解析后续；零风险加法式，merge 删分支；设计/裁定
+>   = WORKLOG P9 全量 Rust 化阶段 B 第五增量条目）
 >   → **当前批次 = P9 全量 Rust 化阶段 B 续（可 Rust 化，纯计算：语义层 Rust 移植续
->   [类型解析[type_uid] + 节点绑定[node_uid] + intrinsic 函数/方法/模块 + free_vars 闭
->   包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] +
->   值对象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留
->   Python 接口[HostService + CPS VM[LLM/意图/宿主面]]；CPS 优化续[覆盖差 22 节点——
->   LLM/意图面按需补齐]随推进）**。
+>   [类型解析[type_uid] + 节点绑定[node_uid] + method[sym_anon_*] + free_vars 闭包捕
+>   获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装] + 值对
+>   象[IbValue 扩展 8902 行] + 差分 harness 扩语料[语义/序列化/值对象面] + 保留 Python
+>   接口[HostService + CPS VM[LLM/意图/宿主面]]；CPS 优化续[覆盖差 22 节点——LLM/意图
+>   面按需补齐]随推进）**。
 > - **是什么**：把 IBCI 数据层（D 纸带）从现状（trial 侧 lossy 静态代码投影）演进为**一等
 >   世界模型知识图谱**——单一权威源 = append-only 事实日志 `(world,s,r,o)`+source/status，
 >   融合**图/三元组平面**（治理词表 + 8 倒排索引 + 矛盾/传递/展开，D1 零 LLM）与**向量平面**
@@ -407,7 +416,8 @@
    → 全量 Rust 化评估 ✅[核心逻辑面盘点 + 可行性评估 + 关键 Python 接口识别]
    → 全量 Rust 化阶段 B 第一增量 序列化 UID 生成 node_uid/type_uid/asset_uid 34 节点池差分 ✅
    → 全量 Rust 化阶段 B 第二增量 节点数据序列化 node_data 829/835 ✅
-   → 全量 Rust 化阶段 B 第四增量 intrinsic 符号表 42 内置类型 42/42 ✅
+   → 全量 Rust 化阶段 B 第五增量 intrinsic 符号表完整 63 符号 63/63 ✅
+   → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+method+free_vars] + 序列化续 + 值对象][当前]
    → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+intrinsic 函数/方法/模块+free_vars] + 序列化续 + 值对象][当前]
    → 全量 Rust 化阶段 B 续[语义层续[类型/节点绑定+intrinsic+free_vars] + 序列化续 + 值对象][当前]
    → 阶段④ 并发解除

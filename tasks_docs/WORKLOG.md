@@ -3890,6 +3890,37 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
     + free_vars 闭包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact
     组装] + 值对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级验证）；保留 Python
     接口[HostService + CPS VM[LLM/意图/宿主面]]。
+- **P9 全量 Rust 化阶段 B 第五增量（intrinsic 符号表完整——63 符号，全字段 63/63 匹配
+  无多余，2026-09-10，隔离分支 `rust-kernel`）**：**阶段 B 续（语义层：intrinsic 符
+  号表完整）**——intrinsic 符号表完整（42 内置类型 CLASS + 19 内置函数 FUNCTION + 2
+  内置模块 MODULE = 63 符号）。每个 intrinsic 符号：uid = `intrinsic:<name>`，kind =
+  CLASS/FUNCTION/MODULE，type_uid = `type_root.<name>`，node_uid/owned_scope_uid = null，
+  metadata = {}（已核全同构）。与 Python intrinsic 符号表逐条差分等价（63/63 全字段匹
+  配 + 无多余）。**交付**：
+  - **intrinsic_symbols 模块扩展**（`ibci-ext/src/intrinsic_symbols.rs`）：加
+    `BUILTIN_FUNCTIONS`[19 内置函数] + `BUILTIN_MODULES`[2 内置模块] + `make_
+    intrinsic(name, kind)`[构建单符号] + `builtin_intrinsic_symbols()`[→ 63 符号
+    BTreeMap]。
+  - **pyo3 暴露**：`ibci_ext.intrinsic_symbol_table() -> intrinsic_symbol_pool_json`
+    （区别于 `intrinsic_type_symbols()`[42 类型]）。
+  - **差分 harness 测试**（TestRustSerializationUid::test_intrinsic_symbol_table_corpus）：
+    63 intrinsic 符号差分（全字段等价 + 无多余）。
+  **关键裁定（self-grill 全分支消解）**：① **intrinsic 符号表完整 = 42 类型 + 19 函数
+    + 2 模块**（method = sym_anon_*[类型解析输出，归语义层后续]；19 函数/2 模块全同构
+    [type_uid = type_root.<name>，node_uid/owned null，metadata {}——已核]）；② **复用
+    make_intrinsic**（单符号构建函数，42 类型 + 19 函数 + 2 模块共用[机制同构，消除重
+    复]）；③ **零风险加法式**（intrinsic_symbol_table 为独立 pyfunction，不动 Python
+    执行路径/语义层）；④ **差分含无多余检查**（Rust 63 符号 ⊆ Python intrinsic 符号 +
+    无多余[防 Rust 误产符号]）。**验证**：63/63 全字段匹配 + 无多余 + 差分 harness
+    26/26 + 全量 pytest 零回归（阶段 B 第五增量放行门——加法式增量不动 Python 执行路径，
+    计数 = 4283 + intrinsic 符号表差分测试 1 例 = 4284；见 NEXT_STEPS 基线锚点）。
+    **阶段 B 第五增量出口达成**（intrinsic 符号表完整——63 符号）。
+  **分支状态**：`rust-kernel` 隔离分支；阶段 B 第五增量零风险加法式（intrinsic_symbol_
+    table 为独立 pyfunction），验证后 merge unsafe-vibe-dev 并删分支；阶段 B 后续（语义
+    层 Rust 移植续[类型解析[type_uid] + 节点绑定[node_uid] + method[sym_anon_*] + free_
+    vars 闭包捕获 + scope 完整收集] + 序列化续[符号/类型/scope 收集 + 完整 artifact 组装]
+    + 值对象[IbValue 扩展 8902 行]）续在隔离分支（差分门逐级验证）；保留 Python 接口
+    [HostService + CPS VM[LLM/意图/宿主面]]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

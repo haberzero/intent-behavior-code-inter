@@ -564,3 +564,29 @@ class TestRustSerializationUid:
                     f"intrinsic 内置类型差分不等价（{uid}·{field}）：\n"
                     f"  py : {d.get(field)}\n  rust: {rs.get(field)}"
                 )
+
+    def test_intrinsic_symbol_table_corpus(self):
+        """intrinsic 符号表完整差分（全量 Rust 化·语义层）：Rust 63 intrinsic 符号
+        == Python intrinsic 符号表（42 内置类型 CLASS + 19 内置函数 FUNCTION + 2 内置
+        模块 MODULE，uid/name/kind/type_uid/node_uid/owned_scope_uid/metadata 全字段
+        等价 + 无多余）。method = sym_anon_* 归类型解析后续。"""
+        import json
+        from tests.conftest import compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel
+        rk = load_rust_kernel()
+        if not rk.loaded or not hasattr(rk._module, "intrinsic_symbol_table"):
+            return
+        rs_syms = json.loads(rk._module.intrinsic_symbol_table())
+        py_pool = FlatSerializer().serialize_artifact(compile_ibci("x = 1\n"))["pools"]["symbols"]
+        py_intrinsic = {u: d for u, d in py_pool.items() if u.startswith("intrinsic:")}
+        for uid, d in py_intrinsic.items():
+            rs = rs_syms.get(uid)
+            assert rs is not None, f"intrinsic 符号缺失：{uid}"
+            for field in ("name", "kind", "type_uid", "node_uid", "owned_scope_uid", "metadata"):
+                assert rs.get(field) == d.get(field), (
+                    f"intrinsic 符号差分不等价（{uid}·{field}）：\n"
+                    f"  py : {d.get(field)}\n  rust: {rs.get(field)}"
+                )
+        extra = [u for u in rs_syms if u not in py_intrinsic]
+        assert not extra, f"intrinsic 符号表多余（Rust 有 Python 无）：{extra}"

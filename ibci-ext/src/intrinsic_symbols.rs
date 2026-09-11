@@ -58,20 +58,71 @@ const BUILTIN_TYPES: &[&str] = &[
     "void",
 ];
 
+/// 19 个 IBC 内置函数（固定集，与 Python 语义层 intrinsic 符号表对齐）。
+const BUILTIN_FUNCTIONS: &[&str] = &[
+    "all",
+    "callable",
+    "copy",
+    "deepcopy",
+    "enumerate",
+    "fn",
+    "get_self_source",
+    "len",
+    "max",
+    "min",
+    "next",
+    "print",
+    "range",
+    "reversed",
+    "sorted",
+    "sum",
+    "type",
+    "vec",
+    "zip",
+];
+
+/// 2 个 IBC 内置模块（固定集，与 Python 语义层 intrinsic 符号表对齐）。
+const BUILTIN_MODULES: &[&str] = &["__string_exec__", "module"];
+
+/// 构建单个 intrinsic 符号（uid = `intrinsic:<name>`，type_uid = `type_root.<name>`）。
+fn make_intrinsic(name: &str, kind: &str) -> (String, Value) {
+    let uid = format!("intrinsic:{}", name);
+    let sym_data = Value::Object(serde_json::Map::from_iter([
+        ("uid".to_string(), Value::String(uid.clone())),
+        ("name".to_string(), Value::String(name.to_string())),
+        ("kind".to_string(), Value::String(kind.to_string())),
+        ("metadata".to_string(), Value::Object(serde_json::Map::new())),
+        ("node_uid".to_string(), Value::Null),
+        ("owned_scope_uid".to_string(), Value::Null),
+        ("type_uid".to_string(), Value::String(format!("type_root.{}", name))),
+    ]));
+    (uid, sym_data)
+}
+
 /// 构建 intrinsic 符号池（42 内置类型 CLASS 符号）。BTreeMap 保证 uid 序（确定性）。
 pub fn builtin_type_symbols() -> BTreeMap<String, Value> {
     let mut symbols = BTreeMap::new();
     for name in BUILTIN_TYPES {
-        let uid = format!("intrinsic:{}", name);
-        let sym_data = Value::Object(serde_json::Map::from_iter([
-            ("uid".to_string(), Value::String(uid.clone())),
-            ("name".to_string(), Value::String(name.to_string())),
-            ("kind".to_string(), Value::String("CLASS".to_string())),
-            ("metadata".to_string(), Value::Object(serde_json::Map::new())),
-            ("node_uid".to_string(), Value::Null),
-            ("owned_scope_uid".to_string(), Value::Null),
-            ("type_uid".to_string(), Value::String(format!("type_root.{}", name))),
-        ]));
+        let (uid, sym_data) = make_intrinsic(name, "CLASS");
+        symbols.insert(uid, sym_data);
+    }
+    symbols
+}
+
+/// 构建完整 intrinsic 符号表（42 内置类型 + 19 内置函数 + 2 内置模块 = 63 符号）。
+/// BTreeMap 保证 uid 序（确定性）。与 Python 语义层 intrinsic 符号表逐条差分等价。
+pub fn builtin_intrinsic_symbols() -> BTreeMap<String, Value> {
+    let mut symbols = BTreeMap::new();
+    for name in BUILTIN_TYPES {
+        let (uid, sym_data) = make_intrinsic(name, "CLASS");
+        symbols.insert(uid, sym_data);
+    }
+    for name in BUILTIN_FUNCTIONS {
+        let (uid, sym_data) = make_intrinsic(name, "FUNCTION");
+        symbols.insert(uid, sym_data);
+    }
+    for name in BUILTIN_MODULES {
+        let (uid, sym_data) = make_intrinsic(name, "MODULE");
         symbols.insert(uid, sym_data);
     }
     symbols
