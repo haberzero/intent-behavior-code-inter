@@ -5007,6 +5007,56 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
 8129af0a 之前资产[构建链/parser/deserializer/serializer/差分 harness 资产/
 3e-3f 证明]为可信地基优先复用）。
 
+## 使命 1 审计结论：内核接口层重审——触发使命 3（推翻重来）（2026-09-11）
+
+**审计范围**：`git log 8129af0a..HEAD`（08758567[⑦-1a/1b] / fe1dfcf7[⑦-1c] /
+b66a210a[WIP] / 016f3716[文档]）。**方法**：逐提交 diff + 逐落点读源（code-review
+纪律：前序报告 ≠ 结论，全部第一手证据复核）+ 对照 ⑦ 设计 v1（_p9_switch.md）
+"设计意图 vs 实现漂移" + design-philosophy/code-quality/工作模式定论。**基线实跑**：
+4306/2/1/140.94s（与交接一致；2 failed = 宿主 .call 面 WIP 预期失败）。
+
+**用户两问回答**：
+1. **有没有为对接测试定义的不干净接口代码？——有，已证实**：WIP 会话 API
+   （open_session/session_call/session_release + SESSIONS 注册表 + unsafe raw ptr +
+   RustFunctionProxy + engine 第三分支，唯一动机 = 2 测试，且自身不完整零功能增量）；
+   路由谓词堆 8 谓词 + 4 硬编码集合（每条 = 一个失败测试的静态近似）；engine 镜像
+   （declared 白名单 + materialize_variable 旁路 + 特化复刻 + quoted 特判）；
+   _RUST_ERROR_CODES 映射（functions.py 第二真相）。
+2. **Rust/Python 分层职责分配是否合理？——不合理，已证实**：engine（自述"组装者，
+   不参与执行"）在执行面做语义判断（重跑 Python 类型检查 _check_type 于 Rust 执行
+   结果上）；runtime_context 核心状态模块被开 materialize_variable 旁路（poke 内部
+   符号表，封装侵蚀）；kernels 加载层从"加载 .so"膨胀为 327 行路由裁判（自下而上
+   补丁堆非能力声明表）。
+
+**嫌疑清单复核**：3.1-3.6 全部**证实**（证据见审计文档 §三）；3.7 证实（测试体系
+时代错位 = 使命 2 对象）；diff_harness 语料/探针/divergence 资产 = (a) 契约驱动
+保留升格；**新增 N1**（非数据值显示形态串状态导出 = 类型信息丢失 + 镜像再水化
+特判）、**N2**（diff_harness harness 委托生产路由面，测试资产与生产耦合）。
+
+**总体判定：须推翻重来（触发使命 3）**。判定基准 = 交接任务书固化基准："路由谓词堆
++ 镜像双路径 + 字符串协议 + 双真相语义面"增量清理下**无法收敛**为[单一能力声明表 +
+单一状态物化机制 + 类型化契约]——三个收敛目标均需**接口契约层面重新设计**而非现有
+层边界内重构：镜像动因 = 两值模型状态契约决策；路由谓词编码 = 未移植语义缺口（整理
+不消除）；类型化契约单独可增量但属边界整体重设计面。**推翻范围** = 8129af0a 之后接口
+适配层（engine 路由/镜像/状态契约、kernels 路由判定面、错误跨边界协议、WIP 会话 API、
+materialize_variable 旁路、repr 降级导出）；**复用** = 8129af0a 之前可信地基（Rust
+构建链/lexer/parser/deserializer/serializer/解释器执行核心、Python 前端、artifact 契约、
+diff_harness 语料资产、3e-3f 证明）；**红线不变** = 语言语义（公理+contracts 语义错误
+集）/双内核协议/禁 push/main 永不触碰/独立分支。
+
+**重设计方向（使命 3 蓝图）**：D1 内核能力声明表（Rust 导出能力清单[node_types +
+intrinsic 从分发表生成消除手工清单 + native_modules + unported_corners]，Python 路由 =
+清单查询零谓词堆零硬编码集合）；D2 单一状态物化机制（typed value 通道[值+类型标签]
+替代 repr 降级 + 数据驱动转换表，engine 零语义判断，materialize_variable 旁路删除）；
+D3 类型化跨边界契约（结构化 {class,code,line,col,message}，诊断码单真相，RecursionError
+contains 特判删除）；D4 宿主 callable 统一协议（替代 WIP 会话 API，状态值持有期生命周期
+非全局注册表）；D5 执行通道收敛（run_artifact_state 唯一入口，删持久会话通道）。
+
+**执行纪律**：独立隔离分支实施（零风险确认后 merge unsafe-vibe-dev 即删分支）；分阶段
+实施 + 每阶段差分门/受影响子集+smoke 零回归 + commit + 文档同步；测试体系重设计（使命 2）
+协同推进（新接口落地后测试断言面按新体系承接，契约不留空洞）。**审计结论文档** =
+tasks_docs/_kernel_interface_audit.md（详细证据 + 三分类 + 重设计方向）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
