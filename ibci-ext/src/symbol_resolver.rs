@@ -263,10 +263,20 @@ impl SymbolResolver {
                 self.pop_scope();
             }
             Stmt::For { target, body, orelse, .. } => {
-                // for 循环目标 → scope 符号（VARIABLE）+ 类型 = any（IBCI：iter 类型不推断）。
-                if let Expr::Name { id, .. } = target {
-                    self.bind_symbol(id, "VARIABLE");
-                    self.bind_var_type(id, "any");
+                // for 循环目标 → scope 符号（VARIABLE）；类型：裸名 = any
+                // [iter 类型不推断]；typed 目标 = 声明类型[Python 实证]。
+                match target {
+                    Expr::Name { id, .. } => {
+                        self.bind_symbol(id, "VARIABLE");
+                        self.bind_var_type(id, "any");
+                    }
+                    Expr::TypeAnnotatedExpr { target: inner, annotation, .. } => {
+                        if let Expr::Name { id, .. } = inner.as_ref() {
+                            self.bind_symbol(id, "VARIABLE");
+                            self.bind_var_type(id, &crate::node_serializer::annotation_type_str(annotation));
+                        }
+                    }
+                    _ => {}
                 }
                 for s in body.iter().chain(orelse) {
                     self.resolve_stmt(s);

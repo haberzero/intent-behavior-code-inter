@@ -10,7 +10,10 @@ import copy
 import threading
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Callable
+
+import re as _re
+from pathlib import Path
 
 # =============================================================================
 # 架构边界说明：Engine = 组装者，不参与执行
@@ -84,6 +87,17 @@ class EngineTestSnapshot:
     install_path: str = ""
     root_initialized: bool = False
     spawned_handles: List[str] = field(default_factory=list)
+
+
+# Rust 运行时环境错误类名 → 诊断码映射（与 Python 运行时同一契约面：
+# core.runtime.objects.kernel.functions 异常类型→码映射的数据面投影）。
+_RUST_ERROR_CODES = {
+    "ZeroDivisionError": "RUN_DIVISION_BY_ZERO",
+    "IndexError": "RUN_INDEX_ERROR",
+    "KeyError": "RUN_INDEX_ERROR",
+    "AttributeError": "RUN_ATTRIBUTE_ERROR",
+    "TypeError": "RUN_TYPE_MISMATCH",
+}
 
 
 class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
@@ -498,6 +512,22 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         if not self.interpreter:
             self._prepare_interpreter(immutable_artifact, output_callback=output_callback)
 
+        # ⑦ 切换门面分区路由：数据面源（节点类型全集 ⊆ Rust 反序列化器处理
+        # 全集）→ Rust 内核执行（执行真相 = Rust）；LLM/宿主面源 → Python
+        # 运行时（LLM 语义宿主）。单一内核归属纪律：每源按节点类型路由至
+        # 唯一内核（无对比/无静默回退——双内核协议）。
+        from core.runtime.kernels import artifact_is_rust_executable
+
+        if artifact_is_rust_executable(artifact_dict):
+            # 输出面同构（VM print 契约：callback 优先，无 callback =
+            # stdout 渲染点——子进程 CLI[main.py run] silent 面同语义）
+            return self._execute_rust(
+                artifact_dict,
+                variables=variables,
+                output_callback=output_callback or self._output_callback,
+                on_ready=on_ready,
+            )
+
         # LLM journal 挂载（run 级审计侧信道；None = 不挂载，行为与无 journal 完全一致）
         if journal_writer is not None:
             self.interpreter.service_context.set_llm_journal(journal_writer)
@@ -515,6 +545,249 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         # 目前调度器内部仍然通过 Engine 的准备机制来启动解释器
         # 但从宏观视角看，Engine 已经不再直接驱动 Interpreter
         return self.rt_scheduler.execute(immutable_artifact, variables=variables, output_callback=output_callback)
+
+    def _bind_container_specialization(self, value, declared_type):
+        """⑦ 镜像容器特化绑定（leaf._bind_container_specialization 同构
+        registry 面）：声明为内置容器特化的容器值 → ib_class 重绑水化特化
+        类 + type_ref 结构化；嵌套容器元素经 spec.element_type 递归绑定
+        （VM 嵌套字面量各层独立绑定的镜像等价面）。非容器/非特化声明 =
+        原样返回（保守）。"""
+        if not isinstance(value, (list, dict)) or declared_type is None:
+            return value
+        spec_name = (
+            getattr(declared_type, "qualified_name", None)
+            or getattr(declared_type, "name", None)
+        ) or ""
+        container_kind = "list" if isinstance(value, list) else "dict"
+        if spec_name.split("[", 1)[0].strip() != container_kind:
+            return value
+        registry = self.interpreter.registry
+        spec_reg = registry.get_metadata_registry()
+        if spec_reg is None:
+            return value
+        if "[" not in spec_name or spec_reg.resolve(spec_name) is None:
+            return value
+        specialized_cls = registry.get_class(spec_name)
+        if specialized_cls is None:
+            return value
+        try:
+            from core.runtime.objects.kernel import IbClass as _IbClass
+
+            if not isinstance(specialized_cls, _IbClass):
+                return value
+            boxed = (
+                value if hasattr(value, "ib_class") else registry.box(value)
+            )
+            if getattr(boxed, "ib_class", None) is None:
+                return value
+            boxed.ib_class = specialized_cls
+            from core.kernel.spec.type_ref import TypeRef as _TypeRef
+
+            boxed.type_ref = _TypeRef.from_spec(declared_type)
+            # 嵌套元素递归（spec 元素类型 ref → 解析 → 绑定）
+            elem_ref = getattr(declared_type, "element_type", None)
+            if elem_ref is not None:
+                elem_spec = spec_reg.resolve_typeref(elem_ref)
+                if elem_spec is not None:
+                    elements = getattr(boxed, "elements", None)
+                    if elements is not None and isinstance(elements, list):
+                        # 仅容器元素递归（标量元素装箱形态保持——解箱/
+                        # 回箱循环会破坏元素装箱身份）
+                        for i, elt in enumerate(list(elements)):
+                            elt_base = (
+                                getattr(
+                                    getattr(elt, "ib_class", None), "name", ""
+                                )
+                                or ""
+                            ).split("[", 1)[0]
+                            if isinstance(elt, (list, dict)) or elt_base in (
+                                "list",
+                                "dict",
+                            ):
+                                native = (
+                                    elt
+                                    if isinstance(elt, (list, dict))
+                                    else self._maybe_unbox(elt)
+                                )
+                                bound = self._bind_container_specialization(
+                                    native, elem_spec
+                                )
+                                if bound is not None and bound is not elt:
+                                    elements[i] = bound
+            return boxed
+        except Exception:
+            return value
+
+    @staticmethod
+    def _maybe_unbox(v):
+        """容器元素解箱（绑定面以原生值为操作面——box 幂等[已装箱原样
+        返回]，unbox 统一递归绑定的元素操作面）。"""
+        if hasattr(v, "to_native"):
+            try:
+                return v.to_native()
+            except Exception:
+                return v
+        return v
+
+    def _execute_rust(
+        self,
+        artifact_dict: dict,
+        variables: Optional[Dict[str, Any]],
+        output_callback: Optional[Callable[[str], None]],
+        on_ready: Optional[Callable[["IBCIEngine"], None]],
+    ) -> bool:
+        """⑦ 切换门：数据面源执行（Rust 内核——执行真相唯一）+ 最终状态
+        镜像（Python runtime_context = 状态/符号 API 容器——符号面来自
+        编译产物，define_variable 绑定 Rust 导出的执行后值）。
+
+        数据面源无 LLM 面 → journal/budget/deterministic 守卫无触发面
+        （零 LLM 不变量平凡成立）；on_ready 钩子按契约执行（解释器就绪后、
+        执行开始前）。初始变量经 Rust 状态面注入（run_artifact_state）；
+        未捕获异常 = RuntimeError（Rust 内核边界——执行错误显式传播）。
+        """
+        import json as _json
+        import warnings
+
+        from core.runtime.kernels import load_kernel
+
+        kernel = load_kernel()
+        if on_ready is not None:
+            on_ready(self)
+        artifact_json = _json.dumps(artifact_dict, ensure_ascii=False)
+        try:
+            lines, state = kernel.run_artifact_state(
+                artifact_json, None, variables if variables else None
+            )
+        except RuntimeError as e:
+            # 环境限制异常边界转换（Rust 递归深度守卫 → Python
+            # RecursionError 根因原样传播 + KDIAG 警告不门控投影——
+            # Python VM 契约同面：深递归触底 = RecursionError 本身）
+            if "RecursionError" in str(e):
+                # 环境限制异常边界（VM 同面：KDIAG_RUNTIME_ENV_LIMIT 事件
+                # 投影 + 警告不门控 + 根因原样传播）
+                import core.runtime.observability.diagnostics as _diag
+
+                _exc = RecursionError(str(e))
+                _rc = None
+                if (
+                    self.interpreter is not None
+                    and self.interpreter.execution_context is not None
+                ):
+                    _rc = self.interpreter.execution_context.runtime_context
+                _diag.kernel_diagnostic(
+                    "KDIAG_RUNTIME_ENV_LIMIT",
+                    {"exc_type": "RecursionError", "message": str(e)},
+                    message="环境限制异常 RecursionError: 非语义错误，保留根因传播",
+                    rc=_rc,
+                )
+                warnings.warn(
+                    "环境限制异常 RecursionError（Rust 内核递归深度超限）",
+                    UserWarning,
+                )
+                raise _exc from e
+            # 运行时环境错误边界映射（Rust 异常类名 → 诊断码——与 Python
+            # 运行时同一契约面：functions.py 异常类型→码映射；数据面源
+            # 执行错误 = 显式诊断码，非静默）
+            m = _re.search(r"uncaught exception: (\w+)", str(e))
+            if m and m.group(1) in _RUST_ERROR_CODES:
+                detail = str(e).split(m.group(1) + ":", 1)[-1].strip()
+                # 错误现场位置（Rust 表达式 pos @line:col 后缀——engine 边界
+                # 构造诊断位置；file_path = 模块源文件[合成 entry 同形]）
+                location = None
+                pos_m = _re.search(r"@([0-9]+):([0-9]+)$", detail)
+                if pos_m:
+                    from core.base.source_atomic import Location
+
+                    detail = detail[: pos_m.start()].strip()
+                    file_path = Path(self.root_dir) / (
+                        f"{artifact_dict['entry_module']}.ibci"
+                    )
+                    location = Location(
+                        file_path=str(file_path),
+                        line=int(pos_m.group(1)),
+                        column=int(pos_m.group(2)),
+                    )
+                message = m.group(1) if not detail else f"{m.group(1)}: {detail}"
+                raise InterpreterError(
+                    message, location=location, error_code=_RUST_ERROR_CODES[m.group(1)]
+                ) from e
+            raise
+        # 输出投递（VM 同面：有 callback → callback；无 = stdout 渲染点）
+        if output_callback is not None:
+            for line in lines:
+                output_callback(line)
+        else:
+            for line in lines:
+                print(line)
+        # 最终状态镜像：执行真相 = Rust；Python 运行时上下文 = 状态容器
+        # （get_variable/runtime_context 契约面——数据面源执行后可读）。
+        # declared_type = prepare 期符号声明类型（artifact 符号池经 prepare
+        # 加载）——运行时内省契约（declared_type 泛型身份保留）；可调用声明
+        # 跳过运行时类型检查（VM 同面：值 = 函数对象时直放行——镜像值 =
+        # 显示形态串，检查面不适用）。
+        if self.interpreter is not None and self.interpreter.runtime_context is not None:
+            # 顶层符号 UID 面（artifact 符号池：scope 级 VARIABLE 符号——
+            # 声明类型经 execution_context.resolve_type_from_symbol 解析，
+            # 与 Python VM 赋值路径同一权威源）
+            mod = artifact_dict["modules"][artifact_dict["entry_module"]]
+            sym_uid_by_name = {}
+            for s in mod["pools"]["symbols"].values():
+                uid = s.get("uid") or ""
+                if (
+                    s.get("kind") == "VARIABLE"
+                    and ":" in uid
+                    and "/" not in uid.rsplit(":", 1)[0]
+                ):
+                    sym_uid_by_name[s.get("name")] = uid
+            rc = self.interpreter.runtime_context
+            ec = self.interpreter.execution_context
+            for name, value in state.items():
+                sym_uid = sym_uid_by_name.get(name)
+                declared_type = (
+                    ec.resolve_type_from_symbol(sym_uid) if sym_uid else None
+                )
+                # quoted 保真物化（⑦ 状态契约：Rust Quoted 值 = 源串显示
+                # 形态——declared quoted 声明的值经 IbQuoted 物化[源串全
+                # 保真——repr 面单一权威]，运行时序列化/边界契约同面）
+                _decl_name = getattr(declared_type, "name", None) or ""
+                if (
+                    _decl_name.split("[", 1)[0].strip() == "quoted"
+                    and isinstance(value, str)
+                ):
+                    quoted_cls = self.interpreter.registry.get_class("quoted")
+                    if quoted_cls is not None:
+                        try:
+                            from core.runtime.objects.primitives.quoted import (
+                                IbQuoted,
+                            )
+
+                            value = IbQuoted(quoted_cls, source=value)
+                        except Exception:
+                            pass
+                # 双路径镜像（⑦ 状态契约，声明家族驱动）：
+                # - 数据家族声明（int/float/str/bool/any/list/dict/Optional
+                #   ——镜像值 = 真数据值）= define_variable（VM 权威运行时
+                #   类型检查面同构——语义错误集经同一 _check_type 发射）；
+                # - 非数据家族声明（vector/quoted/knowledge/tuple/函数/类
+                #   等——镜像值 = 显示形态串或保真度缺口）= materialize_
+                #   variable（符号物化——declared_type 内省契约保留，
+                #   类型检查面不适用）。
+                # 容器特化身份（Python VM 同面：list[int]/dict[str,int] 声明
+                # 的容器值对象 ib_class = 水化特化类——运行时特化身份/
+                # 可赋值性契约；registry 面解析[特化类经 prepare 期水化
+                # 注册]，非注册特化 = 保守基类值）
+                # 容器特化身份绑定（VM 同面——递归嵌套；registry 面解析）
+                value = self._bind_container_specialization(value, declared_type)
+                declared_name = getattr(declared_type, "name", None) or ""
+                declared_base = declared_name.split("[", 1)[0].strip()
+                if declared_base in (
+                    "int", "float", "str", "bool", "any", "list", "dict",
+                    "Optional",
+                ):
+                    rc.define_variable(name, value, declared_type=declared_type)
+                else:
+                    rc.materialize_variable(name, value, declared_type=declared_type, uid=sym_uid)
+        return True
 
     def set_variable(self, name: str, val: Any):
         """[Engine API] 向当前解释器环境注入变量"""

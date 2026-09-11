@@ -626,11 +626,47 @@ impl NodeSerializer {
                 // 统一遍历：for 目标 type_env = any（IBCI：iter 类型不推断）+ node_to_type
                 // 更新（target IbName = any，define_name 后）+ node_to_symbol（for 目标 →
                 // VARIABLE scope 符号，当前 scope——Python 实证 Store Name 全绑定）。
-                if let Expr::Name { id, .. } = target {
-                    self.define_name(id, "any");
-                    self.node_to_type.insert(t_uid.clone(), "type_root.any".to_string());
-                    self.node_to_symbol
-                        .insert(t_uid.clone(), self.current_scope_symbol_uid(id));
+                match target {
+                    Expr::Name { id, .. } => {
+                        self.define_name(id, "any");
+                        self.node_to_type
+                            .insert(t_uid.clone(), "type_root.any".to_string());
+                        self.node_to_symbol
+                            .insert(t_uid.clone(), self.current_scope_symbol_uid(id));
+                    }
+                    // typed for 目标 = 声明语义（Python 实证：符号类型 = 声明
+                    // 类型；Store Name 节点 → 符号；TypeAnnotatedExpr 节点 →
+                    // 声明类型；注解绑定 = ser_annotation 已完成）
+                    Expr::TypeAnnotatedExpr { annotation, .. } => {
+                        let id = match target {
+                            Expr::TypeAnnotatedExpr { target: inner, .. } => {
+                                match inner.as_ref() {
+                                    Expr::Name { id, .. } => id.clone(),
+                                    _ => String::new(),
+                                }
+                            }
+                            _ => String::new(),
+                        };
+                        if !id.is_empty() {
+                            let decl_type = annotation_type_str(annotation);
+                            self.define_name(&id, &decl_type);
+                            // Store Name 节点（内层）→ 符号
+                            if let Some(node) = self.node_pool.get(&t_uid) {
+                                if let Some(inner_uid) =
+                                    node.get("target").and_then(|v| v.as_str())
+                                {
+                                    self.node_to_symbol.insert(
+                                        inner_uid.to_string(),
+                                        self.current_scope_symbol_uid(&id),
+                                    );
+                                }
+                            }
+                            // TypeAnnotatedExpr 节点 → 声明类型
+                            self.node_to_type
+                                .insert(t_uid.clone(), format!("type_root.{}", decl_type));
+                        }
+                    }
+                    _ => {}
                 }
                 let b_uids: Vec<String> = body.iter().map(|s| self.serialize_stmt(s)).collect();
                 let o_uids: Vec<String> = orelse.iter().map(|s| self.serialize_stmt(s)).collect();

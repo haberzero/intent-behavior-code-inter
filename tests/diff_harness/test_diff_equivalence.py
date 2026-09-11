@@ -403,12 +403,24 @@ class TestRustExecutionDataPlane:
         rk = load_rust_kernel()
         if not rk.loaded:
             return
-        # 34 语料 = 数据面（Rust 可执行）
+        # 34 语料 = 数据面（Rust 可执行）——Python 面角（面分区路由至
+        # Python 的单一内核归属纪律）：tuple 单符号赋值（元组值物化）+
+        # KB 语料源（对象身份面——payload 物化契约 = ⑦ 缺口批次）
+        py_surface_names = set()
         for name, code in corpus.CORPUS:
             engine = IBCIEngine(root_dir="tests")
             art = engine.compile_string(code, silent=True)
             data = FlatSerializer().serialize_artifact(art)
-            assert artifact_is_rust_executable(data), f"语料 {name} 路由判定 != 数据面"
+            if artifact_is_rust_executable(data):
+                continue
+            py_surface_names.add(name)
+        # 语料 Python 面角 = 已知族（元组物化 + KB 对象身份）——超界 =
+        # 面分区规则漂移信号
+        allowed = {"tuple_basic", "kb_world_vocab", "kb_fact_lookup",
+                   "kb_contradicts"}
+        assert py_surface_names <= allowed, (
+            f"语料 Python 面角超界：{sorted(py_surface_names - allowed)}"
+        )
         # ihost 宿主面 = Python 语义宿主
         engine = IBCIEngine(root_dir="tests")
         art = engine.compile_string(

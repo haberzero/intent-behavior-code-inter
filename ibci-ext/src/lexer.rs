@@ -293,6 +293,7 @@ pub struct Lexer {
     continuation_mode: bool,
     in_string: bool,
     quote_char: char,
+    triple_string: bool,
     current_string_val: String,
     keywords: HashMap<String, TokenType>,
     indent_stack: Vec<usize>,
@@ -347,6 +348,7 @@ impl Lexer {
             continuation_mode: false,
             in_string: false,
             quote_char: '"',
+            triple_string: false,
             current_string_val: String::new(),
             keywords,
             indent_stack: vec![0],
@@ -520,8 +522,17 @@ impl Lexer {
         }
         // 字符串（单行 "..." / '...'）
         if c == '"' || c == '\'' {
-            let quote = self.scanner.advance();
-            self.open_string(quote);
+            // 三引号字面量（多行内容保真含换行；IBCI 契约）
+            if self.scanner.peek(1) == c && self.scanner.peek(2) == c {
+                self.scanner.advance();
+                self.scanner.advance();
+                self.scanner.advance();
+                self.open_string(c);
+                self.triple_string = true;
+            } else {
+                let quote = self.scanner.advance();
+                self.open_string(quote);
+            }
             return;
         }
         // 括号
@@ -707,6 +718,10 @@ impl Lexer {
     fn scan_string_char(&mut self, tokens: &mut Vec<Token>) {
         let c = self.scanner.advance();
         if c == '\n' {
+            // 三引号 = 换行保真（内容面）；单引号 = 换行跳过（既有面）
+            if self.triple_string {
+                self.current_string_val.push('\n');
+            }
             return;
         }
         if c == '\\' {
@@ -714,6 +729,24 @@ impl Lexer {
             return;
         }
         if c == self.quote_char {
+            if self.triple_string {
+                // 三引号闭合 = 三连引号
+                if self.scanner.peek(0) == self.quote_char
+                    && self.scanner.peek(1) == self.quote_char
+                {
+                    self.scanner.advance();
+                    self.scanner.advance();
+                    tokens.push(self.scanner.create_token(
+                        TokenType::String,
+                        Some(self.current_string_val.clone()),
+                    ));
+                    self.in_string = false;
+                    self.triple_string = false;
+                    return;
+                }
+                self.current_string_val.push(c);
+                return;
+            }
             tokens.push(self.scanner.create_token(
                 TokenType::String,
                 Some(self.current_string_val.clone()),

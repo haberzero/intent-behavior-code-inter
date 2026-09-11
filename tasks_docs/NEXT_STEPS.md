@@ -31,10 +31,11 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4308 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 154.75s，P9 全量 Rust 化 ⑦ 切换门批次 阶段 ① 增量 1a/1b[状态面 + 路由判定面]放行门
-> [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
-> 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4307 passed / 4 failed / 1 skipped**（2026-09-11
+> 实跑 ~135s，P9 全量 Rust 化 ⑦ 切换门批次 阶段 ① 增量 1c[engine 路由接入——生产行为已切换：
+> 数据面源经 engine.execute → Rust 内核执行]放行门；4 failed = PT-DEBT-38 登记缺口族[宿主 .call
+> 桥函数值保真度 + Optional 实例同一性——面分区路由已隔离生产数据面]；前基线 4308 passed 零回归 =
+> 增量 1a/1b[154.75s]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
 > 受影响子集 + smoke 子集（`tests/contracts` + `tests/compiler`，~13s）；**全量 pytest 不再限于
 > 特定场合，可按需自由全量**（Rust 化推进后测试耗时缩短、全量可接受）；merge/放行门 / 公理层或语义
@@ -534,14 +535,19 @@
        边界保留面裁定[非移植范围]；⑦ 切换门 = engine 内核选择面独立放行门
        批次[status 提升 + run 入口 + LLM/意图边界行为验证]；34 语料 + 8
        探针全管线等价] ✅
-    → ⑦ 切换门批次[设计 v1 ✅ _p9_switch.md——面分区路由（无 LLM 面 15
-       节点源 → Rust 内核；含 → Python 全源执行）；阶段 ① = 1a ✅ Rust
-       状态面[run_artifact_state：初始注入 + 最终状态导出；Send 安全
-       JSON 中转] + 1b ✅ 路由判定面[artifact_is_rust_executable——单一
-       真相源 = Rust node_types] + 1c 待实施 engine 路由接入[execute：
-       数据面源 → Rust 内核 + 状态契约面]；PT-DEBT-37 = engine
-       run_string(variables=...) 既有缺陷登记；阶段 ② Python 数据面 VM
-       退役 + ③ 差分 harness 退场]
+    → ⑦ 切换门批次[设计 v1 ✅ _p9_switch.md——面分区路由（数据面源 →
+       Rust 内核；LLM/宿主/对象系统/元组物化/未移植内征源 → Python 全源
+       执行——单一内核归属纪律）；阶段 ① = 1a ✅ Rust 状态面[run_
+       artifact_state：初始注入 + 最终状态导出；Send 安全 JSON 中转] +
+       1b ✅ 路由判定面[artifact_is_rust_executable——单一真相源 = Rust
+       node_types + rust_intrinsic_names] + 1c ✅ engine 路由接入[execute
+       数据面源 → Rust 内核 + 双路径状态镜像[declared_type 内省 + 容器
+       特化递归绑定 + quoted 物化] + 错误码/现场位置/KDIAG 对等 + 类型
+       错误面/str 方法全集/optional 方法/三引号/切片 step/AugAssign 全面/
+       For 元组解包——生产行为已切换]；PT-DEBT-37 = engine run_string
+       (variables=...) 既有缺陷登记；PT-DEBT-38 = ⑦ 切换缺口批次[宿主
+       .call 桥函数值保真度 + Optional 实例同一性——4 例全量失败面]；
+       阶段 ② Python 数据面 VM 退役 + ③ 差分 harness 退场]
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

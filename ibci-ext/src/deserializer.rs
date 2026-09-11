@@ -452,6 +452,31 @@ pub fn deserialize_module(artifact_json: &str) -> Option<Module> {
             nodes.insert(uid.clone(), node.clone());
         }
     }
+    // 资产引用解析（ext_ref 常量 → 资产池内容——长/多行串内容寻址形态；
+    // 于加载期就地替换，常量面单一取值路径）
+    let assets: NodeMap = module["pools"]
+        .get("assets")
+        .and_then(|a| a.as_object())
+        .map(|m| {
+            m.iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    for n in nodes.values_mut() {
+        if n.get("_type").and_then(|t| t.as_str()) == Some("IbConstant") {
+            let v = n.get("value").cloned();
+            if let Some(obj) = v.and_then(|v| v.as_object().cloned()) {
+                if obj.get("_type").and_then(|t| t.as_str()) == Some("ext_ref") {
+                    if let Some(auid) = obj.get("uid").and_then(|u| u.as_str()) {
+                        if let Some(content) = assets.get(auid) {
+                            n["value"] = content.clone();
+                        }
+                    }
+                }
+            }
+        }
+    }
     let root_uid = module["root_node_uid"].as_str()?;
     let n = nodes.get(root_uid)?;
     let body: Vec<Stmt> = uids_of(&n["body"]).iter().map(|u| stmt_of(u, &nodes)).collect();
@@ -578,7 +603,7 @@ pub fn node_types() -> Vec<&'static str> {
         // 表达式
         "IbConstant", "IbName", "IbBinOp", "IbUnaryOp", "IbBoolOp", "IbCompare",
         "IbCall", "IbListExpr", "IbTuple", "IbDict", "IbAttribute", "IbSubscript",
-        "IbSlice", "IbIfExp", "IbLambdaExpr",
+        "IbSlice", "IbIfExp", "IbLambdaExpr", "IbTypeAnnotatedExpr",
         // 容器/根
         "IbModule",
     ]

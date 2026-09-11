@@ -576,6 +576,28 @@ fn json_to_ibvalue(v: &serde_json::Value) -> interpreter::IbValue {
     }
 }
 
+/// Rust 解释器已实现的内征函数名集合（⑦ 路由判定单一真相源：数据面源
+/// 引用的内征名 ⊆ 本集 = Rust 可执行；引用未移植内征 = Python 语义宿主。
+/// 随内征移植批次自动扩展——无 Python 侧硬编码清单）。
+#[pyfunction]
+fn rust_intrinsic_names(py: Python<'_>) -> PyResult<Py<PyList>> {
+    let names: Vec<&str> = vec![
+        // call_function 内征臂
+        "print", "len", "range", "knowledge", "vec",
+        // 异常类构造器
+        "Exception", "LLMError", "LLMCallError", "LLMParseError",
+        "LLMRetryExhaustedError", "ThreadError", "ThreadCancelled",
+        "ThreadFailed",
+        // meta 原生绑定
+        "quote", "eval",
+    ];
+    let list = PyList::empty(py);
+    for n in names {
+        list.append(n)?;
+    }
+    Ok(list.unbind())
+}
+
 /// 执行核心（带变量面）：artifact + 初始变量（Python dict）→ （print 输出
 /// 列表, 最终状态 dict）。⑦ 切换门变量面契约：初始变量 = 模块顶层环境
 /// 预置（原生数据值）；最终状态 = 顶层环境全条目（原生数据值 = 原生 Python
@@ -618,7 +640,15 @@ fn run_artifact_state(
                 .collect();
             let (output, state) = interp
                 .run_module_with_state(&module, &initial)
-                .map_err(|t| format!("IBCI: uncaught exception: {}", t.value.repr()))?;
+                .map_err(|t| match t.pos {
+                    Some((line, col)) => format!(
+                        "IBCI: uncaught exception: {}@{}:{}",
+                        t.value.repr(),
+                        line,
+                        col
+                    ),
+                    None => format!("IBCI: uncaught exception: {}", t.value.repr()),
+                })?;
             let state_json: Vec<(String, serde_json::Value)> = state
                 .into_iter()
                 .map(|(k, v)| (k, interpreter::ibvalue_to_json(&v)))
@@ -772,6 +802,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(full_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(rust_run_source, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact_state, m)?)?;
+    m.add_function(wrap_pyfunction!(rust_intrinsic_names, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;

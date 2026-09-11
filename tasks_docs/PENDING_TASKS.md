@@ -116,6 +116,34 @@
   验证）——修复面归 Python 运行时批次（define_variable → runtime_context
   符号 UID 绑定面核查）。
 
+### PT-DEBT-38 ⑦ 切换缺口批次（Rust 值模型保真度长尾——engine 面分区路由已隔离）
+
+- **状态**：registered（2026-09-11 P9 ⑦-1c 切换门全量放行门收敛发现）｜**域**：DEBT｜**优先级**：P2
+- **背景**：⑦-1c engine 路由接入后全量 pytest = 4307 passed / 4 failed（4 例
+  全部 = 本条目登记的 Rust 值模型保真度缺口——生产行为经面分区路由已隔离
+  至 Rust 已证数据面，4 例 = 宿主 .call 桥 / Optional 实例同一性两族）。
+- **面 1：宿主 .call 桥函数值保真度（2 例 =
+  tests/runtime/test_call_drive_convergence.py::TestCallHostSemantics::
+  test_user_function_void_returns_none / test_user_function_explicit_return）**：
+  数据面源含用户函数声明 → Rust 执行 → 状态镜像函数值 = 显示形态串（repr
+  契约）→ 宿主侧 `obj.call(None, args)`（.call 薄包装路径）无 .call 面。
+  **修复面**：Rust 函数值宿主调用桥（bridge API：按名/值调用 Rust 内核函数
+  值 + 参数注入 + 返回导出——状态面 run_artifact_state 的函数值扩展）或
+  镜像物化可调用代理（经 bridge 委托 Rust 执行）。
+- **面 2：Optional 实例同一性（2 例 =
+  tests/runtime/test_optional_value_model.py::test_none_is_literal_and_
+  identity_preserved / test_optional_is_identity_preserved_between_optionals）**：
+  两个空 Optional 变量 `a is b` = False（Python 包装实例恒等面——每赋值
+  新实例）；Rust 值模型空 Optional = None_ 单例 → `is` = True。
+  **修复面**：Rust Optional 包装值变体（每空 Optional = 独立实例 + is 恒等
+  语义 + 现有 unwrap/is_none/is_some 面穿透）或窄路由规则（含 2+ Optional
+  声明 + is 比较的源 → Python）。
+- **非缺口面（已证）**：数据面 print 等价（34 语料 + 探针全管线）；错误码
+  契约（RUN_* 映射 + 现场位置 line/col/file_path）；闭包/nonlocal；类型
+  错误面（str 混合运算 TypeError + 关系跨族 TypeError + 容器特化身份
+  递归绑定）；内征/方法面（str 方法全集 + optional 方法 + list/dict 方法 +
+  位运算/bool 算术）；三引号串 + 资产引用常量；递归深度守卫 + KDIAG 事件。
+
 ---
 
 ## 三、周期审计（AUDIT）

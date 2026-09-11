@@ -672,11 +672,12 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
   差分门（Rust 安全网）。
 - **全量 pytest 基线（本 session P9 全量 Rust 化 ⑦ 切换门批次 阶段 ①
   增量 1a/1b[状态面 + 路由判定面]放行门实跑）**：
-  **4308 passed / 1 skipped / 154.75s / rc=0**（2026-09-11；= 增量 3f 基线
-  4306 + test_rust_state_surface + test_rust_routing_decision 2 例；注：
-  test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试
-  [并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；供下一 session 参照，
-  不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
+  **4307 passed / 4 failed / 1 skipped / ~135s**（2026-09-11；= ⑦-1c engine
+  路由接入后基线——生产行为已切换[数据面源经 engine.execute → Rust 内核
+  执行]；4 failed = PT-DEBT-38 登记缺口族[宿主 .call 桥函数值保真度
+  test_call_drive_convergence::TestCallHostSemantics 2 例 + Optional 实例
+  同一性 test_optional_value_model 2 例——面分区路由已隔离生产数据面]；
+  前基线 4308 passed / rc=0 = 增量 3f[⑦-1a/1b]；供下一 session 参照，不冻结）。**新裁定（2026-09-11 用户，本 session）**：① 全量 pytest 使用限制略微
   放开——测试速度已提高、全量并非不可接受，不再限 4 场合（merge/放行门、公理层或语义错误
   集、阶段边界/里程碑、开新分支前 仍为强制门），可按需自由全量；② 已过期或被证不正确的
   测试脚本可自由处理（重构/修正/删除）——重构的质量原则大于维持现状的重要性。已同步

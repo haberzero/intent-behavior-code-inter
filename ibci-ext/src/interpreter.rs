@@ -237,6 +237,9 @@ impl IbValue {
         match self {
             IbValue::Int(i) => Some((*i as f64, true)),
             IbValue::Float(f) => Some((*f, false)),
+            // bool 参与整数算术按 0/1 数值（Python 契约：True + 1 = 2；
+            // int 形态——bool 是 int 的子类）
+            IbValue::Bool(b) => Some((if *b { 1.0 } else { 0.0 }, true)),
             _ => None,
         }
     }
@@ -301,6 +304,38 @@ pub(crate) fn ibvalue_to_json(v: &IbValue) -> serde_json::Value {
         }
         // 非数据值 = 显示形态（repr 契约）
         other => serde_json::Value::String(other.repr()),
+    }
+}
+
+/// 赋值语义（nonlocal 重定向：nonlocal 名 = 最近外层作用域改写[含该名的
+/// 最近 env，或该 env 亦非 nonlocal 持有者——Python nonlocal 契约]；普通名
+/// = 本地遮蔽）。
+fn assign_env(
+    env: &Rc<RefCell<Environment>>,
+    name: &str,
+    value: IbValue,
+) {
+    let b = env.borrow();
+    let is_nonlocal = b.nonlocals.contains(name);
+    let parent = b.parent.clone();
+    drop(b);
+    if is_nonlocal {
+        match &parent {
+            Some(p) => {
+                let pb = p.borrow();
+                let has = pb.vars.contains_key(name);
+                let also_nl = pb.nonlocals.contains(name);
+                drop(pb);
+                if has || !also_nl {
+                    p.borrow_mut().set(name, value);
+                } else {
+                    assign_env(p, name, value);
+                }
+            }
+            None => env.borrow_mut().set(name, value),
+        }
+    } else {
+        env.borrow_mut().set(name, value);
     }
 }
 
@@ -454,18 +489,55 @@ fn num_result(a: &IbValue, b: &IbValue, f: fn(f64, f64) -> f64) -> IbValue {
 // --------------------------------------------------------------------------- //
 // 环境（变量绑定 + 函数定义 + 作用域链）
 // --------------------------------------------------------------------------- //
+/// 用户函数调用深度（thread_local——Rust 原生调用栈无 Python 递归限检查；
+/// 深度超限 = RecursionError 环境限制异常[Python 契约：根因原样传播，不
+/// 被语义错误包装掩盖]；守卫经 RAII 深度恢复，零签名变更）。
+std::thread_local! {
+    static CALL_DEPTH: std::cell::Cell<u32> = std::cell::Cell::new(0);
+}
+
+/// 递归深度上限（= Python 宿主递归深度序[1000]——f(5000) 超限触发
+/// RecursionError[测试契约]；正常数据面源远低于此序）。
+const RECURSION_LIMIT: u32 = 1000;
+
+struct DepthGuard(u32);
+impl Drop for DepthGuard {
+    fn drop(&mut self) {
+        CALL_DEPTH.with(|c| c.set(self.0));
+    }
+}
+
 /// 抛出的异常值（raise 传播面——Rust 解释器异常机制；try/except 捕获面）。
 /// 值 = 被 raise 的任意 IbValue（IBCI 语义：raise 不做类型检查，匹配在
 /// except 处理器面——类可赋性）。
 #[derive(Debug, Clone)]
 pub struct Thrown {
     pub value: IbValue,
+    /// 错误现场位置（源 line/col——engine 边界构造诊断位置；
+    /// 表达式级错误[类型/下标/递归]携带其表达式 pos）
+    pub pos: Option<(i64, i64)>,
+}
+
+/// 运行时环境错误（Python 内建异常类名契约——engine 边界映射诊断码：
+/// ZeroDivisionError→RUN_DIVISION_BY_ZERO / IndexError|KeyError→
+/// RUN_INDEX_ERROR / AttributeError→RUN_ATTRIBUTE_ERROR）。
+fn runtime_error(class: &str, message: &str) -> Thrown {
+    Thrown {
+        value: IbValue::Error {
+            class: class.to_string(),
+            message: message.to_string(),
+        },
+        pos: None,
+    }
 }
 
 pub struct Environment {
     vars: HashMap<String, IbValue>,
     functions: HashMap<String, Function>,
     parent: Option<Rc<RefCell<Environment>>>,
+    /// nonlocal 绑定名（闭包语义：非局部名赋值 = 最近外层作用域改写，
+    /// 非本地遮蔽——Python nonlocal 契约）。
+    nonlocals: std::collections::BTreeSet<String>,
 }
 
 /// 函数（含闭包捕获的 enclosing 环境——嵌套函数可访问 outer 局部变量）。
@@ -480,6 +552,8 @@ pub struct Function {
     pub body: Vec<Stmt>,
     /// 定义处的环境（闭包捕获——调用时 call_env 的 parent = 此环境）。
     pub enclosing: Option<Rc<RefCell<Environment>>>,
+    /// nonlocal 声明名（body 顶层 Nonlocal 语句——赋值重定向外层作用域）。
+    pub nonlocals: Vec<String>,
 }
 
 impl Clone for Function {
@@ -492,6 +566,7 @@ impl Clone for Function {
             body: self.body.clone(),
             // enclosing = Rc 共享（闭包捕获同一环境）
             enclosing: self.enclosing.clone(),
+            nonlocals: self.nonlocals.clone(),
         }
     }
 }
@@ -512,11 +587,13 @@ impl Environment {
             vars: HashMap::new(),
             functions: HashMap::new(),
             parent,
+            nonlocals: std::collections::BTreeSet::new(),
         }
     }
     fn set(&mut self, name: &str, value: IbValue) {
         self.vars.insert(name.to_string(), value);
     }
+
 
 
     fn get(&self, name: &str) -> Option<IbValue> {
@@ -634,7 +711,7 @@ impl Interpreter {
                     match effective {
                         Expr::Name { id, .. } => {
                             if let Some(val) = &v {
-                                env.borrow_mut().set(id, val.clone());
+                                assign_env(env, id, val.clone());
                             }
                         }
                         // 元组解包声明（Store target）：值 = List → 逐元素赋值
@@ -676,14 +753,19 @@ impl Interpreter {
                 if let Expr::Name { id, .. } = target {
                     let cur = env.borrow().get(id).unwrap_or(IbValue::Int(0));
                     let rhs = self.eval_expr(env, value, output)?;
-                    // 复合算子映射（"+=" → "+"，"-=" → "-"）
-                    let base_op = match op.as_str() {
+                    // 复合算子映射（"+=" → "+"，"*=" → "*"，...）
+                    let base_op: &str = match op.as_str() {
                         "+=" => "+",
                         "-=" => "-",
+                        "*=" => "*",
+                        "/=" => "/",
+                        "//=" => "//",
+                        "%=" => "%",
+                        "**=" => "**",
                         _ => op.as_str(),
                     };
-                    let result = self.binop(&cur, base_op, &rhs);
-                    env.borrow_mut().set(id, result);
+                    let result = self.binop(&cur, base_op, &rhs)?;
+                    assign_env(env, id, result);
                 }
                 Flow::Next
             }
@@ -702,10 +784,64 @@ impl Interpreter {
             Stmt::For { target, iter, body, orelse, .. } => {
                 let items = self.eval_iter(env, iter, output)?;
                 let mut ran_else = false;
+                // 目标名：裸名 / 声明形态内层名（typed for 目标——声明面语义，
+                // 运行时 = 纯赋值）；元组目标 = 逐元素解包绑定
+                let target_name: Option<String> = match target {
+                    Expr::Name { id, .. } => Some(id.clone()),
+                    Expr::TypeAnnotatedExpr { target: inner, .. } => match inner.as_ref() {
+                        Expr::Name { id, .. } => Some(id.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let target_tuple: Option<Vec<String>> = match target {
+                    Expr::Tuple { elts, .. } => {
+                        let mut names = Vec::new();
+                        for e in elts {
+                            let n = match e {
+                                Expr::Name { id, .. } => Some(id.clone()),
+                                Expr::TypeAnnotatedExpr { target: inner, .. } => {
+                                    match inner.as_ref() {
+                                        Expr::Name { id, .. } => Some(id.clone()),
+                                        _ => None,
+                                    }
+                                }
+                                _ => None,
+                            };
+                            match n {
+                                Some(x) => names.push(x),
+                                None => {
+                                    names.clear();
+                                    break;
+                                }
+                            }
+                        }
+                        Some(names)
+                    }
+                    _ => None,
+                };
                 for item in items {
-                    let name = match target {
-                        Expr::Name { id, .. } => id.clone(),
-                        _ => continue,
+                    if let Some(names) = &target_tuple {
+                        let list = match item {
+                            IbValue::List(l) => l.borrow().clone(),
+                            _ => continue,
+                        };
+                        for (n, v) in names.iter().zip(list.iter()) {
+                            env.borrow_mut().set(n, v.clone());
+                        }
+                        match self.exec_body(env, body, output)? {
+                            Flow::Break => {
+                                ran_else = true;
+                                break;
+                            }
+                            Flow::Return(v) => return Ok(Flow::Return(v)),
+                            Flow::Next | Flow::Continue => {}
+                        }
+                        continue;
+                    }
+                    let name = match &target_name {
+                        Some(n) => n.clone(),
+                        None => continue,
                     };
                     env.borrow_mut().set(&name, item);
                     match self.exec_body(env, body, output)? {
@@ -756,6 +892,15 @@ impl Interpreter {
                     .map(|r| crate::node_serializer::annotation_type_str(r));
                 // enclosing = 当前环境（闭包捕获——嵌套函数可访问 outer 局部变量）
                 let enclosing = Some(env.clone());
+                // nonlocal 声明名（body 顶层 Nonlocal 语句——赋值重定向外层）
+                let nonlocals: Vec<String> = body
+                    .iter()
+                    .filter_map(|s| match s {
+                        Stmt::Nonlocal { names, .. } => Some(names.clone()),
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect();
                 env.borrow_mut().define_function(Function {
                     name: name.clone(),
                     params,
@@ -763,6 +908,7 @@ impl Interpreter {
                     ret,
                     body: body.clone(),
                     enclosing,
+                    nonlocals,
                 });
                 Flow::Next
             }
@@ -827,7 +973,7 @@ impl Interpreter {
                     Some(e) => self.eval_expr(env, e, output)?,
                     None => IbValue::None_,
                 };
-                return Err(Thrown { value });
+                return Err(Thrown { value, pos: None });
             }
             // switch：匹配后自动跳出（无 fall-through）；case 内 break = no-op
             // （C 习惯，接受为退出 case）；Return 透传、Continue 透传外层循环
@@ -908,7 +1054,7 @@ impl Interpreter {
                             Ok(sig) => return Ok(sig), // finally signal 覆盖
                             Err(t2) => return Err(t2),
                         }
-                        return Err(Thrown { value: exc_value });
+                        return Err(Thrown { value: exc_value, pos: None });
                     }
                     // 已处理 = 异常消解（不 re-raise）
                     raised = None;
@@ -992,10 +1138,15 @@ impl Interpreter {
                 Some(v) => v,
                 None => IbValue::None_,
             },
-            Expr::BinOp { left, op, right, .. } => {
+            Expr::BinOp { pos, left, op, right, .. } => {
                 let l = self.eval_expr(env, left, output)?;
                 let r = self.eval_expr(env, right, output)?;
+                // 类型错误现场 = 表达式位置（诊断位置契约）
                 self.binop(&l, op, &r)
+                    .map_err(|t| Thrown {
+                        pos: Some((pos.lineno, pos.col_offset)),
+                        value: t.value,
+                    })?
             }
             Expr::UnaryOp { op, operand, .. } => {
                 let v = self.eval_expr(env, operand, output)?;
@@ -1033,13 +1184,18 @@ impl Interpreter {
                     result
                 }
             }
-            Expr::Compare { left, ops, comparators, .. } => {
+            Expr::Compare { pos, left, ops, comparators, .. } => {
                 // 链式比较（a < b < c）——左到右，全部成立
                 let mut cur = self.eval_expr(env, left, output)?;
                 let mut result = true;
                 for (op, r) in ops.iter().zip(comparators.iter()) {
                     let rv = self.eval_expr(env, r, output)?;
-                    if !self.compare(&cur, op, &rv).truthy() {
+                    let cv = self.compare(&cur, op, &rv)
+                        .map_err(|t| Thrown {
+                            pos: Some((pos.lineno, pos.col_offset)),
+                            value: t.value,
+                        })?;
+                    if !cv.truthy() {
                         result = false;
                         break;
                     }
@@ -1066,7 +1222,7 @@ impl Interpreter {
                         let attr = attr.clone();
                         let arg_vals: Vec<IbValue> =
                             args.iter().map(|a| self.eval_expr(env, a, output)).collect::<Result<Vec<IbValue>, _>>()?;
-                        self.call_method(&obj, &attr, arg_vals)
+                        self.call_method(&obj, &attr, arg_vals)?
                     }
                     _ => {
                         let func_name = match func.as_ref() {
@@ -1075,18 +1231,26 @@ impl Interpreter {
                         };
                         let arg_vals: Vec<IbValue> =
                             args.iter().map(|a| self.eval_expr(env, a, output)).collect::<Result<Vec<IbValue>, _>>()?;
-                        // 原生 meta 函数绑定（from meta import quote/eval）
-                        if let Some(IbValue::MetaFn(n)) = env.borrow().get(&func_name) {
-                            self.call_meta_fn(n, arg_vals, output)
-                        // 函数值（一等值别名——fn f = g / x = g）→ 按值调用
-                        } else if let Some(IbValue::Function(f)) = env.borrow().get(&func_name) {
-                            let global = global_rc(env);
-                            self.call_user_function(&f, arg_vals, output, &global)?
-                        // 函数为宿主对象 → 调宿主函数
-                        } else if let Some(IbValue::Host(h)) = env.borrow().get(&func_name) {
-                            self.call_host_function(&h, arg_vals)
-                        } else {
-                            self.call_function(env, &func_name, arg_vals, output)?
+                        // 原生 meta 函数绑定（from meta import quote/eval）——
+                        // 值克隆出借用语境（env Ref 不得贯穿调用体——Re-entrant
+                        // 赋值[nonlocal]于调用内对同一 env 取独占借）
+                        let binding = env.borrow().get(&func_name); // 自有值（Ref 语句末释放——不贯穿调用体）
+                        match binding {
+                            Some(IbValue::MetaFn(n)) => {
+                                self.call_meta_fn(&n, arg_vals, output)
+                            }
+                            // 函数值（一等值别名——fn f = g / x = g）→ 按值调用
+                            Some(IbValue::Function(f)) => {
+                                let global = global_rc(env);
+                                self.call_user_function(&f, arg_vals, output, &global)?
+                            }
+                            // 函数为宿主对象 → 调宿主函数
+                            Some(IbValue::Host(h)) => {
+                                self.call_host_function(&h, arg_vals)
+                            }
+                            _ => {
+                                self.call_function(env, &func_name, arg_vals, output)?
+                            }
                         }
                     }
                 }
@@ -1136,7 +1300,7 @@ impl Interpreter {
                 let base = self.eval_expr(env, value, output)?;
                 match slice.as_ref() {
                     // 切片：x[lower:upper]
-                    Expr::Slice { lower, upper, .. } => {
+                    Expr::Slice { lower, upper, step, .. } => {
                         let lo = match lower.as_ref() {
                             Some(e) => Some(self.eval_expr(env, e, output)?),
                             None => None,
@@ -1145,12 +1309,16 @@ impl Interpreter {
                             Some(e) => Some(self.eval_expr(env, e, output)?),
                             None => None,
                         };
-                        subscript_slice(&base, lo.as_ref(), hi.as_ref())
+                        let st = match step.as_ref() {
+                            Some(e) => Some(self.eval_expr(env, e, output)?),
+                            None => None,
+                        };
+                        subscript_slice(&base, lo.as_ref(), hi.as_ref(), st.as_ref())
                     }
                     // 单表达式下标：x[1]
                     _ => {
                         let key = self.eval_expr(env, slice, output)?;
-                        subscript_get(&base, &key)
+                        subscript_get(&base, &key)?
                     }
                 }
             }
@@ -1180,36 +1348,85 @@ impl Interpreter {
         let v = self.eval_expr(env, iter, output)?;
         match v {
             IbValue::List(l) => Ok(l.borrow().clone()),
+            // 空 Optional 迭代 = 属性错误（Python 契约：空包装无迭代面）
+            IbValue::None_ => Err(runtime_error(
+                "AttributeError",
+                "iteration over empty optional",
+            )),
+            // 非可迭代值静默（登记角——Python TypeError 面未移植）
             _ => Ok(Vec::new()),
         }
     }
 
-    fn binop(&self, l: &IbValue, op: &str, r: &IbValue) -> IbValue {
-        if let (IbValue::Str(a), IbValue::Str(b)) = (l, r) {
-            if op == "+" {
-                return IbValue::Str(format!("{}{}", a, b));
-            }
+    fn binop(&self, l: &IbValue, op: &str, r: &IbValue) -> Result<IbValue, Thrown> {
+        // 类型错误面（Python 契约实证：str 混合运算 = TypeError——str+str
+        // 连接 / str*int 重复合法；其余 str 混合[含 str*str] = 类型错误；
+        // str 与数值混合 + 亦错）
+        if matches!(l, IbValue::Str(_)) || matches!(r, IbValue::Str(_)) {
+            return match (l, r, op) {
+                (IbValue::Str(a), IbValue::Str(b), "+") => {
+                    Ok(IbValue::Str(format!("{}{}", a, b)))
+                }
+                (IbValue::Str(a), IbValue::Int(n), "*")
+                | (IbValue::Int(n), IbValue::Str(a), "*") => {
+                    let k = (*n).max(0) as usize;
+                    Ok(IbValue::Str(a.repeat(k)))
+                }
+                _ => {
+                    let msg = format!("unsupported operand type(s) for {}", op);
+                    Err(runtime_error("TypeError", &msg))
+                }
+            };
         }
         if let (IbValue::List(a), IbValue::List(b)) = (l, r) {
             if op == "+" {
                 let mut merged = a.borrow().clone();
                 merged.extend(b.borrow().clone());
-                return IbValue::list_new(merged);
+                return Ok(IbValue::list_new(merged));
             }
         }
-        match op {
+        Ok(match op {
             "+" => num_result(l, r, |a, b| a + b),
             "-" => num_result(l, r, |a, b| a - b),
             "*" => num_result(l, r, |a, b| a * b),
-            "/" => floor_div(l, r),
-            "//" => floor_div(l, r),
-            "%" => modulo(l, r),
+            "/" => floor_div(l, r)?,
+            "//" => floor_div(l, r)?,
+            "%" => modulo(l, r)?,
             "**" => pow_op(l, r),
+            // 位运算（int/bool——Python 契约：bool 位运算 = bool 结果
+            // [True | False = True]；int 位运算 = int）
+            "|" | "&" | "^" => bitwise(l, op, r),
             _ => IbValue::None_,
-        }
+        })
     }
 
-    fn compare(&self, l: &IbValue, op: &str, r: &IbValue) -> IbValue {
+    fn compare(&self, l: &IbValue, op: &str, r: &IbValue) -> Result<IbValue, Thrown> {
+        // is / is not = 同一性（IBC 实证契约：None 同一性 + 数值按值相等；
+        // 非数值[str/list 等] = 对象同一性——异对象恒 False）
+        if op == "is" || op == "is not" {
+            let identity = match (l, r) {
+                (IbValue::None_, IbValue::None_) => true,
+                _ => {
+                    matches!((l.as_num(), r.as_num()), (Some(_), Some(_)))
+                        && self.cmp(l, r) == 0
+                }
+            };
+            return Ok(IbValue::Bool(if op == "is" { identity } else { !identity }));
+        }
+        // 关系运算类型面（Python 契约实证：跨族[数值 vs str]关系比较 =
+        // TypeError；==/!= 跨族 = 不相等[非错误]）
+        if op != "==" && op != "!=" {
+            let fam = |v: &IbValue| match v {
+                IbValue::Str(_) => 1,
+                IbValue::None_ => 2,
+                _ if v.as_num().is_some() => 0,
+                _ => 3,
+            };
+            if fam(l) != fam(r) {
+                let msg = format!("unsupported operand type(s) for {}", op);
+                return Err(runtime_error("TypeError", &msg));
+            }
+        }
         let c = self.cmp(l, r);
         let b = match op {
             ">" => c > 0,
@@ -1220,7 +1437,7 @@ impl Interpreter {
             "!=" => c != 0,
             _ => false,
         };
-        IbValue::Bool(b)
+        Ok(IbValue::Bool(b))
     }
 
     fn cmp(&self, l: &IbValue, r: &IbValue) -> i64 {
@@ -1235,11 +1452,15 @@ impl Interpreter {
                 }
             }
             _ => match (l, r) {
+                // None 相等性（None == None / None == 空 Optional 对称——
+                // 空 Optional 值面 = None_；Python 契约：is/== 同真）
+                (IbValue::None_, IbValue::None_) => 0,
                 (IbValue::Str(a), IbValue::Str(b)) => {
-                    a.partial_cmp(b).map(|o| o as i64).unwrap_or(0)
+                    a.partial_cmp(b).map(|o| o as i64).unwrap_or(2)
                 }
                 (IbValue::Bool(a), IbValue::Bool(b)) => (*a as i64) - (*b as i64),
-                _ => 0,
+                // 跨族[数值 vs str 等] = 不相等（== 面；关系面已前置 TypeError）
+                _ => 2,
             },
         }
     }
@@ -1263,6 +1484,13 @@ impl Interpreter {
                 Some(IbValue::List(l)) => IbValue::Int(l.borrow().len() as i64),
                 Some(IbValue::Str(s)) => IbValue::Int(s.len() as i64),
                 Some(IbValue::Dict(d)) => IbValue::Int(d.borrow().len() as i64),
+                // 空 Optional len = 属性错误（Python 契约：空包装无 len 面）
+                Some(IbValue::None_) => {
+                    return Err(runtime_error(
+                        "AttributeError",
+                        "len on empty optional",
+                    ))
+                }
                 _ => IbValue::Int(0),
             },
             // 异常对象构造（Exception/LLMError/ThreadError 家族——class +
@@ -1406,10 +1634,29 @@ impl Interpreter {
         output: &mut Vec<String>,
         global: &Rc<RefCell<Environment>>,
     ) -> Result<IbValue, Thrown> {
+        // 递归深度守卫（环境限制异常——Python 契约：深递归触底 =
+        // RecursionError 根因原样传播）
+        let depth = CALL_DEPTH.with(|c| c.get()) + 1;
+        if depth > RECURSION_LIMIT {
+            return Err(Thrown {
+                value: IbValue::Error {
+                    class: "RecursionError".to_string(),
+                    message: "maximum recursion depth exceeded".to_string(),
+                },
+                pos: None,
+            });
+        }
+        let _guard = DepthGuard(CALL_DEPTH.with(|c| c.get()));
+        CALL_DEPTH.with(|c| c.set(depth));
         // 新作用域：parent = enclosing[闭包捕获，嵌套函数访问 outer 局部] 或
         // global[顶层函数，使函数体可访问全局函数/变量——递归 + 读全局]
         let parent = f.enclosing.clone().unwrap_or_else(|| global.clone());
-        let call_env = Rc::new(RefCell::new(Environment::new(Some(parent))));
+        let mut call_env = Environment::new(Some(parent));
+        // nonlocal 名注入（闭包赋值重定向外层作用域）
+        call_env
+            .nonlocals
+            .extend(f.nonlocals.iter().cloned());
+        let call_env = Rc::new(RefCell::new(call_env));
         for (i, arg) in args.iter().enumerate() {
             if let Some(param) = f.params.get(i) {
                 call_env.borrow_mut().set(param, arg.clone());
@@ -1422,8 +1669,59 @@ impl Interpreter {
         })
     }
 
-    fn call_method(&self, obj: &IbValue, method: &str, args: Vec<IbValue>) -> IbValue {
-        match obj {
+    fn call_method(&self, obj: &IbValue, method: &str, args: Vec<IbValue>) -> Result<IbValue, Thrown> {
+        // Optional 面：is_some/is_none = 任意值的全局方法（值非 None_ = some；
+        // Python 契约：Optional 包装幂等——裸值同样可查）
+        if method == "is_some" {
+            return Ok(IbValue::Bool(!matches!(obj, IbValue::None_)));
+        }
+        if method == "is_none" {
+            return Ok(IbValue::Bool(matches!(obj, IbValue::None_)));
+        }
+        // unwrap（Optional 面：有值 = 值本身；空值 = 错误[Python 契约：
+        // 空 Optional 解包 = 异常]）
+        if method == "unwrap" {
+            return match obj {
+                IbValue::None_ => Err(runtime_error(
+                    "AttributeError",
+                    "unwrap on empty optional",
+                )),
+                v => Ok(v.clone()),
+            };
+        }
+        // to_list（Optional 容器解包——值面直返；Python Optional 包装
+        // 解包同语义：有值 = 值本身，空值 = 错误）
+        if method == "to_list" {
+            return match obj {
+                IbValue::None_ => Err(runtime_error(
+                    "AttributeError",
+                    "to_list on empty optional",
+                )),
+                v => Ok(v.clone()),
+            };
+        }
+        // or_else（Optional 面：有值 = 值；空值 = 默认参——Python 契约）
+        if method == "or_else" {
+            return match obj {
+                IbValue::None_ => match args.first() {
+                    Some(d) => Ok(d.clone()),
+                    None => Ok(IbValue::None_),
+                },
+                v => Ok(v.clone()),
+            };
+        }
+        // next（Optional 迭代面：有值 = 值；空值 = 错误
+        // [Python 契约：空 Optional next/迭代 = RUN_ATTRIBUTE_ERROR]）
+        if method == "next" {
+            return match obj {
+                IbValue::None_ => Err(runtime_error(
+                    "AttributeError",
+                    "next on empty optional",
+                )),
+                v => Ok(v.clone()),
+            };
+        }
+        Ok(match obj {
             // Rust 原生 KB 值——方法面经 kb::dispatch（治理门 + 确定性序）
             IbValue::Knowledge(kb) => crate::kb::dispatch(kb, method, &args),
             // vector 值——方法面（dim/dot/norm/cosine/scale/add/sub/cast_to；
@@ -1432,10 +1730,10 @@ impl Interpreter {
                 "dim" => IbValue::Int(v.len() as i64),
                 "dot" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return IbValue::None_;
+                        return Ok(IbValue::None_);
                     };
                     if v.len() != o.len() {
-                        return IbValue::None_;
+                        return Ok(IbValue::None_);
                     }
                     IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum())
                 }
@@ -1444,16 +1742,16 @@ impl Interpreter {
                 }
                 "cosine" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return IbValue::None_;
+                        return Ok(IbValue::None_);
                     };
                     if v.len() != o.len() {
-                        return IbValue::None_;
+                        return Ok(IbValue::None_);
                     }
                     let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
                     let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
                     if na == 0.0 || nb == 0.0 {
                         // 零范数 = 余弦未定义（fail-fast 面——错误面登记 = None_）
-                        return IbValue::None_;
+                        return Ok(IbValue::None_);
                     }
                     IbValue::Float(
                         v.iter().zip(o.iter()).map(|(a, b)| a * b).sum::<f64>()
@@ -1467,14 +1765,14 @@ impl Interpreter {
                     Some(IbValue::Float(k)) => {
                         IbValue::Vector(v.iter().map(|x| x * k).collect())
                     }
-                    _ => IbValue::None_,
+                    _ => return Err(runtime_error("AttributeError", "attribute not found")),
                 },
                 "add" | "sub" => {
                     let [IbValue::Vector(o)] = args.as_slice() else {
-                        return IbValue::None_;
+                        return Ok(IbValue::None_);
                     };
                     if v.len() != o.len() {
-                        return IbValue::None_;
+                        return Ok(IbValue::None_);
                     }
                     let out: Vec<f64> = if method == "add" {
                         v.iter().zip(o.iter()).map(|(a, b)| a + b).collect()
@@ -1486,7 +1784,7 @@ impl Interpreter {
                 // 注：cast_to 目标 = 类对象（`v.cast_to(str)` 的 str 经 VM 类型名
                 // 解析为 class——值域无类对象面，执行面不可达 = 3b 类型面职责；
                 // 用户调用 cast_to("str") = 非法 IBCI[Python 参考 fail-fast 实证]
-                _ => IbValue::None_,
+                _ => return Err(runtime_error("AttributeError", "attribute not found")),
             },
             // 宿主对象——委托 Python 对象方法（host service 桥接）
             IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
@@ -1514,7 +1812,32 @@ impl Interpreter {
                     let mut m = l.borrow_mut();
                     m.pop().unwrap_or(IbValue::None_)
                 }
-                _ => IbValue::None_,
+                // insert(index, value)——负索引/越界 = 端点钳制（Python 契约）
+                "insert" => {
+                    let items = l.borrow().clone();
+                    if let (Some(IbValue::Int(i)), Some(v)) = (args.first(), args.get(1)) {
+                        let mut m = l.borrow_mut();
+                        let len = m.len() as i64;
+                        let ix = {
+                            let raw = if *i < 0 { (len + i).max(0) } else { *i };
+                            (raw as usize).min(m.len())
+                        };
+                        m.insert(ix, v.clone());
+                    }
+                    IbValue::None_
+                }
+                // remove(value)——移除首个相等元素（Python 契约：原地修改，
+                // 无返回值；未找到 = ValueError[登记——语料面无探针]）
+                "remove" => {
+                    if let Some(v) = args.first() {
+                        let mut m = l.borrow_mut();
+                        if let Some(ix) = m.iter().position(|x| x == v) {
+                            m.remove(ix);
+                        }
+                    }
+                    IbValue::None_
+                }
+                _ => return Err(runtime_error("AttributeError", "attribute not found")),
             },
             IbValue::Dict(d) => match method {
                 "get" => {
@@ -1541,7 +1864,7 @@ impl Interpreter {
                     IbValue::list_new(vals)
                 }
                 "len" => IbValue::Int(d.borrow().len() as i64),
-                _ => IbValue::None_,
+                _ => return Err(runtime_error("AttributeError", "attribute not found")),
             },
             IbValue::Str(s) => {
                 match method {
@@ -1561,20 +1884,129 @@ impl Interpreter {
                                 .map(|p| IbValue::Str(p.to_string()))
                                 .collect()
                         };
-                        return IbValue::list_new(parts);
+                        return Ok(IbValue::list_new(parts));
                     }
                     "find" => {
                         let sub = args.first().and_then(|a| match a {
                             IbValue::Str(x) => Some(x.clone()),
                             _ => None,
                         });
-                        return match sub {
+                        return Ok(match sub {
                             Some(sub) => match s.find(&sub) {
                                 Some(i) => IbValue::Int(i as i64),
                                 None => IbValue::Int(-1),
                             },
                             None => IbValue::Int(-1),
+                        });
+                    }
+                    "rfind" => {
+                        let sub = args.first().and_then(|a| match a {
+                            IbValue::Str(x) => Some(x.clone()),
+                            _ => None,
+                        });
+                        // rfind 从尾部扫描（Python rfind 对等——find 反向遍历）
+                        return Ok(match sub {
+                            Some(sub) => {
+                                if sub.is_empty() {
+                                    return Ok(IbValue::Int(s.len() as i64));
+                                }
+                                let mut i = s.len().saturating_sub(sub.len()) as i64;
+                                let mut found = -1;
+                                while i >= 0 {
+                                    if s[i as usize..].starts_with(&sub) {
+                                        found = i;
+                                        break;
+                                    }
+                                    i -= 1;
+                                }
+                                IbValue::Int(found)
+                            }
+                            None => IbValue::Int(-1),
+                        });
+                    }
+                    "count" => {
+                        let sub = args.first().and_then(|a| match a {
+                            IbValue::Str(x) => Some(x.clone()),
+                            _ => None,
+                        });
+                        return Ok(match sub {
+                            Some(sub) if !sub.is_empty() => IbValue::Int(
+                                s.match_indices(&sub).count() as i64,
+                            ),
+                            _ => IbValue::Int(0),
+                        });
+                    }
+                    "contains" => {
+                        let sub = args.first().and_then(|a| match a {
+                            IbValue::Str(x) => Some(x.clone()),
+                            _ => None,
+                        });
+                        return Ok(IbValue::Bool(match sub {
+                            Some(sub) => s.contains(&sub),
+                            None => false,
+                        }));
+                    }
+                    "is_empty" => {
+                        return Ok(IbValue::Bool(s.trim().is_empty()));
+                    }
+                    "startswith" | "endswith" => {
+                        let pre = args.first().and_then(|a| match a {
+                            IbValue::Str(x) => Some(x.clone()),
+                            _ => None,
+                        });
+                        return Ok(IbValue::Bool(match pre {
+                            Some(pre) => {
+                                if method == "startswith" {
+                                    s.starts_with(&pre)
+                                } else {
+                                    s.ends_with(&pre)
+                                }
+                            }
+                            None => false,
+                        }));
+                    }
+                    "replace" => {
+                        let old = args.first().and_then(|a| match a {
+                            IbValue::Str(x) => Some(x.clone()),
+                            _ => None,
+                        });
+                        let new = args.get(1).and_then(|a| match a {
+                            IbValue::Str(x) => Some(x.clone()),
+                            _ => None,
+                        });
+                        return Ok(match (old, new) {
+                            (Some(old), Some(new)) => {
+                                IbValue::Str(s.replace(&old, &new))
+                            }
+                            _ => IbValue::Str(s.clone()),
+                        });
+                    }
+                    "join" => {
+                        // join(list) = 本串作分隔符连接元素（Python str.join 对等）
+                        let parts: Vec<String> = match args.first() {
+                            Some(IbValue::List(l)) => {
+                                let v = l.borrow();
+                                v.iter().map(|x| x.repr()).collect()
+                            }
+                            _ => Vec::new(),
                         };
+                        return Ok(IbValue::Str(parts.join(s.as_str())));
+                    }
+                    "format" => {
+                        // format(arg) = {} 占位符替换（Python str.format 简化对等）
+                        let arg = match args.first() {
+                            Some(a) => a.repr(),
+                            None => String::new(),
+                        };
+                        let mut out = String::new();
+                        let mut rest = s.as_str();
+                        while let Some(i) = rest.find("{}") {
+                            out.push_str(&rest[..i]);
+                            out.push_str(&arg);
+                            rest = &rest[i + 2..];
+                        }
+                        out.push_str(rest);
+                        return Ok(IbValue::Str(out));
                     }
                     _ => {}
                 }
@@ -1582,12 +2014,16 @@ impl Interpreter {
                     "upper" => s.to_uppercase(),
                     "lower" => s.to_lowercase(),
                     "strip" => s.trim().to_string(),
-                    _ => s.clone(),
+                    _ => return Err(runtime_error("AttributeError", "attribute not found")),
                 };
                 IbValue::Str(r)
             }
-            _ => IbValue::None_,
-        }
+            _ => {
+                // 未知对象类型方法 = 环境错误（Python 契约：AttributeError →
+                // RUN_ATTRIBUTE_ERROR）
+                return Err(runtime_error("AttributeError", "attribute not found"))
+            }
+        })
     }
 
     /// 宿主对象方法委托（KB 服务——经 host service 桥接调 Python 对象方法）。
@@ -1699,37 +2135,61 @@ fn const_to_value(c: &ConstVal) -> IbValue {
     }
 }
 
-fn floor_div(l: &IbValue, r: &IbValue) -> IbValue {
+fn floor_div(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
     match (l.as_num(), r.as_num()) {
         (Some((a, ai)), Some((b, bi))) => {
             if b == 0.0 {
-                return IbValue::None_;
+                // 除零 = 环境错误（Python 契约：ZeroDivisionError →
+                // RUN_DIVISION_BY_ZERO；int/float 同面）
+                return Err(runtime_error("ZeroDivisionError", "division by zero"));
             }
             let res = (a / b).floor();
             if ai && bi {
-                IbValue::Int(res as i64)
+                Ok(IbValue::Int(res as i64))
             } else {
-                IbValue::Float(res)
+                Ok(IbValue::Float(res))
             }
         }
-        _ => IbValue::None_,
+        _ => Ok(IbValue::None_),
     }
 }
 
-fn modulo(l: &IbValue, r: &IbValue) -> IbValue {
+fn modulo(l: &IbValue, r: &IbValue) -> Result<IbValue, Thrown> {
     match (l.as_num(), r.as_num()) {
         (Some((a, ai)), Some((b, bi))) => {
             if b == 0.0 {
-                return IbValue::None_;
+                return Err(runtime_error("ZeroDivisionError", "division by zero"));
             }
             let res = a.rem_euclid(b);
             if ai && bi {
-                IbValue::Int(res as i64)
+                Ok(IbValue::Int(res as i64))
             } else {
-                IbValue::Float(res)
+                Ok(IbValue::Float(res))
             }
         }
-        _ => IbValue::None_,
+        _ => Ok(IbValue::None_),
+    }
+}
+
+/// 位运算（int/bool 面：| & ^——操作数须为 int/bool[数值]；bool+bool =
+/// bool 结果[Python 契约]，否则 int）。
+fn bitwise(l: &IbValue, op: &str, r: &IbValue) -> IbValue {
+    let both_bool = matches!(l, IbValue::Bool(_)) && matches!(r, IbValue::Bool(_));
+    let (Some((a, _)), Some((b, _))) = (l.as_num(), r.as_num()) else {
+        return IbValue::None_;
+    };
+    let ai = a as i64;
+    let bi = b as i64;
+    let res = match op {
+        "|" => ai | bi,
+        "&" => ai & bi,
+        "^" => ai ^ bi,
+        _ => 0,
+    };
+    if both_bool {
+        IbValue::Bool(res != 0)
+    } else {
+        IbValue::Int(res)
     }
 }
 
@@ -1747,47 +2207,107 @@ fn pow_op(l: &IbValue, r: &IbValue) -> IbValue {
     }
 }
 
-fn subscript_get(base: &IbValue, key: &IbValue) -> IbValue {
+fn subscript_get(base: &IbValue, key: &IbValue) -> Result<IbValue, Thrown> {
+    // 负索引归一（Python 契约：l[-1] = 末元素）
+    let norm_idx = |v: usize, i: i64| -> Option<usize> {
+        if i < 0 {
+            Some((v as i64 + i).max(0) as usize)
+        } else {
+            Some(i as usize)
+        }
+    };
     match (base, key) {
         (IbValue::List(l), IbValue::Int(i)) => {
-            l.borrow().get(*i as usize).cloned().unwrap_or(IbValue::None_)
+            let v = l.borrow();
+            match norm_idx(v.len(), *i).and_then(|ix| v.get(ix).cloned()) {
+                Some(item) => Ok(item),
+                // 越界 = 环境错误（Python 契约：IndexError → RUN_INDEX_ERROR）
+                None => Err(runtime_error("IndexError", "index out of range")),
+            }
         }
         (IbValue::Dict(d), k) => d
             .borrow()
             .iter()
             .find(|(dk, _)| dk == k)
             .map(|(_, v)| v.clone())
-            .unwrap_or(IbValue::None_),
-        (IbValue::Str(s), IbValue::Int(i)) => s
-            .chars()
-            .nth(*i as usize)
-            .map(|c| IbValue::Str(c.to_string()))
-            .unwrap_or(IbValue::None_),
+            .ok_or_else(|| runtime_error("KeyError", "key not found")),
+        (IbValue::Str(s), IbValue::Int(i)) => {
+            let chars: Vec<char> = s.chars().collect();
+            match norm_idx(chars.len(), *i).and_then(|ix| chars.get(ix)) {
+                Some(c) => Ok(IbValue::Str(c.to_string())),
+                None => Err(runtime_error("IndexError", "index out of range")),
+            }
+        }
         // vector 下标：元素 float（同 __getitem__）
-        (IbValue::Vector(v), IbValue::Int(i)) => v
-            .get(*i as usize)
-            .copied()
-            .map(IbValue::Float)
-            .unwrap_or(IbValue::None_),
-        _ => IbValue::None_,
+        (IbValue::Vector(v), IbValue::Int(i)) => match norm_idx(v.len(), *i).and_then(|ix| v.get(ix)) {
+            Some(f) => Ok(IbValue::Float(*f)),
+            None => Err(runtime_error("IndexError", "index out of range")),
+        },
+        _ => Err(runtime_error("TypeError", "object is not subscriptable")),
     }
 }
 
 /// 列表切片 x[lower:upper]（Python 语义：[lower, upper)；lower/upper 缺省 = 端点）。
-fn subscript_slice(base: &IbValue, lower: Option<&IbValue>, upper: Option<&IbValue>) -> IbValue {
+fn slice_indices(len: i64, lower: Option<&IbValue>, upper: Option<&IbValue>, step: i64) -> Vec<usize> {
+    // Python 切片语义（含负索引归一 + 负 step 反向）
+    fn norm(i: i64, len: i64) -> i64 {
+        if i < 0 {
+            (len + i).max(0)
+        } else {
+            i.min(len)
+        }
+    }
+    let lo = match lower {
+        Some(IbValue::Int(i)) => norm(*i, len),
+        _ => if step > 0 { 0 } else { len - 1 },
+    };
+    let hi = match upper {
+        Some(IbValue::Int(i)) => norm(*i, len),
+        _ => if step > 0 { len } else { -1 },
+    };
+    let mut idx = Vec::new();
+    if step > 0 {
+        let mut i = lo;
+        while i < hi {
+            idx.push(i as usize);
+            i += step;
+        }
+    } else {
+        let mut i = lo;
+        while i > hi {
+            idx.push(i as usize);
+            i += step;
+        }
+    }
+    idx
+}
+
+fn subscript_slice(
+    base: &IbValue,
+    lower: Option<&IbValue>,
+    upper: Option<&IbValue>,
+    step: Option<&IbValue>,
+) -> IbValue {
+    let step_v = match step {
+        Some(IbValue::Int(i)) => *i,
+        Some(_) => 1, // 非 int step = 保守 step 1（Python TypeError 角——登记）
+        None => 1,
+    };
+    if step_v == 0 {
+        return IbValue::None_; // step 0 = 保守 None（登记角）
+    }
     match base {
+        // 字符串切片 = 新字符串（Python 契约：str slice returns str）
+        IbValue::Str(s) => {
+            let chars: Vec<char> = s.chars().collect();
+            let idx = slice_indices(chars.len() as i64, lower, upper, step_v);
+            let out: String = idx.iter().map(|&i| chars[i]).collect();
+            IbValue::Str(out)
+        }
         IbValue::List(l) => {
             let v = l.borrow();
-            let len = v.len() as i64;
-            let lo = match lower {
-                Some(IbValue::Int(i)) => (*i).max(0),
-                _ => 0,
-            };
-            let hi = match upper {
-                Some(IbValue::Int(i)) => (*i).min(len).max(0),
-                _ => len,
-            };
-            let items: Vec<IbValue> = v[lo as usize..hi as usize].to_vec();
+            let idx = slice_indices(v.len() as i64, lower, upper, step_v);
+            let items: Vec<IbValue> = idx.iter().map(|&i| v[i].clone()).collect();
             drop(v);
             IbValue::list_new(items)
         }
@@ -1825,6 +2345,14 @@ pub fn run_artifact(artifact_json: &str, bridge: Option<Py<PyAny>>) -> Result<Ve
     // 未捕获异常 = 执行错误（消息面——跨线程边界 Send 约束：Thrown 含 Rc 非
     // Send，于模块边界降级为消息）
     interp.run_module(&module).map_err(|t| {
-        format!("IBCI: uncaught exception: {}", t.value.repr())
+        match t.pos {
+            Some((line, col)) => format!(
+                "IBCI: uncaught exception: {}@{}:{}",
+                t.value.repr(),
+                line,
+                col
+            ),
+            None => format!("IBCI: uncaught exception: {}", t.value.repr()),
+        }
     })
 }

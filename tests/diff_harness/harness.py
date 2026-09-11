@@ -206,19 +206,16 @@ def rust_execution_data_plane(script: str, bridge=None) -> List[str]:
 
 
 def artifact_is_rust_executable(artifact_dict: dict) -> bool:
-    """⑦ 切换门面分区路由判定：artifact 节点类型全集 ⊆ Rust 反序列化器
-    node_types（单一真相源——缺口集随 deserializer 演进自动正确，无
-    Python 侧硬编码 LLM 面清单）= 数据面源（Rust 可执行）；含 LLM 面
-    节点 = Python 语义宿主（全源 Python 执行——单一内核归属纪律）。"""
-    rk = load_rust_kernel()
-    if not rk.loaded:
+    """⑦ 切换门面分区路由判定（委托生产面——core.runtime.kernels 单一真相
+    源：artifact 节点类型全集 ⊆ Rust 反序列化器 node_types = 数据面源；
+    含 LLM 面节点 = Python 语义宿主）。.so 缺失/不可用 = False（合法态：
+    无 Rust 内核 = 无 Rust 路由，降级为仅 Python 参考——harness 验证面
+    语义，非生产回退）。"""
+    from core.runtime.kernels import kernel_available
+    if not kernel_available():
         return False
-    supported = set(rk._module.node_types())
-    mod = artifact_dict["modules"][artifact_dict["entry_module"]]
-    return all(
-        n.get("_type") in supported
-        for n in mod["pools"]["nodes"].values()
-    )
+    from core.runtime.kernels import artifact_is_rust_executable as _prod
+    return _prod(artifact_dict)
 
 
 def rust_execution_full_pipeline(script: str, bridge=None) -> List[str]:

@@ -639,6 +639,14 @@ impl Parser {
             self.tokens.last().unwrap()
         }
     }
+
+    /// 前瞻第 n 个 token 类型（n=0 = 当前；偏移向后）。
+    fn peek_at(&self, n: usize) -> TokenType {
+        self.tokens
+            .get(self.pos + n)
+            .map(|t| t.type_)
+            .unwrap_or(TokenType::Eof)
+    }
     fn at(&self, ty: TokenType) -> bool {
         self.peek().type_ == ty
     }
@@ -1297,11 +1305,81 @@ impl Parser {
 
     fn parse_for(&mut self) -> Stmt {
         let kw = self.advance(); // FOR
-        let target_tok = self.advance(); // target IDENTIFIER
-        let target = Expr::Name {
-            pos: Pos::from_token(&target_tok),
-            id: target_tok.value,
-            ctx: "Store".to_string(),
+        // for 目标：裸名（for i in ...）或声明形态（for int i in ...——
+        // 前瞻：IDENTIFIER [泛型...] IDENTIFIER IN）
+        let target = if self.at(TokenType::Identifier) {
+            let save = self.pos;
+            let t1 = self.peek().clone();
+            self.advance();
+            // 泛型深度（list[int] i）
+            if self.at(TokenType::Lbracket) {
+                let mut depth = 0;
+                loop {
+                    match self.peek().type_ {
+                        TokenType::Eof => {
+                            self.pos = save;
+                            break;
+                        }
+                        TokenType::Lbracket => {
+                            depth += 1;
+                            self.advance();
+                        }
+                        TokenType::Rbracket => {
+                            depth -= 1;
+                            self.advance();
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {
+                            self.advance();
+                        }
+                    }
+                }
+            }
+            if self.at(TokenType::Identifier) && self.peek_at(1) == TokenType::In {
+                // 声明形态：t1 = 类型名，当前 = 变量名
+                let name_tok = self.advance();
+                let ann = if t1.value == "auto" {
+                    Expr::Name {
+                        pos: Pos::from_token(&t1),
+                        id: t1.value.clone(),
+                        ctx: "Load".to_string(),
+                    }
+                } else {
+                    // 泛型注解 = Subscript（无泛型 = Name）
+                    let mut ann = Expr::Name {
+                        pos: Pos::from_token(&t1),
+                        id: t1.value.clone(),
+                        ctx: "Load".to_string(),
+                    };
+                    ann
+                };
+                Expr::TypeAnnotatedExpr {
+                    pos: Pos::from_token(&t1),
+                    target: Box::new(Expr::Name {
+                        pos: Pos::from_token(&name_tok),
+                        id: name_tok.value,
+                        ctx: "Store".to_string(),
+                    }),
+                    annotation: Box::new(ann),
+                }
+            } else {
+                self.pos = save;
+                let t = self.advance();
+                Expr::Name {
+                    pos: Pos::from_token(&t),
+                    id: t.value,
+                    ctx: "Store".to_string(),
+                }
+            }
+        } else {
+            let t = self.advance();
+            Expr::Name {
+                pos: Pos::from_token(&t),
+                id: t.value,
+                ctx: "Store".to_string(),
+            }
         };
         self.expect(TokenType::In);
         let iter = self.parse_expr();

@@ -4898,6 +4898,75 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   **差分门**：test_rust_state_surface + test_rust_routing_decision 新增。
   **验证**：50 harness passed + smoke 832 passed + 全量 pytest 零回归
   （放行门实跑）。
+## P9 ⑦-1c engine 路由接入 + 错误码对等 + 数据面语义缺口收敛（2026-09-11）
+
+**⑦ 切换门批次 阶段 ① 增量 1c**：engine.execute 接入面分区路由（数据面源
+→ Rust 内核执行 + 最终状态镜像；LLM/宿主面源 → Python 运行时）——生产行为
+已切换（数据面执行真相 = Rust 内核唯一）。
+
+**路由判定面（core/runtime/kernels/__init__.py——artifact_is_rust_executable
+单一入口，全源按节点类型/导入/语义族路由至唯一内核）**：
+- 基础判定：节点类型全集 ⊆（Rust node_types − 对象系统排除集 {IbClassDef,
+  IbLambdaExpr}）且无宿主模块导入（RUST_NATIVE_MODULES = {meta}）
+- 面角规则（Python 语义宿主）：单符号元组赋值（元组值物化 + 声明类型推断
+  交互——`x = (1, 2)` 运行期 RUN_TYPE_MISMATCH 契约）；内建名重定义
+  （`int int = 5` 常量保护面）；meta.compile 属性调用（编译器访问面）；
+  内征引用 ⊄ rust_intrinsic_names（Rust 已实现内征集——print/len/range/
+  knowledge/vec + 异常构造器 + meta quote/eval；随移植批次自动扩展）；
+  对象身份内征（knowledge()/vec() 构造 = payload 物化契约——Rust 数据面
+  已证[2a-2c]，镜像物化 = 缺口批次）
+- 语料判定：34 语料 = 30 Rust 面 + 4 Python 面角（tuple_basic + 3 KB 源）
+
+**engine _execute_rust（core/engine.py）**：
+- 状态镜像双路径（声明家族驱动）：数据家族声明（int/float/str/bool/any/
+  list/dict/Optional）= define_variable（VM 权威 _check_type 同构——语义
+  错误集经同一检查面发射）；非数据家族 = materialize_variable（新增
+  runtime_context 公共 API——符号物化无检查，declared_type 内省保留）
+- declared_type 经 execution_context.resolve_type_from_symbol（符号 UID
+  面——与 Python VM 赋值路径同一权威源）
+- 容器特化身份绑定（_bind_container_specialization 助手——registry 面
+  递归复刻 leaf._bind_container_specialization：ib_class 重绑水化特化类 +
+  TypeRef 结构化 + 嵌套元素经 spec.element_type 递归；标量元素装箱形态
+  保持[解箱/回箱循环会破坏元素装箱身份——实测深克隆面回归修复]）
+- quoted 保真物化（declared quoted + 值串 → IbQuoted[source 全保真]）
+- 输出面同构（VM print 契约：callback 优先，无 callback = stdout 渲染点
+  ——子进程 CLI/main.py run silent 面同语义——ihost run_code 子源输出
+  丢失根因修复）
+- 错误边界：异常类名 → _RUST_ERROR_CODES 映射（ZeroDivisionError→
+  RUN_DIVISION_BY_ZERO / IndexError|KeyError→RUN_INDEX_ERROR /
+  AttributeError→RUN_ATTRIBUTE_ERROR / TypeError→RUN_TYPE_MISMATCH）；
+  RecursionError 边界 = KDIAG_RUNTIME_ENV_LIMIT 事件投影（diagnostics
+  kernel_diagnostic 同面）+ UserWarning + 根因原样传播；现场位置 = Rust
+  表达式 pos @line:col 后缀 → Location(file_path=模块源文件, line, column)
+
+**Rust 内核增量（ibci-ext）**：
+- 类型错误面（Python 契约实证移植）：str 混合运算 = TypeError（str+str
+  连接 / str*int 重复合法，含 int*str；其余 str 混合 = 错误）；关系运算
+  跨族 = TypeError（数值 vs str；==/!= 跨族 = 不相等非错误——cmp 跨族
+  修正[Str==Int 等从 0→2]）；is/is not = 同一性语义（None 同一性 + 数值
+  按值相等 + 非数值异对象恒 False）
+- None 相等性（None == None / None == 空 Optional 对称——cmp 前置臂）
+- 三引号串（lexer：三引号字面量多行内容保真含换行 + 三连引号闭合；
+  ext_ref 资产常量解析[反序列化器加载期就地替换——长/多行串内容寻址]）
+- str 方法全集移植（join/format/rfind/count/contains/is_empty/replace/
+  startswith/endswith + 既有 split/find/upper/lower/strip）
+- optional 方法面（unwrap/to_list/or_else/next——空值错误面 = AttributeError）
+- 空 Optional 错误面（len(空) / for 迭代空 = AttributeError）
+- 切片 step 面（slice_indices Python 切片语义[负索引归一 + 负 step 反向]；
+  str/list 同面）
+- AugAssign 运算符全面（*= / /= / //= / %= / **= 映射）
+- For 元组目标解包（`for (a, b) in [...]` 逐元素绑定——typed 目标同面）
+- Thrown.pos 管线（表达式级错误携带 pos → 边界消息 @line:col → engine
+  Location 构造）
+- 借用贯穿修复（Call 臂 env.borrow().get 的 Ref 贯穿调用体 → nonlocal
+  重入赋值 RefCell panic 根因——值克隆出借用语境）
+- 内征面 API（rust_intrinsic_names——路由判定单一真相源）
+
+**验证**：harness 50/50 + contracts/compiler 全绿 + 全量 pytest
+4307 passed / 4 failed（4 例 = PT-DEBT-38 登记缺口族：宿主 .call 桥函数
+值保真度 2 例 + Optional 实例同一性 2 例——面分区路由已隔离生产数据面）。
+**基线**：4307 passed / 4 failed / ~135s（⑦-1c 后）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）

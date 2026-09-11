@@ -810,6 +810,19 @@ class RuntimeContextImpl(RuntimeContext):
     def define_variable(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None, force: bool = False, is_intrinsic: bool = False) -> None:
         self._current_scope.define(name, value, declared_type, is_const, uid=uid, force=force, is_intrinsic=is_intrinsic)
 
+    def materialize_variable(self, name: str, value: Any, declared_type: Any = None, uid: Optional[str] = None) -> None:
+        """符号直接物化（⑦ 状态镜像面）：写入当前作用域符号表，不触发
+        运行时类型检查（检查语义归执行核心——Rust 执行真相 + 数据家族
+        镜像经 define_variable 检查路径；非数据值[显示形态串]无检查面）。
+        declared_type 保留（运行时内省契约）。"""
+        from core.runtime.objects.kernel import IbObject
+
+        boxed = value if isinstance(value, IbObject) else self._registry.box(value)
+        sym = RuntimeSymbolImpl(name, boxed, declared_type, is_const=False)
+        self._current_scope._symbols[name] = sym
+        if uid:
+            self._current_scope._uid_to_symbol[uid] = sym
+
     def define_variable_at_global(self, name: str, value: Any, declared_type: Any = None, is_const: bool = False, uid: Optional[str] = None) -> None:
         """在全局作用域中定义变量（用于 global 语句创建新全局变量）。"""
         self._global_scope.define(name, value, declared_type, is_const, uid=uid)
