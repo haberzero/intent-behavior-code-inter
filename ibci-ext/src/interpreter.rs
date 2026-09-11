@@ -2875,8 +2875,9 @@ impl Interpreter {
             };
         }
         // to_list（Optional 容器解包——值面直返；Python Optional 包装
-        // 解包同语义：有值 = 值本身，空值 = 错误）
-        if method == "to_list" {
+        // 解包同语义：有值 = 值本身，空值 = 错误）。Tensor 有自身 to_list
+        // （列表转换面——编排网关数据穿越），特例跳过（走值类型方法分派）。
+        if method == "to_list" && !matches!(obj, IbValue::Tensor(_)) {
             return match obj {
                 IbValue::None_ => Err(runtime_error(ErrorKind::AttributeError,
                     "to_list on empty optional",
@@ -2943,7 +2944,7 @@ impl Interpreter {
             // 结果转换（Python 对象 → Rust IbValue）
             Ok(from_py(py, &res))
         })
-        .map_err(|e| runtime_error(ErrorKind::AttributeError, &e.to_string()))
+        .map_err(host_pyerr_to_thrown)
     }
 
     /// 调宿主函数对象（如 from meta import quote 的 quote）——委托 Python 调用。
@@ -2958,8 +2959,46 @@ impl Interpreter {
             let res = obj.call(tuple, None)?;
             Ok(from_py(py, &res))
         })
-        .map_err(|e| runtime_error(ErrorKind::AttributeError, &e.to_string()))
+        .map_err(host_pyerr_to_thrown)
     }
+}
+
+/// 宿主异常 → Thrown（P3 typed 错误贯通——D2-②）：提取宿主
+/// InterpreterError 的 error_code + location[line/col]；无结构化字段 =
+/// 通用 AttributeError（显式，非吞错）。
+fn host_pyerr_to_thrown(e: PyErr) -> Thrown {
+    Python::with_gil(|py| {
+        let obj = e.value(py);
+        let code: Option<String> = obj
+            .getattr("error_code")
+            .ok()
+            .and_then(|c| c.extract::<String>().ok());
+        let class = obj
+            .getattr("error_class")
+            .ok()
+            .and_then(|c| c.extract::<String>().ok())
+            .unwrap_or_else(|| "AttributeError".to_string());
+        let (line, col): (Option<i64>, Option<i64>) = match obj.getattr("location") {
+            Ok(loc) => (
+                loc.getattr("line").ok().and_then(|l| l.extract::<i64>().ok()),
+                loc.getattr("column").ok().and_then(|c| c.extract::<i64>().ok()),
+            ),
+            Err(_) => (None, None),
+        };
+        let message = match obj.getattr("detail") {
+            Ok(d) => d.extract::<String>().ok().unwrap_or_default(),
+            Err(_) => e.to_string(),
+        };
+        let pos = match (line, col) {
+            (Some(l), Some(c)) => Some((l, c)),
+            _ => None,
+        };
+        Thrown {
+            value: IbValue::Error { class, message },
+            pos,
+            code,
+        }
+    })
 }
 
 /// Rust IbValue → Python 对象（host service 桥接参数转换）。
