@@ -370,12 +370,24 @@ fn intrinsic_vec(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) 
                 match x {
                     IbValue::Int(i) => elems.push(*i as f64),
                     IbValue::Float(f) => elems.push(*f),
-                    _ => return Ok(IbValue::None_),
+                    // GAP-vec-failfast（打破清单 #6 清零）：非数值元素 = 显式
+                    // 错误[EMB_INVALID_INPUT——语义层单一权威码]，旧 = 静默 None_
+                    _ => {
+                        return Err(runtime_error_coded(
+                            ErrorKind::TypeError,
+                            "vec() elements must be numeric",
+                            Some("EMB_INVALID_INPUT"),
+                        ))
+                    }
                 }
             }
             Ok(IbValue::Tensor(TensorValue::from_1d(elems)))
         }
-        _ => Ok(IbValue::None_),
+        _ => Err(runtime_error_coded(
+            ErrorKind::TypeError,
+            "vec() requires a list argument",
+            Some("EMB_INVALID_INPUT"),
+        )),
     }
 }
 
@@ -891,6 +903,9 @@ pub struct Thrown {
     /// 错误现场位置（源 line/col——engine 边界构造诊断位置；
     /// 表达式级错误[类型/下标/递归]携带其表达式 pos）
     pub pos: Option<(i64, i64)>,
+    /// 语义诊断码（EMB_/KNW_ 等——语义层契约码；None = engine 经
+    /// error_code_for_class 派生 RUN_*）。跨边界经 RustRuntimeError.code。
+    pub code: Option<String>,
 }
 
 /// 运行时错误种类（R2-4 typed 错误类——消除 stringly-typed 错误类名；
@@ -928,13 +943,20 @@ impl ErrorKind {
 /// 运行时环境错误（typed ErrorKind——engine 边界经 class_name() 映射诊断码：
 /// ZeroDivisionError→RUN_DIVISION_BY_ZERO / IndexError|KeyError→
 /// RUN_INDEX_ERROR / AttributeError→RUN_ATTRIBUTE_ERROR）。
-fn runtime_error(kind: ErrorKind, message: &str) -> Thrown {
+pub(crate) fn runtime_error(kind: ErrorKind, message: &str) -> Thrown {
+    runtime_error_coded(kind, message, None::<&str>)
+}
+
+/// 运行时环境错误 + 语义诊断码（EMB_/KNW_ 等契约码——语义层单一权威码直接
+/// 承载，不经 class_name 派生；engine 边界优先取 code）。
+pub(crate) fn runtime_error_coded(kind: ErrorKind, message: &str, code: Option<&str>) -> Thrown {
     Thrown {
         value: IbValue::Error {
             class: kind.class_name().to_string(),
             message: message.to_string(),
         },
         pos: None,
+        code: code.map(|c| c.to_string()),
     }
 }
 
@@ -1429,7 +1451,7 @@ impl Interpreter {
                     Some(e) => self.eval_expr(env, e, output)?,
                     None => IbValue::None_,
                 };
-                return Err(Thrown { value, pos: None });
+                return Err(Thrown { value, pos: None, code: None });
             }
             // switch：匹配后自动跳出（无 fall-through）；case 内 break = no-op
             // （C 习惯，接受为退出 case）；Return 透传、Continue 透传外层循环
@@ -1510,7 +1532,7 @@ impl Interpreter {
                             Ok(sig) => return Ok(sig), // finally signal 覆盖
                             Err(t2) => return Err(t2),
                         }
-                        return Err(Thrown { value: exc_value, pos: None });
+                        return Err(Thrown { value: exc_value, pos: None, code: None });
                     }
                     // 已处理 = 异常消解（不 re-raise）
                     raised = None;
@@ -1608,6 +1630,7 @@ impl Interpreter {
                     .map_err(|t| Thrown {
                         pos: Some((pos.lineno, pos.col_offset)),
                         value: t.value,
+                        code: t.code,
                     })?
             }
             Expr::UnaryOp { op, operand, .. } => {
@@ -1656,6 +1679,7 @@ impl Interpreter {
                         .map_err(|t| Thrown {
                             pos: Some((pos.lineno, pos.col_offset)),
                             value: t.value,
+                            code: t.code,
                         })?;
                     if !cv.truthy() {
                         result = false;
@@ -2123,7 +2147,7 @@ impl Interpreter {
         }
         Ok(match obj {
             // Rust 原生 KB 值——方法面经 kb::dispatch（治理门 + 确定性序）
-            IbValue::Knowledge(kb) => crate::kb::dispatch(kb, method, &args),
+            IbValue::Knowledge(kb) => crate::kb::dispatch(kb, method, &args)?,
             // tensor 值——统一批量数值形态（vector = 1D tensor；R5-1 值模型
             // 统一）。方法面：shape/ndim/dtype 通用 + dim[1D]/norm[1D]/
             // dot[1D]/cosine[1D] 向量语义 + scale/add/sub 元素级泛化（任意
@@ -2791,6 +2815,7 @@ pub fn run_artifact(
                 class: "ArtifactDeserializeError".to_string(),
                 detail: "artifact 反序列化失败（非良构输入）".to_string(),
                 pos: None,
+                code: None,
             })
         }
     };

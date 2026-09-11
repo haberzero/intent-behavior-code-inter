@@ -494,9 +494,11 @@ VISION 条目模板（仅保留规划价值字段）：
   直调）；② 双码族：Rust ErrorKind→runtime_error_map→RUN_*（ValueError 未映射
   →RUN_GENERIC_ERROR）vs Python 语义码 EMB_/KNW_（axioms）——行为层错误断言
   目前 = Python 码（内核相关）。
-- **关闭方案（⑦ 终点/内核收尾）**：① Rust 错误面扩展承载 EMB_/KNW_ 语义码
-  （runtime_error_map 增映射 + ValueError 补映射）→ kb.rs/intrinsic_vec fail-
-  fast（打破清单 #6 清零）→ 角移除（源路由 Rust）；② 双码族统一 = ⑦ 终点裁决
-  （语义码并入 Rust 错误面 或 RUN_* 单一权威化）。
-- **影响**：C2/C5 行为测试（EMB_/KNW_ 断言）= 契约文档（Python 验证），⑦ 终点
-  角移除后 Rust 验证；test_world_model_kb 迁移前置 = 本项或 Python 验证迁移。
+- **进度（2026-09-11）**：① 已落地——Thrown.code 通道 + runtime_error_coded +
+  intrinsic_vec fail-fast[EMB_INVALID_INPUT] + kb.rs 分派 Result 化（治理门
+  KNW_ 码 + 未知方法 AttributeError）——divergence gap-kb-governance-error-face
+  CLOSED；② 双码族统一（runtime_error_map 增 ValueError 映射 + 语义码并入）
+  = ⑦ 终点裁决；③ 角移除（kb_vec_payload_materialization）= ⑦ 终点（Rust KB
+  store/get 面移植后——行为测试现 Python 验证，角移除后 Rust 验证）。
+- **影响**：test_world_model_kb 迁移前置已解（Rust kb.rs 治理门与 Python 对齐
+  ——可迁移；行为测试 Python 验证契约，⑦ 终点角移除后 Rust 验证）。

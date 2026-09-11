@@ -671,6 +671,7 @@ fn call_top_level_function(
                         class: "ArtifactDeserializeError".to_string(),
                         detail: "artifact 反序列化失败".to_string(),
                         pos: None,
+            code: None,
                     })
                 }
             };
@@ -685,6 +686,7 @@ fn call_top_level_function(
                             class: "TypeError".to_string(),
                             detail: "args 须为 JSON 数组".to_string(),
                             pos: None,
+            code: None,
                         })
                     }
                     Err(_) => Vec::new(),
@@ -778,6 +780,7 @@ fn run_artifact_state(
                         class: "ArtifactDeserializeError".to_string(),
                         detail: "artifact 反序列化失败（非良构输入）".to_string(),
                         pos: None,
+            code: None,
                     })
                 }
             };

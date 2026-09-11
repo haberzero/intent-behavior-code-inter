@@ -85,11 +85,13 @@ REGISTERED: List[DeclaredState] = [
         plane=DATA_PLANE,
         scope="case:kb_governance_error",
         rationale=(
-            "Rust kb.rs 治理门失败（词表未注册/重复登记/参数形态错误）静默 None_，"
-            "Python 参考 = InterpreterError[KNW_ 码]（core/runtime/objects/primitives/"
-            "knowledge.py 实证）。生产不可见：KB 源按能力角路由 Python（kb_vec_payload_"
-            "materialization），Rust kb.rs 仅 diff harness 直接调用且无错误探针。"
-            "修复 = 扩展错误契约承载 KNW_ 码（值模型/错误面后续）。"
+            "已关闭（2026-09-11 GAP-vec-kb-failfast）：kb.rs 分派改 Result + "
+            "Thrown.code 承载 KNW_ 语义码——治理门失败（重复登记 KNW_VOCAB_EXISTS / "
+            "参数形态 KNW_VOCAB_MALFORMED / 未注册引用 KNW_VOCAB_UNREGISTERED / "
+            "重复事实 KNW_FACT_DUPLICATE）显式错误，未知方法 AttributeError（旧 "
+            "catch-all 静默 None_ 清零）。与 Python 参考对齐（打破清单 #6）。"
+            "注：kb_vec_payload_materialization 角仍路由 KB 源送 Python——Rust "
+            "kb.rs 仅 diff harness 直调；角移除 = ⑦ 终点（store/get 面移植后）。"
         ),
     ),
     DeclaredState(

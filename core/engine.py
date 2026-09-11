@@ -600,11 +600,12 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                         UserWarning,
                     )
                     raise _exc from e
-                # 运行时环境错误边界：诊断码 = 单一权威 error_code_for_class
-                # （结构化 error_class 字段直接判定，零正则）
+                # 运行时环境错误边界：诊断码优先取 RustRuntimeError.code（语义层
+                # 契约码 EMB_/KNW_ 等——内核直接承载），无则经单一权威
+                # error_code_for_class 派生（结构化 error_class 字段直接判定，零正则）
                 from core.base.diagnostics.runtime_error_map import error_code_for_class
 
-                code = error_code_for_class(e.error_class)
+                code = e.code if e.code is not None else error_code_for_class(e.error_class)
                 if code is not None:
                     location = None
                     if e.line is not None and e.column is not None:

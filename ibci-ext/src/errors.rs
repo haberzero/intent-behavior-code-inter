@@ -68,6 +68,8 @@ pub(crate) struct ErrorPayload {
     pub class: String,
     pub detail: String,
     pub pos: Option<(i64, i64)>,
+    /// 语义诊断码（EMB_/KNW_ 等——Thrown.code 承载；None = engine 派生 RUN_*）。
+    pub code: Option<String>,
 }
 
 impl ErrorPayload {
@@ -80,6 +82,7 @@ impl ErrorPayload {
             class,
             detail,
             pos: t.pos,
+            code: t.code,
         }
     }
 
@@ -97,7 +100,7 @@ impl ErrorPayload {
         PyErr::new::<RustRuntimeError, _>((
             message,
             self.class.clone(),
-            None::<String>,
+            self.code.clone(),
             line,
             column,
             Some(self.detail.clone()),
