@@ -2382,8 +2382,13 @@ fn assign_subscript(base: &IbValue, key: &IbValue, val: IbValue) {
 use crate::deserializer::deserialize_module;
 
 /// artifact JSON → 执行 → 数据面（print 输出列表）。bridge = host service 桥接
-///（KB 操作经此委托；None = 无宿主服务，非 KB 语料面）。
-pub fn run_artifact(artifact_json: &str, bridge: Option<Py<PyAny>>) -> Result<Vec<String>, String> {
+/// （KB 操作经此委托；None = 无宿主服务，非 KB 语料面）。
+/// 错误 = 类型化载荷（crate::errors::ErrorPayload——Send 安全，跨 allow_threads
+/// 边界；GIL 侧转 RustRuntimeError 结构化异常，P3 协议）。
+pub fn run_artifact(
+    artifact_json: &str,
+    bridge: Option<Py<PyAny>>,
+) -> Result<Vec<String>, crate::errors::ErrorPayload> {
     let module = match deserialize_module(artifact_json) {
         Some(m) => m,
         None => return Ok(Vec::new()),
@@ -2392,17 +2397,5 @@ pub fn run_artifact(artifact_json: &str, bridge: Option<Py<PyAny>>) -> Result<Ve
         Some(b) => Interpreter::with_bridge(b),
         None => Interpreter::new(),
     };
-    // 未捕获异常 = 执行错误（消息面——跨线程边界 Send 约束：Thrown 含 Rc 非
-    // Send，于模块边界降级为消息）
-    interp.run_module(&module).map_err(|t| {
-        match t.pos {
-            Some((line, col)) => format!(
-                "IBCI: uncaught exception: {}@{}:{}",
-                t.value.repr(),
-                line,
-                col
-            ),
-            None => format!("IBCI: uncaught exception: {}", t.value.repr()),
-        }
-    })
+    interp.run_module(&module).map_err(crate::errors::ErrorPayload::from_thrown)
 }

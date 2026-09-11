@@ -502,7 +502,8 @@ class TestRustExecutionDataPlane:
             py = run_ibci(code)
             rs = rust_execution_data_plane(code)  # 无桥接——原生异常传播
             assert rs == py, f"异常面探针数据面差分不等价：\n  py : {py}\n  rust: {rs}"
-        # 未捕获异常 = 执行错误（双侧报错——Rust 经模块边界降级为消息）
+        # 未捕获异常 = 执行错误（双侧报错——Rust 经类型化边界
+        # RustRuntimeError[P3 协议：结构化 error_class，非消息子串]）
         try:
             run_ibci("raise 5\n")
             raise AssertionError("未捕获异常：Python 参考无错（异常）")
@@ -514,7 +515,11 @@ class TestRustExecutionDataPlane:
         except AssertionError:
             raise
         except Exception as ex:
-            assert "uncaught exception" in str(ex)
+            from core.runtime.kernels import load_kernel
+            err_cls = getattr(load_kernel(), "RustRuntimeError", None)
+            assert err_cls is not None and isinstance(ex, err_cls), (
+                f"Rust 未捕获异常应为 RustRuntimeError（P3 类型化契约），got: {type(ex)}"
+            )
 
     def test_data_plane_declaration_extended_snippets(self):
         """数据面 + artifact 面差分等价：声明面剩余形态（自包含脚本——

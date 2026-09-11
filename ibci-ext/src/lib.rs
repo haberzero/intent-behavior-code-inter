@@ -17,6 +17,7 @@
 //! 后升 "ready" 生效）。
 
 mod deserializer;
+mod errors;
 mod interpreter;
 mod kb;
 mod intrinsic_symbols;
@@ -430,7 +431,7 @@ fn rust_run_source(
     });
     let lines = match result {
         Ok(l) => l,
-        Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+        Err(payload) => return Err(payload.to_pyerr()),
     };
     let list = PyList::empty(py);
     for line in lines {
@@ -491,7 +492,7 @@ fn run_artifact(
         .allow_threads(|| interpreter::run_artifact(&json_owned, bridge_owned))
     {
         Ok(l) => l,
-        Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+        Err(payload) => return Err(payload.to_pyerr()),
     };
     let list = PyList::empty(py);
     for line in lines {
@@ -620,20 +621,7 @@ fn open_session(
         .collect();
     let (output, env) = match interp.run_module_session(&module, &initial) {
         Ok(r) => r,
-        Err(t) => {
-            return Err(match t.pos {
-                Some((line, col)) => PyRuntimeError::new_err(format!(
-                    "IBCI: uncaught exception: {}@{}:{}",
-                    t.value.repr(),
-                    line,
-                    col
-                )),
-                None => PyRuntimeError::new_err(format!(
-                    "IBCI: uncaught exception: {}",
-                    t.value.repr()
-                )),
-            });
-        }
+        Err(t) => return Err(errors::thrown_to_pyerr(&t)),
     };
     // 状态导出（执行后顶层环境全条目）
     let state: Vec<(String, interpreter::IbValue)> = env.borrow().snapshot_vars();
@@ -687,20 +675,7 @@ fn session_call(
     let mut out: Vec<String> = Vec::new();
     let result = match interp.session_call(&session.env, name, args, &mut out) {
         Ok(r) => r,
-        Err(t) => {
-            return Err(match t.pos {
-                Some((line, col)) => PyRuntimeError::new_err(format!(
-                    "IBCI: uncaught exception: {}@{}:{}",
-                    t.value.repr(),
-                    line,
-                    col
-                )),
-                None => PyRuntimeError::new_err(format!(
-                    "IBCI: uncaught exception: {}",
-                    t.value.repr()
-                )),
-            });
-        }
+        Err(t) => return Err(errors::thrown_to_pyerr(&t)),
     };
     let result_json = interpreter::ibvalue_to_json(&result).to_string();
     let result_py: Py<PyAny> = pyo3::types::PyString::new(py, &result_json).into_py(py);
@@ -775,7 +750,7 @@ fn run_artifact_state(
     // GIL 释放：反序列化 + 执行 + 状态 → JSON（纯 CPU 面）
     let (lines, state_json): (Vec<String>, Vec<(String, serde_json::Value)>) =
         match py
-            .allow_threads(|| -> Result<(Vec<String>, Vec<(String, serde_json::Value)>), String> {
+            .allow_threads(|| -> Result<(Vec<String>, Vec<(String, serde_json::Value)>), errors::ErrorPayload> {
             let module = match deserializer::deserialize_module(&json_owned) {
                 Some(m) => m,
                 None => return Ok((Vec::new(), Vec::new())),
@@ -790,15 +765,7 @@ fn run_artifact_state(
                 .collect();
             let (output, state) = interp
                 .run_module_with_state(&module, &initial)
-                .map_err(|t| match t.pos {
-                    Some((line, col)) => format!(
-                        "IBCI: uncaught exception: {}@{}:{}",
-                        t.value.repr(),
-                        line,
-                        col
-                    ),
-                    None => format!("IBCI: uncaught exception: {}", t.value.repr()),
-                })?;
+                .map_err(errors::ErrorPayload::from_thrown)?;
             let state_json: Vec<(String, serde_json::Value)> = state
                 .into_iter()
                 .map(|(k, v)| (k, interpreter::ibvalue_to_json(&v)))
@@ -807,7 +774,7 @@ fn run_artifact_state(
             })
         {
             Ok(r) => r,
-            Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+            Err(payload) => return Err(payload.to_pyerr()),
         };
     // GIL 侧：组装返回（输出列表 + 状态 dict）
     let list = PyList::empty(py);
@@ -886,8 +853,8 @@ fn run_artifacts_parallel(
         .collect();
     // GIL-free 真并行：释放 GIL，Rust 线程各执行一批（纯 CPU 无宿主服务）。每线程
     // 返回 Vec<Vec<String>>（每 artifact 一个 print 输出列表）
-    let results: Result<Vec<Vec<String>>, String> = py.allow_threads(|| {
-        let handles: Vec<std::thread::JoinHandle<Result<Vec<Vec<String>>, String>>> =
+    let results: Result<Vec<Vec<String>>, errors::ErrorPayload> = py.allow_threads(|| {
+        let handles: Vec<std::thread::JoinHandle<Result<Vec<Vec<String>>, errors::ErrorPayload>>> =
             chunks
                 .into_iter()
                 .map(|chunk| {
@@ -914,7 +881,7 @@ fn run_artifacts_parallel(
     // 组装结果：list of list（每项 = 一个 artifact 的 print 输出）
     let results = match results {
         Ok(r) => r,
-        Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+        Err(payload) => return Err(payload.to_pyerr()),
     };
     let list = PyList::empty(py);
     for artifact_results in results {
@@ -959,6 +926,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_artifact, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifacts_parallel, m)?)?;
     m.add_function(wrap_pyfunction!(run, m)?)?;
+    m.add_class::<errors::RustRuntimeError>()?;
     m.add_class::<task_pool::TaskPool>()?;
     Ok(())
 }

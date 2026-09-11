@@ -12,7 +12,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List, Tuple, Callable
 
-import re as _re
 from pathlib import Path
 
 # =============================================================================
@@ -89,15 +88,9 @@ class EngineTestSnapshot:
     spawned_handles: List[str] = field(default_factory=list)
 
 
-# Rust 运行时环境错误类名 → 诊断码映射（与 Python 运行时同一契约面：
-# core.runtime.objects.kernel.functions 异常类型→码映射的数据面投影）。
-_RUST_ERROR_CODES = {
-    "ZeroDivisionError": "RUN_DIVISION_BY_ZERO",
-    "IndexError": "RUN_INDEX_ERROR",
-    "KeyError": "RUN_INDEX_ERROR",
-    "AttributeError": "RUN_ATTRIBUTE_ERROR",
-    "TypeError": "RUN_TYPE_MISMATCH",
-}
+# Rust 运行时环境错误类名 → 诊断码映射已收敛至单一权威：
+# core.base.diagnostics.runtime_error_map.error_code_for_class（functions.py 与 engine 边界
+# 同源委托——消除 Python/Rust 双真相映射表）。
 
 
 class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
@@ -661,58 +654,59 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 artifact_json, variables if variables else None
             )
         except RuntimeError as e:
-            # 环境限制异常边界转换（Rust 递归深度守卫 → Python
-            # RecursionError 根因原样传播 + KDIAG 警告不门控投影——
-            # Python VM 契约同面：深递归触底 = RecursionError 本身）
-            if "RecursionError" in str(e):
-                # 环境限制异常边界（VM 同面：KDIAG_RUNTIME_ENV_LIMIT 事件
-                # 投影 + 警告不门控 + 根因原样传播）
-                import core.runtime.observability.diagnostics as _diag
+            # RustRuntimeError = 类型化错误契约（P3：error_class/code/line/
+            # column/detail 结构化字段——替代旧"uncaught exception"消息子串 +
+            # 正则回拆 + _RUST_ERROR_CODES 双真相映射）
+            err_cls = getattr(kernel, "RustRuntimeError", None)
+            if err_cls is not None and isinstance(e, err_cls):
+                # 环境限制异常边界（类名结构化判定——删字符串 contains）：
+                # Rust 递归深度守卫 → RecursionError 根因原样传播 + KDIAG
+                # 警告不门控投影——Python VM 契约同面
+                if e.error_class == "RecursionError":
+                    import core.runtime.observability.diagnostics as _diag
 
-                _exc = RecursionError(str(e))
-                _rc = None
-                if (
-                    self.interpreter is not None
-                    and self.interpreter.execution_context is not None
-                ):
-                    _rc = self.interpreter.execution_context.runtime_context
-                _diag.kernel_diagnostic(
-                    "KDIAG_RUNTIME_ENV_LIMIT",
-                    {"exc_type": "RecursionError", "message": str(e)},
-                    message="环境限制异常 RecursionError: 非语义错误，保留根因传播",
-                    rc=_rc,
-                )
-                warnings.warn(
-                    "环境限制异常 RecursionError（Rust 内核递归深度超限）",
-                    UserWarning,
-                )
-                raise _exc from e
-            # 运行时环境错误边界映射（Rust 异常类名 → 诊断码——与 Python
-            # 运行时同一契约面：functions.py 异常类型→码映射；数据面源
-            # 执行错误 = 显式诊断码，非静默）
-            m = _re.search(r"uncaught exception: (\w+)", str(e))
-            if m and m.group(1) in _RUST_ERROR_CODES:
-                detail = str(e).split(m.group(1) + ":", 1)[-1].strip()
-                # 错误现场位置（Rust 表达式 pos @line:col 后缀——engine 边界
-                # 构造诊断位置；file_path = 模块源文件[合成 entry 同形]）
-                location = None
-                pos_m = _re.search(r"@([0-9]+):([0-9]+)$", detail)
-                if pos_m:
-                    from core.base.source_atomic import Location
+                    _exc = RecursionError(str(e))
+                    _rc = None
+                    if (
+                        self.interpreter is not None
+                        and self.interpreter.execution_context is not None
+                    ):
+                        _rc = self.interpreter.execution_context.runtime_context
+                    _diag.kernel_diagnostic(
+                        "KDIAG_RUNTIME_ENV_LIMIT",
+                        {"exc_type": "RecursionError", "message": str(e)},
+                        message="环境限制异常 RecursionError: 非语义错误，保留根因传播",
+                        rc=_rc,
+                    )
+                    warnings.warn(
+                        "环境限制异常 RecursionError（Rust 内核递归深度超限）",
+                        UserWarning,
+                    )
+                    raise _exc from e
+                # 运行时环境错误边界：诊断码 = 单一权威 error_code_for_class
+                # （结构化 error_class 字段直接判定，零正则）
+                from core.base.diagnostics.runtime_error_map import error_code_for_class
 
-                    detail = detail[: pos_m.start()].strip()
-                    file_path = Path(self.root_dir) / (
-                        f"{artifact_dict['entry_module']}.ibci"
+                code = error_code_for_class(e.error_class)
+                if code is not None:
+                    location = None
+                    if e.line is not None and e.column is not None:
+                        from core.base.source_atomic import Location
+
+                        file_path = Path(self.root_dir) / (
+                            f"{artifact_dict['entry_module']}.ibci"
+                        )
+                        location = Location(
+                            file_path=str(file_path),
+                            line=e.line,
+                            column=e.column,
+                        )
+                    message = (
+                        e.error_class if not e.detail else f"{e.error_class}: {e.detail}"
                     )
-                    location = Location(
-                        file_path=str(file_path),
-                        line=int(pos_m.group(1)),
-                        column=int(pos_m.group(2)),
-                    )
-                message = m.group(1) if not detail else f"{m.group(1)}: {detail}"
-                raise InterpreterError(
-                    message, location=location, error_code=_RUST_ERROR_CODES[m.group(1)]
-                ) from e
+                    raise InterpreterError(
+                        message, location=location, error_code=code
+                    ) from e
             raise
         # 输出投递（VM 同面：有 callback → callback；无 = stdout 渲染点）
         if output_callback is not None:

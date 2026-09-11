@@ -14,7 +14,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use pyo3::prelude::*;
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::PyList;
 
 use crate::interpreter;
@@ -78,8 +77,8 @@ impl TaskPool {
             .filter(|c| !c.is_empty())
             .collect();
         // GIL-free 真并行：释放 GIL，Rust 线程各执行一批（纯 CPU 无宿主服务）
-        let results: Result<Vec<(u64, Vec<String>)>, String> = py.allow_threads(|| {
-            let handles: Vec<std::thread::JoinHandle<Result<Vec<(u64, Vec<String>)>, String>>> =
+        let results: Result<Vec<(u64, Vec<String>)>, crate::errors::ErrorPayload> = py.allow_threads(|| {
+            let handles: Vec<std::thread::JoinHandle<Result<Vec<(u64, Vec<String>)>, crate::errors::ErrorPayload>>> =
                 chunks
                     .into_iter()
                     .map(|chunk| {
@@ -107,7 +106,7 @@ impl TaskPool {
         // 组装结果：list of [task_id, result_list]（每项 = 一个任务的 print 输出）
         let results = match results {
             Ok(r) => r,
-            Err(msg) => return Err(PyRuntimeError::new_err(msg)),
+            Err(payload) => return Err(payload.to_pyerr()),
         };
         let list = PyList::empty(py);
         for (id, result) in results {

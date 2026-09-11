@@ -1,12 +1,5 @@
 from typing import Callable, Optional, List, Any
 
-from core.base.diagnostics.codes import (
-    RUN_ATTRIBUTE_ERROR,
-    RUN_DIVISION_BY_ZERO,
-    RUN_INDEX_ERROR,
-    RUN_PERMISSION_ERROR,
-    RUN_TYPE_MISMATCH,
-)
 from core.base.enums import RegistrationState
 from core.kernel.issue import InterpreterError
 from core.kernel.spec import IbSpec
@@ -19,24 +12,23 @@ def _runtime_error_code_for(exc: Exception) -> Optional[str]:
     """原生函数边界异常 → 运行时诊断码（幽灵码发射：类型/除零/越界/属性/权限）。
 
     原生 Python 异常（TypeError / ZeroDivisionError / IndexError / KeyError /
-    AttributeError / PermissionError）经此映射为具体诊断码，替代裸
-    ``RUN_GENERIC_ERROR``。无法归类的异常返回 None（回落默认 RUN_GENERIC_ERROR）。
+    AttributeError / PermissionError）经**单一权威映射**（runtime_error_map.error_code_for_class
+    ——Python VM 边界与 Rust 内核边界共同委托，消除双真相映射表）转为具体
+    诊断码，替代裸 ``RUN_GENERIC_ERROR``。无法归类的异常返回 None（回落默认
+    RUN_GENERIC_ERROR）。
     """
     # 显式携带诊断码的异常（code 属性 = 失败语义单点权威源，如 embedding
     # 契约/检索异常携带 EMB_ 域码）原码透传——显式码优先于类型猜测
     code = getattr(exc, "code", None)
     if isinstance(code, str):
         return code
-    if isinstance(exc, TypeError):
-        return RUN_TYPE_MISMATCH
-    if isinstance(exc, ZeroDivisionError):
-        return RUN_DIVISION_BY_ZERO
-    if isinstance(exc, (IndexError, KeyError)):
-        return RUN_INDEX_ERROR
-    if isinstance(exc, AttributeError):
-        return RUN_ATTRIBUTE_ERROR
-    if isinstance(exc, PermissionError):
-        return RUN_PERMISSION_ERROR
+    # MRO 逐类名查单一权威映射（isinstance 语义：子类名先命中）
+    from core.base.diagnostics.runtime_error_map import error_code_for_class
+
+    for cls in type(exc).__mro__:
+        mapped = error_code_for_class(cls.__name__)
+        if mapped is not None:
+            return mapped
     return None
 
 
