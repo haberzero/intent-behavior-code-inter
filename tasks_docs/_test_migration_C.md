@@ -22,7 +22,7 @@
 | test_generic_value_identity.py | 值身份/特化 + deep_clone 内部 | 契约（序列化往返）+ 内部 | 保留（契约层）；deep_clone 内部断言 → 后续重构（阶段 C 续） |
 | test_optional_value_model.py | Optional 值语义（is_none/unwrap/identity/包装） | 行为 | ✅ 迁移 tests/behavior/test_optional_behavior.py（28 断言）；**打破清单 #2 落地**：空 Optional = None 值语义统一（`a is b`=True——原 Python 包装实例身份废弃，optional_instance_identity 角移除，Rust 权威化）——白盒文件删除 |
 | test_vector_type.py | vector 值语义/方法面 | 行为 | ✅ 迁移 tests/behavior/test_vector_behavior.py（18 可观察断言：值语义/构造封死/dim 不一致/dict 键/数学性质[精确值钉语义]；round-trip = Rust artifact 契约面；parity = 契约层 embedding_protocol）——白盒文件删除 |
-| test_world_model_kb.py | KB 世界模型（治理/事实/查询） | 行为 | 保留并迁移行为层（KB 语义） |
+| test_world_model_kb.py | KB 世界模型（治理/事实/查询） | 行为 | 迁移前置 = GAP-vec-kb-failfast（Rust kb.rs 治理门静默 None_ vs Python KNW_ 码；行为测试现 = Python 验证契约，⑦ 终点角移除后 Rust 验证） |
 | test_knowledge_type.py | KB 类型（store/快照/amend 门） | 行为/宿主 | ✅ 迁移 tests/behavior/test_knowledge_store_behavior.py（15 断言：store/get/快照隔离/keys/审计链/验证门[诊断码+定位]/check 纯度[编译诊断码]）+ tests/host/test_knowledge_state.py（2 断言：ihost 状态往返）；2 序列化 round-trip = ⑦ 路径删除+契约登记（Rust artifact 契约面）——白盒文件删除 |
 | test_knowledge_to_ibci.py | KB → IBCI 投影（P7 to_ibci） | ⑦ 路径 | ✅ 删除 + 契约登记：to_ibci = Python 参考 KB 功能（Rust kb.rs 无此分派——角路由送 Python；行为层须内核无关，非本层材料）；投影语义 = PENDING（⑦ 终点裁决：移植 Rust kb.rs 或退役） |
 | test_narrow_model_type.py | narrow_model 工件（score/topk，P5） | 宿主 | 保留并迁移宿主层（Rust 无 narrow_model 值变体——Python 宿主功能[world_model.bind_artifact]；迁移 = bind_artifact 语言路径 + artifact JSON 夹具[content_hash 正确计算]） |
