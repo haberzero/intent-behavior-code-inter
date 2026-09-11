@@ -2173,8 +2173,9 @@ impl Interpreter {
                     }
                     if let Some(mod_host) = self.get_host_module(module) {
                         if let IbValue::Host(h) = &mod_host {
-                            let val = self.get_host_attribute(h, &src);
-                            env.borrow_mut().set(&binding, val);
+                            if let Ok(val) = self.get_host_attribute(h, &src) {
+                                env.borrow_mut().set(&binding, val);
+                            }
                         }
                     }
                 }
@@ -2301,18 +2302,18 @@ impl Interpreter {
 
     /// 宿主对象属性访问（如 q.source）——委托桥接 host_getattr（IBC 宿主值类型
     /// 经运行时属性分发，非纯 getattr）。
-    fn get_host_attribute(&self, pyobj: &Py<PyAny>, attr: &str) -> IbValue {
-        let bridge = match &self.bridge {
-            Some(b) => b,
-            None => return IbValue::None_,
-        };
+    /// 宿主属性访问（D2 桥接面——错误显式传播[旧 unwrap_or 吞错 = 静默]）。
+    fn get_host_attribute(&self, pyobj: &Py<PyAny>, attr: &str) -> Result<IbValue, Thrown> {
+        let bridge = self.bridge.as_ref().ok_or_else(|| {
+            runtime_error(ErrorKind::AttributeError, "no host bridge")
+        })?;
         Python::with_gil(|py| -> PyResult<IbValue> {
             let b = bridge.bind(py);
             let obj_ref = pyobj.bind(py);
             let res = b.call_method("host_getattr", (obj_ref, attr), None)?;
             Ok(from_py(py, &res))
         })
-        .unwrap_or(IbValue::None_)
+        .map_err(host_pyerr_to_thrown)
     }
 
     /// 经 host service 桥接取宿主模块（如 meta）——None = 未知模块。
@@ -2537,8 +2538,8 @@ impl Interpreter {
                     IbValue::Quoted { ref source } if attr == "source" => {
                         IbValue::Str(source.clone())
                     }
-                    // 宿主对象属性访问——委托 Python
-                    IbValue::Host(h) => self.get_host_attribute(&h, attr),
+                    // 宿主对象属性访问——委托 Python（错误显式传播）
+                    IbValue::Host(h) => self.get_host_attribute(&h, attr)?,
                     other => other,
                 }
             }
