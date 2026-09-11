@@ -2466,7 +2466,7 @@ impl Interpreter {
                             }
                             // 函数为宿主对象 → 调宿主函数
                             Some(IbValue::Host(h)) => {
-                                self.call_host_function(&h, arg_vals)
+                                self.call_host_function(&h, arg_vals)?
                             }
                             _ => {
                                 // 内征/用户函数调用错误现场 = 调用表达式位置
@@ -2916,7 +2916,7 @@ impl Interpreter {
             // tuple = 冻结列表（仅 len/index/count——无修改面 AttributeError）
             IbValue::Tuple(_) => dispatch_method(TUPLE_METHODS, obj, method, &args)?,
             // 宿主对象——委托 Python 对象方法（host service 桥接）
-            IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args),
+            IbValue::Host(pyobj) => self.call_host_method(pyobj, method, args)?,
             IbValue::List(_) => dispatch_method(LIST_METHODS, obj, method, &args)?,
             IbValue::Dict(_) => dispatch_method(DICT_METHODS, obj, method, &args)?,
             IbValue::Str(_) => dispatch_method(STR_METHODS, obj, method, &args)?,
@@ -2929,21 +2929,28 @@ impl Interpreter {
     }
 
     /// 宿主对象方法委托（KB 服务——经 host service 桥接调 Python 对象方法）。
-    fn call_host_method(&self, pyobj: &Py<PyAny>, method: &str, args: Vec<IbValue>) -> IbValue {
+    /// 宿主方法调用（D2 桥接面）：经 bridge.host_call 分派（模块懒 setup +
+    /// 对象系统 receive/裸属性 + 显式错误传播[旧 unwrap_or 吞错 = 静默]）。
+    fn call_host_method(&self, pyobj: &Py<PyAny>, method: &str, args: Vec<IbValue>) -> Result<IbValue, Thrown> {
+        let bridge = self.bridge.as_ref().ok_or_else(|| {
+            runtime_error(ErrorKind::AttributeError, "no host bridge")
+        })?;
         Python::with_gil(|py| -> PyResult<IbValue> {
             let obj = pyobj.bind(py);
-            // 参数转换（Rust IbValue → Python 对象）
             let py_args: Vec<PyObject> = args.iter().map(|a| to_py(py, a)).collect();
             let tuple = PyTuple::new(py, &py_args)?;
-            let res = obj.call_method(method, tuple, None)?;
+            let res = bridge.bind(py).call_method1("host_call", (obj, method, tuple))?;
             // 结果转换（Python 对象 → Rust IbValue）
             Ok(from_py(py, &res))
         })
-        .unwrap_or(IbValue::None_)
+        .map_err(|e| runtime_error(ErrorKind::AttributeError, &e.to_string()))
     }
 
     /// 调宿主函数对象（如 from meta import quote 的 quote）——委托 Python 调用。
-    fn call_host_function(&self, pyobj: &Py<PyAny>, args: Vec<IbValue>) -> IbValue {
+    fn call_host_function(&self, pyobj: &Py<PyAny>, args: Vec<IbValue>) -> Result<IbValue, Thrown> {
+        let bridge = self.bridge.as_ref().ok_or_else(|| {
+            runtime_error(ErrorKind::AttributeError, "no host bridge")
+        })?;
         Python::with_gil(|py| -> PyResult<IbValue> {
             let obj = pyobj.bind(py);
             let py_args: Vec<PyObject> = args.iter().map(|a| to_py(py, a)).collect();
@@ -2951,7 +2958,7 @@ impl Interpreter {
             let res = obj.call(tuple, None)?;
             Ok(from_py(py, &res))
         })
-        .unwrap_or(IbValue::None_)
+        .map_err(|e| runtime_error(ErrorKind::AttributeError, &e.to_string()))
     }
 }
 

@@ -88,6 +88,7 @@ class RuntimeSchedulerImpl:
             get_current_module_callback=lambda: interpreter.current_module_name
         )
         sub_sc.set_host_service(host_service)
+        host_service.set_service_context(sub_sc)
 
         # 6. 注册实例
         self.instances[instance_id] = interpreter

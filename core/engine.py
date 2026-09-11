@@ -567,8 +567,13 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
         try:
             # 单一执行入口（D5）：run_artifact_state = 一次性执行 + typed 状态
             # 导出（P2）；函数值宿主 .call 经 RustHostCallable（P4，无会话通道）
+            # D2 桥接：bridge = HostService（宿主调用分派——模块懒 setup +
+            # 对象系统 receive + 显式错误传播）；无解释器装配时 = None
+            _bridge = None
+            if self.interpreter is not None and self.interpreter.service_context is not None:
+                _bridge = self.interpreter.service_context.host_service
             lines, state = kernel.run_artifact_state(
-                artifact_json, None, variables if variables else None
+                artifact_json, _bridge, variables if variables else None
             )
         except RuntimeError as e:
             # RustRuntimeError = 类型化错误契约（P3：error_class/code/line/

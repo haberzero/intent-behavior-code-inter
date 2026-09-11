@@ -47,8 +47,51 @@ class HostService(IHostService):
         self.execution_context = execution_context
         self.interop = interop
         self._orchestrator = None
+        self._service_context = None
         self.setup_context_callback = setup_context_callback
         self.get_current_module_callback = get_current_module_callback
+
+    def set_service_context(self, service_context) -> None:
+        """ServiceContext 注入（scheduler 装配期——host_call 懒 setup 用）。"""
+        self._service_context = service_context
+
+    def get_host_module(self, name: str):
+        """宿主模块解析（Rust 内核 import 桥接调用面——经 interop/host_interface
+        单一权威；返回 = 宿主模块对象[Python]）。"""
+        return self.interop.get_package(name)
+
+    def host_call(self, obj, method, args):
+        """宿主调用分派（Rust 内核桥接面——D2 关键路径）。
+
+        - 模块方法：懒 setup(capabilities) 保障（同 loader 装配协议——Rust
+          执行路径不触发 loader 装配，首次调用注入）+ 裸属性调用；
+        - 对象方法：裸属性（IbFileHandle.read 等直接方法）或 receive 分派；
+        - 错误 = 显式传播（旧 call_host_method unwrap_or 吞错——D2 清零）；
+        - 结果 = 原样返回（Rust from_py 消费：数据值 → typed；IbObject → Host）。
+        """
+        # 模块懒 setup（capabilities 注入——同 loader._setup_implementation）
+        if hasattr(obj, "setup") and not getattr(obj, "_ibci_host_call_setup", False):
+            from core.extension.capabilities import ExtensionCapabilities
+
+            caps = ExtensionCapabilities(
+                _registry=self.registry, _capability_registry=None
+            )
+            caps.service_context = self._service_context
+            caps.execution_context = self.execution_context
+            caps._plugin_id = type(obj).__name__
+            obj.setup(capabilities=caps)
+            setattr(obj, "_ibci_host_call_setup", True)
+        target = getattr(obj, method, None)
+        if target is None:
+            # 对象方法 receive 分派（vtable 面——裸属性缺失时）
+            if hasattr(obj, "receive"):
+                # 参数装箱（IBCI 值 → 对象系统）——标量经 registry.box
+                boxed = [self.registry.box(a) for a in args]
+                result = obj.receive(method, boxed)
+                return result
+            raise RuntimeError(f"host_call: {type(obj).__name__} 无方法 '{method}'")
+        result = target(*args)
+        return result
 
     @property
     def orchestrator(self) -> Optional[IKernelOrchestrator]:
