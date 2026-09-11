@@ -21,7 +21,7 @@
 | test_serialization.py | 序列化/artifact | 契约 | 保留（契约层归类） |
 | test_generic_value_identity.py | 值身份/特化 + deep_clone 内部 | 契约（序列化往返）+ 内部 | 保留（契约层）；deep_clone 内部断言 → 后续重构（阶段 C 续） |
 | test_optional_value_model.py | Optional 值语义（is_none/unwrap/identity/包装） | 行为 | 保留并迁移行为层（Optional 语言语义；identity 2 例 = 打破清单 #2 待重设计） |
-| test_vector_type.py | vector 值语义/方法面 | 行为 | 保留并迁移行为层 |
+| test_vector_type.py | vector 值语义/方法面 | 行为 | ✅ 迁移 tests/behavior/test_vector_behavior.py（18 可观察断言：值语义/构造封死/dim 不一致/dict 键/数学性质[精确值钉语义]；round-trip = Rust artifact 契约面；parity = 契约层 embedding_protocol）——白盒文件删除 |
 | test_world_model_kb.py | KB 世界模型（治理/事实/查询） | 行为 | 保留并迁移行为层（KB 语义） |
 | test_knowledge_type.py | KB 类型（store/快照/amend 门） | 行为 | 保留并迁移行为层 |
 | test_knowledge_to_ibci.py | KB → IBCI 投影（P7） | 行为 | 保留并迁移行为层（投影派生视图可观察面） |
@@ -32,7 +32,12 @@
 | test_thread_cleanup.py | 线程清理 | 宿主 | 保留（宿主层归类） |
 | test_quoted_type.py | quoted 值类型/序列化 | 行为/契约 | 保留（契约层 + 行为层引用） |
 
-## 二、R3-C1 执行切片（本批次）
+## 二、R3-C1/C2 执行切片
+
+- **R3-C1**：test_vm_run_many.py / test_execution_context.py 删除（契约承接）。
+- **R3-C2**：test_vector_type.py → 行为层迁移（18 断言，白盒删除）。
+
+### C1 切片（原记录）
 
 | 动作 | 文件 | 映射依据 |
 |------|------|---------|
