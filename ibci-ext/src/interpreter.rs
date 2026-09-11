@@ -245,20 +245,109 @@ impl IbValue {
     }
 }
 
-/// 异常类名集合（可构造异常对象的 intrinsic 类——CLASS_PARENTS 异常家族 +
-/// Exception 基类）。
-fn is_exception_class(name: &str) -> bool {
-    matches!(
-        name,
-        "Exception"
-            | "LLMError"
-            | "LLMCallError"
-            | "LLMParseError"
-            | "LLMRetryExhaustedError"
-            | "ThreadError"
-            | "ThreadCancelled"
-            | "ThreadFailed"
-    )
+/// 异常类名清单（可构造异常对象的 intrinsic 类——单一权威源：call_function
+/// 分发、capability intrinsic_names 派生同源；新增异常类 = 只改本清单，
+/// 杜绝"分发臂 vs 清单"双真相漂移）。
+pub const EXCEPTION_CLASSES: &[&str] = &[
+    "Exception",
+    "LLMError",
+    "LLMCallError",
+    "LLMParseError",
+    "LLMRetryExhaustedError",
+    "ThreadError",
+    "ThreadCancelled",
+    "ThreadFailed",
+];
+
+/// 内征分发表项签名（env 不参与——内征为纯函数面；用户函数走独立默认臂）。
+type IntrinsicFn = fn(
+    &Interpreter,
+    &[IbValue],
+    &mut Vec<String>,
+) -> Result<IbValue, Thrown>;
+
+fn intrinsic_print(_i: &Interpreter, args: &[IbValue], output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+    // 多参 = 空格连接（Python print 语义——数据面实证 print(a, b) = "a b"）
+    let parts: Vec<String> = args.iter().map(|a| a.repr()).collect();
+    output.push(parts.join(" ")); // 无参 = 空行（Python print() 语义）
+    Ok(IbValue::None_)
+}
+
+fn intrinsic_len(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+    match args.first() {
+        Some(IbValue::List(l)) => Ok(IbValue::Int(l.borrow().len() as i64)),
+        Some(IbValue::Str(s)) => Ok(IbValue::Int(s.len() as i64)),
+        Some(IbValue::Dict(d)) => Ok(IbValue::Int(d.borrow().len() as i64)),
+        // 空 Optional len = 属性错误（Python 契约：空包装无 len 面）
+        Some(IbValue::None_) => Err(runtime_error("AttributeError", "len on empty optional")),
+        _ => Ok(IbValue::Int(0)),
+    }
+}
+
+fn intrinsic_range(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+    let items: Vec<IbValue> = if args.len() == 1 {
+        let stop = match &args[0] {
+            IbValue::Int(i) => *i,
+            _ => 0,
+        };
+        (0..stop).map(IbValue::Int).collect()
+    } else if args.len() >= 2 {
+        let start = match &args[0] {
+            IbValue::Int(i) => *i,
+            _ => 0,
+        };
+        let stop = match &args[1] {
+            IbValue::Int(i) => *i,
+            _ => 0,
+        };
+        (start..stop).map(IbValue::Int).collect()
+    } else {
+        Vec::new()
+    };
+    Ok(IbValue::list_new(items))
+}
+
+fn intrinsic_knowledge(i: &Interpreter, _args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+    // KB 原生值（Rust kb::KbState 空白实例——方法面经 kb::dispatch）
+    Ok(i.call_knowledge())
+}
+
+fn intrinsic_vec(_i: &Interpreter, args: &[IbValue], _output: &mut Vec<String>) -> Result<IbValue, Thrown> {
+    // vector 值构造（元素面校验：数值元素，非数值 = None_[错误面]）
+    match args.first() {
+        Some(IbValue::List(items)) => {
+            let mut elems: Vec<f64> = Vec::new();
+            for x in items.borrow().iter() {
+                match x {
+                    IbValue::Int(i) => elems.push(*i as f64),
+                    IbValue::Float(f) => elems.push(*f),
+                    _ => return Ok(IbValue::None_),
+                }
+            }
+            Ok(IbValue::Vector(elems))
+        }
+        _ => Ok(IbValue::None_),
+    }
+}
+
+/// 内征分发表（单一权威源——capability 的 intrinsic_names 由本表派生；
+/// 新增内征 = 只加表项，杜绝"match 臂 vs 清单"双真相漂移）。
+pub const INTRINSICS: &[(&str, IntrinsicFn)] = &[
+    ("print", intrinsic_print),
+    ("len", intrinsic_len),
+    ("range", intrinsic_range),
+    ("knowledge", intrinsic_knowledge),
+    ("vec", intrinsic_vec),
+];
+
+/// Rust 已实现内征集（capability 单一权威源——路由判定经此派生）。
+pub fn intrinsic_names() -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = INTRINSICS.iter().map(|(n, _)| *n).collect();
+    v.extend_from_slice(EXCEPTION_CLASSES);
+    // meta 原生面（call_meta_fn 分发——quote/eval）
+    v.push("quote");
+    v.push("eval");
+    v
 }
 
 /// 值 → JSON（状态导出面：原生数据值 = 原生 JSON 形态[int/float/str/
@@ -1522,93 +1611,31 @@ impl Interpreter {
         args: Vec<IbValue>,
         output: &mut Vec<String>,
     ) -> Result<IbValue, Thrown> {
-        Ok(match name {
-            "print" => {
-                // 多参 = 空格连接（Python print 语义——数据面实证 print(a, b) =
-                // "a b"；单参行为不变）
-                let parts: Vec<String> = args.iter().map(|a| a.repr()).collect();
-                output.push(parts.join(" ")); // 无参 = 空行（Python print() 语义）
-                IbValue::None_
+        // 异常对象构造（EXCEPTION_CLASSES 数据驱动——class + message；显示面 =
+        // `<class>: <message>`[无 message = 仅类名]）
+        if EXCEPTION_CLASSES.contains(&name) {
+            let message = match args.first() {
+                Some(IbValue::Str(s)) => s.clone(),
+                Some(other) => other.repr(),
+                None => String::new(),
+            };
+            return Ok(IbValue::Error {
+                class: name.to_string(),
+                message,
+            });
+        }
+        // 内征分发表（单一权威源——INTRINSICS 表项即分发；新增内征 = 只加表项）
+        for (n, f) in INTRINSICS {
+            if *n == name {
+                return f(self, &args, output);
             }
-            "len" => match args.first() {
-                Some(IbValue::List(l)) => IbValue::Int(l.borrow().len() as i64),
-                Some(IbValue::Str(s)) => IbValue::Int(s.len() as i64),
-                Some(IbValue::Dict(d)) => IbValue::Int(d.borrow().len() as i64),
-                // 空 Optional len = 属性错误（Python 契约：空包装无 len 面）
-                Some(IbValue::None_) => {
-                    return Err(runtime_error(
-                        "AttributeError",
-                        "len on empty optional",
-                    ))
-                }
-                _ => IbValue::Int(0),
-            },
-            // 异常对象构造（Exception/LLMError/ThreadError 家族——class +
-            // message；显示面 = `<class>: <message>`[无 message = 仅类名]）
-            name if is_exception_class(name) => {
-                let message = match args.first() {
-                    Some(IbValue::Str(s)) => s.clone(),
-                    Some(other) => other.repr(),
-                    None => String::new(),
-                };
-                IbValue::Error {
-                    class: name.to_string(),
-                    message,
-                }
-            }
-            "range" => {
-                let items: Vec<IbValue> = if args.len() == 1 {
-                    let stop = match &args[0] {
-                        IbValue::Int(i) => *i,
-                        _ => 0,
-                    };
-                    (0..stop).map(IbValue::Int).collect()
-                } else if args.len() >= 2 {
-                    let start = match &args[0] {
-                        IbValue::Int(i) => *i,
-                        _ => 0,
-                    };
-                    let stop = match &args[1] {
-                        IbValue::Int(i) => *i,
-                        _ => 0,
-                    };
-                    (start..stop).map(IbValue::Int).collect()
-                } else {
-                    Vec::new()
-                };
-                IbValue::list_new(items)
-            }
-            "knowledge" => {
-                // KB 宿主服务——经桥接创建 Python knowledge 对象（单点真理）
-                self.call_knowledge()
-            }
-            "vec" => {
-                // vector 值构造（元素面校验：数值元素，非数值 = None_[错误面]）
-                match args.first() {
-                    Some(IbValue::List(items)) => {
-                        let mut elems: Vec<f64> = Vec::new();
-                        for x in items.borrow().iter() {
-                            match x {
-                                IbValue::Int(i) => elems.push(*i as f64),
-                                IbValue::Float(f) => elems.push(*f),
-                                _ => return Ok(IbValue::None_),
-                            }
-                        }
-                        IbValue::Vector(elems)
-                    }
-                    _ => IbValue::None_,
-                }
-            }
-            _ => {
-                if let Some(f) = env.borrow().get_function(name) {
-                    // 全局环境（作用域链根——使函数体可访问全局函数[递归]）
-                    let global = global_rc(env);
-                    self.call_user_function(&f, args, output, &global)?
-                } else {
-                    IbValue::None_
-                }
-            }
-        })
+        }
+        // 用户函数（全局环境 = 作用域链根——使函数体可访问全局函数[递归]）
+        if let Some(f) = env.borrow().get_function(name) {
+            let global = global_rc(env);
+            return self.call_user_function(&f, args, output, &global);
+        }
+        Ok(IbValue::None_)
     }
 
     /// meta.quote / meta.eval 原生分发（去 Host 化——语义单点真理 =

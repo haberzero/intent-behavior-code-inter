@@ -706,21 +706,58 @@ fn session_release(handle: u64) {
 /// 随内征移植批次自动扩展——无 Python 侧硬编码清单）。
 #[pyfunction]
 fn rust_intrinsic_names(py: Python<'_>) -> PyResult<Py<PyList>> {
-    let names: Vec<&str> = vec![
-        // call_function 内征臂
-        "print", "len", "range", "knowledge", "vec",
-        // 异常类构造器
-        "Exception", "LLMError", "LLMCallError", "LLMParseError",
-        "LLMRetryExhaustedError", "ThreadError", "ThreadCancelled",
-        "ThreadFailed",
-        // meta 原生绑定
-        "quote", "eval",
-    ];
+    // 派生自 interpreter 内征分发表（INTRINSICS + EXCEPTION_CLASSES + meta
+    // 面）——单一权威源，杜绝"清单 vs 分发臂"双真相漂移（审计 3.4）
+    let names = interpreter::intrinsic_names();
     let list = PyList::empty(py);
     for n in names {
         list.append(n)?;
     }
     Ok(list.unbind())
+}
+
+/// 内核能力声明（P1 协议——架构 v2 R0 §三）：node_types / intrinsic_names /
+/// native_modules / unported_corners[{feature, reason}] JSON。路由判定 =
+/// 本声明的查询结果（Python 侧零谓词堆零硬编码集合）；unported_corners 随
+/// 语义移植推进条目删除（消除后路由自动放行）。
+#[pyfunction]
+fn capability() -> PyResult<String> {
+    // node_types = 反序列化器可处理集 − 对象系统执行排除集（IbClassDef/
+    // IbLambdaExpr——Python 宿主承载；审计 3.1 _DATA_PLANE_EXCLUSIONS 入清单）
+    let mut node_types: Vec<&str> = deserializer::node_types();
+    node_types.retain(|t| *t != "IbClassDef" && *t != "IbLambdaExpr");
+    let cap = serde_json::json!({
+        "node_types": node_types,
+        "intrinsic_names": interpreter::intrinsic_names(),
+        // 内建符号全集（42 类型 + 19 函数 + 2 模块）——内建名重定义角检测用
+        "intrinsic_symbol_names": intrinsic_symbols::intrinsic_names(),
+        "native_modules": ["meta"],
+        "unported_corners": [
+            {
+                "feature": "tuple_value_materialization",
+                "reason": "单符号赋值值子树含 IbTuple = 元组值物化面（tuple 声明类型推断 + 运行时类型检查交互）——Python 语义宿主",
+            },
+            {
+                "feature": "optional_instance_identity",
+                "reason": "Optional 包装值实例恒等面（空 Optional 各自独立实例，is 语义）——Python 包装值模型",
+            },
+            {
+                "feature": "meta_compile",
+                "reason": "meta.compile 属性调用（编译器访问面）——Python 宿主",
+            },
+            {
+                "feature": "kb_vec_payload_materialization",
+                "reason": "KB/vector 构造 = payload 物化契约（对象身份读回）——镜像物化面",
+            },
+            {
+                "feature": "intrinsic_redefinition",
+                "reason": "裸名赋值 target = 内建名（常量保护面 Cannot redefine constant）——Python 宿主",
+            },
+        ],
+    });
+    Ok(serde_json::to_string(&cap).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(e.to_string())
+    })?)
 }
 
 /// 执行核心（带变量面）：artifact + 初始变量（Python dict）→ （print 输出
@@ -920,6 +957,7 @@ fn ibci_ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rust_run_source, m)?)?;
     m.add_function(wrap_pyfunction!(run_artifact_state, m)?)?;
     m.add_function(wrap_pyfunction!(rust_intrinsic_names, m)?)?;
+    m.add_function(wrap_pyfunction!(capability, m)?)?;
     m.add_function(wrap_pyfunction!(open_session, m)?)?;
     m.add_function(wrap_pyfunction!(session_call, m)?)?;
     m.add_function(wrap_pyfunction!(session_release, m)?)?;
