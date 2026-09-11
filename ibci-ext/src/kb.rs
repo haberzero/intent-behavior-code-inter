@@ -80,11 +80,36 @@ pub struct KbState {
     pub embeddings: Vec<(String, Vec<f64>)>,
     /// 事实序号（前置自增——首事实 id = "1"）
     pub seq: i64,
+    /// 登记面（entries：键 → 条目——store/get/amend/history/keys/len；
+    /// 值 = 深克隆快照，谓词引用 + 审计事件链；单一权威源 = 活 KB）
+    pub entries: std::collections::HashMap<String, KbEntry>,
+}
+
+/// 登记条目（store 面——值快照 + 谓词引用 + 审计事件链）。
+#[derive(Clone, Debug)]
+pub struct KbEntry {
+    pub value: crate::interpreter::IbValue,
+    /// 验证谓词引用（同进程/会话内 amend 再过门复用；序列化恢复后 =
+    /// None——amend fail-fast，KNW 边界）
+    pub check: Option<crate::interpreter::IbValue>,
+    pub check_name: String,
+    pub provenance: String,
+    pub events: Vec<KbEntryEvent>,
+}
+
+/// 登记审计事件（append-only：{seq, kind, value, reason}）。
+#[derive(Clone, Debug)]
+pub struct KbEntryEvent {
+    pub seq: i64,
+    pub kind: String,
+    pub value: crate::interpreter::IbValue,
+    pub reason: String,
 }
 
 impl KbState {
     pub fn blank() -> KbState {
         KbState {
+            entries: std::collections::HashMap::new(),
             words: Vec::new(),
             relations: Vec::new(),
             worlds: Vec::new(),
@@ -94,6 +119,61 @@ impl KbState {
             embeddings: Vec::new(),
             seq: 0,
         }
+    }
+}
+
+/// IBCI 源码字面量序列化（to_ibci 投影——str 带引号转义；bool = True/False；
+/// 容器递归；None = None）。
+fn ibci_literal(v: &crate::interpreter::IbValue) -> String {
+    use crate::interpreter::IbValue;
+    match v {
+        IbValue::Str(s) => format!(
+            "\"{}\"",
+            s.replace('\\', "\\\\").replace('"', "\\\"")
+        ),
+        IbValue::Bool(b) => if *b { "True".to_string() } else { "False".to_string() },
+        IbValue::Int(i) => i.to_string(),
+        IbValue::Float(f) => f.to_string(),
+        IbValue::None_ => "None".to_string(),
+        IbValue::List(l) => {
+            let items: Vec<String> = l.borrow().iter().map(ibci_literal).collect();
+            format!("[{}]", items.join(", "))
+        }
+        IbValue::Tuple(t) => {
+            let items: Vec<String> = t.iter().map(ibci_literal).collect();
+            format!("({})", items.join(", "))
+        }
+        IbValue::Dict(d) => {
+            let items: Vec<String> = d
+                .borrow()
+                .iter()
+                .map(|(k, val)| format!("{}: {}", ibci_literal(k), ibci_literal(val)))
+                .collect();
+            format!("{{{}}}", items.join(", "))
+        }
+        other => other.repr(),
+    }
+}
+
+/// 验证门函数调用（check(value) 引擎求值——经解释器调用用户函数；
+/// 谓词引用非函数 = fail-fast）。
+fn call_check(
+    interp: &crate::interpreter::Interpreter,
+    env: &Rc<RefCell<crate::interpreter::Environment>>,
+    output: &mut Vec<String>,
+    check: &IbValue,
+    arg: &IbValue,
+) -> Result<bool, Thrown> {
+    match check {
+        IbValue::Function(f) => {
+            let global = crate::interpreter::global_rc(env);
+            let res = interp.call_user_function(f, vec![arg.clone()], output, &global)?;
+            Ok(res.truthy())
+        }
+        _ => Err(runtime_error(
+            ErrorKind::TypeError,
+            "验证谓词须为函数值",
+        )),
     }
 }
 
@@ -141,11 +221,266 @@ fn fact_value(f: &KbFact) -> IbValue {
 /// 错误面登记：治理门失败 / 参数形态错误 = None_（同解释器错误惯例；语料无
 /// 错误探针）。
 pub fn dispatch(
+    interp: &crate::interpreter::Interpreter,
+    env: &Rc<RefCell<crate::interpreter::Environment>>,
     kb: &Rc<RefCell<KbState>>,
     method: &str,
     args: &[IbValue],
+    output: &mut Vec<String>,
 ) -> Result<IbValue, Thrown> {
     match method {
+        // ---- 登记面（store/get/amend/history/keys/len——深克隆快照隔离）----
+        "store" => {
+            // (key: 非空 str, value, check: 函数, [provenance: str])
+            let (k, val, check, prov) = match args {
+                [IbValue::Str(k), v, c] => (k.as_str(), v, c, ""),
+                [IbValue::Str(k), v, c, IbValue::Str(p)] => (k.as_str(), v, c, p.as_str()),
+                _ => {
+                    return Err(runtime_error_coded(
+                        ErrorKind::ValueError,
+                        "store: 参数形态非法",
+                        Some("KNW_KEY_EXISTS"),
+                    ))
+                }
+            };
+            if k.is_empty() {
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "store: 键须为非空 str",
+                    Some("KNW_KEY_EXISTS"),
+                ));
+            }
+            let mut st = kb.borrow_mut();
+            if st.entries.contains_key(k) {
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "store: 键已登记（更正走 amend）",
+                    Some("KNW_KEY_EXISTS"),
+                ));
+            }
+            // 验证门：引擎求值 check(value)（假 = 拒绝登记）
+            let snapshot = crate::interpreter::deep_clone_value(val);
+            let passed = call_check(interp, env, output, check, &snapshot)?;
+            if !passed {
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "store: 未过验证门 check(value) 为假",
+                    Some("KNW_CHECK_REJECTED"),
+                ));
+            }
+            st.seq += 1;
+            let seq = st.seq;
+            let check_name = match check {
+                IbValue::Function(f) => f.name.clone(),
+                _ => String::new(),
+            };
+            st.entries.insert(
+                k.to_string(),
+                KbEntry {
+                    value: snapshot,
+                    check: Some(check.clone()),
+                    check_name,
+                    provenance: prov.to_string(),
+                    events: vec![KbEntryEvent {
+                        seq,
+                        kind: "store".to_string(),
+                        value: val.clone(),
+                        reason: String::new(),
+                    }],
+                },
+            );
+            Ok(IbValue::None_)
+        }
+        "get" => {
+            let [IbValue::Str(k)] = args else {
+                return Ok(IbValue::None_);
+            };
+            let st = kb.borrow();
+            match st.entries.get(k) {
+                Some(e) => Ok(crate::interpreter::deep_clone_value(&e.value)),
+                None => Ok(IbValue::None_),
+            }
+        }
+        "to_ibci" => {
+            // 导出 KB 当前态的确定性 IBCI 代码（派生视图，非存储层——重建等价
+            // KB；词汇序 = 插入序，事实序 = seq 序；只读导出无治理违约面）
+            let st = kb.borrow();
+            let mut lines = vec![
+                "# knowledge.to_ibci() 确定性导出（派生视图——KB 当前态的 IBCI 代码 投影；非存储层，单一权威源 = 活 KB / artifact）".to_string(),
+                "kb = knowledge()".to_string(),
+            ];
+            for (name, rec) in &st.worlds {
+                lines.push(format!(
+                    "kb.register_world({}, {}, {})",
+                    ibci_literal(&IbValue::Str(name.clone())),
+                    ibci_literal(&IbValue::Str(rec.description.clone())),
+                    rec.size_rank
+                ));
+            }
+            for (rtype, rec) in &st.relations {
+                lines.push(format!(
+                    "kb.register_relation({}, {}, {}, {})",
+                    ibci_literal(&IbValue::Str(rtype.clone())),
+                    ibci_literal(&IbValue::Str(rec.semantics.clone())),
+                    ibci_literal(&IbValue::Bool(rec.transitive)),
+                    ibci_literal(&IbValue::Bool(rec.multi_valued))
+                ));
+            }
+            for (lexeme, rec) in &st.words {
+                lines.push(format!(
+                    "kb.register_word({}, {}, {}, {}, {})",
+                    ibci_literal(&IbValue::Str(lexeme.clone())),
+                    ibci_literal(&IbValue::Str(rec.gloss.clone())),
+                    ibci_literal(&IbValue::Bool(rec.is_set)),
+                    ibci_literal(&IbValue::List(Rc::new(RefCell::new(rec.members.clone())))),
+                    ibci_literal(&IbValue::Dict(Rc::new(RefCell::new(rec.entries.clone()))))
+                ));
+            }
+            for f in &st.facts {
+                lines.push(format!(
+                    "kb.add_fact({}, {}, {}, {}, {}, {})",
+                    ibci_literal(&IbValue::Str(f.world.clone())),
+                    ibci_literal(&IbValue::Str(f.s.clone())),
+                    ibci_literal(&IbValue::Str(f.r.clone())),
+                    ibci_literal(&IbValue::Str(f.o.clone())),
+                    ibci_literal(&IbValue::Str(f.source.clone())),
+                    ibci_literal(&IbValue::Str(f.status.clone()))
+                ));
+            }
+            lines.push("kb".to_string());
+            Ok(IbValue::Str(lines.join("\n")))
+        }
+        "export" => {
+            // 全注册表导出（dict 容器约定之外的整库检视面）：键 → {value,
+            // check_name, provenance, events}——值 = 快照深克隆
+            let st = kb.borrow();
+            let mut pairs: Vec<(IbValue, IbValue)> = Vec::new();
+            let mut keys: Vec<&String> = st.entries.keys().collect();
+            keys.sort();
+            for k in keys {
+                let e = &st.entries[k];
+                let events: Vec<IbValue> = e
+                    .events
+                    .iter()
+                    .map(|ev| {
+                        IbValue::dict_new(vec![
+                            (IbValue::Str("seq".into()), IbValue::Int(ev.seq)),
+                            (IbValue::Str("kind".into()), IbValue::Str(ev.kind.clone())),
+                            (IbValue::Str("value".into()), crate::interpreter::deep_clone_value(&ev.value)),
+                            (IbValue::Str("reason".into()), IbValue::Str(ev.reason.clone())),
+                        ])
+                    })
+                    .collect();
+                pairs.push((
+                    IbValue::Str(k.clone()),
+                    IbValue::dict_new(vec![
+                        (IbValue::Str("value".into()), crate::interpreter::deep_clone_value(&e.value)),
+                        (IbValue::Str("check_name".into()), IbValue::Str(e.check_name.clone())),
+                        (IbValue::Str("provenance".into()), IbValue::Str(e.provenance.clone())),
+                        (IbValue::Str("events".into()), IbValue::list_new(events)),
+                    ]),
+                ));
+            }
+            Ok(IbValue::Dict(Rc::new(RefCell::new(pairs))))
+        }
+        "keys" => {
+            let st = kb.borrow();
+            let mut keys: Vec<IbValue> = st.entries.keys().map(|k| IbValue::Str(k.clone())).collect();
+            // 确定性序 = 插入序（HashMap 无序——按 seq 事件序恢复：entries
+            // 插入序经 event seq 推导；当前以键名序为确定性回退）
+            keys.sort_by(|a, b| a.repr().cmp(&b.repr()));
+            Ok(IbValue::list_new(keys))
+        }
+        "len" => {
+            let st = kb.borrow();
+            Ok(IbValue::Int(st.entries.len() as i64))
+        }
+        "amend" => {
+            // (key, new_value, reason: 非空 str)
+            let [IbValue::Str(k), new_val, IbValue::Str(reason)] = args else {
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend: 参数形态非法",
+                    Some("KNW_REASON_EMPTY"),
+                ));
+            };
+            if reason.trim().is_empty() {
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend: 理由强制非空",
+                    Some("KNW_REASON_EMPTY"),
+                ));
+            }
+            // 借出 check 引用（须在可变借用前克隆——check 调用期释放 st）
+            let check = {
+                let st = kb.borrow();
+                st.entries.get(k).map(|e| e.check.clone()).ok_or_else(|| {
+                    runtime_error_coded(
+                        ErrorKind::ValueError,
+                        "amend: 键未登记（更正仅适用已登记条目）",
+                        Some("KNW_REASON_EMPTY"),
+                    )
+                })?
+                .ok_or_else(|| {
+                    runtime_error_coded(
+                        ErrorKind::ValueError,
+                        "amend: 验证谓词引用不可用（恢复后须重新 store）",
+                        Some("KNW_CHECK_REJECTED"),
+                    )
+                })?
+            };
+            // 新值再过 check 门（防更正通道变无门控写口）
+            let snapshot = crate::interpreter::deep_clone_value(new_val);
+            let passed = call_check(interp, env, output, &check, &snapshot)?;
+            if !passed {
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend: 新值未过验证门",
+                    Some("KNW_CHECK_REJECTED"),
+                ));
+            }
+            let mut st = kb.borrow_mut();
+            st.seq += 1;
+            let seq = st.seq;
+            let entry = st.entries.get_mut(k).unwrap();
+            entry.value = snapshot.clone();
+            entry.events.push(KbEntryEvent {
+                seq,
+                kind: "amend".to_string(),
+                value: snapshot,
+                reason: reason.clone(),
+            });
+            Ok(IbValue::None_)
+        }
+        "history" => {
+            // (key, [kind]) → list[{seq, kind, value, reason}]
+            let k = match args.first() {
+                Some(IbValue::Str(k)) => k.as_str(),
+                _ => return Ok(IbValue::list_new(Vec::new())),
+            };
+            let st = kb.borrow();
+            let Some(entry) = st.entries.get(k) else {
+                return Ok(IbValue::list_new(Vec::new()));
+            };
+            let kind_filter = match args.get(1) {
+                Some(IbValue::Str(kf)) => kf.clone(),
+                _ => String::new(),
+            };
+            let items: Vec<IbValue> = entry
+                .events
+                .iter()
+                .filter(|ev| kind_filter.is_empty() || ev.kind == kind_filter)
+                .map(|ev| {
+                    IbValue::dict_new(vec![
+                        (IbValue::Str("seq".into()), IbValue::Int(ev.seq)),
+                        (IbValue::Str("kind".into()), IbValue::Str(ev.kind.clone())),
+                        (IbValue::Str("value".into()), crate::interpreter::deep_clone_value(&ev.value)),
+                        (IbValue::Str("reason".into()), IbValue::Str(ev.reason.clone())),
+                    ])
+                })
+                .collect();
+            Ok(IbValue::list_new(items))
+        }
         // 治理词表面（fail-fast 重复登记拒绝 = None_）
         "register_world" => {
             let [IbValue::Str(n), IbValue::Str(d), IbValue::Int(sr)] = args else {
@@ -263,6 +598,13 @@ pub fn dispatch(
                 .map(|(n, _)| IbValue::Str(n.clone()))
                 .collect(),
         )),
+        "relations" => Ok(IbValue::list_new(
+            kb.borrow()
+                .relations
+                .iter()
+                .map(|(n, _)| IbValue::Str(n.clone()))
+                .collect(),
+        )),
         // 事实面（内建治理门：词表 allowlist + 去重机器强制）
         "add_fact" => {
             // (world, s, r, o: 非空 str; source: str 缺省 ""; status: str 缺省 "active")
@@ -278,6 +620,10 @@ pub fn dispatch(
                     IbValue::Str(src),
                     IbValue::Str(stt),
                 ] => (w, s, r, o, src.as_str(), stt.as_str()),
+                // 5 参形态（w,s,r,o,source——status 缺省 active）
+                [IbValue::Str(w), IbValue::Str(s), IbValue::Str(r), IbValue::Str(o), IbValue::Str(src)] => {
+                    (w, s, r, o, src.as_str(), "active")
+                }
                 _ => {
                     return Err(runtime_error_coded(
                         ErrorKind::ValueError,
@@ -352,6 +698,35 @@ pub fn dispatch(
             Ok(IbValue::Str(fid))
         }
         // 查找面（active 视图）
+        "by_subject" => {
+            // 关于某词的全部 active 事实（word.relations 的派生替代——根治
+            // 双写真相：词关系从不独立存储，只从事实日志派生；seq 序）
+            let [IbValue::Str(s)] = args else {
+                return Ok(IbValue::None_);
+            };
+            let st = kb.borrow();
+            let items: Vec<IbValue> = st
+                .facts
+                .iter()
+                .filter(|f| f.status == "active" && &f.s == s)
+                .map(fact_value)
+                .collect();
+            Ok(IbValue::list_new(items))
+        }
+        "by_source" => {
+            // 某来源的全部事实（审计面——全日志视图，含 retracted 墓碑）
+            let [IbValue::Str(src)] = args else {
+                return Ok(IbValue::None_);
+            };
+            let st = kb.borrow();
+            let items: Vec<IbValue> = st
+                .facts
+                .iter()
+                .filter(|f| &f.source == src)
+                .map(fact_value)
+                .collect();
+            Ok(IbValue::list_new(items))
+        }
         "exists" => {
             let [IbValue::Str(w), IbValue::Str(s), IbValue::Str(r), IbValue::Str(o)] = args
             else {
@@ -382,7 +757,11 @@ pub fn dispatch(
             let st = kb.borrow();
             let rel_rec = st.relations.iter().find(|(n, _)| n == r);
             let Some((_, rec)) = rel_rec else {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "contradicts: 关系未注册",
+                    Some("KNW_VOCAB_UNREGISTERED"),
+                ));
             };
             if rec.multi_valued {
                 return Ok(IbValue::Bool(false));
@@ -494,14 +873,21 @@ pub fn dispatch(
         }
         "source" => {
             let [IbValue::Str(fid)] = args else {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "source: 参数形态非法",
+                    Some("KNW_FACT_NOT_FOUND"),
+                ));
             };
             let st = kb.borrow();
-            Ok(st.facts
-                .iter()
-                .find(|f| &f.id == fid)
-                .map(|f| IbValue::Str(f.source.clone()))
-                .unwrap_or(IbValue::None_))
+            let f = st.facts.iter().find(|f| &f.id == fid).ok_or_else(|| {
+                runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "source: 未知 fact_id",
+                    Some("KNW_FACT_NOT_FOUND"),
+                )
+            })?;
+            Ok(IbValue::Str(f.source.clone()))
         }
         "history_fact" => {
             // 事件链（append-only 全史：{seq, kind, reason, new_o}）
@@ -531,7 +917,13 @@ pub fn dispatch(
                         .collect();
                     IbValue::list_new(items)
                 }
-                None => IbValue::None_,
+                None => {
+                    return Err(runtime_error_coded(
+                        ErrorKind::ValueError,
+                        "history_fact: 未知 fact_id",
+                        Some("KNW_FACT_NOT_FOUND"),
+                    ))
+                }
             })
         }
         // ------------------------------------------------------------------ //
@@ -541,17 +933,33 @@ pub fn dispatch(
             // 墓碑：status → retracted + 事件链；active 索引即时移除（审计视图
             // 保留全史）；已 retracted 再 retract = None_（墓碑只读）
             let [IbValue::Str(fid), IbValue::Str(reason)] = args else {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "retract: 参数形态非法",
+                    Some("KNW_FACT_NOT_FOUND"),
+                ));
             };
             if reason.trim().is_empty() {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "retract: 理由强制非空",
+                    Some("KNW_REASON_EMPTY"),
+                ));
             }
             let mut st = kb.borrow_mut();
             let Some(idx) = st.facts.iter().position(|f| &f.id == fid) else {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "retract: 未知 fact_id",
+                    Some("KNW_FACT_NOT_FOUND"),
+                ));
             };
             if st.facts[idx].status == "retracted" {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "retract: 已 retracted（墓碑只读）",
+                    Some("KNW_FACT_RETRACTED"),
+                ));
             }
             let was_active = st.facts[idx].status == "active";
             st.seq += 1;
@@ -590,21 +998,41 @@ pub fn dispatch(
             // 且 active 时更新；已 retracted 事实 amend = None_
             let [IbValue::Str(fid), IbValue::Str(new_o), IbValue::Str(reason)] = args
             else {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend_fact: 参数形态非法",
+                    Some("KNW_FACT_NOT_FOUND"),
+                ));
             };
             if new_o.is_empty() || reason.trim().is_empty() {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend_fact: 参数形态非法",
+                    Some("KNW_REASON_EMPTY"),
+                ));
             }
             let mut st = kb.borrow_mut();
             let Some(idx) = st.facts.iter().position(|f| &f.id == fid) else {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend_fact: 未知 fact_id",
+                    Some("KNW_FACT_NOT_FOUND"),
+                ));
             };
             if st.facts[idx].status == "retracted" {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend_fact: 已 retracted（墓碑只读）",
+                    Some("KNW_FACT_RETRACTED"),
+                ));
             }
             // 治理门：new_o 须已注册词
             if !find_name(&st.words, new_o) {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "amend_fact: 新 o 未注册",
+                    Some("KNW_VOCAB_UNREGISTERED"),
+                ));
             }
             let old_o = st.facts[idx].o.clone();
             st.seq += 1;
@@ -654,7 +1082,11 @@ pub fn dispatch(
             let st = kb.borrow();
             let rel_rec = st.relations.iter().find(|(n, _)| n == rel);
             let Some((_, rec)) = rel_rec else {
-                return Ok(IbValue::None_);
+                return Err(runtime_error_coded(
+                    ErrorKind::ValueError,
+                    "transitive: 关系未注册",
+                    Some("KNW_VOCAB_UNREGISTERED"),
+                ));
             };
             if !rec.transitive {
                 return Ok(IbValue::list_new(Vec::new()));
@@ -825,7 +1257,13 @@ pub fn dispatch(
                 st.facts.iter().find(|f| &f.id == b),
             ) {
                 (Some(fa), Some(fb)) => (fa, fb),
-                _ => return Ok(IbValue::None_),
+                _ => {
+                    return Err(runtime_error_coded(
+                        ErrorKind::ValueError,
+                        "compare: 未知 fact_id",
+                        Some("KNW_FACT_NOT_FOUND"),
+                    ))
+                }
             };
             let rel_rec = if fa.r == fb.r {
                 st.relations.iter().find(|(n, _)| n == &fa.r).map(|(_, r)| r)
@@ -854,7 +1292,13 @@ pub fn dispatch(
             let st = kb.borrow();
             let f = match st.facts.iter().find(|f| &f.id == fid) {
                 Some(f) => f,
-                None => return Ok(IbValue::None_),
+                None => {
+                    return Err(runtime_error_coded(
+                        ErrorKind::ValueError,
+                        "expand: 未知 fact_id",
+                        Some("KNW_FACT_NOT_FOUND"),
+                    ))
+                }
             };
             let word_value = |st_: &KbState, name: &str| -> IbValue {
                 match st_.words.iter().find(|(n, _)| n == name) {

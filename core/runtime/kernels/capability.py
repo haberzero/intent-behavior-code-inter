@@ -144,18 +144,8 @@ def _detect_meta_compile(view: ArtifactView) -> bool:
     return False
 
 
-def _detect_object_identity(view: ArtifactView) -> bool:
-    """KB/vector 对象身份面（knowledge()/vec() 构造 = payload 物化契约）。"""
-    for sym_uid in view.node_to_symbol.values():
-        if isinstance(sym_uid, str) and sym_uid.startswith("intrinsic:"):
-            if sym_uid.split(":", 1)[1] in ("knowledge", "vec"):
-                return True
-    return False
 
 
-# --------------------------------------------------------------------------- #
-# 路由（单一查询入口）
-# --------------------------------------------------------------------------- #
 class ArtifactRouter:
     """能力查询 + 角检测的单一路由（零谓词堆零硬编码集合——全部数据驱动）。"""
 
@@ -165,7 +155,6 @@ class ArtifactRouter:
         # 加条目；移植角 = 双向删除（角消除后路由自动放行）。
         self._corners: Dict[str, Callable[[ArtifactView], bool]] = {
             "meta_compile": _detect_meta_compile,
-            "kb_vec_payload_materialization": _detect_object_identity,
         }
 
     def can_execute(self, view: ArtifactView) -> bool:

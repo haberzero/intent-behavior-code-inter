@@ -725,10 +725,6 @@ fn capability() -> PyResult<String> {
                 "feature": "meta_compile",
                 "reason": "meta.compile 属性调用（编译器访问面）——Python 宿主",
             },
-            {
-                "feature": "kb_vec_payload_materialization",
-                "reason": "KB/vector 构造 = payload 物化契约（对象身份读回）——镜像物化面",
-            },
         ],
     });
     Ok(serde_json::to_string(&cap).map_err(|e| {

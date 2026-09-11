@@ -277,7 +277,7 @@ IbValue::Quoted { source } => source.clone(),
             IbValue::Host(_) => "<host>".into(),
         }
     }
-    fn truthy(&self) -> bool {
+    pub(crate) fn truthy(&self) -> bool {
         match self {
             IbValue::Bool(b) => *b,
             IbValue::None_ => false,
@@ -594,6 +594,43 @@ pub(crate) fn ibvalue_to_json(v: &IbValue) -> serde_json::Value {
 /// 赋值语义（nonlocal 重定向：nonlocal 名 = 最近外层作用域改写[含该名的
 /// 最近 env，或该 env 亦非 nonlocal 持有者——Python nonlocal 契约]；普通名
 /// = 本地遮蔽）。
+/// IbValue 深拷贝（store 快照隔离——递归断开 List/Dict/Tuple 的 Rc 共享；
+/// 标量/函数/知识 = 共享[值语义/引用语义契约]）。
+pub(crate) fn deep_clone_value(v: &IbValue) -> IbValue {
+    match v {
+        IbValue::List(l) => {
+            let items: Vec<IbValue> = l.borrow().iter().map(deep_clone_value).collect();
+            IbValue::List(Rc::new(RefCell::new(items)))
+        }
+        IbValue::Tuple(t) => {
+            let items: Vec<IbValue> = t.iter().map(deep_clone_value).collect();
+            IbValue::Tuple(Rc::new(items))
+        }
+        IbValue::Dict(d) => {
+            let pairs: Vec<(IbValue, IbValue)> = d
+                .borrow()
+                .iter()
+                .map(|(k, v)| (deep_clone_value(k), deep_clone_value(v)))
+                .collect();
+            IbValue::Dict(Rc::new(RefCell::new(pairs)))
+        }
+        other => other.clone(),
+    }
+}
+
+/// dict 键可哈希判定（Python 契约：标量/str/bool/None 可哈希；
+/// List/Dict/Tuple/Tensor/Function/Knowledge = 不可哈希——dict 键面拒）。
+fn is_hashable_key(v: &IbValue) -> bool {
+    matches!(
+        v,
+        IbValue::Int(_)
+            | IbValue::Float(_)
+            | IbValue::Str(_)
+            | IbValue::Bool(_)
+            | IbValue::None_
+    )
+}
+
 fn assign_env(
     env: &Rc<RefCell<Environment>>,
     name: &str,
@@ -1084,7 +1121,7 @@ impl Environment {
 }
 
 /// 全局环境（作用域链根）的 Rc——短借用走链（不跨递归持借用）。
-fn global_rc(env: &Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
+pub(crate) fn global_rc(env: &Rc<RefCell<Environment>>) -> Rc<RefCell<Environment>> {
     let parent = env.borrow().parent.clone();
     match parent {
         Some(p) => global_rc(&p),
@@ -1177,9 +1214,10 @@ fn tensor_dim(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
     };
     match t.to_1d() {
         Some(v) => Ok(IbValue::Int(v.len() as i64)),
-        None => Err(runtime_error(
+        None => Err(runtime_error_coded(
             ErrorKind::ValueError,
             "dim() is 1D-only; use shape()/ndim() for N-D tensor",
+            Some("EMB_INVALID_INPUT"),
         )),
     }
 }
@@ -1190,15 +1228,15 @@ fn tensor_dot(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
     };
     let v = t
         .to_1d()
-        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor"))?;
+        .ok_or_else(|| runtime_error_coded(ErrorKind::ValueError, "dot() requires a 1D tensor", Some("EMB_INVALID_INPUT")))?;
     let [IbValue::Tensor(o)] = args else {
-        return Err(runtime_error(ErrorKind::TypeError, "dot() requires a vector argument"));
+        return Err(runtime_error_coded(ErrorKind::TypeError, "dot() requires a vector argument", Some("EMB_INVALID_INPUT")));
     };
     let o = o
         .to_1d()
-        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "dot() requires a 1D tensor"))?;
+        .ok_or_else(|| runtime_error_coded(ErrorKind::ValueError, "dot() requires a 1D tensor", Some("EMB_INVALID_INPUT")))?;
     if v.len() != o.len() {
-        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
+        return Err(runtime_error_coded(ErrorKind::ValueError, "vector dimension mismatch", Some("EMB_DIMENSION_MISMATCH")));
     }
     Ok(IbValue::Float(v.iter().zip(o.iter()).map(|(a, b)| a * b).sum()))
 }
@@ -1209,7 +1247,7 @@ fn tensor_norm(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
     };
     let v = t
         .to_1d()
-        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "norm() requires a 1D tensor"))?;
+        .ok_or_else(|| runtime_error_coded(ErrorKind::ValueError, "norm() requires a 1D tensor", Some("EMB_INVALID_INPUT")))?;
     Ok(IbValue::Float(v.iter().map(|x| x * x).sum::<f64>().sqrt()))
 }
 
@@ -1219,21 +1257,26 @@ fn tensor_cosine(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
     };
     let v = t
         .to_1d()
-        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor"))?;
+        .ok_or_else(|| runtime_error_coded(ErrorKind::ValueError, "cosine() requires a 1D tensor", Some("EMB_INVALID_INPUT")))?;
     let [IbValue::Tensor(o)] = args else {
-        return Err(runtime_error(ErrorKind::TypeError, "cosine() requires a vector argument"));
+        return Err(runtime_error_coded(ErrorKind::TypeError, "cosine() requires a vector argument", Some("EMB_INVALID_INPUT")));
     };
     let o = o
         .to_1d()
-        .ok_or_else(|| runtime_error(ErrorKind::ValueError, "cosine() requires a 1D tensor"))?;
+        .ok_or_else(|| runtime_error_coded(ErrorKind::ValueError, "cosine() requires a 1D tensor", Some("EMB_INVALID_INPUT")))?;
     if v.len() != o.len() {
-        return Err(runtime_error(ErrorKind::ValueError, "vector dimension mismatch"));
+        return Err(runtime_error_coded(ErrorKind::ValueError, "vector dimension mismatch", Some("EMB_DIMENSION_MISMATCH")));
     }
     let na: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
     let nb: f64 = o.iter().map(|x| x * x).sum::<f64>().sqrt();
     if na == 0.0 || nb == 0.0 {
-        // 零范数 = 余弦未定义（显式语义角——保持既有面）
-        return Ok(IbValue::None_);
+        // 零范数 = 余弦未定义（fail-fast——Python 契约 EMB_ZERO_NORM；旧 =
+        // 静默 None_[角隐藏分歧，kb_vec 角移除后暴露]）
+        return Err(runtime_error_coded(
+            ErrorKind::ValueError,
+            "cosine zero-norm vector (undefined)",
+            Some("EMB_ZERO_NORM"),
+        ));
     }
     Ok(IbValue::Float(
         v.iter().zip(o.iter()).map(|(a, b)| a * b).sum::<f64>() / (na * nb),
@@ -1254,9 +1297,10 @@ fn tensor_scale(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
             data: t.data.iter().map(|x| x * k).collect(),
         }),
         _ => {
-            return Err(runtime_error(
+            return Err(runtime_error_coded(
                 ErrorKind::TypeError,
                 "scale() requires a numeric argument",
+                Some("EMB_INVALID_INPUT"),
             ))
         }
     })
@@ -1276,10 +1320,10 @@ fn tensor_add(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
         return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
     };
     let [IbValue::Tensor(o)] = args else {
-        return Err(runtime_error(ErrorKind::TypeError, "tensor add/sub requires a tensor argument"));
+        return Err(runtime_error_coded(ErrorKind::TypeError, "tensor add/sub requires a tensor argument", Some("EMB_INVALID_INPUT")));
     };
     if t.shape != o.shape {
-        return Err(runtime_error(ErrorKind::ValueError, "tensor shape mismatch"));
+        return Err(runtime_error_coded(ErrorKind::ValueError, "tensor shape mismatch", Some("EMB_DIMENSION_MISMATCH")));
     }
     Ok(tensor_add_sub(t, o, true))
 }
@@ -1289,10 +1333,10 @@ fn tensor_sub(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
         return Err(runtime_error(ErrorKind::TypeError, "internal: tensor method on non-tensor"));
     };
     let [IbValue::Tensor(o)] = args else {
-        return Err(runtime_error(ErrorKind::TypeError, "tensor add/sub requires a tensor argument"));
+        return Err(runtime_error_coded(ErrorKind::TypeError, "tensor add/sub requires a tensor argument", Some("EMB_INVALID_INPUT")));
     };
     if t.shape != o.shape {
-        return Err(runtime_error(ErrorKind::ValueError, "tensor shape mismatch"));
+        return Err(runtime_error_coded(ErrorKind::ValueError, "tensor shape mismatch", Some("EMB_DIMENSION_MISMATCH")));
     }
     Ok(tensor_add_sub(t, o, false))
 }
@@ -1647,6 +1691,13 @@ fn str_format(obj: &IbValue, args: &[IbValue]) -> Result<IbValue, Thrown> {
     Ok(IbValue::Str(out))
 }
 
+fn str_len(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
+    let IbValue::Str(s) = obj else {
+        return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
+    };
+    Ok(IbValue::Int(s.len() as i64))
+}
+
 fn str_upper(obj: &IbValue, _args: &[IbValue]) -> Result<IbValue, Thrown> {
     let IbValue::Str(s) = obj else {
         return Err(runtime_error(ErrorKind::TypeError, "internal: str method on non-str"));
@@ -1707,6 +1758,7 @@ const TUPLE_METHODS: &[(&str, MethodFn)] = &[
 
 /// str 值方法分派表（单一权威源）。
 const STR_METHODS: &[(&str, MethodFn)] = &[
+    ("len", str_len),
     ("split", str_split),
     ("find", str_find),
     ("rfind", str_rfind),
@@ -1877,11 +1929,16 @@ impl Interpreter {
                                 }
                             }
                         }
-                        Expr::Subscript { value, slice, .. } => {
+                        Expr::Subscript { value, slice, pos: sub_pos, .. } => {
                             let base = self.eval_expr(env, value, output)?;
                             let key = self.eval_expr(env, slice, output)?;
                             if let Some(val) = &v {
-                                assign_subscript(&base, &key, val.clone())?;
+                                // 下标赋值错误现场 = 下标表达式位置
+                                assign_subscript(&base, &key, val.clone()).map_err(|t| Thrown {
+                                    pos: Some((sub_pos.lineno, sub_pos.col_offset)),
+                                    value: t.value,
+                                    code: t.code,
+                                })?;
                             }
                         }
                         _ => {}
@@ -2353,10 +2410,10 @@ impl Interpreter {
                 }
                 IbValue::Bool(result)
             }
-            Expr::Call { func, args, .. } => {
+            Expr::Call { func, args, pos: call_pos, .. } => {
                 // func: &Box<Expr> → as_ref() 得 &Expr
                 match func.as_ref() {
-                    Expr::Attribute { value, attr, .. } => {
+                    Expr::Attribute { value, attr, pos, .. } => {
                         // 原生 meta 函数面（meta.quote / meta.eval——去 Host 化：
                         // 验证门 + 隔离执行，经 call_meta_fn 原生分发）
                         if let Expr::Name { id, .. } = value.as_ref() {
@@ -2372,7 +2429,14 @@ impl Interpreter {
                         let attr = attr.clone();
                         let arg_vals: Vec<IbValue> =
                             args.iter().map(|a| self.eval_expr(env, a, output)).collect::<Result<Vec<IbValue>, _>>()?;
-                        self.call_method(&obj, &attr, arg_vals)?
+                        // 方法调用错误现场 = 内层错误位置优先（函数体内错误
+                        // 保持体内现场）；无内层位置 = 调用表达式位置兜底
+                        self.call_method(env, &obj, &attr, arg_vals, output)
+                            .map_err(|t| Thrown {
+                                pos: t.pos.or(Some((pos.lineno, pos.col_offset))),
+                                value: t.value,
+                                code: t.code,
+                            })?
                     }
                     _ => {
                         let func_name = match func.as_ref() {
@@ -2392,14 +2456,27 @@ impl Interpreter {
                             // 函数值（一等值别名——fn f = g / x = g）→ 按值调用
                             Some(IbValue::Function(f)) => {
                                 let global = global_rc(env);
-                                self.call_user_function(&f, arg_vals, output, &global)?
+                                self.call_user_function(&f, arg_vals, output, &global).map_err(
+                                    |t| Thrown {
+                                        pos: t.pos.or(Some((call_pos.lineno, call_pos.col_offset))),
+                                        value: t.value,
+                                        code: t.code,
+                                    },
+                                )?
                             }
                             // 函数为宿主对象 → 调宿主函数
                             Some(IbValue::Host(h)) => {
                                 self.call_host_function(&h, arg_vals)
                             }
                             _ => {
-                                self.call_function(env, &func_name, arg_vals, output)?
+                                // 内征/用户函数调用错误现场 = 调用表达式位置
+                                self.call_function(env, &func_name, arg_vals, output).map_err(
+                                    |t| Thrown {
+                                        pos: t.pos.or(Some((call_pos.lineno, call_pos.col_offset))),
+                                        value: t.value,
+                                        code: t.code,
+                                    },
+                                )?
                             }
                         }
                     }
@@ -2620,6 +2697,10 @@ impl Interpreter {
                     (IbValue::Tuple(a), IbValue::Tuple(b)) => {
                         if a.as_ref() == b.as_ref() { 0 } else { 2 }
                     }
+                    // tensor 相等 = shape + data 全等（值语义）
+                    (IbValue::Tensor(a), IbValue::Tensor(b)) => {
+                        if a == b { 0 } else { 2 }
+                    }
                     // 跨族[数值 vs str 等] = 不相等（== 面；关系面已前置 TypeError）
                     _ => 2,
                 },
@@ -2727,7 +2808,7 @@ impl Interpreter {
         IbValue::Knowledge(Rc::new(RefCell::new(crate::kb::KbState::blank())))
     }
 
-    fn call_user_function(
+    pub(crate) fn call_user_function(
         &self,
         f: &Function,
         args: Vec<IbValue>,
@@ -2767,7 +2848,14 @@ impl Interpreter {
     }
 
 
-    fn call_method(&self, obj: &IbValue, method: &str, args: Vec<IbValue>) -> Result<IbValue, Thrown> {
+    fn call_method(
+        &self,
+        env: &Rc<RefCell<Environment>>,
+        obj: &IbValue,
+        method: &str,
+        args: Vec<IbValue>,
+        output: &mut Vec<String>,
+    ) -> Result<IbValue, Thrown> {
         // Optional 面：is_some/is_none = 任意值的全局方法（值非 None_ = some；
         // Python 契约：Optional 包装幂等——裸值同样可查）
         if method == "is_some" {
@@ -2818,7 +2906,7 @@ impl Interpreter {
         }
         Ok(match obj {
             // Rust 原生 KB 值——方法面经 kb::dispatch（治理门 + 确定性序）
-            IbValue::Knowledge(kb) => crate::kb::dispatch(kb, method, &args)?,
+            IbValue::Knowledge(kb) => crate::kb::dispatch(self, env, kb, method, &args, output)?,
             // tensor 值——统一批量数值形态（vector = 1D tensor；R5-1 值模型
             // 统一）。方法面：shape/ndim/dtype 通用 + dim[1D]/norm[1D]/
             // dot[1D]/cosine[1D] 向量语义 + scale/add/sub 元素级泛化（任意
@@ -3116,6 +3204,15 @@ fn subscript_slice(
 fn assign_subscript(base: &IbValue, key: &IbValue, val: IbValue) -> Result<(), Thrown> {
     match base {
         IbValue::Dict(d) => {
+            // 可哈希键门（Python 契约：vector/list/dict 等不可哈希 = 拒——
+            // 旧 = 全接受[静默接受不可哈希键]；可哈希 = 标量/str/bool/None）
+            if !is_hashable_key(key) {
+                return Err(runtime_error_coded(
+                    ErrorKind::TypeError,
+                    "unhashable type as dict key",
+                    Some("EMB_INVALID_INPUT"),
+                ));
+            }
             let mut m = d.borrow_mut();
             if let Some(pair) = m.iter_mut().find(|(dk, _)| dk == key) {
                 pair.1 = val;
