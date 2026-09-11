@@ -147,9 +147,14 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 > Python 宿主面] + 五协议 P1-P5 + HOST-EXT + maturin 打包 + 计算基板预留[Tensor +
 > ComputeSubstrate，AVX/GPU 战略期] + 执行核心推倒重写[typed 值 + 无静默路径 +
 > i128 + enum 分派] + 打破清单 8 项[无负向收益论证] + 保留清单 + 实施路线 R1-R5）。
-> **当前下一步** = **R1 接口协议化**（使命 3 D1-D5：P1 能力声明表 / P2 typed 值通道 /
-> P3 typed 错误 / P4 callable 删会话 / 单一执行入口）——`kernel-interface-rebuild`
-> 分支已建，E1（typed 错误契约）设计已就绪。
+> **✅ R1 接口协议化已收束（2026-09-11，分支 kernel-interface-rebuild → 已 merge
+> unsafe-vibe-dev 删分支）**：E1-E4 全部落地——P3 typed 错误（RustRuntimeError +
+> 诊断码单一权威）/ P1 能力声明表（capability() + ArtifactRouter 零谓词堆，内征
+> 分发表派生消除双真相）/ P2 typed 值通道（状态导出类型标签 + StateMaterializer
+> 单一物化）/ P4 删 WIP 会话 API + 单一执行入口（call_top_level_function +
+> RustHostCallable）。全量 4306/2/1 → **4308/0/1**（2 宿主 .call 测试转 pass）。
+> 详见 WORKLOG R1 收束条目。**当前下一步 = R2 执行核心重写**（typed 值模型 +
+> 无静默路径 + enum 分派 + i128 数值 + Tensor 值——独立分支，推倒授权）。
 
 > **接手起点**（下一个智能体，**必读顺序**）：
 > 1. **`tasks_docs/_handoff_kernel_reaudit.md`**（本次转向的交接任务书——用户裁定

@@ -41,10 +41,13 @@
 > （执行面 = Python 语义转录，静默降级系统性）+ 使命 2 测试体系重设计文档
 > （`_test_redesign.md`，五层）。
 >
-> **当前下一步 = R1 接口协议化**（使命 3 D1-D5 实施）：P1 能力声明表（Rust capability() +
-> Python 路由零谓词堆零硬编码集）→ P3 typed 错误（RustRuntimeError + 诊断码单一权威，
-> 删正则/映射表）→ P2 typed 值通道（StateMaterializer 单一物化）→ P4 删 WIP 会话 API +
-> 单一执行入口。分支 `kernel-interface-rebuild`（已建，仅文档 commit）。
+> **✅ R1 接口协议化已收束（2026-09-11，merge unsafe-vibe-dev 删分支）**：P1 能力声明表
+> （capability() + ArtifactRouter 零谓词堆，内征分发表派生）/ P2 typed 值通道（状态
+> 导出类型标签 + StateMaterializer）/ P3 typed 错误（RustRuntimeError + 诊断码单一
+> 权威）/ P4 删会话 API + 单一执行入口（RustHostCallable）。全量 4306/2/1 → 4308/0/1。
+> **当前下一步 = R2 执行核心重写**（独立分支，推倒授权）：typed 值模型 + 无静默路径
+> + enum 分派 + i128 有界整数 + Tensor 值 + 静默降级 13+ 实例清零（架构 v2 R0 §2.6/
+> 打破清单 5/6）。
 >
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4306 passed / 2 failed / 1 skipped**（2026-09-11

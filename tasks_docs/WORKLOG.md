@@ -5100,6 +5100,41 @@ tasks_docs/_kernel_interface_audit.md（详细证据 + 三分类 + 重设计方�
 变化后 = Rust 唯一内核 + 协议层 + HOST-EXT + 计算基板预留。目标（用户裁定/本裁定）
 已同步 goal objective（revision 4 active）。
 
+## R1 接口协议化收束（E1-E4 全部落地，2026-09-11，分支 kernel-interface-rebuild → merge）
+
+**R1 = 架构 v2 五协议中的四协议落地**（P1 能力声明 / P2 typed 值通道 / P3 typed
+错误 / P4 宿主调用 + D5 单一执行入口）——审计使命 1 的 3.1/3.2/3.3/3.4/3.6 全部收敛：
+- **E1（P3）**：RustRuntimeError pyclass + ErrorPayload（Send 载荷）+ 全边界
+  结构化错误；诊断码单一权威 = core/base/diagnostics/runtime_error_map.py
+  （functions.py 与 engine 同源委托）；删 _RUST_ERROR_CODES / 正则回拆 /
+  RecursionError contains。→ commit a6a9b590
+- **E2（P1）**：call_function 改内征分发表（INTRINSICS + EXCEPTION_CLASSES，
+  intrinsic_names 由表派生——审计 3.4 双真相消除）；capability() pyfunction
+  （node_types/intrinsic_names/intrinsic_symbol_names[63]/native_modules/
+  unported_corners[5 角]）；Python capability.py（KernelCapability + ArtifactView
+  + 角注册表 + ArtifactRouter 单一查询）——删 8 谓词堆 + 4 硬编码集合（审计 3.1）。
+  → commit 5b451c38
+- **E3（P2）**：ibvalue_to_typed_json（状态导出 {kind, value} 类型标签——审计 N1
+  消除）；StateMaterializer 单一物化表（quoted→IbQuoted / vector→IbVector 真实
+  数据 / 容器特化绑定移入）；engine 镜像 = 调物化器 + kind 驱动写入路径（删
+  quoted 特判/容器复刻/declared 白名单——审计 3.2）。→ commit d838f6d3
+- **E4（P4/D5）**：删 WIP 会话 API 全组（unsafe 全局注册表 + 双执行通道——审计
+  3.6）；call_top_level_function 无状态顶层函数调用 + RustHostCallable（Python
+  callable → IbNativeFunction .call 契约）；engine 改 run_artifact_state 单一
+  执行入口；divergence 登记 host_call_closure_state。→ commit 324da716
+
+**验证**：全量 pytest 4306/2/1 → **4308/0/1**（2 个宿主 .call 测试转 pass——
+RustHostCallable 修复 WIP 未接线根因）；smoke+diff+host-call 888 passed；残留
+扫描零（会话 API/字符串协议/硬编码集合零残留）。
+
+**merge**：全量零回归 + 复核放行（无对外契约/架构级风险——公开 engine API 不变，
+状态导出形状为内部契约）→ merge unsafe-vibe-dev，删分支（分支政策）。
+
+**变化前后**：变化前 = 8 谓词路由 + 镜像双路径 + 字符串错误协议 + 会话双通道 +
+内征双真相；变化后 = 能力声明查询 + 单一物化表 + 类型化错误 + 单一执行入口 +
+分发表派生内征集。**下一步 = R2 执行核心重写**（typed 值模型 + 无静默路径 +
+enum 分派 + i128 数值 + Tensor 值——独立分支，推倒授权）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
