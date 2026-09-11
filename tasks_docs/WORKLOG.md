@@ -4365,6 +4365,59 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   40 passed[+1 node_to_symbol 门] + smoke 832 passed 零回归（全量 pytest 见放行门
   实跑）。**第三批剩余**：free_vars 闭包捕获 / method 符号[sym_anon_* content_hash
   偏离白名单] / generic+用户类型条目 / modules 组装[完整 artifact 闭环]。
+- **P9 全量 Rust 化第三批 子项 2b-2b-2 增量 3（Rust 独立 artifact 产出：free_vars
+  闭包捕获 + 定义节点 UID 统一遍历化 + divergence 注册表 GAP 清零，2026-09-11，本
+  session，unsafe-vibe-dev）**：**free_vars 闭包捕获**（消除节点池 free_vars 排除
+  GAP）+ **定义节点 UID 计算统一遍历化**（根因修复 symbol_resolver 事后重序列化）+
+  **divergence 注册表 GAP 3 → 0**（free_vars 2 处 GAP 本增量消除 + 非字面值 type_uid
+  GAP 已过期移除——用户 2026-09-11 裁定"过期测试资产可自由处理"适用面）。**侦察实证**
+  （Python 语料 free_vars 分布）：① 语料面唯一定点 = closure_capture 的 get 函数
+  （free_vars = [['a', 'scope___string_exec__/make:a']]——**[name, 定义符号 uid] 二元
+  组**，非纯名字列表）；② **全局引用非自由变量**（closure_top_global：get_a 引用顶层
+  a 无 free_vars——Python 闭包语义：free = 外层函数 scope，非全局）；③ 嵌套函数体
+  引用归嵌套函数自身（外层不重复捕获）；④ 参数注解/返回注解名字 = 定义处 scope 求值
+  （引用收集含注解，不含嵌套体）。**交付**：
+  - **NodeSerializer free_vars 计算**（FunctionDef 分支，scope 上下文内）：函数体引用
+    收集（collect_refs/collect_refs_stmt/collect_refs_expr——不进入嵌套函数体[归嵌套
+    函数自身]，但收集嵌套函数参数默认值/返回注解引用[注解在定义处 scope 求值]）−
+    函数自身 scope 定义（pop 前捕获 own_names）→ 命中外层函数 scope（排除顶层 index
+    0 = 全局引用）→ [name, scope_<定义 scope 串>:name]；BTreeSet 序确定性。
+  - **定义节点 UID 统一遍历化（根因修复）**：NodeSerializer 加 def_node_uids
+    [符号 uid → 定义节点 uid，首次定义优先]——统一遍历中在 scope 上下文内记录
+    （IbAssign 目标→IbAssign 节点 / IbFunctionDef 名→IbFunctionDef 节点 / IbArg→
+    IbArg 节点 / for 目标→IbFor 节点 / ClassDef 名→IbClassDef 节点 / import 绑定→
+    无定义节点）；symbol_resolver 改消费 def_node_uids_map（**删除 DefNode 事后重
+    序列化机制**——根因：嵌套函数 IbFunctionDef 节点的 free_vars 只在定义处上下文可
+    正确产出，事后顶层上下文重序列化产 free_vars=[] → 节点 UID 链式差异[既有
+    closure node_uid gap 的根因]；DefNode/def_nodes/生命周期 'a 整体移除，死代码
+    清理）。
+  - **死代码清理**（code-quality 红线，本增量顺带）：infer_type（零消费者）+
+    EMPTY_MODULES（唯一消费者 = infer_type）+ builtin_function_names（NodeSerializer
+    改 intrinsic_names 63 后零消费者）+ symbol_resolver 未用 Arg import。
+  - **divergence 注册表收缩**：gap-node-pool-free-vars / gap-scope-node-uid-closure
+    （free_vars 对齐消除）+ gap-scope-type-uid-non-literal（第二批 43/43 收束后过期）
+    移除——**GAP 计数 3 → 0**（全部已知缺口收束；节点池比对全字段含 free_vars，
+    scope node_uid 比对含 closure_capture）；TestDivergenceRegistry 自检同步
+    （query 空集断言 + 合成声明注入证明注册表仍驱动逻辑[非死代码]）。
+  **关键裁定（self-grill 全分支消解）**：① **def_node_uids 统一遍历记录 vs 事后重
+    序列化**——前者是根因修复（scope 上下文内产出 = 节点内容正确性的必要条件），
+    后者机制上无法承载 scope 相关节点内容（free_vars/未来更多），违反机制同构
+    （同一遍历两次走）——原则优先于行为维持；② **free_vars = [name, 定义符号 uid]
+    二元组**（Python 实证形态忠实转录，非简化为纯名字列表——artifact 消费面需要
+    uid 引用）；③ **顶层排除 = 闭包语义**（非"保持 Python 行为"迁就，是 Python/
+    IBCI 共同的词法作用域闭包定义——自由变量 = 外层函数 scope，全局 = 直接引用）；
+    ④ **GAP 清零 = 注册表纪律执行**（批次落地即移除声明；过期声明移除——用户裁定
+    适用）；⑤ **零风险加法式**（Rust 侧 + 测试面变更，不动 Python 执行路径/
+    FlatSerializer/语义层）。**验证**：节点池 **34 语料全字段（含 free_vars）内容
+    集合等价**（closure_capture 3 节点 UID 链式差异消除 = 835/835 全对齐）+
+    scope 符号 node_uid **52/52 全对齐**（closure_capture 纳入比对）+ node_to_type
+    635/635 + node_to_symbol 262/262 + scope 符号 43/43 + owned_scope 52/52 全回归
+    无损；diff_harness 40 passed + smoke 832 passed + 全量 pytest 零回归（flaky
+    判别：test_replay_field_linked 并行负载下子进程 spawn 时序偶发失败，隔离重跑
+    6/6 通过 = 非回归，与 test_p7_process_isolation/test_run_result_type 同类；
+    放行门以清理后全量实跑为准）。**第三批剩余**：method 符号[sym_anon_*
+    content_hash 偏离白名单] / generic+用户类型条目 / modules 组装[完整 artifact
+    闭环]。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`

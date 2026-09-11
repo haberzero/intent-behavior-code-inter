@@ -133,7 +133,7 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 
 ## 二、动态状态（随任务更新）
 
-### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1 ✅ → 2b-2b-2 增量 2[当前]**）
+### 2.0 🔴 本 session 交接（2026-09-10/11 全量 Rust 化主线 **阶段 B ✅ → 第一批 harness 状态注册表 ✅ → 第二批 类型解析收束 43/43 ✅ → 第三批 reframe + 子项 1/2a/2b-1/2b-2a/2b-2b-1/2b-2b-2 增量 1-3 ✅[divergence GAP 清零] → 2b-2b-2 增量 4[当前]**）
 
 > **接手起点**（下一位智能体）：读 **`tasks_docs/_world_model_db_design.md`**（本主线设计 +
 > 调研结论 + 决策点/风险 + P0-P9 执行清单，**最核心**；artifact 共享契约见
@@ -159,11 +159,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     隐藏计数行）；**smoke 子集（tests/contracts+tests/compiler）832 passed / ~13s 进程内无子进程**
     （高频验证用）；末次全量 **4191/1**（~126s，P5 公理层放行门，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P9 全量 Rust 化 第三批 子项 2b-2b-2 增量 2：node_to_symbol
-  侧表独立产出 → free_vars 闭包捕获 → method 符号[sym_anon_*] → generic/用户类型条目 + modules
-  组装[完整 artifact 闭环]；每步差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步
-  文档；全量 pytest 可按需自由[2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由
-  处理[重构质量原则优先]）**：
+- **🔴 主线延续点（下一位智能体 = P9 全量 Rust 化 第三批 子项 2b-2b-2 增量 4：method 符号
+  [sym_anon_*，content_hash 已裁定偏离走 divergence.py DIVERGENCE 白名单登记] → generic/用户
+  类型条目 + modules 组装[完整 artifact 闭环——消除"消费 Python 前端 JSON"输入边界]；每步
+  差分门零差异放行 + 受影响子集+smoke 零回归 + commit + 同步文档；全量 pytest 可按需自由
+  [2026-09-11 用户裁定放开]，过期/被证不正确的测试脚本可自由处理[重构质量原则优先]）**：
   - **P1 R-A quote/eval 已落地（本 session）**：`meta.quote`/`meta.eval` + `quoted` 一等值类型
     （单一验证门 + 值通道）。裁定 = WORKLOG（P1 R-A 条目）。
   - **P2 R-B 世界模型 KB 已落地（本 session）**：`knowledge` 就地演化为三元组知识图谱——
@@ -557,15 +557,24 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     any 传播 / 一元 / 布尔 / 三元 / 空容器裸形态[修复既有 list[any] 错误] / 参数注解
     +Slice 不绑定[Python 实证一致] / 双通道实体化[节点 any vs 符号 auto] + 首次绑定
     优先[arithmetic_loop 实证]；type_inference 单一入口 InferCtx[两 walker 共用，
-    机制同构]] ✅[HEAD]。裁定全记录 = WORKLOG 第一批/第二批/第三批条目。
-  - **P9 全量 Rust 化 第三批 2b-2b-2 增量 2 + 后续（当前批次）**：[当前] = node_to_symbol
-    侧表独立产出（统一遍历方向：node_uid → symbol uid，复用 scope 符号解析）→ free_vars
-    闭包捕获 → method 符号
-    [sym_anon_*，content_hash 用原始 spec = 已裁定偏离，divergence.py 白名单登记] →
-    generic/用户类型条目 + modules 组装[完整 artifact 闭环] → 值对象[IbValue 扩展 8902
-    行，去 Py<PyAny>] → KB/quoted/meta 推理面唯一真相[消 host 桥接双真相] → CPS 同构
-    [tree-walking → CPS 分发表，覆盖差 31→53 收缩]；差分 harness 语料纪律[自包含脚本]
-    + 注册表随批次收缩；仅 LLM/意图 IO 面[HostService]保留 Python 接口。证明绝大部分
+    机制同构]] ✅ → 子项 2b-2b-2 增量 2 node_to_symbol 侧表独立产出[全量多重集
+    34 语料 262/262：IbName 引用[scope 链 user_defined 标记层/intrinsic 63 固定集]
+    + IbAssign/IbFunctionDef/IbArg/IbAlias/for 目标定义节点；注解位置不绑定符号
+    [Python 实证 13/13]；RecordMode 三态位置语义显式分派[Full/TypeOnly/None]] ✅
+    → 子项 2b-2b-2 增量 3 free_vars 闭包捕获 + 定义节点 UID 统一遍历化[free_vars
+    [name, 定义符号 uid] 外层函数 scope 捕获[顶层排除=全局非自由变量] +
+    def_node_uids 统一遍历记录[删 DefNode 事后重序列化——根因修复：嵌套函数节点
+    free_vars 只在定义处上下文可正确产出] + **divergence 注册表 GAP 3→0 清零**
+    [free_vars 2 处消除 + 非字面值 type_uid 过期移除] + 死代码清理[infer_type/
+    EMPTY_MODULES/builtin_function_names]] ✅[HEAD]。裁定全记录 = WORKLOG 第一批/
+    第二批/第三批条目。
+  - **P9 全量 Rust 化 第三批 2b-2b-2 增量 4 + 后续（当前批次）**：[当前] = method 符号
+    [sym_anon_*，content_hash 用原始 spec = 已裁定偏离，divergence.py DIVERGENCE 白名单
+    登记] → generic/用户类型条目 + modules 组装[完整 artifact 闭环] → 值对象[IbValue
+    扩展 8902 行，去 Py<PyAny>] → KB/quoted/meta 推理面唯一真相[消 host 桥接双真相] →
+    CPS 同构[tree-walking → CPS 分发表，覆盖差 31→53 收缩]；差分 harness 语料纪律
+    [自包含脚本] + 注册表随批次收缩[GAP 已清零，method content_hash 偏离将以
+    DIVERGENCE 声明进入]；仅 LLM/意图 IO 面[HostService]保留 Python 接口。证明大部分
     关键核心逻辑可 Rust 化后全量转向 Rust（废弃 Python 双通道/对比，harness 退场）。
   - **🔴 P9 终点（用户 2026-09-10 裁定，重新定义——全量 Rust 化）**：Rust 部分
     （阶段②③④）完成后开启**新评估 + 新自主执行模式**，评估**全核心逻辑全量

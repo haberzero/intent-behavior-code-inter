@@ -465,8 +465,11 @@
       262/262：IbName 引用[scope 链/intrinsic 63]+IbAssign/IbFunctionDef/IbArg/IbAlias/
       for 目标定义节点；注解位置不绑定符号[Python 实证 13/13]；RecordMode 三态位置
       语义显式分派] ✅
-   → 第三批 子项 2b-2b-2 增量 3 续[free_vars 闭包捕获 + method 符号 + generic/用户类型
-      + modules 组装[完整 artifact 闭环]][当前]
+   → 第三批 子项 2b-2b-2 增量 3 free_vars 闭包捕获 + 定义节点 UID 统一遍历化[free_vars
+      [name, 定义符号 uid] 外层函数 scope 捕获[顶层排除] + def_node_uids 统一遍历记录
+      [删 DefNode 事后重序列化根因修复] + divergence 注册表 GAP 3→0 + 死代码清理] ✅
+   → 第三批 子项 2b-2b-2 增量 4 续[method 符号 sym_anon_* + generic/用户类型条目 +
+      modules 组装[完整 artifact 闭环]][当前]
    + 值对象[去 Py<PyAny>] + KB/quoted 唯一真相 + CPS 同构
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。

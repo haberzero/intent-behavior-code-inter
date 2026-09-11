@@ -51,6 +51,10 @@ pub struct NodeSerializer {
     modules: ModuleNames,
     node_to_type: BTreeMap<String, String>,
     node_to_symbol: BTreeMap<String, String>,
+    /// 定义节点（符号 uid → 定义节点 uid，首次定义优先）——统一遍历中在 scope 上下文
+    /// 内记录（供 scope 符号 node_uid 绑定；非事后重序列化——嵌套函数 free_vars 等
+    /// scope 相关节点内容只在定义处上下文可正确产出）。
+    def_node_uids: BTreeMap<String, String>,
 }
 
 impl NodeSerializer {
@@ -74,6 +78,7 @@ impl NodeSerializer {
             modules: BTreeSet::new(),
             node_to_type: BTreeMap::new(),
             node_to_symbol: BTreeMap::new(),
+            def_node_uids: BTreeMap::new(),
         }
     }
 
@@ -151,6 +156,11 @@ impl NodeSerializer {
         std::mem::take(&mut self.node_to_symbol)
     }
 
+    /// 定义节点表（符号 uid → 定义节点 uid）——统一遍历产出（scope 上下文内记录）。
+    pub fn def_node_uids_map(&mut self) -> BTreeMap<String, String> {
+        std::mem::take(&mut self.def_node_uids)
+    }
+
     /// Module 节点：{"_type": "IbModule", 基类位置, body: [UIDs], file_path: null}。
     fn serialize_module_node(&mut self, module: &Module) -> String {
         let body: Vec<String> = module.body.iter().map(|s| self.serialize_stmt(s)).collect();
@@ -206,9 +216,13 @@ impl NodeSerializer {
                 let assign_uid = self.collect(node_data);
                 // node_to_symbol：IbAssign 节点 → 目标 VARIABLE scope 符号（定义 scope
                 // = 当前 scope——Python 实证 34/34 IbAssign 全绑定）。
+                // 定义节点：目标符号 → IbAssign 节点 uid（首次定义优先）。
                 if let Some(Expr::Name { id, .. }) = targets.first() {
-                    self.node_to_symbol
-                        .insert(assign_uid.clone(), self.current_scope_symbol_uid(id));
+                    let sym_uid = self.current_scope_symbol_uid(id);
+                    self.node_to_symbol.insert(assign_uid.clone(), sym_uid.clone());
+                    self.def_node_uids
+                        .entry(sym_uid)
+                        .or_insert(assign_uid.clone());
                 }
                 assign_uid
             }
@@ -293,7 +307,15 @@ impl NodeSerializer {
                 node_data.insert("body".to_string(), Value::Array(b_uids.into_iter().map(Value::String).collect()));
                 node_data.insert("orelse".to_string(), Value::Array(o_uids.into_iter().map(Value::String).collect()));
                 node_data.insert("llmexcept_handler".to_string(), Value::Null);
-                self.collect(node_data)
+                let for_uid = self.collect(node_data);
+                // 定义节点：for 目标符号 → IbFor 节点 uid（首次定义优先）。
+                if let Expr::Name { id, .. } = target {
+                    let sym_uid = self.current_scope_symbol_uid(id);
+                    self.def_node_uids
+                        .entry(sym_uid)
+                        .or_insert(for_uid.clone());
+                }
+                for_uid
             }
             Stmt::While { pos, test, body, orelse } => {
                 let t_uid = self.serialize_expr(test);
@@ -332,7 +354,37 @@ impl NodeSerializer {
                 // 参数序列化在函数 scope 内（arg 节点 → 参数符号的 scope = 函数体
                 // scope——scope___string_exec__/add:a，Python 实证）。
                 let arg_uids: Vec<String> = args.iter().map(|a| self.serialize_arg(a)).collect();
+                // free_vars（闭包捕获）：函数体引用（不含嵌套函数体——归嵌套函数自身）
+                // 减去函数自身 scope 定义（pop 前捕获），命中外层函数 scope（排除顶层=
+                // 全局引用非自由变量，Python 实证 closure_top_global 无 free_vars）→
+                // [name, 定义符号 uid]（Python 实证 closure_capture：get.free_vars =
+                // [['a', 'scope___string_exec__/make:a']]）。
+                let own_names: BTreeSet<String> = self
+                    .user_defined
+                    .last()
+                    .map(|m| m.keys().cloned().collect())
+                    .unwrap_or_default();
                 self.pop_scope();
+                let f_idx = self.scope_stack.len();
+                let mut refs: BTreeSet<String> = BTreeSet::new();
+                collect_refs(body, &mut refs);
+                refs.retain(|n| !own_names.contains(n));
+                let mut free_vars: Vec<Value> = Vec::new();
+                for n in refs {
+                    for (i, scope) in self.user_defined[..f_idx].iter().enumerate().rev() {
+                        if i == 0 {
+                            break; // 顶层 = 全局引用，非闭包捕获
+                        }
+                        if scope.contains_key(&n) {
+                            let scope_str = self.scope_stack[..=i].join("/");
+                            free_vars.push(Value::Array(vec![
+                                Value::String(n.clone()),
+                                Value::String(format!("scope_{}:{}", scope_str, n)),
+                            ]));
+                            break;
+                        }
+                    }
+                }
                 // 返回注解 = 类型位置（有 node_to_type 绑定、无 node_to_symbol 绑定——
                 // Python 实证：返回注解 Name 绑定类型 7/7、符号 0/7；参数注解两者皆无）。
                 let ret_uid = returns.as_ref().map(|e| self.serialize_expr_type_only(e));
@@ -345,15 +397,18 @@ impl NodeSerializer {
                 node_data.insert("type_params".to_string(), Value::Array(Vec::new()));
                 node_data.insert("type_param_uids".to_string(), Value::Array(Vec::new()));
                 node_data.insert("type_param_bounds".to_string(), Value::Object(Map::new()));
-                node_data.insert("free_vars".to_string(), Value::Array(Vec::new()));
+                node_data.insert("free_vars".to_string(), Value::Array(free_vars));
                 node_data.insert("is_generator".to_string(), Value::Bool(false));
                 let fd_uid = self.collect(node_data);
                 // node_to_symbol：IbFunctionDef 节点 → 函数名 scope 符号（定义 scope =
                 // 定义处外层 scope，pop_scope 后当前 scope 即定义处——顶层函数 =
                 // scope___string_exec__:add，嵌套函数 = scope___string_exec__/outer:inner，
                 // Python 实证 7/7）。
-                self.node_to_symbol
-                    .insert(fd_uid.clone(), self.current_scope_symbol_uid(name));
+                // 定义节点：函数名符号 → IbFunctionDef 节点 uid（scope 上下文内记录——
+                // 嵌套函数节点的 free_vars 只在定义处上下文可正确产出）。
+                let sym_uid = self.current_scope_symbol_uid(name);
+                self.node_to_symbol.insert(fd_uid.clone(), sym_uid.clone());
+                self.def_node_uids.entry(sym_uid).or_insert(fd_uid.clone());
                 fd_uid
             }
             Stmt::Return { pos, value } => {
@@ -397,7 +452,11 @@ impl NodeSerializer {
                 node_data.insert("_type".to_string(), Value::String("IbClassDef".to_string()));
                 node_data.insert("name".to_string(), Value::String(name.clone()));
                 node_data.insert("body".to_string(), Value::Array(b_uids.into_iter().map(Value::String).collect()));
-                self.collect(node_data)
+                let cd_uid = self.collect(node_data);
+                // 定义节点：类名符号 → IbClassDef 节点 uid。
+                let sym_uid = self.current_scope_symbol_uid(name);
+                self.def_node_uids.entry(sym_uid).or_insert(cd_uid.clone());
+                cd_uid
             }
         }
     }
@@ -615,8 +674,10 @@ impl NodeSerializer {
         node_data.insert("default".to_string(), def.map(Value::String).unwrap_or(Value::Null));
         node_data.insert("kind".to_string(), Value::String(arg.kind.clone()));
         let arg_uid = self.collect(node_data);
-        self.node_to_symbol
-            .insert(arg_uid.clone(), self.current_scope_symbol_uid(&arg.arg));
+        let sym_uid = self.current_scope_symbol_uid(&arg.arg);
+        self.node_to_symbol.insert(arg_uid.clone(), sym_uid.clone());
+        // 定义节点：参数符号 → IbArg 节点 uid（当前 scope = 函数体 scope）。
+        self.def_node_uids.entry(sym_uid).or_insert(arg_uid.clone());
         arg_uid
     }
 
@@ -628,6 +689,141 @@ impl NodeSerializer {
         let uid = serialization::node_uid(&content);
         self.node_pool.insert(uid.clone(), Value::Object(map));
         uid
+    }
+}
+
+/// 收集语句子树引用的名字（free_vars 计算）：不进入嵌套函数体（归嵌套函数自身的
+/// free_vars），但收集嵌套函数的参数/返回注解引用（注解在定义处 scope 求值）。
+fn collect_refs(stmts: &[Stmt], out: &mut BTreeSet<String>) {
+    for s in stmts {
+        collect_refs_stmt(s, out);
+    }
+}
+
+fn collect_refs_stmt(s: &Stmt, out: &mut BTreeSet<String>) {
+    match s {
+        Stmt::Assign { targets, value, .. } => {
+            for t in targets {
+                collect_refs_expr(t, out);
+            }
+            if let Some(v) = value {
+                collect_refs_expr(v, out);
+            }
+        }
+        Stmt::AugAssign { target, value, .. } => {
+            collect_refs_expr(target, out);
+            collect_refs_expr(value, out);
+        }
+        Stmt::ExprStmt { value, .. } => collect_refs_expr(value, out),
+        Stmt::Return { value, .. } => {
+            if let Some(v) = value {
+                collect_refs_expr(v, out);
+            }
+        }
+        Stmt::If { test, body, orelse, .. }
+        | Stmt::While { test, body, orelse, .. } => {
+            collect_refs_expr(test, out);
+            collect_refs(body, out);
+            collect_refs(orelse, out);
+        }
+        Stmt::For { target, iter, body, orelse, .. } => {
+            collect_refs_expr(target, out);
+            collect_refs_expr(iter, out);
+            collect_refs(body, out);
+            collect_refs(orelse, out);
+        }
+        Stmt::FunctionDef { name, args, body, returns, .. } => {
+            // 嵌套函数：名字 = 定义（归外层 own_names）；体 = 嵌套函数自身 free_vars
+            // 关切，不收集；参数默认值/返回注解 = 定义处 scope 求值，收集。
+            let _ = name;
+            for a in args {
+                if let Some(d) = &a.default {
+                    collect_refs_expr(d, out);
+                }
+                if let Some(ann) = &a.annotation {
+                    collect_refs_expr(ann, out);
+                }
+            }
+            if let Some(r) = returns {
+                collect_refs_expr(r, out);
+            }
+            let _ = body;
+        }
+        Stmt::ClassDef { name, body, .. } => {
+            let _ = name;
+            collect_refs(body, out);
+        }
+        Stmt::Import { names, .. } | Stmt::FromImport { names, .. } => {
+            // import 绑定名非 Name 引用
+            let _ = names;
+        }
+        Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Pass { .. } => {}
+        Stmt::Try { body, orelse, finalbody, .. } => {
+            collect_refs(body, out);
+            collect_refs(orelse, out);
+            collect_refs(finalbody, out);
+        }
+    }
+}
+
+fn collect_refs_expr(e: &Expr, out: &mut BTreeSet<String>) {
+    match e {
+        Expr::Name { id, .. } => {
+            out.insert(id.clone());
+        }
+        Expr::BinOp { left, right, .. } => {
+            collect_refs_expr(left, out);
+            collect_refs_expr(right, out);
+        }
+        Expr::UnaryOp { operand, .. } => collect_refs_expr(operand, out),
+        Expr::BoolOp { values, .. } | Expr::List { elts: values, .. } => {
+            for v in values {
+                collect_refs_expr(v, out);
+            }
+        }
+        Expr::Tuple { elts, .. } => {
+            for v in elts {
+                collect_refs_expr(v, out);
+            }
+        }
+        Expr::Compare { left, comparators, .. } => {
+            collect_refs_expr(left, out);
+            for c in comparators {
+                collect_refs_expr(c, out);
+            }
+        }
+        Expr::Call { func, args, .. } => {
+            collect_refs_expr(func, out);
+            for a in args {
+                collect_refs_expr(a, out);
+            }
+        }
+        Expr::Dict { keys, values, .. } => {
+            for k in keys {
+                collect_refs_expr(k, out);
+            }
+            for v in values {
+                collect_refs_expr(v, out);
+            }
+        }
+        Expr::Attribute { value, .. } => collect_refs_expr(value, out),
+        Expr::Subscript { value, slice, .. } => {
+            collect_refs_expr(value, out);
+            collect_refs_expr(slice, out);
+        }
+        Expr::IfExp { test, body, orelse, .. } => {
+            collect_refs_expr(test, out);
+            collect_refs_expr(body, out);
+            collect_refs_expr(orelse, out);
+        }
+        Expr::Slice { lower, upper, step, .. } => {
+            for p in [lower, upper, step] {
+                if let Some(e) = p {
+                    collect_refs_expr(e, out);
+                }
+            }
+        }
+        Expr::Constant { .. } | Expr::Lambda { .. } => {}
     }
 }
 

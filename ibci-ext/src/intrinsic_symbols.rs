@@ -223,11 +223,6 @@ pub fn builtin_intrinsic_types() -> BTreeMap<String, Value> {
     types
 }
 
-/// intrinsic 函数 name 全集（19）——顶层 scope type_env 绑定（IbName 函数名 → 函数类型）。
-pub fn builtin_function_names() -> Vec<String> {
-    BUILTIN_FUNCTIONS.iter().map(|s| s.to_string()).collect()
-}
-
 /// intrinsic 符号 name 全集（42 类型 + 19 函数 + 2 模块 = 63）——顶层 scope 的固有符号。
 pub fn intrinsic_names() -> Vec<String> {
     let mut names = Vec::new();

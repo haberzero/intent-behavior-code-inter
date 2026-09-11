@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::node_serializer::NodeSerializer;
-use crate::parser::{Arg, Expr, Module, Stmt};
+use crate::parser::{Expr, Module, Stmt};
 use crate::type_inference::{
     parse_type_annotation, symbol_level_type, FuncSignatures, InferCtx, ModuleNames, TypeEnv,
 };
@@ -21,21 +21,15 @@ use crate::type_inference::{
 /// 默认模块名（Python 语义层的 `__string_exec__`）。
 const DEFAULT_MODULE: &str = "__string_exec__";
 
-/// 定义节点（符号绑定到的 AST 节点）。Stmt / Arg 两种。
-enum DefNode<'a> {
-    Stmt(&'a Stmt),
-    Arg(&'a Arg),
-}
-
 /// scope 符号解析器：Rust AST → scope 符号池（uid → sym_data，含 node_uid + type_uid）。
-/// 生命周期 `'a` 绑定 AST（def_nodes 持有 AST 节点引用）。
-pub struct SymbolResolver<'a> {
+/// node_uid = 定义节点 UID，经 NodeSerializer 统一遍历在 scope 上下文内产出
+/// （def_node_uids——非事后重序列化：嵌套函数 free_vars 等 scope 相关节点内容只在
+/// 定义处上下文可正确产出）。
+pub struct SymbolResolver {
     /// scope 符号池（uid → sym_data）。BTreeMap 保证 uid 序（确定性）。
     symbols: BTreeMap<String, Value>,
     /// scope 栈（module scope → function scope ...）。
     scope_stack: Vec<String>,
-    /// 定义节点（符号 uid → 定义节点）。
-    def_nodes: BTreeMap<String, DefNode<'a>>,
     /// 类型环境（作用域栈，与 scope_stack 同步）：每 scope 一个 Name→类型字符串 map。
     type_env: TypeEnv,
     /// 函数签名表：函数名 → 返回类型字符串（returns 注解，intrinsic Name 子集）。
@@ -44,12 +38,11 @@ pub struct SymbolResolver<'a> {
     modules: ModuleNames,
 }
 
-impl<'a> SymbolResolver<'a> {
+impl SymbolResolver {
     pub fn new() -> Self {
         Self {
             symbols: BTreeMap::new(),
             scope_stack: vec![DEFAULT_MODULE.to_string()],
-            def_nodes: BTreeMap::new(),
             type_env: vec![BTreeMap::new()],
             func_sigs: BTreeMap::new(),
             modules: BTreeSet::new(),
@@ -100,28 +93,26 @@ impl<'a> SymbolResolver<'a> {
     }
 
     /// 解析 Module → scope 符号池（含 node_uid + type_uid）。
-    pub fn resolve_module(&mut self, module: &'a Module) -> &BTreeMap<String, Value> {
+    pub fn resolve_module(&mut self, module: &Module) -> &BTreeMap<String, Value> {
         for stmt in &module.body {
             self.resolve_stmt(stmt);
         }
-        // node 绑定：计算每个定义符号的 node_uid（经 node_serializer）。
+        // node 绑定：定义符号的 node_uid = 统一遍历（NodeSerializer）在 scope 上下文
+        // 内记录的 def_node_uids（首次定义优先）。
         let mut serializer = NodeSerializer::new();
-        serializer.serialize_module(module);
-        for (uid, def_node) in &self.def_nodes {
-            let node_uid = match def_node {
-                DefNode::Stmt(stmt) => serializer.serialize_stmt(stmt),
-                DefNode::Arg(arg) => serializer.serialize_arg(arg),
-            };
-            if let Some(sym) = self.symbols.get_mut(uid) {
+        let (_root, _pool) = serializer.serialize_module(module);
+        let def_uids = serializer.def_node_uids_map();
+        for (uid, sym) in &mut self.symbols {
+            if let Some(node_uid) = def_uids.get(uid) {
                 if let Some(map) = sym.as_object_mut() {
-                    map.insert("node_uid".to_string(), Value::String(node_uid));
+                    map.insert("node_uid".to_string(), Value::String(node_uid.clone()));
                 }
             }
         }
         &self.symbols
     }
 
-    fn resolve_stmt(&mut self, stmt: &'a Stmt) {
+    fn resolve_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Assign { targets, value, .. } => {
                 // 赋值目标 → scope 符号（VARIABLE）+ 即时类型解析（符号通道：类型环境 +
@@ -132,7 +123,7 @@ impl<'a> SymbolResolver<'a> {
                     value.as_ref().and_then(|v| symbol_level_type(v, &self.ctx()));
                 for target in targets {
                     if let Expr::Name { id, .. } = target {
-                        self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
+                        self.bind_symbol(id, "VARIABLE");
                         let scope = self.current_scope();
                         let uid = format!("scope_{}:{}", scope, id);
                         let has_type = self
@@ -152,7 +143,7 @@ impl<'a> SymbolResolver<'a> {
             Stmt::AugAssign { target, .. } => {
                 // 增赋值目标 → scope 符号（VARIABLE，定义节点 = IbAugAssign）。
                 if let Expr::Name { id, .. } = target {
-                    self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
+                    self.bind_symbol(id, "VARIABLE");
                 }
             }
             Stmt::FunctionDef { name, args, body, returns, .. } => {
@@ -161,7 +152,7 @@ impl<'a> SymbolResolver<'a> {
                 let is_top = self.scope_stack.len() == 1;
                 let kind = if is_top { "FUNCTION" } else { "VARIABLE" };
                 let def_scope = self.current_scope();
-                self.bind_symbol(name, kind, Some(DefNode::Stmt(stmt)));
+                self.bind_symbol(name, kind);
                 // 嵌套函数名 = 函数类型（type_root.<name>）—— 持有函数的变量类型。
                 if !is_top {
                     self.bind_var_type(name, name);
@@ -184,7 +175,7 @@ impl<'a> SymbolResolver<'a> {
                 }
                 for arg in args {
                     // 参数 → scope 符号（VARIABLE）+ 注解类型。
-                    self.bind_symbol(&arg.arg, "VARIABLE", Some(DefNode::Arg(arg)));
+                    self.bind_symbol(&arg.arg, "VARIABLE");
                     if let Some(ann) = &arg.annotation {
                         if let Some(ts) = parse_type_annotation(ann) {
                             self.bind_var_type(&arg.arg, &ts);
@@ -199,7 +190,7 @@ impl<'a> SymbolResolver<'a> {
             Stmt::For { target, body, orelse, .. } => {
                 // for 循环目标 → scope 符号（VARIABLE）+ 类型 = any（IBCI：iter 类型不推断）。
                 if let Expr::Name { id, .. } = target {
-                    self.bind_symbol(id, "VARIABLE", Some(DefNode::Stmt(stmt)));
+                    self.bind_symbol(id, "VARIABLE");
                     self.bind_var_type(id, "any");
                 }
                 for s in body.iter().chain(orelse) {
@@ -212,7 +203,7 @@ impl<'a> SymbolResolver<'a> {
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
                     self.modules.insert(binding.clone());
-                    self.bind_symbol(&binding, "MODULE", None);
+                    self.bind_symbol(&binding, "MODULE");
                 }
             }
             Stmt::FromImport { module, names, .. } => {
@@ -220,12 +211,12 @@ impl<'a> SymbolResolver<'a> {
                 for alias in names {
                     let binding = alias.asname.clone().unwrap_or_else(|| alias.name.clone());
                     let _ = module;
-                    self.bind_symbol(&binding, "FUNCTION", None);
+                    self.bind_symbol(&binding, "FUNCTION");
                 }
             }
             Stmt::ClassDef { name, body, .. } => {
                 // 类名 → scope 符号（CLASS，定义节点 = IbClassDef）。
-                self.bind_symbol(name, "CLASS", Some(DefNode::Stmt(stmt)));
+                self.bind_symbol(name, "CLASS");
                 for s in body {
                     self.resolve_stmt(s);
                 }
@@ -254,14 +245,11 @@ impl<'a> SymbolResolver<'a> {
     }
 
     /// 绑定符号：scope 符号 UID = `scope_<scope>:<name>`（scope = scope 栈串）。
-    fn bind_symbol(&mut self, name: &str, kind: &str, def_node: Option<DefNode<'a>>) {
+    fn bind_symbol(&mut self, name: &str, kind: &str) {
         let scope = self.current_scope();
         let uid = format!("scope_{}:{}", scope, name);
         if self.symbols.contains_key(&uid) {
             return; // 已绑定（复用）
-        }
-        if let Some(def) = def_node {
-            self.def_nodes.insert(uid.clone(), def);
         }
         let sym_data = Value::Object(serde_json::Map::from_iter([
             ("uid".to_string(), Value::String(uid.clone())),

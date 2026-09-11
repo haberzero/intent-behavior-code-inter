@@ -471,11 +471,11 @@ class TestRustSerializationUid:
             assert rs == py, f"asset_uid 差分不等价：py={py} rust={rs}"
 
     def test_node_pool_corpus(self):
-        """34 语料节点池差分（全量 Rust 化·序列化面）：Rust 节点池 == Python 节点池
-        （node_data 内容等价）。free_vars 字段 = 语义层输出（Rust parser 未承载，非
-        序列化面），其值差异会改变节点 content_str → UID，故比对时排除 free_vars 字段
-        并规范化节点引用 UID（node_... → <UID>），按节点内容集合比对（节点结构 + 非
-        UID 字段值等价；UID 本身由 content_str 派生，free_vars 差异不影响节点结构）。"""
+        """34 语料节点池差分（全量 Rust 化·序列化面 + 语义层 free_vars）：Rust 节点池
+        == Python 节点池（node_data 全字段内容等价，含 free_vars 闭包捕获——2b-2b-2
+        增量 3 后无排除字段）。规范化节点引用 UID（node_... → <UID>），按节点内容集合
+        比对（节点结构 + 非 UID 字段值等价；UID 本身由 content_str 派生）。
+        GAP 字段排除经 divergence 注册表查询（当前为空）。"""
         import json
         from tests.conftest import compile_ibci
         from core.compiler.serialization.serializer import FlatSerializer
@@ -836,31 +836,45 @@ class TestDivergenceRegistry:
             assert s.rationale  # rationale 非空（声明根因）
             assert s.scope      # scope 非空
 
-    def test_gap_query_drives_node_pool_exclusion(self):
-        """node_pool 面：free_vars GAP 声明驱动字段排除（query API 返回正确值）。"""
+    def test_gap_query_node_pool_exclusion_empty(self):
+        """node_pool 面：free_vars GAP 已消除（free_vars 闭包捕获 Rust 承载，2b-2b-2
+        增量 3）——字段排除集合空（query API 驱动比对逻辑，单一权威源）。"""
         from tests.diff_harness import divergence
-        assert divergence.excluded_fields(divergence.NODE_POOL) == {"free_vars"}
+        assert divergence.excluded_fields(divergence.NODE_POOL) == set()
 
-    def test_gap_query_drives_scope_node_uid_skip(self):
+    def test_gap_query_scope_node_uid_skip_empty(self):
+        """scope_node_uid 面：closure_capture case 跳过 GAP 已消除（节点 UID 链式差异
+        随 free_vars 对齐消除）。"""
         from tests.diff_harness import divergence
-        assert divergence.skipped_cases(divergence.SCOPE_NODE_UID) == {"closure_capture"}
+        assert divergence.skipped_cases(divergence.SCOPE_NODE_UID) == set()
 
-    def test_gap_query_drives_scope_type_uid_null(self):
+    def test_gap_query_scope_type_uid_null_empty(self):
+        """scope_type_uid 面：非字面值 type_uid GAP 已消除（第二批类型解析 43/43 收束，
+        声明过期移除）。"""
         from tests.diff_harness import divergence
-        assert divergence.null_gap_fields(divergence.SCOPE_TYPE_UID) == {"type_uid"}
+        assert divergence.null_gap_fields(divergence.SCOPE_TYPE_UID) == set()
 
     def test_divergence_mechanism_ready(self):
-        """DIVERGENCE 机制就绪：当前无正向偏离 + GAP 计数 = 3。"""
+        """DIVERGENCE 机制就绪：当前无正向偏离 + GAP 计数 = 0（全部缺口已收束）。"""
         from tests.diff_harness import divergence
         assert divergence.divergences_for(divergence.NODE_POOL) == []
-        assert divergence.gap_count() == 3
+        assert divergence.gap_count() == 0
         assert divergence.divergence_count() == 0
 
     def test_registry_actually_consumed(self, monkeypatch):
-        """注册表真的驱动逻辑（非死代码）：移除一个 GAP 声明 → 排除集合变化。"""
+        """注册表真的驱动逻辑（非死代码）：注入一个 GAP 声明 → 排除集合变化。"""
         import tests.diff_harness.divergence as dv
-        assert "free_vars" in dv.excluded_fields(dv.NODE_POOL)
-        # 模拟 free_vars GAP 已消除（Rust 承载了 free_vars）→ 该字段不再被排除
-        remaining = [s for s in dv.REGISTERED if s.id != "gap-node-pool-free-vars"]
-        monkeypatch.setattr(dv, "REGISTERED", remaining)
         assert dv.excluded_fields(dv.NODE_POOL) == set()
+        # 注入合成 GAP 声明 → 该面字段排除集合应随之变化（query API 被消费证明）
+        synthetic = [
+            dv.DeclaredState(
+                id="synthetic-test-gap",
+                kind=dv.GAP,
+                plane=dv.NODE_POOL,
+                scope="field:free_vars",
+                rationale="synthetic（注册表消费性自检）",
+            )
+        ]
+        monkeypatch.setattr(dv, "REGISTERED", synthetic)
+        assert dv.excluded_fields(dv.NODE_POOL) == {"free_vars"}
+        assert dv.gap_count() == 1

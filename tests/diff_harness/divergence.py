@@ -59,40 +59,11 @@ class DeclaredState:
     verify: Optional[Callable[[object, object], bool]] = field(default=None, compare=False)
 
 
-# 单一权威源：当前已声明状态（随 Rust 化批次推进逐步收缩；批次落地 → 移除对应 GAP）
-REGISTERED: List[DeclaredState] = [
-    DeclaredState(
-        id="gap-node-pool-free-vars",
-        kind=GAP,
-        plane=NODE_POOL,
-        scope="field:free_vars",
-        rationale=(
-            "free_vars（闭包自由变量）= 语义层输出，Rust parser 尚未承载；其值差异改变"
-            "节点 content_str → UID，故节点池比对排除该字段。归全量 Rust 化·语义层批次"
-            "（free_vars 闭包捕获移植）。"
-        ),
-    ),
-    DeclaredState(
-        id="gap-scope-node-uid-closure",
-        kind=GAP,
-        plane=SCOPE_NODE_UID,
-        scope="case:closure_capture",
-        rationale=(
-            "closure_capture 嵌套函数 free_vars 致节点 UID 链式差异（嵌套函数 + 外层"
-            "函数）。归语义层 free_vars 移植批次。"
-        ),
-    ),
-    DeclaredState(
-        id="gap-scope-type-uid-non-literal",
-        kind=GAP,
-        plane=SCOPE_TYPE_UID,
-        scope="symbol:null:type_uid",
-        rationale=(
-            "非字面值（变量引用 / 函数调用 / 二元运算）type_uid 需类型环境 + 函数签名，"
-            "Rust 尚未承载（type_uid = null）。归语义层类型解析批次。"
-        ),
-    ),
-]
+# 单一权威源：当前已声明状态（随 Rust 化批次推进逐步收缩；批次落地 → 移除对应 GAP）。
+# 2026-09-11 收缩：gap-node-pool-free-vars（free_vars 闭包捕获已 Rust 承载——NodeSerializer
+# 统一遍历产出）/ gap-scope-node-uid-closure（节点 UID 链式差异随 free_vars 对齐消除）/
+# gap-scope-type-uid-non-literal（第二批类型解析 43/43 收束后已过期）移除。
+REGISTERED: List[DeclaredState] = []
 
 
 # ---- 查询 API（单一权威源消费入口）----

@@ -35,9 +35,6 @@ pub struct InferCtx<'a> {
     pub modules: &'a ModuleNames,
 }
 
-/// 空模块集（无 import 语境的推导）。
-pub const EMPTY_MODULES: ModuleNames = BTreeSet::new();
-
 /// intrinsic 类型名判定（类型注解 Name → 基本类型）。
 pub fn is_intrinsic_type(name: &str) -> bool {
     matches!(
@@ -55,19 +52,6 @@ pub fn literal_type(value: &ConstVal) -> String {
         ConstVal::Bool(_) => "bool".to_string(),
         ConstVal::None_ => "None".to_string(),
     }
-}
-
-/// 字面值类型推断（int/str/bool/float/None/list/dict/tuple）。非字面值返回 None。
-/// = `infer_type_env` 的空上下文特例（单一实现，无重复）。
-pub fn infer_type(expr: &Expr) -> Option<String> {
-    let empty_env: TypeEnv = Vec::new();
-    let empty_sigs: FuncSignatures = BTreeMap::new();
-    let ctx = InferCtx {
-        type_env: &empty_env,
-        func_sigs: &empty_sigs,
-        modules: &EMPTY_MODULES,
-    };
-    infer_type_env(expr, &ctx)
 }
 
 /// 完整节点级类型推导（节点通道）：字面值/Name[类型环境]/容器[裸+泛型]/二元运算[公理
