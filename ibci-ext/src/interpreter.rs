@@ -582,6 +582,12 @@ impl std::fmt::Debug for Function {
 }
 
 impl Environment {
+    /// 顶层变量快照（host 桥接面——lib 模块状态导出；含函数值
+    /// [vars 双写面]）。
+    pub fn snapshot_vars(&self) -> Vec<(String, IbValue)> {
+        self.vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+
     fn new(parent: Option<Rc<RefCell<Environment>>>) -> Environment {
         Environment {
             vars: HashMap::new(),
@@ -664,14 +670,14 @@ impl Interpreter {
         self.run_module_with_state(module, &[]).map(|(output, _)| output)
     }
 
-    /// 执行模块（带初始变量注入 + 最终状态导出——⑦ 切换门变量面契约：
-    /// 初始变量 = 模块顶层环境预置；最终状态 = 顶层环境全条目
-    /// [vars 表——函数经双写亦在 vars]）。
-    pub fn run_module_with_state(
+    /// 执行模块（带初始变量注入 + 最终环境保活——⑦ 会话面：顶层环境 Rc
+    /// 返回供 host 桥接[函数值宿主调用——闭包/计数器状态跨调用存活]；
+    /// 初始变量 = 模块顶层环境预置）。
+    pub fn run_module_session(
         &self,
         module: &Module,
         initial: &[(String, IbValue)],
-    ) -> Result<(Vec<String>, Vec<(String, IbValue)>), Thrown> {
+    ) -> Result<(Vec<String>, Rc<RefCell<Environment>>), Thrown> {
         let mut output: Vec<String> = Vec::new();
         let mut env = Environment::new(None);
         for (name, value) in initial {
@@ -684,9 +690,53 @@ impl Interpreter {
                 break;
             }
         }
+        Ok((output, env))
+    }
+
+    /// 执行模块（带初始变量注入 + 最终状态导出——⑦ 切换门变量面契约：
+    /// 最终状态 = 顶层环境全条目[vars 表——函数经双写亦在 vars]）。
+    pub fn run_module_with_state(
+        &self,
+        module: &Module,
+        initial: &[(String, IbValue)],
+    ) -> Result<(Vec<String>, Vec<(String, IbValue)>), Thrown> {
+        let (output, env) = self.run_module_session(module, initial)?;
         let state: Vec<(String, IbValue)> =
             env.borrow().vars.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         Ok((output, state))
+    }
+
+    /// 会话函数调用（host 桥接面：顶层环境按名调用——vars 函数值优先
+    /// [变量绑定函数/闭包值]，functions 表次之[声明函数]；调用后状态
+    /// [闭包计数器/变量改写]跨调用存活于顶层环境）。
+    pub fn session_call(
+        &self,
+        env: &Rc<RefCell<Environment>>,
+        name: &str,
+        args: Vec<IbValue>,
+        output: &mut Vec<String>,
+    ) -> Result<IbValue, Thrown> {
+        let f: Option<std::rc::Rc<Function>> = {
+            let b = env.borrow();
+            b.vars
+                .get(name)
+                .and_then(|v| match v {
+                    IbValue::Function(f) => Some(f.clone()),
+                    _ => None,
+                })
+                .or_else(|| {
+                    b.functions
+                        .get(name)
+                        .map(|f| std::rc::Rc::new(f.clone()))
+                })
+        };
+        match f {
+            Some(f) => self.call_user_function(&f, args, output, env),
+            None => Err(runtime_error(
+                "NameError",
+                &format!("name not found: {}", name),
+            )),
+        }
     }
 
     fn exec_stmt(

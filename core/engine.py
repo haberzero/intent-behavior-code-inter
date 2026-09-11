@@ -655,8 +655,10 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
             on_ready(self)
         artifact_json = _json.dumps(artifact_dict, ensure_ascii=False)
         try:
-            lines, state = kernel.run_artifact_state(
-                artifact_json, None, variables if variables else None
+            # 持久会话执行（host 桥接面：顶层环境保活——函数值宿主
+            # .call 经会话调用，闭包/计数器状态跨调用存活）
+            _handle, lines, state = kernel.open_session(
+                artifact_json, variables if variables else None
             )
         except RuntimeError as e:
             # 环境限制异常边界转换（Rust 递归深度守卫 → Python
@@ -780,6 +782,20 @@ class IBCIEngine(IInterpreterFactory, IKernelOrchestrator):
                 value = self._bind_container_specialization(value, declared_type)
                 declared_name = getattr(declared_type, "name", None) or ""
                 declared_base = declared_name.split("[", 1)[0].strip()
+                # 函数声明 = 宿主可调用代理物化（⑦ host 桥接面：.call
+                # 薄包装语义经 Rust 会话调用——函数值宿主调用契约；
+                # 值形态 = 会话函数值[显示串仅作 repr 面]）
+                kind = (
+                    getattr(declared_type, "kind", None)
+                    if declared_type is not None
+                    else None
+                )
+                if kind in ("function", "bound_method", "callable_sig"):
+                    from core.runtime.kernels import RustFunctionProxy
+
+                    value = RustFunctionProxy(
+                        kernel, _handle, name, self.interpreter.registry
+                    )
                 if declared_base in (
                     "int", "float", "str", "bool", "any", "list", "dict",
                     "Optional",

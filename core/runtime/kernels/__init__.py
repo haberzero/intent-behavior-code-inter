@@ -51,6 +51,48 @@ def load_kernel():
 RUST_NATIVE_MODULES = frozenset({"meta"})
 
 
+class RustFunctionProxy:
+    """⑦ 宿主函数值桥（host .call 薄包装语义 = M1 契约面）：Rust 内核
+    函数值（持久会话——顶层环境保活，闭包/计数器状态跨调用存活）的
+    Python 侧可调用代理。宿主经 .call(receiver, args) 调用；返回值经
+    registry.box 物化（IbObject 契约——to_native 等面可用）。
+
+    会话生命周期：open_session 初始引用 = 1；每 proxy 释放递减
+    （__del__）；归零 = Rust 侧释放顶层环境（RAII 纪律）。
+    """
+
+    def __init__(self, kernel, handle, name, registry):
+        self._kernel = kernel
+        self._handle = handle
+        self._name = name
+        self._registry = registry
+        self._released = False
+
+    def call(self, receiver, args):
+        """宿主同步调用（VM 函数对象 .call 同契约：receiver 忽略，
+        args = 位置实参列表）。"""
+        import json as _json
+
+        payload = [
+            a.to_native() if hasattr(a, "to_native") else a
+            for a in (args or [])
+        ]
+        result_json, _out = self._kernel.session_call(
+            self._handle, self._name,
+            _json.dumps(payload, ensure_ascii=False),
+        )
+        return self._registry.box(_json.loads(result_json))
+
+    def __del__(self):
+        if self._released:
+            return
+        self._released = True
+        try:
+            self._kernel.session_release(self._handle)
+        except Exception:
+            pass
+
+
 def _imported_module_names(artifact_dict: dict) -> set:
     """artifact 导入的模块名集合（IbImport = alias 节点 name 面；
     IbImportFrom = module 字段[裸串]）。"""
@@ -165,6 +207,54 @@ def _redefines_intrinsic_name(artifact_dict: dict) -> bool:
     return False
 
 
+def _optional_instance_identity(artifact_dict: dict) -> bool:
+    """Optional 实例同一性角（Python 包装值模型——两个 Optional 声明
+    变量间 is/is not 比较 = 实例恒等面[空 Optional 各自独立实例]；
+    Rust 值模型空 Optional = None_ 单例，is 语义分叉 → 此类源路由
+    Python 语义宿主）。检测：2+ Optional 声明变量 + is/is not 比较两侧
+    均为这些变量名（a is None = 常量侧不适用——Rust 同语义）。"""
+    mod = artifact_dict["modules"][artifact_dict["entry_module"]]
+    nodes = mod["pools"]["nodes"]
+    node_to_type = mod["side_tables"].get("node_to_type", {})
+    optional_names = set()
+    for uid, nd in nodes.items():
+        if nd.get("_type") != "IbTypeAnnotatedExpr":
+            continue
+        t = node_to_type.get(uid)
+        if not isinstance(t, str):
+            continue
+        # 类型名面 = type_root.Optional[...]（模块前缀——剥后判 Optional）
+        base = t.split("[", 1)[0].strip()
+        base = base.rsplit(".", 1)[-1] if "." in base else base
+        if base != "Optional":
+            continue
+        target = nodes.get(nd.get("target"))
+        if isinstance(target, dict) and target.get("_type") == "IbName":
+            optional_names.add(target.get("id"))
+    if len(optional_names) < 2:
+        return False
+    for nd in nodes.values():
+        if nd.get("_type") != "IbCompare":
+            continue
+        ops = nd.get("ops") or []
+        if not any(op in ("is", "is not") for op in ops):
+            continue
+        sides = [nd.get("left")] + list(nd.get("comparators") or [])
+
+        def name_id(u):
+            if not isinstance(u, str) or not u.startswith("node_"):
+                return None
+            inner = nodes.get(u)
+            if isinstance(inner, dict) and inner.get("_type") == "IbName":
+                return inner.get("id")
+            return None
+
+        ids = [name_id(u) for u in sides]
+        if all(i in optional_names for i in ids):
+            return True
+    return False
+
+
 def _uses_meta_compile(artifact_dict: dict) -> bool:
     """meta.compile 属性调用（编译器访问面——Python 宿主承载；
     Rust meta 原生面 = quote/eval 数据面）。"""
@@ -221,6 +311,8 @@ def artifact_is_rust_executable(artifact_dict: dict) -> bool:
     if _assign_tuple_value_nodes(artifact_dict):
         return False
     if _redefines_intrinsic_name(artifact_dict):
+        return False
+    if _optional_instance_identity(artifact_dict):
         return False
     if _uses_meta_compile(artifact_dict):
         return False
