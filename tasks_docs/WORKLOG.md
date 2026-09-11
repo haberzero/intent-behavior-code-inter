@@ -5367,6 +5367,22 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
   （宿主层 + artifact 夹具）、3 个 clone_ref 内部断言重构、cargo test 内核层、
   R2 续项（方法分派表/i128）、阶段 D（⑦ 终点：角移除 + 双码族统一 + IR）。
 
+## R3-C7b（world_model_kb 全平面迁移完成，2026-09-11，commit 1dcc9bae）
+
+- tests/behavior/test_kb_world_model_behavior.py → 31 断言（C7a 11 + C7b 20）：
+  查找面（lookup_pair/exists/all_in_world/by_source/by_subject/contradicts/
+  transitive[防环]）+ 对比展开面（expand 全字段/same_word/compare 4 层）+
+  审计面（retract 墓碑/amend_fact 版本化/source/history_fact/复活语义[诊断码+
+  定位]）+ deepcopy 独立 + entries 零回归。
+- 删除 test_world_model_kb.py（36 测试：31 迁移 + 2 索引结构[内部——契约 =
+  查询面已承接] + 2 legacy 序列化[⑦ 路径] + 1 展开确定性[纯函数吸收]）。
+- **用户指示 GitHub 提交（显式授权 push）**：unsafe-vibe-dev 116 commit 全量
+  push（main 未触碰）。后续每增量同步 push。
+- 全量 pytest 4296/0/1。
+- **剩余**：narrow_model（宿主层 + artifact 夹具）、3 个 clone_ref 内部断言
+  重构（file_handle/generic_value_identity/storage_model_dispatch）、cargo
+  test 内核层组建、R2 续项、阶段 D。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
