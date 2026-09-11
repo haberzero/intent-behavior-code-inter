@@ -192,7 +192,18 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
     隐藏计数行）；**smoke 子集（tests/contracts+tests/compiler）832 passed / ~13s 进程内无子进程**
     （高频验证用）；末次全量 **4191/1**（~126s，P5 公理层放行门，以实跑为准）。
 
-- **🔴 主线延续点（下一位智能体 = P9 全量 Rust 化 第四批：值对象[Rust 执行面去
+- **✅ 阶段 D（⑦ 终点）全部落地（2026-09-11，D1-D7）**：角移除（intrinsic/tuple/
+  kb_vec）→ 宿主桥接 host_call + 6 模块路由 Rust（compute_engine/plugins/fs/
+  world_model/ai）→ 数据面差分退场（语料契约权威化）→ 双码族单源 + UID 规范裁决
+  → 参考角色退役定论 → **前端差分 + 语义转录退役（-4425 行）**。**⑦ 终点架构
+  达成：Rust = 唯一语义执行内核（反序列化 + 解释 + kb + 插件 + 任务池）；Python =
+  编译器 + LLM/宿主执行层；无转录层**。async/ihost = 宿主执行层保留。测试体系
+  五层 + 白盒迁移全部推进完毕；R4/R5/R6 落地。全量 4268/0/1。
+
+- **🔴 主线延续点（下一位智能体 = 周期维护：Tier B 内核健康扫描 + 文档对账 +
+  PENDING 重估触发项；⑦ 终点核心已达成——Rust 语义内核权威 + 无转录层；
+  async/ihost = 宿主执行层保留[职责重定位]；无待裁主线项）**。历史：P9 全量
+  Rust 化（迁移期——差分机制已全部退场，下述为历史记录）。
   Py<PyAny>，8902 行 IbValue 扩展] → KB/quoted/meta 推理面唯一真相[消 host 桥接双真相]
   → CPS 同构[tree-walking → CPS 分发表，覆盖差 31→53 收缩]；第三批已收官[full_artifact
   Rust 独立完整 artifact 产出——34 语料五池 uid 精确 + 全字段等价；bound_method 共享
