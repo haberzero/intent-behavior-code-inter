@@ -5230,6 +5230,23 @@ ComputeSubstrate（R5 计算基板）。**下一步 = R3 测试体系五层重�
 断言逐项迁移映射）+ 宿主面层组建（LLM/意图/ihost/overlay 归类）→ 阶段 D（⑦
 终点）差分机制退场。R4 HOST-EXT+pip 打包紧随其后。
 
+## R3 阶段 C：白盒断言降级第一切片（R3-C1，2026-09-11，unsafe-vibe-dev）
+
+**阶段 C = 白盒断言降级删除 + 宿主面层组建**（迁移映射 = `tasks_docs/_test_
+migration_C.md`——21 个强白盒文件逐文件分类[行为/契约/宿主/内部] + 承接面；
+纪律 = 先落承接再删，契约不留空洞）。
+- **R3-C1（commit 6467e502）**：
+  - 新建 tests/host/ 宿主面层：test_llm_behavior_roots.py（LLM 行为根可观察
+    契约——2 独立 @~ MOCK:STR:... ~ 经公共 engine API 求值 + LLM 请求数 >= 2）。
+  - 删除 test_vm_run_many.py（VM 内部 run_many/UUID 编排——可观察契约 = 新
+    宿主测试承接）+ test_execution_context.py（ExecutionContextImpl 查询 API
+    内部——llmexcept 行为 = e2e/test_llmexcept.py 承接）。
+  - 全量 pytest 4337 → 4326/0/1 零失败（+1 承接 -5 白盒；收集差 = 参数化细节）。
+- **阶段 C 续（后续轮次）**：optional_value_model（identity 2 例 = 打破清单 #2
+  待重设计）/ generic_value_identity（deep_clone 内部）/ file_handle（clone_ref
+  内部）/ storage_model_dispatch（内部）等逐文件迁移映射执行；行为类白盒文件
+  （vector/knowledge/narrow_model/optional 语义）重构为行为层可观察断言。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
