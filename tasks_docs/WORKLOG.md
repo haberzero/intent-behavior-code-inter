@@ -5167,6 +5167,34 @@ enum 分派 + i128 数值 + Tensor 值；推倒授权（用户⑥），独立分
 KB/宿主源路由 Python）、enum 分派（R2-4）、Tensor/ComputeSubstrate（R2-5）、
 值模型 i128（R2 核心）→ R2 收束 merge。
 
+## R2 执行核心硬化波收束（R2-4 + GAP 登记，2026-09-11，execution-core-hardening → merge）
+
+**R2 硬化波 = 架构 v2 R2 的"核心硬化"实施**（typed tree-walking 硬化，非 bytecode
+重写——R0 §2.6 裁定"结构保持 tree-walking，易维护>>性能"；推倒授权执行于"推翻
+f64 全包/静默路径/stringly 错误"的旧实现）：
+- **R2-1**（775b2024）无静默路径第一波（容器/字符串/标量静默清零 13+ 实例）
+- **R2-3a**（e95466f4）typed 数值运算（消灭 f64 全包，i64 精确 + 溢出显式错误，
+  DIVERGENCE bounded-int-overflow）
+- **R2-2**（e285af6c）deserialize fail-fast
+- **R2-4**（6ba87884）typed 错误枚举 ErrorKind（8 类 + class_name() 契约面，全 65
+  调用点机械替换——编译期拼写检查，删 stringly-typed 错误类名）
+- **GAP 登记**（本条目）：kb-governance-error-face + host-bridge-error-face——
+  两处静默路径经实证为 Python 参考抛错（KNW_ 码/宿主异常）而 Rust 静默 None_，
+  但生产不可见（KB/宿主源路由 Python，Rust 侧仅 harness 直调无错误探针）；
+  修复 = 扩展错误契约（值模型/错误面/host 协议后续）。str.format 经实证 = IBCI
+  单参简化语义（Python 参考 strings.py 同）——非偏差，跳过。
+
+**验证**：全量 pytest 4308/0/1 零回归（R2-1/R2-3a/R2-2/R2-4 各一轮全量）；
+diff_harness 全绿（GAP 2→3 / DIVERGENCE 1→2 断言同步）。
+**merge**：零回归 + 复核放行（内部内核硬化，无对外契约变化——错误类名字符串
+契约不变，数值行为严格改善 + bounded-int DIVERGENCE 登记）→ merge unsafe-vibe-dev
+删分支。
+**R2 续项（后续轮次）**：call_method 方法分派表（enum 分派剩余，维护性）、
+i128 值模型（有界界扩大，边界/JSON 复杂度——值模型核心工作）、Tensor 值 +
+ComputeSubstrate（R5 计算基板）。**下一步 = R3 测试体系五层重构**（用户⑧：
+测试太慢/碎片——语言行为层升格 + 白盒降级删除 + cargo test 内核层 + 差分机制
+退场准备）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）

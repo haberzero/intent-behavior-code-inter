@@ -153,12 +153,13 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 > 分发表派生消除双真相）/ P2 typed 值通道（状态导出类型标签 + StateMaterializer
 > 单一物化）/ P4 删 WIP 会话 API + 单一执行入口（call_top_level_function +
 > RustHostCallable）。全量 4306/2/1 → **4308/0/1**（2 宿主 .call 测试转 pass）。
-> 详见 WORKLOG R1 收束条目。**R2 执行核心重写进行中**（独立分支
-> `execution-core-hardening`）：R2-1 无静默路径第一波（容器/字符串方法面 +
-> 标量运算静默清零 13+ 实例）✅ / R2-3a typed 数值运算（消灭 f64 全包，i64
-> 精确 + 溢出显式错误，DIVERGENCE bounded-int-overflow）✅ / R2-2 deserialize
-> fail-fast ✅——均全量 4308/0/1 零回归。下一步 R2 续（kb 治理门/host 桥/enum
-> 分派/Tensor/i128 值模型）→ 收束 merge。
+> 详见 WORKLOG R1/R2 条目。**✅ R2 执行核心硬化波已 merge（2026-09-11，
+> `execution-core-hardening` → unsafe-vibe-dev 删分支）**：R2-1 无静默路径第一波
+> （静默清零 13+ 实例）/ R2-3a typed 数值运算（i64 精确 + 溢出显式错误）/ R2-2
+> deserialize fail-fast / R2-4 typed 错误枚举 ErrorKind；GAP 登记 kb/host 错误面
+> （生产不可见）；全量 4308/0/1 零回归。**当前下一步 = R3 测试体系五层重构**
+> （用户⑧：语言行为层升格 + 白盒降级删除 + cargo test 内核层 + 差分退场准备）；
+> R2 续项（方法分派表/i128/Tensor）= 后续轮次。
 
 > **接手起点**（下一个智能体，**必读顺序**）：
 > 1. **`tasks_docs/_handoff_kernel_reaudit.md`**（本次转向的交接任务书——用户裁定

@@ -45,11 +45,12 @@
 > （capability() + ArtifactRouter 零谓词堆，内征分发表派生）/ P2 typed 值通道（状态
 > 导出类型标签 + StateMaterializer）/ P3 typed 错误（RustRuntimeError + 诊断码单一
 > 权威）/ P4 删会话 API + 单一执行入口（RustHostCallable）。全量 4306/2/1 → 4308/0/1。
-> **R2 执行核心重写进行中**（独立分支 `execution-core-hardening`）：R2-1 无静默
-> 路径第一波 ✅ / R2-3a typed 数值运算（i64 精确 + 溢出显式错误）✅ / R2-2
-> deserialize fail-fast ✅（均 4308/0/1 零回归）。下一步 R2 续：kb 治理门结构化
-> 错误 / host 桥异常传播 / enum 分派（R2-4）/ Tensor+ComputeSubstrate（R2-5）/
-> i128 值模型（R2 核心）→ 收束 merge。
+> **✅ R2 执行核心硬化波已 merge（2026-09-11，execution-core-hardening →
+> unsafe-vibe-dev 删分支）**：R2-1 无静默路径第一波（13+ 实例）/ R2-3a typed 数值
+> 运算（i64 精确 + 溢出显式错误）/ R2-2 deserialize fail-fast / R2-4 typed 错误
+> 枚举 ErrorKind；GAP 登记 kb/host 错误面；全量 4308/0/1 零回归。
+> **当前下一步 = R3 测试体系五层重构**（语言行为层升格 + 白盒降级删除 + cargo
+> test 内核层 + 差分退场准备）；R2 续项（方法分派表/i128/Tensor）= 后续轮次。
 >
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4306 passed / 2 failed / 1 skipped**（2026-09-11

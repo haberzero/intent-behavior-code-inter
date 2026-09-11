@@ -1441,12 +1441,15 @@ class TestDivergenceRegistry:
         P4 宿主 .call 纯函数契约，fresh 重执行 ≠ 持久环境）。"""
         from tests.diff_harness import divergence
         assert divergence.divergences_for(divergence.NODE_POOL) == []
-        assert divergence.gap_count() == 1
+        assert divergence.gap_count() == 3
         assert divergence.skipped_cases(divergence.TYPE_MEMBERS) == {"__string_exec__"}
         assert divergence.divergence_count() == 2
         assert {
             d.scope for d in divergence.divergences_for(divergence.DATA_PLANE)
         } == {"case:host_call_closure_state", "case:int_overflow"}
+        assert divergence.skipped_cases(divergence.DATA_PLANE) == {
+            "kb_governance_error", "host_bridge_error"
+        }
 
     def test_registry_actually_consumed(self, monkeypatch):
         """注册表真的驱动逻辑（非死代码）：注入一个 GAP 声明 → 排除集合变化。"""

@@ -80,6 +80,31 @@ REGISTERED: List[DeclaredState] = [
         ),
     ),
     DeclaredState(
+        id="gap-kb-governance-error-face",
+        kind=GAP,
+        plane=DATA_PLANE,
+        scope="case:kb_governance_error",
+        rationale=(
+            "Rust kb.rs 治理门失败（词表未注册/重复登记/参数形态错误）静默 None_，"
+            "Python 参考 = InterpreterError[KNW_ 码]（core/runtime/objects/primitives/"
+            "knowledge.py 实证）。生产不可见：KB 源按能力角路由 Python（kb_vec_payload_"
+            "materialization），Rust kb.rs 仅 diff harness 直接调用且无错误探针。"
+            "修复 = 扩展错误契约承载 KNW_ 码（值模型/错误面后续）。"
+        ),
+    ),
+    DeclaredState(
+        id="gap-host-bridge-error-face",
+        kind=GAP,
+        plane=DATA_PLANE,
+        scope="case:host_bridge_error",
+        rationale=(
+            "Rust host 桥接（call_host_method/call_host_function/get_host_attribute/"
+            "get_host_module）Python 侧异常被 unwrap_or(None_) 吞掉。生产不可见："
+            "非 meta 宿主导入源路由 Python，桥接仅 meta 原生面（quote/eval 不走桥）。"
+            "修复 = 桥接异常传播（host 面统一协议后续）。"
+        ),
+    ),
+    DeclaredState(
         id="divergence-host-call-closure-state",
         kind=DIVERGENCE,
         plane=DATA_PLANE,
