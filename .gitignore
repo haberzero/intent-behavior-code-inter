@@ -76,3 +76,4 @@ TEMP-35B-LLM-GUIDE.md
 
 # 面向外部试用工程（ibci-trial）的进度告知快照（点态内容，本地交付用，不入库）
 TRIAL_ANNOUNCE_*.md
+tests/_tmp_artifacts/

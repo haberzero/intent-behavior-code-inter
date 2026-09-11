@@ -1,1 +1,0 @@
-{"schema_version": 1, "content_hash": "3de861d04a5095fe6dc5445c30ba747430969165446962de620237f71c156514", "model_name": "test_model", "architecture": "transe", "dim": 3, "entities": ["a", "b", "c"], "entity_embeddings": {"a": [1.0, 0, 0], "b": [2.0, 0, 0], "c": [0.0, 1.0, 0]}, "relations": ["r1", "r2"], "relation_embeddings": {"r1": [1.0, 0, 0], "r2": [0.0, 0, 1.0]}}
