@@ -122,6 +122,11 @@ class HostInterface:
         self.runtime.register(name, implementation)
         self.metadata.register(metadata)
 
+    def get_host_module(self, name: str) -> Optional[Any]:
+        """宿主模块解析（Rust 内核 import 桥接调用面——经 get_module_implementation
+        单一权威；返回 = 宿主模块对象[Python]）。"""
+        return self.get_module_implementation(name)
+
     def get_module_implementation(self, name: str) -> Optional[Any]:
         return self.runtime.get(name)
 
