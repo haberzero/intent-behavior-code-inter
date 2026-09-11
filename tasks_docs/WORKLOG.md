@@ -5400,6 +5400,23 @@ vector_type/world_model_kb 等迁移行为层 + clone_ref 等内部断言重构 
 - **剩余**：R2 续项（方法分派表 enum 化 / i128 评估）+ 阶段 D（⑦ 终点：差分
   退场 + Python 参考内核退役 + 双码族统一 + artifact IR）。
 
+## R2 续项完成（2026-09-11，commit b5d0ae9f + a38c072b）
+
+- **R2-续-1（b5d0ae9f）call_method 方法分派表 enum 化**：审计项"方法分派
+  stringly-typed"关闭——4 个值类型 `match method {"..."}` 大 match 块 →
+  每值类型方法分派表（TENSOR_METHODS 11 / LIST_METHODS 6 / DICT_METHODS 4 /
+  STR_METHODS 14）+ dispatch_method 表查找（单一权威：新增方法 = 只加表项 +
+  实现 fn；未知方法 = AttributeError）。纯结构重构，行为不变。全量 4283/0/1。
+- **R2-续-2（a38c072b）i128 值模型评估裁决**：维持 i64 有界契约——i128/任意
+  精度 = JSON/serde/通道/差分全局复杂度远超边际收益（大整数非 DSL 场景）；
+  溢出 = 显式 OverflowError（fail-fast）；可扩展 = 未来独立 BigInt 值类型。
+  文档化：docs/KNOWN_LIMITS.md §二十八 + divergence int_overflow rationale。
+- **剩余 = 阶段 D（⑦ 终点）**：差分机制退场 + Python 参考内核退役 + 双码族
+  统一 + artifact IR 重设计。**成熟度评估**：尚未成熟——kb_vec 角仍路由
+  knowledge/vec 送 Python（Rust KB 缺 store/get 面）、meta.compile/tuple 物化
+  等角未移除；⑦ 终点前置 = 先移植 Rust 剩余面 + 角移除，再退役 Python 语义
+  执行 + 差分机制（独立项目，下轮主线）。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
