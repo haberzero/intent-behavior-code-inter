@@ -186,6 +186,16 @@ impl NodeSerializer {
         std::mem::take(&mut self.def_node_uids)
     }
 
+    /// 函数别名签名链（`fn f = g` / `auto f = g`：f 的调用返回类型解析同 g——
+    /// Python 类型检查器别名链语义，语料面探针实证 Call f() → int）。
+    pub fn link_function_alias(&mut self, from: &str, to: &str) {
+        if from != to {
+            if let Some(sig) = self.func_sigs.get(to).cloned() {
+                self.func_sigs.insert(from.to_string(), sig);
+            }
+        }
+    }
+
     /// types 池泛型容器类型名（泛型闭包）：种子 = 类型环境值[变量绑定] + 方法调用
     /// 特化返回类型；每个泛型串展开其 payload 实参（dict[str,list[int]] →
     /// list[int] → int），全部泛型串进池（Python 实证：注册表泛型闭包语义）。
@@ -194,6 +204,14 @@ impl NodeSerializer {
         for scope in self.type_env.iter() {
             for t in scope.values() {
                 seeds.insert(t.clone());
+            }
+        }
+        // node_to_type 值（type_root.<name> 形态——剥前缀）：节点引用的泛型类型
+        // 同样触发 types 池条目（Python 实证：解包值 tuple[int,int] 仅经
+        // node_to_type 引用，无符号绑定——条目仍进池）
+        for t in self.node_to_type.values() {
+            if let Some(stripped) = t.strip_prefix("type_root.") {
+                seeds.insert(stripped.to_string());
             }
         }
         let mut out = BTreeSet::new();
@@ -313,10 +331,15 @@ impl NodeSerializer {
     pub fn serialize_stmt(&mut self, stmt: &Stmt) -> String {
         match stmt {
             Stmt::Assign { pos, targets, value } => {
-                // 目标序列化（声明面 target = TypeAnnotatedExpr 时内联序列化
-                // 注解/target 子节点——uid 需暴露给绑定面）
+                // 目标序列化（声明面 target = TypeAnnotatedExpr[单] 或
+                // Tuple[Store][元组解包] 时内联序列化注解/target 子节点——
+                // uid 需暴露给绑定面）
                 let mut t_uids: Vec<String> = Vec::new();
-                let mut decl_parts: Option<(String, String, String)> = None;
+                // 声明绑定分量：(id, annotated_uid, name_uid, ann_uid) + 注解
+                // 表达式引用（绑定面单一权威源）
+                let mut decl_parts: Option<Vec<(String, String, String, String)>> = None;
+                let mut decl_anns: Vec<&Expr> = Vec::new();
+                let mut is_decl_tuple = false;
                 for t in targets {
                     match t {
                         Expr::TypeAnnotatedExpr {
@@ -329,6 +352,10 @@ impl NodeSerializer {
                             // = Full（Store 节点经 Assign 臂显式绑 symbol）
                             let a_uid = self.ser_annotation(annotation);
                             let n_uid = self.ser(target, RecordMode::Full);
+                            let id = match target.as_ref() {
+                                Expr::Name { id, .. } => id.clone(),
+                                _ => String::new(),
+                            };
                             let mut nd = base_fields(tpos);
                             nd.insert(
                                 "_type".to_string(),
@@ -337,8 +364,66 @@ impl NodeSerializer {
                             nd.insert("target".to_string(), Value::String(n_uid.clone()));
                             nd.insert("annotation".to_string(), Value::String(a_uid.clone()));
                             let annotated_uid = self.collect(nd);
-                            decl_parts = Some((annotated_uid.clone(), n_uid, a_uid));
+                            decl_parts = Some(vec![(id, annotated_uid.clone(), n_uid, a_uid)]);
+                            decl_anns.push(annotation);
                             t_uids.push(annotated_uid);
+                        }
+                        // 元组解包声明 target（IbTuple[ctx Store]，elts = annotated）
+                        Expr::Tuple { elts, pos: tpos, .. }
+                            if elts
+                                .iter()
+                                .all(|e| matches!(e, Expr::TypeAnnotatedExpr { .. })) =>
+                        {
+                            is_decl_tuple = true;
+                            let mut parts: Vec<(String, String, String, String)> =
+                                Vec::new();
+                            let mut ann_uids: Vec<String> = Vec::new();
+                            for e in elts {
+                                if let Expr::TypeAnnotatedExpr {
+                                    target,
+                                    annotation,
+                                    pos: tpos,
+                                } = e
+                                {
+                                    // 解包分量注解 = None 记录（不绑 node_to_type——
+                                    // Python 实证：仅单声明注解进 node_to_type）
+                                    let a_uid = self.ser(annotation, RecordMode::None);
+                                    let n_uid = self.ser(target, RecordMode::Full);
+                                    let id = match target.as_ref() {
+                                        Expr::Name { id, .. } => id.clone(),
+                                        _ => String::new(),
+                                    };
+                                    let mut nd = base_fields(tpos);
+                                    nd.insert(
+                                        "_type".to_string(),
+                                        Value::String("IbTypeAnnotatedExpr".to_string()),
+                                    );
+                                    nd.insert(
+                                        "target".to_string(),
+                                        Value::String(n_uid.clone()),
+                                    );
+                                    nd.insert(
+                                        "annotation".to_string(),
+                                        Value::String(a_uid.clone()),
+                                    );
+                                    let annotated_uid = self.collect(nd);
+                                    parts.push((id, annotated_uid.clone(), n_uid, a_uid));
+                                    ann_uids.push(annotated_uid);
+                                    decl_anns.push(annotation);
+                                }
+                            }
+                            // IbTuple 节点（位置 = 解析器既定：LPAREN / 首类型
+                            // token；elts = annotated uid；ctx Store）
+                            let mut nd = base_fields(tpos);
+                            nd.insert("_type".to_string(), Value::String("IbTuple".to_string()));
+                            nd.insert(
+                                "elts".to_string(),
+                                Value::Array(ann_uids.into_iter().map(Value::String).collect()),
+                            );
+                            nd.insert("ctx".to_string(), Value::String("Store".to_string()));
+                            let tuple_uid = self.collect(nd);
+                            decl_parts = Some(parts);
+                            t_uids.push(tuple_uid);
                         }
                         other => t_uids.push(self.serialize_expr(other)),
                     }
@@ -384,41 +469,73 @@ impl NodeSerializer {
                 );
                 node_data.insert("llmexcept_handler".to_string(), Value::Null);
                 let assign_uid = self.collect(node_data);
-                // 声明面绑定（Python 实证：int x = 2 / list[int] ys / auto a）：
-                // 注解节点 node_to_type = type_root.<注解串>（含 auto →
-                // type_root.auto）；annotated/Assign/值节点 node_to_type = 声明
-                // 类型（auto = 值推导符号通道类型）；target name/annotated/
-                // Assign/值节点 node_to_symbol → 定义符号；符号 type_uid = 声明
-                // 类型（auto = 推导）；定义节点 = Assign 节点（同普通赋值）。
-                if let Some((annotated_uid, name_uid, ann_uid)) = decl_parts {
-                    if let Some(Expr::TypeAnnotatedExpr { target, annotation, .. }) = targets.first() {
-                        if let Expr::Name { id, .. } = &**target {
-                            let ctx = self.ctx();
-                            let ann_str = annotation_type_str(&**annotation);
-                            let declared = if ann_str == "auto" {
-                                value.as_ref().and_then(|v| symbol_level_type(v, &ctx))
-                            } else {
-                                Some(ann_str.clone())
-                            };
-                            if let Some(ts) = &declared {
-                                self.define_name(id, ts);
-                            }
+                // 声明面绑定（Python 实证：int x = 2 / list[int] ys / auto a /
+                // fn f / (int x, int y) = t）：注解节点 node_to_type =
+                // type_root.<注解串>（含 auto → type_root.auto / fn →
+                // type_root.fn）；annotated 节点 node_to_type = 声明类型
+                // （auto/fn = 值推导符号通道类型）；单声明值节点 node_to_type =
+                // 声明类型[解包值 = 推导 tuple 型，不覆盖]；target name/annotated
+                // 节点 node_to_symbol → 定义符号（解包逐分量）；Assign 节点
+                // node_to_symbol 仅单声明[解包无——Python 实证]；符号 type_uid =
+                // 声明类型（auto/fn = 推导）；定义节点 = Assign 节点。
+                if let Some(parts) = &decl_parts {
+                    for ((id, annotated_uid, name_uid, ann_uid), ann) in
+                        parts.iter().zip(decl_anns.iter())
+                    {
+                        if id.is_empty() {
+                            continue;
+                        }
+                        let ann_str = annotation_type_str(ann);
+                        // auto / fn 可调用声明 = 值推导（符号/绑定语义同）
+                        let declared = if ann_str == "auto" || ann_str == "fn" {
+                            let decl_ctx = self.ctx();
+                            value
+                                .as_ref()
+                                .and_then(|v| symbol_level_type(v, &decl_ctx))
+                        } else {
+                            Some(ann_str.clone())
+                        };
+                        if let Some(ts) = &declared {
+                            self.define_name(id, ts);
+                        }
+                        // 单声明注解节点 = type_root.<注解串>（含 auto/fn）；解包
+                        // 分量注解不绑（Python 实证）
+                        if !is_decl_tuple {
                             self.node_to_type.insert(
                                 ann_uid.clone(),
-                                format!("type_root.{}", ann_str.clone()),
+                                format!("type_root.{}", ann_str),
                             );
-                            if let Some(d) = declared {
-                                let du = format!("type_root.{}", d);
-                                self.node_to_type.insert(annotated_uid.clone(), du.clone());
-                                // 值节点 = 声明类型（auto = 推导值 ser 已绑，覆盖一致）
+                        }
+                        if let Some(d) = declared {
+                            let du = format!("type_root.{}", d);
+                            self.node_to_type.insert(annotated_uid.clone(), du.clone());
+                            // 单声明值节点 = 声明类型（auto/fn 推导值 ser 已绑，
+                            // 覆盖一致）；解包值 = 推导 tuple 型，不覆盖
+                            if !is_decl_tuple {
                                 if let Some(vu) = &v_uid {
                                     self.node_to_type.insert(vu.clone(), du);
                                 }
                             }
-                            let sym_uid = self.current_scope_symbol_uid(id);
-                            self.node_to_symbol.insert(name_uid.clone(), sym_uid.clone());
+                        }
+                        let sym_uid = self.current_scope_symbol_uid(id);
+                        self.node_to_symbol.insert(name_uid.clone(), sym_uid.clone());
+                        // 单声明：annotated + Assign 节点 node_to_symbol + 定义节点；
+                        // 解包：仅 target name 节点 + 逐分量定义节点（annotated/
+                        // Assign 不绑 symbol——Python 实证）
+                        if is_decl_tuple {
+                            self.def_node_uids
+                                .entry(sym_uid)
+                                .or_insert(assign_uid.clone());
+                        } else {
                             self.node_to_symbol.insert(annotated_uid.clone(), sym_uid.clone());
                             self.node_to_symbol.insert(assign_uid.clone(), sym_uid.clone());
+                            // fn/auto 别名签名链（f = g → Call f() 返回类型解析
+                            // 同 g——Python 类型检查器别名链语义）
+                            if ann_str == "auto" || ann_str == "fn" {
+                                if let Some(Expr::Name { id: vname, .. }) = value.as_ref() {
+                                    self.link_function_alias(id, vname);
+                                }
+                            }
                         }
                     }
                 }
@@ -1072,6 +1189,10 @@ pub(crate) fn annotation_type_str(e: &Expr) -> String {
                 other => annotation_type_str(other),
             };
             format!("{base}[{args}]")
+        }
+        // 点分类型：mod.Type
+        Expr::Attribute { value, attr, .. } => {
+            format!("{}.{}", annotation_type_str(value), attr)
         }
         _ => "any".to_string(),
     }

@@ -160,13 +160,53 @@ impl SymbolResolver {
                                     let ann = crate::node_serializer::annotation_type_str(
                                         annotation,
                                     );
-                                    let ts = if ann == "auto" {
+                                    // auto / fn 可调用声明 = 值推导
+                                    let ts = if ann == "auto" || ann == "fn" {
                                         type_str.clone()
                                     } else {
                                         Some(ann)
                                     };
                                     if let Some(ts) = ts {
                                         self.bind_var_type(id, &ts);
+                                    }
+                                }
+                            }
+                        }
+                        // 元组解包声明 target（逐分量绑定；定义节点 = Assign 节点
+                        // 经 def_node_uids 统一记录）
+                        Expr::Tuple { elts, .. } => {
+                            for e in elts {
+                                if let Expr::TypeAnnotatedExpr {
+                                    target: inner,
+                                    annotation,
+                                    ..
+                                } = e
+                                {
+                                    if let Expr::Name { id, .. } = inner.as_ref() {
+                                        self.bind_symbol(id, "VARIABLE");
+                                        let scope = self.current_scope();
+                                        let uid = format!("scope_{}:{}", scope, id);
+                                        let has_type = self
+                                            .symbols
+                                            .get(&uid)
+                                            .and_then(|s| s.get("type_uid"))
+                                            .and_then(|v| v.as_str())
+                                            .is_some();
+                                        if !has_type {
+                                            let ann = crate::node_serializer::annotation_type_str(
+                                                annotation,
+                                            );
+                                            // auto / fn 可调用声明 = 值推导
+                                            let ts =
+                                                if ann == "auto" || ann == "fn" {
+                                                    type_str.clone()
+                                                } else {
+                                                    Some(ann)
+                                                };
+                                            if let Some(ts) = ts {
+                                                self.bind_var_type(id, &ts);
+                                            }
+                                        }
                                     }
                                 }
                             }

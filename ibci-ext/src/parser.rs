@@ -805,6 +805,30 @@ impl Parser {
                 // auto x = v（类型推导声明——annotation = Name(auto)）
                 self.parse_declaration_auto()
             }
+            TokenType::Fn => {
+                // fn f = v（可调用声明——annotation = Name(fn)；符号/绑定语义同
+                // auto[值推导]；可调用签名 fn[(...) -> ...] = IbCallableType
+                // [登记缺口——语料面不含]）
+                let kw = self.advance();
+                let kw_pos = Pos::from_token(&kw);
+                let annotation = Expr::Name {
+                    pos: kw_pos.clone(),
+                    id: "fn".to_string(),
+                    ctx: "Load".to_string(),
+                };
+                self.finish_declaration(kw_pos, annotation)
+            }
+            TokenType::Lparen => {
+                // 括号元组解包声明：(int x, int y) = t（否则 = 元组表达式语句）
+                if self.is_typed_tuple_declaration() {
+                    return self.parse_tuple_declaration();
+                }
+                let value = self.parse_expr();
+                Stmt::ExprStmt {
+                    pos: expr_pos(&value),
+                    value,
+                }
+            }
             TokenType::Identifier => {
                 // 声明面前瞻：TYPE x = v / TYPE x: TYPE2 = v（TYPE = 标识符[可带
                 // 泛型括号]，后随变量名 + = / :）
@@ -902,19 +926,41 @@ impl Parser {
             return false;
         }
         self.advance();
-        let ok = self.at(TokenType::Assign) || self.at(TokenType::Colon);
+        // = / :（单声明）/ ,（裸列元组解包 int a, int b = t）
+        let ok = self.at(TokenType::Assign)
+            || self.at(TokenType::Colon)
+            || self.at(TokenType::Comma);
         self.pos = save;
         ok
     }
 
-    /// 类型注解（IDENT [ [ typearg, ... ] ]；多参 = IbTuple[ctx Load]；位置 =
-    /// 类型名 token——泛型节点 end = 类型名 end，非括号跨度）。
+    /// 类型注解（IDENT [ . IDENT ]* [ [ typearg, ... ] ]；多参 = IbTuple[ctx
+    /// Load]；位置 = 类型名 token——泛型节点 end = 类型名 end，非括号跨度；点分
+    /// 类型 = Attribute 链[mod.Type]）。
     fn parse_type_annotation(&mut self) -> Expr {
         let tok = self.advance(); // 类型名
+        let ty_pos = Pos::from_token(&tok);
         let base = Expr::Name {
-            pos: Pos::from_token(&tok).clone(),
+            pos: ty_pos.clone(),
             id: tok.value,
             ctx: "Load".to_string(),
+        };
+        // 点分类型：mod.Type
+        let base = if self.at(TokenType::Dot) {
+            let mut cur = Box::new(base);
+            while self.at(TokenType::Dot) {
+                self.advance();
+                let m_tok = self.advance(); // 成员名
+                cur = Box::new(Expr::Attribute {
+                    pos: ty_pos.clone(),
+                    value: cur,
+                    attr: m_tok.value,
+                    ctx: "Load".to_string(),
+                });
+            }
+            *cur
+        } else {
+            base
         };
         self.parse_generic_annotation(base)
     }
@@ -989,8 +1035,8 @@ impl Parser {
         }
     }
 
-    /// 显式类型声明：int x = 1 / list[int] xs = ...（入口 = is_var_declaration
-    /// 已确认）。
+    /// 显式类型声明：int x = 1 / list[int] xs = ... / 裸列 int a, int b = t
+    /// （入口 = is_var_declaration 已确认）。
     fn parse_declaration_identifier(&mut self) -> Stmt {
         let ty_tok = self.advance(); // 类型名
         let ty_pos = Pos::from_token(&ty_tok);
@@ -999,8 +1045,182 @@ impl Parser {
             id: ty_tok.value,
             ctx: "Load".to_string(),
         };
-        let annotation = self.parse_generic_annotation(base);
-        self.finish_declaration(ty_pos, annotation)
+        let first_ann = self.parse_generic_annotation(base);
+        let name_tok = self.advance(); // 变量名
+        // 裸列元组解包声明：int a, int b = t
+        if self.at(TokenType::Comma) {
+            let mut elts = vec![self.annotated_component(
+                ty_pos.clone(),
+                &name_tok,
+                first_ann,
+            )];
+            while self.at(TokenType::Comma) {
+                self.advance();
+                let e_ty_tok = self.advance();
+                let e_ty_pos = Pos::from_token(&e_ty_tok);
+                let e_base = Expr::Name {
+                    pos: e_ty_pos.clone(),
+                    id: e_ty_tok.value,
+                    ctx: "Load".to_string(),
+                };
+                let e_ann = self.parse_generic_annotation(e_base);
+                let e_name_tok = self.advance();
+                elts.push(self.annotated_component(
+                    e_ty_pos,
+                    &e_name_tok,
+                    e_ann,
+                ));
+            }
+            self.expect(TokenType::Assign);
+            let value = self.parse_expr();
+            let tuple = Expr::Tuple {
+                pos: ty_pos.clone(),
+                elts,
+                ctx: "Store".to_string(),
+            };
+            return self.decl_assign(ty_pos, vec![tuple], value);
+        }
+        // 单变量声明（: TYPE2 显式覆盖 / = 值）
+        let annotation = if self.at(TokenType::Colon) {
+            self.advance();
+            self.parse_type_annotation()
+        } else {
+            first_ann
+        };
+        self.expect(TokenType::Assign);
+        let value = self.parse_expr();
+        let store_name = Expr::Name {
+            pos: Pos::from_token(&name_tok),
+            id: name_tok.value,
+            ctx: "Store".to_string(),
+        };
+        let annotated = Expr::TypeAnnotatedExpr {
+            pos: ty_pos.clone(),
+            target: Box::new(store_name),
+            annotation: Box::new(annotation),
+        };
+        self.decl_assign(ty_pos, vec![annotated], value)
+    }
+
+    /// 解包分量（annotated 组件：pos = 分量类型 token）。
+    fn annotated_component(&mut self, ty_pos: Pos, name_tok: &Token, ann: Expr) -> Expr {
+        let store_name = Expr::Name {
+            pos: Pos::from_token(name_tok),
+            id: name_tok.value.clone(),
+            ctx: "Store".to_string(),
+        };
+        Expr::TypeAnnotatedExpr {
+            pos: ty_pos,
+            target: Box::new(store_name),
+            annotation: Box::new(ann),
+        }
+    }
+
+    /// 声明 Assign 收尾（位置 = 类型起始 token，end = 0[Python 声明 Assign 位置
+    /// 约定]）。
+    fn decl_assign(&mut self, ty_pos: Pos, targets: Vec<Expr>, value: Expr) -> Stmt {
+        let mut apos = ty_pos;
+        apos.end_lineno = Some(0);
+        apos.end_col_offset = Some(0);
+        Stmt::Assign {
+            pos: apos,
+            targets,
+            value: Some(value),
+        }
+    }
+
+    /// 括号元组解包声明前瞻：( TYPE x [, TYPE y ...] ) = （组件 = 类型名 +
+    /// 可选泛型 + 变量名）。
+    fn is_typed_tuple_declaration(&mut self) -> bool {
+        if !self.at(TokenType::Lparen) {
+            return false;
+        }
+        let save = self.pos;
+        self.advance(); // (
+        let mut depth = 0;
+        loop {
+            if !self.at(TokenType::Identifier) {
+                self.pos = save;
+                return false;
+            }
+            self.advance(); // 组件类型名
+            if self.at(TokenType::Lbracket) {
+                // 泛型括号深度
+                self.advance();
+                depth = 1;
+                while depth > 0 {
+                    match self.peek().type_ {
+                        TokenType::Eof => {
+                            self.pos = save;
+                            return false;
+                        }
+                        TokenType::Lbracket => {
+                            depth += 1;
+                            self.advance();
+                        }
+                        TokenType::Rbracket => {
+                            depth -= 1;
+                            self.advance();
+                        }
+                        _ => {
+                            self.advance();
+                        }
+                    }
+                }
+            }
+            if !self.at(TokenType::Identifier) {
+                self.pos = save;
+                return false;
+            }
+            self.advance(); // 组件变量名
+            if self.at(TokenType::Comma) {
+                self.advance();
+                continue;
+            }
+            if !self.at(TokenType::Rparen) {
+                self.pos = save;
+                return false;
+            }
+            self.advance(); // )
+            break;
+        }
+        let ok = self.at(TokenType::Assign);
+        self.pos = save;
+        ok
+    }
+
+    /// 括号元组解包声明：(int x, int y) = t（目标 IbTuple[ctx Store]，位置 =
+    /// LPAREN token；Assign 位置 = LPAREN，end = 0）。
+    fn parse_tuple_declaration(&mut self) -> Stmt {
+        let lparen = self.advance(); // (
+        let lpos = Pos::from_token(&lparen);
+        let mut elts = Vec::new();
+        loop {
+            let ty_tok = self.advance(); // 组件类型名
+            let ty_pos = Pos::from_token(&ty_tok);
+            let base = Expr::Name {
+                pos: ty_pos.clone(),
+                id: ty_tok.value,
+                ctx: "Load".to_string(),
+            };
+            let ann = self.parse_generic_annotation(base);
+            let name_tok = self.advance(); // 组件变量名
+            elts.push(self.annotated_component(ty_pos, &name_tok, ann));
+            if self.at(TokenType::Comma) {
+                self.advance();
+                continue;
+            }
+            break;
+        }
+        self.advance(); // )
+        self.expect(TokenType::Assign);
+        let value = self.parse_expr();
+        let tuple = Expr::Tuple {
+            pos: lpos.clone(),
+            elts,
+            ctx: "Store".to_string(),
+        };
+        self.decl_assign(lpos, vec![tuple], value)
     }
 
     /// auto x = v（入口 = Auto token；annotation = Name(auto)）。

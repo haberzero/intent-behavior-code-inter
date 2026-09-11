@@ -31,8 +31,8 @@
 ## 🔴 当前状态
 
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
-> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4303 passed / 1 skipped 零回归**（2026-09-11 实跑
-> 139.38s，P9 全量 Rust 化第四批 增量 3c[声明面移植]放行门
+> 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4304 passed / 1 skipped 零回归**（2026-09-11 实跑
+> 155.22s，P9 全量 Rust 化第四批 增量 3d[声明面剩余形态 + 函数值一等化]放行门
 > [注：test_p7_process_isolation / test_run_result_type 为 flaky 子进程 spawn 测试，
 > 并行负载下临时文件时序偶发失败，隔离重跑通过，非回归]；数字以实跑为准，不冻结）。
 > **使用策略（临时，2026-09-10 起 → 直至 Rust 内核替换结束；2026-09-11 用户裁定放开）**：单任务默认验证 =
@@ -514,9 +514,15 @@
        / TYPE x: TYPE2 = v 显式覆盖——parser 声明面前瞻 + Expr::TypeAnnotatedExpr
        + 声明 Assign 绑定面[注解仅顶层 node_to_type + 声明类型优先 + auto 推导]
        + symbol_resolver 声明类型 + interpreter 运行时纯赋值；2 探针数据面 +
-       5 池 + 2 侧表内容归一全等价][当前批次推进中]
-    + LLM 面 15 节点覆盖差[归 LLM 运行时移植批次] + 声明面剩余形态[fn/元组解包/
-      点分类型] + Host 变体退役收尾
+       5 池 + 2 侧表内容归一全等价] ✅
+    → 第四批 增量 3d 声明面剩余形态 + 函数值一等化[fn f = g 可调用声明[值推导
+       + 别名签名链] / 括号元组解包 (int x, int y) = t / 裸列 int a, int b = t /
+       点分类型 mod.Type / 函数内解包；解包绑定面裁定[分量注解不绑 + Assign 不
+       绑 symbol + 值 = 推导 tuple 型]；**IbValue::Function 一等值变体**[根因
+       修复：别名调用 env.get = None——双写 functions/vars 表 + source 形态
+       显示面 + 身份相等]；types 池泛型条目触发面扩 node_to_type 种子[lib.rs
+       顺序修正]；2 探针数据面 + 5 池 + 2 侧表内容归一全等价][当前批次推进中]
+    + LLM 面 15 节点覆盖差[归 LLM 运行时移植批次] + Host 变体退役收尾
    （差分 harness 语料纪律 = 自包含脚本，磁盘面不入库语料——P9 如需文件语料再显式
    扩 temp root；每步受影响子集+smoke 零回归 + commit + 同步 NEXT_STEPS/WORKLOG）。
 2. **selfref 弧线（C3-C5, Phase D）与主线收敛**：R-A quote/eval 地基已落（C3 起 selfref.verify

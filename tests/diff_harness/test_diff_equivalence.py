@@ -329,6 +329,77 @@ class TestRustExecutionDataPlane:
             rs = rust_execution_data_plane(src)
             assert rs == py, f"数据面差分不等价：\n  py : {py}\n  rust: {rs}"
 
+    def test_data_plane_declaration_extended_snippets(self):
+        """数据面 + artifact 面差分等价：声明面剩余形态（自包含脚本——
+        `fn f = g` 可调用声明[符号/绑定语义同 auto：值推导 + 别名签名链——
+        Call f() 返回类型解析同 g] / 括号元组解包 `(int x, int y) = t` /
+        裸列元组解包 `int a, int b = t` / 函数内解包；函数值 = 一等值
+        [IbValue::Function——print(f) source 形态显示面 func name(types) -> ret
+        + 别名调用 x = g / fn f = g]。解包绑定面：target name 节点
+        node_to_symbol + annotated 节点 node_to_type（分量注解不绑——仅单
+        声明）+ Assign 节点不绑 symbol；解包值 node_to_type = 推导 tuple 型
+        [触发 types 池泛型条目——generics 种子含 node_to_type 值]。
+        登记缺口：auto/fn 分量解包[Python 不支持] / 可调用签名 fn[(...) ->
+        ...] / 普通赋值别名链 x = g 的 Call 返回类型[类型检查器深度语义]）。"""
+        from tests.conftest import run_ibci, compile_ibci
+        from core.compiler.serialization.serializer import FlatSerializer
+        from tests.diff_harness.harness import load_rust_kernel, rust_execution_data_plane
+        import json, re
+        from collections import Counter
+        rk = load_rust_kernel()
+        if not rk.loaded:
+            return
+        probes = [
+            (
+                'func g() -> int:\n'
+                '    return 1\n'
+                'fn f = g\n'
+                '(int x, int y) = (10, 20)\n'
+                'print(f())\n'
+                'print(x)\n'
+                'print(y)\n'
+                'print(f)\n'
+            ),
+            (
+                'int a, int b = (1, 2)\n'
+                'print(a)\n'
+                'print(b)\n'
+                'func h() -> int:\n'
+                '    (int p, int q) = (3, 4)\n'
+                '    return p + q\n'
+                'print(h())\n'
+            ),
+        ]
+        def norm(d):
+            return re.sub(r"node_[0-9a-f]{16}", "<UID>", json.dumps(d, sort_keys=True, ensure_ascii=False))
+        for code in probes:
+            py = run_ibci(code)
+            rs = rust_execution_data_plane(code)
+            assert rs == py, f"声明面剩余形态数据面差分不等价：\n  py : {py}\n  rust: {rs}"
+            art = FlatSerializer().serialize_artifact(compile_ibci(code))
+            rs_art = json.loads(rk._module.full_artifact(code))
+            mod_p = art["modules"][art["entry_module"]]
+            mod_r = rs_art["modules"][rs_art["entry_module"]]
+            for pool in ("nodes", "symbols", "scopes", "types", "assets"):
+                r, p = rs_art["pools"][pool], art["pools"][pool]
+                cr = Counter(norm(v) for v in r.values())
+                cp = Counter(norm(v) for v in p.values())
+                assert cr == cp, (
+                    f"声明面剩余形态 artifact {pool} 内容差：rs_only={list((cr-cp).elements())[:2]} "
+                    f"py_only={list((cp-cr).elements())[:2]}"
+                )
+            for st in ("node_to_type", "node_to_symbol"):
+                r, p = mod_r["side_tables"][st], mod_p["side_tables"][st]
+                rc, pc = {}, {}
+                for k, v in r.items():
+                    rc.setdefault(norm(json.dumps(mod_r["pools"]["nodes"][k], sort_keys=True)), []).append(v)
+                for k, v in p.items():
+                    pc.setdefault(norm(json.dumps(mod_p["pools"]["nodes"][k], sort_keys=True)), []).append(v)
+                assert rc == pc, (
+                    f"声明面剩余形态侧表 {st} 内容差：rs_only={list(set(rc)-set(pc))[:2]} "
+                    f"py_only={list(set(pc)-set(rc))[:2]}"
+                )
+
     def test_data_plane_declaration_snippets(self):
         """数据面 + artifact 面差分等价：变量声明面（自包含脚本——
         `int x = v` / `auto x = v` / 泛型 `list[int] xs = v` / `str s = v`

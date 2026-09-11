@@ -68,9 +68,31 @@ Rust 执行面值域（`ibci-ext/src/interpreter.rs` 的 `IbValue`）消除 `Hos
    赋值，注解不消费] + deserializer。差分门：
    test_data_plane_declaration_snippets（数据面 + 5 池 + 2 侧表内容归一全等价；
    顶层 + 函数内 scope 双探针）。
-   **登记缺口（非本增量范围）**：① 声明面剩余形态——`fn f = ...` 可调用声明 /
-   元组解包 `(int x, int y) = t` / 点分类型 `mod.Type` / chan/slot 类型[LLM
-   运行时面]；② LLM 面 15 节点覆盖差（IbCastExpr/IbRetry/
+   **声明面剩余形态移植 ✅[2026-09-11 落地，3d 同批]**：`fn f = g` 可调用
+   声明[符号/绑定语义同 auto——值推导 + 别名签名链 link_function_alias：
+   Call f() 返回类型解析同 g] / 括号元组解包 `(int x, int y) = t` / 裸列
+   `int a, int b = t`[前瞻 Comma 分支] / 点分类型 `mod.Type`[Attribute 链 +
+   annotation_type_str 点分串]。**解包绑定面裁定（Python 实证）**：target
+   name 节点 node_to_symbol + annotated 节点 node_to_type = 声明类型（分量
+   注解不绑 node_to_type——仅单声明注解进）+ Assign 节点不绑 symbol[单声明
+   绑] + 解包值 node_to_type = 推导 tuple 型[不覆盖为分量声明类型]；符号
+   node_uid = Assign 节点（同单声明）；types 池泛型条目触发面 = generics
+   种子含 node_to_type 值[解包值 tuple[int,int] 仅经 node_to_type 引用——
+   lib.rs 顺序修正：generic_type_names 先于 node_to_type_map[mem::take]]。
+   **函数值一等化（根因修复）**：`fn f = g` / `x = g` 别名调用暴露 Rust 函数
+   仅驻 functions 表[值通道 env.get = None]——IbValue::Function(Rc<Function>)
+   新变体（一等值：可赋值/别名/传参；显示面 = source 形态
+   `func <name>(<param types>) -> <ret>`[Python 实证：参数面仅类型名不含
+   参数名；无返回类型省略 -> 段]；define_function 双写 functions 表 +
+   vars 表；Call 分支经值调用[call_user_function 共享]；身份相等[Rc
+   ptr_eq]；不经桥接）。差分门：test_data_plane_declaration_snippets +
+   test_data_plane_declaration_extended_snippets（fn/括号解包/裸列/函数内
+   解包 + 函数值显示/别名——数据面 + 5 池 + 2 侧表内容归一全等价）。
+   **登记缺口（非本增量范围）**：① 声明面剩余——auto/fn 分量元组解包
+   [Python 不支持] / 可调用签名 `fn[(...) -> ...]` = IbCallableType /
+   普通赋值别名链 `x = g` 的 Call 返回类型[类型检查器深度语义——数据面无
+   偏离，仅 artifact node_to_type 差] / chan/slot 类型[LLM 运行时面]；
+   ② LLM 面 15 节点覆盖差（IbCastExpr/IbRetry/
    IbIntentAnnotation/IbImplDef/IbProtocolDef/IbHostImport/IbBehaviorExpr/
    IbChannelExpr/IbAwaitExpr/IbYieldExpr/IbYieldFromExpr/IbFilteredExpr/
    IbSlotExpr/IbIntentStackOperation/IbWithOverlay——其中 IbCastExpr 语法复杂

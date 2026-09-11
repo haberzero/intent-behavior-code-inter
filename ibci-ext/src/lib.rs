@@ -243,9 +243,11 @@ fn full_artifact(source: &str) -> PyResult<String> {
     // 1) NodeSerializer 统一遍历：nodes + 侧表 + 泛型/用户面
     let mut ns = node_serializer::NodeSerializer::new();
     let (root_uid, nodes) = ns.serialize_module(&module);
+    // 泛型闭包先取（种子含 node_to_type 值——node_to_type_map 为 mem::take 取走
+    // 语义，顺序敏感）
+    let generics = ns.generic_type_names();
     let node_to_type = ns.node_to_type_map();
     let node_to_symbol = ns.node_to_symbol_map();
-    let generics = ns.generic_type_names();
     let module_type = ns.entry_module_type_entry();
     let module_member_kinds = ns.entry_module_member_kinds();
     let user_function_types = ns.user_function_entries();

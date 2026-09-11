@@ -48,6 +48,9 @@ pub enum IbValue {
     /// 截断摘要 vector[<dim>](前 8 维 %.6g, ...)——同 __to_prompt__）。
     Vector(Vec<f64>),
     /// 宿主对象（Python 对象引用——host service 桥接委托面）。
+    /// 函数值（一等值——值域可赋值/别名/传参；Rc 共享 = 同一函数对象身份；
+    /// 显示面 = source 形态 `func <name>(<param types>) -> <ret>`）。
+    Function(Rc<Function>),
     Host(Py<PyAny>),
 }
 
@@ -69,6 +72,8 @@ impl Clone for IbValue {
             // 共享可变容器（同 List/Dict——Rc clone = 共享引用）
             IbValue::Knowledge(k) => IbValue::Knowledge(k.clone()),
             IbValue::Vector(v) => IbValue::Vector(v.clone()),
+            // 函数值 = Rc 共享（同一函数对象）
+            IbValue::Function(f) => IbValue::Function(f.clone()),
             IbValue::Host(h) => {
                 // clone_ref 需 GIL（执行期 GIL 已持有，with_gil 可重入）
                 let cloned = Python::with_gil(|py| h.clone_ref(py));
@@ -90,6 +95,7 @@ impl std::fmt::Debug for IbValue {
             IbValue::MetaFn(n) => write!(f, "MetaFn({n:?})"),
             IbValue::Knowledge(_) => write!(f, "Knowledge(..)"),
             IbValue::Vector(v) => write!(f, "Vector({v:?})"),
+            IbValue::Function(fn_val) => write!(f, "Function({})", fn_val.name),
             IbValue::List(_) => write!(f, "List(..)"),
             IbValue::Dict(_) => write!(f, "Dict(..)"),
             IbValue::Host(_) => write!(f, "Host(<py object>)"),
@@ -124,6 +130,8 @@ impl PartialEq for IbValue {
             (IbValue::Knowledge(a), IbValue::Knowledge(b)) => Rc::ptr_eq(a, b),
             // vector 相等 = 元素逐位值语义（公理：payload 元组相等）
             (IbValue::Vector(a), IbValue::Vector(b)) => a == b,
+            // 函数值相等 = 对象身份（Rc 共享——同一函数定义）
+            (IbValue::Function(a), IbValue::Function(b)) => Rc::ptr_eq(a, b),
             (IbValue::Host(a), IbValue::Host(b)) => {
                 // 宿主对象身份相等（同一 Python 对象指针）
                 a.as_ptr() == b.as_ptr()
@@ -174,6 +182,15 @@ impl IbValue {
             // vector 显示面 = 截断摘要（dim + 前 8 维 %.6g——同 __to_prompt__；
             // 全量维度进提示词 = 污染风险，截断即纪律）
             IbValue::Vector(v) => vector_repr(v),
+            // 函数值显示面 = source 形态（Python 实证：func f(int) -> str——
+            // 参数面仅类型名不含参数名；无返回类型 = 省略 -> 段）
+            IbValue::Function(f) => {
+                let mut s = format!("func {}({})", f.name, f.param_types.join(", "));
+                if let Some(r) = &f.ret {
+                    s.push_str(&format!(" -> {r}"));
+                }
+                s
+            }
             IbValue::Host(_) => "<host>".into(),
         }
     }
@@ -190,6 +207,7 @@ impl IbValue {
             IbValue::MetaFn(_) => true,
             IbValue::Knowledge(_) => true,
             IbValue::Vector(v) => !v.is_empty(),
+            IbValue::Function(_) => true,
             IbValue::Host(_) => true,
         }
     }
@@ -309,6 +327,11 @@ pub struct Environment {
 pub struct Function {
     pub name: String,
     pub params: Vec<String>,
+    /// 参数类型串（显示面 source 形态：`func f(int, str) -> int`——Python 实证
+    /// 参数面仅类型名，不含参数名）。
+    pub param_types: Vec<String>,
+    /// 返回类型串（显示面 `-> <ret>`；无 = 省略）。
+    pub ret: Option<String>,
     pub body: Vec<Stmt>,
     /// 定义处的环境（闭包捕获——调用时 call_env 的 parent = 此环境）。
     pub enclosing: Option<Rc<RefCell<Environment>>>,
@@ -319,6 +342,8 @@ impl Clone for Function {
         Function {
             name: self.name.clone(),
             params: self.params.clone(),
+            param_types: self.param_types.clone(),
+            ret: self.ret.clone(),
             body: self.body.clone(),
             // enclosing = Rc 共享（闭包捕获同一环境）
             enclosing: self.enclosing.clone(),
@@ -357,7 +382,12 @@ impl Environment {
         }
     }
     fn define_function(&mut self, f: Function) {
-        self.functions.insert(f.name.clone(), f);
+        // 函数 = 一等值（值域可赋值/别名/传参——Python 语义：f() 可经任意名字
+        // 调用）：functions 表（按名查找）+ vars 表（值通道）双写
+        let rc = Rc::new(f.clone());
+        let name = f.name.clone();
+        self.functions.insert(name.clone(), f);
+        self.vars.insert(name, IbValue::Function(rc));
     }
     fn get_function(&self, name: &str) -> Option<Function> {
         if let Some(f) = self.functions.get(name) {
@@ -438,6 +468,28 @@ impl Interpreter {
                         Expr::Name { id, .. } => {
                             if let Some(val) = &v {
                                 env.borrow_mut().set(id, val.clone());
+                            }
+                        }
+                        // 元组解包声明（Store target）：值 = List → 逐元素赋值
+                        // （分量 = annotated 内层名字；长度不符 = 错误面静默）
+                        Expr::Tuple { elts, .. } => {
+                            if let Some(IbValue::List(items)) = &v {
+                                let elems = items.borrow();
+                                for (i, e) in elts.iter().enumerate() {
+                                    let name = match e {
+                                        Expr::TypeAnnotatedExpr { target: inner, .. } => {
+                                            match inner.as_ref() {
+                                                Expr::Name { id, .. } => Some(id.clone()),
+                                                _ => None,
+                                            }
+                                        }
+                                        Expr::Name { id, .. } => Some(id.clone()),
+                                        _ => None,
+                                    };
+                                    if let (Some(id), Some(val)) = (name, elems.get(i)) {
+                                        env.borrow_mut().set(&id, val.clone());
+                                    }
+                                }
                             }
                         }
                         Expr::Subscript { value, slice, .. } => {
@@ -523,13 +575,25 @@ impl Interpreter {
                     Flow::Next
                 }
             }
-            Stmt::FunctionDef { name, args, body, .. } => {
+            Stmt::FunctionDef { name, args, body, returns, .. } => {
                 let params: Vec<String> = args.iter().map(|a| a.arg.clone()).collect();
+                // 显示面 source 形态分量（参数类型串 + 返回类型串——Python 实证
+                // `func f(int) -> str`）
+                let param_types: Vec<String> = args
+                    .iter()
+                    .filter_map(|a| a.annotation.as_ref())
+                    .map(|ann| crate::node_serializer::annotation_type_str(ann))
+                    .collect();
+                let ret = returns
+                    .as_ref()
+                    .map(|r| crate::node_serializer::annotation_type_str(r));
                 // enclosing = 当前环境（闭包捕获——嵌套函数可访问 outer 局部变量）
                 let enclosing = Some(env.clone());
                 env.borrow_mut().define_function(Function {
                     name: name.clone(),
                     params,
+                    param_types,
+                    ret,
                     body: body.clone(),
                     enclosing,
                 });
@@ -774,6 +838,10 @@ impl Interpreter {
                         // 原生 meta 函数绑定（from meta import quote/eval）
                         if let Some(IbValue::MetaFn(n)) = env.borrow().get(&func_name) {
                             self.call_meta_fn(n, arg_vals, output)
+                        // 函数值（一等值别名——fn f = g / x = g）→ 按值调用
+                        } else if let Some(IbValue::Function(f)) = env.borrow().get(&func_name) {
+                            let global = global_rc(env);
+                            self.call_user_function(&f, arg_vals, output, &global)
                         // 函数为宿主对象 → 调宿主函数
                         } else if let Some(IbValue::Host(h)) = env.borrow().get(&func_name) {
                             self.call_host_function(&h, arg_vals)
@@ -1300,9 +1368,10 @@ fn to_py(py: Python<'_>, v: &IbValue) -> PyObject {
         }
         // quoted 值跨边界 = 完整源串（同 to_native 边界拆箱契约）
         IbValue::Quoted { source } => source.clone().into_py(py),
-        // 原生 meta 函数引用 / 原生 KB 值 / vector 值不经桥接（vector 是值语义
-        // 一等类型，不可拆箱为原生值——同 to_native 显式违约契约）
-        IbValue::MetaFn(_) | IbValue::Knowledge(_) | IbValue::Vector(_) => py.None(),
+        // 原生 meta 函数引用 / 原生 KB 值 / vector 值 / 函数值不经桥接
+        // （vector 是值语义一等类型，不可拆箱——同 to_native 显式违约契约）
+        IbValue::MetaFn(_) | IbValue::Knowledge(_) | IbValue::Vector(_)
+        | IbValue::Function(_) => py.None(),
         IbValue::Host(h) => h.clone().into_py(py),
     }
 }

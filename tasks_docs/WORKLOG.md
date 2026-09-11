@@ -4744,6 +4744,42 @@ subagent 仅 general agent / 决策纪律 / goal 配置习惯 / 总体规划灵�
   `mod.Type` / chan/slot 类型[LLM 运行时面]。
   **验证**：2 探针全对齐 + 34 语料回归无损[Assign 臂重构面] + 全 harness 45
   passed + smoke 832 passed + 全量 pytest 零回归（放行门实跑）。
+- **P9 全量 Rust 化第四批 增量 3d（声明面剩余形态 + 函数值一等化，2026-09-11，
+  本 session，unsafe-vibe-dev，设计 = tasks_docs/_value_objects.md）**：
+  ① **fn 可调用声明**（`fn f = g`——annotation = Name(fn)；符号/绑定语义同
+  auto：值推导[type_root.g] + 注解节点 type_root.fn；**别名签名链**
+  link_function_alias：f 的 func_sigs = g 的签名——Call f() 节点
+  node_to_type = 返回类型[Python 类型检查器别名链语义实证]）。
+  ② **元组解包声明**（括号 `(int x, int y) = t` + 裸列 `int a, int b = t`
+  [前瞻 Comma 分支] + 函数内解包——目标 IbTuple[ctx Store]，位置 = LPAREN /
+  首类型 token[Python 位置约定：end = 首 token end]；运行时 = 值 List 逐元素
+  赋值；**解包绑定面裁定（Python 实证）**：target name 节点 node_to_symbol +
+  annotated 节点 node_to_type = 声明类型（分量注解不绑 node_to_type——仅单
+  声明注解进）+ Assign 节点不绑 symbol[单声明绑] + 解包值 node_to_type =
+  推导 tuple 型[不覆盖为分量声明类型]；符号 node_uid = Assign 节点[同单声明]）。
+  ③ **点分类型**（`mod.Type`——Attribute 链 + annotation_type_str 点分串）。
+  ④ **函数值一等化（根因修复）**：fn 声明/普通赋值别名（`fn f = g` /
+  `x = g`）暴露 Rust 函数仅驻 functions 表[值通道 env.get = None → 别名调用
+  = None]——**IbValue::Function(Rc<Function>) 新值变体**（一等值：可赋值/别名/
+  传参；Function 扩 param_types/ret 字段[显示面 source 形态
+  `func <name>(<param types>) -> <ret>`——Python 实证：参数面仅类型名不含参数
+  名，无返回类型省略 -> 段]；define_function 双写 functions 表 + vars 表；
+  Call 分支经值调用[call_user_function 共享]；身份相等[Rc ptr_eq]；真值 =
+  true；不经桥接）。
+  ⑤ **types 池泛型条目触发面扩展**：generics 种子含 node_to_type 值
+  [解包值 tuple[int,int] 仅经 node_to_type 引用无符号绑定——条目仍须进池；
+  lib.rs 顺序修正：generic_type_names 先于 node_to_type_map[mem::take 取走
+  语义，顺序敏感]]。
+  **差分门**：test_data_plane_declaration_extended_snippets 新增（2 探针：
+  fn + 括号解包 + 函数值显示/别名；裸列 + 函数内解包——数据面 + 5 池 + 2 侧表
+  内容归一全对齐[3 轮修正：解包绑定面 / 泛型种子时序 / 前瞻 Comma]）。
+  **登记缺口（非本增量范围）**：auto/fn 分量元组解包[Python 不支持——探针
+  实证] / 可调用签名 `fn[(...) -> ...]` = IbCallableType / 普通赋值别名链
+  `x = g` 的 Call 返回类型[类型检查器深度语义——数据面无偏离，仅 artifact
+  node_to_type 差] / chan/slot 类型[LLM 运行时面]。
+  **验证**：2 探针全对齐 + 函数值面独立探针全对齐（f()/g()/print(f)/x = g
+  别名/参数化函数 repr）+ 34 语料回归无损[Function 值变体核心面] + 全
+  harness 46 passed + smoke 832 passed + 全量 pytest 零回归（放行门实跑）。
 ## 附、书写模式（本文档专用模板，书写必须参照）
 
 > 本节是本文档书写的**唯一权威模板**（模板归属 = 文档自身；`GOVERNANCE.md`
