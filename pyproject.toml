@@ -1,6 +1,7 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+# R4-2 pip 打包（架构 v2 用户点②）：maturin 构建 pyo3 扩展（Rust 内核）入 wheel
+requires = ["maturin>=1.15,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "ibci-inter"
@@ -29,6 +30,15 @@ dependencies = [
 test = ["pytest>=7", "pytest-timeout>=2"]
 dev = ["pytest>=7", "pytest-timeout>=2"]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["core*", "ibci_modules*"]
+[tool.maturin]
+# Rust 内核 pyo3 扩展（crate = ibci-ext，lib 名 ibci_ext——extension-module）
+manifest-path = "ibci-ext/Cargo.toml"
+module-name = "ibci_ext"
+# Python 包（core/ + ibci_modules/）经 include 收录入 wheel（site-packages 根）
+include = [
+    "core/**/*.py",
+    "core/**/*.json",
+    "ibci_modules/**/*.py",
+]
+# 构建纪律（AGENTS.local.md）：cargo 写位置 pin workspace 内（默认不可写）
+# 构建时经 env：CARGO_HOME=$PWD/.cargo_local CARGO_TARGET_DIR=$PWD/target

@@ -27,14 +27,26 @@ def kernel_available() -> bool:
 def load_kernel():
     """加载 Rust 内核模块（进程级缓存——单一实例）。
 
-    .so 缺失 = 显式 KernelUnavailableError（双内核协议：无静默回退）。
+    加载序（R4-2 pip 打包：wheel 安装形态 = 顶层 ``import ibci_ext``；
+    dev 形态 = ``core/runtime/kernels/ibci_ext.so`` 路径加载）：
+    1. sys.modules 已有（先前已加载）→ 返回；
+    2. ``import ibci_ext``（wheel 安装的顶层模块——maturin 构建形态）→ 缓存；
+    3. ``_SO_PATH`` 路径加载（dev/脚本构建形态）。
+    均缺失 = 显式 KernelUnavailableError（双内核协议：无静默回退）。
     """
     if "ibci_ext" in sys.modules:
         return sys.modules["ibci_ext"]
+    # wheel 安装形态（顶层模块——maturin wheel 内嵌编译扩展）
+    try:
+        module = importlib.import_module("ibci_ext")
+        sys.modules["ibci_ext"] = module
+        return module
+    except ImportError:
+        pass
     if not os.path.exists(_SO_PATH):
         raise KernelUnavailableError(
-            "ibci_ext.so 缺失——构建：bash scripts/build_rust_ext.sh"
-            "（双内核协议：无静默回退）"
+            "ibci_ext 不可用——wheel 安装无内嵌扩展或 dev .so 缺失"
+            "（dev 构建：bash scripts/build_rust_ext.sh；双内核协议：无静默回退）"
         )
     spec = importlib.util.spec_from_file_location("ibci_ext", _SO_PATH)
     module = importlib.util.module_from_spec(spec)
