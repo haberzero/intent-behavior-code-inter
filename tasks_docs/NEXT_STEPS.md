@@ -49,8 +49,10 @@
 > unsafe-vibe-dev 删分支）**：R2-1 无静默路径第一波（13+ 实例）/ R2-3a typed 数值
 > 运算（i64 精确 + 溢出显式错误）/ R2-2 deserialize fail-fast / R2-4 typed 错误
 > 枚举 ErrorKind；GAP 登记 kb/host 错误面；全量 4308/0/1 零回归。
-> **当前下一步 = R3 测试体系五层重构**（语言行为层升格 + 白盒降级删除 + cargo
-> test 内核层 + 差分退场准备）；R2 续项（方法分派表/i128/Tensor）= 后续轮次。
+> **✅ R3-1 语言行为层骨架已落地（2026-09-11）**：tests/behavior/（assert_error
+> 诊断码断言面 + 18 测试）+ 引擎错误边界补齐（未映射类 → RUN_GENERIC_ERROR）；
+> 全量 4326/0/1。**当前下一步 = R3 阶段 B**（diff 语料升格行为层 + 契约层巩固）
+> → 阶段 C 白盒降级删除 + 宿主面层组建；R2 续项（方法分派表/i128/Tensor）= 后续。
 >
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4306 passed / 2 failed / 1 skipped**（2026-09-11

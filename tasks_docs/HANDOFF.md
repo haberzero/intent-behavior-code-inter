@@ -157,9 +157,11 @@ PENDING_TASKS.md，主线范围变更时非目标面随之重估）。
 > `execution-core-hardening` → unsafe-vibe-dev 删分支）**：R2-1 无静默路径第一波
 > （静默清零 13+ 实例）/ R2-3a typed 数值运算（i64 精确 + 溢出显式错误）/ R2-2
 > deserialize fail-fast / R2-4 typed 错误枚举 ErrorKind；GAP 登记 kb/host 错误面
-> （生产不可见）；全量 4308/0/1 零回归。**当前下一步 = R3 测试体系五层重构**
-> （用户⑧：语言行为层升格 + 白盒降级删除 + cargo test 内核层 + 差分退场准备）；
-> R2 续项（方法分派表/i128/Tensor）= 后续轮次。
+> （生产不可见）；全量 4308/0/1 零回归。**✅ R3-1 语言行为层骨架已落地（2026-09-11）**：
+> tests/behavior/（run/assert_error[诊断码+现场] 断言面 + 18 行为测试）+ 引擎
+> 错误边界补齐（未映射类 → RUN_GENERIC_ERROR，P3 契约完成）；全量 4326/0/1。
+> **当前下一步 = R3 阶段 B**（diff 语料升格行为层 + 契约层巩固）→ 阶段 C 白盒
+> 降级删除 + 宿主面层组建；R2 续项（方法分派表/i128/Tensor）= 后续轮次。
 
 > **接手起点**（下一个智能体，**必读顺序**）：
 > 1. **`tasks_docs/_handoff_kernel_reaudit.md`**（本次转向的交接任务书——用户裁定
