@@ -5135,6 +5135,38 @@ RustHostCallable 修复 WIP 未接线根因）；smoke+diff+host-call 888 passed
 分发表派生内征集。**下一步 = R2 执行核心重写**（typed 值模型 + 无静默路径 +
 enum 分派 + i128 数值 + Tensor 值——独立分支，推倒授权）。
 
+## R2 执行核心重写（独立分支 execution-core-hardening）——R2-1/R2-3a/R2-2 落地（2026-09-11）
+
+**R2 目标（架构 v2 R0 §2.6 + 打破清单 5/6）**：typed 值模型 + 无静默路径 +
+enum 分派 + i128 数值 + Tensor 值；推倒授权（用户⑥），独立分支逐增量。
+
+- **R2-1（无静默路径第一波，commit 775b2024）**：容器/字符串方法面 + 标量
+  运算静默清零——list.index/pop/remove 错误化；str.split 无参 = 空白切分
+  （修旧"逐字符切分"错误值）+ 缺参/非 str TypeError（find/rfind/count/
+  contains/startswith/endswith/replace）；slice step 0/非 int step/非序列
+  错误化；assign_subscript 支持 List 元素赋值（修旧仅 Dict 静默 no-op）+
+  越界 IndexError；Name 未定义 NameError；len/range 类型错误；num_result/
+  pow/bitwise/floor/modulo 非数值 TypeError；eval_iter 非可迭代 TypeError；
+  PartialEq bool==数值（dict 键 True==1）；vector 方法参数错误 TypeError。
+  全量 4308/0/1 零回归。
+- **R2-3a（typed 数值运算，commit e95466f4）**：消灭 f64 全包——num_arith
+  单一入口（Int/Bool = i64 精确 checked 路径，溢出 = 显式 OverflowError；
+  含 Float = f64）；floor 除/floor mod 精确（负号正确）；** 精确幂（负指数
+  = 浮点）；位运算 i64 精确；cmp 精确 i64 比较（修大整数经 f64 误判相等）。
+  登记 DIVERGENCE bounded-int-overflow（i64 有界契约，超界显式错误优于静默
+  错误值；i128/num-bigint = R2 值模型后续）；test_execution_model
+  factorial(100)→(20)（100! 超界 = 旧 Rust 静默 i64::MAX 垃圾，改断言 20!
+  精确值）。全量 4308/0/1 零回归。
+- **R2-2（deserialize fail-fast，commit e285af6c）**：run_artifact/
+  run_artifact_state 非良构 artifact = ArtifactDeserializeError 显式错误
+  （旧 = 空输出静默）。
+
+**变化前后**：变化前 = 静默 None_/0/空输出/错误值（13+ 实例）+ f64 全包精度
+丢失 + 有界溢出静默饱和；变化后 = 显式结构化错误 + i64 精确算术 + 溢出显式
+错误。**下一步 R2 续**：kb 治理门结构化错误、host 桥异常传播（低生产价值——
+KB/宿主源路由 Python）、enum 分派（R2-4）、Tensor/ComputeSubstrate（R2-5）、
+值模型 i128（R2 核心）→ R2 收束 merge。
+
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）
 ## 附、书写模式（本文档专用模板，书写必须参照）

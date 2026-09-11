@@ -45,9 +45,11 @@
 > （capability() + ArtifactRouter 零谓词堆，内征分发表派生）/ P2 typed 值通道（状态
 > 导出类型标签 + StateMaterializer）/ P3 typed 错误（RustRuntimeError + 诊断码单一
 > 权威）/ P4 删会话 API + 单一执行入口（RustHostCallable）。全量 4306/2/1 → 4308/0/1。
-> **当前下一步 = R2 执行核心重写**（独立分支，推倒授权）：typed 值模型 + 无静默路径
-> + enum 分派 + i128 有界整数 + Tensor 值 + 静默降级 13+ 实例清零（架构 v2 R0 §2.6/
-> 打破清单 5/6）。
+> **R2 执行核心重写进行中**（独立分支 `execution-core-hardening`）：R2-1 无静默
+> 路径第一波 ✅ / R2-3a typed 数值运算（i64 精确 + 溢出显式错误）✅ / R2-2
+> deserialize fail-fast ✅（均 4308/0/1 零回归）。下一步 R2 续：kb 治理门结构化
+> 错误 / host 桥异常传播 / enum 分派（R2-4）/ Tensor+ComputeSubstrate（R2-5）/
+> i128 值模型（R2 核心）→ 收束 merge。
 >
 > **测试基线（唯一锚点）**：`.venv/bin/python -m pytest tests/`（唯一权威命令；addopts 已含 `-q`，
 > 勿显式再加——双 `-q` 会隐藏计数行）；末次全量 **4306 passed / 2 failed / 1 skipped**（2026-09-11
